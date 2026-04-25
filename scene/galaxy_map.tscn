@@ -1,0 +1,10 @@
+[gd_scene load_steps=2 format=3 uid="uid://dojwk6qq4inn2"]
+
+[ext_resource type="Script" uid="uid://g1mf10nbmimu" path="res://scripts/Galaxy.gd" id="1_tvptu"]
+
+[node name="GalaxyMap" type="Node2D"]
+script = ExtResource("1_tvptu")
+
+[node name="Lanes" type="Node2D" parent="."]
+
+[node name="Systems" type="Node2D" parent="."]

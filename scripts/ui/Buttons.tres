@@ -1,0 +1,22 @@
+[gd_resource type="Theme" load_steps=7 format=3 uid="uid://cjaewb3353lqh"]
+
+[ext_resource type="FontFile" uid="uid://deuierbbkg6su" path="res://Image/UI/eurostile.TTF" id="1_0ahaj"]
+[ext_resource type="Texture2D" uid="uid://q610xialofwu" path="res://Image/UI/Button001.png" id="2_y076k"]
+[ext_resource type="Texture2D" uid="uid://ci2nmnyfwylw2" path="res://Image/UI/Button001Pressed.png" id="3_icu00"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_cqkhu"]
+
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_kuejk"]
+texture = ExtResource("2_y076k")
+texture_margin_top = 1.0
+
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_jfl1p"]
+texture = ExtResource("3_icu00")
+
+[resource]
+Button/font_sizes/font_size = 25
+Button/fonts/font = ExtResource("1_0ahaj")
+Button/styles/focus = SubResource("StyleBoxEmpty_cqkhu")
+Button/styles/hover = SubResource("StyleBoxTexture_kuejk")
+Button/styles/normal = SubResource("StyleBoxTexture_kuejk")
+Button/styles/pressed = SubResource("StyleBoxTexture_jfl1p")

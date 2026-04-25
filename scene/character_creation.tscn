@@ -1,0 +1,3216 @@
+[gd_scene load_steps=6 format=3 uid="uid://d4c8suiasvw30"]
+
+[ext_resource type="PackedScene" uid="uid://cy8cg762mitdb" path="res://scene/warning_popup.tscn" id="11_pyk2c"]
+
+[sub_resource type="Theme" id="Theme_c33ah"]
+Panel/styles/panel = null
+
+[sub_resource type="Theme" id="Theme_lsu3t"]
+
+[sub_resource type="Theme" id="Theme_wt6gt"]
+
+[sub_resource type="Theme" id="Theme_lib1u"]
+
+[node name="CharacterCreation" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Background" type="Panel" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme = SubResource("Theme_c33ah")
+
+[node name="CharacterCreation" type="Panel" parent="Background"]
+layout_mode = 0
+offset_left = 22.0
+offset_top = 26.0
+offset_right = 295.0
+offset_bottom = 61.0
+theme = null
+
+[node name="CharacterCreation" type="Label" parent="Background/CharacterCreation"]
+layout_mode = 1
+anchors_preset = -1
+anchor_left = 0.00732601
+anchor_right = 1.03456
+anchor_bottom = 1.11429
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+theme_override_font_sizes/font_size = 30
+text = "Character Creation"
+metadata/_edit_use_anchors_ = true
+
+[node name="Panel2" type="Panel" parent="Background"]
+layout_mode = 1
+offset_left = 34.0
+offset_top = 73.0
+offset_right = 504.0
+offset_bottom = 317.0
+theme = null
+
+[node name="Panel" type="VBoxContainer" parent="Background/Panel2"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_top = 8.0
+offset_right = -4.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="NameContainer" type="HBoxContainer" parent="Background/Panel2/Panel"]
+layout_mode = 2
+
+[node name="NameLabel" type="Label" parent="Background/Panel2/Panel/NameContainer"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+theme_override_font_sizes/font_size = 30
+text = " Name"
+
+[node name="NameEdit" type="LineEdit" parent="Background/Panel2/Panel/NameContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 1
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+theme_override_font_sizes/font_size = 30
+
+[node name="SectContainer" type="HBoxContainer" parent="Background/Panel2/Panel"]
+layout_mode = 2
+
+[node name="SectLabel" type="Label" parent="Background/Panel2/Panel/SectContainer"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+theme_override_font_sizes/font_size = 30
+text = " Sect"
+
+[node name="SectEdit" type="OptionButton" parent="Background/Panel2/Panel/SectContainer"]
+layout_mode = 2
+focus_mode = 0
+theme = null
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+theme_override_font_sizes/font_size = 30
+item_count = 2
+popup/item_0/text = "Camarilla"
+popup/item_0/id = 0
+popup/item_1/text = "Sabbat"
+popup/item_1/id = 1
+
+[node name="ClanContainer" type="HBoxContainer" parent="Background/Panel2/Panel"]
+layout_mode = 2
+
+[node name="ClanLabel" type="Label" parent="Background/Panel2/Panel/ClanContainer"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+theme_override_font_sizes/font_size = 30
+text = " Clan"
+
+[node name="ClanEdit" type="OptionButton" parent="Background/Panel2/Panel/ClanContainer"]
+custom_minimum_size = Vector2(150, 0)
+layout_mode = 2
+focus_mode = 0
+theme = null
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+theme_override_font_sizes/font_size = 30
+
+[node name="NatureContainer" type="HBoxContainer" parent="Background/Panel2/Panel"]
+layout_mode = 2
+
+[node name="NatureLabel" type="Label" parent="Background/Panel2/Panel/NatureContainer"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+theme_override_font_sizes/font_size = 30
+text = " Nature"
+
+[node name="NatureEdit" type="OptionButton" parent="Background/Panel2/Panel/NatureContainer"]
+layout_mode = 2
+focus_mode = 0
+theme = null
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+theme_override_font_sizes/font_size = 30
+item_count = 1
+popup/item_0/id = 0
+
+[node name="DemeanorContainer" type="HBoxContainer" parent="Background/Panel2/Panel"]
+layout_mode = 2
+
+[node name="NatureLabel" type="Label" parent="Background/Panel2/Panel/DemeanorContainer"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+theme_override_font_sizes/font_size = 30
+text = " Demeanor"
+
+[node name="DemeanorEdit" type="OptionButton" parent="Background/Panel2/Panel/DemeanorContainer"]
+layout_mode = 2
+focus_mode = 0
+theme = null
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+theme_override_font_sizes/font_size = 30
+item_count = 1
+popup/item_0/id = 0
+
+[node name="AttributePanel" type="Panel" parent="Background"]
+layout_mode = 0
+offset_left = 7.0
+offset_top = 449.0
+offset_right = 790.0
+offset_bottom = 876.0
+theme = null
+
+[node name="AttributeLabel" type="Label" parent="Background/AttributePanel"]
+layout_mode = 1
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -39.0
+offset_right = 39.0
+offset_bottom = 23.0
+grow_horizontal = 2
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+theme_override_font_sizes/font_size = 30
+text = "Attributes"
+
+[node name="AttributeOrderPanel" type="HBoxContainer" parent="Background/AttributePanel"]
+layout_mode = 1
+anchors_preset = 14
+anchor_top = 0.5
+anchor_right = 1.0
+anchor_bottom = 0.5
+offset_left = 5.0
+offset_top = -174.5
+offset_right = -5.0
+offset_bottom = -130.5
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="PrimaryLabel" type="Label" parent="Background/AttributePanel/AttributeOrderPanel"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+theme_override_font_sizes/font_size = 25
+text = "Primary"
+
+[node name="PrimaryButton" type="OptionButton" parent="Background/AttributePanel/AttributeOrderPanel"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+theme_override_font_sizes/font_size = 25
+
+[node name="SecondaryLabel" type="Label" parent="Background/AttributePanel/AttributeOrderPanel"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+theme_override_font_sizes/font_size = 25
+text = "Secondary"
+
+[node name="SecondaryButton" type="OptionButton" parent="Background/AttributePanel/AttributeOrderPanel"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+theme_override_font_sizes/font_size = 25
+
+[node name="TertiaryLabel" type="Label" parent="Background/AttributePanel/AttributeOrderPanel"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+theme_override_font_sizes/font_size = 25
+text = "Tertiary"
+
+[node name="TertiaryButton" type="OptionButton" parent="Background/AttributePanel/AttributeOrderPanel"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+theme_override_font_sizes/font_size = 25
+
+[node name="AttributeListing" type="VBoxContainer" parent="Background/AttributePanel"]
+layout_mode = 1
+anchors_preset = -1
+anchor_left = 0.00510856
+anchor_top = 0.234192
+anchor_right = 0.993614
+anchor_bottom = 0.983607
+grow_horizontal = 2
+grow_vertical = 2
+theme = null
+metadata/_edit_use_anchors_ = true
+
+[node name="PhysicalPanel" type="Panel" parent="Background/AttributePanel/AttributeListing"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="PhysicalLabel" type="Label" parent="Background/AttributePanel/AttributeListing/PhysicalPanel"]
+layout_mode = 1
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -54.5
+offset_right = 54.5
+offset_bottom = 39.0
+grow_horizontal = 2
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+theme_override_font_sizes/font_size = 30
+text = "Physical"
+
+[node name="PhysicalCounterBox" type="Panel" parent="Background/AttributePanel/AttributeListing/PhysicalPanel"]
+layout_mode = 1
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = 60.5
+offset_top = 7.61307
+offset_right = 88.5
+offset_bottom = 34.6131
+grow_horizontal = 2
+
+[node name="PhysicalCounterNumber" type="Label" parent="Background/AttributePanel/AttributeListing/PhysicalPanel/PhysicalCounterBox"]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -0.5
+offset_top = -11.5
+offset_right = 0.5
+offset_bottom = 11.5
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+
+[node name="PhysicalAttributes" type="HBoxContainer" parent="Background/AttributePanel/AttributeListing/PhysicalPanel"]
+layout_mode = 1
+anchors_preset = 12
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 8.0
+offset_top = -45.0
+offset_right = -8.0
+offset_bottom = -6.0
+grow_horizontal = 2
+grow_vertical = 0
+theme = SubResource("Theme_lsu3t")
+
+[node name="Strength" type="Label" parent="Background/AttributePanel/AttributeListing/PhysicalPanel/PhysicalAttributes"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+theme_override_font_sizes/font_size = 25
+text = "Strength"
+
+[node name="StrengthPanel" type="Panel" parent="Background/AttributePanel/AttributeListing/PhysicalPanel/PhysicalAttributes"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_stretch_ratio = 2.05
+theme = SubResource("Theme_wt6gt")
+
+[node name="StrengthPanelOrdering" type="HBoxContainer" parent="Background/AttributePanel/AttributeListing/PhysicalPanel/PhysicalAttributes/StrengthPanel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 4.0
+offset_top = 4.0
+offset_right = -5.0
+offset_bottom = -4.0
+grow_horizontal = 2
+grow_vertical = 2
+theme = SubResource("Theme_lib1u")
+
+[node name="Strength1" type="Button" parent="Background/AttributePanel/AttributeListing/PhysicalPanel/PhysicalAttributes/StrengthPanel/StrengthPanelOrdering"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Strength2" type="Button" parent="Background/AttributePanel/AttributeListing/PhysicalPanel/PhysicalAttributes/StrengthPanel/StrengthPanelOrdering"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Strength3" type="Button" parent="Background/AttributePanel/AttributeListing/PhysicalPanel/PhysicalAttributes/StrengthPanel/StrengthPanelOrdering"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Strength4" type="Button" parent="Background/AttributePanel/AttributeListing/PhysicalPanel/PhysicalAttributes/StrengthPanel/StrengthPanelOrdering"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Strength5" type="Button" parent="Background/AttributePanel/AttributeListing/PhysicalPanel/PhysicalAttributes/StrengthPanel/StrengthPanelOrdering"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Dexterity" type="Label" parent="Background/AttributePanel/AttributeListing/PhysicalPanel/PhysicalAttributes"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+theme_override_font_sizes/font_size = 25
+text = "Dexterity"
+
+[node name="DexterityPanel" type="Panel" parent="Background/AttributePanel/AttributeListing/PhysicalPanel/PhysicalAttributes"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_stretch_ratio = 2.05
+
+[node name="DexterityPanelOrdering" type="HBoxContainer" parent="Background/AttributePanel/AttributeListing/PhysicalPanel/PhysicalAttributes/DexterityPanel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 4.0
+offset_top = 4.0
+offset_right = -4.0
+offset_bottom = -5.0
+grow_horizontal = 2
+grow_vertical = 2
+size_flags_horizontal = 3
+
+[node name="Dexterity1" type="Button" parent="Background/AttributePanel/AttributeListing/PhysicalPanel/PhysicalAttributes/DexterityPanel/DexterityPanelOrdering"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Dexterity2" type="Button" parent="Background/AttributePanel/AttributeListing/PhysicalPanel/PhysicalAttributes/DexterityPanel/DexterityPanelOrdering"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Dexterity3" type="Button" parent="Background/AttributePanel/AttributeListing/PhysicalPanel/PhysicalAttributes/DexterityPanel/DexterityPanelOrdering"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Dexterity4" type="Button" parent="Background/AttributePanel/AttributeListing/PhysicalPanel/PhysicalAttributes/DexterityPanel/DexterityPanelOrdering"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Dexterity5" type="Button" parent="Background/AttributePanel/AttributeListing/PhysicalPanel/PhysicalAttributes/DexterityPanel/DexterityPanelOrdering"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Stamina" type="Label" parent="Background/AttributePanel/AttributeListing/PhysicalPanel/PhysicalAttributes"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+theme_override_font_sizes/font_size = 25
+text = "Stamina"
+
+[node name="StaminaPanel" type="Panel" parent="Background/AttributePanel/AttributeListing/PhysicalPanel/PhysicalAttributes"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_stretch_ratio = 2.05
+
+[node name="StaminaPanelOrdering" type="HBoxContainer" parent="Background/AttributePanel/AttributeListing/PhysicalPanel/PhysicalAttributes/StaminaPanel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 4.0
+offset_top = 3.0
+offset_right = -4.0
+offset_bottom = -5.0
+grow_horizontal = 2
+grow_vertical = 2
+size_flags_horizontal = 3
+
+[node name="Stamina1" type="Button" parent="Background/AttributePanel/AttributeListing/PhysicalPanel/PhysicalAttributes/StaminaPanel/StaminaPanelOrdering"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme = null
+toggle_mode = true
+
+[node name="Stamina2" type="Button" parent="Background/AttributePanel/AttributeListing/PhysicalPanel/PhysicalAttributes/StaminaPanel/StaminaPanelOrdering"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme = null
+toggle_mode = true
+
+[node name="Stamina3" type="Button" parent="Background/AttributePanel/AttributeListing/PhysicalPanel/PhysicalAttributes/StaminaPanel/StaminaPanelOrdering"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme = null
+toggle_mode = true
+
+[node name="Stamina4" type="Button" parent="Background/AttributePanel/AttributeListing/PhysicalPanel/PhysicalAttributes/StaminaPanel/StaminaPanelOrdering"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme = null
+toggle_mode = true
+
+[node name="Stamina5" type="Button" parent="Background/AttributePanel/AttributeListing/PhysicalPanel/PhysicalAttributes/StaminaPanel/StaminaPanelOrdering"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme = null
+toggle_mode = true
+
+[node name="SocialPanel" type="Panel" parent="Background/AttributePanel/AttributeListing"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="SocialLabel" type="Label" parent="Background/AttributePanel/AttributeListing/SocialPanel"]
+layout_mode = 1
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -40.5
+offset_right = 40.5
+offset_bottom = 39.0
+grow_horizontal = 2
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+theme_override_font_sizes/font_size = 30
+text = "Social"
+
+[node name="SocialCounterBox" type="Panel" parent="Background/AttributePanel/AttributeListing/SocialPanel"]
+layout_mode = 1
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = 45.5
+offset_top = 5.6131
+offset_right = 71.5
+offset_bottom = 33.6131
+grow_horizontal = 2
+
+[node name="SocialCounterNumber" type="Label" parent="Background/AttributePanel/AttributeListing/SocialPanel/SocialCounterBox"]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -0.5
+offset_top = -11.5
+offset_right = 0.5
+offset_bottom = 11.5
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+
+[node name="SocialAttributes" type="HBoxContainer" parent="Background/AttributePanel/AttributeListing/SocialPanel"]
+layout_mode = 1
+anchors_preset = 12
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 9.0
+offset_top = -42.0
+offset_right = -8.0
+offset_bottom = -12.0
+grow_horizontal = 2
+grow_vertical = 0
+
+[node name="Charisma" type="Label" parent="Background/AttributePanel/AttributeListing/SocialPanel/SocialAttributes"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+theme_override_font_sizes/font_size = 25
+text = "Charisma"
+
+[node name="CharismaPanel" type="Panel" parent="Background/AttributePanel/AttributeListing/SocialPanel/SocialAttributes"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_stretch_ratio = 3.98
+
+[node name="CharismaPanelOrdering" type="HBoxContainer" parent="Background/AttributePanel/AttributeListing/SocialPanel/SocialAttributes/CharismaPanel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 4.0
+offset_top = 4.0
+offset_right = -4.0
+offset_bottom = -4.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Charisma1" type="Button" parent="Background/AttributePanel/AttributeListing/SocialPanel/SocialAttributes/CharismaPanel/CharismaPanelOrdering"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Charisma2" type="Button" parent="Background/AttributePanel/AttributeListing/SocialPanel/SocialAttributes/CharismaPanel/CharismaPanelOrdering"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Charisma3" type="Button" parent="Background/AttributePanel/AttributeListing/SocialPanel/SocialAttributes/CharismaPanel/CharismaPanelOrdering"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Charisma4" type="Button" parent="Background/AttributePanel/AttributeListing/SocialPanel/SocialAttributes/CharismaPanel/CharismaPanelOrdering"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Charisma5" type="Button" parent="Background/AttributePanel/AttributeListing/SocialPanel/SocialAttributes/CharismaPanel/CharismaPanelOrdering"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Manipulation" type="Label" parent="Background/AttributePanel/AttributeListing/SocialPanel/SocialAttributes"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+theme_override_font_sizes/font_size = 25
+text = "Manipulation"
+
+[node name="ManipulationPanel" type="Panel" parent="Background/AttributePanel/AttributeListing/SocialPanel/SocialAttributes"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_stretch_ratio = 3.98
+
+[node name="ManipulationPanelOrdering" type="HBoxContainer" parent="Background/AttributePanel/AttributeListing/SocialPanel/SocialAttributes/ManipulationPanel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 4.0
+offset_top = 4.0
+offset_right = -4.0
+offset_bottom = -4.0
+grow_horizontal = 2
+grow_vertical = 2
+size_flags_horizontal = 3
+
+[node name="Manipulation1" type="Button" parent="Background/AttributePanel/AttributeListing/SocialPanel/SocialAttributes/ManipulationPanel/ManipulationPanelOrdering"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Manipulation2" type="Button" parent="Background/AttributePanel/AttributeListing/SocialPanel/SocialAttributes/ManipulationPanel/ManipulationPanelOrdering"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Manipulation3" type="Button" parent="Background/AttributePanel/AttributeListing/SocialPanel/SocialAttributes/ManipulationPanel/ManipulationPanelOrdering"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Manipulation4" type="Button" parent="Background/AttributePanel/AttributeListing/SocialPanel/SocialAttributes/ManipulationPanel/ManipulationPanelOrdering"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Manipulation5" type="Button" parent="Background/AttributePanel/AttributeListing/SocialPanel/SocialAttributes/ManipulationPanel/ManipulationPanelOrdering"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Appearance" type="Label" parent="Background/AttributePanel/AttributeListing/SocialPanel/SocialAttributes"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+theme_override_font_sizes/font_size = 25
+text = "Appearance"
+
+[node name="AppearancePanel" type="Panel" parent="Background/AttributePanel/AttributeListing/SocialPanel/SocialAttributes"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_stretch_ratio = 3.98
+
+[node name="AppearancePanelOrdering" type="HBoxContainer" parent="Background/AttributePanel/AttributeListing/SocialPanel/SocialAttributes/AppearancePanel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 4.0
+offset_top = 4.0
+offset_right = -4.0
+offset_bottom = -4.0
+grow_horizontal = 2
+grow_vertical = 2
+size_flags_horizontal = 3
+
+[node name="Appearance1" type="Button" parent="Background/AttributePanel/AttributeListing/SocialPanel/SocialAttributes/AppearancePanel/AppearancePanelOrdering"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Appearance2" type="Button" parent="Background/AttributePanel/AttributeListing/SocialPanel/SocialAttributes/AppearancePanel/AppearancePanelOrdering"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Appearance3" type="Button" parent="Background/AttributePanel/AttributeListing/SocialPanel/SocialAttributes/AppearancePanel/AppearancePanelOrdering"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Appearance4" type="Button" parent="Background/AttributePanel/AttributeListing/SocialPanel/SocialAttributes/AppearancePanel/AppearancePanelOrdering"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Appearance5" type="Button" parent="Background/AttributePanel/AttributeListing/SocialPanel/SocialAttributes/AppearancePanel/AppearancePanelOrdering"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="MentalPanel" type="Panel" parent="Background/AttributePanel/AttributeListing"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="MentalLabel" type="Label" parent="Background/AttributePanel/AttributeListing/MentalPanel"]
+layout_mode = 1
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -50.0
+offset_right = 50.0
+offset_bottom = 39.0
+grow_horizontal = 2
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+theme_override_font_sizes/font_size = 30
+text = "Mental"
+
+[node name="MentalCounterBox" type="Panel" parent="Background/AttributePanel/AttributeListing/MentalPanel"]
+layout_mode = 1
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = 56.5
+offset_top = 6.6131
+offset_right = 80.5
+offset_bottom = 34.6131
+grow_horizontal = 2
+
+[node name="MentalCounterNumber" type="Label" parent="Background/AttributePanel/AttributeListing/MentalPanel/MentalCounterBox"]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -0.5
+offset_top = -11.5
+offset_right = 0.5
+offset_bottom = 11.5
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+
+[node name="MentalAttributes" type="HBoxContainer" parent="Background/AttributePanel/AttributeListing/MentalPanel"]
+layout_mode = 1
+anchors_preset = 12
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 6.0
+offset_top = -41.0
+offset_right = -8.0
+offset_bottom = -8.0
+grow_horizontal = 2
+grow_vertical = 0
+
+[node name="Perception" type="Label" parent="Background/AttributePanel/AttributeListing/MentalPanel/MentalAttributes"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+theme_override_font_sizes/font_size = 25
+text = "Perception"
+
+[node name="PerceptionPanel" type="Panel" parent="Background/AttributePanel/AttributeListing/MentalPanel/MentalAttributes"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="PerceptionPanelOrdering" type="HBoxContainer" parent="Background/AttributePanel/AttributeListing/MentalPanel/MentalAttributes/PerceptionPanel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 4.0
+offset_top = 4.0
+offset_right = -4.0
+offset_bottom = -4.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Perception1" type="Button" parent="Background/AttributePanel/AttributeListing/MentalPanel/MentalAttributes/PerceptionPanel/PerceptionPanelOrdering"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Perception2" type="Button" parent="Background/AttributePanel/AttributeListing/MentalPanel/MentalAttributes/PerceptionPanel/PerceptionPanelOrdering"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Perception3" type="Button" parent="Background/AttributePanel/AttributeListing/MentalPanel/MentalAttributes/PerceptionPanel/PerceptionPanelOrdering"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Perception4" type="Button" parent="Background/AttributePanel/AttributeListing/MentalPanel/MentalAttributes/PerceptionPanel/PerceptionPanelOrdering"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Perception5" type="Button" parent="Background/AttributePanel/AttributeListing/MentalPanel/MentalAttributes/PerceptionPanel/PerceptionPanelOrdering"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Intelligence" type="Label" parent="Background/AttributePanel/AttributeListing/MentalPanel/MentalAttributes"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+theme_override_font_sizes/font_size = 25
+text = "Intelligence"
+
+[node name="IntelligencePanel" type="Panel" parent="Background/AttributePanel/AttributeListing/MentalPanel/MentalAttributes"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="IntelligencePanelOrdering" type="HBoxContainer" parent="Background/AttributePanel/AttributeListing/MentalPanel/MentalAttributes/IntelligencePanel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 4.0
+offset_top = 4.0
+offset_right = -4.0
+offset_bottom = -4.0
+grow_horizontal = 2
+grow_vertical = 2
+size_flags_horizontal = 3
+
+[node name="Intelligence1" type="Button" parent="Background/AttributePanel/AttributeListing/MentalPanel/MentalAttributes/IntelligencePanel/IntelligencePanelOrdering"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Intelligence2" type="Button" parent="Background/AttributePanel/AttributeListing/MentalPanel/MentalAttributes/IntelligencePanel/IntelligencePanelOrdering"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Intelligence3" type="Button" parent="Background/AttributePanel/AttributeListing/MentalPanel/MentalAttributes/IntelligencePanel/IntelligencePanelOrdering"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Intelligence4" type="Button" parent="Background/AttributePanel/AttributeListing/MentalPanel/MentalAttributes/IntelligencePanel/IntelligencePanelOrdering"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Intelligence5" type="Button" parent="Background/AttributePanel/AttributeListing/MentalPanel/MentalAttributes/IntelligencePanel/IntelligencePanelOrdering"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Wits" type="Label" parent="Background/AttributePanel/AttributeListing/MentalPanel/MentalAttributes"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+theme_override_font_sizes/font_size = 25
+text = "Wits"
+
+[node name="WitsPanel" type="Panel" parent="Background/AttributePanel/AttributeListing/MentalPanel/MentalAttributes"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="WitsPanelOrdering" type="HBoxContainer" parent="Background/AttributePanel/AttributeListing/MentalPanel/MentalAttributes/WitsPanel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 4.0
+offset_top = 4.0
+offset_right = -4.0
+offset_bottom = -4.0
+grow_horizontal = 2
+grow_vertical = 2
+size_flags_horizontal = 3
+
+[node name="Wits1" type="Button" parent="Background/AttributePanel/AttributeListing/MentalPanel/MentalAttributes/WitsPanel/WitsPanelOrdering"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Wits2" type="Button" parent="Background/AttributePanel/AttributeListing/MentalPanel/MentalAttributes/WitsPanel/WitsPanelOrdering"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Wits3" type="Button" parent="Background/AttributePanel/AttributeListing/MentalPanel/MentalAttributes/WitsPanel/WitsPanelOrdering"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Wits4" type="Button" parent="Background/AttributePanel/AttributeListing/MentalPanel/MentalAttributes/WitsPanel/WitsPanelOrdering"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Wits5" type="Button" parent="Background/AttributePanel/AttributeListing/MentalPanel/MentalAttributes/WitsPanel/WitsPanelOrdering"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="AbilityPanel" type="Panel" parent="Background"]
+layout_mode = 0
+offset_left = 533.0
+offset_top = 16.0
+offset_right = 1321.0
+offset_bottom = 425.0
+theme = null
+
+[node name="AbilityLabel" type="Label" parent="Background/AbilityPanel"]
+layout_mode = 1
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -24.5
+offset_right = 24.5
+offset_bottom = 23.0
+grow_horizontal = 2
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+theme_override_font_sizes/font_size = 30
+text = "Abilities"
+
+[node name="AbilityOrderPanel" type="HBoxContainer" parent="Background/AbilityPanel"]
+layout_mode = 0
+offset_left = 3.0
+offset_top = 35.0
+offset_right = 553.0
+offset_bottom = 67.0
+
+[node name="PrimaryLabel" type="Label" parent="Background/AbilityPanel/AbilityOrderPanel"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+theme_override_font_sizes/font_size = 25
+text = "Primary"
+
+[node name="PrimaryAbilityButton" type="OptionButton" parent="Background/AbilityPanel/AbilityOrderPanel"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_stretch_ratio = 1.5
+focus_mode = 0
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+theme_override_font_sizes/font_size = 15
+
+[node name="SecondaryLabel" type="Label" parent="Background/AbilityPanel/AbilityOrderPanel"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+theme_override_font_sizes/font_size = 25
+text = "Secondary"
+
+[node name="SecondaryAbilityButton" type="OptionButton" parent="Background/AbilityPanel/AbilityOrderPanel"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_stretch_ratio = 1.5
+focus_mode = 0
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+theme_override_font_sizes/font_size = 15
+
+[node name="TertiaryLabel" type="Label" parent="Background/AbilityPanel/AbilityOrderPanel"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+theme_override_font_sizes/font_size = 25
+text = "Tertiary"
+
+[node name="TertiaryAbilityButton" type="OptionButton" parent="Background/AbilityPanel/AbilityOrderPanel"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_stretch_ratio = 1.5
+focus_mode = 0
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+theme_override_font_sizes/font_size = 15
+
+[node name="AbilityListing" type="HBoxContainer" parent="Background/AbilityPanel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_top = 79.0
+offset_bottom = -2.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="TalentsPanel" type="Panel" parent="Background/AbilityPanel/AbilityListing"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+theme = null
+
+[node name="TalentsLabel" type="Label" parent="Background/AbilityPanel/AbilityListing/TalentsPanel"]
+layout_mode = 1
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -43.5
+offset_top = 8.0
+offset_right = 19.5
+offset_bottom = 31.0
+grow_horizontal = 2
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+theme_override_font_sizes/font_size = 25
+text = "Talents"
+
+[node name="TalentsCounterBox" type="Panel" parent="Background/AbilityPanel/AbilityListing/TalentsPanel"]
+layout_mode = 1
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = 36.5
+offset_top = 12.0
+offset_right = 64.5
+offset_bottom = 39.0
+grow_horizontal = 2
+
+[node name="TalentsCounterNumber" type="Label" parent="Background/AbilityPanel/AbilityListing/TalentsPanel/TalentsCounterBox"]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -0.5
+offset_top = -11.5
+offset_right = 0.5
+offset_bottom = 11.5
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+
+[node name="TalentsAbilities" type="VBoxContainer" parent="Background/AbilityPanel/AbilityListing/TalentsPanel"]
+layout_mode = 1
+anchors_preset = 4
+anchor_top = 0.5
+anchor_bottom = 0.5
+offset_left = 5.0
+offset_top = -118.0
+offset_right = 253.0
+offset_bottom = 148.0
+grow_vertical = 2
+
+[node name="AlertnessContainer" type="HBoxContainer" parent="Background/AbilityPanel/AbilityListing/TalentsPanel/TalentsAbilities"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="Alertness" type="Label" parent="Background/AbilityPanel/AbilityListing/TalentsPanel/TalentsAbilities/AlertnessContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+text = " Alertness                          "
+
+[node name="Alertness1" type="Button" parent="Background/AbilityPanel/AbilityListing/TalentsPanel/TalentsAbilities/AlertnessContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Alertness2" type="Button" parent="Background/AbilityPanel/AbilityListing/TalentsPanel/TalentsAbilities/AlertnessContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Alertness3" type="Button" parent="Background/AbilityPanel/AbilityListing/TalentsPanel/TalentsAbilities/AlertnessContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="AthleticsContainer" type="HBoxContainer" parent="Background/AbilityPanel/AbilityListing/TalentsPanel/TalentsAbilities"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="Athletics" type="Label" parent="Background/AbilityPanel/AbilityListing/TalentsPanel/TalentsAbilities/AthleticsContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+text = " Athletics                          "
+
+[node name="Athletics1" type="Button" parent="Background/AbilityPanel/AbilityListing/TalentsPanel/TalentsAbilities/AthleticsContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Athletics2" type="Button" parent="Background/AbilityPanel/AbilityListing/TalentsPanel/TalentsAbilities/AthleticsContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Athletics3" type="Button" parent="Background/AbilityPanel/AbilityListing/TalentsPanel/TalentsAbilities/AthleticsContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="AwarenessContainer" type="HBoxContainer" parent="Background/AbilityPanel/AbilityListing/TalentsPanel/TalentsAbilities"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="Awareness" type="Label" parent="Background/AbilityPanel/AbilityListing/TalentsPanel/TalentsAbilities/AwarenessContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+text = " Awareness                          "
+
+[node name="Awareness1" type="Button" parent="Background/AbilityPanel/AbilityListing/TalentsPanel/TalentsAbilities/AwarenessContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Awareness2" type="Button" parent="Background/AbilityPanel/AbilityListing/TalentsPanel/TalentsAbilities/AwarenessContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Awareness3" type="Button" parent="Background/AbilityPanel/AbilityListing/TalentsPanel/TalentsAbilities/AwarenessContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="BrawlContainer" type="HBoxContainer" parent="Background/AbilityPanel/AbilityListing/TalentsPanel/TalentsAbilities"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="Brawl" type="Label" parent="Background/AbilityPanel/AbilityListing/TalentsPanel/TalentsAbilities/BrawlContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+text = " Brawl                                  "
+
+[node name="Brawl1" type="Button" parent="Background/AbilityPanel/AbilityListing/TalentsPanel/TalentsAbilities/BrawlContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Brawl2" type="Button" parent="Background/AbilityPanel/AbilityListing/TalentsPanel/TalentsAbilities/BrawlContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Brawl3" type="Button" parent="Background/AbilityPanel/AbilityListing/TalentsPanel/TalentsAbilities/BrawlContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="EmpathyContainer" type="HBoxContainer" parent="Background/AbilityPanel/AbilityListing/TalentsPanel/TalentsAbilities"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="Empathy" type="Label" parent="Background/AbilityPanel/AbilityListing/TalentsPanel/TalentsAbilities/EmpathyContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+text = " Empathy                            "
+
+[node name="Empathy1" type="Button" parent="Background/AbilityPanel/AbilityListing/TalentsPanel/TalentsAbilities/EmpathyContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Empathy2" type="Button" parent="Background/AbilityPanel/AbilityListing/TalentsPanel/TalentsAbilities/EmpathyContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Empathy3" type="Button" parent="Background/AbilityPanel/AbilityListing/TalentsPanel/TalentsAbilities/EmpathyContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="ExpressionContainer" type="HBoxContainer" parent="Background/AbilityPanel/AbilityListing/TalentsPanel/TalentsAbilities"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="Expression" type="Label" parent="Background/AbilityPanel/AbilityListing/TalentsPanel/TalentsAbilities/ExpressionContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+text = " Expression                        "
+
+[node name="Expression1" type="Button" parent="Background/AbilityPanel/AbilityListing/TalentsPanel/TalentsAbilities/ExpressionContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Expression2" type="Button" parent="Background/AbilityPanel/AbilityListing/TalentsPanel/TalentsAbilities/ExpressionContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Expression3" type="Button" parent="Background/AbilityPanel/AbilityListing/TalentsPanel/TalentsAbilities/ExpressionContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="IntimidationContainer" type="HBoxContainer" parent="Background/AbilityPanel/AbilityListing/TalentsPanel/TalentsAbilities"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="Intimidation" type="Label" parent="Background/AbilityPanel/AbilityListing/TalentsPanel/TalentsAbilities/IntimidationContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+text = " Intimidation                    "
+
+[node name="Intimidation1" type="Button" parent="Background/AbilityPanel/AbilityListing/TalentsPanel/TalentsAbilities/IntimidationContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Intimidation2" type="Button" parent="Background/AbilityPanel/AbilityListing/TalentsPanel/TalentsAbilities/IntimidationContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Intimidation3" type="Button" parent="Background/AbilityPanel/AbilityListing/TalentsPanel/TalentsAbilities/IntimidationContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="LeadershipContainer" type="HBoxContainer" parent="Background/AbilityPanel/AbilityListing/TalentsPanel/TalentsAbilities"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="Leadership" type="Label" parent="Background/AbilityPanel/AbilityListing/TalentsPanel/TalentsAbilities/LeadershipContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+text = " Leadership                        "
+
+[node name="Leadership1" type="Button" parent="Background/AbilityPanel/AbilityListing/TalentsPanel/TalentsAbilities/LeadershipContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Leadership2" type="Button" parent="Background/AbilityPanel/AbilityListing/TalentsPanel/TalentsAbilities/LeadershipContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Leadership3" type="Button" parent="Background/AbilityPanel/AbilityListing/TalentsPanel/TalentsAbilities/LeadershipContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="StreetwiseContainer" type="HBoxContainer" parent="Background/AbilityPanel/AbilityListing/TalentsPanel/TalentsAbilities"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="Streetwise" type="Label" parent="Background/AbilityPanel/AbilityListing/TalentsPanel/TalentsAbilities/StreetwiseContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+text = " Streetwise                         "
+
+[node name="Streetwise1" type="Button" parent="Background/AbilityPanel/AbilityListing/TalentsPanel/TalentsAbilities/StreetwiseContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Streetwise2" type="Button" parent="Background/AbilityPanel/AbilityListing/TalentsPanel/TalentsAbilities/StreetwiseContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Streetwise3" type="Button" parent="Background/AbilityPanel/AbilityListing/TalentsPanel/TalentsAbilities/StreetwiseContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="SubterfugeContainer" type="HBoxContainer" parent="Background/AbilityPanel/AbilityListing/TalentsPanel/TalentsAbilities"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="Subterfuge" type="Label" parent="Background/AbilityPanel/AbilityListing/TalentsPanel/TalentsAbilities/SubterfugeContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+text = " Subterfuge                        "
+
+[node name="Subterfuge1" type="Button" parent="Background/AbilityPanel/AbilityListing/TalentsPanel/TalentsAbilities/SubterfugeContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Subterfuge2" type="Button" parent="Background/AbilityPanel/AbilityListing/TalentsPanel/TalentsAbilities/SubterfugeContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Subterfuge3" type="Button" parent="Background/AbilityPanel/AbilityListing/TalentsPanel/TalentsAbilities/SubterfugeContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="SkillsPanel" type="Panel" parent="Background/AbilityPanel/AbilityListing"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+theme = null
+
+[node name="SkillsLabel" type="Label" parent="Background/AbilityPanel/AbilityListing/SkillsPanel"]
+layout_mode = 1
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -34.5
+offset_top = 8.0
+offset_right = 11.5
+offset_bottom = 31.0
+grow_horizontal = 2
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+theme_override_font_sizes/font_size = 25
+text = "Skills"
+
+[node name="SkillsCounterBox" type="Panel" parent="Background/AbilityPanel/AbilityListing/SkillsPanel"]
+layout_mode = 1
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = 35.5
+offset_top = 12.0
+offset_right = 63.5
+offset_bottom = 39.0
+grow_horizontal = 2
+
+[node name="SkillsCounterNumber" type="Label" parent="Background/AbilityPanel/AbilityListing/SkillsPanel/SkillsCounterBox"]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -0.5
+offset_top = -11.5
+offset_right = 0.5
+offset_bottom = 11.5
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+
+[node name="SkillsAbilities" type="VBoxContainer" parent="Background/AbilityPanel/AbilityListing/SkillsPanel"]
+layout_mode = 1
+anchors_preset = 4
+anchor_top = 0.5
+anchor_bottom = 0.5
+offset_left = 6.0
+offset_top = -118.0
+offset_right = 253.0
+offset_bottom = 148.0
+grow_vertical = 2
+
+[node name="AnimalKenContainer" type="HBoxContainer" parent="Background/AbilityPanel/AbilityListing/SkillsPanel/SkillsAbilities"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="AnimalKen" type="Label" parent="Background/AbilityPanel/AbilityListing/SkillsPanel/SkillsAbilities/AnimalKenContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+text = " Animal Ken                      "
+
+[node name="AnimalKen1" type="Button" parent="Background/AbilityPanel/AbilityListing/SkillsPanel/SkillsAbilities/AnimalKenContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="AnimalKen2" type="Button" parent="Background/AbilityPanel/AbilityListing/SkillsPanel/SkillsAbilities/AnimalKenContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="AnimalKen3" type="Button" parent="Background/AbilityPanel/AbilityListing/SkillsPanel/SkillsAbilities/AnimalKenContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="CraftContainer" type="HBoxContainer" parent="Background/AbilityPanel/AbilityListing/SkillsPanel/SkillsAbilities"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="Craft" type="Label" parent="Background/AbilityPanel/AbilityListing/SkillsPanel/SkillsAbilities/CraftContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+text = " Craft                                 "
+
+[node name="Craft1" type="Button" parent="Background/AbilityPanel/AbilityListing/SkillsPanel/SkillsAbilities/CraftContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Craft2" type="Button" parent="Background/AbilityPanel/AbilityListing/SkillsPanel/SkillsAbilities/CraftContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Craft3" type="Button" parent="Background/AbilityPanel/AbilityListing/SkillsPanel/SkillsAbilities/CraftContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="DriveContainer" type="HBoxContainer" parent="Background/AbilityPanel/AbilityListing/SkillsPanel/SkillsAbilities"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="Drive" type="Label" parent="Background/AbilityPanel/AbilityListing/SkillsPanel/SkillsAbilities/DriveContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+text = " Drive                                 "
+
+[node name="Drive1" type="Button" parent="Background/AbilityPanel/AbilityListing/SkillsPanel/SkillsAbilities/DriveContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Drive2" type="Button" parent="Background/AbilityPanel/AbilityListing/SkillsPanel/SkillsAbilities/DriveContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Drive3" type="Button" parent="Background/AbilityPanel/AbilityListing/SkillsPanel/SkillsAbilities/DriveContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="EtiquetteContainer" type="HBoxContainer" parent="Background/AbilityPanel/AbilityListing/SkillsPanel/SkillsAbilities"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="Etiquette" type="Label" parent="Background/AbilityPanel/AbilityListing/SkillsPanel/SkillsAbilities/EtiquetteContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+text = " Etiquette                       "
+
+[node name="Etiquette1" type="Button" parent="Background/AbilityPanel/AbilityListing/SkillsPanel/SkillsAbilities/EtiquetteContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Etiquette2" type="Button" parent="Background/AbilityPanel/AbilityListing/SkillsPanel/SkillsAbilities/EtiquetteContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Etiquette3" type="Button" parent="Background/AbilityPanel/AbilityListing/SkillsPanel/SkillsAbilities/EtiquetteContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="FirearmsContainer" type="HBoxContainer" parent="Background/AbilityPanel/AbilityListing/SkillsPanel/SkillsAbilities"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="Firearms" type="Label" parent="Background/AbilityPanel/AbilityListing/SkillsPanel/SkillsAbilities/FirearmsContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+text = " Firearms                          "
+
+[node name="Firearms1" type="Button" parent="Background/AbilityPanel/AbilityListing/SkillsPanel/SkillsAbilities/FirearmsContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Firearms2" type="Button" parent="Background/AbilityPanel/AbilityListing/SkillsPanel/SkillsAbilities/FirearmsContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Firearms3" type="Button" parent="Background/AbilityPanel/AbilityListing/SkillsPanel/SkillsAbilities/FirearmsContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="LarcenyContainer" type="HBoxContainer" parent="Background/AbilityPanel/AbilityListing/SkillsPanel/SkillsAbilities"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="Larceny" type="Label" parent="Background/AbilityPanel/AbilityListing/SkillsPanel/SkillsAbilities/LarcenyContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+text = " Larceny                           "
+
+[node name="Larceny1" type="Button" parent="Background/AbilityPanel/AbilityListing/SkillsPanel/SkillsAbilities/LarcenyContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Larceny2" type="Button" parent="Background/AbilityPanel/AbilityListing/SkillsPanel/SkillsAbilities/LarcenyContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Larceny3" type="Button" parent="Background/AbilityPanel/AbilityListing/SkillsPanel/SkillsAbilities/LarcenyContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="MeleeContainer" type="HBoxContainer" parent="Background/AbilityPanel/AbilityListing/SkillsPanel/SkillsAbilities"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="Melee" type="Label" parent="Background/AbilityPanel/AbilityListing/SkillsPanel/SkillsAbilities/MeleeContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+text = " Melee                               "
+
+[node name="Melee1" type="Button" parent="Background/AbilityPanel/AbilityListing/SkillsPanel/SkillsAbilities/MeleeContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Melee2" type="Button" parent="Background/AbilityPanel/AbilityListing/SkillsPanel/SkillsAbilities/MeleeContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Melee3" type="Button" parent="Background/AbilityPanel/AbilityListing/SkillsPanel/SkillsAbilities/MeleeContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="PerformanceContainer" type="HBoxContainer" parent="Background/AbilityPanel/AbilityListing/SkillsPanel/SkillsAbilities"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="Performance" type="Label" parent="Background/AbilityPanel/AbilityListing/SkillsPanel/SkillsAbilities/PerformanceContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+text = " Performance                  "
+
+[node name="Performance1" type="Button" parent="Background/AbilityPanel/AbilityListing/SkillsPanel/SkillsAbilities/PerformanceContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Performance2" type="Button" parent="Background/AbilityPanel/AbilityListing/SkillsPanel/SkillsAbilities/PerformanceContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Performance3" type="Button" parent="Background/AbilityPanel/AbilityListing/SkillsPanel/SkillsAbilities/PerformanceContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="StealthContainer" type="HBoxContainer" parent="Background/AbilityPanel/AbilityListing/SkillsPanel/SkillsAbilities"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="Stealth" type="Label" parent="Background/AbilityPanel/AbilityListing/SkillsPanel/SkillsAbilities/StealthContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+text = " Stealth                            "
+
+[node name="Stealth1" type="Button" parent="Background/AbilityPanel/AbilityListing/SkillsPanel/SkillsAbilities/StealthContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Stealth2" type="Button" parent="Background/AbilityPanel/AbilityListing/SkillsPanel/SkillsAbilities/StealthContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Stealth3" type="Button" parent="Background/AbilityPanel/AbilityListing/SkillsPanel/SkillsAbilities/StealthContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="SurvivalContainer" type="HBoxContainer" parent="Background/AbilityPanel/AbilityListing/SkillsPanel/SkillsAbilities"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="Survival" type="Label" parent="Background/AbilityPanel/AbilityListing/SkillsPanel/SkillsAbilities/SurvivalContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+text = " Survival                           "
+
+[node name="Survival1" type="Button" parent="Background/AbilityPanel/AbilityListing/SkillsPanel/SkillsAbilities/SurvivalContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Survival2" type="Button" parent="Background/AbilityPanel/AbilityListing/SkillsPanel/SkillsAbilities/SurvivalContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Survival3" type="Button" parent="Background/AbilityPanel/AbilityListing/SkillsPanel/SkillsAbilities/SurvivalContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="KnowledgesPanel" type="Panel" parent="Background/AbilityPanel/AbilityListing"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+theme = null
+
+[node name="KnowledgesLabel" type="Label" parent="Background/AbilityPanel/AbilityListing/KnowledgesPanel"]
+layout_mode = 1
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -63.0
+offset_top = 7.0
+offset_right = 30.0
+offset_bottom = 30.0
+grow_horizontal = 2
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+theme_override_font_sizes/font_size = 25
+text = "Knowledges"
+
+[node name="KnowledgesCounterBox" type="Panel" parent="Background/AbilityPanel/AbilityListing/KnowledgesPanel"]
+layout_mode = 1
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = 56.0
+offset_top = 8.0
+offset_right = 84.0
+offset_bottom = 35.0
+grow_horizontal = 2
+
+[node name="KnowledgesCounterNumber" type="Label" parent="Background/AbilityPanel/AbilityListing/KnowledgesPanel/KnowledgesCounterBox"]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -0.5
+offset_top = -11.5
+offset_right = 0.5
+offset_bottom = 11.5
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+
+[node name="KnowledgesAbilities" type="VBoxContainer" parent="Background/AbilityPanel/AbilityListing/KnowledgesPanel"]
+layout_mode = 1
+anchors_preset = 4
+anchor_top = 0.5
+anchor_bottom = 0.5
+offset_left = 4.0
+offset_top = -118.0
+offset_right = 254.0
+offset_bottom = 148.0
+grow_vertical = 2
+
+[node name="AcademicsContainer" type="HBoxContainer" parent="Background/AbilityPanel/AbilityListing/KnowledgesPanel/KnowledgesAbilities"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="Academics" type="Label" parent="Background/AbilityPanel/AbilityListing/KnowledgesPanel/KnowledgesAbilities/AcademicsContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+text = " Academics                           "
+
+[node name="Academics1" type="Button" parent="Background/AbilityPanel/AbilityListing/KnowledgesPanel/KnowledgesAbilities/AcademicsContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Academics2" type="Button" parent="Background/AbilityPanel/AbilityListing/KnowledgesPanel/KnowledgesAbilities/AcademicsContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Academics3" type="Button" parent="Background/AbilityPanel/AbilityListing/KnowledgesPanel/KnowledgesAbilities/AcademicsContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="ComputerContainer" type="HBoxContainer" parent="Background/AbilityPanel/AbilityListing/KnowledgesPanel/KnowledgesAbilities"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="Computer" type="Label" parent="Background/AbilityPanel/AbilityListing/KnowledgesPanel/KnowledgesAbilities/ComputerContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+text = " Computer                           "
+
+[node name="Computer1" type="Button" parent="Background/AbilityPanel/AbilityListing/KnowledgesPanel/KnowledgesAbilities/ComputerContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Computer2" type="Button" parent="Background/AbilityPanel/AbilityListing/KnowledgesPanel/KnowledgesAbilities/ComputerContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Computer3" type="Button" parent="Background/AbilityPanel/AbilityListing/KnowledgesPanel/KnowledgesAbilities/ComputerContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="FinanceContainer" type="HBoxContainer" parent="Background/AbilityPanel/AbilityListing/KnowledgesPanel/KnowledgesAbilities"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="Finance" type="Label" parent="Background/AbilityPanel/AbilityListing/KnowledgesPanel/KnowledgesAbilities/FinanceContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+text = " Finance                                "
+
+[node name="Finance1" type="Button" parent="Background/AbilityPanel/AbilityListing/KnowledgesPanel/KnowledgesAbilities/FinanceContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Finance2" type="Button" parent="Background/AbilityPanel/AbilityListing/KnowledgesPanel/KnowledgesAbilities/FinanceContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Finance3" type="Button" parent="Background/AbilityPanel/AbilityListing/KnowledgesPanel/KnowledgesAbilities/FinanceContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="InvestigationContainer" type="HBoxContainer" parent="Background/AbilityPanel/AbilityListing/KnowledgesPanel/KnowledgesAbilities"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="Investigation" type="Label" parent="Background/AbilityPanel/AbilityListing/KnowledgesPanel/KnowledgesAbilities/InvestigationContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+text = " Investigation                     "
+
+[node name="Investigation1" type="Button" parent="Background/AbilityPanel/AbilityListing/KnowledgesPanel/KnowledgesAbilities/InvestigationContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Investigation2" type="Button" parent="Background/AbilityPanel/AbilityListing/KnowledgesPanel/KnowledgesAbilities/InvestigationContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Investigation3" type="Button" parent="Background/AbilityPanel/AbilityListing/KnowledgesPanel/KnowledgesAbilities/InvestigationContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="LawContainer" type="HBoxContainer" parent="Background/AbilityPanel/AbilityListing/KnowledgesPanel/KnowledgesAbilities"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="Law" type="Label" parent="Background/AbilityPanel/AbilityListing/KnowledgesPanel/KnowledgesAbilities/LawContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+text = " Law                                        "
+
+[node name="Law1" type="Button" parent="Background/AbilityPanel/AbilityListing/KnowledgesPanel/KnowledgesAbilities/LawContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Law2" type="Button" parent="Background/AbilityPanel/AbilityListing/KnowledgesPanel/KnowledgesAbilities/LawContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Law3" type="Button" parent="Background/AbilityPanel/AbilityListing/KnowledgesPanel/KnowledgesAbilities/LawContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="MedicineContainer" type="HBoxContainer" parent="Background/AbilityPanel/AbilityListing/KnowledgesPanel/KnowledgesAbilities"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="Medicine" type="Label" parent="Background/AbilityPanel/AbilityListing/KnowledgesPanel/KnowledgesAbilities/MedicineContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+text = " Medicine                             "
+
+[node name="Medicine1" type="Button" parent="Background/AbilityPanel/AbilityListing/KnowledgesPanel/KnowledgesAbilities/MedicineContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Medicine2" type="Button" parent="Background/AbilityPanel/AbilityListing/KnowledgesPanel/KnowledgesAbilities/MedicineContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Medicine3" type="Button" parent="Background/AbilityPanel/AbilityListing/KnowledgesPanel/KnowledgesAbilities/MedicineContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="OccultContainer" type="HBoxContainer" parent="Background/AbilityPanel/AbilityListing/KnowledgesPanel/KnowledgesAbilities"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="Occult" type="Label" parent="Background/AbilityPanel/AbilityListing/KnowledgesPanel/KnowledgesAbilities/OccultContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+text = " Occult                                "
+
+[node name="Occult1" type="Button" parent="Background/AbilityPanel/AbilityListing/KnowledgesPanel/KnowledgesAbilities/OccultContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Occult2" type="Button" parent="Background/AbilityPanel/AbilityListing/KnowledgesPanel/KnowledgesAbilities/OccultContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Occult3" type="Button" parent="Background/AbilityPanel/AbilityListing/KnowledgesPanel/KnowledgesAbilities/OccultContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="PoliticsContainer" type="HBoxContainer" parent="Background/AbilityPanel/AbilityListing/KnowledgesPanel/KnowledgesAbilities"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="Politics" type="Label" parent="Background/AbilityPanel/AbilityListing/KnowledgesPanel/KnowledgesAbilities/PoliticsContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+text = " Politics                               "
+
+[node name="Politics1" type="Button" parent="Background/AbilityPanel/AbilityListing/KnowledgesPanel/KnowledgesAbilities/PoliticsContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Politics2" type="Button" parent="Background/AbilityPanel/AbilityListing/KnowledgesPanel/KnowledgesAbilities/PoliticsContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Politics3" type="Button" parent="Background/AbilityPanel/AbilityListing/KnowledgesPanel/KnowledgesAbilities/PoliticsContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="ScienceContainer" type="HBoxContainer" parent="Background/AbilityPanel/AbilityListing/KnowledgesPanel/KnowledgesAbilities"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="Science" type="Label" parent="Background/AbilityPanel/AbilityListing/KnowledgesPanel/KnowledgesAbilities/ScienceContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+text = " Science                                "
+
+[node name="Science1" type="Button" parent="Background/AbilityPanel/AbilityListing/KnowledgesPanel/KnowledgesAbilities/ScienceContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Science2" type="Button" parent="Background/AbilityPanel/AbilityListing/KnowledgesPanel/KnowledgesAbilities/ScienceContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Science3" type="Button" parent="Background/AbilityPanel/AbilityListing/KnowledgesPanel/KnowledgesAbilities/ScienceContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="TechnologyContainer" type="HBoxContainer" parent="Background/AbilityPanel/AbilityListing/KnowledgesPanel/KnowledgesAbilities"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="Technology" type="Label" parent="Background/AbilityPanel/AbilityListing/KnowledgesPanel/KnowledgesAbilities/TechnologyContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+text = " Technology                       "
+
+[node name="Technology1" type="Button" parent="Background/AbilityPanel/AbilityListing/KnowledgesPanel/KnowledgesAbilities/TechnologyContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Technology2" type="Button" parent="Background/AbilityPanel/AbilityListing/KnowledgesPanel/KnowledgesAbilities/TechnologyContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Technology3" type="Button" parent="Background/AbilityPanel/AbilityListing/KnowledgesPanel/KnowledgesAbilities/TechnologyContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="DisciplinePanel" type="Panel" parent="Background"]
+layout_mode = 0
+offset_left = 903.0
+offset_top = 476.0
+offset_right = 1454.0
+offset_bottom = 612.0
+theme = null
+
+[node name="DisciplineLabel" type="Label" parent="Background/DisciplinePanel"]
+layout_mode = 1
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -86.5
+offset_top = 3.0
+offset_right = 24.5
+offset_bottom = 36.0
+grow_horizontal = 2
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+theme_override_font_sizes/font_size = 25
+text = "Disciplines"
+
+[node name="DisciplineNumberContainer" type="Panel" parent="Background/DisciplinePanel"]
+layout_mode = 0
+offset_left = 321.0
+offset_top = 2.0
+offset_right = 350.0
+offset_bottom = 31.0
+theme = null
+
+[node name="DisciplineNumberLabel" type="Label" parent="Background/DisciplinePanel/DisciplineNumberContainer"]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -0.5
+offset_top = -11.5
+offset_right = 0.5
+offset_bottom = 11.5
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+
+[node name="DisciplineContainer" type="HBoxContainer" parent="Background/DisciplinePanel"]
+layout_mode = 0
+offset_left = 16.0
+offset_top = 33.0
+offset_right = 537.0
+offset_bottom = 125.0
+
+[node name="Discipline1Panel" type="Panel" parent="Background/DisciplinePanel/DisciplineContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme = null
+
+[node name="Discipline1Container" type="VBoxContainer" parent="Background/DisciplinePanel/DisciplineContainer/Discipline1Panel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 4.0
+offset_top = 3.0
+offset_right = -3.0
+offset_bottom = -4.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Discipline1Label" type="Label" parent="Background/DisciplinePanel/DisciplineContainer/Discipline1Panel/Discipline1Container"]
+layout_mode = 2
+size_flags_horizontal = 4
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+theme_override_font_sizes/font_size = 25
+
+[node name="Discipline1ButtonContainer" type="HBoxContainer" parent="Background/DisciplinePanel/DisciplineContainer/Discipline1Panel/Discipline1Container"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="Discipline1Button1" type="Button" parent="Background/DisciplinePanel/DisciplineContainer/Discipline1Panel/Discipline1Container/Discipline1ButtonContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Discipline1Button2" type="Button" parent="Background/DisciplinePanel/DisciplineContainer/Discipline1Panel/Discipline1Container/Discipline1ButtonContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Discipline1Button3" type="Button" parent="Background/DisciplinePanel/DisciplineContainer/Discipline1Panel/Discipline1Container/Discipline1ButtonContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Discipline2Panel" type="Panel" parent="Background/DisciplinePanel/DisciplineContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme = null
+
+[node name="Discipline2Container" type="VBoxContainer" parent="Background/DisciplinePanel/DisciplineContainer/Discipline2Panel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 3.0
+offset_right = -5.0
+offset_bottom = -4.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Discipline2Label" type="Label" parent="Background/DisciplinePanel/DisciplineContainer/Discipline2Panel/Discipline2Container"]
+layout_mode = 2
+size_flags_horizontal = 4
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+theme_override_font_sizes/font_size = 25
+
+[node name="Discipline2ButtonContainer" type="HBoxContainer" parent="Background/DisciplinePanel/DisciplineContainer/Discipline2Panel/Discipline2Container"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="Discipline2Button1" type="Button" parent="Background/DisciplinePanel/DisciplineContainer/Discipline2Panel/Discipline2Container/Discipline2ButtonContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Discipline2Button2" type="Button" parent="Background/DisciplinePanel/DisciplineContainer/Discipline2Panel/Discipline2Container/Discipline2ButtonContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Discipline2Button3" type="Button" parent="Background/DisciplinePanel/DisciplineContainer/Discipline2Panel/Discipline2Container/Discipline2ButtonContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Discipline3Panel" type="Panel" parent="Background/DisciplinePanel/DisciplineContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme = null
+
+[node name="Discipline3Container" type="VBoxContainer" parent="Background/DisciplinePanel/DisciplineContainer/Discipline3Panel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 4.0
+offset_right = -4.0
+offset_bottom = -4.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Discipline3Label" type="Label" parent="Background/DisciplinePanel/DisciplineContainer/Discipline3Panel/Discipline3Container"]
+layout_mode = 2
+size_flags_horizontal = 4
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+theme_override_font_sizes/font_size = 25
+
+[node name="Discipline3ButtonContainer" type="HBoxContainer" parent="Background/DisciplinePanel/DisciplineContainer/Discipline3Panel/Discipline3Container"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="Discipline3Button1" type="Button" parent="Background/DisciplinePanel/DisciplineContainer/Discipline3Panel/Discipline3Container/Discipline3ButtonContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Discipline3Button2" type="Button" parent="Background/DisciplinePanel/DisciplineContainer/Discipline3Panel/Discipline3Container/Discipline3ButtonContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Discipline3Button3" type="Button" parent="Background/DisciplinePanel/DisciplineContainer/Discipline3Panel/Discipline3Container/Discipline3ButtonContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="BackgroundPanel" type="Panel" parent="Background"]
+layout_mode = 0
+offset_left = 1329.0
+offset_top = 20.0
+offset_right = 1579.0
+offset_bottom = 425.0
+theme = null
+
+[node name="BackgroundLabel" type="Label" parent="Background/BackgroundPanel"]
+layout_mode = 1
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -105.5
+offset_top = 7.0
+offset_right = 52.5
+offset_bottom = 46.0
+grow_horizontal = 2
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+theme_override_font_sizes/font_size = 30
+text = "Backgrounds"
+
+[node name="BackgroundCounterBox" type="Panel" parent="Background/BackgroundPanel"]
+layout_mode = 0
+offset_left = 186.0
+offset_top = 13.0
+offset_right = 216.0
+offset_bottom = 42.0
+theme = null
+
+[node name="BackgroundCounterNumber" type="Label" parent="Background/BackgroundPanel/BackgroundCounterBox"]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -0.5
+offset_top = -17.5
+offset_right = 0.5
+offset_bottom = 17.5
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+theme_override_font_sizes/font_size = 20
+
+[node name="BackgroundListing" type="VBoxContainer" parent="Background/BackgroundPanel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_top = 49.0
+grow_horizontal = 2
+grow_vertical = 2
+theme = null
+
+[node name="AlliesContainer" type="HBoxContainer" parent="Background/BackgroundPanel/BackgroundListing"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="Allies" type="Label" parent="Background/BackgroundPanel/BackgroundListing/AlliesContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+text = " Allies           "
+
+[node name="Allies1" type="Button" parent="Background/BackgroundPanel/BackgroundListing/AlliesContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Allies2" type="Button" parent="Background/BackgroundPanel/BackgroundListing/AlliesContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Allies3" type="Button" parent="Background/BackgroundPanel/BackgroundListing/AlliesContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Allies4" type="Button" parent="Background/BackgroundPanel/BackgroundListing/AlliesContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Allies5" type="Button" parent="Background/BackgroundPanel/BackgroundListing/AlliesContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="ContactsContainer" type="HBoxContainer" parent="Background/BackgroundPanel/BackgroundListing"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="Contacts" type="Label" parent="Background/BackgroundPanel/BackgroundListing/ContactsContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+text = " Contacts    "
+
+[node name="Contacts1" type="Button" parent="Background/BackgroundPanel/BackgroundListing/ContactsContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Contacts2" type="Button" parent="Background/BackgroundPanel/BackgroundListing/ContactsContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Contacts3" type="Button" parent="Background/BackgroundPanel/BackgroundListing/ContactsContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Contacts4" type="Button" parent="Background/BackgroundPanel/BackgroundListing/ContactsContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Contacts5" type="Button" parent="Background/BackgroundPanel/BackgroundListing/ContactsContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="DomainContainer" type="HBoxContainer" parent="Background/BackgroundPanel/BackgroundListing"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="Domain" type="Label" parent="Background/BackgroundPanel/BackgroundListing/DomainContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+text = " Domain       "
+
+[node name="Domain1" type="Button" parent="Background/BackgroundPanel/BackgroundListing/DomainContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Domain2" type="Button" parent="Background/BackgroundPanel/BackgroundListing/DomainContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Domain3" type="Button" parent="Background/BackgroundPanel/BackgroundListing/DomainContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Domain4" type="Button" parent="Background/BackgroundPanel/BackgroundListing/DomainContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Domain5" type="Button" parent="Background/BackgroundPanel/BackgroundListing/DomainContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="FameContainer" type="HBoxContainer" parent="Background/BackgroundPanel/BackgroundListing"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="Fame" type="Label" parent="Background/BackgroundPanel/BackgroundListing/FameContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+text = " Fame            "
+
+[node name="Fame1" type="Button" parent="Background/BackgroundPanel/BackgroundListing/FameContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Fame2" type="Button" parent="Background/BackgroundPanel/BackgroundListing/FameContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Fame3" type="Button" parent="Background/BackgroundPanel/BackgroundListing/FameContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Fame4" type="Button" parent="Background/BackgroundPanel/BackgroundListing/FameContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Fame5" type="Button" parent="Background/BackgroundPanel/BackgroundListing/FameContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="GenerationContainer" type="HBoxContainer" parent="Background/BackgroundPanel/BackgroundListing"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="Generation" type="Label" parent="Background/BackgroundPanel/BackgroundListing/GenerationContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+theme_override_font_sizes/font_size = 15
+text = " Generation"
+
+[node name="Generation1" type="Button" parent="Background/BackgroundPanel/BackgroundListing/GenerationContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Generation2" type="Button" parent="Background/BackgroundPanel/BackgroundListing/GenerationContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Generation3" type="Button" parent="Background/BackgroundPanel/BackgroundListing/GenerationContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Generation4" type="Button" parent="Background/BackgroundPanel/BackgroundListing/GenerationContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Generation5" type="Button" parent="Background/BackgroundPanel/BackgroundListing/GenerationContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="HavenContainer" type="HBoxContainer" parent="Background/BackgroundPanel/BackgroundListing"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="Haven" type="Label" parent="Background/BackgroundPanel/BackgroundListing/HavenContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+text = " Haven          "
+
+[node name="Haven1" type="Button" parent="Background/BackgroundPanel/BackgroundListing/HavenContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Haven2" type="Button" parent="Background/BackgroundPanel/BackgroundListing/HavenContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Haven3" type="Button" parent="Background/BackgroundPanel/BackgroundListing/HavenContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Haven4" type="Button" parent="Background/BackgroundPanel/BackgroundListing/HavenContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Haven5" type="Button" parent="Background/BackgroundPanel/BackgroundListing/HavenContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="HerdContainer" type="HBoxContainer" parent="Background/BackgroundPanel/BackgroundListing"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="Herd" type="Label" parent="Background/BackgroundPanel/BackgroundListing/HerdContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+text = " Herd            "
+
+[node name="Herd1" type="Button" parent="Background/BackgroundPanel/BackgroundListing/HerdContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Herd2" type="Button" parent="Background/BackgroundPanel/BackgroundListing/HerdContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Herd3" type="Button" parent="Background/BackgroundPanel/BackgroundListing/HerdContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Herd4" type="Button" parent="Background/BackgroundPanel/BackgroundListing/HerdContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Herd5" type="Button" parent="Background/BackgroundPanel/BackgroundListing/HerdContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="InfluenceContainer" type="HBoxContainer" parent="Background/BackgroundPanel/BackgroundListing"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="Influence" type="Label" parent="Background/BackgroundPanel/BackgroundListing/InfluenceContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+text = " Influence   "
+
+[node name="Influence1" type="Button" parent="Background/BackgroundPanel/BackgroundListing/InfluenceContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Influence2" type="Button" parent="Background/BackgroundPanel/BackgroundListing/InfluenceContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Influence3" type="Button" parent="Background/BackgroundPanel/BackgroundListing/InfluenceContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Influence4" type="Button" parent="Background/BackgroundPanel/BackgroundListing/InfluenceContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Influence5" type="Button" parent="Background/BackgroundPanel/BackgroundListing/InfluenceContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="MentorContainer" type="HBoxContainer" parent="Background/BackgroundPanel/BackgroundListing"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="Mentor" type="Label" parent="Background/BackgroundPanel/BackgroundListing/MentorContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+text = " Mentor       "
+
+[node name="Mentor1" type="Button" parent="Background/BackgroundPanel/BackgroundListing/MentorContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Mentor2" type="Button" parent="Background/BackgroundPanel/BackgroundListing/MentorContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Mentor3" type="Button" parent="Background/BackgroundPanel/BackgroundListing/MentorContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Mentor4" type="Button" parent="Background/BackgroundPanel/BackgroundListing/MentorContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Mentor5" type="Button" parent="Background/BackgroundPanel/BackgroundListing/MentorContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="ResourcesContainer" type="HBoxContainer" parent="Background/BackgroundPanel/BackgroundListing"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="Resources" type="Label" parent="Background/BackgroundPanel/BackgroundListing/ResourcesContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+text = " Resources   "
+
+[node name="Resources1" type="Button" parent="Background/BackgroundPanel/BackgroundListing/ResourcesContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Resources2" type="Button" parent="Background/BackgroundPanel/BackgroundListing/ResourcesContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Resources3" type="Button" parent="Background/BackgroundPanel/BackgroundListing/ResourcesContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Resources4" type="Button" parent="Background/BackgroundPanel/BackgroundListing/ResourcesContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Resources5" type="Button" parent="Background/BackgroundPanel/BackgroundListing/ResourcesContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="RetainersContainer" type="HBoxContainer" parent="Background/BackgroundPanel/BackgroundListing"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="Retainers" type="Label" parent="Background/BackgroundPanel/BackgroundListing/RetainersContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+text = " Retainers    "
+
+[node name="Retainers1" type="Button" parent="Background/BackgroundPanel/BackgroundListing/RetainersContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Retainers2" type="Button" parent="Background/BackgroundPanel/BackgroundListing/RetainersContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Retainers3" type="Button" parent="Background/BackgroundPanel/BackgroundListing/RetainersContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Retainers4" type="Button" parent="Background/BackgroundPanel/BackgroundListing/RetainersContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Retainers5" type="Button" parent="Background/BackgroundPanel/BackgroundListing/RetainersContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="RitualsContainer" type="HBoxContainer" parent="Background/BackgroundPanel/BackgroundListing"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="Rituals" type="Label" parent="Background/BackgroundPanel/BackgroundListing/RitualsContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+text = " Rituals         "
+
+[node name="Rituals1" type="Button" parent="Background/BackgroundPanel/BackgroundListing/RitualsContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Rituals2" type="Button" parent="Background/BackgroundPanel/BackgroundListing/RitualsContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Rituals3" type="Button" parent="Background/BackgroundPanel/BackgroundListing/RitualsContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Rituals4" type="Button" parent="Background/BackgroundPanel/BackgroundListing/RitualsContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Rituals5" type="Button" parent="Background/BackgroundPanel/BackgroundListing/RitualsContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="StatusContainer" type="HBoxContainer" parent="Background/BackgroundPanel/BackgroundListing"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="Status" type="Label" parent="Background/BackgroundPanel/BackgroundListing/StatusContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+text = " Status           "
+
+[node name="Status1" type="Button" parent="Background/BackgroundPanel/BackgroundListing/StatusContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Status2" type="Button" parent="Background/BackgroundPanel/BackgroundListing/StatusContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Status3" type="Button" parent="Background/BackgroundPanel/BackgroundListing/StatusContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Status4" type="Button" parent="Background/BackgroundPanel/BackgroundListing/StatusContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="Status5" type="Button" parent="Background/BackgroundPanel/BackgroundListing/StatusContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+toggle_mode = true
+
+[node name="VirtuePanel" type="Panel" parent="Background"]
+layout_mode = 0
+offset_left = 802.0
+offset_top = 664.0
+offset_right = 1594.0
+offset_bottom = 749.0
+theme = null
+
+[node name="VBoxContainer" type="VBoxContainer" parent="Background/VirtuePanel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 11.0
+offset_top = 4.0
+offset_right = -9.0
+offset_bottom = -3.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="PathContainer" type="HBoxContainer" parent="Background/VirtuePanel/VBoxContainer"]
+layout_mode = 2
+
+[node name="Path" type="Label" parent="Background/VirtuePanel/VBoxContainer/PathContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+theme_override_font_sizes/font_size = 25
+text = " Path"
+horizontal_alignment = 1
+
+[node name="PathButton" type="OptionButton" parent="Background/VirtuePanel/VBoxContainer/PathContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+theme_override_font_sizes/font_size = 25
+
+[node name="VirtueNumberContainer" type="Panel" parent="Background/VirtuePanel/VBoxContainer/PathContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme = null
+
+[node name="VirtueNumberLabel" type="Label" parent="Background/VirtuePanel/VBoxContainer/PathContainer/VirtueNumberContainer"]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -0.5
+offset_top = -11.5
+offset_right = 0.5
+offset_bottom = 11.5
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+
+[node name="VirtuesContainer" type="HBoxContainer" parent="Background/VirtuePanel/VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="ConsciencePanel" type="Panel" parent="Background/VirtuePanel/VBoxContainer/VirtuesContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme = null
+
+[node name="ConscienceContainer" type="HBoxContainer" parent="Background/VirtuePanel/VBoxContainer/VirtuesContainer/ConsciencePanel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 4.0
+offset_top = 4.0
+offset_right = -5.0
+offset_bottom = -5.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Conscience" type="Label" parent="Background/VirtuePanel/VBoxContainer/VirtuesContainer/ConsciencePanel/ConscienceContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+theme_override_font_sizes/font_size = 20
+text = "Conscience"
+
+[node name="Conscience1" type="Button" parent="Background/VirtuePanel/VBoxContainer/VirtuesContainer/ConsciencePanel/ConscienceContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+
+[node name="Conscience2" type="Button" parent="Background/VirtuePanel/VBoxContainer/VirtuesContainer/ConsciencePanel/ConscienceContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+
+[node name="Conscience3" type="Button" parent="Background/VirtuePanel/VBoxContainer/VirtuesContainer/ConsciencePanel/ConscienceContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+
+[node name="Conscience4" type="Button" parent="Background/VirtuePanel/VBoxContainer/VirtuesContainer/ConsciencePanel/ConscienceContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+
+[node name="Conscience5" type="Button" parent="Background/VirtuePanel/VBoxContainer/VirtuesContainer/ConsciencePanel/ConscienceContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+
+[node name="SelfControlPanel" type="Panel" parent="Background/VirtuePanel/VBoxContainer/VirtuesContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme = null
+
+[node name="SelfControlContainer" type="HBoxContainer" parent="Background/VirtuePanel/VBoxContainer/VirtuesContainer/SelfControlPanel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 4.0
+offset_top = 4.0
+offset_right = -5.0
+offset_bottom = -5.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="SelfControl" type="Label" parent="Background/VirtuePanel/VBoxContainer/VirtuesContainer/SelfControlPanel/SelfControlContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+theme_override_font_sizes/font_size = 20
+text = "Self Control"
+
+[node name="SelfControl1" type="Button" parent="Background/VirtuePanel/VBoxContainer/VirtuesContainer/SelfControlPanel/SelfControlContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+
+[node name="SelfControl2" type="Button" parent="Background/VirtuePanel/VBoxContainer/VirtuesContainer/SelfControlPanel/SelfControlContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+
+[node name="SelfControl3" type="Button" parent="Background/VirtuePanel/VBoxContainer/VirtuesContainer/SelfControlPanel/SelfControlContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+
+[node name="SelfControl4" type="Button" parent="Background/VirtuePanel/VBoxContainer/VirtuesContainer/SelfControlPanel/SelfControlContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+
+[node name="SelfControl5" type="Button" parent="Background/VirtuePanel/VBoxContainer/VirtuesContainer/SelfControlPanel/SelfControlContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+
+[node name="CouragePanel" type="Panel" parent="Background/VirtuePanel/VBoxContainer/VirtuesContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme = null
+
+[node name="CourageContainer" type="HBoxContainer" parent="Background/VirtuePanel/VBoxContainer/VirtuesContainer/CouragePanel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 4.0
+offset_top = 5.0
+offset_right = -4.0
+offset_bottom = -4.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Courage" type="Label" parent="Background/VirtuePanel/VBoxContainer/VirtuesContainer/CouragePanel/CourageContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+theme_override_font_sizes/font_size = 20
+text = "Courage"
+
+[node name="Courage1" type="Button" parent="Background/VirtuePanel/VBoxContainer/VirtuesContainer/CouragePanel/CourageContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+
+[node name="Courage2" type="Button" parent="Background/VirtuePanel/VBoxContainer/VirtuesContainer/CouragePanel/CourageContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+
+[node name="Courage3" type="Button" parent="Background/VirtuePanel/VBoxContainer/VirtuesContainer/CouragePanel/CourageContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+
+[node name="Courage4" type="Button" parent="Background/VirtuePanel/VBoxContainer/VirtuesContainer/CouragePanel/CourageContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+
+[node name="Courage5" type="Button" parent="Background/VirtuePanel/VBoxContainer/VirtuesContainer/CouragePanel/CourageContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme = null
+
+[node name="NEXT" type="Button" parent="Background"]
+layout_mode = 0
+offset_left = 1497.0
+offset_top = 797.0
+offset_right = 1577.0
+offset_bottom = 877.0
+focus_mode = 0
+theme = null
+
+[node name="WarningPopup" parent="." instance=ExtResource("11_pyk2c")]
+visible = false
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -200.0
+offset_top = -100.0
+offset_right = 200.0
+offset_bottom = 100.0
+
+[connection signal="item_selected" from="Background/AttributePanel/AttributeOrderPanel/PrimaryButton" to="." method="_on_primary_button_item_selected"]
+[connection signal="item_selected" from="Background/AttributePanel/AttributeOrderPanel/SecondaryButton" to="." method="_on_secondary_button_item_selected"]
+[connection signal="item_selected" from="Background/AttributePanel/AttributeOrderPanel/TertiaryButton" to="." method="_on_tertiary_button_item_selected"]
