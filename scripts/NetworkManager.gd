@@ -110,6 +110,8 @@ signal zone_description_received(desc: String)
 
 @rpc("any_peer")
 func request_zone_name(char_name: String):
+	if not multiplayer.is_server():
+		return
 	if not GameManager.character_data_by_name.has(char_name):
 		return
 	var zone_name = GameManager.character_data_by_name[char_name].current_zone
@@ -119,6 +121,8 @@ func request_zone_name(char_name: String):
 
 @rpc("any_peer")
 func request_zone_character_list(char_name: String):
+	if not multiplayer.is_server():
+		return
 	if not GameManager.character_data_by_name.has(char_name):
 		print("❌ Unknown character")
 		return
@@ -160,6 +164,8 @@ func request_zone_character_list(char_name: String):
 
 @rpc("any_peer")
 func request_zone_description(char_name: String):
+	if not multiplayer.is_server():
+		return
 	if not GameManager.character_data_by_name.has(char_name):
 		print("❌ Unknown character:", char_name)
 		return
@@ -213,6 +219,8 @@ func receive_zone_description(data: Dictionary):
 
 @rpc("any_peer")
 func request_zone_move_to(character_name: String, target_zone_or_character: String, move_reason: String = "standard") -> void:
+	if not multiplayer.is_server():
+		return
 	if not GameManager.character_data_by_name.has(character_name):
 		print("❌ Move request from unknown character:", character_name)
 		return
@@ -886,6 +894,8 @@ func send_character_data_to_peer(char_data: CharacterData, peer_id: int):
 
 @rpc("any_peer")
 func set_peer_mode(mode: String):
+	if not multiplayer.is_server():
+		return
 	var peer_id = multiplayer.get_remote_sender_id()
 	GameManager.current_mode_by_peer[peer_id] = mode
 
@@ -1143,6 +1153,8 @@ func request_dice_roll(character_name: String, attr_name: String, ability_name: 
 
 @rpc("any_peer")
 func request_zone_viewpoint_data(char_name: String) -> void:
+	if not multiplayer.is_server():
+		return
 	if not GameManager.character_data_by_name.has(char_name):
 		print("❌ Unknown character:", char_name)
 		return
@@ -1167,6 +1179,8 @@ func request_zone_viewpoint_data(char_name: String) -> void:
 
 @rpc("any_peer")
 func receive_viewpoint_image(data: Dictionary) -> void:
+	if multiplayer.is_server():
+		return
 	var char_name = data.get("char_name", "")
 	print("🧭 Updating image for:", char_name)
 
@@ -1200,6 +1214,8 @@ func set_viewpoint_image(texture: Texture2D) -> void:
 
 @rpc("any_peer")
 func request_change_viewpoint(char_name: String, new_viewpoint: String):
+	if not multiplayer.is_server():
+		return
 	if not GameManager.character_data_by_name.has(char_name):
 		print("❌ Unknown character:", char_name)
 		return
@@ -1502,6 +1518,8 @@ func request_load_character(character_name: String, submitted_password: String) 
 
 @rpc("any_peer")
 func handle_received_character_data(data: Dictionary) -> void:
+	if multiplayer.is_server():
+		return
 	var character := CharacterData.new()
 	character.deserialize_from_dict(data)
 
@@ -1587,6 +1605,8 @@ func handle_peer_disconnected(peer_id: int) -> void:
 
 @rpc("any_peer")
 func set_character_description(character_name: String, description: String) -> void:
+	if not multiplayer.is_server():
+		return
 	var character = GameManager.character_data_by_name.get(character_name)
 	if character == null:
 		print("❌ Character not found:", character_name)
@@ -1615,6 +1635,8 @@ func receive_updated_description_only(_new_description: String) -> void:
 
 @rpc("any_peer")
 func request_character_description(requester_name: String, target_name: String):
+	if not multiplayer.is_server():
+		return
 	if not GameManager.character_data_by_name.has(target_name):
 		print("❌ Target not found for description:", target_name)
 		return
@@ -1817,6 +1839,8 @@ func _log_character_edit_text(editor_peer_id: int, target_before: String, target
 
 @rpc("any_peer")
 func request_edit_character(character_name: String, change_dict: Dictionary) -> void:
+	if not multiplayer.is_server():
+		return
 	if not GameManager.character_data_by_name.has(character_name):
 		print("❌ Character not found:", character_name)
 		return
@@ -1947,6 +1971,8 @@ func receive_edited_character_data(dict: Dictionary) -> void:
 
 @rpc("any_peer")
 func request_character_data_for_view(character_name: String) -> void:
+	if not multiplayer.is_server():
+		return
 	var sender_id: int = multiplayer.get_remote_sender_id()
 	var sender_name: String = GameManager.peer_to_character_name.get(sender_id, "")
 	var sender_data: CharacterData = GameManager.character_data_by_name.get(sender_name, null)
@@ -1994,6 +2020,8 @@ func request_character_data_for_description(panel_ref: Node, character_name: Str
 
 @rpc("any_peer")
 func request_character_data_for_description_only(character_name: String) -> void:
+	if not multiplayer.is_server():
+		return
 	var sender_id: int = multiplayer.get_remote_sender_id()
 	var sender_name: String = GameManager.peer_to_character_name.get(sender_id, "")
 	var sender_data: CharacterData = GameManager.character_data_by_name.get(sender_name, null)
@@ -2033,6 +2061,8 @@ func receive_character_data_for_description_only(dict: Dictionary, character_nam
 
 @rpc("any_peer")
 func request_create_temp_zone(payload: Dictionary) -> void:
+	if not multiplayer.is_server():
+		return
 	var zone_name: String = payload.get("name", "").strip_edges()
 	var password: String = payload.get("password", "").strip_edges()
 	var description: String = payload.get("description", "").strip_edges()
@@ -2082,6 +2112,8 @@ func request_create_temp_zone(payload: Dictionary) -> void:
 
 @rpc("any_peer")
 func request_zone_selection_list(character_name: String, mode: String) -> void:
+	if not multiplayer.is_server():
+		return
 	var peer_id = multiplayer.get_remote_sender_id()
 	var char_data = GameManager.character_data_by_name.get(character_name)
 
@@ -2160,6 +2192,8 @@ func receive_name_check_result(name_taken: bool):
 ################### Note code for players ##########################
 @rpc("any_peer")
 func set_character_notes(character_name: String, notes: String) -> void:
+	if not multiplayer.is_server():
+		return
 	var character = GameManager.character_data_by_name.get(character_name)
 	if character == null:
 		print("❌ Character not found for notes:", character_name)
@@ -2176,6 +2210,8 @@ func set_character_notes(character_name: String, notes: String) -> void:
 
 @rpc("any_peer")
 func report_typing_state(data: Dictionary) -> void:
+	if not multiplayer.is_server():
+		return
 	var char_name: String = data.get("name", "")
 	var is_typing: bool = data.get("is_typing", false)
 	var mode: String = data.get("mode", "")
@@ -2264,6 +2300,8 @@ func receive_zone_category(category: String):
 
 @rpc("any_peer")
 func upload_character_image(char_name: String, data: PackedByteArray):
+	if not multiplayer.is_server():
+		return
 	var save_dir := "user://portraits/"
 	var save_path := save_dir + char_name + ".png"
 

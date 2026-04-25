@@ -12,7 +12,7 @@ func _ready():
 	self.visible = false
 
 # === ENTRY POINT ===
-func enter_mode(_storyteller_data: Resource) -> void:
+func enter_mode(_storyteller_name: String) -> void:
 	self.visible = true
 	editable_inputs.clear()
 	_clear_ui()
