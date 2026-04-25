@@ -206,7 +206,7 @@ func _start_storyteller_mode_final():
 	var main_scene: Control = load("res://scene/main_ui.tscn").instantiate()
 	print("📦 main_ui.tscn loaded and instantiated")
 
-	main_scene.set_character_data(character)
+	main_scene.set_character_data(character.name)
 	GameManager.character_uis[character.name] = main_scene
 	print("📨 Character data passed to main_ui and UI registered under name")
 

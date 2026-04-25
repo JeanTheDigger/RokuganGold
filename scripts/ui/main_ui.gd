@@ -6,28 +6,28 @@ const ACTION_LOG_PATH := ACTION_LOG_DIR + "action_log.txt"
 
 
 
-func set_character_data(data: CharacterData) -> void:
+func set_character_data(character_name: String) -> void:
 	# Disconnect previous message signal if needed
 	if not local_character_name.is_empty() and NetworkManager.is_connected("message_received", Callable(self, "_on_message_received")):
 		NetworkManager.disconnect("message_received", Callable(self, "_on_message_received"))
 
-	local_character_name = data.name
+	local_character_name = character_name
 
 	# Propagate data to subpanels
 	$TextPanel/InputButtons.set_character_data(local_character_name)
 	$ActionPanel.set_character_data(local_character_name)
 
 	# Register this UI for the character
-	GameManager.character_uis[data.name] = self
+	GameManager.character_uis[local_character_name] = self
 
 	# Connect signal safely
 	if not NetworkManager.is_connected("message_received", Callable(self, "_on_message_received")):
 		NetworkManager.connect("message_received", Callable(self, "_on_message_received"))
 
-	print("📘 Registered UI for", data.name)
+	print("📘 Registered UI for", local_character_name)
 
 	# Request zone image once UI is fully prepared
-	NetworkManager.rpc("request_zone_viewpoint_data", data.name)
+	NetworkManager.rpc("request_zone_viewpoint_data", local_character_name)
 	
 
 

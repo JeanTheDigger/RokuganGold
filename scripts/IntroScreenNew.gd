@@ -197,7 +197,7 @@ func _start_storyteller_mode_final():
 	GameManager.character_uis[character.name] = null  # will be set below
 
 	var main_scene: Control = load("res://scene/main_ui.tscn").instantiate()
-	main_scene.set_character_data(character)
+	main_scene.set_character_data(character.name)
 	GameManager.character_uis[character.name] = main_scene
 
 	get_tree().root.add_child(main_scene)

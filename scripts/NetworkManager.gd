@@ -225,6 +225,20 @@ func request_zone_move_to(character_name: String, target_zone_or_character: Stri
 		print("❌ Move request from unknown character:", character_name)
 		return
 
+	var sender_id := multiplayer.get_remote_sender_id()
+	if sender_id != 0:  # 0 means called directly on server (not via RPC)
+		match move_reason:
+			"standard", "secret", "load":
+				if not _sender_is_owner_or_st(sender_id, character_name):
+					print("❌ Move denied — sender does not own character:", character_name)
+					return
+			"teleport", "to_character", "spawn":
+				var sname := GameManager.peer_to_character_name.get(sender_id, "")
+				var sdata: CharacterData = GameManager.character_data_by_name.get(sname, null)
+				if sdata == null or not sdata.is_storyteller:
+					print("❌ Teleport/spawn denied — not a storyteller")
+					return
+
 	var char_data = GameManager.character_data_by_name[character_name]
 	var old_zone = char_data.current_zone
 	var final_target_zone := ""
@@ -711,6 +725,9 @@ func request_possess(target_name: String):
 	if st_data == null:
 		print("❌ ST character data not found for:", current_name)
 		return
+	if not st_data.is_storyteller:
+		print("❌ Possession denied — not a storyteller:", current_name)
+		return
 	if target_data == null:
 		print("❌ Target character not found:", target_name)
 		return
@@ -777,6 +794,14 @@ func deserialize_character_data(dict: Dictionary) -> CharacterData:
 	return new_data
 
 
+func _sender_is_owner_or_st(sender_id: int, char_name: String) -> bool:
+	var sender_name: String = GameManager.peer_to_character_name.get(sender_id, "")
+	if sender_name == char_name:
+		return true
+	var sender_data: CharacterData = GameManager.character_data_by_name.get(sender_name, null)
+	return sender_data != null and sender_data.is_storyteller
+
+
 
 
 
@@ -807,7 +832,7 @@ func _delayed_update_character_data(data_dict: Dictionary) -> void:
 	print("📌 Updated peer_to_character_name[", my_peer_id, "] =", new_data.name)
 
 	# ✅ Apply data to UI
-	main_ui.set_character_data(new_data)
+	main_ui.set_character_data(new_data.name)
 
 
 
@@ -958,17 +983,18 @@ func request_stat_value(character_name: String, stat_name: String) -> void:
 
 # === SERVER: Receives request and responds ===
 @rpc("any_peer")
-func request_stat_value_server(peer_id: int, character_name: String, stat_name: String) -> void:
+func request_stat_value_server(_peer_id: int, character_name: String, stat_name: String) -> void:
 	if not multiplayer.is_server():
 		return
 
+	var actual_sender := multiplayer.get_remote_sender_id()
 	var character_data = GameManager.character_data_by_name.get(character_name, null)
 	if character_data == null:
 		print("⚠ Unknown character:", character_name)
 		return
 
 	var value = _resolve_stat_value(character_data, stat_name)
-	rpc_id(peer_id, "receive_stat_value", stat_name, value)
+	rpc_id(actual_sender, "receive_stat_value", stat_name, value)
 
 
 func _resolve_stat_value(character_data: Resource, stat_name: Variant) -> int:
@@ -1010,6 +1036,11 @@ func request_dice_roll(character_name: String, attr_name: String, ability_name: 
 	var character_data = GameManager.character_data_by_name.get(character_name, null)
 	if character_data == null:
 		print("❌ Character not found for roll:", character_name)
+		return
+
+	var dice_sender_id := multiplayer.get_remote_sender_id()
+	if not _sender_is_owner_or_st(dice_sender_id, character_name):
+		print("❌ Dice roll denied — sender does not own character:", character_name)
 		return
 
 	var attr_val := 0
@@ -1215,6 +1246,10 @@ func set_viewpoint_image(texture: Texture2D) -> void:
 @rpc("any_peer")
 func request_change_viewpoint(char_name: String, new_viewpoint: String):
 	if not multiplayer.is_server():
+		return
+	var vp_sender_id := multiplayer.get_remote_sender_id()
+	if not _sender_is_owner_or_st(vp_sender_id, char_name):
+		print("❌ Viewpoint change denied for:", char_name)
 		return
 	if not GameManager.character_data_by_name.has(char_name):
 		print("❌ Unknown character:", char_name)
@@ -1429,7 +1464,7 @@ func receive_character_data(data: Dictionary) -> void:
 	GameManager.peer_to_character_name[multiplayer.get_unique_id()] = character.name
 
 	var main_ui = load("res://scene/main_ui.tscn").instantiate()
-	main_ui.set_character_data(character)
+	main_ui.set_character_data(character.name)
 
 	GameManager.character_uis[character.name] = main_ui
 
@@ -1537,7 +1572,7 @@ func handle_received_character_data(data: Dictionary) -> void:
 
 func on_character_received(character: CharacterData) -> void:
 	var main_ui = load("res://scene/main_ui.tscn").instantiate()
-	main_ui.set_character_data(character)
+	main_ui.set_character_data(character.name)
 
 	GameManager.character_uis[character.name] = main_ui
 
@@ -1606,6 +1641,10 @@ func handle_peer_disconnected(peer_id: int) -> void:
 @rpc("any_peer")
 func set_character_description(character_name: String, description: String) -> void:
 	if not multiplayer.is_server():
+		return
+	var desc_sender_id := multiplayer.get_remote_sender_id()
+	if not _sender_is_owner_or_st(desc_sender_id, character_name):
+		print("❌ Description update denied for:", character_name)
 		return
 	var character = GameManager.character_data_by_name.get(character_name)
 	if character == null:
@@ -1846,6 +1885,9 @@ func request_edit_character(character_name: String, change_dict: Dictionary) -> 
 		return
 
 	var editor_peer_id := multiplayer.get_remote_sender_id()
+	if not _sender_is_owner_or_st(editor_peer_id, character_name):
+		print("❌ Edit denied — not owner or storyteller for:", character_name)
+		return
 	var original_target := character_name
 
 	var character_data: CharacterData = GameManager.character_data_by_name[character_name]
@@ -2194,6 +2236,10 @@ func receive_name_check_result(name_taken: bool):
 func set_character_notes(character_name: String, notes: String) -> void:
 	if not multiplayer.is_server():
 		return
+	var notes_sender_id := multiplayer.get_remote_sender_id()
+	if not _sender_is_owner_or_st(notes_sender_id, character_name):
+		print("❌ Notes update denied for:", character_name)
+		return
 	var character = GameManager.character_data_by_name.get(character_name)
 	if character == null:
 		print("❌ Character not found for notes:", character_name)
@@ -2301,6 +2347,10 @@ func receive_zone_category(category: String):
 @rpc("any_peer")
 func upload_character_image(char_name: String, data: PackedByteArray):
 	if not multiplayer.is_server():
+		return
+	var img_sender_id := multiplayer.get_remote_sender_id()
+	if not _sender_is_owner_or_st(img_sender_id, char_name):
+		print("❌ Image upload denied — sender does not own character:", char_name)
 		return
 	var save_dir := "user://portraits/"
 	var save_path := save_dir + char_name + ".png"
