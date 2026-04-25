@@ -72,15 +72,9 @@ func _on_file_selected(path: String) -> void:
 		cleanup.call()
 		return
 
-	var char_data = GameManager.character_data
-	if char_data == null:
-		_warn("No character data available.")
-		cleanup.call()
-		return
-
-	var char_name: String = char_data.name.strip_edges()
+	var char_name: String = GameManager.local_character_name.strip_edges()
 	if char_name.is_empty():
-		_warn("Your character has no name.")
+		_warn("No active character.")
 		cleanup.call()
 		return
 

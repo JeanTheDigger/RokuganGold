@@ -19,15 +19,15 @@ func set_enter_mode(mode: int) -> void:
 
 	print("📤 Calling RPC: request_edit_character →", mode)
 
-	if GameManager.character_data:
+	var char_name: String = GameManager.local_character_name
+	if not char_name.is_empty():
 		NetworkManager.rpc(
 			"request_edit_character",
-			GameManager.character_data.name,
+			char_name,
 			{"enter_mode": mode}
 		)
 
-func sync_from_character() -> void:
-	if GameManager.character_data:
-		current_enter_mode = int(GameManager.character_data.enter_mode)
-		print("🔄 Sync from character: enter_mode =", current_enter_mode)
-		enter_mode_changed.emit(current_enter_mode)
+func sync_from_character_data(data: CharacterData) -> void:
+	current_enter_mode = int(data.enter_mode)
+	print("🔄 Sync from character: enter_mode =", current_enter_mode)
+	enter_mode_changed.emit(current_enter_mode)

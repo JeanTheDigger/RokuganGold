@@ -7,7 +7,7 @@ const CHAT_DIVIDER := "[color=gray]───────────────
 const ACTION_LOG_DIR := "user://StarWarsProject/logs/"
 const ACTION_LOG_PATH := ACTION_LOG_DIR + "action_log.txt"
 
-var character_data
+var local_character_name: String = ""
 
 func _ready():
 	buttons_container.custom_minimum_size = Vector2(300, 200)
@@ -28,7 +28,7 @@ func _ready():
 		NetworkManager.connect("zone_description_received", Callable(self, "_on_zone_description_received"))
 
 func set_character_data(data):
-	character_data = data
+	local_character_name = data
 
 func _on_tab_changed(tab_index: int) -> void:
 	for child in buttons_container.get_children():
@@ -80,62 +80,50 @@ func _on_button_pressed(action: String) -> void:
 	match action:
 		"Move":
 			var location_selection = get_parent().get_node("LocationSelection")
-			location_selection.enter(character_data)
+			location_selection.enter(local_character_name)
 		"Viewpoint":
 			var location_selection = get_parent().get_node("LocationSelection")
-			location_selection.enter(character_data, "viewpoint")
+			location_selection.enter(local_character_name, "viewpoint")
 		"Where?":
-			NetworkManager.rpc("request_zone_name", character_data.name)
+			NetworkManager.rpc("request_zone_name", local_character_name)
 		"Who?":
-			NetworkManager.rpc("request_zone_character_list", character_data.name)
+			NetworkManager.rpc("request_zone_character_list", local_character_name)
 		"Description":
-			NetworkManager.rpc("request_zone_description", character_data.name)
+			NetworkManager.rpc("request_zone_description", local_character_name)
 		"Dice Roller":
 			var dice_roller = get_parent().get_node("DiceRollerUI")
-			dice_roller.enter_state("roll", character_data)
+			dice_roller.enter_state("roll", local_character_name)
 		"Dice Roller Custom":
 			var dice_roller = get_parent().get_node("DiceRollerUI")
-			dice_roller.enter_state("custom", character_data)
+			dice_roller.enter_state("custom", local_character_name)
 		"Character Sheet":
 			var sheet_ui = get_parent().get_node("CharacterSheetUI")
-			sheet_ui.load_character(character_data.name)
-
+			sheet_ui.load_character(local_character_name)
 		"Secret Move":
 			var words_input = get_parent().get_node("WordsInputPanel")
-			words_input.enter_state("secret_move", character_data)
+			words_input.enter_state("secret_move", local_character_name)
 		"Save":
-			if not character_data:
-				_append_to_display("\n❌ No character data to save.")
+			if local_character_name.is_empty():
+				_append_to_display("\n❌ No character loaded.")
 				return
-			if character_data.character_password == "":
-				_append_to_display("\n Please enter a password for your character.")
-				var words_input = get_node("/root/MainUI/WordsInputPanel")
-				words_input.enter_state("set_password", character_data)
-			else:
-				# Only send the name — the server will fetch its own up-to-date copy
-				var minimal_dict := {"name": character_data.name}
-				NetworkManager.rpc("request_save_character", minimal_dict)
-				_append_to_display("\n Your character has been saved.")
+			var words_input = get_node("/root/MainUI/WordsInputPanel")
+			words_input.enter_state("set_password", local_character_name)
 		"Write Description":
 			var words_input = get_parent().get_node("WordsInputPanel")
-			words_input.enter_state("write_description", character_data)
+			words_input.enter_state("write_description", local_character_name)
 		"View Character":
 			var player_selection = get_parent().get_node("PlayerSelection")
-			player_selection.enter_state("view_description", character_data)
+			player_selection.enter_state("view_description", local_character_name)
 		"Temporary Zone":
-			if not character_data:
-				_append_to_display("\n No character data.")
-				return
-			var zone_info = ZoneManager.zones.get(character_data.current_zone, {})
-			if not zone_info.get("is_neighborhood", false):
-				_append_to_display("\n You must be in a Neighborhood zone to create a Custom Zone.")
+			if local_character_name.is_empty():
+				_append_to_display("\n No character loaded.")
 				return
 			var words_input = get_parent().get_node("WordsInputPanel")
 			words_input.custom_zone_payload = {}  # reset temp storage
-			words_input.enter_state("custom_move_zone_name", character_data)
+			words_input.enter_state("custom_move_zone_name", local_character_name)
 		"Notes":
 			var words_input = get_parent().get_node("WordsInputPanel")
-			words_input.enter_state("write_notes", character_data)
+			words_input.enter_state("write_notes", local_character_name)
 		"Sounds":
 			var sound_ui = get_parent().get_node_or_null("AudioSettingsUI")
 			if sound_ui:
@@ -156,10 +144,10 @@ func _on_button_pressed(action: String) -> void:
 			else:
 				print("❌ FileSelector not found.")
 		"See Self-Image":
-			if not character_data:
+			if local_character_name.is_empty():
 				_append_to_display("\n❌ No character loaded.")
 				return
-			NetworkManager.rpc("request_self_image_preview", character_data.name)
+			NetworkManager.rpc("request_self_image_preview", local_character_name)
 		"Group":
 			var group_menu = get_parent().get_node_or_null("GroupMenu")
 			if group_menu:
@@ -167,36 +155,34 @@ func _on_button_pressed(action: String) -> void:
 			else:
 				_append_to_display("\n❌ Group Menu not found.")
 		"Date":
-			if not character_data:
+			if local_character_name.is_empty():
 				_append_to_display("\n❌ No character loaded.")
 				return
-			NetworkManager.rpc("request_current_ic_time", character_data.name)
+			NetworkManager.rpc("request_current_ic_time", local_character_name)
 		"Nightly Activities":
-			var zone_name: String = character_data.current_zone
-			var zone_info: Dictionary = ZoneManager.zones.get(zone_name, {})
-			if zone_info.is_empty() or not zone_info.get("is_neighborhood", false):
-				_append_to_display("\n[b]You must explore the streets.[/b]")
+			if local_character_name.is_empty():
+				_append_to_display("\n❌ No character loaded.")
 				return
 			var nightly_ui = get_parent().get_node_or_null("NightlyActivitiesUI")
 			if nightly_ui:
 				nightly_ui.visible = true
-				NetworkManager.rpc("request_nightly_activities_data", character_data.name)
-				NetworkManager.rpc("request_group_summary", character_data.name)
+				NetworkManager.rpc("request_nightly_activities_data", local_character_name)
+				NetworkManager.rpc("request_group_summary", local_character_name)
 			else:
 				_append_to_display("\n❌ NightlyActivitiesUI not found.")
 		"Heal":
-			if not character_data:
+			if local_character_name.is_empty():
 				_append_to_display("\n❌ No character loaded.")
 				return
 			var heal_panel = get_parent().get_node_or_null("HealPanel")
 			if heal_panel:
 				heal_panel.visible = true
 				if heal_panel.has_method("set_character_data"):
-					heal_panel.set_character_data(character_data)
+					heal_panel.set_character_data(local_character_name)
 			else:
 				_append_to_display("\n❌ HealPanel not found.")
 		"Inventory":
-			if not character_data:
+			if local_character_name.is_empty():
 				_append_to_display("\n❌ No character loaded.")
 				return
 			var inventory_menu = get_parent().get_node_or_null("InventoryMenu")
@@ -205,12 +191,12 @@ func _on_button_pressed(action: String) -> void:
 			else:
 				_append_to_display("\n❌ InventoryMenu not found.")
 		"Physical Attributes":
-			if not character_data:
+			if local_character_name.is_empty():
 				_append_to_display("\n❌ No character loaded.")
 				return
 			var inc_ui = get_parent().get_node_or_null("IncreasePhysicalAttributesUI")
 			if inc_ui:
-				inc_ui.enter(character_data)
+				inc_ui.enter(local_character_name)
 			else:
 				_append_to_display("\n❌ IncreasePhysicalAttributesUI not found.")
 		_:

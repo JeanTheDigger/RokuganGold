@@ -1,24 +1,21 @@
 extends Control
 
-var character_data
+var local_character_name: String = ""
 const ACTION_LOG_DIR := "user://StarWarsProject/logs/"
 const ACTION_LOG_PATH := ACTION_LOG_DIR + "action_log.txt"
 
 
 
 func set_character_data(data: CharacterData) -> void:
-	# ✅ Register the character globally so other systems reference the correct one
-	GameManager.character_data = data
-
 	# Disconnect previous message signal if needed
-	if character_data != null and NetworkManager.is_connected("message_received", Callable(self, "_on_message_received")):
+	if not local_character_name.is_empty() and NetworkManager.is_connected("message_received", Callable(self, "_on_message_received")):
 		NetworkManager.disconnect("message_received", Callable(self, "_on_message_received"))
 
-	character_data = data
+	local_character_name = data.name
 
 	# Propagate data to subpanels
-	$TextPanel/InputButtons.set_character_data(data)
-	$ActionPanel.set_character_data(data)
+	$TextPanel/InputButtons.set_character_data(local_character_name)
+	$ActionPanel.set_character_data(local_character_name)
 
 	# Register this UI for the character
 	GameManager.character_uis[data.name] = self
@@ -95,7 +92,7 @@ func _on_storyteller_tab_pressed() -> void:
 				"Create Character":
 					var panel = get_node_or_null("CreateCharacterUI")
 					if panel:
-						panel.enter_mode(character_data)
+						panel.enter_mode(local_character_name)
 					else:
 						print("⚠️ CreateCharacterUI not found.")
 
@@ -103,7 +100,7 @@ func _on_storyteller_tab_pressed() -> void:
 					var panel = get_node_or_null("PlayerSelection")
 					if panel:
 						print("✅ Possess button clicked")
-						panel.enter_state("possess", character_data)
+						panel.enter_state("possess", local_character_name)
 					else:
 						print("⚠️ PlayerSelection panel not found.")
 
@@ -115,7 +112,7 @@ func _on_storyteller_tab_pressed() -> void:
 					var panel = get_node_or_null("PlayerSelection")
 					if panel:
 						print("🗑️ Delete button clicked")
-						panel.enter_state("delete", character_data)
+						panel.enter_state("delete", local_character_name)
 					else:
 						print("⚠️ PlayerSelection panel not found.")
 						
@@ -123,7 +120,7 @@ func _on_storyteller_tab_pressed() -> void:
 					var panel = get_node_or_null("LocationSelection")
 					if panel:
 						print("🌀 Teleport button clicked")
-						panel.enter(character_data, "teleport")
+						panel.enter(local_character_name, "teleport")
 					else:
 						print("⚠️ LocationSelection panel not found.")
 						
@@ -131,7 +128,7 @@ func _on_storyteller_tab_pressed() -> void:
 					var panel = get_node_or_null("PlayerSelection")
 					if panel:
 						print("🧭 Teleport to Character clicked")
-						panel.enter_state("teleport_to_character", character_data)
+						panel.enter_state("teleport_to_character", local_character_name)
 					else:
 						print("⚠️ PlayerSelection panel not found.")
 						
@@ -139,7 +136,7 @@ func _on_storyteller_tab_pressed() -> void:
 					var panel = get_node_or_null("PlayerSelection")
 					if panel:
 						print("🧲 Summon Character clicked")
-						panel.enter_state("summon", character_data)
+						panel.enter_state("summon", local_character_name)
 					else:
 						print("⚠️ PlayerSelection panel not found.")
 						
@@ -147,7 +144,7 @@ func _on_storyteller_tab_pressed() -> void:
 					var virtue_tester = get_node_or_null("STVirtueTester")
 					if virtue_tester:
 						virtue_tester.visible = true
-						virtue_tester.enter_mode("path", character_data)
+						virtue_tester.enter_mode("path", local_character_name)
 					else:
 						print("⚠️ STVirtueTester not found under MainUI.")
 						
@@ -155,7 +152,7 @@ func _on_storyteller_tab_pressed() -> void:
 					var virtue_tester = get_node_or_null("STVirtueTester")
 					if virtue_tester:
 						virtue_tester.visible = true
-						virtue_tester.enter_mode("frenzy", character_data)
+						virtue_tester.enter_mode("frenzy", local_character_name)
 					else:
 						print("⚠️ STVirtueTester not found under MainUI.")
 						
@@ -163,7 +160,7 @@ func _on_storyteller_tab_pressed() -> void:
 					var virtue_tester = get_node_or_null("STVirtueTester")
 					if virtue_tester:
 						virtue_tester.visible = true
-						virtue_tester.enter_mode("rotschreck", character_data)
+						virtue_tester.enter_mode("rotschreck", local_character_name)
 					else:
 						print("⚠️ STVirtueTester not found under MainUI.")
 						
@@ -171,26 +168,26 @@ func _on_storyteller_tab_pressed() -> void:
 					var panel = get_node_or_null("PlayerSelection")
 					if panel:
 						print("✏️ Edit Character clicked")
-						panel.enter_state("edit", character_data)
+						panel.enter_state("edit", local_character_name)
 					else:
 						print("⚠️ PlayerSelection panel not found.")
 				"Describe":
 					var panel = get_node_or_null("WordsInputPanel")
 					if panel:
 						print("📝 Describe Scene clicked")
-						panel.enter_state("describe", character_data)
+						panel.enter_state("describe", local_character_name)
 					else:
 						print("⚠️ WordsInputPanel not found.")
 				"Damage":
 					var panel = get_node_or_null("PlayerSelection")
 					if panel:
-						panel.enter_state("STDamage", character_data)
+						panel.enter_state("STDamage", local_character_name)
 					else:
 						print("⚠️ PlayerSelection panel not found.")
 				"Grant AP":
 					var panel = get_node_or_null("PlayerSelection")
 					if panel:
-						panel.enter_state("STGiveAP", character_data)
+						panel.enter_state("STGiveAP", local_character_name)
 					else:
 						print("⚠️ PlayerSelection panel not found.")
 
@@ -284,7 +281,7 @@ var typers_in_zone := {}  # name → true/false
 func _on_typing_update_received(data: Dictionary) -> void:
 	var typer_name: String = data.get("name", "")
 	var is_typing: bool = data.get("is_typing", false)
-	var local_name: String = character_data.name
+	var local_name: String = local_character_name
 	
 	print("📨 Typing update received from:", typer_name, "is_typing:", is_typing)
 

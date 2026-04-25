@@ -8,7 +8,7 @@ var whisper_target: String = ""
 var dragging := false
 var drag_offset := Vector2.ZERO
 var current_state: String = ""
-var character_data  # Stores character info during open state
+var character_name: String = ""
 var custom_zone_payload := {}
 
 var saved_position: Vector2 = Vector2.ZERO
@@ -19,29 +19,20 @@ func _ready():
 	cancel_button.pressed.connect(_on_cancel_pressed)
 	send_button.pressed.connect(_on_send_pressed)
 
-func enter_state(state_name: String, data, target_name := "") -> void:
+func enter_state(state_name: String, data: String, target_name := "") -> void:
 	print("📣 enter_state called with:", state_name, target_name)
-	print("📦 Incoming data for enter_state:", data)
 
 	current_state = state_name
-	character_data = data
+	character_name = data
 	whisper_target = target_name
 
 	_update_prompt_label()
 
 	if state_name == "write_description":
-		if character_data != null:
+		if not character_name.is_empty():
 			input_box.text = "Loading description..."
-			var name_value = character_data.name
-			NetworkManager.request_character_data_for_description(self, name_value)
+			NetworkManager.request_character_data_for_description(self, character_name)
 		else:
-			print("❌ character_data is NULL")
-			input_box.text = ""
-	elif state_name == "write_notes":
-		if character_data != null:
-			input_box.text = character_data.notes
-		else:
-			print("❌ character_data is NULL")
 			input_box.text = ""
 	else:
 		input_box.text = ""
@@ -52,7 +43,7 @@ func enter_state(state_name: String, data, target_name := "") -> void:
 
 	if ["speak", "emote", "whisper", "ooc", "describe"].has(state_name):
 		NetworkManager.rpc("report_typing_state", {
-			"name": character_data.name,
+			"name": character_name,
 			"is_typing": true,
 			"mode": state_name
 		})
@@ -95,7 +86,7 @@ func _format_state_title(state: String) -> String:
 		_: return state.capitalize()
 
 func receive_fresh_description_resource(data: Resource) -> void:
-	if current_state == "write_description" and data.name == character_data.name:
+	if current_state == "write_description" and data.name == character_name:
 		input_box.text = data.description
 
 func _on_send_pressed() -> void:
@@ -105,57 +96,54 @@ func _on_send_pressed() -> void:
 		print("⚠ Aborted: message is empty")
 		return
 
-	if character_data == null:
-		print("⚠ Aborted: character_data is null")
+	if character_name.is_empty():
+		print("⚠ Aborted: no character loaded")
 		return
 
 	match current_state:
 		"speak":
 			NetworkManager.rpc("handle_incoming_message", {
-				"type": "speak", "speaker": character_data.name, "message": message })
+				"type": "speak", "speaker": character_name, "message": message })
 		"whisper":
 			if whisper_target == "":
 				print("⚠ No whisper target specified")
 				return
 			NetworkManager.rpc("handle_incoming_message", {
-				"type": "whisper", "speaker": character_data.name, "target": whisper_target, "message": message })
+				"type": "whisper", "speaker": character_name, "target": whisper_target, "message": message })
 		"emote":
 			NetworkManager.rpc("handle_incoming_message", {
-				"type": "emote", "speaker": character_data.name, "message": message })
+				"type": "emote", "speaker": character_name, "message": message })
 		"ooc":
 			NetworkManager.rpc("handle_incoming_message", {
-				"type": "ooc", "speaker": character_data.name, "message": message })
+				"type": "ooc", "speaker": character_name, "message": message })
 		"tell":
 			if whisper_target == "":
 				print("⚠ No tell target specified")
 				return
 			NetworkManager.rpc("handle_incoming_message", {
-				"type": "tell", "speaker": character_data.name, "target": whisper_target, "message": message })
+				"type": "tell", "speaker": character_name, "target": whisper_target, "message": message })
 		"secret_move":
-			NetworkManager.rpc("request_zone_move_to", character_data.name, message, "secret")
+			NetworkManager.rpc("request_zone_move_to", character_name, message, "secret")
 		"set_password":
 			if message.length() < 4:
 				print("⚠ Password too short.")
 				return
-			character_data.character_password = message
-			NetworkManager.rpc("request_save_character", character_data.serialize_to_dict())
+			NetworkManager.rpc("request_save_character", {"name": character_name, "character_password": message})
 		"write_description":
-			NetworkManager.rpc("set_character_description", character_data.name, message)
+			NetworkManager.rpc("set_character_description", character_name, message)
 		"write_notes":
-			character_data.notes = message
-			NetworkManager.rpc("set_character_notes", character_data.name, message)
+			NetworkManager.rpc("set_character_notes", character_name, message)
 		"custom_move_zone_name":
 			custom_zone_payload["name"] = message
-			enter_state("custom_move_password", character_data)
+			enter_state("custom_move_password", character_name)
 			return
 		"custom_move_password":
 			custom_zone_payload["password"] = message
-			enter_state("custom_move_description", character_data)
+			enter_state("custom_move_description", character_name)
 			return
 		"custom_move_description":
 			custom_zone_payload["description"] = message
-			custom_zone_payload["creator"] = character_data.name
-			custom_zone_payload["origin_zone"] = character_data.current_zone
+			custom_zone_payload["creator"] = character_name
 			NetworkManager.rpc("request_create_temp_zone", custom_zone_payload)
 			custom_zone_payload = {}
 			remember_position()
@@ -163,13 +151,13 @@ func _on_send_pressed() -> void:
 			whisper_target = ""
 		"describe":
 			NetworkManager.rpc("handle_incoming_message", {
-				"type": "describe", "speaker": character_data.name, "message": message })
+				"type": "describe", "speaker": character_name, "message": message })
 
 
 
 	if ["speak", "emote", "whisper", "ooc", "describe"].has(current_state):
 		NetworkManager.rpc("report_typing_state", {
-			"name": character_data.name, "is_typing": false, "mode": current_state })
+			"name": character_name, "is_typing": false, "mode": current_state })
 
 	remember_position()
 	self.visible = false
@@ -183,7 +171,7 @@ func _on_cancel_pressed() -> void:
 
 	if ["speak", "emote", "whisper", "ooc", "describe"].has(current_state):
 		NetworkManager.rpc("report_typing_state", {
-			"name": character_data.name, "is_typing": false, "mode": current_state })
+			"name": character_name, "is_typing": false, "mode": current_state })
 
 func _on_input_box_gui_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed:

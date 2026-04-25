@@ -288,7 +288,7 @@ func receive_character_data(data: Dictionary) -> void:
 	print("📥 Receiving character data on client:", data.get("name", "Unknown"))
 
 	deserialize_from_dict(data)
-	GameManager.character_data = self
+	GameManager.local_character_name = self.name
 
 	# 🔁 Notify NetworkManager (or whoever) to handle scene switching
 	NetworkManager.on_character_received(self)

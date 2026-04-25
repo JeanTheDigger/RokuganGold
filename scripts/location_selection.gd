@@ -5,16 +5,16 @@ extends Control
 @onready var select_button = $Panel/VBoxContainer/HBoxContainer/Select
 @onready var label = $Panel/VBoxContainer/Label
 
-var character_data  # Resource
+var character_name: String = ""
 var mode: String = "zone"  # Can be "zone", "viewpoint", or "teleport"
 
 func _ready():
 	cancel_button.pressed.connect(_on_cancel_pressed)
 	select_button.pressed.connect(_on_select_pressed)
 
-func enter(character: Resource, new_mode: String = "zone"):
+func enter(character: String, new_mode: String = "zone"):
 	mode = new_mode
-	character_data = character
+	character_name = character
 
 	option_button.clear()
 	select_button.disabled = true
@@ -34,7 +34,7 @@ func enter(character: Resource, new_mode: String = "zone"):
 			return
 
 	# Ask the server for zone list based on mode
-	NetworkManager.rpc("request_zone_selection_list", character_data.name, mode)
+	NetworkManager.rpc("request_zone_selection_list", character_name, mode)
 
 	# Center this panel
 	var viewport_size = get_viewport_rect().size
@@ -58,12 +58,12 @@ func _on_select_pressed():
 
 	match mode:
 		"zone":
-			NetworkManager.rpc("request_zone_move_to", character_data.name, selection, "standard")
+			NetworkManager.rpc("request_zone_move_to", character_name, selection, "standard")
 
 		"teleport":
-			NetworkManager.rpc("request_zone_move_to", character_data.name, selection, "teleport")
+			NetworkManager.rpc("request_zone_move_to", character_name, selection, "teleport")
 
 		"viewpoint":
-			NetworkManager.rpc("request_change_viewpoint", character_data.name, selection)
+			NetworkManager.rpc("request_change_viewpoint", character_name, selection)
 
 	self.visible = false

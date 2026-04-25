@@ -65,9 +65,9 @@ func receive_message(data: Dictionary):
 	var content = data.get("message", "")
 
 	# UI display
-	var char_data = GameManager.character_data
-	if char_data:
-		var ui = GameManager.character_uis.get(char_data.name, null)
+	var local_name: String = GameManager.local_character_name
+	if not local_name.is_empty():
+		var ui = GameManager.character_uis.get(local_name, null)
 		if ui and ui.has_method("display_message"):
 			ui.display_message(content)
 
@@ -794,8 +794,8 @@ func _delayed_update_character_data(data_dict: Dictionary) -> void:
 	var new_data = deserialize_character_data(data_dict)
 
 	# ✅ Update current active character reference
-	GameManager.character_data = new_data
-	print("✅ GameManager.character_data set to:", new_data.name)
+	GameManager.local_character_name = new_data.name
+	print("✅ GameManager.local_character_name set to:", new_data.name)
 
 	# ✅ Update peer name mapping on client
 	var my_peer_id = multiplayer.get_unique_id()
@@ -1415,7 +1415,7 @@ func receive_character_data(data: Dictionary) -> void:
 	character.deserialize_from_dict(data)
 
 	GameManager.character_data_by_name[character.name] = character
-	GameManager.character_data = character
+	GameManager.local_character_name = character.name
 
 	var main_ui = load("res://scene/main_ui.tscn").instantiate()
 	main_ui.set_character_data(character)
@@ -1510,11 +1510,10 @@ func handle_received_character_data(data: Dictionary) -> void:
 	var character := CharacterData.new()
 	character.deserialize_from_dict(data)
 
-	GameManager.character_data_by_name[character.name] = character
-	GameManager.character_data = character
+	GameManager.local_character_name = character.name
 
 	if Engine.has_singleton("SettingsManager") or SettingsManager:
-		SettingsManager.sync_from_character()
+		SettingsManager.sync_from_character_data(character)
 
 	NetworkManager.on_character_received(character)
 
@@ -1613,10 +1612,8 @@ func set_character_description(character_name: String, description: String) -> v
 		rpc_id(peer_id, "receive_updated_description_only", description)
 
 @rpc("authority")
-func receive_updated_description_only(new_description: String) -> void:
-	if GameManager.character_data:
-		GameManager.character_data.description = new_description
-		print("📝 Client-side character description updated")
+func receive_updated_description_only(_new_description: String) -> void:
+	pass  # description is authoritative on the server; no client-side copy to update
 
 
 ################ Description ############
@@ -1737,7 +1734,7 @@ func request_character_data_for_edit(character_name: String) -> void:
 
 @rpc("authority")
 func send_character_data_to_editor(data: Dictionary) -> void:
-	var character_ui = GameManager.character_uis.get(GameManager.character_data.name, null)
+	var character_ui = GameManager.character_uis.get(GameManager.local_character_name, null)
 	if character_ui == null:
 		print("⚠️ Could not find UI for current character")
 		return
@@ -1941,9 +1938,8 @@ func receive_edited_character_data(dict: Dictionary) -> void:
 	var new_data := CharacterData.new()
 	new_data.deserialize_from_dict(dict)
 
-	GameManager.character_data = new_data
-	GameManager.character_data_by_name[new_data.name] = new_data  # keeps local cache aligned
-	SettingsManager.sync_from_character()  # <-- add this
+	GameManager.local_character_name = new_data.name
+	SettingsManager.sync_from_character_data(new_data)
 
 	var main_ui: Control = GameManager.character_uis.get(new_data.name, null)
 	if main_ui != null:
@@ -2046,7 +2042,8 @@ func request_create_temp_zone(payload: Dictionary) -> void:
 	var password: String = payload.get("password", "").strip_edges()
 	var description: String = payload.get("description", "").strip_edges()
 	var creator: String = payload.get("creator", "")
-	var origin_zone: String = payload.get("origin_zone", "")
+	var creator_data: CharacterData = GameManager.character_data_by_name.get(creator, null)
+	var origin_zone: String = creator_data.current_zone if creator_data != null else ""
 
 	if zone_name == "" or password == "" or description == "":
 		print("❌ Invalid temp zone payload received")
@@ -2234,11 +2231,11 @@ func receive_typing_update(data: Dictionary) -> void:
 
 @rpc("authority")
 func flush_typing_state():
-	if GameManager.character_data == null:
-		print("❌ flush_typing_state skipped: character_data is null")
+	var local_name: String = GameManager.local_character_name
+	if local_name.is_empty():
+		print("❌ flush_typing_state skipped: no local character")
 		return
 
-	var local_name = GameManager.character_data.name
 	var ui = GameManager.character_uis.get(local_name, null)
 	if ui:
 		ui.typers_in_zone.clear()
@@ -2247,11 +2244,11 @@ func flush_typing_state():
 
 @rpc("authority")
 func remove_typing_character(char_name: String):
-	if GameManager.character_data == null:
-		print("❌ remove_typing_character skipped: character_data is null")
+	var local_name: String = GameManager.local_character_name
+	if local_name.is_empty():
+		print("❌ remove_typing_character skipped: no local character")
 		return
 
-	var local_name = GameManager.character_data.name
 	var ui = GameManager.character_uis.get(local_name, null)
 	if ui and ui.typers_in_zone.has(char_name):
 		ui.typers_in_zone.erase(char_name)

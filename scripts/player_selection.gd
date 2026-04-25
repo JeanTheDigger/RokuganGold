@@ -5,7 +5,7 @@ extends Control
 @onready var cancel_button: Button = $Panel/VBoxContainer/HBoxContainer/Cancel
 @onready var select_button: Button = $Panel/VBoxContainer/HBoxContainer/Select
 
-var character_data: CharacterData
+var character_name: String = ""
 var current_mode: String = ""
 var selection_target: String = ""   # For mentor flow: holds the chosen student name; reused elsewhere as needed.
 var mentor_subject: String = ""
@@ -22,9 +22,9 @@ func _ready() -> void:
 		NetworkManager.connect("all_character_names_received", Callable(self, "_on_receive_all_character_names"))
 
 
-func enter_state(mode: String, data: Resource, target: Variant = null) -> void:
+func enter_state(mode: String, data: String, target: Variant = null) -> void:
 	current_mode = mode
-	character_data = data
+	character_name = data
 	selection_target = ""
 	mentor_subject = ""
 	if target != null:
@@ -43,32 +43,32 @@ func enter_state(mode: String, data: Resource, target: Variant = null) -> void:
 		# ---------------- Existing modes ----------------
 		"whisper", "possess", "delete", "view_description", "edit", "GroupInvite", "GiveBloodSelectTarget":
 			NetworkManager.rpc("set_peer_mode", current_mode)
-			NetworkManager.rpc("request_zone_character_list", character_data.name)
+			NetworkManager.rpc("request_zone_character_list", character_name)
 
 		"teleport_to_character", "summon", "tell", "STDamage", "STGiveAP":
 			NetworkManager.rpc("set_peer_mode", current_mode)
-			NetworkManager.rpc("request_all_character_names", character_data.name)
+			NetworkManager.rpc("request_all_character_names", character_name)
 
 		# ---------------- NEW mentor modes ----------------
 		"MentorSelectStudent":
 			# Ask server for eligible students (same group, same zone, NA open)
-			NetworkManager.rpc("request_mentor_target_list", character_data.name)
+			NetworkManager.rpc("request_mentor_target_list", character_name)
 
 		"MentorSelectDiscipline":
 			# Requires a preselected student in selection_target
 			if selection_target == "":
 				push_warning("MentorSelectDiscipline requires a student target.")
 			else:
-				NetworkManager.rpc("request_mentor_discipline_list", character_data.name, selection_target)
+				NetworkManager.rpc("request_mentor_discipline_list", character_name, selection_target)
 
 		"MentorTeachSelectStudent":
-			NetworkManager.rpc("request_mentor_target_list", character_data.name)
+			NetworkManager.rpc("request_mentor_target_list", character_name)
 
 		"MentorTeachSelectTopic":
 			if selection_target == "" or mentor_subject == "":
 				push_warning("MentorTeachSelectTopic requires a student target and subject.")
 			else:
-				NetworkManager.rpc("request_mentor_teaching_options", character_data.name, selection_target, mentor_subject)
+				NetworkManager.rpc("request_mentor_teaching_options", character_name, selection_target, mentor_subject)
 
 		_:
 			print("⚠ Unknown mode passed to PlayerSelection:", current_mode)
@@ -86,7 +86,7 @@ func _on_receive_zone_character_list(names: Array) -> void:
 	for char_name_v in names:
 		var char_name := String(char_name_v)
 		# Do not list self when choosing a blood recipient
-		if current_mode == "GiveBloodSelectTarget" and char_name == character_data.name:
+		if current_mode == "GiveBloodSelectTarget" and char_name == character_name:
 			continue
 		option_button.add_item(char_name)
 	select_button.disabled = option_button.item_count == 0
@@ -97,7 +97,7 @@ func _on_receive_all_character_names(names: Array) -> void:
 	option_button.clear()
 	for char_name_v in names:
 		var char_name := String(char_name_v)
-		if char_name == character_data.name:
+		if char_name == character_name:
 			continue
 		option_button.add_item(char_name)
 	select_button.disabled = option_button.item_count == 0
@@ -172,21 +172,21 @@ func _on_select_pressed() -> void:
 			self.visible = false
 
 		"teleport_to_character":
-			NetworkManager.rpc("request_zone_move_to", character_data.name, selected_text, "to_character")
+			NetworkManager.rpc("request_zone_move_to", character_name, selected_text, "to_character")
 			self.visible = false
 
 		"summon":
-			NetworkManager.rpc("request_zone_move_to", selected_text, character_data.name, "summon")
+			NetworkManager.rpc("request_zone_move_to", selected_text, character_name, "summon")
 			self.visible = false
 
 		"view_description":
-			NetworkManager.rpc("request_character_description", character_data.name, selected_text)
+			NetworkManager.rpc("request_character_description", character_name, selected_text)
 			self.visible = false
 
 
 		"GroupInvite":
 			print("📨 Inviting %s to group..." % selected_text)
-			NetworkManager.rpc("request_send_group_invitation", character_data.name, selected_text)
+			NetworkManager.rpc("request_send_group_invitation", character_name, selected_text)
 			self.visible = false
 
 
@@ -201,12 +201,12 @@ func _on_select_pressed() -> void:
 			current_mode = "MentorSelectDiscipline"
 			option_button.clear()
 			select_button.disabled = true
-			NetworkManager.rpc("request_mentor_discipline_list", character_data.name, selection_target)
+			NetworkManager.rpc("request_mentor_discipline_list", character_name, selection_target)
 
 		"MentorSelectDiscipline":
 			# Send invite to the student for the selected discipline
 			var discipline: String = selected_text
-			NetworkManager.rpc("request_send_mentor_invite", character_data.name, selection_target, discipline)
+			NetworkManager.rpc("request_send_mentor_invite", character_name, selection_target, discipline)
 			self.visible = false
 
 
@@ -220,7 +220,7 @@ func _on_select_pressed() -> void:
 		# ------------- NEW Give Blood flow -------------
 		"GiveBloodSelectTarget":
 			# Send a blood offer to the selected target; server will prompt their UI
-			NetworkManager.rpc("request_send_blood_offer", character_data.name, selected_text)
+			NetworkManager.rpc("request_send_blood_offer", character_name, selected_text)
 			self.visible = false
 
 		_:
@@ -228,11 +228,11 @@ func _on_select_pressed() -> void:
 			self.visible = false
 
 func _send_mentor_training_invite(topic_value: String, topic_label: String) -> void:
-	if character_data == null or selection_target == "":
+	if character_name.is_empty() or selection_target == "":
 		return
 	NetworkManager.rpc(
 		"request_send_mentor_invite",
-		character_data.name,
+		character_name,
 		selection_target,
 		topic_value,
 		mentor_subject,

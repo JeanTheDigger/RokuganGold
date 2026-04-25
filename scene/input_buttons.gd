@@ -5,16 +5,16 @@ extends Control
 @onready var ooc_button = $OOCButton
 @onready var tell_button = $TellButton
 
-var character_data  # Passed from main_ui.gd
+var local_character_name: String = ""
 
 
-func set_character_data(data):
-	character_data = data
+func set_character_data(data: String) -> void:
+	local_character_name = data
 
 
 func _on_whisper_pressed():
 	var player_selection = $"../../PlayerSelection"
-	player_selection.enter_state("whisper", character_data)
+	player_selection.enter_state("whisper", local_character_name)
 
 	var viewport_size = get_viewport_rect().size
 	player_selection.global_position = (viewport_size - player_selection.size) / 2
@@ -23,7 +23,7 @@ func _on_whisper_pressed():
 
 func _on_tell_pressed():
 	var player_selection = $"../../PlayerSelection"
-	player_selection.enter_state("tell", character_data)
+	player_selection.enter_state("tell", local_character_name)
 
 	var viewport_size = get_viewport_rect().size
 	player_selection.global_position = (viewport_size - player_selection.size) / 2

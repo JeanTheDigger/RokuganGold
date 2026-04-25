@@ -192,7 +192,7 @@ func _start_storyteller_mode_final():
 	character.name = storyteller_name
 	character.current_zone = "OOC"
 	character.is_storyteller = true
-	GameManager.character_data = character
+	GameManager.local_character_name = character.name
 
 	var peer_id: int = multiplayer.get_unique_id()
 	GameManager.peer_to_character_name[peer_id] = character.name
