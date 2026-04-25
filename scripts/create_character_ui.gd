@@ -229,5 +229,5 @@ func _on_confirm_pressed():
 	character_dict["is_storyteller"] = false
 
 	# Send to server
-	NetworkManager.rpc("request_create_character", character_dict, GameManager.local_character_name)
+	NetworkManager.rpc("request_create_character", character_dict, GameManager.peer_to_character_name.get(multiplayer.get_unique_id(), ""))
 	self.visible = false

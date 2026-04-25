@@ -65,7 +65,7 @@ func receive_message(data: Dictionary):
 	var content = data.get("message", "")
 
 	# UI display
-	var local_name: String = GameManager.local_character_name
+	var local_name: String = GameManager.peer_to_character_name.get(multiplayer.get_unique_id(), "")
 	if not local_name.is_empty():
 		var ui = GameManager.character_uis.get(local_name, null)
 		if ui and ui.has_method("display_message"):
@@ -793,10 +793,6 @@ func _delayed_update_character_data(data_dict: Dictionary) -> void:
 
 	var new_data = deserialize_character_data(data_dict)
 
-	# ✅ Update current active character reference
-	GameManager.local_character_name = new_data.name
-	print("✅ GameManager.local_character_name set to:", new_data.name)
-
 	# ✅ Update peer name mapping on client
 	var my_peer_id = multiplayer.get_unique_id()
 	GameManager.peer_to_character_name[my_peer_id] = new_data.name
@@ -1414,7 +1410,7 @@ func receive_character_data(data: Dictionary) -> void:
 	var character = CharacterData.new()
 	character.deserialize_from_dict(data)
 
-	GameManager.local_character_name = character.name
+	GameManager.peer_to_character_name[multiplayer.get_unique_id()] = character.name
 
 	var main_ui = load("res://scene/main_ui.tscn").instantiate()
 	main_ui.set_character_data(character)
@@ -1509,7 +1505,7 @@ func handle_received_character_data(data: Dictionary) -> void:
 	var character := CharacterData.new()
 	character.deserialize_from_dict(data)
 
-	GameManager.local_character_name = character.name
+	GameManager.peer_to_character_name[multiplayer.get_unique_id()] = character.name
 
 	if Engine.has_singleton("SettingsManager") or SettingsManager:
 		SettingsManager.sync_from_character_data(character)
@@ -1733,7 +1729,7 @@ func request_character_data_for_edit(character_name: String) -> void:
 
 @rpc("authority")
 func send_character_data_to_editor(data: Dictionary) -> void:
-	var character_ui = GameManager.character_uis.get(GameManager.local_character_name, null)
+	var character_ui = GameManager.character_uis.get(GameManager.peer_to_character_name.get(multiplayer.get_unique_id(), ""), null)
 	if character_ui == null:
 		print("⚠️ Could not find UI for current character")
 		return
@@ -1937,7 +1933,7 @@ func receive_edited_character_data(dict: Dictionary) -> void:
 	var new_data := CharacterData.new()
 	new_data.deserialize_from_dict(dict)
 
-	GameManager.local_character_name = new_data.name
+	GameManager.peer_to_character_name[multiplayer.get_unique_id()] = new_data.name
 	SettingsManager.sync_from_character_data(new_data)
 
 	var main_ui: Control = GameManager.character_uis.get(new_data.name, null)
@@ -2230,7 +2226,7 @@ func receive_typing_update(data: Dictionary) -> void:
 
 @rpc("authority")
 func flush_typing_state():
-	var local_name: String = GameManager.local_character_name
+	var local_name: String = GameManager.peer_to_character_name.get(multiplayer.get_unique_id(), "")
 	if local_name.is_empty():
 		print("❌ flush_typing_state skipped: no local character")
 		return
@@ -2243,7 +2239,7 @@ func flush_typing_state():
 
 @rpc("authority")
 func remove_typing_character(char_name: String):
-	var local_name: String = GameManager.local_character_name
+	var local_name: String = GameManager.peer_to_character_name.get(multiplayer.get_unique_id(), "")
 	if local_name.is_empty():
 		print("❌ remove_typing_character skipped: no local character")
 		return

@@ -7,7 +7,7 @@ func _ready():
 
 func _on_message_received(data: Dictionary) -> void:
 	var speaker = data.get("speaker", "")
-	var local_name: String = GameManager.local_character_name
+	var local_name: String = GameManager.peer_to_character_name.get(multiplayer.get_unique_id(), "")
 	if local_name.is_empty():
 		return
 

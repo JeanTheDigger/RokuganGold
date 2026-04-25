@@ -19,7 +19,7 @@ func set_enter_mode(mode: int) -> void:
 
 	print("📤 Calling RPC: request_edit_character →", mode)
 
-	var char_name: String = GameManager.local_character_name
+	var char_name: String = GameManager.peer_to_character_name.get(multiplayer.get_unique_id(), "")
 	if not char_name.is_empty():
 		NetworkManager.rpc(
 			"request_edit_character",
