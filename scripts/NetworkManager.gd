@@ -1414,7 +1414,6 @@ func receive_character_data(data: Dictionary) -> void:
 	var character = CharacterData.new()
 	character.deserialize_from_dict(data)
 
-	GameManager.character_data_by_name[character.name] = character
 	GameManager.local_character_name = character.name
 
 	var main_ui = load("res://scene/main_ui.tscn").instantiate()
