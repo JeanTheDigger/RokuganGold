@@ -1,8 +1,7 @@
-[gd_scene load_steps=6 format=3 uid="uid://c5mjt2raln2ku"]
+[gd_scene load_steps=5 format=3 uid="uid://c5mjt2raln2ku"]
 
 [ext_resource type="Script" uid="uid://coi4l71qjrupr" path="res://scene/IntroScreen.gd" id="1_0or32"]
 [ext_resource type="Theme" uid="uid://cx2pg2eqkkwin" path="res://Theme/CharacterCreation.tres" id="1_hlvbf"]
-[ext_resource type="FontFile" uid="uid://d36bviqyu6lr2" path="res://Image/UI/Starjedi.ttf" id="3_0or32"]
 [ext_resource type="Texture2D" uid="uid://pbrsar0vms2h" path="res://Image/UI/4aa99b6ad2d2cbc7cb04a41571885a8f.jpg" id="3_ht8l7"]
 [ext_resource type="PackedScene" uid="uid://fwr66jce628v" path="res://scene/LoginUI.tscn" id="6_4k3k4"]
 
@@ -40,10 +39,8 @@ offset_right = 0.5
 offset_bottom = 17.0
 grow_horizontal = 2
 theme_override_colors/font_color = Color(1, 1, 1, 1)
-theme_override_fonts/font = ExtResource("3_0or32")
 theme_override_font_sizes/font_size = 150
-text = "STAR WARS
-The interregnum"
+text = "The Interregnum"
 horizontal_alignment = 1
 
 [node name="ButtonMenu" type="VBoxContainer" parent="."]

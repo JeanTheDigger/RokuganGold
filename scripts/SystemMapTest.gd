@@ -8,10 +8,10 @@ const CanonSystemTestData = preload("res://scripts/data/canon_systems_test.gd")
 const FLEET_RING_OFFSET: float = 52.0
 const FLEET_SHIP_SPACING_X: float = 14.0
 const FLEET_SHIP_SPACING_Y: float = 10.0
-const REPUBLIC_FACTION_ID: int = 1
-const SITH_FACTION_ID: int = 2
-const REPUBLIC_COLOR := Color(1.0, 0.55, 0.10, 1.0)
-const SITH_COLOR := Color(0.86, 0.12, 0.12, 1.0)
+const FACTION_A_ID: int = 1
+const FACTION_B_ID: int = 2
+const FACTION_A_COLOR := Color(1.0, 0.55, 0.10, 1.0)
+const FACTION_B_COLOR := Color(0.86, 0.12, 0.12, 1.0)
 const DEFAULT_FACTION_FLEET_COLOR := Color(0.82, 0.88, 0.95, 1.0)
 const STATION_RING_OFFSET: float = 28.0
 const STATION_SQUARE_SIZE: float = 7.0
@@ -210,10 +210,10 @@ func _compute_cluster_states(factions: Array) -> Array[Dictionary]:
 
 
 func _color_for_faction(faction_id: int) -> Color:
-	if faction_id == REPUBLIC_FACTION_ID:
-		return REPUBLIC_COLOR
-	if faction_id == SITH_FACTION_ID:
-		return SITH_COLOR
+	if faction_id == FACTION_A_ID:
+		return FACTION_A_COLOR
+	if faction_id == FACTION_B_ID:
+		return FACTION_B_COLOR
 	return DEFAULT_FACTION_FLEET_COLOR
 
 func _prebuild_generated_planets() -> void:

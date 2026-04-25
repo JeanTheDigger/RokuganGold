@@ -18,21 +18,21 @@ const PLANETARY_TYPE_ECUMENOPOLIS := "Ecumenopolis"
 
 const CANON_SYSTEMS: Array[Dictionary] = [
 	{
-		"system_id": "system_coruscant",
-		"system_name": "Coruscant",
+		"system_id": "system_capital",
+		"system_name": "Capital",
 		"region": "Core Worlds",
 		"position": Vector2(0.00, 0.00),
 		"lanes": ["Perlemian Trade Route", "Corellian Run"],
-		"planet_ids": ["planet_coruscant"],
+		"planet_ids": ["planet_capital"],
 	},
 ]
 
 const CANON_PLANETS: Array[Dictionary] = [
 	{
-		"planet_id": "planet_coruscant",
-		"name": "Coruscant",
+		"planet_id": "planet_capital",
+		"name": "Capital",
 		"planetary_type": PLANETARY_TYPE_ECUMENOPOLIS,
-		"system_id": "system_coruscant",
+		"system_id": "system_capital",
 		"max_settlements": 1,
 	},
 ]
@@ -46,9 +46,9 @@ const CANON_PLANETS: Array[Dictionary] = [
 
 const SETTLEMENTS: Array[Dictionary] = [
 	{
-		"settlement_id": "settlement_coruscant_global",
-		"planet_id": "planet_coruscant",
-		"owner_faction_id": "faction_republic",
+		"settlement_id": "settlement_capital_global",
+		"planet_id": "planet_capital",
+		"owner_faction_id": "faction_a",
 		"name": "Galactic City",
 		"is_giant_settlement": true,
 		"population": {
@@ -62,23 +62,23 @@ const SETTLEMENTS: Array[Dictionary] = [
 
 const INFRASTRUCTURES: Array[Dictionary] = [
 	{
-		"infrastructure_id": "infra_storage_republic_core",
-		"settlement_id": "settlement_coruscant_global",
-		"owner_faction_id": "faction_republic",
+		"infrastructure_id": "infra_storage_faction_a_core",
+		"settlement_id": "settlement_capital_global",
+		"owner_faction_id": "faction_a",
 		"type": "storage",
 		"storage_capacity": 100000.0,
 	},
 	{
-		"infrastructure_id": "infra_storage_kuat_arms",
-		"settlement_id": "settlement_coruscant_global",
-		"owner_faction_id": "faction_kuat_arms",
+		"infrastructure_id": "infra_storage_faction_b",
+		"settlement_id": "settlement_capital_global",
+		"owner_faction_id": "faction_b",
 		"type": "storage",
 		"storage_capacity": 40000.0,
 	},
 	{
-		"infrastructure_id": "infra_factory_kuat_arms",
-		"settlement_id": "settlement_coruscant_global",
-		"owner_faction_id": "faction_kuat_arms",
+		"infrastructure_id": "infra_factory_faction_b",
+		"settlement_id": "settlement_capital_global",
+		"owner_faction_id": "faction_b",
 		"type": "military_factory",
 		"storage_capacity": 5000.0,
 	},
@@ -87,27 +87,27 @@ const INFRASTRUCTURES: Array[Dictionary] = [
 const HOLDINGS: Array[Dictionary] = [
 	{
 		"holding_id": "holding_001",
-		"faction_id": "faction_republic",
-		"settlement_id": "settlement_coruscant_global",
-		"infrastructure_id": "infra_storage_republic_core",
+		"faction_id": "faction_a",
+		"settlement_id": "settlement_capital_global",
+		"infrastructure_id": "infra_storage_faction_a_core",
 		"resource": "food",
 		"quantity": 5.0,
 		"reserved": 0.0,
 	},
 	{
 		"holding_id": "holding_002",
-		"faction_id": "faction_kuat_arms",
-		"settlement_id": "settlement_coruscant_global",
-		"infrastructure_id": "infra_storage_kuat_arms",
+		"faction_id": "faction_b",
+		"settlement_id": "settlement_capital_global",
+		"infrastructure_id": "infra_storage_faction_b",
 		"resource": "food",
 		"quantity": 3.0,
 		"reserved": 0.0,
 	},
 	{
 		"holding_id": "holding_003",
-		"faction_id": "faction_kuat_arms",
-		"settlement_id": "settlement_coruscant_global",
-		"infrastructure_id": "infra_factory_kuat_arms",
+		"faction_id": "faction_b",
+		"settlement_id": "settlement_capital_global",
+		"infrastructure_id": "infra_factory_faction_b",
 		"resource": "weapons",
 		"quantity": 220.0,
 		"reserved": 40.0,
@@ -117,18 +117,18 @@ const HOLDINGS: Array[Dictionary] = [
 const TRADE_OFFERS: Array[Dictionary] = [
 	{
 		"offer_id": "offer_001",
-		"settlement_id": "settlement_coruscant_global",
-		"seller_faction_id": "faction_kuat_arms",
-		"buyer_faction_id": "faction_republic",
+		"settlement_id": "settlement_capital_global",
+		"seller_faction_id": "faction_b",
+		"buyer_faction_id": "faction_a",
 		"resource": "food",
 		"quantity": 2.0,
 		"price_per_unit": 4.0,
 	},
 	{
 		"offer_id": "offer_002",
-		"settlement_id": "settlement_coruscant_global",
-		"seller_faction_id": "faction_kuat_arms",
-		"buyer_faction_id": "faction_republic",
+		"settlement_id": "settlement_capital_global",
+		"seller_faction_id": "faction_b",
+		"buyer_faction_id": "faction_a",
 		"resource": "weapons",
 		"quantity": 180.0,
 		"price_per_unit": 12.0,

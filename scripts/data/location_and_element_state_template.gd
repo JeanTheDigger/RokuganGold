@@ -6,7 +6,7 @@ class_name LocationAndElementStateTemplate
 ## 1) Location graph (where things are)
 ## 2) Element state (what things currently have)
 ##
-## Example target: Coruscant.
+## Example target: Capital.
 
 
 ## ---------------------------------------------------------------------------
@@ -14,38 +14,38 @@ class_name LocationAndElementStateTemplate
 ## ---------------------------------------------------------------------------
 ## system -> planets -> elements
 ## Elements can be settlements, districts, sites, or any planet-level node.
-## In this Coruscant example, there is intentionally only ONE element for the
+## In this Capital example, there is intentionally only ONE element for the
 ## planet (Galactic City). Any internal subdivision is modeled through
 ## infrastructures/state, not additional city-level elements.
 
 const LOCATION_SYSTEMS: Array[Dictionary] = [
 	{
-		"system_id": "system_coruscant",
-		"system_name": "Coruscant",
+		"system_id": "system_capital",
+		"system_name": "Capital",
 		"region": "Core Worlds",
 		"position": Vector2(0.00, 0.00),
-		"planet_ids": ["planet_coruscant"],
+		"planet_ids": ["planet_capital"],
 		"lanes": ["Perlemian Trade Route", "Corellian Run"],
 	},
 ]
 
 const LOCATION_PLANETS: Array[Dictionary] = [
 	{
-		"planet_id": "planet_coruscant",
-		"system_id": "system_coruscant",
-		"planet_name": "Coruscant",
+		"planet_id": "planet_capital",
+		"system_id": "system_capital",
+		"planet_name": "Capital",
 		"planetary_type": "Ecumenopolis",
 		"max_settlements": 1,
 		"element_ids": [
-			"element_coruscant_galactic_city",
+			"element_capital_galactic_city",
 		],
 	},
 ]
 
 const LOCATION_ELEMENTS: Array[Dictionary] = [
 	{
-		"element_id": "element_coruscant_galactic_city",
-		"planet_id": "planet_coruscant",
+		"element_id": "element_capital_galactic_city",
+		"planet_id": "planet_capital",
 		"element_type": "settlement",
 		"element_name": "Galactic City",
 		"tags": ["capital", "giant_settlement"],
@@ -60,46 +60,46 @@ const LOCATION_ELEMENTS: Array[Dictionary] = [
 
 const ELEMENT_STATE: Array[Dictionary] = [
 	{
-		"element_id": "element_coruscant_galactic_city",
-		"owner_faction_id": "faction_republic",
+		"element_id": "element_capital_galactic_city",
+		"owner_faction_id": "faction_a",
 		"population": {"free": 1000000, "slave": 0},
 		"happiness": 18,
 		"stability": 16,
 		"infrastructure_ids": [
-			"infra_city_storage_republic",
-			"infra_city_factory_kuat_arms",
+			"infra_city_storage_faction_a",
+			"infra_city_factory_faction_b",
 			"infra_city_underlevels_arcology",
 		],
 		"resource_holdings": [
-			{"faction_id": "faction_republic", "resource": "food", "quantity": 3000.0, "reserved": 900.0},
-			{"faction_id": "faction_republic", "resource": "organic_matter", "quantity": 1800.0, "reserved": 1200.0},
-			{"faction_id": "faction_kuat_arms", "resource": "weapons", "quantity": 220.0, "reserved": 40.0},
+			{"faction_id": "faction_a", "resource": "food", "quantity": 3000.0, "reserved": 900.0},
+			{"faction_id": "faction_a", "resource": "organic_matter", "quantity": 1800.0, "reserved": 1200.0},
+			{"faction_id": "faction_b", "resource": "weapons", "quantity": 220.0, "reserved": 40.0},
 		],
 		"trade_offers": [
-			{"seller_faction_id": "faction_kuat_arms", "buyer_faction_id": "faction_republic", "resource": "weapons", "quantity": 180.0, "price_per_unit": 12.0},
+			{"seller_faction_id": "faction_b", "buyer_faction_id": "faction_a", "resource": "weapons", "quantity": 180.0, "price_per_unit": 12.0},
 		],
 	},
 ]
 
 const INFRASTRUCTURES: Array[Dictionary] = [
 	{
-		"infrastructure_id": "infra_city_storage_republic",
-		"element_id": "element_coruscant_galactic_city",
-		"owner_faction_id": "faction_republic",
+		"infrastructure_id": "infra_city_storage_faction_a",
+		"element_id": "element_capital_galactic_city",
+		"owner_faction_id": "faction_a",
 		"type": "storage",
 		"storage_capacity": 100000.0,
 	},
 	{
-		"infrastructure_id": "infra_city_factory_kuat_arms",
-		"element_id": "element_coruscant_galactic_city",
-		"owner_faction_id": "faction_kuat_arms",
+		"infrastructure_id": "infra_city_factory_faction_b",
+		"element_id": "element_capital_galactic_city",
+		"owner_faction_id": "faction_b",
 		"type": "military_factory",
 		"storage_capacity": 5000.0,
 	},
 	{
 		"infrastructure_id": "infra_city_underlevels_arcology",
-		"element_id": "element_coruscant_galactic_city",
-		"owner_faction_id": "faction_republic",
+		"element_id": "element_capital_galactic_city",
+		"owner_faction_id": "faction_a",
 		"type": "arcology_block",
 		"storage_capacity": 15000.0,
 	},
@@ -155,15 +155,15 @@ static func get_total_resource_in_element(element_id: String, resource: String) 
 	return total
 
 
-static func build_coruscant_example_snapshot() -> Dictionary:
+static func build_capital_example_snapshot() -> Dictionary:
 	var location := build_location_view()
-	var city_food_total := get_total_resource_in_element("element_coruscant_galactic_city", "food")
-	var city_weapons_total := get_total_resource_in_element("element_coruscant_galactic_city", "weapons")
+	var city_food_total := get_total_resource_in_element("element_capital_galactic_city", "food")
+	var city_weapons_total := get_total_resource_in_element("element_capital_galactic_city", "weapons")
 
 	return {
 		"location": location,
 		"state_example": {
-			"element": "element_coruscant_galactic_city",
+			"element": "element_capital_galactic_city",
 			"food_total": city_food_total,
 			"weapons_total": city_weapons_total,
 		},

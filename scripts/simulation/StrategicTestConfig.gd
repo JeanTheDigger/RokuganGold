@@ -1,14 +1,14 @@
 extends RefCounted
 class_name StrategicTestConfig
 
-const REBELS_FACTION_ID: int = -1
+const NO_OWNER_FACTION_ID: int = -1
 const TEST_FACTION_ID: int = 1
-const SITH_FACTION_ID: int = 2
+const FACTION_B_ID: int = 2
 
 const STARTING_CREDITS: int = 10000
 const STARTING_METAL: int = 1000
 const STARTING_RARE_METAL: int = 200
-const REPUBLIC_PREPATCH7_STARTING_CREDITS: int = 40000
+const FACTION_A_LEGACY_STARTING_CREDITS: int = 40000
 
 const PLANET_START_CONTROL: int = 100
 const PLANET_START_STABILITY: int = 60
@@ -195,8 +195,8 @@ static func create_engagement_state() -> Dictionary:
 		"start_day": -1,
 		"resolve_day": -1,
 		"factions": [],
-		"side_a": REBELS_FACTION_ID,
-		"side_b": REBELS_FACTION_ID,
+		"side_a": NO_OWNER_FACTION_ID,
+		"side_b": NO_OWNER_FACTION_ID,
 		"snapshot": {},
 		"last_update_day": -1,
 	}

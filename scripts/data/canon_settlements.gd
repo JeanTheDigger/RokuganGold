@@ -74,52 +74,5 @@ const INFRASTRUCTURE_TYPES: Dictionary = {
 	},
 }
 
-const CORUSCANT_ELEMENTS: Array[Dictionary] = [
-	{
-		"element_id": "element_coruscant_galactic_city",
-		"element_type": "settlement",
-		"element_name": "Galactic City",
-		"owner_faction_id": "faction_republic",
-		"is_giant_settlement": true,
-		"population": {"free": 1000000, "slave": 0},
-		"happiness": 18,
-		"stability": 16,
-		"infrastructure_ids": [
-			"infra_city_storage_republic",
-			"infra_city_factory_kuat_arms",
-			"infra_city_underlevels_arcology",
-		],
-		"resource_holdings": [
-			{"faction_id": "faction_republic", "resource": "food", "quantity": 3000.0, "reserved": 900.0},
-			{"faction_id": "faction_republic", "resource": "organic_matter", "quantity": 1800.0, "reserved": 1200.0},
-			{"faction_id": "faction_kuat_arms", "resource": "weapons", "quantity": 220.0, "reserved": 40.0},
-		],
-		"trade_offers": [
-			{"seller_faction_id": "faction_kuat_arms", "buyer_faction_id": "faction_republic", "resource": "weapons", "quantity": 180.0, "price_per_unit": 12.0},
-		],
-	},
-]
-
-const CORUSCANT_INFRASTRUCTURES: Array[Dictionary] = [
-	{
-		"infrastructure_id": "infra_city_storage_republic",
-		"element_id": "element_coruscant_galactic_city",
-		"owner_faction_id": "faction_republic",
-		"type": "storage",
-		"storage_capacity": 100000.0,
-	},
-	{
-		"infrastructure_id": "infra_city_factory_kuat_arms",
-		"element_id": "element_coruscant_galactic_city",
-		"owner_faction_id": "faction_kuat_arms",
-		"type": "industry_military_equipment",
-		"storage_capacity": 5000.0,
-	},
-	{
-		"infrastructure_id": "infra_city_underlevels_arcology",
-		"element_id": "element_coruscant_galactic_city",
-		"owner_faction_id": "faction_republic",
-		"type": "housing",
-		"storage_capacity": 15000.0,
-	},
-]
+const CAPITAL_ELEMENTS: Array[Dictionary] = []
+const CAPITAL_INFRASTRUCTURES: Array[Dictionary] = []

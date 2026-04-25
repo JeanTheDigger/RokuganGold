@@ -18,7 +18,7 @@ func _ready():
 	load_button.pressed.connect(_on_load_character_pressed)
 	new_character_button.pressed.connect(_on_new_character_pressed)
 	
-	MusicManager.play_music(preload("res://Sounds/Music/Star_Wars_Galaxies_(SWG)_Loading_Screen_Music_128k.mp3"))
+	pass
 
 
 func _on_new_character_pressed():

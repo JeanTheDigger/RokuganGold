@@ -12,7 +12,7 @@ const TEST_ELEMENTS: Array[Dictionary] = [
 		"element_id": TEST_SETTLEMENT_1_ELEMENT_ID,
 		"element_type": "settlement",
 		"element_name": TEST_SETTLEMENT_1_NAME,
-		"owner_faction_id": "faction_republic",
+		"owner_faction_id": "faction_a",
 		"population": {"free": 10, "slave": 0, "starving_free": 0, "starving_slave": 0},
 		"infrastructure_ids": [
 			TEST_SETTLEMENT_1_STORAGE_ID,

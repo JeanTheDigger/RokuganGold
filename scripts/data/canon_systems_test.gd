@@ -100,7 +100,7 @@ const PRESET_SYSTEMS: Dictionary = {
 				{
 					"owner_faction_id": 1,
 					"sr": 25,
-					"group_id": "sith_guard",
+					"group_id": "guard_force",
 					"system_id": 2,
 					"role": "IDLE",
 					"patrol_system_id": -1,
@@ -210,7 +210,7 @@ const PRESET_SYSTEMS: Dictionary = {
 				{
 					"owner_faction_id": 2,
 					"sr": 25,
-					"group_id": "sith_guard",
+					"group_id": "guard_force",
 					"system_id": 4,
 					"role": "IDLE",
 					"patrol_system_id": -1,

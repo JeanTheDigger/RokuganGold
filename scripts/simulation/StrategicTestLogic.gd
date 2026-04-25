@@ -59,7 +59,7 @@ static func update_planet_control_and_stability(planet_state: Dictionary, is_blo
 	stability = clampi(stability, 0, 100)
 
 	var revolt_occurred: bool = false
-	var previous_owner_faction_id: int = int(planet_state.get("owner_faction_id", StrategicTestConfig.REBELS_FACTION_ID))
+	var previous_owner_faction_id: int = int(planet_state.get("owner_faction_id", StrategicTestConfig.NO_OWNER_FACTION_ID))
 	var new_owner_faction_id: int = previous_owner_faction_id
 	if control == 0:
 		revolt_occurred = true
@@ -82,13 +82,13 @@ static func update_planet_control_and_stability(planet_state: Dictionary, is_blo
 
 
 static func compute_planet_troop_gp(planet_state: Dictionary) -> int:
-	var owner_faction_id: int = int(planet_state.get("owner_faction_id", StrategicTestConfig.REBELS_FACTION_ID))
+	var owner_faction_id: int = int(planet_state.get("owner_faction_id", StrategicTestConfig.NO_OWNER_FACTION_ID))
 	var troop_gp: int = 0
 	for troop_variant in planet_state.get("troops", []):
 		var troop: Dictionary = troop_variant
 		if str(troop.get("status", "active")) != "active":
 			continue
-		if int(troop.get("owner_faction_id", StrategicTestConfig.REBELS_FACTION_ID)) != owner_faction_id:
+		if int(troop.get("owner_faction_id", StrategicTestConfig.NO_OWNER_FACTION_ID)) != owner_faction_id:
 			continue
 		troop_gp += maxi(0, int(troop.get("gp", 0)))
 	return troop_gp
@@ -107,7 +107,7 @@ static func pay_troop_upkeep(troop_state: Dictionary, faction_state: Dictionary)
 
 
 static func apply_garrison_recruitment_for_planet(planet_state: Dictionary, faction_state: Dictionary, is_blockaded: bool, current_day: int) -> Dictionary:
-	var owner_faction_id: int = int(planet_state.get("owner_faction_id", StrategicTestConfig.REBELS_FACTION_ID))
+	var owner_faction_id: int = int(planet_state.get("owner_faction_id", StrategicTestConfig.NO_OWNER_FACTION_ID))
 	if owner_faction_id < 0:
 		return {
 			"under_garrisoned": false,
@@ -222,10 +222,10 @@ static func pay_defense_station_upkeep(station_state: Dictionary, faction_state:
 
 
 static func is_movement_blocked_by_hostile_station(fleet_state: Dictionary, stations_in_system: Array) -> Dictionary:
-	var fleet_owner_faction_id: int = int(fleet_state.get("owner_faction_id", StrategicTestConfig.REBELS_FACTION_ID))
+	var fleet_owner_faction_id: int = int(fleet_state.get("owner_faction_id", StrategicTestConfig.NO_OWNER_FACTION_ID))
 	for station_variant in stations_in_system:
 		var station: Dictionary = station_variant
-		var station_owner_faction_id: int = int(station.get("owner_faction_id", StrategicTestConfig.REBELS_FACTION_ID))
+		var station_owner_faction_id: int = int(station.get("owner_faction_id", StrategicTestConfig.NO_OWNER_FACTION_ID))
 		var station_sr: int = int(station.get("sr", 0))
 		if are_factions_hostile(station_owner_faction_id, fleet_owner_faction_id) and station_sr >= StrategicTestConfig.DEFENSE_STATION_I_STATION_SR:
 			return {
@@ -242,7 +242,7 @@ static func is_movement_blocked_by_hostile_station(fleet_state: Dictionary, stat
 static func are_factions_hostile(faction_a: int, faction_b: int) -> bool:
 	if faction_a == faction_b:
 		return false
-	if faction_a == StrategicTestConfig.REBELS_FACTION_ID or faction_b == StrategicTestConfig.REBELS_FACTION_ID:
+	if faction_a == StrategicTestConfig.NO_OWNER_FACTION_ID or faction_b == StrategicTestConfig.NO_OWNER_FACTION_ID:
 		return true
 	return faction_a != faction_b
 
@@ -472,7 +472,7 @@ static func collect_patrol_candidates_for_faction(
 	var light_candidates: Array[Dictionary] = []
 	for fleet_variant in fleets:
 		var fleet_state: Dictionary = fleet_variant
-		if int(fleet_state.get("owner_faction_id", StrategicTestConfig.REBELS_FACTION_ID)) != faction_id:
+		if int(fleet_state.get("owner_faction_id", StrategicTestConfig.NO_OWNER_FACTION_ID)) != faction_id:
 			continue
 		if require_patrol_assignment:
 			if str(fleet_state.get("role", StrategicTestConfig.FLEET_ROLE_IDLE)) != StrategicTestConfig.FLEET_ROLE_PATROL:

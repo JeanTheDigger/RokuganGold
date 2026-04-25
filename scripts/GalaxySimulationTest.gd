@@ -153,7 +153,7 @@ func run_strategic_day() -> Array[String]:
 		var planet_state_for_yield: Dictionary = _planets_by_id[planet_id_for_yield]
 		var system_for_planet_yield: Dictionary = get_system(int(planet_state_for_yield.get("system_id", -1)))
 		var planet_piracy_multiplier: float = _get_planet_piracy_multiplier(system_for_planet_yield)
-		var owner_faction_id: int = int(planet_state_for_yield.get("owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID))
+		var owner_faction_id: int = int(planet_state_for_yield.get("owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID))
 		if not _factions_by_id.has(owner_faction_id):
 			continue
 		var faction_state: Dictionary = _factions_by_id[owner_faction_id]
@@ -178,7 +178,7 @@ func run_strategic_day() -> Array[String]:
 	for system_variant in _systems:
 		var system_state_for_upkeep: Dictionary = system_variant
 		if bool(system_state_for_upkeep.get("has_belt", false)):
-			var belt_owner_faction_id: int = int(system_state_for_upkeep.get("belt_owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID))
+			var belt_owner_faction_id: int = int(system_state_for_upkeep.get("belt_owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID))
 			if _factions_by_id.has(belt_owner_faction_id):
 				var platform_upkeep: int = StrategicTestLogicScript.get_platform_upkeep_for_tier(int(system_state_for_upkeep.get("platform_tier", 0)))
 				var belt_owner_faction_state: Dictionary = _factions_by_id[belt_owner_faction_id]
@@ -190,7 +190,7 @@ func run_strategic_day() -> Array[String]:
 		var structures: Array = system_state_for_upkeep.get("orbital_structures", [])
 		for structure_variant in structures:
 			var structure: Dictionary = structure_variant
-			var owner_faction_id: int = int(structure.get("owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID))
+			var owner_faction_id: int = int(structure.get("owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID))
 			if not _factions_by_id.has(owner_faction_id):
 				continue
 			var faction_state: Dictionary = _factions_by_id[owner_faction_id]
@@ -226,14 +226,14 @@ func run_strategic_day() -> Array[String]:
 		var planet_state: Dictionary = _planets_by_id[planet_id_for_control]
 		var control_update: Dictionary = StrategicTestLogicScript.update_planet_control_and_stability(planet_state, is_planet_blockaded(planet_state))
 		if bool(control_update.get("revolt_occurred", false)):
-			var previous_owner_faction_id: int = int(control_update.get("previous_owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID))
-			var new_owner_faction_id: int = int(control_update.get("new_owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID))
+			var previous_owner_faction_id: int = int(control_update.get("previous_owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID))
+			var new_owner_faction_id: int = int(control_update.get("new_owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID))
 			if previous_owner_faction_id != new_owner_faction_id:
 				_reassign_planet_ownership(planet_id_for_control, previous_owner_faction_id, new_owner_faction_id)
 			logs.append("DAY %d | REVOLT | planet=%d new_owner=%d control=%d stability=%d" % [
 				_day_index,
 				planet_id_for_control,
-				int(planet_state.get("owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID)),
+				int(planet_state.get("owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID)),
 				int(planet_state.get("control", 0)),
 				int(planet_state.get("stability", 0)),
 			])
@@ -248,7 +248,7 @@ func run_strategic_day() -> Array[String]:
 
 	faction_orders_by_day.clear()
 	for faction_id in _get_sorted_faction_ids():
-		if faction_id == StrategicTestConfigScript.REBELS_FACTION_ID:
+		if faction_id == StrategicTestConfigScript.NO_OWNER_FACTION_ID:
 			continue
 		var order_book: Dictionary = run_faction_planner_for_faction(faction_id, {"day": _day_index})
 		faction_orders_by_day[faction_id] = order_book
@@ -393,7 +393,7 @@ func merge_fleets(system_id: int, owner_faction_id: int, fleet_ids: Array[int]) 
 		_ensure_fleet_defaults(fleet, system_id)
 		if not requested_ids.has(int(fleet.get("fleet_id", -1))):
 			continue
-		if int(fleet.get("owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID)) != owner_faction_id:
+		if int(fleet.get("owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID)) != owner_faction_id:
 			return -1
 		if int(fleet.get("system_id", -1)) != system_id:
 			return -1
@@ -506,7 +506,7 @@ func split_fleet_one_ship(fleet_id: int) -> int:
 			fleet["sr"] = get_fleet_base_sr(fleet)
 			fleet["upkeep_credits_per_day"] = get_fleet_upkeep_credits_per_day(fleet)
 			var new_fleet: Dictionary = {
-				"owner_faction_id": int(fleet.get("owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID)),
+				"owner_faction_id": int(fleet.get("owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID)),
 				"group_id": str(fleet.get("group_id", "main")),
 				"system_id": system_id,
 				"status": "idle",
@@ -529,7 +529,7 @@ func split_fleet_one_ship(fleet_id: int) -> int:
 			system_state["fleets"] = fleets
 			_pending_operation_logs.append("DAY %d | FLEET_SPLIT | owner=%d sys=%d from=%d src_ships=%d new=%d new_ships=%d base_sr_src=%d base_sr_new=%d readiness=%d" % [
 				_day_index,
-				int(fleet.get("owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID)),
+				int(fleet.get("owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID)),
 				system_id,
 				fleet_id,
 				int((fleet.get("ships", []) as Array).size()),
@@ -563,7 +563,7 @@ func _apply_fleet_upkeep_deterministic(fleet_upkeep_paid_by_fleet_id: Dictionary
 		for fleet_variant in system_state.get("fleets", []):
 			var fleet: Dictionary = fleet_variant
 			_ensure_fleet_defaults(fleet, system_id)
-			var owner_id: int = int(fleet.get("owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID))
+			var owner_id: int = int(fleet.get("owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID))
 			if not fleets_by_faction.has(owner_id):
 				fleets_by_faction[owner_id] = []
 			(fleets_by_faction[owner_id] as Array).append(fleet)
@@ -614,7 +614,7 @@ func _apply_fleet_readiness_changes(fleet_upkeep_paid_by_fleet_id: Dictionary, l
 			elif pirate_state == StrategicTestConfigScript.PIRATE_STATE_HAVEN:
 				readiness -= 2
 				reasons.append("piracy_haven")
-			if system_has_active_shipyard_for_faction(system_state, int(fleet.get("owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID))):
+			if system_has_active_shipyard_for_faction(system_state, int(fleet.get("owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID))):
 				readiness += 5
 				fleet["last_refit_day"] = _day_index
 				reasons.append("refit")
@@ -628,7 +628,7 @@ func _apply_fleet_readiness_changes(fleet_upkeep_paid_by_fleet_id: Dictionary, l
 			logs.append("DAY %d | FLEET_READY | fleet=%d owner=%d sys=%d base_sr=%d eff_sr=%d readiness=%d delta=%d reasons=%s" % [
 				_day_index,
 				fleet_id,
-				int(fleet.get("owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID)),
+				int(fleet.get("owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID)),
 				system_id,
 				get_fleet_base_sr(fleet),
 				get_fleet_effective_sr(fleet),
@@ -643,7 +643,7 @@ func system_has_active_shipyard_for_faction(system_state: Dictionary, faction_id
 		var structure: Dictionary = structure_variant
 		if str(structure.get("type", "")) != StrategicTestConfigScript.SHIPYARD_I_TYPE:
 			continue
-		if int(structure.get("owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID)) != faction_id:
+		if int(structure.get("owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID)) != faction_id:
 			continue
 		if bool(structure.get("enabled", true)) and int(structure.get("disabled_days", 0)) == 0:
 			return true
@@ -717,7 +717,7 @@ func _issue_fleet_move_order(fleet_state: Dictionary, destination_system_id: int
 		logs.append("DAY %d | ERROR | FLEET_ORDER_BLOCKED | source=%s faction=%d fleet=%d from=%d to=%d reason=%s" % [
 			current_day_index,
 			source,
-			int(fleet_state.get("owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID)),
+			int(fleet_state.get("owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID)),
 			int(fleet_state.get("fleet_id", -1)),
 			int(fleet_state.get("system_id", -1)),
 			destination_system_id,
@@ -750,7 +750,7 @@ func _issue_fleet_move_order(fleet_state: Dictionary, destination_system_id: int
 	logs.append("DAY %d | FLEET_ORDER | source=%s faction=%d fleet=%d sr=%d kind=%s from=%d to=%d hops=%d travel_days=%d arrival_day=%d reason=%s" % [
 		current_day_index,
 		source,
-		int(fleet_state.get("owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID)),
+		int(fleet_state.get("owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID)),
 		int(fleet_state.get("fleet_id", -1)),
 		get_fleet_effective_sr(fleet_state),
 		str(fleet_state.get("group_id", "main")),
@@ -818,7 +818,7 @@ func _remove_troops_gp_for_owner(planet_state: Dictionary, owner_faction_id: int
 	for troop_variant in troops:
 		var troop: Dictionary = troop_variant
 		var troop_gp: int = maxi(0, int(troop.get("gp", 0)))
-		var is_matching_troop: bool = str(troop.get("status", "active")) == "active" and int(troop.get("owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID)) == owner_faction_id and troop_gp > 0
+		var is_matching_troop: bool = str(troop.get("status", "active")) == "active" and int(troop.get("owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID)) == owner_faction_id and troop_gp > 0
 		if not is_matching_troop or removed_gp >= goal:
 			kept.append(troop)
 			continue
@@ -855,7 +855,7 @@ func transport_land(fleet_id: int, planet_id: int) -> Dictionary:
 		_day_index,
 		ORDER_SOURCE_FACTION_PLANNER,
 		fleet_id,
-		int(fleet_state.get("owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID)),
+		int(fleet_state.get("owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID)),
 		planet_id,
 	])
 	return {"ok": true}
@@ -875,7 +875,7 @@ func transport_launch(fleet_id: int) -> Dictionary:
 		_day_index,
 		ORDER_SOURCE_FACTION_PLANNER,
 		fleet_id,
-		int(fleet_state.get("owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID)),
+		int(fleet_state.get("owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID)),
 	])
 	return {"ok": true}
 
@@ -894,8 +894,8 @@ func transport_load_troops(fleet_id: int, planet_id: int, requested_gp: int) -> 
 		return {"ok": false, "reason": "not_landed_on_planet"}
 	if int(fleet_state.get("system_id", -1)) != int(planet_state.get("system_id", -1)):
 		return {"ok": false, "reason": "different_system"}
-	var faction_id: int = int(fleet_state.get("owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID))
-	if int(planet_state.get("owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID)) != faction_id:
+	var faction_id: int = int(fleet_state.get("owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID))
+	if int(planet_state.get("owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID)) != faction_id:
 		return {"ok": false, "reason": "not_friendly_owner"}
 	var capacity: int = int(fleet_state.get("transport_capacity_gp", 0))
 	var cargo_before: int = int(fleet_state.get("cargo_troop_gp", 0))
@@ -905,7 +905,7 @@ func transport_load_troops(fleet_id: int, planet_id: int, requested_gp: int) -> 
 		var troop: Dictionary = troop_variant
 		if str(troop.get("status", "active")) != "active":
 			continue
-		if int(troop.get("owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID)) != faction_id:
+		if int(troop.get("owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID)) != faction_id:
 			continue
 		planet_available_gp += maxi(0, int(troop.get("gp", 0)))
 	var actual_load: int = mini(maxi(0, requested_gp), mini(planet_available_gp, free_capacity))
@@ -941,7 +941,7 @@ func transport_unload_troops(fleet_id: int, planet_id: int, requested_gp: int) -
 		return {"ok": false, "reason": "different_system"}
 	var cargo_before: int = int(fleet_state.get("cargo_troop_gp", 0))
 	var actual_unload: int = mini(maxi(0, requested_gp), cargo_before)
-	var faction_id: int = int(fleet_state.get("owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID))
+	var faction_id: int = int(fleet_state.get("owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID))
 	var spawned_gp: int = _spawn_troops_on_planet(planet_state, faction_id, actual_unload)
 	fleet_state["cargo_troop_gp"] = maxi(0, cargo_before - spawned_gp)
 	_pending_operation_logs.append("DAY %d | TROOP_UNLOAD | source=%s faction=%d planet=%d transport=%d req=%d unloaded=%d cargo=%d/%d" % [
@@ -972,8 +972,8 @@ func transport_invade_planet(fleet_id: int, planet_id: int, commit_gp: int = -1)
 		return {"ok": false, "reason": "not_landed_on_planet"}
 	if int(fleet_state.get("system_id", -1)) != int(planet_state.get("system_id", -1)):
 		return {"ok": false, "reason": "different_system"}
-	var attacker_id: int = int(fleet_state.get("owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID))
-	var defender_id: int = int(planet_state.get("owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID))
+	var attacker_id: int = int(fleet_state.get("owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID))
+	var defender_id: int = int(planet_state.get("owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID))
 	if not StrategicTestLogicScript.are_factions_hostile(attacker_id, defender_id):
 		return {"ok": false, "reason": "not_hostile"}
 	var system_id: int = int(planet_state.get("system_id", -1))
@@ -1017,7 +1017,7 @@ func _apply_fleet_arrivals_for_day(current_day_index: int, logs: Array[String]) 
 		fleet_state["status"] = "on_task" if not (fleet_state.get("task", {}) as Dictionary).is_empty() else "idle"
 		logs.append("DAY %d | FLEET_ARRIVE | faction=%d fleet=%d to=%d kind=%s" % [
 			current_day_index,
-			int(fleet_state.get("owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID)),
+			int(fleet_state.get("owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID)),
 			int(fleet_state.get("fleet_id", -1)),
 			destination_system_id,
 			str(fleet_state.get("group_id", "main")),
@@ -1038,8 +1038,8 @@ func _create_space_engagements_for_day(current_day_index: int, logs: Array[Strin
 		if hostile_factions.size() < 2:
 			continue
 		var selected_sides: Dictionary = _pick_top_two_factions_by_effective_sr(system_state, hostile_factions)
-		var side_a: int = int(selected_sides.get("side_a", StrategicTestConfigScript.REBELS_FACTION_ID))
-		var side_b: int = int(selected_sides.get("side_b", StrategicTestConfigScript.REBELS_FACTION_ID))
+		var side_a: int = int(selected_sides.get("side_a", StrategicTestConfigScript.NO_OWNER_FACTION_ID))
+		var side_b: int = int(selected_sides.get("side_b", StrategicTestConfigScript.NO_OWNER_FACTION_ID))
 		system_state["space_engagement"] = {
 			"active": true,
 			"start_day": current_day_index,
@@ -1070,7 +1070,7 @@ func _get_hostile_factions_in_system(system_state: Dictionary) -> Array[int]:
 			continue
 		if get_fleet_base_sr(fleet_state) <= 0:
 			continue
-		var owner_faction_id: int = int(fleet_state.get("owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID))
+		var owner_faction_id: int = int(fleet_state.get("owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID))
 		if not factions_in_system.has(owner_faction_id):
 			factions_in_system.append(owner_faction_id)
 	if factions_in_system.size() < 2:
@@ -1124,7 +1124,7 @@ func _create_ground_engagements_for_day(current_day_index: int, logs: Array[Stri
 			attacker_candidates.append(int(attacker_id_variant))
 		if attacker_candidates.is_empty():
 			continue
-		var owner_faction_id: int = int(planet_state.get("owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID))
+		var owner_faction_id: int = int(planet_state.get("owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID))
 		var pick: Dictionary = _pick_strongest_ground_attacker(planet_state, attacker_candidates)
 		var side_a: int = int(pick.get("side_a", owner_faction_id))
 		var side_b: int = int(pick.get("side_b", owner_faction_id))
@@ -1160,8 +1160,8 @@ func _resolve_ground_engagements_for_day(current_day_index: int, logs: Array[Str
 
 func _resolve_ground_engagement_for_planet(planet_state: Dictionary, ground_engagement: Dictionary, current_day_index: int, logs: Array[String]) -> void:
 	var planet_id: int = int(planet_state.get("planet_id", -1))
-	var attacker_id: int = int(ground_engagement.get("side_b", StrategicTestConfigScript.REBELS_FACTION_ID))
-	var defender_id: int = int(planet_state.get("owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID))
+	var attacker_id: int = int(ground_engagement.get("side_b", StrategicTestConfigScript.NO_OWNER_FACTION_ID))
+	var defender_id: int = int(planet_state.get("owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID))
 	if not StrategicTestLogicScript.are_factions_hostile(attacker_id, defender_id):
 		planet_state["ground_engagement"] = {}
 		planet_state["last_engagement_end_day"] = current_day_index
@@ -1170,7 +1170,7 @@ func _resolve_ground_engagement_for_planet(planet_state: Dictionary, ground_enga
 			planet_id,
 			attacker_id,
 			defender_id,
-			int(planet_state.get("owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID)),
+			int(planet_state.get("owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID)),
 		])
 		return
 	var committed_gp: int = _compute_ground_attacker_gp(planet_state, attacker_id)
@@ -1182,7 +1182,7 @@ func _resolve_ground_engagement_for_planet(planet_state: Dictionary, ground_enga
 			planet_id,
 			attacker_id,
 			defender_id,
-			int(planet_state.get("owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID)),
+			int(planet_state.get("owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID)),
 		])
 		return
 	var defender_troop_gp: int = 0
@@ -1190,7 +1190,7 @@ func _resolve_ground_engagement_for_planet(planet_state: Dictionary, ground_enga
 		var troop: Dictionary = troop_variant
 		if str(troop.get("status", "active")) != "active":
 			continue
-		if int(troop.get("owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID)) != defender_id:
+		if int(troop.get("owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID)) != defender_id:
 			continue
 		defender_troop_gp += maxi(0, int(troop.get("gp", 0)))
 	var defender_garrison_gp: int = int(planet_state.get("current_garrison_gp", 0))
@@ -1219,7 +1219,7 @@ func _resolve_ground_engagement_for_planet(planet_state: Dictionary, ground_enga
 		committed_gp,
 		defender_effective_gp,
 		"WIN" if won else "HOLD",
-		int(planet_state.get("owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID)),
+		int(planet_state.get("owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID)),
 	])
 	_pending_operation_logs.append("DAY %d | INVASION | source=%s planet=%d def=%d atk=%d A=%d D=%d result=%s atk_loss=%d def_troop_loss=%d cargo_after=%d new_owner=%d" % [
 		current_day_index,
@@ -1233,18 +1233,18 @@ func _resolve_ground_engagement_for_planet(planet_state: Dictionary, ground_enga
 		attacker_losses,
 		defender_troop_losses,
 		0,
-		int(planet_state.get("owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID)),
+		int(planet_state.get("owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID)),
 	])
 
 
 func _get_ground_engagement_candidates(planet_state: Dictionary) -> Dictionary:
-	var defender_id: int = int(planet_state.get("owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID))
+	var defender_id: int = int(planet_state.get("owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID))
 	var defender_troop_gp: int = 0
 	for troop_variant in planet_state.get("troops", []):
 		var troop: Dictionary = troop_variant
 		if str(troop.get("status", "active")) != "active":
 			continue
-		if int(troop.get("owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID)) != defender_id:
+		if int(troop.get("owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID)) != defender_id:
 			continue
 		defender_troop_gp += maxi(0, int(troop.get("gp", 0)))
 	var defender_present: bool = int(planet_state.get("current_garrison_gp", 0)) + defender_troop_gp > 0
@@ -1258,7 +1258,7 @@ func _get_ground_engagement_candidates(planet_state: Dictionary) -> Dictionary:
 			continue
 		if not StrategicTestLogicScript.fleet_is_transport_only(fleet_state):
 			continue
-		var attacker_id: int = int(fleet_state.get("owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID))
+		var attacker_id: int = int(fleet_state.get("owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID))
 		if not StrategicTestLogicScript.are_factions_hostile(attacker_id, defender_id):
 			continue
 		if int(fleet_state.get("cargo_troop_gp", 0)) > 0 and not attackers.has(attacker_id):
@@ -1267,7 +1267,7 @@ func _get_ground_engagement_candidates(planet_state: Dictionary) -> Dictionary:
 		var troop: Dictionary = troop_variant
 		if str(troop.get("status", "active")) != "active":
 			continue
-		var attacker_id: int = int(troop.get("owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID))
+		var attacker_id: int = int(troop.get("owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID))
 		if attacker_id == defender_id:
 			continue
 		if StrategicTestLogicScript.are_factions_hostile(attacker_id, defender_id) and not attackers.has(attacker_id):
@@ -1282,7 +1282,7 @@ func _compute_ground_attacker_gp(planet_state: Dictionary, attacker_id: int) -> 
 		var troop: Dictionary = troop_variant
 		if str(troop.get("status", "active")) != "active":
 			continue
-		if int(troop.get("owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID)) != attacker_id:
+		if int(troop.get("owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID)) != attacker_id:
 			continue
 		total_gp += maxi(0, int(troop.get("gp", 0)))
 	var system_state: Dictionary = get_system(int(planet_state.get("system_id", -1)))
@@ -1290,7 +1290,7 @@ func _compute_ground_attacker_gp(planet_state: Dictionary, attacker_id: int) -> 
 		var fleet_state: Dictionary = fleet_variant
 		if int(fleet_state.get("landed_planet_id", -1)) != int(planet_state.get("planet_id", -1)):
 			continue
-		if int(fleet_state.get("owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID)) != attacker_id:
+		if int(fleet_state.get("owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID)) != attacker_id:
 			continue
 		if not StrategicTestLogicScript.fleet_is_transport_only(fleet_state):
 			continue
@@ -1299,7 +1299,7 @@ func _compute_ground_attacker_gp(planet_state: Dictionary, attacker_id: int) -> 
 
 
 func _pick_strongest_ground_attacker(planet_state: Dictionary, attacker_factions: Array[int]) -> Dictionary:
-	var owner_faction_id: int = int(planet_state.get("owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID))
+	var owner_faction_id: int = int(planet_state.get("owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID))
 	var sorted_attackers: Array[int] = attacker_factions.duplicate(true)
 	sorted_attackers.sort_custom(func(a: int, b: int) -> bool:
 		var a_gp: int = _compute_ground_attacker_gp(planet_state, a)
@@ -1328,8 +1328,8 @@ func _resolve_system_engagement(system_state: Dictionary, space_engagement: Dict
 			engagement_factions.append(faction_id)
 	engagement_factions.sort()
 	var side_pick: Dictionary = _pick_top_two_factions_by_effective_sr(system_state, engagement_factions)
-	var side_a: int = int(side_pick.get("side_a", int(space_engagement.get("side_a", StrategicTestConfigScript.REBELS_FACTION_ID))))
-	var side_b: int = int(side_pick.get("side_b", int(space_engagement.get("side_b", StrategicTestConfigScript.REBELS_FACTION_ID))))
+	var side_a: int = int(side_pick.get("side_a", int(space_engagement.get("side_a", StrategicTestConfigScript.NO_OWNER_FACTION_ID))))
+	var side_b: int = int(side_pick.get("side_b", int(space_engagement.get("side_b", StrategicTestConfigScript.NO_OWNER_FACTION_ID))))
 	if side_a == side_b or not StrategicTestLogicScript.are_factions_hostile(side_a, side_b):
 		system_state["space_engagement"] = {}
 		system_state["last_engagement_end_day"] = current_day_index
@@ -1368,7 +1368,7 @@ func _resolve_system_engagement(system_state: Dictionary, space_engagement: Dict
 		var fleet_state: Dictionary = fleet_variant
 		if str(fleet_state.get("status", "idle")) == "moving":
 			continue
-		var fleet_owner: int = int(fleet_state.get("owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID))
+		var fleet_owner: int = int(fleet_state.get("owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID))
 		var base_sr_before: int = get_fleet_base_sr(fleet_state)
 		if base_sr_before <= 0:
 			continue
@@ -1401,7 +1401,7 @@ func _resolve_system_engagement(system_state: Dictionary, space_engagement: Dict
 		var transport_candidates: Array[Dictionary] = []
 		for fleet_variant in system_state.get("fleets", []):
 			var fleet_state: Dictionary = fleet_variant
-			if int(fleet_state.get("owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID)) != loser_faction_id:
+			if int(fleet_state.get("owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID)) != loser_faction_id:
 				continue
 			if StrategicTestLogicScript.fleet_is_transport_only(fleet_state):
 				transport_candidates.append(fleet_state)
@@ -1620,7 +1620,7 @@ func _collect_haven_fleet_orders_for_faction(faction_id: int, order_book: Dictio
 	var candidates: Array[Dictionary] = []
 	for fleet_variant in _collect_all_fleets():
 		var fleet_state: Dictionary = fleet_variant
-		if int(fleet_state.get("owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID)) != faction_id:
+		if int(fleet_state.get("owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID)) != faction_id:
 			continue
 		if str(fleet_state.get("status", "idle")) == "moving":
 			continue
@@ -1723,7 +1723,7 @@ func execute_faction_order_book(faction_id: int, order_book: Dictionary, logs: A
 
 
 func _execute_invasion_step_for_faction(faction_id: int, occupied_target_planets: Dictionary, logs: Array[String]) -> void:
-	if faction_id == StrategicTestConfigScript.REBELS_FACTION_ID:
+	if faction_id == StrategicTestConfigScript.NO_OWNER_FACTION_ID:
 		return
 	if not ai_trace_by_faction.has(faction_id):
 		ai_trace_by_faction[faction_id] = []
@@ -1739,7 +1739,7 @@ func _run_dispatcher(_current_day_index: int, _logs: Array[String]) -> void:
 func _run_dispatcher_haven_mass(current_day_index: int, logs: Array[String]) -> void:
 	return
 	for faction_id in _get_sorted_faction_ids():
-		if faction_id == StrategicTestConfigScript.REBELS_FACTION_ID:
+		if faction_id == StrategicTestConfigScript.NO_OWNER_FACTION_ID:
 			continue
 		var target_system_id: int = -1
 		var threshold: int = 0
@@ -1767,7 +1767,7 @@ func _run_dispatcher_haven_mass(current_day_index: int, logs: Array[String]) -> 
 		var candidates: Array[Dictionary] = []
 		for fleet_variant in _collect_all_fleets():
 			var fleet_state: Dictionary = fleet_variant
-			if int(fleet_state.get("owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID)) != faction_id:
+			if int(fleet_state.get("owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID)) != faction_id:
 				continue
 			if str(fleet_state.get("status", "idle")) == "moving":
 				continue
@@ -1828,7 +1828,7 @@ func add_defense_station_i_to_planet(system_name: String, planet_name: String) -
 	var system_state: Dictionary = get_system(system_id)
 	if system_state.is_empty():
 		return false
-	var owner_faction_id: int = int((_planets_by_id[planet_id] as Dictionary).get("owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID))
+	var owner_faction_id: int = int((_planets_by_id[planet_id] as Dictionary).get("owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID))
 	var structures: Array = system_state.get("orbital_structures", [])
 	structures.append(StrategicTestConfigScript.create_defense_station_i_instance(owner_faction_id, system_id))
 	system_state["orbital_structures"] = structures
@@ -1844,7 +1844,7 @@ func add_listening_post_to_planet(system_name: String, planet_name: String) -> b
 	var system_state: Dictionary = get_system(system_id)
 	if system_state.is_empty():
 		return false
-	var owner_faction_id: int = int((_planets_by_id[planet_id] as Dictionary).get("owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID))
+	var owner_faction_id: int = int((_planets_by_id[planet_id] as Dictionary).get("owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID))
 	var structures: Array = system_state.get("orbital_structures", [])
 	structures.append(StrategicTestConfigScript.create_listening_post_instance(owner_faction_id, system_id))
 	system_state["orbital_structures"] = structures
@@ -1860,7 +1860,7 @@ func add_patrol_hq_to_planet(system_name: String, planet_name: String) -> bool:
 	var system_state: Dictionary = get_system(system_id)
 	if system_state.is_empty():
 		return false
-	var owner_faction_id: int = int((_planets_by_id[planet_id] as Dictionary).get("owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID))
+	var owner_faction_id: int = int((_planets_by_id[planet_id] as Dictionary).get("owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID))
 	var structures: Array = system_state.get("orbital_structures", [])
 	structures.append(StrategicTestConfigScript.create_patrol_hq_instance(owner_faction_id, system_id))
 	system_state["orbital_structures"] = structures
@@ -1877,13 +1877,13 @@ func add_rare_belt_to_system(system_name: String, platform_tier: int = 2) -> boo
 	var belt_node: Dictionary = StrategicTestConfigScript.create_belt_node(
 		StrategicTestConfigScript.BELT_CLASS_RARE,
 		platform_tier,
-		int(primary_planet.get("owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID))
+		int(primary_planet.get("owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID))
 	)
 	system_state["has_belt"] = true
 	system_state["belt_class"] = str(belt_node.get("belt_class", StrategicTestConfigScript.BELT_CLASS_NONE))
 	system_state["platform_tier"] = int(belt_node.get("platform_tier", 0))
 	system_state["belt_disabled_days"] = int(belt_node.get("belt_disabled_days", 0))
-	system_state["belt_owner_faction_id"] = int(belt_node.get("owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID))
+	system_state["belt_owner_faction_id"] = int(belt_node.get("owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID))
 	system_state["belt"] = belt_node
 	return true
 
@@ -1906,7 +1906,7 @@ func queue_build_mining_platform(system_name: String, target_tier: int) -> Dicti
 	var primary_planet: Dictionary = get_primary_planet(int(system_state.get("id", -1)))
 	if primary_planet.is_empty():
 		return {"queued": false, "reason": "missing primary planet"}
-	var owner_faction_id: int = int(primary_planet.get("owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID))
+	var owner_faction_id: int = int(primary_planet.get("owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID))
 	if not _factions_by_id.has(owner_faction_id):
 		return {"queued": false, "reason": "owner faction missing"}
 
@@ -1966,7 +1966,7 @@ func collect_governor_candidates_for_faction(faction_id: int, current_day_index:
 	for planet_id_variant in _planets_by_id.keys():
 		var planet_id: int = int(planet_id_variant)
 		var planet: Dictionary = _planets_by_id[planet_id]
-		if int(planet.get("owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID)) != faction_id:
+		if int(planet.get("owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID)) != faction_id:
 			continue
 		if not (planet.get("troop_training_queue", []) as Array).is_empty():
 			continue
@@ -2079,7 +2079,7 @@ func run_galaxy_background_governor(current_day_index: int, logs: Array[String] 
 			var system_id: int = int(entry.get("system_id", -1))
 			for planet_variant in get_system_planets(system_id):
 				var planet_state: Dictionary = planet_variant
-				if int(planet_state.get("owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID)) != faction_id:
+				if int(planet_state.get("owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID)) != faction_id:
 					continue
 				_enqueue_troop_training_for_planet(planet_state, faction_id, queued_upkeep_by_faction, logs, troop_skip_logged_today_by_planet)
 
@@ -2362,7 +2362,7 @@ func _select_ai_invasion_target_for_faction(faction_id: int, occupied_target_pla
 		if bool(occupied_target_planets.get(target_planet_id, false)):
 			continue
 		var target_planet: Dictionary = _planets_by_id[target_planet_id]
-		var target_owner: int = int(target_planet.get("owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID))
+		var target_owner: int = int(target_planet.get("owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID))
 		if target_owner == faction_id:
 			continue
 		if not StrategicTestLogicScript.are_factions_hostile(faction_id, target_owner):
@@ -2399,7 +2399,7 @@ func _select_ai_staging_planet(faction_id: int, target_system_id: int) -> Dictio
 	for planet_id_variant in _planets_by_id.keys():
 		var planet_id: int = int(planet_id_variant)
 		var planet: Dictionary = _planets_by_id[planet_id]
-		if int(planet.get("owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID)) != faction_id:
+		if int(planet.get("owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID)) != faction_id:
 			continue
 		var system_id: int = int(planet.get("system_id", -1))
 		if _compute_hop_distance(system_id, target_system_id) < 0:
@@ -2426,7 +2426,7 @@ func _select_ai_alternate_staging_planet(faction_id: int, target_system_id: int,
 		if planet_id == excluded_planet_id:
 			continue
 		var planet: Dictionary = _planets_by_id[planet_id]
-		if int(planet.get("owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID)) != faction_id:
+		if int(planet.get("owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID)) != faction_id:
 			continue
 		var system_id: int = int(planet.get("system_id", -1))
 		if _compute_hop_distance(system_id, target_system_id) < 0:
@@ -2451,7 +2451,7 @@ func _select_owned_load_planet_in_system(faction_id: int, system_id: int) -> Dic
 	for planet_id_variant in _planets_by_id.keys():
 		var planet_id: int = int(planet_id_variant)
 		var planet: Dictionary = _planets_by_id[planet_id]
-		if int(planet.get("owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID)) != faction_id:
+		if int(planet.get("owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID)) != faction_id:
 			continue
 		if int(planet.get("system_id", -1)) != system_id:
 			continue
@@ -2766,7 +2766,7 @@ func _emit_ai_invasion_load_diagnostics(faction_id: int, current_day_index: int,
 		load_block = "capacity_full"
 	elif staging_planet.is_empty() or staging_planet_id <= 0:
 		load_block = "invalid_planet"
-	elif int(staging_planet.get("owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID)) != faction_id:
+	elif int(staging_planet.get("owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID)) != faction_id:
 		load_block = "owner_mismatch"
 	elif staging_troop_gp <= 0:
 		load_block = "no_troops"
@@ -2992,7 +2992,7 @@ func _find_available_transport_fleet_for_faction(faction_id: int) -> Dictionary:
 	var candidates: Array[Dictionary] = []
 	for fleet_variant in _collect_all_fleets():
 		var fleet_state: Dictionary = fleet_variant
-		if int(fleet_state.get("owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID)) != faction_id:
+		if int(fleet_state.get("owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID)) != faction_id:
 			continue
 		if str(fleet_state.get("status", "idle")) == "moving":
 			continue
@@ -3038,7 +3038,7 @@ func _find_pending_shipyard_system_for_faction(faction_id: int) -> int:
 				continue
 			if str(order.get("build_type", "")) != StrategicTestConfigScript.SHIPYARD_I_TYPE:
 				continue
-			if int(order.get("owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID)) == faction_id:
+			if int(order.get("owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID)) == faction_id:
 				return system_id
 	return -1
 
@@ -3082,7 +3082,7 @@ func _select_ai_escort_fleets_for_transport(transport_fleet: Dictionary, faction
 	var transport_system_id: int = int(transport_fleet.get("system_id", -1))
 	for fleet_variant in _collect_all_fleets():
 		var fleet_state: Dictionary = fleet_variant
-		if int(fleet_state.get("owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID)) != faction_id:
+		if int(fleet_state.get("owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID)) != faction_id:
 			continue
 		if int(fleet_state.get("fleet_id", -1)) == int(transport_fleet.get("fleet_id", -2)):
 			continue
@@ -3192,7 +3192,7 @@ func get_owned_system_ids(faction_id: int) -> Array[int]:
 		var system_id: int = int(system_state.get("id", -1))
 		for planet_variant in get_system_planets(system_id):
 			var planet: Dictionary = planet_variant
-			if int(planet.get("owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID)) == faction_id:
+			if int(planet.get("owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID)) == faction_id:
 				owned_systems.append(system_id)
 				break
 	owned_systems.sort()
@@ -3203,7 +3203,7 @@ func get_system_credits_value(system_id: int, faction_id: int) -> int:
 	var total: int = 0
 	for planet_variant in get_system_planets(system_id):
 		var planet: Dictionary = planet_variant
-		if int(planet.get("owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID)) != faction_id:
+		if int(planet.get("owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID)) != faction_id:
 			continue
 		total += int(planet.get("base_credits_per_day", 0))
 	return total
@@ -3276,7 +3276,7 @@ func get_faction_expected_income_today(faction_id: int) -> int:
 	var credits_total: int = 0
 	for planet_variant in _planets_by_id.values():
 		var planet: Dictionary = planet_variant
-		if int(planet.get("owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID)) != faction_id:
+		if int(planet.get("owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID)) != faction_id:
 			continue
 		var system_state: Dictionary = get_system(int(planet.get("system_id", -1)))
 		var yield_result: Dictionary = StrategicTestLogicScript.compute_planet_yield(planet, is_planet_blockaded(planet), _get_planet_piracy_multiplier(system_state))
@@ -3288,16 +3288,16 @@ func get_faction_total_upkeep(faction_id: int) -> int:
 	var upkeep_total: int = 0
 	for system_variant in _systems:
 		var system_state: Dictionary = system_variant
-		if bool(system_state.get("has_belt", false)) and int(system_state.get("belt_owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID)) == faction_id:
+		if bool(system_state.get("has_belt", false)) and int(system_state.get("belt_owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID)) == faction_id:
 			upkeep_total += StrategicTestLogicScript.get_platform_upkeep_for_tier(int(system_state.get("platform_tier", 0)))
 		for structure_variant in system_state.get("orbital_structures", []):
 			var structure: Dictionary = structure_variant
-			if int(structure.get("owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID)) != faction_id:
+			if int(structure.get("owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID)) != faction_id:
 				continue
 			upkeep_total += int(structure.get("upkeep_credits_per_day", 0))
 		for fleet_variant in system_state.get("fleets", []):
 			var fleet: Dictionary = fleet_variant
-			if int(fleet.get("owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID)) != faction_id:
+			if int(fleet.get("owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID)) != faction_id:
 				continue
 			upkeep_total += get_fleet_upkeep_credits_per_day(fleet)
 
@@ -3307,7 +3307,7 @@ func get_faction_total_upkeep(faction_id: int) -> int:
 			var troop: Dictionary = troop_variant
 			if str(troop.get("status", "active")) != "active":
 				continue
-			if int(troop.get("owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID)) != faction_id:
+			if int(troop.get("owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID)) != faction_id:
 				continue
 			upkeep_total += maxi(0, int(troop.get("upkeep_credits_per_day", 0)))
 	return upkeep_total
@@ -3379,7 +3379,7 @@ func _get_next_orbit_governor_action(system_id: int, faction_id: int, faction_ne
 func _get_governor_settlement_for_system(system_id: int, faction_id: int) -> Dictionary:
 	for planet_variant in get_system_planets(system_id):
 		var settlement: Dictionary = planet_variant
-		if int(settlement.get("owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID)) == faction_id:
+		if int(settlement.get("owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID)) == faction_id:
 			return settlement
 	return {}
 
@@ -3492,7 +3492,7 @@ func _get_active_shipyard_for_system(system_id: int, owner_faction_id: int) -> D
 		var structure: Dictionary = structure_variant
 		if str(structure.get("type", "")) != StrategicTestConfigScript.SHIPYARD_I_TYPE:
 			continue
-		if int(structure.get("owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID)) != owner_faction_id:
+		if int(structure.get("owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID)) != owner_faction_id:
 			continue
 		if not _is_structure_active(structure):
 			continue
@@ -3578,11 +3578,11 @@ func _count_planned_orbital_type(system_id: int, faction_id: int, structure_type
 	var count: int = 0
 	for structure_variant in system_state.get("orbital_structures", []):
 		var structure: Dictionary = structure_variant
-		if int(structure.get("owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID)) == faction_id and str(structure.get("type", "")) == structure_type:
+		if int(structure.get("owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID)) == faction_id and str(structure.get("type", "")) == structure_type:
 			count += 1
 	for order_variant in system_state.get("space_queue", []):
 		var order: Dictionary = order_variant
-		if str(order.get("order_type", "")) == "build_orbital_structure" and int(order.get("owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID)) == faction_id and str(order.get("build_type", "")) == structure_type:
+		if str(order.get("order_type", "")) == "build_orbital_structure" and int(order.get("owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID)) == faction_id and str(order.get("build_type", "")) == structure_type:
 			count += 1
 	return count
 
@@ -3756,7 +3756,7 @@ func build_planet_report(system_name: String, planet_name: String) -> String:
 		return "\n".join(report_lines)
 
 	var planet_state: Dictionary = _planets_by_id[planet_id]
-	var owner_faction_id: int = int(planet_state.get("owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID))
+	var owner_faction_id: int = int(planet_state.get("owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID))
 	var owner_name: String = "Unknown"
 	if _factions_by_id.has(owner_faction_id):
 		owner_name = str((_factions_by_id[owner_faction_id] as Dictionary).get("name", "Unknown"))
@@ -3834,8 +3834,8 @@ func get_planet_panel_data_for_system(system_id: int) -> Dictionary:
 			landed_transport_fleet_ids.append(fleet_id)
 			if int(fleet.get("cargo_troop_gp", 0)) <= 0:
 				continue
-			var fleet_owner: int = int(fleet.get("owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID))
-			var planet_owner: int = int(planet_state.get("owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID))
+			var fleet_owner: int = int(fleet.get("owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID))
+			var planet_owner: int = int(planet_state.get("owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID))
 			if StrategicTestLogicScript.are_factions_hostile(fleet_owner, planet_owner):
 				hostile_transport_warning = true
 				hostile_transport_fleet_ids.append(fleet_id)
@@ -3844,7 +3844,7 @@ func get_planet_panel_data_for_system(system_id: int) -> Dictionary:
 		planets.append({
 			"planet_id": planet_id,
 			"name": str(planet_state.get("name", "")),
-			"owner_faction_id": int(planet_state.get("owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID)),
+			"owner_faction_id": int(planet_state.get("owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID)),
 			"troop_count": int((planet_state.get("troops", []) as Array).size()),
 			"troop_gp": troop_gp,
 			"effective_garrison_gp": effective_garrison_gp,
@@ -3947,7 +3947,7 @@ func get_system_owner_factions(system_id: int) -> Array:
 	var owner_ids: Dictionary = {}
 	for planet_variant in get_system_planets(system_id):
 		var planet_state: Dictionary = planet_variant
-		owner_ids[int(planet_state.get("owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID))] = true
+		owner_ids[int(planet_state.get("owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID))] = true
 	return owner_ids.keys()
 
 
@@ -4027,7 +4027,7 @@ func compute_system_sr(system_id: int) -> void:
 			continue
 		if structure.has("enabled") and not bool(structure.get("enabled", true)):
 			continue
-		var owner_faction_id: int = int(structure.get("owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID))
+		var owner_faction_id: int = int(structure.get("owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID))
 		sr_by_faction[owner_faction_id] = int(sr_by_faction.get(owner_faction_id, 0)) + int(structure.get("sr", 0))
 
 	system_state["fleets_present"] = fleets_by_faction
@@ -4065,17 +4065,17 @@ func is_planet_blockaded(planet: Dictionary) -> bool:
 	var system_state: Dictionary = get_system(system_id)
 	if system_state.is_empty():
 		return false
-	var owner_faction_id: int = int(planet.get("owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID))
+	var owner_faction_id: int = int(planet.get("owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID))
 	return bool(system_state.get("blockade_by_faction", {}).get(owner_faction_id, false))
 
 
 func _initialize_default_factions() -> void:
-	var test_faction: Dictionary = StrategicTestConfigScript.create_default_faction(StrategicTestConfigScript.TEST_FACTION_ID, "Test Republic")
-	var sith_faction: Dictionary = StrategicTestConfigScript.create_default_faction(StrategicTestConfigScript.SITH_FACTION_ID, "Sith")
-	var rebels_faction: Dictionary = StrategicTestConfigScript.create_default_faction(StrategicTestConfigScript.REBELS_FACTION_ID, "Rebels")
+	var test_faction: Dictionary = StrategicTestConfigScript.create_default_faction(StrategicTestConfigScript.TEST_FACTION_ID, "Test Faction")
+	var faction_b: Dictionary = StrategicTestConfigScript.create_default_faction(StrategicTestConfigScript.FACTION_B_ID, "Faction B")
+	var no_owner: Dictionary = StrategicTestConfigScript.create_default_faction(StrategicTestConfigScript.NO_OWNER_FACTION_ID, "No Owner")
 	_factions_by_id[StrategicTestConfigScript.TEST_FACTION_ID] = test_faction
-	_factions_by_id[StrategicTestConfigScript.SITH_FACTION_ID] = sith_faction
-	_factions_by_id[StrategicTestConfigScript.REBELS_FACTION_ID] = rebels_faction
+	_factions_by_id[StrategicTestConfigScript.FACTION_B_ID] = faction_b
+	_factions_by_id[StrategicTestConfigScript.NO_OWNER_FACTION_ID] = no_owner
 
 
 func _index_and_prepare_planets() -> void:
@@ -4171,7 +4171,7 @@ func _apply_planet_strategic_defaults(planet_data: Dictionary) -> void:
 	for troop_variant in planet_data.get("troops", []):
 		var troop: Dictionary = troop_variant
 		troop["troop_id"] = int(troop.get("troop_id", _next_troop_id))
-		troop["owner_faction_id"] = int(troop.get("owner_faction_id", int(planet_data.get("owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID))))
+		troop["owner_faction_id"] = int(troop.get("owner_faction_id", int(planet_data.get("owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID))))
 		troop["planet_id"] = int(troop.get("planet_id", int(planet_data.get("planet_id", -1))))
 		troop["type_id"] = str(troop.get("type_id", "troops_basic"))
 		troop["gp"] = maxi(0, int(troop.get("gp", 1)))
@@ -4188,7 +4188,7 @@ func _apply_garrison_recruitment(logs: Array[String]) -> void:
 
 	for planet_id in sorted_planet_ids:
 		var planet_state: Dictionary = _planets_by_id[planet_id]
-		var owner_faction_id: int = int(planet_state.get("owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID))
+		var owner_faction_id: int = int(planet_state.get("owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID))
 		if owner_faction_id < 0 or not _factions_by_id.has(owner_faction_id):
 			continue
 
@@ -4278,7 +4278,7 @@ func _apply_troop_upkeep_deterministic(logs: Array[String], faction_upkeep_paid_
 	for entry_variant in troop_entries:
 		var entry: Dictionary = entry_variant
 		var troop: Dictionary = entry.get("troop", {})
-		var owner_faction_id: int = int(troop.get("owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID))
+		var owner_faction_id: int = int(troop.get("owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID))
 		if not _factions_by_id.has(owner_faction_id):
 			continue
 		var faction_state: Dictionary = _factions_by_id[owner_faction_id]
@@ -4307,7 +4307,7 @@ func _process_troop_training(logs: Array[String]) -> void:
 	for planet_id in sorted_planet_ids:
 		var planet_state: Dictionary = _planets_by_id[planet_id]
 		_refresh_planet_troop_gp(planet_state)
-		var owner_faction_id: int = int(planet_state.get("owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID))
+		var owner_faction_id: int = int(planet_state.get("owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID))
 		var queue: Array = planet_state.get("troop_training_queue", [])
 		if queue.is_empty():
 			planet_state["troop_training_progress"] = 0
@@ -4547,10 +4547,10 @@ func _update_scouting_freshness_for_system(system_state: Dictionary) -> void:
 		relevant_factions[int(faction_id_variant)] = true
 	for structure_variant in system_state.get("orbital_structures", []):
 		var structure: Dictionary = structure_variant
-		relevant_factions[int(structure.get("owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID))] = true
+		relevant_factions[int(structure.get("owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID))] = true
 	for planet_variant in get_system_planets(int(system_state.get("id", -1))):
 		var planet_state: Dictionary = planet_variant
-		relevant_factions[int(planet_state.get("owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID))] = true
+		relevant_factions[int(planet_state.get("owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID))] = true
 
 	var last_scout_day_by_faction: Dictionary = system_state.get("last_scout_day_by_faction", {})
 	var fleets_present: Dictionary = system_state.get("fleets_present", {})
@@ -4567,7 +4567,7 @@ func _update_system_security_and_piracy(system_state: Dictionary) -> void:
 	var primary_planet: Dictionary = get_primary_planet(int(system_state.get("id", -1)))
 	if primary_planet.is_empty():
 		return
-	var controller_faction_id: int = int(primary_planet.get("owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID))
+	var controller_faction_id: int = int(primary_planet.get("owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID))
 	var security: int = _compute_system_security_for_controller(system_state, controller_faction_id)
 	var security_by_faction: Dictionary = system_state.get("security_by_faction", {})
 	security_by_faction[controller_faction_id] = security
@@ -4611,7 +4611,7 @@ func _compute_system_security_for_controller(system_state: Dictionary, controlle
 	for planet_variant in get_system_planets(int(system_state.get("id", -1))):
 		var planet_state: Dictionary = planet_variant
 		var effective_garrison_gp: int = int(planet_state.get("current_garrison_gp", 0)) + _refresh_planet_troop_gp(planet_state)
-		if int(planet_state.get("owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID)) == controller_faction_id and effective_garrison_gp >= 1:
+		if int(planet_state.get("owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID)) == controller_faction_id and effective_garrison_gp >= 1:
 			security += 10
 			break
 
@@ -4647,7 +4647,7 @@ func _has_owned_structure_type(system_state: Dictionary, owner_faction_id: int, 
 		var structure: Dictionary = structure_variant
 		if not _is_structure_active(structure):
 			continue
-		if int(structure.get("owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID)) == owner_faction_id and str(structure.get("type", "")) == structure_type:
+		if int(structure.get("owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID)) == owner_faction_id and str(structure.get("type", "")) == structure_type:
 			return true
 	return false
 
@@ -4657,7 +4657,7 @@ func _has_owned_defense_station_sr_at_least(system_state: Dictionary, owner_fact
 		var structure: Dictionary = structure_variant
 		if not _is_structure_active(structure):
 			continue
-		if int(structure.get("owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID)) != owner_faction_id:
+		if int(structure.get("owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID)) != owner_faction_id:
 			continue
 		if str(structure.get("type", "")) == StrategicTestConfigScript.DEFENSE_STATION_I_TYPE and int(structure.get("sr", 0)) >= minimum_sr:
 			return true
@@ -4687,7 +4687,7 @@ func _build_system_fleets_present(system_state: Dictionary) -> Dictionary:
 		var fleet: Dictionary = fleet_variant
 		if int(fleet.get("system_id", -1)) != system_id:
 			continue
-		var owner_faction_id: int = int(fleet.get("owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID))
+		var owner_faction_id: int = int(fleet.get("owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID))
 		if not fleets_by_faction.has(owner_faction_id):
 			fleets_by_faction[owner_faction_id] = []
 		(fleets_by_faction[owner_faction_id] as Array).append(fleet)
@@ -4710,7 +4710,7 @@ func _resolve_belt_income(system_state: Dictionary) -> Dictionary:
 	if int(system_state.get("platform_tier", 0)) <= 0 or int(system_state.get("belt_disabled_days", 0)) > 0:
 		return {"metal_gain": 0, "rare_gain": 0}
 
-	var owner_faction_id: int = int(system_state.get("belt_owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID))
+	var owner_faction_id: int = int(system_state.get("belt_owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID))
 	if not _factions_by_id.has(owner_faction_id):
 		return {"metal_gain": 0, "rare_gain": 0}
 
@@ -4722,7 +4722,7 @@ func _resolve_belt_income(system_state: Dictionary) -> Dictionary:
 			var structure: Dictionary = structure_variant
 			if not _is_structure_active(structure):
 				continue
-			if int(structure.get("owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID)) == owner_faction_id and int(structure.get("sr", 0)) >= StrategicTestConfigScript.DEFENSE_STATION_I_STATION_SR:
+			if int(structure.get("owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID)) == owner_faction_id and int(structure.get("sr", 0)) >= StrategicTestConfigScript.DEFENSE_STATION_I_STATION_SR:
 				presence_ok = true
 				break
 	if not presence_ok:
@@ -4774,7 +4774,7 @@ func _try_clear_pirate_haven(system_state: Dictionary) -> void:
 			var structure: Dictionary = structure_variant
 			if not _is_structure_active(structure):
 				continue
-			if int(structure.get("owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID)) == faction_id:
+			if int(structure.get("owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID)) == faction_id:
 				friendly_sr += int(structure.get("sr", 0))
 		if friendly_sr >= threshold_sr:
 			system_state["piracy_pressure"] = 30
@@ -4788,17 +4788,17 @@ func _sync_belt_owner_to_primary_planet(system_state: Dictionary) -> void:
 	var primary_planet: Dictionary = get_primary_planet(int(system_state.get("id", -1)))
 	if primary_planet.is_empty():
 		return
-	system_state["belt_owner_faction_id"] = int(primary_planet.get("owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID))
+	system_state["belt_owner_faction_id"] = int(primary_planet.get("owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID))
 	var belt_state: Dictionary = system_state.get("belt", {})
 	if not belt_state.is_empty():
-		belt_state["owner_faction_id"] = int(system_state.get("belt_owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID))
+		belt_state["owner_faction_id"] = int(system_state.get("belt_owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID))
 
 
 func _spawn_ship_from_completed_order(system_state: Dictionary, completed_order: Dictionary) -> Dictionary:
 	var blueprint_id: String = str(completed_order.get("blueprint_id", ""))
 	var blueprint: Dictionary = StrategicTestConfigScript.SHIP_BLUEPRINTS.get(blueprint_id, {})
 	var system_id: int = int(system_state.get("id", -1))
-	var owner_faction_id: int = int(completed_order.get("owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID))
+	var owner_faction_id: int = int(completed_order.get("owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID))
 	var fleet_unit: Dictionary = {
 		"fleet_id": _next_fleet_id,
 		"owner_faction_id": owner_faction_id,
@@ -4834,7 +4834,7 @@ func _process_shipyards_for_system(system_state: Dictionary, logs: Array[String]
 		var shipyard: Dictionary = structure_variant
 		if str(shipyard.get("type", "")) != StrategicTestConfigScript.SHIPYARD_I_TYPE:
 			continue
-		var owner_faction_id: int = int(shipyard.get("owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID))
+		var owner_faction_id: int = int(shipyard.get("owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID))
 		if not _factions_by_id.has(owner_faction_id):
 			continue
 		var faction_state_for_queue: Dictionary = _factions_by_id[owner_faction_id]
@@ -4909,7 +4909,7 @@ func _advance_space_queue(system_state: Dictionary, logs: Array[String]) -> void
 		order["days_remaining"] = maxi(0, int(order.get("days_remaining", 0)) - 1)
 		if int(order.get("days_remaining", 0)) <= 0:
 			var order_type: String = str(order.get("order_type", ""))
-			var owner_faction_id: int = int(order.get("owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID))
+			var owner_faction_id: int = int(order.get("owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID))
 			var cost_credits: int = int(order.get("cost_credits", 0))
 			var cost_metal: int = int(order.get("cost_metal", 0))
 			var cost_rare: int = int(order.get("cost_rare_metal", 0))
@@ -4937,7 +4937,7 @@ func _advance_space_queue(system_state: Dictionary, logs: Array[String]) -> void
 			queue[0] = order
 	system_state["space_queue"] = queue
 	var primary_planet: Dictionary = get_primary_planet(system_id)
-	var controller_faction_id: int = int(primary_planet.get("owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID))
+	var controller_faction_id: int = int(primary_planet.get("owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID))
 	if queue.is_empty():
 		logs.append("DAY %d | SPACEQ | system=%d owner_controller=%d len=0 head=none head_owner=-1 prog=0/0 stalled=0 reason=none paid=0/0/0" % [_day_index, system_id, controller_faction_id])
 		return
@@ -4976,7 +4976,7 @@ func _ensure_system_belt_state(system_data: Dictionary) -> void:
 		system_data["belt_class"] = str(belt_data.get("belt_class", StrategicTestConfigScript.BELT_CLASS_NONE))
 		system_data["platform_tier"] = int(belt_data.get("platform_tier", 0))
 		system_data["belt_disabled_days"] = int(belt_data.get("belt_disabled_days", belt_data.get("disabled_days", 0)))
-		system_data["belt_owner_faction_id"] = int(belt_data.get("owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID))
+		system_data["belt_owner_faction_id"] = int(belt_data.get("owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID))
 	else:
 		if not system_data.has("has_belt"):
 			system_data["has_belt"] = false
@@ -4987,7 +4987,7 @@ func _ensure_system_belt_state(system_data: Dictionary) -> void:
 		if not system_data.has("belt_disabled_days"):
 			system_data["belt_disabled_days"] = 0
 		if not system_data.has("belt_owner_faction_id"):
-			system_data["belt_owner_faction_id"] = StrategicTestConfigScript.REBELS_FACTION_ID
+			system_data["belt_owner_faction_id"] = StrategicTestConfigScript.NO_OWNER_FACTION_ID
 
 	system_data["belt"] = {
 		"has_belt": bool(system_data.get("has_belt", false)),
@@ -4995,7 +4995,7 @@ func _ensure_system_belt_state(system_data: Dictionary) -> void:
 		"platform_tier": int(system_data.get("platform_tier", 0)),
 		"belt_disabled_days": int(system_data.get("belt_disabled_days", 0)),
 		"disabled_days": int(system_data.get("belt_disabled_days", 0)),
-		"owner_faction_id": int(system_data.get("belt_owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID)),
+		"owner_faction_id": int(system_data.get("belt_owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID)),
 	}
 
 
@@ -6032,7 +6032,7 @@ func run_prepach7_tick_harness(days: int = 15, preset: String = "TEST_GALAXY_PRE
 	logs.append("A) System 1 piracy<=15 and pirate_state=NONE throughout: %s" % str(system1_ok))
 	logs.append("B) System 2 piracy increased and reached ACTIVITY by day 10: %s" % str(system2_piracy_increased and system2_reached_activity_by_day10))
 	logs.append("C) System 2 belt income remained 0 due to holding presence gate: %s" % str(system2_belt_income_zero))
-	logs.append("D) System 3 Republic blockaded at start and belt income 0 while blockaded: %s" % str(system3_blockaded_at_start and system3_belt_zero_while_blockaded))
+	logs.append("D) System 3 blockaded at start and belt income 0 while blockaded: %s" % str(system3_blockaded_at_start and system3_belt_zero_while_blockaded))
 	logs.append("E) Deterministic logs check available via repeated harness run comparison.")
 
 	for line in logs:
@@ -6156,7 +6156,7 @@ func _append_prepatch7_snapshot(logs: Array[String], day: int) -> void:
 	for system_id in _get_sorted_system_ids():
 		var system_state: Dictionary = get_system(system_id)
 		var primary_planet: Dictionary = get_primary_planet(system_id)
-		var controller_faction_id: int = int(primary_planet.get("owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID))
+		var controller_faction_id: int = int(primary_planet.get("owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID))
 		var security_by_faction: Dictionary = system_state.get("security_by_faction", {})
 		var scout_age_by_faction: Dictionary = {}
 		for faction_id in _get_sorted_faction_ids():
@@ -6263,15 +6263,15 @@ func _apply_prepatch7_factions() -> void:
 	_factions_by_id.clear()
 	_factions_by_id[1] = {
 		"id": 1,
-		"name": "Republic",
-		"credits": StrategicTestConfigScript.REPUBLIC_PREPATCH7_STARTING_CREDITS,
+		"name": "Faction A",
+		"credits": StrategicTestConfigScript.FACTION_A_LEGACY_STARTING_CREDITS,
 		"metal": 500,
 		"rare_metal": 100,
 		"owned_planet_ids": [101, 201, 301],
 	}
 	_factions_by_id[2] = {
 		"id": 2,
-		"name": "Sith",
+		"name": "Faction B",
 		"credits": 20000,
 		"metal": 500,
 		"rare_metal": 100,
@@ -6300,7 +6300,7 @@ func _append_daily_logs(
 	for system_id in _get_sorted_system_ids():
 		var system_state: Dictionary = get_system(system_id)
 		var primary_planet: Dictionary = get_primary_planet(system_id)
-		var controller_faction_id: int = int(primary_planet.get("owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID))
+		var controller_faction_id: int = int(primary_planet.get("owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID))
 		var scout_age: int = get_scout_age(system_state, controller_faction_id, _day_index)
 		var security: int = int((system_state.get("security_by_faction", {}) as Dictionary).get(controller_faction_id, 0))
 		var pirate_threat_sr: int = int((system_state.get("pirate_presence", {}) as Dictionary).get("threat_sr", 0))
@@ -6320,7 +6320,7 @@ func _append_daily_logs(
 
 	for planet_id_for_log in _get_sorted_planet_ids():
 		var planet_state_for_log: Dictionary = _planets_by_id[planet_id_for_log]
-		var owner_faction_id: int = int(planet_state_for_log.get("owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID))
+		var owner_faction_id: int = int(planet_state_for_log.get("owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID))
 		var applied_yield_result: Dictionary = planet_yield_by_id.get(planet_id_for_log, {
 			"credits_gain": 0,
 			"metal_gain": 0,
@@ -6422,7 +6422,7 @@ func get_fleet_panel_data_for_system(system_id: int) -> Dictionary:
 		for ship_variant in fleet.get("ships", []):
 			ships.append((ship_variant as Dictionary).duplicate(true))
 		StrategicTestLogicScript.sort_ships_for_merge_append(ships)
-		var owner_faction_id: int = int(fleet.get("owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID))
+		var owner_faction_id: int = int(fleet.get("owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID))
 		var is_transport: bool = StrategicTestLogicScript.fleet_is_transport_only(fleet)
 		var landed_planet_id: int = int(fleet.get("landed_planet_id", -1))
 		var friendly_planet_ids: Array[int] = []
@@ -6432,7 +6432,7 @@ func get_fleet_panel_data_for_system(system_id: int) -> Dictionary:
 				var planet_state: Dictionary = _planets_by_id.get(planet_id, {})
 				if planet_state.is_empty():
 					continue
-				var planet_owner_id: int = int(planet_state.get("owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID))
+				var planet_owner_id: int = int(planet_state.get("owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID))
 				if planet_owner_id == owner_faction_id:
 					friendly_planet_ids.append(planet_id)
 				elif StrategicTestLogicScript.are_factions_hostile(owner_faction_id, planet_owner_id):
@@ -6486,7 +6486,7 @@ func build_fleet_summary_by_system_name() -> Dictionary:
 		for fleet_variant in system_state.get("fleets", []):
 			var fleet_state: Dictionary = fleet_variant
 			_ensure_fleet_defaults(fleet_state, system_id)
-			var owner_faction_id: int = int(fleet_state.get("owner_faction_id", StrategicTestConfigScript.REBELS_FACTION_ID))
+			var owner_faction_id: int = int(fleet_state.get("owner_faction_id", StrategicTestConfigScript.NO_OWNER_FACTION_ID))
 			var ship_count: int = maxi(0, (fleet_state.get("ships", []) as Array).size())
 			faction_ship_count[owner_faction_id] = int(faction_ship_count.get(owner_faction_id, 0)) + ship_count
 			var fleet_ids: Array = faction_fleet_ids.get(owner_faction_id, [])

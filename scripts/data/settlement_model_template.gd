@@ -13,17 +13,17 @@ const RESOURCE_WEAPONS := "weapons"
 const RESOURCE_ORGANIC_MATTER := "organic_matter"
 
 var planet := {
-	"id": "planet_coruscant",
-	"name": "Coruscant",
+	"id": "planet_capital",
+	"name": "Capital",
 	"planet_type": PLANET_TYPE_ECUMENOPOLIS,
 	"max_settlements": 1
 }
 
-## The single giant settlement for Coruscant.
+## The single giant settlement for Capital.
 var settlement := {
-	"id": "settlement_coruscant_global",
+	"id": "settlement_capital_global",
 	"name": "Galactic City",
-	"owner_faction_id": "faction_republic",
+	"owner_faction_id": "faction_a",
 	"population": {
 		"free": 1000000,
 		"slave": 0
@@ -159,7 +159,7 @@ func get_resource_snapshot(resource: String) -> Dictionary:
 	}
 
 
-func get_coruscant_rule_snapshot(current_settlement_count: int) -> Dictionary:
+func get_capital_rule_snapshot(current_settlement_count: int) -> Dictionary:
 	return {
 		"planet": planet["name"],
 		"planet_type": planet["planet_type"],
@@ -168,29 +168,29 @@ func get_coruscant_rule_snapshot(current_settlement_count: int) -> Dictionary:
 	}
 
 
-static func build_coruscant_example() -> SettlementModelTemplate:
+static func build_capital_example() -> SettlementModelTemplate:
 	var model := SettlementModelTemplate.new()
 
-	## Republic owns Coruscant and controls the giant settlement.
-	model.add_infrastructure("infra_storage_republic_core", "storage", "faction_republic", 100000.0)
-	model.add_infrastructure("infra_farm_import_hub", "storage", "faction_republic", 50000.0)
+	## Faction A owns Capital and controls the giant settlement.
+	model.add_infrastructure("infra_storage_faction_a_core", "storage", "faction_a", 100000.0)
+	model.add_infrastructure("infra_farm_import_hub", "storage", "faction_a", 50000.0)
 
 	## Commercial faction owns separate storage + weapons factory inside the same settlement.
-	model.add_infrastructure("infra_storage_kuat_arms", "storage", "faction_kuat_arms", 40000.0)
-	model.add_infrastructure("infra_factory_kuat_arms", "military_factory", "faction_kuat_arms", 5000.0)
+	model.add_infrastructure("infra_storage_faction_b", "storage", "faction_b", 40000.0)
+	model.add_infrastructure("infra_factory_faction_b", "military_factory", "faction_b", 5000.0)
 
 	## Example ownership split in one settlement:
-	## - Republic has 5 food in its own storage.
-	## - Kuat Arms has 3 food in its own storage.
-	model.set_holding("faction_republic", "infra_storage_republic_core", RESOURCE_FOOD, 5.0)
-	model.set_holding("faction_kuat_arms", "infra_storage_kuat_arms", RESOURCE_FOOD, 3.0)
+	## - Faction A has 5 food in its own storage.
+	## - Faction B has 3 food in its own storage.
+	model.set_holding("faction_a", "infra_storage_faction_a_core", RESOURCE_FOOD, 5.0)
+	model.set_holding("faction_b", "infra_storage_faction_b", RESOURCE_FOOD, 3.0)
 
-	## Additional strategic stock relevant to Coruscant scale.
-	model.set_holding("faction_republic", "infra_farm_import_hub", RESOURCE_ORGANIC_MATTER, 1800.0, 1200.0)
-	model.set_holding("faction_kuat_arms", "infra_factory_kuat_arms", RESOURCE_WEAPONS, 220.0, 40.0)
+	## Additional strategic stock relevant to Capital scale.
+	model.set_holding("faction_a", "infra_farm_import_hub", RESOURCE_ORGANIC_MATTER, 1800.0, 1200.0)
+	model.set_holding("faction_b", "infra_factory_faction_b", RESOURCE_WEAPONS, 220.0, 40.0)
 
-	## Kuat Arms can sell goods to the Republic.
-	model.add_trade_offer("faction_kuat_arms", "faction_republic", RESOURCE_FOOD, 2.0, 4.0)
-	model.add_trade_offer("faction_kuat_arms", "faction_republic", RESOURCE_WEAPONS, 180.0, 12.0)
+	## Faction B can sell goods to Faction A.
+	model.add_trade_offer("faction_b", "faction_a", RESOURCE_FOOD, 2.0, 4.0)
+	model.add_trade_offer("faction_b", "faction_a", RESOURCE_WEAPONS, 180.0, 12.0)
 
 	return model

@@ -161,8 +161,8 @@ func on_merge_selected_fleets(fleet_ids: Array[int]) -> void:
 		if not fleet_ids.has(candidate_id):
 			continue
 		if owner_faction_id == -999999:
-			owner_faction_id = int(fleet.get("owner_faction_id", StrategicTestConfigResource.REBELS_FACTION_ID))
-		elif owner_faction_id != int(fleet.get("owner_faction_id", StrategicTestConfigResource.REBELS_FACTION_ID)):
+			owner_faction_id = int(fleet.get("owner_faction_id", StrategicTestConfigResource.NO_OWNER_FACTION_ID))
+		elif owner_faction_id != int(fleet.get("owner_faction_id", StrategicTestConfigResource.NO_OWNER_FACTION_ID)):
 			return
 	var primary_id: int = _simulation.merge_fleets(_selected_system_id, owner_faction_id, fleet_ids)
 	if primary_id > 0:
@@ -239,7 +239,7 @@ func _refresh_ai_trace_section() -> void:
 		previous_faction_id = ai_trace_faction_option.get_item_id(ai_trace_faction_option.selected)
 	ai_trace_faction_option.clear()
 	for faction_id in _simulation.get_simulation_faction_ids():
-		if faction_id == StrategicTestConfigResource.REBELS_FACTION_ID:
+		if faction_id == StrategicTestConfigResource.NO_OWNER_FACTION_ID:
 			continue
 		ai_trace_faction_option.add_item("Faction %d" % faction_id, faction_id)
 	if ai_trace_faction_option.get_item_count() <= 0:
