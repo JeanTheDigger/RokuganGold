@@ -1,14 +1,14 @@
 extends Button
 
-@onready var character_scene = preload("res://scene/Character.tscn")
-@onready var main_ui_scene = preload("res://scene/main_ui.tscn")
-@onready var zone_scene = preload("res://scene/Zone.tscn")
+@onready var character_scene = preload("res://scenes/Character.tscn")
+@onready var main_ui_scene = preload("res://scenes/main_ui.tscn")
+@onready var zone_scene = preload("res://scenes/Zone.tscn")
 
 func _ready():
 	connect("pressed", Callable(self, "_on_pressed"))
 
 func _on_pressed():
-	var character_creation = preload("res://scene/character_creation.tscn").instantiate()
+	var character_creation = preload("res://scenes/character_creation.tscn").instantiate()
 	var root = get_tree().get_root()
 
 	# Step 1: Connect to server

@@ -1,0 +1,404 @@
+[gd_scene load_steps=46 format=3 uid="uid://bmk5qlcks4v3u"]
+
+[ext_resource type="Script" uid="uid://drwfitony6hbj" path="res://scripts/ui/main_ui.gd" id="2_i4ba5"]
+[ext_resource type="Texture2D" uid="uid://oar14m2y1vpu" path="res://assets/images/SpaceTile1.png" id="2_n6mpm"]
+[ext_resource type="Theme" uid="uid://cjaewb3353lqh" path="res://scripts/ui/Buttons.tres" id="3_baa2r"]
+[ext_resource type="Texture2D" uid="uid://cwbwy10mpw0yj" path="res://assets/images/Screen100B.png" id="3_n6mpm"]
+[ext_resource type="Texture2D" uid="uid://cc6ywv4ywwy7n" path="res://assets/images/Screen101B.png" id="4_d2so1"]
+[ext_resource type="Script" uid="uid://eiulmike27ng" path="res://scripts/ui/input_buttons.gd" id="4_eib71"]
+[ext_resource type="FontFile" uid="uid://deuierbbkg6su" path="res://assets/fonts/eurostile.TTF" id="5_d2so1"]
+[ext_resource type="Script" uid="uid://dumoka3feh6sp" path="res://scripts/ui/ActionPanel.gd" id="5_g4hc0"]
+[ext_resource type="Shader" uid="uid://bkqapjh7bps4u" path="res://shaders/WritingPanelShader.gdshader" id="6_1ipri"]
+[ext_resource type="PackedScene" uid="uid://33yiuaybmux" path="res://scenes/Zone.tscn" id="6_niqgt"]
+[ext_resource type="Texture2D" uid="uid://83hcerwrjokr" path="res://assets/images/NeighborSprite.png" id="7_2jhcv"]
+[ext_resource type="PackedScene" uid="uid://d52y56d4b22e" path="res://scenes/player_selection.tscn" id="10_pdx0a"]
+[ext_resource type="PackedScene" uid="uid://bx3xnyrpoikl7" path="res://scenes/location_selection.tscn" id="11_17wiq"]
+[ext_resource type="PackedScene" uid="uid://83lf4w57ss45" path="res://scenes/DiceRollerUI.tscn" id="12_m1ovf"]
+[ext_resource type="PackedScene" uid="uid://be7d7nwx3vahn" path="res://scenes/create_character_ui.tscn" id="12_s2wwb"]
+[ext_resource type="PackedScene" uid="uid://bdy36cmnjn1t3" path="res://scenes/charactersheet_ui.tscn" id="13_s2wwb"]
+[ext_resource type="PackedScene" uid="uid://cbdeikjv0iw21" path="res://scenes/character_sheet_editable_ui.tscn" id="15_4b8mr"]
+[ext_resource type="PackedScene" uid="uid://cohsughsaqjes" path="res://scenes/AudioSettingsUI.tscn" id="17_ox3ol"]
+[ext_resource type="PackedScene" uid="uid://cqfmsafjq246d" path="res://scenes/settings.tscn" id="22_thd06"]
+[ext_resource type="PackedScene" uid="uid://cwcgrhghfxqn5" path="res://scenes/nightly_activities_ui.tscn" id="32_2smvb"]
+
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_n6mpm"]
+texture = ExtResource("2_n6mpm")
+
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_1ipri"]
+texture = ExtResource("3_n6mpm")
+modulate_color = Color(0.580392, 0.721569, 0.756863, 1)
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_ml8dl"]
+
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_odx23"]
+texture = ExtResource("4_d2so1")
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_thd06"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_od6ea"]
+
+[sub_resource type="CompressedTexture2D" id="CompressedTexture2D_i6cec"]
+
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_xlrnn"]
+texture = SubResource("CompressedTexture2D_i6cec")
+
+[sub_resource type="CompressedTexture2D" id="CompressedTexture2D_fxj62"]
+
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_npwxd"]
+texture = SubResource("CompressedTexture2D_fxj62")
+
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_fivip"]
+texture = SubResource("CompressedTexture2D_i6cec")
+
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_u6tdo"]
+texture = SubResource("CompressedTexture2D_fxj62")
+
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_g08ba"]
+texture = SubResource("CompressedTexture2D_i6cec")
+
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_huy42"]
+texture = SubResource("CompressedTexture2D_i6cec")
+
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_f1wkw"]
+texture = SubResource("CompressedTexture2D_i6cec")
+
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_n0esf"]
+texture = SubResource("CompressedTexture2D_i6cec")
+
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_4adf7"]
+texture = SubResource("CompressedTexture2D_fxj62")
+
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_0ywhc"]
+texture = SubResource("CompressedTexture2D_i6cec")
+
+[sub_resource type="CompressedTexture2D" id="CompressedTexture2D_acxdq"]
+
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_1xs4l"]
+texture = SubResource("CompressedTexture2D_acxdq")
+
+[sub_resource type="Theme" id="Theme_ml8dl"]
+Button/styles/hover = SubResource("StyleBoxTexture_xlrnn")
+Button/styles/hover_pressed = SubResource("StyleBoxTexture_npwxd")
+Button/styles/normal = SubResource("StyleBoxTexture_fivip")
+Button/styles/pressed = SubResource("StyleBoxTexture_u6tdo")
+TabBar/styles/tab_focus = SubResource("StyleBoxTexture_g08ba")
+TabBar/styles/tab_hovered = SubResource("StyleBoxTexture_huy42")
+TabBar/styles/tab_selected = SubResource("StyleBoxTexture_f1wkw")
+TabBar/styles/tab_unselected = SubResource("StyleBoxTexture_n0esf")
+TabContainer/styles/tab_disabled = SubResource("StyleBoxTexture_4adf7")
+TabContainer/styles/tab_selected = SubResource("StyleBoxTexture_0ywhc")
+TabContainer/styles/tab_unselected = null
+TabContainer/styles/tabbar_background = SubResource("StyleBoxTexture_1xs4l")
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_i6cec"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_fxj62"]
+
+[sub_resource type="CompressedTexture2D" id="CompressedTexture2D_bpym6"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_odx23"]
+shader = ExtResource("6_1ipri")
+shader_parameter/scanline_intensity = 0.04
+shader_parameter/vignette_strength = 0.12
+shader_parameter/flicker_strength = 0.005
+
+[node name="MainUI" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("2_i4ba5")
+metadata/_edit_use_anchors_ = true
+
+[node name="Background" type="Panel" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_styles/panel = SubResource("StyleBoxTexture_n6mpm")
+
+[node name="TextPanel" type="Panel" parent="."]
+layout_mode = 1
+anchors_preset = -1
+anchor_left = 0.3
+anchor_right = 0.5325
+anchor_bottom = 0.665556
+offset_left = -480.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_styles/panel = SubResource("StyleBoxTexture_1ipri")
+metadata/_edit_use_anchors_ = true
+
+[node name="DisplayText" type="RichTextLabel" parent="TextPanel"]
+layout_mode = 1
+anchors_preset = -1
+anchor_left = 0.044601
+anchor_top = -0.474124
+anchor_right = 0.954225
+anchor_bottom = 0.193656
+offset_left = -3.05176e-05
+offset_top = 319.0
+offset_bottom = 450.0
+grow_horizontal = 2
+grow_vertical = 2
+focus_mode = 2
+theme_override_colors/default_color = Color(1, 1, 1, 1)
+theme_override_styles/focus = SubResource("StyleBoxEmpty_ml8dl")
+bbcode_enabled = true
+scroll_following = true
+selection_enabled = true
+metadata/_edit_use_anchors_ = true
+
+[node name="WritingPanel" type="Panel" parent="."]
+layout_mode = 0
+offset_top = 605.0
+offset_right = 851.0
+offset_bottom = 779.0
+theme_override_styles/panel = SubResource("StyleBoxTexture_odx23")
+
+[node name="TextEdit" type="TextEdit" parent="WritingPanel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 28.0
+offset_top = 22.0
+offset_right = -28.0
+offset_bottom = -20.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_colors/font_color = Color(0.811765, 0.913725, 0.94902, 1)
+theme_override_fonts/font = ExtResource("5_d2so1")
+theme_override_font_sizes/font_size = 22
+wrap_mode = 1
+
+[node name="WritingButtonPanel" type="Panel" parent="."]
+layout_mode = 1
+anchors_preset = 2
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_top = -118.0
+offset_right = 851.0
+grow_vertical = 0
+theme_override_styles/panel = SubResource("StyleBoxEmpty_thd06")
+
+[node name="InputButtons" type="HBoxContainer" parent="WritingButtonPanel"]
+layout_mode = 1
+anchors_preset = 10
+anchor_right = 1.0
+offset_left = 38.0
+offset_top = 11.0
+offset_right = -38.0
+offset_bottom = 66.0
+grow_horizontal = 2
+theme = ExtResource("3_baa2r")
+script = ExtResource("4_eib71")
+
+[node name="EmoteButton" type="Button" parent="WritingButtonPanel/InputButtons"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme = ExtResource("3_baa2r")
+theme_override_colors/font_color = Color(0.811765, 0.913725, 0.94902, 1)
+text = "Emote
+"
+
+[node name="WhisperButton" type="Button" parent="WritingButtonPanel/InputButtons"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0.811765, 0.913725, 0.94902, 1)
+text = "Whisper"
+
+[node name="OOCButton" type="Button" parent="WritingButtonPanel/InputButtons"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0.811765, 0.913725, 0.94902, 1)
+text = "OOC"
+
+[node name="TellButton" type="Button" parent="WritingButtonPanel/InputButtons"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0.811765, 0.913725, 0.94902, 1)
+text = "Tell"
+
+[node name="ActionPanel" type="Panel" parent="."]
+layout_mode = 1
+anchors_preset = -1
+anchor_left = 0.531875
+anchor_right = 0.699375
+anchor_bottom = 0.606667
+offset_right = 481.0
+offset_bottom = -246.0
+grow_horizontal = 2
+grow_vertical = 2
+theme = ExtResource("3_baa2r")
+theme_override_styles/panel = SubResource("StyleBoxEmpty_od6ea")
+script = ExtResource("5_g4hc0")
+metadata/_edit_use_anchors_ = true
+
+[node name="HboxContainer" type="HBoxContainer" parent="ActionPanel"]
+layout_mode = 1
+anchors_preset = 10
+anchor_right = 1.0
+offset_left = 44.0
+offset_top = 8.0
+offset_right = -44.0
+offset_bottom = 45.0
+grow_horizontal = 2
+alignment = 1
+
+[node name="Location" type="Button" parent="ActionPanel/HboxContainer"]
+custom_minimum_size = Vector2(150, 0)
+layout_mode = 2
+text = "Location"
+
+[node name="Action" type="Button" parent="ActionPanel/HboxContainer"]
+custom_minimum_size = Vector2(150, 0)
+layout_mode = 2
+text = "Action"
+
+[node name="Character" type="Button" parent="ActionPanel/HboxContainer"]
+custom_minimum_size = Vector2(150, 0)
+layout_mode = 2
+text = "Character"
+
+[node name="Settings" type="Button" parent="ActionPanel/HboxContainer"]
+custom_minimum_size = Vector2(150, 0)
+layout_mode = 2
+text = "Settings"
+
+[node name="ButtonsContainer" type="GridContainer" parent="ActionPanel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 6.0
+offset_top = 59.0
+offset_right = -6.99994
+offset_bottom = -6.99982
+grow_horizontal = 2
+grow_vertical = 2
+theme = SubResource("Theme_ml8dl")
+columns = 3
+
+[node name="StorytellerTab" type="Button" parent="ActionPanel"]
+visible = false
+layout_mode = 2
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 547.0
+offset_top = 3.0
+offset_right = -8.99994
+offset_bottom = -275.0
+
+[node name="ZoneImagePanel" type="Panel" parent="."]
+layout_mode = 1
+anchors_preset = -1
+anchor_left = 0.5
+anchor_top = 0.362963
+anchor_right = 0.9
+anchor_bottom = 1.07407
+offset_left = 110.0
+offset_top = -26.6667
+offset_right = 160.0
+offset_bottom = -66.663
+theme_override_styles/panel = SubResource("StyleBoxEmpty_i6cec")
+metadata/_edit_use_anchors_ = true
+
+[node name="ViewpointImage" type="TextureRect" parent="ZoneImagePanel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 26.0
+offset_top = 80.0
+offset_right = -26.0
+offset_bottom = -34.9999
+grow_horizontal = 2
+grow_vertical = 2
+expand_mode = 1
+
+[node name="NeighIndicator" type="TextureRect" parent="ZoneImagePanel"]
+visible = false
+layout_mode = 0
+offset_left = 536.0
+offset_top = 514.0
+offset_right = 600.0
+offset_bottom = 596.0
+texture = ExtResource("7_2jhcv")
+
+[node name="Decoration1" type="Panel" parent="."]
+layout_mode = 0
+offset_left = 851.0
+offset_top = 300.0
+offset_right = 910.0
+offset_bottom = 900.0
+theme_override_styles/panel = SubResource("StyleBoxEmpty_fxj62")
+
+[node name="TypingIndicator" type="TextureRect" parent="Decoration1"]
+layout_mode = 0
+offset_top = 524.0
+offset_right = 40.0
+offset_bottom = 597.0
+texture = SubResource("CompressedTexture2D_bpym6")
+
+[node name="ColorRect" type="ColorRect" parent="."]
+material = SubResource("ShaderMaterial_odx23")
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="TypingTooltip" type="Label" parent="."]
+visible = false
+layout_mode = 0
+offset_right = 40.0
+offset_bottom = 23.0
+autowrap_mode = 2
+
+[node name="Zone" parent="." instance=ExtResource("6_niqgt")]
+
+[node name="PlayerSelection" parent="." instance=ExtResource("10_pdx0a")]
+visible = false
+layout_mode = 1
+
+[node name="LocationSelection" parent="." instance=ExtResource("11_17wiq")]
+visible = false
+layout_mode = 1
+
+[node name="DiceRollerUI" parent="." instance=ExtResource("12_m1ovf")]
+visible = false
+layout_mode = 1
+
+[node name="CreateCharacterUI" parent="." instance=ExtResource("12_s2wwb")]
+visible = false
+layout_mode = 1
+
+[node name="AudioPlayer" type="AudioStreamPlayer" parent="."]
+volume_db = 15.0
+
+[node name="CharacterSheetUI" parent="." instance=ExtResource("13_s2wwb")]
+visible = false
+layout_mode = 1
+
+[node name="CharacterSheetEditableUI" parent="." instance=ExtResource("15_4b8mr")]
+visible = false
+layout_mode = 1
+
+[node name="AudioSettingsUI" parent="." instance=ExtResource("17_ox3ol")]
+visible = false
+layout_mode = 1
+
+[node name="Settings" parent="." instance=ExtResource("22_thd06")]
+visible = false
+layout_mode = 1
+
+[node name="NightlyActivitiesUI" parent="." instance=ExtResource("32_2smvb")]
+visible = false
+layout_mode = 1
