@@ -1,6 +1,6 @@
 [gd_resource type="Theme" load_steps=14 format=3 uid="uid://cx2pg2eqkkwin"]
 
-[ext_resource type="FontFile" uid="uid://deuierbbkg6su" path="res://Image/UI/eurostile.TTF" id="1_hjmcg"]
+[ext_resource type="FontFile" uid="uid://deuierbbkg6su" path="res://assets/fonts/eurostile.TTF" id="1_hjmcg"]
 
 [sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_hjmcg"]
 
