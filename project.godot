@@ -21,17 +21,17 @@ buses/default_bus_layout=""
 [autoload]
 
 PlayerData="*res://scripts/ui/PlayerData.gd"
-NetworkManager="*res://scripts/NetworkManager.gd"
-ZoneManager="*res://scene/Zone.tscn"
-GameManager="*res://scripts/GameManager.gd"
-MessagesManager="*res://scripts/message_manager.gd"
-SaveManager="*res://scripts/SaveManager.gd"
-MusicManager="*res://scripts/music_manager.gd"
-MessageWarningPlayer="*res://scripts/message_warning_player.tscn"
-SettingsManager="*res://scripts/settings.gd"
-CalendarManager="*res://scripts/CalendarManager.gd"
-WakeUpManager="*res://scripts/WakeUpManager.gd"
-NoFocus="*res://scripts/NoFocus.gd"
+NetworkManager="*res://scripts/managers/NetworkManager.gd"
+ZoneManager="*res://scenes/Zone.tscn"
+GameManager="*res://scripts/managers/GameManager.gd"
+MessagesManager="*res://scripts/managers/message_manager.gd"
+SaveManager="*res://scripts/managers/SaveManager.gd"
+MusicManager="*res://scripts/managers/music_manager.gd"
+MessageWarningPlayer="*res://scenes/message_warning_player.tscn"
+SettingsManager="*res://scripts/ui/settings.gd"
+CalendarManager="*res://scripts/managers/CalendarManager.gd"
+WakeUpManager="*res://scripts/managers/WakeUpManager.gd"
+NoFocus="*res://scripts/utility/NoFocus.gd"
 
 [display]
 

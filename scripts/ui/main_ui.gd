@@ -282,7 +282,7 @@ func _on_typing_update_received(data: Dictionary) -> void:
 
 func update_typing_indicator():
 	var someone_typing = typers_in_zone.size() > 0
-	$Decoration1/TypingIndicator.texture = preload("res://Image/UI/CandleLit.png") if someone_typing else preload("res://Image/UI/CandleUnlit.png")
+	$Decoration1/TypingIndicator.texture = preload("res://assets/images/CandleLit.png") if someone_typing else preload("res://assets/images/CandleUnlit.png")
 
 func _on_TypingIndicator_mouse_entered():
 	if typers_in_zone.size() == 0:
