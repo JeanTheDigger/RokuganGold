@@ -2,7 +2,6 @@ extends Node
 
 # === CLIENT ===
 var character_uis := {}  # name → UI node (client only)
-var character_data: CharacterData = null  # currently active character on client
 
 # === SERVER ===
 var character_data_by_name := {}  # name → CharacterData resource

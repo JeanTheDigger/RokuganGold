@@ -7,7 +7,9 @@ func _ready():
 
 func _on_message_received(data: Dictionary) -> void:
 	var speaker = data.get("speaker", "")
-	var local_name = GameManager.character_data.name
+	var local_name: String = GameManager.peer_to_character_name.get(multiplayer.get_unique_id(), "")
+	if local_name.is_empty():
+		return
 
 	# 🔇 Suppress sound if it's a system/time message or from yourself
 	if speaker != local_name and speaker != "SYSTEM" and speaker != "Time":

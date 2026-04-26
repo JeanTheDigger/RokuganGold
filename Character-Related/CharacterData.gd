@@ -283,17 +283,6 @@ func deserialize_from_dict(data: Dictionary) -> void:
 
 
 
-@rpc("authority")
-func receive_character_data(data: Dictionary) -> void:
-	print("📥 Receiving character data on client:", data.get("name", "Unknown"))
-
-	deserialize_from_dict(data)
-	GameManager.character_data = self
-
-	# 🔁 Notify NetworkManager (or whoever) to handle scene switching
-	NetworkManager.on_character_received(self)
-
-
 func serialize_to_dict() -> Dictionary:
 	var dict := {}
 	for property in get_property_list():

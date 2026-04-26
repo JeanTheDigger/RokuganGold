@@ -65,9 +65,9 @@ func receive_message(data: Dictionary):
 	var content = data.get("message", "")
 
 	# UI display
-	var char_data = GameManager.character_data
-	if char_data:
-		var ui = GameManager.character_uis.get(char_data.name, null)
+	var local_name: String = GameManager.peer_to_character_name.get(multiplayer.get_unique_id(), "")
+	if not local_name.is_empty():
+		var ui = GameManager.character_uis.get(local_name, null)
 		if ui and ui.has_method("display_message"):
 			ui.display_message(content)
 
@@ -110,6 +110,8 @@ signal zone_description_received(desc: String)
 
 @rpc("any_peer")
 func request_zone_name(char_name: String):
+	if not multiplayer.is_server():
+		return
 	if not GameManager.character_data_by_name.has(char_name):
 		return
 	var zone_name = GameManager.character_data_by_name[char_name].current_zone
@@ -119,6 +121,8 @@ func request_zone_name(char_name: String):
 
 @rpc("any_peer")
 func request_zone_character_list(char_name: String):
+	if not multiplayer.is_server():
+		return
 	if not GameManager.character_data_by_name.has(char_name):
 		print("❌ Unknown character")
 		return
@@ -160,6 +164,8 @@ func request_zone_character_list(char_name: String):
 
 @rpc("any_peer")
 func request_zone_description(char_name: String):
+	if not multiplayer.is_server():
+		return
 	if not GameManager.character_data_by_name.has(char_name):
 		print("❌ Unknown character:", char_name)
 		return
@@ -213,9 +219,25 @@ func receive_zone_description(data: Dictionary):
 
 @rpc("any_peer")
 func request_zone_move_to(character_name: String, target_zone_or_character: String, move_reason: String = "standard") -> void:
+	if not multiplayer.is_server():
+		return
 	if not GameManager.character_data_by_name.has(character_name):
 		print("❌ Move request from unknown character:", character_name)
 		return
+
+	var sender_id := multiplayer.get_remote_sender_id()
+	if sender_id != 0:  # 0 means called directly on server (not via RPC)
+		match move_reason:
+			"standard", "secret", "load":
+				if not _sender_is_owner_or_st(sender_id, character_name):
+					print("❌ Move denied — sender does not own character:", character_name)
+					return
+			"teleport", "to_character", "spawn":
+				var sname := GameManager.peer_to_character_name.get(sender_id, "")
+				var sdata: CharacterData = GameManager.character_data_by_name.get(sname, null)
+				if sdata == null or not sdata.is_storyteller:
+					print("❌ Teleport/spawn denied — not a storyteller")
+					return
 
 	var char_data = GameManager.character_data_by_name[character_name]
 	var old_zone = char_data.current_zone
@@ -234,8 +256,6 @@ func request_zone_move_to(character_name: String, target_zone_or_character: Stri
 			final_target_zone = target_zone_or_character
 
 		"load":
-			var current_zone_data_load: Dictionary = ZoneManager.zones.get(old_zone, {}) as Dictionary
-			var _connected_zones: Array = current_zone_data_load.get("connected_zones", []) as Array
 			print("📥 Load move: skipping connection check between", old_zone, "and", target_zone_or_character)
 			final_target_zone = target_zone_or_character
 
@@ -703,6 +723,9 @@ func request_possess(target_name: String):
 	if st_data == null:
 		print("❌ ST character data not found for:", current_name)
 		return
+	if not st_data.is_storyteller:
+		print("❌ Possession denied — not a storyteller:", current_name)
+		return
 	if target_data == null:
 		print("❌ Target character not found:", target_name)
 		return
@@ -769,6 +792,14 @@ func deserialize_character_data(dict: Dictionary) -> CharacterData:
 	return new_data
 
 
+func _sender_is_owner_or_st(sender_id: int, char_name: String) -> bool:
+	var sender_name: String = GameManager.peer_to_character_name.get(sender_id, "")
+	if sender_name == char_name:
+		return true
+	var sender_data: CharacterData = GameManager.character_data_by_name.get(sender_name, null)
+	return sender_data != null and sender_data.is_storyteller
+
+
 
 
 
@@ -793,17 +824,18 @@ func _delayed_update_character_data(data_dict: Dictionary) -> void:
 
 	var new_data = deserialize_character_data(data_dict)
 
-	# ✅ Update current active character reference
-	GameManager.character_data = new_data
-	print("✅ GameManager.character_data set to:", new_data.name)
-
 	# ✅ Update peer name mapping on client
 	var my_peer_id = multiplayer.get_unique_id()
+	var old_local_name := GameManager.peer_to_character_name.get(my_peer_id, "")
 	GameManager.peer_to_character_name[my_peer_id] = new_data.name
 	print("📌 Updated peer_to_character_name[", my_peer_id, "] =", new_data.name)
 
+	# Remove stale character_uis entry for the previous name
+	if not old_local_name.is_empty() and old_local_name != new_data.name:
+		GameManager.character_uis.erase(old_local_name)
+
 	# ✅ Apply data to UI
-	main_ui.set_character_data(new_data)
+	main_ui.set_character_data(new_data.name)
 
 
 
@@ -890,6 +922,8 @@ func send_character_data_to_peer(char_data: CharacterData, peer_id: int):
 
 @rpc("any_peer")
 func set_peer_mode(mode: String):
+	if not multiplayer.is_server():
+		return
 	var peer_id = multiplayer.get_remote_sender_id()
 	GameManager.current_mode_by_peer[peer_id] = mode
 
@@ -939,30 +973,20 @@ func request_delete_character(target_name: String):
 
 signal stat_value_received(stat_name: String, value: int)
 
-# === CLIENT: Call this to request a stat ===
-func request_stat_value(character_name: String, stat_name: String) -> void:
-	if multiplayer.is_server():
-		# If you ever allow local server hosting, you can just fetch directly:
-		var character_data = GameManager.character_data_by_name.get(character_name, null)
-		if character_data:
-			var value = _resolve_stat_value(character_data, stat_name)
-			emit_signal("stat_value_received", stat_name, value)
-	else:
-		rpc_id(1, "request_stat_value_server", multiplayer.get_unique_id(), character_name, stat_name)
-
 # === SERVER: Receives request and responds ===
 @rpc("any_peer")
-func request_stat_value_server(peer_id: int, character_name: String, stat_name: String) -> void:
+func request_stat_value_server(_peer_id: int, character_name: String, stat_name: String) -> void:
 	if not multiplayer.is_server():
 		return
 
+	var actual_sender := multiplayer.get_remote_sender_id()
 	var character_data = GameManager.character_data_by_name.get(character_name, null)
 	if character_data == null:
 		print("⚠ Unknown character:", character_name)
 		return
 
 	var value = _resolve_stat_value(character_data, stat_name)
-	rpc_id(peer_id, "receive_stat_value", stat_name, value)
+	rpc_id(actual_sender, "receive_stat_value", stat_name, value)
 
 
 func _resolve_stat_value(character_data: Resource, stat_name: Variant) -> int:
@@ -1004,6 +1028,11 @@ func request_dice_roll(character_name: String, attr_name: String, ability_name: 
 	var character_data = GameManager.character_data_by_name.get(character_name, null)
 	if character_data == null:
 		print("❌ Character not found for roll:", character_name)
+		return
+
+	var dice_sender_id := multiplayer.get_remote_sender_id()
+	if not _sender_is_owner_or_st(dice_sender_id, character_name):
+		print("❌ Dice roll denied — sender does not own character:", character_name)
 		return
 
 	var attr_val := 0
@@ -1147,6 +1176,8 @@ func request_dice_roll(character_name: String, attr_name: String, ability_name: 
 
 @rpc("any_peer")
 func request_zone_viewpoint_data(char_name: String) -> void:
+	if not multiplayer.is_server():
+		return
 	if not GameManager.character_data_by_name.has(char_name):
 		print("❌ Unknown character:", char_name)
 		return
@@ -1171,6 +1202,8 @@ func request_zone_viewpoint_data(char_name: String) -> void:
 
 @rpc("any_peer")
 func receive_viewpoint_image(data: Dictionary) -> void:
+	if multiplayer.is_server():
+		return
 	var char_name = data.get("char_name", "")
 	print("🧭 Updating image for:", char_name)
 
@@ -1195,8 +1228,6 @@ func receive_viewpoint_image(data: Dictionary) -> void:
 
 
 
-func set_viewpoint_image(texture: Texture2D) -> void:
-	$ZoneImagePanel.texture = texture
 
 
 
@@ -1204,6 +1235,12 @@ func set_viewpoint_image(texture: Texture2D) -> void:
 
 @rpc("any_peer")
 func request_change_viewpoint(char_name: String, new_viewpoint: String):
+	if not multiplayer.is_server():
+		return
+	var vp_sender_id := multiplayer.get_remote_sender_id()
+	if not _sender_is_owner_or_st(vp_sender_id, char_name):
+		print("❌ Viewpoint change denied for:", char_name)
+		return
 	if not GameManager.character_data_by_name.has(char_name):
 		print("❌ Unknown character:", char_name)
 		return
@@ -1410,24 +1447,12 @@ func request_register_player_character(data: Dictionary):
 @rpc("authority")
 func receive_character_data(data: Dictionary) -> void:
 	print("📥 Receiving character data on client:", data.get("name", "Unknown"))
-
-	var character = CharacterData.new()
+	var character := CharacterData.new()
 	character.deserialize_from_dict(data)
-
-	GameManager.character_data_by_name[character.name] = character
-	GameManager.character_data = character
-
-	var main_ui = load("res://scene/main_ui.tscn").instantiate()
-	main_ui.set_character_data(character)
-
-	GameManager.character_uis[character.name] = main_ui
-
-	get_tree().root.add_child(main_ui)
-	if get_tree().current_scene:
-		get_tree().current_scene.queue_free()
-	get_tree().set_current_scene(main_ui)
-
-	print("✅ Character %s fully loaded into UI and memory" % character.name)
+	GameManager.peer_to_character_name[multiplayer.get_unique_id()] = character.name
+	if SettingsManager:
+		SettingsManager.sync_from_character_data(character)
+	on_character_received(character)
 
 @rpc("any_peer")
 func request_save_character(character_dict: Dictionary) -> void:
@@ -1437,6 +1462,11 @@ func request_save_character(character_dict: Dictionary) -> void:
 	var char_name = character_dict.get("name", "")
 	if char_name == "":
 		print("❌ Save failed — no name in dictionary.")
+		return
+
+	var save_sender_id := multiplayer.get_remote_sender_id()
+	if save_sender_id != 0 and not _sender_is_owner_or_st(save_sender_id, char_name):
+		print("❌ Save denied — sender does not own character:", char_name)
 		return
 
 	var character = GameManager.character_data_by_name.get(char_name)
@@ -1507,37 +1537,30 @@ func request_load_character(character_name: String, submitted_password: String) 
 
 @rpc("any_peer")
 func handle_received_character_data(data: Dictionary) -> void:
+	if multiplayer.is_server():
+		return
 	var character := CharacterData.new()
 	character.deserialize_from_dict(data)
 
-	GameManager.character_data_by_name[character.name] = character
-	GameManager.character_data = character
+	GameManager.peer_to_character_name[multiplayer.get_unique_id()] = character.name
 
 	if Engine.has_singleton("SettingsManager") or SettingsManager:
-		SettingsManager.sync_from_character()
+		SettingsManager.sync_from_character_data(character)
 
 	NetworkManager.on_character_received(character)
-
-	# ✅ Ask server to apply wake-up effects for this character
-	NetworkManager.rpc_id(1, "request_wake_up_effects", character.name)
 
 
 
 func on_character_received(character: CharacterData) -> void:
 	var main_ui = load("res://scene/main_ui.tscn").instantiate()
-	main_ui.set_character_data(character)
-
+	main_ui.set_character_data(character.name)
 	GameManager.character_uis[character.name] = main_ui
-
-	print("✅ Finished loading character UI for:", character.name)
 	get_tree().root.add_child(main_ui)
 	var old_scene = get_tree().current_scene
 	get_tree().current_scene = main_ui
 	if old_scene:
 		old_scene.queue_free()
-
 	print("✅ Main UI loaded for:", character.name)
-	print("✅ Finished loading character UI for:", character.name)
 
 
 
@@ -1580,6 +1603,7 @@ func handle_peer_disconnected(peer_id: int) -> void:
 	GameManager.name_to_peer.erase(char_name)
 	GameManager.peer_to_character_name.erase(peer_id)
 	GameManager.current_mode_by_peer.erase(peer_id)
+	GameManager.character_uis.erase(char_name)
 
 	# Storyteller possession cleanup
 	if GameManager.storyteller_original_forms.has(char_name):
@@ -1593,6 +1617,12 @@ func handle_peer_disconnected(peer_id: int) -> void:
 
 @rpc("any_peer")
 func set_character_description(character_name: String, description: String) -> void:
+	if not multiplayer.is_server():
+		return
+	var desc_sender_id := multiplayer.get_remote_sender_id()
+	if not _sender_is_owner_or_st(desc_sender_id, character_name):
+		print("❌ Description update denied for:", character_name)
+		return
 	var character = GameManager.character_data_by_name.get(character_name)
 	if character == null:
 		print("❌ Character not found:", character_name)
@@ -1606,23 +1636,13 @@ func set_character_description(character_name: String, description: String) -> v
 	print("📦 [set_character_description] Serialized Description:", dict.get("description", "MISSING"))
 	request_save_character(dict)
 
-	# 🔁 Push updated description back to client to prevent ghosting
-	var peer_id = GameManager.name_to_peer.get(character_name, -1)
-	if peer_id != -1:
-		print("📤 Syncing updated description to peer:", peer_id)
-		rpc_id(peer_id, "receive_updated_description_only", description)
-
-@rpc("authority")
-func receive_updated_description_only(new_description: String) -> void:
-	if GameManager.character_data:
-		GameManager.character_data.description = new_description
-		print("📝 Client-side character description updated")
-
 
 ################ Description ############
 
 @rpc("any_peer")
 func request_character_description(requester_name: String, target_name: String):
+	if not multiplayer.is_server():
+		return
 	if not GameManager.character_data_by_name.has(target_name):
 		print("❌ Target not found for description:", target_name)
 		return
@@ -1723,6 +1743,12 @@ func request_character_data_for_edit(character_name: String) -> void:
 		print("❌ Invalid sender peer ID — likely called locally on the server")
 		return
 
+	var edit_requester_name := GameManager.peer_to_character_name.get(sender_peer, "")
+	var edit_requester_data: CharacterData = GameManager.character_data_by_name.get(edit_requester_name, null)
+	if edit_requester_data == null or not edit_requester_data.is_storyteller:
+		print("❌ Edit data request denied — not a storyteller:", edit_requester_name)
+		return
+
 	if not GameManager.character_data_by_name.has(character_name):
 		print("❌ Character not found:", character_name)
 		return
@@ -1737,7 +1763,7 @@ func request_character_data_for_edit(character_name: String) -> void:
 
 @rpc("authority")
 func send_character_data_to_editor(data: Dictionary) -> void:
-	var character_ui = GameManager.character_uis.get(GameManager.character_data.name, null)
+	var character_ui = GameManager.character_uis.get(GameManager.peer_to_character_name.get(multiplayer.get_unique_id(), ""), null)
 	if character_ui == null:
 		print("⚠️ Could not find UI for current character")
 		return
@@ -1753,33 +1779,6 @@ func send_character_data_to_editor(data: Dictionary) -> void:
 	editable_panel.receive_character_data(character_resource)
 
 
-
-
-@rpc("authority", "call_local")
-func receive_character_data_for_edit(dict: Dictionary, sender_name: String) -> void:
-
-	print("🔍 Looking up UI for:", sender_name)
-	print("📋 character_uis keys:", GameManager.character_uis.keys())
-
-	var main_ui: Control = GameManager.character_uis.get(sender_name, null)
-	if main_ui == null:
-		print("❌ MainUI not found for Storyteller named:", sender_name)
-		return
-
-	var edit_ui: Control = main_ui.get_node_or_null("CharacterSheetEditableUI")
-	if edit_ui == null:
-		print("❌ CharacterSheetEditableUI not found.")
-		return
-
-	var temp_data: CharacterData = CharacterData.new()
-	temp_data.deserialize_from_dict(dict)
-
-	edit_ui.receive_character_data(temp_data)
-	edit_ui.visible = true
-
-	var player_selection: Control = main_ui.get_node_or_null("PlayerSelection")
-	if player_selection:
-		player_selection.visible = false
 
 
 ######################### ST Editing ##############################
@@ -1825,11 +1824,16 @@ func _log_character_edit_text(editor_peer_id: int, target_before: String, target
 
 @rpc("any_peer")
 func request_edit_character(character_name: String, change_dict: Dictionary) -> void:
+	if not multiplayer.is_server():
+		return
 	if not GameManager.character_data_by_name.has(character_name):
 		print("❌ Character not found:", character_name)
 		return
 
 	var editor_peer_id := multiplayer.get_remote_sender_id()
+	if not _sender_is_owner_or_st(editor_peer_id, character_name):
+		print("❌ Edit denied — not owner or storyteller for:", character_name)
+		return
 	var original_target := character_name
 
 	var character_data: CharacterData = GameManager.character_data_by_name[character_name]
@@ -1930,20 +1934,35 @@ func request_edit_character(character_name: String, change_dict: Dictionary) -> 
 
 	_log_character_edit_text(editor_peer_id, original_target, character_name, change_dict)
 
+	var renamed_peer_id: int = -1
 	if GameManager.character_peers.has(character_name):
-		var peer_id: int = int(GameManager.character_peers.get(character_name, -1))
-		if peer_id != -1:
+		renamed_peer_id = int(GameManager.character_peers.get(character_name, -1))
+		if renamed_peer_id != -1:
 			var dict = character_data.serialize_to_dict()
-			rpc_id(peer_id, "receive_edited_character_data", dict)
+			rpc_id(renamed_peer_id, "receive_edited_character_data", dict)
+
+	# If the character was renamed, notify zone peers so their character lists stay current
+	if original_target != character_name:
+		var zone_name: String = character_data.current_zone
+		var zone_data: Dictionary = ZoneManager.zones.get(zone_name, {})
+		var chars_in_zone: Array = zone_data.get("characters", [])
+		for zone_peer_id in _peers_in_zone(zone_name):
+			if zone_peer_id == renamed_peer_id:
+				continue  # already notified via receive_edited_character_data
+			var observer_name: String = GameManager.peer_to_character_name.get(zone_peer_id, "")
+			var names: Array[String] = []
+			for c in chars_in_zone:
+				if c and c.name != observer_name:
+					names.append(c.name)
+			rpc_id(zone_peer_id, "receive_zone_character_list", names)
 
 @rpc
 func receive_edited_character_data(dict: Dictionary) -> void:
 	var new_data := CharacterData.new()
 	new_data.deserialize_from_dict(dict)
 
-	GameManager.character_data = new_data
-	GameManager.character_data_by_name[new_data.name] = new_data  # keeps local cache aligned
-	SettingsManager.sync_from_character()  # <-- add this
+	GameManager.peer_to_character_name[multiplayer.get_unique_id()] = new_data.name
+	SettingsManager.sync_from_character_data(new_data)
 
 	var main_ui: Control = GameManager.character_uis.get(new_data.name, null)
 	if main_ui != null:
@@ -1956,6 +1975,8 @@ func receive_edited_character_data(dict: Dictionary) -> void:
 
 @rpc("any_peer")
 func request_character_data_for_view(character_name: String) -> void:
+	if not multiplayer.is_server():
+		return
 	var sender_id: int = multiplayer.get_remote_sender_id()
 	var sender_name: String = GameManager.peer_to_character_name.get(sender_id, "")
 	var sender_data: CharacterData = GameManager.character_data_by_name.get(sender_name, null)
@@ -1975,7 +1996,7 @@ func request_character_data_for_view(character_name: String) -> void:
 	print("📤 Sent viewable character data for", character_name, "to", sender_name)
 
 
-@rpc("authority", "call_local")
+@rpc("authority")
 func receive_character_data_for_view(dict: Dictionary, character_name: String) -> void:
 	print("🛬 Receiving viewable character data for:", character_name)
 
@@ -2003,6 +2024,8 @@ func request_character_data_for_description(panel_ref: Node, character_name: Str
 
 @rpc("any_peer")
 func request_character_data_for_description_only(character_name: String) -> void:
+	if not multiplayer.is_server():
+		return
 	var sender_id: int = multiplayer.get_remote_sender_id()
 	var sender_name: String = GameManager.peer_to_character_name.get(sender_id, "")
 	var sender_data: CharacterData = GameManager.character_data_by_name.get(sender_name, null)
@@ -2022,7 +2045,7 @@ func request_character_data_for_description_only(character_name: String) -> void
 	print("📤 Sent description character data for", character_name, "to", sender_name)
 
 
-@rpc("authority", "call_local")
+@rpc("authority")
 func receive_character_data_for_description_only(dict: Dictionary, character_name: String) -> void:
 	print("🛬 Receiving character data (description-only) for:", character_name)
 
@@ -2042,11 +2065,14 @@ func receive_character_data_for_description_only(dict: Dictionary, character_nam
 
 @rpc("any_peer")
 func request_create_temp_zone(payload: Dictionary) -> void:
+	if not multiplayer.is_server():
+		return
 	var zone_name: String = payload.get("name", "").strip_edges()
 	var password: String = payload.get("password", "").strip_edges()
 	var description: String = payload.get("description", "").strip_edges()
 	var creator: String = payload.get("creator", "")
-	var origin_zone: String = payload.get("origin_zone", "")
+	var creator_data: CharacterData = GameManager.character_data_by_name.get(creator, null)
+	var origin_zone: String = creator_data.current_zone if creator_data != null else ""
 
 	if zone_name == "" or password == "" or description == "":
 		print("❌ Invalid temp zone payload received")
@@ -2090,7 +2116,12 @@ func request_create_temp_zone(payload: Dictionary) -> void:
 
 @rpc("any_peer")
 func request_zone_selection_list(character_name: String, mode: String) -> void:
+	if not multiplayer.is_server():
+		return
 	var peer_id = multiplayer.get_remote_sender_id()
+	if not _sender_is_owner_or_st(peer_id, character_name):
+		print("❌ Zone selection list denied for:", character_name)
+		return
 	var char_data = GameManager.character_data_by_name.get(character_name)
 
 	if char_data == null:
@@ -2168,6 +2199,12 @@ func receive_name_check_result(name_taken: bool):
 ################### Note code for players ##########################
 @rpc("any_peer")
 func set_character_notes(character_name: String, notes: String) -> void:
+	if not multiplayer.is_server():
+		return
+	var notes_sender_id := multiplayer.get_remote_sender_id()
+	if not _sender_is_owner_or_st(notes_sender_id, character_name):
+		print("❌ Notes update denied for:", character_name)
+		return
 	var character = GameManager.character_data_by_name.get(character_name)
 	if character == null:
 		print("❌ Character not found for notes:", character_name)
@@ -2184,6 +2221,8 @@ func set_character_notes(character_name: String, notes: String) -> void:
 
 @rpc("any_peer")
 func report_typing_state(data: Dictionary) -> void:
+	if not multiplayer.is_server():
+		return
 	var char_name: String = data.get("name", "")
 	var is_typing: bool = data.get("is_typing", false)
 	var mode: String = data.get("mode", "")
@@ -2234,11 +2273,11 @@ func receive_typing_update(data: Dictionary) -> void:
 
 @rpc("authority")
 func flush_typing_state():
-	if GameManager.character_data == null:
-		print("❌ flush_typing_state skipped: character_data is null")
+	var local_name: String = GameManager.peer_to_character_name.get(multiplayer.get_unique_id(), "")
+	if local_name.is_empty():
+		print("❌ flush_typing_state skipped: no local character")
 		return
 
-	var local_name = GameManager.character_data.name
 	var ui = GameManager.character_uis.get(local_name, null)
 	if ui:
 		ui.typers_in_zone.clear()
@@ -2247,11 +2286,11 @@ func flush_typing_state():
 
 @rpc("authority")
 func remove_typing_character(char_name: String):
-	if GameManager.character_data == null:
-		print("❌ remove_typing_character skipped: character_data is null")
+	var local_name: String = GameManager.peer_to_character_name.get(multiplayer.get_unique_id(), "")
+	if local_name.is_empty():
+		print("❌ remove_typing_character skipped: no local character")
 		return
 
-	var local_name = GameManager.character_data.name
 	var ui = GameManager.character_uis.get(local_name, null)
 	if ui and ui.typers_in_zone.has(char_name):
 		ui.typers_in_zone.erase(char_name)
@@ -2272,6 +2311,12 @@ func receive_zone_category(category: String):
 
 @rpc("any_peer")
 func upload_character_image(char_name: String, data: PackedByteArray):
+	if not multiplayer.is_server():
+		return
+	var img_sender_id := multiplayer.get_remote_sender_id()
+	if not _sender_is_owner_or_st(img_sender_id, char_name):
+		print("❌ Image upload denied — sender does not own character:", char_name)
+		return
 	var save_dir := "user://portraits/"
 	var save_path := save_dir + char_name + ".png"
 

@@ -18,7 +18,7 @@ func _ready():
 	load_button.pressed.connect(_on_load_character_pressed)
 	new_character_button.pressed.connect(_on_new_character_pressed)
 	
-	MusicManager.play_music(preload("res://Sounds/Music/Star_Wars_Galaxies_(SWG)_Loading_Screen_Music_128k.mp3"))
+	pass
 
 
 func _on_new_character_pressed():
@@ -101,8 +101,6 @@ func _start_storyteller_mode_final():
 	character.name = storyteller_name
 	character.current_zone = "OOC"
 	character.is_storyteller = true
-	GameManager.character_data = character
-
 	print("✅ CharacterData created")
 	print("  - Name:", character.name)
 	print("  - Zone:", character.current_zone)
@@ -115,7 +113,7 @@ func _start_storyteller_mode_final():
 	var main_scene: Control = load("res://scene/main_ui.tscn").instantiate()
 	print("📦 main_ui.tscn loaded and instantiated")
 
-	main_scene.set_character_data(character)
+	main_scene.set_character_data(character.name)
 	GameManager.character_uis[character.name] = main_scene
 	print("📨 Character data passed to main_ui and UI registered under name")
 

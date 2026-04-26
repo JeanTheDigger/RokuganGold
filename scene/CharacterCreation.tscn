@@ -92,7 +92,7 @@ text = "Class"
 layout_mode = 2
 size_flags_horizontal = 3
 item_count = 5
-popup/item_0/text = "Jedi"
+popup/item_0/text = "Bushi"
 popup/item_0/id = 0
 popup/item_1/text = "Noble"
 popup/item_1/id = 1
@@ -1043,7 +1043,7 @@ horizontal_alignment = 1
 
 [node name="Label2" type="Label" parent="BackgroundPanel/CombatStatisticPanel/VBoxContainer/MarginContainer2/VBoxContainer/HBoxContainer3/VBoxContainer2"]
 layout_mode = 2
-text = "Force Points"
+text = "Void Points"
 horizontal_alignment = 1
 
 [node name="VBoxContainer3" type="VBoxContainer" parent="BackgroundPanel/CombatStatisticPanel/VBoxContainer/MarginContainer2/VBoxContainer/HBoxContainer3"]
@@ -1297,21 +1297,21 @@ layout_mode = 2
 size_flags_horizontal = 3
 alignment = 2
 
-[node name="Knowledge - GalacticLore (Int)HBoxContainer" type="HBoxContainer" parent="BackgroundPanel/SkillsPanel/VBoxContainer/MarginContainer2/VBoxContainer/ScrollContainer/VBoxContainer"]
+[node name="Knowledge - Lore (Int)HBoxContainer" type="HBoxContainer" parent="BackgroundPanel/SkillsPanel/VBoxContainer/MarginContainer2/VBoxContainer/ScrollContainer/VBoxContainer"]
 layout_mode = 2
 size_flags_vertical = 3
 
-[node name="Label" type="Label" parent="BackgroundPanel/SkillsPanel/VBoxContainer/MarginContainer2/VBoxContainer/ScrollContainer/VBoxContainer/Knowledge - GalacticLore (Int)HBoxContainer"]
+[node name="Label" type="Label" parent="BackgroundPanel/SkillsPanel/VBoxContainer/MarginContainer2/VBoxContainer/ScrollContainer/VBoxContainer/Knowledge - Lore (Int)HBoxContainer"]
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_stretch_ratio = 20.0
-text = "Knowledge - Galactic Lore (Int)"
+text = "Knowledge - Lore (Int)"
 
-[node name="CenterContainer" type="CenterContainer" parent="BackgroundPanel/SkillsPanel/VBoxContainer/MarginContainer2/VBoxContainer/ScrollContainer/VBoxContainer/Knowledge - GalacticLore (Int)HBoxContainer"]
+[node name="CenterContainer" type="CenterContainer" parent="BackgroundPanel/SkillsPanel/VBoxContainer/MarginContainer2/VBoxContainer/ScrollContainer/VBoxContainer/Knowledge - Lore (Int)HBoxContainer"]
 layout_mode = 2
 size_flags_horizontal = 3
 
-[node name="CheckBox" type="CheckButton" parent="BackgroundPanel/SkillsPanel/VBoxContainer/MarginContainer2/VBoxContainer/ScrollContainer/VBoxContainer/Knowledge - GalacticLore (Int)HBoxContainer/CenterContainer"]
+[node name="CheckBox" type="CheckButton" parent="BackgroundPanel/SkillsPanel/VBoxContainer/MarginContainer2/VBoxContainer/ScrollContainer/VBoxContainer/Knowledge - Lore (Int)HBoxContainer/CenterContainer"]
 layout_mode = 2
 size_flags_horizontal = 3
 alignment = 2
@@ -1601,25 +1601,6 @@ layout_mode = 2
 size_flags_horizontal = 3
 alignment = 2
 
-[node name="UsetheforceHBoxContainer12" type="HBoxContainer" parent="BackgroundPanel/SkillsPanel/VBoxContainer/MarginContainer2/VBoxContainer/ScrollContainer/VBoxContainer"]
-layout_mode = 2
-size_flags_vertical = 3
-
-[node name="Label" type="Label" parent="BackgroundPanel/SkillsPanel/VBoxContainer/MarginContainer2/VBoxContainer/ScrollContainer/VBoxContainer/UsetheforceHBoxContainer12"]
-layout_mode = 2
-size_flags_horizontal = 3
-size_flags_stretch_ratio = 20.0
-text = "Use the Force (Cha)"
-
-[node name="CenterContainer" type="CenterContainer" parent="BackgroundPanel/SkillsPanel/VBoxContainer/MarginContainer2/VBoxContainer/ScrollContainer/VBoxContainer/UsetheforceHBoxContainer12"]
-layout_mode = 2
-size_flags_horizontal = 3
-
-[node name="CheckBox" type="CheckButton" parent="BackgroundPanel/SkillsPanel/VBoxContainer/MarginContainer2/VBoxContainer/ScrollContainer/VBoxContainer/UsetheforceHBoxContainer12/CenterContainer"]
-layout_mode = 2
-size_flags_horizontal = 3
-alignment = 2
-
 [node name="FeatsPanel" type="Panel" parent="BackgroundPanel"]
 layout_mode = 0
 offset_left = 533.0
@@ -1886,138 +1867,6 @@ layout_mode = 2
 size_flags_horizontal = 3
 horizontal_alignment = 2
 
-[node name="ForcePowersPanel" type="Panel" parent="BackgroundPanel"]
-layout_mode = 0
-offset_left = 1039.0
-offset_top = 452.0
-offset_right = 1527.0
-offset_bottom = 806.0
-
-[node name="VBoxContainer" type="VBoxContainer" parent="BackgroundPanel/ForcePowersPanel"]
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
-
-[node name="MarginContainer" type="MarginContainer" parent="BackgroundPanel/ForcePowersPanel/VBoxContainer"]
-layout_mode = 2
-theme_override_constants/margin_left = 20
-theme_override_constants/margin_top = 5
-theme_override_constants/margin_right = 20
-
-[node name="VBoxContainer" type="VBoxContainer" parent="BackgroundPanel/ForcePowersPanel/VBoxContainer/MarginContainer"]
-layout_mode = 2
-metadata/_edit_use_anchors_ = true
-
-[node name="Force Powers" type="Label" parent="BackgroundPanel/ForcePowersPanel/VBoxContainer/MarginContainer/VBoxContainer"]
-layout_mode = 2
-size_flags_vertical = 3
-size_flags_stretch_ratio = 0.25
-theme = ExtResource("2_434bv")
-text = "Force Powers"
-horizontal_alignment = 1
-
-[node name="ColorRect" type="ColorRect" parent="BackgroundPanel/ForcePowersPanel/VBoxContainer/MarginContainer/VBoxContainer"]
-custom_minimum_size = Vector2(450, 2)
-layout_mode = 2
-size_flags_horizontal = 4
-color = Color(0.372549, 0.658824, 0.709804, 1)
-
-[node name="MarginContainer2" type="MarginContainer" parent="BackgroundPanel/ForcePowersPanel/VBoxContainer"]
-layout_mode = 2
-size_flags_vertical = 3
-theme_override_constants/margin_left = 20
-theme_override_constants/margin_top = 5
-theme_override_constants/margin_right = 20
-theme_override_constants/margin_bottom = 20
-
-[node name="VBoxContainer" type="VBoxContainer" parent="BackgroundPanel/ForcePowersPanel/VBoxContainer/MarginContainer2"]
-layout_mode = 2
-
-[node name="AcquiredLabel" type="Label" parent="BackgroundPanel/ForcePowersPanel/VBoxContainer/MarginContainer2/VBoxContainer"]
-layout_mode = 2
-size_flags_vertical = 3
-size_flags_stretch_ratio = 0.0
-text = "Acquired"
-horizontal_alignment = 1
-
-[node name="PanelContainer" type="PanelContainer" parent="BackgroundPanel/ForcePowersPanel/VBoxContainer/MarginContainer2/VBoxContainer"]
-layout_mode = 2
-size_flags_vertical = 3
-
-[node name="ScrollContainer" type="ScrollContainer" parent="BackgroundPanel/ForcePowersPanel/VBoxContainer/MarginContainer2/VBoxContainer/PanelContainer"]
-layout_mode = 2
-size_flags_vertical = 3
-
-[node name="VBoxContainer" type="VBoxContainer" parent="BackgroundPanel/ForcePowersPanel/VBoxContainer/MarginContainer2/VBoxContainer/PanelContainer/ScrollContainer"]
-layout_mode = 2
-size_flags_horizontal = 3
-size_flags_vertical = 3
-
-[node name="HBoxContainer" type="HBoxContainer" parent="BackgroundPanel/ForcePowersPanel/VBoxContainer/MarginContainer2/VBoxContainer/PanelContainer/ScrollContainer/VBoxContainer"]
-layout_mode = 2
-
-[node name="Label" type="Label" parent="BackgroundPanel/ForcePowersPanel/VBoxContainer/MarginContainer2/VBoxContainer/PanelContainer/ScrollContainer/VBoxContainer/HBoxContainer"]
-layout_mode = 2
-size_flags_horizontal = 3
-
-[node name="Label2" type="Label" parent="BackgroundPanel/ForcePowersPanel/VBoxContainer/MarginContainer2/VBoxContainer/PanelContainer/ScrollContainer/VBoxContainer/HBoxContainer"]
-layout_mode = 2
-size_flags_horizontal = 3
-horizontal_alignment = 2
-
-[node name="AvailableLabel" type="Label" parent="BackgroundPanel/ForcePowersPanel/VBoxContainer/MarginContainer2/VBoxContainer"]
-layout_mode = 2
-text = "Available"
-horizontal_alignment = 1
-
-[node name="PanelContainer2" type="PanelContainer" parent="BackgroundPanel/ForcePowersPanel/VBoxContainer/MarginContainer2/VBoxContainer"]
-layout_mode = 2
-size_flags_vertical = 3
-
-[node name="ScrollContainer" type="ScrollContainer" parent="BackgroundPanel/ForcePowersPanel/VBoxContainer/MarginContainer2/VBoxContainer/PanelContainer2"]
-layout_mode = 2
-size_flags_vertical = 3
-
-[node name="VBoxContainer" type="VBoxContainer" parent="BackgroundPanel/ForcePowersPanel/VBoxContainer/MarginContainer2/VBoxContainer/PanelContainer2/ScrollContainer"]
-layout_mode = 2
-size_flags_horizontal = 3
-size_flags_vertical = 3
-
-[node name="HBoxContainer" type="HBoxContainer" parent="BackgroundPanel/ForcePowersPanel/VBoxContainer/MarginContainer2/VBoxContainer/PanelContainer2/ScrollContainer/VBoxContainer"]
-layout_mode = 2
-
-[node name="Label" type="Label" parent="BackgroundPanel/ForcePowersPanel/VBoxContainer/MarginContainer2/VBoxContainer/PanelContainer2/ScrollContainer/VBoxContainer/HBoxContainer"]
-layout_mode = 2
-size_flags_horizontal = 3
-
-[node name="Label2" type="Label" parent="BackgroundPanel/ForcePowersPanel/VBoxContainer/MarginContainer2/VBoxContainer/PanelContainer2/ScrollContainer/VBoxContainer/HBoxContainer"]
-layout_mode = 2
-size_flags_horizontal = 3
-horizontal_alignment = 2
-
-[node name="ScrollContainer2" type="ScrollContainer" parent="BackgroundPanel/ForcePowersPanel/VBoxContainer/MarginContainer2/VBoxContainer/PanelContainer2"]
-layout_mode = 2
-size_flags_vertical = 3
-
-[node name="VBoxContainer" type="VBoxContainer" parent="BackgroundPanel/ForcePowersPanel/VBoxContainer/MarginContainer2/VBoxContainer/PanelContainer2/ScrollContainer2"]
-layout_mode = 2
-size_flags_horizontal = 3
-size_flags_vertical = 3
-
-[node name="HBoxContainer" type="HBoxContainer" parent="BackgroundPanel/ForcePowersPanel/VBoxContainer/MarginContainer2/VBoxContainer/PanelContainer2/ScrollContainer2/VBoxContainer"]
-layout_mode = 2
-
-[node name="Label" type="Label" parent="BackgroundPanel/ForcePowersPanel/VBoxContainer/MarginContainer2/VBoxContainer/PanelContainer2/ScrollContainer2/VBoxContainer/HBoxContainer"]
-layout_mode = 2
-size_flags_horizontal = 3
-
-[node name="Label2" type="Label" parent="BackgroundPanel/ForcePowersPanel/VBoxContainer/MarginContainer2/VBoxContainer/PanelContainer2/ScrollContainer2/VBoxContainer/HBoxContainer"]
-layout_mode = 2
-size_flags_horizontal = 3
-horizontal_alignment = 2
 
 [node name="Button" type="Button" parent="BackgroundPanel"]
 layout_mode = 0

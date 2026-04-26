@@ -12,7 +12,7 @@ func _ready():
 	self.visible = false
 
 # === ENTRY POINT ===
-func enter_mode(_storyteller_data: Resource) -> void:
+func enter_mode(_storyteller_name: String) -> void:
 	self.visible = true
 	editable_inputs.clear()
 	_clear_ui()
@@ -229,5 +229,5 @@ func _on_confirm_pressed():
 	character_dict["is_storyteller"] = false
 
 	# Send to server
-	NetworkManager.rpc("request_create_character", character_dict, GameManager.character_data.name)
+	NetworkManager.rpc("request_create_character", character_dict, GameManager.peer_to_character_name.get(multiplayer.get_unique_id(), ""))
 	self.visible = false
