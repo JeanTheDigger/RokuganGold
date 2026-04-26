@@ -54,7 +54,6 @@ func _on_tab_changed(tab_index: int) -> void:
 			_add_button("Character Sheet")
 			_add_button("Inventory")
 			_add_button("Notes")
-			_add_button("Date")
 		3:
 			_add_button("Heal")
 			_add_button("Physical Attributes")
@@ -154,11 +153,6 @@ func _on_button_pressed(action: String) -> void:
 				group_menu.visible = true
 			else:
 				_append_to_display("\n❌ Group Menu not found.")
-		"Date":
-			if local_character_name.is_empty():
-				_append_to_display("\n❌ No character loaded.")
-				return
-			NetworkManager.rpc("request_current_ic_time", local_character_name)
 		"Nightly Activities":
 			if local_character_name.is_empty():
 				_append_to_display("\n❌ No character loaded.")
@@ -166,8 +160,6 @@ func _on_button_pressed(action: String) -> void:
 			var nightly_ui = get_parent().get_node_or_null("NightlyActivitiesUI")
 			if nightly_ui:
 				nightly_ui.visible = true
-				NetworkManager.rpc("request_nightly_activities_data", local_character_name)
-				NetworkManager.rpc("request_group_summary", local_character_name)
 			else:
 				_append_to_display("\n❌ NightlyActivitiesUI not found.")
 		"Heal":

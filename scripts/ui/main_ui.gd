@@ -76,11 +76,10 @@ func _on_storyteller_tab_pressed() -> void:
 		"Test Path",
 		"Test Frenzy",
 		"Test Rötschreck",
-		"Edit Character" ,
+		"Edit Character",
 		"Describe",
 		"Post Order",
 		"Damage",
-		"Grant AP"
 	]
 
 	for action in actions:
@@ -182,12 +181,6 @@ func _on_storyteller_tab_pressed() -> void:
 					var panel = get_node_or_null("PlayerSelection")
 					if panel:
 						panel.enter_state("STDamage", local_character_name)
-					else:
-						print("⚠️ PlayerSelection panel not found.")
-				"Grant AP":
-					var panel = get_node_or_null("PlayerSelection")
-					if panel:
-						panel.enter_state("STGiveAP", local_character_name)
 					else:
 						print("⚠️ PlayerSelection panel not found.")
 

@@ -7449,11 +7449,6 @@ func move_character_to_zone(character: Resource, target_zone_name: String) -> vo
 func receive_new_zone_data(zone_name: String, zone_data: Dictionary) -> void:
 	ZoneManager.zones[zone_name] = zone_data
 
-	# 🔄 Reset any temporary blood-buffed physicals when zone data is refreshed
-	var local_name: String = GameManager.peer_to_character_name.get(multiplayer.get_unique_id(), "")
-	if not local_name.is_empty():
-		NetworkManager.rpc("request_reset_physical_blood_bonuses", local_name)
-
 
 
 var temp_zone_timers: Dictionary = {}

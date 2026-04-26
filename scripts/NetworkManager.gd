@@ -256,8 +256,6 @@ func request_zone_move_to(character_name: String, target_zone_or_character: Stri
 			final_target_zone = target_zone_or_character
 
 		"load":
-			var current_zone_data_load: Dictionary = ZoneManager.zones.get(old_zone, {}) as Dictionary
-			var _connected_zones: Array = current_zone_data_load.get("connected_zones", []) as Array
 			print("📥 Load move: skipping connection check between", old_zone, "and", target_zone_or_character)
 			final_target_zone = target_zone_or_character
 
@@ -975,17 +973,6 @@ func request_delete_character(target_name: String):
 
 signal stat_value_received(stat_name: String, value: int)
 
-# === CLIENT: Call this to request a stat ===
-func request_stat_value(character_name: String, stat_name: String) -> void:
-	if multiplayer.is_server():
-		# If you ever allow local server hosting, you can just fetch directly:
-		var character_data = GameManager.character_data_by_name.get(character_name, null)
-		if character_data:
-			var value = _resolve_stat_value(character_data, stat_name)
-			emit_signal("stat_value_received", stat_name, value)
-	else:
-		rpc_id(1, "request_stat_value_server", multiplayer.get_unique_id(), character_name, stat_name)
-
 # === SERVER: Receives request and responds ===
 @rpc("any_peer")
 func request_stat_value_server(_peer_id: int, character_name: String, stat_name: String) -> void:
@@ -1241,8 +1228,6 @@ func receive_viewpoint_image(data: Dictionary) -> void:
 
 
 
-func set_viewpoint_image(texture: Texture2D) -> void:
-	$ZoneImagePanel.texture = texture
 
 
 
@@ -1468,7 +1453,6 @@ func receive_character_data(data: Dictionary) -> void:
 	if SettingsManager:
 		SettingsManager.sync_from_character_data(character)
 	on_character_received(character)
-	NetworkManager.rpc_id(1, "request_wake_up_effects", character.name)
 
 @rpc("any_peer")
 func request_save_character(character_dict: Dictionary) -> void:
@@ -1565,9 +1549,6 @@ func handle_received_character_data(data: Dictionary) -> void:
 
 	NetworkManager.on_character_received(character)
 
-	# ✅ Ask server to apply wake-up effects for this character
-	NetworkManager.rpc_id(1, "request_wake_up_effects", character.name)
-
 
 
 func on_character_received(character: CharacterData) -> void:
@@ -1654,16 +1635,6 @@ func set_character_description(character_name: String, description: String) -> v
 	var dict: Dictionary = character.serialize_to_dict()
 	print("📦 [set_character_description] Serialized Description:", dict.get("description", "MISSING"))
 	request_save_character(dict)
-
-	# 🔁 Push updated description back to client to prevent ghosting
-	var peer_id = GameManager.name_to_peer.get(character_name, -1)
-	if peer_id != -1:
-		print("📤 Syncing updated description to peer:", peer_id)
-		rpc_id(peer_id, "receive_updated_description_only", description)
-
-@rpc("authority")
-func receive_updated_description_only(_new_description: String) -> void:
-	pass  # description is authoritative on the server; no client-side copy to update
 
 
 ################ Description ############
@@ -1808,33 +1779,6 @@ func send_character_data_to_editor(data: Dictionary) -> void:
 	editable_panel.receive_character_data(character_resource)
 
 
-
-
-@rpc("authority", "call_local")
-func receive_character_data_for_edit(dict: Dictionary, sender_name: String) -> void:
-
-	print("🔍 Looking up UI for:", sender_name)
-	print("📋 character_uis keys:", GameManager.character_uis.keys())
-
-	var main_ui: Control = GameManager.character_uis.get(sender_name, null)
-	if main_ui == null:
-		print("❌ MainUI not found for Storyteller named:", sender_name)
-		return
-
-	var edit_ui: Control = main_ui.get_node_or_null("CharacterSheetEditableUI")
-	if edit_ui == null:
-		print("❌ CharacterSheetEditableUI not found.")
-		return
-
-	var temp_data: CharacterData = CharacterData.new()
-	temp_data.deserialize_from_dict(dict)
-
-	edit_ui.receive_character_data(temp_data)
-	edit_ui.visible = true
-
-	var player_selection: Control = main_ui.get_node_or_null("PlayerSelection")
-	if player_selection:
-		player_selection.visible = false
 
 
 ######################### ST Editing ##############################
