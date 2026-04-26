@@ -1485,6 +1485,11 @@ func request_save_character(character_dict: Dictionary) -> void:
 		print("❌ Save failed — no name in dictionary.")
 		return
 
+	var save_sender_id := multiplayer.get_remote_sender_id()
+	if save_sender_id != 0 and not _sender_is_owner_or_st(save_sender_id, char_name):
+		print("❌ Save denied — sender does not own character:", char_name)
+		return
+
 	var character = GameManager.character_data_by_name.get(char_name)
 	if character == null:
 		print("❌ Character not found:", char_name)
@@ -1774,6 +1779,12 @@ func request_character_data_for_edit(character_name: String) -> void:
 	var sender_peer := multiplayer.get_remote_sender_id()
 	if sender_peer == -1:
 		print("❌ Invalid sender peer ID — likely called locally on the server")
+		return
+
+	var edit_requester_name := GameManager.peer_to_character_name.get(sender_peer, "")
+	var edit_requester_data: CharacterData = GameManager.character_data_by_name.get(edit_requester_name, null)
+	if edit_requester_data == null or not edit_requester_data.is_storyteller:
+		print("❌ Edit data request denied — not a storyteller:", edit_requester_name)
 		return
 
 	if not GameManager.character_data_by_name.has(character_name):
