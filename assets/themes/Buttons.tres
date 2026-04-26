@@ -1,8 +1,8 @@
 [gd_resource type="Theme" load_steps=7 format=3 uid="uid://cjaewb3353lqh"]
 
-[ext_resource type="FontFile" uid="uid://deuierbbkg6su" path="res://Image/UI/eurostile.TTF" id="1_0ahaj"]
-[ext_resource type="Texture2D" uid="uid://q610xialofwu" path="res://Image/UI/Button001.png" id="2_y076k"]
-[ext_resource type="Texture2D" uid="uid://ci2nmnyfwylw2" path="res://Image/UI/Button001Pressed.png" id="3_icu00"]
+[ext_resource type="FontFile" uid="uid://deuierbbkg6su" path="res://assets/fonts/eurostile.TTF" id="1_0ahaj"]
+[ext_resource type="Texture2D" uid="uid://q610xialofwu" path="res://assets/images/Button001.png" id="2_y076k"]
+[ext_resource type="Texture2D" uid="uid://ci2nmnyfwylw2" path="res://assets/images/Button001Pressed.png" id="3_icu00"]
 
 [sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_cqkhu"]
 
