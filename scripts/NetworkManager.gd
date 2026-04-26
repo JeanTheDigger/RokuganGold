@@ -828,8 +828,13 @@ func _delayed_update_character_data(data_dict: Dictionary) -> void:
 
 	# ✅ Update peer name mapping on client
 	var my_peer_id = multiplayer.get_unique_id()
+	var old_local_name := GameManager.peer_to_character_name.get(my_peer_id, "")
 	GameManager.peer_to_character_name[my_peer_id] = new_data.name
 	print("📌 Updated peer_to_character_name[", my_peer_id, "] =", new_data.name)
+
+	# Remove stale character_uis entry for the previous name
+	if not old_local_name.is_empty() and old_local_name != new_data.name:
+		GameManager.character_uis.erase(old_local_name)
 
 	# ✅ Apply data to UI
 	main_ui.set_character_data(new_data.name)
@@ -1457,23 +1462,13 @@ func request_register_player_character(data: Dictionary):
 @rpc("authority")
 func receive_character_data(data: Dictionary) -> void:
 	print("📥 Receiving character data on client:", data.get("name", "Unknown"))
-
-	var character = CharacterData.new()
+	var character := CharacterData.new()
 	character.deserialize_from_dict(data)
-
 	GameManager.peer_to_character_name[multiplayer.get_unique_id()] = character.name
-
-	var main_ui = load("res://scene/main_ui.tscn").instantiate()
-	main_ui.set_character_data(character.name)
-
-	GameManager.character_uis[character.name] = main_ui
-
-	get_tree().root.add_child(main_ui)
-	if get_tree().current_scene:
-		get_tree().current_scene.queue_free()
-	get_tree().set_current_scene(main_ui)
-
-	print("✅ Character %s fully loaded into UI and memory" % character.name)
+	if SettingsManager:
+		SettingsManager.sync_from_character_data(character)
+	on_character_received(character)
+	NetworkManager.rpc_id(1, "request_wake_up_effects", character.name)
 
 @rpc("any_peer")
 func request_save_character(character_dict: Dictionary) -> void:
@@ -1578,18 +1573,13 @@ func handle_received_character_data(data: Dictionary) -> void:
 func on_character_received(character: CharacterData) -> void:
 	var main_ui = load("res://scene/main_ui.tscn").instantiate()
 	main_ui.set_character_data(character.name)
-
 	GameManager.character_uis[character.name] = main_ui
-
-	print("✅ Finished loading character UI for:", character.name)
 	get_tree().root.add_child(main_ui)
 	var old_scene = get_tree().current_scene
 	get_tree().current_scene = main_ui
 	if old_scene:
 		old_scene.queue_free()
-
 	print("✅ Main UI loaded for:", character.name)
-	print("✅ Finished loading character UI for:", character.name)
 
 
 
@@ -1632,6 +1622,7 @@ func handle_peer_disconnected(peer_id: int) -> void:
 	GameManager.name_to_peer.erase(char_name)
 	GameManager.peer_to_character_name.erase(peer_id)
 	GameManager.current_mode_by_peer.erase(peer_id)
+	GameManager.character_uis.erase(char_name)
 
 	# Storyteller possession cleanup
 	if GameManager.storyteller_original_forms.has(char_name):
@@ -1999,11 +1990,27 @@ func request_edit_character(character_name: String, change_dict: Dictionary) -> 
 
 	_log_character_edit_text(editor_peer_id, original_target, character_name, change_dict)
 
+	var renamed_peer_id: int = -1
 	if GameManager.character_peers.has(character_name):
-		var peer_id: int = int(GameManager.character_peers.get(character_name, -1))
-		if peer_id != -1:
+		renamed_peer_id = int(GameManager.character_peers.get(character_name, -1))
+		if renamed_peer_id != -1:
 			var dict = character_data.serialize_to_dict()
-			rpc_id(peer_id, "receive_edited_character_data", dict)
+			rpc_id(renamed_peer_id, "receive_edited_character_data", dict)
+
+	# If the character was renamed, notify zone peers so their character lists stay current
+	if original_target != character_name:
+		var zone_name: String = character_data.current_zone
+		var zone_data: Dictionary = ZoneManager.zones.get(zone_name, {})
+		var chars_in_zone: Array = zone_data.get("characters", [])
+		for zone_peer_id in _peers_in_zone(zone_name):
+			if zone_peer_id == renamed_peer_id:
+				continue  # already notified via receive_edited_character_data
+			var observer_name: String = GameManager.peer_to_character_name.get(zone_peer_id, "")
+			var names: Array[String] = []
+			for c in chars_in_zone:
+				if c and c.name != observer_name:
+					names.append(c.name)
+			rpc_id(zone_peer_id, "receive_zone_character_list", names)
 
 @rpc
 func receive_edited_character_data(dict: Dictionary) -> void:
