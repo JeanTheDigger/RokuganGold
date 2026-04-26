@@ -4,7 +4,7 @@ extends Control
 @onready var display_text = $"../TextPanel/DisplayText"
 
 const CHAT_DIVIDER := "[color=gray]────────────────────[/color]\n"
-const ACTION_LOG_DIR := "user://StarWarsProject/logs/"
+const ACTION_LOG_DIR := "user://RokuganGold/logs/"
 const ACTION_LOG_PATH := ACTION_LOG_DIR + "action_log.txt"
 
 var local_character_name: String = ""

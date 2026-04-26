@@ -1,7 +1,7 @@
 extends Control
 
 var local_character_name: String = ""
-const ACTION_LOG_DIR := "user://StarWarsProject/logs/"
+const ACTION_LOG_DIR := "user://RokuganGold/logs/"
 const ACTION_LOG_PATH := ACTION_LOG_DIR + "action_log.txt"
 
 
