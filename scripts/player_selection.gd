@@ -28,7 +28,7 @@ func enter_state(mode: String, data: String) -> void:
 	title_label.text = "Who do you select?"
 
 	match current_mode:
-		"whisper", "possess", "delete", "view_description", "edit":
+		"whisper", "possess", "delete", "view_description":
 			NetworkManager.rpc("set_peer_mode", current_mode)
 			NetworkManager.rpc("request_zone_character_list", character_name)
 
@@ -45,7 +45,7 @@ func enter_state(mode: String, data: String) -> void:
 
 
 func _on_receive_zone_character_list(names: Array) -> void:
-	if current_mode not in ["whisper", "possess", "delete", "view_description", "edit"]:
+	if current_mode not in ["whisper", "possess", "delete", "view_description"]:
 		return
 	option_button.clear()
 	for char_name_v in names:

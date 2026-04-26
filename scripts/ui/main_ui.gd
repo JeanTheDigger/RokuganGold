@@ -76,7 +76,6 @@ func _on_storyteller_tab_pressed() -> void:
 		"Test Path",
 		"Test Frenzy",
 		"Test Rötschreck",
-		"Edit Character",
 		"Describe",
 		"Post Order",
 		"Damage",
@@ -163,13 +162,6 @@ func _on_storyteller_tab_pressed() -> void:
 					else:
 						print("⚠️ STVirtueTester not found under MainUI.")
 						
-				"Edit Character":
-					var panel = get_node_or_null("PlayerSelection")
-					if panel:
-						print("✏️ Edit Character clicked")
-						panel.enter_state("edit", local_character_name)
-					else:
-						print("⚠️ PlayerSelection panel not found.")
 				"Describe":
 					var panel = get_node_or_null("WordsInputPanel")
 					if panel:

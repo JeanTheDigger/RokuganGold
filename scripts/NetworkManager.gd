@@ -1996,7 +1996,7 @@ func request_character_data_for_view(character_name: String) -> void:
 	print("📤 Sent viewable character data for", character_name, "to", sender_name)
 
 
-@rpc("authority", "call_local")
+@rpc("authority")
 func receive_character_data_for_view(dict: Dictionary, character_name: String) -> void:
 	print("🛬 Receiving viewable character data for:", character_name)
 
@@ -2045,7 +2045,7 @@ func request_character_data_for_description_only(character_name: String) -> void
 	print("📤 Sent description character data for", character_name, "to", sender_name)
 
 
-@rpc("authority", "call_local")
+@rpc("authority")
 func receive_character_data_for_description_only(dict: Dictionary, character_name: String) -> void:
 	print("🛬 Receiving character data (description-only) for:", character_name)
 
@@ -2119,6 +2119,9 @@ func request_zone_selection_list(character_name: String, mode: String) -> void:
 	if not multiplayer.is_server():
 		return
 	var peer_id = multiplayer.get_remote_sender_id()
+	if not _sender_is_owner_or_st(peer_id, character_name):
+		print("❌ Zone selection list denied for:", character_name)
+		return
 	var char_data = GameManager.character_data_by_name.get(character_name)
 
 	if char_data == null:
