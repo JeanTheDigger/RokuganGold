@@ -3,7 +3,7 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://bw5okw5qfnw6s"
-path="res://.godot/imported/SpaceWire001.png-1ec0a9b4a64e2c06fe068a38321bd28a.ctex"
+path="res://.godot/imported/SpaceWire001.png-f3f1540717c61f8b0171dc028e107c9e.ctex"
 metadata={
 "vram_texture": false
 }
@@ -11,7 +11,7 @@ metadata={
 [deps]
 
 source_file="res://assets/images/SpaceWire001.png"
-dest_files=["res://.godot/imported/SpaceWire001.png-1ec0a9b4a64e2c06fe068a38321bd28a.ctex"]
+dest_files=["res://.godot/imported/SpaceWire001.png-f3f1540717c61f8b0171dc028e107c9e.ctex"]
 
 [params]
 

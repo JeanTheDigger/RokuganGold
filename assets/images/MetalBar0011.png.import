@@ -3,7 +3,7 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://bmrvdik4u2ibi"
-path="res://.godot/imported/MetalBar0011.png-6e5cd26a8dd0bf8e2540717ca9c43756.ctex"
+path="res://.godot/imported/MetalBar0011.png-e7195d716519fb1c7c066dfcc06546be.ctex"
 metadata={
 "vram_texture": false
 }
@@ -11,7 +11,7 @@ metadata={
 [deps]
 
 source_file="res://assets/images/MetalBar0011.png"
-dest_files=["res://.godot/imported/MetalBar0011.png-6e5cd26a8dd0bf8e2540717ca9c43756.ctex"]
+dest_files=["res://.godot/imported/MetalBar0011.png-e7195d716519fb1c7c066dfcc06546be.ctex"]
 
 [params]
 
