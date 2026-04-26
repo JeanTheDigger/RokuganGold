@@ -233,7 +233,7 @@ func request_zone_move_to(character_name: String, target_zone_or_character: Stri
 					print("❌ Move denied — sender does not own character:", character_name)
 					return
 			"teleport", "to_character", "spawn":
-				var sname := GameManager.peer_to_character_name.get(sender_id, "")
+				var sname: String = GameManager.peer_to_character_name.get(sender_id, "")
 				var sdata: CharacterData = GameManager.character_data_by_name.get(sname, null)
 				if sdata == null or not sdata.is_storyteller:
 					print("❌ Teleport/spawn denied — not a storyteller")
@@ -826,7 +826,7 @@ func _delayed_update_character_data(data_dict: Dictionary) -> void:
 
 	# ✅ Update peer name mapping on client
 	var my_peer_id = multiplayer.get_unique_id()
-	var old_local_name := GameManager.peer_to_character_name.get(my_peer_id, "")
+	var old_local_name: String = GameManager.peer_to_character_name.get(my_peer_id, "")
 	GameManager.peer_to_character_name[my_peer_id] = new_data.name
 	print("📌 Updated peer_to_character_name[", my_peer_id, "] =", new_data.name)
 
@@ -1743,7 +1743,7 @@ func request_character_data_for_edit(character_name: String) -> void:
 		print("❌ Invalid sender peer ID — likely called locally on the server")
 		return
 
-	var edit_requester_name := GameManager.peer_to_character_name.get(sender_peer, "")
+	var edit_requester_name: String = GameManager.peer_to_character_name.get(sender_peer, "")
 	var edit_requester_data: CharacterData = GameManager.character_data_by_name.get(edit_requester_name, null)
 	if edit_requester_data == null or not edit_requester_data.is_storyteller:
 		print("❌ Edit data request denied — not a storyteller:", edit_requester_name)
