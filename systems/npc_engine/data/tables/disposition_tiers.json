@@ -1,0 +1,10 @@
+[
+  {"min": -100, "max": -61, "tier": "BLOOD_ENEMY", "cooperative": -20, "hostile": 20},
+  {"min": -60, "max": -31, "tier": "ENEMY", "cooperative": -10, "hostile": 10},
+  {"min": -30, "max": -11, "tier": "RIVAL", "cooperative": -5, "hostile": 5},
+  {"min": -10, "max": 10, "tier": "STRANGER", "cooperative": 0, "hostile": 0},
+  {"min": 11, "max": 30, "tier": "ACQUAINTANCE", "cooperative": 5, "hostile": -5},
+  {"min": 31, "max": 60, "tier": "FRIEND", "cooperative": 10, "hostile": -10},
+  {"min": 61, "max": 90, "tier": "TRUSTED_ALLY", "cooperative": 20, "hostile": -20},
+  {"min": 91, "max": 100, "tier": "DEVOTED", "cooperative": 25, "hostile": -25}
+]
