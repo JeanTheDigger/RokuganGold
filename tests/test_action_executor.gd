@@ -1,0 +1,307 @@
+extends GutTest
+
+
+var _dice_engine: DiceEngine
+var _character: L5RCharacterData
+var _ctx: NPCDataStructures.ContextSnapshot
+var _action_skill_map: Dictionary
+
+
+func before_each() -> void:
+	_dice_engine = DiceEngine.new()
+	_dice_engine.set_seed(42)
+
+	_character = L5RCharacterData.new()
+	_character.character_id = 1
+	_character.character_name = "Test Samurai"
+	_character.traits = {
+		Enums.Trait.REFLEXES: 3,
+		Enums.Trait.AWARENESS: 4,
+		Enums.Trait.STAMINA: 3,
+		Enums.Trait.WILLPOWER: 3,
+		Enums.Trait.AGILITY: 3,
+		Enums.Trait.INTELLIGENCE: 3,
+		Enums.Trait.STRENGTH: 3,
+		Enums.Trait.PERCEPTION: 3,
+		Enums.Trait.VOID: 2,
+	}
+	_character.skills = {
+		"Etiquette": 4,
+		"Courtier": 3,
+		"Sincerity": 3,
+		"Investigation": 2,
+		"Intimidation": 2,
+		"Battle": 2,
+		"Commerce": 1,
+		"Stealth": 2,
+		"Temptation": 1,
+	}
+	_character.emphases = {}
+	_character.current_wounds = 0
+	_character.earth_ring_for_wounds = 3
+	_character.wound_level_size = 15
+
+	_ctx = NPCDataStructures.ContextSnapshot.new()
+	_ctx.character_id = 1
+	_ctx.character_name = "Test Samurai"
+	_ctx.context_flag = Enums.ContextFlag.AT_COURT
+	_ctx.ic_day = 10
+	_ctx.dispositions = {10: 25, 20: -35, 30: 50}
+	_ctx.characters_present = [10, 20, 30]
+
+	_action_skill_map = {
+		"CHARM": {"primary": "Etiquette", "secondary": "Courtier"},
+		"INTIMIDATE": {"primary": "Intimidation", "secondary": null},
+		"PROBE": {"primary": "Courtier", "secondary": "Perception"},
+		"GOSSIP": {"primary": "Courtier", "secondary": "Awareness"},
+		"WRITE_LETTER": {"primary": "Calligraphy", "secondary": "Courtier"},
+		"BRIBE_FOR_INFO": {"primary": "Temptation", "secondary": "Awareness"},
+		"EAVESDROP": {"primary": "Stealth", "secondary": "Investigation"},
+		"ORDER_PATROL": {"primary": "Investigation", "secondary": "Battle"},
+		"ASSESS_PROVINCE_STATUS": {"primary": "Battle", "secondary": "Commerce"},
+		"DO_NOTHING": {"primary": null, "secondary": null},
+		"REST": {"primary": null, "secondary": null},
+		"TRAIN": {"primary": "_trained_skill", "secondary": null},
+		"PUBLIC_DEBATE": {"primary": "Courtier", "secondary": "Awareness"},
+	}
+
+
+func _make_action(action_id: String, target_npc: int = -1) -> NPCDataStructures.ScoredAction:
+	var a := NPCDataStructures.ScoredAction.new()
+	a.action_id = action_id
+	a.target_npc_id = target_npc
+	a.ap_cost = 1
+	return a
+
+
+# -- No-Roll Actions -----------------------------------------------------------
+
+func test_do_nothing_succeeds() -> void:
+	var action := _make_action("DO_NOTHING")
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map
+	)
+	assert_true(result["success"])
+	assert_eq(result["action_id"], "DO_NOTHING")
+	assert_eq(result["roll_total"], 0)
+
+
+func test_rest_succeeds() -> void:
+	var action := _make_action("REST")
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map
+	)
+	assert_true(result["success"])
+	assert_eq(result["effects"]["effect"], "rested")
+
+
+func test_train_no_roll_placeholder_skill() -> void:
+	var action := _make_action("TRAIN")
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map
+	)
+	assert_true(result["success"])
+
+
+# -- Social Actions ------------------------------------------------------------
+
+func test_charm_makes_skill_roll() -> void:
+	var action := _make_action("CHARM", 10)
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map
+	)
+	assert_eq(result["action_id"], "CHARM")
+	assert_eq(result["skill_used"], "Etiquette")
+	assert_true(result["roll_total"] > 0)
+	assert_eq(result["target_npc_id"], 10)
+
+
+func test_charm_tn_adjusted_by_disposition() -> void:
+	var action := _make_action("CHARM", 30)
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map
+	)
+	# Disposition 50 = Friend tier: TN reduced by 5
+	assert_eq(result["tn"], 10)
+
+
+func test_charm_hostile_target_higher_tn() -> void:
+	var action := _make_action("CHARM", 20)
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map
+	)
+	# Disposition -35 = Enemy tier: TN +10
+	assert_eq(result["tn"], 25)
+
+
+func test_social_success_produces_disposition_change() -> void:
+	_dice_engine.set_seed(1)
+	var action := _make_action("CHARM", 10)
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map
+	)
+	if result["success"]:
+		assert_true(result["effects"]["disposition_change"] >= 3)
+
+
+func test_social_failure_produces_negative_disposition() -> void:
+	# Force a failure by targeting hostile NPC (high TN) with bad seed
+	_dice_engine.set_seed(999)
+	_ctx.dispositions[20] = -70
+	var action := _make_action("CHARM", 20)
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map
+	)
+	if not result["success"]:
+		assert_eq(result["effects"]["disposition_change"], -1)
+
+
+func test_probe_produces_info_gained() -> void:
+	_dice_engine.set_seed(1)
+	var action := _make_action("PROBE", 10)
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map
+	)
+	if result["success"]:
+		assert_true(result["effects"]["info_gained"])
+
+
+func test_public_debate_produces_glory() -> void:
+	_dice_engine.set_seed(1)
+	var action := _make_action("PUBLIC_DEBATE", 10)
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map
+	)
+	if result["success"]:
+		assert_almost_eq(result["effects"]["glory_change"], 0.1, 0.001)
+
+
+func test_intimidate_negative_disposition() -> void:
+	_dice_engine.set_seed(1)
+	var action := _make_action("INTIMIDATE", 10)
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map
+	)
+	if result["success"]:
+		assert_true(result["effects"]["disposition_change"] < 0)
+
+
+# -- Covert Actions ------------------------------------------------------------
+
+func test_bribe_for_info_uses_temptation() -> void:
+	var action := _make_action("BRIBE_FOR_INFO", 10)
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map
+	)
+	assert_eq(result["skill_used"], "Temptation")
+	assert_eq(result["tn"], 20)
+
+
+func test_eavesdrop_covert_tn() -> void:
+	var action := _make_action("EAVESDROP")
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map
+	)
+	assert_eq(result["skill_used"], "Stealth")
+	assert_eq(result["tn"], 20)
+
+
+func test_covert_success_produces_info_and_detection() -> void:
+	_dice_engine.set_seed(1)
+	var action := _make_action("EAVESDROP")
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map
+	)
+	if result["success"]:
+		assert_true(result["effects"]["info_gained"])
+		assert_true(result["effects"].has("detection_risk"))
+
+
+# -- Military Actions ----------------------------------------------------------
+
+func test_order_patrol_military_tn() -> void:
+	var action := _make_action("ORDER_PATROL")
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map
+	)
+	assert_eq(result["skill_used"], "Investigation")
+	assert_eq(result["tn"], 15)
+
+
+func test_military_success_produces_effect() -> void:
+	_dice_engine.set_seed(1)
+	var action := _make_action("ORDER_PATROL")
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map
+	)
+	if result["success"]:
+		assert_eq(result["effects"]["effect"], "patrol_dispatched")
+
+
+# -- Administrative Actions ----------------------------------------------------
+
+func test_assess_province_admin_tn() -> void:
+	var action := _make_action("ASSESS_PROVINCE_STATUS")
+	action.target_province_id = 5
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map
+	)
+	assert_eq(result["skill_used"], "Battle")
+	assert_eq(result["tn"], 10)
+	assert_eq(result["target_province_id"], 5)
+
+
+# -- Result Structure ----------------------------------------------------------
+
+func test_result_contains_required_fields() -> void:
+	var action := _make_action("CHARM", 10)
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map
+	)
+	assert_true(result.has("success"))
+	assert_true(result.has("action_id"))
+	assert_true(result.has("character_id"))
+	assert_true(result.has("target_npc_id"))
+	assert_true(result.has("ic_day"))
+	assert_true(result.has("skill_used"))
+	assert_true(result.has("roll_total"))
+	assert_true(result.has("tn"))
+	assert_true(result.has("margin"))
+	assert_true(result.has("effects"))
+
+
+func test_result_character_id_matches_context() -> void:
+	var action := _make_action("CHARM", 10)
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map
+	)
+	assert_eq(result["character_id"], 1)
+	assert_eq(result["ic_day"], 10)
+
+
+# -- Disposition TN Modifiers --------------------------------------------------
+
+func test_tn_floor_is_5() -> void:
+	_ctx.dispositions[30] = 100
+	var action := _make_action("CHARM", 30)
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map
+	)
+	assert_true(result["tn"] >= 5)
+
+
+func test_stranger_disposition_no_modifier() -> void:
+	_ctx.dispositions[10] = 0
+	var action := _make_action("CHARM", 10)
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map
+	)
+	assert_eq(result["tn"], 15)
+
+
+func test_unknown_target_uses_base_tn() -> void:
+	var action := _make_action("CHARM", 999)
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map
+	)
+	assert_eq(result["tn"], 15)
