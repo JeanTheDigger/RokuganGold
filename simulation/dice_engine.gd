@@ -19,7 +19,7 @@ func set_seed(seed_value: int) -> void:
 
 # -- Core Roll & Keep ----------------------------------------------------------
 
-func roll_and_keep(rolled: int, kept: int, explodes: bool = true) -> DiceResult:
+func roll_and_keep(rolled: int, kept: int, explodes: bool = true, emphasis: bool = false) -> DiceResult:
 	if rolled <= 0 or kept <= 0:
 		return DiceResult.new([], [], 0)
 
@@ -40,9 +40,13 @@ func roll_and_keep(rolled: int, kept: int, explodes: bool = true) -> DiceResult:
 	var explosion_count: int = 0
 
 	for i: int in range(rolled):
-		var die_total: int = 0
 		var face: int = _roll_d10()
-		die_total += face
+
+		# L5R4e Emphasis: reroll any initial 1 once. New result stands.
+		if emphasis and face == 1:
+			face = _roll_d10()
+
+		var die_total: int = face
 		if explodes:
 			while face == 10:
 				face = _roll_d10()
@@ -67,9 +71,9 @@ func roll_and_keep(rolled: int, kept: int, explodes: bool = true) -> DiceResult:
 
 # -- Raw Check Against TN ------------------------------------------------------
 
-func roll_check(rolled: int, kept: int, tn: int, raises: int = 0, bonus: int = 0, explodes: bool = true) -> Dictionary:
+func roll_check(rolled: int, kept: int, tn: int, raises: int = 0, bonus: int = 0, explodes: bool = true, emphasis: bool = false) -> Dictionary:
 	var effective_tn: int = tn + (raises * 5)
-	var result: DiceResult = roll_and_keep(rolled, kept, explodes)
+	var result: DiceResult = roll_and_keep(rolled, kept, explodes, emphasis)
 	var final_total: int = result.total + bonus
 	var success: bool = final_total >= effective_tn
 
@@ -82,15 +86,16 @@ func roll_check(rolled: int, kept: int, tn: int, raises: int = 0, bonus: int = 0
 	}
 
 
-# -- Skill Check (handles unskilled rule) -------------------------------------
+# -- Skill Check (handles unskilled + emphasis rules) -------------------------
 # L5R4e p.78: Unskilled rolls (skill_rank == 0) do NOT explode.
+# L5R4e p.78: Emphasis lets you reroll any initial 1, once per die.
 # Rolled = trait + skill_rank, Kept = trait.
 
-func roll_skill_check(trait_value: int, skill_rank: int, tn: int, raises: int = 0, bonus: int = 0) -> Dictionary:
+func roll_skill_check(trait_value: int, skill_rank: int, tn: int, raises: int = 0, bonus: int = 0, has_emphasis: bool = false) -> Dictionary:
 	var rolled: int = trait_value + skill_rank
 	var kept: int = trait_value
 	var explodes: bool = skill_rank > 0
-	return roll_check(rolled, kept, tn, raises, bonus, explodes)
+	return roll_check(rolled, kept, tn, raises, bonus, explodes, has_emphasis)
 
 
 # -- Contested Roll ------------------------------------------------------------

@@ -329,6 +329,91 @@ func test_unskilled_roll_only_trait_dice() -> void:
 	assert_eq(dice.dropped_dice.size(), 0, "No dropped dice when rolled == kept")
 
 
+# -- Emphasis reroll (L5R4e Core p.78) -----------------------------------------
+
+func test_emphasis_eliminates_ones() -> void:
+	# With emphasis, no kept or dropped die should be 1 (unless the reroll
+	# also landed on 1, which is possible but rare). Over many rolls, emphasis
+	# should produce far fewer 1s than non-emphasis.
+	var ones_without: int = 0
+	var ones_with: int = 0
+	var trials: int = 500
+	for i: int in range(trials):
+		_engine.set_seed(i)
+		var no_emph: DiceResult = _engine.roll_and_keep(10, 10, false, false)
+		for die_value: int in no_emph.kept_dice:
+			if die_value == 1:
+				ones_without += 1
+		for die_value: int in no_emph.dropped_dice:
+			if die_value == 1:
+				ones_without += 1
+
+		_engine.set_seed(i)
+		var with_emph: DiceResult = _engine.roll_and_keep(10, 10, false, true)
+		for die_value: int in with_emph.kept_dice:
+			if die_value == 1:
+				ones_with += 1
+		for die_value: int in with_emph.dropped_dice:
+			if die_value == 1:
+				ones_with += 1
+
+	assert_true(
+		ones_with < ones_without,
+		"Emphasis should produce fewer 1s: %d with vs %d without" % [ones_with, ones_without]
+	)
+
+
+func test_emphasis_raises_average() -> void:
+	var sum_without: int = 0
+	var sum_with: int = 0
+	var trials: int = 1000
+	for i: int in range(trials):
+		_engine.set_seed(i)
+		sum_without += _engine.roll_and_keep(6, 3, true, false).total
+
+		_engine.set_seed(i)
+		sum_with += _engine.roll_and_keep(6, 3, true, true).total
+
+	assert_true(
+		sum_with > sum_without,
+		"Emphasis should raise the average total"
+	)
+
+
+func test_emphasis_reroll_can_explode() -> void:
+	# If a 1 is rerolled into a 10, it should explode normally.
+	var found_explosion_from_reroll: bool = false
+	for i: int in range(500):
+		_engine.set_seed(i)
+		var no_emph: DiceResult = _engine.roll_and_keep(10, 10, true, false)
+
+		_engine.set_seed(i)
+		var with_emph: DiceResult = _engine.roll_and_keep(10, 10, true, true)
+
+		# If emphasis version has more explosions, a rerolled 1 hit 10
+		if with_emph.explosions > no_emph.explosions:
+			found_explosion_from_reroll = true
+			break
+
+	assert_true(
+		found_explosion_from_reroll,
+		"A rerolled 1 that lands on 10 should explode"
+	)
+
+
+func test_emphasis_passed_through_skill_check() -> void:
+	_engine.set_seed(42)
+	var no_emph: Dictionary = _engine.roll_skill_check(3, 4, 10, 0, 0, false)
+
+	_engine.set_seed(42)
+	var with_emph: Dictionary = _engine.roll_skill_check(3, 4, 10, 0, 0, true)
+
+	# Results may or may not differ for this seed, but at minimum verify
+	# both calls succeed without error and return valid structure
+	assert_true(no_emph.has("total"))
+	assert_true(with_emph.has("total"))
+
+
 # -- Statistical sanity --------------------------------------------------------
 
 func test_average_roll_is_reasonable() -> void:
