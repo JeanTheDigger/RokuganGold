@@ -205,6 +205,15 @@ single-dice-entry-point and server-authoritative constraints.
   `resolve_day_full()` adds execution (dice rolls + effects).
   `resolve_day_applied()` closes the full loop: decision → execution → mutation.
 
+### Information System
+- **simulation/information_system.gd** — Knowledge management per GDD s55.12,
+  s55.7, s55.6. Five sources (Direct Observation, Daily Conversation, Letters,
+  Intelligence Actions, Public Knowledge). Confidence decay: Fresh → Recent →
+  Stale (disposition entries never decay). Probe visibility reads action_log to
+  reveal target's recent actions. Contact discovery via court observation and
+  introductions. Objective knowledge transfer copies relevant entries on
+  assignment. CharacterData gains `knowledge_pool` and `known_contacts_by_clan`.
+
 ### Resource Tick System
 - **simulation/resource_tick.gd** — Seasonal resource processing per GDD s4.3.
   Rice consumption/harvest, starvation stages, 5-tier tax cascade,
@@ -226,13 +235,14 @@ All in /tests/, one file per system:
 - test_npc_wave_resolver.gd (~15 tests)
 - test_resource_tick.gd (~30 tests)
 - test_objective_decomposer.gd (~45 tests)
+- test_information_system.gd (~35 tests)
 
 ### What's Next
-1. Information system — topic propagation, Probe visibility via action_log,
-   contact discovery per GDD s55.7
+1. Day orchestrator — ties wave resolver + resource tick + information decay into
+   a single tick entry point that advances world state by one IC day
 2. Military standing objectives — GDD s55.23 decomposition trees (awaiting content)
-3. Day orchestrator — ties wave resolver + resource tick into a single tick entry
-   point that advances world state by one IC day
+3. Topic propagation — momentum tracking, public knowledge broadcast per GDD s16
+4. Daily conversation / letter information exchange per GDD s55.12
 
 ## What To Do When Uncertain
 Stop. Read the relevant LOCKED section in /gdd/. If it does not answer the
