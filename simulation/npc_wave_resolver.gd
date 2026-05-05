@@ -56,6 +56,32 @@ static func resolve_day_full(
 	return all_results
 
 
+static func resolve_day_applied(
+	characters: Array[L5RCharacterData],
+	world_states: Dictionary,
+	objectives_map: Dictionary,
+	scoring_tables: Dictionary,
+	filter_data: Dictionary,
+	dice_engine: DiceEngine,
+	action_skill_map: Dictionary,
+	characters_by_id: Dictionary,
+	provinces: Dictionary,
+	action_log: Array[Dictionary],
+) -> Dictionary:
+	var results: Array[Dictionary] = resolve_day_full(
+		characters, world_states, objectives_map, scoring_tables, filter_data,
+		dice_engine, action_skill_map
+	)
+	var applied: Array[Dictionary] = EffectApplicator.apply_day_results(
+		results, characters_by_id, provinces, action_log
+	)
+	return {
+		"results": results,
+		"applied": applied,
+		"action_log": action_log,
+	}
+
+
 # -- Reactive Events (decision only) ------------------------------------------
 
 static func _resolve_reactive_events(
