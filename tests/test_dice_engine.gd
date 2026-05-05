@@ -29,12 +29,12 @@ func test_kept_dice_are_sorted_descending() -> void:
 		)
 
 
-func test_total_equals_sum_of_kept() -> void:
+func test_total_equals_sum_of_kept_plus_overflow() -> void:
 	var result: DiceResult = _engine.roll_and_keep(5, 3)
-	var manual_sum: int = 0
+	var manual_sum: int = result.overflow_bonus
 	for die_value: int in result.kept_dice:
 		manual_sum += die_value
-	assert_eq(result.total, manual_sum, "Total should equal sum of kept dice")
+	assert_eq(result.total, manual_sum, "Total should equal sum of kept dice + overflow bonus")
 
 
 func test_kept_cannot_exceed_rolled() -> void:
@@ -225,6 +225,108 @@ func test_damage_strength_bonus_adds_rolled() -> void:
 		6,
 		"Strength 3 + DR 3 = 6 total dice rolled"
 	)
+
+
+# -- 10-dice cap (L5R4e Core p.77) ---------------------------------------------
+
+func test_cap_rolled_at_10() -> void:
+	_engine.set_seed(42)
+	var result: DiceResult = _engine.roll_and_keep(12, 5)
+	# 12 rolled -> capped to 10 rolled, +4 overflow bonus (2 excess * 2)
+	assert_eq(result.kept_dice.size(), 5, "Should keep 5")
+	assert_eq(
+		result.kept_dice.size() + result.dropped_dice.size(), 10,
+		"Should only physically roll 10 dice"
+	)
+	assert_eq(result.overflow_bonus, 4, "2 excess rolled dice * 2 = +4 bonus")
+
+
+func test_cap_kept_at_10() -> void:
+	_engine.set_seed(42)
+	var result: DiceResult = _engine.roll_and_keep(10, 12)
+	# kept 12 > rolled 10, so kept clamped to rolled first (10),
+	# then 10 kept is at the cap, no overflow from kept
+	assert_eq(result.kept_dice.size(), 10)
+	assert_eq(result.overflow_bonus, 0)
+
+
+func test_cap_both_rolled_and_kept() -> void:
+	_engine.set_seed(42)
+	# 15k12 -> rolled overflow: (15-10)*2=10, kept overflow: (12-10)*2=4, total overflow: 14
+	var result: DiceResult = _engine.roll_and_keep(15, 12)
+	assert_eq(result.kept_dice.size(), 10)
+	assert_eq(
+		result.kept_dice.size() + result.dropped_dice.size(), 10,
+		"Should physically roll 10 dice"
+	)
+	assert_eq(result.overflow_bonus, 14, "(15-10)*2 + (12-10)*2 = 14")
+
+
+func test_cap_overflow_adds_to_total() -> void:
+	_engine.set_seed(42)
+	var capped: DiceResult = _engine.roll_and_keep(12, 5)
+	# Total should be sum of kept + overflow
+	var dice_sum: int = 0
+	for die_value: int in capped.kept_dice:
+		dice_sum += die_value
+	assert_eq(capped.total, dice_sum + capped.overflow_bonus)
+
+
+func test_10k10_no_overflow() -> void:
+	_engine.set_seed(42)
+	var result: DiceResult = _engine.roll_and_keep(10, 10)
+	assert_eq(result.overflow_bonus, 0, "Exactly 10k10 should have no overflow")
+	assert_eq(result.kept_dice.size(), 10)
+
+
+# -- Unskilled rolls (L5R4e Core p.78) ----------------------------------------
+
+func test_unskilled_does_not_explode() -> void:
+	# roll_skill_check with skill_rank 0 should pass explodes=false
+	for i: int in range(100):
+		_engine.set_seed(i)
+		var check: Dictionary = _engine.roll_skill_check(3, 0, 10)
+		var dice: DiceResult = check["dice"]
+		for die_value: int in dice.kept_dice:
+			assert_true(die_value <= 10, "Unskilled roll should not explode past 10")
+		for die_value: int in dice.dropped_dice:
+			assert_true(die_value <= 10, "Unskilled roll should not explode past 10")
+
+
+func test_skilled_can_explode() -> void:
+	var found_over_ten: bool = false
+	for i: int in range(200):
+		_engine.set_seed(i)
+		var check: Dictionary = _engine.roll_skill_check(3, 5, 10)
+		var dice: DiceResult = check["dice"]
+		for die_value: int in dice.kept_dice:
+			if die_value > 10:
+				found_over_ten = true
+				break
+		if found_over_ten:
+			break
+	assert_true(found_over_ten, "Skilled rolls should explode")
+
+
+func test_skill_check_rolled_is_trait_plus_skill() -> void:
+	_engine.set_seed(42)
+	# trait 3, skill 4 -> 7k3
+	var check: Dictionary = _engine.roll_skill_check(3, 4, 15)
+	var dice: DiceResult = check["dice"]
+	assert_eq(dice.kept_dice.size(), 3, "Kept should equal trait value")
+	assert_eq(
+		dice.kept_dice.size() + dice.dropped_dice.size(), 7,
+		"Total dice should be trait + skill"
+	)
+
+
+func test_unskilled_roll_only_trait_dice() -> void:
+	_engine.set_seed(42)
+	# trait 3, skill 0 -> 3k3
+	var check: Dictionary = _engine.roll_skill_check(3, 0, 15)
+	var dice: DiceResult = check["dice"]
+	assert_eq(dice.kept_dice.size(), 3, "Kept should equal trait value")
+	assert_eq(dice.dropped_dice.size(), 0, "No dropped dice when rolled == kept")
 
 
 # -- Statistical sanity --------------------------------------------------------

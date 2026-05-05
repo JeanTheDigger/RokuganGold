@@ -26,6 +26,16 @@ func roll_and_keep(rolled: int, kept: int, explodes: bool = true) -> DiceResult:
 	if kept > rolled:
 		kept = rolled
 
+	# L5R4e 10-dice cap: never roll or keep more than 10. Each excess die
+	# converts to a flat +2 bonus on the final total.
+	var overflow_bonus: int = 0
+	if rolled > 10:
+		overflow_bonus += (rolled - 10) * 2
+		rolled = 10
+	if kept > 10:
+		overflow_bonus += (kept - 10) * 2
+		kept = 10
+
 	var all_dice: Array[int] = []
 	var explosion_count: int = 0
 
@@ -52,10 +62,10 @@ func roll_and_keep(rolled: int, kept: int, explodes: bool = true) -> DiceResult:
 		else:
 			dropped_dice.append(all_dice[i])
 
-	return DiceResult.new(kept_dice, dropped_dice, explosion_count)
+	return DiceResult.new(kept_dice, dropped_dice, explosion_count, overflow_bonus)
 
 
-# -- Skill / Trait Check Against TN --------------------------------------------
+# -- Raw Check Against TN ------------------------------------------------------
 
 func roll_check(rolled: int, kept: int, tn: int, raises: int = 0, bonus: int = 0, explodes: bool = true) -> Dictionary:
 	var effective_tn: int = tn + (raises * 5)
@@ -70,6 +80,17 @@ func roll_check(rolled: int, kept: int, tn: int, raises: int = 0, bonus: int = 0
 		"margin": final_total - effective_tn,
 		"dice": result,
 	}
+
+
+# -- Skill Check (handles unskilled rule) -------------------------------------
+# L5R4e p.78: Unskilled rolls (skill_rank == 0) do NOT explode.
+# Rolled = trait + skill_rank, Kept = trait.
+
+func roll_skill_check(trait_value: int, skill_rank: int, tn: int, raises: int = 0, bonus: int = 0) -> Dictionary:
+	var rolled: int = trait_value + skill_rank
+	var kept: int = trait_value
+	var explodes: bool = skill_rank > 0
+	return roll_check(rolled, kept, tn, raises, bonus, explodes)
 
 
 # -- Contested Roll ------------------------------------------------------------
