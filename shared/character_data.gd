@@ -102,6 +102,8 @@ extends Resource
 @export var topic_pool: Array[String] = []
 @export var active_quest: String = ""
 @export var met_characters: Array[int] = []
+@export var knowledge_pool: Array[Dictionary] = []
+@export var known_contacts_by_clan: Dictionary = {}
 
 # -- Courtier Framework Fields -------------------------------------------------
 
