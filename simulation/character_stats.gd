@@ -32,23 +32,24 @@ static func get_insight(character: L5RCharacterData) -> int:
 
 static func get_insight_rank(character: L5RCharacterData) -> int:
 	var insight: int = get_insight(character)
-	if insight >= 325:
+	# L5R4e Core p.108: Rank 1 at 0, Rank 2 at 150, then +25 per rank.
+	if insight >= 350:
 		return 10
-	if insight >= 300:
+	if insight >= 325:
 		return 9
-	if insight >= 275:
+	if insight >= 300:
 		return 8
-	if insight >= 250:
+	if insight >= 275:
 		return 7
-	if insight >= 225:
+	if insight >= 250:
 		return 6
-	if insight >= 200:
+	if insight >= 225:
 		return 5
-	if insight >= 175:
+	if insight >= 200:
 		return 4
-	if insight >= 150:
+	if insight >= 175:
 		return 3
-	if insight >= 125:
+	if insight >= 150:
 		return 2
 	return 1
 
@@ -76,6 +77,9 @@ static func get_wound_level(character: L5RCharacterData) -> Enums.WoundLevel:
 	if threshold <= 0:
 		return Enums.WoundLevel.DEAD
 
+	if character.wounds_taken <= 0:
+		return Enums.WoundLevel.HEALTHY
+
 	var levels: Array[Enums.WoundLevel] = [
 		Enums.WoundLevel.HEALTHY,
 		Enums.WoundLevel.NICKED,
@@ -88,11 +92,11 @@ static func get_wound_level(character: L5RCharacterData) -> Enums.WoundLevel:
 		Enums.WoundLevel.DEAD,
 	]
 
-	var level_index: int = character.wounds_taken / threshold
-	if character.wounds_taken > 0 and character.wounds_taken % threshold == 0:
-		level_index = mini(level_index, levels.size() - 1)
-	else:
-		level_index = mini(level_index, levels.size() - 1)
+	# Each level holds `threshold` wound boxes. Wounds 1–threshold fill Healthy,
+	# threshold+1 through threshold*2 fill Nicked, etc. The penalty applies once
+	# wounds spill into a new level.
+	var level_index: int = (character.wounds_taken - 1) / threshold
+	level_index = mini(level_index, levels.size() - 1)
 	return levels[level_index]
 
 

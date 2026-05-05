@@ -31,11 +31,11 @@ func test_damage_cannot_go_negative() -> void:
 
 
 func test_damage_tracks_wound_level_change() -> void:
-	# Earth 2, threshold 4
+	# Earth 2, threshold 4. 12 wounds: (12-1)/4 = 2 -> Grazed (index 2)
 	var result: Dictionary = WoundSystem.apply_damage(_char, 12, 0)
 	assert_eq(result["old_wound_level"], Enums.WoundLevel.HEALTHY)
-	assert_eq(result["new_wound_level"], Enums.WoundLevel.HURT)
-	assert_eq(result["levels_crossed"], 3)
+	assert_eq(result["new_wound_level"], Enums.WoundLevel.GRAZED)
+	assert_eq(result["levels_crossed"], 2)
 
 
 func test_lethal_damage_kills() -> void:

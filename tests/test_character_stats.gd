@@ -61,10 +61,10 @@ func test_insight_with_skills() -> void:
 
 
 func test_insight_rank_thresholds() -> void:
-	# 100 insight -> rank 1
+	# 100 insight -> rank 1 (below 150)
 	assert_eq(CharacterStats.get_insight_rank(_char), 1)
 
-	# Raise all traits to 3 -> rings all 3 -> 15*10=150
+	# Raise all traits to 3 -> rings all 3 -> 15*10=150 -> Rank 2
 	_char.stamina = 3
 	_char.willpower = 3
 	_char.strength = 3
@@ -75,6 +75,37 @@ func test_insight_rank_thresholds() -> void:
 	_char.awareness = 3
 	_char.void_ring = 3
 	assert_eq(CharacterStats.get_insight(_char), 150)
+	assert_eq(CharacterStats.get_insight_rank(_char), 2)
+
+
+func test_insight_rank_boundaries() -> void:
+	# L5R4e Core p.108: Rank 2 at 150, +25 per rank after that
+	_char.skills = {}
+
+	# 149 -> Rank 1. Need rings summing to 14 + 9 skills = 149
+	# All traits 3 except void 2: rings = 3+3+3+3+2 = 14 -> 140. Need 9 skill ranks.
+	_char.stamina = 3
+	_char.willpower = 3
+	_char.strength = 3
+	_char.perception = 3
+	_char.agility = 3
+	_char.intelligence = 3
+	_char.reflexes = 3
+	_char.awareness = 3
+	_char.void_ring = 2
+	_char.skills = {"Kenjutsu": 5, "Etiquette": 4}
+	assert_eq(CharacterStats.get_insight(_char), 149)
+	assert_eq(CharacterStats.get_insight_rank(_char), 1)
+
+	# Add 1 skill rank -> 150 -> Rank 2
+	_char.skills = {"Kenjutsu": 5, "Etiquette": 5}
+	assert_eq(CharacterStats.get_insight(_char), 150)
+	assert_eq(CharacterStats.get_insight_rank(_char), 2)
+
+	# 175 -> Rank 3
+	_char.void_ring = 3
+	_char.skills = {"Kenjutsu": 5, "Etiquette": 5, "Courtier": 5, "Lore: Heraldry": 5, "Sincerity": 5}
+	assert_eq(CharacterStats.get_insight(_char), 175)
 	assert_eq(CharacterStats.get_insight_rank(_char), 3)
 
 
@@ -112,48 +143,61 @@ func test_healthy_at_zero_wounds() -> void:
 
 
 func test_nicked_after_threshold() -> void:
-	# Earth 2, threshold = 4. At 4 wounds -> Nicked
+	# Earth 2, threshold = 4. At 4 wounds -> still Healthy (boxes 1-4 filled).
+	# Wound 5 is the first in Nicked.
 	_char.wounds_taken = 4
+	assert_eq(CharacterStats.get_wound_level(_char), Enums.WoundLevel.HEALTHY)
+
+	_char.wounds_taken = 5
 	assert_eq(CharacterStats.get_wound_level(_char), Enums.WoundLevel.NICKED)
 
 
 func test_wound_level_progression() -> void:
-	# Earth 2, threshold = 4 per level
+	# Earth 2, threshold = 4 per level.
+	# Each level holds wounds: Healthy 1-4, Nicked 5-8, Grazed 9-12, etc.
 	_char.wounds_taken = 1
 	assert_eq(CharacterStats.get_wound_level(_char), Enums.WoundLevel.HEALTHY)
 
 	_char.wounds_taken = 4
+	assert_eq(CharacterStats.get_wound_level(_char), Enums.WoundLevel.HEALTHY)
+
+	_char.wounds_taken = 5
 	assert_eq(CharacterStats.get_wound_level(_char), Enums.WoundLevel.NICKED)
 
 	_char.wounds_taken = 8
+	assert_eq(CharacterStats.get_wound_level(_char), Enums.WoundLevel.NICKED)
+
+	_char.wounds_taken = 9
 	assert_eq(CharacterStats.get_wound_level(_char), Enums.WoundLevel.GRAZED)
 
-	_char.wounds_taken = 12
+	_char.wounds_taken = 13
 	assert_eq(CharacterStats.get_wound_level(_char), Enums.WoundLevel.HURT)
 
-	_char.wounds_taken = 16
+	_char.wounds_taken = 17
 	assert_eq(CharacterStats.get_wound_level(_char), Enums.WoundLevel.INJURED)
 
-	_char.wounds_taken = 20
+	_char.wounds_taken = 21
 	assert_eq(CharacterStats.get_wound_level(_char), Enums.WoundLevel.CRIPPLED)
 
-	_char.wounds_taken = 24
+	_char.wounds_taken = 25
 	assert_eq(CharacterStats.get_wound_level(_char), Enums.WoundLevel.DOWN)
 
-	_char.wounds_taken = 28
+	_char.wounds_taken = 29
 	assert_eq(CharacterStats.get_wound_level(_char), Enums.WoundLevel.OUT)
 
-	_char.wounds_taken = 32
+	_char.wounds_taken = 33
 	assert_eq(CharacterStats.get_wound_level(_char), Enums.WoundLevel.DEAD)
 
 
 func test_wound_penalties() -> void:
 	assert_eq(CharacterStats.get_wound_penalty(_char), 0)
 
-	_char.wounds_taken = 4
+	# 5 wounds -> Nicked -> -3
+	_char.wounds_taken = 5
 	assert_eq(CharacterStats.get_wound_penalty(_char), -3)
 
-	_char.wounds_taken = 12
+	# 13 wounds -> Hurt -> -10
+	_char.wounds_taken = 13
 	assert_eq(CharacterStats.get_wound_penalty(_char), -10)
 
 
@@ -175,6 +219,10 @@ func test_total_wound_capacity() -> void:
 func test_higher_earth_more_resilient() -> void:
 	_char.stamina = 5
 	_char.willpower = 5
-	# Earth 5, threshold = 10. At 10 wounds -> Nicked, not Grazed
+	# Earth 5, threshold = 10. At 10 wounds -> still Healthy (boxes 1-10 filled).
+	# Wound 11 enters Nicked.
 	_char.wounds_taken = 10
+	assert_eq(CharacterStats.get_wound_level(_char), Enums.WoundLevel.HEALTHY)
+
+	_char.wounds_taken = 11
 	assert_eq(CharacterStats.get_wound_level(_char), Enums.WoundLevel.NICKED)
