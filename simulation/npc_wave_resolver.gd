@@ -3,6 +3,9 @@ class_name NPCWaveResolver
 ## Resolves all NPCs in AP waves: descending Status, then Awareness tiebreak.
 ## Court batching: all NPCs at the same court resolve as a group before others.
 ## Lord characters resolve TWO actions per wave (AP + Civilian Order) per s57.34.
+##
+## resolve_day() — decision only (returns chosen actions with AP deducted).
+## resolve_day_full() — decision + execution (also rolls dice and applies effects).
 
 
 static func resolve_day(
@@ -27,6 +30,34 @@ static func resolve_day(
 	return all_results
 
 
+static func resolve_day_full(
+	characters: Array[L5RCharacterData],
+	world_states: Dictionary,
+	objectives_map: Dictionary,
+	scoring_tables: Dictionary,
+	filter_data: Dictionary,
+	dice_engine: DiceEngine,
+	action_skill_map: Dictionary,
+) -> Array[Dictionary]:
+	var all_results: Array[Dictionary] = []
+
+	var reactive_results: Array[Dictionary] = _resolve_reactive_events_full(
+		characters, world_states, objectives_map, scoring_tables, filter_data,
+		dice_engine, action_skill_map
+	)
+	all_results.append_array(reactive_results)
+
+	var wave_results: Array[Dictionary] = _resolve_ap_waves_full(
+		characters, world_states, objectives_map, scoring_tables, filter_data,
+		dice_engine, action_skill_map
+	)
+	all_results.append_array(wave_results)
+
+	return all_results
+
+
+# -- Reactive Events (decision only) ------------------------------------------
+
 static func _resolve_reactive_events(
 	characters: Array[L5RCharacterData],
 	world_states: Dictionary,
@@ -35,20 +66,7 @@ static func _resolve_reactive_events(
 	filter_data: Dictionary,
 ) -> Array[Dictionary]:
 	var results: Array[Dictionary] = []
-	var reactive_npcs: Array[L5RCharacterData] = []
-	for c: L5RCharacterData in characters:
-		var ws: Dictionary = world_states.get(c.character_id, {})
-		var events: Array = ws.get("pending_events", [])
-		if events.size() > 0:
-			reactive_npcs.append(c)
-
-	reactive_npcs.sort_custom(func(a: L5RCharacterData, b: L5RCharacterData) -> bool:
-		var ws_a: Dictionary = world_states.get(a.character_id, {})
-		var ws_b: Dictionary = world_states.get(b.character_id, {})
-		var ts_a: int = ws_a.get("reactive_timestamp", 0)
-		var ts_b: int = ws_b.get("reactive_timestamp", 0)
-		return ts_a < ts_b
-	)
+	var reactive_npcs: Array[L5RCharacterData] = _gather_reactive_npcs(characters, world_states)
 
 	for c: L5RCharacterData in reactive_npcs:
 		var ws: Dictionary = world_states.get(c.character_id, {})
@@ -58,6 +76,36 @@ static func _resolve_reactive_events(
 
 	return results
 
+
+# -- Reactive Events (full execution) -----------------------------------------
+
+static func _resolve_reactive_events_full(
+	characters: Array[L5RCharacterData],
+	world_states: Dictionary,
+	objectives_map: Dictionary,
+	scoring_tables: Dictionary,
+	filter_data: Dictionary,
+	dice_engine: DiceEngine,
+	action_skill_map: Dictionary,
+) -> Array[Dictionary]:
+	var results: Array[Dictionary] = []
+	var reactive_npcs: Array[L5RCharacterData] = _gather_reactive_npcs(characters, world_states)
+
+	for c: L5RCharacterData in reactive_npcs:
+		var ws: Dictionary = world_states.get(c.character_id, {})
+		var objs: Dictionary = objectives_map.get(c.character_id, {})
+		var decision: Dictionary = NPCDecisionEngine.run(c, ws, objs, scoring_tables, filter_data)
+		if decision.get("success", false):
+			var exec_result: Dictionary = _execute_decision(
+				decision, c, ws, dice_engine, action_skill_map
+			)
+			decision.merge(exec_result, true)
+		results.append(decision)
+
+	return results
+
+
+# -- AP Waves (decision only) -------------------------------------------------
 
 static func _resolve_ap_waves(
 	characters: Array[L5RCharacterData],
@@ -70,44 +118,111 @@ static func _resolve_ap_waves(
 	var max_ap: int = _get_max_ap(characters)
 
 	for _wave_idx: int in range(max_ap):
-		var active: Array[L5RCharacterData] = []
-		for c: L5RCharacterData in characters:
-			if c.action_points_current > 0:
-				active.append(c)
+		var active: Array[L5RCharacterData] = _get_active_characters(characters)
 		if active.is_empty():
 			break
 
-		var sorted: Array[L5RCharacterData] = _sort_by_resolution_order(active, world_states)
+		var wave_results: Array[Dictionary] = _run_wave(
+			active, world_states, objectives_map, scoring_tables, filter_data
+		)
+		results.append_array(wave_results)
 
-		var court_groups: Dictionary = {}
-		var non_court: Array[L5RCharacterData] = []
-		for c: L5RCharacterData in sorted:
-			var ws: Dictionary = world_states.get(c.character_id, {})
-			var cf: int = ws.get("context_flag", Enums.ContextFlag.AT_OWN_HOLDINGS)
-			var court_id: String = ws.get("court_id", "")
-			if cf == Enums.ContextFlag.AT_COURT and court_id != "":
-				if not court_groups.has(court_id):
-					court_groups[court_id] = []
-				court_groups[court_id].append(c)
-			else:
-				non_court.append(c)
+	return results
 
-		for court_id: String in court_groups:
-			var group: Array = court_groups[court_id]
-			for c: L5RCharacterData in group:
-				var wave_results: Array[Dictionary] = _resolve_character_wave(
-					c, world_states, objectives_map, scoring_tables, filter_data
-				)
-				results.append_array(wave_results)
 
-		for c: L5RCharacterData in non_court:
+# -- AP Waves (full execution) ------------------------------------------------
+
+static func _resolve_ap_waves_full(
+	characters: Array[L5RCharacterData],
+	world_states: Dictionary,
+	objectives_map: Dictionary,
+	scoring_tables: Dictionary,
+	filter_data: Dictionary,
+	dice_engine: DiceEngine,
+	action_skill_map: Dictionary,
+) -> Array[Dictionary]:
+	var results: Array[Dictionary] = []
+	var max_ap: int = _get_max_ap(characters)
+
+	for _wave_idx: int in range(max_ap):
+		var active: Array[L5RCharacterData] = _get_active_characters(characters)
+		if active.is_empty():
+			break
+
+		var wave_results: Array[Dictionary] = _run_wave_full(
+			active, world_states, objectives_map, scoring_tables, filter_data,
+			dice_engine, action_skill_map
+		)
+		results.append_array(wave_results)
+
+	return results
+
+
+# -- Wave Runners --------------------------------------------------------------
+
+static func _run_wave(
+	active: Array[L5RCharacterData],
+	world_states: Dictionary,
+	objectives_map: Dictionary,
+	scoring_tables: Dictionary,
+	filter_data: Dictionary,
+) -> Array[Dictionary]:
+	var results: Array[Dictionary] = []
+	var sorted: Array[L5RCharacterData] = _sort_by_resolution_order(active, world_states)
+	var court_groups: Dictionary = {}
+	var non_court: Array[L5RCharacterData] = []
+	_partition_by_court(sorted, world_states, court_groups, non_court)
+
+	for court_id: String in court_groups:
+		for c: L5RCharacterData in court_groups[court_id]:
 			var wave_results: Array[Dictionary] = _resolve_character_wave(
 				c, world_states, objectives_map, scoring_tables, filter_data
 			)
 			results.append_array(wave_results)
 
+	for c: L5RCharacterData in non_court:
+		var wave_results: Array[Dictionary] = _resolve_character_wave(
+			c, world_states, objectives_map, scoring_tables, filter_data
+		)
+		results.append_array(wave_results)
+
 	return results
 
+
+static func _run_wave_full(
+	active: Array[L5RCharacterData],
+	world_states: Dictionary,
+	objectives_map: Dictionary,
+	scoring_tables: Dictionary,
+	filter_data: Dictionary,
+	dice_engine: DiceEngine,
+	action_skill_map: Dictionary,
+) -> Array[Dictionary]:
+	var results: Array[Dictionary] = []
+	var sorted: Array[L5RCharacterData] = _sort_by_resolution_order(active, world_states)
+	var court_groups: Dictionary = {}
+	var non_court: Array[L5RCharacterData] = []
+	_partition_by_court(sorted, world_states, court_groups, non_court)
+
+	for court_id: String in court_groups:
+		for c: L5RCharacterData in court_groups[court_id]:
+			var wave_results: Array[Dictionary] = _resolve_character_wave_full(
+				c, world_states, objectives_map, scoring_tables, filter_data,
+				dice_engine, action_skill_map
+			)
+			results.append_array(wave_results)
+
+	for c: L5RCharacterData in non_court:
+		var wave_results: Array[Dictionary] = _resolve_character_wave_full(
+			c, world_states, objectives_map, scoring_tables, filter_data,
+			dice_engine, action_skill_map
+		)
+		results.append_array(wave_results)
+
+	return results
+
+
+# -- Per-Character Resolution (decision only) ----------------------------------
 
 static func _resolve_character_wave(
 	character: L5RCharacterData,
@@ -136,6 +251,49 @@ static func _resolve_character_wave(
 
 	return results
 
+
+# -- Per-Character Resolution (full execution) ---------------------------------
+
+static func _resolve_character_wave_full(
+	character: L5RCharacterData,
+	world_states: Dictionary,
+	objectives_map: Dictionary,
+	scoring_tables: Dictionary,
+	filter_data: Dictionary,
+	dice_engine: DiceEngine,
+	action_skill_map: Dictionary,
+) -> Array[Dictionary]:
+	var results: Array[Dictionary] = []
+	var ws: Dictionary = world_states.get(character.character_id, {})
+	var objs: Dictionary = objectives_map.get(character.character_id, {})
+	var is_lord: bool = ws.get("is_lord", false)
+
+	if character.action_points_current > 0:
+		var decision: Dictionary = NPCDecisionEngine.run(
+			character, ws, objs, scoring_tables, filter_data
+		)
+		if decision.get("success", false):
+			var exec_result: Dictionary = _execute_decision(
+				decision, character, ws, dice_engine, action_skill_map
+			)
+			decision.merge(exec_result, true)
+		results.append(decision)
+
+	if is_lord and character.civilian_orders_remaining > 0:
+		var order_decision: Dictionary = _resolve_civilian_order(
+			character, ws, objs, scoring_tables, filter_data
+		)
+		if not order_decision.is_empty():
+			var exec_result: Dictionary = _execute_decision(
+				order_decision, character, ws, dice_engine, action_skill_map
+			)
+			order_decision.merge(exec_result, true)
+			results.append(order_decision)
+
+	return results
+
+
+# -- Civilian Order Resolution -------------------------------------------------
 
 static func _resolve_civilian_order(
 	character: L5RCharacterData,
@@ -180,6 +338,31 @@ static func _resolve_civilian_order(
 	}
 
 
+# -- Executor Bridge -----------------------------------------------------------
+
+static func _execute_decision(
+	decision: Dictionary,
+	character: L5RCharacterData,
+	world_state: Dictionary,
+	dice_engine: DiceEngine,
+	action_skill_map: Dictionary,
+) -> Dictionary:
+	var action := NPCDataStructures.ScoredAction.new()
+	action.action_id = decision.get("action_id", "DO_NOTHING")
+	action.target_npc_id = decision.get("target_npc_id", -1)
+	action.target_npc_id_secondary = decision.get("target_npc_id_secondary", -1)
+	action.target_settlement_id = decision.get("target_settlement_id", -1)
+	action.target_province_id = decision.get("target_province_id", -1)
+
+	var ctx: NPCDataStructures.ContextSnapshot = NPCDecisionEngine.build_context(
+		character, world_state
+	)
+
+	return ActionExecutor.execute(action, character, ctx, dice_engine, action_skill_map)
+
+
+# -- Helpers -------------------------------------------------------------------
+
 static func _is_order_action(action_id: String) -> bool:
 	return action_id in [
 		"ASSESS_PROVINCE_STATUS", "INVESTIGATE_PROVINCE", "ORDER_PATROL",
@@ -208,3 +391,50 @@ static func _get_max_ap(characters: Array[L5RCharacterData]) -> int:
 		if c.action_points_current > max_val:
 			max_val = c.action_points_current
 	return max_val
+
+
+static func _get_active_characters(characters: Array[L5RCharacterData]) -> Array[L5RCharacterData]:
+	var active: Array[L5RCharacterData] = []
+	for c: L5RCharacterData in characters:
+		if c.action_points_current > 0:
+			active.append(c)
+	return active
+
+
+static func _gather_reactive_npcs(
+	characters: Array[L5RCharacterData],
+	world_states: Dictionary,
+) -> Array[L5RCharacterData]:
+	var reactive_npcs: Array[L5RCharacterData] = []
+	for c: L5RCharacterData in characters:
+		var ws: Dictionary = world_states.get(c.character_id, {})
+		var events: Array = ws.get("pending_events", [])
+		if events.size() > 0:
+			reactive_npcs.append(c)
+
+	reactive_npcs.sort_custom(func(a: L5RCharacterData, b: L5RCharacterData) -> bool:
+		var ws_a: Dictionary = world_states.get(a.character_id, {})
+		var ws_b: Dictionary = world_states.get(b.character_id, {})
+		var ts_a: int = ws_a.get("reactive_timestamp", 0)
+		var ts_b: int = ws_b.get("reactive_timestamp", 0)
+		return ts_a < ts_b
+	)
+	return reactive_npcs
+
+
+static func _partition_by_court(
+	sorted: Array[L5RCharacterData],
+	world_states: Dictionary,
+	court_groups: Dictionary,
+	non_court: Array[L5RCharacterData],
+) -> void:
+	for c: L5RCharacterData in sorted:
+		var ws: Dictionary = world_states.get(c.character_id, {})
+		var cf: int = ws.get("context_flag", Enums.ContextFlag.AT_OWN_HOLDINGS)
+		var court_id: String = ws.get("court_id", "")
+		if cf == Enums.ContextFlag.AT_COURT and court_id != "":
+			if not court_groups.has(court_id):
+				court_groups[court_id] = []
+			court_groups[court_id].append(c)
+		else:
+			non_court.append(c)

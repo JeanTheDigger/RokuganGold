@@ -135,3 +135,89 @@ func test_is_order_action() -> void:
 	assert_true(NPCWaveResolver._is_order_action("ORDER_PATROL"))
 	assert_false(NPCWaveResolver._is_order_action("CHARM"))
 	assert_false(NPCWaveResolver._is_order_action("TRAIN"))
+
+
+# -- Full Execution Pipeline ---------------------------------------------------
+
+func _make_char_with_skills(id: int, status: float, awareness: int) -> L5RCharacterData:
+	var c := _make_char(id, status, awareness)
+	c.traits = {
+		Enums.Trait.REFLEXES: 3,
+		Enums.Trait.AWARENESS: awareness,
+		Enums.Trait.STAMINA: 3,
+		Enums.Trait.WILLPOWER: 3,
+		Enums.Trait.AGILITY: 3,
+		Enums.Trait.INTELLIGENCE: 3,
+		Enums.Trait.STRENGTH: 3,
+		Enums.Trait.PERCEPTION: 3,
+		Enums.Trait.VOID: 2,
+	}
+	c.skills = {"Etiquette": 3, "Courtier": 2, "Battle": 1}
+	c.emphases = {}
+	c.current_wounds = 0
+	c.earth_ring_for_wounds = 3
+	c.wound_level_size = 15
+	return c
+
+
+func test_resolve_day_full_produces_effects() -> void:
+	var dice := DiceEngine.new()
+	dice.set_seed(42)
+	var action_map: Dictionary = {
+		"REST": {"primary": null, "secondary": null},
+		"DO_NOTHING": {"primary": null, "secondary": null},
+		"TRAIN": {"primary": "_trained_skill", "secondary": null},
+		"WRITE_LETTER": {"primary": "Calligraphy", "secondary": "Courtier"},
+	}
+	var c1 := _make_char_with_skills(1, 3.0, 3)
+	var chars: Array[L5RCharacterData] = [c1]
+	var ws: Dictionary = {
+		1: _make_world_state(Enums.ContextFlag.AT_OWN_HOLDINGS),
+	}
+	var objs: Dictionary = {
+		1: {"primary": {"need_type": "REST", "priority": 3}},
+	}
+	var results: Array[Dictionary] = NPCWaveResolver.resolve_day_full(
+		chars, ws, objs, _scoring_tables, _filter_data, dice, action_map
+	)
+	assert_true(results.size() >= 1)
+	assert_true(results[0].has("effects"))
+
+
+func test_resolve_day_full_skips_zero_ap() -> void:
+	var dice := DiceEngine.new()
+	dice.set_seed(1)
+	var c1 := _make_char_with_skills(1, 3.0, 3)
+	c1.action_points_current = 0
+	var chars: Array[L5RCharacterData] = [c1]
+	var ws: Dictionary = {1: _make_world_state(Enums.ContextFlag.AT_OWN_HOLDINGS)}
+	var objs: Dictionary = {1: {"primary": {"need_type": "REST", "priority": 3}}}
+	var results: Array[Dictionary] = NPCWaveResolver.resolve_day_full(
+		chars, ws, objs, _scoring_tables, _filter_data, dice, {}
+	)
+	assert_eq(results.size(), 0)
+
+
+func test_resolve_day_full_multiple_npcs() -> void:
+	var dice := DiceEngine.new()
+	dice.set_seed(42)
+	var action_map: Dictionary = {
+		"REST": {"primary": null, "secondary": null},
+		"DO_NOTHING": {"primary": null, "secondary": null},
+		"TRAIN": {"primary": "_trained_skill", "secondary": null},
+	}
+	var c1 := _make_char_with_skills(1, 5.0, 3)
+	var c2 := _make_char_with_skills(2, 3.0, 2)
+	var chars: Array[L5RCharacterData] = [c1, c2]
+	var ws: Dictionary = {
+		1: _make_world_state(Enums.ContextFlag.AT_OWN_HOLDINGS),
+		2: _make_world_state(Enums.ContextFlag.AT_OWN_HOLDINGS),
+	}
+	var objs: Dictionary = {
+		1: {"primary": {"need_type": "REST", "priority": 3}},
+		2: {"primary": {"need_type": "REST", "priority": 3}},
+	}
+	var results: Array[Dictionary] = NPCWaveResolver.resolve_day_full(
+		chars, ws, objs, _scoring_tables, _filter_data, dice, action_map
+	)
+	assert_true(results.size() >= 2)
