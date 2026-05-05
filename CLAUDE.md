@@ -105,6 +105,95 @@ When implementing or auditing a system, go here first:
 - Spirit realms are not evil except Jigoku. Do not implement jade as a
   general-purpose spirit ward.
 
+## What's Been Built So Far
+
+All systems below are implemented, tested, and passing. They follow the
+single-dice-entry-point and server-authoritative constraints.
+
+### Core Dice & Stats Layer
+- **simulation/dice_engine.gd** — THE single authoritative rolling entry point.
+  `roll_and_keep()` with exploding 10s, L5R4e 10-dice cap (overflow = +2 per
+  excess die), emphasis rerolls. `roll_skill_check()` handles unskilled
+  (no explode). `roll_check()`, `contested_roll()`, `roll_initiative()`,
+  `roll_damage()`. Seedable RNG for deterministic testing.
+- **simulation/dice_result.gd** — DiceResult data class (kept_dice,
+  dropped_dice, total, explosions, overflow_bonus).
+- **simulation/character_stats.gd** — Pure static functions: `get_ring_value()`
+  (min of two traits, Void single), `get_insight()` (rings×10 + skill ranks),
+  `get_insight_rank()` (Rank 2 at 150, +25 per rank), `get_armor_tn()`,
+  `get_wound_level()`, `get_wound_penalty()`, `is_dead()`.
+
+### Combat & Consequence Systems
+- **simulation/wound_system.gd** — `apply_damage()` with armor reduction,
+  `heal_wounds()` (dead can't heal), `apply_falling_damage()` (1k1 per 2 tiles).
+- **simulation/honor_glory_system.gd** — Honor/Glory/Status/Infamy changes
+  clamped 0–10, court honor modifier (−2 to +2), full event table constants,
+  atonement system per GDD s4.6.
+
+### Skill & Action Economy
+- **simulation/skill_resolver.gd** — Bridge between CharacterData and DiceEngine.
+  SKILL_TRAITS dict mapping all L5R4e skills to governing traits.
+  SUB_SKILL_TRAIT_OVERRIDES for specializations. `resolve_skill_check()` and
+  `resolve_contested_check()` handle trait lookup, rank, emphasis, wound penalty
+  automatically.
+- **simulation/action_point_system.gd** — 2 AP per IC day, 8 per real day,
+  no carryover. `reset_daily_ap()`, `spend_ap()`, `can_spend()`.
+
+### Time
+- **simulation/time_system.gd** — 1 tick = 1 IC day = 6 real hours. 360 days/year,
+  12 months of 30. Seasons: Spring 90d, Summer 90d, Autumn 60d, Winter 120d.
+
+### Data Models
+- **shared/character_data.gd** — `L5RCharacterData` Resource. Full character sheet
+  per GDD s22.3. Named L5RCharacterData (not CharacterData) to avoid conflict
+  with pre-existing VtM code in scripts/characters/.
+- **shared/enums.gd** — Ring, Trait, WoundLevel, Stance, SchoolType, ContextFlag,
+  BushidoVirtue, ShouridoVirtue, RING_TRAITS, WOUND_PENALTIES.
+- **shared/province_data.gd** — ProvinceData Resource: terrain, adjacency,
+  resources (rice/koku/iron/arms), population PU breakdown, stability. Data model
+  only — no map generation (map is being worked on separately by the user).
+- **shared/settlement_data.gd** — SettlementData Resource: 12 settlement types,
+  infrastructure array, garrison, population.
+
+### NPC Decision Engine
+- **simulation/npc_data_structures.gd** — ImmediateNeed (generic target system),
+  ScoredAction (8 scoring components with `get_total_score()`), ContextSnapshot,
+  ProvinceStatus, competence modifier table per GDD s55.3/s55.5.
+- **simulation/npc_decision_engine.gd** — Full 7-phase loop per GDD s55.4:
+  1. Build Context — assembles ContextSnapshot from character + world state
+  2. Resolve Goal — priority cascade: reactive > crisis > primary > standing > REST
+  3. Generate Options — context-flag-specific action lists
+  4. Personality Filter — hard removal by bushido/shourido virtue
+  5. Score All — 8 components (objective alignment, disposition, personality lean,
+     competence, urgency, standing influence, topic position, resource modifier)
+  6. Selection — highest score, tiebreakers: ObjAlign > disposition > lower AP > seed
+  7. Execution — AP deduction, action record returned
+  Scoring helpers reference JSON table structures (GDD s55.14) — table loaders
+  not yet built. Decomposition functions are stubs ready for per-objective-type
+  logic. Context generators have starter action lists per ContextFlag.
+
+### Tests (GUT v9.3.0)
+All in /tests/, one file per system:
+- test_dice_engine.gd (~35 tests)
+- test_character_stats.gd (~15 tests)
+- test_wound_system.gd (~10 tests)
+- test_honor_glory.gd (~15 tests)
+- test_time_system.gd (~15 tests)
+- test_skill_resolver.gd (~20 tests)
+- test_action_point_system.gd (~12 tests)
+- test_npc_decision_engine.gd (~35 tests)
+
+### What's Next
+The NPC engine skeleton is in place. Next steps to flesh it out:
+1. JSON scoring tables (objective_alignment, disposition_tiers, personality_lean,
+   action_skill_map, competence_table, urgency_rules, topic_position_alignment,
+   personality_filter) per GDD s55.14
+2. Objective decomposition functions (political, military, economic, personal,
+   crisis, reactive) per GDD s55.4.2
+3. Full context generators per ContextFlag with complete ActionID lists
+4. Multi-NPC resolution order (wave system) per GDD s55.13
+5. Resource tick system per GDD s4.3
+
 ## What To Do When Uncertain
 Stop. Read the relevant LOCKED section in /gdd/. If it does not answer the
 question, say so explicitly — do not guess, do not fill gaps with plausible
