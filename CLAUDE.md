@@ -214,6 +214,13 @@ single-dice-entry-point and server-authoritative constraints.
   introductions. Objective knowledge transfer copies relevant entries on
   assignment. CharacterData gains `knowledge_pool` and `known_contacts_by_clan`.
 
+### Day Orchestrator
+- **simulation/day_orchestrator.gd** — Single `advance_day()` entry point that
+  advances world state by one IC day. Sequence: reset AP → NPCWaveResolver
+  `resolve_day_applied()` (decision + execution + mutation) → process info events
+  (Probe results wired into InformationSystem) → on season boundary: run
+  ResourceTick + decay all characters' knowledge confidence.
+
 ### Resource Tick System
 - **simulation/resource_tick.gd** — Seasonal resource processing per GDD s4.3.
   Rice consumption/harvest, starvation stages, 5-tier tax cascade,
@@ -236,13 +243,13 @@ All in /tests/, one file per system:
 - test_resource_tick.gd (~30 tests)
 - test_objective_decomposer.gd (~45 tests)
 - test_information_system.gd (~35 tests)
+- test_day_orchestrator.gd (~12 tests)
 
 ### What's Next
-1. Day orchestrator — ties wave resolver + resource tick + information decay into
-   a single tick entry point that advances world state by one IC day
-2. Military standing objectives — GDD s55.23 decomposition trees (awaiting content)
-3. Topic propagation — momentum tracking, public knowledge broadcast per GDD s16
-4. Daily conversation / letter information exchange per GDD s55.12
+1. Military standing objectives — GDD s55.23 decomposition trees (awaiting content)
+2. Topic propagation — momentum tracking, public knowledge broadcast per GDD s16
+3. Daily conversation / letter information exchange per GDD s55.12
+4. Crime record and investigation system per GDD s57.47, s57.16
 
 ## What To Do When Uncertain
 Stop. Read the relevant LOCKED section in /gdd/. If it does not answer the
