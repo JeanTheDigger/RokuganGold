@@ -188,10 +188,22 @@ single-dice-entry-point and server-authoritative constraints.
   Political (6), Economic (5), Personal (8), Military (2) standing objectives.
   Stateless per GDD s55.4.2. Unknown NeedTypes pass through unchanged.
 
+### Action Execution & World Mutation
+- **simulation/action_executor.gd** — Routes chosen ActionIDs to SkillResolver
+  dice rolls. Social/covert/military/admin categories with disposition-based TN
+  modifiers. Returns effects dict (disposition_change, glory_change, info_gained,
+  province effects).
+- **simulation/effect_applicator.gd** — Applies executor results to world state.
+  `apply()` mutates character disposition/honor/glory, province stability/garrison/
+  report date, and appends to action_log. `apply_day_results()` batch processes
+  a full day's results.
+
 ### Multi-NPC Wave Resolution
 - **simulation/npc_wave_resolver.gd** — `resolve_day()` handles full day
   resolution per GDD s55.13. Reactive events first, then AP waves.
   Status-descending order, Awareness tiebreak. Lord dual-pool.
+  `resolve_day_full()` adds execution (dice rolls + effects).
+  `resolve_day_applied()` closes the full loop: decision → execution → mutation.
 
 ### Resource Tick System
 - **simulation/resource_tick.gd** — Seasonal resource processing per GDD s4.3.
@@ -209,16 +221,18 @@ All in /tests/, one file per system:
 - test_action_point_system.gd (~12 tests)
 - test_npc_decision_engine.gd (~35 tests)
 - test_scoring_table_loader.gd (~15 tests)
-- test_npc_wave_resolver.gd (~10 tests)
-- test_resource_tick.gd (~25 tests)
+- test_action_executor.gd (~25 tests)
+- test_effect_applicator.gd (~25 tests)
+- test_npc_wave_resolver.gd (~15 tests)
+- test_resource_tick.gd (~30 tests)
 - test_objective_decomposer.gd (~45 tests)
 
 ### What's Next
-1. Executor module — route chosen ActionIDs to owning systems per GDD s55.4.7
-2. Resource tick batch processors — wire per-province helpers into settlement
-   iteration (process_seasonal_tick needs full implementation)
-3. Military standing objectives — GDD s55.23 decomposition trees (awaiting content)
-4. Information system — topic propagation, Probe visibility, contact discovery
+1. Information system — topic propagation, Probe visibility via action_log,
+   contact discovery per GDD s55.7
+2. Military standing objectives — GDD s55.23 decomposition trees (awaiting content)
+3. Day orchestrator — ties wave resolver + resource tick into a single tick entry
+   point that advances world state by one IC day
 
 ## What To Do When Uncertain
 Stop. Read the relevant LOCKED section in /gdd/. If it does not answer the
