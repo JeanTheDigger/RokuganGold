@@ -317,27 +317,11 @@ static func _check_crisis_override(
 
 static func _decompose_objective(
 	objective: Dictionary,
-	_ctx: NPCDataStructures.ContextSnapshot,
+	ctx: NPCDataStructures.ContextSnapshot,
 ) -> NPCDataStructures.ImmediateNeed:
 	if not objective.has("need_type"):
 		return null
-
-	var need := NPCDataStructures.ImmediateNeed.new()
-	need.need_type = objective["need_type"]
-	need.priority = objective.get("priority", 2)
-	need.target_npc_id = objective.get("target_npc_id", -1)
-	need.target_npc_id_secondary = objective.get("target_npc_id_secondary", -1)
-	need.target_settlement_id = objective.get("target_settlement_id", -1)
-	need.target_province_id = objective.get("target_province_id", -1)
-	need.target_clan_id = objective.get("target_clan_id", "")
-	need.target_topic_id = objective.get("target_topic_id", -1)
-	need.target_resource = objective.get("target_resource", "")
-	need.target_army_id = objective.get("target_army_id", -1)
-	need.target_intent = objective.get("target_intent", "")
-	need.threshold = objective.get("threshold", 0.0)
-	need.threshold_type = objective.get("threshold_type", "")
-	need.source = objective.get("source", "objective")
-	return need
+	return ObjectiveDecomposer.decompose(objective, ctx)
 
 
 static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array[String]:

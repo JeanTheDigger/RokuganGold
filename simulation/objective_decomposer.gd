@@ -1,0 +1,772 @@
+class_name ObjectiveDecomposer
+## Objective decomposition functions per GDD s55.22 (political), s55.24 (economic),
+## s55.25 (personal). Routes standing objectives to type-specific decomposition
+## trees that examine ContextSnapshot and return the most productive ImmediateNeed
+## for the current AP. Stateless — fires fresh every AP per GDD s55.4.2.
+
+
+# -- Standing Objective NeedType Constants ------------------------------------
+
+const POLITICAL_OBJECTIVES: Array[String] = [
+	"EXPAND_TERRITORY",
+	"MAINTAIN_BALANCE",
+	"ADVANCE_FAMILY",
+	"UNDERMINE_CLAN",
+	"STRENGTHEN_IMPERIAL",
+	"ACCUMULATE_LEVERAGE",
+]
+
+const ECONOMIC_OBJECTIVES: Array[String] = [
+	"MAXIMIZE_PROSPERITY",
+	"CONTROL_TRADE",
+	"PREVENT_SHORTAGE",
+	"ACCUMULATE_WEALTH",
+	"GROW_COMMERCE",
+]
+
+const PERSONAL_OBJECTIVES: Array[String] = [
+	"HONOR_ANCESTORS",
+	"PROTECT_DEPENDENTS",
+	"ACCUMULATE_KNOWLEDGE",
+	"PERSONAL_EXCELLENCE",
+	"ELEVATE_FAMILY",
+	"LIVE_BY_BUSHIDO",
+	"ADVANCE_GLORY",
+	"SEEK_VENGEANCE",
+]
+
+const MILITARY_OBJECTIVES: Array[String] = [
+	"DEFEND_TERRITORY",
+	"STRENGTHEN_FORTIFICATION",
+]
+
+
+# -- Main Entry Point ---------------------------------------------------------
+
+static func decompose(
+	objective: Dictionary,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> NPCDataStructures.ImmediateNeed:
+	var need_type: String = objective.get("need_type", "")
+	if need_type.is_empty():
+		return null
+
+	if need_type in POLITICAL_OBJECTIVES:
+		return _decompose_political(need_type, objective, ctx)
+	if need_type in ECONOMIC_OBJECTIVES:
+		return _decompose_economic(need_type, objective, ctx)
+	if need_type in PERSONAL_OBJECTIVES:
+		return _decompose_personal(need_type, objective, ctx)
+	if need_type in MILITARY_OBJECTIVES:
+		return _decompose_military(need_type, objective, ctx)
+
+	return _passthrough(objective)
+
+
+# -- Political Routing --------------------------------------------------------
+
+static func _decompose_political(
+	need_type: String,
+	objective: Dictionary,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> NPCDataStructures.ImmediateNeed:
+	match need_type:
+		"EXPAND_TERRITORY":
+			return _decompose_expand_territory(objective, ctx)
+		"MAINTAIN_BALANCE":
+			return _decompose_maintain_balance(objective, ctx)
+		"ADVANCE_FAMILY":
+			return _decompose_advance_family(objective, ctx)
+		"UNDERMINE_CLAN":
+			return _decompose_undermine_clan(objective, ctx)
+		"STRENGTHEN_IMPERIAL":
+			return _decompose_strengthen_imperial(objective, ctx)
+		"ACCUMULATE_LEVERAGE":
+			return _decompose_accumulate_leverage(objective, ctx)
+	return _passthrough(objective)
+
+
+# -- Economic Routing ---------------------------------------------------------
+
+static func _decompose_economic(
+	need_type: String,
+	objective: Dictionary,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> NPCDataStructures.ImmediateNeed:
+	match need_type:
+		"MAXIMIZE_PROSPERITY":
+			return _decompose_maximize_prosperity(objective, ctx)
+		"CONTROL_TRADE":
+			return _decompose_control_trade(objective, ctx)
+		"PREVENT_SHORTAGE":
+			return _decompose_prevent_shortage(objective, ctx)
+		"ACCUMULATE_WEALTH":
+			return _decompose_accumulate_wealth(objective, ctx)
+		"GROW_COMMERCE":
+			return _decompose_grow_commerce(objective, ctx)
+	return _passthrough(objective)
+
+
+# -- Personal Routing ---------------------------------------------------------
+
+static func _decompose_personal(
+	need_type: String,
+	objective: Dictionary,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> NPCDataStructures.ImmediateNeed:
+	match need_type:
+		"HONOR_ANCESTORS":
+			return _decompose_honor_ancestors(objective, ctx)
+		"PROTECT_DEPENDENTS":
+			return _decompose_protect_dependents(objective, ctx)
+		"ACCUMULATE_KNOWLEDGE":
+			return _decompose_accumulate_knowledge(objective, ctx)
+		"PERSONAL_EXCELLENCE":
+			return _decompose_personal_excellence(objective, ctx)
+		"ELEVATE_FAMILY":
+			return _decompose_advance_family(objective, ctx)
+		"LIVE_BY_BUSHIDO":
+			return _decompose_live_by_bushido(objective, ctx)
+		"ADVANCE_GLORY":
+			return _decompose_advance_glory(objective, ctx)
+		"SEEK_VENGEANCE":
+			return _decompose_seek_vengeance(objective, ctx)
+	return _passthrough(objective)
+
+
+# -- Military Routing ---------------------------------------------------------
+
+static func _decompose_military(
+	need_type: String,
+	objective: Dictionary,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> NPCDataStructures.ImmediateNeed:
+	match need_type:
+		"DEFEND_TERRITORY":
+			return _decompose_defend_territory(objective, ctx)
+		"STRENGTHEN_FORTIFICATION":
+			return _decompose_strengthen_fortification(objective, ctx)
+	return _passthrough(objective)
+
+
+# =============================================================================
+# Political Decomposition Trees (GDD s55.22)
+# =============================================================================
+
+
+static func _decompose_expand_territory(
+	objective: Dictionary,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> NPCDataStructures.ImmediateNeed:
+	if not ctx.is_lord:
+		return _courtier_diplomatic_path(objective, ctx)
+
+	var weak_province_id: int = _find_weak_neighbor_province(ctx)
+	if weak_province_id >= 0:
+		var ps: Variant = _get_province_status(ctx, weak_province_id)
+		if ps == null or (ps is NPCDataStructures.ProvinceStatus and ps.confidence == 0):
+			return _make_need("GATHER_INTELLIGENCE", 2, {"target_province_id": weak_province_id})
+		return _make_need("INITIATE_WAR_CHECK", 2, {
+			"target_province_id": weak_province_id,
+			"target_clan_id": objective.get("target_clan_id", ""),
+		})
+
+	return _courtier_diplomatic_path(objective, ctx)
+
+
+static func _decompose_maintain_balance(
+	_objective: Dictionary,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> NPCDataStructures.ImmediateNeed:
+	match ctx.context_flag:
+		Enums.ContextFlag.AT_COURT:
+			var contact: int = _find_contact_needing_disposition(ctx, 31)
+			if contact >= 0:
+				return _make_need("RAISE_DISPOSITION", 2, {
+					"target_npc_id": contact,
+					"threshold": 31.0,
+					"threshold_type": "disposition",
+				})
+			return _make_need("MOVE_TOPIC_POSITION", 2)
+		Enums.ContextFlag.AT_OWN_HOLDINGS:
+			return _make_need("SEND_LETTER", 1)
+		_:
+			return _make_need("ATTEND_COURT", 1)
+
+
+static func _decompose_advance_family(
+	_objective: Dictionary,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> NPCDataStructures.ImmediateNeed:
+	match ctx.context_flag:
+		Enums.ContextFlag.AT_COURT:
+			var contact: int = _find_contact_needing_disposition(ctx, 31)
+			if contact >= 0:
+				return _make_need("RAISE_DISPOSITION", 2, {
+					"target_npc_id": contact,
+					"threshold": 31.0,
+					"threshold_type": "disposition",
+				})
+			return _make_need("SEEK_GLORY", 2)
+		Enums.ContextFlag.AT_OWN_HOLDINGS:
+			if ctx.is_lord:
+				var crisis: int = _find_crisis_province(ctx)
+				if crisis >= 0:
+					return _make_need("DEFEND_PROVINCE", 2, {"target_province_id": crisis})
+			return _make_need("SEND_LETTER", 1)
+		_:
+			return _make_need("ATTEND_COURT", 1)
+
+
+static func _decompose_undermine_clan(
+	objective: Dictionary,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> NPCDataStructures.ImmediateNeed:
+	var target_clan: String = objective.get("target_clan_id", "")
+
+	match ctx.context_flag:
+		Enums.ContextFlag.AT_COURT:
+			var target_contact: int = _find_clan_contact_present(ctx, target_clan)
+			if target_contact >= 0:
+				return _make_need("ACQUIRE_LEVERAGE", 2, {"target_npc_id": target_contact})
+			if target_clan.is_empty():
+				return _make_need("IDENTIFY_CONTACT", 2)
+			return _make_need("DAMAGE_RELATIONSHIP", 2, {"target_clan_id": target_clan})
+		Enums.ContextFlag.AT_OWN_HOLDINGS:
+			return _make_need("ACQUIRE_LEVERAGE", 2, {"target_clan_id": target_clan})
+		_:
+			return _make_need("ATTEND_COURT", 1)
+
+
+static func _decompose_strengthen_imperial(
+	_objective: Dictionary,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> NPCDataStructures.ImmediateNeed:
+	match ctx.context_flag:
+		Enums.ContextFlag.AT_COURT:
+			var contact: int = _find_contact_needing_disposition(ctx, 31)
+			if contact >= 0:
+				return _make_need("RAISE_DISPOSITION", 2, {
+					"target_npc_id": contact,
+					"threshold": 31.0,
+					"threshold_type": "disposition",
+				})
+			return _make_need("MOVE_TOPIC_POSITION", 2)
+		Enums.ContextFlag.AT_OWN_HOLDINGS:
+			return _make_need("SEND_LETTER", 1)
+		_:
+			return _make_need("ATTEND_COURT", 1)
+
+
+static func _decompose_accumulate_leverage(
+	_objective: Dictionary,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> NPCDataStructures.ImmediateNeed:
+	match ctx.context_flag:
+		Enums.ContextFlag.AT_COURT:
+			var friend_count: int = _count_friends(ctx.dispositions, 31)
+			if friend_count < 3:
+				var contact: int = _find_contact_needing_disposition(ctx, 31)
+				if contact >= 0:
+					return _make_need("RAISE_DISPOSITION", 2, {
+						"target_npc_id": contact,
+						"threshold": 31.0,
+						"threshold_type": "disposition",
+					})
+				return _make_need("IDENTIFY_CONTACT", 1)
+			var target: int = _find_highest_status_present(ctx)
+			if target >= 0:
+				return _make_need("ACQUIRE_LEVERAGE", 2, {"target_npc_id": target})
+			return _make_need("GATHER_INTELLIGENCE", 2)
+		Enums.ContextFlag.AT_OWN_HOLDINGS:
+			return _make_need("SEND_LETTER", 1)
+		_:
+			return _make_need("ATTEND_COURT", 1)
+
+
+# =============================================================================
+# Economic Decomposition Trees (GDD s55.24)
+# =============================================================================
+
+
+static func _decompose_maximize_prosperity(
+	_objective: Dictionary,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> NPCDataStructures.ImmediateNeed:
+	if not ctx.is_lord:
+		match ctx.context_flag:
+			Enums.ContextFlag.AT_COURT:
+				return _make_need("MOVE_TOPIC_POSITION", 1)
+			_:
+				return _make_need("ATTEND_COURT", 1)
+
+	var crisis: int = _find_crisis_province(ctx)
+	if crisis >= 0:
+		return _make_need("DEFEND_PROVINCE", 3, {"target_province_id": crisis})
+
+	var undergarrisoned: int = _find_undergarrisoned_province(ctx)
+	if undergarrisoned >= 0:
+		return _make_need("DEFEND_PROVINCE", 3, {"target_province_id": undergarrisoned})
+
+	var stale: int = _find_stale_province(ctx)
+	if stale >= 0:
+		return _make_need("INVESTIGATE_THREAT", 2, {"target_province_id": stale})
+
+	var unstable: int = _find_unstable_province(ctx, 75)
+	if unstable >= 0:
+		return _make_need("PATROL_PROVINCE", 1, {"target_province_id": unstable})
+
+	var rice_per_pu: float = _get_rice_per_pu(ctx)
+	if rice_per_pu < 2.0:
+		return _make_need("ACQUIRE_RESOURCE", 2, {"target_resource": "rice"})
+
+	return _make_need("ADJUST_TAX", 1)
+
+
+static func _decompose_control_trade(
+	_objective: Dictionary,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> NPCDataStructures.ImmediateNeed:
+	if ctx.is_lord:
+		var undergarrisoned: int = _find_undergarrisoned_province(ctx)
+		if undergarrisoned >= 0:
+			return _make_need("DEFEND_PROVINCE", 3, {"target_province_id": undergarrisoned})
+
+	match ctx.context_flag:
+		Enums.ContextFlag.AT_COURT:
+			var contact: int = _find_contact_needing_disposition(ctx, 31)
+			if contact >= 0:
+				return _make_need("RAISE_DISPOSITION", 2, {
+					"target_npc_id": contact,
+					"threshold": 31.0,
+					"threshold_type": "disposition",
+				})
+			return _make_need("MOVE_TOPIC_POSITION", 2)
+		Enums.ContextFlag.AT_OWN_HOLDINGS:
+			return _make_need("SEND_LETTER", 1)
+		_:
+			return _make_need("ATTEND_COURT", 1)
+
+
+static func _decompose_prevent_shortage(
+	_objective: Dictionary,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> NPCDataStructures.ImmediateNeed:
+	if not ctx.is_lord:
+		return _make_need("SEND_LETTER", 1)
+
+	var rice_stockpile: float = ctx.resource_stockpiles.get("rice", 0.0)
+	var consumption: float = ctx.resource_stockpiles.get("rice_consumption", 1.0)
+	var seasons_of_rice: float = rice_stockpile / maxf(consumption, 0.01)
+
+	if seasons_of_rice < 1.0:
+		return _make_need("ACQUIRE_RESOURCE", 3, {"target_resource": "rice"})
+	if seasons_of_rice < 2.0:
+		return _make_need("ACQUIRE_RESOURCE", 2, {"target_resource": "rice"})
+
+	var arms: float = ctx.resource_stockpiles.get("arms", 0.0)
+	var arms_upkeep: float = ctx.resource_stockpiles.get("arms_upkeep", 0.01)
+	if arms / maxf(arms_upkeep, 0.01) < 2.0:
+		return _make_need("ACQUIRE_RESOURCE", 2, {"target_resource": "arms"})
+
+	var iron: float = ctx.resource_stockpiles.get("iron", 0.0)
+	if iron < 3.0:
+		return _make_need("ACQUIRE_RESOURCE", 1, {"target_resource": "iron"})
+
+	var koku: float = ctx.resource_stockpiles.get("koku", 0.0)
+	if koku < 5.0:
+		return _make_need("ADJUST_TAX", 1)
+
+	return _make_need("REST", 1)
+
+
+static func _decompose_accumulate_wealth(
+	_objective: Dictionary,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> NPCDataStructures.ImmediateNeed:
+	if not ctx.is_lord:
+		match ctx.context_flag:
+			Enums.ContextFlag.AT_COURT:
+				return _make_need("SEEK_GLORY", 1)
+			_:
+				return _make_need("TRAIN_SKILL", 1)
+
+	var undergarrisoned: int = _find_undergarrisoned_province(ctx)
+	if undergarrisoned >= 0:
+		return _make_need("DEFEND_PROVINCE", 2, {"target_province_id": undergarrisoned})
+
+	return _make_need("ADJUST_TAX", 1)
+
+
+static func _decompose_grow_commerce(
+	_objective: Dictionary,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> NPCDataStructures.ImmediateNeed:
+	match ctx.context_flag:
+		Enums.ContextFlag.AT_OWN_HOLDINGS, Enums.ContextFlag.VISITING:
+			return _make_need("CONDUCT_COMMERCE", 2)
+		Enums.ContextFlag.AT_COURT:
+			var contact: int = _find_contact_needing_disposition(ctx, 31)
+			if contact >= 0:
+				return _make_need("RAISE_DISPOSITION", 1, {"target_npc_id": contact})
+			return _make_need("CONDUCT_COMMERCE", 1)
+		_:
+			return _make_need("TRAIN_SKILL", 1)
+
+
+# =============================================================================
+# Personal Decomposition Trees (GDD s55.25)
+# =============================================================================
+
+
+static func _decompose_honor_ancestors(
+	_objective: Dictionary,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> NPCDataStructures.ImmediateNeed:
+	match ctx.context_flag:
+		Enums.ContextFlag.AT_COURT:
+			return _make_need("SEEK_GLORY", 2)
+		Enums.ContextFlag.AT_TEMPLE:
+			return _make_need("PERFORM_RITUAL", 2)
+		Enums.ContextFlag.AT_OWN_HOLDINGS:
+			if ctx.is_lord:
+				var crisis: int = _find_crisis_province(ctx)
+				if crisis >= 0:
+					return _make_need("DEFEND_PROVINCE", 2, {"target_province_id": crisis})
+			return _make_need("TRAIN_SKILL", 1)
+		Enums.ContextFlag.ON_CAMPAIGN:
+			return _make_need("REST", 1)
+		_:
+			return _make_need("SEEK_GLORY", 1)
+
+
+static func _decompose_protect_dependents(
+	_objective: Dictionary,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> NPCDataStructures.ImmediateNeed:
+	if ctx.is_lord:
+		var crisis: int = _find_crisis_province(ctx)
+		if crisis >= 0:
+			return _make_need("DEFEND_PROVINCE", 3, {"target_province_id": crisis})
+
+		var undergarrisoned: int = _find_undergarrisoned_province(ctx)
+		if undergarrisoned >= 0:
+			return _make_need("DEFEND_PROVINCE", 2, {"target_province_id": undergarrisoned})
+
+		var unstable: int = _find_unstable_province(ctx, 75)
+		if unstable >= 0:
+			return _make_need("PATROL_PROVINCE", 2, {"target_province_id": unstable})
+
+		var rice_per_pu: float = _get_rice_per_pu(ctx)
+		if rice_per_pu < 2.0:
+			return _make_need("ACQUIRE_RESOURCE", 2, {"target_resource": "rice"})
+
+	var contact: int = _find_contact_needing_disposition(ctx, 31)
+	if contact >= 0:
+		return _make_need("RAISE_DISPOSITION", 1, {"target_npc_id": contact})
+	return _make_need("REST", 1)
+
+
+static func _decompose_accumulate_knowledge(
+	_objective: Dictionary,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> NPCDataStructures.ImmediateNeed:
+	match ctx.context_flag:
+		Enums.ContextFlag.AT_COURT:
+			return _make_need("GATHER_INTELLIGENCE", 2)
+		Enums.ContextFlag.AT_TEMPLE:
+			if ctx.school_type == Enums.SchoolType.SHUGENJA:
+				return _make_need("INVESTIGATE_THREAT", 2)
+			return _make_need("PERFORM_RITUAL", 1)
+		Enums.ContextFlag.AT_DOJO:
+			return _make_need("TRAIN_SKILL", 2)
+		Enums.ContextFlag.AT_OWN_HOLDINGS:
+			return _make_need("TRAIN_SKILL", 1)
+		_:
+			return _make_need("ATTEND_COURT", 1)
+
+
+static func _decompose_personal_excellence(
+	_objective: Dictionary,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> NPCDataStructures.ImmediateNeed:
+	match ctx.context_flag:
+		Enums.ContextFlag.AT_DOJO:
+			return _make_need("TRAIN_SKILL", 3)
+		Enums.ContextFlag.AT_COURT:
+			if ctx.school_type == Enums.SchoolType.COURTIER:
+				return _make_need("SEEK_GLORY", 2)
+			if ctx.school_type == Enums.SchoolType.BUSHI:
+				return _make_need("TRAIN_SKILL", 1)
+			return _make_need("PERFORM_RITUAL", 1)
+		Enums.ContextFlag.AT_TEMPLE:
+			if ctx.school_type == Enums.SchoolType.SHUGENJA or ctx.school_type == Enums.SchoolType.MONK:
+				return _make_need("PERFORM_RITUAL", 3)
+			return _make_need("PERFORM_RITUAL", 1)
+		Enums.ContextFlag.AT_OWN_HOLDINGS:
+			return _make_need("TRAIN_SKILL", 2)
+		_:
+			return _make_need("TRAIN_SKILL", 1)
+
+
+static func _decompose_live_by_bushido(
+	_objective: Dictionary,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> NPCDataStructures.ImmediateNeed:
+	if ctx.honor < 3.0:
+		return _make_need("RESTORE_HONOR", 2)
+
+	match ctx.context_flag:
+		Enums.ContextFlag.AT_TEMPLE:
+			return _make_need("PERFORM_RITUAL", 2)
+		Enums.ContextFlag.AT_COURT:
+			return _make_need("SEEK_GLORY", 1)
+		_:
+			return _make_need("TRAIN_SKILL", 1)
+
+
+static func _decompose_advance_glory(
+	_objective: Dictionary,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> NPCDataStructures.ImmediateNeed:
+	match ctx.context_flag:
+		Enums.ContextFlag.AT_COURT:
+			return _make_need("SEEK_GLORY", 2)
+		Enums.ContextFlag.ON_CAMPAIGN:
+			return _make_need("REST", 1)
+		Enums.ContextFlag.UNDER_SIEGE:
+			return _make_need("CONDUCT_SORTIE", 2)
+		Enums.ContextFlag.AT_OWN_HOLDINGS:
+			return _make_need("ATTEND_COURT", 1)
+		_:
+			return _make_need("TRAIN_SKILL", 1)
+
+
+static func _decompose_seek_vengeance(
+	objective: Dictionary,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> NPCDataStructures.ImmediateNeed:
+	var target_npc: int = objective.get("target_npc_id", -1)
+	var target_clan: String = objective.get("target_clan_id", "")
+
+	if target_npc < 0 and not target_clan.is_empty():
+		var clan_contact: int = _find_clan_contact_present(ctx, target_clan)
+		if clan_contact >= 0:
+			target_npc = clan_contact
+		else:
+			return _make_need("IDENTIFY_CONTACT", 2, {"target_clan_id": target_clan})
+
+	if target_npc < 0:
+		return _make_need("GATHER_INTELLIGENCE", 1)
+
+	if target_npc in ctx.characters_present:
+		return _make_need("ISSUE_DUEL_CHALLENGE", 3, {"target_npc_id": target_npc})
+
+	match ctx.context_flag:
+		Enums.ContextFlag.AT_COURT:
+			return _make_need("GATHER_INTELLIGENCE", 2, {"target_npc_id": target_npc})
+		_:
+			return _make_need("ATTEND_COURT", 2)
+
+
+# =============================================================================
+# Military Decomposition Trees (GDD s55.23)
+# =============================================================================
+
+
+static func _decompose_defend_territory(
+	_objective: Dictionary,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> NPCDataStructures.ImmediateNeed:
+	if not ctx.is_lord:
+		match ctx.context_flag:
+			Enums.ContextFlag.ON_CAMPAIGN:
+				return _make_need("REST", 1)
+			_:
+				return _make_need("TRAIN_SKILL", 1)
+
+	var crisis: int = _find_crisis_province(ctx)
+	if crisis >= 0:
+		return _make_need("DEFEND_PROVINCE", 3, {"target_province_id": crisis})
+
+	var undergarrisoned: int = _find_undergarrisoned_province(ctx)
+	if undergarrisoned >= 0:
+		return _make_need("DEFEND_PROVINCE", 2, {"target_province_id": undergarrisoned})
+
+	var stale: int = _find_stale_province(ctx)
+	if stale >= 0:
+		return _make_need("INVESTIGATE_THREAT", 2, {"target_province_id": stale})
+
+	return _make_need("EVALUATE_WAR_READINESS", 1)
+
+
+static func _decompose_strengthen_fortification(
+	_objective: Dictionary,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> NPCDataStructures.ImmediateNeed:
+	if not ctx.is_lord:
+		return _make_need("TRAIN_SKILL", 1)
+
+	var crisis: int = _find_crisis_province(ctx)
+	if crisis >= 0:
+		return _make_need("DEFEND_PROVINCE", 3, {"target_province_id": crisis})
+
+	return _make_need("MAINTAIN_FORTIFICATION", 2)
+
+
+# =============================================================================
+# Helpers
+# =============================================================================
+
+
+static func _make_need(
+	need_type: String,
+	priority: int,
+	extras: Dictionary = {},
+) -> NPCDataStructures.ImmediateNeed:
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = need_type
+	need.priority = priority
+	need.source = "decomposition"
+	need.target_npc_id = extras.get("target_npc_id", -1)
+	need.target_npc_id_secondary = extras.get("target_npc_id_secondary", -1)
+	need.target_settlement_id = extras.get("target_settlement_id", -1)
+	need.target_province_id = extras.get("target_province_id", -1)
+	need.target_clan_id = extras.get("target_clan_id", "")
+	need.target_topic_id = extras.get("target_topic_id", -1)
+	need.target_resource = extras.get("target_resource", "")
+	need.target_army_id = extras.get("target_army_id", -1)
+	need.target_intent = extras.get("target_intent", "")
+	need.threshold = extras.get("threshold", 0.0)
+	need.threshold_type = extras.get("threshold_type", "")
+	return need
+
+
+static func _passthrough(objective: Dictionary) -> NPCDataStructures.ImmediateNeed:
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = objective.get("need_type", "")
+	need.priority = objective.get("priority", 2)
+	need.target_npc_id = objective.get("target_npc_id", -1)
+	need.target_npc_id_secondary = objective.get("target_npc_id_secondary", -1)
+	need.target_settlement_id = objective.get("target_settlement_id", -1)
+	need.target_province_id = objective.get("target_province_id", -1)
+	need.target_clan_id = objective.get("target_clan_id", "")
+	need.target_topic_id = objective.get("target_topic_id", -1)
+	need.target_resource = objective.get("target_resource", "")
+	need.target_army_id = objective.get("target_army_id", -1)
+	need.target_intent = objective.get("target_intent", "")
+	need.threshold = objective.get("threshold", 0.0)
+	need.threshold_type = objective.get("threshold_type", "")
+	need.source = objective.get("source", "objective")
+	return need
+
+
+static func _courtier_diplomatic_path(
+	_objective: Dictionary,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> NPCDataStructures.ImmediateNeed:
+	match ctx.context_flag:
+		Enums.ContextFlag.AT_COURT:
+			var contact: int = _find_contact_needing_disposition(ctx, 31)
+			if contact >= 0:
+				return _make_need("RAISE_DISPOSITION", 2, {
+					"target_npc_id": contact,
+					"threshold": 31.0,
+					"threshold_type": "disposition",
+				})
+			return _make_need("MOVE_TOPIC_POSITION", 2)
+		Enums.ContextFlag.AT_OWN_HOLDINGS:
+			return _make_need("SEND_LETTER", 1)
+		_:
+			return _make_need("ATTEND_COURT", 1)
+
+
+static func _find_contact_needing_disposition(
+	ctx: NPCDataStructures.ContextSnapshot,
+	threshold: int,
+) -> int:
+	for npc_id: int in ctx.characters_present:
+		var disp: int = ctx.dispositions.get(npc_id, 0)
+		if disp < threshold and disp > -30:
+			return npc_id
+	return -1
+
+
+static func _find_clan_contact_present(
+	ctx: NPCDataStructures.ContextSnapshot,
+	_clan_id: String,
+) -> int:
+	for npc_id: int in ctx.known_contacts:
+		if npc_id in ctx.characters_present:
+			return npc_id
+	return -1
+
+
+static func _find_highest_status_present(
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> int:
+	if ctx.characters_present.size() > 0:
+		return ctx.characters_present[0]
+	return -1
+
+
+static func _count_friends(dispositions: Dictionary, threshold: int) -> int:
+	var count: int = 0
+	for disp: int in dispositions.values():
+		if disp >= threshold:
+			count += 1
+	return count
+
+
+static func _find_crisis_province(ctx: NPCDataStructures.ContextSnapshot) -> int:
+	for ps: Variant in ctx.province_statuses:
+		if ps is NPCDataStructures.ProvinceStatus and ps.active_crisis_id >= 0:
+			return ps.province_id
+	return -1
+
+
+static func _find_undergarrisoned_province(ctx: NPCDataStructures.ContextSnapshot) -> int:
+	for ps: Variant in ctx.province_statuses:
+		if ps is NPCDataStructures.ProvinceStatus and ps.garrison_pu < 1:
+			return ps.province_id
+	return -1
+
+
+static func _find_stale_province(ctx: NPCDataStructures.ContextSnapshot) -> int:
+	for ps: Variant in ctx.province_statuses:
+		if ps is NPCDataStructures.ProvinceStatus and ps.confidence == 0:
+			return ps.province_id
+	return -1
+
+
+static func _find_unstable_province(
+	ctx: NPCDataStructures.ContextSnapshot,
+	threshold: float,
+) -> int:
+	for ps: Variant in ctx.province_statuses:
+		if ps is NPCDataStructures.ProvinceStatus and ps.stability <= threshold:
+			return ps.province_id
+	return -1
+
+
+static func _find_weak_neighbor_province(ctx: NPCDataStructures.ContextSnapshot) -> int:
+	for ps: Variant in ctx.province_statuses:
+		if ps is NPCDataStructures.ProvinceStatus and ps.stability <= 50:
+			return ps.province_id
+	return -1
+
+
+static func _get_province_status(
+	ctx: NPCDataStructures.ContextSnapshot,
+	province_id: int,
+) -> NPCDataStructures.ProvinceStatus:
+	for ps: Variant in ctx.province_statuses:
+		if ps is NPCDataStructures.ProvinceStatus and ps.province_id == province_id:
+			return ps
+	return null
+
+
+static func _get_rice_per_pu(ctx: NPCDataStructures.ContextSnapshot) -> float:
+	var rice: float = ctx.resource_stockpiles.get("rice", 0.0)
+	var pop_pu: float = ctx.resource_stockpiles.get("population_pu", 1.0)
+	return rice / maxf(pop_pu, 1.0)
