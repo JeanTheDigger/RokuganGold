@@ -15,7 +15,7 @@ extends Resource
 @export var is_coastal: bool = false
 @export var rivers: Array[String] = []
 @export var roads: Array[String] = []
-@export var terrain_type: String = "plains"
+@export var terrain_type: Enums.TerrainType = Enums.TerrainType.PLAINS
 
 # -- Settlements ---------------------------------------------------------------
 
@@ -46,16 +46,7 @@ extends Resource
 
 # -- Terrain Multipliers (s4.3) -----------------------------------------------
 
-const TERRAIN_RICE_MULTIPLIER: Dictionary = {
-	"river_delta": 1.5,
-	"plains": 1.0,
-	"forest": 0.75,
-	"hills": 0.75,
-	"mountains": 0.5,
-}
-
-
 func get_rice_multiplier() -> float:
-	if TERRAIN_RICE_MULTIPLIER.has(terrain_type):
-		return TERRAIN_RICE_MULTIPLIER[terrain_type]
+	if Enums.TERRAIN_RICE_MULTIPLIER.has(terrain_type):
+		return Enums.TERRAIN_RICE_MULTIPLIER[terrain_type]
 	return 1.0

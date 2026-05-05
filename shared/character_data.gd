@@ -48,8 +48,8 @@ extends Resource
 
 # -- Spells (shugenja only) ----------------------------------------------------
 
-@export var affinity_element: Enums.Ring = Enums.Ring.VOID
-@export var deficiency_element: Enums.Ring = Enums.Ring.VOID
+@export var affinity_element: Enums.Ring = Enums.Ring.NONE
+@export var deficiency_element: Enums.Ring = Enums.Ring.NONE
 @export var spells_known: Array[String] = []
 
 # -- Advantages & Disadvantages ------------------------------------------------
@@ -84,8 +84,8 @@ extends Resource
 
 # -- Personality (Section 19) --------------------------------------------------
 
-@export var bushido_virtue: String = ""
-@export var shourido_virtue: String = ""
+@export var bushido_virtue: Enums.BushidoVirtue = Enums.BushidoVirtue.NONE
+@export var shourido_virtue: Enums.ShouridoVirtue = Enums.ShouridoVirtue.NONE
 
 # -- Social & Dynamic Fields ---------------------------------------------------
 
@@ -171,4 +171,4 @@ func get_trait_value(trait: Enums.Trait) -> int:
 		Enums.Trait.REFLEXES: return reflexes
 		Enums.Trait.AWARENESS: return awareness
 		Enums.Trait.VOID: return void_ring
-	return 0
+		_: return 0

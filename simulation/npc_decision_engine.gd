@@ -103,11 +103,11 @@ static func resolve_goal(
 static func generate_options(
 	ctx: NPCDataStructures.ContextSnapshot,
 	need: NPCDataStructures.ImmediateNeed,
-) -> Array:
-	var options: Array = []
+) -> Array[NPCDataStructures.ScoredAction]:
+	var options: Array[NPCDataStructures.ScoredAction] = []
 	var available_actions: Array[String] = _get_actions_for_context(ctx.context_flag)
 
-	for action_id in available_actions:
+	for action_id: String in available_actions:
 		var option := NPCDataStructures.ScoredAction.new()
 		option.action_id = action_id
 		option.target_npc_id = need.target_npc_id
@@ -124,13 +124,13 @@ static func generate_options(
 # Hard removal of blocked actions. No score can override this gate.
 
 static func apply_personality_filter(
-	options: Array,
+	options: Array[NPCDataStructures.ScoredAction],
 	ctx: NPCDataStructures.ContextSnapshot,
 	filter_data: Dictionary,
-) -> Array:
-	var filtered: Array = []
+) -> Array[NPCDataStructures.ScoredAction]:
+	var filtered: Array[NPCDataStructures.ScoredAction] = []
 
-	for option in options:
+	for option: NPCDataStructures.ScoredAction in options:
 		if _is_action_blocked(option.action_id, ctx, filter_data):
 			continue
 		filtered.append(option)
@@ -142,12 +142,12 @@ static func apply_personality_filter(
 # Eight components per s55.4.5 / s55.3.3.
 
 static func score_all(
-	options: Array,
+	options: Array[NPCDataStructures.ScoredAction],
 	need: NPCDataStructures.ImmediateNeed,
 	ctx: NPCDataStructures.ContextSnapshot,
 	scoring_tables: Dictionary,
 ) -> void:
-	for option in options:
+	for option: NPCDataStructures.ScoredAction in options:
 		option.objective_alignment = _lookup_objective_alignment(
 			need.need_type, option.action_id, scoring_tables
 		)
@@ -178,7 +178,7 @@ static func score_all(
 # Highest total wins. Tiebreakers: ObjAlign > disposition > lower AP > seed.
 
 static func select_action(
-	options: Array,
+	options: Array[NPCDataStructures.ScoredAction],
 	ctx: NPCDataStructures.ContextSnapshot,
 ) -> NPCDataStructures.ScoredAction:
 	if options.is_empty():
@@ -269,10 +269,10 @@ static func _compare_scored_actions(a: NPCDataStructures.ScoredAction, b: NPCDat
 
 # -- Fallback action when all options filtered out ----------------------------
 
-static func _get_fallback_action(ctx: NPCDataStructures.ContextSnapshot) -> NPCDataStructures.ScoredAction:
+static func _get_fallback_action(_ctx: NPCDataStructures.ContextSnapshot) -> NPCDataStructures.ScoredAction:
 	var fallback := NPCDataStructures.ScoredAction.new()
 	fallback.action_id = "DO_NOTHING"
-	fallback.ap_cost = 1
+	fallback.ap_cost = 0
 	return fallback
 
 
@@ -419,18 +419,18 @@ static func _is_action_blocked(
 	ctx: NPCDataStructures.ContextSnapshot,
 	filter_data: Dictionary,
 ) -> bool:
-	# Check bushido virtue blocks
-	if ctx.bushido_virtue != "":
+	if ctx.bushido_virtue != Enums.BushidoVirtue.NONE:
+		var virtue_name: String = Enums.bushido_virtue_name(ctx.bushido_virtue)
 		var bushido_filters: Dictionary = filter_data.get("bushido", {})
-		var virtue_filter: Dictionary = bushido_filters.get(ctx.bushido_virtue, {})
+		var virtue_filter: Dictionary = bushido_filters.get(virtue_name, {})
 		var always_blocked: Array = virtue_filter.get("always_blocked", [])
 		if action_id in always_blocked:
 			return true
 
-	# Check shourido virtue blocks
-	if ctx.shourido_virtue != "":
+	if ctx.shourido_virtue != Enums.ShouridoVirtue.NONE:
+		var virtue_name: String = Enums.shourido_virtue_name(ctx.shourido_virtue)
 		var shourido_filters: Dictionary = filter_data.get("shourido", {})
-		var virtue_filter: Dictionary = shourido_filters.get(ctx.shourido_virtue, {})
+		var virtue_filter: Dictionary = shourido_filters.get(virtue_name, {})
 		var always_blocked: Array = virtue_filter.get("always_blocked", [])
 		if action_id in always_blocked:
 			return true
@@ -473,19 +473,21 @@ static func _lookup_disposition_modifier(
 
 static func _lookup_personality_lean(
 	action_id: String,
-	bushido_virtue: String,
-	shourido_virtue: String,
+	bushido_virtue: Enums.BushidoVirtue,
+	shourido_virtue: Enums.ShouridoVirtue,
 	scoring_tables: Dictionary,
 ) -> float:
 	var lean_table: Dictionary = scoring_tables.get("personality_lean", {})
 	var total: float = 0.0
 
-	if bushido_virtue != "":
-		var bushido_leans: Dictionary = lean_table.get(bushido_virtue, {})
+	if bushido_virtue != Enums.BushidoVirtue.NONE:
+		var virtue_name: String = Enums.bushido_virtue_name(bushido_virtue)
+		var bushido_leans: Dictionary = lean_table.get(virtue_name, {})
 		total += float(bushido_leans.get(action_id, 0))
 
-	if shourido_virtue != "":
-		var shourido_leans: Dictionary = lean_table.get(shourido_virtue, {})
+	if shourido_virtue != Enums.ShouridoVirtue.NONE:
+		var virtue_name: String = Enums.shourido_virtue_name(shourido_virtue)
+		var shourido_leans: Dictionary = lean_table.get(virtue_name, {})
 		total += float(shourido_leans.get(action_id, 0))
 
 	return clampf(total, -15.0, 15.0)
