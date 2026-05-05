@@ -123,6 +123,11 @@ extends Resource
 @export var last_medicine_treatment_ic_day: int = 0
 @export var rested_last_night: bool = true
 
+# -- Action Points (Section 14.1) ----------------------------------------------
+
+@export var action_points_current: int = 2
+@export var action_points_max: int = 2
+
 # -- Civilian Order Budget -----------------------------------------------------
 
 @export var civilian_order_budget_max: int = 0

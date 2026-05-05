@@ -58,6 +58,38 @@ const RING_TRAITS: Dictionary = {
 	Ring.VOID: [Trait.VOID],
 }
 
+enum ContextFlag {
+	AT_OWN_HOLDINGS,
+	AT_COURT,
+	VISITING,
+	TRAVELING,
+	ON_CAMPAIGN,
+	UNDER_SIEGE,
+	IN_EXILE,
+	AT_TEMPLE,
+	AT_DOJO,
+}
+
+enum BushidoVirtue {
+	JIN,
+	YU,
+	REI,
+	CHUGI,
+	GI,
+	MEIYO,
+	MAKOTO,
+}
+
+enum ShouridoVirtue {
+	SEIGYO,
+	KETSUI,
+	DOSATSU,
+	CHISHIKI,
+	KANPEKI,
+	KYORYOKU,
+	ISHI,
+}
+
 const WOUND_PENALTIES: Dictionary = {
 	WoundLevel.HEALTHY: 0,
 	WoundLevel.NICKED: -3,

@@ -1,0 +1,611 @@
+class_name NPCDecisionEngine
+## The Seven-Phase Decision Loop per GDD s55.4.
+## Runs identically for every named NPC regardless of context.
+## Pure data — no Node inheritance, no scene tree dependency.
+
+
+# -- Phase 1: Build Context ----------------------------------------------------
+
+static func build_context(character: L5RCharacterData, world_state: Dictionary) -> NPCDataStructures.ContextSnapshot:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+
+	# Identity
+	ctx.character_id = character.character_id
+	ctx.character_name = character.character_name
+	ctx.clan = character.clan
+	ctx.family = character.family
+	ctx.school_type = character.school_type
+	ctx.is_lord = world_state.get("is_lord", false)
+
+	# Location & situation
+	ctx.location_id = character.physical_location
+	ctx.context_flag = world_state.get("context_flag", Enums.ContextFlag.AT_OWN_HOLDINGS)
+	ctx.season = world_state.get("season", 0)
+	ctx.ic_day = world_state.get("ic_day", 0)
+
+	# Stats
+	ctx.skill_ranks = character.skills.duplicate()
+	ctx.honor = character.honor
+	ctx.glory = character.glory
+	ctx.status = character.status
+	ctx.insight_rank = CharacterStats.get_insight_rank(character)
+
+	# Social knowledge — read through legitimate channels only (GDD s20)
+	ctx.characters_present = world_state.get("characters_present", [] as Array[int])
+	ctx.dispositions = character.disposition_values.duplicate()
+	ctx.known_topics = world_state.get("known_topics", [] as Array[int])
+	ctx.known_positions = world_state.get("known_positions", {})
+	ctx.known_objectives = world_state.get("known_objectives", {})
+	ctx.known_contacts = world_state.get("known_contacts", [] as Array[int])
+	ctx.met_characters = character.met_characters.duplicate()
+
+	# Lord-tier fields
+	if ctx.is_lord:
+		ctx.resource_stockpiles = world_state.get("resource_stockpiles", {})
+		ctx.province_statuses = world_state.get("province_statuses", [])
+
+	# State
+	ctx.pending_events = world_state.get("pending_events", [])
+	ctx.ap_remaining = character.action_points_current
+	ctx.action_log = world_state.get("action_log", [] as Array[String])
+
+	# Personality
+	ctx.bushido_virtue = character.bushido_virtue
+	ctx.shourido_virtue = character.shourido_virtue
+
+	return ctx
+
+
+# -- Phase 2: Resolve Goal & Decompose ----------------------------------------
+# Priority cascade: Reactive Event > Crisis Override > Primary Objective >
+# Standing Objective. Winner decomposes into an ImmediateNeed.
+
+static func resolve_goal(
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	objectives: Dictionary,
+) -> NPCDataStructures.ImmediateNeed:
+	# Check reactive events first
+	if ctx.pending_events.size() > 0:
+		var reactive_need := _decompose_reactive_event(ctx.pending_events[0], ctx)
+		if reactive_need != null:
+			return reactive_need
+
+	# Crisis override
+	var crisis_need := _check_crisis_override(ctx, objectives)
+	if crisis_need != null:
+		return crisis_need
+
+	# Primary objective
+	var primary: Dictionary = objectives.get("primary", {})
+	if primary.size() > 0:
+		var primary_need := _decompose_objective(primary, ctx)
+		if primary_need != null:
+			return primary_need
+
+	# Standing objective fallback
+	var standing: Dictionary = objectives.get("standing", {})
+	if standing.size() > 0:
+		var standing_need := _decompose_objective(standing, ctx)
+		if standing_need != null:
+			return standing_need
+
+	# Absolute fallback — maintenance
+	var fallback := NPCDataStructures.ImmediateNeed.new()
+	fallback.need_type = "REST"
+	fallback.priority = 3
+	return fallback
+
+
+# -- Phase 3: Generate Options -------------------------------------------------
+# Lists every ActionID available given the ContextFlag.
+
+static func generate_options(
+	ctx: NPCDataStructures.ContextSnapshot,
+	need: NPCDataStructures.ImmediateNeed,
+) -> Array:
+	var options: Array = []
+	var available_actions: Array[String] = _get_actions_for_context(ctx.context_flag)
+
+	for action_id in available_actions:
+		var option := NPCDataStructures.ScoredAction.new()
+		option.action_id = action_id
+		option.target_npc_id = need.target_npc_id
+		option.target_npc_id_secondary = need.target_npc_id_secondary
+		option.target_settlement_id = need.target_settlement_id
+		option.target_province_id = need.target_province_id
+		option.ap_cost = _get_ap_cost(action_id)
+		options.append(option)
+
+	return options
+
+
+# -- Phase 4: Personality Filter -----------------------------------------------
+# Hard removal of blocked actions. No score can override this gate.
+
+static func apply_personality_filter(
+	options: Array,
+	ctx: NPCDataStructures.ContextSnapshot,
+	filter_data: Dictionary,
+) -> Array:
+	var filtered: Array = []
+
+	for option in options:
+		if _is_action_blocked(option.action_id, ctx, filter_data):
+			continue
+		filtered.append(option)
+
+	return filtered
+
+
+# -- Phase 5: Score All Options ------------------------------------------------
+# Eight components per s55.4.5 / s55.3.3.
+
+static func score_all(
+	options: Array,
+	need: NPCDataStructures.ImmediateNeed,
+	ctx: NPCDataStructures.ContextSnapshot,
+	scoring_tables: Dictionary,
+) -> void:
+	for option in options:
+		option.objective_alignment = _lookup_objective_alignment(
+			need.need_type, option.action_id, scoring_tables
+		)
+		option.disposition_modifier = _lookup_disposition_modifier(
+			option.target_npc_id, ctx.dispositions, scoring_tables
+		)
+		option.personality_lean = _lookup_personality_lean(
+			option.action_id, ctx.bushido_virtue, ctx.shourido_virtue, scoring_tables
+		)
+		option.competence_modifier = _compute_competence_modifier(
+			option.action_id, ctx.skill_ranks, scoring_tables
+		)
+		option.urgency_bonus = _compute_urgency_bonus(
+			need, ctx, scoring_tables
+		)
+		option.standing_influence = _compute_standing_influence(
+			option.action_id, ctx, scoring_tables
+		)
+		option.topic_position_modifier = _compute_topic_position_modifier(
+			option.action_id, need, ctx, scoring_tables
+		)
+		option.resource_modifier = _compute_resource_modifier(
+			option, ctx, scoring_tables
+		)
+
+
+# -- Phase 6: Selection -------------------------------------------------------
+# Highest total wins. Tiebreakers: ObjAlign > disposition > lower AP > seed.
+
+static func select_action(
+	options: Array,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> NPCDataStructures.ScoredAction:
+	if options.is_empty():
+		return _get_fallback_action(ctx)
+
+	options.sort_custom(_compare_scored_actions)
+	return options[0]
+
+
+# -- Phase 7: Execution -------------------------------------------------------
+# Deducts AP and returns an action record dictionary.
+
+static func execute_action(
+	chosen: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> Dictionary:
+	var result := ActionPointSystem.spend_ap(character, chosen.ap_cost)
+	if not result["success"]:
+		return {
+			"success": false,
+			"reason": "insufficient_ap",
+			"action_id": chosen.action_id,
+		}
+
+	return {
+		"success": true,
+		"action_id": chosen.action_id,
+		"target_npc_id": chosen.target_npc_id,
+		"target_npc_id_secondary": chosen.target_npc_id_secondary,
+		"target_settlement_id": chosen.target_settlement_id,
+		"target_province_id": chosen.target_province_id,
+		"ap_spent": chosen.ap_cost,
+		"total_score": chosen.get_total_score(),
+		"character_id": ctx.character_id,
+		"ic_day": ctx.ic_day,
+	}
+
+
+# -- Main Entry Point ----------------------------------------------------------
+# Runs the full seven-phase loop for one NPC spending one AP.
+
+static func run(
+	character: L5RCharacterData,
+	world_state: Dictionary,
+	objectives: Dictionary,
+	scoring_tables: Dictionary,
+	filter_data: Dictionary,
+) -> Dictionary:
+	# Phase 1
+	var ctx := build_context(character, world_state)
+
+	# Phase 2
+	var need := resolve_goal(character, ctx, objectives)
+
+	# Phase 3
+	var options := generate_options(ctx, need)
+
+	# Phase 4
+	options = apply_personality_filter(options, ctx, filter_data)
+
+	# Phase 5
+	score_all(options, need, ctx, scoring_tables)
+
+	# Phase 6
+	var chosen := select_action(options, ctx)
+
+	# Phase 7
+	return execute_action(chosen, character, ctx)
+
+
+# -- Comparison for Phase 6 tiebreakers ---------------------------------------
+
+static func _compare_scored_actions(a: NPCDataStructures.ScoredAction, b: NPCDataStructures.ScoredAction) -> bool:
+	var score_a := a.get_total_score()
+	var score_b := b.get_total_score()
+	if score_a != score_b:
+		return score_a > score_b
+	if a.objective_alignment != b.objective_alignment:
+		return a.objective_alignment > b.objective_alignment
+	if a.disposition_modifier != b.disposition_modifier:
+		return a.disposition_modifier > b.disposition_modifier
+	if a.ap_cost != b.ap_cost:
+		return a.ap_cost < b.ap_cost
+	# Deterministic seed: lower action_id string wins
+	return a.action_id < b.action_id
+
+
+# -- Fallback action when all options filtered out ----------------------------
+
+static func _get_fallback_action(ctx: NPCDataStructures.ContextSnapshot) -> NPCDataStructures.ScoredAction:
+	var fallback := NPCDataStructures.ScoredAction.new()
+	fallback.action_id = "DO_NOTHING"
+	fallback.ap_cost = 1
+	return fallback
+
+
+# -- Stub helpers (to be replaced by JSON table loaders) ----------------------
+
+static func _decompose_reactive_event(
+	event: Variant,
+	_ctx: NPCDataStructures.ContextSnapshot,
+) -> NPCDataStructures.ImmediateNeed:
+	if event is Dictionary and event.has("need_type"):
+		var need := NPCDataStructures.ImmediateNeed.new()
+		need.need_type = event["need_type"]
+		need.priority = event.get("priority", 1)
+		need.target_npc_id = event.get("target_npc_id", -1)
+		need.target_npc_id_secondary = event.get("target_npc_id_secondary", -1)
+		need.target_settlement_id = event.get("target_settlement_id", -1)
+		need.target_province_id = event.get("target_province_id", -1)
+		need.target_clan_id = event.get("target_clan_id", "")
+		need.source = event.get("source", "reactive")
+		return need
+	return null
+
+
+static func _check_crisis_override(
+	ctx: NPCDataStructures.ContextSnapshot,
+	_objectives: Dictionary,
+) -> NPCDataStructures.ImmediateNeed:
+	if not ctx.is_lord:
+		return null
+
+	for ps in ctx.province_statuses:
+		if ps is NPCDataStructures.ProvinceStatus and ps.active_crisis_id >= 0:
+			var need := NPCDataStructures.ImmediateNeed.new()
+			need.need_type = "DEFEND_PROVINCE"
+			need.priority = 1
+			need.target_province_id = ps.province_id
+			need.source = "crisis_override"
+			return need
+
+	return null
+
+
+static func _decompose_objective(
+	objective: Dictionary,
+	_ctx: NPCDataStructures.ContextSnapshot,
+) -> NPCDataStructures.ImmediateNeed:
+	if not objective.has("need_type"):
+		return null
+
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = objective["need_type"]
+	need.priority = objective.get("priority", 2)
+	need.target_npc_id = objective.get("target_npc_id", -1)
+	need.target_npc_id_secondary = objective.get("target_npc_id_secondary", -1)
+	need.target_settlement_id = objective.get("target_settlement_id", -1)
+	need.target_province_id = objective.get("target_province_id", -1)
+	need.target_clan_id = objective.get("target_clan_id", "")
+	need.target_topic_id = objective.get("target_topic_id", -1)
+	need.target_resource = objective.get("target_resource", "")
+	need.target_army_id = objective.get("target_army_id", -1)
+	need.target_intent = objective.get("target_intent", "")
+	need.threshold = objective.get("threshold", 0.0)
+	need.threshold_type = objective.get("threshold_type", "")
+	need.source = objective.get("source", "objective")
+	return need
+
+
+static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array[String]:
+	match context_flag:
+		Enums.ContextFlag.AT_OWN_HOLDINGS:
+			return [
+				"WRITE_LETTER", "TRAIN", "DO_NOTHING", "ASSESS_PROVINCE_STATUS",
+				"INVESTIGATE_PROVINCE", "ORDER_PATROL", "REST",
+			]
+		Enums.ContextFlag.AT_COURT:
+			return [
+				"CHARM", "INTIMIDATE", "GOSSIP", "PUBLIC_DEBATE",
+				"ASK_FOR_INTRODUCTION", "OBSERVE_COURT_ATTENDEES",
+				"WRITE_LETTER", "TRAIN", "DO_NOTHING", "REST",
+			]
+		Enums.ContextFlag.VISITING:
+			return [
+				"CHARM", "INTIMIDATE", "GOSSIP", "WRITE_LETTER",
+				"ASK_FOR_INTRODUCTION", "TRAIN", "DO_NOTHING", "REST",
+			]
+		Enums.ContextFlag.TRAVELING:
+			return [
+				"WRITE_LETTER", "TRAIN", "DO_NOTHING", "REST",
+			]
+		Enums.ContextFlag.ON_CAMPAIGN:
+			return [
+				"ORDER_BATTLE", "CONDUCT_RAID", "RAID_HARVEST",
+				"WRITE_LETTER", "TRAIN", "DO_NOTHING", "REST",
+			]
+		Enums.ContextFlag.UNDER_SIEGE:
+			return [
+				"CONDUCT_SORTIE", "NEGOTIATE_SURRENDER", "MAINTAIN_SIEGE",
+				"WRITE_LETTER", "DO_NOTHING", "REST",
+			]
+		Enums.ContextFlag.AT_TEMPLE:
+			return [
+				"PERFORM_RITUAL", "PUBLIC_ATONEMENT", "TRAIN",
+				"WRITE_LETTER", "DO_NOTHING", "REST",
+			]
+		Enums.ContextFlag.AT_DOJO:
+			return [
+				"TRAIN", "MENTOR", "WRITE_LETTER", "DO_NOTHING", "REST",
+			]
+		_:
+			return ["DO_NOTHING", "REST"]
+
+
+static func _get_ap_cost(action_id: String) -> int:
+	var costs: Dictionary = {
+		"DO_NOTHING": 1,
+		"REST": 1,
+		"TRAIN": 1,
+		"WRITE_LETTER": 1,
+		"CHARM": 1,
+		"INTIMIDATE": 1,
+		"GOSSIP": 1,
+		"PUBLIC_DEBATE": 1,
+		"ASK_FOR_INTRODUCTION": 1,
+		"OBSERVE_COURT_ATTENDEES": 1,
+		"ASSESS_PROVINCE_STATUS": 1,
+		"INVESTIGATE_PROVINCE": 1,
+		"INVESTIGATE_RUMOR": 1,
+		"ORDER_PATROL": 1,
+		"ORDER_BATTLE": 1,
+		"CONDUCT_RAID": 1,
+		"RAID_HARVEST": 1,
+		"CONDUCT_SORTIE": 1,
+		"NEGOTIATE_SURRENDER": 1,
+		"MAINTAIN_SIEGE": 1,
+		"PERFORM_RITUAL": 1,
+		"PUBLIC_ATONEMENT": 1,
+		"MENTOR": 1,
+	}
+	return costs.get(action_id, 1)
+
+
+static func _is_action_blocked(
+	action_id: String,
+	ctx: NPCDataStructures.ContextSnapshot,
+	filter_data: Dictionary,
+) -> bool:
+	# Check bushido virtue blocks
+	if ctx.bushido_virtue != "":
+		var bushido_filters: Dictionary = filter_data.get("bushido", {})
+		var virtue_filter: Dictionary = bushido_filters.get(ctx.bushido_virtue, {})
+		var always_blocked: Array = virtue_filter.get("always_blocked", [])
+		if action_id in always_blocked:
+			return true
+
+	# Check shourido virtue blocks
+	if ctx.shourido_virtue != "":
+		var shourido_filters: Dictionary = filter_data.get("shourido", {})
+		var virtue_filter: Dictionary = shourido_filters.get(ctx.shourido_virtue, {})
+		var always_blocked: Array = virtue_filter.get("always_blocked", [])
+		if action_id in always_blocked:
+			return true
+
+	return false
+
+
+static func _lookup_objective_alignment(
+	need_type: String,
+	action_id: String,
+	scoring_tables: Dictionary,
+) -> float:
+	var alignment_table: Dictionary = scoring_tables.get("objective_alignment", {})
+	var need_entry: Dictionary = alignment_table.get(need_type, {})
+	if not need_entry.has(action_id):
+		return 0.0
+	return float(need_entry[action_id])
+
+
+static func _lookup_disposition_modifier(
+	target_npc_id: int,
+	dispositions: Dictionary,
+	scoring_tables: Dictionary,
+) -> float:
+	if target_npc_id < 0:
+		return 0.0
+
+	var disp_value: float = float(dispositions.get(target_npc_id, 0))
+	var tiers: Array = scoring_tables.get("disposition_tiers", [])
+
+	for tier in tiers:
+		if tier is Dictionary:
+			var min_val: float = float(tier.get("min", -100))
+			var max_val: float = float(tier.get("max", 100))
+			if disp_value >= min_val and disp_value <= max_val:
+				return float(tier.get("cooperative", 0))
+
+	return 0.0
+
+
+static func _lookup_personality_lean(
+	action_id: String,
+	bushido_virtue: String,
+	shourido_virtue: String,
+	scoring_tables: Dictionary,
+) -> float:
+	var lean_table: Dictionary = scoring_tables.get("personality_lean", {})
+	var total: float = 0.0
+
+	if bushido_virtue != "":
+		var bushido_leans: Dictionary = lean_table.get(bushido_virtue, {})
+		total += float(bushido_leans.get(action_id, 0))
+
+	if shourido_virtue != "":
+		var shourido_leans: Dictionary = lean_table.get(shourido_virtue, {})
+		total += float(shourido_leans.get(action_id, 0))
+
+	return clampf(total, -15.0, 15.0)
+
+
+static func _compute_competence_modifier(
+	action_id: String,
+	skill_ranks: Dictionary,
+	scoring_tables: Dictionary,
+) -> float:
+	var skill_map: Dictionary = scoring_tables.get("action_skill_map", {})
+	var action_skills: Dictionary = skill_map.get(action_id, {})
+
+	var primary_skill: String = action_skills.get("primary", "")
+	if primary_skill == "":
+		return 0.0
+
+	var rank: int = int(skill_ranks.get(primary_skill, 0))
+	var modifier: float = float(NPCDataStructures.get_competence_modifier(rank))
+
+	var secondary_skill: String = action_skills.get("secondary", "")
+	if secondary_skill != "":
+		var sec_rank: int = int(skill_ranks.get(secondary_skill, 0))
+		modifier += float(NPCDataStructures.get_competence_modifier(sec_rank)) * 0.5
+
+	return clampf(modifier, -20.0, 20.0)
+
+
+static func _compute_urgency_bonus(
+	need: NPCDataStructures.ImmediateNeed,
+	_ctx: NPCDataStructures.ContextSnapshot,
+	scoring_tables: Dictionary,
+) -> float:
+	var urgency_rules: Array = scoring_tables.get("urgency_rules", [])
+	var bonus: float = 0.0
+
+	for rule in urgency_rules:
+		if rule is Dictionary:
+			var condition: String = rule.get("condition", "")
+			if _evaluate_urgency_condition(condition, need):
+				bonus += float(rule.get("bonus", 0))
+
+	return clampf(bonus, 0.0, 30.0)
+
+
+static func _evaluate_urgency_condition(
+	condition: String,
+	need: NPCDataStructures.ImmediateNeed,
+) -> bool:
+	match condition:
+		"priority_1":
+			return need.priority == 1
+		"priority_2":
+			return need.priority == 2
+		_:
+			return false
+
+
+static func _compute_standing_influence(
+	action_id: String,
+	ctx: NPCDataStructures.ContextSnapshot,
+	scoring_tables: Dictionary,
+) -> float:
+	var standing_need_type: String = ctx.known_objectives.get("standing_need_type", "")
+	if standing_need_type == "":
+		return 0.0
+
+	var alignment_table: Dictionary = scoring_tables.get("objective_alignment", {})
+	var need_entry: Dictionary = alignment_table.get(standing_need_type, {})
+	if not need_entry.has(action_id):
+		return 0.0
+
+	var raw: float = float(need_entry[action_id]) / 10.0
+	return clampf(raw, 0.0, 15.0)
+
+
+static func _compute_topic_position_modifier(
+	_action_id: String,
+	need: NPCDataStructures.ImmediateNeed,
+	ctx: NPCDataStructures.ContextSnapshot,
+	scoring_tables: Dictionary,
+) -> float:
+	if ctx.known_topics.is_empty():
+		return 0.0
+
+	var topic_table: Dictionary = scoring_tables.get("topic_position_alignment", {})
+	var need_entry: Dictionary = topic_table.get(need.need_type, {})
+	if need_entry.is_empty():
+		return 0.0
+
+	var best_modifier: float = 0.0
+	for topic_id in ctx.known_topics:
+		var position: float = float(ctx.known_positions.get(topic_id, 0))
+		var modifier: float = _interpolate_topic_position(position, need_entry)
+		if absf(modifier) > absf(best_modifier):
+			best_modifier = modifier
+
+	return clampf(best_modifier, -15.0, 15.0)
+
+
+static func _interpolate_topic_position(
+	position: float,
+	_need_entry: Dictionary,
+) -> float:
+	if position <= -50.0:
+		return -15.0
+	if position >= 50.0:
+		return 15.0
+	if position >= -15.0 and position <= 15.0:
+		return 0.0
+	if position < -15.0:
+		return lerpf(0.0, -15.0, (absf(position) - 15.0) / 35.0)
+	return lerpf(0.0, 15.0, (position - 15.0) / 35.0)
+
+
+static func _compute_resource_modifier(
+	_option: NPCDataStructures.ScoredAction,
+	_ctx: NPCDataStructures.ContextSnapshot,
+	_scoring_tables: Dictionary,
+) -> float:
+	# Resource modifier is 0 to -40 per s55.32.
+	# Full implementation requires resource availability checks.
+	return 0.0
