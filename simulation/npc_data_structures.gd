@@ -92,8 +92,8 @@ class ContextSnapshot:
 	var action_log: Array[String] = []
 
 	# Personality
-	var bushido_virtue: String = ""
-	var shourido_virtue: String = ""
+	var bushido_virtue: Enums.BushidoVirtue = Enums.BushidoVirtue.NONE
+	var shourido_virtue: Enums.ShouridoVirtue = Enums.ShouridoVirtue.NONE
 
 
 class ProvinceStatus:

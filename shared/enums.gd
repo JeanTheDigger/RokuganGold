@@ -2,6 +2,7 @@ class_name Enums
 
 
 enum Ring {
+	NONE = -1,
 	AIR,
 	EARTH,
 	FIRE,
@@ -10,6 +11,7 @@ enum Ring {
 }
 
 enum Trait {
+	NONE = -1,
 	REFLEXES,
 	AWARENESS,
 	STAMINA,
@@ -71,6 +73,7 @@ enum ContextFlag {
 }
 
 enum BushidoVirtue {
+	NONE = -1,
 	JIN,
 	YU,
 	REI,
@@ -81,6 +84,7 @@ enum BushidoVirtue {
 }
 
 enum ShouridoVirtue {
+	NONE = -1,
 	SEIGYO,
 	KETSUI,
 	DOSATSU,
@@ -88,6 +92,29 @@ enum ShouridoVirtue {
 	KANPEKI,
 	KYORYOKU,
 	ISHI,
+}
+
+enum TerrainType {
+	PLAINS,
+	RIVER_DELTA,
+	FOREST,
+	HILLS,
+	MOUNTAINS,
+}
+
+enum SettlementType {
+	VILLAGE,
+	TOWN,
+	CITY,
+	IMPERIAL_CAPITAL,
+	FORTIFICATION,
+	KEEP,
+	CASTLE,
+	FAMILY_CASTLE,
+	WALL_TOWER,
+	TEMPLE,
+	SHINDEN,
+	MONASTERY,
 }
 
 const WOUND_PENALTIES: Dictionary = {
@@ -101,3 +128,39 @@ const WOUND_PENALTIES: Dictionary = {
 	WoundLevel.OUT: 0,
 	WoundLevel.DEAD: 0,
 }
+
+const TERRAIN_RICE_MULTIPLIER: Dictionary = {
+	TerrainType.PLAINS: 1.0,
+	TerrainType.RIVER_DELTA: 1.5,
+	TerrainType.FOREST: 0.75,
+	TerrainType.HILLS: 0.75,
+	TerrainType.MOUNTAINS: 0.5,
+}
+
+const MILITARY_SETTLEMENT_TYPES: Array[SettlementType] = [
+	SettlementType.FORTIFICATION,
+	SettlementType.KEEP,
+	SettlementType.CASTLE,
+	SettlementType.FAMILY_CASTLE,
+	SettlementType.WALL_TOWER,
+]
+
+const RELIGIOUS_SETTLEMENT_TYPES: Array[SettlementType] = [
+	SettlementType.TEMPLE,
+	SettlementType.SHINDEN,
+	SettlementType.MONASTERY,
+]
+
+
+static func bushido_virtue_name(v: BushidoVirtue) -> String:
+	var idx: int = BushidoVirtue.values().find(v)
+	if idx < 0:
+		return ""
+	return BushidoVirtue.keys()[idx]
+
+
+static func shourido_virtue_name(v: ShouridoVirtue) -> String:
+	var idx: int = ShouridoVirtue.values().find(v)
+	if idx < 0:
+		return ""
+	return ShouridoVirtue.keys()[idx]

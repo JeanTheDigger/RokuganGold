@@ -15,8 +15,8 @@ func before_each() -> void:
 	_char.clan = "Crane"
 	_char.family = "Doji"
 	_char.school_type = Enums.SchoolType.COURTIER
-	_char.bushido_virtue = "REI"
-	_char.shourido_virtue = ""
+	_char.bushido_virtue = Enums.BushidoVirtue.REI
+	_char.shourido_virtue = Enums.ShouridoVirtue.NONE
 	_char.honor = 5.0
 	_char.glory = 3.0
 	_char.status = 4.0
@@ -130,7 +130,7 @@ func test_build_context_social() -> void:
 
 func test_build_context_personality() -> void:
 	var ctx := NPCDecisionEngine.build_context(_char, _world_state)
-	assert_eq(ctx.bushido_virtue, "REI")
+	assert_eq(ctx.bushido_virtue, Enums.BushidoVirtue.REI)
 
 
 func test_build_context_lord_tier() -> void:
@@ -241,7 +241,7 @@ func test_generate_options_carry_target() -> void:
 
 func test_filter_blocks_action() -> void:
 	var ctx := NPCDecisionEngine.build_context(_char, _world_state)
-	var options: Array = []
+	var options: Array[NPCDataStructures.ScoredAction] = []
 	var charm := NPCDataStructures.ScoredAction.new()
 	charm.action_id = "CHARM"
 	options.append(charm)
@@ -256,9 +256,9 @@ func test_filter_blocks_action() -> void:
 
 func test_filter_no_blocks_pass_through() -> void:
 	var ctx := NPCDecisionEngine.build_context(_char, _world_state)
-	ctx.bushido_virtue = ""
-	ctx.shourido_virtue = ""
-	var options: Array = []
+	ctx.bushido_virtue = Enums.BushidoVirtue.NONE
+	ctx.shourido_virtue = Enums.ShouridoVirtue.NONE
+	var options: Array[NPCDataStructures.ScoredAction] = []
 	var charm := NPCDataStructures.ScoredAction.new()
 	charm.action_id = "CHARM"
 	options.append(charm)

@@ -103,11 +103,11 @@ static func resolve_goal(
 static func generate_options(
 	ctx: NPCDataStructures.ContextSnapshot,
 	need: NPCDataStructures.ImmediateNeed,
-) -> Array:
-	var options: Array = []
+) -> Array[NPCDataStructures.ScoredAction]:
+	var options: Array[NPCDataStructures.ScoredAction] = []
 	var available_actions: Array[String] = _get_actions_for_context(ctx.context_flag)
 
-	for action_id in available_actions:
+	for action_id: String in available_actions:
 		var option := NPCDataStructures.ScoredAction.new()
 		option.action_id = action_id
 		option.target_npc_id = need.target_npc_id
@@ -124,13 +124,13 @@ static func generate_options(
 # Hard removal of blocked actions. No score can override this gate.
 
 static func apply_personality_filter(
-	options: Array,
+	options: Array[NPCDataStructures.ScoredAction],
 	ctx: NPCDataStructures.ContextSnapshot,
 	filter_data: Dictionary,
-) -> Array:
-	var filtered: Array = []
+) -> Array[NPCDataStructures.ScoredAction]:
+	var filtered: Array[NPCDataStructures.ScoredAction] = []
 
-	for option in options:
+	for option: NPCDataStructures.ScoredAction in options:
 		if _is_action_blocked(option.action_id, ctx, filter_data):
 			continue
 		filtered.append(option)
@@ -142,12 +142,12 @@ static func apply_personality_filter(
 # Eight components per s55.4.5 / s55.3.3.
 
 static func score_all(
-	options: Array,
+	options: Array[NPCDataStructures.ScoredAction],
 	need: NPCDataStructures.ImmediateNeed,
 	ctx: NPCDataStructures.ContextSnapshot,
 	scoring_tables: Dictionary,
 ) -> void:
-	for option in options:
+	for option: NPCDataStructures.ScoredAction in options:
 		option.objective_alignment = _lookup_objective_alignment(
 			need.need_type, option.action_id, scoring_tables
 		)
@@ -178,7 +178,7 @@ static func score_all(
 # Highest total wins. Tiebreakers: ObjAlign > disposition > lower AP > seed.
 
 static func select_action(
-	options: Array,
+	options: Array[NPCDataStructures.ScoredAction],
 	ctx: NPCDataStructures.ContextSnapshot,
 ) -> NPCDataStructures.ScoredAction:
 	if options.is_empty():
@@ -269,10 +269,10 @@ static func _compare_scored_actions(a: NPCDataStructures.ScoredAction, b: NPCDat
 
 # -- Fallback action when all options filtered out ----------------------------
 
-static func _get_fallback_action(ctx: NPCDataStructures.ContextSnapshot) -> NPCDataStructures.ScoredAction:
+static func _get_fallback_action(_ctx: NPCDataStructures.ContextSnapshot) -> NPCDataStructures.ScoredAction:
 	var fallback := NPCDataStructures.ScoredAction.new()
 	fallback.action_id = "DO_NOTHING"
-	fallback.ap_cost = 1
+	fallback.ap_cost = 0
 	return fallback
 
 
@@ -317,69 +317,87 @@ static func _check_crisis_override(
 
 static func _decompose_objective(
 	objective: Dictionary,
-	_ctx: NPCDataStructures.ContextSnapshot,
+	ctx: NPCDataStructures.ContextSnapshot,
 ) -> NPCDataStructures.ImmediateNeed:
 	if not objective.has("need_type"):
 		return null
-
-	var need := NPCDataStructures.ImmediateNeed.new()
-	need.need_type = objective["need_type"]
-	need.priority = objective.get("priority", 2)
-	need.target_npc_id = objective.get("target_npc_id", -1)
-	need.target_npc_id_secondary = objective.get("target_npc_id_secondary", -1)
-	need.target_settlement_id = objective.get("target_settlement_id", -1)
-	need.target_province_id = objective.get("target_province_id", -1)
-	need.target_clan_id = objective.get("target_clan_id", "")
-	need.target_topic_id = objective.get("target_topic_id", -1)
-	need.target_resource = objective.get("target_resource", "")
-	need.target_army_id = objective.get("target_army_id", -1)
-	need.target_intent = objective.get("target_intent", "")
-	need.threshold = objective.get("threshold", 0.0)
-	need.threshold_type = objective.get("threshold_type", "")
-	need.source = objective.get("source", "objective")
-	return need
+	return ObjectiveDecomposer.decompose(objective, ctx)
 
 
 static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array[String]:
 	match context_flag:
 		Enums.ContextFlag.AT_OWN_HOLDINGS:
 			return [
-				"WRITE_LETTER", "TRAIN", "DO_NOTHING", "ASSESS_PROVINCE_STATUS",
-				"INVESTIGATE_PROVINCE", "ORDER_PATROL", "REST",
+				"CHARM", "INTIMIDATE", "GOSSIP", "PERSUADE", "NEGOTIATE",
+				"PROBE", "READ_CHARACTER", "PUBLIC_DEBATE",
+				"ASK_FOR_INTRODUCTION", "OBSERVE_COURT_ATTENDEES",
+				"WRITE_LETTER", "TRAIN", "MEDITATE",
+				"ASSESS_PROVINCE_STATUS", "INVESTIGATE_PROVINCE",
+				"INVESTIGATE_RUMOR", "ORDER_PATROL",
+				"CRAFT", "MENTOR",
+				"DO_NOTHING", "REST",
 			]
 		Enums.ContextFlag.AT_COURT:
 			return [
-				"CHARM", "INTIMIDATE", "GOSSIP", "PUBLIC_DEBATE",
+				"CHARM", "INTIMIDATE", "GOSSIP", "PERSUADE", "NEGOTIATE",
+				"PROBE", "READ_CHARACTER", "LISTEN_REFLECT", "IMPRESS",
+				"PUBLIC_DEBATE", "PUBLIC_INSULT", "PUBLIC_DECLARATION",
+				"PUBLIC_PERFORMANCE", "DELIVER_GIFT", "OFFER_FAVOR",
+				"PERFORM_FOR", "DISCLOSE",
 				"ASK_FOR_INTRODUCTION", "OBSERVE_COURT_ATTENDEES",
-				"WRITE_LETTER", "TRAIN", "DO_NOTHING", "REST",
+				"WRITE_LETTER", "TRAIN", "MEDITATE",
+				"BRIBE_FOR_INFO", "EAVESDROP",
+				"INTERCEPT_LETTER", "SEARCH_QUARTERS",
+				"DO_NOTHING", "REST",
 			]
 		Enums.ContextFlag.VISITING:
 			return [
-				"CHARM", "INTIMIDATE", "GOSSIP", "WRITE_LETTER",
-				"ASK_FOR_INTRODUCTION", "TRAIN", "DO_NOTHING", "REST",
+				"CHARM", "INTIMIDATE", "GOSSIP", "PERSUADE", "NEGOTIATE",
+				"PROBE", "READ_CHARACTER", "LISTEN_REFLECT",
+				"DELIVER_GIFT", "OFFER_FAVOR",
+				"ASK_FOR_INTRODUCTION", "OBSERVE_COURT_ATTENDEES",
+				"WRITE_LETTER", "TRAIN", "MEDITATE",
+				"DO_NOTHING", "REST",
 			]
 		Enums.ContextFlag.TRAVELING:
 			return [
-				"WRITE_LETTER", "TRAIN", "DO_NOTHING", "REST",
+				"WRITE_LETTER", "TRAIN", "MEDITATE",
+				"DO_NOTHING", "REST",
 			]
 		Enums.ContextFlag.ON_CAMPAIGN:
 			return [
 				"ORDER_BATTLE", "CONDUCT_RAID", "RAID_HARVEST",
-				"WRITE_LETTER", "TRAIN", "DO_NOTHING", "REST",
+				"DRILL_TROOPS", "EVALUATE_WAR_READINESS",
+				"INTIMIDATE", "NEGOTIATE",
+				"WRITE_LETTER", "TRAIN",
+				"DO_NOTHING", "REST",
 			]
 		Enums.ContextFlag.UNDER_SIEGE:
 			return [
-				"CONDUCT_SORTIE", "NEGOTIATE_SURRENDER", "MAINTAIN_SIEGE",
-				"WRITE_LETTER", "DO_NOTHING", "REST",
+				"CONDUCT_SORTIE", "CONDUCT_STORM_ASSAULT",
+				"NEGOTIATE_SURRENDER", "MAINTAIN_SIEGE",
+				"WRITE_LETTER",
+				"DO_NOTHING", "REST",
+			]
+		Enums.ContextFlag.IN_EXILE:
+			return [
+				"WRITE_LETTER", "TRAIN", "MEDITATE",
+				"DO_NOTHING", "REST",
 			]
 		Enums.ContextFlag.AT_TEMPLE:
 			return [
-				"PERFORM_RITUAL", "PUBLIC_ATONEMENT", "TRAIN",
-				"WRITE_LETTER", "DO_NOTHING", "REST",
+				"PERFORM_RITUAL", "PERFORM_WORSHIP", "MEDITATE",
+				"PUBLIC_ATONEMENT", "TRAIN",
+				"CHARM", "PROBE", "READ_CHARACTER",
+				"WRITE_LETTER",
+				"DO_NOTHING", "REST",
 			]
 		Enums.ContextFlag.AT_DOJO:
 			return [
-				"TRAIN", "MENTOR", "WRITE_LETTER", "DO_NOTHING", "REST",
+				"TRAIN", "MENTOR", "DRILL_TROOPS",
+				"CHARM", "PROBE",
+				"WRITE_LETTER",
+				"DO_NOTHING", "REST",
 			]
 		_:
 			return ["DO_NOTHING", "REST"]
@@ -387,14 +405,27 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array[S
 
 static func _get_ap_cost(action_id: String) -> int:
 	var costs: Dictionary = {
-		"DO_NOTHING": 1,
+		"DO_NOTHING": 0,
 		"REST": 1,
 		"TRAIN": 1,
 		"WRITE_LETTER": 1,
 		"CHARM": 1,
 		"INTIMIDATE": 1,
 		"GOSSIP": 1,
+		"PERSUADE": 1,
+		"NEGOTIATE": 1,
+		"PROBE": 1,
+		"READ_CHARACTER": 1,
+		"LISTEN_REFLECT": 1,
+		"IMPRESS": 1,
 		"PUBLIC_DEBATE": 1,
+		"PUBLIC_INSULT": 1,
+		"PUBLIC_DECLARATION": 1,
+		"PUBLIC_PERFORMANCE": 1,
+		"DELIVER_GIFT": 1,
+		"OFFER_FAVOR": 1,
+		"PERFORM_FOR": 1,
+		"DISCLOSE": 1,
 		"ASK_FOR_INTRODUCTION": 1,
 		"OBSERVE_COURT_ATTENDEES": 1,
 		"ASSESS_PROVINCE_STATUS": 1,
@@ -405,11 +436,27 @@ static func _get_ap_cost(action_id: String) -> int:
 		"CONDUCT_RAID": 1,
 		"RAID_HARVEST": 1,
 		"CONDUCT_SORTIE": 1,
+		"CONDUCT_STORM_ASSAULT": 1,
 		"NEGOTIATE_SURRENDER": 1,
 		"MAINTAIN_SIEGE": 1,
 		"PERFORM_RITUAL": 1,
+		"PERFORM_WORSHIP": 1,
 		"PUBLIC_ATONEMENT": 1,
 		"MENTOR": 1,
+		"MEDITATE": 1,
+		"CRAFT": 1,
+		"DRILL_TROOPS": 1,
+		"EVALUATE_WAR_READINESS": 1,
+		"BRIBE_FOR_INFO": 1,
+		"EAVESDROP": 1,
+		"INTERCEPT_LETTER": 1,
+		"SEARCH_QUARTERS": 1,
+		"BEGIN_TRAVEL": 1,
+		"DISPATCH_COURTIER": 1,
+		"CONDUCT_COMMERCE": 1,
+		"ISSUE_DUEL_CHALLENGE": 1,
+		"SEEK_PRETEXT": 1,
+		"SHARE_SUPPLIES": 1,
 	}
 	return costs.get(action_id, 1)
 
@@ -419,18 +466,18 @@ static func _is_action_blocked(
 	ctx: NPCDataStructures.ContextSnapshot,
 	filter_data: Dictionary,
 ) -> bool:
-	# Check bushido virtue blocks
-	if ctx.bushido_virtue != "":
+	if ctx.bushido_virtue != Enums.BushidoVirtue.NONE:
+		var virtue_name: String = Enums.bushido_virtue_name(ctx.bushido_virtue)
 		var bushido_filters: Dictionary = filter_data.get("bushido", {})
-		var virtue_filter: Dictionary = bushido_filters.get(ctx.bushido_virtue, {})
+		var virtue_filter: Dictionary = bushido_filters.get(virtue_name, {})
 		var always_blocked: Array = virtue_filter.get("always_blocked", [])
 		if action_id in always_blocked:
 			return true
 
-	# Check shourido virtue blocks
-	if ctx.shourido_virtue != "":
+	if ctx.shourido_virtue != Enums.ShouridoVirtue.NONE:
+		var virtue_name: String = Enums.shourido_virtue_name(ctx.shourido_virtue)
 		var shourido_filters: Dictionary = filter_data.get("shourido", {})
-		var virtue_filter: Dictionary = shourido_filters.get(ctx.shourido_virtue, {})
+		var virtue_filter: Dictionary = shourido_filters.get(virtue_name, {})
 		var always_blocked: Array = virtue_filter.get("always_blocked", [])
 		if action_id in always_blocked:
 			return true
@@ -473,19 +520,21 @@ static func _lookup_disposition_modifier(
 
 static func _lookup_personality_lean(
 	action_id: String,
-	bushido_virtue: String,
-	shourido_virtue: String,
+	bushido_virtue: Enums.BushidoVirtue,
+	shourido_virtue: Enums.ShouridoVirtue,
 	scoring_tables: Dictionary,
 ) -> float:
 	var lean_table: Dictionary = scoring_tables.get("personality_lean", {})
 	var total: float = 0.0
 
-	if bushido_virtue != "":
-		var bushido_leans: Dictionary = lean_table.get(bushido_virtue, {})
+	if bushido_virtue != Enums.BushidoVirtue.NONE:
+		var virtue_name: String = Enums.bushido_virtue_name(bushido_virtue)
+		var bushido_leans: Dictionary = lean_table.get(virtue_name, {})
 		total += float(bushido_leans.get(action_id, 0))
 
-	if shourido_virtue != "":
-		var shourido_leans: Dictionary = lean_table.get(shourido_virtue, {})
+	if shourido_virtue != Enums.ShouridoVirtue.NONE:
+		var virtue_name: String = Enums.shourido_virtue_name(shourido_virtue)
+		var shourido_leans: Dictionary = lean_table.get(virtue_name, {})
 		total += float(shourido_leans.get(action_id, 0))
 
 	return clampf(total, -15.0, 15.0)

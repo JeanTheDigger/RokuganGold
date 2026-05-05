@@ -1,0 +1,67 @@
+[
+  {
+    "condition": "active_crisis_in_relevance_range",
+    "bonus": 15,
+    "applies_to": "actions_addressing_crisis",
+    "stacks_per_crisis": true,
+    "weight_by_relevance": true
+  },
+  {
+    "condition": "favor_expiring_within_7_ooc_days",
+    "bonus": 20,
+    "applies_to": ["HONOR_FAVOR", "BREAK_FAVOR"],
+    "stacks_per_crisis": false
+  },
+  {
+    "condition": "court_ending_within_2_ic_days",
+    "bonus": 10,
+    "applies_to": "court_actions",
+    "stacks_per_crisis": false
+  },
+  {
+    "condition": "war_score_below_25",
+    "bonus": 25,
+    "applies_to": "actions_addressing_war",
+    "stacks_per_crisis": false
+  },
+  {
+    "condition": "home_front_hunger",
+    "bonus": 20,
+    "applies_to": "actions_addressing_food_crisis",
+    "stacks_per_crisis": true,
+    "weight_by_relevance": true
+  },
+  {
+    "condition": "home_front_famine",
+    "bonus": 30,
+    "applies_to": "actions_addressing_food_crisis",
+    "stacks_per_crisis": true,
+    "weight_by_relevance": true
+  },
+  {
+    "condition": "army_supply_cut",
+    "bonus": 20,
+    "applies_to": ["ORDER_RETREAT", "ORDER_DEPLOY", "REQUEST_ALLIED_AID"],
+    "stacks_per_crisis": true,
+    "weight_by_relevance": true
+  },
+  {
+    "condition": "under_siege_garrison_below_25pct",
+    "bonus": 25,
+    "applies_to": "siege_end_actions",
+    "stacks_per_crisis": false
+  },
+  {
+    "condition": "vassal_disposition_below_rival",
+    "bonus": 10,
+    "applies_to": "actions_targeting_vassal",
+    "stacks_per_crisis": true,
+    "weight_by_relevance": true
+  },
+  {
+    "condition": "objective_stalled_2_plus_seasons",
+    "bonus": 10,
+    "applies_to": "actions_addressing_primary_objective",
+    "stacks_per_crisis": false
+  }
+]

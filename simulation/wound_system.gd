@@ -43,6 +43,6 @@ static func heal_wounds(character: L5RCharacterData, amount: int) -> Dictionary:
 static func apply_falling_damage(character: L5RCharacterData, tiles_fallen: int, dice_engine: DiceEngine) -> Dictionary:
 	if tiles_fallen <= 1:
 		return apply_damage(character, 0, 0)
-	var dice_count: int = tiles_fallen / 2
+	var dice_count: int = ceili(float(tiles_fallen) / 2.0)
 	var result: Dictionary = dice_engine.roll_damage(dice_count, dice_count, 0, 0)
 	return apply_damage(character, result["raw"], 0)

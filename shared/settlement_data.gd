@@ -3,25 +3,10 @@ extends Resource
 ## Data model for a settlement per GDD s2.3. Holds type, infrastructure,
 ## and garrison info. Settlements exist within provinces.
 
-enum SettlementType {
-	VILLAGE,
-	TOWN,
-	CITY,
-	IMPERIAL_CAPITAL,
-	FORTIFICATION,
-	KEEP,
-	CASTLE,
-	FAMILY_CASTLE,
-	WALL_TOWER,
-	TEMPLE,
-	SHINDEN,
-	MONASTERY,
-}
-
 @export var settlement_id: int = -1
 @export var settlement_name: String = ""
 @export var province_id: int = -1
-@export var settlement_type: SettlementType = SettlementType.VILLAGE
+@export var settlement_type: Enums.SettlementType = Enums.SettlementType.VILLAGE
 @export var description: String = ""
 
 # -- Infrastructure (named features present) -----------------------------------
@@ -43,18 +28,8 @@ func has_infrastructure(feature: String) -> bool:
 
 
 func is_military() -> bool:
-	return settlement_type in [
-		SettlementType.FORTIFICATION,
-		SettlementType.KEEP,
-		SettlementType.CASTLE,
-		SettlementType.FAMILY_CASTLE,
-		SettlementType.WALL_TOWER,
-	]
+	return settlement_type in Enums.MILITARY_SETTLEMENT_TYPES
 
 
 func is_religious() -> bool:
-	return settlement_type in [
-		SettlementType.TEMPLE,
-		SettlementType.SHINDEN,
-		SettlementType.MONASTERY,
-	]
+	return settlement_type in Enums.RELIGIOUS_SETTLEMENT_TYPES

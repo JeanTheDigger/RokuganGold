@@ -168,9 +168,63 @@ single-dice-entry-point and server-authoritative constraints.
      competence, urgency, standing influence, topic position, resource modifier)
   6. Selection — highest score, tiebreakers: ObjAlign > disposition > lower AP > seed
   7. Execution — AP deduction, action record returned
-  Scoring helpers reference JSON table structures (GDD s55.14) — table loaders
-  not yet built. Decomposition functions are stubs ready for per-objective-type
-  logic. Context generators have starter action lists per ContextFlag.
+  Scoring helpers reference 8 JSON scoring tables via ScoringTableLoader.
+  Full context generators with complete ActionID lists per ContextFlag.
+  Objective decomposition routes through ObjectiveDecomposer.
+
+### JSON Scoring Tables & Loader
+- **simulation/scoring_table_loader.gd** — Loads and caches 8 JSON tables from
+  `systems/npc_engine/data/tables/`. `load_all()`, `get_table()`,
+  `get_scoring_tables()`, `get_filter_data()`.
+- **systems/npc_engine/data/tables/** — 8 JSON files:
+  objective_alignment (82 NeedTypes), personality_lean (14 virtues),
+  personality_filter (bushido/shourido blocks), action_skill_map (76+ ActionIDs),
+  competence_table (ranks 0-10), disposition_tiers (8 tiers),
+  urgency_rules (10 rules), topic_position_alignment.
+
+### Objective Decomposition
+- **simulation/objective_decomposer.gd** — Routes standing objectives to
+  type-specific decomposition trees per GDD s55.22/s55.24/s55.25.
+  Political (6), Economic (5), Personal (8), Military (2) standing objectives.
+  Stateless per GDD s55.4.2. Unknown NeedTypes pass through unchanged.
+
+### Action Execution & World Mutation
+- **simulation/action_executor.gd** — Routes chosen ActionIDs to SkillResolver
+  dice rolls. Social/covert/military/admin categories with disposition-based TN
+  modifiers. Returns effects dict (disposition_change, glory_change, info_gained,
+  province effects).
+- **simulation/effect_applicator.gd** — Applies executor results to world state.
+  `apply()` mutates character disposition/honor/glory, province stability/garrison/
+  report date, and appends to action_log. `apply_day_results()` batch processes
+  a full day's results.
+
+### Multi-NPC Wave Resolution
+- **simulation/npc_wave_resolver.gd** — `resolve_day()` handles full day
+  resolution per GDD s55.13. Reactive events first, then AP waves.
+  Status-descending order, Awareness tiebreak. Lord dual-pool.
+  `resolve_day_full()` adds execution (dice rolls + effects).
+  `resolve_day_applied()` closes the full loop: decision → execution → mutation.
+
+### Information System
+- **simulation/information_system.gd** — Knowledge management per GDD s55.12,
+  s55.7, s55.6. Five sources (Direct Observation, Daily Conversation, Letters,
+  Intelligence Actions, Public Knowledge). Confidence decay: Fresh → Recent →
+  Stale (disposition entries never decay). Probe visibility reads action_log to
+  reveal target's recent actions. Contact discovery via court observation and
+  introductions. Objective knowledge transfer copies relevant entries on
+  assignment. CharacterData gains `knowledge_pool` and `known_contacts_by_clan`.
+
+### Day Orchestrator
+- **simulation/day_orchestrator.gd** — Single `advance_day()` entry point that
+  advances world state by one IC day. Sequence: reset AP → NPCWaveResolver
+  `resolve_day_applied()` (decision + execution + mutation) → process info events
+  (Probe results wired into InformationSystem) → on season boundary: run
+  ResourceTick + decay all characters' knowledge confidence.
+
+### Resource Tick System
+- **simulation/resource_tick.gd** — Seasonal resource processing per GDD s4.3.
+  Rice consumption/harvest, starvation stages, 5-tier tax cascade,
+  personality tax modifiers, iron/koku production, population growth.
 
 ### Tests (GUT v9.3.0)
 All in /tests/, one file per system:
@@ -182,17 +236,20 @@ All in /tests/, one file per system:
 - test_skill_resolver.gd (~20 tests)
 - test_action_point_system.gd (~12 tests)
 - test_npc_decision_engine.gd (~35 tests)
+- test_scoring_table_loader.gd (~15 tests)
+- test_action_executor.gd (~25 tests)
+- test_effect_applicator.gd (~25 tests)
+- test_npc_wave_resolver.gd (~15 tests)
+- test_resource_tick.gd (~30 tests)
+- test_objective_decomposer.gd (~45 tests)
+- test_information_system.gd (~35 tests)
+- test_day_orchestrator.gd (~12 tests)
 
 ### What's Next
-The NPC engine skeleton is in place. Next steps to flesh it out:
-1. JSON scoring tables (objective_alignment, disposition_tiers, personality_lean,
-   action_skill_map, competence_table, urgency_rules, topic_position_alignment,
-   personality_filter) per GDD s55.14
-2. Objective decomposition functions (political, military, economic, personal,
-   crisis, reactive) per GDD s55.4.2
-3. Full context generators per ContextFlag with complete ActionID lists
-4. Multi-NPC resolution order (wave system) per GDD s55.13
-5. Resource tick system per GDD s4.3
+1. Military standing objectives — GDD s55.23 decomposition trees (awaiting content)
+2. Topic propagation — momentum tracking, public knowledge broadcast per GDD s16
+3. Daily conversation / letter information exchange per GDD s55.12
+4. Crime record and investigation system per GDD s57.47, s57.16
 
 ## What To Do When Uncertain
 Stop. Read the relevant LOCKED section in /gdd/. If it does not answer the

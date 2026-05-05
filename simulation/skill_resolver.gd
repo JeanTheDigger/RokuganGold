@@ -135,15 +135,15 @@ static func resolve_skill_check(
 	tn: int,
 	raises: int = 0,
 	emphasis_name: String = "",
-	trait_override: Enums.Trait = -1,
+	trait_override: Enums.Trait = Enums.Trait.NONE,
 	bonus_rolled: int = 0,
 	bonus_kept: int = 0,
 	flat_bonus: int = 0,
 ) -> Dictionary:
 	# Determine trait
 	var trait_used: Enums.Trait
-	if trait_override >= 0:
-		trait_used = trait_override as Enums.Trait
+	if trait_override != Enums.Trait.NONE:
+		trait_used = trait_override
 	else:
 		trait_used = get_trait_for_skill(skill_name)
 
@@ -189,22 +189,22 @@ static func resolve_contested_check(
 	skill_b: String,
 	emphasis_a: String = "",
 	emphasis_b: String = "",
-	trait_override_a: Enums.Trait = -1,
-	trait_override_b: Enums.Trait = -1,
+	trait_override_a: Enums.Trait = Enums.Trait.NONE,
+	trait_override_b: Enums.Trait = Enums.Trait.NONE,
 	bonus_rolled_a: int = 0,
 	bonus_rolled_b: int = 0,
 	flat_bonus_a: int = 0,
 	flat_bonus_b: int = 0,
 ) -> Dictionary:
 	# Character A
-	var trait_a: Enums.Trait = trait_override_a as Enums.Trait if trait_override_a >= 0 else get_trait_for_skill(skill_a)
+	var trait_a: Enums.Trait = trait_override_a if trait_override_a != Enums.Trait.NONE else get_trait_for_skill(skill_a)
 	var tv_a: int = char_a.get_trait_value(trait_a)
 	var sr_a: int = get_skill_rank(char_a, skill_a)
 	var emph_a: bool = has_emphasis(char_a, skill_a, emphasis_a) if emphasis_a != "" else false
 	var wp_a: int = CharacterStats.get_wound_penalty(char_a)
 
 	# Character B
-	var trait_b: Enums.Trait = trait_override_b as Enums.Trait if trait_override_b >= 0 else get_trait_for_skill(skill_b)
+	var trait_b: Enums.Trait = trait_override_b if trait_override_b != Enums.Trait.NONE else get_trait_for_skill(skill_b)
 	var tv_b: int = char_b.get_trait_value(trait_b)
 	var sr_b: int = get_skill_rank(char_b, skill_b)
 	var emph_b: bool = has_emphasis(char_b, skill_b, emphasis_b) if emphasis_b != "" else false
