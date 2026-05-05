@@ -129,18 +129,23 @@ static func process_seasonal_tick(
 		"tax_collected": {},
 	}
 
+	settlement_meta["_provinces"] = provinces
+
 	if season == "spring":
 		_lock_planting(provinces, settlement_meta)
 
 	if season == "autumn":
 		var harvest: Dictionary = _process_harvest(provinces, settlement_meta)
 		results["harvest"] = harvest
+		settlement_meta["_harvest"] = harvest
 
 	var consumption: Dictionary = _process_rice_consumption(settlements, settlement_meta)
 	results["rice_consumed"] = consumption
+	settlement_meta["_consumption"] = consumption
 
 	var starvation: Dictionary = _process_starvation_check(settlements, settlement_meta)
 	results["starvation_changes"] = starvation
+	settlement_meta["_starvation"] = starvation
 
 	if season == "autumn":
 		var taxes: Dictionary = _process_tax_cascade(provinces, settlement_meta)
@@ -201,9 +206,14 @@ static func _process_harvest(
 
 static func _process_rice_consumption(
 	_settlements: Array[SettlementData],
-	_settlement_meta: Dictionary,
+	settlement_meta: Dictionary,
 ) -> Dictionary:
-	return {}
+	var results: Dictionary = {}
+	var provinces: Array[ProvinceData] = settlement_meta.get("_provinces", [])
+	for prov: ProvinceData in provinces:
+		var result: Dictionary = consume_rice_province(prov)
+		results[prov.province_id] = result
+	return results
 
 
 static func consume_rice_province(province: ProvinceData) -> Dictionary:
@@ -230,9 +240,20 @@ static func consume_rice_province(province: ProvinceData) -> Dictionary:
 
 static func _process_starvation_check(
 	_settlements: Array[SettlementData],
-	_settlement_meta: Dictionary,
+	settlement_meta: Dictionary,
 ) -> Dictionary:
-	return {}
+	var results: Dictionary = {}
+	var provinces: Array[ProvinceData] = settlement_meta.get("_provinces", [])
+	var consumption: Dictionary = settlement_meta.get("_consumption", {})
+	for prov: ProvinceData in provinces:
+		var cons: Dictionary = consumption.get(prov.province_id, {})
+		var deficit: float = cons.get("deficit", 0.0)
+		var consecutive: int = settlement_meta.get("_deficit_seasons", {}).get(prov.province_id, 0)
+		var starv: Dictionary = check_starvation(prov, deficit, consecutive)
+		if starv["stage"] != StarvationStage.CLEAR:
+			apply_starvation_loss(prov, starv["pu_loss_rate"])
+		results[prov.province_id] = starv
+	return results
 
 
 static func check_starvation(
@@ -298,9 +319,26 @@ static func compute_taxable_surplus(province: ProvinceData, autumn_yield: float)
 
 static func _process_tax_cascade(
 	_provinces: Array[ProvinceData],
-	_settlement_meta: Dictionary,
+	settlement_meta: Dictionary,
 ) -> Dictionary:
-	return {}
+	var results: Dictionary = {}
+	var provinces: Array[ProvinceData] = settlement_meta.get("_provinces", [])
+	var harvest: Dictionary = settlement_meta.get("_harvest", {})
+	for prov: ProvinceData in provinces:
+		var harvest_data: Dictionary = harvest.get(prov.province_id, {})
+		var yield_amount: float = harvest_data.get("yield", 0.0)
+		var surplus: float = compute_taxable_surplus(prov, yield_amount)
+		if surplus <= 0.0:
+			results[prov.province_id] = {"surplus": 0.0, "total_collected": 0.0}
+			continue
+		var tax_mod: float = settlement_meta.get("_tax_modifier", {}).get(prov.province_id, 0.0)
+		var tier_result: Dictionary = apply_tax_at_tier(surplus, "local_daimyo", tax_mod)
+		results[prov.province_id] = {
+			"surplus": surplus,
+			"total_collected": tier_result["collected"],
+			"passed_up": tier_result["passed_up"],
+		}
+	return results
 
 
 static func apply_tax_at_tier(
@@ -325,9 +363,20 @@ static func apply_tax_at_tier(
 
 static func _process_population_adjustment(
 	_settlements: Array[SettlementData],
-	_settlement_meta: Dictionary,
+	settlement_meta: Dictionary,
 ) -> Dictionary:
-	return {}
+	var results: Dictionary = {}
+	var provinces: Array[ProvinceData] = settlement_meta.get("_provinces", [])
+	var starvation_data: Dictionary = settlement_meta.get("_starvation", {})
+	var peace_map: Dictionary = settlement_meta.get("_peace_seasons", {})
+	for prov: ProvinceData in provinces:
+		var starv: Dictionary = starvation_data.get(prov.province_id, {})
+		var stage: StarvationStage = starv.get("stage", StarvationStage.CLEAR)
+		var peace: int = peace_map.get(prov.province_id, 0)
+		var rate: float = compute_growth_rate(prov, stage, peace)
+		var growth: Dictionary = apply_population_growth(prov, rate)
+		results[prov.province_id] = growth
+	return results
 
 
 static func compute_growth_rate(
@@ -371,9 +420,18 @@ static func apply_population_growth(province: ProvinceData, seasonal_rate: float
 
 static func _process_iron_production(
 	_provinces: Array[ProvinceData],
-	_settlement_meta: Dictionary,
+	settlement_meta: Dictionary,
 ) -> Dictionary:
-	return {}
+	var results: Dictionary = {}
+	var provinces: Array[ProvinceData] = settlement_meta.get("_provinces", [])
+	var quality_map: Dictionary = settlement_meta.get("_mine_quality", {})
+	for prov: ProvinceData in provinces:
+		if prov.mining_pu <= 0:
+			continue
+		var quality: float = quality_map.get(prov.province_id, 1.0)
+		var result: Dictionary = produce_iron_province(prov, quality)
+		results[prov.province_id] = result
+	return results
 
 
 static func produce_iron_province(province: ProvinceData, mine_quality: float) -> Dictionary:
@@ -388,9 +446,18 @@ static func produce_iron_province(province: ProvinceData, mine_quality: float) -
 
 static func _process_koku_generation(
 	_settlements: Array[SettlementData],
-	_settlement_meta: Dictionary,
+	settlement_meta: Dictionary,
 ) -> Dictionary:
-	return {}
+	var results: Dictionary = {}
+	var provinces: Array[ProvinceData] = settlement_meta.get("_provinces", [])
+	var location_mods: Dictionary = settlement_meta.get("_koku_modifiers", {})
+	for prov: ProvinceData in provinces:
+		if prov.town_pu <= 0:
+			continue
+		var loc_mod: float = location_mods.get(prov.province_id, 1.0)
+		var result: Dictionary = generate_koku_province(prov, loc_mod)
+		results[prov.province_id] = result
+	return results
 
 
 static func generate_koku_province(province: ProvinceData, location_modifier: float) -> Dictionary:

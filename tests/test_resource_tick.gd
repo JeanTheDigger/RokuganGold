@@ -262,3 +262,69 @@ func test_growth_max_rate() -> void:
 	)
 	# (10% + 3%) / 4 = 3.25%
 	assert_almost_eq(rate, 0.0325, 0.001)
+
+
+# -- Full Seasonal Tick --------------------------------------------------------
+
+func test_process_seasonal_tick_summer_consumes_rice() -> void:
+	var provinces: Array[ProvinceData] = [_province]
+	var settlements: Array[SettlementData] = []
+	var meta: Dictionary = {"_peace_seasons": {1: 0}, "_deficit_seasons": {1: 0}}
+	var result: Dictionary = ResourceTick.process_seasonal_tick(
+		provinces, settlements, "summer", meta
+	)
+	assert_true(result["rice_consumed"].has(1))
+	assert_almost_eq(result["rice_consumed"][1]["total_cost"], 2.10, 0.01)
+
+
+func test_process_seasonal_tick_autumn_harvests() -> void:
+	var provinces: Array[ProvinceData] = [_province]
+	var settlements: Array[SettlementData] = []
+	var meta: Dictionary = {
+		1: {"locked_farming_pu": 4},
+		"_peace_seasons": {1: 0},
+		"_deficit_seasons": {1: 0},
+	}
+	var result: Dictionary = ResourceTick.process_seasonal_tick(
+		provinces, settlements, "autumn", meta
+	)
+	assert_true(result["harvest"].has(1))
+	assert_almost_eq(result["harvest"][1]["yield"], 6.0, 0.01)
+
+
+func test_process_seasonal_tick_iron_production() -> void:
+	var provinces: Array[ProvinceData] = [_province]
+	var settlements: Array[SettlementData] = []
+	var meta: Dictionary = {
+		"_mine_quality": {1: 1.0},
+		"_peace_seasons": {1: 0},
+		"_deficit_seasons": {1: 0},
+	}
+	var result: Dictionary = ResourceTick.process_seasonal_tick(
+		provinces, settlements, "summer", meta
+	)
+	assert_true(result["iron_produced"].has(1))
+	assert_almost_eq(result["iron_produced"][1]["iron_produced"], 0.50, 0.01)
+
+
+func test_process_seasonal_tick_koku_generation() -> void:
+	var provinces: Array[ProvinceData] = [_province]
+	var settlements: Array[SettlementData] = []
+	var meta: Dictionary = {
+		"_koku_modifiers": {1: 1.0},
+		"_peace_seasons": {1: 0},
+		"_deficit_seasons": {1: 0},
+	}
+	var result: Dictionary = ResourceTick.process_seasonal_tick(
+		provinces, settlements, "summer", meta
+	)
+	assert_true(result["koku_generated"].has(1))
+	assert_almost_eq(result["koku_generated"][1]["koku_generated"], 0.50, 0.01)
+
+
+func test_process_seasonal_tick_spring_locks_planting() -> void:
+	var provinces: Array[ProvinceData] = [_province]
+	var settlements: Array[SettlementData] = []
+	var meta: Dictionary = {"_peace_seasons": {1: 0}, "_deficit_seasons": {1: 0}}
+	ResourceTick.process_seasonal_tick(provinces, settlements, "spring", meta)
+	assert_eq(int(meta[1]["locked_farming_pu"]), 4)
