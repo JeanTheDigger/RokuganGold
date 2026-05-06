@@ -1,7 +1,8 @@
 class_name DayOrchestrator
 ## Single entry point to advance world state by one IC day.
-## Ties together: AP reset → wave resolution → effect application →
-## information processing → (season boundary) resource tick + confidence decay.
+## Sequence: AP reset → wave resolution → effect application →
+## info events → letter delivery → topic tick →
+## (season boundary) resource tick + confidence decay.
 
 
 static func advance_day(
@@ -17,6 +18,8 @@ static func advance_day(
 	provinces: Dictionary,
 	action_log: Array[Dictionary],
 	season_meta: Dictionary,
+	active_topics: Array[TopicData] = [],
+	pending_letters: Array = [],
 ) -> Dictionary:
 	var prev_season: int = time_system.get_season()
 
@@ -32,11 +35,21 @@ static func advance_day(
 		dice_engine, action_skill_map, characters_by_id, provinces, action_log
 	)
 
+	var conversation_results: Array[Dictionary] = _process_daily_conversations(
+		characters, dice_engine, current_season
+	)
+
+	var topic_results: Dictionary = TopicMomentumSystem.process_daily_tick(active_topics)
+
 	var info_results: Array[Dictionary] = _process_info_events(
 		day_result.get("applied", []),
 		characters_by_id,
 		action_log,
 		current_season,
+	)
+
+	var letter_results: Array[Dictionary] = LetterSystem.process_pending_letters(
+		pending_letters, characters_by_id, ic_day, current_season, action_log
 	)
 
 	var seasonal_result: Dictionary = {}
@@ -51,7 +64,10 @@ static func advance_day(
 		"season_changed": current_season != prev_season,
 		"day_results": day_result.get("results", []),
 		"applied": day_result.get("applied", []),
+		"conversation_results": conversation_results,
+		"topic_results": topic_results,
 		"info_results": info_results,
+		"letter_results": letter_results,
 		"seasonal_result": seasonal_result,
 	}
 
@@ -61,6 +77,8 @@ static func advance_day(
 static func _reset_all_ap(characters: Array[L5RCharacterData]) -> void:
 	for c: L5RCharacterData in characters:
 		ActionPointSystem.reset_daily_ap(c)
+		c.civilian_orders_remaining = c.civilian_order_budget_max
+		c.passage_request_count_today = 0
 
 
 # -- Information Processing ----------------------------------------------------
@@ -95,6 +113,45 @@ static func _process_info_events(
 				})
 
 	return results
+
+
+# -- Daily Conversations -------------------------------------------------------
+
+static func _process_daily_conversations(
+	characters: Array[L5RCharacterData],
+	dice_engine: DiceEngine,
+	current_season: int,
+) -> Array[Dictionary]:
+	var by_location: Dictionary = {}
+	for c: L5RCharacterData in characters:
+		var loc: String = c.physical_location
+		if loc.is_empty():
+			continue
+		if not by_location.has(loc):
+			by_location[loc] = []
+		by_location[loc].append(c)
+
+	var all_results: Array[Dictionary] = []
+	for loc: String in by_location:
+		var group: Array[L5RCharacterData] = []
+		for c: Variant in by_location[loc]:
+			if c is L5RCharacterData:
+				group.append(c)
+		if group.size() < 2:
+			continue
+
+		var pair_count: int = (group.size() * (group.size() - 1)) / 2
+		var rng_needed: int = pair_count * 3
+		var rng: Array[int] = []
+		for i: int in range(rng_needed):
+			rng.append(dice_engine.rand_int_range(0, 99))
+
+		var results: Array[Dictionary] = DailyConversation.resolve_settlement_conversations(
+			group, rng, current_season
+		)
+		all_results.append_array(results)
+
+	return all_results
 
 
 # -- Season Transition ---------------------------------------------------------

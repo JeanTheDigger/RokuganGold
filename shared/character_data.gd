@@ -91,7 +91,10 @@ extends Resource
 
 @export var lord_id: int = -1
 @export var operational_superior_id: int = -1
-@export var operational_hierarchy_type: String = ""
+@export var operational_hierarchy_type: Enums.OperationalHierarchyType = Enums.OperationalHierarchyType.NONE
+@export var military_rank: Enums.MilitaryRank = Enums.MilitaryRank.NONE
+@export var commanded_unit_id: int = -1
+@export var assigned_company_id: int = -1
 @export var current_objective: String = ""
 @export var physical_location: String = ""
 @export var role_position: String = ""
@@ -104,6 +107,10 @@ extends Resource
 @export var met_characters: Array[int] = []
 @export var knowledge_pool: Array[Dictionary] = []
 @export var known_contacts_by_clan: Dictionary = {}
+
+# -- Legal System (Section 11.3.14) --------------------------------------------
+
+@export var legal_cases: Array[Dictionary] = []
 
 # -- Courtier Framework Fields -------------------------------------------------
 
@@ -119,6 +126,10 @@ extends Resource
 
 @export var pieces_seen: Dictionary = {}
 @export var learning_progress: Dictionary = {}
+
+# -- Meditation (Section 57.32) ------------------------------------------------
+
+@export var void_refresh_blocked_until: int = 0
 
 # -- Medicine & Rest -----------------------------------------------------------
 
@@ -152,6 +163,36 @@ extends Resource
 @export var children_ids: Array[int] = []
 @export var spouse_id: int = -1
 
+# -- Kolat (Section 54.7c) -----------------------------------------------------
+
+@export var kolat_superior_id: int = -1
+@export var kolat_sect: Enums.KolatSect = Enums.KolatSect.NONE
+
+# -- Hunting (Section 57.38) ---------------------------------------------------
+
+@export var hunt_trophies: Array[Dictionary] = []
+
+# -- Animal Companions (Section 57.39) -----------------------------------------
+
+@export var trained_companions: Array[Dictionary] = []
+
+# -- Sailing (Section 57.42) ---------------------------------------------------
+
+@export var aboard_ship_id: int = -1
+@export var passage_request_count_today: int = 0
+@export var assigned_ship_id: int = -1
+
+# -- Tattoo Ability State (Section 57.25.11) -----------------------------------
+
+@export var mantis_tattoo: bool = false
+@export var ocean_tattoo: bool = false
+@export var ocean_last_used_ooc_day: int = -1
+@export var phoenix_last_used_ic_day: int = -1
+@export var crane_pool: int = 0
+@export var kirin_reroll_available: bool = false
+@export var active_tattoo_ability: Enums.TattooAbility = Enums.TattooAbility.NONE
+@export var is_bald: bool = false
+
 # -- Progression (Section 48) -------------------------------------------------
 
 @export var xp_total: int = 0
@@ -162,8 +203,8 @@ extends Resource
 
 # -- Trait Access Helpers (used by CharacterStats) -----------------------------
 
-func get_trait_value(trait: Enums.Trait) -> int:
-	match trait:
+func get_trait_value(p_trait: Enums.Trait) -> int:
+	match p_trait:
 		Enums.Trait.STAMINA: return stamina
 		Enums.Trait.WILLPOWER: return willpower
 		Enums.Trait.STRENGTH: return strength

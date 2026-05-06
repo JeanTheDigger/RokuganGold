@@ -17,6 +17,10 @@ func set_seed(seed_value: int) -> void:
 	_rng.seed = seed_value
 
 
+func rand_int_range(low: int, high: int) -> int:
+	return _rng.randi_range(low, high)
+
+
 # -- Core Roll & Keep ----------------------------------------------------------
 
 func roll_and_keep(rolled: int, kept: int, explodes: bool = true, emphasis: bool = false) -> DiceResult:

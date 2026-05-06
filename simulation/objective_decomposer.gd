@@ -40,6 +40,11 @@ const MILITARY_OBJECTIVES: Array[String] = [
 	"STRENGTHEN_FORTIFICATION",
 ]
 
+const INVESTIGATION_OBJECTIVES: Array[String] = [
+	"INVESTIGATE_CRIME",
+	"UPHOLD_LAW",
+]
+
 
 # -- Main Entry Point ---------------------------------------------------------
 
@@ -59,6 +64,8 @@ static func decompose(
 		return _decompose_personal(need_type, objective, ctx)
 	if need_type in MILITARY_OBJECTIVES:
 		return _decompose_military(need_type, objective, ctx)
+	if need_type in INVESTIGATION_OBJECTIVES:
+		return _decompose_investigation(need_type, objective, ctx)
 
 	return _passthrough(objective)
 
@@ -147,6 +154,21 @@ static func _decompose_military(
 		"STRENGTHEN_FORTIFICATION":
 			return _decompose_strengthen_fortification(objective, ctx)
 	return _passthrough(objective)
+
+
+# -- Investigation Routing (GDD s57.16) ----------------------------------------
+
+static func _decompose_investigation(
+	need_type: String,
+	objective: Dictionary,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> NPCDataStructures.ImmediateNeed:
+	if need_type == "UPHOLD_LAW":
+		var case_data: Dictionary = objective.get("active_case", {})
+		if case_data.is_empty():
+			return _passthrough(objective)
+		return InvestigationDecomposer.decompose(case_data, ctx)
+	return InvestigationDecomposer.decompose(objective, ctx)
 
 
 # =============================================================================
@@ -694,11 +716,12 @@ static func _find_contact_needing_disposition(
 
 static func _find_clan_contact_present(
 	ctx: NPCDataStructures.ContextSnapshot,
-	_clan_id: String,
+	clan_id: String,
 ) -> int:
 	for npc_id: int in ctx.known_contacts:
 		if npc_id in ctx.characters_present:
-			return npc_id
+			if clan_id.is_empty() or ctx.contact_clans.get(npc_id, "") == clan_id:
+				return npc_id
 	return -1
 
 

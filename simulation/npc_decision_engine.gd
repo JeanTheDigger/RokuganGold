@@ -37,6 +37,7 @@ static func build_context(character: L5RCharacterData, world_state: Dictionary) 
 	ctx.known_positions = world_state.get("known_positions", {})
 	ctx.known_objectives = world_state.get("known_objectives", {})
 	ctx.known_contacts = world_state.get("known_contacts", [] as Array[int])
+	ctx.contact_clans = world_state.get("contact_clans", {})
 	ctx.met_characters = character.met_characters.duplicate()
 
 	# Lord-tier fields
@@ -47,7 +48,7 @@ static func build_context(character: L5RCharacterData, world_state: Dictionary) 
 	# State
 	ctx.pending_events = world_state.get("pending_events", [])
 	ctx.ap_remaining = character.action_points_current
-	ctx.action_log = world_state.get("action_log", [] as Array[String])
+	ctx.action_log = world_state.get("action_log", [] as Array[Dictionary])
 
 	# Personality
 	ctx.bushido_virtue = character.bushido_virtue
