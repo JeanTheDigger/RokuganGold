@@ -47,7 +47,7 @@ static func build_context(character: L5RCharacterData, world_state: Dictionary) 
 	# State
 	ctx.pending_events = world_state.get("pending_events", [])
 	ctx.ap_remaining = character.action_points_current
-	ctx.action_log = world_state.get("action_log", [] as Array[String])
+	ctx.action_log = world_state.get("action_log", [] as Array[Dictionary])
 
 	# Personality
 	ctx.bushido_virtue = character.bushido_virtue

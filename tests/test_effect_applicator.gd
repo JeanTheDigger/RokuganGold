@@ -313,6 +313,56 @@ func test_action_logged() -> void:
 	assert_true(_action_log[0]["success"])
 
 
+func test_action_log_includes_roll_fields() -> void:
+	var result: Dictionary = {
+		"success": true,
+		"character_id": 1,
+		"target_npc_id": 2,
+		"action_id": "CHARM",
+		"ic_day": 5,
+		"skill_used": "Etiquette",
+		"roll_total": 22,
+		"tn": 15,
+		"effects": {"disposition_change": 3},
+	}
+	EffectApplicator.apply(result, _characters, _provinces, _action_log)
+	assert_eq(_action_log[0]["roll_result"], 22)
+	assert_eq(_action_log[0]["tn"], 15)
+	assert_true(_action_log[0].has("observable_effect"))
+
+
+func test_observable_effect_on_tier_crossing() -> void:
+	_actor.disposition_values[2] = 28
+	var result: Dictionary = {
+		"success": true,
+		"character_id": 1,
+		"target_npc_id": 2,
+		"action_id": "CHARM",
+		"ic_day": 5,
+		"roll_total": 20,
+		"tn": 15,
+		"effects": {"disposition_change": 5},
+	}
+	EffectApplicator.apply(result, _characters, _provinces, _action_log)
+	assert_true(_action_log[0]["observable_effect"])
+
+
+func test_no_observable_effect_within_tier() -> void:
+	_actor.disposition_values[2] = 15
+	var result: Dictionary = {
+		"success": true,
+		"character_id": 1,
+		"target_npc_id": 2,
+		"action_id": "CHARM",
+		"ic_day": 5,
+		"roll_total": 20,
+		"tn": 15,
+		"effects": {"disposition_change": 3},
+	}
+	EffectApplicator.apply(result, _characters, _provinces, _action_log)
+	assert_false(_action_log[0]["observable_effect"])
+
+
 func test_failed_action_logged() -> void:
 	var result: Dictionary = {
 		"success": false,

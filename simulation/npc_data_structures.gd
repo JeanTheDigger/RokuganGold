@@ -89,7 +89,7 @@ class ContextSnapshot:
 	# State
 	var pending_events: Array = []
 	var ap_remaining: int = 0
-	var action_log: Array[String] = []
+	var action_log: Array[Dictionary] = []
 
 	# Personality
 	var bushido_virtue: Enums.BushidoVirtue = Enums.BushidoVirtue.NONE

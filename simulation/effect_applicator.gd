@@ -40,6 +40,7 @@ static func apply(
 	_apply_glory(effects, actor, applied)
 	_apply_province_effects(effects, result, provinces, applied)
 	_apply_info_events(effects, result, applied)
+	result["observable_effect"] = _detect_observable_effect(result, effects, applied)
 	_log_action(result, action_log)
 	applied["logged"] = true
 
@@ -185,7 +186,51 @@ static func _log_action(
 		"success": result.get("success", false),
 		"skill_used": result.get("skill_used", ""),
 		"is_order": result.get("is_order", false),
+		"roll_result": result.get("roll_total", 0),
+		"tn": result.get("tn", 0),
+		"observable_effect": result.get("observable_effect", false),
 	})
+
+
+# -- Observable Effect Detection -----------------------------------------------
+
+const DISPOSITION_TIER_BOUNDARIES: Array[int] = [-61, -31, -11, 11, 31, 61, 91]
+
+
+static func _get_disposition_tier(value: int) -> int:
+	for i: int in range(DISPOSITION_TIER_BOUNDARIES.size()):
+		if value < DISPOSITION_TIER_BOUNDARIES[i]:
+			return i
+	return DISPOSITION_TIER_BOUNDARIES.size()
+
+
+static func _detect_observable_effect(
+	result: Dictionary,
+	effects: Dictionary,
+	applied: Dictionary,
+) -> bool:
+	var action_id: String = result.get("action_id", "")
+
+	if effects.get("info_gained", false):
+		return true
+
+	var disp_changes: Array = applied.get("disposition_changes", [])
+	if disp_changes.size() > 0:
+		var change: Dictionary = disp_changes[-1]
+		var old_tier: int = _get_disposition_tier(change.get("old", 0))
+		var new_tier: int = _get_disposition_tier(change.get("new", 0))
+		if old_tier != new_tier:
+			return true
+
+	if action_id == "PUBLIC_INSULT":
+		var disp_change: int = effects.get("disposition_change", 0)
+		return disp_change != 0 and result.get("success", false)
+
+	var province_updates: Array = applied.get("province_updates", [])
+	if province_updates.size() > 0:
+		return true
+
+	return false
 
 
 # -- Batch Apply ---------------------------------------------------------------
