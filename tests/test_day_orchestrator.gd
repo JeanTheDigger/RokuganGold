@@ -313,6 +313,144 @@ func test_advance_day_returns_letter_results() -> void:
 	assert_true(result.has("letter_results"))
 
 
+# -- Topic Propagation Wiring --------------------------------------------------
+
+func test_advance_day_wires_discussion_counts() -> void:
+	var c2 := L5RCharacterData.new()
+	c2.character_id = 2
+	c2.character_name = "NPC 2"
+	c2.status = 3.0
+	c2.awareness = 3
+	c2.reflexes = 3
+	c2.stamina = 3
+	c2.willpower = 3
+	c2.agility = 3
+	c2.intelligence = 3
+	c2.strength = 3
+	c2.perception = 3
+	c2.void_ring = 2
+	c2.action_points_current = 2
+	c2.action_points_max = 2
+	c2.honor = 5.0
+	c2.glory = 3.0
+	c2.bushido_virtue = Enums.BushidoVirtue.NONE
+	c2.shourido_virtue = Enums.ShouridoVirtue.NONE
+	c2.skills = {"Etiquette": 3}
+	c2.emphases = {}
+	c2.knowledge_pool = []
+	c2.known_contacts_by_clan = {}
+	c2.met_characters = []
+	c2.topic_pool = [100]
+	c2.topic_positions = {}
+
+	_characters[0].physical_location = "castle_crane"
+	_characters[0].topic_pool = [100]
+	_characters[0].topic_positions = {}
+	_characters[0].disposition_values[2] = 80
+	c2.physical_location = "castle_crane"
+	c2.disposition_values[1] = 80
+
+	_characters.append(c2)
+	_characters_by_id[2] = c2
+
+	var topic := TopicMomentumSystem.create_topic(
+		100, "Gossip", TopicData.Tier.TIER_4, TopicData.Category.PERSONAL, 0, 15.0
+	)
+	var active_topics: Array[TopicData] = [topic]
+
+	var ws: Dictionary = _make_world_states()
+	ws[2] = ws[1].duplicate(true)
+	var objs: Dictionary = _make_objectives()
+	objs[2] = {"primary": {"need_type": "REST", "priority": 3}}
+
+	_dice.set_seed(1)
+
+	var result: Dictionary = DayOrchestrator.advance_day(
+		_time, _characters, _characters_by_id, ws,
+		objs, _scoring_tables, _filter_data, _dice,
+		_action_skill_map, _provinces, _action_log, _season_meta,
+		active_topics
+	)
+	assert_true(result.has("topic_results"))
+	assert_true(result.has("broadcast_results"))
+
+
+func test_advance_day_broadcast_spreads_topics() -> void:
+	var c2 := L5RCharacterData.new()
+	c2.character_id = 2
+	c2.character_name = "NPC 2"
+	c2.status = 3.0
+	c2.awareness = 3
+	c2.reflexes = 3
+	c2.stamina = 3
+	c2.willpower = 3
+	c2.agility = 3
+	c2.intelligence = 3
+	c2.strength = 3
+	c2.perception = 3
+	c2.void_ring = 2
+	c2.action_points_current = 2
+	c2.action_points_max = 2
+	c2.honor = 5.0
+	c2.glory = 3.0
+	c2.bushido_virtue = Enums.BushidoVirtue.NONE
+	c2.shourido_virtue = Enums.ShouridoVirtue.NONE
+	c2.skills = {"Etiquette": 3}
+	c2.emphases = {}
+	c2.knowledge_pool = []
+	c2.known_contacts_by_clan = {}
+	c2.met_characters = []
+	c2.topic_pool = []
+	c2.topic_positions = {}
+
+	_characters[0].topic_pool = []
+	_characters[0].topic_positions = {}
+
+	_characters.append(c2)
+	_characters_by_id[2] = c2
+
+	var topic := TopicMomentumSystem.create_topic(
+		200, "War!", TopicData.Tier.TIER_1, TopicData.Category.MILITARY,
+		0, 80.0
+	)
+	var active_topics: Array[TopicData] = [topic]
+
+	var ws: Dictionary = _make_world_states()
+	ws[2] = ws[1].duplicate(true)
+	var objs: Dictionary = _make_objectives()
+	objs[2] = {"primary": {"need_type": "REST", "priority": 3}}
+
+	var result: Dictionary = DayOrchestrator.advance_day(
+		_time, _characters, _characters_by_id, ws,
+		objs, _scoring_tables, _filter_data, _dice,
+		_action_skill_map, _provinces, _action_log, _season_meta,
+		active_topics
+	)
+	assert_true(200 in _characters[0].topic_pool)
+	assert_true(200 in c2.topic_pool)
+	assert_true(result["broadcast_results"].size() > 0)
+
+
+func test_advance_day_broadcast_computes_positions() -> void:
+	_characters[0].topic_pool = []
+	_characters[0].topic_positions = {}
+	_characters[0].bushido_virtue = Enums.BushidoVirtue.CHUGI
+
+	var topic := TopicMomentumSystem.create_topic(
+		300, "Betrayal", TopicData.Tier.TIER_1, TopicData.Category.POLITICAL,
+		0, 80.0, [], "", "", 5, "betrayal"
+	)
+	var active_topics: Array[TopicData] = [topic]
+
+	DayOrchestrator.advance_day(
+		_time, _characters, _characters_by_id, _make_world_states(),
+		_make_objectives(), _scoring_tables, _filter_data, _dice,
+		_action_skill_map, _provinces, _action_log, _season_meta,
+		active_topics
+	)
+	assert_true(_characters[0].topic_positions.has(300))
+
+
 func test_advance_day_delivers_due_letters() -> void:
 	var recipient := _characters[0]
 	var dice2 := DiceEngine.new()

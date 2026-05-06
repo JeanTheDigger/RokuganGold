@@ -103,6 +103,7 @@ extends Resource
 @export var fear_rating: int = 0
 @export var captive_status: String = ""
 @export var topic_pool: Array[int] = []
+@export var topic_positions: Dictionary = {}
 @export var active_quest: String = ""
 @export var met_characters: Array[int] = []
 @export var knowledge_pool: Array[KnowledgeEntry] = []

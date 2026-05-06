@@ -17,6 +17,8 @@ enum Category {
 @export var topic_id: int = -1
 @export var slug: String = ""
 @export var title: String = ""
+@export var topic_type: String = ""
+@export var variant: String = ""
 @export var tier: Tier = Tier.TIER_4
 @export var category: Category = Category.PERSONAL
 @export var momentum: float = 0.0

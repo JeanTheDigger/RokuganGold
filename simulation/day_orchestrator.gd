@@ -25,6 +25,7 @@ static func advance_day(
 	crime_records: Array[CrimeRecord] = [],
 	next_case_id: Array[int] = [1],
 	military_data: Dictionary = {},
+	character_province_map: Dictionary = {},
 ) -> Dictionary:
 	var prev_season: int = time_system.get_season()
 
@@ -57,7 +58,18 @@ static func advance_day(
 		characters, dice_engine, current_season
 	)
 
+	_wire_discussion_counts(conversation_results, active_topics)
+	_compute_positions_from_conversations(
+		conversation_results, active_topics, characters_by_id
+	)
+
 	var topic_results: Dictionary = TopicMomentumSystem.process_daily_tick(active_topics)
+
+	var province_clan_map: Dictionary = _build_province_clan_map(provinces)
+	var broadcast_results: Array[Dictionary] = TopicMomentumSystem.broadcast_public_knowledge(
+		active_topics, characters, character_province_map, province_clan_map, provinces
+	)
+	_compute_positions_from_broadcast(broadcast_results, active_topics, characters_by_id)
 
 	var info_results: Array[Dictionary] = _process_info_events(
 		day_result.get("applied", []),
@@ -85,6 +97,7 @@ static func advance_day(
 		"applied": day_result.get("applied", []),
 		"conversation_results": conversation_results,
 		"topic_results": topic_results,
+		"broadcast_results": broadcast_results,
 		"info_results": info_results,
 		"letter_results": letter_results,
 		"seasonal_result": seasonal_result,
@@ -291,6 +304,92 @@ static func _process_commitment_deadlines(
 	return CommitmentRegistry.process_deadlines(
 		commitments, ic_day, checker, characters_by_id, characters_by_id
 	)
+
+
+# -- Topic Propagation Wiring --------------------------------------------------
+
+static func _wire_discussion_counts(
+	conversation_results: Array[Dictionary],
+	active_topics: Array[TopicData],
+) -> void:
+	var discussed_ids: Array[int] = []
+	for result: Dictionary in conversation_results:
+		var topic_a: int = result.get("topic_shared_by_a", -1)
+		var topic_b: int = result.get("topic_shared_by_b", -1)
+		if topic_a >= 0:
+			discussed_ids.append(topic_a)
+		if topic_b >= 0:
+			discussed_ids.append(topic_b)
+	if not discussed_ids.is_empty():
+		TopicMomentumSystem.increment_discussion_counts(active_topics, discussed_ids)
+
+
+static func _compute_positions_from_conversations(
+	conversation_results: Array[Dictionary],
+	active_topics: Array[TopicData],
+	characters_by_id: Dictionary,
+) -> void:
+	var topic_map: Dictionary = {}
+	for t: TopicData in active_topics:
+		topic_map[t.topic_id] = t
+
+	for result: Dictionary in conversation_results:
+		var char_a_id: int = result.get("char_a_id", -1)
+		var char_b_id: int = result.get("char_b_id", -1)
+		var topic_a: int = result.get("topic_shared_by_a", -1)
+		var topic_b: int = result.get("topic_shared_by_b", -1)
+		var transferred_to_b: bool = result.get("transferred_to_b", false)
+		var transferred_to_a: bool = result.get("transferred_to_a", false)
+
+		if transferred_to_b and topic_a >= 0 and topic_map.has(topic_a):
+			var char_b: L5RCharacterData = characters_by_id.get(char_b_id)
+			if char_b != null and not char_b.topic_positions.has(topic_a):
+				var pos: float = TopicMomentumSystem.calculate_starting_position(
+					topic_map[topic_a], char_b.disposition_values,
+					char_b.bushido_virtue, char_b.shourido_virtue
+				)
+				char_b.topic_positions[topic_a] = pos
+
+		if transferred_to_a and topic_b >= 0 and topic_map.has(topic_b):
+			var char_a: L5RCharacterData = characters_by_id.get(char_a_id)
+			if char_a != null and not char_a.topic_positions.has(topic_b):
+				var pos: float = TopicMomentumSystem.calculate_starting_position(
+					topic_map[topic_b], char_a.disposition_values,
+					char_a.bushido_virtue, char_a.shourido_virtue
+				)
+				char_a.topic_positions[topic_b] = pos
+
+
+static func _compute_positions_from_broadcast(
+	broadcast_results: Array[Dictionary],
+	active_topics: Array[TopicData],
+	characters_by_id: Dictionary,
+) -> void:
+	var topic_map: Dictionary = {}
+	for t: TopicData in active_topics:
+		topic_map[t.topic_id] = t
+
+	for result: Dictionary in broadcast_results:
+		var char_id: int = result.get("character_id", -1)
+		var topic_id: int = result.get("topic_id", -1)
+		var character: L5RCharacterData = characters_by_id.get(char_id)
+		if character == null or not topic_map.has(topic_id):
+			continue
+		if not character.topic_positions.has(topic_id):
+			var pos: float = TopicMomentumSystem.calculate_starting_position(
+				topic_map[topic_id], character.disposition_values,
+				character.bushido_virtue, character.shourido_virtue
+			)
+			character.topic_positions[topic_id] = pos
+
+
+static func _build_province_clan_map(provinces: Dictionary) -> Dictionary:
+	var result: Dictionary = {}
+	for pid: int in provinces:
+		var prov: ProvinceData = provinces[pid]
+		if prov != null:
+			result[pid] = prov.clan
+	return result
 
 
 static func _season_to_name(season: int) -> String:

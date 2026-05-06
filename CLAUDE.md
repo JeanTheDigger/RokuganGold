@@ -287,6 +287,29 @@ single-dice-entry-point and server-authoritative constraints.
   state. Commission system. Provenance investigation. World gen helpers.
 - **shared/tattoo_data.gd** — TattooData Resource (9 body locations).
 
+### Topic Propagation (s16, s15.5, s15.6)
+- **simulation/topic_system.gd** — TopicMomentumSystem with three propagation
+  features wired into DayOrchestrator:
+  1. **Discussion count wiring** — conversation results increment
+     `discussion_count_this_day` on TopicData before daily tick, driving
+     Tier 4 topic decay/hold mechanics.
+  2. **Public knowledge broadcast** — after momentum tick, topics spread to
+     characters based on momentum thresholds: Minor (11+) → affected provinces,
+     Secondary (26+) → +adjacent provinces, Major (51+) → clan territory,
+     Unavoidable (76+) → all characters. Uses ProvinceData adjacency.
+  3. **Starting position calculation** — `calculate_starting_position()` per
+     GDD s15.5: `(Disposition Anchor Sum × 0.5) + Personality Modifier`,
+     clamped ±100. Disposition anchors use subject_role direction
+     (BENEFICIARY/VICTIM/PERPETRATOR/NEUTRAL). Personality modifier from
+     14-virtue × topic_type:variant table (VIRTUE_MODIFIERS const, s15.6).
+     Positions computed on topic acquisition (conversation transfer, broadcast).
+  - TopicData gains `topic_type`, `variant` fields.
+  - L5RCharacterData gains `topic_positions: Dictionary` (topic_id → float).
+  - DayOrchestrator gains `character_province_map` parameter, builds
+    `province_clan_map` from provinces. Sequence: conversations → wire
+    discussion counts → compute conversation positions → topic tick →
+    broadcast → compute broadcast positions.
+
 ### Character Sheet Field Index (s57.35)
 - **shared/character_data.gd** — Consolidated all fields from gap sections:
   military_rank, commanded_unit_id, assigned_company_id (s11.3.18),
@@ -313,7 +336,8 @@ All in /tests/, one file per system:
 - test_resource_tick.gd (~30 tests)
 - test_objective_decomposer.gd (~100 tests)
 - test_information_system.gd (~35 tests)
-- test_day_orchestrator.gd (~12 tests)
+- test_topic_system.gd (~55 tests)
+- test_day_orchestrator.gd (~15 tests)
 - test_approach_evaluation.gd (~55 tests)
 - test_commitment_registry.gd (~60 tests)
 - test_military_hierarchy.gd (~40 tests)
@@ -323,7 +347,7 @@ All in /tests/, one file per system:
 - test_system_wiring.gd (~20 tests)
 
 ### What's Next
-1. Topic propagation — momentum tracking, public knowledge broadcast per GDD s16
+1. Wire topic position calculation into LetterSystem topic transfers
 2. Daily conversation / letter information exchange per GDD s55.12
 3. Crime investigation system per GDD s57.47, s57.16 (crime recording is wired;
    investigation/discovery flow is not)
