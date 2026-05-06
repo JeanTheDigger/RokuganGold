@@ -40,6 +40,11 @@ const MILITARY_OBJECTIVES: Array[String] = [
 	"STRENGTHEN_FORTIFICATION",
 ]
 
+const INVESTIGATION_OBJECTIVES: Array[String] = [
+	"INVESTIGATE_CRIME",
+	"UPHOLD_LAW",
+]
+
 
 # -- Main Entry Point ---------------------------------------------------------
 
@@ -59,6 +64,8 @@ static func decompose(
 		return _decompose_personal(need_type, objective, ctx)
 	if need_type in MILITARY_OBJECTIVES:
 		return _decompose_military(need_type, objective, ctx)
+	if need_type in INVESTIGATION_OBJECTIVES:
+		return _decompose_investigation(need_type, objective, ctx)
 
 	return _passthrough(objective)
 
@@ -147,6 +154,21 @@ static func _decompose_military(
 		"STRENGTHEN_FORTIFICATION":
 			return _decompose_strengthen_fortification(objective, ctx)
 	return _passthrough(objective)
+
+
+# -- Investigation Routing (GDD s57.16) ----------------------------------------
+
+static func _decompose_investigation(
+	need_type: String,
+	objective: Dictionary,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> NPCDataStructures.ImmediateNeed:
+	if need_type == "UPHOLD_LAW":
+		var case_data: Dictionary = objective.get("active_case", {})
+		if case_data.is_empty():
+			return _passthrough(objective)
+		return InvestigationDecomposer.decompose(case_data, ctx)
+	return InvestigationDecomposer.decompose(objective, ctx)
 
 
 # =============================================================================
