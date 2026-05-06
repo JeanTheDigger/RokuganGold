@@ -42,7 +42,7 @@ extends Resource
 @export var active_crisis_id: int = -1
 @export var active_insurgency_id: int = -1
 @export var garrison_pu: int = 0
-@export var last_report_ic_day: int = 0
+@export var last_report_ic_day: int = -1
 
 # -- Terrain Multipliers (s4.3) -----------------------------------------------
 

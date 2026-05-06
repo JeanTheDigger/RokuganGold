@@ -109,7 +109,7 @@ func test_theater_fields():
 # =============================================================================
 
 func test_void_refresh_blocked_until():
-	assert_eq(_char.void_refresh_blocked_until, 0)
+	assert_eq(_char.void_refresh_blocked_until, -1)
 
 
 # =============================================================================
@@ -117,7 +117,7 @@ func test_void_refresh_blocked_until():
 # =============================================================================
 
 func test_medicine_fields():
-	assert_eq(_char.last_medicine_treatment_ic_day, 0)
+	assert_eq(_char.last_medicine_treatment_ic_day, -1)
 	assert_true(_char.rested_last_night)
 
 

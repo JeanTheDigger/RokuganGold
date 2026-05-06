@@ -21,21 +21,21 @@ static func make_entry(
 	entry_type: String,
 	data: Dictionary,
 	season: int,
-) -> Dictionary:
-	return {
-		"source": source,
-		"entry_type": entry_type,
-		"data": data,
-		"confidence": Confidence.FRESH,
-		"season_acquired": season,
-	}
+) -> KnowledgeEntry:
+	var entry := KnowledgeEntry.new()
+	entry.source = source
+	entry.entry_type = entry_type
+	entry.data = data
+	entry.confidence = Confidence.FRESH
+	entry.season_acquired = season
+	return entry
 
 
 # -- Adding Knowledge ----------------------------------------------------------
 
 static func add_knowledge(
 	character: L5RCharacterData,
-	entry: Dictionary,
+	entry: KnowledgeEntry,
 ) -> void:
 	character.knowledge_pool.append(entry)
 
@@ -62,8 +62,8 @@ static func process_probe_result(
 	action_log: Array[Dictionary],
 	current_season: int,
 	quality: int,
-) -> Array[Dictionary]:
-	var discovered: Array[Dictionary] = []
+) -> Array[KnowledgeEntry]:
+	var discovered: Array[KnowledgeEntry] = []
 	var target_actions: Array[Dictionary] = _get_target_actions(target_id, action_log)
 
 	var max_entries: int = clampi(quality, 1, 5)
@@ -72,7 +72,7 @@ static func process_probe_result(
 		if count >= max_entries:
 			break
 		var action: Dictionary = target_actions[i]
-		var entry: Dictionary = make_entry(
+		var entry: KnowledgeEntry = make_entry(
 			Source.INTELLIGENCE,
 			"observed_action",
 			{
@@ -106,8 +106,8 @@ static func process_observe_court(
 	attendees: Array[L5RCharacterData],
 	quality: int,
 	current_season: int,
-) -> Array[Dictionary]:
-	var discovered: Array[Dictionary] = []
+) -> Array[KnowledgeEntry]:
+	var discovered: Array[KnowledgeEntry] = []
 	var unknown: Array[L5RCharacterData] = []
 	for a: L5RCharacterData in attendees:
 		if a.character_id != observer.character_id and a.character_id not in observer.met_characters:
@@ -117,7 +117,7 @@ static func process_observe_court(
 	for i: int in range(mini(max_discover, unknown.size())):
 		var target: L5RCharacterData = unknown[i]
 		add_contact(observer, target.character_id, target.clan)
-		var entry: Dictionary = make_entry(
+		var entry: KnowledgeEntry = make_entry(
 			Source.DIRECT_OBSERVATION,
 			"contact_discovered",
 			{
@@ -140,13 +140,13 @@ static func process_introduction(
 	introduced: L5RCharacterData,
 	is_kuge: bool,
 	current_season: int,
-) -> Dictionary:
+) -> KnowledgeEntry:
 	add_contact(recipient, introduced.character_id, introduced.clan)
 	var starting_disp: int = 2 if is_kuge else 3
 	if not recipient.disposition_values.has(introduced.character_id):
 		recipient.disposition_values[introduced.character_id] = starting_disp
 
-	var entry: Dictionary = make_entry(
+	var entry: KnowledgeEntry = make_entry(
 		Source.DIRECT_OBSERVATION,
 		"introduction",
 		{
@@ -169,15 +169,18 @@ static func transfer_objective_knowledge(
 	recipient: L5RCharacterData,
 	objective: Dictionary,
 	current_season: int,
-) -> Array[Dictionary]:
-	var transferred: Array[Dictionary] = []
+) -> Array[KnowledgeEntry]:
+	var transferred: Array[KnowledgeEntry] = []
 	var target_tags: Array[String] = _extract_target_tags(objective)
 
-	for entry: Dictionary in assigner.knowledge_pool:
+	for entry: KnowledgeEntry in assigner.knowledge_pool:
 		if _entry_matches_tags(entry, target_tags):
-			var copy: Dictionary = entry.duplicate(true)
-			copy["confidence"] = Confidence.FRESH
-			copy["season_acquired"] = current_season
+			var copy := KnowledgeEntry.new()
+			copy.source = entry.source
+			copy.entry_type = entry.entry_type
+			copy.data = entry.data.duplicate(true)
+			copy.confidence = Confidence.FRESH
+			copy.season_acquired = current_season
 			add_knowledge(recipient, copy)
 			transferred.append(copy)
 
@@ -200,8 +203,8 @@ static func _extract_target_tags(objective: Dictionary) -> Array[String]:
 	return tags
 
 
-static func _entry_matches_tags(entry: Dictionary, tags: Array[String]) -> bool:
-	var data: Dictionary = entry.get("data", {})
+static func _entry_matches_tags(entry: KnowledgeEntry, tags: Array[String]) -> bool:
+	var data: Dictionary = entry.data
 	for tag: String in tags:
 		var parts: PackedStringArray = tag.split(":")
 		if parts.size() != 2:
@@ -230,16 +233,16 @@ static func decay_confidence(
 	current_season: int,
 ) -> int:
 	var decayed_count: int = 0
-	for entry: Dictionary in character.knowledge_pool:
-		if entry.get("entry_type", "") == "disposition":
+	for entry: KnowledgeEntry in character.knowledge_pool:
+		if entry.entry_type == "disposition":
 			continue
 
-		var age: int = current_season - entry.get("season_acquired", 0)
-		var old_conf: int = entry.get("confidence", Confidence.FRESH)
+		var age: int = current_season - entry.season_acquired
+		var old_conf: int = entry.confidence
 		var new_conf: int = _compute_confidence(age)
 
 		if new_conf != old_conf:
-			entry["confidence"] = new_conf
+			entry.confidence = new_conf
 			decayed_count += 1
 
 	return decayed_count
@@ -270,18 +273,17 @@ static func has_fresh_intel_on(
 	character: L5RCharacterData,
 	target_id: int,
 ) -> bool:
-	for entry: Dictionary in character.knowledge_pool:
-		var data: Dictionary = entry.get("data", {})
-		var char_id: int = data.get("target_character_id", data.get("character_id", -1))
-		if char_id == target_id and entry.get("confidence", Confidence.STALE) == Confidence.FRESH:
+	for entry: KnowledgeEntry in character.knowledge_pool:
+		var char_id: int = entry.data.get("target_character_id", entry.data.get("character_id", -1))
+		if char_id == target_id and entry.confidence == Confidence.FRESH:
 			return true
 	return false
 
 
-static func get_stale_entries(character: L5RCharacterData) -> Array[Dictionary]:
-	var stale: Array[Dictionary] = []
-	for entry: Dictionary in character.knowledge_pool:
-		if entry.get("confidence", Confidence.FRESH) == Confidence.STALE:
+static func get_stale_entries(character: L5RCharacterData) -> Array[KnowledgeEntry]:
+	var stale: Array[KnowledgeEntry] = []
+	for entry: KnowledgeEntry in character.knowledge_pool:
+		if entry.confidence == Confidence.STALE:
 			stale.append(entry)
 	return stale
 
@@ -294,7 +296,6 @@ static func count_by_confidence(
 		Confidence.RECENT: 0,
 		Confidence.STALE: 0,
 	}
-	for entry: Dictionary in character.knowledge_pool:
-		var conf: int = entry.get("confidence", Confidence.FRESH)
-		counts[conf] = counts.get(conf, 0) + 1
+	for entry: KnowledgeEntry in character.knowledge_pool:
+		counts[entry.confidence] = counts.get(entry.confidence, 0) + 1
 	return counts

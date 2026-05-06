@@ -13,7 +13,6 @@ extends Resource
 @export var status: Enums.CommitmentStatus = Enums.CommitmentStatus.PENDING
 @export var witnesses: Array[int] = []
 @export var created_ic_day: int = 0
-@export var created_by_action: String = ""
 @export var advance_notice_sent: bool = false
 @export var notice_ic_day: int = -1
 @export var proxy_sent: bool = false

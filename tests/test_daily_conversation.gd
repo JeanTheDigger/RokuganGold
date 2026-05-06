@@ -1,7 +1,7 @@
 extends GutTest
 
 
-func _make_char(id: int, topics: Array[String] = []) -> L5RCharacterData:
+func _make_char(id: int, topics: Array[int] = []) -> L5RCharacterData:
 	var c := L5RCharacterData.new()
 	c.character_id = id
 	c.topic_pool = topics.duplicate()
@@ -96,38 +96,38 @@ func test_should_converse_strangers_never():
 # -- Topic Selection -----------------------------------------------------------
 
 func test_select_topic_from_pool():
-	var topics: Array[String] = ["war_in_lion", "crane_scandal", "trade_deal"]
+	var topics: Array[int] = [1, 2, 3]
 	var c := _make_char(1, topics)
-	var topic: String = DailyConversation.select_topic_to_share(c, 1)
-	assert_eq(topic, "crane_scandal")
+	var topic: int = DailyConversation.select_topic_to_share(c, 1)
+	assert_eq(topic, 2)
 
 func test_select_topic_empty_pool():
 	var c := _make_char(1)
-	var topic: String = DailyConversation.select_topic_to_share(c, 0)
-	assert_eq(topic, "")
+	var topic: int = DailyConversation.select_topic_to_share(c, 0)
+	assert_eq(topic, -1)
 
 
 # -- Topic Transfer ------------------------------------------------------------
 
 func test_transfer_new_topic():
-	var topics_a: Array[String] = ["war_in_lion"]
+	var topics_a: Array[int] = [1]
 	var a := _make_char(1, topics_a)
 	var b := _make_char(2)
-	var transferred: bool = DailyConversation.transfer_topic(a, b, "war_in_lion")
+	var transferred: bool = DailyConversation.transfer_topic(a, b, 1)
 	assert_true(transferred)
-	assert_true("war_in_lion" in b.topic_pool)
+	assert_true(1 in b.topic_pool)
 
 func test_transfer_duplicate_topic_fails():
-	var topics: Array[String] = ["war_in_lion"]
+	var topics: Array[int] = [1]
 	var a := _make_char(1, topics)
 	var b := _make_char(2, topics)
-	var transferred: bool = DailyConversation.transfer_topic(a, b, "war_in_lion")
+	var transferred: bool = DailyConversation.transfer_topic(a, b, 1)
 	assert_false(transferred)
 
 func test_transfer_empty_topic_fails():
 	var a := _make_char(1)
 	var b := _make_char(2)
-	var transferred: bool = DailyConversation.transfer_topic(a, b, "")
+	var transferred: bool = DailyConversation.transfer_topic(a, b, -1)
 	assert_false(transferred)
 
 
@@ -152,34 +152,34 @@ func test_disposition_bonus_from_zero():
 # -- Full Conversation Resolution ----------------------------------------------
 
 func test_resolve_conversation_transfers_topics():
-	var topics_a: Array[String] = ["war_in_lion"]
-	var topics_b: Array[String] = ["crane_scandal"]
+	var topics_a: Array[int] = [1]
+	var topics_b: Array[int] = [2]
 	var a := _make_char(1, topics_a)
 	var b := _make_char(2, topics_b)
 	_set_mutual_disposition(a, b, 50)
 
 	var result: Dictionary = DailyConversation.resolve_conversation(a, b, 0, 0, 5)
-	assert_eq(result["topic_shared_by_a"], "war_in_lion")
-	assert_eq(result["topic_shared_by_b"], "crane_scandal")
+	assert_eq(result["topic_shared_by_a"], 1)
+	assert_eq(result["topic_shared_by_b"], 2)
 	assert_true(result["transferred_to_b"])
 	assert_true(result["transferred_to_a"])
-	assert_true("war_in_lion" in b.topic_pool)
-	assert_true("crane_scandal" in a.topic_pool)
+	assert_true(1 in b.topic_pool)
+	assert_true(2 in a.topic_pool)
 
 func test_resolve_conversation_adds_knowledge_entries():
-	var topics_a: Array[String] = ["war_in_lion"]
+	var topics_a: Array[int] = [1]
 	var a := _make_char(1, topics_a)
 	var b := _make_char(2)
 	_set_mutual_disposition(a, b, 50)
 
 	DailyConversation.resolve_conversation(a, b, 0, 0, 5)
 	assert_eq(b.knowledge_pool.size(), 1)
-	assert_eq(b.knowledge_pool[0]["entry_type"], "topic_learned")
-	assert_eq(b.knowledge_pool[0]["data"]["topic"], "war_in_lion")
-	assert_eq(b.knowledge_pool[0]["data"]["from_character_id"], 1)
+	assert_eq(b.knowledge_pool[0].entry_type, "topic_learned")
+	assert_eq(b.knowledge_pool[0].data["topic"], 1)
+	assert_eq(b.knowledge_pool[0].data["from_character_id"], 1)
 
 func test_resolve_conversation_no_knowledge_if_already_known():
-	var topics: Array[String] = ["war_in_lion"]
+	var topics: Array[int] = [1]
 	var a := _make_char(1, topics)
 	var b := _make_char(2, topics)
 	_set_mutual_disposition(a, b, 50)
@@ -188,7 +188,7 @@ func test_resolve_conversation_no_knowledge_if_already_known():
 	assert_eq(b.knowledge_pool.size(), 0)
 
 func test_resolve_conversation_grants_disposition():
-	var topics_a: Array[String] = ["war_in_lion"]
+	var topics_a: Array[int] = [1]
 	var a := _make_char(1, topics_a)
 	var b := _make_char(2)
 	_set_mutual_disposition(a, b, 50)
@@ -201,8 +201,8 @@ func test_resolve_conversation_grants_disposition():
 # -- Settlement Resolution with Cap --------------------------------------------
 
 func test_settlement_resolution_basic():
-	var topics_a: Array[String] = ["topic_1"]
-	var topics_b: Array[String] = ["topic_2"]
+	var topics_a: Array[int] = [101]
+	var topics_b: Array[int] = [102]
 	var a := _make_char(1, topics_a)
 	var b := _make_char(2, topics_b)
 	_set_mutual_disposition(a, b, 50)
@@ -228,7 +228,7 @@ func test_settlement_resolution_fails_roll():
 func test_settlement_resolution_cap_enforced():
 	var chars: Array[L5RCharacterData] = []
 	for i in range(8):
-		var topics: Array[String] = ["topic_" + str(i)]
+		var topics: Array[int] = [200 + i]
 		var c := _make_char(i + 1, topics)
 		chars.append(c)
 

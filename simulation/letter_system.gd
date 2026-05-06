@@ -97,7 +97,7 @@ static func write_letter(
 	letter_id: int,
 	sender: L5RCharacterData,
 	recipient_id: int,
-	topic: String,
+	topic: int,
 	ic_day_sent: int,
 	dice_engine: DiceEngine,
 	province_distance: int = 0,
@@ -148,7 +148,7 @@ static func deliver_letter(
 
 	# Transfer topic to recipient
 	var topic_transferred: bool = false
-	if not letter.topic.is_empty() and letter.topic not in recipient.topic_pool:
+	if letter.topic >= 0 and letter.topic not in recipient.topic_pool:
 		recipient.topic_pool.append(letter.topic)
 		topic_transferred = true
 		InformationSystem.add_knowledge(recipient, InformationSystem.make_entry(

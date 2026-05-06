@@ -36,30 +36,30 @@ func before_each() -> void:
 # -- Knowledge Entry Creation -------------------------------------------------
 
 func test_make_entry_sets_fields() -> void:
-	var entry: Dictionary = InformationSystem.make_entry(
+	var entry: KnowledgeEntry = InformationSystem.make_entry(
 		InformationSystem.Source.INTELLIGENCE,
 		"observed_action",
 		{"action_id": "CHARM"},
 		4,
 	)
-	assert_eq(entry["source"], InformationSystem.Source.INTELLIGENCE)
-	assert_eq(entry["entry_type"], "observed_action")
-	assert_eq(entry["confidence"], InformationSystem.Confidence.FRESH)
-	assert_eq(entry["season_acquired"], 4)
-	assert_eq(entry["data"]["action_id"], "CHARM")
+	assert_eq(entry.source, InformationSystem.Source.INTELLIGENCE)
+	assert_eq(entry.entry_type, "observed_action")
+	assert_eq(entry.confidence, InformationSystem.Confidence.FRESH)
+	assert_eq(entry.season_acquired, 4)
+	assert_eq(entry.data["action_id"], "CHARM")
 
 
 func test_make_entry_always_fresh() -> void:
-	var entry: Dictionary = InformationSystem.make_entry(
+	var entry: KnowledgeEntry = InformationSystem.make_entry(
 		InformationSystem.Source.DIRECT_OBSERVATION, "test", {}, 1
 	)
-	assert_eq(entry["confidence"], InformationSystem.Confidence.FRESH)
+	assert_eq(entry.confidence, InformationSystem.Confidence.FRESH)
 
 
 # -- Adding Knowledge ----------------------------------------------------------
 
 func test_add_knowledge_appends_to_pool() -> void:
-	var entry: Dictionary = InformationSystem.make_entry(
+	var entry: KnowledgeEntry = InformationSystem.make_entry(
 		InformationSystem.Source.INTELLIGENCE, "test", {}, 1
 	)
 	InformationSystem.add_knowledge(_char_a, entry)
@@ -107,7 +107,7 @@ func test_probe_discovers_target_actions() -> void:
 		{"character_id": 2, "action_id": "CHARM", "target_npc_id": 3, "ic_day": 5, "success": true},
 		{"character_id": 2, "action_id": "GOSSIP", "target_npc_id": 1, "ic_day": 6, "success": true},
 	]
-	var discovered: Array[Dictionary] = InformationSystem.process_probe_result(
+	var discovered: Array[KnowledgeEntry] = InformationSystem.process_probe_result(
 		_char_a, 2, action_log, 1, 3
 	)
 	assert_eq(discovered.size(), 2)
@@ -120,7 +120,7 @@ func test_probe_quality_limits_entries() -> void:
 		{"character_id": 2, "action_id": "GOSSIP", "target_npc_id": 1, "ic_day": 6, "success": true},
 		{"character_id": 2, "action_id": "TRAIN", "target_npc_id": -1, "ic_day": 7, "success": true},
 	]
-	var discovered: Array[Dictionary] = InformationSystem.process_probe_result(
+	var discovered: Array[KnowledgeEntry] = InformationSystem.process_probe_result(
 		_char_a, 2, action_log, 1, 1
 	)
 	assert_eq(discovered.size(), 1)
@@ -131,10 +131,10 @@ func test_probe_returns_most_recent_first() -> void:
 		{"character_id": 2, "action_id": "CHARM", "target_npc_id": 3, "ic_day": 5, "success": true},
 		{"character_id": 2, "action_id": "GOSSIP", "target_npc_id": 1, "ic_day": 6, "success": true},
 	]
-	var discovered: Array[Dictionary] = InformationSystem.process_probe_result(
+	var discovered: Array[KnowledgeEntry] = InformationSystem.process_probe_result(
 		_char_a, 2, action_log, 1, 1
 	)
-	assert_eq(discovered[0]["data"]["action_id"], "GOSSIP")
+	assert_eq(discovered[0].data["action_id"], "GOSSIP")
 
 
 func test_probe_ignores_other_characters() -> void:
@@ -142,7 +142,7 @@ func test_probe_ignores_other_characters() -> void:
 		{"character_id": 2, "action_id": "CHARM", "target_npc_id": 3, "ic_day": 5, "success": true},
 		{"character_id": 3, "action_id": "TRAIN", "target_npc_id": -1, "ic_day": 6, "success": true},
 	]
-	var discovered: Array[Dictionary] = InformationSystem.process_probe_result(
+	var discovered: Array[KnowledgeEntry] = InformationSystem.process_probe_result(
 		_char_a, 2, action_log, 1, 5
 	)
 	assert_eq(discovered.size(), 1)
@@ -150,7 +150,7 @@ func test_probe_ignores_other_characters() -> void:
 
 func test_probe_empty_log_returns_nothing() -> void:
 	var action_log: Array[Dictionary] = []
-	var discovered: Array[Dictionary] = InformationSystem.process_probe_result(
+	var discovered: Array[KnowledgeEntry] = InformationSystem.process_probe_result(
 		_char_a, 2, action_log, 1, 3
 	)
 	assert_eq(discovered.size(), 0)
@@ -161,14 +161,14 @@ func test_probe_entries_are_intelligence_source() -> void:
 		{"character_id": 2, "action_id": "CHARM", "target_npc_id": 3, "ic_day": 5, "success": true},
 	]
 	InformationSystem.process_probe_result(_char_a, 2, action_log, 1, 3)
-	assert_eq(_char_a.knowledge_pool[0]["source"], InformationSystem.Source.INTELLIGENCE)
+	assert_eq(_char_a.knowledge_pool[0].source, InformationSystem.Source.INTELLIGENCE)
 
 
 # -- Observe Court Attendees ---------------------------------------------------
 
 func test_observe_court_discovers_unknown() -> void:
 	var attendees: Array[L5RCharacterData] = [_char_b, _char_c]
-	var discovered: Array[Dictionary] = InformationSystem.process_observe_court(
+	var discovered: Array[KnowledgeEntry] = InformationSystem.process_observe_court(
 		_char_a, attendees, 2, 1
 	)
 	assert_eq(discovered.size(), 2)
@@ -180,20 +180,20 @@ func test_observe_court_skips_known() -> void:
 	_char_a.met_characters = [2]
 	InformationSystem.add_contact(_char_a, 2, "Scorpion")
 	var attendees: Array[L5RCharacterData] = [_char_b, _char_c]
-	var discovered: Array[Dictionary] = InformationSystem.process_observe_court(
+	var discovered: Array[KnowledgeEntry] = InformationSystem.process_observe_court(
 		_char_a, attendees, 3, 1
 	)
 	assert_eq(discovered.size(), 1)
-	assert_eq(discovered[0]["data"]["character_id"], 3)
+	assert_eq(discovered[0].data["character_id"], 3)
 
 
 func test_observe_court_skips_self() -> void:
 	var attendees: Array[L5RCharacterData] = [_char_a, _char_b]
-	var discovered: Array[Dictionary] = InformationSystem.process_observe_court(
+	var discovered: Array[KnowledgeEntry] = InformationSystem.process_observe_court(
 		_char_a, attendees, 3, 1
 	)
 	assert_eq(discovered.size(), 1)
-	assert_eq(discovered[0]["data"]["character_id"], 2)
+	assert_eq(discovered[0].data["character_id"], 2)
 
 
 func test_observe_court_quality_caps_at_3() -> void:
@@ -204,7 +204,7 @@ func test_observe_court_quality_caps_at_3() -> void:
 	c4.family = "Doji"
 	c4.status = 6.0
 	var attendees: Array[L5RCharacterData] = [_char_b, _char_c, c4]
-	var discovered: Array[Dictionary] = InformationSystem.process_observe_court(
+	var discovered: Array[KnowledgeEntry] = InformationSystem.process_observe_court(
 		_char_a, attendees, 5, 1
 	)
 	assert_eq(discovered.size(), 3)
@@ -212,17 +212,17 @@ func test_observe_court_quality_caps_at_3() -> void:
 
 func test_observe_court_records_clan_info() -> void:
 	var attendees: Array[L5RCharacterData] = [_char_b]
-	var discovered: Array[Dictionary] = InformationSystem.process_observe_court(
+	var discovered: Array[KnowledgeEntry] = InformationSystem.process_observe_court(
 		_char_a, attendees, 1, 1
 	)
-	assert_eq(discovered[0]["data"]["clan"], "Scorpion")
-	assert_eq(discovered[0]["data"]["family"], "Bayushi")
+	assert_eq(discovered[0].data["clan"], "Scorpion")
+	assert_eq(discovered[0].data["family"], "Bayushi")
 
 
 func test_observe_court_direct_observation_source() -> void:
 	var attendees: Array[L5RCharacterData] = [_char_b]
 	InformationSystem.process_observe_court(_char_a, attendees, 1, 1)
-	assert_eq(_char_a.knowledge_pool[0]["source"], InformationSystem.Source.DIRECT_OBSERVATION)
+	assert_eq(_char_a.knowledge_pool[0].source, InformationSystem.Source.DIRECT_OBSERVATION)
 
 
 # -- Introduction --------------------------------------------------------------
@@ -251,7 +251,7 @@ func test_introduction_does_not_overwrite_existing_disposition() -> void:
 func test_introduction_creates_knowledge_entry() -> void:
 	InformationSystem.process_introduction(_char_a, _char_b, false, 1)
 	assert_eq(_char_a.knowledge_pool.size(), 1)
-	assert_eq(_char_a.knowledge_pool[0]["entry_type"], "introduction")
+	assert_eq(_char_a.knowledge_pool[0].entry_type, "introduction")
 
 
 # -- Confidence Decay ----------------------------------------------------------
@@ -262,7 +262,7 @@ func test_decay_fresh_stays_fresh_same_season() -> void:
 	))
 	var decayed: int = InformationSystem.decay_confidence(_char_a, 4)
 	assert_eq(decayed, 0)
-	assert_eq(_char_a.knowledge_pool[0]["confidence"], InformationSystem.Confidence.FRESH)
+	assert_eq(_char_a.knowledge_pool[0].confidence, InformationSystem.Confidence.FRESH)
 
 
 func test_decay_to_recent_after_one_season() -> void:
@@ -271,7 +271,7 @@ func test_decay_to_recent_after_one_season() -> void:
 	))
 	var decayed: int = InformationSystem.decay_confidence(_char_a, 2)
 	assert_eq(decayed, 1)
-	assert_eq(_char_a.knowledge_pool[0]["confidence"], InformationSystem.Confidence.RECENT)
+	assert_eq(_char_a.knowledge_pool[0].confidence, InformationSystem.Confidence.RECENT)
 
 
 func test_decay_to_stale_after_three_seasons() -> void:
@@ -280,7 +280,7 @@ func test_decay_to_stale_after_three_seasons() -> void:
 	))
 	var decayed: int = InformationSystem.decay_confidence(_char_a, 4)
 	assert_eq(decayed, 1)
-	assert_eq(_char_a.knowledge_pool[0]["confidence"], InformationSystem.Confidence.STALE)
+	assert_eq(_char_a.knowledge_pool[0].confidence, InformationSystem.Confidence.STALE)
 
 
 func test_decay_skips_disposition_entries() -> void:
@@ -289,7 +289,7 @@ func test_decay_skips_disposition_entries() -> void:
 	))
 	var decayed: int = InformationSystem.decay_confidence(_char_a, 10)
 	assert_eq(decayed, 0)
-	assert_eq(_char_a.knowledge_pool[0]["confidence"], InformationSystem.Confidence.FRESH)
+	assert_eq(_char_a.knowledge_pool[0].confidence, InformationSystem.Confidence.FRESH)
 
 
 func test_decay_multiple_entries() -> void:
@@ -301,8 +301,8 @@ func test_decay_multiple_entries() -> void:
 	))
 	var decayed: int = InformationSystem.decay_confidence(_char_a, 4)
 	assert_eq(decayed, 2)
-	assert_eq(_char_a.knowledge_pool[0]["confidence"], InformationSystem.Confidence.STALE)
-	assert_eq(_char_a.knowledge_pool[1]["confidence"], InformationSystem.Confidence.RECENT)
+	assert_eq(_char_a.knowledge_pool[0].confidence, InformationSystem.Confidence.STALE)
+	assert_eq(_char_a.knowledge_pool[1].confidence, InformationSystem.Confidence.RECENT)
 
 
 # -- Information Transfer (GDD s55.6) -----------------------------------------
@@ -317,24 +317,24 @@ func test_transfer_copies_matching_entries() -> void:
 		{"target_province_id": 20, "stability": 80}, 1
 	))
 	var objective: Dictionary = {"target_province_id": 10}
-	var transferred: Array[Dictionary] = InformationSystem.transfer_objective_knowledge(
+	var transferred: Array[KnowledgeEntry] = InformationSystem.transfer_objective_knowledge(
 		_char_a, _char_b, objective, 2
 	)
 	assert_eq(transferred.size(), 1)
 	assert_eq(_char_b.knowledge_pool.size(), 1)
-	assert_eq(_char_b.knowledge_pool[0]["data"]["target_province_id"], 10)
+	assert_eq(_char_b.knowledge_pool[0].data["target_province_id"], 10)
 
 
 func test_transfer_sets_fresh_confidence() -> void:
-	var entry: Dictionary = InformationSystem.make_entry(
+	var entry: KnowledgeEntry = InformationSystem.make_entry(
 		InformationSystem.Source.INTELLIGENCE, "test",
 		{"target_province_id": 10}, 1
 	)
-	entry["confidence"] = InformationSystem.Confidence.STALE
+	entry.confidence = InformationSystem.Confidence.STALE
 	InformationSystem.add_knowledge(_char_a, entry)
 	var objective: Dictionary = {"target_province_id": 10}
 	InformationSystem.transfer_objective_knowledge(_char_a, _char_b, objective, 5)
-	assert_eq(_char_b.knowledge_pool[0]["confidence"], InformationSystem.Confidence.FRESH)
+	assert_eq(_char_b.knowledge_pool[0].confidence, InformationSystem.Confidence.FRESH)
 
 
 func test_transfer_copies_clan_contacts() -> void:
@@ -352,7 +352,7 @@ func test_transfer_npc_targeted_entries() -> void:
 		{"target_character_id": 5, "action_id": "CHARM"}, 1
 	))
 	var objective: Dictionary = {"target_npc_id": 5}
-	var transferred: Array[Dictionary] = InformationSystem.transfer_objective_knowledge(
+	var transferred: Array[KnowledgeEntry] = InformationSystem.transfer_objective_knowledge(
 		_char_a, _char_b, objective, 1
 	)
 	assert_eq(transferred.size(), 1)
@@ -383,11 +383,11 @@ func test_has_fresh_intel_on_target() -> void:
 
 
 func test_has_fresh_intel_false_when_stale() -> void:
-	var entry: Dictionary = InformationSystem.make_entry(
+	var entry: KnowledgeEntry = InformationSystem.make_entry(
 		InformationSystem.Source.INTELLIGENCE, "observed_action",
 		{"target_character_id": 2, "action_id": "CHARM"}, 1
 	)
-	entry["confidence"] = InformationSystem.Confidence.STALE
+	entry.confidence = InformationSystem.Confidence.STALE
 	InformationSystem.add_knowledge(_char_a, entry)
 	assert_false(InformationSystem.has_fresh_intel_on(_char_a, 2))
 
@@ -397,16 +397,16 @@ func test_has_fresh_intel_false_for_unknown() -> void:
 
 
 func test_get_stale_entries() -> void:
-	var fresh: Dictionary = InformationSystem.make_entry(
+	var fresh: KnowledgeEntry = InformationSystem.make_entry(
 		InformationSystem.Source.INTELLIGENCE, "test", {}, 4
 	)
-	var stale: Dictionary = InformationSystem.make_entry(
+	var stale: KnowledgeEntry = InformationSystem.make_entry(
 		InformationSystem.Source.INTELLIGENCE, "test", {}, 1
 	)
-	stale["confidence"] = InformationSystem.Confidence.STALE
+	stale.confidence = InformationSystem.Confidence.STALE
 	InformationSystem.add_knowledge(_char_a, fresh)
 	InformationSystem.add_knowledge(_char_a, stale)
-	var stale_entries: Array[Dictionary] = InformationSystem.get_stale_entries(_char_a)
+	var stale_entries: Array[KnowledgeEntry] = InformationSystem.get_stale_entries(_char_a)
 	assert_eq(stale_entries.size(), 1)
 
 
@@ -417,10 +417,10 @@ func test_count_by_confidence() -> void:
 	InformationSystem.add_knowledge(_char_a, InformationSystem.make_entry(
 		InformationSystem.Source.INTELLIGENCE, "b", {}, 1
 	))
-	var stale: Dictionary = InformationSystem.make_entry(
+	var stale: KnowledgeEntry = InformationSystem.make_entry(
 		InformationSystem.Source.INTELLIGENCE, "c", {}, 1
 	)
-	stale["confidence"] = InformationSystem.Confidence.STALE
+	stale.confidence = InformationSystem.Confidence.STALE
 	InformationSystem.add_knowledge(_char_a, stale)
 	var counts: Dictionary = InformationSystem.count_by_confidence(_char_a)
 	assert_eq(counts[InformationSystem.Confidence.FRESH], 2)

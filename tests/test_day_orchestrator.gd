@@ -203,7 +203,7 @@ func test_season_change_decays_knowledge() -> void:
 	)
 	# Season 0→1 is 1 season old → RECENT
 	assert_eq(
-		_characters[0].knowledge_pool[0]["confidence"],
+		_characters[0].knowledge_pool[0].confidence,
 		InformationSystem.Confidence.RECENT
 	)
 
@@ -273,10 +273,10 @@ func test_advance_day_conversations_fire_for_colocated_friends() -> void:
 	c2.knowledge_pool = []
 	c2.known_contacts_by_clan = {}
 	c2.met_characters = []
-	c2.topic_pool = ["crane_alliance"]
+	c2.topic_pool = [4]
 
 	_characters[0].physical_location = "castle_crane"
-	_characters[0].topic_pool = ["war_in_lion"]
+	_characters[0].topic_pool = [1]
 	_characters[0].disposition_values[2] = 80
 	c2.physical_location = "castle_crane"
 	c2.disposition_values[1] = 80
@@ -327,7 +327,7 @@ func test_advance_day_delivers_due_letters() -> void:
 	sender.lord_id = -1
 
 	var letter: LetterData = LetterSystem.write_letter(
-		1, sender, recipient.character_id, "crane_scandal", 0, dice2, 0
+		1, sender, recipient.character_id, 2, 0, dice2, 0
 	)
 	var pending: Array = [letter]
 
@@ -337,4 +337,4 @@ func test_advance_day_delivers_due_letters() -> void:
 		_action_skill_map, _provinces, _action_log, _season_meta,
 		[], pending
 	)
-	assert_true("crane_scandal" in recipient.topic_pool)
+	assert_true(2 in recipient.topic_pool)

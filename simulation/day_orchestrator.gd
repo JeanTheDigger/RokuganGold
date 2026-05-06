@@ -103,7 +103,7 @@ static func _process_info_events(
 			var quality: int = event.get("quality", 1)
 
 			if target_id > 0:
-				var discovered: Array[Dictionary] = InformationSystem.process_probe_result(
+				var discovered: Array[KnowledgeEntry] = InformationSystem.process_probe_result(
 					character, target_id, action_log, current_season, quality
 				)
 				results.append({

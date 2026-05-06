@@ -385,21 +385,25 @@ Code refactors required by the resolved design decisions above.
 None of these are design work — the decisions are locked. These are
 mechanical code changes to implement them.
 
-- [ ] **Topic int migration** — Change `L5RCharacterData.topic_pool` from
-  `Array[String]` to `Array[int]`. Add `slug: String` field to `TopicData`.
-  Add world-level `next_topic_id: int` counter. Update letter/conversation
-  code from string slug matching to int comparison.
-- [ ] **Sentinel cleanup** — Grep all `_ic_day`, `_ooc_day`, `_blocked_until`
-  fields. Change any defaulting to `0` for "never" to default `-1`. Update
-  comparison checks from `== 0` to `== -1` where the intent is "never happened."
-- [ ] **CommitmentData field removal** — Remove `created_by_action` from
-  `shared/commitment_data.gd`. Update `create_commitment()` and any reads.
-  `source_action_id` is the sole surviving field.
-- [ ] **KnowledgeEntry Resource** — Create `shared/knowledge_entry.gd`
-  (`class_name KnowledgeEntry extends Resource`). Define typed fields for the
-  ~6 known keys. Change `L5RCharacterData.knowledge_pool` to
-  `Array[KnowledgeEntry]`. Update all InformationSystem dict access to
-  property access.
+- [x] **Topic int migration** — Changed `L5RCharacterData.topic_pool` from
+  `Array[String]` to `Array[int]`. Added `slug: String` field to `TopicData`.
+  Updated DailyConversation and LetterSystem from string topic matching to
+  int comparison. `LetterData.topic` changed from `String` to `int` (sentinel
+  `-1` for no topic). World-level `next_topic_id` counter deferred until
+  topic creation code is implemented.
+- [x] **Sentinel cleanup** — Changed "never happened" fields from `= 0` to
+  `= -1`: `void_refresh_blocked_until`, `last_medicine_treatment_ic_day`
+  (character_data.gd), `last_report_ic_day` (province_data.gd,
+  npc_data_structures.gd). Updated test assertions.
+- [x] **CommitmentData field removal** — Removed `created_by_action` from
+  `shared/commitment_data.gd` and `create_commitment()` in
+  `commitment_registry.gd`. `source_action_id` is the sole surviving field.
+- [x] **KnowledgeEntry Resource** — Created `shared/knowledge_entry.gd`
+  (`class_name KnowledgeEntry extends Resource`) with typed fields: `source`,
+  `entry_type`, `data`, `confidence`, `season_acquired`. Changed
+  `L5RCharacterData.knowledge_pool` to `Array[KnowledgeEntry]`. Updated all
+  InformationSystem methods from dict access to property access. Updated all
+  test files.
 
 ## What To Do When Uncertain
 Stop. Read the relevant LOCKED section in /gdd/. If it does not answer the

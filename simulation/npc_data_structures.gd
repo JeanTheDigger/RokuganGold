@@ -104,7 +104,7 @@ class ProvinceStatus:
 	var active_crisis_id: int = -1
 	var active_insurgency_id: int = -1
 	var rice_stockpile: float = 0.0
-	var last_report_ic_day: int = 0
+	var last_report_ic_day: int = -1
 	var confidence: int = 0  # 0=stale, 1=recent, 2=fresh
 
 

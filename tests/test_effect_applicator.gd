@@ -26,7 +26,7 @@ func before_each() -> void:
 	province.province_id = 10
 	province.stability = 70.0
 	province.garrison_pu = 3
-	province.last_report_ic_day = 0
+	province.last_report_ic_day = -1
 	_provinces = {10: province}
 
 	_action_log = []

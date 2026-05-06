@@ -128,12 +128,12 @@ func test_write_letter_sets_fields():
 	dice.set_seed(42)
 	var sender := _make_char(1, 3)
 	var letter: LetterData = LetterSystem.write_letter(
-		100, sender, 2, "crane_scandal", 10, dice, 3
+		100, sender, 2, 2, 10, dice, 3
 	)
 	assert_eq(letter.letter_id, 100)
 	assert_eq(letter.sender_id, 1)
 	assert_eq(letter.recipient_id, 2)
-	assert_eq(letter.topic, "crane_scandal")
+	assert_eq(letter.topic, 2)
 	assert_eq(letter.ic_day_sent, 10)
 	assert_false(letter.delivered)
 
@@ -143,7 +143,7 @@ func test_write_letter_arrival_calculated():
 	var sender := _make_char(1, 3)
 	# 6 provinces = 2 days transit
 	var letter: LetterData = LetterSystem.write_letter(
-		1, sender, 2, "topic", 5, dice, 6
+		1, sender, 2, 10, 5, dice, 6
 	)
 	assert_eq(letter.ic_day_arrival, 7)
 
@@ -152,7 +152,7 @@ func test_write_letter_same_province_arrives_today():
 	dice.set_seed(42)
 	var sender := _make_char(1, 3)
 	var letter: LetterData = LetterSystem.write_letter(
-		1, sender, 2, "topic", 5, dice, 0
+		1, sender, 2, 10, 5, dice, 0
 	)
 	assert_eq(letter.ic_day_arrival, 5)
 
@@ -161,7 +161,7 @@ func test_write_reply_flagged():
 	dice.set_seed(42)
 	var sender := _make_char(1, 3)
 	var letter: LetterData = LetterSystem.write_letter(
-		1, sender, 2, "topic", 5, dice, 0,
+		1, sender, 2, 10, 5, dice, 0,
 		0, 0, 0, false, Enums.Trait.AWARENESS, true
 	)
 	assert_true(letter.is_reply)
@@ -177,24 +177,24 @@ func test_deliver_transfers_new_topic():
 	var log: Array[Dictionary] = []
 
 	var letter: LetterData = LetterSystem.write_letter(
-		1, sender, 2, "crane_scandal", 0, dice, 0
+		1, sender, 2, 2, 0, dice, 0
 	)
 	LetterSystem.deliver_letter(letter, recipient, 1, log)
 
-	assert_true("crane_scandal" in recipient.topic_pool)
+	assert_true(2 in recipient.topic_pool)
 	assert_eq(recipient.knowledge_pool.size(), 1)
-	assert_eq(recipient.knowledge_pool[0]["entry_type"], "topic_learned")
+	assert_eq(recipient.knowledge_pool[0].entry_type, "topic_learned")
 
 func test_deliver_does_not_duplicate_known_topic():
 	var dice := DiceEngine.new()
 	dice.set_seed(42)
 	var sender := _make_char(1, 3)
 	var recipient := _make_char(2)
-	recipient.topic_pool = ["crane_scandal"]
+	recipient.topic_pool = [2]
 	var log: Array[Dictionary] = []
 
 	var letter: LetterData = LetterSystem.write_letter(
-		1, sender, 2, "crane_scandal", 0, dice, 0
+		1, sender, 2, 2, 0, dice, 0
 	)
 	var result: Dictionary = LetterSystem.deliver_letter(letter, recipient, 1, log)
 	assert_false(result["topic_transferred"])
@@ -211,7 +211,7 @@ func test_deliver_applies_disposition_bonus():
 	var log: Array[Dictionary] = []
 
 	var letter: LetterData = LetterSystem.write_letter(
-		1, sender, 2, "topic", 0, dice, 0
+		1, sender, 2, 10, 0, dice, 0
 	)
 	var bonus_applied: int = letter.disposition_bonus
 	LetterSystem.deliver_letter(letter, recipient, 1, log)
@@ -226,7 +226,7 @@ func test_deliver_marks_letter_delivered():
 	var log: Array[Dictionary] = []
 
 	var letter: LetterData = LetterSystem.write_letter(
-		1, sender, 2, "topic", 0, dice, 0
+		1, sender, 2, 10, 0, dice, 0
 	)
 	LetterSystem.deliver_letter(letter, recipient, 1, log)
 	assert_true(letter.delivered)
@@ -239,7 +239,7 @@ func test_deliver_idempotent():
 	var log: Array[Dictionary] = []
 
 	var letter: LetterData = LetterSystem.write_letter(
-		1, sender, 2, "crane_scandal", 0, dice, 0
+		1, sender, 2, 2, 0, dice, 0
 	)
 	LetterSystem.deliver_letter(letter, recipient, 1, log)
 	LetterSystem.deliver_letter(letter, recipient, 1, log)
@@ -319,14 +319,14 @@ func test_process_pending_delivers_due_letters():
 	var log: Array[Dictionary] = []
 
 	var letter: LetterData = LetterSystem.write_letter(
-		1, sender, 2, "crane_scandal", 0, dice, 0
+		1, sender, 2, 2, 0, dice, 0
 	)
 	var pending: Array = [letter]
 	var results: Array[Dictionary] = LetterSystem.process_pending_letters(
 		pending, chars, 0, 1, log
 	)
 	assert_eq(results.size(), 1)
-	assert_true("crane_scandal" in recipient.topic_pool)
+	assert_true(2 in recipient.topic_pool)
 
 func test_process_pending_skips_not_yet_due():
 	var dice := DiceEngine.new()
@@ -338,14 +338,14 @@ func test_process_pending_skips_not_yet_due():
 
 	# 6 provinces = arrives day 2
 	var letter: LetterData = LetterSystem.write_letter(
-		1, sender, 2, "crane_scandal", 0, dice, 6
+		1, sender, 2, 2, 0, dice, 6
 	)
 	var pending: Array = [letter]
 	var results: Array[Dictionary] = LetterSystem.process_pending_letters(
 		pending, chars, 1, 1, log
 	)
 	assert_eq(results.size(), 0)
-	assert_false("crane_scandal" in recipient.topic_pool)
+	assert_false(2 in recipient.topic_pool)
 
 func test_process_pending_skips_already_delivered():
 	var dice := DiceEngine.new()
@@ -356,7 +356,7 @@ func test_process_pending_skips_already_delivered():
 	var log: Array[Dictionary] = []
 
 	var letter: LetterData = LetterSystem.write_letter(
-		1, sender, 2, "topic", 0, dice, 0
+		1, sender, 2, 10, 0, dice, 0
 	)
 	letter.delivered = true
 	var pending: Array = [letter]
