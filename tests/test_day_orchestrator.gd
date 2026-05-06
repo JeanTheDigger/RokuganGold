@@ -248,3 +248,60 @@ func test_multiple_days_ap_reset_each_day() -> void:
 	# But wave resolver spends them, so they may be 0 after resolution
 	# The key test is that actions were produced each day
 	assert_true(_action_log.size() >= 3)
+
+
+# -- Daily Conversations -------------------------------------------------------
+
+func test_advance_day_returns_conversation_results() -> void:
+	var result: Dictionary = DayOrchestrator.advance_day(
+		_time, _characters, _characters_by_id, _make_world_states(),
+		_make_objectives(), _scoring_tables, _filter_data, _dice,
+		_action_skill_map, _provinces, _action_log, _season_meta
+	)
+	assert_true(result.has("conversation_results"))
+
+
+func test_advance_day_conversations_fire_for_colocated_friends() -> void:
+	var c2 := L5RCharacterData.new()
+	c2.character_id = 2
+	c2.character_name = "NPC 2"
+	c2.status = 3.0
+	c2.awareness = 3
+	c2.action_points_current = 2
+	c2.action_points_max = 2
+	c2.honor = 5.0
+	c2.glory = 3.0
+	c2.bushido_virtue = Enums.BushidoVirtue.NONE
+	c2.shourido_virtue = Enums.ShouridoVirtue.NONE
+	c2.skills = {"Etiquette": 3}
+	c2.emphases = {}
+	c2.knowledge_pool = []
+	c2.known_contacts_by_clan = {}
+	c2.met_characters = []
+	c2.topic_pool = ["crane_alliance"]
+
+	_characters[0].physical_location = "castle_crane"
+	_characters[0].topic_pool = ["war_in_lion"]
+	_characters[0].disposition_values[2] = 80
+	c2.physical_location = "castle_crane"
+	c2.disposition_values[1] = 80
+
+	_characters.append(c2)
+	_characters_by_id[2] = c2
+
+	var ws: Dictionary = _make_world_states()
+	ws[2] = ws[1].duplicate(true)
+
+	var objs: Dictionary = _make_objectives()
+	objs[2] = {"primary": {"need_type": "REST", "priority": 3}}
+
+	# Seed that produces low rolls so conversations trigger (35% chance at disp 80)
+	_dice.set_seed(1)
+
+	var result: Dictionary = DayOrchestrator.advance_day(
+		_time, _characters, _characters_by_id, ws,
+		objs, _scoring_tables, _filter_data, _dice,
+		_action_skill_map, _provinces, _action_log, _season_meta
+	)
+	assert_true(result.has("conversation_results"))
+	assert_true(result["conversation_results"] is Array)
