@@ -300,3 +300,41 @@ func test_advance_day_conversations_fire_for_colocated_friends() -> void:
 	)
 	assert_true(result.has("conversation_results"))
 	assert_true(result["conversation_results"] is Array)
+
+
+# -- Letter Delivery -----------------------------------------------------------
+
+func test_advance_day_returns_letter_results() -> void:
+	var result: Dictionary = DayOrchestrator.advance_day(
+		_time, _characters, _characters_by_id, _make_world_states(),
+		_make_objectives(), _scoring_tables, _filter_data, _dice,
+		_action_skill_map, _provinces, _action_log, _season_meta
+	)
+	assert_true(result.has("letter_results"))
+
+
+func test_advance_day_delivers_due_letters() -> void:
+	var recipient := _characters[0]
+	var dice2 := DiceEngine.new()
+	dice2.set_seed(42)
+	var sender := L5RCharacterData.new()
+	sender.character_id = 99
+	sender.skills = {"Calligraphy": 3}
+	sender.emphases = {}
+	sender.awareness = 3
+	sender.agility = 3
+	sender.wounds_taken = 0
+	sender.lord_id = -1
+
+	var letter: LetterData = LetterSystem.write_letter(
+		1, sender, recipient.character_id, "crane_scandal", 0, dice2, 0
+	)
+	var pending: Array = [letter]
+
+	DayOrchestrator.advance_day(
+		_time, _characters, _characters_by_id, _make_world_states(),
+		_make_objectives(), _scoring_tables, _filter_data, _dice,
+		_action_skill_map, _provinces, _action_log, _season_meta,
+		[], pending
+	)
+	assert_true("crane_scandal" in recipient.topic_pool)

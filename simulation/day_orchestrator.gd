@@ -1,7 +1,8 @@
 class_name DayOrchestrator
 ## Single entry point to advance world state by one IC day.
-## Ties together: AP reset → wave resolution → effect application →
-## information processing → (season boundary) resource tick + confidence decay.
+## Sequence: AP reset → wave resolution → effect application →
+## info events → letter delivery → topic tick →
+## (season boundary) resource tick + confidence decay.
 
 
 static func advance_day(
@@ -18,6 +19,7 @@ static func advance_day(
 	action_log: Array[Dictionary],
 	season_meta: Dictionary,
 	active_topics: Array[TopicData] = [],
+	pending_letters: Array = [],
 ) -> Dictionary:
 	var prev_season: int = time_system.get_season()
 
@@ -46,6 +48,10 @@ static func advance_day(
 		current_season,
 	)
 
+	var letter_results: Array[Dictionary] = LetterSystem.process_pending_letters(
+		pending_letters, characters_by_id, ic_day, current_season, action_log
+	)
+
 	var seasonal_result: Dictionary = {}
 	if current_season != prev_season:
 		seasonal_result = _process_season_transition(
@@ -61,6 +67,7 @@ static func advance_day(
 		"conversation_results": conversation_results,
 		"topic_results": topic_results,
 		"info_results": info_results,
+		"letter_results": letter_results,
 		"seasonal_result": seasonal_result,
 	}
 
