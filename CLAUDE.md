@@ -310,6 +310,36 @@ single-dice-entry-point and server-authoritative constraints.
     discussion counts → compute conversation positions → topic tick →
     broadcast → compute broadcast positions.
 
+### Crime Investigation System (s57.15, s57.16, s57.47)
+- **simulation/investigation_system.gd** — InvestigationSystem with:
+  - `examine_scene()` — Investigation/Perception vs concealment_tn, evidence
+    weight by margin, elapsed time penalty, suspect identification at 2+ raises.
+  - UPHOLD_LAW self-initiation probability table (14 virtues per GDD s57.16.9a).
+  - Witness evidence calculation (awareness bonus, honor penalty).
+  - Witness prioritization (present first, then awareness desc, then honor asc).
+- **simulation/investigation_decomposer.gd** — Seven-phase investigation loop
+  (already existed): travel → examine scene → interview witnesses →
+  interview suspects → check alibis → follow leads → resolution.
+- **simulation/crime_system.gd** — At-act and at-conviction consequences,
+  seppuku system, escalation tracking (already existed).
+- EXAMINE_CRIME_SCENE ActionID added to: objective_alignment (90 under
+  INVESTIGATE_THREAT), action_skill_map, personality_lean (all 14 virtues),
+  action_executor (INTELLIGENCE_ACTIONS category).
+
+### Information Architecture Integration (s55.12)
+- **Confidence penalty in NPC Phase 5 scoring** — `confidence_penalty` field on
+  ScoredAction. When target has RECENT intel: −10. When STALE: ObjAlign halved.
+  No penalty if character has no knowledge about target (benefit of the doubt).
+- **`get_best_confidence_on_target()`** added to InformationSystem.
+- IDENTIFY_CONTACT scoring updated to match GDD s55.7: ASK_FOR_INTRODUCTION=95,
+  OBSERVE_COURT_ATTENDEES=85, WRITE_LETTER=60.
+
+### Military Context Wiring (s55.23)
+- **build_context() Phase 1** now populates all 8 military intelligence fields
+  from world_state: wall_statuses, known_clan_strengths, unit_training_counts,
+  available_levy_pu, can_sustain_iron_upkeep, active_wars, escalating_conflicts,
+  taint_topic_province_ids. Callers supply data via world_state dictionary keys.
+
 ### Character Sheet Field Index (s57.35)
 - **shared/character_data.gd** — Consolidated all fields from gap sections:
   military_rank, commanded_unit_id, assigned_company_id (s11.3.18),
@@ -328,7 +358,7 @@ All in /tests/, one file per system:
 - test_time_system.gd (~15 tests)
 - test_skill_resolver.gd (~20 tests)
 - test_action_point_system.gd (~12 tests)
-- test_npc_decision_engine.gd (~35 tests)
+- test_npc_decision_engine.gd (~41 tests)
 - test_scoring_table_loader.gd (~15 tests)
 - test_action_executor.gd (~25 tests)
 - test_effect_applicator.gd (~28 tests)
@@ -337,7 +367,8 @@ All in /tests/, one file per system:
 - test_objective_decomposer.gd (~100 tests)
 - test_information_system.gd (~35 tests)
 - test_topic_system.gd (~55 tests)
-- test_day_orchestrator.gd (~15 tests)
+- test_investigation_system.gd (~20 tests)
+- test_day_orchestrator.gd (~18 tests)
 - test_approach_evaluation.gd (~55 tests)
 - test_commitment_registry.gd (~60 tests)
 - test_military_hierarchy.gd (~40 tests)
@@ -347,12 +378,16 @@ All in /tests/, one file per system:
 - test_system_wiring.gd (~20 tests)
 
 ### What's Next
-1. Wire topic position calculation into LetterSystem topic transfers
-2. Daily conversation / letter information exchange per GDD s55.12
-3. Crime investigation system per GDD s57.47, s57.16 (crime recording is wired;
-   investigation/discovery flow is not)
-4. Wire military decomposition context population into build_context() Phase 1
-   (wall_statuses, known_clan_strengths, unit_training_counts, etc.)
+1. Wire UPHOLD_LAW standing objective self-initiation (crime topic detection
+   triggers INVESTIGATE_CRIME decomposition for magistrate NPCs)
+2. Evidence generation from witness PROBE results (integrate with investigation
+   decomposer to increment evidence_total during witness interviews)
+3. Topic/secret generation on crime conviction (at-conviction consequences
+   should create world topics per GDD s57.47)
+4. Information transfer on objective assignment — extend
+   `transfer_objective_knowledge()` to include crisis data and province status
+5. Auto-add "gather intelligence" objective when STALE entry is consulted
+   (s55.12: +15 bonus to gather_intelligence when stale knowledge detected)
 
 ### Systems Wired into NPC Loop
 The following subsystems are now integrated into the NPC decision loop:

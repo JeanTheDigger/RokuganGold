@@ -257,6 +257,7 @@ static func process_pending_letters(
 					delivery["letter_id"] = item.letter_id
 					delivery["sender_id"] = item.sender_id
 					delivery["recipient_id"] = item.recipient_id
+					delivery["topic"] = item.topic
 					results.append(delivery)
 
 	return results

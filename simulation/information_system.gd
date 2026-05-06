@@ -295,3 +295,15 @@ static func count_by_confidence(
 	for entry: KnowledgeEntry in character.knowledge_pool:
 		counts[entry.confidence] = counts.get(entry.confidence, 0) + 1
 	return counts
+
+
+static func get_best_confidence_on_target(
+	character: L5RCharacterData,
+	target_id: int,
+) -> int:
+	var best: int = -1
+	for entry: KnowledgeEntry in character.knowledge_pool:
+		var char_id: int = entry.data.get("target_character_id", entry.data.get("character_id", -1))
+		if char_id == target_id and entry.confidence > best:
+			best = entry.confidence
+	return best

@@ -451,6 +451,45 @@ func test_advance_day_broadcast_computes_positions() -> void:
 	assert_true(_characters[0].topic_positions.has(300))
 
 
+func test_advance_day_letter_delivery_computes_positions() -> void:
+	_characters[0].topic_pool = []
+	_characters[0].topic_positions = {}
+	_characters[0].bushido_virtue = Enums.BushidoVirtue.JIN
+
+	var dice2 := DiceEngine.new()
+	dice2.set_seed(42)
+	var sender := L5RCharacterData.new()
+	sender.character_id = 99
+	sender.skills = {"Calligraphy": 3}
+	sender.emphases = {}
+	sender.awareness = 3
+	sender.agility = 3
+	sender.wounds_taken = 0
+	sender.lord_id = -1
+
+	var topic := TopicMomentumSystem.create_topic(
+		400, "Death", TopicData.Tier.TIER_4, TopicData.Category.PERSONAL,
+		0, 15.0, [], "", "", 5, "death", "suspicious"
+	)
+	var active_topics: Array[TopicData] = [topic]
+
+	var letter: LetterData = LetterSystem.write_letter(
+		1, sender, _characters[0].character_id, 400, 0, dice2, 0
+	)
+	var pending: Array = [letter]
+
+	DayOrchestrator.advance_day(
+		_time, _characters, _characters_by_id, _make_world_states(),
+		_make_objectives(), _scoring_tables, _filter_data, _dice,
+		_action_skill_map, _provinces, _action_log, _season_meta,
+		active_topics, pending
+	)
+	assert_true(400 in _characters[0].topic_pool)
+	assert_true(_characters[0].topic_positions.has(400))
+	# JIN virtue + death:suspicious = -8 modifier, no disposition anchor
+	assert_almost_eq(_characters[0].topic_positions[400], -8.0, 0.001)
+
+
 func test_advance_day_delivers_due_letters() -> void:
 	var recipient := _characters[0]
 	var dice2 := DiceEngine.new()

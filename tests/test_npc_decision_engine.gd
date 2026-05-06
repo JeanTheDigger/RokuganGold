@@ -148,6 +148,75 @@ func test_build_context_non_lord_no_resources() -> void:
 	assert_true(ctx.resource_stockpiles.is_empty())
 
 
+func test_build_context_military_defaults() -> void:
+	var ctx := NPCDecisionEngine.build_context(_char, _world_state)
+	assert_eq(ctx.wall_statuses.size(), 0)
+	assert_eq(ctx.known_clan_strengths.size(), 0)
+	assert_eq(ctx.unit_training_counts.size(), 0)
+	assert_almost_eq(ctx.available_levy_pu, 0.0, 0.001)
+	assert_true(ctx.can_sustain_iron_upkeep)
+	assert_eq(ctx.active_wars.size(), 0)
+	assert_eq(ctx.escalating_conflicts.size(), 0)
+	assert_eq(ctx.taint_topic_province_ids.size(), 0)
+
+
+func test_build_context_confidence_penalty_fresh_no_penalty() -> void:
+	InformationSystem.add_knowledge(_char, InformationSystem.make_entry(
+		Enums.KnowledgeSource.INTELLIGENCE, "observed_action",
+		{"target_character_id": 2}, 0
+	))
+	var penalty: float = NPCDecisionEngine._compute_confidence_penalty(_char, 2, 50.0)
+	assert_almost_eq(penalty, 0.0, 0.001)
+
+
+func test_build_context_confidence_penalty_recent() -> void:
+	var entry := InformationSystem.make_entry(
+		Enums.KnowledgeSource.INTELLIGENCE, "observed_action",
+		{"target_character_id": 2}, 0
+	)
+	entry.confidence = Enums.KnowledgeConfidence.RECENT
+	InformationSystem.add_knowledge(_char, entry)
+	var penalty: float = NPCDecisionEngine._compute_confidence_penalty(_char, 2, 50.0)
+	assert_almost_eq(penalty, -10.0, 0.001)
+
+
+func test_build_context_confidence_penalty_stale_halves() -> void:
+	var entry := InformationSystem.make_entry(
+		Enums.KnowledgeSource.INTELLIGENCE, "observed_action",
+		{"target_character_id": 2}, 0
+	)
+	entry.confidence = Enums.KnowledgeConfidence.STALE
+	InformationSystem.add_knowledge(_char, entry)
+	var penalty: float = NPCDecisionEngine._compute_confidence_penalty(_char, 2, 60.0)
+	assert_almost_eq(penalty, -30.0, 0.001)
+
+
+func test_build_context_confidence_penalty_no_knowledge_no_penalty() -> void:
+	var penalty: float = NPCDecisionEngine._compute_confidence_penalty(_char, 99, 50.0)
+	assert_almost_eq(penalty, 0.0, 0.001)
+
+
+func test_build_context_military_populated() -> void:
+	_world_state["wall_statuses"] = [{"province_id": 10, "si": 8}]
+	_world_state["known_clan_strengths"] = {"Crab": 100.0, "Lion": 80.0}
+	_world_state["unit_training_counts"] = {0: 3, 1: 2, 2: 1}
+	_world_state["available_levy_pu"] = 15.0
+	_world_state["can_sustain_iron_upkeep"] = false
+	_world_state["active_wars"] = [{"enemy_clan_id": "Lion"}]
+	_world_state["escalating_conflicts"] = [{"topic_id": 5}]
+	var taint_ids: Array[int] = [10, 20]
+	_world_state["taint_topic_province_ids"] = taint_ids
+	var ctx := NPCDecisionEngine.build_context(_char, _world_state)
+	assert_eq(ctx.wall_statuses.size(), 1)
+	assert_eq(ctx.known_clan_strengths["Crab"], 100.0)
+	assert_eq(ctx.unit_training_counts[0], 3)
+	assert_almost_eq(ctx.available_levy_pu, 15.0, 0.001)
+	assert_false(ctx.can_sustain_iron_upkeep)
+	assert_eq(ctx.active_wars.size(), 1)
+	assert_eq(ctx.escalating_conflicts.size(), 1)
+	assert_eq(ctx.taint_topic_province_ids.size(), 2)
+
+
 # -- Phase 2: Resolve Goal ----------------------------------------------------
 
 func test_resolve_goal_primary_objective() -> void:

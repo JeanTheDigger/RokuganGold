@@ -37,6 +37,10 @@ const ADMINISTRATIVE_ACTIONS: Array[String] = [
 	"DISPATCH_COURTIER",
 ]
 
+const INTELLIGENCE_ACTIONS: Array[String] = [
+	"EXAMINE_CRIME_SCENE",
+]
+
 const SELF_ACTIONS: Array[String] = [
 	"TRAIN", "MEDITATE", "REST", "DO_NOTHING", "CRAFT",
 	"WRITE_LETTER", "PERFORM_RITUAL", "PERFORM_WORSHIP",
@@ -163,6 +167,8 @@ static func _get_tn_for_action(
 		return MILITARY_BASE_TN
 	if action_id in ADMINISTRATIVE_ACTIONS:
 		return ADMIN_BASE_TN
+	if action_id in INTELLIGENCE_ACTIONS:
+		return SOCIAL_BASE_TN
 	return SOCIAL_BASE_TN
 
 
@@ -207,6 +213,8 @@ static func _apply_effects(
 			effects = _compute_military_effects(action_id)
 		elif action_id in ADMINISTRATIVE_ACTIONS:
 			effects = _compute_admin_effects(action_id)
+		elif action_id in INTELLIGENCE_ACTIONS:
+			effects = _compute_intelligence_effects(action_id, result.get("margin", 0))
 		else:
 			effects = _compute_self_effects(action_id)
 	else:
@@ -413,3 +421,20 @@ static func _validate_military_order(
 					return {"valid": false, "reason": "section_no_commander"}
 
 	return {"valid": true}
+
+
+# -- Intelligence Effects (s57.15) --------------------------------------------
+
+static func _compute_intelligence_effects(action_id: String, margin: int) -> Dictionary:
+	match action_id:
+		"EXAMINE_CRIME_SCENE":
+			var raises: int = margin / 5
+			var evidence: int = InvestigationSystem.EVIDENCE_BASE_WEIGHT \
+				+ (raises * InvestigationSystem.EVIDENCE_PER_RAISE)
+			return {
+				"effect": "scene_examined",
+				"info_gained": true,
+				"evidence_gained": evidence,
+				"raises": raises,
+			}
+	return {"effect": "intelligence_action"}

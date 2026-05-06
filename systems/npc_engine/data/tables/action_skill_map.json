@@ -64,6 +64,7 @@
   "REST": {"primary": null, "secondary": null},
   "OBSERVE_COURT_ATTENDEES": {"primary": "Investigation", "secondary": "Lore: Heraldry"},
   "ASK_FOR_INTRODUCTION": {"primary": "Courtier", "secondary": "Etiquette"},
+  "EXAMINE_CRIME_SCENE": {"primary": "Investigation", "secondary": "Perception"},
   "INVESTIGATE_PROVINCE": {"primary": "Investigation", "secondary": "Lore: Shadowlands"},
   "ORDER_PATROL": {"primary": "Investigation", "secondary": "Battle"},
   "ASSESS_PROVINCE_STATUS": {"primary": "Battle", "secondary": "Commerce"},

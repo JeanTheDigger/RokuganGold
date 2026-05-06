@@ -38,10 +38,11 @@ class ScoredAction:
 	var topic_position_modifier: float = 0.0
 	var resource_modifier: float = 0.0
 
-	# Three additional scoring modifiers from wired subsystems
+	# Additional scoring modifiers from wired subsystems
 	var approach_modifier: float = 0.0
 	var commitment_at_risk: float = 0.0
 	var travel_redirect_penalty: float = 0.0
+	var confidence_penalty: float = 0.0
 
 	func get_total_score() -> float:
 		return (
@@ -56,6 +57,7 @@ class ScoredAction:
 			+ approach_modifier
 			+ commitment_at_risk
 			+ travel_redirect_penalty
+			+ confidence_penalty
 		)
 
 

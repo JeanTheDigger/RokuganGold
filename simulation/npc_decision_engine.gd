@@ -57,6 +57,16 @@ static func build_context(character: L5RCharacterData, world_state: Dictionary) 
 	ctx.commanded_unit_id = character.commanded_unit_id
 	ctx.assigned_company_id = character.assigned_company_id
 
+	# Military intelligence (s55.23)
+	ctx.wall_statuses = world_state.get("wall_statuses", [])
+	ctx.known_clan_strengths = world_state.get("known_clan_strengths", {})
+	ctx.unit_training_counts = world_state.get("unit_training_counts", {})
+	ctx.available_levy_pu = world_state.get("available_levy_pu", 0.0)
+	ctx.can_sustain_iron_upkeep = world_state.get("can_sustain_iron_upkeep", true)
+	ctx.active_wars = world_state.get("active_wars", [])
+	ctx.escalating_conflicts = world_state.get("escalating_conflicts", [])
+	ctx.taint_topic_province_ids = world_state.get("taint_topic_province_ids", [] as Array[int])
+
 	# State
 	ctx.pending_events = world_state.get("pending_events", [])
 	ctx.ap_remaining = character.action_points_current
@@ -209,6 +219,13 @@ static func score_all(
 		option.travel_redirect_penalty = float(TravelCommitment.get_redirect_penalty(
 			travel_redirects
 		))
+
+		if character != null and option.target_npc_id > 0:
+			option.confidence_penalty = _compute_confidence_penalty(
+				character, option.target_npc_id, option.objective_alignment
+			)
+		else:
+			option.confidence_penalty = 0.0
 
 
 # -- Phase 6: Selection -------------------------------------------------------
@@ -698,6 +715,25 @@ static func _compute_resource_modifier(
 ) -> float:
 	# Resource modifier is 0 to -40 per s55.32.
 	# Full implementation requires resource availability checks.
+	return 0.0
+
+
+# -- Confidence Penalty (s55.12) -----------------------------------------------
+
+const CONFIDENCE_RECENT_PENALTY: float = -10.0
+
+static func _compute_confidence_penalty(
+	character: L5RCharacterData,
+	target_npc_id: int,
+	obj_alignment: float,
+) -> float:
+	var best: int = InformationSystem.get_best_confidence_on_target(character, target_npc_id)
+	if best < 0:
+		return 0.0
+	if best == Enums.KnowledgeConfidence.STALE:
+		return -(obj_alignment * 0.5)
+	if best == Enums.KnowledgeConfidence.RECENT:
+		return CONFIDENCE_RECENT_PENALTY
 	return 0.0
 
 

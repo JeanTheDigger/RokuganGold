@@ -81,6 +81,7 @@ static func advance_day(
 	var letter_results: Array[Dictionary] = LetterSystem.process_pending_letters(
 		pending_letters, characters_by_id, ic_day, current_season, action_log
 	)
+	_compute_positions_from_letters(letter_results, active_topics, characters_by_id)
 
 	var seasonal_result: Dictionary = {}
 	if current_season != prev_season:
@@ -381,6 +382,32 @@ static func _compute_positions_from_broadcast(
 				character.bushido_virtue, character.shourido_virtue
 			)
 			character.topic_positions[topic_id] = pos
+
+
+static func _compute_positions_from_letters(
+	letter_results: Array[Dictionary],
+	active_topics: Array[TopicData],
+	characters_by_id: Dictionary,
+) -> void:
+	var topic_map: Dictionary = {}
+	for t: TopicData in active_topics:
+		topic_map[t.topic_id] = t
+
+	for result: Dictionary in letter_results:
+		if not result.get("topic_transferred", false):
+			continue
+		var topic_id: int = result.get("topic", -1)
+		var recipient_id: int = result.get("recipient_id", -1)
+		if topic_id < 0 or not topic_map.has(topic_id):
+			continue
+		var recipient: L5RCharacterData = characters_by_id.get(recipient_id)
+		if recipient == null or recipient.topic_positions.has(topic_id):
+			continue
+		var pos: float = TopicMomentumSystem.calculate_starting_position(
+			topic_map[topic_id], recipient.disposition_values,
+			recipient.bushido_virtue, recipient.shourido_virtue
+		)
+		recipient.topic_positions[topic_id] = pos
 
 
 static func _build_province_clan_map(provinces: Dictionary) -> Dictionary:
