@@ -37,6 +37,7 @@ static func build_context(character: L5RCharacterData, world_state: Dictionary) 
 	ctx.known_positions = world_state.get("known_positions", {})
 	ctx.known_objectives = world_state.get("known_objectives", {})
 	ctx.known_contacts = world_state.get("known_contacts", [] as Array[int])
+	ctx.contact_clans = world_state.get("contact_clans", {})
 	ctx.met_characters = character.met_characters.duplicate()
 
 	# Lord-tier fields

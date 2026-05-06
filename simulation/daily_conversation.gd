@@ -74,9 +74,9 @@ static func transfer_topic(
 
 static func apply_disposition_bonus(char_a: L5RCharacterData, char_b: L5RCharacterData) -> void:
 	var current_a: int = char_a.disposition_values.get(char_b.character_id, 0)
-	char_a.disposition_values[char_b.character_id] = current_a + DISPOSITION_BONUS
+	char_a.disposition_values[char_b.character_id] = clampi(current_a + DISPOSITION_BONUS, -100, 100)
 	var current_b: int = char_b.disposition_values.get(char_a.character_id, 0)
-	char_b.disposition_values[char_a.character_id] = current_b + DISPOSITION_BONUS
+	char_b.disposition_values[char_a.character_id] = clampi(current_b + DISPOSITION_BONUS, -100, 100)
 
 
 # -- Full Conversation Resolution ----------------------------------------------

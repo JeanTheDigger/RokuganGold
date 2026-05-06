@@ -249,7 +249,7 @@ static func apply_consequences(
 
 	var honor_change: float = conseq.get("honor", 0.0)
 	if absf(honor_change) > 0.001:
-		debtor.honor = clampf(debtor.honor + honor_change, 0.0, 10.0)
+		HonorGlorySystem.apply_honor_change(debtor, honor_change)
 		result["honor_change"] = honor_change
 
 	var creditor_disp: int = conseq.get("creditor_disp", 0)

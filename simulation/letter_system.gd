@@ -56,14 +56,14 @@ static func can_send_free_letter(
 	is_lord: bool,
 	letters_sent_today: int,
 ) -> bool:
-	if not is_lord:
-		return letters_sent_today < FREE_LETTERS_PER_DAY
-	return false
+	if is_lord:
+		return true
+	return letters_sent_today < FREE_LETTERS_PER_DAY
 
 
 static func can_send_batch(character: L5RCharacterData, is_lord: bool) -> bool:
 	if is_lord:
-		return false
+		return character.civilian_orders_remaining > 0
 	return ActionPointSystem.can_spend(character, 1)
 
 
@@ -165,12 +165,21 @@ static func deliver_letter(
 	# Apply disposition bonus from calligraphy quality
 	if letter.disposition_bonus > 0:
 		var current: int = recipient.disposition_values.get(letter.sender_id, 0)
-		recipient.disposition_values[letter.sender_id] = current + letter.disposition_bonus
+		recipient.disposition_values[letter.sender_id] = clampi(current + letter.disposition_bonus, -100, 100)
 
 	action_log.append({
-		"action": "LETTER_DELIVERED",
-		"sender_id": letter.sender_id,
-		"recipient_id": recipient.character_id,
+		"character_id": letter.sender_id,
+		"action_id": "WRITE_LETTER",
+		"target_npc_id": recipient.character_id,
+		"target_province_id": -1,
+		"ic_day": letter.ic_day_arrival,
+		"season": current_season,
+		"success": true,
+		"skill_used": "Calligraphy",
+		"is_order": false,
+		"roll_result": 0,
+		"tn": 0,
+		"observable_effect": false,
 		"topic": letter.topic,
 		"topic_transferred": topic_transferred,
 		"disposition_bonus": letter.disposition_bonus,

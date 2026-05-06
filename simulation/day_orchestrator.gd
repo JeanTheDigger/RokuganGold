@@ -77,6 +77,8 @@ static func advance_day(
 static func _reset_all_ap(characters: Array[L5RCharacterData]) -> void:
 	for c: L5RCharacterData in characters:
 		ActionPointSystem.reset_daily_ap(c)
+		c.civilian_orders_remaining = c.civilian_order_budget_max
+		c.passage_request_count_today = 0
 
 
 # -- Information Processing ----------------------------------------------------

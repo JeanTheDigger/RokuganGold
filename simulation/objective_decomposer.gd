@@ -716,11 +716,12 @@ static func _find_contact_needing_disposition(
 
 static func _find_clan_contact_present(
 	ctx: NPCDataStructures.ContextSnapshot,
-	_clan_id: String,
+	clan_id: String,
 ) -> int:
 	for npc_id: int in ctx.known_contacts:
 		if npc_id in ctx.characters_present:
-			return npc_id
+			if clan_id.is_empty() or ctx.contact_clans.get(npc_id, "") == clan_id:
+				return npc_id
 	return -1
 
 

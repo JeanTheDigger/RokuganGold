@@ -80,6 +80,7 @@ class ContextSnapshot:
 	var known_positions: Dictionary = {}
 	var known_objectives: Dictionary = {}
 	var known_contacts: Array[int] = []
+	var contact_clans: Dictionary = {}
 	var met_characters: Array[int] = []
 
 	# Lord-tier fields
