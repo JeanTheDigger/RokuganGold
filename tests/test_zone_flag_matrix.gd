@@ -260,6 +260,30 @@ func test_clan_champion_includes_all_core_zones():
 	assert_true(Enums.ZoneSubtype.CHASHITSU in zones)
 	assert_true(Enums.ZoneSubtype.CASTLE_SHRINE in zones)
 
+func test_imperial_min_ten():
+	assert_eq(ZoneFlagMatrix.get_min_zones(Enums.LordRank.IMPERIAL), 10)
+
+func test_imperial_max_eleven():
+	assert_eq(ZoneFlagMatrix.get_max_zones(Enums.LordRank.IMPERIAL), 11)
+
+func test_imperial_includes_all_zone_types():
+	var scaling: Dictionary = ZoneFlagMatrix.get_castle_zones_for_rank(
+		Enums.LordRank.IMPERIAL
+	)
+	var zones: Array = scaling["zones"]
+	assert_eq(zones.size(), 11)
+	assert_true(Enums.ZoneSubtype.OHIROMA in zones)
+	assert_true(Enums.ZoneSubtype.ENKAI_HALL in zones)
+	assert_true(Enums.ZoneSubtype.AUDIENCE_CHAMBER in zones)
+	assert_true(Enums.ZoneSubtype.CHASHITSU in zones)
+	assert_true(Enums.ZoneSubtype.GUEST_WING in zones)
+	assert_true(Enums.ZoneSubtype.LORD_QUARTERS in zones)
+	assert_true(Enums.ZoneSubtype.WAR_COUNCIL_ROOM in zones)
+	assert_true(Enums.ZoneSubtype.DOJO in zones)
+	assert_true(Enums.ZoneSubtype.OUTER_COURTYARD in zones)
+	assert_true(Enums.ZoneSubtype.TSUBONIWA in zones)
+	assert_true(Enums.ZoneSubtype.CASTLE_SHRINE in zones)
+
 func test_village_headman_zones():
 	var scaling: Dictionary = ZoneFlagMatrix.get_castle_zones_for_rank(
 		Enums.LordRank.VILLAGE_HEADMAN

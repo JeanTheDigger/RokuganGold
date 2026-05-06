@@ -343,6 +343,9 @@ func test_current_rank_allotment():
 	assert_eq(TattooSystem.get_current_rank_allotment("Togashi Tattooed Order", 2), 0)
 	assert_eq(TattooSystem.get_current_rank_allotment("Togashi Tattooed Order", 3), 2)
 
+func test_hoshi_allotment_at_rank_3():
+	assert_eq(TattooSystem.get_allotment_for_rank("Hoshi Tsurui Zumi", 3), 1)
+
 func test_has_unfilled_slots_rank_1():
 	assert_true(TattooSystem.has_unfilled_ability_slots(_tattoos, 1, "Togashi Tattooed Order", 1))
 
@@ -402,6 +405,9 @@ func test_seek_tattoo_blocked_all_occupied():
 # Urgency Scoring
 # =============================================================================
 
+func test_urgency_initial_season():
+	assert_eq(TattooSystem.get_seek_tattoo_urgency(0), TattooSystem.SEEK_TATTOO_STANDARD_SCORE)
+
 func test_urgency_standard():
 	assert_eq(TattooSystem.get_seek_tattoo_urgency(1), TattooSystem.SEEK_TATTOO_STANDARD_SCORE)
 
@@ -428,6 +434,9 @@ func test_provenance_tn_exceptional():
 func test_provenance_tn_fine():
 	assert_eq(TattooSystem.get_provenance_tn(Enums.TattooQualityTier.FINE), 25)
 
+func test_provenance_tn_masterwork():
+	assert_eq(TattooSystem.get_provenance_tn(Enums.TattooQualityTier.MASTERWORK), 20)
+
 func test_provenance_tn_normal():
 	assert_eq(TattooSystem.get_provenance_tn(Enums.TattooQualityTier.NORMAL), 30)
 
@@ -438,6 +447,9 @@ func test_provenance_tn_normal():
 
 func test_commission_completion_bonus():
 	assert_eq(TattooSystem.get_commission_completion_bonus(Enums.TattooQualityTier.NORMAL), 2)
+	assert_eq(TattooSystem.get_commission_completion_bonus(Enums.TattooQualityTier.FINE), 3)
+	assert_eq(TattooSystem.get_commission_completion_bonus(Enums.TattooQualityTier.EXCEPTIONAL), 5)
+	assert_eq(TattooSystem.get_commission_completion_bonus(Enums.TattooQualityTier.MASTERWORK), 7)
 	assert_eq(TattooSystem.get_commission_completion_bonus(Enums.TattooQualityTier.LEGENDARY), 10)
 
 func test_commission_not_expired():
@@ -446,8 +458,8 @@ func test_commission_not_expired():
 func test_commission_expired():
 	assert_true(TattooSystem.is_commission_expired(100, 190, 90))
 
-func test_commission_expired_exactly_at_boundary():
-	assert_true(TattooSystem.is_commission_expired(100, 190, 90))
+func test_commission_not_expired_one_before_boundary():
+	assert_false(TattooSystem.is_commission_expired(100, 189, 90))
 
 
 # =============================================================================
@@ -486,6 +498,29 @@ func test_cannot_activate_decorative():
 	var t := _make_tattoo(1, 1, 2, Enums.TattooQualityTier.NORMAL, Enums.TattooBodyLocation.BACK, false)
 	t.is_visible = true
 	assert_false(TattooSystem.can_activate_tattoo(t))
+
+
+# =============================================================================
+# get_active_ability_tattoo
+# =============================================================================
+
+func test_get_active_ability_tattoo_found():
+	_tattoos.append(_make_tattoo(1, 1, 2, Enums.TattooQualityTier.NORMAL, Enums.TattooBodyLocation.BACK, true, Enums.TattooAbility.BEAR))
+	var t := TattooSystem.get_active_ability_tattoo(_tattoos, 1, Enums.TattooAbility.BEAR)
+	assert_not_null(t)
+	assert_eq(t.ability_granted, Enums.TattooAbility.BEAR)
+
+func test_get_active_ability_tattoo_none():
+	var t := TattooSystem.get_active_ability_tattoo(_tattoos, 1, Enums.TattooAbility.NONE)
+	assert_null(t)
+
+func test_get_active_ability_tattoo_wrong_character():
+	_tattoos.append(_make_tattoo(1, 2, 3, Enums.TattooQualityTier.NORMAL, Enums.TattooBodyLocation.BACK, true, Enums.TattooAbility.BEAR))
+	var t := TattooSystem.get_active_ability_tattoo(_tattoos, 1, Enums.TattooAbility.BEAR)
+	assert_null(t)
+
+func test_disposition_bond_mundane_is_zero():
+	assert_eq(TattooSystem.get_disposition_bond(Enums.TattooQualityTier.MUNDANE), 0)
 
 
 # =============================================================================

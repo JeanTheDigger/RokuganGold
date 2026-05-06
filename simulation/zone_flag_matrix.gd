@@ -351,6 +351,23 @@ const CASTLE_ZONE_SCALING: Dictionary = {
 			Enums.ZoneSubtype.OUTER_COURTYARD,
 		],
 	},
+	Enums.LordRank.IMPERIAL: {
+		"min_zones": 10,
+		"max_zones": 11,
+		"zones": [
+			Enums.ZoneSubtype.OHIROMA,
+			Enums.ZoneSubtype.ENKAI_HALL,
+			Enums.ZoneSubtype.AUDIENCE_CHAMBER,
+			Enums.ZoneSubtype.CHASHITSU,
+			Enums.ZoneSubtype.GUEST_WING,
+			Enums.ZoneSubtype.LORD_QUARTERS,
+			Enums.ZoneSubtype.WAR_COUNCIL_ROOM,
+			Enums.ZoneSubtype.DOJO,
+			Enums.ZoneSubtype.OUTER_COURTYARD,
+			Enums.ZoneSubtype.TSUBONIWA,
+			Enums.ZoneSubtype.CASTLE_SHRINE,
+		],
+	},
 }
 
 

@@ -465,6 +465,8 @@ static func get_provenance_tn(quality: Enums.TattooQualityTier) -> int:
 	match quality:
 		Enums.TattooQualityTier.LEGENDARY:
 			return PROVENANCE_TN_LEGENDARY
+		Enums.TattooQualityTier.MASTERWORK:
+			return PROVENANCE_TN_EXCEPTIONAL
 		Enums.TattooQualityTier.EXCEPTIONAL:
 			return PROVENANCE_TN_EXCEPTIONAL
 		Enums.TattooQualityTier.FINE:
