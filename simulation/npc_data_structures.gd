@@ -28,7 +28,7 @@ class ScoredAction:
 	var target_province_id: int = -1
 	var ap_cost: int = 1
 
-	# Eight scoring components per s55.4 Phase 5
+	# Eight base scoring components per s55.4 Phase 5
 	var objective_alignment: float = 0.0
 	var disposition_modifier: float = 0.0
 	var personality_lean: float = 0.0
@@ -37,6 +37,11 @@ class ScoredAction:
 	var standing_influence: float = 0.0
 	var topic_position_modifier: float = 0.0
 	var resource_modifier: float = 0.0
+
+	# Three additional scoring modifiers from wired subsystems
+	var approach_modifier: float = 0.0
+	var commitment_at_risk: float = 0.0
+	var travel_redirect_penalty: float = 0.0
 
 	func get_total_score() -> float:
 		return (
@@ -48,6 +53,9 @@ class ScoredAction:
 			+ standing_influence
 			+ topic_position_modifier
 			+ resource_modifier
+			+ approach_modifier
+			+ commitment_at_risk
+			+ travel_redirect_penalty
 		)
 
 
@@ -65,6 +73,9 @@ class ContextSnapshot:
 	var context_flag: Enums.ContextFlag = Enums.ContextFlag.AT_OWN_HOLDINGS
 	var season: int = 0
 	var ic_day: int = 0
+	var zone_subtype: Enums.ZoneSubtype = Enums.ZoneSubtype.OHIROMA
+	var zone_flags: Dictionary = {}
+	var sublocation: Enums.Sublocation = Enums.Sublocation.PUBLIC
 
 	# Stats
 	var skill_ranks: Dictionary = {}

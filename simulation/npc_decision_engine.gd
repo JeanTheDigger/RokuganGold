@@ -22,6 +22,13 @@ static func build_context(character: L5RCharacterData, world_state: Dictionary) 
 	ctx.context_flag = world_state.get("context_flag", Enums.ContextFlag.AT_OWN_HOLDINGS)
 	ctx.season = world_state.get("season", 0)
 	ctx.ic_day = world_state.get("ic_day", 0)
+	ctx.sublocation = world_state.get("sublocation", Enums.Sublocation.PUBLIC)
+	var ws_zone_subtype: int = world_state.get("zone_subtype", -1)
+	if ws_zone_subtype >= 0:
+		ctx.zone_subtype = ws_zone_subtype as Enums.ZoneSubtype
+		ctx.zone_flags = ZoneFlagMatrix.get_flags(ctx.zone_subtype)
+	else:
+		ctx.zone_flags = {}
 
 	# Stats
 	ctx.skill_ranks = character.skills.duplicate()
@@ -109,6 +116,8 @@ static func generate_options(
 	var available_actions: Array[String] = _get_actions_for_context(ctx.context_flag)
 
 	for action_id: String in available_actions:
+		if _is_zone_blocked(action_id, ctx.zone_flags):
+			continue
 		var option := NPCDataStructures.ScoredAction.new()
 		option.action_id = action_id
 		option.target_npc_id = need.target_npc_id
@@ -147,6 +156,10 @@ static func score_all(
 	need: NPCDataStructures.ImmediateNeed,
 	ctx: NPCDataStructures.ContextSnapshot,
 	scoring_tables: Dictionary,
+	approach_penalties: Array[Dictionary] = [],
+	commitments: Array[CommitmentData] = [],
+	character: L5RCharacterData = null,
+	travel_redirects: int = 0,
 ) -> void:
 	for option: NPCDataStructures.ScoredAction in options:
 		option.objective_alignment = _lookup_objective_alignment(
@@ -173,6 +186,22 @@ static func score_all(
 		option.resource_modifier = _compute_resource_modifier(
 			option, ctx, scoring_tables
 		)
+
+		option.approach_modifier = float(ApproachEvaluation.get_scoring_modifier(
+			option.action_id, ctx.character_id, option.target_npc_id,
+			ctx.action_log, approach_penalties, ctx.season
+		))
+
+		if character != null and not commitments.is_empty():
+			option.commitment_at_risk = float(CommitmentRegistry.get_at_risk_penalty(
+				commitments, ctx.character_id, character
+			))
+		else:
+			option.commitment_at_risk = 0.0
+
+		option.travel_redirect_penalty = float(TravelCommitment.get_redirect_penalty(
+			travel_redirects
+		))
 
 
 # -- Phase 6: Selection -------------------------------------------------------
@@ -228,6 +257,9 @@ static func run(
 	objectives: Dictionary,
 	scoring_tables: Dictionary,
 	filter_data: Dictionary,
+	approach_penalties: Array[Dictionary] = [],
+	commitments: Array[CommitmentData] = [],
+	travel_redirects: int = 0,
 ) -> Dictionary:
 	# Phase 1
 	var ctx := build_context(character, world_state)
@@ -242,7 +274,8 @@ static func run(
 	options = apply_personality_filter(options, ctx, filter_data)
 
 	# Phase 5
-	score_all(options, need, ctx, scoring_tables)
+	score_all(options, need, ctx, scoring_tables,
+		approach_penalties, commitments, character, travel_redirects)
 
 	# Phase 6
 	var chosen := select_action(options, ctx)
@@ -659,3 +692,21 @@ static func _compute_resource_modifier(
 	# Resource modifier is 0 to -40 per s55.32.
 	# Full implementation requires resource availability checks.
 	return 0.0
+
+
+# -- Zone Flag Blocking (s57.36) -----------------------------------------------
+
+const ZONE_GATED_ACTIONS: Dictionary = {
+	"PUBLIC_PERFORMANCE": "performance_permitted",
+	"PERFORM_FOR": "performance_permitted",
+	"PERFORM_WORSHIP": "shrine_eligible",
+	"PERFORM_RITUAL": "shrine_eligible",
+}
+
+static func _is_zone_blocked(action_id: String, zone_flags: Dictionary) -> bool:
+	if zone_flags.is_empty():
+		return false
+	var required_flag: String = ZONE_GATED_ACTIONS.get(action_id, "")
+	if required_flag.is_empty():
+		return false
+	return not zone_flags.get(required_flag, false)

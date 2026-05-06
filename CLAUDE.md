@@ -310,29 +310,41 @@ All in /tests/, one file per system:
 - test_zone_flag_matrix.gd (~53 tests)
 - test_tattoo_system.gd (~100 tests)
 - test_character_sheet_field_index.gd (~45 tests)
+- test_system_wiring.gd (~20 tests)
 
 ### What's Next
 1. Military standing objectives — GDD s55.23 decomposition trees (awaiting content)
 2. Topic propagation — momentum tracking, public knowledge broadcast per GDD s16
 3. Daily conversation / letter information exchange per GDD s55.12
-4. Crime record and investigation system per GDD s57.47, s57.16
+4. Crime investigation system per GDD s57.47, s57.16 (crime recording is wired;
+   investigation/discovery flow is not)
+
+### Systems Wired into NPC Loop
+The following subsystems are now integrated into the NPC decision loop:
+- **ApproachEvaluation** — Phase 5 scoring: `approach_modifier` field on
+  ScoredAction. Measurement bonus (+15), approach penalty (−15, decays),
+  alternative bonus (+10). Seasonal decay runs on season boundary in
+  DayOrchestrator.
+- **CommitmentRegistry** — Phase 5 scoring: `commitment_at_risk` field on
+  ScoredAction (−5/−15/−25 by tier, cap −40). Daily deadline processing
+  runs in DayOrchestrator after wave resolution.
+- **TravelCommitment** — Phase 5 scoring: `travel_redirect_penalty` field
+  on ScoredAction (0/−5/−15/−30). Travel redirect count read from primary
+  objective in NPCWaveResolver.
+- **ZoneFlagMatrix** — Phase 1: `zone_subtype`, `zone_flags`, `sublocation`
+  populated in ContextSnapshot via `build_context()`. Phase 3: zone-gated
+  actions (PUBLIC_PERFORMANCE, PERFORM_FOR, PERFORM_WORSHIP, PERFORM_RITUAL)
+  filtered from option list when zone flags forbid them.
+- **CrimeSystem** — Post-execution: DayOrchestrator scans day results for
+  `detection_risk: true` in covert action effects, creates CrimeRecord via
+  `CrimeSystem.create_crime_record()`, applies at-act honor consequences.
+  Action-to-crime-type mapping: EAVESDROP/SEARCH_QUARTERS/INTERCEPT_LETTER/
+  FABRICATE_SECRET → DISHONORABLE_CONDUCT, BRIBE_FOR_INFO → SKIMMING.
 
 ### Systems Awaiting NPC Loop Integration
-The following systems are fully implemented and tested but NOT YET WIRED into
-the NPC decision engine's Phase 5 scoring or the DayOrchestrator loop:
-- **ApproachEvaluation** — provides measurement bonus, approach penalty, and
-  alternative bonus modifiers for Phase 5 scoring
-- **CommitmentRegistry** — provides at-risk penalties for Phase 5 scoring,
-  plus deadline checking and consequence application
-- **TravelCommitment** — provides redirect penalties and sublocation access
-  gates (travel oscillation prevention)
-- **CrimeSystem** — consequence tables exist but no hook connects action
-  execution to crime recording; covert action `detection_risk` is produced
-  by ActionExecutor but never routed to crime discovery
 - **MilitaryHierarchy** — unit chain queries exist but military ActionIDs
-  don't consult the hierarchy during execution
-- **ZoneFlagMatrix** — zone-level flags not connected to context generation
-  or action availability checks
+  don't consult the hierarchy during execution. Requires military standing
+  objectives (s55.23) to be meaningful.
 
 ## Resolved Design Decisions
 

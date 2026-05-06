@@ -20,6 +20,10 @@ static func advance_day(
 	season_meta: Dictionary,
 	active_topics: Array[TopicData] = [],
 	pending_letters: Array = [],
+	approach_penalties: Array[Dictionary] = [],
+	commitments: Array[CommitmentData] = [],
+	crime_records: Array[CrimeRecord] = [],
+	next_case_id: Array[int] = [1],
 ) -> Dictionary:
 	var prev_season: int = time_system.get_season()
 
@@ -32,7 +36,20 @@ static func advance_day(
 
 	var day_result: Dictionary = NPCWaveResolver.resolve_day_applied(
 		characters, world_states, objectives_map, scoring_tables, filter_data,
-		dice_engine, action_skill_map, characters_by_id, provinces, action_log
+		dice_engine, action_skill_map, characters_by_id, provinces, action_log,
+		approach_penalties, commitments
+	)
+
+	var crime_results: Array[Dictionary] = _process_crime_detection(
+		day_result.get("results", []),
+		characters_by_id,
+		crime_records,
+		ic_day,
+		next_case_id,
+	)
+
+	var commitment_results: Array[Dictionary] = _process_commitment_deadlines(
+		commitments, ic_day, characters_by_id
 	)
 
 	var conversation_results: Array[Dictionary] = _process_daily_conversations(
@@ -55,7 +72,8 @@ static func advance_day(
 	var seasonal_result: Dictionary = {}
 	if current_season != prev_season:
 		seasonal_result = _process_season_transition(
-			characters, provinces, current_season, season_meta
+			characters, provinces, current_season, season_meta,
+			approach_penalties
 		)
 
 	return {
@@ -69,6 +87,8 @@ static func advance_day(
 		"info_results": info_results,
 		"letter_results": letter_results,
 		"seasonal_result": seasonal_result,
+		"crime_results": crime_results,
+		"commitment_results": commitment_results,
 	}
 
 
@@ -161,8 +181,13 @@ static func _process_season_transition(
 	provinces: Dictionary,
 	current_season: int,
 	season_meta: Dictionary,
+	approach_penalties: Array[Dictionary] = [],
 ) -> Dictionary:
 	_decay_all_knowledge(characters, current_season)
+
+	var penalties_decayed: int = ApproachEvaluation.decay_penalties(
+		approach_penalties, current_season
+	)
 
 	var province_array: Array[ProvinceData] = []
 	for pid: int in provinces:
@@ -178,6 +203,7 @@ static func _process_season_transition(
 		"season_name": season_name,
 		"knowledge_decayed": true,
 		"resource_tick": tick_result,
+		"approach_penalties_decayed": penalties_decayed,
 	}
 
 
@@ -187,6 +213,83 @@ static func _decay_all_knowledge(
 ) -> void:
 	for c: L5RCharacterData in characters:
 		InformationSystem.decay_confidence(c, current_season)
+
+
+# -- Crime Detection (s57.47) --------------------------------------------------
+
+static func _process_crime_detection(
+	results: Array,
+	characters_by_id: Dictionary,
+	crime_records: Array[CrimeRecord],
+	ic_day: int,
+	next_case_id: Array[int],
+) -> Array[Dictionary]:
+	var crime_results: Array[Dictionary] = []
+
+	for result: Variant in results:
+		if not result is Dictionary:
+			continue
+		var r: Dictionary = result as Dictionary
+		var effects: Dictionary = r.get("effects", {})
+		if not effects.get("detection_risk", false):
+			continue
+
+		var char_id: int = r.get("character_id", -1)
+		var character: L5RCharacterData = characters_by_id.get(char_id)
+		if character == null:
+			continue
+
+		var action_id: String = r.get("action_id", "")
+		var crime_type: int = _action_to_crime_type(action_id)
+		if crime_type < 0:
+			continue
+
+		var case_id: int = next_case_id[0]
+		next_case_id[0] = case_id + 1
+		var location: String = character.physical_location
+		var target_id: int = r.get("target_npc_id", -1)
+
+		var record: CrimeRecord = CrimeSystem.create_crime_record(
+			case_id, crime_type, char_id, location, ic_day, target_id
+		)
+		crime_records.append(record)
+
+		var at_act: Dictionary = CrimeSystem.apply_at_act_consequences(character, crime_type)
+		crime_results.append({
+			"case_id": case_id,
+			"character_id": char_id,
+			"crime_type": crime_type,
+			"action_id": action_id,
+			"honor_delta": at_act.get("honor_delta", 0.0),
+		})
+
+	return crime_results
+
+
+static func _action_to_crime_type(action_id: String) -> int:
+	match action_id:
+		"EAVESDROP", "SEARCH_QUARTERS", "INTERCEPT_LETTER":
+			return Enums.CrimeType.DISHONORABLE_CONDUCT
+		"BRIBE_FOR_INFO":
+			return Enums.CrimeType.SKIMMING
+		"FABRICATE_SECRET":
+			return Enums.CrimeType.DISHONORABLE_CONDUCT
+	return -1
+
+
+# -- Commitment Deadlines (s55.31) --------------------------------------------
+
+static func _process_commitment_deadlines(
+	commitments: Array[CommitmentData],
+	ic_day: int,
+	characters_by_id: Dictionary,
+) -> Array[Dictionary]:
+	if commitments.is_empty():
+		return []
+	var checker: Callable = func(_c: CommitmentData) -> bool: return false
+	return CommitmentRegistry.process_deadlines(
+		commitments, ic_day, checker, characters_by_id, characters_by_id
+	)
 
 
 static func _season_to_name(season: int) -> String:

@@ -14,16 +14,20 @@ static func resolve_day(
 	objectives_map: Dictionary,
 	scoring_tables: Dictionary,
 	filter_data: Dictionary,
+	approach_penalties: Array[Dictionary] = [],
+	commitments: Array[CommitmentData] = [],
 ) -> Array[Dictionary]:
 	var all_results: Array[Dictionary] = []
 
 	var reactive_results: Array[Dictionary] = _resolve_reactive_events(
-		characters, world_states, objectives_map, scoring_tables, filter_data
+		characters, world_states, objectives_map, scoring_tables, filter_data,
+		approach_penalties, commitments
 	)
 	all_results.append_array(reactive_results)
 
 	var wave_results: Array[Dictionary] = _resolve_ap_waves(
-		characters, world_states, objectives_map, scoring_tables, filter_data
+		characters, world_states, objectives_map, scoring_tables, filter_data,
+		approach_penalties, commitments
 	)
 	all_results.append_array(wave_results)
 
@@ -38,18 +42,20 @@ static func resolve_day_full(
 	filter_data: Dictionary,
 	dice_engine: DiceEngine,
 	action_skill_map: Dictionary,
+	approach_penalties: Array[Dictionary] = [],
+	commitments: Array[CommitmentData] = [],
 ) -> Array[Dictionary]:
 	var all_results: Array[Dictionary] = []
 
 	var reactive_results: Array[Dictionary] = _resolve_reactive_events_full(
 		characters, world_states, objectives_map, scoring_tables, filter_data,
-		dice_engine, action_skill_map
+		dice_engine, action_skill_map, approach_penalties, commitments
 	)
 	all_results.append_array(reactive_results)
 
 	var wave_results: Array[Dictionary] = _resolve_ap_waves_full(
 		characters, world_states, objectives_map, scoring_tables, filter_data,
-		dice_engine, action_skill_map
+		dice_engine, action_skill_map, approach_penalties, commitments
 	)
 	all_results.append_array(wave_results)
 
@@ -67,10 +73,12 @@ static func resolve_day_applied(
 	characters_by_id: Dictionary,
 	provinces: Dictionary,
 	action_log: Array[Dictionary],
+	approach_penalties: Array[Dictionary] = [],
+	commitments: Array[CommitmentData] = [],
 ) -> Dictionary:
 	var results: Array[Dictionary] = resolve_day_full(
 		characters, world_states, objectives_map, scoring_tables, filter_data,
-		dice_engine, action_skill_map
+		dice_engine, action_skill_map, approach_penalties, commitments
 	)
 	var applied: Array[Dictionary] = EffectApplicator.apply_day_results(
 		results, characters_by_id, provinces, action_log
@@ -90,6 +98,8 @@ static func _resolve_reactive_events(
 	objectives_map: Dictionary,
 	scoring_tables: Dictionary,
 	filter_data: Dictionary,
+	approach_penalties: Array[Dictionary] = [],
+	commitments: Array[CommitmentData] = [],
 ) -> Array[Dictionary]:
 	var results: Array[Dictionary] = []
 	var reactive_npcs: Array[L5RCharacterData] = _gather_reactive_npcs(characters, world_states)
@@ -97,7 +107,11 @@ static func _resolve_reactive_events(
 	for c: L5RCharacterData in reactive_npcs:
 		var ws: Dictionary = world_states.get(c.character_id, {})
 		var objs: Dictionary = objectives_map.get(c.character_id, {})
-		var result: Dictionary = NPCDecisionEngine.run(c, ws, objs, scoring_tables, filter_data)
+		var redirects: int = _get_travel_redirects(objs)
+		var result: Dictionary = NPCDecisionEngine.run(
+			c, ws, objs, scoring_tables, filter_data,
+			approach_penalties, commitments, redirects
+		)
 		results.append(result)
 
 	return results
@@ -113,6 +127,8 @@ static func _resolve_reactive_events_full(
 	filter_data: Dictionary,
 	dice_engine: DiceEngine,
 	action_skill_map: Dictionary,
+	approach_penalties: Array[Dictionary] = [],
+	commitments: Array[CommitmentData] = [],
 ) -> Array[Dictionary]:
 	var results: Array[Dictionary] = []
 	var reactive_npcs: Array[L5RCharacterData] = _gather_reactive_npcs(characters, world_states)
@@ -120,7 +136,11 @@ static func _resolve_reactive_events_full(
 	for c: L5RCharacterData in reactive_npcs:
 		var ws: Dictionary = world_states.get(c.character_id, {})
 		var objs: Dictionary = objectives_map.get(c.character_id, {})
-		var decision: Dictionary = NPCDecisionEngine.run(c, ws, objs, scoring_tables, filter_data)
+		var redirects: int = _get_travel_redirects(objs)
+		var decision: Dictionary = NPCDecisionEngine.run(
+			c, ws, objs, scoring_tables, filter_data,
+			approach_penalties, commitments, redirects
+		)
 		if decision.get("success", false):
 			var exec_result: Dictionary = _execute_decision(
 				decision, c, ws, dice_engine, action_skill_map
@@ -139,6 +159,8 @@ static func _resolve_ap_waves(
 	objectives_map: Dictionary,
 	scoring_tables: Dictionary,
 	filter_data: Dictionary,
+	approach_penalties: Array[Dictionary] = [],
+	commitments: Array[CommitmentData] = [],
 ) -> Array[Dictionary]:
 	var results: Array[Dictionary] = []
 	var max_ap: int = _get_max_ap(characters)
@@ -149,7 +171,8 @@ static func _resolve_ap_waves(
 			break
 
 		var wave_results: Array[Dictionary] = _run_wave(
-			active, world_states, objectives_map, scoring_tables, filter_data
+			active, world_states, objectives_map, scoring_tables, filter_data,
+			approach_penalties, commitments
 		)
 		results.append_array(wave_results)
 
@@ -166,6 +189,8 @@ static func _resolve_ap_waves_full(
 	filter_data: Dictionary,
 	dice_engine: DiceEngine,
 	action_skill_map: Dictionary,
+	approach_penalties: Array[Dictionary] = [],
+	commitments: Array[CommitmentData] = [],
 ) -> Array[Dictionary]:
 	var results: Array[Dictionary] = []
 	var max_ap: int = _get_max_ap(characters)
@@ -177,7 +202,7 @@ static func _resolve_ap_waves_full(
 
 		var wave_results: Array[Dictionary] = _run_wave_full(
 			active, world_states, objectives_map, scoring_tables, filter_data,
-			dice_engine, action_skill_map
+			dice_engine, action_skill_map, approach_penalties, commitments
 		)
 		results.append_array(wave_results)
 
@@ -192,6 +217,8 @@ static func _run_wave(
 	objectives_map: Dictionary,
 	scoring_tables: Dictionary,
 	filter_data: Dictionary,
+	approach_penalties: Array[Dictionary] = [],
+	commitments: Array[CommitmentData] = [],
 ) -> Array[Dictionary]:
 	var results: Array[Dictionary] = []
 	var sorted: Array[L5RCharacterData] = _sort_by_resolution_order(active, world_states)
@@ -202,13 +229,15 @@ static func _run_wave(
 	for court_id: String in court_groups:
 		for c: L5RCharacterData in court_groups[court_id]:
 			var wave_results: Array[Dictionary] = _resolve_character_wave(
-				c, world_states, objectives_map, scoring_tables, filter_data
+				c, world_states, objectives_map, scoring_tables, filter_data,
+				approach_penalties, commitments
 			)
 			results.append_array(wave_results)
 
 	for c: L5RCharacterData in non_court:
 		var wave_results: Array[Dictionary] = _resolve_character_wave(
-			c, world_states, objectives_map, scoring_tables, filter_data
+			c, world_states, objectives_map, scoring_tables, filter_data,
+			approach_penalties, commitments
 		)
 		results.append_array(wave_results)
 
@@ -223,6 +252,8 @@ static func _run_wave_full(
 	filter_data: Dictionary,
 	dice_engine: DiceEngine,
 	action_skill_map: Dictionary,
+	approach_penalties: Array[Dictionary] = [],
+	commitments: Array[CommitmentData] = [],
 ) -> Array[Dictionary]:
 	var results: Array[Dictionary] = []
 	var sorted: Array[L5RCharacterData] = _sort_by_resolution_order(active, world_states)
@@ -234,14 +265,14 @@ static func _run_wave_full(
 		for c: L5RCharacterData in court_groups[court_id]:
 			var wave_results: Array[Dictionary] = _resolve_character_wave_full(
 				c, world_states, objectives_map, scoring_tables, filter_data,
-				dice_engine, action_skill_map
+				dice_engine, action_skill_map, approach_penalties, commitments
 			)
 			results.append_array(wave_results)
 
 	for c: L5RCharacterData in non_court:
 		var wave_results: Array[Dictionary] = _resolve_character_wave_full(
 			c, world_states, objectives_map, scoring_tables, filter_data,
-			dice_engine, action_skill_map
+			dice_engine, action_skill_map, approach_penalties, commitments
 		)
 		results.append_array(wave_results)
 
@@ -256,21 +287,26 @@ static func _resolve_character_wave(
 	objectives_map: Dictionary,
 	scoring_tables: Dictionary,
 	filter_data: Dictionary,
+	approach_penalties: Array[Dictionary] = [],
+	commitments: Array[CommitmentData] = [],
 ) -> Array[Dictionary]:
 	var results: Array[Dictionary] = []
 	var ws: Dictionary = world_states.get(character.character_id, {})
 	var objs: Dictionary = objectives_map.get(character.character_id, {})
 	var is_lord: bool = ws.get("is_lord", false)
+	var redirects: int = _get_travel_redirects(objs)
 
 	if character.action_points_current > 0:
 		var ap_result: Dictionary = NPCDecisionEngine.run(
-			character, ws, objs, scoring_tables, filter_data
+			character, ws, objs, scoring_tables, filter_data,
+			approach_penalties, commitments, redirects
 		)
 		results.append(ap_result)
 
 	if is_lord and character.civilian_orders_remaining > 0:
 		var order_result: Dictionary = _resolve_civilian_order(
-			character, ws, objs, scoring_tables, filter_data
+			character, ws, objs, scoring_tables, filter_data,
+			approach_penalties, commitments, redirects
 		)
 		if not order_result.is_empty():
 			results.append(order_result)
@@ -288,15 +324,19 @@ static func _resolve_character_wave_full(
 	filter_data: Dictionary,
 	dice_engine: DiceEngine,
 	action_skill_map: Dictionary,
+	approach_penalties: Array[Dictionary] = [],
+	commitments: Array[CommitmentData] = [],
 ) -> Array[Dictionary]:
 	var results: Array[Dictionary] = []
 	var ws: Dictionary = world_states.get(character.character_id, {})
 	var objs: Dictionary = objectives_map.get(character.character_id, {})
 	var is_lord: bool = ws.get("is_lord", false)
+	var redirects: int = _get_travel_redirects(objs)
 
 	if character.action_points_current > 0:
 		var decision: Dictionary = NPCDecisionEngine.run(
-			character, ws, objs, scoring_tables, filter_data
+			character, ws, objs, scoring_tables, filter_data,
+			approach_penalties, commitments, redirects
 		)
 		if decision.get("success", false):
 			var exec_result: Dictionary = _execute_decision(
@@ -307,7 +347,8 @@ static func _resolve_character_wave_full(
 
 	if is_lord and character.civilian_orders_remaining > 0:
 		var order_decision: Dictionary = _resolve_civilian_order(
-			character, ws, objs, scoring_tables, filter_data
+			character, ws, objs, scoring_tables, filter_data,
+			approach_penalties, commitments, redirects
 		)
 		if not order_decision.is_empty():
 			var exec_result: Dictionary = _execute_decision(
@@ -327,6 +368,9 @@ static func _resolve_civilian_order(
 	objectives: Dictionary,
 	scoring_tables: Dictionary,
 	filter_data: Dictionary,
+	approach_penalties: Array[Dictionary] = [],
+	commitments: Array[CommitmentData] = [],
+	travel_redirects: int = 0,
 ) -> Dictionary:
 	var ctx: NPCDataStructures.ContextSnapshot = NPCDecisionEngine.build_context(character, world_state)
 	var need: NPCDataStructures.ImmediateNeed = NPCDecisionEngine.resolve_goal(character, ctx, objectives)
@@ -344,7 +388,8 @@ static func _resolve_civilian_order(
 	if order_options.is_empty():
 		return {}
 
-	NPCDecisionEngine.score_all(order_options, need, ctx, scoring_tables)
+	NPCDecisionEngine.score_all(order_options, need, ctx, scoring_tables,
+		approach_penalties, commitments, character, travel_redirects)
 	var chosen: NPCDataStructures.ScoredAction = NPCDecisionEngine.select_action(order_options, ctx)
 
 	character.civilian_orders_remaining -= 1
@@ -464,3 +509,8 @@ static func _partition_by_court(
 			court_groups[court_id].append(c)
 		else:
 			non_court.append(c)
+
+
+static func _get_travel_redirects(objectives: Dictionary) -> int:
+	var primary: Dictionary = objectives.get("primary", {})
+	return primary.get("travel_redirects", 0)
