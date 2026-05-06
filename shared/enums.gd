@@ -199,6 +199,26 @@ enum AccessDenialReason {
 }
 
 
+enum CommitmentType {
+	COURT_ATTENDANCE,
+	FAVOR_OBLIGATION,
+	VISIT_PROMISE,
+	SUPPORT_PLEDGE,
+	RESOURCE_PROMISE,
+	MEETING_ARRANGEMENT,
+}
+
+enum CommitmentStatus {
+	PENDING,
+	FULFILLED,
+	BROKEN_NO_NOTICE,
+	BROKEN_WITH_NOTICE,
+	BROKEN_WITH_PROXY,
+	BROKEN_FORCE_MAJEURE,
+	EXPIRED,
+}
+
+
 static func bushido_virtue_name(v: BushidoVirtue) -> String:
 	var idx: int = BushidoVirtue.values().find(v)
 	if idx < 0:
