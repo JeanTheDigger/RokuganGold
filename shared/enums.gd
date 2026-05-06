@@ -328,6 +328,46 @@ enum CulturalReluctance {
 }
 
 
+enum MilitaryRank {
+	NONE,
+	HOHEI,
+	NIKUTAI,
+	GUNSO,
+	CHUI,
+	TAISA,
+	SHIREIKAN,
+	RIKUGUNSHOKAN,
+}
+
+enum OperationalHierarchyType {
+	NONE,
+	LEGAL,
+	MILITARY,
+	DELEGATION,
+}
+
+enum KolatSect {
+	NONE,
+	CHRYSANTHEMUM,
+	CLOUD,
+	COIN,
+	DREAM,
+	LOTUS,
+	SILK,
+	TIGER,
+}
+
+enum ShipClass {
+	SAMPAN,
+	MERCHANT_BARGE,
+	KOBUNE,
+	SENGOKOBUNE,
+	KOUTETSUKAN,
+	ATAKEBUNE,
+	TORTOISE_OCEANGOING,
+}
+
+
 static func bushido_virtue_name(v: BushidoVirtue) -> String:
 	var idx: int = BushidoVirtue.values().find(v)
 	if idx < 0:
