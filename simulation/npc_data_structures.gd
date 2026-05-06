@@ -98,6 +98,11 @@ class ContextSnapshot:
 	var resource_stockpiles: Dictionary = {}
 	var province_statuses: Array = []
 
+	# Military
+	var military_rank: Enums.MilitaryRank = Enums.MilitaryRank.NONE
+	var commanded_unit_id: int = -1
+	var assigned_company_id: int = -1
+
 	# State
 	var pending_events: Array = []
 	var ap_remaining: int = 0

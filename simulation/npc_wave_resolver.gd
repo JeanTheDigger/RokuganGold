@@ -44,18 +44,19 @@ static func resolve_day_full(
 	action_skill_map: Dictionary,
 	approach_penalties: Array[Dictionary] = [],
 	commitments: Array[CommitmentData] = [],
+	military_data: Dictionary = {},
 ) -> Array[Dictionary]:
 	var all_results: Array[Dictionary] = []
 
 	var reactive_results: Array[Dictionary] = _resolve_reactive_events_full(
 		characters, world_states, objectives_map, scoring_tables, filter_data,
-		dice_engine, action_skill_map, approach_penalties, commitments
+		dice_engine, action_skill_map, approach_penalties, commitments, military_data
 	)
 	all_results.append_array(reactive_results)
 
 	var wave_results: Array[Dictionary] = _resolve_ap_waves_full(
 		characters, world_states, objectives_map, scoring_tables, filter_data,
-		dice_engine, action_skill_map, approach_penalties, commitments
+		dice_engine, action_skill_map, approach_penalties, commitments, military_data
 	)
 	all_results.append_array(wave_results)
 
@@ -75,10 +76,11 @@ static func resolve_day_applied(
 	action_log: Array[Dictionary],
 	approach_penalties: Array[Dictionary] = [],
 	commitments: Array[CommitmentData] = [],
+	military_data: Dictionary = {},
 ) -> Dictionary:
 	var results: Array[Dictionary] = resolve_day_full(
 		characters, world_states, objectives_map, scoring_tables, filter_data,
-		dice_engine, action_skill_map, approach_penalties, commitments
+		dice_engine, action_skill_map, approach_penalties, commitments, military_data
 	)
 	var applied: Array[Dictionary] = EffectApplicator.apply_day_results(
 		results, characters_by_id, provinces, action_log
@@ -129,6 +131,7 @@ static func _resolve_reactive_events_full(
 	action_skill_map: Dictionary,
 	approach_penalties: Array[Dictionary] = [],
 	commitments: Array[CommitmentData] = [],
+	military_data: Dictionary = {},
 ) -> Array[Dictionary]:
 	var results: Array[Dictionary] = []
 	var reactive_npcs: Array[L5RCharacterData] = _gather_reactive_npcs(characters, world_states)
@@ -143,7 +146,7 @@ static func _resolve_reactive_events_full(
 		)
 		if decision.get("success", false):
 			var exec_result: Dictionary = _execute_decision(
-				decision, c, ws, dice_engine, action_skill_map
+				decision, c, ws, dice_engine, action_skill_map, military_data
 			)
 			decision.merge(exec_result, true)
 		results.append(decision)
@@ -191,6 +194,7 @@ static func _resolve_ap_waves_full(
 	action_skill_map: Dictionary,
 	approach_penalties: Array[Dictionary] = [],
 	commitments: Array[CommitmentData] = [],
+	military_data: Dictionary = {},
 ) -> Array[Dictionary]:
 	var results: Array[Dictionary] = []
 	var max_ap: int = _get_max_ap(characters)
@@ -202,7 +206,8 @@ static func _resolve_ap_waves_full(
 
 		var wave_results: Array[Dictionary] = _run_wave_full(
 			active, world_states, objectives_map, scoring_tables, filter_data,
-			dice_engine, action_skill_map, approach_penalties, commitments
+			dice_engine, action_skill_map, approach_penalties, commitments,
+			military_data
 		)
 		results.append_array(wave_results)
 
@@ -254,6 +259,7 @@ static func _run_wave_full(
 	action_skill_map: Dictionary,
 	approach_penalties: Array[Dictionary] = [],
 	commitments: Array[CommitmentData] = [],
+	military_data: Dictionary = {},
 ) -> Array[Dictionary]:
 	var results: Array[Dictionary] = []
 	var sorted: Array[L5RCharacterData] = _sort_by_resolution_order(active, world_states)
@@ -265,14 +271,16 @@ static func _run_wave_full(
 		for c: L5RCharacterData in court_groups[court_id]:
 			var wave_results: Array[Dictionary] = _resolve_character_wave_full(
 				c, world_states, objectives_map, scoring_tables, filter_data,
-				dice_engine, action_skill_map, approach_penalties, commitments
+				dice_engine, action_skill_map, approach_penalties, commitments,
+				military_data
 			)
 			results.append_array(wave_results)
 
 	for c: L5RCharacterData in non_court:
 		var wave_results: Array[Dictionary] = _resolve_character_wave_full(
 			c, world_states, objectives_map, scoring_tables, filter_data,
-			dice_engine, action_skill_map, approach_penalties, commitments
+			dice_engine, action_skill_map, approach_penalties, commitments,
+			military_data
 		)
 		results.append_array(wave_results)
 
@@ -326,6 +334,7 @@ static func _resolve_character_wave_full(
 	action_skill_map: Dictionary,
 	approach_penalties: Array[Dictionary] = [],
 	commitments: Array[CommitmentData] = [],
+	military_data: Dictionary = {},
 ) -> Array[Dictionary]:
 	var results: Array[Dictionary] = []
 	var ws: Dictionary = world_states.get(character.character_id, {})
@@ -340,7 +349,8 @@ static func _resolve_character_wave_full(
 		)
 		if decision.get("success", false):
 			var exec_result: Dictionary = _execute_decision(
-				decision, character, ws, dice_engine, action_skill_map
+				decision, character, ws, dice_engine, action_skill_map,
+				military_data
 			)
 			decision.merge(exec_result, true)
 		results.append(decision)
@@ -352,7 +362,8 @@ static func _resolve_character_wave_full(
 		)
 		if not order_decision.is_empty():
 			var exec_result: Dictionary = _execute_decision(
-				order_decision, character, ws, dice_engine, action_skill_map
+				order_decision, character, ws, dice_engine, action_skill_map,
+				military_data
 			)
 			order_decision.merge(exec_result, true)
 			results.append(order_decision)
@@ -417,6 +428,7 @@ static func _execute_decision(
 	world_state: Dictionary,
 	dice_engine: DiceEngine,
 	action_skill_map: Dictionary,
+	military_data: Dictionary = {},
 ) -> Dictionary:
 	var action := NPCDataStructures.ScoredAction.new()
 	action.action_id = decision.get("action_id", "DO_NOTHING")
@@ -429,7 +441,7 @@ static func _execute_decision(
 		character, world_state
 	)
 
-	return ActionExecutor.execute(action, character, ctx, dice_engine, action_skill_map)
+	return ActionExecutor.execute(action, character, ctx, dice_engine, action_skill_map, military_data)
 
 
 # -- Helpers -------------------------------------------------------------------

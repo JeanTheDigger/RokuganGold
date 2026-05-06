@@ -340,11 +340,14 @@ The following subsystems are now integrated into the NPC decision loop:
   `CrimeSystem.create_crime_record()`, applies at-act honor consequences.
   Action-to-crime-type mapping: EAVESDROP/SEARCH_QUARTERS/INTERCEPT_LETTER/
   FABRICATE_SECRET → DISHONORABLE_CONDUCT, BRIBE_FOR_INFO → SKIMMING.
-
-### Systems Awaiting NPC Loop Integration
-- **MilitaryHierarchy** — unit chain queries exist but military ActionIDs
-  don't consult the hierarchy during execution. Requires military standing
-  objectives (s55.23) to be meaningful.
+- **MilitaryHierarchy** — Phase 1: `military_rank`, `commanded_unit_id`,
+  `assigned_company_id` populated in ContextSnapshot. Phase 3: military
+  order actions (ORDER_BATTLE, CONDUCT_RAID, etc.) gated behind
+  `commanded_unit_id >= 0`. DISPATCH_COURTIER gated behind Shireikan rank.
+  Phase 7 (execution): ActionExecutor validates commander authority, checks
+  deployment status (garrisoned units blocked from offensive actions),
+  verifies legion coordination and section campaign authority. Military data
+  dict threaded through NPCWaveResolver → DayOrchestrator.
 
 ## Resolved Design Decisions
 

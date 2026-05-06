@@ -24,6 +24,7 @@ static func advance_day(
 	commitments: Array[CommitmentData] = [],
 	crime_records: Array[CrimeRecord] = [],
 	next_case_id: Array[int] = [1],
+	military_data: Dictionary = {},
 ) -> Dictionary:
 	var prev_season: int = time_system.get_season()
 
@@ -37,7 +38,7 @@ static func advance_day(
 	var day_result: Dictionary = NPCWaveResolver.resolve_day_applied(
 		characters, world_states, objectives_map, scoring_tables, filter_data,
 		dice_engine, action_skill_map, characters_by_id, provinces, action_log,
-		approach_penalties, commitments
+		approach_penalties, commitments, military_data
 	)
 
 	var crime_results: Array[Dictionary] = _process_crime_detection(

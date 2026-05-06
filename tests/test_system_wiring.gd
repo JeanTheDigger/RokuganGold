@@ -508,6 +508,150 @@ func test_wave_resolver_accepts_new_params() -> void:
 
 
 # =============================================================================
+# Phase 1: Military fields populated in ContextSnapshot
+# =============================================================================
+
+func test_build_context_populates_military_rank() -> void:
+	_char.military_rank = Enums.MilitaryRank.TAISA
+	_char.commanded_unit_id = 5
+	var ctx: NPCDataStructures.ContextSnapshot = NPCDecisionEngine.build_context(_char, _world_state)
+	assert_eq(ctx.military_rank, Enums.MilitaryRank.TAISA)
+	assert_eq(ctx.commanded_unit_id, 5)
+
+
+func test_build_context_default_military_rank_is_none() -> void:
+	var ctx: NPCDataStructures.ContextSnapshot = NPCDecisionEngine.build_context(_char, _world_state)
+	assert_eq(ctx.military_rank, Enums.MilitaryRank.NONE)
+	assert_eq(ctx.commanded_unit_id, -1)
+
+
+# =============================================================================
+# Phase 3: Military order gating
+# =============================================================================
+
+func test_military_orders_blocked_without_commanded_unit() -> void:
+	_world_state["context_flag"] = Enums.ContextFlag.ON_CAMPAIGN
+	_char.commanded_unit_id = -1
+	var ctx: NPCDataStructures.ContextSnapshot = NPCDecisionEngine.build_context(_char, _world_state)
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "DEFEND_PROVINCE"
+	var options: Array[NPCDataStructures.ScoredAction] = NPCDecisionEngine.generate_options(ctx, need)
+	var action_ids: Array[String] = []
+	for opt: NPCDataStructures.ScoredAction in options:
+		action_ids.append(opt.action_id)
+	assert_false("ORDER_BATTLE" in action_ids)
+	assert_false("CONDUCT_RAID" in action_ids)
+	assert_false("DRILL_TROOPS" in action_ids)
+	assert_true("DO_NOTHING" in action_ids)
+
+
+func test_military_orders_allowed_with_commanded_unit() -> void:
+	_world_state["context_flag"] = Enums.ContextFlag.ON_CAMPAIGN
+	_char.commanded_unit_id = 5
+	_char.military_rank = Enums.MilitaryRank.CHUI
+	var ctx: NPCDataStructures.ContextSnapshot = NPCDecisionEngine.build_context(_char, _world_state)
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "DEFEND_PROVINCE"
+	var options: Array[NPCDataStructures.ScoredAction] = NPCDecisionEngine.generate_options(ctx, need)
+	var action_ids: Array[String] = []
+	for opt: NPCDataStructures.ScoredAction in options:
+		action_ids.append(opt.action_id)
+	assert_true("ORDER_BATTLE" in action_ids)
+	assert_true("DRILL_TROOPS" in action_ids)
+
+
+# =============================================================================
+# ActionExecutor: Military hierarchy validation
+# =============================================================================
+
+func test_executor_rejects_military_order_without_unit() -> void:
+	var action := NPCDataStructures.ScoredAction.new()
+	action.action_id = "ORDER_BATTLE"
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.commanded_unit_id = -1
+	ctx.character_id = 1
+	ctx.ic_day = 10
+	ctx.season = 1
+	var dice := DiceEngine.new()
+	dice.set_seed(42)
+	var result: Dictionary = ActionExecutor.execute(
+		action, _char, ctx, dice, _action_skill_map
+	)
+	assert_false(result.get("success", true))
+	assert_eq(result.get("reason", ""), "no_commanded_unit")
+
+
+func test_executor_rejects_garrisoned_unit_for_battle() -> void:
+	var company := MilitaryUnitData.CompanyData.new()
+	company.company_id = 5
+	company.commander_id = 1
+	company.deployment_status = Enums.DeploymentStatus.GARRISONED
+	var mil_data: Dictionary = {"companies": {5: company}, "legions": {}}
+
+	var action := NPCDataStructures.ScoredAction.new()
+	action.action_id = "ORDER_BATTLE"
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.commanded_unit_id = 5
+	ctx.military_rank = Enums.MilitaryRank.CHUI
+	ctx.character_id = 1
+	ctx.ic_day = 10
+	ctx.season = 1
+	var dice := DiceEngine.new()
+	dice.set_seed(42)
+	var result: Dictionary = ActionExecutor.execute(
+		action, _char, ctx, dice, _action_skill_map, mil_data
+	)
+	assert_false(result.get("success", true))
+	assert_eq(result.get("reason", ""), "unit_garrisoned")
+
+
+func test_executor_allows_drill_for_garrisoned_unit() -> void:
+	var company := MilitaryUnitData.CompanyData.new()
+	company.company_id = 5
+	company.commander_id = 1
+	company.deployment_status = Enums.DeploymentStatus.GARRISONED
+	var mil_data: Dictionary = {"companies": {5: company}, "legions": {}}
+
+	var action := NPCDataStructures.ScoredAction.new()
+	action.action_id = "DRILL_TROOPS"
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.commanded_unit_id = 5
+	ctx.military_rank = Enums.MilitaryRank.CHUI
+	ctx.character_id = 1
+	ctx.ic_day = 10
+	ctx.season = 1
+	var dice := DiceEngine.new()
+	dice.set_seed(42)
+	var result: Dictionary = ActionExecutor.execute(
+		action, _char, ctx, dice, _action_skill_map, mil_data
+	)
+	assert_true(result.get("valid", true))
+
+
+func test_executor_allows_military_order_with_valid_unit() -> void:
+	var company := MilitaryUnitData.CompanyData.new()
+	company.company_id = 5
+	company.commander_id = 1
+	company.deployment_status = Enums.DeploymentStatus.WITH_LEGION
+	var mil_data: Dictionary = {"companies": {5: company}, "legions": {}}
+
+	var action := NPCDataStructures.ScoredAction.new()
+	action.action_id = "ORDER_BATTLE"
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.commanded_unit_id = 5
+	ctx.military_rank = Enums.MilitaryRank.CHUI
+	ctx.character_id = 1
+	ctx.ic_day = 10
+	ctx.season = 1
+	var dice := DiceEngine.new()
+	dice.set_seed(42)
+	var result: Dictionary = ActionExecutor.execute(
+		action, _char, ctx, dice, _action_skill_map, mil_data
+	)
+	assert_ne(result.get("reason", ""), "unit_garrisoned")
+
+
+# =============================================================================
 # Helpers
 # =============================================================================
 

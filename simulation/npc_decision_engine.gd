@@ -52,6 +52,11 @@ static func build_context(character: L5RCharacterData, world_state: Dictionary) 
 		ctx.resource_stockpiles = world_state.get("resource_stockpiles", {})
 		ctx.province_statuses = world_state.get("province_statuses", [])
 
+	# Military
+	ctx.military_rank = character.military_rank
+	ctx.commanded_unit_id = character.commanded_unit_id
+	ctx.assigned_company_id = character.assigned_company_id
+
 	# State
 	ctx.pending_events = world_state.get("pending_events", [])
 	ctx.ap_remaining = character.action_points_current
@@ -117,6 +122,8 @@ static func generate_options(
 
 	for action_id: String in available_actions:
 		if _is_zone_blocked(action_id, ctx.zone_flags):
+			continue
+		if _is_military_blocked(action_id, ctx):
 			continue
 		var option := NPCDataStructures.ScoredAction.new()
 		option.action_id = action_id
@@ -710,3 +717,29 @@ static func _is_zone_blocked(action_id: String, zone_flags: Dictionary) -> bool:
 	if required_flag.is_empty():
 		return false
 	return not zone_flags.get(required_flag, false)
+
+
+# -- Military Hierarchy Blocking (s57.21) --------------------------------------
+
+const MILITARY_ORDER_ACTIONS: Array[String] = [
+	"ORDER_BATTLE", "CONDUCT_RAID", "RAID_HARVEST",
+	"DRILL_TROOPS", "EVALUATE_WAR_READINESS",
+	"ORDER_PATROL", "CONDUCT_SORTIE", "CONDUCT_STORM_ASSAULT",
+	"MAINTAIN_SIEGE", "NEGOTIATE_SURRENDER",
+]
+
+const COMMANDER_RANK_ACTIONS: Dictionary = {
+	"DISPATCH_COURTIER": Enums.MilitaryRank.SHIREIKAN,
+	"LEVY_TROOPS": Enums.MilitaryRank.CHUI,
+}
+
+static func _is_military_blocked(
+	action_id: String,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> bool:
+	if action_id in MILITARY_ORDER_ACTIONS:
+		return ctx.commanded_unit_id < 0
+	if COMMANDER_RANK_ACTIONS.has(action_id):
+		var min_rank: int = COMMANDER_RANK_ACTIONS[action_id]
+		return ctx.military_rank < min_rank
+	return false

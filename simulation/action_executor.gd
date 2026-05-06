@@ -74,8 +74,24 @@ static func execute(
 	ctx: NPCDataStructures.ContextSnapshot,
 	dice_engine: DiceEngine,
 	action_skill_map: Dictionary,
+	military_data: Dictionary = {},
 ) -> Dictionary:
 	var action_id: String = action.action_id
+
+	if action_id in MILITARY_ORDERS:
+		var mil_check: Dictionary = _validate_military_order(action_id, ctx, military_data)
+		if not mil_check.get("valid", false):
+			return {
+				"success": false,
+				"action_id": action_id,
+				"character_id": ctx.character_id,
+				"target_npc_id": action.target_npc_id,
+				"target_province_id": action.target_province_id,
+				"ic_day": ctx.ic_day,
+				"season": ctx.season,
+				"reason": mil_check.get("reason", "hierarchy_invalid"),
+				"effects": {},
+			}
 
 	if action_id in NO_ROLL_ACTIONS:
 		return _execute_no_roll(action, character, ctx)
@@ -353,3 +369,47 @@ static func _get_no_roll_effects(action_id: String) -> Dictionary:
 		"BEGIN_TRAVEL", "CHANGE_DESTINATION":
 			return {"effect": "travel_started"}
 	return {"effect": "completed"}
+
+
+# -- Military Hierarchy Validation (s57.21) ------------------------------------
+
+static func _validate_military_order(
+	action_id: String,
+	ctx: NPCDataStructures.ContextSnapshot,
+	military_data: Dictionary,
+) -> Dictionary:
+	if ctx.commanded_unit_id < 0:
+		return {"valid": false, "reason": "no_commanded_unit"}
+
+	if military_data.is_empty():
+		return {"valid": true}
+
+	var companies: Dictionary = military_data.get("companies", {})
+	var legions: Dictionary = military_data.get("legions", {})
+
+	if ctx.military_rank == Enums.MilitaryRank.CHUI:
+		var company: MilitaryUnitData.CompanyData = MilitaryHierarchy.get_company(
+			companies, ctx.commanded_unit_id
+		)
+		if company == null:
+			return {"valid": false, "reason": "unit_not_found"}
+		if company.deployment_status == Enums.DeploymentStatus.GARRISONED:
+			if action_id in ["ORDER_BATTLE", "CONDUCT_RAID", "RAID_HARVEST", "CONDUCT_SORTIE"]:
+				return {"valid": false, "reason": "unit_garrisoned"}
+
+	if ctx.military_rank >= Enums.MilitaryRank.TAISA:
+		if not legions.is_empty():
+			var legion: MilitaryUnitData.LegionData = legions.get(ctx.commanded_unit_id)
+			if legion != null and not MilitaryHierarchy.can_legion_coordinate(legion):
+				if action_id in ["ORDER_BATTLE", "CONDUCT_RAID"]:
+					return {"valid": false, "reason": "legion_no_coordinator"}
+
+	if ctx.military_rank >= Enums.MilitaryRank.SHIREIKAN:
+		var sections: Dictionary = military_data.get("sections", {})
+		if not sections.is_empty():
+			var section: MilitaryUnitData.SectionData = sections.get(ctx.commanded_unit_id)
+			if section != null and not MilitaryHierarchy.can_section_initiate_campaign(section):
+				if action_id in ["ORDER_BATTLE", "CONDUCT_RAID"]:
+					return {"valid": false, "reason": "section_no_commander"}
+
+	return {"valid": true}
