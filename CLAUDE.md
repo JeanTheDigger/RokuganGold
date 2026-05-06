@@ -148,7 +148,11 @@ single-dice-entry-point and server-authoritative constraints.
   per GDD s22.3. Named L5RCharacterData (not CharacterData) to avoid conflict
   with pre-existing VtM code in scripts/characters/.
 - **shared/enums.gd** — Ring, Trait, WoundLevel, Stance, SchoolType, ContextFlag,
-  BushidoVirtue, ShouridoVirtue, RING_TRAITS, WOUND_PENALTIES.
+  BushidoVirtue, ShouridoVirtue, RING_TRAITS, WOUND_PENALTIES,
+  CommitmentType, CommitmentStatus, DeploymentStatus, ZoneSubtype (24 values),
+  LordRank, TattooBodyLocation (9), TattooQualityTier, TattooSubjectType,
+  TattooAbility (26 named abilities), CulturalReluctance, MilitaryRank (8 ranks),
+  OperationalHierarchyType, KolatSect (7 sects), ShipClass (7 classes).
 - **shared/province_data.gd** — ProvinceData Resource: terrain, adjacency,
   resources (rice/koku/iron/arms), population PU breakdown, stability. Data model
   only — no map generation (map is being worked on separately by the user).
@@ -226,6 +230,56 @@ single-dice-entry-point and server-authoritative constraints.
   Rice consumption/harvest, starvation stages, 5-tier tax cascade,
   personality tax modifiers, iron/koku production, population growth.
 
+### Approach Evaluation (s55.30)
+- **simulation/approach_evaluation.gd** — Measure-Then-Decide system.
+  Measurement pressure (high-roll-no-effect detection), approach assessment
+  tags (EFFECTIVE/CAPPED/INEFFECTIVE), penalty registry with seasonal decay.
+  Scoring modifier: +15 measurement bonus, −15 approach penalty (halved after
+  1 season, cleared after 2), +10 alternative bonus. NOT YET WIRED into
+  NPC Phase 5 scoring — standalone tested only.
+
+### Commitment Registry (s55.31)
+- **simulation/commitment_registry.gd** — Six commitment types, consequence
+  tables for 4 breaking modes × 3 tiers. Force majeure with personality-
+  modified retroactive forgiveness. Phase 5 at-risk penalties (−5/−15/−25
+  by tier, cap −40). NOT YET WIRED into NPC Phase 5 scoring.
+- **shared/commitment_data.gd** — CommitmentData Resource.
+
+### Military Hierarchy (s57.21)
+- **simulation/military_hierarchy.gd** — Five-level org chain queries:
+  Company → Legion → Section → Army → Clan. Deployment management,
+  commander vacancy detection, operational superior resolution.
+  CLAN_ARMY_COUNT: Crab=4, Crane=2, Dragon=2, Lion=4, Mantis=3,
+  Phoenix=1, Scorpion=1, Unicorn=3, Imperial=1.
+- **shared/military_unit_data.gd** — CompanyData, LegionData, SectionData,
+  ArmyData inner classes (all extend Resource).
+
+### Zone Flag Matrix (s57.36)
+- **simulation/zone_flag_matrix.gd** — 24 zone subtypes with 8 boolean flags
+  each (performance_permitted, wall_art_slot, displayed_art_slot, fusuma_slot,
+  tokonoma, bonsai_display_slot, garden_eligible, shrine_eligible). Castle
+  scaling by lord rank (Village Headman 1–2 through Imperial 10–11).
+
+### Tattoo System (s57.25)
+- **simulation/tattoo_system.gd** — Both decorative artisanal tattoos AND
+  Togashi ability tattoos. Cultural reluctance gates by clan/family with
+  disposition thresholds. APPLY_TATTOO quality resolution (AP 2–6, TN 15–35,
+  skill gates, raise upgrades). Disposition bonds (permanent bidirectional
+  +1 to +5). Visibility computation per body location and clothing state.
+  Togashi school allotments (Tattooed Order 6, Kikage Zumi 3, Hoshi 2).
+  Decorative gate for monk schools. SEEK_TATTOO urgency scaling and BLOCKED
+  state. Commission system. Provenance investigation. World gen helpers.
+- **shared/tattoo_data.gd** — TattooData Resource (9 body locations).
+
+### Character Sheet Field Index (s57.35)
+- **shared/character_data.gd** — Consolidated all fields from gap sections:
+  military_rank, commanded_unit_id, assigned_company_id (s11.3.18),
+  legal_cases (s11.3.14), void_refresh_blocked_until (s57.32),
+  kolat_superior_id/kolat_sect (s54.7c), hunt_trophies (s57.38),
+  trained_companions (s57.39), aboard_ship_id/passage_request_count_today/
+  assigned_ship_id (s57.42), tattoo ability state fields (s57.25.11),
+  is_bald. operational_hierarchy_type upgraded from String to enum.
+
 ### Tests (GUT v9.3.0)
 All in /tests/, one file per system:
 - test_dice_engine.gd (~35 tests)
@@ -238,18 +292,73 @@ All in /tests/, one file per system:
 - test_npc_decision_engine.gd (~35 tests)
 - test_scoring_table_loader.gd (~15 tests)
 - test_action_executor.gd (~25 tests)
-- test_effect_applicator.gd (~25 tests)
+- test_effect_applicator.gd (~28 tests)
 - test_npc_wave_resolver.gd (~15 tests)
 - test_resource_tick.gd (~30 tests)
 - test_objective_decomposer.gd (~45 tests)
 - test_information_system.gd (~35 tests)
 - test_day_orchestrator.gd (~12 tests)
+- test_approach_evaluation.gd (~55 tests)
+- test_commitment_registry.gd (~60 tests)
+- test_military_hierarchy.gd (~40 tests)
+- test_zone_flag_matrix.gd (~53 tests)
+- test_tattoo_system.gd (~100 tests)
+- test_character_sheet_field_index.gd (~45 tests)
 
 ### What's Next
 1. Military standing objectives — GDD s55.23 decomposition trees (awaiting content)
 2. Topic propagation — momentum tracking, public knowledge broadcast per GDD s16
 3. Daily conversation / letter information exchange per GDD s55.12
 4. Crime record and investigation system per GDD s57.47, s57.16
+
+### Systems Awaiting NPC Loop Integration
+The following systems are fully implemented and tested but NOT YET WIRED into
+the NPC decision engine's Phase 5 scoring or the DayOrchestrator loop:
+- **ApproachEvaluation** — provides measurement bonus, approach penalty, and
+  alternative bonus modifiers for Phase 5 scoring
+- **CommitmentRegistry** — provides at-risk penalties for Phase 5 scoring,
+  plus deadline checking and consequence application
+- **TravelCommitment** — provides redirect penalties and sublocation access
+  gates (travel oscillation prevention)
+- **CrimeSystem** — consequence tables exist but no hook connects action
+  execution to crime recording; covert action `detection_risk` is produced
+  by ActionExecutor but never routed to crime discovery
+- **MilitaryHierarchy** — unit chain queries exist but military ActionIDs
+  don't consult the hierarchy during execution
+- **ZoneFlagMatrix** — zone-level flags not connected to context generation
+  or action availability checks
+
+## Open Design Decisions
+The following architectural issues were identified during audit and need
+human decision before implementation:
+
+### 1. Topic Identity: String vs int
+`L5RCharacterData.topic_pool` is `Array[String]` (slugs like "crane_scandal"),
+but `TopicData.topic_id` is `int` and `ContextSnapshot.known_topics` is
+`Array[int]`. The NPC engine uses int IDs while conversation/letter systems
+use string slugs. These cannot interoperate without a translation layer.
+**Decision needed:** Standardise on int IDs everywhere (requires migrating
+topic_pool and letter system), or on string slugs (requires migrating
+TopicData and ContextSnapshot), or build an explicit lookup Dictionary?
+
+### 2. Timestamp Sentinel Convention: 0 vs -1
+Some "never happened" fields use `0` (e.g. `last_medicine_treatment_ic_day`,
+`void_refresh_blocked_until`) and others use `-1` (e.g.
+`phoenix_last_used_ic_day`, `ocean_last_used_ooc_day`). Since IC day 0 is
+the first valid game day, `0` is ambiguous as "never." **Decision needed:**
+Standardise on `-1` for all "never happened" int timestamps? Or define day 0
+as invalid (game starts at day 1)?
+
+### 3. CommitmentData Redundant Fields
+`source_action_id` and `created_by_action` on CommitmentData are always set
+to the same value in `create_commitment()`. **Decision needed:** Remove one
+of them, or do they serve distinct purposes that will diverge later?
+
+### 4. knowledge_pool Typing
+`L5RCharacterData.knowledge_pool: Array[Dictionary]` is heavily used by
+InformationSystem with ~6 known keys per entry. Should this become a typed
+Resource subclass (KnowledgeEntry) for safety, or stay as Dictionary for
+flexibility?
 
 ## What To Do When Uncertain
 Stop. Read the relevant LOCKED section in /gdd/. If it does not answer the
