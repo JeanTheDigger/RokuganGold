@@ -162,8 +162,8 @@ extends Resource
 
 # -- Trait Access Helpers (used by CharacterStats) -----------------------------
 
-func get_trait_value(trait: Enums.Trait) -> int:
-	match trait:
+func get_trait_value(p_trait: Enums.Trait) -> int:
+	match p_trait:
 		Enums.Trait.STAMINA: return stamina
 		Enums.Trait.WILLPOWER: return willpower
 		Enums.Trait.STRENGTH: return strength
