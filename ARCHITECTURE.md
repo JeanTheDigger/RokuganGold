@@ -89,6 +89,14 @@ For design rationale and implementation rules, see CLAUDE.md.
 
 `source: KnowledgeSource`, `entry_type: String`, `data: Dictionary`, `confidence: KnowledgeConfidence`, `season_acquired: int`.
 
+### TopicData (`topic_data.gd`)
+
+`topic_id`, `slug`, `title`, `topic_type`, `variant`, `tier` (Tier enum: TIER_1-4), `category` (Category enum: PERSONAL, POLITICAL, MILITARY, SUPERNATURAL, ECONOMIC, LEGAL), `momentum`, `provinces_affected`, `clan_involved`, `family_involved`, `subject_character_id`, `subject_role`, `ic_day_created`, `resolved`, `discussion_count_this_day`.
+
+### CrimeRecord (`crime_record.gd`)
+
+`case_id`, `crime_type`, `severity`, `perpetrator_id`, `victim_id`, `location`, `ic_day_committed`, `legal_status`, `concealment_tn`, `evidence_total`, `investigating_magistrate_id`, `ic_day_conviction`, `seppuku_offered`, `seppuku_accepted`, `witnesses: Array[int]`, `known_suspects: Array[int]`, `escalation_count`, `skimming_amount`.
+
 ### Enums (`enums.gd`)
 
 Ring, Trait, WoundLevel, Stance, SchoolType, ContextFlag, BushidoVirtue, ShouridoVirtue, TerrainType, SettlementType, CrimeType, CrimeSeverity, LegalStatus, Sublocation, AccessDenialReason, CommitmentType, CommitmentStatus, DeploymentStatus, ZoneSubtype (24), LordRank, TattooBodyLocation (9), TattooQualityTier, TattooSubjectType, TattooAbility (26), CulturalReluctance, MilitaryRank (8), OperationalHierarchyType, KolatSect (7), KnowledgeSource (5), KnowledgeConfidence (3), ShipClass (7).
@@ -143,7 +151,7 @@ Bridges CharacterData to DiceEngine. Trait lookup, rank, emphasis, wound penalty
 - `advance_tick()`, `get_ic_day()`, `get_season()`, `is_winter_court()`
 
 ### NPCDataStructures (`npc_data_structures.gd`)
-`ImmediateNeed` (generic target system), `ScoredAction` (8+3 scoring components), `ContextSnapshot`, `ProvinceStatus`. Competence modifier table.
+`ImmediateNeed` (generic target system), `ScoredAction` (8 base + 5 wired scoring components including `stale_intel_bonus`), `ContextSnapshot`, `ProvinceStatus`. Competence modifier table.
 
 ### NPCDecisionEngine (`npc_decision_engine.gd`)
 Full 7-phase loop: Build Context → Resolve Goal → Generate Options → Personality Filter → Score All → Select → Execute.
@@ -176,7 +184,8 @@ Full day resolution. Reactive events first, then AP waves. Status-descending ord
 - `resolve_day_applied(characters, ...) → Dictionary` — decisions + rolls + world mutation
 
 ### DayOrchestrator (`day_orchestrator.gd`)
-Single `advance_day()` entry point. Sequence: reset AP → wave resolution → conversations → topic wiring → topic tick → broadcast → info events → letters → crime detection → commitment deadlines → season transition (resource tick + knowledge decay).
+Single `advance_day()` entry point. Sequence: reset AP → wave resolution → crime detection (+ crime topic creation) → commitment deadlines → conversations → topic wiring → topic tick → broadcast → UPHOLD_LAW scan → info events (+ witness PROBE evidence) → letters → season transition (resource tick + knowledge decay).
+- `advance_day(time_system, characters, ..., next_topic_id) → Dictionary`
 
 ### InformationSystem (`information_system.gd`)
 Knowledge management. Five sources, confidence decay (Fresh→Recent→Stale).
@@ -184,9 +193,10 @@ Knowledge management. Five sources, confidence decay (Fresh→Recent→Stale).
 - `process_probe_result(character, target, action_log, season)`
 - `process_observe_court(character, attendees, ...) → Array`
 - `process_introduction(introducer, character, target, ...)`
-- `transfer_objective_knowledge(lord, vassal, objective, ...)`
+- `transfer_objective_knowledge(lord, vassal, objective, season, province_statuses)`
 - `decay_confidence(character, current_season)`
 - `get_best_confidence_on_target(character, target_id) → int`
+- `get_stale_entries(character) → Array[KnowledgeEntry]`
 
 ### TopicMomentumSystem (`topic_system.gd`)
 Momentum levels, daily tick, broadcast. Starting position calculation.
@@ -217,12 +227,18 @@ At-act and at-conviction consequences. Seppuku. Escalation tracking.
 - `apply_at_conviction_consequences(character, record, ...) → Dictionary`
 
 ### InvestigationSystem (`investigation_system.gd`)
-Scene examination, witness evidence, UPHOLD_LAW probability.
+Scene examination, witness evidence, UPHOLD_LAW probability, self-initiation wiring, witness PROBE evidence, conviction topic generation.
 - `examine_scene(magistrate, crime_record, dice_engine, ic_day) → Dictionary`
 - `get_uphold_law_probability(bushido, shourido) → int`
 - `should_assign_uphold_law(bushido, shourido, rng_roll) → bool`
 - `calculate_witness_evidence(awareness, honor) → int`
 - `prioritize_witnesses(candidates, characters_by_id, present_ids) → Array[int]`
+- `check_jurisdiction(magistrate, crime_record) → bool`
+- `activate_uphold_law(magistrate, crime_record, standing_objective) → Dictionary`
+- `scan_for_crime_topics(magistrate, standing_obj, crime_records, topics) → Dictionary`
+- `process_witness_interview(crime_record, target_id, quality, objective) → Dictionary`
+- `generate_conviction_topic(record, convicted, tier, next_topic_id, ic_day) → TopicData`
+- `generate_seppuku_refusal_topic(convicted, next_topic_id, ic_day) → TopicData`
 
 ### InvestigationDecomposer (`investigation_decomposer.gd`)
 Seven-phase investigation loop: travel → examine → witnesses → suspects → alibis → leads → resolution.
