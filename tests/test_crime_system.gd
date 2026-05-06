@@ -197,6 +197,8 @@ func test_conviction_covert_killing_low_status_victim_tier_3():
 	assert_eq(result["topic_tier"], 3)
 
 func test_conviction_covert_killing():
+	var c := _make_character(5.0, 5.0, 5.0)
+	var record := _make_record(Enums.CrimeType.UNSANCTIONED_COVERT_KILLING)
 	var result: Dictionary = CrimeSystem.apply_at_conviction_consequences(c, record)
 	assert_almost_eq(c.glory, 4.0, 0.001)
 	assert_almost_eq(c.infamy, 2.0, 0.001)
