@@ -51,6 +51,11 @@ When implementing or auditing a system, go here first:
 | Bloodspeaker cult network                     | 56.14              |
 | Tattoo system                                 | 57.25              |
 | Character sheet field index                   | 57.35              |
+| Information system / knowledge transfer       | 55.12, 55.7, 55.6 |
+| Approach evaluation / action retry            | 55.30              |
+| Resource availability modifier                | 55.32              |
+| Orphaned objectives (lord death)              | 55.33              |
+| Court availability helper                     | 55.34              |
 
 ## Directory Structure
 ```
@@ -328,37 +333,73 @@ the NPC decision engine's Phase 5 scoring or the DayOrchestrator loop:
 - **ZoneFlagMatrix** — zone-level flags not connected to context generation
   or action availability checks
 
-## Open Design Decisions
-The following architectural issues were identified during audit and need
-human decision before implementation:
+## Resolved Design Decisions
 
-### 1. Topic Identity: String vs int
-`L5RCharacterData.topic_pool` is `Array[String]` (slugs like "crane_scandal"),
-but `TopicData.topic_id` is `int` and `ContextSnapshot.known_topics` is
-`Array[int]`. The NPC engine uses int IDs while conversation/letter systems
-use string slugs. These cannot interoperate without a translation layer.
-**Decision needed:** Standardise on int IDs everywhere (requires migrating
-topic_pool and letter system), or on string slugs (requires migrating
-TopicData and ContextSnapshot), or build an explicit lookup Dictionary?
+### 1. Topic Identity — RESOLVED: int IDs
+**Decision:** Standardise on `int` as canonical topic identity everywhere.
+- `topic_pool` migrates from `Array[String]` to `Array[int]`
+- `TopicData.topic_id: int` remains unchanged (already correct)
+- `ContextSnapshot.known_topics: Array[int]` remains unchanged
+- A world-level auto-incrementing counter assigns each new topic its `topic_id`
+- Slugs (e.g. `"crane_scandal_y3m7"`) become a `slug: String` metadata field
+  on `TopicData` — used for logging and debugging, never matched on as identity
+- Letter/conversation code migrates from string slug matching to int comparison
+- **Rationale:** Consistent with NPC engine's existing int patterns, compact for
+  network payload, matches Godot's idiomatic int-ID conventions, fast Dictionary
+  lookups. No translation layer needed.
 
-### 2. Timestamp Sentinel Convention: 0 vs -1
-Some "never happened" fields use `0` (e.g. `last_medicine_treatment_ic_day`,
-`void_refresh_blocked_until`) and others use `-1` (e.g.
-`phoenix_last_used_ic_day`, `ocean_last_used_ooc_day`). Since IC day 0 is
-the first valid game day, `0` is ambiguous as "never." **Decision needed:**
-Standardise on `-1` for all "never happened" int timestamps? Or define day 0
-as invalid (game starts at day 1)?
+### 2. Timestamp Sentinel — RESOLVED: -1 for "never happened"
+**Decision:** All "never happened" int timestamps use `-1` as sentinel.
+- IC day 0 remains a valid game day (no epoch shift)
+- Fields currently defaulting to `0` for "never" migrate to `-1`:
+  `last_medicine_treatment_ic_day`, `void_refresh_blocked_until`, and any others
+- Comparison convention: `if timestamp == -1: never happened`
+- **Rationale:** `-1` is a universal sentinel convention and matches Godot's own
+  patterns (e.g. `String.find()` returns `-1`). Avoids the hidden rule of "day 0
+  isn't real" and requires no time system changes.
 
-### 3. CommitmentData Redundant Fields
-`source_action_id` and `created_by_action` on CommitmentData are always set
-to the same value in `create_commitment()`. **Decision needed:** Remove one
-of them, or do they serve distinct purposes that will diverge later?
+### 3. CommitmentData Redundant Fields — RESOLVED: keep source_action_id
+**Decision:** Remove `created_by_action`. Keep `source_action_id` only.
+- One fact ("which action created this commitment") = one field
+- `source_action_id` follows the `_id` suffix convention used across the
+  codebase (`commanded_unit_id`, `assigned_company_id`, `kolat_superior_id`)
+- If a future distinction genuinely arises, it gets a new field with a clear
+  name — not silent divergence of an originally-identical pair
+- **Rationale:** Eliminates a redundancy that would otherwise become a debugging
+  hazard if the two fields ever drifted apart unintentionally.
 
-### 4. knowledge_pool Typing
-`L5RCharacterData.knowledge_pool: Array[Dictionary]` is heavily used by
-InformationSystem with ~6 known keys per entry. Should this become a typed
-Resource subclass (KnowledgeEntry) for safety, or stay as Dictionary for
-flexibility?
+### 4. knowledge_pool Typing — RESOLVED: typed KnowledgeEntry Resource
+**Decision:** Promote `knowledge_pool` from `Array[Dictionary]` to
+`Array[KnowledgeEntry]` where `KnowledgeEntry` is a Resource subclass.
+- Create `shared/knowledge_entry.gd` with `class_name KnowledgeEntry`
+  extending Resource, typed fields for the ~6 known keys
+- `L5RCharacterData.knowledge_pool` becomes `Array[KnowledgeEntry]`
+- InformationSystem reads/writes update from `entry["key"]` to `entry.key`
+- **Rationale:** Consistent with CommitmentData, TattooData, TopicData pattern.
+  Catches key typos at parse time instead of silent nulls at runtime. Native
+  Godot Resource serialization. Compact and predictable for network sync.
+  Autocomplete and static analysis support in GDScript.
+
+## Pending Migration Tasks
+Code refactors required by the resolved design decisions above.
+None of these are design work — the decisions are locked. These are
+mechanical code changes to implement them.
+
+- [ ] **Topic int migration** — Change `L5RCharacterData.topic_pool` from
+  `Array[String]` to `Array[int]`. Add `slug: String` field to `TopicData`.
+  Add world-level `next_topic_id: int` counter. Update letter/conversation
+  code from string slug matching to int comparison.
+- [ ] **Sentinel cleanup** — Grep all `_ic_day`, `_ooc_day`, `_blocked_until`
+  fields. Change any defaulting to `0` for "never" to default `-1`. Update
+  comparison checks from `== 0` to `== -1` where the intent is "never happened."
+- [ ] **CommitmentData field removal** — Remove `created_by_action` from
+  `shared/commitment_data.gd`. Update `create_commitment()` and any reads.
+  `source_action_id` is the sole surviving field.
+- [ ] **KnowledgeEntry Resource** — Create `shared/knowledge_entry.gd`
+  (`class_name KnowledgeEntry extends Resource`). Define typed fields for the
+  ~6 known keys. Change `L5RCharacterData.knowledge_pool` to
+  `Array[KnowledgeEntry]`. Update all InformationSystem dict access to
+  property access.
 
 ## What To Do When Uncertain
 Stop. Read the relevant LOCKED section in /gdd/. If it does not answer the
