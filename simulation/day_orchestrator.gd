@@ -17,6 +17,7 @@ static func advance_day(
 	provinces: Dictionary,
 	action_log: Array[Dictionary],
 	season_meta: Dictionary,
+	active_topics: Array[TopicData] = [],
 ) -> Dictionary:
 	var prev_season: int = time_system.get_season()
 
@@ -35,6 +36,8 @@ static func advance_day(
 	var conversation_results: Array[Dictionary] = _process_daily_conversations(
 		characters, dice_engine, current_season
 	)
+
+	var topic_results: Dictionary = TopicMomentumSystem.process_daily_tick(active_topics)
 
 	var info_results: Array[Dictionary] = _process_info_events(
 		day_result.get("applied", []),
@@ -56,6 +59,7 @@ static func advance_day(
 		"day_results": day_result.get("results", []),
 		"applied": day_result.get("applied", []),
 		"conversation_results": conversation_results,
+		"topic_results": topic_results,
 		"info_results": info_results,
 		"seasonal_result": seasonal_result,
 	}
