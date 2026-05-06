@@ -12,6 +12,7 @@ enum Category {
 	MILITARY,
 	SUPERNATURAL,
 	ECONOMIC,
+	LEGAL,
 }
 
 @export var topic_id: int = -1

@@ -26,6 +26,7 @@ static func advance_day(
 	next_case_id: Array[int] = [1],
 	military_data: Dictionary = {},
 	character_province_map: Dictionary = {},
+	next_topic_id: Array[int] = [1000],
 ) -> Dictionary:
 	var prev_season: int = time_system.get_season()
 
@@ -48,6 +49,8 @@ static func advance_day(
 		crime_records,
 		ic_day,
 		next_case_id,
+		active_topics,
+		next_topic_id,
 	)
 
 	var commitment_results: Array[Dictionary] = _process_commitment_deadlines(
@@ -71,11 +74,17 @@ static func advance_day(
 	)
 	_compute_positions_from_broadcast(broadcast_results, active_topics, characters_by_id)
 
+	var uphold_law_results: Array[Dictionary] = _process_uphold_law_scan(
+		characters, objectives_map, crime_records, active_topics
+	)
+
 	var info_results: Array[Dictionary] = _process_info_events(
 		day_result.get("applied", []),
 		characters_by_id,
 		action_log,
 		current_season,
+		crime_records,
+		objectives_map,
 	)
 
 	var letter_results: Array[Dictionary] = LetterSystem.process_pending_letters(
@@ -104,6 +113,7 @@ static func advance_day(
 		"seasonal_result": seasonal_result,
 		"crime_results": crime_results,
 		"commitment_results": commitment_results,
+		"uphold_law_results": uphold_law_results,
 	}
 
 
@@ -123,6 +133,8 @@ static func _process_info_events(
 	characters_by_id: Dictionary,
 	action_log: Array[Dictionary],
 	current_season: int,
+	crime_records: Array[CrimeRecord] = [],
+	objectives_map: Dictionary = {},
 ) -> Array[Dictionary]:
 	var results: Array[Dictionary] = []
 
@@ -141,10 +153,16 @@ static func _process_info_events(
 				var discovered: Array[KnowledgeEntry] = InformationSystem.process_probe_result(
 					character, target_id, action_log, current_season, quality
 				)
+
+				var witness_result: Dictionary = _check_witness_evidence(
+					char_id, target_id, quality, crime_records, objectives_map
+				)
+
 				results.append({
 					"character_id": char_id,
 					"target_id": target_id,
 					"entries_discovered": discovered.size(),
+					"witness_evidence": witness_result.get("evidence_gained", 0),
 				})
 
 	return results
@@ -238,6 +256,8 @@ static func _process_crime_detection(
 	crime_records: Array[CrimeRecord],
 	ic_day: int,
 	next_case_id: Array[int],
+	active_topics: Array[TopicData] = [],
+	next_topic_id: Array[int] = [1000],
 ) -> Array[Dictionary]:
 	var crime_results: Array[Dictionary] = []
 
@@ -270,12 +290,20 @@ static func _process_crime_detection(
 		crime_records.append(record)
 
 		var at_act: Dictionary = CrimeSystem.apply_at_act_consequences(character, crime_type)
+
+		var crime_topic: TopicData = _create_crime_topic(
+			record, character, ic_day, next_topic_id
+		)
+		if crime_topic != null:
+			active_topics.append(crime_topic)
+
 		crime_results.append({
 			"case_id": case_id,
 			"character_id": char_id,
 			"crime_type": crime_type,
 			"action_id": action_id,
 			"honor_delta": at_act.get("honor_delta", 0.0),
+			"topic_id": crime_topic.topic_id if crime_topic != null else -1,
 		})
 
 	return crime_results
@@ -290,6 +318,101 @@ static func _action_to_crime_type(action_id: String) -> int:
 		"FABRICATE_SECRET":
 			return Enums.CrimeType.DISHONORABLE_CONDUCT
 	return -1
+
+
+# -- Crime Topic Creation ------------------------------------------------------
+
+static func _create_crime_topic(
+	record: CrimeRecord,
+	perpetrator: L5RCharacterData,
+	ic_day: int,
+	next_topic_id: Array[int],
+) -> TopicData:
+	var crime_name: String = InvestigationSystem.CRIME_TYPE_NAMES.get(
+		record.crime_type, "Crime"
+	)
+	var title: String = "Crime reported: %s at %s" % [crime_name, record.location]
+
+	var topic_id: int = next_topic_id[0]
+	next_topic_id[0] = topic_id + 1
+
+	var topic: TopicData = TopicMomentumSystem.create_topic(
+		topic_id,
+		title,
+		TopicData.Tier.TIER_4,
+		TopicData.Category.LEGAL,
+		ic_day,
+		10.0,
+		[],
+		perpetrator.clan,
+		"",
+		-1,
+		"crime",
+		crime_name.to_lower().replace(" ", "_"),
+	)
+	topic.slug = "crime_case_%d" % record.case_id
+	return topic
+
+
+# -- UPHOLD_LAW Magistrate Scan (s57.16.9) ------------------------------------
+
+static func _process_uphold_law_scan(
+	characters: Array[L5RCharacterData],
+	objectives_map: Dictionary,
+	crime_records: Array[CrimeRecord],
+	active_topics: Array[TopicData],
+) -> Array[Dictionary]:
+	var results: Array[Dictionary] = []
+
+	for character: L5RCharacterData in characters:
+		var objectives: Dictionary = objectives_map.get(character.character_id, {})
+		var standing: Dictionary = objectives.get("standing", {})
+		if standing.get("need_type", "") != "UPHOLD_LAW":
+			continue
+		if standing.has("active_case") and not standing["active_case"].is_empty():
+			continue
+
+		var activated: Dictionary = InvestigationSystem.scan_for_crime_topics(
+			character, standing, crime_records, active_topics
+		)
+		if not activated.is_empty():
+			results.append({
+				"magistrate_id": character.character_id,
+				"case_id": activated.get("case_id", -1),
+			})
+
+	return results
+
+
+# -- Witness PROBE Evidence (s11.3.13e) ----------------------------------------
+
+static func _check_witness_evidence(
+	prober_id: int,
+	target_id: int,
+	quality: int,
+	crime_records: Array[CrimeRecord],
+	objectives_map: Dictionary,
+) -> Dictionary:
+	var objectives: Dictionary = objectives_map.get(prober_id, {})
+	var standing: Dictionary = objectives.get("standing", {})
+	var active_case: Dictionary = standing.get("active_case", {})
+	if active_case.is_empty():
+		var primary: Dictionary = objectives.get("primary", {})
+		active_case = primary if primary.get("need_type", "") == "INVESTIGATE_CRIME" else {}
+	if active_case.is_empty():
+		return {}
+
+	var case_id: int = active_case.get("case_id", -1)
+	if case_id < 0:
+		return {}
+
+	for record: CrimeRecord in crime_records:
+		if record.case_id != case_id:
+			continue
+		return InvestigationSystem.process_witness_interview(
+			record, target_id, quality, active_case
+		)
+	return {}
 
 
 # -- Commitment Deadlines (s55.31) --------------------------------------------

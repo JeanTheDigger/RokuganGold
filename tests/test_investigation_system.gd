@@ -206,3 +206,289 @@ func test_prioritize_single_candidate() -> void:
 	var result: Array[int] = InvestigationSystem.prioritize_witnesses(candidates, {}, [])
 	assert_eq(result.size(), 1)
 	assert_eq(result[0], 5)
+
+
+# -- Jurisdiction check --------------------------------------------------------
+
+func test_jurisdiction_same_province() -> void:
+	var mag := _make_magistrate()
+	mag.physical_location = "castle_crane"
+	var cr := _make_crime_record()
+	cr.location = "castle_crane"
+	assert_true(InvestigationSystem.check_jurisdiction(mag, cr))
+
+
+func test_jurisdiction_different_province() -> void:
+	var mag := _make_magistrate()
+	mag.physical_location = "castle_crane"
+	var cr := _make_crime_record()
+	cr.location = "castle_lion"
+	assert_false(InvestigationSystem.check_jurisdiction(mag, cr))
+
+
+func test_jurisdiction_emerald_magistrate_anywhere() -> void:
+	var mag := _make_magistrate()
+	mag.physical_location = "castle_crane"
+	mag.role_position = "emerald_magistrate"
+	var cr := _make_crime_record()
+	cr.location = "castle_lion"
+	assert_true(InvestigationSystem.check_jurisdiction(mag, cr))
+
+
+# -- UPHOLD_LAW activation ----------------------------------------------------
+
+func _make_crime_topic(case_id: int, topic_id: int = 100) -> TopicData:
+	var t := TopicData.new()
+	t.topic_id = topic_id
+	t.topic_type = "crime"
+	t.slug = "crime_case_%d" % case_id
+	t.tier = TopicData.Tier.TIER_4
+	t.category = TopicData.Category.LEGAL
+	return t
+
+
+func test_activate_uphold_law_sets_active_case() -> void:
+	var mag := _make_magistrate()
+	mag.physical_location = "castle_crane"
+	var cr := _make_crime_record()
+	cr.witnesses = [10, 20]
+	var standing: Dictionary = {"need_type": "UPHOLD_LAW"}
+	var result: Dictionary = InvestigationSystem.activate_uphold_law(mag, cr, standing)
+	assert_eq(result["case_id"], 1)
+	assert_eq(result["crime_location"], "castle_crane")
+	assert_eq(result["witness_pool"].size(), 2)
+	assert_false(result["scene_examined"])
+	assert_eq(cr.investigating_magistrate_id, mag.character_id)
+	assert_eq(cr.legal_status, Enums.LegalStatus.UNDER_INVESTIGATION)
+	assert_true(standing.has("active_case"))
+
+
+func test_scan_for_crime_topics_finds_matching_case() -> void:
+	var mag := _make_magistrate()
+	mag.physical_location = "castle_crane"
+	var cr := _make_crime_record()
+	mag.topic_pool = [100]
+	var topic := _make_crime_topic(1, 100)
+	var standing: Dictionary = {"need_type": "UPHOLD_LAW"}
+	var topics: Array[TopicData] = [topic]
+	var records: Array[CrimeRecord] = [cr]
+	var result: Dictionary = InvestigationSystem.scan_for_crime_topics(
+		mag, standing, records, topics
+	)
+	assert_false(result.is_empty())
+	assert_eq(result["case_id"], 1)
+
+
+func test_scan_skips_already_investigated_case() -> void:
+	var mag := _make_magistrate()
+	mag.physical_location = "castle_crane"
+	var cr := _make_crime_record()
+	cr.investigating_magistrate_id = 99
+	mag.topic_pool = [100]
+	var topic := _make_crime_topic(1, 100)
+	var standing: Dictionary = {"need_type": "UPHOLD_LAW"}
+	var topics: Array[TopicData] = [topic]
+	var records: Array[CrimeRecord] = [cr]
+	var result: Dictionary = InvestigationSystem.scan_for_crime_topics(
+		mag, standing, records, topics
+	)
+	assert_true(result.is_empty())
+
+
+func test_scan_skips_out_of_jurisdiction() -> void:
+	var mag := _make_magistrate()
+	mag.physical_location = "castle_lion"
+	var cr := _make_crime_record()
+	cr.location = "castle_crane"
+	mag.topic_pool = [100]
+	var topic := _make_crime_topic(1, 100)
+	var standing: Dictionary = {"need_type": "UPHOLD_LAW"}
+	var topics: Array[TopicData] = [topic]
+	var records: Array[CrimeRecord] = [cr]
+	var result: Dictionary = InvestigationSystem.scan_for_crime_topics(
+		mag, standing, records, topics
+	)
+	assert_true(result.is_empty())
+
+
+func test_scan_skips_when_active_case_exists() -> void:
+	var mag := _make_magistrate()
+	mag.physical_location = "castle_crane"
+	var cr := _make_crime_record()
+	mag.topic_pool = [100]
+	var topic := _make_crime_topic(1, 100)
+	var standing: Dictionary = {"need_type": "UPHOLD_LAW", "active_case": {"case_id": 99}}
+	var topics: Array[TopicData] = [topic]
+	var records: Array[CrimeRecord] = [cr]
+	var result: Dictionary = InvestigationSystem.scan_for_crime_topics(
+		mag, standing, records, topics
+	)
+	assert_true(result.is_empty())
+
+
+# -- Witness PROBE evidence ----------------------------------------------------
+
+func test_witness_interview_adds_evidence() -> void:
+	var cr := _make_crime_record()
+	cr.witnesses = [10]
+	var objective: Dictionary = {
+		"case_id": 1,
+		"interviewed_witnesses": [],
+		"evidence_total": 0,
+	}
+	var result: Dictionary = InvestigationSystem.process_witness_interview(cr, 10, 3, objective)
+	assert_eq(result["role"], "witness")
+	assert_true(result["evidence_gained"] >= InvestigationSystem.PROBE_WITNESS_EVIDENCE_MIN)
+	assert_true(result["evidence_gained"] <= InvestigationSystem.PROBE_WITNESS_EVIDENCE_MAX)
+	assert_true(cr.evidence_total > 0)
+	assert_true(10 in objective["interviewed_witnesses"])
+
+
+func test_suspect_interview_adds_evidence() -> void:
+	var cr := _make_crime_record()
+	cr.known_suspects = [5]
+	var objective: Dictionary = {
+		"case_id": 1,
+		"interviewed_suspects": [],
+		"evidence_total": 0,
+	}
+	var result: Dictionary = InvestigationSystem.process_witness_interview(cr, 5, 3, objective)
+	assert_eq(result["role"], "suspect")
+	assert_true(result["evidence_gained"] >= InvestigationSystem.PROBE_SUSPECT_EVIDENCE_MIN)
+	assert_true(result["evidence_gained"] <= InvestigationSystem.PROBE_SUSPECT_EVIDENCE_MAX)
+	assert_true(5 in objective["interviewed_suspects"])
+
+
+func test_interview_unrelated_target_no_evidence() -> void:
+	var cr := _make_crime_record()
+	cr.witnesses = [10]
+	cr.known_suspects = [5]
+	var objective: Dictionary = {"case_id": 1, "interviewed_witnesses": [], "evidence_total": 0}
+	var result: Dictionary = InvestigationSystem.process_witness_interview(cr, 99, 3, objective)
+	assert_eq(result["evidence_gained"], 0)
+	assert_eq(result["role"], "none")
+	assert_eq(cr.evidence_total, 0)
+
+
+func test_interview_updates_objective_evidence_total() -> void:
+	var cr := _make_crime_record()
+	cr.witnesses = [10]
+	cr.evidence_total = 5
+	var objective: Dictionary = {
+		"case_id": 1,
+		"interviewed_witnesses": [],
+		"evidence_total": 5,
+	}
+	InvestigationSystem.process_witness_interview(cr, 10, 3, objective)
+	assert_eq(objective["evidence_total"], cr.evidence_total)
+	assert_true(cr.evidence_total > 5)
+
+
+# -- Conviction topic generation -----------------------------------------------
+
+func test_conviction_topic_created() -> void:
+	var cr := _make_crime_record()
+	var convicted := L5RCharacterData.new()
+	convicted.character_id = 5
+	convicted.character_name = "Criminal"
+	convicted.clan = "Scorpion"
+	convicted.family = "Bayushi"
+	var next_id: Array[int] = [1]
+	var topic: TopicData = InvestigationSystem.generate_conviction_topic(
+		cr, convicted, 3, next_id, 10
+	)
+	assert_not_null(topic)
+	assert_eq(topic.topic_id, 1)
+	assert_eq(topic.tier, TopicData.Tier.TIER_3)
+	assert_true(topic.title.contains("Criminal"))
+	assert_true(topic.title.contains("Skimming"))
+	assert_eq(topic.subject_character_id, 5)
+	assert_eq(topic.clan_involved, "Scorpion")
+	assert_eq(topic.subject_role, "PERPETRATOR")
+	assert_eq(topic.slug, "conviction_1")
+	assert_eq(next_id[0], 2)
+
+
+func test_conviction_topic_tier_1_maho() -> void:
+	var cr := CrimeRecord.new()
+	cr.case_id = 2
+	cr.crime_type = Enums.CrimeType.MAHO
+	var convicted := L5RCharacterData.new()
+	convicted.character_id = 7
+	convicted.character_name = "Tsukai"
+	var next_id: Array[int] = [10]
+	var topic: TopicData = InvestigationSystem.generate_conviction_topic(
+		cr, convicted, 1, next_id, 20
+	)
+	assert_not_null(topic)
+	assert_eq(topic.tier, TopicData.Tier.TIER_1)
+	assert_eq(topic.category, TopicData.Category.SUPERNATURAL)
+	assert_true(topic.momentum >= 80.0)
+
+
+func test_conviction_topic_tier_2_treason() -> void:
+	var cr := CrimeRecord.new()
+	cr.case_id = 3
+	cr.crime_type = Enums.CrimeType.TREASON
+	var convicted := L5RCharacterData.new()
+	convicted.character_id = 8
+	convicted.character_name = "Traitor"
+	var next_id: Array[int] = [20]
+	var topic: TopicData = InvestigationSystem.generate_conviction_topic(
+		cr, convicted, 2, next_id, 30
+	)
+	assert_not_null(topic)
+	assert_eq(topic.tier, TopicData.Tier.TIER_2)
+	assert_eq(topic.category, TopicData.Category.POLITICAL)
+	assert_true(topic.momentum >= 50.0)
+
+
+func test_conviction_topic_zero_tier_returns_null() -> void:
+	var cr := _make_crime_record()
+	cr.crime_type = Enums.CrimeType.DISHONORABLE_CONDUCT
+	var convicted := L5RCharacterData.new()
+	convicted.character_id = 9
+	var next_id: Array[int] = [30]
+	var topic: TopicData = InvestigationSystem.generate_conviction_topic(
+		cr, convicted, 0, next_id, 40
+	)
+	assert_null(topic)
+	assert_eq(next_id[0], 30)
+
+
+func test_seppuku_refusal_topic() -> void:
+	var convicted := L5RCharacterData.new()
+	convicted.character_id = 5
+	convicted.character_name = "Coward"
+	convicted.clan = "Lion"
+	convicted.family = "Matsu"
+	var next_id: Array[int] = [50]
+	var topic: TopicData = InvestigationSystem.generate_seppuku_refusal_topic(
+		convicted, next_id, 10
+	)
+	assert_not_null(topic)
+	assert_eq(topic.tier, TopicData.Tier.TIER_4)
+	assert_eq(topic.category, TopicData.Category.PERSONAL)
+	assert_true(topic.title.contains("Coward"))
+	assert_true(topic.title.contains("refused seppuku"))
+	assert_eq(topic.subject_role, "PERPETRATOR")
+	assert_eq(next_id[0], 51)
+
+
+func test_find_crime_record_for_topic() -> void:
+	var cr := _make_crime_record()
+	var topic := _make_crime_topic(1, 100)
+	var records: Array[CrimeRecord] = [cr]
+	var found: CrimeRecord = InvestigationSystem.find_crime_record_for_topic(topic, records)
+	assert_not_null(found)
+	assert_eq(found.case_id, 1)
+
+
+func test_find_crime_record_wrong_type() -> void:
+	var cr := _make_crime_record()
+	var topic := TopicData.new()
+	topic.topic_type = "political"
+	topic.slug = "crime_case_1"
+	var records: Array[CrimeRecord] = [cr]
+	var found: CrimeRecord = InvestigationSystem.find_crime_record_for_topic(topic, records)
+	assert_null(found)

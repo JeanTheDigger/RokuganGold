@@ -515,3 +515,146 @@ func test_advance_day_delivers_due_letters() -> void:
 		[], pending
 	)
 	assert_true(2 in recipient.topic_pool)
+
+
+# -- Crime Detection Topic Creation -------------------------------------------
+
+func test_crime_detection_creates_topic() -> void:
+	var active_topics: Array[TopicData] = []
+	var crime_records: Array[CrimeRecord] = []
+	var next_case_id: Array[int] = [1]
+	var next_topic_id: Array[int] = [500]
+
+	var results: Array = [{
+		"character_id": 1,
+		"action_id": "EAVESDROP",
+		"target_npc_id": -1,
+		"effects": {"detection_risk": true},
+	}]
+	_characters[0].physical_location = "castle_crane"
+
+	var crime_results: Array[Dictionary] = DayOrchestrator._process_crime_detection(
+		results, _characters_by_id, crime_records, 5, next_case_id,
+		active_topics, next_topic_id
+	)
+
+	assert_eq(crime_results.size(), 1)
+	assert_eq(crime_results[0]["topic_id"], 500)
+	assert_eq(active_topics.size(), 1)
+	assert_eq(active_topics[0].topic_type, "crime")
+	assert_eq(active_topics[0].slug, "crime_case_1")
+	assert_eq(next_topic_id[0], 501)
+
+
+# -- UPHOLD_LAW Scan Wiring ---------------------------------------------------
+
+func test_uphold_law_scan_activates_magistrate() -> void:
+	var mag := _characters[0]
+	mag.physical_location = "castle_crane"
+	mag.bushido_virtue = Enums.BushidoVirtue.GI
+
+	var cr := CrimeRecord.new()
+	cr.case_id = 1
+	cr.crime_type = Enums.CrimeType.SKIMMING
+	cr.location = "castle_crane"
+	cr.perpetrator_id = 99
+	cr.investigating_magistrate_id = -1
+	var crime_records: Array[CrimeRecord] = [cr]
+
+	var crime_topic := TopicData.new()
+	crime_topic.topic_id = 600
+	crime_topic.topic_type = "crime"
+	crime_topic.slug = "crime_case_1"
+	crime_topic.category = TopicData.Category.LEGAL
+	var active_topics: Array[TopicData] = [crime_topic]
+
+	mag.topic_pool = [600]
+
+	var objectives: Dictionary = {
+		1: {
+			"primary": {"need_type": "REST", "priority": 3},
+			"standing": {"need_type": "UPHOLD_LAW"},
+		},
+	}
+
+	var results: Array[Dictionary] = DayOrchestrator._process_uphold_law_scan(
+		_characters, objectives, crime_records, active_topics
+	)
+
+	assert_eq(results.size(), 1)
+	assert_eq(results[0]["magistrate_id"], 1)
+	assert_eq(results[0]["case_id"], 1)
+	assert_eq(cr.investigating_magistrate_id, 1)
+	assert_true(objectives[1]["standing"].has("active_case"))
+
+
+func test_uphold_law_scan_skips_no_standing_objective() -> void:
+	_characters[0].physical_location = "castle_crane"
+	_characters[0].topic_pool = [600]
+
+	var cr := CrimeRecord.new()
+	cr.case_id = 1
+	cr.location = "castle_crane"
+	cr.investigating_magistrate_id = -1
+	var crime_records: Array[CrimeRecord] = [cr]
+
+	var crime_topic := TopicData.new()
+	crime_topic.topic_id = 600
+	crime_topic.topic_type = "crime"
+	crime_topic.slug = "crime_case_1"
+	var active_topics: Array[TopicData] = [crime_topic]
+
+	var objectives: Dictionary = {
+		1: {"primary": {"need_type": "REST", "priority": 3}},
+	}
+
+	var results: Array[Dictionary] = DayOrchestrator._process_uphold_law_scan(
+		_characters, objectives, crime_records, active_topics
+	)
+	assert_eq(results.size(), 0)
+
+
+# -- Witness PROBE Evidence Wiring ---------------------------------------------
+
+func test_check_witness_evidence_increments_record() -> void:
+	var cr := CrimeRecord.new()
+	cr.case_id = 1
+	cr.witnesses = [50]
+	cr.evidence_total = 0
+	var crime_records: Array[CrimeRecord] = [cr]
+
+	var objectives: Dictionary = {
+		1: {
+			"standing": {
+				"need_type": "UPHOLD_LAW",
+				"active_case": {
+					"case_id": 1,
+					"interviewed_witnesses": [],
+					"evidence_total": 0,
+				},
+			},
+		},
+	}
+
+	var result: Dictionary = DayOrchestrator._check_witness_evidence(
+		1, 50, 3, crime_records, objectives
+	)
+
+	assert_true(result.get("evidence_gained", 0) > 0)
+	assert_true(cr.evidence_total > 0)
+
+
+func test_check_witness_evidence_no_active_case() -> void:
+	var cr := CrimeRecord.new()
+	cr.case_id = 1
+	cr.witnesses = [50]
+	var crime_records: Array[CrimeRecord] = [cr]
+
+	var objectives: Dictionary = {
+		1: {"primary": {"need_type": "REST"}},
+	}
+
+	var result: Dictionary = DayOrchestrator._check_witness_evidence(
+		1, 50, 3, crime_records, objectives
+	)
+	assert_true(result.is_empty())

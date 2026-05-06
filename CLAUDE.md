@@ -325,6 +325,22 @@ single-dice-entry-point and server-authoritative constraints.
 - EXAMINE_CRIME_SCENE ActionID added to: objective_alignment (90 under
   INVESTIGATE_THREAT), action_skill_map, personality_lean (all 14 virtues),
   action_executor (INTELLIGENCE_ACTIONS category).
+- **UPHOLD_LAW self-initiation** — Crime detection creates crime topics
+  (topic_type="crime", slug="crime_case_{id}"). After broadcast,
+  DayOrchestrator scans magistrates with UPHOLD_LAW standing objective:
+  if crime topic in known_topics + jurisdiction match → activate_uphold_law()
+  populates active_case and sets investigating_magistrate_id. Jurisdiction:
+  same province prefix, or Emerald Magistrate (Empire-wide).
+- **Witness PROBE evidence** — When _process_info_events handles a
+  GATHER_INTELLIGENCE action and the prober has an active_case, checks if
+  target is a witness (10-20 evidence) or suspect (10-15 evidence) on the
+  case. Increments CrimeRecord.evidence_total and marks target as interviewed.
+- **Conviction topic generation** — InvestigationSystem.generate_conviction_topic()
+  creates TopicData from conviction results: tier from CONVICTION_CONSEQUENCES
+  table, momentum by tier (T1=80, T2=50, T3=25, T4=10), category by crime type
+  (SUPERNATURAL for maho, POLITICAL for treason, LEGAL for others).
+  generate_seppuku_refusal_topic() creates Tier 4 PERSONAL topic.
+- TopicData.Category gains LEGAL value.
 
 ### Information Architecture Integration (s55.12)
 - **Confidence penalty in NPC Phase 5 scoring** — `confidence_penalty` field on
@@ -367,8 +383,8 @@ All in /tests/, one file per system:
 - test_objective_decomposer.gd (~100 tests)
 - test_information_system.gd (~35 tests)
 - test_topic_system.gd (~55 tests)
-- test_investigation_system.gd (~20 tests)
-- test_day_orchestrator.gd (~18 tests)
+- test_investigation_system.gd (~40 tests)
+- test_day_orchestrator.gd (~25 tests)
 - test_approach_evaluation.gd (~55 tests)
 - test_commitment_registry.gd (~60 tests)
 - test_military_hierarchy.gd (~40 tests)
@@ -378,15 +394,9 @@ All in /tests/, one file per system:
 - test_system_wiring.gd (~20 tests)
 
 ### What's Next
-1. Wire UPHOLD_LAW standing objective self-initiation (crime topic detection
-   triggers INVESTIGATE_CRIME decomposition for magistrate NPCs)
-2. Evidence generation from witness PROBE results (integrate with investigation
-   decomposer to increment evidence_total during witness interviews)
-3. Topic/secret generation on crime conviction (at-conviction consequences
-   should create world topics per GDD s57.47)
-4. Information transfer on objective assignment — extend
+1. Information transfer on objective assignment — extend
    `transfer_objective_knowledge()` to include crisis data and province status
-5. Auto-add "gather intelligence" objective when STALE entry is consulted
+2. Auto-add "gather intelligence" objective when STALE entry is consulted
    (s55.12: +15 bonus to gather_intelligence when stale knowledge detected)
 
 ### Systems Wired into NPC Loop
@@ -407,7 +417,10 @@ The following subsystems are now integrated into the NPC decision loop:
   filtered from option list when zone flags forbid them.
 - **CrimeSystem** — Post-execution: DayOrchestrator scans day results for
   `detection_risk: true` in covert action effects, creates CrimeRecord via
-  `CrimeSystem.create_crime_record()`, applies at-act honor consequences.
+  `CrimeSystem.create_crime_record()`, applies at-act honor consequences,
+  and creates a crime topic (Tier 4, topic_type="crime"). Crime topics
+  propagate via broadcast, triggering UPHOLD_LAW magistrate self-initiation.
+  Witness PROBE evidence wired into _process_info_events.
   Action-to-crime-type mapping: EAVESDROP/SEARCH_QUARTERS/INTERCEPT_LETTER/
   FABRICATE_SECRET → DISHONORABLE_CONDUCT, BRIBE_FOR_INFO → SKIMMING.
 - **MilitaryHierarchy** — Phase 1: `military_rank`, `commanded_unit_id`,
