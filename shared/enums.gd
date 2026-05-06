@@ -219,6 +219,14 @@ enum CommitmentStatus {
 }
 
 
+enum DeploymentStatus {
+	WITH_LEGION,
+	GARRISONED,
+	DETACHED,
+	ON_CAMPAIGN,
+}
+
+
 static func bushido_virtue_name(v: BushidoVirtue) -> String:
 	var idx: int = BushidoVirtue.values().find(v)
 	if idx < 0:
