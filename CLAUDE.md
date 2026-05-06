@@ -157,7 +157,8 @@ single-dice-entry-point and server-authoritative constraints.
   CommitmentType, CommitmentStatus, DeploymentStatus, ZoneSubtype (24 values),
   LordRank, TattooBodyLocation (9), TattooQualityTier, TattooSubjectType,
   TattooAbility (26 named abilities), CulturalReluctance, MilitaryRank (8 ranks),
-  OperationalHierarchyType, KolatSect (7 sects), ShipClass (7 classes).
+  OperationalHierarchyType, KolatSect (7 sects), ShipClass (7 classes),
+  KnowledgeSource (5 sources), KnowledgeConfidence (3 tiers).
 - **shared/province_data.gd** — ProvinceData Resource: terrain, adjacency,
   resources (rice/koku/iron/arms), population PU breakdown, stability. Data model
   only — no map generation (map is being worked on separately by the user).

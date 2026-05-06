@@ -152,7 +152,7 @@ static func deliver_letter(
 		recipient.topic_pool.append(letter.topic)
 		topic_transferred = true
 		InformationSystem.add_knowledge(recipient, InformationSystem.make_entry(
-			InformationSystem.Source.LETTER,
+			Enums.KnowledgeSource.LETTER,
 			"topic_learned",
 			{
 				"topic": letter.topic,

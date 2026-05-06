@@ -357,6 +357,21 @@ enum KolatSect {
 	TIGER,
 }
 
+enum KnowledgeSource {
+	DIRECT_OBSERVATION,
+	DAILY_CONVERSATION,
+	LETTER,
+	INTELLIGENCE,
+	PUBLIC_KNOWLEDGE,
+}
+
+enum KnowledgeConfidence {
+	FRESH,
+	RECENT,
+	STALE,
+}
+
+
 enum ShipClass {
 	SAMPAN,
 	MERCHANT_BARGE,

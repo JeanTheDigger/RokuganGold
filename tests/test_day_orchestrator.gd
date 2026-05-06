@@ -192,7 +192,7 @@ func test_advance_day_detects_season_change() -> void:
 
 func test_season_change_decays_knowledge() -> void:
 	InformationSystem.add_knowledge(_characters[0], InformationSystem.make_entry(
-		InformationSystem.Source.INTELLIGENCE, "test", {}, 0
+		Enums.KnowledgeSource.INTELLIGENCE, "test", {}, 0
 	))
 	# Jump to season boundary (spring → summer at tick 90)
 	_time.current_tick = 89
@@ -204,7 +204,7 @@ func test_season_change_decays_knowledge() -> void:
 	# Season 0→1 is 1 season old → RECENT
 	assert_eq(
 		_characters[0].knowledge_pool[0].confidence,
-		InformationSystem.Confidence.RECENT
+		Enums.KnowledgeConfidence.RECENT
 	)
 
 

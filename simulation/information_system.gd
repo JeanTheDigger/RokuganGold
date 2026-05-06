@@ -6,10 +6,6 @@ class_name InformationSystem
 ## Disposition values never go stale.
 
 
-enum Confidence { FRESH, RECENT, STALE }
-
-enum Source { DIRECT_OBSERVATION, DAILY_CONVERSATION, LETTER, INTELLIGENCE, PUBLIC_KNOWLEDGE }
-
 const STALE_THRESHOLD_SEASONS: int = 3
 const RECENT_THRESHOLD_SEASONS: int = 1
 
@@ -17,7 +13,7 @@ const RECENT_THRESHOLD_SEASONS: int = 1
 # -- Knowledge Entry Creation --------------------------------------------------
 
 static func make_entry(
-	source: Source,
+	source: Enums.KnowledgeSource,
 	entry_type: String,
 	data: Dictionary,
 	season: int,
@@ -26,7 +22,7 @@ static func make_entry(
 	entry.source = source
 	entry.entry_type = entry_type
 	entry.data = data
-	entry.confidence = Confidence.FRESH
+	entry.confidence = Enums.KnowledgeConfidence.FRESH
 	entry.season_acquired = season
 	return entry
 
@@ -73,7 +69,7 @@ static func process_probe_result(
 			break
 		var action: Dictionary = target_actions[i]
 		var entry: KnowledgeEntry = make_entry(
-			Source.INTELLIGENCE,
+			Enums.KnowledgeSource.INTELLIGENCE,
 			"observed_action",
 			{
 				"target_character_id": target_id,
@@ -118,7 +114,7 @@ static func process_observe_court(
 		var target: L5RCharacterData = unknown[i]
 		add_contact(observer, target.character_id, target.clan)
 		var entry: KnowledgeEntry = make_entry(
-			Source.DIRECT_OBSERVATION,
+			Enums.KnowledgeSource.DIRECT_OBSERVATION,
 			"contact_discovered",
 			{
 				"character_id": target.character_id,
@@ -147,7 +143,7 @@ static func process_introduction(
 		recipient.disposition_values[introduced.character_id] = starting_disp
 
 	var entry: KnowledgeEntry = make_entry(
-		Source.DIRECT_OBSERVATION,
+		Enums.KnowledgeSource.DIRECT_OBSERVATION,
 		"introduction",
 		{
 			"character_id": introduced.character_id,
@@ -179,7 +175,7 @@ static func transfer_objective_knowledge(
 			copy.source = entry.source
 			copy.entry_type = entry.entry_type
 			copy.data = entry.data.duplicate(true)
-			copy.confidence = Confidence.FRESH
+			copy.confidence = Enums.KnowledgeConfidence.FRESH
 			copy.season_acquired = current_season
 			add_knowledge(recipient, copy)
 			transferred.append(copy)
@@ -250,10 +246,10 @@ static func decay_confidence(
 
 static func _compute_confidence(seasons_old: int) -> int:
 	if seasons_old >= STALE_THRESHOLD_SEASONS:
-		return Confidence.STALE
+		return Enums.KnowledgeConfidence.STALE
 	if seasons_old >= RECENT_THRESHOLD_SEASONS:
-		return Confidence.RECENT
-	return Confidence.FRESH
+		return Enums.KnowledgeConfidence.RECENT
+	return Enums.KnowledgeConfidence.FRESH
 
 
 # -- Queries -------------------------------------------------------------------
@@ -275,7 +271,7 @@ static func has_fresh_intel_on(
 ) -> bool:
 	for entry: KnowledgeEntry in character.knowledge_pool:
 		var char_id: int = entry.data.get("target_character_id", entry.data.get("character_id", -1))
-		if char_id == target_id and entry.confidence == Confidence.FRESH:
+		if char_id == target_id and entry.confidence == Enums.KnowledgeConfidence.FRESH:
 			return true
 	return false
 
@@ -283,7 +279,7 @@ static func has_fresh_intel_on(
 static func get_stale_entries(character: L5RCharacterData) -> Array[KnowledgeEntry]:
 	var stale: Array[KnowledgeEntry] = []
 	for entry: KnowledgeEntry in character.knowledge_pool:
-		if entry.confidence == Confidence.STALE:
+		if entry.confidence == Enums.KnowledgeConfidence.STALE:
 			stale.append(entry)
 	return stale
 
@@ -292,9 +288,9 @@ static func count_by_confidence(
 	character: L5RCharacterData,
 ) -> Dictionary:
 	var counts: Dictionary = {
-		Confidence.FRESH: 0,
-		Confidence.RECENT: 0,
-		Confidence.STALE: 0,
+		Enums.KnowledgeConfidence.FRESH: 0,
+		Enums.KnowledgeConfidence.RECENT: 0,
+		Enums.KnowledgeConfidence.STALE: 0,
 	}
 	for entry: KnowledgeEntry in character.knowledge_pool:
 		counts[entry.confidence] = counts.get(entry.confidence, 0) + 1

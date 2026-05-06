@@ -96,7 +96,7 @@ static func resolve_conversation(
 
 	if transferred_to_b and topic_a >= 0:
 		InformationSystem.add_knowledge(char_b, InformationSystem.make_entry(
-			InformationSystem.Source.DAILY_CONVERSATION,
+			Enums.KnowledgeSource.DAILY_CONVERSATION,
 			"topic_learned",
 			{"topic": topic_a, "from_character_id": char_a.character_id},
 			current_season,
@@ -104,7 +104,7 @@ static func resolve_conversation(
 
 	if transferred_to_a and topic_b >= 0:
 		InformationSystem.add_knowledge(char_a, InformationSystem.make_entry(
-			InformationSystem.Source.DAILY_CONVERSATION,
+			Enums.KnowledgeSource.DAILY_CONVERSATION,
 			"topic_learned",
 			{"topic": topic_b, "from_character_id": char_b.character_id},
 			current_season,
