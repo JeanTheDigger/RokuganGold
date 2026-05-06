@@ -24,6 +24,7 @@ class LegionData:
 	@export var parent_section_id: int = -1
 	@export var commander_id: int = -1
 	@export var home_province_id: int = -1
+	@export var current_location_id: String = ""
 	@export var constituent_companies: Array[int] = []
 
 

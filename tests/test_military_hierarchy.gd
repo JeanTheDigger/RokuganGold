@@ -21,7 +21,7 @@ func _make_legion(id: int, section_id: int) -> MilitaryUnitData.LegionData:
 	var l := MilitaryUnitData.LegionData.new()
 	l.legion_id = id
 	l.parent_section_id = section_id
-	l.commander_id = id * 1000
+	l.commander_id = 5000 + id
 	l.home_province_id = 1
 	return l
 
@@ -30,7 +30,7 @@ func _make_section(id: int, army_id: int) -> MilitaryUnitData.SectionData:
 	var s := MilitaryUnitData.SectionData.new()
 	s.section_id = id
 	s.parent_army_id = army_id
-	s.commander_id = id * 10000
+	s.commander_id = 6000 + id
 	return s
 
 
@@ -38,7 +38,7 @@ func _make_army(id: int, clan: String) -> MilitaryUnitData.ArmyData:
 	var a := MilitaryUnitData.ArmyData.new()
 	a.army_id = id
 	a.clan_id = clan
-	a.commander_id = id * 100000
+	a.commander_id = 7000 + id
 	return a
 
 
@@ -121,9 +121,9 @@ func test_commander_chain():
 		company, _legions, _sections, _armies
 	)
 	assert_eq(chain.size(), 3)
-	assert_eq(chain[0], 100000)  # Taisa
-	assert_eq(chain[1], 100000)  # Shireikan
-	assert_eq(chain[2], 100000)  # Rikugunshokan
+	assert_eq(chain[0], 5100)  # Taisa (legion 100)
+	assert_eq(chain[1], 6010)  # Shireikan (section 10)
+	assert_eq(chain[2], 7001)  # Rikugunshokan (army 1)
 
 func test_commander_chain_with_vacancy():
 	_legions[100].commander_id = -1
@@ -184,7 +184,7 @@ func test_vacate_company():
 
 func test_vacate_legion():
 	var old: int = MilitaryHierarchy.vacate_legion(_legions[100])
-	assert_eq(old, 100000)
+	assert_eq(old, 5100)
 	assert_true(MilitaryHierarchy.is_legion_vacant(_legions[100]))
 
 func test_get_vacant_companies():
@@ -205,7 +205,7 @@ func test_no_vacancies():
 func test_resolve_company_superior():
 	var c: MilitaryUnitData.CompanyData = _companies[1000]
 	var superior: int = MilitaryHierarchy.resolve_operational_superior(c, _legions)
-	assert_eq(superior, 100000)
+	assert_eq(superior, 5100)
 
 func test_resolve_company_superior_orphan():
 	var orphan := _make_company(9999, 999)
@@ -213,11 +213,11 @@ func test_resolve_company_superior_orphan():
 
 func test_resolve_legion_superior():
 	var superior: int = MilitaryHierarchy.resolve_legion_superior(_legions[100], _sections)
-	assert_eq(superior, 100000)
+	assert_eq(superior, 6010)
 
 func test_resolve_section_superior():
 	var superior: int = MilitaryHierarchy.resolve_section_superior(_sections[10], _armies)
-	assert_eq(superior, 100000)
+	assert_eq(superior, 7001)
 
 
 # =============================================================================

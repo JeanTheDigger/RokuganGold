@@ -77,6 +77,7 @@ static func get_denial_reason(
 	court_min_status: float = 3.0,
 	has_court_invitation: bool = false,
 	is_household_member: bool = false,
+	has_guest_status: bool = false,
 	has_qualifying_role: bool = false,
 ) -> Enums.AccessDenialReason:
 	match target_sublocation:
@@ -85,7 +86,7 @@ static func get_denial_reason(
 				return Enums.AccessDenialReason.INSUFFICIENT_STATUS
 			return Enums.AccessDenialReason.NO_INVITATION
 		Enums.Sublocation.PRIVATE:
-			if not is_household_member:
+			if not is_household_member and not has_guest_status:
 				return Enums.AccessDenialReason.NO_INVITATION
 			return Enums.AccessDenialReason.HOST_REFUSAL
 		Enums.Sublocation.RESTRICTED:

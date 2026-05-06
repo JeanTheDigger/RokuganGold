@@ -147,7 +147,6 @@ func test_broken_with_proxy():
 func test_support_pledge_proxy_treated_as_notice():
 	var c := _make_commitment({"type": Enums.CommitmentType.SUPPORT_PLEDGE})
 	c.proxy_sent = true
-	c.advance_notice_sent = true
 	var status: Enums.CommitmentStatus = CommitmentRegistry.check_deadline(c, false)
 	assert_eq(status, Enums.CommitmentStatus.BROKEN_WITH_NOTICE)
 

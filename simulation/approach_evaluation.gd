@@ -44,7 +44,7 @@ static func get_measurement_threshold(action_id: String) -> int:
 # 55.30.2 — Measurement Pressure Check
 # =============================================================================
 
-static func get_high_roll_no_effect_actions(
+static func get_recent_actions(
 	action_log: Array[Dictionary],
 	character_id: int,
 	target_npc_id: int,
@@ -59,10 +59,9 @@ static func get_high_roll_no_effect_actions(
 			continue
 		if entry.get("action_id", "") != action_id:
 			continue
-		var roll: int = entry.get("roll_result", 0)
-		var tn: int = entry.get("tn", 0)
-		if roll >= tn + HIGH_ROLL_MARGIN and not entry.get("observable_effect", false):
-			matches.append(entry)
+		if entry.get("season", -1) != current_season:
+			continue
+		matches.append(entry)
 	return matches
 
 
@@ -77,10 +76,21 @@ static func check_measurement_needed(
 	if threshold < 0:
 		return false
 
-	var high_no_effect: Array[Dictionary] = get_high_roll_no_effect_actions(
+	var recent: Array[Dictionary] = get_recent_actions(
 		action_log, character_id, target_npc_id, action_id, current_season
 	)
-	return high_no_effect.size() >= threshold
+
+	var high_roll_count: int = 0
+	var any_observable: bool = false
+	for entry: Dictionary in recent:
+		var roll: int = entry.get("roll_result", 0)
+		var tn: int = entry.get("tn", 0)
+		if roll >= tn + HIGH_ROLL_MARGIN:
+			high_roll_count += 1
+		if entry.get("observable_effect", false):
+			any_observable = true
+
+	return high_roll_count >= threshold and not any_observable
 
 
 # =============================================================================
@@ -103,8 +113,6 @@ const ACTION_CEILINGS: Dictionary = {
 	"OFFER_FAVOR": 40,
 	"PERFORM_FOR": 40,
 }
-
-const DISPOSITION_TIER_BOUNDARIES: Array[int] = [-61, -31, -11, 11, 31, 61, 91]
 
 const MEANINGFUL_PROGRESS_THRESHOLD: int = 3
 
@@ -260,7 +268,7 @@ static func get_scoring_modifier(
 	var alt_bonus: int = get_alternative_bonus(
 		penalties, character_id, target_npc_id, current_season
 	)
-	if alt_bonus > 0 and action_id not in _get_penalized_actions(penalties, character_id, target_npc_id):
+	if alt_bonus > 0 and action_id not in _get_penalized_actions(penalties, character_id, target_npc_id, current_season):
 		return alt_bonus
 
 	return 0
@@ -270,10 +278,17 @@ static func _get_penalized_actions(
 	penalties: Array[Dictionary],
 	character_id: int,
 	target_npc_id: int,
+	current_season: int,
 ) -> Array[String]:
 	var result: Array[String] = []
 	for p: Dictionary in penalties:
-		if (p.get("character_id", -1) == character_id
-			and p.get("target_npc_id", -1) == target_npc_id):
+		if (p.get("character_id", -1) != character_id
+			or p.get("target_npc_id", -1) != target_npc_id):
+			continue
+		var seasons_elapsed: int = current_season - p.get("season_recorded", 0)
+		if seasons_elapsed >= 2:
+			continue
+		var tag: int = p.get("tag", AssessmentTag.NONE)
+		if tag == AssessmentTag.APPROACH_CAPPED or tag == AssessmentTag.APPROACH_INEFFECTIVE:
 			result.append(p.get("action_id", ""))
 	return result

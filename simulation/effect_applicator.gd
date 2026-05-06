@@ -183,6 +183,7 @@ static func _log_action(
 		"target_npc_id": result.get("target_npc_id", -1),
 		"target_province_id": result.get("target_province_id", -1),
 		"ic_day": result.get("ic_day", 0),
+		"season": result.get("season", 0),
 		"success": result.get("success", false),
 		"skill_used": result.get("skill_used", ""),
 		"is_order": result.get("is_order", false),

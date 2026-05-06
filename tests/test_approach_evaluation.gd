@@ -8,6 +8,7 @@ func _make_log_entry(overrides: Dictionary = {}) -> Dictionary:
 		"target_npc_id": 2,
 		"target_province_id": -1,
 		"ic_day": 10,
+		"season": 1,
 		"success": true,
 		"skill_used": "Courtier",
 		"is_order": false,
@@ -100,6 +101,25 @@ func test_measurement_mixed_observable_and_not():
 	log.append(_make_log_entry({"roll_result": 25, "observable_effect": true}))
 	log.append(_make_log_entry({"roll_result": 25, "observable_effect": false}))
 	assert_false(ApproachEvaluation.check_measurement_needed(log, 1, 2, "CHARM", 1))
+
+func test_measurement_any_observable_blocks_with_enough_high_rolls():
+	var log: Array[Dictionary] = []
+	log.append(_make_log_entry({"roll_result": 25, "observable_effect": true}))
+	log.append(_make_log_entry({"roll_result": 25, "observable_effect": false}))
+	log.append(_make_log_entry({"roll_result": 25, "observable_effect": false}))
+	assert_false(ApproachEvaluation.check_measurement_needed(log, 1, 2, "CHARM", 1))
+
+func test_measurement_scoped_to_current_season():
+	var log: Array[Dictionary] = []
+	log.append(_make_log_entry({"roll_result": 25, "season": 0}))
+	log.append(_make_log_entry({"roll_result": 25, "season": 0}))
+	assert_false(ApproachEvaluation.check_measurement_needed(log, 1, 2, "CHARM", 1))
+
+func test_measurement_triggers_in_correct_season():
+	var log: Array[Dictionary] = []
+	log.append(_make_log_entry({"roll_result": 25, "season": 2}))
+	log.append(_make_log_entry({"roll_result": 25, "season": 2}))
+	assert_true(ApproachEvaluation.check_measurement_needed(log, 1, 2, "CHARM", 2))
 
 
 # =============================================================================
