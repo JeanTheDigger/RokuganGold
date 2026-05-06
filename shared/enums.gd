@@ -266,6 +266,68 @@ enum LordRank {
 }
 
 
+enum TattooBodyLocation {
+	LEFT_WRIST_FOREARM,
+	RIGHT_WRIST_FOREARM,
+	LEFT_UPPER_ARM_SHOULDER,
+	RIGHT_UPPER_ARM_SHOULDER,
+	CHEST_TORSO,
+	BACK,
+	LEFT_LEG_THIGH,
+	RIGHT_LEG_THIGH,
+	HEAD,
+}
+
+enum TattooQualityTier {
+	MUNDANE,
+	NORMAL,
+	FINE,
+	EXCEPTIONAL,
+	MASTERWORK,
+	LEGENDARY,
+}
+
+enum TattooSubjectType {
+	IMAGE,
+	TOPIC,
+}
+
+enum TattooAbility {
+	NONE,
+	BALANCE,
+	BAMBOO,
+	BEAR,
+	BLAZE,
+	CENTIPEDE,
+	CLOUD,
+	CRAB,
+	CRANE,
+	DRAGON,
+	HAWK,
+	KI_RIN,
+	LION,
+	MANTIS,
+	MOUNTAIN,
+	OCEAN,
+	PHOENIX,
+	SCORPION,
+	SPIDER,
+	STORM,
+	VOID,
+	VOLCANO,
+	WAVE,
+	WHISPER,
+	WIND,
+	WOLF,
+}
+
+enum CulturalReluctance {
+	NO_RELUCTANCE,
+	RELUCTANT,
+	VERY_RELUCTANT,
+}
+
+
 static func bushido_virtue_name(v: BushidoVirtue) -> String:
 	var idx: int = BushidoVirtue.values().find(v)
 	if idx < 0:
