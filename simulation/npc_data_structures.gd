@@ -43,6 +43,7 @@ class ScoredAction:
 	var commitment_at_risk: float = 0.0
 	var travel_redirect_penalty: float = 0.0
 	var confidence_penalty: float = 0.0
+	var stale_intel_bonus: float = 0.0
 
 	func get_total_score() -> float:
 		return (
@@ -58,6 +59,7 @@ class ScoredAction:
 			+ commitment_at_risk
 			+ travel_redirect_penalty
 			+ confidence_penalty
+			+ stale_intel_bonus
 		)
 
 

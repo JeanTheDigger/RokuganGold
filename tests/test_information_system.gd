@@ -425,3 +425,74 @@ func test_count_by_confidence() -> void:
 	var counts: Dictionary = InformationSystem.count_by_confidence(_char_a)
 	assert_eq(counts[Enums.KnowledgeConfidence.FRESH], 2)
 	assert_eq(counts[Enums.KnowledgeConfidence.STALE], 1)
+
+
+# -- Transfer Province Status & Crisis Data (s55.6) ---------------------------
+
+func test_transfer_province_status() -> void:
+	var ps := NPCDataStructures.ProvinceStatus.new()
+	ps.province_id = 10
+	ps.stability = 60.0
+	ps.garrison_pu = 5
+	ps.rice_stockpile = 20.0
+	ps.last_report_ic_day = 3
+
+	var objective: Dictionary = {"target_province_id": 10}
+	var transferred: Array[KnowledgeEntry] = InformationSystem.transfer_objective_knowledge(
+		_char_a, _char_b, objective, 2, [ps]
+	)
+	var province_entries: Array[KnowledgeEntry] = []
+	for e: KnowledgeEntry in transferred:
+		if e.entry_type == "province_status":
+			province_entries.append(e)
+	assert_eq(province_entries.size(), 1)
+	assert_eq(province_entries[0].data["stability"], 60.0)
+	assert_eq(province_entries[0].data["garrison_pu"], 5)
+	assert_eq(province_entries[0].confidence, Enums.KnowledgeConfidence.FRESH)
+
+
+func test_transfer_crisis_data() -> void:
+	var ps := NPCDataStructures.ProvinceStatus.new()
+	ps.province_id = 10
+	ps.stability = 40.0
+	ps.active_crisis_id = 3
+	ps.crisis_type = "shadowlands_incursion"
+
+	var objective: Dictionary = {"target_province_id": 10}
+	var transferred: Array[KnowledgeEntry] = InformationSystem.transfer_objective_knowledge(
+		_char_a, _char_b, objective, 2, [ps]
+	)
+	var crisis_entries: Array[KnowledgeEntry] = []
+	for e: KnowledgeEntry in transferred:
+		if e.entry_type == "crisis_data":
+			crisis_entries.append(e)
+	assert_eq(crisis_entries.size(), 1)
+	assert_eq(crisis_entries[0].data["crisis_id"], 3)
+	assert_eq(crisis_entries[0].data["crisis_type"], "shadowlands_incursion")
+
+
+func test_transfer_no_crisis_when_none_active() -> void:
+	var ps := NPCDataStructures.ProvinceStatus.new()
+	ps.province_id = 10
+	ps.stability = 80.0
+	ps.active_crisis_id = -1
+
+	var objective: Dictionary = {"target_province_id": 10}
+	var transferred: Array[KnowledgeEntry] = InformationSystem.transfer_objective_knowledge(
+		_char_a, _char_b, objective, 2, [ps]
+	)
+	for e: KnowledgeEntry in transferred:
+		assert_ne(e.entry_type, "crisis_data")
+
+
+func test_transfer_province_wrong_id_ignored() -> void:
+	var ps := NPCDataStructures.ProvinceStatus.new()
+	ps.province_id = 20
+	ps.stability = 60.0
+
+	var objective: Dictionary = {"target_province_id": 10}
+	var transferred: Array[KnowledgeEntry] = InformationSystem.transfer_objective_knowledge(
+		_char_a, _char_b, objective, 2, [ps]
+	)
+	for e: KnowledgeEntry in transferred:
+		assert_ne(e.entry_type, "province_status")

@@ -165,6 +165,7 @@ static func transfer_objective_knowledge(
 	recipient: L5RCharacterData,
 	objective: Dictionary,
 	current_season: int,
+	province_statuses: Array = [],
 ) -> Array[KnowledgeEntry]:
 	var transferred: Array[KnowledgeEntry] = []
 	var target_tags: Array[String] = _extract_target_tags(objective)
@@ -185,7 +186,58 @@ static func transfer_objective_knowledge(
 		for contact_id: int in assigner.known_contacts_by_clan[target_clan]:
 			add_contact(recipient, contact_id, target_clan)
 
+	var target_province_id: int = objective.get("target_province_id", -1)
+	if target_province_id >= 0:
+		for ps: Variant in province_statuses:
+			if not ps is NPCDataStructures.ProvinceStatus:
+				continue
+			var status: NPCDataStructures.ProvinceStatus = ps
+			if status.province_id != target_province_id:
+				continue
+			var province_entry := _make_province_status_entry(status, current_season)
+			add_knowledge(recipient, province_entry)
+			transferred.append(province_entry)
+			if status.active_crisis_id >= 0:
+				var crisis_entry := _make_crisis_entry(status, current_season)
+				add_knowledge(recipient, crisis_entry)
+				transferred.append(crisis_entry)
+			break
+
 	return transferred
+
+
+static func _make_province_status_entry(
+	status: NPCDataStructures.ProvinceStatus,
+	current_season: int,
+) -> KnowledgeEntry:
+	return make_entry(
+		Enums.KnowledgeSource.DIRECT_OBSERVATION,
+		"province_status",
+		{
+			"target_province_id": status.province_id,
+			"stability": status.stability,
+			"garrison_pu": status.garrison_pu,
+			"rice_stockpile": status.rice_stockpile,
+			"last_report_ic_day": status.last_report_ic_day,
+		},
+		current_season,
+	)
+
+
+static func _make_crisis_entry(
+	status: NPCDataStructures.ProvinceStatus,
+	current_season: int,
+) -> KnowledgeEntry:
+	return make_entry(
+		Enums.KnowledgeSource.DIRECT_OBSERVATION,
+		"crisis_data",
+		{
+			"target_province_id": status.province_id,
+			"crisis_id": status.active_crisis_id,
+			"crisis_type": status.crisis_type,
+		},
+		current_season,
+	)
 
 
 static func _extract_target_tags(objective: Dictionary) -> Array[String]:

@@ -342,11 +342,19 @@ single-dice-entry-point and server-authoritative constraints.
   generate_seppuku_refusal_topic() creates Tier 4 PERSONAL topic.
 - TopicData.Category gains LEGAL value.
 
-### Information Architecture Integration (s55.12)
+### Information Architecture Integration (s55.12, s55.6)
 - **Confidence penalty in NPC Phase 5 scoring** — `confidence_penalty` field on
   ScoredAction. When target has RECENT intel: −10. When STALE: ObjAlign halved.
   No penalty if character has no knowledge about target (benefit of the doubt).
+- **Stale intel gather bonus** — `stale_intel_bonus` field on ScoredAction.
+  When target has STALE intel and action is a gather-intelligence type
+  (PROBE, READ_CHARACTER, BRIBE_FOR_INFO, EAVESDROP, INTERCEPT_LETTER,
+  SEARCH_QUARTERS): +15 bonus per GDD s55.12.
 - **`get_best_confidence_on_target()`** added to InformationSystem.
+- **Province status & crisis transfer** — `transfer_objective_knowledge()`
+  now accepts optional `province_statuses` array. When objective targets a
+  province, copies province_status and crisis_data entries to recipient's
+  knowledge_pool as FRESH confidence.
 - IDENTIFY_CONTACT scoring updated to match GDD s55.7: ASK_FOR_INTRODUCTION=95,
   OBSERVE_COURT_ATTENDEES=85, WRITE_LETTER=60.
 
@@ -374,14 +382,14 @@ All in /tests/, one file per system:
 - test_time_system.gd (~15 tests)
 - test_skill_resolver.gd (~20 tests)
 - test_action_point_system.gd (~12 tests)
-- test_npc_decision_engine.gd (~41 tests)
+- test_npc_decision_engine.gd (~47 tests)
 - test_scoring_table_loader.gd (~15 tests)
 - test_action_executor.gd (~25 tests)
 - test_effect_applicator.gd (~28 tests)
 - test_npc_wave_resolver.gd (~15 tests)
 - test_resource_tick.gd (~30 tests)
 - test_objective_decomposer.gd (~100 tests)
-- test_information_system.gd (~35 tests)
+- test_information_system.gd (~40 tests)
 - test_topic_system.gd (~55 tests)
 - test_investigation_system.gd (~40 tests)
 - test_day_orchestrator.gd (~25 tests)
@@ -394,10 +402,9 @@ All in /tests/, one file per system:
 - test_system_wiring.gd (~20 tests)
 
 ### What's Next
-1. Information transfer on objective assignment — extend
-   `transfer_objective_knowledge()` to include crisis data and province status
-2. Auto-add "gather intelligence" objective when STALE entry is consulted
-   (s55.12: +15 bonus to gather_intelligence when stale knowledge detected)
+1. Integration tests — end-to-end DayOrchestrator test covering crime detection
+   → topic broadcast → UPHOLD_LAW activation → investigation → conviction
+2. World generation helpers — initial character/province data seeding
 
 ### Systems Wired into NPC Loop
 The following subsystems are now integrated into the NPC decision loop:

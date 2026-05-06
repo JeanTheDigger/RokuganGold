@@ -196,6 +196,57 @@ func test_build_context_confidence_penalty_no_knowledge_no_penalty() -> void:
 	assert_almost_eq(penalty, 0.0, 0.001)
 
 
+# -- Stale Intel Bonus (s55.12) ------------------------------------------------
+
+func test_stale_intel_bonus_probe_action() -> void:
+	var entry: KnowledgeEntry = InformationSystem.make_entry(
+		Enums.KnowledgeSource.INTELLIGENCE, "observed_action",
+		{"target_character_id": 2}, 1
+	)
+	entry.confidence = Enums.KnowledgeConfidence.STALE
+	InformationSystem.add_knowledge(_char, entry)
+	var bonus: float = NPCDecisionEngine._compute_stale_intel_bonus(_char, "PROBE", 2)
+	assert_almost_eq(bonus, 15.0, 0.001)
+
+
+func test_stale_intel_bonus_non_gather_action() -> void:
+	var entry: KnowledgeEntry = InformationSystem.make_entry(
+		Enums.KnowledgeSource.INTELLIGENCE, "observed_action",
+		{"target_character_id": 2}, 1
+	)
+	entry.confidence = Enums.KnowledgeConfidence.STALE
+	InformationSystem.add_knowledge(_char, entry)
+	var bonus: float = NPCDecisionEngine._compute_stale_intel_bonus(_char, "CHARM", 2)
+	assert_almost_eq(bonus, 0.0, 0.001)
+
+
+func test_stale_intel_bonus_fresh_no_bonus() -> void:
+	InformationSystem.add_knowledge(_char, InformationSystem.make_entry(
+		Enums.KnowledgeSource.INTELLIGENCE, "observed_action",
+		{"target_character_id": 2}, 1
+	))
+	var bonus: float = NPCDecisionEngine._compute_stale_intel_bonus(_char, "PROBE", 2)
+	assert_almost_eq(bonus, 0.0, 0.001)
+
+
+func test_stale_intel_bonus_read_character() -> void:
+	var entry: KnowledgeEntry = InformationSystem.make_entry(
+		Enums.KnowledgeSource.INTELLIGENCE, "observed_action",
+		{"target_character_id": 2}, 1
+	)
+	entry.confidence = Enums.KnowledgeConfidence.STALE
+	InformationSystem.add_knowledge(_char, entry)
+	var bonus: float = NPCDecisionEngine._compute_stale_intel_bonus(_char, "READ_CHARACTER", 2)
+	assert_almost_eq(bonus, 15.0, 0.001)
+
+
+func test_stale_intel_bonus_in_total_score() -> void:
+	var action := NPCDataStructures.ScoredAction.new()
+	action.stale_intel_bonus = 15.0
+	action.objective_alignment = 50.0
+	assert_almost_eq(action.get_total_score(), 65.0, 0.001)
+
+
 func test_build_context_military_populated() -> void:
 	_world_state["wall_statuses"] = [{"province_id": 10, "si": 8}]
 	_world_state["known_clan_strengths"] = {"Crab": 100.0, "Lion": 80.0}

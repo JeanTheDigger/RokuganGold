@@ -224,8 +224,12 @@ static func score_all(
 			option.confidence_penalty = _compute_confidence_penalty(
 				character, option.target_npc_id, option.objective_alignment
 			)
+			option.stale_intel_bonus = _compute_stale_intel_bonus(
+				character, option.action_id, option.target_npc_id
+			)
 		else:
 			option.confidence_penalty = 0.0
+			option.stale_intel_bonus = 0.0
 
 
 # -- Phase 6: Selection -------------------------------------------------------
@@ -734,6 +738,28 @@ static func _compute_confidence_penalty(
 		return -(obj_alignment * 0.5)
 	if best == Enums.KnowledgeConfidence.RECENT:
 		return CONFIDENCE_RECENT_PENALTY
+	return 0.0
+
+
+# -- Stale Intel Bonus (s55.12) ------------------------------------------------
+
+const STALE_INTEL_GATHER_BONUS: float = 15.0
+
+const GATHER_INTELLIGENCE_ACTIONS: Array = [
+	"PROBE", "READ_CHARACTER", "BRIBE_FOR_INFO", "EAVESDROP",
+	"INTERCEPT_LETTER", "SEARCH_QUARTERS",
+]
+
+static func _compute_stale_intel_bonus(
+	character: L5RCharacterData,
+	action_id: String,
+	target_npc_id: int,
+) -> float:
+	if action_id not in GATHER_INTELLIGENCE_ACTIONS:
+		return 0.0
+	var best: int = InformationSystem.get_best_confidence_on_target(character, target_npc_id)
+	if best == Enums.KnowledgeConfidence.STALE:
+		return STALE_INTEL_GATHER_BONUS
 	return 0.0
 
 
