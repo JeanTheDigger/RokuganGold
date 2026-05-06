@@ -183,6 +183,21 @@ enum LegalStatus {
 	PARDONED,
 }
 
+enum Sublocation {
+	PUBLIC,
+	COURT,
+	PRIVATE,
+	RESTRICTED,
+}
+
+enum AccessDenialReason {
+	INSUFFICIENT_STATUS,
+	NO_INVITATION,
+	HOSTILE_CLAN,
+	RESTRICTED_ROLE,
+	HOST_REFUSAL,
+}
+
 
 static func bushido_virtue_name(v: BushidoVirtue) -> String:
 	var idx: int = BushidoVirtue.values().find(v)
