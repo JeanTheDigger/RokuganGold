@@ -64,31 +64,26 @@ func test_delivery_combined_modifiers():
 # -- AP / Budget Check ---------------------------------------------------------
 
 func test_non_lord_first_letter_free():
-	var c := _make_char(1)
-	assert_true(LetterSystem.can_send_free_letter(c, 0))
+	assert_true(LetterSystem.can_send_free_letter(false, 0))
 
 func test_non_lord_second_letter_not_free():
-	var c := _make_char(1)
-	assert_false(LetterSystem.can_send_free_letter(c, 1))
+	assert_false(LetterSystem.can_send_free_letter(false, 1))
 
 func test_lord_cannot_send_free():
-	var c := _make_char(1)
-	c.lord_id = 99
-	assert_false(LetterSystem.can_send_free_letter(c, 0))
+	assert_false(LetterSystem.can_send_free_letter(true, 0))
 
 func test_non_lord_can_send_batch_with_ap():
 	var c := _make_char(1)
-	assert_true(LetterSystem.can_send_batch(c))
+	assert_true(LetterSystem.can_send_batch(c, false))
 
 func test_non_lord_cannot_send_batch_without_ap():
 	var c := _make_char(1)
 	c.action_points_current = 0
-	assert_false(LetterSystem.can_send_batch(c))
+	assert_false(LetterSystem.can_send_batch(c, false))
 
 func test_lord_cannot_send_batch():
 	var c := _make_char(1)
-	c.lord_id = 99
-	assert_false(LetterSystem.can_send_batch(c))
+	assert_false(LetterSystem.can_send_batch(c, true))
 
 
 # -- Quality Roll --------------------------------------------------------------
@@ -184,7 +179,7 @@ func test_deliver_transfers_new_topic():
 	var letter: LetterData = LetterSystem.write_letter(
 		1, sender, 2, "crane_scandal", 0, dice, 0
 	)
-	LetterSystem.deliver_letter(letter, recipient, 50, 1, log)
+	LetterSystem.deliver_letter(letter, recipient, 1, log)
 
 	assert_true("crane_scandal" in recipient.topic_pool)
 	assert_eq(recipient.knowledge_pool.size(), 1)
@@ -201,7 +196,7 @@ func test_deliver_does_not_duplicate_known_topic():
 	var letter: LetterData = LetterSystem.write_letter(
 		1, sender, 2, "crane_scandal", 0, dice, 0
 	)
-	var result: Dictionary = LetterSystem.deliver_letter(letter, recipient, 50, 1, log)
+	var result: Dictionary = LetterSystem.deliver_letter(letter, recipient, 1, log)
 	assert_false(result["topic_transferred"])
 	assert_eq(recipient.topic_pool.size(), 1)
 
@@ -219,7 +214,7 @@ func test_deliver_applies_disposition_bonus():
 		1, sender, 2, "topic", 0, dice, 0
 	)
 	var bonus_applied: int = letter.disposition_bonus
-	LetterSystem.deliver_letter(letter, recipient, 50, 1, log)
+	LetterSystem.deliver_letter(letter, recipient, 1, log)
 
 	assert_eq(recipient.disposition_values[1], 30 + bonus_applied)
 
@@ -233,7 +228,7 @@ func test_deliver_marks_letter_delivered():
 	var letter: LetterData = LetterSystem.write_letter(
 		1, sender, 2, "topic", 0, dice, 0
 	)
-	LetterSystem.deliver_letter(letter, recipient, 50, 1, log)
+	LetterSystem.deliver_letter(letter, recipient, 1, log)
 	assert_true(letter.delivered)
 
 func test_deliver_idempotent():
@@ -246,8 +241,8 @@ func test_deliver_idempotent():
 	var letter: LetterData = LetterSystem.write_letter(
 		1, sender, 2, "crane_scandal", 0, dice, 0
 	)
-	LetterSystem.deliver_letter(letter, recipient, 50, 1, log)
-	LetterSystem.deliver_letter(letter, recipient, 50, 1, log)
+	LetterSystem.deliver_letter(letter, recipient, 1, log)
+	LetterSystem.deliver_letter(letter, recipient, 1, log)
 	assert_eq(recipient.topic_pool.size(), 1)
 
 

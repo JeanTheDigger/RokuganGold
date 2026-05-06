@@ -53,18 +53,16 @@ static func calculate_delivery_time(
 # -- AP / Budget Check ----------------------------------------------------------
 
 static func can_send_free_letter(
-	character: L5RCharacterData,
+	is_lord: bool,
 	letters_sent_today: int,
 ) -> bool:
-	if character.lord_id < 0:
-		# Non-lord: first letter is free
+	if not is_lord:
 		return letters_sent_today < FREE_LETTERS_PER_DAY
-	# Lords use civilian order budget — not checked here (handled by caller)
 	return false
 
 
-static func can_send_batch(character: L5RCharacterData) -> bool:
-	if character.lord_id >= 0:
+static func can_send_batch(character: L5RCharacterData, is_lord: bool) -> bool:
+	if is_lord:
 		return false
 	return ActionPointSystem.can_spend(character, 1)
 
@@ -140,7 +138,6 @@ static func write_letter(
 static func deliver_letter(
 	letter: LetterData,
 	recipient: L5RCharacterData,
-	sender_disp_value: int,
 	current_season: int,
 	action_log: Array[Dictionary],
 ) -> Dictionary:
@@ -244,9 +241,8 @@ static func process_pending_letters(
 				var recipient: L5RCharacterData = characters_by_id.get(item.recipient_id)
 				if recipient == null:
 					continue
-				var sender_disp: int = recipient.disposition_values.get(item.sender_id, 0)
 				var delivery: Dictionary = deliver_letter(
-					item, recipient, sender_disp, current_season, action_log
+					item, recipient, current_season, action_log
 				)
 				if not delivery.is_empty():
 					delivery["letter_id"] = item.letter_id
