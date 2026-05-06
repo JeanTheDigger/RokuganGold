@@ -152,6 +152,38 @@ const RELIGIOUS_SETTLEMENT_TYPES: Array[SettlementType] = [
 ]
 
 
+enum CrimeType {
+	DISHONORABLE_CONDUCT,
+	VIOLENCE,
+	UNSANCTIONED_DUEL_DEATH,
+	SKIMMING,
+	UNSANCTIONED_OPEN_KILLING,
+	UNSANCTIONED_COVERT_KILLING,
+	MAGISTRATE_CORRUPTION,
+	DUEL_DEFILEMENT,
+	TREASON,
+	MAHO,
+	OTHER,
+}
+
+enum CrimeSeverity {
+	MINOR,
+	MODERATE,
+	SERIOUS,
+	CAPITAL,
+}
+
+enum LegalStatus {
+	NONE,
+	SUSPECTED,
+	UNDER_INVESTIGATION,
+	ACCUSED,
+	CONVICTED,
+	CLEAR,
+	PARDONED,
+}
+
+
 static func bushido_virtue_name(v: BushidoVirtue) -> String:
 	var idx: int = BushidoVirtue.values().find(v)
 	if idx < 0:
