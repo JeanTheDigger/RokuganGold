@@ -103,6 +103,22 @@ class ContextSnapshot:
 	var commanded_unit_id: int = -1
 	var assigned_company_id: int = -1
 
+	# Wall management (s55.23)
+	var wall_statuses: Array = []
+
+	# Military intelligence (s55.23)
+	var known_clan_strengths: Dictionary = {}
+	var unit_training_counts: Dictionary = {}
+	var available_levy_pu: float = 0.0
+	var can_sustain_iron_upkeep: bool = true
+
+	# Conflict state (s55.23)
+	var active_wars: Array = []
+	var escalating_conflicts: Array = []
+
+	# Shadowlands intelligence (s55.23)
+	var taint_topic_province_ids: Array[int] = []
+
 	# State
 	var pending_events: Array = []
 	var ap_remaining: int = 0
@@ -122,6 +138,21 @@ class ProvinceStatus:
 	var rice_stockpile: float = 0.0
 	var last_report_ic_day: int = -1
 	var confidence: int = 0  # 0=stale, 1=recent, 2=fresh
+	var is_wall_province: bool = false
+	var crisis_type: String = ""
+
+
+class WallStatus:
+	var province_id: int = -1
+	var si: int = 10
+	var scout_deployed: bool = false
+	var scout_report_age: int = 0
+	var max_taint_rank: int = 0
+	var tea_stockpile_seasons: float = 2.0
+	var jade_stockpile_critical: bool = false
+	var scout_report_elevated_activity: bool = false
+	var garrison_above_minimum: bool = true
+	var minimum_garrison: int = 0
 
 
 # -- Competence Modifier Table (s55.5) -----------------------------------------

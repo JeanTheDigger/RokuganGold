@@ -194,9 +194,19 @@ single-dice-entry-point and server-authoritative constraints.
 
 ### Objective Decomposition
 - **simulation/objective_decomposer.gd** — Routes standing objectives to
-  type-specific decomposition trees per GDD s55.22/s55.24/s55.25.
-  Political (6), Economic (5), Personal (8), Military (2) standing objectives.
+  type-specific decomposition trees per GDD s55.22/s55.24/s55.25/s55.23.
+  Political (6), Economic (5), Personal (8), Military (7) standing objectives.
   Stateless per GDD s55.4.2. Unknown NeedTypes pass through unchanged.
+  Military objectives include 5 full decomposition trees per GDD s55.23:
+  STRENGTHEN_WALL (Kaiu Wall defense with SI/scout/taint/jade/sortie ladder),
+  MILITARY_DOMINANCE (dominance ratio comparison + buildup),
+  ELIMINATE_SHADOWLANDS (crisis → insurgency → taint topic → proactive),
+  MAINTAIN_PEACE (war → tensions → preventive diplomacy),
+  BUILD_STRONGEST_FORCE (training level priority ladder).
+  New ContextSnapshot fields: wall_statuses (WallStatus class),
+  known_clan_strengths, unit_training_counts, available_levy_pu,
+  can_sustain_iron_upkeep, active_wars, escalating_conflicts,
+  taint_topic_province_ids. ProvinceStatus gains is_wall_province, crisis_type.
 
 ### Action Execution & World Mutation
 - **simulation/action_executor.gd** — Routes chosen ActionIDs to SkillResolver
@@ -301,7 +311,7 @@ All in /tests/, one file per system:
 - test_effect_applicator.gd (~28 tests)
 - test_npc_wave_resolver.gd (~15 tests)
 - test_resource_tick.gd (~30 tests)
-- test_objective_decomposer.gd (~45 tests)
+- test_objective_decomposer.gd (~100 tests)
 - test_information_system.gd (~35 tests)
 - test_day_orchestrator.gd (~12 tests)
 - test_approach_evaluation.gd (~55 tests)
@@ -313,11 +323,12 @@ All in /tests/, one file per system:
 - test_system_wiring.gd (~20 tests)
 
 ### What's Next
-1. Military standing objectives — GDD s55.23 decomposition trees (awaiting content)
-2. Topic propagation — momentum tracking, public knowledge broadcast per GDD s16
-3. Daily conversation / letter information exchange per GDD s55.12
-4. Crime investigation system per GDD s57.47, s57.16 (crime recording is wired;
+1. Topic propagation — momentum tracking, public knowledge broadcast per GDD s16
+2. Daily conversation / letter information exchange per GDD s55.12
+3. Crime investigation system per GDD s57.47, s57.16 (crime recording is wired;
    investigation/discovery flow is not)
+4. Wire military decomposition context population into build_context() Phase 1
+   (wall_statuses, known_clan_strengths, unit_training_counts, etc.)
 
 ### Systems Wired into NPC Loop
 The following subsystems are now integrated into the NPC decision loop:

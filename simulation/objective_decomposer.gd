@@ -38,6 +38,11 @@ const PERSONAL_OBJECTIVES: Array[String] = [
 const MILITARY_OBJECTIVES: Array[String] = [
 	"DEFEND_TERRITORY",
 	"STRENGTHEN_FORTIFICATION",
+	"STRENGTHEN_WALL",
+	"MILITARY_DOMINANCE",
+	"ELIMINATE_SHADOWLANDS",
+	"MAINTAIN_PEACE",
+	"BUILD_STRONGEST_FORCE",
 ]
 
 const INVESTIGATION_OBJECTIVES: Array[String] = [
@@ -153,6 +158,16 @@ static func _decompose_military(
 			return _decompose_defend_territory(objective, ctx)
 		"STRENGTHEN_FORTIFICATION":
 			return _decompose_strengthen_fortification(objective, ctx)
+		"STRENGTHEN_WALL":
+			return _decompose_strengthen_wall(objective, ctx)
+		"MILITARY_DOMINANCE":
+			return _decompose_military_dominance(objective, ctx)
+		"ELIMINATE_SHADOWLANDS":
+			return _decompose_eliminate_shadowlands(objective, ctx)
+		"MAINTAIN_PEACE":
+			return _decompose_maintain_peace(objective, ctx)
+		"BUILD_STRONGEST_FORCE":
+			return _decompose_build_strongest_force(objective, ctx)
 	return _passthrough(objective)
 
 
@@ -636,6 +651,245 @@ static func _decompose_strengthen_fortification(
 	return _make_need("MAINTAIN_FORTIFICATION", 2)
 
 
+static func _decompose_strengthen_wall(
+	_objective: Dictionary,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> NPCDataStructures.ImmediateNeed:
+	if not ctx.is_lord:
+		match ctx.context_flag:
+			Enums.ContextFlag.AT_COURT:
+				return _make_need("MOVE_TOPIC_POSITION", 2)
+			Enums.ContextFlag.AT_OWN_HOLDINGS, Enums.ContextFlag.ON_CAMPAIGN:
+				var wall_province: int = _find_wall_province(ctx)
+				if wall_province >= 0:
+					return _make_need("PATROL_PROVINCE", 2, {"target_province_id": wall_province})
+				return _make_need("TRAIN_SKILL", 1)
+			_:
+				return _make_need("TRAIN_SKILL", 1)
+
+	# Branch A: Lord-tier wall management
+	for ws: Variant in ctx.wall_statuses:
+		if not ws is NPCDataStructures.WallStatus:
+			continue
+		var w: NPCDataStructures.WallStatus = ws as NPCDataStructures.WallStatus
+		var ps: NPCDataStructures.ProvinceStatus = _get_province_status(ctx, w.province_id)
+		if ps != null and ps.confidence == 0:
+			return _make_need("INVESTIGATE_THREAT", 3, {"target_province_id": w.province_id})
+
+	for ws: Variant in ctx.wall_statuses:
+		if not ws is NPCDataStructures.WallStatus:
+			continue
+		var w: NPCDataStructures.WallStatus = ws as NPCDataStructures.WallStatus
+		var ps: NPCDataStructures.ProvinceStatus = _get_province_status(ctx, w.province_id)
+		if ps != null and ps.garrison_pu < w.minimum_garrison:
+			return _make_need("DEFEND_PROVINCE", 3, {"target_province_id": w.province_id})
+
+	var crisis: int = _find_crisis_province(ctx)
+	if crisis >= 0:
+		return _make_need("DEFEND_PROVINCE", 3, {"target_province_id": crisis})
+
+	for ws: Variant in ctx.wall_statuses:
+		if not ws is NPCDataStructures.WallStatus:
+			continue
+		var w: NPCDataStructures.WallStatus = ws as NPCDataStructures.WallStatus
+		if not w.scout_deployed or w.scout_report_age > 1:
+			return _make_need("DEPLOY_SCOUTS", 3, {"target_province_id": w.province_id})
+
+	for ws: Variant in ctx.wall_statuses:
+		if not ws is NPCDataStructures.WallStatus:
+			continue
+		var w: NPCDataStructures.WallStatus = ws as NPCDataStructures.WallStatus
+		if w.si < 6:
+			return _make_need("MAINTAIN_FORTIFICATION", 3, {"target_province_id": w.province_id})
+
+	for ws: Variant in ctx.wall_statuses:
+		if not ws is NPCDataStructures.WallStatus:
+			continue
+		var w: NPCDataStructures.WallStatus = ws as NPCDataStructures.WallStatus
+		if w.max_taint_rank >= 3 or w.tea_stockpile_seasons < 1.0:
+			return _make_need("MANAGE_TAINT", 3, {"target_province_id": w.province_id})
+
+	for ws: Variant in ctx.wall_statuses:
+		if not ws is NPCDataStructures.WallStatus:
+			continue
+		var w: NPCDataStructures.WallStatus = ws as NPCDataStructures.WallStatus
+		if w.jade_stockpile_critical:
+			return _make_need("ACQUIRE_RESOURCE", 3, {
+				"target_resource": "jade",
+				"target_province_id": w.province_id,
+			})
+
+	for ws: Variant in ctx.wall_statuses:
+		if not ws is NPCDataStructures.WallStatus:
+			continue
+		var w: NPCDataStructures.WallStatus = ws as NPCDataStructures.WallStatus
+		if w.scout_report_elevated_activity and w.scout_report_age <= 1:
+			if not w.jade_stockpile_critical and w.garrison_above_minimum and w.si >= 6:
+				return _make_need("ORDER_SHADOWLANDS_SORTIE", 2, {
+					"target_province_id": w.province_id,
+				})
+
+	if _has_undertrained_units(ctx, 3):
+		return _make_need("TRAIN_TROOPS", 2)
+
+	var arms: float = ctx.resource_stockpiles.get("arms", 0.0)
+	if arms < 10.0:
+		return _make_need("ACQUIRE_RESOURCE", 2, {"target_resource": "arms"})
+
+	var iron: float = ctx.resource_stockpiles.get("iron", 0.0)
+	if iron < 5.0:
+		return _make_need("ACQUIRE_RESOURCE", 2, {"target_resource": "iron"})
+
+	return _make_need("LEVY_TROOPS", 1)
+
+
+static func _decompose_military_dominance(
+	_objective: Dictionary,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> NPCDataStructures.ImmediateNeed:
+	if ctx.known_clan_strengths.is_empty():
+		if ctx.is_lord:
+			return _make_need("SEND_LETTER", 1)
+		return _make_need("GATHER_INTELLIGENCE", 2)
+
+	var my_strength: float = ctx.known_clan_strengths.get(ctx.clan, 0.0)
+	var strongest_rival: float = 0.0
+	for clan_id: String in ctx.known_clan_strengths:
+		if clan_id != ctx.clan:
+			var rival_str: float = ctx.known_clan_strengths.get(clan_id, 0.0)
+			if rival_str > strongest_rival:
+				strongest_rival = rival_str
+
+	var dominance_ratio: float = my_strength / maxf(strongest_rival, 1.0)
+
+	if dominance_ratio >= 1.5:
+		if _has_undertrained_units(ctx, 3):
+			return _make_need("TRAIN_TROOPS", 1)
+		return _make_need("ACQUIRE_RESOURCE", 1, {"target_resource": "arms"})
+
+	if dominance_ratio >= 1.0:
+		if ctx.is_lord:
+			if ctx.available_levy_pu > 0.0:
+				return _make_need("LEVY_TROOPS", 2)
+			return _make_need("TRAIN_TROOPS", 2)
+		return _make_need("TRAIN_SKILL", 1)
+
+	# Behind a rival — urgent buildup
+	if ctx.is_lord:
+		return _make_need("LEVY_TROOPS", 3)
+	return _make_need("SEND_LETTER", 2)
+
+
+static func _decompose_eliminate_shadowlands(
+	_objective: Dictionary,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> NPCDataStructures.ImmediateNeed:
+	# Step 1: active Shadowlands crisis
+	for ps: Variant in ctx.province_statuses:
+		if ps is NPCDataStructures.ProvinceStatus:
+			var p: NPCDataStructures.ProvinceStatus = ps as NPCDataStructures.ProvinceStatus
+			if p.active_crisis_id >= 0 and p.crisis_type == "shadowlands_incursion":
+				return _make_need("DEFEND_PROVINCE", 3, {"target_province_id": p.province_id})
+
+	# Step 2: Taint insurgency
+	for ps: Variant in ctx.province_statuses:
+		if ps is NPCDataStructures.ProvinceStatus:
+			var p: NPCDataStructures.ProvinceStatus = ps as NPCDataStructures.ProvinceStatus
+			if p.active_insurgency_id >= 0:
+				return _make_need("INVESTIGATE_THREAT", 3, {"target_province_id": p.province_id})
+
+	# Step 3: Jigoku bleed event topics
+	if not ctx.taint_topic_province_ids.is_empty():
+		return _make_need("INVESTIGATE_THREAT", 2, {
+			"target_province_id": ctx.taint_topic_province_ids[0],
+		})
+
+	# Step 4: proactive by context
+	match ctx.context_flag:
+		Enums.ContextFlag.AT_COURT:
+			return _make_need("MOVE_TOPIC_POSITION", 2)
+		Enums.ContextFlag.AT_TEMPLE:
+			if ctx.school_type == Enums.SchoolType.SHUGENJA:
+				return _make_need("INVESTIGATE_THREAT", 2)
+			return _make_need("PERFORM_RITUAL", 1)
+		Enums.ContextFlag.AT_OWN_HOLDINGS:
+			if ctx.is_lord:
+				return _make_need("PATROL_PROVINCE", 1)
+			return _make_need("TRAIN_SKILL", 1)
+		_:
+			return _make_need("TRAIN_SKILL", 1)
+
+
+static func _decompose_maintain_peace(
+	_objective: Dictionary,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> NPCDataStructures.ImmediateNeed:
+	# Step 1: active war
+	if not ctx.active_wars.is_empty():
+		var war: Dictionary = ctx.active_wars[0]
+		return _make_need("SEEK_PEACE", 3, {
+			"target_clan_id": war.get("enemy_clan_id", ""),
+		})
+
+	# Step 2: rising tensions
+	if not ctx.escalating_conflicts.is_empty():
+		var tension: Dictionary = ctx.escalating_conflicts[0]
+		match ctx.context_flag:
+			Enums.ContextFlag.AT_COURT:
+				return _make_need("MOVE_TOPIC_POSITION", 3, {
+					"target_topic_id": tension.get("topic_id", -1),
+				})
+			_:
+				return _make_need("ATTEND_COURT", 2)
+
+	# Step 3: preventive diplomacy
+	match ctx.context_flag:
+		Enums.ContextFlag.AT_COURT:
+			var contact: int = _find_lowest_disposition_contact(ctx)
+			if contact >= 0:
+				return _make_need("RAISE_DISPOSITION", 1, {
+					"target_npc_id": contact,
+					"threshold": 31.0,
+					"threshold_type": "disposition",
+				})
+			return _make_need("IDENTIFY_CONTACT", 1)
+		Enums.ContextFlag.AT_OWN_HOLDINGS:
+			return _make_need("SEND_LETTER", 1)
+		_:
+			return _make_need("ATTEND_COURT", 1)
+
+
+static func _decompose_build_strongest_force(
+	_objective: Dictionary,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> NPCDataStructures.ImmediateNeed:
+	if not ctx.is_lord:
+		return _make_need("TRAIN_SKILL", 1)
+
+	var raw: int = ctx.unit_training_counts.get(0, 0)
+	if raw > 0:
+		return _make_need("TRAIN_TROOPS", 3)
+
+	var drilled: int = ctx.unit_training_counts.get(1, 0)
+	if drilled > 0:
+		return _make_need("TRAIN_TROOPS", 2)
+
+	if not ctx.can_sustain_iron_upkeep:
+		return _make_need("ACQUIRE_RESOURCE", 2, {"target_resource": "iron"})
+
+	if ctx.available_levy_pu > 0.0:
+		var rice: float = ctx.resource_stockpiles.get("rice", 0.0)
+		var upkeep: float = ctx.resource_stockpiles.get("military_upkeep", 1.0)
+		if rice > upkeep * 3.0:
+			return _make_need("LEVY_TROOPS", 1)
+
+	var trained: int = ctx.unit_training_counts.get(2, 0)
+	if trained > 0:
+		return _make_need("TRAIN_TROOPS", 1)
+
+	return _make_need("ACQUIRE_RESOURCE", 1, {"target_resource": "arms"})
+
+
 # =============================================================================
 # Helpers
 # =============================================================================
@@ -793,3 +1047,33 @@ static func _get_rice_per_pu(ctx: NPCDataStructures.ContextSnapshot) -> float:
 	var rice: float = ctx.resource_stockpiles.get("rice", 0.0)
 	var pop_pu: float = ctx.resource_stockpiles.get("population_pu", 1.0)
 	return rice / maxf(pop_pu, 1.0)
+
+
+static func _find_wall_province(ctx: NPCDataStructures.ContextSnapshot) -> int:
+	for ps: Variant in ctx.province_statuses:
+		if ps is NPCDataStructures.ProvinceStatus and ps.is_wall_province:
+			return ps.province_id
+	return -1
+
+
+static func _find_lowest_disposition_contact(
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> int:
+	var lowest_id: int = -1
+	var lowest_disp: int = 999
+	for npc_id: int in ctx.characters_present:
+		var disp: int = ctx.dispositions.get(npc_id, 0)
+		if disp < lowest_disp and disp > -30:
+			lowest_disp = disp
+			lowest_id = npc_id
+	return lowest_id
+
+
+static func _has_undertrained_units(
+	ctx: NPCDataStructures.ContextSnapshot,
+	max_level: int,
+) -> bool:
+	for level: int in ctx.unit_training_counts:
+		if level < max_level and ctx.unit_training_counts[level] > 0:
+			return true
+	return false
