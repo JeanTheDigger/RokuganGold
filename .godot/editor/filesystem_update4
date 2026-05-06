@@ -1,0 +1,8 @@
+res://scenes/main_ui.tscn
+res://assets/themes/Buttons.tres
+res://shaders/WritingPanelShader.gdshader
+res://assets/themes/CharacterCreation.tres
+res://shaders/TextPanelShader.gdshader
+res://scenes/CharacterCreation.tscn
+res://scenes/intro_screen.tscn
+res://scenes/LoginUI.tscn

@@ -122,7 +122,7 @@ Content has not been modified — only split at section boundaries.
 | `s12.6_daily_conversation_system_locked.md` | ## 12.6 Daily Conversation System — LOCKED | 6K | FULLY LOCKED (1) |
 | `s12.6a_deliberate_pc_initiated_conversation.md` | ## 12.6a Deliberate PC-Initiated Conversation | 5K | Reference / No tags |
 | `s12.7_letter_system_locked.md` | ## 12.7 Letter System — LOCKED | 14K | FULLY LOCKED (1) |
-| `s12.8_secret_system_locked.md` | ## 12.8 Secret System — LOCKED | 76K | FULLY LOCKED (19) |
+| `s12.8_secret_system_locked.md` | ## 12.8 Secret System — LOCKED | 80K | FULLY LOCKED (19). v623: Staleness audit. "No divorce mechanic" corrected (Section 57.49.7 dissolution exists). Severity tier "pending design session" resolved → Section 57.47 cross-reference. Severity context modifier formalized (any Status advantage, 4 IC seasons). Gi label corrected "(Honesty)" → "(Honesty/Righteousness)" per Section 19. Dōsatsu spelling standardized. Ishi (Will) named properly. KETSUI/SEIGYO all-caps fixed. 6 missing virtue entries added to Filter 3 (Yu, Rei, Ketsui, Kyōryōku, Ishi, Kanpeki) — all 14 virtues now covered. Seven-phase decision loop reconciliation note added mapping four-filter model to Phases 4–5 (Section 55.4). 4 integration cross-reference notes added: Kolat (54.7a–i), Geisha Intelligence (57.45), Crime Severity (57.47), Allied NPC Companion (57.46). |
 | `s12.9_intimidation_and_blackmail_locked.md` | ## 12.9 Intimidation and Blackmail — LOCKED | 6K | FULLY LOCKED (2) |
 | `s12.10_favor_system_locked.md` | ## 12.10 Favor System — LOCKED | 9K | FULLY LOCKED (11) |
 | `s12.11_inventory_system_locked.md` | ## 12.11 Inventory System — LOCKED | 6K | FULLY LOCKED (9) |
@@ -164,7 +164,7 @@ Content has not been modified — only split at section boundaries.
 | `s16.2_crisis_tier_system_locked.md` | ## 16.2 Crisis Tier System — LOCKED | 11K | FULLY LOCKED (5) |
 | `s16.3_crisis_types_court_outcomes_locked_in_progress.md` | ## 16.3 Crisis Types & Court Outcomes — LOCKED (in progress) | 27K | FULLY LOCKED (1). v618: Tier 2 Nezumi Colony Crisis entry added. Enumeration updated. |
 | `s16.4_personal_relevance_score_locked.md` | ## 16.4 Personal Relevance Score — LOCKED | 13K | FULLY LOCKED (6 locked, 0 TBD). v621: Stale TBD cleaned (already RESOLVED in v467–v469). |
-| `s16.5_tier_4_topics_personal_social.md` | ## 16.5 Tier 4 Topics — Personal & Social | 12K | Reference / No tags |
+| `s16.5_tier_4_topics_personal_social.md` | ## 16.5 Tier 4 Topics — Personal & Social | 13K | Reference / No tags. v623: Cross-reference note added pointing to Section 57.57 (Topic Type Catalog, 197 active topic_types) as authoritative source. Stale virtue names fixed in Topic Relevance section — English names replaced with Japanese (Jin, Meiyo) per Section 19, Sharing Bias formula cross-referenced (57.57.6a). |
 
 ### Section 17
 
@@ -575,4 +575,4 @@ Content has not been modified — only split at section boundaries.
 
 ---
 
-**Total: 272 files, ~6,319,800 characters (6320K)**
+**Total: 272 files, ~6,324,800 characters (6325K)**
