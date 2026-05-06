@@ -141,22 +141,18 @@ func test_is_order_action() -> void:
 
 func _make_char_with_skills(id: int, status: float, awareness: int) -> L5RCharacterData:
 	var c := _make_char(id, status, awareness)
-	c.traits = {
-		Enums.Trait.REFLEXES: 3,
-		Enums.Trait.AWARENESS: awareness,
-		Enums.Trait.STAMINA: 3,
-		Enums.Trait.WILLPOWER: 3,
-		Enums.Trait.AGILITY: 3,
-		Enums.Trait.INTELLIGENCE: 3,
-		Enums.Trait.STRENGTH: 3,
-		Enums.Trait.PERCEPTION: 3,
-		Enums.Trait.VOID: 2,
-	}
+	c.reflexes = 3
+	c.awareness = awareness
+	c.stamina = 3
+	c.willpower = 3
+	c.agility = 3
+	c.intelligence = 3
+	c.strength = 3
+	c.perception = 3
+	c.void_ring = 2
 	c.skills = {"Etiquette": 3, "Courtier": 2, "Battle": 1}
 	c.emphases = {}
-	c.current_wounds = 0
-	c.earth_ring_for_wounds = 3
-	c.wound_level_size = 15
+	c.wounds_taken = 0
 	return c
 
 

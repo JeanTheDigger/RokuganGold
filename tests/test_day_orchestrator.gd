@@ -22,29 +22,24 @@ func before_each() -> void:
 	c1.character_id = 1
 	c1.character_name = "NPC 1"
 	c1.status = 3.0
-	c1.awareness = 3
 	c1.action_points_current = 2
 	c1.action_points_max = 2
 	c1.honor = 5.0
 	c1.glory = 3.0
 	c1.bushido_virtue = Enums.BushidoVirtue.NONE
 	c1.shourido_virtue = Enums.ShouridoVirtue.NONE
-	c1.traits = {
-		Enums.Trait.REFLEXES: 3,
-		Enums.Trait.AWARENESS: 3,
-		Enums.Trait.STAMINA: 3,
-		Enums.Trait.WILLPOWER: 3,
-		Enums.Trait.AGILITY: 3,
-		Enums.Trait.INTELLIGENCE: 3,
-		Enums.Trait.STRENGTH: 3,
-		Enums.Trait.PERCEPTION: 3,
-		Enums.Trait.VOID: 2,
-	}
+	c1.reflexes = 3
+	c1.awareness = 3
+	c1.stamina = 3
+	c1.willpower = 3
+	c1.agility = 3
+	c1.intelligence = 3
+	c1.strength = 3
+	c1.perception = 3
+	c1.void_ring = 2
 	c1.skills = {"Etiquette": 3}
 	c1.emphases = {}
-	c1.current_wounds = 0
-	c1.earth_ring_for_wounds = 3
-	c1.wound_level_size = 15
+	c1.wounds_taken = 0
 	c1.knowledge_pool = []
 	c1.known_contacts_by_clan = {}
 	c1.met_characters = []

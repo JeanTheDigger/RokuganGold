@@ -14,17 +14,15 @@ func before_each() -> void:
 	_character = L5RCharacterData.new()
 	_character.character_id = 1
 	_character.character_name = "Test Samurai"
-	_character.traits = {
-		Enums.Trait.REFLEXES: 3,
-		Enums.Trait.AWARENESS: 4,
-		Enums.Trait.STAMINA: 3,
-		Enums.Trait.WILLPOWER: 3,
-		Enums.Trait.AGILITY: 3,
-		Enums.Trait.INTELLIGENCE: 3,
-		Enums.Trait.STRENGTH: 3,
-		Enums.Trait.PERCEPTION: 3,
-		Enums.Trait.VOID: 2,
-	}
+	_character.reflexes = 3
+	_character.awareness = 4
+	_character.stamina = 3
+	_character.willpower = 3
+	_character.agility = 3
+	_character.intelligence = 3
+	_character.strength = 3
+	_character.perception = 3
+	_character.void_ring = 2
 	_character.skills = {
 		"Etiquette": 4,
 		"Courtier": 3,
@@ -37,9 +35,7 @@ func before_each() -> void:
 		"Temptation": 1,
 	}
 	_character.emphases = {}
-	_character.current_wounds = 0
-	_character.earth_ring_for_wounds = 3
-	_character.wound_level_size = 15
+	_character.wounds_taken = 0
 
 	_ctx = NPCDataStructures.ContextSnapshot.new()
 	_ctx.character_id = 1
