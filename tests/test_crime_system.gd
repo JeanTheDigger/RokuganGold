@@ -178,15 +178,25 @@ func test_conviction_seppuku_not_offered_for_minor():
 	var result: Dictionary = CrimeSystem.apply_at_conviction_consequences(c, record)
 	assert_false(result["seppuku_offered"])
 
-func test_conviction_skimming_strips_status():
+func test_conviction_skimming_does_not_zero_status():
 	var c := _make_character(5.0, 3.0, 4.0)
 	var record := _make_record(Enums.CrimeType.SKIMMING)
 	CrimeSystem.apply_at_conviction_consequences(c, record)
-	assert_eq(c.status, 0.0)
+	assert_eq(c.status, 4.0)
 
-func test_conviction_covert_killing():
+func test_conviction_covert_killing_high_status_victim_tier_2():
 	var c := _make_character(5.0, 5.0, 5.0)
 	var record := _make_record(Enums.CrimeType.UNSANCTIONED_COVERT_KILLING)
+	var result: Dictionary = CrimeSystem.apply_at_conviction_consequences(c, record, 6.0)
+	assert_eq(result["topic_tier"], 2)
+
+func test_conviction_covert_killing_low_status_victim_tier_3():
+	var c := _make_character(5.0, 5.0, 5.0)
+	var record := _make_record(Enums.CrimeType.UNSANCTIONED_COVERT_KILLING)
+	var result: Dictionary = CrimeSystem.apply_at_conviction_consequences(c, record, 2.0)
+	assert_eq(result["topic_tier"], 3)
+
+func test_conviction_covert_killing():
 	var result: Dictionary = CrimeSystem.apply_at_conviction_consequences(c, record)
 	assert_almost_eq(c.glory, 4.0, 0.001)
 	assert_almost_eq(c.infamy, 2.0, 0.001)
@@ -262,6 +272,15 @@ func test_is_seppuku_eligible():
 	assert_true(CrimeSystem.is_seppuku_eligible(Enums.CrimeType.UNSANCTIONED_OPEN_KILLING))
 	assert_false(CrimeSystem.is_seppuku_eligible(Enums.CrimeType.MAHO))
 	assert_false(CrimeSystem.is_seppuku_eligible(Enums.CrimeType.DISHONORABLE_CONDUCT))
+
+func test_is_seppuku_eligible_skimming_above_threshold():
+	assert_true(CrimeSystem.is_seppuku_eligible(Enums.CrimeType.SKIMMING, 15.0))
+
+func test_is_seppuku_eligible_skimming_below_threshold():
+	assert_false(CrimeSystem.is_seppuku_eligible(Enums.CrimeType.SKIMMING, 5.0))
+
+func test_is_seppuku_eligible_skimming_at_threshold():
+	assert_false(CrimeSystem.is_seppuku_eligible(Enums.CrimeType.SKIMMING, 10.0))
 
 
 # -- Escalation ----------------------------------------------------------------

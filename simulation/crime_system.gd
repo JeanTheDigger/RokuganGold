@@ -33,11 +33,13 @@ const CRIME_HONOR_TABLE: Dictionary = {
 
 # At-conviction consequences: [glory_delta, infamy_delta, status_delta, topic_tier]
 # status_delta of -99.0 means "set to 0.0" (strip all status).
+# Skimming uses 0.0 here — the GDD says "stripped of the office" not all status.
+# Office removal is a role_position change, not a numeric status zeroing.
 const CONVICTION_CONSEQUENCES: Dictionary = {
 	Enums.CrimeType.DISHONORABLE_CONDUCT: [-0.1, 0.0, 0.0, 0],
 	Enums.CrimeType.VIOLENCE: [-0.1, 0.0, 0.0, 4],
 	Enums.CrimeType.UNSANCTIONED_DUEL_DEATH: [0.0, 0.0, 0.0, 4],
-	Enums.CrimeType.SKIMMING: [-0.3, 0.5, -99.0, 3],
+	Enums.CrimeType.SKIMMING: [-0.3, 0.5, 0.0, 3],
 	Enums.CrimeType.UNSANCTIONED_OPEN_KILLING: [-0.5, 1.0, 0.0, 3],
 	Enums.CrimeType.UNSANCTIONED_COVERT_KILLING: [-1.0, 2.0, 0.0, 3],
 	Enums.CrimeType.MAGISTRATE_CORRUPTION: [-1.5, 2.0, -99.0, 2],
@@ -58,6 +60,9 @@ const SEPPUKU_OFFERED_CRIMES: Array = [
 	Enums.CrimeType.MAGISTRATE_CORRUPTION,
 	Enums.CrimeType.TREASON,
 ]
+
+# Skimming seppuku threshold per GDD s57.47.6 (PROVISIONAL).
+const SKIMMING_SEPPUKU_THRESHOLD: float = 10.0
 
 # Dishonorable conduct escalation: 3+ offenses in 4-season window.
 const ESCALATION_THRESHOLD: int = 3
@@ -139,7 +144,7 @@ static func apply_at_act_consequences(character: L5RCharacterData, crime_type: E
 
 # -- At-Conviction Phase (fires on formal conviction) -------------------------
 
-static func apply_at_conviction_consequences(character: L5RCharacterData, record: CrimeRecord) -> Dictionary:
+static func apply_at_conviction_consequences(character: L5RCharacterData, record: CrimeRecord, victim_status: float = 0.0) -> Dictionary:
 	var crime_type: Enums.CrimeType = record.crime_type
 	var consequences: Array = CONVICTION_CONSEQUENCES.get(crime_type, [-0.1, 0.0, 0.0, 4])
 
@@ -155,12 +160,17 @@ static func apply_at_conviction_consequences(character: L5RCharacterData, record
 
 	record.legal_status = Enums.LegalStatus.CONVICTED
 
+	var topic_tier: int = int(consequences[3])
+	if crime_type == Enums.CrimeType.UNSANCTIONED_COVERT_KILLING:
+		if victim_status >= HIGH_STATUS_THRESHOLD:
+			topic_tier = 2
+
 	return {
 		"glory_delta": glory_delta,
 		"infamy_delta": infamy_delta,
 		"status_delta": status_delta,
-		"topic_tier": int(consequences[3]),
-		"seppuku_offered": crime_type in SEPPUKU_OFFERED_CRIMES,
+		"topic_tier": topic_tier,
+		"seppuku_offered": is_seppuku_eligible(crime_type, record.skimming_amount),
 	}
 
 
@@ -183,6 +193,12 @@ static func apply_seppuku_refused(character: L5RCharacterData, record: CrimeReco
 		"infamy_delta": infamy_delta,
 		"topic_tier": 4,
 	}
+
+
+# -- Covert Killing Topic Tier Escalation (s57.47) ----------------------------
+# "Tier 3 (Tier 2 if high-Status victim)" — victim_status must be provided.
+
+const HIGH_STATUS_THRESHOLD: float = 5.0
 
 
 # -- CrimeRecord Factory ------------------------------------------------------
@@ -225,7 +241,9 @@ static func clear_suspect(record: CrimeRecord) -> void:
 	record.legal_status = Enums.LegalStatus.CLEAR
 
 
-static func is_seppuku_eligible(crime_type: Enums.CrimeType) -> bool:
+static func is_seppuku_eligible(crime_type: Enums.CrimeType, skimming_amount: float = 0.0) -> bool:
+	if crime_type == Enums.CrimeType.SKIMMING:
+		return skimming_amount > SKIMMING_SEPPUKU_THRESHOLD
 	return crime_type in SEPPUKU_OFFERED_CRIMES
 
 

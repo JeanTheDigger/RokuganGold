@@ -114,7 +114,8 @@ static func _make_close_case_need() -> NPCDataStructures.ImmediateNeed:
 
 
 # -- Witness Prioritization (s57.16.4) ----------------------------------------
-# Priority: highest awareness trait estimate, then lowest honor, then proximity.
+# Full GDD priority: awareness estimate, then lowest honor, then proximity.
+# Current implementation uses proximity only (present witnesses first).
 
 static func _prioritize_witness(candidates: Array, ctx: NPCDataStructures.ContextSnapshot) -> int:
 	if candidates.size() == 0:

@@ -135,7 +135,7 @@ static func _process_daily_conversations(
 		var rng_needed: int = pair_count * 3
 		var rng: Array[int] = []
 		for i: int in range(rng_needed):
-			rng.append(dice_engine._rng.randi() % 100)
+			rng.append(dice_engine.rand_int_range(0, 99))
 
 		var results: Array[Dictionary] = DailyConversation.resolve_settlement_conversations(
 			group, rng, current_season

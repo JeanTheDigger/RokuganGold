@@ -21,3 +21,4 @@ extends Resource
 @export var witnesses: Array[int] = []
 @export var known_suspects: Array[int] = []
 @export var escalation_count: int = 0
+@export var skimming_amount: float = 0.0
