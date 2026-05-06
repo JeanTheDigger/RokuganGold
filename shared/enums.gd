@@ -226,6 +226,45 @@ enum DeploymentStatus {
 	ON_CAMPAIGN,
 }
 
+enum ZoneSubtype {
+	# Castle Interior
+	OHIROMA,
+	ENKAI_HALL,
+	AUDIENCE_CHAMBER,
+	CHASHITSU,
+	GUEST_WING,
+	LORD_QUARTERS,
+	WAR_COUNCIL_ROOM,
+	DOJO,
+	OUTER_COURTYARD,
+	TSUBONIWA,
+	CASTLE_SHRINE,
+	# Urban District
+	MARKET_STREET,
+	RESIDENTIAL_QUARTER,
+	TEMPLE_GROUNDS,
+	PLEASURE_QUARTER,
+	DOCKS_WATERFRONT,
+	POOR_QUARTER,
+	GOVERNMENT_QUARTER,
+	# Wilderness
+	ROAD,
+	FOREST_PATH,
+	MOUNTAIN_PASS,
+	RIVER_CROSSING,
+	FARMLAND,
+	SHRINE_CLEARING,
+}
+
+enum LordRank {
+	VILLAGE_HEADMAN,
+	CITY_DAIMYO,
+	PROVINCIAL_DAIMYO,
+	FAMILY_DAIMYO,
+	CLAN_CHAMPION,
+	IMPERIAL,
+}
+
 
 static func bushido_virtue_name(v: BushidoVirtue) -> String:
 	var idx: int = BushidoVirtue.values().find(v)
