@@ -13,14 +13,19 @@ extends Resource
 
 @export var infrastructure: Array[String] = []
 
-# -- Military ------------------------------------------------------------------
+# -- Resource Stockpiles (per GDD s4.3.7, s4.3.8) ----------------------------
 
-@export var garrison_capacity: int = 0
-@export var current_garrison: int = 0
+@export var rice_stockpile: float = 0.0
+@export var koku_stockpile: float = 0.0
 
-# -- Population ----------------------------------------------------------------
+# -- Population (PU breakdown per GDD s4.3.7) ---------------------------------
 
 @export var population_pu: int = 0
+@export var farming_pu: int = 0
+@export var mining_pu: int = 0
+@export var town_pu: int = 0
+@export var military_pu: int = 0
+@export var garrison_pu: int = 0
 
 
 func has_infrastructure(feature: String) -> bool:

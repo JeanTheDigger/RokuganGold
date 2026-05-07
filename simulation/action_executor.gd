@@ -35,6 +35,14 @@ const ADMINISTRATIVE_ACTIONS: Array[String] = [
 	"DEMAND_TRIBUTE", "REQUEST_ALLIED_AID", "INVESTIGATE_PROVINCE",
 	"INVESTIGATE_RUMOR", "NEGOTIATE_SURRENDER", "CONDUCT_COMMERCE",
 	"DISPATCH_COURTIER",
+	"FOUND_VILLAGE", "BUILD_FORTIFICATION", "BUILD_SHRINE",
+	"FOUND_TEMPLE", "FOUND_MONASTERY", "COMMISSION_SHIP",
+	"ARRANGE_MARRIAGE", "APPOINT_TO_POSITION",
+	"PURIFY_TAINTED_GROUND", "FORTIFY_WALL_SECTION", "SEAL_WALL_BREACH",
+]
+
+const INTELLIGENCE_ACTIONS: Array[String] = [
+	"EXAMINE_CRIME_SCENE",
 ]
 
 const SELF_ACTIONS: Array[String] = [
@@ -74,8 +82,24 @@ static func execute(
 	ctx: NPCDataStructures.ContextSnapshot,
 	dice_engine: DiceEngine,
 	action_skill_map: Dictionary,
+	military_data: Dictionary = {},
 ) -> Dictionary:
 	var action_id: String = action.action_id
+
+	if action_id in MILITARY_ORDERS:
+		var mil_check: Dictionary = _validate_military_order(action_id, ctx, military_data)
+		if not mil_check.get("valid", false):
+			return {
+				"success": false,
+				"action_id": action_id,
+				"character_id": ctx.character_id,
+				"target_npc_id": action.target_npc_id,
+				"target_province_id": action.target_province_id,
+				"ic_day": ctx.ic_day,
+				"season": ctx.season,
+				"reason": mil_check.get("reason", "hierarchy_invalid"),
+				"effects": {},
+			}
 
 	if action_id in NO_ROLL_ACTIONS:
 		return _execute_no_roll(action, character, ctx)
@@ -113,9 +137,22 @@ static func execute(
 
 static func _execute_no_roll(
 	action: NPCDataStructures.ScoredAction,
-	_character: L5RCharacterData,
+	character: L5RCharacterData,
 	ctx: NPCDataStructures.ContextSnapshot,
 ) -> Dictionary:
+	var effects: Dictionary = _get_no_roll_effects(action.action_id)
+
+	if action.action_id == "BEGIN_TRAVEL":
+		var destination: String = _resolve_travel_destination(action)
+		var travel_result: Dictionary = TravelSystem.begin_travel(character, destination)
+		effects["travel"] = travel_result
+		effects["effect"] = "travel_started" if travel_result.get("started", false) else "travel_failed"
+	elif action.action_id == "CHANGE_DESTINATION":
+		var destination: String = _resolve_travel_destination(action)
+		var travel_result: Dictionary = TravelSystem.change_destination(character, destination)
+		effects["travel"] = travel_result
+		effects["effect"] = "destination_changed" if travel_result.get("changed", false) else "change_failed"
+
 	return {
 		"success": true,
 		"action_id": action.action_id,
@@ -128,7 +165,7 @@ static func _execute_no_roll(
 		"roll_total": 0,
 		"tn": 0,
 		"margin": 0,
-		"effects": _get_no_roll_effects(action.action_id),
+		"effects": effects,
 	}
 
 
@@ -147,6 +184,8 @@ static func _get_tn_for_action(
 		return MILITARY_BASE_TN
 	if action_id in ADMINISTRATIVE_ACTIONS:
 		return ADMIN_BASE_TN
+	if action_id in INTELLIGENCE_ACTIONS:
+		return SOCIAL_BASE_TN
 	return SOCIAL_BASE_TN
 
 
@@ -191,6 +230,8 @@ static func _apply_effects(
 			effects = _compute_military_effects(action_id)
 		elif action_id in ADMINISTRATIVE_ACTIONS:
 			effects = _compute_admin_effects(action_id)
+		elif action_id in INTELLIGENCE_ACTIONS:
+			effects = _compute_intelligence_effects(action_id, result.get("margin", 0))
 		else:
 			effects = _compute_self_effects(action_id)
 	else:
@@ -309,6 +350,26 @@ static func _compute_admin_effects(action_id: String) -> Dictionary:
 			return {"effect": "tribute_demanded"}
 		"REQUEST_ALLIED_AID":
 			return {"effect": "aid_requested"}
+		"FOUND_VILLAGE":
+			return {"effect": "village_founded"}
+		"BUILD_FORTIFICATION":
+			return {"effect": "fortification_ordered"}
+		"BUILD_SHRINE":
+			return {"effect": "shrine_built"}
+		"FOUND_TEMPLE", "FOUND_MONASTERY":
+			return {"effect": "religious_site_founded"}
+		"COMMISSION_SHIP":
+			return {"effect": "ship_commissioned"}
+		"ARRANGE_MARRIAGE":
+			return {"effect": "marriage_proposed"}
+		"APPOINT_TO_POSITION":
+			return {"effect": "position_filled"}
+		"PURIFY_TAINTED_GROUND":
+			return {"effect": "taint_purified"}
+		"FORTIFY_WALL_SECTION":
+			return {"effect": "wall_fortified"}
+		"SEAL_WALL_BREACH":
+			return {"effect": "breach_sealed"}
 	return {"effect": "administrative_action"}
 
 
@@ -353,3 +414,76 @@ static func _get_no_roll_effects(action_id: String) -> Dictionary:
 		"BEGIN_TRAVEL", "CHANGE_DESTINATION":
 			return {"effect": "travel_started"}
 	return {"effect": "completed"}
+
+
+# -- Military Hierarchy Validation (s57.21) ------------------------------------
+
+static func _validate_military_order(
+	action_id: String,
+	ctx: NPCDataStructures.ContextSnapshot,
+	military_data: Dictionary,
+) -> Dictionary:
+	if ctx.commanded_unit_id < 0:
+		return {"valid": false, "reason": "no_commanded_unit"}
+
+	if military_data.is_empty():
+		return {"valid": true}
+
+	var companies: Dictionary = military_data.get("companies", {})
+	var legions: Dictionary = military_data.get("legions", {})
+
+	if ctx.military_rank == Enums.MilitaryRank.CHUI:
+		var company: MilitaryUnitData.CompanyData = MilitaryHierarchy.get_company(
+			companies, ctx.commanded_unit_id
+		)
+		if company == null:
+			return {"valid": false, "reason": "unit_not_found"}
+		if company.deployment_status == Enums.DeploymentStatus.GARRISONED:
+			if action_id in ["ORDER_BATTLE", "CONDUCT_RAID", "RAID_HARVEST", "CONDUCT_SORTIE"]:
+				return {"valid": false, "reason": "unit_garrisoned"}
+
+	if ctx.military_rank >= Enums.MilitaryRank.TAISA:
+		if not legions.is_empty():
+			var legion: MilitaryUnitData.LegionData = legions.get(ctx.commanded_unit_id)
+			if legion != null and not MilitaryHierarchy.can_legion_coordinate(legion):
+				if action_id in ["ORDER_BATTLE", "CONDUCT_RAID"]:
+					return {"valid": false, "reason": "legion_no_coordinator"}
+
+	if ctx.military_rank >= Enums.MilitaryRank.SHIREIKAN:
+		var sections: Dictionary = military_data.get("sections", {})
+		if not sections.is_empty():
+			var section: MilitaryUnitData.SectionData = sections.get(ctx.commanded_unit_id)
+			if section != null and not MilitaryHierarchy.can_section_initiate_campaign(section):
+				if action_id in ["ORDER_BATTLE", "CONDUCT_RAID"]:
+					return {"valid": false, "reason": "section_no_commander"}
+
+	return {"valid": true}
+
+
+# -- Intelligence Effects (s57.15) --------------------------------------------
+
+static func _compute_intelligence_effects(action_id: String, margin: int) -> Dictionary:
+	match action_id:
+		"EXAMINE_CRIME_SCENE":
+			var raises: int = margin / 5
+			var evidence: int = InvestigationSystem.EVIDENCE_BASE_WEIGHT \
+				+ (raises * InvestigationSystem.EVIDENCE_PER_RAISE)
+			return {
+				"effect": "scene_examined",
+				"info_gained": true,
+				"evidence_gained": evidence,
+				"raises": raises,
+			}
+	return {"effect": "intelligence_action"}
+
+
+# -- Travel Destination Resolution (s55.29) -----------------------------------
+
+static func _resolve_travel_destination(
+	action: NPCDataStructures.ScoredAction,
+) -> String:
+	if action.target_settlement_id >= 0:
+		return str(action.target_settlement_id)
+	if action.target_province_id >= 0:
+		return str(action.target_province_id)
+	return ""

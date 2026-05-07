@@ -28,7 +28,7 @@ class ScoredAction:
 	var target_province_id: int = -1
 	var ap_cost: int = 1
 
-	# Eight scoring components per s55.4 Phase 5
+	# Eight base scoring components per s55.4 Phase 5
 	var objective_alignment: float = 0.0
 	var disposition_modifier: float = 0.0
 	var personality_lean: float = 0.0
@@ -37,6 +37,14 @@ class ScoredAction:
 	var standing_influence: float = 0.0
 	var topic_position_modifier: float = 0.0
 	var resource_modifier: float = 0.0
+
+	# Additional scoring modifiers from wired subsystems
+	var approach_modifier: float = 0.0
+	var commitment_at_risk: float = 0.0
+	var travel_redirect_penalty: float = 0.0
+	var confidence_penalty: float = 0.0
+	var stale_intel_bonus: float = 0.0
+	var festival_modifier: float = 0.0
 
 	func get_total_score() -> float:
 		return (
@@ -48,6 +56,12 @@ class ScoredAction:
 			+ standing_influence
 			+ topic_position_modifier
 			+ resource_modifier
+			+ approach_modifier
+			+ commitment_at_risk
+			+ travel_redirect_penalty
+			+ confidence_penalty
+			+ stale_intel_bonus
+			+ festival_modifier
 		)
 
 
@@ -65,6 +79,16 @@ class ContextSnapshot:
 	var context_flag: Enums.ContextFlag = Enums.ContextFlag.AT_OWN_HOLDINGS
 	var season: int = 0
 	var ic_day: int = 0
+	var zone_subtype: Enums.ZoneSubtype = Enums.ZoneSubtype.OHIROMA
+	var zone_flags: Dictionary = {}
+	var sublocation: Enums.Sublocation = Enums.Sublocation.PUBLIC
+
+	# Lord & court (s55.34)
+	var lord_id: int = -1
+	var active_court_at_location: Dictionary = {}
+	var upcoming_courts: Array[Dictionary] = []
+	var held_leverage: Array[Dictionary] = []
+	var known_npc_locations: Dictionary = {}
 
 	# Stats
 	var skill_ranks: Dictionary = {}
@@ -76,16 +100,46 @@ class ContextSnapshot:
 	# Social knowledge
 	var characters_present: Array[int] = []
 	var dispositions: Dictionary = {}
+	var disposition_values: Dictionary = {}
 	var known_topics: Array[int] = []
 	var known_positions: Dictionary = {}
 	var known_objectives: Dictionary = {}
 	var known_contacts: Array[int] = []
 	var contact_clans: Dictionary = {}
+	var known_contacts_by_clan: Dictionary = {}
 	var met_characters: Array[int] = []
+	var knowledge_pool: Array[KnowledgeEntry] = []
 
 	# Lord-tier fields
 	var resource_stockpiles: Dictionary = {}
 	var province_statuses: Array = []
+
+	# Military
+	var military_rank: Enums.MilitaryRank = Enums.MilitaryRank.NONE
+	var commanded_unit_id: int = -1
+	var assigned_company_id: int = -1
+
+	# Wall management (s55.23)
+	var wall_statuses: Array = []
+
+	# Military intelligence (s55.23)
+	var known_clan_strengths: Dictionary = {}
+	var unit_training_counts: Dictionary = {}
+	var available_levy_pu: float = 0.0
+	var can_sustain_iron_upkeep: bool = true
+
+	# Conflict state (s55.23)
+	var active_wars: Array = []
+	var escalating_conflicts: Array = []
+
+	# Shadowlands intelligence (s55.23)
+	var taint_topic_province_ids: Array[int] = []
+
+	# Festival state (s11.5)
+	var is_ceasefire_day: bool = false
+	var is_labor_halt_day: bool = false
+	var is_taian: bool = false
+	var is_inauspicious_for_social: bool = false
 
 	# State
 	var pending_events: Array = []
@@ -104,8 +158,23 @@ class ProvinceStatus:
 	var active_crisis_id: int = -1
 	var active_insurgency_id: int = -1
 	var rice_stockpile: float = 0.0
-	var last_report_ic_day: int = 0
+	var last_report_ic_day: int = -1
 	var confidence: int = 0  # 0=stale, 1=recent, 2=fresh
+	var is_wall_province: bool = false
+	var crisis_type: String = ""
+
+
+class WallStatus:
+	var province_id: int = -1
+	var si: int = 10
+	var scout_deployed: bool = false
+	var scout_report_age: int = 0
+	var max_taint_rank: int = 0
+	var tea_stockpile_seasons: float = 2.0
+	var jade_stockpile_critical: bool = false
+	var scout_report_elevated_activity: bool = false
+	var garrison_above_minimum: bool = true
+	var minimum_garrison: int = 0
 
 
 # -- Competence Modifier Table (s55.5) -----------------------------------------

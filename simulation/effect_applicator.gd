@@ -12,6 +12,7 @@ static func apply(
 	characters: Dictionary,
 	provinces: Dictionary,
 	action_log: Array[Dictionary],
+	settlements: Array[SettlementData] = [],
 ) -> Dictionary:
 	var applied: Dictionary = {
 		"disposition_changes": [],
@@ -38,7 +39,7 @@ static func apply(
 	_apply_disposition(effects, actor, target_id, applied)
 	_apply_honor(effects, actor, applied)
 	_apply_glory(effects, actor, applied)
-	_apply_province_effects(effects, result, provinces, applied)
+	_apply_province_effects(effects, result, provinces, applied, settlements)
 	_apply_info_events(effects, result, applied)
 	result["observable_effect"] = _detect_observable_effect(result, effects, applied)
 	_log_action(result, action_log)
@@ -117,6 +118,7 @@ static func _apply_province_effects(
 	result: Dictionary,
 	provinces: Dictionary,
 	applied: Dictionary,
+	settlements: Array[SettlementData] = [],
 ) -> void:
 	var effect_type: String = effects.get("effect", "")
 	var province_id: int = result.get("target_province_id", -1)
@@ -136,11 +138,12 @@ static func _apply_province_effects(
 				"new_stability": province.stability,
 			})
 		"garrison_assigned":
-			province.garrison_pu += 1
+			var target_settlement: SettlementData = _find_settlement_in_province(province_id, settlements)
+			if target_settlement != null:
+				target_settlement.garrison_pu += 1
 			applied["province_updates"].append({
 				"province_id": province_id,
 				"effect": "garrison_increase",
-				"new_garrison": province.garrison_pu,
 			})
 		"intelligence_gathered":
 			province.last_report_ic_day = result.get("ic_day", 0)
@@ -149,6 +152,16 @@ static func _apply_province_effects(
 				"effect": "report_refreshed",
 				"ic_day": province.last_report_ic_day,
 			})
+
+
+static func _find_settlement_in_province(
+	province_id: int,
+	settlements: Array[SettlementData],
+) -> SettlementData:
+	for s: SettlementData in settlements:
+		if s.province_id == province_id:
+			return s
+	return null
 
 
 # -- Information Events --------------------------------------------------------
@@ -241,9 +254,10 @@ static func apply_day_results(
 	characters: Dictionary,
 	provinces: Dictionary,
 	action_log: Array[Dictionary],
+	settlements: Array[SettlementData] = [],
 ) -> Array[Dictionary]:
 	var all_applied: Array[Dictionary] = []
 	for result: Dictionary in results:
-		var applied: Dictionary = apply(result, characters, provinces, action_log)
+		var applied: Dictionary = apply(result, characters, provinces, action_log, settlements)
 		all_applied.append(applied)
 	return all_applied

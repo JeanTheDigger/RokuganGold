@@ -106,11 +106,19 @@ func test_maintain_balance_at_court_all_friends_moves_topic() -> void:
 	assert_eq(need.need_type, "MOVE_TOPIC_POSITION")
 
 
-func test_maintain_balance_traveling_attends_court() -> void:
+func test_maintain_balance_traveling_with_court_attends() -> void:
 	_ctx.context_flag = Enums.ContextFlag.TRAVELING
+	_ctx.active_court_at_location = {"settlement_id": 10, "prestige": 3}
 	var obj: Dictionary = {"need_type": "MAINTAIN_BALANCE"}
 	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
 	assert_eq(need.need_type, "ATTEND_COURT")
+
+
+func test_maintain_balance_traveling_no_court_rests() -> void:
+	_ctx.context_flag = Enums.ContextFlag.TRAVELING
+	var obj: Dictionary = {"need_type": "MAINTAIN_BALANCE"}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
+	assert_eq(need.need_type, "REST")
 
 
 # -- Political: Advance Family -------------------------------------------------
@@ -489,3 +497,574 @@ func test_passthrough_preserves_source() -> void:
 	var obj: Dictionary = {"need_type": "REST", "source": "standing"}
 	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
 	assert_eq(need.source, "standing")
+
+
+# -- Military routing covers all 7 objectives ---------------------------------
+
+func test_military_routing() -> void:
+	for nt: String in ObjectiveDecomposer.MILITARY_OBJECTIVES:
+		var obj: Dictionary = {"need_type": nt}
+		var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
+		assert_not_null(need, "Military objective %s should produce a need" % nt)
+
+
+# =============================================================================
+# Strengthen Wall (s55.23.1)
+# =============================================================================
+
+
+func _make_wall_status(
+	pid: int,
+	si: int = 10,
+	scout: bool = true,
+	scout_age: int = 0,
+) -> NPCDataStructures.WallStatus:
+	var ws := NPCDataStructures.WallStatus.new()
+	ws.province_id = pid
+	ws.si = si
+	ws.scout_deployed = scout
+	ws.scout_report_age = scout_age
+	return ws
+
+
+func _make_wall_province_status(pid: int, confidence: int = 2) -> NPCDataStructures.ProvinceStatus:
+	var ps := NPCDataStructures.ProvinceStatus.new()
+	ps.province_id = pid
+	ps.stability = 80.0
+	ps.garrison_pu = 5
+	ps.confidence = confidence
+	ps.is_wall_province = true
+	return ps
+
+
+func test_strengthen_wall_non_lord_at_court() -> void:
+	_ctx.context_flag = Enums.ContextFlag.AT_COURT
+	var obj: Dictionary = {"need_type": "STRENGTHEN_WALL"}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
+	assert_eq(need.need_type, "MOVE_TOPIC_POSITION")
+	assert_eq(need.priority, 2)
+
+
+func test_strengthen_wall_non_lord_at_holdings_with_wall_province() -> void:
+	var ps: NPCDataStructures.ProvinceStatus = _make_wall_province_status(5)
+	_ctx.province_statuses = [ps]
+	var obj: Dictionary = {"need_type": "STRENGTHEN_WALL"}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
+	assert_eq(need.need_type, "PATROL_PROVINCE")
+	assert_eq(need.target_province_id, 5)
+
+
+func test_strengthen_wall_non_lord_no_wall_province() -> void:
+	var obj: Dictionary = {"need_type": "STRENGTHEN_WALL"}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
+	assert_eq(need.need_type, "TRAIN_SKILL")
+
+
+func test_strengthen_wall_lord_stale_intel() -> void:
+	_ctx.is_lord = true
+	var ws: NPCDataStructures.WallStatus = _make_wall_status(5)
+	var ps: NPCDataStructures.ProvinceStatus = _make_wall_province_status(5, 0)
+	_ctx.wall_statuses = [ws]
+	_ctx.province_statuses = [ps]
+	var obj: Dictionary = {"need_type": "STRENGTHEN_WALL"}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
+	assert_eq(need.need_type, "INVESTIGATE_THREAT")
+	assert_eq(need.target_province_id, 5)
+	assert_eq(need.priority, 3)
+
+
+func test_strengthen_wall_lord_undergarrisoned() -> void:
+	_ctx.is_lord = true
+	var ws: NPCDataStructures.WallStatus = _make_wall_status(5)
+	ws.minimum_garrison = 5
+	var ps: NPCDataStructures.ProvinceStatus = _make_wall_province_status(5)
+	ps.garrison_pu = 2
+	_ctx.wall_statuses = [ws]
+	_ctx.province_statuses = [ps]
+	var obj: Dictionary = {"need_type": "STRENGTHEN_WALL"}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
+	assert_eq(need.need_type, "DEFEND_PROVINCE")
+	assert_eq(need.target_province_id, 5)
+
+
+func test_strengthen_wall_lord_scouts_missing() -> void:
+	_ctx.is_lord = true
+	var ws: NPCDataStructures.WallStatus = _make_wall_status(5, 10, false)
+	var ps: NPCDataStructures.ProvinceStatus = _make_wall_province_status(5)
+	_ctx.wall_statuses = [ws]
+	_ctx.province_statuses = [ps]
+	var obj: Dictionary = {"need_type": "STRENGTHEN_WALL"}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
+	assert_eq(need.need_type, "DEPLOY_SCOUTS")
+	assert_eq(need.priority, 3)
+
+
+func test_strengthen_wall_lord_scout_report_stale() -> void:
+	_ctx.is_lord = true
+	var ws: NPCDataStructures.WallStatus = _make_wall_status(5, 10, true, 2)
+	var ps: NPCDataStructures.ProvinceStatus = _make_wall_province_status(5)
+	_ctx.wall_statuses = [ws]
+	_ctx.province_statuses = [ps]
+	var obj: Dictionary = {"need_type": "STRENGTHEN_WALL"}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
+	assert_eq(need.need_type, "DEPLOY_SCOUTS")
+
+
+func test_strengthen_wall_lord_low_si() -> void:
+	_ctx.is_lord = true
+	var ws: NPCDataStructures.WallStatus = _make_wall_status(5, 4)
+	var ps: NPCDataStructures.ProvinceStatus = _make_wall_province_status(5)
+	_ctx.wall_statuses = [ws]
+	_ctx.province_statuses = [ps]
+	var obj: Dictionary = {"need_type": "STRENGTHEN_WALL"}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
+	assert_eq(need.need_type, "MAINTAIN_FORTIFICATION")
+	assert_eq(need.priority, 3)
+
+
+func test_strengthen_wall_lord_taint_rank_high() -> void:
+	_ctx.is_lord = true
+	var ws: NPCDataStructures.WallStatus = _make_wall_status(5)
+	ws.max_taint_rank = 3
+	var ps: NPCDataStructures.ProvinceStatus = _make_wall_province_status(5)
+	_ctx.wall_statuses = [ws]
+	_ctx.province_statuses = [ps]
+	var obj: Dictionary = {"need_type": "STRENGTHEN_WALL"}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
+	assert_eq(need.need_type, "MANAGE_TAINT")
+
+
+func test_strengthen_wall_lord_tea_low() -> void:
+	_ctx.is_lord = true
+	var ws: NPCDataStructures.WallStatus = _make_wall_status(5)
+	ws.tea_stockpile_seasons = 0.5
+	var ps: NPCDataStructures.ProvinceStatus = _make_wall_province_status(5)
+	_ctx.wall_statuses = [ws]
+	_ctx.province_statuses = [ps]
+	var obj: Dictionary = {"need_type": "STRENGTHEN_WALL"}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
+	assert_eq(need.need_type, "MANAGE_TAINT")
+
+
+func test_strengthen_wall_lord_jade_critical() -> void:
+	_ctx.is_lord = true
+	var ws: NPCDataStructures.WallStatus = _make_wall_status(5)
+	ws.jade_stockpile_critical = true
+	var ps: NPCDataStructures.ProvinceStatus = _make_wall_province_status(5)
+	_ctx.wall_statuses = [ws]
+	_ctx.province_statuses = [ps]
+	var obj: Dictionary = {"need_type": "STRENGTHEN_WALL"}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
+	assert_eq(need.need_type, "ACQUIRE_RESOURCE")
+	assert_eq(need.target_resource, "jade")
+
+
+func test_strengthen_wall_lord_sortie_conditions_met() -> void:
+	_ctx.is_lord = true
+	var ws: NPCDataStructures.WallStatus = _make_wall_status(5)
+	ws.scout_report_elevated_activity = true
+	ws.scout_report_age = 0
+	ws.garrison_above_minimum = true
+	ws.si = 8
+	ws.jade_stockpile_critical = false
+	var ps: NPCDataStructures.ProvinceStatus = _make_wall_province_status(5)
+	_ctx.wall_statuses = [ws]
+	_ctx.province_statuses = [ps]
+	var obj: Dictionary = {"need_type": "STRENGTHEN_WALL"}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
+	assert_eq(need.need_type, "ORDER_SHADOWLANDS_SORTIE")
+	assert_eq(need.priority, 2)
+
+
+func test_strengthen_wall_lord_sortie_blocked_jade() -> void:
+	_ctx.is_lord = true
+	var ws: NPCDataStructures.WallStatus = _make_wall_status(5)
+	ws.scout_report_elevated_activity = true
+	ws.scout_report_age = 0
+	ws.garrison_above_minimum = true
+	ws.jade_stockpile_critical = true
+	var ps: NPCDataStructures.ProvinceStatus = _make_wall_province_status(5)
+	_ctx.wall_statuses = [ws]
+	_ctx.province_statuses = [ps]
+	_ctx.unit_training_counts = {0: 1}
+	var obj: Dictionary = {"need_type": "STRENGTHEN_WALL"}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
+	assert_ne(need.need_type, "ORDER_SHADOWLANDS_SORTIE")
+
+
+func test_strengthen_wall_lord_train_troops() -> void:
+	_ctx.is_lord = true
+	_ctx.wall_statuses = [_make_wall_status(5)]
+	_ctx.province_statuses = [_make_wall_province_status(5)]
+	_ctx.unit_training_counts = {1: 2}
+	_ctx.resource_stockpiles = {"arms": 20.0, "iron": 10.0}
+	var obj: Dictionary = {"need_type": "STRENGTHEN_WALL"}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
+	assert_eq(need.need_type, "TRAIN_TROOPS")
+
+
+func test_strengthen_wall_lord_low_arms() -> void:
+	_ctx.is_lord = true
+	_ctx.wall_statuses = [_make_wall_status(5)]
+	_ctx.province_statuses = [_make_wall_province_status(5)]
+	_ctx.resource_stockpiles = {"arms": 5.0, "iron": 10.0}
+	var obj: Dictionary = {"need_type": "STRENGTHEN_WALL"}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
+	assert_eq(need.need_type, "ACQUIRE_RESOURCE")
+	assert_eq(need.target_resource, "arms")
+
+
+func test_strengthen_wall_lord_low_iron() -> void:
+	_ctx.is_lord = true
+	_ctx.wall_statuses = [_make_wall_status(5)]
+	_ctx.province_statuses = [_make_wall_province_status(5)]
+	_ctx.resource_stockpiles = {"arms": 20.0, "iron": 3.0}
+	var obj: Dictionary = {"need_type": "STRENGTHEN_WALL"}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
+	assert_eq(need.need_type, "ACQUIRE_RESOURCE")
+	assert_eq(need.target_resource, "iron")
+
+
+func test_strengthen_wall_lord_all_clear_levy() -> void:
+	_ctx.is_lord = true
+	_ctx.wall_statuses = [_make_wall_status(5)]
+	_ctx.province_statuses = [_make_wall_province_status(5)]
+	_ctx.resource_stockpiles = {"arms": 20.0, "iron": 10.0}
+	var obj: Dictionary = {"need_type": "STRENGTHEN_WALL"}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
+	assert_eq(need.need_type, "LEVY_TROOPS")
+	assert_eq(need.priority, 1)
+
+
+# =============================================================================
+# Military Dominance (s55.23.2)
+# =============================================================================
+
+
+func test_military_dominance_no_intel_lord() -> void:
+	_ctx.is_lord = true
+	var obj: Dictionary = {"need_type": "MILITARY_DOMINANCE"}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
+	assert_eq(need.need_type, "SEND_LETTER")
+
+
+func test_military_dominance_no_intel_non_lord() -> void:
+	var obj: Dictionary = {"need_type": "MILITARY_DOMINANCE"}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
+	assert_eq(need.need_type, "GATHER_INTELLIGENCE")
+
+
+func test_military_dominance_clearly_dominant() -> void:
+	_ctx.is_lord = true
+	_ctx.clan = "lion"
+	_ctx.known_clan_strengths = {"lion": 30.0, "crane": 15.0}
+	var obj: Dictionary = {"need_type": "MILITARY_DOMINANCE"}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
+	assert_eq(need.need_type, "ACQUIRE_RESOURCE")
+	assert_eq(need.target_resource, "arms")
+	assert_eq(need.priority, 1)
+
+
+func test_military_dominance_dominant_with_raw_units() -> void:
+	_ctx.is_lord = true
+	_ctx.clan = "lion"
+	_ctx.known_clan_strengths = {"lion": 30.0, "crane": 15.0}
+	_ctx.unit_training_counts = {0: 2, 2: 3}
+	var obj: Dictionary = {"need_type": "MILITARY_DOMINANCE"}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
+	assert_eq(need.need_type, "TRAIN_TROOPS")
+
+
+func test_military_dominance_ahead_but_unsafe_levy() -> void:
+	_ctx.is_lord = true
+	_ctx.clan = "lion"
+	_ctx.known_clan_strengths = {"lion": 30.0, "crane": 25.0}
+	_ctx.available_levy_pu = 5.0
+	var obj: Dictionary = {"need_type": "MILITARY_DOMINANCE"}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
+	assert_eq(need.need_type, "LEVY_TROOPS")
+	assert_eq(need.priority, 2)
+
+
+func test_military_dominance_ahead_no_levy() -> void:
+	_ctx.is_lord = true
+	_ctx.clan = "lion"
+	_ctx.known_clan_strengths = {"lion": 30.0, "crane": 25.0}
+	_ctx.available_levy_pu = 0.0
+	var obj: Dictionary = {"need_type": "MILITARY_DOMINANCE"}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
+	assert_eq(need.need_type, "TRAIN_TROOPS")
+
+
+func test_military_dominance_behind_lord() -> void:
+	_ctx.is_lord = true
+	_ctx.clan = "lion"
+	_ctx.known_clan_strengths = {"lion": 20.0, "crane": 25.0}
+	var obj: Dictionary = {"need_type": "MILITARY_DOMINANCE"}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
+	assert_eq(need.need_type, "LEVY_TROOPS")
+	assert_eq(need.priority, 3)
+
+
+func test_military_dominance_behind_non_lord() -> void:
+	_ctx.clan = "lion"
+	_ctx.known_clan_strengths = {"lion": 20.0, "crane": 25.0}
+	var obj: Dictionary = {"need_type": "MILITARY_DOMINANCE"}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
+	assert_eq(need.need_type, "SEND_LETTER")
+	assert_eq(need.priority, 2)
+
+
+func test_military_dominance_non_lord_ahead() -> void:
+	_ctx.clan = "lion"
+	_ctx.known_clan_strengths = {"lion": 30.0, "crane": 25.0}
+	var obj: Dictionary = {"need_type": "MILITARY_DOMINANCE"}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
+	assert_eq(need.need_type, "TRAIN_SKILL")
+
+
+# =============================================================================
+# Eliminate Shadowlands (s55.23.3)
+# =============================================================================
+
+
+func test_eliminate_shadowlands_active_crisis() -> void:
+	_ctx.is_lord = true
+	var ps := NPCDataStructures.ProvinceStatus.new()
+	ps.province_id = 7
+	ps.active_crisis_id = 42
+	ps.crisis_type = "shadowlands_incursion"
+	_ctx.province_statuses = [ps]
+	var obj: Dictionary = {"need_type": "ELIMINATE_SHADOWLANDS"}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
+	assert_eq(need.need_type, "DEFEND_PROVINCE")
+	assert_eq(need.target_province_id, 7)
+	assert_eq(need.priority, 3)
+
+
+func test_eliminate_shadowlands_non_shadowlands_crisis_skipped() -> void:
+	_ctx.is_lord = true
+	var ps := NPCDataStructures.ProvinceStatus.new()
+	ps.province_id = 7
+	ps.active_crisis_id = 42
+	ps.crisis_type = "border_conflict"
+	_ctx.province_statuses = [ps]
+	_ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
+	var obj: Dictionary = {"need_type": "ELIMINATE_SHADOWLANDS"}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
+	assert_ne(need.need_type, "DEFEND_PROVINCE")
+
+
+func test_eliminate_shadowlands_insurgency() -> void:
+	var ps := NPCDataStructures.ProvinceStatus.new()
+	ps.province_id = 3
+	ps.active_insurgency_id = 10
+	_ctx.province_statuses = [ps]
+	var obj: Dictionary = {"need_type": "ELIMINATE_SHADOWLANDS"}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
+	assert_eq(need.need_type, "INVESTIGATE_THREAT")
+	assert_eq(need.target_province_id, 3)
+	assert_eq(need.priority, 3)
+
+
+func test_eliminate_shadowlands_taint_topic() -> void:
+	_ctx.taint_topic_province_ids = [9]
+	var obj: Dictionary = {"need_type": "ELIMINATE_SHADOWLANDS"}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
+	assert_eq(need.need_type, "INVESTIGATE_THREAT")
+	assert_eq(need.target_province_id, 9)
+	assert_eq(need.priority, 2)
+
+
+func test_eliminate_shadowlands_proactive_at_court() -> void:
+	_ctx.context_flag = Enums.ContextFlag.AT_COURT
+	var obj: Dictionary = {"need_type": "ELIMINATE_SHADOWLANDS"}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
+	assert_eq(need.need_type, "MOVE_TOPIC_POSITION")
+
+
+func test_eliminate_shadowlands_shugenja_at_temple() -> void:
+	_ctx.context_flag = Enums.ContextFlag.AT_TEMPLE
+	_ctx.school_type = Enums.SchoolType.SHUGENJA
+	var obj: Dictionary = {"need_type": "ELIMINATE_SHADOWLANDS"}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
+	assert_eq(need.need_type, "INVESTIGATE_THREAT")
+
+
+func test_eliminate_shadowlands_bushi_at_temple() -> void:
+	_ctx.context_flag = Enums.ContextFlag.AT_TEMPLE
+	_ctx.school_type = Enums.SchoolType.BUSHI
+	var obj: Dictionary = {"need_type": "ELIMINATE_SHADOWLANDS"}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
+	assert_eq(need.need_type, "PERFORM_RITUAL")
+
+
+func test_eliminate_shadowlands_lord_at_holdings() -> void:
+	_ctx.is_lord = true
+	_ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
+	var obj: Dictionary = {"need_type": "ELIMINATE_SHADOWLANDS"}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
+	assert_eq(need.need_type, "PATROL_PROVINCE")
+
+
+func test_eliminate_shadowlands_non_lord_at_holdings() -> void:
+	_ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
+	var obj: Dictionary = {"need_type": "ELIMINATE_SHADOWLANDS"}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
+	assert_eq(need.need_type, "TRAIN_SKILL")
+
+
+# =============================================================================
+# Maintain Peace (s55.23.4)
+# =============================================================================
+
+
+func test_maintain_peace_active_war() -> void:
+	_ctx.active_wars = [{"enemy_clan_id": "lion"}]
+	var obj: Dictionary = {"need_type": "MAINTAIN_PEACE"}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
+	assert_eq(need.need_type, "SEEK_PEACE")
+	assert_eq(need.target_clan_id, "lion")
+	assert_eq(need.priority, 3)
+
+
+func test_maintain_peace_rising_tensions_at_court() -> void:
+	_ctx.context_flag = Enums.ContextFlag.AT_COURT
+	_ctx.escalating_conflicts = [{"topic_id": 42}]
+	var obj: Dictionary = {"need_type": "MAINTAIN_PEACE"}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
+	assert_eq(need.need_type, "MOVE_TOPIC_POSITION")
+	assert_eq(need.target_topic_id, 42)
+	assert_eq(need.priority, 3)
+
+
+func test_maintain_peace_rising_tensions_not_at_court_with_lord() -> void:
+	_ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
+	_ctx.lord_id = 99
+	_ctx.escalating_conflicts = [{"topic_id": 42}]
+	_ctx.action_log = []
+	var obj: Dictionary = {"need_type": "MAINTAIN_PEACE"}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
+	assert_eq(need.need_type, "SEND_LETTER")
+	assert_eq(need.target_npc_id, 99)
+
+
+func test_maintain_peace_rising_tensions_not_at_court_no_lord() -> void:
+	_ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
+	_ctx.escalating_conflicts = [{"topic_id": 42}]
+	var obj: Dictionary = {"need_type": "MAINTAIN_PEACE"}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
+	assert_eq(need.need_type, "SEND_LETTER")
+
+
+func test_maintain_peace_preventive_at_court() -> void:
+	_ctx.context_flag = Enums.ContextFlag.AT_COURT
+	var obj: Dictionary = {"need_type": "MAINTAIN_PEACE"}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
+	assert_eq(need.need_type, "RAISE_DISPOSITION")
+	assert_eq(need.target_npc_id, 30)
+
+
+func test_maintain_peace_preventive_at_court_all_friendly() -> void:
+	_ctx.context_flag = Enums.ContextFlag.AT_COURT
+	_ctx.characters_present = []
+	var obj: Dictionary = {"need_type": "MAINTAIN_PEACE"}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
+	assert_eq(need.need_type, "IDENTIFY_CONTACT")
+
+
+func test_maintain_peace_preventive_at_holdings() -> void:
+	var obj: Dictionary = {"need_type": "MAINTAIN_PEACE"}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
+	assert_eq(need.need_type, "SEND_LETTER")
+
+
+func test_maintain_peace_preventive_traveling_with_court() -> void:
+	_ctx.context_flag = Enums.ContextFlag.TRAVELING
+	_ctx.active_court_at_location = {"settlement_id": 10}
+	var obj: Dictionary = {"need_type": "MAINTAIN_PEACE"}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
+	assert_eq(need.need_type, "ATTEND_COURT")
+
+
+func test_maintain_peace_preventive_traveling_no_court() -> void:
+	_ctx.context_flag = Enums.ContextFlag.TRAVELING
+	var obj: Dictionary = {"need_type": "MAINTAIN_PEACE"}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
+	assert_eq(need.need_type, "REST")
+
+
+# =============================================================================
+# Build Strongest Force (s55.23.5)
+# =============================================================================
+
+
+func test_build_strongest_force_non_lord() -> void:
+	var obj: Dictionary = {"need_type": "BUILD_STRONGEST_FORCE"}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
+	assert_eq(need.need_type, "TRAIN_SKILL")
+	assert_eq(need.priority, 1)
+
+
+func test_build_strongest_force_raw_units() -> void:
+	_ctx.is_lord = true
+	_ctx.unit_training_counts = {0: 2, 2: 1}
+	var obj: Dictionary = {"need_type": "BUILD_STRONGEST_FORCE"}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
+	assert_eq(need.need_type, "TRAIN_TROOPS")
+	assert_eq(need.priority, 3)
+
+
+func test_build_strongest_force_drilled_units() -> void:
+	_ctx.is_lord = true
+	_ctx.unit_training_counts = {1: 3}
+	var obj: Dictionary = {"need_type": "BUILD_STRONGEST_FORCE"}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
+	assert_eq(need.need_type, "TRAIN_TROOPS")
+	assert_eq(need.priority, 2)
+
+
+func test_build_strongest_force_iron_unsustainable() -> void:
+	_ctx.is_lord = true
+	_ctx.can_sustain_iron_upkeep = false
+	var obj: Dictionary = {"need_type": "BUILD_STRONGEST_FORCE"}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
+	assert_eq(need.need_type, "ACQUIRE_RESOURCE")
+	assert_eq(need.target_resource, "iron")
+
+
+func test_build_strongest_force_levy_when_sustainable() -> void:
+	_ctx.is_lord = true
+	_ctx.available_levy_pu = 3.0
+	_ctx.resource_stockpiles = {"rice": 100.0, "military_upkeep": 5.0}
+	var obj: Dictionary = {"need_type": "BUILD_STRONGEST_FORCE"}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
+	assert_eq(need.need_type, "LEVY_TROOPS")
+	assert_eq(need.priority, 1)
+
+
+func test_build_strongest_force_levy_blocked_low_rice() -> void:
+	_ctx.is_lord = true
+	_ctx.available_levy_pu = 3.0
+	_ctx.resource_stockpiles = {"rice": 5.0, "military_upkeep": 10.0}
+	var obj: Dictionary = {"need_type": "BUILD_STRONGEST_FORCE"}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
+	assert_ne(need.need_type, "LEVY_TROOPS")
+
+
+func test_build_strongest_force_trained_to_veteran() -> void:
+	_ctx.is_lord = true
+	_ctx.unit_training_counts = {2: 2}
+	var obj: Dictionary = {"need_type": "BUILD_STRONGEST_FORCE"}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
+	assert_eq(need.need_type, "TRAIN_TROOPS")
+	assert_eq(need.priority, 1)
+
+
+func test_build_strongest_force_all_veteran() -> void:
+	_ctx.is_lord = true
+	_ctx.unit_training_counts = {3: 5}
+	var obj: Dictionary = {"need_type": "BUILD_STRONGEST_FORCE"}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
+	assert_eq(need.need_type, "ACQUIRE_RESOURCE")
+	assert_eq(need.target_resource, "arms")

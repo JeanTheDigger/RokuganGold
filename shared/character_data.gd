@@ -97,16 +97,24 @@ extends Resource
 @export var assigned_company_id: int = -1
 @export var current_objective: String = ""
 @export var physical_location: String = ""
+@export var travel_destination: String = ""
+@export var travel_days_remaining: int = 0
+@export var travel_origin: String = ""
 @export var role_position: String = ""
 @export var designated_heir_id: int = -1
 @export var disposition_values: Dictionary = {}
+@export var historical_modifiers: Dictionary = {}
+@export var temporary_modifiers: Dictionary = {}
+@export var cohabitation_days: Dictionary = {}
 @export var fear_rating: int = 0
 @export var captive_status: String = ""
-@export var topic_pool: Array[String] = []
+@export var topic_pool: Array[int] = []
+@export var topic_positions: Dictionary = {}
 @export var active_quest: String = ""
 @export var met_characters: Array[int] = []
-@export var knowledge_pool: Array[Dictionary] = []
+@export var knowledge_pool: Array[KnowledgeEntry] = []
 @export var known_contacts_by_clan: Dictionary = {}
+@export var favors: Array[FavorData] = []
 
 # -- Legal System (Section 11.3.14) --------------------------------------------
 
@@ -129,11 +137,11 @@ extends Resource
 
 # -- Meditation (Section 57.32) ------------------------------------------------
 
-@export var void_refresh_blocked_until: int = 0
+@export var void_refresh_blocked_until: int = -1
 
 # -- Medicine & Rest -----------------------------------------------------------
 
-@export var last_medicine_treatment_ic_day: int = 0
+@export var last_medicine_treatment_ic_day: int = -1
 @export var rested_last_night: bool = true
 
 # -- Action Points (Section 14.1) ----------------------------------------------

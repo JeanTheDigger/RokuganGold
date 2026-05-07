@@ -50,15 +50,6 @@ func before_each() -> void:
 	var province := ProvinceData.new()
 	province.province_id = 10
 	province.stability = 70.0
-	province.garrison_pu = 3
-	province.farming_pu = 4
-	province.mining_pu = 1
-	province.town_pu = 2
-	province.military_pu = 1
-	province.population_pu = 8
-	province.rice_stockpile = 10.0
-	province.koku_stockpile = 5.0
-	province.iron_stockpile = 2.0
 	province.terrain_type = Enums.TerrainType.PLAINS
 	_provinces = {10: province}
 
@@ -192,7 +183,7 @@ func test_advance_day_detects_season_change() -> void:
 
 func test_season_change_decays_knowledge() -> void:
 	InformationSystem.add_knowledge(_characters[0], InformationSystem.make_entry(
-		InformationSystem.Source.INTELLIGENCE, "test", {}, 0
+		Enums.KnowledgeSource.INTELLIGENCE, "test", {}, 0
 	))
 	# Jump to season boundary (spring → summer at tick 90)
 	_time.current_tick = 89
@@ -203,8 +194,8 @@ func test_season_change_decays_knowledge() -> void:
 	)
 	# Season 0→1 is 1 season old → RECENT
 	assert_eq(
-		_characters[0].knowledge_pool[0]["confidence"],
-		InformationSystem.Confidence.RECENT
+		_characters[0].knowledge_pool[0].confidence,
+		Enums.KnowledgeConfidence.RECENT
 	)
 
 
@@ -273,10 +264,10 @@ func test_advance_day_conversations_fire_for_colocated_friends() -> void:
 	c2.knowledge_pool = []
 	c2.known_contacts_by_clan = {}
 	c2.met_characters = []
-	c2.topic_pool = ["crane_alliance"]
+	c2.topic_pool = [4]
 
 	_characters[0].physical_location = "castle_crane"
-	_characters[0].topic_pool = ["war_in_lion"]
+	_characters[0].topic_pool = [1]
 	_characters[0].disposition_values[2] = 80
 	c2.physical_location = "castle_crane"
 	c2.disposition_values[1] = 80
@@ -313,6 +304,183 @@ func test_advance_day_returns_letter_results() -> void:
 	assert_true(result.has("letter_results"))
 
 
+# -- Topic Propagation Wiring --------------------------------------------------
+
+func test_advance_day_wires_discussion_counts() -> void:
+	var c2 := L5RCharacterData.new()
+	c2.character_id = 2
+	c2.character_name = "NPC 2"
+	c2.status = 3.0
+	c2.awareness = 3
+	c2.reflexes = 3
+	c2.stamina = 3
+	c2.willpower = 3
+	c2.agility = 3
+	c2.intelligence = 3
+	c2.strength = 3
+	c2.perception = 3
+	c2.void_ring = 2
+	c2.action_points_current = 2
+	c2.action_points_max = 2
+	c2.honor = 5.0
+	c2.glory = 3.0
+	c2.bushido_virtue = Enums.BushidoVirtue.NONE
+	c2.shourido_virtue = Enums.ShouridoVirtue.NONE
+	c2.skills = {"Etiquette": 3}
+	c2.emphases = {}
+	c2.knowledge_pool = []
+	c2.known_contacts_by_clan = {}
+	c2.met_characters = []
+	c2.topic_pool = [100]
+	c2.topic_positions = {}
+
+	_characters[0].physical_location = "castle_crane"
+	_characters[0].topic_pool = [100]
+	_characters[0].topic_positions = {}
+	_characters[0].disposition_values[2] = 80
+	c2.physical_location = "castle_crane"
+	c2.disposition_values[1] = 80
+
+	_characters.append(c2)
+	_characters_by_id[2] = c2
+
+	var topic := TopicMomentumSystem.create_topic(
+		100, "Gossip", TopicData.Tier.TIER_4, TopicData.Category.PERSONAL, 0, 15.0
+	)
+	var active_topics: Array[TopicData] = [topic]
+
+	var ws: Dictionary = _make_world_states()
+	ws[2] = ws[1].duplicate(true)
+	var objs: Dictionary = _make_objectives()
+	objs[2] = {"primary": {"need_type": "REST", "priority": 3}}
+
+	_dice.set_seed(1)
+
+	var result: Dictionary = DayOrchestrator.advance_day(
+		_time, _characters, _characters_by_id, ws,
+		objs, _scoring_tables, _filter_data, _dice,
+		_action_skill_map, _provinces, _action_log, _season_meta,
+		active_topics
+	)
+	assert_true(result.has("topic_results"))
+	assert_true(result.has("broadcast_results"))
+
+
+func test_advance_day_broadcast_spreads_topics() -> void:
+	var c2 := L5RCharacterData.new()
+	c2.character_id = 2
+	c2.character_name = "NPC 2"
+	c2.status = 3.0
+	c2.awareness = 3
+	c2.reflexes = 3
+	c2.stamina = 3
+	c2.willpower = 3
+	c2.agility = 3
+	c2.intelligence = 3
+	c2.strength = 3
+	c2.perception = 3
+	c2.void_ring = 2
+	c2.action_points_current = 2
+	c2.action_points_max = 2
+	c2.honor = 5.0
+	c2.glory = 3.0
+	c2.bushido_virtue = Enums.BushidoVirtue.NONE
+	c2.shourido_virtue = Enums.ShouridoVirtue.NONE
+	c2.skills = {"Etiquette": 3}
+	c2.emphases = {}
+	c2.knowledge_pool = []
+	c2.known_contacts_by_clan = {}
+	c2.met_characters = []
+	c2.topic_pool = []
+	c2.topic_positions = {}
+
+	_characters[0].topic_pool = []
+	_characters[0].topic_positions = {}
+
+	_characters.append(c2)
+	_characters_by_id[2] = c2
+
+	var topic := TopicMomentumSystem.create_topic(
+		200, "War!", TopicData.Tier.TIER_1, TopicData.Category.MILITARY,
+		0, 80.0
+	)
+	var active_topics: Array[TopicData] = [topic]
+
+	var ws: Dictionary = _make_world_states()
+	ws[2] = ws[1].duplicate(true)
+	var objs: Dictionary = _make_objectives()
+	objs[2] = {"primary": {"need_type": "REST", "priority": 3}}
+
+	var result: Dictionary = DayOrchestrator.advance_day(
+		_time, _characters, _characters_by_id, ws,
+		objs, _scoring_tables, _filter_data, _dice,
+		_action_skill_map, _provinces, _action_log, _season_meta,
+		active_topics
+	)
+	assert_true(200 in _characters[0].topic_pool)
+	assert_true(200 in c2.topic_pool)
+	assert_true(result["broadcast_results"].size() > 0)
+
+
+func test_advance_day_broadcast_computes_positions() -> void:
+	_characters[0].topic_pool = []
+	_characters[0].topic_positions = {}
+	_characters[0].bushido_virtue = Enums.BushidoVirtue.CHUGI
+
+	var topic := TopicMomentumSystem.create_topic(
+		300, "Betrayal", TopicData.Tier.TIER_1, TopicData.Category.POLITICAL,
+		0, 80.0, [], "", "", 5, "betrayal"
+	)
+	var active_topics: Array[TopicData] = [topic]
+
+	DayOrchestrator.advance_day(
+		_time, _characters, _characters_by_id, _make_world_states(),
+		_make_objectives(), _scoring_tables, _filter_data, _dice,
+		_action_skill_map, _provinces, _action_log, _season_meta,
+		active_topics
+	)
+	assert_true(_characters[0].topic_positions.has(300))
+
+
+func test_advance_day_letter_delivery_computes_positions() -> void:
+	_characters[0].topic_pool = []
+	_characters[0].topic_positions = {}
+	_characters[0].bushido_virtue = Enums.BushidoVirtue.JIN
+
+	var dice2 := DiceEngine.new()
+	dice2.set_seed(42)
+	var sender := L5RCharacterData.new()
+	sender.character_id = 99
+	sender.skills = {"Calligraphy": 3}
+	sender.emphases = {}
+	sender.awareness = 3
+	sender.agility = 3
+	sender.wounds_taken = 0
+	sender.lord_id = -1
+
+	var topic := TopicMomentumSystem.create_topic(
+		400, "Death", TopicData.Tier.TIER_4, TopicData.Category.PERSONAL,
+		0, 15.0, [], "", "", 5, "death", "suspicious"
+	)
+	var active_topics: Array[TopicData] = [topic]
+
+	var letter: LetterData = LetterSystem.write_letter(
+		1, sender, _characters[0].character_id, 400, 0, dice2, 0
+	)
+	var pending: Array = [letter]
+
+	DayOrchestrator.advance_day(
+		_time, _characters, _characters_by_id, _make_world_states(),
+		_make_objectives(), _scoring_tables, _filter_data, _dice,
+		_action_skill_map, _provinces, _action_log, _season_meta,
+		active_topics, pending
+	)
+	assert_true(400 in _characters[0].topic_pool)
+	assert_true(_characters[0].topic_positions.has(400))
+	# JIN virtue + death:suspicious = -8 modifier, no disposition anchor
+	assert_almost_eq(_characters[0].topic_positions[400], -8.0, 0.001)
+
+
 func test_advance_day_delivers_due_letters() -> void:
 	var recipient := _characters[0]
 	var dice2 := DiceEngine.new()
@@ -327,7 +495,7 @@ func test_advance_day_delivers_due_letters() -> void:
 	sender.lord_id = -1
 
 	var letter: LetterData = LetterSystem.write_letter(
-		1, sender, recipient.character_id, "crane_scandal", 0, dice2, 0
+		1, sender, recipient.character_id, 2, 0, dice2, 0
 	)
 	var pending: Array = [letter]
 
@@ -337,4 +505,321 @@ func test_advance_day_delivers_due_letters() -> void:
 		_action_skill_map, _provinces, _action_log, _season_meta,
 		[], pending
 	)
-	assert_true("crane_scandal" in recipient.topic_pool)
+	assert_true(2 in recipient.topic_pool)
+
+
+# -- Crime Detection Topic Creation -------------------------------------------
+
+func test_crime_detection_creates_topic() -> void:
+	var active_topics: Array[TopicData] = []
+	var crime_records: Array[CrimeRecord] = []
+	var next_case_id: Array[int] = [1]
+	var next_topic_id: Array[int] = [500]
+
+	# Add a witness at the same location
+	var witness := L5RCharacterData.new()
+	witness.character_id = 2
+	witness.physical_location = "castle_crane"
+	witness.topic_pool = []
+	_characters_by_id[2] = witness
+
+	var results: Array = [{
+		"character_id": 1,
+		"action_id": "EAVESDROP",
+		"target_npc_id": -1,
+		"effects": {"detection_risk": true},
+	}]
+	_characters[0].physical_location = "castle_crane"
+
+	var crime_results: Array[Dictionary] = DayOrchestrator._process_crime_detection(
+		results, _characters_by_id, crime_records, 5, next_case_id,
+		active_topics, next_topic_id
+	)
+
+	assert_eq(crime_results.size(), 1)
+	assert_eq(crime_results[0]["topic_id"], 500)
+	assert_eq(crime_results[0]["witness_count"], 1)
+	assert_eq(active_topics.size(), 1)
+	assert_eq(active_topics[0].topic_type, "crime")
+	assert_eq(active_topics[0].slug, "crime_case_1")
+	assert_almost_eq(active_topics[0].momentum, 0.0, 0.001)
+	assert_eq(next_topic_id[0], 501)
+	# Witness should have the topic seeded into their pool
+	assert_true(500 in witness.topic_pool)
+	# Perpetrator should NOT have the topic
+	assert_false(500 in _characters[0].topic_pool)
+
+
+func test_crime_detection_no_witnesses_still_creates_topic() -> void:
+	var active_topics: Array[TopicData] = []
+	var crime_records: Array[CrimeRecord] = []
+	var next_case_id: Array[int] = [1]
+	var next_topic_id: Array[int] = [500]
+
+	var results: Array = [{
+		"character_id": 1,
+		"action_id": "EAVESDROP",
+		"target_npc_id": -1,
+		"effects": {"detection_risk": true},
+	}]
+	_characters[0].physical_location = "remote_wilderness"
+
+	var crime_results: Array[Dictionary] = DayOrchestrator._process_crime_detection(
+		results, _characters_by_id, crime_records, 5, next_case_id,
+		active_topics, next_topic_id
+	)
+
+	assert_eq(crime_results.size(), 1)
+	assert_eq(crime_results[0]["witness_count"], 0)
+	assert_eq(active_topics.size(), 1)
+	assert_almost_eq(active_topics[0].momentum, 0.0, 0.001)
+
+
+func test_crime_topic_seeds_to_victim() -> void:
+	var active_topics: Array[TopicData] = []
+	var crime_records: Array[CrimeRecord] = []
+	var next_case_id: Array[int] = [1]
+	var next_topic_id: Array[int] = [500]
+
+	var victim := L5RCharacterData.new()
+	victim.character_id = 3
+	victim.physical_location = "castle_crane"
+	victim.topic_pool = []
+	_characters_by_id[3] = victim
+
+	var results: Array = [{
+		"character_id": 1,
+		"action_id": "EAVESDROP",
+		"target_npc_id": 3,
+		"effects": {"detection_risk": true},
+	}]
+	_characters[0].physical_location = "castle_crane"
+
+	DayOrchestrator._process_crime_detection(
+		results, _characters_by_id, crime_records, 5, next_case_id,
+		active_topics, next_topic_id
+	)
+
+	# Victim receives the topic (target_npc_id = 3 becomes victim_id)
+	assert_true(500 in victim.topic_pool)
+
+
+# -- UPHOLD_LAW Scan Wiring ---------------------------------------------------
+
+func test_uphold_law_scan_activates_magistrate() -> void:
+	var mag := _characters[0]
+	mag.physical_location = "castle_crane"
+	mag.bushido_virtue = Enums.BushidoVirtue.GI
+
+	var cr := CrimeRecord.new()
+	cr.case_id = 1
+	cr.crime_type = Enums.CrimeType.SKIMMING
+	cr.location = "castle_crane"
+	cr.perpetrator_id = 99
+	cr.investigating_magistrate_id = -1
+	var crime_records: Array[CrimeRecord] = [cr]
+
+	var crime_topic := TopicData.new()
+	crime_topic.topic_id = 600
+	crime_topic.topic_type = "crime"
+	crime_topic.slug = "crime_case_1"
+	crime_topic.category = TopicData.Category.LEGAL
+	var active_topics: Array[TopicData] = [crime_topic]
+
+	mag.topic_pool = [600]
+
+	var objectives: Dictionary = {
+		1: {
+			"primary": {"need_type": "REST", "priority": 3},
+			"standing": {"need_type": "UPHOLD_LAW"},
+		},
+	}
+
+	var results: Array[Dictionary] = DayOrchestrator._process_uphold_law_scan(
+		_characters, objectives, crime_records, active_topics
+	)
+
+	assert_eq(results.size(), 1)
+	assert_eq(results[0]["magistrate_id"], 1)
+	assert_eq(results[0]["case_id"], 1)
+	assert_eq(cr.investigating_magistrate_id, 1)
+	assert_true(objectives[1]["standing"].has("active_case"))
+
+
+func test_uphold_law_scan_skips_no_standing_objective() -> void:
+	_characters[0].physical_location = "castle_crane"
+	_characters[0].topic_pool = [600]
+
+	var cr := CrimeRecord.new()
+	cr.case_id = 1
+	cr.location = "castle_crane"
+	cr.investigating_magistrate_id = -1
+	var crime_records: Array[CrimeRecord] = [cr]
+
+	var crime_topic := TopicData.new()
+	crime_topic.topic_id = 600
+	crime_topic.topic_type = "crime"
+	crime_topic.slug = "crime_case_1"
+	var active_topics: Array[TopicData] = [crime_topic]
+
+	var objectives: Dictionary = {
+		1: {"primary": {"need_type": "REST", "priority": 3}},
+	}
+
+	var results: Array[Dictionary] = DayOrchestrator._process_uphold_law_scan(
+		_characters, objectives, crime_records, active_topics
+	)
+	assert_eq(results.size(), 0)
+
+
+# -- Witness PROBE Evidence Wiring ---------------------------------------------
+
+func test_check_witness_evidence_increments_record() -> void:
+	var cr := CrimeRecord.new()
+	cr.case_id = 1
+	cr.witnesses = [50]
+	cr.evidence_total = 0
+	var crime_records: Array[CrimeRecord] = [cr]
+
+	var objectives: Dictionary = {
+		1: {
+			"standing": {
+				"need_type": "UPHOLD_LAW",
+				"active_case": {
+					"case_id": 1,
+					"interviewed_witnesses": [],
+					"evidence_total": 0,
+				},
+			},
+		},
+	}
+
+	var result: Dictionary = DayOrchestrator._check_witness_evidence(
+		1, 50, 3, crime_records, objectives
+	)
+
+	assert_true(result.get("evidence_gained", 0) > 0)
+	assert_true(cr.evidence_total > 0)
+
+
+func test_check_witness_evidence_no_active_case() -> void:
+	var cr := CrimeRecord.new()
+	cr.case_id = 1
+	cr.witnesses = [50]
+	var crime_records: Array[CrimeRecord] = [cr]
+
+	var objectives: Dictionary = {
+		1: {"primary": {"need_type": "REST"}},
+	}
+
+	var result: Dictionary = DayOrchestrator._check_witness_evidence(
+		1, 50, 3, crime_records, objectives
+	)
+	assert_true(result.is_empty())
+
+
+# -- Festival Wiring ----------------------------------------------------------
+
+func test_advance_day_returns_festival_results() -> void:
+	var result: Dictionary = DayOrchestrator.advance_day(
+		_time, _characters, _characters_by_id, _make_world_states(),
+		_make_objectives(), _scoring_tables, _filter_data, _dice,
+		_action_skill_map, _provinces, _action_log, _season_meta
+	)
+	assert_true(result.has("festival_results"))
+	assert_true(result["festival_results"].has("rokuyo"))
+	assert_true(result["festival_results"].has("is_ceasefire"))
+	assert_true(result["festival_results"].has("is_labor_halt"))
+
+
+func test_festival_sets_world_state_flags() -> void:
+	var ws: Dictionary = _make_world_states()
+	DayOrchestrator.advance_day(
+		_time, _characters, _characters_by_id, ws,
+		_make_objectives(), _scoring_tables, _filter_data, _dice,
+		_action_skill_map, _provinces, _action_log, _season_meta
+	)
+	assert_true(ws.has("is_ceasefire_day"))
+	assert_true(ws.has("is_labor_halt_day"))
+	assert_true(ws.has("is_taian"))
+	assert_true(ws.has("is_inauspicious_for_social"))
+	assert_true(ws.has("rokuyo"))
+
+
+# -- Cohabitation Wiring -------------------------------------------------------
+
+func test_cohabitation_increments_days() -> void:
+	var c2 := L5RCharacterData.new()
+	c2.character_id = 2
+	c2.character_name = "NPC 2"
+	c2.status = 3.0
+	c2.awareness = 3
+	c2.reflexes = 3
+	c2.stamina = 3
+	c2.willpower = 3
+	c2.agility = 3
+	c2.intelligence = 3
+	c2.strength = 3
+	c2.perception = 3
+	c2.void_ring = 2
+	c2.action_points_current = 2
+	c2.action_points_max = 2
+	c2.honor = 5.0
+	c2.glory = 3.0
+	c2.bushido_virtue = Enums.BushidoVirtue.NONE
+	c2.shourido_virtue = Enums.ShouridoVirtue.NONE
+	c2.skills = {"Etiquette": 3}
+	c2.emphases = {}
+	c2.knowledge_pool = []
+	c2.known_contacts_by_clan = {}
+	c2.met_characters = []
+	c2.topic_pool = []
+
+	_characters[0].physical_location = "castle_crane"
+	c2.physical_location = "castle_crane"
+
+	_characters.append(c2)
+	_characters_by_id[2] = c2
+
+	var ws: Dictionary = _make_world_states()
+	ws[2] = ws[1].duplicate(true)
+	var objs: Dictionary = _make_objectives()
+	objs[2] = {"primary": {"need_type": "REST", "priority": 3}}
+
+	DayOrchestrator.advance_day(
+		_time, _characters, _characters_by_id, ws,
+		objs, _scoring_tables, _filter_data, _dice,
+		_action_skill_map, _provinces, _action_log, _season_meta
+	)
+	assert_eq(_characters[0].cohabitation_days.get(2, 0), 1)
+	assert_eq(c2.cohabitation_days.get(1, 0), 1)
+
+
+# -- Favor Processing Wiring --------------------------------------------------
+
+func test_advance_day_returns_favor_results() -> void:
+	var result: Dictionary = DayOrchestrator.advance_day(
+		_time, _characters, _characters_by_id, _make_world_states(),
+		_make_objectives(), _scoring_tables, _filter_data, _dice,
+		_action_skill_map, _provinces, _action_log, _season_meta
+	)
+	assert_true(result.has("favor_results"))
+	assert_true(result["favor_results"].has("expired_favor_ids"))
+	assert_true(result["favor_results"].has("deadline_breaches"))
+
+
+func test_favor_expiration_fires() -> void:
+	var favor := FavorData.new()
+	favor.favor_id = 1
+	favor.tier = FavorData.FavorTier.MINOR
+	favor.created_ic_day = 0
+	var favors: Array = [favor]
+
+	_time.current_tick = 360
+	var result: Dictionary = DayOrchestrator.advance_day(
+		_time, _characters, _characters_by_id, _make_world_states(),
+		_make_objectives(), _scoring_tables, _filter_data, _dice,
+		_action_skill_map, _provinces, _action_log, _season_meta,
+		[], [], [], [], [], [1], {}, {}, [1000], [], {}, favors
+	)
+	assert_true(result["favor_results"]["expired_favor_ids"].has(1))

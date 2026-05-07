@@ -31,6 +31,8 @@ MessageWarningPlayer="*res://scenes/message_warning_player.tscn"
 SettingsManager="*res://scripts/ui/settings.gd"
 CalendarManager="*res://scripts/managers/CalendarManager.gd"
 WakeUpManager="*res://scripts/managers/WakeUpManager.gd"
+WorldState="*res://scripts/managers/world_state.gd"
+SimScheduler="*res://scripts/managers/simulation_scheduler.gd"
 NoFocus="*res://scripts/utility/NoFocus.gd"
 
 [display]

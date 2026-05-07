@@ -6,10 +6,6 @@ class_name InformationSystem
 ## Disposition values never go stale.
 
 
-enum Confidence { FRESH, RECENT, STALE }
-
-enum Source { DIRECT_OBSERVATION, DAILY_CONVERSATION, LETTER, INTELLIGENCE, PUBLIC_KNOWLEDGE }
-
 const STALE_THRESHOLD_SEASONS: int = 3
 const RECENT_THRESHOLD_SEASONS: int = 1
 
@@ -17,25 +13,25 @@ const RECENT_THRESHOLD_SEASONS: int = 1
 # -- Knowledge Entry Creation --------------------------------------------------
 
 static func make_entry(
-	source: Source,
+	source: Enums.KnowledgeSource,
 	entry_type: String,
 	data: Dictionary,
 	season: int,
-) -> Dictionary:
-	return {
-		"source": source,
-		"entry_type": entry_type,
-		"data": data,
-		"confidence": Confidence.FRESH,
-		"season_acquired": season,
-	}
+) -> KnowledgeEntry:
+	var entry := KnowledgeEntry.new()
+	entry.source = source
+	entry.entry_type = entry_type
+	entry.data = data
+	entry.confidence = Enums.KnowledgeConfidence.FRESH
+	entry.season_acquired = season
+	return entry
 
 
 # -- Adding Knowledge ----------------------------------------------------------
 
 static func add_knowledge(
 	character: L5RCharacterData,
-	entry: Dictionary,
+	entry: KnowledgeEntry,
 ) -> void:
 	character.knowledge_pool.append(entry)
 
@@ -62,8 +58,8 @@ static func process_probe_result(
 	action_log: Array[Dictionary],
 	current_season: int,
 	quality: int,
-) -> Array[Dictionary]:
-	var discovered: Array[Dictionary] = []
+) -> Array[KnowledgeEntry]:
+	var discovered: Array[KnowledgeEntry] = []
 	var target_actions: Array[Dictionary] = _get_target_actions(target_id, action_log)
 
 	var max_entries: int = clampi(quality, 1, 5)
@@ -72,8 +68,8 @@ static func process_probe_result(
 		if count >= max_entries:
 			break
 		var action: Dictionary = target_actions[i]
-		var entry: Dictionary = make_entry(
-			Source.INTELLIGENCE,
+		var entry: KnowledgeEntry = make_entry(
+			Enums.KnowledgeSource.INTELLIGENCE,
 			"observed_action",
 			{
 				"target_character_id": target_id,
@@ -106,8 +102,8 @@ static func process_observe_court(
 	attendees: Array[L5RCharacterData],
 	quality: int,
 	current_season: int,
-) -> Array[Dictionary]:
-	var discovered: Array[Dictionary] = []
+) -> Array[KnowledgeEntry]:
+	var discovered: Array[KnowledgeEntry] = []
 	var unknown: Array[L5RCharacterData] = []
 	for a: L5RCharacterData in attendees:
 		if a.character_id != observer.character_id and a.character_id not in observer.met_characters:
@@ -117,8 +113,8 @@ static func process_observe_court(
 	for i: int in range(mini(max_discover, unknown.size())):
 		var target: L5RCharacterData = unknown[i]
 		add_contact(observer, target.character_id, target.clan)
-		var entry: Dictionary = make_entry(
-			Source.DIRECT_OBSERVATION,
+		var entry: KnowledgeEntry = make_entry(
+			Enums.KnowledgeSource.DIRECT_OBSERVATION,
 			"contact_discovered",
 			{
 				"character_id": target.character_id,
@@ -140,14 +136,14 @@ static func process_introduction(
 	introduced: L5RCharacterData,
 	is_kuge: bool,
 	current_season: int,
-) -> Dictionary:
+) -> KnowledgeEntry:
 	add_contact(recipient, introduced.character_id, introduced.clan)
 	var starting_disp: int = 2 if is_kuge else 3
 	if not recipient.disposition_values.has(introduced.character_id):
 		recipient.disposition_values[introduced.character_id] = starting_disp
 
-	var entry: Dictionary = make_entry(
-		Source.DIRECT_OBSERVATION,
+	var entry: KnowledgeEntry = make_entry(
+		Enums.KnowledgeSource.DIRECT_OBSERVATION,
 		"introduction",
 		{
 			"character_id": introduced.character_id,
@@ -169,15 +165,19 @@ static func transfer_objective_knowledge(
 	recipient: L5RCharacterData,
 	objective: Dictionary,
 	current_season: int,
-) -> Array[Dictionary]:
-	var transferred: Array[Dictionary] = []
+	province_statuses: Array = [],
+) -> Array[KnowledgeEntry]:
+	var transferred: Array[KnowledgeEntry] = []
 	var target_tags: Array[String] = _extract_target_tags(objective)
 
-	for entry: Dictionary in assigner.knowledge_pool:
+	for entry: KnowledgeEntry in assigner.knowledge_pool:
 		if _entry_matches_tags(entry, target_tags):
-			var copy: Dictionary = entry.duplicate(true)
-			copy["confidence"] = Confidence.FRESH
-			copy["season_acquired"] = current_season
+			var copy := KnowledgeEntry.new()
+			copy.source = entry.source
+			copy.entry_type = entry.entry_type
+			copy.data = entry.data.duplicate(true)
+			copy.confidence = Enums.KnowledgeConfidence.FRESH
+			copy.season_acquired = current_season
 			add_knowledge(recipient, copy)
 			transferred.append(copy)
 
@@ -186,7 +186,58 @@ static func transfer_objective_knowledge(
 		for contact_id: int in assigner.known_contacts_by_clan[target_clan]:
 			add_contact(recipient, contact_id, target_clan)
 
+	var target_province_id: int = objective.get("target_province_id", -1)
+	if target_province_id >= 0:
+		for ps: Variant in province_statuses:
+			if not ps is NPCDataStructures.ProvinceStatus:
+				continue
+			var status: NPCDataStructures.ProvinceStatus = ps
+			if status.province_id != target_province_id:
+				continue
+			var province_entry := _make_province_status_entry(status, current_season)
+			add_knowledge(recipient, province_entry)
+			transferred.append(province_entry)
+			if status.active_crisis_id >= 0:
+				var crisis_entry := _make_crisis_entry(status, current_season)
+				add_knowledge(recipient, crisis_entry)
+				transferred.append(crisis_entry)
+			break
+
 	return transferred
+
+
+static func _make_province_status_entry(
+	status: NPCDataStructures.ProvinceStatus,
+	current_season: int,
+) -> KnowledgeEntry:
+	return make_entry(
+		Enums.KnowledgeSource.DIRECT_OBSERVATION,
+		"province_status",
+		{
+			"target_province_id": status.province_id,
+			"stability": status.stability,
+			"garrison_pu": status.garrison_pu,
+			"rice_stockpile": status.rice_stockpile,
+			"last_report_ic_day": status.last_report_ic_day,
+		},
+		current_season,
+	)
+
+
+static func _make_crisis_entry(
+	status: NPCDataStructures.ProvinceStatus,
+	current_season: int,
+) -> KnowledgeEntry:
+	return make_entry(
+		Enums.KnowledgeSource.DIRECT_OBSERVATION,
+		"crisis_data",
+		{
+			"target_province_id": status.province_id,
+			"crisis_id": status.active_crisis_id,
+			"crisis_type": status.crisis_type,
+		},
+		current_season,
+	)
 
 
 static func _extract_target_tags(objective: Dictionary) -> Array[String]:
@@ -200,8 +251,8 @@ static func _extract_target_tags(objective: Dictionary) -> Array[String]:
 	return tags
 
 
-static func _entry_matches_tags(entry: Dictionary, tags: Array[String]) -> bool:
-	var data: Dictionary = entry.get("data", {})
+static func _entry_matches_tags(entry: KnowledgeEntry, tags: Array[String]) -> bool:
+	var data: Dictionary = entry.data
 	for tag: String in tags:
 		var parts: PackedStringArray = tag.split(":")
 		if parts.size() != 2:
@@ -230,16 +281,16 @@ static func decay_confidence(
 	current_season: int,
 ) -> int:
 	var decayed_count: int = 0
-	for entry: Dictionary in character.knowledge_pool:
-		if entry.get("entry_type", "") == "disposition":
+	for entry: KnowledgeEntry in character.knowledge_pool:
+		if entry.entry_type == "disposition":
 			continue
 
-		var age: int = current_season - entry.get("season_acquired", 0)
-		var old_conf: int = entry.get("confidence", Confidence.FRESH)
+		var age: int = current_season - entry.season_acquired
+		var old_conf: int = entry.confidence
 		var new_conf: int = _compute_confidence(age)
 
 		if new_conf != old_conf:
-			entry["confidence"] = new_conf
+			entry.confidence = new_conf
 			decayed_count += 1
 
 	return decayed_count
@@ -247,10 +298,10 @@ static func decay_confidence(
 
 static func _compute_confidence(seasons_old: int) -> int:
 	if seasons_old >= STALE_THRESHOLD_SEASONS:
-		return Confidence.STALE
+		return Enums.KnowledgeConfidence.STALE
 	if seasons_old >= RECENT_THRESHOLD_SEASONS:
-		return Confidence.RECENT
-	return Confidence.FRESH
+		return Enums.KnowledgeConfidence.RECENT
+	return Enums.KnowledgeConfidence.FRESH
 
 
 # -- Queries -------------------------------------------------------------------
@@ -270,18 +321,17 @@ static func has_fresh_intel_on(
 	character: L5RCharacterData,
 	target_id: int,
 ) -> bool:
-	for entry: Dictionary in character.knowledge_pool:
-		var data: Dictionary = entry.get("data", {})
-		var char_id: int = data.get("target_character_id", data.get("character_id", -1))
-		if char_id == target_id and entry.get("confidence", Confidence.STALE) == Confidence.FRESH:
+	for entry: KnowledgeEntry in character.knowledge_pool:
+		var char_id: int = entry.data.get("target_character_id", entry.data.get("character_id", -1))
+		if char_id == target_id and entry.confidence == Enums.KnowledgeConfidence.FRESH:
 			return true
 	return false
 
 
-static func get_stale_entries(character: L5RCharacterData) -> Array[Dictionary]:
-	var stale: Array[Dictionary] = []
-	for entry: Dictionary in character.knowledge_pool:
-		if entry.get("confidence", Confidence.FRESH) == Confidence.STALE:
+static func get_stale_entries(character: L5RCharacterData) -> Array[KnowledgeEntry]:
+	var stale: Array[KnowledgeEntry] = []
+	for entry: KnowledgeEntry in character.knowledge_pool:
+		if entry.confidence == Enums.KnowledgeConfidence.STALE:
 			stale.append(entry)
 	return stale
 
@@ -290,11 +340,43 @@ static func count_by_confidence(
 	character: L5RCharacterData,
 ) -> Dictionary:
 	var counts: Dictionary = {
-		Confidence.FRESH: 0,
-		Confidence.RECENT: 0,
-		Confidence.STALE: 0,
+		Enums.KnowledgeConfidence.FRESH: 0,
+		Enums.KnowledgeConfidence.RECENT: 0,
+		Enums.KnowledgeConfidence.STALE: 0,
 	}
-	for entry: Dictionary in character.knowledge_pool:
-		var conf: int = entry.get("confidence", Confidence.FRESH)
-		counts[conf] = counts.get(conf, 0) + 1
+	for entry: KnowledgeEntry in character.knowledge_pool:
+		counts[entry.confidence] = counts.get(entry.confidence, 0) + 1
 	return counts
+
+
+static func get_best_confidence_on_target(
+	character: L5RCharacterData,
+	target_id: int,
+) -> int:
+	var best: int = -1
+	for entry: KnowledgeEntry in character.knowledge_pool:
+		var char_id: int = entry.data.get("target_character_id", entry.data.get("character_id", -1))
+		if char_id == target_id and entry.confidence > best:
+			best = entry.confidence
+	return best
+
+
+static func record_location_observation(
+	observer: L5RCharacterData,
+	observed_id: int,
+	settlement_id: String,
+	current_season: int,
+) -> void:
+	for entry: KnowledgeEntry in observer.knowledge_pool:
+		if entry.entry_type == "location" and entry.data.get("character_id", -1) == observed_id:
+			entry.data["settlement_id"] = settlement_id
+			entry.confidence = Enums.KnowledgeConfidence.FRESH
+			entry.season_acquired = current_season
+			return
+	var new_entry := KnowledgeEntry.new()
+	new_entry.source = Enums.KnowledgeSource.DIRECT_OBSERVATION
+	new_entry.entry_type = "location"
+	new_entry.data = {"character_id": observed_id, "settlement_id": settlement_id}
+	new_entry.confidence = Enums.KnowledgeConfidence.FRESH
+	new_entry.season_acquired = current_season
+	observer.knowledge_pool.append(new_entry)

@@ -25,8 +25,7 @@ func before_each() -> void:
 	var province := ProvinceData.new()
 	province.province_id = 10
 	province.stability = 70.0
-	province.garrison_pu = 3
-	province.last_report_ic_day = 0
+	province.last_report_ic_day = -1
 	_provinces = {10: province}
 
 	_action_log = []
@@ -218,6 +217,11 @@ func test_patrol_stability_capped_at_100() -> void:
 
 
 func test_garrison_assigned_increases_pu() -> void:
+	var settlement := SettlementData.new()
+	settlement.settlement_id = 100
+	settlement.province_id = 10
+	settlement.garrison_pu = 3
+	var settlements: Array[SettlementData] = [settlement]
 	var result: Dictionary = {
 		"success": true,
 		"character_id": 1,
@@ -227,8 +231,8 @@ func test_garrison_assigned_increases_pu() -> void:
 		"ic_day": 5,
 		"effects": {"effect": "garrison_assigned"},
 	}
-	EffectApplicator.apply(result, _characters, _provinces, _action_log)
-	assert_eq(_provinces[10].garrison_pu, 4)
+	EffectApplicator.apply(result, _characters, _provinces, _action_log, settlements)
+	assert_eq(settlement.garrison_pu, 4)
 
 
 func test_intelligence_gathered_refreshes_report() -> void:

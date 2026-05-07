@@ -7,7 +7,7 @@ extends Resource
 @export var recipient_id: int = -1
 
 # Topic carried
-@export var topic: String = ""
+@export var topic: int = -1
 
 # Calligraphy roll outcome — 0=fail, 1=success(+1), 2=one raise(+2), 3=two raises(+3)
 @export var quality: int = 0

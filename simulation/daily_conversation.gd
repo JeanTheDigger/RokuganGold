@@ -50,9 +50,9 @@ static func should_converse(
 
 # -- Topic Exchange ------------------------------------------------------------
 
-static func select_topic_to_share(character: L5RCharacterData, rng_value: int) -> String:
+static func select_topic_to_share(character: L5RCharacterData, rng_value: int) -> int:
 	if character.topic_pool.is_empty():
-		return ""
+		return -1
 	var index: int = rng_value % character.topic_pool.size()
 	return character.topic_pool[index]
 
@@ -60,9 +60,9 @@ static func select_topic_to_share(character: L5RCharacterData, rng_value: int) -
 static func transfer_topic(
 	from_char: L5RCharacterData,
 	to_char: L5RCharacterData,
-	topic: String,
+	topic: int,
 ) -> bool:
-	if topic.is_empty():
+	if topic < 0:
 		return false
 	if topic in to_char.topic_pool:
 		return false
@@ -88,23 +88,23 @@ static func resolve_conversation(
 	rng_b: int,
 	current_season: int,
 ) -> Dictionary:
-	var topic_a: String = select_topic_to_share(char_a, rng_a)
-	var topic_b: String = select_topic_to_share(char_b, rng_b)
+	var topic_a: int = select_topic_to_share(char_a, rng_a)
+	var topic_b: int = select_topic_to_share(char_b, rng_b)
 
 	var transferred_to_b: bool = transfer_topic(char_a, char_b, topic_a)
 	var transferred_to_a: bool = transfer_topic(char_b, char_a, topic_b)
 
-	if transferred_to_b and not topic_a.is_empty():
+	if transferred_to_b and topic_a >= 0:
 		InformationSystem.add_knowledge(char_b, InformationSystem.make_entry(
-			InformationSystem.Source.DAILY_CONVERSATION,
+			Enums.KnowledgeSource.DAILY_CONVERSATION,
 			"topic_learned",
 			{"topic": topic_a, "from_character_id": char_a.character_id},
 			current_season,
 		))
 
-	if transferred_to_a and not topic_b.is_empty():
+	if transferred_to_a and topic_b >= 0:
 		InformationSystem.add_knowledge(char_a, InformationSystem.make_entry(
-			InformationSystem.Source.DAILY_CONVERSATION,
+			Enums.KnowledgeSource.DAILY_CONVERSATION,
 			"topic_learned",
 			{"topic": topic_b, "from_character_id": char_b.character_id},
 			current_season,

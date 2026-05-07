@@ -238,6 +238,7 @@ static func get_scoring_modifier(
 	action_log: Array[Dictionary],
 	penalties: Array[Dictionary],
 	current_season: int,
+	shourido_virtue: Enums.ShouridoVirtue = Enums.ShouridoVirtue.NONE,
 ) -> int:
 	if action_id in MEASUREMENT_ACTIONS:
 		var needs_measurement: bool = false
@@ -258,6 +259,10 @@ static func get_scoring_modifier(
 					break
 		if needs_measurement:
 			return MEASUREMENT_BONUS
+
+	# s57.4: Ishi NPCs ignore approach penalties entirely
+	if shourido_virtue == Enums.ShouridoVirtue.ISHI:
+		return 0
 
 	var penalty: int = get_penalty(
 		penalties, character_id, target_npc_id, action_id, current_season

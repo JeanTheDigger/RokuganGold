@@ -318,3 +318,370 @@ func test_resolve_topic():
 	TopicMomentumSystem.resolve_topic(t)
 	assert_true(t.resolved)
 	assert_eq(t.momentum, 0.0)
+
+
+func test_create_topic_with_type_and_variant():
+	var t: TopicData = TopicMomentumSystem.create_topic(
+		10, "A Death", TopicData.Tier.TIER_4, TopicData.Category.PERSONAL,
+		5, 15.0, [], "", "", -1, "death", "suspicious"
+	)
+	assert_eq(t.topic_type, "death")
+	assert_eq(t.variant, "suspicious")
+
+
+# -- Discussion Count Wiring ---------------------------------------------------
+
+func test_increment_discussion_counts_basic():
+	var t1 := _make_tier4(20.0)
+	t1.topic_id = 1
+	var t2 := _make_tier4(20.0)
+	t2.topic_id = 2
+	var topics: Array[TopicData] = [t1, t2]
+	var discussed: Array[int] = [1, 1, 2]
+	TopicMomentumSystem.increment_discussion_counts(topics, discussed)
+	assert_eq(t1.discussion_count_this_day, 2)
+	assert_eq(t2.discussion_count_this_day, 1)
+
+
+func test_increment_discussion_counts_unknown_id_ignored():
+	var t1 := _make_tier4(20.0)
+	t1.topic_id = 1
+	var topics: Array[TopicData] = [t1]
+	var discussed: Array[int] = [1, 99]
+	TopicMomentumSystem.increment_discussion_counts(topics, discussed)
+	assert_eq(t1.discussion_count_this_day, 1)
+
+
+func test_increment_discussion_counts_empty():
+	var t1 := _make_tier4(20.0)
+	t1.topic_id = 1
+	var topics: Array[TopicData] = [t1]
+	var discussed: Array[int] = []
+	TopicMomentumSystem.increment_discussion_counts(topics, discussed)
+	assert_eq(t1.discussion_count_this_day, 0)
+
+
+# -- Public Knowledge Broadcast ------------------------------------------------
+
+func _make_char(id: int, clan: String = "") -> L5RCharacterData:
+	var c := L5RCharacterData.new()
+	c.character_id = id
+	c.clan = clan
+	c.topic_pool = []
+	c.topic_positions = {}
+	c.disposition_values = {}
+	c.bushido_virtue = Enums.BushidoVirtue.NONE
+	c.shourido_virtue = Enums.ShouridoVirtue.NONE
+	return c
+
+
+func _make_province(id: int, clan: String = "", adjacent: Array[int] = []) -> ProvinceData:
+	var p := ProvinceData.new()
+	p.province_id = id
+	p.clan = clan
+	p.adjacent_province_ids = adjacent
+	return p
+
+
+func test_broadcast_rumor_no_spread():
+	var t := _make_crisis(TopicData.Tier.TIER_2, 5.0)
+	t.topic_id = 1
+	t.provinces_affected = [10]
+	var c := _make_char(1)
+	var chars: Array[L5RCharacterData] = [c]
+	var char_prov: Dictionary = {1: 10}
+	var prov_clan: Dictionary = {10: "Crane"}
+	var results: Array[Dictionary] = TopicMomentumSystem.broadcast_public_knowledge(
+		[t] as Array[TopicData], chars, char_prov, prov_clan
+	)
+	assert_eq(results.size(), 0)
+	assert_eq(c.topic_pool.size(), 0)
+
+
+func test_broadcast_minor_affected_province():
+	var t := _make_crisis(TopicData.Tier.TIER_2, 15.0)
+	t.topic_id = 1
+	t.provinces_affected = [10]
+	var c := _make_char(1)
+	var chars: Array[L5RCharacterData] = [c]
+	var char_prov: Dictionary = {1: 10}
+	var prov_clan: Dictionary = {10: "Crane"}
+	var results: Array[Dictionary] = TopicMomentumSystem.broadcast_public_knowledge(
+		[t] as Array[TopicData], chars, char_prov, prov_clan
+	)
+	assert_eq(results.size(), 1)
+	assert_true(1 in c.topic_pool)
+
+
+func test_broadcast_minor_non_affected_province_excluded():
+	var t := _make_crisis(TopicData.Tier.TIER_2, 15.0)
+	t.topic_id = 1
+	t.provinces_affected = [10]
+	var c := _make_char(1)
+	var chars: Array[L5RCharacterData] = [c]
+	var char_prov: Dictionary = {1: 20}
+	var prov_clan: Dictionary = {10: "Crane", 20: "Lion"}
+	var results: Array[Dictionary] = TopicMomentumSystem.broadcast_public_knowledge(
+		[t] as Array[TopicData], chars, char_prov, prov_clan
+	)
+	assert_eq(results.size(), 0)
+
+
+func test_broadcast_secondary_adjacent_province():
+	var t := _make_crisis(TopicData.Tier.TIER_2, 30.0)
+	t.topic_id = 1
+	t.provinces_affected = [10]
+	var c := _make_char(1)
+	var p10 := _make_province(10, "Crane", [20])
+	var p20 := _make_province(20, "Lion", [10])
+	var chars: Array[L5RCharacterData] = [c]
+	var char_prov: Dictionary = {1: 20}
+	var prov_clan: Dictionary = {10: "Crane", 20: "Lion"}
+	var provinces: Dictionary = {10: p10, 20: p20}
+	var results: Array[Dictionary] = TopicMomentumSystem.broadcast_public_knowledge(
+		[t] as Array[TopicData], chars, char_prov, prov_clan, provinces
+	)
+	assert_eq(results.size(), 1)
+	assert_true(1 in c.topic_pool)
+
+
+func test_broadcast_secondary_non_adjacent_excluded():
+	var t := _make_crisis(TopicData.Tier.TIER_2, 30.0)
+	t.topic_id = 1
+	t.provinces_affected = [10]
+	var c := _make_char(1)
+	var p10 := _make_province(10, "Crane", [])
+	var p20 := _make_province(20, "Lion", [])
+	var chars: Array[L5RCharacterData] = [c]
+	var char_prov: Dictionary = {1: 20}
+	var prov_clan: Dictionary = {10: "Crane", 20: "Lion"}
+	var provinces: Dictionary = {10: p10, 20: p20}
+	var results: Array[Dictionary] = TopicMomentumSystem.broadcast_public_knowledge(
+		[t] as Array[TopicData], chars, char_prov, prov_clan, provinces
+	)
+	assert_eq(results.size(), 0)
+
+
+func test_broadcast_major_same_clan():
+	var t := _make_crisis(TopicData.Tier.TIER_1, 55.0)
+	t.topic_id = 1
+	t.provinces_affected = [10]
+	t.clan_involved = "Crane"
+	var c := _make_char(1)
+	var chars: Array[L5RCharacterData] = [c]
+	var char_prov: Dictionary = {1: 20}
+	var prov_clan: Dictionary = {10: "Crane", 20: "Crane"}
+	var results: Array[Dictionary] = TopicMomentumSystem.broadcast_public_knowledge(
+		[t] as Array[TopicData], chars, char_prov, prov_clan
+	)
+	assert_eq(results.size(), 1)
+
+
+func test_broadcast_major_different_clan_excluded():
+	var t := _make_crisis(TopicData.Tier.TIER_1, 55.0)
+	t.topic_id = 1
+	t.provinces_affected = [10]
+	t.clan_involved = "Crane"
+	var c := _make_char(1)
+	var chars: Array[L5RCharacterData] = [c]
+	var char_prov: Dictionary = {1: 30}
+	var prov_clan: Dictionary = {10: "Crane", 30: "Dragon"}
+	var results: Array[Dictionary] = TopicMomentumSystem.broadcast_public_knowledge(
+		[t] as Array[TopicData], chars, char_prov, prov_clan
+	)
+	assert_eq(results.size(), 0)
+
+
+func test_broadcast_unavoidable_all_characters():
+	var t := _make_crisis(TopicData.Tier.TIER_1, 80.0)
+	t.topic_id = 1
+	var c1 := _make_char(1)
+	var c2 := _make_char(2)
+	var chars: Array[L5RCharacterData] = [c1, c2]
+	var char_prov: Dictionary = {1: 10, 2: 99}
+	var prov_clan: Dictionary = {}
+	var results: Array[Dictionary] = TopicMomentumSystem.broadcast_public_knowledge(
+		[t] as Array[TopicData], chars, char_prov, prov_clan
+	)
+	assert_eq(results.size(), 2)
+	assert_true(1 in c1.topic_pool)
+	assert_true(1 in c2.topic_pool)
+
+
+func test_broadcast_skips_already_known():
+	var t := _make_crisis(TopicData.Tier.TIER_1, 80.0)
+	t.topic_id = 1
+	var c := _make_char(1)
+	c.topic_pool = [1]
+	var chars: Array[L5RCharacterData] = [c]
+	var char_prov: Dictionary = {1: 10}
+	var prov_clan: Dictionary = {}
+	var results: Array[Dictionary] = TopicMomentumSystem.broadcast_public_knowledge(
+		[t] as Array[TopicData], chars, char_prov, prov_clan
+	)
+	assert_eq(results.size(), 0)
+
+
+func test_broadcast_skips_resolved():
+	var t := _make_crisis(TopicData.Tier.TIER_1, 80.0)
+	t.topic_id = 1
+	t.resolved = true
+	var c := _make_char(1)
+	var chars: Array[L5RCharacterData] = [c]
+	var results: Array[Dictionary] = TopicMomentumSystem.broadcast_public_knowledge(
+		[t] as Array[TopicData], chars, {1: 10}, {}
+	)
+	assert_eq(results.size(), 0)
+
+
+# -- Adjacency Check -----------------------------------------------------------
+
+func test_is_adjacent_to_affected_true():
+	var p1 := _make_province(1, "Crane", [2, 3])
+	var p2 := _make_province(2, "Lion", [1])
+	var provinces: Dictionary = {1: p1, 2: p2}
+	var affected: Array[int] = [2]
+	assert_true(TopicMomentumSystem._is_adjacent_to_affected(1, affected, provinces))
+
+
+func test_is_adjacent_to_affected_false():
+	var p1 := _make_province(1, "Crane", [3])
+	var provinces: Dictionary = {1: p1}
+	var affected: Array[int] = [2]
+	assert_false(TopicMomentumSystem._is_adjacent_to_affected(1, affected, provinces))
+
+
+func test_is_adjacent_to_affected_unknown_province():
+	var affected: Array[int] = [2]
+	assert_false(TopicMomentumSystem._is_adjacent_to_affected(99, affected, {}))
+
+
+# -- Starting Position Calculation ---------------------------------------------
+
+func test_starting_position_neutral_no_virtue():
+	var t := _make_crisis(TopicData.Tier.TIER_2, 30.0)
+	t.subject_character_id = 5
+	t.subject_role = "NEUTRAL"
+	t.topic_type = "battle_outcome"
+	t.variant = "victory"
+	var dispositions: Dictionary = {5: 40}
+	var pos: float = TopicMomentumSystem.calculate_starting_position(
+		t, dispositions, Enums.BushidoVirtue.NONE, Enums.ShouridoVirtue.NONE
+	)
+	assert_almost_eq(pos, 5.0, 0.001)
+
+
+func test_starting_position_beneficiary():
+	var t := _make_crisis(TopicData.Tier.TIER_2, 30.0)
+	t.subject_character_id = 5
+	t.subject_role = "BENEFICIARY"
+	var dispositions: Dictionary = {5: 60}
+	var pos: float = TopicMomentumSystem.calculate_starting_position(
+		t, dispositions, Enums.BushidoVirtue.NONE, Enums.ShouridoVirtue.NONE
+	)
+	assert_almost_eq(pos, 30.0, 0.001)
+
+
+func test_starting_position_victim():
+	var t := _make_crisis(TopicData.Tier.TIER_2, 30.0)
+	t.subject_character_id = 5
+	t.subject_role = "VICTIM"
+	var dispositions: Dictionary = {5: 60}
+	var pos: float = TopicMomentumSystem.calculate_starting_position(
+		t, dispositions, Enums.BushidoVirtue.NONE, Enums.ShouridoVirtue.NONE
+	)
+	assert_almost_eq(pos, -30.0, 0.001)
+
+
+func test_starting_position_perpetrator():
+	var t := _make_crisis(TopicData.Tier.TIER_2, 30.0)
+	t.subject_character_id = 5
+	t.subject_role = "PERPETRATOR"
+	var dispositions: Dictionary = {5: 40}
+	var pos: float = TopicMomentumSystem.calculate_starting_position(
+		t, dispositions, Enums.BushidoVirtue.NONE, Enums.ShouridoVirtue.NONE
+	)
+	assert_almost_eq(pos, -20.0, 0.001)
+
+
+func test_starting_position_with_bushido_modifier():
+	var t := _make_tier4(20.0)
+	t.subject_character_id = -1
+	t.topic_type = "betrayal"
+	var pos: float = TopicMomentumSystem.calculate_starting_position(
+		t, {}, Enums.BushidoVirtue.CHUGI, Enums.ShouridoVirtue.NONE
+	)
+	assert_almost_eq(pos, -15.0, 0.001)
+
+
+func test_starting_position_with_shourido_modifier():
+	var t := _make_tier4(20.0)
+	t.subject_character_id = -1
+	t.topic_type = "spy_uncovered"
+	var pos: float = TopicMomentumSystem.calculate_starting_position(
+		t, {}, Enums.BushidoVirtue.NONE, Enums.ShouridoVirtue.SEIGYO
+	)
+	assert_almost_eq(pos, 10.0, 0.001)
+
+
+func test_starting_position_with_variant():
+	var t := _make_tier4(20.0)
+	t.subject_character_id = -1
+	t.topic_type = "death"
+	t.variant = "suspicious"
+	var pos: float = TopicMomentumSystem.calculate_starting_position(
+		t, {}, Enums.BushidoVirtue.JIN, Enums.ShouridoVirtue.NONE
+	)
+	assert_almost_eq(pos, -8.0, 0.001)
+
+
+func test_starting_position_variant_fallback_to_type():
+	var t := _make_tier4(20.0)
+	t.subject_character_id = -1
+	t.topic_type = "betrayal"
+	t.variant = "unknown_variant"
+	var pos: float = TopicMomentumSystem.calculate_starting_position(
+		t, {}, Enums.BushidoVirtue.CHUGI, Enums.ShouridoVirtue.NONE
+	)
+	assert_almost_eq(pos, -15.0, 0.001)
+
+
+func test_starting_position_both_virtues():
+	var t := _make_tier4(20.0)
+	t.subject_character_id = -1
+	t.topic_type = "betrayal"
+	var pos: float = TopicMomentumSystem.calculate_starting_position(
+		t, {}, Enums.BushidoVirtue.CHUGI, Enums.ShouridoVirtue.DOSATSU
+	)
+	assert_almost_eq(pos, -7.0, 0.001)
+
+
+func test_starting_position_clamped_positive():
+	var t := _make_tier4(20.0)
+	t.subject_character_id = 5
+	t.subject_role = "BENEFICIARY"
+	var dispositions: Dictionary = {5: 100}
+	var pos: float = TopicMomentumSystem.calculate_starting_position(
+		t, dispositions, Enums.BushidoVirtue.NONE, Enums.ShouridoVirtue.NONE
+	)
+	assert_almost_eq(pos, 50.0, 0.001)
+
+
+func test_starting_position_no_subject():
+	var t := _make_tier4(20.0)
+	t.subject_character_id = -1
+	var pos: float = TopicMomentumSystem.calculate_starting_position(
+		t, {}, Enums.BushidoVirtue.NONE, Enums.ShouridoVirtue.NONE
+	)
+	assert_almost_eq(pos, 0.0, 0.001)
+
+
+func test_starting_position_unknown_subject_id():
+	var t := _make_tier4(20.0)
+	t.subject_character_id = 99
+	t.subject_role = "BENEFICIARY"
+	var dispositions: Dictionary = {}
+	var pos: float = TopicMomentumSystem.calculate_starting_position(
+		t, dispositions, Enums.BushidoVirtue.NONE, Enums.ShouridoVirtue.NONE
+	)
+	assert_almost_eq(pos, 0.0, 0.001)

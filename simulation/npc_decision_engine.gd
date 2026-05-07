@@ -19,9 +19,26 @@ static func build_context(character: L5RCharacterData, world_state: Dictionary) 
 
 	# Location & situation
 	ctx.location_id = character.physical_location
-	ctx.context_flag = world_state.get("context_flag", Enums.ContextFlag.AT_OWN_HOLDINGS)
+	if TravelSystem.is_traveling(character):
+		ctx.context_flag = Enums.ContextFlag.TRAVELING
+	else:
+		ctx.context_flag = world_state.get("context_flag", Enums.ContextFlag.AT_OWN_HOLDINGS)
 	ctx.season = world_state.get("season", 0)
 	ctx.ic_day = world_state.get("ic_day", 0)
+	ctx.sublocation = world_state.get("sublocation", Enums.Sublocation.PUBLIC)
+	var ws_zone_subtype: int = world_state.get("zone_subtype", -1)
+	if ws_zone_subtype >= 0:
+		ctx.zone_subtype = ws_zone_subtype as Enums.ZoneSubtype
+		ctx.zone_flags = ZoneFlagMatrix.get_flags(ctx.zone_subtype)
+	else:
+		ctx.zone_flags = {}
+
+	# Lord & court (s55.34)
+	ctx.lord_id = character.lord_id
+	ctx.active_court_at_location = world_state.get("active_court_at_location", {})
+	ctx.upcoming_courts = world_state.get("upcoming_courts", [] as Array[Dictionary])
+	ctx.held_leverage = world_state.get("held_leverage", [] as Array[Dictionary])
+	ctx.known_npc_locations = world_state.get("known_npc_locations", {})
 
 	# Stats
 	ctx.skill_ranks = character.skills.duplicate()
@@ -33,17 +50,41 @@ static func build_context(character: L5RCharacterData, world_state: Dictionary) 
 	# Social knowledge — read through legitimate channels only (GDD s20)
 	ctx.characters_present = world_state.get("characters_present", [] as Array[int])
 	ctx.dispositions = character.disposition_values.duplicate()
+	ctx.disposition_values = character.disposition_values.duplicate()
 	ctx.known_topics = world_state.get("known_topics", [] as Array[int])
 	ctx.known_positions = world_state.get("known_positions", {})
 	ctx.known_objectives = world_state.get("known_objectives", {})
 	ctx.known_contacts = world_state.get("known_contacts", [] as Array[int])
 	ctx.contact_clans = world_state.get("contact_clans", {})
+	ctx.known_contacts_by_clan = character.known_contacts_by_clan.duplicate()
 	ctx.met_characters = character.met_characters.duplicate()
+	ctx.knowledge_pool = character.knowledge_pool
 
 	# Lord-tier fields
 	if ctx.is_lord:
 		ctx.resource_stockpiles = world_state.get("resource_stockpiles", {})
 		ctx.province_statuses = world_state.get("province_statuses", [])
+
+	# Military
+	ctx.military_rank = character.military_rank
+	ctx.commanded_unit_id = character.commanded_unit_id
+	ctx.assigned_company_id = character.assigned_company_id
+
+	# Military intelligence (s55.23)
+	ctx.wall_statuses = world_state.get("wall_statuses", [])
+	ctx.known_clan_strengths = world_state.get("known_clan_strengths", {})
+	ctx.unit_training_counts = world_state.get("unit_training_counts", {})
+	ctx.available_levy_pu = world_state.get("available_levy_pu", 0.0)
+	ctx.can_sustain_iron_upkeep = world_state.get("can_sustain_iron_upkeep", true)
+	ctx.active_wars = world_state.get("active_wars", [])
+	ctx.escalating_conflicts = world_state.get("escalating_conflicts", [])
+	ctx.taint_topic_province_ids = world_state.get("taint_topic_province_ids", [] as Array[int])
+
+	# Festival state (s11.5)
+	ctx.is_ceasefire_day = world_state.get("is_ceasefire_day", false)
+	ctx.is_labor_halt_day = world_state.get("is_labor_halt_day", false)
+	ctx.is_taian = world_state.get("is_taian", false)
+	ctx.is_inauspicious_for_social = world_state.get("is_inauspicious_for_social", false)
 
 	# State
 	ctx.pending_events = world_state.get("pending_events", [])
@@ -109,6 +150,14 @@ static func generate_options(
 	var available_actions: Array[String] = _get_actions_for_context(ctx.context_flag)
 
 	for action_id: String in available_actions:
+		if _is_zone_blocked(action_id, ctx.zone_flags):
+			continue
+		if _is_military_blocked(action_id, ctx):
+			continue
+		if ctx.is_ceasefire_day and _is_ceasefire_blocked(action_id):
+			continue
+		if ctx.is_labor_halt_day and _is_labor_halt_blocked(action_id):
+			continue
 		var option := NPCDataStructures.ScoredAction.new()
 		option.action_id = action_id
 		option.target_npc_id = need.target_npc_id
@@ -139,6 +188,27 @@ static func apply_personality_filter(
 	return filtered
 
 
+# -- Phase 4b: Allowlist Filter (s57.1) ----------------------------------------
+# Only actions listed in objective_alignment.json for the current NeedType
+# may enter scoring. Missing entries are BLOCKED, not scored at 0.
+
+static func apply_allowlist_filter(
+	options: Array[NPCDataStructures.ScoredAction],
+	need_type: String,
+	scoring_tables: Dictionary,
+) -> Array[NPCDataStructures.ScoredAction]:
+	var alignment_table: Dictionary = scoring_tables.get("objective_alignment", {})
+	var need_entry: Dictionary = alignment_table.get(need_type, {})
+	if need_entry.is_empty():
+		return options
+
+	var filtered: Array[NPCDataStructures.ScoredAction] = []
+	for option: NPCDataStructures.ScoredAction in options:
+		if need_entry.has(option.action_id):
+			filtered.append(option)
+	return filtered
+
+
 # -- Phase 5: Score All Options ------------------------------------------------
 # Eight components per s55.4.5 / s55.3.3.
 
@@ -147,6 +217,10 @@ static func score_all(
 	need: NPCDataStructures.ImmediateNeed,
 	ctx: NPCDataStructures.ContextSnapshot,
 	scoring_tables: Dictionary,
+	approach_penalties: Array[Dictionary] = [],
+	commitments: Array[CommitmentData] = [],
+	character: L5RCharacterData = null,
+	travel_redirects: int = 0,
 ) -> void:
 	for option: NPCDataStructures.ScoredAction in options:
 		option.objective_alignment = _lookup_objective_alignment(
@@ -171,8 +245,37 @@ static func score_all(
 			option.action_id, need, ctx, scoring_tables
 		)
 		option.resource_modifier = _compute_resource_modifier(
-			option, ctx, scoring_tables
+			option, ctx, scoring_tables, character
 		)
+
+		option.approach_modifier = float(ApproachEvaluation.get_scoring_modifier(
+			option.action_id, ctx.character_id, option.target_npc_id,
+			ctx.action_log, approach_penalties, ctx.season, ctx.shourido_virtue
+		))
+
+		if character != null and not commitments.is_empty():
+			option.commitment_at_risk = float(CommitmentRegistry.get_at_risk_penalty(
+				commitments, ctx.character_id, character
+			))
+		else:
+			option.commitment_at_risk = 0.0
+
+		option.travel_redirect_penalty = float(TravelCommitment.get_redirect_penalty(
+			travel_redirects
+		))
+
+		if character != null and option.target_npc_id > 0:
+			option.confidence_penalty = _compute_confidence_penalty(
+				character, option.target_npc_id, option.objective_alignment
+			)
+			option.stale_intel_bonus = _compute_stale_intel_bonus(
+				character, option.action_id, option.target_npc_id
+			)
+		else:
+			option.confidence_penalty = 0.0
+			option.stale_intel_bonus = 0.0
+
+		option.festival_modifier = _compute_festival_modifier(option.action_id, ctx)
 
 
 # -- Phase 6: Selection -------------------------------------------------------
@@ -228,6 +331,9 @@ static func run(
 	objectives: Dictionary,
 	scoring_tables: Dictionary,
 	filter_data: Dictionary,
+	approach_penalties: Array[Dictionary] = [],
+	commitments: Array[CommitmentData] = [],
+	travel_redirects: int = 0,
 ) -> Dictionary:
 	# Phase 1
 	var ctx := build_context(character, world_state)
@@ -240,9 +346,11 @@ static func run(
 
 	# Phase 4
 	options = apply_personality_filter(options, ctx, filter_data)
+	options = apply_allowlist_filter(options, need.need_type, scoring_tables)
 
 	# Phase 5
-	score_all(options, need, ctx, scoring_tables)
+	score_all(options, need, ctx, scoring_tables,
+		approach_penalties, commitments, character, travel_redirects)
 
 	# Phase 6
 	var chosen := select_action(options, ctx)
@@ -332,9 +440,13 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array[S
 				"CHARM", "INTIMIDATE", "GOSSIP", "PERSUADE", "NEGOTIATE",
 				"PROBE", "READ_CHARACTER", "PUBLIC_DEBATE",
 				"ASK_FOR_INTRODUCTION", "OBSERVE_COURT_ATTENDEES",
-				"WRITE_LETTER", "TRAIN", "MEDITATE",
+				"TRAIN", "MEDITATE",
 				"ASSESS_PROVINCE_STATUS", "INVESTIGATE_PROVINCE",
 				"INVESTIGATE_RUMOR", "ORDER_PATROL",
+				"FOUND_VILLAGE", "BUILD_FORTIFICATION", "BUILD_SHRINE",
+				"FOUND_TEMPLE", "FOUND_MONASTERY", "COMMISSION_SHIP",
+				"ARRANGE_MARRIAGE", "APPOINT_TO_POSITION",
+				"PURIFY_TAINTED_GROUND", "FORTIFY_WALL_SECTION", "SEAL_WALL_BREACH",
 				"CRAFT", "MENTOR",
 				"DO_NOTHING", "REST",
 			]
@@ -346,7 +458,8 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array[S
 				"PUBLIC_PERFORMANCE", "DELIVER_GIFT", "OFFER_FAVOR",
 				"PERFORM_FOR", "DISCLOSE",
 				"ASK_FOR_INTRODUCTION", "OBSERVE_COURT_ATTENDEES",
-				"WRITE_LETTER", "TRAIN", "MEDITATE",
+				"ARRANGE_MARRIAGE", "APPOINT_TO_POSITION",
+				"TRAIN", "MEDITATE",
 				"BRIBE_FOR_INFO", "EAVESDROP",
 				"INTERCEPT_LETTER", "SEARCH_QUARTERS",
 				"DO_NOTHING", "REST",
@@ -357,12 +470,13 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array[S
 				"PROBE", "READ_CHARACTER", "LISTEN_REFLECT",
 				"DELIVER_GIFT", "OFFER_FAVOR",
 				"ASK_FOR_INTRODUCTION", "OBSERVE_COURT_ATTENDEES",
-				"WRITE_LETTER", "TRAIN", "MEDITATE",
+				"TRAIN", "MEDITATE",
 				"DO_NOTHING", "REST",
 			]
 		Enums.ContextFlag.TRAVELING:
 			return [
-				"WRITE_LETTER", "TRAIN", "MEDITATE",
+				"CHANGE_DESTINATION",
+				"TRAIN", "MEDITATE",
 				"DO_NOTHING", "REST",
 			]
 		Enums.ContextFlag.ON_CAMPAIGN:
@@ -370,19 +484,18 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array[S
 				"ORDER_BATTLE", "CONDUCT_RAID", "RAID_HARVEST",
 				"DRILL_TROOPS", "EVALUATE_WAR_READINESS",
 				"INTIMIDATE", "NEGOTIATE",
-				"WRITE_LETTER", "TRAIN",
+				"TRAIN",
 				"DO_NOTHING", "REST",
 			]
 		Enums.ContextFlag.UNDER_SIEGE:
 			return [
 				"CONDUCT_SORTIE", "CONDUCT_STORM_ASSAULT",
 				"NEGOTIATE_SURRENDER", "MAINTAIN_SIEGE",
-				"WRITE_LETTER",
 				"DO_NOTHING", "REST",
 			]
 		Enums.ContextFlag.IN_EXILE:
 			return [
-				"WRITE_LETTER", "TRAIN", "MEDITATE",
+				"TRAIN", "MEDITATE",
 				"DO_NOTHING", "REST",
 			]
 		Enums.ContextFlag.AT_TEMPLE:
@@ -390,14 +503,12 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array[S
 				"PERFORM_RITUAL", "PERFORM_WORSHIP", "MEDITATE",
 				"PUBLIC_ATONEMENT", "TRAIN",
 				"CHARM", "PROBE", "READ_CHARACTER",
-				"WRITE_LETTER",
 				"DO_NOTHING", "REST",
 			]
 		Enums.ContextFlag.AT_DOJO:
 			return [
 				"TRAIN", "MENTOR", "DRILL_TROOPS",
 				"CHARM", "PROBE",
-				"WRITE_LETTER",
 				"DO_NOTHING", "REST",
 			]
 		_:
@@ -458,6 +569,9 @@ static func _get_ap_cost(action_id: String) -> int:
 		"ISSUE_DUEL_CHALLENGE": 1,
 		"SEEK_PRETEXT": 1,
 		"SHARE_SUPPLIES": 1,
+		"PURIFY_TAINTED_GROUND": 1,
+		"FORTIFY_WALL_SECTION": 1,
+		"SEAL_WALL_BREACH": 2,
 	}
 	return costs.get(action_id, 1)
 
@@ -652,10 +766,214 @@ static func _interpolate_topic_position(
 
 
 static func _compute_resource_modifier(
-	_option: NPCDataStructures.ScoredAction,
-	_ctx: NPCDataStructures.ContextSnapshot,
+	option: NPCDataStructures.ScoredAction,
+	ctx: NPCDataStructures.ContextSnapshot,
 	_scoring_tables: Dictionary,
+	character: L5RCharacterData = null,
 ) -> float:
-	# Resource modifier is 0 to -40 per s55.32.
-	# Full implementation requires resource availability checks.
+	if character == null:
+		return 0.0
+	var province_data: Dictionary = _build_province_data_for_resource_check(ctx)
+	return ResourceAvailability.compute_resource_modifier(
+		option.action_id, character, province_data
+	)
+
+
+static func _build_province_data_for_resource_check(
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> Dictionary:
+	var data: Dictionary = {
+		"available_levy_pu": ctx.available_levy_pu,
+	}
+	if not ctx.province_statuses.is_empty():
+		var ps: Variant = ctx.province_statuses[0]
+		if ps is NPCDataStructures.ProvinceStatus:
+			data["rice_stockpile"] = ps.rice_stockpile
+	return data
+
+
+# -- Confidence Penalty (s55.12) -----------------------------------------------
+
+const CONFIDENCE_RECENT_PENALTY: float = -10.0
+
+static func _compute_confidence_penalty(
+	character: L5RCharacterData,
+	target_npc_id: int,
+	obj_alignment: float,
+) -> float:
+	var best: int = InformationSystem.get_best_confidence_on_target(character, target_npc_id)
+	if best < 0:
+		return 0.0
+	if best == Enums.KnowledgeConfidence.STALE:
+		return -(obj_alignment * 0.5)
+	if best == Enums.KnowledgeConfidence.RECENT:
+		return CONFIDENCE_RECENT_PENALTY
 	return 0.0
+
+
+# -- Stale Intel Bonus (s55.12) ------------------------------------------------
+
+const STALE_INTEL_GATHER_BONUS: float = 15.0
+
+const GATHER_INTELLIGENCE_ACTIONS: Array = [
+	"PROBE", "READ_CHARACTER", "BRIBE_FOR_INFO", "EAVESDROP",
+	"INTERCEPT_LETTER", "SEARCH_QUARTERS",
+]
+
+static func _compute_stale_intel_bonus(
+	character: L5RCharacterData,
+	action_id: String,
+	target_npc_id: int,
+) -> float:
+	if action_id not in GATHER_INTELLIGENCE_ACTIONS:
+		return 0.0
+	var best: int = InformationSystem.get_best_confidence_on_target(character, target_npc_id)
+	if best == Enums.KnowledgeConfidence.STALE:
+		return STALE_INTEL_GATHER_BONUS
+	return 0.0
+
+
+# -- Zone Flag Blocking (s57.36) -----------------------------------------------
+
+const ZONE_GATED_ACTIONS: Dictionary = {
+	"PUBLIC_PERFORMANCE": "performance_permitted",
+	"PERFORM_FOR": "performance_permitted",
+	"PERFORM_WORSHIP": "shrine_eligible",
+	"PERFORM_RITUAL": "shrine_eligible",
+}
+
+static func _is_zone_blocked(action_id: String, zone_flags: Dictionary) -> bool:
+	if zone_flags.is_empty():
+		return false
+	var required_flag: String = ZONE_GATED_ACTIONS.get(action_id, "")
+	if required_flag.is_empty():
+		return false
+	return not zone_flags.get(required_flag, false)
+
+
+# -- Military Hierarchy Blocking (s57.21) --------------------------------------
+
+const MILITARY_ORDER_ACTIONS: Array[String] = [
+	"ORDER_BATTLE", "CONDUCT_RAID", "RAID_HARVEST",
+	"DRILL_TROOPS", "EVALUATE_WAR_READINESS",
+	"ORDER_PATROL", "CONDUCT_SORTIE", "CONDUCT_STORM_ASSAULT",
+	"MAINTAIN_SIEGE", "NEGOTIATE_SURRENDER",
+]
+
+const COMMANDER_RANK_ACTIONS: Dictionary = {
+	"DISPATCH_COURTIER": Enums.MilitaryRank.SHIREIKAN,
+	"LEVY_TROOPS": Enums.MilitaryRank.CHUI,
+}
+
+static func _is_military_blocked(
+	action_id: String,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> bool:
+	if action_id in MILITARY_ORDER_ACTIONS:
+		return ctx.commanded_unit_id < 0
+	if COMMANDER_RANK_ACTIONS.has(action_id):
+		var min_rank: int = COMMANDER_RANK_ACTIONS[action_id]
+		return ctx.military_rank < min_rank
+	return false
+
+
+# -- Festival Blocking (s11.5) ------------------------------------------------
+
+const CEASEFIRE_BLOCKED_ACTIONS: Array[String] = [
+	"ORDER_BATTLE", "CONDUCT_RAID", "RAID_HARVEST",
+	"CONDUCT_SORTIE", "CONDUCT_STORM_ASSAULT",
+	"MAINTAIN_SIEGE", "DECLARE_WAR",
+]
+
+const LABOR_HALT_BLOCKED_ACTIONS: Array[String] = [
+	"COMMISSION_CONSTRUCTION", "COMMISSION_REPAIR",
+	"LEVY_TROOPS", "DRILL_TROOPS",
+]
+
+const SOCIAL_ACTIONS: Array[String] = [
+	"CHARM", "NEGOTIATE", "PERSUADE", "IMPRESS",
+	"LISTEN_REFLECT", "INTIMIDATE", "PERFORM_FOR",
+	"GOSSIP", "DISCLOSE", "OFFER_FAVOR",
+]
+
+const INAUSPICIOUS_PENALTY: float = -10.0
+const TAIAN_BONUS: float = 5.0
+
+static func _is_ceasefire_blocked(action_id: String) -> bool:
+	return action_id in CEASEFIRE_BLOCKED_ACTIONS
+
+
+static func _is_labor_halt_blocked(action_id: String) -> bool:
+	return action_id in LABOR_HALT_BLOCKED_ACTIONS
+
+
+static func _compute_festival_modifier(
+	action_id: String,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> float:
+	if action_id not in SOCIAL_ACTIONS:
+		return 0.0
+	var modifier: float = 0.0
+	if ctx.is_inauspicious_for_social:
+		modifier += INAUSPICIOUS_PENALTY
+	if ctx.is_taian:
+		modifier += TAIAN_BONUS
+	return modifier
+
+
+# -- Daily Letter Pass (s57.5) ------------------------------------------------
+# WRITE_LETTER is not scored in the main decision loop. After AP resolution,
+# each NPC gets one free letter per IC day. Selects best recipient using
+# SEND_LETTER alignment entries as scoring table.
+
+static func resolve_daily_letter(
+	character: L5RCharacterData,
+	objectives: Dictionary,
+	scoring_tables: Dictionary,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> Dictionary:
+	var need_type: String = _get_letter_need_type(objectives)
+	if need_type.is_empty():
+		return {}
+
+	var alignment_table: Dictionary = scoring_tables.get("objective_alignment", {})
+	var send_letter_entry: Dictionary = alignment_table.get(need_type, {})
+	var send_letter_score: float = float(send_letter_entry.get("WRITE_LETTER", send_letter_entry.get("SEND_LETTER", 0)))
+	if send_letter_score <= 0:
+		return {}
+
+	var target_id: int = _select_letter_target(objectives, ctx)
+	if target_id < 0:
+		return {}
+
+	return {
+		"character_id": character.character_id,
+		"action_id": "WRITE_LETTER",
+		"target_npc_id": target_id,
+		"need_type": need_type,
+	}
+
+
+static func _get_letter_need_type(objectives: Dictionary) -> String:
+	var primary: Dictionary = objectives.get("primary", {})
+	if not primary.is_empty():
+		return primary.get("need_type", "")
+	var standing: Dictionary = objectives.get("standing", {})
+	if not standing.is_empty():
+		return standing.get("need_type", "")
+	return ""
+
+
+static func _select_letter_target(
+	objectives: Dictionary,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> int:
+	var primary: Dictionary = objectives.get("primary", {})
+	if primary.has("target_npc_id") and primary["target_npc_id"] >= 0:
+		return primary["target_npc_id"]
+	if ctx.lord_id >= 0:
+		return ctx.lord_id
+	var met: Array[int] = ctx.met_characters
+	if not met.is_empty():
+		return met[0]
+	return -1

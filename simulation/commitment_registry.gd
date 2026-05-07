@@ -150,7 +150,6 @@ static func create_commitment(
 	c.fulfillment_target = fulfillment_target
 	c.tier = clampi(tier, 1, 3)
 	c.created_ic_day = created_ic_day
-	c.created_by_action = source_action
 	c.witnesses = witnesses.duplicate()
 	return c
 

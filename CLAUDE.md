@@ -157,12 +157,19 @@ single-dice-entry-point and server-authoritative constraints.
   CommitmentType, CommitmentStatus, DeploymentStatus, ZoneSubtype (24 values),
   LordRank, TattooBodyLocation (9), TattooQualityTier, TattooSubjectType,
   TattooAbility (26 named abilities), CulturalReluctance, MilitaryRank (8 ranks),
-  OperationalHierarchyType, KolatSect (7 sects), ShipClass (7 classes).
+  OperationalHierarchyType, KolatSect (7 sects), ShipClass (7 classes),
+  KnowledgeSource (5 sources), KnowledgeConfidence (3 tiers).
 - **shared/province_data.gd** — ProvinceData Resource: terrain, adjacency,
-  resources (rice/koku/iron/arms), population PU breakdown, stability. Data model
-  only — no map generation (map is being worked on separately by the user).
+  stability. Geography and settlement references only — no PU, no stockpiles.
+  Data model only — no map generation (map is being worked on separately by
+  the user).
 - **shared/settlement_data.gd** — SettlementData Resource: 12 settlement types,
-  infrastructure array, garrison, population.
+  infrastructure array, population_pu, farming_pu, mining_pu, town_pu,
+  military_pu, garrison_pu, rice_stockpile, koku_stockpile. Per GDD s4.3.7,
+  all PU breakdown and resource stockpiles live at settlement level.
+- **shared/clan_data.gd** — ClanData Resource: clan_name, iron_stockpile,
+  arms_stockpile, champion_id, province_ids. Iron/arms pool at clan level
+  per GDD s4.3.10.
 
 ### NPC Decision Engine
 - **simulation/npc_data_structures.gd** — ImmediateNeed (generic target system),
@@ -193,9 +200,19 @@ single-dice-entry-point and server-authoritative constraints.
 
 ### Objective Decomposition
 - **simulation/objective_decomposer.gd** — Routes standing objectives to
-  type-specific decomposition trees per GDD s55.22/s55.24/s55.25.
-  Political (6), Economic (5), Personal (8), Military (2) standing objectives.
+  type-specific decomposition trees per GDD s55.22/s55.24/s55.25/s55.23.
+  Political (6), Economic (5), Personal (8), Military (7) standing objectives.
   Stateless per GDD s55.4.2. Unknown NeedTypes pass through unchanged.
+  Military objectives include 5 full decomposition trees per GDD s55.23:
+  STRENGTHEN_WALL (Kaiu Wall defense with SI/scout/taint/jade/sortie ladder),
+  MILITARY_DOMINANCE (dominance ratio comparison + buildup),
+  ELIMINATE_SHADOWLANDS (crisis → insurgency → taint topic → proactive),
+  MAINTAIN_PEACE (war → tensions → preventive diplomacy),
+  BUILD_STRONGEST_FORCE (training level priority ladder).
+  New ContextSnapshot fields: wall_statuses (WallStatus class),
+  known_clan_strengths, unit_training_counts, available_levy_pu,
+  can_sustain_iron_upkeep, active_wars, escalating_conflicts,
+  taint_topic_province_ids. ProvinceStatus gains is_wall_province, crisis_type.
 
 ### Action Execution & World Mutation
 - **simulation/action_executor.gd** — Routes chosen ActionIDs to SkillResolver
@@ -232,8 +249,11 @@ single-dice-entry-point and server-authoritative constraints.
 
 ### Resource Tick System
 - **simulation/resource_tick.gd** — Seasonal resource processing per GDD s4.3.
-  Rice consumption/harvest, starvation stages, 5-tier tax cascade,
-  personality tax modifiers, iron/koku production, population growth.
+  Fully settlement-based: all PU reads and stockpile writes target
+  SettlementData. Rice consumption/harvest, starvation stages, 5-tier tax
+  cascade (deposits collected rice to settlements), personality tax modifiers,
+  iron production (pools to ClanData), koku production, population growth.
+  Province-level helpers sum PU across settlements.
 
 ### Approach Evaluation (s55.30)
 - **simulation/approach_evaluation.gd** — Measure-Then-Decide system.
@@ -276,6 +296,87 @@ single-dice-entry-point and server-authoritative constraints.
   state. Commission system. Provenance investigation. World gen helpers.
 - **shared/tattoo_data.gd** — TattooData Resource (9 body locations).
 
+### Topic Propagation (s16, s15.5, s15.6)
+- **simulation/topic_system.gd** — TopicMomentumSystem with three propagation
+  features wired into DayOrchestrator:
+  1. **Discussion count wiring** — conversation results increment
+     `discussion_count_this_day` on TopicData before daily tick, driving
+     Tier 4 topic decay/hold mechanics.
+  2. **Public knowledge broadcast** — after momentum tick, topics spread to
+     characters based on momentum thresholds: Minor (11+) → affected provinces,
+     Secondary (26+) → +adjacent provinces, Major (51+) → clan territory,
+     Unavoidable (76+) → all characters. Uses ProvinceData adjacency.
+  3. **Starting position calculation** — `calculate_starting_position()` per
+     GDD s15.5: `(Disposition Anchor Sum × 0.5) + Personality Modifier`,
+     clamped ±100. Disposition anchors use subject_role direction
+     (BENEFICIARY/VICTIM/PERPETRATOR/NEUTRAL). Personality modifier from
+     14-virtue × topic_type:variant table (VIRTUE_MODIFIERS const, s15.6).
+     Positions computed on topic acquisition (conversation transfer, broadcast).
+  - TopicData gains `topic_type`, `variant` fields.
+  - L5RCharacterData gains `topic_positions: Dictionary` (topic_id → float).
+  - DayOrchestrator gains `character_province_map` parameter, builds
+    `province_clan_map` from provinces. Sequence: conversations → wire
+    discussion counts → compute conversation positions → topic tick →
+    broadcast → compute broadcast positions.
+
+### Crime Investigation System (s57.15, s57.16, s57.47)
+- **simulation/investigation_system.gd** — InvestigationSystem with:
+  - `examine_scene()` — Investigation/Perception vs concealment_tn, evidence
+    weight by margin, elapsed time penalty, suspect identification at 2+ raises.
+  - UPHOLD_LAW self-initiation probability table (14 virtues per GDD s57.16.9a).
+  - Witness evidence calculation (awareness bonus, honor penalty).
+  - Witness prioritization (present first, then awareness desc, then honor asc).
+- **simulation/investigation_decomposer.gd** — Seven-phase investigation loop
+  (already existed): travel → examine scene → interview witnesses →
+  interview suspects → check alibis → follow leads → resolution.
+- **simulation/crime_system.gd** — At-act and at-conviction consequences,
+  seppuku system, escalation tracking (already existed).
+- EXAMINE_CRIME_SCENE ActionID added to: objective_alignment (90 under
+  INVESTIGATE_THREAT), action_skill_map, personality_lean (all 14 virtues),
+  action_executor (INTELLIGENCE_ACTIONS category).
+- **UPHOLD_LAW self-initiation** — Crime detection creates crime topics
+  (topic_type="crime", slug="crime_case_{id}") with momentum 0 (no broadcast).
+  Topics are seeded only to witnesses (characters at same physical_location
+  as perpetrator) and victims via `_seed_crime_topic_to_knowers()`. Topics
+  then spread organically through daily conversations/letters — magistrates
+  learn about crimes when someone tells them, not omnisciently.
+  DayOrchestrator scans magistrates with UPHOLD_LAW standing objective:
+  if crime topic in known_topics + jurisdiction match → activate_uphold_law()
+  populates active_case and sets investigating_magistrate_id. Jurisdiction:
+  same province prefix, or Emerald Magistrate (Empire-wide).
+- **Witness PROBE evidence** — When _process_info_events handles a
+  GATHER_INTELLIGENCE action and the prober has an active_case, checks if
+  target is a witness (10-20 evidence) or suspect (10-15 evidence) on the
+  case. Increments CrimeRecord.evidence_total and marks target as interviewed.
+- **Conviction topic generation** — InvestigationSystem.generate_conviction_topic()
+  creates TopicData from conviction results: tier from CONVICTION_CONSEQUENCES
+  table, momentum by tier (T1=80, T2=50, T3=25, T4=10), category by crime type
+  (SUPERNATURAL for maho, POLITICAL for treason, LEGAL for others).
+  generate_seppuku_refusal_topic() creates Tier 4 PERSONAL topic.
+- TopicData.Category gains LEGAL value.
+
+### Information Architecture Integration (s55.12, s55.6)
+- **Confidence penalty in NPC Phase 5 scoring** — `confidence_penalty` field on
+  ScoredAction. When target has RECENT intel: −10. When STALE: ObjAlign halved.
+  No penalty if character has no knowledge about target (benefit of the doubt).
+- **Stale intel gather bonus** — `stale_intel_bonus` field on ScoredAction.
+  When target has STALE intel and action is a gather-intelligence type
+  (PROBE, READ_CHARACTER, BRIBE_FOR_INFO, EAVESDROP, INTERCEPT_LETTER,
+  SEARCH_QUARTERS): +15 bonus per GDD s55.12.
+- **`get_best_confidence_on_target()`** added to InformationSystem.
+- **Province status & crisis transfer** — `transfer_objective_knowledge()`
+  now accepts optional `province_statuses` array. When objective targets a
+  province, copies province_status and crisis_data entries to recipient's
+  knowledge_pool as FRESH confidence.
+- IDENTIFY_CONTACT scoring updated to match GDD s55.7: ASK_FOR_INTRODUCTION=95,
+  OBSERVE_COURT_ATTENDEES=85, WRITE_LETTER=60.
+
+### Military Context Wiring (s55.23)
+- **build_context() Phase 1** now populates all 8 military intelligence fields
+  from world_state: wall_statuses, known_clan_strengths, unit_training_counts,
+  available_levy_pu, can_sustain_iron_upkeep, active_wars, escalating_conflicts,
+  taint_topic_province_ids. Callers supply data via world_state dictionary keys.
+
 ### Character Sheet Field Index (s57.35)
 - **shared/character_data.gd** — Consolidated all fields from gap sections:
   military_rank, commanded_unit_id, assigned_company_id (s11.3.18),
@@ -294,44 +395,522 @@ All in /tests/, one file per system:
 - test_time_system.gd (~15 tests)
 - test_skill_resolver.gd (~20 tests)
 - test_action_point_system.gd (~12 tests)
-- test_npc_decision_engine.gd (~35 tests)
+- test_npc_decision_engine.gd (~47 tests)
 - test_scoring_table_loader.gd (~15 tests)
 - test_action_executor.gd (~25 tests)
 - test_effect_applicator.gd (~28 tests)
 - test_npc_wave_resolver.gd (~15 tests)
 - test_resource_tick.gd (~30 tests)
-- test_objective_decomposer.gd (~45 tests)
-- test_information_system.gd (~35 tests)
-- test_day_orchestrator.gd (~12 tests)
+- test_objective_decomposer.gd (~100 tests)
+- test_information_system.gd (~40 tests)
+- test_topic_system.gd (~55 tests)
+- test_investigation_system.gd (~40 tests)
+- test_day_orchestrator.gd (~25 tests)
 - test_approach_evaluation.gd (~55 tests)
 - test_commitment_registry.gd (~60 tests)
-- test_military_hierarchy.gd (~40 tests)
+- test_military_hierarchy.gd (~47 tests)
 - test_zone_flag_matrix.gd (~53 tests)
 - test_tattoo_system.gd (~100 tests)
 - test_character_sheet_field_index.gd (~45 tests)
+- test_insurgency_system.gd (~60 tests)
+- test_system_wiring.gd (~48 tests)
+- test_rice_market_system.gd (~35 tests)
+- test_regional_price_modifiers.gd (~25 tests)
+- test_world_generator.gd (~45 tests)
+- test_resource_availability.gd (~25 tests)
+- test_court_availability.gd (~15 tests)
+- test_orphaned_objectives.gd (~25 tests)
+- test_strategic_review.gd (~35 tests)
+- test_province_triage.gd (~30 tests)
+- test_reactive_decisions.gd (~30 tests)
+- test_opportunity_scanner.gd (~25 tests)
+- test_primary_objective_decomposer.gd (~35 tests)
+- test_favor_system.gd (~36 tests)
+- test_personal_visit_system.gd (~25 tests)
+- test_inventory_system.gd (~30 tests)
+- test_intimidation_system.gd (~30 tests)
+- test_disposition_system.gd (~66 tests)
+- test_marriage_system.gd (~22 tests)
+- test_hostage_system.gd (~22 tests)
+- test_court_priority_system.gd (~18 tests)
+- test_travel_system.gd (~30 tests)
+- test_objective_progress.gd (~35 tests)
+- test_festival_system.gd (~55 tests)
+- test_simulation_scheduler.gd (~20 tests)
+
+### Festival System (s11.5)
+- **simulation/festival_system.gd** — Empire-wide canonical festivals, Rokuyo
+  cycle, championship resolution, and local settlement festival generation per
+  GDD s11.5. Rokuyo 6-day rotating cycle (Sensho, Tomobiki, Senbu, Butsumetsu,
+  Taian, Shakko) with Taian +1 disposition bonus and Butsumetsu/Tomobiki
+  inauspicious for social actions. 23 canonical festivals with month/day/effects.
+  Ceasefire detection (Setsuban), labor halt (Chrysanthemum 7-day window),
+  marriage bonus day. Championship system: 6 types (Emerald, Jade, Amethyst,
+  Ruby, Turquoise, Topaz), 3-stage skill+trait resolution, honor tiebreaker.
+  Topaz is annual; others are vacancy-triggered. Emperor's Chosen vacancy
+  evaluation with weighted scoring (disposition 20, clan_balance 15,
+  skill_relevance 15, honor 10, status 5, personality 10). Local festival
+  procedural generation: settlement type → count range, theme categories,
+  format words, name patterns, season-spread day picking.
+
+### World Generator
+- **simulation/world_generator.gd** — Static factory methods for seeding initial
+  world state per GDD s22.4 generation templates and s4.3 resource rules.
+  `generate_character(id, name, clan, family, school, insight_rank, dice)` →
+  L5RCharacterData with traits, skills, honor/glory, personality, age, koku.
+  `generate_province(id, name, clan, family, terrain, total_pu, dice)` →
+  ProvinceData with stability (no PU, no stockpiles).
+  `generate_settlement(id, name, province, type, pop, terrain)` → SettlementData
+  with PU distribution, garrison_pu, rice_stockpile (2 seasons buffer),
+  koku_stockpile (proportional to town_pu).
+  Data tables: 38 family trait bonuses, 28 schools (all Great Clans), clan
+  personality weights (bushido/shourido), terrain PU distributions, age ranges.
+  Trait advancement: 4 points per rank above 1, 70% priority to focus rings.
+  Void: full rate for shugenja, half rate for others. Skill advancement: school
+  skills advance 80%/rank, 2-3 non-school skills added per rank.
+  Coordinate system and adjacency are NOT set — deferred for later.
+
+### Resource Availability Modifier (s55.32)
+- **simulation/resource_availability.gd** — Phase 5 scoring penalty for
+  resource-consuming actions. `compute_resource_modifier(action_id, character,
+  province_data)` returns 0 to −40 based on koku ratio to cost.
+  ACTION_RESOURCE_COSTS: 8 actions mapped to resource type + amount.
+  Thresholds: ≥5.0→0, ≥3.0→−5, ≥1.5→−10, ≥1.0→−15, <1.0→−25, ≤0→−40.
+  Resource types: koku (ratio), inventory_item (count), troop_pu/rice
+  (province data). Wired into `_compute_resource_modifier` in
+  npc_decision_engine.gd — `resource_modifier` field on ScoredAction populated
+  from `ResourceAvailability.compute_resource_modifier()`.
+
+### Court Availability Helper (s55.34)
+- **simulation/court_availability.gd** — `attend_court_or_alternative(
+  active_court, upcoming_courts, character, target_npc_id, held_leverage,
+  action_log, current_season, known_locations)` → Variant (Dictionary or null).
+  4-step priority cascade:
+  1. Active court at location → ATTEND_COURT (priority 2)
+  2. Upcoming court → TRAVEL_TO highest-prestige court
+  3a. Held leverage → SEND_LETTER to target's lord (or target directly)
+  3b. Has lord → SEND_LETTER to lord requesting court (once per season)
+  3c. Known target location → TRAVEL_TO for personal visit
+  4. No options → null
+
+### Orphaned Objectives on Lord Death (s55.33)
+- **simulation/orphaned_objectives.gd** — Vassal objective handling when
+  assigning lord dies. LORD_DEPENDENT_OBJECTIVES (9 types: BREAK_ALLIANCE,
+  ISOLATE_CHARACTER, GAIN_WINTER_COURT_INVITATION, APPOINT_TO_POSITION,
+  REMOVE_FROM_POSITION, RESOLVE_CLAN_WAR, OBTAIN_IMPERIAL_EDICT,
+  CONQUER_PROVINCE, SABOTAGE_ECONOMY) → ORPHANED on lord death.
+  TARGET_DEPENDENT_OBJECTIVES (3 types: EXPOSE_SECRET, INCREASE_KOKU,
+  AVENGE) → persist as ACTIVE.
+  `process_lord_death(vassals, dead_lord_id, successor_id, objectives_map)`
+  marks lord-dependent objectives ORPHANED, returns report targets.
+  `resolve_orphaned_objective(objectives, decision, new_objective)` handles
+  CONFIRM (reactivate), MODIFY (replace), CANCEL (remove).
+  `generate_report_need(vassal, successor_id)` creates REPORT_TO_NEW_LORD need.
+  `has_orphaned_vassals(vassals, lord_id, objectives_map)` finds orphaned IDs.
+
+### Strategic Review (s55.10)
+- **simulation/strategic_review.gd** — Lord-tier seasonal Strategic Review per
+  GDD s55.10. Runs at each season boundary for lord-tier NPCs (status ≥ 5.0
+  or lord_id == -1). Produces directives: REASSIGN_VASSAL_OBJECTIVE (orphan
+  resolution by bushido virtue + idle vassal assignment), ADJUST_TAX (stability/
+  treasury thresholds + personality modifiers), WAR_READINESS (active wars or
+  escalating conflicts), SEEK_PEACE (Jin-favored, Yu-blocked, duration gate),
+  CALL_COURT (vassal count + crises + winter bonus + Rei modifier), NO_CHANGE.
+  Emperor-specific: `run_emperor_review()` adds Winter Court host selection
+  (Autumn only, 4 scoring factors + archetype preference), vacancy filling
+  (archetype-specific delays: Benevolent/Iron 14, Cunning 45, disposition vs
+  skill weights per archetype), Shogun creation (Benevolent: reluctant after 3+
+  season crisis + failed diplomacy; Iron: duty/readiness; Cunning/Warlike: never;
+  Tyrant: personal enforcer with loyal candidate). Five EmperorArchetype enum
+  values. Wired into DayOrchestrator `_run_strategic_reviews()` on season change.
+
+### Province Triage (s55.9)
+- **simulation/province_triage.gd** — Multi-target comparative evaluation.
+  Scores each province: crisis(+100), insurgency(+80), broken stability(+60),
+  volatile(+30), restless(+10), garrison deficit(+20), stale info(+25).
+  `get_worst_province()` returns highest-scoring province with recommended
+  NeedType (DEFEND_PROVINCE / INVESTIGATE_THREAT / PATROL_PROVINCE / REST).
+  `get_top_provinces(count)` for afternoon AP cycling. Wired into
+  ObjectiveDecomposer for MAXIMIZE_PROSPERITY and DEFEND_TERRITORY trees.
+  Also used by StrategicReview for vassal assignment threat detection.
+
+### Reactive Decision Path (s55.11)
+- **simulation/reactive_decisions.gd** — Personality-driven reactive event
+  evaluation. Four reactive types: DUEL_CHALLENGE_RECEIVED (Yu/Kyoryoku always
+  accept, Rival disposition accepts, Bushido in public accepts),
+  FAVOR_REQUESTED (Chugi/Makoto always honor, Friend+ disposition honors,
+  Jin honors neutral), COURT_INVITATION (prestige 3+ or Friend+ accepts,
+  Rei always attends, Ishi declines low), ACCEPT_TRAINING (sensei rank must
+  exceed student, Kanpeki needs 2+ gap, Ketsui needs mentor objective).
+  Proactive duel trigger: 3-step evaluation (capability → target assessment →
+  personality gate). Dosatsu/Chishiki require intel on target.
+
+### Opportunity Scanner / Primary Objective Self-Selection (s55.26.1)
+- **simulation/opportunity_scanner.gd** — Lord-tier and lordless NPC primary
+  objective self-selection. Scans known world state through 4 domain scanners
+  (political, military, economic, personal). Scores candidates on: standing
+  alignment (40%), feasibility (30%), urgency (20%), personality fit (10%).
+  Self-selection timing: Chugi never, Seigyo/Ishi 1 season, Makoto/Ketsui 2,
+  default 3. Wired into StrategicReview `_evaluate_self_selection()` — lords
+  without active primary objectives run the scanner each seasonal review.
+
+### Primary Objective Decomposer (s55.28)
+- **simulation/primary_objective_decomposer.gd** — 12 completable primary
+  objective decomposition trees: BREAK_ALLIANCE (vulnerability assessment,
+  leverage deployment, court/letter routing), ISOLATE_CHARACTER (ally triage,
+  progressive severing), GAIN_WINTER_COURT_INVITATION, APPOINT_TO_POSITION,
+  REMOVE_FROM_POSITION (leverage gates), RESOLVE_CLAN_WAR (negotiate contacts),
+  OBTAIN_IMPERIAL_EDICT (emperor access), EXPOSE_SECRET (acquire→deploy),
+  CONQUER_PROVINCE (readiness→declare→battle), INCREASE_KOKU (stability first),
+  SABOTAGE_ECONOMY, AVENGE (death=duel, disgrace=expose). Routed through
+  ObjectiveDecomposer before standing objectives. ContextSnapshot gains
+  `disposition_values`, `known_contacts_by_clan`, `knowledge_pool` fields.
+
+### Favor System (s12.10)
+- **shared/favor_data.gd** — FavorData Resource: FavorType (SPECIFIC/GENERAL),
+  FavorTier (MAJOR=1/MODERATE=2/MINOR=3), InvocationMethod (LETTER/COURT/
+  PERSONAL_VISIT). Fields: creditor_id, debtor_id, terms, is_blackmail_extracted,
+  invoked state, response deadline, heir_id.
+- **simulation/favor_system.gd** — Full favor lifecycle per GDD s12.10:
+  `offer_favor()` creates FavorData, `get_offer_disposition()` returns tier-scaled
+  disposition (+6/+10/+15 base, +2/+3/+4 per raise, −5 on critical failure).
+  `invoke_favor()` sets deadline (letter=90d, court=1d, visit=90d).
+  `honor_favor()` returns +0.1 honor. `break_favor()` returns full consequence
+  table (disposition −20/−35/−50, honor −0.5/−1.0/−2.0, glory loss for major,
+  witness disposition loss, topic generation). `can_dispute()` / `resolve_dispute()`
+  for general favors (contested Sincerity). Expiration: minor=360d, moderate=1080d,
+  major=never. Death: major favors inherit to heir, others dissolve.
+  `extract_blackmail_favor()` creates general favors from secret tiers.
+  `can_unlock_supply_sharing()` for moderate/major favors.
+- L5RCharacterData gains `favors: Array[FavorData]`.
+
+### Personal Visit System (s17)
+- **simulation/personal_visit_system.gd** — Three visit types (INVITATION_SENT,
+  LETTER_ANNOUNCING_ARRIVAL, UNINVITED) with host response mechanics.
+  Refuse after invitation: −10 disposition, −0.3 honor. Refuse letter: −2.
+  Refuse uninvited: no cost. Accept uninvited: +5 goodwill. Decline invitation:
+  −3 disposition. Action filtering: Categories 1, 3, 5 only (no broadcast).
+  Intimate setting bonus: +3 disposition on all Category 1 actions (CHARM,
+  FLATTERY, SINCERE_COMPLIMENT, SHARED_INTEREST, DELIVER_GIFT, OFFER_FAVOR,
+  PERFORM_FOR). Does not apply to Categories 3 or 5.
+
+### Inventory System (s12.11)
+- **simulation/inventory_system.gd** — Three storage tiers (ON_PERSON,
+  CURRENT_QUARTERS capacity=20, HOME_STORAGE unlimited). Five outfit capacities
+  (court_formal=3, casual=5, traveling=8, light_armor=6, heavy_armor=3).
+  Item sizes: SMALL=1, MEDIUM=2, LARGE=3. Seven categories (DOCUMENT, SEAL,
+  GIFT, WEAPON, SCROLL, VALUABLE, EVIDENCE). Transfer: give_directly (same
+  location), send_by_messenger (transit state), move_to_storage. Covert:
+  pickpocket (on-person only), search_quarters (quarters only). Evidence
+  tracking: `has_evidence()`, `get_evidence_items()`. Concealment check for
+  court formal overflow. `destroy_item()` for eliminating evidence.
+
+### Intimidation & Blackmail System (s12.9)
+- **simulation/intimidation_system.gd** — Three intimidation contexts:
+  BLACKMAIL (secret-tier free raises: T1=3, T2=2, T3=1, T4=0; favors=margin/5),
+  PRIVATE (in-person: TN+10+5/raise; by letter: TN+5 only),
+  PUBLIC (court: TN+10+5/raise, −2 disposition with Rei/Gi/Meiyo witnesses).
+  All produce compliance (binary active/inactive). Honor Rank as flat defense
+  bonus. Disposition modifiers: friend/ally +5, enemy −5.
+  Honor costs: blackmail/public −0.3, private −0.2. Infamy: 0.1/0.1/0.05.
+  Pushback TN = 15 + intimidator's skill rank. Compliance ends at Friend
+  disposition or when leverage removed.
+
+### Disposition System (s12.2)
+- **simulation/disposition_system.gd** — Core relationship layer per GDD s12.2.
+  Scale: -100 to +100, 8 named tiers (Blood Enemy to Devoted). Three modifier
+  categories: permanent (14×14 virtue compatibility matrix, family bonds),
+  historical (27 event types with start/floor/decay), temporary (14 conditional
+  modifiers with durations). Roll modifiers: target's disposition gives Free
+  Raises (+31) or additional Raises required (-31). Authenticity modifier:
+  dice kept penalty for hostile actions toward friends or positive actions
+  toward enemies. Supply sharing ratio (Friend+ only, scaled 50-100%).
+  Court action disposition values for all 7 targeted actions. Cohabitation
+  passive gain (+0.1/day). Family/Clan ripple (+2/+1, caps 30/15).
+
+### Marriage System (s22.7)
+- **simulation/marriage_system.gd** — Political marriage institution per GDD s22.7.
+  Three types: WITHIN_FAMILY (no boosts), BETWEEN_FAMILIES (family +5),
+  CROSS_CLAN (clan +8, family +5, favor owed). Boost decay: clan fades over
+  80 seasons, family over 40 seasons. Caps: clan +20, family +15.
+  Birth family disposition floors: +15 (family), +8 (clan) — permanent for
+  the married character. Pregnancy: seasonal chance based on spouse disposition
+  (0%/5%/15%/25%). Gempuku at 72 seasons (18 IC years). Benten Festival bonus.
+
+### Hostage System (s22.9)
+- **simulation/hostage_system.gd** — Hitojichi per GDD s22.9. Capture via
+  siege surrender or battle. Personality gates: Yu less likely captured (0.5x),
+  Ishi committed never escapes. Escape: Stealth+Agility vs settlement TN
+  (town=20, castle=25, major=30, +2 per 0.5 excess PU). Bushi only, Stealth 3+.
+  Success: escape + family honor loss. Failure: execution. Critical: public
+  execution + catastrophic honor loss. Leverage: rank 3+=3, rank 5+/champion=8.
+  Action restrictions: no travel, no actions targeting captor.
+
+### Court Priority System (s15.8)
+- **simulation/court_priority_system.gd** — NPC court selection: lord-assigned
+  → primary objective → personal relevance → standing objective → court status.
+  Early departure costs: host (honor+glory loss), guest (-3 disposition),
+  proxy (mandate violation). Objective negligence: passive -0.1/season,
+  deliberate -0.5 immediate. Otomo institutional leans: Gossip +15, Disclose
+  +10, blocks inter-clan goodwill actions, escalates at Rival disposition.
+
+### Travel System (s55.29)
+- **simulation/travel_system.gd** — NPC movement between settlements per GDD
+  s55.29. Placeholder distance dictionary (symmetric key lookup, swappable
+  when map is built). Terrain cost constants (plains=1, forest=2, mountains=3).
+  `begin_travel()` sets origin/destination/days_remaining on character.
+  `process_travel_tick()` decrements daily, triggers arrival on completion.
+  `cancel_travel()` returns to origin. `change_destination()` mid-travel
+  redirection. `get_context_flag()` returns TRAVELING or AT_OWN_HOLDINGS.
+  `apply_forced_march()` reduces travel by 1 day at 5 morale per day saved.
+  River crossing costs (normal=1, spring=2). Minimum 1 travel day.
+  Wired into DayOrchestrator (`_process_travel()` runs before wave resolution),
+  ActionExecutor (BEGIN_TRAVEL/CHANGE_DESTINATION call TravelSystem), and
+  NPC engine Phase 1 (`build_context()` auto-sets TRAVELING context flag).
+
+### Objective Progress Functions (s55.29.3)
+- **simulation/objective_progress.gd** — 12 per-objective-type progress functions
+  (0.0–1.0) evaluated seasonally per GDD s55.29.3. Drives stall detection via
+  TravelCommitment.update_progress()/is_stalled(). Discovery confidence gate
+  applied to 4 objectives (ISOLATE_CHARACTER, REMOVE_FROM_POSITION,
+  EXPOSE_SECRET, SABOTAGE_ECONOMY) — caps near-completion at 0.85 when
+  investigation is insufficient (min 2 seasons AND 4 intel actions required
+  for 0.95 cap). `evaluate_all_objectives()` seasonal entry point evaluates
+  all characters' primary objectives, updates progress, detects stalls.
+  Wired into DayOrchestrator on season boundary (before strategic reviews).
+  Progress functions use existing game state fields — where upstream systems
+  don't exist yet (SecretSystem, WarSystem, SiegeSystem), those components
+  contribute 0 and will activate when built.
+- **Arrival observation** — `InformationSystem.record_location_observation()`
+  records FRESH location knowledge when NPCs arrive at a settlement.
+  DayOrchestrator calls `_process_arrival_observation()` after travel tick,
+  updating arriving characters' `met_characters` and `knowledge_pool` with
+  co-located NPCs.
+
+### NPC Engine Amendments (s57.1–s57.5, s57.17, s57.19, s57.20)
+- **s57.1 Allowlist Model** — Actions not listed in objective_alignment.json
+  for the current NeedType are blocked from the scoring pool. Implemented as
+  `apply_allowlist_filter()` between Phase 4 and Phase 5. Prevents unlisted
+  actions from winning via accumulated personality/disposition/competence scores.
+- **s57.2 Score Compression** — Social/political NeedTypes already compressed
+  to 10-point top-cluster bands (65–75). IDENTIFY_CONTACT remains uncompressed
+  pending dedicated tuning pass per GDD.
+- **s57.3 Disposition Tiers** — Already applied. RIVAL (−5,+5),
+  ACQUAINTANCE (+5,−5), DEVOTED (+25,−25). Full gradient across all tiers.
+- **s57.4 Ishi Exemption** — Ishi-virtue NPCs skip approach_ineffective and
+  approach_capped penalties in `ApproachEvaluation.get_scoring_modifier()`.
+  Measurement bonus still fires. Ishi is the only virtue that continues a
+  failed approach indefinitely.
+- **s57.5 WRITE_LETTER Extraction** — Removed from all context action lists
+  in Phase 3. Daily letter pass: `resolve_daily_letter()` runs after AP
+  resolution via `_process_daily_letter_pass()` in DayOrchestrator. Each NPC
+  gets one free letter per IC day, targeting the best recipient based on
+  SEND_LETTER alignment entries.
+- **s57.20 New Decision Paths** — 3 NeedTypes added: BUILD_INFRASTRUCTURE,
+  ARRANGE_MARRIAGE, FILL_VACANCY. 8 ActionIDs: FOUND_VILLAGE,
+  BUILD_FORTIFICATION, BUILD_SHRINE, FOUND_TEMPLE, FOUND_MONASTERY,
+  COMMISSION_SHIP, ARRANGE_MARRIAGE, APPOINT_TO_POSITION. Added to
+  action_skill_map.json, personality_lean.json, context action lists
+  (AT_OWN_HOLDINGS, AT_COURT), and ActionExecutor (ADMINISTRATIVE category).
+- **s57.17 Operational Superior Support** — `MilitaryHierarchy.get_direct_subordinates()`
+  returns characters where `lord_id == argument OR operational_superior_id == argument`,
+  deduplicated. `get_direct_vassals()` retained as alias. DayOrchestrator
+  `_get_vassals()` delegates to `get_direct_subordinates()` so strategic reviews
+  and vassal assignment include operational subordinates (military commanders).
+- **s57.19 Engine Table Entries** — 3 new ActionIDs: PURIFY_TAINTED_GROUND
+  (Lore: Shadowlands, Category 6, Kuni Shugenja), FORTIFY_WALL_SECTION
+  (Engineering, Category 6, Kaiu Engineer), SEAL_WALL_BREACH (Engineering,
+  Category 6, 2 AP, Kaiu Engineer Rank 3+). Added to action_skill_map,
+  objective_alignment (MANAGE_TAINT, MAINTAIN_FORTIFICATION, DEFEND_PROVINCE,
+  PERFORM_RITUAL), personality_lean (all 14 virtues), context action list
+  (AT_OWN_HOLDINGS), and ActionExecutor (ADMINISTRATIVE category).
+
+### Insurgency System (s11.11)
+- **simulation/insurgency_system.gd** — Province-level insurgency lifecycle per
+  GDD s11.11. Shared 5-phase mechanics (Spawning, Hidden Growth, Detection,
+  Active Crisis, Suppression) for 7 insurgency types: Maho Cult, Peasant Revolt,
+  Ronin Bandit Uprising, Province Taint Manifestation, Nezumi Infestation,
+  Urban Criminal Network, Pirate (Wako) Fleet.
+  `get_stability_tier()` maps 0–100 stability to 4 tiers (Stable/Restless/
+  Volatile/Broken). `compute_stability_change()` seasonal delta from starvation,
+  war, raids, insurgencies, garrison, peace bonus. `get_eligible_types()` per
+  tier with Maho 2% in Stable, Nezumi anywhere, Taint from PTL≥3, Pirates
+  coastal only. `get_spawn_chance()` type-specific probabilities with lord
+  virtue, starvation, garrison modifiers. `try_spawn()` d100 via DiceEngine.
+  `process_hidden_growth()` strength +1, concealment −1, hint at str 5,
+  auto-detect at concealment 0. `attempt_detection()` success/partial/failure.
+  `get_suppression_tn()` strength×5 standard, ×7 for ronin bandits.
+  `resolve_suppression()` success(−3)/partial(−1)/failure(0)/critical(+1);
+  maho/taint max −1 without shugenja. `resolve_coordinated_suppression()`
+  cumulative with leader bonus. `compute_ptl_change()` maho/taint gains,
+  adjacent bleed at PTL 6+, jade halves bleed, natural decay −0.5.
+  `get_crisis_tier()` type-specific tier mapping. `get_strength_10_consequence()`
+  oni_manifestation/province_seized/army_scale_threat/etc.
+  `attempt_ronin_hire()` TN=str×5 courtier+awareness roll.
+  `compute_susceptibility()` hidden modifier from disposition/honor/glory/
+  shourido. `is_immune_to_corruption()` Ishi immunity. Economic effects:
+  `get_koku_drain()`, `get_rice_drain()`, `get_pu_loss_on_suppression()`.
+  `process_season()` full seasonal tick combining growth, spread, spawn.
+- **shared/insurgency_data.gd** — InsurgencyData Resource: insurgency_id, type,
+  province_id, settlement_id, strength (1–10), concealment (1–10), detected,
+  seasons_active, season_spawned, spread_from_id.
+- **shared/enums.gd** gains InsurgencyType (7 values), StabilityTier (4 values).
+- **shared/province_data.gd** gains `province_taint_level: float = 0.0`.
+- Wired into DayOrchestrator: `_process_insurgencies()` runs on season boundary
+  after historical modifier decay. Reads PTL from `province_taint_level` on
+  ProvinceData. Appends spawned insurgencies, removes suppressed ones.
+  New params on `advance_day()`: `insurgencies`, `next_insurgency_id`.
+  Return dict gains `insurgency_results`.
+- ASCII map investigation module and Settlement Building Framework deferred
+  until ASCII map system is built.
+
+### Rice Market & Trade Route System (s4.3.18)
+- **simulation/rice_market_system.gd** — Decentralized rice market per GDD s4.3.18.
+  `compute_surplus()` calculates lord's genuine surplus above 4-season consumption
+  buffer. `create_posting()` lists rice for sale at a set price. Price adjustment:
+  +0.25 Koku per season of sales, −0.25 per unsold season (floor 0.25).
+  `should_withdraw()` returns true at floor price with no buyers.
+  Disposition-based purchase priority: Friend (31+) → Acquaintance (−10 to +30)
+  → Rival (−11 and below). Blood Enemy (−60) blocked entirely.
+  `resolve_purchases()` processes all postings against buy orders with priority
+  ordering and budget limits. Intra-clan rice sharing: `share_rice()` transfers
+  rice between same-clan provinces, generating Honor scaled to recipient need
+  (Shortage +0.1/+0.2, Hunger +0.3, Famine +0.5, Famine resolved +1.0).
+  Trade route koku bonus: `compute_trade_route_koku()` sums active route bonuses,
+  skipping disrupted routes. Route disruption/restoration helpers.
+- **shared/trade_route_data.gd** — TradeRouteData Resource: route_id,
+  province_a_id, province_b_id, is_naval, is_disrupted, disruption_reason,
+  koku_bonus_per_season. `connects()`, `other_end()` helpers.
+- **shared/rice_posting_data.gd** — RicePostingData Resource: lord_id,
+  province_id, quantity, price_per_unit, seasons_sold, seasons_unsold.
+
+### Regional Price Modifiers (s11.8)
+- **simulation/regional_price_modifiers.gd** — Clan territory price modifiers
+  per GDD s11.8. CLAN_MODIFIERS dictionary for all 8 Great Clans with item
+  category → modifier mappings (−40% to +50%). `get_territory_modifier()` looks
+  up modifier by clan and item category. `compute_final_price()` applies
+  territory modifier then Commerce skill reduction (−10% on roll ≥ TN 15).
+
+### CONDUCT_COMMERCE Alignment (s57.9)
+- **objective_alignment.json** gains CONDUCT_COMMERCE NeedType with 7 actions:
+  CONDUCT_COMMERCE (100), BEGIN_TRAVEL (60), PURCHASE_MARKET (50),
+  NEGOTIATE (45), WRITE_LETTER (35), ASSESS_PROVINCE_STATUS (30), DO_NOTHING (0).
+
+### Simulation Scheduler & World State
+- **scripts/managers/world_state.gd** — `WorldStateData` autoload singleton
+  (registered as `WorldState`). Holds all persistent data arrays:
+  characters, provinces, settlements, clans, topics, insurgencies, etc.
+  `rebuild_characters_by_id()` refreshes the ID lookup dictionary.
+  `advance_one_day()` delegates to `DayOrchestrator.advance_day()` with
+  all world state parameters.
+- **scripts/managers/simulation_scheduler.gd** — `SimulationScheduler` autoload
+  (registered as `SimScheduler`). Checks real wall-clock time each frame,
+  converts UTC to EST (with DST), fires `WorldState.advance_one_day()` at
+  4 checkpoints per real day (EST hours 0, 6, 12, 18 = every 6 real hours).
+  Tick key format `YYYY-MM-DD-HXX` prevents double-firing on restart.
+  State persisted to `user://simulation/scheduler_state.txt`.
+  `force_tick()` for manual advancement. `tick_completed` signal emitted
+  after each advancement.
 
 ### What's Next
-1. Military standing objectives — GDD s55.23 decomposition trees (awaiting content)
-2. Topic propagation — momentum tracking, public knowledge broadcast per GDD s16
-3. Daily conversation / letter information exchange per GDD s55.12
-4. Crime record and investigation system per GDD s57.47, s57.16
+1. World generation coordinate system and adjacency
 
-### Systems Awaiting NPC Loop Integration
-The following systems are fully implemented and tested but NOT YET WIRED into
-the NPC decision engine's Phase 5 scoring or the DayOrchestrator loop:
-- **ApproachEvaluation** — provides measurement bonus, approach penalty, and
-  alternative bonus modifiers for Phase 5 scoring
-- **CommitmentRegistry** — provides at-risk penalties for Phase 5 scoring,
-  plus deadline checking and consequence application
-- **TravelCommitment** — provides redirect penalties and sublocation access
-  gates (travel oscillation prevention)
-- **CrimeSystem** — consequence tables exist but no hook connects action
-  execution to crime recording; covert action `detection_risk` is produced
-  by ActionExecutor but never routed to crime discovery
-- **MilitaryHierarchy** — unit chain queries exist but military ActionIDs
-  don't consult the hierarchy during execution
-- **ZoneFlagMatrix** — zone-level flags not connected to context generation
-  or action availability checks
+### Systems Wired into NPC Loop
+The following subsystems are now integrated into the NPC decision loop:
+- **ApproachEvaluation** — Phase 5 scoring: `approach_modifier` field on
+  ScoredAction. Measurement bonus (+15), approach penalty (−15, decays),
+  alternative bonus (+10). Seasonal decay runs on season boundary in
+  DayOrchestrator.
+- **CommitmentRegistry** — Phase 5 scoring: `commitment_at_risk` field on
+  ScoredAction (−5/−15/−25 by tier, cap −40). Daily deadline processing
+  runs in DayOrchestrator after wave resolution.
+- **TravelCommitment** — Phase 5 scoring: `travel_redirect_penalty` field
+  on ScoredAction (0/−5/−15/−30). Travel redirect count read from primary
+  objective in NPCWaveResolver.
+- **ZoneFlagMatrix** — Phase 1: `zone_subtype`, `zone_flags`, `sublocation`
+  populated in ContextSnapshot via `build_context()`. Phase 3: zone-gated
+  actions (PUBLIC_PERFORMANCE, PERFORM_FOR, PERFORM_WORSHIP, PERFORM_RITUAL)
+  filtered from option list when zone flags forbid them.
+- **CrimeSystem** — Post-execution: DayOrchestrator scans day results for
+  `detection_risk: true` in covert action effects, determines witnesses via
+  `_get_witnesses_at_location()` (characters at same physical_location),
+  creates CrimeRecord via `CrimeSystem.create_crime_record()` (with witnesses),
+  applies at-act honor consequences, and creates a crime topic (Tier 4,
+  topic_type="crime", momentum=0). Crime topics are seeded ONLY to witnesses
+  and victims via `_seed_crime_topic_to_knowers()` — they do NOT broadcast
+  globally. Topics spread organically through conversations/letters. Magistrates
+  learn about crimes when witnesses tell them, then UPHOLD_LAW self-initiation
+  triggers. Witness PROBE evidence wired into _process_info_events.
+  Action-to-crime-type mapping: EAVESDROP/SEARCH_QUARTERS/INTERCEPT_LETTER/
+  FABRICATE_SECRET → DISHONORABLE_CONDUCT, BRIBE_FOR_INFO → SKIMMING.
+- **MilitaryHierarchy** — Phase 1: `military_rank`, `commanded_unit_id`,
+  `assigned_company_id` populated in ContextSnapshot. Phase 3: military
+  order actions (ORDER_BATTLE, CONDUCT_RAID, etc.) gated behind
+  `commanded_unit_id >= 0`. DISPATCH_COURTIER gated behind Shireikan rank.
+  Phase 7 (execution): ActionExecutor validates commander authority, checks
+  deployment status (garrisoned units blocked from offensive actions),
+  verifies legion coordination and section campaign authority. Military data
+  dict threaded through NPCWaveResolver → DayOrchestrator.
+- **ResourceAvailability** — Phase 5 scoring: `resource_modifier` field on
+  ScoredAction. `_compute_resource_modifier` in npc_decision_engine.gd calls
+  `ResourceAvailability.compute_resource_modifier()`. Koku ratio thresholds:
+  ≥5x→0, ≥3x→−5, ≥1.5x→−10, ≥1x→−15, <1x→−25, broke→−40.
+- **CourtAvailability** — Decomposition: all 13 ATTEND_COURT returns in
+  ObjectiveDecomposer replaced with `_court_or_alternative()` wrapper that
+  calls `CourtAvailability.attend_court_or_alternative()`. ContextSnapshot
+  gains `lord_id`, `active_court_at_location`, `upcoming_courts`,
+  `held_leverage`, `known_npc_locations` — populated in `build_context()`.
+  When no court or alternative is available, falls through to REST or
+  tree-specific fallback.
+- **OrphanedObjectives** — Post-execution: DayOrchestrator `_process_lord_deaths`
+  processes `death_events` array. For each dead lord, calls
+  `OrphanedObjectives.process_lord_death()` to mark lord-dependent vassal
+  objectives ORPHANED, then generates REPORT_TO_NEW_LORD needs for affected
+  vassals. `successor_map` provides heir IDs; falls back to
+  `operational_superior_id`. New params on `advance_day()`: `death_events`,
+  `successor_map`.
+- **FestivalSystem** — Daily: `_process_festivals()` runs each day before
+  wave resolution. Sets world_state flags: `is_ceasefire_day`,
+  `is_labor_halt_day`, `is_taian`, `is_inauspicious_for_social`, `rokuyo`.
+  Returns active festivals, effects, honor/glory gains. NPC loop can read
+  world_state flags to gate military actions (ceasefire) and labor
+  (Chrysanthemum halt).
+- **DispositionSystem** — Daily: `_apply_cohabitation()` increments
+  `cohabitation_days` dict on L5RCharacterData for all character pairs
+  sharing a `physical_location`. Seasonal: `_decay_all_historical_modifiers()`
+  runs on season boundary, calling `DispositionSystem.decay_historical_modifier()`
+  for all entries in each character's `historical_modifiers` dict.
+  L5RCharacterData gains `historical_modifiers`, `temporary_modifiers`,
+  `cohabitation_days` fields.
+- **FavorSystem** — Daily: `_process_favors()` runs
+  `FavorSystem.process_expirations()` and
+  `FavorSystem.process_deadline_breaches()` on the favors array. New param
+  on `advance_day()`: `favors`.
+- **TravelSystem** — Daily: `_process_travel()` runs
+  `TravelSystem.process_travel_tick()` before wave resolution, decrementing
+  travel days and arriving characters. Phase 1: `build_context()` auto-detects
+  traveling characters via `TravelSystem.is_traveling()` and sets
+  `ctx.context_flag = TRAVELING`. Phase 3: TRAVELING context restricts to
+  CHANGE_DESTINATION, WRITE_LETTER, TRAIN, MEDITATE, DO_NOTHING, REST.
+  Phase 7: ActionExecutor routes BEGIN_TRAVEL to `TravelSystem.begin_travel()`
+  and CHANGE_DESTINATION to `TravelSystem.change_destination()`. Return dict
+  includes `travel_arrivals`.
+- **ObjectiveProgress** — Seasonal: `_evaluate_objective_progress()` runs on
+  season boundary before strategic reviews. Evaluates all primary objectives
+  via 12 type-specific progress functions (0.0–1.0). Updates
+  `last_measured_progress` and `seasons_without_progress` via
+  `TravelCommitment.update_progress()`. Stall detection via
+  `TravelCommitment.is_stalled()` with personality-gated thresholds.
+  Arrival observation: `_process_arrival_observation()` runs after travel tick,
+  records FRESH location knowledge via
+  `InformationSystem.record_location_observation()` for co-located NPCs.
+- **InsurgencySystem** — Seasonal: `_process_insurgencies()` runs on season
+  boundary after historical modifier decay. Calls
+  `InsurgencySystem.process_season()` with PTL values read from
+  `ProvinceData.province_taint_level`. Appends new insurgencies from spawning
+  and spreading, removes suppressed ones (strength ≤ 0). New params on
+  `advance_day()`: `insurgencies: Array[InsurgencyData]`,
+  `next_insurgency_id: Array[int]`. Return dict gains `insurgency_results`.
 
 ## Resolved Design Decisions
 
@@ -385,21 +964,25 @@ Code refactors required by the resolved design decisions above.
 None of these are design work — the decisions are locked. These are
 mechanical code changes to implement them.
 
-- [ ] **Topic int migration** — Change `L5RCharacterData.topic_pool` from
-  `Array[String]` to `Array[int]`. Add `slug: String` field to `TopicData`.
-  Add world-level `next_topic_id: int` counter. Update letter/conversation
-  code from string slug matching to int comparison.
-- [ ] **Sentinel cleanup** — Grep all `_ic_day`, `_ooc_day`, `_blocked_until`
-  fields. Change any defaulting to `0` for "never" to default `-1`. Update
-  comparison checks from `== 0` to `== -1` where the intent is "never happened."
-- [ ] **CommitmentData field removal** — Remove `created_by_action` from
-  `shared/commitment_data.gd`. Update `create_commitment()` and any reads.
-  `source_action_id` is the sole surviving field.
-- [ ] **KnowledgeEntry Resource** — Create `shared/knowledge_entry.gd`
-  (`class_name KnowledgeEntry extends Resource`). Define typed fields for the
-  ~6 known keys. Change `L5RCharacterData.knowledge_pool` to
-  `Array[KnowledgeEntry]`. Update all InformationSystem dict access to
-  property access.
+- [x] **Topic int migration** — Changed `L5RCharacterData.topic_pool` from
+  `Array[String]` to `Array[int]`. Added `slug: String` field to `TopicData`.
+  Updated DailyConversation and LetterSystem from string topic matching to
+  int comparison. `LetterData.topic` changed from `String` to `int` (sentinel
+  `-1` for no topic). World-level `next_topic_id` counter deferred until
+  topic creation code is implemented.
+- [x] **Sentinel cleanup** — Changed "never happened" fields from `= 0` to
+  `= -1`: `void_refresh_blocked_until`, `last_medicine_treatment_ic_day`
+  (character_data.gd), `last_report_ic_day` (province_data.gd,
+  npc_data_structures.gd). Updated test assertions.
+- [x] **CommitmentData field removal** — Removed `created_by_action` from
+  `shared/commitment_data.gd` and `create_commitment()` in
+  `commitment_registry.gd`. `source_action_id` is the sole surviving field.
+- [x] **KnowledgeEntry Resource** — Created `shared/knowledge_entry.gd`
+  (`class_name KnowledgeEntry extends Resource`) with typed fields: `source`,
+  `entry_type`, `data`, `confidence`, `season_acquired`. Changed
+  `L5RCharacterData.knowledge_pool` to `Array[KnowledgeEntry]`. Updated all
+  InformationSystem methods from dict access to property access. Updated all
+  test files.
 
 ## What To Do When Uncertain
 Stop. Read the relevant LOCKED section in /gdd/. If it does not answer the
