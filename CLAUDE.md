@@ -437,9 +437,9 @@ All in /tests/, one file per system:
 - test_objective_progress.gd (~35 tests)
 - test_festival_system.gd (~55 tests)
 - test_simulation_scheduler.gd (~20 tests)
-- test_gift_giving_system.gd (~30 tests)
-- test_biological_family.gd (~30 tests)
-- test_collective_disposition.gd (~35 tests)
+- test_gift_giving_system.gd (~39 tests)
+- test_biological_family.gd (~42 tests)
+- test_collective_disposition.gd (~37 tests)
 
 ### Festival System (s11.5)
 - **simulation/festival_system.gd** — Empire-wide canonical festivals, Rokuyo
@@ -802,8 +802,8 @@ All in /tests/, one file per system:
 ### Clan & Family Collective Disposition (s12.2b)
 - **simulation/collective_disposition.gd** — `CollectiveDisposition` class
   per GDD s12.2b. Holds the locked PROVISIONAL pre-Scorpion-Coup baselines
-  as const dicts: 21 Great Clan ↔ Great Clan pairs, 28 Minor Clan ↔ Great
-  Clan pairs, 8 Minor ↔ Minor pairs (`STARTING_CLAN_BASELINES`); plus 41
+  as const dicts: 21 Great Clan ↔ Great Clan pairs, 29 Minor Clan ↔ Great
+  Clan pairs, 8 Minor ↔ Minor pairs (`STARTING_CLAN_BASELINES`); plus 44
   intra-clan family pairs and 11 cross-clan family pairs
   (`STARTING_FAMILY_BASELINES`). Symmetric `make_pair_key(a, b)` lookup —
   lexicographic sort + "||" delimiter so order doesn't matter.
