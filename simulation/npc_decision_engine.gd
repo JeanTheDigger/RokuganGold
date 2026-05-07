@@ -188,6 +188,27 @@ static func apply_personality_filter(
 	return filtered
 
 
+# -- Phase 4b: Allowlist Filter (s57.1) ----------------------------------------
+# Only actions listed in objective_alignment.json for the current NeedType
+# may enter scoring. Missing entries are BLOCKED, not scored at 0.
+
+static func apply_allowlist_filter(
+	options: Array[NPCDataStructures.ScoredAction],
+	need_type: String,
+	scoring_tables: Dictionary,
+) -> Array[NPCDataStructures.ScoredAction]:
+	var alignment_table: Dictionary = scoring_tables.get("objective_alignment", {})
+	var need_entry: Dictionary = alignment_table.get(need_type, {})
+	if need_entry.is_empty():
+		return options
+
+	var filtered: Array[NPCDataStructures.ScoredAction] = []
+	for option: NPCDataStructures.ScoredAction in options:
+		if need_entry.has(option.action_id):
+			filtered.append(option)
+	return filtered
+
+
 # -- Phase 5: Score All Options ------------------------------------------------
 # Eight components per s55.4.5 / s55.3.3.
 
@@ -229,7 +250,7 @@ static func score_all(
 
 		option.approach_modifier = float(ApproachEvaluation.get_scoring_modifier(
 			option.action_id, ctx.character_id, option.target_npc_id,
-			ctx.action_log, approach_penalties, ctx.season
+			ctx.action_log, approach_penalties, ctx.season, ctx.shourido_virtue
 		))
 
 		if character != null and not commitments.is_empty():
@@ -325,6 +346,7 @@ static func run(
 
 	# Phase 4
 	options = apply_personality_filter(options, ctx, filter_data)
+	options = apply_allowlist_filter(options, need.need_type, scoring_tables)
 
 	# Phase 5
 	score_all(options, need, ctx, scoring_tables,
@@ -418,9 +440,12 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array[S
 				"CHARM", "INTIMIDATE", "GOSSIP", "PERSUADE", "NEGOTIATE",
 				"PROBE", "READ_CHARACTER", "PUBLIC_DEBATE",
 				"ASK_FOR_INTRODUCTION", "OBSERVE_COURT_ATTENDEES",
-				"WRITE_LETTER", "TRAIN", "MEDITATE",
+				"TRAIN", "MEDITATE",
 				"ASSESS_PROVINCE_STATUS", "INVESTIGATE_PROVINCE",
 				"INVESTIGATE_RUMOR", "ORDER_PATROL",
+				"FOUND_VILLAGE", "BUILD_FORTIFICATION", "BUILD_SHRINE",
+				"FOUND_TEMPLE", "FOUND_MONASTERY", "COMMISSION_SHIP",
+				"ARRANGE_MARRIAGE", "APPOINT_TO_POSITION",
 				"CRAFT", "MENTOR",
 				"DO_NOTHING", "REST",
 			]
@@ -432,7 +457,8 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array[S
 				"PUBLIC_PERFORMANCE", "DELIVER_GIFT", "OFFER_FAVOR",
 				"PERFORM_FOR", "DISCLOSE",
 				"ASK_FOR_INTRODUCTION", "OBSERVE_COURT_ATTENDEES",
-				"WRITE_LETTER", "TRAIN", "MEDITATE",
+				"ARRANGE_MARRIAGE", "APPOINT_TO_POSITION",
+				"TRAIN", "MEDITATE",
 				"BRIBE_FOR_INFO", "EAVESDROP",
 				"INTERCEPT_LETTER", "SEARCH_QUARTERS",
 				"DO_NOTHING", "REST",
@@ -443,13 +469,13 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array[S
 				"PROBE", "READ_CHARACTER", "LISTEN_REFLECT",
 				"DELIVER_GIFT", "OFFER_FAVOR",
 				"ASK_FOR_INTRODUCTION", "OBSERVE_COURT_ATTENDEES",
-				"WRITE_LETTER", "TRAIN", "MEDITATE",
+				"TRAIN", "MEDITATE",
 				"DO_NOTHING", "REST",
 			]
 		Enums.ContextFlag.TRAVELING:
 			return [
 				"CHANGE_DESTINATION",
-				"WRITE_LETTER", "TRAIN", "MEDITATE",
+				"TRAIN", "MEDITATE",
 				"DO_NOTHING", "REST",
 			]
 		Enums.ContextFlag.ON_CAMPAIGN:
@@ -457,19 +483,18 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array[S
 				"ORDER_BATTLE", "CONDUCT_RAID", "RAID_HARVEST",
 				"DRILL_TROOPS", "EVALUATE_WAR_READINESS",
 				"INTIMIDATE", "NEGOTIATE",
-				"WRITE_LETTER", "TRAIN",
+				"TRAIN",
 				"DO_NOTHING", "REST",
 			]
 		Enums.ContextFlag.UNDER_SIEGE:
 			return [
 				"CONDUCT_SORTIE", "CONDUCT_STORM_ASSAULT",
 				"NEGOTIATE_SURRENDER", "MAINTAIN_SIEGE",
-				"WRITE_LETTER",
 				"DO_NOTHING", "REST",
 			]
 		Enums.ContextFlag.IN_EXILE:
 			return [
-				"WRITE_LETTER", "TRAIN", "MEDITATE",
+				"TRAIN", "MEDITATE",
 				"DO_NOTHING", "REST",
 			]
 		Enums.ContextFlag.AT_TEMPLE:
@@ -477,14 +502,12 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array[S
 				"PERFORM_RITUAL", "PERFORM_WORSHIP", "MEDITATE",
 				"PUBLIC_ATONEMENT", "TRAIN",
 				"CHARM", "PROBE", "READ_CHARACTER",
-				"WRITE_LETTER",
 				"DO_NOTHING", "REST",
 			]
 		Enums.ContextFlag.AT_DOJO:
 			return [
 				"TRAIN", "MENTOR", "DRILL_TROOPS",
 				"CHARM", "PROBE",
-				"WRITE_LETTER",
 				"DO_NOTHING", "REST",
 			]
 		_:
@@ -892,3 +915,61 @@ static func _compute_festival_modifier(
 	if ctx.is_taian:
 		modifier += TAIAN_BONUS
 	return modifier
+
+
+# -- Daily Letter Pass (s57.5) ------------------------------------------------
+# WRITE_LETTER is not scored in the main decision loop. After AP resolution,
+# each NPC gets one free letter per IC day. Selects best recipient using
+# SEND_LETTER alignment entries as scoring table.
+
+static func resolve_daily_letter(
+	character: L5RCharacterData,
+	objectives: Dictionary,
+	scoring_tables: Dictionary,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> Dictionary:
+	var need_type: String = _get_letter_need_type(objectives)
+	if need_type.is_empty():
+		return {}
+
+	var alignment_table: Dictionary = scoring_tables.get("objective_alignment", {})
+	var send_letter_entry: Dictionary = alignment_table.get(need_type, {})
+	var send_letter_score: float = float(send_letter_entry.get("WRITE_LETTER", send_letter_entry.get("SEND_LETTER", 0)))
+	if send_letter_score <= 0:
+		return {}
+
+	var target_id: int = _select_letter_target(objectives, ctx)
+	if target_id < 0:
+		return {}
+
+	return {
+		"character_id": character.character_id,
+		"action_id": "WRITE_LETTER",
+		"target_npc_id": target_id,
+		"need_type": need_type,
+	}
+
+
+static func _get_letter_need_type(objectives: Dictionary) -> String:
+	var primary: Dictionary = objectives.get("primary", {})
+	if not primary.is_empty():
+		return primary.get("need_type", "")
+	var standing: Dictionary = objectives.get("standing", {})
+	if not standing.is_empty():
+		return standing.get("need_type", "")
+	return ""
+
+
+static func _select_letter_target(
+	objectives: Dictionary,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> int:
+	var primary: Dictionary = objectives.get("primary", {})
+	if primary.has("target_npc_id") and primary["target_npc_id"] >= 0:
+		return primary["target_npc_id"]
+	if ctx.lord_id >= 0:
+		return ctx.lord_id
+	var met: Array[int] = ctx.met_characters
+	if not met.is_empty():
+		return met[0]
+	return -1

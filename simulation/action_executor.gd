@@ -35,6 +35,9 @@ const ADMINISTRATIVE_ACTIONS: Array[String] = [
 	"DEMAND_TRIBUTE", "REQUEST_ALLIED_AID", "INVESTIGATE_PROVINCE",
 	"INVESTIGATE_RUMOR", "NEGOTIATE_SURRENDER", "CONDUCT_COMMERCE",
 	"DISPATCH_COURTIER",
+	"FOUND_VILLAGE", "BUILD_FORTIFICATION", "BUILD_SHRINE",
+	"FOUND_TEMPLE", "FOUND_MONASTERY", "COMMISSION_SHIP",
+	"ARRANGE_MARRIAGE", "APPOINT_TO_POSITION",
 ]
 
 const INTELLIGENCE_ACTIONS: Array[String] = [
@@ -346,6 +349,20 @@ static func _compute_admin_effects(action_id: String) -> Dictionary:
 			return {"effect": "tribute_demanded"}
 		"REQUEST_ALLIED_AID":
 			return {"effect": "aid_requested"}
+		"FOUND_VILLAGE":
+			return {"effect": "village_founded"}
+		"BUILD_FORTIFICATION":
+			return {"effect": "fortification_ordered"}
+		"BUILD_SHRINE":
+			return {"effect": "shrine_built"}
+		"FOUND_TEMPLE", "FOUND_MONASTERY":
+			return {"effect": "religious_site_founded"}
+		"COMMISSION_SHIP":
+			return {"effect": "ship_commissioned"}
+		"ARRANGE_MARRIAGE":
+			return {"effect": "marriage_proposed"}
+		"APPOINT_TO_POSITION":
+			return {"effect": "position_filled"}
 	return {"effect": "administrative_action"}
 
 

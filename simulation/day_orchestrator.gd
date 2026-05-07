@@ -55,6 +55,10 @@ static func advance_day(
 		approach_penalties, commitments, military_data
 	)
 
+	var letter_pass_results: Array[Dictionary] = _process_daily_letter_pass(
+		characters, characters_by_id, objectives_map, scoring_tables, world_states
+	)
+
 	var crime_results: Array[Dictionary] = _process_crime_detection(
 		day_result.get("results", []),
 		characters_by_id,
@@ -146,6 +150,7 @@ static func advance_day(
 		"favor_results": favor_results,
 		"travel_arrivals": travel_arrivals,
 		"progress_results": progress_results,
+		"letter_pass_results": letter_pass_results,
 	}
 
 
@@ -793,6 +798,29 @@ static func _process_travel(
 	characters: Array[L5RCharacterData],
 ) -> Array[Dictionary]:
 	return TravelSystem.process_travel_tick(characters)
+
+
+# -- Daily Letter Pass (s57.5) -------------------------------------------------
+
+static func _process_daily_letter_pass(
+	characters: Array[L5RCharacterData],
+	characters_by_id: Dictionary,
+	objectives_map: Dictionary,
+	scoring_tables: Dictionary,
+	world_states: Dictionary,
+) -> Array[Dictionary]:
+	var results: Array[Dictionary] = []
+	for character: L5RCharacterData in characters:
+		var objectives: Dictionary = objectives_map.get(character.character_id, {})
+		if objectives.is_empty():
+			continue
+		var ctx := NPCDecisionEngine.build_context(character, world_states)
+		var letter_result: Dictionary = NPCDecisionEngine.resolve_daily_letter(
+			character, objectives, scoring_tables, ctx
+		)
+		if not letter_result.is_empty():
+			results.append(letter_result)
+	return results
 
 
 # -- Arrival Observation (s55.29.2) --------------------------------------------
