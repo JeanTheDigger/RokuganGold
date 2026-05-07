@@ -444,6 +444,7 @@ All in /tests/, one file per system:
 - test_miya_blessing_wiring.gd (~14 tests)
 - test_miya_blessing_followup.gd (~13 tests)
 - test_togashi_oversight.gd (~49 tests)
+- test_phoenix_council.gd (~51 tests)
 
 ### Festival System (s11.5)
 - **simulation/festival_system.gd** — Empire-wide canonical festivals, Rokuyo
@@ -802,6 +803,62 @@ All in /tests/, one file per system:
 - **objective_alignment.json** gains CONDUCT_COMMERCE NeedType with 7 actions:
   CONDUCT_COMMERCE (100), BEGIN_TRAVEL (60), PURCHASE_MARKET (50),
   NEGOTIATE (45), WRITE_LETTER (35), ASSESS_PROVINCE_STATUS (30), DO_NOTHING (0).
+
+### Phoenix Elemental Council — Phoenix Clan Governance Exception (s55.10.3)
+- **simulation/phoenix_council.gd** — `PhoenixCouncil` pure simulation
+  class implementing the Phoenix governance per GDD s55.10.3.
+  The Shiba Champion proposes; the five-Master Elemental Council approves
+  major decisions by 3-of-5 majority vote. Per-Master temperament
+  dominates voting behavior; Defiance and Overreach paths track
+  escalation between Champion and Council.
+  Five-value `Master` enum (FIRE, WATER, AIR, EARTH, VOID) and 11-value
+  `DecisionType` enum split into `MAJOR_DECISIONS` (require Council
+  vote) and Champion-handled (no vote needed).
+  `MASTER_VOTE_BASE` weights per-element: Fire +15 on DECLARE_WAR / -10
+  on SIGN_TREATY; Water +10 on SIGN_TREATY / +5 MAJOR_RESOURCE_SPEND;
+  Air +15 on SIGN_TREATY / -15 on DECLARE_WAR / -10 on DEPLOY_GO_HATAMOTO;
+  Earth -15 on DECLARE_WAR / +5 SIGN_TREATY / -10 COMMIT_SHUGENJA.
+  Void Master uses an omen-based random model (40% YES baseline,
+  ±20% for spiritual dimension match, ~10% chance to abstain).
+  Vote modifiers: Friend disposition (+5), Rival (-5), Tier 1 crisis
+  override (+15), element-threatened lock-in (+20).
+  `tally_vote()` returns
+  `{passed, yes, no, abstain, deadlocked, votes}`. Deadlock detected
+  when Void abstains and YES==NO and not passed.
+  `table_proposal()` / `champion_may_break_tie()` enforce s55.10.3.4
+  deadlock resolution — proposal must be tabled twice before the
+  Champion may break the tie at -0.3 Honor cost.
+  Defiance Path (s55.10.3.5) — `handle_unilateral_action()` increments
+  the cumulative defiance counter (no clean-slate per s55.10.3.5
+  escalation scope). Stage queries: `is_diplomatic_suspended()` (Stage
+  2+), `is_shugenja_withdrawn()` (Stage 3, Phoenix Go-hatamoto loses
+  shugenja support), `is_unfit_declaration_active()` (Stage 4, formal
+  removal demand). `handle_compliant_season()` unwinds one stage but
+  does not reset lifetime defiance count.
+  Overreach Path (s55.10.3.6) — `handle_overreach_trigger()` for
+  generic triggers; `track_consecutive_crisis_veto()` (3 consecutive
+  vetoes of crisis-response proposals) and
+  `track_consecutive_obstruction()` (3 seasons of total Council
+  refusal) automatically increment overreach. Stage queries:
+  `is_emperor_appeal_available()` (Stage 2+), `is_compact_declared_violated()`
+  (Stage 3), `is_overreach_schism_imminent()` (Stage 4).
+  `phoenix_champion_authority` flag tracks post-schism Champion
+  victory. `grant_champion_authority()` sets it; `restore_council_compact()`
+  clears it AND zeroes all defiance/overreach state. Reincarnation
+  inheritance: `reincarnated_champion_evaluates_restore()` evaluates
+  whether a new Champion who inherited the flag voluntarily restores
+  the compact based on virtues + duty score + disposition toward
+  Council.
+  Master vacancy queries: `count_living_masters()`,
+  `can_council_self_govern()` (3+ Masters required),
+  `champion_appoints_replacements()` (true below quorum — significant
+  power shift during schism), `is_council_extinct()`.
+  State held in plain Dictionary owned by caller; `make_initial_state()`
+  factories it.
+  Deferred (depend on systems not yet built):
+  Phoenix Schism Crisis (s55.10.3.7), Shiba Reincarnation Mechanic
+  (s55.10.3.8 — depends on Section 22.5 succession), Grand Ritual
+  threat integration, Imperial Edict appeal mediation.
 
 ### Togashi Oversight — Dragon Clan Governance Exception (s55.10.2)
 - **simulation/togashi_oversight.gd** — `TogashiOversight` pure simulation
