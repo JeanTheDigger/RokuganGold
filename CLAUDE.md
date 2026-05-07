@@ -408,6 +408,7 @@ All in /tests/, one file per system:
 - test_resource_availability.gd (~25 tests)
 - test_court_availability.gd (~15 tests)
 - test_orphaned_objectives.gd (~25 tests)
+- test_strategic_review.gd (~35 tests)
 
 ### World Generator
 - **simulation/world_generator.gd** — Static factory methods for seeding initial
@@ -460,6 +461,22 @@ All in /tests/, one file per system:
   CONFIRM (reactivate), MODIFY (replace), CANCEL (remove).
   `generate_report_need(vassal, successor_id)` creates REPORT_TO_NEW_LORD need.
   `has_orphaned_vassals(vassals, lord_id, objectives_map)` finds orphaned IDs.
+
+### Strategic Review (s55.10)
+- **simulation/strategic_review.gd** — Lord-tier seasonal Strategic Review per
+  GDD s55.10. Runs at each season boundary for lord-tier NPCs (status ≥ 5.0
+  or lord_id == -1). Produces directives: REASSIGN_VASSAL_OBJECTIVE (orphan
+  resolution by bushido virtue + idle vassal assignment), ADJUST_TAX (stability/
+  treasury thresholds + personality modifiers), WAR_READINESS (active wars or
+  escalating conflicts), SEEK_PEACE (Jin-favored, Yu-blocked, duration gate),
+  CALL_COURT (vassal count + crises + winter bonus + Rei modifier), NO_CHANGE.
+  Emperor-specific: `run_emperor_review()` adds Winter Court host selection
+  (Autumn only, 4 scoring factors + archetype preference), vacancy filling
+  (archetype-specific delays: Benevolent/Iron 14, Cunning 45, disposition vs
+  skill weights per archetype), Shogun creation (Benevolent: reluctant after 3+
+  season crisis + failed diplomacy; Iron: duty/readiness; Cunning/Warlike: never;
+  Tyrant: personal enforcer with loyal candidate). Five EmperorArchetype enum
+  values. Wired into DayOrchestrator `_run_strategic_reviews()` on season change.
 
 ### What's Next
 1. World generation coordinate system and adjacency
