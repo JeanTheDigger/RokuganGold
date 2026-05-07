@@ -346,5 +346,25 @@
   "APPOINT_TO_POSITION": {
     "primary": "Courtier",
     "secondary": "Awareness"
+  },
+  "FORCE_MARCH": {
+    "primary": "Battle",
+    "secondary": null
+  },
+  "EVALUATE_CLAN_STRENGTH": {
+    "primary": "Lore: Heraldry",
+    "secondary": "Battle"
+  },
+  "COMMISSION_ASSASSINATION": {
+    "primary": "Courtier",
+    "secondary": "Sincerity"
+  },
+  "EXECUTE_ASSASSINATION": {
+    "primary": "Stealth",
+    "secondary": "Acting"
+  },
+  "ABORT_OPERATION": {
+    "primary": "Stealth",
+    "secondary": null
   }
 }
