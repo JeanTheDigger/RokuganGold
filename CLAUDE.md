@@ -693,6 +693,23 @@ The following subsystems are now integrated into the NPC decision loop:
   vassals. `successor_map` provides heir IDs; falls back to
   `operational_superior_id`. New params on `advance_day()`: `death_events`,
   `successor_map`.
+- **FestivalSystem** — Daily: `_process_festivals()` runs each day before
+  wave resolution. Sets world_state flags: `is_ceasefire_day`,
+  `is_labor_halt_day`, `is_taian`, `is_inauspicious_for_social`, `rokuyo`.
+  Returns active festivals, effects, honor/glory gains. NPC loop can read
+  world_state flags to gate military actions (ceasefire) and labor
+  (Chrysanthemum halt).
+- **DispositionSystem** — Daily: `_apply_cohabitation()` increments
+  `cohabitation_days` dict on L5RCharacterData for all character pairs
+  sharing a `physical_location`. Seasonal: `_decay_all_historical_modifiers()`
+  runs on season boundary, calling `DispositionSystem.decay_historical_modifier()`
+  for all entries in each character's `historical_modifiers` dict.
+  L5RCharacterData gains `historical_modifiers`, `temporary_modifiers`,
+  `cohabitation_days` fields.
+- **FavorSystem** — Daily: `_process_favors()` runs
+  `FavorSystem.process_expirations()` and
+  `FavorSystem.process_deadline_breaches()` on the favors array. New param
+  on `advance_day()`: `favors`.
 
 ## Resolved Design Decisions
 

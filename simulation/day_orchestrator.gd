@@ -29,6 +29,7 @@ static func advance_day(
 	next_topic_id: Array[int] = [1000],
 	death_events: Array[Dictionary] = [],
 	successor_map: Dictionary = {},
+	favors: Array = [],
 ) -> Dictionary:
 	var prev_season: int = time_system.get_season()
 
@@ -38,6 +39,12 @@ static func advance_day(
 	var current_season: int = time_system.get_season()
 
 	_reset_all_ap(characters)
+
+	var festival_results: Dictionary = _process_festivals(ic_day, world_states)
+
+	_apply_cohabitation(characters, characters_by_id)
+
+	var favor_results: Dictionary = _process_favors(favors, ic_day)
 
 	var day_result: Dictionary = NPCWaveResolver.resolve_day_applied(
 		characters, world_states, objectives_map, scoring_tables, filter_data,
@@ -106,6 +113,7 @@ static func advance_day(
 			characters, provinces, current_season, season_meta,
 			approach_penalties
 		)
+		_decay_all_historical_modifiers(characters, ic_day)
 		strategic_results = _run_strategic_reviews(
 			characters, objectives_map, world_states
 		)
@@ -127,6 +135,8 @@ static func advance_day(
 		"uphold_law_results": uphold_law_results,
 		"orphan_results": orphan_results,
 		"strategic_results": strategic_results,
+		"festival_results": festival_results,
+		"favor_results": favor_results,
 	}
 
 
@@ -692,3 +702,92 @@ static func _get_vassals(
 		if c.lord_id == lord.character_id:
 			vassals.append(c)
 	return vassals
+
+
+# -- Festival Processing (s11.5) ----------------------------------------------
+
+static func _process_festivals(ic_day: int, world_states: Dictionary) -> Dictionary:
+	var active_festivals: Array[Dictionary] = FestivalSystem.get_active_festivals(ic_day)
+	var effects: Array[String] = FestivalSystem.get_festival_effects(ic_day)
+	var rokuyo_name: String = FestivalSystem.get_rokuyo_name(ic_day)
+	var is_taian: bool = FestivalSystem.get_taian_bonus(ic_day) > 0
+	var is_inauspicious: bool = FestivalSystem.is_inauspicious_for_social(ic_day)
+	var is_ceasefire: bool = FestivalSystem.is_ceasefire_day(ic_day)
+	var is_labor_halt: bool = FestivalSystem.is_labor_halt_day(ic_day)
+
+	world_states["is_ceasefire_day"] = is_ceasefire
+	world_states["is_labor_halt_day"] = is_labor_halt
+	world_states["is_taian"] = is_taian
+	world_states["is_inauspicious_for_social"] = is_inauspicious
+	world_states["rokuyo"] = rokuyo_name
+
+	return {
+		"active_festivals": active_festivals,
+		"effects": effects,
+		"rokuyo": rokuyo_name,
+		"is_taian": is_taian,
+		"is_inauspicious": is_inauspicious,
+		"is_ceasefire": is_ceasefire,
+		"is_labor_halt": is_labor_halt,
+		"honor_gain": FestivalSystem.get_honor_gain_festivals(ic_day),
+		"glory_gain": FestivalSystem.get_glory_gain_festivals(ic_day),
+	}
+
+
+# -- Cohabitation Disposition (s12.2) ------------------------------------------
+
+static func _apply_cohabitation(
+	characters: Array[L5RCharacterData],
+	characters_by_id: Dictionary,
+) -> void:
+	var by_location: Dictionary = {}
+	for c: L5RCharacterData in characters:
+		var loc: String = c.physical_location
+		if loc.is_empty():
+			continue
+		if not by_location.has(loc):
+			by_location[loc] = []
+		by_location[loc].append(c.character_id)
+
+	for loc: String in by_location:
+		var ids: Array = by_location[loc]
+		if ids.size() < 2:
+			continue
+		for i: int in range(ids.size()):
+			for j: int in range(i + 1, ids.size()):
+				var id_a: int = ids[i]
+				var id_b: int = ids[j]
+				var char_a: L5RCharacterData = characters_by_id.get(id_a)
+				var char_b: L5RCharacterData = characters_by_id.get(id_b)
+				if char_a == null or char_b == null:
+					continue
+				char_a.cohabitation_days[id_b] = char_a.cohabitation_days.get(id_b, 0) + 1
+				char_b.cohabitation_days[id_a] = char_b.cohabitation_days.get(id_a, 0) + 1
+
+
+# -- Favor Processing (s12.10) ------------------------------------------------
+
+static func _process_favors(favors: Array, ic_day: int) -> Dictionary:
+	var expired_ids: Array[int] = FavorSystem.process_expirations(favors, ic_day)
+
+	var breach_results: Array[Dictionary] = FavorSystem.process_deadline_breaches(favors, ic_day)
+
+	return {
+		"expired_favor_ids": expired_ids,
+		"deadline_breaches": breach_results,
+	}
+
+
+# -- Historical Modifier Decay (s12.2, season boundary) -----------------------
+
+static func _decay_all_historical_modifiers(
+	characters: Array[L5RCharacterData],
+	ic_day: int,
+) -> void:
+	for c: L5RCharacterData in characters:
+		for target_id: Variant in c.historical_modifiers:
+			var mods: Array = c.historical_modifiers[target_id]
+			for mod: Variant in mods:
+				if mod is Dictionary:
+					var days_elapsed: int = ic_day - mod.get("created_ic_day", 0)
+					DispositionSystem.decay_historical_modifier(mod, days_elapsed)

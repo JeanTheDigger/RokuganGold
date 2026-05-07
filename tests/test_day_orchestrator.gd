@@ -725,3 +725,110 @@ func test_check_witness_evidence_no_active_case() -> void:
 		1, 50, 3, crime_records, objectives
 	)
 	assert_true(result.is_empty())
+
+
+# -- Festival Wiring ----------------------------------------------------------
+
+func test_advance_day_returns_festival_results() -> void:
+	var result: Dictionary = DayOrchestrator.advance_day(
+		_time, _characters, _characters_by_id, _make_world_states(),
+		_make_objectives(), _scoring_tables, _filter_data, _dice,
+		_action_skill_map, _provinces, _action_log, _season_meta
+	)
+	assert_true(result.has("festival_results"))
+	assert_true(result["festival_results"].has("rokuyo"))
+	assert_true(result["festival_results"].has("is_ceasefire"))
+	assert_true(result["festival_results"].has("is_labor_halt"))
+
+
+func test_festival_sets_world_state_flags() -> void:
+	var ws: Dictionary = _make_world_states()
+	DayOrchestrator.advance_day(
+		_time, _characters, _characters_by_id, ws,
+		_make_objectives(), _scoring_tables, _filter_data, _dice,
+		_action_skill_map, _provinces, _action_log, _season_meta
+	)
+	assert_true(ws.has("is_ceasefire_day"))
+	assert_true(ws.has("is_labor_halt_day"))
+	assert_true(ws.has("is_taian"))
+	assert_true(ws.has("is_inauspicious_for_social"))
+	assert_true(ws.has("rokuyo"))
+
+
+# -- Cohabitation Wiring -------------------------------------------------------
+
+func test_cohabitation_increments_days() -> void:
+	var c2 := L5RCharacterData.new()
+	c2.character_id = 2
+	c2.character_name = "NPC 2"
+	c2.status = 3.0
+	c2.awareness = 3
+	c2.reflexes = 3
+	c2.stamina = 3
+	c2.willpower = 3
+	c2.agility = 3
+	c2.intelligence = 3
+	c2.strength = 3
+	c2.perception = 3
+	c2.void_ring = 2
+	c2.action_points_current = 2
+	c2.action_points_max = 2
+	c2.honor = 5.0
+	c2.glory = 3.0
+	c2.bushido_virtue = Enums.BushidoVirtue.NONE
+	c2.shourido_virtue = Enums.ShouridoVirtue.NONE
+	c2.skills = {"Etiquette": 3}
+	c2.emphases = {}
+	c2.knowledge_pool = []
+	c2.known_contacts_by_clan = {}
+	c2.met_characters = []
+	c2.topic_pool = []
+
+	_characters[0].physical_location = "castle_crane"
+	c2.physical_location = "castle_crane"
+
+	_characters.append(c2)
+	_characters_by_id[2] = c2
+
+	var ws: Dictionary = _make_world_states()
+	ws[2] = ws[1].duplicate(true)
+	var objs: Dictionary = _make_objectives()
+	objs[2] = {"primary": {"need_type": "REST", "priority": 3}}
+
+	DayOrchestrator.advance_day(
+		_time, _characters, _characters_by_id, ws,
+		objs, _scoring_tables, _filter_data, _dice,
+		_action_skill_map, _provinces, _action_log, _season_meta
+	)
+	assert_eq(_characters[0].cohabitation_days.get(2, 0), 1)
+	assert_eq(c2.cohabitation_days.get(1, 0), 1)
+
+
+# -- Favor Processing Wiring --------------------------------------------------
+
+func test_advance_day_returns_favor_results() -> void:
+	var result: Dictionary = DayOrchestrator.advance_day(
+		_time, _characters, _characters_by_id, _make_world_states(),
+		_make_objectives(), _scoring_tables, _filter_data, _dice,
+		_action_skill_map, _provinces, _action_log, _season_meta
+	)
+	assert_true(result.has("favor_results"))
+	assert_true(result["favor_results"].has("expired_favor_ids"))
+	assert_true(result["favor_results"].has("deadline_breaches"))
+
+
+func test_favor_expiration_fires() -> void:
+	var favor := FavorData.new()
+	favor.favor_id = 1
+	favor.tier = FavorData.FavorTier.MINOR
+	favor.created_ic_day = 0
+	var favors: Array = [favor]
+
+	_time.current_tick = 360
+	var result: Dictionary = DayOrchestrator.advance_day(
+		_time, _characters, _characters_by_id, _make_world_states(),
+		_make_objectives(), _scoring_tables, _filter_data, _dice,
+		_action_skill_map, _provinces, _action_log, _season_meta,
+		[], [], [], [], [], [1], {}, {}, [1000], [], {}, favors
+	)
+	assert_true(result["favor_results"]["expired_favor_ids"].has(1))
