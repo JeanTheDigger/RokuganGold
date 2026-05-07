@@ -436,6 +436,7 @@ All in /tests/, one file per system:
 - test_travel_system.gd (~30 tests)
 - test_objective_progress.gd (~35 tests)
 - test_festival_system.gd (~55 tests)
+- test_simulation_scheduler.gd (~20 tests)
 
 ### Festival System (s11.5)
 - **simulation/festival_system.gd** — Empire-wide canonical festivals, Rokuyo
@@ -794,6 +795,22 @@ All in /tests/, one file per system:
 - **objective_alignment.json** gains CONDUCT_COMMERCE NeedType with 7 actions:
   CONDUCT_COMMERCE (100), BEGIN_TRAVEL (60), PURCHASE_MARKET (50),
   NEGOTIATE (45), WRITE_LETTER (35), ASSESS_PROVINCE_STATUS (30), DO_NOTHING (0).
+
+### Simulation Scheduler & World State
+- **scripts/managers/world_state.gd** — `WorldStateData` autoload singleton
+  (registered as `WorldState`). Holds all persistent data arrays:
+  characters, provinces, settlements, clans, topics, insurgencies, etc.
+  `rebuild_characters_by_id()` refreshes the ID lookup dictionary.
+  `advance_one_day()` delegates to `DayOrchestrator.advance_day()` with
+  all world state parameters.
+- **scripts/managers/simulation_scheduler.gd** — `SimulationScheduler` autoload
+  (registered as `SimScheduler`). Checks real wall-clock time each frame,
+  converts UTC to EST (with DST), fires `WorldState.advance_one_day()` at
+  4 checkpoints per real day (EST hours 0, 6, 12, 18 = every 6 real hours).
+  Tick key format `YYYY-MM-DD-HXX` prevents double-firing on restart.
+  State persisted to `user://simulation/scheduler_state.txt`.
+  `force_tick()` for manual advancement. `tick_completed` signal emitted
+  after each advancement.
 
 ### What's Next
 1. World generation coordinate system and adjacency
