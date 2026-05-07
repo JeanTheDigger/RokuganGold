@@ -40,6 +40,9 @@ static func add_contact(
 	character: L5RCharacterData,
 	contact_id: int,
 	clan_id: String,
+	contact: L5RCharacterData = null,
+	clan_baselines: Dictionary = {},
+	family_baselines: Dictionary = {},
 ) -> void:
 	if contact_id in character.met_characters:
 		return
@@ -48,6 +51,14 @@ static func add_contact(
 		character.known_contacts_by_clan[clan_id] = []
 	if contact_id not in character.known_contacts_by_clan[clan_id]:
 		character.known_contacts_by_clan[clan_id].append(contact_id)
+
+	# Seed starting personal disposition from clan + family baselines (s12.2b)
+	# on first meeting. No-op if the caller didn't supply baselines or the
+	# contact char itself.
+	if contact != null and (not clan_baselines.is_empty() or not family_baselines.is_empty()):
+		CollectiveDisposition.seed_first_meeting(
+			character, contact, clan_baselines, family_baselines
+		)
 
 
 # -- Probe Visibility (GDD s55.4.7) -------------------------------------------

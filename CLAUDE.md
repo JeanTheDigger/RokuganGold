@@ -439,6 +439,7 @@ All in /tests/, one file per system:
 - test_simulation_scheduler.gd (~20 tests)
 - test_gift_giving_system.gd (~30 tests)
 - test_biological_family.gd (~30 tests)
+- test_collective_disposition.gd (~35 tests)
 
 ### Festival System (s11.5)
 - **simulation/festival_system.gd** — Empire-wide canonical festivals, Rokuyo
@@ -797,6 +798,36 @@ All in /tests/, one file per system:
 - **objective_alignment.json** gains CONDUCT_COMMERCE NeedType with 7 actions:
   CONDUCT_COMMERCE (100), BEGIN_TRAVEL (60), PURCHASE_MARKET (50),
   NEGOTIATE (45), WRITE_LETTER (35), ASSESS_PROVINCE_STATUS (30), DO_NOTHING (0).
+
+### Clan & Family Collective Disposition (s12.2b)
+- **simulation/collective_disposition.gd** — `CollectiveDisposition` class
+  per GDD s12.2b. Holds the locked PROVISIONAL pre-Scorpion-Coup baselines
+  as const dicts: 21 Great Clan ↔ Great Clan pairs, 28 Minor Clan ↔ Great
+  Clan pairs, 8 Minor ↔ Minor pairs (`STARTING_CLAN_BASELINES`); plus 41
+  intra-clan family pairs and 11 cross-clan family pairs
+  (`STARTING_FAMILY_BASELINES`). Symmetric `make_pair_key(a, b)` lookup —
+  lexicographic sort + "||" delimiter so order doesn't matter.
+  `get_clan_baseline` / `get_family_baseline` return the int baseline (0
+  for unlisted, intra-clan/family, or empty-string pairs).
+  `compute_seed_disposition(actor, target, clan_baselines, family_baselines)`
+  applies the GDD formula: `clan × 0.25 + family × 0.50` rounded to int.
+  `seed_first_meeting()` writes the seed to `actor.disposition_values[target.id]`
+  on first meeting only — preserves any existing value.
+  `apply_event_ripple(actor, target, personal_change, ...)` mutates the
+  baseline dicts with proportional changes (`× 0.05` clan, `× 0.20` family).
+  Specific event helpers: `apply_marriage` (with `champion_level=true` for
+  Champion-tier marriage), `apply_clan_war_declared` (-10), 
+  `apply_clan_peace_treaty` (+5), `apply_harvest_destruction` (-5),
+  `apply_family_lord_raid` (-3), `apply_family_betrayal` (-10),
+  `apply_intra_clan_rice_sharing` (+2), `apply_family_duel_death` (-5).
+  `make_starting_baselines()` factory returns a deep copy of the locked
+  data, ready to be stored as world state. Baselines never decay — they're
+  collective historical memory, only changed by deliberate events.
+- **simulation/information_system.gd** — `add_contact()` gains optional
+  4th/5th/6th args (contact char, clan baselines, family baselines). When
+  supplied, calls `CollectiveDisposition.seed_first_meeting()` on first
+  meeting so the new disposition_values entry starts at the clan+family
+  seed instead of 0. Existing 3-arg callers are unaffected.
 
 ### Biological Family Web (s22.6)
 - **shared/ancestor_record.gd** — `AncestorRecord` Resource for lightweight
