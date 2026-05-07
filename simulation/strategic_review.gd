@@ -185,7 +185,17 @@ static func _evaluate_vassal_objectives(
 ) -> Array[Dictionary]:
 	var results: Array[Dictionary] = []
 
+	var province_statuses: Array = world_state.get("province_statuses", [])
+	var triage_results: Array[ProvinceTriage.TriageResult] = ProvinceTriage.get_top_provinces(
+		province_statuses, 3
+	)
+
 	var threats: Array = world_state.get("province_threats", [])
+	if threats.is_empty() and not triage_results.is_empty():
+		for t: ProvinceTriage.TriageResult in triage_results:
+			if t.score >= ProvinceTriage.SCORE_VOLATILE_STABILITY:
+				threats.append({"type": "instability", "target_province_id": t.province_id})
+
 	var idle_vassals: Array[int] = []
 	for vassal: L5RCharacterData in vassals:
 		if vassal.lord_id != lord.character_id:

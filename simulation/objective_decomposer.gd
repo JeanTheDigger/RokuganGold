@@ -355,21 +355,13 @@ static func _decompose_maximize_prosperity(
 					return _court_need
 				return _make_need("REST", 1)
 
-	var crisis: int = _find_crisis_province(ctx)
-	if crisis >= 0:
-		return _make_need("DEFEND_PROVINCE", 3, {"target_province_id": crisis})
-
-	var undergarrisoned: int = _find_undergarrisoned_province(ctx)
-	if undergarrisoned >= 0:
-		return _make_need("DEFEND_PROVINCE", 3, {"target_province_id": undergarrisoned})
-
-	var stale: int = _find_stale_province(ctx)
-	if stale >= 0:
-		return _make_need("INVESTIGATE_THREAT", 2, {"target_province_id": stale})
-
-	var unstable: int = _find_unstable_province(ctx, 75)
-	if unstable >= 0:
-		return _make_need("PATROL_PROVINCE", 1, {"target_province_id": unstable})
+	var triage: ProvinceTriage.TriageResult = ProvinceTriage.get_worst_province(
+		ctx.province_statuses
+	)
+	if triage.score > 0.0 and triage.province_id >= 0:
+		return _make_need(triage.recommended_need, triage.priority, {
+			"target_province_id": triage.province_id,
+		})
 
 	var rice_per_pu: float = _get_rice_per_pu(ctx)
 	if rice_per_pu < 2.0:
@@ -652,17 +644,13 @@ static func _decompose_defend_territory(
 			_:
 				return _make_need("TRAIN_SKILL", 1)
 
-	var crisis: int = _find_crisis_province(ctx)
-	if crisis >= 0:
-		return _make_need("DEFEND_PROVINCE", 3, {"target_province_id": crisis})
-
-	var undergarrisoned: int = _find_undergarrisoned_province(ctx)
-	if undergarrisoned >= 0:
-		return _make_need("DEFEND_PROVINCE", 2, {"target_province_id": undergarrisoned})
-
-	var stale: int = _find_stale_province(ctx)
-	if stale >= 0:
-		return _make_need("INVESTIGATE_THREAT", 2, {"target_province_id": stale})
+	var triage_mil: ProvinceTriage.TriageResult = ProvinceTriage.get_worst_province(
+		ctx.province_statuses
+	)
+	if triage_mil.score > 0.0 and triage_mil.province_id >= 0:
+		return _make_need(triage_mil.recommended_need, triage_mil.priority, {
+			"target_province_id": triage_mil.province_id,
+		})
 
 	return _make_need("EVALUATE_WAR_READINESS", 1)
 
