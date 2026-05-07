@@ -160,12 +160,16 @@ single-dice-entry-point and server-authoritative constraints.
   OperationalHierarchyType, KolatSect (7 sects), ShipClass (7 classes),
   KnowledgeSource (5 sources), KnowledgeConfidence (3 tiers).
 - **shared/province_data.gd** — ProvinceData Resource: terrain, adjacency,
-  population PU breakdown, stability. Data model only — no map generation
-  (map is being worked on separately by the user). Resource stockpiles
-  (rice, koku) live on SettlementData per GDD s4.3.7. Iron/arms pool at
-  clan level (no data model yet).
+  stability. Geography and settlement references only — no PU, no stockpiles.
+  Data model only — no map generation (map is being worked on separately by
+  the user).
 - **shared/settlement_data.gd** — SettlementData Resource: 12 settlement types,
-  infrastructure array, garrison, population, rice_stockpile, koku_stockpile.
+  infrastructure array, population_pu, farming_pu, mining_pu, town_pu,
+  military_pu, garrison_pu, rice_stockpile, koku_stockpile. Per GDD s4.3.7,
+  all PU breakdown and resource stockpiles live at settlement level.
+- **shared/clan_data.gd** — ClanData Resource: clan_name, iron_stockpile,
+  arms_stockpile, champion_id, province_ids. Iron/arms pool at clan level
+  per GDD s4.3.10.
 
 ### NPC Decision Engine
 - **simulation/npc_data_structures.gd** — ImmediateNeed (generic target system),
@@ -245,8 +249,11 @@ single-dice-entry-point and server-authoritative constraints.
 
 ### Resource Tick System
 - **simulation/resource_tick.gd** — Seasonal resource processing per GDD s4.3.
-  Rice consumption/harvest, starvation stages, 5-tier tax cascade,
-  personality tax modifiers, iron/koku production, population growth.
+  Fully settlement-based: all PU reads and stockpile writes target
+  SettlementData. Rice consumption/harvest, starvation stages, 5-tier tax
+  cascade (deposits collected rice to settlements), personality tax modifiers,
+  iron production (pools to ClanData), koku production, population growth.
+  Province-level helpers sum PU across settlements.
 
 ### Approach Evaluation (s55.30)
 - **simulation/approach_evaluation.gd** — Measure-Then-Decide system.
@@ -451,9 +458,10 @@ All in /tests/, one file per system:
   `generate_character(id, name, clan, family, school, insight_rank, dice)` →
   L5RCharacterData with traits, skills, honor/glory, personality, age, koku.
   `generate_province(id, name, clan, family, terrain, total_pu, dice)` →
-  ProvinceData with PU distribution, stability, garrison.
-  `generate_settlement(id, name, province, type, pop)` → SettlementData with
-  rice_stockpile (2 seasons buffer) and koku_stockpile (proportional to town_pu).
+  ProvinceData with stability (no PU, no stockpiles).
+  `generate_settlement(id, name, province, type, pop, terrain)` → SettlementData
+  with PU distribution, garrison_pu, rice_stockpile (2 seasons buffer),
+  koku_stockpile (proportional to town_pu).
   Data tables: 38 family trait bonuses, 28 schools (all Great Clans), clan
   personality weights (bushido/shourido), terrain PU distributions, age ranges.
   Trait advancement: 4 points per rank above 1, 70% priority to focus rings.

@@ -353,35 +353,55 @@ func test_pu_distribution_sums_to_total() -> void:
 			terrain, "Test", "Lion", "Akodo",
 			terrain as Enums.TerrainType, 20, _dice
 		)
-		var total: int = p.farming_pu + p.town_pu + p.mining_pu + p.military_pu
+		var s: SettlementData = WorldGenerator.generate_settlement(
+			terrain + 100, "Village", p, Enums.SettlementType.VILLAGE, 20,
+			terrain as Enums.TerrainType,
+		)
+		var total: int = s.farming_pu + s.town_pu + s.mining_pu + s.military_pu
 		assert_eq(total, 20, "PU should sum to total for terrain %d" % terrain)
 
 
 func test_mountains_have_more_mining() -> void:
-	var mountain: ProvinceData = WorldGenerator.generate_province(
+	var mp: ProvinceData = WorldGenerator.generate_province(
 		1, "Mountain", "Dragon", "Mirumoto",
 		Enums.TerrainType.MOUNTAINS, 20, _dice
 	)
-	var plains: ProvinceData = WorldGenerator.generate_province(
+	var mountain: SettlementData = WorldGenerator.generate_settlement(
+		101, "Village", mp, Enums.SettlementType.VILLAGE, 20,
+		Enums.TerrainType.MOUNTAINS,
+	)
+	var pp: ProvinceData = WorldGenerator.generate_province(
 		2, "Plains", "Lion", "Akodo",
 		Enums.TerrainType.PLAINS, 20, _dice
+	)
+	var plains: SettlementData = WorldGenerator.generate_settlement(
+		102, "Village", pp, Enums.SettlementType.VILLAGE, 20,
+		Enums.TerrainType.PLAINS,
 	)
 	assert_true(mountain.mining_pu > plains.mining_pu,
 		"Mountains should have more mining PU than plains")
 
 
 func test_river_delta_has_most_farming() -> void:
-	var delta: ProvinceData = WorldGenerator.generate_province(
+	var dp: ProvinceData = WorldGenerator.generate_province(
 		1, "Delta", "Crane", "Doji",
 		Enums.TerrainType.RIVER_DELTA, 20, _dice
+	)
+	var delta: SettlementData = WorldGenerator.generate_settlement(
+		101, "Village", dp, Enums.SettlementType.VILLAGE, 20,
+		Enums.TerrainType.RIVER_DELTA,
 	)
 	assert_true(delta.farming_pu >= 12, "River delta should have high farming PU")
 
 
 func test_river_delta_has_no_mining() -> void:
-	var delta: ProvinceData = WorldGenerator.generate_province(
+	var dp: ProvinceData = WorldGenerator.generate_province(
 		1, "Delta", "Crane", "Doji",
 		Enums.TerrainType.RIVER_DELTA, 20, _dice
+	)
+	var delta: SettlementData = WorldGenerator.generate_settlement(
+		101, "Village", dp, Enums.SettlementType.VILLAGE, 20,
+		Enums.TerrainType.RIVER_DELTA,
 	)
 	assert_eq(delta.mining_pu, 0)
 
@@ -395,7 +415,10 @@ func test_garrison_is_five_percent() -> void:
 		1, "Test", "Lion", "Akodo",
 		Enums.TerrainType.PLAINS, 40, _dice
 	)
-	assert_eq(p.garrison_pu, 2)
+	var s: SettlementData = WorldGenerator.generate_settlement(
+		101, "Village", p, Enums.SettlementType.VILLAGE, 40,
+	)
+	assert_eq(s.garrison_pu, 2)
 
 
 func test_garrison_minimum_one() -> void:
@@ -403,7 +426,10 @@ func test_garrison_minimum_one() -> void:
 		1, "Tiny", "Dragon", "Togashi",
 		Enums.TerrainType.MOUNTAINS, 5, _dice
 	)
-	assert_eq(p.garrison_pu, 1)
+	var s: SettlementData = WorldGenerator.generate_settlement(
+		101, "Village", p, Enums.SettlementType.VILLAGE, 5,
+	)
+	assert_eq(s.garrison_pu, 1)
 
 
 # =============================================================================
@@ -428,10 +454,10 @@ func test_settlement_koku_stockpile() -> void:
 		Enums.TerrainType.PLAINS, 20, _dice
 	)
 	var s: SettlementData = WorldGenerator.generate_settlement(
-		10, "Town", p, Enums.SettlementType.CITY, p.population_pu
+		10, "Town", p, Enums.SettlementType.CITY, 20,
 	)
-	# koku = town_pu * 0.5 * (pop/pop) = town_pu * 0.5
-	assert_almost_eq(s.koku_stockpile, float(p.town_pu) * 0.5, 0.001)
+	# koku = town_pu * 0.5
+	assert_almost_eq(s.koku_stockpile, float(s.town_pu) * 0.5, 0.001)
 
 
 # =============================================================================
@@ -476,12 +502,18 @@ func test_same_seed_produces_same_province() -> void:
 		1, "Test", "Lion", "Akodo",
 		Enums.TerrainType.PLAINS, 20, _dice
 	)
+	var s1: SettlementData = WorldGenerator.generate_settlement(
+		101, "Village", p1, Enums.SettlementType.VILLAGE, 20,
+	)
 	_dice.set_seed(42)
 	var p2: ProvinceData = WorldGenerator.generate_province(
 		1, "Test", "Lion", "Akodo",
 		Enums.TerrainType.PLAINS, 20, _dice
 	)
-	assert_eq(p1.farming_pu, p2.farming_pu)
+	var s2: SettlementData = WorldGenerator.generate_settlement(
+		101, "Village", p2, Enums.SettlementType.VILLAGE, 20,
+	)
+	assert_eq(s1.farming_pu, s2.farming_pu)
 	assert_eq(p1.stability, p2.stability)
 
 
@@ -533,7 +565,11 @@ func test_all_terrains_generate_valid_provinces() -> void:
 			i, "Test_%d" % i, "Lion", "Akodo",
 			terrains[i], 20, _dice
 		)
-		var total: int = p.farming_pu + p.town_pu + p.mining_pu + p.military_pu
+		var s: SettlementData = WorldGenerator.generate_settlement(
+			i + 100, "Village", p, Enums.SettlementType.VILLAGE, 20,
+			terrains[i],
+		)
+		var total: int = s.farming_pu + s.town_pu + s.mining_pu + s.military_pu
 		assert_eq(total, 20, "Terrain %d PU should sum to 20" % terrains[i])
-		assert_true(p.garrison_pu >= 1)
+		assert_true(s.garrison_pu >= 1)
 		assert_true(p.stability >= 70.0)

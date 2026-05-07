@@ -21,20 +21,11 @@ extends Resource
 
 @export var settlement_ids: Array[int] = []
 
-# -- Population ----------------------------------------------------------------
-
-@export var population_pu: int = 0
-@export var farming_pu: int = 0
-@export var mining_pu: int = 0
-@export var town_pu: int = 0
-@export var military_pu: int = 0
-
 # -- Stability (used by NPC engine, s55.3) -------------------------------------
 
 @export var stability: float = 100.0
 @export var active_crisis_id: int = -1
 @export var active_insurgency_id: int = -1
-@export var garrison_pu: int = 0
 @export var province_taint_level: float = 0.0
 @export var last_report_ic_day: int = -1
 

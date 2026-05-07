@@ -12,8 +12,6 @@ func _make_province(id: int, stability: float = 100.0, coastal: bool = false) ->
 	var p := ProvinceData.new()
 	p.province_id = id
 	p.stability = stability
-	p.population_pu = 1000
-	p.garrison_pu = 100
 	p.is_coastal = coastal
 	return p
 
@@ -106,9 +104,8 @@ func test_stability_recovery_with_peace_bonus():
 
 func test_stability_under_garrisoned():
 	var p := _make_province(1, 80.0)
-	p.garrison_pu = 10  # below 5% of 1000
 	var ins_arr: Array[InsurgencyData] = []
-	var delta: float = InsurgencySystem.compute_stability_change(p, ins_arr, 0, false, false, 0)
+	var delta: float = InsurgencySystem.compute_stability_change(p, ins_arr, 0, false, false, 0, 1000, 10)
 	assert_true(delta < 0.0, "Under-garrisoned should prevent recovery and add penalty")
 
 

@@ -52,6 +52,8 @@ static func compute_stability_change(
 	war_status_active: bool,
 	raided_this_season: bool,
 	peace_bonus_seasons: int,
+	population_pu: int = 0,
+	garrison_pu: int = 0,
 ) -> float:
 	var delta: float = 0.0
 
@@ -60,8 +62,8 @@ static func compute_stability_change(
 		2: delta -= 3.0
 		3: delta -= 10.0
 
-	var garrison_min: float = province.population_pu * 0.05
-	if province.garrison_pu < garrison_min:
+	var garrison_min: float = population_pu * 0.05
+	if garrison_pu < garrison_min:
 		delta -= 2.0
 
 	if war_status_active:
@@ -78,7 +80,7 @@ static func compute_stability_change(
 
 	var has_starvation: bool = starvation_stage > 0
 	var has_insurgency: bool = insurgency_count > 0
-	if not has_starvation and province.garrison_pu >= garrison_min and not has_insurgency and not war_status_active:
+	if not has_starvation and garrison_pu >= garrison_min and not has_insurgency and not war_status_active:
 		delta += 2.0
 		if peace_bonus_seasons >= 4:
 			delta += 1.0

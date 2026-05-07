@@ -50,12 +50,6 @@ func before_each() -> void:
 	var province := ProvinceData.new()
 	province.province_id = 10
 	province.stability = 70.0
-	province.garrison_pu = 3
-	province.farming_pu = 4
-	province.mining_pu = 1
-	province.town_pu = 2
-	province.military_pu = 1
-	province.population_pu = 8
 	province.terrain_type = Enums.TerrainType.PLAINS
 	_provinces = {10: province}
 

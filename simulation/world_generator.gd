@@ -521,15 +521,6 @@ static func generate_province(
 	p.family = family
 	p.terrain_type = terrain_type
 	p.is_coastal = is_coastal
-	p.population_pu = total_pu
-
-	var dist: Dictionary = _distribute_pu(total_pu, terrain_type)
-	p.farming_pu = dist["farming"]
-	p.town_pu = dist["town"]
-	p.mining_pu = dist["mining"]
-	p.military_pu = dist["military"]
-
-	p.garrison_pu = maxi(1, total_pu / 20)
 
 	p.stability = float(70 + dice_engine.rand_int_range(0, 20))
 
@@ -546,6 +537,7 @@ static func generate_settlement(
 	province: ProvinceData,
 	settlement_type: Enums.SettlementType,
 	population_pu: int,
+	terrain_type: Enums.TerrainType = Enums.TerrainType.PLAINS,
 ) -> SettlementData:
 	var s := SettlementData.new()
 	s.settlement_id = settlement_id
@@ -554,9 +546,16 @@ static func generate_settlement(
 	s.settlement_type = settlement_type
 	s.population_pu = population_pu
 
+	var dist: Dictionary = _distribute_pu(population_pu, terrain_type)
+	s.farming_pu = dist["farming"]
+	s.town_pu = dist["town"]
+	s.mining_pu = dist["mining"]
+	s.military_pu = dist["military"]
+	s.garrison_pu = maxi(1, population_pu / 20)
+
 	var rice_per_season: float = float(population_pu) * 0.25
 	s.rice_stockpile = rice_per_season * 2.0
-	s.koku_stockpile = float(province.town_pu) * 0.5 * (float(population_pu) / maxf(float(province.population_pu), 1.0))
+	s.koku_stockpile = float(s.town_pu) * 0.5
 
 	return s
 

@@ -318,12 +318,6 @@ func test_advance_day_returns_crime_results() -> void:
 	var province := ProvinceData.new()
 	province.province_id = 10
 	province.stability = 70.0
-	province.garrison_pu = 3
-	province.farming_pu = 4
-	province.mining_pu = 1
-	province.town_pu = 2
-	province.military_pu = 1
-	province.population_pu = 8
 	province.terrain_type = Enums.TerrainType.PLAINS
 
 	var characters: Array[L5RCharacterData] = [_char]
@@ -355,12 +349,6 @@ func test_advance_day_returns_commitment_results() -> void:
 	var province := ProvinceData.new()
 	province.province_id = 10
 	province.stability = 70.0
-	province.garrison_pu = 3
-	province.farming_pu = 4
-	province.mining_pu = 1
-	province.town_pu = 2
-	province.military_pu = 1
-	province.population_pu = 8
 	province.terrain_type = Enums.TerrainType.PLAINS
 
 	var characters: Array[L5RCharacterData] = [_char]
@@ -391,12 +379,6 @@ func test_advance_day_processes_due_commitment() -> void:
 	var province := ProvinceData.new()
 	province.province_id = 10
 	province.stability = 70.0
-	province.garrison_pu = 3
-	province.farming_pu = 4
-	province.mining_pu = 1
-	province.town_pu = 2
-	province.military_pu = 1
-	province.population_pu = 8
 	province.terrain_type = Enums.TerrainType.PLAINS
 
 	var characters: Array[L5RCharacterData] = [_char]
@@ -436,12 +418,6 @@ func test_season_transition_decays_approach_penalties() -> void:
 	var province := ProvinceData.new()
 	province.province_id = 10
 	province.stability = 70.0
-	province.garrison_pu = 3
-	province.farming_pu = 4
-	province.mining_pu = 1
-	province.town_pu = 2
-	province.military_pu = 1
-	province.population_pu = 8
 	province.terrain_type = Enums.TerrainType.PLAINS
 
 	var characters: Array[L5RCharacterData] = [_char]
@@ -1466,12 +1442,6 @@ func test_advance_day_processes_lord_death() -> void:
 	var province := ProvinceData.new()
 	province.province_id = 10
 	province.stability = 70.0
-	province.garrison_pu = 3
-	province.farming_pu = 4
-	province.mining_pu = 1
-	province.town_pu = 2
-	province.military_pu = 1
-	province.population_pu = 8
 	province.terrain_type = Enums.TerrainType.PLAINS
 
 	var characters: Array[L5RCharacterData] = [vassal]
@@ -1523,12 +1493,6 @@ func test_advance_day_no_death_events_no_orphans() -> void:
 	var province := ProvinceData.new()
 	province.province_id = 10
 	province.stability = 70.0
-	province.garrison_pu = 3
-	province.farming_pu = 4
-	province.mining_pu = 1
-	province.town_pu = 2
-	province.military_pu = 1
-	province.population_pu = 8
 	province.terrain_type = Enums.TerrainType.PLAINS
 
 	var characters: Array[L5RCharacterData] = [_char]
@@ -1672,8 +1636,6 @@ func test_s11_11_insurgency_wired_into_orchestrator() -> void:
 	var province := ProvinceData.new()
 	province.province_id = 1
 	province.stability = 40.0
-	province.population_pu = 1000
-	province.garrison_pu = 100
 	var provinces: Dictionary = {1: province}
 	var insurgencies: Array[InsurgencyData] = []
 	var next_ins_id: Array[int] = [1]
