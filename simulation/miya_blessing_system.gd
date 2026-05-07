@@ -142,7 +142,7 @@ static func compute_need_score(conditions: Dictionary) -> int:
 	##   has_insurgency: bool        (active right now)
 	##   pu_decline_pct: float       (0.0–1.0; e.g. 0.18 = 18% decline)
 	##   blessed_last_year: bool
-	##   blessed_two_years_ago: bool (used for the +2 "rotation" check)
+	##   blessed_two_years_ago: bool (unused — kept for caller compatibility)
 	##   petition_bonus: int         (winter-court petition contributions)
 	var score: int = 0
 	score += get_starvation_need(conditions.get("worst_starvation_stage", 0))
@@ -156,9 +156,7 @@ static func compute_need_score(conditions: Dictionary) -> int:
 	score += get_pu_decline_need(conditions.get("pu_decline_pct", 0.0))
 	if conditions.get("blessed_last_year", false):
 		score += NEED_BLESSED_LAST_YEAR_MALUS
-	elif not conditions.get("blessed_two_years_ago", false):
-		# Eligible for the rotation bonus if neither last year nor the year
-		# before received the Blessing — a simple rotation aid.
+	else:
 		score += NEED_NOT_BLESSED_LAST_YEAR
 	score += int(conditions.get("petition_bonus", 0))
 	return score
