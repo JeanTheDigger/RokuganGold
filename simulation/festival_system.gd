@@ -286,6 +286,115 @@ const THEME_CATEGORIES: Array[String] = [
 	"historical_local", "food_drink", "animal_wildlife", "domestic",
 ]
 
+const THEME_WORDS: Dictionary = {
+	"agricultural": [
+		"First Rice", "Golden Sheaf", "Water Gate Opening", "Scarecrow Raising",
+		"Silkworm Blessing", "Ox Rest", "Sweet Potato Roasting", "New Sake",
+		"Persimmon Drying", "Mushroom Hunt", "Straw Rope Tying", "Threshing",
+		"Seedbed Turning", "Barley Roasting", "Melon Splitting", "Terrace Mending",
+		"Millstone Blessing", "Radish Pulling", "Hemp Cutting", "Chestnut Gathering",
+		"Plum Pickling", "Soy Pressing", "Taro Digging", "Grain Storing",
+		"Stubble Burning",
+	],
+	"maritime": [
+		"Tide Watching", "First Catch", "Boat Blessing", "Pearl Offering",
+		"Net Mending", "Seaweed Gathering", "Salt Making", "Coral Throwing",
+		"Whale Sighting", "Driftwood Carving", "Abalone", "Anchor Stone",
+		"Oar Painting", "Rope Coiling", "Eel Trapping", "Shell Polishing",
+		"Kelp Drying", "Harbor Cleaning", "Sail Patching", "Crab Pot Setting",
+		"Squid Lantern", "River Mouth", "Storm Rope", "Fish Bone Burning",
+		"Current Reading",
+	],
+	"mountain_forest": [
+		"First Snow", "Charcoal Burning", "Hot Spring Blessing", "Bear Warding",
+		"Avalanche Prayer", "Bamboo Cutting", "Cedar Planting", "Eagle Watching",
+		"Stone Stacking", "Autumn Leaf", "Wild Herb", "Woodcutter's Rest",
+		"Pine Resin", "Moss Gathering", "Trail Clearing", "Cave Sealing",
+		"Waterfall Prayer", "Mushroom Log", "Vine Cutting", "Mountain Echo",
+		"Goat Path", "Root Digging", "Snow Bridge", "Hawk Release", "Summit Smoke",
+	],
+	"martial": [
+		"Sword Polishing", "Archery", "Garrison Founding", "Fallen Heroes",
+		"Armor Airing", "Training Ground Blessing", "War Drum", "Signal Fire",
+		"Patrol Return", "Shield Wall", "Spear Dance", "Watchfire Night",
+		"Banner Washing", "Target Splitting", "Cavalry Review", "Sentry's Thanks",
+		"Bowstring Waxing", "The Empty Saddle", "Quiver Counting", "Torch March",
+		"First Duel", "War Paint", "Stone Throwing", "Wrestling", "Veteran's Tale",
+	],
+	"spiritual": [
+		"Shrine Washing", "Lantern Floating", "Bell Ringing", "Fox Prayer",
+		"Stone Turning", "Sacred Tree Binding", "Incense Trail",
+		"Spirit Gate Closing", "Well Blessing", "Ash Scattering", "Moon Offering",
+		"Salt Circle", "Candle Floating", "Bamboo Wish", "Mirror Polishing",
+		"Smoke Reading", "River Crossing", "Sand Raking", "Sutra Copying",
+		"Prayer Wheel", "Thread Tying", "Fire Walking", "Oracle Bone",
+		"Wind Chime Hanging", "Sacred Water Drawing",
+	],
+	"craft_trade": [
+		"Forge Lighting", "Weaving", "Pottery Breaking", "Grand Market",
+		"Indigo Vat", "Paper Making", "Lacquer Curing", "Carpenter's Feast",
+		"Kiln Opening", "Coin Washing", "Measuring Day", "Ink Stone",
+		"Needle Blessing", "Straw Sandal", "Roof Thatching", "Charcoal Sorting",
+		"Bamboo Weaving", "Tool Sharpening", "Broom Binding", "Candle Pouring",
+		"Fan Stretching", "Iron Quenching", "Timber Floating", "Silk Unwinding",
+		"Glaze Mixing",
+	],
+	"nature_seasonal": [
+		"Firefly Night", "Crane Migration", "Frost Prayer", "Cicada Chorus",
+		"Autumn Moon", "Plum Blossom", "Frog Song", "Dragonfly", "Snow Rabbit",
+		"Wisteria", "Thunder Prayer", "Morning Glory", "Bamboo Flower",
+		"Star Counting", "Rainbow", "Moss Garden", "Icicle", "Cherry Fall",
+		"Pine Wind", "Evening Primrose", "Spider Silk", "Mushroom Ring",
+		"Falling Star", "Frozen Waterfall", "Lotus Opening",
+	],
+	"cultural_social": [
+		"Poetry Reading", "Ghost Story Night", "Children's Games", "Matchmaking",
+		"Tea Gathering", "Storytelling Night", "Kite Flying", "Riddle Night",
+		"Dance Practice", "Mask Carving", "Fan Painting", "Doll Display",
+		"Calligraphy Contest", "Flower Arranging", "Incense Guessing",
+		"Go Tournament", "Paper Folding", "Shadow Play", "Hair Combing",
+		"Old Song", "Proverb Contest", "Embroidery Display", "Stone Garden",
+		"Lullaby Night", "Name Day",
+	],
+	"historical_local": [
+		"Founding Day", "Great Fire Memorial", "Flood Remembrance",
+		"Old Lord's Birthday", "Bridge Day", "Treaty Day", "Famine's End",
+		"Night the Mountain Shook", "Liberation", "First Well", "Shrine Founding",
+		"The Great Catch", "The Wandering Monk", "The Year of Snow",
+		"The Lord Who Stayed", "Market Charter", "The Broken Dam",
+		"The Ghost Sighting", "The Samurai's Gift", "Road Building",
+		"The Dry Year", "The Tiger Hunt", "Old Temple", "The Ronin Who Helped",
+		"Twin Birth",
+	],
+	"food_drink": [
+		"Mochi Pounding", "New Tea", "Pickled Plum", "Tofu Pressing",
+		"Soba Cutting", "Grilled Fish", "Red Bean Paste", "Rice Cake Stacking",
+		"Dumpling Wrapping", "Wild Boar Roasting", "Vinegar Brewing",
+		"Chestnut Steaming", "Radish Soup", "Dried Fish Stringing",
+		"Honey Harvesting", "Ginger Digging", "Bamboo Shoot Boiling",
+		"Seaweed Soup", "Salt Licking", "Bean Counting", "Quail Egg",
+		"Herb Drying", "Lotus Root Slicing", "Plum Wine Opening", "First Melon",
+	],
+	"animal_wildlife": [
+		"Crane Return", "Sparrow Feeding", "Koi Blessing", "Silkworm Hatching",
+		"Horse Bathing", "Cicada Shell", "Tanuki Watch", "Deer Calling",
+		"Frog Chorus", "Swallow Nesting", "Carp Jumping", "Owl Calling",
+		"Fox Wedding", "Turtle Release", "Dragonfly Racing", "Cat Blessing",
+		"Butterfly Cloud", "Spider Hanging", "Heron Standing", "Bee Swarm",
+		"Boar Track", "Salamander", "Hawk Circling", "Firefly Jar",
+		"Nightingale",
+	],
+	"domestic": [
+		"Roof Sweeping", "Hearth Lighting", "Tatami Airing", "Kimono Washing",
+		"Garden Raking", "Shutter Opening", "Floor Oiling", "Bedding Sunning",
+		"Lamp Trimming", "Gate Painting", "Well Cleaning", "Threshold Salting",
+		"Broom Retiring", "Rope Sandal Day", "Chest Organizing", "Jar Sealing",
+		"Window Paper", "Water Jar Filling", "Herb Pot Planting", "Soot Cleaning",
+		"Clothing Mending", "Fence Building", "Stone Path Laying", "Ash Removal",
+		"Door Charm Hanging",
+	],
+}
+
 const SETTLEMENT_FESTIVAL_COUNT: Dictionary = {
 	"village": [1, 2],
 	"town": [2, 3],
@@ -293,6 +402,17 @@ const SETTLEMENT_FESTIVAL_COUNT: Dictionary = {
 	"fortification": [0, 1],
 	"temple": [0, 1],
 }
+
+static var _canonical_days_cache: Array[int] = []
+
+static func _get_canonical_days() -> Array[int]:
+	if _canonical_days_cache.is_empty():
+		for fest in CANONICAL_FESTIVALS:
+			var day_of_year: int = (fest["month"] - 1) * 30 + (fest["day"] - 1)
+			if day_of_year not in _canonical_days_cache:
+				_canonical_days_cache.append(day_of_year)
+	return _canonical_days_cache
+
 
 static func generate_local_festivals(
 	settlement_type: String,
@@ -312,11 +432,13 @@ static func generate_local_festivals(
 	var used_days: Array[int] = []
 
 	for i in range(count):
-		var theme: String = ""
+		var category: String = ""
 		if themes.size() > i:
-			theme = themes[i]
+			category = themes[i]
 		else:
-			theme = THEME_CATEGORIES[i % THEME_CATEGORIES.size()]
+			category = THEME_CATEGORIES[i % THEME_CATEGORIES.size()]
+
+		var theme_word: String = _pick_theme_word(category, rng)
 
 		var format_word: String = FORMAT_WORDS[i % FORMAT_WORDS.size()]
 		if rng.has_method("randi_range"):
@@ -324,9 +446,9 @@ static func generate_local_festivals(
 
 		var name: String = ""
 		if rng.has_method("randi_range") and rng.randi_range(0, 1) == 0:
-			name = "The %s of the %s" % [format_word, theme.capitalize()]
+			name = "The %s of the %s" % [format_word, theme_word]
 		else:
-			name = "%s %s" % [theme.capitalize(), format_word]
+			name = "%s %s" % [theme_word, format_word]
 
 		var day: int = _pick_festival_day(i, count, used_days, rng)
 		used_days.append(day)
@@ -334,11 +456,20 @@ static func generate_local_festivals(
 		festivals.append({
 			"name": name,
 			"day_of_year": day,
-			"theme_category": theme,
+			"theme_category": category,
 			"mechanical_effect": false,
 		})
 
 	return festivals
+
+
+static func _pick_theme_word(category: String, rng: Object) -> String:
+	var words: Array = THEME_WORDS.get(category, [])
+	if words.is_empty():
+		return category.capitalize()
+	if rng.has_method("randi_range"):
+		return words[rng.randi_range(0, words.size() - 1)]
+	return words[0]
 
 
 static func _pick_festival_day(index: int, total: int, used: Array[int], rng: Object) -> int:
@@ -347,12 +478,18 @@ static func _pick_festival_day(index: int, total: int, used: Array[int], rng: Ob
 		season_start = 0 if index == 0 else 180
 	var season_end: int = season_start + 179
 
+	var canonical: Array[int] = _get_canonical_days()
+	var blocked: Array[int] = used.duplicate()
+	for cd in canonical:
+		if cd not in blocked:
+			blocked.append(cd)
+
 	var day: int = season_start + 30
 	if rng.has_method("randi_range"):
 		day = rng.randi_range(season_start + 1, season_end)
 
 	var attempts: int = 0
-	while day in used and attempts < 50:
+	while day in blocked and attempts < 50:
 		if rng.has_method("randi_range"):
 			day = rng.randi_range(season_start + 1, season_end)
 		else:

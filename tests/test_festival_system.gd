@@ -376,3 +376,53 @@ func test_settlement_festival_count_keys():
 	assert_true(FestivalSystem.SETTLEMENT_FESTIVAL_COUNT.has("castle_town"))
 	assert_true(FestivalSystem.SETTLEMENT_FESTIVAL_COUNT.has("fortification"))
 	assert_true(FestivalSystem.SETTLEMENT_FESTIVAL_COUNT.has("temple"))
+
+
+func test_theme_words_all_categories_present():
+	for cat in FestivalSystem.THEME_CATEGORIES:
+		assert_true(FestivalSystem.THEME_WORDS.has(cat), "Missing theme words for: %s" % cat)
+
+
+func test_theme_words_25_per_category():
+	for cat in FestivalSystem.THEME_CATEGORIES:
+		var words: Array = FestivalSystem.THEME_WORDS.get(cat, [])
+		assert_eq(words.size(), 25, "Expected 25 themes for %s, got %d" % [cat, words.size()])
+
+
+func test_theme_words_total_300():
+	var total: int = 0
+	for cat in FestivalSystem.THEME_WORDS:
+		total += FestivalSystem.THEME_WORDS[cat].size()
+	assert_eq(total, 300)
+
+
+func test_local_festival_uses_theme_words():
+	var rng := MockRNG.new()
+	rng._value = 3
+	var fests := FestivalSystem.generate_local_festivals("village", "plains", "Lion", rng)
+	if fests.size() > 0:
+		var name: String = fests[0]["name"]
+		var cat: String = fests[0]["theme_category"]
+		var words: Array = FestivalSystem.THEME_WORDS.get(cat, [])
+		var found: bool = false
+		for w in words:
+			if w in name:
+				found = true
+				break
+		assert_true(found, "Festival name '%s' should contain a theme word from '%s'" % [name, cat])
+
+
+func test_local_festival_avoids_canonical_days():
+	var rng := MockRNG.new()
+	rng._value = 50
+	var canonical_days: Array[int] = FestivalSystem._get_canonical_days()
+	var fests := FestivalSystem.generate_local_festivals("town", "plains", "Crane", rng)
+	for f in fests:
+		assert_false(f["day_of_year"] in canonical_days,
+			"Local festival on day %d collides with canonical festival" % f["day_of_year"])
+
+
+func test_canonical_days_cache_populated():
+	var days: Array[int] = FestivalSystem._get_canonical_days()
+	assert_true(days.size() > 0)
+	assert_true(days.size() <= FestivalSystem.CANONICAL_FESTIVALS.size())
