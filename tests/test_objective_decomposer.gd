@@ -106,11 +106,19 @@ func test_maintain_balance_at_court_all_friends_moves_topic() -> void:
 	assert_eq(need.need_type, "MOVE_TOPIC_POSITION")
 
 
-func test_maintain_balance_traveling_attends_court() -> void:
+func test_maintain_balance_traveling_with_court_attends() -> void:
 	_ctx.context_flag = Enums.ContextFlag.TRAVELING
+	_ctx.active_court_at_location = {"settlement_id": 10, "prestige": 3}
 	var obj: Dictionary = {"need_type": "MAINTAIN_BALANCE"}
 	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
 	assert_eq(need.need_type, "ATTEND_COURT")
+
+
+func test_maintain_balance_traveling_no_court_rests() -> void:
+	_ctx.context_flag = Enums.ContextFlag.TRAVELING
+	var obj: Dictionary = {"need_type": "MAINTAIN_BALANCE"}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
+	assert_eq(need.need_type, "REST")
 
 
 # -- Political: Advance Family -------------------------------------------------
@@ -930,13 +938,23 @@ func test_maintain_peace_rising_tensions_at_court() -> void:
 	assert_eq(need.priority, 3)
 
 
-func test_maintain_peace_rising_tensions_not_at_court() -> void:
+func test_maintain_peace_rising_tensions_not_at_court_with_lord() -> void:
+	_ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
+	_ctx.lord_id = 99
+	_ctx.escalating_conflicts = [{"topic_id": 42}]
+	_ctx.action_log = []
+	var obj: Dictionary = {"need_type": "MAINTAIN_PEACE"}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
+	assert_eq(need.need_type, "SEND_LETTER")
+	assert_eq(need.target_npc_id, 99)
+
+
+func test_maintain_peace_rising_tensions_not_at_court_no_lord() -> void:
 	_ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
 	_ctx.escalating_conflicts = [{"topic_id": 42}]
 	var obj: Dictionary = {"need_type": "MAINTAIN_PEACE"}
 	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
-	assert_eq(need.need_type, "ATTEND_COURT")
-	assert_eq(need.priority, 2)
+	assert_eq(need.need_type, "SEND_LETTER")
 
 
 func test_maintain_peace_preventive_at_court() -> void:
@@ -961,11 +979,19 @@ func test_maintain_peace_preventive_at_holdings() -> void:
 	assert_eq(need.need_type, "SEND_LETTER")
 
 
-func test_maintain_peace_preventive_traveling() -> void:
+func test_maintain_peace_preventive_traveling_with_court() -> void:
 	_ctx.context_flag = Enums.ContextFlag.TRAVELING
+	_ctx.active_court_at_location = {"settlement_id": 10}
 	var obj: Dictionary = {"need_type": "MAINTAIN_PEACE"}
 	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
 	assert_eq(need.need_type, "ATTEND_COURT")
+
+
+func test_maintain_peace_preventive_traveling_no_court() -> void:
+	_ctx.context_flag = Enums.ContextFlag.TRAVELING
+	var obj: Dictionary = {"need_type": "MAINTAIN_PEACE"}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
+	assert_eq(need.need_type, "REST")
 
 
 # =============================================================================

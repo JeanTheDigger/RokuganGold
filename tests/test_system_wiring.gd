@@ -1308,6 +1308,264 @@ func test_end_to_end_crime_loop_through_conviction() -> void:
 		"Tier 3 conviction topic should start at momentum 25")
 
 
+# =============================================================================
+# Court Availability Wiring into Decomposition Trees
+# =============================================================================
+
+func test_decomposer_uses_court_availability_when_court_active() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.context_flag = Enums.ContextFlag.ON_CAMPAIGN
+	ctx.character_id = 1
+	ctx.lord_id = 99
+	ctx.active_court_at_location = {"settlement_id": 10, "prestige": 3}
+	ctx.action_log = []
+	ctx.season = 1
+
+	var objective: Dictionary = {"need_type": "MAINTAIN_BALANCE"}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(
+		objective, ctx
+	)
+	assert_not_null(need)
+	assert_eq(need.need_type, "ATTEND_COURT")
+	assert_eq(need.target_settlement_id, 10)
+
+
+func test_decomposer_uses_upcoming_court_when_no_active() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.context_flag = Enums.ContextFlag.ON_CAMPAIGN
+	ctx.character_id = 1
+	ctx.lord_id = 99
+	ctx.active_court_at_location = {}
+	ctx.upcoming_courts = [
+		{"settlement_id": 20, "prestige": 5},
+	]
+	ctx.action_log = []
+	ctx.season = 1
+
+	var objective: Dictionary = {"need_type": "ADVANCE_FAMILY"}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(
+		objective, ctx
+	)
+	assert_not_null(need)
+	assert_eq(need.need_type, "TRAVEL_TO")
+	assert_eq(need.target_settlement_id, 20)
+
+
+func test_decomposer_sends_letter_to_lord_when_no_court() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.context_flag = Enums.ContextFlag.ON_CAMPAIGN
+	ctx.character_id = 1
+	ctx.lord_id = 99
+	ctx.active_court_at_location = {}
+	ctx.upcoming_courts = []
+	ctx.held_leverage = []
+	ctx.action_log = []
+	ctx.season = 1
+
+	var objective: Dictionary = {"need_type": "STRENGTHEN_IMPERIAL"}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(
+		objective, ctx
+	)
+	assert_not_null(need)
+	assert_eq(need.need_type, "SEND_LETTER")
+	assert_eq(need.target_npc_id, 99)
+
+
+func test_decomposer_falls_through_to_rest_when_no_options() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.context_flag = Enums.ContextFlag.ON_CAMPAIGN
+	ctx.character_id = 1
+	ctx.lord_id = -1
+	ctx.active_court_at_location = {}
+	ctx.upcoming_courts = []
+	ctx.held_leverage = []
+	ctx.action_log = []
+	ctx.season = 1
+
+	var objective: Dictionary = {"need_type": "ACCUMULATE_LEVERAGE"}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(
+		objective, ctx
+	)
+	assert_not_null(need)
+	assert_eq(need.need_type, "REST")
+
+
+func test_decomposer_seek_vengeance_uses_court_alternative() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
+	ctx.character_id = 1
+	ctx.lord_id = -1
+	ctx.characters_present = []
+	ctx.active_court_at_location = {}
+	ctx.upcoming_courts = []
+	ctx.held_leverage = []
+	ctx.known_npc_locations = {10: 42}
+	ctx.action_log = []
+	ctx.season = 1
+
+	var objective: Dictionary = {
+		"need_type": "SEEK_VENGEANCE",
+		"target_npc_id": 10,
+	}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(
+		objective, ctx
+	)
+	assert_not_null(need)
+	assert_eq(need.need_type, "TRAVEL_TO")
+	assert_eq(need.target_settlement_id, 42)
+
+
+func test_build_context_populates_court_fields() -> void:
+	_char.lord_id = 99
+	_world_state["active_court_at_location"] = {"settlement_id": 10}
+	_world_state["upcoming_courts"] = [{"settlement_id": 20, "prestige": 5}]
+	_world_state["held_leverage"] = [{"secret_id": 1}]
+	_world_state["known_npc_locations"] = {10: 42}
+
+	var ctx: NPCDataStructures.ContextSnapshot = NPCDecisionEngine.build_context(
+		_char, _world_state
+	)
+	assert_eq(ctx.lord_id, 99)
+	assert_eq(ctx.active_court_at_location.get("settlement_id", -1), 10)
+	assert_eq(ctx.upcoming_courts.size(), 1)
+	assert_eq(ctx.held_leverage.size(), 1)
+	assert_eq(ctx.known_npc_locations.get(10, -1), 42)
+
+
+# =============================================================================
+# Orphaned Objectives Wiring into DayOrchestrator
+# =============================================================================
+
+func test_advance_day_processes_lord_death() -> void:
+	var time: TimeSystem = TimeSystem.new(1120, 0)
+	var dice: DiceEngine = DiceEngine.new()
+	dice.set_seed(42)
+
+	var lord := L5RCharacterData.new()
+	lord.character_id = 10
+	lord.lord_id = -1
+
+	var vassal := L5RCharacterData.new()
+	vassal.character_id = 1
+	vassal.character_name = "Vassal"
+	vassal.lord_id = 10
+	vassal.operational_superior_id = 50
+	vassal.clan = "Lion"
+	vassal.family = "Akodo"
+	vassal.school_type = Enums.SchoolType.BUSHI
+	vassal.bushido_virtue = Enums.BushidoVirtue.NONE
+	vassal.shourido_virtue = Enums.ShouridoVirtue.NONE
+	vassal.honor = 5.0
+	vassal.glory = 3.0
+	vassal.status = 4.0
+	vassal.skills = {}
+	vassal.emphases = {}
+	vassal.reflexes = 3
+	vassal.awareness = 3
+	vassal.stamina = 3
+	vassal.willpower = 3
+	vassal.agility = 3
+	vassal.intelligence = 3
+	vassal.strength = 3
+	vassal.perception = 3
+	vassal.void_ring = 2
+	vassal.wounds_taken = 0
+	vassal.knowledge_pool = []
+	vassal.known_contacts_by_clan = {}
+	vassal.met_characters = []
+	ActionPointSystem.reset_daily_ap(vassal)
+
+	var province := ProvinceData.new()
+	province.province_id = 10
+	province.stability = 70.0
+	province.garrison_pu = 3
+	province.farming_pu = 4
+	province.mining_pu = 1
+	province.town_pu = 2
+	province.military_pu = 1
+	province.population_pu = 8
+	province.rice_stockpile = 10.0
+	province.koku_stockpile = 5.0
+	province.iron_stockpile = 2.0
+	province.terrain_type = Enums.TerrainType.PLAINS
+
+	var characters: Array[L5RCharacterData] = [vassal]
+	var characters_by_id: Dictionary = {1: vassal}
+	var provinces: Dictionary = {10: province}
+	var action_log: Array[Dictionary] = []
+	var season_meta: Dictionary = {
+		"_peace_seasons": {10: 0},
+		"_deficit_seasons": {10: 0},
+	}
+	var ws: Dictionary = _make_day_world_state()
+
+	var objectives_map: Dictionary = {
+		1: {
+			"primary": {
+				"need_type": "CONQUER_PROVINCE",
+				"objective_type": "CONQUER_PROVINCE",
+				"assigning_lord_id": 10,
+			},
+		},
+	}
+
+	var death_events: Array[Dictionary] = [
+		{"character_id": 10, "is_lord": true},
+	]
+	var successor_map: Dictionary = {10: 20}
+
+	var result: Dictionary = DayOrchestrator.advance_day(
+		time, characters, characters_by_id, {1: ws},
+		objectives_map, _scoring_tables, _filter_data, dice,
+		_action_skill_map, provinces, action_log, season_meta,
+		[], [], [], [], [], [1], {}, {}, [1000],
+		death_events, successor_map,
+	)
+
+	assert_true(result.has("orphan_results"))
+	assert_eq(result["orphan_results"].size(), 1)
+	assert_eq(result["orphan_results"][0]["vassal_id"], 1)
+	assert_eq(result["orphan_results"][0]["status"], "ORPHANED")
+	assert_eq(result["orphan_results"][0]["report_target_id"], 20)
+	assert_eq(objectives_map[1]["primary"]["status"], "ORPHANED")
+
+
+func test_advance_day_no_death_events_no_orphans() -> void:
+	var time: TimeSystem = TimeSystem.new(1120, 0)
+	var dice: DiceEngine = DiceEngine.new()
+	dice.set_seed(42)
+
+	var province := ProvinceData.new()
+	province.province_id = 10
+	province.stability = 70.0
+	province.garrison_pu = 3
+	province.farming_pu = 4
+	province.mining_pu = 1
+	province.town_pu = 2
+	province.military_pu = 1
+	province.population_pu = 8
+	province.rice_stockpile = 10.0
+	province.koku_stockpile = 5.0
+	province.iron_stockpile = 2.0
+	province.terrain_type = Enums.TerrainType.PLAINS
+
+	var characters: Array[L5RCharacterData] = [_char]
+	var characters_by_id: Dictionary = {1: _char}
+	var ws: Dictionary = _make_day_world_state()
+
+	var result: Dictionary = DayOrchestrator.advance_day(
+		time, characters, characters_by_id, {1: ws},
+		{1: _objectives}, _scoring_tables, _filter_data, dice,
+		_action_skill_map, {10: province}, [], {
+			"_peace_seasons": {10: 0},
+			"_deficit_seasons": {10: 0},
+		}
+	)
+
+	assert_true(result.has("orphan_results"))
+	assert_eq(result["orphan_results"].size(), 0)
+
+
 func test_stale_intel_bonus_wired_into_score_all() -> void:
 	# Give character stale knowledge about target
 	var entry: KnowledgeEntry = InformationSystem.make_entry(

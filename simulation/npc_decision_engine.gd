@@ -30,6 +30,13 @@ static func build_context(character: L5RCharacterData, world_state: Dictionary) 
 	else:
 		ctx.zone_flags = {}
 
+	# Lord & court (s55.34)
+	ctx.lord_id = character.lord_id
+	ctx.active_court_at_location = world_state.get("active_court_at_location", {})
+	ctx.upcoming_courts = world_state.get("upcoming_courts", [] as Array[Dictionary])
+	ctx.held_leverage = world_state.get("held_leverage", [] as Array[Dictionary])
+	ctx.known_npc_locations = world_state.get("known_npc_locations", {})
+
 	# Stats
 	ctx.skill_ranks = character.skills.duplicate()
 	ctx.honor = character.honor

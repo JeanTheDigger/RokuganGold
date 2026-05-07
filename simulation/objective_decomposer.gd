@@ -228,7 +228,10 @@ static func _decompose_maintain_balance(
 		Enums.ContextFlag.AT_OWN_HOLDINGS:
 			return _make_need("SEND_LETTER", 1)
 		_:
-			return _make_need("ATTEND_COURT", 1)
+			var _court_need := _court_or_alternative(ctx)
+			if _court_need != null:
+				return _court_need
+			return _make_need("REST", 1)
 
 
 static func _decompose_advance_family(
@@ -252,7 +255,10 @@ static func _decompose_advance_family(
 					return _make_need("DEFEND_PROVINCE", 2, {"target_province_id": crisis})
 			return _make_need("SEND_LETTER", 1)
 		_:
-			return _make_need("ATTEND_COURT", 1)
+			var _court_need := _court_or_alternative(ctx)
+			if _court_need != null:
+				return _court_need
+			return _make_need("REST", 1)
 
 
 static func _decompose_undermine_clan(
@@ -272,7 +278,10 @@ static func _decompose_undermine_clan(
 		Enums.ContextFlag.AT_OWN_HOLDINGS:
 			return _make_need("ACQUIRE_LEVERAGE", 2, {"target_clan_id": target_clan})
 		_:
-			return _make_need("ATTEND_COURT", 1)
+			var _court_need := _court_or_alternative(ctx)
+			if _court_need != null:
+				return _court_need
+			return _make_need("REST", 1)
 
 
 static func _decompose_strengthen_imperial(
@@ -292,7 +301,10 @@ static func _decompose_strengthen_imperial(
 		Enums.ContextFlag.AT_OWN_HOLDINGS:
 			return _make_need("SEND_LETTER", 1)
 		_:
-			return _make_need("ATTEND_COURT", 1)
+			var _court_need := _court_or_alternative(ctx)
+			if _court_need != null:
+				return _court_need
+			return _make_need("REST", 1)
 
 
 static func _decompose_accumulate_leverage(
@@ -318,7 +330,10 @@ static func _decompose_accumulate_leverage(
 		Enums.ContextFlag.AT_OWN_HOLDINGS:
 			return _make_need("SEND_LETTER", 1)
 		_:
-			return _make_need("ATTEND_COURT", 1)
+			var _court_need := _court_or_alternative(ctx)
+			if _court_need != null:
+				return _court_need
+			return _make_need("REST", 1)
 
 
 # =============================================================================
@@ -335,7 +350,10 @@ static func _decompose_maximize_prosperity(
 			Enums.ContextFlag.AT_COURT:
 				return _make_need("MOVE_TOPIC_POSITION", 1)
 			_:
-				return _make_need("ATTEND_COURT", 1)
+				var _court_need := _court_or_alternative(ctx)
+				if _court_need != null:
+					return _court_need
+				return _make_need("REST", 1)
 
 	var crisis: int = _find_crisis_province(ctx)
 	if crisis >= 0:
@@ -382,7 +400,10 @@ static func _decompose_control_trade(
 		Enums.ContextFlag.AT_OWN_HOLDINGS:
 			return _make_need("SEND_LETTER", 1)
 		_:
-			return _make_need("ATTEND_COURT", 1)
+			var _court_need := _court_or_alternative(ctx)
+			if _court_need != null:
+				return _court_need
+			return _make_need("REST", 1)
 
 
 static func _decompose_prevent_shortage(
@@ -520,7 +541,10 @@ static func _decompose_accumulate_knowledge(
 		Enums.ContextFlag.AT_OWN_HOLDINGS:
 			return _make_need("TRAIN_SKILL", 1)
 		_:
-			return _make_need("ATTEND_COURT", 1)
+			var _court_need := _court_or_alternative(ctx)
+			if _court_need != null:
+				return _court_need
+			return _make_need("REST", 1)
 
 
 static func _decompose_personal_excellence(
@@ -574,7 +598,10 @@ static func _decompose_advance_glory(
 		Enums.ContextFlag.UNDER_SIEGE:
 			return _make_need("CONDUCT_SORTIE", 2)
 		Enums.ContextFlag.AT_OWN_HOLDINGS:
-			return _make_need("ATTEND_COURT", 1)
+			var _court_need := _court_or_alternative(ctx)
+			if _court_need != null:
+				return _court_need
+			return _make_need("REST", 1)
 		_:
 			return _make_need("TRAIN_SKILL", 1)
 
@@ -603,7 +630,10 @@ static func _decompose_seek_vengeance(
 		Enums.ContextFlag.AT_COURT:
 			return _make_need("GATHER_INTELLIGENCE", 2, {"target_npc_id": target_npc})
 		_:
-			return _make_need("ATTEND_COURT", 2)
+			var _court_need := _court_or_alternative(ctx, target_npc, 2)
+			if _court_need != null:
+				return _court_need
+			return _make_need("GATHER_INTELLIGENCE", 1, {"target_npc_id": target_npc})
 
 
 # =============================================================================
@@ -840,7 +870,10 @@ static func _decompose_maintain_peace(
 					"target_topic_id": tension.get("topic_id", -1),
 				})
 			_:
-				return _make_need("ATTEND_COURT", 2)
+				var _court_need := _court_or_alternative(ctx, -1, 2)
+				if _court_need != null:
+					return _court_need
+				return _make_need("SEND_LETTER", 1)
 
 	# Step 3: preventive diplomacy
 	match ctx.context_flag:
@@ -856,7 +889,10 @@ static func _decompose_maintain_peace(
 		Enums.ContextFlag.AT_OWN_HOLDINGS:
 			return _make_need("SEND_LETTER", 1)
 		_:
-			return _make_need("ATTEND_COURT", 1)
+			var _court_need := _court_or_alternative(ctx)
+			if _court_need != null:
+				return _court_need
+			return _make_need("REST", 1)
 
 
 static func _decompose_build_strongest_force(
@@ -954,7 +990,44 @@ static func _courtier_diplomatic_path(
 		Enums.ContextFlag.AT_OWN_HOLDINGS:
 			return _make_need("SEND_LETTER", 1)
 		_:
-			return _make_need("ATTEND_COURT", 1)
+			var _court_need := _court_or_alternative(ctx)
+			if _court_need != null:
+				return _court_need
+			return _make_need("REST", 1)
+
+
+static func _court_or_alternative(
+	ctx: NPCDataStructures.ContextSnapshot,
+	target_npc_id: int = -1,
+	priority: int = 1,
+) -> NPCDataStructures.ImmediateNeed:
+	var result: Variant = CourtAvailability.attend_court_or_alternative(
+		ctx.active_court_at_location,
+		ctx.upcoming_courts,
+		_make_court_character_stub(ctx),
+		target_npc_id,
+		ctx.held_leverage,
+		ctx.action_log,
+		ctx.season,
+		ctx.known_npc_locations,
+	)
+	if result == null:
+		return null
+	return _make_need(
+		result.get("need_type", ""),
+		maxi(result.get("priority", 1), priority),
+		result,
+	)
+
+
+static func _make_court_character_stub(
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> L5RCharacterData:
+	var stub := L5RCharacterData.new()
+	stub.character_id = ctx.character_id
+	stub.lord_id = ctx.lord_id
+	stub.operational_superior_id = -1
+	return stub
 
 
 static func _find_contact_needing_disposition(

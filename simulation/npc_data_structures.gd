@@ -81,6 +81,13 @@ class ContextSnapshot:
 	var zone_flags: Dictionary = {}
 	var sublocation: Enums.Sublocation = Enums.Sublocation.PUBLIC
 
+	# Lord & court (s55.34)
+	var lord_id: int = -1
+	var active_court_at_location: Dictionary = {}
+	var upcoming_courts: Array[Dictionary] = []
+	var held_leverage: Array[Dictionary] = []
+	var known_npc_locations: Dictionary = {}
+
 	# Stats
 	var skill_ranks: Dictionary = {}
 	var honor: float = 0.0

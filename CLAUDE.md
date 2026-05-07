@@ -403,7 +403,7 @@ All in /tests/, one file per system:
 - test_zone_flag_matrix.gd (~53 tests)
 - test_tattoo_system.gd (~100 tests)
 - test_character_sheet_field_index.gd (~45 tests)
-- test_system_wiring.gd (~25 tests)
+- test_system_wiring.gd (~35 tests)
 - test_world_generator.gd (~45 tests)
 - test_resource_availability.gd (~25 tests)
 - test_court_availability.gd (~15 tests)
@@ -462,8 +462,7 @@ All in /tests/, one file per system:
   `has_orphaned_vassals(vassals, lord_id, objectives_map)` finds orphaned IDs.
 
 ### What's Next
-1. Wire court_availability and orphaned_objectives into NPC decision loop
-2. World generation coordinate system and adjacency
+1. World generation coordinate system and adjacency
 
 ### Systems Wired into NPC Loop
 The following subsystems are now integrated into the NPC decision loop:
@@ -505,6 +504,20 @@ The following subsystems are now integrated into the NPC decision loop:
   ScoredAction. `_compute_resource_modifier` in npc_decision_engine.gd calls
   `ResourceAvailability.compute_resource_modifier()`. Koku ratio thresholds:
   ≥5x→0, ≥3x→−5, ≥1.5x→−10, ≥1x→−15, <1x→−25, broke→−40.
+- **CourtAvailability** — Decomposition: all 13 ATTEND_COURT returns in
+  ObjectiveDecomposer replaced with `_court_or_alternative()` wrapper that
+  calls `CourtAvailability.attend_court_or_alternative()`. ContextSnapshot
+  gains `lord_id`, `active_court_at_location`, `upcoming_courts`,
+  `held_leverage`, `known_npc_locations` — populated in `build_context()`.
+  When no court or alternative is available, falls through to REST or
+  tree-specific fallback.
+- **OrphanedObjectives** — Post-execution: DayOrchestrator `_process_lord_deaths`
+  processes `death_events` array. For each dead lord, calls
+  `OrphanedObjectives.process_lord_death()` to mark lord-dependent vassal
+  objectives ORPHANED, then generates REPORT_TO_NEW_LORD needs for affected
+  vassals. `successor_map` provides heir IDs; falls back to
+  `operational_superior_id`. New params on `advance_day()`: `death_events`,
+  `successor_map`.
 
 ## Resolved Design Decisions
 

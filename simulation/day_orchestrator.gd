@@ -27,6 +27,8 @@ static func advance_day(
 	military_data: Dictionary = {},
 	character_province_map: Dictionary = {},
 	next_topic_id: Array[int] = [1000],
+	death_events: Array[Dictionary] = [],
+	successor_map: Dictionary = {},
 ) -> Dictionary:
 	var prev_season: int = time_system.get_season()
 
@@ -56,6 +58,10 @@ static func advance_day(
 
 	var commitment_results: Array[Dictionary] = _process_commitment_deadlines(
 		commitments, ic_day, characters_by_id
+	)
+
+	var orphan_results: Array[Dictionary] = _process_lord_deaths(
+		death_events, characters, objectives_map, successor_map
 	)
 
 	var conversation_results: Array[Dictionary] = _process_daily_conversations(
@@ -115,6 +121,7 @@ static func advance_day(
 		"crime_results": crime_results,
 		"commitment_results": commitment_results,
 		"uphold_law_results": uphold_law_results,
+		"orphan_results": orphan_results,
 	}
 
 
@@ -457,6 +464,56 @@ static func _check_witness_evidence(
 			record, target_id, quality, active_case
 		)
 	return {}
+
+
+# -- Lord Death / Orphaned Objectives (s55.33) --------------------------------
+
+static func _process_lord_deaths(
+	death_events: Array[Dictionary],
+	characters: Array[L5RCharacterData],
+	objectives_map: Dictionary,
+	successor_map: Dictionary,
+) -> Array[Dictionary]:
+	if death_events.is_empty():
+		return []
+
+	var all_results: Array[Dictionary] = []
+	for event: Dictionary in death_events:
+		var dead_lord_id: int = event.get("character_id", -1)
+		if dead_lord_id < 0:
+			continue
+		if not event.get("is_lord", false):
+			continue
+
+		var successor_id: int = successor_map.get(dead_lord_id, -1)
+
+		var orphan_results: Array[Dictionary] = OrphanedObjectives.process_lord_death(
+			characters, dead_lord_id, successor_id, objectives_map
+		)
+
+		for result: Dictionary in orphan_results:
+			var vassal_id: int = result.get("vassal_id", -1)
+			var report_target: int = result.get("report_target_id", -1)
+			if vassal_id < 0:
+				continue
+
+			var vassal: L5RCharacterData = null
+			for c: L5RCharacterData in characters:
+				if c.character_id == vassal_id:
+					vassal = c
+					break
+			if vassal == null:
+				continue
+
+			var report_need: Dictionary = OrphanedObjectives.generate_report_need(
+				vassal, report_target
+			)
+			if not report_need.is_empty():
+				result["report_need"] = report_need
+
+		all_results.append_array(orphan_results)
+
+	return all_results
 
 
 # -- Commitment Deadlines (s55.31) --------------------------------------------
