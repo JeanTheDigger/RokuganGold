@@ -671,6 +671,32 @@ All in /tests/, one file per system:
   updating arriving characters' `met_characters` and `knowledge_pool` with
   co-located NPCs.
 
+### NPC Engine Amendments (s57.1–s57.5, s57.20)
+- **s57.1 Allowlist Model** — Actions not listed in objective_alignment.json
+  for the current NeedType are blocked from the scoring pool. Implemented as
+  `apply_allowlist_filter()` between Phase 4 and Phase 5. Prevents unlisted
+  actions from winning via accumulated personality/disposition/competence scores.
+- **s57.2 Score Compression** — Social/political NeedTypes already compressed
+  to 10-point top-cluster bands (65–75). IDENTIFY_CONTACT remains uncompressed
+  pending dedicated tuning pass per GDD.
+- **s57.3 Disposition Tiers** — Already applied. RIVAL (−5,+5),
+  ACQUAINTANCE (+5,−5), DEVOTED (+25,−25). Full gradient across all tiers.
+- **s57.4 Ishi Exemption** — Ishi-virtue NPCs skip approach_ineffective and
+  approach_capped penalties in `ApproachEvaluation.get_scoring_modifier()`.
+  Measurement bonus still fires. Ishi is the only virtue that continues a
+  failed approach indefinitely.
+- **s57.5 WRITE_LETTER Extraction** — Removed from all context action lists
+  in Phase 3. Daily letter pass: `resolve_daily_letter()` runs after AP
+  resolution via `_process_daily_letter_pass()` in DayOrchestrator. Each NPC
+  gets one free letter per IC day, targeting the best recipient based on
+  SEND_LETTER alignment entries.
+- **s57.20 New Decision Paths** — 3 NeedTypes added: BUILD_INFRASTRUCTURE,
+  ARRANGE_MARRIAGE, FILL_VACANCY. 8 ActionIDs: FOUND_VILLAGE,
+  BUILD_FORTIFICATION, BUILD_SHRINE, FOUND_TEMPLE, FOUND_MONASTERY,
+  COMMISSION_SHIP, ARRANGE_MARRIAGE, APPOINT_TO_POSITION. Added to
+  action_skill_map.json, personality_lean.json, context action lists
+  (AT_OWN_HOLDINGS, AT_COURT), and ActionExecutor (ADMINISTRATIVE category).
+
 ### What's Next
 1. World generation coordinate system and adjacency
 
