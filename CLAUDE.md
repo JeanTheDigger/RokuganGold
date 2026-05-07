@@ -411,6 +411,7 @@ All in /tests/, one file per system:
 - test_strategic_review.gd (~35 tests)
 - test_province_triage.gd (~30 tests)
 - test_reactive_decisions.gd (~30 tests)
+- test_opportunity_scanner.gd (~25 tests)
 
 ### World Generator
 - **simulation/world_generator.gd** — Static factory methods for seeding initial
@@ -500,6 +501,15 @@ All in /tests/, one file per system:
   exceed student, Kanpeki needs 2+ gap, Ketsui needs mentor objective).
   Proactive duel trigger: 3-step evaluation (capability → target assessment →
   personality gate). Dosatsu/Chishiki require intel on target.
+
+### Opportunity Scanner / Primary Objective Self-Selection (s55.26.1)
+- **simulation/opportunity_scanner.gd** — Lord-tier and lordless NPC primary
+  objective self-selection. Scans known world state through 4 domain scanners
+  (political, military, economic, personal). Scores candidates on: standing
+  alignment (40%), feasibility (30%), urgency (20%), personality fit (10%).
+  Self-selection timing: Chugi never, Seigyo/Ishi 1 season, Makoto/Ketsui 2,
+  default 3. Wired into StrategicReview `_evaluate_self_selection()` — lords
+  without active primary objectives run the scanner each seasonal review.
 
 ### What's Next
 1. World generation coordinate system and adjacency

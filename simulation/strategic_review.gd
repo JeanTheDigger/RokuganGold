@@ -73,6 +73,10 @@ static func run_seasonal_review(
 ) -> Array[Dictionary]:
 	var directives: Array[Dictionary] = []
 
+	var self_select: Dictionary = _evaluate_self_selection(lord, objectives_map, world_state)
+	if not self_select.is_empty():
+		directives.append(self_select)
+
 	var orphan_directives: Array[Dictionary] = _resolve_orphaned_vassals(
 		lord, vassals, objectives_map
 	)
@@ -519,3 +523,43 @@ static func _evaluate_shogun_creation(
 		}
 
 	return {}
+
+
+# -- Self-Selection (s55.26.1) -------------------------------------------------
+
+static func _evaluate_self_selection(
+	lord: L5RCharacterData,
+	objectives_map: Dictionary,
+	world_state: Dictionary,
+) -> Dictionary:
+	var lord_objectives: Dictionary = objectives_map.get(lord.character_id, {})
+	var primary: Dictionary = lord_objectives.get("primary", {})
+
+	if not primary.is_empty() and primary.get("status", "") == "ACTIVE":
+		return {}
+
+	var standing: Dictionary = lord_objectives.get("standing", {})
+	var standing_type: String = standing.get("need_type", "")
+	if standing_type.is_empty():
+		return {}
+
+	var selected: Dictionary = OpportunityScanner.select_primary_objective(
+		lord, standing_type, world_state
+	)
+	if selected.is_empty():
+		return {}
+
+	return {
+		"directive": Directive.REASSIGN_VASSAL_OBJECTIVE,
+		"lord_id": lord.character_id,
+		"vassal_id": lord.character_id,
+		"decision": "SELF_SELECT",
+		"new_objective": {
+			"objective_type": selected["objective_type"],
+			"target_fields": selected["target_fields"],
+			"assigning_lord_id": lord.character_id,
+			"status": "ACTIVE",
+			"source": "SELF_SELECTED",
+		},
+		"score": selected.get("score", 0.0),
+	}
