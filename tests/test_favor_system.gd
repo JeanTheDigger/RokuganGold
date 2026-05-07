@@ -313,3 +313,47 @@ func test_supply_sharing_unlocked_by_major():
 
 func test_supply_sharing_not_unlocked_by_minor():
 	assert_false(FavorSystem.can_unlock_supply_sharing(FavorData.FavorTier.MINOR))
+
+
+# -- Heir forgiveness tests ---------------------------------------------------
+
+func test_forgive_favor():
+	var f := _make_favor(FavorData.FavorTier.MAJOR)
+	f.favor_id = 99
+	f.creditor_id = 5
+	f.debtor_id = 10
+	var result := FavorSystem.forgive_favor(f)
+	assert_true(result["forgiven"])
+	assert_true(result["resolved"])
+	assert_eq(result["debtor_id"], 10)
+	assert_eq(result["creditor_id"], 5)
+
+
+# -- Blackmail exposure risk tests --------------------------------------------
+
+func test_blackmail_public_invocation_risky():
+	var f := _make_favor()
+	f.is_blackmail_extracted = true
+	assert_true(FavorSystem.is_blackmail_exposure_risk(f, true))
+
+
+func test_blackmail_private_invocation_safe():
+	var f := _make_favor()
+	f.is_blackmail_extracted = true
+	assert_false(FavorSystem.is_blackmail_exposure_risk(f, false))
+
+
+func test_normal_favor_no_exposure_risk():
+	var f := _make_favor()
+	f.is_blackmail_extracted = false
+	assert_false(FavorSystem.is_blackmail_exposure_risk(f, true))
+
+
+# -- Dispute witness disposition tests ----------------------------------------
+
+func test_dispute_witness_creditor_wins():
+	assert_eq(FavorSystem.get_dispute_witness_disposition(true), 2)
+
+
+func test_dispute_witness_debtor_wins():
+	assert_eq(FavorSystem.get_dispute_witness_disposition(false), 0)

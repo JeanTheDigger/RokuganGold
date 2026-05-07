@@ -189,7 +189,7 @@ const HISTORICAL_EVENTS: Dictionary = {
 	"witnessed_performance": {"start": 3, "floor": 1, "decay": true},
 	"shared_victory": {"start": 12, "floor": 6, "decay": true},
 	"shared_defeat": {"start": 8, "floor": 4, "decay": true},
-	"families_married": {"start": 8, "floor": 4, "decay": true},
+	"families_married": {"start": 8, "floor": 4, "decay": false},
 	"publicly_praised": {"start": 8, "floor": 4, "decay": true},
 	"praised_by_you": {"start": 6, "floor": 3, "decay": true},
 	"publicly_humiliated": {"start": -15, "floor": -8, "decay": true},
@@ -287,9 +287,32 @@ static func is_temporary_expired(modifier: Dictionary, current_ic_day: int) -> b
 	return (current_ic_day - modifier.get("created_ic_day", 0)) >= duration
 
 
+# -- Death of Mutual Friend (Category 2 — dynamic) ---------------------------
+
+static func create_death_mutual_friend_modifier(
+	disp_a_toward_deceased: int,
+	disp_b_toward_deceased: int,
+	created_ic_day: int,
+) -> Dictionary:
+	var avg_disp: int = (disp_a_toward_deceased + disp_b_toward_deceased) / 2
+	var start_val: int = mini(avg_disp / 10, 10)
+	var floor_val: int = start_val / 2
+	return {
+		"event_type": "death_mutual_friend",
+		"current_value": start_val,
+		"floor": floor_val,
+		"decays": true,
+		"created_ic_day": created_ic_day,
+	}
+
+
 # -- Cohabitation -------------------------------------------------------------
 
 const COHABITATION_RATE: float = 0.1
+
+
+static func compute_cohabitation_bonus(days_cohabiting: int) -> float:
+	return float(days_cohabiting) * COHABITATION_RATE
 
 
 # -- Disposition Change Values (Court Actions) --------------------------------
@@ -358,3 +381,33 @@ const FAMILY_RIPPLE: int = 2
 const CLAN_RIPPLE: int = 1
 const FAMILY_RIPPLE_CAP: int = 30
 const CLAN_RIPPLE_CAP: int = 15
+
+
+# -- Information Sharing Thresholds -------------------------------------------
+
+enum InfoSharingTier {
+	SHARES_NOTHING,
+	SHARES_NEUTRAL,
+	SHARES_RELEVANT,
+	SHARES_SENSITIVE,
+}
+
+static func get_info_sharing_tier(disposition: int) -> InfoSharingTier:
+	if disposition >= 61:
+		return InfoSharingTier.SHARES_SENSITIVE
+	elif disposition >= 31:
+		return InfoSharingTier.SHARES_RELEVANT
+	elif disposition >= -10:
+		return InfoSharingTier.SHARES_NEUTRAL
+	return InfoSharingTier.SHARES_NOTHING
+
+
+static func will_share_topic(disposition: int, topic_is_sensitive: bool) -> bool:
+	var tier: InfoSharingTier = get_info_sharing_tier(disposition)
+	if topic_is_sensitive:
+		return tier == InfoSharingTier.SHARES_SENSITIVE
+	return tier >= InfoSharingTier.SHARES_NEUTRAL
+
+
+static func may_deliberately_mislead(disposition: int) -> bool:
+	return disposition <= -11

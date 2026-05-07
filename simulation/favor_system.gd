@@ -294,3 +294,29 @@ static func _secret_tier_to_favor_tier(secret_tier: int) -> FavorData.FavorTier:
 
 static func can_unlock_supply_sharing(favor_tier: FavorData.FavorTier) -> bool:
 	return favor_tier == FavorData.FavorTier.MODERATE or favor_tier == FavorData.FavorTier.MAJOR
+
+
+# -- Heir forgiveness --------------------------------------------------------
+
+static func forgive_favor(favor: FavorData) -> Dictionary:
+	return {
+		"favor_id": favor.favor_id,
+		"debtor_id": favor.debtor_id,
+		"creditor_id": favor.creditor_id,
+		"forgiven": true,
+		"resolved": true,
+	}
+
+
+# -- Blackmail exposure risk --------------------------------------------------
+
+static func is_blackmail_exposure_risk(favor: FavorData, invocation_is_public: bool) -> bool:
+	return favor.is_blackmail_extracted and invocation_is_public
+
+
+# -- Witness disposition on dispute win ---------------------------------------
+
+static func get_dispute_witness_disposition(creditor_won: bool) -> int:
+	if creditor_won:
+		return 2
+	return 0

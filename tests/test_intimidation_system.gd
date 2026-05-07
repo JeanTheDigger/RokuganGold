@@ -160,3 +160,66 @@ func test_bitter_enemy_gives_penalty():
 	var result := IntimidationSystem.resolve_blackmail(15, 15, 2.0, 3, "bitter_enemy")
 	# defender_total = 15 + 2 - 5 = 12, free_raises = 1, effective_roll = 15 + 5 = 20
 	assert_true(result["success"])
+
+
+# -- Pushback resolution tests ------------------------------------------------
+
+func test_pushback_success():
+	var result := IntimidationSystem.resolve_pushback(20, 3)
+	# TN = 15 + 3 = 18, roll 20 >= 18
+	assert_true(result["success"])
+	assert_true(result["compliance_ended"])
+
+
+func test_pushback_failure():
+	var result := IntimidationSystem.resolve_pushback(15, 3)
+	# TN = 15 + 3 = 18, roll 15 < 18
+	assert_false(result["success"])
+	assert_false(result["compliance_ended"])
+
+
+# -- Compliance status tests --------------------------------------------------
+
+func test_compliance_active_normal():
+	assert_true(IntimidationSystem.check_compliance_status(0, false, false))
+
+
+func test_compliance_ends_leverage_removed():
+	assert_false(IntimidationSystem.check_compliance_status(0, true, false))
+
+
+func test_compliance_ends_pushback_succeeded():
+	assert_false(IntimidationSystem.check_compliance_status(0, false, true))
+
+
+func test_compliance_ends_friend_disposition():
+	assert_false(IntimidationSystem.check_compliance_status(51, false, false))
+
+
+# -- Witness virtue reaction tests --------------------------------------------
+
+func test_witness_rei_reacts():
+	assert_eq(IntimidationSystem.get_witness_reaction("Rei"), -2)
+
+
+func test_witness_gi_reacts():
+	assert_eq(IntimidationSystem.get_witness_reaction("Gi"), -2)
+
+
+func test_witness_meiyo_reacts():
+	assert_eq(IntimidationSystem.get_witness_reaction("Meiyo"), -2)
+
+
+func test_witness_no_reaction():
+	assert_eq(IntimidationSystem.get_witness_reaction("Jin"), 0)
+	assert_eq(IntimidationSystem.get_witness_reaction("Yu"), 0)
+
+
+# -- Betrayal topic tests -----------------------------------------------------
+
+func test_betrayal_topic_generation():
+	var topic := IntimidationSystem.generate_betrayal_topic(42)
+	assert_eq(topic["topic_type"], "betrayal")
+	assert_eq(topic["subject_id"], 42)
+	assert_eq(topic["tier"], 4)
+	assert_eq(topic["category"], "PERSONAL")

@@ -364,3 +364,82 @@ func test_family_ripple():
 func test_ripple_caps():
 	assert_eq(DispositionSystem.FAMILY_RIPPLE_CAP, 30)
 	assert_eq(DispositionSystem.CLAN_RIPPLE_CAP, 15)
+
+
+# -- families_married is permanent --------------------------------------------
+
+func test_families_married_no_decay():
+	assert_false(DispositionSystem.HISTORICAL_EVENTS["families_married"]["decay"])
+
+
+# -- Death of mutual friend ---------------------------------------------------
+
+func test_death_mutual_friend_positive():
+	var mod := DispositionSystem.create_death_mutual_friend_modifier(60, 40, 100)
+	# avg = 50, start = 50/10 = 5, floor = 2
+	assert_eq(mod["current_value"], 5)
+	assert_eq(mod["floor"], 2)
+	assert_true(mod["decays"])
+
+
+func test_death_mutual_friend_capped_at_10():
+	var mod := DispositionSystem.create_death_mutual_friend_modifier(100, 100, 100)
+	# avg = 100, start = 100/10 = 10 (capped), floor = 5
+	assert_eq(mod["current_value"], 10)
+	assert_eq(mod["floor"], 5)
+
+
+func test_death_mutual_friend_low_disposition():
+	var mod := DispositionSystem.create_death_mutual_friend_modifier(10, 10, 100)
+	# avg = 10, start = 10/10 = 1, floor = 0
+	assert_eq(mod["current_value"], 1)
+	assert_eq(mod["floor"], 0)
+
+
+# -- Cohabitation bonus -------------------------------------------------------
+
+func test_cohabitation_bonus():
+	assert_eq(DispositionSystem.compute_cohabitation_bonus(10), 1.0)
+
+
+func test_cohabitation_bonus_zero_days():
+	assert_eq(DispositionSystem.compute_cohabitation_bonus(0), 0.0)
+
+
+func test_cohabitation_bonus_40_days():
+	var bonus := DispositionSystem.compute_cohabitation_bonus(40)
+	assert_almost_eq(bonus, 4.0, 0.01)
+
+
+# -- Information sharing thresholds -------------------------------------------
+
+func test_shares_sensitive_at_61():
+	assert_eq(DispositionSystem.get_info_sharing_tier(61), DispositionSystem.InfoSharingTier.SHARES_SENSITIVE)
+
+
+func test_shares_relevant_at_31():
+	assert_eq(DispositionSystem.get_info_sharing_tier(31), DispositionSystem.InfoSharingTier.SHARES_RELEVANT)
+
+
+func test_shares_neutral_at_0():
+	assert_eq(DispositionSystem.get_info_sharing_tier(0), DispositionSystem.InfoSharingTier.SHARES_NEUTRAL)
+
+
+func test_shares_nothing_at_minus_11():
+	assert_eq(DispositionSystem.get_info_sharing_tier(-11), DispositionSystem.InfoSharingTier.SHARES_NOTHING)
+
+
+func test_will_share_sensitive_topic():
+	assert_true(DispositionSystem.will_share_topic(61, true))
+	assert_false(DispositionSystem.will_share_topic(50, true))
+
+
+func test_will_share_neutral_topic():
+	assert_true(DispositionSystem.will_share_topic(0, false))
+	assert_false(DispositionSystem.will_share_topic(-20, false))
+
+
+func test_may_deliberately_mislead():
+	assert_true(DispositionSystem.may_deliberately_mislead(-11))
+	assert_false(DispositionSystem.may_deliberately_mislead(-10))
+	assert_false(DispositionSystem.may_deliberately_mislead(0))

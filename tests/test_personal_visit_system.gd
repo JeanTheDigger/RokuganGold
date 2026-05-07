@@ -167,3 +167,74 @@ func test_is_category_1_action():
 	assert_true(PersonalVisitSystem.is_category_1_action("DELIVER_GIFT"))
 	assert_false(PersonalVisitSystem.is_category_1_action("GOSSIP"))
 	assert_false(PersonalVisitSystem.is_category_1_action("PROBE"))
+
+
+# -- Visit lifecycle tests ----------------------------------------------------
+
+func test_initiate_visit_state():
+	var visit := PersonalVisitSystem.initiate_visit(1, 2, PersonalVisitSystem.VisitType.INVITATION_SENT, 100)
+	assert_eq(visit["state"], PersonalVisitSystem.VisitState.INITIATED)
+	assert_eq(visit["started_ic_day"], -1)
+	assert_eq(visit["concluded_ic_day"], -1)
+
+
+func test_activate_visit():
+	var visit := PersonalVisitSystem.initiate_visit(1, 2, PersonalVisitSystem.VisitType.INVITATION_SENT, 100)
+	PersonalVisitSystem.activate_visit(visit, 105)
+	assert_eq(visit["state"], PersonalVisitSystem.VisitState.ACTIVE)
+	assert_eq(visit["started_ic_day"], 105)
+
+
+func test_conclude_visit():
+	var visit := PersonalVisitSystem.initiate_visit(1, 2, PersonalVisitSystem.VisitType.INVITATION_SENT, 100)
+	PersonalVisitSystem.activate_visit(visit, 105)
+	PersonalVisitSystem.conclude_visit(visit, 110)
+	assert_eq(visit["state"], PersonalVisitSystem.VisitState.CONCLUDED)
+	assert_eq(visit["concluded_ic_day"], 110)
+
+
+func test_is_visit_active():
+	var visit := PersonalVisitSystem.initiate_visit(1, 2, PersonalVisitSystem.VisitType.INVITATION_SENT, 100)
+	assert_false(PersonalVisitSystem.is_visit_active(visit))
+	PersonalVisitSystem.activate_visit(visit, 105)
+	assert_true(PersonalVisitSystem.is_visit_active(visit))
+	PersonalVisitSystem.conclude_visit(visit, 110)
+	assert_false(PersonalVisitSystem.is_visit_active(visit))
+
+
+func test_visit_duration():
+	var visit := PersonalVisitSystem.initiate_visit(1, 2, PersonalVisitSystem.VisitType.INVITATION_SENT, 100)
+	assert_eq(PersonalVisitSystem.get_visit_duration_days(visit, 105), 0)
+	PersonalVisitSystem.activate_visit(visit, 105)
+	assert_eq(PersonalVisitSystem.get_visit_duration_days(visit, 108), 3)
+
+
+func test_refuse_sets_refused_state():
+	var visit := PersonalVisitSystem.initiate_visit(1, 2, PersonalVisitSystem.VisitType.INVITATION_SENT, 100)
+	PersonalVisitSystem.resolve_host_response(visit, PersonalVisitSystem.HostResponse.REFUSE)
+	assert_eq(visit["state"], PersonalVisitSystem.VisitState.REFUSED)
+
+
+func test_accept_sets_accepted_state():
+	var visit := PersonalVisitSystem.initiate_visit(1, 2, PersonalVisitSystem.VisitType.UNINVITED, 100)
+	PersonalVisitSystem.resolve_host_response(visit, PersonalVisitSystem.HostResponse.ACCEPT)
+	assert_eq(visit["state"], PersonalVisitSystem.VisitState.ACCEPTED)
+
+
+func test_daily_ap_during_visit():
+	assert_eq(PersonalVisitSystem.DAILY_AP_DURING_VISIT, 2)
+
+
+# -- Category 3/5 qualitative advantage tests ---------------------------------
+
+func test_category_3_lower_exposure():
+	assert_true(PersonalVisitSystem.has_lower_exposure_risk("GOSSIP"))
+	assert_true(PersonalVisitSystem.has_lower_exposure_risk("DISCLOSE"))
+	assert_false(PersonalVisitSystem.has_lower_exposure_risk("CHARM"))
+
+
+func test_category_5_extended_observation():
+	assert_true(PersonalVisitSystem.has_extended_observation("PROBE", 2))
+	assert_true(PersonalVisitSystem.has_extended_observation("READ_CHARACTER", 3))
+	assert_false(PersonalVisitSystem.has_extended_observation("PROBE", 1))
+	assert_false(PersonalVisitSystem.has_extended_observation("CHARM", 5))

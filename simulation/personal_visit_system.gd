@@ -17,7 +17,16 @@ enum HostResponse {
 	REFUSE,
 }
 
+enum VisitState {
+	INITIATED,
+	ACCEPTED,
+	ACTIVE,
+	CONCLUDED,
+	REFUSED,
+}
+
 const INTIMATE_SETTING_BONUS: int = 3
+const DAILY_AP_DURING_VISIT: int = 2
 
 const DECLINE_INVITATION_DISPOSITION: int = -3
 const REFUSE_AFTER_INVITATION_DISPOSITION: int = -10
@@ -79,10 +88,32 @@ static func initiate_visit(
 		"visitor_id": visitor_id,
 		"host_id": host_id,
 		"visit_type": visit_type,
+		"state": VisitState.INITIATED,
 		"initiated_ic_day": current_ic_day,
-		"active": false,
 		"started_ic_day": -1,
+		"concluded_ic_day": -1,
 	}
+
+
+static func activate_visit(visit: Dictionary, current_ic_day: int) -> void:
+	visit["state"] = VisitState.ACTIVE
+	visit["started_ic_day"] = current_ic_day
+
+
+static func conclude_visit(visit: Dictionary, current_ic_day: int) -> void:
+	visit["state"] = VisitState.CONCLUDED
+	visit["concluded_ic_day"] = current_ic_day
+
+
+static func is_visit_active(visit: Dictionary) -> bool:
+	return visit.get("state", VisitState.INITIATED) == VisitState.ACTIVE
+
+
+static func get_visit_duration_days(visit: Dictionary, current_ic_day: int) -> int:
+	var started: int = visit.get("started_ic_day", -1)
+	if started < 0:
+		return 0
+	return current_ic_day - started
 
 
 # -- Host Response ------------------------------------------------------------
@@ -102,6 +133,7 @@ static func resolve_host_response(
 	}
 
 	if response == HostResponse.REFUSE:
+		visit["state"] = VisitState.REFUSED
 		match visit_type:
 			VisitType.INVITATION_SENT:
 				effects["disposition_change_to_host"] = REFUSE_AFTER_INVITATION_DISPOSITION
@@ -111,6 +143,7 @@ static func resolve_host_response(
 			VisitType.UNINVITED:
 				effects["disposition_change_to_host"] = REFUSE_UNINVITED_DISPOSITION
 	elif response == HostResponse.ACCEPT:
+		visit["state"] = VisitState.ACCEPTED
 		if visit_type == VisitType.UNINVITED:
 			effects["disposition_change_to_visitor"] = RECEIVE_UNINVITED_DISPOSITION
 
@@ -151,3 +184,19 @@ static func get_intimate_bonus(action_id: String) -> int:
 	if is_category_1_action(action_id):
 		return INTIMATE_SETTING_BONUS
 	return 0
+
+
+static func is_category_3_action(action_id: String) -> bool:
+	return action_id in CATEGORY_3_ACTIONS
+
+
+static func is_category_5_action(action_id: String) -> bool:
+	return action_id in CATEGORY_5_ACTIONS
+
+
+static func has_lower_exposure_risk(action_id: String) -> bool:
+	return is_category_3_action(action_id)
+
+
+static func has_extended_observation(action_id: String, visit_duration_days: int) -> bool:
+	return is_category_5_action(action_id) and visit_duration_days > 1

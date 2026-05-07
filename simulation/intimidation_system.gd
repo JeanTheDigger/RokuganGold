@@ -153,6 +153,51 @@ static func can_compliance_end(
 	return intimidator_disposition_toward_target >= friend_threshold
 
 
+static func resolve_pushback(
+	target_willpower_roll: int,
+	intimidator_skill_rank: int,
+) -> Dictionary:
+	var tn: int = get_pushback_tn(intimidator_skill_rank)
+	var success: bool = target_willpower_roll >= tn
+	return {
+		"success": success,
+		"tn": tn,
+		"compliance_ended": success,
+	}
+
+
+static func check_compliance_status(
+	intimidator_disposition_toward_target: int,
+	leverage_removed: bool,
+	pushback_succeeded: bool,
+) -> bool:
+	if leverage_removed:
+		return false
+	if pushback_succeeded:
+		return false
+	if can_compliance_end(intimidator_disposition_toward_target):
+		return false
+	return true
+
+
+const WITNESS_VIRTUE_REACTIONS: Array[String] = ["Rei", "Gi", "Meiyo"]
+
+static func get_witness_reaction(witness_virtue: String) -> int:
+	if witness_virtue in WITNESS_VIRTUE_REACTIONS:
+		return PUBLIC_WITNESS_DISPOSITION_LOSS
+	return 0
+
+
+static func generate_betrayal_topic(actor_id: int) -> Dictionary:
+	return {
+		"topic_type": "betrayal",
+		"subject_id": actor_id,
+		"tier": 4,
+		"category": "PERSONAL",
+		"slug": "intimidation_bluff_failure_%d" % actor_id,
+	}
+
+
 # -- Helpers ------------------------------------------------------------------
 
 static func _disposition_defense_bonus(tier: String) -> int:
