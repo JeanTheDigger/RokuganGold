@@ -47,12 +47,15 @@ static func build_context(character: L5RCharacterData, world_state: Dictionary) 
 	# Social knowledge — read through legitimate channels only (GDD s20)
 	ctx.characters_present = world_state.get("characters_present", [] as Array[int])
 	ctx.dispositions = character.disposition_values.duplicate()
+	ctx.disposition_values = character.disposition_values.duplicate()
 	ctx.known_topics = world_state.get("known_topics", [] as Array[int])
 	ctx.known_positions = world_state.get("known_positions", {})
 	ctx.known_objectives = world_state.get("known_objectives", {})
 	ctx.known_contacts = world_state.get("known_contacts", [] as Array[int])
 	ctx.contact_clans = world_state.get("contact_clans", {})
+	ctx.known_contacts_by_clan = character.known_contacts_by_clan.duplicate()
 	ctx.met_characters = character.met_characters.duplicate()
+	ctx.knowledge_pool = character.knowledge_pool
 
 	# Lord-tier fields
 	if ctx.is_lord:

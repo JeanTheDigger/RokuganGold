@@ -98,12 +98,15 @@ class ContextSnapshot:
 	# Social knowledge
 	var characters_present: Array[int] = []
 	var dispositions: Dictionary = {}
+	var disposition_values: Dictionary = {}
 	var known_topics: Array[int] = []
 	var known_positions: Dictionary = {}
 	var known_objectives: Dictionary = {}
 	var known_contacts: Array[int] = []
 	var contact_clans: Dictionary = {}
+	var known_contacts_by_clan: Dictionary = {}
 	var met_characters: Array[int] = []
+	var knowledge_pool: Array[KnowledgeEntry] = []
 
 	# Lord-tier fields
 	var resource_stockpiles: Dictionary = {}

@@ -61,6 +61,8 @@ static func decompose(
 	if need_type.is_empty():
 		return null
 
+	if PrimaryObjectiveDecomposer.is_primary_objective(need_type):
+		return PrimaryObjectiveDecomposer.decompose(objective, ctx)
 	if need_type in POLITICAL_OBJECTIVES:
 		return _decompose_political(need_type, objective, ctx)
 	if need_type in ECONOMIC_OBJECTIVES:
