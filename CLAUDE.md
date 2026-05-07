@@ -413,6 +413,10 @@ All in /tests/, one file per system:
 - test_reactive_decisions.gd (~30 tests)
 - test_opportunity_scanner.gd (~25 tests)
 - test_primary_objective_decomposer.gd (~35 tests)
+- test_favor_system.gd (~36 tests)
+- test_personal_visit_system.gd (~25 tests)
+- test_inventory_system.gd (~30 tests)
+- test_intimidation_system.gd (~30 tests)
 
 ### World Generator
 - **simulation/world_generator.gd** — Static factory methods for seeding initial
@@ -523,6 +527,56 @@ All in /tests/, one file per system:
   SABOTAGE_ECONOMY, AVENGE (death=duel, disgrace=expose). Routed through
   ObjectiveDecomposer before standing objectives. ContextSnapshot gains
   `disposition_values`, `known_contacts_by_clan`, `knowledge_pool` fields.
+
+### Favor System (s12.10)
+- **shared/favor_data.gd** — FavorData Resource: FavorType (SPECIFIC/GENERAL),
+  FavorTier (MAJOR=1/MODERATE=2/MINOR=3), InvocationMethod (LETTER/COURT/
+  PERSONAL_VISIT). Fields: creditor_id, debtor_id, terms, is_blackmail_extracted,
+  invoked state, response deadline, heir_id.
+- **simulation/favor_system.gd** — Full favor lifecycle per GDD s12.10:
+  `offer_favor()` creates FavorData, `get_offer_disposition()` returns tier-scaled
+  disposition (+6/+10/+15 base, +2/+3/+4 per raise, −5 on critical failure).
+  `invoke_favor()` sets deadline (letter=90d, court=1d, visit=90d).
+  `honor_favor()` returns +0.1 honor. `break_favor()` returns full consequence
+  table (disposition −20/−35/−50, honor −0.5/−1.0/−2.0, glory loss for major,
+  witness disposition loss, topic generation). `can_dispute()` / `resolve_dispute()`
+  for general favors (contested Sincerity). Expiration: minor=360d, moderate=1080d,
+  major=never. Death: major favors inherit to heir, others dissolve.
+  `extract_blackmail_favor()` creates general favors from secret tiers.
+  `can_unlock_supply_sharing()` for moderate/major favors.
+- L5RCharacterData gains `favors: Array[FavorData]`.
+
+### Personal Visit System (s17)
+- **simulation/personal_visit_system.gd** — Three visit types (INVITATION_SENT,
+  LETTER_ANNOUNCING_ARRIVAL, UNINVITED) with host response mechanics.
+  Refuse after invitation: −10 disposition, −0.3 honor. Refuse letter: −2.
+  Refuse uninvited: no cost. Accept uninvited: +5 goodwill. Decline invitation:
+  −3 disposition. Action filtering: Categories 1, 3, 5 only (no broadcast).
+  Intimate setting bonus: +3 disposition on all Category 1 actions (CHARM,
+  FLATTERY, SINCERE_COMPLIMENT, SHARED_INTEREST, DELIVER_GIFT, OFFER_FAVOR,
+  PERFORM_FOR). Does not apply to Categories 3 or 5.
+
+### Inventory System (s12.11)
+- **simulation/inventory_system.gd** — Three storage tiers (ON_PERSON,
+  CURRENT_QUARTERS capacity=20, HOME_STORAGE unlimited). Five outfit capacities
+  (court_formal=3, casual=5, traveling=8, light_armor=6, heavy_armor=3).
+  Item sizes: SMALL=1, MEDIUM=2, LARGE=3. Seven categories (DOCUMENT, SEAL,
+  GIFT, WEAPON, SCROLL, VALUABLE, EVIDENCE). Transfer: give_directly (same
+  location), send_by_messenger (transit state), move_to_storage. Covert:
+  pickpocket (on-person only), search_quarters (quarters only). Evidence
+  tracking: `has_evidence()`, `get_evidence_items()`. Concealment check for
+  court formal overflow. `destroy_item()` for eliminating evidence.
+
+### Intimidation & Blackmail System (s12.9)
+- **simulation/intimidation_system.gd** — Three intimidation contexts:
+  BLACKMAIL (secret-tier free raises: T1=3, T2=2, T3=1, T4=0; favors=margin/5),
+  PRIVATE (in-person: TN+10+5/raise; by letter: TN+5 only),
+  PUBLIC (court: TN+10+5/raise, −2 disposition with Rei/Gi/Meiyo witnesses).
+  All produce compliance (binary active/inactive). Honor Rank as flat defense
+  bonus. Disposition modifiers: friend/ally +5, enemy −5.
+  Honor costs: blackmail/public −0.3, private −0.2. Infamy: 0.1/0.1/0.05.
+  Pushback TN = 15 + intimidator's skill rank. Compliance ends at Friend
+  disposition or when leverage removed.
 
 ### What's Next
 1. World generation coordinate system and adjacency
