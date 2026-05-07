@@ -201,7 +201,7 @@ static func score_all(
 			option.action_id, need, ctx, scoring_tables
 		)
 		option.resource_modifier = _compute_resource_modifier(
-			option, ctx, scoring_tables
+			option, ctx, scoring_tables, character
 		)
 
 		option.approach_modifier = float(ApproachEvaluation.get_scoring_modifier(
@@ -713,13 +713,16 @@ static func _interpolate_topic_position(
 
 
 static func _compute_resource_modifier(
-	_option: NPCDataStructures.ScoredAction,
+	option: NPCDataStructures.ScoredAction,
 	_ctx: NPCDataStructures.ContextSnapshot,
 	_scoring_tables: Dictionary,
+	character: L5RCharacterData = null,
 ) -> float:
-	# Resource modifier is 0 to -40 per s55.32.
-	# Full implementation requires resource availability checks.
-	return 0.0
+	if character == null:
+		return 0.0
+	return ResourceAvailability.compute_resource_modifier(
+		option.action_id, character
+	)
 
 
 # -- Confidence Penalty (s55.12) -----------------------------------------------

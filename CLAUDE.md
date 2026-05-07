@@ -403,8 +403,11 @@ All in /tests/, one file per system:
 - test_zone_flag_matrix.gd (~53 tests)
 - test_tattoo_system.gd (~100 tests)
 - test_character_sheet_field_index.gd (~45 tests)
-- test_system_wiring.gd (~20 tests)
+- test_system_wiring.gd (~25 tests)
 - test_world_generator.gd (~45 tests)
+- test_resource_availability.gd (~25 tests)
+- test_court_availability.gd (~15 tests)
+- test_orphaned_objectives.gd (~25 tests)
 
 ### World Generator
 - **simulation/world_generator.gd** — Static factory methods for seeding initial
@@ -420,9 +423,47 @@ All in /tests/, one file per system:
   skills advance 80%/rank, 2-3 non-school skills added per rank.
   Coordinate system and adjacency are NOT set — deferred for later.
 
+### Resource Availability Modifier (s55.32)
+- **simulation/resource_availability.gd** — Phase 5 scoring penalty for
+  resource-consuming actions. `compute_resource_modifier(action_id, character,
+  province_data)` returns 0 to −40 based on koku ratio to cost.
+  ACTION_RESOURCE_COSTS: 8 actions mapped to resource type + amount.
+  Thresholds: ≥5.0→0, ≥3.0→−5, ≥1.5→−10, ≥1.0→−15, <1.0→−25, ≤0→−40.
+  Resource types: koku (ratio), inventory_item (count), troop_pu/rice
+  (province data). Wired into `_compute_resource_modifier` in
+  npc_decision_engine.gd — `resource_modifier` field on ScoredAction populated
+  from `ResourceAvailability.compute_resource_modifier()`.
+
+### Court Availability Helper (s55.34)
+- **simulation/court_availability.gd** — `attend_court_or_alternative(
+  active_court, upcoming_courts, character, target_npc_id, held_leverage,
+  action_log, current_season, known_locations)` → Variant (Dictionary or null).
+  4-step priority cascade:
+  1. Active court at location → ATTEND_COURT (priority 2)
+  2. Upcoming court → TRAVEL_TO highest-prestige court
+  3a. Held leverage → SEND_LETTER to target's lord (or target directly)
+  3b. Has lord → SEND_LETTER to lord requesting court (once per season)
+  3c. Known target location → TRAVEL_TO for personal visit
+  4. No options → null
+
+### Orphaned Objectives on Lord Death (s55.33)
+- **simulation/orphaned_objectives.gd** — Vassal objective handling when
+  assigning lord dies. LORD_DEPENDENT_OBJECTIVES (9 types: BREAK_ALLIANCE,
+  ISOLATE_CHARACTER, GAIN_WINTER_COURT_INVITATION, APPOINT_TO_POSITION,
+  REMOVE_FROM_POSITION, RESOLVE_CLAN_WAR, OBTAIN_IMPERIAL_EDICT,
+  CONQUER_PROVINCE, SABOTAGE_ECONOMY) → ORPHANED on lord death.
+  TARGET_DEPENDENT_OBJECTIVES (3 types: EXPOSE_SECRET, INCREASE_KOKU,
+  AVENGE) → persist as ACTIVE.
+  `process_lord_death(vassals, dead_lord_id, successor_id, objectives_map)`
+  marks lord-dependent objectives ORPHANED, returns report targets.
+  `resolve_orphaned_objective(objectives, decision, new_objective)` handles
+  CONFIRM (reactivate), MODIFY (replace), CANCEL (remove).
+  `generate_report_need(vassal, successor_id)` creates REPORT_TO_NEW_LORD need.
+  `has_orphaned_vassals(vassals, lord_id, objectives_map)` finds orphaned IDs.
+
 ### What's Next
-1. Integration tests — end-to-end DayOrchestrator test covering crime detection
-   → topic broadcast → UPHOLD_LAW activation → investigation → conviction
+1. Wire court_availability and orphaned_objectives into NPC decision loop
+2. World generation coordinate system and adjacency
 
 ### Systems Wired into NPC Loop
 The following subsystems are now integrated into the NPC decision loop:
@@ -460,6 +501,10 @@ The following subsystems are now integrated into the NPC decision loop:
   deployment status (garrisoned units blocked from offensive actions),
   verifies legion coordination and section campaign authority. Military data
   dict threaded through NPCWaveResolver → DayOrchestrator.
+- **ResourceAvailability** — Phase 5 scoring: `resource_modifier` field on
+  ScoredAction. `_compute_resource_modifier` in npc_decision_engine.gd calls
+  `ResourceAvailability.compute_resource_modifier()`. Koku ratio thresholds:
+  ≥5x→0, ≥3x→−5, ≥1.5x→−10, ≥1x→−15, <1x→−25, broke→−40.
 
 ## Resolved Design Decisions
 

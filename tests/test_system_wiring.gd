@@ -1167,6 +1167,147 @@ func test_objective_transfer_includes_province_crisis() -> void:
 # Integration: Stale Intel Bonus affects gather-intelligence scoring
 # =============================================================================
 
+# =============================================================================
+# End-to-End Crime Loop: Detection → Witness Seed → UPHOLD_LAW → Examine →
+#   Interview → Conviction → Conviction Topic
+# =============================================================================
+
+func test_end_to_end_crime_loop_through_conviction() -> void:
+	var criminal := L5RCharacterData.new()
+	criminal.character_id = 10
+	criminal.character_name = "Bayushi Spy"
+	criminal.clan = "Scorpion"
+	criminal.family = "Bayushi"
+	criminal.physical_location = "castle_scorpion"
+	criminal.honor = 3.0
+	criminal.glory = 2.0
+	criminal.status = 3.0
+	criminal.infamy = 0.0
+
+	var magistrate := L5RCharacterData.new()
+	magistrate.character_id = 20
+	magistrate.character_name = "Crane Magistrate"
+	magistrate.clan = "Crane"
+	magistrate.physical_location = "castle_scorpion"
+	magistrate.bushido_virtue = Enums.BushidoVirtue.GI
+	magistrate.shourido_virtue = Enums.ShouridoVirtue.NONE
+	magistrate.skills = {"Investigation": 5}
+	magistrate.perception = 4
+	magistrate.awareness = 3
+	magistrate.intelligence = 3
+	magistrate.reflexes = 3
+	magistrate.willpower = 3
+	magistrate.emphases = {}
+	magistrate.wounds_taken = 0
+	magistrate.knowledge_pool = []
+	magistrate.topic_pool = []
+
+	var witness := L5RCharacterData.new()
+	witness.character_id = 50
+	witness.character_name = "Witness"
+	witness.physical_location = "castle_scorpion"
+	witness.awareness = 4
+	witness.honor = 6.0
+	witness.topic_pool = []
+
+	var characters_by_id: Dictionary = {10: criminal, 20: magistrate, 50: witness}
+
+	# Phase 1: Crime detection
+	var crime_records: Array[CrimeRecord] = []
+	var active_topics: Array[TopicData] = []
+	var next_case_id: Array[int] = [1]
+	var next_topic_id: Array[int] = [500]
+
+	var covert_results: Array = [{
+		"character_id": 10,
+		"action_id": "BRIBE_FOR_INFO",
+		"target_npc_id": -1,
+		"effects": {"detection_risk": true},
+	}]
+
+	var crime_results: Array[Dictionary] = DayOrchestrator._process_crime_detection(
+		covert_results, characters_by_id, crime_records, 5, next_case_id,
+		active_topics, next_topic_id
+	)
+
+	assert_eq(crime_results.size(), 1, "Should detect one crime")
+	assert_eq(crime_records.size(), 1)
+	var record: CrimeRecord = crime_records[0]
+	assert_eq(record.crime_type, Enums.CrimeType.SKIMMING)
+	assert_eq(record.perpetrator_id, 10)
+
+	# Phase 2: Witness-only topic seeding
+	assert_eq(active_topics.size(), 1)
+	var crime_topic: TopicData = active_topics[0]
+	assert_almost_eq(crime_topic.momentum, 0.0, 0.001,
+		"Crime topic momentum should be 0")
+	assert_true(crime_topic.topic_id in magistrate.topic_pool,
+		"Magistrate at location gets topic via witness seeding")
+	assert_true(crime_topic.topic_id in witness.topic_pool,
+		"Witness at location gets topic via witness seeding")
+	assert_false(crime_topic.topic_id in criminal.topic_pool,
+		"Criminal should NOT receive own crime topic")
+
+	# Phase 3: UPHOLD_LAW activation
+	var objectives: Dictionary = {
+		20: {
+			"standing": {"need_type": "UPHOLD_LAW"},
+		},
+	}
+	var characters: Array[L5RCharacterData] = [criminal, magistrate, witness]
+	var uphold_results: Array[Dictionary] = DayOrchestrator._process_uphold_law_scan(
+		characters, objectives, crime_records, active_topics
+	)
+
+	assert_eq(uphold_results.size(), 1, "Magistrate should self-initiate")
+	assert_eq(uphold_results[0]["magistrate_id"], 20)
+	assert_eq(record.investigating_magistrate_id, 20)
+	assert_eq(record.legal_status, Enums.LegalStatus.UNDER_INVESTIGATION)
+	var active_case: Dictionary = objectives[20]["standing"]["active_case"]
+	assert_false(active_case.is_empty())
+
+	# Phase 4: Scene examination
+	var dice := DiceEngine.new()
+	dice.set_seed(42)
+	var exam: Dictionary = InvestigationSystem.examine_scene(
+		magistrate, record, dice, 5
+	)
+	assert_true(exam["success"], "Investigation 5 should pass TN 15")
+	var evidence_after_exam: int = record.evidence_total
+	assert_true(evidence_after_exam > 0, "Scene exam should add evidence")
+
+	# Phase 5: Witness interview via PROBE
+	var witness_result: Dictionary = DayOrchestrator._check_witness_evidence(
+		20, 50, 3, crime_records, objectives
+	)
+	assert_true(witness_result.get("evidence_gained", 0) >= 10)
+	assert_true(record.evidence_total > evidence_after_exam)
+	assert_true(50 in active_case["interviewed_witnesses"])
+
+	# Phase 6: Conviction
+	var conviction: Dictionary = CrimeSystem.apply_at_conviction_consequences(
+		criminal, record
+	)
+	assert_eq(record.legal_status, Enums.LegalStatus.CONVICTED)
+	assert_eq(conviction["topic_tier"], 3, "Skimming -> Tier 3 topic")
+	assert_true(criminal.glory < 2.0, "Glory should decrease on conviction")
+	assert_true(criminal.infamy > 0.0, "Infamy should increase on conviction")
+
+	# Phase 7: Conviction topic generation
+	var conviction_topic: TopicData = InvestigationSystem.generate_conviction_topic(
+		record, criminal, conviction["topic_tier"], next_topic_id, 6
+	)
+	assert_not_null(conviction_topic)
+	assert_eq(conviction_topic.tier, TopicData.Tier.TIER_3)
+	assert_eq(conviction_topic.category, TopicData.Category.LEGAL)
+	assert_true(conviction_topic.title.contains("Bayushi Spy"))
+	assert_true(conviction_topic.title.contains("Skimming"))
+	assert_eq(conviction_topic.subject_character_id, 10)
+	assert_eq(conviction_topic.subject_role, "PERPETRATOR")
+	assert_almost_eq(conviction_topic.momentum, 25.0, 0.001,
+		"Tier 3 conviction topic should start at momentum 25")
+
+
 func test_stale_intel_bonus_wired_into_score_all() -> void:
 	# Give character stale knowledge about target
 	var entry: KnowledgeEntry = InformationSystem.make_entry(
