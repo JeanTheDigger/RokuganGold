@@ -441,7 +441,8 @@ All in /tests/, one file per system:
 - test_biological_family.gd (~42 tests)
 - test_collective_disposition.gd (~37 tests)
 - test_miya_blessing_system.gd (~50 tests)
-- test_miya_blessing_wiring.gd (~12 tests)
+- test_miya_blessing_wiring.gd (~14 tests)
+- test_miya_blessing_followup.gd (~13 tests)
 
 ### Festival System (s11.5)
 - **simulation/festival_system.gd** — Empire-wide canonical festivals, Rokuyo
@@ -855,11 +856,40 @@ All in /tests/, one file per system:
   year (via `time_system.get_ic_year()`) and reads
   `last_autumn_emperor_tax_income` from season_meta before passing to
   ResourceTick.
-  `WorldStateData` gains `emperor_id`, `emperor_settlement_id`, and
-  `emperor_archetype` fields plus a `_build_miya_inputs()` helper that
-  assembles the dict from world state. Returns `{}` (no-op) when the
-  Imperial capital isn't fully configured. `advance_one_day()` calls
-  it automatically.
+  `WorldStateData` gains `emperor_id`, `emperor_settlement_id`,
+  `emperor_archetype`, and `miya_representative_id` fields plus a
+  `_build_miya_inputs()` helper that assembles the dict from world state.
+  Returns `{}` (no-op) when the Imperial capital isn't fully configured.
+  `advance_one_day()` calls it automatically.
+
+- **Miya's Blessing follow-up (s11.5b §6–7)** —
+  `DayOrchestrator._process_miya_blessing_followup()` runs on Spring
+  transitions after the seasonal tick. Reads
+  `seasonal_result.resource_tick.miya_blessing`, then:
+  - **Fired path** — generates one Tier 4 `miya_blessing/delivered` topic
+    per blessed province (POLITICAL category, BENEFICIARY subject role,
+    momentum 11.0); applies disposition deltas per province lord:
+    `+2 toward miya_representative_id`, `+1 toward emperor_id` (gated on
+    those IDs being set). Resets
+    `season_meta["consecutive_blessing_suspensions"] = 0`.
+    Province-lord lookup scans `characters_by_id` for the highest-status
+    character matching the province's clan + family — placeholder until
+    daimyo IDs are explicit on ProvinceData.
+  - **Suspended path** — increments `consecutive_blessing_suspensions`,
+    generates a Tier 4 suspension topic the first 1–2 years and a Tier 3
+    grievance topic at year 3+ ("Miya's Blessing Suspended — Imperial
+    Reserves Insufficient", or "Miya's Blessing Denied by Imperial Order"
+    for the tyrant_archetype reason). Applies `-1 stability` to every
+    province with `stability < 76` or an active insurgency (proxy for
+    Need Score > 0); the penalty doubles to `-2` after 2+ consecutive
+    suspensions. Applies `-3` Miya-rep disposition toward the Emperor
+    (gated on both IDs being set). Same-clan ripple and per-clan-champion
+    empire-wide penalties are deferred until clan→champion mapping is
+    consistent.
+  - **Pop growth bonus** — `ResourceTick._apply_miya_blessing` now writes
+    `_miya_growth_bonus: { province_id: 0.01 }` into settlement_meta;
+    `_process_population_adjustment` reads it and adds the +1% to the
+    blessed provinces' growth rate that season.
 
 ### Clan & Family Collective Disposition (s12.2b)
 - **simulation/collective_disposition.gd** — `CollectiveDisposition` class

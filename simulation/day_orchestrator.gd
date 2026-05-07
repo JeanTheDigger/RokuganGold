@@ -131,6 +131,14 @@ static func advance_day(
 			characters, provinces, current_season, season_meta,
 			approach_penalties, settlements, spring_inputs
 		)
+		# Miya's Blessing follow-up — topic generation, disposition deltas,
+		# suspension penalties. Runs only on Spring transitions when the
+		# blessing actually fired or was suspended.
+		if current_season == TimeSystem.Season.SPRING:
+			_process_miya_blessing_followup(
+				seasonal_result, miya_inputs, provinces, characters_by_id,
+				active_topics, next_topic_id, ic_day, season_meta,
+			)
 		_decay_all_historical_modifiers(characters, ic_day)
 		insurgency_results = _process_insurgencies(
 			insurgencies, provinces, dice_engine, current_season,
@@ -310,6 +318,180 @@ static func _decay_all_knowledge(
 ) -> void:
 	for c: L5RCharacterData in characters:
 		InformationSystem.decay_confidence(c, current_season)
+
+
+# -- Miya's Blessing Follow-up (s11.5b §7) ------------------------------------
+#
+# Reads the blessing result from the season's resource_tick, then:
+#   - Generates Tier 4 topics for each blessed province (success path) OR a
+#     suspension topic (Tier 4 first year, Tier 3 grievance after 3+ years).
+#   - Applies disposition deltas: blessed-province lord toward Miya rep +2
+#     and toward Emperor +1 on success; Miya rep toward Emperor -3 on
+#     suspension. Same-clan ripple and per-clan-champion penalties are
+#     deferred until the clan→champion mapping is consistent.
+#   - Updates season_meta["consecutive_blessing_suspensions"] for the
+#     escalation thresholds.
+#   - Applies -1 stability to every Need Score > 0 province on suspension
+#     (penalty doubles after 2 consecutive years).
+
+static func _process_miya_blessing_followup(
+	seasonal_result: Dictionary,
+	miya_inputs: Dictionary,
+	provinces: Dictionary,
+	characters_by_id: Dictionary,
+	active_topics: Array[TopicData],
+	next_topic_id: Array[int],
+	ic_day: int,
+	season_meta: Dictionary,
+) -> void:
+	var resource_tick: Dictionary = seasonal_result.get("resource_tick", {})
+	var blessing: Dictionary = resource_tick.get("miya_blessing", {})
+	if blessing.is_empty():
+		return
+
+	var miya_rep_id: int = int(miya_inputs.get("miya_representative_id", -1))
+	var emperor_id: int = int(miya_inputs.get("emperor_id", -1))
+
+	if blessing.get("fired", false):
+		# Success path — reset the suspension counter, generate per-province
+		# topics, apply disposition deltas.
+		season_meta["consecutive_blessing_suspensions"] = 0
+		var selected_ids: Array = blessing.get("selected_province_ids", [])
+		for pid in selected_ids:
+			var prov: ProvinceData = provinces.get(pid)
+			if prov == null:
+				continue
+			_create_blessing_topic(
+				prov, active_topics, next_topic_id, ic_day, "delivered"
+			)
+			_apply_blessing_disposition(
+				prov, characters_by_id, miya_rep_id, emperor_id
+			)
+		return
+
+	if not blessing.get("suspended", false):
+		return
+
+	# Suspension path — count, generate topic, apply penalties.
+	var suspended_count: int = int(season_meta.get("consecutive_blessing_suspensions", 0)) + 1
+	season_meta["consecutive_blessing_suspensions"] = suspended_count
+
+	var reason: String = blessing.get("suspension_reason", "")
+	var topic_tier: TopicData.Tier = TopicData.Tier.TIER_4
+	if suspended_count >= 3:
+		# Miya daimyo raises a formal grievance — escalates to Tier 3.
+		topic_tier = TopicData.Tier.TIER_3
+	_create_suspension_topic(active_topics, next_topic_id, ic_day, reason, topic_tier)
+
+	# -1 stability to every Need Score > 0 province (doubled at 2+
+	# consecutive years per §7.2). Read need scores from blessing result if
+	# present; otherwise scan provinces for any non-stable, non-blessed.
+	var stab_penalty: int = -1
+	if suspended_count >= 2:
+		stab_penalty = -2
+	for pid in provinces:
+		var p: ProvinceData = provinces[pid]
+		# Quick proxy for "Need Score > 0": stability below stable threshold
+		# OR active insurgency. Avoids requiring caller to pass full need scores.
+		if p.stability < 76.0 or p.active_insurgency_id >= 0:
+			p.stability = clampf(p.stability + float(stab_penalty), 0.0, 100.0)
+
+	if miya_rep_id >= 0 and emperor_id >= 0:
+		var miya: L5RCharacterData = characters_by_id.get(miya_rep_id)
+		if miya != null:
+			var current: int = int(miya.disposition_values.get(emperor_id, 0))
+			miya.disposition_values[emperor_id] = clampi(current - 3, -100, 100)
+
+
+static func _create_blessing_topic(
+	prov: ProvinceData,
+	active_topics: Array[TopicData],
+	next_topic_id: Array[int],
+	ic_day: int,
+	variant: String,
+) -> void:
+	var topic: TopicData = TopicData.new()
+	topic.topic_id = next_topic_id[0]
+	next_topic_id[0] += 1
+	topic.slug = "miya_blessing_%s_p%d_d%d" % [variant, prov.province_id, ic_day]
+	topic.title = "Miya's Blessing — %s" % prov.province_name
+	topic.topic_type = "miya_blessing"
+	topic.variant = variant
+	topic.tier = TopicData.Tier.TIER_4
+	topic.category = TopicData.Category.POLITICAL
+	topic.momentum = 11.0  # Minor topic — broadcasts to affected province.
+	topic.provinces_affected = [prov.province_id]
+	topic.clan_involved = prov.clan
+	topic.subject_role = "BENEFICIARY"
+	topic.ic_day_created = ic_day
+	active_topics.append(topic)
+
+
+static func _create_suspension_topic(
+	active_topics: Array[TopicData],
+	next_topic_id: Array[int],
+	ic_day: int,
+	reason: String,
+	tier: TopicData.Tier,
+) -> void:
+	var topic: TopicData = TopicData.new()
+	topic.topic_id = next_topic_id[0]
+	next_topic_id[0] += 1
+	var variant: String = "suspended_%s" % reason if reason != "" else "suspended"
+	topic.slug = "miya_blessing_%s_d%d" % [variant, ic_day]
+	if reason == "tyrant_archetype":
+		topic.title = "Miya's Blessing Denied by Imperial Order"
+	else:
+		topic.title = "Miya's Blessing Suspended — Imperial Reserves Insufficient"
+	topic.topic_type = "miya_blessing"
+	topic.variant = variant
+	topic.tier = tier
+	topic.category = TopicData.Category.POLITICAL
+	topic.momentum = 26.0 if tier == TopicData.Tier.TIER_3 else 11.0
+	topic.subject_role = "PERPETRATOR"   # Emperor / Imperial decision
+	topic.ic_day_created = ic_day
+	active_topics.append(topic)
+
+
+static func _apply_blessing_disposition(
+	prov: ProvinceData,
+	characters_by_id: Dictionary,
+	miya_rep_id: int,
+	emperor_id: int,
+) -> void:
+	## Find the lord of this province and apply +2 toward Miya rep, +1 toward
+	## Emperor. Lord identification is conservative: scan characters_by_id for
+	## the highest-status character whose family/clan matches the province.
+	var lord: L5RCharacterData = _find_province_lord(prov, characters_by_id)
+	if lord == null:
+		return
+	if miya_rep_id >= 0:
+		var current_miya: int = int(lord.disposition_values.get(miya_rep_id, 0))
+		lord.disposition_values[miya_rep_id] = clampi(current_miya + 2, -100, 100)
+	if emperor_id >= 0:
+		var current_emp: int = int(lord.disposition_values.get(emperor_id, 0))
+		lord.disposition_values[emperor_id] = clampi(current_emp + 1, -100, 100)
+
+
+static func _find_province_lord(
+	prov: ProvinceData,
+	characters_by_id: Dictionary,
+) -> L5RCharacterData:
+	# Highest-status character whose clan matches and (if set) family matches.
+	# This is a placeholder until province → daimyo linkage is explicit on
+	# ProvinceData.
+	var best: L5RCharacterData = null
+	for cid: int in characters_by_id:
+		var c: L5RCharacterData = characters_by_id[cid]
+		if c == null:
+			continue
+		if prov.clan != "" and c.clan != prov.clan:
+			continue
+		if prov.family != "" and c.family != prov.family:
+			continue
+		if best == null or c.status > best.status:
+			best = c
+	return best
 
 
 # -- Crime Detection (s57.47) --------------------------------------------------

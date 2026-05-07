@@ -65,6 +65,7 @@ var family_baselines: Dictionary = {}
 var emperor_id: int = -1
 var emperor_settlement_id: int = -1
 var emperor_archetype: int = StrategicReview.EmperorArchetype.IRON
+var miya_representative_id: int = -1
 
 
 func _ready() -> void:
@@ -130,8 +131,10 @@ func _build_miya_inputs() -> Dictionary:
 		return {}
 	return {
 		"emperor_archetype": emperor_archetype,
+		"emperor_id": emperor_id,
 		"emperor_settlement_id": emperor_settlement_id,
 		"otosan_uchi_pu": float(emperor_settlement.population_pu),
+		"miya_representative_id": miya_representative_id,
 		# Tax income is resolved from season_meta inside DayOrchestrator —
 		# don't override it here.
 	}

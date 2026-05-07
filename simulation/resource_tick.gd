@@ -345,6 +345,10 @@ static func _apply_miya_blessing(
 	for s in settlements:
 		if grants.has(s.settlement_id):
 			s.rice_stockpile += float(grants[s.settlement_id])
+	# One-season +1% pop growth (§6.3) — stash by province_id; the
+	# population adjustment step reads this dict and adds to its rate.
+	var growth_bonus: Dictionary = {}
+	var pop_growth_bonus: float = float(result.get("pop_growth_bonus", 0.0))
 	for prov in provinces:
 		if prov.province_id in result.get("selected_province_ids", []):
 			prov.stability = clampf(
@@ -353,6 +357,8 @@ static func _apply_miya_blessing(
 			)
 			if current_ic_year >= 0:
 				prov.last_blessed_ic_year = current_ic_year
+			growth_bonus[prov.province_id] = pop_growth_bonus
+	settlement_meta["_miya_growth_bonus"] = growth_bonus
 	return result
 
 
@@ -692,6 +698,9 @@ static func _process_population_adjustment(
 	var results: Dictionary = {}
 	var starvation_data: Dictionary = settlement_meta.get("_starvation", {})
 	var peace_map: Dictionary = settlement_meta.get("_peace_seasons", {})
+	# One-season Miya's Blessing growth bonus (s11.5b §6.3) — keyed by
+	# province_id and added to the computed rate for blessed provinces.
+	var miya_growth_bonus: Dictionary = settlement_meta.get("_miya_growth_bonus", {})
 	for prov: ProvinceData in provinces:
 		var starv: Dictionary = starvation_data.get(prov.province_id, {})
 		var stage: StarvationStage = starv.get("stage", StarvationStage.CLEAR)
@@ -699,6 +708,7 @@ static func _process_population_adjustment(
 		var total_pop: int = sum_population_pu(prov, settlements)
 		var prov_rice: float = get_province_rice(prov, settlements)
 		var rate: float = compute_growth_rate(total_pop, stage, peace, prov_rice)
+		rate += float(miya_growth_bonus.get(prov.province_id, 0.0))
 		var growth: Dictionary = apply_population_growth_settlements(prov, settlements, rate)
 		results[prov.province_id] = growth
 	return results

@@ -311,6 +311,46 @@ func test_blessed_last_year_gets_minus_5_malus_next_year() -> void:
 
 # -- Pop growth bonus and stability bonus values match GDD ------------------
 
+func test_pop_growth_bonus_applied_to_blessed_provinces() -> void:
+	# Run spring tick with blessing — the _miya_growth_bonus dict should be
+	# stashed in settlement_meta and read by the population step.
+	var meta: Dictionary = {}
+	var miya_inputs: Dictionary = {
+		"emperor_archetype": StrategicReview.EmperorArchetype.IRON,
+		"emperor_settlement_id": 999,
+		"otosan_uchi_pu": 50.0,
+		"emperor_autumn_tax_income": 12.0,
+		"current_ic_year": 1120,
+	}
+	ResourceTick.process_seasonal_tick(
+		_provinces, _settlements, "spring", meta, miya_inputs
+	)
+	var growth_bonus: Dictionary = meta.get("_miya_growth_bonus", {})
+	assert_false(growth_bonus.is_empty())
+	# Each selected province has 0.01 (=1%) bonus stashed.
+	for pid in growth_bonus:
+		assert_almost_eq(float(growth_bonus[pid]), 0.01, 0.0001)
+
+
+func test_pop_growth_bonus_not_applied_to_unblessed_provinces() -> void:
+	# Add a stable, never-blessed province; verify it doesn't get the bonus.
+	_provinces.append(_make_province(50, 95.0))
+	_settlements.append(_make_settlement(501, 50, 10, 0.0))
+	var meta: Dictionary = {}
+	var miya_inputs: Dictionary = {
+		"emperor_archetype": StrategicReview.EmperorArchetype.IRON,
+		"emperor_settlement_id": 999,
+		"otosan_uchi_pu": 50.0,
+		"emperor_autumn_tax_income": 12.0,
+		"current_ic_year": 1120,
+	}
+	ResourceTick.process_seasonal_tick(
+		_provinces, _settlements, "spring", meta, miya_inputs
+	)
+	var growth_bonus: Dictionary = meta.get("_miya_growth_bonus", {})
+	assert_false(growth_bonus.has(50))
+
+
 func test_blessing_carries_locked_stability_and_growth_bonuses() -> void:
 	var meta: Dictionary = {}
 	var miya_inputs: Dictionary = {
