@@ -437,6 +437,7 @@ All in /tests/, one file per system:
 - test_objective_progress.gd (~35 tests)
 - test_festival_system.gd (~55 tests)
 - test_simulation_scheduler.gd (~20 tests)
+- test_gift_giving_system.gd (~30 tests)
 
 ### Festival System (s11.5)
 - **simulation/festival_system.gd** — Empire-wide canonical festivals, Rokuyo
@@ -795,6 +796,34 @@ All in /tests/, one file per system:
 - **objective_alignment.json** gains CONDUCT_COMMERCE NeedType with 7 actions:
   CONDUCT_COMMERCE (100), BEGIN_TRAVEL (60), PURCHASE_MARKET (50),
   NEGOTIATE (45), WRITE_LETTER (35), ASSESS_PROVINCE_STATUS (30), DO_NOTHING (0).
+
+### Gift-Giving System (s12.3)
+- **simulation/gift_giving_system.gd** — Gift resolution per GDD s12.3 with
+  mechanics from s49 (quality tiers + Free Raises) and s15.4 (Deliver Gift
+  court action). Pure simulation class, no Node inheritance.
+  Six QualityTier values (Mundane/Normal/Fine/Exceptional/Masterwork/Legendary)
+  with Free Raise lookup (0/0/+1/+2/+3/+4). Ten GiftCategory values: 8 valid
+  (ART, WRITING_IMPLEMENTS, TEA_IMPLEMENTS, POETRY_SCROLLS, INCENSE,
+  ACCESSORIES, FOOD_DRINK, RITUAL_OBJECTS) plus WEAPON and ARMOR (forbidden).
+  Five RecipientArchetype values (BUSHI, COURTIER, SHUGENJA, SCHOLAR, MONK)
+  with sparse APPROPRIATENESS_MATRIX — unmapped pairs default to NEUTRAL.
+  Six Appropriateness levels (IDEAL, APPROPRIATE, NEUTRAL keep full Free
+  Raises; REDUCED halves them; INAPPROPRIATE/INSULTING zero them).
+  Forbidden gifts: weapons (unless Legendary blade — the s12.3 once-in-a-
+  generation exception) and any armor. `is_forbidden()`, `get_appropriateness()`,
+  `compute_effective_free_raises()` (history points stack, clamped non-negative).
+  `resolve_deliver_gift()` returns dict with outcome (success/failure/
+  critical_failure/forbidden), disposition_change, obligation_created flag,
+  and modifiers_to_apply (ready-to-append temp dispositions). Roll: Awareness
+  + Etiquette vs TN 15, +5 per effective Free Raise as flat bonus. Success:
+  full quality disposition + gift_obligation modifier. Failure: half
+  disposition, no obligation. Critical failure (margin ≤ -10): -5 disposition.
+  Forbidden gift: short-circuit -5 disposition, no roll. Quality tier
+  disposition values pulled from existing `DispositionSystem.GIFT_DISPOSITION`
+  table; temp modifier keys (gift_normal/fine/exceptional/masterwork) reuse
+  the existing `DispositionSystem.TEMPORARY_EVENTS` registry. Caller is
+  responsible for actually mutating recipient state — resolver stays pure.
+  `default_archetype_for_school()` maps SchoolType to a default archetype.
 
 ### Simulation Scheduler & World State
 - **scripts/managers/world_state.gd** — `WorldStateData` autoload singleton
