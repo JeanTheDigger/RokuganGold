@@ -100,10 +100,14 @@ static func advance_day(
 	_compute_positions_from_letters(letter_results, active_topics, characters_by_id)
 
 	var seasonal_result: Dictionary = {}
+	var strategic_results: Array[Dictionary] = []
 	if current_season != prev_season:
 		seasonal_result = _process_season_transition(
 			characters, provinces, current_season, season_meta,
 			approach_penalties
+		)
+		strategic_results = _run_strategic_reviews(
+			characters, objectives_map, world_states
 		)
 
 	return {
@@ -122,6 +126,7 @@ static func advance_day(
 		"commitment_results": commitment_results,
 		"uphold_law_results": uphold_law_results,
 		"orphan_results": orphan_results,
+		"strategic_results": strategic_results,
 	}
 
 
@@ -650,3 +655,40 @@ static func _season_to_name(season: int) -> String:
 		TimeSystem.Season.AUTUMN: return "autumn"
 		TimeSystem.Season.WINTER: return "winter"
 	return "summer"
+
+
+# -- Strategic Review (s55.10) -------------------------------------------------
+
+static func _run_strategic_reviews(
+	characters: Array[L5RCharacterData],
+	objectives_map: Dictionary,
+	world_states: Dictionary,
+) -> Array[Dictionary]:
+	var results: Array[Dictionary] = []
+
+	for lord: L5RCharacterData in characters:
+		if not _is_lord_tier(lord):
+			continue
+		var vassals: Array[L5RCharacterData] = _get_vassals(lord, characters)
+		var directives: Array[Dictionary] = StrategicReview.run_seasonal_review(
+			lord, vassals, objectives_map, world_states
+		)
+		for d: Dictionary in directives:
+			results.append(d)
+
+	return results
+
+
+static func _is_lord_tier(character: L5RCharacterData) -> bool:
+	return character.status >= 5.0 or character.lord_id == -1
+
+
+static func _get_vassals(
+	lord: L5RCharacterData,
+	characters: Array[L5RCharacterData],
+) -> Array[L5RCharacterData]:
+	var vassals: Array[L5RCharacterData] = []
+	for c: L5RCharacterData in characters:
+		if c.lord_id == lord.character_id:
+			vassals.append(c)
+	return vassals
