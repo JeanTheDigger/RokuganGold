@@ -87,19 +87,23 @@ static func _count_intel_actions(
 	return count
 
 
-# -- Helper: known allies of target with Status >= min_status -----------------
+# -- Helper: known allies of target --------------------------------------------
+# Returns the list of character IDs the NPC believes to be allies of the target.
+# This is stored on the objective as "known_allies" — a snapshot built from
+# intelligence actions over time. The objective dict accumulates these IDs as
+# the NPC discovers relationships through PROBE/READ_CHARACTER/OBSERVE actions.
+# The current disposition (which may have dropped below Friend threshold) is
+# checked separately to determine how many have been "severed."
 
-static func _get_known_allies(
-	target_id: int,
-	ctx: NPCDataStructures.ContextSnapshot,
-	min_status: float = 3.0,
+static func _get_known_allies_from_objective(
+	objective: Dictionary,
 ) -> Array[int]:
-	var allies: Array[int] = []
-	for cid: int in ctx.disposition_values:
-		var disp: int = ctx.disposition_values.get(cid, 0)
-		if disp >= 25:
-			allies.append(cid)
-	return allies
+	var raw: Array = objective.get("known_allies", [])
+	var result: Array[int] = []
+	for entry: Variant in raw:
+		if entry is int:
+			result.append(entry)
+	return result
 
 
 # =============================================================================
@@ -174,7 +178,7 @@ static func _progress_isolate_character(
 	var score: float = 0.0
 	var target_x: int = objective.get("target_npc_id", -1)
 
-	var known_allies: Array[int] = _get_known_allies(target_x, ctx)
+	var known_allies: Array[int] = _get_known_allies_from_objective(objective)
 
 	if known_allies.is_empty():
 		var intel: int = _count_intel_actions(
@@ -302,7 +306,7 @@ static func _progress_remove_from_position(
 	elif lord_disp <= 25:
 		score += 0.1
 
-	var known_allies: Array[int] = _get_known_allies(target_x, ctx)
+	var known_allies: Array[int] = _get_known_allies_from_objective(objective)
 	if known_allies.size() > 0:
 		var severed: int = 0
 		for ally_id: int in known_allies:

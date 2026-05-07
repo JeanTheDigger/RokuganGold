@@ -121,6 +121,7 @@ func test_isolate_no_known_allies() -> void:
 
 func test_isolate_all_severed_with_confidence() -> void:
 	var ctx := _make_ctx()
+	# Ally 5 was originally Friend+ but NPC has lowered their disposition
 	ctx.disposition_values = {5: 10}
 	ctx.action_log = [
 		{"target_npc_id": 10, "action_id": "PROBE"},
@@ -132,6 +133,7 @@ func test_isolate_all_severed_with_confidence() -> void:
 		"need_type": "ISOLATE_CHARACTER",
 		"target_npc_id": 10,
 		"created_season": 0,
+		"known_allies": [5],
 	}
 	var p: float = ObjectiveProgress.get_progress(obj, ctx)
 	assert_gt(p, 0.8)
@@ -496,6 +498,7 @@ func test_confidence_gate_thorough() -> void:
 		"need_type": "ISOLATE_CHARACTER",
 		"target_npc_id": 10,
 		"created_season": 0,
+		"known_allies": [5],
 	}
 	var p: float = ObjectiveProgress.get_progress(obj, ctx)
 	assert_ge(p, ObjectiveProgress.CONFIDENT_CAP)
@@ -511,6 +514,7 @@ func test_confidence_gate_insufficient() -> void:
 		"need_type": "ISOLATE_CHARACTER",
 		"target_npc_id": 10,
 		"created_season": 3,
+		"known_allies": [5],
 	}
 	var p: float = ObjectiveProgress.get_progress(obj, ctx)
 	assert_le(p, ObjectiveProgress.CONFIDENT_CAP)

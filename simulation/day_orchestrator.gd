@@ -815,10 +815,17 @@ static func _process_arrival_observation(
 			var other: L5RCharacterData = characters_by_id[other_id]
 			if other.physical_location != dest:
 				continue
+			# Arriving character observes residents
 			if other_id not in character.met_characters:
 				character.met_characters.append(other_id)
 			InformationSystem.record_location_observation(
 				character, other_id, dest, current_season
+			)
+			# Residents observe the arriving character
+			if char_id not in other.met_characters:
+				other.met_characters.append(char_id)
+			InformationSystem.record_location_observation(
+				other, char_id, dest, current_season
 			)
 
 
