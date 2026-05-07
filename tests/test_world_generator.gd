@@ -410,30 +410,28 @@ func test_garrison_minimum_one() -> void:
 # Province Generation — Stockpiles
 # =============================================================================
 
-func test_rice_stockpile_two_seasons() -> void:
+func test_settlement_rice_stockpile_two_seasons() -> void:
 	var p: ProvinceData = WorldGenerator.generate_province(
 		1, "Test", "Lion", "Akodo",
 		Enums.TerrainType.PLAINS, 20, _dice
 	)
+	var s: SettlementData = WorldGenerator.generate_settlement(
+		10, "Village", p, Enums.SettlementType.VILLAGE, 20
+	)
 	# 20 PU * 0.25 per season * 2 seasons = 10.0
-	assert_almost_eq(p.rice_stockpile, 10.0, 0.001)
+	assert_almost_eq(s.rice_stockpile, 10.0, 0.001)
 
 
-func test_koku_stockpile_from_town() -> void:
+func test_settlement_koku_stockpile() -> void:
 	var p: ProvinceData = WorldGenerator.generate_province(
 		1, "Test", "Crane", "Doji",
 		Enums.TerrainType.PLAINS, 20, _dice
 	)
-	# town_pu * 0.5
-	assert_almost_eq(p.koku_stockpile, float(p.town_pu) * 0.5, 0.001)
-
-
-func test_iron_stockpile_from_mining() -> void:
-	var p: ProvinceData = WorldGenerator.generate_province(
-		1, "Test", "Crab", "Kaiu",
-		Enums.TerrainType.MOUNTAINS, 20, _dice
+	var s: SettlementData = WorldGenerator.generate_settlement(
+		10, "Town", p, Enums.SettlementType.CITY, p.population_pu
 	)
-	assert_almost_eq(p.iron_stockpile, float(p.mining_pu) * 0.5, 0.001)
+	# koku = town_pu * 0.5 * (pop/pop) = town_pu * 0.5
+	assert_almost_eq(s.koku_stockpile, float(p.town_pu) * 0.5, 0.001)
 
 
 # =============================================================================
@@ -485,7 +483,6 @@ func test_same_seed_produces_same_province() -> void:
 	)
 	assert_eq(p1.farming_pu, p2.farming_pu)
 	assert_eq(p1.stability, p2.stability)
-	assert_eq(p1.rice_stockpile, p2.rice_stockpile)
 
 
 # =============================================================================
@@ -540,4 +537,3 @@ func test_all_terrains_generate_valid_provinces() -> void:
 		assert_eq(total, 20, "Terrain %d PU should sum to 20" % terrains[i])
 		assert_true(p.garrison_pu >= 1)
 		assert_true(p.stability >= 70.0)
-		assert_true(p.rice_stockpile > 0.0)

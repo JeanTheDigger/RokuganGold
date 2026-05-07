@@ -56,9 +56,6 @@ func before_each() -> void:
 	province.town_pu = 2
 	province.military_pu = 1
 	province.population_pu = 8
-	province.rice_stockpile = 10.0
-	province.koku_stockpile = 5.0
-	province.iron_stockpile = 2.0
 	province.terrain_type = Enums.TerrainType.PLAINS
 	_provinces = {10: province}
 

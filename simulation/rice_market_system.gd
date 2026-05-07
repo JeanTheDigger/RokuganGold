@@ -20,12 +20,12 @@ const HONOR_SHARING_FAMINE_RESOLVED: float = 1.0
 # =============================================================================
 
 static func compute_surplus(
-	province: ProvinceData,
+	settlement: SettlementData,
 	seasons_of_consumption: int = 4,
 ) -> float:
-	var seasonal_need: float = province.population_pu * 0.001
+	var seasonal_need: float = settlement.population_pu * 0.001
 	var total_need: float = seasonal_need * seasons_of_consumption
-	return maxf(province.rice_stockpile - total_need, 0.0)
+	return maxf(settlement.rice_stockpile - total_need, 0.0)
 
 
 # =============================================================================
@@ -168,25 +168,25 @@ static func compute_sharing_honor(
 
 static func share_rice(
 	giver: L5RCharacterData,
-	giver_province: ProvinceData,
-	receiver_province: ProvinceData,
+	giver_settlement: SettlementData,
+	receiver_settlement: SettlementData,
 	amount: float,
 	recipient_starvation_stage: int,
 ) -> Dictionary:
 	if amount <= 0.0:
 		return {"result": "invalid", "honor_gain": 0.0}
 
-	if giver_province.rice_stockpile < amount:
+	if giver_settlement.rice_stockpile < amount:
 		return {"result": "insufficient", "honor_gain": 0.0}
 
 	if recipient_starvation_stage <= 0:
 		return {"result": "not_needed", "honor_gain": 0.0}
 
-	var seasonal_need: float = receiver_province.population_pu * 0.001
-	var resolves: bool = (receiver_province.rice_stockpile + amount) >= seasonal_need
+	var seasonal_need: float = receiver_settlement.population_pu * 0.001
+	var resolves: bool = (receiver_settlement.rice_stockpile + amount) >= seasonal_need
 
-	giver_province.rice_stockpile -= amount
-	receiver_province.rice_stockpile += amount
+	giver_settlement.rice_stockpile -= amount
+	receiver_settlement.rice_stockpile += amount
 
 	var honor: float = compute_sharing_honor(amount, recipient_starvation_stage, resolves)
 	giver.honor = minf(giver.honor + honor, 10.0)

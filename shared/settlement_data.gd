@@ -18,6 +18,11 @@ extends Resource
 @export var garrison_capacity: int = 0
 @export var current_garrison: int = 0
 
+# -- Resource Stockpiles (per GDD s4.3.7, s4.3.8) ----------------------------
+
+@export var rice_stockpile: float = 0.0
+@export var koku_stockpile: float = 0.0
+
 # -- Population ----------------------------------------------------------------
 
 @export var population_pu: int = 0

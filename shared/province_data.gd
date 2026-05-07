@@ -21,13 +21,6 @@ extends Resource
 
 @export var settlement_ids: Array[int] = []
 
-# -- Resource Stockpiles (lord-tier, per GDD s4.3) ----------------------------
-
-@export var rice_stockpile: float = 0.0
-@export var koku_stockpile: float = 0.0
-@export var iron_stockpile: float = 0.0
-@export var arms_stockpile: float = 0.0
-
 # -- Population ----------------------------------------------------------------
 
 @export var population_pu: int = 0

@@ -160,10 +160,12 @@ single-dice-entry-point and server-authoritative constraints.
   OperationalHierarchyType, KolatSect (7 sects), ShipClass (7 classes),
   KnowledgeSource (5 sources), KnowledgeConfidence (3 tiers).
 - **shared/province_data.gd** — ProvinceData Resource: terrain, adjacency,
-  resources (rice/koku/iron/arms), population PU breakdown, stability. Data model
-  only — no map generation (map is being worked on separately by the user).
+  population PU breakdown, stability. Data model only — no map generation
+  (map is being worked on separately by the user). Resource stockpiles
+  (rice, koku) live on SettlementData per GDD s4.3.7. Iron/arms pool at
+  clan level (no data model yet).
 - **shared/settlement_data.gd** — SettlementData Resource: 12 settlement types,
-  infrastructure array, garrison, population.
+  infrastructure array, garrison, population, rice_stockpile, koku_stockpile.
 
 ### NPC Decision Engine
 - **simulation/npc_data_structures.gd** — ImmediateNeed (generic target system),
@@ -449,7 +451,9 @@ All in /tests/, one file per system:
   `generate_character(id, name, clan, family, school, insight_rank, dice)` →
   L5RCharacterData with traits, skills, honor/glory, personality, age, koku.
   `generate_province(id, name, clan, family, terrain, total_pu, dice)` →
-  ProvinceData with PU distribution, stockpiles, stability, garrison.
+  ProvinceData with PU distribution, stability, garrison.
+  `generate_settlement(id, name, province, type, pop)` → SettlementData with
+  rice_stockpile (2 seasons buffer) and koku_stockpile (proportional to town_pu).
   Data tables: 38 family trait bonuses, 28 schools (all Great Clans), clan
   personality weights (bushido/shourido), terrain PU distributions, age ranges.
   Trait advancement: 4 points per rank above 1, 70% priority to focus rings.

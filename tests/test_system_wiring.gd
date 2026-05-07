@@ -324,9 +324,6 @@ func test_advance_day_returns_crime_results() -> void:
 	province.town_pu = 2
 	province.military_pu = 1
 	province.population_pu = 8
-	province.rice_stockpile = 10.0
-	province.koku_stockpile = 5.0
-	province.iron_stockpile = 2.0
 	province.terrain_type = Enums.TerrainType.PLAINS
 
 	var characters: Array[L5RCharacterData] = [_char]
@@ -364,9 +361,6 @@ func test_advance_day_returns_commitment_results() -> void:
 	province.town_pu = 2
 	province.military_pu = 1
 	province.population_pu = 8
-	province.rice_stockpile = 10.0
-	province.koku_stockpile = 5.0
-	province.iron_stockpile = 2.0
 	province.terrain_type = Enums.TerrainType.PLAINS
 
 	var characters: Array[L5RCharacterData] = [_char]
@@ -403,9 +397,6 @@ func test_advance_day_processes_due_commitment() -> void:
 	province.town_pu = 2
 	province.military_pu = 1
 	province.population_pu = 8
-	province.rice_stockpile = 10.0
-	province.koku_stockpile = 5.0
-	province.iron_stockpile = 2.0
 	province.terrain_type = Enums.TerrainType.PLAINS
 
 	var characters: Array[L5RCharacterData] = [_char]
@@ -451,9 +442,6 @@ func test_season_transition_decays_approach_penalties() -> void:
 	province.town_pu = 2
 	province.military_pu = 1
 	province.population_pu = 8
-	province.rice_stockpile = 10.0
-	province.koku_stockpile = 5.0
-	province.iron_stockpile = 2.0
 	province.terrain_type = Enums.TerrainType.PLAINS
 
 	var characters: Array[L5RCharacterData] = [_char]
@@ -1484,9 +1472,6 @@ func test_advance_day_processes_lord_death() -> void:
 	province.town_pu = 2
 	province.military_pu = 1
 	province.population_pu = 8
-	province.rice_stockpile = 10.0
-	province.koku_stockpile = 5.0
-	province.iron_stockpile = 2.0
 	province.terrain_type = Enums.TerrainType.PLAINS
 
 	var characters: Array[L5RCharacterData] = [vassal]
@@ -1544,9 +1529,6 @@ func test_advance_day_no_death_events_no_orphans() -> void:
 	province.town_pu = 2
 	province.military_pu = 1
 	province.population_pu = 8
-	province.rice_stockpile = 10.0
-	province.koku_stockpile = 5.0
-	province.iron_stockpile = 2.0
 	province.terrain_type = Enums.TerrainType.PLAINS
 
 	var characters: Array[L5RCharacterData] = [_char]

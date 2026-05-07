@@ -1,11 +1,18 @@
 extends GutTest
 
 
-func _make_province(id: int, rice: float = 10.0, pop: int = 1000) -> ProvinceData:
+func _make_settlement(id: int, province_id: int, rice: float = 10.0, pop: int = 1000) -> SettlementData:
+	var s := SettlementData.new()
+	s.settlement_id = id
+	s.province_id = province_id
+	s.rice_stockpile = rice
+	s.population_pu = pop
+	return s
+
+
+func _make_province(id: int) -> ProvinceData:
 	var p := ProvinceData.new()
 	p.province_id = id
-	p.rice_stockpile = rice
-	p.population_pu = pop
 	p.stability = 80.0
 	return p
 
@@ -29,21 +36,21 @@ func _make_character(honor: float = 5.0) -> L5RCharacterData:
 # -- Surplus Calculation -------------------------------------------------------
 
 func test_surplus_positive():
-	var p := _make_province(1, 10.0, 1000)
-	var surplus: float = RiceMarketSystem.compute_surplus(p, 4)
+	var s := _make_settlement(1, 1, 10.0, 1000)
+	var surplus: float = RiceMarketSystem.compute_surplus(s, 4)
 	# need = 1000 * 0.001 * 4 = 4.0
 	assert_almost_eq(surplus, 6.0, 0.01)
 
 
 func test_surplus_zero_when_tight():
-	var p := _make_province(1, 4.0, 1000)
-	var surplus: float = RiceMarketSystem.compute_surplus(p, 4)
+	var s := _make_settlement(1, 1, 4.0, 1000)
+	var surplus: float = RiceMarketSystem.compute_surplus(s, 4)
 	assert_almost_eq(surplus, 0.0, 0.01)
 
 
 func test_surplus_zero_when_deficit():
-	var p := _make_province(1, 2.0, 1000)
-	var surplus: float = RiceMarketSystem.compute_surplus(p, 4)
+	var s := _make_settlement(1, 1, 2.0, 1000)
+	var surplus: float = RiceMarketSystem.compute_surplus(s, 4)
 	assert_almost_eq(surplus, 0.0, 0.01)
 
 
@@ -224,28 +231,28 @@ func test_sharing_no_honor_when_not_needed():
 
 func test_share_rice_transfers():
 	var c := _make_character(5.0)
-	var giver_p := _make_province(1, 10.0)
-	var receiver_p := _make_province(2, 0.5, 500)
-	var result: Dictionary = RiceMarketSystem.share_rice(c, giver_p, receiver_p, 2.0, 2)
+	var giver_s := _make_settlement(1, 1, 10.0)
+	var receiver_s := _make_settlement(2, 2, 0.5, 500)
+	var result: Dictionary = RiceMarketSystem.share_rice(c, giver_s, receiver_s, 2.0, 2)
 	assert_eq(result["result"], "success")
 	assert_true(result["honor_gain"] > 0.0)
-	assert_almost_eq(giver_p.rice_stockpile, 8.0, 0.01)
-	assert_almost_eq(receiver_p.rice_stockpile, 2.5, 0.01)
+	assert_almost_eq(giver_s.rice_stockpile, 8.0, 0.01)
+	assert_almost_eq(receiver_s.rice_stockpile, 2.5, 0.01)
 
 
 func test_share_rice_insufficient():
 	var c := _make_character()
-	var giver_p := _make_province(1, 1.0)
-	var receiver_p := _make_province(2, 0.5)
-	var result: Dictionary = RiceMarketSystem.share_rice(c, giver_p, receiver_p, 5.0, 2)
+	var giver_s := _make_settlement(1, 1, 1.0)
+	var receiver_s := _make_settlement(2, 2, 0.5)
+	var result: Dictionary = RiceMarketSystem.share_rice(c, giver_s, receiver_s, 5.0, 2)
 	assert_eq(result["result"], "insufficient")
 
 
 func test_share_rice_not_needed():
 	var c := _make_character()
-	var giver_p := _make_province(1, 10.0)
-	var receiver_p := _make_province(2, 5.0)
-	var result: Dictionary = RiceMarketSystem.share_rice(c, giver_p, receiver_p, 2.0, 0)
+	var giver_s := _make_settlement(1, 1, 10.0)
+	var receiver_s := _make_settlement(2, 2, 5.0)
+	var result: Dictionary = RiceMarketSystem.share_rice(c, giver_s, receiver_s, 2.0, 0)
 	assert_eq(result["result"], "not_needed")
 
 

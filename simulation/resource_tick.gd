@@ -130,6 +130,7 @@ static func process_seasonal_tick(
 	}
 
 	settlement_meta["_provinces"] = provinces
+	settlement_meta["_settlements"] = settlements
 
 	if season == "spring":
 		_lock_planting(provinces, settlement_meta)
@@ -191,13 +192,46 @@ static func _process_harvest(
 		var locked_farming: float = float(meta.get("locked_farming_pu", prov.farming_pu))
 		var terrain_mult: float = prov.get_rice_multiplier()
 		var yield_amount: float = locked_farming * RICE_YIELD_PER_FARMING_PU_PER_YEAR * terrain_mult
-		prov.rice_stockpile += yield_amount
+		_distribute_rice_to_settlements(prov, settlement_meta, yield_amount)
 		harvest_results[prov.province_id] = {
 			"farming_pu": locked_farming,
 			"terrain_mult": terrain_mult,
 			"yield": yield_amount,
 		}
 	return harvest_results
+
+
+static func _distribute_rice_to_settlements(
+	province: ProvinceData,
+	settlement_meta: Dictionary,
+	rice_amount: float,
+) -> void:
+	var settlements: Array[SettlementData] = settlement_meta.get("_settlements", [])
+	var province_settlements: Array[SettlementData] = []
+	var total_pop: int = 0
+	for s: SettlementData in settlements:
+		if s.province_id == province.province_id:
+			province_settlements.append(s)
+			total_pop += s.population_pu
+	if province_settlements.is_empty():
+		return
+	if total_pop <= 0:
+		province_settlements[0].rice_stockpile += rice_amount
+		return
+	for s: SettlementData in province_settlements:
+		var share: float = rice_amount * (float(s.population_pu) / float(total_pop))
+		s.rice_stockpile += share
+
+
+static func get_province_rice(
+	province: ProvinceData,
+	settlements: Array[SettlementData],
+) -> float:
+	var total: float = 0.0
+	for s: SettlementData in settlements:
+		if s.province_id == province.province_id:
+			total += s.rice_stockpile
+	return total
 
 
 # ==============================================================================
@@ -210,28 +244,49 @@ static func _process_rice_consumption(
 ) -> Dictionary:
 	var results: Dictionary = {}
 	var provinces: Array[ProvinceData] = settlement_meta.get("_provinces", [])
+	var settlements: Array[SettlementData] = settlement_meta.get("_settlements", [])
 	for prov: ProvinceData in provinces:
-		var result: Dictionary = consume_rice_province(prov)
+		var result: Dictionary = consume_rice_province(prov, settlements)
 		results[prov.province_id] = result
 	return results
 
 
-static func consume_rice_province(province: ProvinceData) -> Dictionary:
+static func consume_rice_province(
+	province: ProvinceData,
+	settlements: Array[SettlementData],
+) -> Dictionary:
 	var civilian_pu: int = province.farming_pu + province.mining_pu + province.town_pu
 	var military_pu: int = province.military_pu
 	var civilian_cost: float = float(civilian_pu) * RICE_CONSUMPTION_PER_PU_PER_SEASON
 	var military_cost: float = float(military_pu) * MILITARY_RICE_PER_PU_PER_SEASON
 	var total_cost: float = civilian_cost + military_cost
-	var old_stockpile: float = province.rice_stockpile
-	province.rice_stockpile = maxf(0.0, province.rice_stockpile - total_cost)
+	var old_stockpile: float = get_province_rice(province, settlements)
+	_deduct_rice_from_settlements(province, settlements, total_cost)
+	var new_stockpile: float = get_province_rice(province, settlements)
 	var deficit: float = maxf(0.0, total_cost - old_stockpile)
 	return {
 		"civilian_cost": civilian_cost,
 		"military_cost": military_cost,
 		"total_cost": total_cost,
 		"deficit": deficit,
-		"stockpile_after": province.rice_stockpile,
+		"stockpile_after": new_stockpile,
 	}
+
+
+static func _deduct_rice_from_settlements(
+	province: ProvinceData,
+	settlements: Array[SettlementData],
+	amount: float,
+) -> void:
+	var remaining: float = amount
+	for s: SettlementData in settlements:
+		if s.province_id != province.province_id:
+			continue
+		if remaining <= 0.0:
+			break
+		var deduct: float = minf(s.rice_stockpile, remaining)
+		s.rice_stockpile -= deduct
+		remaining -= deduct
 
 
 # ==============================================================================
@@ -244,12 +299,14 @@ static func _process_starvation_check(
 ) -> Dictionary:
 	var results: Dictionary = {}
 	var provinces: Array[ProvinceData] = settlement_meta.get("_provinces", [])
+	var settlements: Array[SettlementData] = settlement_meta.get("_settlements", [])
 	var consumption: Dictionary = settlement_meta.get("_consumption", {})
 	for prov: ProvinceData in provinces:
 		var cons: Dictionary = consumption.get(prov.province_id, {})
 		var deficit: float = cons.get("deficit", 0.0)
 		var consecutive: int = settlement_meta.get("_deficit_seasons", {}).get(prov.province_id, 0)
-		var starv: Dictionary = check_starvation(prov, deficit, consecutive)
+		var prov_rice: float = get_province_rice(prov, settlements)
+		var starv: Dictionary = check_starvation(prov, deficit, consecutive, prov_rice)
 		if starv["stage"] != StarvationStage.CLEAR:
 			apply_starvation_loss(prov, starv["pu_loss_rate"])
 		results[prov.province_id] = starv
@@ -257,15 +314,16 @@ static func _process_starvation_check(
 
 
 static func check_starvation(
-	province: ProvinceData,
+	_province: ProvinceData,
 	deficit: float,
 	consecutive_deficit_seasons: int,
+	province_rice: float = 0.0,
 ) -> Dictionary:
 	if deficit <= 0.0:
 		return {"stage": StarvationStage.CLEAR, "pu_loss_rate": 0.0}
 
 	var stage: StarvationStage
-	if province.rice_stockpile <= 0.0 and deficit > 0.0:
+	if province_rice <= 0.0 and deficit > 0.0:
 		stage = StarvationStage.FAMINE
 	elif consecutive_deficit_seasons >= 3:
 		stage = StarvationStage.FAMINE
@@ -367,13 +425,15 @@ static func _process_population_adjustment(
 ) -> Dictionary:
 	var results: Dictionary = {}
 	var provinces: Array[ProvinceData] = settlement_meta.get("_provinces", [])
+	var settlements: Array[SettlementData] = settlement_meta.get("_settlements", [])
 	var starvation_data: Dictionary = settlement_meta.get("_starvation", {})
 	var peace_map: Dictionary = settlement_meta.get("_peace_seasons", {})
 	for prov: ProvinceData in provinces:
 		var starv: Dictionary = starvation_data.get(prov.province_id, {})
 		var stage: StarvationStage = starv.get("stage", StarvationStage.CLEAR)
 		var peace: int = peace_map.get(prov.province_id, 0)
-		var rate: float = compute_growth_rate(prov, stage, peace)
+		var prov_rice: float = get_province_rice(prov, settlements)
+		var rate: float = compute_growth_rate(prov, stage, peace, prov_rice)
 		var growth: Dictionary = apply_population_growth(prov, rate)
 		results[prov.province_id] = growth
 	return results
@@ -383,13 +443,14 @@ static func compute_growth_rate(
 	province: ProvinceData,
 	starvation_stage: StarvationStage,
 	peace_seasons: int,
+	province_rice: float = 0.0,
 ) -> float:
 	if starvation_stage != StarvationStage.CLEAR:
 		return 0.0
 
 	var rice_per_pu: float = 0.0
 	if province.population_pu > 0:
-		rice_per_pu = province.rice_stockpile / float(province.population_pu)
+		rice_per_pu = province_rice / float(province.population_pu)
 
 	var annual_rate: float = BASELINE_GROWTH_ANNUAL
 	if rice_per_pu >= STRONG_STOCKPILE_THRESHOLD:
@@ -436,8 +497,7 @@ static func _process_iron_production(
 
 static func produce_iron_province(province: ProvinceData, mine_quality: float) -> Dictionary:
 	var iron: float = float(province.mining_pu) * IRON_PER_MINING_PU_PER_SEASON * mine_quality
-	province.iron_stockpile += iron
-	return {"iron_produced": iron, "stockpile_after": province.iron_stockpile}
+	return {"iron_produced": iron}
 
 
 # ==============================================================================
@@ -450,17 +510,43 @@ static func _process_koku_generation(
 ) -> Dictionary:
 	var results: Dictionary = {}
 	var provinces: Array[ProvinceData] = settlement_meta.get("_provinces", [])
+	var settlements: Array[SettlementData] = settlement_meta.get("_settlements", [])
 	var location_mods: Dictionary = settlement_meta.get("_koku_modifiers", {})
 	for prov: ProvinceData in provinces:
 		if prov.town_pu <= 0:
 			continue
 		var loc_mod: float = location_mods.get(prov.province_id, 1.0)
-		var result: Dictionary = generate_koku_province(prov, loc_mod)
+		var result: Dictionary = generate_koku_province(prov, settlements, loc_mod)
 		results[prov.province_id] = result
 	return results
 
 
-static func generate_koku_province(province: ProvinceData, location_modifier: float) -> Dictionary:
+static func generate_koku_province(
+	province: ProvinceData,
+	settlements: Array[SettlementData],
+	location_modifier: float,
+) -> Dictionary:
 	var koku: float = float(province.town_pu) * KOKU_PER_TOWN_PU_PER_SEASON * location_modifier
-	province.koku_stockpile += koku
-	return {"koku_generated": koku, "stockpile_after": province.koku_stockpile}
+	_distribute_koku_to_settlements(province, settlements, koku)
+	return {"koku_generated": koku}
+
+
+static func _distribute_koku_to_settlements(
+	province: ProvinceData,
+	settlements: Array[SettlementData],
+	koku_amount: float,
+) -> void:
+	var province_settlements: Array[SettlementData] = []
+	var total_pop: int = 0
+	for s: SettlementData in settlements:
+		if s.province_id == province.province_id:
+			province_settlements.append(s)
+			total_pop += s.population_pu
+	if province_settlements.is_empty():
+		return
+	if total_pop <= 0:
+		province_settlements[0].koku_stockpile += koku_amount
+		return
+	for s: SettlementData in province_settlements:
+		var share: float = koku_amount * (float(s.population_pu) / float(total_pop))
+		s.koku_stockpile += share
