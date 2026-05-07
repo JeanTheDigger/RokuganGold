@@ -108,6 +108,7 @@ extends Resource
 @export var met_characters: Array[int] = []
 @export var knowledge_pool: Array[KnowledgeEntry] = []
 @export var known_contacts_by_clan: Dictionary = {}
+@export var favors: Array[FavorData] = []
 
 # -- Legal System (Section 11.3.14) --------------------------------------------
 
