@@ -404,11 +404,25 @@ All in /tests/, one file per system:
 - test_tattoo_system.gd (~100 tests)
 - test_character_sheet_field_index.gd (~45 tests)
 - test_system_wiring.gd (~20 tests)
+- test_world_generator.gd (~45 tests)
+
+### World Generator
+- **simulation/world_generator.gd** — Static factory methods for seeding initial
+  world state per GDD s22.4 generation templates and s4.3 resource rules.
+  `generate_character(id, name, clan, family, school, insight_rank, dice)` →
+  L5RCharacterData with traits, skills, honor/glory, personality, age, koku.
+  `generate_province(id, name, clan, family, terrain, total_pu, dice)` →
+  ProvinceData with PU distribution, stockpiles, stability, garrison.
+  Data tables: 38 family trait bonuses, 28 schools (all Great Clans), clan
+  personality weights (bushido/shourido), terrain PU distributions, age ranges.
+  Trait advancement: 4 points per rank above 1, 70% priority to focus rings.
+  Void: full rate for shugenja, half rate for others. Skill advancement: school
+  skills advance 80%/rank, 2-3 non-school skills added per rank.
+  Coordinate system and adjacency are NOT set — deferred for later.
 
 ### What's Next
 1. Integration tests — end-to-end DayOrchestrator test covering crime detection
    → topic broadcast → UPHOLD_LAW activation → investigation → conviction
-2. World generation helpers — initial character/province data seeding
 
 ### Systems Wired into NPC Loop
 The following subsystems are now integrated into the NPC decision loop:
