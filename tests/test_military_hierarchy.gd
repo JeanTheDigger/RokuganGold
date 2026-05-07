@@ -296,3 +296,72 @@ func test_phoenix_has_one_army():
 
 func test_companies_per_legion():
 	assert_eq(MilitaryHierarchy.COMPANIES_PER_LEGION, 7)
+
+
+# -- s57.17 — Direct Subordinate Query ----------------------------------------
+
+func _make_subordinate_char(id: int, lord: int, op_sup: int = -1) -> L5RCharacterData:
+	var c := L5RCharacterData.new()
+	c.character_id = id
+	c.lord_id = lord
+	c.operational_superior_id = op_sup
+	return c
+
+
+func test_get_direct_subordinates_feudal_only():
+	var lord := _make_subordinate_char(1, -1)
+	var v1 := _make_subordinate_char(10, 1)
+	var v2 := _make_subordinate_char(11, 1)
+	var other := _make_subordinate_char(20, 5)
+	var chars: Array[L5RCharacterData] = [lord, v1, v2, other]
+	var result := MilitaryHierarchy.get_direct_subordinates(1, chars)
+	assert_eq(result.size(), 2)
+
+
+func test_get_direct_subordinates_operational_only():
+	var commander := _make_subordinate_char(1, -1)
+	var op1 := _make_subordinate_char(10, 5, 1)
+	var chars: Array[L5RCharacterData] = [commander, op1]
+	var result := MilitaryHierarchy.get_direct_subordinates(1, chars)
+	assert_eq(result.size(), 1)
+	assert_eq(result[0].character_id, 10)
+
+
+func test_get_direct_subordinates_mixed():
+	var lord := _make_subordinate_char(1, -1)
+	var vassal := _make_subordinate_char(10, 1)
+	var op_sub := _make_subordinate_char(11, 5, 1)
+	var chars: Array[L5RCharacterData] = [lord, vassal, op_sub]
+	var result := MilitaryHierarchy.get_direct_subordinates(1, chars)
+	assert_eq(result.size(), 2)
+
+
+func test_get_direct_subordinates_deduplicates():
+	var lord := _make_subordinate_char(1, -1)
+	var both := _make_subordinate_char(10, 1, 1)
+	var chars: Array[L5RCharacterData] = [lord, both]
+	var result := MilitaryHierarchy.get_direct_subordinates(1, chars)
+	assert_eq(result.size(), 1)
+
+
+func test_get_direct_subordinates_excludes_self():
+	var lord := _make_subordinate_char(1, 1)
+	var chars: Array[L5RCharacterData] = [lord]
+	var result := MilitaryHierarchy.get_direct_subordinates(1, chars)
+	assert_eq(result.size(), 0)
+
+
+func test_get_direct_subordinates_empty():
+	var lord := _make_subordinate_char(1, -1)
+	var chars: Array[L5RCharacterData] = [lord]
+	var result := MilitaryHierarchy.get_direct_subordinates(1, chars)
+	assert_eq(result.size(), 0)
+
+
+func test_get_direct_vassals_is_alias():
+	var lord := _make_subordinate_char(1, -1)
+	var v := _make_subordinate_char(10, 1)
+	var chars: Array[L5RCharacterData] = [lord, v]
+	var r1 := MilitaryHierarchy.get_direct_subordinates(1, chars)
+	var r2 := MilitaryHierarchy.get_direct_vassals(1, chars)
+	assert_eq(r1.size(), r2.size())

@@ -26,6 +26,33 @@ const RESERVE_COMPANIES_PER_LEGION: int = 1
 
 
 # =============================================================================
+# 57.17 — Direct Subordinate Query (feudal + operational)
+# =============================================================================
+
+static func get_direct_subordinates(
+	character_id: int,
+	characters: Array[L5RCharacterData],
+) -> Array[L5RCharacterData]:
+	var result: Array[L5RCharacterData] = []
+	var seen: Dictionary = {}
+	for c: L5RCharacterData in characters:
+		if c.character_id == character_id:
+			continue
+		if c.lord_id == character_id or c.operational_superior_id == character_id:
+			if not seen.has(c.character_id):
+				seen[c.character_id] = true
+				result.append(c)
+	return result
+
+
+static func get_direct_vassals(
+	character_id: int,
+	characters: Array[L5RCharacterData],
+) -> Array[L5RCharacterData]:
+	return get_direct_subordinates(character_id, characters)
+
+
+# =============================================================================
 # 57.21.2 — Organizational Queries
 # =============================================================================
 

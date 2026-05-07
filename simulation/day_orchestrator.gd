@@ -711,11 +711,7 @@ static func _get_vassals(
 	lord: L5RCharacterData,
 	characters: Array[L5RCharacterData],
 ) -> Array[L5RCharacterData]:
-	var vassals: Array[L5RCharacterData] = []
-	for c: L5RCharacterData in characters:
-		if c.lord_id == lord.character_id:
-			vassals.append(c)
-	return vassals
+	return MilitaryHierarchy.get_direct_subordinates(lord.character_id, characters)
 
 
 # -- Festival Processing (s11.5) ----------------------------------------------

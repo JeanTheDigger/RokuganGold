@@ -1601,3 +1601,78 @@ func test_stale_intel_bonus_wired_into_score_all() -> void:
 		"PROBE should get +15 stale intel bonus")
 	assert_almost_eq(charm_option.stale_intel_bonus, 0.0, 0.001,
 		"CHARM should not get stale intel bonus")
+
+
+# -- s57.19 — New Wall/Taint ActionIDs ----------------------------------------
+
+func test_s57_19_purify_in_manage_taint_alignment() -> void:
+	var alignment_table: Dictionary = _scoring_tables.get("objective_alignment", {})
+	var manage_taint: Dictionary = alignment_table.get("MANAGE_TAINT", {})
+	assert_true(manage_taint.has("PURIFY_TAINTED_GROUND"),
+		"PURIFY_TAINTED_GROUND should be in MANAGE_TAINT alignment")
+	assert_eq(manage_taint["PURIFY_TAINTED_GROUND"], 95)
+
+
+func test_s57_19_wall_actions_in_maintain_fortification() -> void:
+	var alignment_table: Dictionary = _scoring_tables.get("objective_alignment", {})
+	var maintain: Dictionary = alignment_table.get("MAINTAIN_FORTIFICATION", {})
+	assert_true(maintain.has("FORTIFY_WALL_SECTION"))
+	assert_true(maintain.has("SEAL_WALL_BREACH"))
+	assert_eq(maintain["SEAL_WALL_BREACH"], 100)
+	assert_eq(maintain["FORTIFY_WALL_SECTION"], 95)
+
+
+func test_s57_19_wall_actions_in_defend_province() -> void:
+	var alignment_table: Dictionary = _scoring_tables.get("objective_alignment", {})
+	var defend: Dictionary = alignment_table.get("DEFEND_PROVINCE", {})
+	assert_true(defend.has("FORTIFY_WALL_SECTION"))
+	assert_true(defend.has("SEAL_WALL_BREACH"))
+	assert_true(defend.has("PURIFY_TAINTED_GROUND"))
+
+
+func test_s57_19_actions_in_skill_map() -> void:
+	var skill_map: Dictionary = _scoring_tables.get("action_skill_map", {})
+	assert_true(skill_map.has("PURIFY_TAINTED_GROUND"))
+	assert_true(skill_map.has("FORTIFY_WALL_SECTION"))
+	assert_true(skill_map.has("SEAL_WALL_BREACH"))
+	assert_eq(skill_map["PURIFY_TAINTED_GROUND"]["primary"], "Lore: Shadowlands")
+	assert_eq(skill_map["FORTIFY_WALL_SECTION"]["primary"], "Engineering")
+
+
+func test_s57_19_seal_wall_breach_costs_2_ap() -> void:
+	var cost: int = NPCDecisionEngine._get_ap_cost("SEAL_WALL_BREACH")
+	assert_eq(cost, 2, "SEAL_WALL_BREACH should cost 2 AP")
+	assert_eq(NPCDecisionEngine._get_ap_cost("PURIFY_TAINTED_GROUND"), 1)
+	assert_eq(NPCDecisionEngine._get_ap_cost("FORTIFY_WALL_SECTION"), 1)
+
+
+func test_s57_19_actions_in_context_list() -> void:
+	var actions: Array[String] = NPCDecisionEngine._get_actions_for_context(
+		Enums.ContextFlag.AT_OWN_HOLDINGS)
+	assert_true("PURIFY_TAINTED_GROUND" in actions)
+	assert_true("FORTIFY_WALL_SECTION" in actions)
+	assert_true("SEAL_WALL_BREACH" in actions)
+
+
+func test_s57_19_executor_handles_new_actions() -> void:
+	for action_id: String in ["PURIFY_TAINTED_GROUND", "FORTIFY_WALL_SECTION", "SEAL_WALL_BREACH"]:
+		assert_true(action_id in ActionExecutor.ADMINISTRATIVE_ACTIONS,
+			"%s should be in ADMINISTRATIVE_ACTIONS" % action_id)
+
+
+# -- s57.17 — Direct Subordinate in DayOrchestrator ---------------------------
+
+func test_s57_17_get_vassals_includes_operational_subordinates() -> void:
+	var lord := L5RCharacterData.new()
+	lord.character_id = 1
+	lord.lord_id = -1
+	var vassal := L5RCharacterData.new()
+	vassal.character_id = 10
+	vassal.lord_id = 1
+	var op_sub := L5RCharacterData.new()
+	op_sub.character_id = 11
+	op_sub.lord_id = 5
+	op_sub.operational_superior_id = 1
+	var chars: Array[L5RCharacterData] = [lord, vassal, op_sub]
+	var result := DayOrchestrator._get_vassals(lord, chars)
+	assert_eq(result.size(), 2, "Should include both feudal vassal and operational subordinate")

@@ -366,5 +366,17 @@
   "ABORT_OPERATION": {
     "primary": "Stealth",
     "secondary": null
+  },
+  "PURIFY_TAINTED_GROUND": {
+    "primary": "Lore: Shadowlands",
+    "secondary": "Intelligence"
+  },
+  "FORTIFY_WALL_SECTION": {
+    "primary": "Engineering",
+    "secondary": "Intelligence"
+  },
+  "SEAL_WALL_BREACH": {
+    "primary": "Engineering",
+    "secondary": "Intelligence"
   }
 }

@@ -446,6 +446,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array[S
 				"FOUND_VILLAGE", "BUILD_FORTIFICATION", "BUILD_SHRINE",
 				"FOUND_TEMPLE", "FOUND_MONASTERY", "COMMISSION_SHIP",
 				"ARRANGE_MARRIAGE", "APPOINT_TO_POSITION",
+				"PURIFY_TAINTED_GROUND", "FORTIFY_WALL_SECTION", "SEAL_WALL_BREACH",
 				"CRAFT", "MENTOR",
 				"DO_NOTHING", "REST",
 			]
@@ -568,6 +569,9 @@ static func _get_ap_cost(action_id: String) -> int:
 		"ISSUE_DUEL_CHALLENGE": 1,
 		"SEEK_PRETEXT": 1,
 		"SHARE_SUPPLIES": 1,
+		"PURIFY_TAINTED_GROUND": 1,
+		"FORTIFY_WALL_SECTION": 1,
+		"SEAL_WALL_BREACH": 2,
 	}
 	return costs.get(action_id, 1)
 

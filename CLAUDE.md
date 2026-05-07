@@ -399,11 +399,11 @@ All in /tests/, one file per system:
 - test_day_orchestrator.gd (~25 tests)
 - test_approach_evaluation.gd (~55 tests)
 - test_commitment_registry.gd (~60 tests)
-- test_military_hierarchy.gd (~40 tests)
+- test_military_hierarchy.gd (~47 tests)
 - test_zone_flag_matrix.gd (~53 tests)
 - test_tattoo_system.gd (~100 tests)
 - test_character_sheet_field_index.gd (~45 tests)
-- test_system_wiring.gd (~35 tests)
+- test_system_wiring.gd (~44 tests)
 - test_world_generator.gd (~45 tests)
 - test_resource_availability.gd (~25 tests)
 - test_court_availability.gd (~15 tests)
@@ -671,7 +671,7 @@ All in /tests/, one file per system:
   updating arriving characters' `met_characters` and `knowledge_pool` with
   co-located NPCs.
 
-### NPC Engine Amendments (s57.1–s57.5, s57.20)
+### NPC Engine Amendments (s57.1–s57.5, s57.17, s57.19, s57.20)
 - **s57.1 Allowlist Model** — Actions not listed in objective_alignment.json
   for the current NeedType are blocked from the scoring pool. Implemented as
   `apply_allowlist_filter()` between Phase 4 and Phase 5. Prevents unlisted
@@ -696,6 +696,18 @@ All in /tests/, one file per system:
   COMMISSION_SHIP, ARRANGE_MARRIAGE, APPOINT_TO_POSITION. Added to
   action_skill_map.json, personality_lean.json, context action lists
   (AT_OWN_HOLDINGS, AT_COURT), and ActionExecutor (ADMINISTRATIVE category).
+- **s57.17 Operational Superior Support** — `MilitaryHierarchy.get_direct_subordinates()`
+  returns characters where `lord_id == argument OR operational_superior_id == argument`,
+  deduplicated. `get_direct_vassals()` retained as alias. DayOrchestrator
+  `_get_vassals()` delegates to `get_direct_subordinates()` so strategic reviews
+  and vassal assignment include operational subordinates (military commanders).
+- **s57.19 Engine Table Entries** — 3 new ActionIDs: PURIFY_TAINTED_GROUND
+  (Lore: Shadowlands, Category 6, Kuni Shugenja), FORTIFY_WALL_SECTION
+  (Engineering, Category 6, Kaiu Engineer), SEAL_WALL_BREACH (Engineering,
+  Category 6, 2 AP, Kaiu Engineer Rank 3+). Added to action_skill_map,
+  objective_alignment (MANAGE_TAINT, MAINTAIN_FORTIFICATION, DEFEND_PROVINCE,
+  PERFORM_RITUAL), personality_lean (all 14 virtues), context action list
+  (AT_OWN_HOLDINGS), and ActionExecutor (ADMINISTRATIVE category).
 
 ### What's Next
 1. World generation coordinate system and adjacency
