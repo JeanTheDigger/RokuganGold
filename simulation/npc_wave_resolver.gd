@@ -77,13 +77,14 @@ static func resolve_day_applied(
 	approach_penalties: Array[Dictionary] = [],
 	commitments: Array[CommitmentData] = [],
 	military_data: Dictionary = {},
+	settlements: Array[SettlementData] = [],
 ) -> Dictionary:
 	var results: Array[Dictionary] = resolve_day_full(
 		characters, world_states, objectives_map, scoring_tables, filter_data,
 		dice_engine, action_skill_map, approach_penalties, commitments, military_data
 	)
 	var applied: Array[Dictionary] = EffectApplicator.apply_day_results(
-		results, characters_by_id, provinces, action_log
+		results, characters_by_id, provinces, action_log, settlements
 	)
 	return {
 		"results": results,

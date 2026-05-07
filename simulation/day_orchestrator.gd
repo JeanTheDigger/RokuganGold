@@ -32,6 +32,7 @@ static func advance_day(
 	favors: Array = [],
 	insurgencies: Array[InsurgencyData] = [],
 	next_insurgency_id: Array[int] = [1],
+	settlements: Array[SettlementData] = [],
 ) -> Dictionary:
 	var prev_season: int = time_system.get_season()
 
@@ -54,7 +55,7 @@ static func advance_day(
 	var day_result: Dictionary = NPCWaveResolver.resolve_day_applied(
 		characters, world_states, objectives_map, scoring_tables, filter_data,
 		dice_engine, action_skill_map, characters_by_id, provinces, action_log,
-		approach_penalties, commitments, military_data
+		approach_penalties, commitments, military_data, settlements
 	)
 
 	var letter_pass_results: Array[Dictionary] = _process_daily_letter_pass(
@@ -122,7 +123,7 @@ static func advance_day(
 	if current_season != prev_season:
 		seasonal_result = _process_season_transition(
 			characters, provinces, current_season, season_meta,
-			approach_penalties
+			approach_penalties, settlements
 		)
 		_decay_all_historical_modifiers(characters, ic_day)
 		insurgency_results = _process_insurgencies(
@@ -260,6 +261,7 @@ static func _process_season_transition(
 	current_season: int,
 	season_meta: Dictionary,
 	approach_penalties: Array[Dictionary] = [],
+	settlements: Array[SettlementData] = [],
 ) -> Dictionary:
 	_decay_all_knowledge(characters, current_season)
 
@@ -272,7 +274,6 @@ static func _process_season_transition(
 		province_array.append(provinces[pid])
 
 	var season_name: String = _season_to_name(current_season)
-	var settlements: Array[SettlementData] = []
 	var tick_result: Dictionary = ResourceTick.process_seasonal_tick(
 		province_array, settlements, season_name, season_meta
 	)
