@@ -47,17 +47,15 @@ static func resolve_blackmail(
 	defender_roll: int,
 	defender_honor: float,
 	secret_tier: int,
-	declared_raises: int,
 	disposition_tier: String = "neutral",
 ) -> Dictionary:
 	var defender_total: int = defender_roll + int(defender_honor)
 	defender_total += _disposition_defense_bonus(disposition_tier)
 
 	var free_raises: int = SECRET_FREE_RAISES.get(secret_tier, 0)
-	var tn: int = defender_total + (declared_raises * 5)
 	var effective_roll: int = attacker_roll + (free_raises * 5)
 
-	var success: bool = effective_roll >= tn
+	var success: bool = effective_roll >= defender_total
 	var favors_extracted: int = 0
 
 	if success:

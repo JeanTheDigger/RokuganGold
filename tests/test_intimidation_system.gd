@@ -5,7 +5,7 @@ extends GutTest
 # -- Blackmail tests ----------------------------------------------------------
 
 func test_blackmail_success_extracts_favors():
-	var result := IntimidationSystem.resolve_blackmail(35, 15, 3.0, 2, 0)
+	var result := IntimidationSystem.resolve_blackmail(35, 15, 3.0, 2)
 	# defender_total = 15 + 3 = 18, free_raises = 2, effective_roll = 35 + 10 = 45
 	# margin = 45 - 18 = 27, favors = 27/5 = 5
 	assert_true(result["success"])
@@ -14,22 +14,21 @@ func test_blackmail_success_extracts_favors():
 
 
 func test_blackmail_failure():
-	var result := IntimidationSystem.resolve_blackmail(10, 25, 5.0, 4, 2)
-	# defender_total = 25 + 5 = 30, tn = 30 + 10 = 40
-	# free_raises = 0, effective_roll = 10
+	var result := IntimidationSystem.resolve_blackmail(10, 25, 5.0, 4)
+	# defender_total = 25 + 5 = 30, free_raises = 0, effective_roll = 10
 	assert_false(result["success"])
 	assert_eq(result["favors_extracted"], 0)
 	assert_false(result["compliance_active"])
 
 
 func test_blackmail_always_costs_honor():
-	var result := IntimidationSystem.resolve_blackmail(10, 25, 5.0, 4, 0)
+	var result := IntimidationSystem.resolve_blackmail(10, 25, 5.0, 4)
 	assert_eq(result["honor_loss"], -0.3)
 	assert_eq(result["infamy_gain"], 0.1)
 
 
 func test_blackmail_tier1_secret_gives_3_free_raises():
-	var result := IntimidationSystem.resolve_blackmail(20, 10, 2.0, 1, 0)
+	var result := IntimidationSystem.resolve_blackmail(20, 10, 2.0, 1)
 	# defender_total = 10 + 2 = 12, free_raises = 3, effective_roll = 20 + 15 = 35
 	# margin = 35 - 12 = 23, favors = 23/5 = 4
 	assert_true(result["success"])
@@ -37,7 +36,7 @@ func test_blackmail_tier1_secret_gives_3_free_raises():
 
 
 func test_blackmail_tier4_secret_no_free_raises():
-	var result := IntimidationSystem.resolve_blackmail(20, 10, 2.0, 4, 0)
+	var result := IntimidationSystem.resolve_blackmail(20, 10, 2.0, 4)
 	# defender_total = 12, effective_roll = 20
 	# margin = 20 - 12 = 8, favors = 8/5 = 1
 	assert_true(result["success"])
@@ -45,7 +44,7 @@ func test_blackmail_tier4_secret_no_free_raises():
 
 
 func test_blackmail_friend_gives_defense_bonus():
-	var result := IntimidationSystem.resolve_blackmail(20, 10, 2.0, 3, 0, "friend")
+	var result := IntimidationSystem.resolve_blackmail(20, 10, 2.0, 3, "friend")
 	# defender_total = 10 + 2 + 5 = 17, free_raises = 1, effective_roll = 20 + 5 = 25
 	# margin = 25 - 17 = 8, favors = 1
 	assert_true(result["success"])
@@ -53,7 +52,7 @@ func test_blackmail_friend_gives_defense_bonus():
 
 
 func test_blackmail_enemy_gives_defense_penalty():
-	var result := IntimidationSystem.resolve_blackmail(15, 10, 2.0, 3, 0, "enemy")
+	var result := IntimidationSystem.resolve_blackmail(15, 10, 2.0, 3, "enemy")
 	# defender_total = 10 + 2 - 5 = 7, free_raises = 1, effective_roll = 15 + 5 = 20
 	# margin = 20 - 7 = 13, favors = 2
 	assert_true(result["success"])
@@ -146,18 +145,18 @@ func test_compliance_ends_at_friend_disposition():
 # -- Disposition defense modifier tests ---------------------------------------
 
 func test_neutral_no_bonus():
-	var result := IntimidationSystem.resolve_blackmail(20, 15, 2.0, 3, 0, "neutral")
-	# defender_total = 15 + 2 = 17
+	var result := IntimidationSystem.resolve_blackmail(20, 15, 2.0, 3, "neutral")
+	# defender_total = 15 + 2 = 17, free_raises = 1, effective_roll = 20 + 5 = 25
 	assert_true(result["success"])
 
 
 func test_ally_gives_defense_bonus():
-	var result := IntimidationSystem.resolve_blackmail(20, 15, 2.0, 3, 0, "ally")
+	var result := IntimidationSystem.resolve_blackmail(20, 15, 2.0, 3, "ally")
 	# defender_total = 15 + 2 + 5 = 22, free_raises = 1, effective_roll = 20 + 5 = 25
 	assert_true(result["success"])
 
 
 func test_bitter_enemy_gives_penalty():
-	var result := IntimidationSystem.resolve_blackmail(15, 15, 2.0, 3, 0, "bitter_enemy")
+	var result := IntimidationSystem.resolve_blackmail(15, 15, 2.0, 3, "bitter_enemy")
 	# defender_total = 15 + 2 - 5 = 12, free_raises = 1, effective_roll = 15 + 5 = 20
 	assert_true(result["success"])

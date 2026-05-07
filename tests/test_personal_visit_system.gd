@@ -122,6 +122,11 @@ func test_perform_for_gets_intimate_bonus():
 	assert_eq(result, 6)
 
 
+func test_negotiate_gets_intimate_bonus():
+	var result := PersonalVisitSystem.apply_intimate_bonus("NEGOTIATE", 4)
+	assert_eq(result, 7)
+
+
 func test_gossip_no_intimate_bonus():
 	var result := PersonalVisitSystem.apply_intimate_bonus("GOSSIP", 4)
 	assert_eq(result, 4)
@@ -138,9 +143,9 @@ func test_read_character_no_intimate_bonus():
 
 
 func test_get_intimate_bonus_category_1():
-	assert_eq(PersonalVisitSystem.get_intimate_bonus("FLATTERY"), 3)
-	assert_eq(PersonalVisitSystem.get_intimate_bonus("SINCERE_COMPLIMENT"), 3)
-	assert_eq(PersonalVisitSystem.get_intimate_bonus("SHARED_INTEREST"), 3)
+	assert_eq(PersonalVisitSystem.get_intimate_bonus("PERSUADE"), 3)
+	assert_eq(PersonalVisitSystem.get_intimate_bonus("IMPRESS"), 3)
+	assert_eq(PersonalVisitSystem.get_intimate_bonus("LISTEN_REFLECT"), 3)
 
 
 func test_get_intimate_bonus_non_category_1():
@@ -158,6 +163,7 @@ func test_all_category_1_are_in_visit_actions():
 
 func test_is_category_1_action():
 	assert_true(PersonalVisitSystem.is_category_1_action("CHARM"))
+	assert_true(PersonalVisitSystem.is_category_1_action("NEGOTIATE"))
 	assert_true(PersonalVisitSystem.is_category_1_action("DELIVER_GIFT"))
 	assert_false(PersonalVisitSystem.is_category_1_action("GOSSIP"))
 	assert_false(PersonalVisitSystem.is_category_1_action("PROBE"))
