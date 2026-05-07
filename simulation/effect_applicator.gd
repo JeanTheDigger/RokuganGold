@@ -37,6 +37,7 @@ static func apply(
 		return applied
 
 	_apply_disposition(effects, actor, target_id, applied)
+	_apply_recipient_effects(effects, actor, target_id, characters, applied)
 	_apply_honor(effects, actor, applied)
 	_apply_glory(effects, actor, applied)
 	_apply_province_effects(effects, result, provinces, applied, settlements)
@@ -71,6 +72,59 @@ static func _apply_disposition(
 		"new": new_val,
 		"delta": disp_change,
 	})
+
+
+# -- Recipient-side effects (gifts, etc.) -------------------------------------
+#
+# Some actions (DELIVER_GIFT especially) mutate the *recipient*'s disposition
+# toward the actor, not the actor's disposition toward the recipient. They
+# may also append temporary modifier dicts to the recipient and consume an
+# item from the actor's inventory.
+
+static func _apply_recipient_effects(
+	effects: Dictionary,
+	actor: L5RCharacterData,
+	target_id: int,
+	characters: Dictionary,
+	applied: Dictionary,
+) -> void:
+	var consume_id: int = effects.get("consume_item_id", -1)
+	if consume_id >= 0:
+		_remove_item_by_id(actor, consume_id)
+
+	if target_id < 0:
+		return
+	var recipient: L5RCharacterData = characters.get(target_id)
+	if recipient == null:
+		return
+
+	var disp_change: int = effects.get("recipient_disposition_change", 0)
+	if disp_change != 0:
+		var old_val: int = recipient.disposition_values.get(actor.character_id, 0)
+		var new_val: int = clampi(old_val + disp_change, -100, 100)
+		recipient.disposition_values[actor.character_id] = new_val
+		applied["disposition_changes"].append({
+			"actor_id": recipient.character_id,
+			"target_id": actor.character_id,
+			"old": old_val,
+			"new": new_val,
+			"delta": disp_change,
+		})
+
+	var modifiers: Array = effects.get("recipient_modifiers", [])
+	if not modifiers.is_empty():
+		var bucket: Array = recipient.temporary_modifiers.get(actor.character_id, [])
+		for mod in modifiers:
+			bucket.append(mod)
+		recipient.temporary_modifiers[actor.character_id] = bucket
+
+
+static func _remove_item_by_id(actor: L5RCharacterData, item_id: int) -> void:
+	for i in range(actor.items.size()):
+		var item: Dictionary = actor.items[i]
+		if item.get("item_id", -1) == item_id:
+			actor.items.remove_at(i)
+			return
 
 
 # -- Honor ---------------------------------------------------------------------

@@ -40,6 +40,9 @@ static func add_contact(
 	character: L5RCharacterData,
 	contact_id: int,
 	clan_id: String,
+	contact: L5RCharacterData = null,
+	clan_baselines: Dictionary = {},
+	family_baselines: Dictionary = {},
 ) -> void:
 	if contact_id in character.met_characters:
 		return
@@ -48,6 +51,14 @@ static func add_contact(
 		character.known_contacts_by_clan[clan_id] = []
 	if contact_id not in character.known_contacts_by_clan[clan_id]:
 		character.known_contacts_by_clan[clan_id].append(contact_id)
+
+	# Seed starting personal disposition from clan + family baselines (s12.2b)
+	# on first meeting. No-op if the caller didn't supply baselines or the
+	# contact char itself.
+	if contact != null and (not clan_baselines.is_empty() or not family_baselines.is_empty()):
+		CollectiveDisposition.seed_first_meeting(
+			character, contact, clan_baselines, family_baselines
+		)
 
 
 # -- Probe Visibility (GDD s55.4.7) -------------------------------------------
@@ -102,6 +113,8 @@ static func process_observe_court(
 	attendees: Array[L5RCharacterData],
 	quality: int,
 	current_season: int,
+	clan_baselines: Dictionary = {},
+	family_baselines: Dictionary = {},
 ) -> Array[KnowledgeEntry]:
 	var discovered: Array[KnowledgeEntry] = []
 	var unknown: Array[L5RCharacterData] = []
@@ -112,7 +125,7 @@ static func process_observe_court(
 	var max_discover: int = clampi(quality, 1, 3)
 	for i: int in range(mini(max_discover, unknown.size())):
 		var target: L5RCharacterData = unknown[i]
-		add_contact(observer, target.character_id, target.clan)
+		add_contact(observer, target.character_id, target.clan, target, clan_baselines, family_baselines)
 		var entry: KnowledgeEntry = make_entry(
 			Enums.KnowledgeSource.DIRECT_OBSERVATION,
 			"contact_discovered",
@@ -136,11 +149,24 @@ static func process_introduction(
 	introduced: L5RCharacterData,
 	is_kuge: bool,
 	current_season: int,
+	clan_baselines: Dictionary = {},
+	family_baselines: Dictionary = {},
 ) -> KnowledgeEntry:
-	add_contact(recipient, introduced.character_id, introduced.clan)
+	# add_contact may seed disposition from collective baselines (s12.2b).
+	# The introduction bonus then layers on top — both should compose, not
+	# clobber. A first-time introduction with active baselines puts the
+	# recipient at (clan*0.25 + family*0.5) + introduction_bonus.
+	var was_first_meeting: bool = introduced.character_id not in recipient.met_characters
+	add_contact(
+		recipient, introduced.character_id, introduced.clan,
+		introduced, clan_baselines, family_baselines,
+	)
 	var starting_disp: int = 2 if is_kuge else 3
-	if not recipient.disposition_values.has(introduced.character_id):
-		recipient.disposition_values[introduced.character_id] = starting_disp
+	if was_first_meeting:
+		var current: int = recipient.disposition_values.get(introduced.character_id, 0)
+		recipient.disposition_values[introduced.character_id] = clampi(
+			current + starting_disp, -100, 100
+		)
 
 	var entry: KnowledgeEntry = make_entry(
 		Enums.KnowledgeSource.DIRECT_OBSERVATION,
@@ -166,6 +192,9 @@ static func transfer_objective_knowledge(
 	objective: Dictionary,
 	current_season: int,
 	province_statuses: Array = [],
+	chars_by_id: Dictionary = {},
+	clan_baselines: Dictionary = {},
+	family_baselines: Dictionary = {},
 ) -> Array[KnowledgeEntry]:
 	var transferred: Array[KnowledgeEntry] = []
 	var target_tags: Array[String] = _extract_target_tags(objective)
@@ -184,7 +213,11 @@ static func transfer_objective_knowledge(
 	var target_clan: String = objective.get("target_clan", "")
 	if target_clan != "" and assigner.known_contacts_by_clan.has(target_clan):
 		for contact_id: int in assigner.known_contacts_by_clan[target_clan]:
-			add_contact(recipient, contact_id, target_clan)
+			var contact: L5RCharacterData = chars_by_id.get(contact_id)
+			add_contact(
+				recipient, contact_id, target_clan,
+				contact, clan_baselines, family_baselines,
+			)
 
 	var target_province_id: int = objective.get("target_province_id", -1)
 	if target_province_id >= 0:

@@ -206,11 +206,20 @@ static func get_province_rice(
 # Seasonal Tick Entry Point
 # ==============================================================================
 
+## Effective fraction of each province's local-tier passed-up rice that
+## ultimately reaches the Emperor's stockpile through the four upper
+## tiers of the cascade per GDD s4.3.7. Approximation only — does not
+## yet account for per-tier personality modifiers (those need the full
+## hierarchy wired up). 0.70 (provincial passes 70%) × 0.75 × 0.80 × 0.15.
+const EMPEROR_TAKE_FROM_PASSED_UP: float = 0.063
+
+
 static func process_seasonal_tick(
 	provinces: Array[ProvinceData],
 	settlements: Array[SettlementData],
 	season: String,
 	settlement_meta: Dictionary,
+	miya_inputs: Dictionary = {},
 ) -> Dictionary:
 	var results: Dictionary = {
 		"rice_consumed": {},
@@ -220,6 +229,7 @@ static func process_seasonal_tick(
 		"koku_generated": {},
 		"harvest": {},
 		"tax_collected": {},
+		"miya_blessing": {},
 	}
 
 	settlement_meta["_provinces"] = provinces
@@ -227,6 +237,13 @@ static func process_seasonal_tick(
 
 	if season == "spring":
 		_lock_planting(provinces, settlements, settlement_meta)
+		# Miya's Blessing fires after planting and BEFORE consumption per
+		# GDD s11.5b §3 — the injected rice can absorb the Spring draw and
+		# pull settlements out of Shortage before the starvation check.
+		if not miya_inputs.is_empty():
+			results["miya_blessing"] = _apply_miya_blessing(
+				provinces, settlements, miya_inputs, settlement_meta
+			)
 
 	if season == "autumn":
 		var harvest: Dictionary = _process_harvest(provinces, settlements, settlement_meta)
@@ -244,6 +261,11 @@ static func process_seasonal_tick(
 	if season == "autumn":
 		var taxes: Dictionary = _process_tax_cascade(provinces, settlements, settlement_meta)
 		results["tax_collected"] = taxes
+		# Persist the Emperor's approximate income for next Spring's Blessing
+		# allocation (s11.5b §2.1).
+		settlement_meta["last_autumn_emperor_tax_income"] = (
+			_compute_emperor_income_from_cascade(taxes)
+		)
 
 	var pop_changes: Dictionary = _process_population_adjustment(provinces, settlements, settlement_meta)
 	results["population_changes"] = pop_changes
@@ -255,6 +277,173 @@ static func process_seasonal_tick(
 	results["koku_generated"] = koku
 
 	return results
+
+
+# ==============================================================================
+# Miya's Blessing application (s11.5b)
+# ==============================================================================
+#
+# `miya_inputs` is the dict assembled by DayOrchestrator. Required keys:
+#   "emperor_archetype": StrategicReview.EmperorArchetype
+#   "emperor_settlement_id": int   -- where the Imperial stockpile lives
+#   "otosan_uchi_pu": float        -- for the reserve floor
+#   "emperor_autumn_tax_income": float  -- previous Autumn income
+#   "current_ic_year": int
+#   "petition_bonuses": Dictionary -- province_id -> int (optional)
+#   "exclusions": Dictionary       -- province_id -> {in_rebellion, over_taint_threshold}
+#   "war_history": Dictionary      -- province_id -> bool (had active war last year)
+#   "raid_history": Dictionary     -- province_id -> bool
+#   "pu_decline": Dictionary       -- province_id -> float (0.0..1.0)
+# Returns the MiyaBlessingSystem result dict, plus an "applied" sub-dict
+# describing the actual rice/stability/year-tracking mutations performed.
+
+static func _apply_miya_blessing(
+	provinces: Array[ProvinceData],
+	settlements: Array[SettlementData],
+	miya_inputs: Dictionary,
+	settlement_meta: Dictionary,
+) -> Dictionary:
+	var current_ic_year: int = int(miya_inputs.get("current_ic_year", -1))
+	var emperor_settlement_id: int = int(miya_inputs.get("emperor_settlement_id", -1))
+	var emperor_settlement: SettlementData = null
+	for s in settlements:
+		if s.settlement_id == emperor_settlement_id:
+			emperor_settlement = s
+			break
+
+	var stockpile: float = 0.0
+	if emperor_settlement != null:
+		stockpile = emperor_settlement.rice_stockpile
+
+	var scored: Array[Dictionary] = _build_scored_provinces(
+		provinces, settlements, miya_inputs, settlement_meta, current_ic_year
+	)
+
+	var inputs: Dictionary = {
+		"emperor_archetype": miya_inputs.get(
+			"emperor_archetype", StrategicReview.EmperorArchetype.IRON
+		),
+		"emperor_autumn_tax_income": float(miya_inputs.get("emperor_autumn_tax_income", 0.0)),
+		"emperor_stockpile": stockpile,
+		"otosan_uchi_pu": float(miya_inputs.get("otosan_uchi_pu", 0.0)),
+		"scored_provinces": scored,
+		"province_settlements": _group_settlements_by_province(provinces, settlements),
+	}
+
+	var result: Dictionary = MiyaBlessingSystem.process_annual_blessing(inputs)
+
+	if not result.get("fired", false):
+		return result
+
+	# Apply: withdraw from Emperor's stockpile, deposit into selected
+	# settlements, bump province stability, mark last_blessed_ic_year.
+	if emperor_settlement != null:
+		emperor_settlement.rice_stockpile = maxf(
+			0.0, emperor_settlement.rice_stockpile - float(result.get("allocation_total", 0.0))
+		)
+	var grants: Dictionary = result.get("settlement_rice_grants", {})
+	for s in settlements:
+		if grants.has(s.settlement_id):
+			s.rice_stockpile += float(grants[s.settlement_id])
+	# One-season +1% pop growth (§6.3) — stash by province_id; the
+	# population adjustment step reads this dict and adds to its rate.
+	var growth_bonus: Dictionary = {}
+	var pop_growth_bonus: float = float(result.get("pop_growth_bonus", 0.0))
+	for prov in provinces:
+		if prov.province_id in result.get("selected_province_ids", []):
+			prov.stability = clampf(
+				prov.stability + float(result.get("stability_bonus", 0)),
+				0.0, 100.0,
+			)
+			if current_ic_year >= 0:
+				prov.last_blessed_ic_year = current_ic_year
+			growth_bonus[prov.province_id] = pop_growth_bonus
+	settlement_meta["_miya_growth_bonus"] = growth_bonus
+	return result
+
+
+static func _build_scored_provinces(
+	provinces: Array[ProvinceData],
+	settlements: Array[SettlementData],
+	miya_inputs: Dictionary,
+	settlement_meta: Dictionary,
+	current_ic_year: int,
+) -> Array[Dictionary]:
+	var scored: Array[Dictionary] = []
+	var petition_bonuses: Dictionary = miya_inputs.get("petition_bonuses", {})
+	var exclusions: Dictionary = miya_inputs.get("exclusions", {})
+	var war_history: Dictionary = miya_inputs.get("war_history", {})
+	var raid_history: Dictionary = miya_inputs.get("raid_history", {})
+	var pu_decline: Dictionary = miya_inputs.get("pu_decline", {})
+
+	for prov in provinces:
+		var pid: int = prov.province_id
+		var blessed_last_year: bool = (
+			current_ic_year > 0 and prov.last_blessed_ic_year == current_ic_year - 1
+		)
+		var blessed_two_years_ago: bool = (
+			current_ic_year > 1 and prov.last_blessed_ic_year == current_ic_year - 2
+		)
+		var conditions: Dictionary = {
+			"stability": prov.stability,
+			"worst_starvation_stage": _worst_starvation_in_province(prov, settlement_meta),
+			"had_active_war": bool(war_history.get(pid, false)),
+			"had_raid": bool(raid_history.get(pid, false)),
+			"has_insurgency": prov.active_insurgency_id >= 0,
+			"pu_decline_pct": float(pu_decline.get(pid, 0.0)),
+			"blessed_last_year": blessed_last_year,
+			"blessed_two_years_ago": blessed_two_years_ago,
+			"petition_bonus": int(petition_bonuses.get(pid, 0)),
+		}
+		var ex_data: Dictionary = exclusions.get(pid, {})
+		var entry: Dictionary = {
+			"province_id": pid,
+			"score": MiyaBlessingSystem.compute_need_score(conditions),
+			"stability": prov.stability,
+			"population_pu": float(sum_population_pu(prov, settlements)),
+			"excluded": MiyaBlessingSystem.is_excluded(ex_data),
+		}
+		scored.append(entry)
+	return scored
+
+
+static func _worst_starvation_in_province(
+	province: ProvinceData,
+	settlement_meta: Dictionary,
+) -> int:
+	## Reads from the previous tick's "_starvation" entry if present; otherwise
+	## CLEAR. Note: at Spring start this is the prior season's stage — exactly
+	## the signal Miya wants when deciding which provinces are most at risk
+	## entering the new year. Starvation results are keyed by province_id with
+	## a single { stage, pu_loss_rate } dict per province.
+	var starv_data: Dictionary = settlement_meta.get("_starvation", {})
+	var entry: Dictionary = starv_data.get(province.province_id, {})
+	return int(entry.get("stage", StarvationStage.CLEAR))
+
+
+static func _group_settlements_by_province(
+	provinces: Array[ProvinceData],
+	settlements: Array[SettlementData],
+) -> Dictionary:
+	var grouped: Dictionary = {}
+	for prov in provinces:
+		var bucket: Array = []
+		for s in settlements:
+			if s.province_id == prov.province_id:
+				bucket.append(s)
+		grouped[prov.province_id] = bucket
+	return grouped
+
+
+static func _compute_emperor_income_from_cascade(taxes: Dictionary) -> float:
+	## Approximation of Emperor's Autumn income from the local-tier cascade
+	## results. Real cascade should sum each tier's retention; until the full
+	## hierarchy is wired, multiply total passed-up rice by the upper-tier
+	## product (0.70 × 0.75 × 0.80 × 0.15 = 0.063).
+	var total_passed_up: float = 0.0
+	for pid in taxes:
+		total_passed_up += float(taxes[pid].get("passed_up", 0.0))
+	return total_passed_up * EMPEROR_TAKE_FROM_PASSED_UP
 
 
 # ==============================================================================
@@ -509,6 +698,9 @@ static func _process_population_adjustment(
 	var results: Dictionary = {}
 	var starvation_data: Dictionary = settlement_meta.get("_starvation", {})
 	var peace_map: Dictionary = settlement_meta.get("_peace_seasons", {})
+	# One-season Miya's Blessing growth bonus (s11.5b §6.3) — keyed by
+	# province_id and added to the computed rate for blessed provinces.
+	var miya_growth_bonus: Dictionary = settlement_meta.get("_miya_growth_bonus", {})
 	for prov: ProvinceData in provinces:
 		var starv: Dictionary = starvation_data.get(prov.province_id, {})
 		var stage: StarvationStage = starv.get("stage", StarvationStage.CLEAR)
@@ -516,6 +708,7 @@ static func _process_population_adjustment(
 		var total_pop: int = sum_population_pu(prov, settlements)
 		var prov_rice: float = get_province_rice(prov, settlements)
 		var rate: float = compute_growth_rate(total_pop, stage, peace, prov_rice)
+		rate += float(miya_growth_bonus.get(prov.province_id, 0.0))
 		var growth: Dictionary = apply_population_growth_settlements(prov, settlements, rate)
 		results[prov.province_id] = growth
 	return results

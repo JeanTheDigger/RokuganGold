@@ -437,6 +437,15 @@ All in /tests/, one file per system:
 - test_objective_progress.gd (~35 tests)
 - test_festival_system.gd (~55 tests)
 - test_simulation_scheduler.gd (~20 tests)
+- test_gift_giving_system.gd (~39 tests)
+- test_biological_family.gd (~42 tests)
+- test_collective_disposition.gd (~37 tests)
+- test_miya_blessing_system.gd (~50 tests)
+- test_miya_blessing_wiring.gd (~14 tests)
+- test_miya_blessing_followup.gd (~13 tests)
+- test_togashi_oversight.gd (~49 tests)
+- test_phoenix_council.gd (~51 tests)
+- test_intra_clan_civil_war.gd (~59 tests)
 
 ### Festival System (s11.5)
 - **simulation/festival_system.gd** — Empire-wide canonical festivals, Rokuyo
@@ -796,6 +805,412 @@ All in /tests/, one file per system:
   CONDUCT_COMMERCE (100), BEGIN_TRAVEL (60), PURCHASE_MARKET (50),
   NEGOTIATE (45), WRITE_LETTER (35), ASSESS_PROVINCE_STATUS (30), DO_NOTHING (0).
 
+### Intra-Clan Civil War (s53.2)
+- **simulation/intra_clan_civil_war.gd** — `IntraClanCivilWar` pure
+  simulation class implementing the generalized civil-war system per
+  GDD s53.2. Triggered when a Family Daimyo (or higher) refuses lawful
+  authority; produces faction assignments, war-score tracking, stability
+  bleed, resolution detection, defection mechanics, and the empire-wide
+  Precedent Effect.
+  Four-value `Faction` enum (NONE, LEGITIMACY, REBEL, RONIN).
+  `evaluate_loyalty(npc, rebel_lord_id, completion_rate, grievance_visible,
+  rebel_was_failing)` runs the GDD's 5-factor scoring: Chugi (30%),
+  disposition toward rebel (25%), rebel competence (20%, bracketed at
+  ≥75% / 50-74% / <50%), grievance legitimacy (15%, with no-info safe
+  default toward Legitimacy), Ishi ambition (10%). Returns `{faction,
+  rebel_score, chugi_pull, disposition_pull}`. Ronin path fires when
+  both Chugi pull and disposition pull are below 40 — character has no
+  strong attachment in either direction.
+  `apply_seasonal_consequences(state, rebel_lord, provinces, current_season)`
+  applies the −3 / −5 / −7 stability penalty (escalating at 8 and 12
+  seasons) to all clan provinces and the −0.3 Honor/season hemorrhage to
+  the rebel lord. Honor floors at 0.
+  War Score shifts (s53.2.5): `record_defection` (±12 family daimyo,
+  ±5 provincial), `record_rebel_disgrace` (+15), `record_imperial_edict`
+  (±10), `record_foreign_intervention` (±8). All clamp to 0..100.
+  Resolution: `check_legitimacy_victory` (capitulation, Honor < 0,
+  seat lost). `tick_rebel_victory_counter(state, rebel, holds_seat,
+  has_allies)` requires all three conditions for 6 consecutive seasons;
+  resets on any failure. `is_rebel_victory_achieved()` queries the
+  threshold.
+  `can_seize_championship(state, clan, was_family_daimyo,
+  incumbent_disgraced_or_dead)` enforces the 90+ war score gate AND
+  the absolute Dragon/Phoenix exceptions (`SEIZURE_FORBIDDEN_CLANS`).
+  Defection (s53.2.8): `defection_trigger_fired` checks all four GDD
+  triggers (lord killed, edict against faction, faction war-score
+  Desperate, disposition-toward-leader Enemy).
+  `apply_defection_consequences` applies −0.5 Honor on defector and
+  −15 disposition from every former faction member.
+  Precedent Effect (s53.2.10): `apply_precedent_effect` adds +3
+  (standard rebel victory) or +5 (Championship Seizure) to the world's
+  defy-bonus modifier dict, expiring 5 seasons later. Modifiers stack.
+  `tick_precedent_decay` removes expired entries.
+  `finalise(state, season, legitimacy_won)` marks the war resolved.
+  Deferred (depend on systems not yet built):
+  Army reconstitution / Go-hatamoto reform (s53.2.3 — needs full
+  military hierarchy), tax cascade break (current cascade is
+  approximation only), Imperial Edict gating, full Crisis topic
+  routing for the trigger topic, Section 22.5 succession integration
+  for post-victory FILL_VACANCY chains.
+
+### Phoenix Elemental Council — Phoenix Clan Governance Exception (s55.10.3)
+- **simulation/phoenix_council.gd** — `PhoenixCouncil` pure simulation
+  class implementing the Phoenix governance per GDD s55.10.3.
+  The Shiba Champion proposes; the five-Master Elemental Council approves
+  major decisions by 3-of-5 majority vote. Per-Master temperament
+  dominates voting behavior; Defiance and Overreach paths track
+  escalation between Champion and Council.
+  Five-value `Master` enum (FIRE, WATER, AIR, EARTH, VOID) and 11-value
+  `DecisionType` enum split into `MAJOR_DECISIONS` (require Council
+  vote) and Champion-handled (no vote needed).
+  `MASTER_VOTE_BASE` weights per-element: Fire +15 on DECLARE_WAR / -10
+  on SIGN_TREATY; Water +10 on SIGN_TREATY / +5 MAJOR_RESOURCE_SPEND;
+  Air +15 on SIGN_TREATY / -15 on DECLARE_WAR / -10 on DEPLOY_GO_HATAMOTO;
+  Earth -15 on DECLARE_WAR / +5 SIGN_TREATY / -10 COMMIT_SHUGENJA.
+  Void Master uses an omen-based random model (40% YES baseline,
+  ±20% for spiritual dimension match, ~10% chance to abstain).
+  Vote modifiers: Friend disposition (+5), Rival (-5), Tier 1 crisis
+  override (+15), element-threatened lock-in (+20).
+  `tally_vote()` returns
+  `{passed, yes, no, abstain, deadlocked, votes}`. Deadlock detected
+  when Void abstains and YES==NO and not passed.
+  `table_proposal()` / `champion_may_break_tie()` enforce s55.10.3.4
+  deadlock resolution — proposal must be tabled twice before the
+  Champion may break the tie at -0.3 Honor cost.
+  Defiance Path (s55.10.3.5) — `handle_unilateral_action()` increments
+  the cumulative defiance counter (no clean-slate per s55.10.3.5
+  escalation scope). Stage queries: `is_diplomatic_suspended()` (Stage
+  2+), `is_shugenja_withdrawn()` (Stage 3, Phoenix Go-hatamoto loses
+  shugenja support), `is_unfit_declaration_active()` (Stage 4, formal
+  removal demand). `handle_compliant_season()` unwinds one stage but
+  does not reset lifetime defiance count.
+  Overreach Path (s55.10.3.6) — `handle_overreach_trigger()` for
+  generic triggers; `track_consecutive_crisis_veto()` (3 consecutive
+  vetoes of crisis-response proposals) and
+  `track_consecutive_obstruction()` (3 seasons of total Council
+  refusal) automatically increment overreach. Stage queries:
+  `is_emperor_appeal_available()` (Stage 2+), `is_compact_declared_violated()`
+  (Stage 3), `is_overreach_schism_imminent()` (Stage 4).
+  `phoenix_champion_authority` flag tracks post-schism Champion
+  victory. `grant_champion_authority()` sets it; `restore_council_compact()`
+  clears it AND zeroes all defiance/overreach state. Reincarnation
+  inheritance: `reincarnated_champion_evaluates_restore()` evaluates
+  whether a new Champion who inherited the flag voluntarily restores
+  the compact based on virtues + duty score + disposition toward
+  Council.
+  Master vacancy queries: `count_living_masters()`,
+  `can_council_self_govern()` (3+ Masters required),
+  `champion_appoints_replacements()` (true below quorum — significant
+  power shift during schism), `is_council_extinct()`.
+  State held in plain Dictionary owned by caller; `make_initial_state()`
+  factories it.
+  Deferred (depend on systems not yet built):
+  Phoenix Schism Crisis (s55.10.3.7), Shiba Reincarnation Mechanic
+  (s55.10.3.8 — depends on Section 22.5 succession), Grand Ritual
+  threat integration, Imperial Edict appeal mediation.
+
+### Togashi Oversight — Dragon Clan Governance Exception (s55.10.2)
+- **simulation/togashi_oversight.gd** — `TogashiOversight` pure simulation
+  class implementing the Dragon-specific governance per GDD s55.10.2.
+  The Mirumoto FC runs the seasonal Strategic Evaluation on behalf of
+  the Clan Champion position (Togashi the Kami). Togashi monitors four
+  cosmic axes and forces directives when his dissatisfaction crosses
+  threshold.
+  Four-value `Axis` enum: BALANCE_OF_POWER, IMPERIAL_COHESION,
+  SPIRITUAL_HEALTH, SHADOWLANDS_CONTAINMENT.
+  Per-axis concern checks read world state directly (no information
+  channels — Togashi is cosmically informed): clan_strengths +30%
+  dominance, 2+ inter-clan wars OR emperor vacant OR 5+ rebellions,
+  failing worship/realm overlaps/PTL outside Shadowlands, wall breach
+  OR Tier 2+ incursion OR Crab readiness < 50%.
+  `tick_oversight()` updates dissatisfaction per axis: -10/season when
+  no concern, -5/season when concern active and FC's directives are
+  aligned, +15/season when concern unaligned. Dissatisfaction floors
+  at 0; threshold for intervention is 50.
+  `is_directive_aligned()` heuristic-matches StrategicReview.Directive
+  values to each axis (war-readiness/seek-peace for balance and
+  cohesion; explicit `addresses_spiritual` / `addresses_shadowlands`
+  tags for the latter two — those have no native StrategicReview path).
+  `generate_forced_directive(axis)` produces a directive dict
+  flagged `forced_by_champion: true` with axis tag and address-flags.
+  `evaluate_compliance(fc, directive, togashi_id, repeated, conflict)`:
+  Comply = Chugi (+10) + Rei (+5) + clamped disposition toward Togashi
+  (±20) + repeated-letter Meiyo bonus (+5, +5 more if Meiyo virtue).
+  Defy = Ishi (+10) + Ketsui (+8) + conflict_modifier (0–20).
+  Compliance unwinds escalation by 1 stage and resets dissatisfaction
+  to 30 on the triggering axis. Defiance increments `defiance_count`
+  cumulatively (s55.10.2.6 — counter is NOT per-axis), capped at 4.
+  Stage queries: `is_authority_locked()` (Stage 2+, blocks formal
+  Champion powers), `is_order_withdrawn()` (Stage 3, Wandering Togashi
+  recall + tattoo suspension), `is_removal_triggered()` (Stage 4,
+  formal removal — handles via the standard succession system once
+  s22.5 lands). `get_diplomatic_credibility_modifier()` returns -5
+  during authority lockout.
+  Forced-directive lifecycle: `add_forced_directive` replaces any
+  existing entry on the same axis (one per axis at a time);
+  `should_lift_forced_directive` fires below dissatisfaction 20;
+  `remove_forced_directive` filters by axis.
+  `process_seasonal_oversight()` is the high-level driver — caller
+  invokes it after the Mirumoto FC's seasonal review with the FC's
+  directives + world state. Returns `{tick, intervention_fired,
+  compliance, forced_directive}`. State is held in a plain Dictionary
+  owned by the caller; `make_initial_state()` factories it.
+  Deferred (depend on systems not yet built):
+  Dragon Schism Crisis (s55.10.2.8), assault on the High House of
+  Light (Togashi vanish-and-return mechanics), foreign-clan
+  intervention escalation, Section 53.2 civil war integration,
+  Section 22.5 succession integration for Stage 4 removal.
+
+### Miya's Blessing — Annual World Map Event (s11.5b)
+- **simulation/miya_blessing_system.gd** — Annual charitable Rice transfer
+  per GDD s11.5b. Pure simulation class. Fires once per year at the start
+  of Spring, after planting and before rice consumption — the injected
+  Rice can pull settlements out of Shortage before the starvation check.
+  Five `BLESSING_RATE` values keyed by `StrategicReview.EmperorArchetype`:
+  Benevolent 20%, Iron 15% (default), Cunning 10%, Warlike 5%, Tyrant 0%.
+  `compute_allocation(tax_income, rate, stockpile, otosan_uchi_pu)`
+  applies (1) blessing rate, (2) `MAX_TOTAL=15.0` per-year ceiling
+  (5.0 × 3), and (3) the Imperial reserve floor (`OU_PU × 0.25` must
+  remain) — clamping the result to whatever the Emperor's stockpile
+  can spare without starving the capital. `is_suspended(allocation)`
+  flags any total below `MIN_THRESHOLD=0.50`.
+  Need score per GDD §4.1: starvation tier (Shortage/Hunger/Famine =
+  +5/+10/+20), stability bracket (Restless/Volatile/Broken = +2/+5/+10),
+  +5 active war, +3 raided, +3 insurgency, +5 PU decline ≥10%, +10 if
+  ≥25% (replaces the +5), +2 rotation if not blessed last year (and not
+  the year before that), -5 malus if blessed last year, plus Winter
+  Court petition contributions.
+  `compute_petition_bonus(success, raises)` = +8 base + 2 per Raise.
+  `select_provinces(scored)` picks up to 3 by score desc, tiebreaking
+  on lowest stability, then smaller population. Excluded provinces
+  (Shadowlands taint above maho threshold, active rebellion) are
+  filtered before selection. `distribute_to_settlements()` allocates
+  each province's share proportionally by `population_pu` across that
+  province's settlements (zero-PU settlements skipped).
+  `process_annual_blessing(inputs)` is the top-level orchestrator —
+  returns a result dict with `fired`, `suspended`, `suspension_reason`
+  ("tyrant_archetype" or "below_threshold"), `allocation_total`,
+  `allocation_per_province`, `selected_province_ids`,
+  `settlement_rice_grants`, `stability_bonus` (+5), and
+  `pop_growth_bonus` (+1%). The system itself stays pure — the wiring
+  (below) does the mutations.
+
+- **Miya's Blessing wiring** —
+  `ResourceTick.process_seasonal_tick()` accepts an optional `miya_inputs`
+  dict. When `season == "spring"` and the dict is non-empty, runs the
+  Blessing AFTER planting and BEFORE rice consumption (per GDD §3 — the
+  injected rice can absorb the Spring draw). Mutates the Imperial
+  settlement's `rice_stockpile`, deposits each grant into the recipient
+  settlements proportionally by `population_pu`, applies `+5 stability`
+  to each selected province (clamped 0–100), and stamps
+  `province.last_blessed_ic_year`. After the autumn tax cascade,
+  `season_meta["last_autumn_emperor_tax_income"]` is set to an
+  approximation: `sum(passed_up) × 0.063` (the four-tier upper-cascade
+  product 0.70 × 0.75 × 0.80 × 0.15) — a placeholder until the full
+  hierarchy cascades through individual lord characters.
+  `ProvinceData` gains `last_blessed_ic_year: int = -1` (sentinel for
+  never blessed).
+  `DayOrchestrator.advance_day()` accepts optional `miya_inputs` and
+  threads it into `_process_season_transition`, which injects the IC
+  year (via `time_system.get_ic_year()`) and reads
+  `last_autumn_emperor_tax_income` from season_meta before passing to
+  ResourceTick.
+  `WorldStateData` gains `emperor_id`, `emperor_settlement_id`,
+  `emperor_archetype`, and `miya_representative_id` fields plus a
+  `_build_miya_inputs()` helper that assembles the dict from world state.
+  Returns `{}` (no-op) when the Imperial capital isn't fully configured.
+  `advance_one_day()` calls it automatically.
+
+- **Miya's Blessing follow-up (s11.5b §6–7)** —
+  `DayOrchestrator._process_miya_blessing_followup()` runs on Spring
+  transitions after the seasonal tick. Reads
+  `seasonal_result.resource_tick.miya_blessing`, then:
+  - **Fired path** — generates one Tier 4 `miya_blessing/delivered` topic
+    per blessed province (POLITICAL category, BENEFICIARY subject role,
+    momentum 11.0); applies disposition deltas per province lord:
+    `+2 toward miya_representative_id`, `+1 toward emperor_id` (gated on
+    those IDs being set). Resets
+    `season_meta["consecutive_blessing_suspensions"] = 0`.
+    Province-lord lookup scans `characters_by_id` for the highest-status
+    character matching the province's clan + family — placeholder until
+    daimyo IDs are explicit on ProvinceData.
+  - **Suspended path** — increments `consecutive_blessing_suspensions`,
+    generates a Tier 4 suspension topic the first 1–2 years and a Tier 3
+    grievance topic at year 3+ ("Miya's Blessing Suspended — Imperial
+    Reserves Insufficient", or "Miya's Blessing Denied by Imperial Order"
+    for the tyrant_archetype reason). Applies `-1 stability` to every
+    province with `stability < 76` or an active insurgency (proxy for
+    Need Score > 0); the penalty doubles to `-2` after 2+ consecutive
+    suspensions. Applies `-3` Miya-rep disposition toward the Emperor
+    (gated on both IDs being set). Same-clan ripple and per-clan-champion
+    empire-wide penalties are deferred until clan→champion mapping is
+    consistent.
+  - **Pop growth bonus** — `ResourceTick._apply_miya_blessing` now writes
+    `_miya_growth_bonus: { province_id: 0.01 }` into settlement_meta;
+    `_process_population_adjustment` reads it and adds the +1% to the
+    blessed provinces' growth rate that season.
+
+### Clan & Family Collective Disposition (s12.2b)
+- **simulation/collective_disposition.gd** — `CollectiveDisposition` class
+  per GDD s12.2b. Holds the locked PROVISIONAL pre-Scorpion-Coup baselines
+  as const dicts: 21 Great Clan ↔ Great Clan pairs, 29 Minor Clan ↔ Great
+  Clan pairs, 8 Minor ↔ Minor pairs (`STARTING_CLAN_BASELINES`); plus 44
+  intra-clan family pairs and 11 cross-clan family pairs
+  (`STARTING_FAMILY_BASELINES`). Symmetric `make_pair_key(a, b)` lookup —
+  lexicographic sort + "||" delimiter so order doesn't matter.
+  `get_clan_baseline` / `get_family_baseline` return the int baseline (0
+  for unlisted, intra-clan/family, or empty-string pairs).
+  `compute_seed_disposition(actor, target, clan_baselines, family_baselines)`
+  applies the GDD formula: `clan × 0.25 + family × 0.50` rounded to int.
+  `seed_first_meeting()` writes the seed to `actor.disposition_values[target.id]`
+  on first meeting only — preserves any existing value.
+  `apply_event_ripple(actor, target, personal_change, ...)` mutates the
+  baseline dicts with proportional changes (`× 0.05` clan, `× 0.20` family).
+  Specific event helpers: `apply_marriage` (with `champion_level=true` for
+  Champion-tier marriage), `apply_clan_war_declared` (-10), 
+  `apply_clan_peace_treaty` (+5), `apply_harvest_destruction` (-5),
+  `apply_family_lord_raid` (-3), `apply_family_betrayal` (-10),
+  `apply_intra_clan_rice_sharing` (+2), `apply_family_duel_death` (-5).
+  `make_starting_baselines()` factory returns a deep copy of the locked
+  data, ready to be stored as world state. Baselines never decay — they're
+  collective historical memory, only changed by deliberate events.
+- **simulation/information_system.gd** — `add_contact()` gains optional
+  4th/5th/6th args (contact char, clan baselines, family baselines). When
+  supplied, calls `CollectiveDisposition.seed_first_meeting()` on first
+  meeting so the new disposition_values entry starts at the clan+family
+  seed instead of 0. Existing 3-arg callers are unaffected.
+  `process_observe_court()` and `process_introduction()` thread baselines
+  through to add_contact. `process_introduction()` now layers the
+  introduction bonus (+2 kuge / +3 standard) ON TOP of the seed instead
+  of clobbering it — first-time introduction with active baselines
+  produces `seed + bonus`, captured via a `was_first_meeting` snapshot
+  before add_contact mutates met_characters.
+  `transfer_objective_knowledge()` accepts optional chars_by_id +
+  baselines and seeds dispositions for each contact transferred from the
+  assigner's known_contacts_by_clan when the recipient hasn't met them.
+
+- **scripts/managers/world_state.gd** — `WorldStateData` autoload gains
+  `clan_baselines: Dictionary` and `family_baselines: Dictionary`,
+  initialized in `_ready()` from
+  `CollectiveDisposition.make_starting_baselines()`. Callers that need
+  baselines can read them off the WorldState autoload directly. Mutations
+  via CollectiveDisposition event helpers compound on the live world
+  state — they never decay.
+
+### Biological Family Web (s22.6)
+- **shared/ancestor_record.gd** — `AncestorRecord` Resource for lightweight
+  G3/G4 historical records: ancestor_id, name, clan, family, generation
+  (3 = grandparent, 4 = great-grandparent), ic_year_born/died, spouse_name,
+  children_names, maternal flag. `is_living(current_ic_year)` helper.
+- **shared/character_data.gd** — Adds `grandparent_records: Array[AncestorRecord]`
+  and `great_grandparent_records: Array[AncestorRecord]` alongside the
+  existing `mother_id`/`father_id`/`sibling_ids`/`children_ids`/`spouse_id`
+  family-web fields.
+- **simulation/biological_family.gd** — `BiologicalFamily` traversal class
+  per GDD s22.6. Eight-value Relationship enum (NONE, SELF, SIBLING, PARENT,
+  CHILD, GRANDPARENT, GRANDCHILD, FIRST_COUSIN, CROSS_CLAN_MARRIAGE_RELATIVE).
+  `get_relationship(a, b, chars_by_id)` is the main classifier — checks
+  blood relations first (sibling via shared parents OR sibling_ids
+  including half-sibs; parent/child direct id; grandparent/grandchild
+  two-hop; first cousin via aunt/uncle), then the cross-clan-marriage tie
+  (b is a blood relative of a's spouse, with both clans differing).
+  `get_family_modifier(rel)` returns the integer bond value from the
+  existing `DispositionSystem.FAMILY_BONDS` table (sibling=20, parent_child=20,
+  grandparent_grandchild=12, first_cousin=6, cross_clan_marriage=4) — bonds
+  are owned by DispositionSystem; this class is only the classifier.
+  `compute_pairwise_modifier(a, b, chars_by_id)` is the end-to-end helper.
+  Direct lookups: `get_parent_ids`, `get_sibling_ids`, `get_child_ids`.
+  Two-hop: `get_grandparent_ids`, `get_grandchild_ids`, `get_aunt_uncle_ids`
+  (includes half-aunts/uncles via shared grandparents), `get_first_cousin_ids`.
+  `get_generation_lineage(character, chars_by_id)` returns the four-generation
+  lineage dict (G1 self, G2 parents, G3 grandparents as character ids, G4
+  as AncestorRecord entries pulled from parents' grandparent_records and
+  self's great_grandparent_records). Sentinel-safe: -1 parent ids are
+  skipped rather than treated as a match.
+  `compute_all_family_bonds(actor, chars_by_id)` returns
+  `{ other_id: bond_value }` for every blood relative + cross-clan-marriage
+  relative reachable from the actor.
+
+- **Family bond wiring into disposition** —
+  `DispositionSystem.get_effective_disposition(actor, target_id, chars_by_id={})`
+  returns the stored `disposition_values` entry plus the family bond, clamped
+  -100..100. Falls back to a plain lookup when chars_by_id is empty.
+  `NPCDecisionEngine.build_context` accepts an optional `chars_by_id` third
+  argument; when provided, it walks `compute_all_family_bonds` and layers the
+  bonds onto `ctx.dispositions` and `ctx.disposition_values`. `run()` accepts
+  the same optional arg and threads it to build_context. NPCWaveResolver
+  passes characters_by_id into the run() and build_context() calls inside
+  the full-execution paths (`_resolve_reactive_events_full`,
+  `_resolve_character_wave_full`, `_execute_decision`); DayOrchestrator
+  threads it into the daily letter pass. Decision-only paths and
+  civilian-order resolution still use the empty-dict default — they
+  degrade gracefully without family-bond awareness. Bonds are recomputed
+  each context build, so they never decay and stay in sync with the family
+  graph automatically.
+
+### Gift-Giving System (s12.3)
+- **simulation/gift_giving_system.gd** — Gift resolution per GDD s12.3 with
+  mechanics from s49 (quality tiers + Free Raises) and s15.4 (Deliver Gift
+  court action). Pure simulation class, no Node inheritance.
+  Six QualityTier values (Mundane/Normal/Fine/Exceptional/Masterwork/Legendary)
+  with Free Raise lookup (0/0/+1/+2/+3/+4). Ten GiftCategory values: 8 valid
+  (ART, WRITING_IMPLEMENTS, TEA_IMPLEMENTS, POETRY_SCROLLS, INCENSE,
+  ACCESSORIES, FOOD_DRINK, RITUAL_OBJECTS) plus WEAPON and ARMOR (forbidden).
+  Five RecipientArchetype values (BUSHI, COURTIER, SHUGENJA, SCHOLAR, MONK)
+  with sparse APPROPRIATENESS_MATRIX — unmapped pairs default to NEUTRAL.
+  Six Appropriateness levels (IDEAL, APPROPRIATE, NEUTRAL keep full Free
+  Raises; REDUCED halves them; INAPPROPRIATE/INSULTING zero them).
+  Forbidden gifts: weapons (unless Legendary blade — the s12.3 once-in-a-
+  generation exception) and any armor. `is_forbidden()`, `get_appropriateness()`,
+  `compute_effective_free_raises()` (history points stack, clamped non-negative).
+  `resolve_deliver_gift()` returns dict with outcome (success/failure/
+  critical_failure/forbidden), disposition_change, obligation_created flag,
+  and modifiers_to_apply (ready-to-append temp dispositions). Roll: Awareness
+  + Etiquette vs TN 15, +5 per effective Free Raise as flat bonus. Success:
+  full quality disposition + gift_obligation modifier. Failure: half
+  disposition, no obligation. Critical failure (margin ≤ -10): -5 disposition.
+  Forbidden gift: short-circuit -5 disposition, no roll. Quality tier
+  disposition values pulled from existing `DispositionSystem.GIFT_DISPOSITION`
+  table; temp modifier keys (gift_normal/fine/exceptional/masterwork) reuse
+  the existing `DispositionSystem.TEMPORARY_EVENTS` registry.
+  `default_archetype_for_school()` maps SchoolType to a default archetype.
+  `select_best_gift(items, archetype)` picks the best gift dict from an
+  inventory array, scoring on effective Free Raises with quality tier as
+  tiebreaker, skipping forbidden categories.
+
+- **DELIVER_GIFT executor wiring** — `ActionExecutor.execute()` accepts an
+  optional `characters_by_id: Dictionary` and special-cases DELIVER_GIFT
+  before the generic social path. `_try_execute_deliver_gift()` looks up the
+  recipient, picks the best gift from the giver's items via
+  `GiftGivingSystem.select_best_gift()`, runs `resolve_deliver_gift()`, and
+  emits effects: `recipient_disposition_change`, `recipient_modifiers`,
+  `consume_item_id`, `gift_outcome`, `gift_tier`, `gift_subtype`,
+  `gift_free_raises`. Falls through to the generic CHARM-style social path
+  when no recipient is resolvable or the inventory has no giftable item.
+  Failure outcomes set `effects["failed"] = true` so EffectApplicator's
+  early-return guard does not skip recipient mutation.
+
+- **EffectApplicator recipient-side effects** — New `_apply_recipient_effects()`
+  handles three new effect keys: `consume_item_id` removes the item from
+  giver's `items` array; `recipient_disposition_change` mutates
+  `recipient.disposition_values[giver_id]` (clamped); `recipient_modifiers`
+  appends each modifier dict to `recipient.temporary_modifiers[giver_id]`
+  (initialized to `[]` if absent). Establishes the convention that
+  `temporary_modifiers` is keyed by the source character's id.
+
+- **Inventory storage on character** — `L5RCharacterData.items: Array[Dictionary]`
+  added per s12.11. Item dicts are produced by
+  `InventorySystem.create_item()` or the new `create_gift_item(item_id, name,
+  gift_subtype, quality_tier, size)` wrapper that tags items with a
+  `gift_subtype` key matching `GiftGivingSystem.GiftCategory`.
+
+- **NPCWaveResolver threading** — `characters_by_id: Dictionary` is now
+  threaded from `resolve_day_applied()` (where DayOrchestrator already
+  supplies it) down through `resolve_day_full`, `_resolve_reactive_events_full`,
+  `_resolve_ap_waves_full`, `_resolve_character_wave_full`, and
+  `_execute_decision()` into `ActionExecutor.execute()`. Optional with
+  `{}` default — the parameter is dormant for resolvers that don't need it.
+
 ### Simulation Scheduler & World State
 - **scripts/managers/world_state.gd** — `WorldStateData` autoload singleton
   (registered as `WorldState`). Holds all persistent data arrays:
@@ -988,3 +1403,15 @@ mechanical code changes to implement them.
 Stop. Read the relevant LOCKED section in /gdd/. If it does not answer the
 question, say so explicitly — do not guess, do not fill gaps with plausible
 logic, do not extrapolate from adjacent systems.
+
+## Workflow — After Each Task
+Whenever a task is complete (system implemented, wired, committed, pushed),
+do the following in order before ending the turn:
+1. **Validate twice** — re-read the actual code (not memory) and check it
+   against the GDD section it implements. First pass: logic and GDD
+   fidelity. Second pass: tests against implementation, edge cases. State
+   findings explicitly — what's correct, what's a known limitation, what
+   would be a tuning concern.
+2. **Suggest a list of next options** — present 3–4 distinct directions
+   for what to build next, sized for clarity (small / medium / foundational
+   / wiring follow-up). Use AskUserQuestion to let the user pick.

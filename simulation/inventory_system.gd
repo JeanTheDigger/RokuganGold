@@ -48,6 +48,21 @@ const QUARTERS_CAPACITY: int = 20
 
 # -- Item Structure -----------------------------------------------------------
 
+static func create_gift_item(
+	item_id: int,
+	name: String,
+	gift_subtype: int,
+	quality_tier: int = 1,
+	size: ItemSize = ItemSize.SMALL,
+) -> Dictionary:
+	## Convenience wrapper for gift items. `gift_subtype` is a
+	## GiftGivingSystem.GiftCategory value stored alongside the inventory
+	## ItemCategory so the gift resolver can identify the kind of gift.
+	var item: Dictionary = create_item(item_id, name, ItemCategory.GIFT, size, quality_tier)
+	item["gift_subtype"] = gift_subtype
+	return item
+
+
 static func create_item(
 	item_id: int,
 	name: String,

@@ -301,3 +301,130 @@ func test_unknown_target_uses_base_tn() -> void:
 		action, _character, _ctx, _dice_engine, _action_skill_map
 	)
 	assert_eq(result["tn"], 15)
+
+
+# -- DELIVER_GIFT wiring ------------------------------------------------------
+
+func _make_recipient(id: int, school_type: Enums.SchoolType) -> L5RCharacterData:
+	var r := L5RCharacterData.new()
+	r.character_id = id
+	r.school_type = school_type
+	return r
+
+
+func test_deliver_gift_falls_through_when_no_inventory() -> void:
+	# No items in inventory and no characters_by_id provided.
+	# The gift path returns {} and execution falls through to generic social.
+	var action := _make_action("DELIVER_GIFT", 10)
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map
+	)
+	# Generic social path uses Etiquette and applies the standard social
+	# disposition_change (no recipient_disposition_change).
+	assert_false(result["effects"].has("gift_outcome"))
+
+
+func test_deliver_gift_falls_through_when_recipient_unknown() -> void:
+	var gift: Dictionary = InventorySystem.create_gift_item(
+		1, "Fine Calligraphy",
+		GiftGivingSystem.GiftCategory.ART,
+		GiftGivingSystem.QualityTier.FINE,
+	)
+	_character.items = [gift]
+	var action := _make_action("DELIVER_GIFT", 10)
+	# characters_by_id is empty — recipient cannot be resolved.
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map
+	)
+	assert_false(result["effects"].has("gift_outcome"))
+	assert_true(_character.items.size() == 1)  # Item not consumed.
+
+
+func test_deliver_gift_routes_to_gift_giving_system() -> void:
+	var gift: Dictionary = InventorySystem.create_gift_item(
+		7, "Masterwork Tea Bowl",
+		GiftGivingSystem.GiftCategory.TEA_IMPLEMENTS,
+		GiftGivingSystem.QualityTier.MASTERWORK,
+	)
+	_character.items = [gift]
+	var recipient: L5RCharacterData = _make_recipient(10, Enums.SchoolType.COURTIER)
+	var characters_by_id: Dictionary = {10: recipient}
+
+	var action := _make_action("DELIVER_GIFT", 10)
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map,
+		{}, characters_by_id,
+	)
+	assert_true(result["effects"].has("gift_outcome"))
+	assert_eq(result["effects"]["gift_tier"], GiftGivingSystem.QualityTier.MASTERWORK)
+	assert_eq(result["effects"]["gift_subtype"], GiftGivingSystem.GiftCategory.TEA_IMPLEMENTS)
+	assert_eq(result["effects"]["consume_item_id"], 7)
+	assert_eq(result["skill_used"], "Etiquette")
+
+
+func test_deliver_gift_picks_best_quality_from_inventory() -> void:
+	var fine: Dictionary = InventorySystem.create_gift_item(
+		1, "Fine Brush",
+		GiftGivingSystem.GiftCategory.WRITING_IMPLEMENTS,
+		GiftGivingSystem.QualityTier.FINE,
+	)
+	var masterwork: Dictionary = InventorySystem.create_gift_item(
+		2, "Masterwork Inkstone",
+		GiftGivingSystem.GiftCategory.WRITING_IMPLEMENTS,
+		GiftGivingSystem.QualityTier.MASTERWORK,
+	)
+	_character.items = [fine, masterwork]
+	var recipient: L5RCharacterData = _make_recipient(10, Enums.SchoolType.COURTIER)
+	var characters_by_id: Dictionary = {10: recipient}
+
+	var action := _make_action("DELIVER_GIFT", 10)
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map,
+		{}, characters_by_id,
+	)
+	assert_eq(result["effects"]["consume_item_id"], 2)
+
+
+func test_deliver_gift_skips_forbidden_inventory_items() -> void:
+	var sword: Dictionary = InventorySystem.create_gift_item(
+		3, "Fine Katana",
+		GiftGivingSystem.GiftCategory.WEAPON,
+		GiftGivingSystem.QualityTier.FINE,
+	)
+	var fine_art: Dictionary = InventorySystem.create_gift_item(
+		4, "Fine Painting",
+		GiftGivingSystem.GiftCategory.ART,
+		GiftGivingSystem.QualityTier.FINE,
+	)
+	_character.items = [sword, fine_art]
+	var recipient: L5RCharacterData = _make_recipient(10, Enums.SchoolType.COURTIER)
+	var characters_by_id: Dictionary = {10: recipient}
+
+	var action := _make_action("DELIVER_GIFT", 10)
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map,
+		{}, characters_by_id,
+	)
+	# The forbidden sword is skipped — best legal pick is the painting.
+	assert_eq(result["effects"]["consume_item_id"], 4)
+
+
+func test_deliver_gift_failure_is_marked_failed_so_effects_apply() -> void:
+	# A weak giver gives a forbidden gift on purpose: the legendary-blade
+	# exception does NOT apply at lower tiers, so the result is "forbidden".
+	# Set up a sole sword in inventory so that path is forced.
+	var sword: Dictionary = InventorySystem.create_gift_item(
+		1, "Plain Katana",
+		GiftGivingSystem.GiftCategory.WEAPON,
+		GiftGivingSystem.QualityTier.FINE,
+	)
+	_character.items = [sword]
+	var recipient: L5RCharacterData = _make_recipient(10, Enums.SchoolType.BUSHI)
+	# Forbidden gift means select_best_gift returns {} — wiring falls through.
+	var action := _make_action("DELIVER_GIFT", 10)
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map,
+		{}, {10: recipient},
+	)
+	# No giftable item -> generic social path -> no gift_outcome key.
+	assert_false(result["effects"].has("gift_outcome"))

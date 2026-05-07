@@ -342,6 +342,35 @@ const GIFT_DISPOSITION: Dictionary = {
 }
 
 
+# -- Effective Disposition (with permanent modifiers) ------------------------
+
+# Returns actor's disposition toward target_id with the permanent
+# biological-family bond layered on top (s22.6). The stored
+# disposition_values entry represents accumulated event-driven disposition;
+# family bonds are added at read time so they never decay and can never go
+# stale relative to the family graph.
+#
+# Pass chars_by_id={} (the default) to skip family-bond computation entirely
+# — the function then degrades to a plain disposition_values lookup.
+static func get_effective_disposition(
+	actor: L5RCharacterData,
+	target_id: int,
+	chars_by_id: Dictionary = {},
+) -> int:
+	if actor == null or target_id < 0:
+		return 0
+	var stored: int = actor.disposition_values.get(target_id, 0)
+	if chars_by_id.is_empty():
+		return clampi(stored, -100, 100)
+	var target: L5RCharacterData = chars_by_id.get(target_id)
+	if target == null:
+		return clampi(stored, -100, 100)
+	var family_bond: int = BiologicalFamily.compute_pairwise_modifier(
+		actor, target, chars_by_id
+	)
+	return clampi(stored + family_bond, -100, 100)
+
+
 # -- Supply Sharing -----------------------------------------------------------
 
 static func get_supply_share_ratio(disposition: int) -> float:

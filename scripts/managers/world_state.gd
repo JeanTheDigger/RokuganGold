@@ -48,8 +48,30 @@ var character_province_map: Dictionary = {}
 var death_events: Array[Dictionary] = []
 var successor_map: Dictionary = {}
 
+# -- Collective Disposition (s12.2b) -------------------------------------------
+# Clan-to-clan and family-to-family baselines keyed by sorted "a||b" strings.
+# Initialized to the locked PROVISIONAL pre-Scorpion-Coup starting values.
+# Mutated by CollectiveDisposition event helpers as the simulation runs —
+# they never decay, only deliberate events shift them.
+
+var clan_baselines: Dictionary = {}
+var family_baselines: Dictionary = {}
+
+# -- Imperial Capital (s11.5b) -------------------------------------------------
+# Identifies the Emperor character and the settlement holding the Imperial
+# rice stockpile. -1 sentinels mean "not yet assigned" — Miya's Blessing
+# will not fire until both are set.
+
+var emperor_id: int = -1
+var emperor_settlement_id: int = -1
+var emperor_archetype: int = StrategicReview.EmperorArchetype.IRON
+var miya_representative_id: int = -1
+
 
 func _ready() -> void:
+	var fresh: Dictionary = CollectiveDisposition.make_starting_baselines()
+	clan_baselines = fresh["clan"]
+	family_baselines = fresh["family"]
 	print("[WorldState] Initialized.")
 
 
@@ -88,4 +110,31 @@ func advance_one_day() -> Dictionary:
 		insurgencies,
 		next_insurgency_id,
 		settlements,
+		_build_miya_inputs(),
 	)
+
+
+func _build_miya_inputs() -> Dictionary:
+	## Assembles the Miya's Blessing inputs dict for this world. Returns an
+	## empty dict (no-op) when the Imperial capital isn't fully set up.
+	if emperor_id < 0 or emperor_settlement_id < 0:
+		return {}
+	var emperor: L5RCharacterData = characters_by_id.get(emperor_id)
+	if emperor == null:
+		return {}
+	var emperor_settlement: SettlementData = null
+	for s: SettlementData in settlements:
+		if s.settlement_id == emperor_settlement_id:
+			emperor_settlement = s
+			break
+	if emperor_settlement == null:
+		return {}
+	return {
+		"emperor_archetype": emperor_archetype,
+		"emperor_id": emperor_id,
+		"emperor_settlement_id": emperor_settlement_id,
+		"otosan_uchi_pu": float(emperor_settlement.population_pu),
+		"miya_representative_id": miya_representative_id,
+		# Tax income is resolved from season_meta inside DayOrchestrator —
+		# don't override it here.
+	}

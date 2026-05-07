@@ -83,8 +83,18 @@ static func execute(
 	dice_engine: DiceEngine,
 	action_skill_map: Dictionary,
 	military_data: Dictionary = {},
+	characters_by_id: Dictionary = {},
 ) -> Dictionary:
 	var action_id: String = action.action_id
+
+	if action_id == "DELIVER_GIFT":
+		var gift_result: Dictionary = _try_execute_deliver_gift(
+			action, character, ctx, dice_engine, characters_by_id
+		)
+		if not gift_result.is_empty():
+			return gift_result
+		# No giftable item or no recipient — fall through to the generic
+		# social path so the gesture is at least scored as social effort.
 
 	if action_id in MILITARY_ORDERS:
 		var mil_check: Dictionary = _validate_military_order(action_id, ctx, military_data)
@@ -131,6 +141,80 @@ static func execute(
 
 	_apply_effects(result, action, character, ctx)
 	return result
+
+
+# -- Deliver Gift -------------------------------------------------------------
+#
+# Returns an empty dict to signal "no gift wired, fall through to generic
+# social path". Returns a populated result dict on successful resolution.
+
+static func _try_execute_deliver_gift(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	dice_engine: DiceEngine,
+	characters_by_id: Dictionary,
+) -> Dictionary:
+	if action.target_npc_id < 0:
+		return {}
+	if characters_by_id.is_empty():
+		return {}
+	var recipient: L5RCharacterData = characters_by_id.get(action.target_npc_id)
+	if recipient == null:
+		return {}
+
+	var archetype: GiftGivingSystem.RecipientArchetype = (
+		GiftGivingSystem.default_archetype_for_school(recipient.school_type)
+	)
+	var gift_item: Dictionary = GiftGivingSystem.select_best_gift(character.items, archetype)
+	if gift_item.is_empty():
+		return {}
+
+	var tier: int = gift_item.get("quality_tier", 0)
+	var subtype: int = gift_item.get("gift_subtype", -1)
+
+	var gift_result: Dictionary = GiftGivingSystem.resolve_deliver_gift(
+		character, recipient, tier, subtype, archetype, dice_engine, ctx.ic_day
+	)
+
+	var outcome: String = gift_result.get("outcome", "")
+	var success: bool = outcome == "success"
+	var roll: Dictionary = gift_result.get("roll", {})
+	var tn: int = GiftGivingSystem.TN_DELIVER_GIFT
+
+	var effects: Dictionary = {
+		"recipient_disposition_change": gift_result.get("disposition_change", 0),
+		"recipient_modifiers": gift_result.get("modifiers_to_apply", []),
+		"consume_item_id": gift_item.get("item_id", -1),
+		"gift_outcome": outcome,
+		"gift_tier": tier,
+		"gift_subtype": subtype,
+		"gift_free_raises": gift_result.get("free_raises_applied", 0),
+		# Preserve generic-social effect keys so downstream consumers that read
+		# disposition_change uniformly still see something — but for gifts the
+		# value lives on the recipient side.
+		"disposition_change": 0,
+	}
+	# Failure paths still apply effects (half disposition, critical loss,
+	# forbidden loss). Mark as "failed" so EffectApplicator's early-return
+	# guard does not skip the recipient mutation.
+	if not success:
+		effects["failed"] = true
+
+	return {
+		"success": success,
+		"action_id": "DELIVER_GIFT",
+		"character_id": ctx.character_id,
+		"target_npc_id": action.target_npc_id,
+		"target_province_id": action.target_province_id,
+		"ic_day": ctx.ic_day,
+		"season": ctx.season,
+		"skill_used": "Etiquette",
+		"roll_total": roll.get("total", 0),
+		"tn": tn,
+		"margin": roll.get("margin", 0),
+		"effects": effects,
+	}
 
 
 # -- No-Roll Execution --------------------------------------------------------

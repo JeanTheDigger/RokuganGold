@@ -6,7 +6,11 @@ class_name NPCDecisionEngine
 
 # -- Phase 1: Build Context ----------------------------------------------------
 
-static func build_context(character: L5RCharacterData, world_state: Dictionary) -> NPCDataStructures.ContextSnapshot:
+static func build_context(
+	character: L5RCharacterData,
+	world_state: Dictionary,
+	chars_by_id: Dictionary = {},
+) -> NPCDataStructures.ContextSnapshot:
 	var ctx := NPCDataStructures.ContextSnapshot.new()
 
 	# Identity
@@ -51,6 +55,20 @@ static func build_context(character: L5RCharacterData, world_state: Dictionary) 
 	ctx.characters_present = world_state.get("characters_present", [] as Array[int])
 	ctx.dispositions = character.disposition_values.duplicate()
 	ctx.disposition_values = character.disposition_values.duplicate()
+
+	# Permanent family bonds layered on top of stored disposition (s22.6).
+	# Bonds are recomputed each context build — they never decay and stay
+	# in sync with the family graph automatically.
+	if not chars_by_id.is_empty():
+		var bonds: Dictionary = BiologicalFamily.compute_all_family_bonds(
+			character, chars_by_id
+		)
+		for other_id: int in bonds:
+			var bond: int = bonds[other_id]
+			var current: int = ctx.dispositions.get(other_id, 0)
+			var combined: int = clampi(current + bond, -100, 100)
+			ctx.dispositions[other_id] = combined
+			ctx.disposition_values[other_id] = combined
 	ctx.known_topics = world_state.get("known_topics", [] as Array[int])
 	ctx.known_positions = world_state.get("known_positions", {})
 	ctx.known_objectives = world_state.get("known_objectives", {})
@@ -334,9 +352,10 @@ static func run(
 	approach_penalties: Array[Dictionary] = [],
 	commitments: Array[CommitmentData] = [],
 	travel_redirects: int = 0,
+	chars_by_id: Dictionary = {},
 ) -> Dictionary:
 	# Phase 1
-	var ctx := build_context(character, world_state)
+	var ctx := build_context(character, world_state, chars_by_id)
 
 	# Phase 2
 	var need := resolve_goal(character, ctx, objectives)
