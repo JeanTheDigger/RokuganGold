@@ -404,7 +404,9 @@ All in /tests/, one file per system:
 - test_tattoo_system.gd (~100 tests)
 - test_character_sheet_field_index.gd (~45 tests)
 - test_insurgency_system.gd (~60 tests)
-- test_system_wiring.gd (~46 tests)
+- test_system_wiring.gd (~48 tests)
+- test_rice_market_system.gd (~35 tests)
+- test_regional_price_modifiers.gd (~25 tests)
 - test_world_generator.gd (~45 tests)
 - test_resource_availability.gd (~25 tests)
 - test_court_availability.gd (~15 tests)
@@ -748,6 +750,38 @@ All in /tests/, one file per system:
   Return dict gains `insurgency_results`.
 - ASCII map investigation module and Settlement Building Framework deferred
   until ASCII map system is built.
+
+### Rice Market & Trade Route System (s4.3.18)
+- **simulation/rice_market_system.gd** — Decentralized rice market per GDD s4.3.18.
+  `compute_surplus()` calculates lord's genuine surplus above 4-season consumption
+  buffer. `create_posting()` lists rice for sale at a set price. Price adjustment:
+  +0.25 Koku per season of sales, −0.25 per unsold season (floor 0.25).
+  `should_withdraw()` returns true at floor price with no buyers.
+  Disposition-based purchase priority: Friend (31+) → Acquaintance (−10 to +30)
+  → Rival (−11 and below). Blood Enemy (−60) blocked entirely.
+  `resolve_purchases()` processes all postings against buy orders with priority
+  ordering and budget limits. Intra-clan rice sharing: `share_rice()` transfers
+  rice between same-clan provinces, generating Honor scaled to recipient need
+  (Shortage +0.1/+0.2, Hunger +0.3, Famine +0.5, Famine resolved +1.0).
+  Trade route koku bonus: `compute_trade_route_koku()` sums active route bonuses,
+  skipping disrupted routes. Route disruption/restoration helpers.
+- **shared/trade_route_data.gd** — TradeRouteData Resource: route_id,
+  province_a_id, province_b_id, is_naval, is_disrupted, disruption_reason,
+  koku_bonus_per_season. `connects()`, `other_end()` helpers.
+- **shared/rice_posting_data.gd** — RicePostingData Resource: lord_id,
+  province_id, quantity, price_per_unit, seasons_sold, seasons_unsold.
+
+### Regional Price Modifiers (s11.8)
+- **simulation/regional_price_modifiers.gd** — Clan territory price modifiers
+  per GDD s11.8. CLAN_MODIFIERS dictionary for all 8 Great Clans with item
+  category → modifier mappings (−40% to +50%). `get_territory_modifier()` looks
+  up modifier by clan and item category. `compute_final_price()` applies
+  territory modifier then Commerce skill reduction (−10% on roll ≥ TN 15).
+
+### CONDUCT_COMMERCE Alignment (s57.9)
+- **objective_alignment.json** gains CONDUCT_COMMERCE NeedType with 7 actions:
+  CONDUCT_COMMERCE (100), BEGIN_TRAVEL (60), PURCHASE_MARKET (50),
+  NEGOTIATE (45), WRITE_LETTER (35), ASSESS_PROVINCE_STATUS (30), DO_NOTHING (0).
 
 ### What's Next
 1. World generation coordinate system and adjacency
