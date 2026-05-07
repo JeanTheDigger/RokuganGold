@@ -359,3 +359,24 @@ static func get_best_confidence_on_target(
 		if char_id == target_id and entry.confidence > best:
 			best = entry.confidence
 	return best
+
+
+static func record_location_observation(
+	observer: L5RCharacterData,
+	observed_id: int,
+	settlement_id: String,
+	current_season: int,
+) -> void:
+	for entry: KnowledgeEntry in observer.knowledge_pool:
+		if entry.entry_type == "location" and entry.data.get("character_id", -1) == observed_id:
+			entry.data["settlement_id"] = settlement_id
+			entry.confidence = Enums.KnowledgeConfidence.FRESH
+			entry.season_acquired = current_season
+			return
+	var new_entry := KnowledgeEntry.new()
+	new_entry.source = Enums.KnowledgeSource.DIRECT_OBSERVATION
+	new_entry.entry_type = "location"
+	new_entry.data = {"character_id": observed_id, "settlement_id": settlement_id}
+	new_entry.confidence = Enums.KnowledgeConfidence.FRESH
+	new_entry.season_acquired = current_season
+	observer.knowledge_pool.append(new_entry)

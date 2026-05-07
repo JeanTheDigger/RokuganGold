@@ -43,6 +43,7 @@ static func advance_day(
 	var festival_results: Dictionary = _process_festivals(ic_day, world_states)
 
 	var travel_arrivals: Array[Dictionary] = _process_travel(characters)
+	_process_arrival_observation(travel_arrivals, characters_by_id, current_season)
 
 	_apply_cohabitation(characters, characters_by_id)
 
@@ -110,12 +111,16 @@ static func advance_day(
 
 	var seasonal_result: Dictionary = {}
 	var strategic_results: Array[Dictionary] = []
+	var progress_results: Array[Dictionary] = []
 	if current_season != prev_season:
 		seasonal_result = _process_season_transition(
 			characters, provinces, current_season, season_meta,
 			approach_penalties
 		)
 		_decay_all_historical_modifiers(characters, ic_day)
+		progress_results = _evaluate_objective_progress(
+			characters, objectives_map, world_states
+		)
 		strategic_results = _run_strategic_reviews(
 			characters, objectives_map, world_states
 		)
@@ -140,6 +145,7 @@ static func advance_day(
 		"festival_results": festival_results,
 		"favor_results": favor_results,
 		"travel_arrivals": travel_arrivals,
+		"progress_results": progress_results,
 	}
 
 
@@ -787,6 +793,45 @@ static func _process_travel(
 	characters: Array[L5RCharacterData],
 ) -> Array[Dictionary]:
 	return TravelSystem.process_travel_tick(characters)
+
+
+# -- Arrival Observation (s55.29.2) --------------------------------------------
+
+static func _process_arrival_observation(
+	arrivals: Array[Dictionary],
+	characters_by_id: Dictionary,
+	current_season: int,
+) -> void:
+	for arrival: Dictionary in arrivals:
+		var char_id: int = arrival.get("character_id", -1)
+		var dest: String = arrival.get("destination", "")
+		var character: L5RCharacterData = characters_by_id.get(char_id)
+		if character == null or dest.is_empty():
+			continue
+
+		for other_id: int in characters_by_id:
+			if other_id == char_id:
+				continue
+			var other: L5RCharacterData = characters_by_id[other_id]
+			if other.physical_location != dest:
+				continue
+			if other_id not in character.met_characters:
+				character.met_characters.append(other_id)
+			InformationSystem.record_location_observation(
+				character, other_id, dest, current_season
+			)
+
+
+# -- Objective Progress Evaluation (s55.29.3) ----------------------------------
+
+static func _evaluate_objective_progress(
+	characters: Array[L5RCharacterData],
+	objectives_map: Dictionary,
+	world_states: Dictionary,
+) -> Array[Dictionary]:
+	return ObjectiveProgress.evaluate_all_objectives(
+		characters, objectives_map, world_states
+	)
 
 
 # -- Historical Modifier Decay (s12.2, season boundary) -----------------------

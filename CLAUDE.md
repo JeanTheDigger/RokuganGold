@@ -422,6 +422,7 @@ All in /tests/, one file per system:
 - test_hostage_system.gd (~22 tests)
 - test_court_priority_system.gd (~18 tests)
 - test_travel_system.gd (~30 tests)
+- test_objective_progress.gd (~35 tests)
 - test_festival_system.gd (~55 tests)
 
 ### Festival System (s11.5)
@@ -651,6 +652,25 @@ All in /tests/, one file per system:
   ActionExecutor (BEGIN_TRAVEL/CHANGE_DESTINATION call TravelSystem), and
   NPC engine Phase 1 (`build_context()` auto-sets TRAVELING context flag).
 
+### Objective Progress Functions (s55.29.3)
+- **simulation/objective_progress.gd** — 12 per-objective-type progress functions
+  (0.0–1.0) evaluated seasonally per GDD s55.29.3. Drives stall detection via
+  TravelCommitment.update_progress()/is_stalled(). Discovery confidence gate
+  applied to 4 objectives (ISOLATE_CHARACTER, REMOVE_FROM_POSITION,
+  EXPOSE_SECRET, SABOTAGE_ECONOMY) — caps near-completion at 0.85 when
+  investigation is insufficient (min 2 seasons AND 4 intel actions required
+  for 0.95 cap). `evaluate_all_objectives()` seasonal entry point evaluates
+  all characters' primary objectives, updates progress, detects stalls.
+  Wired into DayOrchestrator on season boundary (before strategic reviews).
+  Progress functions use existing game state fields — where upstream systems
+  don't exist yet (SecretSystem, WarSystem, SiegeSystem), those components
+  contribute 0 and will activate when built.
+- **Arrival observation** — `InformationSystem.record_location_observation()`
+  records FRESH location knowledge when NPCs arrive at a settlement.
+  DayOrchestrator calls `_process_arrival_observation()` after travel tick,
+  updating arriving characters' `met_characters` and `knowledge_pool` with
+  co-located NPCs.
+
 ### What's Next
 1. World generation coordinate system and adjacency
 
@@ -734,6 +754,15 @@ The following subsystems are now integrated into the NPC decision loop:
   Phase 7: ActionExecutor routes BEGIN_TRAVEL to `TravelSystem.begin_travel()`
   and CHANGE_DESTINATION to `TravelSystem.change_destination()`. Return dict
   includes `travel_arrivals`.
+- **ObjectiveProgress** — Seasonal: `_evaluate_objective_progress()` runs on
+  season boundary before strategic reviews. Evaluates all primary objectives
+  via 12 type-specific progress functions (0.0–1.0). Updates
+  `last_measured_progress` and `seasons_without_progress` via
+  `TravelCommitment.update_progress()`. Stall detection via
+  `TravelCommitment.is_stalled()` with personality-gated thresholds.
+  Arrival observation: `_process_arrival_observation()` runs after travel tick,
+  records FRESH location knowledge via
+  `InformationSystem.record_location_observation()` for co-located NPCs.
 
 ## Resolved Design Decisions
 
