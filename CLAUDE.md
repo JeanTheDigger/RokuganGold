@@ -421,6 +421,22 @@ All in /tests/, one file per system:
 - test_marriage_system.gd (~22 tests)
 - test_hostage_system.gd (~22 tests)
 - test_court_priority_system.gd (~18 tests)
+- test_festival_system.gd (~55 tests)
+
+### Festival System (s11.5)
+- **simulation/festival_system.gd** — Empire-wide canonical festivals, Rokuyo
+  cycle, championship resolution, and local settlement festival generation per
+  GDD s11.5. Rokuyo 6-day rotating cycle (Sensho, Tomobiki, Senbu, Butsumetsu,
+  Taian, Shakko) with Taian +1 disposition bonus and Butsumetsu/Tomobiki
+  inauspicious for social actions. 23 canonical festivals with month/day/effects.
+  Ceasefire detection (Setsuban), labor halt (Chrysanthemum 7-day window),
+  marriage bonus day. Championship system: 6 types (Emerald, Jade, Amethyst,
+  Ruby, Turquoise, Topaz), 3-stage skill+trait resolution, honor tiebreaker.
+  Topaz is annual; others are vacancy-triggered. Emperor's Chosen vacancy
+  evaluation with weighted scoring (disposition 20, clan_balance 15,
+  skill_relevance 15, honor 10, status 5, personality 10). Local festival
+  procedural generation: settlement type → count range, theme categories,
+  format words, name patterns, season-spread day picking.
 
 ### World Generator
 - **simulation/world_generator.gd** — Static factory methods for seeding initial
