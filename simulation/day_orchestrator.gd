@@ -437,7 +437,7 @@ static func _create_suspension_topic(
 	var topic: TopicData = TopicData.new()
 	topic.topic_id = next_topic_id[0]
 	next_topic_id[0] += 1
-	var variant: String = "suspended_%s" % reason if reason != "" else "suspended"
+	var variant: String = ("suspended_%s" % reason) if reason != "" else "suspended"
 	topic.slug = "miya_blessing_%s_d%d" % [variant, ic_day]
 	if reason == "tyrant_archetype":
 		topic.title = "Miya's Blessing Denied by Imperial Order"
