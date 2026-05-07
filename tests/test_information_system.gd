@@ -496,3 +496,99 @@ func test_transfer_province_wrong_id_ignored() -> void:
 	)
 	for e: KnowledgeEntry in transferred:
 		assert_ne(e.entry_type, "province_status")
+
+
+# -- Collective Disposition Seed Wiring (s12.2b) -----------------------------
+
+func test_add_contact_skips_seed_when_no_baselines_provided() -> void:
+	# Existing 3-arg form: no seed, disposition_values stays empty.
+	InformationSystem.add_contact(_char_a, _char_b.character_id, _char_b.clan)
+	assert_false(_char_a.disposition_values.has(_char_b.character_id))
+
+
+func test_add_contact_seeds_disposition_when_contact_and_baselines_provided() -> void:
+	var baselines: Dictionary = CollectiveDisposition.make_starting_baselines()
+	# Lion (Akodo) ↔ Scorpion (Bayushi):
+	# Clan Lion-Scorpion = -15 → -15 * 0.25 = -3.75
+	# Family Akodo-Bayushi = 0 (unlisted) → 0
+	# Seed = round(-3.75) = -4.
+	InformationSystem.add_contact(
+		_char_a, _char_b.character_id, _char_b.clan,
+		_char_b, baselines["clan"], baselines["family"],
+	)
+	assert_eq(_char_a.disposition_values[_char_b.character_id], -4)
+
+
+func test_add_contact_does_not_overwrite_existing_disposition() -> void:
+	var baselines: Dictionary = CollectiveDisposition.make_starting_baselines()
+	_char_a.disposition_values[_char_b.character_id] = 50
+	# Already-met-or-known: add_contact returns early on met_characters check,
+	# but this character was added to met_characters via a previous interaction.
+	_char_a.met_characters = [_char_b.character_id]
+	InformationSystem.add_contact(
+		_char_a, _char_b.character_id, _char_b.clan,
+		_char_b, baselines["clan"], baselines["family"],
+	)
+	assert_eq(_char_a.disposition_values[_char_b.character_id], 50)
+
+
+func test_observe_court_seeds_disposition_for_new_contacts() -> void:
+	var baselines: Dictionary = CollectiveDisposition.make_starting_baselines()
+	# Lion observer meets Crab Hida: Crab-Lion clan baseline +5 → seed +1.
+	# Family unlisted → 0. Seed = round(1.25) = 1.
+	InformationSystem.process_observe_court(
+		_char_a, [_char_c], 3, 0,
+		baselines["clan"], baselines["family"],
+	)
+	assert_eq(_char_a.disposition_values.get(_char_c.character_id, 0), 1)
+
+
+func test_introduction_layers_bonus_on_top_of_seed() -> void:
+	var baselines: Dictionary = CollectiveDisposition.make_starting_baselines()
+	# Crane (Doji) ↔ Phoenix (Isawa) example would be the strongest positive,
+	# but we use the existing fixtures: Lion (Akodo) ↔ Scorpion (Bayushi).
+	# Seed = -4 (computed above). Introduction (non-kuge) bonus = +3.
+	# Final stored disposition = -4 + 3 = -1.
+	InformationSystem.process_introduction(
+		_char_a, _char_b, false, 0,
+		baselines["clan"], baselines["family"],
+	)
+	assert_eq(_char_a.disposition_values[_char_b.character_id], -1)
+
+
+func test_introduction_kuge_bonus_layered_on_seed() -> void:
+	var baselines: Dictionary = CollectiveDisposition.make_starting_baselines()
+	# Same seed (-4) + kuge bonus (+2) = -2.
+	InformationSystem.process_introduction(
+		_char_a, _char_b, true, 0,
+		baselines["clan"], baselines["family"],
+	)
+	assert_eq(_char_a.disposition_values[_char_b.character_id], -2)
+
+
+func test_introduction_without_baselines_keeps_legacy_behavior() -> void:
+	# 4-arg form: no baselines. Introduction bonus alone should land.
+	InformationSystem.process_introduction(_char_a, _char_b, false, 0)
+	assert_eq(_char_a.disposition_values[_char_b.character_id], 3)
+
+
+func test_introduction_skips_bonus_when_already_met() -> void:
+	# Existing met character doesn't get re-bonused.
+	_char_a.met_characters = [_char_b.character_id]
+	_char_a.disposition_values[_char_b.character_id] = 25
+	InformationSystem.process_introduction(_char_a, _char_b, false, 0)
+	assert_eq(_char_a.disposition_values[_char_b.character_id], 25)
+
+
+func test_transfer_objective_knowledge_seeds_contacts() -> void:
+	var baselines: Dictionary = CollectiveDisposition.make_starting_baselines()
+	_char_a.known_contacts_by_clan = {"Crab": [_char_c.character_id]}
+	var chars_by_id: Dictionary = {_char_c.character_id: _char_c}
+	var objective: Dictionary = {"target_clan": "Crab"}
+	# Recipient is Scorpion (_char_b). Crab-Scorpion baseline -15 → -3.75 → -4.
+	# Bayushi-Hida unlisted → 0. Seed = -4.
+	InformationSystem.transfer_objective_knowledge(
+		_char_a, _char_b, objective, 0,
+		[], chars_by_id, baselines["clan"], baselines["family"],
+	)
+	assert_eq(_char_b.disposition_values.get(_char_c.character_id, 999), -4)

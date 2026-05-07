@@ -48,8 +48,20 @@ var character_province_map: Dictionary = {}
 var death_events: Array[Dictionary] = []
 var successor_map: Dictionary = {}
 
+# -- Collective Disposition (s12.2b) -------------------------------------------
+# Clan-to-clan and family-to-family baselines keyed by sorted "a||b" strings.
+# Initialized to the locked PROVISIONAL pre-Scorpion-Coup starting values.
+# Mutated by CollectiveDisposition event helpers as the simulation runs —
+# they never decay, only deliberate events shift them.
+
+var clan_baselines: Dictionary = {}
+var family_baselines: Dictionary = {}
+
 
 func _ready() -> void:
+	var fresh: Dictionary = CollectiveDisposition.make_starting_baselines()
+	clan_baselines = fresh["clan"]
+	family_baselines = fresh["family"]
 	print("[WorldState] Initialized.")
 
 

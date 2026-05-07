@@ -828,6 +828,23 @@ All in /tests/, one file per system:
   supplied, calls `CollectiveDisposition.seed_first_meeting()` on first
   meeting so the new disposition_values entry starts at the clan+family
   seed instead of 0. Existing 3-arg callers are unaffected.
+  `process_observe_court()` and `process_introduction()` thread baselines
+  through to add_contact. `process_introduction()` now layers the
+  introduction bonus (+2 kuge / +3 standard) ON TOP of the seed instead
+  of clobbering it — first-time introduction with active baselines
+  produces `seed + bonus`, captured via a `was_first_meeting` snapshot
+  before add_contact mutates met_characters.
+  `transfer_objective_knowledge()` accepts optional chars_by_id +
+  baselines and seeds dispositions for each contact transferred from the
+  assigner's known_contacts_by_clan when the recipient hasn't met them.
+
+- **scripts/managers/world_state.gd** — `WorldStateData` autoload gains
+  `clan_baselines: Dictionary` and `family_baselines: Dictionary`,
+  initialized in `_ready()` from
+  `CollectiveDisposition.make_starting_baselines()`. Callers that need
+  baselines can read them off the WorldState autoload directly. Mutations
+  via CollectiveDisposition event helpers compound on the live world
+  state — they never decay.
 
 ### Biological Family Web (s22.6)
 - **shared/ancestor_record.gd** — `AncestorRecord` Resource for lightweight
