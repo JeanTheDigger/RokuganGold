@@ -443,6 +443,7 @@ All in /tests/, one file per system:
 - test_miya_blessing_system.gd (~50 tests)
 - test_miya_blessing_wiring.gd (~14 tests)
 - test_miya_blessing_followup.gd (~13 tests)
+- test_togashi_oversight.gd (~49 tests)
 
 ### Festival System (s11.5)
 - **simulation/festival_system.gd** — Empire-wide canonical festivals, Rokuyo
@@ -801,6 +802,58 @@ All in /tests/, one file per system:
 - **objective_alignment.json** gains CONDUCT_COMMERCE NeedType with 7 actions:
   CONDUCT_COMMERCE (100), BEGIN_TRAVEL (60), PURCHASE_MARKET (50),
   NEGOTIATE (45), WRITE_LETTER (35), ASSESS_PROVINCE_STATUS (30), DO_NOTHING (0).
+
+### Togashi Oversight — Dragon Clan Governance Exception (s55.10.2)
+- **simulation/togashi_oversight.gd** — `TogashiOversight` pure simulation
+  class implementing the Dragon-specific governance per GDD s55.10.2.
+  The Mirumoto FC runs the seasonal Strategic Evaluation on behalf of
+  the Clan Champion position (Togashi the Kami). Togashi monitors four
+  cosmic axes and forces directives when his dissatisfaction crosses
+  threshold.
+  Four-value `Axis` enum: BALANCE_OF_POWER, IMPERIAL_COHESION,
+  SPIRITUAL_HEALTH, SHADOWLANDS_CONTAINMENT.
+  Per-axis concern checks read world state directly (no information
+  channels — Togashi is cosmically informed): clan_strengths +30%
+  dominance, 2+ inter-clan wars OR emperor vacant OR 5+ rebellions,
+  failing worship/realm overlaps/PTL outside Shadowlands, wall breach
+  OR Tier 2+ incursion OR Crab readiness < 50%.
+  `tick_oversight()` updates dissatisfaction per axis: -10/season when
+  no concern, -5/season when concern active and FC's directives are
+  aligned, +15/season when concern unaligned. Dissatisfaction floors
+  at 0; threshold for intervention is 50.
+  `is_directive_aligned()` heuristic-matches StrategicReview.Directive
+  values to each axis (war-readiness/seek-peace for balance and
+  cohesion; explicit `addresses_spiritual` / `addresses_shadowlands`
+  tags for the latter two — those have no native StrategicReview path).
+  `generate_forced_directive(axis)` produces a directive dict
+  flagged `forced_by_champion: true` with axis tag and address-flags.
+  `evaluate_compliance(fc, directive, togashi_id, repeated, conflict)`:
+  Comply = Chugi (+10) + Rei (+5) + clamped disposition toward Togashi
+  (±20) + repeated-letter Meiyo bonus (+5, +5 more if Meiyo virtue).
+  Defy = Ishi (+10) + Ketsui (+8) + conflict_modifier (0–20).
+  Compliance unwinds escalation by 1 stage and resets dissatisfaction
+  to 30 on the triggering axis. Defiance increments `defiance_count`
+  cumulatively (s55.10.2.6 — counter is NOT per-axis), capped at 4.
+  Stage queries: `is_authority_locked()` (Stage 2+, blocks formal
+  Champion powers), `is_order_withdrawn()` (Stage 3, Wandering Togashi
+  recall + tattoo suspension), `is_removal_triggered()` (Stage 4,
+  formal removal — handles via the standard succession system once
+  s22.5 lands). `get_diplomatic_credibility_modifier()` returns -5
+  during authority lockout.
+  Forced-directive lifecycle: `add_forced_directive` replaces any
+  existing entry on the same axis (one per axis at a time);
+  `should_lift_forced_directive` fires below dissatisfaction 20;
+  `remove_forced_directive` filters by axis.
+  `process_seasonal_oversight()` is the high-level driver — caller
+  invokes it after the Mirumoto FC's seasonal review with the FC's
+  directives + world state. Returns `{tick, intervention_fired,
+  compliance, forced_directive}`. State is held in a plain Dictionary
+  owned by the caller; `make_initial_state()` factories it.
+  Deferred (depend on systems not yet built):
+  Dragon Schism Crisis (s55.10.2.8), assault on the High House of
+  Light (Togashi vanish-and-return mechanics), foreign-clan
+  intervention escalation, Section 53.2 civil war integration,
+  Section 22.5 succession integration for Stage 4 removal.
 
 ### Miya's Blessing — Annual World Map Event (s11.5b)
 - **simulation/miya_blessing_system.gd** — Annual charitable Rice transfer
