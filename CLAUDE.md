@@ -418,6 +418,9 @@ All in /tests/, one file per system:
 - test_inventory_system.gd (~30 tests)
 - test_intimidation_system.gd (~30 tests)
 - test_disposition_system.gd (~66 tests)
+- test_marriage_system.gd (~22 tests)
+- test_hostage_system.gd (~22 tests)
+- test_court_priority_system.gd (~18 tests)
 
 ### World Generator
 - **simulation/world_generator.gd** — Static factory methods for seeding initial
@@ -590,6 +593,32 @@ All in /tests/, one file per system:
   toward enemies. Supply sharing ratio (Friend+ only, scaled 50-100%).
   Court action disposition values for all 7 targeted actions. Cohabitation
   passive gain (+0.1/day). Family/Clan ripple (+2/+1, caps 30/15).
+
+### Marriage System (s22.7)
+- **simulation/marriage_system.gd** — Political marriage institution per GDD s22.7.
+  Three types: WITHIN_FAMILY (no boosts), BETWEEN_FAMILIES (family +5),
+  CROSS_CLAN (clan +8, family +5, favor owed). Boost decay: clan fades over
+  80 seasons, family over 40 seasons. Caps: clan +20, family +15.
+  Birth family disposition floors: +15 (family), +8 (clan) — permanent for
+  the married character. Pregnancy: seasonal chance based on spouse disposition
+  (0%/5%/15%/25%). Gempuku at 72 seasons (18 IC years). Benten Festival bonus.
+
+### Hostage System (s22.9)
+- **simulation/hostage_system.gd** — Hitojichi per GDD s22.9. Capture via
+  siege surrender or battle. Personality gates: Yu less likely captured (0.5x),
+  Ishi committed never escapes. Escape: Stealth+Agility vs settlement TN
+  (town=20, castle=25, major=30, +2 per 0.5 excess PU). Bushi only, Stealth 3+.
+  Success: escape + family honor loss. Failure: execution. Critical: public
+  execution + catastrophic honor loss. Leverage: rank 3+=3, rank 5+/champion=8.
+  Action restrictions: no travel, no actions targeting captor.
+
+### Court Priority System (s15.8)
+- **simulation/court_priority_system.gd** — NPC court selection: lord-assigned
+  → primary objective → personal relevance → standing objective → court status.
+  Early departure costs: host (honor+glory loss), guest (-3 disposition),
+  proxy (mandate violation). Objective negligence: passive -0.1/season,
+  deliberate -0.5 immediate. Otomo institutional leans: Gossip +15, Disclose
+  +10, blocks inter-clan goodwill actions, escalates at Rival disposition.
 
 ### What's Next
 1. World generation coordinate system and adjacency
