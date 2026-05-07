@@ -441,6 +441,7 @@ All in /tests/, one file per system:
 - test_biological_family.gd (~42 tests)
 - test_collective_disposition.gd (~37 tests)
 - test_miya_blessing_system.gd (~50 tests)
+- test_miya_blessing_wiring.gd (~12 tests)
 
 ### Festival System (s11.5)
 - **simulation/festival_system.gd** — Empire-wide canonical festivals, Rokuyo
@@ -831,10 +832,34 @@ All in /tests/, one file per system:
   ("tyrant_archetype" or "below_threshold"), `allocation_total`,
   `allocation_per_province`, `selected_province_ids`,
   `settlement_rice_grants`, `stability_bonus` (+5), and
-  `pop_growth_bonus` (+1%). The caller (DayOrchestrator) is responsible
-  for actually applying the rice transfer, stability bump, growth
-  bonus, topic generation, and disposition deltas — the system itself
-  stays pure.
+  `pop_growth_bonus` (+1%). The system itself stays pure — the wiring
+  (below) does the mutations.
+
+- **Miya's Blessing wiring** —
+  `ResourceTick.process_seasonal_tick()` accepts an optional `miya_inputs`
+  dict. When `season == "spring"` and the dict is non-empty, runs the
+  Blessing AFTER planting and BEFORE rice consumption (per GDD §3 — the
+  injected rice can absorb the Spring draw). Mutates the Imperial
+  settlement's `rice_stockpile`, deposits each grant into the recipient
+  settlements proportionally by `population_pu`, applies `+5 stability`
+  to each selected province (clamped 0–100), and stamps
+  `province.last_blessed_ic_year`. After the autumn tax cascade,
+  `season_meta["last_autumn_emperor_tax_income"]` is set to an
+  approximation: `sum(passed_up) × 0.063` (the four-tier upper-cascade
+  product 0.70 × 0.75 × 0.80 × 0.15) — a placeholder until the full
+  hierarchy cascades through individual lord characters.
+  `ProvinceData` gains `last_blessed_ic_year: int = -1` (sentinel for
+  never blessed).
+  `DayOrchestrator.advance_day()` accepts optional `miya_inputs` and
+  threads it into `_process_season_transition`, which injects the IC
+  year (via `time_system.get_ic_year()`) and reads
+  `last_autumn_emperor_tax_income` from season_meta before passing to
+  ResourceTick.
+  `WorldStateData` gains `emperor_id`, `emperor_settlement_id`, and
+  `emperor_archetype` fields plus a `_build_miya_inputs()` helper that
+  assembles the dict from world state. Returns `{}` (no-op) when the
+  Imperial capital isn't fully configured. `advance_one_day()` calls
+  it automatically.
 
 ### Clan & Family Collective Disposition (s12.2b)
 - **simulation/collective_disposition.gd** — `CollectiveDisposition` class

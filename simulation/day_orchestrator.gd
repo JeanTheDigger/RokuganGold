@@ -33,6 +33,7 @@ static func advance_day(
 	insurgencies: Array[InsurgencyData] = [],
 	next_insurgency_id: Array[int] = [1],
 	settlements: Array[SettlementData] = [],
+	miya_inputs: Dictionary = {},
 ) -> Dictionary:
 	var prev_season: int = time_system.get_season()
 
@@ -121,9 +122,14 @@ static func advance_day(
 	var progress_results: Array[Dictionary] = []
 	var insurgency_results: Dictionary = {}
 	if current_season != prev_season:
+		# Add the IC year to miya_inputs so per-province blessed-year tracking
+		# stays consistent. Year is computed from the time system's tick count.
+		var spring_inputs: Dictionary = miya_inputs.duplicate()
+		if current_season == TimeSystem.Season.SPRING and not miya_inputs.is_empty():
+			spring_inputs["current_ic_year"] = time_system.get_ic_year()
 		seasonal_result = _process_season_transition(
 			characters, provinces, current_season, season_meta,
-			approach_penalties, settlements
+			approach_penalties, settlements, spring_inputs
 		)
 		_decay_all_historical_modifiers(characters, ic_day)
 		insurgency_results = _process_insurgencies(
@@ -262,6 +268,7 @@ static func _process_season_transition(
 	season_meta: Dictionary,
 	approach_penalties: Array[Dictionary] = [],
 	settlements: Array[SettlementData] = [],
+	miya_inputs: Dictionary = {},
 ) -> Dictionary:
 	_decay_all_knowledge(characters, current_season)
 
@@ -274,8 +281,19 @@ static func _process_season_transition(
 		province_array.append(provinces[pid])
 
 	var season_name: String = _season_to_name(current_season)
+
+	# Read the Emperor's previous-Autumn income from season_meta (where the
+	# autumn tax cascade persisted it) and inject it into miya_inputs.
+	# Spring tick is the only one that reads it, so this is harmless on
+	# other seasons.
+	var resolved_inputs: Dictionary = miya_inputs.duplicate()
+	if not resolved_inputs.is_empty() and not resolved_inputs.has("emperor_autumn_tax_income"):
+		resolved_inputs["emperor_autumn_tax_income"] = float(
+			season_meta.get("last_autumn_emperor_tax_income", 0.0)
+		)
+
 	var tick_result: Dictionary = ResourceTick.process_seasonal_tick(
-		province_array, settlements, season_name, season_meta
+		province_array, settlements, season_name, season_meta, resolved_inputs
 	)
 
 	return {

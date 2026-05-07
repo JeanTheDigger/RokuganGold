@@ -29,6 +29,12 @@ extends Resource
 @export var province_taint_level: float = 0.0
 @export var last_report_ic_day: int = -1
 
+# -- Miya's Blessing tracking (s11.5b) -----------------------------------------
+# IC year of the most recent Miya's Blessing received. -1 = never blessed.
+# Used by the Need Score calculation: +2 rotation bonus when no Blessing in
+# the last two years, -5 malus when blessed last year.
+@export var last_blessed_ic_year: int = -1
+
 # -- Terrain Multipliers (s4.3) -----------------------------------------------
 
 func get_rice_multiplier() -> float:
