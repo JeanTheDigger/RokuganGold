@@ -168,13 +168,19 @@ extends Resource
 
 @export var active_poisons: Array[Dictionary] = []
 
-# -- Family Web ----------------------------------------------------------------
+# -- Family Web (Section 22.6) -------------------------------------------------
+# Generation 1 (self), Generation 2 (parents), and any actively-simulated
+# Generation 3 ancestors are full L5RCharacterData. Deceased grandparents
+# and great-grandparents are stored as lightweight AncestorRecord entries
+# for lineage tracking and cross-clan-marriage detection.
 
 @export var mother_id: int = -1
 @export var father_id: int = -1
 @export var sibling_ids: Array[int] = []
 @export var children_ids: Array[int] = []
 @export var spouse_id: int = -1
+@export var grandparent_records: Array[AncestorRecord] = []
+@export var great_grandparent_records: Array[AncestorRecord] = []
 
 # -- Kolat (Section 54.7c) -----------------------------------------------------
 

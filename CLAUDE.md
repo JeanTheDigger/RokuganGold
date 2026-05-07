@@ -438,6 +438,7 @@ All in /tests/, one file per system:
 - test_festival_system.gd (~55 tests)
 - test_simulation_scheduler.gd (~20 tests)
 - test_gift_giving_system.gd (~30 tests)
+- test_biological_family.gd (~30 tests)
 
 ### Festival System (s11.5)
 - **simulation/festival_system.gd** — Empire-wide canonical festivals, Rokuyo
@@ -796,6 +797,37 @@ All in /tests/, one file per system:
 - **objective_alignment.json** gains CONDUCT_COMMERCE NeedType with 7 actions:
   CONDUCT_COMMERCE (100), BEGIN_TRAVEL (60), PURCHASE_MARKET (50),
   NEGOTIATE (45), WRITE_LETTER (35), ASSESS_PROVINCE_STATUS (30), DO_NOTHING (0).
+
+### Biological Family Web (s22.6)
+- **shared/ancestor_record.gd** — `AncestorRecord` Resource for lightweight
+  G3/G4 historical records: ancestor_id, name, clan, family, generation
+  (3 = grandparent, 4 = great-grandparent), ic_year_born/died, spouse_name,
+  children_names, maternal flag. `is_living(current_ic_year)` helper.
+- **shared/character_data.gd** — Adds `grandparent_records: Array[AncestorRecord]`
+  and `great_grandparent_records: Array[AncestorRecord]` alongside the
+  existing `mother_id`/`father_id`/`sibling_ids`/`children_ids`/`spouse_id`
+  family-web fields.
+- **simulation/biological_family.gd** — `BiologicalFamily` traversal class
+  per GDD s22.6. Eight-value Relationship enum (NONE, SELF, SIBLING, PARENT,
+  CHILD, GRANDPARENT, GRANDCHILD, FIRST_COUSIN, CROSS_CLAN_MARRIAGE_RELATIVE).
+  `get_relationship(a, b, chars_by_id)` is the main classifier — checks
+  blood relations first (sibling via shared parents OR sibling_ids
+  including half-sibs; parent/child direct id; grandparent/grandchild
+  two-hop; first cousin via aunt/uncle), then the cross-clan-marriage tie
+  (b is a blood relative of a's spouse, with both clans differing).
+  `get_family_modifier(rel)` returns the integer bond value from the
+  existing `DispositionSystem.FAMILY_BONDS` table (sibling=20, parent_child=20,
+  grandparent_grandchild=12, first_cousin=6, cross_clan_marriage=4) — bonds
+  are owned by DispositionSystem; this class is only the classifier.
+  `compute_pairwise_modifier(a, b, chars_by_id)` is the end-to-end helper.
+  Direct lookups: `get_parent_ids`, `get_sibling_ids`, `get_child_ids`.
+  Two-hop: `get_grandparent_ids`, `get_grandchild_ids`, `get_aunt_uncle_ids`
+  (includes half-aunts/uncles via shared grandparents), `get_first_cousin_ids`.
+  `get_generation_lineage(character, chars_by_id)` returns the four-generation
+  lineage dict (G1 self, G2 parents, G3 grandparents as character ids, G4
+  as AncestorRecord entries pulled from parents' grandparent_records and
+  self's great_grandparent_records). Sentinel-safe: -1 parent ids are
+  skipped rather than treated as a match.
 
 ### Gift-Giving System (s12.3)
 - **simulation/gift_giving_system.gd** — Gift resolution per GDD s12.3 with
