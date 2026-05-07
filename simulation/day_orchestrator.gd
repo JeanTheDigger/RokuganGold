@@ -42,6 +42,8 @@ static func advance_day(
 
 	var festival_results: Dictionary = _process_festivals(ic_day, world_states)
 
+	var travel_arrivals: Array[Dictionary] = _process_travel(characters)
+
 	_apply_cohabitation(characters, characters_by_id)
 
 	var favor_results: Dictionary = _process_favors(favors, ic_day)
@@ -137,6 +139,7 @@ static func advance_day(
 		"strategic_results": strategic_results,
 		"festival_results": festival_results,
 		"favor_results": favor_results,
+		"travel_arrivals": travel_arrivals,
 	}
 
 
@@ -776,6 +779,14 @@ static func _process_favors(favors: Array, ic_day: int) -> Dictionary:
 		"expired_favor_ids": expired_ids,
 		"deadline_breaches": breach_results,
 	}
+
+
+# -- Travel Processing (s55.29) -----------------------------------------------
+
+static func _process_travel(
+	characters: Array[L5RCharacterData],
+) -> Array[Dictionary]:
+	return TravelSystem.process_travel_tick(characters)
 
 
 # -- Historical Modifier Decay (s12.2, season boundary) -----------------------

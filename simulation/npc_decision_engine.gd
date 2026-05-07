@@ -19,7 +19,10 @@ static func build_context(character: L5RCharacterData, world_state: Dictionary) 
 
 	# Location & situation
 	ctx.location_id = character.physical_location
-	ctx.context_flag = world_state.get("context_flag", Enums.ContextFlag.AT_OWN_HOLDINGS)
+	if TravelSystem.is_traveling(character):
+		ctx.context_flag = Enums.ContextFlag.TRAVELING
+	else:
+		ctx.context_flag = world_state.get("context_flag", Enums.ContextFlag.AT_OWN_HOLDINGS)
 	ctx.season = world_state.get("season", 0)
 	ctx.ic_day = world_state.get("ic_day", 0)
 	ctx.sublocation = world_state.get("sublocation", Enums.Sublocation.PUBLIC)
@@ -445,6 +448,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array[S
 			]
 		Enums.ContextFlag.TRAVELING:
 			return [
+				"CHANGE_DESTINATION",
 				"WRITE_LETTER", "TRAIN", "MEDITATE",
 				"DO_NOTHING", "REST",
 			]

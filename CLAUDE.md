@@ -421,6 +421,7 @@ All in /tests/, one file per system:
 - test_marriage_system.gd (~22 tests)
 - test_hostage_system.gd (~22 tests)
 - test_court_priority_system.gd (~18 tests)
+- test_travel_system.gd (~30 tests)
 - test_festival_system.gd (~55 tests)
 
 ### Festival System (s11.5)
@@ -636,6 +637,20 @@ All in /tests/, one file per system:
   deliberate -0.5 immediate. Otomo institutional leans: Gossip +15, Disclose
   +10, blocks inter-clan goodwill actions, escalates at Rival disposition.
 
+### Travel System (s55.29)
+- **simulation/travel_system.gd** — NPC movement between settlements per GDD
+  s55.29. Placeholder distance dictionary (symmetric key lookup, swappable
+  when map is built). Terrain cost constants (plains=1, forest=2, mountains=3).
+  `begin_travel()` sets origin/destination/days_remaining on character.
+  `process_travel_tick()` decrements daily, triggers arrival on completion.
+  `cancel_travel()` returns to origin. `change_destination()` mid-travel
+  redirection. `get_context_flag()` returns TRAVELING or AT_OWN_HOLDINGS.
+  `apply_forced_march()` reduces travel by 1 day at 5 morale per day saved.
+  River crossing costs (normal=1, spring=2). Minimum 1 travel day.
+  Wired into DayOrchestrator (`_process_travel()` runs before wave resolution),
+  ActionExecutor (BEGIN_TRAVEL/CHANGE_DESTINATION call TravelSystem), and
+  NPC engine Phase 1 (`build_context()` auto-sets TRAVELING context flag).
+
 ### What's Next
 1. World generation coordinate system and adjacency
 
@@ -710,6 +725,15 @@ The following subsystems are now integrated into the NPC decision loop:
   `FavorSystem.process_expirations()` and
   `FavorSystem.process_deadline_breaches()` on the favors array. New param
   on `advance_day()`: `favors`.
+- **TravelSystem** — Daily: `_process_travel()` runs
+  `TravelSystem.process_travel_tick()` before wave resolution, decrementing
+  travel days and arriving characters. Phase 1: `build_context()` auto-detects
+  traveling characters via `TravelSystem.is_traveling()` and sets
+  `ctx.context_flag = TRAVELING`. Phase 3: TRAVELING context restricts to
+  CHANGE_DESTINATION, WRITE_LETTER, TRAIN, MEDITATE, DO_NOTHING, REST.
+  Phase 7: ActionExecutor routes BEGIN_TRAVEL to `TravelSystem.begin_travel()`
+  and CHANGE_DESTINATION to `TravelSystem.change_destination()`. Return dict
+  includes `travel_arrivals`.
 
 ## Resolved Design Decisions
 

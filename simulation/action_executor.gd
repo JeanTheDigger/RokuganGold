@@ -133,9 +133,22 @@ static func execute(
 
 static func _execute_no_roll(
 	action: NPCDataStructures.ScoredAction,
-	_character: L5RCharacterData,
+	character: L5RCharacterData,
 	ctx: NPCDataStructures.ContextSnapshot,
 ) -> Dictionary:
+	var effects: Dictionary = _get_no_roll_effects(action.action_id)
+
+	if action.action_id == "BEGIN_TRAVEL":
+		var destination: String = _resolve_travel_destination(action)
+		var travel_result: Dictionary = TravelSystem.begin_travel(character, destination)
+		effects["travel"] = travel_result
+		effects["effect"] = "travel_started" if travel_result.get("started", false) else "travel_failed"
+	elif action.action_id == "CHANGE_DESTINATION":
+		var destination: String = _resolve_travel_destination(action)
+		var travel_result: Dictionary = TravelSystem.change_destination(character, destination)
+		effects["travel"] = travel_result
+		effects["effect"] = "destination_changed" if travel_result.get("changed", false) else "change_failed"
+
 	return {
 		"success": true,
 		"action_id": action.action_id,
@@ -148,7 +161,7 @@ static func _execute_no_roll(
 		"roll_total": 0,
 		"tn": 0,
 		"margin": 0,
-		"effects": _get_no_roll_effects(action.action_id),
+		"effects": effects,
 	}
 
 
@@ -438,3 +451,15 @@ static func _compute_intelligence_effects(action_id: String, margin: int) -> Dic
 				"raises": raises,
 			}
 	return {"effect": "intelligence_action"}
+
+
+# -- Travel Destination Resolution (s55.29) -----------------------------------
+
+static func _resolve_travel_destination(
+	action: NPCDataStructures.ScoredAction,
+) -> String:
+	if action.target_settlement_id >= 0:
+		return str(action.target_settlement_id)
+	if action.target_province_id >= 0:
+		return str(action.target_province_id)
+	return ""
