@@ -44,6 +44,7 @@ class ScoredAction:
 	var travel_redirect_penalty: float = 0.0
 	var confidence_penalty: float = 0.0
 	var stale_intel_bonus: float = 0.0
+	var festival_modifier: float = 0.0
 
 	func get_total_score() -> float:
 		return (
@@ -60,6 +61,7 @@ class ScoredAction:
 			+ travel_redirect_penalty
 			+ confidence_penalty
 			+ stale_intel_bonus
+			+ festival_modifier
 		)
 
 
@@ -132,6 +134,12 @@ class ContextSnapshot:
 
 	# Shadowlands intelligence (s55.23)
 	var taint_topic_province_ids: Array[int] = []
+
+	# Festival state (s11.5)
+	var is_ceasefire_day: bool = false
+	var is_labor_halt_day: bool = false
+	var is_taian: bool = false
+	var is_inauspicious_for_social: bool = false
 
 	# State
 	var pending_events: Array = []

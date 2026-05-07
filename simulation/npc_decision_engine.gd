@@ -77,6 +77,12 @@ static func build_context(character: L5RCharacterData, world_state: Dictionary) 
 	ctx.escalating_conflicts = world_state.get("escalating_conflicts", [])
 	ctx.taint_topic_province_ids = world_state.get("taint_topic_province_ids", [] as Array[int])
 
+	# Festival state (s11.5)
+	ctx.is_ceasefire_day = world_state.get("is_ceasefire_day", false)
+	ctx.is_labor_halt_day = world_state.get("is_labor_halt_day", false)
+	ctx.is_taian = world_state.get("is_taian", false)
+	ctx.is_inauspicious_for_social = world_state.get("is_inauspicious_for_social", false)
+
 	# State
 	ctx.pending_events = world_state.get("pending_events", [])
 	ctx.ap_remaining = character.action_points_current
@@ -144,6 +150,10 @@ static func generate_options(
 		if _is_zone_blocked(action_id, ctx.zone_flags):
 			continue
 		if _is_military_blocked(action_id, ctx):
+			continue
+		if ctx.is_ceasefire_day and _is_ceasefire_blocked(action_id):
+			continue
+		if ctx.is_labor_halt_day and _is_labor_halt_blocked(action_id):
 			continue
 		var option := NPCDataStructures.ScoredAction.new()
 		option.action_id = action_id
@@ -240,6 +250,8 @@ static func score_all(
 		else:
 			option.confidence_penalty = 0.0
 			option.stale_intel_bonus = 0.0
+
+		option.festival_modifier = _compute_festival_modifier(option.action_id, ctx)
 
 
 # -- Phase 6: Selection -------------------------------------------------------
@@ -832,3 +844,47 @@ static func _is_military_blocked(
 		var min_rank: int = COMMANDER_RANK_ACTIONS[action_id]
 		return ctx.military_rank < min_rank
 	return false
+
+
+# -- Festival Blocking (s11.5) ------------------------------------------------
+
+const CEASEFIRE_BLOCKED_ACTIONS: Array[String] = [
+	"ORDER_BATTLE", "CONDUCT_RAID", "RAID_HARVEST",
+	"CONDUCT_SORTIE", "CONDUCT_STORM_ASSAULT",
+	"MAINTAIN_SIEGE", "DECLARE_WAR",
+]
+
+const LABOR_HALT_BLOCKED_ACTIONS: Array[String] = [
+	"COMMISSION_CONSTRUCTION", "COMMISSION_REPAIR",
+	"LEVY_TROOPS", "DRILL_TROOPS",
+]
+
+const SOCIAL_ACTIONS: Array[String] = [
+	"CHARM", "NEGOTIATE", "PERSUADE", "IMPRESS",
+	"LISTEN_REFLECT", "INTIMIDATE", "PERFORM_FOR",
+	"GOSSIP", "DISCLOSE", "OFFER_FAVOR",
+]
+
+const INAUSPICIOUS_PENALTY: float = -10.0
+const TAIAN_BONUS: float = 5.0
+
+static func _is_ceasefire_blocked(action_id: String) -> bool:
+	return action_id in CEASEFIRE_BLOCKED_ACTIONS
+
+
+static func _is_labor_halt_blocked(action_id: String) -> bool:
+	return action_id in LABOR_HALT_BLOCKED_ACTIONS
+
+
+static func _compute_festival_modifier(
+	action_id: String,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> float:
+	if action_id not in SOCIAL_ACTIONS:
+		return 0.0
+	var modifier: float = 0.0
+	if ctx.is_inauspicious_for_social:
+		modifier += INAUSPICIOUS_PENALTY
+	if ctx.is_taian:
+		modifier += TAIAN_BONUS
+	return modifier
