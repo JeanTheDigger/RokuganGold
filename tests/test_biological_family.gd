@@ -416,3 +416,152 @@ func test_ancestor_is_living_when_year_died_in_future() -> void:
 	var rec: AncestorRecord = AncestorRecord.new()
 	rec.ic_year_died = 600
 	assert_true(rec.is_living(500))
+
+
+# -- compute_all_family_bonds -------------------------------------------------
+
+func test_compute_all_family_bonds_returns_close_relations() -> void:
+	var self_char: L5RCharacterData = _make(3)
+	var sibling: L5RCharacterData = _make(4)
+	var father: L5RCharacterData = _make(1)
+	var child: L5RCharacterData = _make(7)
+	self_char.sibling_ids = [4]
+	sibling.sibling_ids = [3]
+	self_char.father_id = 1
+	self_char.children_ids = [7]
+
+	var bonds: Dictionary = BiologicalFamily.compute_all_family_bonds(self_char, _chars)
+	assert_eq(bonds[4], DispositionSystem.FAMILY_BONDS["sibling"])
+	assert_eq(bonds[1], DispositionSystem.FAMILY_BONDS["parent_child"])
+	assert_eq(bonds[7], DispositionSystem.FAMILY_BONDS["parent_child"])
+
+
+func test_compute_all_family_bonds_includes_grandparents_and_cousins() -> void:
+	var grand: L5RCharacterData = _make(100)
+	var father: L5RCharacterData = _make(1)
+	var aunt: L5RCharacterData = _make(5)
+	var self_char: L5RCharacterData = _make(3)
+	var cousin: L5RCharacterData = _make(50)
+	father.father_id = 100
+	father.sibling_ids = [5]
+	aunt.father_id = 100
+	aunt.sibling_ids = [1]
+	aunt.children_ids = [50]
+	self_char.father_id = 1
+	cousin.mother_id = 5
+
+	var bonds: Dictionary = BiologicalFamily.compute_all_family_bonds(self_char, _chars)
+	assert_eq(bonds.get(100, -1), DispositionSystem.FAMILY_BONDS["grandparent_grandchild"])
+	assert_eq(bonds.get(50, -1), DispositionSystem.FAMILY_BONDS["first_cousin"])
+
+
+func test_compute_all_family_bonds_includes_cross_clan_relatives() -> void:
+	var self_char: L5RCharacterData = _make(3, "Lion")
+	var spouse: L5RCharacterData = _make(60, "Crane")
+	var spouse_sib: L5RCharacterData = _make(61, "Crane")
+	self_char.spouse_id = 60
+	spouse.sibling_ids = [61]
+
+	var bonds: Dictionary = BiologicalFamily.compute_all_family_bonds(self_char, _chars)
+	assert_eq(
+		bonds.get(61, -999),
+		DispositionSystem.FAMILY_BONDS["cross_clan_marriage"],
+	)
+
+
+func test_compute_all_family_bonds_does_not_include_strangers() -> void:
+	var self_char: L5RCharacterData = _make(3)
+	_make(99)  # Unrelated stranger.
+	var bonds: Dictionary = BiologicalFamily.compute_all_family_bonds(self_char, _chars)
+	assert_false(bonds.has(99))
+
+
+func test_compute_all_family_bonds_handles_null_actor() -> void:
+	var bonds: Dictionary = BiologicalFamily.compute_all_family_bonds(null, _chars)
+	assert_true(bonds.is_empty())
+
+
+# -- DispositionSystem.get_effective_disposition -----------------------------
+
+func test_effective_disposition_falls_back_without_chars_by_id() -> void:
+	var actor: L5RCharacterData = _make(3)
+	actor.disposition_values = {99: 25}
+	assert_eq(DispositionSystem.get_effective_disposition(actor, 99), 25)
+
+
+func test_effective_disposition_layers_family_bond() -> void:
+	var actor: L5RCharacterData = _make(3)
+	var sibling: L5RCharacterData = _make(4)
+	actor.sibling_ids = [4]
+	sibling.sibling_ids = [3]
+	actor.disposition_values = {4: 10}
+	# Stored 10 + sibling bond 20 = 30.
+	assert_eq(
+		DispositionSystem.get_effective_disposition(actor, 4, _chars),
+		30,
+	)
+
+
+func test_effective_disposition_clamps_at_100() -> void:
+	var actor: L5RCharacterData = _make(3)
+	var sibling: L5RCharacterData = _make(4)
+	actor.sibling_ids = [4]
+	sibling.sibling_ids = [3]
+	actor.disposition_values = {4: 95}
+	# 95 + 20 = 115 -> clamped 100.
+	assert_eq(
+		DispositionSystem.get_effective_disposition(actor, 4, _chars),
+		100,
+	)
+
+
+func test_effective_disposition_returns_zero_for_negative_target() -> void:
+	var actor: L5RCharacterData = _make(3)
+	assert_eq(DispositionSystem.get_effective_disposition(actor, -1, _chars), 0)
+
+
+func test_effective_disposition_returns_zero_for_null_actor() -> void:
+	assert_eq(DispositionSystem.get_effective_disposition(null, 4, _chars), 0)
+
+
+# -- NPCDecisionEngine.build_context augmentation ----------------------------
+
+func test_build_context_omits_family_bonds_without_chars_by_id() -> void:
+	var actor: L5RCharacterData = _make(3)
+	var sibling: L5RCharacterData = _make(4)
+	actor.sibling_ids = [4]
+	sibling.sibling_ids = [3]
+	actor.disposition_values = {4: 5}
+	var ctx: NPCDataStructures.ContextSnapshot = NPCDecisionEngine.build_context(actor, {})
+	assert_eq(ctx.dispositions.get(4, 0), 5)
+
+
+func test_build_context_layers_family_bonds_when_chars_by_id_provided() -> void:
+	var actor: L5RCharacterData = _make(3)
+	var sibling: L5RCharacterData = _make(4)
+	actor.sibling_ids = [4]
+	sibling.sibling_ids = [3]
+	actor.disposition_values = {4: 5}
+	var ctx: NPCDataStructures.ContextSnapshot = NPCDecisionEngine.build_context(actor, {}, _chars)
+	# 5 stored + 20 sibling bond.
+	assert_eq(ctx.dispositions.get(4, 0), 25)
+	assert_eq(ctx.disposition_values.get(4, 0), 25)
+
+
+func test_build_context_seeds_dispositions_for_relatives_with_no_stored_value() -> void:
+	# A character who has never met their sibling still feels the bond.
+	var actor: L5RCharacterData = _make(3)
+	var sibling: L5RCharacterData = _make(4)
+	actor.sibling_ids = [4]
+	sibling.sibling_ids = [3]
+	# disposition_values is empty.
+	var ctx: NPCDataStructures.ContextSnapshot = NPCDecisionEngine.build_context(actor, {}, _chars)
+	assert_eq(ctx.dispositions.get(4, 0), 20)
+
+
+func test_build_context_does_not_alter_non_relatives() -> void:
+	var actor: L5RCharacterData = _make(3)
+	_make(99)
+	actor.disposition_values = {99: -10}
+	var ctx: NPCDataStructures.ContextSnapshot = NPCDecisionEngine.build_context(actor, {}, _chars)
+	assert_eq(ctx.dispositions.get(99, 0), -10)

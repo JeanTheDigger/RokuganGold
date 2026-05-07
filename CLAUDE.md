@@ -828,6 +828,26 @@ All in /tests/, one file per system:
   as AncestorRecord entries pulled from parents' grandparent_records and
   self's great_grandparent_records). Sentinel-safe: -1 parent ids are
   skipped rather than treated as a match.
+  `compute_all_family_bonds(actor, chars_by_id)` returns
+  `{ other_id: bond_value }` for every blood relative + cross-clan-marriage
+  relative reachable from the actor.
+
+- **Family bond wiring into disposition** —
+  `DispositionSystem.get_effective_disposition(actor, target_id, chars_by_id={})`
+  returns the stored `disposition_values` entry plus the family bond, clamped
+  -100..100. Falls back to a plain lookup when chars_by_id is empty.
+  `NPCDecisionEngine.build_context` accepts an optional `chars_by_id` third
+  argument; when provided, it walks `compute_all_family_bonds` and layers the
+  bonds onto `ctx.dispositions` and `ctx.disposition_values`. `run()` accepts
+  the same optional arg and threads it to build_context. NPCWaveResolver
+  passes characters_by_id into the run() and build_context() calls inside
+  the full-execution paths (`_resolve_reactive_events_full`,
+  `_resolve_character_wave_full`, `_execute_decision`); DayOrchestrator
+  threads it into the daily letter pass. Decision-only paths and
+  civilian-order resolution still use the empty-dict default — they
+  degrade gracefully without family-bond awareness. Bonds are recomputed
+  each context build, so they never decay and stay in sync with the family
+  graph automatically.
 
 ### Gift-Giving System (s12.3)
 - **simulation/gift_giving_system.gd** — Gift resolution per GDD s12.3 with

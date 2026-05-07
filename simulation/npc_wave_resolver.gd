@@ -148,7 +148,7 @@ static func _resolve_reactive_events_full(
 		var redirects: int = _get_travel_redirects(objs)
 		var decision: Dictionary = NPCDecisionEngine.run(
 			c, ws, objs, scoring_tables, filter_data,
-			approach_penalties, commitments, redirects
+			approach_penalties, commitments, redirects, characters_by_id
 		)
 		if decision.get("success", false):
 			var exec_result: Dictionary = _execute_decision(
@@ -354,7 +354,7 @@ static func _resolve_character_wave_full(
 	if character.action_points_current > 0:
 		var decision: Dictionary = NPCDecisionEngine.run(
 			character, ws, objs, scoring_tables, filter_data,
-			approach_penalties, commitments, redirects
+			approach_penalties, commitments, redirects, characters_by_id
 		)
 		if decision.get("success", false):
 			var exec_result: Dictionary = _execute_decision(
@@ -448,7 +448,7 @@ static func _execute_decision(
 	action.target_province_id = decision.get("target_province_id", -1)
 
 	var ctx: NPCDataStructures.ContextSnapshot = NPCDecisionEngine.build_context(
-		character, world_state
+		character, world_state, characters_by_id
 	)
 
 	return ActionExecutor.execute(

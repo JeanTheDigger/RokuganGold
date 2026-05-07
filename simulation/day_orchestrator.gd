@@ -819,7 +819,7 @@ static func _process_daily_letter_pass(
 		var objectives: Dictionary = objectives_map.get(character.character_id, {})
 		if objectives.is_empty():
 			continue
-		var ctx := NPCDecisionEngine.build_context(character, world_states)
+		var ctx := NPCDecisionEngine.build_context(character, world_states, characters_by_id)
 		var letter_result: Dictionary = NPCDecisionEngine.resolve_daily_letter(
 			character, objectives, scoring_tables, ctx
 		)

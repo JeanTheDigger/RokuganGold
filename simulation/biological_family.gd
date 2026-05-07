@@ -71,6 +71,85 @@ static func compute_pairwise_modifier(
 	return get_family_modifier(rel)
 
 
+# Computes all family bond modifiers for `actor` against every blood relative
+# (close blood relations + cross-clan-marriage relatives) reachable from
+# chars_by_id. Returns { other_id: int -> bond_value: int }.
+#
+# Limited to the close-relation set (siblings, parents, children, grandparents,
+# grandchildren, first cousins) plus actor's spouse's blood relatives in
+# differing clans. Bonds are pulled from DispositionSystem.FAMILY_BONDS.
+static func compute_all_family_bonds(
+	actor: L5RCharacterData,
+	chars_by_id: Dictionary,
+) -> Dictionary:
+	var bonds: Dictionary = {}
+	if actor == null:
+		return bonds
+
+	# Close blood relations — direct id lookups, fast.
+	for sib_id in get_sibling_ids(actor):
+		_record_bond(bonds, sib_id, Relationship.SIBLING)
+	for parent_id in get_parent_ids(actor):
+		_record_bond(bonds, parent_id, Relationship.PARENT)
+	for child_id in get_child_ids(actor):
+		_record_bond(bonds, child_id, Relationship.CHILD)
+
+	# Half-siblings via shared parent — scan chars_by_id for other entries
+	# claiming the same mother/father.
+	if actor.mother_id != -1 or actor.father_id != -1:
+		for other_id: int in chars_by_id:
+			if other_id == actor.character_id:
+				continue
+			if bonds.has(other_id):
+				continue
+			var other: L5RCharacterData = chars_by_id.get(other_id)
+			if other == null:
+				continue
+			if _are_siblings(actor, other):
+				_record_bond(bonds, other_id, Relationship.SIBLING)
+
+	# Two-hop relations.
+	for gp_id in get_grandparent_ids(actor, chars_by_id):
+		if not bonds.has(gp_id):
+			_record_bond(bonds, gp_id, Relationship.GRANDPARENT)
+	for gc_id in get_grandchild_ids(actor, chars_by_id):
+		if not bonds.has(gc_id):
+			_record_bond(bonds, gc_id, Relationship.GRANDCHILD)
+	for cousin_id in get_first_cousin_ids(actor, chars_by_id):
+		if not bonds.has(cousin_id):
+			_record_bond(bonds, cousin_id, Relationship.FIRST_COUSIN)
+
+	# Cross-clan-marriage relatives via spouse's blood ties.
+	if actor.spouse_id != -1:
+		var spouse: L5RCharacterData = chars_by_id.get(actor.spouse_id)
+		if spouse != null and spouse.clan != actor.clan:
+			for other_id: int in chars_by_id:
+				if other_id == actor.character_id:
+					continue
+				if bonds.has(other_id):
+					continue
+				var other: L5RCharacterData = chars_by_id.get(other_id)
+				if other == null:
+					continue
+				if other.clan == actor.clan:
+					continue
+				var rel: Relationship = _get_blood_relationship(spouse, other, chars_by_id)
+				if rel != Relationship.NONE:
+					_record_bond(bonds, other_id, Relationship.CROSS_CLAN_MARRIAGE_RELATIVE)
+
+	return bonds
+
+
+static func _record_bond(
+	bonds: Dictionary,
+	other_id: int,
+	rel: Relationship,
+) -> void:
+	if other_id < 0:
+		return
+	bonds[other_id] = get_family_modifier(rel)
+
+
 # -- Direct relation lookups (no traversal beyond the character itself) ------
 
 static func get_parent_ids(character: L5RCharacterData) -> Array[int]:
