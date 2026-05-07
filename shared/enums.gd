@@ -395,3 +395,21 @@ static func shourido_virtue_name(v: ShouridoVirtue) -> String:
 	if idx < 0:
 		return ""
 	return ShouridoVirtue.keys()[idx]
+
+
+enum InsurgencyType {
+	MAHO_CULT,
+	PEASANT_REVOLT,
+	RONIN_BANDIT,
+	TAINT_MANIFESTATION,
+	NEZUMI_INFESTATION,
+	URBAN_CRIMINAL_NETWORK,
+	PIRATE_FLEET,
+}
+
+enum StabilityTier {
+	STABLE,
+	RESTLESS,
+	VOLATILE,
+	BROKEN,
+}

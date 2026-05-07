@@ -30,6 +30,8 @@ static func advance_day(
 	death_events: Array[Dictionary] = [],
 	successor_map: Dictionary = {},
 	favors: Array = [],
+	insurgencies: Array[InsurgencyData] = [],
+	next_insurgency_id: Array[int] = [1],
 ) -> Dictionary:
 	var prev_season: int = time_system.get_season()
 
@@ -116,12 +118,17 @@ static func advance_day(
 	var seasonal_result: Dictionary = {}
 	var strategic_results: Array[Dictionary] = []
 	var progress_results: Array[Dictionary] = []
+	var insurgency_results: Dictionary = {}
 	if current_season != prev_season:
 		seasonal_result = _process_season_transition(
 			characters, provinces, current_season, season_meta,
 			approach_penalties
 		)
 		_decay_all_historical_modifiers(characters, ic_day)
+		insurgency_results = _process_insurgencies(
+			insurgencies, provinces, dice_engine, current_season,
+			next_insurgency_id, world_states
+		)
 		progress_results = _evaluate_objective_progress(
 			characters, objectives_map, world_states
 		)
@@ -151,6 +158,7 @@ static func advance_day(
 		"travel_arrivals": travel_arrivals,
 		"progress_results": progress_results,
 		"letter_pass_results": letter_pass_results,
+		"insurgency_results": insurgency_results,
 	}
 
 
@@ -878,3 +886,42 @@ static func _decay_all_historical_modifiers(
 				if mod is Dictionary:
 					var days_elapsed: int = ic_day - mod.get("created_ic_day", 0)
 					DispositionSystem.decay_historical_modifier(mod, days_elapsed)
+
+
+# -- Insurgency Processing (s11.11, season boundary) --------------------------
+
+static func _process_insurgencies(
+	insurgencies: Array[InsurgencyData],
+	provinces: Dictionary,
+	dice_engine: DiceEngine,
+	current_season: int,
+	next_insurgency_id: Array[int],
+	world_states: Dictionary,
+) -> Dictionary:
+	var ptls: Dictionary = {}
+	for pid: int in provinces:
+		var prov: ProvinceData = provinces[pid]
+		ptls[pid] = prov.province_taint_level
+
+	var per_province_ws: Dictionary = {}
+	for pid: int in provinces:
+		per_province_ws[pid] = world_states.get(pid, world_states)
+
+	var result: Dictionary = InsurgencySystem.process_season(
+		insurgencies, provinces, ptls, dice_engine, current_season,
+		next_insurgency_id[0], per_province_ws
+	)
+
+	for new_ins: InsurgencyData in result.get("new_insurgencies", []):
+		insurgencies.append(new_ins)
+
+	next_insurgency_id[0] = result.get("next_id", next_insurgency_id[0])
+
+	var removed: Array[InsurgencyData] = []
+	for ins: InsurgencyData in insurgencies:
+		if ins.strength <= 0:
+			removed.append(ins)
+	for ins: InsurgencyData in removed:
+		insurgencies.erase(ins)
+
+	return result

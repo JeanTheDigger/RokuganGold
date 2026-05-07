@@ -403,7 +403,8 @@ All in /tests/, one file per system:
 - test_zone_flag_matrix.gd (~53 tests)
 - test_tattoo_system.gd (~100 tests)
 - test_character_sheet_field_index.gd (~45 tests)
-- test_system_wiring.gd (~44 tests)
+- test_insurgency_system.gd (~60 tests)
+- test_system_wiring.gd (~46 tests)
 - test_world_generator.gd (~45 tests)
 - test_resource_availability.gd (~25 tests)
 - test_court_availability.gd (~15 tests)
@@ -709,6 +710,45 @@ All in /tests/, one file per system:
   PERFORM_RITUAL), personality_lean (all 14 virtues), context action list
   (AT_OWN_HOLDINGS), and ActionExecutor (ADMINISTRATIVE category).
 
+### Insurgency System (s11.11)
+- **simulation/insurgency_system.gd** — Province-level insurgency lifecycle per
+  GDD s11.11. Shared 5-phase mechanics (Spawning, Hidden Growth, Detection,
+  Active Crisis, Suppression) for 7 insurgency types: Maho Cult, Peasant Revolt,
+  Ronin Bandit Uprising, Province Taint Manifestation, Nezumi Infestation,
+  Urban Criminal Network, Pirate (Wako) Fleet.
+  `get_stability_tier()` maps 0–100 stability to 4 tiers (Stable/Restless/
+  Volatile/Broken). `compute_stability_change()` seasonal delta from starvation,
+  war, raids, insurgencies, garrison, peace bonus. `get_eligible_types()` per
+  tier with Maho 2% in Stable, Nezumi anywhere, Taint from PTL≥3, Pirates
+  coastal only. `get_spawn_chance()` type-specific probabilities with lord
+  virtue, starvation, garrison modifiers. `try_spawn()` d100 via DiceEngine.
+  `process_hidden_growth()` strength +1, concealment −1, hint at str 5,
+  auto-detect at concealment 0. `attempt_detection()` success/partial/failure.
+  `get_suppression_tn()` strength×5 standard, ×7 for ronin bandits.
+  `resolve_suppression()` success(−3)/partial(−1)/failure(0)/critical(+1);
+  maho/taint max −1 without shugenja. `resolve_coordinated_suppression()`
+  cumulative with leader bonus. `compute_ptl_change()` maho/taint gains,
+  adjacent bleed at PTL 6+, jade halves bleed, natural decay −0.5.
+  `get_crisis_tier()` type-specific tier mapping. `get_strength_10_consequence()`
+  oni_manifestation/province_seized/army_scale_threat/etc.
+  `attempt_ronin_hire()` TN=str×5 courtier+awareness roll.
+  `compute_susceptibility()` hidden modifier from disposition/honor/glory/
+  shourido. `is_immune_to_corruption()` Ishi immunity. Economic effects:
+  `get_koku_drain()`, `get_rice_drain()`, `get_pu_loss_on_suppression()`.
+  `process_season()` full seasonal tick combining growth, spread, spawn.
+- **shared/insurgency_data.gd** — InsurgencyData Resource: insurgency_id, type,
+  province_id, settlement_id, strength (1–10), concealment (1–10), detected,
+  seasons_active, season_spawned, spread_from_id.
+- **shared/enums.gd** gains InsurgencyType (7 values), StabilityTier (4 values).
+- **shared/province_data.gd** gains `province_taint_level: float = 0.0`.
+- Wired into DayOrchestrator: `_process_insurgencies()` runs on season boundary
+  after historical modifier decay. Reads PTL from `province_taint_level` on
+  ProvinceData. Appends spawned insurgencies, removes suppressed ones.
+  New params on `advance_day()`: `insurgencies`, `next_insurgency_id`.
+  Return dict gains `insurgency_results`.
+- ASCII map investigation module and Settlement Building Framework deferred
+  until ASCII map system is built.
+
 ### What's Next
 1. World generation coordinate system and adjacency
 
@@ -801,6 +841,13 @@ The following subsystems are now integrated into the NPC decision loop:
   Arrival observation: `_process_arrival_observation()` runs after travel tick,
   records FRESH location knowledge via
   `InformationSystem.record_location_observation()` for co-located NPCs.
+- **InsurgencySystem** — Seasonal: `_process_insurgencies()` runs on season
+  boundary after historical modifier decay. Calls
+  `InsurgencySystem.process_season()` with PTL values read from
+  `ProvinceData.province_taint_level`. Appends new insurgencies from spawning
+  and spreading, removes suppressed ones (strength ≤ 0). New params on
+  `advance_day()`: `insurgencies: Array[InsurgencyData]`,
+  `next_insurgency_id: Array[int]`. Return dict gains `insurgency_results`.
 
 ## Resolved Design Decisions
 

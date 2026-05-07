@@ -1676,3 +1676,36 @@ func test_s57_17_get_vassals_includes_operational_subordinates() -> void:
 	var chars: Array[L5RCharacterData] = [lord, vassal, op_sub]
 	var result := DayOrchestrator._get_vassals(lord, chars)
 	assert_eq(result.size(), 2, "Should include both feudal vassal and operational subordinate")
+
+
+# -- s11.11 — Insurgency System Wiring ----------------------------------------
+
+func test_s11_11_insurgency_wired_into_orchestrator() -> void:
+	var time := TimeSystem.new()
+	# Advance to just before a season boundary
+	for i: int in range(89):
+		time.advance_tick()
+	var chars: Array[L5RCharacterData] = [_char]
+	var chars_by_id: Dictionary = {1: _char}
+	var province := ProvinceData.new()
+	province.province_id = 1
+	province.stability = 40.0
+	province.population_pu = 1000
+	province.garrison_pu = 100
+	var provinces: Dictionary = {1: province}
+	var insurgencies: Array[InsurgencyData] = []
+	var next_ins_id: Array[int] = [1]
+	var dice := DiceEngine.new(42)
+
+	var result: Dictionary = DayOrchestrator.advance_day(
+		time, chars, chars_by_id, {}, {}, _scoring_tables, _filter_data,
+		dice, _action_skill_map, provinces, [] as Array[Dictionary],
+		{}, [], [], [], [], [], {}, {}, [], {}, [],
+		insurgencies, next_ins_id,
+	)
+	assert_true(result.has("insurgency_results"), "Should include insurgency_results")
+
+
+func test_s11_11_province_taint_level_field() -> void:
+	var p := ProvinceData.new()
+	assert_eq(p.province_taint_level, 0.0, "PTL should default to 0.0")
