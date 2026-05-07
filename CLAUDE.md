@@ -440,6 +440,7 @@ All in /tests/, one file per system:
 - test_gift_giving_system.gd (~39 tests)
 - test_biological_family.gd (~42 tests)
 - test_collective_disposition.gd (~37 tests)
+- test_miya_blessing_system.gd (~50 tests)
 
 ### Festival System (s11.5)
 - **simulation/festival_system.gd** — Empire-wide canonical festivals, Rokuyo
@@ -798,6 +799,42 @@ All in /tests/, one file per system:
 - **objective_alignment.json** gains CONDUCT_COMMERCE NeedType with 7 actions:
   CONDUCT_COMMERCE (100), BEGIN_TRAVEL (60), PURCHASE_MARKET (50),
   NEGOTIATE (45), WRITE_LETTER (35), ASSESS_PROVINCE_STATUS (30), DO_NOTHING (0).
+
+### Miya's Blessing — Annual World Map Event (s11.5b)
+- **simulation/miya_blessing_system.gd** — Annual charitable Rice transfer
+  per GDD s11.5b. Pure simulation class. Fires once per year at the start
+  of Spring, after planting and before rice consumption — the injected
+  Rice can pull settlements out of Shortage before the starvation check.
+  Five `BLESSING_RATE` values keyed by `StrategicReview.EmperorArchetype`:
+  Benevolent 20%, Iron 15% (default), Cunning 10%, Warlike 5%, Tyrant 0%.
+  `compute_allocation(tax_income, rate, stockpile, otosan_uchi_pu)`
+  applies (1) blessing rate, (2) `MAX_TOTAL=15.0` per-year ceiling
+  (5.0 × 3), and (3) the Imperial reserve floor (`OU_PU × 0.25` must
+  remain) — clamping the result to whatever the Emperor's stockpile
+  can spare without starving the capital. `is_suspended(allocation)`
+  flags any total below `MIN_THRESHOLD=0.50`.
+  Need score per GDD §4.1: starvation tier (Shortage/Hunger/Famine =
+  +5/+10/+20), stability bracket (Restless/Volatile/Broken = +2/+5/+10),
+  +5 active war, +3 raided, +3 insurgency, +5 PU decline ≥10%, +10 if
+  ≥25% (replaces the +5), +2 rotation if not blessed last year (and not
+  the year before that), -5 malus if blessed last year, plus Winter
+  Court petition contributions.
+  `compute_petition_bonus(success, raises)` = +8 base + 2 per Raise.
+  `select_provinces(scored)` picks up to 3 by score desc, tiebreaking
+  on lowest stability, then smaller population. Excluded provinces
+  (Shadowlands taint above maho threshold, active rebellion) are
+  filtered before selection. `distribute_to_settlements()` allocates
+  each province's share proportionally by `population_pu` across that
+  province's settlements (zero-PU settlements skipped).
+  `process_annual_blessing(inputs)` is the top-level orchestrator —
+  returns a result dict with `fired`, `suspended`, `suspension_reason`
+  ("tyrant_archetype" or "below_threshold"), `allocation_total`,
+  `allocation_per_province`, `selected_province_ids`,
+  `settlement_rice_grants`, `stability_bonus` (+5), and
+  `pop_growth_bonus` (+1%). The caller (DayOrchestrator) is responsible
+  for actually applying the rice transfer, stability bump, growth
+  bonus, topic generation, and disposition deltas — the system itself
+  stays pure.
 
 ### Clan & Family Collective Disposition (s12.2b)
 - **simulation/collective_disposition.gd** — `CollectiveDisposition` class
