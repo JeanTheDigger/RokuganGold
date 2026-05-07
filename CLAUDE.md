@@ -417,6 +417,7 @@ All in /tests/, one file per system:
 - test_personal_visit_system.gd (~25 tests)
 - test_inventory_system.gd (~30 tests)
 - test_intimidation_system.gd (~30 tests)
+- test_disposition_system.gd (~66 tests)
 
 ### World Generator
 - **simulation/world_generator.gd** — Static factory methods for seeding initial
@@ -577,6 +578,18 @@ All in /tests/, one file per system:
   Honor costs: blackmail/public −0.3, private −0.2. Infamy: 0.1/0.1/0.05.
   Pushback TN = 15 + intimidator's skill rank. Compliance ends at Friend
   disposition or when leverage removed.
+
+### Disposition System (s12.2)
+- **simulation/disposition_system.gd** — Core relationship layer per GDD s12.2.
+  Scale: -100 to +100, 8 named tiers (Blood Enemy to Devoted). Three modifier
+  categories: permanent (14×14 virtue compatibility matrix, family bonds),
+  historical (27 event types with start/floor/decay), temporary (14 conditional
+  modifiers with durations). Roll modifiers: target's disposition gives Free
+  Raises (+31) or additional Raises required (-31). Authenticity modifier:
+  dice kept penalty for hostile actions toward friends or positive actions
+  toward enemies. Supply sharing ratio (Friend+ only, scaled 50-100%).
+  Court action disposition values for all 7 targeted actions. Cohabitation
+  passive gain (+0.1/day). Family/Clan ripple (+2/+1, caps 30/15).
 
 ### What's Next
 1. World generation coordinate system and adjacency
