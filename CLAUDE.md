@@ -412,6 +412,7 @@ All in /tests/, one file per system:
 - test_province_triage.gd (~30 tests)
 - test_reactive_decisions.gd (~30 tests)
 - test_opportunity_scanner.gd (~25 tests)
+- test_primary_objective_decomposer.gd (~35 tests)
 
 ### World Generator
 - **simulation/world_generator.gd** — Static factory methods for seeding initial
@@ -510,6 +511,18 @@ All in /tests/, one file per system:
   Self-selection timing: Chugi never, Seigyo/Ishi 1 season, Makoto/Ketsui 2,
   default 3. Wired into StrategicReview `_evaluate_self_selection()` — lords
   without active primary objectives run the scanner each seasonal review.
+
+### Primary Objective Decomposer (s55.28)
+- **simulation/primary_objective_decomposer.gd** — 12 completable primary
+  objective decomposition trees: BREAK_ALLIANCE (vulnerability assessment,
+  leverage deployment, court/letter routing), ISOLATE_CHARACTER (ally triage,
+  progressive severing), GAIN_WINTER_COURT_INVITATION, APPOINT_TO_POSITION,
+  REMOVE_FROM_POSITION (leverage gates), RESOLVE_CLAN_WAR (negotiate contacts),
+  OBTAIN_IMPERIAL_EDICT (emperor access), EXPOSE_SECRET (acquire→deploy),
+  CONQUER_PROVINCE (readiness→declare→battle), INCREASE_KOKU (stability first),
+  SABOTAGE_ECONOMY, AVENGE (death=duel, disgrace=expose). Routed through
+  ObjectiveDecomposer before standing objectives. ContextSnapshot gains
+  `disposition_values`, `known_contacts_by_clan`, `knowledge_pool` fields.
 
 ### What's Next
 1. World generation coordinate system and adjacency
