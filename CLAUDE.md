@@ -445,6 +445,7 @@ All in /tests/, one file per system:
 - test_miya_blessing_followup.gd (~13 tests)
 - test_togashi_oversight.gd (~49 tests)
 - test_phoenix_council.gd (~51 tests)
+- test_intra_clan_civil_war.gd (~59 tests)
 
 ### Festival System (s11.5)
 - **simulation/festival_system.gd** — Empire-wide canonical festivals, Rokuyo
@@ -803,6 +804,54 @@ All in /tests/, one file per system:
 - **objective_alignment.json** gains CONDUCT_COMMERCE NeedType with 7 actions:
   CONDUCT_COMMERCE (100), BEGIN_TRAVEL (60), PURCHASE_MARKET (50),
   NEGOTIATE (45), WRITE_LETTER (35), ASSESS_PROVINCE_STATUS (30), DO_NOTHING (0).
+
+### Intra-Clan Civil War (s53.2)
+- **simulation/intra_clan_civil_war.gd** — `IntraClanCivilWar` pure
+  simulation class implementing the generalized civil-war system per
+  GDD s53.2. Triggered when a Family Daimyo (or higher) refuses lawful
+  authority; produces faction assignments, war-score tracking, stability
+  bleed, resolution detection, defection mechanics, and the empire-wide
+  Precedent Effect.
+  Four-value `Faction` enum (NONE, LEGITIMACY, REBEL, RONIN).
+  `evaluate_loyalty(npc, rebel_lord_id, completion_rate, grievance_visible,
+  rebel_was_failing)` runs the GDD's 5-factor scoring: Chugi (30%),
+  disposition toward rebel (25%), rebel competence (20%, bracketed at
+  ≥75% / 50-74% / <50%), grievance legitimacy (15%, with no-info safe
+  default toward Legitimacy), Ishi ambition (10%). Returns `{faction,
+  rebel_score, chugi_pull, disposition_pull}`. Ronin path fires when
+  both Chugi pull and disposition pull are below 40 — character has no
+  strong attachment in either direction.
+  `apply_seasonal_consequences(state, rebel_lord, provinces, current_season)`
+  applies the −3 / −5 / −7 stability penalty (escalating at 8 and 12
+  seasons) to all clan provinces and the −0.3 Honor/season hemorrhage to
+  the rebel lord. Honor floors at 0.
+  War Score shifts (s53.2.5): `record_defection` (±12 family daimyo,
+  ±5 provincial), `record_rebel_disgrace` (+15), `record_imperial_edict`
+  (±10), `record_foreign_intervention` (±8). All clamp to 0..100.
+  Resolution: `check_legitimacy_victory` (capitulation, Honor < 0,
+  seat lost). `tick_rebel_victory_counter(state, rebel, holds_seat,
+  has_allies)` requires all three conditions for 6 consecutive seasons;
+  resets on any failure. `is_rebel_victory_achieved()` queries the
+  threshold.
+  `can_seize_championship(state, clan, was_family_daimyo,
+  incumbent_disgraced_or_dead)` enforces the 90+ war score gate AND
+  the absolute Dragon/Phoenix exceptions (`SEIZURE_FORBIDDEN_CLANS`).
+  Defection (s53.2.8): `defection_trigger_fired` checks all four GDD
+  triggers (lord killed, edict against faction, faction war-score
+  Desperate, disposition-toward-leader Enemy).
+  `apply_defection_consequences` applies −0.5 Honor on defector and
+  −15 disposition from every former faction member.
+  Precedent Effect (s53.2.10): `apply_precedent_effect` adds +3
+  (standard rebel victory) or +5 (Championship Seizure) to the world's
+  defy-bonus modifier dict, expiring 5 seasons later. Modifiers stack.
+  `tick_precedent_decay` removes expired entries.
+  `finalise(state, season, legitimacy_won)` marks the war resolved.
+  Deferred (depend on systems not yet built):
+  Army reconstitution / Go-hatamoto reform (s53.2.3 — needs full
+  military hierarchy), tax cascade break (current cascade is
+  approximation only), Imperial Edict gating, full Crisis topic
+  routing for the trigger topic, Section 22.5 succession integration
+  for post-victory FILL_VACANCY chains.
 
 ### Phoenix Elemental Council — Phoenix Clan Governance Exception (s55.10.3)
 - **simulation/phoenix_council.gd** — `PhoenixCouncil` pure simulation
@@ -1354,3 +1403,15 @@ mechanical code changes to implement them.
 Stop. Read the relevant LOCKED section in /gdd/. If it does not answer the
 question, say so explicitly — do not guess, do not fill gaps with plausible
 logic, do not extrapolate from adjacent systems.
+
+## Workflow — After Each Task
+Whenever a task is complete (system implemented, wired, committed, pushed),
+do the following in order before ending the turn:
+1. **Validate twice** — re-read the actual code (not memory) and check it
+   against the GDD section it implements. First pass: logic and GDD
+   fidelity. Second pass: tests against implementation, edge cases. State
+   findings explicitly — what's correct, what's a known limitation, what
+   would be a tuning concern.
+2. **Suggest a list of next options** — present 3–4 distinct directions
+   for what to build next, sized for clarity (small / medium / foundational
+   / wiring follow-up). Use AskUserQuestion to let the user pick.
