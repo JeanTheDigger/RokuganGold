@@ -409,6 +409,8 @@ All in /tests/, one file per system:
 - test_court_availability.gd (~15 tests)
 - test_orphaned_objectives.gd (~25 tests)
 - test_strategic_review.gd (~35 tests)
+- test_province_triage.gd (~30 tests)
+- test_reactive_decisions.gd (~30 tests)
 
 ### World Generator
 - **simulation/world_generator.gd** — Static factory methods for seeding initial
@@ -477,6 +479,27 @@ All in /tests/, one file per system:
   season crisis + failed diplomacy; Iron: duty/readiness; Cunning/Warlike: never;
   Tyrant: personal enforcer with loyal candidate). Five EmperorArchetype enum
   values. Wired into DayOrchestrator `_run_strategic_reviews()` on season change.
+
+### Province Triage (s55.9)
+- **simulation/province_triage.gd** — Multi-target comparative evaluation.
+  Scores each province: crisis(+100), insurgency(+80), broken stability(+60),
+  volatile(+30), restless(+10), garrison deficit(+20), stale info(+25).
+  `get_worst_province()` returns highest-scoring province with recommended
+  NeedType (DEFEND_PROVINCE / INVESTIGATE_THREAT / PATROL_PROVINCE / REST).
+  `get_top_provinces(count)` for afternoon AP cycling. Wired into
+  ObjectiveDecomposer for MAXIMIZE_PROSPERITY and DEFEND_TERRITORY trees.
+  Also used by StrategicReview for vassal assignment threat detection.
+
+### Reactive Decision Path (s55.11)
+- **simulation/reactive_decisions.gd** — Personality-driven reactive event
+  evaluation. Four reactive types: DUEL_CHALLENGE_RECEIVED (Yu/Kyoryoku always
+  accept, Rival disposition accepts, Bushido in public accepts),
+  FAVOR_REQUESTED (Chugi/Makoto always honor, Friend+ disposition honors,
+  Jin honors neutral), COURT_INVITATION (prestige 3+ or Friend+ accepts,
+  Rei always attends, Ishi declines low), ACCEPT_TRAINING (sensei rank must
+  exceed student, Kanpeki needs 2+ gap, Ketsui needs mentor objective).
+  Proactive duel trigger: 3-step evaluation (capability → target assessment →
+  personality gate). Dosatsu/Chishiki require intel on target.
 
 ### What's Next
 1. World generation coordinate system and adjacency
