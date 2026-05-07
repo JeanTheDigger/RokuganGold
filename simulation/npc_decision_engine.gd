@@ -714,15 +714,29 @@ static func _interpolate_topic_position(
 
 static func _compute_resource_modifier(
 	option: NPCDataStructures.ScoredAction,
-	_ctx: NPCDataStructures.ContextSnapshot,
+	ctx: NPCDataStructures.ContextSnapshot,
 	_scoring_tables: Dictionary,
 	character: L5RCharacterData = null,
 ) -> float:
 	if character == null:
 		return 0.0
+	var province_data: Dictionary = _build_province_data_for_resource_check(ctx)
 	return ResourceAvailability.compute_resource_modifier(
-		option.action_id, character
+		option.action_id, character, province_data
 	)
+
+
+static func _build_province_data_for_resource_check(
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> Dictionary:
+	var data: Dictionary = {
+		"available_levy_pu": ctx.available_levy_pu,
+	}
+	if not ctx.province_statuses.is_empty():
+		var ps: Variant = ctx.province_statuses[0]
+		if ps is NPCDataStructures.ProvinceStatus:
+			data["rice_stockpile"] = ps.rice_stockpile
+	return data
 
 
 # -- Confidence Penalty (s55.12) -----------------------------------------------
