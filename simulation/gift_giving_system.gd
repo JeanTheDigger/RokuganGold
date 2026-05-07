@@ -362,7 +362,7 @@ static func _is_giftable(item: Dictionary) -> bool:
 	if item.get("category", -1) != InventorySystem.ItemCategory.GIFT:
 		return false
 	if item.get("in_transit", false):
-		return true  # in_transit gifts are still selectable on arrival
+		return false
 	return true
 
 

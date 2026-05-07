@@ -215,7 +215,7 @@ static func _resolve_ap_waves_full(
 		var wave_results: Array[Dictionary] = _run_wave_full(
 			active, world_states, objectives_map, scoring_tables, filter_data,
 			dice_engine, action_skill_map, approach_penalties, commitments,
-			military_data
+			military_data, characters_by_id
 		)
 		results.append_array(wave_results)
 
@@ -268,6 +268,7 @@ static func _run_wave_full(
 	approach_penalties: Array[Dictionary] = [],
 	commitments: Array[CommitmentData] = [],
 	military_data: Dictionary = {},
+	characters_by_id: Dictionary = {},
 ) -> Array[Dictionary]:
 	var results: Array[Dictionary] = []
 	var sorted: Array[L5RCharacterData] = _sort_by_resolution_order(active, world_states)
@@ -288,7 +289,7 @@ static func _run_wave_full(
 		var wave_results: Array[Dictionary] = _resolve_character_wave_full(
 			c, world_states, objectives_map, scoring_tables, filter_data,
 			dice_engine, action_skill_map, approach_penalties, commitments,
-			military_data
+			military_data, characters_by_id
 		)
 		results.append_array(wave_results)
 

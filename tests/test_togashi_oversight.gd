@@ -334,12 +334,14 @@ func test_compliance_unwinds_stage_one_step() -> void:
 	)
 
 
-func test_compliance_floor_at_zero() -> void:
+func test_compliance_preserves_defiance_count() -> void:
+	TogashiOversight.handle_defiance(_state, TogashiOversight.Axis.SPIRITUAL_HEALTH)
+	assert_eq(_state["defiance_count"], 1)
 	TogashiOversight.handle_compliance_response(
 		_state, TogashiOversight.Axis.SPIRITUAL_HEALTH
 	)
 	assert_eq(_state["stage"], 0)
-	assert_eq(_state["defiance_count"], 0)
+	assert_eq(_state["defiance_count"], 1)
 
 
 # -- Authority lockout / Order withdrawal ------------------------------------

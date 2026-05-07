@@ -334,7 +334,7 @@ static func handle_compliance_response(state: Dictionary, axis: Axis) -> void:
 	state["dissatisfaction"][axis] = DISSATISFACTION_RESET_AFTER_COMPLY
 	state["last_directive_axis"] = axis
 	state["stage"] = maxi(state.get("stage", 0) - 1, 0)
-	state["defiance_count"] = maxi(state.get("defiance_count", 0) - 1, 0)
+	# defiance_count is cumulative and never decremented (s55.10.2.6)
 
 
 static func handle_defiance(state: Dictionary, axis: Axis) -> void:

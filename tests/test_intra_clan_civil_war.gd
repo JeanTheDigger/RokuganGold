@@ -341,29 +341,29 @@ func test_rebel_victory_not_achieved_at_5_seasons() -> void:
 # -- Championship Seizure ---------------------------------------------------
 
 func test_seizure_requires_war_score_90() -> void:
-	_state["war_score"] = 89
+	_state["war_score"] = 11
 	assert_false(IntraClanCivilWar.can_seize_championship(_state, "Lion", true, true))
-	_state["war_score"] = 90
+	_state["war_score"] = 10
 	assert_true(IntraClanCivilWar.can_seize_championship(_state, "Lion", true, true))
 
 
 func test_seizure_requires_family_daimyo_rebel() -> void:
-	_state["war_score"] = 95
+	_state["war_score"] = 5
 	assert_false(IntraClanCivilWar.can_seize_championship(_state, "Lion", false, true))
 
 
 func test_seizure_requires_incumbent_disgraced_or_dead() -> void:
-	_state["war_score"] = 95
+	_state["war_score"] = 5
 	assert_false(IntraClanCivilWar.can_seize_championship(_state, "Lion", true, false))
 
 
 func test_seizure_forbidden_for_dragon() -> void:
-	_state["war_score"] = 100
+	_state["war_score"] = 0
 	assert_false(IntraClanCivilWar.can_seize_championship(_state, "Dragon", true, true))
 
 
 func test_seizure_forbidden_for_phoenix() -> void:
-	_state["war_score"] = 100
+	_state["war_score"] = 0
 	assert_false(IntraClanCivilWar.can_seize_championship(_state, "Phoenix", true, true))
 
 

@@ -391,7 +391,7 @@ static func can_seize_championship(
 		return false
 	if not incumbent_disgraced_or_dead:
 		return false
-	return int(state.get("war_score", 50)) >= CHAMPIONSHIP_SEIZURE_WAR_SCORE
+	return (100 - int(state.get("war_score", 50))) >= CHAMPIONSHIP_SEIZURE_WAR_SCORE
 
 
 # -- Defection (s53.2.8) ----------------------------------------------------
