@@ -357,20 +357,93 @@ static func champion_may_break_tie(
 	state: Dictionary,
 	decision_type: DecisionType,
 ) -> bool:
-	# After two consecutive abstentions on the same proposal the Champion
-	# may break the tie at the Honor cost in §55.10.3.4.
 	return get_tabled_vote_count(state, decision_type) >= 2
+
+
+const RESUBMISSION_BAN_SEASONS: int = 2
+
+
+static func record_failed_proposal(
+	state: Dictionary,
+	decision_type: DecisionType,
+	current_season: int,
+) -> void:
+	## Track a proposal that failed its vote (not tabled — outright rejected).
+	var failed: Dictionary = state.get("failed_proposals", {})
+	var entry: Dictionary = failed.get(decision_type, {})
+	var count: int = int(entry.get("fail_count", 0)) + 1
+	entry["fail_count"] = count
+	entry["last_failed_season"] = current_season
+	if count >= 2:
+		entry["banned_until_season"] = current_season + RESUBMISSION_BAN_SEASONS
+	failed[decision_type] = entry
+	state["failed_proposals"] = failed
+
+
+static func is_proposal_banned(
+	state: Dictionary,
+	decision_type: DecisionType,
+	current_season: int,
+) -> bool:
+	var failed: Dictionary = state.get("failed_proposals", {})
+	var entry: Dictionary = failed.get(decision_type, {})
+	var banned_until: int = int(entry.get("banned_until_season", -1))
+	return banned_until > current_season
+
+
+static func clear_failed_proposal(state: Dictionary, decision_type: DecisionType) -> void:
+	var failed: Dictionary = state.get("failed_proposals", {})
+	failed.erase(decision_type)
+	state["failed_proposals"] = failed
+
+
+# -- Stage consequences (s55.10.3.5 / s55.10.3.6) ---------------------------
+
+const DEFIANCE_STAGE_1_HONOR_PENALTY: float = -0.3
+
+
+static func get_defiance_consequences(state: Dictionary) -> Dictionary:
+	## Returns the consequences for the current defiance stage.
+	## Caller applies honor, generates topics, etc.
+	var stage: int = int(state.get("defiance_stage", 0))
+	if stage <= 0:
+		return {}
+	return {
+		"stage": stage,
+		"honor_penalty": DEFIANCE_STAGE_1_HONOR_PENALTY if stage >= 1 else 0.0,
+		"topic_tier": 4,
+		"topic_slug": "phoenix_champion_defiance_stage_%d" % stage,
+		"diplomatic_suspended": stage >= 2,
+		"shugenja_withdrawn": stage >= 3,
+		"unfit_declaration": stage >= 4,
+	}
+
+
+static func get_overreach_consequences(state: Dictionary) -> Dictionary:
+	var stage: int = int(state.get("overreach_stage", 0))
+	if stage <= 0:
+		return {}
+	return {
+		"stage": stage,
+		"topic_tier": 4 if stage <= 1 else 3,
+		"topic_slug": "phoenix_council_overreach_stage_%d" % stage,
+		"emperor_appeal_available": stage >= 2,
+		"compact_violated": stage >= 3,
+		"schism_imminent": stage >= 4,
+	}
 
 
 # -- Defiance Path (s55.10.3.5) ----------------------------------------------
 
-static func handle_unilateral_action(state: Dictionary) -> void:
+static func handle_unilateral_action(state: Dictionary) -> Dictionary:
 	## Champion bypassed the Council on a major decision. Increments the
 	## defiance counter and stage; resets compliant-season streak.
+	## Returns consequence dict for the new stage.
 	var dc: int = int(state.get("defiance_count", 0)) + 1
 	state["defiance_count"] = dc
 	state["defiance_stage"] = mini(dc, 4)
 	state["consecutive_seasons_compliant"] = 0
+	return get_defiance_consequences(state)
 
 
 static func handle_compliant_season(state: Dictionary) -> void:
@@ -401,10 +474,11 @@ static func is_unfit_declaration_active(state: Dictionary) -> bool:
 # Triggers tracked by the caller; this class only owns the counter
 # and stage queries.
 
-static func handle_overreach_trigger(state: Dictionary) -> void:
+static func handle_overreach_trigger(state: Dictionary) -> Dictionary:
 	var oc: int = int(state.get("overreach_count", 0)) + 1
 	state["overreach_count"] = oc
 	state["overreach_stage"] = mini(oc, 4)
+	return get_overreach_consequences(state)
 
 
 static func is_emperor_appeal_available(state: Dictionary) -> bool:
@@ -523,6 +597,7 @@ static func make_initial_state() -> Dictionary:
 		"consecutive_seasons_compliant": 0,
 		"phoenix_champion_authority": false,
 		"tabled_proposals": {},
+		"failed_proposals": {},
 		"consecutive_crisis_vetoes": 0,
 		"consecutive_obstruction_seasons": 0,
 	}

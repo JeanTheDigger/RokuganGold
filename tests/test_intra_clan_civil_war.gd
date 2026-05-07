@@ -470,3 +470,84 @@ func test_finalise_marks_resolved() -> void:
 	assert_eq(_state["season_resolved"], 200)
 	assert_true(_state["legitimacy_victory"])
 	assert_false(_state["rebel_victory"])
+
+
+# -- Ronin departure --------------------------------------------------------
+
+func test_ronin_departure_costs_honor() -> void:
+	var n: L5RCharacterData = _make_npc(50)
+	n.honor = 3.0
+	IntraClanCivilWar.apply_ronin_departure(n)
+	assert_eq(n.honor, 2.0)
+
+
+func test_ronin_departure_honor_floors_at_zero() -> void:
+	var n: L5RCharacterData = _make_npc(50)
+	n.honor = 0.5
+	IntraClanCivilWar.apply_ronin_departure(n)
+	assert_eq(n.honor, 0.0)
+
+
+# -- Post-resolution consequences -------------------------------------------
+
+func test_post_resolution_scars_between_opposite_factions() -> void:
+	var a: L5RCharacterData = _make_npc(10)
+	var b: L5RCharacterData = _make_npc(20)
+	IntraClanCivilWar.assign_faction(_state, 10, IntraClanCivilWar.Faction.LEGITIMACY)
+	IntraClanCivilWar.assign_faction(_state, 20, IntraClanCivilWar.Faction.REBEL)
+	IntraClanCivilWar.apply_post_resolution_scars(_state, [a, b])
+	assert_eq(int(a.disposition_values.get(20, 0)), -10)
+	assert_eq(int(b.disposition_values.get(10, 0)), -10)
+
+
+func test_post_resolution_scars_skip_same_faction() -> void:
+	var a: L5RCharacterData = _make_npc(10)
+	var b: L5RCharacterData = _make_npc(20)
+	IntraClanCivilWar.assign_faction(_state, 10, IntraClanCivilWar.Faction.REBEL)
+	IntraClanCivilWar.assign_faction(_state, 20, IntraClanCivilWar.Faction.REBEL)
+	IntraClanCivilWar.apply_post_resolution_scars(_state, [a, b])
+	assert_eq(int(a.disposition_values.get(20, 0)), 0)
+
+
+func test_post_resolution_family_death_adds_extra_scar() -> void:
+	var a: L5RCharacterData = _make_npc(10)
+	var b: L5RCharacterData = _make_npc(20)
+	IntraClanCivilWar.assign_faction(_state, 10, IntraClanCivilWar.Faction.LEGITIMACY)
+	IntraClanCivilWar.assign_faction(_state, 20, IntraClanCivilWar.Faction.REBEL)
+	var deaths: Dictionary = {10: [20]}
+	IntraClanCivilWar.apply_post_resolution_scars(_state, [a, b], deaths)
+	# a lost family member b: -10 + -15 = -25
+	assert_eq(int(a.disposition_values.get(20, 0)), -25)
+	# b did not lose family member a: -10 only
+	assert_eq(int(b.disposition_values.get(10, 0)), -10)
+
+
+func test_rebel_consequences_family_daimyo() -> void:
+	var fd: L5RCharacterData = _make_npc(30)
+	fd.status = 6.0
+	var result: Dictionary = IntraClanCivilWar.apply_rebel_consequences_on_legitimacy_victory(
+		[fd], [30]
+	)
+	assert_eq(fd.honor, 2.5)  # default 3.5 - 1.0
+	assert_eq(result["rebel_consequences"].size(), 1)
+	assert_eq(result["rebel_consequences"][0]["consequence"], "removal")
+
+
+func test_rebel_consequences_provincial_daimyo() -> void:
+	var pd: L5RCharacterData = _make_npc(40)
+	pd.status = 5.0
+	var result: Dictionary = IntraClanCivilWar.apply_rebel_consequences_on_legitimacy_victory(
+		[pd], []
+	)
+	assert_eq(pd.honor, 3.0)  # default 3.5 - 0.5
+	assert_eq(result["rebel_consequences"][0]["consequence"], "reassignment")
+
+
+func test_rebel_consequences_rank_and_file_no_penalty() -> void:
+	var rf: L5RCharacterData = _make_npc(50)
+	rf.status = 2.0
+	var result: Dictionary = IntraClanCivilWar.apply_rebel_consequences_on_legitimacy_victory(
+		[rf], []
+	)
+	assert_eq(rf.honor, 3.5)  # unchanged
+	assert_eq(result["rebel_consequences"].size(), 0)

@@ -467,5 +467,82 @@ func test_initial_state_zero_counters() -> void:
 	assert_eq(_state["overreach_count"], 0)
 	assert_eq(_state["consecutive_crisis_vetoes"], 0)
 	assert_eq(_state["consecutive_obstruction_seasons"], 0)
+	assert_eq(_state["failed_proposals"], {})
+
+
+# -- Resubmission ban (s55.10.3.4) -------------------------------------------
+
+func test_proposal_not_banned_after_one_failure() -> void:
+	PhoenixCouncil.record_failed_proposal(
+		_state, PhoenixCouncil.DecisionType.SIGN_TREATY, 10
+	)
+	assert_false(PhoenixCouncil.is_proposal_banned(
+		_state, PhoenixCouncil.DecisionType.SIGN_TREATY, 10
+	))
+
+
+func test_proposal_banned_after_two_failures() -> void:
+	PhoenixCouncil.record_failed_proposal(
+		_state, PhoenixCouncil.DecisionType.SIGN_TREATY, 10
+	)
+	PhoenixCouncil.record_failed_proposal(
+		_state, PhoenixCouncil.DecisionType.SIGN_TREATY, 11
+	)
+	assert_true(PhoenixCouncil.is_proposal_banned(
+		_state, PhoenixCouncil.DecisionType.SIGN_TREATY, 11
+	))
+
+
+func test_proposal_ban_expires_after_two_seasons() -> void:
+	PhoenixCouncil.record_failed_proposal(
+		_state, PhoenixCouncil.DecisionType.DECLARE_WAR, 5
+	)
+	PhoenixCouncil.record_failed_proposal(
+		_state, PhoenixCouncil.DecisionType.DECLARE_WAR, 6
+	)
+	assert_true(PhoenixCouncil.is_proposal_banned(
+		_state, PhoenixCouncil.DecisionType.DECLARE_WAR, 7
+	))
+	assert_false(PhoenixCouncil.is_proposal_banned(
+		_state, PhoenixCouncil.DecisionType.DECLARE_WAR, 8
+	))
+
+
+func test_clear_failed_proposal_removes_ban() -> void:
+	PhoenixCouncil.record_failed_proposal(
+		_state, PhoenixCouncil.DecisionType.SIGN_TREATY, 10
+	)
+	PhoenixCouncil.record_failed_proposal(
+		_state, PhoenixCouncil.DecisionType.SIGN_TREATY, 11
+	)
+	PhoenixCouncil.clear_failed_proposal(
+		_state, PhoenixCouncil.DecisionType.SIGN_TREATY
+	)
+	assert_false(PhoenixCouncil.is_proposal_banned(
+		_state, PhoenixCouncil.DecisionType.SIGN_TREATY, 11
+	))
+
+
+# -- Stage consequences -----------------------------------------------------
+
+func test_defiance_returns_consequences() -> void:
+	var result: Dictionary = PhoenixCouncil.handle_unilateral_action(_state)
+	assert_eq(result["stage"], 1)
+	assert_eq(result["honor_penalty"], -0.3)
+	assert_false(result["diplomatic_suspended"])
+
+
+func test_defiance_stage_2_consequences_include_diplomatic() -> void:
+	PhoenixCouncil.handle_unilateral_action(_state)
+	var result: Dictionary = PhoenixCouncil.handle_unilateral_action(_state)
+	assert_eq(result["stage"], 2)
+	assert_true(result["diplomatic_suspended"])
+	assert_false(result["shugenja_withdrawn"])
+
+
+func test_overreach_returns_consequences() -> void:
+	var result: Dictionary = PhoenixCouncil.handle_overreach_trigger(_state)
+	assert_eq(result["stage"], 1)
+	assert_eq(result["topic_tier"], 4)
 	assert_false(_state["phoenix_champion_authority"])
 	assert_eq(_state["tabled_proposals"], {})

@@ -64,6 +64,9 @@ const DISP_EMPEROR_FROM_SELECTED_LORD: int = 1
 const DISP_MIYA_TOWARD_EMPEROR_ON_SUSPENSION: int = -3
 const DISP_EMPIRE_TOWARD_EMPEROR_ON_SUSPENSION: int = -1
 const STABILITY_PENALTY_NEEDY_PROVINCE_ON_SUSPENSION: int = -1
+const CUNNING_NEED_SCORE_BONUS: int = 10
+const CUNNING_NEED_SCORE_PENALTY: int = -10
+const CUNNING_MIYA_DISP_PENALTY_PER_YEAR: int = -2
 
 
 # -- Allocation calculation (§2.1, §2.2, §2.3, §2.4) -------------------------
@@ -160,6 +163,23 @@ static func compute_need_score(conditions: Dictionary) -> int:
 		score += NEED_NOT_BLESSED_LAST_YEAR
 	score += int(conditions.get("petition_bonus", 0))
 	return score
+
+
+# -- Cunning archetype modifier (§5) -----------------------------------------
+
+static func apply_cunning_modifier(
+	scored: Array[Dictionary],
+	favored_clan: String,
+	disfavored_clan: String,
+) -> void:
+	## Cunning emperors add +10 Need Score to favored clan's provinces
+	## and -10 to disfavored clan's provinces.
+	for entry in scored:
+		var clan: String = entry.get("clan", "")
+		if clan == favored_clan:
+			entry["score"] = int(entry.get("score", 0)) + CUNNING_NEED_SCORE_BONUS
+		elif clan == disfavored_clan:
+			entry["score"] = int(entry.get("score", 0)) + CUNNING_NEED_SCORE_PENALTY
 
 
 # -- Province selection (§4.2, §4.3) -----------------------------------------

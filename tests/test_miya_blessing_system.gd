@@ -475,3 +475,23 @@ func test_fired_total_matches_per_province_times_count() -> void:
 	assert_eq(result["selected_province_ids"].size(), 2)
 	# 0.60 per province × 2 selected = 1.20 actually fired.
 	assert_almost_eq(result["allocation_total"], 1.20, 0.001)
+
+
+# -- Cunning archetype modifier ---------------------------------------------
+
+func test_cunning_modifier_boosts_favored_clan() -> void:
+	var scored: Array[Dictionary] = [
+		{"province_id": 1, "score": 5, "clan": "Crane"},
+		{"province_id": 2, "score": 5, "clan": "Lion"},
+	]
+	MiyaBlessingSystem.apply_cunning_modifier(scored, "Crane", "Lion")
+	assert_eq(scored[0]["score"], 15)  # +10
+	assert_eq(scored[1]["score"], -5)  # -10
+
+
+func test_cunning_modifier_ignores_neutral_clans() -> void:
+	var scored: Array[Dictionary] = [
+		{"province_id": 1, "score": 5, "clan": "Dragon"},
+	]
+	MiyaBlessingSystem.apply_cunning_modifier(scored, "Crane", "Lion")
+	assert_eq(scored[0]["score"], 5)

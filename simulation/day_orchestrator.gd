@@ -402,6 +402,26 @@ static func _process_miya_blessing_followup(
 			var current: int = int(miya.disposition_values.get(emperor_id, 0))
 			miya.disposition_values[emperor_id] = clampi(current - 3, -100, 100)
 
+	# Clan Champion -1 disposition toward Emperor on suspension (s11.5b §7.2).
+	# Proxy: highest-status character per clan with lord_id == -1.
+	if emperor_id >= 0:
+		var champions: Dictionary = {}
+		for cid: int in characters_by_id:
+			var c: L5RCharacterData = characters_by_id[cid]
+			if c == null or c.clan == "" or c.character_id == emperor_id:
+				continue
+			if c.lord_id != -1:
+				continue
+			var existing: L5RCharacterData = champions.get(c.clan)
+			if existing == null or c.status > existing.status:
+				champions[c.clan] = c
+		for clan_name: String in champions:
+			var champ: L5RCharacterData = champions[clan_name]
+			var cur: int = int(champ.disposition_values.get(emperor_id, 0))
+			champ.disposition_values[emperor_id] = clampi(
+				cur + MiyaBlessingSystem.DISP_EMPIRE_TOWARD_EMPEROR_ON_SUSPENSION, -100, 100
+			)
+
 
 static func _create_blessing_topic(
 	prov: ProvinceData,
@@ -459,18 +479,23 @@ static func _apply_blessing_disposition(
 	miya_rep_id: int,
 	emperor_id: int,
 ) -> void:
-	## Find the lord of this province and apply +2 toward Miya rep, +1 toward
-	## Emperor. Lord identification is conservative: scan characters_by_id for
-	## the highest-status character whose family/clan matches the province.
+	## Apply +2 toward Miya rep from province lord AND all same-clan lords.
+	## Apply +1 toward Emperor from province lord only.
 	var lord: L5RCharacterData = _find_province_lord(prov, characters_by_id)
 	if lord == null:
 		return
-	if miya_rep_id >= 0:
-		var current_miya: int = int(lord.disposition_values.get(miya_rep_id, 0))
-		lord.disposition_values[miya_rep_id] = clampi(current_miya + 2, -100, 100)
 	if emperor_id >= 0:
 		var current_emp: int = int(lord.disposition_values.get(emperor_id, 0))
 		lord.disposition_values[emperor_id] = clampi(current_emp + 1, -100, 100)
+	if miya_rep_id >= 0:
+		for cid: int in characters_by_id:
+			var c: L5RCharacterData = characters_by_id[cid]
+			if c == null or c.clan != prov.clan:
+				continue
+			if c.status < 4.0:
+				continue
+			var cur: int = int(c.disposition_values.get(miya_rep_id, 0))
+			c.disposition_values[miya_rep_id] = clampi(cur + 2, -100, 100)
 
 
 static func _find_province_lord(
