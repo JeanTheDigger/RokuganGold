@@ -51,6 +51,7 @@ static func advance_day(
 		next_case_id,
 		active_topics,
 		next_topic_id,
+		world_states,
 	)
 
 	var commitment_results: Array[Dictionary] = _process_commitment_deadlines(
@@ -258,6 +259,7 @@ static func _process_crime_detection(
 	next_case_id: Array[int],
 	active_topics: Array[TopicData] = [],
 	next_topic_id: Array[int] = [1000],
+	world_states: Dictionary = {},
 ) -> Array[Dictionary]:
 	var crime_results: Array[Dictionary] = []
 
@@ -284,8 +286,13 @@ static func _process_crime_detection(
 		var location: String = character.physical_location
 		var target_id: int = r.get("target_npc_id", -1)
 
+		var witnesses: Array[int] = _get_witnesses_at_location(
+			char_id, location, characters_by_id, world_states
+		)
+
 		var record: CrimeRecord = CrimeSystem.create_crime_record(
-			case_id, crime_type, char_id, location, ic_day, target_id
+			case_id, crime_type, char_id, location, ic_day, target_id,
+			0, witnesses
 		)
 		crime_records.append(record)
 
@@ -296,6 +303,9 @@ static func _process_crime_detection(
 		)
 		if crime_topic != null:
 			active_topics.append(crime_topic)
+			_seed_crime_topic_to_knowers(
+				crime_topic, record, characters_by_id
+			)
 
 		crime_results.append({
 			"case_id": case_id,
@@ -304,6 +314,7 @@ static func _process_crime_detection(
 			"action_id": action_id,
 			"honor_delta": at_act.get("honor_delta", 0.0),
 			"topic_id": crime_topic.topic_id if crime_topic != null else -1,
+			"witness_count": witnesses.size(),
 		})
 
 	return crime_results
@@ -336,13 +347,15 @@ static func _create_crime_topic(
 	var topic_id: int = next_topic_id[0]
 	next_topic_id[0] = topic_id + 1
 
+	# Momentum starts at 0 — crime topics do NOT broadcast globally.
+	# They spread only through witnesses/victims via conversations.
 	var topic: TopicData = TopicMomentumSystem.create_topic(
 		topic_id,
 		title,
 		TopicData.Tier.TIER_4,
 		TopicData.Category.LEGAL,
 		ic_day,
-		10.0,
+		0.0,
 		[],
 		perpetrator.clan,
 		"",
@@ -352,6 +365,37 @@ static func _create_crime_topic(
 	)
 	topic.slug = "crime_case_%d" % record.case_id
 	return topic
+
+
+static func _get_witnesses_at_location(
+	perpetrator_id: int,
+	location: String,
+	characters_by_id: Dictionary,
+	world_states: Dictionary,
+) -> Array[int]:
+	var witnesses: Array[int] = []
+	for cid: int in characters_by_id:
+		if cid == perpetrator_id:
+			continue
+		var c: L5RCharacterData = characters_by_id[cid]
+		if c.physical_location == location:
+			witnesses.append(cid)
+	return witnesses
+
+
+static func _seed_crime_topic_to_knowers(
+	topic: TopicData,
+	record: CrimeRecord,
+	characters_by_id: Dictionary,
+) -> void:
+	for witness_id: int in record.witnesses:
+		var witness: L5RCharacterData = characters_by_id.get(witness_id)
+		if witness != null and topic.topic_id not in witness.topic_pool:
+			witness.topic_pool.append(topic.topic_id)
+	if record.victim_id >= 0:
+		var victim: L5RCharacterData = characters_by_id.get(record.victim_id)
+		if victim != null and topic.topic_id not in victim.topic_pool:
+			victim.topic_pool.append(topic.topic_id)
 
 
 # -- UPHOLD_LAW Magistrate Scan (s57.16.9) ------------------------------------

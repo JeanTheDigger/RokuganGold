@@ -525,6 +525,13 @@ func test_crime_detection_creates_topic() -> void:
 	var next_case_id: Array[int] = [1]
 	var next_topic_id: Array[int] = [500]
 
+	# Add a witness at the same location
+	var witness := L5RCharacterData.new()
+	witness.character_id = 2
+	witness.physical_location = "castle_crane"
+	witness.topic_pool = []
+	_characters_by_id[2] = witness
+
 	var results: Array = [{
 		"character_id": 1,
 		"action_id": "EAVESDROP",
@@ -540,10 +547,70 @@ func test_crime_detection_creates_topic() -> void:
 
 	assert_eq(crime_results.size(), 1)
 	assert_eq(crime_results[0]["topic_id"], 500)
+	assert_eq(crime_results[0]["witness_count"], 1)
 	assert_eq(active_topics.size(), 1)
 	assert_eq(active_topics[0].topic_type, "crime")
 	assert_eq(active_topics[0].slug, "crime_case_1")
+	assert_almost_eq(active_topics[0].momentum, 0.0, 0.001)
 	assert_eq(next_topic_id[0], 501)
+	# Witness should have the topic seeded into their pool
+	assert_true(500 in witness.topic_pool)
+	# Perpetrator should NOT have the topic
+	assert_false(500 in _characters[0].topic_pool)
+
+
+func test_crime_detection_no_witnesses_still_creates_topic() -> void:
+	var active_topics: Array[TopicData] = []
+	var crime_records: Array[CrimeRecord] = []
+	var next_case_id: Array[int] = [1]
+	var next_topic_id: Array[int] = [500]
+
+	var results: Array = [{
+		"character_id": 1,
+		"action_id": "EAVESDROP",
+		"target_npc_id": -1,
+		"effects": {"detection_risk": true},
+	}]
+	_characters[0].physical_location = "remote_wilderness"
+
+	var crime_results: Array[Dictionary] = DayOrchestrator._process_crime_detection(
+		results, _characters_by_id, crime_records, 5, next_case_id,
+		active_topics, next_topic_id
+	)
+
+	assert_eq(crime_results.size(), 1)
+	assert_eq(crime_results[0]["witness_count"], 0)
+	assert_eq(active_topics.size(), 1)
+	assert_almost_eq(active_topics[0].momentum, 0.0, 0.001)
+
+
+func test_crime_topic_seeds_to_victim() -> void:
+	var active_topics: Array[TopicData] = []
+	var crime_records: Array[CrimeRecord] = []
+	var next_case_id: Array[int] = [1]
+	var next_topic_id: Array[int] = [500]
+
+	var victim := L5RCharacterData.new()
+	victim.character_id = 3
+	victim.physical_location = "castle_crane"
+	victim.topic_pool = []
+	_characters_by_id[3] = victim
+
+	var results: Array = [{
+		"character_id": 1,
+		"action_id": "EAVESDROP",
+		"target_npc_id": 3,
+		"effects": {"detection_risk": true},
+	}]
+	_characters[0].physical_location = "castle_crane"
+
+	DayOrchestrator._process_crime_detection(
+		results, _characters_by_id, crime_records, 5, next_case_id,
+		active_topics, next_topic_id
+	)
+
+	# Victim receives the topic (target_npc_id = 3 becomes victim_id)
+	assert_true(500 in victim.topic_pool)
 
 
 # -- UPHOLD_LAW Scan Wiring ---------------------------------------------------

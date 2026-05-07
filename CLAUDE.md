@@ -326,7 +326,11 @@ single-dice-entry-point and server-authoritative constraints.
   INVESTIGATE_THREAT), action_skill_map, personality_lean (all 14 virtues),
   action_executor (INTELLIGENCE_ACTIONS category).
 - **UPHOLD_LAW self-initiation** — Crime detection creates crime topics
-  (topic_type="crime", slug="crime_case_{id}"). After broadcast,
+  (topic_type="crime", slug="crime_case_{id}") with momentum 0 (no broadcast).
+  Topics are seeded only to witnesses (characters at same physical_location
+  as perpetrator) and victims via `_seed_crime_topic_to_knowers()`. Topics
+  then spread organically through daily conversations/letters — magistrates
+  learn about crimes when someone tells them, not omnisciently.
   DayOrchestrator scans magistrates with UPHOLD_LAW standing objective:
   if crime topic in known_topics + jurisdiction match → activate_uphold_law()
   populates active_case and sets investigating_magistrate_id. Jurisdiction:
@@ -423,11 +427,15 @@ The following subsystems are now integrated into the NPC decision loop:
   actions (PUBLIC_PERFORMANCE, PERFORM_FOR, PERFORM_WORSHIP, PERFORM_RITUAL)
   filtered from option list when zone flags forbid them.
 - **CrimeSystem** — Post-execution: DayOrchestrator scans day results for
-  `detection_risk: true` in covert action effects, creates CrimeRecord via
-  `CrimeSystem.create_crime_record()`, applies at-act honor consequences,
-  and creates a crime topic (Tier 4, topic_type="crime"). Crime topics
-  propagate via broadcast, triggering UPHOLD_LAW magistrate self-initiation.
-  Witness PROBE evidence wired into _process_info_events.
+  `detection_risk: true` in covert action effects, determines witnesses via
+  `_get_witnesses_at_location()` (characters at same physical_location),
+  creates CrimeRecord via `CrimeSystem.create_crime_record()` (with witnesses),
+  applies at-act honor consequences, and creates a crime topic (Tier 4,
+  topic_type="crime", momentum=0). Crime topics are seeded ONLY to witnesses
+  and victims via `_seed_crime_topic_to_knowers()` — they do NOT broadcast
+  globally. Topics spread organically through conversations/letters. Magistrates
+  learn about crimes when witnesses tell them, then UPHOLD_LAW self-initiation
+  triggers. Witness PROBE evidence wired into _process_info_events.
   Action-to-crime-type mapping: EAVESDROP/SEARCH_QUARTERS/INTERCEPT_LETTER/
   FABRICATE_SECRET → DISHONORABLE_CONDUCT, BRIBE_FOR_INFO → SKIMMING.
 - **MilitaryHierarchy** — Phase 1: `military_rank`, `commanded_unit_id`,

@@ -719,9 +719,12 @@ func test_crime_detection_creates_topic_and_magistrate_picks_up() -> void:
 	assert_eq(active_topics[0].topic_type, "crime")
 	assert_eq(active_topics[0].slug, "crime_case_1")
 	assert_eq(active_topics[0].category, TopicData.Category.LEGAL)
+	assert_almost_eq(active_topics[0].momentum, 0.0, 0.001)
 
-	# Step 2: Magistrate receives the crime topic (simulating broadcast)
-	magistrate.topic_pool = [active_topics[0].topic_id]
+	# Step 2: Magistrate was at the crime location — witness seeding adds topic
+	assert_true(active_topics[0].topic_id in magistrate.topic_pool,
+		"Magistrate at crime location should receive topic via witness seeding")
+	assert_eq(crime_results[0]["witness_count"], 1)
 
 	# Step 3: UPHOLD_LAW scan activates the magistrate
 	var objectives: Dictionary = {
@@ -1045,6 +1048,11 @@ func test_full_crime_loop_detection_through_evidence() -> void:
 	var next_case_id: Array[int] = [1]
 	var next_topic_id: Array[int] = [100]
 
+	# Place witness at crime location too
+	witness.physical_location = "castle_scorpion"
+	witness.topic_pool = []
+	magistrate.topic_pool = []
+
 	DayOrchestrator._process_crime_detection(
 		[{"character_id": 10, "action_id": "SEARCH_QUARTERS", "target_npc_id": -1,
 		  "effects": {"detection_risk": true}}],
@@ -1053,10 +1061,10 @@ func test_full_crime_loop_detection_through_evidence() -> void:
 	)
 	assert_eq(crime_records.size(), 1)
 	var record: CrimeRecord = crime_records[0]
-	record.witnesses = [50]
 
-	# Phase 2: Topic reaches magistrate
-	magistrate.topic_pool = [active_topics[0].topic_id]
+	# Both magistrate and witness at location are witnesses — seeded with topic
+	assert_true(active_topics[0].topic_id in magistrate.topic_pool)
+	assert_true(active_topics[0].topic_id in witness.topic_pool)
 
 	# Phase 3: UPHOLD_LAW activation
 	var objectives: Dictionary = {
