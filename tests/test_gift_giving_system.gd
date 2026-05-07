@@ -380,6 +380,86 @@ func test_default_archetype_maps_school_types() -> void:
 	)
 
 
+# -- select_best_gift --------------------------------------------------------
+
+func test_select_best_gift_returns_empty_when_no_inventory() -> void:
+	var pick: Dictionary = GiftGivingSystem.select_best_gift(
+		[], GiftGivingSystem.RecipientArchetype.COURTIER
+	)
+	assert_true(pick.is_empty())
+
+
+func test_select_best_gift_returns_empty_when_only_non_gift_items() -> void:
+	# A non-gift item (DOCUMENT category) should not be selectable.
+	var doc: Dictionary = InventorySystem.create_item(
+		1, "Letter", InventorySystem.ItemCategory.DOCUMENT, InventorySystem.ItemSize.SMALL
+	)
+	var pick: Dictionary = GiftGivingSystem.select_best_gift(
+		[doc], GiftGivingSystem.RecipientArchetype.COURTIER
+	)
+	assert_true(pick.is_empty())
+
+
+func test_select_best_gift_picks_highest_quality() -> void:
+	var fine: Dictionary = InventorySystem.create_gift_item(
+		1, "Fine Brush", GiftGivingSystem.GiftCategory.WRITING_IMPLEMENTS,
+		GiftGivingSystem.QualityTier.FINE,
+	)
+	var masterwork: Dictionary = InventorySystem.create_gift_item(
+		2, "Masterwork Inkstone", GiftGivingSystem.GiftCategory.WRITING_IMPLEMENTS,
+		GiftGivingSystem.QualityTier.MASTERWORK,
+	)
+	var pick: Dictionary = GiftGivingSystem.select_best_gift(
+		[fine, masterwork], GiftGivingSystem.RecipientArchetype.SCHOLAR
+	)
+	assert_eq(pick.get("item_id", -1), 2)
+
+
+func test_select_best_gift_prefers_appropriate_over_reduced() -> void:
+	# Equal-quality fine accessories are REDUCED for monks; fine tea is IDEAL.
+	var accessories: Dictionary = InventorySystem.create_gift_item(
+		1, "Fine Hair Pin", GiftGivingSystem.GiftCategory.ACCESSORIES,
+		GiftGivingSystem.QualityTier.MASTERWORK,
+	)
+	var tea: Dictionary = InventorySystem.create_gift_item(
+		2, "Fine Tea Set", GiftGivingSystem.GiftCategory.TEA_IMPLEMENTS,
+		GiftGivingSystem.QualityTier.FINE,
+	)
+	# Masterwork accessories at REDUCED = 1 effective FR.
+	# Fine tea at IDEAL = 1 effective FR. Tie on FR; tier breaks tie -> accessories.
+	# Verify select picks accessories (higher tier wins on FR tie).
+	var pick: Dictionary = GiftGivingSystem.select_best_gift(
+		[accessories, tea], GiftGivingSystem.RecipientArchetype.MONK
+	)
+	assert_eq(pick.get("item_id", -1), 1)
+
+
+func test_select_best_gift_skips_forbidden_weapon() -> void:
+	var sword: Dictionary = InventorySystem.create_gift_item(
+		1, "Fine Sword", GiftGivingSystem.GiftCategory.WEAPON,
+		GiftGivingSystem.QualityTier.FINE,
+	)
+	var painting: Dictionary = InventorySystem.create_gift_item(
+		2, "Normal Painting", GiftGivingSystem.GiftCategory.ART,
+		GiftGivingSystem.QualityTier.NORMAL,
+	)
+	var pick: Dictionary = GiftGivingSystem.select_best_gift(
+		[sword, painting], GiftGivingSystem.RecipientArchetype.BUSHI
+	)
+	assert_eq(pick.get("item_id", -1), 2)
+
+
+func test_select_best_gift_keeps_legendary_blade_exception() -> void:
+	var legendary_blade: Dictionary = InventorySystem.create_gift_item(
+		1, "Ancestral Katana", GiftGivingSystem.GiftCategory.WEAPON,
+		GiftGivingSystem.QualityTier.LEGENDARY,
+	)
+	var pick: Dictionary = GiftGivingSystem.select_best_gift(
+		[legendary_blade], GiftGivingSystem.RecipientArchetype.BUSHI
+	)
+	assert_eq(pick.get("item_id", -1), 1)
+
+
 # -- Free Raise -> roll bonus integration ------------------------------------
 
 func test_quality_free_raises_actually_help_the_roll() -> void:

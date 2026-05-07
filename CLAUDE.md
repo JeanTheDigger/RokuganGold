@@ -821,9 +821,44 @@ All in /tests/, one file per system:
   Forbidden gift: short-circuit -5 disposition, no roll. Quality tier
   disposition values pulled from existing `DispositionSystem.GIFT_DISPOSITION`
   table; temp modifier keys (gift_normal/fine/exceptional/masterwork) reuse
-  the existing `DispositionSystem.TEMPORARY_EVENTS` registry. Caller is
-  responsible for actually mutating recipient state — resolver stays pure.
+  the existing `DispositionSystem.TEMPORARY_EVENTS` registry.
   `default_archetype_for_school()` maps SchoolType to a default archetype.
+  `select_best_gift(items, archetype)` picks the best gift dict from an
+  inventory array, scoring on effective Free Raises with quality tier as
+  tiebreaker, skipping forbidden categories.
+
+- **DELIVER_GIFT executor wiring** — `ActionExecutor.execute()` accepts an
+  optional `characters_by_id: Dictionary` and special-cases DELIVER_GIFT
+  before the generic social path. `_try_execute_deliver_gift()` looks up the
+  recipient, picks the best gift from the giver's items via
+  `GiftGivingSystem.select_best_gift()`, runs `resolve_deliver_gift()`, and
+  emits effects: `recipient_disposition_change`, `recipient_modifiers`,
+  `consume_item_id`, `gift_outcome`, `gift_tier`, `gift_subtype`,
+  `gift_free_raises`. Falls through to the generic CHARM-style social path
+  when no recipient is resolvable or the inventory has no giftable item.
+  Failure outcomes set `effects["failed"] = true` so EffectApplicator's
+  early-return guard does not skip recipient mutation.
+
+- **EffectApplicator recipient-side effects** — New `_apply_recipient_effects()`
+  handles three new effect keys: `consume_item_id` removes the item from
+  giver's `items` array; `recipient_disposition_change` mutates
+  `recipient.disposition_values[giver_id]` (clamped); `recipient_modifiers`
+  appends each modifier dict to `recipient.temporary_modifiers[giver_id]`
+  (initialized to `[]` if absent). Establishes the convention that
+  `temporary_modifiers` is keyed by the source character's id.
+
+- **Inventory storage on character** — `L5RCharacterData.items: Array[Dictionary]`
+  added per s12.11. Item dicts are produced by
+  `InventorySystem.create_item()` or the new `create_gift_item(item_id, name,
+  gift_subtype, quality_tier, size)` wrapper that tags items with a
+  `gift_subtype` key matching `GiftGivingSystem.GiftCategory`.
+
+- **NPCWaveResolver threading** — `characters_by_id: Dictionary` is now
+  threaded from `resolve_day_applied()` (where DayOrchestrator already
+  supplies it) down through `resolve_day_full`, `_resolve_reactive_events_full`,
+  `_resolve_ap_waves_full`, `_resolve_character_wave_full`, and
+  `_execute_decision()` into `ActionExecutor.execute()`. Optional with
+  `{}` default — the parameter is dormant for resolvers that don't need it.
 
 ### Simulation Scheduler & World State
 - **scripts/managers/world_state.gd** — `WorldStateData` autoload singleton

@@ -82,6 +82,11 @@ extends Resource
 @export var outfit: Array[String] = []
 @export var koku: float = 0.0
 
+# -- Inventory (Section 12.11) -------------------------------------------------
+# Item dicts as produced by InventorySystem.create_item / create_gift_item.
+# Storage tier and outfit-slot accounting are queried via InventorySystem.
+@export var items: Array[Dictionary] = []
+
 # -- Personality (Section 19) --------------------------------------------------
 
 @export var bushido_virtue: Enums.BushidoVirtue = Enums.BushidoVirtue.NONE

@@ -442,3 +442,115 @@ func test_honor_and_province_effect_together() -> void:
 	}
 	EffectApplicator.apply(result, _characters, _provinces, _action_log)
 	assert_almost_eq(_actor.honor, 5.3, 0.01)
+
+
+# -- Recipient-side effects (gifts) ------------------------------------------
+
+func test_gift_recipient_disposition_lands_on_recipient_side() -> void:
+	# The disposition change goes onto the recipient's record, toward the actor.
+	var result: Dictionary = {
+		"success": true,
+		"character_id": 1,
+		"target_npc_id": 2,
+		"action_id": "DELIVER_GIFT",
+		"ic_day": 5,
+		"effects": {
+			"recipient_disposition_change": 8,
+			"recipient_modifiers": [],
+			"consume_item_id": -1,
+			"gift_outcome": "success",
+		},
+	}
+	EffectApplicator.apply(result, _characters, _provinces, _action_log)
+	# Actor's disposition toward target unchanged.
+	assert_eq(_actor.disposition_values.get(2, 20), 20)
+	# Recipient's disposition toward actor gained +8.
+	assert_eq(_target.disposition_values[1], 8)
+
+
+func test_gift_consumes_item_from_actor_inventory() -> void:
+	_actor.items = [
+		InventorySystem.create_gift_item(7, "Tea Bowl", 2, 3),
+		InventorySystem.create_gift_item(8, "Inkstone", 1, 2),
+	]
+	var result: Dictionary = {
+		"success": true,
+		"character_id": 1,
+		"target_npc_id": 2,
+		"action_id": "DELIVER_GIFT",
+		"ic_day": 5,
+		"effects": {
+			"recipient_disposition_change": 5,
+			"recipient_modifiers": [],
+			"consume_item_id": 7,
+			"gift_outcome": "success",
+		},
+	}
+	EffectApplicator.apply(result, _characters, _provinces, _action_log)
+	assert_eq(_actor.items.size(), 1)
+	assert_eq(_actor.items[0]["item_id"], 8)
+
+
+func test_gift_appends_temporary_modifiers_on_recipient() -> void:
+	var modifiers: Array = [
+		{"event_type": "gift_fine", "value": 5, "created_ic_day": 5, "duration": 45},
+		{"event_type": "gift_obligation", "value": -2, "created_ic_day": 5, "duration": -1},
+	]
+	var result: Dictionary = {
+		"success": true,
+		"character_id": 1,
+		"target_npc_id": 2,
+		"action_id": "DELIVER_GIFT",
+		"ic_day": 5,
+		"effects": {
+			"recipient_disposition_change": 5,
+			"recipient_modifiers": modifiers,
+			"consume_item_id": -1,
+			"gift_outcome": "success",
+		},
+	}
+	EffectApplicator.apply(result, _characters, _provinces, _action_log)
+	var bucket: Array = _target.temporary_modifiers.get(1, [])
+	assert_eq(bucket.size(), 2)
+	assert_eq(bucket[0]["event_type"], "gift_fine")
+	assert_eq(bucket[1]["event_type"], "gift_obligation")
+
+
+func test_gift_failed_outcome_still_applies_disposition() -> void:
+	# The "failed" key opts the result into the full pipeline so the
+	# critical-failure disposition loss lands on the recipient.
+	var result: Dictionary = {
+		"success": false,
+		"character_id": 1,
+		"target_npc_id": 2,
+		"action_id": "DELIVER_GIFT",
+		"ic_day": 5,
+		"effects": {
+			"recipient_disposition_change": -5,
+			"recipient_modifiers": [],
+			"consume_item_id": -1,
+			"gift_outcome": "critical_failure",
+			"failed": true,
+		},
+	}
+	EffectApplicator.apply(result, _characters, _provinces, _action_log)
+	assert_eq(_target.disposition_values[1], -5)
+
+
+func test_gift_consume_item_id_minus_one_is_no_op() -> void:
+	_actor.items = [InventorySystem.create_gift_item(7, "Tea Bowl", 2, 3)]
+	var result: Dictionary = {
+		"success": true,
+		"character_id": 1,
+		"target_npc_id": 2,
+		"action_id": "DELIVER_GIFT",
+		"ic_day": 5,
+		"effects": {
+			"recipient_disposition_change": 3,
+			"recipient_modifiers": [],
+			"consume_item_id": -1,
+			"gift_outcome": "success",
+		},
+	}
+	EffectApplicator.apply(result, _characters, _provinces, _action_log)
+	assert_eq(_actor.items.size(), 1)

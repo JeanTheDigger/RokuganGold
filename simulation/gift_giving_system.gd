@@ -316,6 +316,56 @@ static func resolve_deliver_gift(
 	return result
 
 
+# -- Gift selection from inventory -------------------------------------------
+#
+# Items are dicts shaped per InventorySystem.create_gift_item:
+#   {
+#       "item_id": int,
+#       "name": String,
+#       "category": InventorySystem.ItemCategory.GIFT,
+#       "quality_tier": int (matches QualityTier enum value),
+#       "gift_subtype": int (matches GiftCategory enum value),
+#       "storage_tier": ...,
+#       ...
+#   }
+#
+# Forbidden categories (WEAPON, ARMOR) are skipped — they cannot be selected
+# as gifts even if present in inventory.
+
+static func select_best_gift(
+	items: Array,
+	archetype: RecipientArchetype,
+) -> Dictionary:
+	var best: Dictionary = {}
+	var best_score: int = -1
+	for item in items:
+		if not _is_giftable(item):
+			continue
+		var tier: int = item.get("quality_tier", 0)
+		var subtype: int = item.get("gift_subtype", -1)
+		if subtype < 0:
+			continue
+		if is_forbidden(subtype, tier):
+			continue
+		var fr: int = compute_effective_free_raises(tier, subtype, archetype)
+		# Score: weight effective FR strongly, break ties on raw quality.
+		var score: int = (fr * 100) + tier
+		if score > best_score:
+			best_score = score
+			best = item
+	return best
+
+
+static func _is_giftable(item: Dictionary) -> bool:
+	if not item.has("category"):
+		return false
+	if item.get("category", -1) != InventorySystem.ItemCategory.GIFT:
+		return false
+	if item.get("in_transit", false):
+		return true  # in_transit gifts are still selectable on arrival
+	return true
+
+
 # -- Convenience archetype mapping -------------------------------------------
 # Maps a school type to a default archetype. Callers can override based on
 # specific role (e.g. a Crab BUSHI who is also a magistrate may still prefer
