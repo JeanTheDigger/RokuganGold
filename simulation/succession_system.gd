@@ -657,7 +657,7 @@ static func _get_relevant_skills(demand: String) -> Array[String]:
 		"political":
 			return ["Courtier", "Etiquette", "Sincerity"]
 		"spiritual":
-			return ["Theology", "Meditation", "Lore: Spirit Realms"]
+			return ["Theology", "Meditation", "Lore: Theology"]
 		_:
 			return ["Etiquette", "Kenjutsu", "Courtier"]
 
