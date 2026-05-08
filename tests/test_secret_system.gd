@@ -587,3 +587,263 @@ func test_lion_highest_reluctance() -> void:
 
 func test_dragon_mid_reluctance() -> void:
 	assert_eq(SecretSystem.CLAN_RELUCTANCE["Dragon"], 3)
+
+
+# ==============================================================================
+# Eavesdrop Resolution
+# ==============================================================================
+
+func _make_eavesdropper() -> L5RCharacterData:
+	var c: L5RCharacterData = L5RCharacterData.new()
+	c.character_id = 50
+	c.agility = 4
+	c.skills = {"Stealth": 4}
+	c.honor = 5.0
+	c.infamy = 0.0
+	return c
+
+
+func _make_eavesdrop_target() -> L5RCharacterData:
+	var c: L5RCharacterData = L5RCharacterData.new()
+	c.character_id = 51
+	c.perception = 3
+	c.skills = {"Investigation": 2}
+	return c
+
+
+func test_eavesdrop_applies_costs() -> void:
+	var eav: L5RCharacterData = _make_eavesdropper()
+	var tgt: L5RCharacterData = _make_eavesdrop_target()
+	SecretSystem.resolve_eavesdrop(eav, tgt, _engine)
+	assert_almost_eq(eav.honor, 4.9, 0.01)
+	assert_almost_eq(eav.infamy, 0.05, 0.01)
+
+
+func test_eavesdrop_returns_contested_result() -> void:
+	var eav: L5RCharacterData = _make_eavesdropper()
+	var tgt: L5RCharacterData = _make_eavesdrop_target()
+	var r: Dictionary = SecretSystem.resolve_eavesdrop(eav, tgt, _engine)
+	assert_has(r, "success")
+	assert_has(r, "eavesdropper_total")
+	assert_has(r, "target_total")
+	assert_has(r, "detection_risk")
+
+
+func test_eavesdrop_detected_on_failure() -> void:
+	var eav: L5RCharacterData = _make_eavesdropper()
+	var tgt: L5RCharacterData = _make_eavesdrop_target()
+	var r: Dictionary = SecretSystem.resolve_eavesdrop(eav, tgt, _engine)
+	assert_eq(r["detected"], not r["success"])
+
+
+# ==============================================================================
+# Intercept Letter Resolution
+# ==============================================================================
+
+func test_intercept_applies_costs() -> void:
+	_fabricator.skills["Stealth"] = 3
+	_fabricator.skills["Forgery"] = 3
+	var starting: float = _fabricator.honor
+	SecretSystem.resolve_intercept_letter(_fabricator, _engine)
+	assert_true(_fabricator.honor < starting)
+
+
+func test_intercept_same_location_easier() -> void:
+	var c: L5RCharacterData = L5RCharacterData.new()
+	c.character_id = 60
+	c.agility = 4
+	c.intelligence = 4
+	c.skills = {"Stealth": 3, "Forgery": 3}
+	c.honor = 5.0
+	c.infamy = 0.0
+	var r1: Dictionary = SecretSystem.resolve_intercept_letter(c, DiceEngine.new(42), false)
+	c.honor = 5.0
+	c.infamy = 0.0
+	var r2: Dictionary = SecretSystem.resolve_intercept_letter(c, DiceEngine.new(42), true)
+	assert_eq(r2.get("stealth_tn", 0), r1.get("stealth_tn", 0) - 5)
+
+
+func test_intercept_stealth_fail_detected() -> void:
+	var weak: L5RCharacterData = L5RCharacterData.new()
+	weak.character_id = 61
+	weak.agility = 1
+	weak.intelligence = 1
+	weak.skills = {"Stealth": 0, "Forgery": 0}
+	weak.honor = 5.0
+	weak.infamy = 0.0
+	var e: DiceEngine = DiceEngine.new(1)
+	var r: Dictionary = SecretSystem.resolve_intercept_letter(weak, e)
+	if not r["success"]:
+		assert_eq(r["phase_failed"], "stealth")
+		assert_true(r["detection_risk"])
+
+
+# ==============================================================================
+# Search Quarters Resolution
+# ==============================================================================
+
+func test_search_quarters_tn_includes_target_investigation() -> void:
+	var searcher: L5RCharacterData = L5RCharacterData.new()
+	searcher.character_id = 70
+	searcher.agility = 4
+	searcher.skills = {"Stealth": 3}
+	searcher.honor = 5.0
+	searcher.infamy = 0.0
+	var tgt: L5RCharacterData = L5RCharacterData.new()
+	tgt.skills = {"Investigation": 4}
+	var r: Dictionary = SecretSystem.resolve_search_quarters(searcher, tgt, _engine)
+	assert_eq(r["tn"], 19)
+
+
+func test_search_quarters_applies_costs() -> void:
+	var searcher: L5RCharacterData = L5RCharacterData.new()
+	searcher.character_id = 71
+	searcher.agility = 3
+	searcher.skills = {"Stealth": 2}
+	searcher.honor = 5.0
+	searcher.infamy = 0.0
+	var tgt: L5RCharacterData = L5RCharacterData.new()
+	tgt.skills = {}
+	SecretSystem.resolve_search_quarters(searcher, tgt, _engine)
+	assert_almost_eq(searcher.honor, 4.7, 0.01)
+
+
+# ==============================================================================
+# Shadow Target Resolution
+# ==============================================================================
+
+func test_shadow_target_returns_contested() -> void:
+	var shadow: L5RCharacterData = L5RCharacterData.new()
+	shadow.character_id = 80
+	shadow.agility = 4
+	shadow.skills = {"Stealth": 4}
+	var tgt: L5RCharacterData = L5RCharacterData.new()
+	tgt.character_id = 81
+	tgt.perception = 3
+	tgt.skills = {"Investigation": 2}
+	var r: Dictionary = SecretSystem.resolve_shadow_target(shadow, tgt, _engine)
+	assert_has(r, "success")
+	assert_has(r, "shadow_total")
+	assert_has(r, "target_total")
+	assert_eq(r["detected"], not r["success"])
+
+
+# ==============================================================================
+# Conceal Item
+# ==============================================================================
+
+func test_conceal_tn_small() -> void:
+	assert_eq(SecretSystem.get_conceal_tn("SMALL"), 10)
+
+
+func test_conceal_tn_medium() -> void:
+	assert_eq(SecretSystem.get_conceal_tn("MEDIUM"), 15)
+
+
+func test_conceal_tn_large() -> void:
+	assert_eq(SecretSystem.get_conceal_tn("LARGE"), 20)
+
+
+func test_conceal_weapon_requires_rank_5() -> void:
+	var actor: L5RCharacterData = L5RCharacterData.new()
+	actor.agility = 3
+	actor.skills = {"Sleight of Hand": 3}
+	var r: Dictionary = SecretSystem.resolve_conceal_item(actor, "SMALL", true, _engine)
+	assert_false(r["success"])
+	assert_eq(r["reason"], "weapon_skill_gate")
+
+
+func test_conceal_weapon_rank_5_allowed() -> void:
+	var actor: L5RCharacterData = L5RCharacterData.new()
+	actor.agility = 4
+	actor.skills = {"Sleight of Hand": 5}
+	var r: Dictionary = SecretSystem.resolve_conceal_item(actor, "SMALL", true, _engine)
+	assert_has(r, "roll_total")
+
+
+func test_conceal_non_weapon_no_gate() -> void:
+	var actor: L5RCharacterData = L5RCharacterData.new()
+	actor.agility = 3
+	actor.skills = {"Sleight of Hand": 2}
+	var r: Dictionary = SecretSystem.resolve_conceal_item(actor, "MEDIUM", false, _engine)
+	assert_has(r, "roll_total")
+
+
+# ==============================================================================
+# Search Person
+# ==============================================================================
+
+func test_search_person_glory_cost_without_authority() -> void:
+	var searcher: L5RCharacterData = L5RCharacterData.new()
+	searcher.character_id = 90
+	searcher.perception = 2
+	searcher.skills = {"Investigation": 1}
+	searcher.glory = 5.0
+	var tgt: L5RCharacterData = L5RCharacterData.new()
+	var e: DiceEngine = DiceEngine.new(1)
+	var r: Dictionary = SecretSystem.resolve_search_person(searcher, tgt, 99, e, false)
+	if not r["success"]:
+		assert_almost_eq(searcher.glory, 4.7, 0.01)
+
+
+func test_search_person_no_glory_cost_with_authority() -> void:
+	var searcher: L5RCharacterData = L5RCharacterData.new()
+	searcher.character_id = 91
+	searcher.perception = 2
+	searcher.skills = {"Investigation": 1}
+	searcher.glory = 5.0
+	var tgt: L5RCharacterData = L5RCharacterData.new()
+	var e: DiceEngine = DiceEngine.new(1)
+	SecretSystem.resolve_search_person(searcher, tgt, 99, e, true)
+	assert_almost_eq(searcher.glory, 5.0, 0.01)
+
+
+# ==============================================================================
+# Forge Impersonation Letter
+# ==============================================================================
+
+func test_forge_letter_no_forgery_fails() -> void:
+	var c: L5RCharacterData = L5RCharacterData.new()
+	c.skills = {}
+	var r: Dictionary = SecretSystem.resolve_forge_impersonation_letter(c, "minor", _engine)
+	assert_false(r["success"])
+	assert_eq(r["reason"], "no_forgery_skill")
+
+
+func test_forge_letter_tn_by_authority() -> void:
+	assert_eq(SecretSystem.FORGE_LETTER_TN["minor"], 15)
+	assert_eq(SecretSystem.FORGE_LETTER_TN["moderate"], 20)
+	assert_eq(SecretSystem.FORGE_LETTER_TN["major"], 25)
+
+
+func test_forge_letter_applies_honor_and_infamy() -> void:
+	_fabricator.honor = 5.0
+	_fabricator.infamy = 0.0
+	SecretSystem.resolve_forge_impersonation_letter(_fabricator, "minor", _engine)
+	assert_almost_eq(_fabricator.honor, 4.7, 0.01)
+	assert_almost_eq(_fabricator.infamy, 0.1, 0.01)
+
+
+# ==============================================================================
+# Forge Order
+# ==============================================================================
+
+func test_forge_order_no_forgery_fails() -> void:
+	var c: L5RCharacterData = L5RCharacterData.new()
+	c.skills = {}
+	var r: Dictionary = SecretSystem.resolve_forge_order(c, "minor", _engine)
+	assert_false(r["success"])
+
+
+func test_forge_order_tn_by_authority() -> void:
+	assert_eq(SecretSystem.FORGE_ORDER_TN["minor"], 20)
+	assert_eq(SecretSystem.FORGE_ORDER_TN["moderate"], 25)
+	assert_eq(SecretSystem.FORGE_ORDER_TN["major"], 30)
+
+
+func test_forge_order_higher_honor_cost_than_letter() -> void:
+	_fabricator.honor = 5.0
+	_fabricator.infamy = 0.0
+	SecretSystem.resolve_forge_order(_fabricator, "minor", _engine)
+	assert_almost_eq(_fabricator.honor, 4.5, 0.01)
+	assert_almost_eq(_fabricator.infamy, 0.2, 0.01)

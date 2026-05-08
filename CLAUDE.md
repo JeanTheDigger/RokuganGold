@@ -451,7 +451,9 @@ All in /tests/, one file per system:
 - test_performative_arts_wiring.gd (~10 tests)
 - test_succession_system.gd (~60 tests)
 - test_succession_wiring.gd (~10 tests)
-- test_secret_system.gd (~55 tests)
+- test_secret_system.gd (~90 tests)
+- test_seduction_system.gd (~25 tests)
+- test_assassination_system.gd (~45 tests)
 
 ### Festival System (s11.5)
 - **simulation/festival_system.gd** — Empire-wide canonical festivals, Rokuyo
@@ -1315,8 +1317,42 @@ All in /tests/, one file per system:
   Assassination order honor cost by target status (−2/−3/−4/−5). NPC covert
   filters: Gi/Makoto hard-block, CLAN_RELUCTANCE table (Scorpion 0 through
   Lion 5), honor threshold 3.5, disposition −31 gate. `can_fabricate()`
-  personality gate. Deferred: assassination phases, seduction actions,
-  bound/escape, forge impersonation/order, shadow target, conceal/search.
+  personality gate. Covert action resolution: `resolve_eavesdrop()` contested
+  Stealth+Agility vs Perception+Investigation, `resolve_intercept_letter()`
+  two-step Stealth then Forgery with geographic modifier,
+  `resolve_search_quarters()` TN 15 + target Investigation rank,
+  `resolve_shadow_target()` contested Stealth vs Investigation (1 IC day),
+  `resolve_conceal_item()` Sleight of Hand TN 10/15/20 by size with Rank 5
+  weapon gate, `resolve_search_person()` Investigation vs concealment_tn
+  with −0.3 Glory if caught without magistrate authority,
+  `resolve_forge_impersonation_letter()` Forgery+Intelligence TN 15/20/25,
+  `resolve_forge_order()` Forgery+Intelligence TN 20/25/30.
+
+### Seduction System (s12.8)
+- **simulation/seduction_system.gd** — Seduction and entanglement mechanics per
+  GDD s12.8. Five SeductionVariant values (SEDUCE, SEDUCE_FOR_INFO,
+  SEDUCE_FOR_ACCESS, SEDUCE_FOR_LEVERAGE, SEDUCE_TO_COMPROMISE). Category 6,
+  1 AP. Temptation+Awareness vs TN 15 + Etiquette + Willpower + Honor Rank.
+  Honor cost −0.3, Infamy +0.1. Variant effects: SEDUCE +5 disposition,
+  SEDUCE_FOR_INFO grants info with raises for detail, others grant access/
+  leverage/compromise. Entanglement lifecycle: create, maintain (16 IC day
+  window), neglect, break (3 missed windows). Breakup disposition loss by
+  attachment level (low −5, moderate −15, high −30). Affair secret severity:
+  unmarried T4, married T3, political marriage T2, cross-clan T1.
+
+### Assassination System (s12.8)
+- **simulation/assassination_system.gd** — Three-phase assassination per GDD
+  s12.8. Phase 1 Access: social infiltration over 3+ days via forge_credentials
+  (TN 20), bribe (TN 15), stealth (TN 20), seduction (TN 15). Suspicion
+  accumulation (+5/+10/+15 by failure severity), decay (−1/day absent, 0 present),
+  alert at 20 (+10 TN), lockdown at 40 (+15 TN, blocks execution). Phase 2
+  Execution: poison (Stealth TN 15 + Sleight of Hand TN 20), blade (Stealth
+  TN 20 + attack with +10 bonus vs Armor TN), arranged accident (Engineering
+  TN 25 + Stealth TN 15). Bodyguard encounters with fight/evade/abort options.
+  Phase 3 Concealment: poison (Medicine TN 15), blade (Stealth TN 25), accident
+  (Engineering TN 20). Successful concealment produces concealment_tn for
+  investigators. PC safeguard crisis windows: poison 12, blade 4, accident 8
+  real days.
 
 ### What's Next
 1. World generation coordinate system and adjacency

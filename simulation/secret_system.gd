@@ -417,3 +417,319 @@ static func can_fabricate(character: L5RCharacterData) -> bool:
 	if character.bushido_virtue == Enums.BushidoVirtue.MAKOTO:
 		return false
 	return true
+
+
+# ==============================================================================
+# Eavesdrop Resolution (Contested)
+# ==============================================================================
+
+const EAVESDROP_SKILL: String = "Stealth"
+const EAVESDROP_DETECT_SKILL: String = "Investigation"
+
+static func resolve_eavesdrop(
+	eavesdropper: L5RCharacterData,
+	target: L5RCharacterData,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	apply_eavesdrop_costs(eavesdropper)
+
+	var stealth_rank: int = eavesdropper.skills.get(EAVESDROP_SKILL, 0)
+	var rolled_a: int = eavesdropper.agility + stealth_rank
+	var kept_a: int = eavesdropper.agility
+	var explodes_a: bool = stealth_rank > 0
+
+	var inv_rank: int = target.skills.get(EAVESDROP_DETECT_SKILL, 0)
+	var rolled_b: int = target.perception + inv_rank
+	var kept_b: int = target.perception
+	var explodes_b: bool = inv_rank > 0
+
+	var result_a: DiceResult = dice_engine.roll_and_keep(rolled_a, kept_a, explodes_a)
+	var result_b: DiceResult = dice_engine.roll_and_keep(rolled_b, kept_b, explodes_b)
+
+	var success: bool = result_a.total >= result_b.total
+	var detected: bool = not success
+	var margin: int = result_a.total - result_b.total
+
+	return {
+		"success": success,
+		"detected": detected,
+		"margin": margin,
+		"eavesdropper_total": result_a.total,
+		"target_total": result_b.total,
+		"detection_risk": detected,
+	}
+
+
+# ==============================================================================
+# Intercept Letter Resolution (Two-Step)
+# ==============================================================================
+
+const INTERCEPT_STEALTH_TN: int = 15
+const INTERCEPT_FORGERY_TN: int = 15
+const INTERCEPT_GEOGRAPHIC_BONUS: int = 5
+
+static func resolve_intercept_letter(
+	interceptor: L5RCharacterData,
+	dice_engine: DiceEngine,
+	is_same_location: bool = false,
+) -> Dictionary:
+	apply_intercept_costs(interceptor)
+
+	var geographic_mod: int = -INTERCEPT_GEOGRAPHIC_BONUS if is_same_location else 0
+
+	var stealth_rank: int = interceptor.skills.get("Stealth", 0)
+	var stealth_rolled: int = interceptor.agility + stealth_rank
+	var stealth_kept: int = interceptor.agility
+	var stealth_result: DiceResult = dice_engine.roll_and_keep(stealth_rolled, stealth_kept, stealth_rank > 0)
+	var stealth_tn: int = INTERCEPT_STEALTH_TN + geographic_mod
+	var stealth_success: bool = stealth_result.total >= stealth_tn
+
+	if not stealth_success:
+		return {
+			"success": false,
+			"phase_failed": "stealth",
+			"stealth_total": stealth_result.total,
+			"stealth_tn": stealth_tn,
+			"detection_risk": true,
+		}
+
+	var forgery_rank: int = interceptor.skills.get("Forgery", 0)
+	var forgery_rolled: int = interceptor.intelligence + forgery_rank
+	var forgery_kept: int = interceptor.intelligence
+	var forgery_result: DiceResult = dice_engine.roll_and_keep(forgery_rolled, forgery_kept, forgery_rank > 0)
+	var forgery_success: bool = forgery_result.total >= INTERCEPT_FORGERY_TN
+
+	return {
+		"success": forgery_success,
+		"phase_failed": "" if forgery_success else "forgery",
+		"stealth_total": stealth_result.total,
+		"stealth_tn": stealth_tn,
+		"forgery_total": forgery_result.total,
+		"forgery_tn": INTERCEPT_FORGERY_TN,
+		"detection_risk": not forgery_success,
+	}
+
+
+# ==============================================================================
+# Search Quarters Resolution
+# ==============================================================================
+
+const SEARCH_BASE_TN: int = 15
+
+static func resolve_search_quarters(
+	searcher: L5RCharacterData,
+	target: L5RCharacterData,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	apply_search_costs(searcher)
+
+	var inv_rank: int = target.skills.get("Investigation", 0)
+	var tn: int = SEARCH_BASE_TN + inv_rank
+
+	var stealth_rank: int = searcher.skills.get("Stealth", 0)
+	var rolled: int = searcher.agility + stealth_rank
+	var kept: int = searcher.agility
+	var result: DiceResult = dice_engine.roll_and_keep(rolled, kept, stealth_rank > 0)
+	var success: bool = result.total >= tn
+	var margin: int = result.total - tn
+
+	return {
+		"success": success,
+		"roll_total": result.total,
+		"tn": tn,
+		"margin": margin,
+		"detection_risk": not success,
+	}
+
+
+# ==============================================================================
+# Shadow Target Resolution (Contested, 1 IC Day)
+# ==============================================================================
+
+static func resolve_shadow_target(
+	shadow: L5RCharacterData,
+	target: L5RCharacterData,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	var stealth_rank: int = shadow.skills.get("Stealth", 0)
+	var rolled_a: int = shadow.agility + stealth_rank
+	var kept_a: int = shadow.agility
+	var explodes_a: bool = stealth_rank > 0
+
+	var inv_rank: int = target.skills.get("Investigation", 0)
+	var rolled_b: int = target.perception + inv_rank
+	var kept_b: int = target.perception
+	var explodes_b: bool = inv_rank > 0
+
+	var result_a: DiceResult = dice_engine.roll_and_keep(rolled_a, kept_a, explodes_a)
+	var result_b: DiceResult = dice_engine.roll_and_keep(rolled_b, kept_b, explodes_b)
+
+	var success: bool = result_a.total >= result_b.total
+	var margin: int = result_a.total - result_b.total
+
+	return {
+		"success": success,
+		"detected": not success,
+		"shadow_total": result_a.total,
+		"target_total": result_b.total,
+		"margin": margin,
+	}
+
+
+# ==============================================================================
+# Conceal Item
+# ==============================================================================
+
+const CONCEAL_TN_SMALL: int = 10
+const CONCEAL_TN_MEDIUM: int = 15
+const CONCEAL_TN_LARGE: int = 20
+const CONCEAL_WEAPON_SKILL_GATE: int = 5
+
+static func get_conceal_tn(item_size: String) -> int:
+	match item_size:
+		"SMALL":
+			return CONCEAL_TN_SMALL
+		"MEDIUM":
+			return CONCEAL_TN_MEDIUM
+		"LARGE":
+			return CONCEAL_TN_LARGE
+		_:
+			return CONCEAL_TN_MEDIUM
+
+
+static func resolve_conceal_item(
+	actor: L5RCharacterData,
+	item_size: String,
+	is_weapon: bool,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	if is_weapon:
+		var soh_rank: int = actor.skills.get("Sleight of Hand", 0)
+		if soh_rank < CONCEAL_WEAPON_SKILL_GATE:
+			return {"success": false, "reason": "weapon_skill_gate", "required_rank": CONCEAL_WEAPON_SKILL_GATE}
+
+	var tn: int = get_conceal_tn(item_size)
+	var soh_rank: int = actor.skills.get("Sleight of Hand", 0)
+	var rolled: int = actor.agility + soh_rank
+	var kept: int = actor.agility
+	var result: DiceResult = dice_engine.roll_and_keep(rolled, kept, soh_rank > 0)
+	var success: bool = result.total >= tn
+
+	return {
+		"success": success,
+		"roll_total": result.total,
+		"tn": tn,
+		"concealment_tn": result.total if success else 0,
+	}
+
+
+# ==============================================================================
+# Search Person
+# ==============================================================================
+
+const SEARCH_PERSON_GLORY_COST: float = -0.3
+
+static func resolve_search_person(
+	searcher: L5RCharacterData,
+	target: L5RCharacterData,
+	concealment_tn: int,
+	dice_engine: DiceEngine,
+	has_magistrate_authority: bool = false,
+) -> Dictionary:
+	var inv_rank: int = searcher.skills.get("Investigation", 0)
+	var rolled: int = searcher.perception + inv_rank
+	var kept: int = searcher.perception
+	var result: DiceResult = dice_engine.roll_and_keep(rolled, kept, inv_rank > 0)
+	var success: bool = result.total >= concealment_tn
+
+	var glory_cost: float = 0.0
+	if not has_magistrate_authority and not success:
+		glory_cost = SEARCH_PERSON_GLORY_COST
+		searcher.glory = clampf(searcher.glory + glory_cost, 0.0, 10.0)
+
+	return {
+		"success": success,
+		"roll_total": result.total,
+		"concealment_tn": concealment_tn,
+		"glory_cost": glory_cost,
+	}
+
+
+# ==============================================================================
+# Forge Impersonation Letter
+# ==============================================================================
+
+const FORGE_LETTER_TN: Dictionary = {
+	"minor": 15,
+	"moderate": 20,
+	"major": 25,
+}
+
+static func resolve_forge_impersonation_letter(
+	forger: L5RCharacterData,
+	authority_level: String,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	var tn: int = FORGE_LETTER_TN.get(authority_level, 20)
+
+	var forgery_rank: int = forger.skills.get("Forgery", 0)
+	if forgery_rank == 0:
+		return {"success": false, "reason": "no_forgery_skill"}
+
+	var rolled: int = forger.intelligence + forgery_rank
+	var kept: int = forger.intelligence
+	var result: DiceResult = dice_engine.roll_and_keep(rolled, kept)
+	var success: bool = result.total >= tn
+
+	var detection_tn: int = result.total if success else 0
+
+	forger.honor = clampf(forger.honor - 0.3, 0.0, 10.0)
+	forger.infamy = clampf(forger.infamy + 0.1, 0.0, 10.0)
+
+	return {
+		"success": success,
+		"roll_total": result.total,
+		"tn": tn,
+		"detection_tn": detection_tn,
+		"detection_risk": not success,
+	}
+
+
+# ==============================================================================
+# Forge Order
+# ==============================================================================
+
+const FORGE_ORDER_TN: Dictionary = {
+	"minor": 20,
+	"moderate": 25,
+	"major": 30,
+}
+
+static func resolve_forge_order(
+	forger: L5RCharacterData,
+	authority_level: String,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	var tn: int = FORGE_ORDER_TN.get(authority_level, 25)
+
+	var forgery_rank: int = forger.skills.get("Forgery", 0)
+	if forgery_rank == 0:
+		return {"success": false, "reason": "no_forgery_skill"}
+
+	var rolled: int = forger.intelligence + forgery_rank
+	var kept: int = forger.intelligence
+	var result: DiceResult = dice_engine.roll_and_keep(rolled, kept)
+	var success: bool = result.total >= tn
+
+	var detection_tn: int = result.total if success else 0
+
+	forger.honor = clampf(forger.honor - 0.5, 0.0, 10.0)
+	forger.infamy = clampf(forger.infamy + 0.2, 0.0, 10.0)
+
+	return {
+		"success": success,
+		"roll_total": result.total,
+		"tn": tn,
+		"detection_tn": detection_tn,
+		"detection_risk": not success,
+	}
