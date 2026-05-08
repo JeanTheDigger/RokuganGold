@@ -104,6 +104,18 @@ static func advance_day(
 		companies,
 	)
 
+	var starvation_results: Array[Dictionary] = _process_starvation_warfare_effects(
+		day_result.get("applied", []),
+		characters_by_id,
+		trade_routes,
+		active_topics,
+		next_topic_id,
+		ic_day,
+		season_meta,
+		active_wars,
+		next_war_id,
+	)
+
 	var war_declarations: Array[Dictionary] = _process_war_declarations(
 		day_result.get("applied", []),
 		active_wars,
@@ -225,6 +237,9 @@ static func advance_day(
 			dice_engine, _season_to_name(current_season),
 		)
 		_process_war_seasonal(active_wars, characters)
+		military_seasonal_result["blockade_honor"] = StarvationWarfare.process_seasonal_blockade_honor(
+			trade_routes, characters_by_id,
+		)
 		military_seasonal_result["supply_status"] = _process_supply_status_checks(
 			characters, active_wars, settlements, provinces,
 			companies, clans, active_tethers,
@@ -283,6 +298,7 @@ static func advance_day(
 		"ladder_effects_results": ladder_effects_results,
 		"war_termination_results": war_termination_results,
 		"trade_route_results": trade_route_results,
+		"starvation_results": starvation_results,
 	}
 
 
@@ -2087,6 +2103,136 @@ static func _process_military_effects(
 				results.append(r)
 
 	return results
+
+
+# -- Starvation Warfare Effects ---------------------------------------------------
+
+static func _process_starvation_warfare_effects(
+	applied_list: Array,
+	characters_by_id: Dictionary,
+	trade_routes: Array,
+	active_topics: Array[TopicData],
+	next_topic_id: Array[int],
+	ic_day: int,
+	season_meta: Dictionary,
+	active_wars: Array[WarData],
+	next_war_id: Array[int],
+) -> Array[Dictionary]:
+	var results: Array[Dictionary] = []
+
+	for applied: Dictionary in applied_list:
+		var effects: Dictionary = applied.get("effects", {})
+
+		if effects.get("requires_harvest_destruction", false):
+			var r: Dictionary = _apply_harvest_destruction(
+				effects, characters_by_id, active_topics,
+				next_topic_id, ic_day, season_meta,
+			)
+			if not r.is_empty():
+				results.append(r)
+
+		if effects.get("requires_blockade", false):
+			var r: Dictionary = _apply_blockade(
+				effects, trade_routes, active_wars, next_war_id, ic_day,
+			)
+			if not r.is_empty():
+				results.append(r)
+
+	return results
+
+
+static func _apply_harvest_destruction(
+	effects: Dictionary,
+	characters_by_id: Dictionary,
+	active_topics: Array[TopicData],
+	next_topic_id: Array[int],
+	ic_day: int,
+	season_meta: Dictionary,
+) -> Dictionary:
+	var province_id: int = effects.get("province_id", -1)
+	var ordering_clan: String = effects.get("ordering_clan", "")
+	var target_clan: String = effects.get("target_clan", "")
+
+	if province_id < 0 or ordering_clan.is_empty():
+		return {}
+
+	StarvationWarfare.apply_harvest_destruction(province_id, season_meta)
+
+	var topic: TopicData = StarvationWarfare.generate_harvest_topic(
+		ordering_clan, province_id, next_topic_id, ic_day,
+	)
+	active_topics.append(topic)
+
+	for id: Variant in characters_by_id:
+		var c: L5RCharacterData = characters_by_id[id] as L5RCharacterData
+		if c == null:
+			continue
+		if c.clan == ordering_clan:
+			continue
+		var event_type: String = "destroyed_harvest" if c.clan == target_clan else "witnessed_harvest_destruction"
+		var mod: Dictionary = DispositionSystem.create_historical_modifier(event_type, ic_day)
+		if mod.is_empty():
+			continue
+		if not c.historical_modifiers.has(ordering_clan):
+			c.historical_modifiers[ordering_clan] = []
+		c.historical_modifiers[ordering_clan].append(mod)
+
+	return {
+		"type": "harvest_destruction",
+		"province_id": province_id,
+		"ordering_clan": ordering_clan,
+		"target_clan": target_clan,
+		"topic_id": topic.topic_id,
+		"honor_change": effects.get("honor_change", 0.0),
+		"glory_change": effects.get("glory_change", 0.0),
+	}
+
+
+static func _apply_blockade(
+	effects: Dictionary,
+	trade_routes: Array,
+	active_wars: Array[WarData],
+	next_war_id: Array[int],
+	ic_day: int,
+) -> Dictionary:
+	var route_id: int = effects.get("route_id", -1)
+	var blocking_clan: String = effects.get("blocking_clan", "")
+	var target_clan: String = effects.get("target_clan", "")
+	var disruption_reason: String = effects.get("disruption_reason", "")
+
+	if route_id < 0 or blocking_clan.is_empty():
+		return {}
+
+	for r: Variant in trade_routes:
+		if not (r is TradeRouteData):
+			continue
+		var route: TradeRouteData = r as TradeRouteData
+		if route.route_id == route_id:
+			StarvationWarfare.apply_blockade(route, disruption_reason)
+			break
+
+	var war_created: bool = false
+	if effects.get("triggers_war_status", false) and not target_clan.is_empty():
+		var already_at_war: bool = WarSystem.are_clans_at_war(
+			active_wars, blocking_clan, target_clan,
+		)
+		if not already_at_war:
+			var war: WarData = WarSystem.declare_war(
+				next_war_id[0], blocking_clan, target_clan,
+				WarData.AuthorityLevel.PROVINCIAL_RAID,
+				-1, -1, ic_day,
+			)
+			next_war_id[0] += 1
+			active_wars.append(war)
+			war_created = true
+
+	return {
+		"type": "blockade",
+		"route_id": route_id,
+		"blocking_clan": blocking_clan,
+		"target_clan": target_clan,
+		"war_created": war_created,
+	}
 
 
 # -- War System Wiring -----------------------------------------------------------

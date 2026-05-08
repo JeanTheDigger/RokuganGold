@@ -476,6 +476,7 @@ All in /tests/, one file per system:
 - test_war_justification.gd (~55 tests)
 - test_war_termination.gd (~46 tests)
 - test_feasibility_ledger.gd (~148 tests)
+- test_starvation_warfare.gd (~35 tests)
 
 ### Festival System (s11.5)
 - **simulation/festival_system.gd** — Empire-wide canonical festivals, Rokuyo
@@ -1850,9 +1851,46 @@ All in /tests/, one file per system:
   deactivates army, returns PU proportional to company health via
   `PUReconciliation.return_disband_pu()` to source province settlements.
   Runs before movement tick so disbanded armies don't get movement ticked.
-  Deferred: Phase 4 player-initiated starvation strategies, forge
-  infrastructure for arms production projection, stipend obligations,
-  real pathfinding for retreat marches (needs coordinate system).
+  Deferred: forge infrastructure for arms production projection, stipend
+  obligations, real pathfinding for retreat marches (needs coordinate system).
+
+### Starvation Warfare (s4.3.17 Phase 4)
+- **simulation/starvation_warfare.gd** — Player-initiated starvation strategies
+  per GDD s4.3.17 Phase 4. Pure static functions. Two hostile military actions:
+  1. **RAID_HARVEST** — Army present in a province during Autumn destroys that
+     year's harvest (yield → 0). Honor −2.0, Glory −0.5, −20 permanent
+     disposition from targeted clan (historical modifier, never decays), −10
+     from other clans who learn of it (decays). Tier 2 Military/Political
+     topic. Farming PU unharmed — crop-only destruction. Harvest recovers
+     next year (flag auto-cleared after resource tick). Personality gates:
+     Jin/Gi/Rei NEVER. Yu only if no other path. Meiyo only vs hated enemy.
+     Chugi only if lord commands. Makoto only if publicly declared. All
+     Shourido unrestricted. `evaluate_ai_harvest_decision()` combines
+     personality gate with condition evaluation.
+  2. **BLOCKADE_TRADE_ROUTE** — Military unit (≥1.0 PU) on a trade route node
+     blocks Rice/Iron/Koku flow. Triggers War Status (Provincial Raid) if not
+     already at war. Honor −0.5 per season maintained (stacks per route).
+     `process_seasonal_blockade_honor()` returns per-clan results.
+  Imperial edict consequence: −3.0 Honor to attacker, +5 disposition toward
+  targeted clan (deferred until Emperor AI response is implemented).
+- **simulation/resource_tick.gd** — `_process_harvest()` checks
+  `harvest_destroyed` flag in settlement_meta. Destroyed provinces yield 0
+  rice that Autumn. Flag cleared after processing so harvest recovers next year.
+- **simulation/disposition_system.gd** — New historical events:
+  `destroyed_harvest` (start −20, floor −20, decay false — permanent),
+  `witnessed_harvest_destruction` (start −10, floor −5, decay true).
+- **ActionExecutor** — RAID_HARVEST and BLOCKADE_TRADE_ROUTE routed to
+  `StarvationWarfare.execute_harvest_destruction()` and
+  `StarvationWarfare.execute_blockade()` respectively. Return
+  `requires_harvest_destruction` / `requires_blockade` effect flags.
+- **DayOrchestrator** — `_process_starvation_warfare_effects()` runs after
+  military effects. Harvest destruction: applies `harvest_destroyed` flag to
+  `season_meta`, generates Tier 2 topic, applies permanent disposition modifier
+  to targeted clan + decay modifier to other clans. Blockade: disrupts route,
+  creates Provincial Raid war if not already at war.
+  Seasonal: `process_seasonal_blockade_honor()` runs on season boundary.
+  Deferred: Emperor edict response via StrategicReview, blockade unit
+  presence validation (needs coordinate system for node tracking).
 
 ### Ladder Side Effects Processing
 - **DayOrchestrator `_process_ladder_side_effects()`** — Runs after

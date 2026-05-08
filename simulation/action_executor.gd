@@ -859,8 +859,10 @@ static func _compute_military_effects(action_id: String) -> Dictionary:
 			return {"effect": "garrison_assigned"}
 		"DRILL_TROOPS":
 			return {"effect": "training_bonus"}
-		"CONDUCT_RAID", "RAID_HARVEST":
+		"CONDUCT_RAID":
 			return {"effect": "raid_executed"}
+		"RAID_HARVEST":
+			return _compute_harvest_destruction_effects(action)
 		"CONDUCT_SORTIE":
 			return {"effect": "sortie_executed"}
 		"CONDUCT_STORM_ASSAULT":
@@ -868,7 +870,7 @@ static func _compute_military_effects(action_id: String) -> Dictionary:
 		"MAINTAIN_SIEGE":
 			return {"effect": "siege_maintained"}
 		"BLOCKADE_TRADE_ROUTE":
-			return {"effect": "route_blocked"}
+			return _compute_blockade_effects(action)
 		"ASSIGN_TO_MILITARY_SERVICE":
 			return {
 				"effect": "service_assigned",
@@ -1163,3 +1165,29 @@ static func _get_primary_virtue_name(character: L5RCharacterData) -> String:
 	if _SHOURIDO_NAMES.has(character.shourido_virtue):
 		return _SHOURIDO_NAMES[character.shourido_virtue]
 	return ""
+
+
+# -- Harvest Destruction & Blockade Effects ------------------------------------
+
+static func _compute_harvest_destruction_effects(action: NPCDataStructures.ScoredAction) -> Dictionary:
+	var province_id: int = action.metadata.get("target_province_id", action.target_province_id)
+	var target_clan: String = action.metadata.get("target_clan", "")
+	var ordering_clan: String = action.metadata.get("ordering_clan", "")
+	var result: Dictionary = StarvationWarfare.execute_harvest_destruction(
+		province_id, ordering_clan, target_clan,
+	)
+	result["effect"] = "harvest_destroyed"
+	result["requires_harvest_destruction"] = true
+	return result
+
+
+static func _compute_blockade_effects(action: NPCDataStructures.ScoredAction) -> Dictionary:
+	var route_id: int = action.metadata.get("route_id", -1)
+	var blocking_clan: String = action.metadata.get("blocking_clan", "")
+	var target_clan: String = action.metadata.get("target_clan", "")
+	var result: Dictionary = StarvationWarfare.execute_blockade(
+		route_id, blocking_clan, target_clan,
+	)
+	result["effect"] = "route_blocked"
+	result["requires_blockade"] = true
+	return result
