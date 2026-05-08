@@ -471,7 +471,7 @@ All in /tests/, one file per system:
 - test_order_system.gd (~30 tests)
 - test_military_service_system.gd (~35 tests)
 - test_pu_reconciliation.gd (~30 tests)
-- test_military_wiring.gd (~160 tests)
+- test_military_wiring.gd (~172 tests)
 - test_war_system.gd (~61 tests)
 - test_war_justification.gd (~55 tests)
 - test_war_termination.gd (~46 tests)
@@ -1828,9 +1828,17 @@ All in /tests/, one file per system:
   RETREAT. Retreat target selection: nearest friendly province (≤2 distance)
   with rice≥1.0/PU or forge; disband if no target found (generates Tier 4
   topic). `run_supply_status_check(inputs)` is the top-level entry point.
+  Wired into DayOrchestrator: `_process_supply_status_checks()` runs on
+  season boundary after `_process_war_seasonal()`. Iterates lord-tier NPCs
+  involved in active wars with fielded companies. Collects clan settlements,
+  worst tether state, iron upkeep totals, and war score per side. Returns
+  per-lord results with `peace_need` flag (for SEEK_PEACE/URGENT_PEACE/
+  IMMEDIATE_PEACE decisions) and `retreat` target (for RETREAT decisions).
+  Results stored in `military_seasonal["supply_status"]`.
   Deferred: Phase 4 player-initiated starvation strategies, forge
   infrastructure for arms production projection, stipend obligations,
-  wiring into DayOrchestrator seasonal tick.
+  consuming supply_status results to generate ImmediateNeeds for peace
+  negotiation and retreat army movement orders.
 
 ### War Trigger Pipeline (Metadata Population)
 - **Phase 3 metadata population** — `_populate_action_metadata()` in
