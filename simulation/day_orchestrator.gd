@@ -46,6 +46,7 @@ static func advance_day(
 	clans: Dictionary = {},
 	active_wars: Array[WarData] = [],
 	trade_routes: Array = [],
+	next_war_id: Array[int] = [1],
 ) -> Dictionary:
 	var prev_season: int = time_system.get_season()
 
@@ -107,6 +108,7 @@ static func advance_day(
 		day_result.get("applied", []),
 		active_wars,
 		ic_day,
+		next_war_id,
 	)
 
 	var trade_route_results: Array[Dictionary] = _process_war_trade_routes(
@@ -2677,6 +2679,7 @@ static func _process_war_declarations(
 	applied_list: Array,
 	active_wars: Array[WarData],
 	ic_day: int,
+	next_war_id: Array[int] = [1],
 ) -> Array[Dictionary]:
 	var results: Array[Dictionary] = []
 	for applied: Variant in applied_list:
@@ -2702,7 +2705,8 @@ static func _process_war_declarations(
 			})
 			continue
 
-		var war_id: int = active_wars.size() + 1
+		var war_id: int = next_war_id[0]
+		next_war_id[0] += 1
 		var authority_level: int = effects.get(
 			"authority_level", WarData.AuthorityLevel.PROVINCIAL_RAID,
 		)

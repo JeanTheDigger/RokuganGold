@@ -1589,6 +1589,7 @@ func test_inactive_war_skipped_for_battle_scores() -> void:
 
 func test_war_declaration_creates_war() -> void:
 	var active_wars: Array[WarData] = []
+	var next_wid: Array[int] = [5]
 	var applied: Array = [
 		{
 			"effects": {
@@ -1601,7 +1602,7 @@ func test_war_declaration_creates_war() -> void:
 		},
 	]
 	var results: Array[Dictionary] = DayOrchestrator._process_war_declarations(
-		applied, active_wars, 100,
+		applied, active_wars, 100, next_wid,
 	)
 	assert_eq(results.size(), 1)
 	assert_eq(results[0]["event"], "war_declared")
@@ -1611,6 +1612,8 @@ func test_war_declaration_creates_war() -> void:
 	assert_eq(active_wars[0].clan_a, "Crab")
 	assert_eq(active_wars[0].clan_b, "Crane")
 	assert_eq(active_wars[0].ic_day_started, 100)
+	assert_eq(active_wars[0].war_id, 5)
+	assert_eq(next_wid[0], 6)
 
 
 func test_war_declaration_skips_duplicate() -> void:

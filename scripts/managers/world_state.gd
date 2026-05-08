@@ -142,6 +142,7 @@ func advance_one_day() -> Dictionary:
 		clans,
 		active_wars,
 		trade_routes,
+		next_war_id,
 	)
 
 
