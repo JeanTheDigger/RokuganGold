@@ -715,3 +715,62 @@ func test_field_deprivation_multiple_tethers() -> void:
 	assert_eq(results[0]["army_id"], 1)
 	assert_eq(results[1]["army_id"], 2)
 	assert_eq(results[1]["company_effects"].size(), 2)
+
+
+# -- Tether Companies Fix Tests ---------------------------------------------------
+
+func test_build_companies_by_id() -> void:
+	var companies: Array[Dictionary] = [
+		_make_company_dict(10, Enums.CompanyUnitType.BUSHI_RETAINER),
+		_make_company_dict(20, Enums.CompanyUnitType.ASHIGARU_SPEARMEN),
+	]
+	var result: Dictionary = DayOrchestrator._build_companies_by_id(companies)
+	assert_eq(result.size(), 2)
+	assert_true(result.has(10))
+	assert_true(result.has(20))
+	assert_eq(result[10]["unit_type"], Enums.CompanyUnitType.BUSHI_RETAINER)
+
+
+func test_build_companies_by_id_skips_invalid() -> void:
+	var companies: Array[Dictionary] = [
+		{"unit_type": 0},
+	]
+	var result: Dictionary = DayOrchestrator._build_companies_by_id(companies)
+	assert_eq(result.size(), 0)
+
+
+func test_escort_defense_reads_dict() -> void:
+	var companies_by_id: Dictionary = {
+		5: {"defense": 7},
+	}
+	var tether: Dictionary = {
+		"node_states": {
+			0: {"escort_company_id": 5, "escort_returning": false},
+		},
+	}
+	var defense: int = SupplyTetherSystem.get_escort_defense(tether, 0, companies_by_id)
+	assert_eq(defense, 7)
+
+
+func test_escort_defense_reads_company_data() -> void:
+	var c: MilitaryUnitData.CompanyData = ArmyCombatSystem.create_company(
+		5, Enums.CompanyUnitType.BUSHI_RETAINER, -1, 1,
+	)
+	var companies_by_id: Dictionary = {5: c}
+	var tether: Dictionary = {
+		"node_states": {
+			0: {"escort_company_id": 5, "escort_returning": false},
+		},
+	}
+	var defense: int = SupplyTetherSystem.get_escort_defense(tether, 0, companies_by_id)
+	assert_eq(defense, c.defense)
+
+
+func test_escort_defense_returns_zero_when_no_escort() -> void:
+	var tether: Dictionary = {
+		"node_states": {
+			0: {"escort_company_id": -1, "escort_returning": false},
+		},
+	}
+	var defense: int = SupplyTetherSystem.get_escort_defense(tether, 0, {})
+	assert_eq(defense, 0)

@@ -70,7 +70,7 @@ static func advance_day(
 
 	var military_daily: Dictionary = _process_military_daily(
 		active_armies, active_sieges, active_tethers, order_states,
-		dice_engine, settlements,
+		dice_engine, settlements, companies,
 	)
 
 	var day_result: Dictionary = NPCWaveResolver.resolve_day_applied(
@@ -1504,13 +1504,14 @@ static func _process_military_daily(
 	order_states: Array[Dictionary],
 	dice_engine: DiceEngine,
 	settlements: Array[SettlementData],
+	companies: Array[Dictionary] = [],
 ) -> Dictionary:
 	var movement_results: Array[Dictionary] = _process_army_movements(active_armies)
 	var siege_results: Array[Dictionary] = _process_siege_ticks(
 		active_sieges, dice_engine,
 	)
 	var tether_results: Array[Dictionary] = _process_tether_ticks(
-		active_tethers, dice_engine,
+		active_tethers, dice_engine, companies,
 	)
 	var order_results: Dictionary = _process_order_ticks(order_states)
 	var deprivation_results: Array[Dictionary] = _process_field_deprivation(
@@ -1560,7 +1561,9 @@ static func _process_siege_ticks(
 static func _process_tether_ticks(
 	active_tethers: Array[Dictionary],
 	dice_engine: DiceEngine,
+	companies: Array[Dictionary],
 ) -> Array[Dictionary]:
+	var companies_by_id: Dictionary = _build_companies_by_id(companies)
 	var results: Array[Dictionary] = []
 	for tether: Dictionary in active_tethers:
 		var garrisons: Dictionary = tether.get("garrisons_on_path", {})
@@ -1568,10 +1571,21 @@ static func _process_tether_ticks(
 		for e: Variant in tether.get("enemy_armies_on_path", []):
 			enemies.append(int(e))
 		var r: Dictionary = SupplyTetherSystem.process_supply_tick(
-			dice_engine, tether, garrisons, enemies,
+			dice_engine, tether, garrisons, enemies, companies_by_id,
 		)
 		results.append(r)
 	return results
+
+
+static func _build_companies_by_id(
+	companies: Array[Dictionary],
+) -> Dictionary:
+	var result: Dictionary = {}
+	for c: Dictionary in companies:
+		var cid: int = c.get("company_id", -1)
+		if cid >= 0:
+			result[cid] = c
+	return result
 
 
 static func _process_field_deprivation(

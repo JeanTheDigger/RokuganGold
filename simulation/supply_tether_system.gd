@@ -107,8 +107,12 @@ static func get_escort_defense(
 		return 0
 	if not companies_by_id.has(escort_id):
 		return 0
-	var company: MilitaryUnitData.CompanyData = companies_by_id[escort_id]
-	return company.defense
+	var entry: Variant = companies_by_id[escort_id]
+	if entry is MilitaryUnitData.CompanyData:
+		return entry.defense
+	if entry is Dictionary:
+		return entry.get("defense", 0)
+	return 0
 
 
 static func process_tether_tick(
