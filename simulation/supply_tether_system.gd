@@ -377,3 +377,28 @@ static func process_supply_tick(
 		"arms_deprivation_tick": tether["arms_deprivation_tick"],
 		"deprivation": dep_result,
 	}
+
+
+# -- Tether Detachment -----------------------------------------------------------
+
+static func detach_tether(tether: Dictionary) -> Dictionary:
+	var freed_escort_ids: Array[int] = []
+	var node_states: Dictionary = tether.get("node_states", {})
+	for tile_id: Variant in node_states:
+		var node: Dictionary = node_states[tile_id]
+		var escort_id: int = node.get("escort_company_id", -1)
+		if escort_id >= 0:
+			freed_escort_ids.append(escort_id)
+			node["escort_company_id"] = -1
+			node["escort_returning"] = false
+			node["escort_return_ticks"] = 0
+	tether["overall_state"] = TetherState.SOLID
+	tether["rice_deprivation_tick"] = 0
+	tether["arms_deprivation_tick"] = 0
+	tether["partial_tick_accumulator_rice"] = 0
+	tether["partial_tick_accumulator_arms"] = 0
+	tether["detached"] = true
+	return {
+		"army_id": tether.get("army_id", -1),
+		"freed_escort_ids": freed_escort_ids,
+	}

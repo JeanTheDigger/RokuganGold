@@ -494,3 +494,60 @@ func test_full_tick_multiple_broken_then_recovery() -> void:
 	for i: int in 3:
 		SupplyTetherSystem.process_supply_tick(_dice, t, {}, [], {})
 	assert_eq(t["rice_deprivation_tick"], 0)
+
+
+# -- Detach Tether Tests ---------------------------------------------------------
+
+func test_detach_tether_marks_detached() -> void:
+	var t: Dictionary = _make_tether()
+	var result: Dictionary = SupplyTetherSystem.detach_tether(t)
+	assert_true(t.get("detached", false))
+	assert_eq(result["army_id"], 1)
+
+
+func test_detach_tether_resets_deprivation() -> void:
+	var t: Dictionary = _make_tether([10])
+	SupplyTetherSystem.advance_deprivation(t, SupplyTetherSystem.TetherState.BROKEN)
+	assert_eq(t["rice_deprivation_tick"], 1)
+	SupplyTetherSystem.detach_tether(t)
+	assert_eq(t["rice_deprivation_tick"], 0)
+	assert_eq(t["arms_deprivation_tick"], 0)
+	assert_eq(t["partial_tick_accumulator_rice"], 0)
+	assert_eq(t["partial_tick_accumulator_arms"], 0)
+
+
+func test_detach_tether_resets_overall_state() -> void:
+	var t: Dictionary = _make_tether([10])
+	t["overall_state"] = SupplyTetherSystem.TetherState.BROKEN
+	SupplyTetherSystem.detach_tether(t)
+	assert_eq(t["overall_state"], SupplyTetherSystem.TetherState.SOLID)
+
+
+func test_detach_tether_frees_escorts() -> void:
+	var t: Dictionary = _make_tether([10, 20, 30])
+	SupplyTetherSystem.assign_escort(t, 10, 101)
+	SupplyTetherSystem.assign_escort(t, 30, 103)
+	var result: Dictionary = SupplyTetherSystem.detach_tether(t)
+	var freed: Array = result["freed_escort_ids"]
+	assert_eq(freed.size(), 2)
+	assert_true(101 in freed)
+	assert_true(103 in freed)
+	for tile_id: Variant in t["node_states"]:
+		var node: Dictionary = t["node_states"][tile_id]
+		assert_eq(node["escort_company_id"], -1)
+		assert_false(node["escort_returning"])
+
+
+func test_detach_tether_no_escorts_returns_empty() -> void:
+	var t: Dictionary = _make_tether()
+	var result: Dictionary = SupplyTetherSystem.detach_tether(t)
+	assert_eq(result["freed_escort_ids"].size(), 0)
+
+
+func test_detach_tether_frees_returning_escorts() -> void:
+	var t: Dictionary = _make_tether([10, 20])
+	SupplyTetherSystem.assign_escort(t, 10, 101)
+	SupplyTetherSystem.recall_escort(t, 10)
+	var result: Dictionary = SupplyTetherSystem.detach_tether(t)
+	assert_eq(result["freed_escort_ids"].size(), 1)
+	assert_eq(result["freed_escort_ids"][0], 101)

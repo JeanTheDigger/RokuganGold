@@ -3451,6 +3451,136 @@ func test_movement_processes_retreat_then_ticks() -> void:
 	assert_eq(army["days_remaining"], DayOrchestrator._RETREAT_DEFAULT_DAYS - 1)
 
 
+# -- Retreat arrival cleanup -----------------------------------------------------
+
+func test_retreat_arrival_clears_retreat_flags() -> void:
+	var army: Dictionary = ArmyMovementSystem.create_army_state(1, 10, "Crab")
+	army["retreat_ordered"] = true
+	army["retreat_target_province"] = 5
+	army["is_moving"] = true
+	army["days_remaining"] = 1
+	army["path"] = [5] as Array[int]
+	army["destination_sub_tile"] = 5
+	var movement_results: Array[Dictionary] = DayOrchestrator._process_army_movements([army])
+	var tethers: Array[Dictionary] = []
+	var results: Array[Dictionary] = DayOrchestrator._process_retreat_arrivals(
+		movement_results, [army], tethers,
+	)
+	assert_eq(results.size(), 1)
+	assert_false(army.has("retreat_ordered"))
+	assert_false(army.has("retreat_target_province"))
+
+
+func test_retreat_arrival_detaches_tether() -> void:
+	var army: Dictionary = ArmyMovementSystem.create_army_state(1, 10, "Crab")
+	army["retreat_ordered"] = true
+	army["retreat_target_province"] = 5
+	army["is_moving"] = true
+	army["days_remaining"] = 1
+	army["path"] = [5] as Array[int]
+	army["destination_sub_tile"] = 5
+	var typed_path: Array[int] = [10, 20]
+	var tether: Dictionary = SupplyTetherSystem.create_tether(1, 100, typed_path)
+	var movement_results: Array[Dictionary] = DayOrchestrator._process_army_movements([army])
+	var results: Array[Dictionary] = DayOrchestrator._process_retreat_arrivals(
+		movement_results, [army], [tether],
+	)
+	assert_eq(results.size(), 1)
+	assert_true(results[0]["tether_detached"])
+	assert_true(tether.get("detached", false))
+
+
+func test_retreat_arrival_frees_escorts_from_tether() -> void:
+	var army: Dictionary = ArmyMovementSystem.create_army_state(1, 10, "Crab")
+	army["retreat_ordered"] = true
+	army["retreat_target_province"] = 5
+	army["is_moving"] = true
+	army["days_remaining"] = 1
+	army["path"] = [5] as Array[int]
+	army["destination_sub_tile"] = 5
+	var typed_path: Array[int] = [10, 20]
+	var tether: Dictionary = SupplyTetherSystem.create_tether(1, 100, typed_path)
+	SupplyTetherSystem.assign_escort(tether, 10, 201)
+	var movement_results: Array[Dictionary] = DayOrchestrator._process_army_movements([army])
+	var results: Array[Dictionary] = DayOrchestrator._process_retreat_arrivals(
+		movement_results, [army], [tether],
+	)
+	assert_eq(results[0]["freed_escort_ids"].size(), 1)
+	assert_eq(results[0]["freed_escort_ids"][0], 201)
+
+
+func test_retreat_arrival_skips_non_retreat() -> void:
+	var army: Dictionary = ArmyMovementSystem.create_army_state(1, 10, "Crab")
+	army["is_moving"] = true
+	army["days_remaining"] = 1
+	army["path"] = [5] as Array[int]
+	army["destination_sub_tile"] = 5
+	var movement_results: Array[Dictionary] = DayOrchestrator._process_army_movements([army])
+	var results: Array[Dictionary] = DayOrchestrator._process_retreat_arrivals(
+		movement_results, [army], [],
+	)
+	assert_eq(results.size(), 0)
+
+
+func test_retreat_arrival_no_tether_still_cleans_flags() -> void:
+	var army: Dictionary = ArmyMovementSystem.create_army_state(1, 10, "Crab")
+	army["retreat_ordered"] = true
+	army["retreat_target_province"] = 5
+	army["is_moving"] = true
+	army["days_remaining"] = 1
+	army["path"] = [5] as Array[int]
+	army["destination_sub_tile"] = 5
+	var movement_results: Array[Dictionary] = DayOrchestrator._process_army_movements([army])
+	var results: Array[Dictionary] = DayOrchestrator._process_retreat_arrivals(
+		movement_results, [army], [],
+	)
+	assert_eq(results.size(), 1)
+	assert_false(results[0]["tether_detached"])
+	assert_false(army.has("retreat_ordered"))
+
+
+func test_retreat_arrival_in_military_daily() -> void:
+	var army: Dictionary = ArmyMovementSystem.create_army_state(1, 10, "Crab")
+	army["retreat_ordered"] = true
+	army["retreat_target_province"] = 5
+	army["is_moving"] = true
+	army["days_remaining"] = 1
+	army["path"] = [5] as Array[int]
+	army["destination_sub_tile"] = 5
+	var dice: DiceEngine = DiceEngine.new(42)
+	var result: Dictionary = DayOrchestrator._process_military_daily(
+		[army] as Array[Dictionary],
+		[] as Array[Dictionary],
+		[] as Array[Dictionary],
+		[] as Array[Dictionary],
+		dice,
+		[] as Array[SettlementData],
+		[] as Array[Dictionary],
+	)
+	assert_true(result.has("retreat_arrival_results"))
+	assert_eq(result["retreat_arrival_results"].size(), 1)
+	assert_false(army.has("retreat_ordered"))
+
+
+func test_retreat_arrival_skips_already_detached_tether() -> void:
+	var army: Dictionary = ArmyMovementSystem.create_army_state(1, 10, "Crab")
+	army["retreat_ordered"] = true
+	army["retreat_target_province"] = 5
+	army["is_moving"] = true
+	army["days_remaining"] = 1
+	army["path"] = [5] as Array[int]
+	army["destination_sub_tile"] = 5
+	var typed_path: Array[int] = [10, 20]
+	var tether: Dictionary = SupplyTetherSystem.create_tether(1, 100, typed_path)
+	tether["detached"] = true
+	var movement_results: Array[Dictionary] = DayOrchestrator._process_army_movements([army])
+	var results: Array[Dictionary] = DayOrchestrator._process_retreat_arrivals(
+		movement_results, [army], [tether],
+	)
+	assert_eq(results.size(), 1)
+	assert_false(results[0]["tether_detached"])
+
+
 # -- Disband processing ---------------------------------------------------------
 
 func _make_settlement_for_disband(province_id: int) -> SettlementData:

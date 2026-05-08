@@ -1590,6 +1590,9 @@ static func _process_military_daily(
 		active_armies, companies, settlements,
 	)
 	var movement_results: Array[Dictionary] = _process_army_movements(active_armies)
+	var retreat_arrival_results: Array[Dictionary] = _process_retreat_arrivals(
+		movement_results, active_armies, active_tethers,
+	)
 	var siege_results: Array[Dictionary] = _process_siege_ticks(
 		active_sieges, dice_engine,
 	)
@@ -1609,6 +1612,7 @@ static func _process_military_daily(
 
 	return {
 		"movement_results": movement_results,
+		"retreat_arrival_results": retreat_arrival_results,
 		"siege_results": siege_results,
 		"tether_results": tether_results,
 		"order_results": order_results,
@@ -1627,6 +1631,7 @@ static func _process_army_movements(
 		if not army.get("is_moving", false):
 			continue
 		var r: Dictionary = ArmyMovementSystem.process_movement_tick(army)
+		r["army_id"] = army.get("army_id", -1)
 		if r.get("arrived", false):
 			var battle_check: Dictionary = ArmyMovementSystem.check_battle_trigger(
 				r, active_armies,
@@ -1639,6 +1644,54 @@ static func _process_army_movements(
 
 
 const _RETREAT_DEFAULT_DAYS: int = 3
+
+
+static func _process_retreat_arrivals(
+	movement_results: Array[Dictionary],
+	active_armies: Array[Dictionary],
+	active_tethers: Array[Dictionary],
+) -> Array[Dictionary]:
+	var results: Array[Dictionary] = []
+	for mr: Dictionary in movement_results:
+		if not mr.get("retreat_arrived", false):
+			continue
+		var army_id: int = mr.get("army_id", -1)
+		var army: Dictionary = _find_army_by_id(army_id, active_armies)
+		if army.is_empty():
+			continue
+
+		army.erase("retreat_ordered")
+		army.erase("retreat_target_province")
+
+		var tether_result: Dictionary = _detach_army_tether(army_id, active_tethers)
+
+		results.append({
+			"army_id": army_id,
+			"arrived_at": mr.get("arrived_at", -1),
+			"tether_detached": not tether_result.is_empty(),
+			"freed_escort_ids": tether_result.get("freed_escort_ids", []),
+		})
+	return results
+
+
+static func _find_army_by_id(
+	army_id: int,
+	active_armies: Array[Dictionary],
+) -> Dictionary:
+	for army: Dictionary in active_armies:
+		if army.get("army_id", -1) == army_id:
+			return army
+	return {}
+
+
+static func _detach_army_tether(
+	army_id: int,
+	active_tethers: Array[Dictionary],
+) -> Dictionary:
+	for tether: Dictionary in active_tethers:
+		if tether.get("army_id", -1) == army_id and not tether.get("detached", false):
+			return SupplyTetherSystem.detach_tether(tether)
+	return {}
 
 
 static func _initiate_retreat_march(army: Dictionary) -> void:
@@ -1728,6 +1781,8 @@ static func _process_tether_ticks(
 	var companies_by_id: Dictionary = _build_companies_by_id(companies)
 	var results: Array[Dictionary] = []
 	for tether: Dictionary in active_tethers:
+		if tether.get("detached", false):
+			continue
 		var garrisons: Dictionary = tether.get("garrisons_on_path", {})
 		var enemies: Array[int] = []
 		for e: Variant in tether.get("enemy_armies_on_path", []):
@@ -1754,9 +1809,13 @@ static func _build_tether_result_by_army(
 	active_tethers: Array[Dictionary],
 	tether_results: Array[Dictionary],
 ) -> Dictionary:
+	var non_detached: Array[Dictionary] = []
+	for t: Dictionary in active_tethers:
+		if not t.get("detached", false):
+			non_detached.append(t)
 	var result: Dictionary = {}
-	for i: int in range(mini(active_tethers.size(), tether_results.size())):
-		var army_id: int = active_tethers[i].get("army_id", -1)
+	for i: int in range(mini(non_detached.size(), tether_results.size())):
+		var army_id: int = non_detached[i].get("army_id", -1)
 		if army_id >= 0:
 			result[army_id] = tether_results[i]
 	return result
@@ -1848,9 +1907,13 @@ static func _process_field_deprivation(
 	active_tethers: Array[Dictionary],
 	tether_results: Array[Dictionary],
 ) -> Array[Dictionary]:
+	var non_detached: Array[Dictionary] = []
+	for t: Dictionary in active_tethers:
+		if not t.get("detached", false):
+			non_detached.append(t)
 	var results: Array[Dictionary] = []
-	for i: int in range(mini(active_tethers.size(), tether_results.size())):
-		var tether: Dictionary = active_tethers[i]
+	for i: int in range(mini(non_detached.size(), tether_results.size())):
+		var tether: Dictionary = non_detached[i]
 		var tr: Dictionary = tether_results[i]
 		var rice_tick: int = tr.get("rice_deprivation_tick", 0)
 		var arms_tick: int = tr.get("arms_deprivation_tick", 0)
