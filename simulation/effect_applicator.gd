@@ -39,6 +39,7 @@ static func apply(
 
 	_apply_disposition(effects, actor, target_id, applied)
 	_apply_recipient_effects(effects, actor, target_id, characters, applied)
+	_apply_witness_effects(effects, actor, characters, applied)
 	_apply_honor(effects, actor, applied)
 	_apply_glory(effects, actor, applied)
 	_apply_infamy(effects, actor, applied)
@@ -127,6 +128,37 @@ static func _remove_item_by_id(actor: L5RCharacterData, item_id: int) -> void:
 		if item.get("item_id", -1) == item_id:
 			actor.items.remove_at(i)
 			return
+
+
+# -- Witness disposition loss ---------------------------------------------------
+
+static func _apply_witness_effects(
+	effects: Dictionary,
+	actor: L5RCharacterData,
+	characters: Dictionary,
+	applied: Dictionary,
+) -> void:
+	var disp_loss: int = effects.get("witness_disposition_loss", 0)
+	if disp_loss == 0:
+		return
+	var witness_ids: Array = effects.get("witnesses", [])
+	if witness_ids.is_empty():
+		return
+
+	for wid in witness_ids:
+		var witness: L5RCharacterData = characters.get(wid)
+		if witness == null or witness.character_id == actor.character_id:
+			continue
+		var old_val: int = witness.disposition_values.get(actor.character_id, 0)
+		var new_val: int = clampi(old_val + disp_loss, -100, 100)
+		witness.disposition_values[actor.character_id] = new_val
+		applied["disposition_changes"].append({
+			"actor_id": witness.character_id,
+			"target_id": actor.character_id,
+			"old": old_val,
+			"new": new_val,
+			"delta": disp_loss,
+		})
 
 
 # -- Honor ---------------------------------------------------------------------

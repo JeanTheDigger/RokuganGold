@@ -119,6 +119,106 @@ func test_disposition_created_for_new_target() -> void:
 	assert_eq(_actor.disposition_values.get(99, 0), 3)
 
 
+# -- Witness Disposition Loss --------------------------------------------------
+
+func test_witness_disposition_loss_applied() -> void:
+	var witness := L5RCharacterData.new()
+	witness.character_id = 3
+	witness.character_name = "Witness"
+	witness.disposition_values = {1: 10}
+	_characters[3] = witness
+
+	var result: Dictionary = {
+		"success": true,
+		"character_id": 1,
+		"target_npc_id": 2,
+		"action_id": "INTIMIDATE",
+		"ic_day": 5,
+		"effects": {
+			"disposition_change": -3,
+			"witness_disposition_loss": -2,
+			"witnesses": [3],
+		},
+	}
+	var applied: Dictionary = EffectApplicator.apply(
+		result, _characters, _provinces, _action_log
+	)
+	assert_eq(witness.disposition_values[1], 8)
+	var witness_changes: Array = applied["disposition_changes"].filter(
+		func(c: Dictionary) -> bool: return c["actor_id"] == 3
+	)
+	assert_eq(witness_changes.size(), 1)
+	assert_eq(witness_changes[0]["delta"], -2)
+
+
+func test_witness_loss_skips_actor() -> void:
+	var result: Dictionary = {
+		"success": true,
+		"character_id": 1,
+		"target_npc_id": 2,
+		"action_id": "INTIMIDATE",
+		"ic_day": 5,
+		"effects": {
+			"witness_disposition_loss": -2,
+			"witnesses": [1, 2],
+		},
+	}
+	var applied: Dictionary = EffectApplicator.apply(
+		result, _characters, _provinces, _action_log
+	)
+	var witness_changes: Array = applied["disposition_changes"].filter(
+		func(c: Dictionary) -> bool: return c.get("delta", 0) == -2
+	)
+	assert_eq(witness_changes.size(), 1)
+	assert_eq(witness_changes[0]["actor_id"], 2)
+
+
+func test_no_witness_effect_without_loss() -> void:
+	var result: Dictionary = {
+		"success": true,
+		"character_id": 1,
+		"target_npc_id": 2,
+		"action_id": "CHARM",
+		"ic_day": 5,
+		"effects": {"disposition_change": 3},
+	}
+	var applied: Dictionary = EffectApplicator.apply(
+		result, _characters, _provinces, _action_log
+	)
+	var witness_related: Array = applied["disposition_changes"].filter(
+		func(c: Dictionary) -> bool: return c["actor_id"] != 1
+	)
+	assert_eq(witness_related.size(), 0)
+
+
+func test_multiple_witnesses_all_affected() -> void:
+	var w1 := L5RCharacterData.new()
+	w1.character_id = 3
+	w1.character_name = "Witness1"
+	w1.disposition_values = {}
+	var w2 := L5RCharacterData.new()
+	w2.character_id = 4
+	w2.character_name = "Witness2"
+	w2.disposition_values = {}
+	_characters[3] = w1
+	_characters[4] = w2
+
+	var result: Dictionary = {
+		"success": true,
+		"character_id": 1,
+		"target_npc_id": 2,
+		"action_id": "INTIMIDATE",
+		"ic_day": 5,
+		"effects": {
+			"witness_disposition_loss": -5,
+			"witnesses": [3, 4],
+		},
+	}
+	EffectApplicator.apply(result, _characters, _provinces, _action_log)
+	assert_eq(w1.disposition_values.get(1, 0), -5)
+	assert_eq(w2.disposition_values.get(1, 0), -5)
+
+
 # -- Honor Changes -------------------------------------------------------------
 
 func test_honor_increase() -> void:
