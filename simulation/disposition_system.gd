@@ -296,6 +296,8 @@ static func create_death_mutual_friend_modifier(
 	disp_b_toward_deceased: int,
 	created_ic_day: int,
 ) -> Dictionary:
+	if disp_a_toward_deceased <= 0 or disp_b_toward_deceased <= 0:
+		return {}
 	var avg_disp: int = (disp_a_toward_deceased + disp_b_toward_deceased) / 2
 	var start_val: int = mini(avg_disp / 10, 10)
 	var floor_val: int = start_val / 2

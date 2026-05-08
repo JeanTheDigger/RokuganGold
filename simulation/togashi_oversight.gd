@@ -85,7 +85,7 @@ static func initialize_from_world_state(
 	]:
 		var fires: bool = axis_concern_fires(axis, world_state)
 		if fires:
-			state["dissatisfaction"][axis] = INTERVENTION_THRESHOLD * 0.5
+			state["dissatisfaction"][axis] = DISSATISFACTION_THRESHOLD * 0.5
 
 
 # -- Concern checks (s55.10.2.3) ---------------------------------------------

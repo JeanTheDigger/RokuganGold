@@ -341,8 +341,8 @@ static func _execute_public_performance(
 		"tn": PerformativeArtsSystem.PERFORMANCE_TN,
 		"margin": perf_result.get("margin", 0),
 		"effects": {
-			"glory_change": perf_result.get("glory_change", 0.0),
-			"disposition_change": perf_result.get("disposition_per_witness", 0),
+			"glory_change": 0.0,  # Already applied by PerformativeArtsSystem
+			"disposition_change": 0,  # Already applied by PerformativeArtsSystem
 			"witness_count": witness_ids.size(),
 			"performance_outcome": perf_result.get("outcome", 0),
 			"art_form": art_form,
@@ -386,8 +386,8 @@ static func _execute_perform_for(
 		"tn": PerformativeArtsSystem.PERFORMANCE_TN,
 		"margin": perf_result.get("margin", 0),
 		"effects": {
-			"glory_change": perf_result.get("glory_change", 0.0),
-			"disposition_change": perf_result.get("disposition_change", 0),
+			"glory_change": 0.0,  # Already applied by PerformativeArtsSystem
+			"disposition_change": 0,  # Already applied by PerformativeArtsSystem
 			"recipient_id": action.target_npc_id,
 			"performance_outcome": perf_result.get("outcome", 0),
 			"art_form": art_form,
@@ -489,7 +489,7 @@ static func _get_disposition_tier_name(disp: int) -> String:
 		return "rival"
 	if disp >= -60:
 		return "enemy"
-	return "bitter_enemy"
+	return "blood_enemy"
 
 
 # -- Covert Actions (s12.8) ---------------------------------------------------
@@ -763,7 +763,7 @@ static func _apply_effects(
 		elif action_id in COVERT_ACTIONS:
 			effects = _compute_covert_effects(action_id, result["margin"])
 		elif action_id in MILITARY_ORDERS:
-			effects = _compute_military_effects(action_id)
+			effects = _compute_military_effects(action_id, action)
 		elif action_id in ADMINISTRATIVE_ACTIONS:
 			effects = _compute_admin_effects(action_id)
 		elif action_id in INTELLIGENCE_ACTIONS:
@@ -835,7 +835,7 @@ static func _compute_covert_effects(action_id: String, margin: int) -> Dictionar
 	}
 
 
-static func _compute_military_effects(action_id: String) -> Dictionary:
+static func _compute_military_effects(action_id: String, action: NPCDataStructures.ScoredAction) -> Dictionary:
 	match action_id:
 		"ORDER_LEVY":
 			return {

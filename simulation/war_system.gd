@@ -83,10 +83,10 @@ static func apply_score_shift(
 
 	if winning_clan == war.clan_a:
 		war.war_score_a = clampi(war.war_score_a + shift, 0, 100)
-		war.war_score_b = clampi(war.war_score_b - shift, 0, 100)
+		war.war_score_b = 100 - war.war_score_a
 	elif winning_clan == war.clan_b:
 		war.war_score_b = clampi(war.war_score_b + shift, 0, 100)
-		war.war_score_a = clampi(war.war_score_a - shift, 0, 100)
+		war.war_score_a = 100 - war.war_score_b
 
 	return {
 		"shift": shift,

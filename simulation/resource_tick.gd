@@ -531,20 +531,19 @@ static func consume_rice_province(
 ) -> Dictionary:
 	var total_civilian_cost: float = 0.0
 	var total_military_cost: float = 0.0
+	var old_stockpile: float = get_province_rice(province, settlements)
 	for s: SettlementData in settlements:
 		if s.province_id != province.province_id:
 			continue
 		var civilian: int = s.farming_pu + s.mining_pu + s.town_pu
 		var civilian_cost: float = float(civilian) * RICE_CONSUMPTION_PER_PU_PER_SEASON
-		var military_cost: float = float(s.military_pu) * MILITARY_RICE_PER_PU_PER_SEASON
+		var military_cost: float = float(s.military_pu + s.garrison_pu) * MILITARY_RICE_PER_PU_PER_SEASON
 		var settlement_cost: float = civilian_cost + military_cost
-		var old_rice: float = s.rice_stockpile
 		s.rice_stockpile = maxf(0.0, s.rice_stockpile - settlement_cost)
 		total_civilian_cost += civilian_cost
 		total_military_cost += military_cost
 	var total_cost: float = total_civilian_cost + total_military_cost
 	var new_stockpile: float = get_province_rice(province, settlements)
-	var old_stockpile: float = new_stockpile + total_cost
 	var deficit: float = maxf(0.0, total_cost - old_stockpile)
 	return {
 		"civilian_cost": total_civilian_cost,
@@ -612,6 +611,8 @@ static func apply_starvation_loss_settlements(
 			continue
 		var loss: float = float(s.population_pu) * loss_rate
 		var lost_pu: int = int(loss)
+		if loss > 0.0 and lost_pu == 0:
+			lost_pu = 1
 		if lost_pu > 0 and s.farming_pu > 0:
 			var farming_loss: int = mini(lost_pu, s.farming_pu)
 			s.farming_pu -= farming_loss

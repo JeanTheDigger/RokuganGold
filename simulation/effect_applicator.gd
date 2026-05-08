@@ -253,7 +253,7 @@ static func _apply_province_effects(
 				"effect": "garrison_increase",
 			})
 		"intelligence_gathered":
-			province.last_report_ic_day = result.get("ic_day", 0)
+			province.last_report_ic_day = result.get("ic_day", -1)
 			applied["province_updates"].append({
 				"province_id": province_id,
 				"effect": "report_refreshed",
@@ -286,7 +286,7 @@ static func _apply_info_events(
 		"action_id": result.get("action_id", ""),
 		"target_npc_id": result.get("target_npc_id", -1),
 		"target_province_id": result.get("target_province_id", -1),
-		"ic_day": result.get("ic_day", 0),
+		"ic_day": result.get("ic_day", -1),
 		"quality": effects.get("quality", 1),
 	})
 
@@ -302,7 +302,7 @@ static func _log_action(
 		"action_id": result.get("action_id", ""),
 		"target_npc_id": result.get("target_npc_id", -1),
 		"target_province_id": result.get("target_province_id", -1),
-		"ic_day": result.get("ic_day", 0),
+		"ic_day": result.get("ic_day", -1),
 		"season": result.get("season", 0),
 		"success": result.get("success", false),
 		"skill_used": result.get("skill_used", ""),

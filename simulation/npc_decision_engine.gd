@@ -1413,7 +1413,8 @@ static func _collect_raidable_provinces(
 	return result
 
 
-static func _has_active_trade_routes(trade_routes: Array, _clan: String) -> bool:
+# TODO: Filter trade routes by clan — requires province-to-clan mapping.
+static func _has_active_trade_routes(trade_routes: Array, clan: String) -> bool:
 	for r: Variant in trade_routes:
 		if r is TradeRouteData:
 			var tr: TradeRouteData = r
@@ -1529,22 +1530,6 @@ static func _has_grievance_against_neighbors(
 	return false
 
 
-const _VIRTUE_NAMES: Dictionary = {
-	Enums.BushidoVirtue.JIN: "Jin",
-	Enums.BushidoVirtue.YU: "Yu",
-	Enums.BushidoVirtue.REI: "Rei",
-	Enums.BushidoVirtue.CHUGI: "Chugi",
-	Enums.BushidoVirtue.GI: "Gi",
-	Enums.BushidoVirtue.MEIYO: "Meiyo",
-	Enums.BushidoVirtue.MAKOTO: "Makoto",
-	Enums.ShouridoVirtue.SEIGYO: "Seigyo",
-	Enums.ShouridoVirtue.KETSUI: "Ketsui",
-	Enums.ShouridoVirtue.DOSATSU: "Dosatsu",
-	Enums.ShouridoVirtue.CHISHIKI: "Chishiki",
-	Enums.ShouridoVirtue.KANPEKI: "Kanpeki",
-	Enums.ShouridoVirtue.ISHI: "Ishi",
-	Enums.ShouridoVirtue.KYORYOKU: "Kyoryoku",
-}
 
 
 static func _has_issued_demand(
@@ -1563,9 +1548,9 @@ static func _has_issued_demand(
 
 static func _get_virtue_string(ctx: NPCDataStructures.ContextSnapshot) -> String:
 	if ctx.bushido_virtue != Enums.BushidoVirtue.NONE:
-		return _VIRTUE_NAMES.get(ctx.bushido_virtue, "")
+		return Enums.bushido_virtue_name(ctx.bushido_virtue)
 	if ctx.shourido_virtue != Enums.ShouridoVirtue.NONE:
-		return _VIRTUE_NAMES.get(ctx.shourido_virtue, "")
+		return Enums.shourido_virtue_name(ctx.shourido_virtue)
 	return ""
 
 

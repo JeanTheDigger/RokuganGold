@@ -23,7 +23,7 @@ static func compute_surplus(
 	settlement: SettlementData,
 	seasons_of_consumption: int = 4,
 ) -> float:
-	var seasonal_need: float = settlement.population_pu * 0.001
+	var seasonal_need: float = settlement.population_pu * 0.25
 	var total_need: float = seasonal_need * seasons_of_consumption
 	return maxf(settlement.rice_stockpile - total_need, 0.0)
 
@@ -182,7 +182,7 @@ static func share_rice(
 	if recipient_starvation_stage <= 0:
 		return {"result": "not_needed", "honor_gain": 0.0}
 
-	var seasonal_need: float = receiver_settlement.population_pu * 0.001
+	var seasonal_need: float = receiver_settlement.population_pu * 0.25
 	var resolves: bool = (receiver_settlement.rice_stockpile + amount) >= seasonal_need
 
 	giver_settlement.rice_stockpile -= amount

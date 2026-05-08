@@ -98,14 +98,14 @@ static func advance_day(
 	)
 
 	var military_effects: Array[Dictionary] = _process_military_effects(
-		day_result.get("applied", []),
+		day_result.get("results", []),
 		settlements,
 		characters_by_id,
 		companies,
 	)
 
 	var starvation_results: Array[Dictionary] = _process_starvation_warfare_effects(
-		day_result.get("applied", []),
+		day_result.get("results", []),
 		characters_by_id,
 		trade_routes,
 		active_topics,
@@ -117,21 +117,21 @@ static func advance_day(
 	)
 
 	var supply_sharing_results: Array[Dictionary] = _process_supply_sharing(
-		day_result.get("applied", []),
+		day_result.get("results", []),
 		characters_by_id,
 		settlements,
 		provinces,
 	)
 
 	var war_declarations: Array[Dictionary] = _process_war_declarations(
-		day_result.get("applied", []),
+		day_result.get("results", []),
 		active_wars,
 		ic_day,
 		next_war_id,
 	)
 
 	var ladder_effects_results: Array[Dictionary] = _process_ladder_side_effects(
-		day_result.get("applied", []),
+		day_result.get("results", []),
 		characters_by_id,
 		active_topics,
 		next_topic_id,
@@ -150,7 +150,7 @@ static func advance_day(
 	)
 
 	var war_termination_results: Array[Dictionary] = _process_war_terminations(
-		day_result.get("applied", []),
+		day_result.get("results", []),
 		active_wars,
 		active_topics,
 		next_topic_id,
@@ -347,7 +347,7 @@ static func _process_info_events(
 			var target_id: int = event.get("target_npc_id", -1)
 			var quality: int = event.get("quality", 1)
 
-			if target_id > 0:
+			if target_id >= 0:
 				var discovered: Array[KnowledgeEntry] = InformationSystem.process_probe_result(
 					character, target_id, action_log, current_season, quality
 				)
@@ -1442,11 +1442,13 @@ static func _process_festivals(ic_day: int, world_states: Dictionary) -> Diction
 	var is_ceasefire: bool = FestivalSystem.is_ceasefire_day(ic_day)
 	var is_labor_halt: bool = FestivalSystem.is_labor_halt_day(ic_day)
 
-	world_states["is_ceasefire_day"] = is_ceasefire
-	world_states["is_labor_halt_day"] = is_labor_halt
-	world_states["is_taian"] = is_taian
-	world_states["is_inauspicious_for_social"] = is_inauspicious
-	world_states["rokuyo"] = rokuyo_name
+	for char_id: int in world_states:
+		var ws: Dictionary = world_states[char_id]
+		ws["is_ceasefire_day"] = is_ceasefire
+		ws["is_labor_halt_day"] = is_labor_halt
+		ws["is_taian"] = is_taian
+		ws["is_inauspicious_for_social"] = is_inauspicious
+		ws["rokuyo"] = rokuyo_name
 
 	return {
 		"active_festivals": active_festivals,

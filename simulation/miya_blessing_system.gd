@@ -159,7 +159,7 @@ static func compute_need_score(conditions: Dictionary) -> int:
 	score += get_pu_decline_need(conditions.get("pu_decline_pct", 0.0))
 	if conditions.get("blessed_last_year", false):
 		score += NEED_BLESSED_LAST_YEAR_MALUS
-	else:
+	elif not conditions.get("blessed_two_years_ago", false):
 		score += NEED_NOT_BLESSED_LAST_YEAR
 	score += int(conditions.get("petition_bonus", 0))
 	return score

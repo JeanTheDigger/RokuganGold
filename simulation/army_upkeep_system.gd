@@ -297,8 +297,10 @@ static func apply_arms_deprivation(
 		return {"attack_penalty": 0, "defense_penalty": 0, "warning_only": true}
 
 	var effect: Dictionary = get_arms_deprivation_effect(tick)
-	company.attack = maxi(base["attack"] + effect["attack"], 0)
-	company.defense = maxi(base["defense"] + effect["defense"], 0)
+	var iron_delta_atk: int = company.attack - base["attack"]
+	var iron_delta_def: int = company.defense - base["defense"]
+	company.attack = maxi(base["attack"] + mini(iron_delta_atk, 0) + effect["attack"], 0)
+	company.defense = maxi(base["defense"] + mini(iron_delta_def, 0) + effect["defense"], 0)
 
 	return {
 		"attack_penalty": effect["attack"],

@@ -29,7 +29,7 @@ enum WarScoreTier {
 @export var initiator_clan: String = ""
 @export var declaring_lord_id: int = -1
 @export var target_lord_id: int = -1
-@export var ic_day_started: int = 0
+@export var ic_day_started: int = -1
 @export var seasons_active: int = 0
 @export var is_active: bool = true
 @export var resolution_type: String = ""

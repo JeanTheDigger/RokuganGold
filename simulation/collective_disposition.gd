@@ -286,13 +286,13 @@ static func apply_event_ripple(
 	if actor.clan != target.clan and actor.clan != "" and target.clan != "" and clan_change != 0:
 		var ckey: String = make_pair_key(actor.clan, target.clan)
 		var current: int = int(clan_baselines.get(ckey, 0))
-		clan_baselines[ckey] = current + clan_change
+		clan_baselines[ckey] = clampi(current + clan_change, -100, 100)
 		result["clan_change"] = clan_change
 		result["clan_key"] = ckey
 	if actor.family != target.family and actor.family != "" and target.family != "" and family_change != 0:
 		var fkey: String = make_pair_key(actor.family, target.family)
 		var current: int = int(family_baselines.get(fkey, 0))
-		family_baselines[fkey] = current + family_change
+		family_baselines[fkey] = clampi(current + family_change, -100, 100)
 		result["family_change"] = family_change
 		result["family_key"] = fkey
 	return result
@@ -326,7 +326,7 @@ static func apply_clan_war_declared(
 	if clan_a == clan_b or clan_a == "" or clan_b == "":
 		return 0
 	var key: String = make_pair_key(clan_a, clan_b)
-	clan_baselines[key] = int(clan_baselines.get(key, 0)) + CLAN_WAR_DECLARED_DELTA
+	clan_baselines[key] = clampi(int(clan_baselines.get(key, 0)) + CLAN_WAR_DECLARED_DELTA, -100, 100)
 	return CLAN_WAR_DECLARED_DELTA
 
 
@@ -337,7 +337,7 @@ static func apply_clan_peace_treaty(
 	if clan_a == clan_b or clan_a == "" or clan_b == "":
 		return 0
 	var key: String = make_pair_key(clan_a, clan_b)
-	clan_baselines[key] = int(clan_baselines.get(key, 0)) + CLAN_PEACE_TREATY_DELTA
+	clan_baselines[key] = clampi(int(clan_baselines.get(key, 0)) + CLAN_PEACE_TREATY_DELTA, -100, 100)
 	return CLAN_PEACE_TREATY_DELTA
 
 
@@ -348,7 +348,7 @@ static func apply_harvest_destruction(
 	if clan_a == clan_b or clan_a == "" or clan_b == "":
 		return 0
 	var key: String = make_pair_key(clan_a, clan_b)
-	clan_baselines[key] = int(clan_baselines.get(key, 0)) + HARVEST_DESTRUCTION_CLAN_DELTA
+	clan_baselines[key] = clampi(int(clan_baselines.get(key, 0)) + HARVEST_DESTRUCTION_CLAN_DELTA, -100, 100)
 	return HARVEST_DESTRUCTION_CLAN_DELTA
 
 
@@ -359,7 +359,7 @@ static func apply_family_lord_raid(
 	if family_a == family_b or family_a == "" or family_b == "":
 		return 0
 	var key: String = make_pair_key(family_a, family_b)
-	family_baselines[key] = int(family_baselines.get(key, 0)) + FAMILY_LORD_RAID_DELTA
+	family_baselines[key] = clampi(int(family_baselines.get(key, 0)) + FAMILY_LORD_RAID_DELTA, -100, 100)
 	return FAMILY_LORD_RAID_DELTA
 
 
@@ -370,7 +370,7 @@ static func apply_family_betrayal(
 	if family_a == family_b or family_a == "" or family_b == "":
 		return 0
 	var key: String = make_pair_key(family_a, family_b)
-	family_baselines[key] = int(family_baselines.get(key, 0)) + FAMILY_BETRAYAL_DELTA
+	family_baselines[key] = clampi(int(family_baselines.get(key, 0)) + FAMILY_BETRAYAL_DELTA, -100, 100)
 	return FAMILY_BETRAYAL_DELTA
 
 
@@ -381,7 +381,7 @@ static func apply_intra_clan_rice_sharing(
 	if family_a == family_b or family_a == "" or family_b == "":
 		return 0
 	var key: String = make_pair_key(family_a, family_b)
-	family_baselines[key] = int(family_baselines.get(key, 0)) + INTRA_CLAN_RICE_SHARING_DELTA
+	family_baselines[key] = clampi(int(family_baselines.get(key, 0)) + INTRA_CLAN_RICE_SHARING_DELTA, -100, 100)
 	return INTRA_CLAN_RICE_SHARING_DELTA
 
 
@@ -392,7 +392,7 @@ static func apply_family_duel_death(
 	if family_a == family_b or family_a == "" or family_b == "":
 		return 0
 	var key: String = make_pair_key(family_a, family_b)
-	family_baselines[key] = int(family_baselines.get(key, 0)) + FAMILY_DUEL_DEATH_DELTA
+	family_baselines[key] = clampi(int(family_baselines.get(key, 0)) + FAMILY_DUEL_DEATH_DELTA, -100, 100)
 	return FAMILY_DUEL_DEATH_DELTA
 
 
