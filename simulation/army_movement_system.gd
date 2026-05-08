@@ -47,6 +47,7 @@ static func create_army_state(
 	army_id: int,
 	current_sub_tile: int,
 	owning_clan: String,
+	province_id: int = -1,
 ) -> Dictionary:
 	return {
 		"army_id": army_id,
@@ -58,6 +59,7 @@ static func create_army_state(
 		"owning_clan": owning_clan,
 		"has_scouts": false,
 		"forced_march": false,
+		"province_id": province_id,
 	}
 
 

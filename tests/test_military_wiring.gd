@@ -2241,6 +2241,91 @@ func test_build_context_preserves_existing_province_statuses() -> void:
 	assert_eq(ctx.province_statuses[0].clan, "Dragon")
 
 
+# -- Field Army Detection Wiring -------------------------------------------------
+
+func test_build_province_statuses_detects_enemy_army() -> void:
+	var pd := ProvinceData.new()
+	pd.province_id = 10
+	pd.clan = "Crane"
+	var army: Dictionary = ArmyMovementSystem.create_army_state(1, 100, "Lion", 10)
+	var result: Array = NPCDecisionEngine.build_province_statuses_from_data(
+		[pd], [], [army],
+	)
+	assert_true(result[0].has_field_army_nearby)
+
+
+func test_build_province_statuses_own_clan_army_not_enemy() -> void:
+	var pd := ProvinceData.new()
+	pd.province_id = 10
+	pd.clan = "Crane"
+	var army: Dictionary = ArmyMovementSystem.create_army_state(1, 100, "Crane", 10)
+	var result: Array = NPCDecisionEngine.build_province_statuses_from_data(
+		[pd], [], [army],
+	)
+	assert_false(result[0].has_field_army_nearby)
+
+
+func test_build_province_statuses_no_army_no_field() -> void:
+	var pd := ProvinceData.new()
+	pd.province_id = 10
+	pd.clan = "Crane"
+	var result: Array = NPCDecisionEngine.build_province_statuses_from_data(
+		[pd], [], [],
+	)
+	assert_false(result[0].has_field_army_nearby)
+
+
+func test_build_province_statuses_army_at_different_province() -> void:
+	var pd := ProvinceData.new()
+	pd.province_id = 10
+	pd.clan = "Crane"
+	var army: Dictionary = ArmyMovementSystem.create_army_state(1, 200, "Lion", 20)
+	var result: Array = NPCDecisionEngine.build_province_statuses_from_data(
+		[pd], [], [army],
+	)
+	assert_false(result[0].has_field_army_nearby)
+
+
+func test_build_province_statuses_army_no_province_id_ignored() -> void:
+	var pd := ProvinceData.new()
+	pd.province_id = 10
+	pd.clan = "Crane"
+	var army: Dictionary = ArmyMovementSystem.create_army_state(1, 100, "Lion")
+	var result: Array = NPCDecisionEngine.build_province_statuses_from_data(
+		[pd], [], [army],
+	)
+	assert_false(result[0].has_field_army_nearby)
+
+
+func test_build_context_threads_active_armies() -> void:
+	var c := L5RCharacterData.new()
+	c.character_id = 1
+	c.status = 6.0
+	var pd := ProvinceData.new()
+	pd.province_id = 10
+	pd.clan = "Crane"
+	var army: Dictionary = ArmyMovementSystem.create_army_state(1, 100, "Lion", 10)
+	var ws: Dictionary = {
+		"is_lord": true,
+		"province_data": [pd],
+		"settlements": [],
+		"active_armies": [army],
+	}
+	var ctx: NPCDataStructures.ContextSnapshot = NPCDecisionEngine.build_context(c, ws)
+	assert_eq(ctx.province_statuses.size(), 1)
+	assert_true(ctx.province_statuses[0].has_field_army_nearby)
+
+
+func test_army_state_factory_includes_province_id() -> void:
+	var state: Dictionary = ArmyMovementSystem.create_army_state(1, 50, "Crab", 7)
+	assert_eq(state["province_id"], 7)
+
+
+func test_army_state_factory_default_province_id() -> void:
+	var state: Dictionary = ArmyMovementSystem.create_army_state(1, 50, "Crab")
+	assert_eq(state["province_id"], -1)
+
+
 # -- Standing Objective War Check Paths ------------------------------------------
 
 func test_seek_vengeance_produces_war_check() -> void:

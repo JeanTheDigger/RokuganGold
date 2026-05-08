@@ -85,9 +85,10 @@ static func build_context(
 		if ctx.province_statuses.is_empty():
 			var prov_data: Array = world_state.get("province_data", [])
 			var settlements_arr: Array = world_state.get("settlements", [])
+			var armies_arr: Array = world_state.get("active_armies", [])
 			if not prov_data.is_empty():
 				ctx.province_statuses = build_province_statuses_from_data(
-					prov_data, settlements_arr,
+					prov_data, settlements_arr, armies_arr,
 				)
 
 	# Military
@@ -1016,6 +1017,7 @@ static func _select_letter_target(
 static func build_province_statuses_from_data(
 	province_data: Array,
 	settlements: Array = [],
+	active_armies: Array = [],
 ) -> Array:
 	var result: Array = []
 	var settlement_garrison: Dictionary = {}
@@ -1026,6 +1028,21 @@ static func build_province_statuses_from_data(
 			var pid: int = sd.province_id
 			settlement_garrison[pid] = settlement_garrison.get(pid, 0) + sd.garrison_pu
 			settlement_total_pu[pid] = settlement_total_pu.get(pid, 0) + sd.population_pu
+
+	var armies_by_province: Dictionary = {}
+	for army: Variant in active_armies:
+		if not (army is Dictionary):
+			continue
+		var ad: Dictionary = army
+		var apid: int = ad.get("province_id", -1)
+		if apid < 0:
+			continue
+		var clan: String = ad.get("owning_clan", "")
+		if clan.is_empty():
+			continue
+		if not armies_by_province.has(apid):
+			armies_by_province[apid] = []
+		armies_by_province[apid].append(clan)
 
 	for prov: Variant in province_data:
 		if not (prov is ProvinceData):
@@ -1041,6 +1058,11 @@ static func build_province_statuses_from_data(
 		ps.garrison_pu = settlement_garrison.get(pd.province_id, 0)
 		ps.total_settlement_pu = settlement_total_pu.get(pd.province_id, 0)
 		ps.confidence = 2
+		var army_clans: Array = armies_by_province.get(pd.province_id, [])
+		for ac: Variant in army_clans:
+			if ac is String and ac != pd.clan:
+				ps.has_field_army_nearby = true
+				break
 		result.append(ps)
 	return result
 

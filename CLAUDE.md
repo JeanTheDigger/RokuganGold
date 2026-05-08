@@ -471,7 +471,7 @@ All in /tests/, one file per system:
 - test_order_system.gd (~30 tests)
 - test_military_service_system.gd (~35 tests)
 - test_pu_reconciliation.gd (~30 tests)
-- test_military_wiring.gd (~152 tests)
+- test_military_wiring.gd (~160 tests)
 - test_war_system.gd (~61 tests)
 - test_war_justification.gd (~55 tests)
 - test_war_termination.gd (~46 tests)
@@ -1811,6 +1811,14 @@ All in /tests/, one file per system:
   flow through to `evaluate_war_justification()` in ActionExecutor for the
   Step 2 personality aggression weakness gate. When no target province status
   is found, weakness fields are omitted (defaults to false/0.0 in executor).
+- **Field army detection wiring** — `ArmyMovementSystem.create_army_state()`
+  gains optional `province_id: int = -1` parameter. `build_province_statuses_from_data()`
+  gains optional `active_armies: Array` parameter — scans army states and sets
+  `has_field_army_nearby = true` on any province where a non-own-clan army is
+  positioned. `build_context()` threads `active_armies` from world_state into
+  the province status builder. Armies without `province_id` (default -1) are
+  ignored. Callers populate `province_id` on army state when sub-tile→province
+  mapping becomes available.
 
 ### What's Next
 1. World generation coordinate system and adjacency
