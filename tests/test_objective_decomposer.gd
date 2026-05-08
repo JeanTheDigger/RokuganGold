@@ -920,7 +920,8 @@ func test_eliminate_shadowlands_non_lord_at_holdings() -> void:
 
 
 func test_maintain_peace_active_war() -> void:
-	_ctx.active_wars = [{"enemy_clan_id": "lion"}]
+	_ctx.clan = "crab"
+	_ctx.active_wars = [{"clan_a": "crab", "clan_b": "lion"}]
 	var obj: Dictionary = {"need_type": "MAINTAIN_PEACE"}
 	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
 	assert_eq(need.need_type, "SEEK_PEACE")

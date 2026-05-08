@@ -382,7 +382,6 @@ static func to_context_dict(war: WarData) -> Dictionary:
 		"war_id": war.war_id,
 		"clan_a": war.clan_a,
 		"clan_b": war.clan_b,
-		"enemy_clan_id": war.clan_b,
 		"authority_level": war.authority_level,
 		"war_score_a": war.war_score_a,
 		"war_score_b": war.war_score_b,
@@ -390,6 +389,14 @@ static func to_context_dict(war: WarData) -> Dictionary:
 		"is_active": war.is_active,
 		"seasons_active": war.seasons_active,
 	}
+
+
+static func get_enemy_clan_from_war(war: Dictionary, own_clan: String) -> String:
+	if war.get("clan_a", "") == own_clan:
+		return war.get("clan_b", "")
+	if war.get("clan_b", "") == own_clan:
+		return war.get("clan_a", "")
+	return ""
 
 
 static func wars_to_context_array(wars: Array[WarData]) -> Array:

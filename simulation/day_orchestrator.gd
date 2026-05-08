@@ -2030,29 +2030,38 @@ static func _process_battle_war_scores(
 	for effect: Dictionary in military_effects:
 		if effect.get("type", "") != "battle_pu_reconciliation":
 			continue
+		var victor_clan: String = effect.get("victor_clan", "")
+		if victor_clan.is_empty():
+			continue
 		var casualties: Dictionary = effect.get("casualties", {})
 		var total_loss: float = casualties.get("total_pu_lost", 0.0)
 		if total_loss >= 5.0:
 			for war: WarData in active_wars:
-				if war.is_active:
+				if not war.is_active:
+					continue
+				if WarSystem.is_clan_involved(war, victor_clan):
 					var r: Dictionary = WarSystem.apply_score_shift(
-						war, "decisive_battle", war.initiator_clan,
+						war, "decisive_battle", victor_clan,
 					)
 					results.append({
 						"war_id": war.war_id,
 						"event": "decisive_battle_upgrade",
+						"clan": victor_clan,
 						"shift": r["shift"],
 					})
 					break
 		elif total_loss >= 3.0:
 			for war: WarData in active_wars:
-				if war.is_active:
+				if not war.is_active:
+					continue
+				if WarSystem.is_clan_involved(war, victor_clan):
 					var r: Dictionary = WarSystem.apply_score_shift(
-						war, "major_battle", war.initiator_clan,
+						war, "major_battle", victor_clan,
 					)
 					results.append({
 						"war_id": war.war_id,
 						"event": "major_battle_upgrade",
+						"clan": victor_clan,
 						"shift": r["shift"],
 					})
 					break
@@ -2478,10 +2487,15 @@ static func _apply_battle_pu_reconciliation(
 		victor_companies, loser_companies, settlements_by_province,
 	)
 
+	var victor_clan: String = ""
+	if not victor_companies.is_empty():
+		victor_clan = victor_companies[0].get("clan_name", "")
+
 	return {
 		"type": "battle_pu_reconciliation",
 		"casualties": r.get("casualties", {}),
 		"recovery": r.get("recovery", {}),
+		"victor_clan": victor_clan,
 	}
 
 

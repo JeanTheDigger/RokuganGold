@@ -253,7 +253,7 @@ func test_build_context_military_populated() -> void:
 	_world_state["unit_training_counts"] = {0: 3, 1: 2, 2: 1}
 	_world_state["available_levy_pu"] = 15.0
 	_world_state["can_sustain_iron_upkeep"] = false
-	_world_state["active_wars"] = [{"enemy_clan_id": "Lion"}]
+	_world_state["active_wars"] = [{"clan_a": "Crab", "clan_b": "Lion"}]
 	_world_state["escalating_conflicts"] = [{"topic_id": 5}]
 	var taint_ids: Array[int] = [10, 20]
 	_world_state["taint_topic_province_ids"] = taint_ids

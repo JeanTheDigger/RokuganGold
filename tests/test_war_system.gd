@@ -458,9 +458,16 @@ func test_to_context_dict() -> void:
 	assert_eq(d["war_id"], 1)
 	assert_eq(d["clan_a"], "Crab")
 	assert_eq(d["clan_b"], "Crane")
-	assert_eq(d["enemy_clan_id"], "Crane")
+	assert_false(d.has("enemy_clan_id"))
 	assert_eq(d["war_score_a"], 50)
 	assert_true(d["is_active"])
+
+
+func test_get_enemy_clan_from_war() -> void:
+	var war: Dictionary = {"clan_a": "Crab", "clan_b": "Crane"}
+	assert_eq(WarSystem.get_enemy_clan_from_war(war, "Crab"), "Crane")
+	assert_eq(WarSystem.get_enemy_clan_from_war(war, "Crane"), "Crab")
+	assert_eq(WarSystem.get_enemy_clan_from_war(war, "Lion"), "")
 
 
 func test_wars_to_context_array_skips_inactive() -> void:

@@ -1470,10 +1470,12 @@ func test_tether_threatened_no_score() -> void:
 
 func test_heavy_casualties_upgrade_to_decisive() -> void:
 	var war: WarData = _make_war()
+	var score_a_before: int = war.war_score_a
 	var military_effects: Array[Dictionary] = [
 		{
 			"type": "battle_pu_reconciliation",
 			"casualties": {"total_pu_lost": 6.0},
+			"victor_clan": "Crab",
 		},
 	]
 	var results: Array[Dictionary] = DayOrchestrator._process_war_score_shifts(
@@ -1481,7 +1483,9 @@ func test_heavy_casualties_upgrade_to_decisive() -> void:
 	)
 	assert_eq(results.size(), 1)
 	assert_eq(results[0]["event"], "decisive_battle_upgrade")
+	assert_eq(results[0]["clan"], "Crab")
 	assert_eq(results[0]["shift"], 15)
+	assert_eq(war.war_score_a, score_a_before + 15)
 
 
 func test_moderate_casualties_upgrade_to_major() -> void:
@@ -1490,6 +1494,7 @@ func test_moderate_casualties_upgrade_to_major() -> void:
 		{
 			"type": "battle_pu_reconciliation",
 			"casualties": {"total_pu_lost": 3.5},
+			"victor_clan": "Crane",
 		},
 	]
 	var results: Array[Dictionary] = DayOrchestrator._process_war_score_shifts(
@@ -1497,6 +1502,7 @@ func test_moderate_casualties_upgrade_to_major() -> void:
 	)
 	assert_eq(results.size(), 1)
 	assert_eq(results[0]["event"], "major_battle_upgrade")
+	assert_eq(results[0]["clan"], "Crane")
 	assert_eq(results[0]["shift"], 8)
 
 
@@ -1506,6 +1512,21 @@ func test_small_casualties_no_upgrade() -> void:
 		{
 			"type": "battle_pu_reconciliation",
 			"casualties": {"total_pu_lost": 2.0},
+			"victor_clan": "Crab",
+		},
+	]
+	var results: Array[Dictionary] = DayOrchestrator._process_war_score_shifts(
+		{}, military_effects, [war], [],
+	)
+	assert_eq(results.size(), 0)
+
+
+func test_casualties_upgrade_skipped_without_victor_clan() -> void:
+	var war: WarData = _make_war()
+	var military_effects: Array[Dictionary] = [
+		{
+			"type": "battle_pu_reconciliation",
+			"casualties": {"total_pu_lost": 6.0},
 		},
 	]
 	var results: Array[Dictionary] = DayOrchestrator._process_war_score_shifts(

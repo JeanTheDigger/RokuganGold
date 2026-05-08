@@ -847,8 +847,9 @@ static func _decompose_maintain_peace(
 	# Step 1: active war
 	if not ctx.active_wars.is_empty():
 		var war: Dictionary = ctx.active_wars[0]
+		var enemy: String = WarSystem.get_enemy_clan_from_war(war, ctx.clan)
 		return _make_need("SEEK_PEACE", 3, {
-			"target_clan_id": war.get("enemy_clan_id", ""),
+			"target_clan_id": enemy,
 		})
 
 	# Step 2: rising tensions
