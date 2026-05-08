@@ -631,7 +631,62 @@ static func _is_action_blocked(
 		if action_id in always_blocked:
 			return true
 
+	if action_id == "RAID_HARVEST":
+		return _is_harvest_blocked_by_virtue(ctx)
+
 	return false
+
+
+static func _is_harvest_blocked_by_virtue(ctx: NPCDataStructures.ContextSnapshot) -> bool:
+	var virtue: String = _get_virtue_string(ctx)
+	if virtue in StarvationWarfare.HARVEST_NEVER_VIRTUES:
+		return true
+	var hc: Dictionary = _evaluate_harvest_conditions(ctx)
+	if virtue == "Yu":
+		return not hc.get("no_other_path", false)
+	if virtue == "Meiyo":
+		return not hc.get("hated_enemy", false)
+	if virtue == "Chugi":
+		return not hc.get("lord_commands", false)
+	if virtue == "Makoto":
+		return not hc.get("publicly_declared", false)
+	return false
+
+
+static func _evaluate_harvest_conditions(ctx: NPCDataStructures.ContextSnapshot) -> Dictionary:
+	var no_other_path: bool = false
+	for w: Variant in ctx.active_wars:
+		if w is Dictionary:
+			var score: int = w.get("war_score", 50)
+			if score < 25:
+				no_other_path = true
+				break
+
+	var hated_enemy: bool = false
+	for did: Variant in ctx.disposition_values:
+		var val: int = ctx.disposition_values[did]
+		if val <= -60:
+			hated_enemy = true
+			break
+
+	var lord_commands: bool = false
+	for ev: Variant in ctx.pending_events:
+		if ev is Dictionary and ev.get("need_type", "") in ["RAID_HARVEST", "DESTROY_HARVEST"]:
+			lord_commands = true
+			break
+
+	var publicly_declared: bool = false
+	for entry: Dictionary in ctx.action_log:
+		if entry.get("action_id", "") == "PUBLIC_DECLARATION":
+			publicly_declared = true
+			break
+
+	return {
+		"no_other_path": no_other_path,
+		"hated_enemy": hated_enemy,
+		"lord_commands": lord_commands,
+		"publicly_declared": publicly_declared,
+	}
 
 
 static func _lookup_objective_alignment(
@@ -1082,6 +1137,10 @@ static func _populate_action_metadata(
 		option.metadata = _build_declare_war_metadata(need, ctx)
 	elif option.action_id == "NEGOTIATE_SURRENDER":
 		option.metadata = _build_negotiate_surrender_metadata(need, ctx)
+	elif option.action_id == "RAID_HARVEST":
+		option.metadata = _build_raid_harvest_metadata(need, ctx)
+	elif option.action_id == "BLOCKADE_TRADE_ROUTE":
+		option.metadata = _build_blockade_metadata(need, ctx)
 
 
 static func _build_declare_war_metadata(
@@ -1160,6 +1219,38 @@ static func _build_negotiate_surrender_metadata(
 		"target_virtue": "",
 		"hostage_held": false,
 		"superior_pressuring": false,
+	}
+
+
+static func _build_raid_harvest_metadata(
+	need: NPCDataStructures.ImmediateNeed,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> Dictionary:
+	var target_province: int = need.target_province_id
+	var target_clan: String = need.target_clan_id
+	if target_clan.is_empty():
+		for ps: Variant in ctx.province_statuses:
+			if ps is NPCDataStructures.ProvinceStatus:
+				var status: NPCDataStructures.ProvinceStatus = ps
+				if status.province_id == target_province and not status.clan.is_empty():
+					target_clan = status.clan
+					break
+	return {
+		"target_province_id": target_province,
+		"target_clan": target_clan,
+		"ordering_clan": ctx.clan,
+	}
+
+
+static func _build_blockade_metadata(
+	need: NPCDataStructures.ImmediateNeed,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> Dictionary:
+	var target_clan: String = need.target_clan_id
+	return {
+		"route_id": -1,
+		"blocking_clan": ctx.clan,
+		"target_clan": target_clan,
 	}
 
 

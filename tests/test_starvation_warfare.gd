@@ -439,3 +439,156 @@ func test_imperial_edict_consequence() -> void:
 	assert_almost_eq(result["lord_honor_cost"], -3.0, 0.01)
 	assert_eq(result["sympathy_bonus"], 5)
 	assert_eq(result["sympathy_clan"], "Crane")
+
+
+# ==============================================================================
+# NPC Engine: Harvest Condition Evaluation Tests
+# ==============================================================================
+
+func _make_ctx_for_harvest(virtue: Enums.BushidoVirtue = Enums.BushidoVirtue.NONE,
+	shourido: Enums.ShouridoVirtue = Enums.ShouridoVirtue.NONE,
+) -> NPCDataStructures.ContextSnapshot:
+	var ctx: NPCDataStructures.ContextSnapshot = NPCDataStructures.ContextSnapshot.new()
+	ctx.bushido_virtue = virtue
+	ctx.shourido_virtue = shourido
+	ctx.clan = "Lion"
+	ctx.active_wars = []
+	ctx.disposition_values = {}
+	ctx.pending_events = []
+	ctx.action_log = []
+	return ctx
+
+
+func test_harvest_conditions_no_other_path_when_desperate() -> void:
+	var ctx: NPCDataStructures.ContextSnapshot = _make_ctx_for_harvest()
+	ctx.active_wars = [{"war_score": 20}]
+	var conditions: Dictionary = NPCDecisionEngine._evaluate_harvest_conditions(ctx)
+	assert_true(conditions["no_other_path"])
+
+
+func test_harvest_conditions_no_other_path_false_when_ahead() -> void:
+	var ctx: NPCDataStructures.ContextSnapshot = _make_ctx_for_harvest()
+	ctx.active_wars = [{"war_score": 60}]
+	var conditions: Dictionary = NPCDecisionEngine._evaluate_harvest_conditions(ctx)
+	assert_false(conditions["no_other_path"])
+
+
+func test_harvest_conditions_hated_enemy_when_blood_enemy() -> void:
+	var ctx: NPCDataStructures.ContextSnapshot = _make_ctx_for_harvest()
+	ctx.disposition_values = {5: -60}
+	var conditions: Dictionary = NPCDecisionEngine._evaluate_harvest_conditions(ctx)
+	assert_true(conditions["hated_enemy"])
+
+
+func test_harvest_conditions_hated_enemy_false_for_rival() -> void:
+	var ctx: NPCDataStructures.ContextSnapshot = _make_ctx_for_harvest()
+	ctx.disposition_values = {5: -30}
+	var conditions: Dictionary = NPCDecisionEngine._evaluate_harvest_conditions(ctx)
+	assert_false(conditions["hated_enemy"])
+
+
+func test_harvest_conditions_lord_commands() -> void:
+	var ctx: NPCDataStructures.ContextSnapshot = _make_ctx_for_harvest()
+	ctx.pending_events = [{"need_type": "RAID_HARVEST"}]
+	var conditions: Dictionary = NPCDecisionEngine._evaluate_harvest_conditions(ctx)
+	assert_true(conditions["lord_commands"])
+
+
+func test_harvest_conditions_publicly_declared() -> void:
+	var ctx: NPCDataStructures.ContextSnapshot = _make_ctx_for_harvest()
+	ctx.action_log = [{"action_id": "PUBLIC_DECLARATION"}]
+	var conditions: Dictionary = NPCDecisionEngine._evaluate_harvest_conditions(ctx)
+	assert_true(conditions["publicly_declared"])
+
+
+func test_harvest_blocked_jin_always() -> void:
+	var ctx: NPCDataStructures.ContextSnapshot = _make_ctx_for_harvest(Enums.BushidoVirtue.JIN)
+	assert_true(NPCDecisionEngine._is_harvest_blocked_by_virtue(ctx))
+
+
+func test_harvest_blocked_gi_always() -> void:
+	var ctx: NPCDataStructures.ContextSnapshot = _make_ctx_for_harvest(Enums.BushidoVirtue.GI)
+	assert_true(NPCDecisionEngine._is_harvest_blocked_by_virtue(ctx))
+
+
+func test_harvest_blocked_rei_always() -> void:
+	var ctx: NPCDataStructures.ContextSnapshot = _make_ctx_for_harvest(Enums.BushidoVirtue.REI)
+	assert_true(NPCDecisionEngine._is_harvest_blocked_by_virtue(ctx))
+
+
+func test_harvest_not_blocked_yu_when_desperate() -> void:
+	var ctx: NPCDataStructures.ContextSnapshot = _make_ctx_for_harvest(Enums.BushidoVirtue.YU)
+	ctx.active_wars = [{"war_score": 15}]
+	assert_false(NPCDecisionEngine._is_harvest_blocked_by_virtue(ctx))
+
+
+func test_harvest_blocked_yu_when_not_desperate() -> void:
+	var ctx: NPCDataStructures.ContextSnapshot = _make_ctx_for_harvest(Enums.BushidoVirtue.YU)
+	ctx.active_wars = [{"war_score": 60}]
+	assert_true(NPCDecisionEngine._is_harvest_blocked_by_virtue(ctx))
+
+
+func test_harvest_not_blocked_meiyo_vs_blood_enemy() -> void:
+	var ctx: NPCDataStructures.ContextSnapshot = _make_ctx_for_harvest(Enums.BushidoVirtue.MEIYO)
+	ctx.disposition_values = {5: -60}
+	assert_false(NPCDecisionEngine._is_harvest_blocked_by_virtue(ctx))
+
+
+func test_harvest_blocked_meiyo_without_enemy() -> void:
+	var ctx: NPCDataStructures.ContextSnapshot = _make_ctx_for_harvest(Enums.BushidoVirtue.MEIYO)
+	ctx.disposition_values = {5: -10}
+	assert_true(NPCDecisionEngine._is_harvest_blocked_by_virtue(ctx))
+
+
+func test_harvest_not_blocked_chugi_when_lord_commands() -> void:
+	var ctx: NPCDataStructures.ContextSnapshot = _make_ctx_for_harvest(Enums.BushidoVirtue.CHUGI)
+	ctx.pending_events = [{"need_type": "RAID_HARVEST"}]
+	assert_false(NPCDecisionEngine._is_harvest_blocked_by_virtue(ctx))
+
+
+func test_harvest_not_blocked_makoto_when_publicly_declared() -> void:
+	var ctx: NPCDataStructures.ContextSnapshot = _make_ctx_for_harvest(Enums.BushidoVirtue.MAKOTO)
+	ctx.action_log = [{"action_id": "PUBLIC_DECLARATION"}]
+	assert_false(NPCDecisionEngine._is_harvest_blocked_by_virtue(ctx))
+
+
+func test_harvest_not_blocked_shourido() -> void:
+	var ctx: NPCDataStructures.ContextSnapshot = _make_ctx_for_harvest(
+		Enums.BushidoVirtue.NONE, Enums.ShouridoVirtue.ISHI,
+	)
+	assert_false(NPCDecisionEngine._is_harvest_blocked_by_virtue(ctx))
+
+
+# -- Metadata Population Tests ---------------------------------------------------
+
+func test_raid_harvest_metadata_populates_clans() -> void:
+	var need: NPCDataStructures.ImmediateNeed = NPCDataStructures.ImmediateNeed.new()
+	need.target_province_id = 5
+	need.target_clan_id = "Crane"
+	var ctx: NPCDataStructures.ContextSnapshot = _make_ctx_for_harvest()
+	var meta: Dictionary = NPCDecisionEngine._build_raid_harvest_metadata(need, ctx)
+	assert_eq(meta["target_province_id"], 5)
+	assert_eq(meta["target_clan"], "Crane")
+	assert_eq(meta["ordering_clan"], "Lion")
+
+
+func test_raid_harvest_metadata_looks_up_clan_from_province_status() -> void:
+	var need: NPCDataStructures.ImmediateNeed = NPCDataStructures.ImmediateNeed.new()
+	need.target_province_id = 5
+	need.target_clan_id = ""
+	var ctx: NPCDataStructures.ContextSnapshot = _make_ctx_for_harvest()
+	var ps: NPCDataStructures.ProvinceStatus = NPCDataStructures.ProvinceStatus.new()
+	ps.province_id = 5
+	ps.clan = "Crane"
+	ctx.province_statuses = [ps]
+	var meta: Dictionary = NPCDecisionEngine._build_raid_harvest_metadata(need, ctx)
+	assert_eq(meta["target_clan"], "Crane")
+
+
+func test_blockade_metadata_populates() -> void:
+	var need: NPCDataStructures.ImmediateNeed = NPCDataStructures.ImmediateNeed.new()
+	need.target_clan_id = "Crane"
+	var ctx: NPCDataStructures.ContextSnapshot = _make_ctx_for_harvest()
+	var meta: Dictionary = NPCDecisionEngine._build_blockade_metadata(need, ctx)
+	assert_eq(meta["blocking_clan"], "Lion")
+	assert_eq(meta["target_clan"], "Crane")

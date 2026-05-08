@@ -476,7 +476,7 @@ All in /tests/, one file per system:
 - test_war_justification.gd (~55 tests)
 - test_war_termination.gd (~46 tests)
 - test_feasibility_ledger.gd (~148 tests)
-- test_starvation_warfare.gd (~35 tests)
+- test_starvation_warfare.gd (~55 tests)
 
 ### Festival System (s11.5)
 - **simulation/festival_system.gd** — Empire-wide canonical festivals, Rokuyo
