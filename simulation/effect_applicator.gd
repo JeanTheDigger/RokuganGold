@@ -18,6 +18,7 @@ static func apply(
 		"disposition_changes": [],
 		"honor_changes": [],
 		"glory_changes": [],
+		"infamy_changes": [],
 		"province_updates": [],
 		"info_events": [],
 		"logged": false,
@@ -40,6 +41,7 @@ static func apply(
 	_apply_recipient_effects(effects, actor, target_id, characters, applied)
 	_apply_honor(effects, actor, applied)
 	_apply_glory(effects, actor, applied)
+	_apply_infamy(effects, actor, applied)
 	_apply_province_effects(effects, result, provinces, applied, settlements)
 	_apply_info_events(effects, result, applied)
 	result["observable_effect"] = _detect_observable_effect(result, effects, applied)
@@ -162,6 +164,25 @@ static func _apply_glory(
 		"character_id": actor.character_id,
 		"delta": actual,
 		"new_glory": actor.glory,
+	})
+
+
+# -- Infamy --------------------------------------------------------------------
+
+static func _apply_infamy(
+	effects: Dictionary,
+	actor: L5RCharacterData,
+	applied: Dictionary,
+) -> void:
+	var infamy_change: float = effects.get("infamy_gain", effects.get("infamy_change", 0.0))
+	if absf(infamy_change) < 0.001:
+		return
+
+	var actual: float = HonorGlorySystem.apply_infamy_change(actor, infamy_change)
+	applied["infamy_changes"].append({
+		"character_id": actor.character_id,
+		"delta": actual,
+		"new_infamy": actor.infamy,
 	})
 
 

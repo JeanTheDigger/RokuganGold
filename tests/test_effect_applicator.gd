@@ -182,6 +182,71 @@ func test_glory_decrease_on_failure() -> void:
 	assert_almost_eq(_actor.glory, 2.95, 0.01)
 
 
+# -- Infamy Changes ------------------------------------------------------------
+
+func test_infamy_gain_applied() -> void:
+	var result: Dictionary = {
+		"success": true,
+		"character_id": 1,
+		"target_npc_id": 2,
+		"action_id": "EAVESDROP",
+		"ic_day": 5,
+		"effects": {"infamy_gain": 0.1},
+	}
+	var applied: Dictionary = EffectApplicator.apply(
+		result, _characters, _provinces, _action_log
+	)
+	assert_almost_eq(_actor.infamy, 0.1, 0.01)
+	assert_eq(applied["infamy_changes"].size(), 1)
+	assert_almost_eq(applied["infamy_changes"][0]["delta"], 0.1, 0.01)
+
+
+func test_infamy_clamped_at_10() -> void:
+	_actor.infamy = 9.8
+	var result: Dictionary = {
+		"success": true,
+		"character_id": 1,
+		"target_npc_id": 2,
+		"action_id": "EAVESDROP",
+		"ic_day": 5,
+		"effects": {"infamy_gain": 0.5},
+	}
+	EffectApplicator.apply(result, _characters, _provinces, _action_log)
+	assert_almost_eq(_actor.infamy, 10.0, 0.01)
+
+
+func test_no_infamy_change_when_zero() -> void:
+	var result: Dictionary = {
+		"success": true,
+		"character_id": 1,
+		"target_npc_id": -1,
+		"action_id": "CHARM",
+		"ic_day": 5,
+		"effects": {"disposition_change": 3},
+	}
+	var applied: Dictionary = EffectApplicator.apply(
+		result, _characters, _provinces, _action_log
+	)
+	assert_eq(applied["infamy_changes"].size(), 0)
+	assert_almost_eq(_actor.infamy, 0.0, 0.01)
+
+
+func test_infamy_change_key_also_works() -> void:
+	var result: Dictionary = {
+		"success": true,
+		"character_id": 1,
+		"target_npc_id": 2,
+		"action_id": "FABRICATE_SECRET",
+		"ic_day": 5,
+		"effects": {"infamy_change": 0.2},
+	}
+	var applied: Dictionary = EffectApplicator.apply(
+		result, _characters, _provinces, _action_log
+	)
+	assert_almost_eq(_actor.infamy, 0.2, 0.01)
+	assert_eq(applied["infamy_changes"].size(), 1)
+
+
 # -- Province Effects ----------------------------------------------------------
 
 func test_patrol_increases_stability() -> void:
