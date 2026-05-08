@@ -111,6 +111,17 @@ static func advance_day(
 		next_war_id,
 	)
 
+	var ladder_effects_results: Array[Dictionary] = _process_ladder_side_effects(
+		day_result.get("applied", []),
+		characters_by_id,
+		active_topics,
+		next_topic_id,
+		ic_day,
+		favors,
+		active_wars,
+		next_war_id,
+	)
+
 	var trade_route_results: Array[Dictionary] = _process_war_trade_routes(
 		war_declarations, trade_routes, provinces,
 	)
@@ -264,6 +275,7 @@ static func advance_day(
 		"military_topics": military_topics,
 		"war_score_results": war_score_results,
 		"war_declarations": war_declarations,
+		"ladder_effects_results": ladder_effects_results,
 		"war_termination_results": war_termination_results,
 		"trade_route_results": trade_route_results,
 	}
@@ -2976,6 +2988,253 @@ static func _process_war_declarations(
 		})
 
 	return results
+
+
+# -- Ladder Side Effects Processing -------------------------------------------
+
+static func _process_ladder_side_effects(
+	applied_list: Array,
+	characters_by_id: Dictionary,
+	active_topics: Array[TopicData],
+	next_topic_id: Array[int],
+	ic_day: int,
+	favors: Array,
+	active_wars: Array[WarData],
+	next_war_id: Array[int],
+) -> Array[Dictionary]:
+	var results: Array[Dictionary] = []
+
+	for applied: Variant in applied_list:
+		if not (applied is Dictionary):
+			continue
+		var ad: Dictionary = applied
+		var effects: Dictionary = ad.get("effects", {})
+		if not effects.has("ladder_side_effects"):
+			continue
+
+		var side: Dictionary = effects["ladder_side_effects"]
+		var declaring_lord_id: int = effects.get("declaring_lord_id", -1)
+		var declaring_clan: String = effects.get("declaring_clan", "")
+		var lord: L5RCharacterData = characters_by_id.get(declaring_lord_id)
+		var result: Dictionary = {
+			"lord_id": declaring_lord_id,
+			"rung": side.get("rung", -1),
+		}
+
+		if side.get("glory_cost", 0.0) != 0.0 and lord != null:
+			lord.glory = maxf(lord.glory + side["glory_cost"], 0.0)
+			result["glory_applied"] = side["glory_cost"]
+
+		if side.has("disposition_cost") and lord != null:
+			var disp_cost: int = side["disposition_cost"]
+			_apply_vassal_disposition_cost(lord, characters_by_id, disp_cost)
+			result["vassal_disposition_applied"] = disp_cost
+
+		if side.has("clan_disposition_cost"):
+			var clan_cost: int = side["clan_disposition_cost"]
+			var raid_target_clan: String = side.get("raid_target_clan", "")
+			if not raid_target_clan.is_empty():
+				_apply_clan_disposition_cost(
+					declaring_clan, raid_target_clan, clan_cost, characters_by_id,
+				)
+				result["clan_disposition_applied"] = clan_cost
+				result["raid_target_clan"] = raid_target_clan
+
+		if side.has("other_disposition_cost"):
+			var other_cost: int = side["other_disposition_cost"]
+			var raid_target_clan: String = side.get("raid_target_clan", "")
+			_apply_other_clans_disposition_cost(
+				declaring_clan, raid_target_clan, other_cost, characters_by_id,
+			)
+			result["other_disposition_applied"] = other_cost
+
+		if side.get("generates_topic", false):
+			var topic: TopicData = _create_ladder_topic(
+				side, declaring_clan, active_topics, next_topic_id, ic_day,
+			)
+			result["topic_id"] = topic.topic_id
+
+		if side.get("creates_favor", false) and lord != null:
+			var favor_tier: int = side.get("favor_tier", 3)
+			var favor: FavorData = _create_allied_aid_favor(
+				lord, favor_tier, ic_day, favors,
+			)
+			if favor != null:
+				result["favor_id"] = favor.favor_id
+				result["favor_tier"] = favor_tier
+
+		if side.get("triggers_war_status", false):
+			var raid_target_clan: String = side.get("raid_target_clan", "")
+			if not raid_target_clan.is_empty() and not declaring_clan.is_empty():
+				if not WarSystem.are_clans_at_war(active_wars, declaring_clan, raid_target_clan):
+					var war_id: int = next_war_id[0]
+					next_war_id[0] += 1
+					var war: WarData = WarSystem.declare_war(
+						war_id, declaring_clan, raid_target_clan,
+						WarData.AuthorityLevel.PROVINCIAL_RAID,
+						declaring_lord_id, -1, ic_day,
+					)
+					active_wars.append(war)
+					result["raid_war_id"] = war.war_id
+					result["raid_war_target"] = raid_target_clan
+
+		results.append(result)
+
+	return results
+
+
+static func _apply_vassal_disposition_cost(
+	lord: L5RCharacterData,
+	characters_by_id: Dictionary,
+	cost: int,
+) -> void:
+	for cid: Variant in characters_by_id:
+		var c: Variant = characters_by_id[cid]
+		if not (c is L5RCharacterData):
+			continue
+		var ch: L5RCharacterData = c
+		if ch.lord_id == lord.character_id:
+			var key: int = lord.character_id
+			if ch.disposition_values.has(key):
+				ch.disposition_values[key] = clampi(
+					ch.disposition_values[key] + cost, -100, 100,
+				)
+			else:
+				ch.disposition_values[key] = clampi(cost, -100, 100)
+
+
+static func _apply_clan_disposition_cost(
+	declaring_clan: String,
+	target_clan: String,
+	cost: int,
+	characters_by_id: Dictionary,
+) -> void:
+	for cid: Variant in characters_by_id:
+		var c: Variant = characters_by_id[cid]
+		if not (c is L5RCharacterData):
+			continue
+		var ch: L5RCharacterData = c
+		if ch.clan != target_clan:
+			continue
+		for oid: Variant in characters_by_id:
+			var o: Variant = characters_by_id[oid]
+			if not (o is L5RCharacterData):
+				continue
+			var other: L5RCharacterData = o
+			if other.clan != declaring_clan:
+				continue
+			var key: int = other.character_id
+			if ch.disposition_values.has(key):
+				ch.disposition_values[key] = clampi(
+					ch.disposition_values[key] + cost, -100, 100,
+				)
+			else:
+				ch.disposition_values[key] = clampi(cost, -100, 100)
+
+
+static func _apply_other_clans_disposition_cost(
+	declaring_clan: String,
+	exempt_clan: String,
+	cost: int,
+	characters_by_id: Dictionary,
+) -> void:
+	for cid: Variant in characters_by_id:
+		var c: Variant = characters_by_id[cid]
+		if not (c is L5RCharacterData):
+			continue
+		var ch: L5RCharacterData = c
+		if ch.clan == declaring_clan or ch.clan == exempt_clan:
+			continue
+		for oid: Variant in characters_by_id:
+			var o: Variant = characters_by_id[oid]
+			if not (o is L5RCharacterData):
+				continue
+			var other: L5RCharacterData = o
+			if other.clan != declaring_clan:
+				continue
+			var key: int = other.character_id
+			if ch.disposition_values.has(key):
+				ch.disposition_values[key] = clampi(
+					ch.disposition_values[key] + cost, -100, 100,
+				)
+			else:
+				ch.disposition_values[key] = clampi(cost, -100, 100)
+
+
+static func _create_ladder_topic(
+	side_effects: Dictionary,
+	declaring_clan: String,
+	active_topics: Array[TopicData],
+	next_topic_id: Array[int],
+	ic_day: int,
+) -> TopicData:
+	var topic: TopicData = TopicData.new()
+	topic.topic_id = next_topic_id[0]
+	next_topic_id[0] += 1
+
+	var rung: int = side_effects.get("rung", -1)
+	var tier_val: int = side_effects.get("topic_tier", 4)
+	match tier_val:
+		3: topic.tier = TopicData.Tier.TIER_3
+		2: topic.tier = TopicData.Tier.TIER_2
+		1: topic.tier = TopicData.Tier.TIER_1
+		_: topic.tier = TopicData.Tier.TIER_4
+
+	var rung_name: String = _ladder_rung_name(rung)
+	topic.slug = "war_preparation_%s_%s_d%d" % [rung_name, declaring_clan, ic_day]
+	topic.title = "War Preparation — %s (%s)" % [declaring_clan, rung_name.replace("_", " ")]
+	topic.topic_type = "war_preparation"
+	topic.variant = rung_name
+	topic.category = TopicData.Category.POLITICAL
+	topic.clan_involved = declaring_clan
+	topic.ic_day_created = ic_day
+
+	match topic.tier:
+		TopicData.Tier.TIER_3: topic.momentum = 26.0
+		_: topic.momentum = 11.0
+
+	active_topics.append(topic)
+	return topic
+
+
+static func _create_allied_aid_favor(
+	lord: L5RCharacterData,
+	favor_tier: int,
+	ic_day: int,
+	favors: Array,
+) -> FavorData:
+	var tier: FavorData.FavorTier
+	match favor_tier:
+		2: tier = FavorData.FavorTier.MODERATE
+		1: tier = FavorData.FavorTier.MAJOR
+		_: tier = FavorData.FavorTier.MINOR
+
+	var max_id: int = 0
+	for f: Variant in favors:
+		if f is FavorData and (f as FavorData).favor_id >= max_id:
+			max_id = (f as FavorData).favor_id + 1
+
+	var favor: FavorData = FavorSystem.offer_favor(
+		FavorData.FavorType.GENERAL,
+		tier,
+		-1,
+		lord.character_id,
+		ic_day,
+		"Allied aid for war preparation",
+		"ALLIED_AID",
+		max_id,
+	)
+	favors.append(favor)
+	return favor
+
+
+static func _ladder_rung_name(rung: int) -> String:
+	match rung:
+		FeasibilityLedger.LadderRung.DEMAND_TRIBUTE: return "demand_tribute"
+		FeasibilityLedger.LadderRung.REQUEST_ALLIED_AID: return "allied_aid"
+		FeasibilityLedger.LadderRung.RAID_NEIGHBOR: return "raid_neighbor"
+		FeasibilityLedger.LadderRung.DESPERATION_OVERRIDE: return "desperation"
+		_: return "unknown"
 
 
 # -- War Termination Processing ------------------------------------------------

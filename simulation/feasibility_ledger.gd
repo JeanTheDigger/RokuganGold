@@ -829,6 +829,7 @@ static func walk_alternative_ladder(
 
 static func _extract_side_effects(rung_result: Dictionary) -> Dictionary:
 	var effects: Dictionary = {}
+	effects["rung"] = rung_result.get("rung", -1)
 	if rung_result.get("generates_topic", false):
 		effects["generates_topic"] = true
 		effects["topic_tier"] = rung_result.get("topic_tier", 4)
@@ -847,6 +848,8 @@ static func _extract_side_effects(rung_result: Dictionary) -> Dictionary:
 		effects["favor_tier"] = rung_result.get("favor_tier", 3)
 	if rung_result.get("triggers_war_status", false):
 		effects["triggers_war_status"] = true
+		effects["raid_target_clan"] = rung_result.get("target_clan", "")
+		effects["raid_target_province_id"] = rung_result.get("target_province_id", -1)
 	if rung_result.get("desperation_levy", false):
 		effects["desperation_levy"] = true
 	return effects

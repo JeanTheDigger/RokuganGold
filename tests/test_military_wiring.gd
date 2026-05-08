@@ -2857,3 +2857,259 @@ func test_supply_status_helper_clan_settlements() -> void:
 	)
 	assert_eq(result.size(), 1)
 	assert_eq(result[0].settlement_id, 10)
+
+
+# -- Ladder Side Effects Wiring ------------------------------------------------
+
+func _make_applied_with_ladder(
+	declaring_lord_id: int,
+	declaring_clan: String,
+	target_clan: String,
+	side_effects: Dictionary,
+) -> Dictionary:
+	return {
+		"effects": {
+			"requires_war_creation": true,
+			"declaring_clan": declaring_clan,
+			"target_clan": target_clan,
+			"declaring_lord_id": declaring_lord_id,
+			"ladder_outcome": "demanded_tribute",
+			"ladder_side_effects": side_effects,
+		},
+	}
+
+
+func test_ladder_side_effects_skips_when_no_ladder() -> void:
+	var applied: Array = [{"effects": {"requires_war_creation": true, "declaring_clan": "Crab"}}]
+	var topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [100]
+	var results: Array[Dictionary] = DayOrchestrator._process_ladder_side_effects(
+		applied, {}, topics, next_topic_id, 1, [], [], [1],
+	)
+	assert_eq(results.size(), 0)
+
+
+func test_ladder_side_effects_applies_glory_cost() -> void:
+	var lord: L5RCharacterData = _make_character(1, "Crab")
+	lord.glory = 3.0
+	var chars_by_id: Dictionary = {1: lord}
+	var side: Dictionary = {"glory_cost": -0.3, "rung": FeasibilityLedger.LadderRung.RAID_NEIGHBOR}
+	var applied: Array = [_make_applied_with_ladder(1, "Crab", "Crane", side)]
+	var topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [100]
+	var results: Array[Dictionary] = DayOrchestrator._process_ladder_side_effects(
+		applied, chars_by_id, topics, next_topic_id, 1, [], [], [1],
+	)
+	assert_eq(results.size(), 1)
+	assert_almost_eq(lord.glory, 2.7, 0.01)
+	assert_almost_eq(results[0]["glory_applied"], -0.3, 0.01)
+
+
+func test_ladder_side_effects_applies_vassal_disposition() -> void:
+	var lord: L5RCharacterData = _make_character(1, "Crab")
+	var vassal: L5RCharacterData = _make_character(2, "Crab")
+	vassal.lord_id = 1
+	vassal.disposition_values[1] = 20
+	var chars_by_id: Dictionary = {1: lord, 2: vassal}
+	var side: Dictionary = {
+		"disposition_cost": -5,
+		"rung": FeasibilityLedger.LadderRung.DEMAND_TRIBUTE,
+	}
+	var applied: Array = [_make_applied_with_ladder(1, "Crab", "Crane", side)]
+	var topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [100]
+	DayOrchestrator._process_ladder_side_effects(
+		applied, chars_by_id, topics, next_topic_id, 1, [], [], [1],
+	)
+	assert_eq(vassal.disposition_values[1], 15)
+
+
+func test_ladder_side_effects_vassal_disposition_not_applied_to_non_vassals() -> void:
+	var lord: L5RCharacterData = _make_character(1, "Crab")
+	var other: L5RCharacterData = _make_character(2, "Crab")
+	other.lord_id = 99
+	other.disposition_values[1] = 20
+	var chars_by_id: Dictionary = {1: lord, 2: other}
+	var side: Dictionary = {
+		"disposition_cost": -5,
+		"rung": FeasibilityLedger.LadderRung.DEMAND_TRIBUTE,
+	}
+	var applied: Array = [_make_applied_with_ladder(1, "Crab", "Crane", side)]
+	var topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [100]
+	DayOrchestrator._process_ladder_side_effects(
+		applied, chars_by_id, topics, next_topic_id, 1, [], [], [1],
+	)
+	assert_eq(other.disposition_values[1], 20)
+
+
+func test_ladder_side_effects_clan_disposition_cost() -> void:
+	var lord: L5RCharacterData = _make_character(1, "Crab")
+	var target_char: L5RCharacterData = _make_character(2, "Crane")
+	target_char.disposition_values[1] = 10
+	var chars_by_id: Dictionary = {1: lord, 2: target_char}
+	var side: Dictionary = {
+		"clan_disposition_cost": -15,
+		"raid_target_clan": "Crane",
+		"rung": FeasibilityLedger.LadderRung.RAID_NEIGHBOR,
+	}
+	var applied: Array = [_make_applied_with_ladder(1, "Crab", "Crane", side)]
+	var topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [100]
+	DayOrchestrator._process_ladder_side_effects(
+		applied, chars_by_id, topics, next_topic_id, 1, [], [], [1],
+	)
+	assert_eq(target_char.disposition_values[1], -5)
+
+
+func test_ladder_side_effects_other_clans_disposition_cost() -> void:
+	var lord: L5RCharacterData = _make_character(1, "Crab")
+	var lion: L5RCharacterData = _make_character(2, "Lion")
+	lion.disposition_values[1] = 10
+	var crane: L5RCharacterData = _make_character(3, "Crane")
+	crane.disposition_values[1] = 10
+	var chars_by_id: Dictionary = {1: lord, 2: lion, 3: crane}
+	var side: Dictionary = {
+		"other_disposition_cost": -5,
+		"raid_target_clan": "Crane",
+		"rung": FeasibilityLedger.LadderRung.RAID_NEIGHBOR,
+	}
+	var applied: Array = [_make_applied_with_ladder(1, "Crab", "Crane", side)]
+	var topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [100]
+	DayOrchestrator._process_ladder_side_effects(
+		applied, chars_by_id, topics, next_topic_id, 1, [], [], [1],
+	)
+	# Lion (other clan) gets the -5
+	assert_eq(lion.disposition_values[1], 5)
+	# Crane (target clan) is exempt from "other" cost
+	assert_eq(crane.disposition_values[1], 10)
+
+
+func test_ladder_side_effects_generates_topic() -> void:
+	var lord: L5RCharacterData = _make_character(1, "Crab")
+	var chars_by_id: Dictionary = {1: lord}
+	var side: Dictionary = {
+		"generates_topic": true,
+		"topic_tier": 4,
+		"rung": FeasibilityLedger.LadderRung.DEMAND_TRIBUTE,
+	}
+	var applied: Array = [_make_applied_with_ladder(1, "Crab", "Crane", side)]
+	var topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [100]
+	var results: Array[Dictionary] = DayOrchestrator._process_ladder_side_effects(
+		applied, chars_by_id, topics, next_topic_id, 1, [], [], [1],
+	)
+	assert_eq(topics.size(), 1)
+	assert_eq(topics[0].topic_id, 100)
+	assert_eq(topics[0].tier, TopicData.Tier.TIER_4)
+	assert_eq(topics[0].topic_type, "war_preparation")
+	assert_eq(topics[0].clan_involved, "Crab")
+	assert_eq(next_topic_id[0], 101)
+	assert_eq(results[0]["topic_id"], 100)
+
+
+func test_ladder_side_effects_tier_3_topic() -> void:
+	var lord: L5RCharacterData = _make_character(1, "Crab")
+	var chars_by_id: Dictionary = {1: lord}
+	var side: Dictionary = {
+		"generates_topic": true,
+		"topic_tier": 3,
+		"rung": FeasibilityLedger.LadderRung.RAID_NEIGHBOR,
+	}
+	var applied: Array = [_make_applied_with_ladder(1, "Crab", "Crane", side)]
+	var topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [200]
+	DayOrchestrator._process_ladder_side_effects(
+		applied, chars_by_id, topics, next_topic_id, 1, [], [], [1],
+	)
+	assert_eq(topics.size(), 1)
+	assert_eq(topics[0].tier, TopicData.Tier.TIER_3)
+	assert_almost_eq(topics[0].momentum, 26.0, 0.01)
+
+
+func test_ladder_side_effects_creates_favor() -> void:
+	var lord: L5RCharacterData = _make_character(1, "Crab")
+	var chars_by_id: Dictionary = {1: lord}
+	var side: Dictionary = {
+		"creates_favor": true,
+		"favor_tier": 2,
+		"rung": FeasibilityLedger.LadderRung.REQUEST_ALLIED_AID,
+	}
+	var applied: Array = [_make_applied_with_ladder(1, "Crab", "Crane", side)]
+	var topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [100]
+	var favors: Array = []
+	var results: Array[Dictionary] = DayOrchestrator._process_ladder_side_effects(
+		applied, chars_by_id, topics, next_topic_id, 1, favors, [], [1],
+	)
+	assert_eq(favors.size(), 1)
+	assert_eq((favors[0] as FavorData).tier, FavorData.FavorTier.MODERATE)
+	assert_eq((favors[0] as FavorData).debtor_id, 1)
+	assert_eq(results[0]["favor_tier"], 2)
+
+
+func test_ladder_side_effects_triggers_raid_war() -> void:
+	var lord: L5RCharacterData = _make_character(1, "Crab")
+	var chars_by_id: Dictionary = {1: lord}
+	var side: Dictionary = {
+		"triggers_war_status": true,
+		"raid_target_clan": "Lion",
+		"raid_target_province_id": 5,
+		"rung": FeasibilityLedger.LadderRung.RAID_NEIGHBOR,
+	}
+	var applied: Array = [_make_applied_with_ladder(1, "Crab", "Crane", side)]
+	var topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [100]
+	var active_wars: Array[WarData] = []
+	var next_war_id: Array[int] = [10]
+	var results: Array[Dictionary] = DayOrchestrator._process_ladder_side_effects(
+		applied, chars_by_id, topics, next_topic_id, 1, [], active_wars, next_war_id,
+	)
+	assert_eq(active_wars.size(), 1)
+	assert_eq(active_wars[0].clan_a, "Crab")
+	assert_eq(active_wars[0].clan_b, "Lion")
+	assert_eq(active_wars[0].authority_level, WarData.AuthorityLevel.PROVINCIAL_RAID)
+	assert_eq(results[0]["raid_war_id"], 10)
+	assert_eq(next_war_id[0], 11)
+
+
+func test_ladder_side_effects_no_duplicate_raid_war() -> void:
+	var lord: L5RCharacterData = _make_character(1, "Crab")
+	var chars_by_id: Dictionary = {1: lord}
+	var side: Dictionary = {
+		"triggers_war_status": true,
+		"raid_target_clan": "Lion",
+		"rung": FeasibilityLedger.LadderRung.RAID_NEIGHBOR,
+	}
+	var applied: Array = [_make_applied_with_ladder(1, "Crab", "Crane", side)]
+	var topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [100]
+	var existing_war: WarData = _make_war(5, "Crab", "Lion")
+	var active_wars: Array[WarData] = [existing_war]
+	var next_war_id: Array[int] = [10]
+	var results: Array[Dictionary] = DayOrchestrator._process_ladder_side_effects(
+		applied, chars_by_id, topics, next_topic_id, 1, [], active_wars, next_war_id,
+	)
+	assert_eq(active_wars.size(), 1)
+	assert_false(results[0].has("raid_war_id"))
+
+
+func test_ladder_rung_name() -> void:
+	assert_eq(
+		DayOrchestrator._ladder_rung_name(FeasibilityLedger.LadderRung.DEMAND_TRIBUTE),
+		"demand_tribute",
+	)
+	assert_eq(
+		DayOrchestrator._ladder_rung_name(FeasibilityLedger.LadderRung.RAID_NEIGHBOR),
+		"raid_neighbor",
+	)
+	assert_eq(
+		DayOrchestrator._ladder_rung_name(FeasibilityLedger.LadderRung.REQUEST_ALLIED_AID),
+		"allied_aid",
+	)
+	assert_eq(
+		DayOrchestrator._ladder_rung_name(FeasibilityLedger.LadderRung.DESPERATION_OVERRIDE),
+		"desperation",
+	)
+	assert_eq(DayOrchestrator._ladder_rung_name(-1), "unknown")
