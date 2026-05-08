@@ -471,7 +471,7 @@ All in /tests/, one file per system:
 - test_order_system.gd (~30 tests)
 - test_military_service_system.gd (~35 tests)
 - test_pu_reconciliation.gd (~30 tests)
-- test_military_wiring.gd (~172 tests)
+- test_military_wiring.gd (~184 tests)
 - test_war_system.gd (~61 tests)
 - test_war_justification.gd (~55 tests)
 - test_war_termination.gd (~46 tests)
@@ -1839,6 +1839,28 @@ All in /tests/, one file per system:
   infrastructure for arms production projection, stipend obligations,
   consuming supply_status results to generate ImmediateNeeds for peace
   negotiation and retreat army movement orders.
+
+### Ladder Side Effects Processing
+- **DayOrchestrator `_process_ladder_side_effects()`** — Runs after
+  `_process_war_declarations()`. Scans applied results for
+  `ladder_side_effects` dicts produced when a DECLARE_WAR action passed
+  through the Alternative Ladder. Processes 7 effect types:
+  - `glory_cost` — applied to declaring lord (raid rung: −0.3)
+  - `disposition_cost` — applied to all vassals of declaring lord
+    (tribute rung: −5 per vassal)
+  - `clan_disposition_cost` — all target clan chars toward declaring
+    clan chars (raid rung: −15)
+  - `other_disposition_cost` — all non-declaring, non-target clan chars
+    toward declaring clan chars (raid rung: −5)
+  - `generates_topic` — creates TopicData (war_preparation topic_type,
+    rung-specific variant/slug, Tier 3 or 4 with appropriate momentum)
+  - `creates_favor` — creates FavorData for allied aid debt (GENERAL
+    type, Tier 2 MODERATE or Tier 3 MINOR)
+  - `triggers_war_status` — creates a Provincial Raid war against the
+    raided clan (guards against duplicates)
+  `_extract_side_effects()` in FeasibilityLedger enriched with `rung`,
+  `raid_target_clan`, `raid_target_province_id` fields.
+  Return dict gains `ladder_effects_results`.
 
 ### War Trigger Pipeline (Metadata Population)
 - **Phase 3 metadata population** — `_populate_action_metadata()` in
