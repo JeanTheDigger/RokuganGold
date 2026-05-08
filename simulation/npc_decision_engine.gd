@@ -1197,6 +1197,15 @@ static func _build_feasibility_data(
 	var levy_before_planting: bool = current_season == "spring"
 	var spans_autumn: bool = true
 
+	var vassal_stockpiles: Array = _collect_vassal_stockpiles(
+		character, world_state, settlements, provinces,
+	)
+	var raidable: Array = _collect_raidable_provinces(
+		character.clan, provinces, settlements, world_state.get("active_wars", []),
+	)
+	var trade_routes: Array = world_state.get("trade_routes", [])
+	var has_routes: bool = _has_active_trade_routes(trade_routes, character.clan)
+
 	return {
 		"controlled_settlements": controlled,
 		"provinces": provinces,
@@ -1207,7 +1216,110 @@ static func _build_feasibility_data(
 		"spans_autumn": spans_autumn,
 		"iron_upkeep_rate_per_pu": 0.10,
 		"equip_cost": 0.0,
+		"ladder_context": {
+			"current_season": current_season,
+			"vassal_stockpiles": vassal_stockpiles,
+			"allied_surplus": [],
+			"raidable_provinces": raidable,
+			"has_trade_routes": has_routes,
+			"has_grievance": false,
+			"has_issued_demand": false,
+			"war_score": 50,
+			"is_defending": false,
+		},
 	}
+
+
+static func _collect_vassal_stockpiles(
+	lord: L5RCharacterData,
+	world_state: Dictionary,
+	settlements: Array,
+	provinces: Array,
+) -> Array:
+	var chars: Dictionary = world_state.get("characters_by_id", {})
+	var result: Array = []
+	for cid: Variant in chars:
+		var c: Variant = chars[cid]
+		if not (c is L5RCharacterData):
+			continue
+		var ch: L5RCharacterData = c
+		if ch.lord_id != lord.character_id:
+			continue
+		var disp: int = ch.disposition_values.get(lord.character_id, 0)
+		var vassal_rice: float = 0.0
+		var vassal_arms: float = 0.0
+		var in_shortage: bool = false
+		for s: Variant in settlements:
+			if s is SettlementData:
+				var sd: SettlementData = s
+				for p: Variant in provinces:
+					if p is ProvinceData:
+						var pd: ProvinceData = p
+						if pd.province_id == sd.province_id and pd.clan == ch.clan:
+							vassal_rice += sd.rice_stockpile
+							if sd.rice_stockpile < float(sd.population_pu) * 0.25:
+								in_shortage = true
+		if vassal_rice > 0.0:
+			result.append({
+				"character_id": ch.character_id,
+				"disposition": disp,
+				"rice_stockpile": vassal_rice,
+				"arms_stockpile": vassal_arms,
+				"in_shortage": in_shortage,
+			})
+	return result
+
+
+static func _collect_raidable_provinces(
+	own_clan: String,
+	provinces: Array,
+	settlements: Array,
+	active_wars: Array,
+) -> Array:
+	var at_war_clans: Dictionary = {}
+	for w: Variant in active_wars:
+		if w is Dictionary:
+			var wd: Dictionary = w
+			if wd.get("clan_a", "") == own_clan:
+				at_war_clans[wd.get("clan_b", "")] = true
+			elif wd.get("clan_b", "") == own_clan:
+				at_war_clans[wd.get("clan_a", "")] = true
+
+	var province_rice: Dictionary = {}
+	var province_garrison: Dictionary = {}
+	for s: Variant in settlements:
+		if s is SettlementData:
+			var sd: SettlementData = s
+			province_rice[sd.province_id] = province_rice.get(sd.province_id, 0.0) + sd.rice_stockpile
+			province_garrison[sd.province_id] = province_garrison.get(sd.province_id, 0.0) + float(sd.garrison_pu)
+
+	var result: Array = []
+	for p: Variant in provinces:
+		if not (p is ProvinceData):
+			continue
+		var pd: ProvinceData = p
+		if pd.clan == own_clan or pd.clan.is_empty():
+			continue
+		result.append({
+			"province_id": pd.province_id,
+			"clan": pd.clan,
+			"garrison_pu": province_garrison.get(pd.province_id, 0.0),
+			"rice_stockpile": province_rice.get(pd.province_id, 0.0),
+			"already_at_war": at_war_clans.has(pd.clan),
+		})
+	return result
+
+
+static func _has_active_trade_routes(trade_routes: Array, clan: String) -> bool:
+	for r: Variant in trade_routes:
+		if r is TradeRouteData:
+			var tr: TradeRouteData = r
+			if not tr.is_disrupted:
+				return true
+		elif r is Dictionary:
+			if not r.get("is_disrupted", true):
+				return true
+	return false
 
 
 const _VIRTUE_NAMES: Dictionary = {

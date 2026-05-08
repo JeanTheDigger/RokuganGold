@@ -354,6 +354,30 @@ static func evaluate_war_justification(
 			feasibility_inputs,
 		)
 		if not ledger["feasible"]:
+			var ladder_ctx: Dictionary = feasibility_inputs.get("ladder_context", {})
+			if not ladder_ctx.is_empty():
+				var ladder_result: Dictionary = _run_alternative_ladder(
+					feasibility_inputs, primary_virtue, ladder_ctx,
+					standing_objective,
+				)
+				if ladder_result.get("outcome", "") == "desperation_override" or (
+					ladder_result.has("final_ledger")
+					and ladder_result["final_ledger"].get("feasible", false)
+				):
+					var reason_str: String = (
+						"personality_aggression" if personality_aggression
+						else "objective_justified"
+					)
+					return {
+						"justified": true,
+						"reason": reason_str,
+						"step_failed": 0,
+						"personality_driven": personality_aggression,
+						"feasibility": ladder_result.get("final_ledger", ledger),
+						"ladder_outcome": ladder_result["outcome"],
+						"ladder_side_effects": ladder_result.get("side_effects", {}),
+						"ladder_rungs_tried": ladder_result.get("rungs_tried", []),
+					}
 			return {
 				"justified": false,
 				"reason": "feasibility_failed",
@@ -375,3 +399,32 @@ static func evaluate_war_justification(
 		"step_failed": 0,
 		"personality_driven": personality_aggression,
 	}
+
+
+static func _run_alternative_ladder(
+	feasibility_inputs: Dictionary,
+	primary_virtue: String,
+	ladder_ctx: Dictionary,
+	standing_objective: String,
+) -> Dictionary:
+	var current_season: String = ladder_ctx.get("current_season", "spring")
+	var vassal_stockpiles: Array = ladder_ctx.get("vassal_stockpiles", [])
+	var allied_surplus: Array = ladder_ctx.get("allied_surplus", [])
+	var raidable_provinces: Array = ladder_ctx.get("raidable_provinces", [])
+	var has_trade_routes: bool = ladder_ctx.get("has_trade_routes", false)
+	var has_grievance: bool = ladder_ctx.get("has_grievance", false)
+	var has_issued_demand: bool = ladder_ctx.get("has_issued_demand", false)
+	var war_score: int = ladder_ctx.get("war_score", 50)
+	var is_defending: bool = ladder_ctx.get("is_defending", false)
+
+	var has_critical: bool = standing_objective in [
+		"DEFEND_PROVINCE", "DEFEND_TERRITORY",
+		"RESOLVE_CLAN_WAR", "SEEK_VENGEANCE", "AVENGE",
+	]
+
+	return FeasibilityLedger.walk_alternative_ladder(
+		feasibility_inputs, primary_virtue, current_season,
+		vassal_stockpiles, allied_surplus, raidable_provinces,
+		has_trade_routes, has_grievance, has_issued_demand,
+		has_critical, war_score, is_defending,
+	)

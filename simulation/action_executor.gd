@@ -1112,7 +1112,12 @@ static func _execute_declare_war(
 		"authority_level", WarData.AuthorityLevel.PROVINCIAL_RAID,
 	)
 
-	return {
+	var honor: float = -0.5 if intended_tier == WarJustification.MilitaryTier.TOTAL_WAR else 0.0
+	var ladder_effects: Dictionary = justification.get("ladder_side_effects", {})
+	if ladder_effects.has("honor_cost"):
+		honor += ladder_effects["honor_cost"]
+
+	var result: Dictionary = {
 		"effect": "war_declared",
 		"requires_war_creation": true,
 		"declaring_clan": character.clan,
@@ -1121,8 +1126,14 @@ static func _execute_declare_war(
 		"declaring_lord_id": character.character_id,
 		"intended_tier": intended_tier,
 		"personality_driven": justification.get("personality_driven", false),
-		"honor_change": -0.5 if intended_tier == WarJustification.MilitaryTier.TOTAL_WAR else 0.0,
+		"honor_change": honor,
 	}
+
+	if justification.has("ladder_outcome"):
+		result["ladder_outcome"] = justification["ladder_outcome"]
+		result["ladder_side_effects"] = ladder_effects
+
+	return result
 
 
 const _BUSHIDO_NAMES: Dictionary = {

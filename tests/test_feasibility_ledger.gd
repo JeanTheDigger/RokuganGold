@@ -1009,3 +1009,144 @@ func test_ladder_walk_tribute_resolves() -> void:
 	if result["outcome"] == "demanded_tribute":
 		assert_true(result["final_ledger"]["feasible"])
 		assert_true(result.has("side_effects"))
+
+
+# =============================================================================
+# War Justification Ladder Wiring Tests
+# =============================================================================
+
+func _make_broke_fi_with_ladder(
+	vassal_stockpiles: Array = [],
+	raidable: Array = [],
+	current_season: String = "autumn",
+	has_trade_routes: bool = false,
+) -> Dictionary:
+	var s := _make_settlement(1, 0.0, 1, 0, 0, 10)
+	return {
+		"authority_level": WarData.AuthorityLevel.CLAN_WAR,
+		"primary_virtue": "",
+		"controlled_settlements": [s],
+		"provinces": [],
+		"clan_arms_stockpile": 0.0,
+		"clan_iron_stockpile": 0.0,
+		"proposed_levy_pu": 20.0,
+		"equip_cost": 40.0,
+		"iron_upkeep_rate_per_pu": 0.20,
+		"levy_before_planting": true,
+		"spans_autumn": false,
+		"current_koku": 0.0,
+		"ladder_context": {
+			"current_season": current_season,
+			"vassal_stockpiles": vassal_stockpiles,
+			"allied_surplus": [],
+			"raidable_provinces": raidable,
+			"has_trade_routes": has_trade_routes,
+			"has_grievance": false,
+			"has_issued_demand": false,
+			"war_score": 50,
+			"is_defending": false,
+		},
+	}
+
+
+func test_war_justification_ladder_still_fails_when_hopeless() -> void:
+	var fi: Dictionary = _make_broke_fi_with_ladder()
+	var result: Dictionary = WarJustification.evaluate_war_justification(
+		"EXPAND_TERRITORY", "", WarJustification.MilitaryTier.RAID, "Makoto",
+		false, false, false, 0.0, 0.0, fi,
+	)
+	assert_false(result["justified"])
+	assert_eq(result["step_failed"], 5)
+
+
+func test_war_justification_ladder_tribute_rescues() -> void:
+	var s := _make_settlement(1, 5.0, 10, 2, 5, 3)
+	s.koku_stockpile = 2.0
+	var fi: Dictionary = {
+		"authority_level": WarData.AuthorityLevel.PROVINCIAL_RAID,
+		"primary_virtue": "",
+		"controlled_settlements": [s],
+		"provinces": [],
+		"clan_arms_stockpile": 5.0,
+		"clan_iron_stockpile": 3.0,
+		"proposed_levy_pu": 5.0,
+		"equip_cost": 2.0,
+		"iron_upkeep_rate_per_pu": 0.10,
+		"levy_before_planting": false,
+		"spans_autumn": false,
+		"current_koku": 2.0,
+		"ladder_context": {
+			"current_season": "autumn",
+			"vassal_stockpiles": [
+				{"disposition": 40, "rice_stockpile": 200.0, "arms_stockpile": 20.0},
+			],
+			"allied_surplus": [],
+			"raidable_provinces": [],
+			"has_trade_routes": false,
+		},
+	}
+	var initial: Dictionary = FeasibilityLedger.evaluate_feasibility(fi)
+	if not initial["feasible"]:
+		var result: Dictionary = WarJustification.evaluate_war_justification(
+			"EXPAND_TERRITORY", "", WarJustification.MilitaryTier.RAID, "",
+			false, false, false, 0.0, 0.0, fi,
+		)
+		if result["justified"]:
+			assert_true(result.has("ladder_outcome"))
+
+
+func test_war_justification_ladder_desperation_for_defend() -> void:
+	var s := _make_settlement(1, 1.0, 2, 0, 1, 5)
+	var fi: Dictionary = {
+		"authority_level": WarData.AuthorityLevel.BORDER_CONFLICT,
+		"primary_virtue": "Yu",
+		"controlled_settlements": [s],
+		"provinces": [],
+		"clan_arms_stockpile": 0.0,
+		"clan_iron_stockpile": 0.0,
+		"proposed_levy_pu": 10.0,
+		"equip_cost": 20.0,
+		"iron_upkeep_rate_per_pu": 0.20,
+		"levy_before_planting": true,
+		"spans_autumn": false,
+		"current_koku": 0.0,
+		"ladder_context": {
+			"current_season": "autumn",
+			"vassal_stockpiles": [],
+			"allied_surplus": [],
+			"raidable_provinces": [],
+			"has_trade_routes": false,
+			"war_score": 50,
+			"is_defending": false,
+		},
+	}
+	var result: Dictionary = WarJustification.evaluate_war_justification(
+		"DEFEND_PROVINCE", "", WarJustification.MilitaryTier.RAID, "Yu",
+		false, false, false, 0.0, 0.0, fi,
+	)
+	if result["justified"]:
+		assert_eq(result.get("ladder_outcome", ""), "desperation_override")
+
+
+func test_war_justification_no_ladder_without_context() -> void:
+	var s := _make_settlement(1, 0.0, 1, 0, 0, 10)
+	var fi: Dictionary = {
+		"authority_level": WarData.AuthorityLevel.CLAN_WAR,
+		"primary_virtue": "",
+		"controlled_settlements": [s],
+		"provinces": [],
+		"clan_arms_stockpile": 0.0,
+		"clan_iron_stockpile": 0.0,
+		"proposed_levy_pu": 20.0,
+		"equip_cost": 40.0,
+		"iron_upkeep_rate_per_pu": 0.20,
+		"levy_before_planting": true,
+		"spans_autumn": false,
+		"current_koku": 0.0,
+	}
+	var result: Dictionary = WarJustification.evaluate_war_justification(
+		"EXPAND_TERRITORY", "", WarJustification.MilitaryTier.RAID, "",
+		false, false, false, 0.0, 0.0, fi,
+	)
+	assert_false(result["justified"])
+	assert_false(result.has("ladder_outcome"))
