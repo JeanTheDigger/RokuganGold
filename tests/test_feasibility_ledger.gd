@@ -688,6 +688,40 @@ func test_allied_aid_significant_contribution_tier2_favor() -> void:
 	assert_eq(result["favor_tier"], 2)
 
 
+func test_allied_aid_tracks_contributing_ally_ids() -> void:
+	var inputs := _make_infeasible_inputs()
+	var allies: Array = [
+		{"disposition": 40, "surplus_rice": 50.0, "surplus_koku": 0.0, "character_id": 10},
+		{"disposition": 50, "surplus_rice": 30.0, "surplus_koku": 0.0, "character_id": 20},
+		{"disposition": 5, "surplus_rice": 100.0, "surplus_koku": 0.0, "character_id": 30},
+	]
+	var result: Dictionary = FeasibilityLedger.try_request_allied_aid(
+		inputs, "", allies,
+	)
+	assert_true(result["applied"])
+	var ids: Array = result["contributing_ally_ids"]
+	assert_eq(ids.size(), 2, "Only friends (disp>=31) contribute")
+	assert_true(10 in ids)
+	assert_true(20 in ids)
+	assert_false(30 in ids, "Low disposition ally excluded")
+
+
+func test_extract_side_effects_includes_contributing_ally_ids() -> void:
+	var rung_result: Dictionary = {
+		"rung": FeasibilityLedger.LadderRung.REQUEST_ALLIED_AID,
+		"applied": true,
+		"creates_favor": true,
+		"favor_tier": 3,
+		"contributing_ally_ids": [10, 20],
+	}
+	var effects: Dictionary = FeasibilityLedger._extract_side_effects(rung_result)
+	assert_true(effects["creates_favor"])
+	var ids: Array = effects["contributing_ally_ids"]
+	assert_eq(ids.size(), 2)
+	assert_true(10 in ids)
+	assert_true(20 in ids)
+
+
 # -- Rung 6: Raid Neighbor ----------------------------------------------------
 
 func test_raid_jin_blocked() -> void:

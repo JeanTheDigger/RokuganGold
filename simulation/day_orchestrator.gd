@@ -3172,12 +3172,24 @@ static func _process_ladder_side_effects(
 
 		if side.get("creates_favor", false) and lord != null:
 			var favor_tier: int = side.get("favor_tier", 3)
-			var favor: FavorData = _create_allied_aid_favor(
-				lord, favor_tier, ic_day, favors,
-			)
-			if favor != null:
-				result["favor_id"] = favor.favor_id
-				result["favor_tier"] = favor_tier
+			var ally_ids: Array = side.get("contributing_ally_ids", [])
+			var created_favors: Array[int] = []
+			if ally_ids.is_empty():
+				var favor: FavorData = _create_allied_aid_favor(
+					-1, lord.character_id, favor_tier, ic_day, favors,
+				)
+				if favor != null:
+					created_favors.append(favor.favor_id)
+			else:
+				for aid: Variant in ally_ids:
+					var ally_id: int = aid as int
+					var favor: FavorData = _create_allied_aid_favor(
+						ally_id, lord.character_id, favor_tier, ic_day, favors,
+					)
+					if favor != null:
+						created_favors.append(favor.favor_id)
+			result["favor_ids"] = created_favors
+			result["favor_tier"] = favor_tier
 
 		if side.get("triggers_war_status", false):
 			var raid_target_clan: String = side.get("raid_target_clan", "")
@@ -3314,7 +3326,8 @@ static func _create_ladder_topic(
 
 
 static func _create_allied_aid_favor(
-	lord: L5RCharacterData,
+	creditor_id: int,
+	debtor_id: int,
 	favor_tier: int,
 	ic_day: int,
 	favors: Array,
@@ -3333,8 +3346,8 @@ static func _create_allied_aid_favor(
 	var favor: FavorData = FavorSystem.offer_favor(
 		FavorData.FavorType.GENERAL,
 		tier,
-		-1,
-		lord.character_id,
+		creditor_id,
+		debtor_id,
 		ic_day,
 		"Allied aid for war preparation",
 		"ALLIED_AID",

@@ -537,6 +537,7 @@ static func try_request_allied_aid(
 	var total_aid_rice: float = 0.0
 	var total_aid_koku: float = 0.0
 	var favor_tier: int = 3
+	var contributing_ally_ids: Array[int] = []
 
 	for ally: Variant in allied_surplus:
 		if not (ally is Dictionary):
@@ -553,6 +554,7 @@ static func try_request_allied_aid(
 		var contribution_koku: float = surplus_koku * 0.25
 		total_aid_rice += contribution_rice
 		total_aid_koku += contribution_koku
+		contributing_ally_ids.append(ad.get("character_id", -1))
 		if contribution_rice > surplus_rice * ALLIED_AID_SIGNIFICANT_FRACTION:
 			favor_tier = 2
 
@@ -575,6 +577,7 @@ static func try_request_allied_aid(
 		"aid_koku": total_aid_koku,
 		"favor_tier": favor_tier,
 		"creates_favor": true,
+		"contributing_ally_ids": contributing_ally_ids,
 	}
 
 
@@ -846,6 +849,7 @@ static func _extract_side_effects(rung_result: Dictionary) -> Dictionary:
 	if rung_result.get("creates_favor", false):
 		effects["creates_favor"] = true
 		effects["favor_tier"] = rung_result.get("favor_tier", 3)
+		effects["contributing_ally_ids"] = rung_result.get("contributing_ally_ids", [])
 	if rung_result.get("triggers_war_status", false):
 		effects["triggers_war_status"] = true
 		effects["raid_target_clan"] = rung_result.get("target_clan", "")

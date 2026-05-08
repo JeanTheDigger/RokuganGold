@@ -1231,7 +1231,7 @@ static func _build_feasibility_data(
 			"raidable_provinces": raidable,
 			"has_trade_routes": has_routes,
 			"has_grievance": has_grievance,
-			"has_issued_demand": false,
+			"has_issued_demand": _has_issued_demand(character, world_state),
 			"war_score": war_info.get("war_score", 50),
 			"is_defending": war_info.get("is_defending", false),
 		},
@@ -1450,6 +1450,20 @@ const _VIRTUE_NAMES: Dictionary = {
 	Enums.ShouridoVirtue.ISHI: "Ishi",
 	Enums.ShouridoVirtue.KYORYOKU: "Kyoryoku",
 }
+
+
+static func _has_issued_demand(
+	character: L5RCharacterData,
+	world_state: Dictionary,
+) -> bool:
+	var active_topics: Array = world_state.get("active_topics", [])
+	for t: Variant in active_topics:
+		if not (t is TopicData):
+			continue
+		var topic: TopicData = t as TopicData
+		if topic.topic_type == "war_preparation" and topic.variant == "demand_tribute" and topic.clan_involved == character.clan:
+			return true
+	return false
 
 
 static func _get_virtue_string(ctx: NPCDataStructures.ContextSnapshot) -> String:

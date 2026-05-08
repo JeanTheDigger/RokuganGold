@@ -3268,3 +3268,117 @@ func test_consume_supply_retreat_skips_inactive_armies() -> void:
 		results, {}, active_armies, topics, next_topic_id, 1,
 	)
 	assert_false(active_armies[0].has("retreat_ordered"))
+
+
+# -- Ladder Data Gaps: has_issued_demand -----------------------------------------
+
+func test_has_issued_demand_true_when_demand_tribute_topic_exists() -> void:
+	var c: L5RCharacterData = _make_character(1, "Crab")
+	var topic: TopicData = TopicData.new()
+	topic.topic_type = "war_preparation"
+	topic.variant = "demand_tribute"
+	topic.clan_involved = "Crab"
+	var ws: Dictionary = {"active_topics": [topic]}
+	assert_true(NPCDecisionEngine._has_issued_demand(c, ws))
+
+
+func test_has_issued_demand_false_when_no_topics() -> void:
+	var c: L5RCharacterData = _make_character(1, "Crab")
+	var ws: Dictionary = {"active_topics": []}
+	assert_false(NPCDecisionEngine._has_issued_demand(c, ws))
+
+
+func test_has_issued_demand_false_for_different_clan() -> void:
+	var c: L5RCharacterData = _make_character(1, "Crab")
+	var topic: TopicData = TopicData.new()
+	topic.topic_type = "war_preparation"
+	topic.variant = "demand_tribute"
+	topic.clan_involved = "Lion"
+	var ws: Dictionary = {"active_topics": [topic]}
+	assert_false(NPCDecisionEngine._has_issued_demand(c, ws))
+
+
+func test_has_issued_demand_false_for_different_variant() -> void:
+	var c: L5RCharacterData = _make_character(1, "Crab")
+	var topic: TopicData = TopicData.new()
+	topic.topic_type = "war_preparation"
+	topic.variant = "allied_aid"
+	topic.clan_involved = "Crab"
+	var ws: Dictionary = {"active_topics": [topic]}
+	assert_false(NPCDecisionEngine._has_issued_demand(c, ws))
+
+
+func test_has_issued_demand_false_when_no_active_topics_key() -> void:
+	var c: L5RCharacterData = _make_character(1, "Crab")
+	assert_false(NPCDecisionEngine._has_issued_demand(c, {}))
+
+
+# -- Ladder Data Gaps: contributing_ally_ids favor creation ----------------------
+
+func test_ladder_favor_uses_real_ally_creditor_ids() -> void:
+	var lord: L5RCharacterData = _make_character(1, "Crab")
+	lord.status = 6.0
+	var ally1: L5RCharacterData = _make_character(10, "Crane")
+	var ally2: L5RCharacterData = _make_character(20, "Lion")
+	var chars_by_id: Dictionary = {1: lord, 10: ally1, 20: ally2}
+	var topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [100]
+	var favors: Array = []
+	var wars: Array[WarData] = []
+	var next_war_id: Array[int] = [1]
+
+	var applied: Array[Dictionary] = [{
+		"character_id": 1,
+		"action_id": "DECLARE_WAR",
+		"effects": {
+			"ladder_side_effects": [{
+				"creates_favor": true,
+				"favor_tier": 3,
+				"contributing_ally_ids": [10, 20],
+			}],
+		},
+	}]
+
+	DayOrchestrator._process_ladder_side_effects(
+		applied, chars_by_id, topics, next_topic_id, 1, favors, wars, next_war_id,
+	)
+
+	assert_eq(favors.size(), 2, "One favor per ally")
+	var f0: FavorData = favors[0] as FavorData
+	var f1: FavorData = favors[1] as FavorData
+	assert_eq(f0.creditor_id, 10)
+	assert_eq(f0.debtor_id, 1)
+	assert_eq(f1.creditor_id, 20)
+	assert_eq(f1.debtor_id, 1)
+
+
+func test_ladder_favor_fallback_when_no_ally_ids() -> void:
+	var lord: L5RCharacterData = _make_character(1, "Crab")
+	lord.status = 6.0
+	var chars_by_id: Dictionary = {1: lord}
+	var topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [100]
+	var favors: Array = []
+	var wars: Array[WarData] = []
+	var next_war_id: Array[int] = [1]
+
+	var applied: Array[Dictionary] = [{
+		"character_id": 1,
+		"action_id": "DECLARE_WAR",
+		"effects": {
+			"ladder_side_effects": [{
+				"creates_favor": true,
+				"favor_tier": 2,
+				"contributing_ally_ids": [],
+			}],
+		},
+	}]
+
+	DayOrchestrator._process_ladder_side_effects(
+		applied, chars_by_id, topics, next_topic_id, 1, favors, wars, next_war_id,
+	)
+
+	assert_eq(favors.size(), 1)
+	var f: FavorData = favors[0] as FavorData
+	assert_eq(f.creditor_id, -1, "Fallback creditor when no ally IDs")
+	assert_eq(f.debtor_id, 1)
