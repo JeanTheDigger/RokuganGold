@@ -3382,3 +3382,167 @@ func test_ladder_favor_fallback_when_no_ally_ids() -> void:
 	var f: FavorData = favors[0] as FavorData
 	assert_eq(f.creditor_id, -1, "Fallback creditor when no ally IDs")
 	assert_eq(f.debtor_id, 1)
+
+
+# -- Retreat flag consumption: initiate retreat march ----------------------------
+
+func test_retreat_initiates_march_for_flagged_army() -> void:
+	var army: Dictionary = ArmyMovementSystem.create_army_state(1, 10, "Crab")
+	army["retreat_ordered"] = true
+	army["retreat_target_province"] = 5
+	DayOrchestrator._initiate_retreat_march(army)
+	assert_true(army["is_moving"])
+	assert_eq(army["destination_sub_tile"], 5)
+	assert_eq(army["days_remaining"], DayOrchestrator._RETREAT_DEFAULT_DAYS)
+
+
+func test_retreat_skips_army_without_flag() -> void:
+	var army: Dictionary = ArmyMovementSystem.create_army_state(1, 10, "Crab")
+	DayOrchestrator._initiate_retreat_march(army)
+	assert_false(army["is_moving"])
+
+
+func test_retreat_skips_already_moving_army() -> void:
+	var army: Dictionary = ArmyMovementSystem.create_army_state(1, 10, "Crab")
+	army["retreat_ordered"] = true
+	army["retreat_target_province"] = 5
+	army["is_moving"] = true
+	army["days_remaining"] = 2
+	DayOrchestrator._initiate_retreat_march(army)
+	assert_eq(army["days_remaining"], 2, "Should not reset travel time")
+
+
+func test_retreat_skips_disband_ordered_army() -> void:
+	var army: Dictionary = ArmyMovementSystem.create_army_state(1, 10, "Crab")
+	army["retreat_ordered"] = true
+	army["disband_ordered"] = true
+	army["retreat_target_province"] = 5
+	DayOrchestrator._initiate_retreat_march(army)
+	assert_false(army["is_moving"])
+
+
+func test_retreat_skips_no_target_province() -> void:
+	var army: Dictionary = ArmyMovementSystem.create_army_state(1, 10, "Crab")
+	army["retreat_ordered"] = true
+	DayOrchestrator._initiate_retreat_march(army)
+	assert_false(army["is_moving"])
+
+
+func test_retreat_arrived_flag_set_on_arrival() -> void:
+	var army: Dictionary = ArmyMovementSystem.create_army_state(1, 10, "Crab")
+	army["retreat_ordered"] = true
+	army["retreat_target_province"] = 5
+	army["is_moving"] = true
+	army["days_remaining"] = 1
+	army["path"] = [5] as Array[int]
+	army["destination_sub_tile"] = 5
+	var results: Array[Dictionary] = DayOrchestrator._process_army_movements([army])
+	assert_eq(results.size(), 1)
+	assert_true(results[0].get("retreat_arrived", false))
+
+
+func test_movement_processes_retreat_then_ticks() -> void:
+	var army: Dictionary = ArmyMovementSystem.create_army_state(1, 10, "Crab")
+	army["retreat_ordered"] = true
+	army["retreat_target_province"] = 5
+	var results: Array[Dictionary] = DayOrchestrator._process_army_movements([army])
+	assert_eq(results.size(), 1, "Retreat initiated and immediately ticked")
+	assert_true(army["is_moving"])
+	assert_eq(army["days_remaining"], DayOrchestrator._RETREAT_DEFAULT_DAYS - 1)
+
+
+# -- Disband processing ---------------------------------------------------------
+
+func _make_settlement_for_disband(province_id: int) -> SettlementData:
+	var s: SettlementData = SettlementData.new()
+	s.settlement_id = province_id * 10
+	s.province_id = province_id
+	s.military_pu = 0
+	s.population_pu = 10
+	return s
+
+
+func test_disband_deactivates_army_and_returns_pu() -> void:
+	var army: Dictionary = ArmyMovementSystem.create_army_state(1, 10, "Crab")
+	army["disband_ordered"] = true
+	army["clan_name"] = "Crab"
+	var comp: Dictionary = {
+		"army_id": 1,
+		"source_province_id": 3,
+		"current_health": 100,
+	}
+	var settlement: SettlementData = _make_settlement_for_disband(3)
+	var results: Array[Dictionary] = DayOrchestrator._process_disbands(
+		[army], [comp], [settlement],
+	)
+	assert_eq(results.size(), 1)
+	assert_false(army.get("is_active", true), "Army should be deactivated")
+	assert_true(settlement.military_pu > 0, "PU should be returned")
+
+
+func test_disband_skips_non_disband_army() -> void:
+	var army: Dictionary = ArmyMovementSystem.create_army_state(1, 10, "Crab")
+	army["clan_name"] = "Crab"
+	var results: Array[Dictionary] = DayOrchestrator._process_disbands(
+		[army], [], [],
+	)
+	assert_eq(results.size(), 0)
+
+
+func test_disband_skips_already_inactive() -> void:
+	var army: Dictionary = ArmyMovementSystem.create_army_state(1, 10, "Crab")
+	army["disband_ordered"] = true
+	army["is_active"] = false
+	army["clan_name"] = "Crab"
+	var results: Array[Dictionary] = DayOrchestrator._process_disbands(
+		[army], [], [],
+	)
+	assert_eq(results.size(), 0)
+
+
+func test_disband_skips_company_without_health() -> void:
+	var army: Dictionary = ArmyMovementSystem.create_army_state(1, 10, "Crab")
+	army["disband_ordered"] = true
+	army["clan_name"] = "Crab"
+	var comp: Dictionary = {
+		"army_id": 1,
+		"source_province_id": 3,
+		"current_health": 0,
+	}
+	var settlement: SettlementData = _make_settlement_for_disband(3)
+	var results: Array[Dictionary] = DayOrchestrator._process_disbands(
+		[army], [comp], [settlement],
+	)
+	assert_eq(results.size(), 1)
+	assert_eq(results[0]["pu_returned"].size(), 0, "Dead company returns no PU")
+
+
+func test_disband_multiple_companies_returns_to_correct_settlements() -> void:
+	var army: Dictionary = ArmyMovementSystem.create_army_state(1, 10, "Crab")
+	army["disband_ordered"] = true
+	army["clan_name"] = "Crab"
+	var comp1: Dictionary = {"army_id": 1, "source_province_id": 3, "current_health": 100}
+	var comp2: Dictionary = {"army_id": 1, "source_province_id": 7, "current_health": 80}
+	var s1: SettlementData = _make_settlement_for_disband(3)
+	var s2: SettlementData = _make_settlement_for_disband(7)
+	var results: Array[Dictionary] = DayOrchestrator._process_disbands(
+		[army], [comp1, comp2], [s1, s2],
+	)
+	assert_eq(results[0]["pu_returned"].size(), 2)
+	assert_true(s1.military_pu > 0)
+	assert_true(s2.military_pu > 0)
+
+
+func test_disband_runs_before_movement_in_daily() -> void:
+	var army: Dictionary = ArmyMovementSystem.create_army_state(1, 10, "Crab")
+	army["disband_ordered"] = true
+	army["clan_name"] = "Crab"
+	army["is_active"] = true
+	var comp: Dictionary = {"army_id": 1, "source_province_id": 3, "current_health": 100}
+	var settlement: SettlementData = _make_settlement_for_disband(3)
+	var result: Dictionary = DayOrchestrator._process_military_daily(
+		[army], [], [], [], DiceEngine.new(), [settlement], [comp],
+	)
+	assert_true(result.has("disband_results"))
+	assert_eq(result["disband_results"].size(), 1)
+	assert_false(army.get("is_active", true))

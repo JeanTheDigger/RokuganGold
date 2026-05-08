@@ -471,7 +471,7 @@ All in /tests/, one file per system:
 - test_order_system.gd (~30 tests)
 - test_military_service_system.gd (~35 tests)
 - test_pu_reconciliation.gd (~30 tests)
-- test_military_wiring.gd (~199 tests)
+- test_military_wiring.gd (~212 tests)
 - test_war_system.gd (~61 tests)
 - test_war_justification.gd (~55 tests)
 - test_war_termination.gd (~46 tests)
@@ -1840,10 +1840,19 @@ All in /tests/, one file per system:
   (SEEK_PEACE need_type, priority 1 for URGENT/IMMEDIATE, priority 2 for
   SEEK_PEACE). Retreat decisions flag clan armies with `retreat_ordered` and
   `retreat_target_province`; disband orders generate Tier 4 army_disbanded
-  topic. Retreat flags are consumed when army movement processing reads
-  `retreat_ordered` (deferred until coordinate system exists).
+  topic. Retreat flags consumed by `_initiate_retreat_march()` inside
+  `_process_army_movements()`: begins a placeholder march toward
+  `retreat_target_province` with default 3-day travel time (will use real
+  pathfinding when coordinate system exists). Skips already-moving,
+  disband-ordered, or target-less armies. Sets `retreat_arrived` flag on
+  movement result when retreat march completes.
+  Disband-ordered armies processed by `_process_disbands()` before movement:
+  deactivates army, returns PU proportional to company health via
+  `PUReconciliation.return_disband_pu()` to source province settlements.
+  Runs before movement tick so disbanded armies don't get movement ticked.
   Deferred: Phase 4 player-initiated starvation strategies, forge
-  infrastructure for arms production projection, stipend obligations.
+  infrastructure for arms production projection, stipend obligations,
+  real pathfinding for retreat marches (needs coordinate system).
 
 ### Ladder Side Effects Processing
 - **DayOrchestrator `_process_ladder_side_effects()`** — Runs after

@@ -1570,6 +1570,9 @@ static func _process_military_daily(
 	settlements: Array[SettlementData],
 	companies: Array[Dictionary] = [],
 ) -> Dictionary:
+	var disband_results: Array[Dictionary] = _process_disbands(
+		active_armies, companies, settlements,
+	)
 	var movement_results: Array[Dictionary] = _process_army_movements(active_armies)
 	var siege_results: Array[Dictionary] = _process_siege_ticks(
 		active_sieges, dice_engine,
@@ -1595,6 +1598,7 @@ static func _process_military_daily(
 		"order_results": order_results,
 		"deprivation_results": deprivation_results,
 		"recovery_results": recovery_results,
+		"disband_results": disband_results,
 	}
 
 
@@ -1603,6 +1607,7 @@ static func _process_army_movements(
 ) -> Array[Dictionary]:
 	var results: Array[Dictionary] = []
 	for army: Dictionary in active_armies:
+		_initiate_retreat_march(army)
 		if not army.get("is_moving", false):
 			continue
 		var r: Dictionary = ArmyMovementSystem.process_movement_tick(army)
@@ -1611,8 +1616,78 @@ static func _process_army_movements(
 				r, active_armies,
 			)
 			r["battle_check"] = battle_check
+			if army.get("retreat_ordered", false):
+				r["retreat_arrived"] = true
 		results.append(r)
 	return results
+
+
+const _RETREAT_DEFAULT_DAYS: int = 3
+
+
+static func _initiate_retreat_march(army: Dictionary) -> void:
+	if not army.get("retreat_ordered", false):
+		return
+	if army.get("is_moving", false):
+		return
+	if army.get("disband_ordered", false):
+		return
+	var target: int = army.get("retreat_target_province", -1)
+	if target < 0:
+		return
+	var current: int = army.get("current_sub_tile", 0)
+	army["destination_sub_tile"] = target
+	army["path"] = [target] as Array[int]
+	army["days_remaining"] = _RETREAT_DEFAULT_DAYS
+	army["is_moving"] = true
+	army["forced_march"] = false
+
+
+static func _process_disbands(
+	active_armies: Array[Dictionary],
+	companies: Array[Dictionary],
+	settlements: Array[SettlementData],
+) -> Array[Dictionary]:
+	var results: Array[Dictionary] = []
+	for army: Dictionary in active_armies:
+		if not army.get("disband_ordered", false):
+			continue
+		if not army.get("is_active", true):
+			continue
+		var army_id: int = army.get("army_id", -1)
+		var disband_result: Dictionary = {
+			"army_id": army_id,
+			"clan": army.get("clan_name", army.get("owning_clan", "")),
+			"pu_returned": [] as Array[Dictionary],
+		}
+		for comp: Dictionary in companies:
+			if comp.get("army_id", -1) != army_id:
+				continue
+			var source_province: int = comp.get("source_province_id", -1)
+			var health: int = comp.get("current_health", 0)
+			if health <= 0:
+				continue
+			var target_settlement: SettlementData = _find_settlement_for_province(
+				source_province, settlements,
+			)
+			if target_settlement != null:
+				var pu_result: Dictionary = PUReconciliation.return_disband_pu(
+					target_settlement, health,
+				)
+				disband_result["pu_returned"].append(pu_result)
+		army["is_active"] = false
+		results.append(disband_result)
+	return results
+
+
+static func _find_settlement_for_province(
+	province_id: int,
+	settlements: Array[SettlementData],
+) -> SettlementData:
+	for s: SettlementData in settlements:
+		if s.province_id == province_id:
+			return s
+	return null
 
 
 static func _process_siege_ticks(
