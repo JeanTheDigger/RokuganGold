@@ -471,7 +471,7 @@ All in /tests/, one file per system:
 - test_order_system.gd (~30 tests)
 - test_military_service_system.gd (~35 tests)
 - test_pu_reconciliation.gd (~30 tests)
-- test_military_wiring.gd (~70 tests)
+- test_military_wiring.gd (~76 tests)
 
 ### Festival System (s11.5)
 - **simulation/festival_system.gd** — Empire-wide canonical festivals, Rokuyo
@@ -1801,6 +1801,11 @@ The following subsystems are now integrated into the NPC decision loop:
   penalty) effects based on tether deprivation tick levels. Tick 1 = warning
   only; ticks 2–4 apply escalating penalties per ArmyUpkeepSystem tables.
   Effects returned as descriptors for caller to apply to CompanyData objects.
+  Army recovery: `_process_army_recovery()` runs after deprivation, producing
+  recovery descriptors for stationary armies with solid supply. +5 health/tick
+  and +3 morale/tick (capped at base stats), arms tier restoration when arms
+  deprivation tick > 1. Moving armies skip recovery. Broken/threatened tethers
+  block supply and prevent recovery.
 
 ## Resolved Design Decisions
 
