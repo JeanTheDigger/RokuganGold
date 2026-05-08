@@ -82,6 +82,13 @@ static func build_context(
 	if ctx.is_lord:
 		ctx.resource_stockpiles = world_state.get("resource_stockpiles", {})
 		ctx.province_statuses = world_state.get("province_statuses", [])
+		if ctx.province_statuses.is_empty():
+			var prov_data: Array = world_state.get("province_data", [])
+			var settlements_arr: Array = world_state.get("settlements", [])
+			if not prov_data.is_empty():
+				ctx.province_statuses = build_province_statuses_from_data(
+					prov_data, settlements_arr,
+				)
 
 	# Military
 	ctx.military_rank = character.military_rank
@@ -1002,6 +1009,37 @@ static func _select_letter_target(
 	if not met.is_empty():
 		return met[0]
 	return -1
+
+
+# -- Province Status Builder ---------------------------------------------------
+
+static func build_province_statuses_from_data(
+	province_data: Array,
+	settlements: Array = [],
+) -> Array:
+	var result: Array = []
+	var settlement_garrison: Dictionary = {}
+	for s: Variant in settlements:
+		if s is SettlementData:
+			var sd: SettlementData = s
+			var pid: int = sd.province_id
+			settlement_garrison[pid] = settlement_garrison.get(pid, 0) + sd.garrison_pu
+
+	for prov: Variant in province_data:
+		if not (prov is ProvinceData):
+			continue
+		var pd: ProvinceData = prov
+		var ps := NPCDataStructures.ProvinceStatus.new()
+		ps.province_id = pd.province_id
+		ps.clan = pd.clan
+		ps.stability = pd.stability
+		ps.active_crisis_id = pd.active_crisis_id
+		ps.active_insurgency_id = pd.active_insurgency_id
+		ps.last_report_ic_day = pd.last_report_ic_day
+		ps.garrison_pu = settlement_garrison.get(pd.province_id, 0)
+		ps.confidence = 2
+		result.append(ps)
+	return result
 
 
 # -- Action Metadata Population ------------------------------------------------

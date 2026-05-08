@@ -97,6 +97,8 @@ func rebuild_characters_by_id() -> void:
 
 func _sync_wars_to_world_states() -> void:
 	world_states["active_wars"] = WarSystem.wars_to_context_array(active_wars)
+	world_states["province_data"] = provinces.values()
+	world_states["settlements"] = settlements
 
 
 func advance_one_day() -> Dictionary:

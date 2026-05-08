@@ -1885,6 +1885,92 @@ func test_ketsui_lord_gets_formal_war_for_dominance() -> void:
 		)
 
 
+# -- ProvinceStatus.clan Wiring --------------------------------------------------
+
+func test_build_province_statuses_from_data() -> void:
+	var pd := ProvinceData.new()
+	pd.province_id = 10
+	pd.clan = "Crab"
+	pd.stability = 60.0
+	pd.active_crisis_id = -1
+	pd.active_insurgency_id = -1
+
+	var result: Array = NPCDecisionEngine.build_province_statuses_from_data([pd])
+	assert_eq(result.size(), 1)
+	var ps: NPCDataStructures.ProvinceStatus = result[0]
+	assert_eq(ps.province_id, 10)
+	assert_eq(ps.clan, "Crab")
+	assert_eq(ps.stability, 60.0)
+	assert_eq(ps.confidence, 2)
+
+
+func test_build_province_statuses_sums_garrison() -> void:
+	var pd := ProvinceData.new()
+	pd.province_id = 10
+	pd.clan = "Lion"
+
+	var s1 := SettlementData.new()
+	s1.province_id = 10
+	s1.garrison_pu = 3
+	var s2 := SettlementData.new()
+	s2.province_id = 10
+	s2.garrison_pu = 2
+
+	var result: Array = NPCDecisionEngine.build_province_statuses_from_data(
+		[pd], [s1, s2],
+	)
+	assert_eq(result[0].garrison_pu, 5)
+
+
+func test_build_context_auto_builds_province_statuses() -> void:
+	var c := L5RCharacterData.new()
+	c.character_id = 1
+	c.status = 6.0
+
+	var pd := ProvinceData.new()
+	pd.province_id = 20
+	pd.clan = "Crane"
+	pd.stability = 45.0
+
+	var ws: Dictionary = {
+		"is_lord": true,
+		"province_data": [pd],
+		"settlements": [],
+	}
+
+	var ctx: NPCDataStructures.ContextSnapshot = NPCDecisionEngine.build_context(
+		c, ws,
+	)
+	assert_eq(ctx.province_statuses.size(), 1)
+	var ps: NPCDataStructures.ProvinceStatus = ctx.province_statuses[0]
+	assert_eq(ps.clan, "Crane")
+	assert_eq(ps.province_id, 20)
+	assert_eq(ps.stability, 45.0)
+
+
+func test_build_context_preserves_existing_province_statuses() -> void:
+	var c := L5RCharacterData.new()
+	c.character_id = 1
+	c.status = 6.0
+
+	var existing_ps := NPCDataStructures.ProvinceStatus.new()
+	existing_ps.province_id = 30
+	existing_ps.clan = "Dragon"
+
+	var ws: Dictionary = {
+		"is_lord": true,
+		"province_statuses": [existing_ps],
+		"province_data": [],
+	}
+
+	var ctx: NPCDataStructures.ContextSnapshot = NPCDecisionEngine.build_context(
+		c, ws,
+	)
+	assert_eq(ctx.province_statuses.size(), 1)
+	assert_eq(ctx.province_statuses[0].province_id, 30)
+	assert_eq(ctx.province_statuses[0].clan, "Dragon")
+
+
 # -- Standing Objective War Check Paths ------------------------------------------
 
 func test_seek_vengeance_produces_war_check() -> void:
