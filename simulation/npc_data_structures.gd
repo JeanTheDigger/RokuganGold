@@ -157,6 +157,9 @@ class ProvinceStatus:
 	var clan: String = ""
 	var stability: float = 100.0
 	var garrison_pu: int = 0
+	var total_settlement_pu: int = 0
+	var has_field_army_nearby: bool = false
+	var has_alliance_protection: bool = false
 	var active_crisis_id: int = -1
 	var active_insurgency_id: int = -1
 	var rice_stockpile: float = 0.0

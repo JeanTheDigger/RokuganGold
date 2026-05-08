@@ -1019,11 +1019,13 @@ static func build_province_statuses_from_data(
 ) -> Array:
 	var result: Array = []
 	var settlement_garrison: Dictionary = {}
+	var settlement_total_pu: Dictionary = {}
 	for s: Variant in settlements:
 		if s is SettlementData:
 			var sd: SettlementData = s
 			var pid: int = sd.province_id
 			settlement_garrison[pid] = settlement_garrison.get(pid, 0) + sd.garrison_pu
+			settlement_total_pu[pid] = settlement_total_pu.get(pid, 0) + sd.population_pu
 
 	for prov: Variant in province_data:
 		if not (prov is ProvinceData):
@@ -1037,6 +1039,7 @@ static func build_province_statuses_from_data(
 		ps.active_insurgency_id = pd.active_insurgency_id
 		ps.last_report_ic_day = pd.last_report_ic_day
 		ps.garrison_pu = settlement_garrison.get(pd.province_id, 0)
+		ps.total_settlement_pu = settlement_total_pu.get(pd.province_id, 0)
 		ps.confidence = 2
 		result.append(ps)
 	return result

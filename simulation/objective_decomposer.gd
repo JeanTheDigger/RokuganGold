@@ -1151,8 +1151,13 @@ static func _find_unstable_province(
 
 static func _find_weak_neighbor_province(ctx: NPCDataStructures.ContextSnapshot) -> int:
 	for ps: Variant in ctx.province_statuses:
-		if ps is NPCDataStructures.ProvinceStatus and ps.stability <= 50:
-			return ps.province_id
+		if ps is NPCDataStructures.ProvinceStatus:
+			var status: NPCDataStructures.ProvinceStatus = ps
+			if not status.clan.is_empty() and status.clan == ctx.clan:
+				continue
+			var weakness: Dictionary = WarJustification.evaluate_province_weakness(status)
+			if weakness["is_weak"]:
+				return status.province_id
 	return -1
 
 
@@ -1163,7 +1168,10 @@ static func _find_weak_neighbor_province_for_clan(
 	for ps: Variant in ctx.province_statuses:
 		if ps is NPCDataStructures.ProvinceStatus:
 			var status: NPCDataStructures.ProvinceStatus = ps
-			if status.clan == target_clan and status.stability <= 50:
+			if status.clan != target_clan:
+				continue
+			var weakness: Dictionary = WarJustification.evaluate_province_weakness(status)
+			if weakness["is_weak"]:
 				return status.province_id
 	return -1
 

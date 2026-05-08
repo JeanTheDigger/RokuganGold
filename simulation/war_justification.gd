@@ -125,6 +125,33 @@ static func qualifies_for_personality_aggression(
 	return true
 
 
+const GARRISON_MINIMUM_RATIO: float = 0.05
+
+
+static func is_garrison_at_minimum(garrison_pu: int, total_settlement_pu: int) -> bool:
+	if total_settlement_pu <= 0:
+		return garrison_pu <= 0
+	var required: float = total_settlement_pu * GARRISON_MINIMUM_RATIO
+	return float(garrison_pu) <= required
+
+
+static func evaluate_province_weakness(
+	ps: NPCDataStructures.ProvinceStatus,
+) -> Dictionary:
+	var at_minimum: bool = is_garrison_at_minimum(
+		ps.garrison_pu, ps.total_settlement_pu,
+	)
+	var no_army: bool = not ps.has_field_army_nearby
+	var no_alliance: bool = not ps.has_alliance_protection
+	var is_weak: bool = at_minimum and no_army and no_alliance
+	return {
+		"is_weak": is_weak,
+		"garrison_at_minimum": at_minimum,
+		"no_field_army_nearby": no_army,
+		"no_alliance_protection": no_alliance,
+	}
+
+
 static func check_raid_weakness(
 	target_garrison_at_minimum: bool,
 	no_field_army_nearby: bool,

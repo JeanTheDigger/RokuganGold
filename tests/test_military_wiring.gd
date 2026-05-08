@@ -1885,6 +1885,92 @@ func test_ketsui_lord_gets_formal_war_for_dominance() -> void:
 		)
 
 
+# -- Weakness Conditions (s53.1) -------------------------------------------------
+
+func test_garrison_at_minimum_with_zero_pu() -> void:
+	assert_true(WarJustification.is_garrison_at_minimum(0, 0))
+
+
+func test_garrison_at_minimum_exactly_5_percent() -> void:
+	assert_true(WarJustification.is_garrison_at_minimum(1, 20))
+
+
+func test_garrison_above_minimum() -> void:
+	assert_false(WarJustification.is_garrison_at_minimum(5, 20))
+
+
+func test_garrison_below_minimum() -> void:
+	assert_true(WarJustification.is_garrison_at_minimum(0, 20))
+
+
+func test_evaluate_province_weakness_all_conditions_met() -> void:
+	var ps := NPCDataStructures.ProvinceStatus.new()
+	ps.garrison_pu = 0
+	ps.total_settlement_pu = 20
+	ps.has_field_army_nearby = false
+	ps.has_alliance_protection = false
+	var result: Dictionary = WarJustification.evaluate_province_weakness(ps)
+	assert_true(result["is_weak"])
+	assert_true(result["garrison_at_minimum"])
+	assert_true(result["no_field_army_nearby"])
+	assert_true(result["no_alliance_protection"])
+
+
+func test_evaluate_province_weakness_garrison_too_high() -> void:
+	var ps := NPCDataStructures.ProvinceStatus.new()
+	ps.garrison_pu = 5
+	ps.total_settlement_pu = 20
+	var result: Dictionary = WarJustification.evaluate_province_weakness(ps)
+	assert_false(result["is_weak"])
+	assert_false(result["garrison_at_minimum"])
+
+
+func test_evaluate_province_weakness_field_army_present() -> void:
+	var ps := NPCDataStructures.ProvinceStatus.new()
+	ps.garrison_pu = 0
+	ps.total_settlement_pu = 20
+	ps.has_field_army_nearby = true
+	var result: Dictionary = WarJustification.evaluate_province_weakness(ps)
+	assert_false(result["is_weak"])
+	assert_false(result["no_field_army_nearby"])
+
+
+func test_evaluate_province_weakness_alliance_protection() -> void:
+	var ps := NPCDataStructures.ProvinceStatus.new()
+	ps.garrison_pu = 0
+	ps.total_settlement_pu = 20
+	ps.has_alliance_protection = true
+	var result: Dictionary = WarJustification.evaluate_province_weakness(ps)
+	assert_false(result["is_weak"])
+	assert_false(result["no_alliance_protection"])
+
+
+func test_find_weak_skips_own_clan() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.clan = "Lion"
+	var own_ps := _make_ps_wt(10, "Lion", 2)
+	ctx.province_statuses = [own_ps]
+	var result: int = ObjectiveDecomposer._find_weak_neighbor_province(ctx)
+	assert_eq(result, -1)
+
+
+func test_find_weak_finds_enemy_province() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.clan = "Lion"
+	var enemy_ps := _make_ps_wt(10, "Crane", 2)
+	ctx.province_statuses = [enemy_ps]
+	var result: int = ObjectiveDecomposer._find_weak_neighbor_province(ctx)
+	assert_eq(result, 10)
+
+
+func test_find_weak_rejects_strong_enemy() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.clan = "Lion"
+	ctx.province_statuses = [_make_strong_ps(10, "Crane")]
+	var result: int = ObjectiveDecomposer._find_weak_neighbor_province(ctx)
+	assert_eq(result, -1)
+
+
 # -- ProvinceStatus.clan Wiring --------------------------------------------------
 
 func test_build_province_statuses_from_data() -> void:
@@ -1999,7 +2085,7 @@ func test_seek_vengeance_no_war_check_without_weak_province() -> void:
 	ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
 	ctx.is_lord = true
 	ctx.clan = "Lion"
-	ctx.province_statuses = [_make_ps_wt(20, "Crane", 2, 80.0)]
+	ctx.province_statuses = [_make_strong_ps(20, "Crane")]
 
 	var objective: Dictionary = {
 		"type": "SEEK_VENGEANCE",
@@ -2054,7 +2140,7 @@ func test_undermine_clan_falls_through_when_no_weak_target() -> void:
 	ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
 	ctx.is_lord = true
 	ctx.clan = "Scorpion"
-	ctx.province_statuses = [_make_ps_wt(30, "Crane", 2, 80.0)]
+	ctx.province_statuses = [_make_strong_ps(30, "Crane")]
 
 	var objective: Dictionary = {
 		"type": "UNDERMINE_CLAN",
@@ -2219,4 +2305,16 @@ func _make_ps_wt(
 	ps.clan = clan_name
 	ps.confidence = confidence_val
 	ps.stability = stab
+	return ps
+
+
+func _make_strong_ps(
+	prov_id: int, clan_name: String,
+) -> NPCDataStructures.ProvinceStatus:
+	var ps := NPCDataStructures.ProvinceStatus.new()
+	ps.province_id = prov_id
+	ps.clan = clan_name
+	ps.confidence = 2
+	ps.garrison_pu = 5
+	ps.total_settlement_pu = 20
 	return ps

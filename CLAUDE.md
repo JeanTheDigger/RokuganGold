@@ -471,7 +471,7 @@ All in /tests/, one file per system:
 - test_order_system.gd (~30 tests)
 - test_military_service_system.gd (~35 tests)
 - test_pu_reconciliation.gd (~30 tests)
-- test_military_wiring.gd (~134 tests)
+- test_military_wiring.gd (~146 tests)
 - test_war_system.gd (~61 tests)
 - test_war_justification.gd (~55 tests)
 - test_war_termination.gd (~46 tests)
@@ -1795,6 +1795,15 @@ All in /tests/, one file per system:
 - **ProvinceStatus.clan** — `NPCDataStructures.ProvinceStatus` gains `clan`
   field for clan-targeted province lookups. New helper
   `_find_weak_neighbor_province_for_clan()` filters by target clan.
+- **Weakness conditions (s53.1)** — `ProvinceStatus` gains `total_settlement_pu`,
+  `has_field_army_nearby`, `has_alliance_protection` fields. `WarJustification`
+  gains `GARRISON_MINIMUM_RATIO = 0.05`, `is_garrison_at_minimum()` (garrison
+  at/below 5% of total settlement PU), `evaluate_province_weakness()` (all
+  three conditions: garrison at minimum + no field army + no alliance).
+  `_find_weak_neighbor_province()` and `_find_weak_neighbor_province_for_clan()`
+  upgraded from stability-based to full weakness evaluation. Own-clan provinces
+  skipped in generic weak-neighbor search. `build_province_statuses_from_data()`
+  populates `total_settlement_pu` from settlement `population_pu`.
 
 ### What's Next
 1. World generation coordinate system and adjacency
