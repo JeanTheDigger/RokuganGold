@@ -462,6 +462,7 @@ All in /tests/, one file per system:
 - test_bound_escape_system.gd (~45 tests)
 - test_secret_system_wiring.gd (~25 tests)
 - test_army_combat_system.gd (~145 tests)
+- test_army_upkeep_system.gd (~40 tests)
 
 ### Festival System (s11.5)
 - **simulation/festival_system.gd** — Empire-wide canonical festivals, Rokuyo
@@ -1438,10 +1439,35 @@ All in /tests/, one file per system:
   `source_province_id` fields.
   Deferred (Phase 2+): Army movement on world map (sub-tiles), supply
   tether system, siege mechanics (starvation/storm/sortie), siege events,
-  army upkeep deprivation, military promotion system, military service
-  assignment, levy authority, order system, Shinjo auto-flank behavior,
-  ASCII battle events / Heroic Opportunities, PU reconciliation wiring
-  into ResourceTick, Shadowlands terrain zones, naval combat bonuses.
+  military promotion system, military service assignment, levy authority,
+  order system, Shinjo auto-flank behavior, ASCII battle events / Heroic
+  Opportunities, PU reconciliation wiring into ResourceTick, Shadowlands
+  terrain zones, naval combat bonuses.
+
+### Army Upkeep & Deprivation (s4.3, s11.7)
+- **simulation/army_upkeep_system.gd** — Army upkeep costs, iron degradation,
+  and field deprivation per GDD s4.3 / s11.7. Pure static functions; caller
+  owns all state dictionaries.
+  Rice upkeep: 0.35 per military PU per season (universal).
+  Iron upkeep per unit per season: Peasant Levy 0.03, Ashigaru 0.10, Bushi
+  Retainer/Light Cavalry 0.20, Ronin 0.00, Garrison 0.10. Clan elites by
+  cost tier: T1=0.25, T2=0.35, T3=0.50.
+  Arms equip cost (one-time): Peasant Levy 0.25, Ashigaru 1.00, Bushi/Cavalry
+  2.00, Ronin 0.00, Garrison 0.75. Clan elites: T1=2.50, T2=3.50, T3=5.00.
+  Koku costs: Garrison 0.20/PU/season, Ronin hire 2.00, Ronin upkeep
+  0.50/month (1.50/season).
+  24 clan elite units mapped to cost tiers 1/2/3 via CLAN_ELITE_COST_TIER.
+  Iron failure penalties (flat-from-base, not cumulative): Season 1 (−2 Atk,
+  −2 Def, −4 Morale, −2 MD), Season 2+ (−4 Atk, −4 Def, −8 Morale, −4 MD).
+  `apply_iron_failure()` reads base stats from `ArmyCombatSystem.UNIT_STATS`.
+  `process_iron_upkeep()` tracks per-company iron state, degrades or restores.
+  Field deprivation (s11.7): Rice (cumulative health/morale loss per tick,
+  4 tiers), Arms (flat attack/defense penalties from base, 4 tiers).
+  `process_deprivation_tick()` advances rice/arms ticks per company based on
+  supply flags, applies effects. Supply restoration resets tick to 1 (warning).
+  Recovery: `apply_recovery_tick()` requires stationary + supplied. +5 Health
+  per tick (capped at base), +3 Morale per tick (capped at base), arms recover
+  1 deprivation tier per tick when arms supplied.
 
 ### What's Next
 1. World generation coordinate system and adjacency
