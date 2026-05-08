@@ -1194,3 +1194,199 @@ func test_famine_crisis_clear_without_topic_is_noop() -> void:
 
 	assert_eq(results.size(), 0)
 	assert_false(meta["_famine_tracking"].has(1), "Tracking cleared when no active topic")
+
+
+# -- Multi-province famine aggregation -----------------------------------------
+
+func test_multi_province_famine_creates_clan_topic() -> void:
+	var seasonal_result: Dictionary = {
+		"resource_tick": {
+			"starvation_changes": {
+				1: {"stage": ResourceTick.StarvationStage.HUNGER, "pu_loss_rate": 0.08},
+				2: {"stage": ResourceTick.StarvationStage.HUNGER, "pu_loss_rate": 0.08},
+			},
+		},
+	}
+	var provinces: Dictionary = {
+		1: _make_province_for_famine(1, "Crab"),
+		2: _make_province_for_famine(2, "Crab"),
+	}
+	var topics: Array[TopicData] = []
+	var next_id: Array[int] = [100]
+	var meta: Dictionary = {}
+
+	var results: Array[Dictionary] = DayOrchestrator._process_famine_crises(
+		seasonal_result, provinces, topics, next_id, 10, meta,
+	)
+
+	assert_eq(results.size(), 1)
+	assert_eq(results[0]["action"], "created_clan")
+	assert_eq(results[0]["tier"], TopicData.Tier.TIER_2)
+	assert_eq(topics.size(), 1)
+	assert_eq(topics[0].variant, "clan_famine")
+	assert_eq(topics[0].clan_involved, "Crab")
+	assert_true(1 in topics[0].provinces_affected)
+	assert_true(2 in topics[0].provinces_affected)
+
+
+func test_multi_province_different_clans_separate_topics() -> void:
+	var seasonal_result: Dictionary = {
+		"resource_tick": {
+			"starvation_changes": {
+				1: {"stage": ResourceTick.StarvationStage.HUNGER, "pu_loss_rate": 0.08},
+				2: {"stage": ResourceTick.StarvationStage.HUNGER, "pu_loss_rate": 0.08},
+			},
+		},
+	}
+	var provinces: Dictionary = {
+		1: _make_province_for_famine(1, "Crab"),
+		2: _make_province_for_famine(2, "Crane"),
+	}
+	var topics: Array[TopicData] = []
+	var next_id: Array[int] = [100]
+	var meta: Dictionary = {}
+
+	var results: Array[Dictionary] = DayOrchestrator._process_famine_crises(
+		seasonal_result, provinces, topics, next_id, 10, meta,
+	)
+
+	assert_eq(topics.size(), 2)
+	for t: TopicData in topics:
+		assert_eq(t.variant, "provincial_famine")
+		assert_eq(t.tier, TopicData.Tier.TIER_3)
+
+
+func test_new_province_added_to_existing_clan_topic() -> void:
+	var existing: TopicData = TopicData.new()
+	existing.topic_id = 50
+	existing.topic_type = "famine"
+	existing.variant = "clan_famine"
+	existing.clan_involved = "Crab"
+	existing.provinces_affected = [1, 2]
+	existing.resolved = false
+
+	var seasonal_result: Dictionary = {
+		"resource_tick": {
+			"starvation_changes": {
+				3: {"stage": ResourceTick.StarvationStage.HUNGER, "pu_loss_rate": 0.08},
+			},
+		},
+	}
+	var provinces: Dictionary = {3: _make_province_for_famine(3, "Crab")}
+	var topics: Array[TopicData] = [existing]
+	var next_id: Array[int] = [100]
+	var meta: Dictionary = {}
+
+	var results: Array[Dictionary] = DayOrchestrator._process_famine_crises(
+		seasonal_result, provinces, topics, next_id, 10, meta,
+	)
+
+	assert_eq(results.size(), 1)
+	assert_eq(results[0]["action"], "added_to_clan_topic")
+	assert_true(3 in existing.provinces_affected)
+	assert_eq(topics.size(), 1, "No new topic created")
+
+
+func test_clan_topic_province_recovers_removed_from_list() -> void:
+	var existing: TopicData = TopicData.new()
+	existing.topic_id = 50
+	existing.topic_type = "famine"
+	existing.variant = "clan_famine"
+	existing.clan_involved = "Crab"
+	existing.provinces_affected = [1, 2]
+	existing.resolved = false
+	existing.momentum = 50.0
+
+	var seasonal_result: Dictionary = {
+		"resource_tick": {
+			"starvation_changes": {
+				1: {"stage": ResourceTick.StarvationStage.CLEAR, "pu_loss_rate": 0.0},
+			},
+		},
+	}
+	var provinces: Dictionary = {1: _make_province_for_famine(1, "Crab")}
+	var topics: Array[TopicData] = [existing]
+	var next_id: Array[int] = [100]
+	var meta: Dictionary = {"_famine_tracking": {1: 9}}
+
+	var results: Array[Dictionary] = DayOrchestrator._process_famine_crises(
+		seasonal_result, provinces, topics, next_id, 10, meta,
+	)
+
+	assert_eq(results.size(), 1)
+	assert_eq(results[0]["action"], "province_recovered")
+	assert_false(1 in existing.provinces_affected)
+	assert_true(2 in existing.provinces_affected)
+	assert_false(existing.resolved, "Topic stays active with remaining provinces")
+
+
+func test_clan_topic_resolves_when_last_province_recovers() -> void:
+	var existing: TopicData = TopicData.new()
+	existing.topic_id = 50
+	existing.topic_type = "famine"
+	existing.variant = "clan_famine"
+	existing.clan_involved = "Crab"
+	existing.provinces_affected = [1]
+	existing.resolved = false
+	existing.momentum = 50.0
+
+	var seasonal_result: Dictionary = {
+		"resource_tick": {
+			"starvation_changes": {
+				1: {"stage": ResourceTick.StarvationStage.CLEAR, "pu_loss_rate": 0.0},
+			},
+		},
+	}
+	var provinces: Dictionary = {1: _make_province_for_famine(1, "Crab")}
+	var topics: Array[TopicData] = [existing]
+	var next_id: Array[int] = [100]
+	var meta: Dictionary = {"_famine_tracking": {1: 9}}
+
+	var results: Array[Dictionary] = DayOrchestrator._process_famine_crises(
+		seasonal_result, provinces, topics, next_id, 10, meta,
+	)
+
+	assert_eq(results.size(), 1)
+	assert_eq(results[0]["action"], "resolved")
+	assert_true(existing.resolved)
+
+
+func test_clan_topic_absorbs_existing_provincial_topics() -> void:
+	var provincial: TopicData = TopicData.new()
+	provincial.topic_id = 40
+	provincial.topic_type = "famine"
+	provincial.variant = "provincial_famine"
+	provincial.clan_involved = "Crab"
+	provincial.provinces_affected = [1]
+	provincial.resolved = false
+	provincial.momentum = 25.0
+
+	var seasonal_result: Dictionary = {
+		"resource_tick": {
+			"starvation_changes": {
+				1: {"stage": ResourceTick.StarvationStage.HUNGER, "pu_loss_rate": 0.08},
+				2: {"stage": ResourceTick.StarvationStage.HUNGER, "pu_loss_rate": 0.08},
+			},
+		},
+	}
+	var provinces: Dictionary = {
+		1: _make_province_for_famine(1, "Crab"),
+		2: _make_province_for_famine(2, "Crab"),
+	}
+	var topics: Array[TopicData] = [provincial]
+	var next_id: Array[int] = [100]
+	var meta: Dictionary = {}
+
+	DayOrchestrator._process_famine_crises(
+		seasonal_result, provinces, topics, next_id, 10, meta,
+	)
+
+	assert_true(provincial.resolved, "Old provincial topic should be absorbed")
+	assert_eq(provincial.momentum, 0.0)
+	var clan_topic: TopicData = null
+	for t: TopicData in topics:
+		if t.variant == "clan_famine" and not t.resolved:
+			clan_topic = t
+	assert_not_null(clan_topic, "New clan topic should be created")
+	assert_true(1 in clan_topic.provinces_affected)
+	assert_true(2 in clan_topic.provinces_affected)

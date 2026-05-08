@@ -678,25 +678,69 @@ static func _process_famine_crises(
 		season_meta["_famine_tracking"] = {}
 	var tracking: Dictionary = season_meta["_famine_tracking"]
 
+	var starving_by_clan: Dictionary = {}
+	var recovering_pids: Array[int] = []
+
 	for pid: Variant in starvation:
 		var province_id: int = int(pid)
 		var starv: Dictionary = starvation[pid]
 		var stage: int = starv.get("stage", 0)
-
 		var is_starving: bool = stage >= ResourceTick.StarvationStage.HUNGER
 
 		if is_starving:
 			tracking.erase(province_id)
+			var prov_data: Variant = provinces.get(province_id, null)
+			var clan: String = ""
+			if prov_data is ProvinceData:
+				clan = prov_data.clan
+			if not starving_by_clan.has(clan):
+				starving_by_clan[clan] = []
+			starving_by_clan[clan].append({"province_id": province_id, "stage": stage})
+		else:
+			recovering_pids.append(province_id)
+
+	for clan: String in starving_by_clan:
+		var entries: Array = starving_by_clan[clan]
+		var existing_clan_topic: TopicData = _find_clan_famine_topic(clan, active_topics)
+
+		if entries.size() >= 2 or existing_clan_topic != null:
+			if existing_clan_topic == null:
+				var all_pids: Array[int] = []
+				for e: Dictionary in entries:
+					all_pids.append(int(e["province_id"]))
+				_absorb_provincial_famine_topics(clan, active_topics)
+				var topic: TopicData = _create_famine_topic_multi(
+					all_pids, clan, next_topic_id, ic_day,
+				)
+				active_topics.append(topic)
+				results.append({
+					"clan": clan,
+					"province_ids": all_pids,
+					"action": "created_clan",
+					"topic_id": topic.topic_id,
+					"tier": TopicData.Tier.TIER_2,
+				})
+			else:
+				for e: Dictionary in entries:
+					var pid_i: int = int(e["province_id"])
+					if pid_i not in existing_clan_topic.provinces_affected:
+						existing_clan_topic.provinces_affected.append(pid_i)
+						results.append({
+							"clan": clan,
+							"province_id": pid_i,
+							"action": "added_to_clan_topic",
+							"topic_id": existing_clan_topic.topic_id,
+						})
+		else:
+			var entry: Dictionary = entries[0]
+			var province_id: int = int(entry["province_id"])
+			var stage: int = int(entry["stage"])
 			if not _has_active_famine_topic(province_id, active_topics):
 				var tier: int = TopicData.Tier.TIER_3
 				var momentum: float = _FAMINE_HUNGER_MOMENTUM
 				if stage >= ResourceTick.StarvationStage.FAMINE:
 					tier = TopicData.Tier.TIER_2
 					momentum = _FAMINE_FAMINE_MOMENTUM
-				var prov_data: Variant = provinces.get(province_id, null)
-				var clan: String = ""
-				if prov_data is ProvinceData:
-					clan = prov_data.clan
 				var topic: TopicData = _create_famine_topic(
 					province_id, clan, tier, momentum,
 					next_topic_id, ic_day,
@@ -709,20 +753,31 @@ static func _process_famine_crises(
 					"tier": tier,
 					"stage": stage,
 				})
-		else:
-			if _has_active_famine_topic(province_id, active_topics):
-				var count: int = tracking.get(province_id, 0) + 1
-				tracking[province_id] = count
-				if count >= _FAMINE_RECOVERY_THRESHOLD:
-					_resolve_famine_topic(province_id, active_topics)
-					tracking.erase(province_id)
-					results.append({
-						"province_id": province_id,
-						"action": "resolved",
-						"recovery_ticks": count,
-					})
+
+	for province_id: int in recovering_pids:
+		var topic: TopicData = _find_famine_topic_for_province(province_id, active_topics)
+		if topic == null:
+			tracking.erase(province_id)
+			continue
+		var count: int = tracking.get(province_id, 0) + 1
+		tracking[province_id] = count
+		if count >= _FAMINE_RECOVERY_THRESHOLD:
+			tracking.erase(province_id)
+			if topic.provinces_affected.size() > 1:
+				topic.provinces_affected.erase(province_id)
+				results.append({
+					"province_id": province_id,
+					"action": "province_recovered",
+					"topic_id": topic.topic_id,
+				})
 			else:
-				tracking.erase(province_id)
+				topic.resolved = true
+				topic.momentum = 0.0
+				results.append({
+					"province_id": province_id,
+					"action": "resolved",
+					"recovery_ticks": count,
+				})
 
 	return results
 
@@ -736,6 +791,39 @@ static func _has_active_famine_topic(
 			if province_id in t.provinces_affected:
 				return true
 	return false
+
+
+static func _absorb_provincial_famine_topics(
+	clan: String,
+	active_topics: Array[TopicData],
+) -> void:
+	for t: TopicData in active_topics:
+		if t.topic_type == "famine" and not t.resolved:
+			if t.variant == "provincial_famine" and t.clan_involved == clan:
+				t.resolved = true
+				t.momentum = 0.0
+
+
+static func _find_famine_topic_for_province(
+	province_id: int,
+	active_topics: Array[TopicData],
+) -> TopicData:
+	for t: TopicData in active_topics:
+		if t.topic_type == "famine" and not t.resolved:
+			if province_id in t.provinces_affected:
+				return t
+	return null
+
+
+static func _find_clan_famine_topic(
+	clan: String,
+	active_topics: Array[TopicData],
+) -> TopicData:
+	for t: TopicData in active_topics:
+		if t.topic_type == "famine" and not t.resolved:
+			if t.variant == "clan_famine" and t.clan_involved == clan:
+				return t
+	return null
 
 
 static func _create_famine_topic(
@@ -762,16 +850,26 @@ static func _create_famine_topic(
 	return topic
 
 
-static func _resolve_famine_topic(
-	province_id: int,
-	active_topics: Array[TopicData],
-) -> void:
-	for t: TopicData in active_topics:
-		if t.topic_type == "famine" and not t.resolved:
-			if province_id in t.provinces_affected:
-				t.resolved = true
-				t.momentum = 0.0
-				return
+static func _create_famine_topic_multi(
+	province_ids: Array[int],
+	clan: String,
+	next_topic_id: Array[int],
+	ic_day: int,
+) -> TopicData:
+	var topic: TopicData = TopicData.new()
+	topic.topic_id = next_topic_id[0]
+	next_topic_id[0] += 1
+	topic.slug = "famine_clan_%s_d%d" % [clan.to_lower(), ic_day]
+	topic.title = "Famine across %s lands" % clan
+	topic.topic_type = "famine"
+	topic.variant = "clan_famine"
+	topic.tier = TopicData.Tier.TIER_2
+	topic.category = TopicData.Category.POLITICAL
+	topic.clan_involved = clan
+	topic.provinces_affected = province_ids.duplicate()
+	topic.ic_day_created = ic_day
+	topic.momentum = _FAMINE_FAMINE_MOMENTUM
+	return topic
 
 
 # -- Crime Detection (s57.47) --------------------------------------------------
