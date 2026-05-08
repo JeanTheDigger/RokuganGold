@@ -413,3 +413,22 @@ enum StabilityTier {
 	VOLATILE,
 	BROKEN,
 }
+
+enum CompanyUnitType {
+	PEASANT_LEVY,
+	ASHIGARU_SPEARMEN,
+	ASHIGARU_ARCHERS,
+	BUSHI_RETAINER,
+	LIGHT_CAVALRY,
+	RONIN,
+	GARRISON,
+}
+
+enum BattleTerrainType {
+	PLAINS,
+	FOREST,
+	HILLS,
+	MOUNTAIN,
+	URBAN,
+	COASTAL_BEACH,
+}
