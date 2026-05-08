@@ -2587,3 +2587,273 @@ func _make_strong_ps(
 	ps.garrison_pu = 5
 	ps.total_settlement_pu = 20
 	return ps
+
+
+# -- Supply Status Check Wiring (s4.3.17 Phase 3) -----------------------------
+
+func _make_supply_lord(
+	id: int,
+	clan: String = "Crab",
+	virtue: Enums.BushidoVirtue = Enums.BushidoVirtue.NONE,
+	shourido: Enums.ShouridoVirtue = Enums.ShouridoVirtue.NONE,
+) -> L5RCharacterData:
+	var c: L5RCharacterData = _make_character(id, clan)
+	c.status = 6.0
+	c.lord_id = -1
+	c.bushido_virtue = virtue
+	c.shourido_virtue = shourido
+	return c
+
+
+func _make_supply_settlement(
+	id: int,
+	province_id: int,
+	rice: float = 50.0,
+	farming: int = 10,
+	mining: int = 5,
+	town: int = 5,
+) -> SettlementData:
+	var s: SettlementData = SettlementData.new()
+	s.settlement_id = id
+	s.province_id = province_id
+	s.rice_stockpile = rice
+	s.farming_pu = farming
+	s.mining_pu = mining
+	s.town_pu = town
+	s.population_pu = farming + mining + town
+	return s
+
+
+func _make_supply_province(id: int, clan: String) -> ProvinceData:
+	var p: ProvinceData = ProvinceData.new()
+	p.province_id = id
+	p.clan = clan
+	return p
+
+
+func test_supply_status_check_skips_when_no_wars() -> void:
+	var lord: L5RCharacterData = _make_supply_lord(1)
+	var results: Array[Dictionary] = DayOrchestrator._process_supply_status_checks(
+		[lord], [], [], {}, [], {}, [],
+	)
+	assert_eq(results.size(), 0)
+
+
+func test_supply_status_check_skips_non_lord() -> void:
+	var c: L5RCharacterData = _make_character(1, "Crab")
+	c.status = 2.0
+	c.lord_id = 5
+	var war: WarData = _make_war(1, "Crab", "Crane")
+	var companies: Array[Dictionary] = [{"company_id": 1, "clan_name": "Crab", "unit_type": Enums.CompanyUnitType.PEASANT_LEVY, "army_id": 1}]
+	var results: Array[Dictionary] = DayOrchestrator._process_supply_status_checks(
+		[c], [war], [], {}, companies, {}, [],
+	)
+	assert_eq(results.size(), 0)
+
+
+func test_supply_status_check_skips_lord_without_companies() -> void:
+	var lord: L5RCharacterData = _make_supply_lord(1)
+	var war: WarData = _make_war(1, "Crab", "Crane")
+	var results: Array[Dictionary] = DayOrchestrator._process_supply_status_checks(
+		[lord], [war], [], {}, [], {}, [],
+	)
+	assert_eq(results.size(), 0)
+
+
+func test_supply_status_check_continue_when_all_clear() -> void:
+	var lord: L5RCharacterData = _make_supply_lord(1)
+	var war: WarData = _make_war(1, "Crab", "Crane")
+	var prov: ProvinceData = _make_supply_province(1, "Crab")
+	var s: SettlementData = _make_supply_settlement(1, 1, 50.0, 10, 5, 5)
+	var companies: Array[Dictionary] = [{"company_id": 1, "clan_name": "Crab", "unit_type": Enums.CompanyUnitType.PEASANT_LEVY, "army_id": 1}]
+	var clan: ClanData = _make_clan("Crab", [1])
+	var provinces: Dictionary = {1: prov}
+	var results: Array[Dictionary] = DayOrchestrator._process_supply_status_checks(
+		[lord], [war], [s], provinces, companies, {"Crab": clan}, [],
+	)
+	assert_eq(results.size(), 1)
+	assert_eq(results[0]["decision"], FeasibilityLedger.CampaignDecision.CONTINUE)
+	assert_eq(results[0]["lord_id"], 1)
+	assert_eq(results[0]["clan"], "Crab")
+	assert_false(results[0].has("peace_need"))
+	assert_false(results[0].has("retreat"))
+
+
+func test_supply_status_check_shortage_seeks_peace() -> void:
+	var lord: L5RCharacterData = _make_supply_lord(1, "Crab", Enums.BushidoVirtue.JIN)
+	var war: WarData = _make_war(1, "Crab", "Crane")
+	war.war_score_a = 40
+	var prov: ProvinceData = _make_supply_province(1, "Crab")
+	var s: SettlementData = _make_supply_settlement(1, 1, 15.0, 10, 5, 5)
+	var companies: Array[Dictionary] = [{"company_id": 1, "clan_name": "Crab", "unit_type": Enums.CompanyUnitType.PEASANT_LEVY, "army_id": 1}]
+	var clan: ClanData = _make_clan("Crab", [1])
+	var provinces: Dictionary = {1: prov}
+	var results: Array[Dictionary] = DayOrchestrator._process_supply_status_checks(
+		[lord], [war], [s], provinces, companies, {"Crab": clan}, [],
+	)
+	assert_eq(results.size(), 1)
+	assert_eq(results[0]["decision"], FeasibilityLedger.CampaignDecision.SEEK_PEACE)
+	assert_true(results[0]["peace_need"])
+
+
+func test_supply_status_check_famine_immediate_peace() -> void:
+	var lord: L5RCharacterData = _make_supply_lord(1, "Crab", Enums.BushidoVirtue.JIN)
+	var war: WarData = _make_war(1, "Crab", "Crane")
+	var prov: ProvinceData = _make_supply_province(1, "Crab")
+	var s: SettlementData = _make_supply_settlement(1, 1, 0.0, 10, 5, 5)
+	var companies: Array[Dictionary] = [{"company_id": 1, "clan_name": "Crab", "unit_type": Enums.CompanyUnitType.PEASANT_LEVY, "army_id": 1}]
+	var clan: ClanData = _make_clan("Crab", [1])
+	var provinces: Dictionary = {1: prov}
+	var results: Array[Dictionary] = DayOrchestrator._process_supply_status_checks(
+		[lord], [war], [s], provinces, companies, {"Crab": clan}, [],
+	)
+	assert_eq(results.size(), 1)
+	assert_eq(results[0]["decision"], FeasibilityLedger.CampaignDecision.IMMEDIATE_PEACE)
+	assert_true(results[0]["peace_need"])
+	assert_eq(results[0]["peace_urgency"], FeasibilityLedger.CampaignDecision.IMMEDIATE_PEACE)
+
+
+func test_supply_status_check_broken_tether_retreat() -> void:
+	var lord: L5RCharacterData = _make_supply_lord(1)
+	var war: WarData = _make_war(1, "Crab", "Crane")
+	var prov: ProvinceData = _make_supply_province(1, "Crab")
+	var s: SettlementData = _make_supply_settlement(1, 1, 50.0, 10, 5, 5)
+	var companies: Array[Dictionary] = [{"company_id": 1, "clan_name": "Crab", "unit_type": Enums.CompanyUnitType.PEASANT_LEVY, "army_id": 1}]
+	var clan: ClanData = _make_clan("Crab", [1])
+	var provinces: Dictionary = {1: prov}
+	var tethers: Array[Dictionary] = [{
+		"army_id": 1,
+		"overall_state": SupplyTetherSystem.TetherState.BROKEN,
+		"seasons_cut": 2,
+	}]
+	var results: Array[Dictionary] = DayOrchestrator._process_supply_status_checks(
+		[lord], [war], [s], provinces, companies, {"Crab": clan}, tethers,
+	)
+	assert_eq(results.size(), 1)
+	assert_eq(results[0]["decision"], FeasibilityLedger.CampaignDecision.RETREAT)
+	assert_true(results[0].has("retreat"))
+
+
+func test_supply_status_check_broken_tether_restore_first() -> void:
+	var lord: L5RCharacterData = _make_supply_lord(1)
+	var war: WarData = _make_war(1, "Crab", "Crane")
+	var prov: ProvinceData = _make_supply_province(1, "Crab")
+	var s: SettlementData = _make_supply_settlement(1, 1, 50.0, 10, 5, 5)
+	var companies: Array[Dictionary] = [{"company_id": 1, "clan_name": "Crab", "unit_type": Enums.CompanyUnitType.PEASANT_LEVY, "army_id": 1}]
+	var clan: ClanData = _make_clan("Crab", [1])
+	var provinces: Dictionary = {1: prov}
+	var tethers: Array[Dictionary] = [{
+		"army_id": 1,
+		"overall_state": SupplyTetherSystem.TetherState.BROKEN,
+		"seasons_cut": 0,
+	}]
+	var results: Array[Dictionary] = DayOrchestrator._process_supply_status_checks(
+		[lord], [war], [s], provinces, companies, {"Crab": clan}, tethers,
+	)
+	assert_eq(results.size(), 1)
+	assert_eq(results[0]["decision"], FeasibilityLedger.CampaignDecision.RESTORE_TETHER)
+
+
+func test_supply_status_check_war_score_from_correct_side() -> void:
+	var lord: L5RCharacterData = _make_supply_lord(1, "Crane")
+	var war: WarData = _make_war(1, "Crab", "Crane")
+	war.war_score_a = 30
+	war.war_score_b = 70
+	var prov: ProvinceData = _make_supply_province(1, "Crane")
+	var s: SettlementData = _make_supply_settlement(1, 1, 15.0, 10, 5, 5)
+	var companies: Array[Dictionary] = [{"company_id": 1, "clan_name": "Crane", "unit_type": Enums.CompanyUnitType.PEASANT_LEVY, "army_id": 1}]
+	var clan: ClanData = ClanData.new()
+	clan.clan_name = "Crane"
+	clan.province_ids = [1]
+	clan.arms_stockpile = 10.0
+	var provinces: Dictionary = {1: prov}
+	var results: Array[Dictionary] = DayOrchestrator._process_supply_status_checks(
+		[lord], [war], [s], provinces, companies, {"Crane": clan}, [],
+	)
+	assert_eq(results.size(), 1)
+	# Crane has war_score_b = 70, which is >= 65 (WINNING_THRESHOLD)
+	# So despite shortage, decision should be PUSH_TO_FINISH
+	assert_eq(results[0]["decision"], FeasibilityLedger.CampaignDecision.PUSH_TO_FINISH)
+
+
+func test_supply_status_check_personality_ignores_shortage() -> void:
+	var lord: L5RCharacterData = _make_supply_lord(1, "Crab")
+	lord.bushido_virtue = Enums.BushidoVirtue.YU
+	var war: WarData = _make_war(1, "Crab", "Crane")
+	war.war_score_a = 40
+	var prov: ProvinceData = _make_supply_province(1, "Crab")
+	var s: SettlementData = _make_supply_settlement(1, 1, 15.0, 10, 5, 5)
+	var companies: Array[Dictionary] = [{"company_id": 1, "clan_name": "Crab", "unit_type": Enums.CompanyUnitType.PEASANT_LEVY, "army_id": 1}]
+	var clan: ClanData = _make_clan("Crab", [1])
+	var provinces: Dictionary = {1: prov}
+	var results: Array[Dictionary] = DayOrchestrator._process_supply_status_checks(
+		[lord], [war], [s], provinces, companies, {"Crab": clan}, [],
+	)
+	assert_eq(results.size(), 1)
+	assert_eq(results[0]["decision"], FeasibilityLedger.CampaignDecision.CONTINUE)
+	assert_eq(results[0]["reason"], "personality_ignores_shortage")
+
+
+func test_supply_status_check_uninvolved_clan_skipped() -> void:
+	var lord: L5RCharacterData = _make_supply_lord(1, "Lion")
+	var war: WarData = _make_war(1, "Crab", "Crane")
+	var prov: ProvinceData = _make_supply_province(1, "Lion")
+	var s: SettlementData = _make_supply_settlement(1, 1, 50.0, 10, 5, 5)
+	var companies: Array[Dictionary] = [{"company_id": 1, "clan_name": "Lion", "unit_type": Enums.CompanyUnitType.PEASANT_LEVY, "army_id": 1}]
+	var clan: ClanData = ClanData.new()
+	clan.clan_name = "Lion"
+	clan.province_ids = [1]
+	clan.arms_stockpile = 10.0
+	var provinces: Dictionary = {1: prov}
+	var results: Array[Dictionary] = DayOrchestrator._process_supply_status_checks(
+		[lord], [war], [s], provinces, companies, {"Lion": clan}, [],
+	)
+	assert_eq(results.size(), 0)
+
+
+func test_supply_status_helper_get_character_virtue() -> void:
+	var c: L5RCharacterData = L5RCharacterData.new()
+	c.bushido_virtue = Enums.BushidoVirtue.YU
+	assert_eq(DayOrchestrator._get_character_virtue(c), "Yu")
+
+	var c2: L5RCharacterData = L5RCharacterData.new()
+	c2.shourido_virtue = Enums.ShouridoVirtue.ISHI
+	assert_eq(DayOrchestrator._get_character_virtue(c2), "Ishi")
+
+	var c3: L5RCharacterData = L5RCharacterData.new()
+	assert_eq(DayOrchestrator._get_character_virtue(c3), "")
+
+
+func test_supply_status_helper_source_has_rice() -> void:
+	var s1: SettlementData = _make_supply_settlement(1, 1, 20.0, 10, 5, 5)
+	assert_true(DayOrchestrator._source_has_rice([s1]))
+	var s2: SettlementData = _make_supply_settlement(2, 1, 5.0, 10, 5, 5)
+	assert_false(DayOrchestrator._source_has_rice([s2]))
+
+
+func test_supply_status_helper_worst_tether_state() -> void:
+	var companies: Array[Dictionary] = [
+		{"company_id": 1, "clan_name": "Crab", "army_id": 1},
+		{"company_id": 2, "clan_name": "Crab", "army_id": 2},
+	]
+	var tethers: Array[Dictionary] = [
+		{"army_id": 1, "overall_state": SupplyTetherSystem.TetherState.SOLID},
+		{"army_id": 2, "overall_state": SupplyTetherSystem.TetherState.THREATENED},
+	]
+	assert_eq(
+		DayOrchestrator._get_worst_tether_state("Crab", tethers, companies),
+		SupplyTetherSystem.TetherState.THREATENED,
+	)
+
+
+func test_supply_status_helper_clan_settlements() -> void:
+	var p1: ProvinceData = _make_supply_province(1, "Crab")
+	var p2: ProvinceData = _make_supply_province(2, "Crane")
+	var s1: SettlementData = _make_supply_settlement(10, 1)
+	var s2: SettlementData = _make_supply_settlement(20, 2)
+	var provinces: Dictionary = {1: p1, 2: p2}
+	var result: Array[SettlementData] = DayOrchestrator._get_clan_settlements(
+		"Crab", [s1, s2], provinces,
+	)
+	assert_eq(result.size(), 1)
+	assert_eq(result[0].settlement_id, 10)

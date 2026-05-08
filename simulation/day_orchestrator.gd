@@ -214,6 +214,10 @@ static func advance_day(
 			dice_engine, _season_to_name(current_season),
 		)
 		_process_war_seasonal(active_wars, characters)
+		military_seasonal_result["supply_status"] = _process_supply_status_checks(
+			characters, active_wars, settlements, provinces,
+			companies, clans, active_tethers,
+		)
 		insurgency_results = _process_insurgencies(
 			insurgencies, provinces, dice_engine, current_season,
 			next_insurgency_id, world_states
@@ -2295,6 +2299,249 @@ static func _apply_war_disposition_penalty(
 				c.disposition_values[key] = clampi(
 					c.disposition_values[key] + penalty, -100, 100,
 				)
+
+
+# -- Supply Status Checks (s4.3.17 Phase 3) -----------------------------------
+
+static func _process_supply_status_checks(
+	characters: Array[L5RCharacterData],
+	active_wars: Array[WarData],
+	settlements: Array[SettlementData],
+	provinces: Dictionary,
+	companies: Array[Dictionary],
+	clans: Dictionary,
+	active_tethers: Array[Dictionary],
+) -> Array[Dictionary]:
+	if active_wars.is_empty():
+		return []
+
+	var results: Array[Dictionary] = []
+
+	for lord: L5RCharacterData in characters:
+		if not _is_lord_tier(lord):
+			continue
+		var war: WarData = _find_active_war_for_clan(lord.clan, active_wars)
+		if war == null:
+			continue
+
+		var clan_companies: Array[Dictionary] = _get_clan_companies(lord.clan, companies)
+		if clan_companies.is_empty():
+			continue
+
+		var controlled: Array[SettlementData] = _get_clan_settlements(
+			lord.clan, settlements, provinces,
+		)
+
+		var tether_state: int = _get_worst_tether_state(lord.clan, active_tethers, companies)
+		var source_has_rice: bool = _source_has_rice(controlled)
+
+		var clan_iron: float = 0.0
+		var clan_data: ClanData = clans.get(lord.clan)
+		if clan_data != null:
+			clan_iron = clan_data.arms_stockpile
+
+		var total_iron_upkeep: float = 0.0
+		for comp: Dictionary in clan_companies:
+			var ut: int = comp.get("unit_type", Enums.CompanyUnitType.PEASANT_LEVY)
+			var costs: Dictionary = ArmyUpkeepSystem.compute_company_seasonal_costs(ut)
+			total_iron_upkeep += costs["iron"]
+
+		var side: String = WarSystem.get_clan_side(war, lord.clan)
+		var war_score: int = war.war_score_a if side == "a" else war.war_score_b
+
+		var virtue: String = _get_character_virtue(lord)
+
+		var seasons_cut: int = _get_seasons_tether_cut(lord.clan, active_tethers, companies)
+
+		var inputs: Dictionary = {
+			"controlled_settlements": controlled,
+			"tether_state": tether_state,
+			"source_has_rice": source_has_rice,
+			"clan_iron_stockpile": clan_iron,
+			"total_iron_upkeep": total_iron_upkeep,
+			"primary_virtue": virtue,
+			"war_score": war_score,
+			"seasons_tether_cut": seasons_cut,
+		}
+
+		var check: Dictionary = FeasibilityLedger.run_supply_status_check(inputs)
+		var decision: int = check["decision"]["decision"]
+
+		var result: Dictionary = {
+			"lord_id": lord.character_id,
+			"clan": lord.clan,
+			"war_id": war.war_id,
+			"check": check,
+			"decision": decision,
+			"reason": check["decision"]["reason"],
+		}
+
+		if decision == FeasibilityLedger.CampaignDecision.SEEK_PEACE \
+			or decision == FeasibilityLedger.CampaignDecision.URGENT_PEACE \
+			or decision == FeasibilityLedger.CampaignDecision.IMMEDIATE_PEACE:
+			result["peace_need"] = true
+			result["peace_urgency"] = decision
+
+		if decision == FeasibilityLedger.CampaignDecision.RETREAT:
+			var friendly: Array[Dictionary] = _build_friendly_province_list(
+				lord.clan, settlements, provinces,
+			)
+			var retreat_target: Dictionary = FeasibilityLedger.find_retreat_target(
+				-1, friendly,
+			)
+			result["retreat"] = retreat_target
+
+		results.append(result)
+
+	return results
+
+
+static func _find_active_war_for_clan(
+	clan: String, wars: Array[WarData],
+) -> WarData:
+	for w: WarData in wars:
+		if w.is_active and WarSystem.is_clan_involved(w, clan):
+			return w
+	return null
+
+
+static func _get_clan_companies(
+	clan: String, companies: Array[Dictionary],
+) -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	for c: Dictionary in companies:
+		if c.get("clan_name", "") == clan:
+			result.append(c)
+	return result
+
+
+static func _get_clan_settlements(
+	clan: String,
+	settlements: Array[SettlementData],
+	provinces: Dictionary,
+) -> Array[SettlementData]:
+	var clan_province_ids: Array[int] = []
+	for pid: Variant in provinces:
+		var p: Variant = provinces[pid]
+		if p is ProvinceData and (p as ProvinceData).clan == clan:
+			clan_province_ids.append((p as ProvinceData).province_id)
+	var result: Array[SettlementData] = []
+	for s: SettlementData in settlements:
+		if s.province_id in clan_province_ids:
+			result.append(s)
+	return result
+
+
+static func _get_worst_tether_state(
+	clan: String,
+	active_tethers: Array[Dictionary],
+	companies: Array[Dictionary],
+) -> int:
+	var clan_army_ids: Array[int] = []
+	for c: Dictionary in companies:
+		if c.get("clan_name", "") == clan:
+			var aid: int = c.get("army_id", -1)
+			if aid >= 0 and aid not in clan_army_ids:
+				clan_army_ids.append(aid)
+	var worst: int = 0
+	for t: Dictionary in active_tethers:
+		if t.get("army_id", -1) in clan_army_ids:
+			var state: int = t.get("overall_state", 0)
+			if state > worst:
+				worst = state
+	return worst
+
+
+static func _source_has_rice(controlled: Array[SettlementData]) -> bool:
+	var total_rice: float = 0.0
+	var total_civ_pu: float = 0.0
+	for s: SettlementData in controlled:
+		total_rice += s.rice_stockpile
+		total_civ_pu += float(s.farming_pu + s.mining_pu + s.town_pu)
+	if total_civ_pu <= 0.0:
+		return total_rice > 0.0
+	return total_rice / total_civ_pu >= 0.50
+
+
+const _VIRTUE_NAMES: Dictionary = {
+	Enums.BushidoVirtue.JIN: "Jin",
+	Enums.BushidoVirtue.YU: "Yu",
+	Enums.BushidoVirtue.REI: "Rei",
+	Enums.BushidoVirtue.CHUGI: "Chugi",
+	Enums.BushidoVirtue.GI: "Gi",
+	Enums.BushidoVirtue.MEIYO: "Meiyo",
+	Enums.BushidoVirtue.MAKOTO: "Makoto",
+	Enums.ShouridoVirtue.SEIGYO: "Seigyo",
+	Enums.ShouridoVirtue.KETSUI: "Ketsui",
+	Enums.ShouridoVirtue.DOSATSU: "Dosatsu",
+	Enums.ShouridoVirtue.CHISHIKI: "Chishiki",
+	Enums.ShouridoVirtue.KANPEKI: "Kanpeki",
+	Enums.ShouridoVirtue.ISHI: "Ishi",
+	Enums.ShouridoVirtue.KYORYOKU: "Kyoryoku",
+}
+
+
+static func _get_character_virtue(character: L5RCharacterData) -> String:
+	if character.bushido_virtue != Enums.BushidoVirtue.NONE:
+		return _VIRTUE_NAMES.get(character.bushido_virtue, "")
+	if character.shourido_virtue != Enums.ShouridoVirtue.NONE:
+		return _VIRTUE_NAMES.get(character.shourido_virtue, "")
+	return ""
+
+
+static func _get_seasons_tether_cut(
+	clan: String,
+	active_tethers: Array[Dictionary],
+	companies: Array[Dictionary],
+) -> int:
+	var clan_army_ids: Array[int] = []
+	for c: Dictionary in companies:
+		if c.get("clan_name", "") == clan:
+			var aid: int = c.get("army_id", -1)
+			if aid >= 0 and aid not in clan_army_ids:
+				clan_army_ids.append(aid)
+	var worst_cut: int = 0
+	for t: Dictionary in active_tethers:
+		if t.get("army_id", -1) in clan_army_ids:
+			var state: int = t.get("overall_state", 0)
+			if state == SupplyTetherSystem.TetherState.BROKEN:
+				var cut: int = t.get("seasons_cut", 0)
+				if cut > worst_cut:
+					worst_cut = cut
+	return worst_cut
+
+
+static func _build_friendly_province_list(
+	clan: String,
+	settlements: Array[SettlementData],
+	provinces: Dictionary,
+) -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	var by_province: Dictionary = {}
+	for s: SettlementData in settlements:
+		if not by_province.has(s.province_id):
+			by_province[s.province_id] = {"rice": 0.0, "civ_pu": 0.0}
+		by_province[s.province_id]["rice"] += s.rice_stockpile
+		by_province[s.province_id]["civ_pu"] += float(s.farming_pu + s.mining_pu + s.town_pu)
+	for pid: Variant in provinces:
+		var p: Variant = provinces[pid]
+		if not (p is ProvinceData):
+			continue
+		var pd: ProvinceData = p
+		if pd.clan != clan:
+			continue
+		var rice_per_pu: float = 0.0
+		if by_province.has(pd.province_id):
+			var d: Dictionary = by_province[pd.province_id]
+			if d["civ_pu"] > 0.0:
+				rice_per_pu = d["rice"] / d["civ_pu"]
+		result.append({
+			"province_id": pd.province_id,
+			"distance": 1,
+			"rice_per_pu": rice_per_pu,
+			"has_forge": false,
+		})
+	return result
 
 
 static func _generate_military_event_topics(
