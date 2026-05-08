@@ -785,3 +785,565 @@ func test_full_battle_large_asymmetric() -> void:
 		atk, dfn, Enums.BattleTerrainType.PLAINS, _dice,
 	)
 	assert_eq(result["victor"], "attacker", "5 Bushi should overwhelm 2 Levy")
+
+
+# -- Clan Elite Stat Block Tests -------------------------------------------------
+
+func test_clan_elite_stats_hida_bushi() -> void:
+	var s: Dictionary = ArmyCombatSystem.UNIT_STATS[Enums.CompanyUnitType.HIDA_BUSHI]
+	assert_eq(s["attack"], 5)
+	assert_eq(s["defense"], 7)
+	assert_eq(s["morale"], 20)
+	assert_eq(s["morale_defense"], 9)
+
+
+func test_clan_elite_stats_crab_berserkers() -> void:
+	var s: Dictionary = ArmyCombatSystem.UNIT_STATS[Enums.CompanyUnitType.CRAB_BERSERKERS]
+	assert_eq(s["attack"], 8)
+	assert_eq(s["defense"], 3)
+	assert_eq(s["morale"], 20)
+	assert_eq(s["morale_defense"], 10)
+
+
+func test_clan_elite_stats_akodo_bushi() -> void:
+	var s: Dictionary = ArmyCombatSystem.UNIT_STATS[Enums.CompanyUnitType.AKODO_BUSHI]
+	assert_eq(s["attack"], 6)
+	assert_eq(s["defense"], 5)
+	assert_eq(s["morale"], 20)
+	assert_eq(s["morale_defense"], 9)
+
+
+func test_clan_elite_stats_lions_pride() -> void:
+	var s: Dictionary = ArmyCombatSystem.UNIT_STATS[Enums.CompanyUnitType.LIONS_PRIDE]
+	assert_eq(s["attack"], 9)
+	assert_eq(s["morale"], 22)
+
+
+func test_clan_elite_stats_deathseekers() -> void:
+	var s: Dictionary = ArmyCombatSystem.UNIT_STATS[Enums.CompanyUnitType.DEATHSEEKERS]
+	assert_eq(s["attack"], 8)
+	assert_eq(s["defense"], 2)
+	assert_eq(s["morale"], 0)
+	assert_eq(s["morale_defense"], 0)
+
+
+func test_clan_elite_stats_utaku() -> void:
+	var s: Dictionary = ArmyCombatSystem.UNIT_STATS[Enums.CompanyUnitType.UTAKU_BATTLE_MAIDENS]
+	assert_eq(s["attack"], 8)
+	assert_eq(s["defense"], 5)
+	assert_eq(s["morale"], 21)
+
+
+func test_clan_elite_stats_kenshinzen() -> void:
+	var s: Dictionary = ArmyCombatSystem.UNIT_STATS[Enums.CompanyUnitType.KENSHINZEN]
+	assert_eq(s["attack"], 9)
+	assert_eq(s["defense"], 4)
+
+
+func test_clan_elite_stats_white_guard() -> void:
+	var s: Dictionary = ArmyCombatSystem.UNIT_STATS[Enums.CompanyUnitType.WHITE_GUARD]
+	assert_eq(s["attack"], 9)
+	assert_eq(s["defense"], 5)
+
+
+# -- Clan Special Ability Tests --------------------------------------------------
+
+# Flank bonus
+func test_flank_bonus_light_cavalry() -> void:
+	assert_eq(ArmyCombatSystem._get_flank_bonus(Enums.CompanyUnitType.LIGHT_CAVALRY), 4)
+
+
+func test_flank_bonus_shinjo() -> void:
+	assert_eq(ArmyCombatSystem._get_flank_bonus(Enums.CompanyUnitType.SHINJO_BUSHI), 3)
+
+
+func test_flank_bonus_hiruma() -> void:
+	assert_eq(ArmyCombatSystem._get_flank_bonus(Enums.CompanyUnitType.HIRUMA_SCOUTS), 3)
+
+
+func test_flank_bonus_standard() -> void:
+	assert_eq(ArmyCombatSystem._get_flank_bonus(Enums.CompanyUnitType.BUSHI_RETAINER), 2)
+
+
+# Anti-cavalry
+func test_anti_cavalry_daidoji() -> void:
+	assert_eq(
+		ArmyCombatSystem._get_anti_cavalry_bonus(
+			Enums.CompanyUnitType.DAIDOJI_HEAVY_SPEARMEN,
+			Enums.CompanyUnitType.SHINJO_BUSHI,
+		),
+		3,
+	)
+
+
+func test_anti_cavalry_spearmen_vs_non_cav() -> void:
+	assert_eq(
+		ArmyCombatSystem._get_anti_cavalry_bonus(
+			Enums.CompanyUnitType.ASHIGARU_SPEARMEN,
+			Enums.CompanyUnitType.BUSHI_RETAINER,
+		),
+		0,
+	)
+
+
+# First round attack bonus
+func test_first_round_kakita() -> void:
+	assert_eq(ArmyCombatSystem._get_first_round_attack_bonus(Enums.CompanyUnitType.KAKITA_BUSHI), 2)
+
+
+func test_first_round_utaku() -> void:
+	assert_eq(ArmyCombatSystem._get_first_round_attack_bonus(Enums.CompanyUnitType.UTAKU_BATTLE_MAIDENS), 3)
+
+
+func test_first_round_storm_legion() -> void:
+	assert_eq(ArmyCombatSystem._get_first_round_attack_bonus(Enums.CompanyUnitType.STORM_LEGION), 2)
+
+
+func test_first_round_normal() -> void:
+	assert_eq(ArmyCombatSystem._get_first_round_attack_bonus(Enums.CompanyUnitType.BUSHI_RETAINER), 0)
+
+
+# Low health attack bonus
+func test_low_health_berserkers() -> void:
+	var c: MilitaryUnitData.CompanyData = _make_company(1, Enums.CompanyUnitType.CRAB_BERSERKERS)
+	var bc: Dictionary = _make_bc(c, 1, 0, "attacker")
+	bc["current_health"] = 70
+	assert_eq(ArmyCombatSystem._get_low_health_attack_bonus(bc), 2)
+
+
+func test_low_health_deathseekers() -> void:
+	var c: MilitaryUnitData.CompanyData = _make_company(1, Enums.CompanyUnitType.DEATHSEEKERS)
+	var bc: Dictionary = _make_bc(c, 1, 0, "attacker")
+	bc["current_health"] = 70
+	assert_eq(ArmyCombatSystem._get_low_health_attack_bonus(bc), 3)
+
+
+func test_low_health_white_guard() -> void:
+	var c: MilitaryUnitData.CompanyData = _make_company(1, Enums.CompanyUnitType.WHITE_GUARD)
+	var bc: Dictionary = _make_bc(c, 1, 0, "attacker")
+	bc["current_health"] = 70
+	assert_eq(ArmyCombatSystem._get_low_health_attack_bonus(bc), 2)
+
+
+func test_low_health_above_threshold() -> void:
+	var c: MilitaryUnitData.CompanyData = _make_company(1, Enums.CompanyUnitType.CRAB_BERSERKERS)
+	var bc: Dictionary = _make_bc(c, 1, 0, "attacker")
+	bc["current_health"] = 100
+	assert_eq(ArmyCombatSystem._get_low_health_attack_bonus(bc), 0)
+
+
+# Conditional attack bonus
+func test_bayushi_vs_low_morale() -> void:
+	var c1: MilitaryUnitData.CompanyData = _make_company(1, Enums.CompanyUnitType.BAYUSHI_BUSHI)
+	var c2: MilitaryUnitData.CompanyData = _make_company(2, Enums.CompanyUnitType.BUSHI_RETAINER)
+	var atk: Dictionary = _make_bc(c1, 1, 0, "attacker")
+	var dfn: Dictionary = _make_bc(c2, 1, 0, "defender")
+	dfn["current_morale"] = 5
+	dfn["starting_morale"] = 18
+	assert_eq(ArmyCombatSystem._get_conditional_attack_bonus(atk, dfn), 2)
+
+
+func test_dragon_talons_vs_high_def() -> void:
+	var c1: MilitaryUnitData.CompanyData = _make_company(1, Enums.CompanyUnitType.DRAGON_TALONS)
+	var c2: MilitaryUnitData.CompanyData = _make_company(2, Enums.CompanyUnitType.HIDA_BUSHI)
+	var atk: Dictionary = _make_bc(c1, 1, 0, "attacker")
+	var dfn: Dictionary = _make_bc(c2, 1, 0, "defender")
+	assert_eq(ArmyCombatSystem._get_conditional_attack_bonus(atk, dfn), 2)
+
+
+func test_kenshinzen_vs_elite() -> void:
+	var c1: MilitaryUnitData.CompanyData = _make_company(1, Enums.CompanyUnitType.KENSHINZEN)
+	var c2: MilitaryUnitData.CompanyData = _make_company(2, Enums.CompanyUnitType.LIONS_PRIDE)
+	var atk: Dictionary = _make_bc(c1, 1, 0, "attacker")
+	var dfn: Dictionary = _make_bc(c2, 1, 0, "defender")
+	assert_eq(ArmyCombatSystem._get_conditional_attack_bonus(atk, dfn), 2)
+
+
+# Defense ignore
+func test_defense_ignore_dragon_talons() -> void:
+	assert_eq(ArmyCombatSystem._get_defense_ignore(Enums.CompanyUnitType.DRAGON_TALONS), 1)
+
+
+func test_defense_ignore_white_guard() -> void:
+	assert_eq(ArmyCombatSystem._get_defense_ignore(Enums.CompanyUnitType.WHITE_GUARD), 1)
+
+
+func test_defense_ignore_normal() -> void:
+	assert_eq(ArmyCombatSystem._get_defense_ignore(Enums.CompanyUnitType.BUSHI_RETAINER), 0)
+
+
+# Extra morale damage
+func test_extra_morale_bayushi() -> void:
+	assert_eq(ArmyCombatSystem._get_extra_morale_damage(Enums.CompanyUnitType.BAYUSHI_BUSHI), 1)
+
+
+func test_extra_morale_black_cabal() -> void:
+	assert_eq(ArmyCombatSystem._get_extra_morale_damage(Enums.CompanyUnitType.BLACK_CABAL), 3)
+
+
+func test_extra_morale_elemental_guard() -> void:
+	assert_eq(ArmyCombatSystem._get_extra_morale_damage(Enums.CompanyUnitType.ELEMENTAL_GUARD), 2)
+
+
+# Commander survival TN modifier
+func test_cmd_survival_hiruma() -> void:
+	assert_eq(ArmyCombatSystem._get_commander_survival_tn_modifier(Enums.CompanyUnitType.HIRUMA_SCOUTS), 2)
+
+
+func test_cmd_survival_kenshinzen() -> void:
+	assert_eq(ArmyCombatSystem._get_commander_survival_tn_modifier(Enums.CompanyUnitType.KENSHINZEN), 3)
+
+
+func test_cmd_survival_lions_pride() -> void:
+	assert_eq(ArmyCombatSystem._get_commander_survival_tn_modifier(Enums.CompanyUnitType.LIONS_PRIDE), 3)
+
+
+func test_cmd_survival_normal() -> void:
+	assert_eq(ArmyCombatSystem._get_commander_survival_tn_modifier(Enums.CompanyUnitType.BUSHI_RETAINER), 0)
+
+
+# Can rout
+func test_deathseekers_cannot_rout() -> void:
+	var c: MilitaryUnitData.CompanyData = _make_company(1, Enums.CompanyUnitType.DEATHSEEKERS)
+	var bc: Dictionary = _make_bc(c, 1, 0, "attacker")
+	assert_false(ArmyCombatSystem._can_rout(bc))
+
+
+func test_berserkers_rout_only_below_25pct() -> void:
+	var c: MilitaryUnitData.CompanyData = _make_company(1, Enums.CompanyUnitType.CRAB_BERSERKERS)
+	var bc: Dictionary = _make_bc(c, 1, 0, "attacker")
+	bc["current_health"] = 100
+	assert_false(ArmyCombatSystem._can_rout(bc))
+	bc["current_health"] = 38
+	assert_true(ArmyCombatSystem._can_rout(bc))
+
+
+func test_normal_can_rout() -> void:
+	var c: MilitaryUnitData.CompanyData = _make_company(1, Enums.CompanyUnitType.BUSHI_RETAINER)
+	var bc: Dictionary = _make_bc(c, 1, 0, "attacker")
+	assert_true(ArmyCombatSystem._can_rout(bc))
+
+
+# No morale (Deathseekers)
+func test_deathseekers_no_morale_flag() -> void:
+	var c: MilitaryUnitData.CompanyData = _make_company(1, Enums.CompanyUnitType.DEATHSEEKERS)
+	var bc: Dictionary = _make_bc(c, 1, 0, "attacker")
+	assert_true(bc["no_morale"])
+
+
+# Counter-attack immunity while flanking
+func test_utaku_immune_to_counter_while_flanking() -> void:
+	assert_true(ArmyCombatSystem._is_immune_to_counter_attack_while_flanking(
+		Enums.CompanyUnitType.UTAKU_BATTLE_MAIDENS,
+	))
+
+
+func test_cavalry_immune_to_counter_while_flanking() -> void:
+	assert_true(ArmyCombatSystem._is_immune_to_counter_attack_while_flanking(
+		Enums.CompanyUnitType.LIGHT_CAVALRY,
+	))
+
+
+func test_bushi_not_immune_to_counter() -> void:
+	assert_false(ArmyCombatSystem._is_immune_to_counter_attack_while_flanking(
+		Enums.CompanyUnitType.BUSHI_RETAINER,
+	))
+
+
+# Vs-attacker defense bonus (Mirumoto vs shugenja)
+func test_mirumoto_vs_shugenja_defense() -> void:
+	assert_eq(
+		ArmyCombatSystem._get_vs_attacker_defense_bonus(
+			Enums.CompanyUnitType.MIRUMOTO_BUSHI,
+			Enums.CompanyUnitType.YAMABUSHI,
+		),
+		2,
+	)
+
+
+func test_mirumoto_vs_normal_no_bonus() -> void:
+	assert_eq(
+		ArmyCombatSystem._get_vs_attacker_defense_bonus(
+			Enums.CompanyUnitType.MIRUMOTO_BUSHI,
+			Enums.CompanyUnitType.BUSHI_RETAINER,
+		),
+		0,
+	)
+
+
+# Adjacency defense bonus (Shiba near shugenja, Daidoji near Crane)
+func test_shiba_defense_near_shugenja() -> void:
+	var c1: MilitaryUnitData.CompanyData = _make_company(1, Enums.CompanyUnitType.SHIBA_BUSHI)
+	var c2: MilitaryUnitData.CompanyData = _make_company(2, Enums.CompanyUnitType.ELEMENTAL_GUARD)
+	var shiba: Dictionary = _make_bc(c1, 1, 0, "attacker")
+	var guard: Dictionary = _make_bc(c2, 1, 1, "attacker")
+	var allies: Array[Dictionary] = [shiba, guard]
+	assert_eq(ArmyCombatSystem._get_adjacency_defense_bonus(shiba, allies), 2)
+
+
+func test_daidoji_defense_near_crane() -> void:
+	var c1: MilitaryUnitData.CompanyData = _make_company(1, Enums.CompanyUnitType.DAIDOJI_HEAVY_SPEARMEN)
+	var c2: MilitaryUnitData.CompanyData = _make_company(2, Enums.CompanyUnitType.KAKITA_BUSHI)
+	var daidoji: Dictionary = _make_bc(c1, 1, 0, "attacker")
+	var kakita: Dictionary = _make_bc(c2, 1, 1, "attacker")
+	var allies: Array[Dictionary] = [daidoji, kakita]
+	assert_eq(ArmyCombatSystem._get_adjacency_defense_bonus(daidoji, allies), 1)
+
+
+# Adjacency attack bonus (Akodo + Lion)
+func test_akodo_attack_near_lion() -> void:
+	var c1: MilitaryUnitData.CompanyData = _make_company(1, Enums.CompanyUnitType.AKODO_BUSHI)
+	var c2: MilitaryUnitData.CompanyData = _make_company(2, Enums.CompanyUnitType.LIONS_PRIDE)
+	var c3: MilitaryUnitData.CompanyData = _make_company(3, Enums.CompanyUnitType.DEATHSEEKERS)
+	var akodo: Dictionary = _make_bc(c1, 1, 1, "attacker")
+	var lion1: Dictionary = _make_bc(c2, 1, 0, "attacker")
+	var lion2: Dictionary = _make_bc(c3, 1, 2, "attacker")
+	var allies: Array[Dictionary] = [akodo, lion1, lion2]
+	assert_eq(ArmyCombatSystem._get_adjacency_attack_bonus(akodo, allies), 2)
+
+
+func test_akodo_attack_capped_at_3() -> void:
+	var c1: MilitaryUnitData.CompanyData = _make_company(1, Enums.CompanyUnitType.AKODO_BUSHI)
+	var c2: MilitaryUnitData.CompanyData = _make_company(2, Enums.CompanyUnitType.AKODO_BUSHI)
+	var c3: MilitaryUnitData.CompanyData = _make_company(3, Enums.CompanyUnitType.AKODO_BUSHI)
+	var c4: MilitaryUnitData.CompanyData = _make_company(4, Enums.CompanyUnitType.AKODO_BUSHI)
+	var target: Dictionary = _make_bc(c1, 1, 1, "attacker")
+	var ally1: Dictionary = _make_bc(c2, 1, 0, "attacker")
+	var ally2: Dictionary = _make_bc(c3, 1, 2, "attacker")
+	var ally3: Dictionary = _make_bc(c4, 1, 1, "attacker")
+	ally3["company_id"] = 5
+	var allies: Array[Dictionary] = [target, ally1, ally2, ally3]
+	var bonus: int = ArmyCombatSystem._get_adjacency_attack_bonus(target, allies)
+	assert_true(bonus <= 3, "Akodo adjacency bonus capped at 3")
+
+
+# Debuff on hit
+func test_yoritomo_debuff_on_hit() -> void:
+	var c1: MilitaryUnitData.CompanyData = _make_company(1, Enums.CompanyUnitType.YORITOMO_BUSHI)
+	var c2: MilitaryUnitData.CompanyData = _make_company(2, Enums.CompanyUnitType.BUSHI_RETAINER)
+	var atk: Dictionary = _make_bc(c1, 1, 0, "attacker")
+	var dfn: Dictionary = _make_bc(c2, 1, 0, "defender")
+	var def_before: int = dfn["base_defense"]
+	ArmyCombatSystem._apply_debuff_on_hit(atk, dfn)
+	assert_eq(dfn["base_defense"], def_before - 1)
+	assert_eq(dfn["yoritomo_def_debuff"], 1)
+
+
+func test_yoritomo_debuff_caps_at_3() -> void:
+	var c1: MilitaryUnitData.CompanyData = _make_company(1, Enums.CompanyUnitType.YORITOMO_BUSHI)
+	var c2: MilitaryUnitData.CompanyData = _make_company(2, Enums.CompanyUnitType.BUSHI_RETAINER)
+	var atk: Dictionary = _make_bc(c1, 1, 0, "attacker")
+	var dfn: Dictionary = _make_bc(c2, 1, 0, "defender")
+	for i: int in range(5):
+		ArmyCombatSystem._apply_debuff_on_hit(atk, dfn)
+	assert_eq(dfn["yoritomo_def_debuff"], 3)
+
+
+func test_scorpions_claws_debuff() -> void:
+	var c1: MilitaryUnitData.CompanyData = _make_company(1, Enums.CompanyUnitType.SCORPIONS_CLAWS)
+	var c2: MilitaryUnitData.CompanyData = _make_company(2, Enums.CompanyUnitType.BUSHI_RETAINER)
+	var atk: Dictionary = _make_bc(c1, 1, 0, "attacker")
+	var dfn: Dictionary = _make_bc(c2, 1, 0, "defender")
+	var atk_before: int = dfn["base_attack"]
+	var md_before: int = dfn["base_morale_defense"]
+	ArmyCombatSystem._apply_debuff_on_hit(atk, dfn)
+	assert_eq(dfn["base_attack"], atk_before - 1)
+	assert_eq(dfn["base_morale_defense"], md_before - 1)
+
+
+# Adjacency morale defense
+func test_shiba_morale_defense_aura() -> void:
+	var c1: MilitaryUnitData.CompanyData = _make_company(1, Enums.CompanyUnitType.BUSHI_RETAINER)
+	var c2: MilitaryUnitData.CompanyData = _make_company(2, Enums.CompanyUnitType.SHIBA_BUSHI)
+	var target: Dictionary = _make_bc(c1, 1, 0, "attacker")
+	var shiba: Dictionary = _make_bc(c2, 1, 1, "attacker")
+	var allies: Array[Dictionary] = [target, shiba]
+	assert_eq(ArmyCombatSystem._get_adjacency_morale_defense_bonus(target, allies), 1)
+
+
+func test_black_cabal_morale_defense_penalty() -> void:
+	var c1: MilitaryUnitData.CompanyData = _make_company(1, Enums.CompanyUnitType.BUSHI_RETAINER)
+	var c2: MilitaryUnitData.CompanyData = _make_company(2, Enums.CompanyUnitType.BLACK_CABAL)
+	var target: Dictionary = _make_bc(c1, 1, 0, "defender")
+	var cabal: Dictionary = _make_bc(c2, 1, 1, "attacker")
+	var enemies: Array[Dictionary] = [cabal]
+	assert_eq(ArmyCombatSystem._get_adjacency_morale_defense_penalty(target, enemies), -1)
+
+
+# Storm Legion no terrain penalties
+func test_storm_legion_no_terrain_penalties() -> void:
+	assert_true(ArmyCombatSystem._has_no_terrain_penalties(Enums.CompanyUnitType.STORM_LEGION))
+
+
+func test_normal_has_terrain_penalties() -> void:
+	assert_false(ArmyCombatSystem._has_no_terrain_penalties(Enums.CompanyUnitType.BUSHI_RETAINER))
+
+
+# Terrain modifiers apply to clan cavalry
+func test_terrain_forest_disables_shinjo_flanking() -> void:
+	var mods: Dictionary = ArmyCombatSystem.get_terrain_modifiers(
+		Enums.BattleTerrainType.FOREST, Enums.CompanyUnitType.SHINJO_BUSHI, false, false,
+	)
+	assert_eq(mods["flanking_disabled"], true)
+	assert_eq(mods["attack_mod"], -2)
+
+
+func test_terrain_urban_disables_utaku_flanking() -> void:
+	var mods: Dictionary = ArmyCombatSystem.get_terrain_modifiers(
+		Enums.BattleTerrainType.URBAN, Enums.CompanyUnitType.UTAKU_BATTLE_MAIDENS, false, false,
+	)
+	assert_eq(mods["flanking_disabled"], true)
+
+
+# Ally buff system
+func test_ally_buff_yamabushi_attack() -> void:
+	var c1: MilitaryUnitData.CompanyData = _make_company(1, Enums.CompanyUnitType.YAMABUSHI)
+	var c2: MilitaryUnitData.CompanyData = _make_company(2, Enums.CompanyUnitType.MIRUMOTO_BUSHI)
+	var yamabushi: Dictionary = _make_bc(c1, 1, 0, "attacker")
+	var mirumoto: Dictionary = _make_bc(c2, 1, 1, "attacker")
+	var side: Array[Dictionary] = [yamabushi, mirumoto]
+	ArmyCombatSystem._reset_ally_buffs(side)
+	ArmyCombatSystem._apply_ally_buffs(side)
+	assert_eq(mirumoto["ally_buff_attack"], 3, "Yamabushi should grant +3 Atk to adjacent Dragon")
+
+
+func test_ally_buff_yamabushi_defense_once() -> void:
+	var c1: MilitaryUnitData.CompanyData = _make_company(1, Enums.CompanyUnitType.YAMABUSHI)
+	var c2: MilitaryUnitData.CompanyData = _make_company(2, Enums.CompanyUnitType.MIRUMOTO_BUSHI)
+	var yamabushi: Dictionary = _make_bc(c1, 1, 0, "attacker")
+	var mirumoto: Dictionary = _make_bc(c2, 1, 1, "attacker")
+	var side: Array[Dictionary] = [yamabushi, mirumoto]
+	ArmyCombatSystem._reset_ally_buffs(side)
+	ArmyCombatSystem._apply_ally_buffs(side)
+	assert_eq(mirumoto["ally_buff_defense"], 2, "Yamabushi one-time +2 Def")
+	assert_true(yamabushi["yamabushi_def_used"])
+	# Second application should not add more defense
+	ArmyCombatSystem._reset_ally_buffs(side)
+	ArmyCombatSystem._apply_ally_buffs(side)
+	assert_eq(mirumoto["ally_buff_defense"], 0, "One-time defense buff should not re-apply")
+
+
+func test_ally_buff_elemental_guard() -> void:
+	var c1: MilitaryUnitData.CompanyData = _make_company(1, Enums.CompanyUnitType.ELEMENTAL_GUARD)
+	var c2: MilitaryUnitData.CompanyData = _make_company(2, Enums.CompanyUnitType.SHIBA_BUSHI)
+	var guard: Dictionary = _make_bc(c1, 1, 0, "attacker")
+	var shiba: Dictionary = _make_bc(c2, 1, 1, "attacker")
+	var side: Array[Dictionary] = [guard, shiba]
+	ArmyCombatSystem._reset_ally_buffs(side)
+	ArmyCombatSystem._apply_ally_buffs(side)
+	assert_eq(shiba["ally_buff_attack"], 3, "Elemental Guard should grant +3 Atk to adjacent Phoenix")
+
+
+func test_ally_buff_storm_riders() -> void:
+	var c1: MilitaryUnitData.CompanyData = _make_company(1, Enums.CompanyUnitType.STORM_RIDERS)
+	var c2: MilitaryUnitData.CompanyData = _make_company(2, Enums.CompanyUnitType.YORITOMO_BUSHI)
+	var riders: Dictionary = _make_bc(c1, 1, 0, "attacker")
+	var yoritomo: Dictionary = _make_bc(c2, 1, 1, "attacker")
+	var side: Array[Dictionary] = [riders, yoritomo]
+	ArmyCombatSystem._reset_ally_buffs(side)
+	ArmyCombatSystem._apply_ally_buffs(side)
+	assert_eq(yoritomo["ally_buff_attack"], 2, "Storm Riders should grant +2 Atk to adjacent Mantis")
+
+
+func test_ally_buff_mirumoto_shugenja() -> void:
+	var c1: MilitaryUnitData.CompanyData = _make_company(1, Enums.CompanyUnitType.MIRUMOTO_BUSHI)
+	var c2: MilitaryUnitData.CompanyData = _make_company(2, Enums.CompanyUnitType.YAMABUSHI)
+	var mirumoto: Dictionary = _make_bc(c1, 1, 0, "attacker")
+	var yamabushi: Dictionary = _make_bc(c2, 1, 1, "attacker")
+	var side: Array[Dictionary] = [mirumoto, yamabushi]
+	ArmyCombatSystem._reset_ally_buffs(side)
+	ArmyCombatSystem._apply_ally_buffs(side)
+	assert_true(
+		yamabushi["ally_buff_attack"] >= 1,
+		"Mirumoto should grant +1 Atk to adjacent shugenja",
+	)
+
+
+func test_ally_buff_no_self_buff() -> void:
+	var c1: MilitaryUnitData.CompanyData = _make_company(1, Enums.CompanyUnitType.YAMABUSHI)
+	var yamabushi: Dictionary = _make_bc(c1, 1, 0, "attacker")
+	var side: Array[Dictionary] = [yamabushi]
+	ArmyCombatSystem._reset_ally_buffs(side)
+	ArmyCombatSystem._apply_ally_buffs(side)
+	assert_eq(yamabushi["ally_buff_attack"], 0, "Should not buff self")
+
+
+func test_ally_buff_not_adjacent() -> void:
+	var c1: MilitaryUnitData.CompanyData = _make_company(1, Enums.CompanyUnitType.YAMABUSHI)
+	var c2: MilitaryUnitData.CompanyData = _make_company(2, Enums.CompanyUnitType.MIRUMOTO_BUSHI)
+	var yamabushi: Dictionary = _make_bc(c1, 1, 0, "attacker")
+	var mirumoto: Dictionary = _make_bc(c2, 1, 3, "attacker")
+	var side: Array[Dictionary] = [yamabushi, mirumoto]
+	ArmyCombatSystem._reset_ally_buffs(side)
+	ArmyCombatSystem._apply_ally_buffs(side)
+	assert_eq(mirumoto["ally_buff_attack"], 0, "Non-adjacent should not receive buff")
+
+
+# Elemental Legions synergy
+func test_elemental_legions_attack_near_guard() -> void:
+	var c1: MilitaryUnitData.CompanyData = _make_company(1, Enums.CompanyUnitType.ELEMENTAL_LEGIONS)
+	var c2: MilitaryUnitData.CompanyData = _make_company(2, Enums.CompanyUnitType.ELEMENTAL_GUARD)
+	var legion: Dictionary = _make_bc(c1, 1, 0, "attacker")
+	var guard: Dictionary = _make_bc(c2, 1, 1, "attacker")
+	var allies: Array[Dictionary] = [legion, guard]
+	assert_eq(ArmyCombatSystem._get_adjacency_attack_bonus(legion, allies), 2)
+
+
+func test_elemental_legions_defense_near_guard() -> void:
+	var c1: MilitaryUnitData.CompanyData = _make_company(1, Enums.CompanyUnitType.ELEMENTAL_LEGIONS)
+	var c2: MilitaryUnitData.CompanyData = _make_company(2, Enums.CompanyUnitType.ELEMENTAL_GUARD)
+	var legion: Dictionary = _make_bc(c1, 1, 0, "attacker")
+	var guard: Dictionary = _make_bc(c2, 1, 1, "attacker")
+	var allies: Array[Dictionary] = [legion, guard]
+	assert_eq(ArmyCombatSystem._get_adjacency_defense_bonus(legion, allies), 1)
+
+
+# Round number tracking and first-round bonus integration
+func test_round_number_increments() -> void:
+	var atk: Array[Dictionary] = _make_army(1, Enums.CompanyUnitType.KAKITA_BUSHI, "attacker")
+	var dfn: Array[Dictionary] = _make_army(1, Enums.CompanyUnitType.BUSHI_RETAINER, "defender", 100)
+	_dice.set_seed(42)
+	ArmyCombatSystem._apply_setup_modifiers(atk, Enums.BattleTerrainType.PLAINS, false, false, 0)
+	ArmyCombatSystem._apply_setup_modifiers(dfn, Enums.BattleTerrainType.PLAINS, true, false, 0)
+	ArmyCombatSystem._resolve_combat_round(atk, dfn, Enums.BattleTerrainType.PLAINS, _dice)
+	assert_eq(atk[0]["round_number"], 1)
+	ArmyCombatSystem._resolve_combat_round(atk, dfn, Enums.BattleTerrainType.PLAINS, _dice)
+	assert_eq(atk[0]["round_number"], 2)
+
+
+# Full integration: clan elite battle
+func test_full_battle_lion_vs_crab() -> void:
+	var atk: Array[Dictionary] = _make_army(2, Enums.CompanyUnitType.AKODO_BUSHI, "attacker")
+	var dfn: Array[Dictionary] = _make_army(2, Enums.CompanyUnitType.HIDA_BUSHI, "defender", 100)
+	_dice.set_seed(42)
+	var result: Dictionary = ArmyCombatSystem.resolve_battle(
+		atk, dfn, Enums.BattleTerrainType.PLAINS, _dice,
+	)
+	assert_true(result["rounds"] > 1)
+	assert_true(result["victor"] in ["attacker", "defender", "draw"])
+
+
+func test_full_battle_scorpion_morale_attrition() -> void:
+	var c1: MilitaryUnitData.CompanyData = _make_company(1, Enums.CompanyUnitType.BAYUSHI_BUSHI)
+	var c2: MilitaryUnitData.CompanyData = _make_company(2, Enums.CompanyUnitType.BLACK_CABAL)
+	var atk: Array[Dictionary] = [
+		_make_bc(c1, 1, 0, "attacker"),
+		_make_bc(c2, 1, 1, "attacker"),
+	]
+	var dfn: Array[Dictionary] = _make_army(2, Enums.CompanyUnitType.PEASANT_LEVY, "defender", 100)
+	_dice.set_seed(42)
+	var result: Dictionary = ArmyCombatSystem.resolve_battle(
+		atk, dfn, Enums.BattleTerrainType.PLAINS, _dice,
+	)
+	assert_eq(result["victor"], "attacker", "Scorpion morale pressure should break Levy")
+
+
+func test_full_battle_deathseekers_never_rout() -> void:
+	var atk: Array[Dictionary] = _make_army(1, Enums.CompanyUnitType.DEATHSEEKERS, "attacker")
+	var dfn: Array[Dictionary] = _make_army(2, Enums.CompanyUnitType.BUSHI_RETAINER, "defender", 100)
+	_dice.set_seed(42)
+	var result: Dictionary = ArmyCombatSystem.resolve_battle(
+		atk, dfn, Enums.BattleTerrainType.PLAINS, _dice,
+	)
+	for bc: Dictionary in result["attacker_states"]:
+		assert_false(bc["is_routed"], "Deathseekers should never rout")

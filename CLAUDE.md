@@ -461,7 +461,7 @@ All in /tests/, one file per system:
 - test_assassination_system.gd (~45 tests)
 - test_bound_escape_system.gd (~45 tests)
 - test_secret_system_wiring.gd (~25 tests)
-- test_army_combat_system.gd (~80 tests)
+- test_army_combat_system.gd (~145 tests)
 
 ### Festival System (s11.5)
 - **simulation/festival_system.gd** — Empire-wide canonical festivals, Rokuyo
@@ -1375,39 +1375,54 @@ All in /tests/, one file per system:
   filter: bound characters can CHARM, NEGOTIATE, PERSUADE, INTIMIDATE, escape,
   cast spells, and speak only. Low Skill honor cost −0.1 on escape attempts.
 
-### Army Combat System — Phase 1: Core Battle Resolution (s11.7)
+### Army Combat System — Core Battle Resolution (s11.7) + Clan Elite Units (s11.6)
 - **simulation/army_combat_system.gd** — Victoria II-inspired grid battle
-  resolution per GDD s11.7. Phase 1 covers the core battle loop from setup
-  to completion.
+  resolution per GDD s11.7. Covers the core battle loop from setup
+  to completion, plus all 24 clan elite unit types per GDD s11.6.
   7 universal unit types with full stat blocks per GDD: Peasant Levy (A1/D1),
   Ashigaru Spearmen (A3/D4, +3 vs Cavalry), Ashigaru Archers (A4/D2, 1d5
   ranged fire, -3 melee), Bushi Retainer (A6/D5), Light Cavalry (A3/D2,
   +4 flanking, immune to counter-attack while flanking), Ronin (A5/D4),
   Garrison (A3/D5, +2 Defense at home settlement).
+  24 clan elite unit types across 8 clans (Crab, Crane, Dragon, Lion,
+  Phoenix, Scorpion, Unicorn, Mantis) in 3 cost tiers (Baseline/Specialized/
+  Elite). Full stat blocks and special abilities per GDD s11.6.
   Row 1 (front) / Row 2 (reserve/archer) grid layout. Companies fight the
   enemy in their column. Unmatched companies auto-flank adjacent enemies.
   Combat round: simultaneous 1d10+Attack-Defense, minimum 0. Archers fire
-  1d5 from Row 2. Flanking: +2 Attack (standard) or +4 (Light Cavalry),
-  no counter-attack against flanker. Counter-attack targets lowest-Defense
-  attacker (Light Cavalry exempt).
+  1d5 from Row 2. Flanking: +2 Attack (standard), +4 (Light Cavalry), +3
+  (Shinjo/Hiruma). No counter-attack against flanker (Light Cavalry, Utaku).
   Morale system: 1d10 + modifiers - Morale Defense. Triggers: heavy loss
   (+2 if >25% health lost), low health (+1 if <50%), Chui death (+3),
-  higher commander death (+4). Encirclement: automatic 10 damage bypassing
-  defense. Morale zero = rout. Routing contagion: adjacent allies take
-  immediate morale check when a company routs, can chain.
+  higher commander death (+4). Extra morale damage: Bayushi +1, Black Cabal
+  +3, Elemental Guard +2. Adjacency morale: Shiba +1 MD to allies, Black
+  Cabal -1 MD to enemies. Deathseekers: no morale, cannot rout. Berserkers:
+  rout only below 25% health. Morale zero = rout. Routing contagion: adjacent
+  allies take immediate morale check when a company routs, can chain.
   Commander bonus: Battle skill rank as value, highest Ring determines type
   (Fire/Water→Attack, Earth/Air→Defense, Void→Morale). Clan-specific
-  tiebreaker tables for Ring ties (8 Great + 13 Minor clans). Scope:
-  Chui (company), Taisa (legion), Shireikan (section), Rikugunshokan (army).
-  Bonuses stack across hierarchy levels.
+  tiebreaker tables for Ring ties (8 Great + 13 Minor clans).
   Commander survival: Earth k Earth + Battle vs TN (10/15/20/25 at
-  75%/50%/25%/0% health). Fail by 1-3: injured (bonus removed). Fail by 4+:
-  dead (morale cascade). Each threshold triggers once per battle.
+  75%/50%/25%/0% health). Attacker TN modifiers: Hiruma +2, Kenshinzen +3,
+  Lion's Pride +3. Fail by 1-3: injured. Fail by 4+: dead.
+  Clan special abilities: first-round attack bonus (Kakita +2, Utaku +3,
+  Storm Legion +2), low-health attack bonus (Berserkers +2, Deathseekers +3,
+  White Guard +2 at <50%), conditional attack bonus (Bayushi vs low morale,
+  Dragon Talons vs high def, Kenshinzen vs elites, White Guard vs low health),
+  defense ignore (Dragon Talons 1, White Guard 1), vs-shugenja defense
+  (Mirumoto +2), adjacency defense (Shiba +2 near shugenja, Daidoji +1 near
+  Crane, Elemental Legions +1 near Guard), adjacency attack (Akodo +1 per
+  adjacent Lion max 3, Elemental Legions +2 near Guard), debuff-on-hit
+  (Yoritomo -1 Def stack 3, Scorpion's Claws -1 Atk/-1 MD stack 3).
+  Per-round ally buff system: Yamabushi +3 Atk to adjacent Dragon (+ one-time
+  +2 Def), Elemental Guard +3 Atk to adjacent Phoenix, Storm Riders +2 Atk
+  to adjacent Mantis, Mirumoto +1 Atk to adjacent shugenja.
+  Terrain: all cavalry types (Light Cav, Shinjo, Utaku, White Guard) affected
+  by cavalry terrain penalties/bonuses. Storm Legion ignores terrain penalties.
   6 terrain types: Plains (cavalry +2 flanking), Forest (defender +2 Def,
   cavalry disabled), Hills (attacker -2 Atk), Mountain (defender +4 Def,
   cavalry disabled), Urban (defender +3 Def, spearmen +1 Def), Coastal
-  (amphibious -3 Atk). Unit-specific adjustments per terrain type.
-  Fortification bonus parameter for siege storm assaults.
+  (amphibious -3 Atk).
   Reserve promotion: Row 2 non-archer companies auto-promote when Row 1
   slot in their column is vacated. Archers stay in Row 2.
   Battle end: all companies on one side destroyed or routed.
@@ -1417,16 +1432,16 @@ All in /tests/, one file per system:
   80% permanently dead. Victor only.
   `create_company()` factory sets stats from UNIT_STATS table.
   Safety cap: 200 rounds maximum to prevent infinite loops.
-- **shared/enums.gd** gains `CompanyUnitType` (7 values) and
-  `BattleTerrainType` (6 values).
+- **shared/enums.gd** gains `CompanyUnitType` (31 values: 7 universal + 24
+  clan elite) and `BattleTerrainType` (6 values).
 - **shared/military_unit_data.gd** — CompanyData gains `unit_type` and
   `source_province_id` fields.
   Deferred (Phase 2+): Army movement on world map (sub-tiles), supply
   tether system, siege mechanics (starvation/storm/sortie), siege events,
   army upkeep deprivation, military promotion system, military service
-  assignment, levy authority, order system, clan elite unit stat blocks,
+  assignment, levy authority, order system, Shinjo auto-flank behavior,
   ASCII battle events / Heroic Opportunities, PU reconciliation wiring
-  into ResourceTick, Shadowlands terrain zones.
+  into ResourceTick, Shadowlands terrain zones, naval combat bonuses.
 
 ### What's Next
 1. World generation coordinate system and adjacency

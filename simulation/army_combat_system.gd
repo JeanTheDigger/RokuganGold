@@ -7,6 +7,7 @@ class_name ArmyCombatSystem
 # -- Unit Stat Blocks (GDD s11.7) -----------------------------------------------
 
 const UNIT_STATS: Dictionary = {
+	# Universal units
 	Enums.CompanyUnitType.PEASANT_LEVY: {
 		"health": 153, "attack": 1, "defense": 1, "morale": 8, "morale_defense": 1,
 	},
@@ -28,6 +29,86 @@ const UNIT_STATS: Dictionary = {
 	Enums.CompanyUnitType.GARRISON: {
 		"health": 153, "attack": 3, "defense": 5, "morale": 16, "morale_defense": 7,
 	},
+	# Crab
+	Enums.CompanyUnitType.HIDA_BUSHI: {
+		"health": 153, "attack": 5, "defense": 7, "morale": 20, "morale_defense": 9,
+	},
+	Enums.CompanyUnitType.CRAB_BERSERKERS: {
+		"health": 153, "attack": 8, "defense": 3, "morale": 20, "morale_defense": 10,
+	},
+	Enums.CompanyUnitType.HIRUMA_SCOUTS: {
+		"health": 153, "attack": 6, "defense": 3, "morale": 15, "morale_defense": 6,
+	},
+	# Crane
+	Enums.CompanyUnitType.KAKITA_BUSHI: {
+		"health": 153, "attack": 6, "defense": 5, "morale": 18, "morale_defense": 8,
+	},
+	Enums.CompanyUnitType.KENSHINZEN: {
+		"health": 153, "attack": 9, "defense": 4, "morale": 18, "morale_defense": 8,
+	},
+	Enums.CompanyUnitType.DAIDOJI_HEAVY_SPEARMEN: {
+		"health": 153, "attack": 5, "defense": 7, "morale": 19, "morale_defense": 8,
+	},
+	# Dragon
+	Enums.CompanyUnitType.MIRUMOTO_BUSHI: {
+		"health": 153, "attack": 6, "defense": 5, "morale": 17, "morale_defense": 7,
+	},
+	Enums.CompanyUnitType.DRAGON_TALONS: {
+		"health": 153, "attack": 8, "defense": 4, "morale": 17, "morale_defense": 7,
+	},
+	Enums.CompanyUnitType.YAMABUSHI: {
+		"health": 153, "attack": 4, "defense": 3, "morale": 16, "morale_defense": 8,
+	},
+	# Lion
+	Enums.CompanyUnitType.AKODO_BUSHI: {
+		"health": 153, "attack": 6, "defense": 5, "morale": 20, "morale_defense": 9,
+	},
+	Enums.CompanyUnitType.LIONS_PRIDE: {
+		"health": 153, "attack": 9, "defense": 4, "morale": 22, "morale_defense": 10,
+	},
+	Enums.CompanyUnitType.DEATHSEEKERS: {
+		"health": 153, "attack": 8, "defense": 2, "morale": 0, "morale_defense": 0,
+	},
+	# Phoenix
+	Enums.CompanyUnitType.SHIBA_BUSHI: {
+		"health": 153, "attack": 5, "defense": 6, "morale": 18, "morale_defense": 8,
+	},
+	Enums.CompanyUnitType.ELEMENTAL_GUARD: {
+		"health": 153, "attack": 7, "defense": 3, "morale": 16, "morale_defense": 9,
+	},
+	Enums.CompanyUnitType.ELEMENTAL_LEGIONS: {
+		"health": 153, "attack": 6, "defense": 5, "morale": 19, "morale_defense": 9,
+	},
+	# Scorpion
+	Enums.CompanyUnitType.BAYUSHI_BUSHI: {
+		"health": 153, "attack": 6, "defense": 5, "morale": 16, "morale_defense": 7,
+	},
+	Enums.CompanyUnitType.BLACK_CABAL: {
+		"health": 153, "attack": 7, "defense": 5, "morale": 18, "morale_defense": 8,
+	},
+	Enums.CompanyUnitType.SCORPIONS_CLAWS: {
+		"health": 153, "attack": 6, "defense": 4, "morale": 15, "morale_defense": 7,
+	},
+	# Unicorn
+	Enums.CompanyUnitType.SHINJO_BUSHI: {
+		"health": 153, "attack": 6, "defense": 4, "morale": 17, "morale_defense": 7,
+	},
+	Enums.CompanyUnitType.UTAKU_BATTLE_MAIDENS: {
+		"health": 153, "attack": 8, "defense": 5, "morale": 21, "morale_defense": 9,
+	},
+	Enums.CompanyUnitType.WHITE_GUARD: {
+		"health": 153, "attack": 9, "defense": 5, "morale": 16, "morale_defense": 7,
+	},
+	# Mantis
+	Enums.CompanyUnitType.YORITOMO_BUSHI: {
+		"health": 153, "attack": 5, "defense": 4, "morale": 15, "morale_defense": 6,
+	},
+	Enums.CompanyUnitType.STORM_RIDERS: {
+		"health": 153, "attack": 3, "defense": 3, "morale": 14, "morale_defense": 7,
+	},
+	Enums.CompanyUnitType.STORM_LEGION: {
+		"health": 153, "attack": 7, "defense": 4, "morale": 16, "morale_defense": 7,
+	},
 }
 
 const GARRISON_HOME_DEFENSE_BONUS: int = 2
@@ -38,6 +119,343 @@ const LIGHT_CAVALRY_FLANK_BONUS: int = 4
 const BASE_FLANK_BONUS: int = 2
 
 const ENCIRCLEMENT_MORALE_DAMAGE: int = 10
+
+
+# -- Clan Elite Special Abilities (GDD s11.6) ------------------------------------
+
+const CAVALRY_UNIT_TYPES: Array[int] = [
+	Enums.CompanyUnitType.LIGHT_CAVALRY,
+	Enums.CompanyUnitType.SHINJO_BUSHI,
+	Enums.CompanyUnitType.UTAKU_BATTLE_MAIDENS,
+	Enums.CompanyUnitType.WHITE_GUARD,
+]
+
+const SHUGENJA_UNIT_TYPES: Array[int] = [
+	Enums.CompanyUnitType.YAMABUSHI,
+	Enums.CompanyUnitType.ELEMENTAL_GUARD,
+	Enums.CompanyUnitType.STORM_RIDERS,
+]
+
+const NO_MORALE_UNIT_TYPES: Array[int] = [
+	Enums.CompanyUnitType.DEATHSEEKERS,
+]
+
+const ANTI_CAVALRY_UNIT_TYPES: Array[int] = [
+	Enums.CompanyUnitType.ASHIGARU_SPEARMEN,
+	Enums.CompanyUnitType.DAIDOJI_HEAVY_SPEARMEN,
+]
+
+const CLAN_OF_UNIT: Dictionary = {
+	Enums.CompanyUnitType.HIDA_BUSHI: "Crab",
+	Enums.CompanyUnitType.CRAB_BERSERKERS: "Crab",
+	Enums.CompanyUnitType.HIRUMA_SCOUTS: "Crab",
+	Enums.CompanyUnitType.KAKITA_BUSHI: "Crane",
+	Enums.CompanyUnitType.KENSHINZEN: "Crane",
+	Enums.CompanyUnitType.DAIDOJI_HEAVY_SPEARMEN: "Crane",
+	Enums.CompanyUnitType.MIRUMOTO_BUSHI: "Dragon",
+	Enums.CompanyUnitType.DRAGON_TALONS: "Dragon",
+	Enums.CompanyUnitType.YAMABUSHI: "Dragon",
+	Enums.CompanyUnitType.AKODO_BUSHI: "Lion",
+	Enums.CompanyUnitType.LIONS_PRIDE: "Lion",
+	Enums.CompanyUnitType.DEATHSEEKERS: "Lion",
+	Enums.CompanyUnitType.SHIBA_BUSHI: "Phoenix",
+	Enums.CompanyUnitType.ELEMENTAL_GUARD: "Phoenix",
+	Enums.CompanyUnitType.ELEMENTAL_LEGIONS: "Phoenix",
+	Enums.CompanyUnitType.BAYUSHI_BUSHI: "Scorpion",
+	Enums.CompanyUnitType.BLACK_CABAL: "Scorpion",
+	Enums.CompanyUnitType.SCORPIONS_CLAWS: "Scorpion",
+	Enums.CompanyUnitType.SHINJO_BUSHI: "Unicorn",
+	Enums.CompanyUnitType.UTAKU_BATTLE_MAIDENS: "Unicorn",
+	Enums.CompanyUnitType.WHITE_GUARD: "Unicorn",
+	Enums.CompanyUnitType.YORITOMO_BUSHI: "Mantis",
+	Enums.CompanyUnitType.STORM_RIDERS: "Mantis",
+	Enums.CompanyUnitType.STORM_LEGION: "Mantis",
+}
+
+const ELITE_UNIT_TYPES: Array[int] = [
+	Enums.CompanyUnitType.KENSHINZEN,
+	Enums.CompanyUnitType.LIONS_PRIDE,
+	Enums.CompanyUnitType.ELEMENTAL_GUARD,
+	Enums.CompanyUnitType.CRAB_BERSERKERS,
+	Enums.CompanyUnitType.UTAKU_BATTLE_MAIDENS,
+]
+
+
+static func _is_cavalry(unit_type: int) -> bool:
+	return unit_type in CAVALRY_UNIT_TYPES
+
+
+static func _get_unit_clan(unit_type: int) -> String:
+	return CLAN_OF_UNIT.get(unit_type, "")
+
+
+static func _get_anti_cavalry_bonus(attacker_type: int, defender_type: int) -> int:
+	if not _is_cavalry(defender_type):
+		return 0
+	if attacker_type == Enums.CompanyUnitType.ASHIGARU_SPEARMEN:
+		return ASHIGARU_SPEARMEN_VS_CAVALRY_BONUS
+	if attacker_type == Enums.CompanyUnitType.DAIDOJI_HEAVY_SPEARMEN:
+		return 3
+	return 0
+
+
+static func _get_flank_bonus(unit_type: int) -> int:
+	if unit_type == Enums.CompanyUnitType.LIGHT_CAVALRY:
+		return LIGHT_CAVALRY_FLANK_BONUS
+	if unit_type == Enums.CompanyUnitType.SHINJO_BUSHI:
+		return 3
+	if unit_type == Enums.CompanyUnitType.HIRUMA_SCOUTS:
+		return 3
+	return BASE_FLANK_BONUS
+
+
+static func _is_immune_to_counter_attack_while_flanking(unit_type: int) -> bool:
+	return unit_type in [
+		Enums.CompanyUnitType.LIGHT_CAVALRY,
+		Enums.CompanyUnitType.UTAKU_BATTLE_MAIDENS,
+	]
+
+
+static func _get_first_round_attack_bonus(unit_type: int) -> int:
+	if unit_type == Enums.CompanyUnitType.KAKITA_BUSHI:
+		return 2
+	if unit_type == Enums.CompanyUnitType.UTAKU_BATTLE_MAIDENS:
+		return 3
+	if unit_type == Enums.CompanyUnitType.STORM_LEGION:
+		return 2
+	return 0
+
+
+static func _get_low_health_attack_bonus(bc: Dictionary) -> int:
+	var pct: float = float(bc["current_health"]) / float(bc["starting_health"])
+	var ut: int = bc["unit_type"]
+	if ut == Enums.CompanyUnitType.CRAB_BERSERKERS and pct < 0.50:
+		return 2
+	if ut == Enums.CompanyUnitType.DEATHSEEKERS and pct < 0.50:
+		return 3
+	if ut == Enums.CompanyUnitType.WHITE_GUARD and pct < 0.50:
+		return 2
+	return 0
+
+
+static func _get_conditional_attack_bonus(
+	attacker: Dictionary,
+	defender: Dictionary,
+) -> int:
+	var bonus: int = 0
+	var atk_type: int = attacker["unit_type"]
+	var def_type: int = defender["unit_type"]
+
+	if atk_type == Enums.CompanyUnitType.BAYUSHI_BUSHI:
+		var morale_pct: float = float(defender["current_morale"]) / float(defender.get("starting_morale", 1))
+		if morale_pct < 0.50:
+			bonus += 2
+
+	if atk_type == Enums.CompanyUnitType.DRAGON_TALONS:
+		if defender["base_defense"] >= 6:
+			bonus += 2
+
+	if atk_type == Enums.CompanyUnitType.KENSHINZEN:
+		if def_type in ELITE_UNIT_TYPES:
+			bonus += 2
+
+	if atk_type == Enums.CompanyUnitType.WHITE_GUARD:
+		var health_pct: float = float(defender["current_health"]) / float(defender["starting_health"])
+		if health_pct < 0.50:
+			bonus += 2
+
+	return bonus
+
+
+static func _get_defense_ignore(attacker_type: int) -> int:
+	if attacker_type == Enums.CompanyUnitType.DRAGON_TALONS:
+		return 1
+	if attacker_type == Enums.CompanyUnitType.WHITE_GUARD:
+		return 1
+	return 0
+
+
+static func _get_extra_morale_damage(attacker_type: int) -> int:
+	if attacker_type == Enums.CompanyUnitType.BAYUSHI_BUSHI:
+		return 1
+	if attacker_type == Enums.CompanyUnitType.BLACK_CABAL:
+		return 3
+	if attacker_type == Enums.CompanyUnitType.ELEMENTAL_GUARD:
+		return 2
+	return 0
+
+
+static func _get_commander_survival_tn_modifier(attacker_type: int) -> int:
+	if attacker_type == Enums.CompanyUnitType.HIRUMA_SCOUTS:
+		return 2
+	if attacker_type == Enums.CompanyUnitType.KENSHINZEN:
+		return 3
+	if attacker_type == Enums.CompanyUnitType.LIONS_PRIDE:
+		return 3
+	return 0
+
+
+static func _can_rout(bc: Dictionary) -> bool:
+	var ut: int = bc["unit_type"]
+	if ut == Enums.CompanyUnitType.DEATHSEEKERS:
+		return false
+	if ut == Enums.CompanyUnitType.CRAB_BERSERKERS:
+		var pct: float = float(bc["current_health"]) / float(bc["starting_health"])
+		return pct <= 0.25
+	return true
+
+
+static func _get_adjacency_attack_bonus(
+	bc: Dictionary,
+	all_allies: Array[Dictionary],
+) -> int:
+	var ut: int = bc["unit_type"]
+	var bonus: int = 0
+
+	if ut == Enums.CompanyUnitType.AKODO_BUSHI:
+		var lion_adjacent: int = 0
+		for ally: Dictionary in all_allies:
+			if ally["company_id"] == bc["company_id"]:
+				continue
+			if not ArmyCombatSystem.is_active(ally):
+				continue
+			if absi(ally["column"] - bc["column"]) <= 1 and ally["row"] == bc["row"]:
+				if _get_unit_clan(ally["unit_type"]) == "Lion":
+					lion_adjacent += 1
+		bonus += mini(lion_adjacent, 3)
+
+	if ut == Enums.CompanyUnitType.ELEMENTAL_LEGIONS:
+		for ally: Dictionary in all_allies:
+			if ally["company_id"] == bc["company_id"]:
+				continue
+			if not ArmyCombatSystem.is_active(ally):
+				continue
+			if absi(ally["column"] - bc["column"]) <= 1:
+				if ally["unit_type"] == Enums.CompanyUnitType.ELEMENTAL_GUARD:
+					bonus += 2
+					break
+
+	return bonus
+
+
+static func _get_vs_attacker_defense_bonus(
+	defender_type: int,
+	attacker_type: int,
+) -> int:
+	if defender_type == Enums.CompanyUnitType.MIRUMOTO_BUSHI:
+		if attacker_type in SHUGENJA_UNIT_TYPES:
+			return 2
+	return 0
+
+
+static func _get_adjacency_defense_bonus(
+	bc: Dictionary,
+	all_allies: Array[Dictionary],
+) -> int:
+	var ut: int = bc["unit_type"]
+	var bonus: int = 0
+
+	if ut == Enums.CompanyUnitType.SHIBA_BUSHI:
+		for ally: Dictionary in all_allies:
+			if ally["company_id"] == bc["company_id"]:
+				continue
+			if not ArmyCombatSystem.is_active(ally):
+				continue
+			if absi(ally["column"] - bc["column"]) <= 1:
+				if ally["unit_type"] in SHUGENJA_UNIT_TYPES:
+					bonus += 2
+					break
+
+	if ut == Enums.CompanyUnitType.DAIDOJI_HEAVY_SPEARMEN:
+		for ally: Dictionary in all_allies:
+			if ally["company_id"] == bc["company_id"]:
+				continue
+			if not ArmyCombatSystem.is_active(ally):
+				continue
+			if absi(ally["column"] - bc["column"]) <= 1:
+				if _get_unit_clan(ally["unit_type"]) == "Crane":
+					bonus += 1
+					break
+
+	if ut == Enums.CompanyUnitType.ELEMENTAL_LEGIONS:
+		for ally: Dictionary in all_allies:
+			if ally["company_id"] == bc["company_id"]:
+				continue
+			if not ArmyCombatSystem.is_active(ally):
+				continue
+			if absi(ally["column"] - bc["column"]) <= 1:
+				if ally["unit_type"] == Enums.CompanyUnitType.ELEMENTAL_GUARD:
+					bonus += 1
+					break
+
+	return bonus
+
+
+static func _apply_debuff_on_hit(
+	attacker: Dictionary,
+	defender: Dictionary,
+) -> void:
+	var ut: int = attacker["unit_type"]
+
+	if ut == Enums.CompanyUnitType.YORITOMO_BUSHI:
+		var current: int = defender.get("yoritomo_def_debuff", 0)
+		if current < 3:
+			defender["yoritomo_def_debuff"] = current + 1
+			defender["base_defense"] = maxi(defender["base_defense"] - 1, 0)
+
+	if ut == Enums.CompanyUnitType.SCORPIONS_CLAWS:
+		var atk_debuff: int = defender.get("claws_atk_debuff", 0)
+		var md_debuff: int = defender.get("claws_md_debuff", 0)
+		if atk_debuff < 3:
+			defender["claws_atk_debuff"] = atk_debuff + 1
+			defender["base_attack"] = maxi(defender["base_attack"] - 1, 0)
+		if md_debuff < 3:
+			defender["claws_md_debuff"] = md_debuff + 1
+			defender["base_morale_defense"] = maxi(defender["base_morale_defense"] - 1, 0)
+
+
+static func _get_adjacency_morale_defense_bonus(
+	bc: Dictionary,
+	all_allies: Array[Dictionary],
+) -> int:
+	var bonus: int = 0
+
+	for ally: Dictionary in all_allies:
+		if ally["company_id"] == bc["company_id"]:
+			continue
+		if not ArmyCombatSystem.is_active(ally):
+			continue
+		if absi(ally["column"] - bc["column"]) <= 1:
+			if ally["unit_type"] == Enums.CompanyUnitType.SHIBA_BUSHI:
+				bonus += 1
+				break
+
+	return bonus
+
+
+static func _get_adjacency_morale_defense_penalty(
+	bc: Dictionary,
+	all_enemies: Array[Dictionary],
+) -> int:
+	var penalty: int = 0
+
+	for enemy: Dictionary in all_enemies:
+		if not ArmyCombatSystem.is_active(enemy):
+			continue
+		if absi(enemy["column"] - bc["column"]) <= 1:
+			if enemy["unit_type"] == Enums.CompanyUnitType.BLACK_CABAL:
+				penalty -= 1
+				break
+
+	return penalty
+
+
+static func _has_no_terrain_penalties(unit_type: int) -> bool:
+	return unit_type == Enums.CompanyUnitType.STORM_LEGION
+
+
+static func _is_flanking_cavalry(unit_type: int) -> bool:
+	return unit_type in CAVALRY_UNIT_TYPES
 
 
 # -- Commander Bonus (GDD s11.7) -------------------------------------------------
@@ -171,8 +589,8 @@ static func get_terrain_modifiers(
 	else:
 		mods["attack_mod"] += t.get("attacker_attack_penalty", 0)
 
-	var is_cavalry: bool = unit_type == Enums.CompanyUnitType.LIGHT_CAVALRY
-	var is_spearmen: bool = unit_type == Enums.CompanyUnitType.ASHIGARU_SPEARMEN
+	var is_cavalry: bool = _is_cavalry(unit_type)
+	var is_spearmen: bool = unit_type in ANTI_CAVALRY_UNIT_TYPES
 	var is_archer: bool = unit_type == Enums.CompanyUnitType.ASHIGARU_ARCHERS
 
 	if is_cavalry:
@@ -231,12 +649,14 @@ static func make_battle_company(
 	commander: L5RCharacterData = null,
 	commander_bonus: Dictionary = {},
 ) -> Dictionary:
+	var ut: int = company.unit_type
 	return {
 		"company": company,
 		"company_id": company.company_id,
-		"unit_type": company.unit_type,
+		"unit_type": ut,
 		"starting_health": company.health,
 		"current_health": company.health,
+		"starting_morale": company.morale,
 		"current_morale": company.morale,
 		"base_attack": company.attack,
 		"base_defense": company.defense,
@@ -252,8 +672,9 @@ static func make_battle_company(
 		"commander_dead": false,
 		"survival_thresholds_triggered": [],
 		"health_damage_this_round": 0,
-		"is_archer": company.unit_type == Enums.CompanyUnitType.ASHIGARU_ARCHERS,
-		"no_morale": false,
+		"is_archer": ut == Enums.CompanyUnitType.ASHIGARU_ARCHERS,
+		"no_morale": ut in NO_MORALE_UNIT_TYPES,
+		"round_number": 0,
 	}
 
 
@@ -320,17 +741,25 @@ static func _apply_setup_modifiers(
 	fortification_bonus: int,
 ) -> void:
 	for bc: Dictionary in states:
-		var t_mods: Dictionary = get_terrain_modifiers(
-			terrain, bc["unit_type"], is_defender, is_amphibious,
-		)
-		bc["terrain_attack_mod"] = t_mods["attack_mod"]
-		bc["terrain_defense_mod"] = t_mods["defense_mod"]
-		bc["terrain_flanking_disabled"] = t_mods["flanking_disabled"]
-		bc["terrain_flanking_bonus_mod"] = t_mods["flanking_bonus_mod"]
+		if _has_no_terrain_penalties(bc["unit_type"]):
+			bc["terrain_attack_mod"] = 0
+			bc["terrain_defense_mod"] = 0
+			bc["terrain_flanking_disabled"] = false
+			bc["terrain_flanking_bonus_mod"] = 0
+		else:
+			var t_mods: Dictionary = get_terrain_modifiers(
+				terrain, bc["unit_type"], is_defender, is_amphibious,
+			)
+			bc["terrain_attack_mod"] = t_mods["attack_mod"]
+			bc["terrain_defense_mod"] = t_mods["defense_mod"]
+			bc["terrain_flanking_disabled"] = t_mods["flanking_disabled"]
+			bc["terrain_flanking_bonus_mod"] = t_mods["flanking_bonus_mod"]
 		if is_defender:
 			bc["terrain_defense_mod"] += fortification_bonus
 		if bc["unit_type"] == Enums.CompanyUnitType.GARRISON and is_defender and fortification_bonus > 0:
 			bc["terrain_defense_mod"] += GARRISON_HOME_DEFENSE_BONUS
+		if _is_flanking_cavalry(bc["unit_type"]):
+			bc["terrain_flanking_disabled"] = bc.get("terrain_flanking_disabled", false)
 
 
 static func _get_effective_attack(bc: Dictionary) -> int:
@@ -360,6 +789,70 @@ static func _get_effective_morale_defense(bc: Dictionary) -> int:
 	return maxi(md, 0)
 
 
+# -- Per-Round Ally Buffs --------------------------------------------------------
+
+const BUFF_ALLY_UNITS: Dictionary = {
+	Enums.CompanyUnitType.YAMABUSHI: {"clan": "Dragon", "attack": 3},
+	Enums.CompanyUnitType.ELEMENTAL_GUARD: {"clan": "Phoenix", "attack": 3},
+	Enums.CompanyUnitType.STORM_RIDERS: {"clan": "Mantis", "attack": 2},
+}
+
+
+static func _reset_ally_buffs(side: Array[Dictionary]) -> void:
+	for bc: Dictionary in side:
+		bc["ally_buff_attack"] = 0
+		bc["ally_buff_defense"] = 0
+
+
+static func _apply_ally_buffs(side: Array[Dictionary]) -> void:
+	for bc: Dictionary in side:
+		if not is_active(bc):
+			continue
+		var ut: int = bc["unit_type"]
+
+		# Buff-ally-per-round specials (Yamabushi, Elemental Guard, Storm Riders)
+		if ut in BUFF_ALLY_UNITS:
+			var buff_data: Dictionary = BUFF_ALLY_UNITS[ut]
+			var best_ally: Dictionary = {}
+			for ally: Dictionary in side:
+				if ally["company_id"] == bc["company_id"]:
+					continue
+				if not is_active(ally):
+					continue
+				if absi(ally["column"] - bc["column"]) > 1:
+					continue
+				if _get_unit_clan(ally["unit_type"]) != buff_data["clan"]:
+					continue
+				if best_ally.is_empty():
+					best_ally = ally
+			if not best_ally.is_empty():
+				best_ally["ally_buff_attack"] += buff_data["attack"]
+
+		# Mirumoto: adjacent allied shugenja gain +1 Attack
+		if ut == Enums.CompanyUnitType.MIRUMOTO_BUSHI:
+			for ally: Dictionary in side:
+				if ally["company_id"] == bc["company_id"]:
+					continue
+				if not is_active(ally):
+					continue
+				if absi(ally["column"] - bc["column"]) <= 1:
+					if ally["unit_type"] in SHUGENJA_UNIT_TYPES:
+						ally["ally_buff_attack"] += 1
+
+		# Yamabushi one-time +2 Defense buff to adjacent ally
+		if ut == Enums.CompanyUnitType.YAMABUSHI and not bc.get("yamabushi_def_used", false):
+			for ally: Dictionary in side:
+				if ally["company_id"] == bc["company_id"]:
+					continue
+				if not is_active(ally):
+					continue
+				if absi(ally["column"] - bc["column"]) <= 1:
+					if _get_unit_clan(ally["unit_type"]) == "Dragon":
+						ally["ally_buff_defense"] += 2
+						bc["yamabushi_def_used"] = true
+						break
+
+
 # -- Combat Round ----------------------------------------------------------------
 
 static func _resolve_combat_round(
@@ -368,10 +861,19 @@ static func _resolve_combat_round(
 	terrain: Enums.BattleTerrainType,
 	dice_engine: DiceEngine,
 ) -> Dictionary:
+	# Increment round number and reset per-round state
 	for bc: Dictionary in attackers:
 		bc["health_damage_this_round"] = 0
+		bc["round_number"] = bc.get("round_number", 0) + 1
 	for bc: Dictionary in defenders:
 		bc["health_damage_this_round"] = 0
+		bc["round_number"] = bc.get("round_number", 0) + 1
+
+	# Apply per-round ally buffs (Yamabushi, Elemental Guard, Storm Riders, Mirumoto)
+	_reset_ally_buffs(attackers)
+	_reset_ally_buffs(defenders)
+	_apply_ally_buffs(attackers)
+	_apply_ally_buffs(defenders)
 
 	var pending_damage: Dictionary = {}
 	var pending_morale_triggers: Dictionary = {}
@@ -391,28 +893,65 @@ static func _resolve_combat_round(
 		var atk: Dictionary = m["attacker"]
 		var dfn: Dictionary = m["defender"]
 
-		var atk_dmg: int = _compute_attack_damage(atk, dfn, dice_engine, false, false)
-		var def_dmg: int = _compute_attack_damage(dfn, atk, dice_engine, false, false)
+		var atk_dmg: int = _compute_attack_damage(
+			atk, dfn, dice_engine, false, false, attackers, defenders,
+		)
+		var def_dmg: int = _compute_attack_damage(
+			dfn, atk, dice_engine, false, false, defenders, attackers,
+		)
 
 		_add_pending(pending_damage, dfn, atk_dmg)
 		_add_pending(pending_damage, atk, def_dmg)
 
 		if atk_dmg > 0:
 			_ensure_trigger(pending_morale_triggers, dfn)
+			_add_extra_morale_damage(pending_morale_triggers, dfn, atk["unit_type"])
 		if def_dmg > 0:
 			_ensure_trigger(pending_morale_triggers, atk)
+			_add_extra_morale_damage(pending_morale_triggers, atk, dfn["unit_type"])
 
 	for f: Dictionary in flanks:
 		var flanker: Dictionary = f["flanker"]
 		var target: Dictionary = f["target"]
-		var flank_dmg: int = _compute_attack_damage(flanker, target, dice_engine, true, false)
+		var flanker_side: Array[Dictionary] = attackers if flanker["side"] == "attacker" else defenders
+		var target_side: Array[Dictionary] = defenders if flanker["side"] == "attacker" else attackers
+		var flank_dmg: int = _compute_attack_damage(
+			flanker, target, dice_engine, true, false, flanker_side, target_side,
+		)
 		_add_pending(pending_damage, target, flank_dmg)
 		if flank_dmg > 0:
 			_ensure_trigger(pending_morale_triggers, target)
 			pending_morale_triggers[target["company_id"]]["flanked"] = true
+			_add_extra_morale_damage(pending_morale_triggers, target, flanker["unit_type"])
 
 	_resolve_archer_fire(active_atk_r2, active_def_r1, dice_engine, pending_damage, pending_morale_triggers)
 	_resolve_archer_fire(active_def_r2, active_atk_r1, dice_engine, pending_damage, pending_morale_triggers)
+
+	# Track which attacker types dealt damage to each target (for commander survival TN modifier)
+	var damage_sources: Dictionary = {}
+	for bc_id: int in pending_damage:
+		if not damage_sources.has(bc_id):
+			damage_sources[bc_id] = []
+
+	for m: Dictionary in matchups:
+		var atk: Dictionary = m["attacker"]
+		var dfn: Dictionary = m["defender"]
+		if pending_damage.get(dfn["company_id"], 0) > 0:
+			if not damage_sources.has(dfn["company_id"]):
+				damage_sources[dfn["company_id"]] = []
+			damage_sources[dfn["company_id"]].append(atk["unit_type"])
+		if pending_damage.get(atk["company_id"], 0) > 0:
+			if not damage_sources.has(atk["company_id"]):
+				damage_sources[atk["company_id"]] = []
+			damage_sources[atk["company_id"]].append(dfn["unit_type"])
+
+	for f: Dictionary in flanks:
+		var flanker: Dictionary = f["flanker"]
+		var target: Dictionary = f["target"]
+		if pending_damage.get(target["company_id"], 0) > 0:
+			if not damage_sources.has(target["company_id"]):
+				damage_sources[target["company_id"]] = []
+			damage_sources[target["company_id"]].append(flanker["unit_type"])
 
 	for bc_id: int in pending_damage:
 		var bc: Dictionary = _find_bc_by_id(attackers, defenders, bc_id)
@@ -426,8 +965,12 @@ static func _resolve_combat_round(
 		if bc["current_health"] <= 0:
 			bc["is_destroyed"] = true
 
+		var cmd_tn_mod: int = 0
+		for src_type: int in damage_sources.get(bc_id, []):
+			cmd_tn_mod = maxi(cmd_tn_mod, _get_commander_survival_tn_modifier(src_type))
+
 		var survival: Dictionary = _check_commander_survival_thresholds(
-			bc, health_before, dice_engine,
+			bc, health_before, dice_engine, cmd_tn_mod,
 		)
 		if survival.get("died", false):
 			commander_deaths.append(survival)
@@ -441,7 +984,9 @@ static func _resolve_combat_round(
 		if bc.get("no_morale", false):
 			continue
 		var triggers: Dictionary = pending_morale_triggers[bc_id]
-		_resolve_morale_check(bc, triggers, dice_engine, commander_deaths)
+		var bc_allies: Array[Dictionary] = attackers if bc["side"] == "attacker" else defenders
+		var bc_enemies: Array[Dictionary] = defenders if bc["side"] == "attacker" else attackers
+		_resolve_morale_check(bc, triggers, dice_engine, commander_deaths, bc_allies, bc_enemies)
 
 	_process_rout_contagion(attackers, dice_engine)
 	_process_rout_contagion(defenders, dice_engine)
@@ -549,9 +1094,18 @@ static func _compute_attack_damage(
 	dice_engine: DiceEngine,
 	is_flanking: bool,
 	is_archer_fire: bool,
+	attacker_allies: Array[Dictionary] = [],
+	defender_allies: Array[Dictionary] = [],
 ) -> int:
 	var atk_val: int = _get_effective_attack(attacker)
 	var def_val: int = _get_effective_defense(defender)
+
+	def_val += _get_adjacency_defense_bonus(defender, defender_allies)
+	def_val += _get_vs_attacker_defense_bonus(defender["unit_type"], attacker["unit_type"])
+	def_val += defender.get("ally_buff_defense", 0)
+
+	var def_ignore: int = _get_defense_ignore(attacker["unit_type"])
+	def_val = maxi(def_val - def_ignore, 0)
 
 	if is_archer_fire:
 		if attacker.get("is_archer", false) and not is_flanking:
@@ -563,21 +1117,25 @@ static func _compute_attack_damage(
 	var bonus: int = 0
 
 	if is_flanking:
-		var is_cavalry: bool = attacker["unit_type"] == Enums.CompanyUnitType.LIGHT_CAVALRY
-		if is_cavalry:
-			bonus += LIGHT_CAVALRY_FLANK_BONUS
-		else:
-			bonus += BASE_FLANK_BONUS
+		bonus += _get_flank_bonus(attacker["unit_type"])
 		bonus += attacker.get("terrain_flanking_bonus_mod", 0)
 
-	if attacker["unit_type"] == Enums.CompanyUnitType.ASHIGARU_SPEARMEN:
-		if defender["unit_type"] == Enums.CompanyUnitType.LIGHT_CAVALRY:
-			bonus += ASHIGARU_SPEARMEN_VS_CAVALRY_BONUS
+	bonus += _get_anti_cavalry_bonus(attacker["unit_type"], defender["unit_type"])
+	bonus += _get_conditional_attack_bonus(attacker, defender)
+	bonus += _get_low_health_attack_bonus(attacker)
+	bonus += _get_adjacency_attack_bonus(attacker, attacker_allies)
+	bonus += attacker.get("ally_buff_attack", 0)
+
+	if attacker.get("round_number", 0) == 1:
+		bonus += _get_first_round_attack_bonus(attacker["unit_type"])
 
 	if attacker["unit_type"] == Enums.CompanyUnitType.ASHIGARU_ARCHERS:
 		bonus -= 3
 
-	return maxi(roll + atk_val + bonus - def_val, 0)
+	var dmg: int = maxi(roll + atk_val + bonus - def_val, 0)
+	if dmg > 0:
+		_apply_debuff_on_hit(attacker, defender)
+	return dmg
 
 
 static func _resolve_archer_fire(
@@ -618,11 +1176,14 @@ static func _resolve_morale_check(
 	triggers: Dictionary,
 	dice_engine: DiceEngine,
 	commander_deaths: Array[Dictionary],
+	all_allies: Array[Dictionary] = [],
+	all_enemies: Array[Dictionary] = [],
 ) -> void:
 	if bc.get("no_morale", false):
 		return
 
 	var modifier: int = 0
+	modifier += triggers.get("extra_morale_damage", 0)
 
 	var health_pct: float = float(bc["current_health"]) / float(bc["starting_health"])
 	var dmg_pct: float = float(bc["health_damage_this_round"]) / float(bc["starting_health"])
@@ -638,16 +1199,15 @@ static func _resolve_morale_check(
 		if cd.get("is_higher_commander", false) and cd.get("side", "") == bc["side"]:
 			modifier += MORALE_MOD_HIGHER_COMMANDER_DEATH
 
-	if triggers.get("flanked", false):
-		pass
-
 	var roll: int = dice_engine.rand_int_range(1, 10)
 	var md: int = _get_effective_morale_defense(bc)
+	md += _get_adjacency_morale_defense_bonus(bc, all_allies)
+	md += _get_adjacency_morale_defense_penalty(bc, all_enemies)
 	var morale_dmg: int = maxi(roll + modifier - md, 0)
 
 	bc["current_morale"] = maxi(bc["current_morale"] - morale_dmg, 0)
 
-	if bc["current_morale"] <= 0:
+	if bc["current_morale"] <= 0 and _can_rout(bc):
 		bc["is_routed"] = true
 
 
@@ -682,6 +1242,7 @@ static func _check_commander_survival_thresholds(
 	bc: Dictionary,
 	health_before: int,
 	dice_engine: DiceEngine,
+	attacker_tn_modifier: int = 0,
 ) -> Dictionary:
 	var commander: L5RCharacterData = bc.get("commander")
 	if commander == null:
@@ -705,7 +1266,7 @@ static func _check_commander_survival_thresholds(
 			bc["survival_thresholds_triggered"] = triggered
 
 			var result: Dictionary = _roll_commander_survival(
-				commander, COMMANDER_SURVIVAL_TNS[threshold], dice_engine,
+				commander, COMMANDER_SURVIVAL_TNS[threshold] + attacker_tn_modifier, dice_engine,
 			)
 			if result["outcome"] == "dead":
 				bc["commander_dead"] = true
@@ -854,7 +1415,17 @@ static func _add_pending(pending: Dictionary, bc: Dictionary, dmg: int) -> void:
 static func _ensure_trigger(triggers: Dictionary, bc: Dictionary) -> void:
 	var cid: int = bc["company_id"]
 	if not triggers.has(cid):
-		triggers[cid] = {"flanked": false}
+		triggers[cid] = {"flanked": false, "extra_morale_damage": 0}
+
+
+static func _add_extra_morale_damage(
+	triggers: Dictionary,
+	target: Dictionary,
+	attacker_type: int,
+) -> void:
+	var cid: int = target["company_id"]
+	_ensure_trigger(triggers, target)
+	triggers[cid]["extra_morale_damage"] = triggers[cid].get("extra_morale_damage", 0) + _get_extra_morale_damage(attacker_type)
 
 
 static func _find_bc_by_id(
