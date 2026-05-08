@@ -472,6 +472,7 @@ All in /tests/, one file per system:
 - test_military_service_system.gd (~35 tests)
 - test_pu_reconciliation.gd (~30 tests)
 - test_military_wiring.gd (~76 tests)
+- test_war_system.gd (~55 tests)
 
 ### Festival System (s11.5)
 - **simulation/festival_system.gd** — Empire-wide canonical festivals, Rokuyo
@@ -1621,6 +1622,43 @@ All in /tests/, one file per system:
   `process_army_dissolution()` handles ≤20% health dissolution — surviving
   health returned as PU to source settlements. Settlement mutations: losses
   deducted from military_pu first, gains added to primary settlement.
+
+### War Status System (s53)
+- **shared/war_data.gd** — WarData Resource: war_id, clan_a, clan_b,
+  authority_level (4 tiers: Provincial Raid, Border Conflict, Family War,
+  Clan War), war_score_a/b (0–100), initiator_clan, declaring/target lord
+  IDs, ic_day_started, seasons_active, allied_clans arrays, provinces_captured
+  arrays. WarScoreTier enum (6 values: Desperate through Dominant).
+- **simulation/war_system.gd** — War Status tracking per GDD s53. Pure static
+  functions; caller owns WarData instances.
+  Declaration: `declare_war()` creates WarData with scores starting at 50.
+  Score shifts: 19 named event types from GDD (minor/major/decisive battle,
+  province/castle captured, siege won/repelled, commander kills by rank,
+  hostage by rank, lord assassination, supply line cut, attrition, authority
+  commits, allied clan joins). `apply_score_shift()` adjusts both sides.
+  Score tiers: Desperate (0–24), Losing (25–39), Behind (40–49), Ahead
+  (50–64), Winning (65–79), Dominant (80–100).
+  Escalation: `can_escalate()`, `escalate()`, `check_auto_escalation()` with
+  5 triggers (desperate score, castle fallen, enemy spread, prolonged 3+
+  seasons, enemy alliance).
+  Peace willingness: `compute_peace_willingness()` scores 0–100 from war
+  score tier, territory terms, hostage, superior pressure, personality
+  (Seigyo/Chishiki/Gi/Makoto positive; Yu/Ketsui/Ishi negative).
+  Honor costs: aid request (0 desperate, −1.0 losing, −0.5 slight advantage),
+  refusal (−2.0 family, −3.0 clan), territory fall (−2.0). Refusal
+  disposition effects (−15/−20/−5/−10).
+  Alliances: add/remove ally, get_all_combatant_clans, is_clan_involved,
+  get_clan_side. Province capture tracking with side-switching.
+  Resolution: `end_war()`, `is_annihilated()`.
+  Seasonal: `process_seasonal_attrition()` (+1 initiator), disposition
+  penalty (−2 per season active).
+  Queries: `are_clans_at_war()`, `get_war_between()`,
+  `get_active_wars_for_clan()`. Context conversion: `to_context_dict()`,
+  `wars_to_context_array()` for NPC engine compatibility (existing code
+  expects Dictionary arrays with clan_a/clan_b/enemy_clan_id keys).
+  Deferred: War justification / casus belli system (s53.1), full integration
+  with NPC decision engine war-readiness directives, peace court mechanics,
+  Imperial edict intervention, trade route suspension on war declaration.
 
 ### What's Next
 1. World generation coordinate system and adjacency
