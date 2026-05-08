@@ -1200,11 +1200,19 @@ static func _build_feasibility_data(
 	var vassal_stockpiles: Array = _collect_vassal_stockpiles(
 		character, world_state, settlements, provinces,
 	)
+	var active_wars: Array = world_state.get("active_wars", [])
 	var raidable: Array = _collect_raidable_provinces(
-		character.clan, provinces, settlements, world_state.get("active_wars", []),
+		character.clan, provinces, settlements, active_wars,
 	)
 	var trade_routes: Array = world_state.get("trade_routes", [])
 	var has_routes: bool = _has_active_trade_routes(trade_routes, character.clan)
+	var allied: Array = _collect_allied_surplus(
+		character, world_state, settlements, provinces,
+	)
+	var war_info: Dictionary = _get_war_context(character.clan, active_wars)
+	var has_grievance: bool = _has_grievance_against_neighbors(
+		character, raidable,
+	)
 
 	return {
 		"controlled_settlements": controlled,
@@ -1219,13 +1227,13 @@ static func _build_feasibility_data(
 		"ladder_context": {
 			"current_season": current_season,
 			"vassal_stockpiles": vassal_stockpiles,
-			"allied_surplus": [],
+			"allied_surplus": allied,
 			"raidable_provinces": raidable,
 			"has_trade_routes": has_routes,
-			"has_grievance": false,
+			"has_grievance": has_grievance,
 			"has_issued_demand": false,
-			"war_score": 50,
-			"is_defending": false,
+			"war_score": war_info.get("war_score", 50),
+			"is_defending": war_info.get("is_defending", false),
 		},
 	}
 
@@ -1310,7 +1318,7 @@ static func _collect_raidable_provinces(
 	return result
 
 
-static func _has_active_trade_routes(trade_routes: Array, clan: String) -> bool:
+static func _has_active_trade_routes(trade_routes: Array, _clan: String) -> bool:
 	for r: Variant in trade_routes:
 		if r is TradeRouteData:
 			var tr: TradeRouteData = r
@@ -1319,6 +1327,110 @@ static func _has_active_trade_routes(trade_routes: Array, clan: String) -> bool:
 		elif r is Dictionary:
 			if not r.get("is_disrupted", true):
 				return true
+	return false
+
+
+static func _collect_allied_surplus(
+	character: L5RCharacterData,
+	world_state: Dictionary,
+	settlements: Array,
+	provinces: Array,
+) -> Array:
+	var chars: Dictionary = world_state.get("characters_by_id", {})
+	var result: Array = []
+	for cid: Variant in chars:
+		var c: Variant = chars[cid]
+		if not (c is L5RCharacterData):
+			continue
+		var ch: L5RCharacterData = c
+		if ch.clan == character.clan:
+			continue
+		if ch.character_id == character.character_id:
+			continue
+		var is_lord: bool = ch.status >= 5.0 or ch.lord_id == -1
+		if not is_lord:
+			continue
+		var disp: int = character.disposition_values.get(ch.character_id, 0)
+		if disp < 31:
+			continue
+		var ally_rice: float = 0.0
+		var ally_koku: float = 0.0
+		var ally_prov_ids: Array[int] = []
+		for p: Variant in provinces:
+			if p is ProvinceData and (p as ProvinceData).clan == ch.clan:
+				ally_prov_ids.append((p as ProvinceData).province_id)
+		for s: Variant in settlements:
+			if s is SettlementData and (s as SettlementData).province_id in ally_prov_ids:
+				ally_rice += (s as SettlementData).rice_stockpile
+				ally_koku += (s as SettlementData).koku_stockpile
+		var ally_civilian_pu: float = 0.0
+		for s: Variant in settlements:
+			if s is SettlementData and (s as SettlementData).province_id in ally_prov_ids:
+				var sd: SettlementData = s
+				ally_civilian_pu += float(sd.farming_pu + sd.mining_pu + sd.town_pu)
+		var buffer: float = ally_civilian_pu * 0.25 * 4.0
+		var surplus_rice: float = maxf(0.0, ally_rice - buffer)
+		if surplus_rice > 0.0 or ally_koku > 0.0:
+			result.append({
+				"character_id": ch.character_id,
+				"clan": ch.clan,
+				"disposition": disp,
+				"surplus_rice": surplus_rice,
+				"surplus_koku": maxf(0.0, ally_koku),
+			})
+	return result
+
+
+static func _get_war_context(
+	clan: String,
+	active_wars: Array,
+) -> Dictionary:
+	var worst_score: int = 50
+	var is_defending: bool = false
+	for w: Variant in active_wars:
+		var wd: Variant = w
+		var clan_a: String = ""
+		var clan_b: String = ""
+		var score_a: int = 50
+		var score_b: int = 50
+		var initiator: String = ""
+		if wd is Dictionary:
+			clan_a = (wd as Dictionary).get("clan_a", "")
+			clan_b = (wd as Dictionary).get("clan_b", "")
+			score_a = (wd as Dictionary).get("war_score_a", 50)
+			score_b = (wd as Dictionary).get("war_score_b", 50)
+			initiator = (wd as Dictionary).get("initiator_clan", "")
+		elif wd is WarData:
+			clan_a = (wd as WarData).clan_a
+			clan_b = (wd as WarData).clan_b
+			score_a = (wd as WarData).war_score_a
+			score_b = (wd as WarData).war_score_b
+			initiator = (wd as WarData).initiator_clan
+		var my_score: int = -1
+		if clan_a == clan:
+			my_score = score_a
+			if initiator == clan_b:
+				is_defending = true
+		elif clan_b == clan:
+			my_score = score_b
+			if initiator == clan_a:
+				is_defending = true
+		if my_score >= 0 and my_score < worst_score:
+			worst_score = my_score
+	return {"war_score": worst_score, "is_defending": is_defending}
+
+
+static func _has_grievance_against_neighbors(
+	character: L5RCharacterData,
+	_raidable_provinces: Array,
+) -> bool:
+	for cid: Variant in character.disposition_values:
+		var disp: int = character.disposition_values[cid]
+		if disp <= -31:
+			return true
+	var obj: String = character.current_objective
+	if obj in ["SEEK_VENGEANCE", "UNDERMINE_CLAN", "AVENGE"]:
+		return true
 	return false
 
 

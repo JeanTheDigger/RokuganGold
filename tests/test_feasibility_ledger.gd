@@ -1150,3 +1150,196 @@ func test_war_justification_no_ladder_without_context() -> void:
 	)
 	assert_false(result["justified"])
 	assert_false(result.has("ladder_outcome"))
+
+
+# =============================================================================
+# Ladder Context Population Tests (NPC Engine Helpers)
+# =============================================================================
+
+func test_get_war_context_no_wars() -> void:
+	var result: Dictionary = NPCDecisionEngine._get_war_context("Lion", [])
+	assert_eq(result["war_score"], 50)
+	assert_false(result["is_defending"])
+
+
+func test_get_war_context_defending() -> void:
+	var war: Dictionary = {
+		"clan_a": "Lion",
+		"clan_b": "Crane",
+		"war_score_a": 30,
+		"war_score_b": 70,
+		"initiator_clan": "Crane",
+	}
+	var result: Dictionary = NPCDecisionEngine._get_war_context("Lion", [war])
+	assert_eq(result["war_score"], 30)
+	assert_true(result["is_defending"])
+
+
+func test_get_war_context_attacking() -> void:
+	var war: Dictionary = {
+		"clan_a": "Lion",
+		"clan_b": "Crane",
+		"war_score_a": 65,
+		"war_score_b": 35,
+		"initiator_clan": "Lion",
+	}
+	var result: Dictionary = NPCDecisionEngine._get_war_context("Lion", [war])
+	assert_eq(result["war_score"], 65)
+	assert_false(result["is_defending"])
+
+
+func test_get_war_context_worst_score_across_wars() -> void:
+	var war1: Dictionary = {
+		"clan_a": "Lion",
+		"clan_b": "Crane",
+		"war_score_a": 40,
+		"war_score_b": 60,
+		"initiator_clan": "Crane",
+	}
+	var war2: Dictionary = {
+		"clan_a": "Scorpion",
+		"clan_b": "Lion",
+		"war_score_a": 70,
+		"war_score_b": 20,
+		"initiator_clan": "Scorpion",
+	}
+	var result: Dictionary = NPCDecisionEngine._get_war_context("Lion", [war1, war2])
+	assert_eq(result["war_score"], 20)
+	assert_true(result["is_defending"])
+
+
+func test_get_war_context_with_war_data_resource() -> void:
+	var wd := WarData.new()
+	wd.clan_a = "Lion"
+	wd.clan_b = "Crane"
+	wd.war_score_a = 25
+	wd.war_score_b = 75
+	wd.initiator_clan = "Crane"
+	var result: Dictionary = NPCDecisionEngine._get_war_context("Lion", [wd])
+	assert_eq(result["war_score"], 25)
+	assert_true(result["is_defending"])
+
+
+func test_has_grievance_from_disposition() -> void:
+	var c := L5RCharacterData.new()
+	c.disposition_values = {10: -35}
+	assert_true(NPCDecisionEngine._has_grievance_against_neighbors(c, []))
+
+
+func test_has_grievance_from_objective() -> void:
+	var c := L5RCharacterData.new()
+	c.current_objective = "SEEK_VENGEANCE"
+	assert_true(NPCDecisionEngine._has_grievance_against_neighbors(c, []))
+
+
+func test_no_grievance_neutral() -> void:
+	var c := L5RCharacterData.new()
+	c.disposition_values = {10: 5}
+	c.current_objective = "MAXIMIZE_PROSPERITY"
+	assert_false(NPCDecisionEngine._has_grievance_against_neighbors(c, []))
+
+
+func test_collect_allied_surplus_friend_plus() -> void:
+	var lord := L5RCharacterData.new()
+	lord.character_id = 1
+	lord.clan = "Lion"
+	lord.disposition_values = {2: 40}
+
+	var ally := L5RCharacterData.new()
+	ally.character_id = 2
+	ally.clan = "Crane"
+	ally.status = 6.0
+
+	var pd := ProvinceData.new()
+	pd.province_id = 10
+	pd.clan = "Crane"
+
+	var sd := SettlementData.new()
+	sd.province_id = 10
+	sd.rice_stockpile = 100.0
+	sd.koku_stockpile = 30.0
+	sd.farming_pu = 10
+	sd.mining_pu = 2
+	sd.town_pu = 5
+
+	var ws: Dictionary = {"characters_by_id": {2: ally}}
+	var result: Array = NPCDecisionEngine._collect_allied_surplus(
+		lord, ws, [sd], [pd],
+	)
+	assert_eq(result.size(), 1)
+	assert_eq(result[0]["clan"], "Crane")
+	assert_true(result[0]["surplus_rice"] > 0.0)
+	assert_eq(result[0]["disposition"], 40)
+
+
+func test_collect_allied_surplus_below_friend_excluded() -> void:
+	var lord := L5RCharacterData.new()
+	lord.character_id = 1
+	lord.clan = "Lion"
+	lord.disposition_values = {2: 20}
+
+	var ally := L5RCharacterData.new()
+	ally.character_id = 2
+	ally.clan = "Crane"
+	ally.status = 6.0
+
+	var ws: Dictionary = {"characters_by_id": {2: ally}}
+	var result: Array = NPCDecisionEngine._collect_allied_surplus(
+		lord, ws, [], [],
+	)
+	assert_eq(result.size(), 0)
+
+
+func test_collect_raidable_provinces_excludes_own_clan() -> void:
+	var pd := ProvinceData.new()
+	pd.province_id = 10
+	pd.clan = "Lion"
+	var result: Array = NPCDecisionEngine._collect_raidable_provinces(
+		"Lion", [pd], [], [],
+	)
+	assert_eq(result.size(), 0)
+
+
+func test_collect_raidable_provinces_marks_at_war() -> void:
+	var pd := ProvinceData.new()
+	pd.province_id = 10
+	pd.clan = "Crane"
+	var war: Dictionary = {"clan_a": "Lion", "clan_b": "Crane"}
+	var result: Array = NPCDecisionEngine._collect_raidable_provinces(
+		"Lion", [pd], [], [war],
+	)
+	assert_eq(result.size(), 1)
+	assert_true(result[0]["already_at_war"])
+
+
+func test_build_feasibility_data_populates_ladder_context() -> void:
+	var c := L5RCharacterData.new()
+	c.character_id = 1
+	c.clan = "Lion"
+	c.status = 6.0
+	var pd := ProvinceData.new()
+	pd.province_id = 10
+	pd.clan = "Lion"
+	var sd := SettlementData.new()
+	sd.province_id = 10
+	sd.rice_stockpile = 50.0
+	sd.koku_stockpile = 20.0
+	sd.farming_pu = 10
+	sd.mining_pu = 2
+	sd.town_pu = 5
+	sd.military_pu = 3
+	var ws: Dictionary = {
+		"settlements": [sd],
+		"province_data": [pd],
+		"clans": [],
+		"characters_by_id": {},
+		"current_season": "summer",
+		"active_wars": [],
+		"trade_routes": [],
+	}
+	var result: Dictionary = NPCDecisionEngine._build_feasibility_data(c, ws)
+	assert_true(result.has("ladder_context"))
+	var lc: Dictionary = result["ladder_context"]
+	assert_eq(lc["current_season"], "summer")
+	assert_eq(lc["war_score"], 50)
+	assert_false(lc["is_defending"])
