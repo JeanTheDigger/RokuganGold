@@ -101,6 +101,10 @@ static func advance_day(
 		companies,
 	)
 
+	var military_topics: Array[TopicData] = _generate_military_event_topics(
+		military_daily, military_effects, active_topics, next_topic_id, ic_day,
+	)
+
 	var commitment_results: Array[Dictionary] = _process_commitment_deadlines(
 		commitments, ic_day, characters_by_id
 	)
@@ -221,6 +225,7 @@ static func advance_day(
 		"military_daily": military_daily,
 		"military_seasonal": military_seasonal_result,
 		"military_effects": military_effects,
+		"military_topics": military_topics,
 	}
 
 
@@ -1950,6 +1955,137 @@ static func _process_military_effects(
 				results.append(r)
 
 	return results
+
+
+static func _generate_military_event_topics(
+	military_daily: Dictionary,
+	military_effects: Array[Dictionary],
+	active_topics: Array[TopicData],
+	next_topic_id: Array[int],
+	ic_day: int,
+) -> Array[TopicData]:
+	var topics: Array[TopicData] = []
+
+	var movement_results: Array = military_daily.get("movement_results", [])
+	for mr: Variant in movement_results:
+		if not (mr is Dictionary):
+			continue
+		var md: Dictionary = mr
+		if md.get("battle_triggered", false):
+			var topic: TopicData = _create_battle_topic(
+				md, next_topic_id, ic_day,
+			)
+			if topic != null:
+				active_topics.append(topic)
+				topics.append(topic)
+
+	for effect: Dictionary in military_effects:
+		var etype: String = effect.get("type", "")
+		if etype == "battle_pu_reconciliation":
+			var casualties: Dictionary = effect.get("casualties", {})
+			var total_loss: float = casualties.get("total_pu_lost", 0.0)
+			if total_loss >= 0.5:
+				var topic: TopicData = _create_heavy_casualties_topic(
+					casualties, next_topic_id, ic_day,
+				)
+				if topic != null:
+					active_topics.append(topic)
+					topics.append(topic)
+
+	var siege_results: Array = military_daily.get("siege_results", [])
+	for sr: Variant in siege_results:
+		if not (sr is Dictionary):
+			continue
+		var sd: Dictionary = sr
+		var events: Array = sd.get("events", [])
+		for evt: Variant in events:
+			if not (evt is Dictionary):
+				continue
+			var ed: Dictionary = evt
+			var topic: TopicData = _create_siege_event_topic(
+				ed, sd, next_topic_id, ic_day,
+			)
+			if topic != null:
+				active_topics.append(topic)
+				topics.append(topic)
+
+	return topics
+
+
+static func _create_battle_topic(
+	movement_result: Dictionary,
+	next_topic_id: Array[int],
+	ic_day: int,
+) -> TopicData:
+	var army_id: int = movement_result.get("army_id", -1)
+	var province_id: int = movement_result.get("arrived_province_id", -1)
+	var provinces: Array[int] = [province_id] if province_id >= 0 else []
+
+	var variant: String = "victory_clean"
+	var tier: TopicData.Tier = TopicData.Tier.TIER_3
+	var momentum: float = 30.0
+
+	var title: String = "Battle at province %d" % province_id
+
+	var topic_id: int = next_topic_id[0]
+	next_topic_id[0] += 1
+
+	var topic: TopicData = TopicMomentumSystem.create_topic(
+		topic_id, title, tier, TopicData.Category.MILITARY,
+		ic_day, momentum, provinces, "", "", -1,
+		"battle_outcome", variant,
+	)
+	topic.slug = "battle_%d_day_%d" % [army_id, ic_day]
+	return topic
+
+
+static func _create_heavy_casualties_topic(
+	casualties: Dictionary,
+	next_topic_id: Array[int],
+	ic_day: int,
+) -> TopicData:
+	var provinces: Array[int] = []
+	var by_province: Dictionary = casualties.get("pu_lost_by_province", {})
+	for pid: Variant in by_province:
+		if pid is int:
+			provinces.append(pid)
+
+	var title: String = "Heavy casualties in battle"
+	var topic_id: int = next_topic_id[0]
+	next_topic_id[0] += 1
+
+	var topic: TopicData = TopicMomentumSystem.create_topic(
+		topic_id, title, TopicData.Tier.TIER_3, TopicData.Category.MILITARY,
+		ic_day, 25.0, provinces, "", "", -1,
+		"battle_outcome", "heavy_casualties",
+	)
+	topic.slug = "casualties_day_%d" % ic_day
+	return topic
+
+
+static func _create_siege_event_topic(
+	event: Dictionary,
+	siege_result: Dictionary,
+	next_topic_id: Array[int],
+	ic_day: int,
+) -> TopicData:
+	var event_type: String = event.get("event_type", "")
+	if event_type.is_empty():
+		return null
+
+	var siege_id: int = siege_result.get("siege_id", -1)
+	var title: String = "Siege event: %s" % event_type.replace("_", " ")
+
+	var topic_id: int = next_topic_id[0]
+	next_topic_id[0] += 1
+
+	var topic: TopicData = TopicMomentumSystem.create_topic(
+		topic_id, title, TopicData.Tier.TIER_4, TopicData.Category.MILITARY,
+		ic_day, 11.0, [], "", "", -1,
+		"siege", event_type,
+	)
+	topic.slug = "siege_%d_event_%s_day_%d" % [siege_id, event_type, ic_day]
+	return topic
 
 
 static func _apply_levy_pu_effect(

@@ -911,3 +911,169 @@ func test_build_tether_result_by_army_skips_invalid() -> void:
 		tethers, results,
 	)
 	assert_eq(mapping.size(), 0)
+
+
+# -- Military Event Topic Tests --------------------------------------------------
+
+func test_generate_battle_topic_from_movement() -> void:
+	var military_daily: Dictionary = {
+		"movement_results": [
+			{"army_id": 1, "battle_triggered": true, "arrived_province_id": 5},
+		],
+		"siege_results": [],
+	}
+	var active_topics: Array[TopicData] = []
+	var next_id: Array[int] = [100]
+
+	var topics: Array[TopicData] = DayOrchestrator._generate_military_event_topics(
+		military_daily, [], active_topics, next_id, 10,
+	)
+	assert_eq(topics.size(), 1)
+	assert_eq(topics[0].topic_type, "battle_outcome")
+	assert_eq(topics[0].category, TopicData.Category.MILITARY)
+	assert_true(topics[0].momentum > 0.0)
+	assert_eq(next_id[0], 101)
+	assert_eq(active_topics.size(), 1)
+
+
+func test_generate_battle_topic_skips_no_trigger() -> void:
+	var military_daily: Dictionary = {
+		"movement_results": [
+			{"army_id": 1, "battle_triggered": false, "arrived_province_id": 5},
+		],
+		"siege_results": [],
+	}
+	var active_topics: Array[TopicData] = []
+	var next_id: Array[int] = [100]
+
+	var topics: Array[TopicData] = DayOrchestrator._generate_military_event_topics(
+		military_daily, [], active_topics, next_id, 10,
+	)
+	assert_eq(topics.size(), 0)
+
+
+func test_generate_heavy_casualties_topic() -> void:
+	var military_daily: Dictionary = {
+		"movement_results": [],
+		"siege_results": [],
+	}
+	var effects: Array[Dictionary] = [
+		{
+			"type": "battle_pu_reconciliation",
+			"casualties": {
+				"total_pu_lost": 2.5,
+				"pu_lost_by_province": {1: 1.5, 2: 1.0},
+			},
+		},
+	]
+	var active_topics: Array[TopicData] = []
+	var next_id: Array[int] = [200]
+
+	var topics: Array[TopicData] = DayOrchestrator._generate_military_event_topics(
+		military_daily, effects, active_topics, next_id, 15,
+	)
+	assert_eq(topics.size(), 1)
+	assert_eq(topics[0].variant, "heavy_casualties")
+	assert_eq(topics[0].provinces_affected.size(), 2)
+	assert_eq(next_id[0], 201)
+
+
+func test_generate_casualties_topic_skipped_for_small_loss() -> void:
+	var military_daily: Dictionary = {
+		"movement_results": [],
+		"siege_results": [],
+	}
+	var effects: Array[Dictionary] = [
+		{
+			"type": "battle_pu_reconciliation",
+			"casualties": {"total_pu_lost": 0.2},
+		},
+	]
+	var topics: Array[TopicData] = DayOrchestrator._generate_military_event_topics(
+		military_daily, effects, [], [300], 15,
+	)
+	assert_eq(topics.size(), 0)
+
+
+func test_generate_siege_event_topic() -> void:
+	var military_daily: Dictionary = {
+		"movement_results": [],
+		"siege_results": [
+			{
+				"siege_id": 1,
+				"events": [
+					{"event_type": "supply_raid"},
+				],
+			},
+		],
+	}
+	var active_topics: Array[TopicData] = []
+	var next_id: Array[int] = [400]
+
+	var topics: Array[TopicData] = DayOrchestrator._generate_military_event_topics(
+		military_daily, [], active_topics, next_id, 20,
+	)
+	assert_eq(topics.size(), 1)
+	assert_eq(topics[0].topic_type, "siege")
+	assert_eq(topics[0].variant, "supply_raid")
+	assert_eq(topics[0].tier, TopicData.Tier.TIER_4)
+	assert_eq(next_id[0], 401)
+
+
+func test_generate_siege_event_skips_empty_type() -> void:
+	var military_daily: Dictionary = {
+		"movement_results": [],
+		"siege_results": [
+			{
+				"siege_id": 1,
+				"events": [{"event_type": ""}],
+			},
+		],
+	}
+	var topics: Array[TopicData] = DayOrchestrator._generate_military_event_topics(
+		military_daily, [], [], [500], 20,
+	)
+	assert_eq(topics.size(), 0)
+
+
+func test_generate_multiple_topics_in_one_day() -> void:
+	var military_daily: Dictionary = {
+		"movement_results": [
+			{"army_id": 1, "battle_triggered": true, "arrived_province_id": 3},
+		],
+		"siege_results": [
+			{
+				"siege_id": 2,
+				"events": [{"event_type": "treachery"}],
+			},
+		],
+	}
+	var effects: Array[Dictionary] = [
+		{
+			"type": "battle_pu_reconciliation",
+			"casualties": {"total_pu_lost": 1.0, "pu_lost_by_province": {3: 1.0}},
+		},
+	]
+	var active_topics: Array[TopicData] = []
+	var next_id: Array[int] = [600]
+
+	var topics: Array[TopicData] = DayOrchestrator._generate_military_event_topics(
+		military_daily, effects, active_topics, next_id, 25,
+	)
+	assert_eq(topics.size(), 3)
+	assert_eq(next_id[0], 603)
+	assert_eq(active_topics.size(), 3)
+
+
+func test_battle_topic_has_province_affected() -> void:
+	var military_daily: Dictionary = {
+		"movement_results": [
+			{"army_id": 1, "battle_triggered": true, "arrived_province_id": 7},
+		],
+		"siege_results": [],
+	}
+	var topics: Array[TopicData] = DayOrchestrator._generate_military_event_topics(
+		military_daily, [], [], [700], 30,
+	)
+	assert_eq(topics[0].provinces_affected.size(), 1)
+	assert_eq(topics[0].provinces_affected[0], 7)
