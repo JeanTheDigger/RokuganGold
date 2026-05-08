@@ -265,14 +265,13 @@ single-dice-entry-point and server-authoritative constraints.
   Measurement pressure (high-roll-no-effect detection), approach assessment
   tags (EFFECTIVE/CAPPED/INEFFECTIVE), penalty registry with seasonal decay.
   Scoring modifier: +15 measurement bonus, −15 approach penalty (halved after
-  1 season, cleared after 2), +10 alternative bonus. NOT YET WIRED into
-  NPC Phase 5 scoring — standalone tested only.
+  1 season, cleared after 2), +10 alternative bonus.
 
 ### Commitment Registry (s55.31)
 - **simulation/commitment_registry.gd** — Six commitment types, consequence
   tables for 4 breaking modes × 3 tiers. Force majeure with personality-
   modified retroactive forgiveness. Phase 5 at-risk penalties (−5/−15/−25
-  by tier, cap −40). NOT YET WIRED into NPC Phase 5 scoring.
+  by tier, cap −40).
 - **shared/commitment_data.gd** — CommitmentData Resource.
 
 ### Military Hierarchy (s57.21)
