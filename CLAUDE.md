@@ -468,6 +468,7 @@ All in /tests/, one file per system:
 - test_army_movement_system.gd (~40 tests)
 - test_levy_system.gd (~35 tests)
 - test_military_promotion_system.gd (~35 tests)
+- test_order_system.gd (~30 tests)
 
 ### Festival System (s11.5)
 - **simulation/festival_system.gd** — Empire-wide canonical festivals, Rokuyo
@@ -1442,10 +1443,9 @@ All in /tests/, one file per system:
   clan elite) and `BattleTerrainType` (6 values).
 - **shared/military_unit_data.gd** — CompanyData gains `unit_type` and
   `source_province_id` fields.
-  Deferred (Phase 2+): military service assignment, order system,
-  Shinjo auto-flank behavior, ASCII battle events / Heroic Opportunities,
-  PU reconciliation wiring into ResourceTick, Shadowlands terrain zones,
-  naval combat bonuses.
+  Deferred (Phase 2+): military service assignment, Shinjo auto-flank
+  behavior, ASCII battle events / Heroic Opportunities, PU reconciliation
+  wiring into ResourceTick, Shadowlands terrain zones, naval combat bonuses.
 
 ### Army Upkeep & Deprivation (s4.3, s11.7)
 - **simulation/army_upkeep_system.gd** — Army upkeep costs, iron degradation,
@@ -1570,6 +1570,19 @@ All in /tests/, one file per system:
   command. Demotion: −0.5 Glory, clears rank and commanded_unit_id. Removal
   trigger: disposition below −10. Vacancy detection scans units for empty
   commander_id slots.
+
+### Order System (s11.7a)
+- **simulation/order_system.gd** — Military command order system per GDD s11.7a.
+  Pure static functions; caller owns order state dictionaries.
+  Order budgets by rank: Chui 5, Taisa 10, Shireikan 10, Rikugunshokan 15,
+  feudal lord 10. 8 order types: Scout, Hold Position, Garrison Province,
+  March To, Recall, Detach to Support, Standing Patrol, Deliver Letter.
+  Same-location orders deliver instantly; remote orders require messenger travel
+  (1 sub-tile per real day). `issue_order()` validates budget, sets delivery
+  delay. `process_pending_orders()` decrements daily, returns delivered orders.
+  Standing patrol orders persist until cancelled (1 order to set up, continues
+  until recalled). `cancel_standing_order()` removes by target character.
+  `reset_daily_orders()` clears used count each real day.
 
 ### What's Next
 1. World generation coordinate system and adjacency
