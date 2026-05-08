@@ -471,7 +471,7 @@ All in /tests/, one file per system:
 - test_order_system.gd (~30 tests)
 - test_military_service_system.gd (~35 tests)
 - test_pu_reconciliation.gd (~30 tests)
-- test_military_wiring.gd (~50 tests)
+- test_military_wiring.gd (~57 tests)
 
 ### Festival System (s11.5)
 - **simulation/festival_system.gd** — Empire-wide canonical festivals, Rokuyo
@@ -1793,6 +1793,9 @@ The following subsystems are now integrated into the NPC decision loop:
   Rice upkeep deduction: `_deduct_rice_upkeep()` deducts seasonal rice costs
   from clan settlements' `rice_stockpile` using `ClanData.province_ids` to
   locate the correct settlements. Deduction caps at available stockpile.
+  Koku upkeep deduction: `_deduct_koku_upkeep()` deducts garrison (0.20/PU/
+  season) and ronin (1.50/season) koku costs from clan settlements'
+  `koku_stockpile`. Units with zero koku cost skip deduction.
 
 ## Resolved Design Decisions
 
