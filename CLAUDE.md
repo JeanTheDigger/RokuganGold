@@ -446,6 +446,7 @@ All in /tests/, one file per system:
 - test_togashi_oversight.gd (~49 tests)
 - test_phoenix_council.gd (~51 tests)
 - test_intra_clan_civil_war.gd (~59 tests)
+- test_event_durations.gd (~25 tests)
 - test_performative_arts.gd (~30 tests)
 - test_performative_arts_wiring.gd (~10 tests)
 - test_succession_system.gd (~60 tests)
@@ -1230,6 +1231,15 @@ All in /tests/, one file per system:
   State persisted to `user://simulation/scheduler_state.txt`.
   `force_tick()` for manual advancement. `tick_completed` signal emitted
   after each advancement.
+
+### Event Durations (s11.7b)
+- **simulation/event_durations.gd** — Reference constants for major event
+  pacing per GDD s11.7b. Six EventType values (MASS_BATTLE, SIEGE,
+  COURT_SEASON, FESTIVAL, DIPLOMATIC_SUMMIT, TOURNAMENT) with min/max OOC
+  day durations. OOC-to-IC ratio = 4 (1 OOC day = 4 IC days). Durations:
+  battle 1/1, siege 15/30, court 30/30, festival 3/3, summit 5/7,
+  tournament 3/5. `get_ooc_duration()`, `get_ic_duration()`, `get_ic_ticks()`,
+  `is_variable_duration()`, `get_all_durations()`.
 
 ### Performative Arts System (s12.4)
 - **simulation/performative_arts_system.gd** — Court performance mechanics per
