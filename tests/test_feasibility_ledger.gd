@@ -1343,3 +1343,295 @@ func test_build_feasibility_data_populates_ladder_context() -> void:
 	assert_eq(lc["current_season"], "summer")
 	assert_eq(lc["war_score"], 50)
 	assert_false(lc["is_defending"])
+
+
+# =============================================================================
+# Phase 3: Mid-Campaign Supply Status Monitor Tests
+# =============================================================================
+
+# -- Home Front Status ---------------------------------------------------------
+
+func test_home_front_clear() -> void:
+	var s := _make_settlement(1, 50.0, 10, 5, 5, 2)
+	var result: Dictionary = FeasibilityLedger.assess_home_front([s])
+	assert_eq(result["status"], FeasibilityLedger.HomeFrontStatus.CLEAR)
+
+
+func test_home_front_shortage() -> void:
+	var s := _make_settlement(1, 10.0, 10, 5, 5, 2)
+	var result: Dictionary = FeasibilityLedger.assess_home_front([s])
+	assert_eq(result["status"], FeasibilityLedger.HomeFrontStatus.SHORTAGE)
+
+
+func test_home_front_hunger() -> void:
+	var s := _make_settlement(1, 5.0, 10, 5, 5, 2)
+	var result: Dictionary = FeasibilityLedger.assess_home_front([s])
+	assert_eq(result["status"], FeasibilityLedger.HomeFrontStatus.HUNGER)
+
+
+func test_home_front_famine() -> void:
+	var s := _make_settlement(1, 0.0, 10, 5, 5, 2)
+	var result: Dictionary = FeasibilityLedger.assess_home_front([s])
+	assert_eq(result["status"], FeasibilityLedger.HomeFrontStatus.FAMINE)
+
+
+func test_home_front_worst_settlement_wins() -> void:
+	var s1 := _make_settlement(1, 50.0, 10, 5, 5, 2)
+	var s2 := _make_settlement(2, 0.0, 10, 5, 5, 2)
+	var result: Dictionary = FeasibilityLedger.assess_home_front([s1, s2])
+	assert_eq(result["status"], FeasibilityLedger.HomeFrontStatus.FAMINE)
+
+
+# -- Army Supply Status --------------------------------------------------------
+
+func test_army_supplied() -> void:
+	var result: Dictionary = FeasibilityLedger.assess_army_supply(0, true)
+	assert_eq(result["status"], FeasibilityLedger.ArmySupplyStatus.SUPPLIED)
+
+
+func test_army_unsupplied_tether_cut() -> void:
+	var result: Dictionary = FeasibilityLedger.assess_army_supply(2, true)
+	assert_eq(result["status"], FeasibilityLedger.ArmySupplyStatus.UNSUPPLIED)
+
+
+func test_army_unsupplied_no_rice() -> void:
+	var result: Dictionary = FeasibilityLedger.assess_army_supply(0, false)
+	assert_eq(result["status"], FeasibilityLedger.ArmySupplyStatus.UNSUPPLIED)
+
+
+# -- Iron Upkeep Status --------------------------------------------------------
+
+func test_iron_maintained() -> void:
+	var result: Dictionary = FeasibilityLedger.assess_iron_upkeep(5.0, 3.0)
+	assert_eq(result["status"], FeasibilityLedger.IronUpkeepStatus.MAINTAINED)
+	assert_eq(result["deficit"], 0.0)
+
+
+func test_iron_degrading() -> void:
+	var result: Dictionary = FeasibilityLedger.assess_iron_upkeep(2.0, 5.0)
+	assert_eq(result["status"], FeasibilityLedger.IronUpkeepStatus.DEGRADING)
+	assert_eq(result["deficit"], 3.0)
+
+
+# -- Campaign Decision Matrix --------------------------------------------------
+
+func test_clear_supplied_continue() -> void:
+	var d: Dictionary = FeasibilityLedger.determine_campaign_decision(
+		FeasibilityLedger.HomeFrontStatus.CLEAR,
+		FeasibilityLedger.ArmySupplyStatus.SUPPLIED,
+		"", 50,
+	)
+	assert_eq(d["decision"], FeasibilityLedger.CampaignDecision.CONTINUE)
+
+
+func test_shortage_winning_push_to_finish() -> void:
+	var d: Dictionary = FeasibilityLedger.determine_campaign_decision(
+		FeasibilityLedger.HomeFrontStatus.SHORTAGE,
+		FeasibilityLedger.ArmySupplyStatus.SUPPLIED,
+		"", 70,
+	)
+	assert_eq(d["decision"], FeasibilityLedger.CampaignDecision.PUSH_TO_FINISH)
+
+
+func test_shortage_losing_seek_peace() -> void:
+	var d: Dictionary = FeasibilityLedger.determine_campaign_decision(
+		FeasibilityLedger.HomeFrontStatus.SHORTAGE,
+		FeasibilityLedger.ArmySupplyStatus.SUPPLIED,
+		"", 40,
+	)
+	assert_eq(d["decision"], FeasibilityLedger.CampaignDecision.SEEK_PEACE)
+
+
+func test_shortage_yu_ignores() -> void:
+	var d: Dictionary = FeasibilityLedger.determine_campaign_decision(
+		FeasibilityLedger.HomeFrontStatus.SHORTAGE,
+		FeasibilityLedger.ArmySupplyStatus.SUPPLIED,
+		"Yu", 30,
+	)
+	assert_eq(d["decision"], FeasibilityLedger.CampaignDecision.CONTINUE)
+
+
+func test_shortage_kyoryoku_ignores() -> void:
+	var d: Dictionary = FeasibilityLedger.determine_campaign_decision(
+		FeasibilityLedger.HomeFrontStatus.SHORTAGE,
+		FeasibilityLedger.ArmySupplyStatus.SUPPLIED,
+		"Kyoryoku", 30,
+	)
+	assert_eq(d["decision"], FeasibilityLedger.CampaignDecision.CONTINUE)
+
+
+func test_shortage_ishi_ignores() -> void:
+	var d: Dictionary = FeasibilityLedger.determine_campaign_decision(
+		FeasibilityLedger.HomeFrontStatus.SHORTAGE,
+		FeasibilityLedger.ArmySupplyStatus.SUPPLIED,
+		"Ishi", 30,
+	)
+	assert_eq(d["decision"], FeasibilityLedger.CampaignDecision.CONTINUE)
+
+
+func test_hunger_urgent_peace() -> void:
+	var d: Dictionary = FeasibilityLedger.determine_campaign_decision(
+		FeasibilityLedger.HomeFrontStatus.HUNGER,
+		FeasibilityLedger.ArmySupplyStatus.SUPPLIED,
+		"", 50,
+	)
+	assert_eq(d["decision"], FeasibilityLedger.CampaignDecision.URGENT_PEACE)
+
+
+func test_hunger_ishi_continues() -> void:
+	var d: Dictionary = FeasibilityLedger.determine_campaign_decision(
+		FeasibilityLedger.HomeFrontStatus.HUNGER,
+		FeasibilityLedger.ArmySupplyStatus.SUPPLIED,
+		"Ishi", 50,
+	)
+	assert_eq(d["decision"], FeasibilityLedger.CampaignDecision.CONTINUE)
+
+
+func test_hunger_yu_does_not_override() -> void:
+	var d: Dictionary = FeasibilityLedger.determine_campaign_decision(
+		FeasibilityLedger.HomeFrontStatus.HUNGER,
+		FeasibilityLedger.ArmySupplyStatus.SUPPLIED,
+		"Yu", 50,
+	)
+	assert_eq(d["decision"], FeasibilityLedger.CampaignDecision.URGENT_PEACE)
+
+
+func test_famine_immediate_peace() -> void:
+	var d: Dictionary = FeasibilityLedger.determine_campaign_decision(
+		FeasibilityLedger.HomeFrontStatus.FAMINE,
+		FeasibilityLedger.ArmySupplyStatus.SUPPLIED,
+		"", 50,
+	)
+	assert_eq(d["decision"], FeasibilityLedger.CampaignDecision.IMMEDIATE_PEACE)
+
+
+func test_famine_ishi_continues() -> void:
+	var d: Dictionary = FeasibilityLedger.determine_campaign_decision(
+		FeasibilityLedger.HomeFrontStatus.FAMINE,
+		FeasibilityLedger.ArmySupplyStatus.SUPPLIED,
+		"Ishi", 50,
+	)
+	assert_eq(d["decision"], FeasibilityLedger.CampaignDecision.CONTINUE)
+
+
+func test_famine_yu_seeks_peace() -> void:
+	var d: Dictionary = FeasibilityLedger.determine_campaign_decision(
+		FeasibilityLedger.HomeFrontStatus.FAMINE,
+		FeasibilityLedger.ArmySupplyStatus.SUPPLIED,
+		"Yu", 50,
+	)
+	assert_eq(d["decision"], FeasibilityLedger.CampaignDecision.IMMEDIATE_PEACE)
+
+
+func test_supply_cut_restore_tether() -> void:
+	var d: Dictionary = FeasibilityLedger.determine_campaign_decision(
+		FeasibilityLedger.HomeFrontStatus.CLEAR,
+		FeasibilityLedger.ArmySupplyStatus.UNSUPPLIED,
+		"", 50, 0,
+	)
+	assert_eq(d["decision"], FeasibilityLedger.CampaignDecision.RESTORE_TETHER)
+	assert_eq(d["hold_seasons_remaining"], 1)
+
+
+func test_supply_cut_retreat_after_hold() -> void:
+	var d: Dictionary = FeasibilityLedger.determine_campaign_decision(
+		FeasibilityLedger.HomeFrontStatus.CLEAR,
+		FeasibilityLedger.ArmySupplyStatus.UNSUPPLIED,
+		"", 50, 1,
+	)
+	assert_eq(d["decision"], FeasibilityLedger.CampaignDecision.RETREAT)
+
+
+func test_supply_cut_ketsui_holds_longer() -> void:
+	var d: Dictionary = FeasibilityLedger.determine_campaign_decision(
+		FeasibilityLedger.HomeFrontStatus.CLEAR,
+		FeasibilityLedger.ArmySupplyStatus.UNSUPPLIED,
+		"Ketsui", 50, 1,
+	)
+	assert_eq(d["decision"], FeasibilityLedger.CampaignDecision.RESTORE_TETHER)
+	assert_eq(d["hold_seasons_remaining"], 1)
+
+
+func test_supply_cut_ketsui_retreats_after_2() -> void:
+	var d: Dictionary = FeasibilityLedger.determine_campaign_decision(
+		FeasibilityLedger.HomeFrontStatus.CLEAR,
+		FeasibilityLedger.ArmySupplyStatus.UNSUPPLIED,
+		"Ketsui", 50, 2,
+	)
+	assert_eq(d["decision"], FeasibilityLedger.CampaignDecision.RETREAT)
+
+
+# -- Retreat Target Selection --------------------------------------------------
+
+func test_retreat_finds_rich_province() -> void:
+	var provinces: Array = [
+		{"province_id": 1, "distance": 1, "rice_per_pu": 2.0, "has_forge": false},
+		{"province_id": 2, "distance": 2, "rice_per_pu": 0.5, "has_forge": true},
+	]
+	var result: Dictionary = FeasibilityLedger.find_retreat_target(10, provinces)
+	assert_true(result["found"])
+	assert_false(result["should_disband"])
+
+
+func test_retreat_disbands_when_no_target() -> void:
+	var provinces: Array = [
+		{"province_id": 1, "distance": 3, "rice_per_pu": 2.0, "has_forge": false},
+	]
+	var result: Dictionary = FeasibilityLedger.find_retreat_target(10, provinces)
+	assert_false(result["found"])
+	assert_true(result["should_disband"])
+
+
+func test_retreat_skips_poor_provinces() -> void:
+	var provinces: Array = [
+		{"province_id": 1, "distance": 1, "rice_per_pu": 0.5, "has_forge": false},
+	]
+	var result: Dictionary = FeasibilityLedger.find_retreat_target(10, provinces)
+	assert_false(result["found"])
+	assert_true(result["should_disband"])
+
+
+func test_retreat_prefers_forge_province() -> void:
+	var provinces: Array = [
+		{"province_id": 1, "distance": 1, "rice_per_pu": 1.5, "has_forge": false},
+		{"province_id": 2, "distance": 1, "rice_per_pu": 0.8, "has_forge": true},
+	]
+	var result: Dictionary = FeasibilityLedger.find_retreat_target(10, provinces)
+	assert_true(result["found"])
+	assert_eq(result["province_id"], 2)
+
+
+# -- Full Supply Status Check --------------------------------------------------
+
+func test_full_supply_check_all_clear() -> void:
+	var s := _make_settlement(1, 50.0, 10, 5, 5, 2)
+	var inputs: Dictionary = {
+		"controlled_settlements": [s],
+		"tether_state": 0,
+		"source_has_rice": true,
+		"clan_iron_stockpile": 5.0,
+		"total_iron_upkeep": 3.0,
+		"primary_virtue": "",
+		"war_score": 50,
+	}
+	var result: Dictionary = FeasibilityLedger.run_supply_status_check(inputs)
+	assert_eq(result["home_front"]["status"], FeasibilityLedger.HomeFrontStatus.CLEAR)
+	assert_eq(result["army_supply"]["status"], FeasibilityLedger.ArmySupplyStatus.SUPPLIED)
+	assert_eq(result["iron_upkeep"]["status"], FeasibilityLedger.IronUpkeepStatus.MAINTAINED)
+	assert_eq(result["decision"]["decision"], FeasibilityLedger.CampaignDecision.CONTINUE)
+
+
+func test_full_supply_check_famine_retreat() -> void:
+	var s := _make_settlement(1, 0.0, 10, 5, 5, 2)
+	var inputs: Dictionary = {
+		"controlled_settlements": [s],
+		"tether_state": 2,
+		"source_has_rice": false,
+		"clan_iron_stockpile": 0.0,
+		"total_iron_upkeep": 5.0,
+		"primary_virtue": "Jin",
+		"war_score": 30,
+		"seasons_tether_cut": 2,
+	}
+	var result: Dictionary = FeasibilityLedger.run_supply_status_check(inputs)
+	assert_eq(result["decision"]["decision"], FeasibilityLedger.CampaignDecision.RETREAT)

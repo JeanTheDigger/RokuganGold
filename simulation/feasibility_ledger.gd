@@ -850,3 +850,248 @@ static func _extract_side_effects(rung_result: Dictionary) -> Dictionary:
 	if rung_result.get("desperation_levy", false):
 		effects["desperation_levy"] = true
 	return effects
+
+
+# =============================================================================
+# Phase 3: Mid-Campaign Supply Status Monitor (s4.3.17)
+# =============================================================================
+# Seasonal survival assessment of fielded armies and settlements feeding them.
+# Three checks: Home Front Status, Army Supply Status, Iron Upkeep Status.
+# Response matrix combines Home Front × Army Supply to produce AI decisions.
+
+enum HomeFrontStatus {
+	CLEAR,
+	SHORTAGE,
+	HUNGER,
+	FAMINE,
+}
+
+enum ArmySupplyStatus {
+	SUPPLIED,
+	UNSUPPLIED,
+}
+
+enum IronUpkeepStatus {
+	MAINTAINED,
+	DEGRADING,
+}
+
+enum CampaignDecision {
+	CONTINUE,
+	PUSH_TO_FINISH,
+	SEEK_PEACE,
+	URGENT_PEACE,
+	IMMEDIATE_PEACE,
+	RESTORE_TETHER,
+	RETREAT,
+}
+
+
+const SHORTAGE_RICE_PER_PU: float = 1.00
+const HUNGER_RICE_PER_PU: float = 0.50
+const FAMINE_RICE_PER_PU: float = 0.0
+
+const WINNING_THRESHOLD: int = 65
+
+const SHORTAGE_IGNORE_VIRTUES: Array[String] = ["Yu", "Kyoryoku", "Ishi"]
+const HUNGER_CONTINUE_VIRTUES: Array[String] = ["Ishi"]
+const FAMINE_CONTINUE_VIRTUES: Array[String] = ["Ishi"]
+
+const TETHER_HOLD_EXTRA_VIRTUES: Array[String] = ["Ketsui"]
+const TETHER_HOLD_SEASONS_DEFAULT: int = 1
+const TETHER_HOLD_SEASONS_KETSUI: int = 2
+
+
+# -- Check 1: Home Front Status -----------------------------------------------
+
+static func assess_home_front(
+	controlled_settlements: Array,
+) -> Dictionary:
+	var worst: int = HomeFrontStatus.CLEAR
+	var worst_settlement_id: int = -1
+
+	for s: Variant in controlled_settlements:
+		if not (s is SettlementData):
+			continue
+		var sd: SettlementData = s
+		var civilian_pu: float = float(sd.farming_pu + sd.mining_pu + sd.town_pu)
+		if civilian_pu <= 0.0:
+			continue
+		var rice_per_pu: float = sd.rice_stockpile / civilian_pu
+		var status: int = HomeFrontStatus.CLEAR
+		if rice_per_pu <= FAMINE_RICE_PER_PU:
+			status = HomeFrontStatus.FAMINE
+		elif rice_per_pu <= HUNGER_RICE_PER_PU:
+			status = HomeFrontStatus.HUNGER
+		elif rice_per_pu < SHORTAGE_RICE_PER_PU:
+			status = HomeFrontStatus.SHORTAGE
+		if status > worst:
+			worst = status
+			worst_settlement_id = sd.settlement_id
+
+	return {
+		"status": worst,
+		"worst_settlement_id": worst_settlement_id,
+	}
+
+
+# -- Check 2: Army Supply Status -----------------------------------------------
+
+static func assess_army_supply(
+	tether_state: int,
+	source_has_rice: bool,
+) -> Dictionary:
+	var supplied: bool = tether_state == 0 and source_has_rice
+	return {
+		"status": ArmySupplyStatus.SUPPLIED if supplied else ArmySupplyStatus.UNSUPPLIED,
+		"tether_intact": tether_state == 0,
+		"source_has_rice": source_has_rice,
+	}
+
+
+# -- Check 3: Iron Upkeep Status -----------------------------------------------
+
+static func assess_iron_upkeep(
+	clan_iron_stockpile: float,
+	total_iron_upkeep: float,
+) -> Dictionary:
+	var maintained: bool = clan_iron_stockpile >= total_iron_upkeep
+	return {
+		"status": IronUpkeepStatus.MAINTAINED if maintained else IronUpkeepStatus.DEGRADING,
+		"deficit": maxf(0.0, total_iron_upkeep - clan_iron_stockpile),
+	}
+
+
+# -- Response Matrix -----------------------------------------------------------
+
+static func determine_campaign_decision(
+	home_front: int,
+	army_supply: int,
+	primary_virtue: String,
+	war_score: int,
+	seasons_tether_cut: int = 0,
+) -> Dictionary:
+	if army_supply == ArmySupplyStatus.UNSUPPLIED:
+		var hold_limit: int = TETHER_HOLD_SEASONS_DEFAULT
+		if primary_virtue in TETHER_HOLD_EXTRA_VIRTUES:
+			hold_limit = TETHER_HOLD_SEASONS_KETSUI
+		if seasons_tether_cut < hold_limit:
+			return {
+				"decision": CampaignDecision.RESTORE_TETHER,
+				"reason": "supply_cut",
+				"hold_seasons_remaining": hold_limit - seasons_tether_cut,
+			}
+		return {
+			"decision": CampaignDecision.RETREAT,
+			"reason": "tether_restoration_failed",
+		}
+
+	match home_front:
+		HomeFrontStatus.CLEAR:
+			return {
+				"decision": CampaignDecision.CONTINUE,
+				"reason": "all_clear",
+			}
+
+		HomeFrontStatus.SHORTAGE:
+			if primary_virtue in SHORTAGE_IGNORE_VIRTUES:
+				return {
+					"decision": CampaignDecision.CONTINUE,
+					"reason": "personality_ignores_shortage",
+				}
+			if war_score >= WINNING_THRESHOLD:
+				return {
+					"decision": CampaignDecision.PUSH_TO_FINISH,
+					"reason": "shortage_but_winning",
+				}
+			return {
+				"decision": CampaignDecision.SEEK_PEACE,
+				"reason": "shortage_not_winning",
+			}
+
+		HomeFrontStatus.HUNGER:
+			if primary_virtue in HUNGER_CONTINUE_VIRTUES:
+				return {
+					"decision": CampaignDecision.CONTINUE,
+					"reason": "personality_ignores_hunger",
+				}
+			return {
+				"decision": CampaignDecision.URGENT_PEACE,
+				"reason": "hunger_at_home",
+			}
+
+		HomeFrontStatus.FAMINE:
+			if primary_virtue in FAMINE_CONTINUE_VIRTUES:
+				return {
+					"decision": CampaignDecision.CONTINUE,
+					"reason": "personality_ignores_famine",
+				}
+			return {
+				"decision": CampaignDecision.IMMEDIATE_PEACE,
+				"reason": "famine_at_home",
+			}
+
+	return {
+		"decision": CampaignDecision.CONTINUE,
+		"reason": "default",
+	}
+
+
+# -- Retreat Target Selection --------------------------------------------------
+
+static func find_retreat_target(
+	army_province_id: int,
+	friendly_provinces: Array,
+	max_distance: int = 2,
+) -> Dictionary:
+	var best_id: int = -1
+	var best_score: float = -1.0
+
+	for fp: Variant in friendly_provinces:
+		if not (fp is Dictionary):
+			continue
+		var fpd: Dictionary = fp
+		var dist: int = fpd.get("distance", 99)
+		if dist > max_distance:
+			continue
+		var rice_per_pu: float = fpd.get("rice_per_pu", 0.0)
+		var has_forge: bool = fpd.get("has_forge", false)
+		if rice_per_pu < 1.0 and not has_forge:
+			continue
+		var score: float = rice_per_pu + (5.0 if has_forge else 0.0) - float(dist)
+		if score > best_score:
+			best_score = score
+			best_id = fpd.get("province_id", -1)
+
+	if best_id < 0:
+		return {"found": false, "should_disband": true}
+	return {"found": true, "province_id": best_id, "should_disband": false}
+
+
+# -- Full Supply Status Check --------------------------------------------------
+
+static func run_supply_status_check(inputs: Dictionary) -> Dictionary:
+	var settlements: Array = inputs.get("controlled_settlements", [])
+	var tether_state: int = inputs.get("tether_state", 0)
+	var source_has_rice: bool = inputs.get("source_has_rice", true)
+	var clan_iron: float = inputs.get("clan_iron_stockpile", 0.0)
+	var total_iron_upkeep: float = inputs.get("total_iron_upkeep", 0.0)
+	var primary_virtue: String = inputs.get("primary_virtue", "")
+	var war_score: int = inputs.get("war_score", 50)
+	var seasons_tether_cut: int = inputs.get("seasons_tether_cut", 0)
+
+	var home: Dictionary = assess_home_front(settlements)
+	var army: Dictionary = assess_army_supply(tether_state, source_has_rice)
+	var iron: Dictionary = assess_iron_upkeep(clan_iron, total_iron_upkeep)
+
+	var decision: Dictionary = determine_campaign_decision(
+		home["status"], army["status"], primary_virtue, war_score,
+		seasons_tether_cut,
+	)
+
+	return {
+		"home_front": home,
+		"army_supply": army,
+		"iron_upkeep": iron,
+		"decision": decision,
+	}

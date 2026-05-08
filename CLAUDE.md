@@ -475,7 +475,7 @@ All in /tests/, one file per system:
 - test_war_system.gd (~61 tests)
 - test_war_justification.gd (~55 tests)
 - test_war_termination.gd (~46 tests)
-- test_feasibility_ledger.gd (~115 tests)
+- test_feasibility_ledger.gd (~145 tests)
 
 ### Festival System (s11.5)
 - **simulation/festival_system.gd** — Empire-wide canonical festivals, Rokuyo
@@ -1815,9 +1815,22 @@ All in /tests/, one file per system:
   virtue (Yu/Chugi/Ketsui/Kyoryoku/Ishi) or Desperate war score (<25) while
   defending. Jin lords pay extra −1.0 Honor. Tier 3 topic.
   Returns `{outcome, rungs_tried, final_ledger, side_effects}`.
-  Deferred: Phase 3 Mid-Campaign Supply Monitor, Phase 4 player-initiated
-  starvation strategies, forge infrastructure for arms production projection,
-  stipend obligations.
+  Phase 3 Mid-Campaign Supply Status Monitor: seasonal survival assessment
+  for fielded armies. Three checks: Home Front Status (Clear/Shortage/Hunger/
+  Famine by worst-case settlement rice-per-PU), Army Supply Status (Supplied/
+  Unsupplied from tether state + source rice), Iron Upkeep Status (Maintained/
+  Degrading from clan iron vs total upkeep). Response matrix combines Home
+  Front × Army Supply: Clear+Supplied=CONTINUE, Shortage+winning(65+)=
+  PUSH_TO_FINISH, Shortage+losing=SEEK_PEACE, Hunger=URGENT_PEACE,
+  Famine=IMMEDIATE_PEACE. Personality overrides: Yu/Kyoryoku/Ishi ignore
+  Shortage; only Ishi ignores Hunger and Famine (even Yu seeks peace at
+  Famine). Supply cut=RESTORE_TETHER for 1 season (Ketsui holds 2), then
+  RETREAT. Retreat target selection: nearest friendly province (≤2 distance)
+  with rice≥1.0/PU or forge; disband if no target found (generates Tier 4
+  topic). `run_supply_status_check(inputs)` is the top-level entry point.
+  Deferred: Phase 4 player-initiated starvation strategies, forge
+  infrastructure for arms production projection, stipend obligations,
+  wiring into DayOrchestrator seasonal tick.
 
 ### War Trigger Pipeline (Metadata Population)
 - **Phase 3 metadata population** — `_populate_action_metadata()` in
