@@ -471,7 +471,7 @@ All in /tests/, one file per system:
 - test_order_system.gd (~30 tests)
 - test_military_service_system.gd (~35 tests)
 - test_pu_reconciliation.gd (~30 tests)
-- test_military_wiring.gd (~107 tests)
+- test_military_wiring.gd (~111 tests)
 - test_war_system.gd (~61 tests)
 - test_war_justification.gd (~45 tests)
 - test_war_termination.gd (~46 tests)
@@ -1764,6 +1764,26 @@ All in /tests/, one file per system:
   Return dict gains `trade_route_results`.
   Deferred: Peace court mechanics (formal court session), Imperial edict
   action path, territory transfer mutations on settlement/province data.
+
+### War Trigger Pipeline (Metadata Population)
+- **Phase 3 metadata population** — `_populate_action_metadata()` in
+  npc_decision_engine.gd populates action-specific metadata during Phase 3
+  option generation. DECLARE_WAR gets `standing_objective` (from
+  `need.target_intent`), `target_clan` (from need or province statuses),
+  `intended_tier`, `authority_level`. NEGOTIATE_SURRENDER gets `war_ref`
+  (WarData reference from `_war_ref` key in context war dicts),
+  `target_clan`, `target_virtue`, `hostage_held`, `superior_pressuring`.
+- **Metadata flow** — `execute_action()` copies metadata to decision dict
+  when non-empty. `_execute_decision()` in NPCWaveResolver copies metadata
+  from decision to ScoredAction before ActionExecutor receives it.
+- **ObjectiveDecomposer target_intent** — EXPAND_TERRITORY and
+  MILITARY_DOMINANCE decomposition trees produce INITIATE_WAR_CHECK needs
+  with `target_intent` carrying the originating standing objective type.
+  MILITARY_DOMINANCE gains a preemptive strike path when lord is behind
+  rival (dominance_ratio 0.7–1.0) and has no levy PU.
+- **war_system.gd** — `to_context_dict()` gains `_war_ref` key carrying
+  the WarData reference for NEGOTIATE_SURRENDER metadata lookup.
+- NEGOTIATE_SURRENDER added to AT_OWN_HOLDINGS action list.
 
 ### What's Next
 1. World generation coordinate system and adjacency
