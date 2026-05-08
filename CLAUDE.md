@@ -471,7 +471,7 @@ All in /tests/, one file per system:
 - test_order_system.gd (~30 tests)
 - test_military_service_system.gd (~35 tests)
 - test_pu_reconciliation.gd (~30 tests)
-- test_military_wiring.gd (~111 tests)
+- test_military_wiring.gd (~127 tests)
 - test_war_system.gd (~61 tests)
 - test_war_justification.gd (~45 tests)
 - test_war_termination.gd (~46 tests)
@@ -1784,6 +1784,17 @@ All in /tests/, one file per system:
 - **war_system.gd** — `to_context_dict()` gains `_war_ref` key carrying
   the WarData reference for NEGOTIATE_SURRENDER metadata lookup.
 - NEGOTIATE_SURRENDER added to AT_OWN_HOLDINGS action list.
+- **Standing objective war check paths** — 7 additional standing objectives
+  now produce INITIATE_WAR_CHECK needs: SEEK_VENGEANCE (clan-targeted, all
+  tiers), UNDERMINE_CLAN (clan-targeted, Tier 3/2), PREVENT_SHORTAGE (when
+  rice < 1 season, Tier 3 only), BUILD_STRONGEST_FORCE (when all training
+  done, Tier 3 proving exercise), ADVANCE_GLORY (bushi lords only, Tier 3),
+  ADVANCE_FAMILY (lords at own holdings, Tier 3), HONOR_ANCESTORS (requires
+  active wars or escalating conflicts, all tiers). All gate on is_lord +
+  AT_OWN_HOLDINGS + weak neighbor province availability.
+- **ProvinceStatus.clan** — `NPCDataStructures.ProvinceStatus` gains `clan`
+  field for clan-targeted province lookups. New helper
+  `_find_weak_neighbor_province_for_clan()` filters by target clan.
 
 ### What's Next
 1. World generation coordinate system and adjacency
