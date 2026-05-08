@@ -1527,9 +1527,14 @@ static func _process_army_movements(
 ) -> Array[Dictionary]:
 	var results: Array[Dictionary] = []
 	for army: Dictionary in active_armies:
-		if not army.get("is_marching", false):
+		if not army.get("is_moving", false):
 			continue
 		var r: Dictionary = ArmyMovementSystem.process_movement_tick(army)
+		if r.get("arrived", false):
+			var battle_check: Dictionary = ArmyMovementSystem.check_battle_trigger(
+				r, active_armies,
+			)
+			r["battle_check"] = battle_check
 		results.append(r)
 	return results
 
@@ -1864,6 +1869,67 @@ static func _apply_battle_pu_reconciliation(
 		"casualties": r.get("casualties", {}),
 		"recovery": r.get("recovery", {}),
 	}
+
+
+# -- Full Battle Resolution Pipeline -------------------------------------------
+
+static func resolve_and_reconcile_battle(
+	attacker_states: Array[Dictionary],
+	defender_states: Array[Dictionary],
+	terrain: Enums.BattleTerrainType,
+	dice_engine: DiceEngine,
+	settlements: Array[SettlementData],
+	is_amphibious: bool = false,
+	fortification_bonus: int = 0,
+) -> Dictionary:
+	var battle_result: Dictionary = ArmyCombatSystem.resolve_battle(
+		attacker_states, defender_states, terrain, dice_engine,
+		is_amphibious, fortification_bonus,
+	)
+
+	var pu_data: Dictionary = ArmyCombatSystem.extract_pu_reconciliation_data(
+		battle_result,
+	)
+
+	var settlements_by_province: Dictionary = _build_settlements_by_province(settlements)
+
+	var reconciliation: Dictionary = PUReconciliation.reconcile_battle(
+		pu_data["victor_companies"],
+		pu_data["loser_companies"],
+		settlements_by_province,
+	)
+
+	var victor: String = battle_result.get("victor", "draw")
+	var rout_result: Dictionary = {}
+	if victor != "draw":
+		var loser_states: Array[Dictionary] = []
+		for s: Variant in (battle_result["defender_states"] if victor == "attacker" else battle_result["attacker_states"]):
+			if s is Dictionary:
+				loser_states.append(s)
+		var victor_states: Array[Dictionary] = []
+		for s: Variant in (battle_result["attacker_states"] if victor == "attacker" else battle_result["defender_states"]):
+			if s is Dictionary:
+				victor_states.append(s)
+
+		var has_cavalry: bool = false
+		for bc: Dictionary in victor_states:
+			if ArmyCombatSystem.is_cavalry(bc.get("unit_type", -1)):
+				has_cavalry = true
+				break
+
+		rout_result = ArmyCombatSystem.resolve_rout(
+			loser_states, has_cavalry, dice_engine,
+		)
+
+		var recovery: Dictionary = ArmyCombatSystem.compute_post_battle_recovery(
+			victor_states,
+		)
+		battle_result["recovery"] = recovery
+
+	battle_result["reconciliation"] = reconciliation
+	battle_result["rout"] = rout_result
+
+	return battle_result
 
 
 static func _build_settlements_by_province(

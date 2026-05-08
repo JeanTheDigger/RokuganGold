@@ -181,6 +181,9 @@ const ELITE_UNIT_TYPES: Array[int] = [
 ]
 
 
+static func is_cavalry(unit_type: int) -> bool:
+	return unit_type in CAVALRY_UNIT_TYPES
+
 static func _is_cavalry(unit_type: int) -> bool:
 	return unit_type in CAVALRY_UNIT_TYPES
 
@@ -1402,6 +1405,54 @@ static func compute_post_battle_recovery(
 		"recovered_to_companies": recovered,
 		"returned_as_pu": returned_pu,
 		"permanently_dead": dead,
+	}
+
+
+static func extract_pu_reconciliation_data(
+	battle_result: Dictionary,
+) -> Dictionary:
+	var victor_data: Array[Dictionary] = []
+	var loser_data: Array[Dictionary] = []
+
+	var victor: String = battle_result.get("victor", "draw")
+	var attacker_states: Array = battle_result.get("attacker_states", [])
+	var defender_states: Array = battle_result.get("defender_states", [])
+
+	var victor_states: Array = attacker_states if victor == "attacker" else defender_states
+	var loser_states: Array = defender_states if victor == "attacker" else attacker_states
+
+	for bc: Variant in victor_states:
+		if bc is Dictionary:
+			victor_data.append(_bc_to_pu_data(bc))
+	for bc: Variant in loser_states:
+		if bc is Dictionary:
+			loser_data.append(_bc_to_pu_data(bc))
+
+	if victor == "draw":
+		var all_data: Array[Dictionary] = []
+		all_data.append_array(victor_data)
+		all_data.append_array(loser_data)
+		return {
+			"victor_companies": [],
+			"loser_companies": all_data,
+		}
+
+	return {
+		"victor_companies": victor_data,
+		"loser_companies": loser_data,
+	}
+
+
+static func _bc_to_pu_data(bc: Dictionary) -> Dictionary:
+	var source_id: int = -1
+	var company: Variant = bc.get("company")
+	if company is MilitaryUnitData.CompanyData:
+		source_id = company.source_province_id
+	return {
+		"company_id": bc.get("company_id", -1),
+		"starting_health": bc.get("starting_health", 153),
+		"current_health": maxi(bc.get("current_health", 0), 0),
+		"source_province_id": source_id,
 	}
 
 

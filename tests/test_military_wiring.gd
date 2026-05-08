@@ -304,3 +304,87 @@ func test_iron_upkeep_dict_resets_on_supply() -> void:
 	var iron_state: Dictionary = {1: 3}
 	ArmyUpkeepSystem.process_iron_upkeep_dict(companies, iron_state, 10.0)
 	assert_eq(iron_state[1], 0)
+
+
+# -- Battle Flow Integration Tests ----------------------------------------------
+
+func _make_battle_company_state(
+	id: int,
+	unit_type: int = Enums.CompanyUnitType.BUSHI_RETAINER,
+	source_province_id: int = 1,
+) -> Dictionary:
+	var c: MilitaryUnitData.CompanyData = ArmyCombatSystem.create_company(
+		id, unit_type, -1, source_province_id,
+	)
+	return ArmyCombatSystem.make_battle_company(c, 1, 0, "attacker")
+
+
+func test_extract_pu_data_attacker_wins() -> void:
+	var result: Dictionary = {
+		"victor": "attacker",
+		"attacker_states": [_make_battle_company_state(1)],
+		"defender_states": [_make_battle_company_state(2, Enums.CompanyUnitType.PEASANT_LEVY, 2)],
+	}
+	# Simulate some damage
+	result["attacker_states"][0]["current_health"] = 100
+	result["defender_states"][0]["current_health"] = 30
+	var pu_data: Dictionary = ArmyCombatSystem.extract_pu_reconciliation_data(result)
+	assert_eq(pu_data["victor_companies"].size(), 1)
+	assert_eq(pu_data["loser_companies"].size(), 1)
+	assert_eq(pu_data["victor_companies"][0]["source_province_id"], 1)
+	assert_eq(pu_data["loser_companies"][0]["source_province_id"], 2)
+
+
+func test_extract_pu_data_draw() -> void:
+	var result: Dictionary = {
+		"victor": "draw",
+		"attacker_states": [_make_battle_company_state(1)],
+		"defender_states": [_make_battle_company_state(2)],
+	}
+	var pu_data: Dictionary = ArmyCombatSystem.extract_pu_reconciliation_data(result)
+	assert_eq(pu_data["victor_companies"].size(), 0)
+	assert_eq(pu_data["loser_companies"].size(), 2)
+
+
+func test_extract_pu_data_preserves_health() -> void:
+	var result: Dictionary = {
+		"victor": "attacker",
+		"attacker_states": [_make_battle_company_state(1)],
+		"defender_states": [],
+	}
+	result["attacker_states"][0]["current_health"] = 80
+	var pu_data: Dictionary = ArmyCombatSystem.extract_pu_reconciliation_data(result)
+	assert_eq(pu_data["victor_companies"][0]["current_health"], 80)
+	assert_eq(pu_data["victor_companies"][0]["starting_health"], 153)
+
+
+func test_resolve_and_reconcile_battle() -> void:
+	var dice: DiceEngine = DiceEngine.new(42)
+	var attacker: MilitaryUnitData.CompanyData = ArmyCombatSystem.create_company(
+		1, Enums.CompanyUnitType.BUSHI_RETAINER, -1, 1,
+	)
+	var defender: MilitaryUnitData.CompanyData = ArmyCombatSystem.create_company(
+		2, Enums.CompanyUnitType.PEASANT_LEVY, -1, 2,
+	)
+	var atk_states: Array[Dictionary] = [
+		ArmyCombatSystem.make_battle_company(attacker, 1, 0, "attacker"),
+	]
+	var def_states: Array[Dictionary] = [
+		ArmyCombatSystem.make_battle_company(defender, 1, 0, "defender"),
+	]
+	var s1: SettlementData = _make_settlement(10, 1, 10, 3)
+	var s2: SettlementData = _make_settlement(20, 2, 10, 3)
+
+	var r: Dictionary = DayOrchestrator.resolve_and_reconcile_battle(
+		atk_states, def_states, Enums.BattleTerrainType.PLAINS,
+		dice, [s1, s2],
+	)
+	assert_true(r.has("victor"))
+	assert_true(r.has("reconciliation"))
+	assert_true(r.has("rout"))
+	assert_true(r["reconciliation"].has("casualties"))
+
+
+func test_is_cavalry_public() -> void:
+	assert_true(ArmyCombatSystem.is_cavalry(Enums.CompanyUnitType.LIGHT_CAVALRY))
+	assert_false(ArmyCombatSystem.is_cavalry(Enums.CompanyUnitType.BUSHI_RETAINER))
