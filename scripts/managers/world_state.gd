@@ -47,6 +47,8 @@ var military_data: Dictionary = {}
 var character_province_map: Dictionary = {}
 var death_events: Array[Dictionary] = []
 var successor_map: Dictionary = {}
+var active_successions: Array[SuccessionData] = []
+var next_succession_id: Array[int] = [1]
 
 # -- Collective Disposition (s12.2b) -------------------------------------------
 # Clan-to-clan and family-to-family baselines keyed by sorted "a||b" strings.
@@ -111,6 +113,8 @@ func advance_one_day() -> Dictionary:
 		next_insurgency_id,
 		settlements,
 		_build_miya_inputs(),
+		active_successions,
+		next_succession_id,
 	)
 
 

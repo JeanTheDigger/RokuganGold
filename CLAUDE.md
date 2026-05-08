@@ -446,6 +446,8 @@ All in /tests/, one file per system:
 - test_togashi_oversight.gd (~49 tests)
 - test_phoenix_council.gd (~51 tests)
 - test_intra_clan_civil_war.gd (~59 tests)
+- test_succession_system.gd (~60 tests)
+- test_succession_wiring.gd (~10 tests)
 
 ### Festival System (s11.5)
 - **simulation/festival_system.gd** — Empire-wide canonical festivals, Rokuyo
@@ -1227,6 +1229,37 @@ All in /tests/, one file per system:
   `force_tick()` for manual advancement. `tick_completed` signal emitted
   after each advancement.
 
+### Succession System (s22.5)
+- **shared/succession_data.gd** — SuccessionData Resource: SuccessionState (4),
+  VacancyCause (4), deceased_id, position_tier, confirming_authority_id,
+  candidate_ids, contesting_ids, suspicious_death, transition timing.
+- **simulation/succession_system.gd** — Full succession lifecycle per GDD s22.5.
+  7-priority candidate gathering (designated heir, eldest child, other children,
+  adopted, siblings, lord selects, generated). Confirmation authority tier map
+  (each position confirmed one level up). Clean vs disputed detection (4
+  conditions: suspicious death, contesters, rival disposition, multiple
+  same-priority). 9-factor heir evaluation (disposition, birth order, honor,
+  glory, insight rank, school type, skills, achievements, titles) with 14
+  personality-driven weight multipliers (7 bushido + 7 shourido). Ishi
+  permanence (never re-evaluates designated heir). Seigyo re-evaluates every
+  season. Emperor succession special case with crisis detection. Major favor
+  inheritance. Dispute mechanics. Topic generation (Tier 4 clean / Tier 2
+  disputed). Transition effects (tax/koku suspension, stockpile freeze).
+  Clan exceptions (Phoenix reincarnation bypass, Dragon Togashi removal
+  bypass) detected and skipped.
+- **Succession wiring** — DayOrchestrator `_process_lord_deaths()` now
+  triggers SuccessionSystem on lord death events: gathers candidates, finds
+  confirming authority, determines clean/disputed, generates succession topic,
+  auto-confirms clean successions with heir evaluation. `_process_successions()`
+  ticks active disputed successions daily and force-confirms on expiry (60
+  ticks). `_evaluate_heir_designations()` runs on season boundary — lords
+  without heirs (or with Seigyo virtue) evaluate candidates via the 9-factor
+  scoring system and auto-designate. WorldStateData gains `active_successions`
+  and `next_succession_id` fields, threaded through `advance_one_day()`.
+  Deferred: Priority 4 adopted heir (needs adoption action), court dispute
+  resolution, assassination cross-ref (needs SecretSystem), Dragon/Phoenix
+  exception integration.
+
 ### What's Next
 1. World generation coordinate system and adjacency
 
@@ -1326,6 +1359,16 @@ The following subsystems are now integrated into the NPC decision loop:
   and spreading, removes suppressed ones (strength ≤ 0). New params on
   `advance_day()`: `insurgencies: Array[InsurgencyData]`,
   `next_insurgency_id: Array[int]`. Return dict gains `insurgency_results`.
+- **SuccessionSystem** — Daily: `_process_lord_deaths()` triggers
+  `SuccessionSystem.trigger_succession()` on lord death events. Gathers
+  candidates, finds confirming authority, determines clean/disputed, generates
+  succession topic, auto-confirms clean successions via heir evaluation.
+  `_process_successions()` ticks active disputed successions daily and
+  force-confirms on expiry (60 ticks). Seasonal: `_evaluate_heir_designations()`
+  runs on season boundary for lord-tier NPCs without heirs (or Seigyo lords
+  who re-evaluate every season). Uses 9-factor scoring to designate heirs.
+  New params on `advance_day()`: `active_successions: Array[SuccessionData]`,
+  `next_succession_id: Array[int]`. Return dict gains `succession_results`.
 
 ## Resolved Design Decisions
 

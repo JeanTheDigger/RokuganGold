@@ -34,6 +34,8 @@ static func advance_day(
 	next_insurgency_id: Array[int] = [1],
 	settlements: Array[SettlementData] = [],
 	miya_inputs: Dictionary = {},
+	active_successions: Array[SuccessionData] = [],
+	next_succession_id: Array[int] = [1],
 ) -> Dictionary:
 	var prev_season: int = time_system.get_season()
 
@@ -79,7 +81,13 @@ static func advance_day(
 	)
 
 	var orphan_results: Array[Dictionary] = _process_lord_deaths(
-		death_events, characters, objectives_map, successor_map
+		death_events, characters, objectives_map, successor_map,
+		active_successions, next_succession_id, characters_by_id, ic_day,
+		active_topics, next_topic_id,
+	)
+
+	var succession_results: Array[Dictionary] = _process_successions(
+		active_successions, characters_by_id
 	)
 
 	var conversation_results: Array[Dictionary] = _process_daily_conversations(
@@ -150,6 +158,9 @@ static func advance_day(
 		strategic_results = _run_strategic_reviews(
 			characters, objectives_map, world_states
 		)
+		_evaluate_heir_designations(
+			characters, characters_by_id, active_topics
+		)
 
 	return {
 		"ic_day": ic_day,
@@ -174,6 +185,7 @@ static func advance_day(
 		"progress_results": progress_results,
 		"letter_pass_results": letter_pass_results,
 		"insurgency_results": insurgency_results,
+		"succession_results": succession_results,
 	}
 
 
@@ -736,6 +748,12 @@ static func _process_lord_deaths(
 	characters: Array[L5RCharacterData],
 	objectives_map: Dictionary,
 	successor_map: Dictionary,
+	active_successions: Array[SuccessionData] = [],
+	next_succession_id: Array[int] = [1],
+	characters_by_id: Dictionary = {},
+	current_tick: int = 0,
+	active_topics: Array[TopicData] = [],
+	next_topic_id: Array[int] = [1000],
 ) -> Array[Dictionary]:
 	if death_events.is_empty():
 		return []
@@ -776,7 +794,123 @@ static func _process_lord_deaths(
 
 		all_results.append_array(orphan_results)
 
+		# Trigger succession for the deceased lord
+		var deceased: L5RCharacterData = characters_by_id.get(dead_lord_id)
+		if deceased == null:
+			continue
+
+		var position_tier: Enums.LordRank = event.get(
+			"position_tier", Enums.LordRank.PROVINCIAL_DAIMYO
+		)
+		var suspicious: bool = event.get("suspicious_death", false)
+		var cause: SuccessionData.VacancyCause = SuccessionData.VacancyCause.DEATH
+
+		if SuccessionSystem.is_phoenix_champion_succession(deceased.clan, position_tier):
+			continue
+		if SuccessionSystem.is_dragon_togashi_removal(deceased.clan, position_tier):
+			continue
+
+		var succession := SuccessionSystem.trigger_succession(
+			deceased, cause, position_tier, current_tick, suspicious
+		)
+		succession.succession_id = next_succession_id[0]
+		next_succession_id[0] += 1
+
+		var candidates := SuccessionSystem.get_candidates(deceased, characters_by_id)
+		for cand in candidates:
+			succession.candidate_ids.append(cand["id"])
+
+		succession.confirming_authority_id = SuccessionSystem.find_confirming_authority(
+			position_tier, deceased.clan, characters_by_id
+		)
+
+		var confirming_disp: int = 0
+		if succession.confirming_authority_id >= 0 and candidates.size() > 0:
+			var auth: L5RCharacterData = characters_by_id.get(succession.confirming_authority_id)
+			if auth != null:
+				confirming_disp = auth.disposition_values.get(candidates[0]["id"], 0)
+
+		var is_clean: bool = SuccessionSystem.is_clean_succession(
+			succession, candidates, confirming_disp
+		)
+
+		if not is_clean:
+			succession.state = SuccessionData.SuccessionState.DISPUTED
+
+		var topic_dict: Dictionary = SuccessionSystem.generate_succession_topic(
+			succession, not is_clean
+		)
+		var topic := TopicData.new()
+		topic.topic_id = next_topic_id[0]
+		next_topic_id[0] += 1
+		topic.slug = topic_dict.get("slug", "")
+		topic.momentum = topic_dict.get("momentum", 10.0)
+		topic.topic_type = "succession"
+		topic.variant = topic_dict.get("variant", "clean")
+		active_topics.append(topic)
+
+		active_successions.append(succession)
+
+		if is_clean and candidates.size() > 0:
+			var auth: L5RCharacterData = characters_by_id.get(succession.confirming_authority_id)
+			if auth != null:
+				var evaluations := SuccessionSystem.evaluate_all_candidates(
+					auth, candidates
+				)
+				if evaluations.size() > 0:
+					var chosen_id: int = evaluations[0]["candidate_id"]
+					SuccessionSystem.confirm_successor(succession, chosen_id)
+					successor_map[dead_lord_id] = chosen_id
+
+					var chosen: L5RCharacterData = characters_by_id.get(chosen_id)
+					if chosen != null:
+						SuccessionSystem.apply_successor_inheritance(chosen, deceased)
+
 	return all_results
+
+
+static func _process_successions(
+	active_successions: Array[SuccessionData],
+	characters_by_id: Dictionary,
+) -> Array[Dictionary]:
+	var results: Array[Dictionary] = []
+	for succ in active_successions:
+		if succ.state == SuccessionData.SuccessionState.CONFIRMED:
+			continue
+		if succ.state == SuccessionData.SuccessionState.RESOLVED:
+			continue
+
+		var max_dur: int = SuccessionSystem.DISPUTED_MAX_TICKS
+		if succ.state == SuccessionData.SuccessionState.PENDING:
+			max_dur = SuccessionSystem.CLEAN_SUCCESSION_MAX_TICKS
+
+		var tick_result := SuccessionSystem.process_tick(succ, max_dur)
+		if tick_result["expired"]:
+			var candidates := _rebuild_candidates(succ, characters_by_id)
+			if candidates.size() > 0:
+				var auth_id: int = succ.confirming_authority_id
+				var auth: L5RCharacterData = characters_by_id.get(auth_id)
+				if auth != null:
+					var evals := SuccessionSystem.evaluate_all_candidates(auth, candidates)
+					if evals.size() > 0:
+						SuccessionSystem.confirm_successor(succ, evals[0]["candidate_id"])
+				else:
+					SuccessionSystem.confirm_successor(succ, candidates[0]["id"])
+			results.append({"succession_id": succ.succession_id, "expired": true, "successor_id": succ.successor_id})
+
+	return results
+
+
+static func _rebuild_candidates(
+	succ: SuccessionData,
+	characters_by_id: Dictionary,
+) -> Array[Dictionary]:
+	var candidates: Array[Dictionary] = []
+	for cid in succ.candidate_ids:
+		var c: L5RCharacterData = characters_by_id.get(cid)
+		if c != null and not CharacterStats.is_dead(c):
+			candidates.append({"id": cid, "priority": SuccessionSystem.CandidatePriority.LORD_SELECTS, "character": c})
+	return candidates
 
 
 # -- Commitment Deadlines (s55.31) --------------------------------------------
@@ -1151,3 +1285,49 @@ static func _process_insurgencies(
 		insurgencies.erase(ins)
 
 	return result
+
+
+# -- Heir Designation Evaluation (s22.5, season boundary) --------------------
+
+static func _evaluate_heir_designations(
+	characters: Array[L5RCharacterData],
+	characters_by_id: Dictionary,
+	active_topics: Array[TopicData],
+) -> void:
+	for lord in characters:
+		if CharacterStats.is_dead(lord):
+			continue
+		if not _is_lord_tier(lord):
+			continue
+
+		if not SuccessionSystem.should_reevaluate_heir(lord):
+			continue
+
+		var proxy := L5RCharacterData.new()
+		proxy.character_id = lord.character_id
+		proxy.clan = lord.clan
+		proxy.family = lord.family
+		proxy.children_ids = lord.children_ids
+		proxy.sibling_ids = lord.sibling_ids
+		proxy.designated_heir_id = lord.designated_heir_id
+
+		var candidates := SuccessionSystem.get_candidates(proxy, characters_by_id)
+		if candidates.is_empty():
+			continue
+
+		var topics_by_char: Dictionary = {}
+		for cand in candidates:
+			var cand_id: int = cand["id"]
+			var cand_topics: Array[Dictionary] = []
+			for t in lord.topic_pool:
+				for topic in active_topics:
+					if topic.topic_id == t:
+						cand_topics.append({"topic_type": topic.topic_type})
+						break
+			topics_by_char[cand_id] = cand_topics
+
+		var evals := SuccessionSystem.evaluate_all_candidates(
+			lord, candidates, "military", topics_by_char
+		)
+		if evals.size() > 0:
+			SuccessionSystem.designate_heir(lord, evals[0]["candidate_id"])
