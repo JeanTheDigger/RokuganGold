@@ -1778,6 +1778,14 @@ The following subsystems are now integrated into the NPC decision loop:
   dict-based companies. Seasonal upkeep groups companies by clan, deducts
   iron from `ClanData.arms_stockpile`, tracks per-company iron state for
   degradation penalties.
+  Battle flow: `ArmyCombatSystem.extract_pu_reconciliation_data()` extracts
+  per-company health summaries (starting_health, current_health,
+  source_province_id) from battle states for PU reconciliation.
+  `DayOrchestrator.resolve_and_reconcile_battle()` runs the full pipeline:
+  battle resolution → PU extraction → reconciliation → rout → recovery.
+  Army movement processing detects battle triggers on arrival via
+  `ArmyMovementSystem.check_battle_trigger()`.
+  `ArmyCombatSystem.is_cavalry()` public helper for cavalry detection.
 
 ## Resolved Design Decisions
 
