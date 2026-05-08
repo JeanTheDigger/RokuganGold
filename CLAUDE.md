@@ -471,7 +471,7 @@ All in /tests/, one file per system:
 - test_order_system.gd (~30 tests)
 - test_military_service_system.gd (~35 tests)
 - test_pu_reconciliation.gd (~30 tests)
-- test_military_wiring.gd (~146 tests)
+- test_military_wiring.gd (~152 tests)
 - test_war_system.gd (~61 tests)
 - test_war_justification.gd (~55 tests)
 - test_war_termination.gd (~46 tests)
@@ -1804,6 +1804,13 @@ All in /tests/, one file per system:
   upgraded from stability-based to full weakness evaluation. Own-clan provinces
   skipped in generic weak-neighbor search. `build_province_statuses_from_data()`
   populates `total_settlement_pu` from settlement `population_pu`.
+- **Formal war weakness in metadata** — `_build_declare_war_metadata()` now
+  populates `target_garrison_at_minimum`, `no_field_army_nearby`,
+  `no_alliance_protection`, `defender_observable_pu` (target province garrison),
+  and `attacker_pu` (available_levy_pu + sum of own-clan garrison PU). These
+  flow through to `evaluate_war_justification()` in ActionExecutor for the
+  Step 2 personality aggression weakness gate. When no target province status
+  is found, weakness fields are omitted (defaults to false/0.0 in executor).
 
 ### What's Next
 1. World generation coordinate system and adjacency

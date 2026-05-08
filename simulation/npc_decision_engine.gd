@@ -1066,13 +1066,18 @@ static func _build_declare_war_metadata(
 	ctx: NPCDataStructures.ContextSnapshot,
 ) -> Dictionary:
 	var target_clan: String = need.target_clan_id
-	if target_clan.is_empty():
-		for ps: Variant in ctx.province_statuses:
-			if ps is NPCDataStructures.ProvinceStatus:
-				var status: NPCDataStructures.ProvinceStatus = ps
-				if status.province_id == need.target_province_id:
+	var target_ps: NPCDataStructures.ProvinceStatus = null
+	var own_garrison_total: float = 0.0
+
+	for ps: Variant in ctx.province_statuses:
+		if ps is NPCDataStructures.ProvinceStatus:
+			var status: NPCDataStructures.ProvinceStatus = ps
+			if not status.clan.is_empty() and status.clan == ctx.clan:
+				own_garrison_total += float(status.garrison_pu)
+			if status.province_id == need.target_province_id:
+				if target_clan.is_empty():
 					target_clan = status.clan
-					break
+				target_ps = status
 
 	var standing: String = need.target_intent
 	var primary: String = ""
@@ -1082,14 +1087,24 @@ static func _build_declare_war_metadata(
 		standing, primary, virtue,
 	)
 
-	return {
+	var meta: Dictionary = {
 		"standing_objective": standing,
 		"primary_objective": primary,
 		"intended_tier": tier,
 		"target_clan": target_clan,
 		"authority_level": WarJustification.get_authority_for_tier(tier),
 		"primary_virtue": virtue,
+		"attacker_pu": ctx.available_levy_pu + own_garrison_total,
 	}
+
+	if target_ps != null:
+		var weakness: Dictionary = WarJustification.evaluate_province_weakness(target_ps)
+		meta["target_garrison_at_minimum"] = weakness["garrison_at_minimum"]
+		meta["no_field_army_nearby"] = weakness["no_field_army_nearby"]
+		meta["no_alliance_protection"] = weakness["no_alliance_protection"]
+		meta["defender_observable_pu"] = float(target_ps.garrison_pu)
+
+	return meta
 
 
 static func _build_negotiate_surrender_metadata(

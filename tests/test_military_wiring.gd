@@ -1971,6 +1971,190 @@ func test_find_weak_rejects_strong_enemy() -> void:
 	assert_eq(result, -1)
 
 
+# -- Formal War Weakness in Metadata (s53.1) ------------------------------------
+
+func test_declare_war_metadata_includes_weakness_conditions() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
+	ctx.character_id = 1
+	ctx.clan = "Lion"
+	ctx.is_lord = true
+	var target_ps := NPCDataStructures.ProvinceStatus.new()
+	target_ps.province_id = 10
+	target_ps.clan = "Crane"
+	target_ps.garrison_pu = 0
+	target_ps.total_settlement_pu = 20
+	target_ps.has_field_army_nearby = false
+	target_ps.has_alliance_protection = false
+	ctx.province_statuses = [target_ps]
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "INITIATE_WAR_CHECK"
+	need.target_province_id = 10
+	need.target_intent = "EXPAND_TERRITORY"
+	var options: Array[NPCDataStructures.ScoredAction] = NPCDecisionEngine.generate_options(
+		ctx, need,
+	)
+	var dw: NPCDataStructures.ScoredAction = null
+	for opt: NPCDataStructures.ScoredAction in options:
+		if opt.action_id == "DECLARE_WAR":
+			dw = opt
+			break
+	assert_not_null(dw)
+	if dw != null:
+		assert_true(dw.metadata.get("target_garrison_at_minimum", false))
+		assert_true(dw.metadata.get("no_field_army_nearby", false))
+		assert_true(dw.metadata.get("no_alliance_protection", false))
+		assert_eq(dw.metadata.get("defender_observable_pu", -1.0), 0.0)
+
+
+func test_declare_war_metadata_strong_province_not_weak() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
+	ctx.character_id = 1
+	ctx.clan = "Lion"
+	ctx.is_lord = true
+	var target_ps := _make_strong_ps(10, "Crane")
+	ctx.province_statuses = [target_ps]
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "INITIATE_WAR_CHECK"
+	need.target_province_id = 10
+	need.target_intent = "EXPAND_TERRITORY"
+	var options: Array[NPCDataStructures.ScoredAction] = NPCDecisionEngine.generate_options(
+		ctx, need,
+	)
+	var dw: NPCDataStructures.ScoredAction = null
+	for opt: NPCDataStructures.ScoredAction in options:
+		if opt.action_id == "DECLARE_WAR":
+			dw = opt
+			break
+	assert_not_null(dw)
+	if dw != null:
+		assert_false(dw.metadata.get("target_garrison_at_minimum", true))
+		assert_eq(dw.metadata.get("defender_observable_pu", -1.0), 5.0)
+
+
+func test_declare_war_metadata_attacker_pu_from_levy_and_garrison() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
+	ctx.character_id = 1
+	ctx.clan = "Lion"
+	ctx.is_lord = true
+	ctx.available_levy_pu = 10.0
+	var own_ps := _make_strong_ps(5, "Lion")
+	own_ps.garrison_pu = 8
+	var target_ps := NPCDataStructures.ProvinceStatus.new()
+	target_ps.province_id = 10
+	target_ps.clan = "Crane"
+	target_ps.garrison_pu = 2
+	target_ps.total_settlement_pu = 20
+	ctx.province_statuses = [own_ps, target_ps]
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "INITIATE_WAR_CHECK"
+	need.target_province_id = 10
+	need.target_intent = "EXPAND_TERRITORY"
+	var options: Array[NPCDataStructures.ScoredAction] = NPCDecisionEngine.generate_options(
+		ctx, need,
+	)
+	var dw: NPCDataStructures.ScoredAction = null
+	for opt: NPCDataStructures.ScoredAction in options:
+		if opt.action_id == "DECLARE_WAR":
+			dw = opt
+			break
+	assert_not_null(dw)
+	if dw != null:
+		assert_eq(dw.metadata.get("attacker_pu", 0.0), 18.0)
+		assert_eq(dw.metadata.get("defender_observable_pu", 0.0), 2.0)
+
+
+func test_declare_war_metadata_no_target_province_status_omits_weakness() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
+	ctx.character_id = 1
+	ctx.clan = "Lion"
+	ctx.is_lord = true
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "INITIATE_WAR_CHECK"
+	need.target_province_id = 99
+	need.target_clan_id = "Crane"
+	need.target_intent = "EXPAND_TERRITORY"
+	var options: Array[NPCDataStructures.ScoredAction] = NPCDecisionEngine.generate_options(
+		ctx, need,
+	)
+	var dw: NPCDataStructures.ScoredAction = null
+	for opt: NPCDataStructures.ScoredAction in options:
+		if opt.action_id == "DECLARE_WAR":
+			dw = opt
+			break
+	assert_not_null(dw)
+	if dw != null:
+		assert_false(dw.metadata.has("target_garrison_at_minimum"))
+		assert_false(dw.metadata.has("defender_observable_pu"))
+
+
+func test_declare_war_metadata_field_army_blocks_weakness() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
+	ctx.character_id = 1
+	ctx.clan = "Lion"
+	ctx.is_lord = true
+	var target_ps := NPCDataStructures.ProvinceStatus.new()
+	target_ps.province_id = 10
+	target_ps.clan = "Crane"
+	target_ps.garrison_pu = 0
+	target_ps.total_settlement_pu = 20
+	target_ps.has_field_army_nearby = true
+	ctx.province_statuses = [target_ps]
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "INITIATE_WAR_CHECK"
+	need.target_province_id = 10
+	need.target_intent = "EXPAND_TERRITORY"
+	var options: Array[NPCDataStructures.ScoredAction] = NPCDecisionEngine.generate_options(
+		ctx, need,
+	)
+	var dw: NPCDataStructures.ScoredAction = null
+	for opt: NPCDataStructures.ScoredAction in options:
+		if opt.action_id == "DECLARE_WAR":
+			dw = opt
+			break
+	assert_not_null(dw)
+	if dw != null:
+		assert_false(dw.metadata.get("no_field_army_nearby", true))
+
+
+func test_declare_war_metadata_multiple_own_provinces_sum_garrison() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
+	ctx.character_id = 1
+	ctx.clan = "Lion"
+	ctx.is_lord = true
+	ctx.available_levy_pu = 5.0
+	var own_a := _make_strong_ps(1, "Lion")
+	own_a.garrison_pu = 3
+	var own_b := _make_strong_ps(2, "Lion")
+	own_b.garrison_pu = 7
+	var target_ps := NPCDataStructures.ProvinceStatus.new()
+	target_ps.province_id = 10
+	target_ps.clan = "Crane"
+	target_ps.garrison_pu = 1
+	target_ps.total_settlement_pu = 20
+	ctx.province_statuses = [own_a, own_b, target_ps]
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "INITIATE_WAR_CHECK"
+	need.target_province_id = 10
+	need.target_intent = "EXPAND_TERRITORY"
+	var options: Array[NPCDataStructures.ScoredAction] = NPCDecisionEngine.generate_options(
+		ctx, need,
+	)
+	var dw: NPCDataStructures.ScoredAction = null
+	for opt: NPCDataStructures.ScoredAction in options:
+		if opt.action_id == "DECLARE_WAR":
+			dw = opt
+			break
+	assert_not_null(dw)
+	if dw != null:
+		assert_eq(dw.metadata.get("attacker_pu", 0.0), 15.0)
+
+
 # -- ProvinceStatus.clan Wiring --------------------------------------------------
 
 func test_build_province_statuses_from_data() -> void:
