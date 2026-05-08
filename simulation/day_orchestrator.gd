@@ -154,6 +154,7 @@ static func advance_day(
 	var strategic_results: Array[Dictionary] = []
 	var progress_results: Array[Dictionary] = []
 	var insurgency_results: Dictionary = {}
+	var military_seasonal_result: Dictionary = {}
 	if current_season != prev_season:
 		# Add the IC year to miya_inputs so per-province blessed-year tracking
 		# stays consistent. Year is computed from the time system's tick count.
@@ -173,7 +174,7 @@ static func advance_day(
 				active_topics, next_topic_id, ic_day, season_meta,
 			)
 		_decay_all_historical_modifiers(characters, ic_day)
-		_process_military_seasonal(
+		var military_seasonal_result: Dictionary = _process_military_seasonal(
 			companies, settlements, clans, characters_by_id,
 			dice_engine, _season_to_name(current_season),
 		)
@@ -218,6 +219,7 @@ static func advance_day(
 		"entanglement_results": entanglement_results,
 		"bound_escape_results": bound_escape_results,
 		"military_daily": military_daily,
+		"military_seasonal": military_seasonal_result,
 		"military_effects": military_effects,
 	}
 

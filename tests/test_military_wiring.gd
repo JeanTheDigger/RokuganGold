@@ -175,6 +175,18 @@ func test_advance_day_accepts_military_params() -> void:
 	assert_true(DayOrchestrator.has_method("advance_day"))
 
 
+func test_military_daily_returns_all_keys() -> void:
+	var r: Dictionary = DayOrchestrator._process_military_daily(
+		[], [], [], [], DiceEngine.new(), [], [],
+	)
+	assert_true(r.has("movement_results"))
+	assert_true(r.has("siege_results"))
+	assert_true(r.has("tether_results"))
+	assert_true(r.has("order_results"))
+	assert_true(r.has("deprivation_results"))
+	assert_true(r.has("recovery_results"))
+
+
 # -- Military Effect Post-Processing Tests --------------------------------------
 
 func _make_settlement(
