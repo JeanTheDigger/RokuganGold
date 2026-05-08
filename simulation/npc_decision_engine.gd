@@ -90,6 +90,7 @@ static func build_context(
 				ctx.province_statuses = build_province_statuses_from_data(
 					prov_data, settlements_arr, armies_arr,
 				)
+		ctx.feasibility_data = _build_feasibility_data(character, world_state)
 
 	# Military
 	ctx.military_rank = character.military_rank
@@ -1109,12 +1110,14 @@ static func _build_declare_war_metadata(
 		standing, primary, virtue,
 	)
 
+	var authority: int = WarJustification.get_authority_for_tier(tier)
+
 	var meta: Dictionary = {
 		"standing_objective": standing,
 		"primary_objective": primary,
 		"intended_tier": tier,
 		"target_clan": target_clan,
-		"authority_level": WarJustification.get_authority_for_tier(tier),
+		"authority_level": authority,
 		"primary_virtue": virtue,
 		"attacker_pu": ctx.available_levy_pu + own_garrison_total,
 	}
@@ -1125,6 +1128,13 @@ static func _build_declare_war_metadata(
 		meta["no_field_army_nearby"] = weakness["no_field_army_nearby"]
 		meta["no_alliance_protection"] = weakness["no_alliance_protection"]
 		meta["defender_observable_pu"] = float(target_ps.garrison_pu)
+
+	if not ctx.feasibility_data.is_empty():
+		var fi: Dictionary = ctx.feasibility_data.duplicate()
+		fi["authority_level"] = authority
+		fi["primary_virtue"] = virtue
+		fi["proposed_levy_pu"] = ctx.available_levy_pu
+		meta["feasibility_inputs"] = fi
 
 	return meta
 
@@ -1150,6 +1160,53 @@ static func _build_negotiate_surrender_metadata(
 		"target_virtue": "",
 		"hostage_held": false,
 		"superior_pressuring": false,
+	}
+
+
+static func _build_feasibility_data(
+	character: L5RCharacterData,
+	world_state: Dictionary,
+) -> Dictionary:
+	var settlements: Array = world_state.get("settlements", [])
+	var provinces: Array = world_state.get("province_data", [])
+	var clans: Array = world_state.get("clans", [])
+
+	var controlled: Array = []
+	var clan_province_ids: Array[int] = []
+	for p: Variant in provinces:
+		if p is ProvinceData and (p as ProvinceData).clan == character.clan:
+			clan_province_ids.append((p as ProvinceData).province_id)
+	for s: Variant in settlements:
+		if s is SettlementData and (s as SettlementData).province_id in clan_province_ids:
+			controlled.append(s)
+
+	var clan_arms: float = 0.0
+	var clan_iron: float = 0.0
+	for c: Variant in clans:
+		if c is ClanData and (c as ClanData).clan_name == character.clan:
+			clan_arms = (c as ClanData).arms_stockpile
+			clan_iron = (c as ClanData).iron_stockpile
+			break
+
+	var total_koku: float = 0.0
+	for s: Variant in controlled:
+		if s is SettlementData:
+			total_koku += (s as SettlementData).koku_stockpile
+
+	var current_season: String = world_state.get("current_season", "spring")
+	var levy_before_planting: bool = current_season == "spring"
+	var spans_autumn: bool = true
+
+	return {
+		"controlled_settlements": controlled,
+		"provinces": provinces,
+		"clan_arms_stockpile": clan_arms,
+		"clan_iron_stockpile": clan_iron,
+		"current_koku": total_koku,
+		"levy_before_planting": levy_before_planting,
+		"spans_autumn": spans_autumn,
+		"iron_upkeep_rate_per_pu": 0.10,
+		"equip_cost": 0.0,
 	}
 
 

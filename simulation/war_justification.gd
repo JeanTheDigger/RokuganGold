@@ -285,6 +285,7 @@ static func evaluate_war_justification(
 	no_alliance_protection: bool = false,
 	attacker_pu: float = 0.0,
 	defender_observable_pu: float = 0.0,
+	feasibility_inputs: Dictionary = {},
 ) -> Dictionary:
 	# Step 1: Objective justification
 	var objective_justified: bool = is_objective_justified(
@@ -347,7 +348,27 @@ static func evaluate_war_justification(
 			"step_failed": 4,
 		}
 
-	# Step 5: Feasibility Ledger (deferred — always passes for now)
+	# Step 5: Feasibility Ledger
+	if not feasibility_inputs.is_empty():
+		var ledger: Dictionary = FeasibilityLedger.evaluate_feasibility(
+			feasibility_inputs,
+		)
+		if not ledger["feasible"]:
+			return {
+				"justified": false,
+				"reason": "feasibility_failed",
+				"step_failed": 5,
+				"personality_driven": personality_aggression,
+				"feasibility": ledger,
+			}
+		return {
+			"justified": true,
+			"reason": "personality_aggression" if personality_aggression else "objective_justified",
+			"step_failed": 0,
+			"personality_driven": personality_aggression,
+			"feasibility": ledger,
+		}
+
 	return {
 		"justified": true,
 		"reason": "personality_aggression" if personality_aggression else "objective_justified",

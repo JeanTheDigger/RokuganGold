@@ -114,6 +114,7 @@ class ContextSnapshot:
 	# Lord-tier fields
 	var resource_stockpiles: Dictionary = {}
 	var province_statuses: Array = []
+	var feasibility_data: Dictionary = {}
 
 	# Military
 	var military_rank: Enums.MilitaryRank = Enums.MilitaryRank.NONE

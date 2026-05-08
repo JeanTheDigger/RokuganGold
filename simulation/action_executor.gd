@@ -1091,9 +1091,12 @@ static func _execute_declare_war(
 	var attacker_pu: float = metadata.get("attacker_pu", 0.0)
 	var defender_pu: float = metadata.get("defender_observable_pu", 0.0)
 
+	var feasibility_inputs: Dictionary = metadata.get("feasibility_inputs", {})
+
 	var justification: Dictionary = WarJustification.evaluate_war_justification(
 		standing_objective, primary_objective, intended_tier, primary_virtue,
 		target_garrison_min, no_field_army, no_alliance, attacker_pu, defender_pu,
+		feasibility_inputs,
 	)
 
 	if not justification.get("justified", false):

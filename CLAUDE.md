@@ -475,6 +475,7 @@ All in /tests/, one file per system:
 - test_war_system.gd (~61 tests)
 - test_war_justification.gd (~55 tests)
 - test_war_termination.gd (~46 tests)
+- test_feasibility_ledger.gd (~45 tests)
 
 ### Festival System (s11.5)
 - **simulation/festival_system.gd** — Empire-wide canonical festivals, Rokuyo
@@ -1700,7 +1701,7 @@ All in /tests/, one file per system:
   Step 3 Tier validation: intended tier must be in supported list.
   Step 4 Personality gates: Jin blocks total war expansion and resource
   raids. Gi/Makoto block covert warfare (undermine/sabotage).
-  Step 5 Feasibility: placeholder pass (deferred to s4.3.17).
+  Step 5 Feasibility: runs FeasibilityLedger when feasibility_inputs provided.
   `evaluate_war_justification()` runs all 5 steps, returns justified/reason/
   step_failed/personality_driven.
   Wired into ActionExecutor: DECLARE_WAR intercepted before category routing.
@@ -1764,6 +1765,39 @@ All in /tests/, one file per system:
   Return dict gains `trade_route_results`.
   Deferred: Peace court mechanics (formal court session), Imperial edict
   action path, territory transfer mutations on settlement/province data.
+
+### Feasibility Ledger (s4.3.17 Phase 1)
+- **simulation/feasibility_ledger.gd** — AI War Readiness Check per GDD s4.3.17
+  Phase 1. Pure static functions. Estimates whether a lord can sustain a proposed
+  military campaign across three strategic resources (Rice, Arms, Koku).
+  Step 1 Campaign length estimation: PROVINCIAL_RAID=1, BORDER_CONFLICT=2,
+  FAMILY_WAR=3, CLAN_WAR=4 seasons. Personality modifiers: Yu/Kyoryoku −1
+  (min 1), Seigyo/Chishiki +1, Ketsui/Ishi no change.
+  Step 2 Rice budget: current stockpile + projected harvest (if spans autumn)
+  − civilian burn (civilian_pu × 0.25 × seasons) − military burn
+  ((military_pu + levy_pu) × 0.35 × seasons) − production loss (levy_pu × 1.50
+  if before planting). Green: net ≥ 1.00 per total PU. Yellow: net ≥ 0 but
+  < 1.00 per PU. Red: net < 0.
+  Step 3 Arms budget: clan arms stockpile + projected iron production − equip
+  cost − iron upkeep. Green: net ≥ 0. Yellow: deficit coverable by market koku.
+  Red: can't equip at any cost.
+  Step 4 Koku budget: treasury − stipend obligations − market purchases.
+  Green: net ≥ 0. Yellow: covers market but not stipends. Red: financial collapse.
+  Step 5 Composite verdict: All Green → FEASIBLE, Any Yellow no Red → RISKY,
+  Any Red → NOT_FEASIBLE, All Red → DESPERATE. RISKY proceeds if high-priority
+  objective OR aggressive personality (Yu/Kyoryoku/Ketsui/Ishi).
+  `evaluate_feasibility(inputs)` is the top-level entry point returning
+  `{feasible, verdict, campaign_seasons, rice, arms, koku}`.
+  Wired into WarJustification Step 5 via optional `feasibility_inputs` parameter.
+  When empty, Step 5 passes unconditionally (backward compatible).
+  NPC engine `_build_feasibility_data()` populates feasibility data from
+  world_state (settlements, clan data, koku) for lord-tier characters.
+  `_build_declare_war_metadata()` threads feasibility_inputs into DECLARE_WAR
+  action metadata when feasibility_data is available on ContextSnapshot.
+  ContextSnapshot gains `feasibility_data: Dictionary` field.
+  Deferred: Phase 2 Alternative Ladder, Phase 3 Mid-Campaign Supply Monitor,
+  Phase 4 player-initiated starvation strategies, forge infrastructure for
+  arms production projection, stipend obligations.
 
 ### War Trigger Pipeline (Metadata Population)
 - **Phase 3 metadata population** — `_populate_action_metadata()` in
