@@ -470,6 +470,7 @@ All in /tests/, one file per system:
 - test_military_promotion_system.gd (~35 tests)
 - test_order_system.gd (~30 tests)
 - test_military_service_system.gd (~35 tests)
+- test_pu_reconciliation.gd (~30 tests)
 
 ### Festival System (s11.5)
 - **simulation/festival_system.gd** — Empire-wide canonical festivals, Rokuyo
@@ -1445,8 +1446,7 @@ All in /tests/, one file per system:
 - **shared/military_unit_data.gd** — CompanyData gains `unit_type` and
   `source_province_id` fields.
   Deferred (Phase 2+): Shinjo auto-flank behavior, ASCII battle events /
-  Heroic Opportunities, PU reconciliation wiring into ResourceTick,
-  Shadowlands terrain zones, naval combat bonuses.
+  Heroic Opportunities, Shadowlands terrain zones, naval combat bonuses.
 
 ### Army Upkeep & Deprivation (s4.3, s11.7)
 - **simulation/army_upkeep_system.gd** — Army upkeep costs, iron degradation,
@@ -1603,6 +1603,23 @@ All in /tests/, one file per system:
   shortfall tracking. `apply_service_assignments()` batch mutation of character
   data. Engine wiring: ASSIGN_TO_MILITARY_SERVICE aligns to LEVY_TROOPS (80)
   and DEFEND_PROVINCE (60). Courtier (Manipulation) + Awareness, Category 2.
+
+### PU Reconciliation (s11.7)
+- **simulation/pu_reconciliation.gd** — Battle → World Map PU reconciliation per
+  GDD s11.7. Every company tagged to source province at levy time. Conversion:
+  HEALTH_TO_PU = 1.0/153.0 (1 PU per company at 153 starting health).
+  `consume_levy_pu()` deducts military_pu and population_pu from settlement when
+  raising a levy. `return_disband_pu()` returns PU proportional to health ratio
+  on disband. `process_battle_casualties()` computes per-province PU losses from
+  health lost across all companies, distributes losses to settlements (military_pu
+  first, overflow to general population). Ronin companies excluded — no source
+  province, losses disappear. `process_victor_recovery()` victor-only: 10%
+  recovered to companies (health), 10% returned as PU to source settlements,
+  80% permanently dead. Per-company proportional allocation by loss share.
+  `reconcile_battle()` full orchestrator combining casualties + recovery.
+  `process_army_dissolution()` handles ≤20% health dissolution — surviving
+  health returned as PU to source settlements. Settlement mutations: losses
+  deducted from military_pu first, gains added to primary settlement.
 
 ### What's Next
 1. World generation coordinate system and adjacency
