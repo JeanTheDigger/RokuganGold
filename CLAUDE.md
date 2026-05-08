@@ -463,6 +463,7 @@ All in /tests/, one file per system:
 - test_secret_system_wiring.gd (~25 tests)
 - test_army_combat_system.gd (~145 tests)
 - test_army_upkeep_system.gd (~40 tests)
+- test_supply_tether_system.gd (~45 tests)
 
 ### Festival System (s11.5)
 - **simulation/festival_system.gd** — Empire-wide canonical festivals, Rokuyo
@@ -1468,6 +1469,31 @@ All in /tests/, one file per system:
   Recovery: `apply_recovery_tick()` requires stationary + supplied. +5 Health
   per tick (capped at base), +3 Morale per tick (capped at base), arms recover
   1 deprivation tier per tick when arms supplied.
+
+### Supply Tether System (s11.7)
+- **simulation/supply_tether_system.gd** — Supply tether mechanics for armies
+  in hostile territory per GDD s11.7. Pure static functions; caller owns state.
+  TetherState enum: SOLID (100% supply), THREATENED (50%, partial raid),
+  BROKEN (0%, full cut). `create_tether()` forms a tether from army to source
+  province through a sub-tile path with per-node state and escort tracking.
+  Garrison raid: `resolve_garrison_raid()` rolls 1d10 + garrison Attack
+  (base 3, ±1 per 0.5 PU above/below 1.0) vs TN (5 unescorted, 5 + escort
+  Defense when escorted). Below TN = fail (SOLID), meets TN = partial
+  (THREATENED), exceeds by 5+ = full cut (BROKEN).
+  `process_tether_tick()` resolves all garrisons along the path independently.
+  Worst result applies; enemy army on path = instant BROKEN; two partial
+  raids stack to BROKEN. Escort management: `assign_escort()` places a
+  company on a sub-tile (removed from battle roster), `recall_escort()`
+  initiates 1-tick return delay. Deprivation tracking: BROKEN advances
+  rice/arms deprivation ticks by 1 per tick; THREATENED advances at half
+  speed (every 2 ticks). Step-down recovery: SOLID restores 1 deprivation
+  stage per tick; THREATENED restores at half speed (1 per 2 ticks); BROKEN
+  blocks recovery. `get_supply_source_provinces()` merges lord's provinces
+  with compelled and shared sources. `process_supply_tick()` orchestrates
+  the full tick: raid resolution → deprivation advance or step-down recovery.
+  Deferred: Vertical/horizontal supply political mechanics (disposition
+  damage, favor integration), visual line rendering, territory capture
+  during war, actual sub-tile coordinate system (uses placeholder int IDs).
 
 ### What's Next
 1. World generation coordinate system and adjacency
