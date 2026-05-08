@@ -93,8 +93,12 @@ static func execute(
 		)
 		if not gift_result.is_empty():
 			return gift_result
-		# No giftable item or no recipient — fall through to the generic
-		# social path so the gesture is at least scored as social effort.
+
+	if action_id == "PUBLIC_PERFORMANCE":
+		return _execute_public_performance(action, character, ctx, dice_engine, characters_by_id)
+
+	if action_id == "PERFORM_FOR":
+		return _execute_perform_for(action, character, ctx, dice_engine, characters_by_id)
 
 	if action_id in MILITARY_ORDERS:
 		var mil_check: Dictionary = _validate_military_order(action_id, ctx, military_data)
@@ -251,6 +255,113 @@ static func _execute_no_roll(
 		"margin": 0,
 		"effects": effects,
 	}
+
+
+# -- Performative Arts --------------------------------------------------------
+
+static func _execute_public_performance(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	dice_engine: DiceEngine,
+	characters_by_id: Dictionary,
+) -> Dictionary:
+	var art_form: PerformativeArtsSystem.ArtForm = PerformativeArtsSystem.get_best_art_form(character)
+	var witness_ids: Array[int] = _get_co_located_ids(character, characters_by_id)
+	var fatigue_count: int = character.pieces_seen.get("_performance_count_today", 0)
+
+	var perf_result: Dictionary = PerformativeArtsSystem.resolve_public_performance(
+		character, art_form, witness_ids, dice_engine, fatigue_count
+	)
+
+	PerformativeArtsSystem.apply_performance_effects(character, perf_result, characters_by_id)
+	character.pieces_seen["_performance_count_today"] = fatigue_count + 1
+
+	var success: bool = perf_result["outcome"] != PerformativeArtsSystem.PerformanceOutcome.FAILURE and \
+		perf_result["outcome"] != PerformativeArtsSystem.PerformanceOutcome.CRITICAL_FAILURE
+
+	return {
+		"success": success,
+		"action_id": "PUBLIC_PERFORMANCE",
+		"character_id": ctx.character_id,
+		"target_npc_id": action.target_npc_id,
+		"target_province_id": action.target_province_id,
+		"ic_day": ctx.ic_day,
+		"season": ctx.season,
+		"skill_used": perf_result.get("skill_used", ""),
+		"roll_total": perf_result.get("roll_total", 0),
+		"tn": PerformativeArtsSystem.PERFORMANCE_TN,
+		"margin": perf_result.get("margin", 0),
+		"effects": {
+			"glory_change": perf_result.get("glory_change", 0.0),
+			"disposition_change": perf_result.get("disposition_per_witness", 0),
+			"witness_count": witness_ids.size(),
+			"performance_outcome": perf_result.get("outcome", 0),
+			"art_form": art_form,
+			"raises": perf_result.get("raises", 0),
+			"performance_applied": true,
+		},
+	}
+
+
+static func _execute_perform_for(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	dice_engine: DiceEngine,
+	characters_by_id: Dictionary,
+) -> Dictionary:
+	var art_form: PerformativeArtsSystem.ArtForm = PerformativeArtsSystem.get_best_art_form(character)
+	var recipient: L5RCharacterData = characters_by_id.get(action.target_npc_id)
+
+	if recipient == null:
+		return _execute_no_roll(action, character, ctx)
+
+	var perf_result: Dictionary = PerformativeArtsSystem.resolve_perform_for(
+		character, recipient, art_form, dice_engine
+	)
+
+	PerformativeArtsSystem.apply_performance_effects(character, perf_result, characters_by_id)
+
+	var success: bool = perf_result["outcome"] != PerformativeArtsSystem.PerformanceOutcome.FAILURE
+
+	return {
+		"success": success,
+		"action_id": "PERFORM_FOR",
+		"character_id": ctx.character_id,
+		"target_npc_id": action.target_npc_id,
+		"target_province_id": action.target_province_id,
+		"ic_day": ctx.ic_day,
+		"season": ctx.season,
+		"skill_used": perf_result.get("skill_used", ""),
+		"roll_total": perf_result.get("roll_total", 0),
+		"tn": PerformativeArtsSystem.PERFORMANCE_TN,
+		"margin": perf_result.get("margin", 0),
+		"effects": {
+			"glory_change": perf_result.get("glory_change", 0.0),
+			"disposition_change": perf_result.get("disposition_change", 0),
+			"recipient_id": action.target_npc_id,
+			"performance_outcome": perf_result.get("outcome", 0),
+			"art_form": art_form,
+			"raises": perf_result.get("raises", 0),
+			"performance_applied": true,
+		},
+	}
+
+
+static func _get_co_located_ids(
+	character: L5RCharacterData,
+	characters_by_id: Dictionary,
+) -> Array[int]:
+	var ids: Array[int] = []
+	var loc: String = character.physical_location
+	if loc.is_empty():
+		return ids
+	for id in characters_by_id:
+		var c: L5RCharacterData = characters_by_id[id]
+		if c.character_id != character.character_id and c.physical_location == loc:
+			ids.append(c.character_id)
+	return ids
 
 
 # -- TN Calculation -----------------------------------------------------------

@@ -196,6 +196,7 @@ static func _reset_all_ap(characters: Array[L5RCharacterData]) -> void:
 		ActionPointSystem.reset_daily_ap(c)
 		c.civilian_orders_remaining = c.civilian_order_budget_max
 		c.passage_request_count_today = 0
+		c.pieces_seen.erase("_performance_count_today")
 
 
 # -- Information Processing ----------------------------------------------------

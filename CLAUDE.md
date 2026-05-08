@@ -447,6 +447,7 @@ All in /tests/, one file per system:
 - test_phoenix_council.gd (~51 tests)
 - test_intra_clan_civil_war.gd (~59 tests)
 - test_performative_arts.gd (~30 tests)
+- test_performative_arts_wiring.gd (~10 tests)
 - test_succession_system.gd (~60 tests)
 - test_succession_wiring.gd (~10 tests)
 
@@ -1244,6 +1245,13 @@ All in /tests/, one file per system:
   skill+trait combination. `apply_performance_effects()` mutates glory and
   witness/recipient disposition values. Venue gating (performance_permitted
   zone flag) already enforced by NPC engine Phase 3 zone-flag filtering.
+- **Performative arts wiring** — ActionExecutor intercepts PUBLIC_PERFORMANCE
+  and PERFORM_FOR before the `_performance_skill` fallthrough. PUBLIC_PERFORMANCE
+  picks best art form, gathers co-located witness IDs, reads fatigue from
+  `pieces_seen["_performance_count_today"]`, resolves via PerformativeArtsSystem,
+  applies effects (glory + witness dispositions), increments fatigue counter.
+  PERFORM_FOR resolves targeted performance against recipient, no fatigue.
+  DayOrchestrator `_reset_all_ap()` clears the fatigue counter daily.
 
 ### Succession System (s22.5)
 - **shared/succession_data.gd** — SuccessionData Resource: SuccessionState (4),
