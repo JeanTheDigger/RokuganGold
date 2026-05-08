@@ -409,7 +409,7 @@ All in /tests/, one file per system:
 - test_information_system.gd (~40 tests)
 - test_topic_system.gd (~55 tests)
 - test_investigation_system.gd (~40 tests)
-- test_day_orchestrator.gd (~38 tests)
+- test_day_orchestrator.gd (~44 tests)
 - test_approach_evaluation.gd (~55 tests)
 - test_commitment_registry.gd (~60 tests)
 - test_military_hierarchy.gd (~47 tests)
@@ -1907,17 +1907,18 @@ All in /tests/, one file per system:
 ### Famine Crisis Processing (s16.2)
 - **DayOrchestrator `_process_famine_crises()`** — Seasonal famine crisis
   generation per GDD s16.2. Runs on season boundary after resource tick.
-  Reads `starvation_changes` from tick results. Creates famine crisis topics
-  for provinces at HUNGER (Tier 3, momentum 25) or FAMINE (Tier 2, momentum
-  50). No duplicate topics per province. Recovery tracking: increments
-  `_famine_tracking[province_id]` counter each season the province is at
-  CLEAR with an active famine topic. At 10 consecutive seasons, resolves
-  the crisis (sets `resolved=true`, momentum=0). Relapse (returning to
-  HUNGER/FAMINE) resets the recovery counter. Topics carry
-  `topic_type="famine"`, `variant="provincial_famine"`, `clan_involved`
-  from ProvinceData, `provinces_affected=[province_id]`. Harvest
-  destruction flows naturally: `harvest_destroyed` flag → yield 0 →
-  starvation check → FAMINE stage → crisis topic created here.
+  Reads `starvation_changes` from tick results. Two topic variants:
+  `provincial_famine` (Tier 3, single province at HUNGER; Tier 2 at FAMINE)
+  and `clan_famine` (Tier 2, 2+ provinces of same clan starving). When
+  multiple provinces of the same clan starve simultaneously, existing
+  provincial_famine topics are absorbed (resolved) and a single clan_famine
+  topic created. New starving provinces added to existing clan topics.
+  Recovery: per-province counter in `_famine_tracking[province_id]`
+  increments each season at CLEAR. At 10 consecutive seasons, province
+  removed from multi-province topic (or topic resolved if last province).
+  Relapse resets counter. Topics: `topic_type="famine"`, `clan_involved`
+  from ProvinceData, `provinces_affected` array. Harvest destruction flows
+  naturally: `harvest_destroyed` flag → yield 0 → FAMINE → crisis topic.
   Tracking state persists in `season_meta["_famine_tracking"]`.
 
 ### Ladder Side Effects Processing
