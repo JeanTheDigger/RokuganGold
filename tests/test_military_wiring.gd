@@ -1779,16 +1779,257 @@ func test_expand_territory_produces_war_check_with_intent() -> void:
 	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(
 		objective, ctx,
 	)
-	if need.need_type == "INITIATE_WAR_CHECK":
-		assert_eq(need.target_intent, "EXPAND_TERRITORY")
-		assert_eq(need.target_province_id, 10)
+	assert_eq(need.need_type, "INITIATE_WAR_CHECK")
+	assert_eq(need.target_intent, "EXPAND_TERRITORY")
+	assert_eq(need.target_province_id, 10)
+
+
+# -- Standing Objective War Check Paths ------------------------------------------
+
+func test_seek_vengeance_produces_war_check() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
+	ctx.is_lord = true
+	ctx.clan = "Lion"
+	ctx.province_statuses = [_make_ps_wt(20, "Crane", 2)]
+
+	var objective: Dictionary = {
+		"type": "SEEK_VENGEANCE",
+		"target_npc_id": -1,
+		"target_clan_id": "Crane",
+	}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(
+		objective, ctx,
+	)
+	assert_eq(need.need_type, "INITIATE_WAR_CHECK")
+	assert_eq(need.target_intent, "SEEK_VENGEANCE")
+	assert_eq(need.target_clan_id, "Crane")
+	assert_eq(need.target_province_id, 20)
+
+
+func test_seek_vengeance_no_war_check_without_weak_province() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
+	ctx.is_lord = true
+	ctx.clan = "Lion"
+	ctx.province_statuses = [_make_ps_wt(20, "Crane", 2, 80.0)]
+
+	var objective: Dictionary = {
+		"type": "SEEK_VENGEANCE",
+		"target_npc_id": -1,
+		"target_clan_id": "Crane",
+	}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(
+		objective, ctx,
+	)
+	assert_ne(need.need_type, "INITIATE_WAR_CHECK")
+
+
+func test_seek_vengeance_no_war_check_same_clan() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
+	ctx.is_lord = true
+	ctx.clan = "Lion"
+	ctx.province_statuses = [_make_ps_wt(20, "Lion", 2)]
+
+	var objective: Dictionary = {
+		"type": "SEEK_VENGEANCE",
+		"target_npc_id": -1,
+		"target_clan_id": "Lion",
+	}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(
+		objective, ctx,
+	)
+	assert_ne(need.need_type, "INITIATE_WAR_CHECK")
+
+
+func test_undermine_clan_produces_war_check() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
+	ctx.is_lord = true
+	ctx.clan = "Scorpion"
+	ctx.province_statuses = [_make_ps_wt(30, "Crane", 2)]
+
+	var objective: Dictionary = {
+		"type": "UNDERMINE_CLAN",
+		"target_clan_id": "Crane",
+	}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(
+		objective, ctx,
+	)
+	assert_eq(need.need_type, "INITIATE_WAR_CHECK")
+	assert_eq(need.target_intent, "UNDERMINE_CLAN")
+	assert_eq(need.target_clan_id, "Crane")
+
+
+func test_undermine_clan_falls_through_when_no_weak_target() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
+	ctx.is_lord = true
+	ctx.clan = "Scorpion"
+	ctx.province_statuses = [_make_ps_wt(30, "Crane", 2, 80.0)]
+
+	var objective: Dictionary = {
+		"type": "UNDERMINE_CLAN",
+		"target_clan_id": "Crane",
+	}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(
+		objective, ctx,
+	)
+	assert_eq(need.need_type, "ACQUIRE_LEVERAGE")
+
+
+func test_prevent_shortage_produces_war_check_when_starving() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
+	ctx.is_lord = true
+	ctx.clan = "Crab"
+	ctx.resource_stockpiles = {"rice": 0.5, "rice_consumption": 1.0}
+	ctx.province_statuses = [_make_ps_wt(15, "Crane", 2)]
+
+	var objective: Dictionary = {"type": "PREVENT_SHORTAGE"}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(
+		objective, ctx,
+	)
+	assert_eq(need.need_type, "INITIATE_WAR_CHECK")
+	assert_eq(need.target_intent, "PREVENT_SHORTAGE")
+
+
+func test_prevent_shortage_acquires_resource_when_no_weak_neighbor() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
+	ctx.is_lord = true
+	ctx.clan = "Crab"
+	ctx.resource_stockpiles = {"rice": 0.5, "rice_consumption": 1.0}
+	ctx.province_statuses = []
+
+	var objective: Dictionary = {"type": "PREVENT_SHORTAGE"}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(
+		objective, ctx,
+	)
+	assert_eq(need.need_type, "ACQUIRE_RESOURCE")
+
+
+func test_build_strongest_force_produces_war_check_when_trained() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
+	ctx.is_lord = true
+	ctx.clan = "Lion"
+	ctx.unit_training_counts = {0: 0, 1: 0, 2: 0}
+	ctx.can_sustain_iron_upkeep = true
+	ctx.available_levy_pu = 0.0
+	ctx.resource_stockpiles = {"rice": 10.0, "military_upkeep": 1.0}
+	ctx.province_statuses = [_make_ps_wt(25, "Crane", 2)]
+
+	var objective: Dictionary = {"type": "BUILD_STRONGEST_FORCE"}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(
+		objective, ctx,
+	)
+	assert_eq(need.need_type, "INITIATE_WAR_CHECK")
+	assert_eq(need.target_intent, "BUILD_STRONGEST_FORCE")
+
+
+func test_advance_glory_produces_war_check_for_bushi_lord() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
+	ctx.is_lord = true
+	ctx.clan = "Lion"
+	ctx.school_type = Enums.SchoolType.BUSHI
+	ctx.province_statuses = [_make_ps_wt(25, "Crane", 2)]
+
+	var objective: Dictionary = {"type": "ADVANCE_GLORY"}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(
+		objective, ctx,
+	)
+	assert_eq(need.need_type, "INITIATE_WAR_CHECK")
+	assert_eq(need.target_intent, "ADVANCE_GLORY")
+
+
+func test_advance_glory_no_war_check_for_courtier() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
+	ctx.is_lord = true
+	ctx.clan = "Crane"
+	ctx.school_type = Enums.SchoolType.COURTIER
+	ctx.province_statuses = [_make_ps_wt(25, "Lion", 2)]
+
+	var objective: Dictionary = {"type": "ADVANCE_GLORY"}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(
+		objective, ctx,
+	)
+	assert_ne(need.need_type, "INITIATE_WAR_CHECK")
+
+
+func test_advance_family_produces_war_check() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
+	ctx.is_lord = true
+	ctx.clan = "Lion"
+	ctx.province_statuses = [_make_ps_wt(25, "Crane", 2)]
+
+	var objective: Dictionary = {"type": "ADVANCE_FAMILY"}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(
+		objective, ctx,
+	)
+	assert_eq(need.need_type, "INITIATE_WAR_CHECK")
+	assert_eq(need.target_intent, "ADVANCE_FAMILY")
+
+
+func test_advance_family_defends_first_on_crisis() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
+	ctx.is_lord = true
+	ctx.clan = "Lion"
+	var crisis_ps := _make_ps_wt(5, "Lion", 2)
+	crisis_ps.active_crisis_id = 1
+	ctx.province_statuses = [crisis_ps, _make_ps_wt(25, "Crane", 2)]
+
+	var objective: Dictionary = {"type": "ADVANCE_FAMILY"}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(
+		objective, ctx,
+	)
+	assert_eq(need.need_type, "DEFEND_PROVINCE")
+
+
+func test_honor_ancestors_produces_war_check_with_active_wars() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
+	ctx.is_lord = true
+	ctx.clan = "Lion"
+	ctx.active_wars = [{"war_id": 1}]
+	ctx.province_statuses = [_make_ps_wt(25, "Crane", 2)]
+
+	var objective: Dictionary = {"type": "HONOR_ANCESTORS"}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(
+		objective, ctx,
+	)
+	assert_eq(need.need_type, "INITIATE_WAR_CHECK")
+	assert_eq(need.target_intent, "HONOR_ANCESTORS")
+
+
+func test_honor_ancestors_trains_without_active_wars() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
+	ctx.is_lord = true
+	ctx.clan = "Lion"
+	ctx.active_wars = []
+	ctx.escalating_conflicts = []
+	ctx.province_statuses = [_make_ps_wt(25, "Crane", 2)]
+
+	var objective: Dictionary = {"type": "HONOR_ANCESTORS"}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(
+		objective, ctx,
+	)
+	assert_eq(need.need_type, "TRAIN_SKILL")
 
 
 func _make_ps_wt(
 	prov_id: int, clan_name: String, confidence_val: int,
+	stab: float = 40.0,
 ) -> NPCDataStructures.ProvinceStatus:
 	var ps := NPCDataStructures.ProvinceStatus.new()
 	ps.province_id = prov_id
 	ps.clan = clan_name
 	ps.confidence = confidence_val
+	ps.stability = stab
 	return ps

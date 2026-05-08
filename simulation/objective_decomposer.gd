@@ -256,6 +256,12 @@ static func _decompose_advance_family(
 				var crisis: int = _find_crisis_province(ctx)
 				if crisis >= 0:
 					return _make_need("DEFEND_PROVINCE", 2, {"target_province_id": crisis})
+				var weak: int = _find_weak_neighbor_province(ctx)
+				if weak >= 0:
+					return _make_need("INITIATE_WAR_CHECK", 1, {
+						"target_province_id": weak,
+						"target_intent": "ADVANCE_FAMILY",
+					})
 			return _make_need("SEND_LETTER", 1)
 		_:
 			var _court_need := _court_or_alternative(ctx)
@@ -279,6 +285,14 @@ static func _decompose_undermine_clan(
 				return _make_need("IDENTIFY_CONTACT", 2)
 			return _make_need("DAMAGE_RELATIONSHIP", 2, {"target_clan_id": target_clan})
 		Enums.ContextFlag.AT_OWN_HOLDINGS:
+			if ctx.is_lord and not target_clan.is_empty():
+				var weak: int = _find_weak_neighbor_province_for_clan(ctx, target_clan)
+				if weak >= 0:
+					return _make_need("INITIATE_WAR_CHECK", 2, {
+						"target_province_id": weak,
+						"target_clan_id": target_clan,
+						"target_intent": "UNDERMINE_CLAN",
+					})
 			return _make_need("ACQUIRE_LEVERAGE", 2, {"target_clan_id": target_clan})
 		_:
 			var _court_need := _court_or_alternative(ctx)
@@ -413,6 +427,12 @@ static func _decompose_prevent_shortage(
 	var seasons_of_rice: float = rice_stockpile / maxf(consumption, 0.01)
 
 	if seasons_of_rice < 1.0:
+		var weak: int = _find_weak_neighbor_province(ctx)
+		if weak >= 0:
+			return _make_need("INITIATE_WAR_CHECK", 3, {
+				"target_province_id": weak,
+				"target_intent": "PREVENT_SHORTAGE",
+			})
 		return _make_need("ACQUIRE_RESOURCE", 3, {"target_resource": "rice"})
 	if seasons_of_rice < 2.0:
 		return _make_need("ACQUIRE_RESOURCE", 2, {"target_resource": "rice"})
@@ -486,6 +506,13 @@ static func _decompose_honor_ancestors(
 				var crisis: int = _find_crisis_province(ctx)
 				if crisis >= 0:
 					return _make_need("DEFEND_PROVINCE", 2, {"target_province_id": crisis})
+				if not ctx.active_wars.is_empty() or not ctx.escalating_conflicts.is_empty():
+					var weak: int = _find_weak_neighbor_province(ctx)
+					if weak >= 0:
+						return _make_need("INITIATE_WAR_CHECK", 2, {
+							"target_province_id": weak,
+							"target_intent": "HONOR_ANCESTORS",
+						})
 			return _make_need("TRAIN_SKILL", 1)
 		Enums.ContextFlag.ON_CAMPAIGN:
 			return _make_need("REST", 1)
@@ -593,6 +620,13 @@ static func _decompose_advance_glory(
 		Enums.ContextFlag.UNDER_SIEGE:
 			return _make_need("CONDUCT_SORTIE", 2)
 		Enums.ContextFlag.AT_OWN_HOLDINGS:
+			if ctx.is_lord and ctx.school_type == Enums.SchoolType.BUSHI:
+				var weak: int = _find_weak_neighbor_province(ctx)
+				if weak >= 0:
+					return _make_need("INITIATE_WAR_CHECK", 1, {
+						"target_province_id": weak,
+						"target_intent": "ADVANCE_GLORY",
+					})
 			var _court_need := _court_or_alternative(ctx)
 			if _court_need != null:
 				return _court_need
@@ -620,6 +654,16 @@ static func _decompose_seek_vengeance(
 
 	if target_npc in ctx.characters_present:
 		return _make_need("ISSUE_DUEL_CHALLENGE", 3, {"target_npc_id": target_npc})
+
+	if ctx.is_lord and not target_clan.is_empty() and target_clan != ctx.clan:
+		if ctx.context_flag == Enums.ContextFlag.AT_OWN_HOLDINGS:
+			var weak: int = _find_weak_neighbor_province_for_clan(ctx, target_clan)
+			if weak >= 0:
+				return _make_need("INITIATE_WAR_CHECK", 2, {
+					"target_province_id": weak,
+					"target_clan_id": target_clan,
+					"target_intent": "SEEK_VENGEANCE",
+				})
 
 	match ctx.context_flag:
 		Enums.ContextFlag.AT_COURT:
@@ -922,6 +966,13 @@ static func _decompose_build_strongest_force(
 	if trained > 0:
 		return _make_need("TRAIN_TROOPS", 1)
 
+	var weak: int = _find_weak_neighbor_province(ctx)
+	if weak >= 0:
+		return _make_need("INITIATE_WAR_CHECK", 1, {
+			"target_province_id": weak,
+			"target_intent": "BUILD_STRONGEST_FORCE",
+		})
+
 	return _make_need("ACQUIRE_RESOURCE", 1, {"target_resource": "arms"})
 
 
@@ -1102,6 +1153,18 @@ static func _find_weak_neighbor_province(ctx: NPCDataStructures.ContextSnapshot)
 	for ps: Variant in ctx.province_statuses:
 		if ps is NPCDataStructures.ProvinceStatus and ps.stability <= 50:
 			return ps.province_id
+	return -1
+
+
+static func _find_weak_neighbor_province_for_clan(
+	ctx: NPCDataStructures.ContextSnapshot,
+	target_clan: String,
+) -> int:
+	for ps: Variant in ctx.province_statuses:
+		if ps is NPCDataStructures.ProvinceStatus:
+			var status: NPCDataStructures.ProvinceStatus = ps
+			if status.clan == target_clan and status.stability <= 50:
+				return status.province_id
 	return -1
 
 

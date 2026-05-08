@@ -154,6 +154,7 @@ class ContextSnapshot:
 
 class ProvinceStatus:
 	var province_id: int = -1
+	var clan: String = ""
 	var stability: float = 100.0
 	var garrison_pu: int = 0
 	var active_crisis_id: int = -1
