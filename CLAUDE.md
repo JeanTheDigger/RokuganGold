@@ -218,11 +218,16 @@ single-dice-entry-point and server-authoritative constraints.
 - **simulation/action_executor.gd** — Routes chosen ActionIDs to SkillResolver
   dice rolls. Social/covert/military/admin categories with disposition-based TN
   modifiers. Returns effects dict (disposition_change, glory_change, info_gained,
-  province effects).
+  province effects). INTIMIDATE intercepted before generic social path and routed
+  through IntimidationSystem for proper honor/infamy/compliance effects — context
+  determined from metadata (secret_ref → blackmail, AT_COURT → public, else
+  private). Falls through to generic path when characters_by_id is empty.
 - **simulation/effect_applicator.gd** — Applies executor results to world state.
-  `apply()` mutates character disposition/honor/glory, province stability/garrison/
-  report date, and appends to action_log. `apply_day_results()` batch processes
-  a full day's results.
+  `apply()` mutates character disposition/honor/glory/infamy, witness disposition,
+  recipient disposition, province stability/garrison/report date, and appends to
+  action_log. `apply_day_results()` batch processes a full day's results.
+  Tracks all mutations in `applied` dict: `disposition_changes`, `honor_changes`,
+  `glory_changes`, `infamy_changes`, `province_updates`, `info_events`.
 
 ### Multi-NPC Wave Resolution
 - **simulation/npc_wave_resolver.gd** — `resolve_day()` handles full day
@@ -397,15 +402,15 @@ All in /tests/, one file per system:
 - test_action_point_system.gd (~12 tests)
 - test_npc_decision_engine.gd (~47 tests)
 - test_scoring_table_loader.gd (~15 tests)
-- test_action_executor.gd (~25 tests)
-- test_effect_applicator.gd (~28 tests)
+- test_action_executor.gd (~29 tests)
+- test_effect_applicator.gd (~37 tests)
 - test_npc_wave_resolver.gd (~15 tests)
 - test_resource_tick.gd (~30 tests)
 - test_objective_decomposer.gd (~100 tests)
 - test_information_system.gd (~40 tests)
 - test_topic_system.gd (~55 tests)
 - test_investigation_system.gd (~40 tests)
-- test_day_orchestrator.gd (~25 tests)
+- test_day_orchestrator.gd (~28 tests)
 - test_approach_evaluation.gd (~55 tests)
 - test_commitment_registry.gd (~60 tests)
 - test_military_hierarchy.gd (~47 tests)
@@ -1441,8 +1446,12 @@ The following subsystems are now integrated into the NPC decision loop:
   `cohabitation_days` fields.
 - **FavorSystem** — Daily: `_process_favors()` runs
   `FavorSystem.process_expirations()` and
-  `FavorSystem.process_deadline_breaches()` on the favors array. New param
-  on `advance_day()`: `favors`.
+  `FavorSystem.process_deadline_breaches()` on the favors array.
+  `_apply_favor_breach()` applies breach consequences: debtor honor/glory
+  loss via HonorGlorySystem, creditor disposition change with
+  `disposition_floor` enforcement (prevents minor favor breaks from creating
+  Blood Enemies), and witness disposition loss. New param on `advance_day()`:
+  `favors`.
 - **TravelSystem** — Daily: `_process_travel()` runs
   `TravelSystem.process_travel_tick()` before wave resolution, decrementing
   travel days and arriving characters. Phase 1: `build_context()` auto-detects
@@ -1541,6 +1550,31 @@ The following subsystems are now integrated into the NPC decision loop:
   Catches key typos at parse time instead of silent nulls at runtime. Native
   Godot Resource serialization. Compact and predictable for network sync.
   Autocomplete and static analysis support in GDScript.
+
+### 5. Effect Application Pattern — RESOLVED: dual pattern with naming guard
+**Decision:** Two coexisting patterns for applying character mutations:
+- **Pattern A (Deferred):** System returns effect keys → EffectApplicator
+  reads them and mutates characters centrally. Standard keys consumed:
+  `honor_change`, `glory_change`, `infamy_gain`, `infamy_change`,
+  `disposition_change`, `recipient_disposition_change`, `recipient_modifiers`,
+  `consume_item_id`, `witness_disposition_loss` + `witnesses`.
+  Used by: social actions, military, admin, intimidation, gifts.
+- **Pattern B (Pre-applied):** System directly mutates characters before
+  returning. Return dict contains metadata keys prefixed `subject_*` or
+  suffixed `*_cost` (never matching Pattern A keys). Used by: SecretSystem
+  (covert costs always apply regardless of success; exposure mutates the
+  secret's subject, not the actor) and SeductionSystem (honor/infamy cost
+  for attempting).
+- **Safety rule:** Never use `honor_change`, `glory_change`, or `infamy_gain`
+  as return dict keys from a system that pre-applies mutations. Use
+  `subject_honor_loss`, `subject_glory_loss`, `subject_infamy_gain`,
+  `honor_cost`, `glory_cost` to prevent EffectApplicator double-application.
+- `FavorSystem.break_favor()` returns `disposition_floor` (per-tier minimum)
+  which `_apply_favor_breach()` in DayOrchestrator enforces as a lower clamp.
+- **Rationale:** Pre-application is correct for always-pay costs (covert action
+  moral costs apply even on failure). Deferred application is correct for
+  outcome-dependent effects (disposition gains only on success). The naming
+  guard prevents accidental double-application across the two patterns.
 
 ## Pending Migration Tasks
 Code refactors required by the resolved design decisions above.
