@@ -55,7 +55,7 @@ static func advance_day(
 
 	_apply_cohabitation(characters, characters_by_id)
 
-	var favor_results: Dictionary = _process_favors(favors, ic_day)
+	var favor_results: Dictionary = _process_favors(favors, ic_day, characters_by_id)
 
 	var entanglement_results: Array[Dictionary] = _process_entanglements(entanglements, ic_day)
 	var bound_escape_results: Array[Dictionary] = _process_bound_states(
@@ -1155,15 +1155,60 @@ static func _apply_cohabitation(
 
 # -- Favor Processing (s12.10) ------------------------------------------------
 
-static func _process_favors(favors: Array, ic_day: int) -> Dictionary:
+static func _process_favors(
+	favors: Array,
+	ic_day: int,
+	characters_by_id: Dictionary = {},
+) -> Dictionary:
 	var expired_ids: Array[int] = FavorSystem.process_expirations(favors, ic_day)
 
 	var breach_results: Array[Dictionary] = FavorSystem.process_deadline_breaches(favors, ic_day)
+
+	for breach: Dictionary in breach_results:
+		_apply_favor_breach(breach, characters_by_id)
 
 	return {
 		"expired_favor_ids": expired_ids,
 		"deadline_breaches": breach_results,
 	}
+
+
+static func _apply_favor_breach(
+	breach: Dictionary,
+	characters_by_id: Dictionary,
+) -> void:
+	var debtor_id: int = breach.get("debtor_id", -1)
+	var creditor_id: int = breach.get("creditor_id", -1)
+	var debtor: L5RCharacterData = characters_by_id.get(debtor_id)
+	if debtor == null:
+		return
+
+	var honor_loss: float = breach.get("honor_loss", 0.0)
+	if absf(honor_loss) > 0.001:
+		HonorGlorySystem.apply_honor_change(debtor, honor_loss)
+
+	var glory_loss: float = breach.get("glory_loss", 0.0)
+	if absf(glory_loss) > 0.001:
+		HonorGlorySystem.apply_glory_change(debtor, glory_loss)
+
+	var creditor: L5RCharacterData = characters_by_id.get(creditor_id)
+	if creditor != null:
+		var disp_change: int = breach.get("disposition_change", 0)
+		if disp_change != 0:
+			var old_val: int = creditor.disposition_values.get(debtor_id, 0)
+			var new_val: int = clampi(old_val + disp_change, -100, 100)
+			creditor.disposition_values[debtor_id] = new_val
+
+	var witness_loss: int = breach.get("witness_disposition_loss", 0)
+	var witness_ids: Array = breach.get("witnesses", [])
+	if witness_loss != 0:
+		for wid in witness_ids:
+			var witness: L5RCharacterData = characters_by_id.get(wid)
+			if witness == null or witness.character_id == debtor_id:
+				continue
+			var old_val: int = witness.disposition_values.get(debtor_id, 0)
+			var new_val: int = clampi(old_val + witness_loss, -100, 100)
+			witness.disposition_values[debtor_id] = new_val
 
 
 # -- Travel Processing (s55.29) -----------------------------------------------

@@ -823,3 +823,98 @@ func test_favor_expiration_fires() -> void:
 		[], [], [], [], [], [1], {}, {}, [1000], [], {}, favors
 	)
 	assert_true(result["favor_results"]["expired_favor_ids"].has(1))
+
+
+func test_favor_breach_applies_honor_and_disposition() -> void:
+	var debtor := L5RCharacterData.new()
+	debtor.character_id = 2
+	debtor.character_name = "Debtor"
+	debtor.honor = 5.0
+	debtor.glory = 3.0
+	debtor.status = 2.0
+	debtor.reflexes = 3
+	debtor.awareness = 3
+	debtor.stamina = 3
+	debtor.willpower = 3
+	debtor.agility = 3
+	debtor.intelligence = 3
+	debtor.strength = 3
+	debtor.perception = 3
+	debtor.void_ring = 2
+	debtor.skills = {"Etiquette": 2}
+	debtor.emphases = {}
+	debtor.wounds_taken = 0
+	debtor.knowledge_pool = []
+	debtor.known_contacts_by_clan = {}
+	debtor.met_characters = []
+	_characters.append(debtor)
+	_characters_by_id[2] = debtor
+
+	var creditor: L5RCharacterData = _characters[0]
+	creditor.disposition_values = {2: 10}
+
+	var favor := FavorData.new()
+	favor.favor_id = 1
+	favor.tier = FavorData.FavorTier.MODERATE
+	favor.creditor_id = 1
+	favor.debtor_id = 2
+	favor.invoked = true
+	favor.response_deadline_ic_day = 5
+	favor.created_ic_day = 0
+	var favors: Array = [favor]
+
+	_time.current_tick = 10
+	var result: Dictionary = DayOrchestrator.advance_day(
+		_time, _characters, _characters_by_id, _make_world_states(),
+		_make_objectives(), _scoring_tables, _filter_data, _dice,
+		_action_skill_map, _provinces, _action_log, _season_meta,
+		[], [], [], [], [], [1], {}, {}, [1000], [], {}, favors
+	)
+
+	assert_eq(result["favor_results"]["deadline_breaches"].size(), 1)
+	assert_true(debtor.honor < 5.0)
+	assert_true(creditor.disposition_values[2] < 10)
+
+
+func test_favor_breach_witness_disposition_applied() -> void:
+	var debtor := L5RCharacterData.new()
+	debtor.character_id = 2
+	debtor.character_name = "Debtor"
+	debtor.honor = 5.0
+	debtor.glory = 3.0
+	debtor.status = 2.0
+	debtor.reflexes = 3
+	debtor.awareness = 3
+	debtor.stamina = 3
+	debtor.willpower = 3
+	debtor.agility = 3
+	debtor.intelligence = 3
+	debtor.strength = 3
+	debtor.perception = 3
+	debtor.void_ring = 2
+	debtor.skills = {"Etiquette": 2}
+	debtor.emphases = {}
+	debtor.wounds_taken = 0
+	debtor.knowledge_pool = []
+	debtor.known_contacts_by_clan = {}
+	debtor.met_characters = []
+	_characters.append(debtor)
+	_characters_by_id[2] = debtor
+
+	var breach: Dictionary = {
+		"debtor_id": 2,
+		"creditor_id": 1,
+		"disposition_change": -35,
+		"honor_loss": -1.0,
+		"glory_loss": -0.5,
+		"witness_disposition_loss": -10,
+		"witnesses": [1],
+	}
+
+	DayOrchestrator._apply_favor_breach(breach, _characters_by_id)
+
+	assert_almost_eq(debtor.honor, 4.0, 0.01)
+	assert_almost_eq(debtor.glory, 2.5, 0.01)
+	var creditor: L5RCharacterData = _characters[0]
+	assert_eq(creditor.disposition_values.get(2, 0), -35)
+	assert_eq(creditor.disposition_values.get(2, 0), -35)
