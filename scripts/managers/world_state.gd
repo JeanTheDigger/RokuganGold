@@ -52,6 +52,13 @@ var next_succession_id: Array[int] = [1]
 var entanglements: Array[Dictionary] = []
 var bound_states: Array[Dictionary] = []
 
+# -- Military Phase 2 State (s11.7) -------------------------------------------
+var active_armies: Array[Dictionary] = []
+var active_sieges: Array[Dictionary] = []
+var active_tethers: Array[Dictionary] = []
+var order_states: Array[Dictionary] = []
+var military_companies: Array[Dictionary] = []
+
 # -- Collective Disposition (s12.2b) -------------------------------------------
 # Clan-to-clan and family-to-family baselines keyed by sorted "a||b" strings.
 # Initialized to the locked PROVISIONAL pre-Scorpion-Coup starting values.
@@ -119,6 +126,12 @@ func advance_one_day() -> Dictionary:
 		next_succession_id,
 		entanglements,
 		bound_states,
+		active_armies,
+		active_sieges,
+		active_tethers,
+		order_states,
+		military_companies,
+		clans,
 	)
 
 

@@ -471,6 +471,7 @@ All in /tests/, one file per system:
 - test_order_system.gd (~30 tests)
 - test_military_service_system.gd (~35 tests)
 - test_pu_reconciliation.gd (~30 tests)
+- test_military_wiring.gd (~15 tests)
 
 ### Festival System (s11.5)
 - **simulation/festival_system.gd** — Empire-wide canonical festivals, Rokuyo
@@ -1750,6 +1751,21 @@ The following subsystems are now integrated into the NPC decision loop:
   Sleight of Hand skill, removes freed states. New params on `advance_day()`:
   `entanglements: Array[Dictionary]`, `bound_states: Array[Dictionary]`.
   Return dict gains `entanglement_results`, `bound_escape_results`.
+- **Military Phase 2 Systems** — Daily: `_process_military_daily()` runs after
+  bound/entanglement processing and before NPC wave resolution. Ticks four
+  subsystems each day: `_process_army_movements()` decrements march days for
+  all active armies (ArmyMovementSystem), `_process_siege_ticks()` processes
+  starvation and events for all active sieges (SiegeSystem),
+  `_process_tether_ticks()` resolves garrison raids and deprivation for supply
+  tethers (SupplyTetherSystem), `_process_order_ticks()` resets daily order
+  budgets and delivers pending orders (OrderSystem). Seasonal:
+  `_process_military_seasonal()` runs on season boundary after historical
+  modifier decay. `_process_army_upkeep()` computes seasonal rice/iron/koku
+  costs across all companies via ArmyUpkeepSystem. `_process_military_promotions()`
+  scans for commander vacancies and fills them via MilitaryPromotionSystem
+  candidate scoring. New params on `advance_day()`: `active_armies`,
+  `active_sieges`, `active_tethers`, `order_states`, `companies`, `clans`.
+  WorldStateData gains matching fields. Return dict gains `military_daily`.
 
 ## Resolved Design Decisions
 

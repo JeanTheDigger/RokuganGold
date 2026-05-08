@@ -38,6 +38,12 @@ static func advance_day(
 	next_succession_id: Array[int] = [1],
 	entanglements: Array[Dictionary] = [],
 	bound_states: Array[Dictionary] = [],
+	active_armies: Array[Dictionary] = [],
+	active_sieges: Array[Dictionary] = [],
+	active_tethers: Array[Dictionary] = [],
+	order_states: Array[Dictionary] = [],
+	companies: Array[Dictionary] = [],
+	clans: Dictionary = {},
 ) -> Dictionary:
 	var prev_season: int = time_system.get_season()
 
@@ -60,6 +66,11 @@ static func advance_day(
 	var entanglement_results: Array[Dictionary] = _process_entanglements(entanglements, ic_day)
 	var bound_escape_results: Array[Dictionary] = _process_bound_states(
 		bound_states, characters_by_id, dice_engine, ic_day
+	)
+
+	var military_daily: Dictionary = _process_military_daily(
+		active_armies, active_sieges, active_tethers, order_states,
+		dice_engine, settlements,
 	)
 
 	var day_result: Dictionary = NPCWaveResolver.resolve_day_applied(
@@ -155,6 +166,10 @@ static func advance_day(
 				active_topics, next_topic_id, ic_day, season_meta,
 			)
 		_decay_all_historical_modifiers(characters, ic_day)
+		_process_military_seasonal(
+			companies, settlements, clans, characters_by_id,
+			dice_engine, _season_to_name(current_season),
+		)
 		insurgency_results = _process_insurgencies(
 			insurgencies, provinces, dice_engine, current_season,
 			next_insurgency_id, world_states
@@ -195,6 +210,7 @@ static func advance_day(
 		"succession_results": succession_results,
 		"entanglement_results": entanglement_results,
 		"bound_escape_results": bound_escape_results,
+		"military_daily": military_daily,
 	}
 
 
@@ -1469,3 +1485,212 @@ static func _process_bound_states(
 		bound_states.erase(bs)
 
 	return results
+
+
+# -- Military Daily Processing -------------------------------------------------
+
+static func _process_military_daily(
+	active_armies: Array[Dictionary],
+	active_sieges: Array[Dictionary],
+	active_tethers: Array[Dictionary],
+	order_states: Array[Dictionary],
+	dice_engine: DiceEngine,
+	settlements: Array[SettlementData],
+) -> Dictionary:
+	var movement_results: Array[Dictionary] = _process_army_movements(active_armies)
+	var siege_results: Array[Dictionary] = _process_siege_ticks(
+		active_sieges, dice_engine,
+	)
+	var tether_results: Array[Dictionary] = _process_tether_ticks(
+		active_tethers, dice_engine,
+	)
+	var order_results: Dictionary = _process_order_ticks(order_states)
+
+	return {
+		"movement_results": movement_results,
+		"siege_results": siege_results,
+		"tether_results": tether_results,
+		"order_results": order_results,
+	}
+
+
+static func _process_army_movements(
+	active_armies: Array[Dictionary],
+) -> Array[Dictionary]:
+	var results: Array[Dictionary] = []
+	for army: Dictionary in active_armies:
+		if not army.get("is_marching", false):
+			continue
+		var r: Dictionary = ArmyMovementSystem.process_movement_tick(army)
+		results.append(r)
+	return results
+
+
+static func _process_siege_ticks(
+	active_sieges: Array[Dictionary],
+	dice_engine: DiceEngine,
+) -> Array[Dictionary]:
+	var results: Array[Dictionary] = []
+	for siege: Dictionary in active_sieges:
+		var personality: String = siege.get("personality_tag", "default")
+		var r: Dictionary = SiegeSystem.process_siege_tick(
+			siege, dice_engine, personality,
+		)
+		results.append(r)
+	return results
+
+
+static func _process_tether_ticks(
+	active_tethers: Array[Dictionary],
+	dice_engine: DiceEngine,
+) -> Array[Dictionary]:
+	var results: Array[Dictionary] = []
+	for tether: Dictionary in active_tethers:
+		var garrisons: Dictionary = tether.get("garrisons_on_path", {})
+		var enemies: Array[int] = []
+		for e: Variant in tether.get("enemy_armies_on_path", []):
+			enemies.append(int(e))
+		var r: Dictionary = SupplyTetherSystem.process_supply_tick(
+			dice_engine, tether, garrisons, enemies,
+		)
+		results.append(r)
+	return results
+
+
+static func _process_order_ticks(
+	order_states: Array[Dictionary],
+) -> Dictionary:
+	var delivered_total: int = 0
+	var per_commander: Array[Dictionary] = []
+	for os: Dictionary in order_states:
+		OrderSystem.reset_daily_orders(os)
+		var delivered: Array[Dictionary] = OrderSystem.process_pending_orders(os)
+		delivered_total += delivered.size()
+		if not delivered.is_empty():
+			per_commander.append({
+				"commander_id": os.get("commander_id", -1),
+				"delivered_count": delivered.size(),
+				"delivered_orders": delivered,
+			})
+	return {
+		"total_delivered": delivered_total,
+		"per_commander": per_commander,
+	}
+
+
+# -- Military Seasonal Processing -----------------------------------------------
+
+static func _process_military_seasonal(
+	companies: Array[Dictionary],
+	settlements: Array[SettlementData],
+	clans: Dictionary,
+	characters_by_id: Dictionary,
+	dice_engine: DiceEngine,
+	season_name: String,
+) -> Dictionary:
+	var upkeep_results: Dictionary = _process_army_upkeep(
+		companies, settlements, clans,
+	)
+	var promotion_results: Array[Dictionary] = _process_military_promotions(
+		companies, characters_by_id,
+	)
+	return {
+		"upkeep": upkeep_results,
+		"promotions": promotion_results,
+	}
+
+
+static func _process_army_upkeep(
+	companies: Array[Dictionary],
+	settlements: Array[SettlementData],
+	clans: Dictionary,
+) -> Dictionary:
+	var total_rice_cost: float = 0.0
+	var total_iron_cost: float = 0.0
+	var total_koku_cost: float = 0.0
+
+	for company: Dictionary in companies:
+		var unit_type: int = company.get("unit_type", Enums.CompanyUnitType.PEASANT_LEVY)
+		var costs: Dictionary = ArmyUpkeepSystem.compute_company_seasonal_costs(unit_type)
+		total_rice_cost += costs["rice"]
+		total_iron_cost += costs["iron"]
+		total_koku_cost += costs["koku"]
+
+	return {
+		"total_rice_cost": total_rice_cost,
+		"total_iron_cost": total_iron_cost,
+		"total_koku_cost": total_koku_cost,
+		"company_count": companies.size(),
+	}
+
+
+static func _process_military_promotions(
+	companies: Array[Dictionary],
+	characters_by_id: Dictionary,
+) -> Array[Dictionary]:
+	var units: Array[Dictionary] = []
+	for company: Dictionary in companies:
+		units.append({
+			"unit_id": company.get("company_id", -1),
+			"commander_id": company.get("commander_id", -1),
+			"rank_needed": Enums.MilitaryRank.CHUI,
+		})
+
+	var vacancies: Array[Dictionary] = MilitaryPromotionSystem.find_vacancies(units)
+	var results: Array[Dictionary] = []
+
+	for vacancy: Dictionary in vacancies:
+		var candidates: Array[Dictionary] = _gather_promotion_candidates(
+			vacancy, characters_by_id,
+		)
+		if candidates.is_empty():
+			continue
+
+		var best: Dictionary = MilitaryPromotionSystem.select_best_candidate(
+			candidates, vacancy.get("rank_needed", Enums.MilitaryRank.CHUI),
+		)
+		if best.is_empty():
+			continue
+
+		results.append({
+			"unit_id": vacancy["unit_id"],
+			"rank_needed": vacancy["rank_needed"],
+			"promoted_character_id": best.get("character_id", -1),
+			"score": best.get("score", 0.0),
+		})
+
+	return results
+
+
+static func _gather_promotion_candidates(
+	vacancy: Dictionary,
+	characters_by_id: Dictionary,
+) -> Array[Dictionary]:
+	var candidates: Array[Dictionary] = []
+	var rank_needed: int = vacancy.get("rank_needed", Enums.MilitaryRank.CHUI)
+
+	for char_id: int in characters_by_id:
+		var c: L5RCharacterData = characters_by_id[char_id]
+		if c == null:
+			continue
+		if c.military_rank >= rank_needed:
+			continue
+		if c.commanded_unit_id >= 0:
+			continue
+
+		var battle_skill: int = c.skills.get("Battle", 0)
+		candidates.append({
+			"character_id": c.character_id,
+			"battle_skill": battle_skill,
+			"insight_rank": CharacterStats.get_insight_rank(CharacterStats.get_insight(c)),
+			"school_rank": c.school_rank,
+			"glory": c.glory,
+			"disposition": 10,
+			"personality_virtue": c.primary_virtue,
+			"battles_commanded": c.battle_record.get("battles_fought", 0) if c.battle_record is Dictionary else 0,
+			"battles_as_chui": c.battle_record.get("battles_as_chui", 0) if c.battle_record is Dictionary else 0,
+			"battles_as_taisa": c.battle_record.get("battles_as_taisa", 0) if c.battle_record is Dictionary else 0,
+			"is_garrison": c.assigned_company_id >= 0,
+		})
+
+	return candidates
