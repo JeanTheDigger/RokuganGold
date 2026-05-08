@@ -221,6 +221,39 @@ static func process_iron_upkeep(
 	}
 
 
+static func process_iron_upkeep_dict(
+	companies: Array[Dictionary],
+	iron_state: Dictionary,
+	clan_iron_available: float,
+) -> Dictionary:
+	var total_needed: float = 0.0
+	for c: Dictionary in companies:
+		total_needed += get_iron_upkeep(c.get("unit_type", Enums.CompanyUnitType.PEASANT_LEVY))
+
+	var supplied: bool = clan_iron_available >= total_needed
+	var iron_consumed: float = minf(clan_iron_available, total_needed)
+	var degraded: Array[int] = []
+
+	for c: Dictionary in companies:
+		var cid: int = c.get("company_id", -1)
+		if not iron_state.has(cid):
+			iron_state[cid] = 0
+
+		if supplied:
+			if iron_state[cid] > 0:
+				iron_state[cid] = 0
+		else:
+			iron_state[cid] += 1
+			degraded.append(cid)
+
+	return {
+		"iron_consumed": iron_consumed,
+		"iron_needed": total_needed,
+		"supplied": supplied,
+		"degraded_companies": degraded,
+	}
+
+
 # -- Field Deprivation -----------------------------------------------------------
 
 static func get_rice_deprivation_effect(tick: int) -> Dictionary:

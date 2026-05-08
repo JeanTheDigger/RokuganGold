@@ -94,6 +94,13 @@ static func advance_day(
 		world_states,
 	)
 
+	var military_effects: Array[Dictionary] = _process_military_effects(
+		day_result.get("applied", []),
+		settlements,
+		characters_by_id,
+		companies,
+	)
+
 	var commitment_results: Array[Dictionary] = _process_commitment_deadlines(
 		commitments, ic_day, characters_by_id
 	)
@@ -211,6 +218,7 @@ static func advance_day(
 		"entanglement_results": entanglement_results,
 		"bound_escape_results": bound_escape_results,
 		"military_daily": military_daily,
+		"military_effects": military_effects,
 	}
 
 
@@ -1609,6 +1617,7 @@ static func _process_army_upkeep(
 	var total_iron_cost: float = 0.0
 	var total_koku_cost: float = 0.0
 
+	var companies_by_clan: Dictionary = {}
 	for company: Dictionary in companies:
 		var unit_type: int = company.get("unit_type", Enums.CompanyUnitType.PEASANT_LEVY)
 		var costs: Dictionary = ArmyUpkeepSystem.compute_company_seasonal_costs(unit_type)
@@ -1616,11 +1625,41 @@ static func _process_army_upkeep(
 		total_iron_cost += costs["iron"]
 		total_koku_cost += costs["koku"]
 
+		var clan_name: String = company.get("clan_name", "")
+		if not clan_name.is_empty():
+			if not companies_by_clan.has(clan_name):
+				companies_by_clan[clan_name] = []
+			companies_by_clan[clan_name].append(company)
+
+	var iron_results: Array[Dictionary] = []
+	for clan_name: String in companies_by_clan:
+		var clan: ClanData = clans.get(clan_name)
+		if clan == null:
+			continue
+		var clan_companies: Array[Dictionary] = []
+		for c: Variant in companies_by_clan[clan_name]:
+			if c is Dictionary:
+				clan_companies.append(c)
+		var iron_state: Dictionary = clan.get_meta("iron_state", {}) if clan.has_meta("iron_state") else {}
+		var r: Dictionary = ArmyUpkeepSystem.process_iron_upkeep_dict(
+			clan_companies, iron_state, clan.arms_stockpile,
+		)
+		clan.arms_stockpile = maxf(clan.arms_stockpile - r["iron_consumed"], 0.0)
+		if not iron_state.is_empty():
+			clan.set_meta("iron_state", iron_state)
+		iron_results.append({
+			"clan": clan_name,
+			"iron_consumed": r["iron_consumed"],
+			"supplied": r["supplied"],
+			"degraded": r["degraded_companies"],
+		})
+
 	return {
 		"total_rice_cost": total_rice_cost,
 		"total_iron_cost": total_iron_cost,
 		"total_koku_cost": total_koku_cost,
 		"company_count": companies.size(),
+		"iron_results": iron_results,
 	}
 
 
@@ -1694,3 +1733,145 @@ static func _gather_promotion_candidates(
 		})
 
 	return candidates
+
+
+# -- Military Effect Post-Processing -------------------------------------------
+
+static func _process_military_effects(
+	applied_list: Array,
+	settlements: Array[SettlementData],
+	characters_by_id: Dictionary,
+	companies: Array[Dictionary],
+) -> Array[Dictionary]:
+	var results: Array[Dictionary] = []
+	var settlements_by_province: Dictionary = _build_settlements_by_province(settlements)
+
+	for applied: Dictionary in applied_list:
+		var effects: Dictionary = applied.get("effects", {})
+
+		if effects.get("requires_levy_pu", false):
+			var r: Dictionary = _apply_levy_pu_effect(applied, settlements)
+			if not r.is_empty():
+				results.append(r)
+
+		if effects.get("requires_service_assignment", false):
+			var r: Dictionary = _apply_service_assignment_effect(
+				applied, characters_by_id,
+			)
+			if not r.is_empty():
+				results.append(r)
+
+		if effects.get("requires_battle_resolution", false):
+			var r: Dictionary = _apply_battle_pu_reconciliation(
+				applied, settlements_by_province,
+			)
+			if not r.is_empty():
+				results.append(r)
+
+	return results
+
+
+static func _apply_levy_pu_effect(
+	applied: Dictionary,
+	settlements: Array[SettlementData],
+) -> Dictionary:
+	var province_id: int = applied.get("target_province_id", -1)
+	if province_id < 0:
+		return {}
+
+	var target_settlement: SettlementData = null
+	for s: SettlementData in settlements:
+		if s.province_id == province_id:
+			target_settlement = s
+			break
+
+	if target_settlement == null:
+		return {}
+
+	var r: Dictionary = PUReconciliation.consume_levy_pu(target_settlement)
+	return {
+		"type": "levy_pu_consumed",
+		"character_id": applied.get("character_id", -1),
+		"province_id": province_id,
+		"settlement_id": target_settlement.settlement_id,
+		"pu_consumed": r["pu_consumed"],
+	}
+
+
+static func _apply_service_assignment_effect(
+	applied: Dictionary,
+	characters_by_id: Dictionary,
+) -> Dictionary:
+	var effects: Dictionary = applied.get("effects", {})
+	var target_id: int = applied.get("target_npc_id", -1)
+	if target_id < 0:
+		return {}
+
+	var target: L5RCharacterData = characters_by_id.get(target_id)
+	if target == null:
+		return {}
+
+	var commander_id: int = effects.get("military_commander_id", -1)
+	var unit_id: int = effects.get("assigned_unit_id", -1)
+	if commander_id < 0:
+		return {}
+
+	var char_data: Dictionary = {
+		"character_id": target.character_id,
+		"lord_id": target.lord_id,
+		"operational_superior_id": target.operational_superior_id,
+		"assigned_company_id": target.assigned_company_id,
+	}
+
+	MilitaryServiceSystem.assign_to_military_service(
+		char_data, commander_id, unit_id,
+	)
+
+	target.operational_superior_id = char_data["operational_superior_id"]
+	target.assigned_company_id = char_data["assigned_company_id"]
+
+	return {
+		"type": "service_assigned",
+		"character_id": target.character_id,
+		"new_commander_id": commander_id,
+		"assigned_unit_id": unit_id,
+	}
+
+
+static func _apply_battle_pu_reconciliation(
+	applied: Dictionary,
+	settlements_by_province: Dictionary,
+) -> Dictionary:
+	var effects: Dictionary = applied.get("effects", {})
+	var victor_companies: Array[Dictionary] = []
+	for c: Variant in effects.get("victor_companies", []):
+		if c is Dictionary:
+			victor_companies.append(c)
+	var loser_companies: Array[Dictionary] = []
+	for c: Variant in effects.get("loser_companies", []):
+		if c is Dictionary:
+			loser_companies.append(c)
+
+	if victor_companies.is_empty() and loser_companies.is_empty():
+		return {}
+
+	var r: Dictionary = PUReconciliation.reconcile_battle(
+		victor_companies, loser_companies, settlements_by_province,
+	)
+
+	return {
+		"type": "battle_pu_reconciliation",
+		"casualties": r.get("casualties", {}),
+		"recovery": r.get("recovery", {}),
+	}
+
+
+static func _build_settlements_by_province(
+	settlements: Array[SettlementData],
+) -> Dictionary:
+	var result: Dictionary = {}
+	for s: SettlementData in settlements:
+		if not result.has(s.province_id):
+			result[s.province_id] = []
+		result[s.province_id].append(s)
+	return result

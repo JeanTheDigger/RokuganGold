@@ -30,7 +30,7 @@ const MILITARY_ORDERS: Array[String] = [
 	"ORDER_BATTLE", "ORDER_PATROL", "ASSIGN_GARRISON",
 	"CONDUCT_RAID", "RAID_HARVEST", "CONDUCT_SORTIE",
 	"CONDUCT_STORM_ASSAULT", "MAINTAIN_SIEGE", "DRILL_TROOPS",
-	"BLOCKADE_TRADE_ROUTE",
+	"BLOCKADE_TRADE_ROUTE", "ASSIGN_TO_MILITARY_SERVICE",
 ]
 
 const ADMINISTRATIVE_ACTIONS: Array[String] = [
@@ -809,7 +809,10 @@ static func _compute_covert_effects(action_id: String, margin: int) -> Dictionar
 static func _compute_military_effects(action_id: String) -> Dictionary:
 	match action_id:
 		"ORDER_LEVY":
-			return {"effect": "levy_raised"}
+			return {
+				"effect": "levy_raised",
+				"requires_levy_pu": true,
+			}
 		"ORDER_DEPLOY":
 			return {"effect": "unit_deployed"}
 		"ORDER_FORTIFY":
@@ -817,7 +820,10 @@ static func _compute_military_effects(action_id: String) -> Dictionary:
 		"ORDER_RETREAT":
 			return {"effect": "retreat_ordered"}
 		"ORDER_BATTLE":
-			return {"effect": "battle_initiated"}
+			return {
+				"effect": "battle_initiated",
+				"requires_battle_resolution": true,
+			}
 		"ORDER_PATROL":
 			return {"effect": "patrol_dispatched"}
 		"ASSIGN_GARRISON":
@@ -834,6 +840,11 @@ static func _compute_military_effects(action_id: String) -> Dictionary:
 			return {"effect": "siege_maintained"}
 		"BLOCKADE_TRADE_ROUTE":
 			return {"effect": "route_blocked"}
+		"ASSIGN_TO_MILITARY_SERVICE":
+			return {
+				"effect": "service_assigned",
+				"requires_service_assignment": true,
+			}
 	return {"effect": "military_order_issued"}
 
 

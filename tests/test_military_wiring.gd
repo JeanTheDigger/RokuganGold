@@ -161,7 +161,146 @@ func test_promotion_detects_vacancy() -> void:
 # -- Integration: advance_day parameter count -----------------------------------
 
 func test_advance_day_accepts_military_params() -> void:
-	# Verify the function signature accepts the new params without error.
-	# We can't run a full advance_day without all the infrastructure,
-	# so we just confirm the static function exists with the right arity.
 	assert_true(DayOrchestrator.has_method("advance_day"))
+
+
+# -- Military Effect Post-Processing Tests --------------------------------------
+
+func _make_settlement(
+	id: int,
+	province_id: int,
+	pop: int = 10,
+	military: int = 2,
+) -> SettlementData:
+	var s: SettlementData = SettlementData.new()
+	s.settlement_id = id
+	s.province_id = province_id
+	s.population_pu = pop
+	s.military_pu = military
+	return s
+
+
+func test_levy_pu_effect_consumes_pu() -> void:
+	var s: SettlementData = _make_settlement(10, 1, 10, 3)
+	var applied: Dictionary = {
+		"character_id": 5,
+		"target_province_id": 1,
+		"effects": {"requires_levy_pu": true},
+	}
+	var r: Dictionary = DayOrchestrator._apply_levy_pu_effect(applied, [s])
+	assert_eq(r["type"], "levy_pu_consumed")
+	assert_eq(r["pu_consumed"], 1)
+	assert_eq(s.military_pu, 2)
+	assert_eq(s.population_pu, 9)
+
+
+func test_levy_pu_effect_no_province() -> void:
+	var applied: Dictionary = {
+		"character_id": 5,
+		"target_province_id": -1,
+		"effects": {"requires_levy_pu": true},
+	}
+	var r: Dictionary = DayOrchestrator._apply_levy_pu_effect(applied, [])
+	assert_true(r.is_empty())
+
+
+func test_battle_pu_reconciliation_effect() -> void:
+	var s: SettlementData = _make_settlement(10, 1, 10, 3)
+	var settlements: Dictionary = {1: [s]}
+	var applied: Dictionary = {
+		"effects": {
+			"requires_battle_resolution": true,
+			"victor_companies": [
+				{"company_id": 1, "starting_health": 153, "current_health": 100, "source_province_id": 1},
+			],
+			"loser_companies": [
+				{"company_id": 2, "starting_health": 153, "current_health": 50, "source_province_id": 1},
+			],
+		},
+	}
+	var r: Dictionary = DayOrchestrator._apply_battle_pu_reconciliation(
+		applied, settlements,
+	)
+	assert_eq(r["type"], "battle_pu_reconciliation")
+	assert_true(r.has("casualties"))
+	assert_true(r.has("recovery"))
+
+
+func test_battle_pu_reconciliation_no_companies() -> void:
+	var applied: Dictionary = {
+		"effects": {"requires_battle_resolution": true},
+	}
+	var r: Dictionary = DayOrchestrator._apply_battle_pu_reconciliation(applied, {})
+	assert_true(r.is_empty())
+
+
+func test_process_military_effects_scans_results() -> void:
+	var s: SettlementData = _make_settlement(10, 1, 10, 3)
+	var applied_list: Array = [
+		{
+			"character_id": 5,
+			"target_province_id": 1,
+			"effects": {"requires_levy_pu": true},
+		},
+	]
+	var results: Array[Dictionary] = DayOrchestrator._process_military_effects(
+		applied_list, [s], {}, [],
+	)
+	assert_eq(results.size(), 1)
+	assert_eq(results[0]["type"], "levy_pu_consumed")
+
+
+func test_build_settlements_by_province() -> void:
+	var s1: SettlementData = _make_settlement(1, 10)
+	var s2: SettlementData = _make_settlement(2, 10)
+	var s3: SettlementData = _make_settlement(3, 20)
+	var result: Dictionary = DayOrchestrator._build_settlements_by_province(
+		[s1, s2, s3],
+	)
+	assert_eq(result[10].size(), 2)
+	assert_eq(result[20].size(), 1)
+
+
+# -- Iron Upkeep Dict Tests -----------------------------------------------------
+
+func test_iron_upkeep_dict_supplied() -> void:
+	var companies: Array[Dictionary] = [
+		_make_company_dict(1, Enums.CompanyUnitType.ASHIGARU_SPEARMEN),
+	]
+	var iron_state: Dictionary = {}
+	var r: Dictionary = ArmyUpkeepSystem.process_iron_upkeep_dict(
+		companies, iron_state, 10.0,
+	)
+	assert_true(r["supplied"])
+	assert_eq(r["degraded_companies"].size(), 0)
+
+
+func test_iron_upkeep_dict_not_supplied() -> void:
+	var companies: Array[Dictionary] = [
+		_make_company_dict(1, Enums.CompanyUnitType.ASHIGARU_SPEARMEN),
+	]
+	var iron_state: Dictionary = {}
+	var r: Dictionary = ArmyUpkeepSystem.process_iron_upkeep_dict(
+		companies, iron_state, 0.0,
+	)
+	assert_false(r["supplied"])
+	assert_eq(r["degraded_companies"].size(), 1)
+	assert_eq(iron_state[1], 1)
+
+
+func test_iron_upkeep_dict_increments_state() -> void:
+	var companies: Array[Dictionary] = [
+		_make_company_dict(1, Enums.CompanyUnitType.ASHIGARU_SPEARMEN),
+	]
+	var iron_state: Dictionary = {1: 1}
+	ArmyUpkeepSystem.process_iron_upkeep_dict(companies, iron_state, 0.0)
+	assert_eq(iron_state[1], 2)
+
+
+func test_iron_upkeep_dict_resets_on_supply() -> void:
+	var companies: Array[Dictionary] = [
+		_make_company_dict(1, Enums.CompanyUnitType.ASHIGARU_SPEARMEN),
+	]
+	var iron_state: Dictionary = {1: 3}
+	ArmyUpkeepSystem.process_iron_upkeep_dict(companies, iron_state, 10.0)
+	assert_eq(iron_state[1], 0)
