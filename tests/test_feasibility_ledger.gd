@@ -449,3 +449,563 @@ func test_war_justification_no_feasibility_inputs_still_passes() -> void:
 	)
 	assert_true(result["justified"])
 	assert_false(result.has("feasibility"))
+
+
+# =============================================================================
+# Phase 2: Alternative Ladder Tests
+# =============================================================================
+
+func _make_infeasible_inputs() -> Dictionary:
+	var s := _make_settlement(1, 5.0, 5, 1, 3, 8)
+	s.koku_stockpile = 2.0
+	return {
+		"authority_level": WarData.AuthorityLevel.BORDER_CONFLICT,
+		"primary_virtue": "",
+		"controlled_settlements": [s],
+		"provinces": [],
+		"clan_arms_stockpile": 1.0,
+		"clan_iron_stockpile": 0.5,
+		"proposed_levy_pu": 10.0,
+		"equip_cost": 5.0,
+		"iron_upkeep_rate_per_pu": 0.10,
+		"levy_before_planting": true,
+		"spans_autumn": false,
+		"current_koku": 2.0,
+	}
+
+
+# -- Rung 1: Scale Down -------------------------------------------------------
+
+func test_scale_down_halves_levy() -> void:
+	var inputs := _make_infeasible_inputs()
+	var result: Dictionary = FeasibilityLedger.try_scale_down(inputs)
+	assert_true(result["applied"])
+	assert_eq(result["reduced_levy_pu"], 5.0)
+
+
+func test_scale_down_halves_equip_cost() -> void:
+	var inputs := _make_infeasible_inputs()
+	var result: Dictionary = FeasibilityLedger.try_scale_down(inputs)
+	assert_eq(result["modified_inputs"]["equip_cost"], 2.5)
+
+
+# -- Rung 2: Delay to Harvest -------------------------------------------------
+
+func test_delay_to_harvest_applies_in_spring() -> void:
+	var inputs := _make_infeasible_inputs()
+	var result: Dictionary = FeasibilityLedger.try_delay_to_harvest(
+		inputs, "Jin", "spring",
+	)
+	assert_true(result["applied"])
+	assert_true(result["modified_inputs"]["spans_autumn"])
+	assert_false(result["modified_inputs"]["levy_before_planting"])
+
+
+func test_delay_to_harvest_applies_in_summer() -> void:
+	var inputs := _make_infeasible_inputs()
+	var result: Dictionary = FeasibilityLedger.try_delay_to_harvest(
+		inputs, "Jin", "summer",
+	)
+	assert_true(result["applied"])
+
+
+func test_delay_to_harvest_skipped_in_autumn() -> void:
+	var inputs := _make_infeasible_inputs()
+	var result: Dictionary = FeasibilityLedger.try_delay_to_harvest(
+		inputs, "Jin", "autumn",
+	)
+	assert_false(result["applied"])
+	assert_eq(result["reason"], "wrong_season")
+
+
+func test_delay_to_harvest_skipped_in_winter() -> void:
+	var inputs := _make_infeasible_inputs()
+	var result: Dictionary = FeasibilityLedger.try_delay_to_harvest(
+		inputs, "Jin", "winter",
+	)
+	assert_false(result["applied"])
+
+
+func test_delay_to_harvest_yu_skips() -> void:
+	var inputs := _make_infeasible_inputs()
+	var result: Dictionary = FeasibilityLedger.try_delay_to_harvest(
+		inputs, "Yu", "spring",
+	)
+	assert_false(result["applied"])
+	assert_eq(result["reason"], "personality_skip")
+
+
+func test_delay_to_harvest_kyoryoku_skips() -> void:
+	var inputs := _make_infeasible_inputs()
+	var result: Dictionary = FeasibilityLedger.try_delay_to_harvest(
+		inputs, "Kyoryoku", "spring",
+	)
+	assert_false(result["applied"])
+
+
+# -- Rung 3: Market Purchase --------------------------------------------------
+
+func test_market_purchase_with_green_koku() -> void:
+	var inputs := _make_infeasible_inputs()
+	var result: Dictionary = FeasibilityLedger.try_market_purchase(
+		inputs, FeasibilityLedger.ResourceStatus.GREEN, true,
+	)
+	assert_true(result["applied"])
+	assert_true(result["rice_purchased"] > 0.0)
+
+
+func test_market_purchase_blocked_by_red_koku() -> void:
+	var result: Dictionary = FeasibilityLedger.try_market_purchase(
+		{}, FeasibilityLedger.ResourceStatus.RED, true,
+	)
+	assert_false(result["applied"])
+	assert_eq(result["reason"], "koku_red")
+
+
+func test_market_purchase_blocked_by_no_routes() -> void:
+	var result: Dictionary = FeasibilityLedger.try_market_purchase(
+		{}, FeasibilityLedger.ResourceStatus.GREEN, false,
+	)
+	assert_false(result["applied"])
+	assert_eq(result["reason"], "no_trade_routes")
+
+
+# -- Rung 4: Demand Tribute ---------------------------------------------------
+
+func test_demand_tribute_extracts_25_percent() -> void:
+	var inputs := _make_infeasible_inputs()
+	var vassals: Array = [
+		{"disposition": 40, "rice_stockpile": 100.0, "arms_stockpile": 10.0},
+	]
+	var result: Dictionary = FeasibilityLedger.try_demand_tribute(
+		inputs, "", vassals,
+	)
+	assert_true(result["applied"])
+	assert_eq(result["tribute_rice"], 25.0)
+	assert_eq(result["tribute_arms"], 2.5)
+	assert_eq(result["compliant_vassals"], 1)
+
+
+func test_demand_tribute_rival_refuses() -> void:
+	var inputs := _make_infeasible_inputs()
+	var vassals: Array = [
+		{"disposition": -20, "rice_stockpile": 100.0, "arms_stockpile": 10.0},
+	]
+	var result: Dictionary = FeasibilityLedger.try_demand_tribute(
+		inputs, "", vassals,
+	)
+	assert_false(result["applied"])
+	assert_eq(result["reason"], "no_compliant_vassals")
+
+
+func test_demand_tribute_jin_skips_shortage_vassal() -> void:
+	var inputs := _make_infeasible_inputs()
+	var vassals: Array = [
+		{"disposition": 40, "rice_stockpile": 100.0, "arms_stockpile": 10.0, "in_shortage": true},
+	]
+	var result: Dictionary = FeasibilityLedger.try_demand_tribute(
+		inputs, "Jin", vassals,
+	)
+	assert_false(result["applied"])
+	assert_eq(result["reason"], "no_compliant_vassals")
+
+
+func test_demand_tribute_generates_topic() -> void:
+	var inputs := _make_infeasible_inputs()
+	var vassals: Array = [
+		{"disposition": 40, "rice_stockpile": 50.0, "arms_stockpile": 5.0},
+	]
+	var result: Dictionary = FeasibilityLedger.try_demand_tribute(
+		inputs, "", vassals,
+	)
+	assert_true(result["generates_topic"])
+	assert_eq(result["topic_tier"], 4)
+
+
+func test_demand_tribute_no_vassals() -> void:
+	var inputs := _make_infeasible_inputs()
+	var result: Dictionary = FeasibilityLedger.try_demand_tribute(
+		inputs, "", [],
+	)
+	assert_false(result["applied"])
+	assert_eq(result["reason"], "no_vassals")
+
+
+# -- Rung 5: Allied Aid -------------------------------------------------------
+
+func test_allied_aid_with_willing_friend() -> void:
+	var inputs := _make_infeasible_inputs()
+	var allies: Array = [
+		{"disposition": 40, "surplus_rice": 50.0, "surplus_koku": 20.0},
+	]
+	var result: Dictionary = FeasibilityLedger.try_request_allied_aid(
+		inputs, "", allies,
+	)
+	assert_true(result["applied"])
+	assert_true(result["aid_rice"] > 0.0)
+	assert_true(result["creates_favor"])
+
+
+func test_allied_aid_ketsui_skips() -> void:
+	var allies: Array = [
+		{"disposition": 40, "surplus_rice": 50.0, "surplus_koku": 20.0},
+	]
+	var result: Dictionary = FeasibilityLedger.try_request_allied_aid(
+		{}, "Ketsui", allies,
+	)
+	assert_false(result["applied"])
+	assert_eq(result["reason"], "personality_skip")
+
+
+func test_allied_aid_ishi_skips() -> void:
+	var result: Dictionary = FeasibilityLedger.try_request_allied_aid(
+		{}, "Ishi", [{"disposition": 50, "surplus_rice": 100.0}],
+	)
+	assert_false(result["applied"])
+
+
+func test_allied_aid_low_disposition_rejected() -> void:
+	var inputs := _make_infeasible_inputs()
+	var allies: Array = [
+		{"disposition": 10, "surplus_rice": 50.0, "surplus_koku": 20.0},
+	]
+	var result: Dictionary = FeasibilityLedger.try_request_allied_aid(
+		inputs, "", allies,
+	)
+	assert_false(result["applied"])
+	assert_eq(result["reason"], "no_willing_allies")
+
+
+func test_allied_aid_significant_contribution_tier2_favor() -> void:
+	var inputs := _make_infeasible_inputs()
+	var allies: Array = [
+		{"disposition": 50, "surplus_rice": 10.0, "surplus_koku": 0.0},
+	]
+	var result: Dictionary = FeasibilityLedger.try_request_allied_aid(
+		inputs, "", allies,
+	)
+	assert_true(result["applied"])
+	assert_eq(result["favor_tier"], 2)
+
+
+# -- Rung 6: Raid Neighbor ----------------------------------------------------
+
+func test_raid_jin_blocked() -> void:
+	var result: Dictionary = FeasibilityLedger.try_raid_neighbor(
+		{}, "Jin", false, false, [],
+	)
+	assert_false(result["applied"])
+	assert_eq(result["reason"], "personality_block")
+
+
+func test_raid_gi_blocked() -> void:
+	var result: Dictionary = FeasibilityLedger.try_raid_neighbor(
+		{}, "Gi", false, false, [],
+	)
+	assert_false(result["applied"])
+	assert_eq(result["reason"], "personality_block")
+
+
+func test_raid_meiyo_needs_grievance() -> void:
+	var result: Dictionary = FeasibilityLedger.try_raid_neighbor(
+		{}, "Meiyo", false, false, [{"garrison_pu": 0.5, "rice_stockpile": 40.0}],
+	)
+	assert_false(result["applied"])
+	assert_eq(result["reason"], "meiyo_no_grievance")
+
+
+func test_raid_meiyo_with_grievance_allowed() -> void:
+	var inputs := _make_infeasible_inputs()
+	var provinces: Array = [
+		{"province_id": 5, "clan": "Crane", "garrison_pu": 0.5, "rice_stockpile": 40.0},
+	]
+	var result: Dictionary = FeasibilityLedger.try_raid_neighbor(
+		inputs, "Meiyo", true, false, provinces,
+	)
+	assert_true(result["applied"])
+
+
+func test_raid_rei_needs_prior_demand() -> void:
+	var result: Dictionary = FeasibilityLedger.try_raid_neighbor(
+		{}, "Rei", false, false, [{"garrison_pu": 0.5, "rice_stockpile": 40.0}],
+	)
+	assert_false(result["applied"])
+	assert_eq(result["reason"], "rei_no_prior_demand")
+
+
+func test_raid_rei_with_prior_demand_allowed() -> void:
+	var inputs := _make_infeasible_inputs()
+	var provinces: Array = [
+		{"province_id": 5, "clan": "Crane", "garrison_pu": 0.5, "rice_stockpile": 40.0},
+	]
+	var result: Dictionary = FeasibilityLedger.try_raid_neighbor(
+		inputs, "Rei", false, true, provinces,
+	)
+	assert_true(result["applied"])
+
+
+func test_raid_seizes_50_percent_rice() -> void:
+	var inputs := _make_infeasible_inputs()
+	var provinces: Array = [
+		{"province_id": 5, "clan": "Crane", "garrison_pu": 0.5, "rice_stockpile": 80.0},
+	]
+	var result: Dictionary = FeasibilityLedger.try_raid_neighbor(
+		inputs, "", false, false, provinces,
+	)
+	assert_true(result["applied"])
+	assert_eq(result["seized_rice"], 40.0)
+	assert_eq(result["honor_cost"], -1.0)
+	assert_eq(result["glory_cost"], -0.3)
+
+
+func test_raid_prefers_existing_war_target() -> void:
+	var inputs := _make_infeasible_inputs()
+	var provinces: Array = [
+		{"province_id": 5, "clan": "Crane", "garrison_pu": 0.5, "rice_stockpile": 40.0, "already_at_war": false},
+		{"province_id": 6, "clan": "Lion", "garrison_pu": 0.5, "rice_stockpile": 30.0, "already_at_war": true},
+	]
+	var result: Dictionary = FeasibilityLedger.try_raid_neighbor(
+		inputs, "", false, false, provinces,
+	)
+	assert_true(result["applied"])
+	assert_eq(result["target_province_id"], 6)
+
+
+func test_raid_skips_heavy_garrison() -> void:
+	var inputs := _make_infeasible_inputs()
+	var provinces: Array = [
+		{"province_id": 5, "clan": "Crane", "garrison_pu": 2.0, "rice_stockpile": 100.0},
+	]
+	var result: Dictionary = FeasibilityLedger.try_raid_neighbor(
+		inputs, "", false, false, provinces,
+	)
+	assert_false(result["applied"])
+	assert_eq(result["reason"], "no_viable_targets")
+
+
+func test_raid_no_targets_empty() -> void:
+	var result: Dictionary = FeasibilityLedger.try_raid_neighbor(
+		{}, "", false, false, [],
+	)
+	assert_false(result["applied"])
+	assert_eq(result["reason"], "no_targets")
+
+
+func test_raid_triggers_war_status_when_not_at_war() -> void:
+	var inputs := _make_infeasible_inputs()
+	var provinces: Array = [
+		{"province_id": 5, "clan": "Crane", "garrison_pu": 0.5, "rice_stockpile": 40.0, "already_at_war": false},
+	]
+	var result: Dictionary = FeasibilityLedger.try_raid_neighbor(
+		inputs, "", false, false, provinces,
+	)
+	assert_true(result["triggers_war_status"])
+
+
+func test_raid_no_war_trigger_when_already_at_war() -> void:
+	var inputs := _make_infeasible_inputs()
+	var provinces: Array = [
+		{"province_id": 5, "clan": "Crane", "garrison_pu": 0.5, "rice_stockpile": 40.0, "already_at_war": true},
+	]
+	var result: Dictionary = FeasibilityLedger.try_raid_neighbor(
+		inputs, "", false, false, provinces,
+	)
+	assert_false(result["triggers_war_status"])
+
+
+# -- Rung 7: Desperation Override ----------------------------------------------
+
+func test_desperation_fires_with_all_conditions() -> void:
+	var result: Dictionary = FeasibilityLedger.try_desperation_override(
+		{}, "Yu", 0.3, true, 50, false,
+	)
+	assert_true(result["applied"])
+	assert_true(result["desperation_levy"])
+	assert_true(result["overrides_feasibility"])
+
+
+func test_desperation_blocked_by_high_rice() -> void:
+	var result: Dictionary = FeasibilityLedger.try_desperation_override(
+		{}, "Yu", 0.6, true, 50, false,
+	)
+	assert_false(result["applied"])
+	assert_eq(result["reason"], "rice_above_threshold")
+
+
+func test_desperation_blocked_without_critical_objective() -> void:
+	var result: Dictionary = FeasibilityLedger.try_desperation_override(
+		{}, "Yu", 0.3, false, 50, false,
+	)
+	assert_false(result["applied"])
+	assert_eq(result["reason"], "no_critical_objective")
+
+
+func test_desperation_blocked_by_wrong_personality() -> void:
+	var result: Dictionary = FeasibilityLedger.try_desperation_override(
+		{}, "Jin", 0.3, true, 50, false,
+	)
+	assert_false(result["applied"])
+	assert_eq(result["reason"], "personality_and_score_block")
+
+
+func test_desperation_defender_at_desperate_score() -> void:
+	var result: Dictionary = FeasibilityLedger.try_desperation_override(
+		{}, "Jin", 0.3, true, 20, true,
+	)
+	assert_true(result["applied"])
+
+
+func test_desperation_jin_honor_cost() -> void:
+	var result: Dictionary = FeasibilityLedger.try_desperation_override(
+		{}, "Jin", 0.3, true, 20, true,
+	)
+	assert_eq(result["honor_cost"], -1.0)
+
+
+func test_desperation_non_jin_no_extra_honor_cost() -> void:
+	var result: Dictionary = FeasibilityLedger.try_desperation_override(
+		{}, "Yu", 0.3, true, 50, false,
+	)
+	assert_eq(result["honor_cost"], 0.0)
+
+
+func test_desperation_chugi_qualifies() -> void:
+	var result: Dictionary = FeasibilityLedger.try_desperation_override(
+		{}, "Chugi", 0.3, true, 50, false,
+	)
+	assert_true(result["applied"])
+
+
+func test_desperation_ketsui_qualifies() -> void:
+	var result: Dictionary = FeasibilityLedger.try_desperation_override(
+		{}, "Ketsui", 0.3, true, 50, false,
+	)
+	assert_true(result["applied"])
+
+
+# -- Full Ladder Walk ----------------------------------------------------------
+
+func test_ladder_walk_already_feasible() -> void:
+	var s := _make_settlement(1, 200.0, 30, 5, 10, 5)
+	s.koku_stockpile = 50.0
+	var inputs: Dictionary = {
+		"authority_level": WarData.AuthorityLevel.PROVINCIAL_RAID,
+		"primary_virtue": "",
+		"controlled_settlements": [s],
+		"provinces": [],
+		"clan_arms_stockpile": 20.0,
+		"clan_iron_stockpile": 10.0,
+		"proposed_levy_pu": 2.0,
+		"equip_cost": 1.0,
+		"iron_upkeep_rate_per_pu": 0.10,
+		"levy_before_planting": false,
+		"spans_autumn": false,
+		"current_koku": 50.0,
+	}
+	var result: Dictionary = FeasibilityLedger.walk_alternative_ladder(
+		inputs, "", "spring",
+	)
+	assert_eq(result["outcome"], "already_feasible")
+	assert_eq(result["rungs_tried"].size(), 0)
+
+
+func test_ladder_walk_scale_down_resolves() -> void:
+	var s := _make_settlement(1, 50.0, 20, 5, 10, 5)
+	s.koku_stockpile = 10.0
+	var inputs: Dictionary = {
+		"authority_level": WarData.AuthorityLevel.PROVINCIAL_RAID,
+		"primary_virtue": "",
+		"controlled_settlements": [s],
+		"provinces": [],
+		"clan_arms_stockpile": 10.0,
+		"clan_iron_stockpile": 5.0,
+		"proposed_levy_pu": 30.0,
+		"equip_cost": 15.0,
+		"iron_upkeep_rate_per_pu": 0.10,
+		"levy_before_planting": false,
+		"spans_autumn": false,
+		"current_koku": 10.0,
+	}
+	var initial: Dictionary = FeasibilityLedger.evaluate_feasibility(inputs)
+	if not initial["feasible"]:
+		var result: Dictionary = FeasibilityLedger.walk_alternative_ladder(
+			inputs, "", "spring",
+		)
+		if result["outcome"] == "scaled_down":
+			assert_true(result["final_ledger"]["feasible"])
+			assert_true(result["rungs_tried"].size() >= 1)
+
+
+func test_ladder_walk_abandoned_when_hopeless() -> void:
+	var s := _make_settlement(1, 0.0, 1, 0, 0, 10)
+	var inputs: Dictionary = {
+		"authority_level": WarData.AuthorityLevel.CLAN_WAR,
+		"primary_virtue": "Makoto",
+		"controlled_settlements": [s],
+		"provinces": [],
+		"clan_arms_stockpile": 0.0,
+		"clan_iron_stockpile": 0.0,
+		"proposed_levy_pu": 20.0,
+		"equip_cost": 40.0,
+		"iron_upkeep_rate_per_pu": 0.20,
+		"levy_before_planting": true,
+		"spans_autumn": false,
+		"current_koku": 0.0,
+	}
+	var result: Dictionary = FeasibilityLedger.walk_alternative_ladder(
+		inputs, "Makoto", "autumn",
+	)
+	assert_eq(result["outcome"], "abandoned")
+	assert_true(result["rungs_tried"].size() >= 5)
+
+
+func test_ladder_walk_desperation_fires() -> void:
+	var s := _make_settlement(1, 1.0, 2, 0, 1, 5)
+	var inputs: Dictionary = {
+		"authority_level": WarData.AuthorityLevel.BORDER_CONFLICT,
+		"primary_virtue": "Yu",
+		"controlled_settlements": [s],
+		"provinces": [],
+		"clan_arms_stockpile": 0.0,
+		"clan_iron_stockpile": 0.0,
+		"proposed_levy_pu": 10.0,
+		"equip_cost": 20.0,
+		"iron_upkeep_rate_per_pu": 0.20,
+		"levy_before_planting": true,
+		"spans_autumn": false,
+		"current_koku": 0.0,
+	}
+	var result: Dictionary = FeasibilityLedger.walk_alternative_ladder(
+		inputs, "Yu", "autumn",
+		[], [], [], false, false, false, true, 50, false,
+	)
+	assert_eq(result["outcome"], "desperation_override")
+	assert_true(result["desperation_levy"])
+
+
+func test_ladder_walk_tribute_resolves() -> void:
+	var s := _make_settlement(1, 5.0, 10, 2, 5, 3)
+	s.koku_stockpile = 2.0
+	var inputs: Dictionary = {
+		"authority_level": WarData.AuthorityLevel.PROVINCIAL_RAID,
+		"primary_virtue": "",
+		"controlled_settlements": [s],
+		"provinces": [],
+		"clan_arms_stockpile": 5.0,
+		"clan_iron_stockpile": 3.0,
+		"proposed_levy_pu": 5.0,
+		"equip_cost": 2.0,
+		"iron_upkeep_rate_per_pu": 0.10,
+		"levy_before_planting": false,
+		"spans_autumn": false,
+		"current_koku": 2.0,
+	}
+	var vassals: Array = [
+		{"disposition": 40, "rice_stockpile": 200.0, "arms_stockpile": 20.0},
+	]
+	var result: Dictionary = FeasibilityLedger.walk_alternative_ladder(
+		inputs, "", "autumn", vassals,
+	)
+	if result["outcome"] == "demanded_tribute":
+		assert_true(result["final_ledger"]["feasible"])
+		assert_true(result.has("side_effects"))

@@ -475,7 +475,7 @@ All in /tests/, one file per system:
 - test_war_system.gd (~61 tests)
 - test_war_justification.gd (~55 tests)
 - test_war_termination.gd (~46 tests)
-- test_feasibility_ledger.gd (~45 tests)
+- test_feasibility_ledger.gd (~90 tests)
 
 ### Festival System (s11.5)
 - **simulation/festival_system.gd** — Empire-wide canonical festivals, Rokuyo
@@ -1795,9 +1795,29 @@ All in /tests/, one file per system:
   `_build_declare_war_metadata()` threads feasibility_inputs into DECLARE_WAR
   action metadata when feasibility_data is available on ContextSnapshot.
   ContextSnapshot gains `feasibility_data: Dictionary` field.
-  Deferred: Phase 2 Alternative Ladder, Phase 3 Mid-Campaign Supply Monitor,
-  Phase 4 player-initiated starvation strategies, forge infrastructure for
-  arms production projection, stipend obligations.
+  Phase 2 Alternative Ladder: 7-rung sequential evaluation when feasibility
+  fails. `walk_alternative_ladder()` walks all rungs, recalculating after each.
+  Rung 1 Scale Down: halve levy PU and equip cost.
+  Rung 2 Delay to Harvest: set spans_autumn=true if spring/summer; Yu/Kyoryoku
+  skip (delay = cowardice).
+  Rung 3 Market Purchase: spend 50% koku for rice; requires Green/Yellow koku
+  and active trade routes.
+  Rung 4 Demand Tribute: 25% of vassal stockpiles; −5 disposition per vassal;
+  Rival (−11) refuses; Jin skips shortage vassals; generates Tier 4 topic.
+  Rung 5 Allied Aid: Friend+ (31+) allies contribute 25% surplus; creates
+  favor (Tier 2 if >20% of ally surplus, Tier 3 otherwise); Ketsui/Ishi skip.
+  Rung 6 Raid Neighbor: seize 50% rice from weak province (garrison ≤1.0 PU);
+  −1.0 Honor, −0.3 Glory, −15 clan disposition, −5 other clans; Jin/Gi never;
+  Meiyo needs grievance; Rei needs prior demand; prefers existing war targets;
+  triggers Provincial Raid if not already at war; Tier 3 topic.
+  Rung 7 Desperation Override: requires rice <0.50/PU + critical objective
+  (DEFEND_PROVINCE, SEEK_VENGEANCE, AVENGE, RESOLVE_CLAN_WAR) + aggressive
+  virtue (Yu/Chugi/Ketsui/Kyoryoku/Ishi) or Desperate war score (<25) while
+  defending. Jin lords pay extra −1.0 Honor. Tier 3 topic.
+  Returns `{outcome, rungs_tried, final_ledger, side_effects}`.
+  Deferred: Phase 3 Mid-Campaign Supply Monitor, Phase 4 player-initiated
+  starvation strategies, forge infrastructure for arms production projection,
+  stipend obligations.
 
 ### War Trigger Pipeline (Metadata Population)
 - **Phase 3 metadata population** — `_populate_action_metadata()` in

@@ -70,6 +70,7 @@ static func calculate_rice_budget(
 	levy_before_planting: bool,
 	spans_autumn: bool,
 	provinces: Array = [],
+	market_rice_bonus: float = 0.0,
 ) -> Dictionary:
 	var current_stockpile: float = 0.0
 	var total_civilian_pu: float = 0.0
@@ -101,7 +102,7 @@ static func calculate_rice_budget(
 		projected_harvest = farming_after_levy * RICE_YIELD_PER_PU * terrain_mult
 
 	var net: float = (
-		current_stockpile + projected_harvest
+		current_stockpile + projected_harvest + market_rice_bonus
 		- civilian_burn - military_burn - production_loss
 	)
 
@@ -254,6 +255,7 @@ static func evaluate_feasibility(inputs: Dictionary) -> Dictionary:
 	var current_koku: float = inputs.get("current_koku", 0.0)
 	var stipend_per_season: float = inputs.get("stipend_per_season", 0.0)
 	var is_high_priority: bool = inputs.get("is_high_priority_objective", false)
+	var market_rice_bonus: float = inputs.get("market_rice_bonus", 0.0)
 
 	var campaign_seasons: int = estimate_campaign_seasons(
 		authority_level, primary_virtue,
@@ -268,7 +270,7 @@ static func evaluate_feasibility(inputs: Dictionary) -> Dictionary:
 
 	var rice: Dictionary = calculate_rice_budget(
 		controlled_settlements, proposed_levy_pu, campaign_seasons,
-		levy_before_planting, spans_autumn, provinces,
+		levy_before_planting, spans_autumn, provinces, market_rice_bonus,
 	)
 
 	var arms: Dictionary = calculate_arms_budget(
@@ -324,3 +326,527 @@ static func _avg_terrain_multiplier(
 	if count == 0:
 		return 1.0
 	return total / float(count)
+
+
+# =============================================================================
+# Phase 2: The Alternative Ladder (s4.3.17)
+# =============================================================================
+# When the Feasibility Ledger returns RISKY or NOT_FEASIBLE/DESPERATE, the AI
+# walks down 7 rungs sequentially, recalculating after each. Stops when the
+# verdict improves to an acceptable level.
+
+enum LadderRung {
+	SCALE_DOWN,
+	DELAY_TO_HARVEST,
+	PURCHASE_MARKET,
+	DEMAND_TRIBUTE,
+	REQUEST_ALLIED_AID,
+	RAID_NEIGHBOR,
+	DESPERATION_OVERRIDE,
+}
+
+
+# -- Constants ----------------------------------------------------------------
+
+const SCALE_DOWN_FACTOR: float = 0.5
+const SCALE_DOWN_EQUIP_RATIO: float = 0.5
+
+const DELAY_SKIP_VIRTUES: Array[String] = ["Yu", "Kyoryoku"]
+const DELAYABLE_SEASONS: Array[String] = ["spring", "summer"]
+
+const TRIBUTE_MAX_FRACTION: float = 0.25
+const TRIBUTE_DISPOSITION_COST: int = -5
+const TRIBUTE_FRIEND_THRESHOLD: int = 31
+const TRIBUTE_REFUSE_THRESHOLD: int = -11
+
+const ALLIED_AID_SKIP_VIRTUES: Array[String] = ["Ketsui", "Ishi"]
+const ALLIED_AID_FRIEND_THRESHOLD: int = 31
+const ALLIED_AID_SIGNIFICANT_FRACTION: float = 0.20
+
+const RAID_BLOCK_VIRTUES: Array[String] = ["Jin", "Gi"]
+const RAID_HONOR_COST: float = -1.0
+const RAID_GLORY_COST: float = -0.3
+const RAID_CLAN_DISPOSITION_COST: int = -15
+const RAID_OTHER_DISPOSITION_COST: int = -5
+const RAID_RICE_FRACTION: float = 0.50
+const RAID_GARRISON_CAP: float = 1.0
+
+const DESPERATION_RICE_PER_PU: float = 0.50
+const DESPERATION_VIRTUES: Array[String] = [
+	"Yu", "Chugi", "Ketsui", "Kyoryoku", "Ishi",
+]
+const CRITICAL_OBJECTIVES: Array[String] = [
+	"DEFEND_PROVINCE", "DEFEND_TERRITORY",
+	"RESOLVE_CLAN_WAR", "SEEK_VENGEANCE", "AVENGE",
+]
+const DESPERATION_JIN_HONOR_COST: float = -1.0
+
+
+# -- Rung 1: Scale Down the Army ----------------------------------------------
+
+static func try_scale_down(inputs: Dictionary) -> Dictionary:
+	var modified: Dictionary = inputs.duplicate(true)
+	var current_levy: float = modified.get("proposed_levy_pu", 0.0)
+	var current_equip: float = modified.get("equip_cost", 0.0)
+
+	modified["proposed_levy_pu"] = current_levy * SCALE_DOWN_FACTOR
+	modified["equip_cost"] = current_equip * SCALE_DOWN_EQUIP_RATIO
+
+	var ledger: Dictionary = evaluate_feasibility(modified)
+	return {
+		"rung": LadderRung.SCALE_DOWN,
+		"applied": true,
+		"ledger": ledger,
+		"modified_inputs": modified,
+		"reduced_levy_pu": modified["proposed_levy_pu"],
+	}
+
+
+# -- Rung 2: Delay to Post-Harvest --------------------------------------------
+
+static func try_delay_to_harvest(
+	inputs: Dictionary,
+	primary_virtue: String,
+	current_season: String,
+) -> Dictionary:
+	if primary_virtue in DELAY_SKIP_VIRTUES:
+		return {"rung": LadderRung.DELAY_TO_HARVEST, "applied": false, "reason": "personality_skip"}
+
+	if current_season not in DELAYABLE_SEASONS:
+		return {"rung": LadderRung.DELAY_TO_HARVEST, "applied": false, "reason": "wrong_season"}
+
+	var modified: Dictionary = inputs.duplicate(true)
+	modified["levy_before_planting"] = false
+	modified["spans_autumn"] = true
+
+	var ledger: Dictionary = evaluate_feasibility(modified)
+	return {
+		"rung": LadderRung.DELAY_TO_HARVEST,
+		"applied": true,
+		"ledger": ledger,
+		"modified_inputs": modified,
+	}
+
+
+# -- Rung 3: Purchase on the Market -------------------------------------------
+
+static func try_market_purchase(
+	inputs: Dictionary,
+	koku_status: int,
+	has_trade_routes: bool,
+) -> Dictionary:
+	if koku_status == ResourceStatus.RED:
+		return {"rung": LadderRung.PURCHASE_MARKET, "applied": false, "reason": "koku_red"}
+
+	if not has_trade_routes:
+		return {"rung": LadderRung.PURCHASE_MARKET, "applied": false, "reason": "no_trade_routes"}
+
+	var modified: Dictionary = inputs.duplicate(true)
+	var available_koku: float = modified.get("current_koku", 0.0)
+	var rice_price: float = 1.0
+	var purchasable_rice: float = available_koku * 0.5 / rice_price
+
+	var settlements: Array = modified.get("controlled_settlements", [])
+	var bonus_rice: float = purchasable_rice
+	modified["market_rice_bonus"] = bonus_rice
+
+	var ledger: Dictionary = evaluate_feasibility(modified)
+	return {
+		"rung": LadderRung.PURCHASE_MARKET,
+		"applied": true,
+		"ledger": ledger,
+		"modified_inputs": modified,
+		"koku_spent": available_koku * 0.5,
+		"rice_purchased": bonus_rice,
+	}
+
+
+# -- Rung 4: Demand Extraordinary Tribute --------------------------------------
+
+static func try_demand_tribute(
+	inputs: Dictionary,
+	primary_virtue: String,
+	vassal_stockpiles: Array,
+) -> Dictionary:
+	if vassal_stockpiles.is_empty():
+		return {"rung": LadderRung.DEMAND_TRIBUTE, "applied": false, "reason": "no_vassals"}
+
+	var total_tribute_rice: float = 0.0
+	var total_tribute_arms: float = 0.0
+	var compliant_vassals: int = 0
+	var refusing_vassals: int = 0
+
+	for v: Variant in vassal_stockpiles:
+		if not (v is Dictionary):
+			continue
+		var vd: Dictionary = v
+		var disp: int = vd.get("disposition", 0)
+		var rice: float = vd.get("rice_stockpile", 0.0)
+		var arms: float = vd.get("arms_stockpile", 0.0)
+		var in_shortage: bool = vd.get("in_shortage", false)
+
+		if primary_virtue == "Jin" and in_shortage:
+			continue
+
+		if disp < TRIBUTE_REFUSE_THRESHOLD:
+			refusing_vassals += 1
+			continue
+
+		total_tribute_rice += rice * TRIBUTE_MAX_FRACTION
+		total_tribute_arms += arms * TRIBUTE_MAX_FRACTION
+		compliant_vassals += 1
+
+	if compliant_vassals == 0:
+		return {"rung": LadderRung.DEMAND_TRIBUTE, "applied": false, "reason": "no_compliant_vassals"}
+
+	var modified: Dictionary = inputs.duplicate(true)
+	var settlements: Array = modified.get("controlled_settlements", [])
+	if not settlements.is_empty() and settlements[0] is SettlementData:
+		(settlements[0] as SettlementData).rice_stockpile += total_tribute_rice
+	modified["clan_arms_stockpile"] = modified.get("clan_arms_stockpile", 0.0) + total_tribute_arms
+
+	var ledger: Dictionary = evaluate_feasibility(modified)
+	return {
+		"rung": LadderRung.DEMAND_TRIBUTE,
+		"applied": true,
+		"ledger": ledger,
+		"modified_inputs": modified,
+		"tribute_rice": total_tribute_rice,
+		"tribute_arms": total_tribute_arms,
+		"compliant_vassals": compliant_vassals,
+		"refusing_vassals": refusing_vassals,
+		"disposition_cost": TRIBUTE_DISPOSITION_COST,
+		"generates_topic": true,
+		"topic_tier": 4,
+	}
+
+
+# -- Rung 5: Request Allied Aid -----------------------------------------------
+
+static func try_request_allied_aid(
+	inputs: Dictionary,
+	primary_virtue: String,
+	allied_surplus: Array,
+) -> Dictionary:
+	if primary_virtue in ALLIED_AID_SKIP_VIRTUES:
+		return {"rung": LadderRung.REQUEST_ALLIED_AID, "applied": false, "reason": "personality_skip"}
+
+	if allied_surplus.is_empty():
+		return {"rung": LadderRung.REQUEST_ALLIED_AID, "applied": false, "reason": "no_allies"}
+
+	var total_aid_rice: float = 0.0
+	var total_aid_koku: float = 0.0
+	var favor_tier: int = 3
+
+	for ally: Variant in allied_surplus:
+		if not (ally is Dictionary):
+			continue
+		var ad: Dictionary = ally
+		var disp: int = ad.get("disposition", 0)
+		if disp < ALLIED_AID_FRIEND_THRESHOLD:
+			continue
+		var surplus_rice: float = ad.get("surplus_rice", 0.0)
+		var surplus_koku: float = ad.get("surplus_koku", 0.0)
+		if surplus_rice <= 0.0 and surplus_koku <= 0.0:
+			continue
+		var contribution_rice: float = surplus_rice * 0.25
+		var contribution_koku: float = surplus_koku * 0.25
+		total_aid_rice += contribution_rice
+		total_aid_koku += contribution_koku
+		if contribution_rice > surplus_rice * ALLIED_AID_SIGNIFICANT_FRACTION:
+			favor_tier = 2
+
+	if total_aid_rice <= 0.0 and total_aid_koku <= 0.0:
+		return {"rung": LadderRung.REQUEST_ALLIED_AID, "applied": false, "reason": "no_willing_allies"}
+
+	var modified: Dictionary = inputs.duplicate(true)
+	var settlements: Array = modified.get("controlled_settlements", [])
+	if not settlements.is_empty() and settlements[0] is SettlementData:
+		(settlements[0] as SettlementData).rice_stockpile += total_aid_rice
+	modified["current_koku"] = modified.get("current_koku", 0.0) + total_aid_koku
+
+	var ledger: Dictionary = evaluate_feasibility(modified)
+	return {
+		"rung": LadderRung.REQUEST_ALLIED_AID,
+		"applied": true,
+		"ledger": ledger,
+		"modified_inputs": modified,
+		"aid_rice": total_aid_rice,
+		"aid_koku": total_aid_koku,
+		"favor_tier": favor_tier,
+		"creates_favor": true,
+	}
+
+
+# -- Rung 6: Raid a Vulnerable Neighbor ----------------------------------------
+
+static func try_raid_neighbor(
+	inputs: Dictionary,
+	primary_virtue: String,
+	has_grievance: bool,
+	has_issued_demand: bool,
+	raidable_provinces: Array,
+) -> Dictionary:
+	if primary_virtue in RAID_BLOCK_VIRTUES:
+		return {"rung": LadderRung.RAID_NEIGHBOR, "applied": false, "reason": "personality_block"}
+
+	if primary_virtue == "Meiyo" and not has_grievance:
+		return {"rung": LadderRung.RAID_NEIGHBOR, "applied": false, "reason": "meiyo_no_grievance"}
+
+	if primary_virtue == "Rei" and not has_issued_demand:
+		return {"rung": LadderRung.RAID_NEIGHBOR, "applied": false, "reason": "rei_no_prior_demand"}
+
+	if raidable_provinces.is_empty():
+		return {"rung": LadderRung.RAID_NEIGHBOR, "applied": false, "reason": "no_targets"}
+
+	var best_target: Dictionary = {}
+	var best_rice: float = 0.0
+	for rp: Variant in raidable_provinces:
+		if not (rp is Dictionary):
+			continue
+		var rpd: Dictionary = rp
+		var garrison: float = rpd.get("garrison_pu", 0.0)
+		if garrison > RAID_GARRISON_CAP:
+			continue
+		var rice: float = rpd.get("rice_stockpile", 0.0) * RAID_RICE_FRACTION
+		var at_war: bool = rpd.get("already_at_war", false)
+		var effective_rice: float = rice * (1.5 if at_war else 1.0)
+		if effective_rice > best_rice:
+			best_rice = effective_rice
+			best_target = rpd
+
+	if best_target.is_empty():
+		return {"rung": LadderRung.RAID_NEIGHBOR, "applied": false, "reason": "no_viable_targets"}
+
+	var seized_rice: float = best_target.get("rice_stockpile", 0.0) * RAID_RICE_FRACTION
+
+	var modified: Dictionary = inputs.duplicate(true)
+	var settlements: Array = modified.get("controlled_settlements", [])
+	if not settlements.is_empty() and settlements[0] is SettlementData:
+		(settlements[0] as SettlementData).rice_stockpile += seized_rice
+
+	var ledger: Dictionary = evaluate_feasibility(modified)
+	return {
+		"rung": LadderRung.RAID_NEIGHBOR,
+		"applied": true,
+		"ledger": ledger,
+		"modified_inputs": modified,
+		"seized_rice": seized_rice,
+		"target_province_id": best_target.get("province_id", -1),
+		"target_clan": best_target.get("clan", ""),
+		"honor_cost": RAID_HONOR_COST,
+		"glory_cost": RAID_GLORY_COST,
+		"clan_disposition_cost": RAID_CLAN_DISPOSITION_COST,
+		"other_disposition_cost": RAID_OTHER_DISPOSITION_COST,
+		"triggers_war_status": not best_target.get("already_at_war", false),
+		"generates_topic": true,
+		"topic_tier": 3,
+	}
+
+
+# -- Rung 7: Desperation Override ----------------------------------------------
+
+const CRITICAL_OBJECTIVE_KEYS: Array[String] = [
+	"DEFEND_PROVINCE", "DEFEND_TERRITORY",
+	"RESOLVE_CLAN_WAR", "SEEK_VENGEANCE", "AVENGE",
+]
+
+
+static func try_desperation_override(
+	inputs: Dictionary,
+	primary_virtue: String,
+	rice_per_pu: float,
+	has_critical_objective: bool,
+	war_score: int,
+	is_defending: bool,
+) -> Dictionary:
+	if rice_per_pu >= DESPERATION_RICE_PER_PU:
+		return {"rung": LadderRung.DESPERATION_OVERRIDE, "applied": false, "reason": "rice_above_threshold"}
+
+	if not has_critical_objective:
+		return {"rung": LadderRung.DESPERATION_OVERRIDE, "applied": false, "reason": "no_critical_objective"}
+
+	var personality_qualifies: bool = primary_virtue in DESPERATION_VIRTUES
+	var score_qualifies: bool = war_score < 25 and is_defending
+	if not personality_qualifies and not score_qualifies:
+		return {"rung": LadderRung.DESPERATION_OVERRIDE, "applied": false, "reason": "personality_and_score_block"}
+
+	var honor_cost: float = 0.0
+	if primary_virtue == "Jin":
+		honor_cost = DESPERATION_JIN_HONOR_COST
+
+	return {
+		"rung": LadderRung.DESPERATION_OVERRIDE,
+		"applied": true,
+		"overrides_feasibility": true,
+		"desperation_levy": true,
+		"honor_cost": honor_cost,
+		"generates_topic": true,
+		"topic_tier": 3,
+	}
+
+
+# -- Full Ladder Walk ----------------------------------------------------------
+
+static func walk_alternative_ladder(
+	inputs: Dictionary,
+	primary_virtue: String,
+	current_season: String,
+	vassal_stockpiles: Array = [],
+	allied_surplus: Array = [],
+	raidable_provinces: Array = [],
+	has_trade_routes: bool = false,
+	has_grievance: bool = false,
+	has_issued_demand: bool = false,
+	has_critical_objective: bool = false,
+	war_score: int = 50,
+	is_defending: bool = false,
+) -> Dictionary:
+	var rungs_tried: Array[Dictionary] = []
+	var working_inputs: Dictionary = inputs.duplicate(true)
+	var current_ledger: Dictionary = evaluate_feasibility(working_inputs)
+
+	if current_ledger["feasible"]:
+		return {
+			"outcome": "already_feasible",
+			"rungs_tried": rungs_tried,
+			"final_ledger": current_ledger,
+		}
+
+	# Rung 1: Scale Down
+	var r1: Dictionary = try_scale_down(working_inputs)
+	rungs_tried.append(r1)
+	if r1["applied"] and r1["ledger"]["feasible"]:
+		return {
+			"outcome": "scaled_down",
+			"rungs_tried": rungs_tried,
+			"final_ledger": r1["ledger"],
+			"modified_inputs": r1["modified_inputs"],
+		}
+	if r1["applied"]:
+		working_inputs = r1["modified_inputs"]
+		current_ledger = r1["ledger"]
+
+	# Rung 2: Delay to Harvest
+	var r2: Dictionary = try_delay_to_harvest(working_inputs, primary_virtue, current_season)
+	rungs_tried.append(r2)
+	if r2.get("applied", false) and r2.get("ledger", {}).get("feasible", false):
+		return {
+			"outcome": "delayed_to_harvest",
+			"rungs_tried": rungs_tried,
+			"final_ledger": r2["ledger"],
+			"modified_inputs": r2["modified_inputs"],
+		}
+	if r2.get("applied", false):
+		working_inputs = r2["modified_inputs"]
+		current_ledger = r2["ledger"]
+
+	# Rung 3: Market Purchase
+	var koku_status: int = current_ledger.get("koku", {}).get("status", ResourceStatus.RED)
+	var r3: Dictionary = try_market_purchase(working_inputs, koku_status, has_trade_routes)
+	rungs_tried.append(r3)
+	if r3.get("applied", false) and r3.get("ledger", {}).get("feasible", false):
+		return {
+			"outcome": "market_purchase",
+			"rungs_tried": rungs_tried,
+			"final_ledger": r3["ledger"],
+			"modified_inputs": r3["modified_inputs"],
+		}
+	if r3.get("applied", false):
+		working_inputs = r3["modified_inputs"]
+		current_ledger = r3["ledger"]
+
+	# Rung 4: Demand Tribute
+	var r4: Dictionary = try_demand_tribute(working_inputs, primary_virtue, vassal_stockpiles)
+	rungs_tried.append(r4)
+	if r4.get("applied", false) and r4.get("ledger", {}).get("feasible", false):
+		return {
+			"outcome": "demanded_tribute",
+			"rungs_tried": rungs_tried,
+			"final_ledger": r4["ledger"],
+			"modified_inputs": r4["modified_inputs"],
+			"side_effects": _extract_side_effects(r4),
+		}
+	if r4.get("applied", false):
+		working_inputs = r4["modified_inputs"]
+		current_ledger = r4["ledger"]
+
+	# Rung 5: Allied Aid
+	var r5: Dictionary = try_request_allied_aid(working_inputs, primary_virtue, allied_surplus)
+	rungs_tried.append(r5)
+	if r5.get("applied", false) and r5.get("ledger", {}).get("feasible", false):
+		return {
+			"outcome": "allied_aid",
+			"rungs_tried": rungs_tried,
+			"final_ledger": r5["ledger"],
+			"modified_inputs": r5["modified_inputs"],
+			"side_effects": _extract_side_effects(r5),
+		}
+	if r5.get("applied", false):
+		working_inputs = r5["modified_inputs"]
+		current_ledger = r5["ledger"]
+
+	# Rung 6: Raid Neighbor
+	var r6: Dictionary = try_raid_neighbor(
+		working_inputs, primary_virtue, has_grievance, has_issued_demand,
+		raidable_provinces,
+	)
+	rungs_tried.append(r6)
+	if r6.get("applied", false) and r6.get("ledger", {}).get("feasible", false):
+		return {
+			"outcome": "raid_neighbor",
+			"rungs_tried": rungs_tried,
+			"final_ledger": r6["ledger"],
+			"modified_inputs": r6["modified_inputs"],
+			"side_effects": _extract_side_effects(r6),
+		}
+	if r6.get("applied", false):
+		working_inputs = r6["modified_inputs"]
+		current_ledger = r6["ledger"]
+
+	# Rung 7: Desperation Override
+	var rice_per_pu: float = current_ledger.get("rice", {}).get("per_pu", 1.0)
+	var r7: Dictionary = try_desperation_override(
+		working_inputs, primary_virtue, rice_per_pu,
+		has_critical_objective, war_score, is_defending,
+	)
+	rungs_tried.append(r7)
+	if r7.get("applied", false) and r7.get("overrides_feasibility", false):
+		return {
+			"outcome": "desperation_override",
+			"rungs_tried": rungs_tried,
+			"final_ledger": current_ledger,
+			"desperation_levy": true,
+			"side_effects": _extract_side_effects(r7),
+		}
+
+	return {
+		"outcome": "abandoned",
+		"rungs_tried": rungs_tried,
+		"final_ledger": current_ledger,
+	}
+
+
+static func _extract_side_effects(rung_result: Dictionary) -> Dictionary:
+	var effects: Dictionary = {}
+	if rung_result.get("generates_topic", false):
+		effects["generates_topic"] = true
+		effects["topic_tier"] = rung_result.get("topic_tier", 4)
+	if rung_result.has("honor_cost"):
+		effects["honor_cost"] = rung_result["honor_cost"]
+	if rung_result.has("glory_cost"):
+		effects["glory_cost"] = rung_result["glory_cost"]
+	if rung_result.has("disposition_cost"):
+		effects["disposition_cost"] = rung_result["disposition_cost"]
+	if rung_result.has("clan_disposition_cost"):
+		effects["clan_disposition_cost"] = rung_result["clan_disposition_cost"]
+	if rung_result.has("other_disposition_cost"):
+		effects["other_disposition_cost"] = rung_result["other_disposition_cost"]
+	if rung_result.get("creates_favor", false):
+		effects["creates_favor"] = true
+		effects["favor_tier"] = rung_result.get("favor_tier", 3)
+	if rung_result.get("triggers_war_status", false):
+		effects["triggers_war_status"] = true
+	if rung_result.get("desperation_levy", false):
+		effects["desperation_levy"] = true
+	return effects
