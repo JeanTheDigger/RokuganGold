@@ -463,7 +463,7 @@ All in /tests/, one file per system:
 - test_secret_system_wiring.gd (~25 tests)
 - test_army_combat_system.gd (~145 tests)
 - test_army_upkeep_system.gd (~40 tests)
-- test_supply_tether_system.gd (~45 tests)
+- test_supply_tether_system.gd (~51 tests)
 - test_siege_system.gd (~50 tests)
 - test_army_movement_system.gd (~40 tests)
 - test_levy_system.gd (~35 tests)
@@ -471,7 +471,7 @@ All in /tests/, one file per system:
 - test_order_system.gd (~30 tests)
 - test_military_service_system.gd (~35 tests)
 - test_pu_reconciliation.gd (~30 tests)
-- test_military_wiring.gd (~212 tests)
+- test_military_wiring.gd (~219 tests)
 - test_war_system.gd (~61 tests)
 - test_war_justification.gd (~55 tests)
 - test_war_termination.gd (~46 tests)
@@ -1500,6 +1500,10 @@ All in /tests/, one file per system:
   blocks recovery. `get_supply_source_provinces()` merges lord's provinces
   with compelled and shared sources. `process_supply_tick()` orchestrates
   the full tick: raid resolution → deprivation advance or step-down recovery.
+  `detach_tether()` deactivates a tether on retreat arrival: resets deprivation
+  ticks/accumulators/overall_state to SOLID, frees all escort companies (returns
+  their IDs), marks `detached=true`. Detached tethers skipped by downstream
+  processing.
   Deferred: Vertical/horizontal supply political mechanics (disposition
   damage, favor integration), visual line rendering, territory capture
   during war, actual sub-tile coordinate system (uses placeholder int IDs).
@@ -1847,6 +1851,15 @@ All in /tests/, one file per system:
   pathfinding when coordinate system exists). Skips already-moving,
   disband-ordered, or target-less armies. Sets `retreat_arrived` flag on
   movement result when retreat march completes.
+  Retreat arrival cleanup: `_process_retreat_arrivals()` runs after movement
+  tick. When `retreat_arrived` fires: clears `retreat_ordered` and
+  `retreat_target_province` flags from army, detaches supply tether via
+  `SupplyTetherSystem.detach_tether()` (resets deprivation, frees escort
+  companies, marks tether `detached=true`). Detached tethers skipped by
+  tether tick, deprivation, and recovery processing. `army_id` added to
+  movement results for retreat arrival lookup. `_find_army_by_id()` and
+  `_detach_army_tether()` helper functions. Return dict gains
+  `retreat_arrival_results`.
   Disband-ordered armies processed by `_process_disbands()` before movement:
   deactivates army, returns PU proportional to company health via
   `PUReconciliation.return_disband_pu()` to source province settlements.
