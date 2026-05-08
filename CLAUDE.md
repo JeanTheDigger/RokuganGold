@@ -1766,6 +1766,18 @@ The following subsystems are now integrated into the NPC decision loop:
   candidate scoring. New params on `advance_day()`: `active_armies`,
   `active_sieges`, `active_tethers`, `order_states`, `companies`, `clans`.
   WorldStateData gains matching fields. Return dict gains `military_daily`.
+  Post-execution: `_process_military_effects()` scans day results for effect
+  flags. ORDER_LEVY → `_apply_levy_pu_effect()` calls
+  `PUReconciliation.consume_levy_pu()` on source settlement. ORDER_BATTLE →
+  `_apply_battle_pu_reconciliation()` calls `PUReconciliation.reconcile_battle()`
+  with victor/loser company data from effects dict. ASSIGN_TO_MILITARY_SERVICE →
+  `_apply_service_assignment_effect()` calls
+  `MilitaryServiceSystem.assign_to_military_service()` to mutate
+  operational_superior_id. Return dict gains `military_effects`.
+  Iron degradation: `ArmyUpkeepSystem.process_iron_upkeep_dict()` added for
+  dict-based companies. Seasonal upkeep groups companies by clan, deducts
+  iron from `ClanData.arms_stockpile`, tracks per-company iron state for
+  degradation penalties.
 
 ## Resolved Design Decisions
 
