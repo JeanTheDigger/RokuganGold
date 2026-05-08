@@ -58,6 +58,7 @@ var active_sieges: Array[Dictionary] = []
 var active_tethers: Array[Dictionary] = []
 var order_states: Array[Dictionary] = []
 var military_companies: Array[Dictionary] = []
+var active_wars: Array[WarData] = []
 
 # -- Collective Disposition (s12.2b) -------------------------------------------
 # Clan-to-clan and family-to-family baselines keyed by sorted "a||b" strings.
@@ -92,7 +93,12 @@ func rebuild_characters_by_id() -> void:
 		characters_by_id[c.character_id] = c
 
 
+func _sync_wars_to_world_states() -> void:
+	world_states["active_wars"] = WarSystem.wars_to_context_array(active_wars)
+
+
 func advance_one_day() -> Dictionary:
+	_sync_wars_to_world_states()
 	return DayOrchestrator.advance_day(
 		time_system,
 		characters,
@@ -132,6 +138,7 @@ func advance_one_day() -> Dictionary:
 		order_states,
 		military_companies,
 		clans,
+		active_wars,
 	)
 
 

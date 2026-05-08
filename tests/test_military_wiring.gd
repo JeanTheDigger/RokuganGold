@@ -1077,3 +1077,133 @@ func test_battle_topic_has_province_affected() -> void:
 	)
 	assert_eq(topics[0].provinces_affected.size(), 1)
 	assert_eq(topics[0].provinces_affected[0], 7)
+
+
+# -- War System Wiring Tests -----------------------------------------------------
+
+func _make_war(
+	war_id: int = 1,
+	clan_a: String = "Crab",
+	clan_b: String = "Crane",
+) -> WarData:
+	return WarSystem.declare_war(
+		war_id, clan_a, clan_b,
+		WarData.AuthorityLevel.FAMILY_WAR, 10, 20, 100,
+	)
+
+
+func _make_character(
+	id: int,
+	clan: String = "Crab",
+) -> L5RCharacterData:
+	var c: L5RCharacterData = L5RCharacterData.new()
+	c.character_id = id
+	c.clan = clan
+	return c
+
+
+func test_war_score_shift_on_battle_trigger() -> void:
+	var war: WarData = _make_war()
+	var companies: Array[Dictionary] = [
+		{"army_id": 1, "clan_name": "Crab"},
+	]
+	var military_daily: Dictionary = {
+		"movement_results": [
+			{"army_id": 1, "battle_triggered": true, "arrived_province_id": 5},
+		],
+	}
+	var wars: Array[WarData] = [war]
+	var results: Array[Dictionary] = DayOrchestrator._process_war_score_shifts(
+		military_daily, [], wars, companies,
+	)
+	assert_eq(results.size(), 1)
+	assert_eq(results[0]["event"], "minor_battle")
+	assert_eq(war.war_score_a, 53)
+	assert_eq(war.war_score_b, 47)
+
+
+func test_war_score_no_shift_without_battle() -> void:
+	var war: WarData = _make_war()
+	var military_daily: Dictionary = {
+		"movement_results": [
+			{"army_id": 1, "battle_triggered": false},
+		],
+	}
+	var results: Array[Dictionary] = DayOrchestrator._process_war_score_shifts(
+		military_daily, [], [war], [],
+	)
+	assert_eq(results.size(), 0)
+	assert_eq(war.war_score_a, 50)
+
+
+func test_war_score_no_shift_without_wars() -> void:
+	var military_daily: Dictionary = {
+		"movement_results": [
+			{"army_id": 1, "battle_triggered": true},
+		],
+	}
+	var wars: Array[WarData] = []
+	var results: Array[Dictionary] = DayOrchestrator._process_war_score_shifts(
+		military_daily, [], wars, [],
+	)
+	assert_eq(results.size(), 0)
+
+
+func test_war_seasonal_attrition() -> void:
+	var war: WarData = _make_war()
+	var chars: Array[L5RCharacterData] = []
+	DayOrchestrator._process_war_seasonal([war], chars)
+	assert_eq(war.seasons_active, 1)
+	assert_eq(war.war_score_a, 51)
+
+
+func test_war_seasonal_disposition_penalty() -> void:
+	var war: WarData = _make_war()
+	war.seasons_active = 2
+	var crab_char: L5RCharacterData = _make_character(1, "Crab")
+	var crane_char: L5RCharacterData = _make_character(2, "Crane")
+	crab_char.disposition_values[2] = 0
+	crane_char.disposition_values[1] = 0
+	var chars: Array[L5RCharacterData] = [crab_char, crane_char]
+	DayOrchestrator._process_war_seasonal([war], chars)
+	var penalty: int = WarSystem.get_active_war_disposition_penalty(
+		war.seasons_active,
+	)
+	assert_true(crab_char.disposition_values[2] < 0)
+	assert_true(crane_char.disposition_values[1] < 0)
+
+
+func test_war_seasonal_skips_same_side() -> void:
+	var war: WarData = _make_war()
+	war.seasons_active = 2
+	var crab1: L5RCharacterData = _make_character(1, "Crab")
+	var crab2: L5RCharacterData = _make_character(2, "Crab")
+	crab1.disposition_values[2] = 10
+	crab2.disposition_values[1] = 10
+	var chars: Array[L5RCharacterData] = [crab1, crab2]
+	DayOrchestrator._process_war_seasonal([war], chars)
+	assert_eq(crab1.disposition_values[2], 10)
+	assert_eq(crab2.disposition_values[1], 10)
+
+
+func test_war_seasonal_skips_uninvolved_clans() -> void:
+	var war: WarData = _make_war(1, "Crab", "Crane")
+	war.seasons_active = 2
+	var lion: L5RCharacterData = _make_character(1, "Lion")
+	var crab: L5RCharacterData = _make_character(2, "Crab")
+	lion.disposition_values[2] = 10
+	crab.disposition_values[1] = 10
+	var chars: Array[L5RCharacterData] = [lion, crab]
+	DayOrchestrator._process_war_seasonal([war], chars)
+	assert_eq(lion.disposition_values[2], 10)
+	assert_eq(crab.disposition_values[1], 10)
+
+
+func test_get_army_clan() -> void:
+	var companies: Array[Dictionary] = [
+		{"army_id": 1, "clan_name": "Crab"},
+		{"army_id": 2, "clan_name": "Crane"},
+	]
+	assert_eq(DayOrchestrator._get_army_clan(1, companies), "Crab")
+	assert_eq(DayOrchestrator._get_army_clan(2, companies), "Crane")
+	assert_eq(DayOrchestrator._get_army_clan(99, companies), "")

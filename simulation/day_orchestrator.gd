@@ -44,6 +44,7 @@ static func advance_day(
 	order_states: Array[Dictionary] = [],
 	companies: Array[Dictionary] = [],
 	clans: Dictionary = {},
+	active_wars: Array[WarData] = [],
 ) -> Dictionary:
 	var prev_season: int = time_system.get_season()
 
@@ -99,6 +100,10 @@ static func advance_day(
 		settlements,
 		characters_by_id,
 		companies,
+	)
+
+	var war_score_results: Array[Dictionary] = _process_war_score_shifts(
+		military_daily, military_effects, active_wars, companies,
 	)
 
 	var military_topics: Array[TopicData] = _generate_military_event_topics(
@@ -182,6 +187,7 @@ static func advance_day(
 			companies, settlements, clans, characters_by_id,
 			dice_engine, _season_to_name(current_season),
 		)
+		_process_war_seasonal(active_wars, characters)
 		insurgency_results = _process_insurgencies(
 			insurgencies, provinces, dice_engine, current_season,
 			next_insurgency_id, world_states
@@ -226,6 +232,7 @@ static func advance_day(
 		"military_seasonal": military_seasonal_result,
 		"military_effects": military_effects,
 		"military_topics": military_topics,
+		"war_score_results": war_score_results,
 	}
 
 
@@ -1955,6 +1962,116 @@ static func _process_military_effects(
 				results.append(r)
 
 	return results
+
+
+# -- War System Wiring -----------------------------------------------------------
+
+static func _process_war_score_shifts(
+	military_daily: Dictionary,
+	military_effects: Array[Dictionary],
+	active_wars: Array[WarData],
+	companies: Array[Dictionary],
+) -> Array[Dictionary]:
+	var results: Array[Dictionary] = []
+	if active_wars.is_empty():
+		return results
+
+	var movement_results: Array = military_daily.get("movement_results", [])
+	for mr: Variant in movement_results:
+		if not (mr is Dictionary):
+			continue
+		var md: Dictionary = mr
+		if not md.get("battle_triggered", false):
+			continue
+		var army_id: int = md.get("army_id", -1)
+		var army_clan: String = _get_army_clan(army_id, companies)
+		if army_clan.is_empty():
+			continue
+
+		for war: WarData in active_wars:
+			if not war.is_active:
+				continue
+			if WarSystem.is_clan_involved(war, army_clan):
+				var r: Dictionary = WarSystem.apply_score_shift(
+					war, "minor_battle", army_clan,
+				)
+				results.append({
+					"war_id": war.war_id,
+					"event": "minor_battle",
+					"clan": army_clan,
+					"shift": r["shift"],
+				})
+				break
+
+	for effect: Dictionary in military_effects:
+		if effect.get("type", "") != "battle_pu_reconciliation":
+			continue
+		var casualties: Dictionary = effect.get("casualties", {})
+		var total_loss: float = casualties.get("total_pu_lost", 0.0)
+		if total_loss >= 3.0:
+			for war: WarData in active_wars:
+				if war.is_active:
+					var side_a_score: int = war.war_score_a
+					var r: Dictionary = WarSystem.apply_score_shift(
+						war, "major_battle", war.initiator_clan,
+					)
+					if r["shift"] > 0:
+						results.append({
+							"war_id": war.war_id,
+							"event": "major_battle_upgrade",
+							"shift": r["shift"],
+						})
+					break
+
+	return results
+
+
+static func _get_army_clan(
+	army_id: int,
+	companies: Array[Dictionary],
+) -> String:
+	for c: Dictionary in companies:
+		if c.get("army_id", -1) == army_id:
+			return c.get("clan_name", "")
+	return ""
+
+
+static func _process_war_seasonal(
+	active_wars: Array[WarData],
+	characters: Array[L5RCharacterData],
+) -> void:
+	for war: WarData in active_wars:
+		if not war.is_active:
+			continue
+		WarSystem.process_seasonal_attrition(war)
+		var penalty: int = WarSystem.get_active_war_disposition_penalty(
+			war.seasons_active,
+		)
+		_apply_war_disposition_penalty(war, characters, penalty)
+
+
+static func _apply_war_disposition_penalty(
+	war: WarData,
+	characters: Array[L5RCharacterData],
+	penalty: int,
+) -> void:
+	if penalty >= 0:
+		return
+	for c: L5RCharacterData in characters:
+		var c_side: String = WarSystem.get_clan_side(war, c.clan)
+		if c_side.is_empty():
+			continue
+		for other: L5RCharacterData in characters:
+			if other.character_id == c.character_id:
+				continue
+			var o_side: String = WarSystem.get_clan_side(war, other.clan)
+			if o_side.is_empty() or o_side == c_side:
+				continue
+			var key: int = other.character_id
+			if c.disposition_values.has(key):
+				c.disposition_values[key] = clampi(
+					c.disposition_values[key] + penalty, -100, 100,
+				)
 
 
 static func _generate_military_event_topics(
