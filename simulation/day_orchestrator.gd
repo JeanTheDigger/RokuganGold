@@ -1790,6 +1790,7 @@ static func _process_tether_ticks(
 		var r: Dictionary = SupplyTetherSystem.process_supply_tick(
 			dice_engine, tether, garrisons, enemies, companies_by_id,
 		)
+		r["army_id"] = tether.get("army_id", -1)
 		results.append(r)
 	return results
 

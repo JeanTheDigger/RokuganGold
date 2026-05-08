@@ -1468,6 +1468,30 @@ func test_tether_threatened_no_score() -> void:
 	assert_eq(results.size(), 0)
 
 
+func test_tether_tick_injects_army_id_into_results() -> void:
+	var typed_path: Array[int] = [10]
+	var tether: Dictionary = SupplyTetherSystem.create_tether(7, 100, typed_path)
+	tether["garrisons_on_path"] = {}
+	tether["enemy_armies_on_path"] = []
+	var dice: DiceEngine = DiceEngine.new(42)
+	var results: Array[Dictionary] = DayOrchestrator._process_tether_ticks(
+		[tether], dice, [],
+	)
+	assert_eq(results.size(), 1)
+	assert_eq(results[0]["army_id"], 7)
+
+
+func test_tether_tick_skips_detached_tethers() -> void:
+	var typed_path: Array[int] = [10]
+	var tether: Dictionary = SupplyTetherSystem.create_tether(7, 100, typed_path)
+	tether["detached"] = true
+	var dice: DiceEngine = DiceEngine.new(42)
+	var results: Array[Dictionary] = DayOrchestrator._process_tether_ticks(
+		[tether], dice, [],
+	)
+	assert_eq(results.size(), 0)
+
+
 func test_heavy_casualties_upgrade_to_decisive() -> void:
 	var war: WarData = _make_war()
 	var score_a_before: int = war.war_score_a
