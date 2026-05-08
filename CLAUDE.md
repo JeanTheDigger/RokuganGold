@@ -469,6 +469,7 @@ All in /tests/, one file per system:
 - test_levy_system.gd (~35 tests)
 - test_military_promotion_system.gd (~35 tests)
 - test_order_system.gd (~30 tests)
+- test_military_service_system.gd (~35 tests)
 
 ### Festival System (s11.5)
 - **simulation/festival_system.gd** — Empire-wide canonical festivals, Rokuyo
@@ -1443,9 +1444,9 @@ All in /tests/, one file per system:
   clan elite) and `BattleTerrainType` (6 values).
 - **shared/military_unit_data.gd** — CompanyData gains `unit_type` and
   `source_province_id` fields.
-  Deferred (Phase 2+): military service assignment, Shinjo auto-flank
-  behavior, ASCII battle events / Heroic Opportunities, PU reconciliation
-  wiring into ResourceTick, Shadowlands terrain zones, naval combat bonuses.
+  Deferred (Phase 2+): Shinjo auto-flank behavior, ASCII battle events /
+  Heroic Opportunities, PU reconciliation wiring into ResourceTick,
+  Shadowlands terrain zones, naval combat bonuses.
 
 ### Army Upkeep & Deprivation (s4.3, s11.7)
 - **simulation/army_upkeep_system.gd** — Army upkeep costs, iron degradation,
@@ -1583,6 +1584,25 @@ All in /tests/, one file per system:
   Standing patrol orders persist until cancelled (1 order to set up, continues
   until recalled). `cancel_standing_order()` removes by target character.
   `reset_daily_orders()` clears used count each real day.
+
+### Military Service Assignment (s11.7a)
+- **simulation/military_service_system.gd** — Feudal chain request flow per GDD
+  s11.7a. Request cascade: Clan Champion → Rikugunshokan → Family Daimyo →
+  Provincial/City Daimyo. `create_service_request()` creates a request with
+  commander, target unit, rank needed, count. `cascade_request_to_vassals()`
+  distributes count across vassal Provincial Daimyo (even split with remainder).
+  `evaluate_candidates()` delegates to LevySystem commitment protection scoring
+  (same scores: yojimbo −30/−15, magistrate −25/−15, yoriki −10/−5, courtier
+  −15/−10, shugenja −5, uncommitted 0). Personality modifiers shared: Jin
+  doubles yojimbo, Yu halves all, Chugi −10 reduction.
+  `assign_to_military_service()` sets `operational_superior_id` to military
+  commander, sets `assigned_company_id`; `lord_id` stays unchanged (feudal chain
+  unbroken). `release_from_military_service()` returns samurai to their lord.
+  Authority: only Provincial/City Daimyo can directly assign; only Shireikan+
+  can request service. `select_candidates_for_service()` bulk selection with
+  shortfall tracking. `apply_service_assignments()` batch mutation of character
+  data. Engine wiring: ASSIGN_TO_MILITARY_SERVICE aligns to LEVY_TROOPS (80)
+  and DEFEND_PROVINCE (60). Courtier (Manipulation) + Awareness, Category 2.
 
 ### What's Next
 1. World generation coordinate system and adjacency
