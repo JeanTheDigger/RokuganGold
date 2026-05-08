@@ -446,6 +446,7 @@ All in /tests/, one file per system:
 - test_togashi_oversight.gd (~49 tests)
 - test_phoenix_council.gd (~51 tests)
 - test_intra_clan_civil_war.gd (~59 tests)
+- test_performative_arts.gd (~30 tests)
 - test_succession_system.gd (~60 tests)
 - test_succession_wiring.gd (~10 tests)
 
@@ -1228,6 +1229,21 @@ All in /tests/, one file per system:
   State persisted to `user://simulation/scheduler_state.txt`.
   `force_tick()` for manual advancement. `tick_completed` signal emitted
   after each advancement.
+
+### Performative Arts System (s12.4)
+- **simulation/performative_arts_system.gd** — Court performance mechanics per
+  GDD s12.4 and s15.4. Five ArtForm values (POETRY, DANCE, THEATER, MUSIC,
+  TEA_CEREMONY) mapped to skills (Artisan, Perform, Acting, Tea Ceremony).
+  `resolve_public_performance()` rolls skill+trait vs TN 15: success +2
+  disposition to all witnesses + 0.3 Glory, +1 disp per raise, critical failure
+  (margin ≤ -10) -2 disposition -0.3 Glory. Performance fatigue: diminishing
+  returns (full → half → zero) on repeat performances same court same OOC day.
+  `resolve_perform_for()` targeted performance: +3 disp on success + raises,
+  +0.2 Glory on masterful (3+ raises), -1 disp on failure. No fatigue, no venue
+  restriction. `get_best_art_form()` picks performer's highest effective
+  skill+trait combination. `apply_performance_effects()` mutates glory and
+  witness/recipient disposition values. Venue gating (performance_permitted
+  zone flag) already enforced by NPC engine Phase 3 zone-flag filtering.
 
 ### Succession System (s22.5)
 - **shared/succession_data.gd** — SuccessionData Resource: SuccessionState (4),
