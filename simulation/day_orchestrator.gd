@@ -1659,10 +1659,15 @@ static func _process_army_upkeep(
 			"degraded": r["degraded_companies"],
 		})
 
+	var rice_deducted: float = _deduct_rice_upkeep(
+		companies_by_clan, settlements, clans,
+	)
+
 	return {
 		"total_rice_cost": total_rice_cost,
 		"total_iron_cost": total_iron_cost,
 		"total_koku_cost": total_koku_cost,
+		"rice_deducted": rice_deducted,
 		"company_count": companies.size(),
 		"iron_results": iron_results,
 	}
@@ -1926,10 +1931,84 @@ static func resolve_and_reconcile_battle(
 		)
 		battle_result["recovery"] = recovery
 
+		if rout_result.get("dissolved", false):
+			var pursuit_total: int = rout_result.get("pursuit_casualties", 0)
+			var dissolution_companies: Array[Dictionary] = _build_dissolution_companies(
+				loser_states, pursuit_total,
+			)
+			var dissolution: Dictionary = PUReconciliation.process_army_dissolution(
+				dissolution_companies, settlements_by_province,
+			)
+			battle_result["dissolution"] = dissolution
+
 	battle_result["reconciliation"] = reconciliation
 	battle_result["rout"] = rout_result
 
 	return battle_result
+
+
+static func _deduct_rice_upkeep(
+	companies_by_clan: Dictionary,
+	settlements: Array[SettlementData],
+	clans: Dictionary,
+) -> float:
+	var settlements_by_province: Dictionary = _build_settlements_by_province(settlements)
+	var total_deducted: float = 0.0
+
+	for clan_name: String in companies_by_clan:
+		var clan_companies: Array = companies_by_clan[clan_name]
+		var clan_rice_cost: float = 0.0
+		for c: Variant in clan_companies:
+			if c is Dictionary:
+				clan_rice_cost += ArmyUpkeepSystem.RICE_PER_MILITARY_PU_PER_SEASON
+
+		var clan: ClanData = clans.get(clan_name)
+		if clan == null:
+			continue
+
+		var clan_settlements: Array[SettlementData] = []
+		for pid: int in clan.province_ids:
+			var province_setts: Array = settlements_by_province.get(pid, [])
+			for s: Variant in province_setts:
+				if s is SettlementData:
+					clan_settlements.append(s)
+
+		if clan_settlements.is_empty():
+			continue
+
+		var remaining: float = clan_rice_cost
+		for s: SettlementData in clan_settlements:
+			if remaining <= 0.0:
+				break
+			var deduct: float = minf(s.rice_stockpile, remaining)
+			s.rice_stockpile -= deduct
+			remaining -= deduct
+			total_deducted += deduct
+
+	return total_deducted
+
+
+static func _build_dissolution_companies(
+	loser_states: Array[Dictionary],
+	pursuit_casualties: int,
+) -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	var remaining_pursuit: int = pursuit_casualties
+	for bc: Dictionary in loser_states:
+		if bc.get("is_destroyed", false):
+			continue
+		var health: int = maxi(bc.get("current_health", 0), 0)
+		var loss: int = mini(remaining_pursuit, health)
+		remaining_pursuit -= loss
+		var company: Variant = bc.get("company")
+		var source_id: int = -1
+		if company is MilitaryUnitData.CompanyData:
+			source_id = company.source_province_id
+		result.append({
+			"current_health": health - loss,
+			"source_province_id": source_id,
+		})
+	return result
 
 
 static func _build_settlements_by_province(

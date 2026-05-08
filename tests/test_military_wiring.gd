@@ -48,6 +48,15 @@ func _make_company_dict(
 	}
 
 
+func _make_company_data(
+	id: int,
+	source_province_id: int = 1,
+) -> MilitaryUnitData.CompanyData:
+	return ArmyCombatSystem.create_company(
+		id, Enums.CompanyUnitType.PEASANT_LEVY, -1, source_province_id,
+	)
+
+
 # -- Daily Military Processing Tests --------------------------------------------
 
 func test_process_military_daily_empty() -> void:
@@ -388,3 +397,120 @@ func test_resolve_and_reconcile_battle() -> void:
 func test_is_cavalry_public() -> void:
 	assert_true(ArmyCombatSystem.is_cavalry(Enums.CompanyUnitType.LIGHT_CAVALRY))
 	assert_false(ArmyCombatSystem.is_cavalry(Enums.CompanyUnitType.BUSHI_RETAINER))
+
+
+# -- Rout Dissolution Wiring Tests -----------------------------------------------
+
+func test_build_dissolution_companies_distributes_pursuit() -> void:
+	var loser_states: Array[Dictionary] = [
+		{"current_health": 100, "is_destroyed": false, "company": _make_company_data(1, 1)},
+		{"current_health": 50, "is_destroyed": false, "company": _make_company_data(2, 2)},
+	]
+	var result: Array[Dictionary] = DayOrchestrator._build_dissolution_companies(
+		loser_states, 30,
+	)
+	assert_eq(result.size(), 2)
+	assert_eq(result[0]["current_health"], 70)
+	assert_eq(result[1]["current_health"], 50)
+
+
+func test_build_dissolution_companies_skips_destroyed() -> void:
+	var loser_states: Array[Dictionary] = [
+		{"current_health": 0, "is_destroyed": true, "company": _make_company_data(1, 1)},
+		{"current_health": 80, "is_destroyed": false, "company": _make_company_data(2, 2)},
+	]
+	var result: Array[Dictionary] = DayOrchestrator._build_dissolution_companies(
+		loser_states, 20,
+	)
+	assert_eq(result.size(), 1)
+	assert_eq(result[0]["current_health"], 60)
+
+
+func test_build_dissolution_companies_preserves_source_province() -> void:
+	var loser_states: Array[Dictionary] = [
+		{"current_health": 50, "is_destroyed": false, "company": _make_company_data(1, 5)},
+	]
+	var result: Array[Dictionary] = DayOrchestrator._build_dissolution_companies(
+		loser_states, 0,
+	)
+	assert_eq(result[0]["source_province_id"], 5)
+
+
+func test_resolve_battle_includes_dissolution_when_dissolved() -> void:
+	var dice: DiceEngine = DiceEngine.new(99)
+	var strong: MilitaryUnitData.CompanyData = ArmyCombatSystem.create_company(
+		1, Enums.CompanyUnitType.BUSHI_RETAINER, -1, 1,
+	)
+	var weak: MilitaryUnitData.CompanyData = ArmyCombatSystem.create_company(
+		2, Enums.CompanyUnitType.PEASANT_LEVY, -1, 2,
+	)
+	weak.health = 10
+	weak.morale = 1
+	var atk_states: Array[Dictionary] = [
+		ArmyCombatSystem.make_battle_company(strong, 1, 0, "attacker"),
+	]
+	var def_states: Array[Dictionary] = [
+		ArmyCombatSystem.make_battle_company(weak, 1, 0, "defender"),
+	]
+	var s1: SettlementData = _make_settlement(10, 1, 10, 3)
+	var s2: SettlementData = _make_settlement(20, 2, 10, 3)
+
+	var r: Dictionary = DayOrchestrator.resolve_and_reconcile_battle(
+		atk_states, def_states, Enums.BattleTerrainType.PLAINS,
+		dice, [s1, s2],
+	)
+	if r["rout"].get("dissolved", false):
+		assert_true(r.has("dissolution"))
+		assert_true(r["dissolution"].has("total_returned_pu"))
+
+
+# -- Rice Upkeep Deduction Tests -------------------------------------------------
+
+func _make_clan(name: String, province_ids: Array[int]) -> ClanData:
+	var c: ClanData = ClanData.new()
+	c.clan_name = name
+	c.province_ids = province_ids
+	c.arms_stockpile = 10.0
+	return c
+
+
+func test_rice_upkeep_deducts_from_settlements() -> void:
+	var companies: Array[Dictionary] = [
+		_make_company_dict(1, Enums.CompanyUnitType.PEASANT_LEVY),
+	]
+	var s: SettlementData = _make_settlement(10, 1, 10, 3)
+	s.rice_stockpile = 5.0
+	var clan: ClanData = _make_clan("Crab", [1])
+	var clans: Dictionary = {"Crab": clan}
+
+	var r: Dictionary = DayOrchestrator._process_army_upkeep(companies, [s], clans)
+	assert_true(r["rice_deducted"] > 0.0)
+	assert_true(s.rice_stockpile < 5.0)
+
+
+func test_rice_upkeep_caps_at_available_stockpile() -> void:
+	var companies: Array[Dictionary] = [
+		_make_company_dict(1, Enums.CompanyUnitType.PEASANT_LEVY),
+		_make_company_dict(2, Enums.CompanyUnitType.BUSHI_RETAINER),
+		_make_company_dict(3, Enums.CompanyUnitType.BUSHI_RETAINER),
+	]
+	var s: SettlementData = _make_settlement(10, 1, 10, 3)
+	s.rice_stockpile = 0.1
+	var clan: ClanData = _make_clan("Crab", [1])
+	var clans: Dictionary = {"Crab": clan}
+
+	var r: Dictionary = DayOrchestrator._process_army_upkeep(companies, [s], clans)
+	assert_almost_eq(s.rice_stockpile, 0.0, 0.001)
+	assert_almost_eq(r["rice_deducted"], 0.1, 0.001)
+
+
+func test_rice_upkeep_no_clan_no_deduction() -> void:
+	var companies: Array[Dictionary] = [
+		_make_company_dict(1, Enums.CompanyUnitType.PEASANT_LEVY),
+	]
+	var s: SettlementData = _make_settlement(10, 1, 10, 3)
+	s.rice_stockpile = 5.0
+
+	var r: Dictionary = DayOrchestrator._process_army_upkeep(companies, [s], {})
+	assert_almost_eq(r["rice_deducted"], 0.0, 0.001)
+	assert_almost_eq(s.rice_stockpile, 5.0, 0.001)
