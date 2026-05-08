@@ -464,6 +464,7 @@ All in /tests/, one file per system:
 - test_army_combat_system.gd (~145 tests)
 - test_army_upkeep_system.gd (~40 tests)
 - test_supply_tether_system.gd (~45 tests)
+- test_siege_system.gd (~50 tests)
 
 ### Festival System (s11.5)
 - **simulation/festival_system.gd** — Empire-wide canonical festivals, Rokuyo
@@ -1494,6 +1495,28 @@ All in /tests/, one file per system:
   Deferred: Vertical/horizontal supply political mechanics (disposition
   damage, favor integration), visual line rendering, territory capture
   during war, actual sub-tile coordinate system (uses placeholder int IDs).
+
+### Siege System (s11.7)
+- **simulation/siege_system.gd** — Siege mechanics per GDD s11.7. Pure static
+  functions; caller owns siege state dictionary.
+  Starvation siege: `compute_daily_consumption()` uses civilian (0.0028 Rice/PU/
+  tick) and military (0.0039 Rice/PU/tick) consumption rates. Castle town (2.0
+  Rice, 10 PU + 0.5 garrison) ≈ 67 ticks; fortification (0.5 Rice, 0.5 garrison)
+  ≈ 256 ticks. `process_starvation_tick()` decrements rice and checks starvation.
+  Siege phases: Early (≤30 ticks, events every 10), Mid (31–60, every 7), Late
+  (61+, every 5). 12 siege events: 6 attacker (smuggling intercept −10 ticks,
+  secret passage −15, deserters −5 + reveal stores, relief force strategic
+  decision, supply raid, contaminate water −20 + honor cost), 4 defender
+  (midnight resupply +15, message for relief, tactical sortie, civilian morale
+  crisis), 1 mutual (treachery −30). `resolve_siege_event()` rolls skill checks
+  per event definitions. Storm assault: Urban (+3) + Fortification (+5) = +8
+  Defense bonus; garrison at Defense 13 effective. Honor cowardice: −1 Honor per
+  10 ticks after threshold (default 30, aggressive 20, pragmatic 45). Sortie
+  resets counter. `process_siege_tick()` orchestrates starvation + honor +
+  event firing per tick.
+  Deferred: Full battle integration for storm assaults and sorties (uses
+  ArmyCombatSystem), personality-driven sortie decisions (s19.3), ASCII map
+  event scenarios, mutual event (treachery) resolution.
 
 ### What's Next
 1. World generation coordinate system and adjacency
