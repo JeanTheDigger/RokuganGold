@@ -139,7 +139,7 @@ static func resolve_goal(
 ) -> NPCDataStructures.ImmediateNeed:
 	# Check reactive events first
 	if ctx.pending_events.size() > 0:
-		var reactive_need := _decompose_reactive_event(ctx.pending_events[0], ctx)
+		var reactive_need := _decompose_reactive_event(ctx.pending_events[0], ctx, character)
 		if reactive_need != null:
 			return reactive_need
 
@@ -424,9 +424,26 @@ static func _get_fallback_action(_ctx: NPCDataStructures.ContextSnapshot) -> NPC
 
 static func _decompose_reactive_event(
 	event: Variant,
-	_ctx: NPCDataStructures.ContextSnapshot,
+	ctx: NPCDataStructures.ContextSnapshot,
+	character: L5RCharacterData = null,
 ) -> NPCDataStructures.ImmediateNeed:
-	if event is Dictionary and event.has("need_type"):
+	if not (event is Dictionary):
+		return null
+
+	if event.has("reactive_type") and character != null:
+		var result: Dictionary = ReactiveDecisions.evaluate_reactive_event(
+			event, character, ctx,
+		)
+		if result.has("need_type"):
+			var need := NPCDataStructures.ImmediateNeed.new()
+			need.need_type = result["need_type"]
+			need.priority = result.get("priority", 1)
+			need.target_npc_id = result.get("target_npc_id", -1)
+			need.source = "reactive"
+			return need
+		return null
+
+	if event.has("need_type"):
 		var need := NPCDataStructures.ImmediateNeed.new()
 		need.need_type = event["need_type"]
 		need.priority = event.get("priority", 1)

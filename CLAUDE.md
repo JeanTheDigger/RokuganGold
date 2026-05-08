@@ -399,7 +399,7 @@ All in /tests/, one file per system:
 - test_time_system.gd (~15 tests)
 - test_skill_resolver.gd (~20 tests)
 - test_action_point_system.gd (~12 tests)
-- test_npc_decision_engine.gd (~48 tests)
+- test_npc_decision_engine.gd (~52 tests)
 - test_scoring_table_loader.gd (~15 tests)
 - test_action_executor.gd (~35 tests)
 - test_effect_applicator.gd (~37 tests)
@@ -2030,6 +2030,12 @@ All in /tests/, one file per system:
 
 ### Systems Wired into NPC Loop
 The following subsystems are now integrated into the NPC decision loop:
+- **ReactiveDecisions** — Phase 2 goal resolution: pending events with
+  `reactive_type` field are routed through
+  `ReactiveDecisions.evaluate_reactive_event()` for personality-driven
+  accept/decline decisions. Four reactive types: DUEL_CHALLENGE_RECEIVED,
+  FAVOR_REQUESTED, COURT_INVITATION, ACCEPT_TRAINING. Events without
+  `reactive_type` fall through to the existing direct-conversion path.
 - **ApproachEvaluation** — Phase 5 scoring: `approach_modifier` field on
   ScoredAction. Measurement bonus (+15), approach penalty (−15, decays),
   alternative bonus (+10). Seasonal decay runs on season boundary in

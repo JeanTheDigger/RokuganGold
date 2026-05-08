@@ -618,3 +618,53 @@ func test_extract_famine_province_ids_resolved_ignored() -> void:
 		_char, [t],
 	)
 	assert_eq(ids.size(), 0, "Resolved famine topic yields no provinces")
+
+
+# -- Reactive Decisions Wiring -------------------------------------------------
+
+func test_reactive_type_duel_routes_through_reactive_decisions() -> void:
+	_char.bushido_virtue = Enums.BushidoVirtue.YU
+	_char.disposition_values = {5: -20.0}
+	_world_state["pending_events"] = [{
+		"reactive_type": "DUEL_CHALLENGE_RECEIVED",
+		"challenger_id": 5,
+		"is_public": true,
+	}]
+	var ctx := NPCDecisionEngine.build_context(_char, _world_state)
+	var need := NPCDecisionEngine.resolve_goal(_char, ctx, _objectives)
+	assert_eq(need.need_type, "ACCEPT_DUEL", "Yu virtue accepts duels")
+	assert_eq(need.target_npc_id, 5)
+
+
+func test_reactive_type_favor_routes_through_reactive_decisions() -> void:
+	_char.bushido_virtue = Enums.BushidoVirtue.CHUGI
+	_world_state["pending_events"] = [{
+		"reactive_type": "FAVOR_REQUESTED",
+		"requester_id": 3,
+	}]
+	var ctx := NPCDecisionEngine.build_context(_char, _world_state)
+	var need := NPCDecisionEngine.resolve_goal(_char, ctx, _objectives)
+	assert_eq(need.need_type, "HONOR_FAVOR", "Chugi honors favors")
+
+
+func test_reactive_type_court_invitation_routes() -> void:
+	_char.bushido_virtue = Enums.BushidoVirtue.REI
+	_world_state["pending_events"] = [{
+		"reactive_type": "COURT_INVITATION",
+		"host_id": 7,
+		"prestige": 1,
+	}]
+	var ctx := NPCDecisionEngine.build_context(_char, _world_state)
+	var need := NPCDecisionEngine.resolve_goal(_char, ctx, _objectives)
+	assert_eq(need.need_type, "ATTEND_COURT", "Rei always attends court")
+
+
+func test_reactive_event_without_reactive_type_still_works() -> void:
+	_world_state["pending_events"] = [{
+		"need_type": "CHALLENGE_TO_DUEL",
+		"priority": 1,
+		"target_npc_id": 5,
+	}]
+	var ctx := NPCDecisionEngine.build_context(_char, _world_state)
+	var need := NPCDecisionEngine.resolve_goal(_char, ctx, _objectives)
+	assert_eq(need.need_type, "CHALLENGE_TO_DUEL", "Legacy events still work")
