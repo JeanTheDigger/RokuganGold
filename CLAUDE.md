@@ -473,6 +473,7 @@ All in /tests/, one file per system:
 - test_pu_reconciliation.gd (~30 tests)
 - test_military_wiring.gd (~86 tests)
 - test_war_system.gd (~55 tests)
+- test_war_justification.gd (~45 tests)
 
 ### Festival System (s11.5)
 - **simulation/festival_system.gd** — Empire-wide canonical festivals, Rokuyo
@@ -1665,9 +1666,29 @@ All in /tests/, one file per system:
   engine compatibility. WorldStateData gains `active_wars: Array[WarData]`.
   New param on `advance_day()`: `active_wars`. Return dict gains
   `war_score_results`.
-  Deferred: War justification / casus belli system (s53.1), peace court
-  mechanics, Imperial edict intervention, trade route suspension on war
-  declaration, decisive battle detection, commander death score shifts.
+  Deferred: Peace court mechanics, Imperial edict intervention, trade route
+  suspension on war declaration, decisive battle detection, commander death
+  score shifts.
+
+### War Justification & Casus Belli (s53.1)
+- **simulation/war_justification.gd** — Five-step AI lord war initiation
+  decision sequence per GDD s53.1. Pure static functions.
+  Three MilitaryTier values: RAID, FORMAL_WAR, TOTAL_WAR.
+  Step 1 Objective justification: 9 standing objectives mapped to tiers
+  (EXPAND_TERRITORY all 3, MILITARY_DOMINANCE raid+formal, BUILD_STRONGEST
+  raid only, etc.), 5 situational objectives (ADVANCE_FAMILY raid only,
+  HONOR_ANCESTORS all 3, etc.), 5 primary objectives (CONQUER requires
+  formal, DEFEND_PROVINCE all 3, AVENGE all 3, SABOTAGE raid only). 8
+  peace objectives hard-block except DEFEND_PROVINCE.
+  Step 2 Personality aggression: Yu/Kyoryoku/Ketsui virtues + weakness
+  condition. Raid: garrison at minimum + no field army + no alliance.
+  Formal war: raid condition met + 2x PU ratio.
+  Step 3 Tier validation: intended tier must be in supported list.
+  Step 4 Personality gates: Jin blocks total war expansion and resource
+  raids. Gi/Makoto block covert warfare (undermine/sabotage).
+  Step 5 Feasibility: placeholder pass (deferred to s4.3.17).
+  `evaluate_war_justification()` runs all 5 steps, returns justified/reason/
+  step_failed/personality_driven.
 
 ### What's Next
 1. World generation coordinate system and adjacency
