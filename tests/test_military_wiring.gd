@@ -816,7 +816,7 @@ func test_recovery_stationary_damaged_army() -> void:
 	var army: Dictionary = _make_army(1, false)
 	var company: Dictionary = _make_army_company(10, 1, Enums.CompanyUnitType.BUSHI_RETAINER, 100, 10)
 	var results: Array[Dictionary] = DayOrchestrator._process_army_recovery(
-		[army], [], [], [company],
+		[army], {}, [company],
 	)
 	assert_eq(results.size(), 1)
 	assert_eq(results[0]["army_id"], 1)
@@ -830,7 +830,7 @@ func test_recovery_skips_moving_army() -> void:
 	var army: Dictionary = _make_army(1, true)
 	var company: Dictionary = _make_army_company(10, 1, Enums.CompanyUnitType.BUSHI_RETAINER, 100, 10)
 	var results: Array[Dictionary] = DayOrchestrator._process_army_recovery(
-		[army], [], [], [company],
+		[army], {}, [company],
 	)
 	assert_eq(results.size(), 0)
 
@@ -841,7 +841,7 @@ func test_recovery_caps_at_max_health() -> void:
 	var army: Dictionary = _make_army(1, false)
 	var company: Dictionary = _make_army_company(10, 1, Enums.CompanyUnitType.BUSHI_RETAINER, max_health, base["morale"])
 	var results: Array[Dictionary] = DayOrchestrator._process_army_recovery(
-		[army], [], [], [company],
+		[army], {}, [company],
 	)
 	assert_eq(results.size(), 0)
 
@@ -849,7 +849,7 @@ func test_recovery_caps_at_max_health() -> void:
 func test_recovery_no_companies_no_result() -> void:
 	var army: Dictionary = _make_army(1, false)
 	var results: Array[Dictionary] = DayOrchestrator._process_army_recovery(
-		[army], [], [], [],
+		[army], {}, [],
 	)
 	assert_eq(results.size(), 0)
 
@@ -857,13 +857,14 @@ func test_recovery_no_companies_no_result() -> void:
 func test_recovery_broken_tether_no_supply() -> void:
 	var army: Dictionary = _make_army(1, false)
 	var company: Dictionary = _make_army_company(10, 1, Enums.CompanyUnitType.BUSHI_RETAINER, 100, 10)
-	var tether: Dictionary = {"army_id": 1}
-	var tether_result: Dictionary = {
-		"overall_state": SupplyTetherSystem.TetherState.BROKEN,
-		"arms_deprivation_tick": 0,
+	var tether_by_army: Dictionary = {
+		1: {
+			"overall_state": SupplyTetherSystem.TetherState.BROKEN,
+			"arms_deprivation_tick": 0,
+		},
 	}
 	var results: Array[Dictionary] = DayOrchestrator._process_army_recovery(
-		[army], [tether], [tether_result], [company],
+		[army], tether_by_army, [company],
 	)
 	assert_eq(results.size(), 0)
 
@@ -871,14 +872,42 @@ func test_recovery_broken_tether_no_supply() -> void:
 func test_recovery_arms_tier_when_supplied_and_deprived() -> void:
 	var army: Dictionary = _make_army(1, false)
 	var company: Dictionary = _make_army_company(10, 1, Enums.CompanyUnitType.BUSHI_RETAINER, 100, 10)
-	var tether: Dictionary = {"army_id": 1}
-	var tether_result: Dictionary = {
-		"overall_state": SupplyTetherSystem.TetherState.SOLID,
-		"arms_deprivation_tick": 3,
+	var tether_by_army: Dictionary = {
+		1: {
+			"overall_state": SupplyTetherSystem.TetherState.SOLID,
+			"arms_deprivation_tick": 3,
+		},
 	}
 	var results: Array[Dictionary] = DayOrchestrator._process_army_recovery(
-		[army], [tether], [tether_result], [company],
+		[army], tether_by_army, [company],
 	)
 	assert_eq(results.size(), 1)
 	var cr: Dictionary = results[0]["company_recoveries"][0]
 	assert_true(cr["arms_tier_recovered"])
+
+
+# -- Helper Extraction Tests ------------------------------------------------------
+
+func test_build_tether_result_by_army() -> void:
+	var tethers: Array[Dictionary] = [
+		{"army_id": 1}, {"army_id": 2},
+	]
+	var results: Array[Dictionary] = [
+		{"overall_state": 0, "rice_deprivation_tick": 3},
+		{"overall_state": 2, "rice_deprivation_tick": 0},
+	]
+	var mapping: Dictionary = DayOrchestrator._build_tether_result_by_army(
+		tethers, results,
+	)
+	assert_eq(mapping.size(), 2)
+	assert_eq(mapping[1]["rice_deprivation_tick"], 3)
+	assert_eq(mapping[2]["overall_state"], 2)
+
+
+func test_build_tether_result_by_army_skips_invalid() -> void:
+	var tethers: Array[Dictionary] = [{"army_id": -1}]
+	var results: Array[Dictionary] = [{"overall_state": 0}]
+	var mapping: Dictionary = DayOrchestrator._build_tether_result_by_army(
+		tethers, results,
+	)
+	assert_eq(mapping.size(), 0)

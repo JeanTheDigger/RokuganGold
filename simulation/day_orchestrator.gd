@@ -174,7 +174,7 @@ static func advance_day(
 				active_topics, next_topic_id, ic_day, season_meta,
 			)
 		_decay_all_historical_modifiers(characters, ic_day)
-		var military_seasonal_result: Dictionary = _process_military_seasonal(
+		military_seasonal_result = _process_military_seasonal(
 			companies, settlements, clans, characters_by_id,
 			dice_engine, _season_to_name(current_season),
 		)
@@ -1516,11 +1516,14 @@ static func _process_military_daily(
 		active_tethers, dice_engine, companies,
 	)
 	var order_results: Dictionary = _process_order_ticks(order_states)
+	var tether_by_army: Dictionary = _build_tether_result_by_army(
+		active_tethers, tether_results,
+	)
 	var deprivation_results: Array[Dictionary] = _process_field_deprivation(
 		active_tethers, tether_results,
 	)
 	var recovery_results: Array[Dictionary] = _process_army_recovery(
-		active_armies, active_tethers, tether_results, companies,
+		active_armies, tether_by_army, companies,
 	)
 
 	return {
@@ -1594,18 +1597,23 @@ static func _build_companies_by_id(
 	return result
 
 
-static func _process_army_recovery(
-	active_armies: Array[Dictionary],
+static func _build_tether_result_by_army(
 	active_tethers: Array[Dictionary],
 	tether_results: Array[Dictionary],
-	companies: Array[Dictionary],
-) -> Array[Dictionary]:
-	var tether_state_by_army: Dictionary = {}
+) -> Dictionary:
+	var result: Dictionary = {}
 	for i: int in range(mini(active_tethers.size(), tether_results.size())):
 		var army_id: int = active_tethers[i].get("army_id", -1)
 		if army_id >= 0:
-			tether_state_by_army[army_id] = tether_results[i]
+			result[army_id] = tether_results[i]
+	return result
 
+
+static func _process_army_recovery(
+	active_armies: Array[Dictionary],
+	tether_state_by_army: Dictionary,
+	companies: Array[Dictionary],
+) -> Array[Dictionary]:
 	var companies_by_army: Dictionary = {}
 	for c: Dictionary in companies:
 		var aid: int = c.get("army_id", -1)
@@ -1699,15 +1707,11 @@ static func _process_field_deprivation(
 
 		var army_id: int = tether.get("army_id", -1)
 		var company_ids: Array = tether.get("company_ids", [])
+		var rice_effect: Dictionary = ArmyUpkeepSystem.get_rice_deprivation_effect(rice_tick) if rice_tick > 0 else {}
+		var arms_effect: Dictionary = ArmyUpkeepSystem.get_arms_deprivation_effect(arms_tick) if arms_tick > 0 else {}
 		var per_company: Array[Dictionary] = []
 
 		for cid: Variant in company_ids:
-			var rice_effect: Dictionary = {}
-			var arms_effect: Dictionary = {}
-			if rice_tick > 0:
-				rice_effect = ArmyUpkeepSystem.get_rice_deprivation_effect(rice_tick)
-			if arms_tick > 0:
-				arms_effect = ArmyUpkeepSystem.get_arms_deprivation_effect(arms_tick)
 			per_company.append({
 				"company_id": int(cid),
 				"rice_tick": rice_tick,
@@ -1779,6 +1783,8 @@ static func _process_army_upkeep(
 	var total_koku_cost: float = 0.0
 
 	var companies_by_clan: Dictionary = {}
+	var rice_cost_by_clan: Dictionary = {}
+	var koku_cost_by_clan: Dictionary = {}
 	for company: Dictionary in companies:
 		var unit_type: int = company.get("unit_type", Enums.CompanyUnitType.PEASANT_LEVY)
 		var costs: Dictionary = ArmyUpkeepSystem.compute_company_seasonal_costs(unit_type)
@@ -1790,7 +1796,11 @@ static func _process_army_upkeep(
 		if not clan_name.is_empty():
 			if not companies_by_clan.has(clan_name):
 				companies_by_clan[clan_name] = []
+				rice_cost_by_clan[clan_name] = 0.0
+				koku_cost_by_clan[clan_name] = 0.0
 			companies_by_clan[clan_name].append(company)
+			rice_cost_by_clan[clan_name] += costs["rice"]
+			koku_cost_by_clan[clan_name] += costs["koku"]
 
 	var iron_results: Array[Dictionary] = []
 	for clan_name: String in companies_by_clan:
@@ -1815,12 +1825,12 @@ static func _process_army_upkeep(
 			"degraded": r["degraded_companies"],
 		})
 
-	var rice_deducted: float = _deduct_rice_upkeep(
-		companies_by_clan, settlements, clans,
+	var settlements_by_province: Dictionary = _build_settlements_by_province(settlements)
+	var rice_deducted: float = _deduct_clan_upkeep(
+		rice_cost_by_clan, clans, settlements_by_province, "rice_stockpile",
 	)
-
-	var koku_deducted: float = _deduct_koku_upkeep(
-		companies_by_clan, settlements, clans,
+	var koku_deducted: float = _deduct_clan_upkeep(
+		koku_cost_by_clan, clans, settlements_by_province, "koku_stockpile",
 	)
 
 	return {
@@ -2108,65 +2118,17 @@ static func resolve_and_reconcile_battle(
 	return battle_result
 
 
-static func _deduct_rice_upkeep(
-	companies_by_clan: Dictionary,
-	settlements: Array[SettlementData],
+static func _deduct_clan_upkeep(
+	cost_by_clan: Dictionary,
 	clans: Dictionary,
+	settlements_by_province: Dictionary,
+	stockpile_field: String,
 ) -> float:
-	var settlements_by_province: Dictionary = _build_settlements_by_province(settlements)
 	var total_deducted: float = 0.0
 
-	for clan_name: String in companies_by_clan:
-		var clan_companies: Array = companies_by_clan[clan_name]
-		var clan_rice_cost: float = 0.0
-		for c: Variant in clan_companies:
-			if c is Dictionary:
-				clan_rice_cost += ArmyUpkeepSystem.RICE_PER_MILITARY_PU_PER_SEASON
-
-		var clan: ClanData = clans.get(clan_name)
-		if clan == null:
-			continue
-
-		var clan_settlements: Array[SettlementData] = []
-		for pid: int in clan.province_ids:
-			var province_setts: Array = settlements_by_province.get(pid, [])
-			for s: Variant in province_setts:
-				if s is SettlementData:
-					clan_settlements.append(s)
-
-		if clan_settlements.is_empty():
-			continue
-
-		var remaining: float = clan_rice_cost
-		for s: SettlementData in clan_settlements:
-			if remaining <= 0.0:
-				break
-			var deduct: float = minf(s.rice_stockpile, remaining)
-			s.rice_stockpile -= deduct
-			remaining -= deduct
-			total_deducted += deduct
-
-	return total_deducted
-
-
-static func _deduct_koku_upkeep(
-	companies_by_clan: Dictionary,
-	settlements: Array[SettlementData],
-	clans: Dictionary,
-) -> float:
-	var settlements_by_province: Dictionary = _build_settlements_by_province(settlements)
-	var total_deducted: float = 0.0
-
-	for clan_name: String in companies_by_clan:
-		var clan_companies: Array = companies_by_clan[clan_name]
-		var clan_koku_cost: float = 0.0
-		for c: Variant in clan_companies:
-			if c is Dictionary:
-				var ut: int = c.get("unit_type", Enums.CompanyUnitType.PEASANT_LEVY)
-				var costs: Dictionary = ArmyUpkeepSystem.compute_company_seasonal_costs(ut)
-				clan_koku_cost += costs["koku"]
-
-		if clan_koku_cost <= 0.0:
+	for clan_name: String in cost_by_clan:
+		var clan_cost: float = cost_by_clan[clan_name]
+		if clan_cost <= 0.0:
 			continue
 
 		var clan: ClanData = clans.get(clan_name)
@@ -2183,12 +2145,13 @@ static func _deduct_koku_upkeep(
 		if clan_settlements.is_empty():
 			continue
 
-		var remaining: float = clan_koku_cost
+		var remaining: float = clan_cost
 		for s: SettlementData in clan_settlements:
 			if remaining <= 0.0:
 				break
-			var deduct: float = minf(s.koku_stockpile, remaining)
-			s.koku_stockpile -= deduct
+			var available: float = s.get(stockpile_field)
+			var deduct: float = minf(available, remaining)
+			s.set(stockpile_field, available - deduct)
 			remaining -= deduct
 			total_deducted += deduct
 
