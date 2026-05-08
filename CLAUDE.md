@@ -451,6 +451,7 @@ All in /tests/, one file per system:
 - test_performative_arts_wiring.gd (~10 tests)
 - test_succession_system.gd (~60 tests)
 - test_succession_wiring.gd (~10 tests)
+- test_secret_system.gd (~55 tests)
 
 ### Festival System (s11.5)
 - **simulation/festival_system.gd** — Empire-wide canonical festivals, Rokuyo
@@ -1293,6 +1294,29 @@ All in /tests/, one file per system:
   Deferred: Priority 4 adopted heir (needs adoption action), court dispute
   resolution, assassination cross-ref (needs SecretSystem), Dragon/Phoenix
   exception integration.
+
+### Secret System (s12.8)
+- **shared/secret_data.gd** — SecretData Resource: Severity enum (TIER_4=4 least
+  severe through TIER_1=1 most severe), secret_id, subject_id, severity,
+  fabricated, fabricator_id, detection_tn, exposed, exposed_publicly, slug,
+  description, topic_id, physical_proof_item_id.
+- **simulation/secret_system.gd** — Core secret mechanics per GDD s12.8.
+  Severity consequence tables: PRIVATE_EXPOSURE_DISP (−8/−15/−30/−50),
+  PUBLIC_EXPOSURE_DISP_PER_WITNESS (−5/−10/−20/−35), SUBJECT_HONOR_LOSS
+  (0/−0.3/−1.0/−2.0), SUBJECT_GLORY_LOSS (−0.1/−0.3/−0.5/−1.0),
+  SUBJECT_INFAMY_GAIN (0/0/0.3/0.5). Context modifier: severity upgrade when
+  involved_status > subject_status OR act within 4 seasons (max one tier).
+  `reveal_privately()` applies disposition/honor/glory/infamy to subject,
+  generates betrayal topic at Tier 1. `expose_publicly()` per-witness
+  disposition loss. Fabrication: Forgery+Agility vs TN 15/20/25/30 by tier,
+  honor cost −0.3/−0.5/−0.8/−1.5, +0.2 infamy. `detect_fabrication()`
+  Investigation+Perception vs detection_tn. Covert acquisition costs: bribe
+  −0.2/+0.1, eavesdrop −0.1/+0.05, intercept −0.3/+0.1, search −0.3/+0.1.
+  Assassination order honor cost by target status (−2/−3/−4/−5). NPC covert
+  filters: Gi/Makoto hard-block, CLAN_RELUCTANCE table (Scorpion 0 through
+  Lion 5), honor threshold 3.5, disposition −31 gate. `can_fabricate()`
+  personality gate. Deferred: assassination phases, seduction actions,
+  bound/escape, forge impersonation/order, shadow target, conceal/search.
 
 ### What's Next
 1. World generation coordinate system and adjacency

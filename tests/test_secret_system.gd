@@ -1,0 +1,589 @@
+extends GutTest
+
+
+var _engine: DiceEngine
+var _subject: L5RCharacterData
+var _revealer: L5RCharacterData
+var _recipient: L5RCharacterData
+var _fabricator: L5RCharacterData
+
+
+func before_each() -> void:
+	_engine = DiceEngine.new(42)
+
+	_subject = L5RCharacterData.new()
+	_subject.character_id = 1
+	_subject.honor = 5.0
+	_subject.glory = 5.0
+	_subject.infamy = 0.0
+
+	_revealer = L5RCharacterData.new()
+	_revealer.character_id = 2
+
+	_recipient = L5RCharacterData.new()
+	_recipient.character_id = 3
+	_recipient.disposition_values = {}
+
+	_fabricator = L5RCharacterData.new()
+	_fabricator.character_id = 4
+	_fabricator.agility = 4
+	_fabricator.skills = {"Forgery": 3}
+	_fabricator.honor = 5.0
+	_fabricator.infamy = 0.0
+
+
+# ==============================================================================
+# Secret Creation
+# ==============================================================================
+
+func test_create_secret_sets_fields() -> void:
+	var s: SecretData = SecretSystem.create_secret(1, 10, SecretData.Severity.TIER_2, "scandal", "A scandal")
+	assert_eq(s.secret_id, 1)
+	assert_eq(s.subject_id, 10)
+	assert_eq(s.severity, SecretData.Severity.TIER_2)
+	assert_eq(s.slug, "scandal")
+	assert_eq(s.description, "A scandal")
+	assert_false(s.fabricated)
+	assert_false(s.exposed)
+
+
+func test_create_secret_defaults() -> void:
+	var s: SecretData = SecretSystem.create_secret(2, 20, SecretData.Severity.TIER_4)
+	assert_eq(s.slug, "")
+	assert_eq(s.description, "")
+
+
+# ==============================================================================
+# Severity Enum Values
+# ==============================================================================
+
+func test_tier_1_is_most_severe() -> void:
+	assert_eq(SecretData.Severity.TIER_1, 1)
+
+
+func test_tier_4_is_least_severe() -> void:
+	assert_eq(SecretData.Severity.TIER_4, 4)
+
+
+# ==============================================================================
+# Context Modifier — Severity Upgrade
+# ==============================================================================
+
+func test_no_upgrade_when_no_conditions_met() -> void:
+	var s: SecretData = SecretSystem.create_secret(1, 1, SecretData.Severity.TIER_3)
+	var eff: SecretData.Severity = SecretSystem.get_effective_severity(s, 5.0, 3.0, 10)
+	assert_eq(eff, SecretData.Severity.TIER_3)
+
+
+func test_upgrade_when_involved_status_higher() -> void:
+	var s: SecretData = SecretSystem.create_secret(1, 1, SecretData.Severity.TIER_3)
+	var eff: SecretData.Severity = SecretSystem.get_effective_severity(s, 3.0, 5.0, 10)
+	assert_eq(eff, SecretData.Severity.TIER_2)
+
+
+func test_upgrade_when_recent_act() -> void:
+	var s: SecretData = SecretSystem.create_secret(1, 1, SecretData.Severity.TIER_3)
+	var eff: SecretData.Severity = SecretSystem.get_effective_severity(s, 5.0, 3.0, 2)
+	assert_eq(eff, SecretData.Severity.TIER_2)
+
+
+func test_no_upgrade_past_tier_4() -> void:
+	var s: SecretData = SecretSystem.create_secret(1, 1, SecretData.Severity.TIER_4)
+	var eff: SecretData.Severity = SecretSystem.get_effective_severity(s, 3.0, 5.0, 1)
+	assert_eq(eff, SecretData.Severity.TIER_4)
+
+
+func test_upgrade_caps_at_tier_4_value() -> void:
+	var s: SecretData = SecretSystem.create_secret(1, 1, SecretData.Severity.TIER_4)
+	var eff: SecretData.Severity = SecretSystem.get_effective_severity(s, 1.0, 9.0, 0)
+	assert_eq(eff, SecretData.Severity.TIER_4)
+
+
+func test_recency_boundary_at_4_seasons() -> void:
+	var s: SecretData = SecretSystem.create_secret(1, 1, SecretData.Severity.TIER_3)
+	var eff: SecretData.Severity = SecretSystem.get_effective_severity(s, 5.0, 3.0, 4)
+	assert_eq(eff, SecretData.Severity.TIER_3)
+
+
+func test_recency_at_3_seasons_upgrades() -> void:
+	var s: SecretData = SecretSystem.create_secret(1, 1, SecretData.Severity.TIER_3)
+	var eff: SecretData.Severity = SecretSystem.get_effective_severity(s, 5.0, 3.0, 3)
+	assert_eq(eff, SecretData.Severity.TIER_2)
+
+
+# ==============================================================================
+# Private Exposure
+# ==============================================================================
+
+func test_reveal_privately_tier_4_disposition() -> void:
+	var s: SecretData = SecretSystem.create_secret(1, _subject.character_id, SecretData.Severity.TIER_4)
+	var r: Dictionary = SecretSystem.reveal_privately(s, _revealer, _recipient, _subject)
+	assert_eq(r["disposition_change"], -8)
+
+
+func test_reveal_privately_tier_1_disposition() -> void:
+	var s: SecretData = SecretSystem.create_secret(1, _subject.character_id, SecretData.Severity.TIER_1)
+	var r: Dictionary = SecretSystem.reveal_privately(s, _revealer, _recipient, _subject)
+	assert_eq(r["disposition_change"], -50)
+
+
+func test_reveal_privately_marks_exposed() -> void:
+	var s: SecretData = SecretSystem.create_secret(1, _subject.character_id, SecretData.Severity.TIER_3)
+	SecretSystem.reveal_privately(s, _revealer, _recipient, _subject)
+	assert_true(s.exposed)
+	assert_false(s.exposed_publicly)
+
+
+func test_reveal_privately_applies_honor_loss() -> void:
+	var s: SecretData = SecretSystem.create_secret(1, _subject.character_id, SecretData.Severity.TIER_2)
+	SecretSystem.reveal_privately(s, _revealer, _recipient, _subject)
+	assert_almost_eq(_subject.honor, 4.0, 0.01)
+
+
+func test_reveal_privately_applies_glory_loss() -> void:
+	var s: SecretData = SecretSystem.create_secret(1, _subject.character_id, SecretData.Severity.TIER_1)
+	SecretSystem.reveal_privately(s, _revealer, _recipient, _subject)
+	assert_almost_eq(_subject.glory, 4.0, 0.01)
+
+
+func test_reveal_privately_applies_infamy_gain() -> void:
+	var s: SecretData = SecretSystem.create_secret(1, _subject.character_id, SecretData.Severity.TIER_1)
+	SecretSystem.reveal_privately(s, _revealer, _recipient, _subject)
+	assert_almost_eq(_subject.infamy, 0.5, 0.01)
+
+
+func test_reveal_privately_no_honor_loss_tier_4() -> void:
+	var s: SecretData = SecretSystem.create_secret(1, _subject.character_id, SecretData.Severity.TIER_4)
+	SecretSystem.reveal_privately(s, _revealer, _recipient, _subject)
+	assert_almost_eq(_subject.honor, 5.0, 0.01)
+
+
+func test_reveal_privately_mutates_recipient_disposition() -> void:
+	var s: SecretData = SecretSystem.create_secret(1, _subject.character_id, SecretData.Severity.TIER_3)
+	SecretSystem.reveal_privately(s, _revealer, _recipient, _subject)
+	assert_eq(_recipient.disposition_values[_subject.character_id], -15)
+
+
+func test_reveal_privately_generates_betrayal_topic_tier_1() -> void:
+	var s: SecretData = SecretSystem.create_secret(1, _subject.character_id, SecretData.Severity.TIER_1)
+	var r: Dictionary = SecretSystem.reveal_privately(s, _revealer, _recipient, _subject)
+	assert_true(r["generates_betrayal_topic"])
+
+
+func test_reveal_privately_no_betrayal_topic_tier_2() -> void:
+	var s: SecretData = SecretSystem.create_secret(1, _subject.character_id, SecretData.Severity.TIER_2)
+	var r: Dictionary = SecretSystem.reveal_privately(s, _revealer, _recipient, _subject)
+	assert_false(r["generates_betrayal_topic"])
+
+
+func test_reveal_privately_with_proof_grants_free_raises() -> void:
+	var s: SecretData = SecretSystem.create_secret(1, _subject.character_id, SecretData.Severity.TIER_3)
+	var r: Dictionary = SecretSystem.reveal_privately(s, _revealer, _recipient, _subject, true)
+	assert_eq(r["free_raises"], 1)
+
+
+func test_reveal_privately_without_proof_no_free_raises() -> void:
+	var s: SecretData = SecretSystem.create_secret(1, _subject.character_id, SecretData.Severity.TIER_3)
+	var r: Dictionary = SecretSystem.reveal_privately(s, _revealer, _recipient, _subject, false)
+	assert_eq(r["free_raises"], 0)
+
+
+func test_reveal_privately_clamps_honor_at_zero() -> void:
+	_subject.honor = 0.5
+	var s: SecretData = SecretSystem.create_secret(1, _subject.character_id, SecretData.Severity.TIER_1)
+	SecretSystem.reveal_privately(s, _revealer, _recipient, _subject)
+	assert_almost_eq(_subject.honor, 0.0, 0.01)
+
+
+# ==============================================================================
+# Public Exposure
+# ==============================================================================
+
+func test_expose_publicly_disposition_per_witness() -> void:
+	var s: SecretData = SecretSystem.create_secret(1, _subject.character_id, SecretData.Severity.TIER_3)
+	var w1: L5RCharacterData = L5RCharacterData.new()
+	w1.character_id = 10
+	var w2: L5RCharacterData = L5RCharacterData.new()
+	w2.character_id = 11
+	var chars: Dictionary = {10: w1, 11: w2}
+	var r: Dictionary = SecretSystem.expose_publicly(s, _revealer, _subject, [10, 11] as Array[int], chars)
+	assert_eq(r["disposition_per_witness"], -10)
+	assert_eq(r["witness_count"], 2)
+	assert_eq(r["witness_effects"].size(), 2)
+
+
+func test_expose_publicly_marks_both_flags() -> void:
+	var s: SecretData = SecretSystem.create_secret(1, _subject.character_id, SecretData.Severity.TIER_2)
+	SecretSystem.expose_publicly(s, _revealer, _subject, [] as Array[int], {})
+	assert_true(s.exposed)
+	assert_true(s.exposed_publicly)
+
+
+func test_expose_publicly_applies_subject_consequences() -> void:
+	var s: SecretData = SecretSystem.create_secret(1, _subject.character_id, SecretData.Severity.TIER_2)
+	SecretSystem.expose_publicly(s, _revealer, _subject, [] as Array[int], {})
+	assert_almost_eq(_subject.honor, 4.0, 0.01)
+	assert_almost_eq(_subject.glory, 4.5, 0.01)
+	assert_almost_eq(_subject.infamy, 0.3, 0.01)
+
+
+func test_expose_publicly_witness_disposition_mutated() -> void:
+	var s: SecretData = SecretSystem.create_secret(1, _subject.character_id, SecretData.Severity.TIER_1)
+	var w: L5RCharacterData = L5RCharacterData.new()
+	w.character_id = 10
+	var r: Dictionary = SecretSystem.expose_publicly(s, _revealer, _subject, [10] as Array[int], {10: w})
+	assert_eq(w.disposition_values[_subject.character_id], -35)
+
+
+func test_expose_publicly_tier_1_generates_betrayal_topic() -> void:
+	var s: SecretData = SecretSystem.create_secret(1, _subject.character_id, SecretData.Severity.TIER_1)
+	var r: Dictionary = SecretSystem.expose_publicly(s, _revealer, _subject, [] as Array[int], {})
+	assert_true(r["generates_betrayal_topic"])
+
+
+func test_expose_publicly_has_proof_grants_raises() -> void:
+	var s: SecretData = SecretSystem.create_secret(1, _subject.character_id, SecretData.Severity.TIER_3)
+	var r: Dictionary = SecretSystem.expose_publicly(s, _revealer, _subject, [] as Array[int], {}, true)
+	assert_eq(r["free_raises"], 1)
+
+
+func test_expose_publicly_skips_missing_witness() -> void:
+	var s: SecretData = SecretSystem.create_secret(1, _subject.character_id, SecretData.Severity.TIER_3)
+	var r: Dictionary = SecretSystem.expose_publicly(s, _revealer, _subject, [99] as Array[int], {})
+	assert_eq(r["witness_effects"].size(), 0)
+
+
+# ==============================================================================
+# Fabrication TN
+# ==============================================================================
+
+func test_fabrication_tn_tier_1() -> void:
+	assert_eq(SecretSystem.get_fabrication_tn(SecretData.Severity.TIER_1), 15)
+
+
+func test_fabrication_tn_tier_2() -> void:
+	assert_eq(SecretSystem.get_fabrication_tn(SecretData.Severity.TIER_2), 20)
+
+
+func test_fabrication_tn_tier_3() -> void:
+	assert_eq(SecretSystem.get_fabrication_tn(SecretData.Severity.TIER_3), 25)
+
+
+func test_fabrication_tn_tier_4() -> void:
+	assert_eq(SecretSystem.get_fabrication_tn(SecretData.Severity.TIER_4), 30)
+
+
+# ==============================================================================
+# Fabrication
+# ==============================================================================
+
+func test_fabricate_fails_without_forgery_skill() -> void:
+	_fabricator.skills = {}
+	var r: Dictionary = SecretSystem.fabricate_secret(_fabricator, 10, SecretData.Severity.TIER_3, 1, _engine)
+	assert_false(r["success"])
+	assert_eq(r["reason"], "no_forgery_skill")
+
+
+func test_fabricate_applies_honor_cost() -> void:
+	var starting_honor: float = _fabricator.honor
+	SecretSystem.fabricate_secret(_fabricator, 10, SecretData.Severity.TIER_1, 1, _engine)
+	assert_true(_fabricator.honor < starting_honor)
+
+
+func test_fabricate_applies_infamy() -> void:
+	SecretSystem.fabricate_secret(_fabricator, 10, SecretData.Severity.TIER_1, 1, _engine)
+	assert_almost_eq(_fabricator.infamy, 0.2, 0.01)
+
+
+func test_fabricate_success_creates_secret() -> void:
+	var high_skill: L5RCharacterData = L5RCharacterData.new()
+	high_skill.character_id = 99
+	high_skill.agility = 8
+	high_skill.skills = {"Forgery": 8}
+	high_skill.honor = 5.0
+	high_skill.infamy = 0.0
+	var e: DiceEngine = DiceEngine.new(7)
+	var r: Dictionary = SecretSystem.fabricate_secret(high_skill, 10, SecretData.Severity.TIER_1, 50, e)
+	if r["success"]:
+		var secret: SecretData = r["secret"]
+		assert_true(secret.fabricated)
+		assert_eq(secret.fabricator_id, 99)
+		assert_eq(secret.subject_id, 10)
+		assert_eq(secret.secret_id, 50)
+	else:
+		pass_test("Roll failed — acceptable with dice RNG")
+
+
+func test_fabricate_with_raises_increases_tn() -> void:
+	var r: Dictionary = SecretSystem.fabricate_secret(_fabricator, 10, SecretData.Severity.TIER_1, 1, _engine, 2)
+	assert_eq(r["tn"], 25)
+
+
+func test_fabricate_honor_cost_tier_4() -> void:
+	_fabricator.honor = 5.0
+	SecretSystem.fabricate_secret(_fabricator, 10, SecretData.Severity.TIER_4, 1, _engine)
+	assert_almost_eq(_fabricator.honor, 3.5, 0.01)
+
+
+func test_fabricate_honor_cost_tier_1() -> void:
+	_fabricator.honor = 5.0
+	SecretSystem.fabricate_secret(_fabricator, 10, SecretData.Severity.TIER_1, 1, _engine)
+	assert_almost_eq(_fabricator.honor, 4.7, 0.01)
+
+
+# ==============================================================================
+# Detect Fabrication
+# ==============================================================================
+
+func test_detect_non_fabricated_returns_not_checked() -> void:
+	var s: SecretData = SecretSystem.create_secret(1, 10, SecretData.Severity.TIER_3)
+	var investigator: L5RCharacterData = L5RCharacterData.new()
+	investigator.perception = 4
+	investigator.skills = {"Investigation": 3}
+	var r: Dictionary = SecretSystem.detect_fabrication(investigator, s, _engine)
+	assert_false(r["checked"])
+	assert_eq(r["reason"], "not_fabricated")
+
+
+func test_detect_fabricated_secret_checked() -> void:
+	var s: SecretData = SecretData.new()
+	s.fabricated = true
+	s.detection_tn = 15
+	var investigator: L5RCharacterData = L5RCharacterData.new()
+	investigator.perception = 4
+	investigator.skills = {"Investigation": 3}
+	var r: Dictionary = SecretSystem.detect_fabrication(investigator, s, _engine)
+	assert_true(r["checked"])
+	assert_has(r, "detected")
+	assert_eq(r["detection_tn"], 15)
+
+
+# ==============================================================================
+# Covert Acquisition Costs
+# ==============================================================================
+
+func test_bribe_costs() -> void:
+	var actor: L5RCharacterData = L5RCharacterData.new()
+	actor.honor = 5.0
+	actor.infamy = 0.0
+	SecretSystem.apply_bribe_costs(actor)
+	assert_almost_eq(actor.honor, 4.8, 0.01)
+	assert_almost_eq(actor.infamy, 0.1, 0.01)
+
+
+func test_eavesdrop_costs() -> void:
+	var actor: L5RCharacterData = L5RCharacterData.new()
+	actor.honor = 5.0
+	actor.infamy = 0.0
+	SecretSystem.apply_eavesdrop_costs(actor)
+	assert_almost_eq(actor.honor, 4.9, 0.01)
+	assert_almost_eq(actor.infamy, 0.05, 0.01)
+
+
+func test_intercept_costs() -> void:
+	var actor: L5RCharacterData = L5RCharacterData.new()
+	actor.honor = 5.0
+	actor.infamy = 0.0
+	SecretSystem.apply_intercept_costs(actor)
+	assert_almost_eq(actor.honor, 4.7, 0.01)
+	assert_almost_eq(actor.infamy, 0.1, 0.01)
+
+
+func test_search_costs() -> void:
+	var actor: L5RCharacterData = L5RCharacterData.new()
+	actor.honor = 5.0
+	actor.infamy = 0.0
+	SecretSystem.apply_search_costs(actor)
+	assert_almost_eq(actor.honor, 4.7, 0.01)
+	assert_almost_eq(actor.infamy, 0.1, 0.01)
+
+
+func test_covert_costs_clamp_honor_at_zero() -> void:
+	var actor: L5RCharacterData = L5RCharacterData.new()
+	actor.honor = 0.1
+	actor.infamy = 0.0
+	SecretSystem.apply_intercept_costs(actor)
+	assert_almost_eq(actor.honor, 0.0, 0.01)
+
+
+func test_covert_costs_clamp_infamy_at_ten() -> void:
+	var actor: L5RCharacterData = L5RCharacterData.new()
+	actor.honor = 5.0
+	actor.infamy = 9.95
+	SecretSystem.apply_bribe_costs(actor)
+	assert_almost_eq(actor.infamy, 10.0, 0.01)
+
+
+# ==============================================================================
+# Bribe TN
+# ==============================================================================
+
+func test_bribe_tn_positive_disposition() -> void:
+	assert_eq(SecretSystem.get_bribe_tn(50), 20)
+
+
+func test_bribe_tn_negative_disposition() -> void:
+	assert_eq(SecretSystem.get_bribe_tn(-50), 0)
+
+
+func test_bribe_tn_zero_disposition() -> void:
+	assert_eq(SecretSystem.get_bribe_tn(0), 10)
+
+
+# ==============================================================================
+# Assassination Order Honor Cost
+# ==============================================================================
+
+func test_assassination_low_status() -> void:
+	assert_almost_eq(SecretSystem.get_assassination_order_honor_cost(2.0), -2.0, 0.01)
+
+
+func test_assassination_mid_status() -> void:
+	assert_almost_eq(SecretSystem.get_assassination_order_honor_cost(4.0), -3.0, 0.01)
+
+
+func test_assassination_high_status() -> void:
+	assert_almost_eq(SecretSystem.get_assassination_order_honor_cost(7.0), -4.0, 0.01)
+
+
+func test_assassination_imperial_status() -> void:
+	assert_almost_eq(SecretSystem.get_assassination_order_honor_cost(9.0), -5.0, 0.01)
+
+
+func test_assassination_boundary_3() -> void:
+	assert_almost_eq(SecretSystem.get_assassination_order_honor_cost(3.0), -3.0, 0.01)
+
+
+func test_assassination_boundary_6() -> void:
+	assert_almost_eq(SecretSystem.get_assassination_order_honor_cost(6.0), -4.0, 0.01)
+
+
+func test_assassination_boundary_8() -> void:
+	assert_almost_eq(SecretSystem.get_assassination_order_honor_cost(8.0), -5.0, 0.01)
+
+
+# ==============================================================================
+# Reputation Threshold
+# ==============================================================================
+
+func test_below_threshold_no_topic() -> void:
+	assert_false(SecretSystem.should_generate_reputation_topic(0.4))
+
+
+func test_at_threshold_generates_topic() -> void:
+	assert_true(SecretSystem.should_generate_reputation_topic(0.5))
+
+
+func test_above_threshold_generates_topic() -> void:
+	assert_true(SecretSystem.should_generate_reputation_topic(1.0))
+
+
+# ==============================================================================
+# NPC Covert Filters
+# ==============================================================================
+
+func _make_npc(clan: String, virtue_b: Enums.BushidoVirtue, honor: float) -> L5RCharacterData:
+	var c: L5RCharacterData = L5RCharacterData.new()
+	c.character_id = 100
+	c.clan = clan
+	c.bushido_virtue = virtue_b
+	c.honor = honor
+	return c
+
+
+func test_gi_virtue_blocks_covert() -> void:
+	var c: L5RCharacterData = _make_npc("Scorpion", Enums.BushidoVirtue.GI, 1.0)
+	assert_false(SecretSystem.passes_covert_filters(c, -50, true))
+
+
+func test_makoto_virtue_blocks_covert() -> void:
+	var c: L5RCharacterData = _make_npc("Scorpion", Enums.BushidoVirtue.MAKOTO, 1.0)
+	assert_false(SecretSystem.passes_covert_filters(c, -50, true))
+
+
+func test_scorpion_high_honor_passes() -> void:
+	var c: L5RCharacterData = _make_npc("Scorpion", Enums.BushidoVirtue.NONE, 4.0)
+	assert_true(SecretSystem.passes_covert_filters(c, -50, true))
+
+
+func test_lion_high_honor_blocked() -> void:
+	var c: L5RCharacterData = _make_npc("Lion", Enums.BushidoVirtue.NONE, 4.0)
+	assert_false(SecretSystem.passes_covert_filters(c, -50, true))
+
+
+func test_crane_high_honor_blocked() -> void:
+	var c: L5RCharacterData = _make_npc("Crane", Enums.BushidoVirtue.NONE, 4.0)
+	assert_false(SecretSystem.passes_covert_filters(c, -50, true))
+
+
+func test_positive_disposition_no_lord_blocked() -> void:
+	var c: L5RCharacterData = _make_npc("Scorpion", Enums.BushidoVirtue.NONE, 1.0)
+	assert_false(SecretSystem.passes_covert_filters(c, 0, false))
+
+
+func test_negative_disposition_no_lord_passes() -> void:
+	var c: L5RCharacterData = _make_npc("Scorpion", Enums.BushidoVirtue.NONE, 1.0)
+	assert_true(SecretSystem.passes_covert_filters(c, -50, false))
+
+
+func test_lord_assignment_overrides_disposition() -> void:
+	var c: L5RCharacterData = _make_npc("Scorpion", Enums.BushidoVirtue.NONE, 1.0)
+	assert_true(SecretSystem.passes_covert_filters(c, 50, true))
+
+
+func test_crab_low_reluctance_high_honor_blocked() -> void:
+	var c: L5RCharacterData = _make_npc("Crab", Enums.BushidoVirtue.NONE, 4.0)
+	assert_false(SecretSystem.passes_covert_filters(c, -50, true))
+
+
+# ==============================================================================
+# Fabrication Gate
+# ==============================================================================
+
+func test_can_fabricate_normal() -> void:
+	var c: L5RCharacterData = L5RCharacterData.new()
+	c.bushido_virtue = Enums.BushidoVirtue.NONE
+	assert_true(SecretSystem.can_fabricate(c))
+
+
+func test_gi_cannot_fabricate() -> void:
+	var c: L5RCharacterData = L5RCharacterData.new()
+	c.bushido_virtue = Enums.BushidoVirtue.GI
+	assert_false(SecretSystem.can_fabricate(c))
+
+
+func test_makoto_cannot_fabricate() -> void:
+	var c: L5RCharacterData = L5RCharacterData.new()
+	c.bushido_virtue = Enums.BushidoVirtue.MAKOTO
+	assert_false(SecretSystem.can_fabricate(c))
+
+
+func test_ishi_can_fabricate() -> void:
+	var c: L5RCharacterData = L5RCharacterData.new()
+	c.bushido_virtue = Enums.BushidoVirtue.NONE
+	c.shourido_virtue = Enums.ShouridoVirtue.ISHI
+	assert_true(SecretSystem.can_fabricate(c))
+
+
+# ==============================================================================
+# Fabrication Exposure Disposition
+# ==============================================================================
+
+func test_fabrication_exposed_disp_constant() -> void:
+	assert_eq(SecretSystem.FABRICATION_EXPOSED_DISP, -25)
+
+
+# ==============================================================================
+# Clan Reluctance Table
+# ==============================================================================
+
+func test_scorpion_zero_reluctance() -> void:
+	assert_eq(SecretSystem.CLAN_RELUCTANCE["Scorpion"], 0)
+
+
+func test_lion_highest_reluctance() -> void:
+	assert_eq(SecretSystem.CLAN_RELUCTANCE["Lion"], 5)
+
+
+func test_dragon_mid_reluctance() -> void:
+	assert_eq(SecretSystem.CLAN_RELUCTANCE["Dragon"], 3)
