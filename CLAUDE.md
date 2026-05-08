@@ -471,7 +471,7 @@ All in /tests/, one file per system:
 - test_order_system.gd (~30 tests)
 - test_military_service_system.gd (~35 tests)
 - test_pu_reconciliation.gd (~30 tests)
-- test_military_wiring.gd (~57 tests)
+- test_military_wiring.gd (~64 tests)
 
 ### Festival System (s11.5)
 - **simulation/festival_system.gd** — Empire-wide canonical festivals, Rokuyo
@@ -1796,6 +1796,11 @@ The following subsystems are now integrated into the NPC decision loop:
   Koku upkeep deduction: `_deduct_koku_upkeep()` deducts garrison (0.20/PU/
   season) and ronin (1.50/season) koku costs from clan settlements'
   `koku_stockpile`. Units with zero koku cost skip deduction.
+  Field deprivation: `_process_field_deprivation()` runs after tether ticks,
+  computing per-company rice (morale/health loss) and arms (attack/defense
+  penalty) effects based on tether deprivation tick levels. Tick 1 = warning
+  only; ticks 2–4 apply escalating penalties per ArmyUpkeepSystem tables.
+  Effects returned as descriptors for caller to apply to CompanyData objects.
 
 ## Resolved Design Decisions
 
