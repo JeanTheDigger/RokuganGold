@@ -917,4 +917,35 @@ func test_favor_breach_witness_disposition_applied() -> void:
 	assert_almost_eq(debtor.glory, 2.5, 0.01)
 	var creditor: L5RCharacterData = _characters[0]
 	assert_eq(creditor.disposition_values.get(2, 0), -35)
-	assert_eq(creditor.disposition_values.get(2, 0), -35)
+
+
+func test_favor_breach_disposition_floor_prevents_overcorrection() -> void:
+	var debtor := L5RCharacterData.new()
+	debtor.character_id = 2
+	debtor.character_name = "Debtor"
+	debtor.honor = 5.0
+	debtor.glory = 3.0
+	debtor.skills = {}
+	debtor.emphases = {}
+	debtor.wounds_taken = 0
+	debtor.knowledge_pool = []
+	debtor.known_contacts_by_clan = {}
+	debtor.met_characters = []
+	var chars: Dictionary = {1: _characters[0], 2: debtor}
+
+	_characters[0].disposition_values = {2: 0}
+
+	var breach: Dictionary = {
+		"debtor_id": 2,
+		"creditor_id": 1,
+		"disposition_change": -20,
+		"disposition_floor": -15,
+		"honor_loss": 0.0,
+		"glory_loss": 0.0,
+		"witness_disposition_loss": 0,
+		"witnesses": [],
+	}
+
+	DayOrchestrator._apply_favor_breach(breach, chars)
+
+	assert_eq(_characters[0].disposition_values[2], -15)

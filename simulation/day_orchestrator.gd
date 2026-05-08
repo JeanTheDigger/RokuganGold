@@ -1194,9 +1194,10 @@ static func _apply_favor_breach(
 	var creditor: L5RCharacterData = characters_by_id.get(creditor_id)
 	if creditor != null:
 		var disp_change: int = breach.get("disposition_change", 0)
+		var disp_floor: int = breach.get("disposition_floor", -100)
 		if disp_change != 0:
 			var old_val: int = creditor.disposition_values.get(debtor_id, 0)
-			var new_val: int = clampi(old_val + disp_change, -100, 100)
+			var new_val: int = clampi(old_val + disp_change, disp_floor, 100)
 			creditor.disposition_values[debtor_id] = new_val
 
 	var witness_loss: int = breach.get("witness_disposition_loss", 0)
