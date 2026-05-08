@@ -96,6 +96,16 @@ const DEFECTOR_DISPOSITION_PENALTY: int = -15
 
 # -- Precedent Effect (s53.2.10) --------------------------------------------
 
+# -- Post-resolution disposition scars (s53.2.7) ----------------------------
+
+const POST_WAR_SCAR_BASE: int = -10
+const POST_WAR_SCAR_DECAY_PER_SEASON: int = 1
+const POST_WAR_SCAR_FAMILY_DEATH: int = -15
+const RONIN_DEPARTURE_HONOR_PENALTY: float = -1.0
+const REBEL_FAMILY_DAIMYO_HONOR_PENALTY: float = -1.0
+const REBEL_PROVINCIAL_DAIMYO_HONOR_PENALTY: float = -0.5
+
+
 const PRECEDENT_DEFY_BONUS_STANDARD: int = 3
 const PRECEDENT_DEFY_BONUS_SEIZURE: int = 5
 const PRECEDENT_DURATION_SEASONS: int = 5
@@ -391,7 +401,7 @@ static func can_seize_championship(
 		return false
 	if not incumbent_disgraced_or_dead:
 		return false
-	return int(state.get("war_score", 50)) >= CHAMPIONSHIP_SEIZURE_WAR_SCORE
+	return (100 - int(state.get("war_score", 50))) >= CHAMPIONSHIP_SEIZURE_WAR_SCORE
 
 
 # -- Defection (s53.2.8) ----------------------------------------------------
@@ -485,6 +495,112 @@ static func get_active_precedent_bonus(precedent_modifiers: Dictionary) -> int:
 	for k in precedent_modifiers:
 		total += int(precedent_modifiers[k].get("bonus", 0))
 	return total
+
+
+# -- Ronin departure (s53.2.2) ----------------------------------------------
+
+static func apply_ronin_departure(npc: L5RCharacterData) -> void:
+	if npc == null:
+		return
+	npc.honor = clampf(npc.honor + RONIN_DEPARTURE_HONOR_PENALTY, 0.0, 10.0)
+
+
+# -- Post-resolution consequences (s53.2.7) ---------------------------------
+
+static func apply_post_resolution_scars(
+	state: Dictionary,
+	all_characters: Array,
+	family_deaths: Dictionary = {},
+) -> Dictionary:
+	## Applies disposition scars between opposite-faction combatants.
+	## `family_deaths` maps character_id → Array[int] of family member ids
+	## killed during the war. Returns a dict of scars applied for logging.
+	var scars: Array[Dictionary] = []
+	var assignments: Dictionary = state.get("faction_assignments", {})
+	for i: int in all_characters.size():
+		var a: L5RCharacterData = all_characters[i]
+		if a == null:
+			continue
+		var fa: int = int(assignments.get(a.character_id, Faction.NONE))
+		if fa == Faction.NONE or fa == Faction.RONIN:
+			continue
+		for j: int in range(i + 1, all_characters.size()):
+			var b: L5RCharacterData = all_characters[j]
+			if b == null:
+				continue
+			var fb: int = int(assignments.get(b.character_id, Faction.NONE))
+			if fb == Faction.NONE or fb == Faction.RONIN:
+				continue
+			if fa == fb:
+				continue
+			var scar_a: int = POST_WAR_SCAR_BASE
+			var scar_b: int = POST_WAR_SCAR_BASE
+			var deaths_a: Array = family_deaths.get(a.character_id, [])
+			if b.character_id in deaths_a:
+				scar_a += POST_WAR_SCAR_FAMILY_DEATH
+			var deaths_b: Array = family_deaths.get(b.character_id, [])
+			if a.character_id in deaths_b:
+				scar_b += POST_WAR_SCAR_FAMILY_DEATH
+			var cur_ab: int = int(a.disposition_values.get(b.character_id, 0))
+			a.disposition_values[b.character_id] = clampi(cur_ab + scar_a, -100, 100)
+			var cur_ba: int = int(b.disposition_values.get(a.character_id, 0))
+			b.disposition_values[a.character_id] = clampi(cur_ba + scar_b, -100, 100)
+			scars.append({
+				"a_id": a.character_id, "b_id": b.character_id,
+				"scar_a": scar_a, "scar_b": scar_b,
+			})
+	return {"scars": scars}
+
+
+static func decay_post_war_scars(
+	characters: Array,
+	scar_entries: Array[Dictionary],
+) -> void:
+	## Called once per season to decay the base -10 scar by 1 per season.
+	## Family death scars (-15) do not decay.
+	## Caller tracks remaining scar values and stops calling when 0.
+	for entry in scar_entries:
+		var base_remaining: int = int(entry.get("base_remaining", POST_WAR_SCAR_BASE))
+		if base_remaining >= 0:
+			continue
+		var new_remaining: int = mini(base_remaining + POST_WAR_SCAR_DECAY_PER_SEASON, 0)
+		var decay_delta: int = new_remaining - base_remaining
+		entry["base_remaining"] = new_remaining
+		var a_id: int = int(entry.get("a_id", -1))
+		var b_id: int = int(entry.get("b_id", -1))
+		for c in characters:
+			if c == null:
+				continue
+			if c.character_id == a_id and b_id >= 0:
+				var cur: int = int(c.disposition_values.get(b_id, 0))
+				c.disposition_values[b_id] = clampi(cur + decay_delta, -100, 100)
+			elif c.character_id == b_id and a_id >= 0:
+				var cur: int = int(c.disposition_values.get(a_id, 0))
+				c.disposition_values[a_id] = clampi(cur + decay_delta, -100, 100)
+
+
+static func apply_rebel_consequences_on_legitimacy_victory(
+	rebels: Array,
+	family_daimyo_ids: Array[int],
+) -> Dictionary:
+	## On legitimacy victory, rebel Family Daimyos face removal + -1.0 Honor,
+	## Provincial Daimyos face reassignment + -0.5 Honor. Rank-and-file:
+	## no penalty (following orders is duty). Returns report for logging.
+	var results: Array[Dictionary] = []
+	for c in rebels:
+		if c == null:
+			continue
+		if c.character_id in family_daimyo_ids:
+			c.honor = clampf(c.honor + REBEL_FAMILY_DAIMYO_HONOR_PENALTY, 0.0, 10.0)
+			results.append({
+				"id": c.character_id, "consequence": "removal", "honor_loss": -1.0
+			})
+		elif c.status >= 4.0:
+			c.honor = clampf(c.honor + REBEL_PROVINCIAL_DAIMYO_HONOR_PENALTY, 0.0, 10.0)
+			results.append({
+				"id": c.character_id, "consequence": "reassignment", "honor_loss": -0.5
+			})
+	return {"rebel_consequences": results}
 
 
 # -- Resolution finaliser ---------------------------------------------------

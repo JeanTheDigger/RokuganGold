@@ -1,382 +1,386 @@
 {
-  "CHARM": {
-    "primary": "Etiquette",
-    "secondary": "Courtier"
-  },
-  "NEGOTIATE": {
-    "primary": "Courtier",
-    "secondary": "Etiquette"
-  },
-  "PERSUADE": {
-    "primary": "Sincerity",
-    "secondary": "Courtier"
-  },
-  "INTIMIDATE": {
-    "primary": "Intimidation",
-    "secondary": null
-  },
-  "LISTEN_REFLECT": {
-    "primary": "Investigation",
-    "secondary": "Perception"
-  },
-  "IMPRESS": {
-    "primary": "Lore",
-    "secondary": "Etiquette"
-  },
-  "PROBE": {
-    "primary": "Courtier",
-    "secondary": "Perception"
-  },
-  "READ_CHARACTER": {
-    "primary": "Investigation",
-    "secondary": "Perception"
-  },
-  "PUBLIC_DEBATE": {
-    "primary": "Courtier",
-    "secondary": "Awareness"
-  },
-  "PUBLIC_INSULT": {
-    "primary": "Courtier",
-    "secondary": "Awareness"
-  },
-  "GOSSIP": {
-    "primary": "Courtier",
-    "secondary": "Awareness"
-  },
-  "DISCLOSE": {
-    "primary": "Sincerity",
-    "secondary": "Perception"
-  },
-  "REVEAL_SECRET_PRIVATE": {
-    "primary": "Courtier",
-    "secondary": "Awareness"
-  },
-  "EXPOSE_SECRET_PUBLIC": {
-    "primary": "Courtier",
-    "secondary": "Awareness"
-  },
-  "PUBLIC_DECLARATION": {
-    "primary": "Sincerity",
-    "secondary": "Courtier"
-  },
-  "PUBLIC_PERFORMANCE": {
-    "primary": "_performance_skill",
-    "secondary": "Awareness"
-  },
-  "DELIVER_GIFT": {
-    "primary": "Etiquette",
-    "secondary": "Courtier"
-  },
-  "OFFER_FAVOR": {
-    "primary": "Sincerity",
-    "secondary": "Courtier"
-  },
-  "PERFORM_FOR": {
-    "primary": "_performance_skill",
-    "secondary": null
-  },
-  "ORDER_LEVY": {
-    "primary": "Battle",
-    "secondary": null
-  },
-  "ORDER_DEPLOY": {
-    "primary": "Battle",
-    "secondary": null
-  },
-  "ORDER_FORTIFY": {
-    "primary": "Battle",
-    "secondary": "Engineering"
-  },
-  "ORDER_RETREAT": {
-    "primary": "Battle",
-    "secondary": null
-  },
-  "EVALUATE_WAR_READINESS": {
-    "primary": "Battle",
-    "secondary": "Commerce"
-  },
-  "ASSIGN_GARRISON": {
-    "primary": "Battle",
-    "secondary": null
-  },
-  "SET_TAX_RATE": {
-    "primary": "Commerce",
-    "secondary": null
-  },
-  "SET_STIPEND_RATE": {
-    "primary": "Commerce",
-    "secondary": null
-  },
-  "PURCHASE_MARKET": {
-    "primary": "Commerce",
-    "secondary": null
-  },
-  "DEMAND_TRIBUTE": {
-    "primary": "Intimidation",
-    "secondary": "Courtier"
-  },
-  "REQUEST_ALLIED_AID": {
-    "primary": "Courtier",
-    "secondary": "Sincerity"
-  },
-  "WRITE_LETTER": {
-    "primary": "Calligraphy",
-    "secondary": "Courtier"
-  },
-  "ASSIGN_VASSAL_OBJECTIVE": {
-    "primary": "Courtier",
-    "secondary": "Battle"
-  },
-  "CALL_COURT": {
-    "primary": "Courtier",
-    "secondary": "Etiquette"
-  },
-  "SEND_INVITATION": {
-    "primary": "Calligraphy",
-    "secondary": "Etiquette"
-  },
-  "TRAIN": {
-    "primary": "_trained_skill",
-    "secondary": null
-  },
-  "CRAFT": {
-    "primary": "_craft_skill",
-    "secondary": null
-  },
-  "CULTIVATE_GARDEN": {
-    "primary": "Artisan: Gardening",
-    "secondary": "Awareness"
-  },
-  "MAINTAIN_GARDEN": {
-    "primary": "Artisan: Gardening",
-    "secondary": "Awareness"
-  },
-  "REQUEST_ART": {
-    "primary": null,
-    "secondary": null
-  },
-  "OFFER_ART_COMMISSION": {
-    "primary": null,
-    "secondary": null
-  },
-  "COLLECT_BONSAI_SPECIMEN": {
-    "primary": "Artisan: Gardening",
-    "secondary": "Perception"
-  },
-  "TEND_BONSAI": {
-    "primary": "Artisan: Gardening",
-    "secondary": "Awareness"
-  },
-  "DISPLAY_BONSAI": {
-    "primary": null,
-    "secondary": null
-  },
-  "APPLY_TATTOO": {
-    "primary": "Artisan: Tattooing",
-    "secondary": "Agility"
-  },
-  "MEDITATE": {
-    "primary": "Meditation",
-    "secondary": null
-  },
-  "PERFORM_WORSHIP": {
-    "primary": "Theology",
-    "secondary": null
-  },
-  "BEGIN_TRAVEL": {
-    "primary": null,
-    "secondary": null
-  },
-  "CHANGE_DESTINATION": {
-    "primary": null,
-    "secondary": null
-  },
-  "BRIBE_FOR_INFO": {
-    "primary": "Temptation",
-    "secondary": "Awareness"
-  },
-  "EAVESDROP": {
-    "primary": "Stealth",
-    "secondary": "Investigation"
-  },
-  "INTERCEPT_LETTER": {
-    "primary": "Stealth",
-    "secondary": "Forgery"
-  },
-  "SEARCH_QUARTERS": {
-    "primary": "Sleight of Hand",
-    "secondary": "Investigation"
-  },
-  "MAINTAIN_SIEGE": {
-    "primary": "Battle",
-    "secondary": "Commerce"
-  },
-  "CONDUCT_STORM_ASSAULT": {
-    "primary": "Battle",
-    "secondary": null
-  },
-  "NEGOTIATE_SURRENDER": {
-    "primary": "Courtier",
-    "secondary": "Sincerity"
-  },
-  "CONDUCT_SORTIE": {
-    "primary": "Battle",
-    "secondary": null
-  },
-  "ORDER_BATTLE": {
-    "primary": "Battle",
-    "secondary": null
-  },
-  "PUBLIC_ATONEMENT": {
-    "primary": "Sincerity",
-    "secondary": "Willpower"
-  },
-  "MENTOR": {
-    "primary": "_taught_skill",
-    "secondary": "Willpower"
-  },
-  "RAID_HARVEST": {
-    "primary": "Battle",
-    "secondary": null
-  },
-  "CONDUCT_RAID": {
-    "primary": "Battle",
-    "secondary": null
-  },
-  "DO_NOTHING": {
-    "primary": null,
-    "secondary": null
-  },
-  "REST": {
-    "primary": null,
-    "secondary": null
-  },
-  "OBSERVE_COURT_ATTENDEES": {
-    "primary": "Investigation",
-    "secondary": "Lore: Heraldry"
-  },
-  "ASK_FOR_INTRODUCTION": {
-    "primary": "Courtier",
-    "secondary": "Etiquette"
-  },
-  "EXAMINE_CRIME_SCENE": {
-    "primary": "Investigation",
-    "secondary": "Perception"
-  },
-  "INVESTIGATE_PROVINCE": {
-    "primary": "Investigation",
-    "secondary": "Lore: Shadowlands"
-  },
-  "ORDER_PATROL": {
-    "primary": "Investigation",
-    "secondary": "Battle"
-  },
-  "ASSESS_PROVINCE_STATUS": {
-    "primary": "Battle",
-    "secondary": "Commerce"
-  },
-  "INVESTIGATE_RUMOR": {
-    "primary": "Investigation",
-    "secondary": "Perception"
-  },
-  "CONDUCT_COMMERCE": {
-    "primary": "Commerce",
-    "secondary": "Investigation"
-  },
-  "ISSUE_DUEL_CHALLENGE": {
-    "primary": "Iaijutsu",
-    "secondary": "Awareness"
-  },
-  "SEEK_PRETEXT": {
-    "primary": "Courtier",
-    "secondary": "Awareness"
-  },
-  "DRILL_TROOPS": {
-    "primary": "Battle",
-    "secondary": "Intelligence"
-  },
-  "BLOCKADE_TRADE_ROUTE": {
-    "primary": "Battle",
-    "secondary": "Intimidation"
-  },
-  "SHARE_SUPPLIES": {
-    "primary": "Commerce",
-    "secondary": null
-  },
-  "FABRICATE_SECRET": {
-    "primary": "Forgery",
-    "secondary": "Intelligence"
-  },
-  "PERFORM_RITUAL": {
-    "primary": "Theology",
-    "secondary": null
-  },
-  "DISPATCH_COURTIER": {
-    "primary": "Courtier",
-    "secondary": "Battle"
-  },
-  "FOUND_VILLAGE": {
-    "primary": "Engineering",
-    "secondary": "Intelligence"
-  },
-  "BUILD_FORTIFICATION": {
-    "primary": "Engineering",
-    "secondary": "Intelligence"
-  },
-  "BUILD_SHRINE": {
-    "primary": "Theology",
-    "secondary": "Awareness"
-  },
-  "FOUND_TEMPLE": {
-    "primary": "Theology",
-    "secondary": "Awareness"
-  },
-  "FOUND_MONASTERY": {
-    "primary": "Theology",
-    "secondary": "Awareness"
-  },
-  "COMMISSION_SHIP": {
-    "primary": "Commerce",
-    "secondary": "Intelligence"
-  },
-  "ARRANGE_MARRIAGE": {
-    "primary": "Courtier",
-    "secondary": "Awareness"
-  },
-  "APPOINT_TO_POSITION": {
-    "primary": "Courtier",
-    "secondary": "Awareness"
-  },
-  "FORCE_MARCH": {
-    "primary": "Battle",
-    "secondary": null
-  },
-  "EVALUATE_CLAN_STRENGTH": {
-    "primary": "Lore: Heraldry",
-    "secondary": "Battle"
-  },
-  "COMMISSION_ASSASSINATION": {
-    "primary": "Courtier",
-    "secondary": "Sincerity"
-  },
-  "EXECUTE_ASSASSINATION": {
-    "primary": "Stealth",
-    "secondary": "Acting"
-  },
-  "ABORT_OPERATION": {
-    "primary": "Stealth",
-    "secondary": null
-  },
-  "PURIFY_TAINTED_GROUND": {
-    "primary": "Lore: Shadowlands",
-    "secondary": "Intelligence"
-  },
-  "FORTIFY_WALL_SECTION": {
-    "primary": "Engineering",
-    "secondary": "Intelligence"
-  },
-  "SEAL_WALL_BREACH": {
-    "primary": "Engineering",
-    "secondary": "Intelligence"
-  }
+	"CHARM": {
+		"primary": "Etiquette",
+		"secondary": "Courtier"
+	},
+	"NEGOTIATE": {
+		"primary": "Courtier",
+		"secondary": "Etiquette"
+	},
+	"PERSUADE": {
+		"primary": "Sincerity",
+		"secondary": "Courtier"
+	},
+	"INTIMIDATE": {
+		"primary": "Intimidation",
+		"secondary": null
+	},
+	"LISTEN_REFLECT": {
+		"primary": "Investigation",
+		"secondary": "Perception"
+	},
+	"IMPRESS": {
+		"primary": "Lore",
+		"secondary": "Etiquette"
+	},
+	"PROBE": {
+		"primary": "Courtier",
+		"secondary": "Perception"
+	},
+	"READ_CHARACTER": {
+		"primary": "Investigation",
+		"secondary": "Perception"
+	},
+	"PUBLIC_DEBATE": {
+		"primary": "Courtier",
+		"secondary": "Awareness"
+	},
+	"PUBLIC_INSULT": {
+		"primary": "Courtier",
+		"secondary": "Awareness"
+	},
+	"GOSSIP": {
+		"primary": "Courtier",
+		"secondary": "Awareness"
+	},
+	"DISCLOSE": {
+		"primary": "Sincerity",
+		"secondary": "Perception"
+	},
+	"REVEAL_SECRET_PRIVATE": {
+		"primary": "Courtier",
+		"secondary": "Awareness"
+	},
+	"EXPOSE_SECRET_PUBLIC": {
+		"primary": "Courtier",
+		"secondary": "Awareness"
+	},
+	"PUBLIC_DECLARATION": {
+		"primary": "Sincerity",
+		"secondary": "Courtier"
+	},
+	"PUBLIC_PERFORMANCE": {
+		"primary": "_performance_skill",
+		"secondary": "Awareness"
+	},
+	"DELIVER_GIFT": {
+		"primary": "Etiquette",
+		"secondary": "Courtier"
+	},
+	"OFFER_FAVOR": {
+		"primary": "Sincerity",
+		"secondary": "Courtier"
+	},
+	"PERFORM_FOR": {
+		"primary": "_performance_skill",
+		"secondary": null
+	},
+	"ORDER_LEVY": {
+		"primary": "Battle",
+		"secondary": null
+	},
+	"ORDER_DEPLOY": {
+		"primary": "Battle",
+		"secondary": null
+	},
+	"ORDER_FORTIFY": {
+		"primary": "Battle",
+		"secondary": "Engineering"
+	},
+	"ORDER_RETREAT": {
+		"primary": "Battle",
+		"secondary": null
+	},
+	"EVALUATE_WAR_READINESS": {
+		"primary": "Battle",
+		"secondary": "Commerce"
+	},
+	"ASSIGN_GARRISON": {
+		"primary": "Battle",
+		"secondary": null
+	},
+	"SET_TAX_RATE": {
+		"primary": "Commerce",
+		"secondary": null
+	},
+	"SET_STIPEND_RATE": {
+		"primary": "Commerce",
+		"secondary": null
+	},
+	"PURCHASE_MARKET": {
+		"primary": "Commerce",
+		"secondary": null
+	},
+	"DEMAND_TRIBUTE": {
+		"primary": "Intimidation",
+		"secondary": "Courtier"
+	},
+	"REQUEST_ALLIED_AID": {
+		"primary": "Courtier",
+		"secondary": "Sincerity"
+	},
+	"WRITE_LETTER": {
+		"primary": "Calligraphy",
+		"secondary": "Courtier"
+	},
+	"ASSIGN_VASSAL_OBJECTIVE": {
+		"primary": "Courtier",
+		"secondary": "Battle"
+	},
+	"CALL_COURT": {
+		"primary": "Courtier",
+		"secondary": "Etiquette"
+	},
+	"SEND_INVITATION": {
+		"primary": "Calligraphy",
+		"secondary": "Etiquette"
+	},
+	"TRAIN": {
+		"primary": "_trained_skill",
+		"secondary": null
+	},
+	"CRAFT": {
+		"primary": "_craft_skill",
+		"secondary": null
+	},
+	"CULTIVATE_GARDEN": {
+		"primary": "Artisan: Gardening",
+		"secondary": "Awareness"
+	},
+	"MAINTAIN_GARDEN": {
+		"primary": "Artisan: Gardening",
+		"secondary": "Awareness"
+	},
+	"REQUEST_ART": {
+		"primary": null,
+		"secondary": null
+	},
+	"OFFER_ART_COMMISSION": {
+		"primary": null,
+		"secondary": null
+	},
+	"COLLECT_BONSAI_SPECIMEN": {
+		"primary": "Artisan: Gardening",
+		"secondary": "Perception"
+	},
+	"TEND_BONSAI": {
+		"primary": "Artisan: Gardening",
+		"secondary": "Awareness"
+	},
+	"DISPLAY_BONSAI": {
+		"primary": null,
+		"secondary": null
+	},
+	"APPLY_TATTOO": {
+		"primary": "Artisan: Tattooing",
+		"secondary": "Agility"
+	},
+	"MEDITATE": {
+		"primary": "Meditation",
+		"secondary": null
+	},
+	"PERFORM_WORSHIP": {
+		"primary": "Theology",
+		"secondary": null
+	},
+	"BEGIN_TRAVEL": {
+		"primary": null,
+		"secondary": null
+	},
+	"CHANGE_DESTINATION": {
+		"primary": null,
+		"secondary": null
+	},
+	"BRIBE_FOR_INFO": {
+		"primary": "Temptation",
+		"secondary": "Awareness"
+	},
+	"EAVESDROP": {
+		"primary": "Stealth",
+		"secondary": "Investigation"
+	},
+	"INTERCEPT_LETTER": {
+		"primary": "Stealth",
+		"secondary": "Forgery"
+	},
+	"SEARCH_QUARTERS": {
+		"primary": "Sleight of Hand",
+		"secondary": "Investigation"
+	},
+	"MAINTAIN_SIEGE": {
+		"primary": "Battle",
+		"secondary": "Commerce"
+	},
+	"CONDUCT_STORM_ASSAULT": {
+		"primary": "Battle",
+		"secondary": null
+	},
+	"NEGOTIATE_SURRENDER": {
+		"primary": "Courtier",
+		"secondary": "Sincerity"
+	},
+	"CONDUCT_SORTIE": {
+		"primary": "Battle",
+		"secondary": null
+	},
+	"ORDER_BATTLE": {
+		"primary": "Battle",
+		"secondary": null
+	},
+	"PUBLIC_ATONEMENT": {
+		"primary": "Sincerity",
+		"secondary": "Willpower"
+	},
+	"MENTOR": {
+		"primary": "_taught_skill",
+		"secondary": "Willpower"
+	},
+	"RAID_HARVEST": {
+		"primary": "Battle",
+		"secondary": null
+	},
+	"CONDUCT_RAID": {
+		"primary": "Battle",
+		"secondary": null
+	},
+	"DO_NOTHING": {
+		"primary": null,
+		"secondary": null
+	},
+	"REST": {
+		"primary": null,
+		"secondary": null
+	},
+	"OBSERVE_COURT_ATTENDEES": {
+		"primary": "Investigation",
+		"secondary": "Lore: Heraldry"
+	},
+	"ASK_FOR_INTRODUCTION": {
+		"primary": "Courtier",
+		"secondary": "Etiquette"
+	},
+	"EXAMINE_CRIME_SCENE": {
+		"primary": "Investigation",
+		"secondary": "Perception"
+	},
+	"INVESTIGATE_PROVINCE": {
+		"primary": "Investigation",
+		"secondary": "Lore: Shadowlands"
+	},
+	"ORDER_PATROL": {
+		"primary": "Investigation",
+		"secondary": "Battle"
+	},
+	"ASSESS_PROVINCE_STATUS": {
+		"primary": "Battle",
+		"secondary": "Commerce"
+	},
+	"INVESTIGATE_RUMOR": {
+		"primary": "Investigation",
+		"secondary": "Perception"
+	},
+	"CONDUCT_COMMERCE": {
+		"primary": "Commerce",
+		"secondary": "Investigation"
+	},
+	"ISSUE_DUEL_CHALLENGE": {
+		"primary": "Iaijutsu",
+		"secondary": "Awareness"
+	},
+	"SEEK_PRETEXT": {
+		"primary": "Courtier",
+		"secondary": "Awareness"
+	},
+	"DRILL_TROOPS": {
+		"primary": "Battle",
+		"secondary": "Intelligence"
+	},
+	"BLOCKADE_TRADE_ROUTE": {
+		"primary": "Battle",
+		"secondary": "Intimidation"
+	},
+	"SHARE_SUPPLIES": {
+		"primary": "Commerce",
+		"secondary": null
+	},
+	"FABRICATE_SECRET": {
+		"primary": "Forgery",
+		"secondary": "Intelligence"
+	},
+	"PERFORM_RITUAL": {
+		"primary": "Theology",
+		"secondary": null
+	},
+	"DISPATCH_COURTIER": {
+		"primary": "Courtier",
+		"secondary": "Battle"
+	},
+	"FOUND_VILLAGE": {
+		"primary": "Engineering",
+		"secondary": "Intelligence"
+	},
+	"BUILD_FORTIFICATION": {
+		"primary": "Engineering",
+		"secondary": "Intelligence"
+	},
+	"BUILD_SHRINE": {
+		"primary": "Theology",
+		"secondary": "Awareness"
+	},
+	"FOUND_TEMPLE": {
+		"primary": "Theology",
+		"secondary": "Awareness"
+	},
+	"FOUND_MONASTERY": {
+		"primary": "Theology",
+		"secondary": "Awareness"
+	},
+	"COMMISSION_SHIP": {
+		"primary": "Commerce",
+		"secondary": "Intelligence"
+	},
+	"ARRANGE_MARRIAGE": {
+		"primary": "Courtier",
+		"secondary": "Awareness"
+	},
+	"APPOINT_TO_POSITION": {
+		"primary": "Courtier",
+		"secondary": "Awareness"
+	},
+	"FORCE_MARCH": {
+		"primary": "Battle",
+		"secondary": null
+	},
+	"EVALUATE_CLAN_STRENGTH": {
+		"primary": "Lore: Heraldry",
+		"secondary": "Battle"
+	},
+	"COMMISSION_ASSASSINATION": {
+		"primary": "Courtier",
+		"secondary": "Sincerity"
+	},
+	"EXECUTE_ASSASSINATION": {
+		"primary": "Stealth",
+		"secondary": "Acting"
+	},
+	"ABORT_OPERATION": {
+		"primary": "Stealth",
+		"secondary": null
+	},
+	"PURIFY_TAINTED_GROUND": {
+		"primary": "Lore: Shadowlands",
+		"secondary": "Intelligence"
+	},
+	"FORTIFY_WALL_SECTION": {
+		"primary": "Engineering",
+		"secondary": "Intelligence"
+	},
+	"SEAL_WALL_BREACH": {
+		"primary": "Engineering",
+		"secondary": "Intelligence"
+	},
+	"DECLARE_WAR": {
+		"primary": "Courtier",
+		"secondary": "Awareness"
+	}
 }

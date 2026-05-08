@@ -13,7 +13,8 @@
       "always_blocked": ["DELAY_TO_POST_HARVEST"],
       "conditional": [
         {"action": "SEEK_PEACE", "blocked_when": "war_score_above_25_and_army_capable"},
-        {"action": "NEGOTIATE_PEACE", "blocked_when": "war_score_above_25_and_army_capable"}
+        {"action": "NEGOTIATE_PEACE", "blocked_when": "war_score_above_25_and_army_capable"},
+        {"action": "RAID_HARVEST", "blocked_when": "other_paths_available"}
       ]
     },
     "REI": {
@@ -27,11 +28,12 @@
       "always_blocked": ["BRIBE_FOR_INFO", "EAVESDROP", "INTERCEPT_LETTER", "SEARCH_QUARTERS", "APPROACH_FOR_RECRUITMENT"],
       "conditional": [
         {"action": "_ANY_ACTION", "blocked_when": "contradicts_lords_known_position"},
-        {"action": "PUBLIC_DECLARATION", "blocked_when": "deviates_from_lord_directive"}
+        {"action": "PUBLIC_DECLARATION", "blocked_when": "deviates_from_lord_directive"},
+        {"action": "RAID_HARVEST", "blocked_when": "not_lord_commanded"}
       ]
     },
     "GI": {
-      "always_blocked": ["GOSSIP", "FABRICATE_SECRET", "BRIBE_FOR_INFO", "EAVESDROP", "INTERCEPT_LETTER", "SEARCH_QUARTERS", "CONDUCT_CONDITIONING", "ACTIVATE_SLEEPER", "UNDERREPORT_KOKU", "LAUNDER_KOKU", "ESTABLISH_DEAD_DROP", "TRANSMIT_VIA_TEAR"],
+      "always_blocked": ["GOSSIP", "FABRICATE_SECRET", "BRIBE_FOR_INFO", "EAVESDROP", "INTERCEPT_LETTER", "SEARCH_QUARTERS", "CONDUCT_CONDITIONING", "ACTIVATE_SLEEPER", "UNDERREPORT_KOKU", "LAUNDER_KOKU", "ESTABLISH_DEAD_DROP", "TRANSMIT_VIA_TEAR", "RAID_HARVEST"],
       "conditional": [
         {"action": "DISCLOSE", "blocked_when": "information_is_false"},
         {"action": "PUBLIC_DECLARATION", "blocked_when": "npc_knows_declaration_is_false"}
@@ -42,14 +44,16 @@
       "conditional": [
         {"action": "_ANY_ACTION", "blocked_when": "violates_personal_code"},
         {"action": "COMPLY_WITH_LORD_ORDER", "blocked_when": "order_violates_personal_code"},
-        {"action": "CONDUCT_RAID", "blocked_when": "no_prior_grievance_or_lord_directive"}
+        {"action": "CONDUCT_RAID", "blocked_when": "no_prior_grievance_or_lord_directive"},
+        {"action": "RAID_HARVEST", "blocked_when": "target_not_hated_enemy"}
       ]
     },
     "MAKOTO": {
       "always_blocked": ["ACTIVATE_SLEEPER", "ESTABLISH_DEAD_DROP", "RENEGE_COMMITMENT", "CONDUCT_CONDITIONING"],
       "conditional": [
         {"action": "CHANGE_OBJECTIVE_MID_SESSION", "blocked_when": "public_declaration_already_made"},
-        {"action": "ABORT_RAID", "blocked_when": "intent_publicly_declared"}
+        {"action": "ABORT_RAID", "blocked_when": "intent_publicly_declared"},
+        {"action": "RAID_HARVEST", "blocked_when": "not_publicly_declared"}
       ]
     }
   },

@@ -18,6 +18,7 @@ static func apply(
 		"disposition_changes": [],
 		"honor_changes": [],
 		"glory_changes": [],
+		"infamy_changes": [],
 		"province_updates": [],
 		"info_events": [],
 		"logged": false,
@@ -38,8 +39,10 @@ static func apply(
 
 	_apply_disposition(effects, actor, target_id, applied)
 	_apply_recipient_effects(effects, actor, target_id, characters, applied)
+	_apply_witness_effects(effects, actor, characters, applied)
 	_apply_honor(effects, actor, applied)
 	_apply_glory(effects, actor, applied)
+	_apply_infamy(effects, actor, applied)
 	_apply_province_effects(effects, result, provinces, applied, settlements)
 	_apply_info_events(effects, result, applied)
 	result["observable_effect"] = _detect_observable_effect(result, effects, applied)
@@ -127,6 +130,37 @@ static func _remove_item_by_id(actor: L5RCharacterData, item_id: int) -> void:
 			return
 
 
+# -- Witness disposition loss ---------------------------------------------------
+
+static func _apply_witness_effects(
+	effects: Dictionary,
+	actor: L5RCharacterData,
+	characters: Dictionary,
+	applied: Dictionary,
+) -> void:
+	var disp_loss: int = effects.get("witness_disposition_loss", 0)
+	if disp_loss == 0:
+		return
+	var witness_ids: Array = effects.get("witnesses", [])
+	if witness_ids.is_empty():
+		return
+
+	for wid in witness_ids:
+		var witness: L5RCharacterData = characters.get(wid)
+		if witness == null or witness.character_id == actor.character_id:
+			continue
+		var old_val: int = witness.disposition_values.get(actor.character_id, 0)
+		var new_val: int = clampi(old_val + disp_loss, -100, 100)
+		witness.disposition_values[actor.character_id] = new_val
+		applied["disposition_changes"].append({
+			"actor_id": witness.character_id,
+			"target_id": actor.character_id,
+			"old": old_val,
+			"new": new_val,
+			"delta": disp_loss,
+		})
+
+
 # -- Honor ---------------------------------------------------------------------
 
 static func _apply_honor(
@@ -162,6 +196,25 @@ static func _apply_glory(
 		"character_id": actor.character_id,
 		"delta": actual,
 		"new_glory": actor.glory,
+	})
+
+
+# -- Infamy --------------------------------------------------------------------
+
+static func _apply_infamy(
+	effects: Dictionary,
+	actor: L5RCharacterData,
+	applied: Dictionary,
+) -> void:
+	var infamy_change: float = effects.get("infamy_gain", effects.get("infamy_change", 0.0))
+	if absf(infamy_change) < 0.001:
+		return
+
+	var actual: float = HonorGlorySystem.apply_infamy_change(actor, infamy_change)
+	applied["infamy_changes"].append({
+		"character_id": actor.character_id,
+		"delta": actual,
+		"new_infamy": actor.infamy,
 	})
 
 

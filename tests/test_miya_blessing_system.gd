@@ -189,23 +189,23 @@ func test_need_score_blessed_last_year_applies_minus_5_malus() -> void:
 	assert_eq(MiyaBlessingSystem.compute_need_score(conditions), 7)
 
 
-func test_need_score_blessed_two_years_ago_skips_rotation_bonus() -> void:
-	# Stable + recently-but-not-immediately blessed: no rotation bonus.
+func test_need_score_blessed_two_years_ago_still_gets_rotation_bonus() -> void:
+	# Not blessed last year → always gets the +2 rotation bonus per GDD.
 	var conditions: Dictionary = {
 		"stability": 80.0,
 		"blessed_last_year": false,
 		"blessed_two_years_ago": true,
 	}
-	assert_eq(MiyaBlessingSystem.compute_need_score(conditions), 0)
+	assert_eq(MiyaBlessingSystem.compute_need_score(conditions), 2)
 
 
 func test_need_score_includes_petition_bonus() -> void:
 	var conditions: Dictionary = {
 		"stability": 90.0,
-		"blessed_two_years_ago": true,
+		"blessed_last_year": false,
 		"petition_bonus": 12,   # successful petition + 2 raises
 	}
-	assert_eq(MiyaBlessingSystem.compute_need_score(conditions), 12)
+	assert_eq(MiyaBlessingSystem.compute_need_score(conditions), 14)
 
 
 # -- Petition bonus ----------------------------------------------------------
@@ -475,3 +475,23 @@ func test_fired_total_matches_per_province_times_count() -> void:
 	assert_eq(result["selected_province_ids"].size(), 2)
 	# 0.60 per province × 2 selected = 1.20 actually fired.
 	assert_almost_eq(result["allocation_total"], 1.20, 0.001)
+
+
+# -- Cunning archetype modifier ---------------------------------------------
+
+func test_cunning_modifier_boosts_favored_clan() -> void:
+	var scored: Array[Dictionary] = [
+		{"province_id": 1, "score": 5, "clan": "Crane"},
+		{"province_id": 2, "score": 5, "clan": "Lion"},
+	]
+	MiyaBlessingSystem.apply_cunning_modifier(scored, "Crane", "Lion")
+	assert_eq(scored[0]["score"], 15)  # +10
+	assert_eq(scored[1]["score"], -5)  # -10
+
+
+func test_cunning_modifier_ignores_neutral_clans() -> void:
+	var scored: Array[Dictionary] = [
+		{"province_id": 1, "score": 5, "clan": "Dragon"},
+	]
+	MiyaBlessingSystem.apply_cunning_modifier(scored, "Crane", "Lion")
+	assert_eq(scored[0]["score"], 5)

@@ -27,6 +27,7 @@ class ScoredAction:
 	var target_settlement_id: int = -1
 	var target_province_id: int = -1
 	var ap_cost: int = 1
+	var metadata: Dictionary = {}
 
 	# Eight base scoring components per s55.4 Phase 5
 	var objective_alignment: float = 0.0
@@ -113,6 +114,7 @@ class ContextSnapshot:
 	# Lord-tier fields
 	var resource_stockpiles: Dictionary = {}
 	var province_statuses: Array = []
+	var feasibility_data: Dictionary = {}
 
 	# Military
 	var military_rank: Enums.MilitaryRank = Enums.MilitaryRank.NONE
@@ -135,6 +137,9 @@ class ContextSnapshot:
 	# Shadowlands intelligence (s55.23)
 	var taint_topic_province_ids: Array[int] = []
 
+	# Famine crisis intelligence
+	var famine_crisis_province_ids: Array[int] = []
+
 	# Festival state (s11.5)
 	var is_ceasefire_day: bool = false
 	var is_labor_halt_day: bool = false
@@ -153,8 +158,12 @@ class ContextSnapshot:
 
 class ProvinceStatus:
 	var province_id: int = -1
+	var clan: String = ""
 	var stability: float = 100.0
 	var garrison_pu: int = 0
+	var total_settlement_pu: int = 0
+	var has_field_army_nearby: bool = false
+	var has_alliance_protection: bool = false
 	var active_crisis_id: int = -1
 	var active_insurgency_id: int = -1
 	var rice_stockpile: float = 0.0

@@ -229,6 +229,48 @@ func test_maximize_prosperity_lord_all_clear() -> void:
 	assert_eq(need.need_type, "ADJUST_TAX")
 
 
+func test_maximize_prosperity_famine_response_with_surplus() -> void:
+	_ctx.is_lord = true
+	_ctx.famine_crisis_province_ids = [7]
+	_ctx.resource_stockpiles = {"rice": 20.0, "population_pu": 8.0}
+	var ps := NPCDataStructures.ProvinceStatus.new()
+	ps.province_id = 4
+	ps.stability = 90.0
+	ps.garrison_pu = 5
+	ps.confidence = 2
+	_ctx.province_statuses = [ps]
+	var obj: Dictionary = {"need_type": "MAXIMIZE_PROSPERITY"}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
+	assert_eq(need.need_type, "CONDUCT_COMMERCE")
+	assert_eq(need.target_province_id, 7)
+	assert_eq(need.target_intent, "famine_relief")
+
+
+func test_maximize_prosperity_famine_no_surplus_skips() -> void:
+	_ctx.is_lord = true
+	_ctx.famine_crisis_province_ids = [7]
+	_ctx.resource_stockpiles = {"rice": 5.0, "population_pu": 8.0}
+	var ps := NPCDataStructures.ProvinceStatus.new()
+	ps.province_id = 4
+	ps.stability = 90.0
+	ps.garrison_pu = 5
+	ps.confidence = 2
+	_ctx.province_statuses = [ps]
+	var obj: Dictionary = {"need_type": "MAXIMIZE_PROSPERITY"}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
+	assert_ne(need.need_type, "CONDUCT_COMMERCE", "Low rice skips famine response")
+
+
+func test_maximize_prosperity_famine_non_lord_ignores() -> void:
+	_ctx.is_lord = false
+	_ctx.famine_crisis_province_ids = [7]
+	_ctx.resource_stockpiles = {"rice": 20.0, "population_pu": 8.0}
+	_ctx.context_flag = Enums.ContextFlag.AT_COURT
+	var obj: Dictionary = {"need_type": "MAXIMIZE_PROSPERITY"}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
+	assert_ne(need.need_type, "CONDUCT_COMMERCE", "Non-lords do not share supplies")
+
+
 # -- Economic: Prevent Shortage ------------------------------------------------
 
 func test_prevent_shortage_non_lord_sends_letter() -> void:
@@ -920,7 +962,8 @@ func test_eliminate_shadowlands_non_lord_at_holdings() -> void:
 
 
 func test_maintain_peace_active_war() -> void:
-	_ctx.active_wars = [{"enemy_clan_id": "lion"}]
+	_ctx.clan = "crab"
+	_ctx.active_wars = [{"clan_a": "crab", "clan_b": "lion"}]
 	var obj: Dictionary = {"need_type": "MAINTAIN_PEACE"}
 	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
 	assert_eq(need.need_type, "SEEK_PEACE")

@@ -71,6 +71,23 @@ static func make_initial_state() -> Dictionary:
 	}
 
 
+static func initialize_from_world_state(
+	state: Dictionary,
+	world_state: Dictionary,
+) -> void:
+	## Seeds dissatisfaction from the starting world state rather than 0.
+	## Call once at game start after make_initial_state().
+	for axis in [
+		Axis.BALANCE_OF_POWER,
+		Axis.IMPERIAL_COHESION,
+		Axis.SPIRITUAL_HEALTH,
+		Axis.SHADOWLANDS_CONTAINMENT,
+	]:
+		var fires: bool = axis_concern_fires(axis, world_state)
+		if fires:
+			state["dissatisfaction"][axis] = INTERVENTION_THRESHOLD * 0.5
+
+
 # -- Concern checks (s55.10.2.3) ---------------------------------------------
 #
 # world_state shape (caller responsibility):
@@ -334,7 +351,7 @@ static func handle_compliance_response(state: Dictionary, axis: Axis) -> void:
 	state["dissatisfaction"][axis] = DISSATISFACTION_RESET_AFTER_COMPLY
 	state["last_directive_axis"] = axis
 	state["stage"] = maxi(state.get("stage", 0) - 1, 0)
-	state["defiance_count"] = maxi(state.get("defiance_count", 0) - 1, 0)
+	# defiance_count is cumulative and never decremented (s55.10.2.6)
 
 
 static func handle_defiance(state: Dictionary, axis: Axis) -> void:
@@ -395,6 +412,13 @@ static func remove_forced_directive(state: Dictionary, axis: Axis) -> void:
 	state["active_forced_directives"] = kept
 
 
+static func _has_active_directive_on_axis(state: Dictionary, axis: Axis) -> bool:
+	for d in state.get("active_forced_directives", []):
+		if int(d.get("axis", -1)) == axis:
+			return true
+	return false
+
+
 static func add_forced_directive(state: Dictionary, directive: Dictionary) -> void:
 	var actives: Array = state.get("active_forced_directives", [])
 	# Replace any existing directive on the same axis (only one per axis at a time).
@@ -444,8 +468,9 @@ static func process_seasonal_oversight(
 		}
 
 	var directive: Dictionary = generate_forced_directive(primary as Axis)
+	var is_repeated: bool = _has_active_directive_on_axis(state, primary as Axis)
 	var compliance: Dictionary = evaluate_compliance(
-		mirumoto_fc, directive, togashi_id, false, conflict_modifier
+		mirumoto_fc, directive, togashi_id, is_repeated, conflict_modifier
 	)
 	if compliance.get("comply", false):
 		handle_compliance_response(state, primary as Axis)

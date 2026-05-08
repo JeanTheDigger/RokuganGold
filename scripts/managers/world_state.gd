@@ -47,6 +47,20 @@ var military_data: Dictionary = {}
 var character_province_map: Dictionary = {}
 var death_events: Array[Dictionary] = []
 var successor_map: Dictionary = {}
+var active_successions: Array[SuccessionData] = []
+var next_succession_id: Array[int] = [1]
+var entanglements: Array[Dictionary] = []
+var bound_states: Array[Dictionary] = []
+
+# -- Military Phase 2 State (s11.7) -------------------------------------------
+var active_armies: Array[Dictionary] = []
+var active_sieges: Array[Dictionary] = []
+var active_tethers: Array[Dictionary] = []
+var order_states: Array[Dictionary] = []
+var military_companies: Array[Dictionary] = []
+var active_wars: Array[WarData] = []
+var next_war_id: Array[int] = [1]
+var trade_routes: Array = []
 
 # -- Collective Disposition (s12.2b) -------------------------------------------
 # Clan-to-clan and family-to-family baselines keyed by sorted "a||b" strings.
@@ -81,7 +95,14 @@ func rebuild_characters_by_id() -> void:
 		characters_by_id[c.character_id] = c
 
 
+func _sync_wars_to_world_states() -> void:
+	world_states["active_wars"] = WarSystem.wars_to_context_array(active_wars)
+	world_states["province_data"] = provinces.values()
+	world_states["settlements"] = settlements
+
+
 func advance_one_day() -> Dictionary:
+	_sync_wars_to_world_states()
 	return DayOrchestrator.advance_day(
 		time_system,
 		characters,
@@ -111,6 +132,19 @@ func advance_one_day() -> Dictionary:
 		next_insurgency_id,
 		settlements,
 		_build_miya_inputs(),
+		active_successions,
+		next_succession_id,
+		entanglements,
+		bound_states,
+		active_armies,
+		active_sieges,
+		active_tethers,
+		order_states,
+		military_companies,
+		clans,
+		active_wars,
+		trade_routes,
+		next_war_id,
 	)
 
 

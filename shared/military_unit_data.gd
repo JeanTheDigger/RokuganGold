@@ -16,6 +16,8 @@ class CompanyData:
 	@export var defense: int = 0
 	@export var morale: int = 100
 	@export var morale_defense: int = 0
+	@export var unit_type: Enums.CompanyUnitType = Enums.CompanyUnitType.ASHIGARU_SPEARMEN
+	@export var source_province_id: int = -1
 
 
 class LegionData:

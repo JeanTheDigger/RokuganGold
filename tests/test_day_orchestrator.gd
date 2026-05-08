@@ -823,3 +823,689 @@ func test_favor_expiration_fires() -> void:
 		[], [], [], [], [], [1], {}, {}, [1000], [], {}, favors
 	)
 	assert_true(result["favor_results"]["expired_favor_ids"].has(1))
+
+
+func test_favor_breach_applies_honor_and_disposition() -> void:
+	var debtor := L5RCharacterData.new()
+	debtor.character_id = 2
+	debtor.character_name = "Debtor"
+	debtor.honor = 5.0
+	debtor.glory = 3.0
+	debtor.status = 2.0
+	debtor.reflexes = 3
+	debtor.awareness = 3
+	debtor.stamina = 3
+	debtor.willpower = 3
+	debtor.agility = 3
+	debtor.intelligence = 3
+	debtor.strength = 3
+	debtor.perception = 3
+	debtor.void_ring = 2
+	debtor.skills = {"Etiquette": 2}
+	debtor.emphases = {}
+	debtor.wounds_taken = 0
+	debtor.knowledge_pool = []
+	debtor.known_contacts_by_clan = {}
+	debtor.met_characters = []
+	_characters.append(debtor)
+	_characters_by_id[2] = debtor
+
+	var creditor: L5RCharacterData = _characters[0]
+	creditor.disposition_values = {2: 10}
+
+	var favor := FavorData.new()
+	favor.favor_id = 1
+	favor.tier = FavorData.FavorTier.MODERATE
+	favor.creditor_id = 1
+	favor.debtor_id = 2
+	favor.invoked = true
+	favor.response_deadline_ic_day = 5
+	favor.created_ic_day = 0
+	var favors: Array = [favor]
+
+	_time.current_tick = 10
+	var result: Dictionary = DayOrchestrator.advance_day(
+		_time, _characters, _characters_by_id, _make_world_states(),
+		_make_objectives(), _scoring_tables, _filter_data, _dice,
+		_action_skill_map, _provinces, _action_log, _season_meta,
+		[], [], [], [], [], [1], {}, {}, [1000], [], {}, favors
+	)
+
+	assert_eq(result["favor_results"]["deadline_breaches"].size(), 1)
+	assert_true(debtor.honor < 5.0)
+	assert_true(creditor.disposition_values[2] < 10)
+
+
+func test_favor_breach_witness_disposition_applied() -> void:
+	var debtor := L5RCharacterData.new()
+	debtor.character_id = 2
+	debtor.character_name = "Debtor"
+	debtor.honor = 5.0
+	debtor.glory = 3.0
+	debtor.status = 2.0
+	debtor.reflexes = 3
+	debtor.awareness = 3
+	debtor.stamina = 3
+	debtor.willpower = 3
+	debtor.agility = 3
+	debtor.intelligence = 3
+	debtor.strength = 3
+	debtor.perception = 3
+	debtor.void_ring = 2
+	debtor.skills = {"Etiquette": 2}
+	debtor.emphases = {}
+	debtor.wounds_taken = 0
+	debtor.knowledge_pool = []
+	debtor.known_contacts_by_clan = {}
+	debtor.met_characters = []
+	_characters.append(debtor)
+	_characters_by_id[2] = debtor
+
+	var breach: Dictionary = {
+		"debtor_id": 2,
+		"creditor_id": 1,
+		"disposition_change": -35,
+		"honor_loss": -1.0,
+		"glory_loss": -0.5,
+		"witness_disposition_loss": -10,
+		"witnesses": [1],
+	}
+
+	DayOrchestrator._apply_favor_breach(breach, _characters_by_id)
+
+	assert_almost_eq(debtor.honor, 4.0, 0.01)
+	assert_almost_eq(debtor.glory, 2.5, 0.01)
+	var creditor: L5RCharacterData = _characters[0]
+	assert_eq(creditor.disposition_values.get(2, 0), -35)
+
+
+func test_favor_breach_disposition_floor_prevents_overcorrection() -> void:
+	var debtor := L5RCharacterData.new()
+	debtor.character_id = 2
+	debtor.character_name = "Debtor"
+	debtor.honor = 5.0
+	debtor.glory = 3.0
+	debtor.skills = {}
+	debtor.emphases = {}
+	debtor.wounds_taken = 0
+	debtor.knowledge_pool = []
+	debtor.known_contacts_by_clan = {}
+	debtor.met_characters = []
+	var chars: Dictionary = {1: _characters[0], 2: debtor}
+
+	_characters[0].disposition_values = {2: 0}
+
+	var breach: Dictionary = {
+		"debtor_id": 2,
+		"creditor_id": 1,
+		"disposition_change": -20,
+		"disposition_floor": -15,
+		"honor_loss": 0.0,
+		"glory_loss": 0.0,
+		"witness_disposition_loss": 0,
+		"witnesses": [],
+	}
+
+	DayOrchestrator._apply_favor_breach(breach, chars)
+
+	assert_eq(_characters[0].disposition_values[2], -15)
+
+
+# -- Famine Crisis Processing (s16.2) -----------------------------------------
+
+func _make_province_for_famine(id: int, clan: String = "Crab") -> ProvinceData:
+	var p: ProvinceData = ProvinceData.new()
+	p.province_id = id
+	p.clan = clan
+	return p
+
+
+func test_famine_crisis_creates_topic_at_hunger() -> void:
+	var seasonal_result: Dictionary = {
+		"resource_tick": {
+			"starvation_changes": {
+				1: {"stage": ResourceTick.StarvationStage.HUNGER, "pu_loss_rate": 0.08},
+			},
+		},
+	}
+	var provinces: Dictionary = {1: _make_province_for_famine(1)}
+	var topics: Array[TopicData] = []
+	var next_id: Array[int] = [100]
+	var meta: Dictionary = {}
+
+	var results: Array[Dictionary] = DayOrchestrator._process_famine_crises(
+		seasonal_result, provinces, topics, next_id, 10, meta,
+	)
+
+	assert_eq(results.size(), 1)
+	assert_eq(results[0]["action"], "created")
+	assert_eq(results[0]["tier"], TopicData.Tier.TIER_3)
+	assert_eq(topics.size(), 1)
+	assert_eq(topics[0].topic_type, "famine")
+	assert_eq(topics[0].variant, "provincial_famine")
+	assert_true(1 in topics[0].provinces_affected)
+
+
+func test_famine_crisis_tier_2_at_famine_stage() -> void:
+	var seasonal_result: Dictionary = {
+		"resource_tick": {
+			"starvation_changes": {
+				1: {"stage": ResourceTick.StarvationStage.FAMINE, "pu_loss_rate": 0.20},
+			},
+		},
+	}
+	var provinces: Dictionary = {1: _make_province_for_famine(1)}
+	var topics: Array[TopicData] = []
+	var next_id: Array[int] = [100]
+	var meta: Dictionary = {}
+
+	var results: Array[Dictionary] = DayOrchestrator._process_famine_crises(
+		seasonal_result, provinces, topics, next_id, 10, meta,
+	)
+
+	assert_eq(results.size(), 1)
+	assert_eq(results[0]["tier"], TopicData.Tier.TIER_2)
+	assert_eq(topics[0].momentum, DayOrchestrator._FAMINE_FAMINE_MOMENTUM)
+
+
+func test_famine_crisis_no_duplicate_topic() -> void:
+	var existing: TopicData = TopicData.new()
+	existing.topic_id = 50
+	existing.topic_type = "famine"
+	existing.provinces_affected = [1]
+	existing.resolved = false
+
+	var seasonal_result: Dictionary = {
+		"resource_tick": {
+			"starvation_changes": {
+				1: {"stage": ResourceTick.StarvationStage.FAMINE, "pu_loss_rate": 0.20},
+			},
+		},
+	}
+	var provinces: Dictionary = {1: _make_province_for_famine(1)}
+	var topics: Array[TopicData] = [existing]
+	var next_id: Array[int] = [100]
+	var meta: Dictionary = {}
+
+	var results: Array[Dictionary] = DayOrchestrator._process_famine_crises(
+		seasonal_result, provinces, topics, next_id, 10, meta,
+	)
+
+	assert_eq(results.size(), 0, "Should not create duplicate famine topic")
+	assert_eq(topics.size(), 1)
+
+
+func test_famine_crisis_recovery_increments() -> void:
+	var existing: TopicData = TopicData.new()
+	existing.topic_id = 50
+	existing.topic_type = "famine"
+	existing.provinces_affected = [1]
+	existing.resolved = false
+
+	var seasonal_result: Dictionary = {
+		"resource_tick": {
+			"starvation_changes": {
+				1: {"stage": ResourceTick.StarvationStage.CLEAR, "pu_loss_rate": 0.0},
+			},
+		},
+	}
+	var provinces: Dictionary = {1: _make_province_for_famine(1)}
+	var topics: Array[TopicData] = [existing]
+	var next_id: Array[int] = [100]
+	var meta: Dictionary = {}
+
+	DayOrchestrator._process_famine_crises(
+		seasonal_result, provinces, topics, next_id, 10, meta,
+	)
+
+	var tracking: Dictionary = meta.get("_famine_tracking", {})
+	assert_eq(tracking.get(1, 0), 1)
+	assert_false(existing.resolved, "Not yet at threshold")
+
+
+func test_famine_crisis_resolves_at_threshold() -> void:
+	var existing: TopicData = TopicData.new()
+	existing.topic_id = 50
+	existing.topic_type = "famine"
+	existing.provinces_affected = [1]
+	existing.resolved = false
+	existing.momentum = 50.0
+
+	var seasonal_result: Dictionary = {
+		"resource_tick": {
+			"starvation_changes": {
+				1: {"stage": ResourceTick.StarvationStage.CLEAR, "pu_loss_rate": 0.0},
+			},
+		},
+	}
+	var provinces: Dictionary = {1: _make_province_for_famine(1)}
+	var topics: Array[TopicData] = [existing]
+	var next_id: Array[int] = [100]
+	var meta: Dictionary = {"_famine_tracking": {1: 9}}
+
+	var results: Array[Dictionary] = DayOrchestrator._process_famine_crises(
+		seasonal_result, provinces, topics, next_id, 10, meta,
+	)
+
+	assert_eq(results.size(), 1)
+	assert_eq(results[0]["action"], "resolved")
+	assert_true(existing.resolved)
+	assert_eq(existing.momentum, 0.0)
+
+
+func test_famine_crisis_recovery_resets_on_relapse() -> void:
+	var existing: TopicData = TopicData.new()
+	existing.topic_id = 50
+	existing.topic_type = "famine"
+	existing.provinces_affected = [1]
+	existing.resolved = false
+
+	var meta: Dictionary = {"_famine_tracking": {1: 5}}
+	var seasonal_result: Dictionary = {
+		"resource_tick": {
+			"starvation_changes": {
+				1: {"stage": ResourceTick.StarvationStage.HUNGER, "pu_loss_rate": 0.08},
+			},
+		},
+	}
+	var provinces: Dictionary = {1: _make_province_for_famine(1)}
+	var topics: Array[TopicData] = [existing]
+	var next_id: Array[int] = [100]
+
+	DayOrchestrator._process_famine_crises(
+		seasonal_result, provinces, topics, next_id, 10, meta,
+	)
+
+	var tracking: Dictionary = meta.get("_famine_tracking", {})
+	assert_false(tracking.has(1), "Recovery count should reset on relapse")
+
+
+func test_famine_crisis_no_topic_at_shortage() -> void:
+	var seasonal_result: Dictionary = {
+		"resource_tick": {
+			"starvation_changes": {
+				1: {"stage": ResourceTick.StarvationStage.SHORTAGE, "pu_loss_rate": 0.03},
+			},
+		},
+	}
+	var provinces: Dictionary = {1: _make_province_for_famine(1)}
+	var topics: Array[TopicData] = []
+	var next_id: Array[int] = [100]
+	var meta: Dictionary = {}
+
+	var results: Array[Dictionary] = DayOrchestrator._process_famine_crises(
+		seasonal_result, provinces, topics, next_id, 10, meta,
+	)
+
+	assert_eq(results.size(), 0, "Shortage should not trigger famine crisis")
+	assert_eq(topics.size(), 0)
+
+
+func test_famine_crisis_empty_starvation_noop() -> void:
+	var seasonal_result: Dictionary = {"resource_tick": {}}
+	var provinces: Dictionary = {}
+	var topics: Array[TopicData] = []
+	var next_id: Array[int] = [100]
+	var meta: Dictionary = {}
+
+	var results: Array[Dictionary] = DayOrchestrator._process_famine_crises(
+		seasonal_result, provinces, topics, next_id, 10, meta,
+	)
+
+	assert_eq(results.size(), 0)
+
+
+func test_famine_crisis_sets_clan_on_topic() -> void:
+	var seasonal_result: Dictionary = {
+		"resource_tick": {
+			"starvation_changes": {
+				5: {"stage": ResourceTick.StarvationStage.FAMINE, "pu_loss_rate": 0.20},
+			},
+		},
+	}
+	var provinces: Dictionary = {5: _make_province_for_famine(5, "Lion")}
+	var topics: Array[TopicData] = []
+	var next_id: Array[int] = [100]
+	var meta: Dictionary = {}
+
+	DayOrchestrator._process_famine_crises(
+		seasonal_result, provinces, topics, next_id, 10, meta,
+	)
+
+	assert_eq(topics[0].clan_involved, "Lion")
+
+
+func test_famine_crisis_clear_without_topic_is_noop() -> void:
+	var seasonal_result: Dictionary = {
+		"resource_tick": {
+			"starvation_changes": {
+				1: {"stage": ResourceTick.StarvationStage.CLEAR, "pu_loss_rate": 0.0},
+			},
+		},
+	}
+	var provinces: Dictionary = {1: _make_province_for_famine(1)}
+	var topics: Array[TopicData] = []
+	var next_id: Array[int] = [100]
+	var meta: Dictionary = {"_famine_tracking": {1: 3}}
+
+	var results: Array[Dictionary] = DayOrchestrator._process_famine_crises(
+		seasonal_result, provinces, topics, next_id, 10, meta,
+	)
+
+	assert_eq(results.size(), 0)
+	assert_false(meta["_famine_tracking"].has(1), "Tracking cleared when no active topic")
+
+
+# -- Multi-province famine aggregation -----------------------------------------
+
+func test_multi_province_famine_creates_clan_topic() -> void:
+	var seasonal_result: Dictionary = {
+		"resource_tick": {
+			"starvation_changes": {
+				1: {"stage": ResourceTick.StarvationStage.HUNGER, "pu_loss_rate": 0.08},
+				2: {"stage": ResourceTick.StarvationStage.HUNGER, "pu_loss_rate": 0.08},
+			},
+		},
+	}
+	var provinces: Dictionary = {
+		1: _make_province_for_famine(1, "Crab"),
+		2: _make_province_for_famine(2, "Crab"),
+	}
+	var topics: Array[TopicData] = []
+	var next_id: Array[int] = [100]
+	var meta: Dictionary = {}
+
+	var results: Array[Dictionary] = DayOrchestrator._process_famine_crises(
+		seasonal_result, provinces, topics, next_id, 10, meta,
+	)
+
+	assert_eq(results.size(), 1)
+	assert_eq(results[0]["action"], "created_clan")
+	assert_eq(results[0]["tier"], TopicData.Tier.TIER_2)
+	assert_eq(topics.size(), 1)
+	assert_eq(topics[0].variant, "clan_famine")
+	assert_eq(topics[0].clan_involved, "Crab")
+	assert_true(1 in topics[0].provinces_affected)
+	assert_true(2 in topics[0].provinces_affected)
+
+
+func test_multi_province_different_clans_separate_topics() -> void:
+	var seasonal_result: Dictionary = {
+		"resource_tick": {
+			"starvation_changes": {
+				1: {"stage": ResourceTick.StarvationStage.HUNGER, "pu_loss_rate": 0.08},
+				2: {"stage": ResourceTick.StarvationStage.HUNGER, "pu_loss_rate": 0.08},
+			},
+		},
+	}
+	var provinces: Dictionary = {
+		1: _make_province_for_famine(1, "Crab"),
+		2: _make_province_for_famine(2, "Crane"),
+	}
+	var topics: Array[TopicData] = []
+	var next_id: Array[int] = [100]
+	var meta: Dictionary = {}
+
+	var results: Array[Dictionary] = DayOrchestrator._process_famine_crises(
+		seasonal_result, provinces, topics, next_id, 10, meta,
+	)
+
+	assert_eq(topics.size(), 2)
+	for t: TopicData in topics:
+		assert_eq(t.variant, "provincial_famine")
+		assert_eq(t.tier, TopicData.Tier.TIER_3)
+
+
+func test_new_province_added_to_existing_clan_topic() -> void:
+	var existing: TopicData = TopicData.new()
+	existing.topic_id = 50
+	existing.topic_type = "famine"
+	existing.variant = "clan_famine"
+	existing.clan_involved = "Crab"
+	existing.provinces_affected = [1, 2]
+	existing.resolved = false
+
+	var seasonal_result: Dictionary = {
+		"resource_tick": {
+			"starvation_changes": {
+				3: {"stage": ResourceTick.StarvationStage.HUNGER, "pu_loss_rate": 0.08},
+			},
+		},
+	}
+	var provinces: Dictionary = {3: _make_province_for_famine(3, "Crab")}
+	var topics: Array[TopicData] = [existing]
+	var next_id: Array[int] = [100]
+	var meta: Dictionary = {}
+
+	var results: Array[Dictionary] = DayOrchestrator._process_famine_crises(
+		seasonal_result, provinces, topics, next_id, 10, meta,
+	)
+
+	assert_eq(results.size(), 1)
+	assert_eq(results[0]["action"], "added_to_clan_topic")
+	assert_true(3 in existing.provinces_affected)
+	assert_eq(topics.size(), 1, "No new topic created")
+
+
+func test_clan_topic_province_recovers_removed_from_list() -> void:
+	var existing: TopicData = TopicData.new()
+	existing.topic_id = 50
+	existing.topic_type = "famine"
+	existing.variant = "clan_famine"
+	existing.clan_involved = "Crab"
+	existing.provinces_affected = [1, 2]
+	existing.resolved = false
+	existing.momentum = 50.0
+
+	var seasonal_result: Dictionary = {
+		"resource_tick": {
+			"starvation_changes": {
+				1: {"stage": ResourceTick.StarvationStage.CLEAR, "pu_loss_rate": 0.0},
+			},
+		},
+	}
+	var provinces: Dictionary = {1: _make_province_for_famine(1, "Crab")}
+	var topics: Array[TopicData] = [existing]
+	var next_id: Array[int] = [100]
+	var meta: Dictionary = {"_famine_tracking": {1: 9}}
+
+	var results: Array[Dictionary] = DayOrchestrator._process_famine_crises(
+		seasonal_result, provinces, topics, next_id, 10, meta,
+	)
+
+	assert_eq(results.size(), 1)
+	assert_eq(results[0]["action"], "province_recovered")
+	assert_false(1 in existing.provinces_affected)
+	assert_true(2 in existing.provinces_affected)
+	assert_false(existing.resolved, "Topic stays active with remaining provinces")
+
+
+func test_clan_topic_resolves_when_last_province_recovers() -> void:
+	var existing: TopicData = TopicData.new()
+	existing.topic_id = 50
+	existing.topic_type = "famine"
+	existing.variant = "clan_famine"
+	existing.clan_involved = "Crab"
+	existing.provinces_affected = [1]
+	existing.resolved = false
+	existing.momentum = 50.0
+
+	var seasonal_result: Dictionary = {
+		"resource_tick": {
+			"starvation_changes": {
+				1: {"stage": ResourceTick.StarvationStage.CLEAR, "pu_loss_rate": 0.0},
+			},
+		},
+	}
+	var provinces: Dictionary = {1: _make_province_for_famine(1, "Crab")}
+	var topics: Array[TopicData] = [existing]
+	var next_id: Array[int] = [100]
+	var meta: Dictionary = {"_famine_tracking": {1: 9}}
+
+	var results: Array[Dictionary] = DayOrchestrator._process_famine_crises(
+		seasonal_result, provinces, topics, next_id, 10, meta,
+	)
+
+	assert_eq(results.size(), 1)
+	assert_eq(results[0]["action"], "resolved")
+	assert_true(existing.resolved)
+
+
+func test_clan_topic_absorbs_existing_provincial_topics() -> void:
+	var provincial: TopicData = TopicData.new()
+	provincial.topic_id = 40
+	provincial.topic_type = "famine"
+	provincial.variant = "provincial_famine"
+	provincial.clan_involved = "Crab"
+	provincial.provinces_affected = [1]
+	provincial.resolved = false
+	provincial.momentum = 25.0
+
+	var seasonal_result: Dictionary = {
+		"resource_tick": {
+			"starvation_changes": {
+				1: {"stage": ResourceTick.StarvationStage.HUNGER, "pu_loss_rate": 0.08},
+				2: {"stage": ResourceTick.StarvationStage.HUNGER, "pu_loss_rate": 0.08},
+			},
+		},
+	}
+	var provinces: Dictionary = {
+		1: _make_province_for_famine(1, "Crab"),
+		2: _make_province_for_famine(2, "Crab"),
+	}
+	var topics: Array[TopicData] = [provincial]
+	var next_id: Array[int] = [100]
+	var meta: Dictionary = {}
+
+	DayOrchestrator._process_famine_crises(
+		seasonal_result, provinces, topics, next_id, 10, meta,
+	)
+
+	assert_true(provincial.resolved, "Old provincial topic should be absorbed")
+	assert_eq(provincial.momentum, 0.0)
+	var clan_topic: TopicData = null
+	for t: TopicData in topics:
+		if t.variant == "clan_famine" and not t.resolved:
+			clan_topic = t
+	assert_not_null(clan_topic, "New clan topic should be created")
+	assert_true(1 in clan_topic.provinces_affected)
+	assert_true(2 in clan_topic.provinces_affected)
+
+
+# -- Supply Sharing Effects ----------------------------------------------------
+
+func _make_settlement_for_sharing(
+	province_id: int,
+	rice: float,
+	pop: float,
+) -> SettlementData:
+	var s: SettlementData = SettlementData.new()
+	s.province_id = province_id
+	s.rice_stockpile = rice
+	s.population_pu = pop
+	return s
+
+
+func _make_lord_for_sharing(
+	id: int,
+	clan: String,
+	honor: float = 5.0,
+) -> L5RCharacterData:
+	var c: L5RCharacterData = L5RCharacterData.new()
+	c.character_id = id
+	c.clan = clan
+	c.honor = honor
+	return c
+
+
+func test_supply_sharing_transfers_rice() -> void:
+	var lord: L5RCharacterData = _make_lord_for_sharing(1, "Crane")
+	var giver_s: SettlementData = _make_settlement_for_sharing(10, 100.0, 50.0)
+	var receiver_s: SettlementData = _make_settlement_for_sharing(20, 0.5, 50.0)
+	var applied: Array = [{
+		"character_id": 1,
+		"target_province_id": 20,
+		"effects": {"requires_supply_sharing": true},
+	}]
+	var chars: Dictionary = {1: lord}
+	var settlements: Array[SettlementData] = [giver_s, receiver_s]
+	var prov_dict: Dictionary = {
+		10: _make_province_for_famine(10, "Crane"),
+		20: _make_province_for_famine(20, "Lion"),
+	}
+
+	var results: Array[Dictionary] = DayOrchestrator._process_supply_sharing(
+		applied, chars, settlements, prov_dict,
+	)
+
+	assert_eq(results.size(), 1)
+	assert_eq(results[0]["type"], "supply_sharing")
+	assert_gt(results[0]["amount"], 0.0)
+	assert_gt(results[0]["honor_gain"], 0.0)
+	assert_lt(giver_s.rice_stockpile, 100.0, "Giver lost rice")
+	assert_gt(receiver_s.rice_stockpile, 0.5, "Receiver gained rice")
+
+
+func test_supply_sharing_no_surplus_skips() -> void:
+	var lord: L5RCharacterData = _make_lord_for_sharing(1, "Crane")
+	var giver_s: SettlementData = _make_settlement_for_sharing(10, 0.1, 50.0)
+	var receiver_s: SettlementData = _make_settlement_for_sharing(20, 0.5, 50.0)
+	var applied: Array = [{
+		"character_id": 1,
+		"target_province_id": 20,
+		"effects": {"requires_supply_sharing": true},
+	}]
+	var chars: Dictionary = {1: lord}
+	var settlements: Array[SettlementData] = [giver_s, receiver_s]
+	var prov_dict: Dictionary = {
+		10: _make_province_for_famine(10, "Crane"),
+		20: _make_province_for_famine(20, "Lion"),
+	}
+
+	var results: Array[Dictionary] = DayOrchestrator._process_supply_sharing(
+		applied, chars, settlements, prov_dict,
+	)
+
+	assert_eq(results.size(), 0, "No surplus means no sharing")
+
+
+func test_supply_sharing_same_province_skips() -> void:
+	var lord: L5RCharacterData = _make_lord_for_sharing(1, "Crane")
+	var s: SettlementData = _make_settlement_for_sharing(10, 100.0, 50.0)
+	var applied: Array = [{
+		"character_id": 1,
+		"target_province_id": 10,
+		"effects": {"requires_supply_sharing": true},
+	}]
+	var chars: Dictionary = {1: lord}
+	var settlements: Array[SettlementData] = [s]
+	var prov_dict: Dictionary = {10: _make_province_for_famine(10, "Crane")}
+
+	var results: Array[Dictionary] = DayOrchestrator._process_supply_sharing(
+		applied, chars, settlements, prov_dict,
+	)
+
+	assert_eq(results.size(), 0, "Cannot share with self")
+
+
+func test_supply_sharing_receiver_not_starving_skips() -> void:
+	var lord: L5RCharacterData = _make_lord_for_sharing(1, "Crane")
+	var giver_s: SettlementData = _make_settlement_for_sharing(10, 100.0, 50.0)
+	var receiver_s: SettlementData = _make_settlement_for_sharing(20, 100.0, 50.0)
+	var applied: Array = [{
+		"character_id": 1,
+		"target_province_id": 20,
+		"effects": {"requires_supply_sharing": true},
+	}]
+	var chars: Dictionary = {1: lord}
+	var settlements: Array[SettlementData] = [giver_s, receiver_s]
+	var prov_dict: Dictionary = {
+		10: _make_province_for_famine(10, "Crane"),
+		20: _make_province_for_famine(20, "Lion"),
+	}
+
+	var results: Array[Dictionary] = DayOrchestrator._process_supply_sharing(
+		applied, chars, settlements, prov_dict,
+	)
+
+	assert_eq(results.size(), 0, "Well-fed receiver needs no sharing")

@@ -477,11 +477,16 @@ static func _process_harvest(
 		var locked_farming: float = float(meta.get("locked_farming_pu", farming))
 		var terrain_mult: float = prov.get_rice_multiplier()
 		var yield_amount: float = locked_farming * RICE_YIELD_PER_FARMING_PU_PER_YEAR * terrain_mult
+		var harvest_destroyed: bool = meta.get("harvest_destroyed", false)
+		if harvest_destroyed:
+			yield_amount = 0.0
+			meta["harvest_destroyed"] = false
 		_distribute_rice_to_settlements(prov, settlements, yield_amount)
 		harvest_results[prov.province_id] = {
 			"farming_pu": locked_farming,
 			"terrain_mult": terrain_mult,
 			"yield": yield_amount,
+			"destroyed": harvest_destroyed,
 		}
 	return harvest_results
 

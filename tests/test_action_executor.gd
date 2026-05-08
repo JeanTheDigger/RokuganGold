@@ -182,6 +182,102 @@ func test_intimidate_negative_disposition() -> void:
 		assert_true(result["effects"]["disposition_change"] < 0)
 
 
+# -- Intimidation System Routing -----------------------------------------------
+
+func test_intimidate_routes_through_system_when_target_available() -> void:
+	var target := L5RCharacterData.new()
+	target.character_id = 10
+	target.character_name = "Target"
+	target.honor = 3.0
+	target.reflexes = 3
+	target.awareness = 3
+	target.willpower = 3
+	target.skills = {"Etiquette": 2}
+	target.emphases = {}
+	target.wounds_taken = 0
+	var chars: Dictionary = {1: _character, 10: target}
+
+	_dice_engine.set_seed(42)
+	var action := _make_action("INTIMIDATE", 10)
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map, {}, chars
+	)
+	assert_eq(result["action_id"], "INTIMIDATE")
+	assert_eq(result["skill_used"], "Intimidation")
+	assert_true(result["effects"].has("honor_change"))
+	assert_true(result["effects"].has("infamy_gain"))
+	assert_true(result["effects"].has("compliance_active"))
+
+
+func test_intimidate_public_includes_witnesses() -> void:
+	var target := L5RCharacterData.new()
+	target.character_id = 10
+	target.character_name = "Target"
+	target.honor = 3.0
+	target.reflexes = 3
+	target.awareness = 3
+	target.willpower = 3
+	target.physical_location = "Castle_Doji"
+	target.skills = {"Etiquette": 2}
+	target.emphases = {}
+	target.wounds_taken = 0
+
+	var bystander := L5RCharacterData.new()
+	bystander.character_id = 20
+	bystander.character_name = "Bystander"
+	bystander.physical_location = "Castle_Doji"
+	_character.physical_location = "Castle_Doji"
+
+	var chars: Dictionary = {1: _character, 10: target, 20: bystander}
+	_ctx.context_flag = Enums.ContextFlag.AT_COURT
+
+	_dice_engine.set_seed(42)
+	var action := _make_action("INTIMIDATE", 10)
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map, {}, chars
+	)
+	assert_eq(result["action_id"], "INTIMIDATE")
+	if result["effects"].has("witnesses"):
+		assert_true(result["effects"]["witnesses"].size() > 0)
+
+
+func test_intimidate_blackmail_uses_secret_tier() -> void:
+	var target := L5RCharacterData.new()
+	target.character_id = 10
+	target.character_name = "Target"
+	target.honor = 3.0
+	target.reflexes = 3
+	target.awareness = 3
+	target.willpower = 3
+	target.skills = {"Etiquette": 2}
+	target.emphases = {}
+	target.wounds_taken = 0
+	var chars: Dictionary = {1: _character, 10: target}
+
+	_ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
+	_dice_engine.set_seed(42)
+	var action := _make_action("INTIMIDATE", 10)
+	action.metadata = {"secret_ref": true, "secret_tier": 1}
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map, {}, chars
+	)
+	assert_eq(result["action_id"], "INTIMIDATE")
+	assert_almost_eq(result["effects"]["honor_change"], -0.3, 0.01)
+	assert_almost_eq(result["effects"]["infamy_gain"], 0.1, 0.01)
+	if result["success"]:
+		assert_true(result["effects"].has("favors_extracted"))
+
+
+func test_intimidate_falls_through_without_characters_by_id() -> void:
+	_dice_engine.set_seed(42)
+	var action := _make_action("INTIMIDATE", 10)
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map
+	)
+	assert_eq(result["action_id"], "INTIMIDATE")
+	assert_false(result["effects"].has("infamy_gain"))
+
+
 # -- Covert Actions ------------------------------------------------------------
 
 func test_bribe_for_info_uses_temptation() -> void:
@@ -428,3 +524,60 @@ func test_deliver_gift_failure_is_marked_failed_so_effects_apply() -> void:
 	)
 	# No giftable item -> generic social path -> no gift_outcome key.
 	assert_false(result["effects"].has("gift_outcome"))
+
+
+# -- DECLARE_WAR Executor Tests --------------------------------------------------
+
+func test_declare_war_justified_returns_war_effects() -> void:
+	_character.clan = "Crab"
+	_character.bushido_virtue = Enums.BushidoVirtue.YU
+	var action := _make_action("DECLARE_WAR")
+	action.metadata = {
+		"standing_objective": "EXPAND_TERRITORY",
+		"primary_objective": "",
+		"intended_tier": WarJustification.MilitaryTier.RAID,
+		"target_clan": "Crane",
+		"authority_level": WarData.AuthorityLevel.PROVINCIAL_RAID,
+	}
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map,
+	)
+	assert_eq(result["effects"]["effect"], "war_declared")
+	assert_true(result["effects"]["requires_war_creation"])
+	assert_eq(result["effects"]["declaring_clan"], "Crab")
+	assert_eq(result["effects"]["target_clan"], "Crane")
+
+
+func test_declare_war_not_justified_returns_rejection() -> void:
+	_character.clan = "Crab"
+	_character.bushido_virtue = Enums.BushidoVirtue.JIN
+	var action := _make_action("DECLARE_WAR")
+	action.metadata = {
+		"standing_objective": "MAINTAIN_PEACE",
+		"primary_objective": "",
+		"intended_tier": WarJustification.MilitaryTier.RAID,
+		"target_clan": "Crane",
+	}
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map,
+	)
+	assert_eq(result["effects"]["effect"], "war_declaration_rejected")
+	assert_true(result["effects"]["failed"])
+
+
+func test_declare_war_total_war_honor_cost() -> void:
+	_character.clan = "Crab"
+	_character.bushido_virtue = Enums.BushidoVirtue.YU
+	var action := _make_action("DECLARE_WAR")
+	action.metadata = {
+		"standing_objective": "EXPAND_TERRITORY",
+		"primary_objective": "",
+		"intended_tier": WarJustification.MilitaryTier.TOTAL_WAR,
+		"target_clan": "Crane",
+		"authority_level": WarData.AuthorityLevel.CLAN_WAR,
+	}
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map,
+	)
+	assert_eq(result["effects"]["effect"], "war_declared")
+	assert_almost_eq(result["effects"]["honor_change"], -0.5, 0.01)

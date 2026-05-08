@@ -253,7 +253,7 @@ func test_build_context_military_populated() -> void:
 	_world_state["unit_training_counts"] = {0: 3, 1: 2, 2: 1}
 	_world_state["available_levy_pu"] = 15.0
 	_world_state["can_sustain_iron_upkeep"] = false
-	_world_state["active_wars"] = [{"enemy_clan_id": "Lion"}]
+	_world_state["active_wars"] = [{"clan_a": "Crab", "clan_b": "Lion"}]
 	_world_state["escalating_conflicts"] = [{"topic_id": 5}]
 	var taint_ids: Array[int] = [10, 20]
 	_world_state["taint_topic_province_ids"] = taint_ids
@@ -577,3 +577,44 @@ func test_full_loop_reactive_overrides() -> void:
 		_char, _world_state, _objectives, _scoring_tables, _filter_data
 	)
 	assert_true(result["success"])
+
+
+# -- Famine Province Extraction ------------------------------------------------
+
+func test_extract_famine_province_ids_known_topic() -> void:
+	var t: TopicData = TopicData.new()
+	t.topic_id = 50
+	t.topic_type = "famine"
+	t.variant = "provincial_famine"
+	t.provinces_affected = [3, 7]
+	_char.topic_pool = [50]
+	var ids: Array[int] = NPCDecisionEngine._extract_famine_province_ids(
+		_char, [t],
+	)
+	assert_true(3 in ids)
+	assert_true(7 in ids)
+
+
+func test_extract_famine_province_ids_unknown_topic_ignored() -> void:
+	var t: TopicData = TopicData.new()
+	t.topic_id = 50
+	t.topic_type = "famine"
+	t.provinces_affected = [3]
+	_char.topic_pool = []
+	var ids: Array[int] = NPCDecisionEngine._extract_famine_province_ids(
+		_char, [t],
+	)
+	assert_eq(ids.size(), 0, "Unknown topic yields no provinces")
+
+
+func test_extract_famine_province_ids_resolved_ignored() -> void:
+	var t: TopicData = TopicData.new()
+	t.topic_id = 50
+	t.topic_type = "famine"
+	t.resolved = true
+	t.provinces_affected = [3]
+	_char.topic_pool = [50]
+	var ids: Array[int] = NPCDecisionEngine._extract_famine_province_ids(
+		_char, [t],
+	)
+	assert_eq(ids.size(), 0, "Resolved famine topic yields no provinces")

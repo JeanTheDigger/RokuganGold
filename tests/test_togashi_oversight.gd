@@ -334,12 +334,14 @@ func test_compliance_unwinds_stage_one_step() -> void:
 	)
 
 
-func test_compliance_floor_at_zero() -> void:
+func test_compliance_preserves_defiance_count() -> void:
+	TogashiOversight.handle_defiance(_state, TogashiOversight.Axis.SPIRITUAL_HEALTH)
+	assert_eq(_state["defiance_count"], 1)
 	TogashiOversight.handle_compliance_response(
 		_state, TogashiOversight.Axis.SPIRITUAL_HEALTH
 	)
 	assert_eq(_state["stage"], 0)
-	assert_eq(_state["defiance_count"], 0)
+	assert_eq(_state["defiance_count"], 1)
 
 
 # -- Authority lockout / Order withdrawal ------------------------------------
@@ -481,3 +483,40 @@ func test_process_seasonal_oversight_lifts_directive_when_concern_resolves() -> 
 	# Calm world → no concern → decay → 9 → still below lift.
 	TogashiOversight.process_seasonal_oversight(_state, {}, [], _fc, 99)
 	assert_eq(_state["active_forced_directives"].size(), 0)
+
+
+# -- Initialize from world state ---------------------------------------------
+
+func test_initialize_from_world_state_seeds_nonzero_dissatisfaction() -> void:
+	var ws: Dictionary = {"realm_overlaps_empire_wide": 5}
+	TogashiOversight.initialize_from_world_state(_state, ws)
+	assert_eq(
+		float(_state["dissatisfaction"][TogashiOversight.Axis.SPIRITUAL_HEALTH]),
+		25.0,
+	)
+
+
+func test_initialize_from_world_state_calm_stays_zero() -> void:
+	TogashiOversight.initialize_from_world_state(_state, {})
+	assert_eq(
+		float(_state["dissatisfaction"][TogashiOversight.Axis.SPIRITUAL_HEALTH]),
+		0.0,
+	)
+
+
+# -- Repeated letter in process_seasonal_oversight ---------------------------
+
+func test_repeated_letter_detected_when_directive_exists_on_axis() -> void:
+	_state["dissatisfaction"][TogashiOversight.Axis.SPIRITUAL_HEALTH] = 60.0
+	var ws: Dictionary = {"realm_overlaps_empire_wide": 5}
+	# First intervention — creates a directive on SPIRITUAL_HEALTH.
+	var r1: Dictionary = TogashiOversight.process_seasonal_oversight(
+		_state, ws, [], _fc, 99
+	)
+	assert_true(r1["intervention_fired"])
+	# Second call — same axis has an active directive, so repeated_letter = true.
+	_state["dissatisfaction"][TogashiOversight.Axis.SPIRITUAL_HEALTH] = 60.0
+	var r2: Dictionary = TogashiOversight.process_seasonal_oversight(
+		_state, ws, [], _fc, 99
+	)
+	assert_true(r2["intervention_fired"])

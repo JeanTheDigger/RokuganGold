@@ -218,11 +218,16 @@ single-dice-entry-point and server-authoritative constraints.
 - **simulation/action_executor.gd** — Routes chosen ActionIDs to SkillResolver
   dice rolls. Social/covert/military/admin categories with disposition-based TN
   modifiers. Returns effects dict (disposition_change, glory_change, info_gained,
-  province effects).
+  province effects). INTIMIDATE intercepted before generic social path and routed
+  through IntimidationSystem for proper honor/infamy/compliance effects — context
+  determined from metadata (secret_ref → blackmail, AT_COURT → public, else
+  private). Falls through to generic path when characters_by_id is empty.
 - **simulation/effect_applicator.gd** — Applies executor results to world state.
-  `apply()` mutates character disposition/honor/glory, province stability/garrison/
-  report date, and appends to action_log. `apply_day_results()` batch processes
-  a full day's results.
+  `apply()` mutates character disposition/honor/glory/infamy, witness disposition,
+  recipient disposition, province stability/garrison/report date, and appends to
+  action_log. `apply_day_results()` batch processes a full day's results.
+  Tracks all mutations in `applied` dict: `disposition_changes`, `honor_changes`,
+  `glory_changes`, `infamy_changes`, `province_updates`, `info_events`.
 
 ### Multi-NPC Wave Resolution
 - **simulation/npc_wave_resolver.gd** — `resolve_day()` handles full day
@@ -260,14 +265,13 @@ single-dice-entry-point and server-authoritative constraints.
   Measurement pressure (high-roll-no-effect detection), approach assessment
   tags (EFFECTIVE/CAPPED/INEFFECTIVE), penalty registry with seasonal decay.
   Scoring modifier: +15 measurement bonus, −15 approach penalty (halved after
-  1 season, cleared after 2), +10 alternative bonus. NOT YET WIRED into
-  NPC Phase 5 scoring — standalone tested only.
+  1 season, cleared after 2), +10 alternative bonus.
 
 ### Commitment Registry (s55.31)
 - **simulation/commitment_registry.gd** — Six commitment types, consequence
   tables for 4 breaking modes × 3 tiers. Force majeure with personality-
   modified retroactive forgiveness. Phase 5 at-risk penalties (−5/−15/−25
-  by tier, cap −40). NOT YET WIRED into NPC Phase 5 scoring.
+  by tier, cap −40).
 - **shared/commitment_data.gd** — CommitmentData Resource.
 
 ### Military Hierarchy (s57.21)
@@ -395,17 +399,17 @@ All in /tests/, one file per system:
 - test_time_system.gd (~15 tests)
 - test_skill_resolver.gd (~20 tests)
 - test_action_point_system.gd (~12 tests)
-- test_npc_decision_engine.gd (~47 tests)
+- test_npc_decision_engine.gd (~48 tests)
 - test_scoring_table_loader.gd (~15 tests)
-- test_action_executor.gd (~25 tests)
-- test_effect_applicator.gd (~28 tests)
+- test_action_executor.gd (~35 tests)
+- test_effect_applicator.gd (~37 tests)
 - test_npc_wave_resolver.gd (~15 tests)
 - test_resource_tick.gd (~30 tests)
-- test_objective_decomposer.gd (~100 tests)
+- test_objective_decomposer.gd (~110 tests)
 - test_information_system.gd (~40 tests)
 - test_topic_system.gd (~55 tests)
 - test_investigation_system.gd (~40 tests)
-- test_day_orchestrator.gd (~25 tests)
+- test_day_orchestrator.gd (~54 tests)
 - test_approach_evaluation.gd (~55 tests)
 - test_commitment_registry.gd (~60 tests)
 - test_military_hierarchy.gd (~47 tests)
@@ -446,6 +450,32 @@ All in /tests/, one file per system:
 - test_togashi_oversight.gd (~49 tests)
 - test_phoenix_council.gd (~51 tests)
 - test_intra_clan_civil_war.gd (~59 tests)
+- test_event_durations.gd (~25 tests)
+- test_performative_arts.gd (~30 tests)
+- test_performative_arts_wiring.gd (~10 tests)
+- test_succession_system.gd (~60 tests)
+- test_succession_wiring.gd (~10 tests)
+- test_secret_system.gd (~90 tests)
+- test_seduction_system.gd (~25 tests)
+- test_assassination_system.gd (~45 tests)
+- test_bound_escape_system.gd (~45 tests)
+- test_secret_system_wiring.gd (~25 tests)
+- test_army_combat_system.gd (~145 tests)
+- test_army_upkeep_system.gd (~40 tests)
+- test_supply_tether_system.gd (~51 tests)
+- test_siege_system.gd (~50 tests)
+- test_army_movement_system.gd (~40 tests)
+- test_levy_system.gd (~35 tests)
+- test_military_promotion_system.gd (~35 tests)
+- test_order_system.gd (~30 tests)
+- test_military_service_system.gd (~35 tests)
+- test_pu_reconciliation.gd (~30 tests)
+- test_military_wiring.gd (~219 tests)
+- test_war_system.gd (~61 tests)
+- test_war_justification.gd (~55 tests)
+- test_war_termination.gd (~46 tests)
+- test_feasibility_ledger.gd (~148 tests)
+- test_starvation_warfare.gd (~55 tests)
 
 ### Festival System (s11.5)
 - **simulation/festival_system.gd** — Empire-wide canonical festivals, Rokuyo
@@ -1227,6 +1257,774 @@ All in /tests/, one file per system:
   `force_tick()` for manual advancement. `tick_completed` signal emitted
   after each advancement.
 
+### Event Durations (s11.7b)
+- **simulation/event_durations.gd** — Reference constants for major event
+  pacing per GDD s11.7b. Six EventType values (MASS_BATTLE, SIEGE,
+  COURT_SEASON, FESTIVAL, DIPLOMATIC_SUMMIT, TOURNAMENT) with min/max OOC
+  day durations. OOC-to-IC ratio = 4 (1 OOC day = 4 IC days). Durations:
+  battle 1/1, siege 15/30, court 30/30, festival 3/3, summit 5/7,
+  tournament 3/5. `get_ooc_duration()`, `get_ic_duration()`, `get_ic_ticks()`,
+  `is_variable_duration()`, `get_all_durations()`.
+
+### Performative Arts System (s12.4)
+- **simulation/performative_arts_system.gd** — Court performance mechanics per
+  GDD s12.4 and s15.4. Five ArtForm values (POETRY, DANCE, THEATER, MUSIC,
+  TEA_CEREMONY) mapped to skills (Artisan, Perform, Acting, Tea Ceremony).
+  `resolve_public_performance()` rolls skill+trait vs TN 15: success +2
+  disposition to all witnesses + 0.3 Glory, +1 disp per raise, critical failure
+  (margin ≤ -10) -2 disposition -0.3 Glory. Performance fatigue: diminishing
+  returns (full → half → zero) on repeat performances same court same OOC day.
+  `resolve_perform_for()` targeted performance: +3 disp on success + raises,
+  +0.2 Glory on masterful (3+ raises), -1 disp on failure. No fatigue, no venue
+  restriction. `get_best_art_form()` picks performer's highest effective
+  skill+trait combination. `apply_performance_effects()` mutates glory and
+  witness/recipient disposition values. Venue gating (performance_permitted
+  zone flag) already enforced by NPC engine Phase 3 zone-flag filtering.
+- **Performative arts wiring** — ActionExecutor intercepts PUBLIC_PERFORMANCE
+  and PERFORM_FOR before the `_performance_skill` fallthrough. PUBLIC_PERFORMANCE
+  picks best art form, gathers co-located witness IDs, reads fatigue from
+  `pieces_seen["_performance_count_today"]`, resolves via PerformativeArtsSystem,
+  applies effects (glory + witness dispositions), increments fatigue counter.
+  PERFORM_FOR resolves targeted performance against recipient, no fatigue.
+  DayOrchestrator `_reset_all_ap()` clears the fatigue counter daily.
+
+### Succession System (s22.5)
+- **shared/succession_data.gd** — SuccessionData Resource: SuccessionState (4),
+  VacancyCause (4), deceased_id, position_tier, confirming_authority_id,
+  candidate_ids, contesting_ids, suspicious_death, transition timing.
+- **simulation/succession_system.gd** — Full succession lifecycle per GDD s22.5.
+  7-priority candidate gathering (designated heir, eldest child, other children,
+  adopted, siblings, lord selects, generated). Confirmation authority tier map
+  (each position confirmed one level up). Clean vs disputed detection (4
+  conditions: suspicious death, contesters, rival disposition, multiple
+  same-priority). 9-factor heir evaluation (disposition, birth order, honor,
+  glory, insight rank, school type, skills, achievements, titles) with 14
+  personality-driven weight multipliers (7 bushido + 7 shourido). Ishi
+  permanence (never re-evaluates designated heir). Seigyo re-evaluates every
+  season. Emperor succession special case with crisis detection. Major favor
+  inheritance. Dispute mechanics. Topic generation (Tier 4 clean / Tier 2
+  disputed). Transition effects (tax/koku suspension, stockpile freeze).
+  Clan exceptions (Phoenix reincarnation bypass, Dragon Togashi removal
+  bypass) detected and skipped.
+- **Succession wiring** — DayOrchestrator `_process_lord_deaths()` now
+  triggers SuccessionSystem on lord death events: gathers candidates, finds
+  confirming authority, determines clean/disputed, generates succession topic,
+  auto-confirms clean successions with heir evaluation. `_process_successions()`
+  ticks active disputed successions daily and force-confirms on expiry (60
+  ticks). `_evaluate_heir_designations()` runs on season boundary — lords
+  without heirs (or with Seigyo virtue) evaluate candidates via the 9-factor
+  scoring system and auto-designate. WorldStateData gains `active_successions`
+  and `next_succession_id` fields, threaded through `advance_one_day()`.
+  Deferred: Priority 4 adopted heir (needs adoption action), court dispute
+  resolution, assassination cross-ref (needs SecretSystem), Dragon/Phoenix
+  exception integration.
+
+### Secret System (s12.8)
+- **shared/secret_data.gd** — SecretData Resource: Severity enum (TIER_4=4 least
+  severe through TIER_1=1 most severe), secret_id, subject_id, severity,
+  fabricated, fabricator_id, detection_tn, exposed, exposed_publicly, slug,
+  description, topic_id, physical_proof_item_id.
+- **simulation/secret_system.gd** — Core secret mechanics per GDD s12.8.
+  Severity consequence tables: PRIVATE_EXPOSURE_DISP (−8/−15/−30/−50),
+  PUBLIC_EXPOSURE_DISP_PER_WITNESS (−5/−10/−20/−35), SUBJECT_HONOR_LOSS
+  (0/−0.3/−1.0/−2.0), SUBJECT_GLORY_LOSS (−0.1/−0.3/−0.5/−1.0),
+  SUBJECT_INFAMY_GAIN (0/0/0.3/0.5). Context modifier: severity upgrade when
+  involved_status > subject_status OR act within 4 seasons (max one tier).
+  `reveal_privately()` applies disposition/honor/glory/infamy to subject,
+  generates betrayal topic at Tier 1. `expose_publicly()` per-witness
+  disposition loss. Fabrication: Forgery+Agility vs TN 15/20/25/30 by tier,
+  honor cost −0.3/−0.5/−0.8/−1.5, +0.2 infamy. `detect_fabrication()`
+  Investigation+Perception vs detection_tn. Covert acquisition costs: bribe
+  −0.2/+0.1, eavesdrop −0.1/+0.05, intercept −0.3/+0.1, search −0.3/+0.1.
+  Assassination order honor cost by target status (−2/−3/−4/−5). NPC covert
+  filters: Gi/Makoto hard-block, CLAN_RELUCTANCE table (Scorpion 0 through
+  Lion 5), honor threshold 3.5, disposition −31 gate. `can_fabricate()`
+  personality gate. Covert action resolution: `resolve_eavesdrop()` contested
+  Stealth+Agility vs Perception+Investigation, `resolve_intercept_letter()`
+  two-step Stealth then Forgery with geographic modifier,
+  `resolve_search_quarters()` TN 15 + target Investigation rank,
+  `resolve_shadow_target()` contested Stealth vs Investigation (1 IC day),
+  `resolve_conceal_item()` Sleight of Hand TN 10/15/20 by size with Rank 5
+  weapon gate, `resolve_search_person()` Investigation vs concealment_tn
+  with −0.3 Glory if caught without magistrate authority,
+  `resolve_forge_impersonation_letter()` Forgery+Intelligence TN 15/20/25,
+  `resolve_forge_order()` Forgery+Intelligence TN 20/25/30.
+
+### Seduction System (s12.8)
+- **simulation/seduction_system.gd** — Seduction and entanglement mechanics per
+  GDD s12.8. Five SeductionVariant values (SEDUCE, SEDUCE_FOR_INFO,
+  SEDUCE_FOR_ACCESS, SEDUCE_FOR_LEVERAGE, SEDUCE_TO_COMPROMISE). Category 6,
+  1 AP. Temptation+Awareness vs TN 15 + Etiquette + Willpower + Honor Rank.
+  Honor cost −0.3, Infamy +0.1. Variant effects: SEDUCE +5 disposition,
+  SEDUCE_FOR_INFO grants info with raises for detail, others grant access/
+  leverage/compromise. Entanglement lifecycle: create, maintain (16 IC day
+  window), neglect, break (3 missed windows). Breakup disposition loss by
+  attachment level (low −5, moderate −15, high −30). Affair secret severity:
+  unmarried T4, married T3, political marriage T2, cross-clan T1.
+
+### Assassination System (s12.8)
+- **simulation/assassination_system.gd** — Three-phase assassination per GDD
+  s12.8. Phase 1 Access: social infiltration over 3+ days via forge_credentials
+  (TN 20), bribe (TN 15), stealth (TN 20), seduction (TN 15). Suspicion
+  accumulation (+5/+10/+15 by failure severity), decay (−1/day absent, 0 present),
+  alert at 20 (+10 TN), lockdown at 40 (+15 TN, blocks execution). Phase 2
+  Execution: poison (Stealth TN 15 + Sleight of Hand TN 20), blade (Stealth
+  TN 20 + attack with +10 bonus vs Armor TN), arranged accident (Engineering
+  TN 25 + Stealth TN 15). Bodyguard encounters with fight/evade/abort options.
+  Phase 3 Concealment: poison (Medicine TN 15), blade (Stealth TN 25), accident
+  (Engineering TN 20). Successful concealment produces concealment_tn for
+  investigators. PC safeguard crisis windows: poison 12, blade 4, accident 8
+  real days.
+
+### Bound/Escape System (s12.8)
+- **simulation/bound_escape_system.gd** — Bound condition and escape per GDD
+  s12.8. Four BindingMaterial values (SIMPLE_ROPE TN 15, QUALITY_ROPE TN 20,
+  CHAINS TN 25, HIGH_GRADE_CHAINS TN 30). Knotwork binding by named characters
+  (Sailing+Intelligence, minimum TN 15). Escape: Sleight of Hand+Agility vs
+  binding TN, once per IC day, generates Quiet noise (3 tiles). Guard noise
+  detection: Investigation+Perception vs TN 15 + distance×2. Failed escape
+  detected → rebind (+5 TN stacking). Location escape separate: Stealth+Agility
+  vs location TN. Free ally: rope = blade Simple Action (no roll, Quiet noise);
+  chains = key (Simple Action) or Strength vs TN 25 (Moderate noise). Action
+  filter: bound characters can CHARM, NEGOTIATE, PERSUADE, INTIMIDATE, escape,
+  cast spells, and speak only. Low Skill honor cost −0.1 on escape attempts.
+
+### Army Combat System — Core Battle Resolution (s11.7) + Clan Elite Units (s11.6)
+- **simulation/army_combat_system.gd** — Victoria II-inspired grid battle
+  resolution per GDD s11.7. Covers the core battle loop from setup
+  to completion, plus all 24 clan elite unit types per GDD s11.6.
+  7 universal unit types with full stat blocks per GDD: Peasant Levy (A1/D1),
+  Ashigaru Spearmen (A3/D4, +3 vs Cavalry), Ashigaru Archers (A4/D2, 1d5
+  ranged fire, -3 melee), Bushi Retainer (A6/D5), Light Cavalry (A3/D2,
+  +4 flanking, immune to counter-attack while flanking), Ronin (A5/D4),
+  Garrison (A3/D5, +2 Defense at home settlement).
+  24 clan elite unit types across 8 clans (Crab, Crane, Dragon, Lion,
+  Phoenix, Scorpion, Unicorn, Mantis) in 3 cost tiers (Baseline/Specialized/
+  Elite). Full stat blocks and special abilities per GDD s11.6.
+  Row 1 (front) / Row 2 (reserve/archer) grid layout. Companies fight the
+  enemy in their column. Unmatched companies auto-flank adjacent enemies.
+  Combat round: simultaneous 1d10+Attack-Defense, minimum 0. Archers fire
+  1d5 from Row 2. Flanking: +2 Attack (standard), +4 (Light Cavalry), +3
+  (Shinjo/Hiruma). No counter-attack against flanker (Light Cavalry, Utaku).
+  Morale system: 1d10 + modifiers - Morale Defense. Triggers: heavy loss
+  (+2 if >25% health lost), low health (+1 if <50%), Chui death (+3),
+  higher commander death (+4). Extra morale damage: Bayushi +1, Black Cabal
+  +3, Elemental Guard +2. Adjacency morale: Shiba +1 MD to allies, Black
+  Cabal -1 MD to enemies. Deathseekers: no morale, cannot rout. Berserkers:
+  rout only below 25% health. Morale zero = rout. Routing contagion: adjacent
+  allies take immediate morale check when a company routs, can chain.
+  Commander bonus: Battle skill rank as value, highest Ring determines type
+  (Fire/Water→Attack, Earth/Air→Defense, Void→Morale). Clan-specific
+  tiebreaker tables for Ring ties (8 Great + 13 Minor clans).
+  Commander survival: Earth k Earth + Battle vs TN (10/15/20/25 at
+  75%/50%/25%/0% health). Attacker TN modifiers: Hiruma +2, Kenshinzen +3,
+  Lion's Pride +3. Fail by 1-3: injured. Fail by 4+: dead.
+  Clan special abilities: first-round attack bonus (Kakita +2, Utaku +3,
+  Storm Legion +2), low-health attack bonus (Berserkers +2, Deathseekers +3,
+  White Guard +2 at <50%), conditional attack bonus (Bayushi vs low morale,
+  Dragon Talons vs high def, Kenshinzen vs elites, White Guard vs low health),
+  defense ignore (Dragon Talons 1, White Guard 1), vs-shugenja defense
+  (Mirumoto +2), adjacency defense (Shiba +2 near shugenja, Daidoji +1 near
+  Crane, Elemental Legions +1 near Guard), adjacency attack (Akodo +1 per
+  adjacent Lion max 3, Elemental Legions +2 near Guard), debuff-on-hit
+  (Yoritomo -1 Def stack 3, Scorpion's Claws -1 Atk/-1 MD stack 3).
+  Per-round ally buff system: Yamabushi +3 Atk to adjacent Dragon (+ one-time
+  +2 Def), Elemental Guard +3 Atk to adjacent Phoenix, Storm Riders +2 Atk
+  to adjacent Mantis, Mirumoto +1 Atk to adjacent shugenja.
+  Terrain: all cavalry types (Light Cav, Shinjo, Utaku, White Guard) affected
+  by cavalry terrain penalties/bonuses. Storm Legion ignores terrain penalties.
+  6 terrain types: Plains (cavalry +2 flanking), Forest (defender +2 Def,
+  cavalry disabled), Hills (attacker -2 Atk), Mountain (defender +4 Def,
+  cavalry disabled), Urban (defender +3 Def, spearmen +1 Def), Coastal
+  (amphibious -3 Atk).
+  Reserve promotion: Row 2 non-archer companies auto-promote when Row 1
+  slot in their column is vacated. Archers stay in Row 2.
+  Battle end: all companies on one side destroyed or routed.
+  `resolve_rout()` — pursuit casualties: cavalry present 1d10+25%, no
+  cavalry 1d10+5%. Army dissolved if below 20% starting health.
+  `compute_post_battle_recovery()` — 10% recovered, 10% returned as PU,
+  80% permanently dead. Victor only.
+  `create_company()` factory sets stats from UNIT_STATS table.
+  Safety cap: 200 rounds maximum to prevent infinite loops.
+- **shared/enums.gd** gains `CompanyUnitType` (31 values: 7 universal + 24
+  clan elite) and `BattleTerrainType` (6 values).
+- **shared/military_unit_data.gd** — CompanyData gains `unit_type` and
+  `source_province_id` fields.
+  Deferred (Phase 2+): Shinjo auto-flank behavior, ASCII battle events /
+  Heroic Opportunities, Shadowlands terrain zones, naval combat bonuses.
+
+### Army Upkeep & Deprivation (s4.3, s11.7)
+- **simulation/army_upkeep_system.gd** — Army upkeep costs, iron degradation,
+  and field deprivation per GDD s4.3 / s11.7. Pure static functions; caller
+  owns all state dictionaries.
+  Rice upkeep: 0.35 per military PU per season (universal).
+  Iron upkeep per unit per season: Peasant Levy 0.03, Ashigaru 0.10, Bushi
+  Retainer/Light Cavalry 0.20, Ronin 0.00, Garrison 0.10. Clan elites by
+  cost tier: T1=0.25, T2=0.35, T3=0.50.
+  Arms equip cost (one-time): Peasant Levy 0.25, Ashigaru 1.00, Bushi/Cavalry
+  2.00, Ronin 0.00, Garrison 0.75. Clan elites: T1=2.50, T2=3.50, T3=5.00.
+  Koku costs: Garrison 0.20/PU/season, Ronin hire 2.00, Ronin upkeep
+  0.50/month (1.50/season).
+  24 clan elite units mapped to cost tiers 1/2/3 via CLAN_ELITE_COST_TIER.
+  Iron failure penalties (flat-from-base, not cumulative): Season 1 (−2 Atk,
+  −2 Def, −4 Morale, −2 MD), Season 2+ (−4 Atk, −4 Def, −8 Morale, −4 MD).
+  `apply_iron_failure()` reads base stats from `ArmyCombatSystem.UNIT_STATS`.
+  `process_iron_upkeep()` tracks per-company iron state, degrades or restores.
+  Field deprivation (s11.7): Rice (cumulative health/morale loss per tick,
+  4 tiers), Arms (flat attack/defense penalties from base, 4 tiers).
+  `process_deprivation_tick()` advances rice/arms ticks per company based on
+  supply flags, applies effects. Supply restoration resets tick to 1 (warning).
+  Recovery: `apply_recovery_tick()` requires stationary + supplied. +5 Health
+  per tick (capped at base), +3 Morale per tick (capped at base), arms recover
+  1 deprivation tier per tick when arms supplied.
+
+### Supply Tether System (s11.7)
+- **simulation/supply_tether_system.gd** — Supply tether mechanics for armies
+  in hostile territory per GDD s11.7. Pure static functions; caller owns state.
+  TetherState enum: SOLID (100% supply), THREATENED (50%, partial raid),
+  BROKEN (0%, full cut). `create_tether()` forms a tether from army to source
+  province through a sub-tile path with per-node state and escort tracking.
+  Garrison raid: `resolve_garrison_raid()` rolls 1d10 + garrison Attack
+  (base 3, ±1 per 0.5 PU above/below 1.0) vs TN (5 unescorted, 5 + escort
+  Defense when escorted). Below TN = fail (SOLID), meets TN = partial
+  (THREATENED), exceeds by 5+ = full cut (BROKEN).
+  `process_tether_tick()` resolves all garrisons along the path independently.
+  Worst result applies; enemy army on path = instant BROKEN; two partial
+  raids stack to BROKEN. Escort management: `assign_escort()` places a
+  company on a sub-tile (removed from battle roster), `recall_escort()`
+  initiates 1-tick return delay. Deprivation tracking: BROKEN advances
+  rice/arms deprivation ticks by 1 per tick; THREATENED advances at half
+  speed (every 2 ticks). Step-down recovery: SOLID restores 1 deprivation
+  stage per tick; THREATENED restores at half speed (1 per 2 ticks); BROKEN
+  blocks recovery. `get_supply_source_provinces()` merges lord's provinces
+  with compelled and shared sources. `process_supply_tick()` orchestrates
+  the full tick: raid resolution → deprivation advance or step-down recovery.
+  `detach_tether()` deactivates a tether on retreat arrival: resets deprivation
+  ticks/accumulators/overall_state to SOLID, frees all escort companies (returns
+  their IDs), marks `detached=true`. Detached tethers skipped by downstream
+  processing.
+  Deferred: Vertical/horizontal supply political mechanics (disposition
+  damage, favor integration), visual line rendering, territory capture
+  during war, actual sub-tile coordinate system (uses placeholder int IDs).
+
+### Siege System (s11.7)
+- **simulation/siege_system.gd** — Siege mechanics per GDD s11.7. Pure static
+  functions; caller owns siege state dictionary.
+  Starvation siege: `compute_daily_consumption()` uses civilian (0.0028 Rice/PU/
+  tick) and military (0.0039 Rice/PU/tick) consumption rates. Castle town (2.0
+  Rice, 10 PU + 0.5 garrison) ≈ 67 ticks; fortification (0.5 Rice, 0.5 garrison)
+  ≈ 256 ticks. `process_starvation_tick()` decrements rice and checks starvation.
+  Siege phases: Early (≤30 ticks, events every 10), Mid (31–60, every 7), Late
+  (61+, every 5). 12 siege events: 6 attacker (smuggling intercept −10 ticks,
+  secret passage −15, deserters −5 + reveal stores, relief force strategic
+  decision, supply raid, contaminate water −20 + honor cost), 4 defender
+  (midnight resupply +15, message for relief, tactical sortie, civilian morale
+  crisis), 1 mutual (treachery −30). `resolve_siege_event()` rolls skill checks
+  per event definitions. Storm assault: Urban (+3) + Fortification (+5) = +8
+  Defense bonus; garrison at Defense 13 effective. Honor cowardice: −1 Honor per
+  10 ticks after threshold (default 30, aggressive 20, pragmatic 45). Sortie
+  resets counter. `process_siege_tick()` orchestrates starvation + honor +
+  event firing per tick.
+  Deferred: Full battle integration for storm assaults and sorties (uses
+  ArmyCombatSystem), personality-driven sortie decisions (s19.3), ASCII map
+  event scenarios, mutual event (treachery) resolution.
+
+### Army Movement System (s11.7a)
+- **simulation/army_movement_system.gd** — Sub-tile army movement per GDD s11.7a.
+  Pure static functions; caller owns army state dictionaries.
+  5 MovementTerrain types: Plains (1d), River Delta (1d), Forest (2d), Heavy
+  Hills (2d), Mountains (3d). Winter ×2 multiplier. River crossing +1d (Spring
+  +2d). Forced march: −1d per sub-tile (floor 1d), costs −5 Morale per day saved.
+  `begin_march()` computes total travel days along a path. `process_movement_tick()`
+  decrements daily, triggers arrival. `cancel_march()` stops movement.
+  Battle trigger: `check_battle_trigger()` detects enemy armies at arrival tile —
+  contact means automatic combat per GDD. Visibility: passive = own + adjacent
+  tiles (range 1), scouts extend to range 2. `detect_enemy_armies()` filters
+  visible tiles for non-allied armies. Retreat to previous sub-tile on battle loss.
+  Dissolution check: army dissolves at ≤20% starting health.
+  Deferred: Order system (lord/commander order budgets), scouting assignments,
+  levy authority, military service assignment, actual sub-tile coordinate system
+  (uses placeholder int IDs), territory control tracking.
+
+### Levy & Mobilization System (s11.7a)
+- **simulation/levy_system.gd** — Levy authority and mobilization per GDD s11.7a.
+  Pure static functions; caller owns all state.
+  Provincial Daimyo can raise Peasant Levy, Ashigaru Spearmen, and Ashigaru
+  Archers from settlement military PU (1.0 PU per company). Levy companies
+  exist outside Go-hatamoto hierarchy (no parent_legion_id). Arms equip cost
+  from ArmyUpkeepSystem. `assign_commander()` attaches household retainers.
+  `disband_levy()` returns PU proportional to remaining health, arms retained.
+  Private Army Suspicion: after 1 season peacetime maintenance, Tier 4 topic
+  generates. −5 disposition per season from Family Daimyo/Champion, −3 from
+  neighbors. Escalates to Tier 3 at 3+ seasons. Wartime exemption.
+  Commitment protection scoring for military service candidates: 6 role tiers
+  (yojimbo −30/−15, magistrate −25/−15, yoriki −10/−5, courtier −15/−10,
+  shugenja −5, uncommitted 0). Personality modifiers: Jin doubles yojimbo
+  penalty, Yu halves all penalties, Chugi reduces by −10.
+  Dual authority check: Daimyo + Taisa rank = can use Go-hatamoto directly.
+
+### Military Promotion System (s11.7a)
+- **simulation/military_promotion_system.gd** — Officer promotion, vacancy filling,
+  and demotion per GDD s11.7a. Pure static functions.
+  Enlisted: Hohei→Nikutai (Battle 2, 1 battle), Nikutai→Gunso (Battle 2, 1
+  battle, vacancy). Officer minimum thresholds: Chui (Battle 3), Taisa
+  (Battle 4, 1 battle as Chui), Shireikan (Battle 5, 2 battles as Taisa),
+  Rikugunshokan (Battle 5, no battle count — political appointment possible).
+  Multi-factor candidate scoring per rank: Battle skill (30–35), Insight Rank
+  (15–20), School Rank/battles commanded (15–20), Glory (10), disposition toward
+  appointing lord (10–20), personality fit (10). Personality tables per rank:
+  Chui favors Yu/Chugi (frontline) or Seigyo (garrison), Taisa adds Dosatsu,
+  Shireikan/Rikugunshokan prioritize Dosatsu/Seigyo for strategic vision.
+  `select_best_candidate()` filters by eligibility then scores and returns best.
+  Battle record tracking: battles fought/won/lost, companies destroyed under
+  command. Demotion: −0.5 Glory, clears rank and commanded_unit_id. Removal
+  trigger: disposition below −10. Vacancy detection scans units for empty
+  commander_id slots.
+
+### Order System (s11.7a)
+- **simulation/order_system.gd** — Military command order system per GDD s11.7a.
+  Pure static functions; caller owns order state dictionaries.
+  Order budgets by rank: Chui 5, Taisa 10, Shireikan 10, Rikugunshokan 15,
+  feudal lord 10. 8 order types: Scout, Hold Position, Garrison Province,
+  March To, Recall, Detach to Support, Standing Patrol, Deliver Letter.
+  Same-location orders deliver instantly; remote orders require messenger travel
+  (1 sub-tile per real day). `issue_order()` validates budget, sets delivery
+  delay. `process_pending_orders()` decrements daily, returns delivered orders.
+  Standing patrol orders persist until cancelled (1 order to set up, continues
+  until recalled). `cancel_standing_order()` removes by target character.
+  `reset_daily_orders()` clears used count each real day.
+
+### Military Service Assignment (s11.7a)
+- **simulation/military_service_system.gd** — Feudal chain request flow per GDD
+  s11.7a. Request cascade: Clan Champion → Rikugunshokan → Family Daimyo →
+  Provincial/City Daimyo. `create_service_request()` creates a request with
+  commander, target unit, rank needed, count. `cascade_request_to_vassals()`
+  distributes count across vassal Provincial Daimyo (even split with remainder).
+  `evaluate_candidates()` delegates to LevySystem commitment protection scoring
+  (same scores: yojimbo −30/−15, magistrate −25/−15, yoriki −10/−5, courtier
+  −15/−10, shugenja −5, uncommitted 0). Personality modifiers shared: Jin
+  doubles yojimbo, Yu halves all, Chugi −10 reduction.
+  `assign_to_military_service()` sets `operational_superior_id` to military
+  commander, sets `assigned_company_id`; `lord_id` stays unchanged (feudal chain
+  unbroken). `release_from_military_service()` returns samurai to their lord.
+  Authority: only Provincial/City Daimyo can directly assign; only Shireikan+
+  can request service. `select_candidates_for_service()` bulk selection with
+  shortfall tracking. `apply_service_assignments()` batch mutation of character
+  data. Engine wiring: ASSIGN_TO_MILITARY_SERVICE aligns to LEVY_TROOPS (80)
+  and DEFEND_PROVINCE (60). Courtier (Manipulation) + Awareness, Category 2.
+
+### PU Reconciliation (s11.7)
+- **simulation/pu_reconciliation.gd** — Battle → World Map PU reconciliation per
+  GDD s11.7. Every company tagged to source province at levy time. Conversion:
+  HEALTH_TO_PU = 1.0/153.0 (1 PU per company at 153 starting health).
+  `consume_levy_pu()` deducts military_pu and population_pu from settlement when
+  raising a levy. `return_disband_pu()` returns PU proportional to health ratio
+  on disband. `process_battle_casualties()` computes per-province PU losses from
+  health lost across all companies, distributes losses to settlements (military_pu
+  first, overflow to general population). Ronin companies excluded — no source
+  province, losses disappear. `process_victor_recovery()` victor-only: 10%
+  recovered to companies (health), 10% returned as PU to source settlements,
+  80% permanently dead. Per-company proportional allocation by loss share.
+  `reconcile_battle()` full orchestrator combining casualties + recovery.
+  `process_army_dissolution()` handles ≤20% health dissolution — surviving
+  health returned as PU to source settlements. Settlement mutations: losses
+  deducted from military_pu first, gains added to primary settlement.
+
+### War Status System (s53)
+- **shared/war_data.gd** — WarData Resource: war_id, clan_a, clan_b,
+  authority_level (4 tiers: Provincial Raid, Border Conflict, Family War,
+  Clan War), war_score_a/b (0–100), initiator_clan, declaring/target lord
+  IDs, ic_day_started, seasons_active, allied_clans arrays, provinces_captured
+  arrays. WarScoreTier enum (6 values: Desperate through Dominant).
+- **simulation/war_system.gd** — War Status tracking per GDD s53. Pure static
+  functions; caller owns WarData instances.
+  Declaration: `declare_war()` creates WarData with scores starting at 50.
+  Score shifts: 19 named event types from GDD (minor/major/decisive battle,
+  province/castle captured, siege won/repelled, commander kills by rank,
+  hostage by rank, lord assassination, supply line cut, attrition, authority
+  commits, allied clan joins). `apply_score_shift()` adjusts both sides.
+  Score tiers: Desperate (0–24), Losing (25–39), Behind (40–49), Ahead
+  (50–64), Winning (65–79), Dominant (80–100).
+  Escalation: `can_escalate()`, `escalate()`, `check_auto_escalation()` with
+  5 triggers (desperate score, castle fallen, enemy spread, prolonged 3+
+  seasons, enemy alliance).
+  Peace willingness: `compute_peace_willingness()` scores 0–100 from war
+  score tier, territory terms, hostage, superior pressure, personality
+  (Seigyo/Chishiki/Gi/Makoto positive; Yu/Ketsui/Ishi negative).
+  Honor costs: aid request (0 desperate, −1.0 losing, −0.5 slight advantage),
+  refusal (−2.0 family, −3.0 clan), territory fall (−2.0). Refusal
+  disposition effects (−15/−20/−5/−10).
+  Alliances: add/remove ally, get_all_combatant_clans, is_clan_involved,
+  get_clan_side. Province capture tracking with side-switching.
+  Resolution: `end_war()`, `is_annihilated()`.
+  Seasonal: `process_seasonal_attrition()` (+1 initiator), disposition
+  penalty (−2 per season active).
+  Queries: `are_clans_at_war()`, `get_war_between()`,
+  `get_active_wars_for_clan()`. Context conversion: `to_context_dict()`,
+  `wars_to_context_array()` for NPC engine compatibility (existing code
+  expects Dictionary arrays with clan_a/clan_b/enemy_clan_id keys).
+  Wired into DayOrchestrator: `_process_war_score_shifts()` processes all
+  war score events from daily military results. Sub-functions:
+  `_process_battle_war_scores()` classifies battles by company count
+  (1–3 minor +3, 4–7 major +8, 8+ decisive +15) via `_classify_battle_size()`.
+  PU casualty upgrades: ≥5.0 total PU lost → decisive_battle_upgrade,
+  ≥3.0 → major_battle_upgrade.
+  `_process_commander_death_scores()` reads `commander_dead` from battle
+  states, maps military rank via `_rank_to_death_event()`:
+  Rikugunshokan → rikugunshokan_killed (+10), Taisa/Shireikan →
+  taisa_shireikan_killed (+5), Chui/Gunso → gunso_chui_killed (+2).
+  Commander death scores to the enemy clan.
+  `_process_siege_war_scores()` reads resolved siege results:
+  attacker_victory → siege_won_attacker (+12), defender_victory →
+  siege_won_defender (+8).
+  `_process_tether_war_scores()` detects BROKEN tether state
+  (overall_state == 2) → supply_line_cut (+3) for the enemy clan.
+  `_process_war_seasonal()` runs on season boundary: seasonal attrition
+  (+1 initiator), disposition penalty (−2 per season active) between
+  opposing-side characters.
+  `_sync_wars_to_world_states()` converts WarData to context dicts for NPC
+  engine compatibility. WorldStateData gains `active_wars: Array[WarData]`.
+  New param on `advance_day()`: `active_wars`. Return dict gains
+  `war_score_results`.
+  Deferred: Peace court mechanics, Imperial edict intervention, trade route
+  suspension on war declaration.
+
+### War Justification & Casus Belli (s53.1)
+- **simulation/war_justification.gd** — Five-step AI lord war initiation
+  decision sequence per GDD s53.1. Pure static functions.
+  Three MilitaryTier values: RAID, FORMAL_WAR, TOTAL_WAR.
+  Step 1 Objective justification: 9 standing objectives mapped to tiers
+  (EXPAND_TERRITORY all 3, MILITARY_DOMINANCE raid+formal, BUILD_STRONGEST
+  raid only, etc.), 5 situational objectives (ADVANCE_FAMILY raid only,
+  HONOR_ANCESTORS all 3, etc.), 5 primary objectives (CONQUER requires
+  formal, DEFEND_PROVINCE all 3, AVENGE all 3, SABOTAGE raid only). 8
+  peace objectives hard-block except DEFEND_PROVINCE.
+  Step 2 Personality aggression: Yu/Kyoryoku/Ketsui virtues + weakness
+  condition. Raid: garrison at minimum + no field army + no alliance.
+  Formal war: raid condition met + 2x PU ratio.
+  Step 3 Tier validation: intended tier must be in supported list.
+  Step 4 Personality gates: Jin blocks total war expansion and resource
+  raids. Gi/Makoto block covert warfare (undermine/sabotage).
+  Step 5 Feasibility: runs FeasibilityLedger when feasibility_inputs provided.
+  `evaluate_war_justification()` runs all 5 steps, returns justified/reason/
+  step_failed/personality_driven.
+  Wired into ActionExecutor: DECLARE_WAR intercepted before category routing.
+  `_execute_declare_war()` reads standing/primary objectives, intended tier,
+  and personality from `action.metadata`, runs `evaluate_war_justification()`
+  as gate. Justified: returns `requires_war_creation: true` effect with
+  declaring_clan, target_clan, authority_level. Rejected: returns
+  `war_declaration_rejected` with reason and step_failed. Total War
+  declaration costs −0.5 Honor.
+  DayOrchestrator `_process_war_declarations()` scans applied results for
+  `requires_war_creation` flag, creates WarData via `WarSystem.declare_war()`,
+  appends to `active_wars`. Guards: no self-war, no duplicate active wars.
+  Return dict gains `war_declarations`.
+  DECLARE_WAR added to: action_skill_map (Courtier+Awareness), objective_alignment
+  (INITIATE_WAR_CHECK: 95), personality_lean (14 virtues: Yu/Kyoryoku +15,
+  Jin −20, Rei/Makoto −10, etc.), AT_OWN_HOLDINGS context list, AP cost 2,
+  ADMINISTRATIVE_ACTIONS category, ceasefire block list.
+  WorldStateData gains `next_war_id: Array[int] = [1]`.
+
+### War Termination (s53)
+- **simulation/war_termination.gd** — War ending mechanics per GDD s53. Pure
+  static functions. Four ResolutionType values (FORMAL_SURRENDER,
+  NEGOTIATED_SETTLEMENT, IMPERIAL_EDICT, ANNIHILATION).
+  `compute_peace_terms(war, proposing_clan)` generates term demands based on
+  war score: Dominant demands all captured territory + honor concession,
+  Winning keeps captured territory, Ahead keeps half, Behind/Losing gets
+  status quo ante. `evaluate_peace_acceptance(war, terms, receiving_clan,
+  virtue, hostage, pressure)` wraps `WarSystem.compute_peace_willingness()`
+  with acceptance threshold of 50.
+  `resolve_formal_surrender()` ends war immediately, −1.0 Honor to loser.
+  `resolve_negotiated_settlement()` ends war with agreed terms, +0.1 Honor
+  to both sides. `resolve_imperial_edict()` ends war with status quo ante.
+  `resolve_annihilation()` ends war, no stability bonus.
+  `check_annihilation(war)` scans for war score 0 on either side.
+  `resolve_negotiate_surrender()` is the NEGOTIATE_SURRENDER action
+  resolution: Courtier+Awareness vs TN 20, raises reduce territory demands,
+  then evaluates enemy acceptance. Returns `requires_peace_resolution: true`
+  on successful acceptance for DayOrchestrator to finalize.
+  `generate_war_end_topic()` creates TopicData per resolution type:
+  surrender Tier 2 momentum 60, negotiated Tier 3 momentum 40, edict
+  Tier 2 momentum 70, annihilation Tier 1 momentum 80.
+  All +3 stability to involved provinces on peace (except annihilation).
+- **ActionExecutor wiring** — NEGOTIATE_SURRENDER intercepted before category
+  routing (same pattern as DECLARE_WAR). Reads `war_ref` from metadata,
+  delegates to WarTermination.resolve_negotiate_surrender().
+- **DayOrchestrator wiring** — `_process_war_terminations()` runs after war
+  score shifts. Phase 1: scans active wars for annihilation (war score 0).
+  Phase 2: scans applied results for `requires_peace_resolution` flag from
+  NEGOTIATE_SURRENDER actions. Both phases call WarTermination resolution
+  functions and generate war end topics. `_find_war_by_id()` helper.
+  Return dict gains `war_termination_results`.
+- **objective_alignment.json** — NEGOTIATE_SURRENDER added to SEEK_PEACE
+  NeedType with score 95 (highest priority when at war).
+- **Trade route suspension** — `suspend_trade_routes_for_war()` disrupts
+  all TradeRouteData connecting provinces of warring clans (disruption_reason
+  = "war_{clan_a}_{clan_b}"). `restore_trade_routes_for_peace()` restores
+  routes with matching war disruption_reason on peace (except annihilation).
+  DayOrchestrator `_process_war_trade_routes()` runs after war declarations,
+  `_process_peace_trade_routes()` runs after war terminations. WorldStateData
+  gains `trade_routes: Array`, threaded through `advance_one_day()`.
+  Return dict gains `trade_route_results`.
+  Deferred: Peace court mechanics (formal court session), Imperial edict
+  action path, territory transfer mutations on settlement/province data.
+
+### Feasibility Ledger (s4.3.17 Phase 1)
+- **simulation/feasibility_ledger.gd** — AI War Readiness Check per GDD s4.3.17
+  Phase 1. Pure static functions. Estimates whether a lord can sustain a proposed
+  military campaign across three strategic resources (Rice, Arms, Koku).
+  Step 1 Campaign length estimation: PROVINCIAL_RAID=1, BORDER_CONFLICT=2,
+  FAMILY_WAR=3, CLAN_WAR=4 seasons. Personality modifiers: Yu/Kyoryoku −1
+  (min 1), Seigyo/Chishiki +1, Ketsui/Ishi no change.
+  Step 2 Rice budget: current stockpile + projected harvest (if spans autumn)
+  − civilian burn (civilian_pu × 0.25 × seasons) − military burn
+  ((military_pu + levy_pu) × 0.35 × seasons) − production loss (levy_pu × 1.50
+  if before planting). Green: net ≥ 1.00 per total PU. Yellow: net ≥ 0 but
+  < 1.00 per PU. Red: net < 0.
+  Step 3 Arms budget: clan arms stockpile + projected iron production − equip
+  cost − iron upkeep. Green: net ≥ 0. Yellow: deficit coverable by market koku.
+  Red: can't equip at any cost.
+  Step 4 Koku budget: treasury − stipend obligations − market purchases.
+  Green: net ≥ 0. Yellow: covers market but not stipends. Red: financial collapse.
+  Step 5 Composite verdict: All Green → FEASIBLE, Any Yellow no Red → RISKY,
+  Any Red → NOT_FEASIBLE, All Red → DESPERATE. RISKY proceeds if high-priority
+  objective OR aggressive personality (Yu/Kyoryoku/Ketsui/Ishi).
+  `evaluate_feasibility(inputs)` is the top-level entry point returning
+  `{feasible, verdict, campaign_seasons, rice, arms, koku}`.
+  Wired into WarJustification Step 5 via optional `feasibility_inputs` parameter.
+  When empty, Step 5 passes unconditionally (backward compatible).
+  NPC engine `_build_feasibility_data()` populates feasibility data from
+  world_state (settlements, clan data, koku) for lord-tier characters.
+  `_build_declare_war_metadata()` threads feasibility_inputs into DECLARE_WAR
+  action metadata when feasibility_data is available on ContextSnapshot.
+  ContextSnapshot gains `feasibility_data: Dictionary` field.
+  Phase 2 Alternative Ladder: 7-rung sequential evaluation when feasibility
+  fails. `walk_alternative_ladder()` walks all rungs, recalculating after each.
+  Rung 1 Scale Down: halve levy PU and equip cost.
+  Rung 2 Delay to Harvest: set spans_autumn=true if spring/summer; Yu/Kyoryoku
+  skip (delay = cowardice).
+  Rung 3 Market Purchase: spend 50% koku for rice; requires Green/Yellow koku
+  and active trade routes.
+  Rung 4 Demand Tribute: 25% of vassal stockpiles; −5 disposition per vassal;
+  Rival (−11) refuses; Jin skips shortage vassals; generates Tier 4 topic.
+  Rung 5 Allied Aid: Friend+ (31+) allies contribute 25% surplus; creates
+  favor (Tier 2 if >20% of ally surplus, Tier 3 otherwise); Ketsui/Ishi skip.
+  Rung 6 Raid Neighbor: seize 50% rice from weak province (garrison ≤1.0 PU);
+  −1.0 Honor, −0.3 Glory, −15 clan disposition, −5 other clans; Jin/Gi never;
+  Meiyo needs grievance; Rei needs prior demand; prefers existing war targets;
+  triggers Provincial Raid if not already at war; Tier 3 topic.
+  Rung 7 Desperation Override: requires rice <0.50/PU + critical objective
+  (DEFEND_PROVINCE, SEEK_VENGEANCE, AVENGE, RESOLVE_CLAN_WAR) + aggressive
+  virtue (Yu/Chugi/Ketsui/Kyoryoku/Ishi) or Desperate war score (<25) while
+  defending. Jin lords pay extra −1.0 Honor. Tier 3 topic.
+  Returns `{outcome, rungs_tried, final_ledger, side_effects}`.
+  Phase 3 Mid-Campaign Supply Status Monitor: seasonal survival assessment
+  for fielded armies. Three checks: Home Front Status (Clear/Shortage/Hunger/
+  Famine by worst-case settlement rice-per-PU), Army Supply Status (Supplied/
+  Unsupplied from tether state + source rice), Iron Upkeep Status (Maintained/
+  Degrading from clan iron vs total upkeep). Response matrix combines Home
+  Front × Army Supply: Clear+Supplied=CONTINUE, Shortage+winning(65+)=
+  PUSH_TO_FINISH, Shortage+losing=SEEK_PEACE, Hunger=URGENT_PEACE,
+  Famine=IMMEDIATE_PEACE. Personality overrides: Yu/Kyoryoku/Ishi ignore
+  Shortage; only Ishi ignores Hunger and Famine (even Yu seeks peace at
+  Famine). Supply cut=RESTORE_TETHER for 1 season (Ketsui holds 2), then
+  RETREAT. Retreat target selection: nearest friendly province (≤2 distance)
+  with rice≥1.0/PU or forge; disband if no target found (generates Tier 4
+  topic). `run_supply_status_check(inputs)` is the top-level entry point.
+  Wired into DayOrchestrator: `_process_supply_status_checks()` runs on
+  season boundary after `_process_war_seasonal()`. Iterates lord-tier NPCs
+  involved in active wars with fielded companies. Collects clan settlements,
+  worst tether state, iron upkeep totals, and war score per side. Returns
+  per-lord results with `peace_need` flag (for SEEK_PEACE/URGENT_PEACE/
+  IMMEDIATE_PEACE decisions) and `retreat` target (for RETREAT decisions).
+  Results stored in `military_seasonal["supply_status"]`.
+  Supply status results consumed by `_consume_supply_status_results()`:
+  peace decisions inject `pending_events` into lord's `world_states`
+  (SEEK_PEACE need_type, priority 1 for URGENT/IMMEDIATE, priority 2 for
+  SEEK_PEACE). Retreat decisions flag clan armies with `retreat_ordered` and
+  `retreat_target_province`; disband orders generate Tier 4 army_disbanded
+  topic. Retreat flags consumed by `_initiate_retreat_march()` inside
+  `_process_army_movements()`: begins a placeholder march toward
+  `retreat_target_province` with default 3-day travel time (will use real
+  pathfinding when coordinate system exists). Skips already-moving,
+  disband-ordered, or target-less armies. Sets `retreat_arrived` flag on
+  movement result when retreat march completes.
+  Retreat arrival cleanup: `_process_retreat_arrivals()` runs after movement
+  tick. When `retreat_arrived` fires: clears `retreat_ordered` and
+  `retreat_target_province` flags from army, detaches supply tether via
+  `SupplyTetherSystem.detach_tether()` (resets deprivation, frees escort
+  companies, marks tether `detached=true`). Detached tethers skipped by
+  tether tick, deprivation, and recovery processing. `army_id` added to
+  movement results for retreat arrival lookup. `_find_army_by_id()` and
+  `_detach_army_tether()` helper functions. Return dict gains
+  `retreat_arrival_results`.
+  Disband-ordered armies processed by `_process_disbands()` before movement:
+  deactivates army, returns PU proportional to company health via
+  `PUReconciliation.return_disband_pu()` to source province settlements.
+  Runs before movement tick so disbanded armies don't get movement ticked.
+  Deferred: forge infrastructure for arms production projection, stipend
+  obligations, real pathfinding for retreat marches (needs coordinate system).
+
+### Starvation Warfare (s4.3.17 Phase 4)
+- **simulation/starvation_warfare.gd** — Player-initiated starvation strategies
+  per GDD s4.3.17 Phase 4. Pure static functions. Two hostile military actions:
+  1. **RAID_HARVEST** — Army present in a province during Autumn destroys that
+     year's harvest (yield → 0). Honor −2.0, Glory −0.5, −20 permanent
+     disposition from targeted clan (historical modifier, never decays), −10
+     from other clans who learn of it (decays). Tier 2 Military/Political
+     topic. Farming PU unharmed — crop-only destruction. Harvest recovers
+     next year (flag auto-cleared after resource tick). Personality gates:
+     Jin/Gi/Rei NEVER. Yu only if no other path. Meiyo only vs hated enemy.
+     Chugi only if lord commands. Makoto only if publicly declared. All
+     Shourido unrestricted. `evaluate_ai_harvest_decision()` combines
+     personality gate with condition evaluation.
+  2. **BLOCKADE_TRADE_ROUTE** — Military unit (≥1.0 PU) on a trade route node
+     blocks Rice/Iron/Koku flow. Triggers War Status (Provincial Raid) if not
+     already at war. Honor −0.5 per season maintained (stacks per route).
+     `process_seasonal_blockade_honor()` returns per-clan results.
+  Imperial edict consequence: −3.0 Honor to attacker, +5 disposition toward
+  targeted clan (deferred until Emperor AI response is implemented).
+- **simulation/resource_tick.gd** — `_process_harvest()` checks
+  `harvest_destroyed` flag in settlement_meta. Destroyed provinces yield 0
+  rice that Autumn. Flag cleared after processing so harvest recovers next year.
+- **simulation/disposition_system.gd** — New historical events:
+  `destroyed_harvest` (start −20, floor −20, decay false — permanent),
+  `witnessed_harvest_destruction` (start −10, floor −5, decay true).
+- **ActionExecutor** — RAID_HARVEST and BLOCKADE_TRADE_ROUTE routed to
+  `StarvationWarfare.execute_harvest_destruction()` and
+  `StarvationWarfare.execute_blockade()` respectively. Return
+  `requires_harvest_destruction` / `requires_blockade` effect flags.
+- **DayOrchestrator** — `_process_starvation_warfare_effects()` runs after
+  military effects. Harvest destruction: applies `harvest_destroyed` flag to
+  `season_meta`, generates Tier 2 topic, applies permanent disposition modifier
+  to targeted clan + decay modifier to other clans. Blockade: disrupts route,
+  creates Provincial Raid war if not already at war.
+  Seasonal: `process_seasonal_blockade_honor()` runs on season boundary.
+  Deferred: Emperor edict response via StrategicReview, blockade unit
+  presence validation (needs coordinate system for node tracking).
+
+### Famine Crisis Processing (s16.2)
+- **DayOrchestrator `_process_famine_crises()`** — Seasonal famine crisis
+  generation per GDD s16.2. Runs on season boundary after resource tick.
+  Reads `starvation_changes` from tick results. Two topic variants:
+  `provincial_famine` (Tier 3, single province at HUNGER; Tier 2 at FAMINE)
+  and `clan_famine` (Tier 2, 2+ provinces of same clan starving). When
+  multiple provinces of the same clan starve simultaneously, existing
+  provincial_famine topics are absorbed (resolved) and a single clan_famine
+  topic created. New starving provinces added to existing clan topics.
+  Recovery: per-province counter in `_famine_tracking[province_id]`
+  increments each season at CLEAR. At 10 consecutive seasons, province
+  removed from multi-province topic (or topic resolved if last province).
+  Relapse resets counter. Topics: `topic_type="famine"`, `clan_involved`
+  from ProvinceData, `provinces_affected` array. Harvest destruction flows
+  naturally: `harvest_destroyed` flag → yield 0 → FAMINE → crisis topic.
+  Tracking state persists in `season_meta["_famine_tracking"]`.
+
+### Ladder Side Effects Processing
+- **DayOrchestrator `_process_ladder_side_effects()`** — Runs after
+  `_process_war_declarations()`. Scans applied results for
+  `ladder_side_effects` dicts produced when a DECLARE_WAR action passed
+  through the Alternative Ladder. Processes 7 effect types:
+  - `glory_cost` — applied to declaring lord (raid rung: −0.3)
+  - `disposition_cost` — applied to all vassals of declaring lord
+    (tribute rung: −5 per vassal)
+  - `clan_disposition_cost` — all target clan chars toward declaring
+    clan chars (raid rung: −15)
+  - `other_disposition_cost` — all non-declaring, non-target clan chars
+    toward declaring clan chars (raid rung: −5)
+  - `generates_topic` — creates TopicData (war_preparation topic_type,
+    rung-specific variant/slug, Tier 3 or 4 with appropriate momentum)
+  - `creates_favor` — creates FavorData for allied aid debt (GENERAL
+    type, Tier 2 MODERATE or Tier 3 MINOR)
+  - `triggers_war_status` — creates a Provincial Raid war against the
+    raided clan (guards against duplicates)
+  `_extract_side_effects()` in FeasibilityLedger enriched with `rung`,
+  `raid_target_clan`, `raid_target_province_id` fields.
+  Return dict gains `ladder_effects_results`.
+
+### War Trigger Pipeline (Metadata Population)
+- **Phase 3 metadata population** — `_populate_action_metadata()` in
+  npc_decision_engine.gd populates action-specific metadata during Phase 3
+  option generation. DECLARE_WAR gets `standing_objective` (from
+  `need.target_intent`), `target_clan` (from need or province statuses),
+  `intended_tier`, `authority_level`. NEGOTIATE_SURRENDER gets `war_ref`
+  (WarData reference from `_war_ref` key in context war dicts),
+  `target_clan`, `target_virtue`, `hostage_held`, `superior_pressuring`.
+- **Metadata flow** — `execute_action()` copies metadata to decision dict
+  when non-empty. `_execute_decision()` in NPCWaveResolver copies metadata
+  from decision to ScoredAction before ActionExecutor receives it.
+- **ObjectiveDecomposer target_intent** — EXPAND_TERRITORY and
+  MILITARY_DOMINANCE decomposition trees produce INITIATE_WAR_CHECK needs
+  with `target_intent` carrying the originating standing objective type.
+  MILITARY_DOMINANCE gains a preemptive strike path when lord is behind
+  rival (dominance_ratio 0.7–1.0) and has no levy PU.
+- **war_system.gd** — `to_context_dict()` gains `_war_ref` key carrying
+  the WarData reference for NEGOTIATE_SURRENDER metadata lookup.
+- NEGOTIATE_SURRENDER added to AT_OWN_HOLDINGS action list.
+- **Standing objective war check paths** — 7 additional standing objectives
+  now produce INITIATE_WAR_CHECK needs: SEEK_VENGEANCE (clan-targeted, all
+  tiers), UNDERMINE_CLAN (clan-targeted, Tier 3/2), PREVENT_SHORTAGE (when
+  rice < 1 season, Tier 3 only), BUILD_STRONGEST_FORCE (when all training
+  done, Tier 3 proving exercise), ADVANCE_GLORY (bushi lords only, Tier 3),
+  ADVANCE_FAMILY (lords at own holdings, Tier 3), HONOR_ANCESTORS (requires
+  active wars or escalating conflicts, all tiers). All gate on is_lord +
+  AT_OWN_HOLDINGS + weak neighbor province availability.
+- **ProvinceStatus.clan** — `NPCDataStructures.ProvinceStatus` gains `clan`
+  field for clan-targeted province lookups. New helper
+  `_find_weak_neighbor_province_for_clan()` filters by target clan.
+- **Weakness conditions (s53.1)** — `ProvinceStatus` gains `total_settlement_pu`,
+  `has_field_army_nearby`, `has_alliance_protection` fields. `WarJustification`
+  gains `GARRISON_MINIMUM_RATIO = 0.05`, `is_garrison_at_minimum()` (garrison
+  at/below 5% of total settlement PU), `evaluate_province_weakness()` (all
+  three conditions: garrison at minimum + no field army + no alliance).
+  `_find_weak_neighbor_province()` and `_find_weak_neighbor_province_for_clan()`
+  upgraded from stability-based to full weakness evaluation. Own-clan provinces
+  skipped in generic weak-neighbor search. `build_province_statuses_from_data()`
+  populates `total_settlement_pu` from settlement `population_pu`.
+- **Formal war weakness in metadata** — `_build_declare_war_metadata()` now
+  populates `target_garrison_at_minimum`, `no_field_army_nearby`,
+  `no_alliance_protection`, `defender_observable_pu` (target province garrison),
+  and `attacker_pu` (available_levy_pu + sum of own-clan garrison PU). These
+  flow through to `evaluate_war_justification()` in ActionExecutor for the
+  Step 2 personality aggression weakness gate. When no target province status
+  is found, weakness fields are omitted (defaults to false/0.0 in executor).
+- **Field army detection wiring** — `ArmyMovementSystem.create_army_state()`
+  gains optional `province_id: int = -1` parameter. `build_province_statuses_from_data()`
+  gains optional `active_armies: Array` parameter — scans army states and sets
+  `has_field_army_nearby = true` on any province where a non-own-clan army is
+  positioned. `build_context()` threads `active_armies` from world_state into
+  the province status builder. Armies without `province_id` (default -1) are
+  ignored. Callers populate `province_id` on army state when sub-tile→province
+  mapping becomes available.
+
+### NPC Famine Response
+- **Famine-aware decomposition** — `ObjectiveDecomposer._decompose_maximize_prosperity()`
+  checks `ctx.famine_crisis_province_ids` before province triage. When a lord
+  has surplus rice (rice_per_pu ≥ 2.0) and knows about active famine crisis
+  topics, emits a CONDUCT_COMMERCE need with `target_intent: "famine_relief"`
+  targeting the first known famine province. Non-lords and low-rice lords
+  fall through to existing triage/acquisition paths.
+- **ContextSnapshot.famine_crisis_province_ids** — `Array[int]` populated
+  during `build_context()` by `_extract_famine_province_ids()`. Scans
+  `active_topics` for unresolved famine topics that appear in the character's
+  `topic_pool`, collecting all `provinces_affected` IDs. Knowledge-gated:
+  NPCs only respond to famines they've heard about through the topic system.
+- **SHARE_SUPPLIES scoring** — Added to `objective_alignment.json` under
+  CONDUCT_COMMERCE (score 80, second only to CONDUCT_COMMERCE itself).
+  Added to `personality_lean.json`: Jin +15, Chugi +8, Makoto +5, Rei +5,
+  Ketsui −10, Ishi −10, Kyoryoku −5. Compassionate lords strongly favor
+  sharing; self-reliant and militaristic lords resist it.
+- **ActionExecutor** — SHARE_SUPPLIES returns `requires_supply_sharing: true`
+  effect flag (Pattern A deferred).
+- **DayOrchestrator._process_supply_sharing()** — Scans applied results for
+  `requires_supply_sharing`. Finds lord's province via clan match, computes
+  surplus via `RiceMarketSystem.compute_surplus()`, transfers 50% of surplus
+  to the target province's settlement via `RiceMarketSystem.share_rice()`.
+  Guards: no surplus → skip, same province → skip, receiver not starving → skip.
+  Honor gain scaled by recipient starvation stage per existing sharing honor
+  table. Return dict gains `supply_sharing_results`.
+
 ### What's Next
 1. World generation coordinate system and adjacency
 
@@ -1299,8 +2097,12 @@ The following subsystems are now integrated into the NPC decision loop:
   `cohabitation_days` fields.
 - **FavorSystem** — Daily: `_process_favors()` runs
   `FavorSystem.process_expirations()` and
-  `FavorSystem.process_deadline_breaches()` on the favors array. New param
-  on `advance_day()`: `favors`.
+  `FavorSystem.process_deadline_breaches()` on the favors array.
+  `_apply_favor_breach()` applies breach consequences: debtor honor/glory
+  loss via HonorGlorySystem, creditor disposition change with
+  `disposition_floor` enforcement (prevents minor favor breaks from creating
+  Blood Enemies), and witness disposition loss. New param on `advance_day()`:
+  `favors`.
 - **TravelSystem** — Daily: `_process_travel()` runs
   `TravelSystem.process_travel_tick()` before wave resolution, decrementing
   travel days and arriving characters. Phase 1: `build_context()` auto-detects
@@ -1326,6 +2128,106 @@ The following subsystems are now integrated into the NPC decision loop:
   and spreading, removes suppressed ones (strength ≤ 0). New params on
   `advance_day()`: `insurgencies: Array[InsurgencyData]`,
   `next_insurgency_id: Array[int]`. Return dict gains `insurgency_results`.
+- **SuccessionSystem** — Daily: `_process_lord_deaths()` triggers
+  `SuccessionSystem.trigger_succession()` on lord death events. Gathers
+  candidates, finds confirming authority, determines clean/disputed, generates
+  succession topic, auto-confirms clean successions via heir evaluation.
+  `_process_successions()` ticks active disputed successions daily and
+  force-confirms on expiry (60 ticks). Seasonal: `_evaluate_heir_designations()`
+  runs on season boundary for lord-tier NPCs without heirs (or Seigyo lords
+  who re-evaluate every season). Uses 9-factor scoring to designate heirs.
+  New params on `advance_day()`: `active_successions: Array[SuccessionData]`,
+  `next_succession_id: Array[int]`. Return dict gains `succession_results`.
+- **SecretSystem / SeductionSystem / AssassinationSystem / BoundEscapeSystem** —
+  Phase 7: ActionExecutor intercepts 17 covert ActionIDs before the generic
+  skill path. Routes EAVESDROP, INTERCEPT_LETTER, SEARCH_QUARTERS,
+  SHADOW_TARGET to SecretSystem contested/two-step resolution. Routes
+  CONCEAL_ITEM, SEARCH_PERSON, FORGE_IMPERSONATION_LETTER, FORGE_ORDER,
+  FABRICATE_SECRET to SecretSystem static methods. Routes SEDUCE and 4
+  variants to SeductionSystem.resolve_seduction(). Routes
+  EXPOSE_SECRET_PRIVATELY/PUBLICLY to SecretSystem.reveal_privately()/
+  expose_publicly() with co-located witness gathering. ScoredAction gains
+  `metadata: Dictionary` for action-specific parameters (item_size, authority_level,
+  secret_ref, concealment_tn, etc.). Daily: `_process_entanglements()` checks
+  16-day maintenance windows, marks neglected/broken, removes broken.
+  `_process_bound_states()` auto-attempts escape for bound characters with
+  Sleight of Hand skill, removes freed states. New params on `advance_day()`:
+  `entanglements: Array[Dictionary]`, `bound_states: Array[Dictionary]`.
+  Return dict gains `entanglement_results`, `bound_escape_results`.
+- **Military Phase 2 Systems** — Daily: `_process_military_daily()` runs after
+  bound/entanglement processing and before NPC wave resolution. Ticks four
+  subsystems each day: `_process_army_movements()` decrements march days for
+  all active armies (ArmyMovementSystem), `_process_siege_ticks()` processes
+  starvation and events for all active sieges (SiegeSystem),
+  `_process_tether_ticks()` resolves garrison raids and deprivation for supply
+  tethers (SupplyTetherSystem), `_process_order_ticks()` resets daily order
+  budgets and delivers pending orders (OrderSystem). Seasonal:
+  `_process_military_seasonal()` runs on season boundary after historical
+  modifier decay. `_process_army_upkeep()` computes seasonal rice/iron/koku
+  costs across all companies via ArmyUpkeepSystem. `_process_military_promotions()`
+  scans for commander vacancies and fills them via MilitaryPromotionSystem
+  candidate scoring. New params on `advance_day()`: `active_armies`,
+  `active_sieges`, `active_tethers`, `order_states`, `companies`, `clans`.
+  WorldStateData gains matching fields. Return dict gains `military_daily`.
+  Post-execution: `_process_military_effects()` scans day results for effect
+  flags. ORDER_LEVY → `_apply_levy_pu_effect()` calls
+  `PUReconciliation.consume_levy_pu()` on source settlement. ORDER_BATTLE →
+  `_apply_battle_pu_reconciliation()` calls `PUReconciliation.reconcile_battle()`
+  with victor/loser company data from effects dict. ASSIGN_TO_MILITARY_SERVICE →
+  `_apply_service_assignment_effect()` calls
+  `MilitaryServiceSystem.assign_to_military_service()` to mutate
+  operational_superior_id. Return dict gains `military_effects`.
+  Iron degradation: `ArmyUpkeepSystem.process_iron_upkeep_dict()` added for
+  dict-based companies. Seasonal upkeep groups companies by clan, deducts
+  iron from `ClanData.arms_stockpile`, tracks per-company iron state for
+  degradation penalties.
+  Battle flow: `ArmyCombatSystem.extract_pu_reconciliation_data()` extracts
+  per-company health summaries (starting_health, current_health,
+  source_province_id) from battle states for PU reconciliation.
+  `DayOrchestrator.resolve_and_reconcile_battle()` runs the full pipeline:
+  battle resolution → PU extraction → reconciliation → rout → recovery →
+  dissolution (when rout dissolves army below 20% health, surviving company
+  health returned as PU to source settlements via
+  `PUReconciliation.process_army_dissolution()`). Pursuit casualties
+  distributed across non-destroyed loser companies before dissolution.
+  Army movement processing detects battle triggers on arrival via
+  `ArmyMovementSystem.check_battle_trigger()`.
+  `ArmyCombatSystem.is_cavalry()` public helper for cavalry detection.
+  Rice upkeep deduction: `_deduct_rice_upkeep()` deducts seasonal rice costs
+  from clan settlements' `rice_stockpile` using `ClanData.province_ids` to
+  locate the correct settlements. Deduction caps at available stockpile.
+  Koku upkeep deduction: `_deduct_koku_upkeep()` deducts garrison (0.20/PU/
+  season) and ronin (1.50/season) koku costs from clan settlements'
+  `koku_stockpile`. Units with zero koku cost skip deduction.
+  Field deprivation: `_process_field_deprivation()` runs after tether ticks,
+  computing per-company rice (morale/health loss) and arms (attack/defense
+  penalty) effects based on tether deprivation tick levels. Tick 1 = warning
+  only; ticks 2–4 apply escalating penalties per ArmyUpkeepSystem tables.
+  Effects returned as descriptors for caller to apply to CompanyData objects.
+  Army recovery: `_process_army_recovery()` runs after deprivation, producing
+  recovery descriptors for stationary armies with solid supply. +5 health/tick
+  and +3 morale/tick (capped at base stats), arms tier restoration when arms
+  deprivation tick > 1. Moving armies skip recovery. Broken/threatened tethers
+  block supply and prevent recovery.
+  Military event topics: `_generate_military_event_topics()` scans daily
+  military results and generates TopicData for three event types: battle
+  outcome (Tier 3, momentum 30, battle_variant per GDD s15.7), heavy
+  casualties (Tier 3, momentum 25, when PU loss ≥ 0.5), siege events
+  (Tier 4, momentum 11, event_type as variant). Topics added to
+  active_topics for organic spread via the momentum/broadcast system.
+  Koku upkeep deduction: `_deduct_koku_upkeep()` deducts garrison (0.20/PU/
+  season) and ronin (1.50/season) koku costs from clan settlements'
+  `koku_stockpile`. Units with zero koku cost skip deduction.
+  Field deprivation: `_process_field_deprivation()` runs after tether ticks,
+  computing per-company rice (morale/health loss) and arms (attack/defense
+  penalty) effects based on tether deprivation tick levels. Tick 1 = warning
+  only; ticks 2–4 apply escalating penalties per ArmyUpkeepSystem tables.
+  Effects returned as descriptors for caller to apply to CompanyData objects.
+  Army recovery: `_process_army_recovery()` runs after deprivation, producing
+  recovery descriptors for stationary armies with solid supply. +5 health/tick
+  and +3 morale/tick (capped at base stats), arms tier restoration when arms
+  deprivation tick > 1. Moving armies skip recovery. Broken/threatened tethers
+  block supply and prevent recovery.
 
 ## Resolved Design Decisions
 
@@ -1373,6 +2275,31 @@ The following subsystems are now integrated into the NPC decision loop:
   Catches key typos at parse time instead of silent nulls at runtime. Native
   Godot Resource serialization. Compact and predictable for network sync.
   Autocomplete and static analysis support in GDScript.
+
+### 5. Effect Application Pattern — RESOLVED: dual pattern with naming guard
+**Decision:** Two coexisting patterns for applying character mutations:
+- **Pattern A (Deferred):** System returns effect keys → EffectApplicator
+  reads them and mutates characters centrally. Standard keys consumed:
+  `honor_change`, `glory_change`, `infamy_gain`, `infamy_change`,
+  `disposition_change`, `recipient_disposition_change`, `recipient_modifiers`,
+  `consume_item_id`, `witness_disposition_loss` + `witnesses`.
+  Used by: social actions, military, admin, intimidation, gifts.
+- **Pattern B (Pre-applied):** System directly mutates characters before
+  returning. Return dict contains metadata keys prefixed `subject_*` or
+  suffixed `*_cost` (never matching Pattern A keys). Used by: SecretSystem
+  (covert costs always apply regardless of success; exposure mutates the
+  secret's subject, not the actor) and SeductionSystem (honor/infamy cost
+  for attempting).
+- **Safety rule:** Never use `honor_change`, `glory_change`, or `infamy_gain`
+  as return dict keys from a system that pre-applies mutations. Use
+  `subject_honor_loss`, `subject_glory_loss`, `subject_infamy_gain`,
+  `honor_cost`, `glory_cost` to prevent EffectApplicator double-application.
+- `FavorSystem.break_favor()` returns `disposition_floor` (per-tier minimum)
+  which `_apply_favor_breach()` in DayOrchestrator enforces as a lower clamp.
+- **Rationale:** Pre-application is correct for always-pay costs (covert action
+  moral costs apply even on failure). Deferred application is correct for
+  outcome-dependent effects (disposition gains only on success). The naming
+  guard prevents accidental double-application across the two patterns.
 
 ## Pending Migration Tasks
 Code refactors required by the resolved design decisions above.

@@ -64,6 +64,9 @@ const DISP_EMPEROR_FROM_SELECTED_LORD: int = 1
 const DISP_MIYA_TOWARD_EMPEROR_ON_SUSPENSION: int = -3
 const DISP_EMPIRE_TOWARD_EMPEROR_ON_SUSPENSION: int = -1
 const STABILITY_PENALTY_NEEDY_PROVINCE_ON_SUSPENSION: int = -1
+const CUNNING_NEED_SCORE_BONUS: int = 10
+const CUNNING_NEED_SCORE_PENALTY: int = -10
+const CUNNING_MIYA_DISP_PENALTY_PER_YEAR: int = -2
 
 
 # -- Allocation calculation (§2.1, §2.2, §2.3, §2.4) -------------------------
@@ -142,7 +145,7 @@ static func compute_need_score(conditions: Dictionary) -> int:
 	##   has_insurgency: bool        (active right now)
 	##   pu_decline_pct: float       (0.0–1.0; e.g. 0.18 = 18% decline)
 	##   blessed_last_year: bool
-	##   blessed_two_years_ago: bool (used for the +2 "rotation" check)
+	##   blessed_two_years_ago: bool (unused — kept for caller compatibility)
 	##   petition_bonus: int         (winter-court petition contributions)
 	var score: int = 0
 	score += get_starvation_need(conditions.get("worst_starvation_stage", 0))
@@ -156,12 +159,27 @@ static func compute_need_score(conditions: Dictionary) -> int:
 	score += get_pu_decline_need(conditions.get("pu_decline_pct", 0.0))
 	if conditions.get("blessed_last_year", false):
 		score += NEED_BLESSED_LAST_YEAR_MALUS
-	elif not conditions.get("blessed_two_years_ago", false):
-		# Eligible for the rotation bonus if neither last year nor the year
-		# before received the Blessing — a simple rotation aid.
+	else:
 		score += NEED_NOT_BLESSED_LAST_YEAR
 	score += int(conditions.get("petition_bonus", 0))
 	return score
+
+
+# -- Cunning archetype modifier (§5) -----------------------------------------
+
+static func apply_cunning_modifier(
+	scored: Array[Dictionary],
+	favored_clan: String,
+	disfavored_clan: String,
+) -> void:
+	## Cunning emperors add +10 Need Score to favored clan's provinces
+	## and -10 to disfavored clan's provinces.
+	for entry in scored:
+		var clan: String = entry.get("clan", "")
+		if clan == favored_clan:
+			entry["score"] = int(entry.get("score", 0)) + CUNNING_NEED_SCORE_BONUS
+		elif clan == disfavored_clan:
+			entry["score"] = int(entry.get("score", 0)) + CUNNING_NEED_SCORE_PENALTY
 
 
 # -- Province selection (§4.2, §4.3) -----------------------------------------

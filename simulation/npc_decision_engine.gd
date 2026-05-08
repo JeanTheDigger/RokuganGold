@@ -82,6 +82,15 @@ static func build_context(
 	if ctx.is_lord:
 		ctx.resource_stockpiles = world_state.get("resource_stockpiles", {})
 		ctx.province_statuses = world_state.get("province_statuses", [])
+		if ctx.province_statuses.is_empty():
+			var prov_data: Array = world_state.get("province_data", [])
+			var settlements_arr: Array = world_state.get("settlements", [])
+			var armies_arr: Array = world_state.get("active_armies", [])
+			if not prov_data.is_empty():
+				ctx.province_statuses = build_province_statuses_from_data(
+					prov_data, settlements_arr, armies_arr,
+				)
+		ctx.feasibility_data = _build_feasibility_data(character, world_state)
 
 	# Military
 	ctx.military_rank = character.military_rank
@@ -97,6 +106,9 @@ static func build_context(
 	ctx.active_wars = world_state.get("active_wars", [])
 	ctx.escalating_conflicts = world_state.get("escalating_conflicts", [])
 	ctx.taint_topic_province_ids = world_state.get("taint_topic_province_ids", [] as Array[int])
+	ctx.famine_crisis_province_ids = _extract_famine_province_ids(
+		character, world_state.get("active_topics", [])
+	)
 
 	# Festival state (s11.5)
 	ctx.is_ceasefire_day = world_state.get("is_ceasefire_day", false)
@@ -183,6 +195,7 @@ static func generate_options(
 		option.target_settlement_id = need.target_settlement_id
 		option.target_province_id = need.target_province_id
 		option.ap_cost = _get_ap_cost(action_id)
+		_populate_action_metadata(option, need, ctx)
 		options.append(option)
 
 	return options
@@ -326,7 +339,7 @@ static func execute_action(
 			"action_id": chosen.action_id,
 		}
 
-	return {
+	var decision: Dictionary = {
 		"success": true,
 		"action_id": chosen.action_id,
 		"target_npc_id": chosen.target_npc_id,
@@ -338,6 +351,9 @@ static func execute_action(
 		"character_id": ctx.character_id,
 		"ic_day": ctx.ic_day,
 	}
+	if not chosen.metadata.is_empty():
+		decision["metadata"] = chosen.metadata
+	return decision
 
 
 # -- Main Entry Point ----------------------------------------------------------
@@ -466,6 +482,8 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array[S
 				"FOUND_TEMPLE", "FOUND_MONASTERY", "COMMISSION_SHIP",
 				"ARRANGE_MARRIAGE", "APPOINT_TO_POSITION",
 				"PURIFY_TAINTED_GROUND", "FORTIFY_WALL_SECTION", "SEAL_WALL_BREACH",
+				"DECLARE_WAR", "NEGOTIATE_SURRENDER",
+				"SHARE_SUPPLIES",
 				"CRAFT", "MENTOR",
 				"DO_NOTHING", "REST",
 			]
@@ -591,6 +609,7 @@ static func _get_ap_cost(action_id: String) -> int:
 		"PURIFY_TAINTED_GROUND": 1,
 		"FORTIFY_WALL_SECTION": 1,
 		"SEAL_WALL_BREACH": 2,
+		"DECLARE_WAR": 2,
 	}
 	return costs.get(action_id, 1)
 
@@ -616,7 +635,62 @@ static func _is_action_blocked(
 		if action_id in always_blocked:
 			return true
 
+	if action_id == "RAID_HARVEST":
+		return _is_harvest_blocked_by_virtue(ctx)
+
 	return false
+
+
+static func _is_harvest_blocked_by_virtue(ctx: NPCDataStructures.ContextSnapshot) -> bool:
+	var virtue: String = _get_virtue_string(ctx)
+	if virtue in StarvationWarfare.HARVEST_NEVER_VIRTUES:
+		return true
+	var hc: Dictionary = _evaluate_harvest_conditions(ctx)
+	if virtue == "Yu":
+		return not hc.get("no_other_path", false)
+	if virtue == "Meiyo":
+		return not hc.get("hated_enemy", false)
+	if virtue == "Chugi":
+		return not hc.get("lord_commands", false)
+	if virtue == "Makoto":
+		return not hc.get("publicly_declared", false)
+	return false
+
+
+static func _evaluate_harvest_conditions(ctx: NPCDataStructures.ContextSnapshot) -> Dictionary:
+	var no_other_path: bool = false
+	for w: Variant in ctx.active_wars:
+		if w is Dictionary:
+			var score: int = w.get("war_score", 50)
+			if score < 25:
+				no_other_path = true
+				break
+
+	var hated_enemy: bool = false
+	for did: Variant in ctx.disposition_values:
+		var val: int = ctx.disposition_values[did]
+		if val <= -60:
+			hated_enemy = true
+			break
+
+	var lord_commands: bool = false
+	for ev: Variant in ctx.pending_events:
+		if ev is Dictionary and ev.get("need_type", "") in ["RAID_HARVEST", "DESTROY_HARVEST"]:
+			lord_commands = true
+			break
+
+	var publicly_declared: bool = false
+	for entry: Dictionary in ctx.action_log:
+		if entry.get("action_id", "") == "PUBLIC_DECLARATION":
+			publicly_declared = true
+			break
+
+	return {
+		"no_other_path": no_other_path,
+		"hated_enemy": hated_enemy,
+		"lord_commands": lord_commands,
+		"publicly_declared": publicly_declared,
+	}
 
 
 static func _lookup_objective_alignment(
@@ -996,3 +1070,522 @@ static func _select_letter_target(
 	if not met.is_empty():
 		return met[0]
 	return -1
+
+
+# -- Province Status Builder ---------------------------------------------------
+
+static func build_province_statuses_from_data(
+	province_data: Array,
+	settlements: Array = [],
+	active_armies: Array = [],
+) -> Array:
+	var result: Array = []
+	var settlement_garrison: Dictionary = {}
+	var settlement_total_pu: Dictionary = {}
+	for s: Variant in settlements:
+		if s is SettlementData:
+			var sd: SettlementData = s
+			var pid: int = sd.province_id
+			settlement_garrison[pid] = settlement_garrison.get(pid, 0) + sd.garrison_pu
+			settlement_total_pu[pid] = settlement_total_pu.get(pid, 0) + sd.population_pu
+
+	var armies_by_province: Dictionary = {}
+	for army: Variant in active_armies:
+		if not (army is Dictionary):
+			continue
+		var ad: Dictionary = army
+		var apid: int = ad.get("province_id", -1)
+		if apid < 0:
+			continue
+		var clan: String = ad.get("owning_clan", "")
+		if clan.is_empty():
+			continue
+		if not armies_by_province.has(apid):
+			armies_by_province[apid] = []
+		armies_by_province[apid].append(clan)
+
+	for prov: Variant in province_data:
+		if not (prov is ProvinceData):
+			continue
+		var pd: ProvinceData = prov
+		var ps := NPCDataStructures.ProvinceStatus.new()
+		ps.province_id = pd.province_id
+		ps.clan = pd.clan
+		ps.stability = pd.stability
+		ps.active_crisis_id = pd.active_crisis_id
+		ps.active_insurgency_id = pd.active_insurgency_id
+		ps.last_report_ic_day = pd.last_report_ic_day
+		ps.garrison_pu = settlement_garrison.get(pd.province_id, 0)
+		ps.total_settlement_pu = settlement_total_pu.get(pd.province_id, 0)
+		ps.confidence = 2
+		var army_clans: Array = armies_by_province.get(pd.province_id, [])
+		for ac: Variant in army_clans:
+			if ac is String and ac != pd.clan:
+				ps.has_field_army_nearby = true
+				break
+		result.append(ps)
+	return result
+
+
+# -- Action Metadata Population ------------------------------------------------
+# Populates action-specific metadata during Phase 3. Actions that need special
+# inputs for execution (DECLARE_WAR, NEGOTIATE_SURRENDER) get their metadata
+# here from the need and context.
+
+static func _populate_action_metadata(
+	option: NPCDataStructures.ScoredAction,
+	need: NPCDataStructures.ImmediateNeed,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> void:
+	if option.action_id == "DECLARE_WAR":
+		option.metadata = _build_declare_war_metadata(need, ctx)
+	elif option.action_id == "NEGOTIATE_SURRENDER":
+		option.metadata = _build_negotiate_surrender_metadata(need, ctx)
+	elif option.action_id == "RAID_HARVEST":
+		option.metadata = _build_raid_harvest_metadata(need, ctx)
+	elif option.action_id == "BLOCKADE_TRADE_ROUTE":
+		option.metadata = _build_blockade_metadata(need, ctx)
+
+
+static func _build_declare_war_metadata(
+	need: NPCDataStructures.ImmediateNeed,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> Dictionary:
+	var target_clan: String = need.target_clan_id
+	var target_ps: NPCDataStructures.ProvinceStatus = null
+	var own_garrison_total: float = 0.0
+
+	for ps: Variant in ctx.province_statuses:
+		if ps is NPCDataStructures.ProvinceStatus:
+			var status: NPCDataStructures.ProvinceStatus = ps
+			if not status.clan.is_empty() and status.clan == ctx.clan:
+				own_garrison_total += float(status.garrison_pu)
+			if status.province_id == need.target_province_id:
+				if target_clan.is_empty():
+					target_clan = status.clan
+				target_ps = status
+
+	var standing: String = need.target_intent
+	var primary: String = ""
+
+	var virtue: String = _get_virtue_string(ctx)
+	var tier: WarJustification.MilitaryTier = WarJustification.select_intended_tier(
+		standing, primary, virtue,
+	)
+
+	var authority: int = WarJustification.get_authority_for_tier(tier)
+
+	var meta: Dictionary = {
+		"standing_objective": standing,
+		"primary_objective": primary,
+		"intended_tier": tier,
+		"target_clan": target_clan,
+		"authority_level": authority,
+		"primary_virtue": virtue,
+		"attacker_pu": ctx.available_levy_pu + own_garrison_total,
+	}
+
+	if target_ps != null:
+		var weakness: Dictionary = WarJustification.evaluate_province_weakness(target_ps)
+		meta["target_garrison_at_minimum"] = weakness["garrison_at_minimum"]
+		meta["no_field_army_nearby"] = weakness["no_field_army_nearby"]
+		meta["no_alliance_protection"] = weakness["no_alliance_protection"]
+		meta["defender_observable_pu"] = float(target_ps.garrison_pu)
+
+	if not ctx.feasibility_data.is_empty():
+		var fi: Dictionary = ctx.feasibility_data.duplicate()
+		fi["authority_level"] = authority
+		fi["primary_virtue"] = virtue
+		fi["proposed_levy_pu"] = ctx.available_levy_pu
+		meta["feasibility_inputs"] = fi
+
+	return meta
+
+
+static func _build_negotiate_surrender_metadata(
+	need: NPCDataStructures.ImmediateNeed,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> Dictionary:
+	var target_clan: String = need.target_clan_id
+	var war_ref: Variant = null
+	for war_dict: Variant in ctx.active_wars:
+		if not (war_dict is Dictionary):
+			continue
+		var wd: Dictionary = war_dict
+		var enemy: String = WarSystem.get_enemy_clan_from_war(wd, ctx.clan)
+		if enemy == target_clan or target_clan.is_empty():
+			war_ref = wd.get("_war_ref")
+			target_clan = enemy
+			break
+	return {
+		"war_ref": war_ref,
+		"target_clan": target_clan,
+		"target_virtue": "",
+		"hostage_held": false,
+		"superior_pressuring": false,
+	}
+
+
+static func _build_raid_harvest_metadata(
+	need: NPCDataStructures.ImmediateNeed,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> Dictionary:
+	var target_province: int = need.target_province_id
+	var target_clan: String = need.target_clan_id
+	if target_clan.is_empty():
+		for ps: Variant in ctx.province_statuses:
+			if ps is NPCDataStructures.ProvinceStatus:
+				var status: NPCDataStructures.ProvinceStatus = ps
+				if status.province_id == target_province and not status.clan.is_empty():
+					target_clan = status.clan
+					break
+	return {
+		"target_province_id": target_province,
+		"target_clan": target_clan,
+		"ordering_clan": ctx.clan,
+	}
+
+
+static func _build_blockade_metadata(
+	need: NPCDataStructures.ImmediateNeed,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> Dictionary:
+	var target_clan: String = need.target_clan_id
+	return {
+		"route_id": -1,
+		"blocking_clan": ctx.clan,
+		"target_clan": target_clan,
+	}
+
+
+static func _build_feasibility_data(
+	character: L5RCharacterData,
+	world_state: Dictionary,
+) -> Dictionary:
+	var settlements: Array = world_state.get("settlements", [])
+	var provinces: Array = world_state.get("province_data", [])
+	var clans: Array = world_state.get("clans", [])
+
+	var controlled: Array = []
+	var clan_province_ids: Array[int] = []
+	for p: Variant in provinces:
+		if p is ProvinceData and (p as ProvinceData).clan == character.clan:
+			clan_province_ids.append((p as ProvinceData).province_id)
+	for s: Variant in settlements:
+		if s is SettlementData and (s as SettlementData).province_id in clan_province_ids:
+			controlled.append(s)
+
+	var clan_arms: float = 0.0
+	var clan_iron: float = 0.0
+	for c: Variant in clans:
+		if c is ClanData and (c as ClanData).clan_name == character.clan:
+			clan_arms = (c as ClanData).arms_stockpile
+			clan_iron = (c as ClanData).iron_stockpile
+			break
+
+	var total_koku: float = 0.0
+	for s: Variant in controlled:
+		if s is SettlementData:
+			total_koku += (s as SettlementData).koku_stockpile
+
+	var current_season: String = world_state.get("current_season", "spring")
+	var levy_before_planting: bool = current_season == "spring"
+	var spans_autumn: bool = true
+
+	var vassal_stockpiles: Array = _collect_vassal_stockpiles(
+		character, world_state, settlements, provinces,
+	)
+	var active_wars: Array = world_state.get("active_wars", [])
+	var raidable: Array = _collect_raidable_provinces(
+		character.clan, provinces, settlements, active_wars,
+	)
+	var trade_routes: Array = world_state.get("trade_routes", [])
+	var has_routes: bool = _has_active_trade_routes(trade_routes, character.clan)
+	var allied: Array = _collect_allied_surplus(
+		character, world_state, settlements, provinces,
+	)
+	var war_info: Dictionary = _get_war_context(character.clan, active_wars)
+	var has_grievance: bool = _has_grievance_against_neighbors(
+		character, raidable,
+	)
+
+	return {
+		"controlled_settlements": controlled,
+		"provinces": provinces,
+		"clan_arms_stockpile": clan_arms,
+		"clan_iron_stockpile": clan_iron,
+		"current_koku": total_koku,
+		"levy_before_planting": levy_before_planting,
+		"spans_autumn": spans_autumn,
+		"iron_upkeep_rate_per_pu": 0.10,
+		"equip_cost": 0.0,
+		"ladder_context": {
+			"current_season": current_season,
+			"vassal_stockpiles": vassal_stockpiles,
+			"allied_surplus": allied,
+			"raidable_provinces": raidable,
+			"has_trade_routes": has_routes,
+			"has_grievance": has_grievance,
+			"has_issued_demand": _has_issued_demand(character, world_state),
+			"war_score": war_info.get("war_score", 50),
+			"is_defending": war_info.get("is_defending", false),
+		},
+	}
+
+
+static func _collect_vassal_stockpiles(
+	lord: L5RCharacterData,
+	world_state: Dictionary,
+	settlements: Array,
+	provinces: Array,
+) -> Array:
+	var chars: Dictionary = world_state.get("characters_by_id", {})
+	var result: Array = []
+	for cid: Variant in chars:
+		var c: Variant = chars[cid]
+		if not (c is L5RCharacterData):
+			continue
+		var ch: L5RCharacterData = c
+		if ch.lord_id != lord.character_id:
+			continue
+		var disp: int = ch.disposition_values.get(lord.character_id, 0)
+		var vassal_rice: float = 0.0
+		var vassal_arms: float = 0.0
+		var in_shortage: bool = false
+		for s: Variant in settlements:
+			if s is SettlementData:
+				var sd: SettlementData = s
+				for p: Variant in provinces:
+					if p is ProvinceData:
+						var pd: ProvinceData = p
+						if pd.province_id == sd.province_id and pd.clan == ch.clan:
+							vassal_rice += sd.rice_stockpile
+							if sd.rice_stockpile < float(sd.population_pu) * 0.25:
+								in_shortage = true
+		if vassal_rice > 0.0:
+			result.append({
+				"character_id": ch.character_id,
+				"disposition": disp,
+				"rice_stockpile": vassal_rice,
+				"arms_stockpile": vassal_arms,
+				"in_shortage": in_shortage,
+			})
+	return result
+
+
+static func _collect_raidable_provinces(
+	own_clan: String,
+	provinces: Array,
+	settlements: Array,
+	active_wars: Array,
+) -> Array:
+	var at_war_clans: Dictionary = {}
+	for w: Variant in active_wars:
+		if w is Dictionary:
+			var wd: Dictionary = w
+			if wd.get("clan_a", "") == own_clan:
+				at_war_clans[wd.get("clan_b", "")] = true
+			elif wd.get("clan_b", "") == own_clan:
+				at_war_clans[wd.get("clan_a", "")] = true
+
+	var province_rice: Dictionary = {}
+	var province_garrison: Dictionary = {}
+	for s: Variant in settlements:
+		if s is SettlementData:
+			var sd: SettlementData = s
+			province_rice[sd.province_id] = province_rice.get(sd.province_id, 0.0) + sd.rice_stockpile
+			province_garrison[sd.province_id] = province_garrison.get(sd.province_id, 0.0) + float(sd.garrison_pu)
+
+	var result: Array = []
+	for p: Variant in provinces:
+		if not (p is ProvinceData):
+			continue
+		var pd: ProvinceData = p
+		if pd.clan == own_clan or pd.clan.is_empty():
+			continue
+		result.append({
+			"province_id": pd.province_id,
+			"clan": pd.clan,
+			"garrison_pu": province_garrison.get(pd.province_id, 0.0),
+			"rice_stockpile": province_rice.get(pd.province_id, 0.0),
+			"already_at_war": at_war_clans.has(pd.clan),
+		})
+	return result
+
+
+static func _has_active_trade_routes(trade_routes: Array, _clan: String) -> bool:
+	for r: Variant in trade_routes:
+		if r is TradeRouteData:
+			var tr: TradeRouteData = r
+			if not tr.is_disrupted:
+				return true
+		elif r is Dictionary:
+			if not r.get("is_disrupted", true):
+				return true
+	return false
+
+
+static func _collect_allied_surplus(
+	character: L5RCharacterData,
+	world_state: Dictionary,
+	settlements: Array,
+	provinces: Array,
+) -> Array:
+	var chars: Dictionary = world_state.get("characters_by_id", {})
+	var result: Array = []
+	for cid: Variant in chars:
+		var c: Variant = chars[cid]
+		if not (c is L5RCharacterData):
+			continue
+		var ch: L5RCharacterData = c
+		if ch.clan == character.clan:
+			continue
+		if ch.character_id == character.character_id:
+			continue
+		var is_lord: bool = ch.status >= 5.0 or ch.lord_id == -1
+		if not is_lord:
+			continue
+		var disp: int = character.disposition_values.get(ch.character_id, 0)
+		if disp < 31:
+			continue
+		var ally_rice: float = 0.0
+		var ally_koku: float = 0.0
+		var ally_prov_ids: Array[int] = []
+		for p: Variant in provinces:
+			if p is ProvinceData and (p as ProvinceData).clan == ch.clan:
+				ally_prov_ids.append((p as ProvinceData).province_id)
+		for s: Variant in settlements:
+			if s is SettlementData and (s as SettlementData).province_id in ally_prov_ids:
+				ally_rice += (s as SettlementData).rice_stockpile
+				ally_koku += (s as SettlementData).koku_stockpile
+		var ally_civilian_pu: float = 0.0
+		for s: Variant in settlements:
+			if s is SettlementData and (s as SettlementData).province_id in ally_prov_ids:
+				var sd: SettlementData = s
+				ally_civilian_pu += float(sd.farming_pu + sd.mining_pu + sd.town_pu)
+		var buffer: float = ally_civilian_pu * 0.25 * 4.0
+		var surplus_rice: float = maxf(0.0, ally_rice - buffer)
+		if surplus_rice > 0.0 or ally_koku > 0.0:
+			result.append({
+				"character_id": ch.character_id,
+				"clan": ch.clan,
+				"disposition": disp,
+				"surplus_rice": surplus_rice,
+				"surplus_koku": maxf(0.0, ally_koku),
+			})
+	return result
+
+
+static func _get_war_context(
+	clan: String,
+	active_wars: Array,
+) -> Dictionary:
+	var worst_score: int = 50
+	var is_defending: bool = false
+	for w: Variant in active_wars:
+		var wd: Variant = w
+		var clan_a: String = ""
+		var clan_b: String = ""
+		var score_a: int = 50
+		var score_b: int = 50
+		var initiator: String = ""
+		if wd is Dictionary:
+			clan_a = (wd as Dictionary).get("clan_a", "")
+			clan_b = (wd as Dictionary).get("clan_b", "")
+			score_a = (wd as Dictionary).get("war_score_a", 50)
+			score_b = (wd as Dictionary).get("war_score_b", 50)
+			initiator = (wd as Dictionary).get("initiator_clan", "")
+		elif wd is WarData:
+			clan_a = (wd as WarData).clan_a
+			clan_b = (wd as WarData).clan_b
+			score_a = (wd as WarData).war_score_a
+			score_b = (wd as WarData).war_score_b
+			initiator = (wd as WarData).initiator_clan
+		var my_score: int = -1
+		if clan_a == clan:
+			my_score = score_a
+			if initiator == clan_b:
+				is_defending = true
+		elif clan_b == clan:
+			my_score = score_b
+			if initiator == clan_a:
+				is_defending = true
+		if my_score >= 0 and my_score < worst_score:
+			worst_score = my_score
+	return {"war_score": worst_score, "is_defending": is_defending}
+
+
+static func _has_grievance_against_neighbors(
+	character: L5RCharacterData,
+	_raidable_provinces: Array,
+) -> bool:
+	for cid: Variant in character.disposition_values:
+		var disp: int = character.disposition_values[cid]
+		if disp <= -31:
+			return true
+	var obj: String = character.current_objective
+	if obj in ["SEEK_VENGEANCE", "UNDERMINE_CLAN", "AVENGE"]:
+		return true
+	return false
+
+
+const _VIRTUE_NAMES: Dictionary = {
+	Enums.BushidoVirtue.JIN: "Jin",
+	Enums.BushidoVirtue.YU: "Yu",
+	Enums.BushidoVirtue.REI: "Rei",
+	Enums.BushidoVirtue.CHUGI: "Chugi",
+	Enums.BushidoVirtue.GI: "Gi",
+	Enums.BushidoVirtue.MEIYO: "Meiyo",
+	Enums.BushidoVirtue.MAKOTO: "Makoto",
+	Enums.ShouridoVirtue.SEIGYO: "Seigyo",
+	Enums.ShouridoVirtue.KETSUI: "Ketsui",
+	Enums.ShouridoVirtue.DOSATSU: "Dosatsu",
+	Enums.ShouridoVirtue.CHISHIKI: "Chishiki",
+	Enums.ShouridoVirtue.KANPEKI: "Kanpeki",
+	Enums.ShouridoVirtue.ISHI: "Ishi",
+	Enums.ShouridoVirtue.KYORYOKU: "Kyoryoku",
+}
+
+
+static func _has_issued_demand(
+	character: L5RCharacterData,
+	world_state: Dictionary,
+) -> bool:
+	var active_topics: Array = world_state.get("active_topics", [])
+	for t: Variant in active_topics:
+		if not (t is TopicData):
+			continue
+		var topic: TopicData = t as TopicData
+		if topic.topic_type == "war_preparation" and topic.variant == "demand_tribute" and topic.clan_involved == character.clan:
+			return true
+	return false
+
+
+static func _get_virtue_string(ctx: NPCDataStructures.ContextSnapshot) -> String:
+	if ctx.bushido_virtue != Enums.BushidoVirtue.NONE:
+		return _VIRTUE_NAMES.get(ctx.bushido_virtue, "")
+	if ctx.shourido_virtue != Enums.ShouridoVirtue.NONE:
+		return _VIRTUE_NAMES.get(ctx.shourido_virtue, "")
+	return ""
+
+
+static func _extract_famine_province_ids(
+	character: L5RCharacterData,
+	active_topics: Array,
+) -> Array[int]:
+	var result: Array[int] = []
+	var known: Array[int] = character.topic_pool
+	for t: Variant in active_topics:
+		if not (t is TopicData):
+			continue
+		var topic: TopicData = t as TopicData
+		if topic.resolved:
+			continue
+		if topic.topic_type != "famine":
+			continue
+		if topic.topic_id not in known:
+			continue
+		for pid: int in topic.provinces_affected:
+			if pid not in result:
+				result.append(pid)
+	return result
