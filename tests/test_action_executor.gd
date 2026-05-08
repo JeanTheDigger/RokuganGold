@@ -524,3 +524,60 @@ func test_deliver_gift_failure_is_marked_failed_so_effects_apply() -> void:
 	)
 	# No giftable item -> generic social path -> no gift_outcome key.
 	assert_false(result["effects"].has("gift_outcome"))
+
+
+# -- DECLARE_WAR Executor Tests --------------------------------------------------
+
+func test_declare_war_justified_returns_war_effects() -> void:
+	_character.clan = "Crab"
+	_character.bushido_virtue = Enums.BushidoVirtue.YU
+	var action := _make_action("DECLARE_WAR")
+	action.metadata = {
+		"standing_objective": "EXPAND_TERRITORY",
+		"primary_objective": "",
+		"intended_tier": WarJustification.MilitaryTier.RAID,
+		"target_clan": "Crane",
+		"authority_level": WarData.AuthorityLevel.PROVINCIAL_RAID,
+	}
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map,
+	)
+	assert_eq(result["effects"]["effect"], "war_declared")
+	assert_true(result["effects"]["requires_war_creation"])
+	assert_eq(result["effects"]["declaring_clan"], "Crab")
+	assert_eq(result["effects"]["target_clan"], "Crane")
+
+
+func test_declare_war_not_justified_returns_rejection() -> void:
+	_character.clan = "Crab"
+	_character.bushido_virtue = Enums.BushidoVirtue.JIN
+	var action := _make_action("DECLARE_WAR")
+	action.metadata = {
+		"standing_objective": "MAINTAIN_PEACE",
+		"primary_objective": "",
+		"intended_tier": WarJustification.MilitaryTier.RAID,
+		"target_clan": "Crane",
+	}
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map,
+	)
+	assert_eq(result["effects"]["effect"], "war_declaration_rejected")
+	assert_true(result["effects"]["failed"])
+
+
+func test_declare_war_total_war_honor_cost() -> void:
+	_character.clan = "Crab"
+	_character.bushido_virtue = Enums.BushidoVirtue.YU
+	var action := _make_action("DECLARE_WAR")
+	action.metadata = {
+		"standing_objective": "EXPAND_TERRITORY",
+		"primary_objective": "",
+		"intended_tier": WarJustification.MilitaryTier.TOTAL_WAR,
+		"target_clan": "Crane",
+		"authority_level": WarData.AuthorityLevel.CLAN_WAR,
+	}
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map,
+	)
+	assert_eq(result["effects"]["effect"], "war_declared")
+	assert_almost_eq(result["effects"]["honor_change"], -0.5, 0.01)

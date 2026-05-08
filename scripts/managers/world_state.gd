@@ -59,6 +59,7 @@ var active_tethers: Array[Dictionary] = []
 var order_states: Array[Dictionary] = []
 var military_companies: Array[Dictionary] = []
 var active_wars: Array[WarData] = []
+var next_war_id: Array[int] = [1]
 
 # -- Collective Disposition (s12.2b) -------------------------------------------
 # Clan-to-clan and family-to-family baselines keyed by sorted "a||b" strings.

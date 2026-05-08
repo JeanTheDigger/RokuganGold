@@ -402,7 +402,7 @@ All in /tests/, one file per system:
 - test_action_point_system.gd (~12 tests)
 - test_npc_decision_engine.gd (~47 tests)
 - test_scoring_table_loader.gd (~15 tests)
-- test_action_executor.gd (~29 tests)
+- test_action_executor.gd (~35 tests)
 - test_effect_applicator.gd (~37 tests)
 - test_npc_wave_resolver.gd (~15 tests)
 - test_resource_tick.gd (~30 tests)
@@ -471,8 +471,8 @@ All in /tests/, one file per system:
 - test_order_system.gd (~30 tests)
 - test_military_service_system.gd (~35 tests)
 - test_pu_reconciliation.gd (~30 tests)
-- test_military_wiring.gd (~101 tests)
-- test_war_system.gd (~55 tests)
+- test_military_wiring.gd (~107 tests)
+- test_war_system.gd (~61 tests)
 - test_war_justification.gd (~45 tests)
 
 ### Festival System (s11.5)
@@ -1702,6 +1702,22 @@ All in /tests/, one file per system:
   Step 5 Feasibility: placeholder pass (deferred to s4.3.17).
   `evaluate_war_justification()` runs all 5 steps, returns justified/reason/
   step_failed/personality_driven.
+  Wired into ActionExecutor: DECLARE_WAR intercepted before category routing.
+  `_execute_declare_war()` reads standing/primary objectives, intended tier,
+  and personality from `action.metadata`, runs `evaluate_war_justification()`
+  as gate. Justified: returns `requires_war_creation: true` effect with
+  declaring_clan, target_clan, authority_level. Rejected: returns
+  `war_declaration_rejected` with reason and step_failed. Total War
+  declaration costs −0.5 Honor.
+  DayOrchestrator `_process_war_declarations()` scans applied results for
+  `requires_war_creation` flag, creates WarData via `WarSystem.declare_war()`,
+  appends to `active_wars`. Guards: no self-war, no duplicate active wars.
+  Return dict gains `war_declarations`.
+  DECLARE_WAR added to: action_skill_map (Courtier+Awareness), objective_alignment
+  (INITIATE_WAR_CHECK: 95), personality_lean (14 virtues: Yu/Kyoryoku +15,
+  Jin −20, Rei/Makoto −10, etc.), AT_OWN_HOLDINGS context list, AP cost 2,
+  ADMINISTRATIVE_ACTIONS category, ceasefire block list.
+  WorldStateData gains `next_war_id: Array[int] = [1]`.
 
 ### What's Next
 1. World generation coordinate system and adjacency

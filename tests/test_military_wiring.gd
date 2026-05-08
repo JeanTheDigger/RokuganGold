@@ -1568,7 +1568,7 @@ func test_multiple_events_combine() -> void:
 	assert_true(results.size() >= 3)
 
 
-func test_inactive_war_skipped_for_battle() -> void:
+func test_inactive_war_skipped_for_battle_scores() -> void:
 	var war: WarData = _make_war()
 	war.is_active = false
 	var companies: Array[Dictionary] = [
@@ -1581,5 +1581,103 @@ func test_inactive_war_skipped_for_battle() -> void:
 	}
 	var results: Array[Dictionary] = DayOrchestrator._process_war_score_shifts(
 		military_daily, [], [war], companies,
+	)
+	assert_eq(results.size(), 0)
+
+
+# -- War Declaration Wiring Tests ------------------------------------------------
+
+func test_war_declaration_creates_war() -> void:
+	var active_wars: Array[WarData] = []
+	var applied: Array = [
+		{
+			"effects": {
+				"requires_war_creation": true,
+				"declaring_clan": "Crab",
+				"target_clan": "Crane",
+				"authority_level": WarData.AuthorityLevel.FAMILY_WAR,
+				"declaring_lord_id": 10,
+			},
+		},
+	]
+	var results: Array[Dictionary] = DayOrchestrator._process_war_declarations(
+		applied, active_wars, 100,
+	)
+	assert_eq(results.size(), 1)
+	assert_eq(results[0]["event"], "war_declared")
+	assert_eq(results[0]["declaring_clan"], "Crab")
+	assert_eq(results[0]["target_clan"], "Crane")
+	assert_eq(active_wars.size(), 1)
+	assert_eq(active_wars[0].clan_a, "Crab")
+	assert_eq(active_wars[0].clan_b, "Crane")
+	assert_eq(active_wars[0].ic_day_started, 100)
+
+
+func test_war_declaration_skips_duplicate() -> void:
+	var existing_war: WarData = _make_war(1, "Crab", "Crane")
+	var active_wars: Array[WarData] = [existing_war]
+	var applied: Array = [
+		{
+			"effects": {
+				"requires_war_creation": true,
+				"declaring_clan": "Crab",
+				"target_clan": "Crane",
+			},
+		},
+	]
+	var results: Array[Dictionary] = DayOrchestrator._process_war_declarations(
+		applied, active_wars, 100,
+	)
+	assert_eq(results.size(), 1)
+	assert_eq(results[0]["event"], "war_already_active")
+	assert_eq(active_wars.size(), 1)
+
+
+func test_war_declaration_skips_self_war() -> void:
+	var active_wars: Array[WarData] = []
+	var applied: Array = [
+		{
+			"effects": {
+				"requires_war_creation": true,
+				"declaring_clan": "Crab",
+				"target_clan": "Crab",
+			},
+		},
+	]
+	var results: Array[Dictionary] = DayOrchestrator._process_war_declarations(
+		applied, active_wars, 100,
+	)
+	assert_eq(results.size(), 0)
+	assert_eq(active_wars.size(), 0)
+
+
+func test_war_declaration_skips_empty_clans() -> void:
+	var active_wars: Array[WarData] = []
+	var applied: Array = [
+		{
+			"effects": {
+				"requires_war_creation": true,
+				"declaring_clan": "Crab",
+				"target_clan": "",
+			},
+		},
+	]
+	var results: Array[Dictionary] = DayOrchestrator._process_war_declarations(
+		applied, active_wars, 100,
+	)
+	assert_eq(results.size(), 0)
+
+
+func test_war_declaration_no_effect_flag() -> void:
+	var active_wars: Array[WarData] = []
+	var applied: Array = [
+		{
+			"effects": {
+				"effect": "readiness_assessed",
+			},
+		},
+	]
+	var results: Array[Dictionary] = DayOrchestrator._process_war_declarations(
+		applied, active_wars, 100,
 	)
 	assert_eq(results.size(), 0)

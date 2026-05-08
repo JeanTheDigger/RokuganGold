@@ -44,6 +44,7 @@ const ADMINISTRATIVE_ACTIONS: Array[String] = [
 	"FOUND_TEMPLE", "FOUND_MONASTERY", "COMMISSION_SHIP",
 	"ARRANGE_MARRIAGE", "APPOINT_TO_POSITION",
 	"PURIFY_TAINTED_GROUND", "FORTIFY_WALL_SECTION", "SEAL_WALL_BREACH",
+	"DECLARE_WAR",
 ]
 
 const INTELLIGENCE_ACTIONS: Array[String] = [
@@ -111,6 +112,19 @@ static func execute(
 		)
 		if not intim_result.is_empty():
 			return intim_result
+
+	if action_id == "DECLARE_WAR":
+		var war_effects: Dictionary = _execute_declare_war(character, action.metadata)
+		return {
+			"success": not war_effects.get("failed", false),
+			"action_id": action_id,
+			"character_id": character.character_id,
+			"target_npc_id": action.target_npc_id,
+			"target_province_id": action.target_province_id,
+			"ic_day": ctx.ic_day,
+			"season": ctx.season,
+			"effects": war_effects,
+		}
 
 	if action_id in COVERT_ACTIONS:
 		var covert_result: Dictionary = _try_execute_covert(
@@ -1004,4 +1018,85 @@ static func _resolve_travel_destination(
 		return str(action.target_settlement_id)
 	if action.target_province_id >= 0:
 		return str(action.target_province_id)
+	return ""
+
+
+# -- War Declaration (s53.1) ---------------------------------------------------
+
+static func _execute_declare_war(
+	character: L5RCharacterData,
+	metadata: Dictionary,
+) -> Dictionary:
+	var standing_objective: String = metadata.get("standing_objective", "")
+	var primary_objective: String = metadata.get("primary_objective", "")
+	var intended_tier: int = metadata.get(
+		"intended_tier", WarJustification.MilitaryTier.RAID,
+	)
+	var primary_virtue: String = metadata.get("primary_virtue", "")
+	if primary_virtue.is_empty():
+		primary_virtue = _get_primary_virtue_name(character)
+
+	var target_garrison_min: bool = metadata.get("target_garrison_at_minimum", false)
+	var no_field_army: bool = metadata.get("no_field_army_nearby", false)
+	var no_alliance: bool = metadata.get("no_alliance_protection", false)
+	var attacker_pu: float = metadata.get("attacker_pu", 0.0)
+	var defender_pu: float = metadata.get("defender_observable_pu", 0.0)
+
+	var justification: Dictionary = WarJustification.evaluate_war_justification(
+		standing_objective, primary_objective, intended_tier, primary_virtue,
+		target_garrison_min, no_field_army, no_alliance, attacker_pu, defender_pu,
+	)
+
+	if not justification.get("justified", false):
+		return {
+			"effect": "war_declaration_rejected",
+			"failed": true,
+			"reason": justification.get("reason", "unknown"),
+			"step_failed": justification.get("step_failed", 0),
+		}
+
+	var target_clan: String = metadata.get("target_clan", "")
+	var authority_level: int = metadata.get(
+		"authority_level", WarData.AuthorityLevel.PROVINCIAL_RAID,
+	)
+
+	return {
+		"effect": "war_declared",
+		"requires_war_creation": true,
+		"declaring_clan": character.clan,
+		"target_clan": target_clan,
+		"authority_level": authority_level,
+		"declaring_lord_id": character.character_id,
+		"intended_tier": intended_tier,
+		"personality_driven": justification.get("personality_driven", false),
+		"honor_change": -0.5 if intended_tier == WarJustification.MilitaryTier.TOTAL_WAR else 0.0,
+	}
+
+
+const _BUSHIDO_NAMES: Dictionary = {
+	Enums.BushidoVirtue.JIN: "Jin",
+	Enums.BushidoVirtue.YU: "Yu",
+	Enums.BushidoVirtue.REI: "Rei",
+	Enums.BushidoVirtue.CHUGI: "Chugi",
+	Enums.BushidoVirtue.GI: "Gi",
+	Enums.BushidoVirtue.MEIYO: "Meiyo",
+	Enums.BushidoVirtue.MAKOTO: "Makoto",
+}
+
+const _SHOURIDO_NAMES: Dictionary = {
+	Enums.ShouridoVirtue.SEIGYO: "Seigyo",
+	Enums.ShouridoVirtue.KETSUI: "Ketsui",
+	Enums.ShouridoVirtue.DOSATSU: "Dosatsu",
+	Enums.ShouridoVirtue.CHISHIKI: "Chishiki",
+	Enums.ShouridoVirtue.KANPEKI: "Kanpeki",
+	Enums.ShouridoVirtue.ISHI: "Ishi",
+	Enums.ShouridoVirtue.KYORYOKU: "Kyoryoku",
+}
+
+
+static func _get_primary_virtue_name(character: L5RCharacterData) -> String:
+	if _BUSHIDO_NAMES.has(character.bushido_virtue):
+		return _BUSHIDO_NAMES[character.bushido_virtue]
+	if _SHOURIDO_NAMES.has(character.shourido_virtue):
+		return _SHOURIDO_NAMES[character.shourido_virtue]
 	return ""

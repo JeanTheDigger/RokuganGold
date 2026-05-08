@@ -102,6 +102,12 @@ static func advance_day(
 		companies,
 	)
 
+	var war_declarations: Array[Dictionary] = _process_war_declarations(
+		day_result.get("applied", []),
+		active_wars,
+		ic_day,
+	)
+
 	var war_score_results: Array[Dictionary] = _process_war_score_shifts(
 		military_daily, military_effects, active_wars, companies,
 	)
@@ -233,6 +239,7 @@ static func advance_day(
 		"military_effects": military_effects,
 		"military_topics": military_topics,
 		"war_score_results": war_score_results,
+		"war_declarations": war_declarations,
 	}
 
 
@@ -2642,3 +2649,59 @@ static func _build_settlements_by_province(
 			result[s.province_id] = []
 		result[s.province_id].append(s)
 	return result
+
+
+# -- War Declaration Processing ------------------------------------------------
+
+static func _process_war_declarations(
+	applied_list: Array,
+	active_wars: Array[WarData],
+	ic_day: int,
+) -> Array[Dictionary]:
+	var results: Array[Dictionary] = []
+	for applied: Variant in applied_list:
+		if not (applied is Dictionary):
+			continue
+		var ad: Dictionary = applied
+		var effects: Dictionary = ad.get("effects", {})
+		if not effects.get("requires_war_creation", false):
+			continue
+
+		var declaring_clan: String = effects.get("declaring_clan", "")
+		var target_clan: String = effects.get("target_clan", "")
+		if declaring_clan.is_empty() or target_clan.is_empty():
+			continue
+		if declaring_clan == target_clan:
+			continue
+
+		if WarSystem.are_clans_at_war(active_wars, declaring_clan, target_clan):
+			results.append({
+				"event": "war_already_active",
+				"declaring_clan": declaring_clan,
+				"target_clan": target_clan,
+			})
+			continue
+
+		var war_id: int = active_wars.size() + 1
+		var authority_level: int = effects.get(
+			"authority_level", WarData.AuthorityLevel.PROVINCIAL_RAID,
+		)
+		var declaring_lord_id: int = effects.get("declaring_lord_id", -1)
+
+		var war: WarData = WarSystem.declare_war(
+			war_id, declaring_clan, target_clan,
+			authority_level, declaring_lord_id, -1, ic_day,
+		)
+		active_wars.append(war)
+
+		results.append({
+			"event": "war_declared",
+			"war_id": war.war_id,
+			"declaring_clan": declaring_clan,
+			"target_clan": target_clan,
+			"authority_level": authority_level,
+			"declaring_lord_id": declaring_lord_id,
+			"personality_driven": effects.get("personality_driven", false),
+		})
+
+	return results
