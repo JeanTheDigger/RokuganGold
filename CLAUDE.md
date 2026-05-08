@@ -1806,6 +1806,25 @@ The following subsystems are now integrated into the NPC decision loop:
   and +3 morale/tick (capped at base stats), arms tier restoration when arms
   deprivation tick > 1. Moving armies skip recovery. Broken/threatened tethers
   block supply and prevent recovery.
+  Military event topics: `_generate_military_event_topics()` scans daily
+  military results and generates TopicData for three event types: battle
+  outcome (Tier 3, momentum 30, battle_variant per GDD s15.7), heavy
+  casualties (Tier 3, momentum 25, when PU loss ≥ 0.5), siege events
+  (Tier 4, momentum 11, event_type as variant). Topics added to
+  active_topics for organic spread via the momentum/broadcast system.
+  Koku upkeep deduction: `_deduct_koku_upkeep()` deducts garrison (0.20/PU/
+  season) and ronin (1.50/season) koku costs from clan settlements'
+  `koku_stockpile`. Units with zero koku cost skip deduction.
+  Field deprivation: `_process_field_deprivation()` runs after tether ticks,
+  computing per-company rice (morale/health loss) and arms (attack/defense
+  penalty) effects based on tether deprivation tick levels. Tick 1 = warning
+  only; ticks 2–4 apply escalating penalties per ArmyUpkeepSystem tables.
+  Effects returned as descriptors for caller to apply to CompanyData objects.
+  Army recovery: `_process_army_recovery()` runs after deprivation, producing
+  recovery descriptors for stationary armies with solid supply. +5 health/tick
+  and +3 morale/tick (capped at base stats), arms tier restoration when arms
+  deprivation tick > 1. Moving armies skip recovery. Broken/threatened tethers
+  block supply and prevent recovery.
 
 ## Resolved Design Decisions
 
