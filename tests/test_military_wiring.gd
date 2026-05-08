@@ -67,6 +67,7 @@ func test_process_military_daily_empty() -> void:
 	assert_eq(r["siege_results"].size(), 0)
 	assert_eq(r["tether_results"].size(), 0)
 	assert_eq(r["order_results"]["total_delivered"], 0)
+	assert_eq(r["deprivation_results"].size(), 0)
 
 
 func test_army_movement_ticks() -> void:
@@ -606,3 +607,111 @@ func test_koku_upkeep_multiple_settlements_spread() -> void:
 	assert_almost_eq(r["koku_deducted"], expected_koku, 0.001)
 	assert_almost_eq(s1.koku_stockpile, 0.0, 0.001)
 	assert_almost_eq(s2.koku_stockpile, 3.0 - (expected_koku - 0.5), 0.001)
+
+
+# -- Field Deprivation Wiring Tests -----------------------------------------------
+
+func _make_tether(army_id: int, company_ids: Array) -> Dictionary:
+	return {
+		"army_id": army_id,
+		"company_ids": company_ids,
+		"rice_deprivation_tick": 0,
+		"arms_deprivation_tick": 0,
+	}
+
+
+func test_field_deprivation_no_tethers() -> void:
+	var results: Array[Dictionary] = DayOrchestrator._process_field_deprivation([], [])
+	assert_eq(results.size(), 0)
+
+
+func test_field_deprivation_skips_zero_ticks() -> void:
+	var tether: Dictionary = _make_tether(1, [1, 2])
+	var tether_result: Dictionary = {
+		"rice_deprivation_tick": 0,
+		"arms_deprivation_tick": 0,
+	}
+	var results: Array[Dictionary] = DayOrchestrator._process_field_deprivation(
+		[tether], [tether_result],
+	)
+	assert_eq(results.size(), 0)
+
+
+func test_field_deprivation_applies_rice_effects() -> void:
+	var tether: Dictionary = _make_tether(1, [10, 20])
+	var tether_result: Dictionary = {
+		"rice_deprivation_tick": 3,
+		"arms_deprivation_tick": 0,
+	}
+	var results: Array[Dictionary] = DayOrchestrator._process_field_deprivation(
+		[tether], [tether_result],
+	)
+	assert_eq(results.size(), 1)
+	assert_eq(results[0]["army_id"], 1)
+	assert_eq(results[0]["rice_deprivation_tick"], 3)
+	assert_eq(results[0]["company_effects"].size(), 2)
+	var eff: Dictionary = results[0]["company_effects"][0]
+	assert_eq(eff["company_id"], 10)
+	assert_true(eff["rice_effect"].has("morale"))
+	assert_true(eff["rice_effect"]["morale"] < 0)
+
+
+func test_field_deprivation_applies_arms_effects() -> void:
+	var tether: Dictionary = _make_tether(1, [10])
+	var tether_result: Dictionary = {
+		"rice_deprivation_tick": 0,
+		"arms_deprivation_tick": 2,
+	}
+	var results: Array[Dictionary] = DayOrchestrator._process_field_deprivation(
+		[tether], [tether_result],
+	)
+	assert_eq(results.size(), 1)
+	var eff: Dictionary = results[0]["company_effects"][0]
+	assert_true(eff["arms_effect"].has("attack"))
+	assert_true(eff["arms_effect"]["attack"] < 0)
+
+
+func test_field_deprivation_both_rice_and_arms() -> void:
+	var tether: Dictionary = _make_tether(1, [10])
+	var tether_result: Dictionary = {
+		"rice_deprivation_tick": 2,
+		"arms_deprivation_tick": 3,
+	}
+	var results: Array[Dictionary] = DayOrchestrator._process_field_deprivation(
+		[tether], [tether_result],
+	)
+	assert_eq(results.size(), 1)
+	var eff: Dictionary = results[0]["company_effects"][0]
+	assert_false(eff["rice_effect"].is_empty())
+	assert_false(eff["arms_effect"].is_empty())
+
+
+func test_field_deprivation_tick_1_warning_only() -> void:
+	var tether: Dictionary = _make_tether(1, [10])
+	var tether_result: Dictionary = {
+		"rice_deprivation_tick": 1,
+		"arms_deprivation_tick": 1,
+	}
+	var results: Array[Dictionary] = DayOrchestrator._process_field_deprivation(
+		[tether], [tether_result],
+	)
+	assert_eq(results.size(), 1)
+	var eff: Dictionary = results[0]["company_effects"][0]
+	assert_eq(eff["rice_effect"]["morale"], 0)
+	assert_eq(eff["rice_effect"]["health"], 0)
+	assert_eq(eff["arms_effect"]["attack"], 0)
+	assert_eq(eff["arms_effect"]["defense"], 0)
+
+
+func test_field_deprivation_multiple_tethers() -> void:
+	var t1: Dictionary = _make_tether(1, [10])
+	var t2: Dictionary = _make_tether(2, [20, 30])
+	var tr1: Dictionary = {"rice_deprivation_tick": 2, "arms_deprivation_tick": 0}
+	var tr2: Dictionary = {"rice_deprivation_tick": 0, "arms_deprivation_tick": 4}
+	var results: Array[Dictionary] = DayOrchestrator._process_field_deprivation(
+		[t1, t2], [tr1, tr2],
+	)
+	assert_eq(results.size(), 2)
+	assert_eq(results[0]["army_id"], 1)
+	assert_eq(results[1]["army_id"], 2)
+	assert_eq(results[1]["company_effects"].size(), 2)

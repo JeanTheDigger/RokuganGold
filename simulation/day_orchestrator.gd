@@ -1513,12 +1513,16 @@ static func _process_military_daily(
 		active_tethers, dice_engine,
 	)
 	var order_results: Dictionary = _process_order_ticks(order_states)
+	var deprivation_results: Array[Dictionary] = _process_field_deprivation(
+		active_tethers, tether_results,
+	)
 
 	return {
 		"movement_results": movement_results,
 		"siege_results": siege_results,
 		"tether_results": tether_results,
 		"order_results": order_results,
+		"deprivation_results": deprivation_results,
 	}
 
 
@@ -1567,6 +1571,49 @@ static func _process_tether_ticks(
 			dice_engine, tether, garrisons, enemies,
 		)
 		results.append(r)
+	return results
+
+
+static func _process_field_deprivation(
+	active_tethers: Array[Dictionary],
+	tether_results: Array[Dictionary],
+) -> Array[Dictionary]:
+	var results: Array[Dictionary] = []
+	for i: int in range(mini(active_tethers.size(), tether_results.size())):
+		var tether: Dictionary = active_tethers[i]
+		var tr: Dictionary = tether_results[i]
+		var rice_tick: int = tr.get("rice_deprivation_tick", 0)
+		var arms_tick: int = tr.get("arms_deprivation_tick", 0)
+
+		if rice_tick <= 0 and arms_tick <= 0:
+			continue
+
+		var army_id: int = tether.get("army_id", -1)
+		var company_ids: Array = tether.get("company_ids", [])
+		var per_company: Array[Dictionary] = []
+
+		for cid: Variant in company_ids:
+			var rice_effect: Dictionary = {}
+			var arms_effect: Dictionary = {}
+			if rice_tick > 0:
+				rice_effect = ArmyUpkeepSystem.get_rice_deprivation_effect(rice_tick)
+			if arms_tick > 0:
+				arms_effect = ArmyUpkeepSystem.get_arms_deprivation_effect(arms_tick)
+			per_company.append({
+				"company_id": int(cid),
+				"rice_tick": rice_tick,
+				"arms_tick": arms_tick,
+				"rice_effect": rice_effect,
+				"arms_effect": arms_effect,
+			})
+
+		results.append({
+			"army_id": army_id,
+			"rice_deprivation_tick": rice_tick,
+			"arms_deprivation_tick": arms_tick,
+			"company_effects": per_company,
+		})
+
 	return results
 
 
