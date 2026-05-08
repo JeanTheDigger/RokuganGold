@@ -105,6 +105,13 @@ static func execute(
 	if action_id == "PERFORM_FOR":
 		return _execute_perform_for(action, character, ctx, dice_engine, characters_by_id)
 
+	if action_id == "INTIMIDATE":
+		var intim_result: Dictionary = _execute_intimidation(
+			action, character, ctx, dice_engine, characters_by_id
+		)
+		if not intim_result.is_empty():
+			return intim_result
+
 	if action_id in COVERT_ACTIONS:
 		var covert_result: Dictionary = _try_execute_covert(
 			action, character, ctx, dice_engine, characters_by_id
@@ -359,6 +366,101 @@ static func _execute_perform_for(
 			"performance_applied": true,
 		},
 	}
+
+
+# -- Intimidation (s12.9) -----------------------------------------------------
+
+static func _execute_intimidation(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	dice_engine: DiceEngine,
+	characters_by_id: Dictionary,
+) -> Dictionary:
+	if action.target_npc_id < 0:
+		return {}
+	var target: L5RCharacterData = characters_by_id.get(action.target_npc_id)
+	if target == null:
+		return {}
+
+	var attacker_result: Dictionary = SkillResolver.resolve_skill_check(
+		character, dice_engine, "Intimidation", 0
+	)
+	var defender_result: Dictionary = SkillResolver.resolve_skill_check(
+		target, dice_engine, "Etiquette", 0
+	)
+	var attacker_roll: int = attacker_result.get("total", 0)
+	var defender_roll: int = defender_result.get("total", 0)
+
+	var disp_toward_target: int = ctx.dispositions.get(action.target_npc_id, 0)
+	var disp_tier: String = _get_disposition_tier_name(disp_toward_target)
+
+	var has_secret: bool = action.metadata.get("secret_ref") != null
+	var by_letter: bool = action.metadata.get("by_letter", false)
+	var is_public: bool = ctx.context_flag == Enums.ContextFlag.AT_COURT
+
+	var r: Dictionary
+	if has_secret:
+		var secret_tier: int = action.metadata.get("secret_tier", 3)
+		r = IntimidationSystem.resolve_blackmail(
+			attacker_roll, defender_roll, target.honor, secret_tier, disp_tier
+		)
+	elif is_public:
+		var witness_ids: Array[int] = _get_co_located_ids(character, characters_by_id)
+		r = IntimidationSystem.resolve_public_intimidation(
+			attacker_roll, defender_roll, target.honor, 0, witness_ids, disp_tier
+		)
+	else:
+		r = IntimidationSystem.resolve_private_intimidation(
+			attacker_roll, defender_roll, target.honor, by_letter, 0, disp_tier
+		)
+
+	var effects: Dictionary = {
+		"disposition_change": -(3 + clampi(attacker_roll - defender_roll, 0, 25) / 5) if r["success"] else 0,
+		"honor_change": r.get("honor_loss", 0.0),
+		"infamy_gain": r.get("infamy_gain", 0.0),
+		"compliance_active": r.get("compliance_active", false),
+	}
+
+	if r.has("witnesses"):
+		effects["witnesses"] = r["witnesses"]
+		effects["witness_disposition_loss"] = r.get("witness_disposition_loss", 0)
+
+	if r.has("favors_extracted"):
+		effects["favors_extracted"] = r["favors_extracted"]
+
+	return {
+		"success": r["success"],
+		"action_id": "INTIMIDATE",
+		"character_id": ctx.character_id,
+		"target_npc_id": action.target_npc_id,
+		"target_province_id": action.target_province_id,
+		"ic_day": ctx.ic_day,
+		"season": ctx.season,
+		"skill_used": "Intimidation",
+		"roll_total": attacker_roll,
+		"tn": defender_roll + int(target.honor),
+		"margin": attacker_roll - (defender_roll + int(target.honor)),
+		"effects": effects,
+	}
+
+
+static func _get_disposition_tier_name(disp: int) -> String:
+	if disp >= 91:
+		return "devoted"
+	if disp >= 61:
+		return "sworn"
+	if disp >= 31:
+		return "ally"
+	if disp >= 11:
+		return "friend"
+	if disp >= -10:
+		return "neutral"
+	if disp >= -30:
+		return "rival"
+	if disp >= -60:
+		return "enemy"
+	return "bitter_enemy"
 
 
 # -- Covert Actions (s12.8) ---------------------------------------------------

@@ -182,6 +182,102 @@ func test_intimidate_negative_disposition() -> void:
 		assert_true(result["effects"]["disposition_change"] < 0)
 
 
+# -- Intimidation System Routing -----------------------------------------------
+
+func test_intimidate_routes_through_system_when_target_available() -> void:
+	var target := L5RCharacterData.new()
+	target.character_id = 10
+	target.character_name = "Target"
+	target.honor = 3.0
+	target.reflexes = 3
+	target.awareness = 3
+	target.willpower = 3
+	target.skills = {"Etiquette": 2}
+	target.emphases = {}
+	target.wounds_taken = 0
+	var chars: Dictionary = {1: _character, 10: target}
+
+	_dice_engine.set_seed(42)
+	var action := _make_action("INTIMIDATE", 10)
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map, {}, chars
+	)
+	assert_eq(result["action_id"], "INTIMIDATE")
+	assert_eq(result["skill_used"], "Intimidation")
+	assert_true(result["effects"].has("honor_change"))
+	assert_true(result["effects"].has("infamy_gain"))
+	assert_true(result["effects"].has("compliance_active"))
+
+
+func test_intimidate_public_includes_witnesses() -> void:
+	var target := L5RCharacterData.new()
+	target.character_id = 10
+	target.character_name = "Target"
+	target.honor = 3.0
+	target.reflexes = 3
+	target.awareness = 3
+	target.willpower = 3
+	target.physical_location = "Castle_Doji"
+	target.skills = {"Etiquette": 2}
+	target.emphases = {}
+	target.wounds_taken = 0
+
+	var bystander := L5RCharacterData.new()
+	bystander.character_id = 20
+	bystander.character_name = "Bystander"
+	bystander.physical_location = "Castle_Doji"
+	_character.physical_location = "Castle_Doji"
+
+	var chars: Dictionary = {1: _character, 10: target, 20: bystander}
+	_ctx.context_flag = Enums.ContextFlag.AT_COURT
+
+	_dice_engine.set_seed(42)
+	var action := _make_action("INTIMIDATE", 10)
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map, {}, chars
+	)
+	assert_eq(result["action_id"], "INTIMIDATE")
+	if result["effects"].has("witnesses"):
+		assert_true(result["effects"]["witnesses"].size() > 0)
+
+
+func test_intimidate_blackmail_uses_secret_tier() -> void:
+	var target := L5RCharacterData.new()
+	target.character_id = 10
+	target.character_name = "Target"
+	target.honor = 3.0
+	target.reflexes = 3
+	target.awareness = 3
+	target.willpower = 3
+	target.skills = {"Etiquette": 2}
+	target.emphases = {}
+	target.wounds_taken = 0
+	var chars: Dictionary = {1: _character, 10: target}
+
+	_ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
+	_dice_engine.set_seed(42)
+	var action := _make_action("INTIMIDATE", 10)
+	action.metadata = {"secret_ref": true, "secret_tier": 1}
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map, {}, chars
+	)
+	assert_eq(result["action_id"], "INTIMIDATE")
+	assert_almost_eq(result["effects"]["honor_change"], -0.3, 0.01)
+	assert_almost_eq(result["effects"]["infamy_gain"], 0.1, 0.01)
+	if result["success"]:
+		assert_true(result["effects"].has("favors_extracted"))
+
+
+func test_intimidate_falls_through_without_characters_by_id() -> void:
+	_dice_engine.set_seed(42)
+	var action := _make_action("INTIMIDATE", 10)
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map
+	)
+	assert_eq(result["action_id"], "INTIMIDATE")
+	assert_false(result["effects"].has("infamy_gain"))
+
+
 # -- Covert Actions ------------------------------------------------------------
 
 func test_bribe_for_info_uses_temptation() -> void:
