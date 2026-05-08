@@ -18,6 +18,11 @@ const SOCIAL_ACTIONS: Array[String] = [
 const COVERT_ACTIONS: Array[String] = [
 	"BRIBE_FOR_INFO", "EAVESDROP", "INTERCEPT_LETTER",
 	"SEARCH_QUARTERS", "FABRICATE_SECRET",
+	"SHADOW_TARGET", "CONCEAL_ITEM", "SEARCH_PERSON",
+	"FORGE_IMPERSONATION_LETTER", "FORGE_ORDER",
+	"SEDUCE", "SEDUCE_FOR_INFO", "SEDUCE_FOR_ACCESS",
+	"SEDUCE_FOR_LEVERAGE", "SEDUCE_TO_COMPROMISE",
+	"EXPOSE_SECRET_PRIVATELY", "EXPOSE_SECRET_PUBLICLY",
 ]
 
 const MILITARY_ORDERS: Array[String] = [
@@ -99,6 +104,13 @@ static func execute(
 
 	if action_id == "PERFORM_FOR":
 		return _execute_perform_for(action, character, ctx, dice_engine, characters_by_id)
+
+	if action_id in COVERT_ACTIONS:
+		var covert_result: Dictionary = _try_execute_covert(
+			action, character, ctx, dice_engine, characters_by_id
+		)
+		if not covert_result.is_empty():
+			return covert_result
 
 	if action_id in MILITARY_ORDERS:
 		var mil_check: Dictionary = _validate_military_order(action_id, ctx, military_data)
@@ -346,6 +358,204 @@ static func _execute_perform_for(
 			"raises": perf_result.get("raises", 0),
 			"performance_applied": true,
 		},
+	}
+
+
+# -- Covert Actions (s12.8) ---------------------------------------------------
+
+static func _try_execute_covert(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	dice_engine: DiceEngine,
+	characters_by_id: Dictionary,
+) -> Dictionary:
+	var action_id: String = action.action_id
+	var target: L5RCharacterData = characters_by_id.get(action.target_npc_id)
+
+	match action_id:
+		"EAVESDROP":
+			if target == null:
+				return {}
+			var r: Dictionary = SecretSystem.resolve_eavesdrop(character, target, dice_engine)
+			return _build_covert_result(action, ctx, "Stealth", r)
+
+		"INTERCEPT_LETTER":
+			var same_loc: bool = target != null and target.physical_location == character.physical_location
+			var r: Dictionary = SecretSystem.resolve_intercept_letter(character, dice_engine, same_loc)
+			return _build_covert_result(action, ctx, "Stealth", r)
+
+		"SEARCH_QUARTERS":
+			if target == null:
+				return {}
+			var r: Dictionary = SecretSystem.resolve_search_quarters(character, target, dice_engine)
+			return _build_covert_result(action, ctx, "Stealth", r)
+
+		"SHADOW_TARGET":
+			if target == null:
+				return {}
+			var r: Dictionary = SecretSystem.resolve_shadow_target(character, target, dice_engine)
+			return _build_covert_result(action, ctx, "Stealth", r)
+
+		"CONCEAL_ITEM":
+			var item_size: String = action.metadata.get("item_size", "MEDIUM")
+			var is_weapon: bool = action.metadata.get("is_weapon", false)
+			var r: Dictionary = SecretSystem.resolve_conceal_item(character, item_size, is_weapon, dice_engine)
+			return _build_covert_result(action, ctx, "Sleight of Hand", r)
+
+		"SEARCH_PERSON":
+			if target == null:
+				return {}
+			var concealment_tn: int = action.metadata.get("concealment_tn", 15)
+			var has_authority: bool = action.metadata.get("magistrate_authority", false)
+			var r: Dictionary = SecretSystem.resolve_search_person(character, target, concealment_tn, dice_engine, has_authority)
+			return _build_covert_result(action, ctx, "Investigation", r)
+
+		"FORGE_IMPERSONATION_LETTER":
+			var auth_level: String = action.metadata.get("authority_level", "minor")
+			var r: Dictionary = SecretSystem.resolve_forge_impersonation_letter(character, auth_level, dice_engine)
+			return _build_covert_result(action, ctx, "Forgery", r)
+
+		"FORGE_ORDER":
+			var auth_level: String = action.metadata.get("authority_level", "minor")
+			var r: Dictionary = SecretSystem.resolve_forge_order(character, auth_level, dice_engine)
+			return _build_covert_result(action, ctx, "Forgery", r)
+
+		"FABRICATE_SECRET":
+			var severity: SecretData.Severity = action.metadata.get("severity", SecretData.Severity.TIER_3)
+			var secret_id: int = action.metadata.get("secret_id", -1)
+			var r: Dictionary = SecretSystem.fabricate_secret(character, action.target_npc_id, severity, secret_id, dice_engine)
+			return _build_covert_result(action, ctx, "Forgery", r)
+
+		"SEDUCE", "SEDUCE_FOR_INFO", "SEDUCE_FOR_ACCESS", \
+		"SEDUCE_FOR_LEVERAGE", "SEDUCE_TO_COMPROMISE":
+			if target == null:
+				return {}
+			var variant: SeductionSystem.SeductionVariant = _get_seduction_variant(action_id)
+			var r: Dictionary = SeductionSystem.resolve_seduction(character, target, variant, dice_engine)
+			return _build_covert_result(action, ctx, "Temptation", r)
+
+		"EXPOSE_SECRET_PRIVATELY":
+			return _execute_expose_privately(action, character, ctx, dice_engine, characters_by_id)
+
+		"EXPOSE_SECRET_PUBLICLY":
+			return _execute_expose_publicly(action, character, ctx, dice_engine, characters_by_id)
+
+	return {}
+
+
+static func _build_covert_result(
+	action: NPCDataStructures.ScoredAction,
+	ctx: NPCDataStructures.ContextSnapshot,
+	skill_used: String,
+	system_result: Dictionary,
+) -> Dictionary:
+	var success: bool = system_result.get("success", false)
+	var effects: Dictionary = system_result.duplicate()
+	effects["detection_risk"] = system_result.get("detection_risk", not success)
+
+	return {
+		"success": success,
+		"action_id": action.action_id,
+		"character_id": ctx.character_id,
+		"target_npc_id": action.target_npc_id,
+		"target_province_id": action.target_province_id,
+		"ic_day": ctx.ic_day,
+		"season": ctx.season,
+		"skill_used": skill_used,
+		"roll_total": system_result.get("roll_total", system_result.get("eavesdropper_total", system_result.get("shadow_total", 0))),
+		"tn": system_result.get("tn", 0),
+		"margin": system_result.get("margin", 0),
+		"effects": effects,
+	}
+
+
+static func _get_seduction_variant(action_id: String) -> SeductionSystem.SeductionVariant:
+	match action_id:
+		"SEDUCE_FOR_INFO":
+			return SeductionSystem.SeductionVariant.SEDUCE_FOR_INFO
+		"SEDUCE_FOR_ACCESS":
+			return SeductionSystem.SeductionVariant.SEDUCE_FOR_ACCESS
+		"SEDUCE_FOR_LEVERAGE":
+			return SeductionSystem.SeductionVariant.SEDUCE_FOR_LEVERAGE
+		"SEDUCE_TO_COMPROMISE":
+			return SeductionSystem.SeductionVariant.SEDUCE_TO_COMPROMISE
+		_:
+			return SeductionSystem.SeductionVariant.SEDUCE
+
+
+static func _execute_expose_privately(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	_dice_engine: DiceEngine,
+	characters_by_id: Dictionary,
+) -> Dictionary:
+	var recipient: L5RCharacterData = characters_by_id.get(action.target_npc_id)
+	if recipient == null:
+		return {}
+
+	var subject_id: int = action.metadata.get("subject_id", -1)
+	var subject: L5RCharacterData = characters_by_id.get(subject_id)
+	if subject == null:
+		return {}
+
+	var secret: SecretData = action.metadata.get("secret_ref")
+	if secret == null:
+		return {}
+
+	var has_proof: bool = action.metadata.get("has_proof", false)
+	var r: Dictionary = SecretSystem.reveal_privately(secret, character, recipient, subject, has_proof)
+
+	return {
+		"success": true,
+		"action_id": "EXPOSE_SECRET_PRIVATELY",
+		"character_id": ctx.character_id,
+		"target_npc_id": action.target_npc_id,
+		"target_province_id": action.target_province_id,
+		"ic_day": ctx.ic_day,
+		"season": ctx.season,
+		"skill_used": "",
+		"roll_total": 0,
+		"tn": 0,
+		"margin": 0,
+		"effects": r,
+	}
+
+
+static func _execute_expose_publicly(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	_dice_engine: DiceEngine,
+	characters_by_id: Dictionary,
+) -> Dictionary:
+	var subject_id: int = action.metadata.get("subject_id", -1)
+	var subject: L5RCharacterData = characters_by_id.get(subject_id)
+	if subject == null:
+		return {}
+
+	var secret: SecretData = action.metadata.get("secret_ref")
+	if secret == null:
+		return {}
+
+	var has_proof: bool = action.metadata.get("has_proof", false)
+	var witness_ids: Array[int] = _get_co_located_ids(character, characters_by_id)
+	var r: Dictionary = SecretSystem.expose_publicly(secret, character, subject, witness_ids, characters_by_id, has_proof)
+
+	return {
+		"success": true,
+		"action_id": "EXPOSE_SECRET_PUBLICLY",
+		"character_id": ctx.character_id,
+		"target_npc_id": action.target_npc_id,
+		"target_province_id": action.target_province_id,
+		"ic_day": ctx.ic_day,
+		"season": ctx.season,
+		"skill_used": "",
+		"roll_total": 0,
+		"tn": 0,
+		"margin": 0,
+		"effects": r,
 	}
 
 

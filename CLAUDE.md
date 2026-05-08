@@ -455,6 +455,7 @@ All in /tests/, one file per system:
 - test_seduction_system.gd (~25 tests)
 - test_assassination_system.gd (~45 tests)
 - test_bound_escape_system.gd (~45 tests)
+- test_secret_system_wiring.gd (~25 tests)
 
 ### Festival System (s11.5)
 - **simulation/festival_system.gd** — Empire-wide canonical festivals, Rokuyo
@@ -1477,6 +1478,22 @@ The following subsystems are now integrated into the NPC decision loop:
   who re-evaluate every season). Uses 9-factor scoring to designate heirs.
   New params on `advance_day()`: `active_successions: Array[SuccessionData]`,
   `next_succession_id: Array[int]`. Return dict gains `succession_results`.
+- **SecretSystem / SeductionSystem / AssassinationSystem / BoundEscapeSystem** —
+  Phase 7: ActionExecutor intercepts 17 covert ActionIDs before the generic
+  skill path. Routes EAVESDROP, INTERCEPT_LETTER, SEARCH_QUARTERS,
+  SHADOW_TARGET to SecretSystem contested/two-step resolution. Routes
+  CONCEAL_ITEM, SEARCH_PERSON, FORGE_IMPERSONATION_LETTER, FORGE_ORDER,
+  FABRICATE_SECRET to SecretSystem static methods. Routes SEDUCE and 4
+  variants to SeductionSystem.resolve_seduction(). Routes
+  EXPOSE_SECRET_PRIVATELY/PUBLICLY to SecretSystem.reveal_privately()/
+  expose_publicly() with co-located witness gathering. ScoredAction gains
+  `metadata: Dictionary` for action-specific parameters (item_size, authority_level,
+  secret_ref, concealment_tn, etc.). Daily: `_process_entanglements()` checks
+  16-day maintenance windows, marks neglected/broken, removes broken.
+  `_process_bound_states()` auto-attempts escape for bound characters with
+  Sleight of Hand skill, removes freed states. New params on `advance_day()`:
+  `entanglements: Array[Dictionary]`, `bound_states: Array[Dictionary]`.
+  Return dict gains `entanglement_results`, `bound_escape_results`.
 
 ## Resolved Design Decisions
 

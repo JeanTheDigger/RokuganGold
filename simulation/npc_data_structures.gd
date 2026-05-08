@@ -27,6 +27,7 @@ class ScoredAction:
 	var target_settlement_id: int = -1
 	var target_province_id: int = -1
 	var ap_cost: int = 1
+	var metadata: Dictionary = {}
 
 	# Eight base scoring components per s55.4 Phase 5
 	var objective_alignment: float = 0.0

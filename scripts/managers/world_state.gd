@@ -49,6 +49,8 @@ var death_events: Array[Dictionary] = []
 var successor_map: Dictionary = {}
 var active_successions: Array[SuccessionData] = []
 var next_succession_id: Array[int] = [1]
+var entanglements: Array[Dictionary] = []
+var bound_states: Array[Dictionary] = []
 
 # -- Collective Disposition (s12.2b) -------------------------------------------
 # Clan-to-clan and family-to-family baselines keyed by sorted "a||b" strings.
@@ -115,6 +117,8 @@ func advance_one_day() -> Dictionary:
 		_build_miya_inputs(),
 		active_successions,
 		next_succession_id,
+		entanglements,
+		bound_states,
 	)
 
 

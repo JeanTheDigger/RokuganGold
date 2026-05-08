@@ -36,6 +36,8 @@ static func advance_day(
 	miya_inputs: Dictionary = {},
 	active_successions: Array[SuccessionData] = [],
 	next_succession_id: Array[int] = [1],
+	entanglements: Array[Dictionary] = [],
+	bound_states: Array[Dictionary] = [],
 ) -> Dictionary:
 	var prev_season: int = time_system.get_season()
 
@@ -54,6 +56,11 @@ static func advance_day(
 	_apply_cohabitation(characters, characters_by_id)
 
 	var favor_results: Dictionary = _process_favors(favors, ic_day)
+
+	var entanglement_results: Array[Dictionary] = _process_entanglements(entanglements, ic_day)
+	var bound_escape_results: Array[Dictionary] = _process_bound_states(
+		bound_states, characters_by_id, dice_engine, ic_day
+	)
 
 	var day_result: Dictionary = NPCWaveResolver.resolve_day_applied(
 		characters, world_states, objectives_map, scoring_tables, filter_data,
@@ -186,6 +193,8 @@ static func advance_day(
 		"letter_pass_results": letter_pass_results,
 		"insurgency_results": insurgency_results,
 		"succession_results": succession_results,
+		"entanglement_results": entanglement_results,
+		"bound_escape_results": bound_escape_results,
 	}
 
 
@@ -1332,3 +1341,85 @@ static func _evaluate_heir_designations(
 		)
 		if evals.size() > 0:
 			SuccessionSystem.designate_heir(lord, evals[0]["candidate_id"])
+
+
+# -- Entanglement Maintenance (s12.8) -----------------------------------------
+
+static func _process_entanglements(
+	entanglements: Array[Dictionary],
+	ic_day: int,
+) -> Array[Dictionary]:
+	var results: Array[Dictionary] = []
+	var broken: Array[Dictionary] = []
+
+	for ent in entanglements:
+		if ent.get("state") == SeductionSystem.EntanglementState.BROKEN:
+			continue
+
+		var check: Dictionary = SeductionSystem.check_maintenance(ent, ic_day)
+		if check.get("state") == SeductionSystem.EntanglementState.BROKEN:
+			ent["state"] = SeductionSystem.EntanglementState.BROKEN
+			ent["missed_windows"] = check.get("missed_windows", 3)
+			broken.append(ent)
+			results.append({
+				"entanglement": ent,
+				"event": "broken",
+				"missed_windows": check.get("missed_windows", 0),
+			})
+		elif check.get("needs_maintenance", false):
+			ent["state"] = check.get("state", SeductionSystem.EntanglementState.NEGLECTED)
+			ent["missed_windows"] = check.get("missed_windows", 0)
+			results.append({
+				"entanglement": ent,
+				"event": "neglected",
+				"missed_windows": check.get("missed_windows", 0),
+			})
+
+	for ent in broken:
+		entanglements.erase(ent)
+
+	return results
+
+
+# -- Bound Character Processing (s12.8) ---------------------------------------
+
+static func _process_bound_states(
+	bound_states: Array[Dictionary],
+	characters_by_id: Dictionary,
+	dice_engine: DiceEngine,
+	ic_day: int,
+) -> Array[Dictionary]:
+	var results: Array[Dictionary] = []
+	var freed: Array[Dictionary] = []
+
+	for bs in bound_states:
+		var char_id: int = bs.get("character_id", -1)
+		var character: L5RCharacterData = characters_by_id.get(char_id)
+		if character == null:
+			continue
+
+		if bs.get("state") != BoundEscapeSystem.BoundState.BOUND:
+			if bs.get("state") == BoundEscapeSystem.BoundState.FREE:
+				freed.append(bs)
+			continue
+
+		if not BoundEscapeSystem.can_attempt_escape(bs, ic_day):
+			continue
+
+		var soh_rank: int = character.skills.get("Sleight of Hand", 0)
+		if soh_rank == 0:
+			continue
+
+		var r: Dictionary = BoundEscapeSystem.resolve_escape_attempt(
+			character, bs, dice_engine, ic_day
+		)
+		results.append({
+			"character_id": char_id,
+			"escape_result": r,
+			"new_state": bs.get("state"),
+		})
+
+	for bs in freed:
+		bound_states.erase(bs)
+
+	return results
