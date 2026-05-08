@@ -183,6 +183,7 @@ static func generate_options(
 		option.target_settlement_id = need.target_settlement_id
 		option.target_province_id = need.target_province_id
 		option.ap_cost = _get_ap_cost(action_id)
+		_populate_action_metadata(option, need, ctx)
 		options.append(option)
 
 	return options
@@ -326,7 +327,7 @@ static func execute_action(
 			"action_id": chosen.action_id,
 		}
 
-	return {
+	var decision: Dictionary = {
 		"success": true,
 		"action_id": chosen.action_id,
 		"target_npc_id": chosen.target_npc_id,
@@ -338,6 +339,9 @@ static func execute_action(
 		"character_id": ctx.character_id,
 		"ic_day": ctx.ic_day,
 	}
+	if not chosen.metadata.is_empty():
+		decision["metadata"] = chosen.metadata
+	return decision
 
 
 # -- Main Entry Point ----------------------------------------------------------
@@ -466,7 +470,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array[S
 				"FOUND_TEMPLE", "FOUND_MONASTERY", "COMMISSION_SHIP",
 				"ARRANGE_MARRIAGE", "APPOINT_TO_POSITION",
 				"PURIFY_TAINTED_GROUND", "FORTIFY_WALL_SECTION", "SEAL_WALL_BREACH",
-				"DECLARE_WAR",
+				"DECLARE_WAR", "NEGOTIATE_SURRENDER",
 				"CRAFT", "MENTOR",
 				"DO_NOTHING", "REST",
 			]
@@ -998,3 +1002,68 @@ static func _select_letter_target(
 	if not met.is_empty():
 		return met[0]
 	return -1
+
+
+# -- Action Metadata Population ------------------------------------------------
+# Populates action-specific metadata during Phase 3. Actions that need special
+# inputs for execution (DECLARE_WAR, NEGOTIATE_SURRENDER) get their metadata
+# here from the need and context.
+
+static func _populate_action_metadata(
+	option: NPCDataStructures.ScoredAction,
+	need: NPCDataStructures.ImmediateNeed,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> void:
+	if option.action_id == "DECLARE_WAR":
+		option.metadata = _build_declare_war_metadata(need, ctx)
+	elif option.action_id == "NEGOTIATE_SURRENDER":
+		option.metadata = _build_negotiate_surrender_metadata(need, ctx)
+
+
+static func _build_declare_war_metadata(
+	need: NPCDataStructures.ImmediateNeed,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> Dictionary:
+	var target_clan: String = need.target_clan_id
+	if target_clan.is_empty():
+		for ps: Variant in ctx.province_statuses:
+			if ps is NPCDataStructures.ProvinceStatus:
+				var status: NPCDataStructures.ProvinceStatus = ps
+				if status.province_id == need.target_province_id:
+					target_clan = status.clan
+					break
+
+	var standing: String = need.target_intent
+	var primary: String = ""
+
+	return {
+		"standing_objective": standing,
+		"primary_objective": primary,
+		"intended_tier": WarJustification.MilitaryTier.RAID,
+		"target_clan": target_clan,
+		"authority_level": WarData.AuthorityLevel.PROVINCIAL_RAID,
+	}
+
+
+static func _build_negotiate_surrender_metadata(
+	need: NPCDataStructures.ImmediateNeed,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> Dictionary:
+	var target_clan: String = need.target_clan_id
+	var war_ref: Variant = null
+	for war_dict: Variant in ctx.active_wars:
+		if not (war_dict is Dictionary):
+			continue
+		var wd: Dictionary = war_dict
+		var enemy: String = WarSystem.get_enemy_clan_from_war(wd, ctx.clan)
+		if enemy == target_clan or target_clan.is_empty():
+			war_ref = wd.get("_war_ref")
+			target_clan = enemy
+			break
+	return {
+		"war_ref": war_ref,
+		"target_clan": target_clan,
+		"target_virtue": "",
+		"hostage_held": false,
+		"superior_pressuring": false,
+	}

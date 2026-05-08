@@ -208,6 +208,7 @@ static func _decompose_expand_territory(
 		return _make_need("INITIATE_WAR_CHECK", 2, {
 			"target_province_id": weak_province_id,
 			"target_clan_id": objective.get("target_clan_id", ""),
+			"target_intent": "EXPAND_TERRITORY",
 		})
 
 	return _courtier_diplomatic_path(objective, ctx)
@@ -794,8 +795,15 @@ static func _decompose_military_dominance(
 			return _make_need("TRAIN_TROOPS", 2)
 		return _make_need("TRAIN_SKILL", 1)
 
-	# Behind a rival — urgent buildup
+	# Behind a rival — urgent buildup or preemptive strike
 	if ctx.is_lord:
+		if ctx.available_levy_pu <= 0.0 and dominance_ratio >= 0.7:
+			var target_province: int = _find_weak_neighbor_province(ctx)
+			if target_province >= 0:
+				return _make_need("INITIATE_WAR_CHECK", 2, {
+					"target_province_id": target_province,
+					"target_intent": "MILITARY_DOMINANCE",
+				})
 		return _make_need("LEVY_TROOPS", 3)
 	return _make_need("SEND_LETTER", 2)
 

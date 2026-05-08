@@ -447,6 +447,7 @@ static func _execute_decision(
 	action.target_npc_id_secondary = decision.get("target_npc_id_secondary", -1)
 	action.target_settlement_id = decision.get("target_settlement_id", -1)
 	action.target_province_id = decision.get("target_province_id", -1)
+	action.metadata = decision.get("metadata", {})
 
 	var ctx: NPCDataStructures.ContextSnapshot = NPCDecisionEngine.build_context(
 		character, world_state, characters_by_id

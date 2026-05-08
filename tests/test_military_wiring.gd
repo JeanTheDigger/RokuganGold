@@ -1672,7 +1672,7 @@ func test_war_declaration_skips_empty_clans() -> void:
 
 
 func test_war_declaration_no_effect_flag() -> void:
-	var active_wars: Array[WarData] = []
+	var wars: Array[WarData] = []
 	var applied: Array = [
 		{
 			"effects": {
@@ -1681,6 +1681,114 @@ func test_war_declaration_no_effect_flag() -> void:
 		},
 	]
 	var results: Array[Dictionary] = DayOrchestrator._process_war_declarations(
-		applied, active_wars, 100,
+		applied, wars, 100,
 	)
 	assert_eq(results.size(), 0)
+
+
+# -- War Trigger Pipeline (Metadata Population) --------------------------------
+
+func test_declare_war_metadata_populated_in_phase_3() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
+	ctx.character_id = 1
+	ctx.clan = "Crab"
+	ctx.is_lord = true
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "INITIATE_WAR_CHECK"
+	need.target_province_id = 10
+	need.target_clan_id = "Crane"
+	need.target_intent = "EXPAND_TERRITORY"
+
+	var options: Array[NPCDataStructures.ScoredAction] = NPCDecisionEngine.generate_options(
+		ctx, need,
+	)
+
+	var declare_war_option: NPCDataStructures.ScoredAction = null
+	for opt: NPCDataStructures.ScoredAction in options:
+		if opt.action_id == "DECLARE_WAR":
+			declare_war_option = opt
+			break
+
+	assert_not_null(declare_war_option, "DECLARE_WAR should be in AT_OWN_HOLDINGS options")
+	if declare_war_option != null:
+		assert_eq(declare_war_option.metadata.get("standing_objective", ""), "EXPAND_TERRITORY")
+		assert_eq(declare_war_option.metadata.get("target_clan", ""), "Crane")
+		assert_eq(declare_war_option.target_province_id, 10)
+
+
+func test_negotiate_surrender_metadata_populated_in_phase_3() -> void:
+	var war_ns: WarData = _make_war(1, "Crab", "Crane")
+	var war_dict: Dictionary = WarSystem.to_context_dict(war_ns)
+
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
+	ctx.character_id = 1
+	ctx.clan = "Crab"
+	ctx.is_lord = true
+	ctx.active_wars = [war_dict]
+
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "SEEK_PEACE"
+	need.target_clan_id = "Crane"
+
+	var options: Array[NPCDataStructures.ScoredAction] = NPCDecisionEngine.generate_options(
+		ctx, need,
+	)
+
+	var surrender_option: NPCDataStructures.ScoredAction = null
+	for opt: NPCDataStructures.ScoredAction in options:
+		if opt.action_id == "NEGOTIATE_SURRENDER":
+			surrender_option = opt
+			break
+
+	assert_not_null(surrender_option, "NEGOTIATE_SURRENDER should be in AT_OWN_HOLDINGS options")
+	if surrender_option != null:
+		assert_eq(surrender_option.metadata.get("target_clan", ""), "Crane")
+		assert_not_null(surrender_option.metadata.get("war_ref"))
+
+
+func test_metadata_carried_through_execute_action() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.character_id = 1
+	ctx.ic_day = 100
+
+	var action := NPCDataStructures.ScoredAction.new()
+	action.action_id = "DECLARE_WAR"
+	action.ap_cost = 2
+	action.metadata = {"standing_objective": "EXPAND_TERRITORY", "target_clan": "Crane"}
+
+	var c: L5RCharacterData = L5RCharacterData.new()
+	c.character_id = 1
+	c.action_points = 4
+
+	var result: Dictionary = NPCDecisionEngine.execute_action(action, c, ctx)
+	assert_true(result.has("metadata"))
+	assert_eq(result["metadata"]["standing_objective"], "EXPAND_TERRITORY")
+	assert_eq(result["metadata"]["target_clan"], "Crane")
+
+
+func test_expand_territory_produces_war_check_with_intent() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
+	ctx.is_lord = true
+	ctx.clan = "Crab"
+	ctx.province_statuses = [_make_ps_wt(10, "Crane", 1)]
+
+	var objective: Dictionary = {"type": "EXPAND_TERRITORY", "target_clan_id": "Crane"}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(
+		objective, ctx,
+	)
+	if need.need_type == "INITIATE_WAR_CHECK":
+		assert_eq(need.target_intent, "EXPAND_TERRITORY")
+		assert_eq(need.target_province_id, 10)
+
+
+func _make_ps_wt(
+	prov_id: int, clan_name: String, confidence_val: int,
+) -> NPCDataStructures.ProvinceStatus:
+	var ps := NPCDataStructures.ProvinceStatus.new()
+	ps.province_id = prov_id
+	ps.clan = clan_name
+	ps.confidence = confidence_val
+	return ps

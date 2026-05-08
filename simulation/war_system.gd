@@ -388,6 +388,7 @@ static func to_context_dict(war: WarData) -> Dictionary:
 		"initiator_clan": war.initiator_clan,
 		"is_active": war.is_active,
 		"seasons_active": war.seasons_active,
+		"_war_ref": war,
 	}
 
 
