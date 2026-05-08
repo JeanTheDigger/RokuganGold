@@ -395,3 +395,59 @@ static func _get_opponent_clan(war: WarData, clan: String) -> String:
 	if clan == war.clan_b:
 		return war.clan_a
 	return ""
+
+
+# -- Trade Route Suspension (GDD s53 Mechanical Effects) -----------------------
+
+static func suspend_trade_routes_for_war(
+	trade_routes: Array,
+	provinces: Dictionary,
+	clan_a: String,
+	clan_b: String,
+) -> Array[Dictionary]:
+	## Disrupt all trade routes connecting provinces of two warring clans.
+	## Per GDD s53: "Trade routes between the two clans are suspended."
+	var results: Array[Dictionary] = []
+	for route: Variant in trade_routes:
+		var r: TradeRouteData = route as TradeRouteData
+		if r == null or r.is_disrupted:
+			continue
+		var prov_a: ProvinceData = provinces.get(r.province_a_id) as ProvinceData
+		var prov_b: ProvinceData = provinces.get(r.province_b_id) as ProvinceData
+		if prov_a == null or prov_b == null:
+			continue
+		var connects_clan_a: bool = prov_a.clan == clan_a or prov_b.clan == clan_a
+		var connects_clan_b: bool = prov_a.clan == clan_b or prov_b.clan == clan_b
+		if connects_clan_a and connects_clan_b:
+			RiceMarketSystem.disrupt_route(r, "war_%s_%s" % [clan_a, clan_b])
+			results.append({
+				"route_id": r.route_id,
+				"province_a_id": r.province_a_id,
+				"province_b_id": r.province_b_id,
+				"action": "suspended",
+			})
+	return results
+
+
+static func restore_trade_routes_for_peace(
+	trade_routes: Array,
+	clan_a: String,
+	clan_b: String,
+) -> Array[Dictionary]:
+	## Restore trade routes that were disrupted by a specific war.
+	var war_reason_1: String = "war_%s_%s" % [clan_a, clan_b]
+	var war_reason_2: String = "war_%s_%s" % [clan_b, clan_a]
+	var results: Array[Dictionary] = []
+	for route: Variant in trade_routes:
+		var r: TradeRouteData = route as TradeRouteData
+		if r == null or not r.is_disrupted:
+			continue
+		if r.disruption_reason == war_reason_1 or r.disruption_reason == war_reason_2:
+			RiceMarketSystem.restore_route(r)
+			results.append({
+				"route_id": r.route_id,
+				"province_a_id": r.province_a_id,
+				"province_b_id": r.province_b_id,
+				"action": "restored",
+			})
+	return results

@@ -45,6 +45,7 @@ static func advance_day(
 	companies: Array[Dictionary] = [],
 	clans: Dictionary = {},
 	active_wars: Array[WarData] = [],
+	trade_routes: Array = [],
 ) -> Dictionary:
 	var prev_season: int = time_system.get_season()
 
@@ -108,6 +109,10 @@ static func advance_day(
 		ic_day,
 	)
 
+	var trade_route_results: Array[Dictionary] = _process_war_trade_routes(
+		war_declarations, trade_routes, provinces,
+	)
+
 	var war_score_results: Array[Dictionary] = _process_war_score_shifts(
 		military_daily, military_effects, active_wars, companies,
 	)
@@ -119,6 +124,11 @@ static func advance_day(
 		next_topic_id,
 		ic_day,
 	)
+
+	var peace_route_results: Array[Dictionary] = _process_peace_trade_routes(
+		war_termination_results, trade_routes,
+	)
+	trade_route_results.append_array(peace_route_results)
 
 	var military_topics: Array[TopicData] = _generate_military_event_topics(
 		military_daily, military_effects, active_topics, next_topic_id, ic_day,
@@ -249,6 +259,7 @@ static func advance_day(
 		"war_score_results": war_score_results,
 		"war_declarations": war_declarations,
 		"war_termination_results": war_termination_results,
+		"trade_route_results": trade_route_results,
 	}
 
 
@@ -2783,3 +2794,55 @@ static func _find_war_by_id(
 		if war.war_id == war_id:
 			return war
 	return null
+
+
+# -- Trade Route Suspension on War/Peace ---------------------------------------
+
+static func _process_war_trade_routes(
+	war_declarations: Array[Dictionary],
+	trade_routes: Array,
+	provinces: Dictionary,
+) -> Array[Dictionary]:
+	var results: Array[Dictionary] = []
+	for decl: Dictionary in war_declarations:
+		if decl.get("event", "") != "war_declared":
+			continue
+		var clan_a: String = decl.get("declaring_clan", "")
+		var clan_b: String = decl.get("target_clan", "")
+		if clan_a.is_empty() or clan_b.is_empty():
+			continue
+		var suspended: Array[Dictionary] = WarTermination.suspend_trade_routes_for_war(
+			trade_routes, provinces, clan_a, clan_b,
+		)
+		results.append_array(suspended)
+	return results
+
+
+static func _process_peace_trade_routes(
+	war_termination_results: Array[Dictionary],
+	trade_routes: Array,
+) -> Array[Dictionary]:
+	var results: Array[Dictionary] = []
+	for resolution: Dictionary in war_termination_results:
+		var res_type: String = resolution.get("resolution", "")
+		if res_type == "annihilation":
+			continue
+		var clan_a: String = ""
+		var clan_b: String = ""
+		match res_type:
+			"formal_surrender":
+				clan_a = resolution.get("winner_clan", "")
+				clan_b = resolution.get("loser_clan", "")
+			"negotiated_settlement":
+				clan_a = resolution.get("proposing_clan", "")
+				clan_b = resolution.get("receiving_clan", "")
+			"imperial_edict":
+				clan_a = resolution.get("clan_a", "")
+				clan_b = resolution.get("clan_b", "")
+		if clan_a.is_empty() or clan_b.is_empty():
+			continue
+		var restored: Array[Dictionary] = WarTermination.restore_trade_routes_for_peace(
+			trade_routes, clan_a, clan_b,
+		)
+		results.append_array(restored)
+	return results

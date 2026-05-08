@@ -474,3 +474,174 @@ func test_resolution_name_constants() -> void:
 		WarTermination.RESOLUTION_NAMES[WarTermination.ResolutionType.ANNIHILATION],
 		"annihilation",
 	)
+
+
+# -- Trade Route Suspension / Restoration --------------------------------------
+
+func _make_route(id: int, prov_a: int, prov_b: int) -> TradeRouteData:
+	var r: TradeRouteData = TradeRouteData.new()
+	r.route_id = id
+	r.province_a_id = prov_a
+	r.province_b_id = prov_b
+	return r
+
+
+func _make_province(id: int, clan: String) -> ProvinceData:
+	var p: ProvinceData = ProvinceData.new()
+	p.province_id = id
+	p.clan = clan
+	return p
+
+
+func test_suspend_routes_between_warring_clans() -> void:
+	var p1: ProvinceData = _make_province(1, "Crab")
+	var p2: ProvinceData = _make_province(2, "Crane")
+	var p3: ProvinceData = _make_province(3, "Crab")
+	var provinces: Dictionary = {1: p1, 2: p2, 3: p3}
+	var route_cross: TradeRouteData = _make_route(10, 1, 2)
+	var route_same: TradeRouteData = _make_route(11, 1, 3)
+	var routes: Array = [route_cross, route_same]
+
+	var results: Array[Dictionary] = WarTermination.suspend_trade_routes_for_war(
+		routes, provinces, "Crab", "Crane",
+	)
+	assert_eq(results.size(), 1)
+	assert_eq(results[0]["route_id"], 10)
+	assert_true(route_cross.is_disrupted)
+	assert_eq(route_cross.disruption_reason, "war_Crab_Crane")
+	assert_false(route_same.is_disrupted)
+
+
+func test_suspend_skips_already_disrupted() -> void:
+	var provinces: Dictionary = {
+		1: _make_province(1, "Crab"),
+		2: _make_province(2, "Crane"),
+	}
+	var route: TradeRouteData = _make_route(10, 1, 2)
+	route.is_disrupted = true
+	route.disruption_reason = "bandits"
+	var routes: Array = [route]
+
+	var results: Array[Dictionary] = WarTermination.suspend_trade_routes_for_war(
+		routes, provinces, "Crab", "Crane",
+	)
+	assert_eq(results.size(), 0)
+	assert_eq(route.disruption_reason, "bandits")
+
+
+func test_restore_routes_on_peace() -> void:
+	var route: TradeRouteData = _make_route(10, 1, 2)
+	route.is_disrupted = true
+	route.disruption_reason = "war_Crab_Crane"
+	var route_other: TradeRouteData = _make_route(11, 3, 4)
+	route_other.is_disrupted = true
+	route_other.disruption_reason = "war_Lion_Unicorn"
+	var routes: Array = [route, route_other]
+
+	var results: Array[Dictionary] = WarTermination.restore_trade_routes_for_peace(
+		routes, "Crab", "Crane",
+	)
+	assert_eq(results.size(), 1)
+	assert_eq(results[0]["route_id"], 10)
+	assert_false(route.is_disrupted)
+	assert_true(route_other.is_disrupted)
+
+
+func test_restore_handles_reversed_clan_order() -> void:
+	var route: TradeRouteData = _make_route(10, 1, 2)
+	route.is_disrupted = true
+	route.disruption_reason = "war_Crane_Crab"
+	var routes: Array = [route]
+
+	var results: Array[Dictionary] = WarTermination.restore_trade_routes_for_peace(
+		routes, "Crab", "Crane",
+	)
+	assert_eq(results.size(), 1)
+	assert_false(route.is_disrupted)
+
+
+func test_annihilation_does_not_restore_routes() -> void:
+	var route: TradeRouteData = _make_route(10, 1, 2)
+	route.is_disrupted = true
+	route.disruption_reason = "war_Crab_Crane"
+	var routes: Array = [route]
+
+	var results: Array[Dictionary] = DayOrchestrator._process_peace_trade_routes(
+		[{"resolution": "annihilation", "victor_clan": "Crab", "annihilated_clan": "Crane"}],
+		routes,
+	)
+	assert_eq(results.size(), 0)
+	assert_true(route.is_disrupted)
+
+
+func test_orchestrator_suspends_routes_on_declaration() -> void:
+	var p1: ProvinceData = _make_province(1, "Crab")
+	var p2: ProvinceData = _make_province(2, "Crane")
+	var provinces: Dictionary = {1: p1, 2: p2}
+	var route: TradeRouteData = _make_route(10, 1, 2)
+	var routes: Array = [route]
+	var declarations: Array[Dictionary] = [{
+		"event": "war_declared",
+		"declaring_clan": "Crab",
+		"target_clan": "Crane",
+	}]
+
+	var results: Array[Dictionary] = DayOrchestrator._process_war_trade_routes(
+		declarations, routes, provinces,
+	)
+	assert_eq(results.size(), 1)
+	assert_true(route.is_disrupted)
+
+
+func test_orchestrator_restores_routes_on_settlement() -> void:
+	var route: TradeRouteData = _make_route(10, 1, 2)
+	route.is_disrupted = true
+	route.disruption_reason = "war_Crab_Crane"
+	var routes: Array = [route]
+	var terminations: Array[Dictionary] = [{
+		"resolution": "negotiated_settlement",
+		"proposing_clan": "Crab",
+		"receiving_clan": "Crane",
+	}]
+
+	var results: Array[Dictionary] = DayOrchestrator._process_peace_trade_routes(
+		terminations, routes,
+	)
+	assert_eq(results.size(), 1)
+	assert_false(route.is_disrupted)
+
+
+func test_orchestrator_restores_routes_on_surrender() -> void:
+	var route: TradeRouteData = _make_route(10, 1, 2)
+	route.is_disrupted = true
+	route.disruption_reason = "war_Crab_Crane"
+	var routes: Array = [route]
+	var terminations: Array[Dictionary] = [{
+		"resolution": "formal_surrender",
+		"winner_clan": "Crab",
+		"loser_clan": "Crane",
+	}]
+
+	var results: Array[Dictionary] = DayOrchestrator._process_peace_trade_routes(
+		terminations, routes,
+	)
+	assert_eq(results.size(), 1)
+	assert_false(route.is_disrupted)
+
+
+func test_orchestrator_restores_routes_on_edict() -> void:
+	var route: TradeRouteData = _make_route(10, 1, 2)
+	route.is_disrupted = true
+	route.disruption_reason = "war_Crab_Crane"
+	var routes: Array = [route]
+	var terminations: Array[Dictionary] = [{
+		"resolution": "imperial_edict",
+		"clan_a": "Crab",
+		"clan_b": "Crane",
+	}]
+
+	var results: Array[Dictionary] = DayOrchestrator._process_peace_trade_routes(
+		terminations, routes,
+	)
+	assert_eq(results.size(), 1)
+	assert_false(route.is_disrupted)

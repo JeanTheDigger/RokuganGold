@@ -60,6 +60,7 @@ var order_states: Array[Dictionary] = []
 var military_companies: Array[Dictionary] = []
 var active_wars: Array[WarData] = []
 var next_war_id: Array[int] = [1]
+var trade_routes: Array = []
 
 # -- Collective Disposition (s12.2b) -------------------------------------------
 # Clan-to-clan and family-to-family baselines keyed by sorted "a||b" strings.
@@ -140,6 +141,7 @@ func advance_one_day() -> Dictionary:
 		military_companies,
 		clans,
 		active_wars,
+		trade_routes,
 	)
 
 
