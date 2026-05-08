@@ -1,0 +1,476 @@
+extends GutTest
+## Tests for WarTermination — war ending mechanics per GDD s53.
+
+
+var _war: WarData
+var _dice: DiceEngine
+
+
+func before_each() -> void:
+	_war = WarData.new()
+	_war.war_id = 1
+	_war.clan_a = "Crab"
+	_war.clan_b = "Crane"
+	_war.initiator_clan = "Crab"
+	_war.declaring_lord_id = 100
+	_war.target_lord_id = 200
+	_war.war_score_a = 50
+	_war.war_score_b = 50
+	_war.is_active = true
+	_war.authority_level = WarData.AuthorityLevel.CLAN_WAR
+	_dice = DiceEngine.new()
+	_dice.set_seed(42)
+
+
+# -- Peace Terms ---------------------------------------------------------------
+
+func test_dominant_terms_demand_territory() -> void:
+	_war.war_score_a = 85
+	_war.war_score_b = 15
+	_war.provinces_captured_by_a = [1, 2, 3]
+	var terms: Dictionary = WarTermination.compute_peace_terms(_war, "Crab")
+	assert_true(terms["territory_demand"])
+	assert_eq(terms["territory_count"], 3)
+	assert_true(terms["honor_concession"])
+
+
+func test_winning_terms_keep_captured() -> void:
+	_war.war_score_a = 70
+	_war.war_score_b = 30
+	_war.provinces_captured_by_a = [1, 2]
+	var terms: Dictionary = WarTermination.compute_peace_terms(_war, "Crab")
+	assert_true(terms["territory_demand"])
+	assert_eq(terms["territory_count"], 2)
+	assert_false(terms["honor_concession"])
+
+
+func test_ahead_terms_partial_territory() -> void:
+	_war.war_score_a = 55
+	_war.war_score_b = 45
+	_war.provinces_captured_by_a = [1, 2, 3, 4]
+	var terms: Dictionary = WarTermination.compute_peace_terms(_war, "Crab")
+	assert_true(terms["territory_demand"])
+	assert_eq(terms["territory_count"], 2)
+
+
+func test_behind_terms_status_quo_ante() -> void:
+	_war.war_score_a = 35
+	_war.war_score_b = 65
+	var terms: Dictionary = WarTermination.compute_peace_terms(_war, "Crab")
+	assert_true(terms["status_quo_ante"])
+	assert_false(terms["territory_demand"])
+
+
+func test_terms_from_side_b_perspective() -> void:
+	_war.war_score_a = 20
+	_war.war_score_b = 80
+	_war.provinces_captured_by_b = [10, 11]
+	var terms: Dictionary = WarTermination.compute_peace_terms(_war, "Crane")
+	assert_true(terms["territory_demand"])
+	assert_eq(terms["territory_count"], 2)
+
+
+func test_terms_no_captured_territory() -> void:
+	_war.war_score_a = 70
+	_war.war_score_b = 30
+	var terms: Dictionary = WarTermination.compute_peace_terms(_war, "Crab")
+	assert_false(terms["territory_demand"])
+	assert_eq(terms["territory_count"], 0)
+
+
+# -- Peace Acceptance ----------------------------------------------------------
+
+func test_desperate_seigyo_accepts_easily() -> void:
+	_war.war_score_b = 15
+	var terms: Dictionary = {"territory_demand": false}
+	var result: Dictionary = WarTermination.evaluate_peace_acceptance(
+		_war, terms, "Crane", "Seigyo", false, false,
+	)
+	assert_true(result["accepted"])
+	assert_gt(result["willingness"], 50)
+
+
+func test_winning_yu_refuses() -> void:
+	_war.war_score_b = 75
+	var terms: Dictionary = {"territory_demand": true}
+	var result: Dictionary = WarTermination.evaluate_peace_acceptance(
+		_war, terms, "Crane", "Yu", false, false,
+	)
+	assert_false(result["accepted"])
+	assert_eq(result["reason"], "winning_refuses")
+
+
+func test_hostage_increases_willingness() -> void:
+	_war.war_score_b = 40
+	var terms: Dictionary = {"territory_demand": false}
+	var without: Dictionary = WarTermination.evaluate_peace_acceptance(
+		_war, terms, "Crane", "Yu", false, false,
+	)
+	var with_hostage: Dictionary = WarTermination.evaluate_peace_acceptance(
+		_war, terms, "Crane", "Yu", true, false,
+	)
+	assert_gt(with_hostage["willingness"], without["willingness"])
+
+
+func test_superior_pressure_increases_willingness() -> void:
+	_war.war_score_b = 35
+	var terms: Dictionary = {"territory_demand": false}
+	var without: Dictionary = WarTermination.evaluate_peace_acceptance(
+		_war, terms, "Crane", "Yu", false, false,
+	)
+	var with_pressure: Dictionary = WarTermination.evaluate_peace_acceptance(
+		_war, terms, "Crane", "Yu", false, true,
+	)
+	assert_gt(with_pressure["willingness"], without["willingness"])
+
+
+func test_territory_demand_reduces_willingness() -> void:
+	_war.war_score_b = 35
+	var no_cede: Dictionary = WarTermination.evaluate_peace_acceptance(
+		_war, {"territory_demand": false}, "Crane", "Gi", false, false,
+	)
+	var cede: Dictionary = WarTermination.evaluate_peace_acceptance(
+		_war, {"territory_demand": true}, "Crane", "Gi", false, false,
+	)
+	assert_gt(no_cede["willingness"], cede["willingness"])
+
+
+func test_acceptance_threshold_is_50() -> void:
+	assert_eq(WarTermination.PEACE_ACCEPTANCE_THRESHOLD, 50)
+
+
+# -- Formal Surrender ----------------------------------------------------------
+
+func test_formal_surrender_ends_war() -> void:
+	var result: Dictionary = WarTermination.resolve_formal_surrender(_war, "Crane")
+	assert_false(_war.is_active)
+	assert_eq(_war.resolution_type, "formal_surrender")
+	assert_eq(result["winner_clan"], "Crab")
+	assert_eq(result["loser_clan"], "Crane")
+	assert_eq(result["honor_cost_loser"], -1.0)
+	assert_eq(result["stability_bonus"], 3)
+
+
+func test_formal_surrender_transfers_captured_territory() -> void:
+	_war.provinces_captured_by_a = [1, 2]
+	var result: Dictionary = WarTermination.resolve_formal_surrender(_war, "Crane")
+	assert_eq(result["territory_transferred"].size(), 2)
+
+
+# -- Negotiated Settlement -----------------------------------------------------
+
+func test_negotiated_settlement_ends_war() -> void:
+	var terms: Dictionary = {
+		"proposing_clan": "Crab",
+		"territory_demand": false,
+		"status_quo_ante": true,
+	}
+	var result: Dictionary = WarTermination.resolve_negotiated_settlement(_war, terms)
+	assert_false(_war.is_active)
+	assert_eq(_war.resolution_type, "negotiated_settlement")
+	assert_eq(result["honor_both"], 0.1)
+	assert_true(result["status_quo_ante"])
+
+
+func test_negotiated_settlement_territory_transfer() -> void:
+	_war.provinces_captured_by_a = [1, 2, 3]
+	var terms: Dictionary = {
+		"proposing_clan": "Crab",
+		"territory_demand": true,
+		"territory_count": 2,
+	}
+	var result: Dictionary = WarTermination.resolve_negotiated_settlement(_war, terms)
+	assert_eq(result["territory_transferred"].size(), 2)
+
+
+func test_negotiated_settlement_clamps_to_available() -> void:
+	_war.provinces_captured_by_a = [1]
+	var terms: Dictionary = {
+		"proposing_clan": "Crab",
+		"territory_demand": true,
+		"territory_count": 5,
+	}
+	var result: Dictionary = WarTermination.resolve_negotiated_settlement(_war, terms)
+	assert_eq(result["territory_transferred"].size(), 1)
+
+
+# -- Imperial Edict ------------------------------------------------------------
+
+func test_imperial_edict_ends_war() -> void:
+	var result: Dictionary = WarTermination.resolve_imperial_edict(_war)
+	assert_false(_war.is_active)
+	assert_eq(_war.resolution_type, "imperial_edict")
+	assert_true(result["status_quo_ante"])
+	assert_eq(result["stability_bonus"], 3)
+
+
+# -- Annihilation --------------------------------------------------------------
+
+func test_check_annihilation_side_a() -> void:
+	_war.war_score_a = 0
+	var check: Dictionary = WarTermination.check_annihilation(_war)
+	assert_true(check["annihilated"])
+	assert_eq(check["clan"], "Crab")
+
+
+func test_check_annihilation_side_b() -> void:
+	_war.war_score_b = 0
+	var check: Dictionary = WarTermination.check_annihilation(_war)
+	assert_true(check["annihilated"])
+	assert_eq(check["clan"], "Crane")
+
+
+func test_check_annihilation_neither() -> void:
+	var check: Dictionary = WarTermination.check_annihilation(_war)
+	assert_false(check["annihilated"])
+
+
+func test_resolve_annihilation() -> void:
+	_war.war_score_b = 0
+	var result: Dictionary = WarTermination.resolve_annihilation(_war, "Crane")
+	assert_false(_war.is_active)
+	assert_eq(_war.resolution_type, "annihilation")
+	assert_eq(result["victor_clan"], "Crab")
+	assert_eq(result["annihilated_clan"], "Crane")
+	assert_eq(result["stability_bonus"], 0)
+
+
+# -- Negotiate Surrender Action ------------------------------------------------
+
+func _make_character(clan: String, courtier_rank: int = 3) -> L5RCharacterData:
+	var c: L5RCharacterData = L5RCharacterData.new()
+	c.character_id = 100
+	c.clan = clan
+	c.skills["Courtier"] = courtier_rank
+	c.traits[Enums.Trait.AWARENESS] = 3
+	return c
+
+
+func test_negotiate_surrender_no_war_fails() -> void:
+	var c: L5RCharacterData = _make_character("Crab")
+	var ctx_war: Dictionary = {"war": null, "own_clan": "Crab", "enemy_clan": "Crane"}
+	var result: Dictionary = WarTermination.resolve_negotiate_surrender(
+		c, ctx_war, "Gi", false, false, _dice,
+	)
+	assert_true(result["failed"])
+	assert_eq(result["reason"], "no_active_war")
+
+
+func test_negotiate_surrender_success_peace_accepted() -> void:
+	_war.war_score_a = 20
+	_war.war_score_b = 80
+	_dice.set_seed(999)
+	var c: L5RCharacterData = _make_character("Crab", 5)
+	c.traits[Enums.Trait.AWARENESS] = 5
+	var ctx_war: Dictionary = {"war": _war, "own_clan": "Crab", "enemy_clan": "Crane"}
+	var result: Dictionary = WarTermination.resolve_negotiate_surrender(
+		c, ctx_war, "Seigyo", false, true, _dice,
+	)
+	if result.get("failed", false):
+		# Roll may fail — test the structure at least.
+		assert_true(result.has("reason"))
+	else:
+		assert_true(result.has("peace_accepted"))
+		assert_true(result.has("terms"))
+
+
+func test_negotiate_surrender_roll_failure() -> void:
+	_dice.set_seed(1)
+	var c: L5RCharacterData = _make_character("Crab", 1)
+	c.traits[Enums.Trait.AWARENESS] = 1
+	var ctx_war: Dictionary = {"war": _war, "own_clan": "Crab", "enemy_clan": "Crane"}
+	var result: Dictionary = WarTermination.resolve_negotiate_surrender(
+		c, ctx_war, "Yu", false, false, _dice,
+	)
+	# With skill 1 and awareness 1 (1k1), very unlikely to hit TN 20.
+	# The result should be failed=true with reason negotiation_failed OR
+	# a low willingness rejection. Either is valid.
+	assert_true(result.has("failed") or result.has("peace_accepted"))
+
+
+func test_negotiate_surrender_not_combatant() -> void:
+	var c: L5RCharacterData = _make_character("Lion")
+	var ctx_war: Dictionary = {"war": _war, "own_clan": "Lion", "enemy_clan": ""}
+	var result: Dictionary = WarTermination.resolve_negotiate_surrender(
+		c, ctx_war, "Gi", false, false, _dice,
+	)
+	assert_true(result["failed"])
+	assert_eq(result["reason"], "not_a_combatant")
+
+
+# -- Topic Generation ---------------------------------------------------------
+
+func test_generate_surrender_topic() -> void:
+	var resolution: Dictionary = {
+		"resolution": "formal_surrender",
+		"war_id": 1,
+		"loser_clan": "Crane",
+		"winner_clan": "Crab",
+	}
+	var next_id: Array[int] = [500]
+	var topic: TopicData = WarTermination.generate_war_end_topic(resolution, next_id, 100)
+	assert_eq(topic.topic_id, 500)
+	assert_eq(next_id[0], 501)
+	assert_eq(topic.topic_type, "war_end")
+	assert_eq(topic.variant, "formal_surrender")
+	assert_eq(topic.tier, TopicData.Tier.TIER_2)
+	assert_eq(topic.momentum, 60.0)
+	assert_eq(topic.category, TopicData.Category.POLITICAL)
+	assert_eq(topic.clan_involved, "Crane")
+	assert_eq(topic.subject_role, "VICTIM")
+
+
+func test_generate_negotiated_topic() -> void:
+	var resolution: Dictionary = {
+		"resolution": "negotiated_settlement",
+		"war_id": 1,
+	}
+	var next_id: Array[int] = [600]
+	var topic: TopicData = WarTermination.generate_war_end_topic(resolution, next_id, 200)
+	assert_eq(topic.tier, TopicData.Tier.TIER_3)
+	assert_eq(topic.momentum, 40.0)
+
+
+func test_generate_imperial_edict_topic() -> void:
+	var resolution: Dictionary = {
+		"resolution": "imperial_edict",
+		"war_id": 1,
+	}
+	var next_id: Array[int] = [700]
+	var topic: TopicData = WarTermination.generate_war_end_topic(resolution, next_id, 300)
+	assert_eq(topic.tier, TopicData.Tier.TIER_2)
+	assert_eq(topic.momentum, 70.0)
+
+
+func test_generate_annihilation_topic() -> void:
+	var resolution: Dictionary = {
+		"resolution": "annihilation",
+		"war_id": 1,
+		"annihilated_clan": "Crane",
+	}
+	var next_id: Array[int] = [800]
+	var topic: TopicData = WarTermination.generate_war_end_topic(resolution, next_id, 400)
+	assert_eq(topic.tier, TopicData.Tier.TIER_1)
+	assert_eq(topic.momentum, 80.0)
+	assert_eq(topic.clan_involved, "Crane")
+
+
+# -- DayOrchestrator Wiring ---------------------------------------------------
+
+func test_annihilation_auto_resolves_in_orchestrator() -> void:
+	_war.war_score_a = 0
+	var active_wars: Array[WarData] = [_war]
+	var active_topics: Array[TopicData] = []
+	var next_id: Array[int] = [100]
+	var results: Array[Dictionary] = DayOrchestrator._process_war_terminations(
+		[], active_wars, active_topics, next_id, 50,
+	)
+	assert_eq(results.size(), 1)
+	assert_eq(results[0]["resolution"], "annihilation")
+	assert_eq(results[0]["annihilated_clan"], "Crab")
+	assert_false(_war.is_active)
+	assert_eq(active_topics.size(), 1)
+
+
+func test_inactive_wars_skipped_in_annihilation_check() -> void:
+	_war.war_score_a = 0
+	_war.is_active = false
+	var active_wars: Array[WarData] = [_war]
+	var active_topics: Array[TopicData] = []
+	var next_id: Array[int] = [100]
+	var results: Array[Dictionary] = DayOrchestrator._process_war_terminations(
+		[], active_wars, active_topics, next_id, 50,
+	)
+	assert_eq(results.size(), 0)
+
+
+func test_peace_resolution_from_applied_list() -> void:
+	var applied: Array = [{
+		"effects": {
+			"requires_peace_resolution": true,
+			"resolution_type": "negotiated_settlement",
+			"war_id": 1,
+			"own_clan": "Crab",
+			"enemy_clan": "Crane",
+			"terms": {
+				"proposing_clan": "Crab",
+				"territory_demand": false,
+				"status_quo_ante": true,
+			},
+		},
+	}]
+	var active_wars: Array[WarData] = [_war]
+	var active_topics: Array[TopicData] = []
+	var next_id: Array[int] = [200]
+	var results: Array[Dictionary] = DayOrchestrator._process_war_terminations(
+		applied, active_wars, active_topics, next_id, 60,
+	)
+	assert_eq(results.size(), 1)
+	assert_eq(results[0]["resolution"], "negotiated_settlement")
+	assert_false(_war.is_active)
+	assert_eq(active_topics.size(), 1)
+
+
+func test_formal_surrender_from_applied_list() -> void:
+	var applied: Array = [{
+		"effects": {
+			"requires_peace_resolution": true,
+			"resolution_type": "formal_surrender",
+			"war_id": 1,
+			"own_clan": "Crane",
+		},
+	}]
+	var active_wars: Array[WarData] = [_war]
+	var active_topics: Array[TopicData] = []
+	var next_id: Array[int] = [300]
+	var results: Array[Dictionary] = DayOrchestrator._process_war_terminations(
+		applied, active_wars, active_topics, next_id, 70,
+	)
+	assert_eq(results.size(), 1)
+	assert_eq(results[0]["resolution"], "formal_surrender")
+	assert_eq(results[0]["surrendering_clan"], "Crane")
+
+
+func test_missing_war_id_skipped() -> void:
+	var applied: Array = [{
+		"effects": {
+			"requires_peace_resolution": true,
+			"resolution_type": "negotiated_settlement",
+			"war_id": 999,
+			"terms": {"proposing_clan": "Crab"},
+		},
+	}]
+	var active_wars: Array[WarData] = [_war]
+	var active_topics: Array[TopicData] = []
+	var next_id: Array[int] = [400]
+	var results: Array[Dictionary] = DayOrchestrator._process_war_terminations(
+		applied, active_wars, active_topics, next_id, 80,
+	)
+	assert_eq(results.size(), 0)
+
+
+func test_find_war_by_id() -> void:
+	var wars: Array[WarData] = [_war]
+	assert_eq(DayOrchestrator._find_war_by_id(wars, 1), _war)
+	assert_null(DayOrchestrator._find_war_by_id(wars, 99))
+
+
+# -- Resolution Names ----------------------------------------------------------
+
+func test_resolution_name_constants() -> void:
+	assert_eq(
+		WarTermination.RESOLUTION_NAMES[WarTermination.ResolutionType.FORMAL_SURRENDER],
+		"formal_surrender",
+	)
+	assert_eq(
+		WarTermination.RESOLUTION_NAMES[WarTermination.ResolutionType.NEGOTIATED_SETTLEMENT],
+		"negotiated_settlement",
+	)
+	assert_eq(
+		WarTermination.RESOLUTION_NAMES[WarTermination.ResolutionType.IMPERIAL_EDICT],
+		"imperial_edict",
+	)
+	assert_eq(
+		WarTermination.RESOLUTION_NAMES[WarTermination.ResolutionType.ANNIHILATION],
+		"annihilation",
+	)

@@ -113,6 +113,21 @@ static func execute(
 		if not intim_result.is_empty():
 			return intim_result
 
+	if action_id == "NEGOTIATE_SURRENDER":
+		var peace_effects: Dictionary = _execute_negotiate_surrender(
+			action, character, ctx, dice_engine
+		)
+		return {
+			"success": not peace_effects.get("failed", false),
+			"action_id": action_id,
+			"character_id": character.character_id,
+			"target_npc_id": action.target_npc_id,
+			"target_province_id": action.target_province_id,
+			"ic_day": ctx.ic_day,
+			"season": ctx.season,
+			"effects": peace_effects,
+		}
+
 	if action_id == "DECLARE_WAR":
 		var war_effects: Dictionary = _execute_declare_war(character, action.metadata)
 		return {
@@ -1019,6 +1034,40 @@ static func _resolve_travel_destination(
 	if action.target_province_id >= 0:
 		return str(action.target_province_id)
 	return ""
+
+
+# -- War Termination (s53) -----------------------------------------------------
+
+static func _execute_negotiate_surrender(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	var war: WarData = action.metadata.get("war_ref") as WarData
+
+	if war == null:
+		return {"failed": true, "reason": "no_active_war"}
+
+	var own_clan: String = character.clan
+	var enemy_clan: String = WarTermination._get_opponent_clan(war, own_clan)
+	if enemy_clan.is_empty():
+		return {"failed": true, "reason": "not_a_combatant"}
+
+	var target_virtue: String = action.metadata.get("target_virtue", "")
+	var hostage_held: bool = action.metadata.get("hostage_held", false)
+	var superior_pressuring: bool = action.metadata.get("superior_pressuring", false)
+
+	var ctx_war: Dictionary = {
+		"war": war,
+		"own_clan": own_clan,
+		"enemy_clan": enemy_clan,
+	}
+
+	return WarTermination.resolve_negotiate_surrender(
+		character, ctx_war, target_virtue,
+		hostage_held, superior_pressuring, dice_engine,
+	)
 
 
 # -- War Declaration (s53.1) ---------------------------------------------------

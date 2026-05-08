@@ -112,6 +112,14 @@ static func advance_day(
 		military_daily, military_effects, active_wars, companies,
 	)
 
+	var war_termination_results: Array[Dictionary] = _process_war_terminations(
+		day_result.get("applied", []),
+		active_wars,
+		active_topics,
+		next_topic_id,
+		ic_day,
+	)
+
 	var military_topics: Array[TopicData] = _generate_military_event_topics(
 		military_daily, military_effects, active_topics, next_topic_id, ic_day,
 	)
@@ -240,6 +248,7 @@ static func advance_day(
 		"military_topics": military_topics,
 		"war_score_results": war_score_results,
 		"war_declarations": war_declarations,
+		"war_termination_results": war_termination_results,
 	}
 
 
@@ -2705,3 +2714,72 @@ static func _process_war_declarations(
 		})
 
 	return results
+
+
+# -- War Termination Processing ------------------------------------------------
+
+static func _process_war_terminations(
+	applied_list: Array,
+	active_wars: Array[WarData],
+	active_topics: Array[TopicData],
+	next_topic_id: Array[int],
+	ic_day: int,
+) -> Array[Dictionary]:
+	var results: Array[Dictionary] = []
+
+	# 1. Check for annihilation on any active war.
+	for war: WarData in active_wars:
+		if not war.is_active:
+			continue
+		var annihilation: Dictionary = WarTermination.check_annihilation(war)
+		if annihilation.get("annihilated", false):
+			var resolution: Dictionary = WarTermination.resolve_annihilation(
+				war, annihilation["clan"],
+			)
+			var topic: TopicData = WarTermination.generate_war_end_topic(
+				resolution, next_topic_id, ic_day,
+			)
+			active_topics.append(topic)
+			results.append(resolution)
+
+	# 2. Process negotiated peace from NEGOTIATE_SURRENDER actions.
+	for applied: Variant in applied_list:
+		if not (applied is Dictionary):
+			continue
+		var ad: Dictionary = applied
+		var effects: Dictionary = ad.get("effects", {})
+		if not effects.get("requires_peace_resolution", false):
+			continue
+
+		var war_id: int = effects.get("war_id", -1)
+		var war: WarData = _find_war_by_id(active_wars, war_id)
+		if war == null or not war.is_active:
+			continue
+
+		var res_type: String = effects.get("resolution_type", "")
+		var terms: Dictionary = effects.get("terms", {})
+		var resolution: Dictionary
+
+		if res_type == "formal_surrender":
+			var surrendering: String = effects.get("own_clan", "")
+			resolution = WarTermination.resolve_formal_surrender(war, surrendering)
+		else:
+			resolution = WarTermination.resolve_negotiated_settlement(war, terms)
+
+		var topic: TopicData = WarTermination.generate_war_end_topic(
+			resolution, next_topic_id, ic_day,
+		)
+		active_topics.append(topic)
+		results.append(resolution)
+
+	return results
+
+
+static func _find_war_by_id(
+	active_wars: Array[WarData],
+	war_id: int,
+) -> WarData:
+	for war: WarData in active_wars:
+		if war.war_id == war_id:
+			return war
+	return null
