@@ -1663,11 +1663,16 @@ static func _process_army_upkeep(
 		companies_by_clan, settlements, clans,
 	)
 
+	var koku_deducted: float = _deduct_koku_upkeep(
+		companies_by_clan, settlements, clans,
+	)
+
 	return {
 		"total_rice_cost": total_rice_cost,
 		"total_iron_cost": total_iron_cost,
 		"total_koku_cost": total_koku_cost,
 		"rice_deducted": rice_deducted,
+		"koku_deducted": koku_deducted,
 		"company_count": companies.size(),
 		"iron_results": iron_results,
 	}
@@ -1982,6 +1987,52 @@ static func _deduct_rice_upkeep(
 				break
 			var deduct: float = minf(s.rice_stockpile, remaining)
 			s.rice_stockpile -= deduct
+			remaining -= deduct
+			total_deducted += deduct
+
+	return total_deducted
+
+
+static func _deduct_koku_upkeep(
+	companies_by_clan: Dictionary,
+	settlements: Array[SettlementData],
+	clans: Dictionary,
+) -> float:
+	var settlements_by_province: Dictionary = _build_settlements_by_province(settlements)
+	var total_deducted: float = 0.0
+
+	for clan_name: String in companies_by_clan:
+		var clan_companies: Array = companies_by_clan[clan_name]
+		var clan_koku_cost: float = 0.0
+		for c: Variant in clan_companies:
+			if c is Dictionary:
+				var ut: int = c.get("unit_type", Enums.CompanyUnitType.PEASANT_LEVY)
+				var costs: Dictionary = ArmyUpkeepSystem.compute_company_seasonal_costs(ut)
+				clan_koku_cost += costs["koku"]
+
+		if clan_koku_cost <= 0.0:
+			continue
+
+		var clan: ClanData = clans.get(clan_name)
+		if clan == null:
+			continue
+
+		var clan_settlements: Array[SettlementData] = []
+		for pid: int in clan.province_ids:
+			var province_setts: Array = settlements_by_province.get(pid, [])
+			for s: Variant in province_setts:
+				if s is SettlementData:
+					clan_settlements.append(s)
+
+		if clan_settlements.is_empty():
+			continue
+
+		var remaining: float = clan_koku_cost
+		for s: SettlementData in clan_settlements:
+			if remaining <= 0.0:
+				break
+			var deduct: float = minf(s.koku_stockpile, remaining)
+			s.koku_stockpile -= deduct
 			remaining -= deduct
 			total_deducted += deduct
 

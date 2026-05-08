@@ -514,3 +514,95 @@ func test_rice_upkeep_no_clan_no_deduction() -> void:
 	var r: Dictionary = DayOrchestrator._process_army_upkeep(companies, [s], {})
 	assert_almost_eq(r["rice_deducted"], 0.0, 0.001)
 	assert_almost_eq(s.rice_stockpile, 5.0, 0.001)
+
+
+# -- Koku Upkeep Deduction Tests -------------------------------------------------
+
+func test_koku_upkeep_deducts_for_garrison() -> void:
+	var companies: Array[Dictionary] = [
+		_make_company_dict(1, Enums.CompanyUnitType.GARRISON),
+	]
+	var s: SettlementData = _make_settlement(10, 1, 10, 3)
+	s.koku_stockpile = 5.0
+	var clan: ClanData = _make_clan("Crab", [1])
+	var clans: Dictionary = {"Crab": clan}
+
+	var r: Dictionary = DayOrchestrator._process_army_upkeep(companies, [s], clans)
+	assert_true(r["koku_deducted"] > 0.0)
+	assert_true(s.koku_stockpile < 5.0)
+	assert_almost_eq(r["koku_deducted"], ArmyUpkeepSystem.GARRISON_KOKU_PER_PU_PER_SEASON, 0.001)
+
+
+func test_koku_upkeep_deducts_for_ronin() -> void:
+	var companies: Array[Dictionary] = [
+		_make_company_dict(1, Enums.CompanyUnitType.RONIN),
+	]
+	var s: SettlementData = _make_settlement(10, 1, 10, 3)
+	s.koku_stockpile = 5.0
+	var clan: ClanData = _make_clan("Crab", [1])
+	var clans: Dictionary = {"Crab": clan}
+
+	var r: Dictionary = DayOrchestrator._process_army_upkeep(companies, [s], clans)
+	var expected_koku: float = ArmyUpkeepSystem.RONIN_UPKEEP_KOKU_PER_MONTH * 3.0
+	assert_almost_eq(r["koku_deducted"], expected_koku, 0.001)
+	assert_almost_eq(s.koku_stockpile, 5.0 - expected_koku, 0.001)
+
+
+func test_koku_upkeep_zero_for_non_koku_units() -> void:
+	var companies: Array[Dictionary] = [
+		_make_company_dict(1, Enums.CompanyUnitType.PEASANT_LEVY),
+		_make_company_dict(2, Enums.CompanyUnitType.BUSHI_RETAINER),
+	]
+	var s: SettlementData = _make_settlement(10, 1, 10, 3)
+	s.koku_stockpile = 5.0
+	var clan: ClanData = _make_clan("Crab", [1])
+	var clans: Dictionary = {"Crab": clan}
+
+	var r: Dictionary = DayOrchestrator._process_army_upkeep(companies, [s], clans)
+	assert_almost_eq(r["koku_deducted"], 0.0, 0.001)
+	assert_almost_eq(s.koku_stockpile, 5.0, 0.001)
+
+
+func test_koku_upkeep_caps_at_available() -> void:
+	var companies: Array[Dictionary] = [
+		_make_company_dict(1, Enums.CompanyUnitType.RONIN),
+		_make_company_dict(2, Enums.CompanyUnitType.RONIN),
+	]
+	var s: SettlementData = _make_settlement(10, 1, 10, 3)
+	s.koku_stockpile = 0.5
+	var clan: ClanData = _make_clan("Crab", [1])
+	var clans: Dictionary = {"Crab": clan}
+
+	var r: Dictionary = DayOrchestrator._process_army_upkeep(companies, [s], clans)
+	assert_almost_eq(s.koku_stockpile, 0.0, 0.001)
+	assert_almost_eq(r["koku_deducted"], 0.5, 0.001)
+
+
+func test_koku_upkeep_no_clan_no_deduction() -> void:
+	var companies: Array[Dictionary] = [
+		_make_company_dict(1, Enums.CompanyUnitType.GARRISON),
+	]
+	var s: SettlementData = _make_settlement(10, 1, 10, 3)
+	s.koku_stockpile = 5.0
+
+	var r: Dictionary = DayOrchestrator._process_army_upkeep(companies, [s], {})
+	assert_almost_eq(r["koku_deducted"], 0.0, 0.001)
+	assert_almost_eq(s.koku_stockpile, 5.0, 0.001)
+
+
+func test_koku_upkeep_multiple_settlements_spread() -> void:
+	var companies: Array[Dictionary] = [
+		_make_company_dict(1, Enums.CompanyUnitType.RONIN),
+	]
+	var s1: SettlementData = _make_settlement(10, 1, 10, 3)
+	s1.koku_stockpile = 0.5
+	var s2: SettlementData = _make_settlement(11, 1, 10, 3)
+	s2.koku_stockpile = 3.0
+	var clan: ClanData = _make_clan("Crab", [1])
+	var clans: Dictionary = {"Crab": clan}
+
+	var expected_koku: float = ArmyUpkeepSystem.RONIN_UPKEEP_KOKU_PER_MONTH * 3.0
+	var r: Dictionary = DayOrchestrator._process_army_upkeep(companies, [s1, s2], clans)
+	assert_almost_eq(r["koku_deducted"], expected_koku, 0.001)
+	assert_almost_eq(s1.koku_stockpile, 0.0, 0.001)
+	assert_almost_eq(s2.koku_stockpile, 3.0 - (expected_koku - 0.5), 0.001)
