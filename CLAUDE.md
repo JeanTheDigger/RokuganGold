@@ -471,7 +471,7 @@ All in /tests/, one file per system:
 - test_order_system.gd (~30 tests)
 - test_military_service_system.gd (~35 tests)
 - test_pu_reconciliation.gd (~30 tests)
-- test_military_wiring.gd (~15 tests)
+- test_military_wiring.gd (~50 tests)
 
 ### Festival System (s11.5)
 - **simulation/festival_system.gd** — Empire-wide canonical festivals, Rokuyo
@@ -1782,10 +1782,17 @@ The following subsystems are now integrated into the NPC decision loop:
   per-company health summaries (starting_health, current_health,
   source_province_id) from battle states for PU reconciliation.
   `DayOrchestrator.resolve_and_reconcile_battle()` runs the full pipeline:
-  battle resolution → PU extraction → reconciliation → rout → recovery.
+  battle resolution → PU extraction → reconciliation → rout → recovery →
+  dissolution (when rout dissolves army below 20% health, surviving company
+  health returned as PU to source settlements via
+  `PUReconciliation.process_army_dissolution()`). Pursuit casualties
+  distributed across non-destroyed loser companies before dissolution.
   Army movement processing detects battle triggers on arrival via
   `ArmyMovementSystem.check_battle_trigger()`.
   `ArmyCombatSystem.is_cavalry()` public helper for cavalry detection.
+  Rice upkeep deduction: `_deduct_rice_upkeep()` deducts seasonal rice costs
+  from clan settlements' `rice_stockpile` using `ClanData.province_ids` to
+  locate the correct settlements. Deduction caps at available stockpile.
 
 ## Resolved Design Decisions
 
