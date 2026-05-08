@@ -466,6 +466,7 @@ All in /tests/, one file per system:
 - test_supply_tether_system.gd (~45 tests)
 - test_siege_system.gd (~50 tests)
 - test_army_movement_system.gd (~40 tests)
+- test_levy_system.gd (~35 tests)
 
 ### Festival System (s11.5)
 - **simulation/festival_system.gd** — Empire-wide canonical festivals, Rokuyo
@@ -1533,6 +1534,23 @@ All in /tests/, one file per system:
   Deferred: Order system (lord/commander order budgets), scouting assignments,
   levy authority, military service assignment, actual sub-tile coordinate system
   (uses placeholder int IDs), territory control tracking.
+
+### Levy & Mobilization System (s11.7a)
+- **simulation/levy_system.gd** — Levy authority and mobilization per GDD s11.7a.
+  Pure static functions; caller owns all state.
+  Provincial Daimyo can raise Peasant Levy, Ashigaru Spearmen, and Ashigaru
+  Archers from settlement military PU (1.0 PU per company). Levy companies
+  exist outside Go-hatamoto hierarchy (no parent_legion_id). Arms equip cost
+  from ArmyUpkeepSystem. `assign_commander()` attaches household retainers.
+  `disband_levy()` returns PU proportional to remaining health, arms retained.
+  Private Army Suspicion: after 1 season peacetime maintenance, Tier 4 topic
+  generates. −5 disposition per season from Family Daimyo/Champion, −3 from
+  neighbors. Escalates to Tier 3 at 3+ seasons. Wartime exemption.
+  Commitment protection scoring for military service candidates: 6 role tiers
+  (yojimbo −30/−15, magistrate −25/−15, yoriki −10/−5, courtier −15/−10,
+  shugenja −5, uncommitted 0). Personality modifiers: Jin doubles yojimbo
+  penalty, Yu halves all penalties, Chugi reduces by −10.
+  Dual authority check: Daimyo + Taisa rank = can use Go-hatamoto directly.
 
 ### What's Next
 1. World generation coordinate system and adjacency
