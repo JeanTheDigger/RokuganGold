@@ -474,6 +474,7 @@ All in /tests/, one file per system:
 - test_military_wiring.gd (~107 tests)
 - test_war_system.gd (~61 tests)
 - test_war_justification.gd (~45 tests)
+- test_war_termination.gd (~37 tests)
 
 ### Festival System (s11.5)
 - **simulation/festival_system.gd** — Empire-wide canonical festivals, Rokuyo
@@ -1718,6 +1719,44 @@ All in /tests/, one file per system:
   Jin −20, Rei/Makoto −10, etc.), AT_OWN_HOLDINGS context list, AP cost 2,
   ADMINISTRATIVE_ACTIONS category, ceasefire block list.
   WorldStateData gains `next_war_id: Array[int] = [1]`.
+
+### War Termination (s53)
+- **simulation/war_termination.gd** — War ending mechanics per GDD s53. Pure
+  static functions. Four ResolutionType values (FORMAL_SURRENDER,
+  NEGOTIATED_SETTLEMENT, IMPERIAL_EDICT, ANNIHILATION).
+  `compute_peace_terms(war, proposing_clan)` generates term demands based on
+  war score: Dominant demands all captured territory + honor concession,
+  Winning keeps captured territory, Ahead keeps half, Behind/Losing gets
+  status quo ante. `evaluate_peace_acceptance(war, terms, receiving_clan,
+  virtue, hostage, pressure)` wraps `WarSystem.compute_peace_willingness()`
+  with acceptance threshold of 50.
+  `resolve_formal_surrender()` ends war immediately, −1.0 Honor to loser.
+  `resolve_negotiated_settlement()` ends war with agreed terms, +0.1 Honor
+  to both sides. `resolve_imperial_edict()` ends war with status quo ante.
+  `resolve_annihilation()` ends war, no stability bonus.
+  `check_annihilation(war)` scans for war score 0 on either side.
+  `resolve_negotiate_surrender()` is the NEGOTIATE_SURRENDER action
+  resolution: Courtier+Awareness vs TN 20, raises reduce territory demands,
+  then evaluates enemy acceptance. Returns `requires_peace_resolution: true`
+  on successful acceptance for DayOrchestrator to finalize.
+  `generate_war_end_topic()` creates TopicData per resolution type:
+  surrender Tier 2 momentum 60, negotiated Tier 3 momentum 40, edict
+  Tier 2 momentum 70, annihilation Tier 1 momentum 80.
+  All +3 stability to involved provinces on peace (except annihilation).
+- **ActionExecutor wiring** — NEGOTIATE_SURRENDER intercepted before category
+  routing (same pattern as DECLARE_WAR). Reads `war_ref` from metadata,
+  delegates to WarTermination.resolve_negotiate_surrender().
+- **DayOrchestrator wiring** — `_process_war_terminations()` runs after war
+  score shifts. Phase 1: scans active wars for annihilation (war score 0).
+  Phase 2: scans applied results for `requires_peace_resolution` flag from
+  NEGOTIATE_SURRENDER actions. Both phases call WarTermination resolution
+  functions and generate war end topics. `_find_war_by_id()` helper.
+  Return dict gains `war_termination_results`.
+- **objective_alignment.json** — NEGOTIATE_SURRENDER added to SEEK_PEACE
+  NeedType with score 95 (highest priority when at war).
+  Deferred: Peace court mechanics (formal court session), Imperial edict
+  action path, trade route suspension on war/peace, territory transfer
+  mutations on settlement/province data.
 
 ### What's Next
 1. World generation coordinate system and adjacency
