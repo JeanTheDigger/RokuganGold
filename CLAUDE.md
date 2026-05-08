@@ -454,6 +454,7 @@ All in /tests/, one file per system:
 - test_secret_system.gd (~90 tests)
 - test_seduction_system.gd (~25 tests)
 - test_assassination_system.gd (~45 tests)
+- test_bound_escape_system.gd (~45 tests)
 
 ### Festival System (s11.5)
 - **simulation/festival_system.gd** — Empire-wide canonical festivals, Rokuyo
@@ -1353,6 +1354,19 @@ All in /tests/, one file per system:
   (Engineering TN 20). Successful concealment produces concealment_tn for
   investigators. PC safeguard crisis windows: poison 12, blade 4, accident 8
   real days.
+
+### Bound/Escape System (s12.8)
+- **simulation/bound_escape_system.gd** — Bound condition and escape per GDD
+  s12.8. Four BindingMaterial values (SIMPLE_ROPE TN 15, QUALITY_ROPE TN 20,
+  CHAINS TN 25, HIGH_GRADE_CHAINS TN 30). Knotwork binding by named characters
+  (Sailing+Intelligence, minimum TN 15). Escape: Sleight of Hand+Agility vs
+  binding TN, once per IC day, generates Quiet noise (3 tiles). Guard noise
+  detection: Investigation+Perception vs TN 15 + distance×2. Failed escape
+  detected → rebind (+5 TN stacking). Location escape separate: Stealth+Agility
+  vs location TN. Free ally: rope = blade Simple Action (no roll, Quiet noise);
+  chains = key (Simple Action) or Strength vs TN 25 (Moderate noise). Action
+  filter: bound characters can CHARM, NEGOTIATE, PERSUADE, INTIMIDATE, escape,
+  cast spells, and speak only. Low Skill honor cost −0.1 on escape attempts.
 
 ### What's Next
 1. World generation coordinate system and adjacency
