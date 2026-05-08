@@ -1517,6 +1517,9 @@ static func _process_military_daily(
 	var deprivation_results: Array[Dictionary] = _process_field_deprivation(
 		active_tethers, tether_results,
 	)
+	var recovery_results: Array[Dictionary] = _process_army_recovery(
+		active_armies, active_tethers, tether_results, companies,
+	)
 
 	return {
 		"movement_results": movement_results,
@@ -1524,6 +1527,7 @@ static func _process_military_daily(
 		"tether_results": tether_results,
 		"order_results": order_results,
 		"deprivation_results": deprivation_results,
+		"recovery_results": recovery_results,
 	}
 
 
@@ -1586,6 +1590,95 @@ static func _build_companies_by_id(
 		if cid >= 0:
 			result[cid] = c
 	return result
+
+
+static func _process_army_recovery(
+	active_armies: Array[Dictionary],
+	active_tethers: Array[Dictionary],
+	tether_results: Array[Dictionary],
+	companies: Array[Dictionary],
+) -> Array[Dictionary]:
+	var tether_state_by_army: Dictionary = {}
+	for i: int in range(mini(active_tethers.size(), tether_results.size())):
+		var army_id: int = active_tethers[i].get("army_id", -1)
+		if army_id >= 0:
+			tether_state_by_army[army_id] = tether_results[i]
+
+	var companies_by_army: Dictionary = {}
+	for c: Dictionary in companies:
+		var aid: int = c.get("army_id", -1)
+		if aid >= 0:
+			if not companies_by_army.has(aid):
+				companies_by_army[aid] = []
+			companies_by_army[aid].append(c)
+
+	var results: Array[Dictionary] = []
+	for army: Dictionary in active_armies:
+		var army_id: int = army.get("army_id", -1)
+		var is_moving: bool = army.get("is_moving", false)
+		if is_moving:
+			continue
+
+		var tr: Dictionary = tether_state_by_army.get(army_id, {})
+		var overall_state: int = tr.get("overall_state", SupplyTetherSystem.TetherState.SOLID)
+		var rice_supplied: bool = overall_state == SupplyTetherSystem.TetherState.SOLID
+		var arms_supplied: bool = overall_state == SupplyTetherSystem.TetherState.SOLID
+		var arms_tick: int = tr.get("arms_deprivation_tick", 0)
+
+		var army_companies: Array = companies_by_army.get(army_id, [])
+		if army_companies.is_empty():
+			continue
+
+		var per_company: Array[Dictionary] = []
+		for c: Variant in army_companies:
+			if not (c is Dictionary):
+				continue
+			var cd: Dictionary = c
+			var cid: int = cd.get("company_id", -1)
+			var ut: int = cd.get("unit_type", Enums.CompanyUnitType.PEASANT_LEVY)
+			var base: Dictionary = ArmyCombatSystem.UNIT_STATS.get(ut, {})
+			if base.is_empty():
+				continue
+
+			var health_recovery: int = 0
+			var morale_recovery: int = 0
+			var arms_recovery: bool = false
+
+			if rice_supplied:
+				var max_health: int = base.get("health", 0)
+				var cur_health: int = cd.get("current_health", max_health)
+				health_recovery = mini(
+					ArmyUpkeepSystem.RECOVERY_HEALTH_PER_TICK,
+					max_health - cur_health,
+				)
+				health_recovery = maxi(health_recovery, 0)
+
+				var max_morale: int = base.get("morale", 0)
+				var cur_morale: int = cd.get("current_morale", max_morale)
+				morale_recovery = mini(
+					ArmyUpkeepSystem.RECOVERY_MORALE_PER_TICK,
+					max_morale - cur_morale,
+				)
+				morale_recovery = maxi(morale_recovery, 0)
+
+			if arms_supplied and arms_tick > 1:
+				arms_recovery = true
+
+			if health_recovery > 0 or morale_recovery > 0 or arms_recovery:
+				per_company.append({
+					"company_id": cid,
+					"health_recovery": health_recovery,
+					"morale_recovery": morale_recovery,
+					"arms_tier_recovered": arms_recovery,
+				})
+
+		if not per_company.is_empty():
+			results.append({
+				"army_id": army_id,
+				"company_recoveries": per_company,
+			})
+
+	return results
 
 
 static func _process_field_deprivation(

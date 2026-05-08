@@ -68,6 +68,7 @@ func test_process_military_daily_empty() -> void:
 	assert_eq(r["tether_results"].size(), 0)
 	assert_eq(r["order_results"]["total_delivered"], 0)
 	assert_eq(r["deprivation_results"].size(), 0)
+	assert_eq(r["recovery_results"].size(), 0)
 
 
 func test_army_movement_ticks() -> void:
@@ -774,3 +775,98 @@ func test_escort_defense_returns_zero_when_no_escort() -> void:
 	}
 	var defense: int = SupplyTetherSystem.get_escort_defense(tether, 0, {})
 	assert_eq(defense, 0)
+
+
+# -- Army Recovery Wiring Tests ---------------------------------------------------
+
+func _make_army(army_id: int, is_moving: bool = false) -> Dictionary:
+	return {"army_id": army_id, "is_moving": is_moving}
+
+
+func _make_army_company(
+	company_id: int,
+	army_id: int,
+	unit_type: int = Enums.CompanyUnitType.BUSHI_RETAINER,
+	current_health: int = 100,
+	current_morale: int = 10,
+) -> Dictionary:
+	return {
+		"company_id": company_id,
+		"army_id": army_id,
+		"unit_type": unit_type,
+		"current_health": current_health,
+		"current_morale": current_morale,
+		"clan_name": "Crab",
+	}
+
+
+func test_recovery_stationary_damaged_army() -> void:
+	var army: Dictionary = _make_army(1, false)
+	var company: Dictionary = _make_army_company(10, 1, Enums.CompanyUnitType.BUSHI_RETAINER, 100, 10)
+	var results: Array[Dictionary] = DayOrchestrator._process_army_recovery(
+		[army], [], [], [company],
+	)
+	assert_eq(results.size(), 1)
+	assert_eq(results[0]["army_id"], 1)
+	var cr: Dictionary = results[0]["company_recoveries"][0]
+	assert_eq(cr["company_id"], 10)
+	assert_eq(cr["health_recovery"], ArmyUpkeepSystem.RECOVERY_HEALTH_PER_TICK)
+	assert_eq(cr["morale_recovery"], ArmyUpkeepSystem.RECOVERY_MORALE_PER_TICK)
+
+
+func test_recovery_skips_moving_army() -> void:
+	var army: Dictionary = _make_army(1, true)
+	var company: Dictionary = _make_army_company(10, 1, Enums.CompanyUnitType.BUSHI_RETAINER, 100, 10)
+	var results: Array[Dictionary] = DayOrchestrator._process_army_recovery(
+		[army], [], [], [company],
+	)
+	assert_eq(results.size(), 0)
+
+
+func test_recovery_caps_at_max_health() -> void:
+	var base: Dictionary = ArmyCombatSystem.UNIT_STATS[Enums.CompanyUnitType.BUSHI_RETAINER]
+	var max_health: int = base["health"]
+	var army: Dictionary = _make_army(1, false)
+	var company: Dictionary = _make_army_company(10, 1, Enums.CompanyUnitType.BUSHI_RETAINER, max_health, base["morale"])
+	var results: Array[Dictionary] = DayOrchestrator._process_army_recovery(
+		[army], [], [], [company],
+	)
+	assert_eq(results.size(), 0)
+
+
+func test_recovery_no_companies_no_result() -> void:
+	var army: Dictionary = _make_army(1, false)
+	var results: Array[Dictionary] = DayOrchestrator._process_army_recovery(
+		[army], [], [], [],
+	)
+	assert_eq(results.size(), 0)
+
+
+func test_recovery_broken_tether_no_supply() -> void:
+	var army: Dictionary = _make_army(1, false)
+	var company: Dictionary = _make_army_company(10, 1, Enums.CompanyUnitType.BUSHI_RETAINER, 100, 10)
+	var tether: Dictionary = {"army_id": 1}
+	var tether_result: Dictionary = {
+		"overall_state": SupplyTetherSystem.TetherState.BROKEN,
+		"arms_deprivation_tick": 0,
+	}
+	var results: Array[Dictionary] = DayOrchestrator._process_army_recovery(
+		[army], [tether], [tether_result], [company],
+	)
+	assert_eq(results.size(), 0)
+
+
+func test_recovery_arms_tier_when_supplied_and_deprived() -> void:
+	var army: Dictionary = _make_army(1, false)
+	var company: Dictionary = _make_army_company(10, 1, Enums.CompanyUnitType.BUSHI_RETAINER, 100, 10)
+	var tether: Dictionary = {"army_id": 1}
+	var tether_result: Dictionary = {
+		"overall_state": SupplyTetherSystem.TetherState.SOLID,
+		"arms_deprivation_tick": 3,
+	}
+	var results: Array[Dictionary] = DayOrchestrator._process_army_recovery(
+		[army], [tether], [tether_result], [company],
+	)
+	assert_eq(results.size(), 1)
+	var cr: Dictionary = results[0]["company_recoveries"][0]
+	assert_true(cr["arms_tier_recovered"])
