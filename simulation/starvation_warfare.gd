@@ -29,6 +29,7 @@ const EDICT_SYMPATHY_BONUS: int = 5
 
 const BLOCKADE_HONOR_COST_PER_SEASON: float = -0.5
 const BLOCKADE_MIN_PU: float = 1.0
+const BLOCKADE_WAR_AUTHORITY: int = 0  # Provincial Raid (WarData.AuthorityLevel.PROVINCIAL_RAID)
 
 
 # -- Harvest Destruction -------------------------------------------------------

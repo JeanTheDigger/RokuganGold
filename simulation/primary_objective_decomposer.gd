@@ -459,12 +459,14 @@ static func _get_anchor(contacts: Array) -> int:
 
 static func _has_disposition_intel(
 	ctx: NPCDataStructures.ContextSnapshot,
-	_anchor_x: int,
-	_anchor_y: int,
+	anchor_x: int,
+	anchor_y: int,
 ) -> bool:
 	for entry: KnowledgeEntry in ctx.knowledge_pool:
 		if entry.entry_type == "disposition_observation":
-			return true
+			var tid: int = entry.data.get("target_character_id", entry.data.get("target_id", -1))
+			if tid == anchor_x or tid == anchor_y:
+				return true
 	return false
 
 

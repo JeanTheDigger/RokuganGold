@@ -104,7 +104,7 @@ static func disband_levy(
 	company: MilitaryUnitData.CompanyData,
 ) -> Dictionary:
 	var pu_returned: float = PU_PER_COMPANY
-	var health_ratio: float = float(company.health) / 100.0
+	var health_ratio: float = float(company.health) / float(ArmyCombatSystem.UNIT_STATS[company.unit_type]["health"])  # Use actual starting health (153 for standard units)
 	if health_ratio < 1.0:
 		pu_returned *= health_ratio
 

@@ -250,9 +250,11 @@ static func _get_conditional_attack_bonus(
 	var def_type: int = defender["unit_type"]
 
 	if atk_type == Enums.CompanyUnitType.BAYUSHI_BUSHI:
-		var morale_pct: float = float(defender["current_morale"]) / float(defender.get("starting_morale", 1))
-		if morale_pct < 0.50:
-			bonus += 2
+		var starting_morale: int = defender.get("starting_morale", 1)
+		if starting_morale > 0:
+			var morale_pct: float = float(defender["current_morale"]) / float(starting_morale)
+			if morale_pct < 0.50:
+				bonus += 2
 
 	if atk_type == Enums.CompanyUnitType.DRAGON_TALONS:
 		if defender["base_defense"] >= 6:
@@ -1218,25 +1220,29 @@ static func _process_rout_contagion(
 	side: Array[Dictionary],
 	dice_engine: DiceEngine,
 ) -> void:
-	var newly_routed: Array[Dictionary] = []
-	for bc: Dictionary in side:
-		if bc["is_routed"] and bc.get("_rout_contagion_processed", false) == false:
-			newly_routed.append(bc)
-			bc["_rout_contagion_processed"] = true
-
-	for routed: Dictionary in newly_routed:
+	var had_new_routs: bool = true
+	while had_new_routs:
+		had_new_routs = false
+		var newly_routed: Array[Dictionary] = []
 		for bc: Dictionary in side:
-			if not is_active(bc):
-				continue
-			if bc.get("no_morale", false):
-				continue
-			if absi(bc["column"] - routed["column"]) <= 1 and bc["row"] == routed["row"]:
-				var roll: int = dice_engine.rand_int_range(1, 10)
-				var md: int = _get_effective_morale_defense(bc)
-				var morale_dmg: int = maxi(roll - md, 0)
-				bc["current_morale"] = maxi(bc["current_morale"] - morale_dmg, 0)
-				if bc["current_morale"] <= 0:
-					bc["is_routed"] = true
+			if bc["is_routed"] and bc.get("_rout_contagion_processed", false) == false:
+				newly_routed.append(bc)
+				bc["_rout_contagion_processed"] = true
+
+		for routed: Dictionary in newly_routed:
+			for bc: Dictionary in side:
+				if not is_active(bc):
+					continue
+				if bc.get("no_morale", false):
+					continue
+				if absi(bc["column"] - routed["column"]) <= 1 and bc["row"] == routed["row"]:
+					var roll: int = dice_engine.rand_int_range(1, 10)
+					var md: int = _get_effective_morale_defense(bc)
+					var morale_dmg: int = maxi(roll - md, 0)
+					bc["current_morale"] = maxi(bc["current_morale"] - morale_dmg, 0)
+					if bc["current_morale"] <= 0:
+						bc["is_routed"] = true
+						had_new_routs = true
 
 
 # -- Commander Survival ----------------------------------------------------------
@@ -1312,7 +1318,7 @@ static func _roll_commander_survival(
 		return {"outcome": "dead", "roll_total": 0, "tn": tn}
 
 	var result: DiceResult = dice_engine.roll_and_keep(rolled, kept, true, false)
-	var total: int = result.total + battle
+	var total: int = result.total
 
 	if total >= tn:
 		return {"outcome": "survived", "roll_total": total, "tn": tn}

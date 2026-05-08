@@ -23,7 +23,7 @@ enum VacancyCause {
 @export var confirming_authority_id: int = -1
 @export var state: SuccessionState = SuccessionState.PENDING
 @export var cause: VacancyCause = VacancyCause.DEATH
-@export var start_tick: int = 0
+@export var start_tick: int = -1
 @export var ticks_elapsed: int = 0
 @export var successor_id: int = -1
 @export var designated_heir_id: int = -1

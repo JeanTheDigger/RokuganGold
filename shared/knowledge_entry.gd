@@ -5,4 +5,4 @@ extends Resource
 @export var entry_type: String = ""
 @export var data: Dictionary = {}
 @export var confidence: Enums.KnowledgeConfidence = Enums.KnowledgeConfidence.FRESH
-@export var season_acquired: int = 0
+@export var season_acquired: int = -1

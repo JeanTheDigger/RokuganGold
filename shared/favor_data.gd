@@ -24,7 +24,7 @@ enum InvocationMethod {
 @export var tier: FavorTier = FavorTier.MINOR
 @export var creditor_id: int = -1
 @export var debtor_id: int = -1
-@export var created_ic_day: int = 0
+@export var created_ic_day: int = -1
 @export var terms: String = ""
 @export var source_action: String = ""
 @export var is_blackmail_extracted: bool = false

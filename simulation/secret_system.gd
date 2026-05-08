@@ -45,17 +45,17 @@ const RECENCY_SEASONS: int = 4
 # -- Fabrication TNs -----------------------------------------------------------
 
 const FABRICATION_TN: Dictionary = {
-	SecretData.Severity.TIER_1: 15,
-	SecretData.Severity.TIER_2: 20,
-	SecretData.Severity.TIER_3: 25,
-	SecretData.Severity.TIER_4: 30,
+	SecretData.Severity.TIER_4: 15,
+	SecretData.Severity.TIER_3: 20,
+	SecretData.Severity.TIER_2: 25,
+	SecretData.Severity.TIER_1: 30,
 }
 
 const FABRICATION_HONOR_COST: Dictionary = {
-	SecretData.Severity.TIER_1: -0.3,
-	SecretData.Severity.TIER_2: -0.5,
-	SecretData.Severity.TIER_3: -0.8,
-	SecretData.Severity.TIER_4: -1.5,
+	SecretData.Severity.TIER_4: -0.3,
+	SecretData.Severity.TIER_3: -0.5,
+	SecretData.Severity.TIER_2: -0.8,
+	SecretData.Severity.TIER_1: -1.5,
 }
 
 const FABRICATION_INFAMY: float = 0.2
@@ -132,8 +132,8 @@ static func get_effective_severity(
 	if seasons_since_act >= 0 and seasons_since_act < RECENCY_SEASONS:
 		should_upgrade = true
 
-	if should_upgrade and sev < SecretData.Severity.TIER_4:
-		sev += 1
+	if should_upgrade and sev > SecretData.Severity.TIER_1:
+		sev -= 1
 
 	return sev as SecretData.Severity
 
@@ -258,7 +258,8 @@ static func fabricate_secret(
 		return {"success": false, "reason": "no_forgery_skill"}
 
 	var trait_val: int = fabricator.agility
-	var roll_result: DiceResult = dice_engine.roll_and_keep(trait_val, skill_rank)
+	var rolled: int = trait_val + skill_rank
+	var roll_result: DiceResult = dice_engine.roll_and_keep(rolled, trait_val, skill_rank > 0)
 	var total: int = roll_result.total
 	var needed: int = tn + (raises_called * 5)
 	var success: bool = total >= needed
@@ -300,7 +301,8 @@ static func detect_fabrication(
 
 	var skill_rank: int = investigator.skills.get("Investigation", 0)
 	var trait_val: int = investigator.perception
-	var roll_result: DiceResult = dice_engine.roll_and_keep(trait_val, skill_rank)
+	var rolled: int = trait_val + skill_rank
+	var roll_result: DiceResult = dice_engine.roll_and_keep(rolled, trait_val, skill_rank > 0)
 	var total: int = roll_result.total
 	var success: bool = total >= secret.detection_tn
 

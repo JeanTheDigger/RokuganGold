@@ -361,7 +361,7 @@ const TRIBUTE_REFUSE_THRESHOLD: int = -11
 
 const ALLIED_AID_SKIP_VIRTUES: Array[String] = ["Ketsui", "Ishi"]
 const ALLIED_AID_FRIEND_THRESHOLD: int = 31
-const ALLIED_AID_SIGNIFICANT_FRACTION: float = 0.20
+const ALLIED_AID_SIGNIFICANT_FRACTION: float = 0.30
 
 const RAID_BLOCK_VIRTUES: Array[String] = ["Jin", "Gi"]
 const RAID_HONOR_COST: float = -1.0
@@ -500,9 +500,7 @@ static func try_demand_tribute(
 		return {"rung": LadderRung.DEMAND_TRIBUTE, "applied": false, "reason": "no_compliant_vassals"}
 
 	var modified: Dictionary = inputs.duplicate(true)
-	var settlements: Array = modified.get("controlled_settlements", [])
-	if not settlements.is_empty() and settlements[0] is SettlementData:
-		(settlements[0] as SettlementData).rice_stockpile += total_tribute_rice
+	modified["market_rice_bonus"] = modified.get("market_rice_bonus", 0.0) + total_tribute_rice
 	modified["clan_arms_stockpile"] = modified.get("clan_arms_stockpile", 0.0) + total_tribute_arms
 
 	var ledger: Dictionary = evaluate_feasibility(modified)
@@ -562,9 +560,7 @@ static func try_request_allied_aid(
 		return {"rung": LadderRung.REQUEST_ALLIED_AID, "applied": false, "reason": "no_willing_allies"}
 
 	var modified: Dictionary = inputs.duplicate(true)
-	var settlements: Array = modified.get("controlled_settlements", [])
-	if not settlements.is_empty() and settlements[0] is SettlementData:
-		(settlements[0] as SettlementData).rice_stockpile += total_aid_rice
+	modified["market_rice_bonus"] = modified.get("market_rice_bonus", 0.0) + total_aid_rice
 	modified["current_koku"] = modified.get("current_koku", 0.0) + total_aid_koku
 
 	var ledger: Dictionary = evaluate_feasibility(modified)
@@ -624,9 +620,7 @@ static func try_raid_neighbor(
 	var seized_rice: float = best_target.get("rice_stockpile", 0.0) * RAID_RICE_FRACTION
 
 	var modified: Dictionary = inputs.duplicate(true)
-	var settlements: Array = modified.get("controlled_settlements", [])
-	if not settlements.is_empty() and settlements[0] is SettlementData:
-		(settlements[0] as SettlementData).rice_stockpile += seized_rice
+	modified["market_rice_bonus"] = modified.get("market_rice_bonus", 0.0) + seized_rice
 
 	var ledger: Dictionary = evaluate_feasibility(modified)
 	return {

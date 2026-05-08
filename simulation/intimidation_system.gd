@@ -148,7 +148,7 @@ static func get_pushback_tn(intimidator_skill_rank: int) -> int:
 
 static func can_compliance_end(
 	intimidator_disposition_toward_target: int,
-	friend_threshold: int = 51,
+	friend_threshold: int = 31,
 ) -> bool:
 	return intimidator_disposition_toward_target >= friend_threshold
 

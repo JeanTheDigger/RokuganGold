@@ -386,11 +386,13 @@ static func get_best_confidence_on_target(
 	character: L5RCharacterData,
 	target_id: int,
 ) -> int:
-	var best: int = -1
+	var best: int = 999
 	for entry: KnowledgeEntry in character.knowledge_pool:
 		var char_id: int = entry.data.get("target_character_id", entry.data.get("character_id", -1))
-		if char_id == target_id and entry.confidence > best:
+		if char_id == target_id and entry.confidence < best:
 			best = entry.confidence
+	if best == 999:
+		return -1
 	return best
 
 
