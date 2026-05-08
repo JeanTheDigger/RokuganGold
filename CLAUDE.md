@@ -467,6 +467,7 @@ All in /tests/, one file per system:
 - test_siege_system.gd (~50 tests)
 - test_army_movement_system.gd (~40 tests)
 - test_levy_system.gd (~35 tests)
+- test_military_promotion_system.gd (~35 tests)
 
 ### Festival System (s11.5)
 - **simulation/festival_system.gd** — Empire-wide canonical festivals, Rokuyo
@@ -1441,10 +1442,10 @@ All in /tests/, one file per system:
   clan elite) and `BattleTerrainType` (6 values).
 - **shared/military_unit_data.gd** — CompanyData gains `unit_type` and
   `source_province_id` fields.
-  Deferred (Phase 2+): military promotion system, military service
-  assignment, levy authority, order system, Shinjo auto-flank behavior,
-  ASCII battle events / Heroic Opportunities, PU reconciliation wiring
-  into ResourceTick, Shadowlands terrain zones, naval combat bonuses.
+  Deferred (Phase 2+): military service assignment, order system,
+  Shinjo auto-flank behavior, ASCII battle events / Heroic Opportunities,
+  PU reconciliation wiring into ResourceTick, Shadowlands terrain zones,
+  naval combat bonuses.
 
 ### Army Upkeep & Deprivation (s4.3, s11.7)
 - **simulation/army_upkeep_system.gd** — Army upkeep costs, iron degradation,
@@ -1551,6 +1552,24 @@ All in /tests/, one file per system:
   shugenja −5, uncommitted 0). Personality modifiers: Jin doubles yojimbo
   penalty, Yu halves all penalties, Chugi reduces by −10.
   Dual authority check: Daimyo + Taisa rank = can use Go-hatamoto directly.
+
+### Military Promotion System (s11.7a)
+- **simulation/military_promotion_system.gd** — Officer promotion, vacancy filling,
+  and demotion per GDD s11.7a. Pure static functions.
+  Enlisted: Hohei→Nikutai (Battle 2, 1 battle), Nikutai→Gunso (Battle 2, 1
+  battle, vacancy). Officer minimum thresholds: Chui (Battle 3), Taisa
+  (Battle 4, 1 battle as Chui), Shireikan (Battle 5, 2 battles as Taisa),
+  Rikugunshokan (Battle 5, no battle count — political appointment possible).
+  Multi-factor candidate scoring per rank: Battle skill (30–35), Insight Rank
+  (15–20), School Rank/battles commanded (15–20), Glory (10), disposition toward
+  appointing lord (10–20), personality fit (10). Personality tables per rank:
+  Chui favors Yu/Chugi (frontline) or Seigyo (garrison), Taisa adds Dosatsu,
+  Shireikan/Rikugunshokan prioritize Dosatsu/Seigyo for strategic vision.
+  `select_best_candidate()` filters by eligibility then scores and returns best.
+  Battle record tracking: battles fought/won/lost, companies destroyed under
+  command. Demotion: −0.5 Glory, clears rank and commanded_unit_id. Removal
+  trigger: disposition below −10. Vacancy detection scans units for empty
+  commander_id slots.
 
 ### What's Next
 1. World generation coordinate system and adjacency
