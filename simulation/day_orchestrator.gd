@@ -1976,6 +1976,20 @@ static func _process_war_score_shifts(
 	if active_wars.is_empty():
 		return results
 
+	_process_battle_war_scores(military_daily, military_effects, active_wars, companies, results)
+	_process_siege_war_scores(military_daily, active_wars, results)
+	_process_tether_war_scores(military_daily, active_wars, companies, results)
+
+	return results
+
+
+static func _process_battle_war_scores(
+	military_daily: Dictionary,
+	military_effects: Array[Dictionary],
+	active_wars: Array[WarData],
+	companies: Array[Dictionary],
+	results: Array[Dictionary],
+) -> void:
 	var movement_results: Array = military_daily.get("movement_results", [])
 	for mr: Variant in movement_results:
 		if not (mr is Dictionary):
@@ -1988,42 +2002,213 @@ static func _process_war_score_shifts(
 		if army_clan.is_empty():
 			continue
 
+		var company_count: int = md.get("company_count", 1)
+		var event_type: String = _classify_battle_size(company_count)
+
 		for war: WarData in active_wars:
 			if not war.is_active:
 				continue
 			if WarSystem.is_clan_involved(war, army_clan):
 				var r: Dictionary = WarSystem.apply_score_shift(
-					war, "minor_battle", army_clan,
+					war, event_type, army_clan,
 				)
 				results.append({
 					"war_id": war.war_id,
-					"event": "minor_battle",
+					"event": event_type,
 					"clan": army_clan,
 					"shift": r["shift"],
 				})
 				break
+
+	var battle_results: Array = military_daily.get("battle_results", [])
+	for br: Variant in battle_results:
+		if not (br is Dictionary):
+			continue
+		var bd: Dictionary = br
+		_process_commander_death_scores(bd, active_wars, results)
 
 	for effect: Dictionary in military_effects:
 		if effect.get("type", "") != "battle_pu_reconciliation":
 			continue
 		var casualties: Dictionary = effect.get("casualties", {})
 		var total_loss: float = casualties.get("total_pu_lost", 0.0)
-		if total_loss >= 3.0:
+		if total_loss >= 5.0:
 			for war: WarData in active_wars:
 				if war.is_active:
-					var side_a_score: int = war.war_score_a
+					var r: Dictionary = WarSystem.apply_score_shift(
+						war, "decisive_battle", war.initiator_clan,
+					)
+					results.append({
+						"war_id": war.war_id,
+						"event": "decisive_battle_upgrade",
+						"shift": r["shift"],
+					})
+					break
+		elif total_loss >= 3.0:
+			for war: WarData in active_wars:
+				if war.is_active:
 					var r: Dictionary = WarSystem.apply_score_shift(
 						war, "major_battle", war.initiator_clan,
 					)
-					if r["shift"] > 0:
-						results.append({
-							"war_id": war.war_id,
-							"event": "major_battle_upgrade",
-							"shift": r["shift"],
-						})
+					results.append({
+						"war_id": war.war_id,
+						"event": "major_battle_upgrade",
+						"shift": r["shift"],
+					})
 					break
 
-	return results
+
+static func _classify_battle_size(company_count: int) -> String:
+	if company_count >= 8:
+		return "decisive_battle"
+	if company_count >= 4:
+		return "major_battle"
+	return "minor_battle"
+
+
+static func _process_commander_death_scores(
+	battle_result: Dictionary,
+	active_wars: Array[WarData],
+	results: Array[Dictionary],
+) -> void:
+	var all_states: Array = []
+	all_states.append_array(battle_result.get("attacker_states", []))
+	all_states.append_array(battle_result.get("defender_states", []))
+
+	for bc: Variant in all_states:
+		if not (bc is Dictionary):
+			continue
+		var bcd: Dictionary = bc
+		if not bcd.get("commander_dead", false):
+			continue
+		var commander: Variant = bcd.get("commander")
+		if commander == null:
+			continue
+		if not (commander is L5RCharacterData):
+			continue
+		var dead_char: L5RCharacterData = commander
+		var rank: int = dead_char.military_rank
+		var clan: String = dead_char.clan
+		var event_type: String = _rank_to_death_event(rank)
+		if event_type.is_empty():
+			continue
+
+		var enemy_clan: String = ""
+		var side: String = bcd.get("side", "")
+		for war: WarData in active_wars:
+			if not war.is_active:
+				continue
+			if not WarSystem.is_clan_involved(war, clan):
+				continue
+			var clan_side: String = WarSystem.get_clan_side(war, clan)
+			enemy_clan = war.clan_b if clan_side == "a" else war.clan_a
+			var r: Dictionary = WarSystem.apply_score_shift(
+				war, event_type, enemy_clan,
+			)
+			results.append({
+				"war_id": war.war_id,
+				"event": event_type,
+				"dead_commander_id": dead_char.character_id,
+				"clan": enemy_clan,
+				"shift": r["shift"],
+			})
+			break
+
+
+static func _rank_to_death_event(rank: int) -> String:
+	if rank == Enums.MilitaryRank.RIKUGUNSHOKAN:
+		return "rikugunshokan_killed"
+	if rank == Enums.MilitaryRank.SHIREIKAN or rank == Enums.MilitaryRank.TAISA:
+		return "taisa_shireikan_killed"
+	if rank == Enums.MilitaryRank.CHUI or rank == Enums.MilitaryRank.GUNSO:
+		return "gunso_chui_killed"
+	return ""
+
+
+static func _process_siege_war_scores(
+	military_daily: Dictionary,
+	active_wars: Array[WarData],
+	results: Array[Dictionary],
+) -> void:
+	var siege_results: Array = military_daily.get("siege_results", [])
+	for sr: Variant in siege_results:
+		if not (sr is Dictionary):
+			continue
+		var sd: Dictionary = sr
+		var resolved: String = sd.get("resolved", "")
+		if resolved.is_empty():
+			continue
+
+		var attacker_clan: String = sd.get("attacker_clan", "")
+		var defender_clan: String = sd.get("defender_clan", "")
+		if attacker_clan.is_empty() or defender_clan.is_empty():
+			continue
+
+		var event_type: String = ""
+		var winning_clan: String = ""
+		if resolved == "attacker_victory":
+			event_type = "siege_won_attacker"
+			winning_clan = attacker_clan
+		elif resolved == "defender_victory":
+			event_type = "siege_won_defender"
+			winning_clan = defender_clan
+
+		if event_type.is_empty():
+			continue
+
+		for war: WarData in active_wars:
+			if not war.is_active:
+				continue
+			if WarSystem.is_clan_involved(war, winning_clan):
+				var r: Dictionary = WarSystem.apply_score_shift(
+					war, event_type, winning_clan,
+				)
+				results.append({
+					"war_id": war.war_id,
+					"event": event_type,
+					"clan": winning_clan,
+					"shift": r["shift"],
+				})
+				break
+
+
+static func _process_tether_war_scores(
+	military_daily: Dictionary,
+	active_wars: Array[WarData],
+	companies: Array[Dictionary],
+	results: Array[Dictionary],
+) -> void:
+	var tether_results: Array = military_daily.get("tether_results", [])
+	for tr: Variant in tether_results:
+		if not (tr is Dictionary):
+			continue
+		var td: Dictionary = tr
+		var state: int = td.get("overall_state", 0)
+		if state != 2:
+			continue
+
+		var army_id: int = td.get("army_id", -1)
+		var army_clan: String = _get_army_clan(army_id, companies)
+		if army_clan.is_empty():
+			continue
+
+		for war: WarData in active_wars:
+			if not war.is_active:
+				continue
+			if not WarSystem.is_clan_involved(war, army_clan):
+				continue
+			var clan_side: String = WarSystem.get_clan_side(war, army_clan)
+			var enemy_clan: String = war.clan_b if clan_side == "a" else war.clan_a
+			var r: Dictionary = WarSystem.apply_score_shift(
+				war, "supply_line_cut", enemy_clan,
+			)
+			results.append({
+				"war_id": war.war_id,
+				"event": "supply_line_cut",
+				"clan": enemy_clan,
+				"shift": r["shift"],
+			})
+			break
 
 
 static func _get_army_clan(

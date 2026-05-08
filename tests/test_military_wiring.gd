@@ -1207,3 +1207,358 @@ func test_get_army_clan() -> void:
 	assert_eq(DayOrchestrator._get_army_clan(1, companies), "Crab")
 	assert_eq(DayOrchestrator._get_army_clan(2, companies), "Crane")
 	assert_eq(DayOrchestrator._get_army_clan(99, companies), "")
+
+
+# -- Deeper War Score Event Tests ------------------------------------------------
+
+func test_classify_battle_size_minor() -> void:
+	assert_eq(DayOrchestrator._classify_battle_size(1), "minor_battle")
+	assert_eq(DayOrchestrator._classify_battle_size(3), "minor_battle")
+
+
+func test_classify_battle_size_major() -> void:
+	assert_eq(DayOrchestrator._classify_battle_size(4), "major_battle")
+	assert_eq(DayOrchestrator._classify_battle_size(7), "major_battle")
+
+
+func test_classify_battle_size_decisive() -> void:
+	assert_eq(DayOrchestrator._classify_battle_size(8), "decisive_battle")
+	assert_eq(DayOrchestrator._classify_battle_size(20), "decisive_battle")
+
+
+func test_rank_to_death_event_rikugunshokan() -> void:
+	assert_eq(
+		DayOrchestrator._rank_to_death_event(Enums.MilitaryRank.RIKUGUNSHOKAN),
+		"rikugunshokan_killed",
+	)
+
+
+func test_rank_to_death_event_taisa() -> void:
+	assert_eq(
+		DayOrchestrator._rank_to_death_event(Enums.MilitaryRank.TAISA),
+		"taisa_shireikan_killed",
+	)
+
+
+func test_rank_to_death_event_shireikan() -> void:
+	assert_eq(
+		DayOrchestrator._rank_to_death_event(Enums.MilitaryRank.SHIREIKAN),
+		"taisa_shireikan_killed",
+	)
+
+
+func test_rank_to_death_event_chui() -> void:
+	assert_eq(
+		DayOrchestrator._rank_to_death_event(Enums.MilitaryRank.CHUI),
+		"gunso_chui_killed",
+	)
+
+
+func test_rank_to_death_event_gunso() -> void:
+	assert_eq(
+		DayOrchestrator._rank_to_death_event(Enums.MilitaryRank.GUNSO),
+		"gunso_chui_killed",
+	)
+
+
+func test_rank_to_death_event_none_returns_empty() -> void:
+	assert_eq(DayOrchestrator._rank_to_death_event(Enums.MilitaryRank.NONE), "")
+	assert_eq(DayOrchestrator._rank_to_death_event(Enums.MilitaryRank.HOHEI), "")
+	assert_eq(DayOrchestrator._rank_to_death_event(Enums.MilitaryRank.NIKUTAI), "")
+
+
+func test_battle_size_affects_war_score() -> void:
+	var war: WarData = _make_war()
+	var companies: Array[Dictionary] = [
+		{"army_id": 1, "clan_name": "Crab"},
+	]
+	var military_daily: Dictionary = {
+		"movement_results": [
+			{"army_id": 1, "battle_triggered": true, "company_count": 5},
+		],
+	}
+	var results: Array[Dictionary] = DayOrchestrator._process_war_score_shifts(
+		military_daily, [], [war], companies,
+	)
+	assert_eq(results.size(), 1)
+	assert_eq(results[0]["event"], "major_battle")
+	assert_eq(results[0]["shift"], 8)
+
+
+func test_decisive_battle_from_company_count() -> void:
+	var war: WarData = _make_war()
+	var companies: Array[Dictionary] = [
+		{"army_id": 1, "clan_name": "Crab"},
+	]
+	var military_daily: Dictionary = {
+		"movement_results": [
+			{"army_id": 1, "battle_triggered": true, "company_count": 10},
+		],
+	}
+	var results: Array[Dictionary] = DayOrchestrator._process_war_score_shifts(
+		military_daily, [], [war], companies,
+	)
+	assert_eq(results[0]["event"], "decisive_battle")
+	assert_eq(results[0]["shift"], 15)
+
+
+func test_commander_death_shifts_enemy_score() -> void:
+	var war: WarData = _make_war()
+	var dead_cmd: L5RCharacterData = _make_character(10, "Crab")
+	dead_cmd.military_rank = Enums.MilitaryRank.TAISA
+	var military_daily: Dictionary = {
+		"battle_results": [
+			{
+				"attacker_states": [
+					{
+						"commander_dead": true,
+						"commander": dead_cmd,
+						"side": "attacker",
+					},
+				],
+				"defender_states": [],
+			},
+		],
+	}
+	var results: Array[Dictionary] = DayOrchestrator._process_war_score_shifts(
+		military_daily, [], [war], [],
+	)
+	assert_eq(results.size(), 1)
+	assert_eq(results[0]["event"], "taisa_shireikan_killed")
+	assert_eq(results[0]["dead_commander_id"], 10)
+	assert_eq(results[0]["clan"], "Crane")
+
+
+func test_commander_death_rikugunshokan() -> void:
+	var war: WarData = _make_war()
+	var score_b_before: int = war.war_score_b
+	var dead_cmd: L5RCharacterData = _make_character(10, "Crab")
+	dead_cmd.military_rank = Enums.MilitaryRank.RIKUGUNSHOKAN
+	var military_daily: Dictionary = {
+		"battle_results": [
+			{
+				"attacker_states": [
+					{"commander_dead": true, "commander": dead_cmd, "side": "attacker"},
+				],
+				"defender_states": [],
+			},
+		],
+	}
+	var results: Array[Dictionary] = DayOrchestrator._process_war_score_shifts(
+		military_daily, [], [war], [],
+	)
+	assert_eq(results[0]["event"], "rikugunshokan_killed")
+	assert_eq(results[0]["shift"], 10)
+	assert_eq(war.war_score_b, score_b_before + 10)
+
+
+func test_commander_death_low_rank_ignored() -> void:
+	var war: WarData = _make_war()
+	var dead_cmd: L5RCharacterData = _make_character(10, "Crab")
+	dead_cmd.military_rank = Enums.MilitaryRank.HOHEI
+	var military_daily: Dictionary = {
+		"battle_results": [
+			{
+				"attacker_states": [
+					{"commander_dead": true, "commander": dead_cmd, "side": "attacker"},
+				],
+				"defender_states": [],
+			},
+		],
+	}
+	var results: Array[Dictionary] = DayOrchestrator._process_war_score_shifts(
+		military_daily, [], [war], [],
+	)
+	assert_eq(results.size(), 0)
+
+
+func test_siege_attacker_victory_war_score() -> void:
+	var war: WarData = _make_war()
+	var score_a_before: int = war.war_score_a
+	var military_daily: Dictionary = {
+		"siege_results": [
+			{
+				"resolved": "attacker_victory",
+				"attacker_clan": "Crab",
+				"defender_clan": "Crane",
+			},
+		],
+	}
+	var results: Array[Dictionary] = DayOrchestrator._process_war_score_shifts(
+		military_daily, [], [war], [],
+	)
+	assert_eq(results.size(), 1)
+	assert_eq(results[0]["event"], "siege_won_attacker")
+	assert_eq(results[0]["shift"], 12)
+	assert_eq(war.war_score_a, score_a_before + 12)
+
+
+func test_siege_defender_victory_war_score() -> void:
+	var war: WarData = _make_war()
+	var score_b_before: int = war.war_score_b
+	var military_daily: Dictionary = {
+		"siege_results": [
+			{
+				"resolved": "defender_victory",
+				"attacker_clan": "Crab",
+				"defender_clan": "Crane",
+			},
+		],
+	}
+	var results: Array[Dictionary] = DayOrchestrator._process_war_score_shifts(
+		military_daily, [], [war], [],
+	)
+	assert_eq(results.size(), 1)
+	assert_eq(results[0]["event"], "siege_won_defender")
+	assert_eq(results[0]["shift"], 8)
+	assert_eq(war.war_score_b, score_b_before + 8)
+
+
+func test_siege_unresolved_no_score() -> void:
+	var war: WarData = _make_war()
+	var military_daily: Dictionary = {
+		"siege_results": [
+			{
+				"resolved": "",
+				"attacker_clan": "Crab",
+				"defender_clan": "Crane",
+			},
+		],
+	}
+	var results: Array[Dictionary] = DayOrchestrator._process_war_score_shifts(
+		military_daily, [], [war], [],
+	)
+	assert_eq(results.size(), 0)
+
+
+func test_tether_broken_cuts_supply_for_enemy() -> void:
+	var war: WarData = _make_war()
+	var score_b_before: int = war.war_score_b
+	var companies: Array[Dictionary] = [
+		{"army_id": 1, "clan_name": "Crab"},
+	]
+	var military_daily: Dictionary = {
+		"tether_results": [
+			{"army_id": 1, "overall_state": 2},
+		],
+	}
+	var results: Array[Dictionary] = DayOrchestrator._process_war_score_shifts(
+		military_daily, [], [war], companies,
+	)
+	assert_eq(results.size(), 1)
+	assert_eq(results[0]["event"], "supply_line_cut")
+	assert_eq(results[0]["clan"], "Crane")
+	assert_eq(results[0]["shift"], 3)
+	assert_eq(war.war_score_b, score_b_before + 3)
+
+
+func test_tether_threatened_no_score() -> void:
+	var war: WarData = _make_war()
+	var companies: Array[Dictionary] = [
+		{"army_id": 1, "clan_name": "Crab"},
+	]
+	var military_daily: Dictionary = {
+		"tether_results": [
+			{"army_id": 1, "overall_state": 1},
+		],
+	}
+	var results: Array[Dictionary] = DayOrchestrator._process_war_score_shifts(
+		military_daily, [], [war], companies,
+	)
+	assert_eq(results.size(), 0)
+
+
+func test_heavy_casualties_upgrade_to_decisive() -> void:
+	var war: WarData = _make_war()
+	var military_effects: Array[Dictionary] = [
+		{
+			"type": "battle_pu_reconciliation",
+			"casualties": {"total_pu_lost": 6.0},
+		},
+	]
+	var results: Array[Dictionary] = DayOrchestrator._process_war_score_shifts(
+		{}, military_effects, [war], [],
+	)
+	assert_eq(results.size(), 1)
+	assert_eq(results[0]["event"], "decisive_battle_upgrade")
+	assert_eq(results[0]["shift"], 15)
+
+
+func test_moderate_casualties_upgrade_to_major() -> void:
+	var war: WarData = _make_war()
+	var military_effects: Array[Dictionary] = [
+		{
+			"type": "battle_pu_reconciliation",
+			"casualties": {"total_pu_lost": 3.5},
+		},
+	]
+	var results: Array[Dictionary] = DayOrchestrator._process_war_score_shifts(
+		{}, military_effects, [war], [],
+	)
+	assert_eq(results.size(), 1)
+	assert_eq(results[0]["event"], "major_battle_upgrade")
+	assert_eq(results[0]["shift"], 8)
+
+
+func test_small_casualties_no_upgrade() -> void:
+	var war: WarData = _make_war()
+	var military_effects: Array[Dictionary] = [
+		{
+			"type": "battle_pu_reconciliation",
+			"casualties": {"total_pu_lost": 2.0},
+		},
+	]
+	var results: Array[Dictionary] = DayOrchestrator._process_war_score_shifts(
+		{}, military_effects, [war], [],
+	)
+	assert_eq(results.size(), 0)
+
+
+func test_multiple_events_combine() -> void:
+	var war: WarData = _make_war()
+	var companies: Array[Dictionary] = [
+		{"army_id": 1, "clan_name": "Crab"},
+	]
+	var dead_cmd: L5RCharacterData = _make_character(10, "Crane")
+	dead_cmd.military_rank = Enums.MilitaryRank.CHUI
+	var military_daily: Dictionary = {
+		"movement_results": [
+			{"army_id": 1, "battle_triggered": true, "company_count": 2},
+		],
+		"battle_results": [
+			{
+				"attacker_states": [],
+				"defender_states": [
+					{"commander_dead": true, "commander": dead_cmd, "side": "defender"},
+				],
+			},
+		],
+		"siege_results": [
+			{
+				"resolved": "attacker_victory",
+				"attacker_clan": "Crab",
+				"defender_clan": "Crane",
+			},
+		],
+	}
+	var results: Array[Dictionary] = DayOrchestrator._process_war_score_shifts(
+		military_daily, [], [war], companies,
+	)
+	assert_true(results.size() >= 3)
+
+
+func test_inactive_war_skipped_for_battle() -> void:
+	var war: WarData = _make_war()
+	war.is_active = false
+	var companies: Array[Dictionary] = [
+		{"army_id": 1, "clan_name": "Crab"},
+	]
+	var military_daily: Dictionary = {
+		"movement_results": [
+			{"army_id": 1, "battle_triggered": true, "company_count": 5},
+		],
+	}
+	var results: Array[Dictionary] = DayOrchestrator._process_war_score_shifts(
+		military_daily, [], [war], companies,
+	)
+	assert_eq(results.size(), 0)

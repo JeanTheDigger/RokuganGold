@@ -471,7 +471,7 @@ All in /tests/, one file per system:
 - test_order_system.gd (~30 tests)
 - test_military_service_system.gd (~35 tests)
 - test_pu_reconciliation.gd (~30 tests)
-- test_military_wiring.gd (~86 tests)
+- test_military_wiring.gd (~101 tests)
 - test_war_system.gd (~55 tests)
 - test_war_justification.gd (~45 tests)
 
@@ -1657,18 +1657,31 @@ All in /tests/, one file per system:
   `get_active_wars_for_clan()`. Context conversion: `to_context_dict()`,
   `wars_to_context_array()` for NPC engine compatibility (existing code
   expects Dictionary arrays with clan_a/clan_b/enemy_clan_id keys).
-  Wired into DayOrchestrator: `_process_war_score_shifts()` applies minor
-  battle (+3) score shifts from battle triggers, upgrades to major battle
-  (+8) on heavy casualties (PU loss ≥ 3.0). `_process_war_seasonal()` runs
-  on season boundary: seasonal attrition (+1 initiator), disposition penalty
-  (−2 per season active) between opposing-side characters.
+  Wired into DayOrchestrator: `_process_war_score_shifts()` processes all
+  war score events from daily military results. Sub-functions:
+  `_process_battle_war_scores()` classifies battles by company count
+  (1–3 minor +3, 4–7 major +8, 8+ decisive +15) via `_classify_battle_size()`.
+  PU casualty upgrades: ≥5.0 total PU lost → decisive_battle_upgrade,
+  ≥3.0 → major_battle_upgrade.
+  `_process_commander_death_scores()` reads `commander_dead` from battle
+  states, maps military rank via `_rank_to_death_event()`:
+  Rikugunshokan → rikugunshokan_killed (+10), Taisa/Shireikan →
+  taisa_shireikan_killed (+5), Chui/Gunso → gunso_chui_killed (+2).
+  Commander death scores to the enemy clan.
+  `_process_siege_war_scores()` reads resolved siege results:
+  attacker_victory → siege_won_attacker (+12), defender_victory →
+  siege_won_defender (+8).
+  `_process_tether_war_scores()` detects BROKEN tether state
+  (overall_state == 2) → supply_line_cut (+3) for the enemy clan.
+  `_process_war_seasonal()` runs on season boundary: seasonal attrition
+  (+1 initiator), disposition penalty (−2 per season active) between
+  opposing-side characters.
   `_sync_wars_to_world_states()` converts WarData to context dicts for NPC
   engine compatibility. WorldStateData gains `active_wars: Array[WarData]`.
   New param on `advance_day()`: `active_wars`. Return dict gains
   `war_score_results`.
   Deferred: Peace court mechanics, Imperial edict intervention, trade route
-  suspension on war declaration, decisive battle detection, commander death
-  score shifts.
+  suspension on war declaration.
 
 ### War Justification & Casus Belli (s53.1)
 - **simulation/war_justification.gd** — Five-step AI lord war initiation
