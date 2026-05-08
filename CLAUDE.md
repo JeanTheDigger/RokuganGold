@@ -474,7 +474,7 @@ All in /tests/, one file per system:
 - test_military_wiring.gd (~107 tests)
 - test_war_system.gd (~61 tests)
 - test_war_justification.gd (~45 tests)
-- test_war_termination.gd (~37 tests)
+- test_war_termination.gd (~46 tests)
 
 ### Festival System (s11.5)
 - **simulation/festival_system.gd** — Empire-wide canonical festivals, Rokuyo
@@ -1754,9 +1754,16 @@ All in /tests/, one file per system:
   Return dict gains `war_termination_results`.
 - **objective_alignment.json** — NEGOTIATE_SURRENDER added to SEEK_PEACE
   NeedType with score 95 (highest priority when at war).
+- **Trade route suspension** — `suspend_trade_routes_for_war()` disrupts
+  all TradeRouteData connecting provinces of warring clans (disruption_reason
+  = "war_{clan_a}_{clan_b}"). `restore_trade_routes_for_peace()` restores
+  routes with matching war disruption_reason on peace (except annihilation).
+  DayOrchestrator `_process_war_trade_routes()` runs after war declarations,
+  `_process_peace_trade_routes()` runs after war terminations. WorldStateData
+  gains `trade_routes: Array`, threaded through `advance_one_day()`.
+  Return dict gains `trade_route_results`.
   Deferred: Peace court mechanics (formal court session), Imperial edict
-  action path, trade route suspension on war/peace, territory transfer
-  mutations on settlement/province data.
+  action path, territory transfer mutations on settlement/province data.
 
 ### What's Next
 1. World generation coordinate system and adjacency
