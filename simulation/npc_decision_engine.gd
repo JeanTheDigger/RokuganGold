@@ -1036,12 +1036,18 @@ static func _build_declare_war_metadata(
 	var standing: String = need.target_intent
 	var primary: String = ""
 
+	var virtue: String = _get_virtue_string(ctx)
+	var tier: WarJustification.MilitaryTier = WarJustification.select_intended_tier(
+		standing, primary, virtue,
+	)
+
 	return {
 		"standing_objective": standing,
 		"primary_objective": primary,
-		"intended_tier": WarJustification.MilitaryTier.RAID,
+		"intended_tier": tier,
 		"target_clan": target_clan,
-		"authority_level": WarData.AuthorityLevel.PROVINCIAL_RAID,
+		"authority_level": WarJustification.get_authority_for_tier(tier),
+		"primary_virtue": virtue,
 	}
 
 
@@ -1067,3 +1073,29 @@ static func _build_negotiate_surrender_metadata(
 		"hostage_held": false,
 		"superior_pressuring": false,
 	}
+
+
+const _VIRTUE_NAMES: Dictionary = {
+	Enums.BushidoVirtue.JIN: "Jin",
+	Enums.BushidoVirtue.YU: "Yu",
+	Enums.BushidoVirtue.REI: "Rei",
+	Enums.BushidoVirtue.CHUGI: "Chugi",
+	Enums.BushidoVirtue.GI: "Gi",
+	Enums.BushidoVirtue.MEIYO: "Meiyo",
+	Enums.BushidoVirtue.MAKOTO: "Makoto",
+	Enums.ShouridoVirtue.SEIGYO: "Seigyo",
+	Enums.ShouridoVirtue.KETSUI: "Ketsui",
+	Enums.ShouridoVirtue.DOSATSU: "Dosatsu",
+	Enums.ShouridoVirtue.CHISHIKI: "Chishiki",
+	Enums.ShouridoVirtue.KANPEKI: "Kanpeki",
+	Enums.ShouridoVirtue.ISHI: "Ishi",
+	Enums.ShouridoVirtue.KYORYOKU: "Kyoryoku",
+}
+
+
+static func _get_virtue_string(ctx: NPCDataStructures.ContextSnapshot) -> String:
+	if ctx.bushido_virtue != Enums.BushidoVirtue.NONE:
+		return _VIRTUE_NAMES.get(ctx.bushido_virtue, "")
+	if ctx.shourido_virtue != Enums.ShouridoVirtue.NONE:
+		return _VIRTUE_NAMES.get(ctx.shourido_virtue, "")
+	return ""

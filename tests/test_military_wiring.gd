@@ -1784,6 +1784,107 @@ func test_expand_territory_produces_war_check_with_intent() -> void:
 	assert_eq(need.target_province_id, 10)
 
 
+# -- Personality-Driven Tier in Metadata ------------------------------------------
+
+func test_yu_lord_gets_total_war_tier_in_metadata() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
+	ctx.character_id = 1
+	ctx.clan = "Lion"
+	ctx.is_lord = true
+	ctx.bushido_virtue = Enums.BushidoVirtue.YU
+
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "INITIATE_WAR_CHECK"
+	need.target_province_id = 10
+	need.target_clan_id = "Crane"
+	need.target_intent = "EXPAND_TERRITORY"
+
+	var options: Array[NPCDataStructures.ScoredAction] = NPCDecisionEngine.generate_options(
+		ctx, need,
+	)
+	var declare_war_option: NPCDataStructures.ScoredAction = null
+	for opt: NPCDataStructures.ScoredAction in options:
+		if opt.action_id == "DECLARE_WAR":
+			declare_war_option = opt
+			break
+
+	assert_not_null(declare_war_option)
+	if declare_war_option != null:
+		assert_eq(
+			declare_war_option.metadata.get("intended_tier"),
+			WarJustification.MilitaryTier.TOTAL_WAR,
+		)
+		assert_eq(
+			declare_war_option.metadata.get("authority_level"),
+			WarData.AuthorityLevel.CLAN_WAR,
+		)
+		assert_eq(declare_war_option.metadata.get("primary_virtue"), "Yu")
+
+
+func test_jin_lord_gets_raid_tier_in_metadata() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
+	ctx.character_id = 1
+	ctx.clan = "Crane"
+	ctx.is_lord = true
+	ctx.bushido_virtue = Enums.BushidoVirtue.JIN
+
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "INITIATE_WAR_CHECK"
+	need.target_province_id = 10
+	need.target_clan_id = "Lion"
+	need.target_intent = "EXPAND_TERRITORY"
+
+	var options: Array[NPCDataStructures.ScoredAction] = NPCDecisionEngine.generate_options(
+		ctx, need,
+	)
+	var declare_war_option: NPCDataStructures.ScoredAction = null
+	for opt: NPCDataStructures.ScoredAction in options:
+		if opt.action_id == "DECLARE_WAR":
+			declare_war_option = opt
+			break
+
+	assert_not_null(declare_war_option)
+	if declare_war_option != null:
+		assert_eq(
+			declare_war_option.metadata.get("intended_tier"),
+			WarJustification.MilitaryTier.RAID,
+		)
+		assert_eq(declare_war_option.metadata.get("primary_virtue"), "Jin")
+
+
+func test_ketsui_lord_gets_formal_war_for_dominance() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
+	ctx.character_id = 1
+	ctx.clan = "Unicorn"
+	ctx.is_lord = true
+	ctx.shourido_virtue = Enums.ShouridoVirtue.KETSUI
+
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "INITIATE_WAR_CHECK"
+	need.target_province_id = 10
+	need.target_clan_id = "Crane"
+	need.target_intent = "MILITARY_DOMINANCE"
+
+	var options: Array[NPCDataStructures.ScoredAction] = NPCDecisionEngine.generate_options(
+		ctx, need,
+	)
+	var declare_war_option: NPCDataStructures.ScoredAction = null
+	for opt: NPCDataStructures.ScoredAction in options:
+		if opt.action_id == "DECLARE_WAR":
+			declare_war_option = opt
+			break
+
+	assert_not_null(declare_war_option)
+	if declare_war_option != null:
+		assert_eq(
+			declare_war_option.metadata.get("intended_tier"),
+			WarJustification.MilitaryTier.FORMAL_WAR,
+		)
+
+
 # -- Standing Objective War Check Paths ------------------------------------------
 
 func test_seek_vengeance_produces_war_check() -> void:

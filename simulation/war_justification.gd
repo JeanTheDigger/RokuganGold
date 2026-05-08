@@ -192,6 +192,60 @@ static func check_personality_gate(
 	return {"blocked": blocked, "reason": reason}
 
 
+# -- Tier Selection by Personality -----------------------------------------------
+
+const TIER_ORDER: Array[int] = [
+	MilitaryTier.RAID,
+	MilitaryTier.FORMAL_WAR,
+	MilitaryTier.TOTAL_WAR,
+]
+
+const AUTHORITY_FOR_TIER: Dictionary = {
+	MilitaryTier.RAID: WarData.AuthorityLevel.PROVINCIAL_RAID,
+	MilitaryTier.FORMAL_WAR: WarData.AuthorityLevel.BORDER_CONFLICT,
+	MilitaryTier.TOTAL_WAR: WarData.AuthorityLevel.CLAN_WAR,
+}
+
+
+static func select_intended_tier(
+	standing_objective: String,
+	primary_objective: String,
+	primary_virtue: String,
+) -> MilitaryTier:
+	var supported: Array = get_objective_tiers(standing_objective, primary_objective)
+	if supported.is_empty():
+		return MilitaryTier.RAID
+
+	var is_aggressive: bool = (
+		primary_virtue in AGGRESSION_BUSHIDO
+		or primary_virtue in AGGRESSION_SHOURIDO
+	)
+
+	if is_aggressive:
+		for i: int in range(TIER_ORDER.size() - 1, -1, -1):
+			if TIER_ORDER[i] in supported:
+				var candidate: MilitaryTier = TIER_ORDER[i] as MilitaryTier
+				var gate: Dictionary = check_personality_gate(
+					candidate, standing_objective, primary_objective, primary_virtue,
+				)
+				if not gate["blocked"]:
+					return candidate
+		return supported[0] as MilitaryTier
+
+	if primary_virtue == "Jin":
+		for tier_val: Variant in supported:
+			var t: MilitaryTier = tier_val as MilitaryTier
+			if t != MilitaryTier.TOTAL_WAR:
+				return t
+		return MilitaryTier.RAID
+
+	return supported[0] as MilitaryTier
+
+
+static func get_authority_for_tier(tier: MilitaryTier) -> int:
+	return AUTHORITY_FOR_TIER.get(tier, WarData.AuthorityLevel.PROVINCIAL_RAID)
+
+
 # -- Full 5-Step Decision Sequence ------------------------------------------------
 
 static func evaluate_war_justification(

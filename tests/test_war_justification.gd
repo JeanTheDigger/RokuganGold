@@ -347,3 +347,77 @@ func test_all_standing_objectives_covered() -> void:
 			WarJustification.STANDING_OBJECTIVE_TIERS.has(obj),
 			"Missing standing objective: %s" % obj,
 		)
+
+
+# -- Personality-Driven Tier Selection -------------------------------------------
+
+func test_yu_selects_highest_tier_expand() -> void:
+	var tier: WarJustification.MilitaryTier = WarJustification.select_intended_tier(
+		"EXPAND_TERRITORY", "", "Yu",
+	)
+	assert_eq(tier, WarJustification.MilitaryTier.TOTAL_WAR)
+
+
+func test_kyoryoku_selects_highest_tier() -> void:
+	var tier: WarJustification.MilitaryTier = WarJustification.select_intended_tier(
+		"SEEK_VENGEANCE", "", "Kyoryoku",
+	)
+	assert_eq(tier, WarJustification.MilitaryTier.TOTAL_WAR)
+
+
+func test_ketsui_selects_formal_for_dominance() -> void:
+	var tier: WarJustification.MilitaryTier = WarJustification.select_intended_tier(
+		"MILITARY_DOMINANCE", "", "Ketsui",
+	)
+	assert_eq(tier, WarJustification.MilitaryTier.FORMAL_WAR)
+
+
+func test_jin_caps_at_formal_war() -> void:
+	var tier: WarJustification.MilitaryTier = WarJustification.select_intended_tier(
+		"EXPAND_TERRITORY", "", "Jin",
+	)
+	assert_ne(tier, WarJustification.MilitaryTier.TOTAL_WAR)
+	assert_eq(tier, WarJustification.MilitaryTier.RAID)
+
+
+func test_jin_caps_at_formal_for_seek_vengeance() -> void:
+	var tier: WarJustification.MilitaryTier = WarJustification.select_intended_tier(
+		"SEEK_VENGEANCE", "", "Jin",
+	)
+	assert_ne(tier, WarJustification.MilitaryTier.TOTAL_WAR)
+
+
+func test_default_virtue_selects_first_supported() -> void:
+	var tier: WarJustification.MilitaryTier = WarJustification.select_intended_tier(
+		"EXPAND_TERRITORY", "", "Rei",
+	)
+	assert_eq(tier, WarJustification.MilitaryTier.RAID)
+
+
+func test_build_strongest_force_always_raid() -> void:
+	var tier: WarJustification.MilitaryTier = WarJustification.select_intended_tier(
+		"BUILD_STRONGEST_FORCE", "", "Yu",
+	)
+	assert_eq(tier, WarJustification.MilitaryTier.RAID)
+
+
+func test_unknown_objective_defaults_to_raid() -> void:
+	var tier: WarJustification.MilitaryTier = WarJustification.select_intended_tier(
+		"NONEXISTENT", "", "Yu",
+	)
+	assert_eq(tier, WarJustification.MilitaryTier.RAID)
+
+
+func test_authority_for_tier_mapping() -> void:
+	assert_eq(
+		WarJustification.get_authority_for_tier(WarJustification.MilitaryTier.RAID),
+		WarData.AuthorityLevel.PROVINCIAL_RAID,
+	)
+	assert_eq(
+		WarJustification.get_authority_for_tier(WarJustification.MilitaryTier.FORMAL_WAR),
+		WarData.AuthorityLevel.BORDER_CONFLICT,
+	)
+	assert_eq(
+		WarJustification.get_authority_for_tier(WarJustification.MilitaryTier.TOTAL_WAR),
+		WarData.AuthorityLevel.CLAN_WAR,
+	)
