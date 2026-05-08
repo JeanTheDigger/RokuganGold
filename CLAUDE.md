@@ -471,7 +471,7 @@ All in /tests/, one file per system:
 - test_order_system.gd (~30 tests)
 - test_military_service_system.gd (~35 tests)
 - test_pu_reconciliation.gd (~30 tests)
-- test_military_wiring.gd (~184 tests)
+- test_military_wiring.gd (~192 tests)
 - test_war_system.gd (~61 tests)
 - test_war_justification.gd (~55 tests)
 - test_war_termination.gd (~46 tests)
@@ -1835,10 +1835,15 @@ All in /tests/, one file per system:
   per-lord results with `peace_need` flag (for SEEK_PEACE/URGENT_PEACE/
   IMMEDIATE_PEACE decisions) and `retreat` target (for RETREAT decisions).
   Results stored in `military_seasonal["supply_status"]`.
+  Supply status results consumed by `_consume_supply_status_results()`:
+  peace decisions inject `pending_events` into lord's `world_states`
+  (SEEK_PEACE need_type, priority 1 for URGENT/IMMEDIATE, priority 2 for
+  SEEK_PEACE). Retreat decisions flag clan armies with `retreat_ordered` and
+  `retreat_target_province`; disband orders generate Tier 4 army_disbanded
+  topic. Retreat flags are consumed when army movement processing reads
+  `retreat_ordered` (deferred until coordinate system exists).
   Deferred: Phase 4 player-initiated starvation strategies, forge
-  infrastructure for arms production projection, stipend obligations,
-  consuming supply_status results to generate ImmediateNeeds for peace
-  negotiation and retreat army movement orders.
+  infrastructure for arms production projection, stipend obligations.
 
 ### Ladder Side Effects Processing
 - **DayOrchestrator `_process_ladder_side_effects()`** — Runs after
