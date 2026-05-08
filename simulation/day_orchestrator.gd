@@ -116,6 +116,13 @@ static func advance_day(
 		next_war_id,
 	)
 
+	var supply_sharing_results: Array[Dictionary] = _process_supply_sharing(
+		day_result.get("applied", []),
+		characters_by_id,
+		settlements,
+		provinces,
+	)
+
 	var war_declarations: Array[Dictionary] = _process_war_declarations(
 		day_result.get("applied", []),
 		active_wars,
@@ -303,6 +310,7 @@ static func advance_day(
 		"war_termination_results": war_termination_results,
 		"trade_route_results": trade_route_results,
 		"starvation_results": starvation_results,
+		"supply_sharing_results": supply_sharing_results,
 	}
 
 
@@ -2524,6 +2532,90 @@ static func _apply_blockade(
 		"target_clan": target_clan,
 		"war_created": war_created,
 	}
+
+
+# -- Supply Sharing Effects --------------------------------------------------------
+
+static func _process_supply_sharing(
+	applied_list: Array,
+	characters_by_id: Dictionary,
+	settlements: Array[SettlementData],
+	provinces: Dictionary,
+) -> Array[Dictionary]:
+	var results: Array[Dictionary] = []
+
+	for applied: Dictionary in applied_list:
+		var effects: Dictionary = applied.get("effects", {})
+		if not effects.get("requires_supply_sharing", false):
+			continue
+
+		var character_id: int = applied.get("character_id", -1)
+		var target_province_id: int = applied.get("target_province_id", -1)
+		var character: L5RCharacterData = characters_by_id.get(character_id)
+		if character == null or target_province_id < 0:
+			continue
+
+		var giver_province_id: int = _find_lord_province_id(character, provinces)
+		if giver_province_id < 0 or giver_province_id == target_province_id:
+			continue
+
+		var giver_settlement: SettlementData = _find_settlement_for_province(
+			giver_province_id, settlements,
+		)
+		var receiver_settlement: SettlementData = _find_settlement_for_province(
+			target_province_id, settlements,
+		)
+		if giver_settlement == null or receiver_settlement == null:
+			continue
+
+		var surplus: float = RiceMarketSystem.compute_surplus(giver_settlement)
+		if surplus <= 0.0:
+			continue
+
+		var amount: float = surplus * 0.5
+		var stage: int = _get_starvation_stage(receiver_settlement)
+		if stage <= 0:
+			continue
+
+		var share_result: Dictionary = RiceMarketSystem.share_rice(
+			character, giver_settlement, receiver_settlement, amount, stage,
+		)
+		if share_result.get("result", "") == "success":
+			results.append({
+				"type": "supply_sharing",
+				"character_id": character_id,
+				"target_province_id": target_province_id,
+				"amount": share_result.get("amount", 0.0),
+				"honor_gain": share_result.get("honor_gain", 0.0),
+				"resolves_famine": share_result.get("resolves_famine", false),
+			})
+
+	return results
+
+
+static func _find_lord_province_id(
+	character: L5RCharacterData,
+	provinces: Dictionary,
+) -> int:
+	for pid: Variant in provinces:
+		var p: ProvinceData = provinces[pid] as ProvinceData
+		if p != null and p.clan == character.clan:
+			return p.province_id
+	return -1
+
+
+static func _get_starvation_stage(settlement: SettlementData) -> int:
+	var seasonal_need: float = settlement.population_pu * 0.001
+	if seasonal_need <= 0.0:
+		return 0
+	var ratio: float = settlement.rice_stockpile / seasonal_need
+	if ratio < 0.5:
+		return 3
+	if ratio < 1.0:
+		return 2
+	if ratio < 2.0:
+		return 1
+	return 0
 
 
 # -- War System Wiring -----------------------------------------------------------

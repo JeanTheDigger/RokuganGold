@@ -106,6 +106,9 @@ static func build_context(
 	ctx.active_wars = world_state.get("active_wars", [])
 	ctx.escalating_conflicts = world_state.get("escalating_conflicts", [])
 	ctx.taint_topic_province_ids = world_state.get("taint_topic_province_ids", [] as Array[int])
+	ctx.famine_crisis_province_ids = _extract_famine_province_ids(
+		character, world_state.get("active_topics", [])
+	)
 
 	# Festival state (s11.5)
 	ctx.is_ceasefire_day = world_state.get("is_ceasefire_day", false)
@@ -480,6 +483,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array[S
 				"ARRANGE_MARRIAGE", "APPOINT_TO_POSITION",
 				"PURIFY_TAINTED_GROUND", "FORTIFY_WALL_SECTION", "SEAL_WALL_BREACH",
 				"DECLARE_WAR", "NEGOTIATE_SURRENDER",
+				"SHARE_SUPPLIES",
 				"CRAFT", "MENTOR",
 				"DO_NOTHING", "REST",
 			]
@@ -1563,3 +1567,25 @@ static func _get_virtue_string(ctx: NPCDataStructures.ContextSnapshot) -> String
 	if ctx.shourido_virtue != Enums.ShouridoVirtue.NONE:
 		return _VIRTUE_NAMES.get(ctx.shourido_virtue, "")
 	return ""
+
+
+static func _extract_famine_province_ids(
+	character: L5RCharacterData,
+	active_topics: Array,
+) -> Array[int]:
+	var result: Array[int] = []
+	var known: Array[int] = character.topic_pool
+	for t: Variant in active_topics:
+		if not (t is TopicData):
+			continue
+		var topic: TopicData = t as TopicData
+		if topic.resolved:
+			continue
+		if topic.topic_type != "famine":
+			continue
+		if topic.topic_id not in known:
+			continue
+		for pid: int in topic.provinces_affected:
+			if pid not in result:
+				result.append(pid)
+	return result

@@ -886,7 +886,10 @@ static func _compute_admin_effects(action_id: String) -> Dictionary:
 		"PURCHASE_MARKET":
 			return {"effect": "transaction_completed"}
 		"SHARE_SUPPLIES":
-			return {"effect": "supplies_shared", "honor_change": 0.3}
+			return {
+				"effect": "supplies_shared",
+				"requires_supply_sharing": true,
+			}
 		"ASSESS_PROVINCE_STATUS", "INVESTIGATE_PROVINCE", "INVESTIGATE_RUMOR":
 			return {"effect": "intelligence_gathered", "info_gained": true}
 		"EVALUATE_WAR_READINESS":

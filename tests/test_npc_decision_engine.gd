@@ -577,3 +577,44 @@ func test_full_loop_reactive_overrides() -> void:
 		_char, _world_state, _objectives, _scoring_tables, _filter_data
 	)
 	assert_true(result["success"])
+
+
+# -- Famine Province Extraction ------------------------------------------------
+
+func test_extract_famine_province_ids_known_topic() -> void:
+	var t: TopicData = TopicData.new()
+	t.topic_id = 50
+	t.topic_type = "famine"
+	t.variant = "provincial_famine"
+	t.provinces_affected = [3, 7]
+	_char.topic_pool = [50]
+	var ids: Array[int] = NPCDecisionEngine._extract_famine_province_ids(
+		_char, [t],
+	)
+	assert_true(3 in ids)
+	assert_true(7 in ids)
+
+
+func test_extract_famine_province_ids_unknown_topic_ignored() -> void:
+	var t: TopicData = TopicData.new()
+	t.topic_id = 50
+	t.topic_type = "famine"
+	t.provinces_affected = [3]
+	_char.topic_pool = []
+	var ids: Array[int] = NPCDecisionEngine._extract_famine_province_ids(
+		_char, [t],
+	)
+	assert_eq(ids.size(), 0, "Unknown topic yields no provinces")
+
+
+func test_extract_famine_province_ids_resolved_ignored() -> void:
+	var t: TopicData = TopicData.new()
+	t.topic_id = 50
+	t.topic_type = "famine"
+	t.resolved = true
+	t.provinces_affected = [3]
+	_char.topic_pool = [50]
+	var ids: Array[int] = NPCDecisionEngine._extract_famine_province_ids(
+		_char, [t],
+	)
+	assert_eq(ids.size(), 0, "Resolved famine topic yields no provinces")

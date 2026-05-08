@@ -137,6 +137,9 @@ class ContextSnapshot:
 	# Shadowlands intelligence (s55.23)
 	var taint_topic_province_ids: Array[int] = []
 
+	# Famine crisis intelligence
+	var famine_crisis_province_ids: Array[int] = []
+
 	# Festival state (s11.5)
 	var is_ceasefire_day: bool = false
 	var is_labor_halt_day: bool = false

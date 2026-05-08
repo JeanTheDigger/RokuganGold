@@ -372,6 +372,12 @@ static func _decompose_maximize_prosperity(
 					return _court_need
 				return _make_need("REST", 1)
 
+	if not ctx.famine_crisis_province_ids.is_empty() and _get_rice_per_pu(ctx) >= 2.0:
+		return _make_need("CONDUCT_COMMERCE", 2, {
+			"target_province_id": ctx.famine_crisis_province_ids[0],
+			"target_intent": "famine_relief",
+		})
+
 	var triage: ProvinceTriage.TriageResult = ProvinceTriage.get_worst_province(
 		ctx.province_statuses
 	)

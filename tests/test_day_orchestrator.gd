@@ -1390,3 +1390,122 @@ func test_clan_topic_absorbs_existing_provincial_topics() -> void:
 	assert_not_null(clan_topic, "New clan topic should be created")
 	assert_true(1 in clan_topic.provinces_affected)
 	assert_true(2 in clan_topic.provinces_affected)
+
+
+# -- Supply Sharing Effects ----------------------------------------------------
+
+func _make_settlement_for_sharing(
+	province_id: int,
+	rice: float,
+	pop: float,
+) -> SettlementData:
+	var s: SettlementData = SettlementData.new()
+	s.province_id = province_id
+	s.rice_stockpile = rice
+	s.population_pu = pop
+	return s
+
+
+func _make_lord_for_sharing(
+	id: int,
+	clan: String,
+	honor: float = 5.0,
+) -> L5RCharacterData:
+	var c: L5RCharacterData = L5RCharacterData.new()
+	c.character_id = id
+	c.clan = clan
+	c.honor = honor
+	return c
+
+
+func test_supply_sharing_transfers_rice() -> void:
+	var lord: L5RCharacterData = _make_lord_for_sharing(1, "Crane")
+	var giver_s: SettlementData = _make_settlement_for_sharing(10, 100.0, 50.0)
+	var receiver_s: SettlementData = _make_settlement_for_sharing(20, 0.5, 50.0)
+	var applied: Array = [{
+		"character_id": 1,
+		"target_province_id": 20,
+		"effects": {"requires_supply_sharing": true},
+	}]
+	var chars: Dictionary = {1: lord}
+	var settlements: Array[SettlementData] = [giver_s, receiver_s]
+	var prov_dict: Dictionary = {
+		10: _make_province_for_famine(10, "Crane"),
+		20: _make_province_for_famine(20, "Lion"),
+	}
+
+	var results: Array[Dictionary] = DayOrchestrator._process_supply_sharing(
+		applied, chars, settlements, prov_dict,
+	)
+
+	assert_eq(results.size(), 1)
+	assert_eq(results[0]["type"], "supply_sharing")
+	assert_gt(results[0]["amount"], 0.0)
+	assert_gt(results[0]["honor_gain"], 0.0)
+	assert_lt(giver_s.rice_stockpile, 100.0, "Giver lost rice")
+	assert_gt(receiver_s.rice_stockpile, 0.5, "Receiver gained rice")
+
+
+func test_supply_sharing_no_surplus_skips() -> void:
+	var lord: L5RCharacterData = _make_lord_for_sharing(1, "Crane")
+	var giver_s: SettlementData = _make_settlement_for_sharing(10, 0.1, 50.0)
+	var receiver_s: SettlementData = _make_settlement_for_sharing(20, 0.5, 50.0)
+	var applied: Array = [{
+		"character_id": 1,
+		"target_province_id": 20,
+		"effects": {"requires_supply_sharing": true},
+	}]
+	var chars: Dictionary = {1: lord}
+	var settlements: Array[SettlementData] = [giver_s, receiver_s]
+	var prov_dict: Dictionary = {
+		10: _make_province_for_famine(10, "Crane"),
+		20: _make_province_for_famine(20, "Lion"),
+	}
+
+	var results: Array[Dictionary] = DayOrchestrator._process_supply_sharing(
+		applied, chars, settlements, prov_dict,
+	)
+
+	assert_eq(results.size(), 0, "No surplus means no sharing")
+
+
+func test_supply_sharing_same_province_skips() -> void:
+	var lord: L5RCharacterData = _make_lord_for_sharing(1, "Crane")
+	var s: SettlementData = _make_settlement_for_sharing(10, 100.0, 50.0)
+	var applied: Array = [{
+		"character_id": 1,
+		"target_province_id": 10,
+		"effects": {"requires_supply_sharing": true},
+	}]
+	var chars: Dictionary = {1: lord}
+	var settlements: Array[SettlementData] = [s]
+	var prov_dict: Dictionary = {10: _make_province_for_famine(10, "Crane")}
+
+	var results: Array[Dictionary] = DayOrchestrator._process_supply_sharing(
+		applied, chars, settlements, prov_dict,
+	)
+
+	assert_eq(results.size(), 0, "Cannot share with self")
+
+
+func test_supply_sharing_receiver_not_starving_skips() -> void:
+	var lord: L5RCharacterData = _make_lord_for_sharing(1, "Crane")
+	var giver_s: SettlementData = _make_settlement_for_sharing(10, 100.0, 50.0)
+	var receiver_s: SettlementData = _make_settlement_for_sharing(20, 100.0, 50.0)
+	var applied: Array = [{
+		"character_id": 1,
+		"target_province_id": 20,
+		"effects": {"requires_supply_sharing": true},
+	}]
+	var chars: Dictionary = {1: lord}
+	var settlements: Array[SettlementData] = [giver_s, receiver_s]
+	var prov_dict: Dictionary = {
+		10: _make_province_for_famine(10, "Crane"),
+		20: _make_province_for_famine(20, "Lion"),
+	}
+
+	var results: Array[Dictionary] = DayOrchestrator._process_supply_sharing(
+		applied, chars, settlements, prov_dict,
+	)
+
+	assert_eq(results.size(), 0, "Well-fed receiver needs no sharing")

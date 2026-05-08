@@ -399,17 +399,17 @@ All in /tests/, one file per system:
 - test_time_system.gd (~15 tests)
 - test_skill_resolver.gd (~20 tests)
 - test_action_point_system.gd (~12 tests)
-- test_npc_decision_engine.gd (~47 tests)
+- test_npc_decision_engine.gd (~48 tests)
 - test_scoring_table_loader.gd (~15 tests)
 - test_action_executor.gd (~35 tests)
 - test_effect_applicator.gd (~37 tests)
 - test_npc_wave_resolver.gd (~15 tests)
 - test_resource_tick.gd (~30 tests)
-- test_objective_decomposer.gd (~100 tests)
+- test_objective_decomposer.gd (~110 tests)
 - test_information_system.gd (~40 tests)
 - test_topic_system.gd (~55 tests)
 - test_investigation_system.gd (~40 tests)
-- test_day_orchestrator.gd (~44 tests)
+- test_day_orchestrator.gd (~54 tests)
 - test_approach_evaluation.gd (~55 tests)
 - test_commitment_registry.gd (~60 tests)
 - test_military_hierarchy.gd (~47 tests)
@@ -1997,6 +1997,33 @@ All in /tests/, one file per system:
   the province status builder. Armies without `province_id` (default -1) are
   ignored. Callers populate `province_id` on army state when sub-tile→province
   mapping becomes available.
+
+### NPC Famine Response
+- **Famine-aware decomposition** — `ObjectiveDecomposer._decompose_maximize_prosperity()`
+  checks `ctx.famine_crisis_province_ids` before province triage. When a lord
+  has surplus rice (rice_per_pu ≥ 2.0) and knows about active famine crisis
+  topics, emits a CONDUCT_COMMERCE need with `target_intent: "famine_relief"`
+  targeting the first known famine province. Non-lords and low-rice lords
+  fall through to existing triage/acquisition paths.
+- **ContextSnapshot.famine_crisis_province_ids** — `Array[int]` populated
+  during `build_context()` by `_extract_famine_province_ids()`. Scans
+  `active_topics` for unresolved famine topics that appear in the character's
+  `topic_pool`, collecting all `provinces_affected` IDs. Knowledge-gated:
+  NPCs only respond to famines they've heard about through the topic system.
+- **SHARE_SUPPLIES scoring** — Added to `objective_alignment.json` under
+  CONDUCT_COMMERCE (score 80, second only to CONDUCT_COMMERCE itself).
+  Added to `personality_lean.json`: Jin +15, Chugi +8, Makoto +5, Rei +5,
+  Ketsui −10, Ishi −10, Kyoryoku −5. Compassionate lords strongly favor
+  sharing; self-reliant and militaristic lords resist it.
+- **ActionExecutor** — SHARE_SUPPLIES returns `requires_supply_sharing: true`
+  effect flag (Pattern A deferred).
+- **DayOrchestrator._process_supply_sharing()** — Scans applied results for
+  `requires_supply_sharing`. Finds lord's province via clan match, computes
+  surplus via `RiceMarketSystem.compute_surplus()`, transfers 50% of surplus
+  to the target province's settlement via `RiceMarketSystem.share_rice()`.
+  Guards: no surplus → skip, same province → skip, receiver not starving → skip.
+  Honor gain scaled by recipient starvation stage per existing sharing honor
+  table. Return dict gains `supply_sharing_results`.
 
 ### What's Next
 1. World generation coordinate system and adjacency
