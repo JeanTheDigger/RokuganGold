@@ -3113,3 +3113,158 @@ func test_ladder_rung_name() -> void:
 		"desperation",
 	)
 	assert_eq(DayOrchestrator._ladder_rung_name(-1), "unknown")
+
+
+# -- Consume Supply Status Results ---------------------------------------------
+
+func test_consume_supply_injects_peace_need_seek() -> void:
+	var world_states: Dictionary = {}
+	var results: Array[Dictionary] = [{
+		"lord_id": 1,
+		"clan": "Crab",
+		"decision": FeasibilityLedger.CampaignDecision.SEEK_PEACE,
+		"peace_need": true,
+		"peace_urgency": FeasibilityLedger.CampaignDecision.SEEK_PEACE,
+	}]
+	var topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [100]
+	DayOrchestrator._consume_supply_status_results(
+		results, world_states, [], topics, next_topic_id, 1,
+	)
+	assert_true(world_states.has(1))
+	var events: Array = world_states[1]["pending_events"]
+	assert_eq(events.size(), 1)
+	assert_eq(events[0]["need_type"], "SEEK_PEACE")
+	assert_eq(events[0]["priority"], 2)
+	assert_eq(events[0]["source"], "supply_status_check")
+
+
+func test_consume_supply_injects_urgent_peace_priority_1() -> void:
+	var world_states: Dictionary = {}
+	var results: Array[Dictionary] = [{
+		"lord_id": 1,
+		"clan": "Crab",
+		"decision": FeasibilityLedger.CampaignDecision.URGENT_PEACE,
+		"peace_need": true,
+		"peace_urgency": FeasibilityLedger.CampaignDecision.URGENT_PEACE,
+	}]
+	var topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [100]
+	DayOrchestrator._consume_supply_status_results(
+		results, world_states, [], topics, next_topic_id, 1,
+	)
+	var events: Array = world_states[1]["pending_events"]
+	assert_eq(events[0]["priority"], 1)
+
+
+func test_consume_supply_injects_immediate_peace_priority_1() -> void:
+	var world_states: Dictionary = {}
+	var results: Array[Dictionary] = [{
+		"lord_id": 1,
+		"clan": "Crab",
+		"decision": FeasibilityLedger.CampaignDecision.IMMEDIATE_PEACE,
+		"peace_need": true,
+		"peace_urgency": FeasibilityLedger.CampaignDecision.IMMEDIATE_PEACE,
+	}]
+	var topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [100]
+	DayOrchestrator._consume_supply_status_results(
+		results, world_states, [], topics, next_topic_id, 1,
+	)
+	var events: Array = world_states[1]["pending_events"]
+	assert_eq(events[0]["priority"], 1)
+
+
+func test_consume_supply_retreat_sets_army_flags() -> void:
+	var active_armies: Array[Dictionary] = [
+		{"army_id": 1, "clan_name": "Crab", "is_active": true},
+		{"army_id": 2, "clan_name": "Crane", "is_active": true},
+	]
+	var results: Array[Dictionary] = [{
+		"lord_id": 1,
+		"clan": "Crab",
+		"decision": FeasibilityLedger.CampaignDecision.RETREAT,
+		"retreat": {"found": true, "province_id": 5, "should_disband": false},
+	}]
+	var topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [100]
+	DayOrchestrator._consume_supply_status_results(
+		results, {}, active_armies, topics, next_topic_id, 1,
+	)
+	assert_true(active_armies[0].get("retreat_ordered", false))
+	assert_eq(active_armies[0].get("retreat_target_province", -1), 5)
+	assert_false(active_armies[1].has("retreat_ordered"))
+
+
+func test_consume_supply_retreat_disband_generates_topic() -> void:
+	var active_armies: Array[Dictionary] = [
+		{"army_id": 1, "clan_name": "Crab", "is_active": true},
+	]
+	var results: Array[Dictionary] = [{
+		"lord_id": 1,
+		"clan": "Crab",
+		"decision": FeasibilityLedger.CampaignDecision.RETREAT,
+		"retreat": {"found": false, "should_disband": true},
+	}]
+	var topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [100]
+	DayOrchestrator._consume_supply_status_results(
+		results, {}, active_armies, topics, next_topic_id, 1,
+	)
+	assert_true(active_armies[0].get("disband_ordered", false))
+	assert_eq(topics.size(), 1)
+	assert_eq(topics[0].variant, "army_disbanded")
+	assert_eq(topics[0].clan_involved, "Crab")
+	assert_eq(next_topic_id[0], 101)
+
+
+func test_consume_supply_continue_does_nothing() -> void:
+	var world_states: Dictionary = {}
+	var results: Array[Dictionary] = [{
+		"lord_id": 1,
+		"clan": "Crab",
+		"decision": FeasibilityLedger.CampaignDecision.CONTINUE,
+	}]
+	var topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [100]
+	DayOrchestrator._consume_supply_status_results(
+		results, world_states, [], topics, next_topic_id, 1,
+	)
+	assert_false(world_states.has(1))
+	assert_eq(topics.size(), 0)
+
+
+func test_consume_supply_appends_to_existing_pending_events() -> void:
+	var world_states: Dictionary = {1: {"pending_events": [{"need_type": "REST"}]}}
+	var results: Array[Dictionary] = [{
+		"lord_id": 1,
+		"clan": "Crab",
+		"decision": FeasibilityLedger.CampaignDecision.SEEK_PEACE,
+		"peace_need": true,
+	}]
+	var topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [100]
+	DayOrchestrator._consume_supply_status_results(
+		results, world_states, [], topics, next_topic_id, 1,
+	)
+	var events: Array = world_states[1]["pending_events"]
+	assert_eq(events.size(), 2)
+	assert_eq(events[1]["need_type"], "SEEK_PEACE")
+
+
+func test_consume_supply_retreat_skips_inactive_armies() -> void:
+	var active_armies: Array[Dictionary] = [
+		{"army_id": 1, "clan_name": "Crab", "is_active": false},
+	]
+	var results: Array[Dictionary] = [{
+		"lord_id": 1,
+		"clan": "Crab",
+		"decision": FeasibilityLedger.CampaignDecision.RETREAT,
+		"retreat": {"found": true, "province_id": 5, "should_disband": false},
+	}]
+	var topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [100]
+	DayOrchestrator._consume_supply_status_results(
+		results, {}, active_armies, topics, next_topic_id, 1,
+	)
+	assert_false(active_armies[0].has("retreat_ordered"))

@@ -229,6 +229,11 @@ static func advance_day(
 			characters, active_wars, settlements, provinces,
 			companies, clans, active_tethers,
 		)
+		_consume_supply_status_results(
+			military_seasonal_result.get("supply_status", []),
+			world_states, active_armies, active_topics,
+			next_topic_id, ic_day,
+		)
 		insurgency_results = _process_insurgencies(
 			insurgencies, provinces, dice_engine, current_season,
 			next_insurgency_id, world_states
@@ -2554,6 +2559,117 @@ static func _build_friendly_province_list(
 			"has_forge": false,
 		})
 	return result
+
+
+# -- Consume Supply Status Results --------------------------------------------
+
+const _PEACE_NEED_TYPES: Dictionary = {
+	FeasibilityLedger.CampaignDecision.SEEK_PEACE: "SEEK_PEACE",
+	FeasibilityLedger.CampaignDecision.URGENT_PEACE: "SEEK_PEACE",
+	FeasibilityLedger.CampaignDecision.IMMEDIATE_PEACE: "SEEK_PEACE",
+}
+
+const _PEACE_PRIORITIES: Dictionary = {
+	FeasibilityLedger.CampaignDecision.SEEK_PEACE: 2,
+	FeasibilityLedger.CampaignDecision.URGENT_PEACE: 1,
+	FeasibilityLedger.CampaignDecision.IMMEDIATE_PEACE: 1,
+}
+
+
+static func _consume_supply_status_results(
+	supply_results: Array[Dictionary],
+	world_states: Dictionary,
+	active_armies: Array[Dictionary],
+	active_topics: Array[TopicData],
+	next_topic_id: Array[int],
+	ic_day: int,
+) -> void:
+	for result: Dictionary in supply_results:
+		var lord_id: int = result.get("lord_id", -1)
+		var decision: int = result.get("decision", FeasibilityLedger.CampaignDecision.CONTINUE)
+		var clan: String = result.get("clan", "")
+
+		if result.get("peace_need", false):
+			_inject_peace_need(lord_id, decision, clan, world_states)
+
+		if decision == FeasibilityLedger.CampaignDecision.RETREAT:
+			_apply_retreat_orders(
+				clan, result.get("retreat", {}), active_armies,
+				active_topics, next_topic_id, ic_day,
+			)
+
+
+static func _inject_peace_need(
+	lord_id: int,
+	decision: int,
+	clan: String,
+	world_states: Dictionary,
+) -> void:
+	var ws: Dictionary = world_states.get(lord_id, {})
+	if ws.is_empty():
+		ws = {}
+		world_states[lord_id] = ws
+
+	if not ws.has("pending_events"):
+		ws["pending_events"] = []
+
+	var need_type: String = _PEACE_NEED_TYPES.get(decision, "SEEK_PEACE")
+	var priority: int = _PEACE_PRIORITIES.get(decision, 2)
+
+	var event: Dictionary = {
+		"need_type": need_type,
+		"priority": priority,
+		"target_clan_id": clan,
+		"source": "supply_status_check",
+	}
+	ws["pending_events"].append(event)
+
+
+static func _apply_retreat_orders(
+	clan: String,
+	retreat_info: Dictionary,
+	active_armies: Array[Dictionary],
+	active_topics: Array[TopicData],
+	next_topic_id: Array[int],
+	ic_day: int,
+) -> void:
+	var should_disband: bool = retreat_info.get("should_disband", false)
+	var target_province: int = retreat_info.get("province_id", -1)
+
+	for army: Dictionary in active_armies:
+		if army.get("clan_name", "") != clan:
+			continue
+		if not army.get("is_active", true):
+			continue
+
+		if should_disband:
+			army["retreat_ordered"] = true
+			army["disband_ordered"] = true
+			_create_disband_topic(clan, active_topics, next_topic_id, ic_day)
+		elif target_province >= 0:
+			army["retreat_ordered"] = true
+			army["retreat_target_province"] = target_province
+
+
+static func _create_disband_topic(
+	clan: String,
+	active_topics: Array[TopicData],
+	next_topic_id: Array[int],
+	ic_day: int,
+) -> void:
+	var topic: TopicData = TopicData.new()
+	topic.topic_id = next_topic_id[0]
+	next_topic_id[0] += 1
+	topic.slug = "army_disband_%s_d%d" % [clan, ic_day]
+	topic.title = "Army Disbanded — %s" % clan
+	topic.topic_type = "military"
+	topic.variant = "army_disbanded"
+	topic.tier = TopicData.Tier.TIER_4
+	topic.category = TopicData.Category.POLITICAL
+	topic.clan_involved = clan
+	topic.ic_day_created = ic_day
+	topic.momentum = 11.0
+	active_topics.append(topic)
 
 
 static func _generate_military_event_topics(
