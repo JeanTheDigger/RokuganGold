@@ -471,7 +471,7 @@ All in /tests/, one file per system:
 - test_order_system.gd (~30 tests)
 - test_military_service_system.gd (~35 tests)
 - test_pu_reconciliation.gd (~30 tests)
-- test_military_wiring.gd (~76 tests)
+- test_military_wiring.gd (~86 tests)
 - test_war_system.gd (~55 tests)
 
 ### Festival System (s11.5)
@@ -1656,9 +1656,18 @@ All in /tests/, one file per system:
   `get_active_wars_for_clan()`. Context conversion: `to_context_dict()`,
   `wars_to_context_array()` for NPC engine compatibility (existing code
   expects Dictionary arrays with clan_a/clan_b/enemy_clan_id keys).
-  Deferred: War justification / casus belli system (s53.1), full integration
-  with NPC decision engine war-readiness directives, peace court mechanics,
-  Imperial edict intervention, trade route suspension on war declaration.
+  Wired into DayOrchestrator: `_process_war_score_shifts()` applies minor
+  battle (+3) score shifts from battle triggers, upgrades to major battle
+  (+8) on heavy casualties (PU loss ≥ 3.0). `_process_war_seasonal()` runs
+  on season boundary: seasonal attrition (+1 initiator), disposition penalty
+  (−2 per season active) between opposing-side characters.
+  `_sync_wars_to_world_states()` converts WarData to context dicts for NPC
+  engine compatibility. WorldStateData gains `active_wars: Array[WarData]`.
+  New param on `advance_day()`: `active_wars`. Return dict gains
+  `war_score_results`.
+  Deferred: War justification / casus belli system (s53.1), peace court
+  mechanics, Imperial edict intervention, trade route suspension on war
+  declaration, decisive battle detection, commander death score shifts.
 
 ### What's Next
 1. World generation coordinate system and adjacency
