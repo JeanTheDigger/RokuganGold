@@ -465,6 +465,7 @@ All in /tests/, one file per system:
 - test_army_upkeep_system.gd (~40 tests)
 - test_supply_tether_system.gd (~45 tests)
 - test_siege_system.gd (~50 tests)
+- test_army_movement_system.gd (~40 tests)
 
 ### Festival System (s11.5)
 - **simulation/festival_system.gd** — Empire-wide canonical festivals, Rokuyo
@@ -1439,12 +1440,10 @@ All in /tests/, one file per system:
   clan elite) and `BattleTerrainType` (6 values).
 - **shared/military_unit_data.gd** — CompanyData gains `unit_type` and
   `source_province_id` fields.
-  Deferred (Phase 2+): Army movement on world map (sub-tiles), supply
-  tether system, siege mechanics (starvation/storm/sortie), siege events,
-  military promotion system, military service assignment, levy authority,
-  order system, Shinjo auto-flank behavior, ASCII battle events / Heroic
-  Opportunities, PU reconciliation wiring into ResourceTick, Shadowlands
-  terrain zones, naval combat bonuses.
+  Deferred (Phase 2+): military promotion system, military service
+  assignment, levy authority, order system, Shinjo auto-flank behavior,
+  ASCII battle events / Heroic Opportunities, PU reconciliation wiring
+  into ResourceTick, Shadowlands terrain zones, naval combat bonuses.
 
 ### Army Upkeep & Deprivation (s4.3, s11.7)
 - **simulation/army_upkeep_system.gd** — Army upkeep costs, iron degradation,
@@ -1517,6 +1516,23 @@ All in /tests/, one file per system:
   Deferred: Full battle integration for storm assaults and sorties (uses
   ArmyCombatSystem), personality-driven sortie decisions (s19.3), ASCII map
   event scenarios, mutual event (treachery) resolution.
+
+### Army Movement System (s11.7a)
+- **simulation/army_movement_system.gd** — Sub-tile army movement per GDD s11.7a.
+  Pure static functions; caller owns army state dictionaries.
+  5 MovementTerrain types: Plains (1d), River Delta (1d), Forest (2d), Heavy
+  Hills (2d), Mountains (3d). Winter ×2 multiplier. River crossing +1d (Spring
+  +2d). Forced march: −1d per sub-tile (floor 1d), costs −5 Morale per day saved.
+  `begin_march()` computes total travel days along a path. `process_movement_tick()`
+  decrements daily, triggers arrival. `cancel_march()` stops movement.
+  Battle trigger: `check_battle_trigger()` detects enemy armies at arrival tile —
+  contact means automatic combat per GDD. Visibility: passive = own + adjacent
+  tiles (range 1), scouts extend to range 2. `detect_enemy_armies()` filters
+  visible tiles for non-allied armies. Retreat to previous sub-tile on battle loss.
+  Dissolution check: army dissolves at ≤20% starting health.
+  Deferred: Order system (lord/commander order budgets), scouting assignments,
+  levy authority, military service assignment, actual sub-tile coordinate system
+  (uses placeholder int IDs), territory control tracking.
 
 ### What's Next
 1. World generation coordinate system and adjacency
