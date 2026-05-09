@@ -86,6 +86,7 @@ static func advance_day(
 		characters_by_id, world_states,
 	)
 	_set_court_context_flags(active_courts, world_states)
+	_set_wall_tower_context_flags(characters, settlements, provinces, world_states)
 
 	var edict_results: Array[Dictionary] = _process_edict_compliance(
 		active_edicts, active_wars, characters, active_topics, next_topic_id, ic_day,
@@ -4558,6 +4559,70 @@ static func _set_court_context_flags(
 				continue
 			ws["context_flag"] = Enums.ContextFlag.AT_COURT
 			ws["active_court_at_location"] = ctx_dict
+
+
+static func _set_wall_tower_context_flags(
+	characters: Array[L5RCharacterData],
+	settlements: Array[SettlementData],
+	provinces: Dictionary,
+	world_states: Dictionary,
+) -> void:
+	# Build a settlement_id (as String) → SettlementData map for wall towers.
+	var wall_towers: Dictionary = {}
+	for s: SettlementData in settlements:
+		if s.settlement_type == Enums.SettlementType.WALL_TOWER:
+			wall_towers[str(s.settlement_id)] = s
+
+	if wall_towers.is_empty():
+		return
+
+	for character: L5RCharacterData in characters:
+		var loc: String = character.physical_location
+		if not wall_towers.has(loc):
+			continue
+		if TravelSystem.is_traveling(character):
+			continue
+		var ws: Dictionary = world_states.get(character.character_id, {})
+		if ws.is_empty():
+			continue
+
+		# AT_COURT takes priority — court overrides wall tower context.
+		if ws.get("context_flag", -1) == Enums.ContextFlag.AT_COURT:
+			continue
+
+		var tower: SettlementData = wall_towers[loc] as SettlementData
+		var province: Variant = provinces.get(tower.province_id, null)
+		var ss: int = 0
+		if province is ProvinceData:
+			ss = (province as ProvinceData).shadowlands_strength
+
+		# Build a WallStatus for this tower.
+		var wstat := NPCDataStructures.WallStatus.new()
+		wstat.province_id = tower.province_id
+		wstat.si = tower.wall_si
+		wstat.ss = ss
+		wstat.garrison_above_minimum = tower.garrison_pu > 0
+		var min_jade: float = float(
+			int(tower.garrison_pu * WallSystem.SORTIE_SMALL_MAX_PCT)
+			* WallSystem.SORTIE_SMALL_JADE_PER_WARRIOR
+		)
+		wstat.jade_stockpile_critical = tower.jade_stockpile <= min_jade
+
+		ws["context_flag"] = Enums.ContextFlag.AT_WALL_TOWER
+		ws["zone_subtype"] = Enums.ZoneSubtype.WALL_TOWER
+		# Preserve any existing wall_statuses from other towers the character
+		# knows about, then ensure the current tower's status is present.
+		var existing: Array = ws.get("wall_statuses", [])
+		var already_has: bool = false
+		for entry: Variant in existing:
+			if entry is NPCDataStructures.WallStatus:
+				if (entry as NPCDataStructures.WallStatus).province_id == tower.province_id:
+					already_has = true
+					break
+		if not already_has:
+			existing = existing.duplicate()
+			existing.append(wstat)
+		ws["wall_statuses"] = existing
 
 
 static func _process_crisis_court_calls(
