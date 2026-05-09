@@ -60,7 +60,7 @@ static func resolve_blackmail(
 
 	if success:
 		var margin: int = effective_roll - defender_total
-		favors_extracted = max(0, margin / 5)
+		favors_extracted = max(0, int(margin / 5))
 
 	return {
 		"success": success,

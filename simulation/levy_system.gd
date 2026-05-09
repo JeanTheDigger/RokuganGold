@@ -163,7 +163,7 @@ static func evaluate_candidate(
 		base_score = roundi(float(base_score) * mult)
 
 	if mods.get("halve_penalties", false) and base_score < 0:
-		base_score = base_score / 2
+		base_score = int(base_score / 2)
 
 	var penalty_mod: int = mods.get("penalty_modifier", 0)
 	if base_score < 0 and penalty_mod != 0:

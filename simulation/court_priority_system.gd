@@ -32,7 +32,7 @@ static func _score_court(
 	court: Dictionary,
 	primary_objective: Dictionary,
 	standing_objective: String,
-	character_status: float,
+	_character_status: float,
 ) -> float:
 	var score: float = 0.0
 
@@ -116,7 +116,7 @@ static func get_otomo_lean(action_id: String) -> int:
 	return 0
 
 
-static func is_otomo_blocked_action(action_id: String, builds_inter_clan_goodwill: bool) -> bool:
+static func is_otomo_blocked_action(_action_id: String, builds_inter_clan_goodwill: bool) -> bool:
 	return builds_inter_clan_goodwill
 
 

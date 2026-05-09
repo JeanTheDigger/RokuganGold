@@ -119,7 +119,7 @@ const MEANINGFUL_PROGRESS_THRESHOLD: int = 3
 
 static func evaluate_approach(
 	action_id: String,
-	target_npc_id: int,
+	_target_npc_id: int,
 	current_disposition: int,
 	disposition_at_start: int,
 ) -> AssessmentTag:
@@ -183,7 +183,7 @@ static func get_penalty(
 		if seasons_elapsed <= 0:
 			return APPROACH_PENALTY
 		elif seasons_elapsed == 1:
-			return APPROACH_PENALTY / 2
+			return int(APPROACH_PENALTY / 2)
 		else:
 			return 0
 	return 0

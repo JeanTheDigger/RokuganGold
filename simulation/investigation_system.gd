@@ -35,7 +35,7 @@ static func examine_scene(
 		}
 
 	var margin: int = result["margin"]
-	var raises: int = margin / RAISE_MARGIN
+	var raises: int = int(margin / RAISE_MARGIN)
 	var raw_evidence: int = EVIDENCE_BASE_WEIGHT + (raises * EVIDENCE_PER_RAISE)
 
 	var days_elapsed: int = ic_day - crime_record.ic_day_committed

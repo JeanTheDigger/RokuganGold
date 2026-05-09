@@ -140,11 +140,11 @@ static func apply_garrison_recruitment_for_planet(planet_state: Dictionary, fact
 
 	var effective_rate: int = recruit_rate
 	if is_blockaded:
-		effective_rate = maxi(1, recruit_rate / 2)
+		effective_rate = maxi(1, int(recruit_rate / 2))
 	var base_cost: int = StrategicTestConfig.GARRISON_GP_RECRUIT_COST_CREDITS
 	var cost_next: int = base_cost
 	if is_blockaded:
-		cost_next = (base_cost * StrategicTestConfig.GARRISON_RECRUIT_BLOCKADE_COST_MULT_NUM) / StrategicTestConfig.GARRISON_RECRUIT_BLOCKADE_COST_MULT_DEN
+		cost_next = int((base_cost * StrategicTestConfig.GARRISON_RECRUIT_BLOCKADE_COST_MULT_NUM) / StrategicTestConfig.GARRISON_RECRUIT_BLOCKADE_COST_MULT_DEN)
 
 	recruit_progress = mini(recruit_progress + effective_rate, StrategicTestConfig.GARRISON_RECRUIT_PROGRESS_CAP)
 	var gained_gp: bool = false

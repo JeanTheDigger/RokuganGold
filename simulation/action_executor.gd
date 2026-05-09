@@ -489,7 +489,7 @@ static func _execute_intimidation(
 		)
 
 	var effects: Dictionary = {
-		"disposition_change": -(3 + clampi(attacker_roll - defender_roll, 0, 25) / 5) if r["success"] else 0,
+		"disposition_change": -(3 + int(clampi(attacker_roll - defender_roll, 0, 25) / 5)) if r["success"] else 0,
 		"honor_change": r.get("honor_loss", 0.0),
 		"infamy_gain": r.get("infamy_gain", 0.0),
 		"compliance_active": r.get("compliance_active", false),

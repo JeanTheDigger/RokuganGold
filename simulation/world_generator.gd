@@ -551,7 +551,7 @@ static func generate_settlement(
 	s.town_pu = dist["town"]
 	s.mining_pu = dist["mining"]
 	s.military_pu = dist["military"]
-	s.garrison_pu = maxi(1, population_pu / 20)
+	s.garrison_pu = maxi(1, int(population_pu / 20))
 
 	var rice_per_season: float = float(population_pu) * 0.25
 	s.rice_stockpile = rice_per_season * 2.0
@@ -609,7 +609,7 @@ static func _advance_traits(
 	if is_shugenja:
 		void_ranks = insight_rank - 1
 	else:
-		void_ranks = (insight_rank - 1) / 2
+		void_ranks = int((insight_rank - 1) / 2)
 	c.void_ring = 2 + void_ranks
 
 
@@ -735,9 +735,9 @@ static func _distribute_pu(total_pu: int, terrain: Enums.TerrainType) -> Diction
 	var pct: Dictionary = TERRAIN_PU_DISTRIBUTION.get(
 		terrain, TERRAIN_PU_DISTRIBUTION[Enums.TerrainType.PLAINS]
 	)
-	var farming: int = maxi(1, total_pu * (pct["farming"] as int) / 100)
-	var town: int = maxi(1, total_pu * (pct["town"] as int) / 100)
-	var mining: int = total_pu * (pct["mining"] as int) / 100
+	var farming: int = maxi(1, int(total_pu * (pct["farming"] as int) / 100))
+	var town: int = maxi(1, int(total_pu * (pct["town"] as int) / 100))
+	var mining: int = int(total_pu * (pct["mining"] as int) / 100)
 	var military: int = maxi(0, total_pu - farming - town - mining)
 	return {"farming": farming, "town": town, "mining": mining, "military": military}
 

@@ -75,7 +75,7 @@ static func resolve_public_performance(
 	elif margin < 0:
 		outcome = PerformanceOutcome.FAILURE
 	else:
-		raises = margin / 5
+		raises = int(margin / 5)
 		outcome = PerformanceOutcome.MASTERFUL if raises >= 3 else PerformanceOutcome.SUCCESS
 
 	var fatigue_mult: float = get_fatigue_multiplier(fatigue_count)
@@ -146,7 +146,7 @@ static func resolve_perform_for(
 	if margin < 0:
 		outcome = PerformanceOutcome.FAILURE
 	else:
-		raises = margin / 5
+		raises = int(margin / 5)
 		outcome = PerformanceOutcome.MASTERFUL if raises >= 3 else PerformanceOutcome.SUCCESS
 
 	var disp_change: int = 0

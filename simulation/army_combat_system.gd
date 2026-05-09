@@ -1041,7 +1041,7 @@ static func _find_flanking_opportunities(
 	def_r1: Array[Dictionary],
 	_all_attackers: Array[Dictionary],
 	_all_defenders: Array[Dictionary],
-	terrain: Enums.BattleTerrainType,
+	_terrain: Enums.BattleTerrainType,
 ) -> Array[Dictionary]:
 	var flanks: Array[Dictionary] = []
 	var engaged_atk_ids: Array[int] = []
@@ -1114,8 +1114,8 @@ static func _compute_attack_damage(
 
 	if is_archer_fire:
 		if attacker.get("is_archer", false) and not is_flanking:
-			var roll: int = dice_engine.rand_int_range(1, 5)
-			return maxi(roll + atk_val - def_val, 0)
+			var archer_roll: int = dice_engine.rand_int_range(1, 5)
+			return maxi(archer_roll + atk_val - def_val, 0)
 		return 0
 
 	var roll: int = dice_engine.rand_int_range(1, 10)

@@ -242,10 +242,10 @@ static func decay_historical_modifier(modifier: Dictionary, days_elapsed: int) -
 	var start_val: int = modifier["current_value"]
 	var floor_val: int = modifier["floor"]
 	if start_val > floor_val:
-		var decay_amount: int = days_elapsed / 10
+		var decay_amount: int = int(days_elapsed / 10)
 		modifier["current_value"] = max(floor_val, start_val - decay_amount)
 	elif start_val < floor_val:
-		var decay_amount: int = days_elapsed / 10
+		var decay_amount: int = int(days_elapsed / 10)
 		modifier["current_value"] = min(floor_val, start_val + decay_amount)
 
 
@@ -298,9 +298,9 @@ static func create_death_mutual_friend_modifier(
 ) -> Dictionary:
 	if disp_a_toward_deceased <= 0 or disp_b_toward_deceased <= 0:
 		return {}
-	var avg_disp: int = (disp_a_toward_deceased + disp_b_toward_deceased) / 2
-	var start_val: int = mini(avg_disp / 10, 10)
-	var floor_val: int = start_val / 2
+	var avg_disp: int = int((disp_a_toward_deceased + disp_b_toward_deceased) / 2)
+	var start_val: int = mini(int(avg_disp / 10), 10)
+	var floor_val: int = int(start_val / 2)
 	return {
 		"event_type": "death_mutual_friend",
 		"current_value": start_val,

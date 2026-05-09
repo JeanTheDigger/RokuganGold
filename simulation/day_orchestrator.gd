@@ -1483,7 +1483,7 @@ static func _get_witnesses_at_location(
 	perpetrator_id: int,
 	location: String,
 	characters_by_id: Dictionary,
-	world_states: Dictionary,
+	_world_states: Dictionary,
 ) -> Array[int]:
 	var witnesses: Array[int] = []
 	for cid: int in characters_by_id:
@@ -2444,7 +2444,6 @@ static func _initiate_retreat_march(army: Dictionary) -> void:
 	var target: int = army.get("retreat_target_province", -1)
 	if target < 0:
 		return
-	var current: int = army.get("current_sub_tile", 0)
 	army["destination_sub_tile"] = target
 	army["path"] = [target] as Array[int]
 	army["days_remaining"] = _RETREAT_DEFAULT_DAYS
@@ -2582,11 +2581,11 @@ static func _process_army_recovery(
 		if is_moving:
 			continue
 
-		var tr: Dictionary = tether_state_by_army.get(army_id, {})
-		var overall_state: int = tr.get("overall_state", SupplyTetherSystem.TetherState.SOLID)
+		var tether: Dictionary = tether_state_by_army.get(army_id, {})
+		var overall_state: int = tether.get("overall_state", SupplyTetherSystem.TetherState.SOLID)
 		var rice_supplied: bool = overall_state == SupplyTetherSystem.TetherState.SOLID
 		var arms_supplied: bool = overall_state == SupplyTetherSystem.TetherState.SOLID
-		var arms_tick: int = tr.get("arms_deprivation_tick", 0)
+		var arms_tick: int = tether.get("arms_deprivation_tick", 0)
 
 		var army_companies: Array = companies_by_army.get(army_id, [])
 		if army_companies.is_empty():
@@ -2655,9 +2654,9 @@ static func _process_field_deprivation(
 	var results: Array[Dictionary] = []
 	for i: int in range(mini(non_detached.size(), tether_results.size())):
 		var tether: Dictionary = non_detached[i]
-		var tr: Dictionary = tether_results[i]
-		var rice_tick: int = tr.get("rice_deprivation_tick", 0)
-		var arms_tick: int = tr.get("arms_deprivation_tick", 0)
+		var tether_result: Dictionary = tether_results[i]
+		var rice_tick: int = tether_result.get("rice_deprivation_tick", 0)
+		var arms_tick: int = tether_result.get("arms_deprivation_tick", 0)
 
 		if rice_tick <= 0 and arms_tick <= 0:
 			continue
@@ -2715,8 +2714,8 @@ static func _process_military_seasonal(
 	settlements: Array[SettlementData],
 	clans: Dictionary,
 	characters_by_id: Dictionary,
-	dice_engine: DiceEngine,
-	season_name: String,
+	_dice_engine: DiceEngine,
+	_season_name: String,
 ) -> Dictionary:
 	var upkeep_results: Dictionary = _process_army_upkeep(
 		companies, settlements, clans,

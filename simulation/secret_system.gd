@@ -144,7 +144,7 @@ static func get_effective_severity(
 
 static func reveal_privately(
 	secret: SecretData,
-	revealer: L5RCharacterData,
+	_revealer: L5RCharacterData,
 	recipient: L5RCharacterData,
 	subject: L5RCharacterData,
 	has_proof: bool = false,
@@ -187,7 +187,7 @@ static func reveal_privately(
 
 static func expose_publicly(
 	secret: SecretData,
-	exposer: L5RCharacterData,
+	_exposer: L5RCharacterData,
 	subject: L5RCharacterData,
 	witness_ids: Array[int],
 	characters_by_id: Dictionary,
@@ -343,7 +343,7 @@ static func apply_search_costs(actor: L5RCharacterData) -> void:
 # ==============================================================================
 
 static func get_bribe_tn(lord_disposition_toward_servant: int) -> int:
-	return 10 + (lord_disposition_toward_servant / 5)
+	return 10 + int(lord_disposition_toward_servant / 5)
 
 
 # ==============================================================================
@@ -605,13 +605,10 @@ static func resolve_conceal_item(
 	is_weapon: bool,
 	dice_engine: DiceEngine,
 ) -> Dictionary:
-	if is_weapon:
-		var soh_rank: int = actor.skills.get("Sleight of Hand", 0)
-		if soh_rank < CONCEAL_WEAPON_SKILL_GATE:
-			return {"success": false, "reason": "weapon_skill_gate", "required_rank": CONCEAL_WEAPON_SKILL_GATE}
-
 	var tn: int = get_conceal_tn(item_size)
 	var soh_rank: int = actor.skills.get("Sleight of Hand", 0)
+	if is_weapon and soh_rank < CONCEAL_WEAPON_SKILL_GATE:
+		return {"success": false, "reason": "weapon_skill_gate", "required_rank": CONCEAL_WEAPON_SKILL_GATE}
 	var rolled: int = actor.agility + soh_rank
 	var kept: int = actor.agility
 	var result: DiceResult = dice_engine.roll_and_keep(rolled, kept, soh_rank > 0)
@@ -633,7 +630,7 @@ const SEARCH_PERSON_GLORY_COST: float = -0.3
 
 static func resolve_search_person(
 	searcher: L5RCharacterData,
-	target: L5RCharacterData,
+	_target: L5RCharacterData,
 	concealment_tn: int,
 	dice_engine: DiceEngine,
 	has_magistrate_authority: bool = false,

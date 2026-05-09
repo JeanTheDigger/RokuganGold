@@ -240,8 +240,8 @@ static func compute_seed_disposition(
 		return 0
 	var clan_val: int = get_clan_baseline(actor.clan, target.clan, clan_baselines)
 	var family_val: int = get_family_baseline(actor.family, target.family, family_baselines)
-	var seed: float = (float(clan_val) * CLAN_SEED_WEIGHT) + (float(family_val) * FAMILY_SEED_WEIGHT)
-	return int(round(seed))
+	var seed_val: float = (float(clan_val) * CLAN_SEED_WEIGHT) + (float(family_val) * FAMILY_SEED_WEIGHT)
+	return int(round(seed_val))
 
 
 static func seed_first_meeting(
@@ -257,9 +257,9 @@ static func seed_first_meeting(
 		return 0
 	if actor.disposition_values.has(target.character_id):
 		return actor.disposition_values[target.character_id]
-	var seed: int = compute_seed_disposition(actor, target, clan_baselines, family_baselines)
-	actor.disposition_values[target.character_id] = seed
-	return seed
+	var seed_val: int = compute_seed_disposition(actor, target, clan_baselines, family_baselines)
+	actor.disposition_values[target.character_id] = seed_val
+	return seed_val
 
 
 # -- Event ripple ------------------------------------------------------------

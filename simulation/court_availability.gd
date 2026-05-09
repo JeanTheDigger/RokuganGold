@@ -87,7 +87,7 @@ static func _pick_highest_prestige_court(
 static func _pick_best_letter_target(
 	target_npc_id: int,
 	held_leverage: Array[Dictionary],
-	character: L5RCharacterData,
+	_character: L5RCharacterData,
 ) -> int:
 	# Prefer the target's lord, then the target themselves
 	for leverage: Dictionary in held_leverage:
