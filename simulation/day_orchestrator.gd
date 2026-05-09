@@ -47,6 +47,8 @@ static func advance_day(
 	active_wars: Array[WarData] = [],
 	trade_routes: Array = [],
 	next_war_id: Array[int] = [1],
+	active_courts: Array[CourtSessionData] = [],
+	next_court_id: Array[int] = [1],
 ) -> Dictionary:
 	var prev_season: int = time_system.get_season()
 
@@ -70,6 +72,11 @@ static func advance_day(
 	var bound_escape_results: Array[Dictionary] = _process_bound_states(
 		bound_states, characters_by_id, dice_engine, ic_day
 	)
+
+	var court_results: Array[Dictionary] = _process_active_courts(
+		active_courts, active_topics, next_topic_id, ic_day
+	)
+	_set_court_context_flags(active_courts, world_states)
 
 	var military_daily: Dictionary = _process_military_daily(
 		active_armies, active_sieges, active_tethers, order_states,
@@ -273,6 +280,10 @@ static func advance_day(
 		_evaluate_heir_designations(
 			characters, characters_by_id, active_topics
 		)
+		_process_strategic_court_calls(
+			strategic_results, active_courts, active_topics,
+			characters_by_id, next_court_id, ic_day,
+		)
 
 	return {
 		"ic_day": ic_day,
@@ -311,6 +322,7 @@ static func advance_day(
 		"trade_route_results": trade_route_results,
 		"starvation_results": starvation_results,
 		"supply_sharing_results": supply_sharing_results,
+		"court_results": court_results,
 	}
 
 
@@ -4091,3 +4103,103 @@ static func _process_peace_trade_routes(
 		)
 		results.append_array(restored)
 	return results
+
+
+# -- Court Session Processing --------------------------------------------------
+
+static func _process_active_courts(
+	active_courts: Array[CourtSessionData],
+	active_topics: Array[TopicData],
+	next_topic_id: Array[int],
+	ic_day: int,
+) -> Array[Dictionary]:
+	var results: Array[Dictionary] = []
+	for court: CourtSessionData in active_courts:
+		if not CourtSystem.is_active(court):
+			continue
+		var advance_result: Dictionary = CourtSystem.advance_court_day(court)
+		if advance_result.get("should_close", false):
+			var close_result: Dictionary = CourtSystem.close_court(court)
+			var topic_dict: Dictionary = CourtSystem.generate_court_close_topic(court)
+			if not topic_dict.is_empty():
+				var t := TopicData.new()
+				t.topic_id = next_topic_id[0]
+				next_topic_id[0] += 1
+				t.topic_type = topic_dict.get("topic_type", "court_session")
+				t.variant = topic_dict.get("variant", "")
+				t.slug = topic_dict.get("slug", "")
+				t.tier = topic_dict.get("tier", TopicData.Tier.TIER_4)
+				t.category = topic_dict.get("category", TopicData.Category.POLITICAL)
+				t.momentum = topic_dict.get("momentum", 5.0)
+				t.clan_involved = topic_dict.get("clan_involved", "")
+				t.ic_day_created = ic_day
+				active_topics.append(t)
+				close_result["topic_id"] = t.topic_id
+			results.append(close_result)
+		else:
+			results.append(advance_result)
+	return results
+
+
+static func _set_court_context_flags(
+	active_courts: Array[CourtSessionData],
+	world_states: Dictionary,
+) -> void:
+	for court: CourtSessionData in active_courts:
+		if not CourtSystem.is_active(court):
+			continue
+		var ctx_dict: Dictionary = CourtSystem.to_context_dict(court)
+		for char_id: int in court.attendee_ids:
+			var ws: Dictionary = world_states.get(char_id, {})
+			if ws.is_empty():
+				continue
+			ws["context_flag"] = Enums.ContextFlag.AT_COURT
+			ws["active_court_at_location"] = ctx_dict
+
+
+static func _process_strategic_court_calls(
+	strategic_results: Array[Dictionary],
+	active_courts: Array[CourtSessionData],
+	active_topics: Array[TopicData],
+	characters_by_id: Dictionary,
+	next_court_id: Array[int],
+	ic_day: int,
+) -> void:
+	for directive: Dictionary in strategic_results:
+		if directive.get("directive", -1) != StrategicReview.Directive.CALL_COURT:
+			continue
+		var lord_id: int = directive.get("lord_id", -1)
+		if lord_id < 0:
+			continue
+		var lord: L5RCharacterData = characters_by_id.get(lord_id) as L5RCharacterData
+		if lord == null:
+			continue
+
+		var already_hosting: bool = false
+		for c: CourtSessionData in active_courts:
+			if c.host_lord_id == lord_id and CourtSystem.is_active(c):
+				already_hosting = true
+				break
+		if already_hosting:
+			continue
+
+		var lord_status: float = lord.status
+		var court_type: CourtSessionData.CourtType = CourtSessionData.CourtType.PROVINCIAL_FAMILY_COURT
+		if lord_status >= 7.0:
+			court_type = CourtSessionData.CourtType.CLAN_CHAMPION_COURT
+		elif lord_status >= 5.0:
+			court_type = CourtSessionData.CourtType.CLAN_CHAMPION_COURT
+
+		var settlement_id: int = lord.physical_location
+		var agenda: Array[int] = CourtSystem.select_agenda_topics(
+			active_topics, court_type
+		)
+
+		var court := CourtSystem.create_court(
+			next_court_id[0], court_type, lord_id,
+			settlement_id, lord.clan, ic_day + 1
+		)
+		next_court_id[0] += 1
+		CourtSystem.set_agenda(court, agenda)
+		CourtSystem.add_attendee(court, lord_id)
+		active_courts.append(court)

@@ -62,6 +62,10 @@ var active_wars: Array[WarData] = []
 var next_war_id: Array[int] = [1]
 var trade_routes: Array = []
 
+# -- Court Sessions (s15.1) ----------------------------------------------------
+var active_courts: Array[CourtSessionData] = []
+var next_court_id: Array[int] = [1]
+
 # -- Collective Disposition (s12.2b) -------------------------------------------
 # Clan-to-clan and family-to-family baselines keyed by sorted "a||b" strings.
 # Initialized to the locked PROVISIONAL pre-Scorpion-Coup starting values.
@@ -145,6 +149,8 @@ func advance_one_day() -> Dictionary:
 		active_wars,
 		trade_routes,
 		next_war_id,
+		active_courts,
+		next_court_id,
 	)
 
 
