@@ -441,3 +441,107 @@ func test_edict_ids_increment():
 	if edicts.size() >= 2:
 		assert_true(edicts[1].edict_id > edicts[0].edict_id)
 	assert_true(next_id[0] > 10, "Counter incremented")
+
+
+# =============================================================================
+# ORCHESTRATOR WIRING — _generate_court_edicts
+# =============================================================================
+
+func _make_court_with_emperor(court_id: int, emperor_id: int) -> CourtSessionData:
+	var court := CourtSessionData.new()
+	court.court_id = court_id
+	court.court_type = CourtSessionData.CourtType.IMPERIAL_WINTER_COURT
+	court.phase = CourtSessionData.CourtPhase.ACTIVE
+	court.host_lord_id = emperor_id
+	court.host_clan = "Imperial"
+	court.emperor_present = true
+	court.duration_ticks = 1
+	court.elapsed_ticks = 0
+	court.attendee_ids = [emperor_id]
+	return court
+
+
+func test_court_close_generates_edicts_when_emperor_present():
+	var emperor := _make_emperor(1)
+	var chars_by_id: Dictionary = {1: emperor}
+	var world_states: Dictionary = {
+		"emperor_id": 1,
+		"emperor_archetype": StrategicReview.EmperorArchetype.IRON,
+	}
+	var war := _make_war(100, "Crane", "Lion", 3)
+	var topic := _make_topic(100, 80.0, "war", TopicData.Category.MILITARY, "Crane")
+	var active_topics: Array[TopicData] = [topic]
+	var active_wars: Array[WarData] = [war]
+	var court := _make_court_with_emperor(1, 1)
+	court.agenda_topic_ids = [100]
+	var active_courts: Array[CourtSessionData] = [court]
+	var active_edicts: Array[EdictData] = []
+	var next_edict_id: Array[int] = [1]
+	var next_topic_id: Array[int] = [500]
+
+	var results := DayOrchestrator._process_active_courts(
+		active_courts, active_topics, next_topic_id, 100,
+		active_edicts, next_edict_id, active_wars,
+		chars_by_id, world_states,
+	)
+	assert_true(active_edicts.size() > 0, "Edicts should be generated")
+	assert_eq(active_edicts[0].edict_type, EdictData.EdictType.CEASE_HOSTILITIES)
+	assert_true(results[0].get("edicts_issued", 0) > 0, "Result reports edicts")
+
+
+func test_court_close_no_edicts_without_emperor():
+	var lord := _make_emperor(2)
+	lord.status = 6.0
+	var chars_by_id: Dictionary = {2: lord}
+	var topic := _make_topic(200, 80.0, "war", TopicData.Category.MILITARY, "Crane", TopicData.Tier.TIER_1)
+	var active_topics: Array[TopicData] = [topic]
+	var court := CourtSessionData.new()
+	court.court_id = 2
+	court.court_type = CourtSessionData.CourtType.CLAN_CHAMPION_COURT
+	court.phase = CourtSessionData.CourtPhase.ACTIVE
+	court.host_lord_id = 2
+	court.emperor_present = false
+	court.duration_ticks = 1
+	court.elapsed_ticks = 0
+	court.agenda_topic_ids = [200]
+	court.attendee_ids = [2]
+	var active_courts: Array[CourtSessionData] = [court]
+	var active_edicts: Array[EdictData] = []
+	var next_edict_id: Array[int] = [1]
+	var next_topic_id: Array[int] = [500]
+
+	DayOrchestrator._process_active_courts(
+		active_courts, active_topics, next_topic_id, 100,
+		active_edicts, next_edict_id, [], chars_by_id, {},
+	)
+	assert_eq(active_edicts.size(), 0, "No edicts without emperor")
+
+
+func test_edict_topics_created_on_court_close():
+	var emperor := _make_emperor(1)
+	var chars_by_id: Dictionary = {1: emperor}
+	var world_states: Dictionary = {
+		"emperor_id": 1,
+		"emperor_archetype": StrategicReview.EmperorArchetype.IRON,
+	}
+	var war := _make_war(300, "Scorpion", "Lion", 4)
+	var topic := _make_topic(300, 80.0, "war", TopicData.Category.MILITARY, "Scorpion")
+	var active_topics: Array[TopicData] = [topic]
+	var court := _make_court_with_emperor(1, 1)
+	court.agenda_topic_ids = [300]
+	var active_courts: Array[CourtSessionData] = [court]
+	var active_edicts: Array[EdictData] = []
+	var next_edict_id: Array[int] = [1]
+	var next_topic_id: Array[int] = [500]
+
+	DayOrchestrator._process_active_courts(
+		active_courts, active_topics, next_topic_id, 200,
+		active_edicts, next_edict_id, [war],
+		chars_by_id, world_states,
+	)
+	var edict_topics: Array[TopicData] = []
+	for t: TopicData in active_topics:
+		if t.topic_type == "imperial_edict":
+			edict_topics.append(t)
+	assert_true(edict_topics.size() > 0, "Edict topic should be created")
+	assert_eq(edict_topics[0].category, TopicData.Category.POLITICAL)

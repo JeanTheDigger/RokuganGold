@@ -66,6 +66,10 @@ var trade_routes: Array = []
 var active_courts: Array[CourtSessionData] = []
 var next_court_id: Array[int] = [1]
 
+# -- Imperial Edicts (s15.1, s15.2) --------------------------------------------
+var active_edicts: Array[EdictData] = []
+var next_edict_id: Array[int] = [1]
+
 # -- Collective Disposition (s12.2b) -------------------------------------------
 # Clan-to-clan and family-to-family baselines keyed by sorted "a||b" strings.
 # Initialized to the locked PROVISIONAL pre-Scorpion-Coup starting values.
@@ -151,6 +155,8 @@ func advance_one_day() -> Dictionary:
 		next_war_id,
 		active_courts,
 		next_court_id,
+		active_edicts,
+		next_edict_id,
 	)
 
 
