@@ -1,4 +1,4 @@
-[gd_scene load_steps=46 format=3 uid="uid://bmk5qlcks4v3u"]
+[gd_scene load_steps=44 format=3 uid="uid://bmk5qlcks4v3u"]
 
 [ext_resource type="Script" uid="uid://drwfitony6hbj" path="res://scripts/ui/main_ui.gd" id="2_i4ba5"]
 [ext_resource type="Texture2D" uid="uid://oar14m2y1vpu" path="res://assets/images/SpaceTile1.png" id="2_n6mpm"]
@@ -8,7 +8,6 @@
 [ext_resource type="Script" uid="uid://eiulmike27ng" path="res://scripts/ui/input_buttons.gd" id="4_eib71"]
 [ext_resource type="FontFile" uid="uid://deuierbbkg6su" path="res://assets/fonts/eurostile.TTF" id="5_d2so1"]
 [ext_resource type="Script" uid="uid://dumoka3feh6sp" path="res://scripts/ui/ActionPanel.gd" id="5_g4hc0"]
-[ext_resource type="Shader" uid="uid://bkqapjh7bps4u" path="res://shaders/WritingPanelShader.gdshader" id="6_1ipri"]
 [ext_resource type="PackedScene" uid="uid://33yiuaybmux" path="res://scenes/Zone.tscn" id="6_niqgt"]
 [ext_resource type="Texture2D" uid="uid://83hcerwrjokr" path="res://assets/images/NeighborSprite.png" id="7_2jhcv"]
 [ext_resource type="PackedScene" uid="uid://d52y56d4b22e" path="res://scenes/player_selection.tscn" id="10_pdx0a"]
@@ -95,12 +94,6 @@ TabContainer/styles/tabbar_background = SubResource("StyleBoxTexture_1xs4l")
 [sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_fxj62"]
 
 [sub_resource type="CompressedTexture2D" id="CompressedTexture2D_bpym6"]
-
-[sub_resource type="ShaderMaterial" id="ShaderMaterial_odx23"]
-shader = ExtResource("6_1ipri")
-shader_parameter/scanline_intensity = 0.04
-shader_parameter/vignette_strength = 0.12
-shader_parameter/flicker_strength = 0.005
 
 [node name="MainUI" type="Control"]
 layout_mode = 3
@@ -346,7 +339,6 @@ offset_bottom = 597.0
 texture = SubResource("CompressedTexture2D_bpym6")
 
 [node name="ColorRect" type="ColorRect" parent="."]
-material = SubResource("ShaderMaterial_odx23")
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
