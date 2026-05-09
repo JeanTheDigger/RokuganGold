@@ -40,8 +40,10 @@ static func apply(
 	_apply_disposition(effects, actor, target_id, applied)
 	_apply_recipient_effects(effects, actor, target_id, characters, applied)
 	_apply_witness_effects(effects, actor, characters, applied)
+	_apply_witness_gain(effects, actor, characters, applied)
 	_apply_gossip_effects(effects, target_id, characters, applied)
 	_apply_target_witness_effects(effects, target_id, characters, applied)
+	_apply_disposition_ripple(effects, actor, target_id, characters, applied)
 	_apply_honor(effects, actor, applied)
 	_apply_glory(effects, actor, applied)
 	_apply_infamy(effects, actor, applied)
@@ -163,6 +165,37 @@ static func _apply_witness_effects(
 		})
 
 
+# -- Witness disposition gain (broadcast actions, s12.2 Category 2) ------------
+
+static func _apply_witness_gain(
+	effects: Dictionary,
+	actor: L5RCharacterData,
+	characters: Dictionary,
+	applied: Dictionary,
+) -> void:
+	var disp_gain: int = effects.get("witness_disposition_gain", 0)
+	if disp_gain == 0:
+		return
+	var witness_ids: Array = effects.get("witnesses", [])
+	if witness_ids.is_empty():
+		return
+
+	for wid in witness_ids:
+		var witness: L5RCharacterData = characters.get(wid)
+		if witness == null or witness.character_id == actor.character_id:
+			continue
+		var old_val: int = witness.disposition_values.get(actor.character_id, 0)
+		var new_val: int = clampi(old_val + disp_gain, -100, 100)
+		witness.disposition_values[actor.character_id] = new_val
+		applied["disposition_changes"].append({
+			"actor_id": witness.character_id,
+			"target_id": actor.character_id,
+			"old": old_val,
+			"new": new_val,
+			"delta": disp_gain,
+		})
+
+
 # -- Gossip 3rd-party targeting (s15.4) ----------------------------------------
 
 static func _apply_gossip_effects(
@@ -217,6 +250,63 @@ static func _apply_target_witness_effects(
 			"old": old_val,
 			"new": new_val,
 			"delta": disp_change,
+		})
+
+
+# -- Family/Clan Disposition Ripple (s12.2) ------------------------------------
+# Per GDD: every disposition change applies +2 to target's family members,
+# +1 to target's clan members (proportional direction, flat amounts).
+
+static func _apply_disposition_ripple(
+	effects: Dictionary,
+	actor: L5RCharacterData,
+	target_id: int,
+	characters: Dictionary,
+	applied: Dictionary,
+) -> void:
+	var disp_change: int = effects.get("disposition_change", 0)
+	if disp_change == 0 or target_id < 0:
+		return
+	var target: L5RCharacterData = characters.get(target_id)
+	if target == null:
+		return
+
+	var direction: int = 1 if disp_change > 0 else -1
+	var target_clan: String = target.clan
+	var target_family: String = target.family
+
+	if target_clan.is_empty():
+		return
+
+	for cid in characters:
+		if cid == actor.character_id or cid == target_id:
+			continue
+		var c: L5RCharacterData = characters[cid]
+		if c.clan != target_clan:
+			continue
+
+		var ripple: int = 0
+		if c.family == target_family and not target_family.is_empty():
+			ripple = DispositionSystem.FAMILY_RIPPLE * direction
+		else:
+			ripple = DispositionSystem.CLAN_RIPPLE * direction
+
+		var old_val: int = actor.disposition_values.get(cid, 0)
+		var cap: int = DispositionSystem.FAMILY_RIPPLE_CAP if c.family == target_family else DispositionSystem.CLAN_RIPPLE_CAP
+		if absi(old_val) >= cap:
+			continue
+		var new_val: int = clampi(old_val + ripple, -100, 100)
+		if absi(new_val) > cap:
+			new_val = cap * direction
+		actor.disposition_values[cid] = new_val
+
+		applied["disposition_changes"].append({
+			"actor_id": actor.character_id,
+			"target_id": cid,
+			"old": old_val,
+			"new": new_val,
+			"delta": new_val - old_val,
+			"ripple": true,
 		})
 
 
@@ -296,6 +386,7 @@ static func _apply_province_effects(
 
 	match effect_type:
 		"patrol_dispatched":
+			# Placeholder: GDD patrol → insurgency suppression, not direct stability.
 			province.stability = minf(province.stability + 2.0, 100.0)
 			applied["province_updates"].append({
 				"province_id": province_id,

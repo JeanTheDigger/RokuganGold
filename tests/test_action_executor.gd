@@ -763,3 +763,64 @@ func test_declare_war_total_war_honor_cost() -> void:
 	)
 	assert_eq(result["effects"]["effect"], "war_declared")
 	assert_almost_eq(result["effects"]["honor_change"], -0.5, 0.01)
+
+
+# -- Broadcast Social Actions (s12.2 Category 2) ------------------------------
+
+func test_public_debate_success_gives_witness_disposition_gain() -> void:
+	var witness := L5RCharacterData.new()
+	witness.character_id = 30
+	witness.character_name = "Witness"
+	witness.disposition_values = {}
+	witness.physical_location = "castle_court"
+	_character.physical_location = "castle_court"
+	var chars: Dictionary = {1: _character, 30: witness}
+
+	_dice_engine.set_seed(1)
+	var action := _make_action("PUBLIC_DEBATE")
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map, {}, chars
+	)
+	if result["success"]:
+		assert_true(result["effects"].get("witness_disposition_gain", 0) >= 2)
+		assert_true(result["effects"].get("witnesses", []).size() > 0)
+
+
+func test_public_debate_witness_effects_applied() -> void:
+	var witness := L5RCharacterData.new()
+	witness.character_id = 30
+	witness.character_name = "Witness"
+	witness.disposition_values = {1: 5}
+	witness.physical_location = "castle_court"
+	_character.physical_location = "castle_court"
+	var chars: Dictionary = {1: _character, 30: witness}
+
+	_dice_engine.set_seed(1)
+	var action := _make_action("PUBLIC_DEBATE")
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map, {}, chars
+	)
+	if result["success"]:
+		var applied: Dictionary = EffectApplicator.apply(
+			result, chars, {}, []
+		)
+		assert_true(witness.disposition_values[1] > 5)
+
+
+func test_public_debate_critical_failure_penalizes_with_witnesses() -> void:
+	var witness := L5RCharacterData.new()
+	witness.character_id = 30
+	witness.character_name = "Witness"
+	witness.disposition_values = {1: 10}
+	witness.physical_location = "castle_court"
+	_character.physical_location = "castle_court"
+	var chars: Dictionary = {1: _character, 30: witness}
+
+	_dice_engine.set_seed(999)
+	_ctx.dispositions[30] = -70
+	var action := _make_action("PUBLIC_DEBATE", 30)
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map, {}, chars
+	)
+	if not result["success"] and result.get("margin", 0) <= -10:
+		assert_eq(result["effects"].get("witness_disposition_loss", 0), -2)

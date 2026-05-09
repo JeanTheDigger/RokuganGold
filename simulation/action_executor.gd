@@ -107,6 +107,9 @@ static func execute(
 	if action_id == "PERFORM_FOR":
 		return _execute_perform_for(action, character, ctx, dice_engine, characters_by_id)
 
+	if action_id == "PUBLIC_DEBATE" or action_id == "PUBLIC_DECLARATION":
+		return _execute_broadcast_social(action, character, ctx, dice_engine, action_skill_map, characters_by_id)
+
 	if action_id == "GOSSIP":
 		return _execute_gossip(action, character, ctx, dice_engine, action_skill_map, characters_by_id)
 
@@ -650,6 +653,64 @@ static func _execute_public_insult(
 	}
 
 
+# -- Broadcast Social Actions (s12.2 Category 2) ------------------------------
+
+static func _execute_broadcast_social(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	dice_engine: DiceEngine,
+	action_skill_map: Dictionary,
+	characters_by_id: Dictionary,
+) -> Dictionary:
+	var action_id: String = action.action_id
+	var skill_entry: Dictionary = action_skill_map.get(action_id, {})
+	var primary_skill: String = skill_entry.get("primary", "Courtier")
+	var tn: int = _get_social_tn(action, ctx)
+	var roll_result: Dictionary = SkillResolver.resolve_skill_check(
+		character, dice_engine, primary_skill, tn
+	)
+
+	var success: bool = roll_result.get("success", false)
+	var margin: int = roll_result.get("total", 0) - tn
+	var raises: int = maxi(margin / 5, 0)
+	var witness_ids: Array[int] = _get_co_located_ids(character, characters_by_id)
+
+	var effects: Dictionary = {}
+	if success:
+		var per_witness_disp: int = 2 + raises
+		var glory_change: float = 0.0
+		if action_id == "PUBLIC_DEBATE":
+			glory_change = 0.3 if raises >= 3 else 0.0
+		elif action_id == "PUBLIC_DECLARATION":
+			glory_change = 0.1
+		effects = {
+			"witness_disposition_gain": per_witness_disp,
+			"witnesses": witness_ids,
+			"glory_change": glory_change,
+		}
+	else:
+		effects = {"failed": true}
+		if margin <= -10:
+			effects["witness_disposition_loss"] = -2
+			effects["witnesses"] = witness_ids
+
+	return {
+		"success": success,
+		"action_id": action_id,
+		"character_id": ctx.character_id,
+		"target_npc_id": action.target_npc_id,
+		"target_province_id": action.target_province_id,
+		"ic_day": ctx.ic_day,
+		"season": ctx.season,
+		"skill_used": primary_skill,
+		"roll_total": roll_result.get("total", 0),
+		"tn": tn,
+		"margin": margin,
+		"effects": effects,
+	}
+
+
 # -- Covert Actions (s12.8) ---------------------------------------------------
 
 static func _try_execute_covert(
@@ -955,16 +1016,8 @@ static func _compute_social_effects(action_id: String, margin: int) -> Dictionar
 			disp_change = 9 + raises * 3
 		"IMPRESS":
 			disp_change = 9 + raises * 3
-		"GOSSIP":
-			info_gained = true
 		"PROBE", "READ_CHARACTER":
 			info_gained = true
-		"PUBLIC_DEBATE":
-			glory_change = 0.3 if raises >= 3 else 0.0
-		"PUBLIC_DECLARATION":
-			glory_change = 0.1
-		"PUBLIC_INSULT":
-			pass
 		"ASK_FOR_INTRODUCTION":
 			info_gained = true
 		"DISCLOSE":

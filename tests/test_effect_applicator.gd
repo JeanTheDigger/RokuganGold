@@ -855,3 +855,199 @@ func test_target_witness_no_op_without_witnesses() -> void:
 		result, _characters, _provinces, _action_log
 	)
 	assert_eq(applied["disposition_changes"].size(), 0)
+
+
+# -- Witness disposition gain (broadcast actions s12.2 Category 2) -------------
+
+func test_witness_gain_mutates_witnesses_toward_actor() -> void:
+	var witness_a := L5RCharacterData.new()
+	witness_a.character_id = 50
+	witness_a.character_name = "Witness A"
+	witness_a.disposition_values = {1: 5}
+
+	var witness_b := L5RCharacterData.new()
+	witness_b.character_id = 51
+	witness_b.character_name = "Witness B"
+	witness_b.disposition_values = {1: -3}
+
+	_characters[50] = witness_a
+	_characters[51] = witness_b
+
+	var result: Dictionary = {
+		"success": true,
+		"character_id": 1,
+		"target_npc_id": -1,
+		"action_id": "PUBLIC_DEBATE",
+		"ic_day": 5,
+		"effects": {
+			"witness_disposition_gain": 3,
+			"witnesses": [50, 51],
+		},
+	}
+	var applied: Dictionary = EffectApplicator.apply(
+		result, _characters, _provinces, _action_log
+	)
+	assert_eq(witness_a.disposition_values[1], 8)
+	assert_eq(witness_b.disposition_values[1], 0)
+	assert_eq(applied["disposition_changes"].size(), 2)
+
+
+func test_witness_gain_skips_actor() -> void:
+	var witness := L5RCharacterData.new()
+	witness.character_id = 50
+	witness.character_name = "Witness"
+	witness.disposition_values = {1: 0}
+	_characters[50] = witness
+
+	var result: Dictionary = {
+		"success": true,
+		"character_id": 1,
+		"target_npc_id": -1,
+		"action_id": "PUBLIC_DEBATE",
+		"ic_day": 5,
+		"effects": {
+			"witness_disposition_gain": 2,
+			"witnesses": [1, 50],
+		},
+	}
+	var applied: Dictionary = EffectApplicator.apply(
+		result, _characters, _provinces, _action_log
+	)
+	assert_eq(applied["disposition_changes"].size(), 1)
+	assert_eq(witness.disposition_values[1], 2)
+
+
+# -- Family/Clan Disposition Ripple (s12.2) ------------------------------------
+
+func test_family_ripple_on_disposition_change() -> void:
+	var family_member := L5RCharacterData.new()
+	family_member.character_id = 60
+	family_member.character_name = "Family Member"
+	family_member.clan = "Crane"
+	family_member.family = "Doji"
+
+	_target.clan = "Crane"
+	_target.family = "Doji"
+	_actor.clan = "Lion"
+	_actor.family = "Akodo"
+	_characters[60] = family_member
+
+	var result: Dictionary = {
+		"success": true,
+		"character_id": 1,
+		"target_npc_id": 2,
+		"action_id": "CHARM",
+		"ic_day": 5,
+		"effects": {"disposition_change": 8},
+	}
+	EffectApplicator.apply(result, _characters, _provinces, _action_log)
+	assert_eq(_actor.disposition_values.get(60, 0), 2)
+
+
+func test_clan_ripple_different_family() -> void:
+	var clan_member := L5RCharacterData.new()
+	clan_member.character_id = 61
+	clan_member.character_name = "Clan Member"
+	clan_member.clan = "Crane"
+	clan_member.family = "Kakita"
+
+	_target.clan = "Crane"
+	_target.family = "Doji"
+	_actor.clan = "Lion"
+	_actor.family = "Akodo"
+	_characters[61] = clan_member
+
+	var result: Dictionary = {
+		"success": true,
+		"character_id": 1,
+		"target_npc_id": 2,
+		"action_id": "CHARM",
+		"ic_day": 5,
+		"effects": {"disposition_change": 8},
+	}
+	EffectApplicator.apply(result, _characters, _provinces, _action_log)
+	assert_eq(_actor.disposition_values.get(61, 0), 1)
+
+
+func test_negative_ripple_on_negative_disposition() -> void:
+	var family_member := L5RCharacterData.new()
+	family_member.character_id = 60
+	family_member.character_name = "Family Member"
+	family_member.clan = "Crane"
+	family_member.family = "Doji"
+
+	_target.clan = "Crane"
+	_target.family = "Doji"
+	_actor.clan = "Lion"
+	_actor.family = "Akodo"
+	_characters[60] = family_member
+
+	var result: Dictionary = {
+		"success": true,
+		"character_id": 1,
+		"target_npc_id": 2,
+		"action_id": "CHARM",
+		"ic_day": 5,
+		"effects": {"disposition_change": -5},
+	}
+	EffectApplicator.apply(result, _characters, _provinces, _action_log)
+	assert_eq(_actor.disposition_values.get(60, 0), -2)
+
+
+func test_ripple_capped_at_family_cap() -> void:
+	var family_member := L5RCharacterData.new()
+	family_member.character_id = 60
+	family_member.character_name = "Family Member"
+	family_member.clan = "Crane"
+	family_member.family = "Doji"
+
+	_target.clan = "Crane"
+	_target.family = "Doji"
+	_actor.clan = "Lion"
+	_actor.family = "Akodo"
+	_actor.disposition_values[60] = 29
+	_characters[60] = family_member
+
+	var result: Dictionary = {
+		"success": true,
+		"character_id": 1,
+		"target_npc_id": 2,
+		"action_id": "CHARM",
+		"ic_day": 5,
+		"effects": {"disposition_change": 8},
+	}
+	EffectApplicator.apply(result, _characters, _provinces, _action_log)
+	assert_eq(_actor.disposition_values.get(60, 0), 30)
+
+
+func test_ripple_no_op_when_at_cap() -> void:
+	var family_member := L5RCharacterData.new()
+	family_member.character_id = 60
+	family_member.character_name = "Family Member"
+	family_member.clan = "Crane"
+	family_member.family = "Doji"
+
+	_target.clan = "Crane"
+	_target.family = "Doji"
+	_actor.clan = "Lion"
+	_actor.family = "Akodo"
+	_actor.disposition_values[60] = 30
+	_characters[60] = family_member
+
+	var result: Dictionary = {
+		"success": true,
+		"character_id": 1,
+		"target_npc_id": 2,
+		"action_id": "CHARM",
+		"ic_day": 5,
+		"effects": {"disposition_change": 8},
+	}
+	var applied: Dictionary = EffectApplicator.apply(
+		result, _characters, _provinces, _action_log
+	)
+	assert_eq(_actor.disposition_values.get(60, 0), 30)
+	var ripple_found: bool = false
+	for change: Dictionary in applied["disposition_changes"]:
+		if change.get("target_id", -1) == 60:
+			ripple_found = true
+	assert_false(ripple_found)
