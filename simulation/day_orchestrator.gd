@@ -51,6 +51,9 @@ static func advance_day(
 	next_court_id: Array[int] = [1],
 	active_edicts: Array[EdictData] = [],
 	next_edict_id: Array[int] = [1],
+	active_hordes: Array[HordeData] = [],
+	horde_strength_counters: Dictionary = {},
+	last_targeted_province_id: Array[int] = [-1],
 ) -> Dictionary:
 	var prev_season: int = time_system.get_season()
 
@@ -86,6 +89,7 @@ static func advance_day(
 		characters_by_id, world_states,
 	)
 	_set_court_context_flags(active_courts, world_states)
+	_set_wall_tower_context_flags(characters, settlements, provinces, world_states)
 
 	var edict_results: Array[Dictionary] = _process_edict_compliance(
 		active_edicts, active_wars, characters, active_topics, next_topic_id, ic_day,
@@ -124,6 +128,21 @@ static func advance_day(
 		settlements,
 		characters_by_id,
 		companies,
+	)
+
+	var wall_engineering_results: Array[Dictionary] = _process_wall_engineering_effects(
+		day_result.get("results", []),
+		settlements,
+	)
+
+	var sortie_results: Array[Dictionary] = _process_sortie_results(
+		day_result.get("results", []),
+		settlements,
+		provinces,
+	)
+
+	var horde_assault_results: Array[Dictionary] = _process_horde_assaults(
+		active_hordes, settlements, active_topics, next_topic_id, ic_day, provinces,
 	)
 
 	var starvation_results: Array[Dictionary] = _process_starvation_warfare_effects(
@@ -247,6 +266,7 @@ static func advance_day(
 	var progress_results: Array[Dictionary] = []
 	var insurgency_results: Dictionary = {}
 	var military_seasonal_result: Dictionary = {}
+	var wall_seasonal_result: Dictionary = {}
 	if current_season != prev_season:
 		# Add the IC year to miya_inputs so per-province blessed-year tracking
 		# stays consistent. Year is computed from the time system's tick count.
@@ -256,6 +276,9 @@ static func advance_day(
 		seasonal_result = _process_season_transition(
 			characters, provinces, current_season, season_meta,
 			approach_penalties, settlements, spring_inputs
+		)
+		wall_seasonal_result = _process_wall_seasonal_pressure(
+			settlements, provinces, current_season, season_meta
 		)
 		# Miya's Blessing follow-up — topic generation, disposition deltas,
 		# suspension penalties. Runs only on Spring transitions when the
@@ -306,6 +329,13 @@ static func advance_day(
 			current_season,
 		)
 
+	var horde_results: Dictionary = _process_horde_rolls(
+		current_season, prev_season,
+		active_hordes, horde_strength_counters, last_targeted_province_id,
+		settlements, provinces, dice_engine, ic_day, season_meta,
+		active_topics, next_topic_id,
+	)
+
 	return {
 		"ic_day": ic_day,
 		"season": current_season,
@@ -349,6 +379,11 @@ static func advance_day(
 		"crisis_courts": crisis_courts,
 		"edict_results": edict_results,
 		"active_edicts": active_edicts,
+		"wall_seasonal": wall_seasonal_result,
+		"wall_engineering_results": wall_engineering_results,
+		"sortie_results": sortie_results,
+		"horde_assault_results": horde_assault_results,
+		"horde_results": horde_results,
 	}
 
 
@@ -486,6 +521,414 @@ static func _process_season_transition(
 		"resource_tick": tick_result,
 		"approach_penalties_decayed": penalties_decayed,
 	}
+
+
+# -- Wall Seasonal Pressure (s2.4.3, s2.4.10) ----------------------------------
+# Applies SI decay, adjacent bleed, and PTL accumulation to wall tower settlements
+# once per season. Mutates settlement.wall_si and province.province_taint_level.
+
+static func _process_wall_seasonal_pressure(
+	settlements: Array[SettlementData],
+	provinces: Dictionary,
+	current_season: int,
+	season_meta: Dictionary,
+) -> Dictionary:
+	var season_name: String = _season_to_name(current_season)
+
+	# Collect wall tower settlements.
+	var wall_settlements: Array[SettlementData] = []
+	for s: SettlementData in settlements:
+		if s.settlement_type == Enums.SettlementType.WALL_TOWER:
+			wall_settlements.append(s)
+
+	if wall_settlements.is_empty():
+		return {}
+
+	# Build province_id → wall tower settlement map for adjacency lookups.
+	var province_to_wall: Dictionary = {}
+	for s: SettlementData in wall_settlements:
+		province_to_wall[s.province_id] = s
+
+	# Step 1: Apply seasonal SI decay per tower (s2.4.3 + s2.4.10 + s2.4.16).
+	var si_decay_results: Array[Dictionary] = []
+	for s: SettlementData in wall_settlements:
+		var province: Variant = provinces.get(s.province_id, null)
+		if not province is ProvinceData:
+			continue
+		var prov: ProvinceData = province as ProvinceData
+		# Pass Kaiu Reinforcement reduction (zero when no modifier is active).
+		var decay_result: Dictionary = WallSystem.apply_seasonal_si_decay(
+			s, season_name, prov.shadowlands_strength, s.kaiu_decay_reduction
+		)
+		var old_si: int = decay_result["new_si"] + decay_result["decay_applied"]
+		s.wall_si = decay_result["new_si"]
+		# Tick down the Kaiu Reinforcement modifier (s2.4.16).
+		if s.kaiu_reinforce_seasons_remaining > 0:
+			s.kaiu_reinforce_seasons_remaining -= 1
+			if s.kaiu_reinforce_seasons_remaining == 0:
+				s.kaiu_decay_reduction = 0.0
+		si_decay_results.append({
+			"settlement_id": s.settlement_id,
+			"province_id": s.province_id,
+			"old_si": old_si,
+			"new_si": decay_result["new_si"],
+			"decay_applied": decay_result["decay_applied"],
+		})
+
+	# Step 2: Adjacent bleed (s2.4.3).
+	# 0.5 SI per season accumulates in season_meta until it reaches 1.0.
+	var bleed_accum: Dictionary = season_meta.get("_wall_bleed_accum", {})
+	for s: SettlementData in wall_settlements:
+		var bleed_check: Dictionary = WallSystem.compute_adjacent_bleed(s.wall_si)
+		if not bleed_check["bleed_active"]:
+			continue
+		var province: Variant = provinces.get(s.province_id, null)
+		if not province is ProvinceData:
+			continue
+		var prov: ProvinceData = province as ProvinceData
+		for adj_id: int in prov.adjacent_province_ids:
+			if not province_to_wall.has(adj_id):
+				continue
+			var adj_s: SettlementData = province_to_wall[adj_id] as SettlementData
+			var key: String = str(adj_s.settlement_id)
+			var accum: float = float(bleed_accum.get(key, 0.0)) + bleed_check["bleed_amount"]
+			if accum >= 1.0:
+				adj_s.wall_si = maxi(0, adj_s.wall_si - 1)
+				accum -= 1.0
+			bleed_accum[key] = accum
+	season_meta["_wall_bleed_accum"] = bleed_accum
+
+	# Step 3: PTL contribution from degraded wall sections (s2.4.2).
+	var ptl_updates: Array[Dictionary] = []
+	for s: SettlementData in wall_settlements:
+		var province: Variant = provinces.get(s.province_id, null)
+		if not province is ProvinceData:
+			continue
+		var prov: ProvinceData = province as ProvinceData
+		var ptl_gain: float = WallSystem.compute_ptl_contribution(s.wall_si, true)
+		prov.province_taint_level = clampf(
+			prov.province_taint_level + ptl_gain, 0.0, 10.0
+		)
+		ptl_updates.append({
+			"province_id": s.province_id,
+			"ptl_gain": ptl_gain,
+			"new_ptl": prov.province_taint_level,
+		})
+
+	# Step 4: Garrison shortage detection (s2.4.12).
+	# Flags towers below the minimum defensible garrison. Does NOT generate a
+	# topic — per s2.4.12 the Taisa/Shireikan must communicate the shortage
+	# through letters or personal visits. The flag is returned in the result
+	# for the NPC AI to act on.
+	var garrison_shortage_towers: Array[Dictionary] = []
+	for s: SettlementData in wall_settlements:
+		if WallSystem.is_garrison_below_minimum(s.garrison_pu):
+			garrison_shortage_towers.append({
+				"settlement_id": s.settlement_id,
+				"province_id": s.province_id,
+				"garrison_pu": s.garrison_pu,
+				"wall_si": s.wall_si,
+			})
+
+	return {
+		"si_decay_results": si_decay_results,
+		"ptl_updates": ptl_updates,
+		"garrison_shortage_towers": garrison_shortage_towers,
+	}
+
+
+# -- Wall Engineering Effects (s2.4.16) ----------------------------------------
+
+static func _process_wall_engineering_effects(
+	applied_list: Array,
+	settlements: Array[SettlementData],
+) -> Array[Dictionary]:
+	var results: Array[Dictionary] = []
+
+	# Build province_id → wall tower settlement map once.
+	var wall_by_province: Dictionary = {}
+	for s: SettlementData in settlements:
+		if s.settlement_type == Enums.SettlementType.WALL_TOWER:
+			wall_by_province[s.province_id] = s
+
+	for applied: Dictionary in applied_list:
+		var effects: Dictionary = applied.get("effects", {})
+		var target_pid: int = effects.get("target_province_id", -1)
+
+		# FORTIFY_WALL_SECTION: apply SI gain and set/update Kaiu Reinforcement.
+		if effects.get("requires_fortify_wall", false):
+			var settlement: Variant = wall_by_province.get(target_pid, null)
+			if not settlement is SettlementData:
+				continue
+			var s: SettlementData = settlement as SettlementData
+			var si_gain: int = effects.get("si_gain", 1)
+			var old_si: int = s.wall_si
+			s.wall_si = clampi(s.wall_si + si_gain, 0, 10)
+			# Apply Kaiu Reinforcement modifier — overwrite only if new value >=
+			# existing (s2.4.16 overwrite rule).
+			var new_reduction: float = float(effects.get("kaiu_decay_reduction", 0.0))
+			if new_reduction >= s.kaiu_decay_reduction:
+				s.kaiu_decay_reduction = new_reduction
+				s.kaiu_reinforce_seasons_remaining = int(
+					effects.get("kaiu_reinforce_duration", 0)
+				)
+			results.append({
+				"action": "fortify_wall",
+				"settlement_id": s.settlement_id,
+				"province_id": target_pid,
+				"old_si": old_si,
+				"new_si": s.wall_si,
+				"kaiu_decay_reduction": s.kaiu_decay_reduction,
+				"kaiu_seasons_remaining": s.kaiu_reinforce_seasons_remaining,
+			})
+
+		# SEAL_WALL_BREACH: always deduct Koku; restore SI to 2 on success.
+		elif applied.get("action_id", "") == "SEAL_WALL_BREACH" \
+				and effects.get("koku_cost", 0.0) > 0.0:
+			var settlement: Variant = wall_by_province.get(target_pid, null)
+			if not settlement is SettlementData:
+				continue
+			var s: SettlementData = settlement as SettlementData
+			var old_si: int = s.wall_si
+			s.koku_stockpile = maxf(0.0, s.koku_stockpile - float(effects["koku_cost"]))
+			if effects.get("requires_breach_seal", false):
+				s.wall_si = 2
+			results.append({
+				"action": "seal_breach",
+				"settlement_id": s.settlement_id,
+				"province_id": target_pid,
+				"old_si": old_si,
+				"new_si": s.wall_si,
+				"koku_deducted": float(effects["koku_cost"]),
+				"sealed": effects.get("requires_breach_seal", false),
+			})
+
+	return results
+
+
+# -- Sortie Results (s2.4.10, s2.4.11, s2.4.15) --------------------------------
+
+static func _process_sortie_results(
+	applied_list: Array,
+	settlements: Array[SettlementData],
+	provinces: Dictionary,
+) -> Array[Dictionary]:
+	var results: Array[Dictionary] = []
+
+	# Build province_id → wall tower settlement map for jade deduction.
+	var wall_by_province: Dictionary = {}
+	for s: SettlementData in settlements:
+		if s.settlement_type == Enums.SettlementType.WALL_TOWER:
+			wall_by_province[s.province_id] = s
+
+	for applied: Dictionary in applied_list:
+		var effects: Dictionary = applied.get("effects", {})
+		if not effects.get("requires_sortie_combat", false):
+			continue
+
+		var target_pid: int = effects.get("target_province_id", -1)
+		var ss_reduction: int = int(effects.get("ss_reduction", 0))
+		var force_pct: float = float(effects.get("force_pct", 0.0))
+		var jade_per_warrior: int = int(effects.get("jade_per_warrior", 1))
+
+		# Apply SS reduction to the Shadowlands province (s2.4.11).
+		# Horde combat resolution is deferred (s2.4.7); SS reduction is applied
+		# immediately as a simplified sortie outcome.
+		var new_ss: int = 0
+		var province: Variant = provinces.get(target_pid, null)
+		if province is ProvinceData:
+			var prov: ProvinceData = province as ProvinceData
+			new_ss = maxi(0, prov.shadowlands_strength - ss_reduction)
+			prov.shadowlands_strength = new_ss
+
+		# Consume jade from the Tower stockpile (s2.4.15).
+		# warriors = floor(garrison_pu × force_pct); jade = warriors × jade_per_warrior.
+		var jade_consumed: float = 0.0
+		var settlement: Variant = wall_by_province.get(target_pid, null)
+		if settlement is SettlementData:
+			var s: SettlementData = settlement as SettlementData
+			var warriors: int = int(s.garrison_pu * force_pct)
+			jade_consumed = float(warriors * jade_per_warrior)
+			s.jade_stockpile = maxf(0.0, s.jade_stockpile - jade_consumed)
+
+		results.append({
+			"province_id": target_pid,
+			"ss_reduction_applied": ss_reduction,
+			"new_ss": new_ss,
+			"jade_consumed": jade_consumed,
+		})
+
+	return results
+
+
+# -- Horde Assault SI Processing (s2.4.5 — LOCKED) ----------------------------
+
+## Processes resolved horde assaults: applies SI hit from the battle outcome,
+## detects breach, and generates a Tier 1 Shadowlands Incursion crisis topic.
+## Called each tick; only hordes with `assault_resolved = true` and an unprocessed
+## outcome (assault_si_hit == 0) are handled. The combat system that resolves
+## horde assaults (deferred) must set `horde.assault_resolved = true` and
+## `horde.battle_outcome` to a HordeBattleOutcome enum value before this runs.
+static func _process_horde_assaults(
+	active_hordes: Array[HordeData],
+	settlements: Array[SettlementData],
+	active_topics: Array[TopicData],
+	next_topic_id: Array[int],
+	ic_day: int,
+	provinces: Dictionary,
+) -> Array[Dictionary]:
+	var results: Array[Dictionary] = []
+
+	# Build province_id → wall tower settlement map.
+	var wall_by_province: Dictionary = {}
+	for s: SettlementData in settlements:
+		if s.settlement_type == Enums.SettlementType.WALL_TOWER:
+			wall_by_province[s.province_id] = s
+
+	for horde: HordeData in active_hordes:
+		if not horde.assault_resolved:
+			continue
+		if horde.battle_outcome < 0:
+			continue
+		# Skip if SI hit was already processed (si_hit stored > 0 means done).
+		if horde.assault_si_hit != 0:
+			continue
+
+		var tower: Variant = wall_by_province.get(horde.target_province_id, null)
+		if not tower is SettlementData:
+			continue
+
+		var si_result: Dictionary = HordeSystem.apply_assault_si_hit(
+			tower as SettlementData, horde.battle_outcome
+		)
+		horde.assault_si_hit = si_result["si_hit"]
+
+		var breach: bool = bool(si_result.get("breach", false))
+		if breach:
+			# Generate Tier 1 Shadowlands Incursion crisis topic (s2.4.5, s16.3).
+			var province: Variant = provinces.get(horde.target_province_id, null)
+			var clan_str: String = ""
+			if province is ProvinceData:
+				clan_str = (province as ProvinceData).clan
+			var topic := TopicData.new()
+			topic.topic_id = next_topic_id[0]
+			next_topic_id[0] += 1
+			topic.slug = "shadowlands_incursion_p%d_d%d" % [horde.target_province_id, ic_day]
+			topic.topic_type = "crisis"
+			topic.variant = "shadowlands_incursion"
+			topic.category = TopicData.Category.MILITARY
+			topic.tier = TopicData.Tier.TIER_1
+			topic.momentum = 80.0  # Tier 1 crisis starts with high momentum.
+			topic.clan_involved = clan_str
+			topic.ic_day_created = ic_day
+			topic.provinces_affected = [horde.target_province_id]
+			active_topics.append(topic)
+			results.append({
+				"province_id": horde.target_province_id,
+				"outcome": horde.battle_outcome,
+				"si_hit": horde.assault_si_hit,
+				"new_si": int(si_result["new_si"]),
+				"breach": true,
+				"incursion_topic_id": topic.topic_id,
+			})
+		else:
+			results.append({
+				"province_id": horde.target_province_id,
+				"outcome": horde.battle_outcome,
+				"si_hit": horde.assault_si_hit,
+				"new_si": int(si_result["new_si"]),
+				"breach": false,
+			})
+
+	return results
+
+
+# -- Horde Rolls (s2.4.4–s2.4.8 — LOCKED) ------------------------------------
+
+## Fires every HORDE_ROLL_SEASON_INTERVAL seasons when a season change occurs.
+## Season count is tracked in season_meta["horde_season_count"].
+## On a successful roll a HordeData is generated and appended to active_hordes.
+## On a failed roll the global strength counter increments.
+## Returns a dict describing what happened; empty dict if no roll fired.
+static func _process_horde_rolls(
+	current_season: int,
+	prev_season: int,
+	active_hordes: Array[HordeData],
+	horde_strength_counters: Dictionary,
+	last_targeted_province_id: Array[int],
+	settlements: Array[SettlementData],
+	provinces: Dictionary,
+	dice: DiceEngine,
+	ic_day: int,
+	season_meta: Dictionary,
+	active_topics: Array[TopicData],
+	next_topic_id: Array[int],
+) -> Dictionary:
+	if current_season == prev_season:
+		return {}
+
+	# Increment season counter.
+	var season_count: int = int(season_meta.get("horde_season_count", 0)) + 1
+	season_meta["horde_season_count"] = season_count
+
+	# Roll only fires every HORDE_ROLL_SEASON_INTERVAL seasons.
+	if season_count % HordeSystem.HORDE_ROLL_SEASON_INTERVAL != 0:
+		return {"roll_fired": false, "season_count": season_count}
+
+	# Gather Wall Tower province IDs.
+	var tower_province_ids: Array[int] = []
+	for s: SettlementData in settlements:
+		if s.settlement_type == Enums.SettlementType.WALL_TOWER:
+			if not (s.province_id in tower_province_ids):
+				tower_province_ids.append(s.province_id)
+
+	# No towers — no horde (Horde must target a Wall Tower per s2.4.4).
+	if tower_province_ids.is_empty():
+		return {"roll_fired": true, "horde_formed": false, "reason": "no_wall_towers"}
+
+	if HordeSystem.roll_horde_fires(dice):
+		var last_pid: int = last_targeted_province_id[0]
+		var horde: HordeData = HordeSystem.generate_horde(
+			tower_province_ids, last_pid, horde_strength_counters, dice, ic_day
+		)
+		# Generate the Oni if the invasion type requires one.
+		if horde.has_oni:
+			horde.oni_data = OniGenerator.generate(dice, ic_day)
+		last_targeted_province_id[0] = horde.target_province_id
+		active_hordes.append(horde)
+		# Generate a horde-sighted topic (Tier 3, POLITICAL category,
+		# MILITARY topic_type) for the targeted tower's province.
+		var topic := TopicData.new()
+		topic.topic_id = next_topic_id[0]
+		next_topic_id[0] += 1
+		topic.slug = "horde_sighted_p%d_d%d" % [horde.target_province_id, ic_day]
+		topic.topic_type = "military"
+		topic.category = TopicData.Category.POLITICAL
+		topic.tier = TopicData.Tier.TIER_3
+		topic.momentum = 30.0
+		topic.ic_day_created = ic_day
+		var province: Variant = provinces.get(horde.target_province_id, null)
+		if province is ProvinceData:
+			topic.clan_involved = (province as ProvinceData).clan
+		active_topics.append(topic)
+		return {
+			"roll_fired": true,
+			"horde_formed": true,
+			"invasion_type": horde.invasion_type,
+			"target_province_id": horde.target_province_id,
+			"strength_at_formation": horde.strength_at_formation,
+			"company_count": horde.companies.size(),
+			"has_oni": horde.has_oni,
+			"has_spawn": horde.has_spawn,
+			"topic_id": topic.topic_id,
+		}
+	else:
+		HordeSystem.increment_strength_counter(horde_strength_counters, tower_province_ids)
+		return {
+			"roll_fired": true,
+			"horde_formed": false,
+			"strength_counter": HordeSystem.get_strength_counter(horde_strength_counters),
+		}
 
 
 static func _decay_all_knowledge(
@@ -4318,6 +4761,70 @@ static func _set_court_context_flags(
 				continue
 			ws["context_flag"] = Enums.ContextFlag.AT_COURT
 			ws["active_court_at_location"] = ctx_dict
+
+
+static func _set_wall_tower_context_flags(
+	characters: Array[L5RCharacterData],
+	settlements: Array[SettlementData],
+	provinces: Dictionary,
+	world_states: Dictionary,
+) -> void:
+	# Build a settlement_id (as String) → SettlementData map for wall towers.
+	var wall_towers: Dictionary = {}
+	for s: SettlementData in settlements:
+		if s.settlement_type == Enums.SettlementType.WALL_TOWER:
+			wall_towers[str(s.settlement_id)] = s
+
+	if wall_towers.is_empty():
+		return
+
+	for character: L5RCharacterData in characters:
+		var loc: String = character.physical_location
+		if not wall_towers.has(loc):
+			continue
+		if TravelSystem.is_traveling(character):
+			continue
+		var ws: Dictionary = world_states.get(character.character_id, {})
+		if ws.is_empty():
+			continue
+
+		# AT_COURT takes priority — court overrides wall tower context.
+		if ws.get("context_flag", -1) == Enums.ContextFlag.AT_COURT:
+			continue
+
+		var tower: SettlementData = wall_towers[loc] as SettlementData
+		var province: Variant = provinces.get(tower.province_id, null)
+		var ss: int = 0
+		if province is ProvinceData:
+			ss = (province as ProvinceData).shadowlands_strength
+
+		# Build a WallStatus for this tower.
+		var wstat := NPCDataStructures.WallStatus.new()
+		wstat.province_id = tower.province_id
+		wstat.si = tower.wall_si
+		wstat.ss = ss
+		wstat.garrison_above_minimum = not WallSystem.is_garrison_below_minimum(tower.garrison_pu)
+		var min_jade: float = float(
+			int(tower.garrison_pu * WallSystem.SORTIE_SMALL_MAX_PCT)
+			* WallSystem.SORTIE_SMALL_JADE_PER_WARRIOR
+		)
+		wstat.jade_stockpile_critical = tower.jade_stockpile <= min_jade
+
+		ws["context_flag"] = Enums.ContextFlag.AT_WALL_TOWER
+		ws["zone_subtype"] = Enums.ZoneSubtype.WALL_TOWER
+		# Preserve any existing wall_statuses from other towers the character
+		# knows about, then ensure the current tower's status is present.
+		var existing: Array = ws.get("wall_statuses", [])
+		var already_has: bool = false
+		for entry: Variant in existing:
+			if entry is NPCDataStructures.WallStatus:
+				if (entry as NPCDataStructures.WallStatus).province_id == tower.province_id:
+					already_has = true
+					break
+		if not already_has:
+			existing = existing.duplicate()
+			existing.append(wstat)
+		ws["wall_statuses"] = existing
 
 
 static func _process_crisis_court_calls(

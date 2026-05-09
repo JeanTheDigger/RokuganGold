@@ -782,3 +782,143 @@ func test_extract_famine_province_ids_resolved_ignored() -> void:
 		_char, [t],
 	)
 	assert_eq(ids.size(), 0, "Resolved famine topic yields no provinces")
+
+
+# =============================================================================
+# AT_WALL_TOWER Context Action List (s57.19)
+# =============================================================================
+
+func test_at_wall_tower_has_fortify_wall_section() -> void:
+	var actions: Array[String] = NPCDecisionEngine._get_actions_for_context(
+		Enums.ContextFlag.AT_WALL_TOWER
+	)
+	assert_true("FORTIFY_WALL_SECTION" in actions)
+
+func test_at_wall_tower_has_seal_wall_breach() -> void:
+	var actions: Array[String] = NPCDecisionEngine._get_actions_for_context(
+		Enums.ContextFlag.AT_WALL_TOWER
+	)
+	assert_true("SEAL_WALL_BREACH" in actions)
+
+func test_at_wall_tower_has_conduct_sortie() -> void:
+	var actions: Array[String] = NPCDecisionEngine._get_actions_for_context(
+		Enums.ContextFlag.AT_WALL_TOWER
+	)
+	assert_true("CONDUCT_SORTIE" in actions)
+
+func test_at_wall_tower_has_scout_enemy() -> void:
+	var actions: Array[String] = NPCDecisionEngine._get_actions_for_context(
+		Enums.ContextFlag.AT_WALL_TOWER
+	)
+	assert_true("SCOUT_ENEMY" in actions)
+
+func test_at_wall_tower_has_dispatch_courtier() -> void:
+	var actions: Array[String] = NPCDecisionEngine._get_actions_for_context(
+		Enums.ContextFlag.AT_WALL_TOWER
+	)
+	assert_true("DISPATCH_COURTIER" in actions)
+
+func test_at_own_holdings_no_fortify_wall_section() -> void:
+	var actions: Array[String] = NPCDecisionEngine._get_actions_for_context(
+		Enums.ContextFlag.AT_OWN_HOLDINGS
+	)
+	assert_false("FORTIFY_WALL_SECTION" in actions,
+		"FORTIFY_WALL_SECTION requires AT_WALL_TOWER, not AT_OWN_HOLDINGS")
+
+func test_at_own_holdings_no_seal_wall_breach() -> void:
+	var actions: Array[String] = NPCDecisionEngine._get_actions_for_context(
+		Enums.ContextFlag.AT_OWN_HOLDINGS
+	)
+	assert_false("SEAL_WALL_BREACH" in actions,
+		"SEAL_WALL_BREACH requires AT_WALL_TOWER, not AT_OWN_HOLDINGS")
+
+func test_at_own_holdings_has_purify_tainted_ground() -> void:
+	var actions: Array[String] = NPCDecisionEngine._get_actions_for_context(
+		Enums.ContextFlag.AT_OWN_HOLDINGS
+	)
+	assert_true("PURIFY_TAINTED_GROUND" in actions,
+		"PURIFY_TAINTED_GROUND context includes AT_OWN_HOLDINGS per GDD s57.19")
+
+
+# =============================================================================
+# School Filter (s57.19 Annex C)
+# =============================================================================
+
+func _make_kaiu_ctx(rank: int = 4) -> NPCDataStructures.ContextSnapshot:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.school = "Kaiu Engineer"
+	ctx.school_type = Enums.SchoolType.BUSHI
+	ctx.insight_rank = rank
+	ctx.bushido_virtue = Enums.BushidoVirtue.NONE
+	ctx.shourido_virtue = Enums.ShouridoVirtue.NONE
+	return ctx
+
+func _make_kuni_ctx() -> NPCDataStructures.ContextSnapshot:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.school = "Kuni Shugenja"
+	ctx.school_type = Enums.SchoolType.SHUGENJA
+	ctx.insight_rank = 2
+	ctx.bushido_virtue = Enums.BushidoVirtue.NONE
+	ctx.shourido_virtue = Enums.ShouridoVirtue.NONE
+	return ctx
+
+func _make_bushi_ctx(school: String = "Kakita Bushi") -> NPCDataStructures.ContextSnapshot:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.school = school
+	ctx.school_type = Enums.SchoolType.BUSHI
+	ctx.insight_rank = 3
+	ctx.bushido_virtue = Enums.BushidoVirtue.NONE
+	ctx.shourido_virtue = Enums.ShouridoVirtue.NONE
+	return ctx
+
+func test_kaiu_can_fortify_wall() -> void:
+	var ctx := _make_kaiu_ctx()
+	assert_false(NPCDecisionEngine._is_action_blocked("FORTIFY_WALL_SECTION", ctx, {}))
+
+func test_non_kaiu_blocked_from_fortify() -> void:
+	var ctx := _make_bushi_ctx()
+	assert_true(NPCDecisionEngine._is_action_blocked("FORTIFY_WALL_SECTION", ctx, {}))
+
+func test_kaiu_rank3_can_seal_breach() -> void:
+	var ctx := _make_kaiu_ctx(3)
+	assert_false(NPCDecisionEngine._is_action_blocked("SEAL_WALL_BREACH", ctx, {}))
+
+func test_kaiu_rank2_blocked_from_seal_breach() -> void:
+	var ctx := _make_kaiu_ctx(2)
+	assert_true(NPCDecisionEngine._is_action_blocked("SEAL_WALL_BREACH", ctx, {}),
+		"SEAL_WALL_BREACH requires Kaiu Engineer Rank 3+")
+
+func test_non_kaiu_blocked_from_seal_breach() -> void:
+	var ctx := _make_bushi_ctx()
+	assert_true(NPCDecisionEngine._is_action_blocked("SEAL_WALL_BREACH", ctx, {}))
+
+func test_kuni_can_purify_tainted_ground() -> void:
+	var ctx := _make_kuni_ctx()
+	assert_false(NPCDecisionEngine._is_action_blocked("PURIFY_TAINTED_GROUND", ctx, {}))
+
+func test_non_kuni_blocked_from_purify() -> void:
+	var ctx := _make_bushi_ctx()
+	assert_true(NPCDecisionEngine._is_action_blocked("PURIFY_TAINTED_GROUND", ctx, {}))
+
+func test_shugenja_non_kuni_blocked_from_purify() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.school = "Isawa Shugenja"
+	ctx.school_type = Enums.SchoolType.SHUGENJA
+	ctx.insight_rank = 2
+	ctx.bushido_virtue = Enums.BushidoVirtue.NONE
+	ctx.shourido_virtue = Enums.ShouridoVirtue.NONE
+	assert_true(NPCDecisionEngine._is_action_blocked("PURIFY_TAINTED_GROUND", ctx, {}),
+		"Only Kuni Shugenja can purify tainted ground")
+
+func test_school_filter_does_not_block_other_actions() -> void:
+	var ctx := _make_bushi_ctx()
+	assert_false(NPCDecisionEngine._is_action_blocked("CHARM", ctx, {}),
+		"School filter should only affect the three wall actions")
+
+func test_build_context_populates_school() -> void:
+	_char.school = "Kaiu Engineer"
+	var ws := _world_state.duplicate()
+	var ctx: NPCDataStructures.ContextSnapshot = NPCDecisionEngine.build_context(
+		_char, ws
+	)
+	assert_eq(ctx.school, "Kaiu Engineer")

@@ -70,6 +70,7 @@ enum ContextFlag {
 	IN_EXILE,
 	AT_TEMPLE,
 	AT_DOJO,
+	AT_WALL_TOWER,
 }
 
 enum BushidoVirtue {
@@ -254,6 +255,8 @@ enum ZoneSubtype {
 	RIVER_CROSSING,
 	FARMLAND,
 	SHRINE_CLEARING,
+	# Wall / Military
+	WALL_TOWER,
 }
 
 enum LordRank {
@@ -463,4 +466,87 @@ enum BattleTerrainType {
 	MOUNTAIN,
 	URBAN,
 	COASTAL_BEACH,
+}
+
+# -- Shadowlands Unit Roster (s2.4.7 — LOCKED) ---------------------------------
+
+enum ShadowlandsUnitType {
+	# Bakemono
+	BAKEMONO,
+	BAKEMONO_WARRIOR,
+	BAKEMONO_ARCHERS,
+	BAKEMONO_SHAMAN,
+	OMONI_BAKEMONO,
+	# Undead
+	ZOMBIE,
+	SKELETON_WARRIOR,
+	UNDEAD_REVENANT,
+	MAHO_TSUKAI,
+	# Ogres
+	OGRE_WARRIOR,
+	RAVENOUS_OGRE,
+	OGRE_WARLORD,
+}
+
+# -- Horde Invasion Types (s2.4.6 — LOCKED) ------------------------------------
+
+enum InvasionType {
+	JIGOKU_HORDE,       # 60% — Bakemono and Ogres
+	UNDEAD_LEGION,      # 25% — Undead and maho-tsukai
+	ONI_LED,            # 15% — Oni at head of Bakemono/Ogre army
+	ONI_LED_SPAWN,      # Spawn variant of Oni-Led (Spawn Pool 3 ability)
+}
+
+# -- Oni Procedural Generation (s2.4.8 — LOCKED) --------------------------------
+
+enum OniSize {
+	SMALL,    # MB Health 50,  Ring budget 9,  MB Atk floor 5
+	MEDIUM,   # MB Health 100, Ring budget 12, MB Atk floor 7
+	LARGE,    # MB Health 175, Ring budget 15, MB Atk floor 9
+	MASSIVE,  # MB Health 300, Ring budget 19, MB Atk floor 11
+}
+
+enum OniBodyForm {
+	HUMANOID,    # Standard movement
+	SERPENTINE,  # Slow, ignores difficult terrain; +1 Atk, -1 Def
+	BESTIAL,     # Fast; +1 Atk when charging
+	TOWERING,    # Slow, 3-tile reach; +2 Atk, -1 Def
+	AMORPHOUS,   # Squeezes through any gap; Immune to flanking
+	INSECTOID,   # Fast, can climb walls; +2 Def
+}
+
+enum OniInvulnerability {
+	ARROW_IMMUNITY,   # Immune to non armor-piercing arrows
+	BLADE_IMMUNITY,   # Reduce all blade damage by half before Reduction
+	FIRE_IMMUNITY,    # Immune to fire-based attacks and spells
+	SPELL_IMMUNITY,   # Immune to 1d3 randomly determined spells
+	POISON_IMMUNITY,  # Immune to all poison effects
+}
+
+enum OniSpecialAttack {
+	BREATH_WEAPON,   # Common  — ranged line attack, damage = Fire k Fire
+	CRUSHING_GRIP,   # Common  — grapple, target cannot act until Strength opposed roll won
+	TAINT_SPIT,      # Uncommon — single-target ranged, +1 Taint Rank on hit
+	REGENERATION,    # Uncommon — recovers Earth Wounds per round
+	SPAWN,           # Rare    — produces 1d3 Bakemono Companies once per combat
+	TAINT_AURA,      # Rare    — passive, all within Earth×5 ft gain +0.5 Taint/round
+}
+
+enum OniWeakness {
+	FIRE,                  # Double damage from fire
+	WATER,                 # Movement halved near water; -2 to all rolls in water
+	SPECIFIC_SPELL_SCHOOL, # Full damage from one element's spells, ignoring Reduction
+	SPECIFIC_WEAPON_TYPE,  # Reduction halved vs one weapon type (rolled at generation)
+	SUNLIGHT,              # -2 to all rolls during daylight
+	SOUND,                 # Earth check TN 20 or lose action vs specific sound
+	NAMED_INDIVIDUAL,      # One character type deals full damage ignoring Reduction
+}
+
+# -- Horde Battle Outcome (s2.4.5 — LOCKED) ------------------------------------
+
+enum HordeBattleOutcome {
+	DECISIVE_DEFENDER_VICTORY,  # Horde routed quickly         → -1 SI
+	CONTESTED_BATTLE,           # Horde fought hard before routing → -2 SI
+	ATTACKER_PUSHED_BACK,       # Defender wins but pushed back  → -3 SI
+	DEFENDER_OVERRUN,           # Garrison destroyed or routed   → -4 SI / breach
 }

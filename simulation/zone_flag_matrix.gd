@@ -279,6 +279,18 @@ const ZONE_FLAGS: Dictionary = {
 		"garden_eligible": false,
 		"shrine_eligible": true,
 	},
+
+	# 57.36 extension — Wall Tower (military fortification, no artisan/social flags)
+	Enums.ZoneSubtype.WALL_TOWER: {
+		"performance_permitted": false,
+		"wall_art_slot": false,
+		"displayed_art_slot": false,
+		"fusuma_slot": false,
+		"tokonoma": false,
+		"bonsai_display_slot": false,
+		"garden_eligible": false,
+		"shrine_eligible": false,
+	},
 }
 
 
@@ -457,6 +469,10 @@ const WILDERNESS_ZONES: Array[Enums.ZoneSubtype] = [
 	Enums.ZoneSubtype.SHRINE_CLEARING,
 ]
 
+const WALL_ZONES: Array[Enums.ZoneSubtype] = [
+	Enums.ZoneSubtype.WALL_TOWER,
+]
+
 
 static func is_castle_interior(zone_subtype: Enums.ZoneSubtype) -> bool:
 	return zone_subtype in CASTLE_INTERIOR_ZONES
@@ -468,6 +484,10 @@ static func is_urban(zone_subtype: Enums.ZoneSubtype) -> bool:
 
 static func is_wilderness(zone_subtype: Enums.ZoneSubtype) -> bool:
 	return zone_subtype in WILDERNESS_ZONES
+
+
+static func is_wall_zone(zone_subtype: Enums.ZoneSubtype) -> bool:
+	return zone_subtype in WALL_ZONES
 
 
 # =============================================================================

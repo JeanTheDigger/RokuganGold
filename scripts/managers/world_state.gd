@@ -70,6 +70,11 @@ var next_court_id: Array[int] = [1]
 var active_edicts: Array[EdictData] = []
 var next_edict_id: Array[int] = [1]
 
+# -- Jigoku Horde System (s2.4.4–s2.4.8) --------------------------------------
+var active_hordes: Array[HordeData] = []
+var horde_strength_counters: Dictionary = {}
+var last_targeted_province_id: Array[int] = [-1]
+
 # -- Collective Disposition (s12.2b) -------------------------------------------
 # Clan-to-clan and family-to-family baselines keyed by sorted "a||b" strings.
 # Initialized to the locked PROVISIONAL pre-Scorpion-Coup starting values.
@@ -157,6 +162,9 @@ func advance_one_day() -> Dictionary:
 		next_court_id,
 		active_edicts,
 		next_edict_id,
+		active_hordes,
+		horde_strength_counters,
+		last_targeted_province_id,
 	)
 
 

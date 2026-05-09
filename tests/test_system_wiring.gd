@@ -1593,11 +1593,14 @@ func test_s57_19_seal_wall_breach_costs_2_ap() -> void:
 
 
 func test_s57_19_actions_in_context_list() -> void:
-	var actions: Array[String] = NPCDecisionEngine._get_actions_for_context(
+	var own_holdings: Array[String] = NPCDecisionEngine._get_actions_for_context(
 		Enums.ContextFlag.AT_OWN_HOLDINGS)
-	assert_true("PURIFY_TAINTED_GROUND" in actions)
-	assert_true("FORTIFY_WALL_SECTION" in actions)
-	assert_true("SEAL_WALL_BREACH" in actions)
+	assert_true("PURIFY_TAINTED_GROUND" in own_holdings)
+	# FORTIFY_WALL_SECTION and SEAL_WALL_BREACH moved to AT_WALL_TOWER (s57.19 context)
+	var wall_tower: Array[String] = NPCDecisionEngine._get_actions_for_context(
+		Enums.ContextFlag.AT_WALL_TOWER)
+	assert_true("FORTIFY_WALL_SECTION" in wall_tower)
+	assert_true("SEAL_WALL_BREACH" in wall_tower)
 
 
 func test_s57_19_executor_handles_new_actions() -> void:
@@ -1653,3 +1656,1083 @@ func test_s11_11_insurgency_wired_into_orchestrator() -> void:
 func test_s11_11_province_taint_level_field() -> void:
 	var p := ProvinceData.new()
 	assert_eq(p.province_taint_level, 0.0, "PTL should default to 0.0")
+
+
+# =============================================================================
+# Wall System Wiring (s2.4.2 / s2.4.3 / s2.4.10 / s2.4.11 / s2.4.15 / s2.4.16)
+# =============================================================================
+
+# -- build_context reads wall_statuses from world_state (Phase 1) --------------
+
+func test_build_context_reads_wall_statuses_from_world_state() -> void:
+	var ws := NPCDataStructures.WallStatus.new()
+	ws.province_id = 10
+	ws.si = 7
+	ws.ss = 3
+	_world_state["context_flag"] = Enums.ContextFlag.AT_WALL_TOWER
+	_world_state["wall_statuses"] = [ws]
+
+	var ctx: NPCDataStructures.ContextSnapshot = NPCDecisionEngine.build_context(_char, _world_state)
+
+	assert_eq(ctx.wall_statuses.size(), 1)
+	assert_eq((ctx.wall_statuses[0] as NPCDataStructures.WallStatus).si, 7)
+	assert_eq((ctx.wall_statuses[0] as NPCDataStructures.WallStatus).ss, 3)
+
+
+func test_build_context_empty_wall_statuses_without_entry() -> void:
+	_world_state["context_flag"] = Enums.ContextFlag.AT_OWN_HOLDINGS
+	var ctx: NPCDataStructures.ContextSnapshot = NPCDecisionEngine.build_context(_char, _world_state)
+	assert_eq(ctx.wall_statuses.size(), 0)
+
+
+# -- advance_day auto-sets AT_WALL_TOWER via _set_wall_tower_context_flags -----
+
+func test_advance_day_sets_at_wall_tower_for_character_at_tower() -> void:
+	var tower := SettlementData.new()
+	tower.settlement_id = 50
+	tower.province_id = 5
+	tower.settlement_type = Enums.SettlementType.WALL_TOWER
+	tower.wall_si = 8
+	tower.garrison_pu = 2
+	tower.jade_stockpile = 10.0
+
+	var province := ProvinceData.new()
+	province.province_id = 5
+	province.shadowlands_strength = 2
+	province.stability = 70.0
+	province.terrain_type = Enums.TerrainType.PLAINS
+
+	var character := L5RCharacterData.new()
+	character.character_id = 99
+	character.character_name = "Kaiu Test"
+	character.physical_location = "50"
+	character.clan = "Crab"
+	character.family = "Kaiu"
+	character.school_type = Enums.SchoolType.BUSHI
+	character.bushido_virtue = Enums.BushidoVirtue.NONE
+	character.shourido_virtue = Enums.ShouridoVirtue.NONE
+	character.honor = 4.0
+	character.glory = 3.0
+	character.status = 2.0
+	character.skills = {}
+	character.emphases = {}
+	character.reflexes = 3
+	character.awareness = 3
+	character.stamina = 3
+	character.willpower = 3
+	character.agility = 3
+	character.intelligence = 3
+	character.strength = 3
+	character.perception = 3
+	character.void_ring = 2
+	character.wounds_taken = 0
+	character.knowledge_pool = []
+	character.known_contacts_by_clan = {}
+	character.met_characters = []
+	ActionPointSystem.reset_daily_ap(character)
+
+	var char_ws: Dictionary = {
+		"context_flag": Enums.ContextFlag.AT_OWN_HOLDINGS,
+		"zone_subtype": Enums.ZoneSubtype.WILDERNESS,
+		"wall_statuses": [],
+		"season": 1,
+		"ic_day": 1,
+		"characters_present": [] as Array[int],
+		"is_lord": false,
+		"known_topics": [] as Array[int],
+		"known_positions": {},
+		"known_objectives": {},
+		"known_contacts": [] as Array[int],
+		"pending_events": [],
+		"action_log": [] as Array[Dictionary],
+	}
+
+	var time := TimeSystem.new(1120, 0)
+	var dice := DiceEngine.new()
+	dice.set_seed(1)
+	var characters: Array[L5RCharacterData] = [character]
+	var characters_by_id: Dictionary = {99: character}
+	var provinces: Dictionary = {5: province}
+	var world_states: Dictionary = {99: char_ws}
+	var settlements: Array[SettlementData] = [tower]
+	var season_meta: Dictionary = {}
+
+	DayOrchestrator.advance_day(
+		time, characters, characters_by_id, world_states,
+		{99: {"primary": {"need_type": "REST", "priority": 3}}},
+		_scoring_tables, _filter_data, dice, _action_skill_map, provinces,
+		[] as Array[Dictionary], season_meta,
+		[], [], [], [], [], [1], {}, {}, [1000], [], {},
+		[], [], [1],
+		settlements,
+	)
+
+	assert_eq(char_ws["context_flag"], Enums.ContextFlag.AT_WALL_TOWER,
+		"advance_day should auto-set AT_WALL_TOWER for character at wall tower")
+	assert_eq(char_ws["wall_statuses"].size(), 1)
+
+
+# -- _process_wall_engineering_effects: SI gain applied to settlement ----------
+
+func _make_wall_tower_s(province_id: int, si: int, koku: float = 10.0) -> SettlementData:
+	var s := SettlementData.new()
+	s.settlement_id = province_id * 10
+	s.province_id = province_id
+	s.settlement_type = Enums.SettlementType.WALL_TOWER
+	s.wall_si = si
+	s.koku_stockpile = koku
+	s.garrison_pu = 2
+	return s
+
+
+func test_wall_engineering_fortify_increases_si_on_settlement() -> void:
+	var tower := _make_wall_tower_s(10, 5)
+	var applied_list: Array = [{
+		"action_id": "FORTIFY_WALL_SECTION",
+		"effects": {
+			"requires_fortify_wall": true,
+			"si_gain": 2,
+			"kaiu_decay_reduction": 0.25,
+			"kaiu_reinforce_duration": 3,
+			"target_province_id": 10,
+		},
+	}]
+
+	var results := DayOrchestrator._process_wall_engineering_effects(
+		applied_list, [tower] as Array[SettlementData]
+	)
+
+	assert_eq(tower.wall_si, 7, "SI should increase from 5 to 7 with si_gain=2")
+	assert_eq(results.size(), 1)
+	assert_eq(results[0]["action"], "fortify_wall")
+
+
+func test_wall_engineering_fortify_clamps_si_at_10() -> void:
+	var tower := _make_wall_tower_s(10, 9)
+	var applied_list: Array = [{
+		"action_id": "FORTIFY_WALL_SECTION",
+		"effects": {
+			"requires_fortify_wall": true,
+			"si_gain": 5,
+			"kaiu_decay_reduction": 0.25,
+			"kaiu_reinforce_duration": 2,
+			"target_province_id": 10,
+		},
+	}]
+
+	DayOrchestrator._process_wall_engineering_effects(
+		applied_list, [tower] as Array[SettlementData]
+	)
+
+	assert_eq(tower.wall_si, 10, "SI clamped at 10")
+
+
+func test_wall_engineering_fortify_applies_kaiu_modifier() -> void:
+	var tower := _make_wall_tower_s(10, 6)
+	tower.kaiu_decay_reduction = 0.0
+	tower.kaiu_reinforce_seasons_remaining = 0
+	var applied_list: Array = [{
+		"action_id": "FORTIFY_WALL_SECTION",
+		"effects": {
+			"requires_fortify_wall": true,
+			"si_gain": 1,
+			"kaiu_decay_reduction": 0.50,
+			"kaiu_reinforce_duration": 3,
+			"target_province_id": 10,
+		},
+	}]
+
+	DayOrchestrator._process_wall_engineering_effects(
+		applied_list, [tower] as Array[SettlementData]
+	)
+
+	assert_almost_eq(tower.kaiu_decay_reduction, 0.50, 0.001)
+	assert_eq(tower.kaiu_reinforce_seasons_remaining, 3)
+
+
+func test_wall_engineering_kaiu_overwrite_rule_keeps_higher() -> void:
+	# Existing modifier 0.75 should not be overwritten by weaker 0.25.
+	var tower := _make_wall_tower_s(10, 6)
+	tower.kaiu_decay_reduction = 0.75
+	tower.kaiu_reinforce_seasons_remaining = 4
+	var applied_list: Array = [{
+		"action_id": "FORTIFY_WALL_SECTION",
+		"effects": {
+			"requires_fortify_wall": true,
+			"si_gain": 1,
+			"kaiu_decay_reduction": 0.25,
+			"kaiu_reinforce_duration": 2,
+			"target_province_id": 10,
+		},
+	}]
+
+	DayOrchestrator._process_wall_engineering_effects(
+		applied_list, [tower] as Array[SettlementData]
+	)
+
+	assert_almost_eq(tower.kaiu_decay_reduction, 0.75, 0.001,
+		"Weaker modifier should not overwrite stronger one")
+	assert_eq(tower.kaiu_reinforce_seasons_remaining, 4)
+
+
+func test_wall_engineering_seal_sets_si_to_2() -> void:
+	var tower := _make_wall_tower_s(10, 0)
+	var applied_list: Array = [{
+		"action_id": "SEAL_WALL_BREACH",
+		"effects": {
+			"requires_breach_seal": true,
+			"koku_cost": 5.0,
+			"target_province_id": 10,
+		},
+	}]
+
+	DayOrchestrator._process_wall_engineering_effects(
+		applied_list, [tower] as Array[SettlementData]
+	)
+
+	assert_eq(tower.wall_si, 2, "Successful breach seal sets SI to 2")
+
+
+func test_wall_engineering_seal_deducts_koku() -> void:
+	var tower := _make_wall_tower_s(10, 0, 10.0)
+	var applied_list: Array = [{
+		"action_id": "SEAL_WALL_BREACH",
+		"effects": {
+			"requires_breach_seal": true,
+			"koku_cost": 5.0,
+			"target_province_id": 10,
+		},
+	}]
+
+	DayOrchestrator._process_wall_engineering_effects(
+		applied_list, [tower] as Array[SettlementData]
+	)
+
+	assert_almost_eq(tower.koku_stockpile, 5.0, 0.001, "5 koku deducted for seal")
+
+
+func test_wall_engineering_seal_failed_does_not_change_si() -> void:
+	var tower := _make_wall_tower_s(10, 0, 10.0)
+	var applied_list: Array = [{
+		"action_id": "SEAL_WALL_BREACH",
+		"effects": {
+			"requires_breach_seal": false,
+			"koku_cost": 5.0,
+			"target_province_id": 10,
+		},
+	}]
+
+	DayOrchestrator._process_wall_engineering_effects(
+		applied_list, [tower] as Array[SettlementData]
+	)
+
+	assert_eq(tower.wall_si, 0, "Failed breach seal leaves SI at 0")
+
+
+# -- _process_sortie_results: SS reduction + jade consumption ------------------
+
+func test_sortie_results_reduces_ss_on_province() -> void:
+	var province := ProvinceData.new()
+	province.province_id = 10
+	province.shadowlands_strength = 6
+
+	var tower := _make_wall_tower_s(10, 8)
+
+	var applied_list: Array = [{
+		"action_id": "CONDUCT_SORTIE",
+		"effects": {
+			"requires_sortie_combat": true,
+			"force_size": "small",
+			"ss_reduction": 1,
+			"force_pct": 0.20,
+			"jade_per_warrior": 1,
+			"target_province_id": 10,
+		},
+	}]
+
+	var results := DayOrchestrator._process_sortie_results(
+		applied_list, [tower] as Array[SettlementData], {10: province}
+	)
+
+	assert_eq(province.shadowlands_strength, 5, "SS reduced by 1 for small sortie")
+	assert_eq(results.size(), 1)
+
+
+func test_sortie_results_ss_clamped_at_zero() -> void:
+	var province := ProvinceData.new()
+	province.province_id = 10
+	province.shadowlands_strength = 0
+
+	var tower := _make_wall_tower_s(10, 8)
+	var applied_list: Array = [{
+		"action_id": "CONDUCT_SORTIE",
+		"effects": {
+			"requires_sortie_combat": true,
+			"force_size": "large",
+			"ss_reduction": 3,
+			"force_pct": 0.60,
+			"jade_per_warrior": 3,
+			"target_province_id": 10,
+		},
+	}]
+
+	DayOrchestrator._process_sortie_results(
+		applied_list, [tower] as Array[SettlementData], {10: province}
+	)
+
+	assert_eq(province.shadowlands_strength, 0, "SS cannot go below 0")
+
+
+func test_sortie_results_deducts_jade_from_settlement() -> void:
+	var province := ProvinceData.new()
+	province.province_id = 10
+	province.shadowlands_strength = 5
+
+	var tower := _make_wall_tower_s(10, 8)
+	tower.garrison_pu = 10
+	tower.jade_stockpile = 50.0
+
+	# Small sortie: force_pct=0.20, jade_per_warrior=1
+	# warriors = floor(10 * 0.20) = 2, jade = 2 * 1 = 2
+	var applied_list: Array = [{
+		"action_id": "CONDUCT_SORTIE",
+		"effects": {
+			"requires_sortie_combat": true,
+			"force_size": "small",
+			"ss_reduction": 1,
+			"force_pct": 0.20,
+			"jade_per_warrior": 1,
+			"target_province_id": 10,
+		},
+	}]
+
+	DayOrchestrator._process_sortie_results(
+		applied_list, [tower] as Array[SettlementData], {10: province}
+	)
+
+	assert_almost_eq(tower.jade_stockpile, 48.0, 0.001, "2 jade consumed for 2 warriors")
+
+
+func test_sortie_results_jade_clamped_at_zero() -> void:
+	var province := ProvinceData.new()
+	province.province_id = 10
+	province.shadowlands_strength = 5
+
+	var tower := _make_wall_tower_s(10, 8)
+	tower.garrison_pu = 10
+	tower.jade_stockpile = 0.5  # not enough for the full cost
+
+	var applied_list: Array = [{
+		"action_id": "CONDUCT_SORTIE",
+		"effects": {
+			"requires_sortie_combat": true,
+			"force_size": "medium",
+			"ss_reduction": 2,
+			"force_pct": 0.40,
+			"jade_per_warrior": 2,
+			"target_province_id": 10,
+		},
+	}]
+
+	DayOrchestrator._process_sortie_results(
+		applied_list, [tower] as Array[SettlementData], {10: province}
+	)
+
+	assert_almost_eq(tower.jade_stockpile, 0.0, 0.001, "Jade never goes negative")
+
+
+# -- Kaiu modifier ticks down in seasonal wall pressure -----------------------
+
+func test_kaiu_modifier_ticks_down_each_season() -> void:
+	var tower := _make_wall_tower_s(10, 8)
+	tower.kaiu_decay_reduction = 0.50
+	tower.kaiu_reinforce_seasons_remaining = 3
+
+	var province := ProvinceData.new()
+	province.province_id = 10
+	province.shadowlands_strength = 0
+	province.adjacent_province_ids = []
+
+	var season_meta: Dictionary = {}
+
+	DayOrchestrator._process_wall_seasonal_pressure(
+		[tower] as Array[SettlementData], {10: province}, 1, season_meta
+	)
+
+	assert_eq(tower.kaiu_reinforce_seasons_remaining, 2,
+		"Remaining seasons ticked from 3 to 2")
+	assert_almost_eq(tower.kaiu_decay_reduction, 0.50, 0.001,
+		"Modifier still active with remaining seasons")
+
+
+func test_kaiu_modifier_cleared_when_seasons_reach_zero() -> void:
+	var tower := _make_wall_tower_s(10, 8)
+	tower.kaiu_decay_reduction = 0.50
+	tower.kaiu_reinforce_seasons_remaining = 1
+
+	var province := ProvinceData.new()
+	province.province_id = 10
+	province.shadowlands_strength = 0
+	province.adjacent_province_ids = []
+
+	var season_meta: Dictionary = {}
+
+	DayOrchestrator._process_wall_seasonal_pressure(
+		[tower] as Array[SettlementData], {10: province}, 1, season_meta
+	)
+
+	assert_eq(tower.kaiu_reinforce_seasons_remaining, 0)
+	assert_almost_eq(tower.kaiu_decay_reduction, 0.0, 0.001,
+		"Modifier cleared when seasons reach 0")
+
+
+# -- _process_horde_rolls: season count tracking --------------------------------
+
+func _make_horde_tower(province_id: int) -> SettlementData:
+	var s := SettlementData.new()
+	s.settlement_id = province_id * 10
+	s.province_id = province_id
+	s.settlement_type = Enums.SettlementType.WALL_TOWER
+	s.wall_si = 10
+	s.garrison_pu = 2
+	return s
+
+
+func _make_horde_province(province_id: int) -> ProvinceData:
+	var p := ProvinceData.new()
+	p.province_id = province_id
+	p.clan = "Crab"
+	p.shadowlands_strength = 3
+	return p
+
+
+func test_horde_no_roll_on_same_season() -> void:
+	var dice := DiceEngine.new()
+	dice.set_seed(1)
+	var season_meta: Dictionary = {}
+	var hordes: Array[HordeData] = []
+	var counters: Dictionary = {}
+	var last_pid: Array[int] = [-1]
+	var tower := _make_horde_tower(1)
+	var province := _make_horde_province(1)
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [1000]
+
+	# current_season == prev_season → no roll fires.
+	var result := DayOrchestrator._process_horde_rolls(
+		TimeSystem.Season.SPRING, TimeSystem.Season.SPRING,
+		hordes, counters, last_pid,
+		[tower] as Array[SettlementData], {1: province},
+		dice, 1, season_meta, active_topics, next_topic_id,
+	)
+
+	assert_eq(result, {}, "Empty dict when no season change")
+	assert_eq(hordes.size(), 0)
+
+
+func test_horde_season_count_increments_on_season_change() -> void:
+	var dice := DiceEngine.new()
+	dice.set_seed(1)
+	var season_meta: Dictionary = {}
+	var hordes: Array[HordeData] = []
+	var counters: Dictionary = {}
+	var last_pid: Array[int] = [-1]
+	var tower := _make_horde_tower(1)
+	var province := _make_horde_province(1)
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [1000]
+
+	DayOrchestrator._process_horde_rolls(
+		TimeSystem.Season.SUMMER, TimeSystem.Season.SPRING,
+		hordes, counters, last_pid,
+		[tower] as Array[SettlementData], {1: province},
+		dice, 1, season_meta, active_topics, next_topic_id,
+	)
+
+	assert_eq(int(season_meta.get("horde_season_count", 0)), 1)
+
+
+func test_horde_no_fire_on_first_season_change() -> void:
+	# The roll fires every 2 seasons, so season_count=1 should NOT trigger a roll.
+	var dice := DiceEngine.new()
+	dice.set_seed(1)
+	var season_meta: Dictionary = {}
+	var hordes: Array[HordeData] = []
+	var counters: Dictionary = {}
+	var last_pid: Array[int] = [-1]
+	var tower := _make_horde_tower(1)
+	var province := _make_horde_province(1)
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [1000]
+
+	var result := DayOrchestrator._process_horde_rolls(
+		TimeSystem.Season.SUMMER, TimeSystem.Season.SPRING,
+		hordes, counters, last_pid,
+		[tower] as Array[SettlementData], {1: province},
+		dice, 1, season_meta, active_topics, next_topic_id,
+	)
+
+	assert_false(result.get("roll_fired", false), "Roll should not fire at season_count=1")
+
+
+func test_horde_roll_fires_at_season_count_2() -> void:
+	var dice := DiceEngine.new()
+	dice.set_seed(1)
+	var season_meta: Dictionary = {"horde_season_count": 1}  # Already at 1, next will be 2.
+	var hordes: Array[HordeData] = []
+	var counters: Dictionary = {}
+	var last_pid: Array[int] = [-1]
+	var tower := _make_horde_tower(1)
+	var province := _make_horde_province(1)
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [1000]
+
+	var result := DayOrchestrator._process_horde_rolls(
+		TimeSystem.Season.AUTUMN, TimeSystem.Season.SUMMER,
+		hordes, counters, last_pid,
+		[tower] as Array[SettlementData], {1: province},
+		dice, 1, season_meta, active_topics, next_topic_id,
+	)
+
+	assert_true(result.get("roll_fired", false), "Roll must fire at season_count=2")
+
+
+func test_horde_no_towers_returns_no_formation() -> void:
+	var dice := DiceEngine.new()
+	dice.set_seed(1)
+	var season_meta: Dictionary = {"horde_season_count": 1}
+	var hordes: Array[HordeData] = []
+	var counters: Dictionary = {}
+	var last_pid: Array[int] = [-1]
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [1000]
+
+	var result := DayOrchestrator._process_horde_rolls(
+		TimeSystem.Season.AUTUMN, TimeSystem.Season.SUMMER,
+		hordes, counters, last_pid,
+		[] as Array[SettlementData], {},
+		dice, 1, season_meta, active_topics, next_topic_id,
+	)
+
+	assert_true(result.get("roll_fired", false))
+	assert_false(result.get("horde_formed", true), "No formation without wall towers")
+	assert_eq(result.get("reason", ""), "no_wall_towers")
+	assert_eq(hordes.size(), 0)
+
+
+func test_horde_formed_appended_to_active_hordes() -> void:
+	# Use a seeded dice known to pass the 50% horde roll (seed 1, roll/10 ≤ 0.50).
+	# Run with season_count=1 pre-set so the 2nd season fires the roll.
+	# Retry seeds until a formation occurs.
+	var found: bool = false
+	for seed_val: int in range(1, 100):
+		var dice := DiceEngine.new()
+		dice.set_seed(seed_val)
+		var season_meta: Dictionary = {"horde_season_count": 1}
+		var hordes: Array[HordeData] = []
+		var counters: Dictionary = {}
+		var last_pid: Array[int] = [-1]
+		var tower := _make_horde_tower(1)
+		var province := _make_horde_province(1)
+		var active_topics: Array[TopicData] = []
+		var next_topic_id: Array[int] = [1000]
+
+		var result := DayOrchestrator._process_horde_rolls(
+			TimeSystem.Season.AUTUMN, TimeSystem.Season.SUMMER,
+			hordes, counters, last_pid,
+			[tower] as Array[SettlementData], {1: province},
+			dice, 50, season_meta, active_topics, next_topic_id,
+		)
+
+		if result.get("horde_formed", false):
+			assert_true(hordes.size() == 1, "Formed horde must be appended to active_hordes")
+			assert_eq(int(result.get("target_province_id", -1)), 1)
+			assert_true(int(result.get("company_count", 0)) >= 7,
+				"Horde must have ≥ 7 companies (base composition)")
+			found = true
+			break
+
+	assert_true(found, "At least one seed out of 100 should produce a horde")
+
+
+func test_horde_failed_roll_increments_strength_counter() -> void:
+	# Roll fails → strength counter increments.
+	# We need a seed that fails the 50% check (roll/10 > 0.50).
+	var found: bool = false
+	for seed_val: int in range(1, 200):
+		var dice := DiceEngine.new()
+		dice.set_seed(seed_val)
+		var season_meta: Dictionary = {"horde_season_count": 1}
+		var hordes: Array[HordeData] = []
+		var counters: Dictionary = {}
+		var last_pid: Array[int] = [-1]
+		var tower := _make_horde_tower(1)
+		var province := _make_horde_province(1)
+		var active_topics: Array[TopicData] = []
+		var next_topic_id: Array[int] = [1000]
+
+		var result := DayOrchestrator._process_horde_rolls(
+			TimeSystem.Season.AUTUMN, TimeSystem.Season.SUMMER,
+			hordes, counters, last_pid,
+			[tower] as Array[SettlementData], {1: province},
+			dice, 1, season_meta, active_topics, next_topic_id,
+		)
+
+		if result.get("roll_fired", false) and not result.get("horde_formed", true):
+			assert_eq(int(result.get("strength_counter", 0)), 1,
+				"Strength counter must be 1 after first failed roll")
+			assert_eq(hordes.size(), 0, "No horde appended on failed roll")
+			found = true
+			break
+
+	assert_true(found, "At least one seed out of 200 should fail the horde roll")
+
+
+func test_horde_formed_generates_topic() -> void:
+	var found: bool = false
+	for seed_val: int in range(1, 100):
+		var dice := DiceEngine.new()
+		dice.set_seed(seed_val)
+		var season_meta: Dictionary = {"horde_season_count": 1}
+		var hordes: Array[HordeData] = []
+		var counters: Dictionary = {}
+		var last_pid: Array[int] = [-1]
+		var tower := _make_horde_tower(1)
+		var province := _make_horde_province(1)
+		var active_topics: Array[TopicData] = []
+		var next_topic_id: Array[int] = [1000]
+
+		var result := DayOrchestrator._process_horde_rolls(
+			TimeSystem.Season.AUTUMN, TimeSystem.Season.SUMMER,
+			hordes, counters, last_pid,
+			[tower] as Array[SettlementData], {1: province},
+			dice, 1, season_meta, active_topics, next_topic_id,
+		)
+
+		if result.get("horde_formed", false):
+			assert_eq(active_topics.size(), 1, "One topic generated on horde formation")
+			var topic: TopicData = active_topics[0]
+			assert_eq(topic.tier, TopicData.Tier.TIER_3)
+			assert_eq(topic.category, TopicData.Category.POLITICAL)
+			assert_eq(topic.topic_type, "military")
+			assert_true(topic.momentum > 0.0)
+			assert_eq(int(result.get("topic_id", -1)), topic.topic_id)
+			found = true
+			break
+
+	assert_true(found, "At least one seed should form a horde and generate a topic")
+
+
+func test_horde_oni_generated_when_has_oni() -> void:
+	# Find a seed that generates an ONI_LED horde.
+	var found: bool = false
+	for seed_val: int in range(1, 500):
+		var dice := DiceEngine.new()
+		dice.set_seed(seed_val)
+		var season_meta: Dictionary = {"horde_season_count": 1}
+		var hordes: Array[HordeData] = []
+		var counters: Dictionary = {}
+		var last_pid: Array[int] = [-1]
+		var tower := _make_horde_tower(1)
+		var province := _make_horde_province(1)
+		var active_topics: Array[TopicData] = []
+		var next_topic_id: Array[int] = [1000]
+
+		DayOrchestrator._process_horde_rolls(
+			TimeSystem.Season.AUTUMN, TimeSystem.Season.SUMMER,
+			hordes, counters, last_pid,
+			[tower] as Array[SettlementData], {1: province},
+			dice, 1, season_meta, active_topics, next_topic_id,
+		)
+
+		for h: HordeData in hordes:
+			if h.has_oni:
+				assert_not_null(h.oni_data, "oni_data must be populated when has_oni is true")
+				assert_is(h.oni_data, OniData)
+				found = true
+				break
+		if found:
+			break
+
+	assert_true(found, "At least one seed out of 500 should produce an Oni-Led horde")
+
+
+func test_last_targeted_province_updated_after_formation() -> void:
+	var found: bool = false
+	for seed_val: int in range(1, 100):
+		var dice := DiceEngine.new()
+		dice.set_seed(seed_val)
+		var season_meta: Dictionary = {"horde_season_count": 1}
+		var hordes: Array[HordeData] = []
+		var counters: Dictionary = {}
+		var last_pid: Array[int] = [-1]
+		var tower := _make_horde_tower(1)
+		var province := _make_horde_province(1)
+		var active_topics: Array[TopicData] = []
+		var next_topic_id: Array[int] = [1000]
+
+		var result := DayOrchestrator._process_horde_rolls(
+			TimeSystem.Season.AUTUMN, TimeSystem.Season.SUMMER,
+			hordes, counters, last_pid,
+			[tower] as Array[SettlementData], {1: province},
+			dice, 1, season_meta, active_topics, next_topic_id,
+		)
+
+		if result.get("horde_formed", false):
+			assert_eq(last_pid[0], 1, "last_targeted_province_id updated to tower's province")
+			found = true
+			break
+
+	assert_true(found, "At least one seed should form a horde")
+
+
+func test_horde_strength_used_from_counter_and_reset_on_formation() -> void:
+	var found: bool = false
+	for seed_val: int in range(1, 100):
+		var dice := DiceEngine.new()
+		dice.set_seed(seed_val)
+		var season_meta: Dictionary = {"horde_season_count": 1}
+		var hordes: Array[HordeData] = []
+		var counters: Dictionary = {"global": 3}  # Pre-accumulated strength.
+		var last_pid: Array[int] = [-1]
+		var tower := _make_horde_tower(1)
+		var province := _make_horde_province(1)
+		var active_topics: Array[TopicData] = []
+		var next_topic_id: Array[int] = [1000]
+
+		var result := DayOrchestrator._process_horde_rolls(
+			TimeSystem.Season.AUTUMN, TimeSystem.Season.SUMMER,
+			hordes, counters, last_pid,
+			[tower] as Array[SettlementData], {1: province},
+			dice, 1, season_meta, active_topics, next_topic_id,
+		)
+
+		if result.get("horde_formed", false):
+			assert_eq(int(result.get("strength_at_formation", -1)), 3,
+				"Horde must carry the accumulated strength counter")
+			assert_eq(HordeSystem.get_strength_counter(counters), 0,
+				"Counter resets to 0 after horde forms")
+			# Base 7 + 3 strength = 10 companies minimum.
+			assert_true(int(result.get("company_count", 0)) >= 10,
+				"Strength bonus adds extra companies")
+			found = true
+			break
+
+	assert_true(found, "At least one seed should form a horde with pre-accumulated strength")
+
+
+# -- WallSystem.is_garrison_below_minimum --------------------------------------
+
+func test_garrison_below_minimum_zero() -> void:
+	assert_true(WallSystem.is_garrison_below_minimum(0),
+		"garrison_pu=0 is below minimum")
+
+
+func test_garrison_below_minimum_returns_false_at_threshold() -> void:
+	assert_false(WallSystem.is_garrison_below_minimum(1),
+		"garrison_pu=1 meets the minimum (1.0 PU threshold)")
+
+
+func test_garrison_below_minimum_returns_false_above() -> void:
+	assert_false(WallSystem.is_garrison_below_minimum(5),
+		"garrison_pu=5 is well above minimum")
+
+
+func test_minimum_garrison_constant_is_one() -> void:
+	assert_almost_eq(WallSystem.MINIMUM_GARRISON_PU, 1.0, 0.001,
+		"Minimum garrison is 1 Company = 1.0 PU (s2.4.2 PROVISIONAL)")
+
+
+# -- _process_wall_seasonal_pressure: garrison shortage detection (s2.4.12) ----
+
+func test_wall_seasonal_returns_garrison_shortage_towers() -> void:
+	var tower := _make_wall_tower_s(10, 8)
+	tower.garrison_pu = 0  # Below minimum.
+
+	var province := ProvinceData.new()
+	province.province_id = 10
+	province.shadowlands_strength = 0
+	province.adjacent_province_ids = []
+
+	var season_meta: Dictionary = {}
+
+	var result := DayOrchestrator._process_wall_seasonal_pressure(
+		[tower] as Array[SettlementData], {10: province}, 1, season_meta
+	)
+
+	var shortage_list: Array = result.get("garrison_shortage_towers", [])
+	assert_eq(shortage_list.size(), 1, "Tower at 0 garrison should be flagged")
+	assert_eq(int(shortage_list[0]["province_id"]), 10)
+	assert_eq(int(shortage_list[0]["garrison_pu"]), 0)
+
+
+func test_wall_seasonal_no_shortage_above_minimum() -> void:
+	var tower := _make_wall_tower_s(10, 8)
+	tower.garrison_pu = 2  # Above minimum.
+
+	var province := ProvinceData.new()
+	province.province_id = 10
+	province.shadowlands_strength = 0
+	province.adjacent_province_ids = []
+
+	var season_meta: Dictionary = {}
+
+	var result := DayOrchestrator._process_wall_seasonal_pressure(
+		[tower] as Array[SettlementData], {10: province}, 1, season_meta
+	)
+
+	var shortage_list: Array = result.get("garrison_shortage_towers", [])
+	assert_eq(shortage_list.size(), 0, "Tower at garrison 2 should not be flagged")
+
+
+func test_wall_seasonal_multiple_shortage_towers() -> void:
+	var tower_a := _make_wall_tower_s(10, 8)
+	tower_a.garrison_pu = 0
+
+	var tower_b := _make_wall_tower_s(11, 7)
+	tower_b.garrison_pu = 0
+
+	var tower_c := _make_wall_tower_s(12, 9)
+	tower_c.garrison_pu = 3  # Fine.
+
+	var province_a := ProvinceData.new()
+	province_a.province_id = 10
+	province_a.shadowlands_strength = 0
+	province_a.adjacent_province_ids = []
+
+	var province_b := ProvinceData.new()
+	province_b.province_id = 11
+	province_b.shadowlands_strength = 0
+	province_b.adjacent_province_ids = []
+
+	var province_c := ProvinceData.new()
+	province_c.province_id = 12
+	province_c.shadowlands_strength = 0
+	province_c.adjacent_province_ids = []
+
+	var season_meta: Dictionary = {}
+
+	var result := DayOrchestrator._process_wall_seasonal_pressure(
+		[tower_a, tower_b, tower_c] as Array[SettlementData],
+		{10: province_a, 11: province_b, 12: province_c},
+		1, season_meta
+	)
+
+	var shortage_list: Array = result.get("garrison_shortage_towers", [])
+	assert_eq(shortage_list.size(), 2, "Two undermanned towers should be flagged")
+
+
+# -- _process_horde_assaults: SI hit and breach topic --------------------------
+
+func _make_resolved_horde(province_id: int, outcome: int) -> HordeData:
+	var h := HordeData.new()
+	h.target_province_id = province_id
+	h.assault_resolved = true
+	h.battle_outcome = outcome
+	h.assault_si_hit = 0  # Not yet processed.
+	return h
+
+
+func test_horde_assault_applies_si_hit_contested() -> void:
+	# CONTESTED_BATTLE → SI hit = 2.
+	var tower := _make_wall_tower_s(10, 8)  # SI starts at 8.
+	var province := _make_horde_province(10)
+
+	var horde := _make_resolved_horde(10, Enums.HordeBattleOutcome.CONTESTED_BATTLE)
+
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [1000]
+
+	var results := DayOrchestrator._process_horde_assaults(
+		[horde] as Array[HordeData],
+		[tower] as Array[SettlementData],
+		active_topics, next_topic_id, 100, {10: province},
+	)
+
+	assert_eq(results.size(), 1)
+	assert_eq(int(results[0]["si_hit"]), 2)
+	assert_eq(int(results[0]["new_si"]), 6)  # 8 - 2 = 6.
+	assert_false(bool(results[0]["breach"]))
+	assert_eq(tower.wall_si, 6)
+
+
+func test_horde_assault_applies_si_hit_pushed_back() -> void:
+	var tower := _make_wall_tower_s(10, 5)
+	var province := _make_horde_province(10)
+
+	var horde := _make_resolved_horde(10, Enums.HordeBattleOutcome.ATTACKER_PUSHED_BACK)
+
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [1000]
+
+	DayOrchestrator._process_horde_assaults(
+		[horde] as Array[HordeData],
+		[tower] as Array[SettlementData],
+		active_topics, next_topic_id, 100, {10: province},
+	)
+
+	assert_eq(tower.wall_si, 2)  # 5 - 3 = 2.
+
+
+func test_horde_assault_si_hit_decisive_defender_victory() -> void:
+	var tower := _make_wall_tower_s(10, 10)
+	var province := _make_horde_province(10)
+
+	var horde := _make_resolved_horde(10, Enums.HordeBattleOutcome.DECISIVE_DEFENDER_VICTORY)
+
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [1000]
+
+	DayOrchestrator._process_horde_assaults(
+		[horde] as Array[HordeData],
+		[tower] as Array[SettlementData],
+		active_topics, next_topic_id, 100, {10: province},
+	)
+
+	assert_eq(tower.wall_si, 9)  # 10 - 1 = 9.
+
+
+func test_horde_assault_breach_generates_incursion_topic() -> void:
+	var tower := _make_wall_tower_s(10, 4)  # SI=4, hit=4 → new_si=0 → breach.
+	var province := _make_horde_province(10)
+
+	var horde := _make_resolved_horde(10, Enums.HordeBattleOutcome.DEFENDER_OVERRUN)
+
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [1000]
+
+	var results := DayOrchestrator._process_horde_assaults(
+		[horde] as Array[HordeData],
+		[tower] as Array[SettlementData],
+		active_topics, next_topic_id, 100, {10: province},
+	)
+
+	assert_eq(results.size(), 1)
+	assert_true(bool(results[0]["breach"]))
+	assert_eq(active_topics.size(), 1, "Shadowlands Incursion topic generated on breach")
+	var topic: TopicData = active_topics[0]
+	assert_eq(topic.tier, TopicData.Tier.TIER_1)
+	assert_eq(topic.topic_type, "crisis")
+	assert_eq(topic.variant, "shadowlands_incursion")
+	assert_eq(topic.category, TopicData.Category.MILITARY)
+	assert_true(topic.momentum > 0.0)
+	assert_true(1000 in topic.provinces_affected)
+
+
+func test_horde_assault_no_breach_when_si_still_above_zero() -> void:
+	# DEFENDER_OVERRUN = -4 SI. SI=5 → new_si=1 → no breach.
+	var tower := _make_wall_tower_s(10, 5)
+	var province := _make_horde_province(10)
+
+	var horde := _make_resolved_horde(10, Enums.HordeBattleOutcome.DEFENDER_OVERRUN)
+
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [1000]
+
+	var results := DayOrchestrator._process_horde_assaults(
+		[horde] as Array[HordeData],
+		[tower] as Array[SettlementData],
+		active_topics, next_topic_id, 100, {10: province},
+	)
+
+	assert_eq(results.size(), 1)
+	assert_false(bool(results[0]["breach"]))
+	assert_eq(active_topics.size(), 0, "No incursion topic when breach is false")
+
+
+func test_horde_assault_skips_unresolved_hordes() -> void:
+	var tower := _make_wall_tower_s(10, 8)
+	var province := _make_horde_province(10)
+
+	var horde := HordeData.new()
+	horde.target_province_id = 10
+	horde.assault_resolved = false  # Not resolved.
+	horde.battle_outcome = -1
+
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [1000]
+
+	var results := DayOrchestrator._process_horde_assaults(
+		[horde] as Array[HordeData],
+		[tower] as Array[SettlementData],
+		active_topics, next_topic_id, 100, {10: province},
+	)
+
+	assert_eq(results.size(), 0, "Unresolved horde should be skipped")
+	assert_eq(tower.wall_si, 8, "SI unchanged when horde not resolved")
+
+
+func test_horde_assault_skips_already_processed() -> void:
+	# If assault_si_hit != 0, it means the hit was already applied.
+	var tower := _make_wall_tower_s(10, 7)
+	var province := _make_horde_province(10)
+
+	var horde := _make_resolved_horde(10, Enums.HordeBattleOutcome.CONTESTED_BATTLE)
+	horde.assault_si_hit = 2  # Already processed.
+
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [1000]
+
+	var results := DayOrchestrator._process_horde_assaults(
+		[horde] as Array[HordeData],
+		[tower] as Array[SettlementData],
+		active_topics, next_topic_id, 100, {10: province},
+	)
+
+	assert_eq(results.size(), 0, "Already-processed horde should be skipped")
+	assert_eq(tower.wall_si, 7, "SI unchanged when horde already processed")
+
+
+func test_horde_assault_si_clamped_at_zero() -> void:
+	# DEFENDER_OVERRUN = -4 SI. SI=2 → would go to -2 → clamped to 0.
+	var tower := _make_wall_tower_s(10, 2)
+	var province := _make_horde_province(10)
+
+	var horde := _make_resolved_horde(10, Enums.HordeBattleOutcome.DEFENDER_OVERRUN)
+
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [1000]
+
+	DayOrchestrator._process_horde_assaults(
+		[horde] as Array[HordeData],
+		[tower] as Array[SettlementData],
+		active_topics, next_topic_id, 100, {10: province},
+	)
+
+	assert_eq(tower.wall_si, 0, "SI clamped at 0")
+
+
+func test_horde_assault_stores_si_hit_on_horde() -> void:
+	var tower := _make_wall_tower_s(10, 9)
+	var province := _make_horde_province(10)
+
+	var horde := _make_resolved_horde(10, Enums.HordeBattleOutcome.ATTACKER_PUSHED_BACK)
+
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [1000]
+
+	DayOrchestrator._process_horde_assaults(
+		[horde] as Array[HordeData],
+		[tower] as Array[SettlementData],
+		active_topics, next_topic_id, 100, {10: province},
+	)
+
+	assert_eq(horde.assault_si_hit, 3,
+		"assault_si_hit stored on HordeData after processing")
+
+
+# -- Context flag uses MINIMUM_GARRISON_PU threshold ---------------------------
+
+func test_wall_tower_context_garrison_above_minimum_at_one() -> void:
+	# garrison_pu = 1 meets the 1.0 PU threshold → garrison_above_minimum = true.
+	var wstat := NPCDataStructures.WallStatus.new()
+	wstat.garrison_above_minimum = not WallSystem.is_garrison_below_minimum(1)
+	assert_true(wstat.garrison_above_minimum)
+
+
+func test_wall_tower_context_garrison_below_minimum_at_zero() -> void:
+	var wstat := NPCDataStructures.WallStatus.new()
+	wstat.garrison_above_minimum = not WallSystem.is_garrison_below_minimum(0)
+	assert_false(wstat.garrison_above_minimum)
+
+
