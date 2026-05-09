@@ -446,7 +446,6 @@ static func try_market_purchase(
 	var rice_price: float = 1.0
 	var purchasable_rice: float = available_koku * 0.5 / rice_price
 
-	var settlements: Array = modified.get("controlled_settlements", [])
 	var bonus_rice: float = purchasable_rice
 	modified["market_rice_bonus"] = bonus_rice
 
@@ -650,7 +649,7 @@ const CRITICAL_OBJECTIVE_KEYS: Array[String] = [
 
 
 static func try_desperation_override(
-	inputs: Dictionary,
+	_inputs: Dictionary,
 	primary_virtue: String,
 	rice_per_pu: float,
 	has_critical_objective: bool,
@@ -1041,7 +1040,7 @@ static func determine_campaign_decision(
 # -- Retreat Target Selection --------------------------------------------------
 
 static func find_retreat_target(
-	army_province_id: int,
+	_army_province_id: int,
 	friendly_provinces: Array,
 	max_distance: int = 2,
 ) -> Dictionary:
