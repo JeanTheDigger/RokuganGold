@@ -40,6 +40,8 @@ static func apply(
 	_apply_disposition(effects, actor, target_id, applied)
 	_apply_recipient_effects(effects, actor, target_id, characters, applied)
 	_apply_witness_effects(effects, actor, characters, applied)
+	_apply_gossip_effects(effects, target_id, characters, applied)
+	_apply_target_witness_effects(effects, target_id, characters, applied)
 	_apply_honor(effects, actor, applied)
 	_apply_glory(effects, actor, applied)
 	_apply_infamy(effects, actor, applied)
@@ -158,6 +160,63 @@ static func _apply_witness_effects(
 			"old": old_val,
 			"new": new_val,
 			"delta": disp_loss,
+		})
+
+
+# -- Gossip 3rd-party targeting (s15.4) ----------------------------------------
+
+static func _apply_gossip_effects(
+	effects: Dictionary,
+	listener_id: int,
+	characters: Dictionary,
+	applied: Dictionary,
+) -> void:
+	var subject_id: int = effects.get("gossip_subject_id", -1)
+	var disp_change: int = effects.get("gossip_subject_disposition", 0)
+	if subject_id < 0 or disp_change == 0 or listener_id < 0:
+		return
+	var listener: L5RCharacterData = characters.get(listener_id)
+	if listener == null:
+		return
+	var old_val: int = listener.disposition_values.get(subject_id, 0)
+	var new_val: int = clampi(old_val + disp_change, -100, 100)
+	listener.disposition_values[subject_id] = new_val
+	applied["disposition_changes"].append({
+		"actor_id": listener_id,
+		"target_id": subject_id,
+		"old": old_val,
+		"new": new_val,
+		"delta": disp_change,
+	})
+
+
+# -- Per-witness disposition toward target (PUBLIC_INSULT) ---------------------
+
+static func _apply_target_witness_effects(
+	effects: Dictionary,
+	target_id: int,
+	characters: Dictionary,
+	applied: Dictionary,
+) -> void:
+	var disp_change: int = effects.get("target_witness_disposition", 0)
+	if disp_change == 0 or target_id < 0:
+		return
+	var witness_ids: Array = effects.get("witnesses", [])
+	if witness_ids.is_empty():
+		return
+	for wid in witness_ids:
+		var witness: L5RCharacterData = characters.get(wid)
+		if witness == null or witness.character_id == target_id:
+			continue
+		var old_val: int = witness.disposition_values.get(target_id, 0)
+		var new_val: int = clampi(old_val + disp_change, -100, 100)
+		witness.disposition_values[target_id] = new_val
+		applied["disposition_changes"].append({
+			"actor_id": witness.character_id,
+			"target_id": target_id,
+			"old": old_val,
+			"new": new_val,
+			"delta": disp_change,
 		})
 
 

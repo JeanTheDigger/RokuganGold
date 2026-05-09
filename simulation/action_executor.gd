@@ -107,6 +107,12 @@ static func execute(
 	if action_id == "PERFORM_FOR":
 		return _execute_perform_for(action, character, ctx, dice_engine, characters_by_id)
 
+	if action_id == "GOSSIP":
+		return _execute_gossip(action, character, ctx, dice_engine, action_skill_map, characters_by_id)
+
+	if action_id == "PUBLIC_INSULT":
+		return _execute_public_insult(action, character, ctx, dice_engine, action_skill_map, characters_by_id)
+
 	if action_id == "INTIMIDATE":
 		var intim_result: Dictionary = _execute_intimidation(
 			action, character, ctx, dice_engine, characters_by_id
@@ -512,6 +518,138 @@ static func _get_disposition_tier_name(disp: int) -> String:
 	return "blood_enemy"
 
 
+# -- GOSSIP (s15.4 Category 3) ------------------------------------------------
+
+static func _execute_gossip(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	dice_engine: DiceEngine,
+	action_skill_map: Dictionary,
+	characters_by_id: Dictionary,
+) -> Dictionary:
+	var listener_id: int = action.target_npc_id
+	var subject_id: int = action.metadata.get("gossip_subject_id", -1)
+
+	var subject: L5RCharacterData = characters_by_id.get(subject_id)
+	var subject_glory: float = subject.glory if subject != null else 0.0
+
+	var tn: int = clampi(
+		10 + int(subject_glory) * 5 - int(character.glory) * 5,
+		5, 60
+	)
+
+	var skill_entry: Dictionary = action_skill_map.get("GOSSIP", {})
+	var primary_skill: String = skill_entry.get("primary", "Courtier")
+	var primary_trait: String = skill_entry.get("secondary", "Awareness")
+	var skill_rank: int = character.skills.get(primary_skill, 0)
+	var trait_val: int = character.traits.get(primary_trait, 2)
+	var roll_result: Dictionary = dice_engine.roll_skill_check(
+		trait_val, skill_rank, tn
+	)
+
+	var success: bool = roll_result.get("success", false)
+	var margin: int = roll_result.get("total", 0) - tn
+	var raises: int = maxi(margin / 5, 0)
+	var effects: Dictionary = {}
+
+	if success:
+		var disp_toward_subject: int = -5 - (raises * 2)
+		effects = {
+			"gossip_subject_id": subject_id,
+			"gossip_subject_disposition": disp_toward_subject,
+			"info_gained": true,
+		}
+	else:
+		effects = {"failed": true}
+		if margin <= -10:
+			effects["disposition_change"] = -5
+
+	return {
+		"success": success,
+		"action_id": "GOSSIP",
+		"character_id": ctx.character_id,
+		"target_npc_id": listener_id,
+		"target_province_id": action.target_province_id,
+		"ic_day": ctx.ic_day,
+		"season": ctx.season,
+		"skill_used": primary_skill,
+		"roll_total": roll_result.get("total", 0),
+		"tn": tn,
+		"margin": margin,
+		"effects": effects,
+	}
+
+
+# -- PUBLIC_INSULT (s15.4 Category 4) ----------------------------------------
+
+static func _execute_public_insult(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	dice_engine: DiceEngine,
+	action_skill_map: Dictionary,
+	characters_by_id: Dictionary,
+) -> Dictionary:
+	var target_id: int = action.target_npc_id
+	var target: L5RCharacterData = characters_by_id.get(target_id)
+
+	var skill_entry: Dictionary = action_skill_map.get("PUBLIC_INSULT", {})
+	var primary_skill: String = skill_entry.get("primary", "Courtier")
+	var primary_trait: String = skill_entry.get("secondary", "Awareness")
+	var skill_rank: int = character.skills.get(primary_skill, 0)
+	var trait_val: int = character.traits.get(primary_trait, 2)
+
+	var attacker_total: int = dice_engine.roll_skill_check(
+		trait_val, skill_rank, 0
+	).get("total", 0)
+
+	var defender_total: int = 0
+	if target != null:
+		var def_etiquette: int = target.skills.get("Etiquette", 0)
+		var def_awareness: int = target.traits.get("Awareness", 2)
+		defender_total = dice_engine.roll_skill_check(
+			def_awareness, def_etiquette, 0
+		).get("total", 0)
+
+	var success: bool = attacker_total >= defender_total
+	var margin: int = attacker_total - defender_total
+	var raises: int = maxi(margin / 5, 0)
+	var witness_ids: Array[int] = _get_co_located_ids(character, characters_by_id)
+
+	var effects: Dictionary = {}
+	if success:
+		var per_witness_disp: int = -2 - raises
+		effects = {
+			"target_witness_disposition": per_witness_disp,
+			"witnesses": witness_ids,
+		}
+	else:
+		var backfire_disp: int = -2
+		effects = {
+			"failed": true,
+			"witness_disposition_loss": backfire_disp,
+			"witnesses": witness_ids,
+		}
+		if margin <= -10:
+			effects["glory_change"] = -0.05
+
+	return {
+		"success": success,
+		"action_id": "PUBLIC_INSULT",
+		"character_id": ctx.character_id,
+		"target_npc_id": target_id,
+		"target_province_id": action.target_province_id,
+		"ic_day": ctx.ic_day,
+		"season": ctx.season,
+		"skill_used": primary_skill,
+		"roll_total": attacker_total,
+		"tn": defender_total,
+		"margin": margin,
+		"effects": effects,
+	}
+
+
 # -- Covert Actions (s12.8) ---------------------------------------------------
 
 static func _try_execute_covert(
@@ -816,9 +954,6 @@ static func _compute_social_effects(action_id: String, margin: int) -> Dictionar
 			disp_change = 11
 		"GOSSIP":
 			info_gained = true
-			# GDD: -5 to listener's disposition toward subject (3rd party).
-			# Structural wiring for 3rd-party targeting not yet built.
-			disp_change = 0
 		"PROBE", "READ_CHARACTER":
 			info_gained = true
 		"PUBLIC_DEBATE":
@@ -826,8 +961,7 @@ static func _compute_social_effects(action_id: String, margin: int) -> Dictionar
 		"PUBLIC_DECLARATION":
 			glory_change = 0.1
 		"PUBLIC_INSULT":
-			# GDD: -2 per witness. Per-witness structural wiring not yet built.
-			disp_change = -2
+			pass
 		"IMPRESS":
 			disp_change = 9
 		"ASK_FOR_INTRODUCTION":
@@ -977,10 +1111,6 @@ static func _compute_failure_effects(action_id: String, margin: int = 0) -> Dict
 	# Critical failure (margin ≤ -10) has action-specific penalties.
 	if action_id in SOCIAL_ACTIONS and margin <= -10:
 		effects["disposition_change"] = _get_critical_failure_disposition(action_id)
-	if action_id == "PUBLIC_INSULT":
-		# GDD: failed PUBLIC_INSULT costs -2 disposition with witnesses
-		effects["disposition_change"] = -2
-		effects["glory_change"] = -0.05
 	if action_id in COVERT_ACTIONS:
 		effects["detection_risk"] = true
 	return effects

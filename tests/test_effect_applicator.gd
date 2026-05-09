@@ -719,3 +719,139 @@ func test_gift_consume_item_id_minus_one_is_no_op() -> void:
 	}
 	EffectApplicator.apply(result, _characters, _provinces, _action_log)
 	assert_eq(_actor.items.size(), 1)
+
+
+# -- Gossip 3rd-party disposition (s15.4) --------------------------------------
+
+func test_gossip_effect_mutates_listener_toward_subject() -> void:
+	var subject := L5RCharacterData.new()
+	subject.character_id = 99
+	subject.character_name = "Subject"
+	_target.disposition_values = {99: 20}
+	_characters[99] = subject
+
+	var result: Dictionary = {
+		"success": true,
+		"character_id": 1,
+		"target_npc_id": 2,
+		"action_id": "GOSSIP",
+		"ic_day": 5,
+		"effects": {
+			"gossip_subject_id": 99,
+			"gossip_subject_disposition": -5,
+		},
+	}
+	var applied: Dictionary = EffectApplicator.apply(
+		result, _characters, _provinces, _action_log
+	)
+	assert_eq(_target.disposition_values[99], 15)
+	assert_eq(applied["disposition_changes"].size(), 1)
+	assert_eq(applied["disposition_changes"][0]["actor_id"], 2)
+	assert_eq(applied["disposition_changes"][0]["target_id"], 99)
+	assert_eq(applied["disposition_changes"][0]["delta"], -5)
+
+
+func test_gossip_effect_no_op_without_subject_id() -> void:
+	var result: Dictionary = {
+		"success": true,
+		"character_id": 1,
+		"target_npc_id": 2,
+		"action_id": "GOSSIP",
+		"ic_day": 5,
+		"effects": {"gossip_subject_id": -1, "gossip_subject_disposition": -5},
+	}
+	EffectApplicator.apply(result, _characters, _provinces, _action_log)
+	assert_eq(_target.disposition_values.get(99, 0), 0)
+
+
+func test_gossip_effect_clamps_to_minus_100() -> void:
+	var subject := L5RCharacterData.new()
+	subject.character_id = 99
+	_target.disposition_values = {99: -95}
+	_characters[99] = subject
+
+	var result: Dictionary = {
+		"success": true,
+		"character_id": 1,
+		"target_npc_id": 2,
+		"action_id": "GOSSIP",
+		"ic_day": 5,
+		"effects": {"gossip_subject_id": 99, "gossip_subject_disposition": -15},
+	}
+	EffectApplicator.apply(result, _characters, _provinces, _action_log)
+	assert_eq(_target.disposition_values[99], -100)
+
+
+# -- Per-witness disposition toward target (PUBLIC_INSULT s15.4) ---------------
+
+func test_target_witness_disposition_mutates_witnesses() -> void:
+	var witness_a := L5RCharacterData.new()
+	witness_a.character_id = 50
+	witness_a.character_name = "Witness A"
+	witness_a.disposition_values = {2: 10}
+
+	var witness_b := L5RCharacterData.new()
+	witness_b.character_id = 51
+	witness_b.character_name = "Witness B"
+	witness_b.disposition_values = {2: 30}
+
+	_characters[50] = witness_a
+	_characters[51] = witness_b
+
+	var result: Dictionary = {
+		"success": true,
+		"character_id": 1,
+		"target_npc_id": 2,
+		"action_id": "PUBLIC_INSULT",
+		"ic_day": 5,
+		"effects": {
+			"target_witness_disposition": -4,
+			"witnesses": [50, 51],
+		},
+	}
+	var applied: Dictionary = EffectApplicator.apply(
+		result, _characters, _provinces, _action_log
+	)
+	assert_eq(witness_a.disposition_values[2], 6)
+	assert_eq(witness_b.disposition_values[2], 26)
+	assert_eq(applied["disposition_changes"].size(), 2)
+
+
+func test_target_witness_skips_target_itself() -> void:
+	var witness := L5RCharacterData.new()
+	witness.character_id = 50
+	witness.character_name = "Witness"
+	witness.disposition_values = {2: 10}
+	_characters[50] = witness
+
+	var result: Dictionary = {
+		"success": true,
+		"character_id": 1,
+		"target_npc_id": 2,
+		"action_id": "PUBLIC_INSULT",
+		"ic_day": 5,
+		"effects": {
+			"target_witness_disposition": -3,
+			"witnesses": [2, 50],
+		},
+	}
+	var applied: Dictionary = EffectApplicator.apply(
+		result, _characters, _provinces, _action_log
+	)
+	assert_eq(witness.disposition_values[2], 7)
+	assert_eq(applied["disposition_changes"].size(), 1)
+
+
+func test_target_witness_no_op_without_witnesses() -> void:
+	var result: Dictionary = {
+		"success": true,
+		"character_id": 1,
+		"target_npc_id": 2,
+		"action_id": "PUBLIC_INSULT",
+		"ic_day": 5,
+		"effects": {"target_witness_disposition": -3, "witnesses": []},
+	}
+	var applied: Dictionary = EffectApplicator.apply(
+		result, _characters, _provinces, _action_log
+	)
+	assert_eq(applied["disposition_changes"].size(), 0)
