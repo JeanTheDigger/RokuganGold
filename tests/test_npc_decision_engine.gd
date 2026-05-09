@@ -84,6 +84,9 @@ func before_each() -> void:
 		"urgency_rules": [
 			{"condition": "war_score_below_25", "bonus": 25, "applies_to": ["CHARM", "ORDER_BATTLE"], "stacks_per_crisis": false},
 			{"condition": "active_crisis_in_relevance_range", "bonus": 15, "applies_to": "actions_addressing_crisis", "stacks_per_crisis": true, "weight_by_relevance": true},
+			{"condition": "court_ending_within_2_ic_days", "bonus": 10, "applies_to": "court_actions", "stacks_per_crisis": false},
+			{"condition": "favor_expiring_within_7_ooc_days", "bonus": 20, "applies_to": ["HONOR_FAVOR", "BREAK_FAVOR"], "stacks_per_crisis": false},
+			{"condition": "objective_stalled_2_plus_seasons", "bonus": 10, "applies_to": "actions_addressing_primary_objective", "stacks_per_crisis": false},
 		],
 		"topic_position_alignment": {},
 	}
@@ -548,6 +551,64 @@ func test_score_urgency_clamped_at_30() -> void:
 	# war_score_below_25: 25 + crisis: 15 = 40, clamped to 30
 	assert_eq(option.urgency_bonus, 30.0)
 	_scoring_tables["objective_alignment"].erase("DEFEND_PROVINCE")
+
+
+func test_urgency_court_ending_within_2_days() -> void:
+	_world_state["active_court_at_location"] = {
+		"elapsed_ticks": 118,
+		"duration_ticks": 120,
+	}
+	var ctx := NPCDecisionEngine.build_context(_char, _world_state)
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "RAISE_DISPOSITION"
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "CHARM"
+	NPCDecisionEngine.score_all([option], need, ctx, _scoring_tables)
+	assert_eq(option.urgency_bonus, 10.0)
+
+
+func test_urgency_court_ending_not_soon_no_bonus() -> void:
+	_world_state["active_court_at_location"] = {
+		"elapsed_ticks": 100,
+		"duration_ticks": 120,
+	}
+	var ctx := NPCDecisionEngine.build_context(_char, _world_state)
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "RAISE_DISPOSITION"
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "CHARM"
+	NPCDecisionEngine.score_all([option], need, ctx, _scoring_tables)
+	assert_eq(option.urgency_bonus, 0.0)
+
+
+func test_urgency_favor_expiring() -> void:
+	var favor := FavorData.new()
+	favor.favor_id = 1
+	favor.debtor_id = 1
+	favor.invoked = true
+	favor.response_deadline_ic_day = 15
+	_world_state["favors"] = [favor]
+	_world_state["ic_day"] = 5
+	var ctx := NPCDecisionEngine.build_context(_char, _world_state)
+	assert_eq(ctx.expiring_favor_ids.size(), 1)
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "RAISE_DISPOSITION"
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "HONOR_FAVOR"
+	NPCDecisionEngine.score_all([option], need, ctx, _scoring_tables)
+	assert_eq(option.urgency_bonus, 20.0)
+
+
+func test_urgency_objective_stalled() -> void:
+	_world_state["objective_stalled_seasons"] = 3
+	var ctx := NPCDecisionEngine.build_context(_char, _world_state)
+	assert_eq(ctx.objective_stalled_seasons, 3)
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "RAISE_DISPOSITION"
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "CHARM"
+	NPCDecisionEngine.score_all([option], need, ctx, _scoring_tables)
+	assert_eq(option.urgency_bonus, 10.0)
 
 
 func test_score_standing_influence() -> void:

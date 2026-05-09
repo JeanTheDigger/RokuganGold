@@ -125,6 +125,15 @@ static func build_context(
 	ctx.bushido_virtue = character.bushido_virtue
 	ctx.shourido_virtue = character.shourido_virtue
 
+	# Urgency evaluation fields
+	ctx.expiring_favor_ids = _extract_expiring_favor_ids(
+		world_state.get("favors", []), character.character_id, ctx.ic_day
+	)
+	ctx.starvation_province_ids = _extract_starvation_province_ids(ctx.province_statuses)
+	ctx.cut_supply_army_ids = _extract_cut_supply_army_ids(world_state)
+	ctx.besieged_settlement_health_pct = world_state.get("besieged_settlement_health_pct", 1.0)
+	ctx.objective_stalled_seasons = world_state.get("objective_stalled_seasons", 0)
+
 	return ctx
 
 
@@ -860,6 +869,38 @@ static func _evaluate_urgency_condition(
 				if disp <= -11:
 					instances.append({"relevance": 1.0, "npc_id": cid})
 			return instances
+		"favor_expiring_within_7_ooc_days":
+			var instances: Array = []
+			for fid: int in ctx.expiring_favor_ids:
+				instances.append({"relevance": 1.0, "favor_id": fid})
+			return instances
+		"court_ending_within_2_ic_days":
+			var court: Dictionary = ctx.active_court_at_location
+			if court.is_empty():
+				return []
+			var elapsed: int = court.get("elapsed_ticks", 0)
+			var duration: int = court.get("duration_ticks", 999)
+			if duration - elapsed <= 2:
+				return [{"relevance": 1.0}]
+			return []
+		"home_front_hunger":
+			var instances: Array = []
+			for pid: int in ctx.starvation_province_ids:
+				instances.append({"relevance": 1.0, "province_id": pid})
+			return instances
+		"army_supply_cut":
+			var instances: Array = []
+			for aid: int in ctx.cut_supply_army_ids:
+				instances.append({"relevance": 1.0, "army_id": aid})
+			return instances
+		"under_siege_garrison_below_25pct":
+			if ctx.besieged_settlement_health_pct < 0.25:
+				return [{"relevance": 1.0}]
+			return []
+		"objective_stalled_2_plus_seasons":
+			if ctx.objective_stalled_seasons >= 2:
+				return [{"relevance": 1.0}]
+			return []
 		_:
 			return []
 
@@ -1706,4 +1747,51 @@ static func _extract_famine_province_ids(
 		for pid: int in topic.provinces_affected:
 			if pid not in result:
 				result.append(pid)
+	return result
+
+
+static func _extract_expiring_favor_ids(
+	favors: Array,
+	character_id: int,
+	ic_day: int,
+) -> Array[int]:
+	var result: Array[int] = []
+	# 7 OOC days = 28 IC days (4 IC days per OOC day)
+	var threshold: int = 28
+	for f: Variant in favors:
+		if not (f is FavorData):
+			continue
+		var favor: FavorData = f as FavorData
+		if favor.debtor_id != character_id:
+			continue
+		if favor.invoked:
+			var deadline: int = favor.response_deadline_ic_day
+			if deadline > 0 and (deadline - ic_day) <= threshold:
+				result.append(favor.favor_id)
+	return result
+
+
+static func _extract_starvation_province_ids(
+	province_statuses: Array,
+) -> Array[int]:
+	var result: Array[int] = []
+	for ps: Variant in province_statuses:
+		if ps is NPCDataStructures.ProvinceStatus:
+			var status: NPCDataStructures.ProvinceStatus = ps
+			if status.starvation_stage > 0:
+				result.append(status.province_id)
+	return result
+
+
+static func _extract_cut_supply_army_ids(
+	world_state: Dictionary,
+) -> Array[int]:
+	var result: Array[int] = []
+	var tethers: Array = world_state.get("active_tethers", [])
+	for t: Variant in tethers:
+		if t is Dictionary:
+			if t.get("overall_state", 0) == 2:
+				var aid: int = t.get("army_id", -1)
+				if aid >= 0:
+					result.append(aid)
 	return result
