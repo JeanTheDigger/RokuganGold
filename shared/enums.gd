@@ -70,6 +70,7 @@ enum ContextFlag {
 	IN_EXILE,
 	AT_TEMPLE,
 	AT_DOJO,
+	AT_WALL_TOWER,
 }
 
 enum BushidoVirtue {
@@ -254,6 +255,8 @@ enum ZoneSubtype {
 	RIVER_CROSSING,
 	FARMLAND,
 	SHRINE_CLEARING,
+	# Wall / Military
+	WALL_TOWER,
 }
 
 enum LordRank {

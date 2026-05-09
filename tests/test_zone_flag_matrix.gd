@@ -310,3 +310,50 @@ func test_all_flags_are_boolean():
 		var flags: Dictionary = ZoneFlagMatrix.get_flags(zone)
 		for key: String in ZoneFlagMatrix.FLAG_KEYS:
 			assert_true(flags[key] is bool, "Flag %s on zone %d should be bool" % [key, z])
+
+
+# =============================================================================
+# Wall Tower Zone Flags (s57.36 extension, s57.19)
+# =============================================================================
+
+func test_wall_tower_no_performance():
+	assert_false(ZoneFlagMatrix.can_perform(Enums.ZoneSubtype.WALL_TOWER))
+
+func test_wall_tower_no_wall_art():
+	assert_false(ZoneFlagMatrix.can_display_wall_art(Enums.ZoneSubtype.WALL_TOWER))
+
+func test_wall_tower_no_displayed_art():
+	assert_false(ZoneFlagMatrix.can_display_art(Enums.ZoneSubtype.WALL_TOWER))
+
+func test_wall_tower_no_fusuma():
+	assert_false(ZoneFlagMatrix.has_fusuma(Enums.ZoneSubtype.WALL_TOWER))
+
+func test_wall_tower_no_tokonoma():
+	assert_false(ZoneFlagMatrix.has_tokonoma(Enums.ZoneSubtype.WALL_TOWER))
+
+func test_wall_tower_no_bonsai():
+	assert_false(ZoneFlagMatrix.can_display_bonsai(Enums.ZoneSubtype.WALL_TOWER))
+
+func test_wall_tower_no_garden():
+	assert_false(ZoneFlagMatrix.can_garden(Enums.ZoneSubtype.WALL_TOWER))
+
+func test_wall_tower_no_shrine():
+	assert_false(ZoneFlagMatrix.can_worship(Enums.ZoneSubtype.WALL_TOWER))
+
+func test_wall_tower_no_tea_ceremony():
+	assert_false(ZoneFlagMatrix.can_tea_ceremony(Enums.ZoneSubtype.WALL_TOWER))
+
+func test_wall_tower_is_wall_zone():
+	assert_true(ZoneFlagMatrix.is_wall_zone(Enums.ZoneSubtype.WALL_TOWER))
+
+func test_wall_tower_not_castle_interior():
+	assert_false(ZoneFlagMatrix.is_castle_interior(Enums.ZoneSubtype.WALL_TOWER))
+
+func test_wall_tower_not_urban():
+	assert_false(ZoneFlagMatrix.is_urban(Enums.ZoneSubtype.WALL_TOWER))
+
+func test_wall_tower_not_wilderness():
+	assert_false(ZoneFlagMatrix.is_wilderness(Enums.ZoneSubtype.WALL_TOWER))
+
+func test_ohiroma_not_wall_zone():
+	assert_false(ZoneFlagMatrix.is_wall_zone(Enums.ZoneSubtype.OHIROMA))

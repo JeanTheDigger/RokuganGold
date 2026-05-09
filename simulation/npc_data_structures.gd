@@ -72,6 +72,7 @@ class ContextSnapshot:
 	var character_name: String = ""
 	var clan: String = ""
 	var family: String = ""
+	var school: String = ""
 	var school_type: Enums.SchoolType = Enums.SchoolType.BUSHI
 	var is_lord: bool = false
 

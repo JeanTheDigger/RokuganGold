@@ -1593,11 +1593,14 @@ func test_s57_19_seal_wall_breach_costs_2_ap() -> void:
 
 
 func test_s57_19_actions_in_context_list() -> void:
-	var actions: Array[String] = NPCDecisionEngine._get_actions_for_context(
+	var own_holdings: Array[String] = NPCDecisionEngine._get_actions_for_context(
 		Enums.ContextFlag.AT_OWN_HOLDINGS)
-	assert_true("PURIFY_TAINTED_GROUND" in actions)
-	assert_true("FORTIFY_WALL_SECTION" in actions)
-	assert_true("SEAL_WALL_BREACH" in actions)
+	assert_true("PURIFY_TAINTED_GROUND" in own_holdings)
+	# FORTIFY_WALL_SECTION and SEAL_WALL_BREACH moved to AT_WALL_TOWER (s57.19 context)
+	var wall_tower: Array[String] = NPCDecisionEngine._get_actions_for_context(
+		Enums.ContextFlag.AT_WALL_TOWER)
+	assert_true("FORTIFY_WALL_SECTION" in wall_tower)
+	assert_true("SEAL_WALL_BREACH" in wall_tower)
 
 
 func test_s57_19_executor_handles_new_actions() -> void:

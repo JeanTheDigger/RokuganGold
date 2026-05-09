@@ -18,6 +18,7 @@ static func build_context(
 	ctx.character_name = character.character_name
 	ctx.clan = character.clan
 	ctx.family = character.family
+	ctx.school = character.school
 	ctx.school_type = character.school_type
 	ctx.is_lord = world_state.get("is_lord", false)
 
@@ -491,7 +492,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array[S
 				"FOUND_VILLAGE", "BUILD_FORTIFICATION", "BUILD_SHRINE",
 				"FOUND_TEMPLE", "FOUND_MONASTERY", "COMMISSION_SHIP",
 				"ARRANGE_MARRIAGE", "APPOINT_TO_POSITION",
-				"PURIFY_TAINTED_GROUND", "FORTIFY_WALL_SECTION", "SEAL_WALL_BREACH",
+				"PURIFY_TAINTED_GROUND",
 				"DISPATCH_COURTIER",
 				"DECLARE_WAR", "NEGOTIATE_SURRENDER",
 				"COMPLY_WITH_EDICT", "DEFY_EDICT",
@@ -560,6 +561,16 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array[S
 			return [
 				"TRAIN", "MENTOR", "DRILL_TROOPS",
 				"CHARM", "PROBE",
+				"DO_NOTHING", "REST",
+			]
+		Enums.ContextFlag.AT_WALL_TOWER:
+			return [
+				"FORTIFY_WALL_SECTION", "SEAL_WALL_BREACH",
+				"CONDUCT_SORTIE",
+				"SCOUT_ENEMY",
+				"ASSESS_PROVINCE_STATUS",
+				"DISPATCH_COURTIER",
+				"TRAIN",
 				"DO_NOTHING", "REST",
 			]
 		_:
@@ -654,6 +665,14 @@ static func _is_action_blocked(
 
 	if action_id == "RAID_HARVEST":
 		return _is_harvest_blocked_by_virtue(ctx)
+
+	# School filter per s57.19 Annex C.
+	if SCHOOL_REQUIRED_ACTIONS.has(action_id):
+		var required: String = SCHOOL_REQUIRED_ACTIONS[action_id]
+		if ctx.school != required:
+			return true
+		if action_id == "SEAL_WALL_BREACH" and ctx.insight_rank < SEAL_WALL_BREACH_MIN_RANK:
+			return true
 
 	return false
 
@@ -1100,6 +1119,17 @@ const ZONE_GATED_ACTIONS: Dictionary = {
 	"PERFORM_WORSHIP": "shrine_eligible",
 	"PERFORM_RITUAL": "shrine_eligible",
 }
+
+# -- School Filter (s57.19 Annex C) --------------------------------------------
+# Actions that require a specific school string (from L5RCharacterData.school).
+
+const SCHOOL_REQUIRED_ACTIONS: Dictionary = {
+	"FORTIFY_WALL_SECTION": "Kaiu Engineer",
+	"SEAL_WALL_BREACH": "Kaiu Engineer",
+	"PURIFY_TAINTED_GROUND": "Kuni Shugenja",
+}
+
+const SEAL_WALL_BREACH_MIN_RANK: int = 3
 
 static func _is_zone_blocked(action_id: String, zone_flags: Dictionary) -> bool:
 	if zone_flags.is_empty():
