@@ -126,8 +126,8 @@ func test_charm_hostile_target_higher_tn() -> void:
 	var result: Dictionary = ActionExecutor.execute(
 		action, _character, _ctx, _dice_engine, _action_skill_map
 	)
-	# Disposition -35 = Enemy tier: TN +10
-	assert_eq(result["tn"], 25)
+	# Disposition -35 = Enemy tier (s57.3): TN +5
+	assert_eq(result["tn"], 20)
 
 
 func test_social_success_produces_disposition_change() -> void:
@@ -137,11 +137,12 @@ func test_social_success_produces_disposition_change() -> void:
 		action, _character, _ctx, _dice_engine, _action_skill_map
 	)
 	if result["success"]:
-		assert_true(result["effects"]["disposition_change"] >= 3)
+		assert_eq(result["effects"]["disposition_change"], 8)
 
 
-func test_social_failure_produces_negative_disposition() -> void:
-	# Force a failure by targeting hostile NPC (high TN) with bad seed
+func test_social_failure_produces_no_disposition_change() -> void:
+	# Per GDD s12.2: no disposition change on normal failure.
+	# Critical failure (margin ≤ -10) has action-specific penalties.
 	_dice_engine.set_seed(999)
 	_ctx.dispositions[20] = -70
 	var action := _make_action("CHARM", 20)
@@ -149,7 +150,12 @@ func test_social_failure_produces_negative_disposition() -> void:
 		action, _character, _ctx, _dice_engine, _action_skill_map
 	)
 	if not result["success"]:
-		assert_eq(result["effects"]["disposition_change"], -1)
+		var disp: int = result["effects"].get("disposition_change", 0)
+		# Normal failure: 0. Critical failure (margin ≤ -10): -5 for CHARM.
+		if result.get("margin", 0) <= -10:
+			assert_eq(disp, -5)
+		else:
+			assert_eq(disp, 0)
 
 
 func test_probe_produces_info_gained() -> void:
@@ -162,14 +168,17 @@ func test_probe_produces_info_gained() -> void:
 		assert_true(result["effects"]["info_gained"])
 
 
-func test_public_debate_produces_glory() -> void:
+func test_public_debate_produces_glory_on_high_raises() -> void:
+	# Per GDD s12.2: PUBLIC_DEBATE glory = 0.3 only if 3+ raises (margin ≥ 15)
 	_dice_engine.set_seed(1)
 	var action := _make_action("PUBLIC_DEBATE", 10)
 	var result: Dictionary = ActionExecutor.execute(
 		action, _character, _ctx, _dice_engine, _action_skill_map
 	)
 	if result["success"]:
-		assert_almost_eq(result["effects"]["glory_change"], 0.1, 0.001)
+		var raises: int = maxi(result.get("margin", 0) / 5, 0)
+		var expected: float = 0.3 if raises >= 3 else 0.0
+		assert_almost_eq(result["effects"]["glory_change"], expected, 0.001)
 
 
 func test_intimidate_negative_disposition() -> void:

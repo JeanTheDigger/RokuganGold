@@ -752,16 +752,18 @@ static func _get_social_tn(
 	var tn: int = SOCIAL_BASE_TN
 	var target_disp: int = ctx.dispositions.get(action.target_npc_id, 0)
 
-	if target_disp <= -60:
-		tn += 15
-	elif target_disp <= -30:
-		tn += 10
-	elif target_disp <= -10:
-		tn += 5
+	# Per GDD s12.2: Free Raises (−5 TN) or additional Raises (+5 TN) by tier
+	if target_disp <= -61:
+		tn += 10  # Blood Enemy: +2 additional Raises
+	elif target_disp <= -31:
+		tn += 5   # Enemy: +1 additional Raise
+	# Rival (-30 to -11), Stranger (-10 to +10), Acquaintance (+11 to +30): no modifier
+	elif target_disp >= 91:
+		tn -= 15  # Devoted: 3 Free Raises
 	elif target_disp >= 61:
-		tn -= 10
+		tn -= 10  # Trusted Ally: 2 Free Raises
 	elif target_disp >= 31:
-		tn -= 5
+		tn -= 5   # Friend: 1 Free Raise
 
 	return maxi(tn, 5)
 
@@ -791,7 +793,7 @@ static func _apply_effects(
 		else:
 			effects = _compute_self_effects(action_id)
 	else:
-		effects = _compute_failure_effects(action_id)
+		effects = _compute_failure_effects(action_id, result.get("margin", 0))
 
 	result["effects"] = effects
 
@@ -800,36 +802,38 @@ static func _compute_social_effects(action_id: String, margin: int) -> Dictionar
 	var disp_change: int = 0
 	var glory_change: float = 0.0
 	var info_gained: bool = false
+	var raises: int = maxi(margin / 5, 0)
 
+	# Per GDD s12.2 Category 1 — Targeted Disposition Values (LOCKED)
 	match action_id:
-		"CHARM", "DELIVER_GIFT", "OFFER_FAVOR", "LISTEN_REFLECT":
-			disp_change = 3 + clampi(margin / 5, 0, 5)
-		"PERSUADE", "NEGOTIATE":
-			disp_change = 2 + clampi(margin / 5, 0, 3)
-		"INTIMIDATE":
-			disp_change = -(3 + clampi(margin / 5, 0, 5))
+		"CHARM":
+			disp_change = 8
+		"OFFER_FAVOR", "LISTEN_REFLECT":
+			disp_change = 8
+		"PERSUADE":
+			disp_change = 11
+		"NEGOTIATE":
+			disp_change = 11
 		"GOSSIP":
 			info_gained = true
-			disp_change = 1
+			# GDD: -5 to listener's disposition toward subject (3rd party).
+			# Structural wiring for 3rd-party targeting not yet built.
+			disp_change = 0
 		"PROBE", "READ_CHARACTER":
 			info_gained = true
-		"PUBLIC_DEBATE", "PUBLIC_DECLARATION", "PUBLIC_PERFORMANCE":
+		"PUBLIC_DEBATE":
+			glory_change = 0.3 if raises >= 3 else 0.0
+		"PUBLIC_DECLARATION":
 			glory_change = 0.1
-			disp_change = 1
 		"PUBLIC_INSULT":
-			disp_change = -5
-			glory_change = 0.05
+			# GDD: -2 per witness. Per-witness structural wiring not yet built.
+			disp_change = -2
 		"IMPRESS":
-			disp_change = 2
-			glory_change = 0.05
+			disp_change = 9
 		"ASK_FOR_INTRODUCTION":
 			info_gained = true
 		"DISCLOSE":
-			disp_change = 2
 			info_gained = true
-		"PERFORM_FOR":
-			disp_change = 2
-			glory_change = 0.05
 
 	return {
 		"disposition_change": disp_change,
@@ -958,7 +962,8 @@ static func _compute_self_effects(action_id: String) -> Dictionary:
 		"PERFORM_RITUAL", "PERFORM_WORSHIP":
 			return {"effect": "ritual_completed", "honor_change": 0.1}
 		"PUBLIC_ATONEMENT":
-			return {"effect": "atonement_performed", "honor_change": 0.5}
+			# GDD s4.6: Tier 4=+0.3, Tier 3=+0.5, Tier 2=+0.8, Tier 1=+1.0
+			return {"effect": "atonement_performed", "honor_change": 0.5, "honor_tier_dependent": true}
 		"MENTOR":
 			return {"effect": "student_trained"}
 		"OBSERVE_COURT_ATTENDEES":
@@ -966,15 +971,31 @@ static func _compute_self_effects(action_id: String) -> Dictionary:
 	return {"effect": "self_action_completed"}
 
 
-static func _compute_failure_effects(action_id: String) -> Dictionary:
+static func _compute_failure_effects(action_id: String, margin: int = 0) -> Dictionary:
 	var effects: Dictionary = {"failed": true}
-	if action_id in SOCIAL_ACTIONS:
-		effects["disposition_change"] = -1
-	if action_id == "PUBLIC_INSULT" or action_id == "PUBLIC_DEBATE":
+	# Per GDD s12.2: no disposition change on normal failure.
+	# Critical failure (margin ≤ -10) has action-specific penalties.
+	if action_id in SOCIAL_ACTIONS and margin <= -10:
+		effects["disposition_change"] = _get_critical_failure_disposition(action_id)
+	if action_id == "PUBLIC_INSULT":
+		# GDD: failed PUBLIC_INSULT costs -2 disposition with witnesses
+		effects["disposition_change"] = -2
 		effects["glory_change"] = -0.05
 	if action_id in COVERT_ACTIONS:
 		effects["detection_risk"] = true
 	return effects
+
+
+# Per GDD s12.2 critical failure (margin ≤ -10) disposition penalties
+const CRITICAL_FAILURE_DISPOSITION: Dictionary = {
+	"CHARM": -5,
+	"PERSUADE": -7,
+	"NEGOTIATE": -6,
+	"LISTEN_REFLECT": -7,
+	"IMPRESS": -6,
+	"DISCLOSE": -5,
+	"GOSSIP": -5,
+}
 
 
 static func _get_no_roll_effects(action_id: String) -> Dictionary:
@@ -986,6 +1007,10 @@ static func _get_no_roll_effects(action_id: String) -> Dictionary:
 		"BEGIN_TRAVEL", "CHANGE_DESTINATION":
 			return {"effect": "travel_started"}
 	return {"effect": "completed"}
+
+
+static func _get_critical_failure_disposition(action_id: String) -> int:
+	return CRITICAL_FAILURE_DISPOSITION.get(action_id, 0)
 
 
 # -- Military Hierarchy Validation (s57.21) ------------------------------------
