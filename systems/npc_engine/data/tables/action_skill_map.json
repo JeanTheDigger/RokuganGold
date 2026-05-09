@@ -390,5 +390,9 @@
 	"DEFY_EDICT": {
 		"primary": "Courtier",
 		"secondary": "Awareness"
+	},
+	"SCOUT_ENEMY": {
+		"primary": "Battle",
+		"secondary": "Perception"
 	}
 }

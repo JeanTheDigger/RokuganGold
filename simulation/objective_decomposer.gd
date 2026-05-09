@@ -910,19 +910,14 @@ static func _decompose_maintain_peace(
 			"target_clan_id": enemy,
 		})
 
-	# Step 2: rising tensions
+	# Step 2: rising tensions — emit PREVENT_WAR NeedType (GDD s55.23.4)
+	# PREVENT_WAR fires before war starts; SEEK_PEACE fires during active war.
 	if not ctx.escalating_conflicts.is_empty():
 		var tension: Dictionary = ctx.escalating_conflicts[0]
-		match ctx.context_flag:
-			Enums.ContextFlag.AT_COURT:
-				return _make_need("MOVE_TOPIC_POSITION", 3, {
-					"target_topic_id": tension.get("topic_id", -1),
-				})
-			_:
-				var _court_need := _court_or_alternative(ctx, -1, 2)
-				if _court_need != null:
-					return _court_need
-				return _make_need("SEND_LETTER", 1)
+		return _make_need("PREVENT_WAR", 3, {
+			"target_topic_id": tension.get("topic_id", -1),
+			"target_clan_id": tension.get("clan", ""),
+		})
 
 	# Step 3: preventive diplomacy
 	match ctx.context_flag:

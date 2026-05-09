@@ -170,6 +170,12 @@ static func execute(
 			},
 		}
 
+	if action_id == "DISPATCH_COURTIER":
+		return _execute_dispatch_courtier(action, character, ctx, dice_engine, characters_by_id)
+
+	if action_id == "SCOUT_ENEMY":
+		return _execute_scout_enemy(action, character, ctx, dice_engine)
+
 	if action_id in COVERT_ACTIONS:
 		var covert_result: Dictionary = _try_execute_covert(
 			action, character, ctx, dice_engine, characters_by_id
@@ -1135,6 +1141,169 @@ static func _compute_admin_effects(action_id: String) -> Dictionary:
 		"SEAL_WALL_BREACH":
 			return {"effect": "breach_sealed"}
 	return {"effect": "administrative_action"}
+
+
+static func _execute_dispatch_courtier(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	dice_engine: DiceEngine,
+	characters_by_id: Dictionary,
+) -> Dictionary:
+	# GDD s55.23a: Champion/Shireikan dispatches a courtier to a Family Daimyo
+	# to formally request Wall garrison commitment. No deferral — the Daimyo
+	# must comply or refuse this season.
+	var target_id: int = action.target_npc_id
+	var target_province_id: int = action.target_province_id
+
+	if target_id < 0 or characters_by_id.is_empty():
+		return {
+			"success": false,
+			"action_id": "DISPATCH_COURTIER",
+			"character_id": ctx.character_id,
+			"target_npc_id": target_id,
+			"target_province_id": target_province_id,
+			"ic_day": ctx.ic_day,
+			"season": ctx.season,
+			"effects": {"effect": "courtier_dispatched", "no_target": true},
+		}
+
+	var daimyo: L5RCharacterData = characters_by_id.get(target_id)
+	if daimyo == null:
+		return {
+			"success": false,
+			"action_id": "DISPATCH_COURTIER",
+			"character_id": ctx.character_id,
+			"target_npc_id": target_id,
+			"target_province_id": target_province_id,
+			"ic_day": ctx.ic_day,
+			"season": ctx.season,
+			"effects": {"effect": "courtier_dispatched", "no_target": true},
+		}
+
+	# Personality modifiers on the receiving Daimyo (GDD s55.23a)
+	var position: float = 30.0
+	match daimyo.bushido_virtue:
+		Enums.BushidoVirtue.CHUGI:
+			position += 15.0
+		Enums.BushidoVirtue.YU:
+			position += 8.0
+		Enums.BushidoVirtue.MEIYO:
+			position += 8.0
+		Enums.BushidoVirtue.JIN:
+			position += 6.0
+	match daimyo.shourido_virtue:
+		Enums.ShouridoVirtue.KYORYOKU:
+			position -= 5.0
+		Enums.ShouridoVirtue.SEIGYO:
+			position -= 5.0
+
+	# Courtier's persuasion roll (Courtier + Intelligence vs TN 20)
+	var roll_result: Dictionary = SkillResolver.resolve_skill_check(
+		character, dice_engine, "Courtier", 20
+	)
+	var margin: int = roll_result.get("margin", 0)
+	position += margin * 0.5
+
+	var wall_critical: bool = false
+	for ws: Variant in ctx.wall_statuses:
+		if ws is NPCDataStructures.WallStatus:
+			var w: NPCDataStructures.WallStatus = ws as NPCDataStructures.WallStatus
+			if w.si < 6:
+				wall_critical = true
+				break
+
+	if position >= 50.0:
+		# Daimyo complies — honor gain scaled by contribution
+		return {
+			"success": true,
+			"action_id": "DISPATCH_COURTIER",
+			"character_id": ctx.character_id,
+			"target_npc_id": target_id,
+			"target_province_id": target_province_id,
+			"ic_day": ctx.ic_day,
+			"season": ctx.season,
+			"skill_used": "Courtier",
+			"roll_total": roll_result.get("total", 0),
+			"tn": 20,
+			"margin": margin,
+			"effects": {
+				"effect": "courtier_accepted",
+				"requires_garrison_assignment": true,
+				"target_npc_id": target_id,
+				"target_province_id": target_province_id,
+				"honor_gain_recipient": 0.1,
+				"recipient_disposition_change": 2.0,
+			},
+		}
+	else:
+		# Daimyo refuses — honor loss scaled to Wall urgency
+		var honor_loss: float = -1.0 if wall_critical else -0.3
+		return {
+			"success": false,
+			"action_id": "DISPATCH_COURTIER",
+			"character_id": ctx.character_id,
+			"target_npc_id": target_id,
+			"target_province_id": target_province_id,
+			"ic_day": ctx.ic_day,
+			"season": ctx.season,
+			"skill_used": "Courtier",
+			"roll_total": roll_result.get("total", 0),
+			"tn": 20,
+			"margin": margin,
+			"effects": {
+				"effect": "courtier_refused",
+				"garrison_refused": true,
+				"target_npc_id": target_id,
+				"target_province_id": target_province_id,
+				"honor_change_recipient": honor_loss,
+				"recipient_disposition_change": -2.0,
+			},
+		}
+
+
+static func _execute_scout_enemy(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	# GDD s55.23.2: Vassal-level military reconnaissance. Roll Battle+Perception
+	# vs TN 20. Success: learn enemy army data. Critical failure: scouts detected.
+	const SCOUT_TN: int = 20
+	var roll_result: Dictionary = SkillResolver.resolve_skill_check(
+		character, dice_engine, "Battle", SCOUT_TN,
+		0, "", Enums.Trait.NONE, 0, 0, 0
+	)
+	var success: bool = roll_result.get("success", false)
+	var margin: int = roll_result.get("margin", 0)
+
+	var effects: Dictionary = {
+		"effect": "scout_completed",
+		"info_gained": success,
+		"scout_intel": success,
+		"target_clan_id": action.metadata.get("target_clan_id", ""),
+	}
+
+	# Critical failure: scouts detected — topic generated (GDD s55.23.2)
+	if not success and margin <= -10:
+		effects["scouts_detected"] = true
+		effects["detection_risk"] = true
+
+	return {
+		"success": success,
+		"action_id": "SCOUT_ENEMY",
+		"character_id": ctx.character_id,
+		"target_npc_id": action.target_npc_id,
+		"target_province_id": action.target_province_id,
+		"ic_day": ctx.ic_day,
+		"season": ctx.season,
+		"skill_used": "Battle",
+		"roll_total": roll_result.get("total", 0),
+		"tn": SCOUT_TN,
+		"margin": margin,
+		"effects": effects,
+	}
 
 
 static func _compute_self_effects(action_id: String) -> Dictionary:
