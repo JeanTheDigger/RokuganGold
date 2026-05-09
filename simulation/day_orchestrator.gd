@@ -1944,6 +1944,8 @@ static func _process_festivals(ic_day: int, world_states: Dictionary) -> Diction
 	var is_labor_halt: bool = FestivalSystem.is_labor_halt_day(ic_day)
 
 	for char_id in world_states:
+		if char_id is not int:
+			continue
 		var ws: Dictionary = world_states[char_id]
 		ws["is_ceasefire_day"] = is_ceasefire
 		ws["is_labor_halt_day"] = is_labor_halt
@@ -2163,7 +2165,7 @@ static func _process_insurgencies(
 
 	var per_province_ws: Dictionary = {}
 	for pid: int in provinces:
-		per_province_ws[pid] = world_states.get(pid, world_states)
+		per_province_ws[pid] = world_states.get(pid, {})
 
 	var result: Dictionary = InsurgencySystem.process_season(
 		insurgencies, provinces, ptls, dice_engine, current_season,
