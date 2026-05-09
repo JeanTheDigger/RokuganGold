@@ -1656,3 +1656,432 @@ func test_s11_11_insurgency_wired_into_orchestrator() -> void:
 func test_s11_11_province_taint_level_field() -> void:
 	var p := ProvinceData.new()
 	assert_eq(p.province_taint_level, 0.0, "PTL should default to 0.0")
+
+
+# =============================================================================
+# Wall System Wiring (s2.4.2 / s2.4.3 / s2.4.10 / s2.4.11 / s2.4.15 / s2.4.16)
+# =============================================================================
+
+# -- build_context reads wall_statuses from world_state (Phase 1) --------------
+
+func test_build_context_reads_wall_statuses_from_world_state() -> void:
+	var ws := NPCDataStructures.WallStatus.new()
+	ws.province_id = 10
+	ws.si = 7
+	ws.ss = 3
+	_world_state["context_flag"] = Enums.ContextFlag.AT_WALL_TOWER
+	_world_state["wall_statuses"] = [ws]
+
+	var ctx: NPCDataStructures.ContextSnapshot = NPCDecisionEngine.build_context(_char, _world_state)
+
+	assert_eq(ctx.wall_statuses.size(), 1)
+	assert_eq((ctx.wall_statuses[0] as NPCDataStructures.WallStatus).si, 7)
+	assert_eq((ctx.wall_statuses[0] as NPCDataStructures.WallStatus).ss, 3)
+
+
+func test_build_context_empty_wall_statuses_without_entry() -> void:
+	_world_state["context_flag"] = Enums.ContextFlag.AT_OWN_HOLDINGS
+	var ctx: NPCDataStructures.ContextSnapshot = NPCDecisionEngine.build_context(_char, _world_state)
+	assert_eq(ctx.wall_statuses.size(), 0)
+
+
+# -- advance_day auto-sets AT_WALL_TOWER via _set_wall_tower_context_flags -----
+
+func test_advance_day_sets_at_wall_tower_for_character_at_tower() -> void:
+	var tower := SettlementData.new()
+	tower.settlement_id = 50
+	tower.province_id = 5
+	tower.settlement_type = Enums.SettlementType.WALL_TOWER
+	tower.wall_si = 8
+	tower.garrison_pu = 2
+	tower.jade_stockpile = 10.0
+
+	var province := ProvinceData.new()
+	province.province_id = 5
+	province.shadowlands_strength = 2
+	province.stability = 70.0
+	province.terrain_type = Enums.TerrainType.PLAINS
+
+	var character := L5RCharacterData.new()
+	character.character_id = 99
+	character.character_name = "Kaiu Test"
+	character.physical_location = "50"
+	character.clan = "Crab"
+	character.family = "Kaiu"
+	character.school_type = Enums.SchoolType.BUSHI
+	character.bushido_virtue = Enums.BushidoVirtue.NONE
+	character.shourido_virtue = Enums.ShouridoVirtue.NONE
+	character.honor = 4.0
+	character.glory = 3.0
+	character.status = 2.0
+	character.skills = {}
+	character.emphases = {}
+	character.reflexes = 3
+	character.awareness = 3
+	character.stamina = 3
+	character.willpower = 3
+	character.agility = 3
+	character.intelligence = 3
+	character.strength = 3
+	character.perception = 3
+	character.void_ring = 2
+	character.wounds_taken = 0
+	character.knowledge_pool = []
+	character.known_contacts_by_clan = {}
+	character.met_characters = []
+	ActionPointSystem.reset_daily_ap(character)
+
+	var char_ws: Dictionary = {
+		"context_flag": Enums.ContextFlag.AT_OWN_HOLDINGS,
+		"zone_subtype": Enums.ZoneSubtype.WILDERNESS,
+		"wall_statuses": [],
+		"season": 1,
+		"ic_day": 1,
+		"characters_present": [] as Array[int],
+		"is_lord": false,
+		"known_topics": [] as Array[int],
+		"known_positions": {},
+		"known_objectives": {},
+		"known_contacts": [] as Array[int],
+		"pending_events": [],
+		"action_log": [] as Array[Dictionary],
+	}
+
+	var time := TimeSystem.new(1120, 0)
+	var dice := DiceEngine.new()
+	dice.set_seed(1)
+	var characters: Array[L5RCharacterData] = [character]
+	var characters_by_id: Dictionary = {99: character}
+	var provinces: Dictionary = {5: province}
+	var world_states: Dictionary = {99: char_ws}
+	var settlements: Array[SettlementData] = [tower]
+	var season_meta: Dictionary = {}
+
+	DayOrchestrator.advance_day(
+		time, characters, characters_by_id, world_states,
+		{99: {"primary": {"need_type": "REST", "priority": 3}}},
+		_scoring_tables, _filter_data, dice, _action_skill_map, provinces,
+		[] as Array[Dictionary], season_meta,
+		[], [], [], [], [], [1], {}, {}, [1000], [], {},
+		[], [], [1],
+		settlements,
+	)
+
+	assert_eq(char_ws["context_flag"], Enums.ContextFlag.AT_WALL_TOWER,
+		"advance_day should auto-set AT_WALL_TOWER for character at wall tower")
+	assert_eq(char_ws["wall_statuses"].size(), 1)
+
+
+# -- _process_wall_engineering_effects: SI gain applied to settlement ----------
+
+func _make_wall_tower_s(province_id: int, si: int, koku: float = 10.0) -> SettlementData:
+	var s := SettlementData.new()
+	s.settlement_id = province_id * 10
+	s.province_id = province_id
+	s.settlement_type = Enums.SettlementType.WALL_TOWER
+	s.wall_si = si
+	s.koku_stockpile = koku
+	s.garrison_pu = 2
+	return s
+
+
+func test_wall_engineering_fortify_increases_si_on_settlement() -> void:
+	var tower := _make_wall_tower_s(10, 5)
+	var applied_list: Array = [{
+		"action_id": "FORTIFY_WALL_SECTION",
+		"effects": {
+			"requires_fortify_wall": true,
+			"si_gain": 2,
+			"kaiu_decay_reduction": 0.25,
+			"kaiu_reinforce_duration": 3,
+			"target_province_id": 10,
+		},
+	}]
+
+	var results := DayOrchestrator._process_wall_engineering_effects(
+		applied_list, [tower] as Array[SettlementData]
+	)
+
+	assert_eq(tower.wall_si, 7, "SI should increase from 5 to 7 with si_gain=2")
+	assert_eq(results.size(), 1)
+	assert_eq(results[0]["action"], "fortify_wall")
+
+
+func test_wall_engineering_fortify_clamps_si_at_10() -> void:
+	var tower := _make_wall_tower_s(10, 9)
+	var applied_list: Array = [{
+		"action_id": "FORTIFY_WALL_SECTION",
+		"effects": {
+			"requires_fortify_wall": true,
+			"si_gain": 5,
+			"kaiu_decay_reduction": 0.25,
+			"kaiu_reinforce_duration": 2,
+			"target_province_id": 10,
+		},
+	}]
+
+	DayOrchestrator._process_wall_engineering_effects(
+		applied_list, [tower] as Array[SettlementData]
+	)
+
+	assert_eq(tower.wall_si, 10, "SI clamped at 10")
+
+
+func test_wall_engineering_fortify_applies_kaiu_modifier() -> void:
+	var tower := _make_wall_tower_s(10, 6)
+	tower.kaiu_decay_reduction = 0.0
+	tower.kaiu_reinforce_seasons_remaining = 0
+	var applied_list: Array = [{
+		"action_id": "FORTIFY_WALL_SECTION",
+		"effects": {
+			"requires_fortify_wall": true,
+			"si_gain": 1,
+			"kaiu_decay_reduction": 0.50,
+			"kaiu_reinforce_duration": 3,
+			"target_province_id": 10,
+		},
+	}]
+
+	DayOrchestrator._process_wall_engineering_effects(
+		applied_list, [tower] as Array[SettlementData]
+	)
+
+	assert_almost_eq(tower.kaiu_decay_reduction, 0.50, 0.001)
+	assert_eq(tower.kaiu_reinforce_seasons_remaining, 3)
+
+
+func test_wall_engineering_kaiu_overwrite_rule_keeps_higher() -> void:
+	# Existing modifier 0.75 should not be overwritten by weaker 0.25.
+	var tower := _make_wall_tower_s(10, 6)
+	tower.kaiu_decay_reduction = 0.75
+	tower.kaiu_reinforce_seasons_remaining = 4
+	var applied_list: Array = [{
+		"action_id": "FORTIFY_WALL_SECTION",
+		"effects": {
+			"requires_fortify_wall": true,
+			"si_gain": 1,
+			"kaiu_decay_reduction": 0.25,
+			"kaiu_reinforce_duration": 2,
+			"target_province_id": 10,
+		},
+	}]
+
+	DayOrchestrator._process_wall_engineering_effects(
+		applied_list, [tower] as Array[SettlementData]
+	)
+
+	assert_almost_eq(tower.kaiu_decay_reduction, 0.75, 0.001,
+		"Weaker modifier should not overwrite stronger one")
+	assert_eq(tower.kaiu_reinforce_seasons_remaining, 4)
+
+
+func test_wall_engineering_seal_sets_si_to_2() -> void:
+	var tower := _make_wall_tower_s(10, 0)
+	var applied_list: Array = [{
+		"action_id": "SEAL_WALL_BREACH",
+		"effects": {
+			"requires_breach_seal": true,
+			"koku_cost": 5.0,
+			"target_province_id": 10,
+		},
+	}]
+
+	DayOrchestrator._process_wall_engineering_effects(
+		applied_list, [tower] as Array[SettlementData]
+	)
+
+	assert_eq(tower.wall_si, 2, "Successful breach seal sets SI to 2")
+
+
+func test_wall_engineering_seal_deducts_koku() -> void:
+	var tower := _make_wall_tower_s(10, 0, 10.0)
+	var applied_list: Array = [{
+		"action_id": "SEAL_WALL_BREACH",
+		"effects": {
+			"requires_breach_seal": true,
+			"koku_cost": 5.0,
+			"target_province_id": 10,
+		},
+	}]
+
+	DayOrchestrator._process_wall_engineering_effects(
+		applied_list, [tower] as Array[SettlementData]
+	)
+
+	assert_almost_eq(tower.koku_stockpile, 5.0, 0.001, "5 koku deducted for seal")
+
+
+func test_wall_engineering_seal_failed_does_not_change_si() -> void:
+	var tower := _make_wall_tower_s(10, 0, 10.0)
+	var applied_list: Array = [{
+		"action_id": "SEAL_WALL_BREACH",
+		"effects": {
+			"requires_breach_seal": false,
+			"koku_cost": 5.0,
+			"target_province_id": 10,
+		},
+	}]
+
+	DayOrchestrator._process_wall_engineering_effects(
+		applied_list, [tower] as Array[SettlementData]
+	)
+
+	assert_eq(tower.wall_si, 0, "Failed breach seal leaves SI at 0")
+
+
+# -- _process_sortie_results: SS reduction + jade consumption ------------------
+
+func test_sortie_results_reduces_ss_on_province() -> void:
+	var province := ProvinceData.new()
+	province.province_id = 10
+	province.shadowlands_strength = 6
+
+	var tower := _make_wall_tower_s(10, 8)
+
+	var applied_list: Array = [{
+		"action_id": "CONDUCT_SORTIE",
+		"effects": {
+			"requires_sortie_combat": true,
+			"force_size": "small",
+			"ss_reduction": 1,
+			"force_pct": 0.20,
+			"jade_per_warrior": 1,
+			"target_province_id": 10,
+		},
+	}]
+
+	var results := DayOrchestrator._process_sortie_results(
+		applied_list, [tower] as Array[SettlementData], {10: province}
+	)
+
+	assert_eq(province.shadowlands_strength, 5, "SS reduced by 1 for small sortie")
+	assert_eq(results.size(), 1)
+
+
+func test_sortie_results_ss_clamped_at_zero() -> void:
+	var province := ProvinceData.new()
+	province.province_id = 10
+	province.shadowlands_strength = 0
+
+	var tower := _make_wall_tower_s(10, 8)
+	var applied_list: Array = [{
+		"action_id": "CONDUCT_SORTIE",
+		"effects": {
+			"requires_sortie_combat": true,
+			"force_size": "large",
+			"ss_reduction": 3,
+			"force_pct": 0.60,
+			"jade_per_warrior": 3,
+			"target_province_id": 10,
+		},
+	}]
+
+	DayOrchestrator._process_sortie_results(
+		applied_list, [tower] as Array[SettlementData], {10: province}
+	)
+
+	assert_eq(province.shadowlands_strength, 0, "SS cannot go below 0")
+
+
+func test_sortie_results_deducts_jade_from_settlement() -> void:
+	var province := ProvinceData.new()
+	province.province_id = 10
+	province.shadowlands_strength = 5
+
+	var tower := _make_wall_tower_s(10, 8)
+	tower.garrison_pu = 10
+	tower.jade_stockpile = 50.0
+
+	# Small sortie: force_pct=0.20, jade_per_warrior=1
+	# warriors = floor(10 * 0.20) = 2, jade = 2 * 1 = 2
+	var applied_list: Array = [{
+		"action_id": "CONDUCT_SORTIE",
+		"effects": {
+			"requires_sortie_combat": true,
+			"force_size": "small",
+			"ss_reduction": 1,
+			"force_pct": 0.20,
+			"jade_per_warrior": 1,
+			"target_province_id": 10,
+		},
+	}]
+
+	DayOrchestrator._process_sortie_results(
+		applied_list, [tower] as Array[SettlementData], {10: province}
+	)
+
+	assert_almost_eq(tower.jade_stockpile, 48.0, 0.001, "2 jade consumed for 2 warriors")
+
+
+func test_sortie_results_jade_clamped_at_zero() -> void:
+	var province := ProvinceData.new()
+	province.province_id = 10
+	province.shadowlands_strength = 5
+
+	var tower := _make_wall_tower_s(10, 8)
+	tower.garrison_pu = 10
+	tower.jade_stockpile = 0.5  # not enough for the full cost
+
+	var applied_list: Array = [{
+		"action_id": "CONDUCT_SORTIE",
+		"effects": {
+			"requires_sortie_combat": true,
+			"force_size": "medium",
+			"ss_reduction": 2,
+			"force_pct": 0.40,
+			"jade_per_warrior": 2,
+			"target_province_id": 10,
+		},
+	}]
+
+	DayOrchestrator._process_sortie_results(
+		applied_list, [tower] as Array[SettlementData], {10: province}
+	)
+
+	assert_almost_eq(tower.jade_stockpile, 0.0, 0.001, "Jade never goes negative")
+
+
+# -- Kaiu modifier ticks down in seasonal wall pressure -----------------------
+
+func test_kaiu_modifier_ticks_down_each_season() -> void:
+	var tower := _make_wall_tower_s(10, 8)
+	tower.kaiu_decay_reduction = 0.50
+	tower.kaiu_reinforce_seasons_remaining = 3
+
+	var province := ProvinceData.new()
+	province.province_id = 10
+	province.shadowlands_strength = 0
+	province.adjacent_province_ids = []
+
+	var season_meta: Dictionary = {}
+
+	DayOrchestrator._process_wall_seasonal_pressure(
+		[tower] as Array[SettlementData], {10: province}, 1, season_meta
+	)
+
+	assert_eq(tower.kaiu_reinforce_seasons_remaining, 2,
+		"Remaining seasons ticked from 3 to 2")
+	assert_almost_eq(tower.kaiu_decay_reduction, 0.50, 0.001,
+		"Modifier still active with remaining seasons")
+
+
+func test_kaiu_modifier_cleared_when_seasons_reach_zero() -> void:
+	var tower := _make_wall_tower_s(10, 8)
+	tower.kaiu_decay_reduction = 0.50
+	tower.kaiu_reinforce_seasons_remaining = 1
+
+	var province := ProvinceData.new()
+	province.province_id = 10
+	province.shadowlands_strength = 0
+	province.adjacent_province_ids = []
+
+	var season_meta: Dictionary = {}
+
+	DayOrchestrator._process_wall_seasonal_pressure(
+		[tower] as Array[SettlementData], {10: province}, 1, season_meta
+	)
+
+	assert_eq(tower.kaiu_reinforce_seasons_remaining, 0)
+	assert_almost_eq(tower.kaiu_decay_reduction, 0.0, 0.001,
+		"Modifier cleared when seasons reach 0")
+
