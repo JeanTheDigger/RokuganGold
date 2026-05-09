@@ -947,3 +947,181 @@ func test_inject_no_lord_found_skips():
 	DayOrchestrator._inject_edict_reactive_events(edicts, characters, world_states, 10)
 
 	assert_false(world_states.has(90), "No event injected when no lord found")
+
+
+# =============================================================================
+# EDICT EFFECT APPLICATION
+# =============================================================================
+
+func test_apply_authorize_war():
+	var edict := ImperialEdictSystem.create_edict(
+		1, EdictData.EdictType.AUTHORIZE_WAR, 100, 10
+	)
+	edict.target_clan = "Lion"
+	var result := ImperialEdictSystem.apply_authorize_war(edict)
+	assert_true(result.get("applied", false))
+	assert_eq(result.get("authorized_clan", ""), "Lion")
+	assert_true(result.get("war_authorized", false))
+
+
+func test_apply_authorize_war_wrong_type():
+	var edict := ImperialEdictSystem.create_edict(
+		1, EdictData.EdictType.GENERAL_DECREE, 100, 10
+	)
+	var result := ImperialEdictSystem.apply_authorize_war(edict)
+	assert_false(result.get("applied", false))
+
+
+func test_apply_tax_reform_grants_honor():
+	var edict := ImperialEdictSystem.create_edict(
+		1, EdictData.EdictType.TAX_REFORM, 100, 10
+	)
+	edict.target_clan = "Crane"
+	var lord := _make_lord(50, "Crane")
+	lord.honor = 5.0
+	var vassal := L5RCharacterData.new()
+	vassal.character_id = 51
+	vassal.clan = "Crane"
+	vassal.status = 3.0
+	vassal.honor = 5.0
+	var characters: Array[L5RCharacterData] = [lord, vassal]
+
+	var result := ImperialEdictSystem.apply_tax_reform(edict, characters)
+	assert_true(result.get("applied", false))
+	assert_gt(lord.honor, 5.0, "Lord should gain honor")
+	assert_eq(vassal.honor, 5.0, "Low-status vassal should not be affected")
+	assert_eq(result.get("affected_ids", []).size(), 1)
+
+
+func test_apply_appoint_position():
+	var edict := ImperialEdictSystem.create_edict(
+		1, EdictData.EdictType.APPOINT_POSITION, 100, 10
+	)
+	edict.target_character_id = 42
+	var result := ImperialEdictSystem.apply_appoint_position(edict)
+	assert_true(result.get("applied", false))
+	assert_eq(result.get("target_character_id", -1), 42)
+	assert_true(result.get("appointment_confirmed", false))
+
+
+func test_apply_strip_autonomy_costs_honor():
+	var edict := ImperialEdictSystem.create_edict(
+		1, EdictData.EdictType.STRIP_AUTONOMY, 100, 10
+	)
+	edict.target_clan = "Scorpion"
+	var lord := _make_lord(60, "Scorpion")
+	lord.honor = 5.0
+	var characters: Array[L5RCharacterData] = [lord]
+
+	var result := ImperialEdictSystem.apply_strip_autonomy(edict, characters)
+	assert_true(result.get("applied", false))
+	assert_true(result.get("autonomy_stripped", false))
+	assert_lt(lord.honor, 5.0, "Lord should lose honor from stripped autonomy")
+
+
+func test_apply_compliance_honor():
+	var edict := ImperialEdictSystem.create_edict(
+		1, EdictData.EdictType.CEASE_HOSTILITIES, 100, 10
+	)
+	var lord := _make_lord(50, "Crane")
+	lord.honor = 5.0
+	var characters: Array[L5RCharacterData] = [lord]
+
+	var result := ImperialEdictSystem.apply_compliance_honor(edict, "Crane", characters)
+	assert_eq(result.get("clan", ""), "Crane")
+	assert_gt(lord.honor, 5.0, "Compliant lord should gain honor")
+
+
+func test_compliant_edict_routes_to_correct_apply_function():
+	var edict := ImperialEdictSystem.create_edict(
+		1, EdictData.EdictType.AUTHORIZE_WAR, 100, 10
+	)
+	edict.target_clan = "Lion"
+	edict.compliance_by_clan = {"Lion": EdictData.ComplianceStatus.COMPLIANT}
+	var wars: Array[WarData] = []
+	var characters: Array[L5RCharacterData] = []
+
+	var result := ImperialEdictSystem._apply_compliant_edict(edict, wars, characters)
+	assert_true(result.get("war_authorized", false))
+
+
+func test_all_compliant_triggers_application_and_deactivation():
+	var edict := ImperialEdictSystem.create_edict(
+		1, EdictData.EdictType.AUTHORIZE_WAR, 100, 10
+	)
+	edict.target_clan = "Lion"
+	edict.compliance_by_clan = {"Lion": EdictData.ComplianceStatus.COMPLIANT}
+	var wars: Array[WarData] = []
+	var edicts: Array[EdictData] = [edict]
+	var characters: Array[L5RCharacterData] = []
+
+	var results := ImperialEdictSystem.process_daily_compliance(
+		edicts, wars, characters, 50
+	)
+
+	assert_false(edict.is_active, "Edict should be deactivated after all compliant")
+	var has_applied: bool = false
+	for r: Dictionary in results:
+		if r.get("war_authorized", false):
+			has_applied = true
+	assert_true(has_applied, "Should contain application result")
+
+
+func test_compliance_action_grants_honor():
+	var edict := ImperialEdictSystem.create_edict(
+		1, EdictData.EdictType.CEASE_HOSTILITIES, 100, 10
+	)
+	edict.compliance_by_clan = {"Crane": EdictData.ComplianceStatus.PENDING}
+	var lord := _make_lord(50, "Crane")
+	lord.honor = 5.0
+	var characters: Array[L5RCharacterData] = [lord]
+	var edicts: Array[EdictData] = [edict]
+	var day_results: Array = [{
+		"effects": {
+			"requires_edict_compliance": true,
+			"edict_id": 1,
+			"clan": "Crane",
+			"compliant": true,
+		},
+	}]
+
+	var results := DayOrchestrator._process_edict_compliance_actions(
+		day_results, edicts, characters,
+	)
+
+	assert_eq(
+		edict.compliance_by_clan.get("Crane", -1),
+		EdictData.ComplianceStatus.COMPLIANT,
+	)
+	assert_gt(lord.honor, 5.0, "Compliant lord gains honor")
+	assert_eq(results.size(), 1)
+
+
+func test_defiance_action_no_honor():
+	var edict := ImperialEdictSystem.create_edict(
+		1, EdictData.EdictType.GENERAL_DECREE, 100, 10
+	)
+	edict.compliance_by_clan = {"Scorpion": EdictData.ComplianceStatus.PENDING}
+	var lord := _make_lord(60, "Scorpion")
+	lord.honor = 5.0
+	var characters: Array[L5RCharacterData] = [lord]
+	var edicts: Array[EdictData] = [edict]
+	var day_results: Array = [{
+		"effects": {
+			"requires_edict_compliance": true,
+			"edict_id": 1,
+			"clan": "Scorpion",
+			"compliant": false,
+		},
+	}]
+
+	var results := DayOrchestrator._process_edict_compliance_actions(
+		day_results, edicts, characters,
+	)
+
+	assert_eq(
+		edict.compliance_by_clan.get("Scorpion", -1),
+		EdictData.ComplianceStatus.DEFIANT,
+	)
+	assert_eq(lord.honor, 5.0, "Defiant lord gets no honor bonus here")
+	assert_eq(results.size(), 0, "No compliance honor for defiance")
