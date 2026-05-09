@@ -220,90 +220,6 @@ static func apply_condemn_clan(
 	return result
 
 
-static func apply_authorize_war(edict: EdictData) -> Dictionary:
-	if edict.edict_type != EdictData.EdictType.AUTHORIZE_WAR:
-		return {"applied": false, "reason": "wrong_type"}
-	return {
-		"applied": true,
-		"edict_id": edict.edict_id,
-		"authorized_clan": edict.target_clan,
-		"war_authorized": true,
-	}
-
-
-static func apply_tax_reform(
-	edict: EdictData,
-	characters: Array[L5RCharacterData],
-) -> Dictionary:
-	if edict.edict_type != EdictData.EdictType.TAX_REFORM:
-		return {"applied": false, "reason": "wrong_type"}
-	var honor_bonus: float = 0.1
-	var affected: Array[int] = []
-	for c: L5RCharacterData in characters:
-		if c.clan == edict.target_clan and c.status >= 5.0:
-			HonorGlorySystem.apply_honor_change(c, honor_bonus)
-			affected.append(c.character_id)
-	return {
-		"applied": true,
-		"edict_id": edict.edict_id,
-		"target_clan": edict.target_clan,
-		"honor_bonus": honor_bonus,
-		"affected_ids": affected,
-	}
-
-
-static func apply_appoint_position(edict: EdictData) -> Dictionary:
-	if edict.edict_type != EdictData.EdictType.APPOINT_POSITION:
-		return {"applied": false, "reason": "wrong_type"}
-	return {
-		"applied": true,
-		"edict_id": edict.edict_id,
-		"target_character_id": edict.target_character_id,
-		"appointment_confirmed": true,
-	}
-
-
-static func apply_strip_autonomy(
-	edict: EdictData,
-	characters: Array[L5RCharacterData],
-) -> Dictionary:
-	if edict.edict_type != EdictData.EdictType.STRIP_AUTONOMY:
-		return {"applied": false, "reason": "wrong_type"}
-	var honor_loss: float = -1.0
-	var affected: Array[int] = []
-	for c: L5RCharacterData in characters:
-		if c.clan == edict.target_clan and c.status >= 5.0:
-			HonorGlorySystem.apply_honor_change(c, honor_loss)
-			affected.append(c.character_id)
-	return {
-		"applied": true,
-		"edict_id": edict.edict_id,
-		"target_clan": edict.target_clan,
-		"honor_loss": honor_loss,
-		"affected_ids": affected,
-		"autonomy_stripped": true,
-	}
-
-
-static func apply_compliance_honor(
-	edict: EdictData,
-	clan: String,
-	characters: Array[L5RCharacterData],
-) -> Dictionary:
-	var honor_gain: float = 0.1
-	var affected: Array[int] = []
-	for c: L5RCharacterData in characters:
-		if c.clan == clan and c.status >= 5.0:
-			HonorGlorySystem.apply_honor_change(c, honor_gain)
-			affected.append(c.character_id)
-	return {
-		"edict_id": edict.edict_id,
-		"clan": clan,
-		"compliance_honor": honor_gain,
-		"affected_ids": affected,
-	}
-
-
 # -- Compliance ----------------------------------------------------------------
 
 static func record_compliance(
@@ -468,7 +384,7 @@ static func process_daily_compliance(
 				results.append(consequence)
 
 		if are_all_compliant(edict):
-			var applied: Dictionary = _apply_compliant_edict(edict, active_wars, characters)
+			var applied: Dictionary = _apply_compliant_edict(edict, active_wars)
 			if not applied.is_empty():
 				results.append(applied)
 			deactivate_edict(edict)
@@ -531,20 +447,11 @@ static func _apply_defiance_to_characters(
 static func _apply_compliant_edict(
 	edict: EdictData,
 	active_wars: Array[WarData],
-	characters: Array[L5RCharacterData] = [],
 ) -> Dictionary:
 	match edict.edict_type:
 		EdictData.EdictType.CEASE_HOSTILITIES:
 			return apply_cease_hostilities(edict, active_wars)
 		EdictData.EdictType.CONDEMN_CLAN:
 			return apply_condemn_clan(edict, active_wars)
-		EdictData.EdictType.AUTHORIZE_WAR:
-			return apply_authorize_war(edict)
-		EdictData.EdictType.TAX_REFORM:
-			return apply_tax_reform(edict, characters)
-		EdictData.EdictType.APPOINT_POSITION:
-			return apply_appoint_position(edict)
-		EdictData.EdictType.STRIP_AUTONOMY:
-			return apply_strip_autonomy(edict, characters)
 		_:
 			return {"applied": true, "edict_id": edict.edict_id}

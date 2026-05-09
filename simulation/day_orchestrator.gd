@@ -145,10 +145,9 @@ static func advance_day(
 		provinces,
 	)
 
-	var edict_compliance_results: Array[Dictionary] = _process_edict_compliance_actions(
+	_process_edict_compliance_actions(
 		day_result.get("results", []),
 		active_edicts,
-		characters,
 	)
 
 	var war_declarations: Array[Dictionary] = _process_war_declarations(
@@ -349,7 +348,6 @@ static func advance_day(
 		"court_attendance": court_attendance,
 		"crisis_courts": crisis_courts,
 		"edict_results": edict_results,
-		"edict_compliance_results": edict_compliance_results,
 		"active_edicts": active_edicts,
 	}
 
@@ -4524,9 +4522,7 @@ static func _process_edict_compliance(
 static func _process_edict_compliance_actions(
 	day_results: Array,
 	active_edicts: Array[EdictData],
-	characters: Array[L5RCharacterData] = [],
-) -> Array[Dictionary]:
-	var results: Array[Dictionary] = []
+) -> void:
 	for result: Dictionary in day_results:
 		var effects: Dictionary = result.get("effects", {})
 		if not effects.get("requires_edict_compliance", false):
@@ -4539,13 +4535,7 @@ static func _process_edict_compliance_actions(
 		for edict: EdictData in active_edicts:
 			if edict.edict_id == edict_id and edict.is_active:
 				ImperialEdictSystem.record_compliance(edict, clan, compliant)
-				if compliant and not characters.is_empty():
-					var honor_result: Dictionary = ImperialEdictSystem.apply_compliance_honor(
-						edict, clan, characters
-					)
-					results.append(honor_result)
 				break
-	return results
 
 
 static func _process_strategic_court_calls(
