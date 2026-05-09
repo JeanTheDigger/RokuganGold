@@ -280,7 +280,7 @@ static func resolve_negotiate_surrender(
 		}
 
 	var margin: int = roll_result.get("total", 0) - 20
-	var raises: int = maxi(0, margin / 5)
+	var raises: int = maxi(0, int(margin / 5))
 
 	var terms: Dictionary = compute_peace_terms(war, own_clan)
 

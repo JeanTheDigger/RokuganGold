@@ -231,7 +231,7 @@ static func generate_harvest_topic(
 static func apply_imperial_edict_consequence(
 	lord_id: int,
 	target_clan: String,
-	characters_by_id: Dictionary,
+	_characters_by_id: Dictionary,
 ) -> Dictionary:
 	return {
 		"lord_honor_cost": EDICT_HONOR_COST,

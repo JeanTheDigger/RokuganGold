@@ -27,10 +27,10 @@ static func build_context(
 	if TravelSystem.is_traveling(character):
 		ctx.context_flag = Enums.ContextFlag.TRAVELING
 	else:
-		ctx.context_flag = world_state.get("context_flag", Enums.ContextFlag.AT_OWN_HOLDINGS)
+		ctx.context_flag = world_state.get("context_flag", Enums.ContextFlag.AT_OWN_HOLDINGS) as Enums.ContextFlag
 	ctx.season = world_state.get("season", 0)
 	ctx.ic_day = world_state.get("ic_day", 0)
-	ctx.sublocation = world_state.get("sublocation", Enums.Sublocation.PUBLIC)
+	ctx.sublocation = world_state.get("sublocation", Enums.Sublocation.PUBLIC) as Enums.Sublocation
 	var ws_zone_subtype: int = world_state.get("zone_subtype", -1)
 	if ws_zone_subtype >= 0:
 		ctx.zone_subtype = ws_zone_subtype as Enums.ZoneSubtype
@@ -143,7 +143,7 @@ static func build_context(
 # Standing Objective. Winner decomposes into an ImmediateNeed.
 
 static func resolve_goal(
-	character: L5RCharacterData,
+	_character: L5RCharacterData,
 	ctx: NPCDataStructures.ContextSnapshot,
 	objectives: Dictionary,
 ) -> NPCDataStructures.ImmediateNeed:
@@ -955,7 +955,7 @@ const URGENCY_EXPLICIT_ACTIONS: Dictionary = {
 static func _action_matches_urgency_category(
 	action_id: String,
 	applies_to: Variant,
-	current_need_type: String,
+	_current_need_type: String,
 	scoring_tables: Dictionary,
 ) -> bool:
 	if applies_to is Array:
@@ -1622,11 +1622,11 @@ static func _collect_raidable_provinces(
 
 
 # TODO: Filter trade routes by clan — requires province-to-clan mapping.
-static func _has_active_trade_routes(trade_routes: Array, clan: String) -> bool:
+static func _has_active_trade_routes(trade_routes: Array, _clan: String) -> bool:
 	for r: Variant in trade_routes:
 		if r is TradeRouteData:
-			var tr: TradeRouteData = r
-			if not tr.is_disrupted:
+			var route: TradeRouteData = r
+			if not route.is_disrupted:
 				return true
 		elif r is Dictionary:
 			if not r.get("is_disrupted", true):

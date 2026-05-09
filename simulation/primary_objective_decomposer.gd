@@ -306,8 +306,8 @@ static func _decompose_conquer_province(
 
 	var war_active: bool = not ctx.active_wars.is_empty()
 	if war_active:
-		var readiness: float = _assess_military_readiness(ctx)
-		if readiness >= 0.7:
+		var war_readiness: float = _assess_military_readiness(ctx)
+		if war_readiness >= 0.7:
 			return _make_need("ORDER_BATTLE", 3, {"target_province_id": target_province})
 		return _make_need("LEVY_TROOPS", 3)
 

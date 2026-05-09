@@ -2,8 +2,6 @@ extends Control
 
 # === UI Nodes ===
 @onready var storyteller_button = $ButtonMenu/StorytellerButton
-@onready var words_input_panel = $WordsInputPanel
-
 @onready var load_button = $ButtonMenu/LoadCharacterButton
 @onready var login_ui = $LoginUI
 @onready var new_character_button = $ButtonMenu/NewCharacterButton

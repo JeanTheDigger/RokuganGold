@@ -91,12 +91,12 @@ static func get_birth_family_floors() -> Dictionary:
 # -- Boost Decay --------------------------------------------------------------
 
 static func decay_clan_boost(current_boost: int, seasons_elapsed: int) -> int:
-	var decay: int = seasons_elapsed / CLAN_DECAY_SEASONS
+	var decay: int = int(seasons_elapsed / CLAN_DECAY_SEASONS)
 	return max(0, current_boost - decay)
 
 
 static func decay_family_boost(current_boost: int, seasons_elapsed: int) -> int:
-	var decay: int = seasons_elapsed / FAMILY_DECAY_SEASONS
+	var decay: int = int(seasons_elapsed / FAMILY_DECAY_SEASONS)
 	return max(0, current_boost - decay)
 
 
@@ -145,6 +145,6 @@ const BENTEN_FESTIVAL_MONTH: int = 12
 
 static func is_benten_festival(ic_day: int) -> bool:
 	var day_of_year: int = ic_day % 360
-	var month: int = (day_of_year / 30) + 1
+	var month: int = int(day_of_year / 30) + 1
 	var day_of_month: int = (day_of_year % 30) + 1
 	return month == BENTEN_FESTIVAL_MONTH and day_of_month == BENTEN_FESTIVAL_DAY

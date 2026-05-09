@@ -99,7 +99,7 @@ static func _get_variant_effects(variant: SeductionVariant, margin: int) -> Dict
 		SeductionVariant.SEDUCE:
 			return {"disposition_change": SEDUCE_DISPOSITION_BONUS}
 		SeductionVariant.SEDUCE_FOR_INFO:
-			return {"info_gained": true, "raises_for_detail": margin / 5}
+			return {"info_gained": true, "raises_for_detail": int(margin / 5)}
 		SeductionVariant.SEDUCE_FOR_ACCESS:
 			return {"access_granted": true}
 		SeductionVariant.SEDUCE_FOR_LEVERAGE:

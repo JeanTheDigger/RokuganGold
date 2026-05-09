@@ -95,7 +95,7 @@ static func get_wound_level(character: L5RCharacterData) -> Enums.WoundLevel:
 	# Each level holds `threshold` wound boxes. Wounds 1–threshold fill Healthy,
 	# threshold+1 through threshold*2 fill Nicked, etc. The penalty applies once
 	# wounds spill into a new level.
-	var level_index: int = (character.wounds_taken - 1) / threshold
+	var level_index: int = int((character.wounds_taken - 1) / threshold)
 	level_index = mini(level_index, levels.size() - 1)
 	return levels[level_index]
 

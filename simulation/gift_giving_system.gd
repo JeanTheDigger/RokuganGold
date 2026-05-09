@@ -165,7 +165,7 @@ static func compute_effective_free_raises(
 		Appropriateness.IDEAL, Appropriateness.APPROPRIATE, Appropriateness.NEUTRAL:
 			return base
 		Appropriateness.REDUCED:
-			return base / 2
+			return int(base / 2)
 		Appropriateness.INAPPROPRIATE, Appropriateness.INSULTING:
 			return 0
 	return base
@@ -305,12 +305,12 @@ static func resolve_deliver_gift(
 	else:
 		# Object appreciated, moment was not. Half disposition, no obligation.
 		result["outcome"] = "failure"
-		result["disposition_change"] = quality_disp / 2
+		result["disposition_change"] = int(quality_disp / 2)
 		var disp_mod: Dictionary = DispositionSystem.create_temporary_modifier(
 			get_disposition_event_key(tier), current_ic_day
 		)
 		if not disp_mod.is_empty():
-			disp_mod["value"] = disp_mod.get("value", 0) / 2
+			disp_mod["value"] = int(int(disp_mod.get("value", 0)) / 2)
 			result["modifiers_to_apply"].append(disp_mod)
 
 	return result

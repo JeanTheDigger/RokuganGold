@@ -154,7 +154,7 @@ static func compute_disposition_pull(npc: L5RCharacterData, rebel_lord_id: int) 
 		return 0
 	var raw: int = int(npc.disposition_values.get(rebel_lord_id, 0))
 	# Map -100..100 → 0..100.
-	return clampi((raw + 100) / 2, 0, 100)
+	return clampi(int((raw + 100) / 2), 0, 100)
 
 
 static func compute_ambition_pull(npc: L5RCharacterData) -> int:

@@ -33,7 +33,7 @@ static func cascade_request_to_vassals(
 	if vassal_ids.is_empty():
 		return []
 
-	var per_vassal: int = maxi(total_needed / vassal_ids.size(), 1)
+	var per_vassal: int = maxi(int(total_needed / vassal_ids.size()), 1)
 	var remainder: int = total_needed % vassal_ids.size()
 
 	var assignments: Array[Dictionary] = []
