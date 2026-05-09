@@ -643,7 +643,8 @@ static func _process_wall_engineering_effects(
 			})
 
 		# SEAL_WALL_BREACH: always deduct Koku; restore SI to 2 on success.
-		elif effects.has("koku_cost") and effects.get("koku_cost", 0.0) > 0.0:
+		elif applied.get("action_id", "") == "SEAL_WALL_BREACH" \
+				and effects.get("koku_cost", 0.0) > 0.0:
 			var settlement: Variant = wall_by_province.get(target_pid, null)
 			if not settlement is SettlementData:
 				continue

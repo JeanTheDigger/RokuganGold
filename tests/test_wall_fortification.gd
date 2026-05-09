@@ -322,6 +322,7 @@ func test_fortify_overwrite_equal_value_refreshes_duration() -> void:
 func test_seal_success_restores_si_to_2() -> void:
 	var s := _make_wall_settlement(10, 0, 10.0)
 	var applied: Array = [{
+		"action_id": "SEAL_WALL_BREACH",
 		"effects": {
 			"requires_breach_seal": true,
 			"koku_cost": 5.0,
@@ -336,6 +337,7 @@ func test_seal_success_restores_si_to_2() -> void:
 func test_seal_failure_does_not_restore_si() -> void:
 	var s := _make_wall_settlement(10, 0, 10.0)
 	var applied: Array = [{
+		"action_id": "SEAL_WALL_BREACH",
 		"effects": {
 			"requires_breach_seal": false,
 			"koku_cost": 5.0,
@@ -351,6 +353,7 @@ func test_seal_koku_capped_at_zero() -> void:
 	# Only 3 Koku available — deducted to 0, not negative
 	var s := _make_wall_settlement(10, 0, 3.0)
 	var applied: Array = [{
+		"action_id": "SEAL_WALL_BREACH",
 		"effects": {
 			"requires_breach_seal": true,
 			"koku_cost": 5.0,
