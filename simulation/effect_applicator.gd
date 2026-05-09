@@ -395,16 +395,11 @@ static func _detect_observable_effect(
 		return true
 
 	var disp_changes: Array = applied.get("disposition_changes", [])
-	if disp_changes.size() > 0:
-		var change: Dictionary = disp_changes[-1]
+	for change: Dictionary in disp_changes:
 		var old_tier: int = _get_disposition_tier(change.get("old", 0))
 		var new_tier: int = _get_disposition_tier(change.get("new", 0))
 		if old_tier != new_tier:
 			return true
-
-	if action_id == "PUBLIC_INSULT":
-		var disp_change: int = effects.get("disposition_change", 0)
-		return disp_change != 0 and result.get("success", false)
 
 	var province_updates: Array = applied.get("province_updates", [])
 	if province_updates.size() > 0:

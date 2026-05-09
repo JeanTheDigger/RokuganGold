@@ -943,15 +943,18 @@ static func _compute_social_effects(action_id: String, margin: int) -> Dictionar
 	var raises: int = maxi(margin / 5, 0)
 
 	# Per GDD s12.2 Category 1 — Targeted Disposition Values (LOCKED)
+	# Base + 3 per raise for disposition-granting social actions
 	match action_id:
 		"CHARM":
-			disp_change = 8
-		"OFFER_FAVOR", "LISTEN_REFLECT":
-			disp_change = 8
+			disp_change = 8 + raises * 3
+		"LISTEN_REFLECT":
+			disp_change = 11 + raises * 3
 		"PERSUADE":
-			disp_change = 11
+			disp_change = 11 + raises * 3
 		"NEGOTIATE":
-			disp_change = 11
+			disp_change = 9 + raises * 3
+		"IMPRESS":
+			disp_change = 9 + raises * 3
 		"GOSSIP":
 			info_gained = true
 		"PROBE", "READ_CHARACTER":
@@ -962,8 +965,6 @@ static func _compute_social_effects(action_id: String, margin: int) -> Dictionar
 			glory_change = 0.1
 		"PUBLIC_INSULT":
 			pass
-		"IMPRESS":
-			disp_change = 9
 		"ASK_FOR_INTRODUCTION":
 			info_gained = true
 		"DISCLOSE":
@@ -1123,6 +1124,7 @@ const CRITICAL_FAILURE_DISPOSITION: Dictionary = {
 	"NEGOTIATE": -6,
 	"LISTEN_REFLECT": -7,
 	"IMPRESS": -6,
+	"INTIMIDATE": -8,
 	"DISCLOSE": -5,
 	"GOSSIP": -5,
 }

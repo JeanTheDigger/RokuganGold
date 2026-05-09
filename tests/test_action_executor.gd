@@ -138,7 +138,8 @@ func test_social_success_produces_disposition_change() -> void:
 		action, _character, _ctx, _dice_engine, _action_skill_map
 	)
 	if result["success"]:
-		assert_eq(result["effects"]["disposition_change"], 8)
+		var raises: int = maxi(result.get("margin", 0) / 5, 0)
+		assert_eq(result["effects"]["disposition_change"], 8 + raises * 3)
 
 
 func test_social_failure_produces_no_disposition_change() -> void:
