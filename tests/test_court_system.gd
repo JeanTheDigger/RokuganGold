@@ -649,3 +649,57 @@ func test_closed_court_skipped_for_attendance():
 	var courts: Array[CourtSessionData] = [court]
 	var results := DayOrchestrator._process_court_attendance(courts, chars)
 	assert_eq(results.size(), 0, "Closed court ignored")
+
+
+# =============================================================================
+# EARLY DEPARTURE COSTS
+# =============================================================================
+
+func test_guest_departure_applies_disposition_cost():
+	var court := _make_court(1, CourtSessionData.CourtType.CLAN_CHAMPION_COURT, 100, 10)
+	CourtSystem.open_court(court, 50)
+	CourtSystem.add_attendee(court, 100)
+	CourtSystem.add_attendee(court, 200)
+	var host := _make_character(100, "10")
+	var guest := _make_character(200, "99")
+	var chars_by_id: Dictionary = {100: host, 200: guest}
+	var chars: Array[L5RCharacterData] = [host, guest]
+	var courts: Array[CourtSessionData] = [court]
+	var results := DayOrchestrator._process_court_attendance(courts, chars, chars_by_id)
+	var departure: Dictionary = {}
+	for r: Dictionary in results:
+		if r.get("action") == "departed":
+			departure = r
+	assert_false(departure.is_empty(), "Guest should depart")
+	assert_eq(departure["disposition_cost"], CourtPrioritySystem.GUEST_LEAVING_DISPOSITION_COST)
+	var host_disp: int = int(host.disposition_values.get(200, 0))
+	assert_eq(host_disp, CourtPrioritySystem.GUEST_LEAVING_DISPOSITION_COST)
+
+
+func test_guest_departure_no_honor_loss():
+	var court := _make_court(1, CourtSessionData.CourtType.PROVINCIAL_FAMILY_COURT, 100, 10)
+	CourtSystem.open_court(court, 50)
+	CourtSystem.add_attendee(court, 200)
+	var guest := _make_character(200, "99")
+	guest.honor = 5.0
+	var chars_by_id: Dictionary = {200: guest}
+	var chars: Array[L5RCharacterData] = [guest]
+	var courts: Array[CourtSessionData] = [court]
+	DayOrchestrator._process_court_attendance(courts, chars, chars_by_id)
+	assert_eq(guest.honor, 5.0, "Guests lose no honor on departure")
+
+
+func test_departure_result_includes_costs():
+	var court := _make_court(1, CourtSessionData.CourtType.PROVINCIAL_FAMILY_COURT, 100, 10)
+	CourtSystem.open_court(court, 50)
+	CourtSystem.add_attendee(court, 200)
+	var guest := _make_character(200, "99")
+	var host := _make_character(100, "10")
+	var chars_by_id: Dictionary = {100: host, 200: guest}
+	var chars: Array[L5RCharacterData] = [guest]
+	var courts: Array[CourtSessionData] = [court]
+	var results := DayOrchestrator._process_court_attendance(courts, chars, chars_by_id)
+	assert_eq(results.size(), 1)
+	assert_true(results[0].has("honor_loss"))
+	assert_true(results[0].has("glory_loss"))
+	assert_true(results[0].has("disposition_cost"))

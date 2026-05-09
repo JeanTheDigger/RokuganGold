@@ -76,7 +76,7 @@ static func advance_day(
 	)
 
 	var court_openings: Array[Dictionary] = _process_court_openings(active_courts, ic_day)
-	var court_attendance: Array[Dictionary] = _process_court_attendance(active_courts, characters)
+	var court_attendance: Array[Dictionary] = _process_court_attendance(active_courts, characters, characters_by_id)
 	var court_results: Array[Dictionary] = _process_active_courts(
 		active_courts, active_topics, next_topic_id, ic_day,
 		active_edicts, next_edict_id, active_wars,
@@ -4251,6 +4251,7 @@ static func _process_court_openings(
 static func _process_court_attendance(
 	active_courts: Array[CourtSessionData],
 	characters: Array[L5RCharacterData],
+	characters_by_id: Dictionary = {},
 ) -> Array[Dictionary]:
 	var results: Array[Dictionary] = []
 	for court: CourtSessionData in active_courts:
@@ -4269,12 +4270,42 @@ static func _process_court_attendance(
 				})
 			elif not at_settlement and is_attending and c.character_id != court.host_lord_id:
 				CourtSystem.remove_attendee(court, c.character_id)
-				results.append({
-					"court_id": court.court_id,
-					"character_id": c.character_id,
-					"action": "departed",
-				})
+				var departure := _apply_early_departure(c, court, characters_by_id)
+				departure["court_id"] = court.court_id
+				departure["character_id"] = c.character_id
+				departure["action"] = "departed"
+				results.append(departure)
 	return results
+
+
+static func _apply_early_departure(
+	character: L5RCharacterData,
+	court: CourtSessionData,
+	characters_by_id: Dictionary,
+) -> Dictionary:
+	var is_host: bool = character.character_id == court.host_lord_id
+	var is_proxy: bool = false
+	var cost: Dictionary = CourtPrioritySystem.get_early_departure_cost(is_host, is_proxy)
+
+	var honor_loss: float = cost.get("honor_loss", 0.0)
+	var glory_loss: float = cost.get("glory_loss", 0.0)
+	var disp_cost: int = cost.get("disposition_cost", 0)
+
+	if honor_loss != 0.0:
+		HonorGlorySystem.apply_honor_change(character, honor_loss)
+	if glory_loss != 0.0:
+		HonorGlorySystem.apply_glory_change(character, glory_loss)
+	if disp_cost != 0:
+		var host: L5RCharacterData = characters_by_id.get(court.host_lord_id) as L5RCharacterData
+		if host != null:
+			var current: int = int(host.disposition_values.get(character.character_id, 0))
+			host.disposition_values[character.character_id] = clampi(current + disp_cost, -100, 100)
+
+	return {
+		"honor_loss": honor_loss,
+		"glory_loss": glory_loss,
+		"disposition_cost": disp_cost,
+	}
 
 
 static func _process_strategic_court_calls(
