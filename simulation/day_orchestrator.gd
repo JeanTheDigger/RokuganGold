@@ -247,6 +247,7 @@ static func advance_day(
 	var progress_results: Array[Dictionary] = []
 	var insurgency_results: Dictionary = {}
 	var military_seasonal_result: Dictionary = {}
+	var wall_seasonal_result: Dictionary = {}
 	if current_season != prev_season:
 		# Add the IC year to miya_inputs so per-province blessed-year tracking
 		# stays consistent. Year is computed from the time system's tick count.
@@ -256,6 +257,9 @@ static func advance_day(
 		seasonal_result = _process_season_transition(
 			characters, provinces, current_season, season_meta,
 			approach_penalties, settlements, spring_inputs
+		)
+		wall_seasonal_result = _process_wall_seasonal_pressure(
+			settlements, provinces, current_season, season_meta
 		)
 		# Miya's Blessing follow-up — topic generation, disposition deltas,
 		# suspension penalties. Runs only on Spring transitions when the
@@ -349,6 +353,7 @@ static func advance_day(
 		"crisis_courts": crisis_courts,
 		"edict_results": edict_results,
 		"active_edicts": active_edicts,
+		"wall_seasonal": wall_seasonal_result,
 	}
 
 
@@ -485,6 +490,98 @@ static func _process_season_transition(
 		"knowledge_decayed": true,
 		"resource_tick": tick_result,
 		"approach_penalties_decayed": penalties_decayed,
+	}
+
+
+# -- Wall Seasonal Pressure (s2.4.3, s2.4.10) ----------------------------------
+# Applies SI decay, adjacent bleed, and PTL accumulation to wall tower settlements
+# once per season. Mutates settlement.wall_si and province.province_taint_level.
+
+static func _process_wall_seasonal_pressure(
+	settlements: Array[SettlementData],
+	provinces: Dictionary,
+	current_season: int,
+	season_meta: Dictionary,
+) -> Dictionary:
+	var season_name: String = _season_to_name(current_season)
+
+	# Collect wall tower settlements.
+	var wall_settlements: Array[SettlementData] = []
+	for s: SettlementData in settlements:
+		if s.settlement_type == Enums.SettlementType.WALL_TOWER:
+			wall_settlements.append(s)
+
+	if wall_settlements.is_empty():
+		return {}
+
+	# Build province_id → wall tower settlement map for adjacency lookups.
+	var province_to_wall: Dictionary = {}
+	for s: SettlementData in wall_settlements:
+		province_to_wall[s.province_id] = s
+
+	# Step 1: Apply seasonal SI decay per tower (s2.4.3 + s2.4.10).
+	var si_decay_results: Array[Dictionary] = []
+	for s: SettlementData in wall_settlements:
+		var province: Variant = provinces.get(s.province_id, null)
+		if not province is ProvinceData:
+			continue
+		var prov: ProvinceData = province as ProvinceData
+		var decay_result: Dictionary = WallSystem.apply_seasonal_si_decay(
+			s, season_name, prov.shadowlands_strength
+		)
+		var old_si: int = decay_result["new_si"] + decay_result["decay_applied"]
+		s.wall_si = decay_result["new_si"]
+		si_decay_results.append({
+			"settlement_id": s.settlement_id,
+			"province_id": s.province_id,
+			"old_si": old_si,
+			"new_si": decay_result["new_si"],
+			"decay_applied": decay_result["decay_applied"],
+		})
+
+	# Step 2: Adjacent bleed (s2.4.3).
+	# 0.5 SI per season accumulates in season_meta until it reaches 1.0.
+	var bleed_accum: Dictionary = season_meta.get("_wall_bleed_accum", {})
+	for s: SettlementData in wall_settlements:
+		var bleed_check: Dictionary = WallSystem.compute_adjacent_bleed(s.wall_si)
+		if not bleed_check["bleed_active"]:
+			continue
+		var province: Variant = provinces.get(s.province_id, null)
+		if not province is ProvinceData:
+			continue
+		var prov: ProvinceData = province as ProvinceData
+		for adj_id: int in prov.adjacent_province_ids:
+			if not province_to_wall.has(adj_id):
+				continue
+			var adj_s: SettlementData = province_to_wall[adj_id] as SettlementData
+			var key: String = str(adj_s.settlement_id)
+			var accum: float = float(bleed_accum.get(key, 0.0)) + bleed_check["bleed_amount"]
+			if accum >= 1.0:
+				adj_s.wall_si = maxi(0, adj_s.wall_si - 1)
+				accum -= 1.0
+			bleed_accum[key] = accum
+	season_meta["_wall_bleed_accum"] = bleed_accum
+
+	# Step 3: PTL contribution from degraded wall sections (s2.4.2).
+	var ptl_updates: Array[Dictionary] = []
+	for s: SettlementData in wall_settlements:
+		var province: Variant = provinces.get(s.province_id, null)
+		if not province is ProvinceData:
+			continue
+		var prov: ProvinceData = province as ProvinceData
+		var ptl_gain: float = WallSystem.compute_ptl_contribution(s.wall_si, true)
+		prov.province_taint_level = clampf(
+			prov.province_taint_level + ptl_gain, 0.0, 10.0
+		)
+		ptl_updates.append({
+			"province_id": s.province_id,
+			"ptl_gain": ptl_gain,
+			"new_ptl": prov.province_taint_level,
+		})
+
+	return {
+		"si_decay_results": si_decay_results,
+		"ptl_updates": ptl_updates,
 	}
 
 
