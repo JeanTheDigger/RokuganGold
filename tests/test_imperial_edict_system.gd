@@ -775,3 +775,175 @@ func test_personality_lean_favors_defiance_for_ishi():
 	var ishi_leans: Dictionary = lean_table.get("ISHI", {})
 	assert_lt(ishi_leans.get("COMPLY_WITH_EDICT", 0), 0, "Ishi should penalize compliance")
 	assert_gt(ishi_leans.get("DEFY_EDICT", 0), 0, "Ishi should favor defiance")
+
+
+# =============================================================================
+# REACTIVE EDICT EVENT INJECTION
+# =============================================================================
+
+func _make_lord(id: int, clan: String, status: float = 7.0) -> L5RCharacterData:
+	var c := L5RCharacterData.new()
+	c.character_id = id
+	c.clan = clan
+	c.status = status
+	c.lord_id = -1
+	return c
+
+
+func test_inject_edict_reactive_event_for_pending_clan():
+	var edict := ImperialEdictSystem.create_edict(
+		1, EdictData.EdictType.CEASE_HOSTILITIES, 100, 10, 5
+	)
+	edict.compliance_by_clan = {"Crane": EdictData.ComplianceStatus.PENDING}
+	var lord := _make_lord(50, "Crane")
+	var characters: Array[L5RCharacterData] = [lord]
+	var world_states: Dictionary = {}
+	var edicts: Array[EdictData] = [edict]
+
+	DayOrchestrator._inject_edict_reactive_events(edicts, characters, world_states, 10)
+
+	var ws: Dictionary = world_states.get(50, {})
+	var events: Array = ws.get("pending_events", [])
+	assert_eq(events.size(), 1, "Should inject one reactive event")
+	assert_eq(events[0]["need_type"], "RESPOND_TO_EDICT")
+	assert_eq(events[0]["target_npc_id"], 1, "target_npc_id carries edict_id")
+	assert_eq(events[0]["target_clan_id"], "Crane")
+	assert_eq(events[0]["priority"], 1)
+	assert_eq(events[0]["source"], "edict_response")
+
+
+func test_inject_skips_compliant_clans():
+	var edict := ImperialEdictSystem.create_edict(
+		1, EdictData.EdictType.GENERAL_DECREE, 100, 10, 5
+	)
+	edict.compliance_by_clan = {"Lion": EdictData.ComplianceStatus.COMPLIANT}
+	var lord := _make_lord(60, "Lion")
+	var characters: Array[L5RCharacterData] = [lord]
+	var world_states: Dictionary = {}
+	var edicts: Array[EdictData] = [edict]
+
+	DayOrchestrator._inject_edict_reactive_events(edicts, characters, world_states, 10)
+
+	var ws: Dictionary = world_states.get(60, {})
+	assert_eq(ws.get("pending_events", []).size(), 0, "No event for compliant clan")
+
+
+func test_inject_skips_defiant_clans():
+	var edict := ImperialEdictSystem.create_edict(
+		1, EdictData.EdictType.GENERAL_DECREE, 100, 10, 5
+	)
+	edict.compliance_by_clan = {"Scorpion": EdictData.ComplianceStatus.DEFIANT}
+	var lord := _make_lord(70, "Scorpion")
+	var characters: Array[L5RCharacterData] = [lord]
+	var world_states: Dictionary = {}
+	var edicts: Array[EdictData] = [edict]
+
+	DayOrchestrator._inject_edict_reactive_events(edicts, characters, world_states, 10)
+
+	var ws: Dictionary = world_states.get(70, {})
+	assert_eq(ws.get("pending_events", []).size(), 0, "No event for defiant clan")
+
+
+func test_inject_skips_inactive_edicts():
+	var edict := ImperialEdictSystem.create_edict(
+		1, EdictData.EdictType.GENERAL_DECREE, 100, 10, 5
+	)
+	edict.compliance_by_clan = {"Crane": EdictData.ComplianceStatus.PENDING}
+	edict.is_active = false
+	var lord := _make_lord(50, "Crane")
+	var characters: Array[L5RCharacterData] = [lord]
+	var world_states: Dictionary = {}
+	var edicts: Array[EdictData] = [edict]
+
+	DayOrchestrator._inject_edict_reactive_events(edicts, characters, world_states, 10)
+
+	var ws: Dictionary = world_states.get(50, {})
+	assert_eq(ws.get("pending_events", []).size(), 0, "No event for inactive edict")
+
+
+func test_inject_no_duplicate_for_same_edict():
+	var edict := ImperialEdictSystem.create_edict(
+		1, EdictData.EdictType.GENERAL_DECREE, 100, 10, 5
+	)
+	edict.compliance_by_clan = {"Crab": EdictData.ComplianceStatus.PENDING}
+	var lord := _make_lord(80, "Crab")
+	var characters: Array[L5RCharacterData] = [lord]
+	var world_states: Dictionary = {
+		80: {
+			"pending_events": [{
+				"need_type": "RESPOND_TO_EDICT",
+				"target_npc_id": 1,
+				"source": "edict_response",
+			}],
+		},
+	}
+	var edicts: Array[EdictData] = [edict]
+
+	DayOrchestrator._inject_edict_reactive_events(edicts, characters, world_states, 10)
+
+	var events: Array = world_states[80]["pending_events"]
+	assert_eq(events.size(), 1, "Should not duplicate existing edict event")
+
+
+func test_inject_multiple_edicts_multiple_clans():
+	var e1 := ImperialEdictSystem.create_edict(
+		1, EdictData.EdictType.CEASE_HOSTILITIES, 100, 10, 5
+	)
+	e1.compliance_by_clan = {
+		"Crane": EdictData.ComplianceStatus.PENDING,
+		"Lion": EdictData.ComplianceStatus.PENDING,
+	}
+	var e2 := ImperialEdictSystem.create_edict(
+		2, EdictData.EdictType.TAX_REFORM, 100, 10, 5
+	)
+	e2.compliance_by_clan = {"Crane": EdictData.ComplianceStatus.PENDING}
+
+	var crane_lord := _make_lord(50, "Crane")
+	var lion_lord := _make_lord(60, "Lion")
+	var characters: Array[L5RCharacterData] = [crane_lord, lion_lord]
+	var world_states: Dictionary = {}
+	var edicts: Array[EdictData] = [e1, e2]
+
+	DayOrchestrator._inject_edict_reactive_events(edicts, characters, world_states, 10)
+
+	var crane_events: Array = world_states.get(50, {}).get("pending_events", [])
+	var lion_events: Array = world_states.get(60, {}).get("pending_events", [])
+	assert_eq(crane_events.size(), 2, "Crane lord gets 2 edict events")
+	assert_eq(lion_events.size(), 1, "Lion lord gets 1 edict event")
+
+
+func test_inject_picks_highest_status_lord():
+	var edict := ImperialEdictSystem.create_edict(
+		1, EdictData.EdictType.GENERAL_DECREE, 100, 10, 5
+	)
+	edict.compliance_by_clan = {"Dragon": EdictData.ComplianceStatus.PENDING}
+	var minor_lord := _make_lord(40, "Dragon", 5.0)
+	var champion := _make_lord(41, "Dragon", 8.0)
+	var characters: Array[L5RCharacterData] = [minor_lord, champion]
+	var world_states: Dictionary = {}
+	var edicts: Array[EdictData] = [edict]
+
+	DayOrchestrator._inject_edict_reactive_events(edicts, characters, world_states, 10)
+
+	assert_false(world_states.has(40), "Minor lord should not get the event")
+	var ws: Dictionary = world_states.get(41, {})
+	assert_eq(ws.get("pending_events", []).size(), 1, "Champion gets the event")
+
+
+func test_inject_no_lord_found_skips():
+	var edict := ImperialEdictSystem.create_edict(
+		1, EdictData.EdictType.GENERAL_DECREE, 100, 10, 5
+	)
+	edict.compliance_by_clan = {"Phoenix": EdictData.ComplianceStatus.PENDING}
+	var vassal := L5RCharacterData.new()
+	vassal.character_id = 90
+	vassal.clan = "Phoenix"
+	vassal.status = 3.0
+	vassal.lord_id = 5
+	var characters: Array[L5RCharacterData] = [vassal]
+	var world_states: Dictionary = {}
+	var edicts: Array[EdictData] = [edict]
+
+	DayOrchestrator._inject_edict_reactive_events(edicts, characters, world_states, 10)
+
+	assert_false(world_states.has(90), "No event injected when no lord found")

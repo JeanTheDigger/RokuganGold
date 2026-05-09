@@ -88,6 +88,8 @@ static func advance_day(
 		active_edicts, active_wars, characters, active_topics, next_topic_id, ic_day,
 	)
 
+	_inject_edict_reactive_events(active_edicts, characters, world_states, ic_day)
+
 	var military_daily: Dictionary = _process_military_daily(
 		active_armies, active_sieges, active_tethers, order_states,
 		dice_engine, settlements, companies,
@@ -3254,6 +3256,59 @@ static func _consume_supply_status_results(
 				clan, result.get("retreat", {}), active_armies,
 				active_topics, next_topic_id, ic_day,
 			)
+
+
+static func _inject_edict_reactive_events(
+	active_edicts: Array[EdictData],
+	characters: Array[L5RCharacterData],
+	world_states: Dictionary,
+	_ic_day: int,
+) -> void:
+	for edict: EdictData in active_edicts:
+		if not edict.is_active:
+			continue
+		for clan: String in edict.compliance_by_clan:
+			var status: int = edict.compliance_by_clan[clan]
+			if status != EdictData.ComplianceStatus.PENDING:
+				continue
+			var lord_id: int = _find_clan_lord(characters, clan)
+			if lord_id < 0:
+				continue
+			var ws: Dictionary = world_states.get(lord_id, {})
+			if ws.is_empty():
+				ws = {}
+				world_states[lord_id] = ws
+			if not ws.has("pending_events"):
+				ws["pending_events"] = []
+			var already_injected: bool = false
+			for ev: Variant in ws["pending_events"]:
+				if ev is Dictionary and ev.get("source", "") == "edict_response" \
+						and ev.get("target_npc_id", -1) == edict.edict_id:
+					already_injected = true
+					break
+			if already_injected:
+				continue
+			ws["pending_events"].append({
+				"need_type": "RESPOND_TO_EDICT",
+				"priority": 1,
+				"target_npc_id": edict.edict_id,
+				"target_clan_id": clan,
+				"source": "edict_response",
+			})
+
+
+static func _find_clan_lord(
+	characters: Array[L5RCharacterData],
+	clan: String,
+) -> int:
+	var best_id: int = -1
+	var best_status: float = -1.0
+	for c: L5RCharacterData in characters:
+		if c.clan == clan and c.status >= 5.0 and c.lord_id == -1:
+			if c.status > best_status:
+				best_status = c.status
+				best_id = c.character_id
+	return best_id
 
 
 static func _inject_peace_need(
