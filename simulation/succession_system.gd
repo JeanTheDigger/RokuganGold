@@ -321,11 +321,11 @@ static func evaluate_all_candidates(
 	var results: Array[Dictionary] = []
 
 	for c in candidates:
-		var char: L5RCharacterData = c.get("character")
-		if char == null:
+		var candidate_char: L5RCharacterData = c.get("character")
+		if candidate_char == null:
 			continue
 		var topics: Array[Dictionary] = topics_by_character.get(c["id"], [])
-		var result: Dictionary = evaluate_candidate(lord, char, c["priority"], weights, position_demand, topics)
+		var result: Dictionary = evaluate_candidate(lord, candidate_char, c["priority"], weights, position_demand, topics)
 		results.append(result)
 
 	results.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a["total"] > b["total"])

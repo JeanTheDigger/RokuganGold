@@ -568,7 +568,7 @@ static func _execute_gossip(
 
 	var success: bool = roll_result.get("success", false)
 	var margin: int = roll_result.get("total", 0) - tn
-	var raises: int = maxi(margin / 5, 0)
+	var raises: int = maxi(int(margin / 5.0), 0)
 	var effects: Dictionary = {}
 
 	if success:
@@ -632,7 +632,7 @@ static func _execute_public_insult(
 
 	var success: bool = attacker_total >= defender_total
 	var margin: int = attacker_total - defender_total
-	var raises: int = maxi(margin / 5, 0)
+	var raises: int = maxi(int(margin / 5.0), 0)
 	var witness_ids: Array[int] = _get_co_located_ids(character, characters_by_id)
 
 	var effects: Dictionary = {}
@@ -688,7 +688,7 @@ static func _execute_broadcast_social(
 
 	var success: bool = roll_result.get("success", false)
 	var margin: int = roll_result.get("total", 0) - tn
-	var raises: int = maxi(margin / 5, 0)
+	var raises: int = maxi(int(margin / 5.0), 0)
 	var witness_ids: Array[int] = _get_co_located_ids(character, characters_by_id)
 
 	var effects: Dictionary = {}
@@ -1016,7 +1016,7 @@ static func _compute_social_effects(action_id: String, margin: int) -> Dictionar
 	var disp_change: int = 0
 	var glory_change: float = 0.0
 	var info_gained: bool = false
-	var raises: int = maxi(margin / 5, 0)
+	var raises: int = maxi(int(margin / 5.0), 0)
 
 	# Per GDD s12.2 Category 1 — Targeted Disposition Values (LOCKED)
 	# Base + 3 per raise for disposition-granting social actions
@@ -1058,7 +1058,7 @@ static func _compute_covert_effects(action_id: String, margin: int) -> Dictionar
 	return {
 		"info_gained": info_gained,
 		"detection_risk": detection_risk,
-		"quality": clampi(margin / 5, 1, 5),
+		"quality": clampi(int(margin / 5.0), 1, 5),
 	}
 
 
@@ -1431,7 +1431,7 @@ static func _execute_fortify_wall_section(
 	)
 	var success: bool = roll_result.get("success", false)
 	var margin: int = roll_result.get("margin", 0)
-	var raises: int = maxi(margin / 5, 0)
+	var raises: int = maxi(int(margin / 5.0), 0)
 	var si_gain: int = int(WallSystem.compute_fortify_si_gain(raises))
 	var kaiu_reinforce: Dictionary = WallSystem.get_kaiu_reinforce(ctx.insight_rank)
 
@@ -1635,7 +1635,7 @@ static func _validate_military_order(
 static func _compute_intelligence_effects(action_id: String, margin: int) -> Dictionary:
 	match action_id:
 		"EXAMINE_CRIME_SCENE":
-			var raises: int = margin / 5
+			var raises: int = int(margin / 5.0)
 			var evidence: int = InvestigationSystem.EVIDENCE_BASE_WEIGHT \
 				+ (raises * InvestigationSystem.EVIDENCE_PER_RAISE)
 			return {
@@ -1664,7 +1664,7 @@ static func _resolve_travel_destination(
 static func _execute_negotiate_surrender(
 	action: NPCDataStructures.ScoredAction,
 	character: L5RCharacterData,
-	ctx: NPCDataStructures.ContextSnapshot,
+	_ctx: NPCDataStructures.ContextSnapshot,
 	dice_engine: DiceEngine,
 ) -> Dictionary:
 	var war: WarData = action.metadata.get("war_ref") as WarData

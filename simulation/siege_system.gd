@@ -352,7 +352,7 @@ static func compute_honor_loss(
 	if ticks_since_sortie <= threshold:
 		return 0.0
 	var ticks_past: int = ticks_since_sortie - threshold
-	var intervals: int = ticks_past / HONOR_LOSS_INTERVAL
+	var intervals: int = int(ticks_past / float(HONOR_LOSS_INTERVAL))
 	return float(intervals) * HONOR_LOSS_PER_INTERVAL
 
 
@@ -409,7 +409,7 @@ static func end_siege(
 
 static func process_siege_tick(
 	siege_state: Dictionary,
-	dice: DiceEngine,
+	_dice: DiceEngine,
 	personality_tag: String,
 ) -> Dictionary:
 	if siege_state["siege_ended"]:

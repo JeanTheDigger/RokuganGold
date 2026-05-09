@@ -58,7 +58,7 @@ static func select_topic_to_share(character: L5RCharacterData, rng_value: int) -
 
 
 static func transfer_topic(
-	from_char: L5RCharacterData,
+	_from_char: L5RCharacterData,
 	to_char: L5RCharacterData,
 	topic: int,
 ) -> bool:

@@ -594,11 +594,11 @@ static func get_terrain_modifiers(
 	else:
 		mods["attack_mod"] += t.get("attacker_attack_penalty", 0)
 
-	var is_cavalry: bool = _is_cavalry(unit_type)
+	var unit_is_cavalry: bool = _is_cavalry(unit_type)
 	var is_spearmen: bool = unit_type in ANTI_CAVALRY_UNIT_TYPES
 	var is_archer: bool = unit_type == Enums.CompanyUnitType.ASHIGARU_ARCHERS
 
-	if is_cavalry:
+	if unit_is_cavalry:
 		if t.get("cavalry_flanking_disabled", false):
 			mods["flanking_disabled"] = true
 		mods["attack_mod"] += t.get("cavalry_attack_penalty", 0)
@@ -618,7 +618,7 @@ static func get_terrain_modifiers(
 	if is_archer and is_defender:
 		mods["attack_mod"] += t.get("archer_defender_attack_bonus", 0)
 
-	if is_amphibious and not is_defender and not is_cavalry:
+	if is_amphibious and not is_defender and not unit_is_cavalry:
 		mods["attack_mod"] += t.get("amphibious_attacker_attack_penalty", 0)
 
 	return mods
@@ -1039,8 +1039,8 @@ static func _build_matchups(
 static func _find_flanking_opportunities(
 	atk_r1: Array[Dictionary],
 	def_r1: Array[Dictionary],
-	all_attackers: Array[Dictionary],
-	all_defenders: Array[Dictionary],
+	_all_attackers: Array[Dictionary],
+	_all_defenders: Array[Dictionary],
 	terrain: Enums.BattleTerrainType,
 ) -> Array[Dictionary]:
 	var flanks: Array[Dictionary] = []
