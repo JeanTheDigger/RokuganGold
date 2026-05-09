@@ -646,3 +646,133 @@ func test_conduct_sortie_high_ss_gives_medium_force() -> void:
 	assert_true(result["success"])
 	assert_eq(result["effects"]["force_size"], "medium")
 	assert_eq(result["effects"]["ss_reduction"], 2)
+
+
+# =============================================================================
+# _process_sortie_results — DayOrchestrator (s2.4.10, s2.4.11, s2.4.15)
+# =============================================================================
+
+func _make_sortie_applied(
+	province_id: int, ss_reduction: int, force_pct: float, jade_per_warrior: int
+) -> Dictionary:
+	return {
+		"action_id": "CONDUCT_SORTIE",
+		"effects": {
+			"requires_sortie_combat": true,
+			"ss_reduction": ss_reduction,
+			"force_pct": force_pct,
+			"jade_per_warrior": jade_per_warrior,
+			"target_province_id": province_id,
+		}
+	}
+
+
+func _make_wall_province_data(pid: int, ss: int) -> ProvinceData:
+	var p := ProvinceData.new()
+	p.province_id = pid
+	p.shadowlands_strength = ss
+	p.province_taint_level = 0.0
+	p.adjacent_province_ids = []
+	return p
+
+
+func _make_wall_tower_settlement(pid: int, garrison: int, jade: float) -> SettlementData:
+	var s := SettlementData.new()
+	s.settlement_id = pid * 10
+	s.province_id = pid
+	s.settlement_type = Enums.SettlementType.WALL_TOWER
+	s.garrison_pu = garrison
+	s.jade_stockpile = jade
+	return s
+
+
+func test_sortie_reduces_ss() -> void:
+	var p := _make_wall_province_data(10, 8)
+	var s := _make_wall_tower_settlement(10, 10, 50.0)
+	var applied: Array = [_make_sortie_applied(10, 2, 0.40, 2)]
+	var results: Array = DayOrchestrator._process_sortie_results(applied, [s], {10: p})
+	assert_eq(p.shadowlands_strength, 6)
+	assert_eq(results.size(), 1)
+	assert_eq(results[0]["ss_reduction_applied"], 2)
+	assert_eq(results[0]["new_ss"], 6)
+
+
+func test_sortie_ss_clamped_at_zero() -> void:
+	var p := _make_wall_province_data(10, 1)
+	var s := _make_wall_tower_settlement(10, 10, 20.0)
+	var applied: Array = [_make_sortie_applied(10, 3, 0.20, 1)]
+	DayOrchestrator._process_sortie_results(applied, [s], {10: p})
+	assert_eq(p.shadowlands_strength, 0)
+
+
+func test_sortie_consumes_jade_from_settlement() -> void:
+	# garrison_pu=10, force_pct=0.20 → warriors=2; jade_per_warrior=1 → jade_consumed=2
+	var p := _make_wall_province_data(10, 6)
+	var s := _make_wall_tower_settlement(10, 10, 20.0)
+	var applied: Array = [_make_sortie_applied(10, 1, 0.20, 1)]
+	DayOrchestrator._process_sortie_results(applied, [s], {10: p})
+	assert_almost_eq(s.jade_stockpile, 18.0, 0.001)
+
+
+func test_sortie_medium_consumes_2_jade_per_warrior() -> void:
+	# garrison_pu=10, force_pct=0.40 → warriors=4; jade_per_warrior=2 → jade_consumed=8
+	var p := _make_wall_province_data(10, 8)
+	var s := _make_wall_tower_settlement(10, 10, 30.0)
+	var applied: Array = [_make_sortie_applied(10, 2, 0.40, 2)]
+	DayOrchestrator._process_sortie_results(applied, [s], {10: p})
+	assert_almost_eq(s.jade_stockpile, 22.0, 0.001)
+
+
+func test_sortie_large_consumes_3_jade_per_warrior() -> void:
+	# garrison_pu=10, force_pct=0.60 → warriors=6; jade_per_warrior=3 → jade_consumed=18
+	var p := _make_wall_province_data(10, 9)
+	var s := _make_wall_tower_settlement(10, 10, 30.0)
+	var applied: Array = [_make_sortie_applied(10, 3, 0.60, 3)]
+	DayOrchestrator._process_sortie_results(applied, [s], {10: p})
+	assert_almost_eq(s.jade_stockpile, 12.0, 0.001)
+
+
+func test_sortie_jade_clamped_at_zero_if_insufficient() -> void:
+	# garrison_pu=10, force_pct=0.40 → warriors=4; jade_per=2 → needs 8; only 3 available
+	var p := _make_wall_province_data(10, 8)
+	var s := _make_wall_tower_settlement(10, 10, 3.0)
+	var applied: Array = [_make_sortie_applied(10, 2, 0.40, 2)]
+	DayOrchestrator._process_sortie_results(applied, [s], {10: p})
+	assert_almost_eq(s.jade_stockpile, 0.0, 0.001)
+
+
+func test_sortie_no_mutation_when_flag_false() -> void:
+	var p := _make_wall_province_data(10, 8)
+	var s := _make_wall_tower_settlement(10, 10, 20.0)
+	var applied: Array = [{
+		"action_id": "CONDUCT_SORTIE",
+		"effects": {"requires_sortie_combat": false, "target_province_id": 10}
+	}]
+	DayOrchestrator._process_sortie_results(applied, [s], {10: p})
+	assert_eq(p.shadowlands_strength, 8, "No SS change without flag")
+	assert_almost_eq(s.jade_stockpile, 20.0, 0.001, "No jade change without flag")
+
+
+func test_sortie_result_in_return_array() -> void:
+	var p := _make_wall_province_data(10, 5)
+	var s := _make_wall_tower_settlement(10, 8, 15.0)
+	var applied: Array = [_make_sortie_applied(10, 1, 0.20, 1)]
+	var results: Array = DayOrchestrator._process_sortie_results(applied, [s], {10: p})
+	assert_eq(results.size(), 1)
+	assert_eq(results[0]["province_id"], 10)
+
+
+func test_sortie_two_independent_sorties() -> void:
+	var p1 := _make_wall_province_data(10, 6)
+	var p2 := _make_wall_province_data(20, 9)
+	var s1 := _make_wall_tower_settlement(10, 10, 20.0)
+	var s2 := _make_wall_tower_settlement(20, 8, 30.0)
+	var applied: Array = [
+		_make_sortie_applied(10, 1, 0.20, 1),   # small → ss 6-1=5, jade 10*0.2=2 warriors ×1=2
+		_make_sortie_applied(20, 2, 0.40, 2),   # medium → ss 9-2=7, jade 8*0.4=3 warriors ×2=6
+	]
+	DayOrchestrator._process_sortie_results(applied, [s1, s2], {10: p1, 20: p2})
+	assert_eq(p1.shadowlands_strength, 5)
+	assert_eq(p2.shadowlands_strength, 7)
+	assert_almost_eq(s1.jade_stockpile, 18.0, 0.001)
+	assert_almost_eq(s2.jade_stockpile, 24.0, 0.001)

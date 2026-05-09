@@ -131,6 +131,12 @@ static func advance_day(
 		settlements,
 	)
 
+	var sortie_results: Array[Dictionary] = _process_sortie_results(
+		day_result.get("results", []),
+		settlements,
+		provinces,
+	)
+
 	var starvation_results: Array[Dictionary] = _process_starvation_warfare_effects(
 		day_result.get("results", []),
 		characters_by_id,
@@ -360,6 +366,7 @@ static func advance_day(
 		"active_edicts": active_edicts,
 		"wall_seasonal": wall_seasonal_result,
 		"wall_engineering_results": wall_engineering_results,
+		"sortie_results": sortie_results,
 	}
 
 
@@ -662,6 +669,61 @@ static func _process_wall_engineering_effects(
 				"koku_deducted": float(effects["koku_cost"]),
 				"sealed": effects.get("requires_breach_seal", false),
 			})
+
+	return results
+
+
+# -- Sortie Results (s2.4.10, s2.4.11, s2.4.15) --------------------------------
+
+static func _process_sortie_results(
+	applied_list: Array,
+	settlements: Array[SettlementData],
+	provinces: Dictionary,
+) -> Array[Dictionary]:
+	var results: Array[Dictionary] = []
+
+	# Build province_id → wall tower settlement map for jade deduction.
+	var wall_by_province: Dictionary = {}
+	for s: SettlementData in settlements:
+		if s.settlement_type == Enums.SettlementType.WALL_TOWER:
+			wall_by_province[s.province_id] = s
+
+	for applied: Dictionary in applied_list:
+		var effects: Dictionary = applied.get("effects", {})
+		if not effects.get("requires_sortie_combat", false):
+			continue
+
+		var target_pid: int = effects.get("target_province_id", -1)
+		var ss_reduction: int = int(effects.get("ss_reduction", 0))
+		var force_pct: float = float(effects.get("force_pct", 0.0))
+		var jade_per_warrior: int = int(effects.get("jade_per_warrior", 1))
+
+		# Apply SS reduction to the Shadowlands province (s2.4.11).
+		# Horde combat resolution is deferred (s2.4.7); SS reduction is applied
+		# immediately as a simplified sortie outcome.
+		var new_ss: int = 0
+		var province: Variant = provinces.get(target_pid, null)
+		if province is ProvinceData:
+			var prov: ProvinceData = province as ProvinceData
+			new_ss = maxi(0, prov.shadowlands_strength - ss_reduction)
+			prov.shadowlands_strength = new_ss
+
+		# Consume jade from the Tower stockpile (s2.4.15).
+		# warriors = floor(garrison_pu × force_pct); jade = warriors × jade_per_warrior.
+		var jade_consumed: float = 0.0
+		var settlement: Variant = wall_by_province.get(target_pid, null)
+		if settlement is SettlementData:
+			var s: SettlementData = settlement as SettlementData
+			var warriors: int = int(s.garrison_pu * force_pct)
+			jade_consumed = float(warriors * jade_per_warrior)
+			s.jade_stockpile = maxf(0.0, s.jade_stockpile - jade_consumed)
+
+		results.append({
+			"province_id": target_pid,
+			"ss_reduction_applied": ss_reduction,
+			"new_ss": new_ss,
+			"jade_consumed": jade_consumed,
+		})
 
 	return results
 
