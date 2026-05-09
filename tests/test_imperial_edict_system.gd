@@ -545,3 +545,153 @@ func test_edict_topics_created_on_court_close():
 			edict_topics.append(t)
 	assert_true(edict_topics.size() > 0, "Edict topic should be created")
 	assert_eq(edict_topics[0].category, TopicData.Category.POLITICAL)
+
+
+# =============================================================================
+# COMPLIANCE ENFORCEMENT
+# =============================================================================
+
+func _make_clan_lord(id: int, clan: String) -> L5RCharacterData:
+	var c := L5RCharacterData.new()
+	c.character_id = id
+	c.clan = clan
+	c.status = 6.0
+	c.honor = 5.0
+	return c
+
+
+func test_create_edict_sets_compliance_deadline():
+	var e := ImperialEdictSystem.create_edict(
+		1, EdictData.EdictType.CEASE_HOSTILITIES, 100, 50
+	)
+	assert_eq(e.compliance_deadline_ic_day, 80, "50 + 30 = 80")
+
+
+func test_tax_reform_deadline_is_90_days():
+	var e := ImperialEdictSystem.create_edict(
+		1, EdictData.EdictType.TAX_REFORM, 100, 50
+	)
+	assert_eq(e.compliance_deadline_ic_day, 140, "50 + 90 = 140")
+
+
+func test_condemn_clan_has_no_grace_period():
+	var e := ImperialEdictSystem.create_edict(
+		1, EdictData.EdictType.CONDEMN_CLAN, 100, 50
+	)
+	assert_eq(e.compliance_deadline_ic_day, -1, "0 grace = no deadline set")
+
+
+func test_pending_clans_become_defiant_at_deadline():
+	var e := ImperialEdictSystem.create_edict(
+		1, EdictData.EdictType.CEASE_HOSTILITIES, 100, 10
+	)
+	e.compliance_by_clan = {
+		"Crane": EdictData.ComplianceStatus.PENDING,
+		"Lion": EdictData.ComplianceStatus.PENDING,
+	}
+	var chars: Array[L5RCharacterData] = [_make_clan_lord(10, "Crane"), _make_clan_lord(20, "Lion")]
+	var edicts: Array[EdictData] = [e]
+	var wars: Array[WarData] = [_make_war(1, "Crane", "Lion")]
+
+	var results := ImperialEdictSystem.process_daily_compliance(edicts, wars, chars, 40)
+	assert_eq(results.size(), 2, "Both clans become defiant")
+	assert_true(ImperialEdictSystem.is_clan_defiant(e, "Crane"))
+	assert_true(ImperialEdictSystem.is_clan_defiant(e, "Lion"))
+
+
+func test_defiance_applies_honor_cost():
+	var e := ImperialEdictSystem.create_edict(
+		1, EdictData.EdictType.CEASE_HOSTILITIES, 100, 10
+	)
+	e.compliance_by_clan = {"Crane": EdictData.ComplianceStatus.PENDING}
+	var lord := _make_clan_lord(10, "Crane")
+	var initial_honor: float = lord.honor
+	var chars: Array[L5RCharacterData] = [lord]
+	var edicts: Array[EdictData] = [e]
+	var wars: Array[WarData] = [_make_war(1, "Crane", "Lion")]
+
+	ImperialEdictSystem.process_daily_compliance(edicts, wars, chars, 40)
+	assert_lt(lord.honor, initial_honor, "Honor should decrease")
+
+
+func test_ceasefire_auto_compliance_when_war_ended():
+	var e := ImperialEdictSystem.create_edict(
+		1, EdictData.EdictType.CEASE_HOSTILITIES, 100, 10
+	)
+	e.compliance_by_clan = {
+		"Crane": EdictData.ComplianceStatus.PENDING,
+		"Lion": EdictData.ComplianceStatus.PENDING,
+	}
+	e.target_war_id = 1
+	var chars: Array[L5RCharacterData] = []
+	var edicts: Array[EdictData] = [e]
+	var wars: Array[WarData] = []
+
+	ImperialEdictSystem.process_daily_compliance(edicts, wars, chars, 5)
+	assert_true(ImperialEdictSystem.are_all_compliant(e))
+	assert_false(e.is_active, "Edict deactivated after full compliance")
+
+
+func test_compliant_edict_deactivated():
+	var e := ImperialEdictSystem.create_edict(
+		1, EdictData.EdictType.GENERAL_DECREE, 100, 10
+	)
+	e.compliance_by_clan = {"Crane": EdictData.ComplianceStatus.COMPLIANT}
+	var edicts: Array[EdictData] = [e]
+	var wars: Array[WarData] = []
+	var chars: Array[L5RCharacterData] = []
+
+	ImperialEdictSystem.process_daily_compliance(edicts, wars, chars, 5)
+	assert_false(e.is_active)
+
+
+func test_defiance_topic_generated():
+	var e := ImperialEdictSystem.create_edict(
+		1, EdictData.EdictType.CEASE_HOSTILITIES, 100, 10
+	)
+	e.compliance_by_clan = {"Crane": EdictData.ComplianceStatus.PENDING}
+	var chars: Array[L5RCharacterData] = [_make_clan_lord(10, "Crane")]
+	var edicts: Array[EdictData] = [e]
+	var wars: Array[WarData] = [_make_war(1, "Crane", "Lion")]
+
+	var results := ImperialEdictSystem.process_daily_compliance(edicts, wars, chars, 40)
+	assert_eq(results.size(), 1)
+	var topic_dict: Dictionary = results[0].get("defiance_topic", {})
+	assert_false(topic_dict.is_empty())
+	assert_eq(topic_dict["topic_type"], "edict_defiance")
+
+
+func test_orchestrator_creates_defiance_topic_data():
+	var e := ImperialEdictSystem.create_edict(
+		1, EdictData.EdictType.CEASE_HOSTILITIES, 100, 10
+	)
+	e.compliance_by_clan = {"Crane": EdictData.ComplianceStatus.PENDING}
+	var lord := _make_clan_lord(10, "Crane")
+	var chars: Array[L5RCharacterData] = [lord]
+	var edicts: Array[EdictData] = [e]
+	var wars: Array[WarData] = [_make_war(1, "Crane", "Lion")]
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [500]
+
+	var results := DayOrchestrator._process_edict_compliance(
+		edicts, wars, chars, active_topics, next_topic_id, 40,
+	)
+	assert_eq(results.size(), 1)
+	var defiance_topics: Array[TopicData] = []
+	for t: TopicData in active_topics:
+		if t.topic_type == "edict_defiance":
+			defiance_topics.append(t)
+	assert_eq(defiance_topics.size(), 1)
+	assert_eq(defiance_topics[0].tier, TopicData.Tier.TIER_1)
+	assert_eq(defiance_topics[0].momentum, 90.0)
+
+
+func test_inactive_edict_skipped():
+	var e := ImperialEdictSystem.create_edict(
+		1, EdictData.EdictType.GENERAL_DECREE, 100, 10
+	)
+	e.compliance_by_clan = {"Crane": EdictData.ComplianceStatus.PENDING}
+	e.is_active = false
+	var edicts: Array[EdictData] = [e]
+	var results := ImperialEdictSystem.process_daily_compliance(edicts, [], [], 40)
+	assert_eq(results.size(), 0)

@@ -29,5 +29,6 @@ enum ComplianceStatus {
 @export var target_topic_id: int = -1
 @export var description: String = ""
 @export var compliance_by_clan: Dictionary = {}
+@export var compliance_deadline_ic_day: int = -1
 @export var is_active: bool = true
 @export var court_id: int = -1

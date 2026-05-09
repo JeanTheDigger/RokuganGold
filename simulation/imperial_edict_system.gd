@@ -10,6 +10,16 @@ const CONDEMN_WAR_SCORE_SHIFT: int = 10
 
 const MAX_EDICTS_PER_WINTER_COURT: int = 3
 
+const COMPLIANCE_DEADLINE: Dictionary = {
+	EdictData.EdictType.CEASE_HOSTILITIES: 30,
+	EdictData.EdictType.CONDEMN_CLAN: 0,
+	EdictData.EdictType.AUTHORIZE_WAR: 0,
+	EdictData.EdictType.TAX_REFORM: 90,
+	EdictData.EdictType.APPOINT_POSITION: 30,
+	EdictData.EdictType.STRIP_AUTONOMY: 30,
+	EdictData.EdictType.GENERAL_DECREE: 30,
+}
+
 const ARCHETYPE_EDICT_FREQUENCY: Dictionary = {
 	StrategicReview.EmperorArchetype.BENEVOLENT: 1,
 	StrategicReview.EmperorArchetype.IRON: 3,
@@ -34,6 +44,9 @@ static func create_edict(
 	e.emperor_id = emperor_id
 	e.ic_day_issued = ic_day
 	e.court_id = court_id
+	var grace: int = COMPLIANCE_DEADLINE.get(edict_type, 30)
+	if grace > 0:
+		e.compliance_deadline_ic_day = ic_day + grace
 	return e
 
 
@@ -341,3 +354,104 @@ static func would_emperor_issue_edict(
 
 static func deactivate_edict(edict: EdictData) -> void:
 	edict.is_active = false
+
+
+# -- Daily Compliance Processing -----------------------------------------------
+
+static func process_daily_compliance(
+	active_edicts: Array[EdictData],
+	active_wars: Array[WarData],
+	characters: Array[L5RCharacterData],
+	ic_day: int,
+) -> Array[Dictionary]:
+	var results: Array[Dictionary] = []
+	for edict: EdictData in active_edicts:
+		if not edict.is_active:
+			continue
+		if edict.compliance_by_clan.is_empty():
+			continue
+
+		if edict.edict_type == EdictData.EdictType.CEASE_HOSTILITIES:
+			_check_ceasefire_auto_compliance(edict, active_wars)
+
+		var deadline_passed: bool = edict.compliance_deadline_ic_day >= 0 and ic_day >= edict.compliance_deadline_ic_day
+		if deadline_passed:
+			var newly_defiant: Array[String] = _mark_pending_as_defiant(edict)
+			for clan: String in newly_defiant:
+				var consequence: Dictionary = compute_defiance_consequences(edict, clan)
+				_apply_defiance_to_characters(consequence, characters, edict.emperor_id)
+				consequence["defiance_topic"] = generate_defiance_topic(edict, clan)
+				results.append(consequence)
+
+		if are_all_compliant(edict):
+			var applied: Dictionary = _apply_compliant_edict(edict, active_wars)
+			if not applied.is_empty():
+				results.append(applied)
+			deactivate_edict(edict)
+
+	return results
+
+
+static func _check_ceasefire_auto_compliance(
+	edict: EdictData,
+	active_wars: Array[WarData],
+) -> void:
+	var war_still_active: bool = false
+	for w: WarData in active_wars:
+		if w.war_id == edict.target_war_id:
+			war_still_active = true
+			break
+	if not war_still_active:
+		for clan: String in edict.compliance_by_clan:
+			if edict.compliance_by_clan[clan] == EdictData.ComplianceStatus.PENDING:
+				edict.compliance_by_clan[clan] = EdictData.ComplianceStatus.COMPLIANT
+
+
+static func _mark_pending_as_defiant(edict: EdictData) -> Array[String]:
+	var newly_defiant: Array[String] = []
+	for clan: String in edict.compliance_by_clan:
+		if edict.compliance_by_clan[clan] == EdictData.ComplianceStatus.PENDING:
+			edict.compliance_by_clan[clan] = EdictData.ComplianceStatus.DEFIANT
+			newly_defiant.append(clan)
+	return newly_defiant
+
+
+static func _apply_defiance_to_characters(
+	consequence: Dictionary,
+	characters: Array[L5RCharacterData],
+	emperor_id: int,
+) -> void:
+	var defiant_clan: String = consequence.get("clan", "")
+	var honor_cost: float = consequence.get("honor_cost", 0.0)
+	var disp_emperor: int = consequence.get("disposition_from_emperor", 0)
+	var disp_others: int = consequence.get("disposition_from_others", 0)
+
+	for c: L5RCharacterData in characters:
+		if c.clan != defiant_clan:
+			continue
+		if c.status < 5.0:
+			continue
+		HonorGlorySystem.apply_honor_change(c, honor_cost)
+		if emperor_id >= 0:
+			var cur_emp: int = int(c.disposition_values.get(emperor_id, 0))
+			c.disposition_values[emperor_id] = clampi(cur_emp + disp_emperor, -100, 100)
+		for other: L5RCharacterData in characters:
+			if other.clan == defiant_clan or other.character_id == emperor_id:
+				continue
+			if other.status < 3.0:
+				continue
+			var cur: int = int(other.disposition_values.get(c.character_id, 0))
+			other.disposition_values[c.character_id] = clampi(cur + disp_others, -100, 100)
+
+
+static func _apply_compliant_edict(
+	edict: EdictData,
+	active_wars: Array[WarData],
+) -> Dictionary:
+	match edict.edict_type:
+		EdictData.EdictType.CEASE_HOSTILITIES:
+			return apply_cease_hostilities(edict, active_wars)
+		EdictData.EdictType.CONDEMN_CLAN:
+			return apply_condemn_clan(edict, active_wars)
+		_:
+			return {"applied": true, "edict_id": edict.edict_id}

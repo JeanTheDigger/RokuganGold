@@ -84,6 +84,10 @@ static func advance_day(
 	)
 	_set_court_context_flags(active_courts, world_states)
 
+	var edict_results: Array[Dictionary] = _process_edict_compliance(
+		active_edicts, active_wars, characters, active_topics, next_topic_id, ic_day,
+	)
+
 	var military_daily: Dictionary = _process_military_daily(
 		active_armies, active_sieges, active_tethers, order_states,
 		dice_engine, settlements, companies,
@@ -331,6 +335,7 @@ static func advance_day(
 		"court_results": court_results,
 		"court_openings": court_openings,
 		"court_attendance": court_attendance,
+		"edict_results": edict_results,
 		"active_edicts": active_edicts,
 	}
 
@@ -4306,6 +4311,40 @@ static func _apply_early_departure(
 		"glory_loss": glory_loss,
 		"disposition_cost": disp_cost,
 	}
+
+
+# -- Edict Compliance Processing -----------------------------------------------
+
+static func _process_edict_compliance(
+	active_edicts: Array[EdictData],
+	active_wars: Array[WarData],
+	characters: Array[L5RCharacterData],
+	active_topics: Array[TopicData],
+	next_topic_id: Array[int],
+	ic_day: int,
+) -> Array[Dictionary]:
+	var results: Array[Dictionary] = ImperialEdictSystem.process_daily_compliance(
+		active_edicts, active_wars, characters, ic_day,
+	)
+	for r: Dictionary in results:
+		var topic_dict: Dictionary = r.get("defiance_topic", {})
+		if topic_dict.is_empty():
+			continue
+		var t := TopicData.new()
+		t.topic_id = next_topic_id[0]
+		next_topic_id[0] += 1
+		t.topic_type = topic_dict.get("topic_type", "edict_defiance")
+		t.variant = topic_dict.get("variant", "")
+		t.slug = topic_dict.get("slug", "")
+		t.tier = topic_dict.get("tier", TopicData.Tier.TIER_1)
+		t.category = topic_dict.get("category", TopicData.Category.POLITICAL)
+		t.momentum = topic_dict.get("momentum", 90.0)
+		t.clan_involved = topic_dict.get("clan_involved", "")
+		t.subject_character_id = topic_dict.get("subject_character_id", -1)
+		t.ic_day_created = ic_day
+		active_topics.append(t)
+		r["defiance_topic_id"] = t.topic_id
+	return results
 
 
 static func _process_strategic_court_calls(
