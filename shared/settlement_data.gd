@@ -27,6 +27,13 @@ extends Resource
 @export var military_pu: int = 0
 @export var garrison_pu: int = 0
 
+# -- Wall Tower fields (Fortification Settlement only, per GDD s2.4.2) --------
+# Structural Integrity: 0 (breached) to 10 (pristine). Non-wall settlements
+# leave this at the default 10 and never mutate it.
+@export var wall_si: int = 10
+# Jade stockpile at Tower level (separate from clan jade reserve, per s2.4.15).
+@export var jade_stockpile: float = 0.0
+
 
 func has_infrastructure(feature: String) -> bool:
 	return feature in infrastructure

@@ -35,6 +35,11 @@ extends Resource
 # the last two years, -5 malus when blessed last year.
 @export var last_blessed_ic_year: int = -1
 
+# -- Shadowlands Strength (per GDD s2.4.10) ------------------------------------
+# Per-province SS value for Shadowlands-adjacent wall provinces. 0 = inactive
+# (non-wall provinces). Accumulates passively; reduced only by sorties.
+@export var shadowlands_strength: int = 0
+
 # -- Terrain Multipliers (s4.3) -----------------------------------------------
 
 func get_rice_multiplier() -> float:

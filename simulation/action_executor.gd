@@ -176,6 +176,9 @@ static func execute(
 	if action_id == "SCOUT_ENEMY":
 		return _execute_scout_enemy(action, character, ctx, dice_engine)
 
+	if action_id == "CONDUCT_SORTIE":
+		return _execute_conduct_sortie(action, character, ctx)
+
 	if action_id in COVERT_ACTIONS:
 		var covert_result: Dictionary = _try_execute_covert(
 			action, character, ctx, dice_engine, characters_by_id
@@ -1303,6 +1306,78 @@ static func _execute_scout_enemy(
 		"tn": SCOUT_TN,
 		"margin": margin,
 		"effects": effects,
+	}
+
+
+static func _execute_conduct_sortie(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> Dictionary:
+	# GDD s2.4.10/s2.4.11: Taisa or higher commits garrison portion into
+	# adjacent Shadowlands province to reduce SS. Horde combat is deferred
+	# until Jigoku Horde generation (s2.4.7) is implemented.
+	var target_province_id: int = action.target_province_id
+
+	# Read SS from metadata (populated by NPC engine from world_state) or
+	# fall back to the WallStatus context for the target province.
+	var ss: int = action.metadata.get("ss", 0)
+	var si: int = 10
+	var garrison_above_minimum: bool = true
+	var jade_stockpile_critical: bool = false
+
+	for ws_variant: Variant in ctx.wall_statuses:
+		if not ws_variant is NPCDataStructures.WallStatus:
+			continue
+		var ws: NPCDataStructures.WallStatus = ws_variant as NPCDataStructures.WallStatus
+		if ws.province_id == target_province_id or target_province_id < 0:
+			ss = ws.ss if ss == 0 else ss
+			si = ws.si
+			garrison_above_minimum = ws.garrison_above_minimum
+			jade_stockpile_critical = ws.jade_stockpile_critical
+			break
+
+	var is_shireikan: bool = character.military_rank >= Enums.MilitaryRank.SHIREIKAN
+	var force_size_override: String = action.metadata.get("force_size", "")
+
+	var sortie_result: Dictionary = WallSystem.resolve_sortie(
+		ss, si, garrison_above_minimum, jade_stockpile_critical,
+		is_shireikan, target_province_id, force_size_override
+	)
+
+	if not sortie_result["success"]:
+		return {
+			"success": false,
+			"action_id": "CONDUCT_SORTIE",
+			"character_id": ctx.character_id,
+			"target_npc_id": action.target_npc_id,
+			"target_province_id": target_province_id,
+			"ic_day": ctx.ic_day,
+			"season": ctx.season,
+			"effects": {
+				"effect": "sortie_blocked",
+				"blocked_reason": sortie_result.get("blocked_reason", "unknown"),
+				"force_size": sortie_result.get("force_size", ""),
+			},
+		}
+
+	return {
+		"success": true,
+		"action_id": "CONDUCT_SORTIE",
+		"character_id": ctx.character_id,
+		"target_npc_id": action.target_npc_id,
+		"target_province_id": target_province_id,
+		"ic_day": ctx.ic_day,
+		"season": ctx.season,
+		"effects": {
+			"effect": "sortie_ordered",
+			"requires_sortie_combat": true,
+			"force_size": sortie_result["force_size"],
+			"force_pct": sortie_result["force_pct"],
+			"ss_reduction": sortie_result["ss_reduction"],
+			"jade_per_warrior": sortie_result["jade_per_warrior"],
+			"target_province_id": target_province_id,
+		},
 	}
 
 

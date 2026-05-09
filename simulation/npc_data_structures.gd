@@ -184,6 +184,7 @@ class ProvinceStatus:
 class WallStatus:
 	var province_id: int = -1
 	var si: int = 10
+	var ss: int = 0  # Shadowlands Strength (per GDD s2.4.10) — from ProvinceData.shadowlands_strength
 	var scout_deployed: bool = false
 	var scout_report_age: int = 0
 	var max_taint_rank: int = 0
