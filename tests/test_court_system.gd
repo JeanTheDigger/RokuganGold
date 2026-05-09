@@ -703,3 +703,122 @@ func test_departure_result_includes_costs():
 	assert_true(results[0].has("honor_loss"))
 	assert_true(results[0].has("glory_loss"))
 	assert_true(results[0].has("disposition_cost"))
+
+
+# =============================================================================
+# WINTER COURT HOST SELECTION WIRING
+# =============================================================================
+
+func test_winter_court_host_directive_creates_imperial_court():
+	var emperor := _make_character(1, "50")
+	emperor.status = 10.0
+	emperor.clan = "Imperial"
+	var crane_champ := _make_character(10, "20")
+	crane_champ.status = 8.0
+	crane_champ.clan = "Crane"
+	crane_champ.lord_id = -1
+	var chars_by_id: Dictionary = {1: emperor, 10: crane_champ}
+	var active_courts: Array[CourtSessionData] = []
+	var active_topics: Array[TopicData] = []
+	var next_court_id: Array[int] = [1]
+
+	var directive: Dictionary = {
+		"directive": "WINTER_COURT_HOST",
+		"lord_id": 1,
+		"host_clan": "Crane",
+		"score": 15.0,
+	}
+	DayOrchestrator._process_strategic_court_calls(
+		[directive], active_courts, active_topics,
+		chars_by_id, next_court_id, 200,
+	)
+	assert_eq(active_courts.size(), 1)
+	var court: CourtSessionData = active_courts[0]
+	assert_eq(court.court_type, CourtSessionData.CourtType.IMPERIAL_WINTER_COURT)
+	assert_eq(court.host_clan, "Crane")
+	assert_true(court.emperor_present)
+	assert_eq(court.host_settlement_id, 20)
+	assert_eq(court.duration_ticks, CourtSystem.WINTER_COURT_DURATION)
+	assert_true(1 in court.attendee_ids)
+	assert_true(10 in court.attendee_ids)
+
+
+func test_winter_court_not_duplicated():
+	var emperor := _make_character(1, "50")
+	emperor.status = 10.0
+	emperor.clan = "Imperial"
+	var lion_champ := _make_character(20, "30")
+	lion_champ.status = 8.0
+	lion_champ.clan = "Lion"
+	lion_champ.lord_id = -1
+	var chars_by_id: Dictionary = {1: emperor, 20: lion_champ}
+	var existing := CourtSystem.create_court(
+		1, CourtSessionData.CourtType.IMPERIAL_WINTER_COURT,
+		1, 50, "Imperial", 100, 120, true
+	)
+	CourtSystem.open_court(existing, 100)
+	var active_courts: Array[CourtSessionData] = [existing]
+	var next_court_id: Array[int] = [2]
+
+	var directive: Dictionary = {
+		"directive": "WINTER_COURT_HOST",
+		"lord_id": 1,
+		"host_clan": "Lion",
+	}
+	DayOrchestrator._process_strategic_court_calls(
+		[directive], active_courts, [],
+		chars_by_id, next_court_id, 200,
+	)
+	assert_eq(active_courts.size(), 1, "No duplicate Winter Court")
+
+
+func test_winter_court_starts_30_days_later():
+	var emperor := _make_character(1, "50")
+	emperor.status = 10.0
+	emperor.clan = "Imperial"
+	var scorpion := _make_character(30, "40")
+	scorpion.status = 8.0
+	scorpion.clan = "Scorpion"
+	scorpion.lord_id = -1
+	var chars_by_id: Dictionary = {1: emperor, 30: scorpion}
+	var active_courts: Array[CourtSessionData] = []
+	var next_court_id: Array[int] = [1]
+
+	var directive: Dictionary = {
+		"directive": "WINTER_COURT_HOST",
+		"lord_id": 1,
+		"host_clan": "Scorpion",
+	}
+	DayOrchestrator._process_strategic_court_calls(
+		[directive], active_courts, [],
+		chars_by_id, next_court_id, 250,
+	)
+	assert_eq(active_courts[0].start_ic_day, 280, "Starts 30 days after directive")
+	assert_eq(active_courts[0].phase, CourtSessionData.CourtPhase.SCHEDULED)
+
+
+func test_emperor_review_runs_for_emperor():
+	var emperor := _make_character(1, "50")
+	emperor.status = 10.0
+	emperor.clan = "Imperial"
+	emperor.lord_id = -1
+	var lion := _make_character(10, "20")
+	lion.status = 8.0
+	lion.clan = "Lion"
+	lion.lord_id = -1
+	var characters: Array[L5RCharacterData] = [emperor, lion]
+	var world_states: Dictionary = {
+		"emperor_id": 1,
+		"emperor_archetype": StrategicReview.EmperorArchetype.IRON,
+		"current_season": TimeSystem.Season.AUTUMN,
+		"current_season_index": 4,
+	}
+	var objectives_map: Dictionary = {}
+	var results := DayOrchestrator._run_strategic_reviews(
+		characters, objectives_map, world_states,
+	)
+	var has_winter_court: bool = false
+	for d: Dictionary in results:
+		if d.get("directive", "") == "WINTER_COURT_HOST":
+			has_winter_court = true
+	assert_true(has_winter_court, "Emperor review should produce WINTER_COURT_HOST in Autumn")

@@ -1432,18 +1432,38 @@ static func _run_strategic_reviews(
 	world_states: Dictionary,
 ) -> Array[Dictionary]:
 	var results: Array[Dictionary] = []
+	var emperor_id: int = int(world_states.get("emperor_id", -1))
+	var emperor_archetype: int = int(world_states.get("emperor_archetype", StrategicReview.EmperorArchetype.IRON))
 
 	for lord: L5RCharacterData in characters:
 		if not _is_lord_tier(lord):
 			continue
-		var vassals: Array[L5RCharacterData] = _get_vassals(lord, characters)
-		var directives: Array[Dictionary] = StrategicReview.run_seasonal_review(
-			lord, vassals, objectives_map, world_states
-		)
-		for d: Dictionary in directives:
-			results.append(d)
+		if lord.character_id == emperor_id and emperor_id >= 0:
+			var clan_champions: Array[L5RCharacterData] = _get_clan_champions(characters)
+			var directives: Array[Dictionary] = StrategicReview.run_emperor_review(
+				lord, emperor_archetype, clan_champions, world_states, objectives_map
+			)
+			for d: Dictionary in directives:
+				results.append(d)
+		else:
+			var vassals: Array[L5RCharacterData] = _get_vassals(lord, characters)
+			var directives: Array[Dictionary] = StrategicReview.run_seasonal_review(
+				lord, vassals, objectives_map, world_states
+			)
+			for d: Dictionary in directives:
+				results.append(d)
 
 	return results
+
+
+static func _get_clan_champions(
+	characters: Array[L5RCharacterData],
+) -> Array[L5RCharacterData]:
+	var champions: Array[L5RCharacterData] = []
+	for c: L5RCharacterData in characters:
+		if c.status >= 7.0 and c.lord_id == -1:
+			champions.append(c)
+	return champions
 
 
 static func _is_lord_tier(character: L5RCharacterData) -> bool:
@@ -4356,7 +4376,14 @@ static func _process_strategic_court_calls(
 	ic_day: int,
 ) -> void:
 	for directive: Dictionary in strategic_results:
-		if directive.get("directive", -1) != StrategicReview.Directive.CALL_COURT:
+		var directive_type = directive.get("directive", "")
+		if directive_type == "WINTER_COURT_HOST":
+			_create_winter_court_from_directive(
+				directive, active_courts, active_topics,
+				characters_by_id, next_court_id, ic_day,
+			)
+			continue
+		if directive_type != StrategicReview.Directive.CALL_COURT:
 			continue
 		var lord_id: int = directive.get("lord_id", -1)
 		if lord_id < 0:
@@ -4393,3 +4420,55 @@ static func _process_strategic_court_calls(
 		CourtSystem.set_agenda(court, agenda)
 		CourtSystem.add_attendee(court, lord_id)
 		active_courts.append(court)
+
+
+static func _create_winter_court_from_directive(
+	directive: Dictionary,
+	active_courts: Array[CourtSessionData],
+	active_topics: Array[TopicData],
+	characters_by_id: Dictionary,
+	next_court_id: Array[int],
+	ic_day: int,
+) -> void:
+	var emperor_id: int = directive.get("lord_id", -1)
+	var host_clan: String = directive.get("host_clan", "")
+	if emperor_id < 0 or host_clan.is_empty():
+		return
+
+	for c: CourtSessionData in active_courts:
+		if c.court_type == CourtSessionData.CourtType.IMPERIAL_WINTER_COURT:
+			if c.phase != CourtSessionData.CourtPhase.CLOSED:
+				return
+
+	var host_settlement_id: int = -1
+	var host_champion_id: int = -1
+	for char_id: int in characters_by_id:
+		var c: L5RCharacterData = characters_by_id[char_id] as L5RCharacterData
+		if c != null and c.clan == host_clan and c.status >= 7.0 and c.lord_id == -1:
+			host_champion_id = c.character_id
+			host_settlement_id = c.physical_location
+			break
+	if host_settlement_id < 0:
+		return
+
+	var agenda: Array[int] = CourtSystem.select_agenda_topics(
+		active_topics, CourtSessionData.CourtType.IMPERIAL_WINTER_COURT
+	)
+
+	var start_day: int = ic_day + 30
+	var court := CourtSystem.create_court(
+		next_court_id[0],
+		CourtSessionData.CourtType.IMPERIAL_WINTER_COURT,
+		emperor_id,
+		host_settlement_id,
+		host_clan,
+		start_day,
+		CourtSystem.WINTER_COURT_DURATION,
+		true,
+	)
+	next_court_id[0] += 1
+	CourtSystem.set_agenda(court, agenda)
+	CourtSystem.add_attendee(court, emperor_id)
+	if host_champion_id >= 0 and host_champion_id != emperor_id:
+		CourtSystem.add_attendee(court, host_champion_id)
+	active_courts.append(court)
