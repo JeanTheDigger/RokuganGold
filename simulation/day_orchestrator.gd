@@ -141,6 +141,10 @@ static func advance_day(
 		provinces,
 	)
 
+	var horde_assault_results: Array[Dictionary] = _process_horde_assaults(
+		active_hordes, settlements, active_topics, next_topic_id, ic_day, provinces,
+	)
+
 	var starvation_results: Array[Dictionary] = _process_starvation_warfare_effects(
 		day_result.get("results", []),
 		characters_by_id,
@@ -378,6 +382,7 @@ static func advance_day(
 		"wall_seasonal": wall_seasonal_result,
 		"wall_engineering_results": wall_engineering_results,
 		"sortie_results": sortie_results,
+		"horde_assault_results": horde_assault_results,
 		"horde_results": horde_results,
 	}
 
@@ -610,9 +615,25 @@ static func _process_wall_seasonal_pressure(
 			"new_ptl": prov.province_taint_level,
 		})
 
+	# Step 4: Garrison shortage detection (s2.4.12).
+	# Flags towers below the minimum defensible garrison. Does NOT generate a
+	# topic — per s2.4.12 the Taisa/Shireikan must communicate the shortage
+	# through letters or personal visits. The flag is returned in the result
+	# for the NPC AI to act on.
+	var garrison_shortage_towers: Array[Dictionary] = []
+	for s: SettlementData in wall_settlements:
+		if WallSystem.is_garrison_below_minimum(s.garrison_pu):
+			garrison_shortage_towers.append({
+				"settlement_id": s.settlement_id,
+				"province_id": s.province_id,
+				"garrison_pu": s.garrison_pu,
+				"wall_si": s.wall_si,
+			})
+
 	return {
 		"si_decay_results": si_decay_results,
 		"ptl_updates": ptl_updates,
+		"garrison_shortage_towers": garrison_shortage_towers,
 	}
 
 
@@ -736,6 +757,88 @@ static func _process_sortie_results(
 			"new_ss": new_ss,
 			"jade_consumed": jade_consumed,
 		})
+
+	return results
+
+
+# -- Horde Assault SI Processing (s2.4.5 — LOCKED) ----------------------------
+
+## Processes resolved horde assaults: applies SI hit from the battle outcome,
+## detects breach, and generates a Tier 1 Shadowlands Incursion crisis topic.
+## Called each tick; only hordes with `assault_resolved = true` and an unprocessed
+## outcome (assault_si_hit == 0) are handled. The combat system that resolves
+## horde assaults (deferred) must set `horde.assault_resolved = true` and
+## `horde.battle_outcome` to a HordeBattleOutcome enum value before this runs.
+static func _process_horde_assaults(
+	active_hordes: Array[HordeData],
+	settlements: Array[SettlementData],
+	active_topics: Array[TopicData],
+	next_topic_id: Array[int],
+	ic_day: int,
+	provinces: Dictionary,
+) -> Array[Dictionary]:
+	var results: Array[Dictionary] = []
+
+	# Build province_id → wall tower settlement map.
+	var wall_by_province: Dictionary = {}
+	for s: SettlementData in settlements:
+		if s.settlement_type == Enums.SettlementType.WALL_TOWER:
+			wall_by_province[s.province_id] = s
+
+	for horde: HordeData in active_hordes:
+		if not horde.assault_resolved:
+			continue
+		if horde.battle_outcome < 0:
+			continue
+		# Skip if SI hit was already processed (si_hit stored > 0 means done).
+		if horde.assault_si_hit != 0:
+			continue
+
+		var tower: Variant = wall_by_province.get(horde.target_province_id, null)
+		if not tower is SettlementData:
+			continue
+
+		var si_result: Dictionary = HordeSystem.apply_assault_si_hit(
+			tower as SettlementData, horde.battle_outcome
+		)
+		horde.assault_si_hit = si_result["si_hit"]
+
+		var breach: bool = bool(si_result.get("breach", false))
+		if breach:
+			# Generate Tier 1 Shadowlands Incursion crisis topic (s2.4.5, s16.3).
+			var province: Variant = provinces.get(horde.target_province_id, null)
+			var clan_str: String = ""
+			if province is ProvinceData:
+				clan_str = (province as ProvinceData).clan
+			var topic := TopicData.new()
+			topic.topic_id = next_topic_id[0]
+			next_topic_id[0] += 1
+			topic.slug = "shadowlands_incursion_p%d_d%d" % [horde.target_province_id, ic_day]
+			topic.topic_type = "crisis"
+			topic.variant = "shadowlands_incursion"
+			topic.category = TopicData.Category.MILITARY
+			topic.tier = TopicData.Tier.TIER_1
+			topic.momentum = 80.0  # Tier 1 crisis starts with high momentum.
+			topic.clan_involved = clan_str
+			topic.ic_day_created = ic_day
+			topic.provinces_affected = [horde.target_province_id]
+			active_topics.append(topic)
+			results.append({
+				"province_id": horde.target_province_id,
+				"outcome": horde.battle_outcome,
+				"si_hit": horde.assault_si_hit,
+				"new_si": int(si_result["new_si"]),
+				"breach": true,
+				"incursion_topic_id": topic.topic_id,
+			})
+		else:
+			results.append({
+				"province_id": horde.target_province_id,
+				"outcome": horde.battle_outcome,
+				"si_hit": horde.assault_si_hit,
+				"new_si": int(si_result["new_si"]),
+				"breach": false,
+			})
 
 	return results
 
@@ -4700,7 +4803,7 @@ static func _set_wall_tower_context_flags(
 		wstat.province_id = tower.province_id
 		wstat.si = tower.wall_si
 		wstat.ss = ss
-		wstat.garrison_above_minimum = tower.garrison_pu > 0
+		wstat.garrison_above_minimum = not WallSystem.is_garrison_below_minimum(tower.garrison_pu)
 		var min_jade: float = float(
 			int(tower.garrison_pu * WallSystem.SORTIE_SMALL_MAX_PCT)
 			* WallSystem.SORTIE_SMALL_JADE_PER_WARRIOR

@@ -2420,3 +2420,319 @@ func test_horde_strength_used_from_counter_and_reset_on_formation() -> void:
 
 	assert_true(found, "At least one seed should form a horde with pre-accumulated strength")
 
+
+# -- WallSystem.is_garrison_below_minimum --------------------------------------
+
+func test_garrison_below_minimum_zero() -> void:
+	assert_true(WallSystem.is_garrison_below_minimum(0),
+		"garrison_pu=0 is below minimum")
+
+
+func test_garrison_below_minimum_returns_false_at_threshold() -> void:
+	assert_false(WallSystem.is_garrison_below_minimum(1),
+		"garrison_pu=1 meets the minimum (1.0 PU threshold)")
+
+
+func test_garrison_below_minimum_returns_false_above() -> void:
+	assert_false(WallSystem.is_garrison_below_minimum(5),
+		"garrison_pu=5 is well above minimum")
+
+
+func test_minimum_garrison_constant_is_one() -> void:
+	assert_almost_eq(WallSystem.MINIMUM_GARRISON_PU, 1.0, 0.001,
+		"Minimum garrison is 1 Company = 1.0 PU (s2.4.2 PROVISIONAL)")
+
+
+# -- _process_wall_seasonal_pressure: garrison shortage detection (s2.4.12) ----
+
+func test_wall_seasonal_returns_garrison_shortage_towers() -> void:
+	var tower := _make_wall_tower_s(10, 8)
+	tower.garrison_pu = 0  # Below minimum.
+
+	var province := ProvinceData.new()
+	province.province_id = 10
+	province.shadowlands_strength = 0
+	province.adjacent_province_ids = []
+
+	var season_meta: Dictionary = {}
+
+	var result := DayOrchestrator._process_wall_seasonal_pressure(
+		[tower] as Array[SettlementData], {10: province}, 1, season_meta
+	)
+
+	var shortage_list: Array = result.get("garrison_shortage_towers", [])
+	assert_eq(shortage_list.size(), 1, "Tower at 0 garrison should be flagged")
+	assert_eq(int(shortage_list[0]["province_id"]), 10)
+	assert_eq(int(shortage_list[0]["garrison_pu"]), 0)
+
+
+func test_wall_seasonal_no_shortage_above_minimum() -> void:
+	var tower := _make_wall_tower_s(10, 8)
+	tower.garrison_pu = 2  # Above minimum.
+
+	var province := ProvinceData.new()
+	province.province_id = 10
+	province.shadowlands_strength = 0
+	province.adjacent_province_ids = []
+
+	var season_meta: Dictionary = {}
+
+	var result := DayOrchestrator._process_wall_seasonal_pressure(
+		[tower] as Array[SettlementData], {10: province}, 1, season_meta
+	)
+
+	var shortage_list: Array = result.get("garrison_shortage_towers", [])
+	assert_eq(shortage_list.size(), 0, "Tower at garrison 2 should not be flagged")
+
+
+func test_wall_seasonal_multiple_shortage_towers() -> void:
+	var tower_a := _make_wall_tower_s(10, 8)
+	tower_a.garrison_pu = 0
+
+	var tower_b := _make_wall_tower_s(11, 7)
+	tower_b.garrison_pu = 0
+
+	var tower_c := _make_wall_tower_s(12, 9)
+	tower_c.garrison_pu = 3  # Fine.
+
+	var province_a := ProvinceData.new()
+	province_a.province_id = 10
+	province_a.shadowlands_strength = 0
+	province_a.adjacent_province_ids = []
+
+	var province_b := ProvinceData.new()
+	province_b.province_id = 11
+	province_b.shadowlands_strength = 0
+	province_b.adjacent_province_ids = []
+
+	var province_c := ProvinceData.new()
+	province_c.province_id = 12
+	province_c.shadowlands_strength = 0
+	province_c.adjacent_province_ids = []
+
+	var season_meta: Dictionary = {}
+
+	var result := DayOrchestrator._process_wall_seasonal_pressure(
+		[tower_a, tower_b, tower_c] as Array[SettlementData],
+		{10: province_a, 11: province_b, 12: province_c},
+		1, season_meta
+	)
+
+	var shortage_list: Array = result.get("garrison_shortage_towers", [])
+	assert_eq(shortage_list.size(), 2, "Two undermanned towers should be flagged")
+
+
+# -- _process_horde_assaults: SI hit and breach topic --------------------------
+
+func _make_resolved_horde(province_id: int, outcome: int) -> HordeData:
+	var h := HordeData.new()
+	h.target_province_id = province_id
+	h.assault_resolved = true
+	h.battle_outcome = outcome
+	h.assault_si_hit = 0  # Not yet processed.
+	return h
+
+
+func test_horde_assault_applies_si_hit_contested() -> void:
+	# CONTESTED_BATTLE → SI hit = 2.
+	var tower := _make_wall_tower_s(10, 8)  # SI starts at 8.
+	var province := _make_horde_province(10)
+
+	var horde := _make_resolved_horde(10, Enums.HordeBattleOutcome.CONTESTED_BATTLE)
+
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [1000]
+
+	var results := DayOrchestrator._process_horde_assaults(
+		[horde] as Array[HordeData],
+		[tower] as Array[SettlementData],
+		active_topics, next_topic_id, 100, {10: province},
+	)
+
+	assert_eq(results.size(), 1)
+	assert_eq(int(results[0]["si_hit"]), 2)
+	assert_eq(int(results[0]["new_si"]), 6)  # 8 - 2 = 6.
+	assert_false(bool(results[0]["breach"]))
+	assert_eq(tower.wall_si, 6)
+
+
+func test_horde_assault_applies_si_hit_pushed_back() -> void:
+	var tower := _make_wall_tower_s(10, 5)
+	var province := _make_horde_province(10)
+
+	var horde := _make_resolved_horde(10, Enums.HordeBattleOutcome.ATTACKER_PUSHED_BACK)
+
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [1000]
+
+	DayOrchestrator._process_horde_assaults(
+		[horde] as Array[HordeData],
+		[tower] as Array[SettlementData],
+		active_topics, next_topic_id, 100, {10: province},
+	)
+
+	assert_eq(tower.wall_si, 2)  # 5 - 3 = 2.
+
+
+func test_horde_assault_si_hit_decisive_defender_victory() -> void:
+	var tower := _make_wall_tower_s(10, 10)
+	var province := _make_horde_province(10)
+
+	var horde := _make_resolved_horde(10, Enums.HordeBattleOutcome.DECISIVE_DEFENDER_VICTORY)
+
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [1000]
+
+	DayOrchestrator._process_horde_assaults(
+		[horde] as Array[HordeData],
+		[tower] as Array[SettlementData],
+		active_topics, next_topic_id, 100, {10: province},
+	)
+
+	assert_eq(tower.wall_si, 9)  # 10 - 1 = 9.
+
+
+func test_horde_assault_breach_generates_incursion_topic() -> void:
+	var tower := _make_wall_tower_s(10, 4)  # SI=4, hit=4 → new_si=0 → breach.
+	var province := _make_horde_province(10)
+
+	var horde := _make_resolved_horde(10, Enums.HordeBattleOutcome.DEFENDER_OVERRUN)
+
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [1000]
+
+	var results := DayOrchestrator._process_horde_assaults(
+		[horde] as Array[HordeData],
+		[tower] as Array[SettlementData],
+		active_topics, next_topic_id, 100, {10: province},
+	)
+
+	assert_eq(results.size(), 1)
+	assert_true(bool(results[0]["breach"]))
+	assert_eq(active_topics.size(), 1, "Shadowlands Incursion topic generated on breach")
+	var topic: TopicData = active_topics[0]
+	assert_eq(topic.tier, TopicData.Tier.TIER_1)
+	assert_eq(topic.topic_type, "crisis")
+	assert_eq(topic.variant, "shadowlands_incursion")
+	assert_eq(topic.category, TopicData.Category.MILITARY)
+	assert_true(topic.momentum > 0.0)
+	assert_true(1000 in topic.provinces_affected)
+
+
+func test_horde_assault_no_breach_when_si_still_above_zero() -> void:
+	# DEFENDER_OVERRUN = -4 SI. SI=5 → new_si=1 → no breach.
+	var tower := _make_wall_tower_s(10, 5)
+	var province := _make_horde_province(10)
+
+	var horde := _make_resolved_horde(10, Enums.HordeBattleOutcome.DEFENDER_OVERRUN)
+
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [1000]
+
+	var results := DayOrchestrator._process_horde_assaults(
+		[horde] as Array[HordeData],
+		[tower] as Array[SettlementData],
+		active_topics, next_topic_id, 100, {10: province},
+	)
+
+	assert_eq(results.size(), 1)
+	assert_false(bool(results[0]["breach"]))
+	assert_eq(active_topics.size(), 0, "No incursion topic when breach is false")
+
+
+func test_horde_assault_skips_unresolved_hordes() -> void:
+	var tower := _make_wall_tower_s(10, 8)
+	var province := _make_horde_province(10)
+
+	var horde := HordeData.new()
+	horde.target_province_id = 10
+	horde.assault_resolved = false  # Not resolved.
+	horde.battle_outcome = -1
+
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [1000]
+
+	var results := DayOrchestrator._process_horde_assaults(
+		[horde] as Array[HordeData],
+		[tower] as Array[SettlementData],
+		active_topics, next_topic_id, 100, {10: province},
+	)
+
+	assert_eq(results.size(), 0, "Unresolved horde should be skipped")
+	assert_eq(tower.wall_si, 8, "SI unchanged when horde not resolved")
+
+
+func test_horde_assault_skips_already_processed() -> void:
+	# If assault_si_hit != 0, it means the hit was already applied.
+	var tower := _make_wall_tower_s(10, 7)
+	var province := _make_horde_province(10)
+
+	var horde := _make_resolved_horde(10, Enums.HordeBattleOutcome.CONTESTED_BATTLE)
+	horde.assault_si_hit = 2  # Already processed.
+
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [1000]
+
+	var results := DayOrchestrator._process_horde_assaults(
+		[horde] as Array[HordeData],
+		[tower] as Array[SettlementData],
+		active_topics, next_topic_id, 100, {10: province},
+	)
+
+	assert_eq(results.size(), 0, "Already-processed horde should be skipped")
+	assert_eq(tower.wall_si, 7, "SI unchanged when horde already processed")
+
+
+func test_horde_assault_si_clamped_at_zero() -> void:
+	# DEFENDER_OVERRUN = -4 SI. SI=2 → would go to -2 → clamped to 0.
+	var tower := _make_wall_tower_s(10, 2)
+	var province := _make_horde_province(10)
+
+	var horde := _make_resolved_horde(10, Enums.HordeBattleOutcome.DEFENDER_OVERRUN)
+
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [1000]
+
+	DayOrchestrator._process_horde_assaults(
+		[horde] as Array[HordeData],
+		[tower] as Array[SettlementData],
+		active_topics, next_topic_id, 100, {10: province},
+	)
+
+	assert_eq(tower.wall_si, 0, "SI clamped at 0")
+
+
+func test_horde_assault_stores_si_hit_on_horde() -> void:
+	var tower := _make_wall_tower_s(10, 9)
+	var province := _make_horde_province(10)
+
+	var horde := _make_resolved_horde(10, Enums.HordeBattleOutcome.ATTACKER_PUSHED_BACK)
+
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [1000]
+
+	DayOrchestrator._process_horde_assaults(
+		[horde] as Array[HordeData],
+		[tower] as Array[SettlementData],
+		active_topics, next_topic_id, 100, {10: province},
+	)
+
+	assert_eq(horde.assault_si_hit, 3,
+		"assault_si_hit stored on HordeData after processing")
+
+
+# -- Context flag uses MINIMUM_GARRISON_PU threshold ---------------------------
+
+func test_wall_tower_context_garrison_above_minimum_at_one() -> void:
+	# garrison_pu = 1 meets the 1.0 PU threshold → garrison_above_minimum = true.
+	var wstat := NPCDataStructures.WallStatus.new()
+	wstat.garrison_above_minimum = not WallSystem.is_garrison_below_minimum(1)
+	assert_true(wstat.garrison_above_minimum)
+
+
+func test_wall_tower_context_garrison_below_minimum_at_zero() -> void:
+	var wstat := NPCDataStructures.WallStatus.new()
+	wstat.garrison_above_minimum = not WallSystem.is_garrison_below_minimum(0)
+	assert_false(wstat.garrison_above_minimum)
+
+

@@ -58,6 +58,16 @@ const SS_MEDIUM_RICE_MODIFIER: float = 1.1
 const SS_HIGH_RICE_MODIFIER: float = 1.2
 
 
+# -- Garrison Threshold (s2.4.2 — PROVISIONAL) --------------------------------
+# Minimum defensible garrison: 1 full Company (153 Health = 1.0 PU).
+# Marked PROVISIONAL in GDD — may be revised after playtesting.
+const MINIMUM_GARRISON_PU: float = 1.0
+
+## Returns true when garrison is below the minimum defensible threshold.
+static func is_garrison_below_minimum(garrison_pu: int) -> bool:
+	return float(garrison_pu) < MINIMUM_GARRISON_PU
+
+
 # -- Sortie Constants (s2.4.10, s2.4.11, s2.4.15 — LOCKED) -------------------
 
 const SORTIE_SMALL_MIN_PCT: float = 0.10

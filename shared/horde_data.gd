@@ -34,5 +34,9 @@ extends Resource
 ## True once this horde has assaulted a tower and the assault is resolved.
 @export var assault_resolved: bool = false
 
+## HordeBattleOutcome enum value set by the combat system on resolution.
+## Sentinel -1 means assault not yet resolved.
+@export var battle_outcome: int = -1
+
 ## SI hit applied to the tower after assault resolution (s2.4.5).
 @export var assault_si_hit: int = 0
