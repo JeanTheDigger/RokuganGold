@@ -1031,7 +1031,7 @@ func test_day_orchestrator_runs_strategic_review_on_season_change() -> void:
 	var result: Dictionary = DayOrchestrator.advance_day(
 		time, characters, characters_by_id, {},
 		objectives_map, {}, {}, DiceEngine.new(42),
-		{}, {}, [], [], [], [], [], [], {}, {}, [1000], [], {}
+		{}, {}, [], {}, [], [], [], [], [], [1], {}, {}, [1000]
 	)
 
 	assert_true(result.get("season_changed", false))
@@ -1052,7 +1052,7 @@ func test_day_orchestrator_no_strategic_review_same_season() -> void:
 	var result: Dictionary = DayOrchestrator.advance_day(
 		time, characters, characters_by_id, {},
 		objectives_map, {}, {}, DiceEngine.new(42),
-		{}, {}, [], [], [], [], [], [], {}, {}, [1000], [], {}
+		{}, {}, [], {}, [], [], [], [], [], [1], {}, {}, [1000]
 	)
 
 	assert_false(result.get("season_changed", false))

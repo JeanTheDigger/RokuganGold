@@ -501,7 +501,7 @@ func test_confidence_gate_thorough() -> void:
 		"known_allies": [5],
 	}
 	var p: float = ObjectiveProgress.get_progress(obj, ctx)
-	assert_ge(p, ObjectiveProgress.CONFIDENT_CAP)
+	assert_true(p >= ObjectiveProgress.CONFIDENT_CAP)
 
 
 func test_confidence_gate_insufficient() -> void:
@@ -517,7 +517,7 @@ func test_confidence_gate_insufficient() -> void:
 		"known_allies": [5],
 	}
 	var p: float = ObjectiveProgress.get_progress(obj, ctx)
-	assert_le(p, ObjectiveProgress.CONFIDENT_CAP)
+	assert_true(p <= ObjectiveProgress.CONFIDENT_CAP)
 
 
 # =============================================================================

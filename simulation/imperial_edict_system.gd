@@ -211,7 +211,7 @@ static func apply_condemn_clan(
 	for w: WarData in active_wars:
 		if w.clan_a == edict.target_clan or w.clan_b == edict.target_clan:
 			var shift_to: String = w.clan_b if w.clan_a == edict.target_clan else w.clan_a
-			WarSystem.apply_score_shift(w, shift_to, CONDEMN_WAR_SCORE_SHIFT)
+			WarSystem.apply_score_shift(w, "condemn_clan", shift_to)
 			result["war_score_shifts"].append({
 				"war_id": w.war_id,
 				"beneficiary": shift_to,

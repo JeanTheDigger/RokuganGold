@@ -287,9 +287,8 @@ static func increment_strength_counter(
 	# generated horde." The counter is shared across all potential targets.
 	var current: int = int(strength_counters.get("global", 0))
 	strength_counters["global"] = current + 1
-	# Suppress unused-variable warning — province IDs are not used in
-	# global counter but kept in signature for future per-tower tracking.
-	var _ = all_tower_province_ids
+	# province IDs not used in global counter but kept in signature for future per-tower tracking.
+	var _tower_ids_kept_for_future := all_tower_province_ids
 
 
 ## Reset the global strength counter after a horde fires.
