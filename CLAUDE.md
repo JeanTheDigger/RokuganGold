@@ -56,6 +56,9 @@ When implementing or auditing a system, go here first:
 | Resource availability modifier                | 55.32              |
 | Orphaned objectives (lord death)              | 55.33              |
 | Court availability helper                     | 55.34              |
+| Court types and lifecycle                     | 15.1, 15.2         |
+| Court priority and early departure            | 15.8               |
+| Imperial Edicts                               | 15.1, 15.2, 55.10 |
 
 ## Directory Structure
 ```
@@ -109,6 +112,13 @@ When implementing or auditing a system, go here first:
 - Dead characters always carry NEUTRAL subject_role valence.
 - Spirit realms are not evil except Jigoku. Do not implement jade as a
   general-purpose spirit ward.
+- **Do not invent mechanics.** Every game mechanic, numeric value, enum value,
+  edict type, action type, honor cost, disposition modifier, deadline, threshold,
+  or behavioral rule must trace back to a specific LOCKED GDD section or to an
+  explicit entry in this CLAUDE.md file. If the GDD does not specify a value or
+  behavior, stop and ask — do not fill in plausible defaults, extrapolate from
+  adjacent systems, or invent new enum values. Structural wiring (routing,
+  function signatures, orchestrator plumbing) is allowed; game design is not.
 
 ## What's Been Built So Far
 
@@ -476,6 +486,8 @@ All in /tests/, one file per system:
 - test_war_termination.gd (~46 tests)
 - test_feasibility_ledger.gd (~148 tests)
 - test_starvation_warfare.gd (~55 tests)
+- test_court_system.gd (~76 tests)
+- test_imperial_edict_system.gd (~57 tests)
 
 ### Festival System (s11.5)
 - **simulation/festival_system.gd** — Empire-wide canonical festivals, Rokuyo
@@ -2024,6 +2036,64 @@ All in /tests/, one file per system:
   Guards: no surplus → skip, same province → skip, receiver not starving → skip.
   Honor gain scaled by recipient starvation stage per existing sharing honor
   table. Return dict gains `supply_sharing_results`.
+
+### Court System (s15.1, s15.2)
+- **shared/court_session_data.gd** — CourtSessionData Resource: 3 CourtType
+  (IMPERIAL_WINTER_COURT, CLAN_CHAMPION_COURT, PROVINCIAL_FAMILY_COURT),
+  3 CourtPhase (SCHEDULED, ACTIVE, CLOSED). Fields: court_id, host_lord_id,
+  host_settlement_id, host_clan, start_ic_day, duration_ticks, elapsed_ticks,
+  attendee_ids, agenda_topic_ids, crisis_trigger_topic_id, emperor_present,
+  prestige, commitments_made, wars_resolved_during.
+- **simulation/court_system.gd** — Court session lifecycle per GDD s15.1 and
+  s15.2. Factory, open/close/advance lifecycle, attendance management,
+  agenda topic selection (top momentum, crisis trigger priority), crisis-triggered
+  court evaluation (`should_call_court()` with per-rank momentum thresholds),
+  commitment recording, topic generation on close (tier/momentum by court type),
+  context helpers (active court at settlement, upcoming courts).
+  Duration constants: Winter Court 120, Clan Court 7-14, Provincial Court 3-5.
+  Prestige: Imperial 3, Clan 2, Provincial 1.
+- **Court scheduling wiring** — DayOrchestrator `_process_crisis_court_calls()`
+  runs daily before court openings. Lord-tier NPCs evaluate crisis topics at
+  their settlement; when momentum exceeds rank threshold and no court is
+  active, creates a court with crisis topic on agenda. 30-day cooldown via
+  `last_court_called_ic_day` in world_states. `_process_strategic_court_calls()`
+  creates courts from CALL_COURT strategic review directives, tracks
+  `last_court_season` for same-season guard. `_status_to_lord_rank()` maps
+  character status to LordRank enum.
+- **Court attendance wiring** — `_process_court_attendance()` auto-adds NPCs
+  at the court's settlement and removes departed NPCs. Early departure costs
+  applied via `CourtPrioritySystem.get_early_departure_cost()`. Context flags
+  set via `_set_court_context_flags()`.
+
+### Imperial Edict System (s15.1, s15.2)
+- **shared/edict_data.gd** — EdictData Resource: 7 EdictType values
+  (CEASE_HOSTILITIES, CONDEMN_CLAN, AUTHORIZE_WAR, TAX_REFORM,
+  APPOINT_POSITION, STRIP_AUTONOMY, GENERAL_DECREE), 3 ComplianceStatus
+  (PENDING, COMPLIANT, DEFIANT). Fields: edict_id, edict_type, emperor_id,
+  ic_day_issued, target_clan, target_character_id, target_war_id,
+  target_topic_id, compliance_by_clan, compliance_deadline_ic_day, is_active,
+  court_id.
+- **simulation/imperial_edict_system.gd** — Edict issuance and compliance per
+  GDD s15.1, s15.2. Edict factory with compliance deadline. Winter Court
+  edict generation from agenda topics (war→CEASE_HOSTILITIES,
+  famine→TAX_REFORM, Tier 1→GENERAL_DECREE). Archetype-specific frequency
+  (Benevolent 1, Iron/Tyrant 3, Cunning/Warlike 2). Application functions:
+  `apply_cease_hostilities()` (ends war via WarTermination),
+  `apply_condemn_clan()` (+10 war score shift against condemned).
+  Compliance tracking, defiance consequence computation, topic generation.
+  Daily compliance processing: auto-ceasefire when war resolved, deadline
+  enforcement, defiance consequences (honor/disposition), all-compliant
+  triggers edict application and deactivation.
+- **NPC edict response wiring** — COMPLY_WITH_EDICT and DEFY_EDICT ActionIDs
+  in context lists, scoring tables, and ActionExecutor. RESPOND_TO_EDICT
+  NeedType in objective_alignment.json. `_inject_edict_reactive_events()`
+  scans active edicts daily and injects RESPOND_TO_EDICT reactive events
+  into clan lords' pending_events when compliance is PENDING. Deduplication
+  prevents re-injection. `_process_edict_compliance_actions()` records
+  compliance/defiance from NPC action results.
+  Deferred: per-type compliance effects for TAX_REFORM, AUTHORIZE_WAR,
+  APPOINT_POSITION, STRIP_AUTONOMY, GENERAL_DECREE need GDD specification
+  before implementation.
 
 ### What's Next
 1. World generation coordinate system and adjacency
