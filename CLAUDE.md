@@ -2028,6 +2028,15 @@ All in /tests/, one file per system:
 ### What's Next
 1. World generation coordinate system and adjacency
 
+### Pending Redesign (to be deepened in Claude Chat)
+- **Winter Court host selection** — The current `_create_winter_court_from_directive()`
+  and `_evaluate_winter_court_host()` wiring is a placeholder. The full Winter Court
+  lifecycle (host bidding, invitation system, NPC travel-to-court decisions, multi-clan
+  attendance rules, seasonal timing constraints, host prestige effects) needs to be
+  redesigned per the GDD before the current implementation is trusted. Do NOT extend
+  the current Winter Court code without first consulting the GDD and validating the
+  approach in a Claude Chat session.
+
 ### Systems Wired into NPC Loop
 The following subsystems are now integrated into the NPC decision loop:
 - **ApproachEvaluation** — Phase 5 scoring: `approach_modifier` field on
