@@ -75,6 +75,9 @@ static func advance_day(
 		bound_states, characters_by_id, dice_engine, ic_day
 	)
 
+	var crisis_courts: Array[Dictionary] = _process_crisis_court_calls(
+		characters, active_courts, active_topics, world_states, next_court_id, ic_day,
+	)
 	var court_openings: Array[Dictionary] = _process_court_openings(active_courts, ic_day)
 	var court_attendance: Array[Dictionary] = _process_court_attendance(active_courts, characters, characters_by_id)
 	var court_results: Array[Dictionary] = _process_active_courts(
@@ -299,7 +302,8 @@ static func advance_day(
 		)
 		_process_strategic_court_calls(
 			strategic_results, active_courts, active_topics,
-			characters_by_id, next_court_id, ic_day,
+			characters_by_id, next_court_id, ic_day, world_states,
+			current_season,
 		)
 
 	return {
@@ -342,6 +346,7 @@ static func advance_day(
 		"court_results": court_results,
 		"court_openings": court_openings,
 		"court_attendance": court_attendance,
+		"crisis_courts": crisis_courts,
 		"edict_results": edict_results,
 		"active_edicts": active_edicts,
 	}
@@ -4315,6 +4320,93 @@ static func _set_court_context_flags(
 			ws["active_court_at_location"] = ctx_dict
 
 
+static func _process_crisis_court_calls(
+	characters: Array[L5RCharacterData],
+	active_courts: Array[CourtSessionData],
+	active_topics: Array[TopicData],
+	world_states: Dictionary,
+	next_court_id: Array[int],
+	ic_day: int,
+) -> Array[Dictionary]:
+	var results: Array[Dictionary] = []
+	for lord: L5RCharacterData in characters:
+		if not _is_lord_tier(lord):
+			continue
+		var lord_rank: Enums.LordRank = _status_to_lord_rank(lord.status)
+		var courts_at_settlement: Array[CourtSessionData] = []
+		var settlement_str: String = str(lord.physical_location)
+		for c: CourtSessionData in active_courts:
+			if str(c.host_settlement_id) == settlement_str:
+				courts_at_settlement.append(c)
+		var eval_result: Dictionary = CourtSystem.should_call_court(
+			lord_rank, active_topics, courts_at_settlement
+		)
+		if eval_result.is_empty() or not eval_result.get("should_call", false):
+			continue
+		var ws: Dictionary = world_states.get(lord.character_id, {})
+		var last_court_day: int = ws.get("last_court_called_ic_day", -1)
+		if last_court_day >= 0 and ic_day - last_court_day < 30:
+			continue
+		var court_type: CourtSessionData.CourtType = CourtSessionData.CourtType.PROVINCIAL_FAMILY_COURT
+		if lord.status >= 7.0:
+			court_type = CourtSessionData.CourtType.CLAN_CHAMPION_COURT
+		var settlement_id: int = int(lord.physical_location)
+		var court := CourtSystem.create_court(
+			next_court_id[0], court_type, lord.character_id,
+			settlement_id, lord.clan, ic_day,
+		)
+		next_court_id[0] += 1
+		var trigger_id: int = eval_result.get("trigger_topic_id", -1)
+		court.crisis_trigger_topic_id = trigger_id
+		var agenda: Array[int] = CourtSystem.select_agenda_topics(
+			active_topics, court_type, trigger_id
+		)
+		CourtSystem.set_agenda(court, agenda)
+		CourtSystem.add_attendee(court, lord.character_id)
+		active_courts.append(court)
+		if ws.is_empty():
+			ws = {}
+			world_states[lord.character_id] = ws
+		ws["last_court_called_ic_day"] = ic_day
+		results.append({
+			"court_id": court.court_id,
+			"lord_id": lord.character_id,
+			"court_type": court_type,
+			"trigger_topic_id": trigger_id,
+			"crisis_called": true,
+		})
+	return results
+
+
+static func _track_court_called(
+	world_states: Dictionary,
+	lord_id: int,
+	ic_day: int,
+	current_season: int = -1,
+) -> void:
+	var ws: Dictionary = world_states.get(lord_id, {})
+	if ws.is_empty():
+		ws = {}
+		world_states[lord_id] = ws
+	ws["last_court_called_ic_day"] = ic_day
+	if current_season >= 0:
+		ws["last_court_season"] = current_season
+
+
+static func _status_to_lord_rank(status: float) -> Enums.LordRank:
+	if status >= 9.0:
+		return Enums.LordRank.IMPERIAL
+	elif status >= 7.0:
+		return Enums.LordRank.CLAN_CHAMPION
+	elif status >= 6.0:
+		return Enums.LordRank.FAMILY_DAIMYO
+	elif status >= 5.0:
+		return Enums.LordRank.PROVINCIAL_DAIMYO
+	elif status >= 4.0:
+		return Enums.LordRank.CITY_DAIMYO
+	return Enums.LordRank.VILLAGE_HEADMAN
+
+
 static func _process_court_openings(
 	active_courts: Array[CourtSessionData],
 	ic_day: int,
@@ -4453,6 +4545,8 @@ static func _process_strategic_court_calls(
 	characters_by_id: Dictionary,
 	next_court_id: Array[int],
 	ic_day: int,
+	world_states: Dictionary = {},
+	current_season: int = -1,
 ) -> void:
 	for directive: Dictionary in strategic_results:
 		var directive_type = directive.get("directive", "")
@@ -4479,11 +4573,8 @@ static func _process_strategic_court_calls(
 		if already_hosting:
 			continue
 
-		var lord_status: float = lord.status
 		var court_type: CourtSessionData.CourtType = CourtSessionData.CourtType.PROVINCIAL_FAMILY_COURT
-		if lord_status >= 7.0:
-			court_type = CourtSessionData.CourtType.CLAN_CHAMPION_COURT
-		elif lord_status >= 5.0:
+		if lord.status >= 7.0:
 			court_type = CourtSessionData.CourtType.CLAN_CHAMPION_COURT
 
 		var settlement_id: int = lord.physical_location
@@ -4499,6 +4590,8 @@ static func _process_strategic_court_calls(
 		CourtSystem.set_agenda(court, agenda)
 		CourtSystem.add_attendee(court, lord_id)
 		active_courts.append(court)
+
+		_track_court_called(world_states, lord_id, ic_day, current_season)
 
 
 static func _create_winter_court_from_directive(

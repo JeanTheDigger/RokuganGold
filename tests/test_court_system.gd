@@ -822,3 +822,254 @@ func test_emperor_review_runs_for_emperor():
 		if d.get("directive", "") == "WINTER_COURT_HOST":
 			has_winter_court = true
 	assert_true(has_winter_court, "Emperor review should produce WINTER_COURT_HOST in Autumn")
+
+
+# =============================================================================
+# CRISIS-TRIGGERED COURT SCHEDULING
+# =============================================================================
+
+func _make_lord(id: int, location: String, clan: String, status: float = 6.0) -> L5RCharacterData:
+	var c := _make_character(id, location)
+	c.clan = clan
+	c.status = status
+	c.lord_id = -1
+	return c
+
+
+func test_crisis_topic_triggers_court_call():
+	var lord := _make_lord(100, "10", "Crane", 6.0)
+	var topic := _make_topic(1, 30.0)
+	var characters: Array[L5RCharacterData] = [lord]
+	var courts: Array[CourtSessionData] = []
+	var topics: Array[TopicData] = [topic]
+	var world_states: Dictionary = {}
+	var next_id: Array[int] = [1]
+
+	var results := DayOrchestrator._process_crisis_court_calls(
+		characters, courts, topics, world_states, next_id, 50,
+	)
+
+	assert_eq(results.size(), 1)
+	assert_true(results[0].get("crisis_called", false))
+	assert_eq(results[0]["lord_id"], 100)
+	assert_eq(results[0]["trigger_topic_id"], 1)
+	assert_eq(courts.size(), 1, "Court should be added to active_courts")
+	assert_eq(courts[0].host_lord_id, 100)
+	assert_eq(courts[0].crisis_trigger_topic_id, 1)
+
+
+func test_crisis_court_not_triggered_below_threshold():
+	var lord := _make_lord(100, "10", "Lion", 6.0)
+	var topic := _make_topic(1, 10.0)
+	var characters: Array[L5RCharacterData] = [lord]
+	var courts: Array[CourtSessionData] = []
+	var topics: Array[TopicData] = [topic]
+	var world_states: Dictionary = {}
+	var next_id: Array[int] = [1]
+
+	var results := DayOrchestrator._process_crisis_court_calls(
+		characters, courts, topics, world_states, next_id, 50,
+	)
+
+	assert_eq(results.size(), 0, "Low momentum should not trigger court")
+	assert_eq(courts.size(), 0)
+
+
+func test_crisis_court_not_triggered_for_non_lords():
+	var vassal := _make_character(200, "10")
+	vassal.clan = "Scorpion"
+	vassal.status = 3.0
+	vassal.lord_id = 100
+	var topic := _make_topic(1, 50.0)
+	var characters: Array[L5RCharacterData] = [vassal]
+	var courts: Array[CourtSessionData] = []
+	var topics: Array[TopicData] = [topic]
+	var world_states: Dictionary = {}
+	var next_id: Array[int] = [1]
+
+	var results := DayOrchestrator._process_crisis_court_calls(
+		characters, courts, topics, world_states, next_id, 50,
+	)
+
+	assert_eq(results.size(), 0, "Non-lords should not trigger crisis courts")
+
+
+func test_crisis_court_blocked_by_existing_active_court():
+	var lord := _make_lord(100, "10", "Crane", 6.0)
+	var topic := _make_topic(1, 30.0)
+	var existing := _make_court(1, CourtSessionData.CourtType.PROVINCIAL_FAMILY_COURT, 100, 10, "Crane")
+	CourtSystem.open_court(existing, 45)
+	var characters: Array[L5RCharacterData] = [lord]
+	var courts: Array[CourtSessionData] = [existing]
+	var topics: Array[TopicData] = [topic]
+	var world_states: Dictionary = {}
+	var next_id: Array[int] = [2]
+
+	var results := DayOrchestrator._process_crisis_court_calls(
+		characters, courts, topics, world_states, next_id, 50,
+	)
+
+	assert_eq(results.size(), 0, "Active court at settlement blocks new crisis court")
+
+
+func test_crisis_court_cooldown_prevents_rapid_calls():
+	var lord := _make_lord(100, "10", "Dragon", 6.0)
+	var topic := _make_topic(1, 30.0)
+	var characters: Array[L5RCharacterData] = [lord]
+	var courts: Array[CourtSessionData] = []
+	var topics: Array[TopicData] = [topic]
+	var world_states: Dictionary = {100: {"last_court_called_ic_day": 30}}
+	var next_id: Array[int] = [1]
+
+	var results := DayOrchestrator._process_crisis_court_calls(
+		characters, courts, topics, world_states, next_id, 50,
+	)
+
+	assert_eq(results.size(), 0, "30-day cooldown should prevent new court")
+
+
+func test_crisis_court_allowed_after_cooldown():
+	var lord := _make_lord(100, "10", "Dragon", 6.0)
+	var topic := _make_topic(1, 30.0)
+	var characters: Array[L5RCharacterData] = [lord]
+	var courts: Array[CourtSessionData] = []
+	var topics: Array[TopicData] = [topic]
+	var world_states: Dictionary = {100: {"last_court_called_ic_day": 10}}
+	var next_id: Array[int] = [1]
+
+	var results := DayOrchestrator._process_crisis_court_calls(
+		characters, courts, topics, world_states, next_id, 50,
+	)
+
+	assert_eq(results.size(), 1, "Court should be allowed after 30-day cooldown")
+
+
+func test_crisis_court_type_matches_lord_status():
+	var champion := _make_lord(100, "10", "Lion", 8.0)
+	var topic := _make_topic(1, 55.0)
+	var characters: Array[L5RCharacterData] = [champion]
+	var courts: Array[CourtSessionData] = []
+	var topics: Array[TopicData] = [topic]
+	var world_states: Dictionary = {}
+	var next_id: Array[int] = [1]
+
+	DayOrchestrator._process_crisis_court_calls(
+		characters, courts, topics, world_states, next_id, 50,
+	)
+
+	assert_eq(courts.size(), 1)
+	assert_eq(courts[0].court_type, CourtSessionData.CourtType.CLAN_CHAMPION_COURT)
+
+
+func test_crisis_court_tracks_last_court_day():
+	var lord := _make_lord(100, "10", "Crane", 6.0)
+	var topic := _make_topic(1, 30.0)
+	var characters: Array[L5RCharacterData] = [lord]
+	var courts: Array[CourtSessionData] = []
+	var topics: Array[TopicData] = [topic]
+	var world_states: Dictionary = {}
+	var next_id: Array[int] = [1]
+
+	DayOrchestrator._process_crisis_court_calls(
+		characters, courts, topics, world_states, next_id, 50,
+	)
+
+	var ws: Dictionary = world_states.get(100, {})
+	assert_eq(ws.get("last_court_called_ic_day", -1), 50)
+
+
+# =============================================================================
+# STRATEGIC COURT SCHEDULING
+# =============================================================================
+
+func test_strategic_call_court_creates_session():
+	var lord := _make_lord(100, "10", "Crane", 6.0)
+	var directives: Array[Dictionary] = [{
+		"directive": StrategicReview.Directive.CALL_COURT,
+		"lord_id": 100,
+	}]
+	var courts: Array[CourtSessionData] = []
+	var topics: Array[TopicData] = []
+	var chars_by_id: Dictionary = {100: lord}
+	var next_id: Array[int] = [1]
+
+	DayOrchestrator._process_strategic_court_calls(
+		directives, courts, topics, chars_by_id, next_id, 50,
+	)
+
+	assert_eq(courts.size(), 1)
+	assert_eq(courts[0].host_lord_id, 100)
+	assert_eq(courts[0].start_ic_day, 51, "Strategic court starts next day")
+	assert_eq(courts[0].court_type, CourtSessionData.CourtType.PROVINCIAL_FAMILY_COURT)
+
+
+func test_strategic_call_court_champion_gets_clan_type():
+	var champion := _make_lord(100, "10", "Lion", 8.0)
+	var directives: Array[Dictionary] = [{
+		"directive": StrategicReview.Directive.CALL_COURT,
+		"lord_id": 100,
+	}]
+	var courts: Array[CourtSessionData] = []
+	var topics: Array[TopicData] = []
+	var chars_by_id: Dictionary = {100: champion}
+	var next_id: Array[int] = [1]
+
+	DayOrchestrator._process_strategic_court_calls(
+		directives, courts, topics, chars_by_id, next_id, 50,
+	)
+
+	assert_eq(courts.size(), 1)
+	assert_eq(courts[0].court_type, CourtSessionData.CourtType.CLAN_CHAMPION_COURT)
+
+
+func test_strategic_call_court_blocked_by_active_court():
+	var lord := _make_lord(100, "10", "Crane", 6.0)
+	var existing := _make_court(1, CourtSessionData.CourtType.PROVINCIAL_FAMILY_COURT, 100, 10, "Crane")
+	CourtSystem.open_court(existing, 45)
+	var directives: Array[Dictionary] = [{
+		"directive": StrategicReview.Directive.CALL_COURT,
+		"lord_id": 100,
+	}]
+	var courts: Array[CourtSessionData] = [existing]
+	var topics: Array[TopicData] = []
+	var chars_by_id: Dictionary = {100: lord}
+	var next_id: Array[int] = [2]
+
+	DayOrchestrator._process_strategic_court_calls(
+		directives, courts, topics, chars_by_id, next_id, 50,
+	)
+
+	assert_eq(courts.size(), 1, "Should not add second court when one is active")
+
+
+func test_strategic_call_court_tracks_last_court_season():
+	var lord := _make_lord(100, "10", "Crane", 6.0)
+	var directives: Array[Dictionary] = [{
+		"directive": StrategicReview.Directive.CALL_COURT,
+		"lord_id": 100,
+	}]
+	var courts: Array[CourtSessionData] = []
+	var topics: Array[TopicData] = []
+	var chars_by_id: Dictionary = {100: lord}
+	var next_id: Array[int] = [1]
+	var world_states: Dictionary = {}
+
+	DayOrchestrator._process_strategic_court_calls(
+		directives, courts, topics, chars_by_id, next_id, 50,
+		world_states, 2,
+	)
+
+	var ws: Dictionary = world_states.get(100, {})
+	assert_eq(ws.get("last_court_season", -1), 2, "Should track season of court call")
+	assert_eq(ws.get("last_court_called_ic_day", -1), 50)
+
+
+func test_status_to_lord_rank_mapping():
+	assert_eq(DayOrchestrator._status_to_lord_rank(10.0), Enums.LordRank.IMPERIAL)
+	assert_eq(DayOrchestrator._status_to_lord_rank(9.0), Enums.LordRank.IMPERIAL)
+	assert_eq(DayOrchestrator._status_to_lord_rank(8.0), Enums.LordRank.CLAN_CHAMPION)
+	assert_eq(DayOrchestrator._status_to_lord_rank(7.0), Enums.LordRank.CLAN_CHAMPION)
+	assert_eq(DayOrchestrator._status_to_lord_rank(6.0), Enums.LordRank.FAMILY_DAIMYO)
+	assert_eq(DayOrchestrator._status_to_lord_rank(5.0), Enums.LordRank.PROVINCIAL_DAIMYO)
+	assert_eq(DayOrchestrator._status_to_lord_rank(4.0), Enums.LordRank.CITY_DAIMYO)
+	assert_eq(DayOrchestrator._status_to_lord_rank(2.0), Enums.LordRank.VILLAGE_HEADMAN)
