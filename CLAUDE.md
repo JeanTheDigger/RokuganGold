@@ -427,7 +427,7 @@ All in /tests/, one file per system:
 - test_tattoo_system.gd (~100 tests)
 - test_character_sheet_field_index.gd (~45 tests)
 - test_insurgency_system.gd (~60 tests)
-- test_system_wiring.gd (~48 tests)
+- test_system_wiring.gd (~145 tests)
 - test_rice_market_system.gd (~35 tests)
 - test_regional_price_modifiers.gd (~25 tests)
 - test_world_generator.gd (~45 tests)
@@ -488,6 +488,8 @@ All in /tests/, one file per system:
 - test_starvation_warfare.gd (~55 tests)
 - test_court_system.gd (~76 tests)
 - test_imperial_edict_system.gd (~57 tests)
+- test_horde_system.gd (~43 tests)
+- test_oni_generator.gd (~80 tests)
 
 ### Festival System (s11.5)
 - **simulation/festival_system.gd** — Empire-wide canonical festivals, Rokuyo
@@ -2094,6 +2096,97 @@ All in /tests/, one file per system:
   Deferred: per-type compliance effects for TAX_REFORM, AUTHORIZE_WAR,
   APPOINT_POSITION, STRIP_AUTONOMY, GENERAL_DECREE need GDD specification
   before implementation.
+
+### Jigoku Horde Generation System (s2.4.4–s2.4.8)
+- **shared/enums.gd** — Added 9 new enums: `ShadowlandsUnitType` (12 values:
+  BAKEMONO through OGRE_WARLORD), `InvasionType` (JIGOKU_HORDE, UNDEAD_LEGION,
+  ONI_LED, ONI_LED_SPAWN), `OniSize` (SMALL/MEDIUM/LARGE/MASSIVE), `OniBodyForm`
+  (6 values: HUMANOID through INSECTOID), `OniInvulnerability` (5 values),
+  `OniSpecialAttack` (6 values), `OniWeakness` (7 values), `HordeBattleOutcome`
+  (4 values: DECISIVE_DEFENDER_VICTORY through DEFENDER_OVERRUN).
+- **shared/horde_data.gd** — HordeData Resource: invasion_type,
+  target_province_id, strength_at_formation, companies (Array[Dictionary]),
+  has_oni, oni_data (OniData), has_spawn, ic_day_generated, assault_resolved,
+  battle_outcome (sentinel -1 = unresolved), assault_si_hit.
+- **shared/oni_data.gd** — OniData Resource: oni_name, size, body_form,
+  is_winged, dominant_ring, rings (Dictionary), mb_health, mb_attack,
+  mb_defense, MB_MORALE const=-1, wounds, armor_tn, reduction, fear_rating,
+  invulnerability, special_attack, spell_immunity_count, specific_weakness,
+  weakness fields, weakness_discovered, ic_day_generated.
+- **simulation/horde_system.gd** — Full LOCKED horde mechanics per s2.4.4–s2.4.7:
+  `HORDE_ROLL_SEASON_INTERVAL=2`, `HORDE_BASE_PROBABILITY=0.50`.
+  Invasion type weights: 60% Jigoku / 25% Undead / 15% Oni-Led (s2.4.6).
+  `ONI_SPAWN_PROBABILITY=0.15` for Spawn variant on Oni-Led.
+  `SHADOWLANDS_UNIT_STATS` — 12 unit stat blocks with all special flags
+  (immune_routing_contagion, no_morale, wall_breaker_attack_bonus/si_ignore,
+  horde_command, commander_unit, dark_spellcraft, pack_hunters, brutal_authority,
+  feeding_frenzy) per s2.4.7.
+  `ASSAULT_SI_HIT = {DECISIVE:1, CONTESTED:2, PUSHED_BACK:3, OVERRUN:4}` per s2.4.5.
+  Functions: `roll_horde_fires()`, `roll_invasion_type()` (with Spawn check),
+  `select_target_tower()` (2× weight for last targeted), `get_unit_stats()`,
+  `_generate_jigoku_companies()` (4 Bakemono + 2 Warrior + 1 Ogre + strength extras),
+  `_generate_undead_companies()` (3 Zombie + 2 Skeleton + 1 Revenant + 1 Maho + extras),
+  `_generate_oni_led_companies()` (delegates to Jigoku composition; Oni is separate),
+  `generate_horde_companies()` (dispatch), `get_assault_si_hit()`,
+  `apply_assault_si_hit()` (mutates settlement.wall_si, returns breach flag),
+  global strength counter helpers, `generate_horde()` full entry point.
+- **simulation/oni_generator.gd** — Fully deterministic 6-step procedural Oni
+  generation per s2.4.8, using only the dice engine (no global RNG):
+  Step 1 Size: d10 table (1-3=Small, 4-6=Medium, 7-9=Large, 10=Massive).
+  Step 2 Body Form: 6 base forms + 20% Winged secondary flag.
+  Step 3 Dominant Ring: 35-45% of budget; other 3 rings each ≥1 and < dominant;
+  Void always 0. Ring budget: 9/12/15/19 by size.
+  Step 4 Derived Stats: MB flat values from tables; wounds=Earth×16,
+  armor_tn=Air×5, reduction=Earth×4.
+  Step 5 Pool 1 (Fear always), Pool 2 (1 of 5 invulnerabilities),
+  Pool 3 (rarity-weighted d100: Breath 40%, Crushing 40%, Taint Spit 10%,
+  Regen 4%, Spawn 3%, Taint Aura 3%).
+  Step 6 Weakness: 7 procedural types; SPECIFIC_WEAPON_TYPE/SPECIFIC_SPELL_SCHOOL/
+  NAMED_INDIVIDUAL get sub-selections; others have no detail fields.
+  `get_mb_stats()` returns mass battle stat block Dictionary.
+- **DayOrchestrator wiring (s2.4.4)** — `_process_horde_rolls()` called each day.
+  Increments `season_meta["horde_season_count"]` on every season change.
+  Fires the 50% horde roll every 2 seasons. On success: `HordeSystem.generate_horde()`
+  creates HordeData (with OniData when ONI_LED), updates `last_targeted_province_id[0]`,
+  appends to `active_hordes`, generates Tier 3 POLITICAL "military" topic.
+  On failure: increments global strength counter.
+  New params on `advance_day()`: `active_hordes: Array[HordeData]`,
+  `horde_strength_counters: Dictionary`, `last_targeted_province_id: Array[int]`.
+  Return dict gains `horde_results`.
+  WorldStateData gains `active_hordes`, `horde_strength_counters`,
+  `last_targeted_province_id` fields.
+- **DayOrchestrator wiring (s2.4.5)** — `_process_horde_assaults()` runs daily.
+  Processes hordes with `assault_resolved=true` and `battle_outcome >= 0` and
+  `assault_si_hit == 0`. Calls `HordeSystem.apply_assault_si_hit()`, stores
+  result on horde. If breach (new_si==0 AND outcome==DEFENDER_OVERRUN): generates
+  Tier 1 MILITARY "crisis/shadowlands_incursion" topic with momentum 80.
+  Return dict gains `horde_assault_results`.
+- **WallSystem additions (s2.4.2 PROVISIONAL)** — `MINIMUM_GARRISON_PU = 1.0`
+  constant (1 full Company = 1.0 PU). `is_garrison_below_minimum(garrison_pu)`
+  helper. `_set_wall_tower_context_flags()` updated to use this helper for
+  `wstat.garrison_above_minimum`.
+- **Garrison shortage detection (s2.4.12)** — `_process_wall_seasonal_pressure()`
+  Step 4 checks each tower's garrison vs. MINIMUM_GARRISON_PU. Returns
+  `garrison_shortage_towers: Array[Dictionary]` (province_id, garrison_pu, wall_si).
+  Does NOT auto-generate topic per s2.4.12 — Taisa/Shireikan AI must propagate
+  through letters.
+- **Tests** — `tests/test_horde_system.gd` (~43 tests): unit stat verification
+  for all 12 Shadowlands unit types, frequency constants, invasion type
+  distribution, target tower selection, company generation counts, assault SI hit
+  table, strength counter operations, generate_horde() full integration.
+  `tests/test_oni_generator.gd` (~80 tests): size/budget/MB/fear constants,
+  pool sizes, ring distribution invariants (dominant highest, non-dominant ≥1,
+  budget sum correct, Void=0), derived stat formulas, weakness detail population,
+  Pool 2/3 validity, Winged frequency, determinism.
+  `tests/test_system_wiring.gd` extended with ~30 additional tests: horde roll
+  season count, roll frequency, no-tower guard, horde formation appended,
+  failed roll counter, topic generation, Oni generation on has_oni, last_pid
+  update, strength used + reset, garrison shortage detection, horde assault
+  SI hit for all 4 outcomes, breach topic generation, skip guards for
+  unresolved/already-processed hordes, garrison threshold flag tests.
+  Deferred: Horde assault combat resolution (sets battle_outcome from
+  ArmyCombatSystem), Spawn company generation (s2.4.6), garrison shortage
+  NPC pipeline (Taisa/Shireikan letter campaign, s2.4.12–s2.4.14).
 
 ### What's Next
 1. World generation coordinate system and adjacency
