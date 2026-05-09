@@ -480,7 +480,7 @@ static func _detect_observable_effect(
 	effects: Dictionary,
 	applied: Dictionary,
 ) -> bool:
-	var action_id: String = result.get("action_id", "")
+	var _action_id: String = result.get("action_id", "")
 
 	if effects.get("info_gained", false):
 		return true

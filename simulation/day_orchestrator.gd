@@ -464,7 +464,7 @@ static func _process_daily_conversations(
 		if group.size() < 2:
 			continue
 
-		var pair_count: int = (group.size() * (group.size() - 1)) / 2
+		var pair_count: int = group.size() * (group.size() - 1) >> 1
 		var rng_needed: int = pair_count * 3
 		var rng: Array[int] = []
 		for i: int in range(rng_needed):
@@ -1943,7 +1943,9 @@ static func _process_festivals(ic_day: int, world_states: Dictionary) -> Diction
 	var is_ceasefire: bool = FestivalSystem.is_ceasefire_day(ic_day)
 	var is_labor_halt: bool = FestivalSystem.is_labor_halt_day(ic_day)
 
-	for char_id: int in world_states:
+	for char_id in world_states:
+		if char_id is not int:
+			continue
 		var ws: Dictionary = world_states[char_id]
 		ws["is_ceasefire_day"] = is_ceasefire
 		ws["is_labor_halt_day"] = is_labor_halt
@@ -2163,7 +2165,7 @@ static func _process_insurgencies(
 
 	var per_province_ws: Dictionary = {}
 	for pid: int in provinces:
-		per_province_ws[pid] = world_states.get(pid, world_states)
+		per_province_ws[pid] = world_states.get(pid, {})
 
 	var result: Dictionary = InsurgencySystem.process_season(
 		insurgencies, provinces, ptls, dice_engine, current_season,
@@ -2877,7 +2879,7 @@ static func _process_military_effects(
 	applied_list: Array,
 	settlements: Array[SettlementData],
 	characters_by_id: Dictionary,
-	companies: Array[Dictionary],
+	_companies: Array[Dictionary],
 ) -> Array[Dictionary]:
 	var results: Array[Dictionary] = []
 	var settlements_by_province: Dictionary = _build_settlements_by_province(settlements)
@@ -3260,7 +3262,6 @@ static func _process_commander_death_scores(
 			continue
 
 		var enemy_clan: String = ""
-		var side: String = bcd.get("side", "")
 		for war: WarData in active_wars:
 			if not war.is_active:
 				continue
@@ -3345,10 +3346,10 @@ static func _process_tether_war_scores(
 	results: Array[Dictionary],
 ) -> void:
 	var tether_results: Array = military_daily.get("tether_results", [])
-	for tr: Variant in tether_results:
-		if not (tr is Dictionary):
+	for tether_r: Variant in tether_results:
+		if not (tether_r is Dictionary):
 			continue
-		var td: Dictionary = tr
+		var td: Dictionary = tether_r
 		var state: int = td.get("overall_state", 0)
 		if state != 2:
 			continue
@@ -4495,11 +4496,10 @@ static func _create_allied_aid_favor(
 	ic_day: int,
 	favors: Array,
 ) -> FavorData:
-	var tier: FavorData.FavorTier
+	var tier: FavorData.FavorTier = FavorData.FavorTier.MINOR
 	match favor_tier:
 		2: tier = FavorData.FavorTier.MODERATE
 		1: tier = FavorData.FavorTier.MAJOR
-		_: tier = FavorData.FavorTier.MINOR
 
 	var max_id: int = 0
 	for f: Variant in favors:

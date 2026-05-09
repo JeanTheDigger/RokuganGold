@@ -18,8 +18,8 @@ func _ready():
 	# Apply loaded values to sound systems
 	_update_jingle_volume(jingle_slider.value)
 	_update_narrator_volume(narrator_slider.value)
-	AudioServer.set_bus_volume_db(AudioServer.get_bus_index("Music"), slider_to_db(music_slider.value))
-	AudioServer.set_bus_volume_db(AudioServer.get_bus_index("Ambiance"), slider_to_db(ambiance_slider.value))
+	_set_bus_volume("Music", slider_to_db(music_slider.value))
+	_set_bus_volume("Ambiance", slider_to_db(ambiance_slider.value))
 
 	# Connect each slider to its handler
 	jingle_slider.value_changed.connect(_on_jingle_volume_changed)
@@ -28,6 +28,11 @@ func _ready():
 	ambiance_slider.value_changed.connect(_on_ambiance_volume_changed)
 
 	close_button.pressed.connect(_on_close_pressed)
+
+func _set_bus_volume(bus_name: String, db: float) -> void:
+	var idx: int = AudioServer.get_bus_index(bus_name)
+	if idx >= 0:
+		AudioServer.set_bus_volume_db(idx, db)
 
 # Convert slider [0–100] to decibels [-80 to 0]
 func slider_to_db(value: float) -> float:
@@ -51,7 +56,7 @@ func _update_jingle_volume(value: float):
 # -------------------
 
 func _on_music_volume_changed(value: float):
-	AudioServer.set_bus_volume_db(AudioServer.get_bus_index("Music"), slider_to_db(value))
+	_set_bus_volume("Music", slider_to_db(value))
 	save_audio_settings()
 
 # -------------------
@@ -72,8 +77,8 @@ func _update_narrator_volume(value: float):
 # -------------------
 
 func _on_ambiance_volume_changed(value: float):
-	var db_value = slider_to_db(value)
-	AudioServer.set_bus_volume_db(AudioServer.get_bus_index("Ambiance"), db_value)
+	var db_value: float = slider_to_db(value)
+	_set_bus_volume("Ambiance", db_value)
 
 	if MusicManager.has_method("update_ambiance_volume"):
 		MusicManager.update_ambiance_volume(db_value)

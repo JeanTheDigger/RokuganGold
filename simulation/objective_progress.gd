@@ -113,7 +113,7 @@ static func _get_known_allies_from_objective(
 static func _progress_avenge(
 	objective: Dictionary,
 	ctx: NPCDataStructures.ContextSnapshot,
-	world_state: Dictionary,
+	_world_state: Dictionary,
 ) -> float:
 	var score: float = 0.0
 	var target_id: int = objective.get("target_npc_id", -1)
@@ -250,7 +250,6 @@ static func _progress_appoint_character(
 	ctx: NPCDataStructures.ContextSnapshot,
 ) -> float:
 	var score: float = 0.0
-	var target_x: int = objective.get("target_npc_id", -1)
 
 	var is_vacant: bool = objective.get("position_vacant", false)
 	if is_vacant:
@@ -428,11 +427,11 @@ static func _progress_expose_secret(
 
 	var has_secrets: bool = objective.get("has_secrets_on_target", false)
 	if not has_secrets:
-		var intel: int = _count_intel_actions(
+		var probe_intel: int = _count_intel_actions(
 			ctx, target_x,
 			["BRIBE_FOR_INFO", "EAVESDROP", "PROBE", "SEARCH_QUARTERS", "INTERCEPT_LETTER"] as Array[String],
 		)
-		score += minf(intel * 0.03, 0.1)
+		score += minf(probe_intel * 0.03, 0.1)
 		return score
 
 	score += 0.2
@@ -474,7 +473,7 @@ static func _progress_expose_secret(
 static func _progress_conquer_province(
 	objective: Dictionary,
 	ctx: NPCDataStructures.ContextSnapshot,
-	world_state: Dictionary,
+	_world_state: Dictionary,
 ) -> float:
 	var score: float = 0.0
 	var target_province: int = objective.get("target_province_id", -1)
@@ -553,7 +552,6 @@ static func _progress_sabotage_economy(
 	ctx: NPCDataStructures.ContextSnapshot,
 ) -> float:
 	var score: float = 0.0
-	var target_clan: String = objective.get("target_clan_id", "")
 
 	var known_provinces: Array = objective.get("known_enemy_provinces", [])
 	if known_provinces.is_empty():

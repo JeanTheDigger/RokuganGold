@@ -41,7 +41,7 @@ static func is_inauspicious_for_social(ic_day: int) -> bool:
 # -- Calendar Helpers ---------------------------------------------------------
 
 static func get_month(ic_day: int) -> int:
-	return ((ic_day - 1) % 360) / 30 + 1
+	return int(float((ic_day - 1) % 360) / 30.0) + 1
 
 static func get_day_of_month(ic_day: int) -> int:
 	return ((ic_day - 1) % 360) % 30 + 1
@@ -192,7 +192,7 @@ static func is_vacancy_triggered(championship: ChampionshipType) -> bool:
 
 static func resolve_championship(
 	candidates: Array[Dictionary],
-	dice: Object,
+	_dice: Object,
 ) -> Dictionary:
 	if candidates.is_empty():
 		return {}
@@ -416,8 +416,8 @@ static func _get_canonical_days() -> Array[int]:
 
 static func generate_local_festivals(
 	settlement_type: String,
-	terrain: String,
-	clan: String,
+	_terrain: String,
+	_clan: String,
 	rng: Object,
 	themes: Array[String] = [],
 ) -> Array[Dictionary]:

@@ -498,7 +498,7 @@ static func _needs_shugenja(itype: Enums.InsurgencyType) -> bool:
 
 static func compute_ptl_change(
 	province: ProvinceData,
-	ptl: float,
+	_ptl: float,
 	active_insurgencies: Array[InsurgencyData],
 	maho_events_this_season: int,
 	adjacent_ptls: Dictionary,
@@ -600,7 +600,6 @@ static func get_crisis_tier(ins: InsurgencyData) -> int:
 		Enums.InsurgencyType.RONIN_BANDIT:
 			return 3
 		Enums.InsurgencyType.TAINT_MANIFESTATION:
-			var ptl_tier: String = "TOUCHED"
 			if ins.strength >= 8:
 				return 1
 			if ins.strength >= 5:

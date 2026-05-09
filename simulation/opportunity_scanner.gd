@@ -249,7 +249,7 @@ static func _scan_military(
 # -- Economic Opportunities ----------------------------------------------------
 
 static func _scan_economic(
-	character: L5RCharacterData,
+	_character: L5RCharacterData,
 	standing_type: String,
 	world_state: Dictionary,
 ) -> Array[Opportunity]:

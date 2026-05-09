@@ -14,7 +14,6 @@ func process_speak(data: Dictionary) -> void:
 	var zone_name: String = speaker_data.current_zone
 	var zone_data: Dictionary = ZoneManager.zones.get(zone_name, {})
 	var characters_in_zone: Array = zone_data.get("characters", [])
-	var is_neighborhood: bool = zone_data.get("is_neighborhood", false)
 
 	# Neighborhood restrictions are disabled when the group system is unavailable.
 	# Normal non-neighborhood broadcast
@@ -50,7 +49,6 @@ func process_whisper(data: Dictionary) -> void:
 	var zone_name: String = speaker_data.current_zone
 	var zone_data: Dictionary = ZoneManager.zones.get(zone_name, {})
 	var characters_in_zone: Array = zone_data.get("characters", [])
-	var is_neighborhood: bool = zone_data.get("is_neighborhood", false)
 
 	# Neighborhood restrictions are disabled when the group system is unavailable.
 	# Normal non-neighborhood whisper behavior
@@ -100,7 +98,6 @@ func process_emote(data: Dictionary) -> void:
 	var zone_name: String = speaker_data.current_zone
 	var zone_data: Dictionary = ZoneManager.zones.get(zone_name, {})
 	var characters_in_zone: Array = zone_data.get("characters", [])
-	var is_neighborhood: bool = zone_data.get("is_neighborhood", false)
 
 	# Neighborhood restrictions are disabled when the group system is unavailable.
 	# Normal non-neighborhood broadcast
@@ -518,7 +515,6 @@ func process_virtue_roll(data: Dictionary) -> void:
 func notify_zone_change(event_type: String, character_name: String, zone_name: String) -> void:
 	var zone_data: Dictionary = ZoneManager.zones.get(zone_name, {})
 	var characters_in_zone: Array = zone_data.get("characters", [])
-	var is_neighborhood: bool = zone_data.get("is_neighborhood", false)
 
 	var packet: Dictionary = {}
 	match event_type:
@@ -588,7 +584,6 @@ func process_describe(data: Dictionary) -> void:
 	var zone_name = speaker_data.current_zone
 	var zone_data = ZoneManager.zones.get(zone_name, {})
 	var characters_in_zone = zone_data.get("characters", [])
-	var is_neighborhood = zone_data.get("is_neighborhood", false)
 
 	# Neighborhood restrictions are disabled when the group system is unavailable.
 	# 🌆 Non-neighborhood zone: broadcast to all in zone
