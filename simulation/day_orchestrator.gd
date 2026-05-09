@@ -51,6 +51,9 @@ static func advance_day(
 	next_court_id: Array[int] = [1],
 	active_edicts: Array[EdictData] = [],
 	next_edict_id: Array[int] = [1],
+	active_hordes: Array[HordeData] = [],
+	horde_strength_counters: Dictionary = {},
+	last_targeted_province_id: Array[int] = [-1],
 ) -> Dictionary:
 	var prev_season: int = time_system.get_season()
 
@@ -322,6 +325,13 @@ static func advance_day(
 			current_season,
 		)
 
+	var horde_results: Dictionary = _process_horde_rolls(
+		current_season, prev_season,
+		active_hordes, horde_strength_counters, last_targeted_province_id,
+		settlements, provinces, dice_engine, ic_day, season_meta,
+		active_topics, next_topic_id,
+	)
+
 	return {
 		"ic_day": ic_day,
 		"season": current_season,
@@ -368,6 +378,7 @@ static func advance_day(
 		"wall_seasonal": wall_seasonal_result,
 		"wall_engineering_results": wall_engineering_results,
 		"sortie_results": sortie_results,
+		"horde_results": horde_results,
 	}
 
 
@@ -727,6 +738,94 @@ static func _process_sortie_results(
 		})
 
 	return results
+
+
+# -- Horde Rolls (s2.4.4–s2.4.8 — LOCKED) ------------------------------------
+
+## Fires every HORDE_ROLL_SEASON_INTERVAL seasons when a season change occurs.
+## Season count is tracked in season_meta["horde_season_count"].
+## On a successful roll a HordeData is generated and appended to active_hordes.
+## On a failed roll the global strength counter increments.
+## Returns a dict describing what happened; empty dict if no roll fired.
+static func _process_horde_rolls(
+	current_season: int,
+	prev_season: int,
+	active_hordes: Array[HordeData],
+	horde_strength_counters: Dictionary,
+	last_targeted_province_id: Array[int],
+	settlements: Array[SettlementData],
+	provinces: Dictionary,
+	dice: DiceEngine,
+	ic_day: int,
+	season_meta: Dictionary,
+	active_topics: Array[TopicData],
+	next_topic_id: Array[int],
+) -> Dictionary:
+	if current_season == prev_season:
+		return {}
+
+	# Increment season counter.
+	var season_count: int = int(season_meta.get("horde_season_count", 0)) + 1
+	season_meta["horde_season_count"] = season_count
+
+	# Roll only fires every HORDE_ROLL_SEASON_INTERVAL seasons.
+	if season_count % HordeSystem.HORDE_ROLL_SEASON_INTERVAL != 0:
+		return {"roll_fired": false, "season_count": season_count}
+
+	# Gather Wall Tower province IDs.
+	var tower_province_ids: Array[int] = []
+	for s: SettlementData in settlements:
+		if s.settlement_type == Enums.SettlementType.WALL_TOWER:
+			if not (s.province_id in tower_province_ids):
+				tower_province_ids.append(s.province_id)
+
+	# No towers — no horde (Horde must target a Wall Tower per s2.4.4).
+	if tower_province_ids.is_empty():
+		return {"roll_fired": true, "horde_formed": false, "reason": "no_wall_towers"}
+
+	if HordeSystem.roll_horde_fires(dice):
+		var last_pid: int = last_targeted_province_id[0]
+		var horde: HordeData = HordeSystem.generate_horde(
+			tower_province_ids, last_pid, horde_strength_counters, dice, ic_day
+		)
+		# Generate the Oni if the invasion type requires one.
+		if horde.has_oni:
+			horde.oni_data = OniGenerator.generate(dice, ic_day)
+		last_targeted_province_id[0] = horde.target_province_id
+		active_hordes.append(horde)
+		# Generate a horde-sighted topic (Tier 3, POLITICAL category,
+		# MILITARY topic_type) for the targeted tower's province.
+		var topic := TopicData.new()
+		topic.topic_id = next_topic_id[0]
+		next_topic_id[0] += 1
+		topic.slug = "horde_sighted_p%d_d%d" % [horde.target_province_id, ic_day]
+		topic.topic_type = "military"
+		topic.category = TopicData.Category.POLITICAL
+		topic.tier = TopicData.Tier.TIER_3
+		topic.momentum = 30.0
+		topic.ic_day_created = ic_day
+		var province: Variant = provinces.get(horde.target_province_id, null)
+		if province is ProvinceData:
+			topic.clan_involved = (province as ProvinceData).clan
+		active_topics.append(topic)
+		return {
+			"roll_fired": true,
+			"horde_formed": true,
+			"invasion_type": horde.invasion_type,
+			"target_province_id": horde.target_province_id,
+			"strength_at_formation": horde.strength_at_formation,
+			"company_count": horde.companies.size(),
+			"has_oni": horde.has_oni,
+			"has_spawn": horde.has_spawn,
+			"topic_id": topic.topic_id,
+		}
+	else:
+		HordeSystem.increment_strength_counter(horde_strength_counters, tower_province_ids)
+		return {
+			"roll_fired": true,
+			"horde_formed": false,
+			"strength_counter": HordeSystem.get_strength_counter(horde_strength_counters),
+		}
 
 
 static func _decay_all_knowledge(

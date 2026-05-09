@@ -2085,3 +2085,338 @@ func test_kaiu_modifier_cleared_when_seasons_reach_zero() -> void:
 	assert_almost_eq(tower.kaiu_decay_reduction, 0.0, 0.001,
 		"Modifier cleared when seasons reach 0")
 
+
+# -- _process_horde_rolls: season count tracking --------------------------------
+
+func _make_horde_tower(province_id: int) -> SettlementData:
+	var s := SettlementData.new()
+	s.settlement_id = province_id * 10
+	s.province_id = province_id
+	s.settlement_type = Enums.SettlementType.WALL_TOWER
+	s.wall_si = 10
+	s.garrison_pu = 2
+	return s
+
+
+func _make_horde_province(province_id: int) -> ProvinceData:
+	var p := ProvinceData.new()
+	p.province_id = province_id
+	p.clan = "Crab"
+	p.shadowlands_strength = 3
+	return p
+
+
+func test_horde_no_roll_on_same_season() -> void:
+	var dice := DiceEngine.new()
+	dice.set_seed(1)
+	var season_meta: Dictionary = {}
+	var hordes: Array[HordeData] = []
+	var counters: Dictionary = {}
+	var last_pid: Array[int] = [-1]
+	var tower := _make_horde_tower(1)
+	var province := _make_horde_province(1)
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [1000]
+
+	# current_season == prev_season → no roll fires.
+	var result := DayOrchestrator._process_horde_rolls(
+		TimeSystem.Season.SPRING, TimeSystem.Season.SPRING,
+		hordes, counters, last_pid,
+		[tower] as Array[SettlementData], {1: province},
+		dice, 1, season_meta, active_topics, next_topic_id,
+	)
+
+	assert_eq(result, {}, "Empty dict when no season change")
+	assert_eq(hordes.size(), 0)
+
+
+func test_horde_season_count_increments_on_season_change() -> void:
+	var dice := DiceEngine.new()
+	dice.set_seed(1)
+	var season_meta: Dictionary = {}
+	var hordes: Array[HordeData] = []
+	var counters: Dictionary = {}
+	var last_pid: Array[int] = [-1]
+	var tower := _make_horde_tower(1)
+	var province := _make_horde_province(1)
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [1000]
+
+	DayOrchestrator._process_horde_rolls(
+		TimeSystem.Season.SUMMER, TimeSystem.Season.SPRING,
+		hordes, counters, last_pid,
+		[tower] as Array[SettlementData], {1: province},
+		dice, 1, season_meta, active_topics, next_topic_id,
+	)
+
+	assert_eq(int(season_meta.get("horde_season_count", 0)), 1)
+
+
+func test_horde_no_fire_on_first_season_change() -> void:
+	# The roll fires every 2 seasons, so season_count=1 should NOT trigger a roll.
+	var dice := DiceEngine.new()
+	dice.set_seed(1)
+	var season_meta: Dictionary = {}
+	var hordes: Array[HordeData] = []
+	var counters: Dictionary = {}
+	var last_pid: Array[int] = [-1]
+	var tower := _make_horde_tower(1)
+	var province := _make_horde_province(1)
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [1000]
+
+	var result := DayOrchestrator._process_horde_rolls(
+		TimeSystem.Season.SUMMER, TimeSystem.Season.SPRING,
+		hordes, counters, last_pid,
+		[tower] as Array[SettlementData], {1: province},
+		dice, 1, season_meta, active_topics, next_topic_id,
+	)
+
+	assert_false(result.get("roll_fired", false), "Roll should not fire at season_count=1")
+
+
+func test_horde_roll_fires_at_season_count_2() -> void:
+	var dice := DiceEngine.new()
+	dice.set_seed(1)
+	var season_meta: Dictionary = {"horde_season_count": 1}  # Already at 1, next will be 2.
+	var hordes: Array[HordeData] = []
+	var counters: Dictionary = {}
+	var last_pid: Array[int] = [-1]
+	var tower := _make_horde_tower(1)
+	var province := _make_horde_province(1)
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [1000]
+
+	var result := DayOrchestrator._process_horde_rolls(
+		TimeSystem.Season.AUTUMN, TimeSystem.Season.SUMMER,
+		hordes, counters, last_pid,
+		[tower] as Array[SettlementData], {1: province},
+		dice, 1, season_meta, active_topics, next_topic_id,
+	)
+
+	assert_true(result.get("roll_fired", false), "Roll must fire at season_count=2")
+
+
+func test_horde_no_towers_returns_no_formation() -> void:
+	var dice := DiceEngine.new()
+	dice.set_seed(1)
+	var season_meta: Dictionary = {"horde_season_count": 1}
+	var hordes: Array[HordeData] = []
+	var counters: Dictionary = {}
+	var last_pid: Array[int] = [-1]
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [1000]
+
+	var result := DayOrchestrator._process_horde_rolls(
+		TimeSystem.Season.AUTUMN, TimeSystem.Season.SUMMER,
+		hordes, counters, last_pid,
+		[] as Array[SettlementData], {},
+		dice, 1, season_meta, active_topics, next_topic_id,
+	)
+
+	assert_true(result.get("roll_fired", false))
+	assert_false(result.get("horde_formed", true), "No formation without wall towers")
+	assert_eq(result.get("reason", ""), "no_wall_towers")
+	assert_eq(hordes.size(), 0)
+
+
+func test_horde_formed_appended_to_active_hordes() -> void:
+	# Use a seeded dice known to pass the 50% horde roll (seed 1, roll/10 ≤ 0.50).
+	# Run with season_count=1 pre-set so the 2nd season fires the roll.
+	# Retry seeds until a formation occurs.
+	var found: bool = false
+	for seed_val: int in range(1, 100):
+		var dice := DiceEngine.new()
+		dice.set_seed(seed_val)
+		var season_meta: Dictionary = {"horde_season_count": 1}
+		var hordes: Array[HordeData] = []
+		var counters: Dictionary = {}
+		var last_pid: Array[int] = [-1]
+		var tower := _make_horde_tower(1)
+		var province := _make_horde_province(1)
+		var active_topics: Array[TopicData] = []
+		var next_topic_id: Array[int] = [1000]
+
+		var result := DayOrchestrator._process_horde_rolls(
+			TimeSystem.Season.AUTUMN, TimeSystem.Season.SUMMER,
+			hordes, counters, last_pid,
+			[tower] as Array[SettlementData], {1: province},
+			dice, 50, season_meta, active_topics, next_topic_id,
+		)
+
+		if result.get("horde_formed", false):
+			assert_true(hordes.size() == 1, "Formed horde must be appended to active_hordes")
+			assert_eq(int(result.get("target_province_id", -1)), 1)
+			assert_true(int(result.get("company_count", 0)) >= 7,
+				"Horde must have ≥ 7 companies (base composition)")
+			found = true
+			break
+
+	assert_true(found, "At least one seed out of 100 should produce a horde")
+
+
+func test_horde_failed_roll_increments_strength_counter() -> void:
+	# Roll fails → strength counter increments.
+	# We need a seed that fails the 50% check (roll/10 > 0.50).
+	var found: bool = false
+	for seed_val: int in range(1, 200):
+		var dice := DiceEngine.new()
+		dice.set_seed(seed_val)
+		var season_meta: Dictionary = {"horde_season_count": 1}
+		var hordes: Array[HordeData] = []
+		var counters: Dictionary = {}
+		var last_pid: Array[int] = [-1]
+		var tower := _make_horde_tower(1)
+		var province := _make_horde_province(1)
+		var active_topics: Array[TopicData] = []
+		var next_topic_id: Array[int] = [1000]
+
+		var result := DayOrchestrator._process_horde_rolls(
+			TimeSystem.Season.AUTUMN, TimeSystem.Season.SUMMER,
+			hordes, counters, last_pid,
+			[tower] as Array[SettlementData], {1: province},
+			dice, 1, season_meta, active_topics, next_topic_id,
+		)
+
+		if result.get("roll_fired", false) and not result.get("horde_formed", true):
+			assert_eq(int(result.get("strength_counter", 0)), 1,
+				"Strength counter must be 1 after first failed roll")
+			assert_eq(hordes.size(), 0, "No horde appended on failed roll")
+			found = true
+			break
+
+	assert_true(found, "At least one seed out of 200 should fail the horde roll")
+
+
+func test_horde_formed_generates_topic() -> void:
+	var found: bool = false
+	for seed_val: int in range(1, 100):
+		var dice := DiceEngine.new()
+		dice.set_seed(seed_val)
+		var season_meta: Dictionary = {"horde_season_count": 1}
+		var hordes: Array[HordeData] = []
+		var counters: Dictionary = {}
+		var last_pid: Array[int] = [-1]
+		var tower := _make_horde_tower(1)
+		var province := _make_horde_province(1)
+		var active_topics: Array[TopicData] = []
+		var next_topic_id: Array[int] = [1000]
+
+		var result := DayOrchestrator._process_horde_rolls(
+			TimeSystem.Season.AUTUMN, TimeSystem.Season.SUMMER,
+			hordes, counters, last_pid,
+			[tower] as Array[SettlementData], {1: province},
+			dice, 1, season_meta, active_topics, next_topic_id,
+		)
+
+		if result.get("horde_formed", false):
+			assert_eq(active_topics.size(), 1, "One topic generated on horde formation")
+			var topic: TopicData = active_topics[0]
+			assert_eq(topic.tier, TopicData.Tier.TIER_3)
+			assert_eq(topic.category, TopicData.Category.POLITICAL)
+			assert_eq(topic.topic_type, "military")
+			assert_true(topic.momentum > 0.0)
+			assert_eq(int(result.get("topic_id", -1)), topic.topic_id)
+			found = true
+			break
+
+	assert_true(found, "At least one seed should form a horde and generate a topic")
+
+
+func test_horde_oni_generated_when_has_oni() -> void:
+	# Find a seed that generates an ONI_LED horde.
+	var found: bool = false
+	for seed_val: int in range(1, 500):
+		var dice := DiceEngine.new()
+		dice.set_seed(seed_val)
+		var season_meta: Dictionary = {"horde_season_count": 1}
+		var hordes: Array[HordeData] = []
+		var counters: Dictionary = {}
+		var last_pid: Array[int] = [-1]
+		var tower := _make_horde_tower(1)
+		var province := _make_horde_province(1)
+		var active_topics: Array[TopicData] = []
+		var next_topic_id: Array[int] = [1000]
+
+		DayOrchestrator._process_horde_rolls(
+			TimeSystem.Season.AUTUMN, TimeSystem.Season.SUMMER,
+			hordes, counters, last_pid,
+			[tower] as Array[SettlementData], {1: province},
+			dice, 1, season_meta, active_topics, next_topic_id,
+		)
+
+		for h: HordeData in hordes:
+			if h.has_oni:
+				assert_not_null(h.oni_data, "oni_data must be populated when has_oni is true")
+				assert_is(h.oni_data, OniData)
+				found = true
+				break
+		if found:
+			break
+
+	assert_true(found, "At least one seed out of 500 should produce an Oni-Led horde")
+
+
+func test_last_targeted_province_updated_after_formation() -> void:
+	var found: bool = false
+	for seed_val: int in range(1, 100):
+		var dice := DiceEngine.new()
+		dice.set_seed(seed_val)
+		var season_meta: Dictionary = {"horde_season_count": 1}
+		var hordes: Array[HordeData] = []
+		var counters: Dictionary = {}
+		var last_pid: Array[int] = [-1]
+		var tower := _make_horde_tower(1)
+		var province := _make_horde_province(1)
+		var active_topics: Array[TopicData] = []
+		var next_topic_id: Array[int] = [1000]
+
+		var result := DayOrchestrator._process_horde_rolls(
+			TimeSystem.Season.AUTUMN, TimeSystem.Season.SUMMER,
+			hordes, counters, last_pid,
+			[tower] as Array[SettlementData], {1: province},
+			dice, 1, season_meta, active_topics, next_topic_id,
+		)
+
+		if result.get("horde_formed", false):
+			assert_eq(last_pid[0], 1, "last_targeted_province_id updated to tower's province")
+			found = true
+			break
+
+	assert_true(found, "At least one seed should form a horde")
+
+
+func test_horde_strength_used_from_counter_and_reset_on_formation() -> void:
+	var found: bool = false
+	for seed_val: int in range(1, 100):
+		var dice := DiceEngine.new()
+		dice.set_seed(seed_val)
+		var season_meta: Dictionary = {"horde_season_count": 1}
+		var hordes: Array[HordeData] = []
+		var counters: Dictionary = {"global": 3}  # Pre-accumulated strength.
+		var last_pid: Array[int] = [-1]
+		var tower := _make_horde_tower(1)
+		var province := _make_horde_province(1)
+		var active_topics: Array[TopicData] = []
+		var next_topic_id: Array[int] = [1000]
+
+		var result := DayOrchestrator._process_horde_rolls(
+			TimeSystem.Season.AUTUMN, TimeSystem.Season.SUMMER,
+			hordes, counters, last_pid,
+			[tower] as Array[SettlementData], {1: province},
+			dice, 1, season_meta, active_topics, next_topic_id,
+		)
+
+		if result.get("horde_formed", false):
+			assert_eq(int(result.get("strength_at_formation", -1)), 3,
+				"Horde must carry the accumulated strength counter")
+			assert_eq(HordeSystem.get_strength_counter(counters), 0,
+				"Counter resets to 0 after horde forms")
+			# Base 7 + 3 strength = 10 companies minimum.
+			assert_true(int(result.get("company_count", 0)) >= 10,
+				"Strength bonus adds extra companies")
+			found = true
+			break
+
+	assert_true(found, "At least one seed should form a horde with pre-accumulated strength")
+
