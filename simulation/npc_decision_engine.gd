@@ -258,7 +258,7 @@ static func score_all(
 			need.need_type, option.action_id, scoring_tables
 		)
 		option.disposition_modifier = _lookup_disposition_modifier(
-			option.target_npc_id, ctx.dispositions, scoring_tables
+			option.target_npc_id, ctx.dispositions, scoring_tables, option.action_id
 		)
 		option.personality_lean = _lookup_personality_lean(
 			option.action_id, ctx.bushido_virtue, ctx.shourido_virtue, scoring_tables
@@ -267,7 +267,7 @@ static func score_all(
 			option.action_id, ctx.skill_ranks, scoring_tables
 		)
 		option.urgency_bonus = _compute_urgency_bonus(
-			need, ctx, scoring_tables
+			option.action_id, need, ctx, scoring_tables
 		)
 		option.standing_influence = _compute_standing_influence(
 			option.action_id, ctx, scoring_tables
@@ -709,23 +709,38 @@ static func _lookup_objective_alignment(
 	return float(need_entry[action_id])
 
 
+# Actions that target someone adversarially use the "hostile" disposition column.
+# All others use "cooperative". Per GDD s55.4.5 / s57.3 scoring examples.
+const HOSTILE_ACTIONS: Array[String] = [
+	"INTIMIDATE", "PUBLIC_INSULT",
+	"BRIBE_FOR_INFO", "EAVESDROP", "INTERCEPT_LETTER", "SEARCH_QUARTERS",
+	"SHADOW_TARGET", "SEARCH_PERSON",
+	"EXPOSE_SECRET_PRIVATELY", "EXPOSE_SECRET_PUBLICLY", "FABRICATE_SECRET",
+	"CONCEAL_ITEM",
+	"SEDUCE", "SEDUCE_FOR_INFO", "SEDUCE_FOR_ACCESS",
+	"SEDUCE_FOR_LEVERAGE", "SEDUCE_TO_COMPROMISE",
+]
+
+
 static func _lookup_disposition_modifier(
 	target_npc_id: int,
 	dispositions: Dictionary,
 	scoring_tables: Dictionary,
+	action_id: String = "",
 ) -> float:
 	if target_npc_id < 0:
 		return 0.0
 
 	var disp_value: float = float(dispositions.get(target_npc_id, 0))
 	var tiers: Array = scoring_tables.get("disposition_tiers", [])
+	var column: String = "hostile" if action_id in HOSTILE_ACTIONS else "cooperative"
 
 	for tier in tiers:
 		if tier is Dictionary:
 			var min_val: float = float(tier.get("min", -100))
 			var max_val: float = float(tier.get("max", 100))
 			if disp_value >= min_val and disp_value <= max_val:
-				return float(tier.get("cooperative", 0))
+				return float(tier.get(column, 0))
 
 	return 0.0
 
@@ -776,33 +791,135 @@ static func _compute_competence_modifier(
 
 
 static func _compute_urgency_bonus(
+	action_id: String,
 	need: NPCDataStructures.ImmediateNeed,
-	_ctx: NPCDataStructures.ContextSnapshot,
+	ctx: NPCDataStructures.ContextSnapshot,
 	scoring_tables: Dictionary,
 ) -> float:
 	var urgency_rules: Array = scoring_tables.get("urgency_rules", [])
 	var bonus: float = 0.0
 
 	for rule in urgency_rules:
-		if rule is Dictionary:
-			var condition: String = rule.get("condition", "")
-			if _evaluate_urgency_condition(condition, need):
-				bonus += float(rule.get("bonus", 0))
+		if not (rule is Dictionary):
+			continue
+		var condition: String = rule.get("condition", "")
+		var rule_bonus: float = float(rule.get("bonus", 0))
+		var applies_to: Variant = rule.get("applies_to", "")
+		var stacks: bool = rule.get("stacks_per_crisis", false)
+
+		var instances: Array = _evaluate_urgency_condition(condition, ctx, scoring_tables)
+		if instances.is_empty():
+			continue
+		if not _action_matches_urgency_category(action_id, applies_to, need.need_type, scoring_tables):
+			continue
+
+		if stacks:
+			for inst: Dictionary in instances:
+				var relevance: float = inst.get("relevance", 1.0)
+				bonus += rule_bonus * relevance
+		else:
+			bonus += rule_bonus
 
 	return clampf(bonus, 0.0, 30.0)
 
 
+# Returns an array of matching instances. Empty = condition not met.
+# Each instance is a dict with optional "relevance" key (0.0-1.0).
 static func _evaluate_urgency_condition(
 	condition: String,
-	need: NPCDataStructures.ImmediateNeed,
-) -> bool:
+	ctx: NPCDataStructures.ContextSnapshot,
+	_scoring_tables: Dictionary,
+) -> Array:
 	match condition:
-		"priority_1":
-			return need.priority == 1
-		"priority_2":
-			return need.priority == 2
+		"active_crisis_in_relevance_range":
+			var instances: Array = []
+			for ps: Variant in ctx.province_statuses:
+				if ps is NPCDataStructures.ProvinceStatus:
+					var status: NPCDataStructures.ProvinceStatus = ps
+					if status.active_crisis_id >= 0:
+						instances.append({"relevance": 1.0, "province_id": status.province_id})
+			return instances
+		"war_score_below_25":
+			for war: Variant in ctx.active_wars:
+				if war is Dictionary:
+					var score: int = war.get("war_score", 50)
+					if score < 25:
+						return [{"relevance": 1.0}]
+			return []
+		"home_front_famine":
+			var instances: Array = []
+			for pid: int in ctx.famine_crisis_province_ids:
+				instances.append({"relevance": 1.0, "province_id": pid})
+			return instances
+		"vassal_disposition_below_rival":
+			if not ctx.is_lord:
+				return []
+			var instances: Array = []
+			for cid: Variant in ctx.disposition_values:
+				var disp: int = ctx.disposition_values[cid]
+				if disp <= -11:
+					instances.append({"relevance": 1.0, "npc_id": cid})
+			return instances
 		_:
-			return false
+			return []
+
+
+# "actions_addressing_X" = any action with ObjAlign > 30 for the relevant
+# NeedType(s). Per GDD s55.G schema definition.
+const URGENCY_CATEGORY_NEED_TYPES: Dictionary = {
+	"actions_addressing_crisis": ["DEFEND_PROVINCE", "PATROL_PROVINCE", "INVESTIGATE_THREAT"],
+	"actions_addressing_war": ["LEVY_TROOPS", "DEPLOY_ARMY", "CONDUCT_SIEGE", "ORDER_BATTLE"],
+	"actions_addressing_food_crisis": ["ACQUIRE_RESOURCE", "CONDUCT_COMMERCE"],
+	"actions_addressing_primary_objective": [],
+}
+
+const URGENCY_EXPLICIT_ACTIONS: Dictionary = {
+	"siege_end_actions": [
+		"MAINTAIN_SIEGE", "CONDUCT_STORM_ASSAULT", "NEGOTIATE_SURRENDER",
+		"CONDUCT_SORTIE", "ORDER_BATTLE",
+	],
+	"court_actions": [
+		"CHARM", "PERSUADE", "NEGOTIATE", "PUBLIC_DEBATE", "PUBLIC_DECLARATION",
+		"PUBLIC_PERFORMANCE", "DELIVER_GIFT", "OFFER_FAVOR", "PERFORM_FOR",
+		"DISCLOSE", "ASK_FOR_INTRODUCTION", "OBSERVE_COURT_ATTENDEES",
+		"GOSSIP", "IMPRESS", "LISTEN_REFLECT", "PUBLIC_INSULT",
+		"INTIMIDATE", "PROBE", "READ_CHARACTER",
+	],
+}
+
+
+static func _action_matches_urgency_category(
+	action_id: String,
+	applies_to: Variant,
+	current_need_type: String,
+	scoring_tables: Dictionary,
+) -> bool:
+	if applies_to is Array:
+		return action_id in applies_to
+
+	var category: String = str(applies_to)
+
+	if URGENCY_EXPLICIT_ACTIONS.has(category):
+		return action_id in URGENCY_EXPLICIT_ACTIONS[category]
+
+	if category == "actions_targeting_vassal":
+		return true
+
+	if category == "actions_addressing_primary_objective":
+		return true
+
+	var need_types: Array = URGENCY_CATEGORY_NEED_TYPES.get(category, [])
+	if need_types.is_empty():
+		return false
+
+	var alignment_table: Dictionary = scoring_tables.get("objective_alignment", {})
+	for nt: String in need_types:
+		var need_entry: Dictionary = alignment_table.get(nt, {})
+		var score: float = float(need_entry.get(action_id, 0))
+		if score > 30.0:
+			return true
+
+	return false
 
 
 static func _compute_standing_influence(

@@ -82,7 +82,8 @@ func before_each() -> void:
 			"PUBLIC_DEBATE": {"primary": "Courtier", "secondary": "Etiquette"},
 		},
 		"urgency_rules": [
-			{"condition": "priority_1", "bonus": 20},
+			{"condition": "war_score_below_25", "bonus": 25, "applies_to": ["CHARM", "ORDER_BATTLE"], "stacks_per_crisis": false},
+			{"condition": "active_crisis_in_relevance_range", "bonus": 15, "applies_to": "actions_addressing_crisis", "stacks_per_crisis": true, "weight_by_relevance": true},
 		],
 		"topic_position_alignment": {},
 	}
@@ -436,15 +437,117 @@ func test_score_disposition_modifier_positive() -> void:
 	assert_eq(option.disposition_modifier, 10.0)
 
 
-func test_score_urgency_priority_1() -> void:
+func test_score_disposition_hostile_action_against_enemy() -> void:
+	_char.disposition_values = {2: -30}
 	var ctx := NPCDecisionEngine.build_context(_char, _world_state)
 	var need := NPCDataStructures.ImmediateNeed.new()
 	need.need_type = "RAISE_DISPOSITION"
-	need.priority = 1
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "INTIMIDATE"
+	option.target_npc_id = 2
+	NPCDecisionEngine.score_all([option], need, ctx, _scoring_tables)
+	# Disposition -30 is in [-50, -10] tier, hostile column = 10
+	assert_eq(option.disposition_modifier, 10.0)
+
+
+func test_score_disposition_hostile_action_against_friend() -> void:
+	_char.disposition_values = {2: 30}
+	var ctx := NPCDecisionEngine.build_context(_char, _world_state)
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "RAISE_DISPOSITION"
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "INTIMIDATE"
+	option.target_npc_id = 2
+	NPCDecisionEngine.score_all([option], need, ctx, _scoring_tables)
+	# Disposition 30 is in [10, 50] tier, hostile column = -10
+	assert_eq(option.disposition_modifier, -10.0)
+
+
+func test_score_disposition_cooperative_action_against_enemy() -> void:
+	_char.disposition_values = {2: -30}
+	var ctx := NPCDecisionEngine.build_context(_char, _world_state)
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "RAISE_DISPOSITION"
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "CHARM"
+	option.target_npc_id = 2
+	NPCDecisionEngine.score_all([option], need, ctx, _scoring_tables)
+	# Disposition -30 is in [-50, -10] tier, cooperative column = -10
+	assert_eq(option.disposition_modifier, -10.0)
+
+
+func test_score_urgency_war_score_below_25() -> void:
+	_world_state["active_wars"] = [{"clan_a": "Crane", "clan_b": "Lion", "war_score": 20}]
+	var ctx := NPCDecisionEngine.build_context(_char, _world_state)
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "RAISE_DISPOSITION"
 	var option := NPCDataStructures.ScoredAction.new()
 	option.action_id = "CHARM"
 	NPCDecisionEngine.score_all([option], need, ctx, _scoring_tables)
-	assert_eq(option.urgency_bonus, 20.0)
+	assert_eq(option.urgency_bonus, 25.0)
+
+
+func test_score_urgency_no_matching_condition() -> void:
+	var ctx := NPCDecisionEngine.build_context(_char, _world_state)
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "RAISE_DISPOSITION"
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "CHARM"
+	NPCDecisionEngine.score_all([option], need, ctx, _scoring_tables)
+	assert_eq(option.urgency_bonus, 0.0)
+
+
+func test_score_urgency_action_not_in_applies_to() -> void:
+	_world_state["active_wars"] = [{"clan_a": "Crane", "clan_b": "Lion", "war_score": 20}]
+	var ctx := NPCDecisionEngine.build_context(_char, _world_state)
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "RAISE_DISPOSITION"
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "GOSSIP"
+	NPCDecisionEngine.score_all([option], need, ctx, _scoring_tables)
+	assert_eq(option.urgency_bonus, 0.0)
+
+
+func test_score_urgency_crisis_stacking() -> void:
+	_world_state["is_lord"] = true
+	var ps1 := NPCDataStructures.ProvinceStatus.new()
+	ps1.province_id = 10
+	ps1.active_crisis_id = 1
+	var ps2 := NPCDataStructures.ProvinceStatus.new()
+	ps2.province_id = 20
+	ps2.active_crisis_id = 2
+	_world_state["province_statuses"] = [ps1, ps2]
+	# Add ObjAlign data so CHARM qualifies as actions_addressing_crisis
+	_scoring_tables["objective_alignment"]["DEFEND_PROVINCE"] = {"CHARM": 50}
+	var ctx := NPCDecisionEngine.build_context(_char, _world_state)
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "RAISE_DISPOSITION"
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "CHARM"
+	NPCDecisionEngine.score_all([option], need, ctx, _scoring_tables)
+	# 2 crises × 15 bonus × 1.0 relevance = 30, clamped to 30
+	assert_eq(option.urgency_bonus, 30.0)
+	# Clean up
+	_scoring_tables["objective_alignment"].erase("DEFEND_PROVINCE")
+
+
+func test_score_urgency_clamped_at_30() -> void:
+	_world_state["is_lord"] = true
+	_world_state["active_wars"] = [{"clan_a": "Crane", "clan_b": "Lion", "war_score": 20}]
+	var ps1 := NPCDataStructures.ProvinceStatus.new()
+	ps1.province_id = 10
+	ps1.active_crisis_id = 1
+	_world_state["province_statuses"] = [ps1]
+	_scoring_tables["objective_alignment"]["DEFEND_PROVINCE"] = {"CHARM": 50}
+	var ctx := NPCDecisionEngine.build_context(_char, _world_state)
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "RAISE_DISPOSITION"
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "CHARM"
+	NPCDecisionEngine.score_all([option], need, ctx, _scoring_tables)
+	# war_score_below_25: 25 + crisis: 15 = 40, clamped to 30
+	assert_eq(option.urgency_bonus, 30.0)
+	_scoring_tables["objective_alignment"].erase("DEFEND_PROVINCE")
 
 
 func test_score_standing_influence() -> void:
