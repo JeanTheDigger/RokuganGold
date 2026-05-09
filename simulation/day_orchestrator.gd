@@ -2857,7 +2857,7 @@ static func _gather_promotion_candidates(
 		candidates.append({
 			"character_id": c.character_id,
 			"battle_skill": battle_skill,
-			"insight_rank": CharacterStats.get_insight_rank(CharacterStats.get_insight(c)),
+			"insight_rank": CharacterStats.get_insight_rank(c),
 			"school_rank": c.school_rank,
 			"glory": c.glory,
 			"disposition": 10,
@@ -3587,7 +3587,7 @@ static func _source_has_rice(controlled: Array[SettlementData]) -> bool:
 	return total_rice / total_civ_pu >= 0.50
 
 
-const _VIRTUE_NAMES: Dictionary = {
+const _BUSHIDO_VIRTUE_NAMES: Dictionary = {
 	Enums.BushidoVirtue.JIN: "Jin",
 	Enums.BushidoVirtue.YU: "Yu",
 	Enums.BushidoVirtue.REI: "Rei",
@@ -3595,6 +3595,9 @@ const _VIRTUE_NAMES: Dictionary = {
 	Enums.BushidoVirtue.GI: "Gi",
 	Enums.BushidoVirtue.MEIYO: "Meiyo",
 	Enums.BushidoVirtue.MAKOTO: "Makoto",
+}
+
+const _SHOURIDO_VIRTUE_NAMES: Dictionary = {
 	Enums.ShouridoVirtue.SEIGYO: "Seigyo",
 	Enums.ShouridoVirtue.KETSUI: "Ketsui",
 	Enums.ShouridoVirtue.DOSATSU: "Dosatsu",
@@ -3607,9 +3610,9 @@ const _VIRTUE_NAMES: Dictionary = {
 
 static func _get_character_virtue(character: L5RCharacterData) -> String:
 	if character.bushido_virtue != Enums.BushidoVirtue.NONE:
-		return _VIRTUE_NAMES.get(character.bushido_virtue, "")
+		return _BUSHIDO_VIRTUE_NAMES.get(character.bushido_virtue, "")
 	if character.shourido_virtue != Enums.ShouridoVirtue.NONE:
-		return _VIRTUE_NAMES.get(character.shourido_virtue, "")
+		return _SHOURIDO_VIRTUE_NAMES.get(character.shourido_virtue, "")
 	return ""
 
 
@@ -5084,7 +5087,9 @@ static func _process_strategic_court_calls(
 		if lord.status >= 7.0:
 			court_type = CourtSessionData.CourtType.CLAN_CHAMPION_COURT
 
-		var settlement_id: int = lord.physical_location
+		var settlement_id: int = int(lord.physical_location) if lord.physical_location.is_valid_int() else -1
+		if settlement_id < 0:
+			continue
 		var agenda: Array[int] = CourtSystem.select_agenda_topics(
 			active_topics, court_type
 		)
@@ -5125,7 +5130,8 @@ static func _create_winter_court_from_directive(
 		var c: L5RCharacterData = characters_by_id[char_id] as L5RCharacterData
 		if c != null and c.clan == host_clan and c.status >= 7.0 and c.lord_id == -1:
 			host_champion_id = c.character_id
-			host_settlement_id = c.physical_location
+			var loc: String = c.physical_location
+			host_settlement_id = int(loc) if loc.is_valid_int() else -1
 			break
 	if host_settlement_id < 0:
 		return

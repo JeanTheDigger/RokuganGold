@@ -1647,8 +1647,8 @@ func test_s11_11_insurgency_wired_into_orchestrator() -> void:
 	var result: Dictionary = DayOrchestrator.advance_day(
 		time, chars, chars_by_id, {}, {}, _scoring_tables, _filter_data,
 		dice, _action_skill_map, provinces, [] as Array[Dictionary],
-		{}, [], [], [], [], [], {}, {}, [], {}, [],
-		insurgencies, next_ins_id,
+		{}, [], [], [], [], [], [1], {}, {}, [1000], [],
+		{}, [], insurgencies, next_ins_id,
 	)
 	assert_true(result.has("insurgency_results"), "Should include insurgency_results")
 
@@ -1733,7 +1733,7 @@ func test_advance_day_sets_at_wall_tower_for_character_at_tower() -> void:
 
 	var char_ws: Dictionary = {
 		"context_flag": Enums.ContextFlag.AT_OWN_HOLDINGS,
-		"zone_subtype": Enums.ZoneSubtype.WILDERNESS,
+		"zone_subtype": Enums.ZoneSubtype.ROAD,
 		"wall_statuses": [],
 		"season": 1,
 		"ic_day": 1,

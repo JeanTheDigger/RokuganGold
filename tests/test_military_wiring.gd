@@ -172,7 +172,7 @@ func test_promotion_detects_vacancy() -> void:
 # -- Integration: advance_day parameter count -----------------------------------
 
 func test_advance_day_accepts_military_params() -> void:
-	assert_true(DayOrchestrator.has_method("advance_day"))
+	assert_true(DayOrchestrator.new().has_method("advance_day"))
 
 
 func test_military_daily_returns_all_keys() -> void:

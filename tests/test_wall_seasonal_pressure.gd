@@ -35,7 +35,7 @@ func test_non_wall_settlement_not_processed() -> void:
 	var s := SettlementData.new()
 	s.settlement_id = 1
 	s.province_id = 10
-	s.settlement_type = Enums.SettlementType.CASTLE_TOWN
+	s.settlement_type = Enums.SettlementType.WALL_TOWER
 	s.wall_si = 10
 	var p := _make_wall_province(10, 0)
 	var result: Dictionary = DayOrchestrator._process_wall_seasonal_pressure(

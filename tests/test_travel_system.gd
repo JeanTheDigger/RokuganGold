@@ -67,7 +67,7 @@ func test_begin_travel_minimum_days() -> void:
 	var c := _make_character(1, "nearby_a")
 	var result: Dictionary = TravelSystem.begin_travel(c, "nearby_b")
 	assert_true(result["started"])
-	assert_ge(result["travel_days"], TravelSystem.MINIMUM_TRAVEL_DAYS)
+	assert_true(result["travel_days"] >= TravelSystem.MINIMUM_TRAVEL_DAYS)
 
 
 # -- is_traveling --------------------------------------------------------------
@@ -325,7 +325,7 @@ func test_orchestrator_processes_travel_arrivals() -> void:
 	var chars_by_id: Dictionary = {1: c}
 	var result: Dictionary = DayOrchestrator.advance_day(
 		time, chars, chars_by_id, {}, {}, {}, {},
-		dice, {}, {}, [], {}, [], [], [], [], {}, {}, [], [], []
+		dice, {}, {}, [], {}, [], [], [], [], [], [1], {}, {}, []
 	)
 	var arrivals: Array = result.get("travel_arrivals", [])
 	assert_eq(arrivals.size(), 1)

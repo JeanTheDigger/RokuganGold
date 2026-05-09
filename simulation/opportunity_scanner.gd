@@ -48,11 +48,14 @@ const STANDING_OBJECTIVE_DOMAIN: Dictionary = {
 	"ELIMINATE_SHADOWLANDS": DOMAIN_MILITARY,
 }
 
-const SELF_SELECTION_DELAY_BY_VIRTUE: Dictionary = {
+const SELF_SELECTION_DELAY_BUSHIDO: Dictionary = {
 	Enums.BushidoVirtue.CHUGI: -1,
+	Enums.BushidoVirtue.MAKOTO: 2,
+}
+
+const SELF_SELECTION_DELAY_SHOURIDO: Dictionary = {
 	Enums.ShouridoVirtue.SEIGYO: 1,
 	Enums.ShouridoVirtue.ISHI: 1,
-	Enums.BushidoVirtue.MAKOTO: 2,
 	Enums.ShouridoVirtue.KETSUI: 2,
 }
 
@@ -120,10 +123,10 @@ static func can_self_select(
 	seasons_without_assignment: int,
 ) -> bool:
 	var delay: int = DEFAULT_SELF_SELECTION_DELAY
-	if SELF_SELECTION_DELAY_BY_VIRTUE.has(character.bushido_virtue):
-		delay = SELF_SELECTION_DELAY_BY_VIRTUE[character.bushido_virtue]
-	elif SELF_SELECTION_DELAY_BY_VIRTUE.has(character.shourido_virtue):
-		delay = SELF_SELECTION_DELAY_BY_VIRTUE[character.shourido_virtue]
+	if SELF_SELECTION_DELAY_BUSHIDO.has(character.bushido_virtue):
+		delay = SELF_SELECTION_DELAY_BUSHIDO[character.bushido_virtue]
+	elif SELF_SELECTION_DELAY_SHOURIDO.has(character.shourido_virtue):
+		delay = SELF_SELECTION_DELAY_SHOURIDO[character.shourido_virtue]
 
 	if delay < 0:
 		return false

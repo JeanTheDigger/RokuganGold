@@ -47,7 +47,7 @@ func _make_ws(char_id: int, flag: int = Enums.ContextFlag.AT_OWN_HOLDINGS) -> Di
 	return {
 		char_id: {
 			"context_flag": flag,
-			"zone_subtype": Enums.ZoneSubtype.WILDERNESS,
+			"zone_subtype": Enums.ZoneSubtype.ROAD,
 			"wall_statuses": [],
 		},
 	}
@@ -359,8 +359,8 @@ func test_two_characters_at_same_tower_both_flagged() -> void:
 	var c2 := _make_character(2, "100")
 	var provinces: Dictionary = {10: _make_province(10)}
 	var world_states: Dictionary = {
-		1: {"context_flag": Enums.ContextFlag.AT_OWN_HOLDINGS, "zone_subtype": Enums.ZoneSubtype.WILDERNESS, "wall_statuses": []},
-		2: {"context_flag": Enums.ContextFlag.AT_OWN_HOLDINGS, "zone_subtype": Enums.ZoneSubtype.WILDERNESS, "wall_statuses": []},
+		1: {"context_flag": Enums.ContextFlag.AT_OWN_HOLDINGS, "zone_subtype": Enums.ZoneSubtype.ROAD, "wall_statuses": []},
+		2: {"context_flag": Enums.ContextFlag.AT_OWN_HOLDINGS, "zone_subtype": Enums.ZoneSubtype.ROAD, "wall_statuses": []},
 	}
 
 	DayOrchestrator._set_wall_tower_context_flags(
@@ -418,7 +418,7 @@ func test_character_at_tower_with_preloaded_other_status_keeps_both() -> void:
 	var world_states: Dictionary = {
 		1: {
 			"context_flag": Enums.ContextFlag.AT_OWN_HOLDINGS,
-			"zone_subtype": Enums.ZoneSubtype.WILDERNESS,
+			"zone_subtype": Enums.ZoneSubtype.ROAD,
 			"wall_statuses": [pre_ws],
 		},
 	}
