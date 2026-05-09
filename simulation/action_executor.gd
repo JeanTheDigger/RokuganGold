@@ -45,6 +45,7 @@ const ADMINISTRATIVE_ACTIONS: Array[String] = [
 	"ARRANGE_MARRIAGE", "APPOINT_TO_POSITION",
 	"PURIFY_TAINTED_GROUND", "FORTIFY_WALL_SECTION", "SEAL_WALL_BREACH",
 	"DECLARE_WAR",
+	"COMPLY_WITH_EDICT", "DEFY_EDICT",
 ]
 
 const INTELLIGENCE_ACTIONS: Array[String] = [
@@ -106,6 +107,15 @@ static func execute(
 	if action_id == "PERFORM_FOR":
 		return _execute_perform_for(action, character, ctx, dice_engine, characters_by_id)
 
+	if action_id == "PUBLIC_DEBATE" or action_id == "PUBLIC_DECLARATION":
+		return _execute_broadcast_social(action, character, ctx, dice_engine, action_skill_map, characters_by_id)
+
+	if action_id == "GOSSIP":
+		return _execute_gossip(action, character, ctx, dice_engine, action_skill_map, characters_by_id)
+
+	if action_id == "PUBLIC_INSULT":
+		return _execute_public_insult(action, character, ctx, dice_engine, action_skill_map, characters_by_id)
+
 	if action_id == "INTIMIDATE":
 		var intim_result: Dictionary = _execute_intimidation(
 			action, character, ctx, dice_engine, characters_by_id
@@ -139,6 +149,25 @@ static func execute(
 			"ic_day": ctx.ic_day,
 			"season": ctx.season,
 			"effects": war_effects,
+		}
+
+	if action_id == "COMPLY_WITH_EDICT" or action_id == "DEFY_EDICT":
+		var compliant: bool = action_id == "COMPLY_WITH_EDICT"
+		var edict_id: int = action.metadata.get("edict_id", -1)
+		var target_clan: String = action.metadata.get("target_clan", character.clan)
+		return {
+			"success": true,
+			"action_id": action_id,
+			"character_id": character.character_id,
+			"target_npc_id": action.target_npc_id,
+			"ic_day": ctx.ic_day,
+			"season": ctx.season,
+			"effects": {
+				"requires_edict_compliance": true,
+				"edict_id": edict_id,
+				"clan": target_clan,
+				"compliant": compliant,
+			},
 		}
 
 	if action_id in COVERT_ACTIONS:
@@ -492,6 +521,196 @@ static func _get_disposition_tier_name(disp: int) -> String:
 	return "blood_enemy"
 
 
+# -- GOSSIP (s15.4 Category 3) ------------------------------------------------
+
+static func _execute_gossip(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	dice_engine: DiceEngine,
+	action_skill_map: Dictionary,
+	characters_by_id: Dictionary,
+) -> Dictionary:
+	var listener_id: int = action.target_npc_id
+	var subject_id: int = action.metadata.get("gossip_subject_id", -1)
+
+	var subject: L5RCharacterData = characters_by_id.get(subject_id)
+	var subject_glory: float = subject.glory if subject != null else 0.0
+
+	var tn: int = clampi(
+		10 + int(subject_glory) * 5 - int(character.glory) * 5,
+		5, 60
+	)
+
+	var skill_entry: Dictionary = action_skill_map.get("GOSSIP", {})
+	var primary_skill: String = skill_entry.get("primary", "Courtier")
+	var primary_trait: String = skill_entry.get("secondary", "Awareness")
+	var skill_rank: int = character.skills.get(primary_skill, 0)
+	var trait_val: int = character.traits.get(primary_trait, 2)
+	var roll_result: Dictionary = dice_engine.roll_skill_check(
+		trait_val, skill_rank, tn
+	)
+
+	var success: bool = roll_result.get("success", false)
+	var margin: int = roll_result.get("total", 0) - tn
+	var raises: int = maxi(margin / 5, 0)
+	var effects: Dictionary = {}
+
+	if success:
+		var disp_toward_subject: int = -5 - (raises * 2)
+		effects = {
+			"gossip_subject_id": subject_id,
+			"gossip_subject_disposition": disp_toward_subject,
+			"info_gained": true,
+		}
+	else:
+		effects = {"failed": true}
+		if margin <= -10:
+			effects["disposition_change"] = -5
+
+	return {
+		"success": success,
+		"action_id": "GOSSIP",
+		"character_id": ctx.character_id,
+		"target_npc_id": listener_id,
+		"target_province_id": action.target_province_id,
+		"ic_day": ctx.ic_day,
+		"season": ctx.season,
+		"skill_used": primary_skill,
+		"roll_total": roll_result.get("total", 0),
+		"tn": tn,
+		"margin": margin,
+		"effects": effects,
+	}
+
+
+# -- PUBLIC_INSULT (s15.4 Category 4) ----------------------------------------
+
+static func _execute_public_insult(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	dice_engine: DiceEngine,
+	action_skill_map: Dictionary,
+	characters_by_id: Dictionary,
+) -> Dictionary:
+	var target_id: int = action.target_npc_id
+	var target: L5RCharacterData = characters_by_id.get(target_id)
+
+	var skill_entry: Dictionary = action_skill_map.get("PUBLIC_INSULT", {})
+	var primary_skill: String = skill_entry.get("primary", "Courtier")
+	var primary_trait: String = skill_entry.get("secondary", "Awareness")
+	var skill_rank: int = character.skills.get(primary_skill, 0)
+	var trait_val: int = character.traits.get(primary_trait, 2)
+
+	var attacker_total: int = dice_engine.roll_skill_check(
+		trait_val, skill_rank, 0
+	).get("total", 0)
+
+	var defender_total: int = 0
+	if target != null:
+		var def_etiquette: int = target.skills.get("Etiquette", 0)
+		var def_awareness: int = target.traits.get("Awareness", 2)
+		defender_total = dice_engine.roll_skill_check(
+			def_awareness, def_etiquette, 0
+		).get("total", 0)
+
+	var success: bool = attacker_total >= defender_total
+	var margin: int = attacker_total - defender_total
+	var raises: int = maxi(margin / 5, 0)
+	var witness_ids: Array[int] = _get_co_located_ids(character, characters_by_id)
+
+	var effects: Dictionary = {}
+	if success:
+		var per_witness_disp: int = -2 - raises
+		effects = {
+			"target_witness_disposition": per_witness_disp,
+			"witnesses": witness_ids,
+		}
+	else:
+		var backfire_disp: int = -2
+		effects = {
+			"failed": true,
+			"witness_disposition_loss": backfire_disp,
+			"witnesses": witness_ids,
+		}
+		if margin <= -10:
+			effects["glory_change"] = -0.05
+
+	return {
+		"success": success,
+		"action_id": "PUBLIC_INSULT",
+		"character_id": ctx.character_id,
+		"target_npc_id": target_id,
+		"target_province_id": action.target_province_id,
+		"ic_day": ctx.ic_day,
+		"season": ctx.season,
+		"skill_used": primary_skill,
+		"roll_total": attacker_total,
+		"tn": defender_total,
+		"margin": margin,
+		"effects": effects,
+	}
+
+
+# -- Broadcast Social Actions (s12.2 Category 2) ------------------------------
+
+static func _execute_broadcast_social(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	dice_engine: DiceEngine,
+	action_skill_map: Dictionary,
+	characters_by_id: Dictionary,
+) -> Dictionary:
+	var action_id: String = action.action_id
+	var skill_entry: Dictionary = action_skill_map.get(action_id, {})
+	var primary_skill: String = skill_entry.get("primary", "Courtier")
+	var tn: int = _get_social_tn(action, ctx)
+	var roll_result: Dictionary = SkillResolver.resolve_skill_check(
+		character, dice_engine, primary_skill, tn
+	)
+
+	var success: bool = roll_result.get("success", false)
+	var margin: int = roll_result.get("total", 0) - tn
+	var raises: int = maxi(margin / 5, 0)
+	var witness_ids: Array[int] = _get_co_located_ids(character, characters_by_id)
+
+	var effects: Dictionary = {}
+	if success:
+		var per_witness_disp: int = 2 + raises
+		var glory_change: float = 0.0
+		if action_id == "PUBLIC_DEBATE":
+			glory_change = 0.3 if raises >= 3 else 0.0
+		elif action_id == "PUBLIC_DECLARATION":
+			glory_change = 0.1
+		effects = {
+			"witness_disposition_gain": per_witness_disp,
+			"witnesses": witness_ids,
+			"glory_change": glory_change,
+		}
+	else:
+		effects = {"failed": true}
+		if margin <= -10:
+			effects["witness_disposition_loss"] = -2
+			effects["witnesses"] = witness_ids
+
+	return {
+		"success": success,
+		"action_id": action_id,
+		"character_id": ctx.character_id,
+		"target_npc_id": action.target_npc_id,
+		"target_province_id": action.target_province_id,
+		"ic_day": ctx.ic_day,
+		"season": ctx.season,
+		"skill_used": primary_skill,
+		"roll_total": roll_result.get("total", 0),
+		"tn": tn,
+		"margin": margin,
+		"effects": effects,
+	}
+
+
 # -- Covert Actions (s12.8) ---------------------------------------------------
 
 static func _try_execute_covert(
@@ -732,16 +951,18 @@ static func _get_social_tn(
 	var tn: int = SOCIAL_BASE_TN
 	var target_disp: int = ctx.dispositions.get(action.target_npc_id, 0)
 
-	if target_disp <= -60:
-		tn += 15
-	elif target_disp <= -30:
-		tn += 10
-	elif target_disp <= -10:
-		tn += 5
+	# Per GDD s12.2: Free Raises (−5 TN) or additional Raises (+5 TN) by tier
+	if target_disp <= -61:
+		tn += 10  # Blood Enemy: +2 additional Raises
+	elif target_disp <= -31:
+		tn += 5   # Enemy: +1 additional Raise
+	# Rival (-30 to -11), Stranger (-10 to +10), Acquaintance (+11 to +30): no modifier
+	elif target_disp >= 91:
+		tn -= 15  # Devoted: 3 Free Raises
 	elif target_disp >= 61:
-		tn -= 10
+		tn -= 10  # Trusted Ally: 2 Free Raises
 	elif target_disp >= 31:
-		tn -= 5
+		tn -= 5   # Friend: 1 Free Raise
 
 	return maxi(tn, 5)
 
@@ -771,7 +992,7 @@ static func _apply_effects(
 		else:
 			effects = _compute_self_effects(action_id)
 	else:
-		effects = _compute_failure_effects(action_id)
+		effects = _compute_failure_effects(action_id, result.get("margin", 0))
 
 	result["effects"] = effects
 
@@ -780,36 +1001,27 @@ static func _compute_social_effects(action_id: String, margin: int) -> Dictionar
 	var disp_change: int = 0
 	var glory_change: float = 0.0
 	var info_gained: bool = false
+	var raises: int = maxi(margin / 5, 0)
 
+	# Per GDD s12.2 Category 1 — Targeted Disposition Values (LOCKED)
+	# Base + 3 per raise for disposition-granting social actions
 	match action_id:
-		"CHARM", "DELIVER_GIFT", "OFFER_FAVOR", "LISTEN_REFLECT":
-			disp_change = 3 + clampi(margin / 5, 0, 5)
-		"PERSUADE", "NEGOTIATE":
-			disp_change = 2 + clampi(margin / 5, 0, 3)
-		"INTIMIDATE":
-			disp_change = -(3 + clampi(margin / 5, 0, 5))
-		"GOSSIP":
-			info_gained = true
-			disp_change = 1
+		"CHARM":
+			disp_change = 8 + raises * 3
+		"LISTEN_REFLECT":
+			disp_change = 11 + raises * 3
+		"PERSUADE":
+			disp_change = 11 + raises * 3
+		"NEGOTIATE":
+			disp_change = 9 + raises * 3
+		"IMPRESS":
+			disp_change = 9 + raises * 3
 		"PROBE", "READ_CHARACTER":
 			info_gained = true
-		"PUBLIC_DEBATE", "PUBLIC_DECLARATION", "PUBLIC_PERFORMANCE":
-			glory_change = 0.1
-			disp_change = 1
-		"PUBLIC_INSULT":
-			disp_change = -5
-			glory_change = 0.05
-		"IMPRESS":
-			disp_change = 2
-			glory_change = 0.05
 		"ASK_FOR_INTRODUCTION":
 			info_gained = true
 		"DISCLOSE":
-			disp_change = 2
 			info_gained = true
-		"PERFORM_FOR":
-			disp_change = 2
-			glory_change = 0.05
 
 	return {
 		"disposition_change": disp_change,
@@ -938,7 +1150,8 @@ static func _compute_self_effects(action_id: String) -> Dictionary:
 		"PERFORM_RITUAL", "PERFORM_WORSHIP":
 			return {"effect": "ritual_completed", "honor_change": 0.1}
 		"PUBLIC_ATONEMENT":
-			return {"effect": "atonement_performed", "honor_change": 0.5}
+			# GDD s4.6: Tier 4=+0.3, Tier 3=+0.5, Tier 2=+0.8, Tier 1=+1.0
+			return {"effect": "atonement_performed", "honor_change": 0.5, "honor_tier_dependent": true}
 		"MENTOR":
 			return {"effect": "student_trained"}
 		"OBSERVE_COURT_ATTENDEES":
@@ -946,15 +1159,28 @@ static func _compute_self_effects(action_id: String) -> Dictionary:
 	return {"effect": "self_action_completed"}
 
 
-static func _compute_failure_effects(action_id: String) -> Dictionary:
+static func _compute_failure_effects(action_id: String, margin: int = 0) -> Dictionary:
 	var effects: Dictionary = {"failed": true}
-	if action_id in SOCIAL_ACTIONS:
-		effects["disposition_change"] = -1
-	if action_id == "PUBLIC_INSULT" or action_id == "PUBLIC_DEBATE":
-		effects["glory_change"] = -0.05
+	# Per GDD s12.2: no disposition change on normal failure.
+	# Critical failure (margin ≤ -10) has action-specific penalties.
+	if action_id in SOCIAL_ACTIONS and margin <= -10:
+		effects["disposition_change"] = _get_critical_failure_disposition(action_id)
 	if action_id in COVERT_ACTIONS:
 		effects["detection_risk"] = true
 	return effects
+
+
+# Per GDD s12.2 critical failure (margin ≤ -10) disposition penalties
+const CRITICAL_FAILURE_DISPOSITION: Dictionary = {
+	"CHARM": -5,
+	"PERSUADE": -7,
+	"NEGOTIATE": -6,
+	"LISTEN_REFLECT": -7,
+	"IMPRESS": -6,
+	"INTIMIDATE": -8,
+	"DISCLOSE": -5,
+	"GOSSIP": -5,
+}
 
 
 static func _get_no_roll_effects(action_id: String) -> Dictionary:
@@ -966,6 +1192,10 @@ static func _get_no_roll_effects(action_id: String) -> Dictionary:
 		"BEGIN_TRAVEL", "CHANGE_DESTINATION":
 			return {"effect": "travel_started"}
 	return {"effect": "completed"}
+
+
+static func _get_critical_failure_disposition(action_id: String) -> int:
+	return CRITICAL_FAILURE_DISPOSITION.get(action_id, 0)
 
 
 # -- Military Hierarchy Validation (s57.21) ------------------------------------

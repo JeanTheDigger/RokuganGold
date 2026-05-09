@@ -59,6 +59,7 @@ func before_each() -> void:
 		"REST": {"primary": null, "secondary": null},
 		"TRAIN": {"primary": "_trained_skill", "secondary": null},
 		"PUBLIC_DEBATE": {"primary": "Courtier", "secondary": "Awareness"},
+		"PUBLIC_INSULT": {"primary": "Courtier", "secondary": "Awareness"},
 	}
 
 
@@ -126,8 +127,8 @@ func test_charm_hostile_target_higher_tn() -> void:
 	var result: Dictionary = ActionExecutor.execute(
 		action, _character, _ctx, _dice_engine, _action_skill_map
 	)
-	# Disposition -35 = Enemy tier: TN +10
-	assert_eq(result["tn"], 25)
+	# Disposition -35 = Enemy tier (s57.3): TN +5
+	assert_eq(result["tn"], 20)
 
 
 func test_social_success_produces_disposition_change() -> void:
@@ -137,11 +138,13 @@ func test_social_success_produces_disposition_change() -> void:
 		action, _character, _ctx, _dice_engine, _action_skill_map
 	)
 	if result["success"]:
-		assert_true(result["effects"]["disposition_change"] >= 3)
+		var raises: int = maxi(result.get("margin", 0) / 5, 0)
+		assert_eq(result["effects"]["disposition_change"], 8 + raises * 3)
 
 
-func test_social_failure_produces_negative_disposition() -> void:
-	# Force a failure by targeting hostile NPC (high TN) with bad seed
+func test_social_failure_produces_no_disposition_change() -> void:
+	# Per GDD s12.2: no disposition change on normal failure.
+	# Critical failure (margin ≤ -10) has action-specific penalties.
 	_dice_engine.set_seed(999)
 	_ctx.dispositions[20] = -70
 	var action := _make_action("CHARM", 20)
@@ -149,7 +152,12 @@ func test_social_failure_produces_negative_disposition() -> void:
 		action, _character, _ctx, _dice_engine, _action_skill_map
 	)
 	if not result["success"]:
-		assert_eq(result["effects"]["disposition_change"], -1)
+		var disp: int = result["effects"].get("disposition_change", 0)
+		# Normal failure: 0. Critical failure (margin ≤ -10): -5 for CHARM.
+		if result.get("margin", 0) <= -10:
+			assert_eq(disp, -5)
+		else:
+			assert_eq(disp, 0)
 
 
 func test_probe_produces_info_gained() -> void:
@@ -162,24 +170,198 @@ func test_probe_produces_info_gained() -> void:
 		assert_true(result["effects"]["info_gained"])
 
 
-func test_public_debate_produces_glory() -> void:
+func test_public_debate_produces_glory_on_high_raises() -> void:
+	# Per GDD s12.2: PUBLIC_DEBATE glory = 0.3 only if 3+ raises (margin ≥ 15)
 	_dice_engine.set_seed(1)
 	var action := _make_action("PUBLIC_DEBATE", 10)
 	var result: Dictionary = ActionExecutor.execute(
 		action, _character, _ctx, _dice_engine, _action_skill_map
 	)
 	if result["success"]:
-		assert_almost_eq(result["effects"]["glory_change"], 0.1, 0.001)
+		var raises: int = maxi(result.get("margin", 0) / 5, 0)
+		var expected: float = 0.3 if raises >= 3 else 0.0
+		assert_almost_eq(result["effects"]["glory_change"], expected, 0.001)
 
 
-func test_intimidate_negative_disposition() -> void:
+func test_intimidate_falls_through_without_characters() -> void:
 	_dice_engine.set_seed(1)
 	var action := _make_action("INTIMIDATE", 10)
 	var result: Dictionary = ActionExecutor.execute(
 		action, _character, _ctx, _dice_engine, _action_skill_map
 	)
 	if result["success"]:
-		assert_true(result["effects"]["disposition_change"] < 0)
+		assert_eq(result["effects"].get("disposition_change", 0), 0)
+
+
+# -- GOSSIP 3rd-party targeting (s15.4) ----------------------------------------
+
+func test_gossip_success_changes_listener_disposition_toward_subject() -> void:
+	var listener := L5RCharacterData.new()
+	listener.character_id = 10
+	listener.character_name = "Listener"
+	listener.glory = 2.0
+	listener.disposition_values = {99: 20}
+
+	var subject := L5RCharacterData.new()
+	subject.character_id = 99
+	subject.character_name = "Subject"
+	subject.glory = 3.0
+
+	_character.glory = 2.0
+	var chars: Dictionary = {1: _character, 10: listener, 99: subject}
+
+	_dice_engine.set_seed(1)
+	var action := _make_action("GOSSIP", 10)
+	action.metadata = {"gossip_subject_id": 99}
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map, {}, chars
+	)
+	if result["success"]:
+		assert_eq(result["effects"].get("gossip_subject_id", -1), 99)
+		assert_true(result["effects"].get("gossip_subject_disposition", 0) <= -5)
+
+
+func test_gossip_effects_applied_to_listener() -> void:
+	var listener := L5RCharacterData.new()
+	listener.character_id = 10
+	listener.character_name = "Listener"
+	listener.glory = 2.0
+	listener.disposition_values = {99: 20}
+
+	var subject := L5RCharacterData.new()
+	subject.character_id = 99
+	subject.character_name = "Subject"
+	subject.glory = 3.0
+
+	_character.glory = 2.0
+	var chars: Dictionary = {1: _character, 10: listener, 99: subject}
+
+	_dice_engine.set_seed(1)
+	var action := _make_action("GOSSIP", 10)
+	action.metadata = {"gossip_subject_id": 99}
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map, {}, chars
+	)
+	if result["success"]:
+		var applied: Dictionary = EffectApplicator.apply(
+			result, chars, {}, []
+		)
+		assert_true(listener.disposition_values[99] < 20)
+
+
+func test_gossip_critical_failure_penalizes_gossiper() -> void:
+	var listener := L5RCharacterData.new()
+	listener.character_id = 10
+	listener.character_name = "Listener"
+	listener.glory = 2.0
+
+	var subject := L5RCharacterData.new()
+	subject.character_id = 99
+	subject.character_name = "Subject"
+	subject.glory = 8.0
+
+	_character.glory = 1.0
+	var chars: Dictionary = {1: _character, 10: listener, 99: subject}
+
+	_dice_engine.set_seed(999)
+	var action := _make_action("GOSSIP", 10)
+	action.metadata = {"gossip_subject_id": 99}
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map, {}, chars
+	)
+	if not result["success"] and result.get("margin", 0) <= -10:
+		assert_eq(result["effects"].get("disposition_change", 0), -5)
+
+
+# -- PUBLIC_INSULT per-witness targeting (s15.4) -------------------------------
+
+func test_public_insult_success_affects_witnesses_toward_target() -> void:
+	var target := L5RCharacterData.new()
+	target.character_id = 10
+	target.character_name = "Target"
+	target.awareness = 2
+	target.skills = {"Etiquette": 1}
+	target.emphases = {}
+	target.wounds_taken = 0
+	target.physical_location = "castle_court"
+
+	var witness := L5RCharacterData.new()
+	witness.character_id = 30
+	witness.character_name = "Witness"
+	witness.disposition_values = {10: 15}
+	witness.physical_location = "castle_court"
+
+	_character.physical_location = "castle_court"
+	var chars: Dictionary = {1: _character, 10: target, 30: witness}
+
+	_dice_engine.set_seed(1)
+	var action := _make_action("PUBLIC_INSULT", 10)
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map, {}, chars
+	)
+	if result["success"]:
+		assert_true(result["effects"].get("target_witness_disposition", 0) <= -2)
+		assert_true(result["effects"].get("witnesses", []).size() > 0)
+
+
+func test_public_insult_effects_applied_to_witnesses() -> void:
+	var target := L5RCharacterData.new()
+	target.character_id = 10
+	target.character_name = "Target"
+	target.awareness = 2
+	target.skills = {"Etiquette": 1}
+	target.emphases = {}
+	target.wounds_taken = 0
+	target.physical_location = "castle_court"
+
+	var witness := L5RCharacterData.new()
+	witness.character_id = 30
+	witness.character_name = "Witness"
+	witness.disposition_values = {10: 15}
+	witness.physical_location = "castle_court"
+
+	_character.physical_location = "castle_court"
+	var chars: Dictionary = {1: _character, 10: target, 30: witness}
+
+	_dice_engine.set_seed(1)
+	var action := _make_action("PUBLIC_INSULT", 10)
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map, {}, chars
+	)
+	if result["success"]:
+		var applied: Dictionary = EffectApplicator.apply(
+			result, chars, {}, []
+		)
+		assert_true(witness.disposition_values[10] < 15)
+
+
+func test_public_insult_failure_backfires_on_insulter() -> void:
+	var target := L5RCharacterData.new()
+	target.character_id = 10
+	target.character_name = "Target"
+	target.awareness = 5
+	target.skills = {"Etiquette": 5}
+	target.emphases = {}
+	target.wounds_taken = 0
+	target.physical_location = "castle_court"
+
+	var witness := L5RCharacterData.new()
+	witness.character_id = 30
+	witness.character_name = "Witness"
+	witness.disposition_values = {1: 10}
+	witness.physical_location = "castle_court"
+
+	_character.physical_location = "castle_court"
+	var chars: Dictionary = {1: _character, 10: target, 30: witness}
+
+	_dice_engine.set_seed(999)
+	var action := _make_action("PUBLIC_INSULT", 10)
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map, {}, chars
+	)
+	if not result["success"]:
+		assert_eq(result["effects"].get("witness_disposition_loss", 0), -2)
+		assert_true(result["effects"].get("witnesses", []).size() > 0)
 
 
 # -- Intimidation System Routing -----------------------------------------------
@@ -581,3 +763,64 @@ func test_declare_war_total_war_honor_cost() -> void:
 	)
 	assert_eq(result["effects"]["effect"], "war_declared")
 	assert_almost_eq(result["effects"]["honor_change"], -0.5, 0.01)
+
+
+# -- Broadcast Social Actions (s12.2 Category 2) ------------------------------
+
+func test_public_debate_success_gives_witness_disposition_gain() -> void:
+	var witness := L5RCharacterData.new()
+	witness.character_id = 30
+	witness.character_name = "Witness"
+	witness.disposition_values = {}
+	witness.physical_location = "castle_court"
+	_character.physical_location = "castle_court"
+	var chars: Dictionary = {1: _character, 30: witness}
+
+	_dice_engine.set_seed(1)
+	var action := _make_action("PUBLIC_DEBATE")
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map, {}, chars
+	)
+	if result["success"]:
+		assert_true(result["effects"].get("witness_disposition_gain", 0) >= 2)
+		assert_true(result["effects"].get("witnesses", []).size() > 0)
+
+
+func test_public_debate_witness_effects_applied() -> void:
+	var witness := L5RCharacterData.new()
+	witness.character_id = 30
+	witness.character_name = "Witness"
+	witness.disposition_values = {1: 5}
+	witness.physical_location = "castle_court"
+	_character.physical_location = "castle_court"
+	var chars: Dictionary = {1: _character, 30: witness}
+
+	_dice_engine.set_seed(1)
+	var action := _make_action("PUBLIC_DEBATE")
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map, {}, chars
+	)
+	if result["success"]:
+		var applied: Dictionary = EffectApplicator.apply(
+			result, chars, {}, []
+		)
+		assert_true(witness.disposition_values[1] > 5)
+
+
+func test_public_debate_critical_failure_penalizes_with_witnesses() -> void:
+	var witness := L5RCharacterData.new()
+	witness.character_id = 30
+	witness.character_name = "Witness"
+	witness.disposition_values = {1: 10}
+	witness.physical_location = "castle_court"
+	_character.physical_location = "castle_court"
+	var chars: Dictionary = {1: _character, 30: witness}
+
+	_dice_engine.set_seed(999)
+	_ctx.dispositions[30] = -70
+	var action := _make_action("PUBLIC_DEBATE", 30)
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map, {}, chars
+	)
+	if not result["success"] and result.get("margin", 0) <= -10:
+		assert_eq(result["effects"].get("witness_disposition_loss", 0), -2)

@@ -405,11 +405,11 @@ static func _apply_baseline_delta(
 	var result: Dictionary = {"clan_change": 0, "family_change": 0}
 	if clan_a != clan_b and clan_a != "" and clan_b != "" and clan_delta != 0:
 		var ckey: String = make_pair_key(clan_a, clan_b)
-		clan_baselines[ckey] = int(clan_baselines.get(ckey, 0)) + clan_delta
+		clan_baselines[ckey] = clampi(int(clan_baselines.get(ckey, 0)) + clan_delta, -100, 100)
 		result["clan_change"] = clan_delta
 	if family_a != family_b and family_a != "" and family_b != "" and family_delta != 0:
 		var fkey: String = make_pair_key(family_a, family_b)
-		family_baselines[fkey] = int(family_baselines.get(fkey, 0)) + family_delta
+		family_baselines[fkey] = clampi(int(family_baselines.get(fkey, 0)) + family_delta, -100, 100)
 		result["family_change"] = family_delta
 	return result
 

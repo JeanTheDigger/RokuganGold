@@ -47,6 +47,10 @@ static func advance_day(
 	active_wars: Array[WarData] = [],
 	trade_routes: Array = [],
 	next_war_id: Array[int] = [1],
+	active_courts: Array[CourtSessionData] = [],
+	next_court_id: Array[int] = [1],
+	active_edicts: Array[EdictData] = [],
+	next_edict_id: Array[int] = [1],
 ) -> Dictionary:
 	var prev_season: int = time_system.get_season()
 
@@ -70,6 +74,24 @@ static func advance_day(
 	var bound_escape_results: Array[Dictionary] = _process_bound_states(
 		bound_states, characters_by_id, dice_engine, ic_day
 	)
+
+	var crisis_courts: Array[Dictionary] = _process_crisis_court_calls(
+		characters, active_courts, active_topics, world_states, next_court_id, ic_day,
+	)
+	var court_openings: Array[Dictionary] = _process_court_openings(active_courts, ic_day)
+	var court_attendance: Array[Dictionary] = _process_court_attendance(active_courts, characters, characters_by_id)
+	var court_results: Array[Dictionary] = _process_active_courts(
+		active_courts, active_topics, next_topic_id, ic_day,
+		active_edicts, next_edict_id, active_wars,
+		characters_by_id, world_states,
+	)
+	_set_court_context_flags(active_courts, world_states)
+
+	var edict_results: Array[Dictionary] = _process_edict_compliance(
+		active_edicts, active_wars, characters, active_topics, next_topic_id, ic_day,
+	)
+
+	_inject_edict_reactive_events(active_edicts, characters, world_states, ic_day)
 
 	var military_daily: Dictionary = _process_military_daily(
 		active_armies, active_sieges, active_tethers, order_states,
@@ -121,6 +143,11 @@ static func advance_day(
 		characters_by_id,
 		settlements,
 		provinces,
+	)
+
+	_process_edict_compliance_actions(
+		day_result.get("results", []),
+		active_edicts,
 	)
 
 	var war_declarations: Array[Dictionary] = _process_war_declarations(
@@ -273,6 +300,11 @@ static func advance_day(
 		_evaluate_heir_designations(
 			characters, characters_by_id, active_topics
 		)
+		_process_strategic_court_calls(
+			strategic_results, active_courts, active_topics,
+			characters_by_id, next_court_id, ic_day, world_states,
+			current_season,
+		)
 
 	return {
 		"ic_day": ic_day,
@@ -311,6 +343,12 @@ static func advance_day(
 		"trade_route_results": trade_route_results,
 		"starvation_results": starvation_results,
 		"supply_sharing_results": supply_sharing_results,
+		"court_results": court_results,
+		"court_openings": court_openings,
+		"court_attendance": court_attendance,
+		"crisis_courts": crisis_courts,
+		"edict_results": edict_results,
+		"active_edicts": active_edicts,
 	}
 
 
@@ -1406,18 +1444,38 @@ static func _run_strategic_reviews(
 	world_states: Dictionary,
 ) -> Array[Dictionary]:
 	var results: Array[Dictionary] = []
+	var emperor_id: int = int(world_states.get("emperor_id", -1))
+	var emperor_archetype: int = int(world_states.get("emperor_archetype", StrategicReview.EmperorArchetype.IRON))
 
 	for lord: L5RCharacterData in characters:
 		if not _is_lord_tier(lord):
 			continue
-		var vassals: Array[L5RCharacterData] = _get_vassals(lord, characters)
-		var directives: Array[Dictionary] = StrategicReview.run_seasonal_review(
-			lord, vassals, objectives_map, world_states
-		)
-		for d: Dictionary in directives:
-			results.append(d)
+		if lord.character_id == emperor_id and emperor_id >= 0:
+			var clan_champions: Array[L5RCharacterData] = _get_clan_champions(characters)
+			var directives: Array[Dictionary] = StrategicReview.run_emperor_review(
+				lord, emperor_archetype, clan_champions, world_states, objectives_map
+			)
+			for d: Dictionary in directives:
+				results.append(d)
+		else:
+			var vassals: Array[L5RCharacterData] = _get_vassals(lord, characters)
+			var directives: Array[Dictionary] = StrategicReview.run_seasonal_review(
+				lord, vassals, objectives_map, world_states
+			)
+			for d: Dictionary in directives:
+				results.append(d)
 
 	return results
+
+
+static func _get_clan_champions(
+	characters: Array[L5RCharacterData],
+) -> Array[L5RCharacterData]:
+	var champions: Array[L5RCharacterData] = []
+	for c: L5RCharacterData in characters:
+		if c.status >= 7.0 and c.lord_id == -1:
+			champions.append(c)
+	return champions
 
 
 static func _is_lord_tier(character: L5RCharacterData) -> bool:
@@ -3205,6 +3263,59 @@ static func _consume_supply_status_results(
 			)
 
 
+static func _inject_edict_reactive_events(
+	active_edicts: Array[EdictData],
+	characters: Array[L5RCharacterData],
+	world_states: Dictionary,
+	_ic_day: int,
+) -> void:
+	for edict: EdictData in active_edicts:
+		if not edict.is_active:
+			continue
+		for clan: String in edict.compliance_by_clan:
+			var status: int = edict.compliance_by_clan[clan]
+			if status != EdictData.ComplianceStatus.PENDING:
+				continue
+			var lord_id: int = _find_clan_lord(characters, clan)
+			if lord_id < 0:
+				continue
+			var ws: Dictionary = world_states.get(lord_id, {})
+			if ws.is_empty():
+				ws = {}
+				world_states[lord_id] = ws
+			if not ws.has("pending_events"):
+				ws["pending_events"] = []
+			var already_injected: bool = false
+			for ev: Variant in ws["pending_events"]:
+				if ev is Dictionary and ev.get("source", "") == "edict_response" \
+						and ev.get("target_npc_id", -1) == edict.edict_id:
+					already_injected = true
+					break
+			if already_injected:
+				continue
+			ws["pending_events"].append({
+				"need_type": "RESPOND_TO_EDICT",
+				"priority": 1,
+				"target_npc_id": edict.edict_id,
+				"target_clan_id": clan,
+				"source": "edict_response",
+			})
+
+
+static func _find_clan_lord(
+	characters: Array[L5RCharacterData],
+	clan: String,
+) -> int:
+	var best_id: int = -1
+	var best_status: float = -1.0
+	for c: L5RCharacterData in characters:
+		if c.clan == clan and c.status >= 5.0 and c.lord_id == -1:
+			if c.status > best_status:
+				best_status = c.status
+				best_id = c.character_id
+	return best_id
+
+
 static func _inject_peace_need(
 	lord_id: int,
 	decision: int,
@@ -4091,3 +4202,445 @@ static func _process_peace_trade_routes(
 		)
 		results.append_array(restored)
 	return results
+
+
+# -- Court Session Processing --------------------------------------------------
+
+static func _process_active_courts(
+	active_courts: Array[CourtSessionData],
+	active_topics: Array[TopicData],
+	next_topic_id: Array[int],
+	ic_day: int,
+	active_edicts: Array[EdictData] = [],
+	next_edict_id: Array[int] = [1],
+	active_wars: Array[WarData] = [],
+	characters_by_id: Dictionary = {},
+	world_states: Dictionary = {},
+) -> Array[Dictionary]:
+	var results: Array[Dictionary] = []
+	for court: CourtSessionData in active_courts:
+		if not CourtSystem.is_active(court):
+			continue
+		var advance_result: Dictionary = CourtSystem.advance_court_day(court)
+		if advance_result.get("should_close", false):
+			var close_result: Dictionary = CourtSystem.close_court(court)
+			var edicts_issued: Array[EdictData] = _generate_court_edicts(
+				court, active_edicts, next_edict_id, active_wars,
+				active_topics, next_topic_id, characters_by_id, world_states, ic_day,
+			)
+			if not edicts_issued.is_empty():
+				close_result["edicts_issued"] = edicts_issued.size()
+			var topic_dict: Dictionary = CourtSystem.generate_court_close_topic(court)
+			if not topic_dict.is_empty():
+				var t := TopicData.new()
+				t.topic_id = next_topic_id[0]
+				next_topic_id[0] += 1
+				t.topic_type = topic_dict.get("topic_type", "court_session")
+				t.variant = topic_dict.get("variant", "")
+				t.slug = topic_dict.get("slug", "")
+				t.tier = topic_dict.get("tier", TopicData.Tier.TIER_4)
+				t.category = topic_dict.get("category", TopicData.Category.POLITICAL)
+				t.momentum = topic_dict.get("momentum", 5.0)
+				t.clan_involved = topic_dict.get("clan_involved", "")
+				t.ic_day_created = ic_day
+				active_topics.append(t)
+				close_result["topic_id"] = t.topic_id
+			results.append(close_result)
+		else:
+			results.append(advance_result)
+	return results
+
+
+static func _generate_court_edicts(
+	court: CourtSessionData,
+	active_edicts: Array[EdictData],
+	next_edict_id: Array[int],
+	active_wars: Array[WarData],
+	active_topics: Array[TopicData],
+	next_topic_id: Array[int],
+	characters_by_id: Dictionary,
+	world_states: Dictionary,
+	ic_day: int,
+) -> Array[EdictData]:
+	if not court.emperor_present:
+		return []
+	var emperor_id: int = -1
+	var archetype: int = StrategicReview.EmperorArchetype.IRON
+	for char_id: int in court.attendee_ids:
+		var c: L5RCharacterData = characters_by_id.get(char_id) as L5RCharacterData
+		if c != null and c.status >= 9.0:
+			emperor_id = c.character_id
+			break
+	if emperor_id < 0:
+		emperor_id = world_states.get("emperor_id", -1)
+	if emperor_id < 0:
+		return []
+	var emperor: L5RCharacterData = characters_by_id.get(emperor_id) as L5RCharacterData
+	if emperor == null:
+		return []
+	archetype = world_states.get("emperor_archetype", StrategicReview.EmperorArchetype.IRON)
+
+	var edicts: Array[EdictData] = ImperialEdictSystem.generate_winter_court_edicts(
+		emperor, archetype, court.agenda_topic_ids, active_topics,
+		active_wars, next_edict_id, ic_day, court.court_id,
+	)
+	for edict: EdictData in edicts:
+		active_edicts.append(edict)
+		var topic_dict: Dictionary = ImperialEdictSystem.generate_edict_topic(edict)
+		if not topic_dict.is_empty():
+			var t := TopicData.new()
+			t.topic_id = next_topic_id[0]
+			next_topic_id[0] += 1
+			t.topic_type = topic_dict.get("topic_type", "imperial_edict")
+			t.variant = topic_dict.get("variant", "")
+			t.slug = topic_dict.get("slug", "")
+			t.tier = topic_dict.get("tier", TopicData.Tier.TIER_1)
+			t.category = topic_dict.get("category", TopicData.Category.POLITICAL)
+			t.momentum = topic_dict.get("momentum", 80.0)
+			t.clan_involved = topic_dict.get("clan_involved", "")
+			t.subject_character_id = topic_dict.get("subject_character_id", -1)
+			t.ic_day_created = ic_day
+			active_topics.append(t)
+	return edicts
+
+
+static func _set_court_context_flags(
+	active_courts: Array[CourtSessionData],
+	world_states: Dictionary,
+) -> void:
+	for court: CourtSessionData in active_courts:
+		if not CourtSystem.is_active(court):
+			continue
+		var ctx_dict: Dictionary = CourtSystem.to_context_dict(court)
+		for char_id: int in court.attendee_ids:
+			var ws: Dictionary = world_states.get(char_id, {})
+			if ws.is_empty():
+				continue
+			ws["context_flag"] = Enums.ContextFlag.AT_COURT
+			ws["active_court_at_location"] = ctx_dict
+
+
+static func _process_crisis_court_calls(
+	characters: Array[L5RCharacterData],
+	active_courts: Array[CourtSessionData],
+	active_topics: Array[TopicData],
+	world_states: Dictionary,
+	next_court_id: Array[int],
+	ic_day: int,
+) -> Array[Dictionary]:
+	var results: Array[Dictionary] = []
+	for lord: L5RCharacterData in characters:
+		if not _is_lord_tier(lord):
+			continue
+		var lord_rank: Enums.LordRank = _status_to_lord_rank(lord.status)
+		var courts_at_settlement: Array[CourtSessionData] = []
+		var settlement_str: String = str(lord.physical_location)
+		for c: CourtSessionData in active_courts:
+			if str(c.host_settlement_id) == settlement_str:
+				courts_at_settlement.append(c)
+		var eval_result: Dictionary = CourtSystem.should_call_court(
+			lord_rank, active_topics, courts_at_settlement
+		)
+		if eval_result.is_empty() or not eval_result.get("should_call", false):
+			continue
+		var ws: Dictionary = world_states.get(lord.character_id, {})
+		var last_court_day: int = ws.get("last_court_called_ic_day", -1)
+		if last_court_day >= 0 and ic_day - last_court_day < 30:
+			continue
+		var court_type: CourtSessionData.CourtType = CourtSessionData.CourtType.PROVINCIAL_FAMILY_COURT
+		if lord.status >= 7.0:
+			court_type = CourtSessionData.CourtType.CLAN_CHAMPION_COURT
+		var settlement_id: int = int(lord.physical_location)
+		var court := CourtSystem.create_court(
+			next_court_id[0], court_type, lord.character_id,
+			settlement_id, lord.clan, ic_day,
+		)
+		next_court_id[0] += 1
+		var trigger_id: int = eval_result.get("trigger_topic_id", -1)
+		court.crisis_trigger_topic_id = trigger_id
+		var agenda: Array[int] = CourtSystem.select_agenda_topics(
+			active_topics, court_type, trigger_id
+		)
+		CourtSystem.set_agenda(court, agenda)
+		CourtSystem.add_attendee(court, lord.character_id)
+		active_courts.append(court)
+		if ws.is_empty():
+			ws = {}
+			world_states[lord.character_id] = ws
+		ws["last_court_called_ic_day"] = ic_day
+		results.append({
+			"court_id": court.court_id,
+			"lord_id": lord.character_id,
+			"court_type": court_type,
+			"trigger_topic_id": trigger_id,
+			"crisis_called": true,
+		})
+	return results
+
+
+static func _track_court_called(
+	world_states: Dictionary,
+	lord_id: int,
+	ic_day: int,
+	current_season: int = -1,
+) -> void:
+	var ws: Dictionary = world_states.get(lord_id, {})
+	if ws.is_empty():
+		ws = {}
+		world_states[lord_id] = ws
+	ws["last_court_called_ic_day"] = ic_day
+	if current_season >= 0:
+		ws["last_court_season"] = current_season
+
+
+static func _status_to_lord_rank(status: float) -> Enums.LordRank:
+	if status >= 9.0:
+		return Enums.LordRank.IMPERIAL
+	elif status >= 7.0:
+		return Enums.LordRank.CLAN_CHAMPION
+	elif status >= 6.0:
+		return Enums.LordRank.FAMILY_DAIMYO
+	elif status >= 5.0:
+		return Enums.LordRank.PROVINCIAL_DAIMYO
+	elif status >= 4.0:
+		return Enums.LordRank.CITY_DAIMYO
+	return Enums.LordRank.VILLAGE_HEADMAN
+
+
+static func _process_court_openings(
+	active_courts: Array[CourtSessionData],
+	ic_day: int,
+) -> Array[Dictionary]:
+	var results: Array[Dictionary] = []
+	for court: CourtSessionData in active_courts:
+		if court.phase != CourtSessionData.CourtPhase.SCHEDULED:
+			continue
+		if ic_day >= court.start_ic_day:
+			CourtSystem.open_court(court, ic_day)
+			results.append({
+				"court_id": court.court_id,
+				"opened": true,
+				"ic_day": ic_day,
+			})
+	return results
+
+
+static func _process_court_attendance(
+	active_courts: Array[CourtSessionData],
+	characters: Array[L5RCharacterData],
+	characters_by_id: Dictionary = {},
+) -> Array[Dictionary]:
+	var results: Array[Dictionary] = []
+	for court: CourtSessionData in active_courts:
+		if not CourtSystem.is_active(court):
+			continue
+		var settlement_str: String = str(court.host_settlement_id)
+		for c: L5RCharacterData in characters:
+			var at_settlement: bool = c.physical_location == settlement_str
+			var is_attending: bool = c.character_id in court.attendee_ids
+			if at_settlement and not is_attending:
+				CourtSystem.add_attendee(court, c.character_id)
+				results.append({
+					"court_id": court.court_id,
+					"character_id": c.character_id,
+					"action": "arrived",
+				})
+			elif not at_settlement and is_attending and c.character_id != court.host_lord_id:
+				CourtSystem.remove_attendee(court, c.character_id)
+				var departure := _apply_early_departure(c, court, characters_by_id)
+				departure["court_id"] = court.court_id
+				departure["character_id"] = c.character_id
+				departure["action"] = "departed"
+				results.append(departure)
+	return results
+
+
+static func _apply_early_departure(
+	character: L5RCharacterData,
+	court: CourtSessionData,
+	characters_by_id: Dictionary,
+) -> Dictionary:
+	var is_host: bool = character.character_id == court.host_lord_id
+	var is_proxy: bool = false
+	var cost: Dictionary = CourtPrioritySystem.get_early_departure_cost(is_host, is_proxy)
+
+	var honor_loss: float = cost.get("honor_loss", 0.0)
+	var glory_loss: float = cost.get("glory_loss", 0.0)
+	var disp_cost: int = cost.get("disposition_cost", 0)
+
+	if honor_loss != 0.0:
+		HonorGlorySystem.apply_honor_change(character, honor_loss)
+	if glory_loss != 0.0:
+		HonorGlorySystem.apply_glory_change(character, glory_loss)
+	if disp_cost != 0:
+		var host: L5RCharacterData = characters_by_id.get(court.host_lord_id) as L5RCharacterData
+		if host != null:
+			var current: int = int(host.disposition_values.get(character.character_id, 0))
+			host.disposition_values[character.character_id] = clampi(current + disp_cost, -100, 100)
+
+	return {
+		"honor_loss": honor_loss,
+		"glory_loss": glory_loss,
+		"disposition_cost": disp_cost,
+	}
+
+
+# -- Edict Compliance Processing -----------------------------------------------
+
+static func _process_edict_compliance(
+	active_edicts: Array[EdictData],
+	active_wars: Array[WarData],
+	characters: Array[L5RCharacterData],
+	active_topics: Array[TopicData],
+	next_topic_id: Array[int],
+	ic_day: int,
+) -> Array[Dictionary]:
+	var results: Array[Dictionary] = ImperialEdictSystem.process_daily_compliance(
+		active_edicts, active_wars, characters, ic_day,
+	)
+	for r: Dictionary in results:
+		var topic_dict: Dictionary = r.get("defiance_topic", {})
+		if topic_dict.is_empty():
+			continue
+		var t := TopicData.new()
+		t.topic_id = next_topic_id[0]
+		next_topic_id[0] += 1
+		t.topic_type = topic_dict.get("topic_type", "edict_defiance")
+		t.variant = topic_dict.get("variant", "")
+		t.slug = topic_dict.get("slug", "")
+		t.tier = topic_dict.get("tier", TopicData.Tier.TIER_1)
+		t.category = topic_dict.get("category", TopicData.Category.POLITICAL)
+		t.momentum = topic_dict.get("momentum", 90.0)
+		t.clan_involved = topic_dict.get("clan_involved", "")
+		t.subject_character_id = topic_dict.get("subject_character_id", -1)
+		t.ic_day_created = ic_day
+		active_topics.append(t)
+		r["defiance_topic_id"] = t.topic_id
+	return results
+
+
+static func _process_edict_compliance_actions(
+	day_results: Array,
+	active_edicts: Array[EdictData],
+) -> void:
+	for result: Dictionary in day_results:
+		var effects: Dictionary = result.get("effects", {})
+		if not effects.get("requires_edict_compliance", false):
+			continue
+		var edict_id: int = effects.get("edict_id", -1)
+		var clan: String = effects.get("clan", "")
+		var compliant: bool = effects.get("compliant", true)
+		if edict_id < 0 or clan.is_empty():
+			continue
+		for edict: EdictData in active_edicts:
+			if edict.edict_id == edict_id and edict.is_active:
+				ImperialEdictSystem.record_compliance(edict, clan, compliant)
+				break
+
+
+static func _process_strategic_court_calls(
+	strategic_results: Array[Dictionary],
+	active_courts: Array[CourtSessionData],
+	active_topics: Array[TopicData],
+	characters_by_id: Dictionary,
+	next_court_id: Array[int],
+	ic_day: int,
+	world_states: Dictionary = {},
+	current_season: int = -1,
+) -> void:
+	for directive: Dictionary in strategic_results:
+		var directive_type = directive.get("directive", "")
+		if directive_type == "WINTER_COURT_HOST":
+			_create_winter_court_from_directive(
+				directive, active_courts, active_topics,
+				characters_by_id, next_court_id, ic_day,
+			)
+			continue
+		if directive_type != StrategicReview.Directive.CALL_COURT:
+			continue
+		var lord_id: int = directive.get("lord_id", -1)
+		if lord_id < 0:
+			continue
+		var lord: L5RCharacterData = characters_by_id.get(lord_id) as L5RCharacterData
+		if lord == null:
+			continue
+
+		var already_hosting: bool = false
+		for c: CourtSessionData in active_courts:
+			if c.host_lord_id == lord_id and CourtSystem.is_active(c):
+				already_hosting = true
+				break
+		if already_hosting:
+			continue
+
+		var court_type: CourtSessionData.CourtType = CourtSessionData.CourtType.PROVINCIAL_FAMILY_COURT
+		if lord.status >= 7.0:
+			court_type = CourtSessionData.CourtType.CLAN_CHAMPION_COURT
+
+		var settlement_id: int = lord.physical_location
+		var agenda: Array[int] = CourtSystem.select_agenda_topics(
+			active_topics, court_type
+		)
+
+		var court := CourtSystem.create_court(
+			next_court_id[0], court_type, lord_id,
+			settlement_id, lord.clan, ic_day + 1
+		)
+		next_court_id[0] += 1
+		CourtSystem.set_agenda(court, agenda)
+		CourtSystem.add_attendee(court, lord_id)
+		active_courts.append(court)
+
+		_track_court_called(world_states, lord_id, ic_day, current_season)
+
+
+static func _create_winter_court_from_directive(
+	directive: Dictionary,
+	active_courts: Array[CourtSessionData],
+	active_topics: Array[TopicData],
+	characters_by_id: Dictionary,
+	next_court_id: Array[int],
+	ic_day: int,
+) -> void:
+	var emperor_id: int = directive.get("lord_id", -1)
+	var host_clan: String = directive.get("host_clan", "")
+	if emperor_id < 0 or host_clan.is_empty():
+		return
+
+	for c: CourtSessionData in active_courts:
+		if c.court_type == CourtSessionData.CourtType.IMPERIAL_WINTER_COURT:
+			if c.phase != CourtSessionData.CourtPhase.CLOSED:
+				return
+
+	var host_settlement_id: int = -1
+	var host_champion_id: int = -1
+	for char_id: int in characters_by_id:
+		var c: L5RCharacterData = characters_by_id[char_id] as L5RCharacterData
+		if c != null and c.clan == host_clan and c.status >= 7.0 and c.lord_id == -1:
+			host_champion_id = c.character_id
+			host_settlement_id = c.physical_location
+			break
+	if host_settlement_id < 0:
+		return
+
+	var agenda: Array[int] = CourtSystem.select_agenda_topics(
+		active_topics, CourtSessionData.CourtType.IMPERIAL_WINTER_COURT
+	)
+
+	var start_day: int = ic_day + 30
+	var court := CourtSystem.create_court(
+		next_court_id[0],
+		CourtSessionData.CourtType.IMPERIAL_WINTER_COURT,
+		emperor_id,
+		host_settlement_id,
+		host_clan,
+		start_day,
+		CourtSystem.WINTER_COURT_DURATION,
+		true,
+	)
+	next_court_id[0] += 1
+	CourtSystem.set_agenda(court, agenda)
+	CourtSystem.add_attendee(court, emperor_id)
+	if host_champion_id >= 0 and host_champion_id != emperor_id:
+		CourtSystem.add_attendee(court, host_champion_id)
+	active_courts.append(court)

@@ -146,6 +146,13 @@ class ContextSnapshot:
 	var is_taian: bool = false
 	var is_inauspicious_for_social: bool = false
 
+	# Urgency evaluation fields
+	var expiring_favor_ids: Array[int] = []
+	var starvation_province_ids: Array[int] = []
+	var cut_supply_army_ids: Array[int] = []
+	var besieged_settlement_health_pct: float = 1.0
+	var objective_stalled_seasons: int = 0
+
 	# State
 	var pending_events: Array = []
 	var ap_remaining: int = 0
@@ -167,6 +174,7 @@ class ProvinceStatus:
 	var active_crisis_id: int = -1
 	var active_insurgency_id: int = -1
 	var rice_stockpile: float = 0.0
+	var starvation_stage: int = 0
 	var last_report_ic_day: int = -1
 	var confidence: int = 0  # 0=stale, 1=recent, 2=fresh
 	var is_wall_province: bool = false
