@@ -1,8 +1,11 @@
 res://scenes/main_ui.tscn
 res://assets/themes/Buttons.tres
-res://shaders/WritingPanelShader.gdshader
 res://assets/themes/CharacterCreation.tres
-res://shaders/TextPanelShader.gdshader
+res://assets/themes/Rokugan001.tres
 res://scenes/CharacterCreation.tscn
 res://scenes/intro_screen.tscn
 res://scenes/LoginUI.tscn
+res://scripts/ui/main_ui.gd
+res://shaders/MainUIRokugan.tres
+res://shaders/MainUIRokugan.gdshader
+res://scripts/ui/CornerBracketsUI.gd

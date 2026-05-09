@@ -1,14 +1,11 @@
-[gd_scene load_steps=44 format=3 uid="uid://bmk5qlcks4v3u"]
+[gd_scene load_steps=35 format=3 uid="uid://bmk5qlcks4v3u"]
 
+[ext_resource type="Theme" uid="uid://cmd3swrkysn2o" path="res://assets/themes/Rokugan001.tres" id="1_ulqfl"]
 [ext_resource type="Script" uid="uid://drwfitony6hbj" path="res://scripts/ui/main_ui.gd" id="2_i4ba5"]
-[ext_resource type="Texture2D" uid="uid://oar14m2y1vpu" path="res://assets/images/SpaceTile1.png" id="2_n6mpm"]
-[ext_resource type="Theme" uid="uid://cjaewb3353lqh" path="res://assets/themes/Buttons.tres" id="3_baa2r"]
-[ext_resource type="Texture2D" uid="uid://cwbwy10mpw0yj" path="res://assets/images/Screen100B.png" id="3_n6mpm"]
-[ext_resource type="Texture2D" uid="uid://cc6ywv4ywwy7n" path="res://assets/images/Screen101B.png" id="4_d2so1"]
 [ext_resource type="Script" uid="uid://eiulmike27ng" path="res://scripts/ui/input_buttons.gd" id="4_eib71"]
-[ext_resource type="FontFile" uid="uid://deuierbbkg6su" path="res://assets/fonts/eurostile.TTF" id="5_d2so1"]
 [ext_resource type="Script" uid="uid://dumoka3feh6sp" path="res://scripts/ui/ActionPanel.gd" id="5_g4hc0"]
 [ext_resource type="PackedScene" uid="uid://33yiuaybmux" path="res://scenes/Zone.tscn" id="6_niqgt"]
+[ext_resource type="Script" uid="uid://c3ws5xslh57qf" path="res://scripts/ui/CornerBracketsUI.gd" id="6_rx44x"]
 [ext_resource type="Texture2D" uid="uid://83hcerwrjokr" path="res://assets/images/NeighborSprite.png" id="7_2jhcv"]
 [ext_resource type="PackedScene" uid="uid://d52y56d4b22e" path="res://scenes/player_selection.tscn" id="10_pdx0a"]
 [ext_resource type="PackedScene" uid="uid://bx3xnyrpoikl7" path="res://scenes/location_selection.tscn" id="11_17wiq"]
@@ -16,25 +13,25 @@
 [ext_resource type="PackedScene" uid="uid://be7d7nwx3vahn" path="res://scenes/create_character_ui.tscn" id="12_s2wwb"]
 [ext_resource type="PackedScene" uid="uid://bdy36cmnjn1t3" path="res://scenes/charactersheet_ui.tscn" id="13_s2wwb"]
 [ext_resource type="PackedScene" uid="uid://cbdeikjv0iw21" path="res://scenes/character_sheet_editable_ui.tscn" id="15_4b8mr"]
+[ext_resource type="Material" uid="uid://dvk5p7hwxj5cb" path="res://shaders/MainUIRokugan.tres" id="16_ulqfl"]
 [ext_resource type="PackedScene" uid="uid://cohsughsaqjes" path="res://scenes/AudioSettingsUI.tscn" id="17_ox3ol"]
 [ext_resource type="PackedScene" uid="uid://cqfmsafjq246d" path="res://scenes/settings.tscn" id="22_thd06"]
 [ext_resource type="PackedScene" uid="uid://cwcgrhghfxqn5" path="res://scenes/nightly_activities_ui.tscn" id="32_2smvb"]
 
-[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_n6mpm"]
-texture = ExtResource("2_n6mpm")
-
-[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_1ipri"]
-texture = ExtResource("3_n6mpm")
-modulate_color = Color(0.580392, 0.721569, 0.756863, 1)
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_u04fh"]
+bg_color = Color(0.831373, 0.768627, 0.627451, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.545098, 0.45098, 0.333333, 1)
+corner_radius_top_left = 20
+corner_radius_top_right = 20
+corner_radius_bottom_right = 20
+corner_radius_bottom_left = 20
+corner_detail = 1
 
 [sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_ml8dl"]
-
-[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_odx23"]
-texture = ExtResource("4_d2so1")
-
-[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_thd06"]
-
-[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_od6ea"]
 
 [sub_resource type="CompressedTexture2D" id="CompressedTexture2D_i6cec"]
 
@@ -89,12 +86,6 @@ TabContainer/styles/tab_selected = SubResource("StyleBoxTexture_0ywhc")
 TabContainer/styles/tab_unselected = null
 TabContainer/styles/tabbar_background = SubResource("StyleBoxTexture_1xs4l")
 
-[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_i6cec"]
-
-[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_fxj62"]
-
-[sub_resource type="CompressedTexture2D" id="CompressedTexture2D_bpym6"]
-
 [node name="MainUI" type="Control"]
 layout_mode = 3
 anchors_preset = 15
@@ -102,40 +93,36 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
+theme = ExtResource("1_ulqfl")
 script = ExtResource("2_i4ba5")
 metadata/_edit_use_anchors_ = true
 
-[node name="Background" type="Panel" parent="."]
+[node name="Background" type="PanelContainer" parent="."]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-theme_override_styles/panel = SubResource("StyleBoxTexture_n6mpm")
 
 [node name="TextPanel" type="Panel" parent="."]
 layout_mode = 1
 anchors_preset = -1
-anchor_left = 0.3
-anchor_right = 0.5325
-anchor_bottom = 0.665556
-offset_left = -480.0
+anchor_left = 0.01875
+anchor_top = 0.616667
+anchor_right = 0.478125
+anchor_bottom = 0.96
 grow_horizontal = 2
 grow_vertical = 2
-theme_override_styles/panel = SubResource("StyleBoxTexture_1ipri")
+theme_override_styles/panel = SubResource("StyleBoxFlat_u04fh")
 metadata/_edit_use_anchors_ = true
 
 [node name="DisplayText" type="RichTextLabel" parent="TextPanel"]
+visible = false
 layout_mode = 1
-anchors_preset = -1
-anchor_left = 0.044601
-anchor_top = -0.474124
-anchor_right = 0.954225
-anchor_bottom = 0.193656
-offset_left = -3.05176e-05
-offset_top = 319.0
-offset_bottom = 450.0
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 focus_mode = 2
@@ -144,14 +131,27 @@ theme_override_styles/focus = SubResource("StyleBoxEmpty_ml8dl")
 bbcode_enabled = true
 scroll_following = true
 selection_enabled = true
-metadata/_edit_use_anchors_ = true
+
+[node name="Control" type="Control" parent="TextPanel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 12.0
+offset_top = 11.0
+offset_right = -12.0
+offset_bottom = -11.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("6_rx44x")
 
 [node name="WritingPanel" type="Panel" parent="."]
 layout_mode = 0
-offset_top = 605.0
-offset_right = 851.0
-offset_bottom = 779.0
-theme_override_styles/panel = SubResource("StyleBoxTexture_odx23")
+offset_left = 795.0
+offset_top = 555.0
+offset_right = 1562.0
+offset_bottom = 729.0
 
 [node name="TextEdit" type="TextEdit" parent="WritingPanel"]
 layout_mode = 1
@@ -164,71 +164,93 @@ offset_right = -28.0
 offset_bottom = -20.0
 grow_horizontal = 2
 grow_vertical = 2
-theme_override_colors/font_color = Color(0.811765, 0.913725, 0.94902, 1)
-theme_override_fonts/font = ExtResource("5_d2so1")
-theme_override_font_sizes/font_size = 22
 wrap_mode = 1
+
+[node name="Control" type="Control" parent="WritingPanel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 12.0
+offset_top = 11.0
+offset_right = -12.0
+offset_bottom = -11.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("6_rx44x")
 
 [node name="WritingButtonPanel" type="Panel" parent="."]
 layout_mode = 1
 anchors_preset = 2
 anchor_top = 1.0
 anchor_bottom = 1.0
-offset_top = -118.0
-offset_right = 851.0
+offset_left = 795.0
+offset_top = -154.0
+offset_right = 1565.0
+offset_bottom = -36.0
 grow_vertical = 0
-theme_override_styles/panel = SubResource("StyleBoxEmpty_thd06")
 
 [node name="InputButtons" type="HBoxContainer" parent="WritingButtonPanel"]
 layout_mode = 1
-anchors_preset = 10
+anchors_preset = 14
+anchor_top = 0.5
 anchor_right = 1.0
-offset_left = 38.0
-offset_top = 11.0
-offset_right = -38.0
-offset_bottom = 66.0
+anchor_bottom = 0.5
+offset_left = 32.0
+offset_top = -30.0
+offset_right = -32.0
+offset_bottom = 30.0
 grow_horizontal = 2
-theme = ExtResource("3_baa2r")
+grow_vertical = 2
 script = ExtResource("4_eib71")
 
 [node name="EmoteButton" type="Button" parent="WritingButtonPanel/InputButtons"]
 layout_mode = 2
 size_flags_horizontal = 3
-theme = ExtResource("3_baa2r")
-theme_override_colors/font_color = Color(0.811765, 0.913725, 0.94902, 1)
 text = "Emote
 "
 
 [node name="WhisperButton" type="Button" parent="WritingButtonPanel/InputButtons"]
 layout_mode = 2
 size_flags_horizontal = 3
-theme_override_colors/font_color = Color(0.811765, 0.913725, 0.94902, 1)
 text = "Whisper"
 
 [node name="OOCButton" type="Button" parent="WritingButtonPanel/InputButtons"]
 layout_mode = 2
 size_flags_horizontal = 3
-theme_override_colors/font_color = Color(0.811765, 0.913725, 0.94902, 1)
 text = "OOC"
 
 [node name="TellButton" type="Button" parent="WritingButtonPanel/InputButtons"]
 layout_mode = 2
 size_flags_horizontal = 3
-theme_override_colors/font_color = Color(0.811765, 0.913725, 0.94902, 1)
 text = "Tell"
+
+[node name="Control" type="Control" parent="WritingButtonPanel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 12.0
+offset_top = 11.0
+offset_right = -12.0
+offset_bottom = -11.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("6_rx44x")
 
 [node name="ActionPanel" type="Panel" parent="."]
 layout_mode = 1
 anchors_preset = -1
-anchor_left = 0.531875
-anchor_right = 0.699375
-anchor_bottom = 0.606667
+anchor_left = 0.496875
+anchor_top = 0.0155556
+anchor_right = 0.675625
+anchor_bottom = 0.877778
 offset_right = 481.0
 offset_bottom = -246.0
 grow_horizontal = 2
 grow_vertical = 2
-theme = ExtResource("3_baa2r")
-theme_override_styles/panel = SubResource("StyleBoxEmpty_od6ea")
 script = ExtResource("5_g4hc0")
 metadata/_edit_use_anchors_ = true
 
@@ -237,9 +259,9 @@ layout_mode = 1
 anchors_preset = 10
 anchor_right = 1.0
 offset_left = 44.0
-offset_top = 8.0
+offset_top = 21.0
 offset_right = -44.0
-offset_bottom = 45.0
+offset_bottom = 58.0
 grow_horizontal = 2
 alignment = 1
 
@@ -268,10 +290,10 @@ layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
-offset_left = 6.0
-offset_top = 59.0
-offset_right = -6.99994
-offset_bottom = -6.99982
+offset_left = 31.0
+offset_top = 79.0
+offset_right = -32.0
+offset_bottom = -27.0
 grow_horizontal = 2
 grow_vertical = 2
 theme = SubResource("Theme_ml8dl")
@@ -287,65 +309,70 @@ offset_top = 3.0
 offset_right = -8.99994
 offset_bottom = -275.0
 
-[node name="ZoneImagePanel" type="Panel" parent="."]
-layout_mode = 1
-anchors_preset = -1
-anchor_left = 0.5
-anchor_top = 0.362963
-anchor_right = 0.9
-anchor_bottom = 1.07407
-offset_left = 110.0
-offset_top = -26.6667
-offset_right = 160.0
-offset_bottom = -66.663
-theme_override_styles/panel = SubResource("StyleBoxEmpty_i6cec")
-metadata/_edit_use_anchors_ = true
-
-[node name="ViewpointImage" type="TextureRect" parent="ZoneImagePanel"]
+[node name="Control" type="Control" parent="ActionPanel"]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
-offset_left = 26.0
-offset_top = 80.0
-offset_right = -26.0
-offset_bottom = -34.9999
+offset_left = 12.0
+offset_top = 11.0
+offset_right = -12.0
+offset_bottom = -11.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("6_rx44x")
+
+[node name="ZoneImagePanel" type="Panel" parent="."]
+layout_mode = 1
+anchors_preset = -1
+anchor_left = -0.048125
+anchor_top = 0.0874074
+anchor_right = 0.378125
+anchor_bottom = 0.678514
+offset_left = 110.0
+offset_top = -26.6667
+offset_right = 160.0
+offset_bottom = -66.663
+metadata/_edit_use_anchors_ = true
+
+[node name="ViewpointImage" type="TextureRect" parent="ZoneImagePanel"]
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 expand_mode = 1
 
 [node name="NeighIndicator" type="TextureRect" parent="ZoneImagePanel"]
 visible = false
-layout_mode = 0
-offset_left = 536.0
-offset_top = 514.0
-offset_right = 600.0
-offset_bottom = 596.0
+layout_mode = 1
+anchors_preset = 3
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -64.0
+offset_top = -82.0
+grow_horizontal = 0
+grow_vertical = 0
 texture = ExtResource("7_2jhcv")
 
-[node name="Decoration1" type="Panel" parent="."]
-layout_mode = 0
-offset_left = 851.0
-offset_top = 300.0
-offset_right = 910.0
-offset_bottom = 900.0
-theme_override_styles/panel = SubResource("StyleBoxEmpty_fxj62")
-
-[node name="TypingIndicator" type="TextureRect" parent="Decoration1"]
-layout_mode = 0
-offset_top = 524.0
-offset_right = 40.0
-offset_bottom = 597.0
-texture = SubResource("CompressedTexture2D_bpym6")
-
-[node name="ColorRect" type="ColorRect" parent="."]
+[node name="Control" type="Control" parent="ZoneImagePanel"]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
+offset_left = 12.0
+offset_top = 11.0
+offset_right = -12.0
+offset_bottom = -11.0
 grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
+script = ExtResource("6_rx44x")
 
 [node name="TypingTooltip" type="Label" parent="."]
 visible = false
@@ -394,3 +421,13 @@ layout_mode = 1
 [node name="NightlyActivitiesUI" parent="." instance=ExtResource("32_2smvb")]
 visible = false
 layout_mode = 1
+
+[node name="ColorRect" type="ColorRect" parent="."]
+material = ExtResource("16_ulqfl")
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2

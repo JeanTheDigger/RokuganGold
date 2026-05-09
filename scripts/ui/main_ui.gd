@@ -43,9 +43,6 @@ func _ready():
 		# Works for Label and RichTextLabel in Godot 4.x
 		tt.autowrap_mode = TextServer.AUTOWRAP_OFF
 
-
-	$Decoration1/TypingIndicator.connect("gui_input", Callable(self, "_on_TypingIndicator_gui_input"))
-
 	var image_rect: TextureRect = $ZoneImagePanel/ViewpointImage
 	image_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 
