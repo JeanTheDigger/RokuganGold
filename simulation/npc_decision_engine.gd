@@ -483,6 +483,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array[S
 				"ARRANGE_MARRIAGE", "APPOINT_TO_POSITION",
 				"PURIFY_TAINTED_GROUND", "FORTIFY_WALL_SECTION", "SEAL_WALL_BREACH",
 				"DECLARE_WAR", "NEGOTIATE_SURRENDER",
+				"COMPLY_WITH_EDICT", "DEFY_EDICT",
 				"SHARE_SUPPLIES",
 				"CRAFT", "MENTOR",
 				"DO_NOTHING", "REST",
@@ -496,6 +497,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array[S
 				"PERFORM_FOR", "DISCLOSE",
 				"ASK_FOR_INTRODUCTION", "OBSERVE_COURT_ATTENDEES",
 				"ARRANGE_MARRIAGE", "APPOINT_TO_POSITION",
+				"COMPLY_WITH_EDICT", "DEFY_EDICT",
 				"TRAIN", "MEDITATE",
 				"BRIBE_FOR_INFO", "EAVESDROP",
 				"INTERCEPT_LETTER", "SEARCH_QUARTERS",
@@ -610,6 +612,8 @@ static func _get_ap_cost(action_id: String) -> int:
 		"FORTIFY_WALL_SECTION": 1,
 		"SEAL_WALL_BREACH": 2,
 		"DECLARE_WAR": 2,
+		"COMPLY_WITH_EDICT": 1,
+		"DEFY_EDICT": 1,
 	}
 	return costs.get(action_id, 1)
 
@@ -1145,6 +1149,8 @@ static func _populate_action_metadata(
 		option.metadata = _build_raid_harvest_metadata(need, ctx)
 	elif option.action_id == "BLOCKADE_TRADE_ROUTE":
 		option.metadata = _build_blockade_metadata(need, ctx)
+	elif option.action_id == "COMPLY_WITH_EDICT" or option.action_id == "DEFY_EDICT":
+		option.metadata = _build_edict_response_metadata(need, ctx)
 
 
 static func _build_declare_war_metadata(
@@ -1255,6 +1261,16 @@ static func _build_blockade_metadata(
 		"route_id": -1,
 		"blocking_clan": ctx.clan,
 		"target_clan": target_clan,
+	}
+
+
+static func _build_edict_response_metadata(
+	need: NPCDataStructures.ImmediateNeed,
+	_ctx: NPCDataStructures.ContextSnapshot,
+) -> Dictionary:
+	return {
+		"edict_id": need.target_npc_id,
+		"target_clan": need.target_clan_id,
 	}
 
 

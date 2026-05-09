@@ -140,6 +140,11 @@ static func advance_day(
 		provinces,
 	)
 
+	_process_edict_compliance_actions(
+		day_result.get("results", []),
+		active_edicts,
+	)
+
 	var war_declarations: Array[Dictionary] = _process_war_declarations(
 		day_result.get("results", []),
 		active_wars,
@@ -4365,6 +4370,25 @@ static func _process_edict_compliance(
 		active_topics.append(t)
 		r["defiance_topic_id"] = t.topic_id
 	return results
+
+
+static func _process_edict_compliance_actions(
+	day_results: Array,
+	active_edicts: Array[EdictData],
+) -> void:
+	for result: Dictionary in day_results:
+		var effects: Dictionary = result.get("effects", {})
+		if not effects.get("requires_edict_compliance", false):
+			continue
+		var edict_id: int = effects.get("edict_id", -1)
+		var clan: String = effects.get("clan", "")
+		var compliant: bool = effects.get("compliant", true)
+		if edict_id < 0 or clan.is_empty():
+			continue
+		for edict: EdictData in active_edicts:
+			if edict.edict_id == edict_id and edict.is_active:
+				ImperialEdictSystem.record_compliance(edict, clan, compliant)
+				break
 
 
 static func _process_strategic_court_calls(

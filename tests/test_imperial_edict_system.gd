@@ -695,3 +695,83 @@ func test_inactive_edict_skipped():
 	var edicts: Array[EdictData] = [e]
 	var results := ImperialEdictSystem.process_daily_compliance(edicts, [], [], 40)
 	assert_eq(results.size(), 0)
+
+
+# =============================================================================
+# NPC COMPLIANCE ACTION WIRING
+# =============================================================================
+
+func test_comply_action_records_compliance():
+	var e := ImperialEdictSystem.create_edict(
+		5, EdictData.EdictType.CEASE_HOSTILITIES, 100, 10
+	)
+	e.compliance_by_clan = {"Crane": EdictData.ComplianceStatus.PENDING}
+	var edicts: Array[EdictData] = [e]
+	var day_results: Array = [{
+		"action_id": "COMPLY_WITH_EDICT",
+		"effects": {
+			"requires_edict_compliance": true,
+			"edict_id": 5,
+			"clan": "Crane",
+			"compliant": true,
+		},
+	}]
+	DayOrchestrator._process_edict_compliance_actions(day_results, edicts)
+	assert_eq(e.compliance_by_clan["Crane"], EdictData.ComplianceStatus.COMPLIANT)
+
+
+func test_defy_action_records_defiance():
+	var e := ImperialEdictSystem.create_edict(
+		6, EdictData.EdictType.CEASE_HOSTILITIES, 100, 10
+	)
+	e.compliance_by_clan = {"Lion": EdictData.ComplianceStatus.PENDING}
+	var edicts: Array[EdictData] = [e]
+	var day_results: Array = [{
+		"action_id": "DEFY_EDICT",
+		"effects": {
+			"requires_edict_compliance": true,
+			"edict_id": 6,
+			"clan": "Lion",
+			"compliant": false,
+		},
+	}]
+	DayOrchestrator._process_edict_compliance_actions(day_results, edicts)
+	assert_eq(e.compliance_by_clan["Lion"], EdictData.ComplianceStatus.DEFIANT)
+
+
+func test_comply_action_skips_wrong_edict_id():
+	var e := ImperialEdictSystem.create_edict(
+		7, EdictData.EdictType.GENERAL_DECREE, 100, 10
+	)
+	e.compliance_by_clan = {"Crane": EdictData.ComplianceStatus.PENDING}
+	var edicts: Array[EdictData] = [e]
+	var day_results: Array = [{
+		"effects": {
+			"requires_edict_compliance": true,
+			"edict_id": 999,
+			"clan": "Crane",
+			"compliant": true,
+		},
+	}]
+	DayOrchestrator._process_edict_compliance_actions(day_results, edicts)
+	assert_eq(e.compliance_by_clan["Crane"], EdictData.ComplianceStatus.PENDING, "No match — unchanged")
+
+
+func test_personality_lean_favors_compliance_for_chugi():
+	var loader := ScoringTableLoader.new()
+	loader.load_all()
+	var tables: Dictionary = loader.get_scoring_tables()
+	var lean_table: Dictionary = tables.get("personality_lean", {})
+	var chugi_leans: Dictionary = lean_table.get("CHUGI", {})
+	assert_gt(chugi_leans.get("COMPLY_WITH_EDICT", 0), 0, "Chugi should favor compliance")
+	assert_lt(chugi_leans.get("DEFY_EDICT", 0), 0, "Chugi should penalize defiance")
+
+
+func test_personality_lean_favors_defiance_for_ishi():
+	var loader := ScoringTableLoader.new()
+	loader.load_all()
+	var tables: Dictionary = loader.get_scoring_tables()
+	var lean_table: Dictionary = tables.get("personality_lean", {})
+	var ishi_leans: Dictionary = lean_table.get("ISHI", {})
+	assert_lt(ishi_leans.get("COMPLY_WITH_EDICT", 0), 0, "Ishi should penalize compliance")
+	assert_gt(ishi_leans.get("DEFY_EDICT", 0), 0, "Ishi should favor defiance")

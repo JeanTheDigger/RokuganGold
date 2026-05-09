@@ -45,6 +45,7 @@ const ADMINISTRATIVE_ACTIONS: Array[String] = [
 	"ARRANGE_MARRIAGE", "APPOINT_TO_POSITION",
 	"PURIFY_TAINTED_GROUND", "FORTIFY_WALL_SECTION", "SEAL_WALL_BREACH",
 	"DECLARE_WAR",
+	"COMPLY_WITH_EDICT", "DEFY_EDICT",
 ]
 
 const INTELLIGENCE_ACTIONS: Array[String] = [
@@ -139,6 +140,25 @@ static func execute(
 			"ic_day": ctx.ic_day,
 			"season": ctx.season,
 			"effects": war_effects,
+		}
+
+	if action_id == "COMPLY_WITH_EDICT" or action_id == "DEFY_EDICT":
+		var compliant: bool = action_id == "COMPLY_WITH_EDICT"
+		var edict_id: int = action.metadata.get("edict_id", -1)
+		var target_clan: String = action.metadata.get("target_clan", character.clan)
+		return {
+			"success": true,
+			"action_id": action_id,
+			"character_id": character.character_id,
+			"target_npc_id": action.target_npc_id,
+			"ic_day": ctx.ic_day,
+			"season": ctx.season,
+			"effects": {
+				"requires_edict_compliance": true,
+				"edict_id": edict_id,
+				"clan": target_clan,
+				"compliant": compliant,
+			},
 		}
 
 	if action_id in COVERT_ACTIONS:

@@ -382,5 +382,13 @@
 	"DECLARE_WAR": {
 		"primary": "Courtier",
 		"secondary": "Awareness"
+	},
+	"COMPLY_WITH_EDICT": {
+		"primary": "Courtier",
+		"secondary": "Sincerity"
+	},
+	"DEFY_EDICT": {
+		"primary": "Courtier",
+		"secondary": "Awareness"
 	}
 }
