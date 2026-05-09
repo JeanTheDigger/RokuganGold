@@ -239,6 +239,111 @@ func test_apply_si_decay_summer_no_decay() -> void:
 	assert_eq(result["decay_applied"], 0)
 
 
+func test_apply_si_decay_kaiu_reduction_reduces_decay() -> void:
+	var tower := SettlementData.new()
+	tower.wall_si = 10
+	# Winter base 2; kaiu_reduction 0.75 → effective decay = 1.25 → int = 1
+	var result: Dictionary = WallSystem.apply_seasonal_si_decay(tower, "winter", 0, 0.75)
+	assert_eq(result["decay_applied"], 1)
+	assert_eq(result["new_si"], 9)
+
+
+func test_apply_si_decay_kaiu_reduction_cannot_restore() -> void:
+	# kaiu_reduction larger than base decay → clamped to 0, no gain
+	var tower := SettlementData.new()
+	tower.wall_si = 8
+	var result: Dictionary = WallSystem.apply_seasonal_si_decay(tower, "spring", 0, 2.0)
+	assert_eq(result["decay_applied"], 0)
+	assert_eq(result["new_si"], 8)
+
+
+func test_apply_si_decay_kaiu_full_cancel_of_medium_ss_spring() -> void:
+	# Spring base 1 + Medium SS 0.5 = 1.5; kaiu 0.5 → 1.0 → int = 1
+	var tower := SettlementData.new()
+	tower.wall_si = 10
+	var result: Dictionary = WallSystem.apply_seasonal_si_decay(tower, "spring", 5, 0.5)
+	assert_eq(result["decay_applied"], 1)
+	assert_eq(result["new_si"], 9)
+
+
+# -- KAIU_REINFORCE_TABLE / get_kaiu_reinforce ---------------------------------
+
+func test_kaiu_reinforce_rank1() -> void:
+	var r: Dictionary = WallSystem.get_kaiu_reinforce(1)
+	assert_almost_eq(r["decay_reduction"], 0.25, 0.001)
+	assert_eq(r["duration"], 2)
+
+
+func test_kaiu_reinforce_rank3() -> void:
+	var r: Dictionary = WallSystem.get_kaiu_reinforce(3)
+	assert_almost_eq(r["decay_reduction"], 0.50, 0.001)
+	assert_eq(r["duration"], 3)
+
+
+func test_kaiu_reinforce_rank5() -> void:
+	var r: Dictionary = WallSystem.get_kaiu_reinforce(5)
+	assert_almost_eq(r["decay_reduction"], 0.75, 0.001)
+	assert_eq(r["duration"], 5)
+
+
+func test_kaiu_reinforce_rank_clamped_low() -> void:
+	# Rank 0 clamps to 1
+	var r: Dictionary = WallSystem.get_kaiu_reinforce(0)
+	assert_almost_eq(r["decay_reduction"], 0.25, 0.001)
+
+
+func test_kaiu_reinforce_rank_clamped_high() -> void:
+	# Rank 6 clamps to 5
+	var r: Dictionary = WallSystem.get_kaiu_reinforce(6)
+	assert_almost_eq(r["decay_reduction"], 0.75, 0.001)
+
+
+# -- get_fortify_tn ------------------------------------------------------------
+
+func test_fortify_tn_si_10_is_20() -> void:
+	assert_eq(WallSystem.get_fortify_tn(10), 20)
+
+
+func test_fortify_tn_si_9_is_22() -> void:
+	assert_eq(WallSystem.get_fortify_tn(9), 22)
+
+
+func test_fortify_tn_si_5_is_30() -> void:
+	assert_eq(WallSystem.get_fortify_tn(5), 30)
+
+
+func test_fortify_tn_si_2_is_36() -> void:
+	# GDD example: crumbling tower SI 2 → TN 36
+	assert_eq(WallSystem.get_fortify_tn(2), 36)
+
+
+func test_fortify_tn_si_1_is_38() -> void:
+	assert_eq(WallSystem.get_fortify_tn(1), 38)
+
+
+func test_fortify_tn_si_0_clamped_to_si1() -> void:
+	# SI 0 would require SEAL_WALL_BREACH; clamp to 1 if called anyway
+	assert_eq(WallSystem.get_fortify_tn(0), 38)
+
+
+# -- compute_fortify_si_gain ---------------------------------------------------
+
+func test_fortify_gain_zero_raises() -> void:
+	assert_almost_eq(WallSystem.compute_fortify_si_gain(0), 1.0, 0.001)
+
+
+func test_fortify_gain_two_raises() -> void:
+	assert_almost_eq(WallSystem.compute_fortify_si_gain(2), 2.0, 0.001)
+
+
+func test_fortify_gain_four_raises() -> void:
+	assert_almost_eq(WallSystem.compute_fortify_si_gain(4), 3.0, 0.001)
+
+
+func test_fortify_gain_one_raise_is_1_5() -> void:
+	assert_almost_eq(WallSystem.compute_fortify_si_gain(1), 1.5, 0.001)
+
+
 # -- AI Sortie Size Selection --------------------------------------------------
 
 func test_ai_sortie_none_when_ss_zero() -> void:

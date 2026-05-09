@@ -126,6 +126,11 @@ static func advance_day(
 		companies,
 	)
 
+	var wall_engineering_results: Array[Dictionary] = _process_wall_engineering_effects(
+		day_result.get("results", []),
+		settlements,
+	)
+
 	var starvation_results: Array[Dictionary] = _process_starvation_warfare_effects(
 		day_result.get("results", []),
 		characters_by_id,
@@ -354,6 +359,7 @@ static func advance_day(
 		"edict_results": edict_results,
 		"active_edicts": active_edicts,
 		"wall_seasonal": wall_seasonal_result,
+		"wall_engineering_results": wall_engineering_results,
 	}
 
 
@@ -519,18 +525,24 @@ static func _process_wall_seasonal_pressure(
 	for s: SettlementData in wall_settlements:
 		province_to_wall[s.province_id] = s
 
-	# Step 1: Apply seasonal SI decay per tower (s2.4.3 + s2.4.10).
+	# Step 1: Apply seasonal SI decay per tower (s2.4.3 + s2.4.10 + s2.4.16).
 	var si_decay_results: Array[Dictionary] = []
 	for s: SettlementData in wall_settlements:
 		var province: Variant = provinces.get(s.province_id, null)
 		if not province is ProvinceData:
 			continue
 		var prov: ProvinceData = province as ProvinceData
+		# Pass Kaiu Reinforcement reduction (zero when no modifier is active).
 		var decay_result: Dictionary = WallSystem.apply_seasonal_si_decay(
-			s, season_name, prov.shadowlands_strength
+			s, season_name, prov.shadowlands_strength, s.kaiu_decay_reduction
 		)
 		var old_si: int = decay_result["new_si"] + decay_result["decay_applied"]
 		s.wall_si = decay_result["new_si"]
+		# Tick down the Kaiu Reinforcement modifier (s2.4.16).
+		if s.kaiu_reinforce_seasons_remaining > 0:
+			s.kaiu_reinforce_seasons_remaining -= 1
+			if s.kaiu_reinforce_seasons_remaining == 0:
+				s.kaiu_decay_reduction = 0.0
 		si_decay_results.append({
 			"settlement_id": s.settlement_id,
 			"province_id": s.province_id,
@@ -583,6 +595,74 @@ static func _process_wall_seasonal_pressure(
 		"si_decay_results": si_decay_results,
 		"ptl_updates": ptl_updates,
 	}
+
+
+# -- Wall Engineering Effects (s2.4.16) ----------------------------------------
+
+static func _process_wall_engineering_effects(
+	applied_list: Array,
+	settlements: Array[SettlementData],
+) -> Array[Dictionary]:
+	var results: Array[Dictionary] = []
+
+	# Build province_id → wall tower settlement map once.
+	var wall_by_province: Dictionary = {}
+	for s: SettlementData in settlements:
+		if s.settlement_type == Enums.SettlementType.WALL_TOWER:
+			wall_by_province[s.province_id] = s
+
+	for applied: Dictionary in applied_list:
+		var effects: Dictionary = applied.get("effects", {})
+		var target_pid: int = effects.get("target_province_id", -1)
+
+		# FORTIFY_WALL_SECTION: apply SI gain and set/update Kaiu Reinforcement.
+		if effects.get("requires_fortify_wall", false):
+			var settlement: Variant = wall_by_province.get(target_pid, null)
+			if not settlement is SettlementData:
+				continue
+			var s: SettlementData = settlement as SettlementData
+			var si_gain: int = effects.get("si_gain", 1)
+			var old_si: int = s.wall_si
+			s.wall_si = clampi(s.wall_si + si_gain, 0, 10)
+			# Apply Kaiu Reinforcement modifier — overwrite only if new value >=
+			# existing (s2.4.16 overwrite rule).
+			var new_reduction: float = float(effects.get("kaiu_decay_reduction", 0.0))
+			if new_reduction >= s.kaiu_decay_reduction:
+				s.kaiu_decay_reduction = new_reduction
+				s.kaiu_reinforce_seasons_remaining = int(
+					effects.get("kaiu_reinforce_duration", 0)
+				)
+			results.append({
+				"action": "fortify_wall",
+				"settlement_id": s.settlement_id,
+				"province_id": target_pid,
+				"old_si": old_si,
+				"new_si": s.wall_si,
+				"kaiu_decay_reduction": s.kaiu_decay_reduction,
+				"kaiu_seasons_remaining": s.kaiu_reinforce_seasons_remaining,
+			})
+
+		# SEAL_WALL_BREACH: always deduct Koku; restore SI to 2 on success.
+		elif effects.has("koku_cost") and effects.get("koku_cost", 0.0) > 0.0:
+			var settlement: Variant = wall_by_province.get(target_pid, null)
+			if not settlement is SettlementData:
+				continue
+			var s: SettlementData = settlement as SettlementData
+			var old_si: int = s.wall_si
+			s.koku_stockpile = maxf(0.0, s.koku_stockpile - float(effects["koku_cost"]))
+			if effects.get("requires_breach_seal", false):
+				s.wall_si = 2
+			results.append({
+				"action": "seal_breach",
+				"settlement_id": s.settlement_id,
+				"province_id": target_pid,
+				"old_si": old_si,
+				"new_si": s.wall_si,
+				"koku_deducted": float(effects["koku_cost"]),
+				"sealed": effects.get("requires_breach_seal", false),
+			})
+
+	return results
 
 
 static func _decay_all_knowledge(

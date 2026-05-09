@@ -139,21 +139,50 @@ static func get_rice_modifier(season_name: String, ss: int) -> float:
 	return base
 
 
+# -- Kaiu Reinforcement Table (s2.4.16 — LOCKED) --------------------------------
+# Indexed by Kaiu Engineer school rank (1–5).
+const KAIU_REINFORCE_TABLE: Dictionary = {
+	1: {"decay_reduction": 0.25, "duration": 2},
+	2: {"decay_reduction": 0.25, "duration": 3},
+	3: {"decay_reduction": 0.50, "duration": 3},
+	4: {"decay_reduction": 0.50, "duration": 4},
+	5: {"decay_reduction": 0.75, "duration": 5},
+}
+
+
+## Returns the Kaiu Reinforcement modifier for a given school rank (1–5).
+static func get_kaiu_reinforce(rank: int) -> Dictionary:
+	return KAIU_REINFORCE_TABLE.get(clampi(rank, 1, 5), KAIU_REINFORCE_TABLE[1])
+
+
+## Returns the FORTIFY_WALL_SECTION TN for the current Tower SI.
+## TN = 20 + (10 − SI) × 2. SI clamped 1–10 (breach requires SEAL_WALL_BREACH).
+static func get_fortify_tn(si: int) -> int:
+	return 20 + (10 - clampi(si, 1, 10)) * 2
+
+
+## Compute SI gain from a FORTIFY_WALL_SECTION roll result.
+## Base +1.0 SI; each Raise adds +0.5. Returns float; caller floors to int.
+static func compute_fortify_si_gain(raises: int) -> float:
+	return 1.0 + raises * 0.5
+
+
 ## Apply seasonal SI decay to a Tower settlement.
 ## Returns the new SI value (clamped 0–10) and the amount actually decayed.
+## kaiu_reduction: flat decay reduction from an active Kaiu Reinforcement modifier.
 ## Caller must write `settlement.wall_si = result["new_si"]`.
 static func apply_seasonal_si_decay(
 	settlement: SettlementData,
 	season_name: String,
 	ss: int,
+	kaiu_reduction: float = 0.0,
 ) -> Dictionary:
-	var decay: float = get_total_si_decay(season_name, ss)
+	var raw_decay: float = get_total_si_decay(season_name, ss)
+	# Subtract Kaiu Reinforcement; floor at 0 so the modifier cannot add SI.
+	var decay: float = maxf(0.0, raw_decay - kaiu_reduction)
 	var old_si: int = settlement.wall_si
 	var new_si: int = maxi(0, old_si - int(decay))
-	# Fractional decay accumulates: if decay is 1.5, apply 1 this season and
-	# carry the 0.5. For simplicity we floor — the fractional part is lost.
-	# A full half-point SI decay hits on odd seasons with Medium SS.
-	# GDD doesn't specify rounding direction; floor is conservative.
+	# Fractional decay is floored (conservative). GDD is silent on rounding.
 	return {
 		"new_si": new_si,
 		"decay_applied": old_si - new_si,

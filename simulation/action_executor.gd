@@ -179,6 +179,12 @@ static func execute(
 	if action_id == "CONDUCT_SORTIE":
 		return _execute_conduct_sortie(action, character, ctx)
 
+	if action_id == "FORTIFY_WALL_SECTION":
+		return _execute_fortify_wall_section(action, character, ctx, dice_engine)
+
+	if action_id == "SEAL_WALL_BREACH":
+		return _execute_seal_wall_breach(action, character, ctx, dice_engine)
+
 	if action_id in COVERT_ACTIONS:
 		var covert_result: Dictionary = _try_execute_covert(
 			action, character, ctx, dice_engine, characters_by_id
@@ -1376,6 +1382,144 @@ static func _execute_conduct_sortie(
 			"force_pct": sortie_result["force_pct"],
 			"ss_reduction": sortie_result["ss_reduction"],
 			"jade_per_warrior": sortie_result["jade_per_warrior"],
+			"target_province_id": target_province_id,
+		},
+	}
+
+
+static func _execute_fortify_wall_section(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	# GDD s2.4.16: Kaiu Engineer repairs SI on a Tower that is not fully breached.
+	# TN = 20 + (10 − current_SI) × 2. Success: +1 SI + 0.5 per Raise (floored).
+	# Lingering effect: Kaiu Reinforcement modifier per engineer rank.
+	var target_province_id: int = action.target_province_id
+
+	# Read SI from WallStatus. Prefer matching province; fall back to first entry.
+	var si: int = 10
+	for ws_variant: Variant in ctx.wall_statuses:
+		if not ws_variant is NPCDataStructures.WallStatus:
+			continue
+		var ws: NPCDataStructures.WallStatus = ws_variant as NPCDataStructures.WallStatus
+		if target_province_id < 0 or ws.province_id == target_province_id:
+			si = ws.si
+			if target_province_id < 0:
+				target_province_id = ws.province_id
+			break
+
+	if si <= 0:
+		return {
+			"success": false,
+			"action_id": "FORTIFY_WALL_SECTION",
+			"character_id": ctx.character_id,
+			"target_npc_id": action.target_npc_id,
+			"target_province_id": target_province_id,
+			"ic_day": ctx.ic_day,
+			"season": ctx.season,
+			"effects": {
+				"effect": "fortify_blocked",
+				"blocked_reason": "si_is_zero_use_seal",
+			},
+		}
+
+	var tn: int = WallSystem.get_fortify_tn(si)
+	var roll_result: Dictionary = SkillResolver.resolve_skill_check(
+		character, dice_engine, "Engineering", tn
+	)
+	var success: bool = roll_result.get("success", false)
+	var margin: int = roll_result.get("margin", 0)
+	var raises: int = maxi(margin / 5, 0)
+	var si_gain: int = int(WallSystem.compute_fortify_si_gain(raises))
+	var kaiu_reinforce: Dictionary = WallSystem.get_kaiu_reinforce(ctx.insight_rank)
+
+	return {
+		"success": success,
+		"action_id": "FORTIFY_WALL_SECTION",
+		"character_id": ctx.character_id,
+		"target_npc_id": action.target_npc_id,
+		"target_province_id": target_province_id,
+		"ic_day": ctx.ic_day,
+		"season": ctx.season,
+		"skill_used": "Engineering",
+		"roll_total": roll_result.get("total", 0),
+		"tn": tn,
+		"margin": margin,
+		"effects": {
+			"effect": "wall_fortified",
+			"requires_fortify_wall": success,
+			"si_gain": si_gain,
+			"kaiu_decay_reduction": kaiu_reinforce["decay_reduction"],
+			"kaiu_reinforce_duration": kaiu_reinforce["duration"],
+			"target_province_id": target_province_id,
+		},
+	}
+
+
+static func _execute_seal_wall_breach(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	# GDD s2.4.16: Kaiu Engineer Rank 3+ rebuilds a fully breached Tower (SI = 0).
+	# TN 35. Always costs 5 Koku from the Tower's koku_stockpile.
+	# Success: SI restored to 2. Failure: no SI change, Koku still paid.
+	const SEAL_TN: int = 35
+	const SEAL_KOKU_COST: float = 5.0
+
+	var target_province_id: int = action.target_province_id
+
+	var si: int = -1
+	for ws_variant: Variant in ctx.wall_statuses:
+		if not ws_variant is NPCDataStructures.WallStatus:
+			continue
+		var ws: NPCDataStructures.WallStatus = ws_variant as NPCDataStructures.WallStatus
+		if target_province_id < 0 or ws.province_id == target_province_id:
+			si = ws.si
+			if target_province_id < 0:
+				target_province_id = ws.province_id
+			break
+
+	if si != 0:
+		return {
+			"success": false,
+			"action_id": "SEAL_WALL_BREACH",
+			"character_id": ctx.character_id,
+			"target_npc_id": action.target_npc_id,
+			"target_province_id": target_province_id,
+			"ic_day": ctx.ic_day,
+			"season": ctx.season,
+			"effects": {
+				"effect": "seal_blocked",
+				"blocked_reason": "si_not_zero",
+			},
+		}
+
+	var roll_result: Dictionary = SkillResolver.resolve_skill_check(
+		character, dice_engine, "Engineering", SEAL_TN
+	)
+	var success: bool = roll_result.get("success", false)
+	var margin: int = roll_result.get("margin", 0)
+
+	return {
+		"success": success,
+		"action_id": "SEAL_WALL_BREACH",
+		"character_id": ctx.character_id,
+		"target_npc_id": action.target_npc_id,
+		"target_province_id": target_province_id,
+		"ic_day": ctx.ic_day,
+		"season": ctx.season,
+		"skill_used": "Engineering",
+		"roll_total": roll_result.get("total", 0),
+		"tn": SEAL_TN,
+		"margin": margin,
+		"effects": {
+			"effect": "breach_sealed" if success else "breach_seal_failed",
+			"requires_breach_seal": success,
+			"koku_cost": SEAL_KOKU_COST,
 			"target_province_id": target_province_id,
 		},
 	}
