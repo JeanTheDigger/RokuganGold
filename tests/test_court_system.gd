@@ -558,3 +558,94 @@ func test_full_lifecycle():
 
 	var topic := CourtSystem.generate_court_close_topic(c)
 	assert_eq(topic["variant"], "concluded")
+
+
+# =============================================================================
+# ORCHESTRATOR WIRING — COURT OPENINGS & ATTENDANCE
+# =============================================================================
+
+func _make_character(id: int, location: String = "") -> L5RCharacterData:
+	var c := L5RCharacterData.new()
+	c.character_id = id
+	c.physical_location = location
+	c.status = 3.0
+	return c
+
+
+func test_scheduled_court_opens_on_start_day():
+	var court := _make_court(1)
+	court.start_ic_day = 50
+	assert_eq(court.phase, CourtSessionData.CourtPhase.SCHEDULED)
+	var courts: Array[CourtSessionData] = [court]
+	var results := DayOrchestrator._process_court_openings(courts, 50)
+	assert_eq(results.size(), 1)
+	assert_true(results[0]["opened"])
+	assert_eq(court.phase, CourtSessionData.CourtPhase.ACTIVE)
+
+
+func test_scheduled_court_does_not_open_before_start():
+	var court := _make_court(1)
+	court.start_ic_day = 100
+	var courts: Array[CourtSessionData] = [court]
+	var results := DayOrchestrator._process_court_openings(courts, 50)
+	assert_eq(results.size(), 0)
+	assert_eq(court.phase, CourtSessionData.CourtPhase.SCHEDULED)
+
+
+func test_character_auto_attends_when_at_settlement():
+	var court := _make_court(1, CourtSessionData.CourtType.PROVINCIAL_FAMILY_COURT, 100, 10)
+	CourtSystem.open_court(court, 50)
+	var npc := _make_character(200, "10")
+	var chars: Array[L5RCharacterData] = [npc]
+	var courts: Array[CourtSessionData] = [court]
+	var results := DayOrchestrator._process_court_attendance(courts, chars)
+	assert_eq(results.size(), 1)
+	assert_eq(results[0]["action"], "arrived")
+	assert_true(200 in court.attendee_ids)
+
+
+func test_character_departs_when_leaving_settlement():
+	var court := _make_court(1, CourtSessionData.CourtType.PROVINCIAL_FAMILY_COURT, 100, 10)
+	CourtSystem.open_court(court, 50)
+	CourtSystem.add_attendee(court, 200)
+	var npc := _make_character(200, "99")
+	var chars: Array[L5RCharacterData] = [npc]
+	var courts: Array[CourtSessionData] = [court]
+	var results := DayOrchestrator._process_court_attendance(courts, chars)
+	assert_eq(results.size(), 1)
+	assert_eq(results[0]["action"], "departed")
+	assert_false(200 in court.attendee_ids)
+
+
+func test_host_not_removed_when_away():
+	var court := _make_court(1, CourtSessionData.CourtType.PROVINCIAL_FAMILY_COURT, 100, 10)
+	CourtSystem.open_court(court, 50)
+	CourtSystem.add_attendee(court, 100)
+	var host := _make_character(100, "99")
+	var chars: Array[L5RCharacterData] = [host]
+	var courts: Array[CourtSessionData] = [court]
+	DayOrchestrator._process_court_attendance(courts, chars)
+	assert_true(100 in court.attendee_ids, "Host stays in attendee list")
+
+
+func test_no_duplicate_attendance():
+	var court := _make_court(1, CourtSessionData.CourtType.PROVINCIAL_FAMILY_COURT, 100, 10)
+	CourtSystem.open_court(court, 50)
+	CourtSystem.add_attendee(court, 200)
+	var npc := _make_character(200, "10")
+	var chars: Array[L5RCharacterData] = [npc]
+	var courts: Array[CourtSessionData] = [court]
+	var results := DayOrchestrator._process_court_attendance(courts, chars)
+	assert_eq(results.size(), 0, "Already attending — no duplicate")
+	assert_eq(court.attendee_ids.count(200), 1)
+
+
+func test_closed_court_skipped_for_attendance():
+	var court := _make_court(1)
+	CourtSystem.open_court(court, 50)
+	CourtSystem.close_court(court)
+	var npc := _make_character(200, "10")
+	var chars: Array[L5RCharacterData] = [npc]
+	var courts: Array[CourtSessionData] = [court]
+	var results := DayOrchestrator._process_court_attendance(courts, chars)
+	assert_eq(results.size(), 0, "Closed court ignored")

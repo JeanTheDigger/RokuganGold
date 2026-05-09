@@ -75,6 +75,8 @@ static func advance_day(
 		bound_states, characters_by_id, dice_engine, ic_day
 	)
 
+	var court_openings: Array[Dictionary] = _process_court_openings(active_courts, ic_day)
+	var court_attendance: Array[Dictionary] = _process_court_attendance(active_courts, characters)
 	var court_results: Array[Dictionary] = _process_active_courts(
 		active_courts, active_topics, next_topic_id, ic_day,
 		active_edicts, next_edict_id, active_wars,
@@ -327,6 +329,8 @@ static func advance_day(
 		"starvation_results": starvation_results,
 		"supply_sharing_results": supply_sharing_results,
 		"court_results": court_results,
+		"court_openings": court_openings,
+		"court_attendance": court_attendance,
 		"active_edicts": active_edicts,
 	}
 
@@ -4224,6 +4228,53 @@ static func _set_court_context_flags(
 				continue
 			ws["context_flag"] = Enums.ContextFlag.AT_COURT
 			ws["active_court_at_location"] = ctx_dict
+
+
+static func _process_court_openings(
+	active_courts: Array[CourtSessionData],
+	ic_day: int,
+) -> Array[Dictionary]:
+	var results: Array[Dictionary] = []
+	for court: CourtSessionData in active_courts:
+		if court.phase != CourtSessionData.CourtPhase.SCHEDULED:
+			continue
+		if ic_day >= court.start_ic_day:
+			CourtSystem.open_court(court, ic_day)
+			results.append({
+				"court_id": court.court_id,
+				"opened": true,
+				"ic_day": ic_day,
+			})
+	return results
+
+
+static func _process_court_attendance(
+	active_courts: Array[CourtSessionData],
+	characters: Array[L5RCharacterData],
+) -> Array[Dictionary]:
+	var results: Array[Dictionary] = []
+	for court: CourtSessionData in active_courts:
+		if not CourtSystem.is_active(court):
+			continue
+		var settlement_str: String = str(court.host_settlement_id)
+		for c: L5RCharacterData in characters:
+			var at_settlement: bool = c.physical_location == settlement_str
+			var is_attending: bool = c.character_id in court.attendee_ids
+			if at_settlement and not is_attending:
+				CourtSystem.add_attendee(court, c.character_id)
+				results.append({
+					"court_id": court.court_id,
+					"character_id": c.character_id,
+					"action": "arrived",
+				})
+			elif not at_settlement and is_attending and c.character_id != court.host_lord_id:
+				CourtSystem.remove_attendee(court, c.character_id)
+				results.append({
+					"court_id": court.court_id,
+					"character_id": c.character_id,
+					"action": "departed",
+				})
+	return results
 
 
 static func _process_strategic_court_calls(
