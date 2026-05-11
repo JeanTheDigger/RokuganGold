@@ -1,0 +1,15 @@
+[gd_resource type="ShaderMaterial" load_steps=2 format=3 uid="uid://83pq2u0dwwq0"]
+
+[ext_resource type="Shader" uid="uid://c8wp2we0yx7fq" path="res://shaders/CharacterCreationBackground1.gdshader" id="1_5jd7p"]
+
+[resource]
+shader = ExtResource("1_5jd7p")
+shader_parameter/ink_color = Color(0.06, 0.04, 0.03, 1)
+shader_parameter/water_color = Color(0.12, 0.09, 0.07, 1)
+shader_parameter/highlight_color = Color(0.55, 0.35, 0.15, 1)
+shader_parameter/flow_speed = 0.08
+shader_parameter/ink_scale = 3.0
+shader_parameter/ink_detail = 4.0
+shader_parameter/ink_contrast = 1.5
+shader_parameter/highlight_intensity = 0.04
+shader_parameter/vignette_strength = 0.4

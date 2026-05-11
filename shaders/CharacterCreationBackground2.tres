@@ -1,0 +1,17 @@
+[gd_resource type="ShaderMaterial" load_steps=2 format=3 uid="uid://p2eq3oneto5"]
+
+[ext_resource type="Shader" uid="uid://btrqgphv013lq" path="res://shaders/CharacterCreationBackground2.gdshader" id="1_xcsr2"]
+
+[resource]
+shader = ExtResource("1_xcsr2")
+shader_parameter/base_color = Color(0.05, 0.04, 0.03, 1)
+shader_parameter/air_color = Color(0.4, 0.54, 0.85, 1)
+shader_parameter/earth_color = Color(0.545, 0.608, 0.29, 1)
+shader_parameter/fire_color = Color(0.851, 0.4, 0.282, 1)
+shader_parameter/water_color = Color(0.29, 0.545, 0.608, 1)
+shader_parameter/void_color = Color(0.608, 0.478, 0.8, 1)
+shader_parameter/flow_speed = 0.06
+shader_parameter/stream_intensity = 0.025
+shader_parameter/stream_scale = 3.0
+shader_parameter/vignette_strength = 0.2
+shader_parameter/grain_intensity = 0.02

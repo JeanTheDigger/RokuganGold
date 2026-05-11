@@ -1,0 +1,15 @@
+[gd_resource type="ShaderMaterial" load_steps=2 format=3 uid="uid://c2tgvgurt5yos"]
+
+[ext_resource type="Shader" uid="uid://rggsuximxfik" path="res://shaders/CC2AIR.gdshader" id="1_rpovp"]
+
+[resource]
+shader = ExtResource("1_rpovp")
+shader_parameter/glow_color = Color(0.4, 0.6, 0.85, 1)
+shader_parameter/circle_radius = 0.45
+shader_parameter/border_thickness = 0.006
+shader_parameter/glow_size = 0.2
+shader_parameter/glow_intensity = 0.6
+shader_parameter/pulse_speed = 0.8
+shader_parameter/pulse_amount = 0.1
+shader_parameter/inner_fill_opacity = 0.15
+shader_parameter/bloom_intensity = 0.35

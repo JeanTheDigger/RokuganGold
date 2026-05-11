@@ -1,8 +1,10 @@
-[gd_scene load_steps=35 format=3 uid="uid://bmk5qlcks4v3u"]
+[gd_scene load_steps=37 format=3 uid="uid://bmk5qlcks4v3u"]
 
 [ext_resource type="Theme" uid="uid://cmd3swrkysn2o" path="res://assets/themes/Rokugan001.tres" id="1_ulqfl"]
 [ext_resource type="Script" uid="uid://drwfitony6hbj" path="res://scripts/ui/main_ui.gd" id="2_i4ba5"]
+[ext_resource type="Material" uid="uid://by4fa3adrto0k" path="res://shaders/BackgroundMainUI.tres" id="3_j03cv"]
 [ext_resource type="Script" uid="uid://eiulmike27ng" path="res://scripts/ui/input_buttons.gd" id="4_eib71"]
+[ext_resource type="Material" uid="uid://bo78kf5xwceuu" path="res://shaders/PaperTexture.tres" id="4_rbpqj"]
 [ext_resource type="Script" uid="uid://dumoka3feh6sp" path="res://scripts/ui/ActionPanel.gd" id="5_g4hc0"]
 [ext_resource type="PackedScene" uid="uid://33yiuaybmux" path="res://scenes/Zone.tscn" id="6_niqgt"]
 [ext_resource type="Script" uid="uid://c3ws5xslh57qf" path="res://scripts/ui/CornerBracketsUI.gd" id="6_rx44x"]
@@ -20,10 +22,10 @@
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_u04fh"]
 bg_color = Color(0.831373, 0.768627, 0.627451, 1)
-border_width_left = 2
-border_width_top = 2
-border_width_right = 2
-border_width_bottom = 2
+border_width_left = 3
+border_width_top = 3
+border_width_right = 3
+border_width_bottom = 3
 border_color = Color(0.545098, 0.45098, 0.333333, 1)
 corner_radius_top_left = 20
 corner_radius_top_right = 20
@@ -98,6 +100,7 @@ script = ExtResource("2_i4ba5")
 metadata/_edit_use_anchors_ = true
 
 [node name="Background" type="PanelContainer" parent="."]
+material = ExtResource("3_j03cv")
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -106,6 +109,7 @@ grow_horizontal = 2
 grow_vertical = 2
 
 [node name="TextPanel" type="Panel" parent="."]
+material = ExtResource("4_rbpqj")
 layout_mode = 1
 anchors_preset = -1
 anchor_left = 0.01875
@@ -118,7 +122,6 @@ theme_override_styles/panel = SubResource("StyleBoxFlat_u04fh")
 metadata/_edit_use_anchors_ = true
 
 [node name="DisplayText" type="RichTextLabel" parent="TextPanel"]
-visible = false
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -203,6 +206,7 @@ offset_right = -32.0
 offset_bottom = 30.0
 grow_horizontal = 2
 grow_vertical = 2
+theme_override_constants/separation = 12
 script = ExtResource("4_eib71")
 
 [node name="EmoteButton" type="Button" parent="WritingButtonPanel/InputButtons"]
@@ -244,7 +248,7 @@ script = ExtResource("6_rx44x")
 layout_mode = 1
 anchors_preset = -1
 anchor_left = 0.496875
-anchor_top = 0.0155556
+anchor_top = 0.0577778
 anchor_right = 0.675625
 anchor_bottom = 0.877778
 offset_right = 481.0
@@ -263,6 +267,7 @@ offset_top = 21.0
 offset_right = -44.0
 offset_bottom = 58.0
 grow_horizontal = 2
+theme_override_constants/separation = 12
 alignment = 1
 
 [node name="Location" type="Button" parent="ActionPanel/HboxContainer"]
@@ -423,6 +428,7 @@ visible = false
 layout_mode = 1
 
 [node name="ColorRect" type="ColorRect" parent="."]
+visible = false
 material = ExtResource("16_ulqfl")
 layout_mode = 1
 anchors_preset = 15

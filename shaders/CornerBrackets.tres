@@ -1,0 +1,11 @@
+[gd_resource type="ShaderMaterial" load_steps=2 format=3 uid="uid://ch5pt5046adxe"]
+
+[ext_resource type="Shader" uid="uid://dg5h6wei811uc" path="res://shaders/CornerBrackets.gdshader" id="1_yfjo5"]
+
+[resource]
+shader = ExtResource("1_yfjo5")
+shader_parameter/gleam_speed = 0.08
+shader_parameter/gleam_color = Color(0.784, 0.663, 0.431, 1)
+shader_parameter/gleam_width = 0.06
+shader_parameter/gleam_intensity = 0.5
+shader_parameter/gleam_offset = 0.0

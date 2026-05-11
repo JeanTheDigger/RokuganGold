@@ -1,0 +1,794 @@
+[gd_scene load_steps=11 format=3 uid="uid://kpr5pn2g35jb"]
+
+[ext_resource type="Theme" uid="uid://cmd3swrkysn2o" path="res://assets/themes/Rokugan001.tres" id="1_yr4k7"]
+[ext_resource type="Script" uid="uid://bjdj0h1t1i6ua" path="res://scripts/ui/character_creation_2.gd" id="2_orqwg"]
+[ext_resource type="Material" uid="uid://c2tgvgurt5yos" path="res://shaders/CC2AIR.tres" id="3_ikk7v"]
+[ext_resource type="Material" uid="uid://p2eq3oneto5" path="res://shaders/CharacterCreationBackground2.tres" id="3_orqwg"]
+[ext_resource type="Script" uid="uid://bhh1wifecd614" path="res://scripts/ui/CharacterCreation2SkillPanel.gd" id="3_yr4k7"]
+[ext_resource type="Script" uid="uid://cbw8to4hol6ay" path="res://scripts/ui/AdvantageDisadvantageCharacterCreation2.gd" id="4_jgpit"]
+[ext_resource type="Material" uid="uid://dlk5rntatdnau" path="res://shaders/CC2EARTH.tres" id="4_u5aia"]
+[ext_resource type="Material" uid="uid://c2hmhw6hs17ms" path="res://shaders/CC2FIRE.tres" id="5_gb3gq"]
+[ext_resource type="Material" uid="uid://dpyce1rur77j4" path="res://shaders/CC2WATER.tres" id="6_xmau3"]
+[ext_resource type="Material" uid="uid://c0hcnk01rwfoj" path="res://shaders/CC2VOID.tres" id="7_b256a"]
+
+[node name="CharacterCreation2" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme = ExtResource("1_yr4k7")
+script = ExtResource("2_orqwg")
+
+[node name="BackgroundPanel" type="PanelContainer" parent="."]
+material = ExtResource("3_orqwg")
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="AirPanel" type="Panel" parent="."]
+layout_mode = 2
+offset_left = 64.0
+offset_top = 46.0
+offset_right = 284.0
+offset_bottom = 406.0
+size_flags_horizontal = 3
+
+[node name="MarginContainer" type="MarginContainer" parent="AirPanel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 20
+theme_override_constants/margin_top = 20
+theme_override_constants/margin_right = 20
+theme_override_constants/margin_bottom = 20
+
+[node name="VBoxContainer" type="VBoxContainer" parent="AirPanel/MarginContainer"]
+layout_mode = 2
+
+[node name="AirElementCircle" type="ColorRect" parent="AirPanel/MarginContainer/VBoxContainer"]
+material = ExtResource("3_ikk7v")
+custom_minimum_size = Vector2(0, 150)
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="AIR" type="Label" parent="AirPanel/MarginContainer/VBoxContainer/AirElementCircle"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+size_flags_vertical = 3
+theme_override_colors/font_color = Color(0.6, 0.709804, 0.909804, 1)
+theme_override_constants/outline_size = 2
+theme_override_font_sizes/font_size = 75
+text = "風"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="Label" type="Label" parent="AirPanel/MarginContainer/VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+text = "Air"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="Label2" type="Label" parent="AirPanel/MarginContainer/VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+text = "NUMBER"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="Label3" type="Label" parent="AirPanel/MarginContainer/VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+text = "Reflexes"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="HBoxContainer" type="HBoxContainer" parent="AirPanel/MarginContainer/VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="Label" type="Label" parent="AirPanel/MarginContainer/VBoxContainer/HBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "NUMBER"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="HBoxContainer" type="HBoxContainer" parent="AirPanel/MarginContainer/VBoxContainer/HBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="Decrease" type="Button" parent="AirPanel/MarginContainer/VBoxContainer/HBoxContainer/HBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+text = "-"
+
+[node name="Increase" type="Button" parent="AirPanel/MarginContainer/VBoxContainer/HBoxContainer/HBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+text = "+"
+
+[node name="Label4" type="Label" parent="AirPanel/MarginContainer/VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+text = "Awareness"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="HBoxContainer2" type="HBoxContainer" parent="AirPanel/MarginContainer/VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="Label" type="Label" parent="AirPanel/MarginContainer/VBoxContainer/HBoxContainer2"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "NUMBER"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="HBoxContainer" type="HBoxContainer" parent="AirPanel/MarginContainer/VBoxContainer/HBoxContainer2"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="Decrease" type="Button" parent="AirPanel/MarginContainer/VBoxContainer/HBoxContainer2/HBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+text = "-"
+
+[node name="Increase" type="Button" parent="AirPanel/MarginContainer/VBoxContainer/HBoxContainer2/HBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+text = "+"
+
+[node name="EarthPanel" type="Panel" parent="."]
+layout_mode = 2
+offset_left = 67.0
+offset_top = 462.0
+offset_right = 287.0
+offset_bottom = 822.0
+size_flags_horizontal = 3
+
+[node name="MarginContainer" type="MarginContainer" parent="EarthPanel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 20
+theme_override_constants/margin_top = 20
+theme_override_constants/margin_right = 20
+theme_override_constants/margin_bottom = 20
+
+[node name="VBoxContainer" type="VBoxContainer" parent="EarthPanel/MarginContainer"]
+layout_mode = 2
+
+[node name="EarthElementCircle" type="ColorRect" parent="EarthPanel/MarginContainer/VBoxContainer"]
+material = ExtResource("4_u5aia")
+custom_minimum_size = Vector2(0, 150)
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="EARTH" type="Label" parent="EarthPanel/MarginContainer/VBoxContainer/EarthElementCircle"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+size_flags_vertical = 3
+theme_override_colors/font_color = Color(0.545098, 0.607843, 0.290196, 1)
+theme_override_constants/outline_size = 2
+theme_override_font_sizes/font_size = 75
+text = "地"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="Label" type="Label" parent="EarthPanel/MarginContainer/VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+text = "Earth"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="Label2" type="Label" parent="EarthPanel/MarginContainer/VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+text = "NUMBER"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="Label3" type="Label" parent="EarthPanel/MarginContainer/VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+text = "Stamina"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="HBoxContainer" type="HBoxContainer" parent="EarthPanel/MarginContainer/VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="Label" type="Label" parent="EarthPanel/MarginContainer/VBoxContainer/HBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "NUMBER"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="HBoxContainer" type="HBoxContainer" parent="EarthPanel/MarginContainer/VBoxContainer/HBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="Decrease" type="Button" parent="EarthPanel/MarginContainer/VBoxContainer/HBoxContainer/HBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+text = "-"
+
+[node name="Increase" type="Button" parent="EarthPanel/MarginContainer/VBoxContainer/HBoxContainer/HBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+text = "+"
+
+[node name="Label4" type="Label" parent="EarthPanel/MarginContainer/VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+text = "Willpower"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="HBoxContainer2" type="HBoxContainer" parent="EarthPanel/MarginContainer/VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="Label" type="Label" parent="EarthPanel/MarginContainer/VBoxContainer/HBoxContainer2"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "NUMBER"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="HBoxContainer" type="HBoxContainer" parent="EarthPanel/MarginContainer/VBoxContainer/HBoxContainer2"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="Decrease" type="Button" parent="EarthPanel/MarginContainer/VBoxContainer/HBoxContainer2/HBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+text = "-"
+
+[node name="Increase" type="Button" parent="EarthPanel/MarginContainer/VBoxContainer/HBoxContainer2/HBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+text = "+"
+
+[node name="FirePanel" type="Panel" parent="."]
+layout_mode = 2
+offset_left = 1320.0
+offset_top = 51.0
+offset_right = 1540.0
+offset_bottom = 411.0
+size_flags_horizontal = 3
+
+[node name="MarginContainer" type="MarginContainer" parent="FirePanel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 20
+theme_override_constants/margin_top = 20
+theme_override_constants/margin_right = 20
+theme_override_constants/margin_bottom = 20
+
+[node name="VBoxContainer" type="VBoxContainer" parent="FirePanel/MarginContainer"]
+layout_mode = 2
+
+[node name="FireElementCircle" type="ColorRect" parent="FirePanel/MarginContainer/VBoxContainer"]
+material = ExtResource("5_gb3gq")
+custom_minimum_size = Vector2(0, 150)
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="EARTH" type="Label" parent="FirePanel/MarginContainer/VBoxContainer/FireElementCircle"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+size_flags_vertical = 3
+theme_override_colors/font_color = Color(0.85098, 0.4, 0.282353, 1)
+theme_override_constants/outline_size = 2
+theme_override_font_sizes/font_size = 75
+text = "火"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="TextureRect" type="TextureRect" parent="FirePanel/MarginContainer/VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="Label" type="Label" parent="FirePanel/MarginContainer/VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+text = "Fire"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="Label2" type="Label" parent="FirePanel/MarginContainer/VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+text = "NUMBER"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="Label3" type="Label" parent="FirePanel/MarginContainer/VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+text = "Agility"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="HBoxContainer" type="HBoxContainer" parent="FirePanel/MarginContainer/VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="Label" type="Label" parent="FirePanel/MarginContainer/VBoxContainer/HBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "NUMBER"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="HBoxContainer" type="HBoxContainer" parent="FirePanel/MarginContainer/VBoxContainer/HBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="Decrease" type="Button" parent="FirePanel/MarginContainer/VBoxContainer/HBoxContainer/HBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+text = "-"
+
+[node name="Increase" type="Button" parent="FirePanel/MarginContainer/VBoxContainer/HBoxContainer/HBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+text = "+"
+
+[node name="Label4" type="Label" parent="FirePanel/MarginContainer/VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+text = "Intelligence"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="HBoxContainer2" type="HBoxContainer" parent="FirePanel/MarginContainer/VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="Label" type="Label" parent="FirePanel/MarginContainer/VBoxContainer/HBoxContainer2"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "NUMBER"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="HBoxContainer" type="HBoxContainer" parent="FirePanel/MarginContainer/VBoxContainer/HBoxContainer2"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="Decrease" type="Button" parent="FirePanel/MarginContainer/VBoxContainer/HBoxContainer2/HBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+text = "-"
+
+[node name="Increase" type="Button" parent="FirePanel/MarginContainer/VBoxContainer/HBoxContainer2/HBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+text = "+"
+
+[node name="WaterPanel" type="Panel" parent="."]
+layout_mode = 2
+offset_left = 1327.0
+offset_top = 459.0
+offset_right = 1547.0
+offset_bottom = 819.0
+size_flags_horizontal = 3
+
+[node name="MarginContainer" type="MarginContainer" parent="WaterPanel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 20
+theme_override_constants/margin_top = 20
+theme_override_constants/margin_right = 20
+theme_override_constants/margin_bottom = 20
+
+[node name="VBoxContainer" type="VBoxContainer" parent="WaterPanel/MarginContainer"]
+layout_mode = 2
+
+[node name="WaterElementCircle" type="ColorRect" parent="WaterPanel/MarginContainer/VBoxContainer"]
+material = ExtResource("6_xmau3")
+custom_minimum_size = Vector2(0, 150)
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="WATER" type="Label" parent="WaterPanel/MarginContainer/VBoxContainer/WaterElementCircle"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+size_flags_vertical = 3
+theme_override_colors/font_color = Color(0.290196, 0.545098, 0.607843, 1)
+theme_override_constants/outline_size = 2
+theme_override_font_sizes/font_size = 75
+text = "水"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="TextureRect" type="TextureRect" parent="WaterPanel/MarginContainer/VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="Label" type="Label" parent="WaterPanel/MarginContainer/VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+text = "Water"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="Label2" type="Label" parent="WaterPanel/MarginContainer/VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+text = "NUMBER"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="Label3" type="Label" parent="WaterPanel/MarginContainer/VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+text = "Strength"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="HBoxContainer" type="HBoxContainer" parent="WaterPanel/MarginContainer/VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="Label" type="Label" parent="WaterPanel/MarginContainer/VBoxContainer/HBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "NUMBER"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="HBoxContainer" type="HBoxContainer" parent="WaterPanel/MarginContainer/VBoxContainer/HBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="Decrease" type="Button" parent="WaterPanel/MarginContainer/VBoxContainer/HBoxContainer/HBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+text = "-"
+
+[node name="Increase" type="Button" parent="WaterPanel/MarginContainer/VBoxContainer/HBoxContainer/HBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+text = "+"
+
+[node name="Label4" type="Label" parent="WaterPanel/MarginContainer/VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+text = "Perception"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="HBoxContainer2" type="HBoxContainer" parent="WaterPanel/MarginContainer/VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="Label" type="Label" parent="WaterPanel/MarginContainer/VBoxContainer/HBoxContainer2"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "NUMBER"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="HBoxContainer" type="HBoxContainer" parent="WaterPanel/MarginContainer/VBoxContainer/HBoxContainer2"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="Decrease" type="Button" parent="WaterPanel/MarginContainer/VBoxContainer/HBoxContainer2/HBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+text = "-"
+
+[node name="Increase" type="Button" parent="WaterPanel/MarginContainer/VBoxContainer/HBoxContainer2/HBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+text = "+"
+
+[node name="VoidPanel" type="Panel" parent="."]
+layout_mode = 2
+offset_left = 687.0
+offset_top = 277.0
+offset_right = 907.0
+offset_bottom = 541.0
+size_flags_horizontal = 3
+
+[node name="MarginContainer" type="MarginContainer" parent="VoidPanel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 20
+theme_override_constants/margin_top = 20
+theme_override_constants/margin_right = 20
+theme_override_constants/margin_bottom = 20
+
+[node name="VBoxContainer" type="VBoxContainer" parent="VoidPanel/MarginContainer"]
+layout_mode = 2
+
+[node name="VoidElementCircle" type="ColorRect" parent="VoidPanel/MarginContainer/VBoxContainer"]
+material = ExtResource("7_b256a")
+custom_minimum_size = Vector2(0, 150)
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="VOID" type="Label" parent="VoidPanel/MarginContainer/VBoxContainer/VoidElementCircle"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+size_flags_vertical = 3
+theme_override_colors/font_color = Color(0.607843, 0.478431, 0.8, 1)
+theme_override_constants/outline_size = 2
+theme_override_font_sizes/font_size = 75
+text = "空"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="TextureRect" type="TextureRect" parent="VoidPanel/MarginContainer/VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="Label" type="Label" parent="VoidPanel/MarginContainer/VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+text = "Void"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="HBoxContainer" type="HBoxContainer" parent="VoidPanel/MarginContainer/VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="Label" type="Label" parent="VoidPanel/MarginContainer/VBoxContainer/HBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "NUMBER"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="HBoxContainer" type="HBoxContainer" parent="VoidPanel/MarginContainer/VBoxContainer/HBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="Decrease" type="Button" parent="VoidPanel/MarginContainer/VBoxContainer/HBoxContainer/HBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+text = "-"
+
+[node name="Increase" type="Button" parent="VoidPanel/MarginContainer/VBoxContainer/HBoxContainer/HBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+text = "+"
+
+[node name="SkillPanel" type="Panel" parent="."]
+custom_minimum_size = Vector2(250, 0)
+layout_mode = 1
+anchors_preset = -1
+anchor_left = 0.1925
+anchor_top = 0.251111
+anchor_right = 0.41125
+anchor_bottom = 0.538889
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("3_yr4k7")
+metadata/_edit_use_anchors_ = true
+
+[node name="MarginContainer" type="MarginContainer" parent="SkillPanel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 20
+theme_override_constants/margin_top = 20
+theme_override_constants/margin_right = 20
+theme_override_constants/margin_bottom = 20
+
+[node name="VBoxContainer" type="VBoxContainer" parent="SkillPanel/MarginContainer"]
+layout_mode = 2
+
+[node name="HBoxContainer" type="HBoxContainer" parent="SkillPanel/MarginContainer/VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+size_flags_stretch_ratio = 0.4
+
+[node name="HighTab" type="Button" parent="SkillPanel/MarginContainer/VBoxContainer/HBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "High"
+
+[node name="BugeiTab" type="Button" parent="SkillPanel/MarginContainer/VBoxContainer/HBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Bugei"
+
+[node name="Merchant" type="Button" parent="SkillPanel/MarginContainer/VBoxContainer/HBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Merchant"
+
+[node name="Low" type="Button" parent="SkillPanel/MarginContainer/VBoxContainer/HBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Low"
+
+[node name="HSeparator" type="HSeparator" parent="SkillPanel/MarginContainer/VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+size_flags_stretch_ratio = 0.2
+
+[node name="ScrollContainer" type="ScrollContainer" parent="SkillPanel/MarginContainer/VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="MarginContainer" type="MarginContainer" parent="SkillPanel/MarginContainer/VBoxContainer/ScrollContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="VBoxContainerHighContent" type="VBoxContainer" parent="SkillPanel/MarginContainer/VBoxContainer/ScrollContainer/MarginContainer"]
+layout_mode = 2
+
+[node name="VBoxContainerBugeiContent" type="VBoxContainer" parent="SkillPanel/MarginContainer/VBoxContainer/ScrollContainer/MarginContainer"]
+layout_mode = 2
+
+[node name="VBoxContainerMerchantContent" type="VBoxContainer" parent="SkillPanel/MarginContainer/VBoxContainer/ScrollContainer/MarginContainer"]
+layout_mode = 2
+
+[node name="VBoxContainerLowContent" type="VBoxContainer" parent="SkillPanel/MarginContainer/VBoxContainer/ScrollContainer/MarginContainer"]
+layout_mode = 2
+
+[node name="AdvanDisadPanel" type="Panel" parent="."]
+custom_minimum_size = Vector2(250, 0)
+layout_mode = 1
+anchors_preset = -1
+anchor_left = 0.1925
+anchor_top = 0.638889
+anchor_right = 0.57625
+anchor_bottom = 0.926667
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("4_jgpit")
+metadata/_edit_use_anchors_ = true
+
+[node name="MarginContainer" type="MarginContainer" parent="AdvanDisadPanel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 20
+theme_override_constants/margin_top = 20
+theme_override_constants/margin_right = 20
+theme_override_constants/margin_bottom = 20
+
+[node name="VBoxContainer" type="VBoxContainer" parent="AdvanDisadPanel/MarginContainer"]
+layout_mode = 2
+
+[node name="HBoxContainer" type="HBoxContainer" parent="AdvanDisadPanel/MarginContainer/VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+size_flags_stretch_ratio = 0.4
+
+[node name="AdvantagesTab" type="Button" parent="AdvanDisadPanel/MarginContainer/VBoxContainer/HBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Advantages"
+
+[node name="DisadvantagesTab" type="Button" parent="AdvanDisadPanel/MarginContainer/VBoxContainer/HBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Disadvantages"
+
+[node name="HSeparator" type="HSeparator" parent="AdvanDisadPanel/MarginContainer/VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+size_flags_stretch_ratio = 0.2
+
+[node name="HBoxContainer2" type="HBoxContainer" parent="AdvanDisadPanel/MarginContainer/VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+size_flags_stretch_ratio = 0.4
+
+[node name="PhysicalTab" type="Button" parent="AdvanDisadPanel/MarginContainer/VBoxContainer/HBoxContainer2"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Physical"
+
+[node name="MentalTab" type="Button" parent="AdvanDisadPanel/MarginContainer/VBoxContainer/HBoxContainer2"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Mental"
+
+[node name="SocialTab" type="Button" parent="AdvanDisadPanel/MarginContainer/VBoxContainer/HBoxContainer2"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Social"
+
+[node name="MysticalTab" type="Button" parent="AdvanDisadPanel/MarginContainer/VBoxContainer/HBoxContainer2"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Mystical"
+
+[node name="HSeparator2" type="HSeparator" parent="AdvanDisadPanel/MarginContainer/VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+size_flags_stretch_ratio = 0.2
+
+[node name="ScrollContainer" type="ScrollContainer" parent="AdvanDisadPanel/MarginContainer/VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="MarginContainer" type="MarginContainer" parent="AdvanDisadPanel/MarginContainer/VBoxContainer/ScrollContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="VBoxContainerContent" type="VBoxContainer" parent="AdvanDisadPanel/MarginContainer/VBoxContainer/ScrollContainer/MarginContainer"]
+layout_mode = 2

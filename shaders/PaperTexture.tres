@@ -1,0 +1,14 @@
+[gd_resource type="ShaderMaterial" load_steps=2 format=3 uid="uid://bo78kf5xwceuu"]
+
+[ext_resource type="Shader" uid="uid://cmqjsuru4tr6l" path="res://shaders/PaperTexture.gdshader" id="1_odc1y"]
+
+[resource]
+shader = ExtResource("1_odc1y")
+shader_parameter/base_color = Color(0.784, 0.722, 0.596, 1)
+shader_parameter/grain_intensity = 0.05
+shader_parameter/stain_scale = 10.0
+shader_parameter/stain_intensity = 0.04
+shader_parameter/fiber_scale = 100.0
+shader_parameter/fiber_intensity = 0.03
+shader_parameter/vignette_strength = 0.2
+shader_parameter/edge_darken = 0.08

@@ -1,0 +1,16 @@
+[gd_resource type="ShaderMaterial" load_steps=2 format=3 uid="uid://by4fa3adrto0k"]
+
+[ext_resource type="Shader" uid="uid://cu8ddeh4tj4y3" path="res://shaders/BackgroundMainUI.gdshader" id="1_kkc6e"]
+
+[resource]
+shader = ExtResource("1_kkc6e")
+shader_parameter/base_color = Color(0.051, 0.043, 0.031, 1)
+shader_parameter/grain_intensity = 0.04
+shader_parameter/stain_scale = 12.0
+shader_parameter/stain_intensity = 0.03
+shader_parameter/weave_scale = 80.0
+shader_parameter/weave_intensity = 0.02
+shader_parameter/vignette_strength = 0.15
+shader_parameter/ripple_speed = 0.3
+shader_parameter/ripple_strength = 0.004
+shader_parameter/ripple_scale = 6.0

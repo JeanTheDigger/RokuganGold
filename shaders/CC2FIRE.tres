@@ -1,0 +1,6 @@
+[gd_resource type="ShaderMaterial" load_steps=2 format=3 uid="uid://c2hmhw6hs17ms"]
+
+[ext_resource type="Shader" uid="uid://cm2pf5nd4t6fm" path="res://shaders/CC2FIRE.gdshader" id="1_28e8k"]
+
+[resource]
+shader = ExtResource("1_28e8k")
