@@ -59,6 +59,9 @@ When implementing or auditing a system, go here first:
 | Court types and lifecycle                     | 15.1, 15.2         |
 | Court priority and early departure            | 15.8               |
 | Imperial Edicts                               | 15.1, 15.2, 55.10 |
+| Winter Court lifecycle (host selection,       | 55.10              |
+|   invitations, delegation, Emperor's Peace)   |                    |
+| Musha Shugyo (warrior's pilgrimage)           | 57.48              |
 
 ## Directory Structure
 ```
@@ -569,8 +572,15 @@ All in /tests/, one file per system:
   treasury thresholds + personality modifiers), WAR_READINESS (active wars or
   escalating conflicts), SEEK_PEACE (Jin-favored, Yu-blocked, duration gate),
   CALL_COURT (vassal count + crises + winter bonus + Rei modifier), NO_CHANGE.
-  Emperor-specific: `run_emperor_review()` adds Winter Court host selection
-  (Autumn only, 4 scoring factors + archetype preference), vacancy filling
+  Emperor-specific: `run_emperor_review()` adds Winter Court host castle
+  selection (Autumn only, 5 scoring factors — Disposition, Clan Recency,
+  Province Stability, Crisis Relevance, Family Prestige — with per-archetype
+  weight matrix, hard disqualifiers: no Capital, stability floor 0.3, no
+  occupation. Cunning uses inverse disposition bell curve. Per-archetype crisis
+  type filter. Regent substitution via Imperial Chancellor if Emperor dead.
+  Selection triggers WINTER_COURT_ANNOUNCED topic, Imperial summons letters,
+  delegation allocation pipeline, personal Imperial invitation scoring.
+  Full specification in GDD s55.10). Vacancy filling
   (archetype-specific delays: Benevolent/Iron 14, Cunning 45, disposition vs
   skill weights per archetype), Shogun creation (Benevolent: reluctant after 3+
   season crisis + failed diplomacy; Iron: duty/readiness; Cunning/Warlike: never;
@@ -2191,14 +2201,28 @@ All in /tests/, one file per system:
 ### What's Next
 1. World generation coordinate system and adjacency
 
-### Pending Redesign (to be deepened in Claude Chat)
-- **Winter Court host selection** — The current `_create_winter_court_from_directive()`
-  and `_evaluate_winter_court_host()` wiring is a placeholder. The full Winter Court
-  lifecycle (host bidding, invitation system, NPC travel-to-court decisions, multi-clan
-  attendance rules, seasonal timing constraints, host prestige effects) needs to be
-  redesigned per the GDD before the current implementation is trusted. Do NOT extend
-  the current Winter Court code without first consulting the GDD and validating the
-  approach in a Claude Chat session.
+### Pending Redesign
+(None currently pending.)
+
+### Resolved Redesigns
+- **Winter Court lifecycle — RESOLVED v624.** Full Winter Court system designed
+  and written into GDD Section 55.10. Replaces the placeholder
+  `_create_winter_court_from_directive()` and `_evaluate_winter_court_host()`.
+  The new design covers: castle-level host selection (5 factors, per-archetype
+  weight matrix, hard disqualifiers including stability floor and no-Capital
+  constraint), three-phase invitation pipeline (capacity from lord rank, equal
+  Great Clan delegation allocation, personal Imperial invitation pool with
+  archetype-scored selection), Champion delegation selection (universal 5-factor
+  scoring, yojimbo pull-in rule), Emperor's Peace (spatial hostile-tag block,
+  sanctioned duel carve-out, covert actions permitted), regent substitution
+  (Imperial Chancellor as caretaker if Emperor dies before selection, no edicts,
+  reduced prestige), travel logistics (mid-Autumn announcement via LetterSystem,
+  distance-dependent delivery, 15-day grace period), host prestige (Glory rewards)
+  and tactical advantage (+5 skill bonus, agenda topic ordering by host Champion),
+  WINTER_COURT_ANNOUNCED topic (Tier 3, non-positional). Crime entry added to
+  Section 57.47 (CAPITAL — Violation of the Emperor's Peace). Section 15.1
+  updated to reflect castle-level selection. The current code must be rewritten
+  to match the GDD specification before being trusted.
 
 ### Systems Wired into NPC Loop
 The following subsystems are now integrated into the NPC decision loop:

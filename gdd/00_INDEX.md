@@ -146,7 +146,7 @@ Content has not been modified — only split at section boundaries.
 | File | Section | Size | Status |
 |------|---------|------|--------|
 | `s15_intro_court_system_locked.md` | # 15. Court System — LOCKED | 489b | FULLY LOCKED (1) |
-| `s15.1_three_court_types_locked.md` | ## 15.1 Three Court Types — LOCKED | 3K | FULLY LOCKED (2) |
+| `s15_1_three_court_types_locked.md` | ## 15.1 Three Court Types — LOCKED | 3K | FULLY LOCKED (2). v624: Winter Court description updated — castle-level selection language, cross-reference to Section 55.10 added. |
 | `s15.2_court_resolution_commitment_system_locked.md` | ## 15.2 Court Resolution & Commitment System — LOCKED | 2K | FULLY LOCKED (4) |
 | `s15.3_court_as_multi_party_persuasion_locked.md` | ## 15.3 Court as Multi-Party Persuasion — LOCKED | 2K | FULLY LOCKED (1) |
 | `s15.4_court_action_menu_locked.md` | ## 15.4 Court Action Menu — LOCKED | 33K | FULLY LOCKED (5). v622: 3 TBD already resolved in prior edits — index corrected. |
@@ -465,7 +465,7 @@ Content has not been modified — only split at section boundaries.
 | `s55.7_contact_discovery_system.md` | ## 55.7 Contact Discovery System | 2K | FULLY LOCKED (1) |
 | `s55.8_investigation_patrol_actions.md` | ## 55.8 Investigation & Patrol Actions | 1K | FULLY LOCKED (1) |
 | `s55.9_multi_target_comparative_evaluation.md` | ## 55.9 Multi-Target Comparative Evaluation | 1K | FULLY LOCKED (1) |
-| `s55.10_the_strategic_layer_lord_tier_decisions.md` | ## 55.10 The Strategic Layer — Lord-Tier Decisions | 11K | FULLY LOCKED (2) |
+| `s55.10_the_strategic_layer_lord_tier_decisions.md` | ## 55.10 The Strategic Layer — Lord-Tier Decisions | 35K | FULLY LOCKED (2). v624: Winter Court lifecycle fully designed — castle-level host selection (5 factors, per-archetype weight matrix), invitation pipeline (3 phases, delegation capacity, Champion selection, personal Imperial invitations, yojimbo pull-in), Emperor’s Peace (spatial hostile-tag block, sanctioned duel carve-out, covert actions permitted), regent substitution (Chancellor as caretaker), travel logistics (mid-Autumn announcement, 15-day grace period), host prestige (Glory) and advantage (+5 skill bonus, agenda ordering), WINTER_COURT_ANNOUNCED topic (non-positional). |
 | `s55_10_2_dragon_clan_governance_exception.md` | ### 55.10.2 Dragon Clan Governance Exception: Togashi Oversight System | 21K | FULLY LOCKED |
 | `s55_10_3_phoenix_clan_governance_exception.md` | ### 55.10.3 Phoenix Clan Governance Exception: Elemental Council Authority System | 27K | FULLY LOCKED |
 | `s55.11_the_reactive_decision_path.md` | ## 55.11 The Reactive Decision Path | 10K | FULLY LOCKED (1) |
@@ -571,8 +571,9 @@ Content has not been modified — only split at section boundaries.
 | `s57.44_wind_down_system.md` | ## 57.44 Wind-Down System | 17K | Reference / No tags |
 | `s57.45_geisha_intelligence_system.md` | ## 57.45 Geisha Intelligence System | 17K | Reference / No tags |
 | `s57.46_allied_npc_companion_system.md` | ## 57.46 Allied NPC Companion System | 22K | Reference / No tags |
-| `s57.47_crime_severity_classification_and_consequence_mapping.md` | ## 57.47 Crime Severity Classification and Consequence Mapping | 353K | FULLY LOCKED (32). v618: T2-35 added, escalation paths resolved. v621: 7 DEFERRED resolved — starting location rules (PROVISIONAL), T4-83 MARRIAGE_DISSOLVED designed with Section 57.49.7 dissolution mechanic (4 pathways), T4-14 illness dropped (not required), artisan sub-skill subjects cross-referenced to existing sections, standing objective decomposition cross-referenced to s55.22–25, T3-49 EMERALD_MAGISTRATE_APPOINTED added, sculpture display slots resolved. 1 TBD resolved (tax rate 10% threshold). v622: Status corrected from ACTIVE to FULLY LOCKED — 0 deferred, 0 TBD. |
+| `s57.47_crime_severity_classification_and_consequence_mapping.md` | ## 57.47 Crime Severity Classification and Consequence Mapping | 353K | FULLY LOCKED (32). v618: T2-35 added, escalation paths resolved. v621: 7 DEFERRED resolved — starting location rules (PROVISIONAL), T4-83 MARRIAGE_DISSOLVED designed with Section 57.49.7 dissolution mechanic (4 pathways), T4-14 illness dropped (not required), artisan sub-skill subjects cross-referenced to existing sections, standing objective decomposition cross-referenced to s55.22–25, T3-49 EMERALD_MAGISTRATE_APPOINTED added, sculpture display slots resolved. 1 TBD resolved (tax rate 10% threshold). v622: Status corrected from ACTIVE to FULLY LOCKED — 0 deferred, 0 TBD. v624: CAPITAL — Violation of the Emperor’s Peace crime entry added (execution without seppuku, Imperial jurisdiction). |
+| `s57_48_musha_shugyo_system.md` | ## 57.48 Musha Shugyo System | 9K | FULLY LOCKED (4). v624: New section. Warrior’s pilgrimage system — Gempukku-only evaluation (base chance + clan modifier + personality modifier), 1 IC year duration, Togashi-parallel SEEK_EXPERIENCE standing objective with school-type destination weighting, clan identity preserved, organic gains only, return-to-service pipeline. PC character creation option. Depends on undesigned Gempukku NPC spawning system. |
 
 ---
 
-**Total: 272 files, ~6,324,800 characters (6325K)**
+**Total: 273 files, ~6,334,000 characters (6334K)**
