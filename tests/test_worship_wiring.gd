@@ -795,3 +795,89 @@ func test_army_recovery_healing_halved_by_worship() -> void:
 		if per_company.size() > 0:
 			var hr: int = per_company[0].get("health_recovery", 0)
 			assert_true(hr <= ArmyUpkeepSystem.RECOVERY_HEALTH_PER_TICK / 2 + 1)
+
+
+# -- Fukurokujin Intelligence Roll Modifier Tests -----------------------------
+
+func test_intelligence_tn_increased_by_fukurokujin_malus() -> void:
+	var action := NPCDataStructures.ScoredAction.new()
+	action.action_id = "EXAMINE_CRIME_SCENE"
+	var ctx := _make_ctx()
+	var malus: Dictionary = {"intelligence_roll_modifier": -5}
+	var tn: int = ActionExecutor._get_tn_for_action(
+		"EXAMINE_CRIME_SCENE", action, ctx, malus,
+	)
+	assert_eq(tn, ActionExecutor.SOCIAL_BASE_TN + 5)
+
+
+func test_intelligence_tn_normal_without_malus() -> void:
+	var action := NPCDataStructures.ScoredAction.new()
+	action.action_id = "EXAMINE_CRIME_SCENE"
+	var ctx := _make_ctx()
+	var tn: int = ActionExecutor._get_tn_for_action(
+		"EXAMINE_CRIME_SCENE", action, ctx,
+	)
+	assert_eq(tn, ActionExecutor.SOCIAL_BASE_TN)
+
+
+func test_intelligence_tn_wrathful_adds_10() -> void:
+	var action := NPCDataStructures.ScoredAction.new()
+	action.action_id = "EXAMINE_CRIME_SCENE"
+	var ctx := _make_ctx()
+	var malus: Dictionary = {"intelligence_roll_modifier": -10}
+	var tn: int = ActionExecutor._get_tn_for_action(
+		"EXAMINE_CRIME_SCENE", action, ctx, malus,
+	)
+	assert_eq(tn, ActionExecutor.SOCIAL_BASE_TN + 10)
+
+
+# -- Jurojin Rank 4 Commander Risk Tests ---------------------------------------
+
+func test_rank4_commander_risk_adds_bonus_for_high_rank() -> void:
+	var c := _make_char(1)
+	c.reflexes = 5
+	c.awareness = 5
+	c.intelligence = 5
+	c.perception = 5
+	c.agility = 5
+	c.stamina = 5
+	c.willpower = 5
+	c.strength = 5
+	c.void_ring = 5
+	c.skills = {"Battle": 5, "Theology": 3, "Courtier": 3}
+	var company := ArmyCombatSystem.create_company(1, Enums.CompanyUnitType.BUSHI_RETAINER, c.character_id, 5)
+	var bc: Dictionary = ArmyCombatSystem.make_battle_company(company, 0, 0, "attacker", c)
+	var states: Array[Dictionary] = [bc]
+	var maluses: Dictionary = {5: {"rank4_commander_risk_checks": true}}
+	DayOrchestrator._inject_worship_battle_maluses(states, maluses)
+	assert_eq(bc.get("worship_commander_risk_bonus", 0), 3)
+
+
+func test_rank4_commander_risk_skips_low_rank() -> void:
+	var c := _make_char(1)
+	var company := ArmyCombatSystem.create_company(1, Enums.CompanyUnitType.BUSHI_RETAINER, c.character_id, 5)
+	var bc: Dictionary = ArmyCombatSystem.make_battle_company(company, 0, 0, "attacker", c)
+	var states: Array[Dictionary] = [bc]
+	var maluses: Dictionary = {5: {"rank4_commander_risk_checks": true}}
+	DayOrchestrator._inject_worship_battle_maluses(states, maluses)
+	assert_false(bc.has("worship_commander_risk_bonus"))
+
+
+func test_bishamon_and_jurojin_risk_stacks() -> void:
+	var c := _make_char(1)
+	c.reflexes = 5
+	c.awareness = 5
+	c.intelligence = 5
+	c.perception = 5
+	c.agility = 5
+	c.stamina = 5
+	c.willpower = 5
+	c.strength = 5
+	c.void_ring = 5
+	c.skills = {"Battle": 5, "Theology": 3, "Courtier": 3}
+	var company := ArmyCombatSystem.create_company(1, Enums.CompanyUnitType.BUSHI_RETAINER, c.character_id, 5)
+	var bc: Dictionary = ArmyCombatSystem.make_battle_company(company, 0, 0, "attacker", c)
+	var states: Array[Dictionary] = [bc]
+	var maluses: Dictionary = {5: {"commander_risk_reduced": true, "rank4_commander_risk_checks": true}}
+	DayOrchestrator._inject_worship_battle_maluses(states, maluses)
+	assert_eq(bc.get("worship_commander_risk_bonus", 0), 8)

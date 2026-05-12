@@ -91,6 +91,7 @@ static func execute(
 	action_skill_map: Dictionary,
 	military_data: Dictionary = {},
 	characters_by_id: Dictionary = {},
+	worship_province_malus: Dictionary = {},
 ) -> Dictionary:
 	var action_id: String = action.action_id
 
@@ -225,7 +226,7 @@ static func execute(
 	if primary_skill.is_empty() or primary_skill.begins_with("_"):
 		return _execute_no_roll(action, character, ctx)
 
-	var tn: int = _get_tn_for_action(action_id, action, ctx)
+	var tn: int = _get_tn_for_action(action_id, action, ctx, worship_province_malus)
 	var wc_bonus: int = _get_winter_court_skill_bonus(character, primary_skill, ctx)
 	var roll_result: Dictionary = SkillResolver.resolve_skill_check(
 		character, dice_engine, primary_skill, tn, 0, "", Enums.Trait.NONE, 0, 0, wc_bonus
@@ -955,6 +956,7 @@ static func _get_tn_for_action(
 	action_id: String,
 	action: NPCDataStructures.ScoredAction,
 	ctx: NPCDataStructures.ContextSnapshot,
+	worship_province_malus: Dictionary = {},
 ) -> int:
 	if action_id in SOCIAL_ACTIONS:
 		return _get_social_tn(action, ctx)
@@ -965,7 +967,8 @@ static func _get_tn_for_action(
 	if action_id in ADMINISTRATIVE_ACTIONS:
 		return ADMIN_BASE_TN
 	if action_id in INTELLIGENCE_ACTIONS:
-		return SOCIAL_BASE_TN
+		var intel_modifier: int = absi(int(worship_province_malus.get("intelligence_roll_modifier", 0)))
+		return SOCIAL_BASE_TN + intel_modifier
 	return SOCIAL_BASE_TN
 
 

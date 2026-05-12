@@ -3060,8 +3060,13 @@ The following subsystems are now integrated into the NPC decision loop:
   `GempukkuSystem.roll_natural_death()`. Jurojin `healing_slower` and
   `injury_recovery_doubled` halve army recovery health per tick in
   `_process_army_recovery()`.
-  Deferred malus hooks: Fukurokujin `intelligence_roll_modifier` (needs
-  ActionExecutor TN threading), Jurojin `rank4_commander_risk_checks`.
+  Fukurokujin `intelligence_roll_modifier` increases TN for
+  INTELLIGENCE_ACTIONS in `ActionExecutor._get_tn_for_action()`, threaded
+  via `worship_province_malus` parameter from NPCWaveResolver using
+  `_settlement_province_map` on world_states. Jurojin
+  `rank4_commander_risk_checks` adds +3 TN to commander survival for
+  Insight Rank 4+ commanders via `_inject_worship_battle_maluses()`.
+  All worship malus hooks are now wired.
 
 ## Resolved Design Decisions
 

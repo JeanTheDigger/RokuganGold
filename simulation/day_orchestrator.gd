@@ -70,6 +70,11 @@ static func advance_day(
 
 	_reset_all_ap(characters)
 
+	var _spm: Dictionary = {}
+	for _s: SettlementData in settlements:
+		_spm[_s.settlement_id] = _s.province_id
+	world_states["_settlement_province_map"] = _spm
+
 	var festival_results: Dictionary = _process_festivals(ic_day, world_states)
 
 	var travel_arrivals: Array[Dictionary] = _process_travel(characters)
@@ -6483,5 +6488,14 @@ static func _inject_worship_battle_maluses(
 			continue
 		bc["worship_attack_penalty"] = int(malus.get("army_attack", 0))
 		bc["worship_morale_penalty"] = int(malus.get("army_morale", 0))
+		var risk_bonus: int = 0
 		if malus.get("commander_risk_reduced", false):
-			bc["worship_commander_risk_bonus"] = 5
+			risk_bonus += 5
+		if malus.get("rank4_commander_risk_checks", false):
+			var cmdr: Variant = bc.get("commander")
+			if cmdr is L5RCharacterData:
+				var rank: int = CharacterStats.get_insight_rank(cmdr as L5RCharacterData)
+				if rank >= 4:
+					risk_bonus += 3
+		if risk_bonus > 0:
+			bc["worship_commander_risk_bonus"] = risk_bonus
