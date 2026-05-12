@@ -511,7 +511,7 @@ All in /tests/, one file per system:
 - test_npc_advancement.gd (~56 tests)
 - test_ronin_system.gd (~44 tests)
 - test_musha_shugyo_system.gd (~75 tests)
-- test_governance_wiring.gd (~53 tests)
+- test_governance_wiring.gd (~62 tests)
 - test_marriage_wiring.gd (~65 tests)
 - test_worship_system.gd (~67 tests)
 - test_worship_wiring.gd (~50 tests)
@@ -2855,10 +2855,17 @@ All in /tests/, one file per system:
   sets province_id, settlement_id, target_intent for construction ActionIDs.
 - **simulation/day_orchestrator.gd** — `_populate_infrastructure_intelligence()`
   runs at start of advance_day(), scans provinces for worship failure (WP < 10),
-  border without fort (adjacent different-clan province), surplus PU (above
-  terrain threshold), and naval state. Results stored in world_states dict.
-  Known limitations: `is_coastal` always false (needs coordinate system),
-  `has_naval_threat` is rough heuristic (any active war = naval threat).
+  border without fort (adjacent different-clan province using `is_military()`
+  to cover all military settlement types: FORTIFICATION, KEEP, CASTLE,
+  FAMILY_CASTLE, WALL_TOWER), surplus PU (above terrain threshold), and naval
+  state. Infrastructure data stored as `Dictionary` (province_id → clan) so
+  context builder can filter per-character's clan. Naval threat detection
+  checks whether any warring enemy clan has non-destroyed ships (not just
+  any active war).
+- **simulation/npc_decision_engine.gd** — `_filter_province_ids_by_clan()`
+  helper filters infrastructure `Dictionary` data by character's clan.
+  Backward compatible with plain `Array[int]` inputs.
+  Known limitations: `is_coastal` always false (needs coordinate system).
 
 ### FILL_VACANCY NeedType Decomposition (s57.20.3)
 - **simulation/objective_decomposer.gd** — `GOVERNANCE_OBJECTIVES` constant

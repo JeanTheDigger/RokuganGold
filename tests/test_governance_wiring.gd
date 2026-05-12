@@ -1031,3 +1031,110 @@ func test_vacancy_key_fallback_for_magistrate() -> void:
 	var v: Dictionary = {"position_type": "Clan Magistrate"}
 	var key: String = DayOrchestrator._vacancy_key(1, v)
 	assert_eq(key, "1_Clan Magistrate")
+
+
+# -- Infrastructure Intelligence Tests ------------------------------------------
+
+
+func test_infra_border_includes_all_military_types() -> void:
+	var prov_a := _make_province(10, "Crane")
+	var prov_b := _make_province(20, "Lion")
+	prov_a.adjacent_province_ids = [20]
+	prov_b.adjacent_province_ids = [10]
+	var provinces: Dictionary = {10: prov_a, 20: prov_b}
+
+	# Province A has a castle — should not be flagged
+	var castle := _make_settlement(100, 10, Enums.SettlementType.CASTLE)
+	# Province B has no military — should be flagged
+	var village := _make_settlement(200, 20, Enums.SettlementType.VILLAGE)
+	var settlements: Array[SettlementData] = [castle, village]
+
+	var ws: Dictionary = {}
+	DayOrchestrator._populate_infrastructure_intelligence(ws, provinces, settlements, [], {})
+
+	var border_dict: Dictionary = ws.get("border_province_ids_without_fort", {})
+	assert_false(border_dict.has(10), "Province with castle should not be flagged")
+	assert_true(border_dict.has(20), "Province without military should be flagged")
+
+
+func test_infra_border_keep_counts_as_fortified() -> void:
+	var prov := _make_province(10, "Crab")
+	var enemy := _make_province(20, "Crane")
+	prov.adjacent_province_ids = [20]
+	enemy.adjacent_province_ids = [10]
+	var provinces: Dictionary = {10: prov, 20: enemy}
+
+	var keep := _make_settlement(100, 10, Enums.SettlementType.KEEP)
+	var settlements: Array[SettlementData] = [keep]
+
+	var ws: Dictionary = {}
+	DayOrchestrator._populate_infrastructure_intelligence(ws, provinces, settlements, [], {})
+
+	var border_dict: Dictionary = ws.get("border_province_ids_without_fort", {})
+	assert_false(border_dict.has(10), "Province with keep should count as fortified")
+
+
+func test_infra_data_includes_clan() -> void:
+	var prov := _make_province(10, "Crane")
+	var enemy := _make_province(20, "Lion")
+	prov.adjacent_province_ids = [20]
+	enemy.adjacent_province_ids = [10]
+	var provinces: Dictionary = {10: prov, 20: enemy}
+
+	var ws: Dictionary = {}
+	DayOrchestrator._populate_infrastructure_intelligence(ws, provinces, [], [], {})
+
+	var border_dict: Dictionary = ws.get("border_province_ids_without_fort", {})
+	if border_dict.has(10):
+		assert_eq(border_dict[10], "Crane", "Border dict should include clan")
+
+
+func test_infra_naval_threat_requires_ships() -> void:
+	var war := WarData.new()
+	war.clan_a = "Crane"
+	war.clan_b = "Crab"
+
+	# No ships at all — naval threat should be false
+	var ws: Dictionary = {"active_wars": [war]}
+	DayOrchestrator._populate_infrastructure_intelligence(ws, {}, [], [], {})
+	assert_false(ws.get("has_naval_threat", true), "No ships means no naval threat")
+
+
+func test_infra_naval_threat_with_enemy_ships() -> void:
+	var war := WarData.new()
+	war.clan_a = "Crane"
+	war.clan_b = "Mantis"
+
+	var ship := ShipData.new()
+	ship.owning_clan = "Mantis"
+	ship.is_destroyed = false
+
+	var ws: Dictionary = {"active_wars": [war]}
+	DayOrchestrator._populate_infrastructure_intelligence(ws, {}, [], [ship], {})
+	assert_true(ws.get("has_naval_threat", false), "Enemy clan with ships = naval threat")
+
+
+func test_infra_naval_threat_no_threat_without_war() -> void:
+	var ship := ShipData.new()
+	ship.owning_clan = "Mantis"
+	ship.is_destroyed = false
+
+	var ws: Dictionary = {}
+	DayOrchestrator._populate_infrastructure_intelligence(ws, {}, [], [ship], {})
+	assert_false(ws.get("has_naval_threat", true), "Ships without war = no naval threat")
+
+
+func test_filter_province_ids_by_clan() -> void:
+	var data: Dictionary = {10: "Crane", 20: "Lion", 30: "Crane"}
+	var result: Array[int] = NPCDecisionEngine._filter_province_ids_by_clan(data, "Crane")
+	assert_eq(result.size(), 2, "Should return only Crane provinces")
+	assert_true(10 in result)
+	assert_true(30 in result)
+	assert_false(20 in result)
+
+
+func test_filter_province_ids_backward_compat() -> void:
+	# Old-style plain array (no clan data)
+	var data: Array = [10, 20, 30]
+	var result: Array[int] = NPCDecisionEngine._filter_province_ids_by_clan(data, "Crane")
+	assert_eq(result.size(), 3, "Backward compat: all ids returned from plain array")

@@ -6928,9 +6928,9 @@ static func _populate_infrastructure_intelligence(
 	ships: Array[ShipData],
 	worship_state: Dictionary,
 ) -> void:
-	var worship_failing: Array[int] = []
-	var border_no_fort: Array[int] = []
-	var surplus_pu: Array[int] = []
+	var worship_failing: Dictionary = {}  # province_id → clan
+	var border_no_fort: Dictionary = {}  # province_id → clan
+	var surplus_pu: Dictionary = {}  # province_id → clan
 	var coastal: bool = false
 	var has_ships_flag: bool = false
 	var naval_threat: bool = false
@@ -6956,7 +6956,7 @@ static func _populate_infrastructure_intelligence(
 					any_failing = true
 					break
 			if any_failing:
-				worship_failing.append(int(pid))
+				worship_failing[int(pid)] = prov.clan
 
 		# Border province without fortification
 		if prov.adjacent_province_ids.size() > 0:
@@ -6967,13 +6967,13 @@ static func _populate_infrastructure_intelligence(
 					is_border = true
 					break
 			if is_border:
-				var has_fort: bool = false
+				var has_military: bool = false
 				for s: Variant in p_settlements:
-					if (s as SettlementData).settlement_type == Enums.SettlementType.FORTIFICATION:
-						has_fort = true
+					if (s as SettlementData).is_military():
+						has_military = true
 						break
-				if not has_fort:
-					border_no_fort.append(int(pid))
+				if not has_military:
+					border_no_fort[int(pid)] = prov.clan
 
 		# Surplus PU check
 		var total_pu: float = 0.0
@@ -6983,7 +6983,7 @@ static func _populate_infrastructure_intelligence(
 			prov.terrain_type, 10.0,
 		)
 		if total_pu > threshold:
-			surplus_pu.append(int(pid))
+			surplus_pu[int(pid)] = prov.clan
 
 	# Coastal / naval detection
 	for s: ShipData in ships:
@@ -6991,11 +6991,17 @@ static func _populate_infrastructure_intelligence(
 			has_ships_flag = true
 			break
 
-	# Simple heuristic: if any active war involves a clan with ships, naval threat
+	# Naval threat: at war AND enemy clan has ships
+	var clans_with_ships: Dictionary = {}
+	for s: ShipData in ships:
+		if not s.is_destroyed and not s.owning_clan.is_empty():
+			clans_with_ships[s.owning_clan] = true
 	for w: Variant in world_states.get("active_wars", []):
 		if w is WarData:
-			naval_threat = true
-			break
+			var wd: WarData = w as WarData
+			if clans_with_ships.has(wd.clan_a) or clans_with_ships.has(wd.clan_b):
+				naval_threat = true
+				break
 
 	world_states["worship_failing_province_ids"] = worship_failing
 	world_states["border_province_ids_without_fort"] = border_no_fort

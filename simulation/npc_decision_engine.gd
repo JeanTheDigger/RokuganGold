@@ -132,10 +132,16 @@ static func build_context(
 		character, world_state.get("active_topics", [])
 	)
 
-	# Infrastructure intelligence (s4.3.22)
-	ctx.worship_failing_province_ids = world_state.get("worship_failing_province_ids", [] as Array[int])
-	ctx.border_province_ids_without_fort = world_state.get("border_province_ids_without_fort", [] as Array[int])
-	ctx.surplus_pu_province_ids = world_state.get("surplus_pu_province_ids", [] as Array[int])
+	# Infrastructure intelligence (s4.3.22) — filtered to lord's own clan
+	ctx.worship_failing_province_ids = _filter_province_ids_by_clan(
+		world_state.get("worship_failing_province_ids", {}), character.clan,
+	)
+	ctx.border_province_ids_without_fort = _filter_province_ids_by_clan(
+		world_state.get("border_province_ids_without_fort", {}), character.clan,
+	)
+	ctx.surplus_pu_province_ids = _filter_province_ids_by_clan(
+		world_state.get("surplus_pu_province_ids", {}), character.clan,
+	)
 	ctx.is_coastal = world_state.get("is_coastal", false)
 	ctx.has_ships = world_state.get("has_ships", false)
 	ctx.has_naval_threat = world_state.get("has_naval_threat", false)
@@ -1850,6 +1856,22 @@ static func _zone_to_worship_location(zone: Enums.ZoneSubtype) -> String:
 		Enums.ZoneSubtype.TEMPLE_GROUNDS:
 			return "local_shrine"
 	return "roadside_shrine"
+
+
+static func _filter_province_ids_by_clan(
+	province_clan_map: Variant,
+	clan: String,
+) -> Array[int]:
+	var result: Array[int] = []
+	if province_clan_map is Dictionary:
+		for pid: Variant in province_clan_map:
+			if province_clan_map[pid] == clan:
+				result.append(int(pid))
+	elif province_clan_map is Array:
+		# Backward compatibility: plain array without clan filtering
+		for pid: Variant in province_clan_map:
+			result.append(int(pid))
+	return result
 
 
 static func _extract_famine_province_ids(
