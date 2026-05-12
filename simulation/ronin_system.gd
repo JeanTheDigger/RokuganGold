@@ -59,6 +59,8 @@ static func accept_into_service(
 	new_role: String,
 	new_clan: String,
 ) -> Dictionary:
+	if character.permanent_ronin:
+		return {"character_id": character.character_id, "rejected": true, "reason": "permanent_ronin"}
 	character.lord_id = new_lord_id
 	character.role_position = new_role
 	character.clan = new_clan
@@ -123,6 +125,8 @@ static func resolve_petition(
 	target_lord: L5RCharacterData,
 	dice_engine: DiceEngine,
 ) -> Dictionary:
+	if character.permanent_ronin:
+		return {"success": false, "rejected": true, "reason": "permanent_ronin", "character_id": character.character_id, "lord_id": target_lord.character_id}
 	var rolled: int = dice_engine.roll_and_keep(
 		character.awareness + character.skills.get("Etiquette", 0),
 		character.awareness

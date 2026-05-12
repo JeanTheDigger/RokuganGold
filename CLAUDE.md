@@ -503,7 +503,8 @@ All in /tests/, one file per system:
 - test_otomo_seiyaku_system.gd (~55 tests)
 - test_world_population_generator.gd (~50 tests)
 - test_npc_advancement.gd (~56 tests)
-- test_ronin_system.gd (~41 tests)
+- test_ronin_system.gd (~44 tests)
+- test_musha_shugyo_system.gd (~75 tests)
 
 ### Festival System (s11.5)
 - **simulation/festival_system.gd** — Empire-wide canonical festivals, Rokuyo
@@ -2623,6 +2624,26 @@ All in /tests/, one file per system:
 - **DayOrchestrator wiring** — `_process_seasonal_ronin()` runs on season
   boundary after seiyaku review. Uses `horde_season_count` from season_meta
   as the monotonic season counter. Return dict gains `ronin_results`.
+- **Permanent ronin gates** — `accept_into_service()` and `resolve_petition()`
+  reject characters with `permanent_ronin == true`, returning `{rejected: true,
+  reason: "permanent_ronin"}`. Normal ronin (non-permanent) unaffected.
+
+### Musha Shugyo Expansion — Pilgrimage Ronin Conversion
+- **simulation/musha_shugyo_system.gd** — Added rare ronin conversion at
+  pilgrimage end. `PILGRIMAGE_RONIN_CHANCE = 0.03` (3%). At the end of the
+  pilgrimage year, `check_ronin_conversion()` rolls against this chance.
+  On success, `end_pilgrimage_as_ronin()` converts the character to a
+  permanent ronin via `RoninSystem.make_ronin()` with VOLUNTARY_DEPARTURE
+  cause and sets `permanent_ronin = true`. Permanent ronin can never find
+  a new lord — `accept_into_service()` and `resolve_petition()` reject them.
+- **shared/character_data.gd** — `permanent_ronin: bool = false` field added
+  to the Musha Shugyo section.
+- **DayOrchestrator wiring** — `_process_musha_shugyo()` now accepts optional
+  `dice_engine` and `current_season_count`. When dice_engine is provided,
+  checks for ronin conversion before the normal end-pilgrimage path. On
+  conversion, calls `RoninSystem.mark_ronin_start()` with the current
+  season count. `advance_day()` threads dice_engine and season_count
+  from `season_meta["horde_season_count"]`.
 
 ### What's Next
 1. World generation coordinate system and adjacency

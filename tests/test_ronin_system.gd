@@ -354,3 +354,32 @@ func test_all_causes_exist():
 	assert_eq(RoninSystem.RoninCause.DISMISSAL, 1)
 	assert_eq(RoninSystem.RoninCause.CLAN_DESTROYED, 2)
 	assert_eq(RoninSystem.RoninCause.VOLUNTARY_DEPARTURE, 3)
+
+
+# === PERMANENT RONIN GATES ===
+
+func test_permanent_ronin_rejects_accept_into_service():
+	var c := _make_samurai()
+	RoninSystem.make_ronin(c, RoninSystem.RoninCause.VOLUNTARY_DEPARTURE)
+	c.permanent_ronin = true
+	var result: Dictionary = RoninSystem.accept_into_service(c, 200, "Retainer", "Crane")
+	assert_true(result.get("rejected", false))
+	assert_eq(c.lord_id, -1)
+
+func test_permanent_ronin_rejects_petition():
+	var c := _make_samurai()
+	RoninSystem.make_ronin(c, RoninSystem.RoninCause.VOLUNTARY_DEPARTURE)
+	c.permanent_ronin = true
+	var lord := _make_lord()
+	var dice := DiceEngine.new(42)
+	var result: Dictionary = RoninSystem.resolve_petition(c, lord, dice)
+	assert_false(result["success"])
+	assert_true(result.get("rejected", false))
+
+func test_non_permanent_ronin_accepts_service():
+	var c := _make_samurai()
+	RoninSystem.make_ronin(c, RoninSystem.RoninCause.DISMISSAL)
+	assert_false(c.permanent_ronin)
+	var result: Dictionary = RoninSystem.accept_into_service(c, 200, "Retainer", "Crane")
+	assert_false(result.get("rejected", false))
+	assert_eq(c.lord_id, 200)

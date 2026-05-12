@@ -73,7 +73,8 @@ static func advance_day(
 	var travel_arrivals: Array[Dictionary] = _process_travel(characters)
 	_process_arrival_observation(travel_arrivals, characters_by_id, current_season)
 
-	var musha_shugyo_results: Array[Dictionary] = _process_musha_shugyo(characters, characters_by_id, ic_day, objectives_map)
+	var musha_season_count: int = int(season_meta.get("horde_season_count", 0))
+	var musha_shugyo_results: Array[Dictionary] = _process_musha_shugyo(characters, characters_by_id, ic_day, objectives_map, dice_engine, musha_season_count)
 
 	_apply_cohabitation(characters, characters_by_id)
 
@@ -5707,10 +5708,19 @@ static func _process_musha_shugyo(
 	characters_by_id: Dictionary,
 	ic_day: int,
 	objectives_map: Dictionary,
+	dice_engine: DiceEngine = null,
+	current_season_count: int = 0,
 ) -> Array[Dictionary]:
 	var results: Array[Dictionary] = []
 	for character: L5RCharacterData in characters:
 		if not MushaShugyo.should_end_pilgrimage(character, ic_day):
+			continue
+		if dice_engine != null and MushaShugyo.check_ronin_conversion(character, dice_engine):
+			var result: Dictionary = MushaShugyo.end_pilgrimage_as_ronin(character)
+			RoninSystem.mark_ronin_start(character, current_season_count)
+			if objectives_map.has(character.character_id):
+				objectives_map[character.character_id].erase("standing")
+			results.append(result)
 			continue
 		var result: Dictionary = MushaShugyo.end_pilgrimage(character)
 		if MushaShugyo.is_lord_dead_or_missing(result["original_lord_id"], characters_by_id):

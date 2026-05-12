@@ -218,6 +218,7 @@ extends Resource
 @export var musha_shugyo: bool = false
 @export var musha_shugyo_end_ic_day: int = -1
 @export var original_lord_id: int = -1
+@export var permanent_ronin: bool = false
 
 # -- Progression (Section 48) -------------------------------------------------
 
