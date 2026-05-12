@@ -217,8 +217,9 @@ static func execute(
 		return _execute_no_roll(action, character, ctx)
 
 	var tn: int = _get_tn_for_action(action_id, action, ctx)
+	var wc_bonus: int = _get_winter_court_skill_bonus(character, primary_skill, ctx)
 	var roll_result: Dictionary = SkillResolver.resolve_skill_check(
-		character, dice_engine, primary_skill, tn
+		character, dice_engine, primary_skill, tn, 0, "", Enums.Trait.NONE, 0, 0, wc_bonus
 	)
 
 	var result: Dictionary = {
@@ -1812,3 +1813,22 @@ static func _compute_blockade_effects(action: NPCDataStructures.ScoredAction) ->
 	result["effect"] = "route_blocked"
 	result["requires_blockade"] = true
 	return result
+
+
+# -- Winter Court Skill Bonus --------------------------------------------------
+
+static func _get_winter_court_skill_bonus(
+	character: L5RCharacterData,
+	skill_name: String,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> int:
+	if not WinterCourtSystem.is_home_ground_skill(skill_name):
+		return 0
+	var court_dict: Dictionary = ctx.active_court_at_location
+	if court_dict.is_empty():
+		return 0
+	if court_dict.get("court_type", -1) != CourtSessionData.CourtType.IMPERIAL_WINTER_COURT:
+		return 0
+	if character.clan != court_dict.get("host_clan", ""):
+		return 0
+	return WinterCourtSystem.HOST_SKILL_BONUS

@@ -346,11 +346,13 @@ static func advance_day(
 		)
 		var provinces_array: Array[ProvinceData] = _dict_values_to_province_array(provinces)
 		var emperor_archetype: int = world_states.get("emperor_archetype", StrategicReview.EmperorArchetype.IRON)
+		var wc_letter_id: Array[int] = [pending_letters.size() + 1000]
 		_process_strategic_court_calls(
 			strategic_results, active_courts, active_topics,
 			characters_by_id, next_court_id, ic_day, world_states,
 			current_season, provinces_array, settlements,
 			emperor_archetype, next_topic_id,
+			pending_letters, dice_engine, wc_letter_id,
 		)
 
 	var horde_results: Dictionary = _process_horde_rolls(
@@ -5101,6 +5103,9 @@ static func _process_strategic_court_calls(
 	settlements: Array[SettlementData] = [],
 	archetype: int = StrategicReview.EmperorArchetype.IRON,
 	next_topic_id: Array[int] = [1],
+	pending_letters: Array = [],
+	dice_engine: DiceEngine = null,
+	next_letter_id: Array[int] = [1],
 ) -> void:
 	for directive: Dictionary in strategic_results:
 		var directive_type = directive.get("directive", "")
@@ -5110,6 +5115,7 @@ static func _process_strategic_court_calls(
 				characters_by_id, next_court_id, ic_day,
 				provinces, settlements, world_states,
 				archetype, next_topic_id,
+				pending_letters, dice_engine, next_letter_id,
 			)
 			continue
 		if directive_type != StrategicReview.Directive.CALL_COURT:
@@ -5164,6 +5170,9 @@ static func _create_winter_court_from_directive(
 	world_state: Dictionary = {},
 	archetype: int = StrategicReview.EmperorArchetype.IRON,
 	next_topic_id: Array[int] = [1],
+	pending_letters: Array = [],
+	dice_engine: DiceEngine = null,
+	next_letter_id: Array[int] = [1],
 ) -> Dictionary:
 	var emperor_id: int = directive.get("lord_id", -1)
 	if emperor_id < 0:
@@ -5258,6 +5267,11 @@ static func _create_winter_court_from_directive(
 	active_topics.append(topic)
 	court.announcement_topic_id = topic.topic_id
 
+	var letters_sent: int = _dispatch_winter_court_summons(
+		emperor, host_clan, topic.topic_id, ic_day, characters_by_id,
+		pending_letters, dice_engine, next_letter_id,
+	)
+
 	return {
 		"court_id": court.court_id,
 		"host_clan": host_clan,
@@ -5266,6 +5280,7 @@ static func _create_winter_court_from_directive(
 		"is_regent_court": is_regent,
 		"invitation_count": all_invited.size(),
 		"announcement_topic_id": topic.topic_id,
+		"summons_letters_sent": letters_sent,
 	}
 
 
@@ -5292,6 +5307,43 @@ static func _legacy_host_selection(
 					"no_edicts": false,
 				}
 	return {}
+
+
+static func _dispatch_winter_court_summons(
+	emperor: L5RCharacterData,
+	host_clan: String,
+	announcement_topic_id: int,
+	ic_day: int,
+	characters_by_id: Dictionary,
+	pending_letters: Array,
+	dice_engine: DiceEngine,
+	next_letter_id: Array[int],
+) -> int:
+	if emperor == null or dice_engine == null:
+		return 0
+
+	var letters_sent: int = 0
+	for char_id: int in characters_by_id:
+		var c: L5RCharacterData = characters_by_id[char_id] as L5RCharacterData
+		if c == null or CharacterStats.is_dead(c):
+			continue
+		if c.lord_id != -1 or c.status < 7.0:
+			continue
+		if c.clan == "Imperial" or c.clan == host_clan:
+			continue
+		if c.character_id == emperor.character_id:
+			continue
+
+		var letter: LetterData = LetterSystem.write_letter(
+			next_letter_id[0], emperor, c.character_id,
+			announcement_topic_id, ic_day, dice_engine,
+			3, 0, 0, 0, true,
+		)
+		next_letter_id[0] += 1
+		pending_letters.append(letter)
+		letters_sent += 1
+
+	return letters_sent
 
 
 # -- Naval Processing ----------------------------------------------------------

@@ -498,7 +498,7 @@ All in /tests/, one file per system:
 - test_naval_combat_system.gd (~46 tests)
 - test_naval_wiring.gd (~35 tests)
 - test_monk_objective_system.gd (~59 tests)
-- test_winter_court_system.gd (~62 tests)
+- test_winter_court_system.gd (~80 tests)
 
 ### Festival System (s11.5)
 - **simulation/festival_system.gd** — Empire-wide canonical festivals, Rokuyo
@@ -2412,9 +2412,19 @@ All in /tests/, one file per system:
   adds glory distribution and announcement topic resolution for
   IMPERIAL_WINTER_COURT type. Legacy fallback for callers without province/
   settlement data. `_dict_values_to_province_array()` helper added.
-  Deferred: travel logistics letter dispatching, late arrival handling,
-  grace period entertainment, Champion agenda ordering AI, +5 skill bonus
-  SkillResolver integration.
+  `_dispatch_winter_court_summons()` sends Imperial summons letters to all
+  Great Clan Champions (lord_id==-1, status>=7.0, not host clan, not
+  Imperial) via LetterSystem with province_distance=3 and has_miya_route=true.
+  Threaded through `_process_strategic_court_calls()`.
+- **simulation/action_executor.gd** — `_get_winter_court_skill_bonus()`
+  checks active_court_at_location context for IMPERIAL_WINTER_COURT type and
+  host clan match. Returns +5 flat_bonus for Etiquette/Courtier/Sincerity
+  via WinterCourtSystem.is_home_ground_skill(). Wired into main execute path
+  as `flat_bonus` parameter on SkillResolver.resolve_skill_check().
+- **Late arrival** — Already handled by existing `_process_court_attendance()`:
+  any character arriving at the host settlement during an active court is
+  automatically added to the attendee list on arrival day, per GDD s55.10.
+  Deferred: grace period entertainment, Champion agenda ordering AI.
 
 ### What's Next
 1. World generation coordinate system and adjacency

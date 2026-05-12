@@ -782,3 +782,257 @@ func test_glory_constants() -> void:
 	assert_almost_eq(WinterCourtSystem.GLORY_HOST_FAMILY_DAIMYO, 0.5, 0.01)
 	assert_almost_eq(WinterCourtSystem.GLORY_HOST_CLAN_CHAMPION, 0.3, 0.01)
 	assert_almost_eq(WinterCourtSystem.GLORY_HOST_CLAN_DELEGATE, 0.1, 0.01)
+
+
+# -- Skill Bonus (Home Ground +5) Tests ---------------------------------------
+
+func test_skill_bonus_applies_to_host_clan_at_winter_court() -> void:
+	var c := _make_character(20, "Crane Courtier", "Crane", "Doji", 4.0)
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.active_court_at_location = {
+		"court_type": CourtSessionData.CourtType.IMPERIAL_WINTER_COURT,
+		"host_clan": "Crane",
+	}
+	var bonus: int = ActionExecutor._get_winter_court_skill_bonus(c, "Etiquette", ctx)
+	assert_eq(bonus, WinterCourtSystem.HOST_SKILL_BONUS)
+
+
+func test_skill_bonus_zero_for_non_host_clan() -> void:
+	var c := _make_character(20, "Lion Courtier", "Lion", "Ikoma", 4.0)
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.active_court_at_location = {
+		"court_type": CourtSessionData.CourtType.IMPERIAL_WINTER_COURT,
+		"host_clan": "Crane",
+	}
+	var bonus: int = ActionExecutor._get_winter_court_skill_bonus(c, "Etiquette", ctx)
+	assert_eq(bonus, 0)
+
+
+func test_skill_bonus_zero_for_non_home_ground_skill() -> void:
+	var c := _make_character(20, "Crane Bushi", "Crane", "Doji", 4.0)
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.active_court_at_location = {
+		"court_type": CourtSessionData.CourtType.IMPERIAL_WINTER_COURT,
+		"host_clan": "Crane",
+	}
+	var bonus: int = ActionExecutor._get_winter_court_skill_bonus(c, "Kenjutsu", ctx)
+	assert_eq(bonus, 0)
+
+
+func test_skill_bonus_zero_for_non_winter_court() -> void:
+	var c := _make_character(20, "Crane Courtier", "Crane", "Doji", 4.0)
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.active_court_at_location = {
+		"court_type": CourtSessionData.CourtType.CLAN_CHAMPION_COURT,
+		"host_clan": "Crane",
+	}
+	var bonus: int = ActionExecutor._get_winter_court_skill_bonus(c, "Etiquette", ctx)
+	assert_eq(bonus, 0)
+
+
+func test_skill_bonus_zero_when_no_court() -> void:
+	var c := _make_character(20, "Crane Courtier", "Crane", "Doji", 4.0)
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	var bonus: int = ActionExecutor._get_winter_court_skill_bonus(c, "Etiquette", ctx)
+	assert_eq(bonus, 0)
+
+
+func test_skill_bonus_applies_to_courtier_skill() -> void:
+	var c := _make_character(20, "Crane Courtier", "Crane", "Doji", 4.0)
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.active_court_at_location = {
+		"court_type": CourtSessionData.CourtType.IMPERIAL_WINTER_COURT,
+		"host_clan": "Crane",
+	}
+	assert_eq(ActionExecutor._get_winter_court_skill_bonus(c, "Courtier", ctx), 5)
+	assert_eq(ActionExecutor._get_winter_court_skill_bonus(c, "Sincerity", ctx), 5)
+
+
+func test_home_ground_skill_recognition() -> void:
+	assert_true(WinterCourtSystem.is_home_ground_skill("Etiquette"))
+	assert_true(WinterCourtSystem.is_home_ground_skill("Courtier"))
+	assert_true(WinterCourtSystem.is_home_ground_skill("Sincerity"))
+	assert_false(WinterCourtSystem.is_home_ground_skill("Kenjutsu"))
+	assert_false(WinterCourtSystem.is_home_ground_skill("Investigation"))
+
+
+# -- Summons Letter Dispatching Tests ------------------------------------------
+
+func test_summons_dispatched_to_clan_champions() -> void:
+	_setup_basic_castle()
+	var lion_champ := _make_character(30, "Lion Champion", "Lion", "Akodo", 8.0)
+	lion_champ.lord_id = -1
+	_characters_by_id[30] = lion_champ
+	var scorpion_champ := _make_character(31, "Scorpion Champion", "Scorpion", "Bayushi", 8.0)
+	scorpion_champ.lord_id = -1
+	_characters_by_id[31] = scorpion_champ
+
+	var pending_letters: Array = []
+	var dice := DiceEngine.new()
+	var next_letter_id: Array[int] = [1]
+
+	var count: int = DayOrchestrator._dispatch_winter_court_summons(
+		_emperor, "Crane", 500, 200, _characters_by_id,
+		pending_letters, dice, next_letter_id,
+	)
+	assert_eq(count, 2)
+	assert_eq(pending_letters.size(), 2)
+	var recipient_ids: Array = []
+	for letter: LetterData in pending_letters:
+		recipient_ids.append(letter.recipient_id)
+		assert_eq(letter.sender_id, _emperor.character_id)
+		assert_eq(letter.topic, 500)
+	assert_true(30 in recipient_ids)
+	assert_true(31 in recipient_ids)
+
+
+func test_summons_skips_host_clan_champion() -> void:
+	_setup_basic_castle()
+	var lion_champ := _make_character(30, "Lion Champion", "Lion", "Akodo", 8.0)
+	lion_champ.lord_id = -1
+	_characters_by_id[30] = lion_champ
+
+	var pending_letters: Array = []
+	var dice := DiceEngine.new()
+	var next_letter_id: Array[int] = [1]
+
+	DayOrchestrator._dispatch_winter_court_summons(
+		_emperor, "Crane", 500, 200, _characters_by_id,
+		pending_letters, dice, next_letter_id,
+	)
+	for letter: LetterData in pending_letters:
+		assert_ne(letter.recipient_id, 10, "Host clan champion should not receive summons")
+
+
+func test_summons_skips_emperor() -> void:
+	_setup_basic_castle()
+	var lion_champ := _make_character(30, "Lion Champion", "Lion", "Akodo", 8.0)
+	lion_champ.lord_id = -1
+	_characters_by_id[30] = lion_champ
+
+	var pending_letters: Array = []
+	var dice := DiceEngine.new()
+	var next_letter_id: Array[int] = [1]
+
+	DayOrchestrator._dispatch_winter_court_summons(
+		_emperor, "Crane", 500, 200, _characters_by_id,
+		pending_letters, dice, next_letter_id,
+	)
+	for letter: LetterData in pending_letters:
+		assert_ne(letter.recipient_id, _emperor.character_id, "Emperor should not receive summons")
+
+
+func test_summons_skips_non_champion_characters() -> void:
+	_setup_basic_castle()
+	var vassal := _make_character(40, "Lion Vassal", "Lion", "Akodo", 4.0)
+	vassal.lord_id = 30
+	_characters_by_id[40] = vassal
+
+	var pending_letters: Array = []
+	var dice := DiceEngine.new()
+	var next_letter_id: Array[int] = [1]
+
+	DayOrchestrator._dispatch_winter_court_summons(
+		_emperor, "Crane", 500, 200, _characters_by_id,
+		pending_letters, dice, next_letter_id,
+	)
+	for letter: LetterData in pending_letters:
+		assert_ne(letter.recipient_id, 40, "Non-champion should not receive summons")
+
+
+func test_summons_zero_when_no_dice_engine() -> void:
+	var count: int = DayOrchestrator._dispatch_winter_court_summons(
+		_emperor, "Crane", 500, 200, _characters_by_id,
+		[], null, [1],
+	)
+	assert_eq(count, 0)
+
+
+func test_summons_increments_letter_ids() -> void:
+	_setup_basic_castle()
+	var lion_champ := _make_character(30, "Lion Champion", "Lion", "Akodo", 8.0)
+	lion_champ.lord_id = -1
+	_characters_by_id[30] = lion_champ
+	var crab_champ := _make_character(31, "Crab Champion", "Crab", "Hida", 8.0)
+	crab_champ.lord_id = -1
+	_characters_by_id[31] = crab_champ
+
+	var pending_letters: Array = []
+	var dice := DiceEngine.new()
+	var next_letter_id: Array[int] = [100]
+
+	DayOrchestrator._dispatch_winter_court_summons(
+		_emperor, "Crane", 500, 200, _characters_by_id,
+		pending_letters, dice, next_letter_id,
+	)
+	assert_eq(next_letter_id[0], 102)
+
+
+func test_summons_has_miya_route() -> void:
+	_setup_basic_castle()
+	var lion_champ := _make_character(30, "Lion Champion", "Lion", "Akodo", 8.0)
+	lion_champ.lord_id = -1
+	_characters_by_id[30] = lion_champ
+
+	var pending_letters: Array = []
+	var dice := DiceEngine.new()
+	var next_letter_id: Array[int] = [1]
+
+	DayOrchestrator._dispatch_winter_court_summons(
+		_emperor, "Crane", 500, 200, _characters_by_id,
+		pending_letters, dice, next_letter_id,
+	)
+	assert_eq(pending_letters.size(), 1)
+	var letter: LetterData = pending_letters[0]
+	assert_true(letter.has_miya_route)
+
+
+# -- Late Arrival Tests --------------------------------------------------------
+
+func test_late_arrival_adds_delegate_to_winter_court() -> void:
+	var court := CourtSessionData.new()
+	court.court_id = 1
+	court.court_type = CourtSessionData.CourtType.IMPERIAL_WINTER_COURT
+	court.host_settlement_id = 100
+	court.host_lord_id = _emperor.character_id
+	court.phase = CourtSessionData.CourtPhase.ACTIVE
+	court.grace_period_days = 15
+	CourtSystem.add_attendee(court, _emperor.character_id)
+	_emperor.physical_location = "100"
+
+	var late_delegate := _make_character(50, "Late Crane", "Crane", "Doji", 4.0)
+	late_delegate.physical_location = "100"
+	_characters_by_id[50] = late_delegate
+
+	var active_courts: Array[CourtSessionData] = [court]
+	var results: Array[Dictionary] = DayOrchestrator._process_court_attendance(
+		active_courts, [_emperor, late_delegate] as Array[L5RCharacterData], _characters_by_id
+	)
+
+	assert_true(50 in court.attendee_ids, "Late delegate should be added to attendee list")
+	var found_arrival: bool = false
+	for r: Dictionary in results:
+		if r.get("character_id", -1) == 50 and r.get("action", "") == "arrived":
+			found_arrival = true
+	assert_true(found_arrival, "Arrival event should be recorded")
+
+
+func test_late_arrival_not_added_if_at_different_settlement() -> void:
+	var court := CourtSessionData.new()
+	court.court_id = 1
+	court.court_type = CourtSessionData.CourtType.IMPERIAL_WINTER_COURT
+	court.host_settlement_id = 100
+	court.host_lord_id = _emperor.character_id
+	court.phase = CourtSessionData.CourtPhase.ACTIVE
+	CourtSystem.add_attendee(court, _emperor.character_id)
+	_emperor.physical_location = "100"
+
+	var distant := _make_character(51, "Distant Crane", "Crane", "Doji", 4.0)
+	distant.physical_location = "200"
+	_characters_by_id[51] = distant
+
+	var active_courts: Array[CourtSessionData] = [court]
+	DayOrchestrator._process_court_attendance(
+		active_courts, [_emperor, distant] as Array[L5RCharacterData], _characters_by_id
+	)
+	assert_false(51 in court.attendee_ids)
