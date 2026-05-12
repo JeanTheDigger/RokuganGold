@@ -212,6 +212,12 @@ extends Resource
 @export var active_tattoo_ability: Enums.TattooAbility = Enums.TattooAbility.NONE
 @export var is_bald: bool = false
 
+# -- Musha Shugyo (Section 57.48) ---------------------------------------------
+
+@export var musha_shugyo: bool = false
+@export var musha_shugyo_end_ic_day: int = -1
+@export var original_lord_id: int = -1
+
 # -- Progression (Section 48) -------------------------------------------------
 
 @export var xp_total: int = 0

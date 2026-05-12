@@ -70,6 +70,8 @@ static func advance_day(
 	var travel_arrivals: Array[Dictionary] = _process_travel(characters)
 	_process_arrival_observation(travel_arrivals, characters_by_id, current_season)
 
+	var musha_shugyo_results: Array[Dictionary] = _process_musha_shugyo(characters, characters_by_id, ic_day, objectives_map)
+
 	_apply_cohabitation(characters, characters_by_id)
 
 	var favor_results: Dictionary = _process_favors(favors, ic_day, characters_by_id)
@@ -414,6 +416,7 @@ static func advance_day(
 		"naval_movement_results": naval_movement_results,
 		"naval_battle_results": naval_battle_results,
 		"naval_topics": naval_topics,
+		"musha_shugyo_results": musha_shugyo_results,
 	}
 
 
@@ -5659,6 +5662,27 @@ static func _generate_naval_battle_topics(
 		topics.append(topic)
 
 	return topics
+
+
+# -- Musha Shugyo (s57.48) ----------------------------------------------------
+
+static func _process_musha_shugyo(
+	characters: Array[L5RCharacterData],
+	characters_by_id: Dictionary,
+	ic_day: int,
+	objectives_map: Dictionary,
+) -> Array[Dictionary]:
+	var results: Array[Dictionary] = []
+	for character: L5RCharacterData in characters:
+		if not MushaShugyo.should_end_pilgrimage(character, ic_day):
+			continue
+		var result: Dictionary = MushaShugyo.end_pilgrimage(character)
+		if MushaShugyo.is_lord_dead_or_missing(result["original_lord_id"], characters_by_id):
+			result["lord_dead"] = true
+		if objectives_map.has(character.character_id):
+			objectives_map[character.character_id].erase("standing")
+		results.append(result)
+	return results
 
 
 # -- Helpers -------------------------------------------------------------------
