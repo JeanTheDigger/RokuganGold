@@ -512,7 +512,7 @@ All in /tests/, one file per system:
 - test_ronin_system.gd (~44 tests)
 - test_musha_shugyo_system.gd (~75 tests)
 - test_governance_wiring.gd (~25 tests)
-- test_marriage_wiring.gd (~42 tests)
+- test_marriage_wiring.gd (~47 tests)
 
 ### Governance Action Wiring (s57.20)
 - **APPOINT_TO_POSITION** — Daily AP action (1 AP, lord-only). Executor
@@ -549,8 +549,12 @@ All in /tests/, one file per system:
   creates ChildRecord via `GempukkuSystem.create_child_at_birth()`, updates
   both parents' `children_ids` and the marriage record's `children_ids`.
   Uses `next_character_id` counter for child IDs.
-- **Birth family disposition floors** — `birth_clan`/`birth_family` fields
-  stored but floor enforcement in DispositionSystem not yet wired (deferred).
+- **Birth family disposition floors** — `DispositionSystem.get_effective_disposition()`
+  enforces `BIRTH_FAMILY_DISPOSITION_FLOOR` (+15) and `BIRTH_CLAN_DISPOSITION_FLOOR`
+  (+8) from MarriageSystem constants. `_get_birth_family_floor()` checks if the
+  target belongs to the actor's `birth_family` (higher floor) or `birth_clan`
+  (lower floor). Only fires when `actor.birth_clan` is non-empty (character was
+  moved via marriage). Floor is applied after family bonds, before final clamp.
 - **ARRANGE_MARRIAGE decomposition** — Lords with unmarried vassals/children
   and cross-clan contacts produce ARRANGE_MARRIAGE needs from three standing
   objective trees: ADVANCE_FAMILY (priority 2, before war check),
