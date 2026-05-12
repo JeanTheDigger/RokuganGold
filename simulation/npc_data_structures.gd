@@ -119,6 +119,8 @@ class ContextSnapshot:
 
 	# Marriage (s22.7)
 	var marriageable_vassal_ids: Array[int] = []
+	var succession_insecure: bool = false
+	var lord_is_unmarried: bool = false
 
 	# Military
 	var military_rank: Enums.MilitaryRank = Enums.MilitaryRank.NONE

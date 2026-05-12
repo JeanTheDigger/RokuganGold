@@ -1111,3 +1111,102 @@ func test_build_strongest_force_all_veteran() -> void:
 	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
 	assert_eq(need.need_type, "ACQUIRE_RESOURCE")
 	assert_eq(need.target_resource, "arms")
+
+
+# -- Succession Marriage (s57.20.2) -------------------------------------------
+
+func test_protect_dependents_succession_unmarried_lord_marriage() -> void:
+	_ctx.is_lord = true
+	_ctx.succession_insecure = true
+	_ctx.lord_is_unmarried = true
+	_ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
+	_ctx.known_contacts_by_clan = {"Lion": [50]}
+	_ctx.dispositions = {50: 10}
+	var obj := {"need_type": "PROTECT_DEPENDENTS", "priority": 2}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
+	assert_eq(need.need_type, "ARRANGE_MARRIAGE")
+	assert_eq(need.priority, 3)
+	assert_eq(need.target_npc_id, _ctx.character_id)
+	assert_eq(need.target_npc_id_secondary, 50)
+	assert_eq(need.target_intent, "PROTECT_DEPENDENTS")
+
+
+func test_protect_dependents_succession_married_lord_vassal_marriage() -> void:
+	_ctx.is_lord = true
+	_ctx.succession_insecure = true
+	_ctx.lord_is_unmarried = false
+	_ctx.marriageable_vassal_ids = [42]
+	_ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
+	_ctx.known_contacts_by_clan = {"Crane": [60]}
+	_ctx.dispositions = {60: 5}
+	var obj := {"need_type": "PROTECT_DEPENDENTS", "priority": 2}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
+	assert_eq(need.need_type, "ARRANGE_MARRIAGE")
+	assert_eq(need.priority, 2)
+	assert_eq(need.target_npc_id, 42)
+	assert_eq(need.target_npc_id_secondary, 60)
+
+
+func test_protect_dependents_succession_secure_no_marriage() -> void:
+	_ctx.is_lord = true
+	_ctx.succession_insecure = false
+	_ctx.lord_is_unmarried = true
+	_ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
+	_ctx.known_contacts_by_clan = {"Lion": [50]}
+	_ctx.dispositions = {50: 10}
+	var obj := {"need_type": "PROTECT_DEPENDENTS", "priority": 2}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
+	assert_ne(need.need_type, "ARRANGE_MARRIAGE")
+
+
+func test_protect_dependents_succession_no_contacts_no_marriage() -> void:
+	_ctx.is_lord = true
+	_ctx.succession_insecure = true
+	_ctx.lord_is_unmarried = true
+	_ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
+	var obj := {"need_type": "PROTECT_DEPENDENTS", "priority": 2}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
+	assert_ne(need.need_type, "ARRANGE_MARRIAGE")
+
+
+func test_protect_dependents_crisis_takes_priority_over_succession() -> void:
+	_ctx.is_lord = true
+	_ctx.succession_insecure = true
+	_ctx.lord_is_unmarried = true
+	_ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
+	_ctx.known_contacts_by_clan = {"Lion": [50]}
+	_ctx.dispositions = {50: 10}
+	var ps := NPCDataStructures.ProvinceStatus.new()
+	ps.province_id = 1
+	ps.stability = 20.0
+	ps.active_crisis_id = 99
+	_ctx.province_statuses = [ps]
+	var obj := {"need_type": "PROTECT_DEPENDENTS", "priority": 2}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
+	assert_eq(need.need_type, "DEFEND_PROVINCE")
+
+
+func test_protect_dependents_not_at_holdings_no_marriage() -> void:
+	_ctx.is_lord = true
+	_ctx.succession_insecure = true
+	_ctx.lord_is_unmarried = true
+	_ctx.context_flag = Enums.ContextFlag.AT_COURT
+	_ctx.known_contacts_by_clan = {"Lion": [50]}
+	_ctx.dispositions = {50: 10}
+	var obj := {"need_type": "PROTECT_DEPENDENTS", "priority": 2}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
+	assert_ne(need.need_type, "ARRANGE_MARRIAGE")
+
+
+func test_protect_dependents_succession_recent_attempt_skips() -> void:
+	_ctx.is_lord = true
+	_ctx.succession_insecure = true
+	_ctx.lord_is_unmarried = true
+	_ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
+	_ctx.known_contacts_by_clan = {"Lion": [50]}
+	_ctx.dispositions = {50: 10}
+	_ctx.ic_day = 50
+	_ctx.action_log = [{"action_id": "ARRANGE_MARRIAGE", "character_id": _ctx.character_id, "ic_day": 40}]
+	var obj := {"need_type": "PROTECT_DEPENDENTS", "priority": 2}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
+	assert_ne(need.need_type, "ARRANGE_MARRIAGE")

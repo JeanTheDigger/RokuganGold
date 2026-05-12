@@ -563,6 +563,12 @@ static func _decompose_protect_dependents(
 		if rice_per_pu < 2.0:
 			return _make_need("ACQUIRE_RESOURCE", 2, {"target_resource": "rice"})
 
+		# Succession insecurity — no heir and no children (s57.20.2)
+		if ctx.succession_insecure and ctx.context_flag == Enums.ContextFlag.AT_OWN_HOLDINGS:
+			var marriage_need: Variant = _try_succession_marriage(ctx)
+			if marriage_need != null:
+				return marriage_need
+
 	var contact: int = _find_contact_needing_disposition(ctx, 31)
 	if contact >= 0:
 		return _make_need("RAISE_DISPOSITION", 1, {"target_npc_id": contact})
@@ -1240,6 +1246,37 @@ static func _has_undertrained_units(
 		if level < max_level and ctx.unit_training_counts[level] > 0:
 			return true
 	return false
+
+
+static func _try_succession_marriage(
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> Variant:
+	if _has_recent_marriage_attempt(ctx, 90):
+		return null
+
+	var target_lord_id: int = _find_cross_clan_lord(ctx)
+	if target_lord_id < 0:
+		target_lord_id = _find_between_families_lord(ctx)
+	if target_lord_id < 0:
+		return null
+
+	# If lord is unmarried, they are the candidate (securing their own succession)
+	if ctx.lord_is_unmarried:
+		return _make_need("ARRANGE_MARRIAGE", 3, {
+			"target_npc_id": ctx.character_id,
+			"target_npc_id_secondary": target_lord_id,
+			"target_intent": "PROTECT_DEPENDENTS",
+		})
+
+	# Lord is married but has no children/heir — marry off a vassal for alliance
+	if not ctx.marriageable_vassal_ids.is_empty():
+		return _make_need("ARRANGE_MARRIAGE", 2, {
+			"target_npc_id": ctx.marriageable_vassal_ids[0],
+			"target_npc_id_secondary": target_lord_id,
+			"target_intent": "PROTECT_DEPENDENTS",
+		})
+
+	return null
 
 
 static func _try_arrange_marriage(

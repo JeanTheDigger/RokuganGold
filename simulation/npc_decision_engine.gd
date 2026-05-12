@@ -98,6 +98,12 @@ static func build_context(
 		ctx.marriageable_vassal_ids = _find_marriageable_vassals(
 			character, chars_by_id,
 		)
+	if ctx.is_lord:
+		ctx.lord_is_unmarried = character.spouse_id < 0
+		ctx.succession_insecure = (
+			character.designated_heir_id < 0
+			and character.children_ids.is_empty()
+		)
 
 	# Military
 	ctx.military_rank = character.military_rank
