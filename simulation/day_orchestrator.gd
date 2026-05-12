@@ -60,6 +60,9 @@ static func advance_day(
 	seiyaku_state: Dictionary = {},
 	marriages: Array[Dictionary] = [],
 	worship_state: Dictionary = {},
+	constructions: Array[ConstructionData] = [],
+	next_settlement_id: Array[int] = [5000],
+	next_construction_id: Array[int] = [1],
 ) -> Dictionary:
 	var prev_season: int = time_system.get_season()
 
@@ -192,6 +195,19 @@ static func advance_day(
 
 	var worship_accumulation_results: Array[Dictionary] = _process_worship_accumulation(
 		day_result.get("results", []), worship_state,
+	)
+
+	var construction_results: Array[Dictionary] = _process_construction_effects(
+		day_result.get("results", []),
+		characters_by_id,
+		provinces,
+		settlements,
+		constructions,
+		next_settlement_id,
+		next_construction_id,
+		ic_day,
+		ships,
+		dice_engine,
 	)
 
 	_process_edict_compliance_actions(
@@ -378,6 +394,14 @@ static func advance_day(
 			insurgencies, provinces, dice_engine, current_season,
 			next_insurgency_id, world_states, worship_maluses,
 		)
+		_process_construction_completions(
+			constructions, settlements, provinces, ships, dice_engine,
+			next_settlement_id, active_topics, next_topic_id, ic_day,
+		)
+		_process_organic_villages(
+			provinces, settlements, next_settlement_id,
+			active_topics, next_topic_id, ic_day,
+		)
 		var _sett_prov_map: Dictionary = {}
 		for s: SettlementData in settlements:
 			_sett_prov_map[s.settlement_id] = s.province_id
@@ -493,6 +517,7 @@ static func advance_day(
 		"seiyaku_results": seiyaku_results,
 		"worship_accumulation_results": worship_accumulation_results,
 		"worship_seasonal_results": worship_seasonal_results,
+		"construction_results": construction_results,
 	}
 
 
@@ -6499,3 +6524,412 @@ static func _inject_worship_battle_maluses(
 					risk_bonus += 3
 		if risk_bonus > 0:
 			bc["worship_commander_risk_bonus"] = risk_bonus
+
+
+# -- Construction Processing ---------------------------------------------------
+
+
+static func _process_construction_effects(
+	day_results: Array,
+	characters_by_id: Dictionary,
+	provinces: Dictionary,
+	settlements: Array[SettlementData],
+	constructions: Array[ConstructionData],
+	next_settlement_id: Array[int],
+	next_construction_id: Array[int],
+	ic_day: int,
+	ships: Array[ShipData],
+	dice_engine: DiceEngine,
+) -> Array[Dictionary]:
+	var results: Array[Dictionary] = []
+
+	for r: Dictionary in day_results:
+		var effects: Dictionary = r.get("effects", {})
+		if not effects.get("requires_construction", false):
+			continue
+
+		var char_id: int = r.get("character_id", -1)
+		var character: Variant = characters_by_id.get(char_id)
+		if character == null:
+			continue
+
+		var action_id: String = effects.get("construction_action", "")
+		var province_id: int = int(effects.get("province_id", -1))
+		var settlement_id: int = int(effects.get("settlement_id", -1))
+		var is_dedicated: bool = effects.get("is_dedicated", false)
+		var dedicated_fortune: int = int(effects.get("dedicated_fortune", -1))
+		var ship_class_val: int = int(effects.get("ship_class", -1))
+		var shrine_tier: String = effects.get("shrine_tier", "roadside")
+
+		var result: Dictionary = _apply_construction_order(
+			action_id, character as L5RCharacterData, province_id, settlement_id,
+			is_dedicated, dedicated_fortune, ship_class_val, shrine_tier,
+			provinces, settlements, constructions,
+			next_settlement_id, next_construction_id, ic_day,
+			ships, dice_engine,
+		)
+		result["character_id"] = char_id
+		result["action_id"] = action_id
+		results.append(result)
+
+	return results
+
+
+static func _apply_construction_order(
+	action_id: String,
+	character: L5RCharacterData,
+	province_id: int,
+	settlement_id: int,
+	is_dedicated: bool,
+	dedicated_fortune: int,
+	ship_class_val: int,
+	shrine_tier: String,
+	provinces: Dictionary,
+	settlements: Array[SettlementData],
+	constructions: Array[ConstructionData],
+	next_settlement_id: Array[int],
+	next_construction_id: Array[int],
+	ic_day: int,
+	ships: Array[ShipData],
+	_dice_engine: DiceEngine,
+) -> Dictionary:
+	var province: Variant = provinces.get(province_id)
+
+	match action_id:
+		"FOUND_VILLAGE":
+			if province == null:
+				return {"applied": false, "reason": "province_not_found"}
+			var valid: Dictionary = ConstructionSystem.validate_village_founding(
+				character, province as ProvinceData, settlements,
+			)
+			if not valid.get("valid", false):
+				return {"applied": false, "reason": valid.get("reason", "invalid")}
+
+			var deduction: Dictionary = ConstructionSystem.deduct_village_resources(
+				settlements, province_id,
+				ConstructionSystem.VILLAGE_MIN_PU,
+				ConstructionSystem.VILLAGE_KOKU_COST,
+			)
+			var village: SettlementData = ConstructionSystem.create_founded_village(
+				next_settlement_id[0],
+				province as ProvinceData,
+				(province as ProvinceData).province_name + " Village",
+				deduction["pu_moved"],
+				deduction["rice_moved"],
+			)
+			next_settlement_id[0] += 1
+			settlements.append(village)
+			return {"applied": true, "type": "village", "settlement_id": village.settlement_id}
+
+		"BUILD_FORTIFICATION":
+			if province == null:
+				return {"applied": false, "reason": "province_not_found"}
+			var valid: Dictionary = ConstructionSystem.validate_fortification(
+				character, province as ProvinceData, settlements,
+			)
+			if not valid.get("valid", false):
+				return {"applied": false, "reason": valid.get("reason", "invalid")}
+
+			ConstructionSystem.deduct_koku(
+				settlements, province_id, ConstructionSystem.FORTIFICATION_KOKU_COST,
+			)
+			var fort: SettlementData = ConstructionSystem.create_fortification(
+				next_settlement_id[0],
+				province as ProvinceData,
+				(province as ProvinceData).province_name + " Fortification",
+			)
+			next_settlement_id[0] += 1
+			settlements.append(fort)
+			return {"applied": true, "type": "fortification", "settlement_id": fort.settlement_id}
+
+		"BUILD_SHRINE":
+			var target_settlement: Variant = _find_settlement_by_id(settlements, settlement_id)
+			if target_settlement == null:
+				return {"applied": false, "reason": "settlement_not_found"}
+
+			var shrine_type: ConstructionData.ConstructionType = _shrine_tier_to_type(shrine_tier)
+			var valid: Dictionary = ConstructionSystem.validate_shrine(
+				shrine_type, character, target_settlement as SettlementData, is_dedicated,
+			)
+			if not valid.get("valid", false):
+				return {"applied": false, "reason": valid.get("reason", "invalid")}
+
+			var cost_entry: Dictionary = ConstructionSystem.SHRINE_COSTS.get(shrine_type, {})
+			var cost: float = cost_entry.get("dedicated", 0.0) if is_dedicated else cost_entry.get("general", 0.0)
+			var build_seasons: int = int(cost_entry.get("seasons", 1))
+
+			(target_settlement as SettlementData).koku_stockpile -= cost
+
+			if build_seasons <= 1:
+				var shrine_name: String = ConstructionSystem.SHRINE_TYPE_NAMES.get(shrine_type, "roadside_shrine")
+				ConstructionSystem.add_shrine_to_settlement(
+					target_settlement as SettlementData, shrine_name, is_dedicated, dedicated_fortune,
+				)
+				return {"applied": true, "type": "shrine", "immediate": true}
+			else:
+				var cd: ConstructionData = ConstructionSystem.create_construction(
+					next_construction_id[0], shrine_type, character.character_id,
+					(target_settlement as SettlementData).province_id, ic_day,
+					cost, 0.0, 0.0, settlement_id, is_dedicated, dedicated_fortune,
+				)
+				next_construction_id[0] += 1
+				constructions.append(cd)
+				return {"applied": true, "type": "shrine", "queued": true, "construction_id": cd.construction_id}
+
+		"FOUND_TEMPLE":
+			if province == null:
+				return {"applied": false, "reason": "province_not_found"}
+			var valid: Dictionary = ConstructionSystem.validate_temple(
+				ConstructionData.ConstructionType.TEMPLE, character,
+				province as ProvinceData, settlements, is_dedicated,
+			)
+			if not valid.get("valid", false):
+				return {"applied": false, "reason": valid.get("reason", "invalid")}
+
+			var koku_cost: float = ConstructionSystem.TEMPLE_DEDICATED_KOKU_COST if is_dedicated else ConstructionSystem.TEMPLE_KOKU_COST
+			ConstructionSystem.deduct_koku(settlements, province_id, koku_cost)
+			ConstructionSystem.deduct_pu(settlements, province_id, ConstructionSystem.TEMPLE_MIN_PU)
+
+			var cd: ConstructionData = ConstructionSystem.create_construction(
+				next_construction_id[0],
+				ConstructionData.ConstructionType.TEMPLE,
+				character.character_id, province_id, ic_day,
+				koku_cost, ConstructionSystem.TEMPLE_MIN_PU, 0.0,
+				-1, is_dedicated, dedicated_fortune,
+			)
+			next_construction_id[0] += 1
+			constructions.append(cd)
+			return {"applied": true, "type": "temple", "queued": true, "construction_id": cd.construction_id}
+
+		"FOUND_MONASTERY":
+			if province == null:
+				return {"applied": false, "reason": "province_not_found"}
+			var valid: Dictionary = ConstructionSystem.validate_temple(
+				ConstructionData.ConstructionType.MONASTERY, character,
+				province as ProvinceData, settlements, is_dedicated,
+			)
+			if not valid.get("valid", false):
+				return {"applied": false, "reason": valid.get("reason", "invalid")}
+
+			ConstructionSystem.deduct_koku(settlements, province_id, ConstructionSystem.MONASTERY_KOKU_COST)
+			ConstructionSystem.deduct_pu(settlements, province_id, ConstructionSystem.MONASTERY_MIN_PU)
+
+			var cd: ConstructionData = ConstructionSystem.create_construction(
+				next_construction_id[0],
+				ConstructionData.ConstructionType.MONASTERY,
+				character.character_id, province_id, ic_day,
+				ConstructionSystem.MONASTERY_KOKU_COST, ConstructionSystem.MONASTERY_MIN_PU,
+				0.0, -1, false, -1,
+			)
+			next_construction_id[0] += 1
+			constructions.append(cd)
+			return {"applied": true, "type": "monastery", "queued": true, "construction_id": cd.construction_id}
+
+		"COMMISSION_SHIP":
+			var target_settlement: Variant = _find_settlement_by_id(settlements, settlement_id)
+			if target_settlement == null:
+				return {"applied": false, "reason": "settlement_not_found"}
+
+			var sc: Enums.ShipClass = ship_class_val as Enums.ShipClass
+			var valid: Dictionary = ConstructionSystem.validate_ship_commission(
+				character, sc, target_settlement as SettlementData,
+			)
+			if not valid.get("valid", false):
+				return {"applied": false, "reason": valid.get("reason", "invalid")}
+
+			var cost: float = ConstructionSystem.SHIP_COSTS.get(sc, 3.0)
+			(target_settlement as SettlementData).koku_stockpile -= cost
+
+			var cd: ConstructionData = ConstructionSystem.create_construction(
+				next_construction_id[0],
+				ConstructionData.ConstructionType.SHIP,
+				character.character_id,
+				(target_settlement as SettlementData).province_id, ic_day,
+				cost, 0.0, 0.0, settlement_id, false, -1, ship_class_val,
+			)
+			next_construction_id[0] += 1
+			constructions.append(cd)
+			return {"applied": true, "type": "ship", "queued": true, "construction_id": cd.construction_id}
+
+	return {"applied": false, "reason": "unknown_action"}
+
+
+static func _process_construction_completions(
+	constructions: Array[ConstructionData],
+	settlements: Array[SettlementData],
+	provinces: Dictionary,
+	ships: Array[ShipData],
+	_dice_engine: DiceEngine,
+	next_settlement_id: Array[int],
+	active_topics: Array[TopicData],
+	next_topic_id: Array[int],
+	ic_day: int,
+) -> void:
+	var completed: Array[ConstructionData] = ConstructionSystem.tick_construction_queue(constructions)
+
+	for cd: ConstructionData in completed:
+		match cd.construction_type:
+			ConstructionData.ConstructionType.SHRINE_ROADSIDE, \
+			ConstructionData.ConstructionType.SHRINE_VILLAGE, \
+			ConstructionData.ConstructionType.SHRINE_LOCAL:
+				var target: Variant = _find_settlement_by_id(settlements, cd.settlement_id)
+				if target != null:
+					var shrine_name: String = ConstructionSystem.SHRINE_TYPE_NAMES.get(
+						cd.construction_type, "roadside_shrine",
+					)
+					ConstructionSystem.add_shrine_to_settlement(
+						target as SettlementData, shrine_name,
+						cd.is_dedicated, cd.dedicated_fortune,
+					)
+
+			ConstructionData.ConstructionType.TEMPLE:
+				var prov: Variant = provinces.get(cd.province_id)
+				if prov != null:
+					var temple: SettlementData = ConstructionSystem.create_temple(
+						next_settlement_id[0], prov as ProvinceData,
+						(prov as ProvinceData).province_name + " Temple",
+						cd.pu_committed, cd.is_dedicated, cd.dedicated_fortune,
+					)
+					next_settlement_id[0] += 1
+					settlements.append(temple)
+
+			ConstructionData.ConstructionType.SHINDEN:
+				var prov: Variant = provinces.get(cd.province_id)
+				if prov != null:
+					var shinden: SettlementData = ConstructionSystem.create_shinden(
+						next_settlement_id[0], prov as ProvinceData,
+						(prov as ProvinceData).province_name + " Shinden",
+						cd.pu_committed, cd.is_dedicated, cd.dedicated_fortune,
+					)
+					next_settlement_id[0] += 1
+					settlements.append(shinden)
+
+			ConstructionData.ConstructionType.MONASTERY:
+				var prov: Variant = provinces.get(cd.province_id)
+				if prov != null:
+					var monastery: SettlementData = ConstructionSystem.create_monastery(
+						next_settlement_id[0], prov as ProvinceData,
+						(prov as ProvinceData).province_name + " Monastery",
+						cd.pu_committed,
+					)
+					next_settlement_id[0] += 1
+					settlements.append(monastery)
+
+			ConstructionData.ConstructionType.SHIP:
+				var ship := ShipData.new()
+				ship.ship_id = next_settlement_id[0]
+				next_settlement_id[0] += 1
+				ship.ship_class = cd.ship_class
+				ship.current_province_id = cd.province_id
+				ship.ic_day_launched = ic_day
+				var stats: Dictionary = NavalSystem.SHIP_STATS.get(ship.ship_class, {})
+				ship.max_health = int(stats.get("health", 100))
+				ship.health = ship.max_health
+				ship.attack = int(stats.get("attack", 3))
+				ship.defense = int(stats.get("defense", 3))
+				ship.morale = int(stats.get("morale", 12))
+				ship.morale_defense = int(stats.get("morale_defense", 4))
+				ship.cargo_capacity = float(stats.get("cargo", 0.3))
+				ship.construction_cost = float(stats.get("construction_cost", 3.0))
+				ships.append(ship)
+
+		_generate_construction_topic(
+			cd, active_topics, next_topic_id, ic_day,
+		)
+
+	# Remove completed constructions
+	var i: int = constructions.size() - 1
+	while i >= 0:
+		if constructions[i].is_complete:
+			constructions.remove_at(i)
+		i -= 1
+
+
+static func _process_organic_villages(
+	provinces: Dictionary,
+	settlements: Array[SettlementData],
+	next_settlement_id: Array[int],
+	active_topics: Array[TopicData],
+	next_topic_id: Array[int],
+	ic_day: int,
+) -> void:
+	for pid: Variant in provinces:
+		var prov: ProvinceData = provinces[pid]
+		var result: Dictionary = ConstructionSystem.process_organic_formation(
+			prov, settlements, next_settlement_id[0],
+		)
+		if result.get("formed", false):
+			var village: SettlementData = result["settlement"]
+			next_settlement_id[0] += 1
+			settlements.append(village)
+
+			var topic := TopicData.new()
+			topic.topic_id = next_topic_id[0]
+			next_topic_id[0] += 1
+			topic.slug = "organic_village_%d" % village.settlement_id
+			topic.topic_type = "settlement"
+			topic.variant = "organic_formation"
+			topic.ic_day_created = ic_day
+			topic.tier = 4
+			topic.momentum = 11.0
+			active_topics.append(topic)
+
+
+static func _generate_construction_topic(
+	cd: ConstructionData,
+	active_topics: Array[TopicData],
+	next_topic_id: Array[int],
+	ic_day: int,
+) -> void:
+	var topic := TopicData.new()
+	topic.topic_id = next_topic_id[0]
+	next_topic_id[0] += 1
+	topic.ic_day_created = ic_day
+	topic.tier = 4
+	topic.momentum = 11.0
+	topic.topic_type = "construction"
+
+	match cd.construction_type:
+		ConstructionData.ConstructionType.TEMPLE:
+			topic.slug = "temple_completed_%d" % cd.construction_id
+			topic.variant = "temple_completed"
+			topic.tier = 3
+			topic.momentum = 25.0
+		ConstructionData.ConstructionType.SHINDEN:
+			topic.slug = "shinden_completed_%d" % cd.construction_id
+			topic.variant = "shinden_completed"
+			topic.tier = 2
+			topic.momentum = 40.0
+		ConstructionData.ConstructionType.MONASTERY:
+			topic.slug = "monastery_completed_%d" % cd.construction_id
+			topic.variant = "monastery_completed"
+			topic.tier = 3
+			topic.momentum = 25.0
+		ConstructionData.ConstructionType.SHIP:
+			topic.slug = "ship_launched_%d" % cd.construction_id
+			topic.variant = "ship_launched"
+		_:
+			topic.slug = "construction_%d" % cd.construction_id
+			topic.variant = "shrine_completed"
+
+	active_topics.append(topic)
+
+
+static func _find_settlement_by_id(
+	settlements: Array[SettlementData],
+	settlement_id: int,
+) -> Variant:
+	for s: SettlementData in settlements:
+		if s.settlement_id == settlement_id:
+			return s
+	return null
+
+
+static func _shrine_tier_to_type(tier: String) -> ConstructionData.ConstructionType:
+	match tier:
+		"village":
+			return ConstructionData.ConstructionType.SHRINE_VILLAGE
+		"local":
+			return ConstructionData.ConstructionType.SHRINE_LOCAL
+		_:
+			return ConstructionData.ConstructionType.SHRINE_ROADSIDE

@@ -515,6 +515,7 @@ All in /tests/, one file per system:
 - test_marriage_wiring.gd (~65 tests)
 - test_worship_system.gd (~67 tests)
 - test_worship_wiring.gd (~50 tests)
+- test_construction_system.gd (~55 tests)
 
 ### Governance Action Wiring (s57.20)
 - **APPOINT_TO_POSITION** — Daily AP action (1 AP, lord-only). Executor
@@ -2776,18 +2777,56 @@ All in /tests/, one file per system:
   mapping: CASTLE_SHRINE→village_shrine, SHRINE_CLEARING→roadside_shrine,
   TEMPLE_GROUNDS→local_shrine, default→roadside_shrine).
   `shared/settlement_data.gd` gains `worship_locations: Array[Dictionary]`.
-  Deferred: malus application to ResourceTick/ArmyCombatSystem/
-  InsurgencySystem/MarriageSystem, construction queue integration with s4.3.22.
+  All worship malus hooks are now wired.
+
+### Settlement Creation & Fortifications (s4.3.22)
+- **shared/construction_data.gd** — ConstructionData Resource: 9 ConstructionType
+  values (VILLAGE, FORTIFICATION, SHRINE_ROADSIDE/VILLAGE/LOCAL, TEMPLE,
+  SHINDEN, MONASTERY, SHIP). Fields: construction_id, ordering_lord_id,
+  province_id, settlement_id, koku/pu/rice committed, seasons_remaining,
+  is_dedicated, dedicated_fortune, ship_class.
+- **simulation/construction_system.gd** — Full settlement creation per GDD
+  s4.3.22. Pure static functions. Covers deliberate village founding (3 Koku,
+  1.0 PU, 1.0 Rice/PU), fortification building (5 Koku, no PU, military only),
+  shrine construction (5/15/30 Koku general, 12/30/60 dedicated, 1/2/3 seasons),
+  temple (80 Koku, 4 seasons, 0.5 PU), shinden (250 Koku, 8 seasons, 1.0 PU),
+  monastery (80 Koku, 4 seasons, 0.5 PU), ship commission (3/8 Koku, 1 season).
+  Validation functions check authority (Provincial Daimyo for villages/forts/
+  shrines/ships, Family Daimyo+ for temples/shinden/monasteries), resource
+  availability, terrain suitability. Construction queue with seasonal tick.
+  Organic village formation: surplus PU threshold by terrain (Plains 3.0,
+  Forest 5.0, Mountains 10.0), stability gate (50+), starvation/taint blocks.
+  Factory functions for all settlement types. Resource deduction helpers.
+  Terrain difficulty table per GDD.
+- **ActionExecutor** — 6 construction ActionIDs (FOUND_VILLAGE,
+  BUILD_FORTIFICATION, BUILD_SHRINE, FOUND_TEMPLE, FOUND_MONASTERY,
+  COMMISSION_SHIP) intercepted before generic admin path. Returns
+  `requires_construction: true` effect flag with construction metadata
+  (province_id, settlement_id, is_dedicated, dedicated_fortune, ship_class,
+  shrine_tier).
+- **DayOrchestrator wiring** — Daily: `_process_construction_effects()` scans
+  day results for `requires_construction` flag. Village and fortification
+  creation are immediate (deduct resources, create SettlementData, append to
+  settlements array). Shrine/temple/shinden/monastery/ship go into the
+  construction queue. Seasonal: `_process_construction_completions()` ticks
+  construction queue, creates completed settlements/shrines/ships. Shrine
+  completion adds worship_location to parent settlement. Ship completion
+  creates ShipData with stats from NavalSystem.SHIP_STATS. Temple/shinden/
+  monastery completion creates new SettlementData. `_process_organic_villages()`
+  checks all provinces for organic formation and creates villages. Topic
+  generation for completions (Tier 2-4 by type).
+  New params on `advance_day()`: `constructions: Array[ConstructionData]`,
+  `next_settlement_id: Array[int]`, `next_construction_id: Array[int]`.
+  Return dict gains `construction_results`.
+- **WorldStateData** gains `constructions`, `next_settlement_id`,
+  `next_construction_id` fields.
+- **Tests** — `tests/test_construction_system.gd` (~55 tests): validation
+  (village/fort/shrine/temple/shinden/monastery/ship), factory output,
+  construction queue tick, organic formation, authority checks, cost constants,
+  resource deduction, shrine addition.
 
 ### What's Next
 1. World generation coordinate system and adjacency
-2. GDD section 4.3.22 (settlement founding / fortification building) — required
-   before infrastructure ActionIDs (FOUND_VILLAGE, BUILD_FORTIFICATION,
-   BUILD_SHRINE, FOUND_TEMPLE, FOUND_MONASTERY) can be fully wired into the
-   NPC loop.
-   COMMISSION_SHIP also needs s4.3.22 for construction queue mechanics.
-   The NPC scoring tables and context lists are already in place (s57.20);
-   only the executor → orchestrator mutation pipeline is missing.
 
 ### Pending Redesign
 (None currently pending.)

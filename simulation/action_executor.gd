@@ -139,6 +139,9 @@ static func execute(
 			"effects": peace_effects,
 		}
 
+	if action_id in _CONSTRUCTION_ACTIONS:
+		return _execute_construction(action, character, ctx)
+
 	if action_id == "DECLARE_WAR":
 		var war_effects: Dictionary = _execute_declare_war(character, action.metadata)
 		return {
@@ -2054,3 +2057,53 @@ static func _get_winter_court_skill_bonus(
 	if character.clan != court_dict.get("host_clan", ""):
 		return 0
 	return WinterCourtSystem.HOST_SKILL_BONUS
+
+
+# -- Construction Intercepts ---------------------------------------------------
+
+const _CONSTRUCTION_ACTIONS: Array[String] = [
+	"FOUND_VILLAGE", "BUILD_FORTIFICATION", "BUILD_SHRINE",
+	"FOUND_TEMPLE", "FOUND_MONASTERY", "COMMISSION_SHIP",
+]
+
+const _CONSTRUCTION_TYPE_MAP: Dictionary = {
+	"BUILD_SHRINE": "shrine",
+	"FOUND_VILLAGE": "village",
+	"BUILD_FORTIFICATION": "fortification",
+	"FOUND_TEMPLE": "temple",
+	"FOUND_MONASTERY": "monastery",
+	"COMMISSION_SHIP": "ship",
+}
+
+
+static func _execute_construction(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> Dictionary:
+	var action_id: String = action.action_id
+	var ctype: String = _CONSTRUCTION_TYPE_MAP.get(action_id, "")
+	var meta: Dictionary = action.metadata if action.metadata != null else {}
+
+	var effects: Dictionary = {
+		"requires_construction": true,
+		"construction_action": action_id,
+		"construction_category": ctype,
+		"province_id": action.target_province_id if action.target_province_id >= 0 else meta.get("province_id", -1),
+		"settlement_id": action.target_settlement_id if action.target_settlement_id >= 0 else meta.get("settlement_id", -1),
+		"is_dedicated": meta.get("is_dedicated", false),
+		"dedicated_fortune": meta.get("dedicated_fortune", -1),
+		"ship_class": meta.get("ship_class", -1),
+		"shrine_tier": meta.get("shrine_tier", "roadside"),
+	}
+
+	return {
+		"success": true,
+		"action_id": action_id,
+		"character_id": character.character_id,
+		"target_npc_id": action.target_npc_id,
+		"target_province_id": effects["province_id"],
+		"ic_day": ctx.ic_day,
+		"season": ctx.season,
+		"effects": effects,
+	}

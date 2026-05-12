@@ -88,6 +88,11 @@ var seiyaku_state: Dictionary = OtomoSeiyakuSystem.make_initial_state()
 # -- Marriages (s22.7) --------------------------------------------------------
 var marriages: Array[Dictionary] = []
 
+# -- Construction Queue (s4.3.22) ----------------------------------------------
+var constructions: Array[ConstructionData] = []
+var next_settlement_id: Array[int] = [5000]
+var next_construction_id: Array[int] = [1]
+
 # -- Kami Worship (s4.3.21) ---------------------------------------------------
 var worship_state: Dictionary = WorshipSystem.make_initial_worship_state()
 
@@ -189,6 +194,9 @@ func advance_one_day() -> Dictionary:
 		seiyaku_state,
 		marriages,
 		worship_state,
+		constructions,
+		next_settlement_id,
+		next_construction_id,
 	)
 
 
