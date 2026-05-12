@@ -1076,17 +1076,19 @@ static func _compute_topic_position_modifier(
 
 static func _interpolate_topic_position(
 	position: float,
-	_need_entry: Dictionary,
+	need_entry: Dictionary,
 ) -> float:
+	var cap_pos: float = float(need_entry.get("strong_support", 15))
+	var cap_neg: float = float(need_entry.get("strong_opposition", -15))
 	if position <= -50.0:
-		return -15.0
+		return cap_neg
 	if position >= 50.0:
-		return 15.0
+		return cap_pos
 	if position >= -15.0 and position <= 15.0:
 		return 0.0
 	if position < -15.0:
-		return lerpf(0.0, -15.0, (absf(position) - 15.0) / 35.0)
-	return lerpf(0.0, 15.0, (position - 15.0) / 35.0)
+		return lerpf(0.0, cap_neg, (absf(position) - 15.0) / 35.0)
+	return lerpf(0.0, cap_pos, (position - 15.0) / 35.0)
 
 
 static func _compute_resource_modifier(

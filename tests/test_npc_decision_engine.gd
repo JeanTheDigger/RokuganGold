@@ -922,3 +922,76 @@ func test_build_context_populates_school() -> void:
 		_char, ws
 	)
 	assert_eq(ctx.school, "Kaiu Engineer")
+
+
+# --- Topic position scoring (s55.14, s55.26 Annex H) ---
+
+func test_interpolate_strong_support_returns_cap() -> void:
+	var entry: Dictionary = {"strong_support": 12, "strong_opposition": -8}
+	var result: float = NPCDecisionEngine._interpolate_topic_position(60.0, entry)
+	assert_eq(result, 12.0)
+
+
+func test_interpolate_strong_opposition_returns_cap() -> void:
+	var entry: Dictionary = {"strong_support": 12, "strong_opposition": -8}
+	var result: float = NPCDecisionEngine._interpolate_topic_position(-60.0, entry)
+	assert_eq(result, -8.0)
+
+
+func test_interpolate_neutral_returns_zero() -> void:
+	var entry: Dictionary = {"strong_support": 15, "strong_opposition": -15}
+	assert_eq(NPCDecisionEngine._interpolate_topic_position(0.0, entry), 0.0)
+	assert_eq(NPCDecisionEngine._interpolate_topic_position(10.0, entry), 0.0)
+	assert_eq(NPCDecisionEngine._interpolate_topic_position(-10.0, entry), 0.0)
+
+
+func test_interpolate_partial_positive() -> void:
+	var entry: Dictionary = {"strong_support": 15, "strong_opposition": -15}
+	var result: float = NPCDecisionEngine._interpolate_topic_position(32.5, entry)
+	assert_almost_eq(result, 7.5, 0.01)
+
+
+func test_interpolate_partial_negative() -> void:
+	var entry: Dictionary = {"strong_support": 15, "strong_opposition": -15}
+	var result: float = NPCDecisionEngine._interpolate_topic_position(-32.5, entry)
+	assert_almost_eq(result, -7.5, 0.01)
+
+
+func test_interpolate_asymmetric_caps() -> void:
+	var entry: Dictionary = {"strong_support": 10, "strong_opposition": 0}
+	assert_eq(NPCDecisionEngine._interpolate_topic_position(60.0, entry), 10.0)
+	assert_eq(NPCDecisionEngine._interpolate_topic_position(-60.0, entry), 0.0)
+
+
+func test_compute_topic_position_modifier_uses_table() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.known_topics = [1, 2]
+	ctx.known_positions = {1: 60.0, 2: -30.0}
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "GATHER_INTELLIGENCE"
+	var tables: Dictionary = {
+		"topic_position_alignment": {
+			"GATHER_INTELLIGENCE": {"strong_support": 10, "strong_opposition": 0},
+		},
+	}
+	var result: float = NPCDecisionEngine._compute_topic_position_modifier(
+		"PROBE", need, ctx, tables,
+	)
+	assert_eq(result, 10.0)
+
+
+func test_compute_topic_position_modifier_missing_need_type() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.known_topics = [1]
+	ctx.known_positions = {1: 80.0}
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "UNKNOWN_NEED"
+	var tables: Dictionary = {
+		"topic_position_alignment": {
+			"GATHER_INTELLIGENCE": {"strong_support": 10, "strong_opposition": 0},
+		},
+	}
+	var result: float = NPCDecisionEngine._compute_topic_position_modifier(
+		"PROBE", need, ctx, tables,
+	)
+	assert_eq(result, 0.0)
