@@ -511,6 +511,34 @@ All in /tests/, one file per system:
 - test_npc_advancement.gd (~56 tests)
 - test_ronin_system.gd (~44 tests)
 - test_musha_shugyo_system.gd (~75 tests)
+- test_governance_wiring.gd (~25 tests)
+- test_marriage_wiring.gd (~20 tests)
+
+### Governance Action Wiring (s57.20)
+- **APPOINT_TO_POSITION** — Daily AP action (1 AP, lord-only). Executor
+  intercept returns `requires_appointment` flag. DayOrchestrator
+  `_apply_appointment()` mutates `role_position` and
+  `operational_superior_id` on the appointee.
+- **REASSIGN_VASSAL_OBJECTIVE** — Strategic Review directive consumption.
+  `_process_vassal_reassignments()` handles ASSIGN/CONFIRM/MODIFY/CANCEL
+  decisions, mutating `objectives_map` entries.
+- **Lord-only gating** — `LORD_ONLY_ACTIONS` constant (11 actions) and
+  `_is_lord_only_blocked()` prevent non-lord NPCs from selecting
+  governance/construction actions in Phase 3.
+- **ARRANGE_MARRIAGE** — Daily AP action (1 AP, lord-only). Executor
+  intercept evaluates target lord acceptance via
+  `MarriageSystem.evaluate_proposal()`. Returns `requires_marriage` on
+  acceptance (orchestrator mutates `spouse_id`, creates marriage record,
+  returns boost data) or `marriage_rejected` with −3 disposition on
+  rejection. Marriage type auto-detected from candidate clan/family.
+  WorldStateData gains `marriages: Array[Dictionary]`.
+- CALL_COURT, ASSIGN_VASSAL_OBJECTIVE, and SEND_INVITATION are NOT daily
+  AP actions — they route through Strategic Review and the daily letter
+  system respectively.
+- Infrastructure ActionIDs (FOUND_VILLAGE, BUILD_FORTIFICATION, BUILD_SHRINE,
+  FOUND_TEMPLE, FOUND_MONASTERY, COMMISSION_SHIP) are in context lists and
+  scoring tables but executor→orchestrator mutation pipeline is blocked on
+  missing GDD sections 4.3.21/4.3.22.
 
 ### Festival System (s11.5)
 - **simulation/festival_system.gd** — Empire-wide canonical festivals, Rokuyo
