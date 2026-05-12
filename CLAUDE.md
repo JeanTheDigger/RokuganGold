@@ -515,7 +515,7 @@ All in /tests/, one file per system:
 - test_marriage_wiring.gd (~65 tests)
 - test_worship_system.gd (~67 tests)
 - test_worship_wiring.gd (~50 tests)
-- test_construction_system.gd (~67 tests)
+- test_construction_system.gd (~89 tests)
 
 ### Governance Action Wiring (s57.20)
 - **APPOINT_TO_POSITION** — Daily AP action (1 AP, lord-only). Executor
