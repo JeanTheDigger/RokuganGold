@@ -674,3 +674,518 @@ func test_infra_village_takes_priority_over_ship() -> void:
 	var obj := {"need_type": "BUILD_INFRASTRUCTURE", "priority": 2}
 	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, ctx)
 	assert_eq(need.target_intent, "FOUND_VILLAGE")
+
+
+# -- Integration: Orchestrator Construction Pipeline ---------------------------
+
+func _make_dice() -> DiceEngine:
+	var d := DiceEngine.new()
+	d.set_seed(42)
+	return d
+
+
+func _make_day_result(char_id: int, action: String, extras: Dictionary = {}) -> Dictionary:
+	var effects: Dictionary = {
+		"requires_construction": true,
+		"construction_action": action,
+	}
+	effects.merge(extras)
+	return {"character_id": char_id, "effects": effects}
+
+
+# -- Village founding via effect flag → immediate settlement creation ----------
+
+func test_integration_village_founding_creates_settlement() -> void:
+	var c := _make_char(1, 3.0)
+	var p := _make_province(1)
+	var s := _make_settlement(10, 1, Enums.SettlementType.VILLAGE, 5, 10.0, 20.0)
+	var chars_by_id: Dictionary = {1: c}
+	var provinces: Dictionary = {1: p}
+	var settlements: Array[SettlementData] = [s]
+	var constructions: Array[ConstructionData] = []
+	var ships: Array[ShipData] = []
+	var next_sid: Array[int] = [100]
+	var next_cid: Array[int] = [1]
+
+	var day_results: Array = [_make_day_result(1, "FOUND_VILLAGE", {"province_id": 1})]
+
+	var results: Array[Dictionary] = DayOrchestrator._process_construction_effects(
+		day_results, chars_by_id, provinces, settlements, constructions,
+		next_sid, next_cid, 50, ships, _make_dice(),
+	)
+
+	assert_eq(results.size(), 1)
+	assert_true(results[0].get("applied", false))
+	assert_eq(results[0].get("type", ""), "village")
+	assert_eq(settlements.size(), 2)
+	assert_eq(settlements[1].settlement_id, 100)
+	assert_eq(settlements[1].settlement_type, Enums.SettlementType.VILLAGE)
+	assert_eq(next_sid[0], 101)
+	# Resources deducted from source settlement
+	assert_true(s.koku_stockpile < 20.0)
+
+
+func test_integration_village_founding_deducts_resources() -> void:
+	var c := _make_char(1, 3.0)
+	var p := _make_province(1)
+	var s := _make_settlement(10, 1, Enums.SettlementType.VILLAGE, 5, 10.0, 20.0)
+	var chars_by_id: Dictionary = {1: c}
+	var provinces: Dictionary = {1: p}
+	var settlements: Array[SettlementData] = [s]
+
+	var day_results: Array = [_make_day_result(1, "FOUND_VILLAGE", {"province_id": 1})]
+	DayOrchestrator._process_construction_effects(
+		day_results, chars_by_id, provinces, settlements,
+		[] as Array[ConstructionData], [100] as Array[int], [1] as Array[int],
+		50, [] as Array[ShipData], _make_dice(),
+	)
+
+	assert_eq(s.koku_stockpile, 17.0)
+	assert_eq(s.population_pu, 4)
+	assert_eq(s.rice_stockpile, 9.0)
+
+
+# -- Fortification via effect flag → immediate creation ------------------------
+
+func test_integration_fortification_creates_settlement() -> void:
+	var c := _make_char(1, 3.0)
+	var p := _make_province(1)
+	var s := _make_settlement(10, 1, Enums.SettlementType.VILLAGE, 5, 10.0, 20.0)
+	var chars_by_id: Dictionary = {1: c}
+	var provinces: Dictionary = {1: p}
+	var settlements: Array[SettlementData] = [s]
+
+	var day_results: Array = [_make_day_result(1, "BUILD_FORTIFICATION", {"province_id": 1})]
+	var results: Array[Dictionary] = DayOrchestrator._process_construction_effects(
+		day_results, chars_by_id, provinces, settlements,
+		[] as Array[ConstructionData], [100] as Array[int], [1] as Array[int],
+		50, [] as Array[ShipData], _make_dice(),
+	)
+
+	assert_eq(results.size(), 1)
+	assert_true(results[0].get("applied", false))
+	assert_eq(results[0].get("type", ""), "fortification")
+	assert_eq(settlements.size(), 2)
+	assert_eq(settlements[1].settlement_type, Enums.SettlementType.FORTIFICATION)
+	assert_eq(s.koku_stockpile, 15.0)
+
+
+# -- Shrine: roadside = immediate, village/local = queued ----------------------
+
+func test_integration_roadside_shrine_immediate() -> void:
+	var c := _make_char(1, 3.0)
+	var s := _make_settlement(10, 1, Enums.SettlementType.VILLAGE, 5, 10.0, 20.0)
+	var chars_by_id: Dictionary = {1: c}
+	var settlements: Array[SettlementData] = [s]
+	var constructions: Array[ConstructionData] = []
+
+	var day_results: Array = [_make_day_result(1, "BUILD_SHRINE", {
+		"settlement_id": 10, "shrine_tier": "roadside", "is_dedicated": false,
+	})]
+	var results: Array[Dictionary] = DayOrchestrator._process_construction_effects(
+		day_results, chars_by_id, {}, settlements, constructions,
+		[100] as Array[int], [1] as Array[int], 50, [] as Array[ShipData], _make_dice(),
+	)
+
+	assert_true(results[0].get("applied", false))
+	assert_true(results[0].get("immediate", false))
+	assert_eq(constructions.size(), 0)
+	assert_eq(s.worship_locations.size(), 1)
+	assert_eq(s.koku_stockpile, 15.0)
+
+
+func test_integration_village_shrine_queued() -> void:
+	var c := _make_char(1, 3.0)
+	var s := _make_settlement(10, 1, Enums.SettlementType.VILLAGE, 5, 10.0, 30.0)
+	var chars_by_id: Dictionary = {1: c}
+	var settlements: Array[SettlementData] = [s]
+	var constructions: Array[ConstructionData] = []
+
+	var day_results: Array = [_make_day_result(1, "BUILD_SHRINE", {
+		"settlement_id": 10, "shrine_tier": "village", "is_dedicated": false,
+	})]
+	var results: Array[Dictionary] = DayOrchestrator._process_construction_effects(
+		day_results, chars_by_id, {}, settlements, constructions,
+		[100] as Array[int], [1] as Array[int], 50, [] as Array[ShipData], _make_dice(),
+	)
+
+	assert_true(results[0].get("applied", false))
+	assert_true(results[0].get("queued", false))
+	assert_eq(constructions.size(), 1)
+	assert_eq(constructions[0].construction_type, ConstructionData.ConstructionType.SHRINE_VILLAGE)
+	assert_eq(constructions[0].seasons_remaining, 2)
+	assert_eq(s.worship_locations.size(), 0)
+
+
+func test_integration_local_shrine_queued_3_seasons() -> void:
+	var c := _make_char(1, 3.0)
+	var s := _make_settlement(10, 1, Enums.SettlementType.VILLAGE, 5, 10.0, 70.0)
+	var chars_by_id: Dictionary = {1: c}
+	var settlements: Array[SettlementData] = [s]
+	var constructions: Array[ConstructionData] = []
+
+	var day_results: Array = [_make_day_result(1, "BUILD_SHRINE", {
+		"settlement_id": 10, "shrine_tier": "local", "is_dedicated": true,
+		"dedicated_fortune": 3,
+	})]
+	DayOrchestrator._process_construction_effects(
+		day_results, chars_by_id, {}, settlements, constructions,
+		[100] as Array[int], [1] as Array[int], 50, [] as Array[ShipData], _make_dice(),
+	)
+
+	assert_eq(constructions.size(), 1)
+	assert_eq(constructions[0].construction_type, ConstructionData.ConstructionType.SHRINE_LOCAL)
+	assert_eq(constructions[0].seasons_remaining, 3)
+	assert_true(constructions[0].is_dedicated)
+	assert_eq(constructions[0].dedicated_fortune, 3)
+
+
+# -- Shrine queue completion → worship_location added --------------------------
+
+func test_integration_shrine_queue_to_completion() -> void:
+	var s := _make_settlement(10, 1, Enums.SettlementType.VILLAGE, 5, 10.0, 20.0)
+	var settlements: Array[SettlementData] = [s]
+	var constructions: Array[ConstructionData] = []
+	var topics: Array[TopicData] = []
+	var next_tid: Array[int] = [1]
+
+	var cd: ConstructionData = ConstructionSystem.create_construction(
+		1, ConstructionData.ConstructionType.SHRINE_VILLAGE, 10, 1, 50,
+		15.0, 0.0, 0.0, 10, true, 2,
+	)
+	constructions.append(cd)
+
+	# Tick once: 2 → 1
+	DayOrchestrator._process_construction_completions(
+		constructions, settlements, {}, [] as Array[ShipData], _make_dice(),
+		[100] as Array[int], topics, next_tid, 100,
+	)
+	assert_eq(constructions.size(), 1)
+	assert_eq(s.worship_locations.size(), 0)
+
+	# Tick again: 1 → 0 = complete
+	DayOrchestrator._process_construction_completions(
+		constructions, settlements, {}, [] as Array[ShipData], _make_dice(),
+		[100] as Array[int], topics, next_tid, 200,
+	)
+	assert_eq(constructions.size(), 0)
+	assert_eq(s.worship_locations.size(), 1)
+	assert_true(s.worship_locations[0].get("dedicated", false))
+	assert_eq(s.worship_locations[0].get("fortune", -1), 2)
+	assert_eq(topics.size(), 1)
+	assert_eq(topics[0].variant, "shrine_completed")
+
+
+# -- Temple queue → new SettlementData -----------------------------------------
+
+func test_integration_temple_queue_entry() -> void:
+	var c := _make_char(1, 5.0)
+	var p := _make_province(1)
+	var s := _make_settlement(10, 1, Enums.SettlementType.VILLAGE, 5, 10.0, 100.0)
+	var chars_by_id: Dictionary = {1: c}
+	var provinces: Dictionary = {1: p}
+	var settlements: Array[SettlementData] = [s]
+	var constructions: Array[ConstructionData] = []
+
+	var day_results: Array = [_make_day_result(1, "FOUND_TEMPLE", {
+		"province_id": 1, "is_dedicated": false,
+	})]
+	DayOrchestrator._process_construction_effects(
+		day_results, chars_by_id, provinces, settlements, constructions,
+		[100] as Array[int], [1] as Array[int], 50, [] as Array[ShipData], _make_dice(),
+	)
+
+	assert_eq(constructions.size(), 1)
+	assert_eq(constructions[0].construction_type, ConstructionData.ConstructionType.TEMPLE)
+	assert_eq(constructions[0].seasons_remaining, 4)
+	assert_eq(s.koku_stockpile, 20.0)
+
+
+func test_integration_temple_completion_creates_settlement() -> void:
+	var p := _make_province(1)
+	var provinces: Dictionary = {1: p}
+	var settlements: Array[SettlementData] = []
+	var topics: Array[TopicData] = []
+	var next_sid: Array[int] = [200]
+	var next_tid: Array[int] = [1]
+
+	var cd: ConstructionData = ConstructionSystem.create_construction(
+		1, ConstructionData.ConstructionType.TEMPLE, 10, 1, 50,
+		80.0, 0.5, 0.0,
+	)
+	cd.is_dedicated = true
+	cd.dedicated_fortune = 5
+	cd.seasons_remaining = 1
+	var constructions: Array[ConstructionData] = [cd]
+
+	DayOrchestrator._process_construction_completions(
+		constructions, settlements, provinces, [] as Array[ShipData], _make_dice(),
+		next_sid, topics, next_tid, 300,
+	)
+
+	assert_eq(constructions.size(), 0)
+	assert_eq(settlements.size(), 1)
+	assert_eq(settlements[0].settlement_type, Enums.SettlementType.TEMPLE)
+	assert_eq(settlements[0].settlement_id, 200)
+	assert_eq(next_sid[0], 201)
+	assert_eq(topics.size(), 1)
+	assert_eq(topics[0].variant, "temple_completed")
+	assert_eq(topics[0].tier, 3)
+	assert_eq(topics[0].momentum, 25.0)
+
+
+# -- Monastery queue → new SettlementData --------------------------------------
+
+func test_integration_monastery_completion_creates_settlement() -> void:
+	var p := _make_province(1)
+	var provinces: Dictionary = {1: p}
+	var settlements: Array[SettlementData] = []
+	var topics: Array[TopicData] = []
+	var next_sid: Array[int] = [200]
+	var next_tid: Array[int] = [1]
+
+	var cd: ConstructionData = ConstructionSystem.create_construction(
+		1, ConstructionData.ConstructionType.MONASTERY, 10, 1, 50,
+		80.0, 0.5, 0.0,
+	)
+	cd.seasons_remaining = 1
+	var constructions: Array[ConstructionData] = [cd]
+
+	DayOrchestrator._process_construction_completions(
+		constructions, settlements, provinces, [] as Array[ShipData], _make_dice(),
+		next_sid, topics, next_tid, 300,
+	)
+
+	assert_eq(constructions.size(), 0)
+	assert_eq(settlements.size(), 1)
+	assert_eq(settlements[0].settlement_type, Enums.SettlementType.MONASTERY)
+	assert_eq(next_sid[0], 201)
+	assert_eq(topics[0].variant, "monastery_completed")
+	assert_eq(topics[0].tier, 3)
+
+
+# -- Ship commission → queue → ShipData creation -------------------------------
+
+func test_integration_ship_commission_queues() -> void:
+	var c := _make_char(1, 3.0)
+	var s := _make_settlement(10, 1, Enums.SettlementType.VILLAGE, 5, 10.0, 20.0)
+	s.infrastructure = ["shipyard"]
+	var chars_by_id: Dictionary = {1: c}
+	var settlements: Array[SettlementData] = [s]
+	var constructions: Array[ConstructionData] = []
+
+	var day_results: Array = [_make_day_result(1, "COMMISSION_SHIP", {
+		"settlement_id": 10, "ship_class": Enums.ShipClass.KOBUNE,
+	})]
+	DayOrchestrator._process_construction_effects(
+		day_results, chars_by_id, {}, settlements, constructions,
+		[100] as Array[int], [1] as Array[int], 50, [] as Array[ShipData], _make_dice(),
+	)
+
+	assert_eq(constructions.size(), 1)
+	assert_eq(constructions[0].construction_type, ConstructionData.ConstructionType.SHIP)
+	assert_eq(constructions[0].ship_class, Enums.ShipClass.KOBUNE)
+	assert_eq(constructions[0].seasons_remaining, 1)
+	assert_eq(s.koku_stockpile, 17.0)
+
+
+func test_integration_ship_completion_creates_ship_data() -> void:
+	var settlements: Array[SettlementData] = []
+	var ships: Array[ShipData] = []
+	var topics: Array[TopicData] = []
+	var next_sid: Array[int] = [200]
+	var next_tid: Array[int] = [1]
+
+	var cd: ConstructionData = ConstructionSystem.create_construction(
+		1, ConstructionData.ConstructionType.SHIP, 10, 1, 50,
+		3.0, 0.0, 0.0, 10, false, -1, Enums.ShipClass.KOBUNE,
+	)
+	cd.seasons_remaining = 1
+	var constructions: Array[ConstructionData] = [cd]
+
+	DayOrchestrator._process_construction_completions(
+		constructions, settlements, {}, ships, _make_dice(),
+		next_sid, topics, next_tid, 300,
+	)
+
+	assert_eq(constructions.size(), 0)
+	assert_eq(ships.size(), 1)
+	assert_eq(ships[0].ship_class, Enums.ShipClass.KOBUNE)
+	assert_eq(ships[0].max_health, 100)
+	assert_eq(ships[0].health, 100)
+	assert_eq(ships[0].attack, 3)
+	assert_eq(ships[0].defense, 3)
+	assert_eq(ships[0].morale, 12)
+	assert_eq(ships[0].cargo_capacity, 0.3)
+	assert_eq(ships[0].ic_day_launched, 300)
+	assert_eq(ships[0].current_province_id, 1)
+	assert_eq(topics.size(), 1)
+	assert_eq(topics[0].variant, "ship_launched")
+
+
+# -- Organic village formation on season boundary ------------------------------
+
+func test_integration_organic_village_formation() -> void:
+	var p := _make_province(1, Enums.TerrainType.PLAINS)
+	var s := _make_settlement(10, 1, Enums.SettlementType.VILLAGE, 10, 20.0, 10.0)
+	var provinces: Dictionary = {1: p}
+	var settlements: Array[SettlementData] = [s]
+	var topics: Array[TopicData] = []
+	var next_sid: Array[int] = [200]
+	var next_tid: Array[int] = [1]
+
+	DayOrchestrator._process_organic_villages(
+		provinces, settlements, next_sid, topics, next_tid, 100,
+	)
+
+	assert_eq(settlements.size(), 2)
+	assert_eq(settlements[1].settlement_type, Enums.SettlementType.VILLAGE)
+	assert_eq(settlements[1].settlement_id, 200)
+	assert_eq(next_sid[0], 201)
+	assert_eq(topics.size(), 1)
+	assert_eq(topics[0].topic_type, "settlement")
+	assert_eq(topics[0].variant, "organic_formation")
+	assert_eq(s.population_pu, 9)
+
+
+func test_integration_organic_village_low_stability_blocked() -> void:
+	var p := _make_province(1, Enums.TerrainType.PLAINS)
+	p.stability = 30.0
+	var s := _make_settlement(10, 1, Enums.SettlementType.VILLAGE, 10, 20.0, 10.0)
+	var provinces: Dictionary = {1: p}
+	var settlements: Array[SettlementData] = [s]
+	var topics: Array[TopicData] = []
+
+	DayOrchestrator._process_organic_villages(
+		provinces, settlements, [200] as Array[int], topics, [1] as Array[int], 100,
+	)
+
+	assert_eq(settlements.size(), 1)
+	assert_eq(topics.size(), 0)
+
+
+# -- Topic generation on completion --------------------------------------------
+
+func test_integration_shinden_topic_tier_2() -> void:
+	var p := _make_province(1)
+	var provinces: Dictionary = {1: p}
+	var settlements: Array[SettlementData] = []
+	var topics: Array[TopicData] = []
+	var next_sid: Array[int] = [200]
+	var next_tid: Array[int] = [1]
+
+	var cd: ConstructionData = ConstructionSystem.create_construction(
+		1, ConstructionData.ConstructionType.SHINDEN, 10, 1, 50,
+		250.0, 1.0, 0.0,
+	)
+	cd.seasons_remaining = 1
+	var constructions: Array[ConstructionData] = [cd]
+
+	DayOrchestrator._process_construction_completions(
+		constructions, settlements, provinces, [] as Array[ShipData], _make_dice(),
+		next_sid, topics, next_tid, 300,
+	)
+
+	assert_eq(topics.size(), 1)
+	assert_eq(topics[0].tier, 2)
+	assert_eq(topics[0].momentum, 40.0)
+	assert_eq(topics[0].variant, "shinden_completed")
+	assert_eq(settlements[0].settlement_type, Enums.SettlementType.SHINDEN)
+
+
+# -- Validation failures propagate through pipeline ----------------------------
+
+func test_integration_village_invalid_province_returns_not_applied() -> void:
+	var c := _make_char(1, 3.0)
+	var chars_by_id: Dictionary = {1: c}
+	var settlements: Array[SettlementData] = []
+
+	var day_results: Array = [_make_day_result(1, "FOUND_VILLAGE", {"province_id": 999})]
+	var results: Array[Dictionary] = DayOrchestrator._process_construction_effects(
+		day_results, chars_by_id, {}, settlements,
+		[] as Array[ConstructionData], [100] as Array[int], [1] as Array[int],
+		50, [] as Array[ShipData], _make_dice(),
+	)
+
+	assert_eq(results.size(), 1)
+	assert_false(results[0].get("applied", true))
+	assert_eq(results[0].get("reason", ""), "province_not_found")
+
+
+func test_integration_unknown_action_returns_not_applied() -> void:
+	var c := _make_char(1, 3.0)
+	var chars_by_id: Dictionary = {1: c}
+
+	var day_results: Array = [_make_day_result(1, "BUILD_CASTLE", {})]
+	var results: Array[Dictionary] = DayOrchestrator._process_construction_effects(
+		day_results, chars_by_id, {}, [] as Array[SettlementData],
+		[] as Array[ConstructionData], [100] as Array[int], [1] as Array[int],
+		50, [] as Array[ShipData], _make_dice(),
+	)
+
+	assert_eq(results.size(), 1)
+	assert_false(results[0].get("applied", true))
+	assert_eq(results[0].get("reason", ""), "unknown_action")
+
+
+# -- Multi-season queue tick counts correctly ----------------------------------
+
+func test_integration_temple_4_season_queue() -> void:
+	var p := _make_province(1)
+	var provinces: Dictionary = {1: p}
+	var settlements: Array[SettlementData] = []
+	var topics: Array[TopicData] = []
+	var next_sid: Array[int] = [200]
+	var next_tid: Array[int] = [1]
+
+	var cd: ConstructionData = ConstructionSystem.create_construction(
+		1, ConstructionData.ConstructionType.TEMPLE, 10, 1, 50,
+		80.0, 0.5, 0.0,
+	)
+	var constructions: Array[ConstructionData] = [cd]
+	assert_eq(cd.seasons_remaining, 4)
+
+	for i: int in range(3):
+		DayOrchestrator._process_construction_completions(
+			constructions, settlements, provinces, [] as Array[ShipData], _make_dice(),
+			next_sid, topics, next_tid, 100 + i * 90,
+		)
+
+	assert_eq(constructions.size(), 1)
+	assert_eq(cd.seasons_remaining, 1)
+	assert_eq(settlements.size(), 0)
+
+	# Final tick completes it
+	DayOrchestrator._process_construction_completions(
+		constructions, settlements, provinces, [] as Array[ShipData], _make_dice(),
+		next_sid, topics, next_tid, 460,
+	)
+
+	assert_eq(constructions.size(), 0)
+	assert_eq(settlements.size(), 1)
+	assert_eq(settlements[0].settlement_type, Enums.SettlementType.TEMPLE)
+	assert_eq(topics.size(), 1)
+
+
+# -- Dedicated shrine passes fortune through pipeline --------------------------
+
+func test_integration_dedicated_roadside_shrine_fortune() -> void:
+	var c := _make_char(1, 3.0)
+	var s := _make_settlement(10, 1, Enums.SettlementType.VILLAGE, 5, 10.0, 20.0)
+	var chars_by_id: Dictionary = {1: c}
+	var settlements: Array[SettlementData] = [s]
+
+	var day_results: Array = [_make_day_result(1, "BUILD_SHRINE", {
+		"settlement_id": 10, "shrine_tier": "roadside",
+		"is_dedicated": true, "dedicated_fortune": 4,
+	})]
+	DayOrchestrator._process_construction_effects(
+		day_results, chars_by_id, {}, settlements,
+		[] as Array[ConstructionData], [100] as Array[int], [1] as Array[int],
+		50, [] as Array[ShipData], _make_dice(),
+	)
+
+	assert_eq(s.worship_locations.size(), 1)
+	assert_true(s.worship_locations[0].get("dedicated", false))
+	assert_eq(s.worship_locations[0].get("fortune", -1), 4)
+	assert_eq(s.koku_stockpile, 8.0)
