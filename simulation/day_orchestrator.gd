@@ -6873,7 +6873,7 @@ static func _process_organic_villages(
 			topic.topic_type = "settlement"
 			topic.variant = "organic_formation"
 			topic.ic_day_created = ic_day
-			topic.tier = 4
+			topic.tier = TopicData.Tier.TIER_4
 			topic.momentum = 11.0
 			active_topics.append(topic)
 
@@ -6888,7 +6888,7 @@ static func _generate_construction_topic(
 	topic.topic_id = next_topic_id[0]
 	next_topic_id[0] += 1
 	topic.ic_day_created = ic_day
-	topic.tier = 4
+	topic.tier = TopicData.Tier.TIER_4
 	topic.momentum = 11.0
 	topic.topic_type = "construction"
 
@@ -6896,17 +6896,17 @@ static func _generate_construction_topic(
 		ConstructionData.ConstructionType.TEMPLE:
 			topic.slug = "temple_completed_%d" % cd.construction_id
 			topic.variant = "temple_completed"
-			topic.tier = 3
+			topic.tier = TopicData.Tier.TIER_3
 			topic.momentum = 25.0
 		ConstructionData.ConstructionType.SHINDEN:
 			topic.slug = "shinden_completed_%d" % cd.construction_id
 			topic.variant = "shinden_completed"
-			topic.tier = 2
+			topic.tier = TopicData.Tier.TIER_2
 			topic.momentum = 40.0
 		ConstructionData.ConstructionType.MONASTERY:
 			topic.slug = "monastery_completed_%d" % cd.construction_id
 			topic.variant = "monastery_completed"
-			topic.tier = 3
+			topic.tier = TopicData.Tier.TIER_3
 			topic.momentum = 25.0
 		ConstructionData.ConstructionType.SHIP:
 			topic.slug = "ship_launched_%d" % cd.construction_id

@@ -930,7 +930,7 @@ func test_integration_temple_completion_creates_settlement() -> void:
 	assert_eq(next_sid[0], 201)
 	assert_eq(topics.size(), 1)
 	assert_eq(topics[0].variant, "temple_completed")
-	assert_eq(topics[0].tier, 3)
+	assert_eq(topics[0].tier, TopicData.Tier.TIER_3)
 	assert_eq(topics[0].momentum, 25.0)
 
 
@@ -961,7 +961,7 @@ func test_integration_monastery_completion_creates_settlement() -> void:
 	assert_eq(settlements[0].settlement_type, Enums.SettlementType.MONASTERY)
 	assert_eq(next_sid[0], 201)
 	assert_eq(topics[0].variant, "monastery_completed")
-	assert_eq(topics[0].tier, 3)
+	assert_eq(topics[0].tier, TopicData.Tier.TIER_3)
 
 
 # -- Ship commission → queue → ShipData creation -------------------------------
@@ -1087,7 +1087,7 @@ func test_integration_shinden_topic_tier_2() -> void:
 	)
 
 	assert_eq(topics.size(), 1)
-	assert_eq(topics[0].tier, 2)
+	assert_eq(topics[0].tier, TopicData.Tier.TIER_2)
 	assert_eq(topics[0].momentum, 40.0)
 	assert_eq(topics[0].variant, "shinden_completed")
 	assert_eq(settlements[0].settlement_type, Enums.SettlementType.SHINDEN)
