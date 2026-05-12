@@ -276,8 +276,13 @@ static func get_natural_death_chance(age: int) -> int:
 static func roll_natural_death(
 	character: L5RCharacterData,
 	dice_engine: DiceEngine,
+	worship_malus: Dictionary = {},
 ) -> bool:
 	var chance: int = get_natural_death_chance(character.age)
+	if worship_malus.get("natural_death_increase", false):
+		chance = ceili(float(chance) * 1.5)
+	if worship_malus.get("aging_accelerated", false):
+		chance = ceili(float(chance) * 2.0)
 	if chance <= 0:
 		return false
 	var roll: int = dice_engine.rand_int_range(1, 100)
@@ -405,6 +410,8 @@ static func process_seasonal_gempukku(
 	next_character_id: Array[int],
 	dice_engine: DiceEngine,
 	ic_day: int,
+	worship_maluses: Dictionary = {},
+	settlement_province_map: Dictionary = {},
 ) -> Dictionary:
 	var results: Dictionary = {
 		"new_characters": [] as Array[L5RCharacterData],
@@ -447,7 +454,11 @@ static func process_seasonal_gempukku(
 			all_characters.append(rc)
 
 	for character: L5RCharacterData in characters:
-		if roll_natural_death(character, dice_engine):
+		var char_province: int = settlement_province_map.get(
+			int(character.physical_location) if character.physical_location.is_valid_int() else -1, -1,
+		)
+		var char_malus: Dictionary = worship_maluses.get(char_province, {})
+		if roll_natural_death(character, dice_engine, char_malus):
 			results["natural_deaths"].append(character.character_id)
 
 	return results

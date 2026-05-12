@@ -89,6 +89,7 @@ static func resolve_purchases(
 	postings: Array[RicePostingData],
 	buy_orders: Array[Dictionary],
 	disposition_lookup: Callable,
+	worship_maluses: Dictionary = {},
 ) -> Array[Dictionary]:
 	var results: Array[Dictionary] = []
 
@@ -117,6 +118,10 @@ static func resolve_purchases(
 			return a["disposition"] > b["disposition"]
 		)
 
+		var prov_malus: Dictionary = worship_maluses.get(posting.province_id, {})
+		var price_modifier: float = prov_malus.get("market_price_modifier", 0.0)
+		var effective_price: float = posting.price_per_unit * (1.0 + price_modifier)
+
 		var remaining: float = posting.quantity
 		var sold_any: bool = false
 		for entry: Dictionary in prioritized:
@@ -124,11 +129,11 @@ static func resolve_purchases(
 				break
 			var order: Dictionary = entry["order"]
 			var wanted: float = order.get("quantity", 0.0)
-			var can_afford_units: float = order.get("koku_budget", 0.0) / posting.price_per_unit
+			var can_afford_units: float = order.get("koku_budget", 0.0) / effective_price
 			var actual: float = minf(minf(wanted, can_afford_units), remaining)
 			if actual <= 0.0:
 				continue
-			var cost: float = actual * posting.price_per_unit
+			var cost: float = actual * effective_price
 			remaining -= actual
 			sold_any = true
 			results.append({
@@ -206,7 +211,11 @@ static func share_rice(
 static func compute_trade_route_koku(
 	province: ProvinceData,
 	routes: Array[TradeRouteData],
+	worship_maluses: Dictionary = {},
 ) -> float:
+	var prov_malus: Dictionary = worship_maluses.get(province.province_id, {})
+	if prov_malus.get("trade_route_koku_disabled", false):
+		return 0.0
 	var total: float = 0.0
 	for route: TradeRouteData in routes:
 		if route.is_disrupted:

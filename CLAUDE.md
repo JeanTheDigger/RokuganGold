@@ -3046,10 +3046,22 @@ The following subsystems are now integrated into the NPC decision loop:
   chance in `InsurgencySystem.process_season()`. Benten `marriage_auto_fail`
   checked via `_is_benten_marriage_blocked()` in `_process_governance_effects()`
   — overrides accepted marriages to rejection.
-  Deferred malus hooks: Bishamon army_attack/army_morale (ArmyCombatSystem),
-  Daikoku market_price_modifier/trade_route_koku_disabled,
-  Fukurokujin divination/intelligence roll penalties,
-  Jurojin natural_death/healing/aging effects.
+  Bishamon `army_attack`/`army_morale` penalties injected into battle state
+  dicts via `_inject_worship_battle_maluses()` before `resolve_battle()`;
+  read by `_get_effective_attack()` and `_get_effective_morale_defense()`.
+  Bishamon `commander_risk_reduced` adds +5 TN to commander survival checks.
+  Daikoku `market_price_modifier` inflates effective price in
+  `RiceMarketSystem.resolve_purchases()`. Daikoku `trade_route_koku_disabled`
+  short-circuits `compute_trade_route_koku()` to 0.
+  Fukurokujin `divination_dice_penalty` reduces rolled dice in
+  `WorshipSystem.resolve_divination()`. Fukurokujin `divination_impossible`
+  returns immediate failure. Jurojin `natural_death_increase` multiplies
+  death chance ×1.5 and `aging_accelerated` ×2.0 in
+  `GempukkuSystem.roll_natural_death()`. Jurojin `healing_slower` and
+  `injury_recovery_doubled` halve army recovery health per tick in
+  `_process_army_recovery()`.
+  Deferred malus hooks: Fukurokujin `intelligence_roll_modifier` (needs
+  ActionExecutor TN threading), Jurojin `rank4_commander_risk_checks`.
 
 ## Resolved Design Decisions
 

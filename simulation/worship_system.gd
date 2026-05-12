@@ -316,9 +316,13 @@ static func resolve_divination(
 	ring_value: int,
 	target_fortune: int,
 	province_wp: Dictionary,
+	province_malus: Dictionary = {},
 ) -> Dictionary:
+	if province_malus.get("divination_impossible", false):
+		return {"success": false, "divination_impossible": true}
+	var dice_penalty: int = int(province_malus.get("divination_dice_penalty", 0))
 	var kept: int = max(1, ring_value)
-	var rolled: int = max(1, theology_rank + ring_value)
+	var rolled: int = max(1, theology_rank + ring_value + dice_penalty)
 	var result: DiceResult = dice_engine.roll_and_keep(rolled, kept)
 	var roll_total: int = result.total
 	var base_tn: int = 15

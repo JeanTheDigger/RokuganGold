@@ -773,6 +773,7 @@ static func _get_effective_attack(bc: Dictionary) -> int:
 	if not bc.get("commander_injured", false) and not bc.get("commander_dead", false):
 		if bonus.get("bonus_type", "") == "attack":
 			atk += bonus.get("bonus_value", 0)
+	atk += bc.get("worship_attack_penalty", 0)
 	return maxi(atk, 0)
 
 
@@ -791,6 +792,7 @@ static func _get_effective_morale_defense(bc: Dictionary) -> int:
 	if not bc.get("commander_injured", false) and not bc.get("commander_dead", false):
 		if bonus.get("bonus_type", "") == "morale":
 			md += bonus.get("bonus_value", 0)
+	md += bc.get("worship_morale_penalty", 0)
 	return maxi(md, 0)
 
 
@@ -1274,8 +1276,9 @@ static func _check_commander_survival_thresholds(
 			triggered.append(threshold)
 			bc["survival_thresholds_triggered"] = triggered
 
+			var worship_risk: int = bc.get("worship_commander_risk_bonus", 0)
 			var result: Dictionary = _roll_commander_survival(
-				commander, COMMANDER_SURVIVAL_TNS[threshold] + attacker_tn_modifier, dice_engine,
+				commander, COMMANDER_SURVIVAL_TNS[threshold] + attacker_tn_modifier + worship_risk, dice_engine,
 			)
 			if result["outcome"] == "dead":
 				bc["commander_dead"] = true

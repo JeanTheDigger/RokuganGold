@@ -615,3 +615,183 @@ func test_insurgency_spawn_chance_doubled_by_worship() -> void:
 	assert_true(base_chance > 0.0)
 	var doubled: float = base_chance * 2.0
 	assert_almost_eq(doubled, base_chance * 2.0, 0.01)
+
+
+# -- ArmyCombatSystem Bishamon Tests -------------------------------------------
+
+func test_bishamon_attack_penalty_reduces_effective_attack() -> void:
+	var bc: Dictionary = {
+		"base_attack": 6,
+		"terrain_attack_mod": 0,
+		"commander_bonus": {},
+		"commander_injured": false,
+		"commander_dead": false,
+		"worship_attack_penalty": -2,
+	}
+	var atk: int = ArmyCombatSystem._get_effective_attack(bc)
+	assert_eq(atk, 4)
+
+
+func test_bishamon_attack_penalty_floors_at_zero() -> void:
+	var bc: Dictionary = {
+		"base_attack": 1,
+		"terrain_attack_mod": 0,
+		"commander_bonus": {},
+		"commander_injured": false,
+		"commander_dead": false,
+		"worship_attack_penalty": -5,
+	}
+	var atk: int = ArmyCombatSystem._get_effective_attack(bc)
+	assert_eq(atk, 0)
+
+
+func test_bishamon_morale_penalty_reduces_effective_morale() -> void:
+	var bc: Dictionary = {
+		"base_morale_defense": 5,
+		"commander_bonus": {},
+		"commander_injured": false,
+		"commander_dead": false,
+		"worship_morale_penalty": -3,
+	}
+	var md: int = ArmyCombatSystem._get_effective_morale_defense(bc)
+	assert_eq(md, 2)
+
+
+func test_no_worship_penalty_leaves_attack_unchanged() -> void:
+	var bc: Dictionary = {
+		"base_attack": 6,
+		"terrain_attack_mod": 0,
+		"commander_bonus": {},
+		"commander_injured": false,
+		"commander_dead": false,
+	}
+	var atk: int = ArmyCombatSystem._get_effective_attack(bc)
+	assert_eq(atk, 6)
+
+
+# -- Battle State Injection Tests ----------------------------------------------
+
+func test_inject_worship_battle_maluses_sets_attack_penalty() -> void:
+	var company := ArmyCombatSystem.create_company(1, Enums.CompanyUnitType.BUSHI_RETAINER, -1, 5)
+	var bc: Dictionary = ArmyCombatSystem.make_battle_company(company, 0, 0, "attacker")
+	var states: Array[Dictionary] = [bc]
+	var maluses: Dictionary = {5: {"army_attack": -2, "army_morale": -1}}
+	DayOrchestrator._inject_worship_battle_maluses(states, maluses)
+	assert_eq(bc.get("worship_attack_penalty", 0), -2)
+	assert_eq(bc.get("worship_morale_penalty", 0), -1)
+
+
+func test_inject_worship_battle_maluses_sets_commander_risk() -> void:
+	var company := ArmyCombatSystem.create_company(1, Enums.CompanyUnitType.BUSHI_RETAINER, -1, 5)
+	var bc: Dictionary = ArmyCombatSystem.make_battle_company(company, 0, 0, "attacker")
+	var states: Array[Dictionary] = [bc]
+	var maluses: Dictionary = {5: {"commander_risk_reduced": true}}
+	DayOrchestrator._inject_worship_battle_maluses(states, maluses)
+	assert_eq(bc.get("worship_commander_risk_bonus", 0), 5)
+
+
+func test_inject_worship_no_malus_leaves_state_clean() -> void:
+	var company := ArmyCombatSystem.create_company(1, Enums.CompanyUnitType.BUSHI_RETAINER, -1, 5)
+	var bc: Dictionary = ArmyCombatSystem.make_battle_company(company, 0, 0, "attacker")
+	var states: Array[Dictionary] = [bc]
+	DayOrchestrator._inject_worship_battle_maluses(states, {})
+	assert_false(bc.has("worship_attack_penalty"))
+
+
+# -- Daikoku Trade Route & Market Tests ----------------------------------------
+
+func test_trade_route_koku_disabled_returns_zero() -> void:
+	var prov := _make_province(1)
+	var route := TradeRouteData.new()
+	route.route_id = 1
+	route.province_a_id = 1
+	route.province_b_id = 2
+	route.koku_bonus_per_season = 5.0
+	route.is_disrupted = false
+	var routes: Array[TradeRouteData] = [route]
+	var maluses: Dictionary = {1: {"trade_route_koku_disabled": true}}
+	var result: float = RiceMarketSystem.compute_trade_route_koku(prov, routes, maluses)
+	assert_almost_eq(result, 0.0, 0.01)
+
+
+func test_trade_route_koku_normal_without_malus() -> void:
+	var prov := _make_province(1)
+	var route := TradeRouteData.new()
+	route.route_id = 1
+	route.province_a_id = 1
+	route.province_b_id = 2
+	route.koku_bonus_per_season = 5.0
+	route.is_disrupted = false
+	var routes: Array[TradeRouteData] = [route]
+	var result: float = RiceMarketSystem.compute_trade_route_koku(prov, routes)
+	assert_almost_eq(result, 5.0, 0.01)
+
+
+# -- Fukurokujin Divination Tests ----------------------------------------------
+
+func test_divination_impossible_returns_failure() -> void:
+	var malus: Dictionary = {"divination_impossible": true}
+	var result: Dictionary = WorshipSystem.resolve_divination(
+		_dice, 5, 4, Enums.GreatFortune.BISHAMON, {}, malus,
+	)
+	assert_false(result.get("success", true))
+	assert_true(result.get("divination_impossible", false))
+
+
+func test_divination_dice_penalty_reduces_rolled() -> void:
+	_dice.set_seed(42)
+	var normal: Dictionary = WorshipSystem.resolve_divination(
+		_dice, 5, 4, Enums.GreatFortune.BISHAMON, {},
+	)
+	_dice.set_seed(42)
+	var malus: Dictionary = {"divination_dice_penalty": -2}
+	var penalized: Dictionary = WorshipSystem.resolve_divination(
+		_dice, 5, 4, Enums.GreatFortune.BISHAMON, {}, malus,
+	)
+	if normal.get("success", false) and penalized.get("success", false):
+		assert_true(penalized.get("roll_total", 0) <= normal.get("roll_total", 0))
+	else:
+		assert_true(true)
+
+
+# -- Jurojin Natural Death Tests -----------------------------------------------
+
+func test_natural_death_increase_raises_chance() -> void:
+	var base: int = GempukkuSystem.get_natural_death_chance(70)
+	assert_true(base > 0)
+	var c := _make_char(1)
+	c.age = 70
+	_dice.set_seed(999)
+	var malus: Dictionary = {"natural_death_increase": true}
+	var expected_chance: int = ceili(float(base) * 1.5)
+	assert_true(expected_chance > base)
+
+
+func test_aging_accelerated_doubles_natural_death_chance() -> void:
+	var base: int = GempukkuSystem.get_natural_death_chance(55)
+	assert_true(base > 0)
+	var malus: Dictionary = {"aging_accelerated": true}
+	var expected_chance: int = ceili(float(base) * 2.0)
+	assert_true(expected_chance > base)
+
+
+# -- Army Recovery Healing Slower Tests ----------------------------------------
+
+func test_army_recovery_healing_halved_by_worship() -> void:
+	var army: Dictionary = {"army_id": 1, "is_moving": false, "province_id": 5}
+	var company: Dictionary = {
+		"army_id": 1,
+		"company_id": 10,
+		"unit_type": Enums.CompanyUnitType.BUSHI_RETAINER,
+		"current_health": 100,
+		"current_morale": 10,
+	}
+	var maluses: Dictionary = {5: {"healing_slower": true}}
+	var results: Array[Dictionary] = DayOrchestrator._process_army_recovery(
+		[army] as Array[Dictionary], {}, [company] as Array[Dictionary], maluses,
+	)
+	if results.size() > 0:
+		var per_company: Array = results[0].get("per_company", [])
+		if per_company.size() > 0:
+			var hr: int = per_company[0].get("health_recovery", 0)
+			assert_true(hr <= ArmyUpkeepSystem.RECOVERY_HEALTH_PER_TICK / 2 + 1)

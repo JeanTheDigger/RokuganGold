@@ -106,9 +106,10 @@ static func advance_day(
 
 	_inject_edict_reactive_events(active_edicts, characters, world_states, ic_day)
 
+	var wm_for_military: Dictionary = world_states.get("_worship_maluses", {})
 	var military_daily: Dictionary = _process_military_daily(
 		active_armies, active_sieges, active_tethers, order_states,
-		dice_engine, settlements, companies,
+		dice_engine, settlements, companies, wm_for_military,
 	)
 
 	var naval_weather: int = _process_naval_weather(
@@ -372,9 +373,13 @@ static func advance_day(
 			insurgencies, provinces, dice_engine, current_season,
 			next_insurgency_id, world_states, worship_maluses,
 		)
+		var _sett_prov_map: Dictionary = {}
+		for s: SettlementData in settlements:
+			_sett_prov_map[s.settlement_id] = s.province_id
 		gempukku_results = _process_gempukku(
 			children, characters, characters_by_id, next_character_id,
 			dice_engine, ic_day, active_topics, next_topic_id, objectives_map,
+			worship_maluses, _sett_prov_map,
 		)
 		advancement_results = _process_npc_advancement(
 			characters, active_courts, active_sieges, active_armies,
@@ -2436,6 +2441,7 @@ static func _process_military_daily(
 	dice_engine: DiceEngine,
 	settlements: Array[SettlementData],
 	companies: Array[Dictionary] = [],
+	worship_maluses: Dictionary = {},
 ) -> Dictionary:
 	var disband_results: Array[Dictionary] = _process_disbands(
 		active_armies, companies, settlements,
@@ -2458,7 +2464,7 @@ static func _process_military_daily(
 		active_tethers, tether_results,
 	)
 	var recovery_results: Array[Dictionary] = _process_army_recovery(
-		active_armies, tether_by_army, companies,
+		active_armies, tether_by_army, companies, worship_maluses,
 	)
 
 	return {
@@ -2676,6 +2682,7 @@ static func _process_army_recovery(
 	active_armies: Array[Dictionary],
 	tether_state_by_army: Dictionary,
 	companies: Array[Dictionary],
+	worship_maluses: Dictionary = {},
 ) -> Array[Dictionary]:
 	var companies_by_army: Dictionary = {}
 	for c: Dictionary in companies:
@@ -2697,6 +2704,11 @@ static func _process_army_recovery(
 		var rice_supplied: bool = overall_state == SupplyTetherSystem.TetherState.SOLID
 		var arms_supplied: bool = overall_state == SupplyTetherSystem.TetherState.SOLID
 		var arms_tick: int = tether.get("arms_deprivation_tick", 0)
+
+		var army_province: int = army.get("province_id", -1)
+		var army_malus: Dictionary = worship_maluses.get(army_province, {})
+		var healing_halved: bool = army_malus.get("healing_slower", false)
+		var recovery_doubled: bool = army_malus.get("injury_recovery_doubled", false)
 
 		var army_companies: Array = companies_by_army.get(army_id, [])
 		if army_companies.is_empty():
@@ -2725,6 +2737,10 @@ static func _process_army_recovery(
 					max_health - cur_health,
 				)
 				health_recovery = maxi(health_recovery, 0)
+				if healing_halved and health_recovery > 0:
+					health_recovery = maxi(health_recovery / 2, 1)
+				if recovery_doubled and health_recovery > 0:
+					health_recovery = maxi(health_recovery / 2, 1)
 
 				var max_morale: int = base.get("morale", 0)
 				var cur_morale: int = cd.get("current_morale", max_morale)
@@ -4187,7 +4203,10 @@ static func resolve_and_reconcile_battle(
 	settlements: Array[SettlementData],
 	is_amphibious: bool = false,
 	fortification_bonus: int = 0,
+	worship_maluses: Dictionary = {},
 ) -> Dictionary:
+	_inject_worship_battle_maluses(attacker_states, worship_maluses)
+	_inject_worship_battle_maluses(defender_states, worship_maluses)
 	var battle_result: Dictionary = ArmyCombatSystem.resolve_battle(
 		attacker_states, defender_states, terrain, dice_engine,
 		is_amphibious, fortification_bonus,
@@ -5876,9 +5895,12 @@ static func _process_gempukku(
 	active_topics: Array[TopicData],
 	next_topic_id: Array[int],
 	objectives_map: Dictionary,
+	worship_maluses: Dictionary = {},
+	settlement_province_map: Dictionary = {},
 ) -> Dictionary:
 	var result: Dictionary = GempukkuSystem.process_seasonal_gempukku(
 		children, characters, next_character_id, dice_engine, ic_day,
+		worship_maluses, settlement_province_map,
 	)
 
 	for nc: L5RCharacterData in result.get("new_characters", []):
@@ -6445,3 +6467,21 @@ static func _apply_worship_stability_maluses(
 		if prov == null:
 			continue
 		prov.stability = clampf(prov.stability + stability_delta, 0.0, 100.0)
+
+
+static func _inject_worship_battle_maluses(
+	battle_states: Array[Dictionary],
+	worship_maluses: Dictionary,
+) -> void:
+	for bc: Dictionary in battle_states:
+		var company: Variant = bc.get("company")
+		if company == null:
+			continue
+		var source_pid: int = company.source_province_id if company is MilitaryUnitData.CompanyData else bc.get("source_province_id", -1)
+		var malus: Dictionary = worship_maluses.get(source_pid, {})
+		if malus.is_empty():
+			continue
+		bc["worship_attack_penalty"] = int(malus.get("army_attack", 0))
+		bc["worship_morale_penalty"] = int(malus.get("army_morale", 0))
+		if malus.get("commander_risk_reduced", false):
+			bc["worship_commander_risk_bonus"] = 5
