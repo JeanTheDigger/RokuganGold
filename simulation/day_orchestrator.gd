@@ -231,6 +231,11 @@ static func advance_day(
 		characters_by_id, ic_day, time_system,
 	)
 
+	_process_court_action_effects(
+		day_result.get("results", []),
+		characters_by_id,
+	)
+
 	var governance_results: Dictionary = _process_governance_effects(
 		day_result.get("results", []),
 		characters_by_id,
@@ -7634,3 +7639,75 @@ static func _compute_next_season_end_ic_day(time_system: TimeSystem) -> int:
 			return ic_day + (e - day_of_year) - 1
 	# Wrapped: next season end is Spring of next year
 	return ic_day + (360 - day_of_year) + 90 - 1
+
+
+# -- Court Action Effects (s15.4) ---------------------------------------------
+
+static func _process_court_action_effects(
+	day_results: Array,
+	characters_by_id: Dictionary,
+) -> void:
+	for entry: Dictionary in day_results:
+		var effects: Dictionary = entry.get("effects", {})
+		if effects.is_empty():
+			continue
+
+		var target_id: int = entry.get("target_npc_id", -1)
+		var target: L5RCharacterData = characters_by_id.get(target_id)
+		if target == null:
+			continue
+
+		# Topic position shift from Negotiate/Persuade
+		if effects.has("target_position_shift"):
+			var shift: float = effects["target_position_shift"]
+			var action_meta: Dictionary = effects.get("_action_metadata", {})
+			var topic_id: int = action_meta.get("topic_id", -1)
+			if topic_id >= 0:
+				var current_pos: float = target.topic_positions.get(topic_id, 0.0)
+				target.topic_positions[topic_id] = clampf(current_pos + shift, -100.0, 100.0)
+
+		# Provoke Emotion target effects
+		if effects.has("target_honor_change"):
+			target.honor = clampf(target.honor + effects["target_honor_change"], 0.0, 10.0)
+		if effects.has("target_glory_change"):
+			target.glory = clampf(target.glory + effects["target_glory_change"], 0.0, 10.0)
+
+		# Provoke Emotion witness disposition loss against target
+		if effects.has("target_witness_disposition"):
+			var per_witness: int = effects["target_witness_disposition"]
+			var witnesses: Array = effects.get("witnesses", [])
+			for wid in witnesses:
+				var w: L5RCharacterData = characters_by_id.get(wid)
+				if w != null:
+					var current: int = w.disposition_values.get(target_id, 0)
+					w.disposition_values[target_id] = clampi(current + per_witness, -100, 100)
+
+		# Play a Game bilateral disposition
+		if effects.has("play_game_result"):
+			var actor_id: int = entry.get("character_id", -1)
+			var actor: L5RCharacterData = characters_by_id.get(actor_id)
+			if actor != null:
+				var a_disp: int = effects.get("a_disposition_toward_b", 0)
+				var b_disp: int = effects.get("b_disposition_toward_a", 0)
+				var cur_a: int = actor.disposition_values.get(target_id, 0)
+				actor.disposition_values[target_id] = clampi(cur_a + a_disp, -100, 100)
+				var cur_b: int = target.disposition_values.get(actor_id, 0)
+				target.disposition_values[actor_id] = clampi(cur_b + b_disp, -100, 100)
+
+		# Public Debate per-witness disposition and position shifts
+		if effects.has("debate_per_witness"):
+			var actor_id: int = entry.get("character_id", -1)
+			var pw_results: Array = effects["debate_per_witness"]
+			for pw: Dictionary in pw_results:
+				var wid: int = pw.get("witness_id", -1)
+				var w: L5RCharacterData = characters_by_id.get(wid)
+				if w == null:
+					continue
+				var a_disp_change: int = pw.get("a_disposition_change", 0)
+				var b_disp_change: int = pw.get("b_disposition_change", 0)
+				if a_disp_change != 0:
+					var cur: int = w.disposition_values.get(actor_id, 0)
+					w.disposition_values[actor_id] = clampi(cur + a_disp_change, -100, 100)
+				if b_disp_change != 0:
+					var cur: int = w.disposition_values.get(target_id, 0)
+					w.disposition_values[target_id] = clampi(cur + b_disp_change, -100, 100)
