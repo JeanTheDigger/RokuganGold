@@ -1300,11 +1300,14 @@ static func resolve_daily_letter(
 	if target_id < 0:
 		return {}
 
+	var topic_id: int = _pick_letter_topic(ctx)
+
 	return {
 		"character_id": character.character_id,
 		"action_id": "WRITE_LETTER",
 		"target_npc_id": target_id,
 		"need_type": need_type,
+		"topic_id": topic_id,
 	}
 
 
@@ -1331,6 +1334,21 @@ static func _select_letter_target(
 	if not met.is_empty():
 		return met[0]
 	return -1
+
+
+static func _pick_letter_topic(ctx: NPCDataStructures.ContextSnapshot) -> int:
+	if ctx.known_topics.is_empty():
+		return -1
+	var best_id: int = -1
+	var best_pos: float = -1.0
+	for tid: int in ctx.known_topics:
+		var pos: float = absf(ctx.known_positions.get(tid, 0.0))
+		if pos > best_pos:
+			best_pos = pos
+			best_id = tid
+	if best_id >= 0:
+		return best_id
+	return ctx.known_topics[0]
 
 
 # -- Province Status Builder ---------------------------------------------------

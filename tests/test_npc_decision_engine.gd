@@ -995,3 +995,51 @@ func test_compute_topic_position_modifier_missing_need_type() -> void:
 		"PROBE", need, ctx, tables,
 	)
 	assert_eq(result, 0.0)
+
+
+# --- Letter topic routing ---
+
+func test_pick_letter_topic_strongest_position() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.known_topics = [10, 20, 30]
+	ctx.known_positions = {10: 5.0, 20: -40.0, 30: 15.0}
+	var tid: int = NPCDecisionEngine._pick_letter_topic(ctx)
+	assert_eq(tid, 20, "Should pick topic with strongest absolute position")
+
+
+func test_pick_letter_topic_fallback_first() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.known_topics = [10, 20]
+	ctx.known_positions = {}
+	var tid: int = NPCDecisionEngine._pick_letter_topic(ctx)
+	assert_eq(tid, 10, "Falls back to first known topic when no positions")
+
+
+func test_pick_letter_topic_empty_returns_negative() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.known_topics = []
+	var tid: int = NPCDecisionEngine._pick_letter_topic(ctx)
+	assert_eq(tid, -1)
+
+
+func test_resolve_daily_letter_includes_topic_id() -> void:
+	var char := L5RCharacterData.new()
+	char.character_id = 1
+	char.topic_pool = [42, 55]
+	char.topic_positions = {42: 30.0, 55: -10.0}
+	char.skills = {"Courtier": 3}
+	char.traits = {"Awareness": 3}
+	var objectives: Dictionary = {
+		"primary": {"need_type": "RAISE_DISPOSITION", "target_npc_id": 5},
+	}
+	var scoring_tables: Dictionary = {
+		"objective_alignment": {
+			"RAISE_DISPOSITION": {"WRITE_LETTER": 60},
+		},
+	}
+	var ws: Dictionary = {"is_lord": false}
+	var ctx := NPCDecisionEngine.build_context(char, ws)
+	var result: Dictionary = NPCDecisionEngine.resolve_daily_letter(
+		char, objectives, scoring_tables, ctx,
+	)
+	assert_eq(result.get("topic_id", -1), 42, "Should include strongest position topic")

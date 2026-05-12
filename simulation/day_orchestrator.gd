@@ -143,8 +143,10 @@ static func advance_day(
 		approach_penalties, commitments, military_data, settlements
 	)
 
+	var next_letter_id: Array[int] = [pending_letters.size() + 1]
 	var letter_pass_results: Array[Dictionary] = _process_daily_letter_pass(
-		characters, characters_by_id, objectives_map, scoring_tables, world_states
+		characters, characters_by_id, objectives_map, scoring_tables, world_states,
+		pending_letters, ic_day, dice_engine, next_letter_id,
 	)
 
 	var crime_results: Array[Dictionary] = _process_crime_detection(
@@ -2285,6 +2287,10 @@ static func _process_daily_letter_pass(
 	objectives_map: Dictionary,
 	scoring_tables: Dictionary,
 	world_states: Dictionary,
+	pending_letters: Array = [],
+	ic_day: int = 0,
+	dice_engine: DiceEngine = null,
+	next_letter_id: Array[int] = [1],
 ) -> Array[Dictionary]:
 	var results: Array[Dictionary] = []
 	for character: L5RCharacterData in characters:
@@ -2297,6 +2303,17 @@ static func _process_daily_letter_pass(
 		)
 		if not letter_result.is_empty():
 			results.append(letter_result)
+			if dice_engine != null:
+				var lid: int = next_letter_id[0]
+				next_letter_id[0] = lid + 1
+				var topic_id: int = letter_result.get("topic_id", -1)
+				var letter: LetterData = LetterSystem.write_letter(
+					lid, character,
+					letter_result["target_npc_id"],
+					topic_id, ic_day, dice_engine,
+					3,
+				)
+				pending_letters.append(letter)
 	return results
 
 
