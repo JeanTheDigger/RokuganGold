@@ -896,3 +896,138 @@ func test_candidate_scoring_skips_already_assigned() -> void:
 		1, "Garrison Commander", characters, chars_by_id,
 	)
 	assert_eq(result, 3, "Already-assigned character should be skipped")
+
+
+# -- Vacancy Persistence & Season Tracking Tests --------------------------------
+
+
+func test_vacancy_registry_created_in_season_meta() -> void:
+	var lord := _make_char(1, "Crane", 5.0)
+	lord.lord_id = -1
+	var characters: Array[L5RCharacterData] = [lord]
+	var chars_by_id: Dictionary = {1: lord}
+	var season_meta: Dictionary = {}
+
+	var ws: Dictionary = {}
+	DayOrchestrator._populate_vacancy_intelligence(ws, characters, chars_by_id, [], [], {}, season_meta)
+
+	assert_true(season_meta.has("vacancy_registry"), "Registry should be created in season_meta")
+
+
+func test_vacancy_seasons_vacant_starts_at_zero() -> void:
+	var lord := _make_char(1, "Crab", 5.0)
+	lord.lord_id = -1
+	lord.clan = "Crab"
+	var characters: Array[L5RCharacterData] = [lord]
+	var chars_by_id: Dictionary = {1: lord}
+	var season_meta: Dictionary = {}
+
+	var prov := _make_province(10, "Crab")
+	var provinces: Dictionary = {10: prov}
+	var fort := _make_settlement(100, 10, Enums.SettlementType.FORTIFICATION)
+	var settlements: Array[SettlementData] = [fort]
+
+	var ws: Dictionary = {}
+	DayOrchestrator._populate_vacancy_intelligence(ws, characters, chars_by_id, [], settlements, provinces, season_meta)
+
+	var vacancies: Array = ws.get("vacancy_data", {}).get(1, [])
+	for v: Dictionary in vacancies:
+		if v.get("position_type", "") == "Garrison Commander":
+			assert_eq(v["seasons_vacant"], 0, "New vacancy starts at 0 seasons")
+
+
+func test_vacancy_seasons_increment_on_season_boundary() -> void:
+	var season_meta: Dictionary = {
+		"vacancy_registry": {
+			"1_Garrison Commander_s100": 0,
+			"1_Clan Magistrate": 1,
+		}
+	}
+
+	DayOrchestrator._increment_vacancy_seasons(season_meta)
+
+	var registry: Dictionary = season_meta["vacancy_registry"]
+	assert_eq(registry["1_Garrison Commander_s100"], 1)
+	assert_eq(registry["1_Clan Magistrate"], 2)
+
+
+func test_vacancy_inherits_seasons_from_registry() -> void:
+	var lord := _make_char(1, "Crab", 5.0)
+	lord.lord_id = -1
+	lord.clan = "Crab"
+	var characters: Array[L5RCharacterData] = [lord]
+	var chars_by_id: Dictionary = {1: lord}
+
+	var prov := _make_province(10, "Crab")
+	var provinces: Dictionary = {10: prov}
+	var fort := _make_settlement(100, 10, Enums.SettlementType.FORTIFICATION)
+	var settlements: Array[SettlementData] = [fort]
+
+	# Pre-populate registry with existing vacancy at 3 seasons
+	var season_meta: Dictionary = {
+		"vacancy_registry": {
+			"1_Garrison Commander_s100": 3,
+		}
+	}
+
+	var ws: Dictionary = {}
+	DayOrchestrator._populate_vacancy_intelligence(ws, characters, chars_by_id, [], settlements, provinces, season_meta)
+
+	var vacancies: Array = ws.get("vacancy_data", {}).get(1, [])
+	for v: Dictionary in vacancies:
+		if v.get("position_type", "") == "Garrison Commander":
+			assert_eq(v["seasons_vacant"], 3, "Should inherit seasons_vacant from registry")
+
+
+func test_vacancy_registry_clears_filled_positions() -> void:
+	var lord := _make_char(1, "Crab", 5.0)
+	lord.lord_id = -1
+	lord.clan = "Crab"
+	var commander := _make_char(2, "Crab", 3.0)
+	commander.lord_id = 1
+	commander.role_position = "Garrison Commander"
+	var characters: Array[L5RCharacterData] = [lord, commander]
+	var chars_by_id: Dictionary = {1: lord, 2: commander}
+
+	var prov := _make_province(10, "Crab")
+	var provinces: Dictionary = {10: prov}
+	var fort := _make_settlement(100, 10, Enums.SettlementType.FORTIFICATION)
+	var settlements: Array[SettlementData] = [fort]
+
+	# Registry has the old vacancy
+	var season_meta: Dictionary = {
+		"vacancy_registry": {
+			"1_Garrison Commander_s100": 5,
+		}
+	}
+
+	var ws: Dictionary = {}
+	DayOrchestrator._populate_vacancy_intelligence(ws, characters, chars_by_id, [], settlements, provinces, season_meta)
+
+	# Since the position is now filled, the vacancy should not appear
+	var registry: Dictionary = season_meta["vacancy_registry"]
+	assert_false(registry.has("1_Garrison Commander_s100"), "Filled vacancy should be removed from registry")
+
+
+func test_vacancy_key_includes_family_for_school_master() -> void:
+	var v: Dictionary = {"position_type": "School Master", "family": "Hida"}
+	var key: String = DayOrchestrator._vacancy_key(1, v)
+	assert_eq(key, "1_School Master_Hida")
+
+
+func test_vacancy_key_includes_settlement_for_garrison() -> void:
+	var v: Dictionary = {"position_type": "Garrison Commander", "settlement_id": 100}
+	var key: String = DayOrchestrator._vacancy_key(1, v)
+	assert_eq(key, "1_Garrison Commander_s100")
+
+
+func test_vacancy_key_includes_unit_for_military() -> void:
+	var v: Dictionary = {"position_type": "military_commander", "unit_id": 42}
+	var key: String = DayOrchestrator._vacancy_key(1, v)
+	assert_eq(key, "1_military_commander_u42")
+
+
+func test_vacancy_key_fallback_for_magistrate() -> void:
+	var v: Dictionary = {"position_type": "Clan Magistrate"}
+	var key: String = DayOrchestrator._vacancy_key(1, v)
+	assert_eq(key, "1_Clan Magistrate")

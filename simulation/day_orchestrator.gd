@@ -79,7 +79,7 @@ static func advance_day(
 	world_states["_settlement_province_map"] = _spm
 
 	_populate_infrastructure_intelligence(world_states, provinces, settlements, ships, worship_state)
-	_populate_vacancy_intelligence(world_states, characters, characters_by_id, companies, settlements, provinces)
+	_populate_vacancy_intelligence(world_states, characters, characters_by_id, companies, settlements, provinces, season_meta)
 
 	var festival_results: Dictionary = _process_festivals(ic_day, world_states)
 
@@ -447,6 +447,7 @@ static func advance_day(
 			)
 		var season_count: int = int(season_meta.get("horde_season_count", 0))
 		ronin_results = _process_seasonal_ronin(characters, season_count)
+		_increment_vacancy_seasons(season_meta)
 		pregnancy_results = _process_pregnancy_checks(
 			marriages, characters_by_id, children, dice_engine, ic_day,
 			next_character_id,
@@ -7023,6 +7024,7 @@ static func _populate_vacancy_intelligence(
 	companies: Array,
 	settlements: Array[SettlementData] = [],
 	provinces: Dictionary = {},
+	season_meta: Dictionary = {},
 ) -> void:
 	var lord_vacancies: Dictionary = {}
 
@@ -7224,6 +7226,17 @@ static func _populate_vacancy_intelligence(
 			filled_positions[lord_id] = []
 		filled_positions[lord_id].append(family_key)
 
+	# Inherit seasons_vacant from persistent registry
+	var registry: Dictionary = season_meta.get("vacancy_registry", {})
+	var new_registry: Dictionary = {}
+	for lord_id: int in lord_vacancies:
+		for v: Dictionary in lord_vacancies[lord_id]:
+			var vkey: String = _vacancy_key(lord_id, v)
+			if registry.has(vkey):
+				v["seasons_vacant"] = registry[vkey]
+			new_registry[vkey] = v.get("seasons_vacant", 0)
+	season_meta["vacancy_registry"] = new_registry
+
 	# Store per-lord vacancy data keyed by lord_id
 	world_states["vacancy_data"] = lord_vacancies
 
@@ -7231,6 +7244,27 @@ static func _populate_vacancy_intelligence(
 	for lord_id: int in lord_vacancies:
 		var key: String = "vacant_positions_%d" % lord_id
 		world_states[key] = lord_vacancies[lord_id]
+
+
+static func _vacancy_key(lord_id: int, v: Dictionary) -> String:
+	var pos_type: String = v.get("position_type", "")
+	var family: String = v.get("family", "")
+	var settlement_id: int = v.get("settlement_id", -1)
+	var unit_id: int = v.get("unit_id", -1)
+	if not family.is_empty():
+		return "%d_%s_%s" % [lord_id, pos_type, family]
+	if settlement_id >= 0:
+		return "%d_%s_s%d" % [lord_id, pos_type, settlement_id]
+	if unit_id >= 0:
+		return "%d_%s_u%d" % [lord_id, pos_type, unit_id]
+	return "%d_%s" % [lord_id, pos_type]
+
+
+static func _increment_vacancy_seasons(season_meta: Dictionary) -> void:
+	var registry: Dictionary = season_meta.get("vacancy_registry", {})
+	for vkey: String in registry:
+		registry[vkey] = registry[vkey] + 1
+	season_meta["vacancy_registry"] = registry
 
 
 static func _has_position(positions: Array, substring: String) -> bool:
