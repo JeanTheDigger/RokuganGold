@@ -477,7 +477,7 @@ All in /tests/, one file per system:
 - test_time_system.gd (~15 tests)
 - test_skill_resolver.gd (~20 tests)
 - test_action_point_system.gd (~12 tests)
-- test_npc_decision_engine.gd (~85 tests)
+- test_npc_decision_engine.gd (~89 tests)
 - test_scoring_table_loader.gd (~15 tests)
 - test_action_executor.gd (~35 tests)
 - test_effect_applicator.gd (~37 tests)
@@ -930,7 +930,11 @@ All in /tests/, one file per system:
   in Phase 3. Daily letter pass: `resolve_daily_letter()` runs after AP
   resolution via `_process_daily_letter_pass()` in DayOrchestrator. Each NPC
   gets one free letter per IC day, targeting the best recipient based on
-  SEND_LETTER alignment entries.
+  SEND_LETTER alignment entries. `_pick_letter_topic()` selects the topic
+  with strongest absolute position from the NPC's known topics.
+  `_process_daily_letter_pass()` creates actual LetterData objects via
+  `LetterSystem.write_letter()` and appends them to `pending_letters`,
+  enabling topic propagation through the letter delivery pipeline.
 - **s57.20 New Decision Paths** — 3 NeedTypes added: BUILD_INFRASTRUCTURE,
   ARRANGE_MARRIAGE, FILL_VACANCY. 8 ActionIDs: FOUND_VILLAGE,
   BUILD_FORTIFICATION, BUILD_SHRINE, FOUND_TEMPLE, FOUND_MONASTERY,
