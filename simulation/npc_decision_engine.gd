@@ -1429,6 +1429,49 @@ static func _populate_action_metadata(
 			"settlement_id": need.target_settlement_id,
 			"target_intent": need.target_intent,
 		}
+	elif option.action_id == "GOSSIP":
+		var subject: int = need.target_npc_id if need.target_npc_id >= 0 else -1
+		if subject < 0:
+			subject = _pick_gossip_subject(ctx)
+		option.metadata = {
+			"gossip_subject_id": subject,
+			"damage_raises": 99,
+			"concealment_raises": 0,
+		}
+	elif option.action_id in ["NEGOTIATE", "PERSUADE", "PUBLIC_DEBATE"]:
+		option.metadata = {
+			"topic_id": _pick_court_agenda_topic(ctx),
+		}
+	elif option.action_id == "DISCLOSE":
+		var about_id: int = need.target_npc_id if need.target_npc_id >= 0 else -1
+		var opinion: int = 0
+		if about_id >= 0:
+			opinion = ctx.disposition_values.get(about_id, 0)
+		option.metadata = {
+			"disclose_about_id": about_id,
+			"disclosed_opinion": opinion,
+		}
+
+
+static func _pick_court_agenda_topic(ctx: NPCDataStructures.ContextSnapshot) -> int:
+	var court: Dictionary = ctx.active_court_at_location
+	if court.is_empty():
+		return -1
+	var topics: Array = court.get("topics", [])
+	if topics.is_empty():
+		return -1
+	return int(topics[0])
+
+
+static func _pick_gossip_subject(ctx: NPCDataStructures.ContextSnapshot) -> int:
+	var worst_id: int = -1
+	var worst_disp: int = 0
+	for cid: Variant in ctx.disposition_values:
+		var disp: int = ctx.disposition_values[cid]
+		if disp < worst_disp:
+			worst_disp = disp
+			worst_id = int(cid)
+	return worst_id
 
 
 static func _build_declare_war_metadata(

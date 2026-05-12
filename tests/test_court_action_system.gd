@@ -1076,3 +1076,122 @@ func test_ikoma_bard_provoke_failure_still_normal() -> void:
 	if not result.get("success", false):
 		assert_true(result["effects"].get("failed", false),
 			"Failed provoke against Ikoma Bard should still report failure")
+
+
+# -- Phase 3 Metadata Population Tests ---------------------------------------
+
+func _make_meta_ctx(court_topics: Array = [], disp: Dictionary = {}) -> NPCDataStructures.ContextSnapshot:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.character_id = 1
+	ctx.ic_day = 45
+	ctx.season = "spring"
+	ctx.context_flag = Enums.ContextFlag.AT_COURT
+	ctx.dispositions = disp
+	ctx.disposition_values = disp.duplicate()
+	if not court_topics.is_empty():
+		ctx.active_court_at_location = {"topics": court_topics}
+	return ctx
+
+
+func test_metadata_negotiate_gets_topic_id() -> void:
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "RAISE_DISPOSITION"
+	var action := NPCDataStructures.ScoredAction.new()
+	action.action_id = "NEGOTIATE"
+	action.target_npc_id = 2
+	var ctx: NPCDataStructures.ContextSnapshot = _make_meta_ctx([42, 55])
+	NPCDecisionEngine._populate_action_metadata(action, need, ctx)
+	assert_eq(action.metadata.get("topic_id", -1), 42)
+
+
+func test_metadata_persuade_gets_topic_id() -> void:
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "RAISE_DISPOSITION"
+	var action := NPCDataStructures.ScoredAction.new()
+	action.action_id = "PERSUADE"
+	action.target_npc_id = 2
+	var ctx: NPCDataStructures.ContextSnapshot = _make_meta_ctx([100])
+	NPCDecisionEngine._populate_action_metadata(action, need, ctx)
+	assert_eq(action.metadata.get("topic_id", -1), 100)
+
+
+func test_metadata_debate_gets_topic_id() -> void:
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "RAISE_DISPOSITION"
+	var action := NPCDataStructures.ScoredAction.new()
+	action.action_id = "PUBLIC_DEBATE"
+	action.target_npc_id = 2
+	var ctx: NPCDataStructures.ContextSnapshot = _make_meta_ctx([77])
+	NPCDecisionEngine._populate_action_metadata(action, need, ctx)
+	assert_eq(action.metadata.get("topic_id", -1), 77)
+
+
+func test_metadata_no_court_topic_returns_negative() -> void:
+	var need := NPCDataStructures.ImmediateNeed.new()
+	var action := NPCDataStructures.ScoredAction.new()
+	action.action_id = "NEGOTIATE"
+	var ctx: NPCDataStructures.ContextSnapshot = _make_meta_ctx()
+	NPCDecisionEngine._populate_action_metadata(action, need, ctx)
+	assert_eq(action.metadata.get("topic_id", -1), -1)
+
+
+func test_metadata_gossip_subject_from_need() -> void:
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.target_npc_id = 99
+	var action := NPCDataStructures.ScoredAction.new()
+	action.action_id = "GOSSIP"
+	var ctx: NPCDataStructures.ContextSnapshot = _make_meta_ctx()
+	NPCDecisionEngine._populate_action_metadata(action, need, ctx)
+	assert_eq(action.metadata.get("gossip_subject_id", -1), 99)
+
+
+func test_metadata_gossip_subject_from_worst_disposition() -> void:
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.target_npc_id = -1
+	var action := NPCDataStructures.ScoredAction.new()
+	action.action_id = "GOSSIP"
+	var ctx: NPCDataStructures.ContextSnapshot = _make_meta_ctx([], {5: -20, 6: -5, 7: 10})
+	NPCDecisionEngine._populate_action_metadata(action, need, ctx)
+	assert_eq(action.metadata.get("gossip_subject_id", -1), 5)
+
+
+func test_metadata_gossip_no_negative_returns_negative() -> void:
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.target_npc_id = -1
+	var action := NPCDataStructures.ScoredAction.new()
+	action.action_id = "GOSSIP"
+	var ctx: NPCDataStructures.ContextSnapshot = _make_meta_ctx([], {5: 10, 6: 20})
+	NPCDecisionEngine._populate_action_metadata(action, need, ctx)
+	assert_eq(action.metadata.get("gossip_subject_id", -1), -1)
+
+
+func test_metadata_gossip_defaults_all_damage_raises() -> void:
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.target_npc_id = 99
+	var action := NPCDataStructures.ScoredAction.new()
+	action.action_id = "GOSSIP"
+	var ctx: NPCDataStructures.ContextSnapshot = _make_meta_ctx()
+	NPCDecisionEngine._populate_action_metadata(action, need, ctx)
+	assert_eq(action.metadata.get("damage_raises", 0), 99)
+	assert_eq(action.metadata.get("concealment_raises", -1), 0)
+
+
+func test_metadata_disclose_about_and_opinion() -> void:
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.target_npc_id = 50
+	var action := NPCDataStructures.ScoredAction.new()
+	action.action_id = "DISCLOSE"
+	var ctx: NPCDataStructures.ContextSnapshot = _make_meta_ctx([], {50: -30})
+	NPCDecisionEngine._populate_action_metadata(action, need, ctx)
+	assert_eq(action.metadata.get("disclose_about_id", -1), 50)
+	assert_eq(action.metadata.get("disclosed_opinion", 0), -30)
+
+
+func test_metadata_disclose_zero_opinion_for_unknown() -> void:
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.target_npc_id = 50
+	var action := NPCDataStructures.ScoredAction.new()
+	action.action_id = "DISCLOSE"
+	var ctx: NPCDataStructures.ContextSnapshot = _make_meta_ctx()
+	NPCDecisionEngine._populate_action_metadata(action, need, ctx)
+	assert_eq(action.metadata.get("disclosed_opinion", -1), 0)
