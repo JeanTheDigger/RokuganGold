@@ -552,7 +552,7 @@ All in /tests/, one file per system:
 - test_feasibility_ledger.gd (~148 tests)
 - test_starvation_warfare.gd (~55 tests)
 - test_court_system.gd (~76 tests)
-- test_imperial_edict_system.gd (~83 tests)
+- test_imperial_edict_system.gd (~95 tests)
 - test_horde_system.gd (~43 tests)
 - test_oni_generator.gd (~80 tests)
 - test_naval_system.gd (~113 tests)
@@ -2275,6 +2275,20 @@ All in /tests/, one file per system:
   Deadline defaults to IC day + 90. `advance_day()` gains
   `court_commitments: Array[CourtCommitmentData]` parameter.
   WorldStateData gains `court_commitments` field.
+- **Commitment need injection** — `_inject_commitment_needs()` runs daily
+  after edict injection and before NPC wave resolution. Iterates unfulfilled
+  court commitments, injects `HONOR_COMMITMENT` reactive events into each
+  lord's `pending_events` with priority from `CourtCommitmentSystem.get_priority()`
+  (95 base, 100 for Chugi). Deduplication by `source + topic_id`. Event dict
+  includes `commitment_type` for decomposition routing.
+- **Commitment seasonal processing** — `_process_commitment_seasonal()` runs
+  on season boundary after ronin processing. Delegates to
+  `CourtCommitmentSystem.process_seasonal_commitments()` for fulfillment/renege
+  detection. On renege: applies honor loss via `HonorGlorySystem.apply_honor_change()`,
+  applies disposition penalty (−15) from all characters who know the reneging
+  lord (inbound disposition), generates renege topic (Tier 3 for voluntary,
+  Tier 2 for edict-compelled, POLITICAL category, "commitment_broken" variant).
+  Return dict gains `commitment_seasonal_result`.
 - **NPC edict response wiring** — COMPLY_WITH_EDICT and DEFY_EDICT ActionIDs
   in context lists, scoring tables, and ActionExecutor. RESPOND_TO_EDICT
   NeedType in objective_alignment.json. `_inject_edict_reactive_events()`

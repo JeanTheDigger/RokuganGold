@@ -1342,3 +1342,189 @@ func test_no_commitments_when_no_edict():
 		court_commitments, characters,
 	)
 	assert_eq(court_commitments.size(), 0, "No commitments when aggregate between thresholds")
+
+
+# -- Commitment Need Injection -------------------------------------------------
+
+func test_inject_commitment_needs_creates_pending_event():
+	var lord := _make_attendee(10, "Crane", 7.0)
+	lord.lord_id = -1
+	lord.bushido_virtue = Enums.BushidoVirtue.NONE
+	var characters: Array[L5RCharacterData] = [lord]
+	var cc := CourtCommitmentSystem.create_edict_commitment(10, 50, "send_supplies", 100, 200, 3)
+	var court_commitments: Array[CourtCommitmentData] = [cc]
+	var world_states: Dictionary = {}
+
+	DayOrchestrator._inject_commitment_needs(court_commitments, characters, world_states)
+	var ws: Dictionary = world_states.get(10, {})
+	var events: Array = ws.get("pending_events", [])
+	assert_eq(events.size(), 1)
+	assert_eq(events[0]["need_type"], "HONOR_COMMITMENT")
+	assert_eq(events[0]["priority"], 95)
+	assert_eq(events[0]["source"], "commitment_honor")
+	assert_eq(events[0]["topic_id"], 50)
+
+func test_inject_commitment_needs_chugi_priority():
+	var lord := _make_attendee(10, "Crane", 7.0)
+	lord.lord_id = -1
+	lord.bushido_virtue = Enums.BushidoVirtue.CHUGI
+	var characters: Array[L5RCharacterData] = [lord]
+	var cc := CourtCommitmentSystem.create_edict_commitment(10, 50, "send_supplies", 100, 200, 3)
+	var court_commitments: Array[CourtCommitmentData] = [cc]
+	var world_states: Dictionary = {}
+
+	DayOrchestrator._inject_commitment_needs(court_commitments, characters, world_states)
+	var events: Array = world_states.get(10, {}).get("pending_events", [])
+	assert_eq(events[0]["priority"], 100)
+
+func test_inject_commitment_needs_skips_fulfilled():
+	var lord := _make_attendee(10, "Crane", 7.0)
+	lord.lord_id = -1
+	lord.bushido_virtue = Enums.BushidoVirtue.NONE
+	var characters: Array[L5RCharacterData] = [lord]
+	var cc := CourtCommitmentSystem.create_edict_commitment(10, 50, "send_supplies", 100, 200, 3)
+	cc.fulfilled = true
+	var court_commitments: Array[CourtCommitmentData] = [cc]
+	var world_states: Dictionary = {}
+
+	DayOrchestrator._inject_commitment_needs(court_commitments, characters, world_states)
+	assert_false(world_states.has(10))
+
+func test_inject_commitment_needs_deduplicates():
+	var lord := _make_attendee(10, "Crane", 7.0)
+	lord.lord_id = -1
+	lord.bushido_virtue = Enums.BushidoVirtue.NONE
+	var characters: Array[L5RCharacterData] = [lord]
+	var cc := CourtCommitmentSystem.create_edict_commitment(10, 50, "send_supplies", 100, 200, 3)
+	var court_commitments: Array[CourtCommitmentData] = [cc]
+	var world_states: Dictionary = {}
+
+	DayOrchestrator._inject_commitment_needs(court_commitments, characters, world_states)
+	DayOrchestrator._inject_commitment_needs(court_commitments, characters, world_states)
+	var events: Array = world_states.get(10, {}).get("pending_events", [])
+	assert_eq(events.size(), 1, "Should not duplicate injection")
+
+func test_inject_commitment_needs_multiple_lords():
+	var lord_a := _make_attendee(10, "Crane", 7.0)
+	lord_a.lord_id = -1
+	lord_a.bushido_virtue = Enums.BushidoVirtue.NONE
+	var lord_b := _make_attendee(11, "Lion", 7.0)
+	lord_b.lord_id = -1
+	lord_b.bushido_virtue = Enums.BushidoVirtue.NONE
+	var characters: Array[L5RCharacterData] = [lord_a, lord_b]
+	var cc_a := CourtCommitmentSystem.create_edict_commitment(10, 50, "send_supplies", 100, 200, 3)
+	var cc_b := CourtCommitmentSystem.create_edict_commitment(11, 50, "send_military_aid", 100, 200, -1)
+	var court_commitments: Array[CourtCommitmentData] = [cc_a, cc_b]
+	var world_states: Dictionary = {}
+
+	DayOrchestrator._inject_commitment_needs(court_commitments, characters, world_states)
+	assert_eq(world_states.get(10, {}).get("pending_events", []).size(), 1)
+	assert_eq(world_states.get(11, {}).get("pending_events", []).size(), 1)
+
+
+# -- Commitment Seasonal Processing --------------------------------------------
+
+func test_commitment_seasonal_empty():
+	var commitments: Array[CourtCommitmentData] = []
+	var log: Array[Dictionary] = []
+	var topics: Array[TopicData] = []
+	var next_id: Array[int] = [500]
+	var result: Dictionary = DayOrchestrator._process_commitment_seasonal(
+		commitments, log, 250, {}, topics, next_id,
+	)
+	assert_true(result.is_empty())
+
+func test_commitment_seasonal_detects_fulfillment():
+	var lord := _make_attendee(10, "Crane", 5.0)
+	lord.honor = 5.0
+	var cc := CourtCommitmentSystem.create_edict_commitment(10, 50, "send_supplies", 100, 200, 5)
+	var commitments: Array[CourtCommitmentData] = [cc]
+	var log: Array[Dictionary] = [
+		{"character_id": 10, "action_id": "SHARE_SUPPLIES", "amount": 5},
+	]
+	var chars_by_id: Dictionary = {10: lord}
+	var topics: Array[TopicData] = []
+	var next_id: Array[int] = [500]
+	var result: Dictionary = DayOrchestrator._process_commitment_seasonal(
+		commitments, log, 150, chars_by_id, topics, next_id,
+	)
+	assert_eq(result["fulfilled_count"], 1)
+	assert_true(cc.fulfilled)
+	assert_eq(topics.size(), 0, "No topic for fulfilled commitment")
+
+func test_commitment_seasonal_renege_applies_honor():
+	var lord := _make_attendee(10, "Crane", 5.0)
+	lord.honor = 5.0
+	var cc := CourtCommitmentSystem.create_edict_commitment(10, 50, "send_supplies", 100, 200, 100)
+	var commitments: Array[CourtCommitmentData] = [cc]
+	var log: Array[Dictionary] = []
+	var chars_by_id: Dictionary = {10: lord}
+	var topics: Array[TopicData] = []
+	var next_id: Array[int] = [500]
+	DayOrchestrator._process_commitment_seasonal(
+		commitments, log, 250, chars_by_id, topics, next_id,
+	)
+	assert_true(lord.honor < 5.0, "Honor should decrease on renege")
+
+func test_commitment_seasonal_renege_generates_topic():
+	var lord := _make_attendee(10, "Crane", 5.0)
+	lord.honor = 5.0
+	var cc := CourtCommitmentSystem.create_edict_commitment(10, 50, "send_supplies", 100, 200, 100)
+	var commitments: Array[CourtCommitmentData] = [cc]
+	var log: Array[Dictionary] = []
+	var chars_by_id: Dictionary = {10: lord}
+	var topics: Array[TopicData] = []
+	var next_id: Array[int] = [500]
+	DayOrchestrator._process_commitment_seasonal(
+		commitments, log, 250, chars_by_id, topics, next_id,
+	)
+	assert_eq(topics.size(), 1, "Renege should generate a topic")
+	assert_eq(topics[0].topic_type, "renege")
+	assert_eq(topics[0].variant, "commitment_broken")
+	assert_eq(topics[0].category, TopicData.Category.POLITICAL)
+
+func test_commitment_seasonal_renege_disposition_penalty():
+	var lord := _make_attendee(10, "Crane", 5.0)
+	lord.honor = 5.0
+	var other := _make_attendee(11, "Lion", 5.0)
+	other.disposition_values[10] = 20
+	var cc := CourtCommitmentSystem.create_edict_commitment(10, 50, "send_supplies", 100, 200, 100)
+	var commitments: Array[CourtCommitmentData] = [cc]
+	var log: Array[Dictionary] = []
+	var chars_by_id: Dictionary = {10: lord, 11: other}
+	var topics: Array[TopicData] = []
+	var next_id: Array[int] = [500]
+	DayOrchestrator._process_commitment_seasonal(
+		commitments, log, 250, chars_by_id, topics, next_id,
+	)
+	assert_eq(other.disposition_values[10], 5, "Others disposition toward reneging lord should drop by 15")
+
+func test_commitment_seasonal_edict_renege_tier_2_topic():
+	var lord := _make_attendee(10, "Crane", 5.0)
+	lord.honor = 3.0
+	var cc := CourtCommitmentSystem.create_edict_commitment(10, 50, "send_supplies", 100, 200, 100)
+	var commitments: Array[CourtCommitmentData] = [cc]
+	var log: Array[Dictionary] = []
+	var chars_by_id: Dictionary = {10: lord}
+	var topics: Array[TopicData] = []
+	var next_id: Array[int] = [500]
+	DayOrchestrator._process_commitment_seasonal(
+		commitments, log, 250, chars_by_id, topics, next_id,
+	)
+	assert_eq(topics[0].tier, 2, "Edict renege should produce Tier 2 topic")
+	assert_eq(topics[0].momentum, 30.0, "Tier 2 topic gets higher momentum")
+
+func test_commitment_seasonal_next_topic_id_increments():
+	var lord := _make_attendee(10, "Crane", 5.0)
+	lord.honor = 5.0
+	var cc := CourtCommitmentSystem.create_edict_commitment(10, 50, "send_supplies", 100, 200, 100)
+	var commitments: Array[CourtCommitmentData] = [cc]
+	var log: Array[Dictionary] = []
+	var chars_by_id: Dictionary = {10: lord}
+	var topics: Array[TopicData] = []
+	var next_id: Array[int] = [500]
+	DayOrchestrator._process_commitment_seasonal(
+		commitments, log, 250, chars_by_id, topics, next_id,
+	)
+	assert_eq(next_id[0], 501)
+	assert_eq(topics[0].topic_id, 500)

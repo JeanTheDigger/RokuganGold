@@ -118,6 +118,7 @@ static func advance_day(
 	)
 
 	_inject_edict_reactive_events(active_edicts, characters, world_states, ic_day)
+	_inject_commitment_needs(court_commitments, characters, world_states)
 
 	var wm_for_military: Dictionary = world_states.get("_worship_maluses", {})
 	var military_daily: Dictionary = _process_military_daily(
@@ -347,6 +348,7 @@ static func advance_day(
 	var ronin_results: Dictionary = {}
 	var pregnancy_results: Array[Dictionary] = []
 	var seiyaku_results: Dictionary = {}
+	var commitment_seasonal_result: Dictionary = {}
 	var worship_seasonal_results: Dictionary = {}
 	if current_season != prev_season:
 		# Add the IC year to miya_inputs so per-province blessed-year tracking
@@ -456,6 +458,10 @@ static func advance_day(
 			)
 		var season_count: int = int(season_meta.get("horde_season_count", 0))
 		ronin_results = _process_seasonal_ronin(characters, season_count)
+		commitment_seasonal_result = _process_commitment_seasonal(
+			court_commitments, action_log, ic_day, characters_by_id,
+			active_topics, next_topic_id,
+		)
 		_increment_vacancy_seasons(season_meta)
 		pregnancy_results = _process_pregnancy_checks(
 			marriages, characters_by_id, children, dice_engine, ic_day,
@@ -531,6 +537,7 @@ static func advance_day(
 		"worship_accumulation_results": worship_accumulation_results,
 		"worship_seasonal_results": worship_seasonal_results,
 		"construction_results": construction_results,
+		"commitment_seasonal_result": commitment_seasonal_result,
 	}
 
 
@@ -7451,3 +7458,91 @@ static func _find_vacancy_candidate(
 			best_score = score
 			best_id = c.character_id
 	return best_id
+
+
+# -- Court Commitment Wiring ---------------------------------------------------
+
+static func _inject_commitment_needs(
+	court_commitments: Array[CourtCommitmentData],
+	characters: Array[L5RCharacterData],
+	world_states: Dictionary,
+) -> void:
+	for cc: CourtCommitmentData in court_commitments:
+		if cc.fulfilled:
+			continue
+		var lord_id: int = cc.lord_id
+		var ws: Dictionary = world_states.get(lord_id, {})
+		if ws.is_empty():
+			ws = {}
+			world_states[lord_id] = ws
+		if not ws.has("pending_events"):
+			ws["pending_events"] = []
+		var already_injected: bool = false
+		for ev: Variant in ws["pending_events"]:
+			if ev is Dictionary and ev.get("source", "") == "commitment_honor" \
+					and ev.get("topic_id", -1) == cc.topic_id:
+				already_injected = true
+				break
+		if already_injected:
+			continue
+		var virtue: Enums.BushidoVirtue = Enums.BushidoVirtue.NONE
+		for c: L5RCharacterData in characters:
+			if c.character_id == lord_id:
+				virtue = c.bushido_virtue
+				break
+		var priority: int = CourtCommitmentSystem.get_priority(virtue)
+		ws["pending_events"].append({
+			"need_type": "HONOR_COMMITMENT",
+			"priority": priority,
+			"topic_id": cc.topic_id,
+			"commitment_type": cc.commitment_type,
+			"source": "commitment_honor",
+		})
+
+
+static func _process_commitment_seasonal(
+	court_commitments: Array[CourtCommitmentData],
+	action_log: Array[Dictionary],
+	ic_day: int,
+	characters_by_id: Dictionary,
+	active_topics: Array[TopicData],
+	next_topic_id: Array[int],
+) -> Dictionary:
+	if court_commitments.is_empty():
+		return {}
+	var result: Dictionary = CourtCommitmentSystem.process_seasonal_commitments(
+		court_commitments, action_log, ic_day, characters_by_id,
+	)
+	for renege_info: Dictionary in result.get("reneged", []):
+		var lord_id: int = renege_info.get("lord_id", -1)
+		var lord: L5RCharacterData = characters_by_id.get(lord_id)
+		if lord == null:
+			continue
+		var honor_change: float = renege_info.get("honor_change", 0.0)
+		if honor_change != 0.0:
+			HonorGlorySystem.apply_honor_change(lord, honor_change)
+		var disp_penalty: int = renege_info.get("disposition_penalty", 0)
+		if disp_penalty != 0:
+			for other: L5RCharacterData in characters_by_id.values():
+				if other.character_id == lord_id:
+					continue
+				if other.disposition_values.has(lord_id):
+					other.disposition_values[lord_id] = clampi(
+						other.disposition_values[lord_id] + disp_penalty, -100, 100,
+					)
+		var topic_tier: int = renege_info.get("topic_tier", 3)
+		var topic_type: String = renege_info.get("topic_type", "renege")
+		var topic_variant: String = renege_info.get("topic_variant", "commitment_broken")
+		var topic_id: int = next_topic_id[0]
+		next_topic_id[0] += 1
+		var topic: TopicData = TopicData.new()
+		topic.topic_id = topic_id
+		topic.slug = "renege_%d_%d" % [lord_id, renege_info.get("topic_id", 0)]
+		topic.tier = topic_tier
+		topic.topic_type = topic_type
+		topic.variant = topic_variant
+		topic.momentum = 11.0 if topic_tier >= 3 else 30.0
+		topic.category = TopicData.Category.POLITICAL
+		topic.ic_day_created = ic_day
+		active_topics.append(topic)
+	return result
