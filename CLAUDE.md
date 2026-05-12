@@ -513,6 +513,7 @@ All in /tests/, one file per system:
 - test_musha_shugyo_system.gd (~75 tests)
 - test_governance_wiring.gd (~25 tests)
 - test_marriage_wiring.gd (~65 tests)
+- test_worship_system.gd (~67 tests)
 
 ### Governance Action Wiring (s57.20)
 - **APPOINT_TO_POSITION** — Daily AP action (1 AP, lord-only). Executor
@@ -2722,12 +2723,50 @@ All in /tests/, one file per system:
   season count. `advance_day()` threads dice_engine and season_count
   from `season_meta["horde_season_count"]`.
 
+### Kami Worship System (s4.3.21)
+- **simulation/worship_system.gd** — Full Kami Worship economy per GDD s4.3.21.
+  Pure static functions. Manages Worship Points (WP), Great Fortune thresholds,
+  Minor Fortune bonuses, active/passive generation, and cascade maluses.
+  **Passive WP generation** — 5 location types (roadside_shrine 0.5, village_shrine
+  1.0, local_shrine 2.0, temple 4.0, shinden 8.0). General locations split WP
+  across all 7 Great Fortunes. Dedicated locations focus all WP on one Fortune
+  at 3× rate (roadside 1.5, village 3.0, local 6.0, temple 12.0, shinden 24.0).
+  **Active worship** — PERFORM_WORSHIP generates WP by character type: normal 1.0,
+  monk 2.0, shugenja 1.0 base + bonus from Lore:Theology+Ring roll vs TN 15
+  (up to +3 bonus WP). Location free raises: roadside/village 0, local +1,
+  temple +2, shinden +3. Directed worship sends all WP to one Fortune; split
+  distributes evenly across 7.
+  **Threshold evaluation** — Province 10 WP, Family 60 WP, Clan 150 WP, Empire
+  800 WP per Fortune per season. Tier assignment by ratio: ≥100% → NONE,
+  ≥75% → RESTLESS, ≥40% → DISPLEASED, <40% → WRATHFUL. Maluses cascade
+  downward — worst tier across all 4 levels applies.
+  **Great Fortune malus tables** — All 7 Fortunes × 3 tiers fully defined:
+  Benten (pop growth −25/−50/−100%, stability, marriage auto-fail),
+  Bishamon (army attack/morale −1/−2/−3, commander risk),
+  Daikoku (koku −15/−30/−50%, market prices, trade routes),
+  Ebisu (rice −15/−30/−50%, harvest cap, famine level),
+  Fukurokujin (divination −1k0/−2k0/impossible, intelligence rolls),
+  Hotei (stability −5/−10/−20/season, insurgency doubled),
+  Jurojin (natural death increase, aging, commander risk checks).
+  **Minor Fortune blessing tiers** — 23 Minor Fortunes with 3 threshold tiers:
+  Noticed (3 WP), Favored (8 WP), Beloved (15 WP). Province-only bonuses.
+  **Divination** — Shugenja Lore:Theology+Ring vs TN 15. Raises expand scope:
+  province → family (+1) → clan (+2) → empire (+3). Returns tier + flavor text.
+  Embedded in PERFORM_WORSHIP — no separate AP cost.
+  **Seasonal processing** — `process_seasonal_worship()` evaluates all 4 cascade
+  levels. `reset_seasonal_wp()` clears accumulated WP each season.
+  `add_active_worship_to_province()` accumulates WP from active worship actions.
+  Deferred: DayOrchestrator wiring (seasonal evaluation + PERFORM_WORSHIP
+  executor intercept), malus application to ResourceTick/ArmyCombatSystem/
+  InsurgencySystem, worship location data on SettlementData, construction
+  queue integration with s4.3.22.
+
 ### What's Next
 1. World generation coordinate system and adjacency
-2. GDD sections 4.3.21 (worship infrastructure) and 4.3.22 (settlement
-   founding / fortification building) — required before infrastructure
-   ActionIDs (FOUND_VILLAGE, BUILD_FORTIFICATION, BUILD_SHRINE,
-   FOUND_TEMPLE, FOUND_MONASTERY) can be fully wired into the NPC loop.
+2. GDD section 4.3.22 (settlement founding / fortification building) — required
+   before infrastructure ActionIDs (FOUND_VILLAGE, BUILD_FORTIFICATION,
+   BUILD_SHRINE, FOUND_TEMPLE, FOUND_MONASTERY) can be fully wired into the
+   NPC loop.
    COMMISSION_SHIP also needs s4.3.22 for construction queue mechanics.
    The NPC scoring tables and context lists are already in place (s57.20);
    only the executor → orchestrator mutation pipeline is missing.
