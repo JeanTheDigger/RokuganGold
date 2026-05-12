@@ -500,7 +500,7 @@ All in /tests/, one file per system:
 - test_court_action_system.gd (~140 tests)
 - test_topic_system.gd (~55 tests)
 - test_investigation_system.gd (~40 tests)
-- test_day_orchestrator.gd (~54 tests)
+- test_day_orchestrator.gd (~64 tests)
 - test_approach_evaluation.gd (~55 tests)
 - test_commitment_registry.gd (~60 tests)
 - test_military_hierarchy.gd (~47 tests)
@@ -3182,6 +3182,15 @@ The following subsystems are now integrated into the NPC decision loop:
   Returns active festivals, effects, honor/glory gains. NPC loop can read
   world_state flags to gate military actions (ceasefire) and labor
   (Chrysanthemum halt).
+- **Urgency data injection** — `_inject_urgency_data()` runs before NPC
+  wave resolution. Injects 5 keys into each per-character world_state dict:
+  `favors` (global favors array for expiring favor urgency detection),
+  `active_tethers` (for cut supply army urgency), `active_topics` (for topic
+  type filtering in Phase 5 scoring), `objective_stalled_seasons` (from
+  primary objective's `seasons_without_progress`), `besieged_settlement_health_pct`
+  (computed from siege state rice/PU ratio at character's physical_location,
+  0.0 if garrison starved). Without this injection, all 5 urgency conditions
+  and topic type filtering would silently use defaults.
 - **DispositionSystem** — Daily: `_apply_cohabitation()` increments
   `cohabitation_days` dict on L5RCharacterData for all character pairs
   sharing a `physical_location`. Seasonal: `_decay_all_historical_modifiers()`
