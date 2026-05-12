@@ -512,7 +512,7 @@ All in /tests/, one file per system:
 - test_ronin_system.gd (~44 tests)
 - test_musha_shugyo_system.gd (~75 tests)
 - test_governance_wiring.gd (~25 tests)
-- test_marriage_wiring.gd (~20 tests)
+- test_marriage_wiring.gd (~30 tests)
 
 ### Governance Action Wiring (s57.20)
 - **APPOINT_TO_POSITION** — Daily AP action (1 AP, lord-only). Executor
@@ -537,6 +537,20 @@ All in /tests/, one file per system:
   debtor=proposing lord), and generates Tier 4 POLITICAL marriage topic
   with type-specific variant. WorldStateData gains
   `marriages: Array[Dictionary]`.
+- **Moving character reassignment** — `_reassign_moving_character()` saves
+  `birth_clan`/`birth_family` on the moving character, then overwrites
+  `clan`/`family`/`lord_id` with the staying character's values. Within-family
+  marriages skip reassignment (moving_id = -1). `L5RCharacterData` gains
+  `birth_clan: String` and `birth_family: String` fields.
+- **Pregnancy processing** — `_process_pregnancy_checks()` runs seasonally.
+  Iterates active marriages, skips dead/same-gender spouses, averages
+  bilateral disposition, rolls against `MarriageSystem.check_pregnancy()`
+  thresholds (hostile 0%, stranger 5%, friend 15%, close 25%). On success,
+  creates ChildRecord via `GempukkuSystem.create_child_at_birth()`, updates
+  both parents' `children_ids` and the marriage record's `children_ids`.
+  Uses `next_character_id` counter for child IDs.
+- **Birth family disposition floors** — `birth_clan`/`birth_family` fields
+  stored but floor enforcement in DispositionSystem not yet wired (deferred).
 - CALL_COURT, ASSIGN_VASSAL_OBJECTIVE, and SEND_INVITATION are NOT daily
   AP actions — they route through Strategic Review and the daily letter
   system respectively.
