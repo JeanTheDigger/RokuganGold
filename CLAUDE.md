@@ -486,7 +486,7 @@ All in /tests/, one file per system:
 - test_information_system.gd (~40 tests)
 - test_daily_conversation.gd (~37 tests)
 - test_court_commitment_system.gd (~49 tests)
-- test_court_action_system.gd (~131 tests)
+- test_court_action_system.gd (~140 tests)
 - test_topic_system.gd (~55 tests)
 - test_investigation_system.gd (~40 tests)
 - test_day_orchestrator.gd (~54 tests)
@@ -2257,7 +2257,11 @@ All in /tests/, one file per system:
   from court agenda (topic with strongest absolute position, falling back to
   first topic when none known). GOSSIP gets `gossip_subject_id` from need
   target or worst-disposition known character, with damage/concealment raise
-  split. DISCLOSE gets `disclose_about_id` and `disclosed_opinion` from
+  split. Gossip concealment AI: `_compute_gossip_raise_split()` assigns
+  raises based on personality — Bayushi Courtier all-damage (free school
+  concealment), Gi/Makoto/Meiyo all-damage, Seigyo/Dosatsu/Chishiki and
+  Scorpion clan reserve 1 raise for concealment, default all-damage.
+  DISCLOSE gets `disclose_about_id` and `disclosed_opinion` from
   character's disposition toward the target.
   `build_context()` now reads `known_topics` from `character.topic_pool` and
   `known_positions` from `character.topic_positions` directly (previously read
