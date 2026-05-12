@@ -515,7 +515,7 @@ All in /tests/, one file per system:
 - test_marriage_wiring.gd (~65 tests)
 - test_worship_system.gd (~67 tests)
 - test_worship_wiring.gd (~50 tests)
-- test_construction_system.gd (~55 tests)
+- test_construction_system.gd (~67 tests)
 
 ### Governance Action Wiring (s57.20)
 - **APPOINT_TO_POSITION** — Daily AP action (1 AP, lord-only). Executor
@@ -2820,10 +2820,32 @@ All in /tests/, one file per system:
   Return dict gains `construction_results`.
 - **WorldStateData** gains `constructions`, `next_settlement_id`,
   `next_construction_id` fields.
-- **Tests** — `tests/test_construction_system.gd` (~55 tests): validation
+- **Tests** — `tests/test_construction_system.gd` (~67 tests): validation
   (village/fort/shrine/temple/shinden/monastery/ship), factory output,
   construction queue tick, organic formation, authority checks, cost constants,
-  resource deduction, shrine addition.
+  resource deduction, shrine addition, infrastructure decomposition.
+
+### BUILD_INFRASTRUCTURE NeedType Decomposition (s57.20.1)
+- **simulation/objective_decomposer.gd** — `INFRASTRUCTURE_OBJECTIVES` constant
+  routes BUILD_INFRASTRUCTURE to `_decompose_infrastructure()`. Lord-only,
+  AT_OWN_HOLDINGS gate. 4-step priority cascade:
+  1. Worship failure → BUILD_SHRINE (priority 3, first failing province)
+  2. Border without fortification → BUILD_FORTIFICATION (priority 2)
+  3. Surplus PU → FOUND_VILLAGE (priority 1)
+  4. Coastal + naval threat + no ships → COMMISSION_SHIP (priority 3)
+  Fallback: REST.
+- **simulation/npc_data_structures.gd** — ContextSnapshot gains 6 fields:
+  `worship_failing_province_ids`, `border_province_ids_without_fort`,
+  `surplus_pu_province_ids`, `is_coastal`, `has_ships`, `has_naval_threat`.
+- **simulation/npc_decision_engine.gd** — `build_context()` populates
+  infrastructure intelligence fields from world_state. `_populate_action_metadata()`
+  sets province_id, settlement_id, target_intent for construction ActionIDs.
+- **simulation/day_orchestrator.gd** — `_populate_infrastructure_intelligence()`
+  runs at start of advance_day(), scans provinces for worship failure (WP < 10),
+  border without fort (adjacent different-clan province), surplus PU (above
+  terrain threshold), and naval state. Results stored in world_states dict.
+  Known limitations: `is_coastal` always false (needs coordinate system),
+  `has_naval_threat` is rough heuristic (any active war = naval threat).
 
 ### What's Next
 1. World generation coordinate system and adjacency
