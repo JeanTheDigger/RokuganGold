@@ -1043,3 +1043,56 @@ func test_resolve_daily_letter_includes_topic_id() -> void:
 		char, objectives, scoring_tables, ctx,
 	)
 	assert_eq(result.get("topic_id", -1), 42, "Should include strongest position topic")
+
+
+# --- SEEK_PEACE position inversion (s55.26 Annex H) ---
+
+func test_seek_peace_inverts_position_pro_war_penalized() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.known_topics = [1]
+	ctx.known_positions = {1: 60.0}
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "SEEK_PEACE"
+	var tables: Dictionary = {
+		"topic_position_alignment": {
+			"SEEK_PEACE": {"strong_support": 15, "strong_opposition": -15},
+		},
+	}
+	var result: float = NPCDecisionEngine._compute_topic_position_modifier(
+		"NEGOTIATE_SURRENDER", need, ctx, tables,
+	)
+	assert_eq(result, -15.0, "Pro-war NPC (pos +60) should get -15 on SEEK_PEACE")
+
+
+func test_seek_peace_inverts_position_anti_war_boosted() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.known_topics = [1]
+	ctx.known_positions = {1: -60.0}
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "SEEK_PEACE"
+	var tables: Dictionary = {
+		"topic_position_alignment": {
+			"SEEK_PEACE": {"strong_support": 15, "strong_opposition": -15},
+		},
+	}
+	var result: float = NPCDecisionEngine._compute_topic_position_modifier(
+		"NEGOTIATE_SURRENDER", need, ctx, tables,
+	)
+	assert_eq(result, 15.0, "Anti-war NPC (pos -60) should get +15 on SEEK_PEACE")
+
+
+func test_seek_peace_neutral_position_zero() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.known_topics = [1]
+	ctx.known_positions = {1: 5.0}
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "SEEK_PEACE"
+	var tables: Dictionary = {
+		"topic_position_alignment": {
+			"SEEK_PEACE": {"strong_support": 15, "strong_opposition": -15},
+		},
+	}
+	var result: float = NPCDecisionEngine._compute_topic_position_modifier(
+		"NEGOTIATE_SURRENDER", need, ctx, tables,
+	)
+	assert_eq(result, 0.0, "Neutral position should still be zero after inversion")

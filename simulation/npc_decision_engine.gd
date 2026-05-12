@@ -1064,9 +1064,12 @@ static func _compute_topic_position_modifier(
 	if need_entry.is_empty():
 		return 0.0
 
+	var invert: bool = need.need_type == "SEEK_PEACE"
 	var best_modifier: float = 0.0
 	for topic_id in ctx.known_topics:
 		var position: float = float(ctx.known_positions.get(topic_id, 0))
+		if invert:
+			position = -position
 		var modifier: float = _interpolate_topic_position(position, need_entry)
 		if absf(modifier) > absf(best_modifier):
 			best_modifier = modifier
