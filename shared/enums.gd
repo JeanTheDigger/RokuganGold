@@ -550,3 +550,27 @@ enum HordeBattleOutcome {
 	ATTACKER_PUSHED_BACK,       # Defender wins but pushed back  → -3 SI
 	DEFENDER_OVERRUN,           # Garrison destroyed or routed   → -4 SI / breach
 }
+
+# -- Naval Enums (s11.9 — LOCKED) ------------------------------------------------
+
+enum NavalWeather {
+	CLEAR,
+	WIND,
+	RAIN,
+	STORM,
+	TYPHOON,
+}
+
+enum WaterSubtileType {
+	RIVER,
+	LAKE,
+	COASTAL,
+	OCEAN,
+}
+
+enum NavalEngagementLevel {
+	RESERVES,
+	DISENGAGED,
+	ENGAGED,
+	HEAVILY_ENGAGED,
+}

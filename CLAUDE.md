@@ -61,6 +61,7 @@ When implementing or auditing a system, go here first:
 | Imperial Edicts                               | 15.1, 15.2, 55.10 |
 | Winter Court lifecycle (host selection,       | 55.10              |
 |   invitations, delegation, Emperor's Peace)   |                    |
+| Ship types & naval trade                      | 11.9               |
 | Musha Shugyo (warrior's pilgrimage)           | 57.48              |
 
 ## Directory Structure
@@ -493,6 +494,7 @@ All in /tests/, one file per system:
 - test_imperial_edict_system.gd (~57 tests)
 - test_horde_system.gd (~43 tests)
 - test_oni_generator.gd (~80 tests)
+- test_naval_system.gd (~113 tests)
 
 ### Festival System (s11.5)
 - **simulation/festival_system.gd** — Empire-wide canonical festivals, Rokuyo
@@ -2197,6 +2199,60 @@ All in /tests/, one file per system:
   Deferred: Horde assault combat resolution (sets battle_outcome from
   ArmyCombatSystem), Spawn company generation (s2.4.6), garrison shortage
   NPC pipeline (Taisa/Shireikan letter campaign, s2.4.12–s2.4.14).
+
+### Ship Types & Naval System (s11.9)
+- **shared/ship_data.gd** — ShipData Resource: ship_id, ship_class (ShipClass enum),
+  owning_clan, captain_id, current_province_id, current_subtile_id, ship_name,
+  combat stats (health, max_health, attack, defense, morale, morale_defense),
+  is_destroyed, is_captured, captured_by_clan, movement state, construction_cost,
+  cargo_capacity, ic_day_launched.
+- **simulation/naval_system.gd** — Full naval mechanics per GDD s11.9. Pure static
+  functions (DiceEngine passed where needed).
+  **Ship stat blocks** — 7 ship classes: Kobune (H100/A3/D3/M12/MD4, cargo 0.3,
+  flat-bottomed, river+coastal), Sampan (H30/A0/D1/M4/MD0, cargo 0.1),
+  Merchant Barge (H80/A1/D2/M6/MD1, cargo 0.5), Sengokobune (H130/A4/D4/M14/MD5,
+  cargo 0.5, ocean-capable), Koutetsukan (H200/A6/D8/M20/MD8, military, 2 days/
+  subtile, no ocean), Atakebune (H250/A7/D6/M18/MD7, military, Mantis-only,
+  ocean), Tortoise Oceangoing (H130/A3/D4/M14/MD5, cost 10 koku, ocean).
+  **Water traversal** — `can_traverse()` validates ship class against water
+  sub-tile type (river, lake, coastal, ocean). `is_ocean_capable()`, deep ocean
+  10% catastrophic loss for non-capable vessels.
+  **Clan exclusivity** — Signature ships (Atakebune→Mantis, Koutetsukan→Crab),
+  clan-exclusive operation checks. `evaluate_signature_capture_decision()` maps
+  personality virtue to destroy/keep/return.
+  **Weather at sea** — d100 seasonal weather table (Clear/Wind/Rain/Storm/Typhoon).
+  Typhoon only in Autumn and Winter (5%). Inland downgrades Typhoon to Storm.
+  Global modifiers: Rain −1 Atk, Storm −2 Atk, Typhoon −3 Atk −2 Def.
+  Ship-specific: flat-bottomed Storm −1 Def / Typhoon −2 Def; Koutetsukan
+  Storm/Typhoon extra −1 Atk. Sengokobune/Atakebune/Tortoise no extra penalties.
+  `get_effective_attack()` / `get_effective_defense()` apply all modifiers with
+  floor at 0. Mantis crew bonus: +1 to Sengokobune combat rolls.
+  **Kobune ranged** — Reserve Row archer support: 1d5 clear/wind, 1d3 rain,
+  suppressed in storm/typhoon. `resolve_kobune_ranged()` rolls and adds attack.
+  **Ram attack** — Koutetsukan only, +8 Attack, 5 self-damage, once per battle.
+  **Boarding** — Koutetsukan immune. Sampan cannot initiate. First round −2 Atk.
+  Capture prize = half construction cost.
+  **Tortoise Escape Attempt** — Navigation+Intelligence contested vs
+  Battle+Intelligence. Weather bonuses: Wind +1k0, Storm +2k0, Typhoon +3k0.
+  Once per engagement.
+  **Tortoise recognition** — Kaiu Engineer, Mantis Kobune Captain Rank 3+,
+  Sailing 5+ auto-recognize gaijin construction. TN 25/20/15 by access level.
+  Tier 2 clan-level secret.
+  **Naval trade routes** — Ocean routes require Sengokobune/Atakebune/Tortoise.
+  Mantis −10% pirate spawn, +3 suppression rolls.
+  **River combat** — Only Kobune/Sampan/Merchant Barge. Max 2 abreast (3 major
+  river). Downstream +1 Atk, upstream −1 Atk. Grounding: Strength TN 15 to free.
+  No flanking on rivers.
+  **Shore attacks** — Shore-to-ship normal, ship-to-shore −2 Atk.
+  **Navigation bonuses** — Direction finder +1k0 (Mantis only), shugenja assist
+  +2k0 (Water TN 20), Tortoise ocean +1k0. All stack.
+  **Civilian vessels** — Merchant Barge auto-surrenders at morale 0. Sampan
+  auto-flees on contact.
+- **shared/enums.gd** gains `NavalWeather` (5 values), `WaterSubtileType` (4
+  values), `NavalEngagementLevel` (4 values).
+  Deferred: Full naval combat round loop (integrating with ArmyCombatSystem),
+  ship movement processing (needs coordinate system), weather-per-subtile-per-day
+  integration with DayOrchestrator, Heroic Opportunities at sea (Category 9).
 
 ### What's Next
 1. World generation coordinate system and adjacency
