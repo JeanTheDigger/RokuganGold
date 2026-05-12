@@ -486,6 +486,7 @@ All in /tests/, one file per system:
 - test_information_system.gd (~40 tests)
 - test_daily_conversation.gd (~37 tests)
 - test_court_commitment_system.gd (~49 tests)
+- test_court_action_system.gd (~85 tests)
 - test_topic_system.gd (~55 tests)
 - test_investigation_system.gd (~40 tests)
 - test_day_orchestrator.gd (~54 tests)
@@ -2208,6 +2209,38 @@ All in /tests/, one file per system:
   Guards: no surplus → skip, same province → skip, receiver not starving → skip.
   Honor gain scaled by recipient starvation stage per existing sharing honor
   table. Return dict gains `supply_sharing_results`.
+
+### Court Action Menu (s15.4)
+- **simulation/court_action_system.gd** — Court action resolution per GDD s15.4.
+  All Category 1 direct conversation actions use contested rolls (attacker vs
+  defender) instead of flat TN. Negotiate (Courtier vs Courtier): topic position
+  shift +5 base +2/raise, session TN reduction. Persuade (Sincerity vs Sincerity):
+  stronger position shift +8 base +4/raise, durable. Charm (Etiquette vs
+  Etiquette): ceiling at +40, diminishing returns (full→half→minimal per session).
+  Impress (Lore vs Etiquette): +5 TN reduction next action. Listen and Reflect
+  (Investigation vs Sincerity): opens Persuade/Negotiate with −5 TN. Offer Favor
+  (Sincerity vs Sincerity): returns `requires_favor_creation`. Disclose (Sincerity
+  vs Sincerity): information transfer, downstream disposition.
+  Category 4: Provoke Emotion (Courtier vs Etiquette): −0.2 Honor, −0.1 Glory,
+  −3 witness disposition on target. Public Debate per-witness formula:
+  (A_roll − B_roll) + tier_A − tier_B per witness, position shift 2/4/6/8 by
+  raises. Play a Game (contested Games sub-skill): +3 disposition both, +1
+  winner bonus. Category 5: Read Character (Investigation vs Etiquette):
+  1-3 random info pieces by raises, partial at margin <5, critical failure
+  false info. Probe (Courtier vs Sincerity): 1-2 info types, always detected.
+  Discern Need (school-dependent vs Etiquette): returns priority objective.
+- **ActionExecutor** — 7 contested court actions (`_CONTESTED_COURT_ACTIONS`)
+  routed through `_execute_contested_court_action()` with per-action
+  attacker/defender skill/trait lookup tables. Dedicated handlers for
+  PROVOKE_EMOTION, PLAY_GAME, DISCERN_NEED, READ_CHARACTER, PROBE,
+  PUBLIC_DEBATE (per-witness). Game trait mapping for 6 Games sub-skills.
+  Yasuki/Doji school-specific skill routing for DISCERN_NEED.
+- **DayOrchestrator** — `_process_court_action_effects()` processes target
+  position shifts, Provoke Emotion honor/glory/witness effects, Play a Game
+  bilateral disposition, Public Debate per-witness disposition/position.
+- **NPC engine** — PROVOKE_EMOTION, PLAY_GAME, DISCERN_NEED added to AT_COURT
+  context list, action_skill_map.json, objective_alignment.json (SEEK_PRETEXT,
+  GATHER_INTELLIGENCE, RAISE_DISPOSITION), personality_lean.json (14 virtues).
 
 ### Court System (s15.1, s15.2)
 - **shared/court_session_data.gd** — CourtSessionData Resource: 3 CourtType
