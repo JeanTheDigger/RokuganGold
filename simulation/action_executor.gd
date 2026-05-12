@@ -173,6 +173,18 @@ static func execute(
 	if action_id == "DISPATCH_COURTIER":
 		return _execute_dispatch_courtier(action, character, ctx, dice_engine, characters_by_id)
 
+	if action_id == "APPOINT_TO_POSITION":
+		return _execute_appoint_to_position(action, character, ctx)
+
+	if action_id == "ASSIGN_VASSAL_OBJECTIVE":
+		return _execute_assign_vassal_objective(action, character, ctx)
+
+	if action_id == "CALL_COURT":
+		return _execute_call_court(action, character, ctx)
+
+	if action_id == "SEND_INVITATION":
+		return _execute_send_invitation(action, character, ctx)
+
 	if action_id == "SCOUT_ENEMY":
 		return _execute_scout_enemy(action, character, ctx, dice_engine)
 
@@ -1813,6 +1825,101 @@ static func _compute_blockade_effects(action: NPCDataStructures.ScoredAction) ->
 	result["effect"] = "route_blocked"
 	result["requires_blockade"] = true
 	return result
+
+
+# -- Governance Actions --------------------------------------------------------
+
+static func _execute_appoint_to_position(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> Dictionary:
+	var target_id: int = action.metadata.get("target_npc_id", action.target_npc_id)
+	var position: String = action.metadata.get("position", "")
+	return {
+		"success": target_id >= 0,
+		"action_id": "APPOINT_TO_POSITION",
+		"character_id": ctx.character_id,
+		"target_npc_id": target_id,
+		"ic_day": ctx.ic_day,
+		"season": ctx.season,
+		"effects": {
+			"requires_appointment": true,
+			"appointing_lord_id": ctx.character_id,
+			"appointee_id": target_id,
+			"position": position,
+		},
+	}
+
+
+static func _execute_assign_vassal_objective(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> Dictionary:
+	var vassal_id: int = action.metadata.get("vassal_id", action.target_npc_id)
+	var objective_type: String = action.metadata.get("objective_type", "")
+	var target_province_id: int = action.metadata.get("target_province_id", -1)
+	return {
+		"success": vassal_id >= 0,
+		"action_id": "ASSIGN_VASSAL_OBJECTIVE",
+		"character_id": ctx.character_id,
+		"target_npc_id": vassal_id,
+		"ic_day": ctx.ic_day,
+		"season": ctx.season,
+		"effects": {
+			"requires_vassal_assignment": true,
+			"lord_id": ctx.character_id,
+			"vassal_id": vassal_id,
+			"objective_type": objective_type,
+			"target_province_id": target_province_id,
+		},
+	}
+
+
+static func _execute_call_court(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> Dictionary:
+	var settlement_id: int = -1
+	if ctx.location_id.is_valid_int():
+		settlement_id = int(ctx.location_id)
+	return {
+		"success": settlement_id >= 0,
+		"action_id": "CALL_COURT",
+		"character_id": ctx.character_id,
+		"ic_day": ctx.ic_day,
+		"season": ctx.season,
+		"effects": {
+			"requires_court_creation": true,
+			"host_lord_id": ctx.character_id,
+			"host_settlement_id": settlement_id,
+			"host_clan": ctx.clan,
+		},
+	}
+
+
+static func _execute_send_invitation(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> Dictionary:
+	var invitee_id: int = action.metadata.get("invitee_id", action.target_npc_id)
+	return {
+		"success": invitee_id >= 0,
+		"action_id": "SEND_INVITATION",
+		"character_id": ctx.character_id,
+		"target_npc_id": invitee_id,
+		"ic_day": ctx.ic_day,
+		"season": ctx.season,
+		"effects": {
+			"requires_invitation": true,
+			"host_lord_id": ctx.character_id,
+			"invitee_id": invitee_id,
+			"host_clan": ctx.clan,
+		},
+	}
 
 
 # -- Winter Court Skill Bonus --------------------------------------------------

@@ -194,6 +194,8 @@ static func generate_options(
 			continue
 		if _is_military_blocked(action_id, ctx):
 			continue
+		if _is_lord_only_blocked(action_id, ctx):
+			continue
 		if ctx.is_ceasefire_day and _is_ceasefire_blocked(action_id):
 			continue
 		if ctx.is_labor_halt_day and _is_labor_halt_blocked(action_id):
@@ -492,6 +494,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array[S
 				"FOUND_VILLAGE", "BUILD_FORTIFICATION", "BUILD_SHRINE",
 				"FOUND_TEMPLE", "FOUND_MONASTERY", "COMMISSION_SHIP",
 				"ARRANGE_MARRIAGE", "APPOINT_TO_POSITION",
+				"ASSIGN_VASSAL_OBJECTIVE", "CALL_COURT", "SEND_INVITATION",
 				"PURIFY_TAINTED_GROUND",
 				"DISPATCH_COURTIER",
 				"DECLARE_WAR", "NEGOTIATE_SURRENDER",
@@ -509,6 +512,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array[S
 				"PERFORM_FOR", "DISCLOSE",
 				"ASK_FOR_INTRODUCTION", "OBSERVE_COURT_ATTENDEES",
 				"ARRANGE_MARRIAGE", "APPOINT_TO_POSITION",
+				"ASSIGN_VASSAL_OBJECTIVE", "CALL_COURT", "SEND_INVITATION",
 				"COMPLY_WITH_EDICT", "DEFY_EDICT",
 				"TRAIN", "MEDITATE",
 				"BRIBE_FOR_INFO", "EAVESDROP",
@@ -638,6 +642,17 @@ static func _get_ap_cost(action_id: String) -> int:
 		"DECLARE_WAR": 2,
 		"COMPLY_WITH_EDICT": 1,
 		"DEFY_EDICT": 1,
+		"CALL_COURT": 2,
+		"SEND_INVITATION": 1,
+		"ASSIGN_VASSAL_OBJECTIVE": 1,
+		"APPOINT_TO_POSITION": 1,
+		"ARRANGE_MARRIAGE": 1,
+		"FOUND_VILLAGE": 1,
+		"BUILD_FORTIFICATION": 1,
+		"BUILD_SHRINE": 1,
+		"FOUND_TEMPLE": 1,
+		"FOUND_MONASTERY": 1,
+		"COMMISSION_SHIP": 1,
 	}
 	return costs.get(action_id, 1)
 
@@ -1154,6 +1169,24 @@ const COMMANDER_RANK_ACTIONS: Dictionary = {
 	"LEVY_TROOPS": Enums.MilitaryRank.CHUI,
 }
 
+const LORD_ONLY_ACTIONS: Array[String] = [
+	"CALL_COURT", "SEND_INVITATION", "ASSIGN_VASSAL_OBJECTIVE",
+	"APPOINT_TO_POSITION", "DECLARE_WAR", "FOUND_VILLAGE",
+	"BUILD_FORTIFICATION", "BUILD_SHRINE", "FOUND_TEMPLE",
+	"FOUND_MONASTERY", "COMMISSION_SHIP", "ARRANGE_MARRIAGE",
+	"SET_TAX_RATE", "SET_STIPEND_RATE",
+]
+
+
+static func _is_lord_only_blocked(
+	action_id: String,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> bool:
+	if action_id in LORD_ONLY_ACTIONS:
+		return not ctx.is_lord
+	return false
+
+
 static func _is_military_blocked(
 	action_id: String,
 	ctx: NPCDataStructures.ContextSnapshot,
@@ -1343,6 +1376,27 @@ static func _populate_action_metadata(
 		option.metadata = _build_blockade_metadata(need, ctx)
 	elif option.action_id == "COMPLY_WITH_EDICT" or option.action_id == "DEFY_EDICT":
 		option.metadata = _build_edict_response_metadata(need, ctx)
+	elif option.action_id == "APPOINT_TO_POSITION":
+		option.metadata = {
+			"target_npc_id": need.target_npc_id,
+			"position": need.target_intent,
+		}
+	elif option.action_id == "ASSIGN_VASSAL_OBJECTIVE":
+		option.metadata = {
+			"vassal_id": need.target_npc_id,
+			"objective_type": need.target_intent,
+			"target_province_id": need.target_province_id,
+		}
+	elif option.action_id == "CALL_COURT":
+		option.metadata = {
+			"lord_id": ctx.character_id,
+			"settlement_id": ctx.location_id,
+		}
+	elif option.action_id == "SEND_INVITATION":
+		option.metadata = {
+			"invitee_id": need.target_npc_id,
+			"lord_id": ctx.character_id,
+		}
 
 
 static func _build_declare_war_metadata(

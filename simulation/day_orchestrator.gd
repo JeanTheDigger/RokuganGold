@@ -187,6 +187,19 @@ static func advance_day(
 		active_edicts,
 	)
 
+	var governance_results: Dictionary = _process_governance_effects(
+		day_result.get("results", []),
+		characters_by_id,
+		objectives_map,
+		active_courts,
+		active_topics,
+		next_court_id,
+		next_topic_id,
+		ic_day,
+		pending_letters,
+		world_states,
+	)
+
 	var war_declarations: Array[Dictionary] = _process_war_declarations(
 		day_result.get("results", []),
 		active_wars,
@@ -372,6 +385,9 @@ static func advance_day(
 			emperor_archetype, next_topic_id,
 			pending_letters, dice_engine, wc_letter_id,
 		)
+		_process_vassal_reassignments(
+			strategic_results, objectives_map, characters_by_id,
+		)
 		if not seiyaku_state.is_empty():
 			seiyaku_results = _process_seiyaku_review(
 				seiyaku_state, characters, characters_by_id,
@@ -425,6 +441,7 @@ static func advance_day(
 		"trade_route_results": trade_route_results,
 		"starvation_results": starvation_results,
 		"supply_sharing_results": supply_sharing_results,
+		"governance_results": governance_results,
 		"court_results": court_results,
 		"court_openings": court_openings,
 		"court_attendance": court_attendance,
@@ -5940,6 +5957,230 @@ static func _build_advancement_world_state(
 		"in_court_ids": in_court_ids,
 		"in_crisis_ids": in_crisis_ids,
 	}
+
+
+# -- Governance Effects --------------------------------------------------------
+
+static func _process_governance_effects(
+	results: Array,
+	characters_by_id: Dictionary,
+	objectives_map: Dictionary,
+	active_courts: Array[CourtSessionData],
+	active_topics: Array[TopicData],
+	next_court_id: Array[int],
+	next_topic_id: Array[int],
+	ic_day: int,
+	pending_letters: Array,
+	world_states: Dictionary,
+) -> Dictionary:
+	var appointment_results: Array[Dictionary] = []
+	var vassal_assignment_results: Array[Dictionary] = []
+	var court_creation_results: Array[Dictionary] = []
+	var invitation_results: Array[Dictionary] = []
+
+	for result: Variant in results:
+		if not (result is Dictionary):
+			continue
+		var rd: Dictionary = result
+		var effects: Dictionary = rd.get("effects", {})
+
+		if effects.get("requires_appointment", false):
+			var ar: Dictionary = _apply_appointment(effects, characters_by_id)
+			appointment_results.append(ar)
+
+		if effects.get("requires_vassal_assignment", false):
+			var vr: Dictionary = _apply_vassal_objective_assignment(effects, objectives_map)
+			vassal_assignment_results.append(vr)
+
+		if effects.get("requires_court_creation", false):
+			var cr: Dictionary = _apply_court_creation(
+				effects, active_courts, active_topics,
+				next_court_id, next_topic_id, ic_day, world_states,
+			)
+			court_creation_results.append(cr)
+
+		if effects.get("requires_invitation", false):
+			var ir: Dictionary = _apply_invitation(effects, pending_letters, ic_day)
+			invitation_results.append(ir)
+
+	return {
+		"appointments": appointment_results,
+		"vassal_assignments": vassal_assignment_results,
+		"court_creations": court_creation_results,
+		"invitations": invitation_results,
+	}
+
+
+static func _apply_appointment(
+	effects: Dictionary,
+	characters_by_id: Dictionary,
+) -> Dictionary:
+	var appointee_id: int = effects.get("appointee_id", -1)
+	var position: String = effects.get("position", "")
+	var lord_id: int = effects.get("appointing_lord_id", -1)
+
+	var appointee: L5RCharacterData = characters_by_id.get(appointee_id) as L5RCharacterData
+	if appointee == null:
+		return {"applied": false, "reason": "no_appointee", "appointee_id": appointee_id}
+
+	appointee.role_position = position
+	appointee.operational_superior_id = lord_id
+
+	return {
+		"applied": true,
+		"appointee_id": appointee_id,
+		"position": position,
+		"lord_id": lord_id,
+	}
+
+
+static func _apply_vassal_objective_assignment(
+	effects: Dictionary,
+	objectives_map: Dictionary,
+) -> Dictionary:
+	var vassal_id: int = effects.get("vassal_id", -1)
+	var objective_type: String = effects.get("objective_type", "")
+	var target_province_id: int = effects.get("target_province_id", -1)
+	var lord_id: int = effects.get("lord_id", -1)
+
+	if vassal_id < 0:
+		return {"applied": false, "reason": "no_vassal"}
+
+	if not objectives_map.has(vassal_id):
+		objectives_map[vassal_id] = {}
+
+	var new_objective: Dictionary = {
+		"need_type": objective_type,
+		"status": "ACTIVE",
+		"assigned_by": lord_id,
+	}
+	if target_province_id >= 0:
+		new_objective["target_province_id"] = target_province_id
+
+	objectives_map[vassal_id]["standing"] = new_objective
+
+	return {
+		"applied": true,
+		"vassal_id": vassal_id,
+		"objective_type": objective_type,
+		"lord_id": lord_id,
+	}
+
+
+static func _apply_court_creation(
+	effects: Dictionary,
+	active_courts: Array[CourtSessionData],
+	active_topics: Array[TopicData],
+	next_court_id: Array[int],
+	next_topic_id: Array[int],
+	ic_day: int,
+	world_states: Dictionary,
+) -> Dictionary:
+	var lord_id: int = effects.get("host_lord_id", -1)
+	var settlement_id: int = effects.get("host_settlement_id", -1)
+	var clan: String = effects.get("host_clan", "")
+
+	if lord_id < 0 or settlement_id < 0:
+		return {"applied": false, "reason": "missing_host_data"}
+
+	for c: CourtSessionData in active_courts:
+		if c.host_lord_id == lord_id and CourtSystem.is_active(c):
+			return {"applied": false, "reason": "already_hosting"}
+
+	var court_type: CourtSessionData.CourtType = CourtSessionData.CourtType.PROVINCIAL_FAMILY_COURT
+
+	var agenda: Array[int] = CourtSystem.select_agenda_topics(
+		active_topics, court_type
+	)
+
+	var court := CourtSystem.create_court(
+		next_court_id[0], court_type, lord_id,
+		settlement_id, clan, ic_day + 1
+	)
+	next_court_id[0] += 1
+	CourtSystem.set_agenda(court, agenda)
+	CourtSystem.add_attendee(court, lord_id)
+	active_courts.append(court)
+
+	var last_court_season: int = world_states.get("current_season", -1)
+	_track_court_called(world_states, lord_id, ic_day, last_court_season)
+
+	return {
+		"applied": true,
+		"court_id": court.court_id,
+		"lord_id": lord_id,
+		"settlement_id": settlement_id,
+	}
+
+
+static func _apply_invitation(
+	effects: Dictionary,
+	pending_letters: Array,
+	ic_day: int,
+) -> Dictionary:
+	var invitee_id: int = effects.get("invitee_id", -1)
+	var lord_id: int = effects.get("host_lord_id", -1)
+	var clan: String = effects.get("host_clan", "")
+
+	if invitee_id < 0 or lord_id < 0:
+		return {"applied": false, "reason": "missing_ids"}
+
+	var letter: Dictionary = {
+		"sender_id": lord_id,
+		"recipient_id": invitee_id,
+		"topic": -1,
+		"letter_type": "court_invitation",
+		"ic_day_sent": ic_day,
+		"province_distance": 3,
+		"clan": clan,
+	}
+	pending_letters.append(letter)
+
+	return {
+		"applied": true,
+		"invitee_id": invitee_id,
+		"lord_id": lord_id,
+	}
+
+
+# -- Vassal Reassignment (Strategic Review Directives) -------------------------
+
+static func _process_vassal_reassignments(
+	strategic_results: Array[Dictionary],
+	objectives_map: Dictionary,
+	characters_by_id: Dictionary,
+) -> void:
+	for directive: Dictionary in strategic_results:
+		var directive_type: Variant = directive.get("directive", "")
+		if directive_type != StrategicReview.Directive.REASSIGN_VASSAL_OBJECTIVE:
+			continue
+
+		var vassal_id: int = directive.get("vassal_id", -1)
+		if vassal_id < 0:
+			continue
+
+		var decision: String = directive.get("decision", "")
+		var lord_id: int = directive.get("lord_id", -1)
+
+		if not objectives_map.has(vassal_id):
+			objectives_map[vassal_id] = {}
+
+		if decision == "ASSIGN":
+			var new_obj: Dictionary = directive.get("new_objective", {})
+			if not new_obj.is_empty():
+				new_obj["assigned_by"] = lord_id
+				new_obj["status"] = "ACTIVE"
+				objectives_map[vassal_id]["standing"] = new_obj
+		elif decision == "CONFIRM":
+			var objectives: Dictionary = objectives_map.get(vassal_id, {})
+			OrphanedObjectives.resolve_orphaned_objective(objectives, "CONFIRM")
+		elif decision == "MODIFY":
+			var new_obj: Dictionary = directive.get("new_objective", {})
+			var objectives: Dictionary = objectives_map.get(vassal_id, {})
+			OrphanedObjectives.resolve_orphaned_objective(objectives, "MODIFY", new_obj)
+		elif decision == "CANCEL":
+			var objectives: Dictionary = objectives_map.get(vassal_id, {})
+			OrphanedObjectives.resolve_orphaned_objective(objectives, "CANCEL")
 
 
 # -- Helpers -------------------------------------------------------------------
