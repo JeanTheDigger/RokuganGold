@@ -486,7 +486,7 @@ All in /tests/, one file per system:
 - test_information_system.gd (~40 tests)
 - test_daily_conversation.gd (~37 tests)
 - test_court_commitment_system.gd (~49 tests)
-- test_court_action_system.gd (~125 tests)
+- test_court_action_system.gd (~131 tests)
 - test_topic_system.gd (~55 tests)
 - test_investigation_system.gd (~40 tests)
 - test_day_orchestrator.gd (~54 tests)
@@ -2254,10 +2254,14 @@ All in /tests/, one file per system:
   context list, action_skill_map.json, objective_alignment.json (SEEK_PRETEXT,
   GATHER_INTELLIGENCE, RAISE_DISPOSITION), personality_lean.json (14 virtues).
   Phase 3 metadata population: NEGOTIATE/PERSUADE/PUBLIC_DEBATE get `topic_id`
-  from court agenda (first topic). GOSSIP gets `gossip_subject_id` from need
+  from court agenda (topic with strongest absolute position, falling back to
+  first topic when none known). GOSSIP gets `gossip_subject_id` from need
   target or worst-disposition known character, with damage/concealment raise
   split. DISCLOSE gets `disclose_about_id` and `disclosed_opinion` from
   character's disposition toward the target.
+  `build_context()` now reads `known_topics` from `character.topic_pool` and
+  `known_positions` from `character.topic_positions` directly (previously read
+  from world_state dict entries that were never populated).
 
 ### Court System (s15.1, s15.2)
 - **shared/court_session_data.gd** — CourtSessionData Resource: 3 CourtType
