@@ -82,6 +82,9 @@ var ships: Array[ShipData] = []
 var children: Array[ChildRecord] = []
 var next_character_id: Array[int] = [10000]
 
+# -- Otomo Seiyaku (s55.22b) ---------------------------------------------------
+var seiyaku_state: Dictionary = OtomoSeiyakuSystem.make_initial_state()
+
 # -- Collective Disposition (s12.2b) -------------------------------------------
 # Clan-to-clan and family-to-family baselines keyed by sorted "a||b" strings.
 # Initialized to the locked PROVISIONAL pre-Scorpion-Coup starting values.
@@ -175,6 +178,7 @@ func advance_one_day() -> Dictionary:
 		ships,
 		children,
 		next_character_id,
+		seiyaku_state,
 	)
 
 

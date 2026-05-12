@@ -500,6 +500,7 @@ All in /tests/, one file per system:
 - test_monk_objective_system.gd (~59 tests)
 - test_winter_court_system.gd (~80 tests)
 - test_gempukku_system.gd (~55 tests)
+- test_otomo_seiyaku_system.gd (~55 tests)
 
 ### Festival System (s11.5)
 - **simulation/festival_system.gd** — Empire-wide canonical festivals, Rokuyo
@@ -2471,6 +2472,39 @@ All in /tests/, one file per system:
   `next_character_id: Array[int]`. Return dict gains `gempukku_results`.
 - **WorldStateData** gains `children: Array[ChildRecord]` and
   `next_character_id: Array[int]` fields.
+
+### Otomo Seiyaku System — Alliance Suppression (s55.22b)
+- **simulation/otomo_seiyaku_system.gd** — `OtomoSeiyakuSystem` pure static
+  class per GDD s55.22b. The Otomo family monitors Champion-to-Champion
+  disposition across all 7 Great Clan pairs (21 total) and assigns operatives
+  to degrade dangerously warm relationships.
+  Emperor archetype thresholds: Benevolent 55, Iron 45, Cunning 35, Warlike 45,
+  Tyrant 25. Archetype pool bonuses: Cunning +1, Tyrant +2, others +0.
+  BASE_OPERATIVE_POOL = 3, plus half the Otomo courtier count.
+  `scan_champion_dispositions()` finds pairs above threshold, sorts by
+  magnitude desc. Warlike archetype exempts war-allied clans.
+  `assign_directives()` allocates operatives to alarm pairs up to pool size.
+  `cancel_directive()` frees operative when disposition drops below
+  threshold − CANCEL_BUFFER (10). `update_escalation()` escalates after
+  ESCALATION_SEASONS (2) consecutive seasons above threshold.
+  `check_exhaustion_topic()` fires once when pool exhausted with uncovered
+  alarms. `declare_formal_alliance()` / `dissolve_formal_alliance()` with
+  FORMAL_ALLIANCE_FLOOR = 31. `resolve_detection()` contested roll.
+  `apply_detection()` halves effectiveness, returns sympathy bonus.
+  `estimate_seasonal_effect()` estimates per-channel disposition damage
+  (court −3 to −8, visits −2 to −5, letters −1 to −2, combined −5 to −12).
+  `get_operative_skill_bonus()` returns +10 court skill for assigned ops.
+  `is_valid_target_pair()` excludes Imperial and same-clan.
+  `process_seasonal_review()` — main seasonal entry point.
+- **DayOrchestrator wiring** — `_process_seiyaku_review()` runs on season
+  boundary (when `seiyaku_state` is non-empty). Builds champion dispositions
+  by finding clan champions (status ≥ 7.0, no lord, living) and averaging
+  bilateral disposition_values. Gets Otomo courtier IDs (family="Otomo",
+  school_type=COURTIER, living). Generates Tier 4 POLITICAL exhaustion topic
+  when pool stretched. New param: `seiyaku_state: Dictionary`. Return dict
+  gains `seiyaku_results`.
+- **WorldStateData** gains `seiyaku_state: Dictionary` initialized from
+  `OtomoSeiyakuSystem.make_initial_state()`.
 
 ### What's Next
 1. World generation coordinate system and adjacency

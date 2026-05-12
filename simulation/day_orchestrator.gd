@@ -57,6 +57,7 @@ static func advance_day(
 	ships: Array[ShipData] = [],
 	children: Array[ChildRecord] = [],
 	next_character_id: Array[int] = [10000],
+	seiyaku_state: Dictionary = {},
 ) -> Dictionary:
 	var prev_season: int = time_system.get_season()
 
@@ -293,6 +294,7 @@ static func advance_day(
 	var military_seasonal_result: Dictionary = {}
 	var wall_seasonal_result: Dictionary = {}
 	var gempukku_results: Dictionary = {}
+	var seiyaku_results: Dictionary = {}
 	if current_season != prev_season:
 		# Add the IC year to miya_inputs so per-province blessed-year tracking
 		# stays consistent. Year is computed from the time system's tick count.
@@ -363,6 +365,12 @@ static func advance_day(
 			emperor_archetype, next_topic_id,
 			pending_letters, dice_engine, wc_letter_id,
 		)
+		if not seiyaku_state.is_empty():
+			seiyaku_results = _process_seiyaku_review(
+				seiyaku_state, characters, characters_by_id,
+				emperor_archetype, active_wars, active_topics,
+				next_topic_id, ic_day,
+			)
 
 	var horde_results: Dictionary = _process_horde_rolls(
 		current_season, prev_season,
@@ -425,6 +433,7 @@ static func advance_day(
 		"naval_topics": naval_topics,
 		"musha_shugyo_results": musha_shugyo_results,
 		"gempukku_results": gempukku_results,
+		"seiyaku_results": seiyaku_results,
 	}
 
 
@@ -5691,6 +5700,98 @@ static func _process_musha_shugyo(
 			objectives_map[character.character_id].erase("standing")
 		results.append(result)
 	return results
+
+
+# -- Otomo Seiyaku Review ------------------------------------------------------
+
+static func _process_seiyaku_review(
+	seiyaku_state: Dictionary,
+	characters: Array[L5RCharacterData],
+	characters_by_id: Dictionary,
+	emperor_archetype: int,
+	active_wars: Array[WarData],
+	active_topics: Array[TopicData],
+	next_topic_id: Array[int],
+	ic_day: int,
+) -> Dictionary:
+	var champion_dispositions: Dictionary = _build_champion_dispositions(characters, characters_by_id)
+	var otomo_courtiers: Array[int] = _get_otomo_courtier_ids(characters)
+	var war_context: Array = []
+	for w: WarData in active_wars:
+		war_context.append(WarSystem.to_context_dict(w))
+
+	var result: Dictionary = OtomoSeiyakuSystem.process_seasonal_review(
+		seiyaku_state,
+		champion_dispositions,
+		emperor_archetype,
+		otomo_courtiers,
+		otomo_courtiers.size(),
+		war_context,
+	)
+
+	if result.get("exhaustion_topic", false):
+		var topic := TopicData.new()
+		topic.topic_id = next_topic_id[0]
+		next_topic_id[0] += 1
+		topic.slug = "otomo_resources_stretched_" + str(ic_day)
+		topic.topic_type = "political"
+		topic.variant = "otomo_exhaustion"
+		topic.tier = TopicData.Tier.TIER_4
+		topic.momentum = 11.0
+		topic.category = TopicData.Category.POLITICAL
+		active_topics.append(topic)
+		result["exhaustion_topic_id"] = topic.topic_id
+
+	return result
+
+
+static func _build_champion_dispositions(
+	characters: Array[L5RCharacterData],
+	characters_by_id: Dictionary,
+) -> Dictionary:
+	var champions: Dictionary = {}
+	for c: L5RCharacterData in characters:
+		if c.clan.is_empty():
+			continue
+		if c.lord_id != -1:
+			continue
+		if c.status < 7.0:
+			continue
+		if c.wounds_taken > 0:
+			var earth: int = CharacterStats.get_ring_value(c, Enums.Ring.EARTH)
+			if CharacterStats.is_dead(c.wounds_taken, earth):
+				continue
+		if not champions.has(c.clan) or c.status > champions[c.clan].status:
+			champions[c.clan] = c
+
+	var dispositions: Dictionary = {}
+	var clan_list: Array = champions.keys()
+	for i: int in range(clan_list.size()):
+		for j: int in range(i + 1, clan_list.size()):
+			var a: L5RCharacterData = champions[clan_list[i]]
+			var b: L5RCharacterData = champions[clan_list[j]]
+			var pair_key: String = OtomoSeiyakuSystem.make_pair_key(
+				clan_list[i] as String, clan_list[j] as String,
+			)
+			var disp_a: int = a.disposition_values.get(b.character_id, 0)
+			var disp_b: int = b.disposition_values.get(a.character_id, 0)
+			dispositions[pair_key] = (disp_a + disp_b) / 2
+	return dispositions
+
+
+static func _get_otomo_courtier_ids(characters: Array[L5RCharacterData]) -> Array[int]:
+	var ids: Array[int] = []
+	for c: L5RCharacterData in characters:
+		if c.family != "Otomo":
+			continue
+		if c.school_type != Enums.SchoolType.COURTIER:
+			continue
+		if c.wounds_taken > 0:
+			var earth: int = CharacterStats.get_ring_value(c, Enums.Ring.EARTH)
+			if CharacterStats.is_dead(c.wounds_taken, earth):
+				continue
+		ids.append(c.character_id)
+	return ids
 
 
 # -- Gempukku & Population -----------------------------------------------------
