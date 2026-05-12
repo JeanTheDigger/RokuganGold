@@ -486,7 +486,7 @@ All in /tests/, one file per system:
 - test_information_system.gd (~40 tests)
 - test_daily_conversation.gd (~37 tests)
 - test_court_commitment_system.gd (~49 tests)
-- test_court_action_system.gd (~105 tests)
+- test_court_action_system.gd (~113 tests)
 - test_topic_system.gd (~55 tests)
 - test_investigation_system.gd (~40 tests)
 - test_day_orchestrator.gd (~54 tests)
@@ -2244,6 +2244,12 @@ All in /tests/, one file per system:
   topic position shifts per witness (requires topic_id in action metadata).
   Action metadata threaded through contested court actions via
   `_action_metadata` key in effects dict.
+- **School exceptions** — Bayushi Courtier R1 ("Weakness is My Strength"):
+  GOSSIP is always source_concealed without spending a concealment Raise.
+  Ikoma Bard R2 ("The Heart of the Lion"): PROVOKE_EMOTION targeting a Lion
+  Ikoma Bard skips all penalties (honor, glory, witness disposition loss).
+  GOSSIP executor refactored to delegate to `CourtActionSystem.resolve_gossip()`
+  with damage/concealment raise split from action metadata.
 - **NPC engine** — PROVOKE_EMOTION, PLAY_GAME, DISCERN_NEED added to AT_COURT
   context list, action_skill_map.json, objective_alignment.json (SEEK_PRETEXT,
   GATHER_INTELLIGENCE, RAISE_DISPOSITION), personality_lean.json (14 virtues).
