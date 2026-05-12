@@ -50,6 +50,10 @@ const INVESTIGATION_OBJECTIVES: Array[String] = [
 	"UPHOLD_LAW",
 ]
 
+const INFRASTRUCTURE_OBJECTIVES: Array[String] = [
+	"BUILD_INFRASTRUCTURE",
+]
+
 
 # -- Main Entry Point ---------------------------------------------------------
 
@@ -77,6 +81,8 @@ static func decompose(
 		return _decompose_military(need_type, objective, ctx)
 	if need_type in INVESTIGATION_OBJECTIVES:
 		return _decompose_investigation(need_type, objective, ctx)
+	if need_type in INFRASTRUCTURE_OBJECTIVES:
+		return _decompose_infrastructure(need_type, objective, ctx)
 
 	return _passthrough(objective)
 
@@ -1324,3 +1330,48 @@ static func _has_recent_marriage_attempt(
 				if attempt_day >= 0 and (ctx.ic_day - attempt_day) < cooldown_days:
 					return true
 	return false
+
+
+# -- Infrastructure Decomposition (s57.20.1) -----------------------------------
+
+
+static func _decompose_infrastructure(
+	_need_type: String,
+	_objective: Dictionary,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> NPCDataStructures.ImmediateNeed:
+	if not ctx.is_lord:
+		return _make_need("REST", 1)
+
+	if ctx.context_flag != Enums.ContextFlag.AT_OWN_HOLDINGS:
+		return _make_need("REST", 1)
+
+	# Priority cascade per GDD s57.20.1:
+	# 1. Worship failure → BUILD_SHRINE (priority rises to 3 when actively causing problems)
+	if not ctx.worship_failing_province_ids.is_empty():
+		return _make_need("BUILD_INFRASTRUCTURE", 3, {
+			"target_province_id": ctx.worship_failing_province_ids[0],
+			"target_intent": "BUILD_SHRINE",
+		})
+
+	# 2. Border without fortification → BUILD_FORTIFICATION
+	if not ctx.border_province_ids_without_fort.is_empty():
+		return _make_need("BUILD_INFRASTRUCTURE", 2, {
+			"target_province_id": ctx.border_province_ids_without_fort[0],
+			"target_intent": "BUILD_FORTIFICATION",
+		})
+
+	# 3. Surplus population → FOUND_VILLAGE
+	if not ctx.surplus_pu_province_ids.is_empty():
+		return _make_need("BUILD_INFRASTRUCTURE", 1, {
+			"target_province_id": ctx.surplus_pu_province_ids[0],
+			"target_intent": "FOUND_VILLAGE",
+		})
+
+	# 4. Coastal with naval threats and no ships → COMMISSION_SHIP (priority 3)
+	if ctx.is_coastal and ctx.has_naval_threat and not ctx.has_ships:
+		return _make_need("BUILD_INFRASTRUCTURE", 3, {
+			"target_intent": "COMMISSION_SHIP",
+		})
+
+	return _make_need("REST", 1)

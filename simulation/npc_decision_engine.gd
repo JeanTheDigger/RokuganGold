@@ -117,6 +117,14 @@ static func build_context(
 		character, world_state.get("active_topics", [])
 	)
 
+	# Infrastructure intelligence (s4.3.22)
+	ctx.worship_failing_province_ids = world_state.get("worship_failing_province_ids", [] as Array[int])
+	ctx.border_province_ids_without_fort = world_state.get("border_province_ids_without_fort", [] as Array[int])
+	ctx.surplus_pu_province_ids = world_state.get("surplus_pu_province_ids", [] as Array[int])
+	ctx.is_coastal = world_state.get("is_coastal", false)
+	ctx.has_ships = world_state.get("has_ships", false)
+	ctx.has_naval_threat = world_state.get("has_naval_threat", false)
+
 	# Festival state (s11.5)
 	ctx.is_ceasefire_day = world_state.get("is_ceasefire_day", false)
 	ctx.is_labor_halt_day = world_state.get("is_labor_halt_day", false)
@@ -1391,6 +1399,13 @@ static func _populate_action_metadata(
 		option.metadata = {
 			"directed_fortune": need.target_npc_id if need.target_npc_id >= 0 else -1,
 			"location_type": _zone_to_worship_location(ctx.zone_subtype),
+		}
+	elif option.action_id in ["FOUND_VILLAGE", "BUILD_FORTIFICATION", "BUILD_SHRINE",
+			"FOUND_TEMPLE", "FOUND_MONASTERY", "COMMISSION_SHIP"]:
+		option.metadata = {
+			"province_id": need.target_province_id,
+			"settlement_id": need.target_settlement_id,
+			"target_intent": need.target_intent,
 		}
 
 

@@ -554,3 +554,123 @@ func test_shrine_type_name_local() -> void:
 		ConstructionSystem.SHRINE_TYPE_NAMES[ConstructionData.ConstructionType.SHRINE_LOCAL],
 		"local_shrine",
 	)
+
+
+# -- Infrastructure Decomposition (s57.20.1) -----------------------------------
+
+func _make_ctx() -> NPCDataStructures.ContextSnapshot:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.character_id = 1
+	ctx.is_lord = true
+	ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
+	ctx.season = 1
+	ctx.ic_day = 10
+	ctx.status = 5.0
+	return ctx
+
+
+func test_infra_non_lord_gets_rest() -> void:
+	var ctx := _make_ctx()
+	ctx.is_lord = false
+	var obj := {"need_type": "BUILD_INFRASTRUCTURE", "priority": 2}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, ctx)
+	assert_eq(need.need_type, "REST")
+
+
+func test_infra_not_at_holdings_gets_rest() -> void:
+	var ctx := _make_ctx()
+	ctx.context_flag = Enums.ContextFlag.AT_COURT
+	var obj := {"need_type": "BUILD_INFRASTRUCTURE", "priority": 2}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, ctx)
+	assert_eq(need.need_type, "REST")
+
+
+func test_infra_worship_failure_builds_shrine() -> void:
+	var ctx := _make_ctx()
+	ctx.worship_failing_province_ids = [10]
+	var obj := {"need_type": "BUILD_INFRASTRUCTURE", "priority": 2}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, ctx)
+	assert_eq(need.need_type, "BUILD_INFRASTRUCTURE")
+	assert_eq(need.priority, 3)
+	assert_eq(need.target_province_id, 10)
+	assert_eq(need.target_intent, "BUILD_SHRINE")
+
+
+func test_infra_border_without_fort_builds_fortification() -> void:
+	var ctx := _make_ctx()
+	ctx.border_province_ids_without_fort = [20]
+	var obj := {"need_type": "BUILD_INFRASTRUCTURE", "priority": 2}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, ctx)
+	assert_eq(need.need_type, "BUILD_INFRASTRUCTURE")
+	assert_eq(need.priority, 2)
+	assert_eq(need.target_province_id, 20)
+	assert_eq(need.target_intent, "BUILD_FORTIFICATION")
+
+
+func test_infra_surplus_pu_founds_village() -> void:
+	var ctx := _make_ctx()
+	ctx.surplus_pu_province_ids = [30]
+	var obj := {"need_type": "BUILD_INFRASTRUCTURE", "priority": 2}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, ctx)
+	assert_eq(need.need_type, "BUILD_INFRASTRUCTURE")
+	assert_eq(need.priority, 1)
+	assert_eq(need.target_province_id, 30)
+	assert_eq(need.target_intent, "FOUND_VILLAGE")
+
+
+func test_infra_coastal_naval_threat_commissions_ship() -> void:
+	var ctx := _make_ctx()
+	ctx.is_coastal = true
+	ctx.has_naval_threat = true
+	ctx.has_ships = false
+	var obj := {"need_type": "BUILD_INFRASTRUCTURE", "priority": 2}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, ctx)
+	assert_eq(need.need_type, "BUILD_INFRASTRUCTURE")
+	assert_eq(need.priority, 3)
+	assert_eq(need.target_intent, "COMMISSION_SHIP")
+
+
+func test_infra_coastal_with_ships_no_commission() -> void:
+	var ctx := _make_ctx()
+	ctx.is_coastal = true
+	ctx.has_naval_threat = true
+	ctx.has_ships = true
+	var obj := {"need_type": "BUILD_INFRASTRUCTURE", "priority": 2}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, ctx)
+	assert_eq(need.need_type, "REST")
+
+
+func test_infra_no_needs_returns_rest() -> void:
+	var ctx := _make_ctx()
+	var obj := {"need_type": "BUILD_INFRASTRUCTURE", "priority": 2}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, ctx)
+	assert_eq(need.need_type, "REST")
+
+
+func test_infra_worship_takes_priority_over_fort() -> void:
+	var ctx := _make_ctx()
+	ctx.worship_failing_province_ids = [10]
+	ctx.border_province_ids_without_fort = [20]
+	var obj := {"need_type": "BUILD_INFRASTRUCTURE", "priority": 2}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, ctx)
+	assert_eq(need.target_intent, "BUILD_SHRINE")
+
+
+func test_infra_fort_takes_priority_over_village() -> void:
+	var ctx := _make_ctx()
+	ctx.border_province_ids_without_fort = [20]
+	ctx.surplus_pu_province_ids = [30]
+	var obj := {"need_type": "BUILD_INFRASTRUCTURE", "priority": 2}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, ctx)
+	assert_eq(need.target_intent, "BUILD_FORTIFICATION")
+
+
+func test_infra_village_takes_priority_over_ship() -> void:
+	var ctx := _make_ctx()
+	ctx.surplus_pu_province_ids = [30]
+	ctx.is_coastal = true
+	ctx.has_naval_threat = true
+	ctx.has_ships = false
+	var obj := {"need_type": "BUILD_INFRASTRUCTURE", "priority": 2}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, ctx)
+	assert_eq(need.target_intent, "FOUND_VILLAGE")

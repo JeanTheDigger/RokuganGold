@@ -78,6 +78,8 @@ static func advance_day(
 		_spm[_s.settlement_id] = _s.province_id
 	world_states["_settlement_province_map"] = _spm
 
+	_populate_infrastructure_intelligence(world_states, provinces, settlements, ships, worship_state)
+
 	var festival_results: Dictionary = _process_festivals(ic_day, world_states)
 
 	var travel_arrivals: Array[Dictionary] = _process_travel(characters)
@@ -6933,3 +6935,90 @@ static func _shrine_tier_to_type(tier: String) -> ConstructionData.ConstructionT
 			return ConstructionData.ConstructionType.SHRINE_LOCAL
 		_:
 			return ConstructionData.ConstructionType.SHRINE_ROADSIDE
+
+
+# -- Infrastructure Intelligence Population ------------------------------------
+
+
+static func _populate_infrastructure_intelligence(
+	world_states: Dictionary,
+	provinces: Dictionary,
+	settlements: Array[SettlementData],
+	ships: Array[ShipData],
+	worship_state: Dictionary,
+) -> void:
+	var worship_failing: Array[int] = []
+	var border_no_fort: Array[int] = []
+	var surplus_pu: Array[int] = []
+	var coastal: bool = false
+	var has_ships_flag: bool = false
+	var naval_threat: bool = false
+
+	var province_settlements: Dictionary = {}
+	for s: SettlementData in settlements:
+		if not province_settlements.has(s.province_id):
+			province_settlements[s.province_id] = []
+		province_settlements[s.province_id].append(s)
+
+	for pid: Variant in provinces:
+		var prov: ProvinceData = provinces[pid]
+		var p_settlements: Array = province_settlements.get(pid, [])
+
+		# Worship failure: check worship_state for any province with RESTLESS+ tier
+		var wp_data: Dictionary = worship_state.get("province_wp", {})
+		var prov_wp: Dictionary = wp_data.get(pid, {})
+		if not prov_wp.is_empty():
+			var any_failing: bool = false
+			for fortune_key: Variant in prov_wp:
+				var wp_val: float = float(prov_wp[fortune_key])
+				if wp_val < 10.0:
+					any_failing = true
+					break
+			if any_failing:
+				worship_failing.append(int(pid))
+
+		# Border province without fortification
+		if prov.adjacent_province_ids.size() > 0:
+			var is_border: bool = false
+			for adj_id: int in prov.adjacent_province_ids:
+				var adj_prov: Variant = provinces.get(adj_id)
+				if adj_prov != null and (adj_prov as ProvinceData).clan != prov.clan:
+					is_border = true
+					break
+			if is_border:
+				var has_fort: bool = false
+				for s: Variant in p_settlements:
+					if (s as SettlementData).settlement_type == Enums.SettlementType.FORTIFICATION:
+						has_fort = true
+						break
+				if not has_fort:
+					border_no_fort.append(int(pid))
+
+		# Surplus PU check
+		var total_pu: float = 0.0
+		for s: Variant in p_settlements:
+			total_pu += (s as SettlementData).population_pu
+		var threshold: float = ConstructionSystem.ORGANIC_SURPLUS_PU_THRESHOLD.get(
+			prov.terrain_type, 10.0,
+		)
+		if total_pu > threshold:
+			surplus_pu.append(int(pid))
+
+	# Coastal / naval detection
+	for s: ShipData in ships:
+		if not s.is_destroyed:
+			has_ships_flag = true
+			break
+
+	# Simple heuristic: if any active war involves a clan with ships, naval threat
+	for w: Variant in world_states.get("active_wars", []):
+		if w is WarData:
+			naval_threat = true
+			break
+
+	world_states["worship_failing_province_ids"] = worship_failing
+	world_states["border_province_ids_without_fort"] = border_no_fort
+	world_states["surplus_pu_province_ids"] = surplus_pu
+	world_states["is_coastal"] = coastal
+	world_states["has_ships"] = has_ships_flag
+	world_states["has_naval_threat"] = naval_threat

@@ -144,6 +144,14 @@ class ContextSnapshot:
 	# Famine crisis intelligence
 	var famine_crisis_province_ids: Array[int] = []
 
+	# Infrastructure intelligence (s4.3.22)
+	var worship_failing_province_ids: Array[int] = []
+	var border_province_ids_without_fort: Array[int] = []
+	var surplus_pu_province_ids: Array[int] = []
+	var is_coastal: bool = false
+	var has_ships: bool = false
+	var has_naval_threat: bool = false
+
 	# Festival state (s11.5)
 	var is_ceasefire_day: bool = false
 	var is_labor_halt_day: bool = false
