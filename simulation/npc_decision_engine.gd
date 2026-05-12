@@ -793,13 +793,15 @@ static func _lookup_objective_alignment(
 # Actions that target someone adversarially use the "hostile" disposition column.
 # All others use "cooperative". Per GDD s55.4.5 / s57.3 scoring examples.
 const HOSTILE_ACTIONS: Array[String] = [
-	"INTIMIDATE", "PUBLIC_INSULT",
+	"INTIMIDATE", "PUBLIC_INSULT", "PROVOKE_EMOTION",
+	"DAMAGE_RELATIONSHIP",
 	"BRIBE_FOR_INFO", "EAVESDROP", "INTERCEPT_LETTER", "SEARCH_QUARTERS",
 	"SHADOW_TARGET", "SEARCH_PERSON",
 	"EXPOSE_SECRET_PRIVATELY", "EXPOSE_SECRET_PUBLICLY", "FABRICATE_SECRET",
 	"CONCEAL_ITEM",
 	"SEDUCE", "SEDUCE_FOR_INFO", "SEDUCE_FOR_ACCESS",
 	"SEDUCE_FOR_LEVERAGE", "SEDUCE_TO_COMPROMISE",
+	"ASSASSINATE", "ISSUE_DUEL_CHALLENGE",
 ]
 
 

@@ -487,7 +487,7 @@ All in /tests/, one file per system:
 - test_time_system.gd (~15 tests)
 - test_skill_resolver.gd (~20 tests)
 - test_action_point_system.gd (~12 tests)
-- test_npc_decision_engine.gd (~100 tests)
+- test_npc_decision_engine.gd (~107 tests)
 - test_scoring_table_loader.gd (~15 tests)
 - test_action_executor.gd (~35 tests)
 - test_effect_applicator.gd (~37 tests)
@@ -3193,6 +3193,12 @@ The following subsystems are now integrated into the NPC decision loop:
   objectives_map standing objective for Phase 5 standing influence scoring).
   Without this injection, urgency conditions, topic type filtering, and
   standing influence would silently use defaults.
+- **Disposition modifier audit** — `HOSTILE_ACTIONS` const expanded with 4
+  additional actions: PROVOKE_EMOTION, DAMAGE_RELATIONSHIP, ASSASSINATE,
+  ISSUE_DUEL_CHALLENGE. These use the hostile disposition column (high
+  disposition toward target = penalty, low = bonus) per GDD s57.3. GOSSIP
+  intentionally excluded: its `target_npc_id` is the conversation partner
+  (cooperative), not the gossip subject.
 - **DispositionSystem** — Daily: `_apply_cohabitation()` increments
   `cohabitation_days` dict on L5RCharacterData for all character pairs
   sharing a `physical_location`. Seasonal: `_decay_all_historical_modifiers()`

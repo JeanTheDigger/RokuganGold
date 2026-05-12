@@ -1220,3 +1220,61 @@ func test_topic_type_filter_unknown_type_passes_through() -> void:
 		"LEVY_TROOPS", need, ctx, tables,
 	)
 	assert_true(result > 0.0, "Topic with unknown type should pass through filter")
+
+
+# -- Disposition modifier tests ------------------------------------------------
+
+func test_disposition_modifier_cooperative_friend() -> void:
+	var disp: Dictionary = {10: 45}
+	var result: float = NPCDecisionEngine._lookup_disposition_modifier(
+		10, disp, _scoring_tables, "CHARM"
+	)
+	assert_eq(result, 10.0, "Friend disposition should give +10 for cooperative action")
+
+
+func test_disposition_modifier_hostile_enemy() -> void:
+	var disp: Dictionary = {10: -45}
+	var result: float = NPCDecisionEngine._lookup_disposition_modifier(
+		10, disp, _scoring_tables, "INTIMIDATE"
+	)
+	assert_eq(result, 10.0, "Enemy disposition should give +10 for hostile action")
+
+
+func test_disposition_modifier_hostile_friend_penalizes() -> void:
+	var disp: Dictionary = {10: 45}
+	var result: float = NPCDecisionEngine._lookup_disposition_modifier(
+		10, disp, _scoring_tables, "INTIMIDATE"
+	)
+	assert_eq(result, -10.0, "Friend disposition should give -10 for hostile action")
+
+
+func test_disposition_modifier_provoke_emotion_is_hostile() -> void:
+	var disp: Dictionary = {10: 45}
+	var result: float = NPCDecisionEngine._lookup_disposition_modifier(
+		10, disp, _scoring_tables, "PROVOKE_EMOTION"
+	)
+	assert_eq(result, -10.0, "PROVOKE_EMOTION should use hostile column")
+
+
+func test_disposition_modifier_no_target() -> void:
+	var disp: Dictionary = {10: 45}
+	var result: float = NPCDecisionEngine._lookup_disposition_modifier(
+		-1, disp, _scoring_tables, "CHARM"
+	)
+	assert_eq(result, 0.0, "No target should return 0")
+
+
+func test_disposition_modifier_stranger_neutral() -> void:
+	var disp: Dictionary = {10: 0}
+	var result: float = NPCDecisionEngine._lookup_disposition_modifier(
+		10, disp, _scoring_tables, "CHARM"
+	)
+	assert_eq(result, 0.0, "Stranger should return 0 for cooperative")
+
+
+func test_disposition_modifier_devoted_cooperative() -> void:
+	var disp: Dictionary = {10: 95}
+	var result: float = NPCDecisionEngine._lookup_disposition_modifier(
+		10, disp, _scoring_tables, "CHARM"
+	)
+	assert_eq(result, 25.0, "Devoted should give +25 for cooperative")
