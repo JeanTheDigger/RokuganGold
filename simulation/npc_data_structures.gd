@@ -117,6 +117,9 @@ class ContextSnapshot:
 	var province_statuses: Array = []
 	var feasibility_data: Dictionary = {}
 
+	# Marriage (s22.7)
+	var marriageable_vassal_ids: Array[int] = []
+
 	# Military
 	var military_rank: Enums.MilitaryRank = Enums.MilitaryRank.NONE
 	var commanded_unit_id: int = -1

@@ -1857,7 +1857,7 @@ static func _execute_arrange_marriage(
 	var target_lord_id: int = action.metadata.get("target_lord_id", -1)
 	var target_candidate_id: int = action.metadata.get("target_candidate_id", -1)
 
-	if candidate_id < 0 or target_lord_id < 0 or target_candidate_id < 0:
+	if candidate_id < 0 or target_lord_id < 0:
 		return {
 			"success": false,
 			"action_id": "ARRANGE_MARRIAGE",
@@ -1879,6 +1879,21 @@ static func _execute_arrange_marriage(
 			"reason": "target_lord_not_found",
 			"effects": {},
 		}
+
+	if target_candidate_id < 0:
+		target_candidate_id = _find_best_marriage_candidate(
+			target_lord, characters_by_id,
+		)
+		if target_candidate_id < 0:
+			return {
+				"success": false,
+				"action_id": "ARRANGE_MARRIAGE",
+				"character_id": ctx.character_id,
+				"ic_day": ctx.ic_day,
+				"season": ctx.season,
+				"reason": "no_target_candidate",
+				"effects": {},
+			}
 
 	var proposing_disp: int = target_lord.disposition_values.get(ctx.character_id, 0)
 	var candidate_char: L5RCharacterData = characters_by_id.get(target_candidate_id) as L5RCharacterData
@@ -1934,6 +1949,33 @@ static func _execute_arrange_marriage(
 			"acceptance_score": acceptance_score,
 		},
 	}
+
+
+static func _find_best_marriage_candidate(
+	lord: L5RCharacterData,
+	characters_by_id: Dictionary,
+) -> int:
+	var best_id: int = -1
+	var best_value: int = -1
+	for cid: int in characters_by_id:
+		var c: L5RCharacterData = characters_by_id[cid] as L5RCharacterData
+		if c == null:
+			continue
+		if c.character_id == lord.character_id:
+			continue
+		if c.spouse_id >= 0:
+			continue
+		if CharacterStats.is_dead(c):
+			continue
+		var is_vassal: bool = c.lord_id == lord.character_id
+		var is_child: bool = lord.children_ids.has(c.character_id)
+		if not is_vassal and not is_child:
+			continue
+		var value: int = int(c.status * 2 + c.glory)
+		if value > best_value:
+			best_value = value
+			best_id = c.character_id
+	return best_id
 
 
 # -- Winter Court Skill Bonus --------------------------------------------------

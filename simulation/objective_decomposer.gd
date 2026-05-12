@@ -260,6 +260,9 @@ static func _decompose_advance_family(
 				var crisis: int = _find_crisis_province(ctx)
 				if crisis >= 0:
 					return _make_need("DEFEND_PROVINCE", 2, {"target_province_id": crisis})
+				var marriage_need: Variant = _try_arrange_marriage(ctx, 2, "ADVANCE_FAMILY")
+				if marriage_need != null:
+					return marriage_need
 				var weak: int = _find_weak_neighbor_province(ctx)
 				if weak >= 0:
 					return _make_need("INITIATE_WAR_CHECK", 1, {
@@ -349,6 +352,9 @@ static func _decompose_accumulate_leverage(
 				return _make_need("ACQUIRE_LEVERAGE", 2, {"target_npc_id": target})
 			return _make_need("GATHER_INTELLIGENCE", 2)
 		Enums.ContextFlag.AT_OWN_HOLDINGS:
+			var marriage_need: Variant = _try_arrange_marriage(ctx, 1, "ACCUMULATE_LEVERAGE")
+			if marriage_need != null:
+				return marriage_need
 			return _make_need("SEND_LETTER", 1)
 		_:
 			var _court_need := _court_or_alternative(ctx)
@@ -935,6 +941,9 @@ static func _decompose_maintain_peace(
 				})
 			return _make_need("IDENTIFY_CONTACT", 1)
 		Enums.ContextFlag.AT_OWN_HOLDINGS:
+			var marriage_need: Variant = _try_arrange_marriage(ctx, 2, "MAINTAIN_PEACE")
+			if marriage_need != null:
+				return marriage_need
 			return _make_need("SEND_LETTER", 1)
 		_:
 			var _court_need := _court_or_alternative(ctx)
@@ -1225,3 +1234,45 @@ static func _has_undertrained_units(
 		if level < max_level and ctx.unit_training_counts[level] > 0:
 			return true
 	return false
+
+
+static func _try_arrange_marriage(
+	ctx: NPCDataStructures.ContextSnapshot,
+	priority: int = 2,
+	target_intent: String = "",
+) -> Variant:
+	if not ctx.is_lord:
+		return null
+	if ctx.context_flag != Enums.ContextFlag.AT_OWN_HOLDINGS:
+		return null
+	if ctx.marriageable_vassal_ids.is_empty():
+		return null
+
+	var candidate_id: int = ctx.marriageable_vassal_ids[0]
+
+	var target_lord_id: int = _find_cross_clan_lord(ctx)
+	if target_lord_id < 0:
+		return null
+
+	return _make_need("ARRANGE_MARRIAGE", priority, {
+		"target_npc_id": candidate_id,
+		"target_npc_id_secondary": target_lord_id,
+		"target_settlement_id": -1,
+		"target_intent": target_intent,
+	})
+
+
+static func _find_cross_clan_lord(
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> int:
+	for clan_name: String in ctx.known_contacts_by_clan:
+		if clan_name == ctx.clan:
+			continue
+		var contacts: Variant = ctx.known_contacts_by_clan[clan_name]
+		if contacts is Array:
+			for contact_id: Variant in contacts:
+				if contact_id is int and contact_id >= 0:
+					var disp: int = ctx.dispositions.get(contact_id, 0)
+					if disp >= -10:
+						return contact_id as int
+	return -1

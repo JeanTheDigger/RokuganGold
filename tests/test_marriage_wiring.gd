@@ -855,3 +855,186 @@ func test_pregnancy_adds_child_to_marriage_record() -> void:
 			break
 
 	assert_true(found, "Should have produced a child")
+
+
+# -- Marriageable Vassal Detection Tests ----------------------------------------
+
+func test_find_marriageable_vassals_returns_unmarried() -> void:
+	var lord: L5RCharacterData = _make_char(1, "Crane", "Doji")
+	var vassal: L5RCharacterData = _make_char(2, "Crane", "Doji")
+	vassal.lord_id = 1
+	vassal.spouse_id = -1
+	var married: L5RCharacterData = _make_char(3, "Crane", "Doji")
+	married.lord_id = 1
+	married.spouse_id = 5
+	var chars_by_id: Dictionary = {1: lord, 2: vassal, 3: married}
+
+	var result: Array[int] = NPCDecisionEngine._find_marriageable_vassals(lord, chars_by_id)
+	assert_true(result.has(2), "Unmarried vassal included")
+	assert_false(result.has(3), "Married vassal excluded")
+	assert_false(result.has(1), "Lord excluded from own list")
+
+
+func test_find_marriageable_vassals_includes_children() -> void:
+	var lord: L5RCharacterData = _make_char(1, "Crane", "Doji")
+	lord.children_ids = [4]
+	var child: L5RCharacterData = _make_char(4, "Crane", "Doji")
+	child.lord_id = 99
+	child.spouse_id = -1
+	var chars_by_id: Dictionary = {1: lord, 4: child}
+
+	var result: Array[int] = NPCDecisionEngine._find_marriageable_vassals(lord, chars_by_id)
+	assert_true(result.has(4), "Lord's child included even with different lord_id")
+
+
+func test_find_marriageable_vassals_excludes_dead() -> void:
+	var lord: L5RCharacterData = _make_char(1, "Crane", "Doji")
+	var vassal: L5RCharacterData = _make_char(2, "Crane", "Doji")
+	vassal.lord_id = 1
+	vassal.spouse_id = -1
+	vassal.wounds_taken = 999
+	var chars_by_id: Dictionary = {1: lord, 2: vassal}
+
+	var result: Array[int] = NPCDecisionEngine._find_marriageable_vassals(lord, chars_by_id)
+	assert_eq(result.size(), 0, "Dead vassal excluded")
+
+
+# -- Decomposition Tree Tests ---------------------------------------------------
+
+func test_advance_family_produces_arrange_marriage() -> void:
+	var lord: L5RCharacterData = _make_char(1, "Crane", "Doji")
+	var ctx: NPCDataStructures.ContextSnapshot = _make_ctx(lord)
+	ctx.is_lord = true
+	ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
+	ctx.marriageable_vassal_ids = [2]
+	ctx.known_contacts_by_clan = {"Lion": [10]}
+	ctx.dispositions = {10: 5}
+	ctx.province_statuses = []
+
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(
+		{"need_type": "ADVANCE_FAMILY", "category": "political"}, ctx,
+	)
+	assert_eq(need.need_type, "ARRANGE_MARRIAGE")
+	assert_eq(need.target_npc_id, 2, "Candidate is the unmarried vassal")
+	assert_eq(need.target_npc_id_secondary, 10, "Target lord from known contacts")
+
+
+func test_advance_family_skips_marriage_without_candidates() -> void:
+	var lord: L5RCharacterData = _make_char(1, "Crane", "Doji")
+	var ctx: NPCDataStructures.ContextSnapshot = _make_ctx(lord)
+	ctx.is_lord = true
+	ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
+	ctx.marriageable_vassal_ids = []
+	ctx.province_statuses = []
+
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(
+		{"need_type": "ADVANCE_FAMILY", "category": "political"}, ctx,
+	)
+	assert_ne(need.need_type, "ARRANGE_MARRIAGE", "Falls through when no candidates")
+
+
+func test_accumulate_leverage_produces_arrange_marriage() -> void:
+	var lord: L5RCharacterData = _make_char(1, "Crane", "Doji")
+	var ctx: NPCDataStructures.ContextSnapshot = _make_ctx(lord)
+	ctx.is_lord = true
+	ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
+	ctx.marriageable_vassal_ids = [2]
+	ctx.known_contacts_by_clan = {"Scorpion": [20]}
+	ctx.dispositions = {20: 0}
+
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(
+		{"need_type": "ACCUMULATE_LEVERAGE", "category": "political"}, ctx,
+	)
+	assert_eq(need.need_type, "ARRANGE_MARRIAGE")
+
+
+func test_maintain_peace_produces_arrange_marriage_no_war() -> void:
+	var lord: L5RCharacterData = _make_char(1, "Crane", "Doji")
+	var ctx: NPCDataStructures.ContextSnapshot = _make_ctx(lord)
+	ctx.is_lord = true
+	ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
+	ctx.marriageable_vassal_ids = [2]
+	ctx.known_contacts_by_clan = {"Lion": [10]}
+	ctx.dispositions = {10: 5}
+	ctx.active_wars = []
+	ctx.escalating_conflicts = []
+
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(
+		{"need_type": "MAINTAIN_PEACE", "category": "military"}, ctx,
+	)
+	assert_eq(need.need_type, "ARRANGE_MARRIAGE")
+
+
+func test_maintain_peace_prioritizes_war_over_marriage() -> void:
+	var lord: L5RCharacterData = _make_char(1, "Crane", "Doji")
+	var ctx: NPCDataStructures.ContextSnapshot = _make_ctx(lord)
+	ctx.is_lord = true
+	ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
+	ctx.marriageable_vassal_ids = [2]
+	ctx.known_contacts_by_clan = {"Lion": [10]}
+	ctx.dispositions = {10: 5}
+	ctx.active_wars = [{"clan_a": "Crane", "clan_b": "Lion", "enemy_clan_id": "Lion"}]
+	ctx.escalating_conflicts = []
+
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(
+		{"need_type": "MAINTAIN_PEACE", "category": "military"}, ctx,
+	)
+	assert_eq(need.need_type, "SEEK_PEACE", "Active war takes priority over marriage")
+
+
+func test_marriage_skipped_at_court() -> void:
+	var lord: L5RCharacterData = _make_char(1, "Crane", "Doji")
+	var ctx: NPCDataStructures.ContextSnapshot = _make_ctx(lord, Enums.ContextFlag.AT_COURT)
+	ctx.is_lord = true
+	ctx.marriageable_vassal_ids = [2]
+	ctx.known_contacts_by_clan = {"Lion": [10]}
+	ctx.dispositions = {10: 5}
+
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(
+		{"need_type": "ADVANCE_FAMILY", "category": "political"}, ctx,
+	)
+	assert_ne(need.need_type, "ARRANGE_MARRIAGE", "Marriage only arranged from own holdings")
+
+
+func test_marriage_skips_same_clan_contacts() -> void:
+	var lord: L5RCharacterData = _make_char(1, "Crane", "Doji")
+	var ctx: NPCDataStructures.ContextSnapshot = _make_ctx(lord)
+	ctx.is_lord = true
+	ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
+	ctx.marriageable_vassal_ids = [2]
+	ctx.known_contacts_by_clan = {"Crane": [10]}
+	ctx.dispositions = {10: 5}
+	ctx.province_statuses = []
+
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(
+		{"need_type": "ADVANCE_FAMILY", "category": "political"}, ctx,
+	)
+	assert_ne(need.need_type, "ARRANGE_MARRIAGE", "Same-clan contacts skipped for cross-clan marriage")
+
+
+func test_executor_auto_selects_target_candidate() -> void:
+	var lord_a: L5RCharacterData = _make_char(1, "Crane", "Doji", 6.0)
+	var candidate: L5RCharacterData = _make_char(2, "Crane", "Doji")
+	candidate.lord_id = 1
+	var lord_b: L5RCharacterData = _make_char(10, "Lion", "Akodo", 6.0)
+	lord_b.disposition_values[1] = 20
+	var target_candidate: L5RCharacterData = _make_char(11, "Lion", "Akodo")
+	target_candidate.lord_id = 10
+	target_candidate.status = 3.0
+	target_candidate.glory = 2.0
+	var chars_by_id: Dictionary = {1: lord_a, 2: candidate, 10: lord_b, 11: target_candidate}
+
+	var ctx: NPCDataStructures.ContextSnapshot = _make_ctx(lord_a)
+	var action: NPCDataStructures.ScoredAction = _make_action("ARRANGE_MARRIAGE", {
+		"candidate_id": 2,
+		"target_lord_id": 10,
+		"target_candidate_id": -1,
+	})
+
+	var result: Dictionary = ActionExecutor.execute(action, lord_a, ctx, _dice, {}, {}, chars_by_id)
+	var effects: Dictionary = result.get("effects", {})
+
+	if effects.get("requires_marriage", false):
+		assert_eq(effects.get("candidate_b_id", -1), 11, "Auto-selected target candidate")
+	else:
+		assert_true(result.get("success", false), "Marriage should succeed with auto-selection")

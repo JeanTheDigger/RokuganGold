@@ -93,6 +93,12 @@ static func build_context(
 				)
 		ctx.feasibility_data = _build_feasibility_data(character, world_state)
 
+	# Marriage — find unmarried vassals/children for lord-tier marriage arrangement
+	if ctx.is_lord and not chars_by_id.is_empty():
+		ctx.marriageable_vassal_ids = _find_marriageable_vassals(
+			character, chars_by_id,
+		)
+
 	# Military
 	ctx.military_rank = character.military_rank
 	ctx.commanded_unit_id = character.commanded_unit_id
@@ -1866,4 +1872,27 @@ static func _extract_cut_supply_army_ids(
 				var aid: int = t.get("army_id", -1)
 				if aid >= 0:
 					result.append(aid)
+	return result
+
+
+static func _find_marriageable_vassals(
+	lord: L5RCharacterData,
+	chars_by_id: Dictionary,
+) -> Array[int]:
+	var result: Array[int] = []
+	for cid: int in chars_by_id:
+		var c: L5RCharacterData = chars_by_id[cid] as L5RCharacterData
+		if c == null:
+			continue
+		if c.character_id == lord.character_id:
+			continue
+		if c.spouse_id >= 0:
+			continue
+		if CharacterStats.is_dead(c):
+			continue
+		var is_vassal: bool = c.lord_id == lord.character_id
+		var is_child: bool = lord.children_ids.has(c.character_id)
+		if not is_vassal and not is_child:
+			continue
+		result.append(c.character_id)
 	return result
