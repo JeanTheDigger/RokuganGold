@@ -499,6 +499,7 @@ All in /tests/, one file per system:
 - test_naval_wiring.gd (~35 tests)
 - test_monk_objective_system.gd (~59 tests)
 - test_winter_court_system.gd (~80 tests)
+- test_gempukku_system.gd (~55 tests)
 
 ### Festival System (s11.5)
 - **simulation/festival_system.gd** — Empire-wide canonical festivals, Rokuyo
@@ -2425,6 +2426,51 @@ All in /tests/, one file per system:
   any character arriving at the host settlement during an active court is
   automatically added to the attendee list on arrival day, per GDD s55.10.
   Deferred: grace period entertainment, Champion agenda ordering AI.
+
+### Gempukku NPC Spawning & Population System (s52, s22.4, s22.7)
+- **shared/child_record.gd** — `ChildRecord` Resource: lightweight pre-gempukku
+  placeholder per GDD s52 Trigger 2. Fields: child_id, child_name, father_id,
+  mother_id, clan, family, gender, orientation, ic_day_born, is_alive.
+  `GEMPUKKU_AGE_DAYS = 6480` (18 IC years × 360). `is_gempukku_ready()`,
+  `get_age_days()` helpers.
+- **simulation/gempukku_system.gd** — `GempukkuSystem` pure static functions.
+  **Orientation**: 85% straight, 10% gay, 5% bisexual (s52 Trigger 2).
+  **Gender**: school-specific weights (Utaku 0% male, Matsu 20% male, Daidoji
+  70% male, Asahina 40% male, default 55% male) per s52 Part 7.
+  **School assignment**: `FAMILY_DEFAULT_SCHOOL` maps all 30 families to their
+  canonical school. Gender-restricted schools (Utaku Battle Maiden → female only)
+  with fallback (male Utaku → Shinjo Bushi).
+  **Name generation**: Clan-specific syllable tables (s52 Part 6) for all 8 Great
+  Clans × male/female. 70% two-syllable, 30% three-syllable names.
+  **Population thresholds**: Per-clan per-rank minimums from s52 (Crab 196,
+  Crane 196, Dragon 79, Lion 254, Phoenix 146, Scorpion 146, Unicorn 146,
+  Mantis 79). `count_clan_population()` counts living characters by insight rank.
+  `get_replenishment_needed()` returns Rank 1 deficit count.
+  **Natural death**: Age-based seasonal mortality (s52 Part 4): under 50 = 0%,
+  50–65 = 1%, 65–75 = 3%, 75–85 = 8%, 85+ = 20%.
+  **Gempukku processing**: `process_gempukku()` promotes a ready child to Rank 1
+  via `WorldGenerator.generate_character()`. School assigned by family, parent
+  IDs preserved, orientation carried over.
+  **Birth helper**: `create_child_at_birth()` creates ChildRecord with generated
+  name, gender, and orientation.
+  **Replenishment**: `generate_replenishment_character()` creates Rank 1 NPCs
+  for depleted clans from random family selection.
+  **Seasonal entry point**: `process_seasonal_gempukku()` processes all ready
+  children, checks population thresholds, runs natural death rolls, integrates
+  with `MushaShugyo.evaluate_at_gempukku()`.
+  Mantis schools (Yoritomo Bushi, Moshi Shugenja, Tsuruchi Archer) are mapped
+  in FAMILY_DEFAULT_SCHOOL but not yet in WorldGenerator.SCHOOL_DATA — characters
+  generate with basic stats only until Mantis school data is added.
+- **shared/character_data.gd** — `orientation: String = "straight"` added to
+  identity block.
+- **DayOrchestrator wiring** — `_process_gempukku()` runs on season boundary
+  after insurgencies. Adds new characters to arrays + characters_by_id. Removes
+  graduated children. Sets lethal wounds on natural death victims. Generates
+  Tier 4 PERSONAL death topics. Wires musha shugyo objectives for pilgrimage
+  characters. New params: `children: Array[ChildRecord]`,
+  `next_character_id: Array[int]`. Return dict gains `gempukku_results`.
+- **WorldStateData** gains `children: Array[ChildRecord]` and
+  `next_character_id: Array[int]` fields.
 
 ### What's Next
 1. World generation coordinate system and adjacency
