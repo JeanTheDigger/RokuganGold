@@ -76,9 +76,16 @@ static func build_context(
 		character.topic_pool, world_state.get("active_topics", []),
 	)
 	ctx.known_objectives = world_state.get("known_objectives", {})
-	ctx.known_contacts = world_state.get("known_contacts", [] as Array[int])
-	ctx.contact_clans = world_state.get("contact_clans", {})
 	ctx.known_contacts_by_clan = character.known_contacts_by_clan.duplicate()
+	var flat_contacts: Array[int] = []
+	var clan_lookup: Dictionary = {}
+	for clan_key: String in character.known_contacts_by_clan:
+		for cid: int in character.known_contacts_by_clan[clan_key]:
+			if cid not in flat_contacts:
+				flat_contacts.append(cid)
+			clan_lookup[cid] = clan_key
+	ctx.known_contacts = flat_contacts
+	ctx.contact_clans = clan_lookup
 	ctx.met_characters = character.met_characters.duplicate()
 	ctx.knowledge_pool = character.knowledge_pool
 

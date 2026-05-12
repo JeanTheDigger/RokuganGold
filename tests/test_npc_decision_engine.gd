@@ -1278,3 +1278,46 @@ func test_disposition_modifier_devoted_cooperative() -> void:
 		10, disp, _scoring_tables, "CHARM"
 	)
 	assert_eq(result, 25.0, "Devoted should give +25 for cooperative")
+
+
+# -- Known contacts injection tests --------------------------------------------
+
+func test_known_contacts_populated_from_character() -> void:
+	_char.known_contacts_by_clan = {"Crane": [10, 11], "Lion": [20]}
+	var ctx: NPCDataStructures.ContextSnapshot = NPCDecisionEngine.build_context(
+		_char, _world_state
+	)
+	assert_eq(ctx.known_contacts.size(), 3, "Should have 3 contacts total")
+	assert_true(10 in ctx.known_contacts, "Contact 10 should be present")
+	assert_true(11 in ctx.known_contacts, "Contact 11 should be present")
+	assert_true(20 in ctx.known_contacts, "Contact 20 should be present")
+
+
+func test_contact_clans_populated_from_character() -> void:
+	_char.known_contacts_by_clan = {"Crane": [10], "Lion": [20]}
+	var ctx: NPCDataStructures.ContextSnapshot = NPCDecisionEngine.build_context(
+		_char, _world_state
+	)
+	assert_eq(ctx.contact_clans.get(10, ""), "Crane", "Contact 10 should map to Crane")
+	assert_eq(ctx.contact_clans.get(20, ""), "Lion", "Contact 20 should map to Lion")
+
+
+func test_known_contacts_empty_when_no_contacts() -> void:
+	_char.known_contacts_by_clan = {}
+	var ctx: NPCDataStructures.ContextSnapshot = NPCDecisionEngine.build_context(
+		_char, _world_state
+	)
+	assert_eq(ctx.known_contacts.size(), 0, "Should have no contacts")
+	assert_eq(ctx.contact_clans.size(), 0, "Should have no clan mappings")
+
+
+func test_known_contacts_no_duplicates() -> void:
+	_char.known_contacts_by_clan = {"Crane": [10], "Lion": [10]}
+	var ctx: NPCDataStructures.ContextSnapshot = NPCDecisionEngine.build_context(
+		_char, _world_state
+	)
+	var count: int = 0
+	for c_id: int in ctx.known_contacts:
+		if c_id == 10:
+			count += 1
+	assert_eq(count, 1, "Contact 10 should appear only once in flat list")
