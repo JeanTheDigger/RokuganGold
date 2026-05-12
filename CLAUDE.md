@@ -511,7 +511,7 @@ All in /tests/, one file per system:
 - test_npc_advancement.gd (~56 tests)
 - test_ronin_system.gd (~44 tests)
 - test_musha_shugyo_system.gd (~75 tests)
-- test_governance_wiring.gd (~76 tests)
+- test_governance_wiring.gd (~78 tests)
 - test_marriage_wiring.gd (~65 tests)
 - test_worship_system.gd (~67 tests)
 - test_worship_wiring.gd (~50 tests)
@@ -2909,6 +2909,8 @@ All in /tests/, one file per system:
   re-runs AFTER `_process_construction_completions()` and
   `_process_organic_villages()` so newly created settlements (temples,
   monasteries, forts) immediately trigger position vacancy detection.
+  Daily: vacancy intelligence also re-runs after `_process_construction_effects()`
+  when any construction result was applied (fort or village created mid-day).
   Newly created settlement vacancies start at `seasons_vacant = 0`.
   Known limitations: Senior Courtier detection deferred (unclear vacancy
   trigger).

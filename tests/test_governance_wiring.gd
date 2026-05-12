@@ -1344,6 +1344,77 @@ func test_vacancy_registry_tracks_new_settlement() -> void:
 	assert_true(found_key, "Temple Head vacancy should be in registry")
 
 
+func test_vacancy_refresh_overwrites_stale_data() -> void:
+	# Simulates the daily construction refresh: vacancy intelligence runs once
+	# with no fort, then a fort is created mid-day, then vacancy intelligence
+	# runs again — garrison commander vacancy should appear
+	var lord := _make_char(1, "Crane", 5.0)
+	var prov := _make_province(10, "Crane")
+	var town := _make_settlement(100, 10, Enums.SettlementType.TOWN)
+	var settlements: Array[SettlementData] = [town]
+	var provinces: Dictionary = {10: prov}
+
+	# First run: no military settlements → no garrison vacancy
+	var ws: Dictionary = {}
+	var sm: Dictionary = {}
+	DayOrchestrator._populate_vacancy_intelligence(
+		ws, [lord], {1: lord}, [], settlements, provinces, sm,
+	)
+	var vacancies_before: Array = ws.get("vacant_positions_1", [])
+	var had_garrison_before: bool = false
+	for v: Dictionary in vacancies_before:
+		if v.get("position_type", "") == "Garrison Commander":
+			had_garrison_before = true
+	assert_false(had_garrison_before, "No garrison vacancy before fort exists")
+
+	# Mid-day: fort gets created (simulating construction effect)
+	var fort := _make_settlement(200, 10, Enums.SettlementType.FORTIFICATION)
+	settlements.append(fort)
+
+	# Second run (refresh): should now detect garrison commander vacancy
+	DayOrchestrator._populate_vacancy_intelligence(
+		ws, [lord], {1: lord}, [], settlements, provinces, sm,
+	)
+	var vacancies_after: Array = ws.get("vacant_positions_1", [])
+	var has_garrison_after: bool = false
+	for v: Dictionary in vacancies_after:
+		if v.get("position_type", "") == "Garrison Commander":
+			has_garrison_after = true
+	assert_true(has_garrison_after, "Garrison vacancy should appear after refresh")
+
+
+func test_vacancy_refresh_preserves_existing_vacancies() -> void:
+	# Refresh should not lose pre-existing vacancies when adding new ones
+	var lord := _make_char(1, "Crane", 5.0)
+	var prov := _make_province(10, "Crane")
+	var temple := _make_settlement(100, 10, Enums.SettlementType.TEMPLE)
+	var settlements: Array[SettlementData] = [temple]
+	var provinces: Dictionary = {10: prov}
+
+	# First run: temple head vacancy
+	var ws: Dictionary = {}
+	var sm: Dictionary = {}
+	DayOrchestrator._populate_vacancy_intelligence(
+		ws, [lord], {1: lord}, [], settlements, provinces, sm,
+	)
+
+	# Add a fort mid-day
+	var fort := _make_settlement(200, 10, Enums.SettlementType.FORTIFICATION)
+	settlements.append(fort)
+
+	# Refresh
+	DayOrchestrator._populate_vacancy_intelligence(
+		ws, [lord], {1: lord}, [], settlements, provinces, sm,
+	)
+
+	var vacancies: Array = ws.get("vacant_positions_1", [])
+	var types: Array[String] = []
+	for v: Dictionary in vacancies:
+		types.append(v.get("position_type", ""))
+	assert_true("Temple Head" in types, "Temple Head should be preserved after refresh")
+	assert_true("Garrison Commander" in types, "Garrison Commander should appear after refresh")
+
+
 # -- Worship Failure Detection Tests ------------------------------------------
 
 func _make_worship_state_with_province(

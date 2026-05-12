@@ -213,6 +213,10 @@ static func advance_day(
 		dice_engine,
 	)
 
+	# Refresh vacancy intelligence after daily construction creates new settlements
+	if not construction_results.is_empty():
+		_populate_vacancy_intelligence(world_states, characters, characters_by_id, companies, settlements, provinces, season_meta)
+
 	_process_edict_compliance_actions(
 		day_result.get("results", []),
 		active_edicts,
