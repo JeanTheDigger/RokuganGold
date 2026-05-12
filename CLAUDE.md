@@ -552,7 +552,7 @@ All in /tests/, one file per system:
 - test_feasibility_ledger.gd (~148 tests)
 - test_starvation_warfare.gd (~55 tests)
 - test_court_system.gd (~76 tests)
-- test_imperial_edict_system.gd (~57 tests)
+- test_imperial_edict_system.gd (~80 tests)
 - test_horde_system.gd (~43 tests)
 - test_oni_generator.gd (~80 tests)
 - test_naval_system.gd (~113 tests)
@@ -2252,6 +2252,21 @@ All in /tests/, one file per system:
   Daily compliance processing: auto-ceasefire when war resolved, deadline
   enforcement, defiance consequences (honor/disposition), all-compliant
   triggers edict application and deactivation.
+  **Aggregate-opinion edict selection (s16.4)** —
+  `compute_emperor_weight()` applies ×3 multiplier to Emperor's position
+  weight (Status × relevance/50 × 3; at relevance 100: weight 60).
+  `compute_topic_aggregate()` computes weighted average opinion across all
+  attending lords using `TopicMomentumSystem.calculate_position_weight()`
+  for regular lords and `compute_emperor_weight()` for the Emperor.
+  `generate_edicts_from_aggregate()` evaluates top 3 agenda topics by
+  momentum. Thresholds: aggregate > +25 → compelling edict, < −25 →
+  blocking edict, between → no edict. Returns edicts + per-topic aggregate
+  diagnostics. `_crisis_to_edict_type()` maps crisis topic_type to
+  EdictType (famine → TAX_REFORM, war → CEASE_HOSTILITIES, others →
+  GENERAL_DECREE). `CRISIS_COMMITMENT_TYPE` maps 10 crisis topic_types to
+  commitment_type strings (send_military_aid, send_supplies,
+  send_magistrates). `generate_edict_commitments()` creates
+  CourtCommitmentData (EDICT source) for every lord when an edict fires.
 - **NPC edict response wiring** — COMPLY_WITH_EDICT and DEFY_EDICT ActionIDs
   in context lists, scoring tables, and ActionExecutor. RESPOND_TO_EDICT
   NeedType in objective_alignment.json. `_inject_edict_reactive_events()`

@@ -947,3 +947,298 @@ func test_inject_no_lord_found_skips():
 	DayOrchestrator._inject_edict_reactive_events(edicts, characters, world_states, 10)
 
 	assert_false(world_states.has(90), "No event injected when no lord found")
+
+
+# =============================================================================
+# AGGREGATE OPINION EDICT SELECTION (s16.4)
+# =============================================================================
+
+func _make_court(
+	court_id: int = 1,
+	agenda_ids: Array[int] = [],
+) -> CourtSessionData:
+	var c := CourtSessionData.new()
+	c.court_id = court_id
+	c.court_type = CourtSessionData.CourtType.IMPERIAL_WINTER_COURT
+	c.phase = CourtSessionData.CourtPhase.ACTIVE
+	c.emperor_present = true
+	c.agenda_topic_ids = agenda_ids
+	return c
+
+
+func _make_attendee(
+	id: int,
+	clan: String = "Crane",
+	status: float = 5.0,
+	family: String = "",
+) -> L5RCharacterData:
+	var c := L5RCharacterData.new()
+	c.character_id = id
+	c.clan = clan
+	c.family = family
+	c.status = status
+	c.bushido_virtue = Enums.BushidoVirtue.NONE
+	c.shourido_virtue = Enums.ShouridoVirtue.NONE
+	return c
+
+
+# -- Emperor Weight ------------------------------------------------------------
+
+func test_emperor_weight_formula():
+	var w: float = ImperialEdictSystem.compute_emperor_weight(10.0, 100.0)
+	assert_almost_eq(w, 60.0, 0.01)
+
+func test_emperor_weight_zero_relevance():
+	var w: float = ImperialEdictSystem.compute_emperor_weight(10.0, 0.0)
+	assert_almost_eq(w, 0.0, 0.01)
+
+func test_emperor_weight_half_relevance():
+	var w: float = ImperialEdictSystem.compute_emperor_weight(10.0, 50.0)
+	assert_almost_eq(w, 30.0, 0.01)
+
+
+# -- Topic Aggregate -----------------------------------------------------------
+
+func test_aggregate_positive_consensus():
+	var topic := _make_topic(1, 50.0, "famine", TopicData.Category.POLITICAL, "Crane")
+	var emperor := _make_attendee(100, "Imperial", 10.0)
+	emperor.topic_positions[1] = 50.0
+	var lord_a := _make_attendee(2, "Crane", 7.0)
+	lord_a.topic_positions[1] = 40.0
+	var lord_b := _make_attendee(3, "Lion", 6.0)
+	lord_b.topic_positions[1] = 30.0
+	var attendees: Array[L5RCharacterData] = [emperor, lord_a, lord_b]
+	var agg: float = ImperialEdictSystem.compute_topic_aggregate(topic, attendees, 100)
+	assert_true(agg > ImperialEdictSystem.EDICT_POSITIVE_THRESHOLD)
+
+func test_aggregate_negative_consensus():
+	var topic := _make_topic(1, 50.0, "war", TopicData.Category.MILITARY, "Lion")
+	var emperor := _make_attendee(100, "Imperial", 10.0)
+	emperor.topic_positions[1] = -60.0
+	var lord_a := _make_attendee(2, "Crane", 7.0)
+	lord_a.topic_positions[1] = -40.0
+	var attendees: Array[L5RCharacterData] = [emperor, lord_a]
+	var agg: float = ImperialEdictSystem.compute_topic_aggregate(topic, attendees, 100)
+	assert_true(agg < ImperialEdictSystem.EDICT_NEGATIVE_THRESHOLD)
+
+func test_aggregate_divided_no_edict():
+	var topic := _make_topic(1, 50.0, "famine", TopicData.Category.POLITICAL, "Crane")
+	var emperor := _make_attendee(100, "Imperial", 10.0)
+	emperor.topic_positions[1] = 10.0
+	var lord_a := _make_attendee(2, "Crane", 7.0)
+	lord_a.topic_positions[1] = 20.0
+	var lord_b := _make_attendee(3, "Lion", 7.0)
+	lord_b.topic_positions[1] = -20.0
+	var attendees: Array[L5RCharacterData] = [emperor, lord_a, lord_b]
+	var agg: float = ImperialEdictSystem.compute_topic_aggregate(topic, attendees, 100)
+	assert_true(agg > ImperialEdictSystem.EDICT_NEGATIVE_THRESHOLD and agg < ImperialEdictSystem.EDICT_POSITIVE_THRESHOLD)
+
+func test_aggregate_emperor_dominates():
+	var topic := _make_topic(1, 80.0, "shadowlands_incursion", TopicData.Category.MILITARY, "Crab", TopicData.Tier.TIER_1)
+	var emperor := _make_attendee(100, "Imperial", 10.0)
+	emperor.topic_positions[1] = 80.0
+	var lord_a := _make_attendee(2, "Scorpion", 5.0)
+	lord_a.topic_positions[1] = -10.0
+	var lord_b := _make_attendee(3, "Crane", 5.0)
+	lord_b.topic_positions[1] = -10.0
+	var attendees: Array[L5RCharacterData] = [emperor, lord_a, lord_b]
+	var agg: float = ImperialEdictSystem.compute_topic_aggregate(topic, attendees, 100)
+	assert_true(agg > 0.0, "Emperor x3 weight should keep aggregate positive")
+
+
+# -- Generate Edicts From Aggregate --------------------------------------------
+
+func test_generate_edicts_compelling():
+	var topic := _make_topic(1, 60.0, "famine", TopicData.Category.POLITICAL, "Crane")
+	var court := _make_court(1, [1])
+	var emperor := _make_attendee(100, "Imperial", 10.0)
+	emperor.topic_positions[1] = 50.0
+	var lord_a := _make_attendee(2, "Crane", 7.0)
+	lord_a.topic_positions[1] = 50.0
+	var attendees: Array[L5RCharacterData] = [emperor, lord_a]
+	var active_topics: Array[TopicData] = [topic]
+	var active_wars: Array[WarData] = []
+	var next_id: Array[int] = [1]
+	var result: Dictionary = ImperialEdictSystem.generate_edicts_from_aggregate(
+		emperor, StrategicReview.EmperorArchetype.IRON, court, attendees,
+		active_topics, active_wars, next_id, 100
+	)
+	assert_eq(result["edicts"].size(), 1)
+	assert_eq(result["aggregates"][0]["direction"], "compelling")
+	var edict: EdictData = result["edicts"][0]
+	assert_eq(edict.target_topic_id, 1)
+
+func test_generate_edicts_blocking():
+	var topic := _make_topic(1, 60.0, "war", TopicData.Category.MILITARY, "Lion")
+	var court := _make_court(1, [1])
+	var emperor := _make_attendee(100, "Imperial", 10.0)
+	emperor.topic_positions[1] = -60.0
+	var lord_a := _make_attendee(2, "Crane", 7.0)
+	lord_a.topic_positions[1] = -50.0
+	var attendees: Array[L5RCharacterData] = [emperor, lord_a]
+	var active_topics: Array[TopicData] = [topic]
+	var active_wars: Array[WarData] = []
+	var next_id: Array[int] = [1]
+	var result: Dictionary = ImperialEdictSystem.generate_edicts_from_aggregate(
+		emperor, StrategicReview.EmperorArchetype.IRON, court, attendees,
+		active_topics, active_wars, next_id, 100
+	)
+	assert_eq(result["edicts"].size(), 1)
+	assert_eq(result["aggregates"][0]["direction"], "blocking")
+
+func test_generate_edicts_no_edict_divided():
+	var topic := _make_topic(1, 60.0, "famine", TopicData.Category.POLITICAL, "Crane")
+	var court := _make_court(1, [1])
+	var emperor := _make_attendee(100, "Imperial", 10.0)
+	emperor.topic_positions[1] = 5.0
+	var lord_a := _make_attendee(2, "Crane", 7.0)
+	lord_a.topic_positions[1] = -5.0
+	var attendees: Array[L5RCharacterData] = [emperor, lord_a]
+	var active_topics: Array[TopicData] = [topic]
+	var active_wars: Array[WarData] = []
+	var next_id: Array[int] = [1]
+	var result: Dictionary = ImperialEdictSystem.generate_edicts_from_aggregate(
+		emperor, StrategicReview.EmperorArchetype.IRON, court, attendees,
+		active_topics, active_wars, next_id, 100
+	)
+	assert_eq(result["edicts"].size(), 0)
+	assert_eq(result["aggregates"][0]["direction"], "none")
+
+func test_generate_edicts_max_3():
+	var topics: Array[TopicData] = []
+	var ids: Array[int] = []
+	for i: int in range(4):
+		var t := _make_topic(i + 1, 80.0 - float(i), "famine", TopicData.Category.POLITICAL, "Crane")
+		topics.append(t)
+		ids.append(i + 1)
+	var court := _make_court(1, ids)
+	var emperor := _make_attendee(100, "Imperial", 10.0)
+	var lord_a := _make_attendee(2, "Crane", 7.0)
+	for t: TopicData in topics:
+		emperor.topic_positions[t.topic_id] = 60.0
+		lord_a.topic_positions[t.topic_id] = 60.0
+	var attendees: Array[L5RCharacterData] = [emperor, lord_a]
+	var active_wars: Array[WarData] = []
+	var next_id: Array[int] = [1]
+	var result: Dictionary = ImperialEdictSystem.generate_edicts_from_aggregate(
+		emperor, StrategicReview.EmperorArchetype.TYRANT, court, attendees,
+		topics, active_wars, next_id, 100
+	)
+	assert_true(result["edicts"].size() <= ImperialEdictSystem.MAX_EDICTS_PER_WINTER_COURT)
+
+func test_generate_edicts_top_3_momentum():
+	var t1 := _make_topic(1, 90.0, "famine", TopicData.Category.POLITICAL, "Crane")
+	var t2 := _make_topic(2, 50.0, "criminal", TopicData.Category.POLITICAL, "Lion")
+	var t3 := _make_topic(3, 30.0, "border_raid", TopicData.Category.MILITARY, "Dragon")
+	var t4 := _make_topic(4, 10.0, "famine", TopicData.Category.POLITICAL, "Phoenix")
+	var court := _make_court(1, [1, 2, 3, 4])
+	var emperor := _make_attendee(100, "Imperial", 10.0)
+	for t: TopicData in [t1, t2, t3, t4]:
+		emperor.topic_positions[t.topic_id] = 60.0
+	var attendees: Array[L5RCharacterData] = [emperor]
+	var active_topics: Array[TopicData] = [t1, t2, t3, t4]
+	var active_wars: Array[WarData] = []
+	var next_id: Array[int] = [1]
+	var result: Dictionary = ImperialEdictSystem.generate_edicts_from_aggregate(
+		emperor, StrategicReview.EmperorArchetype.IRON, court, attendees,
+		active_topics, active_wars, next_id, 100
+	)
+	assert_eq(result["aggregates"].size(), 3, "Only top 3 by momentum evaluated")
+
+func test_famine_edict_type_is_tax_reform():
+	var topic := _make_topic(1, 60.0, "famine", TopicData.Category.POLITICAL, "Crane")
+	var court := _make_court(1, [1])
+	var emperor := _make_attendee(100, "Imperial", 10.0)
+	emperor.topic_positions[1] = 80.0
+	var attendees: Array[L5RCharacterData] = [emperor]
+	var active_topics: Array[TopicData] = [topic]
+	var active_wars: Array[WarData] = []
+	var next_id: Array[int] = [1]
+	var result: Dictionary = ImperialEdictSystem.generate_edicts_from_aggregate(
+		emperor, StrategicReview.EmperorArchetype.IRON, court, attendees,
+		active_topics, active_wars, next_id, 100
+	)
+	assert_eq(result["edicts"].size(), 1)
+	var edict: EdictData = result["edicts"][0]
+	assert_eq(edict.edict_type, EdictData.EdictType.TAX_REFORM)
+
+func test_war_topic_creates_cease_hostilities():
+	var topic := _make_topic(1, 60.0, "war", TopicData.Category.MILITARY, "Lion")
+	var court := _make_court(1, [1])
+	var war := _make_war(1, "Lion", "Crane")
+	var emperor := _make_attendee(100, "Imperial", 10.0)
+	emperor.topic_positions[1] = 80.0
+	var attendees: Array[L5RCharacterData] = [emperor]
+	var active_topics: Array[TopicData] = [topic]
+	var active_wars: Array[WarData] = [war]
+	var next_id: Array[int] = [1]
+	var result: Dictionary = ImperialEdictSystem.generate_edicts_from_aggregate(
+		emperor, StrategicReview.EmperorArchetype.IRON, court, attendees,
+		active_topics, active_wars, next_id, 100
+	)
+	assert_eq(result["edicts"].size(), 1)
+	var edict: EdictData = result["edicts"][0]
+	assert_eq(edict.edict_type, EdictData.EdictType.CEASE_HOSTILITIES)
+
+func test_archetype_limits_edict_count():
+	var topic := _make_topic(1, 60.0, "famine", TopicData.Category.POLITICAL, "Crane")
+	var court := _make_court(1, [1])
+	var emperor := _make_attendee(100, "Imperial", 10.0)
+	emperor.topic_positions[1] = 80.0
+	var attendees: Array[L5RCharacterData] = [emperor]
+	var active_topics: Array[TopicData] = [topic]
+	var active_wars: Array[WarData] = []
+	var next_id: Array[int] = [1]
+	var result: Dictionary = ImperialEdictSystem.generate_edicts_from_aggregate(
+		emperor, StrategicReview.EmperorArchetype.BENEVOLENT, court, attendees,
+		active_topics, active_wars, next_id, 100
+	)
+	assert_eq(result["edicts"].size(), 1)
+
+
+# -- Commitment Type for Crisis ------------------------------------------------
+
+func test_commitment_type_famine():
+	var t := _make_topic(1, 50.0, "famine")
+	assert_eq(ImperialEdictSystem.get_commitment_type_for_topic(t), "send_supplies")
+
+func test_commitment_type_shadowlands():
+	var t := _make_topic(1, 50.0, "shadowlands_incursion")
+	assert_eq(ImperialEdictSystem.get_commitment_type_for_topic(t), "send_military_aid")
+
+func test_commitment_type_maho():
+	var t := _make_topic(1, 50.0, "maho_cult")
+	assert_eq(ImperialEdictSystem.get_commitment_type_for_topic(t), "send_magistrates")
+
+func test_commitment_type_unknown():
+	var t := _make_topic(1, 50.0, "unknown_crisis")
+	assert_eq(ImperialEdictSystem.get_commitment_type_for_topic(t), "")
+
+
+# -- Edict Commitment Generation -----------------------------------------------
+
+func test_generate_edict_commitments():
+	var topic := _make_topic(1, 50.0, "famine")
+	var edict := ImperialEdictSystem.create_edict(1, EdictData.EdictType.TAX_REFORM, 100, 500)
+	edict.target_topic_id = 1
+	var lord_a := _make_attendee(2, "Crane", 7.0)
+	var lord_b := _make_attendee(3, "Lion", 6.0)
+	var lords: Array[L5RCharacterData] = [lord_a, lord_b]
+	var commitments: Array[CourtCommitmentData] = ImperialEdictSystem.generate_edict_commitments(
+		edict, topic, lords, 500, 590
+	)
+	assert_eq(commitments.size(), 2)
+	assert_eq(commitments[0].lord_id, 2)
+	assert_eq(commitments[0].commitment_type, "send_supplies")
+	assert_eq(commitments[0].source, CourtCommitmentData.CommitmentSource.EDICT)
+	assert_eq(commitments[0].deadline_ic_day, 590)
+	assert_eq(commitments[1].lord_id, 3)
+
+func test_generate_edict_commitments_unknown_type_empty():
+	var topic := _make_topic(1, 50.0, "unknown_type")
+	var edict := ImperialEdictSystem.create_edict(1, EdictData.EdictType.GENERAL_DECREE, 100, 500)
+	var lords: Array[L5RCharacterData] = [_make_attendee(2)]
+	var commitments: Array[CourtCommitmentData] = ImperialEdictSystem.generate_edict_commitments(
+		edict, topic, lords, 500, 590
+	)
+	assert_eq(commitments.size(), 0)

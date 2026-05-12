@@ -9,6 +9,22 @@ const DEFIANCE_DISPOSITION_FROM_OTHERS: int = -10
 const CONDEMN_WAR_SCORE_SHIFT: int = 10
 
 const MAX_EDICTS_PER_WINTER_COURT: int = 3
+const EMPEROR_WEIGHT_MULTIPLIER: int = 3
+const EDICT_POSITIVE_THRESHOLD: float = 25.0
+const EDICT_NEGATIVE_THRESHOLD: float = -25.0
+
+const CRISIS_COMMITMENT_TYPE: Dictionary = {
+	"shadowlands_incursion": "send_military_aid",
+	"oni_manifestation": "send_military_aid",
+	"maho_cult": "send_magistrates",
+	"famine": "send_supplies",
+	"starvation": "send_supplies",
+	"provincial_famine": "send_supplies",
+	"clan_famine": "send_supplies",
+	"criminal": "send_magistrates",
+	"nezumi": "send_military_aid",
+	"border_raid": "send_military_aid",
+}
 
 const COMPLIANCE_DEADLINE: Dictionary = {
 	EdictData.EdictType.CEASE_HOSTILITIES: 30,
@@ -80,6 +96,185 @@ static func generate_winter_court_edicts(
 			edicts.append(edict)
 
 	return edicts
+
+
+# -- Aggregate-Opinion Edict Selection (s16.4) ---------------------------------
+
+static func compute_emperor_weight(emperor_status: float, relevance: float) -> float:
+	return emperor_status * (relevance / 50.0) * EMPEROR_WEIGHT_MULTIPLIER
+
+
+static func compute_topic_aggregate(
+	topic: TopicData,
+	attendees: Array[L5RCharacterData],
+	emperor_id: int,
+) -> float:
+	var positions: Array[float] = []
+	var weights: Array[float] = []
+	for c: L5RCharacterData in attendees:
+		var pos: float = c.topic_positions.get(topic.topic_id, 0.0)
+		var relevance: float = TopicMomentumSystem.calculate_personal_relevance(
+			topic,
+			TopicMomentumSystem.ClanRelation.OWN if topic.clan_involved == c.clan and not topic.clan_involved.is_empty() else TopicMomentumSystem.ClanRelation.DISTANT,
+			not topic.family_involved.is_empty() and topic.family_involved == c.family and topic.clan_involved == c.clan,
+			not topic.family_involved.is_empty() and topic.clan_involved == c.clan and topic.family_involved != c.family,
+		)
+		var weight: float
+		if c.character_id == emperor_id:
+			weight = compute_emperor_weight(c.status, relevance)
+		else:
+			weight = TopicMomentumSystem.calculate_position_weight(c.status, relevance)
+		positions.append(pos)
+		weights.append(weight)
+	return TopicMomentumSystem.calculate_aggregate_opinion(positions, weights)
+
+
+static func generate_edicts_from_aggregate(
+	emperor: L5RCharacterData,
+	archetype: int,
+	court: CourtSessionData,
+	attendees: Array[L5RCharacterData],
+	active_topics: Array[TopicData],
+	active_wars: Array[WarData],
+	next_edict_id: Array[int],
+	ic_day: int,
+) -> Dictionary:
+	var max_edicts: int = mini(
+		ARCHETYPE_EDICT_FREQUENCY.get(archetype, 1),
+		MAX_EDICTS_PER_WINTER_COURT
+	)
+
+	var agenda_topics: Array[TopicData] = _resolve_topic_ids(
+		court.agenda_topic_ids, active_topics
+	)
+	agenda_topics.sort_custom(func(a: TopicData, b: TopicData) -> bool:
+		return a.momentum > b.momentum
+	)
+	if agenda_topics.size() > 3:
+		agenda_topics.resize(3)
+
+	var edicts: Array[EdictData] = []
+	var aggregates: Array[Dictionary] = []
+
+	for topic: TopicData in agenda_topics:
+		if edicts.size() >= max_edicts:
+			break
+		var agg: float = compute_topic_aggregate(topic, attendees, emperor.character_id)
+		var edict_result: Dictionary = _evaluate_aggregate_for_edict(
+			topic, agg, emperor, archetype, active_wars, next_edict_id, ic_day, court.court_id
+		)
+		aggregates.append({
+			"topic_id": topic.topic_id,
+			"aggregate": agg,
+			"edict_issued": edict_result.get("edict") != null,
+			"direction": edict_result.get("direction", "none"),
+		})
+		var edict: EdictData = edict_result.get("edict") as EdictData
+		if edict != null:
+			edicts.append(edict)
+
+	return {
+		"edicts": edicts,
+		"aggregates": aggregates,
+	}
+
+
+static func _evaluate_aggregate_for_edict(
+	topic: TopicData,
+	aggregate: float,
+	emperor: L5RCharacterData,
+	archetype: int,
+	active_wars: Array[WarData],
+	next_edict_id: Array[int],
+	ic_day: int,
+	court_id: int,
+) -> Dictionary:
+	if aggregate > EDICT_POSITIVE_THRESHOLD:
+		var edict: EdictData = _create_compelling_edict(
+			topic, emperor, archetype, active_wars, next_edict_id, ic_day, court_id
+		)
+		return {"edict": edict, "direction": "compelling"}
+
+	if aggregate < EDICT_NEGATIVE_THRESHOLD:
+		var edict: EdictData = _create_blocking_edict(
+			topic, emperor, next_edict_id, ic_day, court_id
+		)
+		return {"edict": edict, "direction": "blocking"}
+
+	return {"edict": null, "direction": "none"}
+
+
+static func _create_compelling_edict(
+	topic: TopicData,
+	emperor: L5RCharacterData,
+	archetype: int,
+	active_wars: Array[WarData],
+	next_edict_id: Array[int],
+	ic_day: int,
+	court_id: int,
+) -> EdictData:
+	if topic.topic_type == "war" or topic.category == TopicData.Category.MILITARY:
+		var war: WarData = _find_war_for_topic(topic, active_wars)
+		if war != null:
+			return _create_cease_hostilities(
+				war, topic, emperor, archetype, next_edict_id, ic_day, court_id
+			)
+
+	var edict_type: EdictData.EdictType = _crisis_to_edict_type(topic)
+	var e := create_edict(next_edict_id[0], edict_type, emperor.character_id, ic_day, court_id)
+	next_edict_id[0] += 1
+	e.target_topic_id = topic.topic_id
+	e.target_clan = topic.clan_involved
+	e.description = "Imperial edict on %s" % topic.slug
+	return e
+
+
+static func _create_blocking_edict(
+	topic: TopicData,
+	emperor: L5RCharacterData,
+	next_edict_id: Array[int],
+	ic_day: int,
+	court_id: int,
+) -> EdictData:
+	var e := create_edict(
+		next_edict_id[0], EdictData.EdictType.GENERAL_DECREE,
+		emperor.character_id, ic_day, court_id
+	)
+	next_edict_id[0] += 1
+	e.target_topic_id = topic.topic_id
+	e.target_clan = topic.clan_involved
+	e.description = "Imperial edict blocking action on %s" % topic.slug
+	return e
+
+
+static func _crisis_to_edict_type(topic: TopicData) -> EdictData.EdictType:
+	if topic.topic_type == "famine" or topic.topic_type == "starvation" or topic.topic_type == "provincial_famine" or topic.topic_type == "clan_famine":
+		return EdictData.EdictType.TAX_REFORM
+	return EdictData.EdictType.GENERAL_DECREE
+
+
+static func get_commitment_type_for_topic(topic: TopicData) -> String:
+	return CRISIS_COMMITMENT_TYPE.get(topic.topic_type, "")
+
+
+static func generate_edict_commitments(
+	edict: EdictData,
+	topic: TopicData,
+	lords: Array[L5RCharacterData],
+	ic_day: int,
+	deadline_ic_day: int,
+) -> Array[CourtCommitmentData]:
+	var commitment_type: String = get_commitment_type_for_topic(topic)
+	if commitment_type.is_empty():
+		return []
+	var commitments: Array[CourtCommitmentData] = []
+	for lord: L5RCharacterData in lords:
+		var c := CourtCommitmentSystem.create_edict_commitment(
+			lord.character_id, topic.topic_id, commitment_type,
+			ic_day, deadline_ic_day,
+		)
+		commitments.append(c)
+	return commitments
 
 
 static func _resolve_topic_ids(
