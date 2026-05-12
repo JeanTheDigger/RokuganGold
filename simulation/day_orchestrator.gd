@@ -3987,8 +3987,14 @@ static func _inject_urgency_data(
 		ws["favors"] = favors
 		ws["active_tethers"] = active_tethers
 		ws["active_topics"] = active_topics
-		var primary: Dictionary = objectives_map.get(c.character_id, {}).get("primary", {})
+		var char_objs: Dictionary = objectives_map.get(c.character_id, {})
+		var primary: Dictionary = char_objs.get("primary", {})
 		ws["objective_stalled_seasons"] = primary.get("seasons_without_progress", 0)
+		var standing: Dictionary = char_objs.get("standing", {})
+		var known_objs: Dictionary = ws.get("known_objectives", {})
+		if not standing.is_empty():
+			known_objs["standing_need_type"] = standing.get("need_type", "")
+		ws["known_objectives"] = known_objs
 		var loc: int = int(c.physical_location) if c.physical_location.is_valid_int() else -1
 		if besieged_settlements.has(loc):
 			ws["besieged_settlement_health_pct"] = besieged_settlements[loc]

@@ -1614,3 +1614,28 @@ func test_inject_urgency_data_creates_ws_for_unknown_character() -> void:
 		ws, [c], [], [], [], {}, [],
 	)
 	assert_true(ws.has(5), "Should create per-character ws dict")
+
+
+func test_inject_urgency_data_standing_need_type() -> void:
+	var ws: Dictionary = {1: {}}
+	var c := L5RCharacterData.new()
+	c.character_id = 1
+	var objectives_map: Dictionary = {
+		1: {"standing": {"need_type": "SEEK_GLORY"}},
+	}
+	DayOrchestrator._inject_urgency_data(
+		ws, [c], [], [], [], objectives_map, [],
+	)
+	var known_objs: Dictionary = ws[1].get("known_objectives", {})
+	assert_eq(known_objs.get("standing_need_type", ""), "SEEK_GLORY")
+
+
+func test_inject_urgency_data_no_standing_objective() -> void:
+	var ws: Dictionary = {1: {}}
+	var c := L5RCharacterData.new()
+	c.character_id = 1
+	DayOrchestrator._inject_urgency_data(
+		ws, [c], [], [], [], {}, [],
+	)
+	var known_objs: Dictionary = ws[1].get("known_objectives", {})
+	assert_eq(known_objs.get("standing_need_type", ""), "", "No standing obj = empty string")
