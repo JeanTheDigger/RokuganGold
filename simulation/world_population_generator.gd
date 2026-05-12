@@ -158,6 +158,22 @@ const POSITION_STATUS: Dictionary = {
 }
 
 
+const POSITION_ROLE_NAMES: Dictionary = {
+	PositionType.CLAN_MAGISTRATE: "Clan Magistrate",
+	PositionType.EMERALD_MAGISTRATE: "Emerald Magistrate",
+	PositionType.GARRISON_COMMANDER: "Garrison Commander",
+	PositionType.SCHOOL_MASTER: "School Master",
+	PositionType.TEMPLE_HEAD: "Temple Head",
+	PositionType.MONASTERY_ABBOT: "Monastery Abbot",
+	PositionType.SENIOR_COURTIER: "Senior Courtier",
+	PositionType.TAISA: "Taisa",
+	PositionType.CHUI: "Chui",
+	PositionType.RIKUGUNSHOKAN: "Rikugunshokan",
+	PositionType.WALL_SEGMENT_COMMANDER: "Wall Segment Commander",
+	PositionType.CLAN_MAGISTRATE_COMMANDER: "Clan Magistrate Commander",
+}
+
+
 # -- Position School Type Preferences -----------------------------------------
 
 const BUSHI_POSITION_TYPES: Array = [
@@ -313,6 +329,7 @@ static func _generate_positioned_character(
 	c.status = status
 	c.lord_id = lord_id
 	c.orientation = GempukkuSystem.roll_orientation(dice)
+	c.role_position = POSITION_ROLE_NAMES.get(position_type, "")
 	return c
 
 

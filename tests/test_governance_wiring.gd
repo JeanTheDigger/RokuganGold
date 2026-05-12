@@ -648,3 +648,87 @@ func test_vacancy_per_lord_key_includes_settlement_vacancies() -> void:
 		if v.get("position_type", "") == "Garrison Commander":
 			found_garrison = true
 	assert_true(found_garrison, "Per-lord flat list should include settlement vacancies")
+
+
+# -- School Master Vacancy Detection Tests --------------------------------------
+
+
+func test_vacancy_detects_school_master_for_family() -> void:
+	var lord := _make_char(1, "Crab", 7.0)
+	lord.lord_id = -1
+	lord.clan = "Crab"
+	var characters: Array[L5RCharacterData] = [lord]
+	var chars_by_id: Dictionary = {1: lord}
+
+	var ws: Dictionary = {}
+	DayOrchestrator._populate_vacancy_intelligence(ws, characters, chars_by_id, [], [], {})
+
+	var vacancies: Array = ws.get("vacancy_data", {}).get(1, [])
+	var school_master_count: int = 0
+	for v: Dictionary in vacancies:
+		if v.get("position_type", "") == "School Master":
+			school_master_count += 1
+			assert_eq(v["priority"], 2)
+	# Crab has 5 families (Hida, Hiruma, Kaiu, Kuni, Yasuki) — all have schools
+	assert_true(school_master_count >= 1, "Should detect school master vacancies for clan families")
+
+
+func test_vacancy_skips_filled_school_master() -> void:
+	var lord := _make_char(1, "Crab", 7.0)
+	lord.lord_id = -1
+	lord.clan = "Crab"
+	var master := _make_char(2, "Crab", 5.0)
+	master.lord_id = 1
+	master.family = "Hida"
+	master.role_position = "School Master"
+	var characters: Array[L5RCharacterData] = [lord, master]
+	var chars_by_id: Dictionary = {1: lord, 2: master}
+
+	var ws: Dictionary = {}
+	DayOrchestrator._populate_vacancy_intelligence(ws, characters, chars_by_id, [], [], {})
+
+	var vacancies: Array = ws.get("vacancy_data", {}).get(1, [])
+	var hida_master_found: bool = false
+	for v: Dictionary in vacancies:
+		if v.get("position_type", "") == "School Master" and v.get("family", "") == "Hida":
+			hida_master_found = true
+	assert_false(hida_master_found, "Should not detect vacancy for Hida when school master exists")
+
+
+func test_vacancy_school_master_has_family_field() -> void:
+	var lord := _make_char(1, "Dragon", 7.0)
+	lord.lord_id = -1
+	lord.clan = "Dragon"
+	var characters: Array[L5RCharacterData] = [lord]
+	var chars_by_id: Dictionary = {1: lord}
+
+	var ws: Dictionary = {}
+	DayOrchestrator._populate_vacancy_intelligence(ws, characters, chars_by_id, [], [], {})
+
+	var vacancies: Array = ws.get("vacancy_data", {}).get(1, [])
+	var families_found: Array[String] = []
+	for v: Dictionary in vacancies:
+		if v.get("position_type", "") == "School Master":
+			assert_true(v.has("family"), "School Master vacancy should include family field")
+			families_found.append(v.get("family", ""))
+	# Dragon has 3 families: Mirumoto, Kitsuki, Tamori
+	assert_eq(families_found.size(), 3, "Should detect vacancies for all 3 Dragon families")
+
+
+func test_vacancy_school_master_only_for_clans_with_lords() -> void:
+	# No lord character with status >= 5.0 for Lion → no school master vacancies
+	var low_status := _make_char(1, "Lion", 3.0)
+	low_status.lord_id = -1
+	low_status.clan = "Lion"
+	var characters: Array[L5RCharacterData] = [low_status]
+	var chars_by_id: Dictionary = {1: low_status}
+
+	var ws: Dictionary = {}
+	DayOrchestrator._populate_vacancy_intelligence(ws, characters, chars_by_id, [], [], {})
+
+	var vacancies: Array = ws.get("vacancy_data", {}).get(1, [])
+	var school_master_count: int = 0
+	for v: Dictionary in vacancies:
+		if v.get("position_type", "") == "School Master":
+			school_master_count += 1
+	assert_eq(school_master_count, 0, "No school master vacancies when no lord with status >= 5")

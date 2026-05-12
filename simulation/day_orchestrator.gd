@@ -7169,6 +7169,61 @@ static func _populate_vacancy_intelligence(
 				filled_positions[lord_id] = []
 			filled_positions[lord_id].append("Monastery Abbot (pending)")
 
+	# School Master vacancies: one per family that has a canonical school
+	var clan_lord_map: Dictionary = {}
+	for c: L5RCharacterData in characters:
+		if CharacterStats.is_dead(c):
+			continue
+		if c.lord_id >= 0:
+			continue
+		if c.status < 5.0:
+			continue
+		var existing_status: float = -1.0
+		if clan_lord_map.has(c.clan):
+			var existing_lord: L5RCharacterData = characters_by_id.get(clan_lord_map[c.clan], null)
+			if existing_lord != null:
+				existing_status = existing_lord.status
+		if c.status > existing_status:
+			clan_lord_map[c.clan] = c.character_id
+
+	# Check if each family's school master exists under the clan lord
+	var school_master_families: Dictionary = {}
+	for c: L5RCharacterData in characters:
+		if CharacterStats.is_dead(c):
+			continue
+		if _has_position([c.role_position], "School Master"):
+			school_master_families[c.family] = true
+
+	for fam: String in GempukkuSystem.FAMILY_DEFAULT_SCHOOL:
+		if school_master_families.has(fam):
+			continue
+		var clan: String = _family_to_clan(fam)
+		if clan.is_empty():
+			continue
+		var lord_id: int = clan_lord_map.get(clan, -1)
+		if lord_id < 0:
+			continue
+		var lord_positions: Array = filled_positions.get(lord_id, [])
+		var family_key: String = "School Master (%s)" % fam
+		if _has_position(lord_positions, family_key):
+			continue
+		var candidate: int = _find_vacancy_candidate(
+			lord_id, "School Master", characters, characters_by_id,
+		)
+		if not lord_vacancies.has(lord_id):
+			lord_vacancies[lord_id] = []
+		lord_vacancies[lord_id].append({
+			"position_type": "School Master",
+			"priority": 2,
+			"province_id": -1,
+			"candidate_id": candidate,
+			"seasons_vacant": 0,
+			"family": fam,
+		})
+		if not filled_positions.has(lord_id):
+			filled_positions[lord_id] = []
+		filled_positions[lord_id].append(family_key)
+
 	# Store per-lord vacancy data keyed by lord_id
 	world_states["vacancy_data"] = lord_vacancies
 
@@ -7183,6 +7238,14 @@ static func _has_position(positions: Array, substring: String) -> bool:
 		if p is String and (p as String).contains(substring):
 			return true
 	return false
+
+
+static func _family_to_clan(family: String) -> String:
+	for clan: String in WorldPopulationGenerator.CLAN_FAMILIES:
+		var families: Array = WorldPopulationGenerator.CLAN_FAMILIES[clan]
+		if family in families:
+			return clan
+	return ""
 
 
 static func _find_vacancy_candidate(

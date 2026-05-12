@@ -675,3 +675,36 @@ func test_rank_distribution_lion_is_largest():
 	for rank: int in dragon_ranks:
 		dragon_total += dragon_ranks[rank]
 	assert_true(lion_total > dragon_total)
+
+
+func test_positioned_characters_get_role_position():
+	var dice := DiceEngine.new()
+	dice.set_seed(42)
+	var next_id: Array[int] = [1]
+	var c: L5RCharacterData = WorldPopulationGenerator._generate_positioned_character(
+		next_id, WorldPopulationGenerator.PositionType.SCHOOL_MASTER,
+		"Crab", "Hida", dice, 99,
+	)
+	assert_eq(c.role_position, "School Master")
+
+
+func test_positioned_magistrate_gets_role_position():
+	var dice := DiceEngine.new()
+	dice.set_seed(42)
+	var next_id: Array[int] = [1]
+	var c: L5RCharacterData = WorldPopulationGenerator._generate_positioned_character(
+		next_id, WorldPopulationGenerator.PositionType.CLAN_MAGISTRATE,
+		"Lion", "Akodo", dice, 99,
+	)
+	assert_eq(c.role_position, "Clan Magistrate")
+
+
+func test_positioned_samurai_has_empty_role():
+	var dice := DiceEngine.new()
+	dice.set_seed(42)
+	var next_id: Array[int] = [1]
+	var c: L5RCharacterData = WorldPopulationGenerator._generate_positioned_character(
+		next_id, WorldPopulationGenerator.PositionType.SAMURAI,
+		"Crane", "Doji", dice, 99,
+	)
+	assert_eq(c.role_position, "")

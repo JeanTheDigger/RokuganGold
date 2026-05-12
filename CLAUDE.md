@@ -507,11 +507,11 @@ All in /tests/, one file per system:
 - test_winter_court_system.gd (~80 tests)
 - test_gempukku_system.gd (~55 tests)
 - test_otomo_seiyaku_system.gd (~55 tests)
-- test_world_population_generator.gd (~50 tests)
+- test_world_population_generator.gd (~56 tests)
 - test_npc_advancement.gd (~56 tests)
 - test_ronin_system.gd (~44 tests)
 - test_musha_shugyo_system.gd (~75 tests)
-- test_governance_wiring.gd (~33 tests)
+- test_governance_wiring.gd (~37 tests)
 - test_marriage_wiring.gd (~65 tests)
 - test_worship_system.gd (~67 tests)
 - test_worship_wiring.gd (~50 tests)
@@ -2650,6 +2650,10 @@ All in /tests/, one file per system:
   settlements, dice engine, next_id counter, and optional baselines.
   Returns `{characters, emperor_id, clan_champions, total_count}`.
   Deterministic with seeded DiceEngine.
+  `POSITION_ROLE_NAMES` maps 12 PositionType values to `role_position` strings.
+  `_generate_positioned_character()` sets `role_position` automatically for
+  key positions (magistrates, garrison commanders, school masters, temple
+  heads, monastery abbots, military officers, etc.).
   Known limitations: canonical (Type 1) characters not yet hand-authored —
   all positions use procedural generation. Mantis schools not in
   WorldGenerator.SCHOOL_DATA. Phoenix Elemental Council and Dragon
@@ -2876,14 +2880,16 @@ All in /tests/, one file per system:
   for magistrate gaps, and settlements for position-appropriate vacancies:
   military settlements (FORTIFICATION/KEEP/CASTLE/FAMILY_CASTLE/WALL_TOWER)
   → Garrison Commander (priority 3), TEMPLE → Temple Head (priority 2),
-  MONASTERY → Monastery Abbot (priority 2). Province→lord mapping built
-  from highest-status living character matching province clan. Deduplication
-  prevents multiple vacancy entries per lord per position type.
-  `_find_vacancy_candidate()` picks best unassigned vassal by
-  status+honor+glory+disposition.
-  Known limitations: School Master detection deferred (needs per-school
-  tracking beyond role_position). Senior Courtier detection deferred
-  (unclear vacancy trigger).
+  MONASTERY → Monastery Abbot (priority 2). School Master detection per
+  family: iterates `GempukkuSystem.FAMILY_DEFAULT_SCHOOL`, maps families
+  to clan → lord, checks for living School Master characters (priority 2).
+  `_family_to_clan()` helper reverses `WorldPopulationGenerator.CLAN_FAMILIES`.
+  Province→lord mapping built from highest-status living character matching
+  province clan. Deduplication prevents multiple vacancy entries per lord
+  per position type. `_find_vacancy_candidate()` picks best unassigned
+  vassal by status+honor+glory+disposition.
+  Known limitations: Senior Courtier detection deferred (unclear vacancy
+  trigger).
 
 ### What's Next
 1. World generation coordinate system and adjacency
