@@ -342,6 +342,37 @@ single-dice-entry-point and server-authoritative constraints.
   RNG generation and delegation. `active_topics` threaded through for
   relevance-weighted topic selection.
 
+### Court Commitment System (s16.4)
+- **shared/court_commitment_data.gd** — CourtCommitmentData Resource per GDD
+  s16.4. Distinct from CommitmentData (s55.31) — tracks promises made at court
+  or imposed by Imperial Edict, fulfilled through the NPC Decision Engine.
+  CommitmentSource enum (VOLUNTARY, EDICT). Fields: lord_id, topic_id,
+  commitment_type (String), resource_amount, source, declared_at_ic_day,
+  deadline_ic_day, fulfilled, good_faith, ap_spent_toward.
+- **simulation/court_commitment_system.gd** — Commitment Execution Bridge per
+  GDD s16.4. Pure static functions.
+  Factory: `create_commitment()`, `create_edict_commitment()`.
+  HONOR_COMMITMENT NeedType priority: 95 base, 100 for Chugi virtue.
+  Decomposition: commitment_type → ActionID mapping (send_military_aid →
+  ORDER_DEPLOY, send_supplies → SHARE_SUPPLIES, send_shugenja/send_magistrates
+  → ASSIGN_VASSAL_OBJECTIVE, unknown → DO_NOTHING).
+  Personality evaluation: `should_deprioritize()` (Seigyo deprioritizes),
+  `get_renege_willingness()` (Seigyo 0.8, Chugi 0.05, Makoto 0.1, default 0.3).
+  Fulfillment detection: resource-based (sum SHARE_SUPPLIES amounts ≥ target)
+  and dispatch-based (ORDER_DEPLOY/ASSIGN_VASSAL_OBJECTIVE with fulfilled flag).
+  AP tracking counts all fulfillment actions by lord.
+  Renege detection: binary — zero AP spent past deadline = renege.
+  Renege consequences: honor loss scaled by rank (VOLUNTARY_RENEGE_HONOR_BY_RANK
+  table, 0–10), edict adds −3.0 extra, −15 disposition, topic tier 3
+  (voluntary) or 2 (edict).
+  Good faith: fulfilled = true, or ap_spent_toward > 0.
+  Seasonal processing: `process_seasonal_commitments()` checks fulfillment,
+  evaluates good faith, detects reneges, computes consequences.
+  Queries: `get_active_commitments()`, `has_unfulfilled_commitments()`.
+- **objective_alignment.json** — HONOR_COMMITMENT NeedType added: ORDER_DEPLOY
+  (95), SHARE_SUPPLIES (90), ASSIGN_VASSAL_OBJECTIVE (85), BEGIN_TRAVEL (70),
+  WRITE_LETTER (60), ASSESS_PROVINCE_STATUS (40), DO_NOTHING (0).
+
 ### Topic Propagation (s16, s15.5, s15.6)
 - **simulation/topic_system.gd** — TopicMomentumSystem with three propagation
   features wired into DayOrchestrator:
@@ -450,6 +481,7 @@ All in /tests/, one file per system:
 - test_objective_decomposer.gd (~125 tests)
 - test_information_system.gd (~40 tests)
 - test_daily_conversation.gd (~37 tests)
+- test_court_commitment_system.gd (~37 tests)
 - test_topic_system.gd (~55 tests)
 - test_investigation_system.gd (~40 tests)
 - test_day_orchestrator.gd (~54 tests)
