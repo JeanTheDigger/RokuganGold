@@ -495,6 +495,7 @@ All in /tests/, one file per system:
 - test_horde_system.gd (~43 tests)
 - test_oni_generator.gd (~80 tests)
 - test_naval_system.gd (~113 tests)
+- test_naval_combat_system.gd (~46 tests)
 
 ### Festival System (s11.5)
 - **simulation/festival_system.gd** — Empire-wide canonical festivals, Rokuyo
@@ -2250,9 +2251,53 @@ All in /tests/, one file per system:
   auto-flees on contact.
 - **shared/enums.gd** gains `NavalWeather` (5 values), `WaterSubtileType` (4
   values), `NavalEngagementLevel` (4 values).
-  Deferred: Full naval combat round loop (integrating with ArmyCombatSystem),
-  ship movement processing (needs coordinate system), weather-per-subtile-per-day
-  integration with DayOrchestrator, Heroic Opportunities at sea (Category 9).
+  Deferred: Ship movement processing (needs coordinate system),
+  weather-per-subtile-per-day integration with DayOrchestrator,
+  Heroic Opportunities at sea (Category 9).
+
+### Naval Combat System (s11.9)
+- **simulation/naval_combat_system.gd** — Ship-to-ship battle resolution per
+  GDD s11.9. Follows ArmyCombatSystem's row/column grid pattern with
+  naval-specific rules. Pure static functions.
+  `make_naval_company()` converts ShipData to battle state dict with weather
+  modifiers pre-applied. Civilian flags (auto_surrenders, auto_flees) set from
+  ship class. Kobune in Reserve Row flagged as ranged.
+  `process_civilians()` pre-battle: Sampans auto-flee (removed from combat),
+  Merchant Barges auto-surrender (captured) when enemy warships present.
+  `resolve_naval_battle()` main entry point: processes civilians, applies river
+  modifiers if applicable, runs combat rounds up to 200 cap, returns victor,
+  round log, captain deaths, captured ships, weather.
+  **No flanking** — ships engage front-to-front or front-to-side only. Matchups
+  are column-based; unmatched ships wait (no flanking maneuvers at sea).
+  **Weather replaces terrain** — weather modifiers applied during
+  `make_naval_company()`, not per-round. Atakebune adjacent defense bonus (+3)
+  applied per round to row-adjacent allies.
+  **Kobune ranged from Reserve Row** — fires each round using weather-dependent
+  dice (1d5 clear/wind, 1d3 rain, suppressed storm/typhoon). Kobune stays in
+  Reserve Row on promotion (same as archers on land). Kobune in Forward Row
+  gets +1 Attack on Round 1 only (archers loose before boarding).
+  **Boarding first-round penalty** — all ships take −2 Attack on Round 1
+  (crossing between ships). Subsequent rounds normal.
+  **Koutetsukan** — immune to boarding (cannot engage or be engaged in standard
+  combat). `resolve_ram_in_battle()` once per battle: +8 Attack, 5 self-damage,
+  mutates health directly. Koutetsukan fights only via ramming.
+  **Atakebune** — +3 Defense to adjacent friendly ships on same row.
+  **Civilian surrender** — Merchant Barges that reach morale 0 are captured
+  instead of routing.
+  **Captain survival** — mirrors commander survival from ArmyCombatSystem:
+  Earth+Battle vs TN at health thresholds (75%/50%/25%/0%). Injured captains
+  lose bonus. Dead captains trigger +3 morale modifier.
+  **Morale** — same structure as land: heavy loss (+2), low health (+1),
+  captain death (+3). Rout contagion to adjacent same-row ships.
+  **Rout resolution** — `resolve_naval_rout()` always uses low pursuit %
+  (no cavalry at sea). 20% threshold for fleet dissolution.
+  **Captured ships** — `_collect_captured_ships()` collects surrendered and
+  destroyed (non-Koutetsukan) ships with prize value (half construction cost).
+  **River modifiers** — downstream +1 Atk, upstream −1 Atk applied at battle
+  start via `_apply_river_modifiers()`.
+  Deferred: DayOrchestrator wiring for naval battles, Tortoise Escape Attempt
+  integration into battle round, Heroic Opportunities at sea (Category 9),
+  ship capture/destruction post-battle mutations.
 
 ### What's Next
 1. World generation coordinate system and adjacency
