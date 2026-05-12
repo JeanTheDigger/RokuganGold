@@ -217,10 +217,17 @@ single-dice-entry-point and server-authoritative constraints.
   personality_filter (bushido/shourido blocks), action_skill_map (76+ ActionIDs),
   competence_table (ranks 0-10), disposition_tiers (8 tiers),
   urgency_rules (10 rules), topic_position_alignment (24 NeedTypes with
-  per-NeedType strong_support/strong_opposition caps per GDD s55.26 Annex H).
+  per-NeedType strong_support/strong_opposition caps per GDD s55.26 Annex H,
+  topic_types arrays for NeedType-specific topic filtering).
   SEEK_PEACE position inversion: pro-war NPCs (positive position on war
   topics) get −15 penalty, anti-war NPCs get +15 bonus — position inverted
   before interpolation per GDD special case note.
+  Topic type filtering: NeedTypes with `topic_types` arrays (e.g. LEVY_TROOPS,
+  DEPLOY_ARMY, DEFEND_PROVINCE) only match topics whose `topic_type` appears
+  in the filter list. Topics with unknown type pass through (benefit of the
+  doubt). NeedTypes without `topic_types` (e.g. RAISE_DISPOSITION) match all
+  topics. `_build_known_topic_types()` populates `ctx.known_topic_types` from
+  active_topics during `build_context()`.
 
 ### Objective Decomposition
 - **simulation/objective_decomposer.gd** — Routes standing objectives to
@@ -480,7 +487,7 @@ All in /tests/, one file per system:
 - test_time_system.gd (~15 tests)
 - test_skill_resolver.gd (~20 tests)
 - test_action_point_system.gd (~12 tests)
-- test_npc_decision_engine.gd (~92 tests)
+- test_npc_decision_engine.gd (~100 tests)
 - test_scoring_table_loader.gd (~15 tests)
 - test_action_executor.gd (~35 tests)
 - test_effect_applicator.gd (~37 tests)
