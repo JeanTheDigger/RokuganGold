@@ -344,10 +344,13 @@ static func advance_day(
 		_evaluate_heir_designations(
 			characters, characters_by_id, active_topics
 		)
+		var provinces_array: Array[ProvinceData] = _dict_values_to_province_array(provinces)
+		var emperor_archetype: int = world_states.get("emperor_archetype", StrategicReview.EmperorArchetype.IRON)
 		_process_strategic_court_calls(
 			strategic_results, active_courts, active_topics,
 			characters_by_id, next_court_id, ic_day, world_states,
-			current_season,
+			current_season, provinces_array, settlements,
+			emperor_archetype, next_topic_id,
 		)
 
 	var horde_results: Dictionary = _process_horde_rolls(
@@ -4700,6 +4703,19 @@ static func _process_active_courts(
 			)
 			if not edicts_issued.is_empty():
 				close_result["edicts_issued"] = edicts_issued.size()
+			if court.court_type == CourtSessionData.CourtType.IMPERIAL_WINTER_COURT:
+				var glory_rewards: Array[Dictionary] = WinterCourtSystem.compute_glory_rewards(court, characters_by_id)
+				for reward: Dictionary in glory_rewards:
+					var rid: int = reward.get("character_id", -1)
+					var rchar: L5RCharacterData = characters_by_id.get(rid) as L5RCharacterData
+					if rchar != null:
+						rchar.glory = clampf(rchar.glory + reward.get("glory_change", 0.0), 0.0, 10.0)
+				close_result["glory_rewards"] = glory_rewards
+				if court.announcement_topic_id >= 0:
+					for topic: TopicData in active_topics:
+						if topic.topic_id == court.announcement_topic_id:
+							topic.resolved = true
+							break
 			var topic_dict: Dictionary = CourtSystem.generate_court_close_topic(court)
 			if not topic_dict.is_empty():
 				var t := TopicData.new()
@@ -5081,6 +5097,10 @@ static func _process_strategic_court_calls(
 	ic_day: int,
 	world_states: Dictionary = {},
 	current_season: int = -1,
+	provinces: Array[ProvinceData] = [],
+	settlements: Array[SettlementData] = [],
+	archetype: int = StrategicReview.EmperorArchetype.IRON,
+	next_topic_id: Array[int] = [1],
 ) -> void:
 	for directive: Dictionary in strategic_results:
 		var directive_type = directive.get("directive", "")
@@ -5088,6 +5108,8 @@ static func _process_strategic_court_calls(
 			_create_winter_court_from_directive(
 				directive, active_courts, active_topics,
 				characters_by_id, next_court_id, ic_day,
+				provinces, settlements, world_states,
+				archetype, next_topic_id,
 			)
 			continue
 		if directive_type != StrategicReview.Directive.CALL_COURT:
@@ -5137,50 +5159,139 @@ static func _create_winter_court_from_directive(
 	characters_by_id: Dictionary,
 	next_court_id: Array[int],
 	ic_day: int,
-) -> void:
+	provinces: Array[ProvinceData] = [],
+	settlements: Array[SettlementData] = [],
+	world_state: Dictionary = {},
+	archetype: int = StrategicReview.EmperorArchetype.IRON,
+	next_topic_id: Array[int] = [1],
+) -> Dictionary:
 	var emperor_id: int = directive.get("lord_id", -1)
-	var host_clan: String = directive.get("host_clan", "")
-	if emperor_id < 0 or host_clan.is_empty():
-		return
+	if emperor_id < 0:
+		return {}
 
 	for c: CourtSessionData in active_courts:
 		if c.court_type == CourtSessionData.CourtType.IMPERIAL_WINTER_COURT:
 			if c.phase != CourtSessionData.CourtPhase.CLOSED:
-				return
+				return {}
 
-	var host_settlement_id: int = -1
-	var host_champion_id: int = -1
-	for char_id: int in characters_by_id:
-		var c: L5RCharacterData = characters_by_id[char_id] as L5RCharacterData
-		if c != null and c.clan == host_clan and c.status >= 7.0 and c.lord_id == -1:
-			host_champion_id = c.character_id
-			var loc: String = c.physical_location
-			host_settlement_id = int(loc) if loc.is_valid_int() else -1
-			break
+	var emperor: L5RCharacterData = characters_by_id.get(emperor_id) as L5RCharacterData
+
+	var host_result: Dictionary
+	if not provinces.is_empty() and not settlements.is_empty():
+		host_result = WinterCourtSystem.run_winter_court_selection(
+			emperor, archetype, characters_by_id, provinces, settlements,
+			active_topics, world_state
+		)
+	else:
+		host_result = _legacy_host_selection(directive, characters_by_id)
+
+	if host_result.is_empty() or host_result.get("skipped", false):
+		return host_result
+
+	var host_settlement_id: int = host_result.get("settlement_id", -1)
+	var host_clan: String = host_result.get("host_clan", "")
+	var host_daimyo_id: int = host_result.get("host_daimyo_id", -1)
+	var host_champion_id: int = host_result.get("clan_champion_id", -1)
+	var is_regent: bool = host_result.get("is_regent_court", false)
+
 	if host_settlement_id < 0:
-		return
+		return {}
 
 	var agenda: Array[int] = CourtSystem.select_agenda_topics(
 		active_topics, CourtSessionData.CourtType.IMPERIAL_WINTER_COURT
 	)
 
-	var start_day: int = ic_day + 30
+	var start_day: int = ic_day + (WinterCourtSystem.WINTER_START_IC_DAY - WinterCourtSystem.ANNOUNCEMENT_IC_DAY)
+	var prestige: int = host_result.get("prestige", CourtSystem.PRESTIGE_IMPERIAL)
+
 	var court := CourtSystem.create_court(
 		next_court_id[0],
 		CourtSessionData.CourtType.IMPERIAL_WINTER_COURT,
-		emperor_id,
+		emperor_id if not is_regent else host_result.get("selector_id", emperor_id),
 		host_settlement_id,
 		host_clan,
 		start_day,
 		CourtSystem.WINTER_COURT_DURATION,
-		true,
+		not is_regent,
 	)
+	court.prestige = prestige
+	court.is_regent_court = is_regent
+	court.host_family_daimyo_id = host_daimyo_id
+	court.clan_champion_id = host_champion_id
+	court.grace_period_days = WinterCourtSystem.GRACE_PERIOD_DAYS
+	court.no_edicts = host_result.get("no_edicts", false)
 	next_court_id[0] += 1
 	CourtSystem.set_agenda(court, agenda)
-	CourtSystem.add_attendee(court, emperor_id)
-	if host_champion_id >= 0 and host_champion_id != emperor_id:
-		CourtSystem.add_attendee(court, host_champion_id)
+
+	var host_lord_rank: Enums.LordRank = _status_to_lord_rank(
+		characters_by_id.get(host_daimyo_id) as L5RCharacterData
+	) if host_daimyo_id >= 0 else Enums.LordRank.PROVINCIAL_DAIMYO
+
+	var invitation_result: Dictionary = WinterCourtSystem.run_invitation_pipeline(
+		host_result, emperor, archetype, characters_by_id,
+		host_lord_rank, agenda
+	)
+
+	var all_invited: Array = invitation_result.get("all_invited", [])
+	for inv_id: Variant in all_invited:
+		CourtSystem.add_attendee(court, int(inv_id))
+	court.personal_invitation_ids = invitation_result.get("personal_invitations", [])
+	court.clan_delegation_ids = invitation_result.get("clan_delegations", {})
+
 	active_courts.append(court)
+
+	var topic_info: Dictionary = WinterCourtSystem.generate_announcement_topic(
+		host_daimyo_id, host_clan, host_result.get("province_id", -1)
+	)
+	var topic := TopicData.new()
+	topic.topic_id = next_topic_id[0]
+	next_topic_id[0] += 1
+	topic.topic_type = topic_info.get("topic_type", "")
+	topic.variant = topic_info.get("variant", "")
+	topic.slug = topic_info.get("slug", "")
+	topic.tier = topic_info.get("tier", TopicData.Tier.TIER_3)
+	topic.category = topic_info.get("category", TopicData.Category.POLITICAL)
+	topic.momentum = topic_info.get("momentum", 40.0)
+	topic.resolved = false
+	topic.clan_involved = topic_info.get("clan_involved", "")
+	topic.provinces_affected = topic_info.get("provinces_affected", [])
+	active_topics.append(topic)
+	court.announcement_topic_id = topic.topic_id
+
+	return {
+		"court_id": court.court_id,
+		"host_clan": host_clan,
+		"host_settlement_id": host_settlement_id,
+		"host_daimyo_id": host_daimyo_id,
+		"is_regent_court": is_regent,
+		"invitation_count": all_invited.size(),
+		"announcement_topic_id": topic.topic_id,
+	}
+
+
+static func _legacy_host_selection(
+	directive: Dictionary,
+	characters_by_id: Dictionary,
+) -> Dictionary:
+	var host_clan: String = directive.get("host_clan", "")
+	if host_clan.is_empty():
+		return {}
+	for char_id: int in characters_by_id:
+		var c: L5RCharacterData = characters_by_id[char_id] as L5RCharacterData
+		if c != null and c.clan == host_clan and c.status >= 7.0 and c.lord_id == -1:
+			var loc: String = c.physical_location
+			var sid: int = int(loc) if loc.is_valid_int() else -1
+			if sid >= 0:
+				return {
+					"settlement_id": sid,
+					"host_clan": host_clan,
+					"host_daimyo_id": c.character_id,
+					"clan_champion_id": c.character_id,
+					"is_regent_court": false,
+					"prestige": CourtSystem.PRESTIGE_IMPERIAL,
+					"no_edicts": false,
+				}
+	return {}
 
 
 # -- Naval Processing ----------------------------------------------------------
@@ -5496,3 +5607,14 @@ static func _generate_naval_battle_topics(
 		topics.append(topic)
 
 	return topics
+
+
+# -- Helpers -------------------------------------------------------------------
+
+static func _dict_values_to_province_array(provinces: Dictionary) -> Array[ProvinceData]:
+	var result: Array[ProvinceData] = []
+	for pid: Variant in provinces:
+		var p: ProvinceData = provinces[pid] as ProvinceData
+		if p != null:
+			result.append(p)
+	return result

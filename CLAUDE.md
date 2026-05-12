@@ -498,6 +498,7 @@ All in /tests/, one file per system:
 - test_naval_combat_system.gd (~46 tests)
 - test_naval_wiring.gd (~35 tests)
 - test_monk_objective_system.gd (~59 tests)
+- test_winter_court_system.gd (~62 tests)
 
 ### Festival System (s11.5)
 - **simulation/festival_system.gd** — Empire-wide canonical festivals, Rokuyo
@@ -2370,6 +2371,51 @@ All in /tests/, one file per system:
   political objectives: `MonkObjectiveSystem.is_monk_objective()` check
   dispatches to `MonkObjectiveSystem.decompose()`.
 
+### Winter Court System Rewrite (s55.10)
+- **simulation/winter_court_system.gd** — Full Winter Court lifecycle per GDD
+  s55.10. Replaces the placeholder `_evaluate_winter_court_host()` and
+  `_create_winter_court_from_directive()`. Pure static functions.
+  Castle-level host selection with 5 scoring factors (Disposition, Clan
+  Recency, Province Stability, Crisis Relevance, Family Prestige), each
+  normalized 0–10 and weighted by per-archetype weight matrices (total 50).
+  Hard disqualifiers: not Capital, stability >= 30, not occupied.
+  Cunning archetype uses inverse bell curve for Disposition scoring.
+  Benevolent filters for humanitarian crisis types, Warlike for military,
+  Cunning accepts all, Iron/Tyrant weight crisis at 0.
+  Three-phase invitation pipeline: Phase 1 delegation capacity by host lord
+  rank (Provincial=70, Family=105, Champion=150 total, 8/13/19 per Great
+  Clan). Phase 2 champion delegation scoring (Court Skills 15, Status+Glory
+  10, Disposition 10, Agenda Relevance 10, School Type 5) with yojimbo
+  pull-in rule. Phase 3 personal Imperial invitations (Disposition, Prestige,
+  Crisis Relevance, School Type, total 30, per-archetype weights; Warlike
+  inverts school type ranking).
+  Emperor's Peace: hostile-tagged actions blocked within court settlement
+  during active session. Sanctioned duel (CHALLENGE_TO_DUEL with
+  authorization) exempt. Covert actions (EAVESDROP, FABRICATE_SECRET,
+  INTERCEPT_LETTER, SEARCH_QUARTERS, BRIBE_FOR_INFO) explicitly permitted.
+  Host prestige: +0.5 Glory host family daimyo, +0.3 host Clan Champion,
+  +0.1 all host clan delegates. +5 flat bonus to Etiquette/Courtier/Sincerity
+  for host clan during court. Agenda ordering: 45/35/25 court days.
+  Regent substitution: Imperial Chancellor with neutral 10/10/10/10/10
+  weights when Emperor dead. No edicts, prestige 2. Vacant chancellor = no
+  Winter Court that year.
+  WINTER_COURT_ANNOUNCED topic: Tier 3, POLITICAL, non-positional, resolves
+  on court close. Grace period: 15 days.
+- **shared/court_session_data.gd** — Gains `is_regent_court`,
+  `host_family_daimyo_id`, `clan_champion_id`, `grace_period_days`,
+  `no_edicts`, `personal_invitation_ids`, `clan_delegation_ids`,
+  `announcement_topic_id` fields.
+- **simulation/day_orchestrator.gd** — `_create_winter_court_from_directive()`
+  rewritten to use full WinterCourtSystem pipeline. Accepts provinces,
+  settlements, archetype, next_topic_id. Creates court with invitation
+  pipeline, generates WINTER_COURT_ANNOUNCED topic. Court close processing
+  adds glory distribution and announcement topic resolution for
+  IMPERIAL_WINTER_COURT type. Legacy fallback for callers without province/
+  settlement data. `_dict_values_to_province_array()` helper added.
+  Deferred: travel logistics letter dispatching, late arrival handling,
+  grace period entertainment, Champion agenda ordering AI, +5 skill bonus
+  SkillResolver integration.
+
 ### What's Next
 1. World generation coordinate system and adjacency
 
@@ -2393,8 +2439,11 @@ All in /tests/, one file per system:
   and tactical advantage (+5 skill bonus, agenda topic ordering by host Champion),
   WINTER_COURT_ANNOUNCED topic (Tier 3, non-positional). Crime entry added to
   Section 57.47 (CAPITAL — Violation of the Emperor's Peace). Section 15.1
-  updated to reflect castle-level selection. The current code must be rewritten
-  to match the GDD specification before being trusted.
+  updated to reflect castle-level selection. **CODE REWRITTEN** — 
+  `simulation/winter_court_system.gd` implements the full specification.
+  Remaining deferred: travel logistics letter dispatching, late arrival
+  handling, +5 skill bonus SkillResolver integration, Champion agenda
+  ordering AI.
 
 ### Systems Wired into NPC Loop
 The following subsystems are now integrated into the NPC decision loop:

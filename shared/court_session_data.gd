@@ -31,3 +31,11 @@ enum CourtPhase {
 @export var prestige: int = 1
 @export var commitments_made: Array[Dictionary] = []
 @export var wars_resolved_during: Array[int] = []
+@export var is_regent_court: bool = false
+@export var host_family_daimyo_id: int = -1
+@export var clan_champion_id: int = -1
+@export var grace_period_days: int = 0
+@export var no_edicts: bool = false
+@export var personal_invitation_ids: Array[int] = []
+@export var clan_delegation_ids: Dictionary = {}
+@export var announcement_topic_id: int = -1
