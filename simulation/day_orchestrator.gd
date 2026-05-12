@@ -309,6 +309,7 @@ static func advance_day(
 	var gempukku_results: Dictionary = {}
 	var advancement_results: Dictionary = {}
 	var ronin_results: Dictionary = {}
+	var pregnancy_results: Array[Dictionary] = []
 	var seiyaku_results: Dictionary = {}
 	if current_season != prev_season:
 		# Add the IC year to miya_inputs so per-province blessed-year tracking
@@ -395,6 +396,10 @@ static func advance_day(
 			)
 		var season_count: int = int(season_meta.get("horde_season_count", 0))
 		ronin_results = _process_seasonal_ronin(characters, season_count)
+		pregnancy_results = _process_pregnancy_checks(
+			marriages, characters_by_id, children, dice_engine, ic_day,
+			next_character_id,
+		)
 
 	var horde_results: Dictionary = _process_horde_rolls(
 		current_season, prev_season,
@@ -460,6 +465,7 @@ static func advance_day(
 		"gempukku_results": gempukku_results,
 		"advancement_results": advancement_results,
 		"ronin_results": ronin_results,
+		"pregnancy_results": pregnancy_results,
 		"seiyaku_results": seiyaku_results,
 	}
 
@@ -6056,9 +6062,19 @@ static func _apply_marriage(
 	char_a.spouse_id = b_id
 	char_b.spouse_id = a_id
 
+	var original_clan_a: String = char_a.clan
+	var original_clan_b: String = char_b.clan
+	var original_family_a: String = char_a.family
+	var original_family_b: String = char_b.family
+
 	var moving_id: int = b_id
 	if marriage_type == MarriageSystem.MarriageType.WITHIN_FAMILY:
 		moving_id = -1
+
+	if moving_id >= 0:
+		_reassign_moving_character(
+			char_a, char_b, moving_id, effects,
+		)
 
 	var record: Dictionary = MarriageSystem.create_marriage(
 		a_id, b_id, marriage_type, moving_id, ic_day,
@@ -6069,8 +6085,8 @@ static func _apply_marriage(
 
 	if not clan_baselines.is_empty():
 		CollectiveDisposition.apply_marriage(
-			char_a.clan, char_b.clan,
-			char_a.family, char_b.family,
+			original_clan_a, original_clan_b,
+			original_family_a, original_family_b,
 			clan_baselines, family_baselines,
 		)
 
@@ -6133,6 +6149,28 @@ static func _marriage_type_to_variant(mt: MarriageSystem.MarriageType) -> String
 	return "unknown"
 
 
+static func _reassign_moving_character(
+	char_a: L5RCharacterData,
+	char_b: L5RCharacterData,
+	moving_id: int,
+	effects: Dictionary,
+) -> void:
+	var moving: L5RCharacterData = char_b if moving_id == char_b.character_id else char_a
+	var staying: L5RCharacterData = char_a if moving_id == char_b.character_id else char_b
+
+	moving.birth_clan = moving.clan
+	moving.birth_family = moving.family
+
+	moving.clan = staying.clan
+	moving.family = staying.family
+
+	var new_lord_id: int = effects.get("target_lord_id", -1)
+	if moving_id == char_a.character_id:
+		new_lord_id = effects.get("proposing_lord_id", -1)
+	if new_lord_id >= 0:
+		moving.lord_id = new_lord_id
+
+
 static func _apply_marriage_rejection(
 	effects: Dictionary,
 	characters_by_id: Dictionary,
@@ -6155,6 +6193,75 @@ static func _apply_marriage_rejection(
 		"proposing_lord_id": proposing_lord_id,
 		"disposition_change": disp_change,
 	}
+
+
+# -- Pregnancy Processing (s22.7) -----------------------------------------------
+
+static func _process_pregnancy_checks(
+	marriages: Array,
+	characters_by_id: Dictionary,
+	children: Array[ChildRecord],
+	dice_engine: DiceEngine,
+	ic_day: int,
+	next_character_id: Array[int] = [100000],
+) -> Array[Dictionary]:
+	var results: Array[Dictionary] = []
+
+	for m: Variant in marriages:
+		if not (m is Dictionary):
+			continue
+		var marriage: Dictionary = m
+		if not marriage.get("active", false):
+			continue
+
+		var a_id: int = marriage.get("character_a_id", -1)
+		var b_id: int = marriage.get("character_b_id", -1)
+		var char_a: L5RCharacterData = characters_by_id.get(a_id) as L5RCharacterData
+		var char_b: L5RCharacterData = characters_by_id.get(b_id) as L5RCharacterData
+		if char_a == null or char_b == null:
+			continue
+		if CharacterStats.is_dead(char_a) or CharacterStats.is_dead(char_b):
+			continue
+
+		var same_gender: bool = char_a.gender == char_b.gender
+		if same_gender:
+			continue
+
+		var disp_a_to_b: int = char_a.disposition_values.get(b_id, 0)
+		var disp_b_to_a: int = char_b.disposition_values.get(a_id, 0)
+		var avg_disp: int = int((disp_a_to_b + disp_b_to_a) / 2)
+
+		var roll: float = dice_engine.rand_int_range(1, 10000) / 10000.0
+		if not MarriageSystem.check_pregnancy(avg_disp, roll):
+			continue
+
+		var father: L5RCharacterData = char_a if char_a.gender == "male" else char_b
+		var mother: L5RCharacterData = char_b if char_a.gender == "male" else char_a
+
+		var child_id: int = next_character_id[0]
+		next_character_id[0] += 1
+
+		var child: ChildRecord = GempukkuSystem.create_child_at_birth(
+			child_id, father, mother, father.clan, father.family,
+			ic_day, dice_engine,
+		)
+		children.append(child)
+		father.children_ids.append(child_id)
+		mother.children_ids.append(child_id)
+		if not marriage.has("children_ids"):
+			marriage["children_ids"] = [] as Array[int]
+		(marriage["children_ids"] as Array[int]).append(child_id)
+
+		results.append({
+			"child_id": child_id,
+			"father_id": father.character_id,
+			"mother_id": mother.character_id,
+			"clan": child.clan,
+			"family": child.family,
+			"gender": child.gender,
+		})
+
+	return results
 
 
 # -- Vassal Reassignment (Strategic Review Directives) -------------------------

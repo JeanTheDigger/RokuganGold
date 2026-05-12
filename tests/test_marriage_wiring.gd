@@ -604,3 +604,254 @@ func test_between_families_topic_variant() -> void:
 
 	assert_eq(topics[0].variant, "between_families")
 	assert_eq(topics[0].clan_involved, "Crane")
+
+
+# -- Moving Character Reassignment Tests ----------------------------------------
+
+func test_reassign_moving_character_cross_clan_sets_birth_fields() -> void:
+	var char_a: L5RCharacterData = _make_char(10, "Crane", "Doji")
+	var char_b: L5RCharacterData = _make_char(11, "Lion", "Akodo")
+	var chars_by_id: Dictionary = {10: char_a, 11: char_b}
+	var marriages: Array[Dictionary] = []
+
+	var effects: Dictionary = {
+		"requires_marriage": true,
+		"candidate_a_id": 10,
+		"candidate_b_id": 11,
+		"marriage_type": MarriageSystem.MarriageType.CROSS_CLAN,
+		"proposing_lord_id": 10,
+		"target_lord_id": 11,
+	}
+	DayOrchestrator._apply_marriage(
+		effects, chars_by_id, marriages, 100,
+	)
+
+	assert_eq(char_b.birth_clan, "Lion", "Moving char should preserve original clan")
+	assert_eq(char_b.birth_family, "Akodo", "Moving char should preserve original family")
+	assert_eq(char_b.clan, "Crane", "Moving char should adopt spouse clan")
+	assert_eq(char_b.family, "Doji", "Moving char should adopt spouse family")
+
+
+func test_reassign_moving_character_updates_lord_id() -> void:
+	var char_a: L5RCharacterData = _make_char(10, "Crane", "Doji")
+	char_a.lord_id = -1
+	var char_b: L5RCharacterData = _make_char(11, "Lion", "Akodo")
+	char_b.lord_id = 50
+	var chars_by_id: Dictionary = {10: char_a, 11: char_b}
+	var marriages: Array[Dictionary] = []
+
+	var effects: Dictionary = {
+		"requires_marriage": true,
+		"candidate_a_id": 10,
+		"candidate_b_id": 11,
+		"marriage_type": MarriageSystem.MarriageType.CROSS_CLAN,
+		"proposing_lord_id": 30,
+		"target_lord_id": 40,
+	}
+	DayOrchestrator._apply_marriage(
+		effects, chars_by_id, marriages, 100,
+	)
+
+	assert_eq(char_b.lord_id, 40, "Moving char (b) gets target_lord_id")
+
+
+func test_reassign_within_family_no_reassignment() -> void:
+	var char_a: L5RCharacterData = _make_char(10, "Crane", "Doji")
+	var char_b: L5RCharacterData = _make_char(11, "Crane", "Doji")
+	var chars_by_id: Dictionary = {10: char_a, 11: char_b}
+	var marriages: Array[Dictionary] = []
+
+	var effects: Dictionary = {
+		"requires_marriage": true,
+		"candidate_a_id": 10,
+		"candidate_b_id": 11,
+		"marriage_type": MarriageSystem.MarriageType.WITHIN_FAMILY,
+	}
+	DayOrchestrator._apply_marriage(
+		effects, chars_by_id, marriages, 100,
+	)
+
+	assert_eq(char_b.birth_clan, "", "No birth_clan set for within-family")
+	assert_eq(char_b.birth_family, "", "No birth_family set for within-family")
+	assert_eq(char_b.clan, "Crane", "Clan unchanged")
+	assert_eq(char_b.family, "Doji", "Family unchanged")
+
+
+func test_reassign_between_families_sets_birth_family() -> void:
+	var char_a: L5RCharacterData = _make_char(10, "Crane", "Doji")
+	var char_b: L5RCharacterData = _make_char(11, "Crane", "Kakita")
+	var chars_by_id: Dictionary = {10: char_a, 11: char_b}
+	var marriages: Array[Dictionary] = []
+
+	var effects: Dictionary = {
+		"requires_marriage": true,
+		"candidate_a_id": 10,
+		"candidate_b_id": 11,
+		"marriage_type": MarriageSystem.MarriageType.BETWEEN_FAMILIES,
+		"proposing_lord_id": 30,
+		"target_lord_id": 40,
+	}
+	DayOrchestrator._apply_marriage(
+		effects, chars_by_id, marriages, 100,
+	)
+
+	assert_eq(char_b.birth_clan, "Crane", "Same clan preserved as birth_clan")
+	assert_eq(char_b.birth_family, "Kakita", "Original family preserved")
+	assert_eq(char_b.family, "Doji", "Moved to spouse family")
+
+
+# -- Pregnancy Processing Tests --------------------------------------------------
+
+func test_pregnancy_check_creates_child_on_success() -> void:
+	var father: L5RCharacterData = _make_char(10, "Crane", "Doji")
+	father.gender = "male"
+	var mother: L5RCharacterData = _make_char(11, "Crane", "Doji")
+	mother.gender = "female"
+	father.disposition_values[11] = 70
+	mother.disposition_values[10] = 70
+	var chars_by_id: Dictionary = {10: father, 11: mother}
+
+	var marriage: Dictionary = MarriageSystem.create_marriage(
+		10, 11, MarriageSystem.MarriageType.WITHIN_FAMILY, -1, 50,
+	)
+	var marriages: Array[Dictionary] = [marriage]
+	var children: Array[ChildRecord] = []
+
+	var dice: DiceEngine = DiceEngine.new()
+	dice.set_seed(1)
+
+	var found_child: bool = false
+	for _i: int in range(20):
+		var results: Array[Dictionary] = DayOrchestrator._process_pregnancy_checks(
+			marriages, chars_by_id, children, dice, 100 + _i,
+		)
+		if results.size() > 0:
+			found_child = true
+			assert_eq(results[0]["father_id"], 10)
+			assert_eq(results[0]["mother_id"], 11)
+			assert_eq(results[0]["clan"], "Crane")
+			assert_true(children.size() > 0, "Child added to children array")
+			assert_true(father.children_ids.has(results[0]["child_id"]))
+			assert_true(mother.children_ids.has(results[0]["child_id"]))
+			break
+
+	assert_true(found_child, "Should have produced a child within 20 attempts at high disposition")
+
+
+func test_pregnancy_skips_inactive_marriage() -> void:
+	var father: L5RCharacterData = _make_char(10, "Crane", "Doji")
+	father.gender = "male"
+	var mother: L5RCharacterData = _make_char(11, "Crane", "Doji")
+	mother.gender = "female"
+	father.disposition_values[11] = 70
+	mother.disposition_values[10] = 70
+	var chars_by_id: Dictionary = {10: father, 11: mother}
+
+	var marriage: Dictionary = MarriageSystem.create_marriage(
+		10, 11, MarriageSystem.MarriageType.WITHIN_FAMILY, -1, 50,
+	)
+	marriage["active"] = false
+	var marriages: Array[Dictionary] = [marriage]
+	var children: Array[ChildRecord] = []
+
+	var results: Array[Dictionary] = DayOrchestrator._process_pregnancy_checks(
+		marriages, chars_by_id, children, _dice, 100,
+	)
+	assert_eq(results.size(), 0, "No pregnancy from inactive marriage")
+
+
+func test_pregnancy_skips_dead_spouse() -> void:
+	var father: L5RCharacterData = _make_char(10, "Crane", "Doji")
+	father.gender = "male"
+	father.wounds_taken = 999
+	var mother: L5RCharacterData = _make_char(11, "Crane", "Doji")
+	mother.gender = "female"
+	father.disposition_values[11] = 70
+	mother.disposition_values[10] = 70
+	var chars_by_id: Dictionary = {10: father, 11: mother}
+
+	var marriage: Dictionary = MarriageSystem.create_marriage(
+		10, 11, MarriageSystem.MarriageType.WITHIN_FAMILY, -1, 50,
+	)
+	var marriages: Array[Dictionary] = [marriage]
+	var children: Array[ChildRecord] = []
+
+	var results: Array[Dictionary] = DayOrchestrator._process_pregnancy_checks(
+		marriages, chars_by_id, children, _dice, 100,
+	)
+	assert_eq(results.size(), 0, "No pregnancy when spouse is dead")
+
+
+func test_pregnancy_skips_same_gender_non_bisexual() -> void:
+	var char_a: L5RCharacterData = _make_char(10, "Crane", "Doji")
+	char_a.gender = "male"
+	var char_b: L5RCharacterData = _make_char(11, "Crane", "Doji")
+	char_b.gender = "male"
+	char_a.disposition_values[11] = 70
+	char_b.disposition_values[10] = 70
+	var chars_by_id: Dictionary = {10: char_a, 11: char_b}
+
+	var marriage: Dictionary = MarriageSystem.create_marriage(
+		10, 11, MarriageSystem.MarriageType.WITHIN_FAMILY, -1, 50,
+	)
+	var marriages: Array[Dictionary] = [marriage]
+	var children: Array[ChildRecord] = []
+
+	var results: Array[Dictionary] = DayOrchestrator._process_pregnancy_checks(
+		marriages, chars_by_id, children, _dice, 100,
+	)
+	assert_eq(results.size(), 0, "Same-gender couples cannot have biological children")
+
+
+func test_pregnancy_zero_chance_at_hostile_disposition() -> void:
+	var father: L5RCharacterData = _make_char(10, "Crane", "Doji")
+	father.gender = "male"
+	var mother: L5RCharacterData = _make_char(11, "Crane", "Doji")
+	mother.gender = "female"
+	father.disposition_values[11] = -50
+	mother.disposition_values[10] = -50
+	var chars_by_id: Dictionary = {10: father, 11: mother}
+
+	var marriage: Dictionary = MarriageSystem.create_marriage(
+		10, 11, MarriageSystem.MarriageType.WITHIN_FAMILY, -1, 50,
+	)
+	var marriages: Array[Dictionary] = [marriage]
+	var children: Array[ChildRecord] = []
+
+	for _i: int in range(50):
+		var results: Array[Dictionary] = DayOrchestrator._process_pregnancy_checks(
+			marriages, chars_by_id, children, _dice, 100 + _i,
+		)
+		assert_eq(results.size(), 0, "Hostile disposition = 0% pregnancy chance")
+
+
+func test_pregnancy_adds_child_to_marriage_record() -> void:
+	var father: L5RCharacterData = _make_char(10, "Crane", "Doji")
+	father.gender = "male"
+	var mother: L5RCharacterData = _make_char(11, "Crane", "Doji")
+	mother.gender = "female"
+	father.disposition_values[11] = 80
+	mother.disposition_values[10] = 80
+	var chars_by_id: Dictionary = {10: father, 11: mother}
+
+	var marriage: Dictionary = MarriageSystem.create_marriage(
+		10, 11, MarriageSystem.MarriageType.WITHIN_FAMILY, -1, 50,
+	)
+	var marriages: Array[Dictionary] = [marriage]
+	var children: Array[ChildRecord] = []
+
+	var dice: DiceEngine = DiceEngine.new()
+	dice.set_seed(1)
+
+	var found: bool = false
+	for _i: int in range(20):
+		var results: Array[Dictionary] = DayOrchestrator._process_pregnancy_checks(
+			marriages, chars_by_id, children, dice, 100 + _i,
+		)
+		if results.size() > 0:
+			found = true
+			var m_children: Array = marriage.get("children_ids", [])
+			assert_true(m_children.has(results[0]["child_id"]), "Marriage record tracks child")
+			break
+
+	assert_true(found, "Should have produced a child")

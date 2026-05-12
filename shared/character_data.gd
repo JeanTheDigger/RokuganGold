@@ -180,6 +180,8 @@ extends Resource
 @export var sibling_ids: Array[int] = []
 @export var children_ids: Array[int] = []
 @export var spouse_id: int = -1
+@export var birth_clan: String = ""
+@export var birth_family: String = ""
 @export var grandparent_records: Array[AncestorRecord] = []
 @export var great_grandparent_records: Array[AncestorRecord] = []
 
