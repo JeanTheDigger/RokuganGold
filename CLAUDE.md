@@ -2653,6 +2653,13 @@ All in /tests/, one file per system:
 
 ### What's Next
 1. World generation coordinate system and adjacency
+2. GDD sections 4.3.21 (worship infrastructure) and 4.3.22 (settlement
+   founding / fortification building) — required before infrastructure
+   ActionIDs (FOUND_VILLAGE, BUILD_FORTIFICATION, BUILD_SHRINE,
+   FOUND_TEMPLE, FOUND_MONASTERY) can be fully wired into the NPC loop.
+   COMMISSION_SHIP also needs s4.3.22 for construction queue mechanics.
+   The NPC scoring tables and context lists are already in place (s57.20);
+   only the executor → orchestrator mutation pipeline is missing.
 
 ### Pending Redesign
 (None currently pending.)
