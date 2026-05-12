@@ -6944,21 +6944,22 @@ static func _populate_infrastructure_intelligence(
 			province_settlements[s.province_id] = []
 		province_settlements[s.province_id].append(s)
 
+	var wp_data: Dictionary = worship_state.get("province_wp", {})
+
 	for pid: Variant in provinces:
 		var prov: ProvinceData = provinces[pid]
 		var p_settlements: Array = province_settlements.get(pid, [])
 
-		# Worship failure: check worship_state for any province with RESTLESS+ tier
-		var wp_data: Dictionary = worship_state.get("province_wp", {})
-		var prov_wp: Dictionary = wp_data.get(pid, {})
-		if not prov_wp.is_empty():
-			var any_failing: bool = false
-			for fortune_key: Variant in prov_wp:
-				var wp_val: float = float(prov_wp[fortune_key])
-				if wp_val < 10.0:
-					any_failing = true
-					break
-			if any_failing:
+		# Worship failure: use WorshipSystem threshold evaluation
+		if not wp_data.is_empty():
+			var prov_wp: Dictionary = wp_data.get(pid, {})
+			var tiers: Dictionary = WorshipSystem.evaluate_province_thresholds(prov_wp)
+			var worst_tier: int = Enums.WorshipTier.NONE
+			for fortune_key: Variant in tiers:
+				var tier: int = int(tiers[fortune_key])
+				if tier > worst_tier:
+					worst_tier = tier
+			if worst_tier > Enums.WorshipTier.NONE:
 				worship_failing[int(pid)] = prov.clan
 
 		# Border province without fortification

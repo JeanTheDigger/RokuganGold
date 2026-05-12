@@ -511,7 +511,7 @@ All in /tests/, one file per system:
 - test_npc_advancement.gd (~56 tests)
 - test_ronin_system.gd (~44 tests)
 - test_musha_shugyo_system.gd (~75 tests)
-- test_governance_wiring.gd (~69 tests)
+- test_governance_wiring.gd (~76 tests)
 - test_marriage_wiring.gd (~65 tests)
 - test_worship_system.gd (~67 tests)
 - test_worship_wiring.gd (~50 tests)

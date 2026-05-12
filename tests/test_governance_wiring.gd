@@ -1342,3 +1342,101 @@ func test_vacancy_registry_tracks_new_settlement() -> void:
 			assert_eq(registry[key], 0, "New vacancy should start at season 0")
 			break
 	assert_true(found_key, "Temple Head vacancy should be in registry")
+
+
+# -- Worship Failure Detection Tests ------------------------------------------
+
+func _make_worship_state_with_province(
+	pid: int, fortune_wp: Dictionary,
+) -> Dictionary:
+	return {"province_wp": {pid: fortune_wp}}
+
+
+func test_worship_failure_detected_when_below_threshold() -> void:
+	# Province with some WP below the 10.0 threshold → should be flagged
+	var prov := _make_province(10, "Crane")
+	var fortune_wp: Dictionary = {}
+	for f: int in range(7):
+		fortune_wp[f] = 5.0  # 50% of threshold → DISPLEASED
+	var worship_state: Dictionary = _make_worship_state_with_province(10, fortune_wp)
+
+	var ws: Dictionary = {}
+	DayOrchestrator._populate_infrastructure_intelligence(ws, {10: prov}, [], [], worship_state)
+	var failing: Dictionary = ws.get("worship_failing_province_ids", {})
+	assert_true(failing.has(10), "Province below threshold should be flagged as failing")
+
+
+func test_worship_not_failing_when_at_threshold() -> void:
+	# Province with all fortunes at exactly 10.0 WP → NONE tier → not failing
+	var prov := _make_province(10, "Crane")
+	var fortune_wp: Dictionary = {}
+	for f: int in range(7):
+		fortune_wp[f] = 10.0
+	var worship_state: Dictionary = _make_worship_state_with_province(10, fortune_wp)
+
+	var ws: Dictionary = {}
+	DayOrchestrator._populate_infrastructure_intelligence(ws, {10: prov}, [], [], worship_state)
+	var failing: Dictionary = ws.get("worship_failing_province_ids", {})
+	assert_false(failing.has(10), "Province at threshold should not be flagged")
+
+
+func test_worship_failure_wrathful_when_zero_wp() -> void:
+	# Province in wp_data but with zero WP → WRATHFUL for all fortunes
+	var prov := _make_province(10, "Crane")
+	var fortune_wp: Dictionary = WorshipSystem.make_initial_province_worship()
+	var worship_state: Dictionary = _make_worship_state_with_province(10, fortune_wp)
+
+	var ws: Dictionary = {}
+	DayOrchestrator._populate_infrastructure_intelligence(ws, {10: prov}, [], [], worship_state)
+	var failing: Dictionary = ws.get("worship_failing_province_ids", {})
+	assert_true(failing.has(10), "Zero WP province should be flagged as failing")
+
+
+func test_worship_failure_empty_worship_state_no_flag() -> void:
+	# Empty worship state (system not initialized) → should NOT flag any provinces
+	var prov := _make_province(10, "Crane")
+	var ws: Dictionary = {}
+	DayOrchestrator._populate_infrastructure_intelligence(ws, {10: prov}, [], [], {})
+	var failing: Dictionary = ws.get("worship_failing_province_ids", {})
+	assert_false(failing.has(10), "Empty worship state should not flag provinces")
+
+
+func test_worship_failure_one_fortune_below() -> void:
+	# 6 fortunes at threshold, 1 below → should still flag
+	var prov := _make_province(10, "Crane")
+	var fortune_wp: Dictionary = {}
+	for f: int in range(7):
+		fortune_wp[f] = 10.0
+	fortune_wp[3] = 2.0  # Fortune 3 (Ebisu) at 20% → WRATHFUL
+	var worship_state: Dictionary = _make_worship_state_with_province(10, fortune_wp)
+
+	var ws: Dictionary = {}
+	DayOrchestrator._populate_infrastructure_intelligence(ws, {10: prov}, [], [], worship_state)
+	var failing: Dictionary = ws.get("worship_failing_province_ids", {})
+	assert_true(failing.has(10), "One fortune below threshold should flag province")
+
+
+func test_worship_failure_restless_tier_flagged() -> void:
+	# Province at 75-99% of threshold → RESTLESS (still failing)
+	var prov := _make_province(10, "Crane")
+	var fortune_wp: Dictionary = {}
+	for f: int in range(7):
+		fortune_wp[f] = 10.0
+	fortune_wp[0] = 8.0  # 80% of 10.0 → RESTLESS
+	var worship_state: Dictionary = _make_worship_state_with_province(10, fortune_wp)
+
+	var ws: Dictionary = {}
+	DayOrchestrator._populate_infrastructure_intelligence(ws, {10: prov}, [], [], worship_state)
+	var failing: Dictionary = ws.get("worship_failing_province_ids", {})
+	assert_true(failing.has(10), "RESTLESS tier should still count as failing")
+
+
+func test_worship_failure_province_not_in_wp_data() -> void:
+	# Province exists but has no entry in wp_data → flagged (genuinely no worship)
+	var prov := _make_province(10, "Crane")
+	var worship_state: Dictionary = {"province_wp": {20: {}}}  # Different province
+
+	var ws: Dictionary = {}
+	DayOrchestrator._populate_infrastructure_intelligence(ws, {10: prov}, [], [], worship_state)
+	var failing: Dictionary = ws.get("worship_failing_province_ids", {})
+	assert_true(failing.has(10), "Province absent from wp_data should be flagged")
