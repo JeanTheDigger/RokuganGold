@@ -218,6 +218,9 @@ single-dice-entry-point and server-authoritative constraints.
   competence_table (ranks 0-10), disposition_tiers (8 tiers),
   urgency_rules (10 rules), topic_position_alignment (24 NeedTypes with
   per-NeedType strong_support/strong_opposition caps per GDD s55.26 Annex H).
+  SEEK_PEACE position inversion: pro-war NPCs (positive position on war
+  topics) get −15 penalty, anti-war NPCs get +15 bonus — position inverted
+  before interpolation per GDD special case note.
 
 ### Objective Decomposition
 - **simulation/objective_decomposer.gd** — Routes standing objectives to
@@ -477,7 +480,7 @@ All in /tests/, one file per system:
 - test_time_system.gd (~15 tests)
 - test_skill_resolver.gd (~20 tests)
 - test_action_point_system.gd (~12 tests)
-- test_npc_decision_engine.gd (~89 tests)
+- test_npc_decision_engine.gd (~92 tests)
 - test_scoring_table_loader.gd (~15 tests)
 - test_action_executor.gd (~35 tests)
 - test_effect_applicator.gd (~37 tests)
