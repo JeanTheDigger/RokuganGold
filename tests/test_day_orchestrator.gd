@@ -1509,3 +1509,108 @@ func test_supply_sharing_receiver_not_starving_skips() -> void:
 	)
 
 	assert_eq(results.size(), 0, "Well-fed receiver needs no sharing")
+
+
+# -- Urgency data injection tests -----------------------------------------------
+
+func test_inject_urgency_data_favors() -> void:
+	var ws: Dictionary = {1: {}}
+	var c := L5RCharacterData.new()
+	c.character_id = 1
+	var favors: Array = [FavorData.new()]
+	DayOrchestrator._inject_urgency_data(
+		ws, [c], favors, [], [], {}, [],
+	)
+	assert_eq(ws[1]["favors"], favors)
+
+
+func test_inject_urgency_data_active_tethers() -> void:
+	var ws: Dictionary = {1: {}}
+	var c := L5RCharacterData.new()
+	c.character_id = 1
+	var tethers: Array[Dictionary] = [{"army_id": 5, "overall_state": 2}]
+	DayOrchestrator._inject_urgency_data(
+		ws, [c], [], tethers, [], {}, [],
+	)
+	assert_eq(ws[1]["active_tethers"], tethers)
+
+
+func test_inject_urgency_data_active_topics() -> void:
+	var ws: Dictionary = {1: {}}
+	var c := L5RCharacterData.new()
+	c.character_id = 1
+	var topics: Array[TopicData] = [TopicData.new()]
+	DayOrchestrator._inject_urgency_data(
+		ws, [c], [], [], [], {}, topics,
+	)
+	assert_eq(ws[1]["active_topics"], topics)
+
+
+func test_inject_urgency_data_objective_stalled_seasons() -> void:
+	var ws: Dictionary = {1: {}}
+	var c := L5RCharacterData.new()
+	c.character_id = 1
+	var objectives_map: Dictionary = {
+		1: {"primary": {"need_type": "CONQUER_PROVINCE", "seasons_without_progress": 3}},
+	}
+	DayOrchestrator._inject_urgency_data(
+		ws, [c], [], [], [], objectives_map, [],
+	)
+	assert_eq(ws[1]["objective_stalled_seasons"], 3)
+
+
+func test_inject_urgency_data_no_primary_objective() -> void:
+	var ws: Dictionary = {1: {}}
+	var c := L5RCharacterData.new()
+	c.character_id = 1
+	DayOrchestrator._inject_urgency_data(
+		ws, [c], [], [], [], {}, [],
+	)
+	assert_eq(ws[1]["objective_stalled_seasons"], 0)
+
+
+func test_inject_urgency_data_besieged_settlement() -> void:
+	var ws: Dictionary = {1: {}}
+	var c := L5RCharacterData.new()
+	c.character_id = 1
+	c.physical_location = "42"
+	var siege: Dictionary = SiegeSystem.create_siege_state(42, 1, 2, 0.5, 10.0, 1.0)
+	DayOrchestrator._inject_urgency_data(
+		ws, [c], [], [], [siege], {}, [],
+	)
+	assert_true(ws[1]["besieged_settlement_health_pct"] < 1.0, "Besieged location should have pct < 1")
+
+
+func test_inject_urgency_data_starved_garrison() -> void:
+	var ws: Dictionary = {1: {}}
+	var c := L5RCharacterData.new()
+	c.character_id = 1
+	c.physical_location = "42"
+	var siege: Dictionary = SiegeSystem.create_siege_state(42, 1, 2, 0.0, 10.0, 1.0)
+	siege["garrison_starved"] = true
+	DayOrchestrator._inject_urgency_data(
+		ws, [c], [], [], [siege], {}, [],
+	)
+	assert_eq(ws[1]["besieged_settlement_health_pct"], 0.0, "Starved garrison = 0 pct")
+
+
+func test_inject_urgency_data_not_besieged() -> void:
+	var ws: Dictionary = {1: {}}
+	var c := L5RCharacterData.new()
+	c.character_id = 1
+	c.physical_location = "99"
+	var siege: Dictionary = SiegeSystem.create_siege_state(42, 1, 2, 0.5, 10.0, 1.0)
+	DayOrchestrator._inject_urgency_data(
+		ws, [c], [], [], [siege], {}, [],
+	)
+	assert_eq(ws[1]["besieged_settlement_health_pct"], 1.0, "Not at besieged settlement")
+
+
+func test_inject_urgency_data_creates_ws_for_unknown_character() -> void:
+	var ws: Dictionary = {}
+	var c := L5RCharacterData.new()
+	c.character_id = 5
+	DayOrchestrator._inject_urgency_data(
+		ws, [c], [], [], [], {}, [],
+	)
+	assert_true(ws.has(5), "Should create per-character ws dict")

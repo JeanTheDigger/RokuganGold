@@ -137,6 +137,11 @@ static func advance_day(
 	)
 	_apply_naval_battle_mutations(naval_battle_results, ships, characters_by_id)
 
+	_inject_urgency_data(
+		world_states, characters, favors, active_tethers, active_sieges,
+		objectives_map, active_topics,
+	)
+
 	var day_result: Dictionary = NPCWaveResolver.resolve_day_applied(
 		characters, world_states, objectives_map, scoring_tables, filter_data,
 		dice_engine, action_skill_map, characters_by_id, provinces, action_log,
@@ -3949,6 +3954,46 @@ static func _consume_supply_status_results(
 				clan, result.get("retreat", {}), active_armies,
 				active_topics, next_topic_id, ic_day,
 			)
+
+
+static func _inject_urgency_data(
+	world_states: Dictionary,
+	characters: Array[L5RCharacterData],
+	favors: Array,
+	active_tethers: Array[Dictionary],
+	active_sieges: Array[Dictionary],
+	objectives_map: Dictionary,
+	active_topics: Array[TopicData],
+) -> void:
+	var besieged_settlements: Dictionary = {}
+	for siege: Dictionary in active_sieges:
+		if siege.get("siege_ended", false):
+			continue
+		var sid: int = siege.get("settlement_id", -1)
+		if sid >= 0:
+			if siege.get("garrison_starved", false):
+				besieged_settlements[sid] = 0.0
+			else:
+				var rice: float = siege.get("rice_stockpile", 1.0)
+				var pu: float = siege.get("garrison_pu", 1.0) + siege.get("civilian_pu", 0.0)
+				var rice_per_pu: float = rice / maxf(pu, 0.01)
+				besieged_settlements[sid] = clampf(rice_per_pu, 0.0, 1.0)
+
+	for c: L5RCharacterData in characters:
+		var ws: Dictionary = world_states.get(c.character_id, {})
+		if ws.is_empty():
+			ws = {}
+			world_states[c.character_id] = ws
+		ws["favors"] = favors
+		ws["active_tethers"] = active_tethers
+		ws["active_topics"] = active_topics
+		var primary: Dictionary = objectives_map.get(c.character_id, {}).get("primary", {})
+		ws["objective_stalled_seasons"] = primary.get("seasons_without_progress", 0)
+		var loc: int = int(c.physical_location) if c.physical_location.is_valid_int() else -1
+		if besieged_settlements.has(loc):
+			ws["besieged_settlement_health_pct"] = besieged_settlements[loc]
+		else:
+			ws["besieged_settlement_health_pct"] = 1.0
 
 
 static func _inject_edict_reactive_events(
