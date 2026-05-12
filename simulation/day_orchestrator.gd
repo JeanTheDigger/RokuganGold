@@ -4853,23 +4853,35 @@ static func _process_active_courts(
 							break
 			var topic_dict: Dictionary = CourtSystem.generate_court_close_topic(court)
 			if not topic_dict.is_empty():
-				var t := TopicData.new()
-				t.topic_id = next_topic_id[0]
-				next_topic_id[0] += 1
-				t.topic_type = topic_dict.get("topic_type", "court_session")
-				t.variant = topic_dict.get("variant", "")
-				t.slug = topic_dict.get("slug", "")
-				t.tier = topic_dict.get("tier", TopicData.Tier.TIER_4)
-				t.category = topic_dict.get("category", TopicData.Category.POLITICAL)
-				t.momentum = topic_dict.get("momentum", 5.0)
-				t.clan_involved = topic_dict.get("clan_involved", "")
-				t.ic_day_created = ic_day
+				var t: TopicData = _topic_from_dict(topic_dict, next_topic_id, ic_day)
 				active_topics.append(t)
 				close_result["topic_id"] = t.topic_id
 			results.append(close_result)
 		else:
 			results.append(advance_result)
 	return results
+
+
+static func _topic_from_dict(
+	topic_dict: Dictionary,
+	next_topic_id: Array[int],
+	ic_day: int,
+) -> TopicData:
+	var t := TopicData.new()
+	t.topic_id = next_topic_id[0]
+	next_topic_id[0] += 1
+	t.topic_type = topic_dict.get("topic_type", "")
+	t.variant = topic_dict.get("variant", "")
+	t.slug = topic_dict.get("slug", "")
+	t.tier = topic_dict.get("tier", TopicData.Tier.TIER_4)
+	t.category = topic_dict.get("category", TopicData.Category.POLITICAL)
+	t.momentum = topic_dict.get("momentum", 11.0)
+	t.clan_involved = topic_dict.get("clan_involved", "")
+	t.subject_character_id = topic_dict.get("subject_character_id", -1)
+	t.subject_role = topic_dict.get("subject_role", "NEUTRAL")
+	t.provinces_affected = topic_dict.get("provinces_affected", [])
+	t.ic_day_created = ic_day
+	return t
 
 
 static func _generate_court_edicts(
@@ -4909,18 +4921,7 @@ static func _generate_court_edicts(
 		active_edicts.append(edict)
 		var topic_dict: Dictionary = ImperialEdictSystem.generate_edict_topic(edict)
 		if not topic_dict.is_empty():
-			var t := TopicData.new()
-			t.topic_id = next_topic_id[0]
-			next_topic_id[0] += 1
-			t.topic_type = topic_dict.get("topic_type", "imperial_edict")
-			t.variant = topic_dict.get("variant", "")
-			t.slug = topic_dict.get("slug", "")
-			t.tier = topic_dict.get("tier", TopicData.Tier.TIER_1)
-			t.category = topic_dict.get("category", TopicData.Category.POLITICAL)
-			t.momentum = topic_dict.get("momentum", 80.0)
-			t.clan_involved = topic_dict.get("clan_involved", "")
-			t.subject_character_id = topic_dict.get("subject_character_id", -1)
-			t.ic_day_created = ic_day
+			var t: TopicData = _topic_from_dict(topic_dict, next_topic_id, ic_day)
 			active_topics.append(t)
 	return edicts
 
@@ -5187,18 +5188,7 @@ static func _process_edict_compliance(
 		var topic_dict: Dictionary = r.get("defiance_topic", {})
 		if topic_dict.is_empty():
 			continue
-		var t := TopicData.new()
-		t.topic_id = next_topic_id[0]
-		next_topic_id[0] += 1
-		t.topic_type = topic_dict.get("topic_type", "edict_defiance")
-		t.variant = topic_dict.get("variant", "")
-		t.slug = topic_dict.get("slug", "")
-		t.tier = topic_dict.get("tier", TopicData.Tier.TIER_1)
-		t.category = topic_dict.get("category", TopicData.Category.POLITICAL)
-		t.momentum = topic_dict.get("momentum", 90.0)
-		t.clan_involved = topic_dict.get("clan_involved", "")
-		t.subject_character_id = topic_dict.get("subject_character_id", -1)
-		t.ic_day_created = ic_day
+		var t: TopicData = _topic_from_dict(topic_dict, next_topic_id, ic_day)
 		active_topics.append(t)
 		r["defiance_topic_id"] = t.topic_id
 	return results
@@ -5385,18 +5375,7 @@ static func _create_winter_court_from_directive(
 	var topic_info: Dictionary = WinterCourtSystem.generate_announcement_topic(
 		host_daimyo_id, host_clan, host_result.get("province_id", -1)
 	)
-	var topic := TopicData.new()
-	topic.topic_id = next_topic_id[0]
-	next_topic_id[0] += 1
-	topic.topic_type = topic_info.get("topic_type", "")
-	topic.variant = topic_info.get("variant", "")
-	topic.slug = topic_info.get("slug", "")
-	topic.tier = topic_info.get("tier", TopicData.Tier.TIER_3)
-	topic.category = topic_info.get("category", TopicData.Category.POLITICAL)
-	topic.momentum = topic_info.get("momentum", 40.0)
-	topic.resolved = false
-	topic.clan_involved = topic_info.get("clan_involved", "")
-	topic.provinces_affected = topic_info.get("provinces_affected", [])
+	var topic: TopicData = _topic_from_dict(topic_info, next_topic_id, ic_day)
 	active_topics.append(topic)
 	court.announcement_topic_id = topic.topic_id
 
