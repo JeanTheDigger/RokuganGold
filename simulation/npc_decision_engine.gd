@@ -72,6 +72,9 @@ static func build_context(
 			ctx.disposition_values[other_id] = combined
 	ctx.known_topics = character.topic_pool.duplicate()
 	ctx.known_positions = character.topic_positions.duplicate()
+	ctx.known_topic_types = _build_known_topic_types(
+		character.topic_pool, world_state.get("active_topics", []),
+	)
 	ctx.known_objectives = world_state.get("known_objectives", {})
 	ctx.known_contacts = world_state.get("known_contacts", [] as Array[int])
 	ctx.contact_clans = world_state.get("contact_clans", {})
@@ -1050,6 +1053,25 @@ static func _compute_standing_influence(
 	return clampf(raw, 0.0, 15.0)
 
 
+static func _build_known_topic_types(
+	topic_pool: Array[int],
+	active_topics: Array,
+) -> Dictionary:
+	var result: Dictionary = {}
+	for topic: Variant in active_topics:
+		var tid: int = -1
+		var tt: String = ""
+		if topic is Dictionary:
+			tid = int(topic.get("topic_id", -1))
+			tt = topic.get("topic_type", "")
+		elif topic is Resource:
+			tid = topic.topic_id
+			tt = topic.topic_type
+		if tid >= 0 and tid in topic_pool and tt != "":
+			result[tid] = tt
+	return result
+
+
 static func _compute_topic_position_modifier(
 	_action_id: String,
 	need: NPCDataStructures.ImmediateNeed,
@@ -1065,8 +1087,13 @@ static func _compute_topic_position_modifier(
 		return 0.0
 
 	var invert: bool = need.need_type == "SEEK_PEACE"
+	var type_filter: Array = need_entry.get("topic_types", [])
 	var best_modifier: float = 0.0
 	for topic_id in ctx.known_topics:
+		if not type_filter.is_empty():
+			var tt: String = ctx.known_topic_types.get(topic_id, "")
+			if not tt.is_empty() and tt not in type_filter:
+				continue
 		var position: float = float(ctx.known_positions.get(topic_id, 0))
 		if invert:
 			position = -position

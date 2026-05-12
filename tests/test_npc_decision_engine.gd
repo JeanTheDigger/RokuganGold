@@ -1096,3 +1096,127 @@ func test_seek_peace_neutral_position_zero() -> void:
 		"NEGOTIATE_SURRENDER", need, ctx, tables,
 	)
 	assert_eq(result, 0.0, "Neutral position should still be zero after inversion")
+
+
+# -- Topic type filtering tests -------------------------------------------------
+
+func test_build_known_topic_types_from_topic_data() -> void:
+	var t1 := TopicData.new()
+	t1.topic_id = 10
+	t1.topic_type = "Clan_War"
+	var t2 := TopicData.new()
+	t2.topic_id = 20
+	t2.topic_type = "Provincial_Famine"
+	var t3 := TopicData.new()
+	t3.topic_id = 30
+	t3.topic_type = ""
+	var pool: Array[int] = [10, 20, 30]
+	var result: Dictionary = NPCDecisionEngine._build_known_topic_types(pool, [t1, t2, t3])
+	assert_eq(result.get(10, ""), "Clan_War")
+	assert_eq(result.get(20, ""), "Provincial_Famine")
+	assert_false(result.has(30), "Empty topic_type should be excluded")
+
+
+func test_build_known_topic_types_from_dicts() -> void:
+	var topics: Array = [
+		{"topic_id": 5, "topic_type": "Siege_Beginning"},
+		{"topic_id": 6, "topic_type": "Betrayal"},
+	]
+	var pool: Array[int] = [5, 6]
+	var result: Dictionary = NPCDecisionEngine._build_known_topic_types(pool, topics)
+	assert_eq(result.get(5, ""), "Siege_Beginning")
+	assert_eq(result.get(6, ""), "Betrayal")
+
+
+func test_build_known_topic_types_filters_by_pool() -> void:
+	var t1 := TopicData.new()
+	t1.topic_id = 10
+	t1.topic_type = "Clan_War"
+	var t2 := TopicData.new()
+	t2.topic_id = 20
+	t2.topic_type = "Provincial_Raid"
+	var pool: Array[int] = [10]
+	var result: Dictionary = NPCDecisionEngine._build_known_topic_types(pool, [t1, t2])
+	assert_true(result.has(10))
+	assert_false(result.has(20), "Topic not in pool should be excluded")
+
+
+func test_topic_type_filter_levy_troops_matches_war_topic() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.known_topics = [1]
+	ctx.known_positions = {1: 40.0}
+	ctx.known_topic_types = {1: "Clan_War"}
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "LEVY_TROOPS"
+	var tables: Dictionary = {
+		"topic_position_alignment": {
+			"LEVY_TROOPS": {
+				"strong_support": 15, "strong_opposition": -10,
+				"topic_types": ["Clan_War", "Provincial_Raid", "Shadowlands_Incursion", "Siege_Beginning"],
+			},
+		},
+	}
+	var result: float = NPCDecisionEngine._compute_topic_position_modifier(
+		"LEVY_TROOPS", need, ctx, tables,
+	)
+	assert_true(result > 0.0, "War topic should produce positive modifier for LEVY_TROOPS")
+
+
+func test_topic_type_filter_levy_troops_skips_famine_topic() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.known_topics = [1]
+	ctx.known_positions = {1: 40.0}
+	ctx.known_topic_types = {1: "Provincial_Famine"}
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "LEVY_TROOPS"
+	var tables: Dictionary = {
+		"topic_position_alignment": {
+			"LEVY_TROOPS": {
+				"strong_support": 15, "strong_opposition": -10,
+				"topic_types": ["Clan_War", "Provincial_Raid", "Shadowlands_Incursion", "Siege_Beginning"],
+			},
+		},
+	}
+	var result: float = NPCDecisionEngine._compute_topic_position_modifier(
+		"LEVY_TROOPS", need, ctx, tables,
+	)
+	assert_eq(result, 0.0, "Famine topic should not boost LEVY_TROOPS")
+
+
+func test_topic_type_filter_empty_array_matches_all() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.known_topics = [1]
+	ctx.known_positions = {1: 40.0}
+	ctx.known_topic_types = {1: "Whatever_Type"}
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "RAISE_DISPOSITION"
+	var tables: Dictionary = {
+		"topic_position_alignment": {
+			"RAISE_DISPOSITION": {"strong_support": 15, "strong_opposition": -15},
+		},
+	}
+	var result: float = NPCDecisionEngine._compute_topic_position_modifier(
+		"CHARM", need, ctx, tables,
+	)
+	assert_true(result > 0.0, "No topic_types filter should match all topics")
+
+
+func test_topic_type_filter_unknown_type_passes_through() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.known_topics = [1]
+	ctx.known_positions = {1: 40.0}
+	ctx.known_topic_types = {}
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "LEVY_TROOPS"
+	var tables: Dictionary = {
+		"topic_position_alignment": {
+			"LEVY_TROOPS": {
+				"strong_support": 15, "strong_opposition": -10,
+				"topic_types": ["Clan_War", "Provincial_Raid"],
+			},
+		},
+	}
+	var result: float = NPCDecisionEngine._compute_topic_position_modifier(
+		"LEVY_TROOPS", need, ctx, tables,
+	)
+	assert_true(result > 0.0, "Topic with unknown type should pass through filter")
