@@ -496,6 +496,7 @@ All in /tests/, one file per system:
 - test_oni_generator.gd (~80 tests)
 - test_naval_system.gd (~113 tests)
 - test_naval_combat_system.gd (~46 tests)
+- test_naval_wiring.gd (~35 tests)
 
 ### Festival System (s11.5)
 - **simulation/festival_system.gd** — Empire-wide canonical festivals, Rokuyo
@@ -2295,9 +2296,46 @@ All in /tests/, one file per system:
   destroyed (non-Koutetsukan) ships with prize value (half construction cost).
   **River modifiers** — downstream +1 Atk, upstream −1 Atk applied at battle
   start via `_apply_river_modifiers()`.
-  Deferred: DayOrchestrator wiring for naval battles, Tortoise Escape Attempt
-  integration into battle round, Heroic Opportunities at sea (Category 9),
-  ship capture/destruction post-battle mutations.
+  Deferred: Tortoise Escape Attempt integration into battle round,
+  Heroic Opportunities at sea (Category 9).
+
+### Naval System DayOrchestrator Wiring (s11.9)
+- **DayOrchestrator naval processing** — Six naval functions wired into the
+  daily tick loop:
+  `_process_naval_weather()` rolls daily weather via
+  `NavalSystem.determine_weather()`, stores result in
+  `season_meta["current_naval_weather"]`. Single global weather per day
+  (placeholder until sub-tile weather system exists).
+  `_process_ship_movement()` decrements `movement_days_remaining` for all
+  active ships. On arrival: updates `current_subtile_id`, clears movement
+  state. Deep ocean loss: non-ocean-capable ships have 10% catastrophic
+  loss chance on arrival (per GDD). `ShipData.is_destroyed` set on loss.
+  `_process_naval_battle_triggers()` groups stationary ships by sub-tile,
+  finds hostile clan pairs via `WarSystem.are_clans_at_war()`, resolves
+  naval combat via `NavalCombatSystem.resolve_naval_battle()`. Excludes
+  destroyed, captured, moving, and docked (subtile_id < 0) ships.
+  `_resolve_naval_engagement()` builds battle states from ShipData arrays
+  with captain bonuses (Battle skill rank, ring-determined type). Kobune
+  at col > 0 placed in Reserve Row for ranged support.
+  `_apply_naval_battle_mutations()` writes battle results back to ShipData:
+  health updates, destroyed/captured flags, captured_by_clan assignment,
+  captain cleared from ship on captain death.
+  `_process_naval_war_scores()` feeds naval battle outcomes into war score:
+  minor (1-3 ships, +3), major (4-7, +8), decisive (8+, +15). Uses
+  `WarSystem.apply_score_shift()`.
+  `_generate_naval_battle_topics()` creates Tier 3 MILITARY topics with
+  `naval_battle` variant and momentum 30 for each engagement.
+  `_compute_captain_bonus()` mirrors ArmyCombatSystem commander bonus:
+  Battle skill rank as value, highest Ring determines type (Fire/Water →
+  attack, Earth/Air → defense, Void → morale).
+  New param on `advance_day()`: `ships: Array[ShipData]`.
+  Return dict gains `naval_weather`, `naval_movement_results`,
+  `naval_battle_results`, `naval_topics`.
+  WorldStateData gains `ships: Array[ShipData]` field, threaded through
+  `advance_one_day()`.
+  Deferred: ship movement initiation (needs coordinate system for
+  pathfinding), weather per-sub-tile (needs sub-tile system), naval
+  blockade integration.
 
 ### What's Next
 1. World generation coordinate system and adjacency
@@ -2525,6 +2563,15 @@ The following subsystems are now integrated into the NPC decision loop:
   and +3 morale/tick (capped at base stats), arms tier restoration when arms
   deprivation tick > 1. Moving armies skip recovery. Broken/threatened tethers
   block supply and prevent recovery.
+- **NavalSystem / NavalCombatSystem** — Daily: `_process_naval_weather()` rolls
+  global weather before ship processing. `_process_ship_movement()` ticks ship
+  movement (arrival, deep ocean loss). `_process_naval_battle_triggers()`
+  detects hostile ships at same sub-tile and resolves naval combat via
+  NavalCombatSystem. `_apply_naval_battle_mutations()` writes results back to
+  ShipData (health, destroyed, captured, captain cleared). War score shifts
+  from naval battles fed into `_process_naval_war_scores()` using same
+  minor/major/decisive classification as land battles. Naval topics (Tier 3
+  MILITARY) generated per battle. Ships param on `advance_day()`.
 
 ## Resolved Design Decisions
 

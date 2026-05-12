@@ -75,6 +75,9 @@ var active_hordes: Array[HordeData] = []
 var horde_strength_counters: Dictionary = {}
 var last_targeted_province_id: Array[int] = [-1]
 
+# -- Naval System (s11.9) -----------------------------------------------------
+var ships: Array[ShipData] = []
+
 # -- Collective Disposition (s12.2b) -------------------------------------------
 # Clan-to-clan and family-to-family baselines keyed by sorted "a||b" strings.
 # Initialized to the locked PROVISIONAL pre-Scorpion-Coup starting values.
@@ -165,6 +168,7 @@ func advance_one_day() -> Dictionary:
 		active_hordes,
 		horde_strength_counters,
 		last_targeted_province_id,
+		ships,
 	)
 
 

@@ -54,6 +54,7 @@ static func advance_day(
 	active_hordes: Array[HordeData] = [],
 	horde_strength_counters: Dictionary = {},
 	last_targeted_province_id: Array[int] = [-1],
+	ships: Array[ShipData] = [],
 ) -> Dictionary:
 	var prev_season: int = time_system.get_season()
 
@@ -101,6 +102,17 @@ static func advance_day(
 		active_armies, active_sieges, active_tethers, order_states,
 		dice_engine, settlements, companies,
 	)
+
+	var naval_weather: int = _process_naval_weather(
+		dice_engine, _season_to_name(current_season), season_meta,
+	)
+	var naval_movement_results: Array[Dictionary] = _process_ship_movement(
+		ships, dice_engine,
+	)
+	var naval_battle_results: Array[Dictionary] = _process_naval_battle_triggers(
+		ships, characters_by_id, active_wars, naval_weather, dice_engine,
+	)
+	_apply_naval_battle_mutations(naval_battle_results, ships, characters_by_id)
 
 	var day_result: Dictionary = NPCWaveResolver.resolve_day_applied(
 		characters, world_states, objectives_map, scoring_tables, filter_data,
@@ -193,6 +205,15 @@ static func advance_day(
 
 	var war_score_results: Array[Dictionary] = _process_war_score_shifts(
 		military_daily, military_effects, active_wars, companies,
+	)
+
+	var naval_war_score_results: Array[Dictionary] = _process_naval_war_scores(
+		naval_battle_results, active_wars,
+	)
+	war_score_results.append_array(naval_war_score_results)
+
+	var naval_topics: Array[TopicData] = _generate_naval_battle_topics(
+		naval_battle_results, active_topics, next_topic_id, ic_day,
 	)
 
 	var war_termination_results: Array[Dictionary] = _process_war_terminations(
@@ -384,6 +405,10 @@ static func advance_day(
 		"sortie_results": sortie_results,
 		"horde_assault_results": horde_assault_results,
 		"horde_results": horde_results,
+		"naval_weather": naval_weather,
+		"naval_movement_results": naval_movement_results,
+		"naval_battle_results": naval_battle_results,
+		"naval_topics": naval_topics,
 	}
 
 
@@ -5156,3 +5181,318 @@ static func _create_winter_court_from_directive(
 	if host_champion_id >= 0 and host_champion_id != emperor_id:
 		CourtSystem.add_attendee(court, host_champion_id)
 	active_courts.append(court)
+
+
+# -- Naval Processing ----------------------------------------------------------
+
+static func _process_naval_weather(
+	dice_engine: DiceEngine,
+	season_name: String,
+	season_meta: Dictionary,
+) -> int:
+	var weather: int = NavalSystem.determine_weather(dice_engine, season_name)
+	season_meta["current_naval_weather"] = weather
+	return weather
+
+
+static func _process_ship_movement(
+	ships: Array[ShipData],
+	dice_engine: DiceEngine,
+) -> Array[Dictionary]:
+	var results: Array[Dictionary] = []
+	for ship: ShipData in ships:
+		if ship.is_destroyed or ship.is_captured:
+			continue
+		if not ship.is_moving:
+			continue
+
+		ship.movement_days_remaining -= 1
+
+		if ship.movement_days_remaining <= 0:
+			ship.is_moving = false
+			var prev_subtile: int = ship.current_subtile_id
+			ship.current_subtile_id = ship.destination_subtile_id
+			ship.destination_subtile_id = -1
+			ship.movement_days_remaining = 0
+
+			var deep_ocean_loss: bool = false
+			var loss_chance: float = NavalSystem.get_deep_ocean_loss_chance(ship.ship_class)
+			if loss_chance > 0.0:
+				var roll: int = dice_engine.rand_int_range(1, 100)
+				if roll <= ceili(loss_chance * 100.0):
+					deep_ocean_loss = true
+					ship.is_destroyed = true
+
+			results.append({
+				"ship_id": ship.ship_id,
+				"arrived": true,
+				"from_subtile": prev_subtile,
+				"to_subtile": ship.current_subtile_id,
+				"deep_ocean_loss": deep_ocean_loss,
+			})
+		else:
+			results.append({
+				"ship_id": ship.ship_id,
+				"arrived": false,
+				"days_remaining": ship.movement_days_remaining,
+			})
+
+	return results
+
+
+static func _process_naval_battle_triggers(
+	ships: Array[ShipData],
+	characters_by_id: Dictionary,
+	active_wars: Array[WarData],
+	weather: int,
+	dice_engine: DiceEngine,
+) -> Array[Dictionary]:
+	var ships_by_subtile: Dictionary = {}
+	for ship: ShipData in ships:
+		if ship.is_destroyed or ship.is_captured or ship.is_moving:
+			continue
+		if ship.current_subtile_id < 0:
+			continue
+		if not ships_by_subtile.has(ship.current_subtile_id):
+			ships_by_subtile[ship.current_subtile_id] = []
+		ships_by_subtile[ship.current_subtile_id].append(ship)
+
+	var results: Array[Dictionary] = []
+	var processed_subtiles: Array[int] = []
+
+	for subtile_id: int in ships_by_subtile:
+		if subtile_id in processed_subtiles:
+			continue
+		var ships_at: Array = ships_by_subtile[subtile_id]
+		if ships_at.size() < 2:
+			continue
+
+		var clans_at: Dictionary = {}
+		for s: ShipData in ships_at:
+			if not clans_at.has(s.owning_clan):
+				clans_at[s.owning_clan] = []
+			clans_at[s.owning_clan].append(s)
+
+		if clans_at.size() < 2:
+			continue
+
+		var hostile_pairs: Array[Array] = _find_hostile_naval_pairs(
+			clans_at, active_wars,
+		)
+		if hostile_pairs.is_empty():
+			continue
+
+		processed_subtiles.append(subtile_id)
+
+		for pair: Array in hostile_pairs:
+			var attacker_clan: String = pair[0]
+			var defender_clan: String = pair[1]
+			var atk_ships: Array = clans_at.get(attacker_clan, [])
+			var def_ships: Array = clans_at.get(defender_clan, [])
+
+			if atk_ships.is_empty() or def_ships.is_empty():
+				continue
+
+			var battle_result: Dictionary = _resolve_naval_engagement(
+				atk_ships, def_ships, weather, dice_engine,
+				characters_by_id, attacker_clan, defender_clan,
+			)
+			battle_result["subtile_id"] = subtile_id
+			battle_result["attacker_clan"] = attacker_clan
+			battle_result["defender_clan"] = defender_clan
+			results.append(battle_result)
+
+	return results
+
+
+static func _find_hostile_naval_pairs(
+	clans_at: Dictionary,
+	active_wars: Array[WarData],
+) -> Array[Array]:
+	var pairs: Array[Array] = []
+	var clan_list: Array = clans_at.keys()
+	for i: int in range(clan_list.size()):
+		for j: int in range(i + 1, clan_list.size()):
+			var a: String = clan_list[i]
+			var b: String = clan_list[j]
+			if WarSystem.are_clans_at_war(active_wars, a, b):
+				pairs.append([a, b])
+	return pairs
+
+
+static func _resolve_naval_engagement(
+	atk_ships: Array,
+	def_ships: Array,
+	weather: int,
+	dice_engine: DiceEngine,
+	characters_by_id: Dictionary,
+	attacker_clan: String,
+	defender_clan: String,
+) -> Dictionary:
+	var atk_states: Array[Dictionary] = []
+	var def_states: Array[Dictionary] = []
+	var col: int = 0
+
+	for ship: ShipData in atk_ships:
+		var captain: L5RCharacterData = null
+		var captain_bonus: Dictionary = {}
+		if ship.captain_id >= 0 and characters_by_id.has(ship.captain_id):
+			captain = characters_by_id[ship.captain_id]
+			captain_bonus = _compute_captain_bonus(captain)
+		var is_mantis: bool = (ship.owning_clan == "Mantis")
+		var row: int = 1
+		if ship.ship_class == Enums.ShipClass.KOBUNE and col > 0:
+			row = 2
+		atk_states.append(NavalCombatSystem.make_naval_company(
+			ship, row, col, "attacker", weather, is_mantis, captain, captain_bonus,
+		))
+		col += 1
+
+	col = 0
+	for ship: ShipData in def_ships:
+		var captain: L5RCharacterData = null
+		var captain_bonus: Dictionary = {}
+		if ship.captain_id >= 0 and characters_by_id.has(ship.captain_id):
+			captain = characters_by_id[ship.captain_id]
+			captain_bonus = _compute_captain_bonus(captain)
+		var is_mantis: bool = (ship.owning_clan == "Mantis")
+		var row: int = 1
+		if ship.ship_class == Enums.ShipClass.KOBUNE and col > 0:
+			row = 2
+		def_states.append(NavalCombatSystem.make_naval_company(
+			ship, row, col, "defender", weather, is_mantis, captain, captain_bonus,
+		))
+		col += 1
+
+	var result: Dictionary = NavalCombatSystem.resolve_naval_battle(
+		atk_states, def_states, weather, dice_engine,
+	)
+	return result
+
+
+static func _compute_captain_bonus(captain: L5RCharacterData) -> Dictionary:
+	var battle_rank: int = captain.skills.get("Battle", 0)
+	if battle_rank <= 0:
+		return {}
+	var highest_ring: int = Enums.Ring.FIRE
+	var highest_val: int = 0
+	for ring: int in [Enums.Ring.FIRE, Enums.Ring.WATER, Enums.Ring.EARTH, Enums.Ring.AIR, Enums.Ring.VOID]:
+		var val: int = CharacterStats.get_ring_value(captain, ring)
+		if val > highest_val:
+			highest_val = val
+			highest_ring = ring
+	var bonus_type: String = "morale"
+	if highest_ring == Enums.Ring.FIRE or highest_ring == Enums.Ring.WATER:
+		bonus_type = "attack"
+	elif highest_ring == Enums.Ring.EARTH or highest_ring == Enums.Ring.AIR:
+		bonus_type = "defense"
+	return {"bonus_type": bonus_type, "bonus_value": battle_rank}
+
+
+static func _apply_naval_battle_mutations(
+	naval_battle_results: Array[Dictionary],
+	ships: Array[ShipData],
+	characters_by_id: Dictionary,
+) -> void:
+	var ships_by_id: Dictionary = {}
+	for s: ShipData in ships:
+		ships_by_id[s.ship_id] = s
+
+	for result: Dictionary in naval_battle_results:
+		var all_states: Array = []
+		all_states.append_array(result.get("attacker_states", []))
+		all_states.append_array(result.get("defender_states", []))
+
+		for bc: Dictionary in all_states:
+			var ship_id: int = bc.get("company_id", -1)
+			var ship: ShipData = ships_by_id.get(ship_id)
+			if ship == null:
+				continue
+
+			ship.health = bc.get("current_health", ship.health)
+
+			if bc.get("is_destroyed", false):
+				ship.is_destroyed = true
+				ship.health = 0
+
+			if bc.get("is_captured", false):
+				ship.is_captured = true
+				var captor_side: String = "attacker" if bc["side"] == "defender" else "defender"
+				ship.captured_by_clan = result.get(captor_side + "_clan", "")
+
+		var captain_deaths: Array = result.get("captain_deaths", [])
+		for cd: Dictionary in captain_deaths:
+			if not cd.get("died", false):
+				continue
+			var dead_ship_id: int = cd.get("company_id", -1)
+			var dead_ship: ShipData = ships_by_id.get(dead_ship_id)
+			if dead_ship != null:
+				dead_ship.captain_id = -1
+
+
+static func _process_naval_war_scores(
+	naval_battle_results: Array[Dictionary],
+	active_wars: Array[WarData],
+) -> Array[Dictionary]:
+	var results: Array[Dictionary] = []
+	for battle: Dictionary in naval_battle_results:
+		var atk_clan: String = battle.get("attacker_clan", "")
+		var def_clan: String = battle.get("defender_clan", "")
+		var victor: String = battle.get("victor", "draw")
+		if victor == "draw":
+			continue
+
+		var winning_clan: String = atk_clan if victor == "attacker" else def_clan
+
+		var atk_states: Array = battle.get("attacker_states", [])
+		var def_states: Array = battle.get("defender_states", [])
+		var total_ships: int = atk_states.size() + def_states.size()
+		var event_type: String = "minor_battle"
+		if total_ships >= 8:
+			event_type = "decisive_battle"
+		elif total_ships >= 4:
+			event_type = "major_battle"
+
+		var war: WarData = WarSystem.get_war_between(active_wars, atk_clan, def_clan)
+		if war != null:
+			var shift_result: Dictionary = WarSystem.apply_score_shift(
+				war, event_type, winning_clan,
+			)
+			results.append({
+				"war_id": war.war_id,
+				"event": event_type,
+				"winning_clan": winning_clan,
+				"shift": shift_result.get("shift", 0),
+			})
+
+	return results
+
+
+static func _generate_naval_battle_topics(
+	naval_battle_results: Array[Dictionary],
+	active_topics: Array[TopicData],
+	next_topic_id: Array[int],
+	ic_day: int,
+) -> Array[TopicData]:
+	var topics: Array[TopicData] = []
+	for battle: Dictionary in naval_battle_results:
+		var victor: String = battle.get("victor", "draw")
+		var atk_clan: String = battle.get("attacker_clan", "")
+		var def_clan: String = battle.get("defender_clan", "")
+
+		var topic := TopicData.new()
+		topic.topic_id = next_topic_id[0]
+		next_topic_id[0] += 1
+		topic.topic_type = "military"
+		topic.variant = "naval_battle"
+		topic.slug = "naval_battle_%s_vs_%s_d%d" % [atk_clan.to_lower(), def_clan.to_lower(), ic_day]
+		topic.tier = TopicData.Tier.TIER_3
+		topic.momentum = 30.0
+		topic.category = TopicData.Category.MILITARY
+		topic.ic_day_created = ic_day
+		topic.resolved = false
+
+		active_topics.append(topic)
+		topics.append(topic)
+
+	return topics
