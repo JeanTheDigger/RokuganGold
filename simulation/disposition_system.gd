@@ -372,7 +372,24 @@ static func get_effective_disposition(
 	var family_bond: int = BiologicalFamily.compute_pairwise_modifier(
 		actor, target, chars_by_id
 	)
-	return clampi(stored + family_bond, -100, 100)
+	var raw: int = stored + family_bond
+	var floor_val: int = _get_birth_family_floor(actor, target)
+	if raw < floor_val:
+		raw = floor_val
+	return clampi(raw, -100, 100)
+
+
+static func _get_birth_family_floor(
+	actor: L5RCharacterData,
+	target: L5RCharacterData,
+) -> int:
+	if actor.birth_clan.is_empty():
+		return -100
+	if target.family == actor.birth_family and not actor.birth_family.is_empty():
+		return MarriageSystem.BIRTH_FAMILY_DISPOSITION_FLOOR
+	if target.clan == actor.birth_clan:
+		return MarriageSystem.BIRTH_CLAN_DISPOSITION_FLOOR
+	return -100
 
 
 # -- Supply Sharing -----------------------------------------------------------

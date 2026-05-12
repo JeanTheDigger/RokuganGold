@@ -1038,3 +1038,63 @@ func test_executor_auto_selects_target_candidate() -> void:
 		assert_eq(effects.get("candidate_b_id", -1), 11, "Auto-selected target candidate")
 	else:
 		assert_true(result.get("success", false), "Marriage should succeed with auto-selection")
+
+
+# -- Birth Family Disposition Floor Tests ----------------------------------------
+
+func test_birth_family_floor_enforced_for_birth_family_members() -> void:
+	var actor: L5RCharacterData = _make_char(1, "Crane", "Doji")
+	actor.birth_clan = "Lion"
+	actor.birth_family = "Akodo"
+	var target: L5RCharacterData = _make_char(2, "Lion", "Akodo")
+	actor.disposition_values[2] = -50
+	var chars_by_id: Dictionary = {1: actor, 2: target}
+
+	var eff: int = DispositionSystem.get_effective_disposition(actor, 2, chars_by_id)
+	assert_eq(eff, MarriageSystem.BIRTH_FAMILY_DISPOSITION_FLOOR, "Birth family floor (+15) enforced")
+
+
+func test_birth_clan_floor_enforced_for_birth_clan_members() -> void:
+	var actor: L5RCharacterData = _make_char(1, "Crane", "Doji")
+	actor.birth_clan = "Lion"
+	actor.birth_family = "Akodo"
+	var target: L5RCharacterData = _make_char(2, "Lion", "Matsu")
+	actor.disposition_values[2] = -50
+	var chars_by_id: Dictionary = {1: actor, 2: target}
+
+	var eff: int = DispositionSystem.get_effective_disposition(actor, 2, chars_by_id)
+	assert_eq(eff, MarriageSystem.BIRTH_CLAN_DISPOSITION_FLOOR, "Birth clan floor (+8) enforced")
+
+
+func test_birth_family_floor_not_applied_to_other_clans() -> void:
+	var actor: L5RCharacterData = _make_char(1, "Crane", "Doji")
+	actor.birth_clan = "Lion"
+	actor.birth_family = "Akodo"
+	var target: L5RCharacterData = _make_char(2, "Scorpion", "Bayushi")
+	actor.disposition_values[2] = -50
+	var chars_by_id: Dictionary = {1: actor, 2: target}
+
+	var eff: int = DispositionSystem.get_effective_disposition(actor, 2, chars_by_id)
+	assert_eq(eff, -50, "No floor for unrelated clan members")
+
+
+func test_no_floor_without_birth_clan() -> void:
+	var actor: L5RCharacterData = _make_char(1, "Crane", "Doji")
+	var target: L5RCharacterData = _make_char(2, "Crane", "Doji")
+	actor.disposition_values[2] = -50
+	var chars_by_id: Dictionary = {1: actor, 2: target}
+
+	var eff: int = DispositionSystem.get_effective_disposition(actor, 2, chars_by_id)
+	assert_eq(eff, -50, "No floor when birth_clan is empty (never married away)")
+
+
+func test_birth_family_floor_does_not_raise_above_floor() -> void:
+	var actor: L5RCharacterData = _make_char(1, "Crane", "Doji")
+	actor.birth_clan = "Lion"
+	actor.birth_family = "Akodo"
+	var target: L5RCharacterData = _make_char(2, "Lion", "Akodo")
+	actor.disposition_values[2] = 30
+	var chars_by_id: Dictionary = {1: actor, 2: target}
+
+	var eff: int = DispositionSystem.get_effective_disposition(actor, 2, chars_by_id)
+	assert_eq(eff, 30, "Floor doesn't override already-higher disposition")
