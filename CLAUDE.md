@@ -511,7 +511,7 @@ All in /tests/, one file per system:
 - test_npc_advancement.gd (~56 tests)
 - test_ronin_system.gd (~44 tests)
 - test_musha_shugyo_system.gd (~75 tests)
-- test_governance_wiring.gd (~25 tests)
+- test_governance_wiring.gd (~33 tests)
 - test_marriage_wiring.gd (~65 tests)
 - test_worship_system.gd (~67 tests)
 - test_worship_wiring.gd (~50 tests)
@@ -2871,13 +2871,19 @@ All in /tests/, one file per system:
 - **simulation/npc_decision_engine.gd** — `build_context()` populates
   `vacant_positions` from per-lord keyed world_state entries.
 - **simulation/day_orchestrator.gd** — `_populate_vacancy_intelligence()`
-  runs at start of advance_day(). Scans military companies for
-  commander-less units and characters for magistrate gaps. Stores
-  per-lord vacancy arrays in world_states. `_find_vacancy_candidate()`
-  picks best unassigned vassal by status+honor+glory+disposition.
-  Known limitations: only detects military commander and magistrate
-  vacancies; other position types (school master, temple head, etc.)
-  will activate when position tracking becomes more granular.
+  runs at start of advance_day(). Now accepts `settlements` and `provinces`
+  parameters. Scans military companies for commander-less units, characters
+  for magistrate gaps, and settlements for position-appropriate vacancies:
+  military settlements (FORTIFICATION/KEEP/CASTLE/FAMILY_CASTLE/WALL_TOWER)
+  → Garrison Commander (priority 3), TEMPLE → Temple Head (priority 2),
+  MONASTERY → Monastery Abbot (priority 2). Province→lord mapping built
+  from highest-status living character matching province clan. Deduplication
+  prevents multiple vacancy entries per lord per position type.
+  `_find_vacancy_candidate()` picks best unassigned vassal by
+  status+honor+glory+disposition.
+  Known limitations: School Master detection deferred (needs per-school
+  tracking beyond role_position). Senior Courtier detection deferred
+  (unclear vacancy trigger).
 
 ### What's Next
 1. World generation coordinate system and adjacency

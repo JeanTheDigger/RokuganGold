@@ -79,7 +79,7 @@ static func advance_day(
 	world_states["_settlement_province_map"] = _spm
 
 	_populate_infrastructure_intelligence(world_states, provinces, settlements, ships, worship_state)
-	_populate_vacancy_intelligence(world_states, characters, characters_by_id, companies)
+	_populate_vacancy_intelligence(world_states, characters, characters_by_id, companies, settlements, provinces)
 
 	var festival_results: Dictionary = _process_festivals(ic_day, world_states)
 
@@ -7021,6 +7021,8 @@ static func _populate_vacancy_intelligence(
 	characters: Array[L5RCharacterData],
 	characters_by_id: Dictionary,
 	companies: Array,
+	settlements: Array[SettlementData] = [],
+	provinces: Dictionary = {},
 ) -> void:
 	var lord_vacancies: Dictionary = {}
 
@@ -7032,7 +7034,6 @@ static func _populate_vacancy_intelligence(
 				var parent_legion_id: int = company_data.get("parent_legion_id", -1)
 				if parent_legion_id < 0:
 					continue
-				# Find the lord responsible for this unit
 				var lord_id: int = company_data.get("owning_lord_id", -1)
 				if lord_id < 0:
 					continue
@@ -7046,6 +7047,28 @@ static func _populate_vacancy_intelligence(
 					"candidate_id": -1,
 					"seasons_vacant": company_data.get("seasons_without_commander", 0),
 				})
+
+	# Build province→lord mapping: highest-status living character per province clan
+	var province_lord_map: Dictionary = {}
+	for pid: Variant in provinces:
+		var prov: ProvinceData = provinces[pid] as ProvinceData
+		if prov == null:
+			continue
+		var best_lord_id: int = -1
+		var best_status: float = -1.0
+		for c: L5RCharacterData in characters:
+			if CharacterStats.is_dead(c):
+				continue
+			if c.clan != prov.clan:
+				continue
+			if c.lord_id >= 0 and c.status < 5.0:
+				continue
+			if c.status < 3.0:
+				continue
+			if c.status > best_status:
+				best_status = c.status
+				best_lord_id = c.character_id
+		province_lord_map[int(pid)] = best_lord_id
 
 	# Position vacancies: scan for lord-controlled positions that should be filled
 	var filled_positions: Dictionary = {}
@@ -7061,7 +7084,7 @@ static func _populate_vacancy_intelligence(
 			filled_positions[lord_id] = []
 		filled_positions[lord_id].append(c.role_position)
 
-	# Check each lord for expected positions
+	# Check each lord for expected magistrate position
 	for c: L5RCharacterData in characters:
 		if CharacterStats.is_dead(c):
 			continue
@@ -7070,7 +7093,6 @@ static func _populate_vacancy_intelligence(
 		var lord_id: int = c.character_id
 		var lord_positions: Array = filled_positions.get(lord_id, [])
 
-		# Every lord should have a magistrate
 		if not _has_position(lord_positions, "Magistrate"):
 			var candidate: int = _find_vacancy_candidate(
 				lord_id, "Magistrate", characters, characters_by_id,
@@ -7084,6 +7106,68 @@ static func _populate_vacancy_intelligence(
 				"candidate_id": candidate,
 				"seasons_vacant": 0,
 			})
+
+	# Settlement-based vacancies: garrison commander, temple head, monastery abbot
+	for s: SettlementData in settlements:
+		var lord_id: int = province_lord_map.get(s.province_id, -1)
+		if lord_id < 0:
+			continue
+		var lord_positions: Array = filled_positions.get(lord_id, [])
+
+		if s.is_military() and not _has_position(lord_positions, "Garrison Commander"):
+			var candidate: int = _find_vacancy_candidate(
+				lord_id, "Garrison Commander", characters, characters_by_id,
+			)
+			if not lord_vacancies.has(lord_id):
+				lord_vacancies[lord_id] = []
+			lord_vacancies[lord_id].append({
+				"position_type": "Garrison Commander",
+				"priority": 3,
+				"province_id": s.province_id,
+				"settlement_id": s.settlement_id,
+				"candidate_id": candidate,
+				"seasons_vacant": 0,
+			})
+			# Mark as found so we don't duplicate per settlement
+			if not filled_positions.has(lord_id):
+				filled_positions[lord_id] = []
+			filled_positions[lord_id].append("Garrison Commander (pending)")
+
+		if s.settlement_type == Enums.SettlementType.TEMPLE and not _has_position(lord_positions, "Temple Head"):
+			var candidate: int = _find_vacancy_candidate(
+				lord_id, "Temple Head", characters, characters_by_id,
+			)
+			if not lord_vacancies.has(lord_id):
+				lord_vacancies[lord_id] = []
+			lord_vacancies[lord_id].append({
+				"position_type": "Temple Head",
+				"priority": 2,
+				"province_id": s.province_id,
+				"settlement_id": s.settlement_id,
+				"candidate_id": candidate,
+				"seasons_vacant": 0,
+			})
+			if not filled_positions.has(lord_id):
+				filled_positions[lord_id] = []
+			filled_positions[lord_id].append("Temple Head (pending)")
+
+		if s.settlement_type == Enums.SettlementType.MONASTERY and not _has_position(lord_positions, "Monastery Abbot"):
+			var candidate: int = _find_vacancy_candidate(
+				lord_id, "Monastery Abbot", characters, characters_by_id,
+			)
+			if not lord_vacancies.has(lord_id):
+				lord_vacancies[lord_id] = []
+			lord_vacancies[lord_id].append({
+				"position_type": "Monastery Abbot",
+				"priority": 2,
+				"province_id": s.province_id,
+				"settlement_id": s.settlement_id,
+				"candidate_id": candidate,
+				"seasons_vacant": 0,
+			})
+			if not filled_positions.has(lord_id):
+				filled_positions[lord_id] = []
+			filled_positions[lord_id].append("Monastery Abbot (pending)")
 
 	# Store per-lord vacancy data keyed by lord_id
 	world_states["vacancy_data"] = lord_vacancies

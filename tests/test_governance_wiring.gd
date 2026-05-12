@@ -382,3 +382,269 @@ func test_governance_results_in_advance_day() -> void:
 	assert_true(result.has("governance_results"))
 	var gov: Dictionary = result["governance_results"]
 	assert_true(gov.has("appointments"))
+
+
+# -- Vacancy Scanner Expansion Tests -------------------------------------------
+
+
+func _make_settlement(id: int, province_id: int, stype: Enums.SettlementType) -> SettlementData:
+	var s := SettlementData.new()
+	s.settlement_id = id
+	s.province_id = province_id
+	s.settlement_type = stype
+	s.population_pu = 5.0
+	s.garrison_pu = 1.0
+	return s
+
+
+func _make_province(id: int, clan: String) -> ProvinceData:
+	var p := ProvinceData.new()
+	p.province_id = id
+	p.province_name = "Prov_" + str(id)
+	p.clan = clan
+	return p
+
+
+func test_vacancy_detects_garrison_commander_for_fortification() -> void:
+	var lord := _make_char(1, "Crane", 5.0)
+	lord.lord_id = -1
+	var vassal := _make_char(2, "Crane", 2.0)
+	vassal.lord_id = 1
+	var characters: Array[L5RCharacterData] = [lord, vassal]
+	var chars_by_id: Dictionary = {1: lord, 2: vassal}
+
+	var prov := _make_province(10, "Crane")
+	var provinces: Dictionary = {10: prov}
+	var fort := _make_settlement(100, 10, Enums.SettlementType.FORTIFICATION)
+	var settlements: Array[SettlementData] = [fort]
+
+	var ws: Dictionary = {}
+	DayOrchestrator._populate_vacancy_intelligence(ws, characters, chars_by_id, [], settlements, provinces)
+
+	var vacancies: Array = ws.get("vacancy_data", {}).get(1, [])
+	var found_garrison: bool = false
+	for v: Dictionary in vacancies:
+		if v.get("position_type", "") == "Garrison Commander":
+			found_garrison = true
+			assert_eq(v["priority"], 3)
+			assert_eq(v["province_id"], 10)
+			assert_eq(v["settlement_id"], 100)
+	assert_true(found_garrison, "Should detect garrison commander vacancy for fortification")
+
+
+func test_vacancy_detects_temple_head() -> void:
+	var lord := _make_char(1, "Phoenix", 5.0)
+	lord.lord_id = -1
+	lord.clan = "Phoenix"
+	var characters: Array[L5RCharacterData] = [lord]
+	var chars_by_id: Dictionary = {1: lord}
+
+	var prov := _make_province(10, "Phoenix")
+	var provinces: Dictionary = {10: prov}
+	var temple := _make_settlement(100, 10, Enums.SettlementType.TEMPLE)
+	var settlements: Array[SettlementData] = [temple]
+
+	var ws: Dictionary = {}
+	DayOrchestrator._populate_vacancy_intelligence(ws, characters, chars_by_id, [], settlements, provinces)
+
+	var vacancies: Array = ws.get("vacancy_data", {}).get(1, [])
+	var found_temple: bool = false
+	for v: Dictionary in vacancies:
+		if v.get("position_type", "") == "Temple Head":
+			found_temple = true
+			assert_eq(v["priority"], 2)
+	assert_true(found_temple, "Should detect temple head vacancy")
+
+
+func test_vacancy_detects_monastery_abbot() -> void:
+	var lord := _make_char(1, "Dragon", 5.0)
+	lord.lord_id = -1
+	lord.clan = "Dragon"
+	var characters: Array[L5RCharacterData] = [lord]
+	var chars_by_id: Dictionary = {1: lord}
+
+	var prov := _make_province(10, "Dragon")
+	var provinces: Dictionary = {10: prov}
+	var monastery := _make_settlement(100, 10, Enums.SettlementType.MONASTERY)
+	var settlements: Array[SettlementData] = [monastery]
+
+	var ws: Dictionary = {}
+	DayOrchestrator._populate_vacancy_intelligence(ws, characters, chars_by_id, [], settlements, provinces)
+
+	var vacancies: Array = ws.get("vacancy_data", {}).get(1, [])
+	var found_abbot: bool = false
+	for v: Dictionary in vacancies:
+		if v.get("position_type", "") == "Monastery Abbot":
+			found_abbot = true
+			assert_eq(v["priority"], 2)
+	assert_true(found_abbot, "Should detect monastery abbot vacancy")
+
+
+func test_vacancy_no_duplicate_garrison_for_multiple_forts() -> void:
+	var lord := _make_char(1, "Crab", 5.0)
+	lord.lord_id = -1
+	lord.clan = "Crab"
+	var characters: Array[L5RCharacterData] = [lord]
+	var chars_by_id: Dictionary = {1: lord}
+
+	var prov := _make_province(10, "Crab")
+	var provinces: Dictionary = {10: prov}
+	var fort1 := _make_settlement(100, 10, Enums.SettlementType.FORTIFICATION)
+	var fort2 := _make_settlement(101, 10, Enums.SettlementType.KEEP)
+	var settlements: Array[SettlementData] = [fort1, fort2]
+
+	var ws: Dictionary = {}
+	DayOrchestrator._populate_vacancy_intelligence(ws, characters, chars_by_id, [], settlements, provinces)
+
+	var vacancies: Array = ws.get("vacancy_data", {}).get(1, [])
+	var garrison_count: int = 0
+	for v: Dictionary in vacancies:
+		if v.get("position_type", "") == "Garrison Commander":
+			garrison_count += 1
+	assert_eq(garrison_count, 1, "Should only generate one garrison vacancy per lord")
+
+
+func test_vacancy_skips_filled_garrison_commander() -> void:
+	var lord := _make_char(1, "Crab", 5.0)
+	lord.lord_id = -1
+	lord.clan = "Crab"
+	var commander := _make_char(2, "Crab", 3.0)
+	commander.lord_id = 1
+	commander.role_position = "Garrison Commander"
+	var characters: Array[L5RCharacterData] = [lord, commander]
+	var chars_by_id: Dictionary = {1: lord, 2: commander}
+
+	var prov := _make_province(10, "Crab")
+	var provinces: Dictionary = {10: prov}
+	var fort := _make_settlement(100, 10, Enums.SettlementType.FORTIFICATION)
+	var settlements: Array[SettlementData] = [fort]
+
+	var ws: Dictionary = {}
+	DayOrchestrator._populate_vacancy_intelligence(ws, characters, chars_by_id, [], settlements, provinces)
+
+	var vacancies: Array = ws.get("vacancy_data", {}).get(1, [])
+	var found_garrison: bool = false
+	for v: Dictionary in vacancies:
+		if v.get("position_type", "") == "Garrison Commander":
+			found_garrison = true
+	assert_false(found_garrison, "Should not detect vacancy when garrison commander exists")
+
+
+func test_vacancy_skips_filled_temple_head() -> void:
+	var lord := _make_char(1, "Phoenix", 5.0)
+	lord.lord_id = -1
+	lord.clan = "Phoenix"
+	var head := _make_char(2, "Phoenix", 3.0)
+	head.lord_id = 1
+	head.role_position = "Temple Head"
+	var characters: Array[L5RCharacterData] = [lord, head]
+	var chars_by_id: Dictionary = {1: lord, 2: head}
+
+	var prov := _make_province(10, "Phoenix")
+	var provinces: Dictionary = {10: prov}
+	var temple := _make_settlement(100, 10, Enums.SettlementType.TEMPLE)
+	var settlements: Array[SettlementData] = [temple]
+
+	var ws: Dictionary = {}
+	DayOrchestrator._populate_vacancy_intelligence(ws, characters, chars_by_id, [], settlements, provinces)
+
+	var vacancies: Array = ws.get("vacancy_data", {}).get(1, [])
+	var found_temple: bool = false
+	for v: Dictionary in vacancies:
+		if v.get("position_type", "") == "Temple Head":
+			found_temple = true
+	assert_false(found_temple, "Should not detect vacancy when temple head exists")
+
+
+func test_vacancy_candidate_selection_prefers_high_score() -> void:
+	var lord := _make_char(1, "Crane", 5.0)
+	lord.lord_id = -1
+	var weak := _make_char(2, "Crane", 1.0)
+	weak.lord_id = 1
+	weak.honor = 2.0
+	weak.glory = 1.0
+	var strong := _make_char(3, "Crane", 3.0)
+	strong.lord_id = 1
+	strong.honor = 6.0
+	strong.glory = 4.0
+	var characters: Array[L5RCharacterData] = [lord, weak, strong]
+	var chars_by_id: Dictionary = {1: lord, 2: weak, 3: strong}
+
+	var prov := _make_province(10, "Crane")
+	var provinces: Dictionary = {10: prov}
+	var temple := _make_settlement(100, 10, Enums.SettlementType.TEMPLE)
+	var settlements: Array[SettlementData] = [temple]
+
+	var ws: Dictionary = {}
+	DayOrchestrator._populate_vacancy_intelligence(ws, characters, chars_by_id, [], settlements, provinces)
+
+	var vacancies: Array = ws.get("vacancy_data", {}).get(1, [])
+	for v: Dictionary in vacancies:
+		if v.get("position_type", "") == "Temple Head":
+			assert_eq(v["candidate_id"], 3, "Should pick highest-scoring vassal")
+
+
+func test_vacancy_no_settlement_detection_without_settlements() -> void:
+	var lord := _make_char(1, "Lion", 5.0)
+	lord.lord_id = -1
+	lord.clan = "Lion"
+	var characters: Array[L5RCharacterData] = [lord]
+	var chars_by_id: Dictionary = {1: lord}
+
+	var ws: Dictionary = {}
+	DayOrchestrator._populate_vacancy_intelligence(ws, characters, chars_by_id, [], [], {})
+
+	var vacancies: Array = ws.get("vacancy_data", {}).get(1, [])
+	var settlement_vacancies: int = 0
+	for v: Dictionary in vacancies:
+		if v.get("position_type", "") in ["Garrison Commander", "Temple Head", "Monastery Abbot"]:
+			settlement_vacancies += 1
+	assert_eq(settlement_vacancies, 0, "No settlement vacancies when no settlements provided")
+
+
+func test_vacancy_village_does_not_trigger_garrison() -> void:
+	var lord := _make_char(1, "Lion", 5.0)
+	lord.lord_id = -1
+	lord.clan = "Lion"
+	var characters: Array[L5RCharacterData] = [lord]
+	var chars_by_id: Dictionary = {1: lord}
+
+	var prov := _make_province(10, "Lion")
+	var provinces: Dictionary = {10: prov}
+	var village := _make_settlement(100, 10, Enums.SettlementType.VILLAGE)
+	var settlements: Array[SettlementData] = [village]
+
+	var ws: Dictionary = {}
+	DayOrchestrator._populate_vacancy_intelligence(ws, characters, chars_by_id, [], settlements, provinces)
+
+	var vacancies: Array = ws.get("vacancy_data", {}).get(1, [])
+	var found_garrison: bool = false
+	for v: Dictionary in vacancies:
+		if v.get("position_type", "") == "Garrison Commander":
+			found_garrison = true
+	assert_false(found_garrison, "Village should not trigger garrison commander vacancy")
+
+
+func test_vacancy_per_lord_key_includes_settlement_vacancies() -> void:
+	var lord := _make_char(1, "Scorpion", 5.0)
+	lord.lord_id = -1
+	lord.clan = "Scorpion"
+	var characters: Array[L5RCharacterData] = [lord]
+	var chars_by_id: Dictionary = {1: lord}
+
+	var prov := _make_province(10, "Scorpion")
+	var provinces: Dictionary = {10: prov}
+	var fort := _make_settlement(100, 10, Enums.SettlementType.CASTLE)
+	var settlements: Array[SettlementData] = [fort]
+
+	var ws: Dictionary = {}
+	DayOrchestrator._populate_vacancy_intelligence(ws, characters, chars_by_id, [], settlements, provinces)
+
+	var per_lord_key: String = "vacant_positions_1"
+	assert_true(ws.has(per_lord_key), "Per-lord key should exist")
+	var per_lord: Array = ws[per_lord_key]
+	var found_garrison: bool = false
+	for v: Dictionary in per_lord:
+		if v.get("position_type", "") == "Garrison Commander":
+			found_garrison = true
+	assert_true(found_garrison, "Per-lord flat list should include settlement vacancies")
