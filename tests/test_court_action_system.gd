@@ -927,3 +927,152 @@ func test_orchestrator_metadata_threads_through_contested() -> void:
 	)
 	var meta: Dictionary = result["effects"].get("_action_metadata", {})
 	assert_eq(meta.get("topic_id", -1), 42)
+
+
+# -- Bayushi Courtier Auto-Concealment Tests ----------------------------------
+
+func test_bayushi_gossip_auto_concealed() -> void:
+	var actor: L5RCharacterData = _make_char(1, {"Courtier": 5}, {"Awareness": 5})
+	actor.school = "Bayushi Courtier"
+	actor.clan = "Scorpion"
+	actor.glory = 5.0
+	var listener: L5RCharacterData = _make_char(2)
+	var subject: L5RCharacterData = _make_char(3)
+	subject.glory = 1.0
+	var chars: Dictionary = {1: actor, 2: listener, 3: subject}
+	var action: NPCDataStructures.ScoredAction = _make_action(
+		"GOSSIP", 2, {"gossip_subject_id": 3}
+	)
+	var ctx: NPCDataStructures.ContextSnapshot = _make_ctx()
+	var result: Dictionary = ActionExecutor.execute(
+		action, actor, ctx, _dice, _build_skill_map(), {}, chars
+	)
+	if result.get("success", false):
+		assert_true(result["effects"].get("source_concealed", false),
+			"Bayushi Courtier gossip should always be source_concealed")
+
+
+func test_non_bayushi_gossip_not_auto_concealed() -> void:
+	var actor: L5RCharacterData = _make_char(1, {"Courtier": 5}, {"Awareness": 5})
+	actor.school = "Doji Courtier"
+	actor.glory = 5.0
+	var listener: L5RCharacterData = _make_char(2)
+	var subject: L5RCharacterData = _make_char(3)
+	subject.glory = 1.0
+	var chars: Dictionary = {1: actor, 2: listener, 3: subject}
+	var action: NPCDataStructures.ScoredAction = _make_action(
+		"GOSSIP", 2, {"gossip_subject_id": 3, "damage_raises": 99, "concealment_raises": 0}
+	)
+	var ctx: NPCDataStructures.ContextSnapshot = _make_ctx()
+	var result: Dictionary = ActionExecutor.execute(
+		action, actor, ctx, _dice, _build_skill_map(), {}, chars
+	)
+	if result.get("success", false):
+		assert_false(result["effects"].get("source_concealed", false),
+			"Non-Bayushi gossip without concealment raises should not be concealed")
+
+
+func test_gossip_uses_court_action_system_resolution() -> void:
+	var actor: L5RCharacterData = _make_char(1, {"Courtier": 5}, {"Awareness": 5})
+	actor.glory = 5.0
+	var listener: L5RCharacterData = _make_char(2)
+	var subject: L5RCharacterData = _make_char(3)
+	subject.glory = 0.0
+	var chars: Dictionary = {1: actor, 2: listener, 3: subject}
+	var action: NPCDataStructures.ScoredAction = _make_action(
+		"GOSSIP", 2, {"gossip_subject_id": 3}
+	)
+	var ctx: NPCDataStructures.ContextSnapshot = _make_ctx()
+	var result: Dictionary = ActionExecutor.execute(
+		action, actor, ctx, _dice, _build_skill_map(), {}, chars
+	)
+	if result.get("success", false):
+		assert_true(result["effects"].has("gossip_subject_disposition"))
+		assert_true(result["effects"].has("source_concealed"))
+		assert_true(result["effects"].has("concealment_depth"))
+
+
+func test_gossip_damage_raises_split() -> void:
+	var actor: L5RCharacterData = _make_char(1, {"Courtier": 5}, {"Awareness": 5})
+	actor.glory = 5.0
+	var listener: L5RCharacterData = _make_char(2)
+	var subject: L5RCharacterData = _make_char(3)
+	subject.glory = 0.0
+	var chars: Dictionary = {1: actor, 2: listener, 3: subject}
+	var action: NPCDataStructures.ScoredAction = _make_action(
+		"GOSSIP", 2, {"gossip_subject_id": 3, "damage_raises": 1, "concealment_raises": 1}
+	)
+	var ctx: NPCDataStructures.ContextSnapshot = _make_ctx()
+	var result: Dictionary = ActionExecutor.execute(
+		action, actor, ctx, _dice, _build_skill_map(), {}, chars
+	)
+	if result.get("success", false):
+		var disp: int = result["effects"].get("gossip_subject_disposition", 0)
+		assert_eq(disp, CourtActionSystem.GOSSIP_BASE_DISP + 1 * CourtActionSystem.GOSSIP_RAISE_DAMAGE)
+		assert_true(result["effects"].get("source_concealed", false))
+
+
+# -- Ikoma Bard R2 Exemption Tests -------------------------------------------
+
+func test_ikoma_bard_exempt_from_provoke_penalties() -> void:
+	var actor: L5RCharacterData = _make_char(1, {"Courtier": 5}, {"Awareness": 5})
+	var target: L5RCharacterData = _make_char(2, {"Etiquette": 1}, {"Willpower": 2})
+	target.school = "Ikoma Bard"
+	target.clan = "Lion"
+	var chars: Dictionary = {1: actor, 2: target}
+	var action: NPCDataStructures.ScoredAction = _make_action("PROVOKE_EMOTION")
+	var ctx: NPCDataStructures.ContextSnapshot = _make_ctx()
+	var result: Dictionary = ActionExecutor.execute(
+		action, actor, ctx, _dice, _build_skill_map(), {}, chars
+	)
+	if result.get("success", false):
+		assert_true(result["effects"].get("ikoma_bard_exempt", false))
+		assert_false(result["effects"].has("target_honor_change"))
+		assert_false(result["effects"].has("target_glory_change"))
+
+
+func test_non_ikoma_not_exempt() -> void:
+	var actor: L5RCharacterData = _make_char(1, {"Courtier": 5}, {"Awareness": 5})
+	var target: L5RCharacterData = _make_char(2, {"Etiquette": 1}, {"Willpower": 2})
+	target.school = "Doji Courtier"
+	var chars: Dictionary = {1: actor, 2: target}
+	var action: NPCDataStructures.ScoredAction = _make_action("PROVOKE_EMOTION")
+	var ctx: NPCDataStructures.ContextSnapshot = _make_ctx()
+	var result: Dictionary = ActionExecutor.execute(
+		action, actor, ctx, _dice, _build_skill_map(), {}, chars
+	)
+	if result.get("success", false):
+		assert_false(result["effects"].get("ikoma_bard_exempt", false))
+		assert_true(result["effects"].has("target_honor_change"))
+
+
+func test_ikoma_bard_non_lion_not_exempt() -> void:
+	var actor: L5RCharacterData = _make_char(1, {"Courtier": 5}, {"Awareness": 5})
+	var target: L5RCharacterData = _make_char(2, {"Etiquette": 1}, {"Willpower": 2})
+	target.school = "Ikoma Bard"
+	target.clan = "Crane"
+	var chars: Dictionary = {1: actor, 2: target}
+	var action: NPCDataStructures.ScoredAction = _make_action("PROVOKE_EMOTION")
+	var ctx: NPCDataStructures.ContextSnapshot = _make_ctx()
+	var result: Dictionary = ActionExecutor.execute(
+		action, actor, ctx, _dice, _build_skill_map(), {}, chars
+	)
+	if result.get("success", false):
+		assert_false(result["effects"].get("ikoma_bard_exempt", false),
+			"Non-Lion Ikoma Bard should not get the exemption")
+
+
+func test_ikoma_bard_provoke_failure_still_normal() -> void:
+	var actor: L5RCharacterData = _make_char(1, {"Courtier": 1}, {"Awareness": 2})
+	var target: L5RCharacterData = _make_char(2, {"Etiquette": 5}, {"Willpower": 5})
+	target.school = "Ikoma Bard"
+	target.clan = "Lion"
+	var chars: Dictionary = {1: actor, 2: target}
+	var action: NPCDataStructures.ScoredAction = _make_action("PROVOKE_EMOTION")
+	var ctx: NPCDataStructures.ContextSnapshot = _make_ctx()
+	var result: Dictionary = ActionExecutor.execute(
+		action, actor, ctx, _dice, _build_skill_map(), {}, chars
+	)
+	if not result.get("success", false):
+		assert_true(result["effects"].get("failed", false),
+			"Failed provoke against Ikoma Bard should still report failure")

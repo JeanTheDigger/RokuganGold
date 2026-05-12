@@ -604,25 +604,34 @@ static func _execute_gossip(
 		trait_val, skill_rank, tn
 	)
 
-	var success: bool = roll_result.get("success", false)
-	var margin: int = roll_result.get("total", 0) - tn
-	var raises: int = maxi(int(margin / 5.0), 0)
-	var effects: Dictionary = {}
+	var roll_total: int = roll_result.get("total", 0)
+	var margin: int = roll_total - tn
+	var total_raises: int = maxi(int(margin / 5.0), 0)
+	var damage_raises: int = action.metadata.get("damage_raises", total_raises)
+	var concealment_raises: int = action.metadata.get("concealment_raises", 0)
+	if damage_raises + concealment_raises > total_raises:
+		damage_raises = total_raises
+		concealment_raises = 0
 
-	if success:
-		var disp_toward_subject: int = -5 - (raises * 2)
-		effects = {
-			"gossip_subject_id": subject_id,
-			"gossip_subject_disposition": disp_toward_subject,
-			"info_gained": true,
-		}
+	var resolution: Dictionary = CourtActionSystem.resolve_gossip(
+		roll_total, tn, damage_raises, concealment_raises
+	)
+
+	var effects: Dictionary = {}
+	if resolution.get("success", false):
+		effects["gossip_subject_id"] = subject_id
+		effects["gossip_subject_disposition"] = resolution["gossip_subject_disposition"]
+		effects["info_gained"] = true
+		var is_bayushi: bool = character.school.begins_with("Bayushi Courtier")
+		effects["source_concealed"] = resolution.get("source_concealed", false) or is_bayushi
+		effects["concealment_depth"] = resolution.get("concealment_depth", 0)
 	else:
-		effects = {"failed": true}
-		if margin <= -10:
-			effects["disposition_change"] = -5
+		effects["failed"] = true
+		if resolution.has("disposition_change"):
+			effects["disposition_change"] = resolution["disposition_change"]
 
 	return {
-		"success": success,
+		"success": resolution.get("success", false),
 		"action_id": "GOSSIP",
 		"character_id": ctx.character_id,
 		"target_npc_id": listener_id,
@@ -630,7 +639,7 @@ static func _execute_gossip(
 		"ic_day": ctx.ic_day,
 		"season": ctx.season,
 		"skill_used": primary_skill,
-		"roll_total": roll_result.get("total", 0),
+		"roll_total": roll_total,
 		"tn": tn,
 		"margin": margin,
 		"effects": effects,
@@ -2415,12 +2424,22 @@ static func _execute_provoke_emotion(
 		attacker_roll, defender_roll, witness_ids
 	)
 
+	# Ikoma Bard R2 exemption: emotion on behalf of Lion or honorable cause
+	var ikoma_exempt: bool = (
+		target != null
+		and target.school.begins_with("Ikoma Bard")
+		and target.clan == "Lion"
+	)
+
 	var effects: Dictionary = {}
 	if resolution.get("success", false):
-		effects["target_honor_change"] = resolution["target_honor_change"]
-		effects["target_glory_change"] = resolution["target_glory_change"]
-		effects["target_witness_disposition"] = resolution["target_witness_disposition"]
-		effects["witnesses"] = resolution["witnesses"]
+		if ikoma_exempt:
+			effects["ikoma_bard_exempt"] = true
+		else:
+			effects["target_honor_change"] = resolution["target_honor_change"]
+			effects["target_glory_change"] = resolution["target_glory_change"]
+			effects["target_witness_disposition"] = resolution["target_witness_disposition"]
+			effects["witnesses"] = resolution["witnesses"]
 	else:
 		effects["failed"] = true
 		if resolution.has("witness_disposition_loss"):
