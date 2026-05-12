@@ -503,6 +503,7 @@ All in /tests/, one file per system:
 - test_otomo_seiyaku_system.gd (~55 tests)
 - test_world_population_generator.gd (~50 tests)
 - test_npc_advancement.gd (~56 tests)
+- test_ronin_system.gd (~41 tests)
 
 ### Festival System (s11.5)
 - **simulation/festival_system.gd** — Empire-wide canonical festivals, Rokuyo
@@ -2598,6 +2599,30 @@ All in /tests/, one file per system:
   (defender/attacker character_ids), and crisis indicators (insurgencies →
   magistrates and commanders). `_get_season_days()` helper maps season enum
   to IC day count. Return dict gains `advancement_results`.
+
+### Ronin System (s52 Part 5)
+- **simulation/ronin_system.gd** — Ronin status transitions per GDD s52 Part 5.
+  Pure static functions. Handles conversion to/from ronin status, income
+  tracking, desperation escalation, and insurgency seeding.
+  `make_ronin(character, cause)` strips lord_id, role_position, military fields,
+  operational hierarchy; reduces status by 1.0 (floor 0); applies honor loss
+  (0.5 involuntary, 1.0 voluntary). Preserves original_lord_id. Stats unchanged.
+  Four RoninCause values: LORD_DEATH_NO_HEIR, DISMISSAL, CLAN_DESTROYED,
+  VOLUNTARY_DEPARTURE.
+  `is_ronin()` = no lord + no role + status < 1.0.
+  `accept_into_service()` restores lord/role/clan, sets status ≥ 1.0, +0.1 honor.
+  Income tracking via `supply_ledger` keys: `ronin_since_season`,
+  `last_income_season`. `check_desperation()` returns stable/debt/desperate
+  based on seasons without income (4 → Debt disadvantage, 8 → desperate).
+  `can_seed_insurgency()` gates on desperate + bushi/ninja + not Gi/Meiyo virtue.
+  `resolve_petition()` Awareness+Etiquette vs TN 20 (+10 if lord disposition < -10).
+  `hire_as_mercenary()` pays koku, sets operational_superior_id, records income.
+  `process_seasonal_ronin()` batch entry: scans all ronin for debt/desperate/
+  insurgency seed status. Returns `{debt_results, desperate_results,
+  insurgency_seeds}`.
+- **DayOrchestrator wiring** — `_process_seasonal_ronin()` runs on season
+  boundary after seiyaku review. Uses `horde_season_count` from season_meta
+  as the monotonic season counter. Return dict gains `ronin_results`.
 
 ### What's Next
 1. World generation coordinate system and adjacency

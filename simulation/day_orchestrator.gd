@@ -295,6 +295,7 @@ static func advance_day(
 	var wall_seasonal_result: Dictionary = {}
 	var gempukku_results: Dictionary = {}
 	var advancement_results: Dictionary = {}
+	var ronin_results: Dictionary = {}
 	var seiyaku_results: Dictionary = {}
 	if current_season != prev_season:
 		# Add the IC year to miya_inputs so per-province blessed-year tracking
@@ -376,6 +377,8 @@ static func advance_day(
 				emperor_archetype, active_wars, active_topics,
 				next_topic_id, ic_day,
 			)
+		var season_count: int = int(season_meta.get("horde_season_count", 0))
+		ronin_results = _process_seasonal_ronin(characters, season_count)
 
 	var horde_results: Dictionary = _process_horde_rolls(
 		current_season, prev_season,
@@ -439,6 +442,7 @@ static func advance_day(
 		"musha_shugyo_results": musha_shugyo_results,
 		"gempukku_results": gempukku_results,
 		"advancement_results": advancement_results,
+		"ronin_results": ronin_results,
 		"seiyaku_results": seiyaku_results,
 	}
 
@@ -5859,6 +5863,15 @@ static func _process_gempukku(
 			active_topics.append(topic)
 
 	return result
+
+
+# -- Ronin Processing (s52 Part 5) ---------------------------------------------
+
+static func _process_seasonal_ronin(
+	characters: Array[L5RCharacterData],
+	current_season_count: int,
+) -> Dictionary:
+	return RoninSystem.process_seasonal_ronin(characters, current_season_count)
 
 
 # -- NPC Advancement (s52 Part 3) ----------------------------------------------
