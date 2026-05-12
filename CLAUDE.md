@@ -425,7 +425,7 @@ All in /tests/, one file per system:
 - test_effect_applicator.gd (~37 tests)
 - test_npc_wave_resolver.gd (~15 tests)
 - test_resource_tick.gd (~30 tests)
-- test_objective_decomposer.gd (~110 tests)
+- test_objective_decomposer.gd (~117 tests)
 - test_information_system.gd (~40 tests)
 - test_topic_system.gd (~55 tests)
 - test_investigation_system.gd (~40 tests)
@@ -574,10 +574,19 @@ All in /tests/, one file per system:
   day of month 12 via `MarriageSystem.BENTEN_FESTIVAL_BONUS`.
   ContextSnapshot gains `marriageable_vassal_ids: Array[int]` populated in
   `build_context()` via `_find_marriageable_vassals()` (scans chars_by_id for
-  unmarried vassals/children of the lord). ActionExecutor gains
-  `_find_best_marriage_candidate()` for auto-selecting the target lord's best
-  unmarried vassal when the decomposer doesn't specify one (target_candidate_id
-  = -1).
+  unmarried vassals/children of the lord). `succession_insecure: bool` and
+  `lord_is_unmarried: bool` added to ContextSnapshot — populated from
+  `designated_heir_id` and `children_ids` in build_context(). ActionExecutor
+  gains `_find_best_marriage_candidate()` for auto-selecting the target lord's
+  best unmarried vassal when the decomposer doesn't specify one
+  (target_candidate_id = -1).
+  **Succession-insecurity marriage (s57.20.2)** —
+  `_try_succession_marriage()` in ObjectiveDecomposer fires from
+  PROTECT_DEPENDENTS when lord has no heir and no children (after crisis/
+  garrison/stability/rice checks). Unmarried lords propose themselves as
+  candidate at priority 3 (urgent succession securing). Married lords
+  without children marry off a vassal at priority 2. Same cross-clan
+  preference and 90-day cooldown as other marriage paths.
 - CALL_COURT, ASSIGN_VASSAL_OBJECTIVE, and SEND_INVITATION are NOT daily
   AP actions — they route through Strategic Review and the daily letter
   system respectively.
