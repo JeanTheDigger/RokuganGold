@@ -190,14 +190,6 @@ static func advance_day(
 	var governance_results: Dictionary = _process_governance_effects(
 		day_result.get("results", []),
 		characters_by_id,
-		objectives_map,
-		active_courts,
-		active_topics,
-		next_court_id,
-		next_topic_id,
-		ic_day,
-		pending_letters,
-		world_states,
 	)
 
 	var war_declarations: Array[Dictionary] = _process_war_declarations(
@@ -5964,19 +5956,8 @@ static func _build_advancement_world_state(
 static func _process_governance_effects(
 	results: Array,
 	characters_by_id: Dictionary,
-	objectives_map: Dictionary,
-	active_courts: Array[CourtSessionData],
-	active_topics: Array[TopicData],
-	next_court_id: Array[int],
-	next_topic_id: Array[int],
-	ic_day: int,
-	pending_letters: Array,
-	world_states: Dictionary,
 ) -> Dictionary:
 	var appointment_results: Array[Dictionary] = []
-	var vassal_assignment_results: Array[Dictionary] = []
-	var court_creation_results: Array[Dictionary] = []
-	var invitation_results: Array[Dictionary] = []
 
 	for result: Variant in results:
 		if not (result is Dictionary):
@@ -5988,26 +5969,8 @@ static func _process_governance_effects(
 			var ar: Dictionary = _apply_appointment(effects, characters_by_id)
 			appointment_results.append(ar)
 
-		if effects.get("requires_vassal_assignment", false):
-			var vr: Dictionary = _apply_vassal_objective_assignment(effects, objectives_map)
-			vassal_assignment_results.append(vr)
-
-		if effects.get("requires_court_creation", false):
-			var cr: Dictionary = _apply_court_creation(
-				effects, active_courts, active_topics,
-				next_court_id, next_topic_id, ic_day, world_states,
-			)
-			court_creation_results.append(cr)
-
-		if effects.get("requires_invitation", false):
-			var ir: Dictionary = _apply_invitation(effects, pending_letters, ic_day)
-			invitation_results.append(ir)
-
 	return {
 		"appointments": appointment_results,
-		"vassal_assignments": vassal_assignment_results,
-		"court_creations": court_creation_results,
-		"invitations": invitation_results,
 	}
 
 
@@ -6030,115 +5993,6 @@ static func _apply_appointment(
 		"applied": true,
 		"appointee_id": appointee_id,
 		"position": position,
-		"lord_id": lord_id,
-	}
-
-
-static func _apply_vassal_objective_assignment(
-	effects: Dictionary,
-	objectives_map: Dictionary,
-) -> Dictionary:
-	var vassal_id: int = effects.get("vassal_id", -1)
-	var objective_type: String = effects.get("objective_type", "")
-	var target_province_id: int = effects.get("target_province_id", -1)
-	var lord_id: int = effects.get("lord_id", -1)
-
-	if vassal_id < 0:
-		return {"applied": false, "reason": "no_vassal"}
-
-	if not objectives_map.has(vassal_id):
-		objectives_map[vassal_id] = {}
-
-	var new_objective: Dictionary = {
-		"need_type": objective_type,
-		"status": "ACTIVE",
-		"assigned_by": lord_id,
-	}
-	if target_province_id >= 0:
-		new_objective["target_province_id"] = target_province_id
-
-	objectives_map[vassal_id]["standing"] = new_objective
-
-	return {
-		"applied": true,
-		"vassal_id": vassal_id,
-		"objective_type": objective_type,
-		"lord_id": lord_id,
-	}
-
-
-static func _apply_court_creation(
-	effects: Dictionary,
-	active_courts: Array[CourtSessionData],
-	active_topics: Array[TopicData],
-	next_court_id: Array[int],
-	next_topic_id: Array[int],
-	ic_day: int,
-	world_states: Dictionary,
-) -> Dictionary:
-	var lord_id: int = effects.get("host_lord_id", -1)
-	var settlement_id: int = effects.get("host_settlement_id", -1)
-	var clan: String = effects.get("host_clan", "")
-
-	if lord_id < 0 or settlement_id < 0:
-		return {"applied": false, "reason": "missing_host_data"}
-
-	for c: CourtSessionData in active_courts:
-		if c.host_lord_id == lord_id and CourtSystem.is_active(c):
-			return {"applied": false, "reason": "already_hosting"}
-
-	var court_type: CourtSessionData.CourtType = CourtSessionData.CourtType.PROVINCIAL_FAMILY_COURT
-
-	var agenda: Array[int] = CourtSystem.select_agenda_topics(
-		active_topics, court_type
-	)
-
-	var court := CourtSystem.create_court(
-		next_court_id[0], court_type, lord_id,
-		settlement_id, clan, ic_day + 1
-	)
-	next_court_id[0] += 1
-	CourtSystem.set_agenda(court, agenda)
-	CourtSystem.add_attendee(court, lord_id)
-	active_courts.append(court)
-
-	var last_court_season: int = world_states.get("current_season", -1)
-	_track_court_called(world_states, lord_id, ic_day, last_court_season)
-
-	return {
-		"applied": true,
-		"court_id": court.court_id,
-		"lord_id": lord_id,
-		"settlement_id": settlement_id,
-	}
-
-
-static func _apply_invitation(
-	effects: Dictionary,
-	pending_letters: Array,
-	ic_day: int,
-) -> Dictionary:
-	var invitee_id: int = effects.get("invitee_id", -1)
-	var lord_id: int = effects.get("host_lord_id", -1)
-	var clan: String = effects.get("host_clan", "")
-
-	if invitee_id < 0 or lord_id < 0:
-		return {"applied": false, "reason": "missing_ids"}
-
-	var letter: Dictionary = {
-		"sender_id": lord_id,
-		"recipient_id": invitee_id,
-		"topic": -1,
-		"letter_type": "court_invitation",
-		"ic_day_sent": ic_day,
-		"province_distance": 3,
-		"clan": clan,
-	}
-	pending_letters.append(letter)
-
-	return {
-		"applied": true,
-		"invitee_id": invitee_id,
 		"lord_id": lord_id,
 	}
 

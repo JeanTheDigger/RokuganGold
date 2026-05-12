@@ -1,7 +1,9 @@
 extends GutTest
-## Tests for governance action wiring: APPOINT_TO_POSITION,
-## ASSIGN_VASSAL_OBJECTIVE, CALL_COURT, SEND_INVITATION,
-## and REASSIGN_VASSAL_OBJECTIVE strategic directive consumption.
+## Tests for governance action wiring: APPOINT_TO_POSITION (daily AP action),
+## REASSIGN_VASSAL_OBJECTIVE (strategic review directive consumption),
+## and lord-only action gating.
+## CALL_COURT and ASSIGN_VASSAL_OBJECTIVE run through Strategic Review.
+## SEND_INVITATION runs through the free daily letter system.
 
 
 var _dice: DiceEngine
@@ -74,48 +76,62 @@ func _make_action(action_id: String, metadata: Dictionary = {}) -> NPCDataStruct
 	return a
 
 
-# -- Context Action List Tests -------------------------------------------------
+# -- Context Action List: APPOINT_TO_POSITION ---------------------------------
 
-func test_call_court_in_at_own_holdings_actions() -> void:
+func test_appoint_in_at_own_holdings_actions() -> void:
 	var actions: Array[String] = NPCDecisionEngine._get_actions_for_context(
 		Enums.ContextFlag.AT_OWN_HOLDINGS
 	)
-	assert_true(actions.has("CALL_COURT"), "CALL_COURT should be in AT_OWN_HOLDINGS")
+	assert_true(actions.has("APPOINT_TO_POSITION"))
 
 
-func test_send_invitation_in_at_own_holdings_actions() -> void:
+func test_appoint_in_at_court_actions() -> void:
 	var actions: Array[String] = NPCDecisionEngine._get_actions_for_context(
+		Enums.ContextFlag.AT_COURT
+	)
+	assert_true(actions.has("APPOINT_TO_POSITION"))
+
+
+func test_appoint_not_in_traveling() -> void:
+	var actions: Array[String] = NPCDecisionEngine._get_actions_for_context(
+		Enums.ContextFlag.TRAVELING
+	)
+	assert_false(actions.has("APPOINT_TO_POSITION"))
+
+
+# -- Strategic Review Actions NOT in Daily AP Loop -----------------------------
+
+func test_call_court_not_in_daily_action_lists() -> void:
+	var holdings: Array[String] = NPCDecisionEngine._get_actions_for_context(
 		Enums.ContextFlag.AT_OWN_HOLDINGS
 	)
-	assert_true(actions.has("SEND_INVITATION"), "SEND_INVITATION should be in AT_OWN_HOLDINGS")
+	var court: Array[String] = NPCDecisionEngine._get_actions_for_context(
+		Enums.ContextFlag.AT_COURT
+	)
+	assert_false(holdings.has("CALL_COURT"), "CALL_COURT uses Strategic Review, not daily AP")
+	assert_false(court.has("CALL_COURT"))
 
 
-func test_assign_vassal_objective_in_at_own_holdings_actions() -> void:
-	var actions: Array[String] = NPCDecisionEngine._get_actions_for_context(
+func test_assign_vassal_not_in_daily_action_lists() -> void:
+	var holdings: Array[String] = NPCDecisionEngine._get_actions_for_context(
 		Enums.ContextFlag.AT_OWN_HOLDINGS
 	)
-	assert_true(actions.has("ASSIGN_VASSAL_OBJECTIVE"), "ASSIGN_VASSAL_OBJECTIVE should be in AT_OWN_HOLDINGS")
-
-
-func test_call_court_in_at_court_actions() -> void:
-	var actions: Array[String] = NPCDecisionEngine._get_actions_for_context(
+	var court: Array[String] = NPCDecisionEngine._get_actions_for_context(
 		Enums.ContextFlag.AT_COURT
 	)
-	assert_true(actions.has("CALL_COURT"), "CALL_COURT should be in AT_COURT")
+	assert_false(holdings.has("ASSIGN_VASSAL_OBJECTIVE"), "ASSIGN_VASSAL uses Strategic Review")
+	assert_false(court.has("ASSIGN_VASSAL_OBJECTIVE"))
 
 
-func test_send_invitation_in_at_court_actions() -> void:
-	var actions: Array[String] = NPCDecisionEngine._get_actions_for_context(
+func test_send_invitation_not_in_daily_action_lists() -> void:
+	var holdings: Array[String] = NPCDecisionEngine._get_actions_for_context(
+		Enums.ContextFlag.AT_OWN_HOLDINGS
+	)
+	var court: Array[String] = NPCDecisionEngine._get_actions_for_context(
 		Enums.ContextFlag.AT_COURT
 	)
-	assert_true(actions.has("SEND_INVITATION"), "SEND_INVITATION should be in AT_COURT")
-
-
-func test_assign_vassal_objective_in_at_court_actions() -> void:
-	var actions: Array[String] = NPCDecisionEngine._get_actions_for_context(
-		Enums.ContextFlag.AT_COURT
-	)
-	assert_true(actions.has("ASSIGN_VASSAL_OBJECTIVE"), "ASSIGN_VASSAL_OBJECTIVE should be in AT_COURT")
+	assert_false(holdings.has("SEND_INVITATION"), "SEND_INVITATION uses letter system")
+	assert_false(court.has("SEND_INVITATION"))
 
 
 # -- Lord-Only Gating Tests ----------------------------------------------------
@@ -148,16 +164,19 @@ func test_non_lord_actions_not_blocked() -> void:
 	assert_false(NPCDecisionEngine._is_lord_only_blocked("REST", ctx))
 
 
-func test_governance_actions_not_in_traveling() -> void:
-	var actions: Array[String] = NPCDecisionEngine._get_actions_for_context(
-		Enums.ContextFlag.TRAVELING
-	)
-	assert_false(actions.has("CALL_COURT"))
-	assert_false(actions.has("SEND_INVITATION"))
-	assert_false(actions.has("ASSIGN_VASSAL_OBJECTIVE"))
+func test_appoint_blocked_for_non_lord() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.is_lord = false
+	assert_true(NPCDecisionEngine._is_lord_only_blocked("APPOINT_TO_POSITION", ctx))
 
 
-# -- Action Executor Tests -----------------------------------------------------
+func test_declare_war_blocked_for_non_lord() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.is_lord = false
+	assert_true(NPCDecisionEngine._is_lord_only_blocked("DECLARE_WAR", ctx))
+
+
+# -- Action Executor: APPOINT_TO_POSITION --------------------------------------
 
 func test_appoint_to_position_returns_requires_flag() -> void:
 	var char := _make_char(1)
@@ -178,78 +197,10 @@ func test_appoint_to_position_returns_requires_flag() -> void:
 	assert_eq(effects["appointing_lord_id"], 1)
 
 
-func test_assign_vassal_objective_returns_requires_flag() -> void:
+func test_appoint_fails_without_target() -> void:
 	var char := _make_char(1)
 	var ctx := _make_ctx(char)
-	var action := _make_action("ASSIGN_VASSAL_OBJECTIVE", {
-		"vassal_id": 10,
-		"objective_type": "DEFEND_PROVINCE",
-		"target_province_id": 42,
-	})
-	var result: Dictionary = ActionExecutor.execute(
-		action, char, ctx, _dice, {}
-	)
-	assert_true(result["success"])
-	var effects: Dictionary = result["effects"]
-	assert_true(effects.get("requires_vassal_assignment", false))
-	assert_eq(effects["vassal_id"], 10)
-	assert_eq(effects["objective_type"], "DEFEND_PROVINCE")
-	assert_eq(effects["target_province_id"], 42)
-
-
-func test_call_court_returns_requires_flag() -> void:
-	var char := _make_char(1)
-	char.physical_location = "200"
-	var ctx := _make_ctx(char)
-	var action := _make_action("CALL_COURT", {
-		"lord_id": 1,
-		"settlement_id": "200",
-	})
-	var result: Dictionary = ActionExecutor.execute(
-		action, char, ctx, _dice, {}
-	)
-	assert_true(result["success"])
-	var effects: Dictionary = result["effects"]
-	assert_true(effects.get("requires_court_creation", false))
-	assert_eq(effects["host_lord_id"], 1)
-	assert_eq(effects["host_settlement_id"], 200)
-	assert_eq(effects["host_clan"], "Crane")
-
-
-func test_call_court_fails_with_invalid_location() -> void:
-	var char := _make_char(1)
-	char.physical_location = "unknown"
-	var ctx := _make_ctx(char)
-	var action := _make_action("CALL_COURT")
-	var result: Dictionary = ActionExecutor.execute(
-		action, char, ctx, _dice, {}
-	)
-	assert_false(result["success"])
-
-
-func test_send_invitation_returns_requires_flag() -> void:
-	var char := _make_char(1)
-	var ctx := _make_ctx(char)
-	var action := _make_action("SEND_INVITATION", {
-		"invitee_id": 15,
-		"lord_id": 1,
-	})
-	var result: Dictionary = ActionExecutor.execute(
-		action, char, ctx, _dice, {}
-	)
-	assert_true(result["success"])
-	var effects: Dictionary = result["effects"]
-	assert_true(effects.get("requires_invitation", false))
-	assert_eq(effects["invitee_id"], 15)
-	assert_eq(effects["host_lord_id"], 1)
-
-
-func test_send_invitation_fails_without_invitee() -> void:
-	var char := _make_char(1)
-	var ctx := _make_ctx(char)
-	var action := _make_action("SEND_INVITATION", {
-		"lord_id": 1,
-	})
+	var action := _make_action("APPOINT_TO_POSITION", {})
 	var result: Dictionary = ActionExecutor.execute(
 		action, char, ctx, _dice, {}
 	)
@@ -286,163 +237,10 @@ func test_appointment_fails_for_missing_character() -> void:
 	assert_false(result["applied"])
 
 
-# -- Day Orchestrator: Vassal Objective Assignment -----------------------------
-
-func test_vassal_assignment_creates_objective() -> void:
-	var objectives_map: Dictionary = {}
-	var effects: Dictionary = {
-		"requires_vassal_assignment": true,
-		"lord_id": 1,
-		"vassal_id": 10,
-		"objective_type": "DEFEND_PROVINCE",
-		"target_province_id": 42,
-	}
-	var result: Dictionary = DayOrchestrator._apply_vassal_objective_assignment(
-		effects, objectives_map
-	)
-	assert_true(result["applied"])
-	assert_true(objectives_map.has(10))
-	var standing: Dictionary = objectives_map[10].get("standing", {})
-	assert_eq(standing["need_type"], "DEFEND_PROVINCE")
-	assert_eq(standing["status"], "ACTIVE")
-	assert_eq(standing["assigned_by"], 1)
-	assert_eq(standing["target_province_id"], 42)
-
-
-func test_vassal_assignment_overwrites_existing() -> void:
-	var objectives_map: Dictionary = {
-		10: {"standing": {"need_type": "REST", "status": "ACTIVE"}},
-	}
-	var effects: Dictionary = {
-		"requires_vassal_assignment": true,
-		"lord_id": 1,
-		"vassal_id": 10,
-		"objective_type": "PATROL_PROVINCE",
-	}
-	var result: Dictionary = DayOrchestrator._apply_vassal_objective_assignment(
-		effects, objectives_map
-	)
-	assert_true(result["applied"])
-	assert_eq(objectives_map[10]["standing"]["need_type"], "PATROL_PROVINCE")
-
-
-func test_vassal_assignment_fails_without_vassal_id() -> void:
-	var objectives_map: Dictionary = {}
-	var effects: Dictionary = {
-		"requires_vassal_assignment": true,
-		"vassal_id": -1,
-	}
-	var result: Dictionary = DayOrchestrator._apply_vassal_objective_assignment(
-		effects, objectives_map
-	)
-	assert_false(result["applied"])
-
-
-# -- Day Orchestrator: Court Creation ------------------------------------------
-
-func test_court_creation_adds_court() -> void:
-	var active_courts: Array[CourtSessionData] = []
-	var active_topics: Array[TopicData] = []
-	var next_court_id: Array[int] = [1]
-	var next_topic_id: Array[int] = [100]
-	var world_states: Dictionary = {"current_season": 1}
-
-	var effects: Dictionary = {
-		"requires_court_creation": true,
-		"host_lord_id": 1,
-		"host_settlement_id": 200,
-		"host_clan": "Crane",
-	}
-	var result: Dictionary = DayOrchestrator._apply_court_creation(
-		effects, active_courts, active_topics,
-		next_court_id, next_topic_id, 10, world_states,
-	)
-	assert_true(result["applied"])
-	assert_eq(active_courts.size(), 1)
-	assert_eq(active_courts[0].host_lord_id, 1)
-	assert_eq(active_courts[0].host_settlement_id, 200)
-	assert_eq(next_court_id[0], 2)
-
-
-func test_court_creation_blocks_duplicate() -> void:
-	var existing := CourtSessionData.new()
-	existing.host_lord_id = 1
-	existing.phase = CourtSessionData.CourtPhase.ACTIVE
-	var active_courts: Array[CourtSessionData] = [existing]
-	var active_topics: Array[TopicData] = []
-	var next_court_id: Array[int] = [5]
-	var world_states: Dictionary = {}
-
-	var effects: Dictionary = {
-		"requires_court_creation": true,
-		"host_lord_id": 1,
-		"host_settlement_id": 200,
-		"host_clan": "Crane",
-	}
-	var result: Dictionary = DayOrchestrator._apply_court_creation(
-		effects, active_courts, active_topics,
-		next_court_id, [100], 10, world_states,
-	)
-	assert_false(result["applied"])
-	assert_eq(result["reason"], "already_hosting")
-	assert_eq(active_courts.size(), 1)
-
-
-func test_court_creation_fails_without_settlement() -> void:
-	var effects: Dictionary = {
-		"requires_court_creation": true,
-		"host_lord_id": 1,
-		"host_settlement_id": -1,
-		"host_clan": "Crane",
-	}
-	var result: Dictionary = DayOrchestrator._apply_court_creation(
-		effects, [] as Array[CourtSessionData], [] as Array[TopicData],
-		[1], [100], 10, {},
-	)
-	assert_false(result["applied"])
-
-
-# -- Day Orchestrator: Invitation Processing -----------------------------------
-
-func test_invitation_adds_letter() -> void:
-	var pending_letters: Array = []
-	var effects: Dictionary = {
-		"requires_invitation": true,
-		"invitee_id": 15,
-		"host_lord_id": 1,
-		"host_clan": "Crane",
-	}
-	var result: Dictionary = DayOrchestrator._apply_invitation(
-		effects, pending_letters, 10
-	)
-	assert_true(result["applied"])
-	assert_eq(pending_letters.size(), 1)
-	var letter: Dictionary = pending_letters[0]
-	assert_eq(letter["sender_id"], 1)
-	assert_eq(letter["recipient_id"], 15)
-	assert_eq(letter["letter_type"], "court_invitation")
-	assert_eq(letter["ic_day_sent"], 10)
-
-
-func test_invitation_fails_without_invitee() -> void:
-	var pending_letters: Array = []
-	var effects: Dictionary = {
-		"requires_invitation": true,
-		"invitee_id": -1,
-		"host_lord_id": 1,
-	}
-	var result: Dictionary = DayOrchestrator._apply_invitation(
-		effects, pending_letters, 10
-	)
-	assert_false(result["applied"])
-	assert_eq(pending_letters.size(), 0)
-
-
 # -- Strategic Review: Vassal Reassignment Directive Consumption ---------------
 
 func test_reassign_directive_assigns_new_objective() -> void:
 	var objectives_map: Dictionary = {5: {}}
-	var chars_by_id: Dictionary = {}
 	var strategic_results: Array[Dictionary] = [{
 		"directive": StrategicReview.Directive.REASSIGN_VASSAL_OBJECTIVE,
 		"lord_id": 1,
@@ -452,7 +250,7 @@ func test_reassign_directive_assigns_new_objective() -> void:
 	}]
 
 	DayOrchestrator._process_vassal_reassignments(
-		strategic_results, objectives_map, chars_by_id
+		strategic_results, objectives_map, {}
 	)
 
 	var standing: Dictionary = objectives_map[5].get("standing", {})
@@ -562,61 +360,14 @@ func test_appoint_metadata_populated() -> void:
 	assert_eq(option.metadata.get("position"), "Provincial Magistrate")
 
 
-func test_assign_vassal_metadata_populated() -> void:
-	var need := NPCDataStructures.ImmediateNeed.new()
-	need.target_npc_id = 10
-	need.target_intent = "DEFEND_PROVINCE"
-	need.target_province_id = 42
-	var ctx := _make_ctx(_make_char(1))
-	var option := NPCDataStructures.ScoredAction.new()
-	option.action_id = "ASSIGN_VASSAL_OBJECTIVE"
+# -- Integration: governance_results in advance_day ----------------------------
 
-	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
-
-	assert_eq(option.metadata.get("vassal_id"), 10)
-	assert_eq(option.metadata.get("objective_type"), "DEFEND_PROVINCE")
-	assert_eq(option.metadata.get("target_province_id"), 42)
-
-
-func test_call_court_metadata_populated() -> void:
-	var need := NPCDataStructures.ImmediateNeed.new()
-	var ctx := _make_ctx(_make_char(1))
-	ctx.location_id = "200"
-	var option := NPCDataStructures.ScoredAction.new()
-	option.action_id = "CALL_COURT"
-
-	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
-
-	assert_eq(option.metadata.get("lord_id"), 1)
-	assert_eq(option.metadata.get("settlement_id"), "200")
-
-
-func test_send_invitation_metadata_populated() -> void:
-	var need := NPCDataStructures.ImmediateNeed.new()
-	need.target_npc_id = 15
-	var ctx := _make_ctx(_make_char(1))
-	var option := NPCDataStructures.ScoredAction.new()
-	option.action_id = "SEND_INVITATION"
-
-	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
-
-	assert_eq(option.metadata.get("invitee_id"), 15)
-	assert_eq(option.metadata.get("lord_id"), 1)
-
-
-# -- Integration: Full Day Orchestrator Flow -----------------------------------
-
-func test_governance_effects_processed_in_advance_day() -> void:
+func test_governance_results_in_advance_day() -> void:
 	var lord := _make_char(1, "Crane", 5.0)
 	lord.physical_location = "100"
-	var vassal := _make_char(5, "Crane", 3.0)
-	vassal.lord_id = 1
-	var appointee := _make_char(10, "Crane", 2.0)
-	appointee.role_position = ""
 
-	var characters: Array[L5RCharacterData] = [lord, vassal, appointee]
-	var chars_by_id: Dictionary = {1: lord, 5: vassal, 10: appointee}
-	var objectives_map: Dictionary = {}
+	var characters: Array[L5RCharacterData] = [lord]
+	var chars_by_id: Dictionary = {1: lord}
 	var scoring_tables: Dictionary = ScoringTableLoader.get_scoring_tables()
 	var filter_data: Dictionary = ScoringTableLoader.get_filter_data()
 	var action_skill_map: Dictionary = ScoringTableLoader.load_action_skill_map()
@@ -624,13 +375,10 @@ func test_governance_effects_processed_in_advance_day() -> void:
 	var result: Dictionary = DayOrchestrator.advance_day(
 		_time, characters, chars_by_id,
 		{"context_flag": Enums.ContextFlag.AT_OWN_HOLDINGS, "is_lord": true},
-		objectives_map, scoring_tables, filter_data, _dice, action_skill_map,
+		{}, scoring_tables, filter_data, _dice, action_skill_map,
 		{}, [], {},
 	)
 
 	assert_true(result.has("governance_results"))
 	var gov: Dictionary = result["governance_results"]
 	assert_true(gov.has("appointments"))
-	assert_true(gov.has("vassal_assignments"))
-	assert_true(gov.has("court_creations"))
-	assert_true(gov.has("invitations"))
