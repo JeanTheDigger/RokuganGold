@@ -996,7 +996,7 @@ func test_marriage_skipped_at_court() -> void:
 	assert_ne(need.need_type, "ARRANGE_MARRIAGE", "Marriage only arranged from own holdings")
 
 
-func test_marriage_skips_same_clan_contacts() -> void:
+func test_marriage_same_clan_used_as_between_families_fallback() -> void:
 	var lord: L5RCharacterData = _make_char(1, "Crane", "Doji")
 	var ctx: NPCDataStructures.ContextSnapshot = _make_ctx(lord)
 	ctx.is_lord = true
@@ -1009,7 +1009,7 @@ func test_marriage_skips_same_clan_contacts() -> void:
 	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(
 		{"need_type": "ADVANCE_FAMILY", "category": "political"}, ctx,
 	)
-	assert_ne(need.need_type, "ARRANGE_MARRIAGE", "Same-clan contacts skipped for cross-clan marriage")
+	assert_eq(need.need_type, "ARRANGE_MARRIAGE", "Same-clan contacts used for between-families marriage")
 
 
 func test_executor_auto_selects_target_candidate() -> void:
@@ -1098,3 +1098,232 @@ func test_birth_family_floor_does_not_raise_above_floor() -> void:
 
 	var eff: int = DispositionSystem.get_effective_disposition(actor, 2, chars_by_id)
 	assert_eq(eff, 30, "Floor doesn't override already-higher disposition")
+
+
+# -- Cooldown Tests -------------------------------------------------------------
+
+func test_cooldown_blocks_recent_marriage_attempt() -> void:
+	var lord: L5RCharacterData = _make_char(1, "Crane", "Doji")
+	var ctx: NPCDataStructures.ContextSnapshot = _make_ctx(lord)
+	ctx.is_lord = true
+	ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
+	ctx.marriageable_vassal_ids = [2]
+	ctx.known_contacts_by_clan = {"Lion": [10]}
+	ctx.dispositions = {10: 5}
+	ctx.province_statuses = []
+	ctx.ic_day = 100
+	ctx.action_log = [{"action_id": "ARRANGE_MARRIAGE", "character_id": 1, "ic_day": 50}]
+
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(
+		{"need_type": "ADVANCE_FAMILY", "category": "political"}, ctx,
+	)
+	assert_ne(need.need_type, "ARRANGE_MARRIAGE", "Blocked by 90-day cooldown (50 days ago)")
+
+
+func test_cooldown_allows_expired_marriage_attempt() -> void:
+	var lord: L5RCharacterData = _make_char(1, "Crane", "Doji")
+	var ctx: NPCDataStructures.ContextSnapshot = _make_ctx(lord)
+	ctx.is_lord = true
+	ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
+	ctx.marriageable_vassal_ids = [2]
+	ctx.known_contacts_by_clan = {"Lion": [10]}
+	ctx.dispositions = {10: 5}
+	ctx.province_statuses = []
+	ctx.ic_day = 200
+	ctx.action_log = [{"action_id": "ARRANGE_MARRIAGE", "character_id": 1, "ic_day": 50}]
+
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(
+		{"need_type": "ADVANCE_FAMILY", "category": "political"}, ctx,
+	)
+	assert_eq(need.need_type, "ARRANGE_MARRIAGE", "Allowed after 150 days (>90 cooldown)")
+
+
+func test_cooldown_ignores_other_characters_attempts() -> void:
+	var lord: L5RCharacterData = _make_char(1, "Crane", "Doji")
+	var ctx: NPCDataStructures.ContextSnapshot = _make_ctx(lord)
+	ctx.is_lord = true
+	ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
+	ctx.marriageable_vassal_ids = [2]
+	ctx.known_contacts_by_clan = {"Lion": [10]}
+	ctx.dispositions = {10: 5}
+	ctx.province_statuses = []
+	ctx.ic_day = 100
+	ctx.action_log = [{"action_id": "ARRANGE_MARRIAGE", "character_id": 999, "ic_day": 50}]
+
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(
+		{"need_type": "ADVANCE_FAMILY", "category": "political"}, ctx,
+	)
+	assert_eq(need.need_type, "ARRANGE_MARRIAGE", "Other character's attempt does not trigger cooldown")
+
+
+# -- Smarter Target Lord Selection Tests ----------------------------------------
+
+func test_smarter_selection_picks_lowest_disposition() -> void:
+	var lord: L5RCharacterData = _make_char(1, "Crane", "Doji")
+	var ctx: NPCDataStructures.ContextSnapshot = _make_ctx(lord)
+	ctx.is_lord = true
+	ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
+	ctx.marriageable_vassal_ids = [2]
+	ctx.known_contacts_by_clan = {"Lion": [10, 11]}
+	ctx.dispositions = {10: 20, 11: 0}
+	ctx.province_statuses = []
+
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(
+		{"need_type": "ADVANCE_FAMILY", "category": "political"}, ctx,
+	)
+	assert_eq(need.need_type, "ARRANGE_MARRIAGE")
+	assert_eq(need.target_npc_id_secondary, 11, "Picks lowest-disposition contact for maximum benefit")
+
+
+func test_smarter_selection_skips_below_minus_ten() -> void:
+	var lord: L5RCharacterData = _make_char(1, "Crane", "Doji")
+	var ctx: NPCDataStructures.ContextSnapshot = _make_ctx(lord)
+	ctx.is_lord = true
+	ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
+	ctx.marriageable_vassal_ids = [2]
+	ctx.known_contacts_by_clan = {"Lion": [10, 11]}
+	ctx.dispositions = {10: -15, 11: -20}
+	ctx.province_statuses = []
+
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(
+		{"need_type": "ADVANCE_FAMILY", "category": "political"}, ctx,
+	)
+	assert_ne(need.need_type, "ARRANGE_MARRIAGE", "All contacts below -10 disposition, falls through")
+
+
+func test_smarter_selection_boundary_minus_ten_allowed() -> void:
+	var lord: L5RCharacterData = _make_char(1, "Crane", "Doji")
+	var ctx: NPCDataStructures.ContextSnapshot = _make_ctx(lord)
+	ctx.is_lord = true
+	ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
+	ctx.marriageable_vassal_ids = [2]
+	ctx.known_contacts_by_clan = {"Lion": [10]}
+	ctx.dispositions = {10: -10}
+	ctx.province_statuses = []
+
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(
+		{"need_type": "ADVANCE_FAMILY", "category": "political"}, ctx,
+	)
+	assert_eq(need.need_type, "ARRANGE_MARRIAGE", "Contact at exactly -10 disposition is allowed")
+
+
+# -- Benten Festival Gate Tests -------------------------------------------------
+
+func test_benten_festival_boosts_acceptance() -> void:
+	var lord_a: L5RCharacterData = _make_char(1, "Crane", "Doji", 6.0)
+	var candidate: L5RCharacterData = _make_char(2, "Crane", "Doji")
+	candidate.lord_id = 1
+	var lord_b: L5RCharacterData = _make_char(10, "Lion", "Akodo", 6.0)
+	lord_b.disposition_values[1] = -15
+	var target_candidate: L5RCharacterData = _make_char(11, "Lion", "Akodo")
+	target_candidate.lord_id = 10
+	target_candidate.status = 3.0
+	target_candidate.glory = 2.0
+	var chars_by_id: Dictionary = {1: lord_a, 2: candidate, 10: lord_b, 11: target_candidate}
+
+	var benten_ic_day: int = (12 - 1) * 30 + (9 - 1)
+	var ctx: NPCDataStructures.ContextSnapshot = _make_ctx(lord_a)
+	ctx.ic_day = benten_ic_day
+	var action: NPCDataStructures.ScoredAction = _make_action("ARRANGE_MARRIAGE", {
+		"candidate_id": 2,
+		"target_lord_id": 10,
+		"target_candidate_id": 11,
+	})
+
+	var result: Dictionary = ActionExecutor.execute(action, lord_a, ctx, _dice, {}, {}, chars_by_id)
+	var effects: Dictionary = result.get("effects", {})
+	assert_true(effects.get("requires_marriage", false), "Benten bonus (+20) should push marginal proposal to acceptance")
+
+
+func test_no_benten_bonus_on_normal_day() -> void:
+	var lord_a: L5RCharacterData = _make_char(1, "Crane", "Doji", 6.0)
+	var candidate: L5RCharacterData = _make_char(2, "Crane", "Doji")
+	candidate.lord_id = 1
+	var lord_b: L5RCharacterData = _make_char(10, "Lion", "Akodo", 6.0)
+	lord_b.disposition_values[1] = -15
+	var target_candidate: L5RCharacterData = _make_char(11, "Lion", "Akodo")
+	target_candidate.lord_id = 10
+	target_candidate.status = 3.0
+	target_candidate.glory = 2.0
+	var chars_by_id: Dictionary = {1: lord_a, 2: candidate, 10: lord_b, 11: target_candidate}
+
+	var ctx: NPCDataStructures.ContextSnapshot = _make_ctx(lord_a)
+	ctx.ic_day = 10
+	var action: NPCDataStructures.ScoredAction = _make_action("ARRANGE_MARRIAGE", {
+		"candidate_id": 2,
+		"target_lord_id": 10,
+		"target_candidate_id": 11,
+	})
+
+	var result: Dictionary = ActionExecutor.execute(action, lord_a, ctx, _dice, {}, {}, chars_by_id)
+	var effects: Dictionary = result.get("effects", {})
+	assert_true(effects.get("marriage_rejected", false), "Without Benten bonus, marginal proposal rejected")
+
+
+# -- Between-Families Fallback Tests --------------------------------------------
+
+func test_between_families_fallback_when_no_cross_clan() -> void:
+	var lord: L5RCharacterData = _make_char(1, "Crane", "Doji")
+	var ctx: NPCDataStructures.ContextSnapshot = _make_ctx(lord)
+	ctx.is_lord = true
+	ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
+	ctx.marriageable_vassal_ids = [2]
+	ctx.known_contacts_by_clan = {"Crane": [10]}
+	ctx.dispositions = {10: 5}
+	ctx.province_statuses = []
+
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(
+		{"need_type": "ADVANCE_FAMILY", "category": "political"}, ctx,
+	)
+	assert_eq(need.need_type, "ARRANGE_MARRIAGE", "Falls back to between-families when no cross-clan")
+	assert_eq(need.target_npc_id_secondary, 10, "Between-families lord from same clan")
+
+
+func test_between_families_skips_self() -> void:
+	var lord: L5RCharacterData = _make_char(1, "Crane", "Doji")
+	var ctx: NPCDataStructures.ContextSnapshot = _make_ctx(lord)
+	ctx.is_lord = true
+	ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
+	ctx.marriageable_vassal_ids = [2]
+	ctx.known_contacts_by_clan = {"Crane": [1]}
+	ctx.dispositions = {1: 0}
+	ctx.province_statuses = []
+
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(
+		{"need_type": "ADVANCE_FAMILY", "category": "political"}, ctx,
+	)
+	assert_ne(need.need_type, "ARRANGE_MARRIAGE", "Skips self in between-families search")
+
+
+func test_between_families_picks_lowest_disposition() -> void:
+	var lord: L5RCharacterData = _make_char(1, "Crane", "Doji")
+	var ctx: NPCDataStructures.ContextSnapshot = _make_ctx(lord)
+	ctx.is_lord = true
+	ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
+	ctx.marriageable_vassal_ids = [2]
+	ctx.known_contacts_by_clan = {"Crane": [10, 11]}
+	ctx.dispositions = {10: 20, 11: 0}
+	ctx.province_statuses = []
+
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(
+		{"need_type": "ADVANCE_FAMILY", "category": "political"}, ctx,
+	)
+	assert_eq(need.need_type, "ARRANGE_MARRIAGE")
+	assert_eq(need.target_npc_id_secondary, 11, "Between-families picks lowest disposition contact")
+
+
+func test_cross_clan_preferred_over_between_families() -> void:
+	var lord: L5RCharacterData = _make_char(1, "Crane", "Doji")
+	var ctx: NPCDataStructures.ContextSnapshot = _make_ctx(lord)
+	ctx.is_lord = true
+	ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
+	ctx.marriageable_vassal_ids = [2]
+	ctx.known_contacts_by_clan = {"Crane": [10], "Lion": [20]}
+	ctx.dispositions = {10: 5, 20: 5}
+	ctx.province_statuses = []
+
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(
+		{"need_type": "ADVANCE_FAMILY", "category": "political"}, ctx,
+	)
+	assert_eq(need.need_type, "ARRANGE_MARRIAGE")
+	assert_eq(need.target_npc_id_secondary, 20, "Cross-clan preferred when available")

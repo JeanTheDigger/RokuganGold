@@ -1247,10 +1247,14 @@ static func _try_arrange_marriage(
 		return null
 	if ctx.marriageable_vassal_ids.is_empty():
 		return null
+	if _has_recent_marriage_attempt(ctx, 90):
+		return null
 
 	var candidate_id: int = ctx.marriageable_vassal_ids[0]
 
 	var target_lord_id: int = _find_cross_clan_lord(ctx)
+	if target_lord_id < 0:
+		target_lord_id = _find_between_families_lord(ctx)
 	if target_lord_id < 0:
 		return null
 
@@ -1265,6 +1269,8 @@ static func _try_arrange_marriage(
 static func _find_cross_clan_lord(
 	ctx: NPCDataStructures.ContextSnapshot,
 ) -> int:
+	var best_id: int = -1
+	var best_score: int = -999
 	for clan_name: String in ctx.known_contacts_by_clan:
 		if clan_name == ctx.clan:
 			continue
@@ -1273,6 +1279,48 @@ static func _find_cross_clan_lord(
 			for contact_id: Variant in contacts:
 				if contact_id is int and contact_id >= 0:
 					var disp: int = ctx.dispositions.get(contact_id, 0)
-					if disp >= -10:
-						return contact_id as int
-	return -1
+					if disp < -10:
+						continue
+					var score: int = -disp
+					if score > best_score:
+						best_score = score
+						best_id = contact_id as int
+	return best_id
+
+
+static func _find_between_families_lord(
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> int:
+	if not ctx.known_contacts_by_clan.has(ctx.clan):
+		return -1
+	var contacts: Variant = ctx.known_contacts_by_clan[ctx.clan]
+	if not contacts is Array:
+		return -1
+	var best_id: int = -1
+	var best_score: int = -999
+	for contact_id: Variant in contacts:
+		if contact_id is int and contact_id >= 0:
+			if contact_id == ctx.character_id:
+				continue
+			var disp: int = ctx.dispositions.get(contact_id, 0)
+			if disp < -10:
+				continue
+			var score: int = -disp
+			if score > best_score:
+				best_score = score
+				best_id = contact_id as int
+	return best_id
+
+
+static func _has_recent_marriage_attempt(
+	ctx: NPCDataStructures.ContextSnapshot,
+	cooldown_days: int,
+) -> bool:
+	for entry: Variant in ctx.action_log:
+		if entry is Dictionary:
+			var d: Dictionary = entry
+			if d.get("action_id", "") == "ARRANGE_MARRIAGE" and d.get("character_id", -1) == ctx.character_id:
+				var attempt_day: int = d.get("ic_day", -1)
+				if attempt_day >= 0 and (ctx.ic_day - attempt_day) < cooldown_days:
+					return true
+	return false

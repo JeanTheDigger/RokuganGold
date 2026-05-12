@@ -1907,6 +1907,9 @@ static func _execute_arrange_marriage(
 		proposing_disp, char_value, favor_tier, has_mil_obj,
 	)
 
+	if MarriageSystem.is_benten_festival(ctx.ic_day):
+		acceptance_score += MarriageSystem.BENTEN_FESTIVAL_BONUS
+
 	if acceptance_score < 0:
 		return {
 			"success": false,

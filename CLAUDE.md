@@ -512,7 +512,7 @@ All in /tests/, one file per system:
 - test_ronin_system.gd (~44 tests)
 - test_musha_shugyo_system.gd (~75 tests)
 - test_governance_wiring.gd (~25 tests)
-- test_marriage_wiring.gd (~47 tests)
+- test_marriage_wiring.gd (~65 tests)
 
 ### Governance Action Wiring (s57.20)
 - **APPOINT_TO_POSITION** — Daily AP action (1 AP, lord-only). Executor
@@ -561,8 +561,14 @@ All in /tests/, one file per system:
   ACCUMULATE_LEVERAGE (priority 1, at own holdings), MAINTAIN_PEACE
   (priority 2, preventive diplomacy when no active war). `_try_arrange_marriage()`
   helper checks lord status, AT_OWN_HOLDINGS context, marriageable candidates,
-  and cross-clan lord contacts. `_find_cross_clan_lord()` picks first known
-  contact from a different clan with disposition >= -10.
+  90-day cooldown (scans action_log), and target lord contacts.
+  `_find_cross_clan_lord()` picks lowest-disposition cross-clan contact with
+  disposition >= -10 (maximizes diplomatic benefit). Between-families fallback:
+  `_find_between_families_lord()` finds same-clan different-family lords when
+  no cross-clan contacts are available, using the same lowest-disposition
+  scoring. Cross-clan is always preferred over between-families.
+  Benten Festival bonus: +20 acceptance score on proposals made on the 9th
+  day of month 12 via `MarriageSystem.BENTEN_FESTIVAL_BONUS`.
   ContextSnapshot gains `marriageable_vassal_ids: Array[int]` populated in
   `build_context()` via `_find_marriageable_vassals()` (scans chars_by_id for
   unmarried vassals/children of the lord). ActionExecutor gains
