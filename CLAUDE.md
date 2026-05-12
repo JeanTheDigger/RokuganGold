@@ -512,7 +512,7 @@ All in /tests/, one file per system:
 - test_ronin_system.gd (~44 tests)
 - test_musha_shugyo_system.gd (~75 tests)
 - test_governance_wiring.gd (~25 tests)
-- test_marriage_wiring.gd (~30 tests)
+- test_marriage_wiring.gd (~42 tests)
 
 ### Governance Action Wiring (s57.20)
 - **APPOINT_TO_POSITION** — Daily AP action (1 AP, lord-only). Executor
@@ -551,6 +551,20 @@ All in /tests/, one file per system:
   Uses `next_character_id` counter for child IDs.
 - **Birth family disposition floors** — `birth_clan`/`birth_family` fields
   stored but floor enforcement in DispositionSystem not yet wired (deferred).
+- **ARRANGE_MARRIAGE decomposition** — Lords with unmarried vassals/children
+  and cross-clan contacts produce ARRANGE_MARRIAGE needs from three standing
+  objective trees: ADVANCE_FAMILY (priority 2, before war check),
+  ACCUMULATE_LEVERAGE (priority 1, at own holdings), MAINTAIN_PEACE
+  (priority 2, preventive diplomacy when no active war). `_try_arrange_marriage()`
+  helper checks lord status, AT_OWN_HOLDINGS context, marriageable candidates,
+  and cross-clan lord contacts. `_find_cross_clan_lord()` picks first known
+  contact from a different clan with disposition >= -10.
+  ContextSnapshot gains `marriageable_vassal_ids: Array[int]` populated in
+  `build_context()` via `_find_marriageable_vassals()` (scans chars_by_id for
+  unmarried vassals/children of the lord). ActionExecutor gains
+  `_find_best_marriage_candidate()` for auto-selecting the target lord's best
+  unmarried vassal when the decomposer doesn't specify one (target_candidate_id
+  = -1).
 - CALL_COURT, ASSIGN_VASSAL_OBJECTIVE, and SEND_INVITATION are NOT daily
   AP actions — they route through Strategic Review and the daily letter
   system respectively.
