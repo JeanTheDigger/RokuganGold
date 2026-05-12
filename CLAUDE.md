@@ -500,7 +500,7 @@ All in /tests/, one file per system:
 - test_court_action_system.gd (~140 tests)
 - test_topic_system.gd (~55 tests)
 - test_investigation_system.gd (~40 tests)
-- test_day_orchestrator.gd (~64 tests)
+- test_day_orchestrator.gd (~66 tests)
 - test_approach_evaluation.gd (~55 tests)
 - test_commitment_registry.gd (~60 tests)
 - test_military_hierarchy.gd (~47 tests)
@@ -3189,8 +3189,10 @@ The following subsystems are now integrated into the NPC decision loop:
   type filtering in Phase 5 scoring), `objective_stalled_seasons` (from
   primary objective's `seasons_without_progress`), `besieged_settlement_health_pct`
   (computed from siege state rice/PU ratio at character's physical_location,
-  0.0 if garrison starved). Without this injection, all 5 urgency conditions
-  and topic type filtering would silently use defaults.
+  0.0 if garrison starved), `known_objectives["standing_need_type"]` (from
+  objectives_map standing objective for Phase 5 standing influence scoring).
+  Without this injection, urgency conditions, topic type filtering, and
+  standing influence would silently use defaults.
 - **DispositionSystem** — Daily: `_apply_cohabitation()` increments
   `cohabitation_days` dict on L5RCharacterData for all character pairs
   sharing a `physical_location`. Seasonal: `_decay_all_historical_modifiers()`
