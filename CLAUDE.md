@@ -528,10 +528,15 @@ All in /tests/, one file per system:
 - **ARRANGE_MARRIAGE** — Daily AP action (1 AP, lord-only). Executor
   intercept evaluates target lord acceptance via
   `MarriageSystem.evaluate_proposal()`. Returns `requires_marriage` on
-  acceptance (orchestrator mutates `spouse_id`, creates marriage record,
-  returns boost data) or `marriage_rejected` with −3 disposition on
-  rejection. Marriage type auto-detected from candidate clan/family.
-  WorldStateData gains `marriages: Array[Dictionary]`.
+  acceptance or `marriage_rejected` with −3 disposition on rejection.
+  Marriage type auto-detected from candidate clan/family. Orchestrator
+  `_apply_marriage()` mutates `spouse_id` on both characters, creates
+  marriage record, applies clan/family baseline boosts via
+  `CollectiveDisposition.apply_marriage()`, creates MODERATE GENERAL
+  FavorData for cross-clan marriages (creditor=target lord,
+  debtor=proposing lord), and generates Tier 4 POLITICAL marriage topic
+  with type-specific variant. WorldStateData gains
+  `marriages: Array[Dictionary]`.
 - CALL_COURT, ASSIGN_VASSAL_OBJECTIVE, and SEND_INVITATION are NOT daily
   AP actions — they route through Strategic Review and the daily letter
   system respectively.
