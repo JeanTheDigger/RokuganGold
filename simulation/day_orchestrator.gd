@@ -55,6 +55,8 @@ static func advance_day(
 	horde_strength_counters: Dictionary = {},
 	last_targeted_province_id: Array[int] = [-1],
 	ships: Array[ShipData] = [],
+	children: Array[ChildRecord] = [],
+	next_character_id: Array[int] = [10000],
 ) -> Dictionary:
 	var prev_season: int = time_system.get_season()
 
@@ -290,6 +292,7 @@ static func advance_day(
 	var insurgency_results: Dictionary = {}
 	var military_seasonal_result: Dictionary = {}
 	var wall_seasonal_result: Dictionary = {}
+	var gempukku_results: Dictionary = {}
 	if current_season != prev_season:
 		# Add the IC year to miya_inputs so per-province blessed-year tracking
 		# stays consistent. Year is computed from the time system's tick count.
@@ -336,6 +339,10 @@ static func advance_day(
 		insurgency_results = _process_insurgencies(
 			insurgencies, provinces, dice_engine, current_season,
 			next_insurgency_id, world_states
+		)
+		gempukku_results = _process_gempukku(
+			children, characters, characters_by_id, next_character_id,
+			dice_engine, ic_day, active_topics, next_topic_id, objectives_map,
 		)
 		progress_results = _evaluate_objective_progress(
 			characters, objectives_map, world_states
@@ -417,6 +424,7 @@ static func advance_day(
 		"naval_battle_results": naval_battle_results,
 		"naval_topics": naval_topics,
 		"musha_shugyo_results": musha_shugyo_results,
+		"gempukku_results": gempukku_results,
 	}
 
 
@@ -5683,6 +5691,58 @@ static func _process_musha_shugyo(
 			objectives_map[character.character_id].erase("standing")
 		results.append(result)
 	return results
+
+
+# -- Gempukku & Population -----------------------------------------------------
+
+static func _process_gempukku(
+	children: Array[ChildRecord],
+	characters: Array[L5RCharacterData],
+	characters_by_id: Dictionary,
+	next_character_id: Array[int],
+	dice_engine: DiceEngine,
+	ic_day: int,
+	active_topics: Array[TopicData],
+	next_topic_id: Array[int],
+	objectives_map: Dictionary,
+) -> Dictionary:
+	var result: Dictionary = GempukkuSystem.process_seasonal_gempukku(
+		children, characters, next_character_id, dice_engine, ic_day,
+	)
+
+	for nc: L5RCharacterData in result.get("new_characters", []):
+		characters.append(nc)
+		characters_by_id[nc.character_id] = nc
+		if MushaShugyo.is_on_pilgrimage(nc):
+			MushaShugyo.populate_objectives_map(nc.character_id, objectives_map)
+
+	for rc: L5RCharacterData in result.get("replenishment_characters", []):
+		characters.append(rc)
+		characters_by_id[rc.character_id] = rc
+
+	for cid: int in result.get("graduated_child_ids", []):
+		for i: int in range(children.size() - 1, -1, -1):
+			if children[i].child_id == cid:
+				children.remove_at(i)
+				break
+
+	for dead_id: int in result.get("natural_deaths", []):
+		if characters_by_id.has(dead_id):
+			var dead_char: L5RCharacterData = characters_by_id[dead_id]
+			var lethal: int = CharacterStats.get_ring_value(dead_char, Enums.Ring.EARTH) * 5 * 5
+			dead_char.wounds_taken = lethal
+			var topic := TopicData.new()
+			topic.topic_id = next_topic_id[0]
+			next_topic_id[0] += 1
+			topic.slug = "natural_death_" + str(dead_id)
+			topic.topic_type = "death"
+			topic.variant = "natural"
+			topic.tier = TopicData.Tier.TIER_4
+			topic.momentum = 11.0
+			topic.category = TopicData.Category.PERSONAL
+			active_topics.append(topic)
+
+	return result
 
 
 # -- Helpers -------------------------------------------------------------------

@@ -78,6 +78,10 @@ var last_targeted_province_id: Array[int] = [-1]
 # -- Naval System (s11.9) -----------------------------------------------------
 var ships: Array[ShipData] = []
 
+# -- Gempukku / Population (s52) -----------------------------------------------
+var children: Array[ChildRecord] = []
+var next_character_id: Array[int] = [10000]
+
 # -- Collective Disposition (s12.2b) -------------------------------------------
 # Clan-to-clan and family-to-family baselines keyed by sorted "a||b" strings.
 # Initialized to the locked PROVISIONAL pre-Scorpion-Coup starting values.
@@ -169,6 +173,8 @@ func advance_one_day() -> Dictionary:
 		horde_strength_counters,
 		last_targeted_province_id,
 		ships,
+		children,
+		next_character_id,
 	)
 
 

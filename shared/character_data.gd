@@ -13,6 +13,7 @@ extends Resource
 @export var school_type: Enums.SchoolType = Enums.SchoolType.BUSHI
 @export var age: int = 16
 @export var gender: String = ""
+@export var orientation: String = "straight"
 
 # -- The Five Rings & Traits ---------------------------------------------------
 # Ring = min(trait1, trait2). Both traits tracked individually per s4.5.2.
