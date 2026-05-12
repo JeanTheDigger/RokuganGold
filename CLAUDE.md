@@ -501,6 +501,7 @@ All in /tests/, one file per system:
 - test_winter_court_system.gd (~80 tests)
 - test_gempukku_system.gd (~55 tests)
 - test_otomo_seiyaku_system.gd (~55 tests)
+- test_world_population_generator.gd (~50 tests)
 
 ### Festival System (s11.5)
 - **simulation/festival_system.gd** — Empire-wide canonical festivals, Rokuyo
@@ -2505,6 +2506,63 @@ All in /tests/, one file per system:
   gains `seiyaku_results`.
 - **WorldStateData** gains `seiyaku_state: Dictionary` initialized from
   `OtomoSeiyakuSystem.make_initial_state()`.
+
+### World Population Generator — One-Time Game Start Pass (s52 Part 1, s22.4, s22.8)
+- **simulation/world_population_generator.gd** — `WorldPopulationGenerator` pure
+  static class per GDD s52 Part 1, s22.4, s22.8. One-time world population pass
+  that fills every named position before game start.
+  39-value `PositionType` enum covering all positions from Emperor through
+  Samurai. `POSITION_RANK` and `POSITION_STATUS` const tables map each
+  position to its minimum Insight Rank and starting Status value.
+  `CLAN_FAMILIES` maps all 9 major factions (7 Great Clans + Mantis +
+  Imperial) to their constituent families. 14 Minor Clans defined.
+  `RANK_DISTRIBUTION` target population per clan per rank (3× minimum
+  thresholds from s52 Trigger 3): Lion largest (762), Dragon/Mantis
+  smallest (237 each).
+  School selection logic: `_get_school_for_position()` routes to bushi,
+  courtier, or shugenja schools based on position type, with cross-family
+  fallback within the same clan. School Masters use their family's
+  canonical school.
+  `_generate_positioned_character()` creates a character via
+  `WorldGenerator.generate_character()` with position-appropriate rank,
+  then overrides status to match position tier. Uses GempukkuSystem for
+  name generation, gender rolling, and orientation assignment.
+  **Step 1-2 (Imperial):** Emperor, Heir, 5 court officials, 6 Jeweled
+  Champions, 3 Imperial Family Daimyo (~15-17 characters).
+  **Step 2 (Per-Clan):** Champion, Family Daimyo (per family), Rikugunshokan,
+  Senior Courtier, Magistrate Commander, School Masters per school (~85 total).
+  **Step 2 (Military):** Taisa (3 per army) and Chui (7 per legion) for all
+  clan armies. Lion (4 armies) generates 12 Taisa + 84 Chui = 96 military
+  commanders.
+  **Step 2 (Province):** Provincial Daimyo, Clan Magistrate, Local Daimyo
+  (per town/city), Garrison Commander (per garrisoned settlement), Temple
+  Head / Monastery Abbot (per religious settlement). Scales with world map.
+  **Step 2 (Magistrate System):** 3 Asako Inquisitor leaders, 3 Kuni
+  Witch-Hunter leaders, 2 Kuroiban leaders.
+  **Step 2 (Minor Clans):** Champion + Senior per minor clan (28 total).
+  **Step 2 (Kaiu Wall):** 4 segment commanders (Kaiu), 1 Hiruma Scout
+  Commander.
+  **Step 3 (Rank Filling):** Generates samurai at each rank tier to meet
+  `RANK_DISTRIBUTION` targets. Fills deficit only — characters generated
+  by position steps count toward the target.
+  **Step 4 (Family Web):** `_build_family_web()` orchestrates parent
+  assignment (age-gated, same-family, max 4 children), marriage assignment
+  (40% marriage rate, 15% cross-clan), sibling linkage from shared parents.
+  `_generate_ancestor_records()` creates 1-4 AncestorRecord per character
+  for generation-3 grandparents.
+  **Step 5 (Dispositions):** `_apply_starting_dispositions()` seeds
+  disposition_values for all cross-clan/cross-family character pairs via
+  `CollectiveDisposition.seed_first_meeting()`. Skipped when baselines
+  not provided.
+  `generate_world_population()` — main entry point. Accepts provinces,
+  settlements, dice engine, next_id counter, and optional baselines.
+  Returns `{characters, emperor_id, clan_champions, total_count}`.
+  Deterministic with seeded DiceEngine.
+  Known limitations: canonical (Type 1) characters not yet hand-authored —
+  all positions use procedural generation. Mantis schools not in
+  WorldGenerator.SCHOOL_DATA. Phoenix Elemental Council and Dragon
+  Togashi special handling deferred. Province data must be populated
+  before the pass produces province-scaled positions.
 
 ### What's Next
 1. World generation coordinate system and adjacency
