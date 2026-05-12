@@ -1387,6 +1387,11 @@ static func _populate_action_metadata(
 			"target_npc_id": need.target_npc_id,
 			"position": need.target_intent,
 		}
+	elif option.action_id == "PERFORM_WORSHIP":
+		option.metadata = {
+			"directed_fortune": need.target_npc_id if need.target_npc_id >= 0 else -1,
+			"location_type": _zone_to_worship_location(ctx.zone_subtype),
+		}
 
 
 static func _build_declare_war_metadata(
@@ -1804,6 +1809,17 @@ static func _get_virtue_string(ctx: NPCDataStructures.ContextSnapshot) -> String
 	if ctx.shourido_virtue != Enums.ShouridoVirtue.NONE:
 		return Enums.shourido_virtue_name(ctx.shourido_virtue)
 	return ""
+
+
+static func _zone_to_worship_location(zone: Enums.ZoneSubtype) -> String:
+	match zone:
+		Enums.ZoneSubtype.CASTLE_SHRINE:
+			return "village_shrine"
+		Enums.ZoneSubtype.SHRINE_CLEARING:
+			return "roadside_shrine"
+		Enums.ZoneSubtype.TEMPLE_GROUNDS:
+			return "local_shrine"
+	return "roadside_shrine"
 
 
 static func _extract_famine_province_ids(

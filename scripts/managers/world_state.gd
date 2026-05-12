@@ -88,6 +88,9 @@ var seiyaku_state: Dictionary = OtomoSeiyakuSystem.make_initial_state()
 # -- Marriages (s22.7) --------------------------------------------------------
 var marriages: Array[Dictionary] = []
 
+# -- Kami Worship (s4.3.21) ---------------------------------------------------
+var worship_state: Dictionary = WorshipSystem.make_initial_worship_state()
+
 # -- Collective Disposition (s12.2b) -------------------------------------------
 # Clan-to-clan and family-to-family baselines keyed by sorted "a||b" strings.
 # Initialized to the locked PROVISIONAL pre-Scorpion-Coup starting values.
@@ -185,6 +188,7 @@ func advance_one_day() -> Dictionary:
 		next_character_id,
 		seiyaku_state,
 		marriages,
+		worship_state,
 	)
 
 

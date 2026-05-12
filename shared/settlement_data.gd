@@ -27,6 +27,11 @@ extends Resource
 @export var military_pu: int = 0
 @export var garrison_pu: int = 0
 
+# -- Worship Locations (per GDD s4.3.21/s4.3.22) -----------------------------
+# Each entry: {"type": "roadside_shrine"|"village_shrine"|"local_shrine"|"temple"|"shinden",
+#              "dedicated": bool, "fortune": int (GreatFortune enum, -1 if general)}
+@export var worship_locations: Array[Dictionary] = []
+
 # -- Wall Tower fields (Fortification Settlement only, per GDD s2.4.2) --------
 # Structural Integrity: 0 (breached) to 10 (pristine). Non-wall settlements
 # leave this at the default 10 and never mutate it.

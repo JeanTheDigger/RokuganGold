@@ -179,6 +179,9 @@ static func execute(
 	if action_id == "ARRANGE_MARRIAGE":
 		return _execute_arrange_marriage(action, character, ctx, dice_engine, characters_by_id)
 
+	if action_id == "PERFORM_WORSHIP":
+		return _execute_perform_worship(action, character, ctx, dice_engine)
+
 	if action_id == "SCOUT_ENEMY":
 		return _execute_scout_enemy(action, character, ctx, dice_engine)
 
@@ -1276,6 +1279,56 @@ static func _execute_dispatch_courtier(
 				"recipient_disposition_change": -2.0,
 			},
 		}
+
+
+static func _execute_perform_worship(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	var is_shugenja: bool = character.school_type == Enums.SchoolType.SHUGENJA
+	var is_monk: bool = character.school_type == Enums.SchoolType.MONK
+	var char_type: String = "normal"
+	if is_monk:
+		char_type = "monk"
+	elif is_shugenja:
+		char_type = "shugenja"
+
+	var directed_fortune: int = action.metadata.get("directed_fortune", -1)
+
+	var ring_id: int = Enums.Ring.VOID
+	if directed_fortune >= 0:
+		ring_id = WorshipSystem.FORTUNE_RING.get(directed_fortune, Enums.Ring.VOID)
+	var ring_value: int = CharacterStats.get_ring_value(character, ring_id)
+	var theology_rank: int = character.skills.get("Theology", 0)
+
+	var location_type: String = action.metadata.get("location_type", "roadside_shrine")
+
+	var worship_result: Dictionary = WorshipSystem.resolve_active_worship(
+		char_type, is_shugenja, dice_engine, ring_value, theology_rank,
+		location_type, directed_fortune,
+	)
+
+	var province_id: int = action.target_province_id
+
+	return {
+		"success": true,
+		"action_id": "PERFORM_WORSHIP",
+		"character_id": character.character_id,
+		"target_npc_id": action.target_npc_id,
+		"target_province_id": province_id,
+		"ic_day": ctx.ic_day,
+		"season": ctx.season,
+		"effects": {
+			"requires_worship_accumulation": true,
+			"province_id": province_id,
+			"wp_distribution": worship_result.get("wp_distribution", {}),
+			"total_wp": worship_result.get("total_wp", 0.0),
+			"bonus_wp": worship_result.get("bonus_wp", 0.0),
+			"directed": worship_result.get("directed", false),
+		},
+	}
 
 
 static func _execute_scout_enemy(

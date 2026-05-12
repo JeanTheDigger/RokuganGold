@@ -514,6 +514,7 @@ All in /tests/, one file per system:
 - test_governance_wiring.gd (~25 tests)
 - test_marriage_wiring.gd (~65 tests)
 - test_worship_system.gd (~67 tests)
+- test_worship_wiring.gd (~30 tests)
 
 ### Governance Action Wiring (s57.20)
 - **APPOINT_TO_POSITION** — Daily AP action (1 AP, lord-only). Executor
@@ -2756,10 +2757,27 @@ All in /tests/, one file per system:
   **Seasonal processing** — `process_seasonal_worship()` evaluates all 4 cascade
   levels. `reset_seasonal_wp()` clears accumulated WP each season.
   `add_active_worship_to_province()` accumulates WP from active worship actions.
-  Deferred: DayOrchestrator wiring (seasonal evaluation + PERFORM_WORSHIP
-  executor intercept), malus application to ResourceTick/ArmyCombatSystem/
-  InsurgencySystem, worship location data on SettlementData, construction
-  queue integration with s4.3.22.
+- **Worship wiring** — PERFORM_WORSHIP executor intercept routes through
+  `_execute_perform_worship()` in ActionExecutor. Determines character type
+  (shugenja/monk/normal), ring value from Fortune-Ring mapping, Theology rank,
+  and location type from action metadata. Returns `requires_worship_accumulation`
+  effect flag with `wp_distribution` and `province_id`.
+  `_process_worship_accumulation()` in DayOrchestrator scans day results for
+  the flag and calls `WorshipSystem.add_active_worship_to_province()`.
+  `_process_seasonal_worship()` runs on season boundary: builds
+  `province_worship_locations` from SettlementData.worship_locations,
+  `province_family_map` and `family_clan_map` from ProvinceData fields,
+  calls `WorshipSystem.process_seasonal_worship()`, then
+  `WorshipSystem.reset_seasonal_wp()`. New param: `worship_state: Dictionary`.
+  WorldStateData gains `worship_state` initialized from
+  `WorshipSystem.make_initial_worship_state()`.
+  NPC engine metadata: `_populate_action_metadata()` sets `directed_fortune`
+  (from need.target_npc_id) and `location_type` (from `_zone_to_worship_location()`
+  mapping: CASTLE_SHRINE→village_shrine, SHRINE_CLEARING→roadside_shrine,
+  TEMPLE_GROUNDS→local_shrine, default→roadside_shrine).
+  `shared/settlement_data.gd` gains `worship_locations: Array[Dictionary]`.
+  Deferred: malus application to ResourceTick/ArmyCombatSystem/
+  InsurgencySystem/MarriageSystem, construction queue integration with s4.3.22.
 
 ### What's Next
 1. World generation coordinate system and adjacency
@@ -3006,6 +3024,14 @@ The following subsystems are now integrated into the NPC decision loop:
   from naval battles fed into `_process_naval_war_scores()` using same
   minor/major/decisive classification as land battles. Naval topics (Tier 3
   MILITARY) generated per battle. Ships param on `advance_day()`.
+- **WorshipSystem** — Daily: `_process_worship_accumulation()` scans day
+  results for `requires_worship_accumulation` flag from PERFORM_WORSHIP
+  executor intercept. Calls `WorshipSystem.add_active_worship_to_province()`
+  to accumulate WP. Phase 7: `_execute_perform_worship()` determines
+  character type, ring value, Theology rank, and location type; delegates
+  to `WorshipSystem.resolve_active_worship()`. Seasonal:
+  `_process_seasonal_worship()` builds province/family/clan maps from
+  settlement and province data, evaluates all cascade tiers, resets WP.
 
 ## Resolved Design Decisions
 

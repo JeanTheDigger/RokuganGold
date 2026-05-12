@@ -59,6 +59,7 @@ static func advance_day(
 	next_character_id: Array[int] = [10000],
 	seiyaku_state: Dictionary = {},
 	marriages: Array[Dictionary] = [],
+	worship_state: Dictionary = {},
 ) -> Dictionary:
 	var prev_season: int = time_system.get_season()
 
@@ -181,6 +182,10 @@ static func advance_day(
 		characters_by_id,
 		settlements,
 		provinces,
+	)
+
+	var worship_accumulation_results: Array[Dictionary] = _process_worship_accumulation(
+		day_result.get("results", []), worship_state,
 	)
 
 	_process_edict_compliance_actions(
@@ -311,6 +316,7 @@ static func advance_day(
 	var ronin_results: Dictionary = {}
 	var pregnancy_results: Array[Dictionary] = []
 	var seiyaku_results: Dictionary = {}
+	var worship_seasonal_results: Dictionary = {}
 	if current_season != prev_season:
 		# Add the IC year to miya_inputs so per-province blessed-year tracking
 		# stays consistent. Year is computed from the time system's tick count.
@@ -357,6 +363,9 @@ static func advance_day(
 		insurgency_results = _process_insurgencies(
 			insurgencies, provinces, dice_engine, current_season,
 			next_insurgency_id, world_states
+		)
+		worship_seasonal_results = _process_seasonal_worship(
+			worship_state, settlements, provinces,
 		)
 		gempukku_results = _process_gempukku(
 			children, characters, characters_by_id, next_character_id,
@@ -467,6 +476,8 @@ static func advance_day(
 		"ronin_results": ronin_results,
 		"pregnancy_results": pregnancy_results,
 		"seiyaku_results": seiyaku_results,
+		"worship_accumulation_results": worship_accumulation_results,
+		"worship_seasonal_results": worship_seasonal_results,
 	}
 
 
@@ -6312,4 +6323,81 @@ static func _dict_values_to_province_array(provinces: Dictionary) -> Array[Provi
 		var p: ProvinceData = provinces[pid] as ProvinceData
 		if p != null:
 			result.append(p)
+	return result
+
+
+# -- Worship Processing -------------------------------------------------------
+
+static func _process_worship_accumulation(
+	day_results: Array,
+	worship_state: Dictionary,
+) -> Array[Dictionary]:
+	var results: Array[Dictionary] = []
+	if worship_state.is_empty():
+		return results
+	for r: Variant in day_results:
+		if not (r is Dictionary):
+			continue
+		var result: Dictionary = r as Dictionary
+		var effects: Dictionary = result.get("effects", {})
+		if not effects.get("requires_worship_accumulation", false):
+			continue
+		var province_id: Variant = effects.get("province_id", -1)
+		var wp_dist: Dictionary = effects.get("wp_distribution", {})
+		if province_id is int and province_id >= 0 and not wp_dist.is_empty():
+			WorshipSystem.add_active_worship_to_province(
+				worship_state, province_id, wp_dist,
+			)
+			results.append({
+				"character_id": result.get("character_id", -1),
+				"province_id": province_id,
+				"total_wp": effects.get("total_wp", 0.0),
+			})
+	return results
+
+
+static func _process_seasonal_worship(
+	worship_state: Dictionary,
+	settlements: Array[SettlementData],
+	provinces: Dictionary,
+) -> Dictionary:
+	if worship_state.is_empty():
+		return {}
+
+	var province_worship_locations: Dictionary = {}
+	for s: SettlementData in settlements:
+		var pid: int = s.province_id
+		if pid < 0:
+			continue
+		if not province_worship_locations.has(pid):
+			province_worship_locations[pid] = []
+		province_worship_locations[pid].append_array(s.worship_locations)
+
+	var province_family_map: Dictionary = {}
+	var family_clan_map: Dictionary = {}
+	var all_province_ids: Array = []
+	for pid: Variant in provinces:
+		var prov: ProvinceData = provinces[pid] as ProvinceData
+		if prov == null:
+			continue
+		all_province_ids.append(prov.province_id)
+		var fam: String = prov.family
+		var clan: String = prov.clan
+		if not fam.is_empty():
+			if not province_family_map.has(fam):
+				province_family_map[fam] = []
+			province_family_map[fam].append(prov.province_id)
+		if not clan.is_empty() and not fam.is_empty():
+			if not family_clan_map.has(clan):
+				family_clan_map[clan] = []
+			if fam not in family_clan_map[clan]:
+				family_clan_map[clan].append(fam)
+
+	var result: Dictionary = WorshipSystem.process_seasonal_worship(
+		worship_state, province_worship_locations,
+		province_family_map, family_clan_map, all_province_ids,
+	)
+
+	WorshipSystem.reset_seasonal_wp(worship_state)
+
 	return result
