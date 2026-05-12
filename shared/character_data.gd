@@ -223,6 +223,7 @@ extends Resource
 
 @export var xp_total: int = 0
 @export var xp_spent: int = 0
+@export var xp_fractional: float = 0.0
 @export var progress_bars: Dictionary = {}
 @export var training_relationships: Dictionary = {}
 
@@ -241,3 +242,16 @@ func get_trait_value(p_trait: Enums.Trait) -> int:
 		Enums.Trait.AWARENESS: return awareness
 		Enums.Trait.VOID: return void_ring
 		_: return 0
+
+
+func set_trait_value(p_trait: Enums.Trait, value: int) -> void:
+	match p_trait:
+		Enums.Trait.STAMINA: stamina = value
+		Enums.Trait.WILLPOWER: willpower = value
+		Enums.Trait.STRENGTH: strength = value
+		Enums.Trait.PERCEPTION: perception = value
+		Enums.Trait.AGILITY: agility = value
+		Enums.Trait.INTELLIGENCE: intelligence = value
+		Enums.Trait.REFLEXES: reflexes = value
+		Enums.Trait.AWARENESS: awareness = value
+		Enums.Trait.VOID: void_ring = value

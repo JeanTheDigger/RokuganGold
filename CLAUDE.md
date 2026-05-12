@@ -502,6 +502,7 @@ All in /tests/, one file per system:
 - test_gempukku_system.gd (~55 tests)
 - test_otomo_seiyaku_system.gd (~55 tests)
 - test_world_population_generator.gd (~50 tests)
+- test_npc_advancement.gd (~56 tests)
 
 ### Festival System (s11.5)
 - **simulation/festival_system.gd** — Empire-wide canonical festivals, Rokuyo
@@ -2563,6 +2564,40 @@ All in /tests/, one file per system:
   WorldGenerator.SCHOOL_DATA. Phoenix Elemental Council and Dragon
   Togashi special handling deferred. Province data must be populated
   before the pass produces province-scaled positions.
+
+### NPC Advancement (s52 Part 3, s48)
+- **simulation/npc_advancement.gd** — NPC autonomous advancement per GDD s52
+  Part 3 and s48. Pure static functions. NPCs accumulate XP daily based on
+  their role and current activity, then spend it on progress bars following a
+  fixed priority order toward their school's strengths.
+  Base XP rates per OOC day by role: peacetime 0.02, active duty 0.04, Gunso
+  0.05, Chui 0.06, Taisa 0.08, Shireikan 0.10, courtier 0.05, magistrate 0.06,
+  sensei 0.04, temple head 0.05. Military rank overrides role_position.
+  Activity multipliers: peacetime 1.0x, border patrol 1.5x, battle 2.5x,
+  commanding in battle 3.0x, court season 1.5x (courtiers only), siege 2.0x,
+  major crisis 2.0x. Battle/siege are early-exit (highest priority), others
+  use maxf for stacking.
+  XP spending priority: (1) Primary Ring, (2) highest school skill, (3) other
+  school skills in descending rank order, (4) secondary Ring, (4b) Void Ring
+  for shugenja only, (5) reserve. Never non-school skills, never Void for
+  non-shugenja. Progress bar costs from s48: 1 XP = 200 progress, skill costs
+  1000/2000/3000/4000/5000 per rank, ring costs 4000/8000/12000/16000/20000.
+  `_raise_ring()` raises the lower of the two constituent traits.
+  `accumulate_daily_xp()` per-IC-day accumulator (divides OOC rate by 4).
+  Fractional XP stored in `xp_fractional` field on L5RCharacterData; rolls
+  over to `xp_total` at each whole integer.
+  `process_seasonal_advancement()` batch entry point: accumulates a full
+  season's XP (IC days / 4 = OOC days × rate), then spends. Skips dead
+  characters. Returns `{results, total_rank_advancements}`.
+- **shared/character_data.gd** — Gains `xp_fractional: float` for sub-integer
+  XP accumulation and `set_trait_value()` method for programmatic trait mutation.
+- **DayOrchestrator wiring** — `_process_npc_advancement()` runs on season
+  boundary after gempukku and before objective progress evaluation.
+  `_build_advancement_world_state()` constructs the activity multiplier
+  dictionary from active courts (attendee_ids), active sieges
+  (defender/attacker character_ids), and crisis indicators (insurgencies →
+  magistrates and commanders). `_get_season_days()` helper maps season enum
+  to IC day count. Return dict gains `advancement_results`.
 
 ### What's Next
 1. World generation coordinate system and adjacency

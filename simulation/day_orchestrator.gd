@@ -294,6 +294,7 @@ static func advance_day(
 	var military_seasonal_result: Dictionary = {}
 	var wall_seasonal_result: Dictionary = {}
 	var gempukku_results: Dictionary = {}
+	var advancement_results: Dictionary = {}
 	var seiyaku_results: Dictionary = {}
 	if current_season != prev_season:
 		# Add the IC year to miya_inputs so per-province blessed-year tracking
@@ -345,6 +346,10 @@ static func advance_day(
 		gempukku_results = _process_gempukku(
 			children, characters, characters_by_id, next_character_id,
 			dice_engine, ic_day, active_topics, next_topic_id, objectives_map,
+		)
+		advancement_results = _process_npc_advancement(
+			characters, active_courts, active_sieges, active_armies,
+			insurgencies, current_season,
 		)
 		progress_results = _evaluate_objective_progress(
 			characters, objectives_map, world_states
@@ -433,6 +438,7 @@ static func advance_day(
 		"naval_topics": naval_topics,
 		"musha_shugyo_results": musha_shugyo_results,
 		"gempukku_results": gempukku_results,
+		"advancement_results": advancement_results,
 		"seiyaku_results": seiyaku_results,
 	}
 
@@ -1927,6 +1933,15 @@ static func _season_to_name(season: int) -> String:
 		TimeSystem.Season.AUTUMN: return "autumn"
 		TimeSystem.Season.WINTER: return "winter"
 	return "summer"
+
+
+static func _get_season_days(season: int) -> int:
+	match season:
+		TimeSystem.Season.SPRING: return TimeSystem.SPRING_DAYS
+		TimeSystem.Season.SUMMER: return TimeSystem.SUMMER_DAYS
+		TimeSystem.Season.AUTUMN: return TimeSystem.AUTUMN_DAYS
+		TimeSystem.Season.WINTER: return TimeSystem.WINTER_DAYS
+	return 90
 
 
 # -- Strategic Review (s55.10) -------------------------------------------------
@@ -5844,6 +5859,64 @@ static func _process_gempukku(
 			active_topics.append(topic)
 
 	return result
+
+
+# -- NPC Advancement (s52 Part 3) ----------------------------------------------
+
+static func _process_npc_advancement(
+	characters: Array[L5RCharacterData],
+	active_courts: Array[CourtSessionData],
+	active_sieges: Array[Dictionary],
+	active_armies: Array[Dictionary],
+	insurgencies: Array[InsurgencyData],
+	current_season: int,
+) -> Dictionary:
+	var days_in_season: int = _get_season_days(current_season)
+
+	var adv_world_state: Dictionary = _build_advancement_world_state(
+		characters, active_courts, active_sieges, active_armies, insurgencies
+	)
+
+	return NPCAdvancement.process_seasonal_advancement(characters, adv_world_state, days_in_season)
+
+
+static func _build_advancement_world_state(
+	characters: Array[L5RCharacterData],
+	active_courts: Array[CourtSessionData],
+	active_sieges: Array[Dictionary],
+	active_armies: Array[Dictionary],
+	insurgencies: Array[InsurgencyData],
+) -> Dictionary:
+	var in_court_ids: Array[int] = []
+	for court: CourtSessionData in active_courts:
+		if court.phase == CourtSessionData.CourtPhase.ACTIVE:
+			for aid: int in court.attendee_ids:
+				if not in_court_ids.has(aid):
+					in_court_ids.append(aid)
+
+	var in_siege_ids: Array[int] = []
+	for siege: Dictionary in active_sieges:
+		for cid: int in siege.get("defender_character_ids", []):
+			if not in_siege_ids.has(cid):
+				in_siege_ids.append(cid)
+		for cid: int in siege.get("attacker_character_ids", []):
+			if not in_siege_ids.has(cid):
+				in_siege_ids.append(cid)
+
+	var in_crisis_ids: Array[int] = []
+	if insurgencies.size() > 0:
+		for c: L5RCharacterData in characters:
+			if c.role_position == "Clan Magistrate" or c.role_position == "Emerald Magistrate":
+				in_crisis_ids.append(c.character_id)
+			elif c.military_rank >= Enums.MilitaryRank.CHUI:
+				in_crisis_ids.append(c.character_id)
+
+	return {
+		"in_battle_ids": [],
+		"in_siege_ids": in_siege_ids,
+		"in_court_ids": in_court_ids,
+		"in_crisis_ids": in_crisis_ids,
+	}
 
 
 # -- Helpers -------------------------------------------------------------------
