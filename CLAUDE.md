@@ -425,7 +425,7 @@ All in /tests/, one file per system:
 - test_effect_applicator.gd (~37 tests)
 - test_npc_wave_resolver.gd (~15 tests)
 - test_resource_tick.gd (~30 tests)
-- test_objective_decomposer.gd (~117 tests)
+- test_objective_decomposer.gd (~125 tests)
 - test_information_system.gd (~40 tests)
 - test_topic_system.gd (~55 tests)
 - test_investigation_system.gd (~40 tests)
@@ -2855,6 +2855,29 @@ All in /tests/, one file per system:
   terrain threshold), and naval state. Results stored in world_states dict.
   Known limitations: `is_coastal` always false (needs coordinate system),
   `has_naval_threat` is rough heuristic (any active war = naval threat).
+
+### FILL_VACANCY NeedType Decomposition (s57.20.3)
+- **simulation/objective_decomposer.gd** — `GOVERNANCE_OBJECTIVES` constant
+  routes FILL_VACANCY to `_decompose_fill_vacancy()`. Lord-only,
+  AT_OWN_HOLDINGS gate. Picks highest-priority vacant position from
+  `ctx.vacant_positions`, tiebreaks on `seasons_vacant`. Escalation:
+  priority increments by 1 after 2 seasons vacant (cap at 3). Returns
+  FILL_VACANCY need with `target_npc_id` = candidate_id and
+  `target_intent` = position_type, flowing through existing
+  APPOINT_TO_POSITION metadata and executor pipeline.
+- **simulation/npc_data_structures.gd** — ContextSnapshot gains
+  `vacant_positions: Array[Dictionary]` (each dict has position_type,
+  priority, candidate_id, province_id, seasons_vacant).
+- **simulation/npc_decision_engine.gd** — `build_context()` populates
+  `vacant_positions` from per-lord keyed world_state entries.
+- **simulation/day_orchestrator.gd** — `_populate_vacancy_intelligence()`
+  runs at start of advance_day(). Scans military companies for
+  commander-less units and characters for magistrate gaps. Stores
+  per-lord vacancy arrays in world_states. `_find_vacancy_candidate()`
+  picks best unassigned vassal by status+honor+glory+disposition.
+  Known limitations: only detects military commander and magistrate
+  vacancies; other position types (school master, temple head, etc.)
+  will activate when position tracking becomes more granular.
 
 ### What's Next
 1. World generation coordinate system and adjacency
