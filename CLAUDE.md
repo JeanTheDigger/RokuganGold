@@ -116,6 +116,12 @@ When implementing or auditing a system, go here first:
 - Dead characters always carry NEUTRAL subject_role valence.
 - Spirit realms are not evil except Jigoku. Do not implement jade as a
   general-purpose spirit ward.
+- **Check existing channels before wiring any ActionID.** Before adding an
+  ActionID to a context action list, creating an executor intercept, or
+  assigning an AP cost, verify that the action does not already have a
+  dedicated system (Strategic Review directives, daily letter pass, reactive
+  events, etc.). If a channel already handles it, the wiring belongs in that
+  system — not the daily AP loop. Do not create duplicate execution paths.
 - **Do not invent mechanics.** Every game mechanic, numeric value, enum value,
   edict type, action type, honor cost, disposition modifier, deadline, threshold,
   or behavioral rule must trace back to a specific LOCKED GDD section or to an
