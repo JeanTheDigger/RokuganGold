@@ -1,11 +1,22 @@
 extends GutTest
 
 
-func _make_char(id: int, topics: Array[int] = []) -> L5RCharacterData:
+func _make_char(id: int, topics: Array[int] = [], clan: String = "", family: String = "") -> L5RCharacterData:
 	var c := L5RCharacterData.new()
 	c.character_id = id
 	c.topic_pool = topics.duplicate()
+	c.clan = clan
+	c.family = family
 	return c
+
+
+func _make_topic(id: int, clan_involved: String = "", family_involved: String = "", momentum: float = 10.0) -> TopicData:
+	var t := TopicData.new()
+	t.topic_id = id
+	t.clan_involved = clan_involved
+	t.family_involved = family_involved
+	t.momentum = momentum
+	return t
 
 
 func _set_mutual_disposition(a: L5RCharacterData, b: L5RCharacterData, value: int) -> void:
@@ -261,3 +272,106 @@ func test_settlement_resolution_strangers_skipped():
 	var rng: Array[int] = [0, 0, 0]
 	var results: Array[Dictionary] = DailyConversation.resolve_settlement_conversations(chars, rng, 5)
 	assert_eq(results.size(), 0)
+
+
+# -- Relevance-Weighted Topic Selection ----------------------------------------
+
+func test_select_topic_weighted_empty_pool():
+	var c := _make_char(1, [], "Crab", "Hida")
+	var topics_by_id: Dictionary = {}
+	var result: int = DailyConversation.select_topic_to_share_weighted(c, 0, topics_by_id)
+	assert_eq(result, -1)
+
+func test_select_topic_weighted_single_topic():
+	var topics_arr: Array[int] = [10]
+	var c := _make_char(1, topics_arr, "Crab", "Hida")
+	var t := _make_topic(10, "Crab", "Hida", 50.0)
+	var topics_by_id: Dictionary = {10: t}
+	var result: int = DailyConversation.select_topic_to_share_weighted(c, 42, topics_by_id)
+	assert_eq(result, 10)
+
+func test_select_topic_weighted_favors_relevant():
+	var topics_arr: Array[int] = [1, 2, 3]
+	var c := _make_char(1, topics_arr, "Crab", "Hida")
+	# Topic 1: own clan+family → high relevance (momentum 80 × 2.0 + 20 = 180)
+	var t1 := _make_topic(1, "Crab", "Hida", 80.0)
+	# Topics 2,3: distant clan → low relevance (momentum 10 × 1.0 = 10)
+	var t2 := _make_topic(2, "Crane", "Doji", 10.0)
+	var t3 := _make_topic(3, "Lion", "Akodo", 10.0)
+	var topics_by_id: Dictionary = {1: t1, 2: t2, 3: t3}
+
+	var count_1: int = 0
+	var count_other: int = 0
+	for rng_val: int in range(100):
+		var result: int = DailyConversation.select_topic_to_share_weighted(c, rng_val, topics_by_id)
+		if result == 1:
+			count_1 += 1
+		else:
+			count_other += 1
+	# Topic 1 should be selected significantly more often (weight ~180 vs ~10 each)
+	assert_true(count_1 > count_other, "Relevant topic should be selected more often")
+	assert_true(count_1 > 80, "High-relevance topic should dominate selection")
+
+func test_select_topic_weighted_missing_topic_data_uses_floor():
+	var topics_arr: Array[int] = [1, 999]
+	var c := _make_char(1, topics_arr, "Crab", "Hida")
+	var t1 := _make_topic(1, "Crane", "", 5.0)
+	# Topic 999 not in topics_by_id — should get floor weight of 1.0
+	var topics_by_id: Dictionary = {1: t1}
+	var result: int = DailyConversation.select_topic_to_share_weighted(c, 999, topics_by_id)
+	assert_true(result == 1 or result == 999)
+
+func test_select_topic_weighted_deterministic():
+	var topics_arr: Array[int] = [1, 2, 3]
+	var c := _make_char(1, topics_arr, "Crab", "Hida")
+	var t1 := _make_topic(1, "Crab", "Hida", 50.0)
+	var t2 := _make_topic(2, "Crane", "", 20.0)
+	var t3 := _make_topic(3, "Lion", "", 10.0)
+	var topics_by_id: Dictionary = {1: t1, 2: t2, 3: t3}
+	var first: int = DailyConversation.select_topic_to_share_weighted(c, 42, topics_by_id)
+	var second: int = DailyConversation.select_topic_to_share_weighted(c, 42, topics_by_id)
+	assert_eq(first, second, "Same rng_value should always produce same result")
+
+func test_resolve_conversation_with_topics_by_id():
+	var topics_a: Array[int] = [1, 2]
+	var topics_b: Array[int] = [3]
+	var a := _make_char(1, topics_a, "Crab", "Hida")
+	var b := _make_char(2, topics_b, "Crane", "Doji")
+	_set_mutual_disposition(a, b, 50)
+
+	var t1 := _make_topic(1, "Crab", "Hida", 80.0)
+	var t2 := _make_topic(2, "Crane", "Doji", 5.0)
+	var t3 := _make_topic(3, "Crane", "Doji", 20.0)
+	var topics_by_id: Dictionary = {1: t1, 2: t2, 3: t3}
+
+	var result: Dictionary = DailyConversation.resolve_conversation(a, b, 0, 0, 5, topics_by_id)
+	assert_true(result.has("topic_shared_by_a"))
+	assert_true(result.has("topic_shared_by_b"))
+	assert_eq(result["topic_shared_by_b"], 3)
+
+func test_resolve_conversation_backward_compat():
+	var topics_a: Array[int] = [1]
+	var a := _make_char(1, topics_a)
+	var b := _make_char(2)
+	_set_mutual_disposition(a, b, 50)
+	# No topics_by_id — should use old random path
+	var result: Dictionary = DailyConversation.resolve_conversation(a, b, 0, 0, 5)
+	assert_eq(result["topic_shared_by_a"], 1)
+
+func test_settlement_resolution_with_topics_by_id():
+	var topics_a: Array[int] = [101]
+	var topics_b: Array[int] = [102]
+	var a := _make_char(1, topics_a, "Crab", "Hida")
+	var b := _make_char(2, topics_b, "Crane", "Doji")
+	_set_mutual_disposition(a, b, 50)
+
+	var t1 := _make_topic(101, "Crab", "Hida", 50.0)
+	var t2 := _make_topic(102, "Crane", "Doji", 50.0)
+	var topics_by_id: Dictionary = {101: t1, 102: t2}
+
+	var chars: Array[L5RCharacterData] = [a, b]
+	var rng: Array[int] = [5, 0, 0]
+	var results: Array[Dictionary] = DailyConversation.resolve_settlement_conversations(
+		chars, rng, 5, topics_by_id
+	)
+	assert_eq(results.size(), 1)

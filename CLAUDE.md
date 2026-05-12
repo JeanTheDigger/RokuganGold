@@ -320,6 +320,28 @@ single-dice-entry-point and server-authoritative constraints.
   state. Commission system. Provenance investigation. World gen helpers.
 - **shared/tattoo_data.gd** — TattooData Resource (9 body locations).
 
+### Daily Conversation System (s12.6)
+- **simulation/daily_conversation.gd** — Organic social interaction between
+  co-located characters per GDD s12.6. Fires once per IC day for every
+  qualifying pair sharing a settlement or ship.
+  Disposition-based probability: 7 brackets from Acquaintance (10%) through
+  Devoted max (65%). Uses lower of two mutual dispositions.
+  Topic exchange: each character shares one topic weighted by personal
+  relevance via `select_topic_to_share_weighted()` — calls
+  `TopicMomentumSystem.calculate_personal_relevance()` to compute per-topic
+  weights, then weighted random selection. Own-clan/family topics weighted
+  higher. Falls back to uniform random when no topic data provided.
+  +1 disposition bonus per conversation. 5-per-day cap per character.
+  `resolve_settlement_conversations()` processes all pairs in a group.
+- **DayOrchestrator wiring** — `_process_daily_conversations()` filters out
+  dead (`CharacterStats.is_dead()`) and traveling
+  (`TravelSystem.is_traveling()`) characters. Groups eligible characters by
+  `physical_location` (settlement) and by `aboard_ship_id` (ship co-location
+  per GDD s12.6). Ship-boarded characters excluded from location groups to
+  prevent double-processing. `_resolve_group_conversations()` helper handles
+  RNG generation and delegation. `active_topics` threaded through for
+  relevance-weighted topic selection.
+
 ### Topic Propagation (s16, s15.5, s15.6)
 - **simulation/topic_system.gd** — TopicMomentumSystem with three propagation
   features wired into DayOrchestrator:
@@ -427,6 +449,7 @@ All in /tests/, one file per system:
 - test_resource_tick.gd (~30 tests)
 - test_objective_decomposer.gd (~125 tests)
 - test_information_system.gd (~40 tests)
+- test_daily_conversation.gd (~37 tests)
 - test_topic_system.gd (~55 tests)
 - test_investigation_system.gd (~40 tests)
 - test_day_orchestrator.gd (~54 tests)

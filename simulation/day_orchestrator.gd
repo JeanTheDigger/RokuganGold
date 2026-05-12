@@ -300,7 +300,7 @@ static func advance_day(
 	)
 
 	var conversation_results: Array[Dictionary] = _process_daily_conversations(
-		characters, dice_engine, current_season
+		characters, dice_engine, current_season, active_topics
 	)
 
 	_wire_discussion_counts(conversation_results, active_topics)
@@ -590,37 +590,72 @@ static func _process_daily_conversations(
 	characters: Array[L5RCharacterData],
 	dice_engine: DiceEngine,
 	current_season: int,
+	active_topics: Array[TopicData] = [],
 ) -> Array[Dictionary]:
-	var by_location: Dictionary = {}
+	var topics_by_id: Dictionary = {}
+	for t: TopicData in active_topics:
+		topics_by_id[t.topic_id] = t
+
+	var eligible: Array[L5RCharacterData] = []
 	for c: L5RCharacterData in characters:
-		var loc: String = c.physical_location
-		if loc.is_empty():
+		if CharacterStats.is_dead(c):
 			continue
-		if not by_location.has(loc):
-			by_location[loc] = []
-		by_location[loc].append(c)
+		if TravelSystem.is_traveling(c):
+			continue
+		eligible.append(c)
+
+	var by_location: Dictionary = {}
+	var by_ship: Dictionary = {}
+	for c: L5RCharacterData in eligible:
+		if c.aboard_ship_id >= 0:
+			if not by_ship.has(c.aboard_ship_id):
+				by_ship[c.aboard_ship_id] = []
+			by_ship[c.aboard_ship_id].append(c)
+		else:
+			var loc: String = c.physical_location
+			if loc.is_empty():
+				continue
+			if not by_location.has(loc):
+				by_location[loc] = []
+			by_location[loc].append(c)
 
 	var all_results: Array[Dictionary] = []
+
 	for loc: String in by_location:
-		var group: Array[L5RCharacterData] = []
-		for c: Variant in by_location[loc]:
-			if c is L5RCharacterData:
-				group.append(c)
-		if group.size() < 2:
-			continue
-
-		var pair_count: int = group.size() * (group.size() - 1) >> 1
-		var rng_needed: int = pair_count * 3
-		var rng: Array[int] = []
-		for i: int in range(rng_needed):
-			rng.append(dice_engine.rand_int_range(0, 99))
-
-		var results: Array[Dictionary] = DailyConversation.resolve_settlement_conversations(
-			group, rng, current_season
+		all_results.append_array(
+			_resolve_group_conversations(by_location[loc], dice_engine, current_season, topics_by_id)
 		)
-		all_results.append_array(results)
+
+	for ship_id: int in by_ship:
+		all_results.append_array(
+			_resolve_group_conversations(by_ship[ship_id], dice_engine, current_season, topics_by_id)
+		)
 
 	return all_results
+
+
+static func _resolve_group_conversations(
+	raw_group: Array,
+	dice_engine: DiceEngine,
+	current_season: int,
+	topics_by_id: Dictionary,
+) -> Array[Dictionary]:
+	var group: Array[L5RCharacterData] = []
+	for c: Variant in raw_group:
+		if c is L5RCharacterData:
+			group.append(c)
+	if group.size() < 2:
+		return []
+
+	var pair_count: int = group.size() * (group.size() - 1) >> 1
+	var rng_needed: int = pair_count * 3
+	var rng: Array[int] = []
+	for i: int in range(rng_needed):
+		rng.append(dice_engine.rand_int_range(0, 99))
+
+	return DailyConversation.resolve_settlement_conversations(
+		group, rng, current_season, topics_by_id
+	)
 
 
 # -- Season Transition ---------------------------------------------------------
