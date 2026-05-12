@@ -1370,6 +1370,12 @@ static func _populate_action_metadata(
 		option.metadata = _build_blockade_metadata(need, ctx)
 	elif option.action_id == "COMPLY_WITH_EDICT" or option.action_id == "DEFY_EDICT":
 		option.metadata = _build_edict_response_metadata(need, ctx)
+	elif option.action_id == "ARRANGE_MARRIAGE":
+		option.metadata = {
+			"candidate_id": need.target_npc_id,
+			"target_lord_id": need.target_npc_id_secondary,
+			"target_candidate_id": need.target_settlement_id,
+		}
 	elif option.action_id == "APPOINT_TO_POSITION":
 		option.metadata = {
 			"target_npc_id": need.target_npc_id,

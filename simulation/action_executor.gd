@@ -176,6 +176,9 @@ static func execute(
 	if action_id == "APPOINT_TO_POSITION":
 		return _execute_appoint_to_position(action, character, ctx)
 
+	if action_id == "ARRANGE_MARRIAGE":
+		return _execute_arrange_marriage(action, character, ctx, dice_engine, characters_by_id)
+
 	if action_id == "SCOUT_ENEMY":
 		return _execute_scout_enemy(action, character, ctx, dice_engine)
 
@@ -1842,6 +1845,95 @@ static func _execute_appoint_to_position(
 		},
 	}
 
+
+static func _execute_arrange_marriage(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	dice_engine: DiceEngine,
+	characters_by_id: Dictionary,
+) -> Dictionary:
+	var candidate_id: int = action.metadata.get("candidate_id", -1)
+	var target_lord_id: int = action.metadata.get("target_lord_id", -1)
+	var target_candidate_id: int = action.metadata.get("target_candidate_id", -1)
+
+	if candidate_id < 0 or target_lord_id < 0 or target_candidate_id < 0:
+		return {
+			"success": false,
+			"action_id": "ARRANGE_MARRIAGE",
+			"character_id": ctx.character_id,
+			"ic_day": ctx.ic_day,
+			"season": ctx.season,
+			"reason": "missing_metadata",
+			"effects": {},
+		}
+
+	var target_lord: L5RCharacterData = characters_by_id.get(target_lord_id) as L5RCharacterData
+	if target_lord == null:
+		return {
+			"success": false,
+			"action_id": "ARRANGE_MARRIAGE",
+			"character_id": ctx.character_id,
+			"ic_day": ctx.ic_day,
+			"season": ctx.season,
+			"reason": "target_lord_not_found",
+			"effects": {},
+		}
+
+	var proposing_disp: int = target_lord.disposition_values.get(ctx.character_id, 0)
+	var candidate_char: L5RCharacterData = characters_by_id.get(target_candidate_id) as L5RCharacterData
+	var char_value: int = 0
+	if candidate_char != null:
+		char_value = int(candidate_char.status * 2 + candidate_char.glory)
+	var favor_tier: int = action.metadata.get("favor_tier", 0)
+	var has_mil_obj: bool = action.metadata.get("has_military_objective", false)
+
+	var acceptance_score: int = MarriageSystem.evaluate_proposal(
+		proposing_disp, char_value, favor_tier, has_mil_obj,
+	)
+
+	if acceptance_score < 0:
+		return {
+			"success": false,
+			"action_id": "ARRANGE_MARRIAGE",
+			"character_id": ctx.character_id,
+			"target_npc_id": target_lord_id,
+			"ic_day": ctx.ic_day,
+			"season": ctx.season,
+			"effects": {
+				"marriage_rejected": true,
+				"proposing_lord_id": ctx.character_id,
+				"target_lord_id": target_lord_id,
+				"disposition_change": -3,
+			},
+		}
+
+	var candidate_a: L5RCharacterData = characters_by_id.get(candidate_id) as L5RCharacterData
+	var marriage_type: MarriageSystem.MarriageType = MarriageSystem.MarriageType.CROSS_CLAN
+	if candidate_a != null and candidate_char != null:
+		if candidate_a.clan == candidate_char.clan:
+			if candidate_a.family == candidate_char.family:
+				marriage_type = MarriageSystem.MarriageType.WITHIN_FAMILY
+			else:
+				marriage_type = MarriageSystem.MarriageType.BETWEEN_FAMILIES
+
+	return {
+		"success": true,
+		"action_id": "ARRANGE_MARRIAGE",
+		"character_id": ctx.character_id,
+		"target_npc_id": target_lord_id,
+		"ic_day": ctx.ic_day,
+		"season": ctx.season,
+		"effects": {
+			"requires_marriage": true,
+			"proposing_lord_id": ctx.character_id,
+			"target_lord_id": target_lord_id,
+			"candidate_a_id": candidate_id,
+			"candidate_b_id": target_candidate_id,
+			"marriage_type": marriage_type,
+			"acceptance_score": acceptance_score,
+		},
+	}
 
 
 # -- Winter Court Skill Bonus --------------------------------------------------

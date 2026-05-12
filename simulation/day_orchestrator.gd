@@ -58,6 +58,7 @@ static func advance_day(
 	children: Array[ChildRecord] = [],
 	next_character_id: Array[int] = [10000],
 	seiyaku_state: Dictionary = {},
+	marriages: Array[Dictionary] = [],
 ) -> Dictionary:
 	var prev_season: int = time_system.get_season()
 
@@ -190,6 +191,8 @@ static func advance_day(
 	var governance_results: Dictionary = _process_governance_effects(
 		day_result.get("results", []),
 		characters_by_id,
+		marriages,
+		ic_day,
 	)
 
 	var war_declarations: Array[Dictionary] = _process_war_declarations(
@@ -5956,8 +5959,11 @@ static func _build_advancement_world_state(
 static func _process_governance_effects(
 	results: Array,
 	characters_by_id: Dictionary,
+	marriages: Array,
+	ic_day: int,
 ) -> Dictionary:
 	var appointment_results: Array[Dictionary] = []
+	var marriage_results: Array[Dictionary] = []
 
 	for result: Variant in results:
 		if not (result is Dictionary):
@@ -5969,8 +5975,17 @@ static func _process_governance_effects(
 			var ar: Dictionary = _apply_appointment(effects, characters_by_id)
 			appointment_results.append(ar)
 
+		if effects.get("requires_marriage", false):
+			var mr: Dictionary = _apply_marriage(effects, characters_by_id, marriages, ic_day)
+			marriage_results.append(mr)
+
+		if effects.get("marriage_rejected", false):
+			var rr: Dictionary = _apply_marriage_rejection(effects, characters_by_id)
+			marriage_results.append(rr)
+
 	return {
 		"appointments": appointment_results,
+		"marriages": marriage_results,
 	}
 
 
@@ -5994,6 +6009,76 @@ static func _apply_appointment(
 		"appointee_id": appointee_id,
 		"position": position,
 		"lord_id": lord_id,
+	}
+
+
+static func _apply_marriage(
+	effects: Dictionary,
+	characters_by_id: Dictionary,
+	marriages: Array,
+	ic_day: int,
+) -> Dictionary:
+	var a_id: int = effects.get("candidate_a_id", -1)
+	var b_id: int = effects.get("candidate_b_id", -1)
+	var marriage_type: MarriageSystem.MarriageType = effects.get(
+		"marriage_type", MarriageSystem.MarriageType.CROSS_CLAN
+	)
+
+	var char_a: L5RCharacterData = characters_by_id.get(a_id) as L5RCharacterData
+	var char_b: L5RCharacterData = characters_by_id.get(b_id) as L5RCharacterData
+
+	if char_a == null or char_b == null:
+		return {"applied": false, "reason": "missing_character", "a_id": a_id, "b_id": b_id}
+
+	if char_a.spouse_id >= 0 or char_b.spouse_id >= 0:
+		return {"applied": false, "reason": "already_married", "a_id": a_id, "b_id": b_id}
+
+	char_a.spouse_id = b_id
+	char_b.spouse_id = a_id
+
+	var moving_id: int = b_id
+	if marriage_type == MarriageSystem.MarriageType.WITHIN_FAMILY:
+		moving_id = -1
+
+	var record: Dictionary = MarriageSystem.create_marriage(
+		a_id, b_id, marriage_type, moving_id, ic_day,
+	)
+	marriages.append(record)
+
+	var boosts: Dictionary = MarriageSystem.get_marriage_boosts(marriage_type)
+
+	return {
+		"applied": true,
+		"a_id": a_id,
+		"b_id": b_id,
+		"marriage_type": marriage_type,
+		"clan_boost": boosts.get("clan_boost", 0),
+		"family_boost": boosts.get("family_boost", 0),
+		"favor_owed": boosts.get("favor_owed", false),
+	}
+
+
+static func _apply_marriage_rejection(
+	effects: Dictionary,
+	characters_by_id: Dictionary,
+) -> Dictionary:
+	var target_lord_id: int = effects.get("target_lord_id", -1)
+	var proposing_lord_id: int = effects.get("proposing_lord_id", -1)
+	var disp_change: int = effects.get("disposition_change", -3)
+
+	var target_lord: L5RCharacterData = characters_by_id.get(target_lord_id) as L5RCharacterData
+	if target_lord == null:
+		return {"applied": false, "reason": "target_lord_not_found", "rejected": true}
+
+	var current: int = target_lord.disposition_values.get(proposing_lord_id, 0)
+	target_lord.disposition_values[proposing_lord_id] = clampi(current + disp_change, -100, 100)
+
+	return {
+		"applied": true,
+		"rejected": true,
+		"target_lord_id": target_lord_id,
+		"proposing_lord_id": proposing_lord_id,
+		"disposition_change": disp_change,
 	}
 
 
