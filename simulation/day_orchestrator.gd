@@ -193,6 +193,10 @@ static func advance_day(
 		characters_by_id,
 		marriages,
 		ic_day,
+		world_states,
+		favors,
+		active_topics,
+		next_topic_id,
 	)
 
 	var war_declarations: Array[Dictionary] = _process_war_declarations(
@@ -5961,9 +5965,16 @@ static func _process_governance_effects(
 	characters_by_id: Dictionary,
 	marriages: Array,
 	ic_day: int,
+	world_states: Dictionary = {},
+	favors: Array = [],
+	active_topics: Array[TopicData] = [],
+	next_topic_id: Array[int] = [1000],
 ) -> Dictionary:
 	var appointment_results: Array[Dictionary] = []
 	var marriage_results: Array[Dictionary] = []
+
+	var clan_baselines: Dictionary = world_states.get("clan_baselines", {})
+	var family_baselines: Dictionary = world_states.get("family_baselines", {})
 
 	for result: Variant in results:
 		if not (result is Dictionary):
@@ -5976,7 +5987,11 @@ static func _process_governance_effects(
 			appointment_results.append(ar)
 
 		if effects.get("requires_marriage", false):
-			var mr: Dictionary = _apply_marriage(effects, characters_by_id, marriages, ic_day)
+			var mr: Dictionary = _apply_marriage(
+				effects, characters_by_id, marriages, ic_day,
+				clan_baselines, family_baselines, favors,
+				active_topics, next_topic_id,
+			)
 			marriage_results.append(mr)
 
 		if effects.get("marriage_rejected", false):
@@ -6017,6 +6032,11 @@ static func _apply_marriage(
 	characters_by_id: Dictionary,
 	marriages: Array,
 	ic_day: int,
+	clan_baselines: Dictionary = {},
+	family_baselines: Dictionary = {},
+	favors: Array = [],
+	active_topics: Array[TopicData] = [],
+	next_topic_id: Array[int] = [1000],
 ) -> Dictionary:
 	var a_id: int = effects.get("candidate_a_id", -1)
 	var b_id: int = effects.get("candidate_b_id", -1)
@@ -6047,6 +6067,48 @@ static func _apply_marriage(
 
 	var boosts: Dictionary = MarriageSystem.get_marriage_boosts(marriage_type)
 
+	if not clan_baselines.is_empty():
+		CollectiveDisposition.apply_marriage(
+			char_a.clan, char_b.clan,
+			char_a.family, char_b.family,
+			clan_baselines, family_baselines,
+		)
+
+	var favor_created: bool = false
+	if boosts.get("favor_owed", false):
+		var proposing_lord_id: int = effects.get("proposing_lord_id", -1)
+		var target_lord_id: int = effects.get("target_lord_id", -1)
+		if proposing_lord_id >= 0 and target_lord_id >= 0:
+			var favor := FavorData.new()
+			favor.favor_type = FavorData.FavorType.GENERAL
+			favor.tier = FavorData.FavorTier.MODERATE
+			favor.creditor_id = target_lord_id
+			favor.debtor_id = proposing_lord_id
+			favor.created_ic_day = ic_day
+			favor.terms = "marriage_obligation"
+			favor.source_action = "ARRANGE_MARRIAGE"
+			favors.append(favor)
+			favor_created = true
+
+	var topic_id: int = -1
+	if not next_topic_id.is_empty():
+		var topic := TopicData.new()
+		topic.topic_id = next_topic_id[0]
+		next_topic_id[0] += 1
+		topic.slug = "marriage_%s_%s_d%d" % [char_a.family, char_b.family, ic_day]
+		topic.topic_type = "marriage"
+		topic.variant = _marriage_type_to_variant(marriage_type)
+		topic.category = TopicData.Category.POLITICAL
+		topic.tier = TopicData.Tier.TIER_4
+		topic.momentum = 11.0
+		topic.ic_day_created = ic_day
+		if char_a.clan != char_b.clan:
+			topic.clan_involved = char_a.clan + "," + char_b.clan
+		else:
+			topic.clan_involved = char_a.clan
+		active_topics.append(topic)
+		topic_id = topic.topic_id
+
 	return {
 		"applied": true,
 		"a_id": a_id,
@@ -6055,7 +6117,20 @@ static func _apply_marriage(
 		"clan_boost": boosts.get("clan_boost", 0),
 		"family_boost": boosts.get("family_boost", 0),
 		"favor_owed": boosts.get("favor_owed", false),
+		"favor_created": favor_created,
+		"topic_id": topic_id,
 	}
+
+
+static func _marriage_type_to_variant(mt: MarriageSystem.MarriageType) -> String:
+	match mt:
+		MarriageSystem.MarriageType.CROSS_CLAN:
+			return "cross_clan"
+		MarriageSystem.MarriageType.BETWEEN_FAMILIES:
+			return "between_families"
+		MarriageSystem.MarriageType.WITHIN_FAMILY:
+			return "within_family"
+	return "unknown"
 
 
 static func _apply_marriage_rejection(

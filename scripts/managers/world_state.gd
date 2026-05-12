@@ -125,6 +125,8 @@ func _sync_wars_to_world_states() -> void:
 	world_states["active_wars"] = WarSystem.wars_to_context_array(active_wars)
 	world_states["province_data"] = provinces.values()
 	world_states["settlements"] = settlements
+	world_states["clan_baselines"] = clan_baselines
+	world_states["family_baselines"] = family_baselines
 
 
 func advance_one_day() -> Dictionary:

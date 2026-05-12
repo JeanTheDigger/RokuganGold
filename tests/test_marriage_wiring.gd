@@ -434,3 +434,173 @@ func test_governance_results_include_marriages() -> void:
 	assert_true(result.has("governance_results"))
 	var gov: Dictionary = result["governance_results"]
 	assert_true(gov.has("marriages"))
+
+
+# -- Follow-up: Baseline Boosts -----------------------------------------------
+
+func test_cross_clan_marriage_applies_baseline_boosts() -> void:
+	var char_a := _make_char(10, "Crane", "Doji")
+	var char_b := _make_char(11, "Lion", "Akodo")
+	var chars_by_id: Dictionary = {10: char_a, 11: char_b}
+	var marriages: Array[Dictionary] = []
+	var baselines: Dictionary = CollectiveDisposition.make_starting_baselines()
+	var clan_bl: Dictionary = baselines["clan"]
+	var family_bl: Dictionary = baselines["family"]
+
+	var key_clan: String = CollectiveDisposition.make_pair_key("Crane", "Lion")
+	var before_clan: int = int(clan_bl.get(key_clan, 0))
+
+	var effects: Dictionary = {
+		"requires_marriage": true,
+		"candidate_a_id": 10,
+		"candidate_b_id": 11,
+		"marriage_type": MarriageSystem.MarriageType.CROSS_CLAN,
+		"proposing_lord_id": 1,
+		"target_lord_id": 2,
+	}
+	DayOrchestrator._apply_marriage(
+		effects, chars_by_id, marriages, 100,
+		clan_bl, family_bl,
+	)
+
+	var after_clan: int = int(clan_bl.get(key_clan, 0))
+	assert_true(after_clan > before_clan, "Clan baseline should increase after cross-clan marriage")
+
+
+func test_within_family_marriage_no_baseline_change() -> void:
+	var char_a := _make_char(10, "Crane", "Doji")
+	var char_b := _make_char(11, "Crane", "Doji")
+	var chars_by_id: Dictionary = {10: char_a, 11: char_b}
+	var marriages: Array[Dictionary] = []
+	var baselines: Dictionary = CollectiveDisposition.make_starting_baselines()
+	var clan_bl: Dictionary = baselines["clan"]
+	var family_bl: Dictionary = baselines["family"]
+
+	var clan_snapshot: Dictionary = clan_bl.duplicate()
+
+	var effects: Dictionary = {
+		"requires_marriage": true,
+		"candidate_a_id": 10,
+		"candidate_b_id": 11,
+		"marriage_type": MarriageSystem.MarriageType.WITHIN_FAMILY,
+		"proposing_lord_id": 1,
+		"target_lord_id": 2,
+	}
+	DayOrchestrator._apply_marriage(
+		effects, chars_by_id, marriages, 100,
+		clan_bl, family_bl,
+	)
+
+	assert_eq(clan_bl, clan_snapshot, "Within-family marriage should not change clan baselines")
+
+
+# -- Follow-up: Favor Creation ------------------------------------------------
+
+func test_cross_clan_marriage_creates_favor() -> void:
+	var char_a := _make_char(10, "Crane", "Doji")
+	var char_b := _make_char(11, "Lion", "Akodo")
+	var chars_by_id: Dictionary = {10: char_a, 11: char_b}
+	var marriages: Array[Dictionary] = []
+	var favors: Array = []
+
+	var effects: Dictionary = {
+		"requires_marriage": true,
+		"candidate_a_id": 10,
+		"candidate_b_id": 11,
+		"marriage_type": MarriageSystem.MarriageType.CROSS_CLAN,
+		"proposing_lord_id": 1,
+		"target_lord_id": 2,
+	}
+	var result: Dictionary = DayOrchestrator._apply_marriage(
+		effects, chars_by_id, marriages, 100,
+		{}, {}, favors,
+	)
+
+	assert_true(result["favor_created"])
+	assert_eq(favors.size(), 1)
+	var favor: FavorData = favors[0]
+	assert_eq(favor.creditor_id, 2)
+	assert_eq(favor.debtor_id, 1)
+	assert_eq(favor.tier, FavorData.FavorTier.MODERATE)
+	assert_eq(favor.source_action, "ARRANGE_MARRIAGE")
+
+
+func test_between_families_marriage_no_favor() -> void:
+	var char_a := _make_char(10, "Crane", "Doji")
+	var char_b := _make_char(11, "Crane", "Kakita")
+	var chars_by_id: Dictionary = {10: char_a, 11: char_b}
+	var marriages: Array[Dictionary] = []
+	var favors: Array = []
+
+	var effects: Dictionary = {
+		"requires_marriage": true,
+		"candidate_a_id": 10,
+		"candidate_b_id": 11,
+		"marriage_type": MarriageSystem.MarriageType.BETWEEN_FAMILIES,
+		"proposing_lord_id": 1,
+		"target_lord_id": 2,
+	}
+	var result: Dictionary = DayOrchestrator._apply_marriage(
+		effects, chars_by_id, marriages, 100,
+		{}, {}, favors,
+	)
+
+	assert_false(result["favor_created"])
+	assert_eq(favors.size(), 0)
+
+
+# -- Follow-up: Topic Generation -----------------------------------------------
+
+func test_marriage_generates_topic() -> void:
+	var char_a := _make_char(10, "Crane", "Doji")
+	var char_b := _make_char(11, "Lion", "Akodo")
+	var chars_by_id: Dictionary = {10: char_a, 11: char_b}
+	var marriages: Array[Dictionary] = []
+	var topics: Array[TopicData] = []
+	var next_tid: Array[int] = [500]
+
+	var effects: Dictionary = {
+		"requires_marriage": true,
+		"candidate_a_id": 10,
+		"candidate_b_id": 11,
+		"marriage_type": MarriageSystem.MarriageType.CROSS_CLAN,
+		"proposing_lord_id": 1,
+		"target_lord_id": 2,
+	}
+	var result: Dictionary = DayOrchestrator._apply_marriage(
+		effects, chars_by_id, marriages, 100,
+		{}, {}, [], topics, next_tid,
+	)
+
+	assert_eq(result["topic_id"], 500)
+	assert_eq(next_tid[0], 501)
+	assert_eq(topics.size(), 1)
+	var topic: TopicData = topics[0]
+	assert_eq(topic.topic_type, "marriage")
+	assert_eq(topic.variant, "cross_clan")
+	assert_eq(topic.category, TopicData.Category.POLITICAL)
+	assert_eq(topic.tier, TopicData.Tier.TIER_4)
+	assert_true(topic.slug.begins_with("marriage_Doji_Akodo"))
+
+
+func test_between_families_topic_variant() -> void:
+	var char_a := _make_char(10, "Crane", "Doji")
+	var char_b := _make_char(11, "Crane", "Kakita")
+	var chars_by_id: Dictionary = {10: char_a, 11: char_b}
+	var marriages: Array[Dictionary] = []
+	var topics: Array[TopicData] = []
+	var next_tid: Array[int] = [600]
+
+	var effects: Dictionary = {
+		"requires_marriage": true,
+		"candidate_a_id": 10,
+		"candidate_b_id": 11,
+		"marriage_type": MarriageSystem.MarriageType.BETWEEN_FAMILIES,
+	}
+	var result: Dictionary = DayOrchestrator._apply_marriage(
+		effects, chars_by_id, marriages, 100,
+		{}, {}, [], topics, next_tid,
+	)
+
+	assert_eq(topics[0].variant, "between_families")
+	assert_eq(topics[0].clan_involved, "Crane")
