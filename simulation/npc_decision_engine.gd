@@ -70,8 +70,8 @@ static func build_context(
 			var combined: int = clampi(current + bond, -100, 100)
 			ctx.dispositions[other_id] = combined
 			ctx.disposition_values[other_id] = combined
-	ctx.known_topics = world_state.get("known_topics", [] as Array[int])
-	ctx.known_positions = world_state.get("known_positions", {})
+	ctx.known_topics = character.topic_pool.duplicate()
+	ctx.known_positions = character.topic_positions.duplicate()
 	ctx.known_objectives = world_state.get("known_objectives", {})
 	ctx.known_contacts = world_state.get("known_contacts", [] as Array[int])
 	ctx.contact_clans = world_state.get("contact_clans", {})
@@ -1460,7 +1460,17 @@ static func _pick_court_agenda_topic(ctx: NPCDataStructures.ContextSnapshot) -> 
 	var topics: Array = court.get("topics", [])
 	if topics.is_empty():
 		return -1
-	return int(topics[0])
+	var best_id: int = int(topics[0])
+	var best_score: float = -1.0
+	for t: Variant in topics:
+		var tid: int = int(t)
+		if tid not in ctx.known_topics:
+			continue
+		var pos: float = absf(ctx.known_positions.get(tid, 0.0))
+		if pos > best_score:
+			best_score = pos
+			best_id = tid
+	return best_id
 
 
 static func _pick_gossip_subject(ctx: NPCDataStructures.ContextSnapshot) -> int:

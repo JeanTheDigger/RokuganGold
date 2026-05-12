@@ -1195,3 +1195,72 @@ func test_metadata_disclose_zero_opinion_for_unknown() -> void:
 	var ctx: NPCDataStructures.ContextSnapshot = _make_meta_ctx()
 	NPCDecisionEngine._populate_action_metadata(action, need, ctx)
 	assert_eq(action.metadata.get("disclosed_opinion", -1), 0)
+
+
+# --- Topic-aware metadata selection ---
+
+func test_topic_picks_strongest_position() -> void:
+	var ctx: NPCDataStructures.ContextSnapshot = _make_meta_ctx([10, 20, 30])
+	ctx.known_topics = [10, 20, 30]
+	ctx.known_positions = {10: 5.0, 20: -40.0, 30: 15.0}
+	var need := NPCDataStructures.ImmediateNeed.new()
+	var action := NPCDataStructures.ScoredAction.new()
+	action.action_id = "NEGOTIATE"
+	NPCDecisionEngine._populate_action_metadata(action, need, ctx)
+	assert_eq(action.metadata.get("topic_id", -1), 20, "Should pick topic with highest absolute position")
+
+
+func test_topic_skips_unknown_topics() -> void:
+	var ctx: NPCDataStructures.ContextSnapshot = _make_meta_ctx([10, 20, 30])
+	ctx.known_topics = [10, 30]
+	ctx.known_positions = {10: 5.0, 30: 3.0}
+	var need := NPCDataStructures.ImmediateNeed.new()
+	var action := NPCDataStructures.ScoredAction.new()
+	action.action_id = "PERSUADE"
+	NPCDecisionEngine._populate_action_metadata(action, need, ctx)
+	assert_eq(action.metadata.get("topic_id", -1), 10, "Should pick known topic with strongest position")
+
+
+func test_topic_fallback_to_first_when_none_known() -> void:
+	var ctx: NPCDataStructures.ContextSnapshot = _make_meta_ctx([42, 55])
+	ctx.known_topics = []
+	ctx.known_positions = {}
+	var need := NPCDataStructures.ImmediateNeed.new()
+	var action := NPCDataStructures.ScoredAction.new()
+	action.action_id = "NEGOTIATE"
+	NPCDecisionEngine._populate_action_metadata(action, need, ctx)
+	assert_eq(action.metadata.get("topic_id", -1), 42, "Falls back to first agenda topic")
+
+
+func test_topic_picks_positive_over_weak_negative() -> void:
+	var ctx: NPCDataStructures.ContextSnapshot = _make_meta_ctx([10, 20])
+	ctx.known_topics = [10, 20]
+	ctx.known_positions = {10: 30.0, 20: -10.0}
+	var need := NPCDataStructures.ImmediateNeed.new()
+	var action := NPCDataStructures.ScoredAction.new()
+	action.action_id = "PUBLIC_DEBATE"
+	NPCDecisionEngine._populate_action_metadata(action, need, ctx)
+	assert_eq(action.metadata.get("topic_id", -1), 10, "Strongest absolute position wins regardless of sign")
+
+
+func test_topic_zero_position_loses_to_any_nonzero() -> void:
+	var ctx: NPCDataStructures.ContextSnapshot = _make_meta_ctx([10, 20])
+	ctx.known_topics = [10, 20]
+	ctx.known_positions = {10: 0.0, 20: -1.0}
+	var need := NPCDataStructures.ImmediateNeed.new()
+	var action := NPCDataStructures.ScoredAction.new()
+	action.action_id = "NEGOTIATE"
+	NPCDecisionEngine._populate_action_metadata(action, need, ctx)
+	assert_eq(action.metadata.get("topic_id", -1), 20)
+
+
+func test_build_context_populates_known_topics_from_character() -> void:
+	var char := L5RCharacterData.new()
+	char.character_id = 1
+	char.topic_pool = [10, 20, 30]
+	char.topic_positions = {10: 5.0, 20: -40.0}
+	var ws: Dictionary = {"is_lord": false}
+	var ctx: NPCDataStructures.ContextSnapshot = NPCDecisionEngine.build_context(char, ws)
+	assert_eq(ctx.known_topics, [10, 20, 30] as Array[int])
+	assert_eq(ctx.known_positions.get(10, 0.0), 5.0)
+	assert_eq(ctx.known_positions.get(20, 0.0), -40.0)
