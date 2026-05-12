@@ -284,3 +284,44 @@ static func has_unfulfilled_commitments(
 		if c.lord_id == lord_id and not c.fulfilled:
 			return true
 	return false
+
+
+static func has_commitment_on_topic(
+	commitments: Array[CourtCommitmentData],
+	lord_id: int,
+	topic_id: int,
+) -> bool:
+	for c: CourtCommitmentData in commitments:
+		if c.lord_id == lord_id and c.topic_id == topic_id:
+			return true
+	return false
+
+
+const VOLUNTARY_POSITION_THRESHOLD: float = 50.0
+
+
+static func find_declarable_topics(
+	lord: L5RCharacterData,
+	agenda_topic_ids: Array,
+	active_topics: Array[TopicData],
+	commitments: Array[CourtCommitmentData],
+) -> Array[TopicData]:
+	## Returns action topics on the agenda where the lord's position exceeds +50
+	## and no existing commitment exists. Used to detect voluntary declaration
+	## opportunities per GDD s16.4.
+	var result: Array[TopicData] = []
+	for topic: TopicData in active_topics:
+		if topic.topic_id not in agenda_topic_ids:
+			continue
+		if topic.resolved:
+			continue
+		var commitment_type: String = ImperialEdictSystem.get_commitment_type_for_topic(topic)
+		if commitment_type.is_empty():
+			continue
+		var position: float = lord.topic_positions.get(topic.topic_id, 0.0)
+		if position < VOLUNTARY_POSITION_THRESHOLD:
+			continue
+		if has_commitment_on_topic(commitments, lord.character_id, topic.topic_id):
+			continue
+		result.append(topic)
+	return result

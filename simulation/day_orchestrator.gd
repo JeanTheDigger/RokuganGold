@@ -225,6 +225,12 @@ static func advance_day(
 		active_edicts,
 	)
 
+	_process_voluntary_declarations(
+		day_result.get("results", []),
+		active_courts, active_topics, court_commitments,
+		characters_by_id, ic_day, time_system,
+	)
+
 	var governance_results: Dictionary = _process_governance_effects(
 		day_result.get("results", []),
 		characters_by_id,
@@ -7546,3 +7552,85 @@ static func _process_commitment_seasonal(
 		topic.ic_day_created = ic_day
 		active_topics.append(topic)
 	return result
+
+
+static func _process_voluntary_declarations(
+	applied_results: Array,
+	active_courts: Array[CourtSessionData],
+	active_topics: Array[TopicData],
+	court_commitments: Array[CourtCommitmentData],
+	characters_by_id: Dictionary,
+	ic_day: int,
+	time_system: TimeSystem,
+) -> Array[CourtCommitmentData]:
+	## Scans day results for successful PUBLIC_DECLARATION actions. When the
+	## declaring lord's position exceeds +50 on an agenda action topic at their
+	## current court, creates a voluntary CourtCommitmentData per GDD s16.4.
+	var created: Array[CourtCommitmentData] = []
+	for result: Variant in applied_results:
+		if not result is Dictionary:
+			continue
+		var d: Dictionary = result as Dictionary
+		if d.get("action_id", "") != "PUBLIC_DECLARATION":
+			continue
+		var effects: Dictionary = d.get("effects", {})
+		if effects.get("failed", false):
+			continue
+		var lord_id: int = d.get("character_id", -1)
+		var lord: L5RCharacterData = characters_by_id.get(lord_id)
+		if lord == null:
+			continue
+		if not _is_lord_tier(lord):
+			continue
+		var court: CourtSessionData = _find_active_court_for_character(
+			active_courts, lord_id,
+		)
+		if court == null:
+			continue
+		var declarable: Array[TopicData] = CourtCommitmentSystem.find_declarable_topics(
+			lord, court.agenda_topic_ids, active_topics, court_commitments,
+		)
+		if declarable.is_empty():
+			continue
+		var topic: TopicData = declarable[0]
+		var commitment_type: String = ImperialEdictSystem.get_commitment_type_for_topic(topic)
+		var deadline: int = _compute_next_season_end_ic_day(time_system)
+		var cc: CourtCommitmentData = CourtCommitmentSystem.create_commitment(
+			lord_id, topic.topic_id, commitment_type,
+			CourtCommitmentData.CommitmentSource.VOLUNTARY,
+			ic_day, deadline,
+		)
+		court_commitments.append(cc)
+		created.append(cc)
+	return created
+
+
+static func _find_active_court_for_character(
+	active_courts: Array[CourtSessionData],
+	character_id: int,
+) -> CourtSessionData:
+	for court: CourtSessionData in active_courts:
+		if court.phase != CourtSessionData.CourtPhase.ACTIVE:
+			continue
+		if character_id in court.attendee_ids:
+			return court
+	return null
+
+
+static func _compute_next_season_end_ic_day(time_system: TimeSystem) -> int:
+	## Returns the last IC day of the next season (deadline for voluntary
+	## commitments per GDD s16.4: "default: last day of the next IC season").
+	var day_of_year: int = time_system.get_ic_day_of_year()
+	var ic_day: int = time_system.get_ic_day()
+	# Season end boundaries (cumulative): Spring=90, Summer=180, Autumn=240, Winter=360
+	var ends: Array[int] = [90, 180, 240, 360]
+	# Find the NEXT season boundary after current day_of_year, then add one more
+	var found_current_end: bool = false
+	for e: int in ends:
+		if day_of_year < e:
+			if not found_current_end:
+				found_current_end = true
+				continue
+			return ic_day + (e - day_of_year) - 1
+	# Wrapped: next season end is Spring of next year
+	return ic_day + (360 - day_of_year) + 90 - 1

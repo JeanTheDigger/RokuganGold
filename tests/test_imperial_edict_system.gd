@@ -1528,3 +1528,154 @@ func test_commitment_seasonal_next_topic_id_increments():
 	)
 	assert_eq(next_id[0], 501)
 	assert_eq(topics[0].topic_id, 500)
+
+
+# -- Voluntary Declaration Wiring ---------------------------------------------
+
+func _make_active_court(court_id: int, attendees: Array[int] = [],
+		agenda: Array[int] = []) -> CourtSessionData:
+	var c := CourtSessionData.new()
+	c.court_id = court_id
+	c.phase = CourtSessionData.CourtPhase.ACTIVE
+	c.attendee_ids = attendees
+	c.agenda_topic_ids = agenda
+	return c
+
+func _make_declaration_result(lord_id: int, success: bool = true) -> Dictionary:
+	var effects: Dictionary = {}
+	if not success:
+		effects["failed"] = true
+	else:
+		effects["witness_disposition_gain"] = 2
+	return {
+		"action_id": "PUBLIC_DECLARATION",
+		"character_id": lord_id,
+		"effects": effects,
+	}
+
+func test_voluntary_declaration_creates_commitment():
+	var lord := _make_attendee(10, "Crane", 7.0)
+	lord.lord_id = -1
+	lord.topic_positions[50] = 60.0
+	var chars_by_id: Dictionary = {10: lord}
+	var topic := _make_topic(50, 40.0, "famine", TopicData.Category.POLITICAL)
+	var active_topics: Array[TopicData] = [topic]
+	var court := _make_active_court(1, [10], [50])
+	var active_courts: Array[CourtSessionData] = [court]
+	var court_commitments: Array[CourtCommitmentData] = []
+	var ts := TimeSystem.new(1120, 45)  # Mid-Spring (day 45)
+	var results: Array = [_make_declaration_result(10)]
+	var created: Array[CourtCommitmentData] = DayOrchestrator._process_voluntary_declarations(
+		results, active_courts, active_topics, court_commitments,
+		chars_by_id, 45, ts,
+	)
+	assert_eq(created.size(), 1)
+	assert_eq(created[0].lord_id, 10)
+	assert_eq(created[0].topic_id, 50)
+	assert_eq(created[0].commitment_type, "send_supplies")
+	assert_eq(created[0].source, CourtCommitmentData.CommitmentSource.VOLUNTARY)
+
+func test_voluntary_declaration_skips_failed():
+	var lord := _make_attendee(10, "Crane", 7.0)
+	lord.lord_id = -1
+	lord.topic_positions[50] = 60.0
+	var chars_by_id: Dictionary = {10: lord}
+	var topic := _make_topic(50, 40.0, "famine", TopicData.Category.POLITICAL)
+	var active_topics: Array[TopicData] = [topic]
+	var court := _make_active_court(1, [10], [50])
+	var active_courts: Array[CourtSessionData] = [court]
+	var court_commitments: Array[CourtCommitmentData] = []
+	var ts := TimeSystem.new(1120, 45)
+	var results: Array = [_make_declaration_result(10, false)]
+	var created: Array[CourtCommitmentData] = DayOrchestrator._process_voluntary_declarations(
+		results, active_courts, active_topics, court_commitments,
+		chars_by_id, 45, ts,
+	)
+	assert_eq(created.size(), 0)
+
+func test_voluntary_declaration_skips_non_lord():
+	var vassal := _make_attendee(10, "Crane", 3.0)
+	vassal.lord_id = 5
+	vassal.topic_positions[50] = 60.0
+	var chars_by_id: Dictionary = {10: vassal}
+	var topic := _make_topic(50, 40.0, "famine", TopicData.Category.POLITICAL)
+	var active_topics: Array[TopicData] = [topic]
+	var court := _make_active_court(1, [10], [50])
+	var active_courts: Array[CourtSessionData] = [court]
+	var court_commitments: Array[CourtCommitmentData] = []
+	var ts := TimeSystem.new(1120, 45)
+	var results: Array = [_make_declaration_result(10)]
+	var created: Array[CourtCommitmentData] = DayOrchestrator._process_voluntary_declarations(
+		results, active_courts, active_topics, court_commitments,
+		chars_by_id, 45, ts,
+	)
+	assert_eq(created.size(), 0)
+
+func test_voluntary_declaration_skips_below_threshold():
+	var lord := _make_attendee(10, "Crane", 7.0)
+	lord.lord_id = -1
+	lord.topic_positions[50] = 40.0
+	var chars_by_id: Dictionary = {10: lord}
+	var topic := _make_topic(50, 40.0, "famine", TopicData.Category.POLITICAL)
+	var active_topics: Array[TopicData] = [topic]
+	var court := _make_active_court(1, [10], [50])
+	var active_courts: Array[CourtSessionData] = [court]
+	var court_commitments: Array[CourtCommitmentData] = []
+	var ts := TimeSystem.new(1120, 45)
+	var results: Array = [_make_declaration_result(10)]
+	var created: Array[CourtCommitmentData] = DayOrchestrator._process_voluntary_declarations(
+		results, active_courts, active_topics, court_commitments,
+		chars_by_id, 45, ts,
+	)
+	assert_eq(created.size(), 0)
+
+func test_voluntary_declaration_no_duplicate():
+	var lord := _make_attendee(10, "Crane", 7.0)
+	lord.lord_id = -1
+	lord.topic_positions[50] = 60.0
+	var chars_by_id: Dictionary = {10: lord}
+	var topic := _make_topic(50, 40.0, "famine", TopicData.Category.POLITICAL)
+	var active_topics: Array[TopicData] = [topic]
+	var court := _make_active_court(1, [10], [50])
+	var active_courts: Array[CourtSessionData] = [court]
+	var existing_cc := CourtCommitmentSystem.create_commitment(
+		10, 50, "send_supplies", CourtCommitmentData.CommitmentSource.VOLUNTARY, 40, 200,
+	)
+	var court_commitments: Array[CourtCommitmentData] = [existing_cc]
+	var ts := TimeSystem.new(1120, 45)
+	var results: Array = [_make_declaration_result(10)]
+	var created: Array[CourtCommitmentData] = DayOrchestrator._process_voluntary_declarations(
+		results, active_courts, active_topics, court_commitments,
+		chars_by_id, 45, ts,
+	)
+	assert_eq(created.size(), 0, "Should not create duplicate commitment")
+
+func test_voluntary_declaration_not_at_court():
+	var lord := _make_attendee(10, "Crane", 7.0)
+	lord.lord_id = -1
+	lord.topic_positions[50] = 60.0
+	var chars_by_id: Dictionary = {10: lord}
+	var topic := _make_topic(50, 40.0, "famine", TopicData.Category.POLITICAL)
+	var active_topics: Array[TopicData] = [topic]
+	var court := _make_active_court(1, [20], [50])  # lord NOT in attendees
+	var active_courts: Array[CourtSessionData] = [court]
+	var court_commitments: Array[CourtCommitmentData] = []
+	var ts := TimeSystem.new(1120, 45)
+	var results: Array = [_make_declaration_result(10)]
+	var created: Array[CourtCommitmentData] = DayOrchestrator._process_voluntary_declarations(
+		results, active_courts, active_topics, court_commitments,
+		chars_by_id, 45, ts,
+	)
+	assert_eq(created.size(), 0)
+
+func test_next_season_end_spring():
+	var ts := TimeSystem.new(1120, 45)  # Day 45 = mid Spring
+	# Current season end: day 89 (Spring). Next season end: day 179 (Summer)
+	var result: int = DayOrchestrator._compute_next_season_end_ic_day(ts)
+	assert_eq(result, 179)
+
+func test_next_season_end_winter():
+	var ts := TimeSystem.new(1120, 300)  # Day 300 = Winter
+	# Current season end: day 359. Next season end: Spring of next year = day 449
+	var result: int = DayOrchestrator._compute_next_season_end_ic_day(ts)
+	assert_eq(result, 449)

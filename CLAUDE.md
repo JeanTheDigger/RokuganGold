@@ -368,7 +368,11 @@ single-dice-entry-point and server-authoritative constraints.
   Good faith: fulfilled = true, or ap_spent_toward > 0.
   Seasonal processing: `process_seasonal_commitments()` checks fulfillment,
   evaluates good faith, detects reneges, computes consequences.
-  Queries: `get_active_commitments()`, `has_unfulfilled_commitments()`.
+  Queries: `get_active_commitments()`, `has_unfulfilled_commitments()`,
+  `has_commitment_on_topic()`.
+  Voluntary declaration: `find_declarable_topics()` returns action topics on the
+  court agenda where the lord's position exceeds +50 and no existing commitment
+  exists. `VOLUNTARY_POSITION_THRESHOLD = 50.0`.
 - **objective_alignment.json** — HONOR_COMMITMENT NeedType added: ORDER_DEPLOY
   (95), SHARE_SUPPLIES (90), ASSIGN_VASSAL_OBJECTIVE (85), BEGIN_TRAVEL (70),
   WRITE_LETTER (60), ASSESS_PROVINCE_STATUS (40), DO_NOTHING (0).
@@ -481,7 +485,7 @@ All in /tests/, one file per system:
 - test_objective_decomposer.gd (~125 tests)
 - test_information_system.gd (~40 tests)
 - test_daily_conversation.gd (~37 tests)
-- test_court_commitment_system.gd (~37 tests)
+- test_court_commitment_system.gd (~49 tests)
 - test_topic_system.gd (~55 tests)
 - test_investigation_system.gd (~40 tests)
 - test_day_orchestrator.gd (~54 tests)
@@ -552,7 +556,7 @@ All in /tests/, one file per system:
 - test_feasibility_ledger.gd (~148 tests)
 - test_starvation_warfare.gd (~55 tests)
 - test_court_system.gd (~76 tests)
-- test_imperial_edict_system.gd (~95 tests)
+- test_imperial_edict_system.gd (~103 tests)
 - test_horde_system.gd (~43 tests)
 - test_oni_generator.gd (~80 tests)
 - test_naval_system.gd (~113 tests)
@@ -2289,6 +2293,15 @@ All in /tests/, one file per system:
   lord (inbound disposition), generates renege topic (Tier 3 for voluntary,
   Tier 2 for edict-compelled, POLITICAL category, "commitment_broken" variant).
   Return dict gains `commitment_seasonal_result`.
+- **Voluntary declaration processing** — `_process_voluntary_declarations()` runs
+  daily after edict compliance processing. Scans day results for successful
+  PUBLIC_DECLARATION actions from lord-tier characters at active courts. When the
+  declaring lord's position exceeds +50 on an agenda topic with a commitment type
+  mapping (via `ImperialEdictSystem.get_commitment_type_for_topic()`), creates a
+  VOLUNTARY CourtCommitmentData. Deduplication via `has_commitment_on_topic()`.
+  Deadline computed as last day of the next IC season via
+  `_compute_next_season_end_ic_day()`. `_find_active_court_for_character()` helper
+  locates the lord's court by attendee ID.
 - **NPC edict response wiring** — COMPLY_WITH_EDICT and DEFY_EDICT ActionIDs
   in context lists, scoring tables, and ActionExecutor. RESPOND_TO_EDICT
   NeedType in objective_alignment.json. `_inject_edict_reactive_events()`

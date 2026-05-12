@@ -320,3 +320,110 @@ func test_has_unfulfilled_wrong_lord():
 	var c := _make_commitment(2, "send_supplies")
 	var commitments: Array[CourtCommitmentData] = [c]
 	assert_false(CourtCommitmentSystem.has_unfulfilled_commitments(commitments, 1))
+
+
+# -- Topic Commitment Check ---------------------------------------------------
+
+func test_has_commitment_on_topic_true():
+	var c := _make_commitment(1, "send_supplies")
+	var commitments: Array[CourtCommitmentData] = [c]
+	assert_true(CourtCommitmentSystem.has_commitment_on_topic(commitments, 1, 10))
+
+func test_has_commitment_on_topic_wrong_lord():
+	var c := _make_commitment(2, "send_supplies")
+	var commitments: Array[CourtCommitmentData] = [c]
+	assert_false(CourtCommitmentSystem.has_commitment_on_topic(commitments, 1, 10))
+
+func test_has_commitment_on_topic_wrong_topic():
+	var c := _make_commitment(1, "send_supplies")
+	var commitments: Array[CourtCommitmentData] = [c]
+	assert_false(CourtCommitmentSystem.has_commitment_on_topic(commitments, 1, 99))
+
+
+# -- Declarable Topics --------------------------------------------------------
+
+func _make_famine_topic(id: int, momentum: float = 50.0) -> TopicData:
+	var t := TopicData.new()
+	t.topic_id = id
+	t.momentum = momentum
+	t.topic_type = "famine"
+	t.category = TopicData.Category.POLITICAL
+	return t
+
+func test_find_declarable_topics_above_threshold():
+	var lord := _make_lord(1)
+	lord.topic_positions[100] = 60.0
+	var topic := _make_famine_topic(100)
+	var agenda: Array = [100]
+	var topics: Array[TopicData] = [topic]
+	var commitments: Array[CourtCommitmentData] = []
+	var result: Array[TopicData] = CourtCommitmentSystem.find_declarable_topics(
+		lord, agenda, topics, commitments,
+	)
+	assert_eq(result.size(), 1)
+	assert_eq(result[0].topic_id, 100)
+
+func test_find_declarable_topics_below_threshold():
+	var lord := _make_lord(1)
+	lord.topic_positions[100] = 40.0
+	var topic := _make_famine_topic(100)
+	var agenda: Array = [100]
+	var topics: Array[TopicData] = [topic]
+	var commitments: Array[CourtCommitmentData] = []
+	var result: Array[TopicData] = CourtCommitmentSystem.find_declarable_topics(
+		lord, agenda, topics, commitments,
+	)
+	assert_eq(result.size(), 0)
+
+func test_find_declarable_topics_skips_existing_commitment():
+	var lord := _make_lord(1)
+	lord.topic_positions[100] = 60.0
+	var topic := _make_famine_topic(100)
+	var agenda: Array = [100]
+	var topics: Array[TopicData] = [topic]
+	var cc := _make_commitment(1, "send_supplies")
+	cc.topic_id = 100
+	var commitments: Array[CourtCommitmentData] = [cc]
+	var result: Array[TopicData] = CourtCommitmentSystem.find_declarable_topics(
+		lord, agenda, topics, commitments,
+	)
+	assert_eq(result.size(), 0)
+
+func test_find_declarable_topics_skips_non_action_topic():
+	var lord := _make_lord(1)
+	lord.topic_positions[100] = 60.0
+	var topic := TopicData.new()
+	topic.topic_id = 100
+	topic.topic_type = "unknown_type_no_commitment"
+	var agenda: Array = [100]
+	var topics: Array[TopicData] = [topic]
+	var commitments: Array[CourtCommitmentData] = []
+	var result: Array[TopicData] = CourtCommitmentSystem.find_declarable_topics(
+		lord, agenda, topics, commitments,
+	)
+	assert_eq(result.size(), 0)
+
+func test_find_declarable_topics_skips_off_agenda():
+	var lord := _make_lord(1)
+	lord.topic_positions[100] = 60.0
+	var topic := _make_famine_topic(100)
+	var agenda: Array = [200]  # different topic on agenda
+	var topics: Array[TopicData] = [topic]
+	var commitments: Array[CourtCommitmentData] = []
+	var result: Array[TopicData] = CourtCommitmentSystem.find_declarable_topics(
+		lord, agenda, topics, commitments,
+	)
+	assert_eq(result.size(), 0)
+
+func test_find_declarable_topics_skips_resolved():
+	var lord := _make_lord(1)
+	lord.topic_positions[100] = 60.0
+	var topic := _make_famine_topic(100)
+	topic.resolved = true
+	var agenda: Array = [100]
+	var topics: Array[TopicData] = [topic]
+	var commitments: Array[CourtCommitmentData] = []
+	var result: Array[TopicData] = CourtCommitmentSystem.find_declarable_topics(
+		lord, agenda, topics, commitments,
+	)
+	assert_eq(result.size(), 0)
