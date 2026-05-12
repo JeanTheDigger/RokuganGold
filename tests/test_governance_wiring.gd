@@ -1138,3 +1138,207 @@ func test_filter_province_ids_backward_compat() -> void:
 	var data: Array = [10, 20, 30]
 	var result: Array[int] = NPCDecisionEngine._filter_province_ids_by_clan(data, "Crane")
 	assert_eq(result.size(), 3, "Backward compat: all ids returned from plain array")
+
+
+# -- Construction → Vacancy Pipeline Tests ------------------------------------
+
+func _make_construction(
+	id: int, ctype: ConstructionData.ConstructionType,
+	province_id: int, seasons_remaining: int = 1,
+) -> ConstructionData:
+	var cd := ConstructionData.new()
+	cd.construction_id = id
+	cd.construction_type = ctype
+	cd.province_id = province_id
+	cd.seasons_remaining = seasons_remaining
+	cd.pu_committed = 0.5
+	return cd
+
+
+func test_completed_temple_triggers_vacancy() -> void:
+	var lord := _make_char(1, "Crane", 5.0)
+	var prov := _make_province(10, "Crane")
+	var existing := _make_settlement(100, 10, Enums.SettlementType.TOWN)
+	var settlements: Array[SettlementData] = [existing]
+	var provinces: Dictionary = {10: prov}
+
+	# Create a temple construction about to complete
+	var cd := _make_construction(1, ConstructionData.ConstructionType.TEMPLE, 10, 1)
+	var constructions: Array[ConstructionData] = [cd]
+	var next_sid: Array[int] = [200]
+	var next_tid: Array[int] = [1]
+	var topics: Array[TopicData] = []
+
+	# Tick construction queue — temple completes and is added to settlements
+	DayOrchestrator._process_construction_completions(
+		constructions, settlements, provinces, [], _dice,
+		next_sid, topics, next_tid, 10,
+	)
+
+	# Verify temple was created
+	assert_eq(settlements.size(), 2, "Temple settlement should be added")
+	var temple: SettlementData = settlements[1]
+	assert_eq(temple.settlement_type, Enums.SettlementType.TEMPLE)
+
+	# Now run vacancy intelligence — should detect Temple Head vacancy
+	var ws: Dictionary = {}
+	var sm: Dictionary = {}
+	DayOrchestrator._populate_vacancy_intelligence(
+		ws, [lord], {1: lord}, [], settlements, provinces, sm,
+	)
+
+	var vacancies: Array = ws.get("vacant_positions_1", [])
+	var found_temple_head: bool = false
+	for v: Dictionary in vacancies:
+		if v.get("position_type", "") == "Temple Head":
+			found_temple_head = true
+			break
+	assert_true(found_temple_head, "Completed temple should trigger Temple Head vacancy")
+
+
+func test_completed_monastery_triggers_vacancy() -> void:
+	var lord := _make_char(1, "Crane", 5.0)
+	var prov := _make_province(10, "Crane")
+	var existing := _make_settlement(100, 10, Enums.SettlementType.TOWN)
+	var settlements: Array[SettlementData] = [existing]
+	var provinces: Dictionary = {10: prov}
+
+	var cd := _make_construction(1, ConstructionData.ConstructionType.MONASTERY, 10, 1)
+	var constructions: Array[ConstructionData] = [cd]
+	var next_sid: Array[int] = [200]
+	var next_tid: Array[int] = [1]
+	var topics: Array[TopicData] = []
+
+	DayOrchestrator._process_construction_completions(
+		constructions, settlements, provinces, [], _dice,
+		next_sid, topics, next_tid, 10,
+	)
+
+	assert_eq(settlements.size(), 2, "Monastery settlement should be added")
+
+	var ws: Dictionary = {}
+	var sm: Dictionary = {}
+	DayOrchestrator._populate_vacancy_intelligence(
+		ws, [lord], {1: lord}, [], settlements, provinces, sm,
+	)
+
+	var vacancies: Array = ws.get("vacant_positions_1", [])
+	var found_abbot: bool = false
+	for v: Dictionary in vacancies:
+		if v.get("position_type", "") == "Monastery Abbot":
+			found_abbot = true
+			break
+	assert_true(found_abbot, "Completed monastery should trigger Monastery Abbot vacancy")
+
+
+func test_organic_village_no_position_vacancy() -> void:
+	# Organic villages don't require any specific position holder
+	var lord := _make_char(1, "Crane", 5.0)
+	var prov := _make_province(10, "Crane")
+	prov.terrain = "plains"
+	var existing := _make_settlement(100, 10, Enums.SettlementType.TOWN)
+	existing.population_pu = 10.0
+	var settlements: Array[SettlementData] = [existing]
+	var provinces: Dictionary = {10: prov}
+
+	# Add a village manually (simulates organic village creation)
+	var village := _make_settlement(200, 10, Enums.SettlementType.VILLAGE)
+	settlements.append(village)
+
+	var ws: Dictionary = {}
+	var sm: Dictionary = {}
+	DayOrchestrator._populate_vacancy_intelligence(
+		ws, [lord], {1: lord}, [], settlements, provinces, sm,
+	)
+
+	var vacancies: Array = ws.get("vacant_positions_1", [])
+	# Villages should not trigger Garrison Commander (not military)
+	# and should not trigger Temple Head or Monastery Abbot
+	for v: Dictionary in vacancies:
+		var pt: String = v.get("position_type", "")
+		if pt == "Garrison Commander" or pt == "Temple Head" or pt == "Monastery Abbot":
+			# Check if this vacancy is from the village (settlement_id 200)
+			if v.get("settlement_id", -1) == 200:
+				fail_test("Village should not trigger position vacancy: " + pt)
+				return
+	pass_test("Village correctly produces no position vacancies")
+
+
+func test_construction_vacancy_has_zero_seasons_vacant() -> void:
+	var lord := _make_char(1, "Crane", 5.0)
+	var prov := _make_province(10, "Crane")
+	var settlements: Array[SettlementData] = [_make_settlement(100, 10, Enums.SettlementType.TOWN)]
+	var provinces: Dictionary = {10: prov}
+
+	var cd := _make_construction(1, ConstructionData.ConstructionType.TEMPLE, 10, 1)
+	var constructions: Array[ConstructionData] = [cd]
+	var next_sid: Array[int] = [200]
+	var next_tid: Array[int] = [1]
+	var topics: Array[TopicData] = []
+
+	DayOrchestrator._process_construction_completions(
+		constructions, settlements, provinces, [], _dice,
+		next_sid, topics, next_tid, 10,
+	)
+
+	var ws: Dictionary = {}
+	var sm: Dictionary = {}
+	DayOrchestrator._populate_vacancy_intelligence(
+		ws, [lord], {1: lord}, [], settlements, provinces, sm,
+	)
+
+	var vacancies: Array = ws.get("vacant_positions_1", [])
+	for v: Dictionary in vacancies:
+		if v.get("position_type", "") == "Temple Head":
+			assert_eq(v.get("seasons_vacant", -1), 0,
+				"Newly created settlement vacancy should start at 0 seasons")
+			return
+	fail_test("Temple Head vacancy not found")
+
+
+func test_completed_fortification_triggers_garrison_vacancy() -> void:
+	# Fortifications don't go through the construction queue (they're immediate),
+	# but let's verify that a fort settlement triggers Garrison Commander vacancy
+	var lord := _make_char(1, "Crane", 5.0)
+	var prov := _make_province(10, "Crane")
+	var fort := _make_settlement(200, 10, Enums.SettlementType.FORTIFICATION)
+	var settlements: Array[SettlementData] = [fort]
+	var provinces: Dictionary = {10: prov}
+
+	var ws: Dictionary = {}
+	var sm: Dictionary = {}
+	DayOrchestrator._populate_vacancy_intelligence(
+		ws, [lord], {1: lord}, [], settlements, provinces, sm,
+	)
+
+	var vacancies: Array = ws.get("vacant_positions_1", [])
+	var found_garrison: bool = false
+	for v: Dictionary in vacancies:
+		if v.get("position_type", "") == "Garrison Commander":
+			found_garrison = true
+			break
+	assert_true(found_garrison, "Fortification should trigger Garrison Commander vacancy")
+
+
+func test_vacancy_registry_tracks_new_settlement() -> void:
+	var lord := _make_char(1, "Crane", 5.0)
+	var prov := _make_province(10, "Crane")
+	var temple := _make_settlement(200, 10, Enums.SettlementType.TEMPLE)
+	var settlements: Array[SettlementData] = [temple]
+	var provinces: Dictionary = {10: prov}
+
+	var sm: Dictionary = {"vacancy_registry": {}}
+	var ws: Dictionary = {}
+	DayOrchestrator._populate_vacancy_intelligence(
+		ws, [lord], {1: lord}, [], settlements, provinces, sm,
+	)
+
+	# Verify new settlement vacancy appears in registry
+	var registry: Dictionary = sm.get("vacancy_registry", {})
+	var found_key: bool = false
+	for key: String in registry:
+		if "Temple Head" in key:
+			found_key = true
+			assert_eq(registry[key], 0, "New vacancy should start at season 0")
+			break
+	assert_true(found_key, "Temple Head vacancy should be in registry")

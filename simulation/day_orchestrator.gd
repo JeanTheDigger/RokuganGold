@@ -405,6 +405,9 @@ static func advance_day(
 			provinces, settlements, next_settlement_id,
 			active_topics, next_topic_id, ic_day,
 		)
+		# Refresh vacancy intelligence after construction completions and organic villages
+		# so newly created settlements (temples, monasteries, forts) trigger vacancy detection
+		_populate_vacancy_intelligence(world_states, characters, characters_by_id, companies, settlements, provinces, season_meta)
 		var _sett_prov_map: Dictionary = {}
 		for s: SettlementData in settlements:
 			_sett_prov_map[s.settlement_id] = s.province_id

@@ -511,7 +511,7 @@ All in /tests/, one file per system:
 - test_npc_advancement.gd (~56 tests)
 - test_ronin_system.gd (~44 tests)
 - test_musha_shugyo_system.gd (~75 tests)
-- test_governance_wiring.gd (~62 tests)
+- test_governance_wiring.gd (~69 tests)
 - test_marriage_wiring.gd (~65 tests)
 - test_worship_system.gd (~67 tests)
 - test_worship_wiring.gd (~50 tests)
@@ -2905,6 +2905,11 @@ All in /tests/, one file per system:
   registry entries. Filled positions are automatically pruned from the
   registry when they stop being detected. The decomposer's priority
   escalation (+1 after 2 seasons) now fires correctly.
+  **Construction queue wiring**: On season boundary, vacancy intelligence
+  re-runs AFTER `_process_construction_completions()` and
+  `_process_organic_villages()` so newly created settlements (temples,
+  monasteries, forts) immediately trigger position vacancy detection.
+  Newly created settlement vacancies start at `seasons_vacant = 0`.
   Known limitations: Senior Courtier detection deferred (unclear vacancy
   trigger).
 
