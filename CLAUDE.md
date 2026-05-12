@@ -486,7 +486,7 @@ All in /tests/, one file per system:
 - test_information_system.gd (~40 tests)
 - test_daily_conversation.gd (~37 tests)
 - test_court_commitment_system.gd (~49 tests)
-- test_court_action_system.gd (~85 tests)
+- test_court_action_system.gd (~105 tests)
 - test_topic_system.gd (~55 tests)
 - test_investigation_system.gd (~40 tests)
 - test_day_orchestrator.gd (~54 tests)
@@ -2237,7 +2237,13 @@ All in /tests/, one file per system:
   Yasuki/Doji school-specific skill routing for DISCERN_NEED.
 - **DayOrchestrator** — `_process_court_action_effects()` processes target
   position shifts, Provoke Emotion honor/glory/witness effects, Play a Game
-  bilateral disposition, Public Debate per-witness disposition/position.
+  bilateral disposition, Public Debate per-witness disposition/position,
+  Gossip subject disposition on listener, Disclose downstream opinion transfer
+  (disclosed_opinion × 0.5 to listener's disposition toward subject),
+  OFFER_FAVOR → FavorData creation (GENERAL type, MINOR tier), and debate
+  topic position shifts per witness (requires topic_id in action metadata).
+  Action metadata threaded through contested court actions via
+  `_action_metadata` key in effects dict.
 - **NPC engine** — PROVOKE_EMOTION, PLAY_GAME, DISCERN_NEED added to AT_COURT
   context list, action_skill_map.json, objective_alignment.json (SEEK_PRETEXT,
   GATHER_INTELLIGENCE, RAISE_DISPOSITION), personality_lean.json (14 virtues).
