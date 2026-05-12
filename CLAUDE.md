@@ -216,7 +216,8 @@ single-dice-entry-point and server-authoritative constraints.
   objective_alignment (82 NeedTypes), personality_lean (14 virtues),
   personality_filter (bushido/shourido blocks), action_skill_map (76+ ActionIDs),
   competence_table (ranks 0-10), disposition_tiers (8 tiers),
-  urgency_rules (10 rules), topic_position_alignment.
+  urgency_rules (10 rules), topic_position_alignment (24 NeedTypes with
+  per-NeedType strong_support/strong_opposition caps per GDD s55.26 Annex H).
 
 ### Objective Decomposition
 - **simulation/objective_decomposer.gd** — Routes standing objectives to
@@ -476,7 +477,7 @@ All in /tests/, one file per system:
 - test_time_system.gd (~15 tests)
 - test_skill_resolver.gd (~20 tests)
 - test_action_point_system.gd (~12 tests)
-- test_npc_decision_engine.gd (~48 tests)
+- test_npc_decision_engine.gd (~85 tests)
 - test_scoring_table_loader.gd (~15 tests)
 - test_action_executor.gd (~35 tests)
 - test_effect_applicator.gd (~37 tests)
