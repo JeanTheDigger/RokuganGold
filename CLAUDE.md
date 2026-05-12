@@ -497,6 +497,7 @@ All in /tests/, one file per system:
 - test_naval_system.gd (~113 tests)
 - test_naval_combat_system.gd (~46 tests)
 - test_naval_wiring.gd (~35 tests)
+- test_monk_objective_system.gd (~59 tests)
 
 ### Festival System (s11.5)
 - **simulation/festival_system.gd** — Empire-wide canonical festivals, Rokuyo
@@ -2336,6 +2337,38 @@ All in /tests/, one file per system:
   Deferred: ship movement initiation (needs coordinate system for
   pathfinding), weather per-sub-tile (needs sub-tile system), naval
   blockade integration.
+
+### Named Monk Standing Objectives (s55.11b)
+- **simulation/monk_objective_system.gd** — Monk-specific standing objective
+  assignment and decomposition per GDD s55.11b. Pure static functions. Five
+  standing objectives: HELP_PEOPLE, FIGHT_BANDITS, MEDITATE_DEEPLY,
+  TRAIN_MASTERY, WORSHIP_KAMI. All use existing NeedTypes and ActionIDs — no
+  new engine components.
+  `is_monk()` checks `school_type == MONK`. `is_combat_monk()` detects Sohei
+  and Yamabushi school prefixes. `assign_standing_objective()` routes combat
+  monks to FIGHT_BANDITS, then dispatches by bushido virtue: JIN→HELP_PEOPLE,
+  CHUGI/REI→WORSHIP_KAMI, GI/MEIYO→TRAIN_MASTERY, MAKOTO→MEDITATE_DEEPLY,
+  YU→FIGHT_BANDITS, fallback→MEDITATE_DEEPLY.
+  Five decomposition trees:
+  `_decompose_help_people()` — famine crisis provinces first (from
+  `ctx.famine_crisis_province_ids`), then lowest-stability province (below
+  60.0), then context-based RAISE_DISPOSITION.
+  `_decompose_fight_bandits()` — active insurgency → PATROL_PROVINCE,
+  bandit/ronin crisis or low stability → INVESTIGATE_THREAT, temple/holdings
+  → TRAIN_SKILL, default → PATROL_PROVINCE.
+  `_decompose_meditate_deeply()` — PERFORM_RITUAL with priority 3 at temple,
+  2 at holdings, 1 at court/traveling, 2 default.
+  `_decompose_train_mastery()` — TRAIN_SKILL with priority 3 at dojo, 2 at
+  temple/holdings, 1 traveling/default.
+  `_decompose_worship_kami()` — PERFORM_RITUAL with shrine_eligible zone flag
+  check for holdings priority (2 if shrine, 1 if not), 3 at temple, 1
+  court/traveling, 2 default.
+  `_find_worst_stability_province()` scans ProvinceStatus array for lowest
+  stability. `_make_need()` factory produces ImmediateNeed with source
+  "monk_decomposition".
+- **simulation/objective_decomposer.gd** — Monk objective routing added before
+  political objectives: `MonkObjectiveSystem.is_monk_objective()` check
+  dispatches to `MonkObjectiveSystem.decompose()`.
 
 ### What's Next
 1. World generation coordinate system and adjacency

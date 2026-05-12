@@ -63,6 +63,8 @@ static func decompose(
 
 	if PrimaryObjectiveDecomposer.is_primary_objective(need_type):
 		return PrimaryObjectiveDecomposer.decompose(objective, ctx)
+	if MonkObjectiveSystem.is_monk_objective(need_type):
+		return MonkObjectiveSystem.decompose(need_type, objective, ctx)
 	if need_type in POLITICAL_OBJECTIVES:
 		return _decompose_political(need_type, objective, ctx)
 	if need_type in ECONOMIC_OBJECTIVES:
