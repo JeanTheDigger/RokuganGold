@@ -665,3 +665,265 @@ func test_executor_discern_need_yasuki_school() -> void:
 		action, actor, ctx, _dice, _build_skill_map(), {}, chars
 	)
 	assert_eq(result["skill_used"], "Commerce")
+
+
+# -- Orchestrator Wiring Tests ------------------------------------------------
+
+func _make_day_result(action_id: String, char_id: int, target_id: int, effects: Dictionary) -> Dictionary:
+	return {
+		"action_id": action_id,
+		"character_id": char_id,
+		"target_npc_id": target_id,
+		"effects": effects,
+	}
+
+
+func test_orchestrator_gossip_subject_disposition() -> void:
+	var listener: L5RCharacterData = _make_char(2)
+	listener.disposition_values = {99: 10}
+	var chars: Dictionary = {2: listener}
+	var results: Array = [_make_day_result("GOSSIP", 1, 2, {
+		"gossip_subject_id": 99,
+		"gossip_subject_disposition": -7,
+	})]
+	DayOrchestrator._process_court_action_effects(results, chars)
+	assert_eq(listener.disposition_values[99], 3)
+
+
+func test_orchestrator_gossip_subject_creates_new_entry() -> void:
+	var listener: L5RCharacterData = _make_char(2)
+	listener.disposition_values = {}
+	var chars: Dictionary = {2: listener}
+	var results: Array = [_make_day_result("GOSSIP", 1, 2, {
+		"gossip_subject_id": 50,
+		"gossip_subject_disposition": -5,
+	})]
+	DayOrchestrator._process_court_action_effects(results, chars)
+	assert_eq(listener.disposition_values[50], -5)
+
+
+func test_orchestrator_gossip_clamps_at_negative_100() -> void:
+	var listener: L5RCharacterData = _make_char(2)
+	listener.disposition_values = {99: -98}
+	var chars: Dictionary = {2: listener}
+	var results: Array = [_make_day_result("GOSSIP", 1, 2, {
+		"gossip_subject_id": 99,
+		"gossip_subject_disposition": -10,
+	})]
+	DayOrchestrator._process_court_action_effects(results, chars)
+	assert_eq(listener.disposition_values[99], -100)
+
+
+func test_orchestrator_gossip_ignores_invalid_subject() -> void:
+	var listener: L5RCharacterData = _make_char(2)
+	listener.disposition_values = {}
+	var chars: Dictionary = {2: listener}
+	var results: Array = [_make_day_result("GOSSIP", 1, 2, {
+		"gossip_subject_id": -1,
+		"gossip_subject_disposition": -5,
+	})]
+	DayOrchestrator._process_court_action_effects(results, chars)
+	assert_eq(listener.disposition_values.size(), 0)
+
+
+func test_orchestrator_disclose_opinion_transfer() -> void:
+	var listener: L5RCharacterData = _make_char(2)
+	listener.disposition_values = {50: 0}
+	var chars: Dictionary = {2: listener}
+	var results: Array = [_make_day_result("DISCLOSE", 1, 2, {
+		"disclosed_opinion": -20,
+		"disclose_about_id": 50,
+	})]
+	DayOrchestrator._process_court_action_effects(results, chars)
+	assert_eq(listener.disposition_values[50], -10)
+
+
+func test_orchestrator_disclose_positive_opinion() -> void:
+	var listener: L5RCharacterData = _make_char(2)
+	listener.disposition_values = {50: 5}
+	var chars: Dictionary = {2: listener}
+	var results: Array = [_make_day_result("DISCLOSE", 1, 2, {
+		"disclosed_opinion": 30,
+		"disclose_about_id": 50,
+	})]
+	DayOrchestrator._process_court_action_effects(results, chars)
+	assert_eq(listener.disposition_values[50], 20)
+
+
+func test_orchestrator_disclose_ignores_invalid_about_id() -> void:
+	var listener: L5RCharacterData = _make_char(2)
+	listener.disposition_values = {}
+	var chars: Dictionary = {2: listener}
+	var results: Array = [_make_day_result("DISCLOSE", 1, 2, {
+		"disclosed_opinion": -20,
+		"disclose_about_id": -1,
+	})]
+	DayOrchestrator._process_court_action_effects(results, chars)
+	assert_eq(listener.disposition_values.size(), 0)
+
+
+func test_orchestrator_disclose_zero_opinion_no_change() -> void:
+	var listener: L5RCharacterData = _make_char(2)
+	listener.disposition_values = {50: 10}
+	var chars: Dictionary = {2: listener}
+	var results: Array = [_make_day_result("DISCLOSE", 1, 2, {
+		"disclosed_opinion": 0,
+		"disclose_about_id": 50,
+	})]
+	DayOrchestrator._process_court_action_effects(results, chars)
+	assert_eq(listener.disposition_values[50], 10)
+
+
+func test_orchestrator_offer_favor_creates_favor() -> void:
+	var favors: Array = []
+	var chars: Dictionary = {1: _make_char(1), 2: _make_char(2)}
+	var results: Array = [_make_day_result("OFFER_FAVOR", 1, 2, {
+		"requires_favor_creation": true,
+		"favor_creditor_id": 1,
+		"favor_debtor_id": 2,
+	})]
+	DayOrchestrator._process_court_action_effects(results, chars, favors, 45)
+	assert_eq(favors.size(), 1)
+	var f: FavorData = favors[0]
+	assert_eq(f.creditor_id, 1)
+	assert_eq(f.debtor_id, 2)
+	assert_eq(f.created_ic_day, 45)
+	assert_eq(f.favor_type, FavorData.FavorType.GENERAL)
+	assert_eq(f.tier, FavorData.FavorTier.MINOR)
+
+
+func test_orchestrator_offer_favor_increments_id() -> void:
+	var existing := FavorData.new()
+	existing.favor_id = 5
+	var favors: Array = [existing]
+	var chars: Dictionary = {1: _make_char(1), 2: _make_char(2)}
+	var results: Array = [_make_day_result("OFFER_FAVOR", 1, 2, {
+		"requires_favor_creation": true,
+		"favor_creditor_id": 1,
+		"favor_debtor_id": 2,
+	})]
+	DayOrchestrator._process_court_action_effects(results, chars, favors, 45)
+	assert_eq(favors.size(), 2)
+	assert_eq((favors[1] as FavorData).favor_id, 6)
+
+
+func test_orchestrator_offer_favor_skips_invalid_ids() -> void:
+	var favors: Array = []
+	var chars: Dictionary = {1: _make_char(1)}
+	var results: Array = [_make_day_result("OFFER_FAVOR", 1, -1, {
+		"requires_favor_creation": true,
+		"favor_creditor_id": -1,
+		"favor_debtor_id": 2,
+	})]
+	DayOrchestrator._process_court_action_effects(results, chars, favors, 45)
+	assert_eq(favors.size(), 0)
+
+
+func test_orchestrator_debate_topic_position_shifts() -> void:
+	var witness: L5RCharacterData = _make_char(3)
+	witness.topic_positions = {100: 0.0}
+	var chars: Dictionary = {
+		1: _make_char(1), 2: _make_char(2), 3: witness,
+	}
+	var results: Array = [_make_day_result("PUBLIC_DEBATE", 1, 2, {
+		"debate_per_witness": [
+			{
+				"witness_id": 3,
+				"a_disposition_change": 2,
+				"b_disposition_change": -2,
+				"position_shift_toward_a": 4.0,
+			},
+		],
+		"_action_metadata": {"topic_id": 100},
+	})]
+	DayOrchestrator._process_court_action_effects(results, chars)
+	assert_almost_eq(witness.topic_positions[100], 4.0, 0.01)
+
+
+func test_orchestrator_debate_negative_position_shift() -> void:
+	var witness: L5RCharacterData = _make_char(3)
+	witness.topic_positions = {100: 10.0}
+	var chars: Dictionary = {
+		1: _make_char(1), 2: _make_char(2), 3: witness,
+	}
+	var results: Array = [_make_day_result("PUBLIC_DEBATE", 1, 2, {
+		"debate_per_witness": [
+			{
+				"witness_id": 3,
+				"a_disposition_change": -1,
+				"b_disposition_change": 1,
+				"position_shift_toward_a": -6.0,
+			},
+		],
+		"_action_metadata": {"topic_id": 100},
+	})]
+	DayOrchestrator._process_court_action_effects(results, chars)
+	assert_almost_eq(witness.topic_positions[100], 4.0, 0.01)
+
+
+func test_orchestrator_debate_no_topic_skips_position() -> void:
+	var witness: L5RCharacterData = _make_char(3)
+	witness.topic_positions = {}
+	var chars: Dictionary = {
+		1: _make_char(1), 2: _make_char(2), 3: witness,
+	}
+	var results: Array = [_make_day_result("PUBLIC_DEBATE", 1, 2, {
+		"debate_per_witness": [
+			{
+				"witness_id": 3,
+				"a_disposition_change": 2,
+				"b_disposition_change": -2,
+				"position_shift_toward_a": 4.0,
+			},
+		],
+	})]
+	DayOrchestrator._process_court_action_effects(results, chars)
+	assert_eq(witness.topic_positions.size(), 0)
+
+
+func test_orchestrator_debate_position_clamps() -> void:
+	var witness: L5RCharacterData = _make_char(3)
+	witness.topic_positions = {100: 98.0}
+	var chars: Dictionary = {
+		1: _make_char(1), 2: _make_char(2), 3: witness,
+	}
+	var results: Array = [_make_day_result("PUBLIC_DEBATE", 1, 2, {
+		"debate_per_witness": [
+			{
+				"witness_id": 3,
+				"a_disposition_change": 0,
+				"b_disposition_change": 0,
+				"position_shift_toward_a": 8.0,
+			},
+		],
+		"_action_metadata": {"topic_id": 100},
+	})]
+	DayOrchestrator._process_court_action_effects(results, chars)
+	assert_almost_eq(witness.topic_positions[100], 100.0, 0.01)
+
+
+func test_orchestrator_negotiate_position_shift() -> void:
+	var target: L5RCharacterData = _make_char(2)
+	target.topic_positions = {100: 20.0}
+	var chars: Dictionary = {2: target}
+	var results: Array = [_make_day_result("NEGOTIATE", 1, 2, {
+		"target_position_shift": 5.0,
+		"_action_metadata": {"topic_id": 100},
+	})]
+	DayOrchestrator._process_court_action_effects(results, chars)
+	assert_almost_eq(target.topic_positions[100], 25.0, 0.01)
+
+
+func test_orchestrator_metadata_threads_through_contested() -> void:
+	var actor: L5RCharacterData = _make_char(1, {"Courtier": 5}, {"Awareness": 5})
+	var target: L5RCharacterData = _make_char(2, {"Courtier": 1}, {"Awareness": 2})
+	var chars: Dictionary = {1: actor, 2: target}
+	var action: NPCDataStructures.ScoredAction = _make_action(
+		"NEGOTIATE", 2, {"topic_id": 42}
+	)
+	var ctx: NPCDataStructures.ContextSnapshot = _make_ctx(1, {2: 0})
+	var result: Dictionary = ActionExecutor.execute(
+		action, actor, ctx, _dice, _build_skill_map(), {}, chars
+	)
+	var meta: Dictionary = result["effects"].get("_action_metadata", {})
+	assert_eq(meta.get("topic_id", -1), 42)

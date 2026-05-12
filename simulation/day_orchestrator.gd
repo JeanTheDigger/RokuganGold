@@ -234,6 +234,8 @@ static func advance_day(
 	_process_court_action_effects(
 		day_result.get("results", []),
 		characters_by_id,
+		favors,
+		ic_day,
 	)
 
 	var governance_results: Dictionary = _process_governance_effects(
@@ -7646,31 +7648,33 @@ static func _compute_next_season_end_ic_day(time_system: TimeSystem) -> int:
 static func _process_court_action_effects(
 	day_results: Array,
 	characters_by_id: Dictionary,
+	favors: Array = [],
+	ic_day: int = 0,
 ) -> void:
 	for entry: Dictionary in day_results:
 		var effects: Dictionary = entry.get("effects", {})
 		if effects.is_empty():
 			continue
 
+		var action_id: String = entry.get("action_id", "")
 		var target_id: int = entry.get("target_npc_id", -1)
 		var target: L5RCharacterData = characters_by_id.get(target_id)
-		if target == null:
-			continue
+		var action_meta: Dictionary = effects.get("_action_metadata", {})
 
 		# Topic position shift from Negotiate/Persuade
-		if effects.has("target_position_shift"):
+		if effects.has("target_position_shift") and target != null:
 			var shift: float = effects["target_position_shift"]
-			var action_meta: Dictionary = effects.get("_action_metadata", {})
 			var topic_id: int = action_meta.get("topic_id", -1)
 			if topic_id >= 0:
 				var current_pos: float = target.topic_positions.get(topic_id, 0.0)
 				target.topic_positions[topic_id] = clampf(current_pos + shift, -100.0, 100.0)
 
 		# Provoke Emotion target effects
-		if effects.has("target_honor_change"):
-			target.honor = clampf(target.honor + effects["target_honor_change"], 0.0, 10.0)
-		if effects.has("target_glory_change"):
-			target.glory = clampf(target.glory + effects["target_glory_change"], 0.0, 10.0)
+		if target != null:
+			if effects.has("target_honor_change"):
+				target.honor = clampf(target.honor + effects["target_honor_change"], 0.0, 10.0)
+			if effects.has("target_glory_change"):
+				target.glory = clampf(target.glory + effects["target_glory_change"], 0.0, 10.0)
 
 		# Provoke Emotion witness disposition loss against target
 		if effects.has("target_witness_disposition"):
@@ -7678,12 +7682,12 @@ static func _process_court_action_effects(
 			var witnesses: Array = effects.get("witnesses", [])
 			for wid in witnesses:
 				var w: L5RCharacterData = characters_by_id.get(wid)
-				if w != null:
+				if w != null and target_id >= 0:
 					var current: int = w.disposition_values.get(target_id, 0)
 					w.disposition_values[target_id] = clampi(current + per_witness, -100, 100)
 
 		# Play a Game bilateral disposition
-		if effects.has("play_game_result"):
+		if effects.has("play_game_result") and target != null:
 			var actor_id: int = entry.get("character_id", -1)
 			var actor: L5RCharacterData = characters_by_id.get(actor_id)
 			if actor != null:
@@ -7694,9 +7698,49 @@ static func _process_court_action_effects(
 				var cur_b: int = target.disposition_values.get(actor_id, 0)
 				target.disposition_values[actor_id] = clampi(cur_b + b_disp, -100, 100)
 
+		# Gossip subject disposition on listener
+		if effects.has("gossip_subject_disposition") and target != null:
+			var subject_id: int = effects.get("gossip_subject_id", -1)
+			var disp_change: int = effects["gossip_subject_disposition"]
+			if subject_id >= 0:
+				var cur: int = target.disposition_values.get(subject_id, 0)
+				target.disposition_values[subject_id] = clampi(cur + disp_change, -100, 100)
+
+		# Disclose downstream opinion transfer
+		if effects.has("disclosed_opinion") and target != null:
+			var about_id: int = effects.get("disclose_about_id", -1)
+			var opinion: int = effects["disclosed_opinion"]
+			if about_id >= 0 and opinion != 0:
+				var cur: int = target.disposition_values.get(about_id, 0)
+				var shift: int = int(opinion * 0.5)
+				if shift != 0:
+					target.disposition_values[about_id] = clampi(cur + shift, -100, 100)
+
+		# OFFER_FAVOR creation
+		if effects.get("requires_favor_creation", false):
+			var creditor_id: int = effects.get("favor_creditor_id", -1)
+			var debtor_id: int = effects.get("favor_debtor_id", -1)
+			if creditor_id >= 0 and debtor_id >= 0:
+				var max_id: int = 0
+				for f: Variant in favors:
+					if f is FavorData and (f as FavorData).favor_id >= max_id:
+						max_id = (f as FavorData).favor_id + 1
+				var favor: FavorData = FavorSystem.offer_favor(
+					FavorData.FavorType.GENERAL,
+					FavorData.FavorTier.MINOR,
+					creditor_id,
+					debtor_id,
+					ic_day,
+					"Court favor offered",
+					"OFFER_FAVOR",
+					max_id,
+				)
+				favors.append(favor)
+
 		# Public Debate per-witness disposition and position shifts
 		if effects.has("debate_per_witness"):
 			var actor_id: int = entry.get("character_id", -1)
+			var topic_id: int = action_meta.get("topic_id", -1)
 			var pw_results: Array = effects["debate_per_witness"]
 			for pw: Dictionary in pw_results:
 				var wid: int = pw.get("witness_id", -1)
@@ -7711,3 +7755,8 @@ static func _process_court_action_effects(
 				if b_disp_change != 0:
 					var cur: int = w.disposition_values.get(target_id, 0)
 					w.disposition_values[target_id] = clampi(cur + b_disp_change, -100, 100)
+				if topic_id >= 0:
+					var pos_shift: float = pw.get("position_shift_toward_a", 0.0)
+					if pos_shift != 0.0:
+						var cur_pos: float = w.topic_positions.get(topic_id, 0.0)
+						w.topic_positions[topic_id] = clampf(cur_pos + pos_shift, -100.0, 100.0)

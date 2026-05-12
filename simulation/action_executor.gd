@@ -2307,10 +2307,13 @@ static func _execute_contested_court_action(
 			effects["charm_ceiling_active"] = resolution["charm_ceiling_active"]
 		if resolution.has("requires_favor_creation"):
 			effects["requires_favor_creation"] = true
+			effects["favor_creditor_id"] = ctx.character_id
+			effects["favor_debtor_id"] = target_id
 		if resolution.has("info_gained"):
 			effects["info_gained"] = resolution["info_gained"]
 		if resolution.has("disclosed_opinion"):
 			effects["disclosed_opinion"] = resolution["disclosed_opinion"]
+			effects["disclose_about_id"] = action.metadata.get("disclose_about_id", -1)
 	else:
 		effects["failed"] = true
 		var fail_disp: int = resolution.get("disposition_change", 0)
@@ -2320,6 +2323,9 @@ static func _execute_contested_court_action(
 			effects["target_position_shift"] = resolution["target_position_shift"]
 		if resolution.has("position_hardened"):
 			effects["position_hardened"] = true
+
+	if not action.metadata.is_empty():
+		effects["_action_metadata"] = action.metadata
 
 	return {
 		"success": resolution.get("success", false),
