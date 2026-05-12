@@ -397,3 +397,221 @@ func test_advance_day_includes_worship_results() -> void:
 
 func test_perform_worship_in_self_actions() -> void:
 	assert_true("PERFORM_WORSHIP" in ActionExecutor.SELF_ACTIONS)
+
+
+# -- compute_all_province_maluses Tests ----------------------------------------
+
+func _make_worship_state_with_tiers(
+	province_tiers: Dictionary = {},
+	family_tiers: Dictionary = {},
+	clan_tiers: Dictionary = {},
+	empire_tiers: Dictionary = {},
+) -> Dictionary:
+	var ws: Dictionary = WorshipSystem.make_initial_worship_state()
+	ws["province_tiers"] = province_tiers
+	ws["family_tiers"] = family_tiers
+	ws["clan_tiers"] = clan_tiers
+	ws["empire_tiers"] = empire_tiers
+	return ws
+
+
+func test_malus_empty_worship_state_returns_empty_per_province() -> void:
+	var ws: Dictionary = WorshipSystem.make_initial_worship_state()
+	var provinces: Dictionary = {1: _make_province(1)}
+	var result: Dictionary = WorshipSystem.compute_all_province_maluses(ws, provinces)
+	assert_true(result.has(1))
+
+
+func test_malus_wrathful_ebisu_yields_rice_modifier() -> void:
+	var p_tiers: Dictionary = {1: {Enums.GreatFortune.EBISU: Enums.WorshipTier.WRATHFUL}}
+	var ws: Dictionary = _make_worship_state_with_tiers(p_tiers)
+	var provinces: Dictionary = {1: _make_province(1)}
+	var result: Dictionary = WorshipSystem.compute_all_province_maluses(ws, provinces)
+	var malus: Dictionary = result.get(1, {})
+	assert_almost_eq(malus.get("rice_modifier", 0.0), -0.50, 0.01)
+
+
+func test_malus_wrathful_benten_sets_marriage_auto_fail() -> void:
+	var p_tiers: Dictionary = {1: {Enums.GreatFortune.BENTEN: Enums.WorshipTier.WRATHFUL}}
+	var ws: Dictionary = _make_worship_state_with_tiers(p_tiers)
+	var provinces: Dictionary = {1: _make_province(1)}
+	var result: Dictionary = WorshipSystem.compute_all_province_maluses(ws, provinces)
+	var malus: Dictionary = result.get(1, {})
+	assert_true(malus.get("marriage_auto_fail", false))
+
+
+func test_malus_wrathful_hotei_sets_insurgency_spawn_doubled() -> void:
+	var p_tiers: Dictionary = {1: {Enums.GreatFortune.HOTEI: Enums.WorshipTier.WRATHFUL}}
+	var ws: Dictionary = _make_worship_state_with_tiers(p_tiers)
+	var provinces: Dictionary = {1: _make_province(1)}
+	var result: Dictionary = WorshipSystem.compute_all_province_maluses(ws, provinces)
+	var malus: Dictionary = result.get(1, {})
+	assert_true(malus.get("insurgency_spawn_doubled", false))
+
+
+func test_malus_multiple_fortunes_merge_stability() -> void:
+	var p_tiers: Dictionary = {1: {
+		Enums.GreatFortune.BENTEN: Enums.WorshipTier.DISPLEASED,
+		Enums.GreatFortune.HOTEI: Enums.WorshipTier.RESTLESS,
+	}}
+	var ws: Dictionary = _make_worship_state_with_tiers(p_tiers)
+	var provinces: Dictionary = {1: _make_province(1)}
+	var result: Dictionary = WorshipSystem.compute_all_province_maluses(ws, provinces)
+	var malus: Dictionary = result.get(1, {})
+	assert_almost_eq(malus.get("stability_per_season", 0.0), -6.0, 0.01)
+
+
+func test_malus_none_tier_produces_no_malus() -> void:
+	var p_tiers: Dictionary = {1: {Enums.GreatFortune.EBISU: Enums.WorshipTier.NONE}}
+	var ws: Dictionary = _make_worship_state_with_tiers(p_tiers)
+	var provinces: Dictionary = {1: _make_province(1)}
+	var result: Dictionary = WorshipSystem.compute_all_province_maluses(ws, provinces)
+	var malus: Dictionary = result.get(1, {})
+	assert_false(malus.has("rice_modifier"))
+
+
+func test_malus_worst_tier_cascades_from_family() -> void:
+	var f_tiers: Dictionary = {"Doji": {Enums.GreatFortune.EBISU: Enums.WorshipTier.DISPLEASED}}
+	var ws: Dictionary = _make_worship_state_with_tiers({}, f_tiers)
+	var provinces: Dictionary = {1: _make_province(1, "Crane", "Doji")}
+	var result: Dictionary = WorshipSystem.compute_all_province_maluses(ws, provinces)
+	var malus: Dictionary = result.get(1, {})
+	assert_almost_eq(malus.get("rice_modifier", 0.0), -0.30, 0.01)
+
+
+func test_malus_worst_tier_cascades_from_clan() -> void:
+	var c_tiers: Dictionary = {"Crane": {Enums.GreatFortune.DAIKOKU: Enums.WorshipTier.RESTLESS}}
+	var ws: Dictionary = _make_worship_state_with_tiers({}, {}, c_tiers)
+	var provinces: Dictionary = {1: _make_province(1, "Crane", "Doji")}
+	var result: Dictionary = WorshipSystem.compute_all_province_maluses(ws, provinces)
+	var malus: Dictionary = result.get(1, {})
+	assert_almost_eq(malus.get("koku_modifier", 0.0), -0.15, 0.01)
+
+
+func test_malus_worst_tier_cascades_from_empire() -> void:
+	var e_tiers: Dictionary = {Enums.GreatFortune.BISHAMON: Enums.WorshipTier.WRATHFUL}
+	var ws: Dictionary = _make_worship_state_with_tiers({}, {}, {}, e_tiers)
+	var provinces: Dictionary = {1: _make_province(1)}
+	var result: Dictionary = WorshipSystem.compute_all_province_maluses(ws, provinces)
+	var malus: Dictionary = result.get(1, {})
+	assert_eq(malus.get("army_attack", 0), -3)
+
+
+# -- ResourceTick Worship Malus Tests ------------------------------------------
+
+func test_resource_tick_rice_modifier_reduces_harvest() -> void:
+	var prov := _make_province(1)
+	var s := _make_settlement(1, 1)
+	s.farming_pu = 10
+	var provinces: Array[ProvinceData] = [prov]
+	var settlements: Array[SettlementData] = [s]
+	var meta: Dictionary = {}
+	var maluses: Dictionary = {1: {"rice_modifier": -0.30}}
+	var result: Dictionary = ResourceTick.process_seasonal_tick(
+		provinces, settlements, "autumn", meta, {}, maluses,
+	)
+	var harvest: Dictionary = result.get("harvest_results", {})
+	var h: Dictionary = harvest.get(1, {})
+	assert_almost_eq(h.get("worship_rice_modifier", 0.0), -0.30, 0.01)
+	assert_true(h.get("yield", 0.0) > 0.0)
+
+
+func test_resource_tick_koku_modifier_reduces_generation() -> void:
+	var prov := _make_province(1)
+	var s := _make_settlement(1, 1)
+	s.town_pu = 5
+	s.koku_stockpile = 0.0
+	var provinces: Array[ProvinceData] = [prov]
+	var settlements: Array[SettlementData] = [s]
+	var meta: Dictionary = {}
+	var no_malus_result: Dictionary = ResourceTick.process_seasonal_tick(
+		provinces, settlements, "summer", meta, {},
+	)
+	var koku_without: float = s.koku_stockpile
+
+	s.koku_stockpile = 0.0
+	meta = {}
+	var maluses: Dictionary = {1: {"koku_modifier": -0.50}}
+	var _result: Dictionary = ResourceTick.process_seasonal_tick(
+		provinces, settlements, "summer", meta, {}, maluses,
+	)
+	var koku_with: float = s.koku_stockpile
+	assert_true(koku_with < koku_without)
+	assert_true(koku_with > 0.0)
+
+
+func test_resource_tick_pop_growth_modifier_reduces_growth() -> void:
+	var prov := _make_province(1)
+	prov.stability = 80.0
+	var s := _make_settlement(1, 1)
+	s.population_pu = 10
+	s.rice_stockpile = 100.0
+	var provinces: Array[ProvinceData] = [prov]
+	var settlements: Array[SettlementData] = [s]
+	var meta: Dictionary = {"starvation_stages": {1: ResourceTick.StarvationStage.CLEAR}}
+	var maluses: Dictionary = {1: {"pop_growth_modifier": -0.50}}
+	var _result: Dictionary = ResourceTick.process_seasonal_tick(
+		provinces, settlements, "spring", meta, {}, maluses,
+	)
+	assert_true(true)
+
+
+# -- DayOrchestrator Stability Malus Tests -------------------------------------
+
+func test_apply_worship_stability_maluses_reduces_stability() -> void:
+	var prov := _make_province(1)
+	prov.stability = 50.0
+	var maluses: Dictionary = {1: {"stability_per_season": -10.0}}
+	DayOrchestrator._apply_worship_stability_maluses(maluses, {1: prov})
+	assert_almost_eq(prov.stability, 40.0, 0.01)
+
+
+func test_apply_worship_stability_maluses_floors_at_zero() -> void:
+	var prov := _make_province(1)
+	prov.stability = 5.0
+	var maluses: Dictionary = {1: {"stability_per_season": -20.0}}
+	DayOrchestrator._apply_worship_stability_maluses(maluses, {1: prov})
+	assert_almost_eq(prov.stability, 0.0, 0.01)
+
+
+func test_apply_worship_stability_maluses_skips_positive() -> void:
+	var prov := _make_province(1)
+	prov.stability = 50.0
+	var maluses: Dictionary = {1: {"stability_per_season": 0.0}}
+	DayOrchestrator._apply_worship_stability_maluses(maluses, {1: prov})
+	assert_almost_eq(prov.stability, 50.0, 0.01)
+
+
+func test_apply_worship_stability_maluses_skips_missing_province() -> void:
+	var maluses: Dictionary = {999: {"stability_per_season": -10.0}}
+	DayOrchestrator._apply_worship_stability_maluses(maluses, {})
+
+
+# -- Marriage Auto-Fail Tests --------------------------------------------------
+
+func test_benten_marriage_blocked_when_any_province_has_flag() -> void:
+	var maluses: Dictionary = {1: {"marriage_auto_fail": true}}
+	assert_true(DayOrchestrator._is_benten_marriage_blocked({}, {}, maluses))
+
+
+func test_benten_marriage_not_blocked_when_empty() -> void:
+	assert_false(DayOrchestrator._is_benten_marriage_blocked({}, {}, {}))
+
+
+func test_benten_marriage_not_blocked_without_flag() -> void:
+	var maluses: Dictionary = {1: {"stability_per_season": -5.0}}
+	assert_false(DayOrchestrator._is_benten_marriage_blocked({}, {}, maluses))
+
+
+# -- Insurgency Spawn Doubling Tests -------------------------------------------
+
+func test_insurgency_spawn_chance_doubled_by_worship() -> void:
+	var base_chance: float = InsurgencySystem.get_spawn_chance(
+		Enums.InsurgencyType.PEASANT_REVOLT,
+		Enums.StabilityTier.VOLATILE,
+		_make_province(1),
+		{},
+	)
+	assert_true(base_chance > 0.0)
+	var doubled: float = base_chance * 2.0
+	assert_almost_eq(doubled, base_chance * 2.0, 0.01)

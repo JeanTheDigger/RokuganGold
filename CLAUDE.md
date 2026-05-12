@@ -514,7 +514,7 @@ All in /tests/, one file per system:
 - test_governance_wiring.gd (~25 tests)
 - test_marriage_wiring.gd (~65 tests)
 - test_worship_system.gd (~67 tests)
-- test_worship_wiring.gd (~30 tests)
+- test_worship_wiring.gd (~50 tests)
 
 ### Governance Action Wiring (s57.20)
 - **APPOINT_TO_POSITION** — Daily AP action (1 AP, lord-only). Executor
@@ -3032,6 +3032,24 @@ The following subsystems are now integrated into the NPC decision loop:
   to `WorshipSystem.resolve_active_worship()`. Seasonal:
   `_process_seasonal_worship()` builds province/family/clan maps from
   settlement and province data, evaluates all cascade tiers, resets WP.
+  Worship evaluation runs BEFORE `_process_season_transition()` so maluses
+  are available for ResourceTick. `compute_all_province_maluses()` aggregates
+  worst-tier maluses across province/family/clan/empire for each Fortune per
+  province, merging numeric values (additive) and boolean flags.
+  **Malus hooks**: Ebisu `rice_modifier` reduces harvest yield in
+  `ResourceTick._process_harvest()`. Daikoku `koku_modifier` reduces koku
+  generation in `ResourceTick._process_koku_generation()`. Benten
+  `pop_growth_modifier` reduces population growth in
+  `ResourceTick._process_population_adjustment()`. Benten/Hotei
+  `stability_per_season` applied via `_apply_worship_stability_maluses()`
+  after season transition. Hotei `insurgency_spawn_doubled` doubles spawn
+  chance in `InsurgencySystem.process_season()`. Benten `marriage_auto_fail`
+  checked via `_is_benten_marriage_blocked()` in `_process_governance_effects()`
+  — overrides accepted marriages to rejection.
+  Deferred malus hooks: Bishamon army_attack/army_morale (ArmyCombatSystem),
+  Daikoku market_price_modifier/trade_route_koku_disabled,
+  Fukurokujin divination/intelligence roll penalties,
+  Jurojin natural_death/healing/aging effects.
 
 ## Resolved Design Decisions
 

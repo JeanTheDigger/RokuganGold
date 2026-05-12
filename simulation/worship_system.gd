@@ -419,6 +419,45 @@ static func reset_seasonal_wp(worship_state: Dictionary) -> void:
 	worship_state["minor_fortune_wp"] = {}
 
 
+static func compute_all_province_maluses(
+	worship_state: Dictionary,
+	provinces: Dictionary,
+) -> Dictionary:
+	var province_tiers: Dictionary = worship_state.get("province_tiers", {})
+	var family_tiers: Dictionary = worship_state.get("family_tiers", {})
+	var clan_tiers: Dictionary = worship_state.get("clan_tiers", {})
+	var empire_tiers: Dictionary = worship_state.get("empire_tiers", {})
+
+	var result: Dictionary = {}
+	for pid: Variant in provinces:
+		var prov: ProvinceData = provinces[pid] as ProvinceData
+		if prov == null:
+			continue
+		var p_tiers: Dictionary = province_tiers.get(pid, {})
+		var fam: String = prov.family
+		var clan: String = prov.clan
+		var f_tiers: Dictionary = family_tiers.get(fam, {})
+		var c_tiers: Dictionary = clan_tiers.get(clan, {})
+
+		var combined: Dictionary = {}
+		for f: int in range(GREAT_FORTUNE_COUNT):
+			var pt: Enums.WorshipTier = p_tiers.get(f, Enums.WorshipTier.WRATHFUL) as Enums.WorshipTier
+			var ft: Enums.WorshipTier = f_tiers.get(f, Enums.WorshipTier.WRATHFUL) as Enums.WorshipTier
+			var ct: Enums.WorshipTier = c_tiers.get(f, Enums.WorshipTier.WRATHFUL) as Enums.WorshipTier
+			var et: Enums.WorshipTier = empire_tiers.get(f, Enums.WorshipTier.WRATHFUL) as Enums.WorshipTier
+			var worst: Enums.WorshipTier = get_worst_tier(pt, ft, ct, et)
+			if worst == Enums.WorshipTier.NONE:
+				continue
+			var malus: Dictionary = get_fortune_malus(f as Enums.GreatFortune, worst)
+			for key: String in malus:
+				if malus[key] is float or malus[key] is int:
+					combined[key] = combined.get(key, 0.0) + float(malus[key])
+				elif malus[key] is bool and malus[key]:
+					combined[key] = true
+		result[prov.province_id] = combined
+	return result
+
+
 static func add_active_worship_to_province(
 	worship_state: Dictionary,
 	province_id: Variant,

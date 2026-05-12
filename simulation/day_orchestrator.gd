@@ -323,10 +323,18 @@ static func advance_day(
 		var spring_inputs: Dictionary = miya_inputs.duplicate()
 		if current_season == TimeSystem.Season.SPRING and not miya_inputs.is_empty():
 			spring_inputs["current_ic_year"] = time_system.get_ic_year()
+		worship_seasonal_results = _process_seasonal_worship(
+			worship_state, settlements, provinces,
+		)
+		var worship_maluses: Dictionary = WorshipSystem.compute_all_province_maluses(
+			worship_state, provinces,
+		)
+		world_states["_worship_maluses"] = worship_maluses
 		seasonal_result = _process_season_transition(
 			characters, provinces, current_season, season_meta,
-			approach_penalties, settlements, spring_inputs
+			approach_penalties, settlements, spring_inputs, worship_maluses,
 		)
+		_apply_worship_stability_maluses(worship_maluses, provinces)
 		wall_seasonal_result = _process_wall_seasonal_pressure(
 			settlements, provinces, current_season, season_meta
 		)
@@ -362,10 +370,7 @@ static func advance_day(
 		)
 		insurgency_results = _process_insurgencies(
 			insurgencies, provinces, dice_engine, current_season,
-			next_insurgency_id, world_states
-		)
-		worship_seasonal_results = _process_seasonal_worship(
-			worship_state, settlements, provinces,
+			next_insurgency_id, world_states, worship_maluses,
 		)
 		gempukku_results = _process_gempukku(
 			children, characters, characters_by_id, next_character_id,
@@ -582,6 +587,7 @@ static func _process_season_transition(
 	approach_penalties: Array[Dictionary] = [],
 	settlements: Array[SettlementData] = [],
 	miya_inputs: Dictionary = {},
+	worship_maluses: Dictionary = {},
 ) -> Dictionary:
 	_decay_all_knowledge(characters, current_season)
 
@@ -606,7 +612,8 @@ static func _process_season_transition(
 		)
 
 	var tick_result: Dictionary = ResourceTick.process_seasonal_tick(
-		province_array, settlements, season_name, season_meta, resolved_inputs
+		province_array, settlements, season_name, season_meta, resolved_inputs,
+		worship_maluses,
 	)
 
 	return {
@@ -2260,6 +2267,7 @@ static func _process_insurgencies(
 	current_season: int,
 	next_insurgency_id: Array[int],
 	world_states: Dictionary,
+	worship_maluses: Dictionary = {},
 ) -> Dictionary:
 	var ptls: Dictionary = {}
 	for pid: int in provinces:
@@ -2272,7 +2280,7 @@ static func _process_insurgencies(
 
 	var result: Dictionary = InsurgencySystem.process_season(
 		insurgencies, provinces, ptls, dice_engine, current_season,
-		next_insurgency_id[0], per_province_ws
+		next_insurgency_id[0], per_province_ws, worship_maluses,
 	)
 
 	for new_ins: InsurgencyData in result.get("new_insurgencies", []):
@@ -6004,12 +6012,19 @@ static func _process_governance_effects(
 			appointment_results.append(ar)
 
 		if effects.get("requires_marriage", false):
-			var mr: Dictionary = _apply_marriage(
-				effects, characters_by_id, marriages, ic_day,
-				clan_baselines, family_baselines, favors,
-				active_topics, next_topic_id,
-			)
-			marriage_results.append(mr)
+			var wm: Dictionary = world_states.get("_worship_maluses", {})
+			if _is_benten_marriage_blocked(effects, characters_by_id, wm):
+				effects["requires_marriage"] = false
+				effects["marriage_rejected"] = true
+				effects["disposition_change"] = 0
+				effects["rejection_reason"] = "benten_wrathful"
+			if effects.get("requires_marriage", false):
+				var mr: Dictionary = _apply_marriage(
+					effects, characters_by_id, marriages, ic_day,
+					clan_baselines, family_baselines, favors,
+					active_topics, next_topic_id,
+				)
+				marriage_results.append(mr)
 
 		if effects.get("marriage_rejected", false):
 			var rr: Dictionary = _apply_marriage_rejection(effects, characters_by_id)
@@ -6401,3 +6416,32 @@ static func _process_seasonal_worship(
 	WorshipSystem.reset_seasonal_wp(worship_state)
 
 	return result
+
+
+static func _is_benten_marriage_blocked(
+	effects: Dictionary,
+	characters_by_id: Dictionary,
+	worship_maluses: Dictionary,
+) -> bool:
+	if worship_maluses.is_empty():
+		return false
+	for pid: Variant in worship_maluses:
+		var malus: Dictionary = worship_maluses[pid]
+		if malus.get("marriage_auto_fail", false):
+			return true
+	return false
+
+
+static func _apply_worship_stability_maluses(
+	worship_maluses: Dictionary,
+	provinces: Dictionary,
+) -> void:
+	for pid: Variant in worship_maluses:
+		var malus: Dictionary = worship_maluses[pid]
+		var stability_delta: float = float(malus.get("stability_per_season", 0.0))
+		if stability_delta >= 0.0:
+			continue
+		var prov: ProvinceData = provinces.get(pid) as ProvinceData
+		if prov == null:
+			continue
+		prov.stability = clampf(prov.stability + stability_delta, 0.0, 100.0)
