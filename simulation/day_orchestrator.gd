@@ -7248,14 +7248,43 @@ static func _family_to_clan(family: String) -> String:
 	return ""
 
 
+const POSITION_SKILL_WEIGHTS: Dictionary = {
+	"Clan Magistrate": ["Investigation", "Lore: Law", "Etiquette"],
+	"Emerald Magistrate": ["Investigation", "Lore: Law", "Etiquette"],
+	"Garrison Commander": ["Battle", "Defense", "Kenjutsu"],
+	"military_commander": ["Battle", "War", "Kenjutsu"],
+	"Temple Head": ["Theology", "Meditation", "Lore: Theology"],
+	"Monastery Abbot": ["Theology", "Meditation", "Jiujutsu"],
+	"School Master": ["Lore: Theology", "Instruction"],
+}
+
+const POSITION_VIRTUE_BONUSES: Dictionary = {
+	"Clan Magistrate": [Enums.BushidoVirtue.GI, Enums.BushidoVirtue.MEIYO],
+	"Emerald Magistrate": [Enums.BushidoVirtue.GI, Enums.BushidoVirtue.MEIYO],
+	"Garrison Commander": [Enums.BushidoVirtue.YU, Enums.BushidoVirtue.CHUGI],
+	"military_commander": [Enums.BushidoVirtue.YU, Enums.BushidoVirtue.CHUGI],
+	"Temple Head": [Enums.BushidoVirtue.REI, Enums.BushidoVirtue.JIN],
+	"Monastery Abbot": [Enums.BushidoVirtue.REI, Enums.BushidoVirtue.JIN],
+	"School Master": [Enums.BushidoVirtue.MEIYO, Enums.BushidoVirtue.GI],
+}
+
+const POSITION_SCHOOL_TYPE_BONUS: Dictionary = {
+	"Temple Head": [Enums.SchoolType.SHUGENJA, Enums.SchoolType.MONK],
+	"Monastery Abbot": [Enums.SchoolType.MONK],
+}
+
+
 static func _find_vacancy_candidate(
 	lord_id: int,
-	_position_type: String,
+	position_type: String,
 	characters: Array[L5RCharacterData],
 	_characters_by_id: Dictionary,
 ) -> int:
 	var best_id: int = -1
 	var best_score: float = -999.0
+	var skill_keys: Array = POSITION_SKILL_WEIGHTS.get(position_type, [])
+	var virtue_list: Array = POSITION_VIRTUE_BONUSES.get(position_type, [])
+	var school_types: Array = POSITION_SCHOOL_TYPE_BONUS.get(position_type, [])
 	for c: L5RCharacterData in characters:
 		if CharacterStats.is_dead(c):
 			continue
@@ -7265,9 +7294,20 @@ static func _find_vacancy_candidate(
 			continue
 		if not c.role_position.is_empty():
 			continue
+		# Base: status + honor + glory (same as before)
 		var score: float = c.status + c.honor + c.glory
+		# Loyalty: disposition toward lord (weight 0.1)
 		var disp: int = c.disposition_values.get(lord_id, 0)
 		score += float(disp) * 0.1
+		# Competence: relevant skill ranks (weight 1.0 each)
+		for skill_name: Variant in skill_keys:
+			score += float(c.skills.get(skill_name, 0))
+		# Personality fit: virtue bonus (+3 per matching virtue)
+		if c.bushido_virtue in virtue_list:
+			score += 3.0
+		# School type fit: bonus for matching school type (+2)
+		if not school_types.is_empty() and c.school_type in school_types:
+			score += 2.0
 		if score > best_score:
 			best_score = score
 			best_id = c.character_id

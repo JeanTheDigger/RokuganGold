@@ -732,3 +732,167 @@ func test_vacancy_school_master_only_for_clans_with_lords() -> void:
 		if v.get("position_type", "") == "School Master":
 			school_master_count += 1
 	assert_eq(school_master_count, 0, "No school master vacancies when no lord with status >= 5")
+
+
+# -- Position-Specific Candidate Scoring Tests ----------------------------------
+
+
+func test_candidate_scoring_magistrate_prefers_investigation_skill() -> void:
+	var lord := _make_char(1, "Lion", 5.0)
+	lord.lord_id = -1
+	lord.clan = "Lion"
+	var bushi := _make_char(2, "Lion", 2.0)
+	bushi.lord_id = 1
+	bushi.honor = 3.0
+	bushi.glory = 2.0
+	bushi.skills = {"Battle": 4, "Kenjutsu": 3}
+	var investigator := _make_char(3, "Lion", 2.0)
+	investigator.lord_id = 1
+	investigator.honor = 3.0
+	investigator.glory = 2.0
+	investigator.skills = {"Investigation": 4, "Lore: Law": 3}
+	var characters: Array[L5RCharacterData] = [lord, bushi, investigator]
+	var chars_by_id: Dictionary = {1: lord, 2: bushi, 3: investigator}
+
+	var result: int = DayOrchestrator._find_vacancy_candidate(
+		1, "Clan Magistrate", characters, chars_by_id,
+	)
+	assert_eq(result, 3, "Investigator should score higher for magistrate position")
+
+
+func test_candidate_scoring_garrison_prefers_battle_skill() -> void:
+	var lord := _make_char(1, "Crab", 5.0)
+	lord.lord_id = -1
+	lord.clan = "Crab"
+	var courtier := _make_char(2, "Crab", 2.0)
+	courtier.lord_id = 1
+	courtier.honor = 3.0
+	courtier.glory = 2.0
+	courtier.skills = {"Courtier": 4, "Etiquette": 3}
+	var warrior := _make_char(3, "Crab", 2.0)
+	warrior.lord_id = 1
+	warrior.honor = 3.0
+	warrior.glory = 2.0
+	warrior.skills = {"Battle": 4, "Defense": 3, "Kenjutsu": 2}
+	var characters: Array[L5RCharacterData] = [lord, courtier, warrior]
+	var chars_by_id: Dictionary = {1: lord, 2: courtier, 3: warrior}
+
+	var result: int = DayOrchestrator._find_vacancy_candidate(
+		1, "Garrison Commander", characters, chars_by_id,
+	)
+	assert_eq(result, 3, "Warrior should score higher for garrison commander")
+
+
+func test_candidate_scoring_virtue_bonus_for_magistrate() -> void:
+	var lord := _make_char(1, "Crane", 5.0)
+	lord.lord_id = -1
+	var base := _make_char(2, "Crane", 2.0)
+	base.lord_id = 1
+	base.honor = 3.0
+	base.glory = 2.0
+	base.bushido_virtue = Enums.BushidoVirtue.YU
+	var virtuous := _make_char(3, "Crane", 2.0)
+	virtuous.lord_id = 1
+	virtuous.honor = 3.0
+	virtuous.glory = 2.0
+	virtuous.bushido_virtue = Enums.BushidoVirtue.GI
+	var characters: Array[L5RCharacterData] = [lord, base, virtuous]
+	var chars_by_id: Dictionary = {1: lord, 2: base, 3: virtuous}
+
+	var result: int = DayOrchestrator._find_vacancy_candidate(
+		1, "Clan Magistrate", characters, chars_by_id,
+	)
+	assert_eq(result, 3, "Gi-virtue character should get bonus for magistrate")
+
+
+func test_candidate_scoring_school_type_bonus_for_temple() -> void:
+	var lord := _make_char(1, "Phoenix", 5.0)
+	lord.lord_id = -1
+	lord.clan = "Phoenix"
+	var bushi := _make_char(2, "Phoenix", 2.0)
+	bushi.lord_id = 1
+	bushi.honor = 3.0
+	bushi.glory = 2.0
+	bushi.school_type = Enums.SchoolType.BUSHI
+	var shugenja := _make_char(3, "Phoenix", 2.0)
+	shugenja.lord_id = 1
+	shugenja.honor = 3.0
+	shugenja.glory = 2.0
+	shugenja.school_type = Enums.SchoolType.SHUGENJA
+	var characters: Array[L5RCharacterData] = [lord, bushi, shugenja]
+	var chars_by_id: Dictionary = {1: lord, 2: bushi, 3: shugenja}
+
+	var result: int = DayOrchestrator._find_vacancy_candidate(
+		1, "Temple Head", characters, chars_by_id,
+	)
+	assert_eq(result, 3, "Shugenja should get school type bonus for temple head")
+
+
+func test_candidate_scoring_monastery_prefers_monk() -> void:
+	var lord := _make_char(1, "Dragon", 5.0)
+	lord.lord_id = -1
+	lord.clan = "Dragon"
+	var bushi := _make_char(2, "Dragon", 2.0)
+	bushi.lord_id = 1
+	bushi.honor = 3.0
+	bushi.glory = 2.0
+	bushi.school_type = Enums.SchoolType.BUSHI
+	var monk := _make_char(3, "Dragon", 2.0)
+	monk.lord_id = 1
+	monk.honor = 3.0
+	monk.glory = 2.0
+	monk.school_type = Enums.SchoolType.MONK
+	var characters: Array[L5RCharacterData] = [lord, bushi, monk]
+	var chars_by_id: Dictionary = {1: lord, 2: bushi, 3: monk}
+
+	var result: int = DayOrchestrator._find_vacancy_candidate(
+		1, "Monastery Abbot", characters, chars_by_id,
+	)
+	assert_eq(result, 3, "Monk should get school type bonus for monastery abbot")
+
+
+func test_candidate_scoring_still_uses_loyalty() -> void:
+	var lord := _make_char(1, "Lion", 5.0)
+	lord.lord_id = -1
+	lord.clan = "Lion"
+	# Equal stats except disposition
+	var disliked := _make_char(2, "Lion", 2.0)
+	disliked.lord_id = 1
+	disliked.honor = 3.0
+	disliked.glory = 2.0
+	disliked.disposition_values = {1: -20}
+	var loyal := _make_char(3, "Lion", 2.0)
+	loyal.lord_id = 1
+	loyal.honor = 3.0
+	loyal.glory = 2.0
+	loyal.disposition_values = {1: 40}
+	var characters: Array[L5RCharacterData] = [lord, disliked, loyal]
+	var chars_by_id: Dictionary = {1: lord, 2: disliked, 3: loyal}
+
+	var result: int = DayOrchestrator._find_vacancy_candidate(
+		1, "Garrison Commander", characters, chars_by_id,
+	)
+	assert_eq(result, 3, "Loyal vassal should score higher via disposition bonus")
+
+
+func test_candidate_scoring_skips_already_assigned() -> void:
+	var lord := _make_char(1, "Crab", 5.0)
+	lord.lord_id = -1
+	lord.clan = "Crab"
+	var assigned := _make_char(2, "Crab", 3.0)
+	assigned.lord_id = 1
+	assigned.honor = 8.0
+	assigned.glory = 5.0
+	assigned.role_position = "Clan Magistrate"
+	assigned.skills = {"Battle": 5, "Defense": 4}
+	var free := _make_char(3, "Crab", 2.0)
+	free.lord_id = 1
+	free.honor = 2.0
+	free.glory = 1.0
+	var characters: Array[L5RCharacterData] = [lord, assigned, free]
+	var chars_by_id: Dictionary = {1: lord, 2: assigned, 3: free}
+
+	var result: int = DayOrchestrator._find_vacancy_candidate(
+		1, "Garrison Commander", characters, chars_by_id,
+	)
+	assert_eq(result, 3, "Already-assigned character should be skipped")
