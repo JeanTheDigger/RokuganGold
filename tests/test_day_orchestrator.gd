@@ -1639,3 +1639,83 @@ func test_inject_urgency_data_no_standing_objective() -> void:
 	)
 	var known_objs: Dictionary = ws[1].get("known_objectives", {})
 	assert_eq(known_objs.get("standing_need_type", ""), "", "No standing obj = empty string")
+
+
+# -- Characters present injection tests ----------------------------------------
+
+func test_inject_characters_present_co_located() -> void:
+	var ws: Dictionary = {1: {}, 2: {}, 3: {}}
+	var c1 := L5RCharacterData.new()
+	c1.character_id = 1
+	c1.physical_location = "100"
+	var c2 := L5RCharacterData.new()
+	c2.character_id = 2
+	c2.physical_location = "100"
+	var c3 := L5RCharacterData.new()
+	c3.character_id = 3
+	c3.physical_location = "200"
+	DayOrchestrator._inject_urgency_data(
+		ws, [c1, c2, c3], [], [], [], {}, [],
+	)
+	var present_1: Array = ws[1].get("characters_present", [])
+	assert_true(2 in present_1, "Char 1 should see char 2")
+	assert_false(3 in present_1, "Char 1 should not see char 3")
+	var present_2: Array = ws[2].get("characters_present", [])
+	assert_true(1 in present_2, "Char 2 should see char 1")
+
+
+func test_inject_characters_present_excludes_self() -> void:
+	var ws: Dictionary = {1: {}}
+	var c1 := L5RCharacterData.new()
+	c1.character_id = 1
+	c1.physical_location = "100"
+	DayOrchestrator._inject_urgency_data(
+		ws, [c1], [], [], [], {}, [],
+	)
+	var present: Array = ws[1].get("characters_present", [])
+	assert_eq(present.size(), 0, "Should not include self")
+
+
+func test_inject_characters_present_excludes_dead() -> void:
+	var ws: Dictionary = {1: {}, 2: {}}
+	var c1 := L5RCharacterData.new()
+	c1.character_id = 1
+	c1.physical_location = "100"
+	var c2 := L5RCharacterData.new()
+	c2.character_id = 2
+	c2.physical_location = "100"
+	c2.wounds_taken = 999
+	DayOrchestrator._inject_urgency_data(
+		ws, [c1, c2], [], [], [], {}, [],
+	)
+	var present: Array = ws[1].get("characters_present", [])
+	assert_false(2 in present, "Dead character should not be present")
+
+
+func test_inject_characters_present_excludes_traveling() -> void:
+	var ws: Dictionary = {1: {}, 2: {}}
+	var c1 := L5RCharacterData.new()
+	c1.character_id = 1
+	c1.physical_location = "100"
+	var c2 := L5RCharacterData.new()
+	c2.character_id = 2
+	c2.physical_location = "100"
+	c2.travel_destination = "200"
+	c2.travel_days_remaining = 3
+	DayOrchestrator._inject_urgency_data(
+		ws, [c1, c2], [], [], [], {}, [],
+	)
+	var present: Array = ws[1].get("characters_present", [])
+	assert_false(2 in present, "Traveling character should not be present")
+
+
+func test_inject_characters_present_empty_location() -> void:
+	var ws: Dictionary = {1: {}}
+	var c1 := L5RCharacterData.new()
+	c1.character_id = 1
+	c1.physical_location = ""
+	DayOrchestrator._inject_urgency_data(
+		ws, [c1], [], [], [], {}, [],
+	)
+	var present: Array = ws[1].get("characters_present", [])
+	assert_eq(present.size(), 0, "Empty location should have no co-located chars")

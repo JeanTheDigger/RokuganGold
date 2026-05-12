@@ -3979,6 +3979,19 @@ static func _inject_urgency_data(
 				var rice_per_pu: float = rice / maxf(pu, 0.01)
 				besieged_settlements[sid] = clampf(rice_per_pu, 0.0, 1.0)
 
+	var location_characters: Dictionary = {}
+	for c: L5RCharacterData in characters:
+		if CharacterStats.is_dead(c):
+			continue
+		if TravelSystem.is_traveling(c):
+			continue
+		var loc: String = c.physical_location
+		if loc.is_empty():
+			continue
+		if not location_characters.has(loc):
+			location_characters[loc] = [] as Array[int]
+		location_characters[loc].append(c.character_id)
+
 	for c: L5RCharacterData in characters:
 		var ws: Dictionary = world_states.get(c.character_id, {})
 		if ws.is_empty():
@@ -4000,6 +4013,13 @@ static func _inject_urgency_data(
 			ws["besieged_settlement_health_pct"] = besieged_settlements[loc]
 		else:
 			ws["besieged_settlement_health_pct"] = 1.0
+		var char_loc: String = c.physical_location
+		var present: Array[int] = location_characters.get(char_loc, [] as Array[int])
+		var others: Array[int] = []
+		for pid: int in present:
+			if pid != c.character_id:
+				others.append(pid)
+		ws["characters_present"] = others
 
 
 static func _inject_edict_reactive_events(

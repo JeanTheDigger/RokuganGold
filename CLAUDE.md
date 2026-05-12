@@ -500,7 +500,7 @@ All in /tests/, one file per system:
 - test_court_action_system.gd (~140 tests)
 - test_topic_system.gd (~55 tests)
 - test_investigation_system.gd (~40 tests)
-- test_day_orchestrator.gd (~66 tests)
+- test_day_orchestrator.gd (~71 tests)
 - test_approach_evaluation.gd (~55 tests)
 - test_commitment_registry.gd (~60 tests)
 - test_military_hierarchy.gd (~47 tests)
@@ -3193,6 +3193,12 @@ The following subsystems are now integrated into the NPC decision loop:
   objectives_map standing objective for Phase 5 standing influence scoring).
   Without this injection, urgency conditions, topic type filtering, and
   standing influence would silently use defaults.
+  Also injects `characters_present` — builds location groups from
+  `physical_location`, excludes dead and traveling characters, and
+  populates each character's world_state with co-located NPC IDs
+  (excluding self). Fixes `_find_clan_contact_present()`,
+  `_find_highest_status_present()`, and all social targeting in
+  ObjectiveDecomposer and PrimaryObjectiveDecomposer.
 - **Disposition modifier audit** — `HOSTILE_ACTIONS` const expanded with 4
   additional actions: PROVOKE_EMOTION, DAMAGE_RELATIONSHIP, ASSASSINATE,
   ISSUE_DUEL_CHALLENGE. These use the hostile disposition column (high
