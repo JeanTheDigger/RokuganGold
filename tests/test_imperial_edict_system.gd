@@ -463,6 +463,7 @@ func _make_court_with_emperor(court_id: int, emperor_id: int) -> CourtSessionDat
 
 func test_court_close_generates_edicts_when_emperor_present():
 	var emperor := _make_emperor(1)
+	emperor.topic_positions[100] = 60.0
 	var chars_by_id: Dictionary = {1: emperor}
 	var world_states: Dictionary = {
 		"emperor_id": 1,
@@ -519,6 +520,7 @@ func test_court_close_no_edicts_without_emperor():
 
 func test_edict_topics_created_on_court_close():
 	var emperor := _make_emperor(1)
+	emperor.topic_positions[300] = 60.0
 	var chars_by_id: Dictionary = {1: emperor}
 	var world_states: Dictionary = {
 		"emperor_id": 1,
@@ -1242,3 +1244,101 @@ func test_generate_edict_commitments_unknown_type_empty():
 		edict, topic, lords, 500, 590
 	)
 	assert_eq(commitments.size(), 0)
+
+
+# -- Orchestrator Commitment Wiring --------------------------------------------
+
+func test_court_close_creates_commitments_for_lords():
+	var emperor := _make_emperor(1)
+	emperor.topic_positions[50] = 60.0
+	var lord_a := _make_attendee(10, "Crane", 7.0)
+	lord_a.lord_id = -1
+	var lord_b := _make_attendee(11, "Lion", 6.0)
+	lord_b.lord_id = -1
+	var vassal := _make_attendee(12, "Crane", 3.0)
+	vassal.lord_id = 10
+	var chars_by_id: Dictionary = {1: emperor, 10: lord_a, 11: lord_b, 12: vassal}
+	var characters: Array[L5RCharacterData] = [emperor, lord_a, lord_b, vassal]
+	var world_states: Dictionary = {
+		"emperor_id": 1,
+		"emperor_archetype": StrategicReview.EmperorArchetype.IRON,
+	}
+	var topic := _make_topic(50, 60.0, "famine", TopicData.Category.POLITICAL, "Crane")
+	var active_topics: Array[TopicData] = [topic]
+	var court := _make_court_with_emperor(1, 1)
+	court.agenda_topic_ids = [50]
+	var active_courts: Array[CourtSessionData] = [court]
+	var active_edicts: Array[EdictData] = []
+	var next_edict_id: Array[int] = [1]
+	var next_topic_id: Array[int] = [500]
+	var court_commitments: Array[CourtCommitmentData] = []
+
+	DayOrchestrator._process_active_courts(
+		active_courts, active_topics, next_topic_id, 100,
+		active_edicts, next_edict_id, [],
+		chars_by_id, world_states,
+		court_commitments, characters,
+	)
+	assert_true(court_commitments.size() > 0, "Commitments should be created")
+	for cc: CourtCommitmentData in court_commitments:
+		assert_eq(cc.source, CourtCommitmentData.CommitmentSource.EDICT)
+		assert_eq(cc.commitment_type, "send_supplies")
+
+func test_court_close_commitments_only_for_lords():
+	var emperor := _make_emperor(1)
+	emperor.topic_positions[50] = 60.0
+	var lord := _make_attendee(10, "Crane", 7.0)
+	lord.lord_id = -1
+	var vassal := _make_attendee(12, "Crane", 3.0)
+	vassal.lord_id = 10
+	var chars_by_id: Dictionary = {1: emperor, 10: lord, 12: vassal}
+	var characters: Array[L5RCharacterData] = [emperor, lord, vassal]
+	var world_states: Dictionary = {
+		"emperor_id": 1,
+		"emperor_archetype": StrategicReview.EmperorArchetype.IRON,
+	}
+	var topic := _make_topic(50, 60.0, "famine", TopicData.Category.POLITICAL, "Crane")
+	var active_topics: Array[TopicData] = [topic]
+	var court := _make_court_with_emperor(1, 1)
+	court.agenda_topic_ids = [50]
+	var active_courts: Array[CourtSessionData] = [court]
+	var active_edicts: Array[EdictData] = []
+	var next_edict_id: Array[int] = [1]
+	var next_topic_id: Array[int] = [500]
+	var court_commitments: Array[CourtCommitmentData] = []
+
+	DayOrchestrator._process_active_courts(
+		active_courts, active_topics, next_topic_id, 100,
+		active_edicts, next_edict_id, [],
+		chars_by_id, world_states,
+		court_commitments, characters,
+	)
+	for cc: CourtCommitmentData in court_commitments:
+		assert_true(cc.lord_id == 1 or cc.lord_id == 10, "Only lord-tier chars get commitments")
+
+func test_no_commitments_when_no_edict():
+	var emperor := _make_emperor(1)
+	emperor.topic_positions[50] = 5.0
+	var chars_by_id: Dictionary = {1: emperor}
+	var characters: Array[L5RCharacterData] = [emperor]
+	var world_states: Dictionary = {
+		"emperor_id": 1,
+		"emperor_archetype": StrategicReview.EmperorArchetype.IRON,
+	}
+	var topic := _make_topic(50, 60.0, "famine", TopicData.Category.POLITICAL, "Crane")
+	var active_topics: Array[TopicData] = [topic]
+	var court := _make_court_with_emperor(1, 1)
+	court.agenda_topic_ids = [50]
+	var active_courts: Array[CourtSessionData] = [court]
+	var active_edicts: Array[EdictData] = []
+	var next_edict_id: Array[int] = [1]
+	var next_topic_id: Array[int] = [500]
+	var court_commitments: Array[CourtCommitmentData] = []
+
+	DayOrchestrator._process_active_courts(
+		active_courts, active_topics, next_topic_id, 100,
+		active_edicts, next_edict_id, [],
+		chars_by_id, world_states,
+		court_commitments, characters,
+	)
+	assert_eq(court_commitments.size(), 0, "No commitments when aggregate between thresholds")

@@ -63,6 +63,7 @@ static func advance_day(
 	constructions: Array[ConstructionData] = [],
 	next_settlement_id: Array[int] = [5000],
 	next_construction_id: Array[int] = [1],
+	court_commitments: Array[CourtCommitmentData] = [],
 ) -> Dictionary:
 	var prev_season: int = time_system.get_season()
 
@@ -107,6 +108,7 @@ static func advance_day(
 		active_courts, active_topics, next_topic_id, ic_day,
 		active_edicts, next_edict_id, active_wars,
 		characters_by_id, world_states,
+		court_commitments, characters,
 	)
 	_set_court_context_flags(active_courts, world_states)
 	_set_wall_tower_context_flags(characters, settlements, provinces, world_states)
@@ -4867,6 +4869,8 @@ static func _process_active_courts(
 	active_wars: Array[WarData] = [],
 	characters_by_id: Dictionary = {},
 	world_states: Dictionary = {},
+	court_commitments: Array[CourtCommitmentData] = [],
+	characters: Array[L5RCharacterData] = [],
 ) -> Array[Dictionary]:
 	var results: Array[Dictionary] = []
 	for court: CourtSessionData in active_courts:
@@ -4878,6 +4882,7 @@ static func _process_active_courts(
 			var edicts_issued: Array[EdictData] = _generate_court_edicts(
 				court, active_edicts, next_edict_id, active_wars,
 				active_topics, next_topic_id, characters_by_id, world_states, ic_day,
+				court_commitments, characters,
 			)
 			if not edicts_issued.is_empty():
 				close_result["edicts_issued"] = edicts_issued.size()
@@ -4937,6 +4942,8 @@ static func _generate_court_edicts(
 	characters_by_id: Dictionary,
 	world_states: Dictionary,
 	ic_day: int,
+	court_commitments: Array[CourtCommitmentData] = [],
+	characters: Array[L5RCharacterData] = [],
 ) -> Array[EdictData]:
 	if not court.emperor_present:
 		return []
@@ -4956,17 +4963,66 @@ static func _generate_court_edicts(
 		return []
 	archetype = world_states.get("emperor_archetype", StrategicReview.EmperorArchetype.IRON)
 
-	var edicts: Array[EdictData] = ImperialEdictSystem.generate_winter_court_edicts(
-		emperor, archetype, court.agenda_topic_ids, active_topics,
-		active_wars, next_edict_id, ic_day, court.court_id,
+	var attendees: Array[L5RCharacterData] = _gather_attendees(court, characters_by_id)
+	var agg_result: Dictionary = ImperialEdictSystem.generate_edicts_from_aggregate(
+		emperor, archetype, court, attendees,
+		active_topics, active_wars, next_edict_id, ic_day,
 	)
+	var edicts: Array[EdictData] = []
+	for e: EdictData in agg_result.get("edicts", []):
+		edicts.append(e)
+
+	var deadline_ic_day: int = ic_day + 90
+	var lords: Array[L5RCharacterData] = _gather_lord_tier_characters(characters)
+
 	for edict: EdictData in edicts:
 		active_edicts.append(edict)
 		var topic_dict: Dictionary = ImperialEdictSystem.generate_edict_topic(edict)
 		if not topic_dict.is_empty():
 			var t: TopicData = _topic_from_dict(topic_dict, next_topic_id, ic_day)
 			active_topics.append(t)
+		var edict_topic: TopicData = _find_topic_by_id(edict.target_topic_id, active_topics)
+		if edict_topic != null:
+			var new_commitments: Array[CourtCommitmentData] = ImperialEdictSystem.generate_edict_commitments(
+				edict, edict_topic, lords, ic_day, deadline_ic_day,
+			)
+			for cc: CourtCommitmentData in new_commitments:
+				court_commitments.append(cc)
 	return edicts
+
+
+static func _gather_attendees(
+	court: CourtSessionData,
+	characters_by_id: Dictionary,
+) -> Array[L5RCharacterData]:
+	var result: Array[L5RCharacterData] = []
+	for char_id: int in court.attendee_ids:
+		var c: L5RCharacterData = characters_by_id.get(char_id) as L5RCharacterData
+		if c != null:
+			result.append(c)
+	return result
+
+
+static func _gather_lord_tier_characters(
+	characters: Array[L5RCharacterData],
+) -> Array[L5RCharacterData]:
+	var result: Array[L5RCharacterData] = []
+	for c: L5RCharacterData in characters:
+		if CharacterStats.is_dead(c):
+			continue
+		if c.status >= 5.0 or c.lord_id == -1:
+			result.append(c)
+	return result
+
+
+static func _find_topic_by_id(
+	topic_id: int,
+	active_topics: Array[TopicData],
+) -> TopicData:
+	for t: TopicData in active_topics:
+		if t.topic_id == topic_id:
+			return t
+	return null
 
 
 static func _set_court_context_flags(

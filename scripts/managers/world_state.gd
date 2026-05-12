@@ -93,6 +93,9 @@ var constructions: Array[ConstructionData] = []
 var next_settlement_id: Array[int] = [5000]
 var next_construction_id: Array[int] = [1]
 
+# -- Court Commitments (s16.4) ------------------------------------------------
+var court_commitments: Array[CourtCommitmentData] = []
+
 # -- Kami Worship (s4.3.21) ---------------------------------------------------
 var worship_state: Dictionary = WorshipSystem.make_initial_worship_state()
 
@@ -197,6 +200,7 @@ func advance_one_day() -> Dictionary:
 		constructions,
 		next_settlement_id,
 		next_construction_id,
+		court_commitments,
 	)
 
 

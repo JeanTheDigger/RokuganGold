@@ -552,7 +552,7 @@ All in /tests/, one file per system:
 - test_feasibility_ledger.gd (~148 tests)
 - test_starvation_warfare.gd (~55 tests)
 - test_court_system.gd (~76 tests)
-- test_imperial_edict_system.gd (~80 tests)
+- test_imperial_edict_system.gd (~83 tests)
 - test_horde_system.gd (~43 tests)
 - test_oni_generator.gd (~80 tests)
 - test_naval_system.gd (~113 tests)
@@ -2267,6 +2267,14 @@ All in /tests/, one file per system:
   commitment_type strings (send_military_aid, send_supplies,
   send_magistrates). `generate_edict_commitments()` creates
   CourtCommitmentData (EDICT source) for every lord when an edict fires.
+  Wired into DayOrchestrator: `_generate_court_edicts()` now uses the
+  aggregate path via `generate_edicts_from_aggregate()`. Builds attendee
+  list from `court.attendee_ids`, gathers lord-tier characters (status >= 5.0
+  or lord_id == -1) for commitment binding. On edict issuance, generates
+  CourtCommitmentData for all lords and appends to `court_commitments`.
+  Deadline defaults to IC day + 90. `advance_day()` gains
+  `court_commitments: Array[CourtCommitmentData]` parameter.
+  WorldStateData gains `court_commitments` field.
 - **NPC edict response wiring** — COMPLY_WITH_EDICT and DEFY_EDICT ActionIDs
   in context lists, scoring tables, and ActionExecutor. RESPOND_TO_EDICT
   NeedType in objective_alignment.json. `_inject_edict_reactive_events()`
