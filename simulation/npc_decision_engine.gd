@@ -1433,10 +1433,11 @@ static func _populate_action_metadata(
 		var subject: int = need.target_npc_id if need.target_npc_id >= 0 else -1
 		if subject < 0:
 			subject = _pick_gossip_subject(ctx)
+		var split: Dictionary = _compute_gossip_raise_split(ctx)
 		option.metadata = {
 			"gossip_subject_id": subject,
-			"damage_raises": 99,
-			"concealment_raises": 0,
+			"damage_raises": split["damage"],
+			"concealment_raises": split["concealment"],
 		}
 	elif option.action_id in ["NEGOTIATE", "PERSUADE", "PUBLIC_DEBATE"]:
 		option.metadata = {
@@ -1482,6 +1483,28 @@ static func _pick_gossip_subject(ctx: NPCDataStructures.ContextSnapshot) -> int:
 			worst_disp = disp
 			worst_id = int(cid)
 	return worst_id
+
+
+static func _compute_gossip_raise_split(
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> Dictionary:
+	if ctx.school.begins_with("Bayushi Courtier"):
+		return {"damage": 99, "concealment": 0}
+	if ctx.bushido_virtue in [
+		Enums.BushidoVirtue.GI,
+		Enums.BushidoVirtue.MAKOTO,
+		Enums.BushidoVirtue.MEIYO,
+	]:
+		return {"damage": 99, "concealment": 0}
+	if ctx.shourido_virtue in [
+		Enums.ShouridoVirtue.SEIGYO,
+		Enums.ShouridoVirtue.DOSATSU,
+		Enums.ShouridoVirtue.CHISHIKI,
+	]:
+		return {"damage": 98, "concealment": 1}
+	if ctx.clan == "Scorpion":
+		return {"damage": 98, "concealment": 1}
+	return {"damage": 99, "concealment": 0}
 
 
 static func _build_declare_war_metadata(

@@ -1264,3 +1264,84 @@ func test_build_context_populates_known_topics_from_character() -> void:
 	assert_eq(ctx.known_topics, [10, 20, 30] as Array[int])
 	assert_eq(ctx.known_positions.get(10, 0.0), 5.0)
 	assert_eq(ctx.known_positions.get(20, 0.0), -40.0)
+
+
+# --- Gossip concealment AI ---
+
+func test_gossip_bayushi_courtier_all_damage() -> void:
+	var ctx: NPCDataStructures.ContextSnapshot = _make_meta_ctx()
+	ctx.school = "Bayushi Courtier"
+	ctx.clan = "Scorpion"
+	var split: Dictionary = NPCDecisionEngine._compute_gossip_raise_split(ctx)
+	assert_eq(split["damage"], 99)
+	assert_eq(split["concealment"], 0)
+
+
+func test_gossip_gi_virtue_all_damage() -> void:
+	var ctx: NPCDataStructures.ContextSnapshot = _make_meta_ctx()
+	ctx.bushido_virtue = Enums.BushidoVirtue.GI
+	var split: Dictionary = NPCDecisionEngine._compute_gossip_raise_split(ctx)
+	assert_eq(split["damage"], 99)
+	assert_eq(split["concealment"], 0)
+
+
+func test_gossip_makoto_virtue_all_damage() -> void:
+	var ctx: NPCDataStructures.ContextSnapshot = _make_meta_ctx()
+	ctx.bushido_virtue = Enums.BushidoVirtue.MAKOTO
+	var split: Dictionary = NPCDecisionEngine._compute_gossip_raise_split(ctx)
+	assert_eq(split["damage"], 99)
+	assert_eq(split["concealment"], 0)
+
+
+func test_gossip_meiyo_virtue_all_damage() -> void:
+	var ctx: NPCDataStructures.ContextSnapshot = _make_meta_ctx()
+	ctx.bushido_virtue = Enums.BushidoVirtue.MEIYO
+	var split: Dictionary = NPCDecisionEngine._compute_gossip_raise_split(ctx)
+	assert_eq(split["damage"], 99)
+	assert_eq(split["concealment"], 0)
+
+
+func test_gossip_seigyo_conceals() -> void:
+	var ctx: NPCDataStructures.ContextSnapshot = _make_meta_ctx()
+	ctx.shourido_virtue = Enums.ShouridoVirtue.SEIGYO
+	var split: Dictionary = NPCDecisionEngine._compute_gossip_raise_split(ctx)
+	assert_eq(split["concealment"], 1)
+	assert_eq(split["damage"], 98)
+
+
+func test_gossip_dosatsu_conceals() -> void:
+	var ctx: NPCDataStructures.ContextSnapshot = _make_meta_ctx()
+	ctx.shourido_virtue = Enums.ShouridoVirtue.DOSATSU
+	var split: Dictionary = NPCDecisionEngine._compute_gossip_raise_split(ctx)
+	assert_eq(split["concealment"], 1)
+
+
+func test_gossip_scorpion_clan_conceals() -> void:
+	var ctx: NPCDataStructures.ContextSnapshot = _make_meta_ctx()
+	ctx.clan = "Scorpion"
+	ctx.school = "Shosuro Infiltrator"
+	var split: Dictionary = NPCDecisionEngine._compute_gossip_raise_split(ctx)
+	assert_eq(split["concealment"], 1)
+	assert_eq(split["damage"], 98)
+
+
+func test_gossip_default_all_damage() -> void:
+	var ctx: NPCDataStructures.ContextSnapshot = _make_meta_ctx()
+	ctx.clan = "Crane"
+	ctx.bushido_virtue = Enums.BushidoVirtue.REI
+	var split: Dictionary = NPCDecisionEngine._compute_gossip_raise_split(ctx)
+	assert_eq(split["damage"], 99)
+	assert_eq(split["concealment"], 0)
+
+
+func test_gossip_metadata_uses_split() -> void:
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.target_npc_id = 50
+	var action := NPCDataStructures.ScoredAction.new()
+	action.action_id = "GOSSIP"
+	var ctx: NPCDataStructures.ContextSnapshot = _make_meta_ctx()
+	ctx.clan = "Scorpion"
+	ctx.school = "Bayushi Bushi"
+	NPCDecisionEngine._populate_action_metadata(action, need, ctx)
+	assert_eq(action.metadata.get("concealment_raises", -1), 1)
+	assert_eq(action.metadata.get("damage_raises", -1), 98)
