@@ -774,6 +774,7 @@ static func process_season(
 	current_season: int,
 	next_id_counter: int,
 	world_states: Dictionary,
+	worship_maluses: Dictionary = {},
 ) -> Dictionary:
 	var new_insurgencies: Array[InsurgencyData] = []
 	var events: Array[Dictionary] = []
@@ -850,6 +851,9 @@ static func process_season(
 				continue
 
 			var chance: float = get_spawn_chance(itype as Enums.InsurgencyType, tier, province, ws)
+			var wm: Dictionary = worship_maluses.get(pid, {})
+			if wm.get("insurgency_spawn_doubled", false):
+				chance *= 2.0
 			if chance <= 0.0:
 				continue
 			var spawned: InsurgencyData = try_spawn(

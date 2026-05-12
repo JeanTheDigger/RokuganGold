@@ -13,6 +13,7 @@ extends Resource
 @export var school_type: Enums.SchoolType = Enums.SchoolType.BUSHI
 @export var age: int = 16
 @export var gender: String = ""
+@export var orientation: String = "straight"
 
 # -- The Five Rings & Traits ---------------------------------------------------
 # Ring = min(trait1, trait2). Both traits tracked individually per s4.5.2.
@@ -179,6 +180,8 @@ extends Resource
 @export var sibling_ids: Array[int] = []
 @export var children_ids: Array[int] = []
 @export var spouse_id: int = -1
+@export var birth_clan: String = ""
+@export var birth_family: String = ""
 @export var grandparent_records: Array[AncestorRecord] = []
 @export var great_grandparent_records: Array[AncestorRecord] = []
 
@@ -212,10 +215,18 @@ extends Resource
 @export var active_tattoo_ability: Enums.TattooAbility = Enums.TattooAbility.NONE
 @export var is_bald: bool = false
 
+# -- Musha Shugyo (Section 57.48) ---------------------------------------------
+
+@export var musha_shugyo: bool = false
+@export var musha_shugyo_end_ic_day: int = -1
+@export var original_lord_id: int = -1
+@export var permanent_ronin: bool = false
+
 # -- Progression (Section 48) -------------------------------------------------
 
 @export var xp_total: int = 0
 @export var xp_spent: int = 0
+@export var xp_fractional: float = 0.0
 @export var progress_bars: Dictionary = {}
 @export var training_relationships: Dictionary = {}
 
@@ -234,3 +245,16 @@ func get_trait_value(p_trait: Enums.Trait) -> int:
 		Enums.Trait.AWARENESS: return awareness
 		Enums.Trait.VOID: return void_ring
 		_: return 0
+
+
+func set_trait_value(p_trait: Enums.Trait, value: int) -> void:
+	match p_trait:
+		Enums.Trait.STAMINA: stamina = value
+		Enums.Trait.WILLPOWER: willpower = value
+		Enums.Trait.STRENGTH: strength = value
+		Enums.Trait.PERCEPTION: perception = value
+		Enums.Trait.AGILITY: agility = value
+		Enums.Trait.INTELLIGENCE: intelligence = value
+		Enums.Trait.REFLEXES: reflexes = value
+		Enums.Trait.AWARENESS: awareness = value
+		Enums.Trait.VOID: void_ring = value

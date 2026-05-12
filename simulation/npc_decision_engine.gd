@@ -93,6 +93,27 @@ static func build_context(
 				)
 		ctx.feasibility_data = _build_feasibility_data(character, world_state)
 
+	# Vacancy detection (s57.20.3)
+	if ctx.is_lord:
+		var vkey: String = "vacant_positions_%d" % character.character_id
+		var vdata: Variant = world_state.get(vkey, [])
+		if vdata is Array:
+			for v: Variant in vdata:
+				if v is Dictionary:
+					ctx.vacant_positions.append(v as Dictionary)
+
+	# Marriage — find unmarried vassals/children for lord-tier marriage arrangement
+	if ctx.is_lord and not chars_by_id.is_empty():
+		ctx.marriageable_vassal_ids = _find_marriageable_vassals(
+			character, chars_by_id,
+		)
+	if ctx.is_lord:
+		ctx.lord_is_unmarried = character.spouse_id < 0
+		ctx.succession_insecure = (
+			character.designated_heir_id < 0
+			and character.children_ids.is_empty()
+		)
+
 	# Military
 	ctx.military_rank = character.military_rank
 	ctx.commanded_unit_id = character.commanded_unit_id
@@ -110,6 +131,20 @@ static func build_context(
 	ctx.famine_crisis_province_ids = _extract_famine_province_ids(
 		character, world_state.get("active_topics", [])
 	)
+
+	# Infrastructure intelligence (s4.3.22) — filtered to lord's own clan
+	ctx.worship_failing_province_ids = _filter_province_ids_by_clan(
+		world_state.get("worship_failing_province_ids", {}), character.clan,
+	)
+	ctx.border_province_ids_without_fort = _filter_province_ids_by_clan(
+		world_state.get("border_province_ids_without_fort", {}), character.clan,
+	)
+	ctx.surplus_pu_province_ids = _filter_province_ids_by_clan(
+		world_state.get("surplus_pu_province_ids", {}), character.clan,
+	)
+	ctx.is_coastal = world_state.get("is_coastal", false)
+	ctx.has_ships = world_state.get("has_ships", false)
+	ctx.has_naval_threat = world_state.get("has_naval_threat", false)
 
 	# Festival state (s11.5)
 	ctx.is_ceasefire_day = world_state.get("is_ceasefire_day", false)
@@ -193,6 +228,8 @@ static func generate_options(
 		if _is_zone_blocked(action_id, ctx.zone_flags):
 			continue
 		if _is_military_blocked(action_id, ctx):
+			continue
+		if _is_lord_only_blocked(action_id, ctx):
 			continue
 		if ctx.is_ceasefire_day and _is_ceasefire_blocked(action_id):
 			continue
@@ -638,6 +675,14 @@ static func _get_ap_cost(action_id: String) -> int:
 		"DECLARE_WAR": 2,
 		"COMPLY_WITH_EDICT": 1,
 		"DEFY_EDICT": 1,
+		"APPOINT_TO_POSITION": 1,
+		"ARRANGE_MARRIAGE": 1,
+		"FOUND_VILLAGE": 1,
+		"BUILD_FORTIFICATION": 1,
+		"BUILD_SHRINE": 1,
+		"FOUND_TEMPLE": 1,
+		"FOUND_MONASTERY": 1,
+		"COMMISSION_SHIP": 1,
 	}
 	return costs.get(action_id, 1)
 
@@ -1154,6 +1199,23 @@ const COMMANDER_RANK_ACTIONS: Dictionary = {
 	"LEVY_TROOPS": Enums.MilitaryRank.CHUI,
 }
 
+const LORD_ONLY_ACTIONS: Array[String] = [
+	"APPOINT_TO_POSITION", "DECLARE_WAR", "FOUND_VILLAGE",
+	"BUILD_FORTIFICATION", "BUILD_SHRINE", "FOUND_TEMPLE",
+	"FOUND_MONASTERY", "COMMISSION_SHIP", "ARRANGE_MARRIAGE",
+	"SET_TAX_RATE", "SET_STIPEND_RATE",
+]
+
+
+static func _is_lord_only_blocked(
+	action_id: String,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> bool:
+	if action_id in LORD_ONLY_ACTIONS:
+		return not ctx.is_lord
+	return false
+
+
 static func _is_military_blocked(
 	action_id: String,
 	ctx: NPCDataStructures.ContextSnapshot,
@@ -1343,6 +1405,29 @@ static func _populate_action_metadata(
 		option.metadata = _build_blockade_metadata(need, ctx)
 	elif option.action_id == "COMPLY_WITH_EDICT" or option.action_id == "DEFY_EDICT":
 		option.metadata = _build_edict_response_metadata(need, ctx)
+	elif option.action_id == "ARRANGE_MARRIAGE":
+		option.metadata = {
+			"candidate_id": need.target_npc_id,
+			"target_lord_id": need.target_npc_id_secondary,
+			"target_candidate_id": need.target_settlement_id,
+		}
+	elif option.action_id == "APPOINT_TO_POSITION":
+		option.metadata = {
+			"target_npc_id": need.target_npc_id,
+			"position": need.target_intent,
+		}
+	elif option.action_id == "PERFORM_WORSHIP":
+		option.metadata = {
+			"directed_fortune": need.target_npc_id if need.target_npc_id >= 0 else -1,
+			"location_type": _zone_to_worship_location(ctx.zone_subtype),
+		}
+	elif option.action_id in ["FOUND_VILLAGE", "BUILD_FORTIFICATION", "BUILD_SHRINE",
+			"FOUND_TEMPLE", "FOUND_MONASTERY", "COMMISSION_SHIP"]:
+		option.metadata = {
+			"province_id": need.target_province_id,
+			"settlement_id": need.target_settlement_id,
+			"target_intent": need.target_intent,
+		}
 
 
 static func _build_declare_war_metadata(
@@ -1762,6 +1847,33 @@ static func _get_virtue_string(ctx: NPCDataStructures.ContextSnapshot) -> String
 	return ""
 
 
+static func _zone_to_worship_location(zone: Enums.ZoneSubtype) -> String:
+	match zone:
+		Enums.ZoneSubtype.CASTLE_SHRINE:
+			return "village_shrine"
+		Enums.ZoneSubtype.SHRINE_CLEARING:
+			return "roadside_shrine"
+		Enums.ZoneSubtype.TEMPLE_GROUNDS:
+			return "local_shrine"
+	return "roadside_shrine"
+
+
+static func _filter_province_ids_by_clan(
+	province_clan_map: Variant,
+	clan: String,
+) -> Array[int]:
+	var result: Array[int] = []
+	if province_clan_map is Dictionary:
+		for pid: Variant in province_clan_map:
+			if province_clan_map[pid] == clan:
+				result.append(int(pid))
+	elif province_clan_map is Array:
+		# Backward compatibility: plain array without clan filtering
+		for pid: Variant in province_clan_map:
+			result.append(int(pid))
+	return result
+
+
 static func _extract_famine_province_ids(
 	character: L5RCharacterData,
 	active_topics: Array,
@@ -1828,4 +1940,27 @@ static func _extract_cut_supply_army_ids(
 				var aid: int = t.get("army_id", -1)
 				if aid >= 0:
 					result.append(aid)
+	return result
+
+
+static func _find_marriageable_vassals(
+	lord: L5RCharacterData,
+	chars_by_id: Dictionary,
+) -> Array[int]:
+	var result: Array[int] = []
+	for cid: int in chars_by_id:
+		var c: L5RCharacterData = chars_by_id[cid] as L5RCharacterData
+		if c == null:
+			continue
+		if c.character_id == lord.character_id:
+			continue
+		if c.spouse_id >= 0:
+			continue
+		if CharacterStats.is_dead(c):
+			continue
+		var is_vassal: bool = c.lord_id == lord.character_id
+		var is_child: bool = lord.children_ids.has(c.character_id)
+		if not is_vassal and not is_child:
+			continue
+		result.append(c.character_id)
 	return result

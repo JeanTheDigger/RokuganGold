@@ -550,3 +550,81 @@ enum HordeBattleOutcome {
 	ATTACKER_PUSHED_BACK,       # Defender wins but pushed back  → -3 SI
 	DEFENDER_OVERRUN,           # Garrison destroyed or routed   → -4 SI / breach
 }
+
+# -- Naval Enums (s11.9 — LOCKED) ------------------------------------------------
+
+enum NavalWeather {
+	CLEAR,
+	WIND,
+	RAIN,
+	STORM,
+	TYPHOON,
+}
+
+enum WaterSubtileType {
+	RIVER,
+	LAKE,
+	COASTAL,
+	OCEAN,
+}
+
+enum NavalEngagementLevel {
+	RESERVES,
+	DISENGAGED,
+	ENGAGED,
+	HEAVILY_ENGAGED,
+}
+
+
+enum GreatFortune {
+	BENTEN,
+	BISHAMON,
+	DAIKOKU,
+	EBISU,
+	FUKUROKUJIN,
+	HOTEI,
+	JUROJIN,
+}
+
+
+enum WorshipTier {
+	NONE,
+	RESTLESS,
+	DISPLEASED,
+	WRATHFUL,
+}
+
+
+enum MinorFortune {
+	INARI,
+	KENRO_JI_JIN,
+	KUROSHIN,
+	TOYOUKE_OMIKAMA,
+	HACHIMAN,
+	OSANO_WO,
+	GOEMON,
+	KISADA,
+	KOSHIN,
+	HARUHIKO,
+	TSI_XING_GUO,
+	SUITENGU,
+	HUJOKUKO,
+	JIZO,
+	KOJI,
+	HAMANRI,
+	SAIBANKAN,
+	EMMA_O,
+	TENGEN,
+	SADAHAKO,
+	KO_NO_HAMA,
+	MEGUMI,
+	MUZAKA,
+}
+
+
+enum MinorBlessingTier {
+	NONE,
+	NOTICED,
+	FAVORED,
+	BELOVED,
+}

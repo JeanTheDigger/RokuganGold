@@ -453,9 +453,15 @@ static func _execute_decision(
 		character, world_state, characters_by_id
 	)
 
+	var wm_all: Dictionary = world_state.get("_worship_maluses", {})
+	var char_loc: int = int(character.physical_location) if character.physical_location.is_valid_int() else -1
+	var sett_prov: Dictionary = world_state.get("_settlement_province_map", {})
+	var char_prov: int = sett_prov.get(char_loc, -1)
+	var wpm: Dictionary = wm_all.get(char_prov, {})
+
 	return ActionExecutor.execute(
 		action, character, ctx, dice_engine, action_skill_map,
-		military_data, characters_by_id
+		military_data, characters_by_id, wpm,
 	)
 
 

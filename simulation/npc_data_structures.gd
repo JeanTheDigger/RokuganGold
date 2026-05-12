@@ -117,6 +117,14 @@ class ContextSnapshot:
 	var province_statuses: Array = []
 	var feasibility_data: Dictionary = {}
 
+	# Vacancy detection (s57.20.3)
+	var vacant_positions: Array[Dictionary] = []
+
+	# Marriage (s22.7)
+	var marriageable_vassal_ids: Array[int] = []
+	var succession_insecure: bool = false
+	var lord_is_unmarried: bool = false
+
 	# Military
 	var military_rank: Enums.MilitaryRank = Enums.MilitaryRank.NONE
 	var commanded_unit_id: int = -1
@@ -140,6 +148,14 @@ class ContextSnapshot:
 
 	# Famine crisis intelligence
 	var famine_crisis_province_ids: Array[int] = []
+
+	# Infrastructure intelligence (s4.3.22)
+	var worship_failing_province_ids: Array[int] = []
+	var border_province_ids_without_fort: Array[int] = []
+	var surplus_pu_province_ids: Array[int] = []
+	var is_coastal: bool = false
+	var has_ships: bool = false
+	var has_naval_threat: bool = false
 
 	# Festival state (s11.5)
 	var is_ceasefire_day: bool = false

@@ -143,6 +143,8 @@ static func evaluate_proposal(
 const BENTEN_FESTIVAL_DAY: int = 9
 const BENTEN_FESTIVAL_MONTH: int = 12
 
+const BENTEN_FESTIVAL_BONUS: int = 20
+
 static func is_benten_festival(ic_day: int) -> bool:
 	var day_of_year: int = ic_day % 360
 	var month: int = int(day_of_year / 30) + 1

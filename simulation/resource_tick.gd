@@ -220,6 +220,7 @@ static func process_seasonal_tick(
 	season: String,
 	settlement_meta: Dictionary,
 	miya_inputs: Dictionary = {},
+	worship_maluses: Dictionary = {},
 ) -> Dictionary:
 	var results: Dictionary = {
 		"rice_consumed": {},
@@ -234,6 +235,7 @@ static func process_seasonal_tick(
 
 	settlement_meta["_provinces"] = provinces
 	settlement_meta["_settlements"] = settlements
+	settlement_meta["_worship_maluses"] = worship_maluses
 
 	if season == "spring":
 		_lock_planting(provinces, settlements, settlement_meta)
@@ -481,12 +483,17 @@ static func _process_harvest(
 		if harvest_destroyed:
 			yield_amount = 0.0
 			meta["harvest_destroyed"] = false
+		var worship_m: Dictionary = settlement_meta.get("_worship_maluses", {})
+		var rice_mod: float = (worship_m.get(prov.province_id, {}) as Dictionary).get("rice_modifier", 0.0)
+		if rice_mod < 0.0 and yield_amount > 0.0:
+			yield_amount = maxf(0.0, yield_amount * (1.0 + rice_mod))
 		_distribute_rice_to_settlements(prov, settlements, yield_amount)
 		harvest_results[prov.province_id] = {
 			"farming_pu": locked_farming,
 			"terrain_mult": terrain_mult,
 			"yield": yield_amount,
 			"destroyed": harvest_destroyed,
+			"worship_rice_modifier": rice_mod,
 		}
 	return harvest_results
 
@@ -707,6 +714,7 @@ static func _process_population_adjustment(
 	# One-season Miya's Blessing growth bonus (s11.5b §6.3) — keyed by
 	# province_id and added to the computed rate for blessed provinces.
 	var miya_growth_bonus: Dictionary = settlement_meta.get("_miya_growth_bonus", {})
+	var worship_m: Dictionary = settlement_meta.get("_worship_maluses", {})
 	for prov: ProvinceData in provinces:
 		var starv: Dictionary = starvation_data.get(prov.province_id, {})
 		var stage: StarvationStage = starv.get("stage", StarvationStage.CLEAR)
@@ -715,6 +723,9 @@ static func _process_population_adjustment(
 		var prov_rice: float = get_province_rice(prov, settlements)
 		var rate: float = compute_growth_rate(total_pop, stage, peace, prov_rice)
 		rate += float(miya_growth_bonus.get(prov.province_id, 0.0))
+		var pop_mod: float = (worship_m.get(prov.province_id, {}) as Dictionary).get("pop_growth_modifier", 0.0)
+		if pop_mod < 0.0:
+			rate = maxf(0.0, rate * (1.0 + pop_mod))
 		var growth: Dictionary = apply_population_growth_settlements(prov, settlements, rate)
 		results[prov.province_id] = growth
 	return results
@@ -810,11 +821,15 @@ static func _process_koku_generation(
 ) -> Dictionary:
 	var results: Dictionary = {}
 	var location_mods: Dictionary = settlement_meta.get("_koku_modifiers", {})
+	var worship_m: Dictionary = settlement_meta.get("_worship_maluses", {})
 	for s: SettlementData in settlements:
 		if s.town_pu <= 0:
 			continue
 		var loc_mod: float = location_mods.get(s.settlement_id, location_mods.get(s.province_id, 1.0))
 		var koku: float = float(s.town_pu) * KOKU_PER_TOWN_PU_PER_SEASON * loc_mod
+		var koku_mod: float = (worship_m.get(s.province_id, {}) as Dictionary).get("koku_modifier", 0.0)
+		if koku_mod < 0.0:
+			koku = maxf(0.0, koku * (1.0 + koku_mod))
 		s.koku_stockpile += koku
 		var pid: int = s.province_id
 		if not results.has(pid):

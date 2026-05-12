@@ -50,6 +50,14 @@ const INVESTIGATION_OBJECTIVES: Array[String] = [
 	"UPHOLD_LAW",
 ]
 
+const INFRASTRUCTURE_OBJECTIVES: Array[String] = [
+	"BUILD_INFRASTRUCTURE",
+]
+
+const GOVERNANCE_OBJECTIVES: Array[String] = [
+	"FILL_VACANCY",
+]
+
 
 # -- Main Entry Point ---------------------------------------------------------
 
@@ -63,6 +71,10 @@ static func decompose(
 
 	if PrimaryObjectiveDecomposer.is_primary_objective(need_type):
 		return PrimaryObjectiveDecomposer.decompose(objective, ctx)
+	if MushaShugyo.is_seek_experience(need_type):
+		return MushaShugyo.decompose(objective, ctx, ctx.school_type)
+	if MonkObjectiveSystem.is_monk_objective(need_type):
+		return MonkObjectiveSystem.decompose(need_type, objective, ctx)
 	if need_type in POLITICAL_OBJECTIVES:
 		return _decompose_political(need_type, objective, ctx)
 	if need_type in ECONOMIC_OBJECTIVES:
@@ -73,6 +85,10 @@ static func decompose(
 		return _decompose_military(need_type, objective, ctx)
 	if need_type in INVESTIGATION_OBJECTIVES:
 		return _decompose_investigation(need_type, objective, ctx)
+	if need_type in INFRASTRUCTURE_OBJECTIVES:
+		return _decompose_infrastructure(need_type, objective, ctx)
+	if need_type in GOVERNANCE_OBJECTIVES:
+		return _decompose_governance(need_type, objective, ctx)
 
 	return _passthrough(objective)
 
@@ -256,6 +272,9 @@ static func _decompose_advance_family(
 				var crisis: int = _find_crisis_province(ctx)
 				if crisis >= 0:
 					return _make_need("DEFEND_PROVINCE", 2, {"target_province_id": crisis})
+				var marriage_need: Variant = _try_arrange_marriage(ctx, 2, "ADVANCE_FAMILY")
+				if marriage_need != null:
+					return marriage_need
 				var weak: int = _find_weak_neighbor_province(ctx)
 				if weak >= 0:
 					return _make_need("INITIATE_WAR_CHECK", 1, {
@@ -345,6 +364,9 @@ static func _decompose_accumulate_leverage(
 				return _make_need("ACQUIRE_LEVERAGE", 2, {"target_npc_id": target})
 			return _make_need("GATHER_INTELLIGENCE", 2)
 		Enums.ContextFlag.AT_OWN_HOLDINGS:
+			var marriage_need: Variant = _try_arrange_marriage(ctx, 1, "ACCUMULATE_LEVERAGE")
+			if marriage_need != null:
+				return marriage_need
 			return _make_need("SEND_LETTER", 1)
 		_:
 			var _court_need := _court_or_alternative(ctx)
@@ -546,6 +568,12 @@ static func _decompose_protect_dependents(
 		var rice_per_pu: float = _get_rice_per_pu(ctx)
 		if rice_per_pu < 2.0:
 			return _make_need("ACQUIRE_RESOURCE", 2, {"target_resource": "rice"})
+
+		# Succession insecurity — no heir and no children (s57.20.2)
+		if ctx.succession_insecure and ctx.context_flag == Enums.ContextFlag.AT_OWN_HOLDINGS:
+			var marriage_need: Variant = _try_succession_marriage(ctx)
+			if marriage_need != null:
+				return marriage_need
 
 	var contact: int = _find_contact_needing_disposition(ctx, 31)
 	if contact >= 0:
@@ -931,6 +959,9 @@ static func _decompose_maintain_peace(
 				})
 			return _make_need("IDENTIFY_CONTACT", 1)
 		Enums.ContextFlag.AT_OWN_HOLDINGS:
+			var marriage_need: Variant = _try_arrange_marriage(ctx, 2, "MAINTAIN_PEACE")
+			if marriage_need != null:
+				return marriage_need
 			return _make_need("SEND_LETTER", 1)
 		_:
 			var _court_need := _court_or_alternative(ctx)
@@ -1221,3 +1252,218 @@ static func _has_undertrained_units(
 		if level < max_level and ctx.unit_training_counts[level] > 0:
 			return true
 	return false
+
+
+static func _try_succession_marriage(
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> Variant:
+	if _has_recent_marriage_attempt(ctx, 90):
+		return null
+
+	var target_lord_id: int = _find_cross_clan_lord(ctx)
+	if target_lord_id < 0:
+		target_lord_id = _find_between_families_lord(ctx)
+	if target_lord_id < 0:
+		return null
+
+	# If lord is unmarried, they are the candidate (securing their own succession)
+	if ctx.lord_is_unmarried:
+		return _make_need("ARRANGE_MARRIAGE", 3, {
+			"target_npc_id": ctx.character_id,
+			"target_npc_id_secondary": target_lord_id,
+			"target_intent": "PROTECT_DEPENDENTS",
+		})
+
+	# Lord is married but has no children/heir — marry off a vassal for alliance
+	if not ctx.marriageable_vassal_ids.is_empty():
+		return _make_need("ARRANGE_MARRIAGE", 2, {
+			"target_npc_id": ctx.marriageable_vassal_ids[0],
+			"target_npc_id_secondary": target_lord_id,
+			"target_intent": "PROTECT_DEPENDENTS",
+		})
+
+	return null
+
+
+static func _try_arrange_marriage(
+	ctx: NPCDataStructures.ContextSnapshot,
+	priority: int = 2,
+	target_intent: String = "",
+) -> Variant:
+	if not ctx.is_lord:
+		return null
+	if ctx.context_flag != Enums.ContextFlag.AT_OWN_HOLDINGS:
+		return null
+	if ctx.marriageable_vassal_ids.is_empty():
+		return null
+	if _has_recent_marriage_attempt(ctx, 90):
+		return null
+
+	var candidate_id: int = ctx.marriageable_vassal_ids[0]
+
+	var target_lord_id: int = _find_cross_clan_lord(ctx)
+	if target_lord_id < 0:
+		target_lord_id = _find_between_families_lord(ctx)
+	if target_lord_id < 0:
+		return null
+
+	return _make_need("ARRANGE_MARRIAGE", priority, {
+		"target_npc_id": candidate_id,
+		"target_npc_id_secondary": target_lord_id,
+		"target_settlement_id": -1,
+		"target_intent": target_intent,
+	})
+
+
+static func _find_cross_clan_lord(
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> int:
+	var best_id: int = -1
+	var best_score: int = -999
+	for clan_name: String in ctx.known_contacts_by_clan:
+		if clan_name == ctx.clan:
+			continue
+		var contacts: Variant = ctx.known_contacts_by_clan[clan_name]
+		if contacts is Array:
+			for contact_id: Variant in contacts:
+				if contact_id is int and contact_id >= 0:
+					var disp: int = ctx.dispositions.get(contact_id, 0)
+					if disp < -10:
+						continue
+					var score: int = -disp
+					if score > best_score:
+						best_score = score
+						best_id = contact_id as int
+	return best_id
+
+
+static func _find_between_families_lord(
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> int:
+	if not ctx.known_contacts_by_clan.has(ctx.clan):
+		return -1
+	var contacts: Variant = ctx.known_contacts_by_clan[ctx.clan]
+	if not contacts is Array:
+		return -1
+	var best_id: int = -1
+	var best_score: int = -999
+	for contact_id: Variant in contacts:
+		if contact_id is int and contact_id >= 0:
+			if contact_id == ctx.character_id:
+				continue
+			var disp: int = ctx.dispositions.get(contact_id, 0)
+			if disp < -10:
+				continue
+			var score: int = -disp
+			if score > best_score:
+				best_score = score
+				best_id = contact_id as int
+	return best_id
+
+
+static func _has_recent_marriage_attempt(
+	ctx: NPCDataStructures.ContextSnapshot,
+	cooldown_days: int,
+) -> bool:
+	for entry: Variant in ctx.action_log:
+		if entry is Dictionary:
+			var d: Dictionary = entry
+			if d.get("action_id", "") == "ARRANGE_MARRIAGE" and d.get("character_id", -1) == ctx.character_id:
+				var attempt_day: int = d.get("ic_day", -1)
+				if attempt_day >= 0 and (ctx.ic_day - attempt_day) < cooldown_days:
+					return true
+	return false
+
+
+# -- Infrastructure Decomposition (s57.20.1) -----------------------------------
+
+
+static func _decompose_infrastructure(
+	_need_type: String,
+	_objective: Dictionary,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> NPCDataStructures.ImmediateNeed:
+	if not ctx.is_lord:
+		return _make_need("REST", 1)
+
+	if ctx.context_flag != Enums.ContextFlag.AT_OWN_HOLDINGS:
+		return _make_need("REST", 1)
+
+	# Priority cascade per GDD s57.20.1:
+	# 1. Worship failure → BUILD_SHRINE (priority rises to 3 when actively causing problems)
+	if not ctx.worship_failing_province_ids.is_empty():
+		return _make_need("BUILD_INFRASTRUCTURE", 3, {
+			"target_province_id": ctx.worship_failing_province_ids[0],
+			"target_intent": "BUILD_SHRINE",
+		})
+
+	# 2. Border without fortification → BUILD_FORTIFICATION
+	if not ctx.border_province_ids_without_fort.is_empty():
+		return _make_need("BUILD_INFRASTRUCTURE", 2, {
+			"target_province_id": ctx.border_province_ids_without_fort[0],
+			"target_intent": "BUILD_FORTIFICATION",
+		})
+
+	# 3. Surplus population → FOUND_VILLAGE
+	if not ctx.surplus_pu_province_ids.is_empty():
+		return _make_need("BUILD_INFRASTRUCTURE", 1, {
+			"target_province_id": ctx.surplus_pu_province_ids[0],
+			"target_intent": "FOUND_VILLAGE",
+		})
+
+	# 4. Coastal with naval threats and no ships → COMMISSION_SHIP (priority 3)
+	if ctx.is_coastal and ctx.has_naval_threat and not ctx.has_ships:
+		return _make_need("BUILD_INFRASTRUCTURE", 3, {
+			"target_intent": "COMMISSION_SHIP",
+		})
+
+	return _make_need("REST", 1)
+
+
+# -- Governance Decomposition (s57.20.3) ---------------------------------------
+
+
+static func _decompose_governance(
+	need_type: String,
+	_objective: Dictionary,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> NPCDataStructures.ImmediateNeed:
+	match need_type:
+		"FILL_VACANCY":
+			return _decompose_fill_vacancy(_objective, ctx)
+	return _passthrough(_objective)
+
+
+static func _decompose_fill_vacancy(
+	_objective: Dictionary,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> NPCDataStructures.ImmediateNeed:
+	if not ctx.is_lord:
+		return _make_need("REST", 1)
+
+	if ctx.context_flag != Enums.ContextFlag.AT_OWN_HOLDINGS:
+		return _make_need("REST", 1)
+
+	if ctx.vacant_positions.is_empty():
+		return _make_need("REST", 1)
+
+	# Pick highest-priority vacancy
+	var best_vacancy: Dictionary = ctx.vacant_positions[0]
+	for v: Dictionary in ctx.vacant_positions:
+		if v.get("priority", 1) > best_vacancy.get("priority", 1):
+			best_vacancy = v
+		elif v.get("priority", 1) == best_vacancy.get("priority", 1):
+			if v.get("seasons_vacant", 0) > best_vacancy.get("seasons_vacant", 0):
+				best_vacancy = v
+
+	var priority: int = best_vacancy.get("priority", 1)
+	# Escalate for long-standing vacancies (GDD s57.20.3: +5 per season, mapped to priority tiers)
+	var seasons_vacant: int = best_vacancy.get("seasons_vacant", 0)
+	if seasons_vacant >= 2 and priority < 3:
+		priority = mini(priority + 1, 3)
+
+	return _make_need("FILL_VACANCY", priority, {
+		"target_npc_id": best_vacancy.get("candidate_id", -1),
+		"target_intent": best_vacancy.get("position_type", ""),
+		"target_province_id": best_vacancy.get("province_id", -1),
+	})

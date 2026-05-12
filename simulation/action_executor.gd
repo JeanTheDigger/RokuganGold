@@ -91,6 +91,7 @@ static func execute(
 	action_skill_map: Dictionary,
 	military_data: Dictionary = {},
 	characters_by_id: Dictionary = {},
+	worship_province_malus: Dictionary = {},
 ) -> Dictionary:
 	var action_id: String = action.action_id
 
@@ -138,6 +139,9 @@ static func execute(
 			"effects": peace_effects,
 		}
 
+	if action_id in _CONSTRUCTION_ACTIONS:
+		return _execute_construction(action, character, ctx)
+
 	if action_id == "DECLARE_WAR":
 		var war_effects: Dictionary = _execute_declare_war(character, action.metadata)
 		return {
@@ -172,6 +176,15 @@ static func execute(
 
 	if action_id == "DISPATCH_COURTIER":
 		return _execute_dispatch_courtier(action, character, ctx, dice_engine, characters_by_id)
+
+	if action_id == "APPOINT_TO_POSITION":
+		return _execute_appoint_to_position(action, character, ctx)
+
+	if action_id == "ARRANGE_MARRIAGE":
+		return _execute_arrange_marriage(action, character, ctx, dice_engine, characters_by_id)
+
+	if action_id == "PERFORM_WORSHIP":
+		return _execute_perform_worship(action, character, ctx, dice_engine)
 
 	if action_id == "SCOUT_ENEMY":
 		return _execute_scout_enemy(action, character, ctx, dice_engine)
@@ -216,9 +229,10 @@ static func execute(
 	if primary_skill.is_empty() or primary_skill.begins_with("_"):
 		return _execute_no_roll(action, character, ctx)
 
-	var tn: int = _get_tn_for_action(action_id, action, ctx)
+	var tn: int = _get_tn_for_action(action_id, action, ctx, worship_province_malus)
+	var wc_bonus: int = _get_winter_court_skill_bonus(character, primary_skill, ctx)
 	var roll_result: Dictionary = SkillResolver.resolve_skill_check(
-		character, dice_engine, primary_skill, tn
+		character, dice_engine, primary_skill, tn, 0, "", Enums.Trait.NONE, 0, 0, wc_bonus
 	)
 
 	var result: Dictionary = {
@@ -945,6 +959,7 @@ static func _get_tn_for_action(
 	action_id: String,
 	action: NPCDataStructures.ScoredAction,
 	ctx: NPCDataStructures.ContextSnapshot,
+	worship_province_malus: Dictionary = {},
 ) -> int:
 	if action_id in SOCIAL_ACTIONS:
 		return _get_social_tn(action, ctx)
@@ -955,7 +970,8 @@ static func _get_tn_for_action(
 	if action_id in ADMINISTRATIVE_ACTIONS:
 		return ADMIN_BASE_TN
 	if action_id in INTELLIGENCE_ACTIONS:
-		return SOCIAL_BASE_TN
+		var intel_modifier: int = absi(int(worship_province_malus.get("intelligence_roll_modifier", 0)))
+		return SOCIAL_BASE_TN + intel_modifier
 	return SOCIAL_BASE_TN
 
 
@@ -1269,6 +1285,56 @@ static func _execute_dispatch_courtier(
 				"recipient_disposition_change": -2.0,
 			},
 		}
+
+
+static func _execute_perform_worship(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	var is_shugenja: bool = character.school_type == Enums.SchoolType.SHUGENJA
+	var is_monk: bool = character.school_type == Enums.SchoolType.MONK
+	var char_type: String = "normal"
+	if is_monk:
+		char_type = "monk"
+	elif is_shugenja:
+		char_type = "shugenja"
+
+	var directed_fortune: int = action.metadata.get("directed_fortune", -1)
+
+	var ring_id: int = Enums.Ring.VOID
+	if directed_fortune >= 0:
+		ring_id = WorshipSystem.FORTUNE_RING.get(directed_fortune, Enums.Ring.VOID)
+	var ring_value: int = CharacterStats.get_ring_value(character, ring_id)
+	var theology_rank: int = character.skills.get("Theology", 0)
+
+	var location_type: String = action.metadata.get("location_type", "roadside_shrine")
+
+	var worship_result: Dictionary = WorshipSystem.resolve_active_worship(
+		char_type, is_shugenja, dice_engine, ring_value, theology_rank,
+		location_type, directed_fortune,
+	)
+
+	var province_id: int = action.target_province_id
+
+	return {
+		"success": true,
+		"action_id": "PERFORM_WORSHIP",
+		"character_id": character.character_id,
+		"target_npc_id": action.target_npc_id,
+		"target_province_id": province_id,
+		"ic_day": ctx.ic_day,
+		"season": ctx.season,
+		"effects": {
+			"requires_worship_accumulation": true,
+			"province_id": province_id,
+			"wp_distribution": worship_result.get("wp_distribution", {}),
+			"total_wp": worship_result.get("total_wp", 0.0),
+			"bonus_wp": worship_result.get("bonus_wp", 0.0),
+			"directed": worship_result.get("directed", false),
+		},
+	}
 
 
 static func _execute_scout_enemy(
@@ -1812,3 +1878,232 @@ static func _compute_blockade_effects(action: NPCDataStructures.ScoredAction) ->
 	result["effect"] = "route_blocked"
 	result["requires_blockade"] = true
 	return result
+
+
+# -- Governance Actions --------------------------------------------------------
+
+static func _execute_appoint_to_position(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> Dictionary:
+	var target_id: int = action.metadata.get("target_npc_id", action.target_npc_id)
+	var position: String = action.metadata.get("position", "")
+	return {
+		"success": target_id >= 0,
+		"action_id": "APPOINT_TO_POSITION",
+		"character_id": ctx.character_id,
+		"target_npc_id": target_id,
+		"ic_day": ctx.ic_day,
+		"season": ctx.season,
+		"effects": {
+			"requires_appointment": true,
+			"appointing_lord_id": ctx.character_id,
+			"appointee_id": target_id,
+			"position": position,
+		},
+	}
+
+
+static func _execute_arrange_marriage(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	dice_engine: DiceEngine,
+	characters_by_id: Dictionary,
+) -> Dictionary:
+	var candidate_id: int = action.metadata.get("candidate_id", -1)
+	var target_lord_id: int = action.metadata.get("target_lord_id", -1)
+	var target_candidate_id: int = action.metadata.get("target_candidate_id", -1)
+
+	if candidate_id < 0 or target_lord_id < 0:
+		return {
+			"success": false,
+			"action_id": "ARRANGE_MARRIAGE",
+			"character_id": ctx.character_id,
+			"ic_day": ctx.ic_day,
+			"season": ctx.season,
+			"reason": "missing_metadata",
+			"effects": {},
+		}
+
+	var target_lord: L5RCharacterData = characters_by_id.get(target_lord_id) as L5RCharacterData
+	if target_lord == null:
+		return {
+			"success": false,
+			"action_id": "ARRANGE_MARRIAGE",
+			"character_id": ctx.character_id,
+			"ic_day": ctx.ic_day,
+			"season": ctx.season,
+			"reason": "target_lord_not_found",
+			"effects": {},
+		}
+
+	if target_candidate_id < 0:
+		target_candidate_id = _find_best_marriage_candidate(
+			target_lord, characters_by_id,
+		)
+		if target_candidate_id < 0:
+			return {
+				"success": false,
+				"action_id": "ARRANGE_MARRIAGE",
+				"character_id": ctx.character_id,
+				"ic_day": ctx.ic_day,
+				"season": ctx.season,
+				"reason": "no_target_candidate",
+				"effects": {},
+			}
+
+	var proposing_disp: int = target_lord.disposition_values.get(ctx.character_id, 0)
+	var candidate_char: L5RCharacterData = characters_by_id.get(target_candidate_id) as L5RCharacterData
+	var char_value: int = 0
+	if candidate_char != null:
+		char_value = int(candidate_char.status * 2 + candidate_char.glory)
+	var favor_tier: int = action.metadata.get("favor_tier", 0)
+	var has_mil_obj: bool = action.metadata.get("has_military_objective", false)
+
+	var acceptance_score: int = MarriageSystem.evaluate_proposal(
+		proposing_disp, char_value, favor_tier, has_mil_obj,
+	)
+
+	if MarriageSystem.is_benten_festival(ctx.ic_day):
+		acceptance_score += MarriageSystem.BENTEN_FESTIVAL_BONUS
+
+	if acceptance_score < 0:
+		return {
+			"success": false,
+			"action_id": "ARRANGE_MARRIAGE",
+			"character_id": ctx.character_id,
+			"target_npc_id": target_lord_id,
+			"ic_day": ctx.ic_day,
+			"season": ctx.season,
+			"effects": {
+				"marriage_rejected": true,
+				"proposing_lord_id": ctx.character_id,
+				"target_lord_id": target_lord_id,
+				"disposition_change": -3,
+			},
+		}
+
+	var candidate_a: L5RCharacterData = characters_by_id.get(candidate_id) as L5RCharacterData
+	var marriage_type: MarriageSystem.MarriageType = MarriageSystem.MarriageType.CROSS_CLAN
+	if candidate_a != null and candidate_char != null:
+		if candidate_a.clan == candidate_char.clan:
+			if candidate_a.family == candidate_char.family:
+				marriage_type = MarriageSystem.MarriageType.WITHIN_FAMILY
+			else:
+				marriage_type = MarriageSystem.MarriageType.BETWEEN_FAMILIES
+
+	return {
+		"success": true,
+		"action_id": "ARRANGE_MARRIAGE",
+		"character_id": ctx.character_id,
+		"target_npc_id": target_lord_id,
+		"ic_day": ctx.ic_day,
+		"season": ctx.season,
+		"effects": {
+			"requires_marriage": true,
+			"proposing_lord_id": ctx.character_id,
+			"target_lord_id": target_lord_id,
+			"candidate_a_id": candidate_id,
+			"candidate_b_id": target_candidate_id,
+			"marriage_type": marriage_type,
+			"acceptance_score": acceptance_score,
+		},
+	}
+
+
+static func _find_best_marriage_candidate(
+	lord: L5RCharacterData,
+	characters_by_id: Dictionary,
+) -> int:
+	var best_id: int = -1
+	var best_value: int = -1
+	for cid: int in characters_by_id:
+		var c: L5RCharacterData = characters_by_id[cid] as L5RCharacterData
+		if c == null:
+			continue
+		if c.character_id == lord.character_id:
+			continue
+		if c.spouse_id >= 0:
+			continue
+		if CharacterStats.is_dead(c):
+			continue
+		var is_vassal: bool = c.lord_id == lord.character_id
+		var is_child: bool = lord.children_ids.has(c.character_id)
+		if not is_vassal and not is_child:
+			continue
+		var value: int = int(c.status * 2 + c.glory)
+		if value > best_value:
+			best_value = value
+			best_id = c.character_id
+	return best_id
+
+
+# -- Winter Court Skill Bonus --------------------------------------------------
+
+static func _get_winter_court_skill_bonus(
+	character: L5RCharacterData,
+	skill_name: String,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> int:
+	if not WinterCourtSystem.is_home_ground_skill(skill_name):
+		return 0
+	var court_dict: Dictionary = ctx.active_court_at_location
+	if court_dict.is_empty():
+		return 0
+	if court_dict.get("court_type", -1) != CourtSessionData.CourtType.IMPERIAL_WINTER_COURT:
+		return 0
+	if character.clan != court_dict.get("host_clan", ""):
+		return 0
+	return WinterCourtSystem.HOST_SKILL_BONUS
+
+
+# -- Construction Intercepts ---------------------------------------------------
+
+const _CONSTRUCTION_ACTIONS: Array[String] = [
+	"FOUND_VILLAGE", "BUILD_FORTIFICATION", "BUILD_SHRINE",
+	"FOUND_TEMPLE", "FOUND_MONASTERY", "COMMISSION_SHIP",
+]
+
+const _CONSTRUCTION_TYPE_MAP: Dictionary = {
+	"BUILD_SHRINE": "shrine",
+	"FOUND_VILLAGE": "village",
+	"BUILD_FORTIFICATION": "fortification",
+	"FOUND_TEMPLE": "temple",
+	"FOUND_MONASTERY": "monastery",
+	"COMMISSION_SHIP": "ship",
+}
+
+
+static func _execute_construction(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> Dictionary:
+	var action_id: String = action.action_id
+	var ctype: String = _CONSTRUCTION_TYPE_MAP.get(action_id, "")
+	var meta: Dictionary = action.metadata if action.metadata != null else {}
+
+	var effects: Dictionary = {
+		"requires_construction": true,
+		"construction_action": action_id,
+		"construction_category": ctype,
+		"province_id": action.target_province_id if action.target_province_id >= 0 else meta.get("province_id", -1),
+		"settlement_id": action.target_settlement_id if action.target_settlement_id >= 0 else meta.get("settlement_id", -1),
+		"is_dedicated": meta.get("is_dedicated", false),
+		"dedicated_fortune": meta.get("dedicated_fortune", -1),
+		"ship_class": meta.get("ship_class", -1),
+		"shrine_tier": meta.get("shrine_tier", "roadside"),
+	}
+
+	return {
+		"success": true,
+		"action_id": action_id,
+		"character_id": character.character_id,
+		"target_npc_id": action.target_npc_id,
+		"target_province_id": effects["province_id"],
+		"ic_day": ctx.ic_day,
+		"season": ctx.season,
+		"effects": effects,
+	}

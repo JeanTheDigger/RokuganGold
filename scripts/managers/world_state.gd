@@ -75,6 +75,27 @@ var active_hordes: Array[HordeData] = []
 var horde_strength_counters: Dictionary = {}
 var last_targeted_province_id: Array[int] = [-1]
 
+# -- Naval System (s11.9) -----------------------------------------------------
+var ships: Array[ShipData] = []
+
+# -- Gempukku / Population (s52) -----------------------------------------------
+var children: Array[ChildRecord] = []
+var next_character_id: Array[int] = [10000]
+
+# -- Otomo Seiyaku (s55.22b) ---------------------------------------------------
+var seiyaku_state: Dictionary = OtomoSeiyakuSystem.make_initial_state()
+
+# -- Marriages (s22.7) --------------------------------------------------------
+var marriages: Array[Dictionary] = []
+
+# -- Construction Queue (s4.3.22) ----------------------------------------------
+var constructions: Array[ConstructionData] = []
+var next_settlement_id: Array[int] = [5000]
+var next_construction_id: Array[int] = [1]
+
+# -- Kami Worship (s4.3.21) ---------------------------------------------------
+var worship_state: Dictionary = WorshipSystem.make_initial_worship_state()
+
 # -- Collective Disposition (s12.2b) -------------------------------------------
 # Clan-to-clan and family-to-family baselines keyed by sorted "a||b" strings.
 # Initialized to the locked PROVISIONAL pre-Scorpion-Coup starting values.
@@ -112,6 +133,8 @@ func _sync_wars_to_world_states() -> void:
 	world_states["active_wars"] = WarSystem.wars_to_context_array(active_wars)
 	world_states["province_data"] = provinces.values()
 	world_states["settlements"] = settlements
+	world_states["clan_baselines"] = clan_baselines
+	world_states["family_baselines"] = family_baselines
 
 
 func advance_one_day() -> Dictionary:
@@ -165,6 +188,15 @@ func advance_one_day() -> Dictionary:
 		active_hordes,
 		horde_strength_counters,
 		last_targeted_province_id,
+		ships,
+		children,
+		next_character_id,
+		seiyaku_state,
+		marriages,
+		worship_state,
+		constructions,
+		next_settlement_id,
+		next_construction_id,
 	)
 
 

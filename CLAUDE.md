@@ -61,6 +61,7 @@ When implementing or auditing a system, go here first:
 | Imperial Edicts                               | 15.1, 15.2, 55.10 |
 | Winter Court lifecycle (host selection,       | 55.10              |
 |   invitations, delegation, Emperor's Peace)   |                    |
+| Ship types & naval trade                      | 11.9               |
 | Musha Shugyo (warrior's pilgrimage)           | 57.48              |
 
 ## Directory Structure
@@ -115,6 +116,12 @@ When implementing or auditing a system, go here first:
 - Dead characters always carry NEUTRAL subject_role valence.
 - Spirit realms are not evil except Jigoku. Do not implement jade as a
   general-purpose spirit ward.
+- **Check existing channels before wiring any ActionID.** Before adding an
+  ActionID to a context action list, creating an executor intercept, or
+  assigning an AP cost, verify that the action does not already have a
+  dedicated system (Strategic Review directives, daily letter pass, reactive
+  events, etc.). If a channel already handles it, the wiring belongs in that
+  system — not the daily AP loop. Do not create duplicate execution paths.
 - **Do not invent mechanics.** Every game mechanic, numeric value, enum value,
   edict type, action type, honor cost, disposition modifier, deadline, threshold,
   or behavioral rule must trace back to a specific LOCKED GDD section or to an
@@ -418,7 +425,7 @@ All in /tests/, one file per system:
 - test_effect_applicator.gd (~37 tests)
 - test_npc_wave_resolver.gd (~15 tests)
 - test_resource_tick.gd (~30 tests)
-- test_objective_decomposer.gd (~110 tests)
+- test_objective_decomposer.gd (~125 tests)
 - test_information_system.gd (~40 tests)
 - test_topic_system.gd (~55 tests)
 - test_investigation_system.gd (~40 tests)
@@ -493,6 +500,100 @@ All in /tests/, one file per system:
 - test_imperial_edict_system.gd (~57 tests)
 - test_horde_system.gd (~43 tests)
 - test_oni_generator.gd (~80 tests)
+- test_naval_system.gd (~113 tests)
+- test_naval_combat_system.gd (~46 tests)
+- test_naval_wiring.gd (~35 tests)
+- test_monk_objective_system.gd (~59 tests)
+- test_winter_court_system.gd (~80 tests)
+- test_gempukku_system.gd (~55 tests)
+- test_otomo_seiyaku_system.gd (~55 tests)
+- test_world_population_generator.gd (~56 tests)
+- test_npc_advancement.gd (~56 tests)
+- test_ronin_system.gd (~44 tests)
+- test_musha_shugyo_system.gd (~75 tests)
+- test_governance_wiring.gd (~78 tests)
+- test_marriage_wiring.gd (~65 tests)
+- test_worship_system.gd (~67 tests)
+- test_worship_wiring.gd (~50 tests)
+- test_construction_system.gd (~89 tests)
+
+### Governance Action Wiring (s57.20)
+- **APPOINT_TO_POSITION** — Daily AP action (1 AP, lord-only). Executor
+  intercept returns `requires_appointment` flag. DayOrchestrator
+  `_apply_appointment()` mutates `role_position` and
+  `operational_superior_id` on the appointee.
+- **REASSIGN_VASSAL_OBJECTIVE** — Strategic Review directive consumption.
+  `_process_vassal_reassignments()` handles ASSIGN/CONFIRM/MODIFY/CANCEL
+  decisions, mutating `objectives_map` entries.
+- **Lord-only gating** — `LORD_ONLY_ACTIONS` constant (11 actions) and
+  `_is_lord_only_blocked()` prevent non-lord NPCs from selecting
+  governance/construction actions in Phase 3.
+- **ARRANGE_MARRIAGE** — Daily AP action (1 AP, lord-only). Executor
+  intercept evaluates target lord acceptance via
+  `MarriageSystem.evaluate_proposal()`. Returns `requires_marriage` on
+  acceptance or `marriage_rejected` with −3 disposition on rejection.
+  Marriage type auto-detected from candidate clan/family. Orchestrator
+  `_apply_marriage()` mutates `spouse_id` on both characters, creates
+  marriage record, applies clan/family baseline boosts via
+  `CollectiveDisposition.apply_marriage()`, creates MODERATE GENERAL
+  FavorData for cross-clan marriages (creditor=target lord,
+  debtor=proposing lord), and generates Tier 4 POLITICAL marriage topic
+  with type-specific variant. WorldStateData gains
+  `marriages: Array[Dictionary]`.
+- **Moving character reassignment** — `_reassign_moving_character()` saves
+  `birth_clan`/`birth_family` on the moving character, then overwrites
+  `clan`/`family`/`lord_id` with the staying character's values. Within-family
+  marriages skip reassignment (moving_id = -1). `L5RCharacterData` gains
+  `birth_clan: String` and `birth_family: String` fields.
+- **Pregnancy processing** — `_process_pregnancy_checks()` runs seasonally.
+  Iterates active marriages, skips dead/same-gender spouses, averages
+  bilateral disposition, rolls against `MarriageSystem.check_pregnancy()`
+  thresholds (hostile 0%, stranger 5%, friend 15%, close 25%). On success,
+  creates ChildRecord via `GempukkuSystem.create_child_at_birth()`, updates
+  both parents' `children_ids` and the marriage record's `children_ids`.
+  Uses `next_character_id` counter for child IDs.
+- **Birth family disposition floors** — `DispositionSystem.get_effective_disposition()`
+  enforces `BIRTH_FAMILY_DISPOSITION_FLOOR` (+15) and `BIRTH_CLAN_DISPOSITION_FLOOR`
+  (+8) from MarriageSystem constants. `_get_birth_family_floor()` checks if the
+  target belongs to the actor's `birth_family` (higher floor) or `birth_clan`
+  (lower floor). Only fires when `actor.birth_clan` is non-empty (character was
+  moved via marriage). Floor is applied after family bonds, before final clamp.
+- **ARRANGE_MARRIAGE decomposition** — Lords with unmarried vassals/children
+  and cross-clan contacts produce ARRANGE_MARRIAGE needs from three standing
+  objective trees: ADVANCE_FAMILY (priority 2, before war check),
+  ACCUMULATE_LEVERAGE (priority 1, at own holdings), MAINTAIN_PEACE
+  (priority 2, preventive diplomacy when no active war). `_try_arrange_marriage()`
+  helper checks lord status, AT_OWN_HOLDINGS context, marriageable candidates,
+  90-day cooldown (scans action_log), and target lord contacts.
+  `_find_cross_clan_lord()` picks lowest-disposition cross-clan contact with
+  disposition >= -10 (maximizes diplomatic benefit). Between-families fallback:
+  `_find_between_families_lord()` finds same-clan different-family lords when
+  no cross-clan contacts are available, using the same lowest-disposition
+  scoring. Cross-clan is always preferred over between-families.
+  Benten Festival bonus: +20 acceptance score on proposals made on the 9th
+  day of month 12 via `MarriageSystem.BENTEN_FESTIVAL_BONUS`.
+  ContextSnapshot gains `marriageable_vassal_ids: Array[int]` populated in
+  `build_context()` via `_find_marriageable_vassals()` (scans chars_by_id for
+  unmarried vassals/children of the lord). `succession_insecure: bool` and
+  `lord_is_unmarried: bool` added to ContextSnapshot — populated from
+  `designated_heir_id` and `children_ids` in build_context(). ActionExecutor
+  gains `_find_best_marriage_candidate()` for auto-selecting the target lord's
+  best unmarried vassal when the decomposer doesn't specify one
+  (target_candidate_id = -1).
+  **Succession-insecurity marriage (s57.20.2)** —
+  `_try_succession_marriage()` in ObjectiveDecomposer fires from
+  PROTECT_DEPENDENTS when lord has no heir and no children (after crisis/
+  garrison/stability/rice checks). Unmarried lords propose themselves as
+  candidate at priority 3 (urgent succession securing). Married lords
+  without children marry off a vassal at priority 2. Same cross-clan
+  preference and 90-day cooldown as other marriage paths.
+- CALL_COURT, ASSIGN_VASSAL_OBJECTIVE, and SEND_INVITATION are NOT daily
+  AP actions — they route through Strategic Review and the daily letter
+  system respectively.
+- Infrastructure ActionIDs (FOUND_VILLAGE, BUILD_FORTIFICATION, BUILD_SHRINE,
+  FOUND_TEMPLE, FOUND_MONASTERY, COMMISSION_SHIP) are in context lists and
+  scoring tables but executor→orchestrator mutation pipeline is blocked on
+  missing GDD sections 4.3.21/4.3.22.
 
 ### Festival System (s11.5)
 - **simulation/festival_system.gd** — Empire-wide canonical festivals, Rokuyo
@@ -2198,6 +2299,622 @@ All in /tests/, one file per system:
   ArmyCombatSystem), Spawn company generation (s2.4.6), garrison shortage
   NPC pipeline (Taisa/Shireikan letter campaign, s2.4.12–s2.4.14).
 
+### Ship Types & Naval System (s11.9)
+- **shared/ship_data.gd** — ShipData Resource: ship_id, ship_class (ShipClass enum),
+  owning_clan, captain_id, current_province_id, current_subtile_id, ship_name,
+  combat stats (health, max_health, attack, defense, morale, morale_defense),
+  is_destroyed, is_captured, captured_by_clan, movement state, construction_cost,
+  cargo_capacity, ic_day_launched.
+- **simulation/naval_system.gd** — Full naval mechanics per GDD s11.9. Pure static
+  functions (DiceEngine passed where needed).
+  **Ship stat blocks** — 7 ship classes: Kobune (H100/A3/D3/M12/MD4, cargo 0.3,
+  flat-bottomed, river+coastal), Sampan (H30/A0/D1/M4/MD0, cargo 0.1),
+  Merchant Barge (H80/A1/D2/M6/MD1, cargo 0.5), Sengokobune (H130/A4/D4/M14/MD5,
+  cargo 0.5, ocean-capable), Koutetsukan (H200/A6/D8/M20/MD8, military, 2 days/
+  subtile, no ocean), Atakebune (H250/A7/D6/M18/MD7, military, Mantis-only,
+  ocean), Tortoise Oceangoing (H130/A3/D4/M14/MD5, cost 10 koku, ocean).
+  **Water traversal** — `can_traverse()` validates ship class against water
+  sub-tile type (river, lake, coastal, ocean). `is_ocean_capable()`, deep ocean
+  10% catastrophic loss for non-capable vessels.
+  **Clan exclusivity** — Signature ships (Atakebune→Mantis, Koutetsukan→Crab),
+  clan-exclusive operation checks. `evaluate_signature_capture_decision()` maps
+  personality virtue to destroy/keep/return.
+  **Weather at sea** — d100 seasonal weather table (Clear/Wind/Rain/Storm/Typhoon).
+  Typhoon only in Autumn and Winter (5%). Inland downgrades Typhoon to Storm.
+  Global modifiers: Rain −1 Atk, Storm −2 Atk, Typhoon −3 Atk −2 Def.
+  Ship-specific: flat-bottomed Storm −1 Def / Typhoon −2 Def; Koutetsukan
+  Storm/Typhoon extra −1 Atk. Sengokobune/Atakebune/Tortoise no extra penalties.
+  `get_effective_attack()` / `get_effective_defense()` apply all modifiers with
+  floor at 0. Mantis crew bonus: +1 to Sengokobune combat rolls.
+  **Kobune ranged** — Reserve Row archer support: 1d5 clear/wind, 1d3 rain,
+  suppressed in storm/typhoon. `resolve_kobune_ranged()` rolls and adds attack.
+  **Ram attack** — Koutetsukan only, +8 Attack, 5 self-damage, once per battle.
+  **Boarding** — Koutetsukan immune. Sampan cannot initiate. First round −2 Atk.
+  Capture prize = half construction cost.
+  **Tortoise Escape Attempt** — Navigation+Intelligence contested vs
+  Battle+Intelligence. Weather bonuses: Wind +1k0, Storm +2k0, Typhoon +3k0.
+  Once per engagement.
+  **Tortoise recognition** — Kaiu Engineer, Mantis Kobune Captain Rank 3+,
+  Sailing 5+ auto-recognize gaijin construction. TN 25/20/15 by access level.
+  Tier 2 clan-level secret.
+  **Naval trade routes** — Ocean routes require Sengokobune/Atakebune/Tortoise.
+  Mantis −10% pirate spawn, +3 suppression rolls.
+  **River combat** — Only Kobune/Sampan/Merchant Barge. Max 2 abreast (3 major
+  river). Downstream +1 Atk, upstream −1 Atk. Grounding: Strength TN 15 to free.
+  No flanking on rivers.
+  **Shore attacks** — Shore-to-ship normal, ship-to-shore −2 Atk.
+  **Navigation bonuses** — Direction finder +1k0 (Mantis only), shugenja assist
+  +2k0 (Water TN 20), Tortoise ocean +1k0. All stack.
+  **Civilian vessels** — Merchant Barge auto-surrenders at morale 0. Sampan
+  auto-flees on contact.
+- **shared/enums.gd** gains `NavalWeather` (5 values), `WaterSubtileType` (4
+  values), `NavalEngagementLevel` (4 values).
+  Deferred: Ship movement processing (needs coordinate system),
+  weather-per-subtile-per-day integration with DayOrchestrator,
+  Heroic Opportunities at sea (Category 9).
+
+### Naval Combat System (s11.9)
+- **simulation/naval_combat_system.gd** — Ship-to-ship battle resolution per
+  GDD s11.9. Follows ArmyCombatSystem's row/column grid pattern with
+  naval-specific rules. Pure static functions.
+  `make_naval_company()` converts ShipData to battle state dict with weather
+  modifiers pre-applied. Civilian flags (auto_surrenders, auto_flees) set from
+  ship class. Kobune in Reserve Row flagged as ranged.
+  `process_civilians()` pre-battle: Sampans auto-flee (removed from combat),
+  Merchant Barges auto-surrender (captured) when enemy warships present.
+  `resolve_naval_battle()` main entry point: processes civilians, applies river
+  modifiers if applicable, runs combat rounds up to 200 cap, returns victor,
+  round log, captain deaths, captured ships, weather.
+  **No flanking** — ships engage front-to-front or front-to-side only. Matchups
+  are column-based; unmatched ships wait (no flanking maneuvers at sea).
+  **Weather replaces terrain** — weather modifiers applied during
+  `make_naval_company()`, not per-round. Atakebune adjacent defense bonus (+3)
+  applied per round to row-adjacent allies.
+  **Kobune ranged from Reserve Row** — fires each round using weather-dependent
+  dice (1d5 clear/wind, 1d3 rain, suppressed storm/typhoon). Kobune stays in
+  Reserve Row on promotion (same as archers on land). Kobune in Forward Row
+  gets +1 Attack on Round 1 only (archers loose before boarding).
+  **Boarding first-round penalty** — all ships take −2 Attack on Round 1
+  (crossing between ships). Subsequent rounds normal.
+  **Koutetsukan** — immune to boarding (cannot engage or be engaged in standard
+  combat). `resolve_ram_in_battle()` once per battle: +8 Attack, 5 self-damage,
+  mutates health directly. Koutetsukan fights only via ramming.
+  **Atakebune** — +3 Defense to adjacent friendly ships on same row.
+  **Civilian surrender** — Merchant Barges that reach morale 0 are captured
+  instead of routing.
+  **Captain survival** — mirrors commander survival from ArmyCombatSystem:
+  Earth+Battle vs TN at health thresholds (75%/50%/25%/0%). Injured captains
+  lose bonus. Dead captains trigger +3 morale modifier.
+  **Morale** — same structure as land: heavy loss (+2), low health (+1),
+  captain death (+3). Rout contagion to adjacent same-row ships.
+  **Rout resolution** — `resolve_naval_rout()` always uses low pursuit %
+  (no cavalry at sea). 20% threshold for fleet dissolution.
+  **Captured ships** — `_collect_captured_ships()` collects surrendered and
+  destroyed (non-Koutetsukan) ships with prize value (half construction cost).
+  **River modifiers** — downstream +1 Atk, upstream −1 Atk applied at battle
+  start via `_apply_river_modifiers()`.
+  Deferred: Tortoise Escape Attempt integration into battle round,
+  Heroic Opportunities at sea (Category 9).
+
+### Naval System DayOrchestrator Wiring (s11.9)
+- **DayOrchestrator naval processing** — Six naval functions wired into the
+  daily tick loop:
+  `_process_naval_weather()` rolls daily weather via
+  `NavalSystem.determine_weather()`, stores result in
+  `season_meta["current_naval_weather"]`. Single global weather per day
+  (placeholder until sub-tile weather system exists).
+  `_process_ship_movement()` decrements `movement_days_remaining` for all
+  active ships. On arrival: updates `current_subtile_id`, clears movement
+  state. Deep ocean loss: non-ocean-capable ships have 10% catastrophic
+  loss chance on arrival (per GDD). `ShipData.is_destroyed` set on loss.
+  `_process_naval_battle_triggers()` groups stationary ships by sub-tile,
+  finds hostile clan pairs via `WarSystem.are_clans_at_war()`, resolves
+  naval combat via `NavalCombatSystem.resolve_naval_battle()`. Excludes
+  destroyed, captured, moving, and docked (subtile_id < 0) ships.
+  `_resolve_naval_engagement()` builds battle states from ShipData arrays
+  with captain bonuses (Battle skill rank, ring-determined type). Kobune
+  at col > 0 placed in Reserve Row for ranged support.
+  `_apply_naval_battle_mutations()` writes battle results back to ShipData:
+  health updates, destroyed/captured flags, captured_by_clan assignment,
+  captain cleared from ship on captain death.
+  `_process_naval_war_scores()` feeds naval battle outcomes into war score:
+  minor (1-3 ships, +3), major (4-7, +8), decisive (8+, +15). Uses
+  `WarSystem.apply_score_shift()`.
+  `_generate_naval_battle_topics()` creates Tier 3 MILITARY topics with
+  `naval_battle` variant and momentum 30 for each engagement.
+  `_compute_captain_bonus()` mirrors ArmyCombatSystem commander bonus:
+  Battle skill rank as value, highest Ring determines type (Fire/Water →
+  attack, Earth/Air → defense, Void → morale).
+  New param on `advance_day()`: `ships: Array[ShipData]`.
+  Return dict gains `naval_weather`, `naval_movement_results`,
+  `naval_battle_results`, `naval_topics`.
+  WorldStateData gains `ships: Array[ShipData]` field, threaded through
+  `advance_one_day()`.
+  Deferred: ship movement initiation (needs coordinate system for
+  pathfinding), weather per-sub-tile (needs sub-tile system), naval
+  blockade integration.
+
+### Named Monk Standing Objectives (s55.11b)
+- **simulation/monk_objective_system.gd** — Monk-specific standing objective
+  assignment and decomposition per GDD s55.11b. Pure static functions. Five
+  standing objectives: HELP_PEOPLE, FIGHT_BANDITS, MEDITATE_DEEPLY,
+  TRAIN_MASTERY, WORSHIP_KAMI. All use existing NeedTypes and ActionIDs — no
+  new engine components.
+  `is_monk()` checks `school_type == MONK`. `is_combat_monk()` detects Sohei
+  and Yamabushi school prefixes. `assign_standing_objective()` routes combat
+  monks to FIGHT_BANDITS, then dispatches by bushido virtue: JIN→HELP_PEOPLE,
+  CHUGI/REI→WORSHIP_KAMI, GI/MEIYO→TRAIN_MASTERY, MAKOTO→MEDITATE_DEEPLY,
+  YU→FIGHT_BANDITS, fallback→MEDITATE_DEEPLY.
+  Five decomposition trees:
+  `_decompose_help_people()` — famine crisis provinces first (from
+  `ctx.famine_crisis_province_ids`), then lowest-stability province (below
+  60.0), then context-based RAISE_DISPOSITION.
+  `_decompose_fight_bandits()` — active insurgency → PATROL_PROVINCE,
+  bandit/ronin crisis or low stability → INVESTIGATE_THREAT, temple/holdings
+  → TRAIN_SKILL, default → PATROL_PROVINCE.
+  `_decompose_meditate_deeply()` — PERFORM_RITUAL with priority 3 at temple,
+  2 at holdings, 1 at court/traveling, 2 default.
+  `_decompose_train_mastery()` — TRAIN_SKILL with priority 3 at dojo, 2 at
+  temple/holdings, 1 traveling/default.
+  `_decompose_worship_kami()` — PERFORM_RITUAL with shrine_eligible zone flag
+  check for holdings priority (2 if shrine, 1 if not), 3 at temple, 1
+  court/traveling, 2 default.
+  `_find_worst_stability_province()` scans ProvinceStatus array for lowest
+  stability. `_make_need()` factory produces ImmediateNeed with source
+  "monk_decomposition".
+- **simulation/objective_decomposer.gd** — Monk objective routing added before
+  political objectives: `MonkObjectiveSystem.is_monk_objective()` check
+  dispatches to `MonkObjectiveSystem.decompose()`.
+
+### Winter Court System Rewrite (s55.10)
+- **simulation/winter_court_system.gd** — Full Winter Court lifecycle per GDD
+  s55.10. Replaces the placeholder `_evaluate_winter_court_host()` and
+  `_create_winter_court_from_directive()`. Pure static functions.
+  Castle-level host selection with 5 scoring factors (Disposition, Clan
+  Recency, Province Stability, Crisis Relevance, Family Prestige), each
+  normalized 0–10 and weighted by per-archetype weight matrices (total 50).
+  Hard disqualifiers: not Capital, stability >= 30, not occupied.
+  Cunning archetype uses inverse bell curve for Disposition scoring.
+  Benevolent filters for humanitarian crisis types, Warlike for military,
+  Cunning accepts all, Iron/Tyrant weight crisis at 0.
+  Three-phase invitation pipeline: Phase 1 delegation capacity by host lord
+  rank (Provincial=70, Family=105, Champion=150 total, 8/13/19 per Great
+  Clan). Phase 2 champion delegation scoring (Court Skills 15, Status+Glory
+  10, Disposition 10, Agenda Relevance 10, School Type 5) with yojimbo
+  pull-in rule. Phase 3 personal Imperial invitations (Disposition, Prestige,
+  Crisis Relevance, School Type, total 30, per-archetype weights; Warlike
+  inverts school type ranking).
+  Emperor's Peace: hostile-tagged actions blocked within court settlement
+  during active session. Sanctioned duel (CHALLENGE_TO_DUEL with
+  authorization) exempt. Covert actions (EAVESDROP, FABRICATE_SECRET,
+  INTERCEPT_LETTER, SEARCH_QUARTERS, BRIBE_FOR_INFO) explicitly permitted.
+  Host prestige: +0.5 Glory host family daimyo, +0.3 host Clan Champion,
+  +0.1 all host clan delegates. +5 flat bonus to Etiquette/Courtier/Sincerity
+  for host clan during court. Agenda ordering: 45/35/25 court days.
+  Regent substitution: Imperial Chancellor with neutral 10/10/10/10/10
+  weights when Emperor dead. No edicts, prestige 2. Vacant chancellor = no
+  Winter Court that year.
+  WINTER_COURT_ANNOUNCED topic: Tier 3, POLITICAL, non-positional, resolves
+  on court close. Grace period: 15 days.
+- **shared/court_session_data.gd** — Gains `is_regent_court`,
+  `host_family_daimyo_id`, `clan_champion_id`, `grace_period_days`,
+  `no_edicts`, `personal_invitation_ids`, `clan_delegation_ids`,
+  `announcement_topic_id` fields.
+- **simulation/day_orchestrator.gd** — `_create_winter_court_from_directive()`
+  rewritten to use full WinterCourtSystem pipeline. Accepts provinces,
+  settlements, archetype, next_topic_id. Creates court with invitation
+  pipeline, generates WINTER_COURT_ANNOUNCED topic. Court close processing
+  adds glory distribution and announcement topic resolution for
+  IMPERIAL_WINTER_COURT type. Legacy fallback for callers without province/
+  settlement data. `_dict_values_to_province_array()` helper added.
+  `_dispatch_winter_court_summons()` sends Imperial summons letters to all
+  Great Clan Champions (lord_id==-1, status>=7.0, not host clan, not
+  Imperial) via LetterSystem with province_distance=3 and has_miya_route=true.
+  Threaded through `_process_strategic_court_calls()`.
+- **simulation/action_executor.gd** — `_get_winter_court_skill_bonus()`
+  checks active_court_at_location context for IMPERIAL_WINTER_COURT type and
+  host clan match. Returns +5 flat_bonus for Etiquette/Courtier/Sincerity
+  via WinterCourtSystem.is_home_ground_skill(). Wired into main execute path
+  as `flat_bonus` parameter on SkillResolver.resolve_skill_check().
+- **Late arrival** — Already handled by existing `_process_court_attendance()`:
+  any character arriving at the host settlement during an active court is
+  automatically added to the attendee list on arrival day, per GDD s55.10.
+  Deferred: grace period entertainment, Champion agenda ordering AI.
+
+### Gempukku NPC Spawning & Population System (s52, s22.4, s22.7)
+- **shared/child_record.gd** — `ChildRecord` Resource: lightweight pre-gempukku
+  placeholder per GDD s52 Trigger 2. Fields: child_id, child_name, father_id,
+  mother_id, clan, family, gender, orientation, ic_day_born, is_alive.
+  `GEMPUKKU_AGE_DAYS = 6480` (18 IC years × 360). `is_gempukku_ready()`,
+  `get_age_days()` helpers.
+- **simulation/gempukku_system.gd** — `GempukkuSystem` pure static functions.
+  **Orientation**: 85% straight, 10% gay, 5% bisexual (s52 Trigger 2).
+  **Gender**: school-specific weights (Utaku 0% male, Matsu 20% male, Daidoji
+  70% male, Asahina 40% male, default 55% male) per s52 Part 7.
+  **School assignment**: `FAMILY_DEFAULT_SCHOOL` maps all 30 families to their
+  canonical school. Gender-restricted schools (Utaku Battle Maiden → female only)
+  with fallback (male Utaku → Shinjo Bushi).
+  **Name generation**: Clan-specific syllable tables (s52 Part 6) for all 8 Great
+  Clans × male/female. 70% two-syllable, 30% three-syllable names.
+  **Population thresholds**: Per-clan per-rank minimums from s52 (Crab 196,
+  Crane 196, Dragon 79, Lion 254, Phoenix 146, Scorpion 146, Unicorn 146,
+  Mantis 79). `count_clan_population()` counts living characters by insight rank.
+  `get_replenishment_needed()` returns Rank 1 deficit count.
+  **Natural death**: Age-based seasonal mortality (s52 Part 4): under 50 = 0%,
+  50–65 = 1%, 65–75 = 3%, 75–85 = 8%, 85+ = 20%.
+  **Gempukku processing**: `process_gempukku()` promotes a ready child to Rank 1
+  via `WorldGenerator.generate_character()`. School assigned by family, parent
+  IDs preserved, orientation carried over.
+  **Birth helper**: `create_child_at_birth()` creates ChildRecord with generated
+  name, gender, and orientation.
+  **Replenishment**: `generate_replenishment_character()` creates Rank 1 NPCs
+  for depleted clans from random family selection.
+  **Seasonal entry point**: `process_seasonal_gempukku()` processes all ready
+  children, checks population thresholds, runs natural death rolls, integrates
+  with `MushaShugyo.evaluate_at_gempukku()`.
+  Mantis schools (Yoritomo Bushi, Moshi Shugenja, Tsuruchi Archer) are mapped
+  in FAMILY_DEFAULT_SCHOOL but not yet in WorldGenerator.SCHOOL_DATA — characters
+  generate with basic stats only until Mantis school data is added.
+- **shared/character_data.gd** — `orientation: String = "straight"` added to
+  identity block.
+- **DayOrchestrator wiring** — `_process_gempukku()` runs on season boundary
+  after insurgencies. Adds new characters to arrays + characters_by_id. Removes
+  graduated children. Sets lethal wounds on natural death victims. Generates
+  Tier 4 PERSONAL death topics. Wires musha shugyo objectives for pilgrimage
+  characters. New params: `children: Array[ChildRecord]`,
+  `next_character_id: Array[int]`. Return dict gains `gempukku_results`.
+- **WorldStateData** gains `children: Array[ChildRecord]` and
+  `next_character_id: Array[int]` fields.
+
+### Otomo Seiyaku System — Alliance Suppression (s55.22b)
+- **simulation/otomo_seiyaku_system.gd** — `OtomoSeiyakuSystem` pure static
+  class per GDD s55.22b. The Otomo family monitors Champion-to-Champion
+  disposition across all 7 Great Clan pairs (21 total) and assigns operatives
+  to degrade dangerously warm relationships.
+  Emperor archetype thresholds: Benevolent 55, Iron 45, Cunning 35, Warlike 45,
+  Tyrant 25. Archetype pool bonuses: Cunning +1, Tyrant +2, others +0.
+  BASE_OPERATIVE_POOL = 3, plus half the Otomo courtier count.
+  `scan_champion_dispositions()` finds pairs above threshold, sorts by
+  magnitude desc. Warlike archetype exempts war-allied clans.
+  `assign_directives()` allocates operatives to alarm pairs up to pool size.
+  `cancel_directive()` frees operative when disposition drops below
+  threshold − CANCEL_BUFFER (10). `update_escalation()` escalates after
+  ESCALATION_SEASONS (2) consecutive seasons above threshold.
+  `check_exhaustion_topic()` fires once when pool exhausted with uncovered
+  alarms. `declare_formal_alliance()` / `dissolve_formal_alliance()` with
+  FORMAL_ALLIANCE_FLOOR = 31. `resolve_detection()` contested roll.
+  `apply_detection()` halves effectiveness, returns sympathy bonus.
+  `estimate_seasonal_effect()` estimates per-channel disposition damage
+  (court −3 to −8, visits −2 to −5, letters −1 to −2, combined −5 to −12).
+  `get_operative_skill_bonus()` returns +10 court skill for assigned ops.
+  `is_valid_target_pair()` excludes Imperial and same-clan.
+  `process_seasonal_review()` — main seasonal entry point.
+- **DayOrchestrator wiring** — `_process_seiyaku_review()` runs on season
+  boundary (when `seiyaku_state` is non-empty). Builds champion dispositions
+  by finding clan champions (status ≥ 7.0, no lord, living) and averaging
+  bilateral disposition_values. Gets Otomo courtier IDs (family="Otomo",
+  school_type=COURTIER, living). Generates Tier 4 POLITICAL exhaustion topic
+  when pool stretched. New param: `seiyaku_state: Dictionary`. Return dict
+  gains `seiyaku_results`.
+- **WorldStateData** gains `seiyaku_state: Dictionary` initialized from
+  `OtomoSeiyakuSystem.make_initial_state()`.
+
+### World Population Generator — One-Time Game Start Pass (s52 Part 1, s22.4, s22.8)
+- **simulation/world_population_generator.gd** — `WorldPopulationGenerator` pure
+  static class per GDD s52 Part 1, s22.4, s22.8. One-time world population pass
+  that fills every named position before game start.
+  39-value `PositionType` enum covering all positions from Emperor through
+  Samurai. `POSITION_RANK` and `POSITION_STATUS` const tables map each
+  position to its minimum Insight Rank and starting Status value.
+  `CLAN_FAMILIES` maps all 9 major factions (7 Great Clans + Mantis +
+  Imperial) to their constituent families. 14 Minor Clans defined.
+  `RANK_DISTRIBUTION` target population per clan per rank (3× minimum
+  thresholds from s52 Trigger 3): Lion largest (762), Dragon/Mantis
+  smallest (237 each).
+  School selection logic: `_get_school_for_position()` routes to bushi,
+  courtier, or shugenja schools based on position type, with cross-family
+  fallback within the same clan. School Masters use their family's
+  canonical school.
+  `_generate_positioned_character()` creates a character via
+  `WorldGenerator.generate_character()` with position-appropriate rank,
+  then overrides status to match position tier. Uses GempukkuSystem for
+  name generation, gender rolling, and orientation assignment.
+  **Step 1-2 (Imperial):** Emperor, Heir, 5 court officials, 6 Jeweled
+  Champions, 3 Imperial Family Daimyo (~15-17 characters).
+  **Step 2 (Per-Clan):** Champion, Family Daimyo (per family), Rikugunshokan,
+  Senior Courtier, Magistrate Commander, School Masters per school (~85 total).
+  **Step 2 (Military):** Taisa (3 per army) and Chui (7 per legion) for all
+  clan armies. Lion (4 armies) generates 12 Taisa + 84 Chui = 96 military
+  commanders.
+  **Step 2 (Province):** Provincial Daimyo, Clan Magistrate, Local Daimyo
+  (per town/city), Garrison Commander (per garrisoned settlement), Temple
+  Head / Monastery Abbot (per religious settlement). Scales with world map.
+  **Step 2 (Magistrate System):** 3 Asako Inquisitor leaders, 3 Kuni
+  Witch-Hunter leaders, 2 Kuroiban leaders.
+  **Step 2 (Minor Clans):** Champion + Senior per minor clan (28 total).
+  **Step 2 (Kaiu Wall):** 4 segment commanders (Kaiu), 1 Hiruma Scout
+  Commander.
+  **Step 3 (Rank Filling):** Generates samurai at each rank tier to meet
+  `RANK_DISTRIBUTION` targets. Fills deficit only — characters generated
+  by position steps count toward the target.
+  **Step 4 (Family Web):** `_build_family_web()` orchestrates parent
+  assignment (age-gated, same-family, max 4 children), marriage assignment
+  (40% marriage rate, 15% cross-clan), sibling linkage from shared parents.
+  `_generate_ancestor_records()` creates 1-4 AncestorRecord per character
+  for generation-3 grandparents.
+  **Step 5 (Dispositions):** `_apply_starting_dispositions()` seeds
+  disposition_values for all cross-clan/cross-family character pairs via
+  `CollectiveDisposition.seed_first_meeting()`. Skipped when baselines
+  not provided.
+  `generate_world_population()` — main entry point. Accepts provinces,
+  settlements, dice engine, next_id counter, and optional baselines.
+  Returns `{characters, emperor_id, clan_champions, total_count}`.
+  Deterministic with seeded DiceEngine.
+  `POSITION_ROLE_NAMES` maps 12 PositionType values to `role_position` strings.
+  `_generate_positioned_character()` sets `role_position` automatically for
+  key positions (magistrates, garrison commanders, school masters, temple
+  heads, monastery abbots, military officers, etc.).
+  Known limitations: canonical (Type 1) characters not yet hand-authored —
+  all positions use procedural generation. Mantis schools not in
+  WorldGenerator.SCHOOL_DATA. Phoenix Elemental Council and Dragon
+  Togashi special handling deferred. Province data must be populated
+  before the pass produces province-scaled positions.
+
+### NPC Advancement (s52 Part 3, s48)
+- **simulation/npc_advancement.gd** — NPC autonomous advancement per GDD s52
+  Part 3 and s48. Pure static functions. NPCs accumulate XP daily based on
+  their role and current activity, then spend it on progress bars following a
+  fixed priority order toward their school's strengths.
+  Base XP rates per OOC day by role: peacetime 0.02, active duty 0.04, Gunso
+  0.05, Chui 0.06, Taisa 0.08, Shireikan 0.10, courtier 0.05, magistrate 0.06,
+  sensei 0.04, temple head 0.05. Military rank overrides role_position.
+  Activity multipliers: peacetime 1.0x, border patrol 1.5x, battle 2.5x,
+  commanding in battle 3.0x, court season 1.5x (courtiers only), siege 2.0x,
+  major crisis 2.0x. Battle/siege are early-exit (highest priority), others
+  use maxf for stacking.
+  XP spending priority: (1) Primary Ring, (2) highest school skill, (3) other
+  school skills in descending rank order, (4) secondary Ring, (4b) Void Ring
+  for shugenja only, (5) reserve. Never non-school skills, never Void for
+  non-shugenja. Progress bar costs from s48: 1 XP = 200 progress, skill costs
+  1000/2000/3000/4000/5000 per rank, ring costs 4000/8000/12000/16000/20000.
+  `_raise_ring()` raises the lower of the two constituent traits.
+  `accumulate_daily_xp()` per-IC-day accumulator (divides OOC rate by 4).
+  Fractional XP stored in `xp_fractional` field on L5RCharacterData; rolls
+  over to `xp_total` at each whole integer.
+  `process_seasonal_advancement()` batch entry point: accumulates a full
+  season's XP (IC days / 4 = OOC days × rate), then spends. Skips dead
+  characters. Returns `{results, total_rank_advancements}`.
+- **shared/character_data.gd** — Gains `xp_fractional: float` for sub-integer
+  XP accumulation and `set_trait_value()` method for programmatic trait mutation.
+- **DayOrchestrator wiring** — `_process_npc_advancement()` runs on season
+  boundary after gempukku and before objective progress evaluation.
+  `_build_advancement_world_state()` constructs the activity multiplier
+  dictionary from active courts (attendee_ids), active sieges
+  (defender/attacker character_ids), and crisis indicators (insurgencies →
+  magistrates and commanders). `_get_season_days()` helper maps season enum
+  to IC day count. Return dict gains `advancement_results`.
+
+### Ronin System (s52 Part 5)
+- **simulation/ronin_system.gd** — Ronin status transitions per GDD s52 Part 5.
+  Pure static functions. Handles conversion to/from ronin status, income
+  tracking, desperation escalation, and insurgency seeding.
+  `make_ronin(character, cause)` strips lord_id, role_position, military fields,
+  operational hierarchy; reduces status by 1.0 (floor 0); applies honor loss
+  (0.5 involuntary, 1.0 voluntary). Preserves original_lord_id. Stats unchanged.
+  Four RoninCause values: LORD_DEATH_NO_HEIR, DISMISSAL, CLAN_DESTROYED,
+  VOLUNTARY_DEPARTURE.
+  `is_ronin()` = no lord + no role + status < 1.0.
+  `accept_into_service()` restores lord/role/clan, sets status ≥ 1.0, +0.1 honor.
+  Income tracking via `supply_ledger` keys: `ronin_since_season`,
+  `last_income_season`. `check_desperation()` returns stable/debt/desperate
+  based on seasons without income (4 → Debt disadvantage, 8 → desperate).
+  `can_seed_insurgency()` gates on desperate + bushi/ninja + not Gi/Meiyo virtue.
+  `resolve_petition()` Awareness+Etiquette vs TN 20 (+10 if lord disposition < -10).
+  `hire_as_mercenary()` pays koku, sets operational_superior_id, records income.
+  `process_seasonal_ronin()` batch entry: scans all ronin for debt/desperate/
+  insurgency seed status. Returns `{debt_results, desperate_results,
+  insurgency_seeds}`.
+- **DayOrchestrator wiring** — `_process_seasonal_ronin()` runs on season
+  boundary after seiyaku review. Uses `horde_season_count` from season_meta
+  as the monotonic season counter. Return dict gains `ronin_results`.
+- **Permanent ronin gates** — `accept_into_service()` and `resolve_petition()`
+  reject characters with `permanent_ronin == true`, returning `{rejected: true,
+  reason: "permanent_ronin"}`. Normal ronin (non-permanent) unaffected.
+
+### Musha Shugyo Expansion — Pilgrimage Ronin Conversion
+- **simulation/musha_shugyo_system.gd** — Added rare ronin conversion at
+  pilgrimage end. `PILGRIMAGE_RONIN_CHANCE = 0.03` (3%). At the end of the
+  pilgrimage year, `check_ronin_conversion()` rolls against this chance.
+  On success, `end_pilgrimage_as_ronin()` converts the character to a
+  permanent ronin via `RoninSystem.make_ronin()` with VOLUNTARY_DEPARTURE
+  cause and sets `permanent_ronin = true`. Permanent ronin can never find
+  a new lord — `accept_into_service()` and `resolve_petition()` reject them.
+- **shared/character_data.gd** — `permanent_ronin: bool = false` field added
+  to the Musha Shugyo section.
+- **DayOrchestrator wiring** — `_process_musha_shugyo()` now accepts optional
+  `dice_engine` and `current_season_count`. When dice_engine is provided,
+  checks for ronin conversion before the normal end-pilgrimage path. On
+  conversion, calls `RoninSystem.mark_ronin_start()` with the current
+  season count. `advance_day()` threads dice_engine and season_count
+  from `season_meta["horde_season_count"]`.
+
+### Kami Worship System (s4.3.21)
+- **simulation/worship_system.gd** — Full Kami Worship economy per GDD s4.3.21.
+  Pure static functions. Manages Worship Points (WP), Great Fortune thresholds,
+  Minor Fortune bonuses, active/passive generation, and cascade maluses.
+  **Passive WP generation** — 5 location types (roadside_shrine 0.5, village_shrine
+  1.0, local_shrine 2.0, temple 4.0, shinden 8.0). General locations split WP
+  across all 7 Great Fortunes. Dedicated locations focus all WP on one Fortune
+  at 3× rate (roadside 1.5, village 3.0, local 6.0, temple 12.0, shinden 24.0).
+  **Active worship** — PERFORM_WORSHIP generates WP by character type: normal 1.0,
+  monk 2.0, shugenja 1.0 base + bonus from Lore:Theology+Ring roll vs TN 15
+  (up to +3 bonus WP). Location free raises: roadside/village 0, local +1,
+  temple +2, shinden +3. Directed worship sends all WP to one Fortune; split
+  distributes evenly across 7.
+  **Threshold evaluation** — Province 10 WP, Family 60 WP, Clan 150 WP, Empire
+  800 WP per Fortune per season. Tier assignment by ratio: ≥100% → NONE,
+  ≥75% → RESTLESS, ≥40% → DISPLEASED, <40% → WRATHFUL. Maluses cascade
+  downward — worst tier across all 4 levels applies.
+  **Great Fortune malus tables** — All 7 Fortunes × 3 tiers fully defined:
+  Benten (pop growth −25/−50/−100%, stability, marriage auto-fail),
+  Bishamon (army attack/morale −1/−2/−3, commander risk),
+  Daikoku (koku −15/−30/−50%, market prices, trade routes),
+  Ebisu (rice −15/−30/−50%, harvest cap, famine level),
+  Fukurokujin (divination −1k0/−2k0/impossible, intelligence rolls),
+  Hotei (stability −5/−10/−20/season, insurgency doubled),
+  Jurojin (natural death increase, aging, commander risk checks).
+  **Minor Fortune blessing tiers** — 23 Minor Fortunes with 3 threshold tiers:
+  Noticed (3 WP), Favored (8 WP), Beloved (15 WP). Province-only bonuses.
+  **Divination** — Shugenja Lore:Theology+Ring vs TN 15. Raises expand scope:
+  province → family (+1) → clan (+2) → empire (+3). Returns tier + flavor text.
+  Embedded in PERFORM_WORSHIP — no separate AP cost.
+  **Seasonal processing** — `process_seasonal_worship()` evaluates all 4 cascade
+  levels. `reset_seasonal_wp()` clears accumulated WP each season.
+  `add_active_worship_to_province()` accumulates WP from active worship actions.
+- **Worship wiring** — PERFORM_WORSHIP executor intercept routes through
+  `_execute_perform_worship()` in ActionExecutor. Determines character type
+  (shugenja/monk/normal), ring value from Fortune-Ring mapping, Theology rank,
+  and location type from action metadata. Returns `requires_worship_accumulation`
+  effect flag with `wp_distribution` and `province_id`.
+  `_process_worship_accumulation()` in DayOrchestrator scans day results for
+  the flag and calls `WorshipSystem.add_active_worship_to_province()`.
+  `_process_seasonal_worship()` runs on season boundary: builds
+  `province_worship_locations` from SettlementData.worship_locations,
+  `province_family_map` and `family_clan_map` from ProvinceData fields,
+  calls `WorshipSystem.process_seasonal_worship()`, then
+  `WorshipSystem.reset_seasonal_wp()`. New param: `worship_state: Dictionary`.
+  WorldStateData gains `worship_state` initialized from
+  `WorshipSystem.make_initial_worship_state()`.
+  NPC engine metadata: `_populate_action_metadata()` sets `directed_fortune`
+  (from need.target_npc_id) and `location_type` (from `_zone_to_worship_location()`
+  mapping: CASTLE_SHRINE→village_shrine, SHRINE_CLEARING→roadside_shrine,
+  TEMPLE_GROUNDS→local_shrine, default→roadside_shrine).
+  `shared/settlement_data.gd` gains `worship_locations: Array[Dictionary]`.
+  All worship malus hooks are now wired.
+
+### Settlement Creation & Fortifications (s4.3.22)
+- **shared/construction_data.gd** — ConstructionData Resource: 9 ConstructionType
+  values (VILLAGE, FORTIFICATION, SHRINE_ROADSIDE/VILLAGE/LOCAL, TEMPLE,
+  SHINDEN, MONASTERY, SHIP). Fields: construction_id, ordering_lord_id,
+  province_id, settlement_id, koku/pu/rice committed, seasons_remaining,
+  is_dedicated, dedicated_fortune, ship_class.
+- **simulation/construction_system.gd** — Full settlement creation per GDD
+  s4.3.22. Pure static functions. Covers deliberate village founding (3 Koku,
+  1.0 PU, 1.0 Rice/PU), fortification building (5 Koku, no PU, military only),
+  shrine construction (5/15/30 Koku general, 12/30/60 dedicated, 1/2/3 seasons),
+  temple (80 Koku, 4 seasons, 0.5 PU), shinden (250 Koku, 8 seasons, 1.0 PU),
+  monastery (80 Koku, 4 seasons, 0.5 PU), ship commission (3/8 Koku, 1 season).
+  Validation functions check authority (Provincial Daimyo for villages/forts/
+  shrines/ships, Family Daimyo+ for temples/shinden/monasteries), resource
+  availability, terrain suitability. Construction queue with seasonal tick.
+  Organic village formation: surplus PU threshold by terrain (Plains 3.0,
+  Forest 5.0, Mountains 10.0), stability gate (50+), starvation/taint blocks.
+  Factory functions for all settlement types. Resource deduction helpers.
+  Terrain difficulty table per GDD.
+- **ActionExecutor** — 6 construction ActionIDs (FOUND_VILLAGE,
+  BUILD_FORTIFICATION, BUILD_SHRINE, FOUND_TEMPLE, FOUND_MONASTERY,
+  COMMISSION_SHIP) intercepted before generic admin path. Returns
+  `requires_construction: true` effect flag with construction metadata
+  (province_id, settlement_id, is_dedicated, dedicated_fortune, ship_class,
+  shrine_tier).
+- **DayOrchestrator wiring** — Daily: `_process_construction_effects()` scans
+  day results for `requires_construction` flag. Village and fortification
+  creation are immediate (deduct resources, create SettlementData, append to
+  settlements array). Shrine/temple/shinden/monastery/ship go into the
+  construction queue. Seasonal: `_process_construction_completions()` ticks
+  construction queue, creates completed settlements/shrines/ships. Shrine
+  completion adds worship_location to parent settlement. Ship completion
+  creates ShipData with stats from NavalSystem.SHIP_STATS. Temple/shinden/
+  monastery completion creates new SettlementData. `_process_organic_villages()`
+  checks all provinces for organic formation and creates villages. Topic
+  generation for completions (Tier 2-4 by type).
+  New params on `advance_day()`: `constructions: Array[ConstructionData]`,
+  `next_settlement_id: Array[int]`, `next_construction_id: Array[int]`.
+  Return dict gains `construction_results`.
+- **WorldStateData** gains `constructions`, `next_settlement_id`,
+  `next_construction_id` fields.
+- **Tests** — `tests/test_construction_system.gd` (~67 tests): validation
+  (village/fort/shrine/temple/shinden/monastery/ship), factory output,
+  construction queue tick, organic formation, authority checks, cost constants,
+  resource deduction, shrine addition, infrastructure decomposition.
+
+### BUILD_INFRASTRUCTURE NeedType Decomposition (s57.20.1)
+- **simulation/objective_decomposer.gd** — `INFRASTRUCTURE_OBJECTIVES` constant
+  routes BUILD_INFRASTRUCTURE to `_decompose_infrastructure()`. Lord-only,
+  AT_OWN_HOLDINGS gate. 4-step priority cascade:
+  1. Worship failure → BUILD_SHRINE (priority 3, first failing province)
+  2. Border without fortification → BUILD_FORTIFICATION (priority 2)
+  3. Surplus PU → FOUND_VILLAGE (priority 1)
+  4. Coastal + naval threat + no ships → COMMISSION_SHIP (priority 3)
+  Fallback: REST.
+- **simulation/npc_data_structures.gd** — ContextSnapshot gains 6 fields:
+  `worship_failing_province_ids`, `border_province_ids_without_fort`,
+  `surplus_pu_province_ids`, `is_coastal`, `has_ships`, `has_naval_threat`.
+- **simulation/npc_decision_engine.gd** — `build_context()` populates
+  infrastructure intelligence fields from world_state. `_populate_action_metadata()`
+  sets province_id, settlement_id, target_intent for construction ActionIDs.
+- **simulation/day_orchestrator.gd** — `_populate_infrastructure_intelligence()`
+  runs at start of advance_day(), scans provinces for worship failure (WP < 10),
+  border without fort (adjacent different-clan province using `is_military()`
+  to cover all military settlement types: FORTIFICATION, KEEP, CASTLE,
+  FAMILY_CASTLE, WALL_TOWER), surplus PU (above terrain threshold), and naval
+  state. Infrastructure data stored as `Dictionary` (province_id → clan) so
+  context builder can filter per-character's clan. Naval threat detection
+  checks whether any warring enemy clan has non-destroyed ships (not just
+  any active war).
+- **simulation/npc_decision_engine.gd** — `_filter_province_ids_by_clan()`
+  helper filters infrastructure `Dictionary` data by character's clan.
+  Backward compatible with plain `Array[int]` inputs.
+  Known limitations: `is_coastal` always false (needs coordinate system).
+
+### FILL_VACANCY NeedType Decomposition (s57.20.3)
+- **simulation/objective_decomposer.gd** — `GOVERNANCE_OBJECTIVES` constant
+  routes FILL_VACANCY to `_decompose_fill_vacancy()`. Lord-only,
+  AT_OWN_HOLDINGS gate. Picks highest-priority vacant position from
+  `ctx.vacant_positions`, tiebreaks on `seasons_vacant`. Escalation:
+  priority increments by 1 after 2 seasons vacant (cap at 3). Returns
+  FILL_VACANCY need with `target_npc_id` = candidate_id and
+  `target_intent` = position_type, flowing through existing
+  APPOINT_TO_POSITION metadata and executor pipeline.
+- **simulation/npc_data_structures.gd** — ContextSnapshot gains
+  `vacant_positions: Array[Dictionary]` (each dict has position_type,
+  priority, candidate_id, province_id, seasons_vacant).
+- **simulation/npc_decision_engine.gd** — `build_context()` populates
+  `vacant_positions` from per-lord keyed world_state entries.
+- **simulation/day_orchestrator.gd** — `_populate_vacancy_intelligence()`
+  runs at start of advance_day(). Now accepts `settlements` and `provinces`
+  parameters. Scans military companies for commander-less units, characters
+  for magistrate gaps, and settlements for position-appropriate vacancies:
+  military settlements (FORTIFICATION/KEEP/CASTLE/FAMILY_CASTLE/WALL_TOWER)
+  → Garrison Commander (priority 3), TEMPLE → Temple Head (priority 2),
+  MONASTERY → Monastery Abbot (priority 2). School Master detection per
+  family: iterates `GempukkuSystem.FAMILY_DEFAULT_SCHOOL`, maps families
+  to clan → lord, checks for living School Master characters (priority 2).
+  `_family_to_clan()` helper reverses `WorldPopulationGenerator.CLAN_FAMILIES`.
+  Province→lord mapping built from highest-status living character matching
+  province clan. Deduplication prevents multiple vacancy entries per lord
+  per position type. `_find_vacancy_candidate()` scores candidates using
+  4 factors per GDD: competence (position-specific skills via
+  POSITION_SKILL_WEIGHTS), loyalty (disposition × 0.1), personality fit
+  (virtue bonus +3 via POSITION_VIRTUE_BONUSES), school type fit (+2 via
+  POSITION_SCHOOL_TYPE_BONUS).
+  Vacancy persistence: `season_meta["vacancy_registry"]` stores vacancy
+  keys mapped to `seasons_vacant` counters. `_vacancy_key()` builds stable
+  keys from lord_id + position_type + (family|settlement_id|unit_id).
+  `_increment_vacancy_seasons()` runs on season boundary, incrementing all
+  registry entries. Filled positions are automatically pruned from the
+  registry when they stop being detected. The decomposer's priority
+  escalation (+1 after 2 seasons) now fires correctly.
+  **Construction queue wiring**: On season boundary, vacancy intelligence
+  re-runs AFTER `_process_construction_completions()` and
+  `_process_organic_villages()` so newly created settlements (temples,
+  monasteries, forts) immediately trigger position vacancy detection.
+  Daily: vacancy intelligence also re-runs after `_process_construction_effects()`
+  when any construction result was applied (fort or village created mid-day).
+  Newly created settlement vacancies start at `seasons_vacant = 0`.
+  Known limitations: Senior Courtier detection deferred (unclear vacancy
+  trigger).
+
 ### What's Next
 1. World generation coordinate system and adjacency
 
@@ -2221,8 +2938,11 @@ All in /tests/, one file per system:
   and tactical advantage (+5 skill bonus, agenda topic ordering by host Champion),
   WINTER_COURT_ANNOUNCED topic (Tier 3, non-positional). Crime entry added to
   Section 57.47 (CAPITAL — Violation of the Emperor's Peace). Section 15.1
-  updated to reflect castle-level selection. The current code must be rewritten
-  to match the GDD specification before being trusted.
+  updated to reflect castle-level selection. **CODE REWRITTEN** — 
+  `simulation/winter_court_system.gd` implements the full specification.
+  Remaining deferred: travel logistics letter dispatching, late arrival
+  handling, +5 skill bonus SkillResolver integration, Champion agenda
+  ordering AI.
 
 ### Systems Wired into NPC Loop
 The following subsystems are now integrated into the NPC decision loop:
@@ -2424,6 +3144,58 @@ The following subsystems are now integrated into the NPC decision loop:
   and +3 morale/tick (capped at base stats), arms tier restoration when arms
   deprivation tick > 1. Moving armies skip recovery. Broken/threatened tethers
   block supply and prevent recovery.
+- **NavalSystem / NavalCombatSystem** — Daily: `_process_naval_weather()` rolls
+  global weather before ship processing. `_process_ship_movement()` ticks ship
+  movement (arrival, deep ocean loss). `_process_naval_battle_triggers()`
+  detects hostile ships at same sub-tile and resolves naval combat via
+  NavalCombatSystem. `_apply_naval_battle_mutations()` writes results back to
+  ShipData (health, destroyed, captured, captain cleared). War score shifts
+  from naval battles fed into `_process_naval_war_scores()` using same
+  minor/major/decisive classification as land battles. Naval topics (Tier 3
+  MILITARY) generated per battle. Ships param on `advance_day()`.
+- **WorshipSystem** — Daily: `_process_worship_accumulation()` scans day
+  results for `requires_worship_accumulation` flag from PERFORM_WORSHIP
+  executor intercept. Calls `WorshipSystem.add_active_worship_to_province()`
+  to accumulate WP. Phase 7: `_execute_perform_worship()` determines
+  character type, ring value, Theology rank, and location type; delegates
+  to `WorshipSystem.resolve_active_worship()`. Seasonal:
+  `_process_seasonal_worship()` builds province/family/clan maps from
+  settlement and province data, evaluates all cascade tiers, resets WP.
+  Worship evaluation runs BEFORE `_process_season_transition()` so maluses
+  are available for ResourceTick. `compute_all_province_maluses()` aggregates
+  worst-tier maluses across province/family/clan/empire for each Fortune per
+  province, merging numeric values (additive) and boolean flags.
+  **Malus hooks**: Ebisu `rice_modifier` reduces harvest yield in
+  `ResourceTick._process_harvest()`. Daikoku `koku_modifier` reduces koku
+  generation in `ResourceTick._process_koku_generation()`. Benten
+  `pop_growth_modifier` reduces population growth in
+  `ResourceTick._process_population_adjustment()`. Benten/Hotei
+  `stability_per_season` applied via `_apply_worship_stability_maluses()`
+  after season transition. Hotei `insurgency_spawn_doubled` doubles spawn
+  chance in `InsurgencySystem.process_season()`. Benten `marriage_auto_fail`
+  checked via `_is_benten_marriage_blocked()` in `_process_governance_effects()`
+  — overrides accepted marriages to rejection.
+  Bishamon `army_attack`/`army_morale` penalties injected into battle state
+  dicts via `_inject_worship_battle_maluses()` before `resolve_battle()`;
+  read by `_get_effective_attack()` and `_get_effective_morale_defense()`.
+  Bishamon `commander_risk_reduced` adds +5 TN to commander survival checks.
+  Daikoku `market_price_modifier` inflates effective price in
+  `RiceMarketSystem.resolve_purchases()`. Daikoku `trade_route_koku_disabled`
+  short-circuits `compute_trade_route_koku()` to 0.
+  Fukurokujin `divination_dice_penalty` reduces rolled dice in
+  `WorshipSystem.resolve_divination()`. Fukurokujin `divination_impossible`
+  returns immediate failure. Jurojin `natural_death_increase` multiplies
+  death chance ×1.5 and `aging_accelerated` ×2.0 in
+  `GempukkuSystem.roll_natural_death()`. Jurojin `healing_slower` and
+  `injury_recovery_doubled` halve army recovery health per tick in
+  `_process_army_recovery()`.
+  Fukurokujin `intelligence_roll_modifier` increases TN for
+  INTELLIGENCE_ACTIONS in `ActionExecutor._get_tn_for_action()`, threaded
+  via `worship_province_malus` parameter from NPCWaveResolver using
+  `_settlement_province_map` on world_states. Jurojin
+  `rank4_commander_risk_checks` adds +3 TN to commander survival for
+  Insight Rank 4+ commanders via `_inject_worship_battle_maluses()`.
+  All worship malus hooks are now wired.
 
 ## Resolved Design Decisions
 
