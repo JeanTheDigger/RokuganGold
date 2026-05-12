@@ -117,6 +117,9 @@ class ContextSnapshot:
 	var province_statuses: Array = []
 	var feasibility_data: Dictionary = {}
 
+	# Vacancy detection (s57.20.3)
+	var vacant_positions: Array[Dictionary] = []
+
 	# Marriage (s22.7)
 	var marriageable_vassal_ids: Array[int] = []
 	var succession_insecure: bool = false

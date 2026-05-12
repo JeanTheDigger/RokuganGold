@@ -79,6 +79,7 @@ static func advance_day(
 	world_states["_settlement_province_map"] = _spm
 
 	_populate_infrastructure_intelligence(world_states, provinces, settlements, ships, worship_state)
+	_populate_vacancy_intelligence(world_states, characters, characters_by_id, companies)
 
 	var festival_results: Dictionary = _process_festivals(ic_day, world_states)
 
@@ -7022,3 +7023,126 @@ static func _populate_infrastructure_intelligence(
 	world_states["is_coastal"] = coastal
 	world_states["has_ships"] = has_ships_flag
 	world_states["has_naval_threat"] = naval_threat
+
+
+# -- Vacancy Intelligence Population (s57.20.3) --------------------------------
+
+
+const CRITICAL_POSITIONS: Array[String] = [
+	"Clan Magistrate", "Emerald Magistrate", "Garrison Commander",
+]
+
+const IMPORTANT_POSITIONS: Array[String] = [
+	"School Master", "Temple Head", "Monastery Abbot", "Senior Courtier",
+]
+
+
+static func _populate_vacancy_intelligence(
+	world_states: Dictionary,
+	characters: Array[L5RCharacterData],
+	characters_by_id: Dictionary,
+	companies: Array,
+) -> void:
+	var lord_vacancies: Dictionary = {}
+
+	# Military vacancies: units with no commander
+	for company_data: Variant in companies:
+		if company_data is Dictionary:
+			var commander_id: int = company_data.get("commander_id", -1)
+			if commander_id < 0:
+				var parent_legion_id: int = company_data.get("parent_legion_id", -1)
+				if parent_legion_id < 0:
+					continue
+				# Find the lord responsible for this unit
+				var lord_id: int = company_data.get("owning_lord_id", -1)
+				if lord_id < 0:
+					continue
+				if not lord_vacancies.has(lord_id):
+					lord_vacancies[lord_id] = []
+				lord_vacancies[lord_id].append({
+					"position_type": "military_commander",
+					"priority": 3,
+					"unit_id": company_data.get("company_id", -1),
+					"province_id": company_data.get("source_province_id", -1),
+					"candidate_id": -1,
+					"seasons_vacant": company_data.get("seasons_without_commander", 0),
+				})
+
+	# Position vacancies: scan for lord-controlled positions that should be filled
+	var filled_positions: Dictionary = {}
+	for c: L5RCharacterData in characters:
+		if CharacterStats.is_dead(c):
+			continue
+		if c.role_position.is_empty():
+			continue
+		var lord_id: int = c.lord_id
+		if lord_id < 0:
+			continue
+		if not filled_positions.has(lord_id):
+			filled_positions[lord_id] = []
+		filled_positions[lord_id].append(c.role_position)
+
+	# Check each lord for expected positions
+	for c: L5RCharacterData in characters:
+		if CharacterStats.is_dead(c):
+			continue
+		if c.status < 3.0 or (c.lord_id >= 0 and c.status < 5.0):
+			continue
+		var lord_id: int = c.character_id
+		var lord_positions: Array = filled_positions.get(lord_id, [])
+
+		# Every lord should have a magistrate
+		if not _has_position(lord_positions, "Magistrate"):
+			var candidate: int = _find_vacancy_candidate(
+				lord_id, "Magistrate", characters, characters_by_id,
+			)
+			if not lord_vacancies.has(lord_id):
+				lord_vacancies[lord_id] = []
+			lord_vacancies[lord_id].append({
+				"position_type": "Clan Magistrate",
+				"priority": 3,
+				"province_id": -1,
+				"candidate_id": candidate,
+				"seasons_vacant": 0,
+			})
+
+	# Store per-lord vacancy data keyed by lord_id
+	world_states["vacancy_data"] = lord_vacancies
+
+	# Also store flat vacancy list for each lord in their world_states context
+	for lord_id: int in lord_vacancies:
+		var key: String = "vacant_positions_%d" % lord_id
+		world_states[key] = lord_vacancies[lord_id]
+
+
+static func _has_position(positions: Array, substring: String) -> bool:
+	for p: Variant in positions:
+		if p is String and (p as String).contains(substring):
+			return true
+	return false
+
+
+static func _find_vacancy_candidate(
+	lord_id: int,
+	_position_type: String,
+	characters: Array[L5RCharacterData],
+	_characters_by_id: Dictionary,
+) -> int:
+	var best_id: int = -1
+	var best_score: float = -999.0
+	for c: L5RCharacterData in characters:
+		if CharacterStats.is_dead(c):
+			continue
+		if c.lord_id != lord_id:
+			continue
+		if c.character_id == lord_id:
+			continue
+		if not c.role_position.is_empty():
+			continue
+		var score: float = c.status + c.honor + c.glory
+		var disp: int = c.disposition_values.get(lord_id, 0)
+		score += float(disp) * 0.1
+		if score > best_score:
+			best_score = score
+			best_id = c.character_id
+	return best_id

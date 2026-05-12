@@ -54,6 +54,10 @@ const INFRASTRUCTURE_OBJECTIVES: Array[String] = [
 	"BUILD_INFRASTRUCTURE",
 ]
 
+const GOVERNANCE_OBJECTIVES: Array[String] = [
+	"FILL_VACANCY",
+]
+
 
 # -- Main Entry Point ---------------------------------------------------------
 
@@ -83,6 +87,8 @@ static func decompose(
 		return _decompose_investigation(need_type, objective, ctx)
 	if need_type in INFRASTRUCTURE_OBJECTIVES:
 		return _decompose_infrastructure(need_type, objective, ctx)
+	if need_type in GOVERNANCE_OBJECTIVES:
+		return _decompose_governance(need_type, objective, ctx)
 
 	return _passthrough(objective)
 
@@ -1412,3 +1418,52 @@ static func _decompose_infrastructure(
 		})
 
 	return _make_need("REST", 1)
+
+
+# -- Governance Decomposition (s57.20.3) ---------------------------------------
+
+
+static func _decompose_governance(
+	need_type: String,
+	_objective: Dictionary,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> NPCDataStructures.ImmediateNeed:
+	match need_type:
+		"FILL_VACANCY":
+			return _decompose_fill_vacancy(_objective, ctx)
+	return _passthrough(_objective)
+
+
+static func _decompose_fill_vacancy(
+	_objective: Dictionary,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> NPCDataStructures.ImmediateNeed:
+	if not ctx.is_lord:
+		return _make_need("REST", 1)
+
+	if ctx.context_flag != Enums.ContextFlag.AT_OWN_HOLDINGS:
+		return _make_need("REST", 1)
+
+	if ctx.vacant_positions.is_empty():
+		return _make_need("REST", 1)
+
+	# Pick highest-priority vacancy
+	var best_vacancy: Dictionary = ctx.vacant_positions[0]
+	for v: Dictionary in ctx.vacant_positions:
+		if v.get("priority", 1) > best_vacancy.get("priority", 1):
+			best_vacancy = v
+		elif v.get("priority", 1) == best_vacancy.get("priority", 1):
+			if v.get("seasons_vacant", 0) > best_vacancy.get("seasons_vacant", 0):
+				best_vacancy = v
+
+	var priority: int = best_vacancy.get("priority", 1)
+	# Escalate for long-standing vacancies (GDD s57.20.3: +5 per season, mapped to priority tiers)
+	var seasons_vacant: int = best_vacancy.get("seasons_vacant", 0)
+	if seasons_vacant >= 2 and priority < 3:
+		priority = mini(priority + 1, 3)
+
+	return _make_need("FILL_VACANCY", priority, {
+		"target_npc_id": best_vacancy.get("candidate_id", -1),
+		"target_intent": best_vacancy.get("position_type", ""),
+		"target_province_id": best_vacancy.get("province_id", -1),
+	})

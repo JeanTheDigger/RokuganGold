@@ -93,6 +93,15 @@ static func build_context(
 				)
 		ctx.feasibility_data = _build_feasibility_data(character, world_state)
 
+	# Vacancy detection (s57.20.3)
+	if ctx.is_lord:
+		var vkey: String = "vacant_positions_%d" % character.character_id
+		var vdata: Variant = world_state.get(vkey, [])
+		if vdata is Array:
+			for v: Variant in vdata:
+				if v is Dictionary:
+					ctx.vacant_positions.append(v as Dictionary)
+
 	# Marriage — find unmarried vassals/children for lord-tier marriage arrangement
 	if ctx.is_lord and not chars_by_id.is_empty():
 		ctx.marriageable_vassal_ids = _find_marriageable_vassals(

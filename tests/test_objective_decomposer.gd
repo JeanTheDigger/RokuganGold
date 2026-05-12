@@ -1210,3 +1210,89 @@ func test_protect_dependents_succession_recent_attempt_skips() -> void:
 	var obj := {"need_type": "PROTECT_DEPENDENTS", "priority": 2}
 	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
 	assert_ne(need.need_type, "ARRANGE_MARRIAGE")
+
+
+# -- FILL_VACANCY Decomposition (s57.20.3) ------------------------------------
+
+func test_fill_vacancy_non_lord_rest() -> void:
+	_ctx.is_lord = false
+	var obj := {"need_type": "FILL_VACANCY", "priority": 2}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
+	assert_eq(need.need_type, "REST")
+
+
+func test_fill_vacancy_not_at_holdings_rest() -> void:
+	_ctx.is_lord = true
+	_ctx.context_flag = Enums.ContextFlag.AT_COURT
+	var obj := {"need_type": "FILL_VACANCY", "priority": 2}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
+	assert_eq(need.need_type, "REST")
+
+
+func test_fill_vacancy_no_vacancies_rest() -> void:
+	_ctx.is_lord = true
+	_ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
+	var obj := {"need_type": "FILL_VACANCY", "priority": 2}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
+	assert_eq(need.need_type, "REST")
+
+
+func test_fill_vacancy_picks_highest_priority() -> void:
+	_ctx.is_lord = true
+	_ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
+	_ctx.vacant_positions = [
+		{"position_type": "School Master", "priority": 2, "candidate_id": 10, "province_id": -1, "seasons_vacant": 0},
+		{"position_type": "Clan Magistrate", "priority": 3, "candidate_id": 20, "province_id": -1, "seasons_vacant": 0},
+	]
+	var obj := {"need_type": "FILL_VACANCY", "priority": 2}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
+	assert_eq(need.need_type, "FILL_VACANCY")
+	assert_eq(need.target_intent, "Clan Magistrate")
+	assert_eq(need.target_npc_id, 20)
+	assert_eq(need.priority, 3)
+
+
+func test_fill_vacancy_escalates_after_two_seasons() -> void:
+	_ctx.is_lord = true
+	_ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
+	_ctx.vacant_positions = [
+		{"position_type": "School Master", "priority": 1, "candidate_id": 10, "province_id": -1, "seasons_vacant": 3},
+	]
+	var obj := {"need_type": "FILL_VACANCY", "priority": 2}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
+	assert_eq(need.need_type, "FILL_VACANCY")
+	assert_eq(need.priority, 2)
+
+
+func test_fill_vacancy_priority_3_no_escalation() -> void:
+	_ctx.is_lord = true
+	_ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
+	_ctx.vacant_positions = [
+		{"position_type": "Clan Magistrate", "priority": 3, "candidate_id": 20, "province_id": -1, "seasons_vacant": 5},
+	]
+	var obj := {"need_type": "FILL_VACANCY", "priority": 2}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
+	assert_eq(need.priority, 3)
+
+
+func test_fill_vacancy_same_priority_tiebreak_by_seasons() -> void:
+	_ctx.is_lord = true
+	_ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
+	_ctx.vacant_positions = [
+		{"position_type": "School Master", "priority": 2, "candidate_id": 10, "province_id": -1, "seasons_vacant": 1},
+		{"position_type": "Temple Head", "priority": 2, "candidate_id": 30, "province_id": -1, "seasons_vacant": 4},
+	]
+	var obj := {"need_type": "FILL_VACANCY", "priority": 2}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
+	assert_eq(need.target_npc_id, 30)
+
+
+func test_fill_vacancy_carries_province_id() -> void:
+	_ctx.is_lord = true
+	_ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
+	_ctx.vacant_positions = [
+		{"position_type": "Garrison Commander", "priority": 3, "candidate_id": 15, "province_id": 7, "seasons_vacant": 0},
+	]
+	var obj := {"need_type": "FILL_VACANCY", "priority": 2}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
+	assert_eq(need.target_province_id, 7)
