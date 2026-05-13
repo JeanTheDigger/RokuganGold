@@ -1894,3 +1894,18 @@ func test_known_npc_locations_from_knowledge_pool() -> void:
 	)
 	var locations: Dictionary = ws[1].get("known_npc_locations", {})
 	assert_eq(locations.get(5, -1), 300, "Should map NPC 5 to settlement 300")
+
+
+# -- Court context flag gap fix tests ------------------------------------------
+
+func test_court_context_creates_world_state_entry() -> void:
+	var ws: Dictionary = {}
+	var court := CourtSessionData.new()
+	court.court_phase = CourtSessionData.CourtPhase.ACTIVE
+	court.elapsed_ticks = 1
+	court.duration_ticks = 10
+	court.attendee_ids = [42]
+	DayOrchestrator._set_court_context_flags([court], ws)
+	assert_true(ws.has(42), "Should create world_state entry for attendee")
+	assert_eq(ws[42].get("context_flag", -1), Enums.ContextFlag.AT_COURT)
+	assert_false(ws[42].get("active_court_at_location", {}).is_empty())

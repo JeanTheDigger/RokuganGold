@@ -5148,7 +5148,8 @@ static func _set_court_context_flags(
 		for char_id: int in court.attendee_ids:
 			var ws: Dictionary = world_states.get(char_id, {})
 			if ws.is_empty():
-				continue
+				ws = {}
+				world_states[char_id] = ws
 			ws["context_flag"] = Enums.ContextFlag.AT_COURT
 			ws["active_court_at_location"] = ctx_dict
 
@@ -5176,7 +5177,8 @@ static func _set_wall_tower_context_flags(
 			continue
 		var ws: Dictionary = world_states.get(character.character_id, {})
 		if ws.is_empty():
-			continue
+			ws = {}
+			world_states[character.character_id] = ws
 
 		# AT_COURT takes priority — court overrides wall tower context.
 		if ws.get("context_flag", -1) == Enums.ContextFlag.AT_COURT:
