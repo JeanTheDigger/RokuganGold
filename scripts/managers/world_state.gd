@@ -96,6 +96,12 @@ var next_construction_id: Array[int] = [1]
 # -- Court Commitments (s16.4) ------------------------------------------------
 var court_commitments: Array[CourtCommitmentData] = []
 
+# -- Dragon Clan Governance (s55.10.2) ----------------------------------------
+var togashi_state: Dictionary = TogashiOversight.make_initial_state()
+
+# -- Phoenix Clan Governance (s55.10.3) ---------------------------------------
+var phoenix_council_state: Dictionary = PhoenixCouncil.make_initial_state()
+
 # -- Kami Worship (s4.3.21) ---------------------------------------------------
 var worship_state: Dictionary = WorshipSystem.make_initial_worship_state()
 
@@ -201,6 +207,8 @@ func advance_one_day() -> Dictionary:
 		next_settlement_id,
 		next_construction_id,
 		court_commitments,
+		togashi_state,
+		phoenix_council_state,
 	)
 
 

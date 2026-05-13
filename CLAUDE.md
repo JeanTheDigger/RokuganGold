@@ -630,6 +630,7 @@ All in /tests/, one file per system:
 - test_ronin_system.gd (~44 tests)
 - test_musha_shugyo_system.gd (~75 tests)
 - test_governance_wiring.gd (~78 tests)
+- test_governance_exceptions_wiring.gd (~30 tests)
 - test_marriage_wiring.gd (~65 tests)
 - test_worship_system.gd (~67 tests)
 - test_worship_wiring.gd (~50 tests)
@@ -3444,6 +3445,35 @@ The following subsystems are now integrated into the NPC decision loop:
   `rank4_commander_risk_checks` adds +3 TN to commander survival for
   Insight Rank 4+ commanders via `_inject_worship_battle_maluses()`.
   All worship malus hooks are now wired.
+- **TogashiOversight** — Seasonal: `_process_togashi_oversight()` runs after
+  `_run_strategic_reviews()` but before directive consumption. Finds Mirumoto
+  FC (Dragon, Mirumoto, lord_id==-1, highest status) and Togashi (Dragon,
+  Togashi, lord_id==-1, status>=7.0). Extracts FC's directives from
+  strategic_results, builds world state for concern checks (clan strengths,
+  inter-clan wars, emperor vacant, rebellions, worship failures, wall breach,
+  PTL). Calls `TogashiOversight.process_seasonal_oversight()`. On compliance:
+  injects forced directive into strategic_results. On defiance: applies −0.3
+  Honor to Mirumoto FC. Generates topic (Tier 4 at stage ≤2, Tier 3 at
+  stage 3+; POLITICAL category, momentum 11/26). Reports
+  `diplomatic_penalty` when authority is locked (Stage 2+). Skipped when
+  `togashi_state` is empty or no Mirumoto FC found. WorldStateData holds
+  `togashi_state: Dictionary`.
+- **PhoenixCouncil** — Seasonal: `_process_phoenix_council_gating()` runs
+  after `_run_strategic_reviews()` alongside Togashi processing. Finds
+  Shiba Champion (Phoenix, lord_id==-1, highest status) and Elemental
+  Masters (Phoenix, role_position "Master of {Element}"). Skipped when
+  champion has post-schism authority or Council below quorum (< 3 masters).
+  Maps StrategicReview directives to PhoenixCouncil DecisionType:
+  WAR_READINESS → DEPLOY_GO_HATAMOTO, SEEK_PEACE → SIGN_TREATY. Non-major
+  directives (ADJUST_TAX, CALL_COURT, etc.) pass through without vote.
+  For major decisions: runs `PhoenixCouncil.tally_vote()` with per-master
+  virtues and dispositions. Approved directives kept in strategic_results.
+  Vetoed directives removed. Deadlocked proposals tabled (Champion may
+  break tie after 2 tablings at −0.3 Honor). Tracks crisis veto streak
+  and consecutive obstruction for Overreach path. Generates veto topic
+  (Tier 4 at overreach ≤1, Tier 3 at overreach 2+; POLITICAL category).
+  Failed proposals banned from resubmission per `is_proposal_banned()`.
+  WorldStateData holds `phoenix_council_state: Dictionary`.
 
 ## Resolved Design Decisions
 

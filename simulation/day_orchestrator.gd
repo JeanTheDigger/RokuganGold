@@ -64,6 +64,8 @@ static func advance_day(
 	next_settlement_id: Array[int] = [5000],
 	next_construction_id: Array[int] = [1],
 	court_commitments: Array[CourtCommitmentData] = [],
+	togashi_state: Dictionary = {},
+	phoenix_council_state: Dictionary = {},
 ) -> Dictionary:
 	var prev_season: int = time_system.get_season()
 
@@ -479,6 +481,20 @@ static func advance_day(
 		strategic_results = _run_strategic_reviews(
 			characters, objectives_map, world_states
 		)
+		var togashi_results: Dictionary = {}
+		if not togashi_state.is_empty():
+			togashi_results = _process_togashi_oversight(
+				togashi_state, strategic_results, characters,
+				characters_by_id, world_states, active_topics,
+				next_topic_id, ic_day,
+			)
+		var phoenix_council_results: Dictionary = {}
+		if not phoenix_council_state.is_empty():
+			phoenix_council_results = _process_phoenix_council_gating(
+				phoenix_council_state, strategic_results, characters,
+				characters_by_id, dice_engine, active_topics,
+				next_topic_id, ic_day,
+			)
 		_evaluate_heir_designations(
 			characters, characters_by_id, active_topics
 		)
@@ -585,6 +601,8 @@ static func advance_day(
 		"worship_seasonal_results": worship_seasonal_results,
 		"construction_results": construction_results,
 		"commitment_seasonal_result": commitment_seasonal_result,
+		"togashi_results": togashi_results,
+		"phoenix_council_results": phoenix_council_results,
 	}
 
 
@@ -6129,6 +6147,401 @@ static func _get_otomo_courtier_ids(characters: Array[L5RCharacterData]) -> Arra
 				continue
 		ids.append(c.character_id)
 	return ids
+
+
+# -- Togashi Oversight (s55.10.2) -----------------------------------------------
+
+static func _process_togashi_oversight(
+	togashi_state: Dictionary,
+	strategic_results: Array[Dictionary],
+	characters: Array[L5RCharacterData],
+	characters_by_id: Dictionary,
+	world_states: Dictionary,
+	active_topics: Array[TopicData],
+	next_topic_id: Array[int],
+	ic_day: int,
+) -> Dictionary:
+	var mirumoto_fc: L5RCharacterData = _find_mirumoto_fc(characters)
+	if mirumoto_fc == null:
+		return {"skipped": true, "reason": "no_mirumoto_fc"}
+
+	var togashi_id: int = _find_togashi_id(characters)
+
+	var fc_directives: Array[Dictionary] = []
+	for d: Dictionary in strategic_results:
+		if int(d.get("lord_id", -1)) == mirumoto_fc.character_id:
+			fc_directives.append(d)
+
+	var oversight_world: Dictionary = _build_togashi_world_state(
+		world_states, characters, characters_by_id,
+	)
+
+	var result: Dictionary = TogashiOversight.process_seasonal_oversight(
+		togashi_state, oversight_world, fc_directives,
+		mirumoto_fc, togashi_id,
+	)
+
+	if result.get("intervention_fired", false):
+		var compliance: Dictionary = result.get("compliance", {})
+		var directive: Dictionary = result.get("forced_directive", {})
+
+		if compliance.get("comply", false):
+			directive["lord_id"] = mirumoto_fc.character_id
+			strategic_results.append(directive)
+
+		var stage: int = int(togashi_state.get("stage", 0))
+		if stage >= 1:
+			var topic := TopicData.new()
+			topic.topic_id = next_topic_id[0]
+			next_topic_id[0] += 1
+			var axis_name: String = _axis_to_string(int(result["forced_directive"].get("axis", 0)))
+			if compliance.get("comply", false):
+				topic.slug = "togashi_directive_comply_%s_%d" % [axis_name, ic_day]
+				topic.variant = "togashi_directive_comply"
+			else:
+				topic.slug = "togashi_defiance_stage_%d_%d" % [stage, ic_day]
+				topic.variant = "togashi_defiance"
+				HonorGlorySystem.apply_honor_change(mirumoto_fc, -0.3)
+			topic.topic_type = "political"
+			topic.tier = TopicData.Tier.TIER_4 if stage <= 2 else TopicData.Tier.TIER_3
+			topic.momentum = 11.0 if stage <= 2 else 26.0
+			topic.category = TopicData.Category.POLITICAL
+			active_topics.append(topic)
+			result["topic_id"] = topic.topic_id
+
+		if TogashiOversight.is_authority_locked(togashi_state):
+			result["diplomatic_penalty"] = TogashiOversight.STAGE_DIPLOMATIC_PENALTY
+
+	return result
+
+
+static func _find_mirumoto_fc(characters: Array[L5RCharacterData]) -> L5RCharacterData:
+	var best: L5RCharacterData = null
+	for c: L5RCharacterData in characters:
+		if c.clan != "Dragon" or c.family != "Mirumoto":
+			continue
+		if CharacterStats.is_dead(c.wounds_taken, CharacterStats.get_ring_value(c, Enums.Ring.EARTH)):
+			continue
+		if c.lord_id != -1:
+			continue
+		if best == null or c.status > best.status:
+			best = c
+		elif c.status == best.status and c.character_id < best.character_id:
+			best = c
+	return best
+
+
+static func _find_togashi_id(characters: Array[L5RCharacterData]) -> int:
+	for c: L5RCharacterData in characters:
+		if c.clan != "Dragon" or c.family != "Togashi":
+			continue
+		if CharacterStats.is_dead(c.wounds_taken, CharacterStats.get_ring_value(c, Enums.Ring.EARTH)):
+			continue
+		if c.lord_id == -1 and c.status >= 7.0:
+			return c.character_id
+	return -1
+
+
+static func _build_togashi_world_state(
+	world_states: Dictionary,
+	characters: Array[L5RCharacterData],
+	characters_by_id: Dictionary,
+) -> Dictionary:
+	var clan_strengths: Dictionary = {}
+	for c: L5RCharacterData in characters:
+		if c.clan.is_empty():
+			continue
+		if CharacterStats.is_dead(c.wounds_taken, CharacterStats.get_ring_value(c, Enums.Ring.EARTH)):
+			continue
+		clan_strengths[c.clan] = float(clan_strengths.get(c.clan, 0.0)) + c.status
+
+	var active_wars: Array = world_states.get("active_wars", [])
+	var inter_clan_wars: int = 0
+	for w in active_wars:
+		if w is Dictionary:
+			inter_clan_wars += 1
+
+	var provinces_data: Array = world_states.get("province_data", [])
+	var rebellion_count: int = 0
+	var max_non_sl_ptl: float = 0.0
+	var wall_breach: bool = false
+	var failing_worship: int = 0
+	for p in provinces_data:
+		if p is ProvinceData:
+			if p.active_insurgency_id >= 0:
+				rebellion_count += 1
+			if p.province_taint_level > 0.0 and p.clan != "Crab":
+				max_non_sl_ptl = maxf(max_non_sl_ptl, p.province_taint_level)
+			if p.shadowlands_strength > 0 and p.stability < 30.0:
+				wall_breach = true
+
+	var worship_maluses: Dictionary = world_states.get("_worship_maluses", {})
+	for prov_id in worship_maluses:
+		var pm: Dictionary = worship_maluses[prov_id]
+		if pm.is_empty():
+			continue
+		for fortune_key in pm:
+			var malus: Dictionary = pm[fortune_key]
+			if malus.get("tier", 0) >= 2:
+				failing_worship += 1
+				break
+
+	var emperor_vacant: bool = int(world_states.get("emperor_id", -1)) < 0
+
+	return {
+		"clan_strengths": clan_strengths,
+		"active_inter_clan_wars": inter_clan_wars,
+		"emperor_vacant": emperor_vacant,
+		"provinces_in_rebellion": rebellion_count,
+		"failing_worship_provinces": failing_worship,
+		"realm_overlaps_empire_wide": 0,
+		"realm_overlap_in_dragon_territory": false,
+		"max_non_shadowlands_ptl": max_non_sl_ptl,
+		"wall_breach_active": wall_breach,
+		"shadowlands_incursion_tier": 0,
+		"crab_military_readiness": 1.0,
+	}
+
+
+static func _axis_to_string(axis: int) -> String:
+	match axis:
+		TogashiOversight.Axis.BALANCE_OF_POWER: return "balance"
+		TogashiOversight.Axis.IMPERIAL_COHESION: return "cohesion"
+		TogashiOversight.Axis.SPIRITUAL_HEALTH: return "spiritual"
+		TogashiOversight.Axis.SHADOWLANDS_CONTAINMENT: return "shadowlands"
+	return "unknown"
+
+
+# -- Phoenix Council Gating (s55.10.3) -----------------------------------------
+
+static func _process_phoenix_council_gating(
+	phoenix_state: Dictionary,
+	strategic_results: Array[Dictionary],
+	characters: Array[L5RCharacterData],
+	characters_by_id: Dictionary,
+	dice_engine: DiceEngine,
+	active_topics: Array[TopicData],
+	next_topic_id: Array[int],
+	ic_day: int,
+) -> Dictionary:
+	var shiba_champion: L5RCharacterData = _find_shiba_champion(characters)
+	if shiba_champion == null:
+		return {"skipped": true, "reason": "no_shiba_champion"}
+
+	if PhoenixCouncil.has_champion_authority(phoenix_state):
+		return {"skipped": true, "reason": "champion_has_authority"}
+
+	var living_masters: Array = _find_living_elemental_masters(characters)
+	if not PhoenixCouncil.can_council_self_govern(living_masters):
+		return {"skipped": true, "reason": "council_below_quorum"}
+
+	var master_virtues: Dictionary = _build_master_virtues(living_masters, characters_by_id)
+	var dispositions_to_champion: Dictionary = _build_master_dispositions(
+		living_masters, characters_by_id, shiba_champion.character_id,
+	)
+
+	var vetoed: Array[Dictionary] = []
+	var approved: Array[Dictionary] = []
+	var had_any_major: bool = false
+	var had_any_proposal: bool = false
+	var all_rejected: bool = true
+
+	var directives_to_remove: Array[int] = []
+
+	for idx: int in range(strategic_results.size()):
+		var d: Dictionary = strategic_results[idx]
+		if int(d.get("lord_id", -1)) != shiba_champion.character_id:
+			continue
+
+		var decision_type: int = _directive_to_decision_type(d)
+		if decision_type < 0:
+			continue
+
+		if not PhoenixCouncil.is_major_decision(decision_type as PhoenixCouncil.DecisionType):
+			continue
+
+		had_any_major = true
+		had_any_proposal = true
+
+		var current_season: int = int(d.get("_season_count", 0))
+		if PhoenixCouncil.is_proposal_banned(phoenix_state, decision_type as PhoenixCouncil.DecisionType, current_season):
+			directives_to_remove.append(idx)
+			vetoed.append({"directive": d, "reason": "banned_resubmission"})
+			continue
+
+		var proposal: Dictionary = {
+			"decision_type": decision_type,
+			"crisis_response": d.get("crisis_response", false),
+			"threatens_element": d.get("threatens_element", -1),
+			"spiritual_dimension": d.get("spiritual_dimension", false),
+		}
+
+		var vote_result: Dictionary = PhoenixCouncil.tally_vote(
+			living_masters, proposal, dispositions_to_champion,
+			dice_engine, master_virtues,
+		)
+
+		if vote_result.get("passed", false):
+			approved.append({"directive": d, "vote": vote_result})
+			all_rejected = false
+			PhoenixCouncil.reset_crisis_veto_streak(phoenix_state)
+			PhoenixCouncil.reset_obstruction_streak(phoenix_state)
+			PhoenixCouncil.clear_failed_proposal(phoenix_state, decision_type as PhoenixCouncil.DecisionType)
+		elif vote_result.get("deadlocked", false):
+			if PhoenixCouncil.champion_may_break_tie(phoenix_state, decision_type as PhoenixCouncil.DecisionType):
+				approved.append({"directive": d, "vote": vote_result, "tie_broken": true})
+				all_rejected = false
+				HonorGlorySystem.apply_honor_change(shiba_champion, PhoenixCouncil.DEFIANCE_STAGE_1_HONOR_PENALTY)
+			else:
+				PhoenixCouncil.table_proposal(phoenix_state, decision_type as PhoenixCouncil.DecisionType, current_season)
+				directives_to_remove.append(idx)
+				vetoed.append({"directive": d, "vote": vote_result, "tabled": true})
+		else:
+			directives_to_remove.append(idx)
+			vetoed.append({"directive": d, "vote": vote_result})
+			if d.get("crisis_response", false):
+				PhoenixCouncil.track_consecutive_crisis_veto(phoenix_state)
+			PhoenixCouncil.record_failed_proposal(phoenix_state, decision_type as PhoenixCouncil.DecisionType, current_season)
+
+	directives_to_remove.sort()
+	directives_to_remove.reverse()
+	for idx: int in directives_to_remove:
+		strategic_results.remove_at(idx)
+
+	if had_any_major and all_rejected:
+		PhoenixCouncil.track_consecutive_obstruction(phoenix_state)
+	elif had_any_major:
+		PhoenixCouncil.reset_obstruction_streak(phoenix_state)
+
+	if had_any_proposal:
+		if not all_rejected:
+			PhoenixCouncil.handle_compliant_season(phoenix_state)
+
+	if not vetoed.is_empty():
+		var topic := TopicData.new()
+		topic.topic_id = next_topic_id[0]
+		next_topic_id[0] += 1
+		var overreach_stage: int = int(phoenix_state.get("overreach_stage", 0))
+		topic.slug = "phoenix_council_veto_%d" % ic_day
+		topic.variant = "phoenix_council_veto"
+		topic.topic_type = "political"
+		topic.tier = TopicData.Tier.TIER_4 if overreach_stage <= 1 else TopicData.Tier.TIER_3
+		topic.momentum = 11.0 if overreach_stage <= 1 else 26.0
+		topic.category = TopicData.Category.POLITICAL
+		active_topics.append(topic)
+
+	return {
+		"vetoed": vetoed,
+		"approved": approved,
+		"had_major_decisions": had_any_major,
+		"defiance_stage": int(phoenix_state.get("defiance_stage", 0)),
+		"overreach_stage": int(phoenix_state.get("overreach_stage", 0)),
+		"living_masters_count": living_masters.size(),
+	}
+
+
+static func _find_shiba_champion(characters: Array[L5RCharacterData]) -> L5RCharacterData:
+	var best: L5RCharacterData = null
+	for c: L5RCharacterData in characters:
+		if c.clan != "Phoenix":
+			continue
+		if c.lord_id != -1:
+			continue
+		if CharacterStats.is_dead(c.wounds_taken, CharacterStats.get_ring_value(c, Enums.Ring.EARTH)):
+			continue
+		if best == null or c.status > best.status:
+			best = c
+		elif c.status == best.status and c.character_id < best.character_id:
+			best = c
+	return best
+
+
+static func _find_living_elemental_masters(characters: Array[L5RCharacterData]) -> Array:
+	var masters: Array = []
+	var found_by_role: Dictionary = {}
+	for c: L5RCharacterData in characters:
+		if c.clan != "Phoenix":
+			continue
+		if CharacterStats.is_dead(c.wounds_taken, CharacterStats.get_ring_value(c, Enums.Ring.EARTH)):
+			continue
+		if c.role_position.begins_with("Master of "):
+			var element: String = c.role_position.replace("Master of ", "")
+			var master_enum: int = _element_string_to_master(element)
+			if master_enum >= 0 and not found_by_role.has(master_enum):
+				found_by_role[master_enum] = c
+	for m in found_by_role:
+		masters.append(m)
+	return masters
+
+
+static func _element_string_to_master(element: String) -> int:
+	match element.to_lower():
+		"fire": return PhoenixCouncil.Master.FIRE
+		"water": return PhoenixCouncil.Master.WATER
+		"air": return PhoenixCouncil.Master.AIR
+		"earth": return PhoenixCouncil.Master.EARTH
+		"void": return PhoenixCouncil.Master.VOID
+	return -1
+
+
+static func _build_master_virtues(
+	living_masters: Array,
+	characters_by_id: Dictionary,
+) -> Dictionary:
+	var virtues: Dictionary = {}
+	for m in living_masters:
+		var master_char: L5RCharacterData = _find_master_character(m, characters_by_id)
+		if master_char != null:
+			virtues[m] = {
+				"bushido": master_char.bushido_virtue,
+				"shourido": master_char.shourido_virtue,
+			}
+	return virtues
+
+
+static func _build_master_dispositions(
+	living_masters: Array,
+	characters_by_id: Dictionary,
+	champion_id: int,
+) -> Dictionary:
+	var dispositions: Dictionary = {}
+	for m in living_masters:
+		var master_char: L5RCharacterData = _find_master_character(m, characters_by_id)
+		if master_char != null:
+			dispositions[m] = int(master_char.disposition_values.get(champion_id, 0))
+		else:
+			dispositions[m] = 0
+	return dispositions
+
+
+static func _find_master_character(
+	master_enum: int,
+	characters_by_id: Dictionary,
+) -> L5RCharacterData:
+	var element_name: String = ""
+	match master_enum:
+		PhoenixCouncil.Master.FIRE: element_name = "Fire"
+		PhoenixCouncil.Master.WATER: element_name = "Water"
+		PhoenixCouncil.Master.AIR: element_name = "Air"
+		PhoenixCouncil.Master.EARTH: element_name = "Earth"
+		PhoenixCouncil.Master.VOID: element_name = "Void"
+	var target_role: String = "Master of " + element_name
+	for id in characters_by_id:
+		var c: L5RCharacterData = characters_by_id[id]
+		if c.clan == "Phoenix" and c.role_position == target_role:
+			if not CharacterStats.is_dead(c.wounds_taken, CharacterStats.get_ring_value(c, Enums.Ring.EARTH)):
+				return c
+	return null
+
+
+static func _directive_to_decision_type(directive: Dictionary) -> int:
+	var dtype: int = int(directive.get("directive", -1))
+	match dtype:
+		StrategicReview.Directive.WAR_READINESS:
+			return PhoenixCouncil.DecisionType.DEPLOY_GO_HATAMOTO
+		StrategicReview.Directive.SEEK_PEACE:
+			return PhoenixCouncil.DecisionType.SIGN_TREATY
+	return -1
 
 
 # -- Gempukku & Population -----------------------------------------------------
