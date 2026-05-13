@@ -113,6 +113,9 @@ static func advance_day(
 	)
 	_set_court_context_flags(active_courts, world_states)
 	_set_wall_tower_context_flags(characters, settlements, provinces, world_states)
+	_populate_court_availability_data(
+		active_courts, characters, characters_by_id, world_states, favors,
+	)
 
 	var edict_results: Array[Dictionary] = _process_edict_compliance(
 		active_edicts, active_wars, characters, active_topics, next_topic_id, ic_day,
@@ -7849,6 +7852,62 @@ static func _process_court_action_effects(
 					if pos_shift != 0.0:
 						var cur_pos: float = w.topic_positions.get(topic_id, 0.0)
 						w.topic_positions[topic_id] = clampf(cur_pos + pos_shift, -100.0, 100.0)
+
+
+# -- Court Availability Data Population ----------------------------------------
+
+
+static func _populate_court_availability_data(
+	active_courts: Array[CourtSessionData],
+	characters: Array[L5RCharacterData],
+	characters_by_id: Dictionary,
+	world_states: Dictionary,
+	favors: Array,
+) -> void:
+	var upcoming: Array[Dictionary] = []
+	for court: CourtSessionData in active_courts:
+		if court.court_phase == CourtSessionData.CourtPhase.SCHEDULED:
+			upcoming.append({
+				"settlement_id": court.host_settlement_id,
+				"prestige": court.prestige,
+				"court_id": court.court_id,
+			})
+
+	var creditor_favors: Dictionary = {}
+	for fv: Variant in favors:
+		if fv is FavorData:
+			var f: FavorData = fv as FavorData
+			if f.invoked or f.creditor_id < 0:
+				continue
+			if not creditor_favors.has(f.creditor_id):
+				creditor_favors[f.creditor_id] = []
+			var debtor: Variant = characters_by_id.get(f.debtor_id)
+			var target_lord: int = -1
+			if debtor is L5RCharacterData:
+				target_lord = (debtor as L5RCharacterData).lord_id
+			creditor_favors[f.creditor_id].append({
+				"debtor_id": f.debtor_id,
+				"target_lord_id": target_lord,
+				"tier": f.tier,
+			})
+
+	for c: L5RCharacterData in characters:
+		var ws: Dictionary = world_states.get(c.character_id, {})
+		if ws.is_empty():
+			ws = {}
+			world_states[c.character_id] = ws
+
+		ws["upcoming_courts"] = upcoming
+		ws["held_leverage"] = creditor_favors.get(c.character_id, [] as Array[Dictionary])
+
+		var locations: Dictionary = {}
+		for entry: KnowledgeEntry in c.knowledge_pool:
+			if entry.entry_type == "location":
+				var cid: int = entry.data.get("character_id", -1)
+				var sid_str: String = str(entry.data.get("settlement_id", ""))
+				if cid >= 0 and sid_str.is_valid_int():
+					locations[cid] = int(sid_str)
+		ws["known_npc_locations"] = locations
 
 
 # -- Resource Stockpiles Population --------------------------------------------

@@ -500,7 +500,7 @@ All in /tests/, one file per system:
 - test_court_action_system.gd (~140 tests)
 - test_topic_system.gd (~55 tests)
 - test_investigation_system.gd (~40 tests)
-- test_day_orchestrator.gd (~75 tests)
+- test_day_orchestrator.gd (~81 tests)
 - test_approach_evaluation.gd (~55 tests)
 - test_commitment_registry.gd (~60 tests)
 - test_military_hierarchy.gd (~47 tests)

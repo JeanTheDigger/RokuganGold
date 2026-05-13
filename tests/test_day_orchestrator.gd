@@ -1808,3 +1808,89 @@ func test_resource_stockpiles_no_matching_clan() -> void:
 	)
 	var rs: Dictionary = ws[1].get("resource_stockpiles", {})
 	assert_eq(rs.get("rice", 0.0), 0.0, "No Scorpion settlements")
+
+
+# -- Court availability data population tests ----------------------------------
+
+func test_upcoming_courts_populated() -> void:
+	var ws: Dictionary = {1: {}}
+	var c := L5RCharacterData.new()
+	c.character_id = 1
+	var court := CourtSessionData.new()
+	court.court_id = 10
+	court.host_settlement_id = 50
+	court.prestige = 2
+	court.court_phase = CourtSessionData.CourtPhase.SCHEDULED
+	DayOrchestrator._populate_court_availability_data(
+		[court], [c], {1: c}, ws, [],
+	)
+	var upcoming: Array = ws[1].get("upcoming_courts", [])
+	assert_eq(upcoming.size(), 1, "Should have 1 upcoming court")
+	assert_eq(upcoming[0].get("settlement_id", -1), 50)
+	assert_eq(upcoming[0].get("prestige", 0), 2)
+
+
+func test_upcoming_courts_excludes_active() -> void:
+	var ws: Dictionary = {1: {}}
+	var c := L5RCharacterData.new()
+	c.character_id = 1
+	var court := CourtSessionData.new()
+	court.court_phase = CourtSessionData.CourtPhase.ACTIVE
+	DayOrchestrator._populate_court_availability_data(
+		[court], [c], {1: c}, ws, [],
+	)
+	var upcoming: Array = ws[1].get("upcoming_courts", [])
+	assert_eq(upcoming.size(), 0, "Active courts should not appear as upcoming")
+
+
+func test_held_leverage_from_favors() -> void:
+	var ws: Dictionary = {1: {}, 2: {}}
+	var c1 := L5RCharacterData.new()
+	c1.character_id = 1
+	var c2 := L5RCharacterData.new()
+	c2.character_id = 2
+	c2.lord_id = 5
+	var f := FavorData.new()
+	f.creditor_id = 1
+	f.debtor_id = 2
+	f.invoked = false
+	f.tier = FavorData.FavorTier.MODERATE
+	DayOrchestrator._populate_court_availability_data(
+		[], [c1, c2], {1: c1, 2: c2}, ws, [f],
+	)
+	var leverage: Array = ws[1].get("held_leverage", [])
+	assert_eq(leverage.size(), 1, "Creditor should have 1 leverage entry")
+	assert_eq(leverage[0].get("debtor_id", -1), 2)
+	assert_eq(leverage[0].get("target_lord_id", -1), 5)
+	var lev2: Array = ws[2].get("held_leverage", [])
+	assert_eq(lev2.size(), 0, "Debtor should have no leverage")
+
+
+func test_held_leverage_excludes_invoked() -> void:
+	var ws: Dictionary = {1: {}}
+	var c := L5RCharacterData.new()
+	c.character_id = 1
+	var f := FavorData.new()
+	f.creditor_id = 1
+	f.debtor_id = 2
+	f.invoked = true
+	DayOrchestrator._populate_court_availability_data(
+		[], [c], {1: c}, ws, [f],
+	)
+	var leverage: Array = ws[1].get("held_leverage", [])
+	assert_eq(leverage.size(), 0, "Invoked favors should not appear as leverage")
+
+
+func test_known_npc_locations_from_knowledge_pool() -> void:
+	var ws: Dictionary = {1: {}}
+	var c := L5RCharacterData.new()
+	c.character_id = 1
+	var entry := KnowledgeEntry.new()
+	entry.entry_type = "location"
+	entry.data = {"character_id": 5, "settlement_id": "300"}
+	c.knowledge_pool.append(entry)
+	DayOrchestrator._populate_court_availability_data(
+		[], [c], {1: c}, ws, [],
+	)
+	var locations: Dictionary = ws[1].get("known_npc_locations", {})
+	assert_eq(locations.get(5, -1), 300, "Should map NPC 5 to settlement 300")
