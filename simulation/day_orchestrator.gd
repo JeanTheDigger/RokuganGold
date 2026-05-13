@@ -81,6 +81,7 @@ static func advance_day(
 
 	_populate_infrastructure_intelligence(world_states, provinces, settlements, ships, worship_state)
 	_populate_vacancy_intelligence(world_states, characters, characters_by_id, companies, settlements, provinces, season_meta)
+	_populate_resource_stockpiles(world_states, characters, provinces, settlements, clans, companies)
 
 	var festival_results: Dictionary = _process_festivals(ic_day, world_states)
 
@@ -7848,3 +7849,80 @@ static func _process_court_action_effects(
 					if pos_shift != 0.0:
 						var cur_pos: float = w.topic_positions.get(topic_id, 0.0)
 						w.topic_positions[topic_id] = clampf(cur_pos + pos_shift, -100.0, 100.0)
+
+
+# -- Resource Stockpiles Population --------------------------------------------
+
+
+static func _populate_resource_stockpiles(
+	world_states: Dictionary,
+	characters: Array[L5RCharacterData],
+	provinces: Dictionary,
+	settlements: Array[SettlementData],
+	clans: Dictionary,
+	companies: Array[Dictionary],
+) -> void:
+	var clan_settlements: Dictionary = {}
+	for s: SettlementData in settlements:
+		var pid: int = s.province_id
+		var prov: Variant = provinces.get(pid)
+		if prov == null or not (prov is ProvinceData):
+			continue
+		var clan_name: String = (prov as ProvinceData).clan
+		if clan_name.is_empty():
+			continue
+		if not clan_settlements.has(clan_name):
+			clan_settlements[clan_name] = []
+		clan_settlements[clan_name].append(s)
+
+	var clan_military_upkeep: Dictionary = {}
+	for comp: Dictionary in companies:
+		var comp_clan: String = comp.get("clan", "")
+		if comp_clan.is_empty():
+			continue
+		var rice_cost: float = comp.get("rice_upkeep", 0.35)
+		clan_military_upkeep[comp_clan] = clan_military_upkeep.get(comp_clan, 0.0) + rice_cost
+
+	for c: L5RCharacterData in characters:
+		if c.status < 5.0 and c.lord_id != -1:
+			continue
+		var ws: Dictionary = world_states.get(c.character_id, {})
+		if ws.is_empty():
+			ws = {}
+			world_states[c.character_id] = ws
+
+		var slist: Array = clan_settlements.get(c.clan, [])
+		var total_rice: float = 0.0
+		var total_koku: float = 0.0
+		var total_pop_pu: float = 0.0
+		var total_rice_consumption: float = 0.0
+		for sv: Variant in slist:
+			if sv is SettlementData:
+				var sd: SettlementData = sv as SettlementData
+				total_rice += sd.rice_stockpile
+				total_koku += sd.koku_stockpile
+				total_pop_pu += sd.population_pu
+				total_rice_consumption += sd.population_pu * 0.25
+
+		var clan_data: Variant = clans.get(c.clan)
+		var arms: float = 0.0
+		var iron: float = 0.0
+		if clan_data is ClanData:
+			arms = (clan_data as ClanData).arms_stockpile
+			iron = (clan_data as ClanData).iron_stockpile
+
+		var arms_upkeep: float = 0.0
+		for comp: Dictionary in companies:
+			if comp.get("clan", "") == c.clan:
+				arms_upkeep += comp.get("iron_upkeep", 0.1)
+
+		ws["resource_stockpiles"] = {
+			"rice": total_rice,
+			"rice_consumption": maxf(total_rice_consumption, 0.01),
+			"koku": total_koku,
+			"population_pu": maxf(total_pop_pu, 1.0),
+			"arms": arms,
+			"arms_upkeep": maxf(arms_upkeep, 0.01),
+			"iron": iron,
+			"military_upkeep": maxf(clan_military_upkeep.get(c.clan, 0.0), 0.01),
+		}

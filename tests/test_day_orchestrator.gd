@@ -1719,3 +1719,92 @@ func test_inject_characters_present_empty_location() -> void:
 	)
 	var present: Array = ws[1].get("characters_present", [])
 	assert_eq(present.size(), 0, "Empty location should have no co-located chars")
+
+
+# -- Resource stockpiles population tests --------------------------------------
+
+func _make_province(pid: int, clan: String) -> ProvinceData:
+	var p := ProvinceData.new()
+	p.province_id = pid
+	p.clan = clan
+	return p
+
+
+func _make_settlement_for(sid: int, pid: int, rice: float, koku: float, pop: int) -> SettlementData:
+	var s := SettlementData.new()
+	s.settlement_id = sid
+	s.province_id = pid
+	s.rice_stockpile = rice
+	s.koku_stockpile = koku
+	s.population_pu = pop
+	return s
+
+
+func test_resource_stockpiles_populated_for_lord() -> void:
+	var ws: Dictionary = {}
+	var lord := L5RCharacterData.new()
+	lord.character_id = 1
+	lord.clan = "Crane"
+	lord.status = 6.0
+	lord.lord_id = -1
+	var prov := _make_province(100, "Crane")
+	var s1 := _make_settlement_for(1, 100, 50.0, 20.0, 10)
+	var s2 := _make_settlement_for(2, 100, 30.0, 10.0, 5)
+	var clan := ClanData.new()
+	clan.clan_name = "Crane"
+	clan.arms_stockpile = 15.0
+	clan.iron_stockpile = 8.0
+	DayOrchestrator._populate_resource_stockpiles(
+		ws, [lord], {100: prov}, [s1, s2], {"Crane": clan}, [],
+	)
+	var rs: Dictionary = ws[1].get("resource_stockpiles", {})
+	assert_eq(rs.get("rice", 0.0), 80.0, "Rice should sum both settlements")
+	assert_eq(rs.get("koku", 0.0), 30.0, "Koku should sum both settlements")
+	assert_eq(rs.get("arms", 0.0), 15.0, "Arms from clan data")
+	assert_eq(rs.get("iron", 0.0), 8.0, "Iron from clan data")
+	assert_true(rs.get("population_pu", 0.0) >= 15.0, "Population PU summed")
+
+
+func test_resource_stockpiles_skipped_for_non_lord() -> void:
+	var ws: Dictionary = {}
+	var samurai := L5RCharacterData.new()
+	samurai.character_id = 2
+	samurai.clan = "Crane"
+	samurai.status = 3.0
+	samurai.lord_id = 1
+	DayOrchestrator._populate_resource_stockpiles(
+		ws, [samurai], {}, [], {}, [],
+	)
+	assert_false(ws.has(2), "Non-lord should not get resource stockpiles")
+
+
+func test_resource_stockpiles_rice_consumption() -> void:
+	var ws: Dictionary = {}
+	var lord := L5RCharacterData.new()
+	lord.character_id = 1
+	lord.clan = "Lion"
+	lord.status = 5.0
+	lord.lord_id = -1
+	var prov := _make_province(200, "Lion")
+	var s1 := _make_settlement_for(10, 200, 100.0, 0.0, 20)
+	DayOrchestrator._populate_resource_stockpiles(
+		ws, [lord], {200: prov}, [s1], {}, [],
+	)
+	var rs: Dictionary = ws[1].get("resource_stockpiles", {})
+	assert_almost_eq(rs.get("rice_consumption", 0.0), 5.0, 0.01, "20 PU * 0.25 = 5.0")
+
+
+func test_resource_stockpiles_no_matching_clan() -> void:
+	var ws: Dictionary = {}
+	var lord := L5RCharacterData.new()
+	lord.character_id = 1
+	lord.clan = "Scorpion"
+	lord.status = 6.0
+	lord.lord_id = -1
+	var prov := _make_province(100, "Crane")
+	var s1 := _make_settlement_for(1, 100, 50.0, 20.0, 10)
+	DayOrchestrator._populate_resource_stockpiles(
+		ws, [lord], {100: prov}, [s1], {}, [],
+	)
+	var rs: Dictionary = ws[1].get("resource_stockpiles", {})
+	assert_eq(rs.get("rice", 0.0), 0.0, "No Scorpion settlements")
