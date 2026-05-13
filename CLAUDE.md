@@ -487,7 +487,7 @@ All in /tests/, one file per system:
 - test_time_system.gd (~15 tests)
 - test_skill_resolver.gd (~20 tests)
 - test_action_point_system.gd (~12 tests)
-- test_npc_decision_engine.gd (~111 tests)
+- test_npc_decision_engine.gd (~116 tests)
 - test_scoring_table_loader.gd (~15 tests)
 - test_action_executor.gd (~35 tests)
 - test_effect_applicator.gd (~37 tests)

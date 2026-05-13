@@ -1321,3 +1321,64 @@ func test_known_contacts_no_duplicates() -> void:
 		if c_id == 10:
 			count += 1
 	assert_eq(count, 1, "Contact 10 should appear only once in flat list")
+
+
+# -- Competence modifier tests ------------------------------------------------
+
+func test_competence_modifier_with_primary_skill() -> void:
+	var tables: Dictionary = {
+		"action_skill_map": {
+			"CHARM": {"primary": "Etiquette", "secondary": "Courtier"},
+		},
+	}
+	var skills: Dictionary = {"Etiquette": 5, "Courtier": 3}
+	var result: float = NPCDecisionEngine._compute_competence_modifier(
+		"CHARM", skills, tables,
+	)
+	assert_almost_eq(result, 10.0, 0.01, "Rank 5 primary = +10")
+
+
+func test_competence_modifier_with_secondary_half_value() -> void:
+	var tables: Dictionary = {
+		"action_skill_map": {
+			"TEST": {"primary": "Battle", "secondary": "Etiquette"},
+		},
+	}
+	var skills: Dictionary = {"Battle": 3, "Etiquette": 5}
+	var result: float = NPCDecisionEngine._compute_competence_modifier(
+		"TEST", skills, tables,
+	)
+	assert_almost_eq(result, 5.0, 0.01, "Rank 3 primary (0) + rank 5 secondary (10*0.5=5)")
+
+
+func test_competence_modifier_null_secondary_no_penalty() -> void:
+	var tables: Dictionary = {
+		"action_skill_map": {
+			"INTIMIDATE": {"primary": "Intimidation", "secondary": null},
+		},
+	}
+	var skills: Dictionary = {"Intimidation": 4}
+	var result: float = NPCDecisionEngine._compute_competence_modifier(
+		"INTIMIDATE", skills, tables,
+	)
+	assert_almost_eq(result, 5.0, 0.01, "Rank 4 = +5, null secondary should not add penalty")
+
+
+func test_competence_modifier_null_primary_returns_zero() -> void:
+	var tables: Dictionary = {
+		"action_skill_map": {
+			"DO_NOTHING": {"primary": null, "secondary": null},
+		},
+	}
+	var result: float = NPCDecisionEngine._compute_competence_modifier(
+		"DO_NOTHING", {}, tables,
+	)
+	assert_eq(result, 0.0, "Null primary should return 0")
+
+
+func test_competence_modifier_unknown_action() -> void:
+	var tables: Dictionary = {"action_skill_map": {}}
+	var result: float = NPCDecisionEngine._compute_competence_modifier(
+		"NONEXISTENT", {}, tables,
+	)
+	assert_eq(result, 0.0, "Unknown action should return 0")
