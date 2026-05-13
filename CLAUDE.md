@@ -388,6 +388,42 @@ single-dice-entry-point and server-authoritative constraints.
   (95), SHARE_SUPPLIES (90), ASSIGN_VASSAL_OBJECTIVE (85), BEGIN_TRAVEL (70),
   WRITE_LETTER (60), ASSESS_PROVINCE_STATUS (40), DO_NOTHING (0).
 
+### Letter System Delivery Pipeline (s12.7, s57.5)
+- **shared/letter_data.gd** — LetterData Resource: letter_id, sender_id,
+  recipient_id, topic (int), quality (0–3 Calligraphy tiers), disposition_bonus,
+  ic_day_sent, ic_day_arrival, delivered, is_reply, route info
+  (province_distance, mountain_provinces, warzone_provinces, ocean_segments,
+  has_miya_route). Forgery fields: is_forged, forged_sender_id, forgery_tn,
+  forgery_detected. Blockade field: blocked_by_blockade.
+- **simulation/letter_system.gd** — Full letter lifecycle per GDD s12.7.
+  `calculate_delivery_time()` — provinces/3 + mountain + warzone + ocean×2 − miya.
+  `roll_letter_quality()` — Calligraphy + Trait vs TN 15, max quality 3 (+3 disp).
+  `write_letter()` — creates LetterData with quality roll and computed arrival.
+  `deliver_letter()` — topic transfer, disposition bonus, knowledge entry, action log.
+  `get_reply_chance()` — 20% base + 0.8%/disposition point + 15% Rei bonus (cap 95%).
+  Hostile threshold −30 = 0% reply.
+  `should_reply()` — RNG check against computed chance.
+  `apply_exchange_bonus()` — +1 mutual disposition on completed exchange.
+  `generate_replies()` — after delivery, checks reply chance for each delivered
+  letter, creates reply LetterData with original route info, applies exchange
+  bonus. Skips dead senders/recipients and undeliverable letters.
+  `has_prior_correspondence()` — checks if recipient has received an authentic
+  (non-forged) delivered letter from the apparent sender.
+  `auto_detect_forgery()` — silent Investigation+Perception vs forgery_tn on
+  receipt. Requires prior correspondence as reference. Called during batch delivery.
+  `deliberate_examine_letter()` — 1 AP action with Forgery Rank 5 mastery bonus
+  (+1k0). Returns detected/no_reference/authentic states.
+  `is_blocked_by_blockade()` — ocean letters blocked when active war has naval
+  component. `unblock_letters()` clears blockade flag on all pending letters.
+  `is_recipient_dead()` — dead recipient check via CharacterStats.is_dead().
+  `process_pending_letters()` — batch delivery with dead recipient skip, blockade
+  check, auto-forgery detection, and forgery info in results.
+- **DayOrchestrator wiring** — `process_pending_letters()` called with
+  active_wars and dice_engine for blockade and forgery detection. Reply letters
+  generated after delivery via `generate_replies()`, appended to pending_letters.
+  `unblock_letters()` called when peace trade routes are restored. Reply results
+  returned in `reply_letters` key.
+
 ### Topic Propagation (s16, s15.5, s15.6)
 - **simulation/topic_system.gd** — TopicMomentumSystem with three propagation
   features wired into DayOrchestrator:
@@ -496,6 +532,7 @@ All in /tests/, one file per system:
 - test_objective_decomposer.gd (~125 tests)
 - test_information_system.gd (~40 tests)
 - test_daily_conversation.gd (~37 tests)
+- test_letter_system.gd (~72 tests)
 - test_court_commitment_system.gd (~49 tests)
 - test_court_action_system.gd (~140 tests)
 - test_topic_system.gd (~55 tests)
