@@ -515,7 +515,7 @@ All in /tests/, one file per system:
 - test_resource_availability.gd (~25 tests)
 - test_court_availability.gd (~15 tests)
 - test_orphaned_objectives.gd (~25 tests)
-- test_strategic_review.gd (~35 tests)
+- test_strategic_review.gd (~38 tests)
 - test_province_triage.gd (~30 tests)
 - test_reactive_decisions.gd (~30 tests)
 - test_opportunity_scanner.gd (~25 tests)
