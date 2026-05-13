@@ -119,7 +119,7 @@ func test_exactly_1_5x_is_tight() -> void:
 # =============================================================================
 
 func test_deliver_gift_no_items_broke() -> void:
-	_char.outfit = []
+	_char.items = []
 	var mod: float = ResourceAvailability.compute_resource_modifier(
 		"DELIVER_GIFT", _char
 	)
@@ -127,7 +127,7 @@ func test_deliver_gift_no_items_broke() -> void:
 
 
 func test_deliver_gift_with_items() -> void:
-	_char.outfit = ["fan", "scroll", "tea set", "kimono", "jade"]
+	_char.items = [{"id": 1}, {"id": 2}, {"id": 3}, {"id": 4}, {"id": 5}]
 	var mod: float = ResourceAvailability.compute_resource_modifier(
 		"DELIVER_GIFT", _char
 	)

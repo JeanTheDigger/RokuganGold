@@ -7957,6 +7957,7 @@ static func _populate_resource_stockpiles(
 		var total_koku: float = 0.0
 		var total_pop_pu: float = 0.0
 		var total_rice_consumption: float = 0.0
+		var total_military_pu: float = 0.0
 		for sv: Variant in slist:
 			if sv is SettlementData:
 				var sd: SettlementData = sv as SettlementData
@@ -7964,6 +7965,7 @@ static func _populate_resource_stockpiles(
 				total_koku += sd.koku_stockpile
 				total_pop_pu += sd.population_pu
 				total_rice_consumption += sd.population_pu * 0.25
+				total_military_pu += sd.military_pu
 
 		var clan_data: Variant = clans.get(c.clan)
 		var arms: float = 0.0
@@ -7987,3 +7989,4 @@ static func _populate_resource_stockpiles(
 			"iron": iron,
 			"military_upkeep": maxf(clan_military_upkeep.get(c.clan, 0.0), 0.01),
 		}
+		ws["available_levy_pu"] = total_military_pu

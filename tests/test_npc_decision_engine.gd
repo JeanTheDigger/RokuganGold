@@ -1382,3 +1382,24 @@ func test_competence_modifier_unknown_action() -> void:
 		"NONEXISTENT", {}, tables,
 	)
 	assert_eq(result, 0.0, "Unknown action should return 0")
+
+
+# -- Province status rice stockpile population ---------------------------------
+
+func test_province_status_rice_stockpile_from_settlements() -> void:
+	var p := ProvinceData.new()
+	p.province_id = 100
+	p.clan = "Crane"
+	var s1 := SettlementData.new()
+	s1.settlement_id = 1
+	s1.province_id = 100
+	s1.rice_stockpile = 25.0
+	var s2 := SettlementData.new()
+	s2.settlement_id = 2
+	s2.province_id = 100
+	s2.rice_stockpile = 15.0
+	var statuses: Array = NPCDecisionEngine.build_province_statuses_from_data(
+		[p], [s1, s2],
+	)
+	assert_eq(statuses.size(), 1)
+	assert_almost_eq(statuses[0].rice_stockpile, 40.0, 0.01, "Rice should sum settlements")

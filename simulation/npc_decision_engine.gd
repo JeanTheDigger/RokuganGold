@@ -1402,12 +1402,14 @@ static func build_province_statuses_from_data(
 	var result: Array = []
 	var settlement_garrison: Dictionary = {}
 	var settlement_total_pu: Dictionary = {}
+	var settlement_rice: Dictionary = {}
 	for s: Variant in settlements:
 		if s is SettlementData:
 			var sd: SettlementData = s
 			var pid: int = sd.province_id
 			settlement_garrison[pid] = settlement_garrison.get(pid, 0) + sd.garrison_pu
 			settlement_total_pu[pid] = settlement_total_pu.get(pid, 0) + sd.population_pu
+			settlement_rice[pid] = settlement_rice.get(pid, 0.0) + sd.rice_stockpile
 
 	var armies_by_province: Dictionary = {}
 	for army: Variant in active_armies:
@@ -1437,6 +1439,7 @@ static func build_province_statuses_from_data(
 		ps.last_report_ic_day = pd.last_report_ic_day
 		ps.garrison_pu = settlement_garrison.get(pd.province_id, 0)
 		ps.total_settlement_pu = settlement_total_pu.get(pd.province_id, 0)
+		ps.rice_stockpile = settlement_rice.get(pd.province_id, 0.0)
 		ps.confidence = 2
 		var army_clans: Array = armies_by_province.get(pd.province_id, [])
 		for ac: Variant in army_clans:

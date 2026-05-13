@@ -1896,6 +1896,24 @@ func test_known_npc_locations_from_knowledge_pool() -> void:
 	assert_eq(locations.get(5, -1), 300, "Should map NPC 5 to settlement 300")
 
 
+func test_available_levy_pu_populated_for_lord() -> void:
+	var ws: Dictionary = {}
+	var lord := L5RCharacterData.new()
+	lord.character_id = 1
+	lord.clan = "Crab"
+	lord.status = 6.0
+	lord.lord_id = -1
+	var prov := _make_province(100, "Crab")
+	var s1 := _make_settlement_for(1, 100, 10.0, 5.0, 10)
+	s1.military_pu = 3
+	var s2 := _make_settlement_for(2, 100, 5.0, 2.0, 5)
+	s2.military_pu = 2
+	DayOrchestrator._populate_resource_stockpiles(
+		ws, [lord], {100: prov}, [s1, s2], {}, [],
+	)
+	assert_eq(ws[1].get("available_levy_pu", 0.0), 5.0, "Sum of military_pu")
+
+
 # -- Court context flag gap fix tests ------------------------------------------
 
 func test_court_context_creates_world_state_entry() -> void:
