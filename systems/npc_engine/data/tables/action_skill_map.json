@@ -263,6 +263,10 @@
 		"primary": "Investigation",
 		"secondary": "Perception"
 	},
+	"EXAMINE_LETTER": {
+		"primary": "Investigation",
+		"secondary": "Perception"
+	},
 	"INVESTIGATE_PROVINCE": {
 		"primary": "Investigation",
 		"secondary": "Lore: Shadowlands"

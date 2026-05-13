@@ -535,6 +535,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array[S
 				"TRAIN", "MEDITATE",
 				"ASSESS_PROVINCE_STATUS", "INVESTIGATE_PROVINCE",
 				"INVESTIGATE_RUMOR", "ORDER_PATROL",
+				"EXAMINE_LETTER",
 				"SCOUT_ENEMY",
 				"FOUND_VILLAGE", "BUILD_FORTIFICATION", "BUILD_SHRINE",
 				"FOUND_TEMPLE", "FOUND_MONASTERY", "COMMISSION_SHIP",
@@ -561,6 +562,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array[S
 				"TRAIN", "MEDITATE",
 				"BRIBE_FOR_INFO", "EAVESDROP",
 				"INTERCEPT_LETTER", "SEARCH_QUARTERS",
+				"EXAMINE_LETTER",
 				"DO_NOTHING", "REST",
 			]
 		Enums.ContextFlag.VISITING:
@@ -1515,6 +1517,10 @@ static func _populate_action_metadata(
 		option.metadata = {
 			"disclose_about_id": about_id,
 			"disclosed_opinion": opinion,
+		}
+	elif option.action_id == "EXAMINE_LETTER":
+		option.metadata = {
+			"letter_id": need.target_settlement_id if need.target_settlement_id >= 0 else -1,
 		}
 
 

@@ -867,3 +867,136 @@ func test_next_letter_id_incremented_per_reply():
 	if replies.size() >= 2:
 		assert_ne(replies[0].letter_id, replies[1].letter_id)
 	assert_true(next_id[0] >= 100 + replies.size())
+
+
+# -- EXAMINE_LETTER Wiring ----------------------------------------------------
+
+func test_examine_letter_in_action_skill_map():
+	var loader := ScoringTableLoader.new()
+	loader.load_all()
+	var tables: Dictionary = loader.get_scoring_tables()
+	var skill_map: Dictionary = tables.get("action_skill_map", {})
+	assert_true(skill_map.has("EXAMINE_LETTER"))
+	assert_eq(skill_map["EXAMINE_LETTER"]["primary"], "Investigation")
+	assert_eq(skill_map["EXAMINE_LETTER"]["secondary"], "Perception")
+
+func test_examine_letter_in_objective_alignment():
+	var loader := ScoringTableLoader.new()
+	loader.load_all()
+	var tables: Dictionary = loader.get_scoring_tables()
+	var obj_align: Dictionary = tables.get("objective_alignment", {})
+	assert_true(obj_align.has("INVESTIGATE_THREAT"))
+	var inv_threat: Dictionary = obj_align["INVESTIGATE_THREAT"]
+	assert_true(inv_threat.has("EXAMINE_LETTER"))
+	assert_eq(inv_threat["EXAMINE_LETTER"], 85)
+	assert_true(obj_align.has("GATHER_INTELLIGENCE"))
+	var gather: Dictionary = obj_align["GATHER_INTELLIGENCE"]
+	assert_true(gather.has("EXAMINE_LETTER"))
+	assert_eq(gather["EXAMINE_LETTER"], 75)
+
+func test_examine_letter_in_personality_lean():
+	var loader := ScoringTableLoader.new()
+	loader.load_all()
+	var tables: Dictionary = loader.get_scoring_tables()
+	var lean: Dictionary = tables.get("personality_lean", {})
+	for virtue: String in ["JIN", "YU", "REI", "CHUGI", "GI", "MEIYO", "MAKOTO",
+			"SEIGYO", "KETSUI", "DOSATSU", "CHISHIKI", "KANPEKI", "KYORYOKU", "ISHI"]:
+		assert_true(lean[virtue].has("EXAMINE_LETTER"),
+			"Missing EXAMINE_LETTER in %s" % virtue)
+
+func test_examine_letter_in_context_lists():
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
+	var holdings_actions: Array = NPCDecisionEngine._get_context_actions(ctx.context_flag)
+	assert_true("EXAMINE_LETTER" in holdings_actions,
+		"EXAMINE_LETTER should be in AT_OWN_HOLDINGS actions")
+	ctx.context_flag = Enums.ContextFlag.AT_COURT
+	var court_actions: Array = NPCDecisionEngine._get_context_actions(ctx.context_flag)
+	assert_true("EXAMINE_LETTER" in court_actions,
+		"EXAMINE_LETTER should be in AT_COURT actions")
+
+func test_examine_letter_executor_returns_deferred_flag():
+	var action := NPCDataStructures.ScoredAction.new()
+	action.action_id = "EXAMINE_LETTER"
+	action.target_npc_id = -1
+	action.target_province_id = -1
+	action.metadata = {"letter_id": 42}
+	var char := _make_char(1)
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.ic_day = 10
+	ctx.season = 0
+	ctx.character_id = 1
+	var dice := DiceEngine.new(99)
+	var skill_map: Dictionary = {"EXAMINE_LETTER": {"primary": "Investigation", "secondary": "Perception"}}
+	var result: Dictionary = ActionExecutor.execute(action, char, ctx, dice, skill_map)
+	assert_true(result["success"])
+	assert_eq(result["action_id"], "EXAMINE_LETTER")
+	var effects: Dictionary = result["effects"]
+	assert_true(effects.get("requires_letter_examination", false))
+	assert_eq(effects["letter_id"], 42)
+	assert_eq(effects["examiner_id"], 1)
+
+func test_examine_letter_orchestrator_processes_examination():
+	var examiner := _make_char(1)
+	examiner.skills["Investigation"] = 5
+	var sender := _make_char(2)
+	var dice := DiceEngine.new(42)
+	var forged_letter := LetterData.new()
+	forged_letter.letter_id = 10
+	forged_letter.sender_id = 2
+	forged_letter.recipient_id = 1
+	forged_letter.is_forged = true
+	forged_letter.forgery_tn = 10
+	forged_letter.delivered = true
+	var authentic_letter := LetterData.new()
+	authentic_letter.letter_id = 5
+	authentic_letter.sender_id = 2
+	authentic_letter.recipient_id = 1
+	authentic_letter.delivered = true
+	authentic_letter.is_forged = false
+	var pending: Array = [authentic_letter, forged_letter]
+	var chars: Dictionary = {1: examiner, 2: sender}
+	var day_results: Array = [{
+		"action_id": "EXAMINE_LETTER",
+		"character_id": 1,
+		"effects": {
+			"requires_letter_examination": true,
+			"letter_id": 10,
+			"examiner_id": 1,
+		},
+	}]
+	var results: Array[Dictionary] = DayOrchestrator._process_letter_examinations(
+		day_results, pending, chars, dice,
+	)
+	assert_eq(results.size(), 1)
+	assert_eq(results[0]["letter_id"], 10)
+	assert_eq(results[0]["examiner_id"], 1)
+	assert_true(results[0].has("detected"))
+
+func test_examine_letter_orchestrator_skips_invalid_letter():
+	var examiner := _make_char(1)
+	var dice := DiceEngine.new(42)
+	var pending: Array = []
+	var chars: Dictionary = {1: examiner}
+	var day_results: Array = [{
+		"action_id": "EXAMINE_LETTER",
+		"character_id": 1,
+		"effects": {
+			"requires_letter_examination": true,
+			"letter_id": 999,
+			"examiner_id": 1,
+		},
+	}]
+	var results: Array[Dictionary] = DayOrchestrator._process_letter_examinations(
+		day_results, pending, chars, dice,
+	)
+	assert_eq(results.size(), 0)
+
+func test_examine_letter_orchestrator_skips_without_dice():
+	var day_results: Array = [{
+		"effects": {"requires_letter_examination": true, "letter_id": 1, "examiner_id": 1},
+	}]
+	var results: Array[Dictionary] = DayOrchestrator._process_letter_examinations(
+		day_results, [], {}, null,
+	)
+	assert_eq(results.size(), 0)

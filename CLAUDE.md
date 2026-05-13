@@ -423,6 +423,16 @@ single-dice-entry-point and server-authoritative constraints.
   generated after delivery via `generate_replies()`, appended to pending_letters.
   `unblock_letters()` called when peace trade routes are restored. Reply results
   returned in `reply_letters` key.
+- **EXAMINE_LETTER wiring** — Deliberate letter examination as a daily AP action
+  (1 AP). Added to: action_skill_map.json (Investigation/Perception),
+  objective_alignment.json (INVESTIGATE_THREAT: 85, GATHER_INTELLIGENCE: 75),
+  personality_lean.json (all 14 virtues), AT_OWN_HOLDINGS and AT_COURT context
+  action lists. ActionExecutor intercepts EXAMINE_LETTER before generic path,
+  returns `requires_letter_examination: true` effect flag with letter_id and
+  examiner_id (Pattern A deferred). DayOrchestrator `_process_letter_examinations()`
+  resolves via `LetterSystem.deliberate_examine_letter()` using pending_letters
+  for prior correspondence check and Forgery Rank 5 mastery bonus. Results
+  returned in `letter_examination_results` key.
 
 ### Topic Propagation (s16, s15.5, s15.6)
 - **simulation/topic_system.gd** — TopicMomentumSystem with three propagation
@@ -532,7 +542,7 @@ All in /tests/, one file per system:
 - test_objective_decomposer.gd (~125 tests)
 - test_information_system.gd (~40 tests)
 - test_daily_conversation.gd (~37 tests)
-- test_letter_system.gd (~72 tests)
+- test_letter_system.gd (~76 tests)
 - test_court_commitment_system.gd (~49 tests)
 - test_court_action_system.gd (~140 tests)
 - test_topic_system.gd (~55 tests)

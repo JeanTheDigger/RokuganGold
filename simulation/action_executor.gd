@@ -222,6 +222,9 @@ static func execute(
 	if action_id == "SEAL_WALL_BREACH":
 		return _execute_seal_wall_breach(action, character, ctx, dice_engine)
 
+	if action_id == "EXAMINE_LETTER":
+		return _execute_examine_letter(action, character, ctx)
+
 	if action_id in COVERT_ACTIONS:
 		var covert_result: Dictionary = _try_execute_covert(
 			action, character, ctx, dice_engine, characters_by_id
@@ -1485,6 +1488,28 @@ static func _execute_scout_enemy(
 		"tn": SCOUT_TN,
 		"margin": margin,
 		"effects": effects,
+	}
+
+
+static func _execute_examine_letter(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> Dictionary:
+	var letter_id: int = action.metadata.get("letter_id", -1)
+	return {
+		"success": true,
+		"action_id": "EXAMINE_LETTER",
+		"character_id": character.character_id,
+		"target_npc_id": action.target_npc_id,
+		"target_province_id": action.target_province_id,
+		"ic_day": ctx.ic_day,
+		"season": ctx.season,
+		"effects": {
+			"requires_letter_examination": true,
+			"letter_id": letter_id,
+			"examiner_id": character.character_id,
+		},
 	}
 
 

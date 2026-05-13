@@ -214,6 +214,13 @@ static func advance_day(
 		day_result.get("results", []), worship_state,
 	)
 
+	var letter_examination_results: Array[Dictionary] = _process_letter_examinations(
+		day_result.get("results", []),
+		pending_letters,
+		characters_by_id,
+		dice_engine,
+	)
+
 	var construction_results: Array[Dictionary] = _process_construction_effects(
 		day_result.get("results", []),
 		characters_by_id,
@@ -574,6 +581,7 @@ static func advance_day(
 		"pregnancy_results": pregnancy_results,
 		"seiyaku_results": seiyaku_results,
 		"worship_accumulation_results": worship_accumulation_results,
+		"letter_examination_results": letter_examination_results,
 		"worship_seasonal_results": worship_seasonal_results,
 		"construction_results": construction_results,
 		"commitment_seasonal_result": commitment_seasonal_result,
@@ -6630,6 +6638,41 @@ static func _process_worship_accumulation(
 				"province_id": province_id,
 				"total_wp": effects.get("total_wp", 0.0),
 			})
+	return results
+
+
+static func _process_letter_examinations(
+	day_results: Array,
+	pending_letters: Array,
+	characters_by_id: Dictionary,
+	dice_engine: DiceEngine,
+) -> Array[Dictionary]:
+	var results: Array[Dictionary] = []
+	if dice_engine == null:
+		return results
+	for r: Variant in day_results:
+		if not (r is Dictionary):
+			continue
+		var result: Dictionary = r as Dictionary
+		var effects: Dictionary = result.get("effects", {})
+		if not effects.get("requires_letter_examination", false):
+			continue
+		var letter_id: int = effects.get("letter_id", -1)
+		var examiner_id: int = effects.get("examiner_id", -1)
+		if letter_id < 0 or examiner_id < 0:
+			continue
+		var examiner: L5RCharacterData = characters_by_id.get(examiner_id)
+		if examiner == null:
+			continue
+		var letter: LetterData = LetterSystem._find_letter_by_id(pending_letters, letter_id)
+		if letter == null:
+			continue
+		var exam_result: Dictionary = LetterSystem.deliberate_examine_letter(
+			letter, examiner, dice_engine, pending_letters,
+		)
+		exam_result["letter_id"] = letter_id
+		exam_result["examiner_id"] = examiner_id
+		results.append(exam_result)
 	return results
 
 
