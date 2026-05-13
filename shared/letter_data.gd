@@ -23,6 +23,15 @@ extends Resource
 @export var delivered: bool = false
 @export var is_reply: bool = false
 
+# Forgery tracking (populated by SecretSystem covert actions)
+@export var is_forged: bool = false
+@export var forged_sender_id: int = -1
+@export var forgery_tn: int = 0
+@export var forgery_detected: bool = false
+
+# Blockade state
+@export var blocked_by_blockade: bool = false
+
 # Route info used for delivery time
 @export var province_distance: int = 0
 @export var mountain_provinces: int = 0

@@ -29,6 +29,9 @@ const MIYA_BONUS: int = -1
 const FREE_LETTERS_PER_DAY: int = 1
 const BATCH_SIZE: int = 4
 
+# Forgery Rank 5 mastery bonus
+const FORGERY_RANK5_DETECT_BONUS: int = 1
+
 
 # -- Delivery Time Formula (GDD s12.7) -----------------------------------------
 
@@ -231,6 +234,105 @@ static func apply_exchange_bonus(
 	recipient.disposition_values[sender.character_id] = r_val + 1
 
 
+# -- Forgery Auto-Detection on Receipt -----------------------------------------
+# Per GDD s12.7: when a letter arrives, the recipient automatically performs a
+# silent detection check IF they have previously received an authentic letter
+# from the apparent sender (providing a reference for comparison).
+
+static func has_prior_correspondence(
+	recipient: L5RCharacterData,
+	apparent_sender_id: int,
+	pending_letters: Array,
+) -> bool:
+	for item: Variant in pending_letters:
+		if item is LetterData and item.delivered and not item.is_forged:
+			if item.recipient_id == recipient.character_id \
+				and item.sender_id == apparent_sender_id:
+				return true
+	return false
+
+
+static func auto_detect_forgery(
+	letter: LetterData,
+	recipient: L5RCharacterData,
+	dice_engine: DiceEngine,
+	pending_letters: Array,
+) -> bool:
+	if not letter.is_forged:
+		return false
+	if not has_prior_correspondence(recipient, letter.sender_id, pending_letters):
+		return false
+	var rolled: int = 0
+	var kept: int = 0
+	var perception: int = recipient.get_trait_value(Enums.Trait.PERCEPTION)
+	var investigation_rank: int = recipient.skills.get("Investigation", 0)
+	if investigation_rank > 0:
+		rolled = investigation_rank + perception
+		kept = perception
+	else:
+		rolled = perception
+		kept = perception
+	var result: DiceResult = dice_engine.roll_and_keep(rolled, kept, false)
+	return result.total >= letter.forgery_tn
+
+
+static func deliberate_examine_letter(
+	letter: LetterData,
+	examiner: L5RCharacterData,
+	dice_engine: DiceEngine,
+	pending_letters: Array,
+) -> Dictionary:
+	if not has_prior_correspondence(examiner, letter.sender_id, pending_letters):
+		return {"detected": false, "no_reference": true}
+	if not letter.is_forged:
+		return {"detected": false, "authentic": true}
+	var perception: int = examiner.get_trait_value(Enums.Trait.PERCEPTION)
+	var investigation_rank: int = examiner.skills.get("Investigation", 0)
+	var rolled: int = investigation_rank + perception if investigation_rank > 0 else perception
+	var kept: int = perception
+	var forgery_rank: int = examiner.skills.get("Forgery", 0)
+	if forgery_rank >= 5:
+		rolled += FORGERY_RANK5_DETECT_BONUS
+	var result: DiceResult = dice_engine.roll_and_keep(rolled, kept, false)
+	var detected: bool = result.total >= letter.forgery_tn
+	if detected:
+		letter.forgery_detected = true
+	return {
+		"detected": detected,
+		"roll_total": result.total,
+		"forgery_tn": letter.forgery_tn,
+	}
+
+
+# -- Blockade Check ------------------------------------------------------------
+# Per GDD s12.7: letters with ocean segments are blocked when a naval blockade
+# is active between the sender and recipient clans.
+
+static func is_blocked_by_blockade(
+	letter: LetterData,
+	active_wars: Array = [],
+) -> bool:
+	if letter.ocean_segments <= 0:
+		return false
+	for war: Variant in active_wars:
+		if war is Dictionary:
+			var has_naval: bool = war.get("has_naval_component", false)
+			if not has_naval:
+				continue
+			return true
+		elif war.has_method("get"):
+			return true
+	return false
+
+
+# -- Dead Recipient Check ------------------------------------------------------
+
+static func is_recipient_dead(
+	recipient: L5RCharacterData,
+) -> bool:
+	return CharacterStats.is_dead(recipient)
+
+
 # -- Batch Processing ----------------------------------------------------------
 # Processes all pending letters due for delivery on current_ic_day.
 # Returns list of delivery result dicts.
@@ -241,6 +343,8 @@ static func process_pending_letters(
 	current_ic_day: int,
 	current_season: int,
 	action_log: Array[Dictionary],
+	active_wars: Array = [],
+	dice_engine: DiceEngine = null,
 ) -> Array[Dictionary]:
 	var results: Array[Dictionary] = []
 
@@ -250,6 +354,26 @@ static func process_pending_letters(
 				var recipient: L5RCharacterData = characters_by_id.get(item.recipient_id)
 				if recipient == null:
 					continue
+				if is_recipient_dead(recipient):
+					item.delivered = true
+					results.append({
+						"letter_id": item.letter_id,
+						"sender_id": item.sender_id,
+						"recipient_id": item.recipient_id,
+						"topic": item.topic,
+						"undeliverable": true,
+						"reason": "recipient_dead",
+					})
+					continue
+				if item.ocean_segments > 0 and is_blocked_by_blockade(item, active_wars):
+					item.blocked_by_blockade = true
+					continue
+				if item.is_forged and dice_engine != null:
+					var detected: bool = auto_detect_forgery(
+						item, recipient, dice_engine, pending_letters
+					)
+					if detected:
+						item.forgery_detected = true
 				var delivery: Dictionary = deliver_letter(
 					item, recipient, current_season, action_log
 				)
@@ -258,6 +382,100 @@ static func process_pending_letters(
 					delivery["sender_id"] = item.sender_id
 					delivery["recipient_id"] = item.recipient_id
 					delivery["topic"] = item.topic
+					if item.is_forged:
+						delivery["is_forged"] = true
+						delivery["forged_sender_id"] = item.forged_sender_id
+						delivery["forgery_detected"] = item.forgery_detected
 					results.append(delivery)
 
 	return results
+
+
+# -- Reply Processing ---------------------------------------------------------
+# Generates reply letters for delivered letters. Called after process_pending_letters.
+
+static func generate_replies(
+	delivery_results: Array[Dictionary],
+	pending_letters: Array,
+	characters_by_id: Dictionary,
+	ic_day: int,
+	dice_engine: DiceEngine,
+	next_letter_id: Array[int],
+) -> Array[LetterData]:
+	var replies: Array[LetterData] = []
+
+	for result: Dictionary in delivery_results:
+		if result.get("undeliverable", false):
+			continue
+		var recipient_id: int = result.get("recipient_id", -1)
+		var sender_id: int = result.get("sender_id", -1)
+		var recipient: L5RCharacterData = characters_by_id.get(recipient_id)
+		var sender: L5RCharacterData = characters_by_id.get(sender_id)
+		if recipient == null or sender == null:
+			continue
+		if CharacterStats.is_dead(recipient) or CharacterStats.is_dead(sender):
+			continue
+
+		var disposition: int = recipient.disposition_values.get(sender_id, 0)
+		var rng_roll: int = dice_engine.roll_and_keep(1, 1, false).total % 100
+		if not should_reply(recipient, disposition, rng_roll):
+			continue
+
+		var reply_topic: int = _pick_reply_topic(recipient, result.get("topic", -1))
+		var original_letter: LetterData = _find_letter_by_id(
+			pending_letters, result.get("letter_id", -1)
+		)
+		var prov_dist: int = 0
+		var mtn: int = 0
+		var wz: int = 0
+		var ocean: int = 0
+		var miya: bool = false
+		if original_letter != null:
+			prov_dist = original_letter.province_distance
+			mtn = original_letter.mountain_provinces
+			wz = original_letter.warzone_provinces
+			ocean = original_letter.ocean_segments
+			miya = original_letter.has_miya_route
+
+		var lid: int = next_letter_id[0]
+		next_letter_id[0] = lid + 1
+
+		var reply: LetterData = write_letter(
+			lid, recipient, sender_id, reply_topic, ic_day, dice_engine,
+			prov_dist, mtn, wz, ocean, miya,
+			Enums.Trait.AWARENESS, true,
+		)
+		replies.append(reply)
+
+		apply_exchange_bonus(sender, recipient)
+
+	return replies
+
+
+static func _pick_reply_topic(
+	recipient: L5RCharacterData,
+	original_topic: int,
+) -> int:
+	if recipient.topic_pool.is_empty():
+		return original_topic
+	if original_topic >= 0 and original_topic in recipient.topic_pool:
+		return original_topic
+	return recipient.topic_pool[0]
+
+
+static func _find_letter_by_id(pending_letters: Array, letter_id: int) -> LetterData:
+	for item: Variant in pending_letters:
+		if item is LetterData and item.letter_id == letter_id:
+			return item
+	return null
+
+
+# -- Unblock Letters on Blockade Lift ------------------------------------------
+
+static func unblock_letters(pending_letters: Array) -> int:
+	var count: int = 0
+	for item: Variant in pending_letters:
+		if item is LetterData and item.blocked_by_blockade and not item.delivered:
+			item.blocked_by_blockade = false
+			count += 1
+	return count

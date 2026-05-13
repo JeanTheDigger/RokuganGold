@@ -307,6 +307,8 @@ static func advance_day(
 		war_termination_results, trade_routes,
 	)
 	trade_route_results.append_array(peace_route_results)
+	if not peace_route_results.is_empty():
+		LetterSystem.unblock_letters(pending_letters)
 
 	var military_topics: Array[TopicData] = _generate_military_event_topics(
 		military_daily, military_effects, active_topics, next_topic_id, ic_day,
@@ -357,9 +359,21 @@ static func advance_day(
 	)
 
 	var letter_results: Array[Dictionary] = LetterSystem.process_pending_letters(
-		pending_letters, characters_by_id, ic_day, current_season, action_log
+		pending_letters, characters_by_id, ic_day, current_season, action_log,
+		active_wars if active_wars != null else [], dice_engine,
 	)
 	_compute_positions_from_letters(letter_results, active_topics, characters_by_id)
+
+	var reply_letters: Array[LetterData] = []
+	if dice_engine != null:
+		var reply_next_id: Array[int] = [next_letter_id[0]]
+		reply_letters = LetterSystem.generate_replies(
+			letter_results, pending_letters, characters_by_id,
+			ic_day, dice_engine, reply_next_id,
+		)
+		for reply: LetterData in reply_letters:
+			pending_letters.append(reply)
+		next_letter_id[0] = reply_next_id[0]
 
 	var seasonal_result: Dictionary = {}
 	var strategic_results: Array[Dictionary] = []
@@ -510,6 +524,7 @@ static func advance_day(
 		"broadcast_results": broadcast_results,
 		"info_results": info_results,
 		"letter_results": letter_results,
+		"reply_letters": reply_letters,
 		"seasonal_result": seasonal_result,
 		"crime_results": crime_results,
 		"commitment_results": commitment_results,

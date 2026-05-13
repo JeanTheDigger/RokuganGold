@@ -7,6 +7,7 @@ func _make_char(id: int, calligraphy_rank: int = 3) -> L5RCharacterData:
 	c.awareness = 3
 	c.agility = 3
 	c.intelligence = 3
+	c.perception = 3
 	c.skills = {"Calligraphy": calligraphy_rank}
 	c.emphases = {}
 	c.wounds_taken = 0
@@ -364,3 +365,505 @@ func test_process_pending_skips_already_delivered():
 		pending, chars, 0, 1, log
 	)
 	assert_eq(results.size(), 0)
+
+
+# -- Dead Recipient -----------------------------------------------------------
+
+func test_dead_recipient_marked_undeliverable():
+	var dice := DiceEngine.new()
+	dice.set_seed(42)
+	var sender := _make_char(1, 3)
+	var recipient := _make_char(2)
+	recipient.wounds_taken = 200
+	var chars: Dictionary = {1: sender, 2: recipient}
+	var log: Array[Dictionary] = []
+
+	var letter: LetterData = LetterSystem.write_letter(
+		1, sender, 2, 5, 0, dice, 0
+	)
+	var pending: Array = [letter]
+	var results: Array[Dictionary] = LetterSystem.process_pending_letters(
+		pending, chars, 0, 1, log
+	)
+	assert_eq(results.size(), 1)
+	assert_true(results[0].get("undeliverable", false))
+	assert_eq(results[0].get("reason", ""), "recipient_dead")
+	assert_true(letter.delivered)
+
+func test_dead_recipient_topic_not_transferred():
+	var dice := DiceEngine.new()
+	dice.set_seed(42)
+	var sender := _make_char(1, 3)
+	var recipient := _make_char(2)
+	recipient.wounds_taken = 200
+	var chars: Dictionary = {1: sender, 2: recipient}
+	var log: Array[Dictionary] = []
+
+	var letter: LetterData = LetterSystem.write_letter(
+		1, sender, 2, 5, 0, dice, 0
+	)
+	var pending: Array = [letter]
+	LetterSystem.process_pending_letters(pending, chars, 0, 1, log)
+	assert_false(5 in recipient.topic_pool)
+
+
+# -- Blockade Check -----------------------------------------------------------
+
+func test_ocean_letter_blocked_by_blockade():
+	var dice := DiceEngine.new()
+	dice.set_seed(42)
+	var sender := _make_char(1, 3)
+	var recipient := _make_char(2)
+	var chars: Dictionary = {1: sender, 2: recipient}
+	var log: Array[Dictionary] = []
+
+	var letter: LetterData = LetterSystem.write_letter(
+		1, sender, 2, 5, 0, dice, 0, 0, 0, 1
+	)
+	var wars: Array = [{"has_naval_component": true}]
+	var pending: Array = [letter]
+	var results: Array[Dictionary] = LetterSystem.process_pending_letters(
+		pending, chars, 0, 1, log, wars
+	)
+	assert_eq(results.size(), 0)
+	assert_true(letter.blocked_by_blockade)
+	assert_false(letter.delivered)
+
+func test_overland_letter_not_blocked_by_blockade():
+	var dice := DiceEngine.new()
+	dice.set_seed(42)
+	var sender := _make_char(1, 3)
+	var recipient := _make_char(2)
+	var chars: Dictionary = {1: sender, 2: recipient}
+	var log: Array[Dictionary] = []
+
+	var letter: LetterData = LetterSystem.write_letter(
+		1, sender, 2, 5, 0, dice, 3
+	)
+	var wars: Array = [{"has_naval_component": true}]
+	var pending: Array = [letter]
+	var results: Array[Dictionary] = LetterSystem.process_pending_letters(
+		pending, chars, 0, 1, log, wars
+	)
+	assert_eq(results.size(), 1)
+	assert_false(letter.blocked_by_blockade)
+
+func test_blocked_letter_unblocked_when_blockade_lifts():
+	var letter := LetterData.new()
+	letter.blocked_by_blockade = true
+	letter.ocean_segments = 1
+	var pending: Array = [letter]
+	var count: int = LetterSystem.unblock_letters(pending)
+	assert_eq(count, 1)
+	assert_false(letter.blocked_by_blockade)
+
+
+# -- Forgery Detection -------------------------------------------------------
+
+func test_has_prior_correspondence_true():
+	var recipient := _make_char(2)
+	var prior := LetterData.new()
+	prior.sender_id = 1
+	prior.recipient_id = 2
+	prior.delivered = true
+	prior.is_forged = false
+	var pending: Array = [prior]
+	assert_true(LetterSystem.has_prior_correspondence(recipient, 1, pending))
+
+func test_has_prior_correspondence_false_no_letters():
+	var recipient := _make_char(2)
+	var pending: Array = []
+	assert_false(LetterSystem.has_prior_correspondence(recipient, 1, pending))
+
+func test_has_prior_correspondence_false_only_forged():
+	var recipient := _make_char(2)
+	var forged := LetterData.new()
+	forged.sender_id = 1
+	forged.recipient_id = 2
+	forged.delivered = true
+	forged.is_forged = true
+	var pending: Array = [forged]
+	assert_false(LetterSystem.has_prior_correspondence(recipient, 1, pending))
+
+func test_auto_detect_forgery_no_reference():
+	var dice := DiceEngine.new()
+	dice.set_seed(42)
+	var recipient := _make_char(2)
+	recipient.skills["Investigation"] = 4
+	var forged := LetterData.new()
+	forged.is_forged = true
+	forged.sender_id = 1
+	forged.forgery_tn = 10
+	var pending: Array = []
+	var detected: bool = LetterSystem.auto_detect_forgery(
+		forged, recipient, dice, pending
+	)
+	assert_false(detected)
+
+func test_auto_detect_forgery_with_reference_high_skill():
+	var dice := DiceEngine.new()
+	dice.set_seed(42)
+	var recipient := _make_char(2)
+	recipient.skills["Investigation"] = 5
+	recipient.perception = 5
+	var forged := LetterData.new()
+	forged.is_forged = true
+	forged.sender_id = 1
+	forged.forgery_tn = 10
+	var prior := LetterData.new()
+	prior.sender_id = 1
+	prior.recipient_id = 2
+	prior.delivered = true
+	prior.is_forged = false
+	var pending: Array = [prior]
+	var detected_count: int = 0
+	for i in range(10):
+		dice.set_seed(i)
+		if LetterSystem.auto_detect_forgery(forged, recipient, dice, pending):
+			detected_count += 1
+	assert_true(detected_count > 0)
+
+func test_auto_detect_non_forged_returns_false():
+	var dice := DiceEngine.new()
+	dice.set_seed(42)
+	var recipient := _make_char(2)
+	var letter := LetterData.new()
+	letter.is_forged = false
+	var pending: Array = []
+	assert_false(LetterSystem.auto_detect_forgery(letter, recipient, dice, pending))
+
+func test_deliberate_examine_no_reference():
+	var dice := DiceEngine.new()
+	dice.set_seed(42)
+	var examiner := _make_char(2)
+	examiner.skills["Investigation"] = 4
+	var letter := LetterData.new()
+	letter.is_forged = true
+	letter.sender_id = 1
+	letter.forgery_tn = 15
+	var pending: Array = []
+	var result: Dictionary = LetterSystem.deliberate_examine_letter(
+		letter, examiner, dice, pending
+	)
+	assert_false(result["detected"])
+	assert_true(result.get("no_reference", false))
+
+func test_deliberate_examine_authentic_letter():
+	var dice := DiceEngine.new()
+	dice.set_seed(42)
+	var examiner := _make_char(2)
+	examiner.skills["Investigation"] = 4
+	var letter := LetterData.new()
+	letter.is_forged = false
+	letter.sender_id = 1
+	var prior := LetterData.new()
+	prior.sender_id = 1
+	prior.recipient_id = 2
+	prior.delivered = true
+	prior.is_forged = false
+	var pending: Array = [prior]
+	var result: Dictionary = LetterSystem.deliberate_examine_letter(
+		letter, examiner, dice, pending
+	)
+	assert_false(result["detected"])
+	assert_true(result.get("authentic", false))
+
+func test_deliberate_examine_detects_forgery():
+	var dice := DiceEngine.new()
+	var examiner := _make_char(2)
+	examiner.skills["Investigation"] = 5
+	examiner.perception = 5
+	var letter := LetterData.new()
+	letter.is_forged = true
+	letter.sender_id = 1
+	letter.forgery_tn = 10
+	var prior := LetterData.new()
+	prior.sender_id = 1
+	prior.recipient_id = 2
+	prior.delivered = true
+	prior.is_forged = false
+	var pending: Array = [prior]
+	var detected_count: int = 0
+	for i in range(10):
+		dice.set_seed(i)
+		var result: Dictionary = LetterSystem.deliberate_examine_letter(
+			letter, examiner, dice, pending
+		)
+		if result["detected"]:
+			detected_count += 1
+	assert_true(detected_count > 0)
+
+func test_deliberate_examine_marks_forgery_detected():
+	var dice := DiceEngine.new()
+	dice.set_seed(1)
+	var examiner := _make_char(2)
+	examiner.skills["Investigation"] = 8
+	examiner.perception = 5
+	var letter := LetterData.new()
+	letter.is_forged = true
+	letter.sender_id = 1
+	letter.forgery_tn = 5
+	var prior := LetterData.new()
+	prior.sender_id = 1
+	prior.recipient_id = 2
+	prior.delivered = true
+	prior.is_forged = false
+	var pending: Array = [prior]
+	var result: Dictionary = LetterSystem.deliberate_examine_letter(
+		letter, examiner, dice, pending
+	)
+	if result["detected"]:
+		assert_true(letter.forgery_detected)
+
+func test_forgery_rank5_bonus_in_deliberate():
+	var dice := DiceEngine.new()
+	var examiner := _make_char(2)
+	examiner.skills["Investigation"] = 3
+	examiner.skills["Forgery"] = 5
+	examiner.perception = 3
+	var letter := LetterData.new()
+	letter.is_forged = true
+	letter.sender_id = 1
+	letter.forgery_tn = 15
+	var prior := LetterData.new()
+	prior.sender_id = 1
+	prior.recipient_id = 2
+	prior.delivered = true
+	prior.is_forged = false
+	var pending: Array = [prior]
+	var detected_with: int = 0
+	var detected_without: int = 0
+	for i in range(20):
+		dice.set_seed(i)
+		var r: Dictionary = LetterSystem.deliberate_examine_letter(
+			letter, examiner, dice, pending
+		)
+		if r["detected"]:
+			detected_with += 1
+	examiner.skills["Forgery"] = 0
+	for i in range(20):
+		dice.set_seed(i)
+		letter.forgery_detected = false
+		var r: Dictionary = LetterSystem.deliberate_examine_letter(
+			letter, examiner, dice, pending
+		)
+		if r["detected"]:
+			detected_without += 1
+	assert_true(detected_with >= detected_without)
+
+
+# -- Forged Letter in Batch Processing ----------------------------------------
+
+func test_forged_letter_delivers_with_forgery_info():
+	var dice := DiceEngine.new()
+	dice.set_seed(42)
+	var sender := _make_char(1, 3)
+	var recipient := _make_char(2)
+	var chars: Dictionary = {1: sender, 2: recipient}
+	var log: Array[Dictionary] = []
+
+	var letter: LetterData = LetterSystem.write_letter(
+		1, sender, 2, 5, 0, dice, 0
+	)
+	letter.is_forged = true
+	letter.forged_sender_id = 99
+	letter.forgery_tn = 30
+	var pending: Array = [letter]
+	var results: Array[Dictionary] = LetterSystem.process_pending_letters(
+		pending, chars, 0, 1, log, [], dice
+	)
+	assert_eq(results.size(), 1)
+	assert_true(results[0].get("is_forged", false))
+	assert_eq(results[0].get("forged_sender_id", -1), 99)
+
+
+# -- Reply Generation --------------------------------------------------------
+
+func test_generate_replies_creates_reply():
+	var dice := DiceEngine.new()
+	dice.set_seed(42)
+	var sender := _make_char(1, 3)
+	var recipient := _make_char(2, 3)
+	recipient.disposition_values[1] = 80
+	recipient.topic_pool = [10, 20]
+	var chars: Dictionary = {1: sender, 2: recipient}
+	var log: Array[Dictionary] = []
+
+	var letter: LetterData = LetterSystem.write_letter(
+		1, sender, 2, 10, 0, dice, 3
+	)
+	var pending: Array = [letter]
+	LetterSystem.process_pending_letters(pending, chars, 0, 1, log)
+
+	var delivery_results: Array[Dictionary] = [{
+		"letter_id": 1,
+		"sender_id": 1,
+		"recipient_id": 2,
+		"topic": 10,
+		"topic_transferred": true,
+		"disposition_bonus": 1,
+	}]
+	var next_id: Array[int] = [100]
+	var replies: Array[LetterData] = LetterSystem.generate_replies(
+		delivery_results, pending, chars, 0, dice, next_id
+	)
+	if replies.size() > 0:
+		assert_true(replies[0].is_reply)
+		assert_eq(replies[0].sender_id, 2)
+		assert_eq(replies[0].recipient_id, 1)
+		assert_true(replies[0].topic >= 0)
+
+func test_generate_replies_skips_dead_sender():
+	var dice := DiceEngine.new()
+	dice.set_seed(42)
+	var sender := _make_char(1, 3)
+	sender.wounds_taken = 200
+	var recipient := _make_char(2, 3)
+	recipient.disposition_values[1] = 80
+	recipient.topic_pool = [10]
+	var chars: Dictionary = {1: sender, 2: recipient}
+
+	var delivery_results: Array[Dictionary] = [{
+		"letter_id": 1,
+		"sender_id": 1,
+		"recipient_id": 2,
+		"topic": 10,
+	}]
+	var next_id: Array[int] = [100]
+	var replies: Array[LetterData] = LetterSystem.generate_replies(
+		delivery_results, [], chars, 0, dice, next_id
+	)
+	assert_eq(replies.size(), 0)
+
+func test_generate_replies_skips_undeliverable():
+	var dice := DiceEngine.new()
+	dice.set_seed(42)
+	var sender := _make_char(1, 3)
+	var recipient := _make_char(2, 3)
+	recipient.disposition_values[1] = 80
+	recipient.topic_pool = [10]
+	var chars: Dictionary = {1: sender, 2: recipient}
+
+	var delivery_results: Array[Dictionary] = [{
+		"letter_id": 1,
+		"sender_id": 1,
+		"recipient_id": 2,
+		"topic": 10,
+		"undeliverable": true,
+		"reason": "recipient_dead",
+	}]
+	var next_id: Array[int] = [100]
+	var replies: Array[LetterData] = LetterSystem.generate_replies(
+		delivery_results, [], chars, 0, dice, next_id
+	)
+	assert_eq(replies.size(), 0)
+
+func test_generate_replies_applies_exchange_bonus():
+	var dice := DiceEngine.new()
+	dice.set_seed(42)
+	var sender := _make_char(1, 3)
+	sender.disposition_values[2] = 30
+	var recipient := _make_char(2, 3)
+	recipient.disposition_values[1] = 80
+	recipient.topic_pool = [10]
+	recipient.bushido_virtue = Enums.BushidoVirtue.REI
+	var chars: Dictionary = {1: sender, 2: recipient}
+
+	var letter: LetterData = LetterSystem.write_letter(
+		1, sender, 2, 10, 0, dice, 0
+	)
+	var pending: Array = [letter]
+
+	var delivery_results: Array[Dictionary] = [{
+		"letter_id": 1,
+		"sender_id": 1,
+		"recipient_id": 2,
+		"topic": 10,
+	}]
+	var next_id: Array[int] = [100]
+	var replies: Array[LetterData] = LetterSystem.generate_replies(
+		delivery_results, pending, chars, 0, dice, next_id
+	)
+	if replies.size() > 0:
+		assert_eq(sender.disposition_values[2], 31)
+		assert_eq(recipient.disposition_values[1], 81)
+
+func test_generate_replies_uses_original_route():
+	var dice := DiceEngine.new()
+	dice.set_seed(42)
+	var sender := _make_char(1, 3)
+	var recipient := _make_char(2, 3)
+	recipient.disposition_values[1] = 80
+	recipient.topic_pool = [10]
+	recipient.bushido_virtue = Enums.BushidoVirtue.REI
+	var chars: Dictionary = {1: sender, 2: recipient}
+
+	var letter: LetterData = LetterSystem.write_letter(
+		1, sender, 2, 10, 0, dice, 6, 2, 1, 1, true
+	)
+	var pending: Array = [letter]
+
+	var delivery_results: Array[Dictionary] = [{
+		"letter_id": 1,
+		"sender_id": 1,
+		"recipient_id": 2,
+		"topic": 10,
+	}]
+	var next_id: Array[int] = [100]
+	var replies: Array[LetterData] = LetterSystem.generate_replies(
+		delivery_results, pending, chars, 0, dice, next_id
+	)
+	if replies.size() > 0:
+		assert_eq(replies[0].province_distance, 6)
+		assert_eq(replies[0].mountain_provinces, 2)
+		assert_eq(replies[0].warzone_provinces, 1)
+		assert_eq(replies[0].ocean_segments, 1)
+		assert_true(replies[0].has_miya_route)
+
+func test_reply_topic_prefers_original():
+	var recipient := _make_char(2)
+	recipient.topic_pool = [10, 20, 30]
+	var topic: int = LetterSystem._pick_reply_topic(recipient, 20)
+	assert_eq(topic, 20)
+
+func test_reply_topic_fallback_first_when_original_unknown():
+	var recipient := _make_char(2)
+	recipient.topic_pool = [10, 20, 30]
+	var topic: int = LetterSystem._pick_reply_topic(recipient, 99)
+	assert_eq(topic, 10)
+
+func test_reply_topic_uses_original_when_pool_empty():
+	var recipient := _make_char(2)
+	recipient.topic_pool = []
+	var topic: int = LetterSystem._pick_reply_topic(recipient, 5)
+	assert_eq(topic, 5)
+
+func test_next_letter_id_incremented_per_reply():
+	var dice := DiceEngine.new()
+	dice.set_seed(42)
+	var sender := _make_char(1, 3)
+	var r1 := _make_char(2, 3)
+	r1.disposition_values[1] = 90
+	r1.topic_pool = [10]
+	r1.bushido_virtue = Enums.BushidoVirtue.REI
+	var r2 := _make_char(3, 3)
+	r2.disposition_values[1] = 90
+	r2.topic_pool = [20]
+	r2.bushido_virtue = Enums.BushidoVirtue.REI
+	var chars: Dictionary = {1: sender, 2: r1, 3: r2}
+
+	var l1: LetterData = LetterSystem.write_letter(1, sender, 2, 10, 0, dice, 0)
+	var l2: LetterData = LetterSystem.write_letter(2, sender, 3, 20, 0, dice, 0)
+	var pending: Array = [l1, l2]
+
+	var delivery_results: Array[Dictionary] = [
+		{"letter_id": 1, "sender_id": 1, "recipient_id": 2, "topic": 10},
+		{"letter_id": 2, "sender_id": 1, "recipient_id": 3, "topic": 20},
+	]
+	var next_id: Array[int] = [100]
+	var replies: Array[LetterData] = LetterSystem.generate_replies(
+		delivery_results, pending, chars, 0, dice, next_id
+	)
+	if replies.size() >= 2:
+		assert_ne(replies[0].letter_id, replies[1].letter_id)
+	assert_true(next_id[0] >= 100 + replies.size())
