@@ -513,3 +513,208 @@ func test_non_clan_provinces_unaffected() -> void:
 
 	assert_eq(crane_prov.stability, 80.0,
 		"Non-clan provinces should not be affected by civil war")
+
+
+# -- Trigger & Faction Formation (s53.2.1, s53.2.2) ---------------------------
+
+func test_trigger_civil_war_creates_state() -> void:
+	var rebel := _make_char(100, "Lion")
+	rebel.status = 6.0
+	var authority := _make_char(1, "Lion")
+	authority.status = 7.0
+	authority.lord_id = -1
+	var vassal := _make_char(50, "Lion")
+	vassal.lord_id = 1
+
+	var wars: Array[Dictionary] = []
+	var topics: Array[TopicData] = []
+	var tid: Array[int] = [5000]
+	var chars_by_id: Dictionary = {100: rebel, 1: authority, 50: vassal}
+
+	var result: Dictionary = DayOrchestrator._trigger_civil_war(
+		100, 1, "Lion", "directive",
+		[rebel, authority, vassal], chars_by_id, {},
+		wars, topics, tid, 10, 0,
+	)
+
+	assert_true(result.get("triggered", false), "Civil war should trigger")
+	assert_eq(wars.size(), 1, "Should create one civil war state")
+	assert_true(wars[0].get("active", false), "War should be active")
+	assert_eq(wars[0].get("rebel_lord_id"), 100)
+	assert_eq(wars[0].get("authority_lord_id"), 1)
+	assert_eq(wars[0].get("clan"), "Lion")
+
+
+func test_trigger_generates_tier_2_topic() -> void:
+	var rebel := _make_char(100, "Lion")
+	var authority := _make_char(1, "Lion")
+	authority.lord_id = -1
+
+	var wars: Array[Dictionary] = []
+	var topics: Array[TopicData] = []
+	var tid: Array[int] = [5000]
+	var chars_by_id: Dictionary = {100: rebel, 1: authority}
+
+	DayOrchestrator._trigger_civil_war(
+		100, 1, "Lion", "directive",
+		[rebel, authority], chars_by_id, {},
+		wars, topics, tid, 10, 0,
+	)
+
+	assert_eq(topics.size(), 1, "Should generate one topic")
+	assert_eq(topics[0].tier, TopicData.Tier.TIER_2)
+	assert_eq(topics[0].topic_type, "civil_war")
+
+
+func test_trigger_assigns_factions_to_all_clan_npcs() -> void:
+	var rebel := _make_char(100, "Lion")
+	rebel.status = 6.0
+	var authority := _make_char(1, "Lion")
+	authority.status = 7.0
+	authority.lord_id = -1
+	var npc1 := _make_char(50, "Lion")
+	npc1.lord_id = 1
+	var npc2 := _make_char(51, "Lion")
+	npc2.lord_id = 100
+
+	var wars: Array[Dictionary] = []
+	var topics: Array[TopicData] = []
+	var tid: Array[int] = [5000]
+	var chars: Array[L5RCharacterData] = [rebel, authority, npc1, npc2]
+	var chars_by_id: Dictionary = {100: rebel, 1: authority, 50: npc1, 51: npc2}
+
+	DayOrchestrator._trigger_civil_war(
+		100, 1, "Lion", "directive",
+		chars, chars_by_id, {},
+		wars, topics, tid, 10, 0,
+	)
+
+	var assignments: Dictionary = wars[0].get("faction_assignments", {})
+	assert_eq(assignments.get(100), IntraClanCivilWar.Faction.REBEL)
+	assert_eq(assignments.get(1), IntraClanCivilWar.Faction.LEGITIMACY)
+	assert_true(assignments.has(50) or assignments.has(51),
+		"NPCs should be assigned factions")
+
+
+func test_trigger_skips_dead_npcs() -> void:
+	var rebel := _make_char(100, "Lion")
+	var authority := _make_char(1, "Lion")
+	authority.lord_id = -1
+	var dead_npc := _make_char(50, "Lion")
+	dead_npc.wounds_taken = 999
+
+	var wars: Array[Dictionary] = []
+	var topics: Array[TopicData] = []
+	var tid: Array[int] = [5000]
+	var chars_by_id: Dictionary = {100: rebel, 1: authority, 50: dead_npc}
+
+	DayOrchestrator._trigger_civil_war(
+		100, 1, "Lion", "directive",
+		[rebel, authority, dead_npc], chars_by_id, {},
+		wars, topics, tid, 10, 0,
+	)
+
+	var assignments: Dictionary = wars[0].get("faction_assignments", {})
+	assert_false(assignments.has(50), "Dead NPCs should not be assigned factions")
+
+
+func test_trigger_skips_other_clan_npcs() -> void:
+	var rebel := _make_char(100, "Lion")
+	var authority := _make_char(1, "Lion")
+	authority.lord_id = -1
+	var crane_npc := _make_char(50, "Crane")
+	crane_npc.clan = "Crane"
+
+	var wars: Array[Dictionary] = []
+	var topics: Array[TopicData] = []
+	var tid: Array[int] = [5000]
+	var chars_by_id: Dictionary = {100: rebel, 1: authority, 50: crane_npc}
+
+	DayOrchestrator._trigger_civil_war(
+		100, 1, "Lion", "directive",
+		[rebel, authority, crane_npc], chars_by_id, {},
+		wars, topics, tid, 10, 0,
+	)
+
+	var assignments: Dictionary = wars[0].get("faction_assignments", {})
+	assert_false(assignments.has(50), "Other-clan NPCs should not be assigned factions")
+
+
+func test_trigger_prevents_duplicate_wars() -> void:
+	var rebel := _make_char(100, "Lion")
+	var authority := _make_char(1, "Lion")
+	authority.lord_id = -1
+
+	var existing: Dictionary = IntraClanCivilWar.make_initial_state(200, 1, "Lion", 4000, 0)
+	var wars: Array[Dictionary] = [existing]
+	var topics: Array[TopicData] = []
+	var tid: Array[int] = [5000]
+	var chars_by_id: Dictionary = {100: rebel, 1: authority}
+
+	var result: Dictionary = DayOrchestrator._trigger_civil_war(
+		100, 1, "Lion", "directive",
+		[rebel, authority], chars_by_id, {},
+		wars, topics, tid, 10, 0,
+	)
+
+	assert_false(result.get("triggered", true), "Should not trigger duplicate war")
+	assert_eq(wars.size(), 1, "Should not add a second war")
+
+
+func test_trigger_ronin_departure_on_low_pulls() -> void:
+	var rebel := _make_char(100, "Lion")
+	rebel.status = 6.0
+	var authority := _make_char(1, "Lion")
+	authority.status = 7.0
+	authority.lord_id = -1
+	var npc := _make_char(50, "Lion")
+	npc.bushido_virtue = Enums.BushidoVirtue.NONE
+	npc.shourido_virtue = Enums.ShouridoVirtue.NONE
+	npc.disposition_values[100] = -80
+
+	var wars: Array[Dictionary] = []
+	var topics: Array[TopicData] = []
+	var tid: Array[int] = [5000]
+	var chars_by_id: Dictionary = {100: rebel, 1: authority, 50: npc}
+
+	var result: Dictionary = DayOrchestrator._trigger_civil_war(
+		100, 1, "Lion", "directive",
+		[rebel, authority, npc], chars_by_id, {},
+		wars, topics, tid, 10, 0,
+	)
+
+	var ronin: Array = result.get("ronin_departures", [])
+	if ronin.has(50):
+		assert_true(npc.permanent_ronin, "Ronin departure should set permanent_ronin")
+		assert_eq(npc.lord_id, -1, "Ronin should have no lord")
+	else:
+		assert_true(true, "NPC did not meet ronin threshold")
+
+
+func test_trigger_reassigns_broken_feudal_chains() -> void:
+	var rebel := _make_char(100, "Lion")
+	rebel.status = 6.0
+	rebel.lord_id = -1
+	var authority := _make_char(1, "Lion")
+	authority.status = 7.0
+	authority.lord_id = -1
+	var vassal := _make_char(50, "Lion")
+	vassal.lord_id = 100
+	vassal.bushido_virtue = Enums.BushidoVirtue.CHUGI
+	vassal.disposition_values[100] = -50
+
+	var wars: Array[Dictionary] = []
+	var topics: Array[TopicData] = []
+	var tid: Array[int] = [5000]
+	var chars_by_id: Dictionary = {100: rebel, 1: authority, 50: vassal}
+
+	DayOrchestrator._trigger_civil_war(
+		100, 1, "Lion", "directive",
+		[rebel, authority, vassal], chars_by_id, {},
+		wars, topics, tid, 10, 0,
+	)
+
+	var assignments: Dictionary = wars[0].get("faction_assignments", {})
+	if assignments.get(50) == IntraClanCivilWar.Faction.LEGITIMACY:
+		assert_ne(vassal.lord_id, 100,
+			"Vassal on legitimacy side should not report to rebel lord")

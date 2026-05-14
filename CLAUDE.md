@@ -3500,6 +3500,24 @@ The following subsystems are now integrated into the NPC decision loop:
   New params on `advance_day()`: `active_civil_wars: Array[Dictionary]`,
   `precedent_modifiers: Dictionary`. Return dict gains `civil_war_results`.
   WorldStateData gains `active_civil_wars` and `precedent_modifiers` fields.
+  **Trigger & Faction Formation (s53.2.1, s53.2.2)** —
+  `_trigger_civil_war()` creates initial state via `make_initial_state()`,
+  generates Tier 2 POLITICAL crisis topic, evaluates loyalty for all living
+  clan NPCs (Family Daimyo first, then others), processes ronin departures
+  (permanent via `RoninSystem.make_ronin()` + `permanent_ronin = true`),
+  and reassigns broken feudal chains (`_reassign_broken_feudal_chains()`
+  assigns vassals whose lord picked the opposite faction to the highest-
+  status same-faction member). Guards against duplicate active wars for
+  the same clan.
+  Wired from two existing defiance paths:
+  `_process_togashi_oversight()` — when `is_removal_triggered()` (Stage 4),
+  triggers Dragon civil war with Mirumoto FC as rebel, Togashi as authority.
+  `_process_phoenix_council_gating()` — when `is_overreach_schism_imminent()`
+  (Stage 4), triggers Phoenix civil war with senior Elemental Master as
+  rebel, Shiba Champion as authority.
+  NPC AI decision to refuse a directive is NOT implemented — triggers only
+  fire from existing governance escalation paths. Adding a general refusal
+  mechanic requires GDD specification.
 
 ## Resolved Design Decisions
 

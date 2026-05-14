@@ -491,18 +491,21 @@ static func advance_day(
 			characters, objectives_map, world_states
 		)
 		var togashi_results: Dictionary = {}
+		var cw_season_count: int = int(season_meta.get("horde_season_count", 0))
 		if not togashi_state.is_empty():
 			togashi_results = _process_togashi_oversight(
 				togashi_state, strategic_results, characters,
 				characters_by_id, world_states, active_topics,
-				next_topic_id, ic_day,
+				next_topic_id, ic_day, active_civil_wars,
+				objectives_map, cw_season_count,
 			)
 		var phoenix_council_results: Dictionary = {}
 		if not phoenix_council_state.is_empty():
 			phoenix_council_results = _process_phoenix_council_gating(
 				phoenix_council_state, strategic_results, characters,
 				characters_by_id, dice_engine, active_topics,
-				next_topic_id, ic_day,
+				next_topic_id, ic_day, active_civil_wars,
+				objectives_map, cw_season_count,
 			)
 		_evaluate_heir_designations(
 			characters, characters_by_id, active_topics
@@ -6170,6 +6173,9 @@ static func _process_togashi_oversight(
 	active_topics: Array[TopicData],
 	next_topic_id: Array[int],
 	ic_day: int,
+	active_civil_wars: Array[Dictionary] = [],
+	objectives_map: Dictionary = {},
+	current_season: int = 0,
 ) -> Dictionary:
 	var mirumoto_fc: L5RCharacterData = _find_mirumoto_fc(characters)
 	if mirumoto_fc == null:
@@ -6221,6 +6227,18 @@ static func _process_togashi_oversight(
 
 		if TogashiOversight.is_authority_locked(togashi_state):
 			result["diplomatic_penalty"] = TogashiOversight.STAGE_DIPLOMATIC_PENALTY
+
+	if TogashiOversight.is_removal_triggered(togashi_state):
+		var togashi_id: int = _find_togashi_id(characters)
+		var fc_id: int = mirumoto_fc.character_id
+		if togashi_id >= 0:
+			var cw_result: Dictionary = _trigger_civil_war(
+				fc_id, togashi_id, "Dragon", "removal order",
+				characters, characters_by_id, objectives_map,
+				active_civil_wars, active_topics, next_topic_id,
+				ic_day, current_season,
+			)
+			result["civil_war_triggered"] = cw_result
 
 	return result
 
@@ -6333,6 +6351,9 @@ static func _process_phoenix_council_gating(
 	active_topics: Array[TopicData],
 	next_topic_id: Array[int],
 	ic_day: int,
+	active_civil_wars: Array[Dictionary] = [],
+	objectives_map: Dictionary = {},
+	current_season: int = 0,
 ) -> Dictionary:
 	var shiba_champion: L5RCharacterData = _find_shiba_champion(characters)
 	if shiba_champion == null:
@@ -6440,7 +6461,7 @@ static func _process_phoenix_council_gating(
 		topic.category = TopicData.Category.POLITICAL
 		active_topics.append(topic)
 
-	return {
+	var result_dict: Dictionary = {
 		"vetoed": vetoed,
 		"approved": approved,
 		"had_major_decisions": had_any_major,
@@ -6448,6 +6469,20 @@ static func _process_phoenix_council_gating(
 		"overreach_stage": int(phoenix_state.get("overreach_stage", 0)),
 		"living_masters_count": living_masters.size(),
 	}
+
+	if PhoenixCouncil.is_overreach_schism_imminent(phoenix_state):
+		var senior_master_id: int = _find_senior_elemental_master_id(living_masters, characters_by_id)
+		if senior_master_id >= 0:
+			var cw_result: Dictionary = _trigger_civil_war(
+				senior_master_id, shiba_champion.character_id,
+				"Phoenix", "council overreach",
+				characters, characters_by_id, objectives_map,
+				active_civil_wars, active_topics, next_topic_id,
+				ic_day, current_season,
+			)
+			result_dict["civil_war_triggered"] = cw_result
+
+	return result_dict
 
 
 static func _find_shiba_champion(characters: Array[L5RCharacterData]) -> L5RCharacterData:
@@ -6482,6 +6517,25 @@ static func _find_living_elemental_masters(characters: Array[L5RCharacterData]) 
 	for m in found_by_role:
 		masters.append(m)
 	return masters
+
+
+static func _find_senior_elemental_master_id(
+	_living_masters: Array,
+	characters_by_id: Dictionary,
+) -> int:
+	var best_id: int = -1
+	var best_status: float = -1.0
+	for c: L5RCharacterData in characters_by_id.values():
+		if c.clan != "Phoenix":
+			continue
+		if not c.role_position.begins_with("Master of "):
+			continue
+		if CharacterStats.is_dead(c):
+			continue
+		if c.status > best_status:
+			best_status = c.status
+			best_id = c.character_id
+	return best_id
 
 
 static func _element_string_to_master(element: String) -> int:
@@ -8787,3 +8841,164 @@ static func _decay_civil_war_scars(
 		if int(entry.get("base_remaining", 0)) < 0:
 			remaining.append(entry)
 	season_meta["civil_war_scars"] = remaining
+
+
+# -- Civil War Trigger & Faction Formation (s53.2.1, s53.2.2) ----------------
+
+static func _trigger_civil_war(
+	rebel_lord_id: int,
+	authority_lord_id: int,
+	clan: String,
+	order_type: String,
+	characters: Array[L5RCharacterData],
+	characters_by_id: Dictionary,
+	objectives_map: Dictionary,
+	active_civil_wars: Array[Dictionary],
+	active_topics: Array[TopicData],
+	next_topic_id: Array[int],
+	ic_day: int,
+	current_season: int,
+) -> Dictionary:
+	## Triggers an intra-clan civil war per GDD s53.2.1. Creates initial state,
+	## generates the Tier 2 crisis topic, evaluates loyalty for all named clan
+	## NPCs, and processes ronin departures.
+	## Returns a result dict describing what happened.
+
+	for existing: Dictionary in active_civil_wars:
+		if existing.get("active", false) and existing.get("clan", "") == clan:
+			return {"triggered": false, "reason": "already_active"}
+
+	var topic_id: int = next_topic_id[0]
+	next_topic_id[0] += 1
+	var topic := TopicData.new()
+	topic.topic_id = topic_id
+	var rebel: L5RCharacterData = characters_by_id.get(rebel_lord_id)
+	var authority: L5RCharacterData = characters_by_id.get(authority_lord_id)
+	var rebel_name: String = rebel.character_name if rebel != null else "Unknown"
+	var auth_name: String = authority.character_name if authority != null else "Unknown"
+	topic.slug = "civil_war_%s_%s_refuses_%s_%d" % [
+		clan.to_lower(), rebel_name.to_lower().replace(" ", "_"),
+		order_type.to_lower().replace(" ", "_"), ic_day,
+	]
+	topic.tier = TopicData.Tier.TIER_2
+	topic.topic_type = "civil_war"
+	topic.variant = "civil_war_triggered"
+	topic.momentum = 60.0
+	topic.category = TopicData.Category.POLITICAL
+	topic.ic_day_created = ic_day
+	active_topics.append(topic)
+
+	var state: Dictionary = IntraClanCivilWar.make_initial_state(
+		rebel_lord_id, authority_lord_id, clan, topic_id, current_season,
+	)
+
+	var rebel_completion: float = _get_rebel_completion_rate(rebel_lord_id, objectives_map)
+	var rebel_was_failing: bool = rebel_completion < 0.50
+
+	var clan_npcs: Array[L5RCharacterData] = []
+	for c: L5RCharacterData in characters:
+		if c.clan == clan and not CharacterStats.is_dead(c):
+			clan_npcs.append(c)
+
+	var family_daimyo: Array[L5RCharacterData] = []
+	var others: Array[L5RCharacterData] = []
+	for c: L5RCharacterData in clan_npcs:
+		if c.character_id == rebel_lord_id or c.character_id == authority_lord_id:
+			continue
+		if c.status >= 5.0:
+			family_daimyo.append(c)
+		else:
+			others.append(c)
+
+	IntraClanCivilWar.assign_faction(
+		state, rebel_lord_id, IntraClanCivilWar.Faction.REBEL,
+	)
+	IntraClanCivilWar.assign_faction(
+		state, authority_lord_id, IntraClanCivilWar.Faction.LEGITIMACY,
+	)
+
+	var ronin_departures: Array[int] = []
+	var faction_counts: Dictionary = {
+		IntraClanCivilWar.Faction.LEGITIMACY: 1,
+		IntraClanCivilWar.Faction.REBEL: 1,
+		IntraClanCivilWar.Faction.RONIN: 0,
+	}
+
+	var all_to_evaluate: Array[L5RCharacterData] = []
+	all_to_evaluate.append_array(family_daimyo)
+	all_to_evaluate.append_array(others)
+
+	for npc: L5RCharacterData in all_to_evaluate:
+		var grievance_visible: bool = topic_id in npc.topic_pool
+		var loyalty: Dictionary = IntraClanCivilWar.evaluate_loyalty(
+			npc, rebel_lord_id, rebel_completion, grievance_visible,
+			rebel_was_failing,
+		)
+		var faction: int = int(loyalty.get("faction", IntraClanCivilWar.Faction.LEGITIMACY))
+
+		if faction == IntraClanCivilWar.Faction.RONIN:
+			IntraClanCivilWar.apply_ronin_departure(npc)
+			RoninSystem.make_ronin(npc, RoninSystem.RoninCause.VOLUNTARY_DEPARTURE)
+			npc.permanent_ronin = true
+			ronin_departures.append(npc.character_id)
+			faction_counts[IntraClanCivilWar.Faction.RONIN] = int(faction_counts.get(IntraClanCivilWar.Faction.RONIN, 0)) + 1
+		else:
+			IntraClanCivilWar.assign_faction(state, npc.character_id, faction)
+			faction_counts[faction] = int(faction_counts.get(faction, 0)) + 1
+
+	_reassign_broken_feudal_chains(state, characters_by_id, rebel_lord_id, authority_lord_id)
+
+	active_civil_wars.append(state)
+
+	return {
+		"triggered": true,
+		"clan": clan,
+		"rebel_lord_id": rebel_lord_id,
+		"authority_lord_id": authority_lord_id,
+		"topic_id": topic_id,
+		"faction_counts": faction_counts,
+		"ronin_departures": ronin_departures,
+	}
+
+
+static func _reassign_broken_feudal_chains(
+	state: Dictionary,
+	characters_by_id: Dictionary,
+	rebel_lord_id: int,
+	authority_lord_id: int,
+) -> void:
+	## When a vassal and their immediate lord are on opposite factions,
+	## reassign the vassal's lord_id to the highest-ranking member of
+	## their own faction in the chain. Per GDD s53.2.2.
+	var assignments: Dictionary = state.get("faction_assignments", {})
+	for cid_var: Variant in assignments.keys():
+		var cid: int = int(cid_var)
+		var npc: L5RCharacterData = characters_by_id.get(cid)
+		if npc == null:
+			continue
+		var npc_faction: int = int(assignments.get(cid, IntraClanCivilWar.Faction.NONE))
+		if npc_faction == IntraClanCivilWar.Faction.NONE:
+			continue
+
+		var lord: L5RCharacterData = characters_by_id.get(npc.lord_id)
+		if lord == null:
+			continue
+		var lord_faction: int = int(assignments.get(lord.character_id, IntraClanCivilWar.Faction.NONE))
+		if lord_faction == npc_faction:
+			continue
+
+		var best_lord_id: int = rebel_lord_id if npc_faction == IntraClanCivilWar.Faction.REBEL else authority_lord_id
+		var best_status: float = -1.0
+		for other_id_var: Variant in assignments.keys():
+			var other_id: int = int(other_id_var)
+			if other_id == cid:
+				continue
+			if int(assignments.get(other_id, IntraClanCivilWar.Faction.NONE)) != npc_faction:
+				continue
+			var other: L5RCharacterData = characters_by_id.get(other_id)
+			if other == null:
+				continue
+			if other.status > best_status:
+				best_status = other.status
+				best_lord_id = other_id
+		npc.lord_id = best_lord_id
