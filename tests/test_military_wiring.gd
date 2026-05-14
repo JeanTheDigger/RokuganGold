@@ -4410,3 +4410,126 @@ func test_populate_metadata_order_levy_sets_province() -> void:
 	ctx.province_statuses = [ps]
 	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
 	assert_eq(option.target_province_id, 42)
+
+
+# -- Levy Suspicion Tests --------------------------------------------------------
+
+func _make_levy_company(
+	company_id: int,
+	lord_id: int,
+	raised_season: int = 0,
+) -> Dictionary:
+	return {
+		"company_id": company_id,
+		"unit_type": Enums.CompanyUnitType.ASHIGARU_SPEARMEN,
+		"health": 153,
+		"morale": 12,
+		"commander_id": -1,
+		"parent_legion_id": -1,
+		"source_province_id": 1,
+		"army_id": -1,
+		"lord_id": lord_id,
+		"destroyed": false,
+		"routed": false,
+		"levy_raised_season": raised_season,
+	}
+
+
+func test_levy_suspicion_fires_after_threshold() -> void:
+	var lord: L5RCharacterData = _make_char_for_levy(5, "Crab")
+	lord.family = "Hida"
+	var chars_by_id: Dictionary = {5: lord}
+	var company: Dictionary = _make_levy_company(1, 5, 0)
+	var topics: Array[TopicData] = []
+	var next_tid: Array[int] = [100]
+	var results: Array[Dictionary] = DayOrchestrator._process_levy_suspicion(
+		[company], [], chars_by_id, topics, next_tid, 90, 1,
+	)
+	assert_eq(results.size(), 1)
+	assert_eq(results[0]["lord_id"], 5)
+	assert_eq(results[0]["topic_tier"], 4)
+	assert_eq(topics.size(), 1)
+
+
+func test_levy_suspicion_skips_wartime() -> void:
+	var lord: L5RCharacterData = _make_char_for_levy(5, "Crab")
+	var chars_by_id: Dictionary = {5: lord}
+	var company: Dictionary = _make_levy_company(1, 5, 0)
+	var war: WarData = WarSystem.declare_war(1, "Crab", "Crane", 1, 1, 2)
+	var topics: Array[TopicData] = []
+	var next_tid: Array[int] = [100]
+	var results: Array[Dictionary] = DayOrchestrator._process_levy_suspicion(
+		[company], [war], chars_by_id, topics, next_tid, 90, 3,
+	)
+	assert_eq(results.size(), 0)
+	assert_eq(topics.size(), 0)
+
+
+func test_levy_suspicion_skips_before_threshold() -> void:
+	var lord: L5RCharacterData = _make_char_for_levy(5, "Crab")
+	var chars_by_id: Dictionary = {5: lord}
+	var company: Dictionary = _make_levy_company(1, 5, 5)
+	var topics: Array[TopicData] = []
+	var next_tid: Array[int] = [100]
+	var results: Array[Dictionary] = DayOrchestrator._process_levy_suspicion(
+		[company], [], chars_by_id, topics, next_tid, 90, 5,
+	)
+	assert_eq(results.size(), 0)
+
+
+func test_levy_suspicion_escalates_at_3_seasons() -> void:
+	var lord: L5RCharacterData = _make_char_for_levy(5, "Crab")
+	lord.family = "Hida"
+	var chars_by_id: Dictionary = {5: lord}
+	var company: Dictionary = _make_levy_company(1, 5, 0)
+	var topics: Array[TopicData] = []
+	var next_tid: Array[int] = [100]
+	var results: Array[Dictionary] = DayOrchestrator._process_levy_suspicion(
+		[company], [], chars_by_id, topics, next_tid, 90, 3,
+	)
+	assert_eq(results.size(), 1)
+	assert_eq(results[0]["topic_tier"], 3)
+	assert_true(results[0]["escalated"])
+
+
+func test_levy_suspicion_skips_army_companies() -> void:
+	var lord: L5RCharacterData = _make_char_for_levy(5, "Crab")
+	var chars_by_id: Dictionary = {5: lord}
+	var company: Dictionary = _make_levy_company(1, 5, 0)
+	company["army_id"] = 1
+	var topics: Array[TopicData] = []
+	var next_tid: Array[int] = [100]
+	var results: Array[Dictionary] = DayOrchestrator._process_levy_suspicion(
+		[company], [], chars_by_id, topics, next_tid, 90, 2,
+	)
+	assert_eq(results.size(), 0)
+
+
+func test_levy_suspicion_one_topic_per_lord() -> void:
+	var lord: L5RCharacterData = _make_char_for_levy(5, "Crab")
+	lord.family = "Hida"
+	var chars_by_id: Dictionary = {5: lord}
+	var c1: Dictionary = _make_levy_company(1, 5, 0)
+	var c2: Dictionary = _make_levy_company(2, 5, 0)
+	var topics: Array[TopicData] = []
+	var next_tid: Array[int] = [100]
+	var results: Array[Dictionary] = DayOrchestrator._process_levy_suspicion(
+		[c1, c2], [], chars_by_id, topics, next_tid, 90, 2,
+	)
+	assert_eq(results.size(), 1)
+	assert_eq(topics.size(), 1)
+
+
+func test_levy_company_dict_has_raised_season() -> void:
+	var s: SettlementData = _make_settlement(10, 1, 10, 3)
+	var companies: Array[Dictionary] = []
+	var next_id: Array[int] = [1]
+	var applied: Dictionary = {
+		"character_id": 5,
+		"target_province_id": 1,
+		"effects": {"requires_levy_pu": true},
+	}
+	DayOrchestrator._apply_levy_pu_effect(
+		applied, [s], companies, next_id, {}, {}, 7,
+	)
+	assert_eq(companies[0]["levy_raised_season"], 7)

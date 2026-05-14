@@ -175,6 +175,7 @@ static func advance_day(
 		world_states,
 	)
 
+	var current_season_count: int = int(season_meta.get("horde_season_count", 0))
 	var military_effects: Array[Dictionary] = _process_military_effects(
 		day_result.get("results", []),
 		settlements,
@@ -183,6 +184,7 @@ static func advance_day(
 		provinces,
 		next_company_id,
 		clans,
+		current_season_count,
 	)
 
 	var wall_engineering_results: Array[Dictionary] = _process_wall_engineering_effects(
@@ -442,6 +444,11 @@ static func advance_day(
 		military_seasonal_result = _process_military_seasonal(
 			companies, settlements, clans, characters_by_id,
 			dice_engine, _season_to_name(current_season),
+		)
+		military_seasonal_result["levy_suspicion"] = _process_levy_suspicion(
+			companies, active_wars, characters_by_id,
+			active_topics, next_topic_id, ic_day,
+			int(season_meta.get("horde_season_count", 0)),
 		)
 		_process_war_seasonal(active_wars, characters)
 		military_seasonal_result["blockade_honor"] = StarvationWarfare.process_seasonal_blockade_honor(
@@ -3202,6 +3209,84 @@ static func _process_military_seasonal(
 	}
 
 
+static func _process_levy_suspicion(
+	companies: Array[Dictionary],
+	active_wars: Array[WarData],
+	characters_by_id: Dictionary,
+	active_topics: Array[TopicData],
+	next_topic_id: Array[int],
+	ic_day: int,
+	season_count: int,
+) -> Array[Dictionary]:
+	var results: Array[Dictionary] = []
+	var war_clans: Dictionary = {}
+	for w: WarData in active_wars:
+		war_clans[w.clan_a] = true
+		war_clans[w.clan_b] = true
+		for ac: String in w.allied_clans_a:
+			war_clans[ac] = true
+		for ac: String in w.allied_clans_b:
+			war_clans[ac] = true
+
+	var lords_checked: Dictionary = {}
+	for company: Dictionary in companies:
+		if company.get("destroyed", false):
+			continue
+		if company.get("army_id", -1) >= 0:
+			continue
+		var lord_id: int = company.get("lord_id", -1)
+		if lord_id < 0 or lord_id in lords_checked:
+			continue
+		lords_checked[lord_id] = true
+
+		var lord: L5RCharacterData = characters_by_id.get(lord_id)
+		if lord == null:
+			continue
+
+		var is_wartime: bool = lord.clan in war_clans
+		var raised_season: int = company.get("levy_raised_season", season_count)
+		var seasons_maintained: int = season_count - raised_season
+
+		var check: Dictionary = LevySystem.check_suspicion(seasons_maintained, is_wartime)
+		if not check.get("suspicion", false):
+			continue
+
+		var tid: int = next_topic_id[0]
+		next_topic_id[0] += 1
+		var tier_val: int = check["topic_tier"]
+		var tier: TopicData.Tier = TopicData.Tier.TIER_4 if tier_val == 4 else TopicData.Tier.TIER_3
+		var momentum: float = 11.0 if tier_val == 4 else 26.0
+		var topic: TopicData = TopicMomentumSystem.create_topic(
+			tid,
+			"Private Army Suspicion — %s" % lord.family,
+			tier,
+			TopicData.Category.POLITICAL,
+			ic_day,
+			momentum,
+			[],
+			"",
+			lord.clan,
+			-1,
+			"private_army",
+			"suspicion",
+		)
+		topic.slug = "private_army_%d_season_%d" % [lord_id, season_count]
+		active_topics.append(topic)
+
+		results.append({
+			"lord_id": lord_id,
+			"clan": lord.clan,
+			"seasons_maintained": seasons_maintained,
+			"topic_tier": tier_val,
+			"disposition_loss_lord": check.get("disposition_loss_lord", 0),
+			"disposition_loss_neighbor": check.get("disposition_loss_neighbor", 0),
+			"escalated": check.get("escalated", false),
+			"topic_id": tid,
+		})
+
+	return results
+
+
 static func _process_army_upkeep(
 	companies: Array[Dictionary],
 	settlements: Array[SettlementData],
@@ -3355,6 +3440,7 @@ static func _process_military_effects(
 	provinces: Dictionary = {},
 	next_company_id: Array[int] = [1],
 	clans: Dictionary = {},
+	season_count: int = 0,
 ) -> Array[Dictionary]:
 	var results: Array[Dictionary] = []
 	var settlements_by_province: Dictionary = _build_settlements_by_province(settlements)
@@ -3365,7 +3451,7 @@ static func _process_military_effects(
 		if effects.get("requires_levy_pu", false):
 			var r: Dictionary = _apply_levy_pu_effect(
 				applied, settlements, companies, next_company_id,
-				characters_by_id, clans,
+				characters_by_id, clans, season_count,
 			)
 			if not r.is_empty():
 				results.append(r)
@@ -4525,6 +4611,7 @@ static func _apply_levy_pu_effect(
 	next_company_id: Array[int] = [1],
 	characters_by_id: Dictionary = {},
 	clans: Dictionary = {},
+	season_count: int = 0,
 ) -> Dictionary:
 	var province_id: int = applied.get("target_province_id", -1)
 	if province_id < 0:
@@ -4578,6 +4665,7 @@ static func _apply_levy_pu_effect(
 			"lord_id": lord_id,
 			"destroyed": false,
 			"routed": false,
+			"levy_raised_season": season_count,
 		}
 		companies.append(company_dict)
 

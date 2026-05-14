@@ -608,7 +608,7 @@ All in /tests/, one file per system:
 - test_order_system.gd (~30 tests)
 - test_military_service_system.gd (~35 tests)
 - test_pu_reconciliation.gd (~30 tests)
-- test_military_wiring.gd (~261 tests)
+- test_military_wiring.gd (~268 tests)
 - test_war_system.gd (~61 tests)
 - test_war_justification.gd (~55 tests)
 - test_war_termination.gd (~46 tests)
@@ -3350,7 +3350,16 @@ The following subsystems are now integrated into the NPC decision loop:
   `army_id: -1` (levy companies exist outside Go-hatamoto hierarchy).
   Arms equip cost deducted from `ClanData.arms_stockpile` (looked up via
   character clan, clamped at 0). `arms_deducted` returned in result dict.
-  WorldStateData gains `next_company_id: Array[int]`. ORDER_BATTLE →
+  Company dict stamped with `levy_raised_season` for suspicion tracking.
+  WorldStateData gains `next_company_id: Array[int]`.
+  Seasonal: `_process_levy_suspicion()` runs on season boundary after upkeep.
+  Iterates levy companies (army_id == -1), computes seasons maintained since
+  `levy_raised_season`, checks wartime exemption (all clans in active wars
+  including allies), calls `LevySystem.check_suspicion()`. On suspicion:
+  generates Tier 4 topic (momentum 11) initially, escalates to Tier 3
+  (momentum 26) at 3+ seasons. One topic per lord per season boundary.
+  Skips destroyed companies and companies assigned to armies.
+  ORDER_BATTLE →
   `_apply_battle_pu_reconciliation()` calls `PUReconciliation.reconcile_battle()`
   with victor/loser company data from effects dict. ASSIGN_TO_MILITARY_SERVICE →
   `_apply_service_assignment_effect()` calls
