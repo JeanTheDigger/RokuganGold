@@ -362,13 +362,22 @@ func test_grapple_initiation_has_success_key() -> void:
 	assert_true(result.has("success"))
 
 
-func test_successful_grapple_applies_condition() -> void:
+func test_successful_grapple_applies_condition_to_attacker() -> void:
 	_char_a.agility = 5
 	_char_a.skills = {"Jiujutsu": 5}
 	var p := IndividualCombat.Participant.new()
 	# Use very low TN so grapple succeeds
 	IndividualCombat.initiate_grapple(_char_a, p, 5, _dice)
 	assert_true(IndividualCombat.has_condition(p, IndividualCombat.CONDITION_GRAPPLED))
+
+
+func test_successful_grapple_signals_target_should_be_grappled() -> void:
+	_char_a.agility = 5
+	_char_a.skills = {"Jiujutsu": 5}
+	var p := IndividualCombat.Participant.new()
+	# RAW: "On success, both attacker and target are in a Grapple" (s40)
+	var result: Dictionary = IndividualCombat.initiate_grapple(_char_a, p, 5, _dice)
+	assert_true(result["apply_grappled_to_target"])
 
 
 func test_grapple_control_has_winner() -> void:

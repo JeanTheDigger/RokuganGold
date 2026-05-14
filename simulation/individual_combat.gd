@@ -110,6 +110,7 @@ class Participant:
 	var full_defense_bonus: int = 0  # bonus from Full Defense Stance roll
 	var grapple_partner_id: int = -1
 	var grapple_in_control: bool = false
+	var daze_failed_recovery_attempts: int = 0  # tracks TN reduction per s40 ("decreases by 5 each failed attempt")
 	var void_ring_bonus: int = 0     # from Center Stance carry-forward
 	var center_stance_bonus_used: bool = false
 	var fatigue_days: int = 0        # consecutive days without rest
@@ -514,9 +515,12 @@ static func initiate_grapple(
 		attacker.agility, jiujutsu, target_armor_tn, 0, wound_penalty
 	)
 	if result["success"]:
+		# Both attacker and target enter the Grapple on success (s40)
 		apply_condition(attacker_p, CONDITION_GRAPPLED)
-		return {"success": true, "roll": result["total"], "target_tn": target_armor_tn}
-	return {"success": false, "roll": result["total"], "target_tn": target_armor_tn}
+		return {"success": true, "roll": result["total"], "target_tn": target_armor_tn,
+			"apply_grappled_to_target": true}
+	return {"success": false, "roll": result["total"], "target_tn": target_armor_tn,
+		"apply_grappled_to_target": false}
 
 
 static func resolve_grapple_control(
@@ -735,7 +739,7 @@ static func _iaijutsu_attack(
 	var kept: int = striker.reflexes
 
 	# Center Stance carry-over: +1k1 + Void Ring on the first roll of the turn (s40)
-	var flat_bonus: int = wound_penalty
+	var flat_bonus: int = wound_penalty - get_condition_roll_penalty(striker_p)
 	if striker_p.void_ring_bonus > 0 and not striker_p.center_stance_bonus_used:
 		rolled += 1
 		kept += 1
@@ -813,9 +817,10 @@ static func resolve_duel_strike(
 			duel.loser_id = first_striker.character_id
 			duel.is_over = true
 		elif not duel.duel_to_death:
-			# First blood: if second struck and hit, duel to first blood is over
-			var second_struck: bool = CharacterStats.get_wound_level(second_striker) > Enums.WoundLevel.HEALTHY
-			if second_struck:
+			# First blood: the moment a strike lands the duel is over (s40).
+			# Checking the attack result rather than wound level avoids false positives
+			# from characters who entered the duel already wounded.
+			if first_attack.get("hit", false):
 				duel.winner_id = first_striker.character_id
 				duel.loser_id = second_striker.character_id
 				duel.is_over = true
@@ -923,11 +928,14 @@ static func advance_round_reactions(
 		var c: L5RCharacterData = characters_by_id.get(cid)
 		if c == null:
 			continue
-		# Dazed recovery attempt
+		# Dazed recovery attempt — TN starts at 20, decreases by 5 per prior failure (s40)
 		if CONDITION_DAZED in p.conditions:
-			var recovered: bool = attempt_recover_dazed(c, p, 1, dice_engine)
+			var recovered: bool = attempt_recover_dazed(c, p, p.daze_failed_recovery_attempts + 1, dice_engine)
 			if recovered:
+				p.daze_failed_recovery_attempts = 0
 				events.append({"type": "condition_cleared", "condition": CONDITION_DAZED, "character_id": cid})
+			else:
+				p.daze_failed_recovery_attempts += 1
 		# Stunned recovery
 		if CONDITION_STUNNED in p.conditions:
 			var recovered: bool = attempt_recover_stunned(c, p, dice_engine)
