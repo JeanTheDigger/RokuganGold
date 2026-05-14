@@ -1571,6 +1571,32 @@ static func _populate_action_metadata(
 		option.metadata = {
 			"siege_settlement_id": ctx.location_id,
 		}
+	elif option.action_id == "OBSERVE_COURT_ATTENDEES":
+		# Populate the list of attendees this NPC hasn't met yet (s55.7.3).
+		var court: Dictionary = ctx.active_court_at_location
+		var attendee_ids: Array = court.get("attendee_ids", [])
+		var observable: Array[int] = []
+		for aid: Variant in attendee_ids:
+			var aid_int: int = int(aid)
+			if aid_int != ctx.character_id and aid_int not in ctx.met_characters:
+				observable.append(aid_int)
+		option.metadata = {"observable_attendee_ids": observable}
+	elif option.action_id == "ASK_FOR_INTRODUCTION":
+		# Intermediary: highest-disposition Friend+ contact who is not the target (s55.7.3).
+		var target_id: int = option.target_npc_id
+		if target_id < 0:
+			target_id = need.target_npc_id
+		var best_intermediary: int = -1
+		var best_disp: int = 30
+		for cid: Variant in ctx.disposition_values:
+			var cid_int: int = int(cid)
+			if cid_int == target_id or cid_int == ctx.character_id:
+				continue
+			var disp: int = int(ctx.disposition_values[cid])
+			if disp >= 31 and disp > best_disp:
+				best_disp = disp
+				best_intermediary = cid_int
+		option.metadata = {"intermediary_id": best_intermediary}
 
 
 static func _pick_court_agenda_topic(ctx: NPCDataStructures.ContextSnapshot) -> int:
