@@ -198,6 +198,15 @@ static func advance_day(
 		provinces,
 	)
 
+	var storm_assault_results: Array[Dictionary] = _process_storm_assault_results(
+		day_result.get("results", []),
+		active_sieges,
+		companies,
+		dice_engine,
+		settlements,
+		characters_by_id,
+	)
+
 	var horde_assault_results: Array[Dictionary] = _process_horde_assaults(
 		active_hordes, settlements, active_topics, next_topic_id, ic_day, provinces,
 	)
@@ -608,6 +617,7 @@ static func advance_day(
 		"wall_seasonal": wall_seasonal_result,
 		"wall_engineering_results": wall_engineering_results,
 		"sortie_results": sortie_results,
+		"storm_assault_results": storm_assault_results,
 		"horde_assault_results": horde_assault_results,
 		"horde_results": horde_results,
 		"naval_weather": naval_weather,
@@ -1040,6 +1050,90 @@ static func _process_sortie_results(
 		})
 
 	return results
+
+
+# -- Storm Assault Processing (s11.7) ------------------------------------------
+
+static func _process_storm_assault_results(
+	applied_list: Array,
+	active_sieges: Array[Dictionary],
+	companies: Array[Dictionary],
+	dice_engine: DiceEngine,
+	settlements: Array[SettlementData],
+	characters_by_id: Dictionary,
+) -> Array[Dictionary]:
+	var results: Array[Dictionary] = []
+
+	for applied: Dictionary in applied_list:
+		var effects: Dictionary = applied.get("effects", {})
+		if not effects.get("requires_storm_assault", false):
+			continue
+
+		var siege_settlement_id: int = effects.get("siege_settlement_id", -1)
+		var siege: Dictionary = _find_siege_by_settlement(
+			siege_settlement_id, active_sieges,
+		)
+		if siege.is_empty():
+			push_warning(
+				"[StormAssault] No siege found at settlement %d" % siege_settlement_id,
+			)
+			continue
+
+		var atk_army_id: int = siege.get("attacker_army_id", -1)
+		var def_army_id: int = siege.get("defender_army_id", -1)
+
+		var atk_dicts: Array[Dictionary] = _get_army_companies(atk_army_id, companies)
+		var def_dicts: Array[Dictionary] = _get_army_companies(def_army_id, companies)
+
+		if atk_dicts.is_empty() or def_dicts.is_empty():
+			push_warning(
+				"[StormAssault] Empty companies: atk=%d def=%d" % [
+					atk_dicts.size(), def_dicts.size(),
+				],
+			)
+			continue
+
+		var atk_states: Array[Dictionary] = _build_battle_states(
+			atk_dicts, "attacker", characters_by_id,
+		)
+		var def_states: Array[Dictionary] = _build_battle_states(
+			def_dicts, "defender", characters_by_id,
+		)
+
+		var fort_bonus: int = SiegeSystem.get_storm_defense_bonus()
+		var battle_result: Dictionary = resolve_and_reconcile_battle(
+			atk_states, def_states, Enums.BattleTerrainType.URBAN,
+			dice_engine, settlements, false, fort_bonus,
+		)
+
+		_write_battle_results_to_companies(battle_result, companies)
+
+		var victor: String = battle_result.get("victor", "draw")
+		if victor == "attacker":
+			siege["siege_ended"] = true
+			siege["end_reason"] = "storm_assault_success"
+		elif victor == "defender":
+			siege["ticks_since_sortie"] = 0
+
+		results.append({
+			"siege_settlement_id": siege_settlement_id,
+			"victor": victor,
+			"rounds": battle_result.get("rounds", 0),
+			"attacker_army_id": atk_army_id,
+			"defender_army_id": def_army_id,
+		})
+
+	return results
+
+
+static func _find_siege_by_settlement(
+	settlement_id: int,
+	active_sieges: Array[Dictionary],
+) -> Dictionary:
+	for siege: Dictionary in active_sieges:
+		if siege.get("settlement_id", -1) == settlement_id:
+			return siege
+	return {}
 
 
 # -- Horde Assault SI Processing (s2.4.5 — LOCKED) ----------------------------

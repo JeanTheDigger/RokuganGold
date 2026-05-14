@@ -216,6 +216,9 @@ static func execute(
 	if action_id == "CONDUCT_SORTIE":
 		return _execute_conduct_sortie(action, character, ctx)
 
+	if action_id == "CONDUCT_STORM_ASSAULT":
+		return _execute_conduct_storm_assault(action, character, ctx)
+
 	if action_id == "FORTIFY_WALL_SECTION":
 		return _execute_fortify_wall_section(action, character, ctx, dice_engine)
 
@@ -1585,6 +1588,30 @@ static func _execute_conduct_sortie(
 			"ss_reduction": sortie_result["ss_reduction"],
 			"jade_per_warrior": sortie_result["jade_per_warrior"],
 			"target_province_id": target_province_id,
+		},
+	}
+
+
+static func _execute_conduct_storm_assault(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> Dictionary:
+	var settlement_id: int = action.metadata.get(
+		"siege_settlement_id", character.physical_location,
+	)
+	return {
+		"success": true,
+		"action_id": "CONDUCT_STORM_ASSAULT",
+		"character_id": ctx.character_id,
+		"target_npc_id": action.target_npc_id,
+		"target_province_id": action.target_province_id,
+		"ic_day": ctx.ic_day,
+		"season": ctx.season,
+		"effects": {
+			"effect": "storm_assault_ordered",
+			"requires_storm_assault": true,
+			"siege_settlement_id": settlement_id,
 		},
 	}
 

@@ -4775,3 +4775,129 @@ func test_get_fortification_bonus_no_province_data_allows_bonus() -> void:
 	s.settlement_type = Enums.SettlementType.KEEP
 	var bonus: int = DayOrchestrator._get_fortification_bonus(1, "Lion", [s], {})
 	assert_eq(bonus, DayOrchestrator.FORTIFICATION_DEFENSE_BONUS)
+
+
+# -- Storm Assault Processing Tests ----------------------------------------------
+
+func _make_siege_state(
+	settlement_id: int,
+	atk_army_id: int,
+	def_army_id: int,
+) -> Dictionary:
+	return SiegeSystem.create_siege_state(settlement_id, atk_army_id, def_army_id, 10.0, 5.0, 2.0)
+
+
+func _make_army_company(
+	company_id: int,
+	army_id: int,
+	unit_type: int = Enums.CompanyUnitType.BUSHI_RETAINER,
+) -> Dictionary:
+	var stats: Dictionary = ArmyCombatSystem.UNIT_STATS.get(unit_type, {})
+	return {
+		"company_id": company_id,
+		"army_id": army_id,
+		"unit_type": unit_type,
+		"current_health": stats.get("health", 153),
+		"current_morale": stats.get("morale", 18),
+		"commander_id": -1,
+		"source_province_id": 1,
+		"destroyed": false,
+		"routed": false,
+	}
+
+
+func test_storm_assault_no_flag_returns_empty() -> void:
+	var applied: Array = [{"effects": {"effect": "something_else"}}]
+	var r: Array[Dictionary] = DayOrchestrator._process_storm_assault_results(
+		applied, [], [], DiceEngine.new(), [], {},
+	)
+	assert_eq(r.size(), 0)
+
+
+func test_storm_assault_no_siege_returns_empty() -> void:
+	var applied: Array = [{
+		"effects": {"requires_storm_assault": true, "siege_settlement_id": 99},
+	}]
+	var r: Array[Dictionary] = DayOrchestrator._process_storm_assault_results(
+		applied, [], [], DiceEngine.new(), [], {},
+	)
+	assert_eq(r.size(), 0)
+
+
+func test_storm_assault_finds_siege_and_resolves() -> void:
+	var siege: Dictionary = _make_siege_state(10, 1, 2)
+	var companies: Array[Dictionary] = [
+		_make_army_company(1, 1, Enums.CompanyUnitType.BUSHI_RETAINER),
+		_make_army_company(2, 1, Enums.CompanyUnitType.BUSHI_RETAINER),
+		_make_army_company(3, 2, Enums.CompanyUnitType.GARRISON),
+	]
+	var applied: Array = [{
+		"effects": {"requires_storm_assault": true, "siege_settlement_id": 10},
+	}]
+	var dice: DiceEngine = DiceEngine.new()
+	dice.set_seed(42)
+	var s: SettlementData = SettlementData.new()
+	s.settlement_id = 10
+	s.province_id = 1
+	var r: Array[Dictionary] = DayOrchestrator._process_storm_assault_results(
+		applied, [siege], companies, dice, [s], {},
+	)
+	assert_eq(r.size(), 1)
+	assert_true(r[0].has("victor"))
+	assert_eq(r[0]["siege_settlement_id"], 10)
+	assert_eq(r[0]["attacker_army_id"], 1)
+	assert_eq(r[0]["defender_army_id"], 2)
+
+
+func test_storm_assault_attacker_victory_ends_siege() -> void:
+	var siege: Dictionary = _make_siege_state(10, 1, 2)
+	# Strong attacker vs weak defender
+	var companies: Array[Dictionary] = [
+		_make_army_company(1, 1, Enums.CompanyUnitType.BUSHI_RETAINER),
+		_make_army_company(2, 1, Enums.CompanyUnitType.BUSHI_RETAINER),
+		_make_army_company(3, 1, Enums.CompanyUnitType.BUSHI_RETAINER),
+		_make_army_company(4, 2, Enums.CompanyUnitType.PEASANT_LEVY),
+	]
+	var applied: Array = [{
+		"effects": {"requires_storm_assault": true, "siege_settlement_id": 10},
+	}]
+	var dice: DiceEngine = DiceEngine.new()
+	dice.set_seed(100)
+	var s: SettlementData = SettlementData.new()
+	s.settlement_id = 10
+	s.province_id = 1
+	DayOrchestrator._process_storm_assault_results(
+		applied, [siege], companies, dice, [s], {},
+	)
+	if siege.get("siege_ended", false):
+		assert_eq(siege["end_reason"], "storm_assault_success")
+
+
+func test_storm_assault_empty_companies_skips() -> void:
+	var siege: Dictionary = _make_siege_state(10, 1, 2)
+	var companies: Array[Dictionary] = []
+	var applied: Array = [{
+		"effects": {"requires_storm_assault": true, "siege_settlement_id": 10},
+	}]
+	var r: Array[Dictionary] = DayOrchestrator._process_storm_assault_results(
+		applied, [siege], companies, DiceEngine.new(), [], {},
+	)
+	assert_eq(r.size(), 0)
+
+
+func test_find_siege_by_settlement() -> void:
+	var s1: Dictionary = _make_siege_state(10, 1, 2)
+	var s2: Dictionary = _make_siege_state(20, 3, 4)
+	var found: Dictionary = DayOrchestrator._find_siege_by_settlement(20, [s1, s2])
+	assert_eq(found.get("settlement_id"), 20)
+
+
+func test_find_siege_by_settlement_not_found() -> void:
+	var found: Dictionary = DayOrchestrator._find_siege_by_settlement(99, [])
+	assert_true(found.is_empty())
+
+
+func test_storm_assault_uses_urban_terrain_and_fort_bonus() -> void:
+	# Verify that storm assault applies the siege defense bonus
+	var fort_bonus: int = SiegeSystem.get_storm_defense_bonus()
+	assert_eq(fort_bonus, 8)

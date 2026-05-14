@@ -608,7 +608,7 @@ All in /tests/, one file per system:
 - test_order_system.gd (~30 tests)
 - test_military_service_system.gd (~35 tests)
 - test_pu_reconciliation.gd (~30 tests)
-- test_military_wiring.gd (~291 tests)
+- test_military_wiring.gd (~299 tests)
 - test_war_system.gd (~61 tests)
 - test_war_justification.gd (~55 tests)
 - test_war_termination.gd (~46 tests)
@@ -1773,8 +1773,17 @@ All in /tests/, one file per system:
   10 ticks after threshold (default 30, aggressive 20, pragmatic 45). Sortie
   resets counter. `process_siege_tick()` orchestrates starvation + honor +
   event firing per tick.
-  Deferred: Full battle integration for storm assaults and sorties (uses
-  ArmyCombatSystem), personality-driven sortie decisions (s19.3), ASCII map
+  **Storm assault wiring** — CONDUCT_STORM_ASSAULT intercepted in ActionExecutor
+  before generic military path. Returns `requires_storm_assault: true` with
+  `siege_settlement_id`. DayOrchestrator `_process_storm_assault_results()` finds
+  the siege by settlement ID, gathers attacker/defender companies, runs
+  `resolve_and_reconcile_battle()` with URBAN terrain and +8 defense bonus
+  (Urban +3, Fortification +5 from `SiegeSystem.get_storm_defense_bonus()`).
+  Attacker victory ends the siege (`siege_ended=true`,
+  `end_reason="storm_assault_success"`). Defender victory resets
+  `ticks_since_sortie` (honor cowardice counter). Company health/morale/
+  destroyed/routed written back after battle.
+  Deferred: Personality-driven sortie decisions (s19.3), ASCII map
   event scenarios, mutual event (treachery) resolution.
 
 ### Army Movement System (s11.7a)
