@@ -1927,3 +1927,123 @@ func test_court_context_creates_world_state_entry() -> void:
 	assert_true(ws.has(42), "Should create world_state entry for attendee")
 	assert_eq(ws[42].get("context_flag", -1), Enums.ContextFlag.AT_COURT)
 	assert_false(ws[42].get("active_court_at_location", {}).is_empty())
+
+
+# -- Sortie wiring (_process_sortie_results) ------------------------------------
+
+func _make_wall_tower(sid: int, pid: int, garrison: int, jade: float, si: int = 8) -> SettlementData:
+	var s := SettlementData.new()
+	s.settlement_id = sid
+	s.province_id = pid
+	s.settlement_type = Enums.SettlementType.WALL_TOWER
+	s.garrison_pu = garrison
+	s.jade_stockpile = jade
+	s.wall_si = si
+	return s
+
+
+func _make_shadowlands_province(pid: int, ss: int) -> ProvinceData:
+	var p := ProvinceData.new()
+	p.province_id = pid
+	p.shadowlands_strength = ss
+	return p
+
+
+func _make_sortie_applied(pid: int, force_pct: float, ss_red: int, jade_pw: int) -> Dictionary:
+	return {
+		"effects": {
+			"requires_sortie_combat": true,
+			"target_province_id": pid,
+			"ss_reduction": ss_red,
+			"force_pct": force_pct,
+			"jade_per_warrior": jade_pw,
+		}
+	}
+
+
+func test_sortie_no_requires_flag_skipped() -> void:
+	var applied: Array = [{"effects": {"ss_reduction": 3}}]
+	var tower := _make_wall_tower(1, 10, 5, 20.0)
+	var prov := _make_shadowlands_province(10, 6)
+	var results: Array[Dictionary] = DayOrchestrator._process_sortie_results(
+		applied, [tower], {10: prov}, _dice
+	)
+	assert_eq(results.size(), 0)
+	assert_eq(prov.shadowlands_strength, 6)
+
+
+func test_sortie_jade_consumed_regardless_of_outcome() -> void:
+	# force_pct=0.4 × garrison=5 = 2 committed warriors, jade_per_warrior=2 → 4 jade
+	var applied: Array = [_make_sortie_applied(10, 0.4, 2, 2)]
+	var tower := _make_wall_tower(1, 10, 5, 20.0)
+	var prov := _make_shadowlands_province(10, 6)
+	DayOrchestrator._process_sortie_results(applied, [tower], {10: prov}, _dice)
+	# jade consumed = 2 warriors × 2 jade = 4 regardless of combat success
+	assert_eq(tower.jade_stockpile, 16.0)
+
+
+func test_sortie_result_has_expected_keys() -> void:
+	var applied: Array = [_make_sortie_applied(10, 0.4, 2, 1)]
+	var tower := _make_wall_tower(1, 10, 5, 20.0)
+	var prov := _make_shadowlands_province(10, 6)
+	var results: Array[Dictionary] = DayOrchestrator._process_sortie_results(
+		applied, [tower], {10: prov}, _dice
+	)
+	assert_eq(results.size(), 1)
+	var r: Dictionary = results[0]
+	assert_true(r.has("province_id"))
+	assert_true(r.has("sortie_success"))
+	assert_true(r.has("ss_reduction_applied"))
+	assert_true(r.has("new_ss"))
+	assert_true(r.has("pu_lost"))
+	assert_true(r.has("jade_consumed"))
+
+
+func test_sortie_ss_reduction_only_on_success() -> void:
+	# With garrison_pu=5 and force_pct=0.4 → 2 garrison companies.
+	# SS=12 (High tier), planned ss_reduction=3.
+	# If combat succeeds, SS drops. If fails, SS unchanged.
+	var applied: Array = [_make_sortie_applied(10, 0.4, 3, 1)]
+	var tower := _make_wall_tower(1, 10, 5, 20.0)
+	var prov := _make_shadowlands_province(10, 12)
+	var results: Array[Dictionary] = DayOrchestrator._process_sortie_results(
+		applied, [tower], {10: prov}, _dice
+	)
+	assert_eq(results.size(), 1)
+	var r: Dictionary = results[0]
+	if r["sortie_success"]:
+		assert_eq(r["ss_reduction_applied"], 3)
+		assert_eq(prov.shadowlands_strength, 9)
+	else:
+		assert_eq(r["ss_reduction_applied"], 0)
+		assert_eq(prov.shadowlands_strength, 12)
+
+
+func test_sortie_garrison_pu_reduced_by_casualties() -> void:
+	# garrison_pu starts at 10, force_pct=1.0 → all 10 committed.
+	var applied: Array = [_make_sortie_applied(10, 1.0, 2, 1)]
+	var tower := _make_wall_tower(1, 10, 10, 20.0)
+	var prov := _make_shadowlands_province(10, 8)
+	DayOrchestrator._process_sortie_results(applied, [tower], {10: prov}, _dice)
+	# Garrison PU must not increase and should stay >= 0
+	assert_true(tower.garrison_pu >= 0)
+	assert_true(tower.garrison_pu <= 10)
+
+
+func test_build_garrison_sortie_states_count() -> void:
+	var states: Array[Dictionary] = DayOrchestrator._build_garrison_sortie_states(3)
+	assert_eq(states.size(), 3)
+
+
+func test_build_garrison_sortie_states_fields() -> void:
+	var states: Array[Dictionary] = DayOrchestrator._build_garrison_sortie_states(1)
+	var bc: Dictionary = states[0]
+	assert_eq(bc["side"], "defender")
+	assert_eq(bc["unit_type"], Enums.CompanyUnitType.GARRISON)
+	assert_eq(bc["starting_health"], 153)
+	assert_false(bc["no_morale"])
+
+
+func test_build_garrison_sortie_states_zero_returns_empty() -> void:
+	var states: Array[Dictionary] = DayOrchestrator._build_garrison_sortie_states(0)
+	assert_eq(states.size(), 0)

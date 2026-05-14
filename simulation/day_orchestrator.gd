@@ -196,6 +196,7 @@ static func advance_day(
 		day_result.get("results", []),
 		settlements,
 		provinces,
+		dice_engine,
 	)
 
 	var storm_assault_results: Array[Dictionary] = _process_storm_assault_results(
@@ -1043,10 +1044,11 @@ static func _process_sortie_results(
 	applied_list: Array,
 	settlements: Array[SettlementData],
 	provinces: Dictionary,
+	dice_engine: DiceEngine,
 ) -> Array[Dictionary]:
 	var results: Array[Dictionary] = []
 
-	# Build province_id → wall tower settlement map for jade deduction.
+	# Build province_id → wall tower settlement map.
 	var wall_by_province: Dictionary = {}
 	for s: SettlementData in settlements:
 		if s.settlement_type == Enums.SettlementType.WALL_TOWER:
@@ -1058,38 +1060,103 @@ static func _process_sortie_results(
 			continue
 
 		var target_pid: int = effects.get("target_province_id", -1)
-		var ss_reduction: int = int(effects.get("ss_reduction", 0))
+		var planned_ss_reduction: int = int(effects.get("ss_reduction", 0))
 		var force_pct: float = float(effects.get("force_pct", 0.0))
 		var jade_per_warrior: int = int(effects.get("jade_per_warrior", 1))
 
-		# Apply SS reduction to the Shadowlands province (s2.4.11).
-		# Horde combat resolution is deferred (s2.4.7); SS reduction is applied
-		# immediately as a simplified sortie outcome.
-		var new_ss: int = 0
-		var province: Variant = provinces.get(target_pid, null)
-		if province is ProvinceData:
-			var prov: ProvinceData = province as ProvinceData
-			new_ss = maxi(0, prov.shadowlands_strength - ss_reduction)
-			prov.shadowlands_strength = new_ss
-
-		# Consume jade from the Tower stockpile (s2.4.15).
-		# warriors = floor(garrison_pu × force_pct); jade = warriors × jade_per_warrior.
-		var jade_consumed: float = 0.0
 		var settlement: Variant = wall_by_province.get(target_pid, null)
+		var province: Variant = provinces.get(target_pid, null)
+
+		# Build synthetic garrison battle states from committed PU.
+		var committed_pu: int = 0
+		var garrison_states: Array[Dictionary] = []
 		if settlement is SettlementData:
 			var s: SettlementData = settlement as SettlementData
-			var warriors: int = int(s.garrison_pu * force_pct)
+			committed_pu = int(s.garrison_pu * force_pct)
+			garrison_states = _build_garrison_sortie_states(committed_pu)
+
+		# Resolve sortie combat via HordeSystem (s2.4.10).
+		var ss: int = 0
+		if province is ProvinceData:
+			ss = (province as ProvinceData).shadowlands_strength
+
+		var combat_result: Dictionary = {}
+		var actual_ss_reduction: int = 0
+		var casualties_health: int = 0
+		if not garrison_states.is_empty():
+			combat_result = HordeSystem.resolve_sortie_combat(
+				garrison_states, planned_ss_reduction, ss, dice_engine,
+			)
+			actual_ss_reduction = int(combat_result.get("ss_reduction", 0))
+			casualties_health = int(combat_result.get("casualties_health", 0))
+
+		# Apply SS reduction only if combat succeeded.
+		var new_ss: int = ss
+		if province is ProvinceData and actual_ss_reduction > 0:
+			var prov: ProvinceData = province as ProvinceData
+			new_ss = maxi(0, prov.shadowlands_strength - actual_ss_reduction)
+			prov.shadowlands_strength = new_ss
+
+		# Reduce garrison PU by combat casualties (153 health = 1 PU).
+		var pu_lost: int = 0
+		var jade_consumed: float = 0.0
+		if settlement is SettlementData:
+			var s: SettlementData = settlement as SettlementData
+			pu_lost = int(casualties_health / 153.0)
+			s.garrison_pu = maxi(0, s.garrison_pu - pu_lost)
+
+			# Consume jade regardless of combat outcome (s2.4.15).
+			var warriors: int = committed_pu
 			jade_consumed = float(warriors * jade_per_warrior)
 			s.jade_stockpile = maxf(0.0, s.jade_stockpile - jade_consumed)
 
 		results.append({
 			"province_id": target_pid,
-			"ss_reduction_applied": ss_reduction,
+			"sortie_success": combat_result.get("success", false),
+			"ss_reduction_applied": actual_ss_reduction,
 			"new_ss": new_ss,
+			"pu_lost": pu_lost,
 			"jade_consumed": jade_consumed,
+			"battle_result": combat_result.get("battle_result", {}),
 		})
 
 	return results
+
+
+## Build synthetic GARRISON-type battle company dicts for sortie_states.
+## garrison_pu: number of companies committed (each = 153 health / 1 PU).
+static func _build_garrison_sortie_states(garrison_pu: int) -> Array[Dictionary]:
+	var states: Array[Dictionary] = []
+	var stats: Dictionary = ArmyCombatSystem.UNIT_STATS.get(
+		Enums.CompanyUnitType.GARRISON, {}
+	)
+	for i: int in range(garrison_pu):
+		states.append({
+			"company": null,
+			"company_id": 7000 + i,
+			"unit_type": Enums.CompanyUnitType.GARRISON,
+			"starting_health": stats.get("health", 153),
+			"current_health": stats.get("health", 153),
+			"starting_morale": stats.get("morale", 16),
+			"current_morale": stats.get("morale", 16),
+			"base_attack": stats.get("attack", 3),
+			"base_defense": stats.get("defense", 5),
+			"base_morale_defense": stats.get("morale_defense", 7),
+			"row": 1,
+			"column": i,
+			"side": "defender",
+			"is_routed": false,
+			"is_destroyed": false,
+			"commander": null,
+			"commander_bonus": {},
+			"commander_injured": false,
+			"commander_dead": false,
+			"survival_thresholds_triggered": [],
+			"health_damage_this_round": 0,
+			"no_morale": false,
+			"round_number": 0,
+		})
+	return states
 
 
 # -- Storm Assault Processing (s11.7) ------------------------------------------
