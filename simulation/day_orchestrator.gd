@@ -66,6 +66,8 @@ static func advance_day(
 	court_commitments: Array[CourtCommitmentData] = [],
 	togashi_state: Dictionary = {},
 	phoenix_council_state: Dictionary = {},
+	active_civil_wars: Array[Dictionary] = [],
+	precedent_modifiers: Dictionary = {},
 ) -> Dictionary:
 	var prev_season: int = time_system.get_season()
 
@@ -397,6 +399,7 @@ static func advance_day(
 	var seiyaku_results: Dictionary = {}
 	var commitment_seasonal_result: Dictionary = {}
 	var worship_seasonal_results: Dictionary = {}
+	var civil_war_results_seasonal: Dictionary = {}
 	if current_season != prev_season:
 		# Add the IC year to miya_inputs so per-province blessed-year tracking
 		# stays consistent. Year is computed from the time system's tick count.
@@ -447,6 +450,12 @@ static func advance_day(
 			military_seasonal_result.get("supply_status", []),
 			world_states, active_armies, active_topics,
 			next_topic_id, ic_day,
+		)
+		var season_count_for_cw: int = int(season_meta.get("horde_season_count", 0))
+		civil_war_results_seasonal = _process_civil_war_seasonal(
+			active_civil_wars, precedent_modifiers, characters_by_id,
+			provinces, season_count_for_cw, objectives_map,
+			active_topics, next_topic_id, ic_day, season_meta,
 		)
 		insurgency_results = _process_insurgencies(
 			insurgencies, provinces, dice_engine, current_season,
@@ -603,6 +612,7 @@ static func advance_day(
 		"commitment_seasonal_result": commitment_seasonal_result,
 		"togashi_results": togashi_results,
 		"phoenix_council_results": phoenix_council_results,
+		"civil_war_results": civil_war_results_seasonal,
 	}
 
 
@@ -8461,3 +8471,319 @@ static func _populate_resource_stockpiles(
 			"military_upkeep": maxf(clan_military_upkeep.get(c.clan, 0.0), 0.01),
 		}
 		ws["available_levy_pu"] = total_military_pu
+
+
+# -- Civil War Seasonal Processing (s53.2) ------------------------------------
+
+static func _process_civil_war_seasonal(
+	active_civil_wars: Array[Dictionary],
+	precedent_modifiers: Dictionary,
+	characters_by_id: Dictionary,
+	provinces: Dictionary,
+	current_season: int,
+	objectives_map: Dictionary,
+	active_topics: Array[TopicData],
+	next_topic_id: Array[int],
+	ic_day: int,
+	season_meta: Dictionary,
+) -> Dictionary:
+	var precedent_decay_count: int = IntraClanCivilWar.tick_precedent_decay(
+		precedent_modifiers, current_season,
+	)
+	var per_war_results: Array[Dictionary] = []
+	var defections: Array[Dictionary] = []
+	var resolutions: Array[Dictionary] = []
+
+	for state: Dictionary in active_civil_wars:
+		if not state.get("active", false):
+			continue
+		var clan: String = state.get("clan", "")
+		var rebel_lord_id: int = int(state.get("rebel_lord_id", -1))
+		var authority_lord_id: int = int(state.get("authority_lord_id", -1))
+		var rebel_lord: L5RCharacterData = characters_by_id.get(rebel_lord_id)
+		var authority_lord: L5RCharacterData = characters_by_id.get(authority_lord_id)
+
+		var clan_provinces: Array[ProvinceData] = []
+		for prov: Variant in provinces.values():
+			if prov is ProvinceData and (prov as ProvinceData).clan == clan:
+				clan_provinces.append(prov as ProvinceData)
+
+		var consequence_result: Dictionary = IntraClanCivilWar.apply_seasonal_consequences(
+			state, rebel_lord, clan_provinces, current_season,
+		)
+
+		var war_defections: Array[Dictionary] = _check_civil_war_defections(
+			state, characters_by_id, objectives_map, current_season,
+		)
+		defections.append_array(war_defections)
+
+		var resolution: Dictionary = _check_civil_war_resolution(
+			state, rebel_lord, authority_lord, characters_by_id,
+			precedent_modifiers, current_season, active_topics,
+			next_topic_id, ic_day, season_meta, clan,
+		)
+		if not resolution.is_empty():
+			resolutions.append(resolution)
+
+		per_war_results.append({
+			"clan": clan,
+			"consequence_result": consequence_result,
+			"defection_count": war_defections.size(),
+		})
+
+	_decay_civil_war_scars(characters_by_id, season_meta)
+
+	return {
+		"precedent_decay_count": precedent_decay_count,
+		"per_war": per_war_results,
+		"defections": defections,
+		"resolutions": resolutions,
+	}
+
+
+static func _check_civil_war_defections(
+	state: Dictionary,
+	characters_by_id: Dictionary,
+	objectives_map: Dictionary,
+	current_season: int,
+) -> Array[Dictionary]:
+	var results: Array[Dictionary] = []
+	var assignments: Dictionary = state.get("faction_assignments", {})
+	var rebel_lord_id: int = int(state.get("rebel_lord_id", -1))
+	var authority_lord_id: int = int(state.get("authority_lord_id", -1))
+	var trigger_topic_id: int = int(state.get("trigger_topic_id", -1))
+
+	for char_id_var: Variant in assignments.keys():
+		var char_id: int = int(char_id_var)
+		var faction: int = int(assignments.get(char_id, IntraClanCivilWar.Faction.NONE))
+		if faction == IntraClanCivilWar.Faction.NONE or faction == IntraClanCivilWar.Faction.RONIN:
+			continue
+		var npc: L5RCharacterData = characters_by_id.get(char_id)
+		if npc == null:
+			continue
+		if CharacterStats.is_dead(npc):
+			continue
+		var faction_leader_id: int = (
+			authority_lord_id if faction == IntraClanCivilWar.Faction.LEGITIMACY
+			else rebel_lord_id
+		)
+		if not IntraClanCivilWar.defection_trigger_fired(state, npc, faction_leader_id):
+			continue
+
+		var rebel_completion: float = _get_rebel_completion_rate(rebel_lord_id, objectives_map)
+		var grievance_visible: bool = trigger_topic_id in npc.topic_pool
+		var rebel_was_failing: bool = rebel_completion < 0.50
+		var loyalty: Dictionary = IntraClanCivilWar.evaluate_loyalty(
+			npc, rebel_lord_id, rebel_completion, grievance_visible, rebel_was_failing,
+		)
+		var new_faction: int = int(loyalty.get("faction", IntraClanCivilWar.Faction.NONE))
+		if new_faction == faction:
+			continue
+
+		var is_family_daimyo: bool = npc.status >= 5.0
+		var to_legitimacy: bool = new_faction == IntraClanCivilWar.Faction.LEGITIMACY
+		IntraClanCivilWar.record_defection(state, char_id, is_family_daimyo, to_legitimacy)
+
+		var former_members: Array[L5RCharacterData] = []
+		for other_id_var: Variant in assignments.keys():
+			var other_id: int = int(other_id_var)
+			if other_id == char_id:
+				continue
+			var other_faction: int = int(assignments.get(other_id, IntraClanCivilWar.Faction.NONE))
+			if other_faction == faction:
+				var other: L5RCharacterData = characters_by_id.get(other_id)
+				if other != null:
+					former_members.append(other)
+		IntraClanCivilWar.apply_defection_consequences(npc, former_members)
+
+		results.append({
+			"character_id": char_id,
+			"from_faction": faction,
+			"to_faction": new_faction,
+			"is_family_daimyo": is_family_daimyo,
+		})
+	return results
+
+
+static func _check_civil_war_resolution(
+	state: Dictionary,
+	rebel_lord: L5RCharacterData,
+	authority_lord: L5RCharacterData,
+	characters_by_id: Dictionary,
+	precedent_modifiers: Dictionary,
+	current_season: int,
+	active_topics: Array[TopicData],
+	next_topic_id: Array[int],
+	ic_day: int,
+	season_meta: Dictionary,
+	clan: String,
+) -> Dictionary:
+	var rebel_dead: bool = rebel_lord == null or CharacterStats.is_dead(rebel_lord)
+	if rebel_dead:
+		return _resolve_civil_war(
+			state, true, characters_by_id, precedent_modifiers,
+			current_season, active_topics, next_topic_id, ic_day,
+			season_meta, clan,
+		)
+
+	var rebel_capitulated: bool = false
+	var rebel_seat_lost: bool = false
+
+	if IntraClanCivilWar.check_legitimacy_victory(
+		state, rebel_lord, rebel_capitulated, rebel_seat_lost,
+	):
+		return _resolve_civil_war(
+			state, true, characters_by_id, precedent_modifiers,
+			current_season, active_topics, next_topic_id, ic_day,
+			season_meta, clan,
+		)
+
+	var assignments: Dictionary = state.get("faction_assignments", {})
+	var has_allied_fd: bool = false
+	for cid_var: Variant in assignments.keys():
+		var cid: int = int(cid_var)
+		if int(assignments[cid]) != IntraClanCivilWar.Faction.REBEL:
+			continue
+		if cid == int(state.get("rebel_lord_id", -1)):
+			continue
+		var c: L5RCharacterData = characters_by_id.get(cid)
+		if c != null and not CharacterStats.is_dead(c) and c.status >= 5.0:
+			has_allied_fd = true
+			break
+
+	var holds_seat: bool = rebel_lord != null and not rebel_dead
+	IntraClanCivilWar.tick_rebel_victory_counter(
+		state, rebel_lord, holds_seat, has_allied_fd,
+	)
+
+	if IntraClanCivilWar.is_rebel_victory_achieved(state):
+		return _resolve_civil_war(
+			state, false, characters_by_id, precedent_modifiers,
+			current_season, active_topics, next_topic_id, ic_day,
+			season_meta, clan,
+		)
+
+	return {}
+
+
+static func _resolve_civil_war(
+	state: Dictionary,
+	legitimacy_won: bool,
+	characters_by_id: Dictionary,
+	precedent_modifiers: Dictionary,
+	current_season: int,
+	active_topics: Array[TopicData],
+	next_topic_id: Array[int],
+	ic_day: int,
+	season_meta: Dictionary,
+	clan: String,
+) -> Dictionary:
+	var assignments: Dictionary = state.get("faction_assignments", {})
+	var all_chars: Array[L5RCharacterData] = []
+	for cid_var: Variant in assignments.keys():
+		var c: L5RCharacterData = characters_by_id.get(int(cid_var))
+		if c != null:
+			all_chars.append(c)
+
+	var scar_result: Dictionary = IntraClanCivilWar.apply_post_resolution_scars(
+		state, all_chars,
+	)
+	var scar_entries: Array[Dictionary] = []
+	for s: Dictionary in scar_result.get("scars", []):
+		var entry: Dictionary = s.duplicate()
+		entry["base_remaining"] = IntraClanCivilWar.POST_WAR_SCAR_BASE
+		scar_entries.append(entry)
+	if not scar_entries.is_empty():
+		var all_scars: Array = season_meta.get("civil_war_scars", [])
+		all_scars.append_array(scar_entries)
+		season_meta["civil_war_scars"] = all_scars
+
+	var rebel_consequences: Dictionary = {}
+	var from_seizure: bool = false
+	if legitimacy_won:
+		var rebels: Array[L5RCharacterData] = []
+		var family_daimyo_ids: Array[int] = []
+		for cid_var: Variant in assignments.keys():
+			var cid: int = int(cid_var)
+			if int(assignments[cid]) == IntraClanCivilWar.Faction.REBEL:
+				var c: L5RCharacterData = characters_by_id.get(cid)
+				if c != null:
+					rebels.append(c)
+					if c.status >= 5.0:
+						family_daimyo_ids.append(cid)
+		rebel_consequences = IntraClanCivilWar.apply_rebel_consequences_on_legitimacy_victory(
+			rebels, family_daimyo_ids,
+		)
+	else:
+		var rebel_lord_id: int = int(state.get("rebel_lord_id", -1))
+		var rebel_lord: L5RCharacterData = characters_by_id.get(rebel_lord_id)
+		var was_fd: bool = rebel_lord != null and rebel_lord.status >= 5.0
+		var authority_lord: L5RCharacterData = characters_by_id.get(
+			int(state.get("authority_lord_id", -1))
+		)
+		var incumbent_gone: bool = authority_lord == null or CharacterStats.is_dead(authority_lord) or authority_lord.honor < 0.0
+		from_seizure = IntraClanCivilWar.can_seize_championship(
+			state, clan, was_fd, incumbent_gone,
+		)
+		IntraClanCivilWar.apply_precedent_effect(
+			precedent_modifiers, current_season, from_seizure,
+		)
+
+	IntraClanCivilWar.finalise(state, current_season, legitimacy_won)
+
+	var topic_id: int = next_topic_id[0]
+	next_topic_id[0] += 1
+	var topic: TopicData = TopicData.new()
+	topic.topic_id = topic_id
+	topic.slug = "civil_war_resolved_%s_%d" % [clan.to_lower(), ic_day]
+	topic.tier = 2
+	topic.topic_type = "civil_war"
+	topic.variant = "legitimacy_victory" if legitimacy_won else ("championship_seizure" if from_seizure else "rebel_victory")
+	topic.momentum = 60.0
+	topic.category = TopicData.Category.POLITICAL
+	topic.ic_day_created = ic_day
+	active_topics.append(topic)
+
+	return {
+		"clan": clan,
+		"legitimacy_won": legitimacy_won,
+		"from_seizure": from_seizure,
+		"scar_count": scar_entries.size(),
+		"rebel_consequences": rebel_consequences,
+		"topic_id": topic_id,
+	}
+
+
+static func _get_rebel_completion_rate(
+	rebel_lord_id: int,
+	objectives_map: Dictionary,
+) -> float:
+	var lord_obj: Variant = objectives_map.get(rebel_lord_id)
+	if lord_obj is Dictionary:
+		var primary: Variant = (lord_obj as Dictionary).get("primary")
+		if primary is Dictionary:
+			return float((primary as Dictionary).get("last_measured_progress", 0.5))
+	return 0.5
+
+
+static func _decay_civil_war_scars(
+	characters_by_id: Dictionary,
+	season_meta: Dictionary,
+) -> void:
+	var all_scars: Array = season_meta.get("civil_war_scars", [])
+	if all_scars.is_empty():
+		return
+	var chars_array: Array[L5RCharacterData] = []
+	for c: Variant in characters_by_id.values():
+		if c is L5RCharacterData:
+			chars_array.append(c as L5RCharacterData)
+	var typed_scars: Array[Dictionary] = []
+	for s: Variant in all_scars:
+		if s is Dictionary:
+			typed_scars.append(s as Dictionary)
+	IntraClanCivilWar.decay_post_war_scars(chars_array, typed_scars)
+	var remaining: Array = []
+	for entry: Dictionary in typed_scars:
+		if int(entry.get("base_remaining", 0)) < 0:
+			remaining.append(entry)
+	season_meta["civil_war_scars"] = remaining

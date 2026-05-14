@@ -3474,6 +3474,32 @@ The following subsystems are now integrated into the NPC decision loop:
   (Tier 4 at overreach ≤1, Tier 3 at overreach 2+; POLITICAL category).
   Failed proposals banned from resubmission per `is_proposal_banned()`.
   WorldStateData holds `phoenix_council_state: Dictionary`.
+- **IntraClanCivilWar** — Seasonal: `_process_civil_war_seasonal()` runs after
+  `_consume_supply_status_results()` and before `_process_insurgencies()` so
+  stability damage feeds into insurgency spawn calculations.
+  Precedent decay runs unconditionally (even with no active wars).
+  Per active war: `apply_seasonal_consequences()` applies −3/−5/−7 stability
+  penalty (escalating at 8 and 12 seasons) to all clan provinces, and −0.3
+  Honor/season hemorrhage to the rebel lord.
+  `_check_civil_war_defections()` iterates faction_assignments, checks all 4
+  GDD defection triggers via `defection_trigger_fired()`, re-evaluates loyalty
+  via `evaluate_loyalty()`, calls `record_defection()` + `apply_defection_consequences()`
+  on faction change.
+  `_check_civil_war_resolution()` checks legitimacy victory (rebel dead, rebel
+  honor < 0, capitulation, seat lost) and ticks the rebel victory counter
+  (requires allied Family Daimyo + holds seat for 6 consecutive seasons).
+  `_resolve_civil_war()` applies post-resolution scars (stored in
+  `season_meta["civil_war_scars"]`), rebel consequences on legitimacy victory
+  (honor loss for rebel Family Daimyo), precedent effect on rebel victory
+  (+3 standard, +5 championship seizure, expires 5 seasons), generates
+  Tier 2 POLITICAL resolution topic. `_decay_civil_war_scars()` runs each
+  season, pruning fully-decayed entries.
+  `holds_seat` is a placeholder (true when rebel alive) — needs coordinate
+  system for real province ownership check. `rebel_completion_rate` reads
+  from ObjectiveProgress via `objectives_map`.
+  New params on `advance_day()`: `active_civil_wars: Array[Dictionary]`,
+  `precedent_modifiers: Dictionary`. Return dict gains `civil_war_results`.
+  WorldStateData gains `active_civil_wars` and `precedent_modifiers` fields.
 
 ## Resolved Design Decisions
 

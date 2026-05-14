@@ -102,6 +102,10 @@ var togashi_state: Dictionary = TogashiOversight.make_initial_state()
 # -- Phoenix Clan Governance (s55.10.3) ---------------------------------------
 var phoenix_council_state: Dictionary = PhoenixCouncil.make_initial_state()
 
+# -- Intra-Clan Civil War (s53.2) ---------------------------------------------
+var active_civil_wars: Array[Dictionary] = []
+var precedent_modifiers: Dictionary = {}
+
 # -- Kami Worship (s4.3.21) ---------------------------------------------------
 var worship_state: Dictionary = WorshipSystem.make_initial_worship_state()
 
@@ -209,6 +213,8 @@ func advance_one_day() -> Dictionary:
 		court_commitments,
 		togashi_state,
 		phoenix_council_state,
+		active_civil_wars,
+		precedent_modifiers,
 	)
 
 
