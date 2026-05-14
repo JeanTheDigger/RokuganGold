@@ -547,6 +547,8 @@ All in /tests/, one file per system:
 - test_court_action_system.gd (~140 tests)
 - test_topic_system.gd (~55 tests)
 - test_investigation_system.gd (~40 tests)
+- test_investigation_decomposer.gd (~22 tests)
+- test_crime_system.gd (~52 tests)
 - test_day_orchestrator.gd (~83 tests)
 - test_approach_evaluation.gd (~55 tests)
 - test_commitment_registry.gd (~60 tests)
@@ -576,6 +578,7 @@ All in /tests/, one file per system:
 - test_hostage_system.gd (~22 tests)
 - test_court_priority_system.gd (~18 tests)
 - test_travel_system.gd (~30 tests)
+- test_travel_commitment.gd (~49 tests)
 - test_objective_progress.gd (~35 tests)
 - test_festival_system.gd (~55 tests)
 - test_simulation_scheduler.gd (~20 tests)
@@ -588,6 +591,7 @@ All in /tests/, one file per system:
 - test_togashi_oversight.gd (~49 tests)
 - test_phoenix_council.gd (~51 tests)
 - test_intra_clan_civil_war.gd (~59 tests)
+- test_civil_war_wiring.gd (~28 tests)
 - test_event_durations.gd (~25 tests)
 - test_performative_arts.gd (~30 tests)
 - test_performative_arts_wiring.gd (~10 tests)
@@ -635,6 +639,11 @@ All in /tests/, one file per system:
 - test_worship_system.gd (~67 tests)
 - test_worship_wiring.gd (~50 tests)
 - test_construction_system.gd (~89 tests)
+- test_wall_system.gd (~109 tests)
+- test_wall_seasonal_pressure.gd (~23 tests)
+- test_wall_fortification.gd (~25 tests)
+- test_wall_context_autoset.gd (~19 tests)
+- test_wall_management_needtypes.gd (~34 tests)
 
 ### Governance Action Wiring (s57.20)
 - **APPOINT_TO_POSITION** — Daily AP action (1 AP, lord-only). Executor
@@ -969,6 +978,21 @@ All in /tests/, one file per system:
   DayOrchestrator calls `_process_arrival_observation()` after travel tick,
   updating arriving characters' `met_characters` and `knowledge_pool` with
   co-located NPCs.
+
+### Crime Record & Investigation Decomposer
+- **shared/crime_record.gd** — `CrimeRecord` Resource: crime_id, crime_type,
+  perpetrator_id, victim_id, province_id, ic_day_committed, witnesses array,
+  evidence_total, concealment_tn, convicted, outcome fields. World-level storage
+  — the system always knows who committed the crime; investigation is players
+  (and magistrates) discovering what the world already knows.
+- **simulation/investigation_decomposer.gd** — Seven-phase investigation loop
+  for UPHOLD_LAW objectives: travel to scene → examine scene →
+  interview witnesses → interview suspects → check alibis → follow leads →
+  resolution. Stateless routing; calls into InvestigationSystem for each phase.
+  Resolution fires CrimeSystem conviction consequences and generates conviction
+  or seppuku-refusal topics via InvestigationSystem topic generators.
+- **Tests** — `test_crime_system.gd` (~52 tests),
+  `test_investigation_decomposer.gd` (~22 tests).
 
 ### NPC Engine Amendments (s57.1–s57.5, s57.17, s57.19, s57.20)
 - **s57.1 Allowlist Model** — Actions not listed in objective_alignment.json
@@ -2536,6 +2560,68 @@ All in /tests/, one file per system:
   ArmyCombatSystem), Spawn company generation (s2.4.6), garrison shortage
   NPC pipeline (Taisa/Shireikan letter campaign, s2.4.12–s2.4.14).
 
+### Kaiu Wall System (s2.4.2, s2.4.3, s2.4.10–s2.4.16)
+- **simulation/wall_system.gd** — Kaiu Wall mechanics per GDD s2.4.2/s2.4.3/
+  s2.4.10/s2.4.11/s2.4.15/s2.4.16. Pure static functions; caller owns
+  SettlementData and ProvinceData.
+  **SI Defense Bonus table** (s2.4.2): SI 10 → +12, stepping down to 0 at SI 0.
+  **Seasonal pressure** (s2.4.3): SI decay (spring/autumn 1, winter 2, summer 0),
+  Koku costs (spring/autumn 2, summer 1, winter 3), Rice multipliers (1.0–1.5).
+  **Shadowlands Strength (SS) tiers** (s2.4.10): Low (SS 1–4), Medium (5–8),
+  High (9+). Per-tier extra SI decay (+0.5/+1.0), Koku surcharge (+1/+2), Rice
+  multiplier (×1.1/×1.2). `get_ss_tier()`, `get_total_si_decay()`,
+  `get_total_koku_cost()`, `get_rice_modifier()`.
+  **Garrison minimum** (s2.4.2 PROVISIONAL): `MINIMUM_GARRISON_PU = 1.0`
+  (one Company). `is_garrison_below_minimum()` used by horde and context systems.
+  **PTL contribution** (s2.4.2): 0.1/season baseline per wall-adjacent tower;
+  +0.5 extra when SI ≤ 5. Adjacent bleed (s2.4.3): SI ≤ 4 → −0.5 PTL bleed to
+  neighbors. `compute_ptl_contribution()`, `compute_adjacent_bleed()`.
+  `apply_seasonal_si_decay()` applies total decay with optional Kaiu Reinforcement
+  flat offset (floored at 0 — cannot add SI).
+  **Kaiu Reinforcement table** (s2.4.16, ranks 1–5): decay_reduction 0.25–0.75,
+  duration 2–5 seasons. `get_kaiu_reinforce()`.
+  **FORTIFY_WALL_SECTION** (s2.4.10): TN = 20 + (10 − SI) × 2. Base +1.0 SI
+  gain + 0.5 per Raise. `get_fortify_tn()`, `compute_fortify_si_gain()`.
+  **Sortie system** (s2.4.10, s2.4.11, s2.4.15, s55.23a): `validate_sortie()`
+  checks jade gate (absolute block), garrison gate, SI+SS double-crisis gate
+  (SI < 6 AND High SS), and Shireikan authority for large sorties. AI sizing:
+  Medium SS → Small sortie, High SS → Medium sortie. `resolve_sortie()` returns
+  force parameters (force_pct, ss_reduction, jade_per_warrior) and
+  `requires_sortie_combat: true` flag — actual horde combat deferred.
+  **Wired into DayOrchestrator**: `_process_wall_seasonal_pressure()` on season
+  boundary (SI decay, Koku/Rice costs, adjacent bleed, PTL, garrison shortage
+  detection). `_set_wall_tower_context_flags()` auto-assigns WALL_TOWER context
+  to characters at Wall settlements. Kuni ward bleed reduction applied here.
+- **Tests** — `test_wall_system.gd` (~109 tests), `test_wall_seasonal_pressure.gd`
+  (~23 tests), `test_wall_fortification.gd` (~25 tests),
+  `test_wall_context_autoset.gd` (~19 tests),
+  `test_wall_management_needtypes.gd` (~34 tests).
+  Deferred: Horde assault combat (s2.4.7 — needs ArmyCombatSystem integration),
+  sortie combat outcome processing, garrison shortage NPC letter pipeline
+  (Taisa/Shireikan campaign per s2.4.12–s2.4.14).
+
+### Travel Commitment & Oscillation Prevention (s55.29)
+- **simulation/travel_commitment.gd** — Three subsystems per GDD s55.29. Pure
+  static functions; caller owns the objective dictionary.
+  **Travel frustration counter** (s55.29.1): `REDIRECT_PENALTIES = [0, −5, −15, −30]`
+  indexed by redirect count. `get_redirect_penalty()`, `increment_redirects()`,
+  `reset_redirects()`. Resets automatically when NPC reaches AT_COURT,
+  AT_OWN_HOLDINGS, VISITING, or ON_CAMPAIGN context (any destination arrival).
+  **Sublocation access** (s55.29.2): `can_access_sublocation()` gates entry to
+  PUBLIC, COURT (invitation/status/open-session/role), PRIVATE_RESIDENCE
+  (household/guest/role), and RESTRICTED (household/role only) areas.
+  **Objective stall detection** (s55.29.3): `update_progress()` records
+  `last_measured_progress` and increments `seasons_without_progress` when
+  progress is flat or regressing. `is_stalled()` compares seasons against
+  personality-gated thresholds: Chugi 6, Seigyo 4, Makoto/Ketsui 4, default 3.
+  Ishi never stalls — continues indefinitely. `REASSESS_OBJECTIVE` reactive event
+  fired by DayOrchestrator when stall detected.
+  **Wired into**: Phase 5 NPC scoring (`travel_redirect_penalty` field on
+  ScoredAction read from `travel_redirects` on the primary objective). Seasonal
+  DayOrchestrator `_evaluate_objective_progress()` calls `update_progress()` and
+  `is_stalled()` for all active primary objectives.
+- **Tests** — `test_travel_commitment.gd` (~49 tests).
+
 ### Ship Types & Naval System (s11.9)
 - **shared/ship_data.gd** — ShipData Resource: ship_id, ship_class (ShipClass enum),
   owning_clan, captain_id, current_province_id, current_subtile_id, ship_name,
@@ -3162,7 +3248,122 @@ system or missing GDD specification. Do NOT re-audit the executor →
 orchestrator wiring unless new ActionIDs are added.
 
 ### What's Next
-1. World generation coordinate system and adjacency
+1. World generation coordinate system and adjacency (gates: sub-tile pathfinding,
+   real army movement routes, naval sub-tile routing, province adjacency for map
+   display, and all travel-time calculations that currently use placeholder IDs)
+
+### Implementation Status
+
+#### Fully Implemented — All LOCKED GDD Sections Covered
+All systems in "What's Been Built So Far" above are complete with passing tests.
+This covers GDD sections: s2.4 (Wall/Horde), s4.3 (Resources), s4.5 (Dice/Stats),
+s4.6 (Honor/Glory), s11.5/s11.5b (Festivals/Miya), s11.6–s11.9 (Military/Naval),
+s11.11 (Insurgency), s12.1–s12.11 (Diplomacy suite), s13 (Time), s14 (AP),
+s15 (Court), s16 (Topics), s17 (Personal Visits), s18–s19 (NPC Objectives/Personality),
+s22 (Characters/Marriage/Family/Succession), s29.15 (Courtier Framework), s47 (Mass Battle),
+s52 (World Population), s53/s53.2 (War/Civil War), s55 (full NPC Engine including all
+amendments), s56.10 (quest mechanics referenced from crime/investigation), s57.1–s57.21
+(NPC engine amendments), s57.25 (Tattoo), s57.36 (Zone Flags), s57.47 (Crime Severity),
+s57.48 (Musha Shugyo).
+
+#### Implemented — Known Deferred Items Remaining
+These systems exist and function but have explicitly deferred sub-features:
+
+- **Kaiu Wall** — Sortie combat outcome (horde assault needs ArmyCombatSystem
+  integration per s2.4.7). Garrison shortage NPC letter pipeline (s2.4.12–s2.4.14).
+  Spawn company generation for Oni-Led Spawn variant (s2.4.6).
+- **Coordinate system** — All sub-tile pathfinding uses placeholder int IDs.
+  Affects: ArmyMovementSystem, SupplyTetherSystem, NavalSystem (ship movement
+  initiation), ConstructionSystem (coastal detection), WallSystem (sub-tile
+  node tracking for blockade), SiegeSystem (Shadowlands terrain).
+- **WorldGenerator / GempukkuSystem** — Mantis school stat blocks not in
+  `SCHOOL_DATA`. Mantis characters generate with basic stats only.
+- **SuccessionSystem** — Priority 4 adopted heir (needs adoption action),
+  court dispute resolution, Dragon/Phoenix exception integration with s22.5.
+- **PhoenixCouncil** — Phoenix Schism Crisis (s55.10.3.7), Shiba Reincarnation
+  Mechanic (s55.10.3.8), Grand Ritual threat integration, Imperial Edict appeal
+  mediation all deferred.
+- **TogashiOversight** — Dragon Schism Crisis (s55.10.2.8), Togashi vanish-and-
+  return mechanics, foreign-clan intervention escalation, Stage 4 removal
+  integration with succession (s22.5) all deferred.
+- **IntraClanCivilWar** — `holds_seat` is a placeholder (true when rebel alive);
+  needs coordinate system for real province ownership. Army reconstitution/
+  Go-hatamoto reform (s53.2.3), full Imperial Edict gating deferred.
+- **WarTermination** — Peace court mechanics (formal court session), Imperial
+  edict action path, territory transfer mutations on settlement/province data.
+- **MilitaryPhase2** — 5 military stub ActionIDs (ORDER_DEPLOY, ORDER_FORTIFY,
+  ORDER_RETREAT, ASSIGN_GARRISON, CONDUCT_RAID) return simple effect labels
+  only — all blocked on coordinate system or missing GDD spec.
+- **NavalSystem** — Ship movement initiation needs coordinate system for
+  pathfinding. Weather is global per day (placeholder until sub-tile weather).
+  Naval blockade not yet integrated. Tortoise Escape Attempt not yet in
+  battle round.
+- **ImperialEdictSystem** — Per-type compliance effects for TAX_REFORM,
+  AUTHORIZE_WAR, APPOINT_POSITION, STRIP_AUTONOMY, GENERAL_DECREE need
+  additional GDD specification before implementation.
+- **ConstructionSystem** — Infrastructure ActionIDs in executor/context lists
+  but `is_coastal` detection always false until coordinate system exists.
+- **OtomoSeiyakuSystem** — Same-clan ripple and per-champion empire-wide
+  penalties deferred until clan→champion mapping is consistent.
+- **MiyasBlessingSystem** — `last_autumn_emperor_tax_income` is an approximation
+  (flat-rate formula); will improve when full hierarchy cascade is implemented.
+- **FeasibilityLedger** — Forge infrastructure for arms projection, stipend
+  obligations, and real pathfinding for retreat marches (needs coordinate system).
+
+#### Designed (GDD FULLY LOCKED) — Code Not Yet Written
+These GDD sections are completely designed and locked but have no simulation code:
+
+- **s56 — ASCII Map / Quest System** (s56.1–s56.18): All templates locked
+  (Cave, Occupied Village, Forest Camp, Stockade, Hilltop, Ravine, Ruined
+  Structure, Urban Hideout, Castle Siege, Ship Boarding), Bloodspeaker Cult
+  Network (s56.14), Spiritual Insurgency (s56.16), relocation mechanics (s56.13),
+  shared outdoor systems (s56.6). Requires local interface (s4.4) and the
+  coordinate system first.
+- **s40 — Individual Combat**: PC/NPC melee/ranged resolution, initiative,
+  action types, wound application. The mass battle system (s11.7) is implemented
+  but individual-scale combat (player engagement) is not.
+- **s57.34 — Civilian Order Budget System**: Non-lord NPCs spending AP on
+  civilian life (socializing, practicing arts, shopping). Separate from the
+  lord AP loop.
+- **s57.42–s57.43 — Sailing / Ship Lesser Zones**: Captain and passenger
+  mechanics, voyage play, ship interior zone layout.
+
+#### Reference Only — Design Not Yet Finalized (no code planned yet)
+These GDD sections are source material or designs still in progress. Do not
+implement until the section is marked FULLY LOCKED:
+
+- **s31–s37 — Magic & Spells**: Air, Earth, Fire, Water, Void spell lists and
+  casting mechanics. Large system with major NPC interaction implications.
+- **s38 — Kiho**: Monk ability system.
+- **s43 — Maho**: Blood magic casting and detection (PTL tracking exists but
+  the maho action resolution mechanics are not implemented).
+- **s44 — Shadowlands Mutations & Powers**: Taint advancement tables.
+- **s45 — Advantages & Disadvantages**: Character creation advantages with
+  mechanical effects.
+- **s54.7 (a–i) — The Kolat**: Full faction system with sleeper agents, dual
+  stance, Master succession, and win conditions. Fully designed across 9 sub-
+  sections but none are FULLY LOCKED yet.
+- **s57.22 — Theater Piece System**
+- **s57.23 — Garden System**
+- **s57.24 — Bonsai System**
+- **s57.26 — Origami System**
+- **s57.27 — Painting System**
+- **s57.28 — Sculpture System**
+- **s57.29 — Ikebana System**
+- **s57.30 — Calligraphy System** (letter quality uses it, but full artisan
+  progression not implemented)
+- **s57.31 — Medicine System**
+- **s57.32 — Meditation System**
+- **s57.33 — REQUEST_PERFORMANCE System**
+- **s57.37 — Tea Ceremony System**
+- **s57.38 — Samurai Hunting Party System**
+- **s57.39 — Animal Handling & Trained Companions**
+- **s57.40 — Commerce and Caste Stigma**
+- **s57.41 — Engineering** (construction costs exist; full engineering skill
+  progression not implemented)
+- **s57.44 — Wind-Down System**
+- **s57.45 — Geisha Intelligence System**
+- **s57.46 — Allied NPC Companion System**
 
 ### Pending Redesign
 (None currently pending.)
