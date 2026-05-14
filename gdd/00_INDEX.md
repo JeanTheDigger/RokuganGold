@@ -634,7 +634,7 @@ Key: **DONE** = simulation code written and tested | **PARTIAL** = code exists, 
 | s45 Advantages & Disadvantages | **REFERENCE** | Source material only |
 | s47 Mass Battle Rules | **DONE** | ArmyCombatSystem |
 | s49 Artisan & Crafting System | **PARTIAL** | Gift quality tiers wired into GiftGivingSystem. Tattoo quality into TattooSystem. Full artisan progression not implemented. |
-| s52 World Population System | **PARTIAL** | WorldPopulationGenerator, GempukkuSystem done. Mantis school stat blocks not in SCHOOL_DATA — Mantis characters generate with basic stats only. |
+| s52 World Population System | **DONE** | WorldPopulationGenerator, GempukkuSystem done. Mantis school stat blocks (Yoritomo Bushi, Moshi Shugenja, Tsuruchi Archer) added to SCHOOL_DATA. |
 | s53 War Status System | **PARTIAL** | WarSystem, WarJustification done. WarTermination done. Territory transfer mutations implemented (ProvinceData.clan updated on peace). Imperial edict → CEASE_HOSTILITIES path fully wired. Remaining deferred: peace court mechanics (formal court session via Court System, s15 integration). |
 | s53.2 Intra-Clan Civil War | **PARTIAL** | IntraClanCivilWar done. `holds_seat` is placeholder. Army reconstitution, full Imperial Edict gating deferred. |
 | s54.7 (a–i) The Kolat | **REFERENCE** | Fully designed across 9 sub-sections, none LOCKED. No code. |
