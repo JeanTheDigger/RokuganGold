@@ -282,8 +282,15 @@ static func resolve_attack(
 		else:
 			rolled = maxi(0, rolled - 2)
 
-	# Ranged in melee range: -10 flat to total
+	# Center Stance carry-over: +1k1 + Void Ring on the first roll of the turn (s40)
 	var flat_bonus: int = wound_penalty
+	if attacker_p.void_ring_bonus > 0 and not attacker_p.center_stance_bonus_used:
+		rolled += 1
+		kept += 1
+		flat_bonus += attacker_p.void_ring_bonus
+		attacker_p.center_stance_bonus_used = true
+
+	# Ranged in melee range: -10 flat to total
 	if is_ranged_in_melee and not weapon.get("melee", true):
 		flat_bonus -= 10
 
@@ -705,7 +712,6 @@ static func _iaijutsu_attack(
 	striker: L5RCharacterData,
 	striker_p: Participant,
 	target_tn: int,
-	free_raises: int,
 	dice_engine: DiceEngine,
 ) -> Dictionary:
 	# Duel strike: Iaijutsu/Reflexes attack roll (s40 — explicit "Iaijutsu/Reflexes attack roll")
@@ -713,15 +719,24 @@ static func _iaijutsu_attack(
 	var wound_penalty: int = CharacterStats.get_wound_penalty(striker)
 	var rolled: int = striker.reflexes + iai_rank
 	var kept: int = striker.reflexes
-	# Free Raises reduce the effective TN (roll_check adds raises*5 to TN; free raises offset that)
-	var result: Dictionary = dice_engine.roll_check(rolled, kept, target_tn, free_raises, wound_penalty)
+
+	# Center Stance carry-over: +1k1 + Void Ring on the first roll of the turn (s40)
+	var flat_bonus: int = wound_penalty
+	if striker_p.void_ring_bonus > 0 and not striker_p.center_stance_bonus_used:
+		rolled += 1
+		kept += 1
+		flat_bonus += striker_p.void_ring_bonus
+		striker_p.center_stance_bonus_used = true
+
+	# Free Raises from Focus grant effects without raising TN (s40); they are used
+	# for Increased Damage in resolve_duel_strike(), so passes raises=0 here.
+	var result: Dictionary = dice_engine.roll_check(rolled, kept, target_tn, 0, flat_bonus)
 	return {
 		"success": result["success"],
 		"hit": result["success"],
 		"roll": result["total"],
 		"target_tn": result["tn"],
 		"margin": result["margin"],
-		"raises_called": free_raises,
 	}
 
 
@@ -736,14 +751,14 @@ static func resolve_duel_strike(
 	# Both duelists in Center Stance for the full duel
 	var first_armor_tn: int = get_armor_tn(second_striker, second_striker_p, dice_engine)
 	var first_attack: Dictionary = _iaijutsu_attack(
-		first_striker, first_striker_p,
-		first_armor_tn, duel.free_raises_first, dice_engine
+		first_striker, first_striker_p, first_armor_tn, dice_engine
 	)
 
 	var first_damage: Dictionary = {}
 	var first_wounds: Dictionary = {}
 	if first_attack.get("hit", false):
-		first_damage = resolve_damage(first_striker, "katana", 0, 0, dice_engine)
+		# Free Raises from Focus applied as Increased Damage (+1k0 per Raise, s40)
+		first_damage = resolve_damage(first_striker, "katana", duel.free_raises_first, 0, dice_engine)
 		first_wounds = WoundSystem.apply_damage(second_striker, first_damage["raw_damage"])
 
 	# In a kharmic strike, both attack simultaneously
@@ -753,8 +768,7 @@ static func resolve_duel_strike(
 	if duel.simultaneous or (not duel.simultaneous and not CharacterStats.is_dead(second_striker)):
 		var second_armor_tn: int = get_armor_tn(first_striker, first_striker_p, dice_engine)
 		second_attack = _iaijutsu_attack(
-			second_striker, second_striker_p,
-			second_armor_tn, 0, dice_engine
+			second_striker, second_striker_p, second_armor_tn, dice_engine
 		)
 		if second_attack.get("hit", false):
 			second_damage = resolve_damage(second_striker, "katana", 0, 0, dice_engine)
@@ -832,6 +846,12 @@ static func resolve_full_duel(
 		first_p = def_p
 		second_char = challenger
 		second_p = ch_p
+
+	# Both duelists in Center Stance throughout — by the Strike round (Round 3), they
+	# have accumulated the Center Stance +1k1+VoidRing bonus (s40: "primarily useful
+	# for iaijutsu dueling"). Set it now so _iaijutsu_attack() can consume it.
+	ch_p.void_ring_bonus = challenger.void_ring
+	def_p.void_ring_bonus = defender.void_ring
 
 	var strike: Dictionary = resolve_duel_strike(
 		first_char, first_p, second_char, second_p, duel, dice_engine

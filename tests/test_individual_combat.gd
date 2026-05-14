@@ -549,3 +549,102 @@ func test_check_combat_over_all_alive() -> void:
 	var chars: Dictionary = {1: _char_a, 2: _char_b}
 	var over: bool = IndividualCombat.check_combat_over(state, chars)
 	assert_false(over)
+
+
+# -- Center Stance Roll Bonus --------------------------------------------------
+
+func test_center_stance_bonus_increases_attack_roll() -> void:
+	# A participant with void_ring_bonus set should roll higher than one without
+	_char_a.agility = 3
+	_char_a.skills = {"Kenjutsu": 3}
+	_char_a.void_ring = 3
+
+	var p_no_bonus := IndividualCombat.Participant.new()
+	p_no_bonus.stance = Enums.Stance.ATTACK
+
+	var p_with_bonus := IndividualCombat.Participant.new()
+	p_with_bonus.stance = Enums.Stance.ATTACK
+	p_with_bonus.void_ring_bonus = _char_a.void_ring  # +1k1 +3 flat bonus
+
+	var no_total: int = 0
+	var with_total: int = 0
+	for i: int in range(30):
+		var r_no:   Dictionary = IndividualCombat.resolve_attack(_char_a, p_no_bonus,   "katana", 5, 0, DiceEngine.new(i))
+		p_no_bonus.center_stance_bonus_used = false  # reset for next iteration
+		var r_with: Dictionary = IndividualCombat.resolve_attack(_char_a, p_with_bonus, "katana", 5, 0, DiceEngine.new(i))
+		p_with_bonus.void_ring_bonus = _char_a.void_ring  # restore for next iteration
+		p_with_bonus.center_stance_bonus_used = false
+		no_total   += r_no["roll"]
+		with_total += r_with["roll"]
+	assert_true(with_total > no_total, "Center Stance bonus should increase roll totals")
+
+
+func test_center_stance_bonus_consumed_after_first_attack() -> void:
+	_char_a.agility = 3
+	_char_a.skills = {"Kenjutsu": 3}
+	_char_a.void_ring = 2
+	var p := IndividualCombat.Participant.new()
+	p.void_ring_bonus = 2
+
+	IndividualCombat.resolve_attack(_char_a, p, "katana", 5, 0, _dice)
+	assert_true(p.center_stance_bonus_used, "Bonus should be marked used after first attack")
+
+	# Second attack should NOT get the bonus (center_stance_bonus_used is true)
+	var p2 := IndividualCombat.Participant.new()
+	p2.void_ring_bonus = 2
+	p2.center_stance_bonus_used = true
+	var r1: Dictionary = IndividualCombat.resolve_attack(_char_a, p2, "katana", 5, 0, DiceEngine.new(1))
+	var p3 := IndividualCombat.Participant.new()
+	p3.void_ring_bonus = 0
+	var r2: Dictionary = IndividualCombat.resolve_attack(_char_a, p3, "katana", 5, 0, DiceEngine.new(1))
+	assert_eq(r1["roll"], r2["roll"], "Used bonus should have no effect")
+
+
+func test_duel_full_gives_bonus_to_both_strikers() -> void:
+	# Both duelists in CENTER Stance throughout — both should get void_ring_bonus set
+	_char_a.skills = {"Iaijutsu": 3}
+	_char_b.skills = {"Iaijutsu": 3}
+	_char_a.reflexes = 3
+	_char_b.reflexes = 3
+	_char_a.void_ring = 3
+	_char_b.void_ring = 2
+	# Run multiple duels to confirm structure; we can't assert a specific roll total
+	# without controlling dice. Just verify the bonus doesn't error and duel completes.
+	for i: int in range(5):
+		var result: Dictionary = IndividualCombat.resolve_full_duel(_char_a, _char_b, false, DiceEngine.new(i))
+		assert_true(result.has("winner_id"))
+
+
+func test_free_raises_from_focus_go_to_damage_not_tn() -> void:
+	# Create a duel state where first_striker has 2 Free Raises
+	var first: L5RCharacterData = _make_char(10, 2, 2, 2, 2, 5, 2, 4, 2)
+	var second: L5RCharacterData = _make_char(11, 1, 1, 1, 1, 1, 1, 1, 1)
+	first.skills = {"Iaijutsu": 5}
+	second.skills = {}
+	first.void_ring = 3
+	second.void_ring = 1
+
+	var duel: IndividualCombat.DuelState = IndividualCombat.create_duel(10, 11, false)
+	duel.simultaneous = false
+	duel.first_striker_id = 10
+	duel.free_raises_first = 2  # 2 Free Raises from Focus
+
+	var first_p := IndividualCombat.Participant.new()
+	first_p.character_id = 10
+	first_p.stance = Enums.Stance.CENTER
+	var second_p := IndividualCombat.Participant.new()
+	second_p.character_id = 11
+	second_p.stance = Enums.Stance.CENTER
+
+	# Target TN for second_striker
+	var second_tn: int = IndividualCombat.get_armor_tn(second, second_p, _dice)
+
+	# If Free Raises raised the TN, a high-skill striker would miss much more often
+	# than if Free Raises went to damage instead. We just verify the strike completes
+	# and the first attack roll is NOT penalized by free_raises * 5 on TN.
+	var strike: Dictionary = IndividualCombat.resolve_duel_strike(
+		first, first_p, second, second_p, duel, _dice
+	)
+	assert_true(strike.has("first_attack"))
+	# The effective TN seen by first_attack should equal second_tn (not second_tn + 10)
+	assert_eq(strike["first_attack"].get("target_tn", -1), second_tn)
