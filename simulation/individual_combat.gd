@@ -192,6 +192,7 @@ static func get_armor_tn(
 	character: L5RCharacterData,
 	participant: Participant,
 	dice_engine: DiceEngine,
+	is_melee_attack: bool = true,
 ) -> int:
 	var base_tn: int = CharacterStats.get_armor_tn(character)
 	var stance_mod: int = STANCE_ARMOR_TN_BONUS.get(participant.stance, 0)
@@ -210,8 +211,9 @@ static func get_armor_tn(
 	var cond_mod: int = 0
 	if CONDITION_GRAPPLED in participant.conditions:
 		return 5 + character.armor_tn_bonus  # Grappled: Armor TN = 5 + armor bonuses
-	if CONDITION_PRONE in participant.conditions:
-		cond_mod -= 10  # -10 vs melee attacks while prone
+	if CONDITION_PRONE in participant.conditions and is_melee_attack:
+		# -10 vs melee attacks only (s40: "against melee attacks"); ranged attacks unaffected
+		cond_mod -= 10
 	if CONDITION_STUNNED in participant.conditions:
 		return 5 + character.armor_tn_bonus  # Stunned: Armor TN = 5 + armor bonuses
 	if CONDITION_BLINDED in participant.conditions:
@@ -296,7 +298,7 @@ static func resolve_attack(
 			rolled = maxi(0, rolled - 2)
 
 	# Center Stance carry-over: +1k1 + Void Ring on the first roll of the turn (s40)
-	var flat_bonus: int = wound_penalty
+	var flat_bonus: int = wound_penalty - get_condition_roll_penalty(attacker_p)
 	if attacker_p.void_ring_bonus > 0 and not attacker_p.center_stance_bonus_used:
 		rolled += 1
 		kept += 1
@@ -457,12 +459,9 @@ static func has_condition(participant: Participant, condition: String) -> bool:
 
 
 static func get_condition_roll_penalty(participant: Participant) -> int:
-	var penalty: int = 0
-	if CONDITION_DAZED in participant.conditions:
-		return 30  # -3k0 (reduce rolled by 3, see caller)
 	if CONDITION_FATIGUED in participant.conditions:
-		penalty += 5 + (participant.fatigue_days / 1) * 5
-	return penalty
+		return 5 + participant.fatigue_days * 5
+	return 0
 
 
 static func attempt_recover_dazed(
