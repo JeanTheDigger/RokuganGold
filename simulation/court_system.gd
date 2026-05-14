@@ -8,6 +8,8 @@ const CLAN_COURT_MIN_DURATION: int = 7
 const CLAN_COURT_MAX_DURATION: int = 14
 const PROVINCIAL_COURT_MIN_DURATION: int = 3
 const PROVINCIAL_COURT_MAX_DURATION: int = 5
+const PEACE_COURT_MIN_DURATION: int = 7
+const PEACE_COURT_MAX_DURATION: int = 21
 
 const PRESTIGE_IMPERIAL: int = 3
 const PRESTIGE_CLAN: int = 2
@@ -65,6 +67,8 @@ static func get_default_duration(court_type: CourtSessionData.CourtType) -> int:
 			return CLAN_COURT_MAX_DURATION
 		CourtSessionData.CourtType.PROVINCIAL_FAMILY_COURT:
 			return PROVINCIAL_COURT_MAX_DURATION
+		CourtSessionData.CourtType.PEACE_COURT:
+			return PEACE_COURT_MAX_DURATION
 		_:
 			return PROVINCIAL_COURT_MAX_DURATION
 
@@ -77,6 +81,8 @@ static func _get_prestige(court_type: CourtSessionData.CourtType) -> int:
 			return PRESTIGE_CLAN
 		CourtSessionData.CourtType.PROVINCIAL_FAMILY_COURT:
 			return PRESTIGE_PROVINCIAL
+		CourtSessionData.CourtType.PEACE_COURT:
+			return PRESTIGE_CLAN
 		_:
 			return PRESTIGE_PROVINCIAL
 
