@@ -532,6 +532,7 @@ func test_all_schools_generate_valid_characters() -> void:
 		"Bayushi Courtier", "Soshi Shugenja", "Shosuro Infiltrator",
 		"Shinjo Bushi", "Moto Bushi", "Ide Emissary",
 		"Iuchi Shugenja", "Utaku Battle Maiden",
+		"Yoritomo Bushi", "Moshi Shugenja", "Tsuruchi Archer",
 	]
 	for i: int in range(schools.size()):
 		_dice.set_seed(i)
@@ -573,3 +574,62 @@ func test_all_terrains_generate_valid_provinces() -> void:
 		assert_eq(total, 20, "Terrain %d PU should sum to 20" % terrains[i])
 		assert_true(s.garrison_pu >= 1)
 		assert_true(p.stability >= 70.0)
+
+
+# =============================================================================
+# Mantis School Generation
+# =============================================================================
+
+func test_yoritomo_bushi_generates_correct_stats() -> void:
+	_dice.set_seed(7)
+	var c: L5RCharacterData = WorldGenerator.generate_character(
+		1, "Yoritomo Test", "Mantis", "Yoritomo", "Yoritomo Bushi", 2, _dice
+	)
+	assert_eq(c.clan, "Mantis")
+	assert_eq(c.family, "Yoritomo")
+	assert_eq(c.school, "Yoritomo Bushi")
+	assert_true(c.skills.has("Kenjutsu"), "Yoritomo Bushi must have Kenjutsu")
+	assert_true(c.skills.has("Defense"), "Yoritomo Bushi must have Defense")
+	assert_true(c.skills.has("Jiujutsu"), "Yoritomo Bushi must have Jiujutsu")
+	assert_true(c.skills.has("Commerce"), "Yoritomo Bushi must have Commerce")
+	assert_true(c.skills.has("Knives"), "Yoritomo Bushi must have Knives")
+	assert_eq(c.honor, 3.5)
+	assert_true(c.strength >= 3, "Yoritomo Bushi benefit is +1 Strength")
+
+
+func test_moshi_shugenja_generates_correct_stats() -> void:
+	_dice.set_seed(8)
+	var c: L5RCharacterData = WorldGenerator.generate_character(
+		2, "Moshi Test", "Mantis", "Moshi", "Moshi Shugenja", 2, _dice
+	)
+	assert_eq(c.clan, "Mantis")
+	assert_eq(c.school, "Moshi Shugenja")
+	assert_true(c.skills.has("Calligraphy"), "Moshi Shugenja must have Calligraphy")
+	assert_true(c.skills.has("Lore: Theology"), "Moshi Shugenja must have Lore: Theology")
+	assert_true(c.skills.has("Spellcraft"), "Moshi Shugenja must have Spellcraft")
+	assert_eq(c.honor, 4.5)
+	assert_true(c.awareness >= 3, "Moshi Shugenja benefit is +1 Awareness")
+
+
+func test_tsuruchi_archer_generates_correct_stats() -> void:
+	_dice.set_seed(9)
+	var c: L5RCharacterData = WorldGenerator.generate_character(
+		3, "Tsuruchi Test", "Mantis", "Tsuruchi", "Tsuruchi Archer", 2, _dice
+	)
+	assert_eq(c.clan, "Mantis")
+	assert_eq(c.school, "Tsuruchi Archer")
+	assert_true(c.skills.has("Kyujutsu"), "Tsuruchi Archer must have Kyujutsu")
+	assert_true(c.skills.has("Athletics"), "Tsuruchi Archer must have Athletics")
+	assert_true(c.skills.has("Hunting"), "Tsuruchi Archer must have Hunting")
+	assert_eq(c.honor, 3.5)
+	assert_true(c.reflexes >= 3, "Tsuruchi Archer benefit is +1 Reflexes")
+	assert_true(c.skills.get("Kyujutsu", 0) >= 2, "Tsuruchi Kyujutsu starts at rank 2")
+
+
+func test_mantis_schools_in_school_data() -> void:
+	assert_true(WorldGenerator.SCHOOL_DATA.has("Yoritomo Bushi"))
+	assert_true(WorldGenerator.SCHOOL_DATA.has("Moshi Shugenja"))
+	assert_true(WorldGenerator.SCHOOL_DATA.has("Tsuruchi Archer"))
+	assert_eq(WorldGenerator.SCHOOL_DATA["Yoritomo Bushi"]["clan"], "Mantis")
+	assert_eq(WorldGenerator.SCHOOL_DATA["Moshi Shugenja"]["type"], Enums.SchoolType.SHUGENJA)
+	assert_eq(WorldGenerator.SCHOOL_DATA["Tsuruchi Archer"]["type"], Enums.SchoolType.BUSHI)

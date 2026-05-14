@@ -322,6 +322,35 @@ const SCHOOL_DATA: Dictionary = {
 		"focus_rings": [Enums.Ring.AIR, Enums.Ring.WATER],
 		"skill_rank_2": ["Horsemanship"],
 	},
+	# -- Mantis --
+	"Yoritomo Bushi": {
+		"clan": "Mantis", "family": "Yoritomo",
+		"type": Enums.SchoolType.BUSHI,
+		"benefit": "strength", "honor": 3.5,
+		"skills": ["Commerce", "Defense", "Jiujutsu", "Kenjutsu", "Knives", "Sailing"],
+		"wildcards": ["Skill"],
+		"focus_rings": [Enums.Ring.WATER, Enums.Ring.FIRE],
+		"skill_rank_2": [],
+	},
+	"Moshi Shugenja": {
+		"clan": "Mantis", "family": "Moshi",
+		"type": Enums.SchoolType.SHUGENJA,
+		"benefit": "awareness", "honor": 4.5,
+		"skills": ["Calligraphy", "Divination", "Lore: Theology", "Meditation", "Spellcraft"],
+		"wildcards": ["High", "High"],
+		"focus_rings": [Enums.Ring.AIR, Enums.Ring.FIRE],
+		"skill_rank_2": [],
+		"affinity": Enums.Ring.AIR, "deficiency": Enums.Ring.EARTH,
+	},
+	"Tsuruchi Archer": {
+		"clan": "Mantis", "family": "Tsuruchi",
+		"type": Enums.SchoolType.BUSHI,
+		"benefit": "reflexes", "honor": 3.5,
+		"skills": ["Athletics", "Defense", "Hunting", "Investigation", "Kyujutsu"],
+		"wildcards": ["Skill"],
+		"focus_rings": [Enums.Ring.AIR, Enums.Ring.FIRE],
+		"skill_rank_2": ["Kyujutsu"],
+	},
 }
 
 
