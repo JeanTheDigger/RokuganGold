@@ -3700,3 +3700,186 @@ func test_disband_runs_before_movement_in_daily() -> void:
 	assert_true(result.has("disband_results"))
 	assert_eq(result["disband_results"].size(), 1)
 	assert_false(army.get("is_active", true))
+
+
+# -- Garrison Assignment Tests --------------------------------------------------
+
+func _make_character_for_garrison(
+	id: int,
+	clan: String = "Crane",
+	honor: float = 3.0,
+) -> L5RCharacterData:
+	var c: L5RCharacterData = L5RCharacterData.new()
+	c.character_id = id
+	c.clan = clan
+	c.honor = honor
+	return c
+
+
+func _make_wall_tower(id: int, province_id: int, garrison: float = 2.0) -> SettlementData:
+	var s: SettlementData = SettlementData.new()
+	s.settlement_id = id
+	s.province_id = province_id
+	s.garrison_pu = garrison
+	s.settlement_type = Enums.SettlementType.WALL_TOWER
+	return s
+
+
+func _make_province(id: int, clan: String) -> ProvinceData:
+	var p: ProvinceData = ProvinceData.new()
+	p.province_id = id
+	p.clan = clan
+	return p
+
+
+func test_garrison_assignment_transfers_pu() -> void:
+	var daimyo: L5RCharacterData = _make_character_for_garrison(10, "Crane")
+	var wall: SettlementData = _make_wall_tower(1, 100, 2.0)
+	var source: SettlementData = _make_settlement(2, 200, 10, 3)
+	source.garrison_pu = 5.0
+	var province_crane: ProvinceData = _make_province(200, "Crane")
+	var applied: Dictionary = {
+		"character_id": 5,
+		"effects": {
+			"requires_garrison_assignment": true,
+			"target_npc_id": 10,
+			"target_province_id": 100,
+			"honor_gain_recipient": 0.1,
+		},
+	}
+	var r: Dictionary = DayOrchestrator._apply_garrison_assignment(
+		applied, {10: daimyo}, [wall, source], {200: province_crane},
+	)
+	assert_eq(r["type"], "garrison_assigned")
+	assert_eq(r["daimyo_id"], 10)
+	assert_eq(r["target_province_id"], 100)
+	assert_almost_eq(r["pu_transferred"], 1.0, 0.01)
+	assert_almost_eq(wall.garrison_pu, 3.0, 0.01)
+	assert_almost_eq(source.garrison_pu, 4.0, 0.01)
+	assert_almost_eq(daimyo.honor, 3.1, 0.01)
+
+
+func test_garrison_assignment_honor_applied_to_daimyo() -> void:
+	var daimyo: L5RCharacterData = _make_character_for_garrison(10, "Crane", 5.0)
+	var wall: SettlementData = _make_wall_tower(1, 100, 1.0)
+	var source: SettlementData = _make_settlement(2, 200)
+	source.garrison_pu = 2.0
+	var province_crane: ProvinceData = _make_province(200, "Crane")
+	var applied: Dictionary = {
+		"character_id": 5,
+		"effects": {
+			"requires_garrison_assignment": true,
+			"target_npc_id": 10,
+			"target_province_id": 100,
+			"honor_gain_recipient": 0.1,
+		},
+	}
+	DayOrchestrator._apply_garrison_assignment(
+		applied, {10: daimyo}, [wall, source], {200: province_crane},
+	)
+	assert_almost_eq(daimyo.honor, 5.1, 0.01)
+
+
+func test_garrison_assignment_partial_pu_when_source_low() -> void:
+	var daimyo: L5RCharacterData = _make_character_for_garrison(10, "Crane")
+	var wall: SettlementData = _make_wall_tower(1, 100, 2.0)
+	var source: SettlementData = _make_settlement(2, 200)
+	source.garrison_pu = 0.4
+	var province_crane: ProvinceData = _make_province(200, "Crane")
+	var applied: Dictionary = {
+		"character_id": 5,
+		"effects": {
+			"requires_garrison_assignment": true,
+			"target_npc_id": 10,
+			"target_province_id": 100,
+			"honor_gain_recipient": 0.1,
+		},
+	}
+	var r: Dictionary = DayOrchestrator._apply_garrison_assignment(
+		applied, {10: daimyo}, [wall, source], {200: province_crane},
+	)
+	assert_almost_eq(r["pu_transferred"], 0.4, 0.01)
+	assert_almost_eq(source.garrison_pu, 0.0, 0.01)
+	assert_almost_eq(wall.garrison_pu, 2.4, 0.01)
+
+
+func test_garrison_assignment_no_target_returns_empty() -> void:
+	var applied: Dictionary = {
+		"character_id": 5,
+		"effects": {
+			"requires_garrison_assignment": true,
+			"target_npc_id": -1,
+			"target_province_id": 100,
+		},
+	}
+	var r: Dictionary = DayOrchestrator._apply_garrison_assignment(
+		applied, {}, [], {},
+	)
+	assert_true(r.is_empty())
+
+
+func test_garrison_assignment_no_wall_tower_no_transfer() -> void:
+	var daimyo: L5RCharacterData = _make_character_for_garrison(10, "Crane")
+	var source: SettlementData = _make_settlement(2, 200)
+	source.garrison_pu = 5.0
+	var province_crane: ProvinceData = _make_province(200, "Crane")
+	var applied: Dictionary = {
+		"character_id": 5,
+		"effects": {
+			"requires_garrison_assignment": true,
+			"target_npc_id": 10,
+			"target_province_id": 100,
+			"honor_gain_recipient": 0.1,
+		},
+	}
+	var r: Dictionary = DayOrchestrator._apply_garrison_assignment(
+		applied, {10: daimyo}, [source], {200: province_crane},
+	)
+	assert_eq(r["type"], "garrison_assigned")
+	assert_almost_eq(r["pu_transferred"], 0.0, 0.01)
+	assert_almost_eq(source.garrison_pu, 5.0, 0.01)
+
+
+func test_garrison_assignment_scanned_in_process_military_effects() -> void:
+	var daimyo: L5RCharacterData = _make_character_for_garrison(10, "Crane")
+	var wall: SettlementData = _make_wall_tower(1, 100, 2.0)
+	var source: SettlementData = _make_settlement(2, 200)
+	source.garrison_pu = 3.0
+	var province_crane: ProvinceData = _make_province(200, "Crane")
+	var applied_list: Array = [
+		{
+			"character_id": 5,
+			"effects": {
+				"requires_garrison_assignment": true,
+				"target_npc_id": 10,
+				"target_province_id": 100,
+				"honor_gain_recipient": 0.1,
+			},
+		},
+	]
+	var results: Array[Dictionary] = DayOrchestrator._process_military_effects(
+		applied_list, [wall, source], {10: daimyo}, [], {200: province_crane},
+	)
+	assert_eq(results.size(), 1)
+	assert_eq(results[0]["type"], "garrison_assigned")
+
+
+func test_garrison_assignment_requester_id_captured() -> void:
+	var daimyo: L5RCharacterData = _make_character_for_garrison(10, "Crane")
+	var wall: SettlementData = _make_wall_tower(1, 100, 2.0)
+	var source: SettlementData = _make_settlement(2, 200)
+	source.garrison_pu = 3.0
+	var province_crane: ProvinceData = _make_province(200, "Crane")
+	var applied: Dictionary = {
+		"character_id": 42,
+		"effects": {
+			"requires_garrison_assignment": true,
+			"target_npc_id": 10,
+			"target_province_id": 100,
+			"honor_gain_recipient": 0.1,
+		},
+	}
+	var r: Dictionary = DayOrchestrator._apply_garrison_assignment(
+		applied, {10: daimyo}, [wall, source], {200: province_crane},
+	)
+	assert_eq(r["requester_id"], 42)

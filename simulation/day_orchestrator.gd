@@ -178,6 +178,7 @@ static func advance_day(
 		settlements,
 		characters_by_id,
 		companies,
+		provinces,
 	)
 
 	var wall_engineering_results: Array[Dictionary] = _process_wall_engineering_effects(
@@ -3184,6 +3185,7 @@ static func _process_military_effects(
 	settlements: Array[SettlementData],
 	characters_by_id: Dictionary,
 	_companies: Array[Dictionary],
+	provinces: Dictionary = {},
 ) -> Array[Dictionary]:
 	var results: Array[Dictionary] = []
 	var settlements_by_province: Dictionary = _build_settlements_by_province(settlements)
@@ -3206,6 +3208,13 @@ static func _process_military_effects(
 		if effects.get("requires_battle_resolution", false):
 			var r: Dictionary = _apply_battle_pu_reconciliation(
 				applied, settlements_by_province,
+			)
+			if not r.is_empty():
+				results.append(r)
+
+		if effects.get("requires_garrison_assignment", false):
+			var r: Dictionary = _apply_garrison_assignment(
+				applied, characters_by_id, settlements, provinces,
 			)
 			if not r.is_empty():
 				results.append(r)
@@ -4401,6 +4410,63 @@ static func _apply_service_assignment_effect(
 		"character_id": target.character_id,
 		"new_commander_id": commander_id,
 		"assigned_unit_id": unit_id,
+	}
+
+
+static func _apply_garrison_assignment(
+	applied: Dictionary,
+	characters_by_id: Dictionary,
+	settlements: Array[SettlementData],
+	provinces: Dictionary,
+) -> Dictionary:
+	var effects: Dictionary = applied.get("effects", {})
+	var target_id: int = effects.get("target_npc_id", -1)
+	var target_province_id: int = effects.get("target_province_id", -1)
+	if target_id < 0 or target_province_id < 0:
+		return {}
+
+	var daimyo: L5RCharacterData = characters_by_id.get(target_id)
+	if daimyo == null:
+		return {}
+
+	var honor_gain: float = effects.get("honor_gain_recipient", 0.0)
+	if honor_gain != 0.0:
+		HonorGlorySystem.apply_honor_change(daimyo, honor_gain)
+
+	var wall_tower: SettlementData = null
+	var source_settlement: SettlementData = null
+	var daimyo_province_id: int = _find_lord_province_id(daimyo, provinces)
+
+	for s: SettlementData in settlements:
+		if s.province_id == target_province_id \
+				and s.settlement_type == Enums.SettlementType.WALL_TOWER \
+				and wall_tower == null:
+			wall_tower = s
+		if s.province_id == daimyo_province_id \
+				and source_settlement == null:
+			source_settlement = s
+
+	var pu_transferred: float = 0.0
+	if wall_tower != null:
+		var transfer: float = 1.0
+		if source_settlement != null and source_settlement.garrison_pu >= transfer:
+			source_settlement.garrison_pu -= transfer
+			wall_tower.garrison_pu += transfer
+			pu_transferred = transfer
+		elif source_settlement != null and source_settlement.garrison_pu > 0.0:
+			pu_transferred = source_settlement.garrison_pu
+			wall_tower.garrison_pu += pu_transferred
+			source_settlement.garrison_pu = 0.0
+
+	var requester_id: int = applied.get("character_id", -1)
+	return {
+		"type": "garrison_assigned",
+		"daimyo_id": target_id,
+		"requester_id": requester_id,
+		"target_province_id": target_province_id,
+		"source_province_id": daimyo_province_id,
+		"pu_transferred": pu_transferred,
+		"honor_gained": honor_gain,
 	}
 
 

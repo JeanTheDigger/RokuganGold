@@ -3206,6 +3206,12 @@ The following subsystems are now integrated into the NPC decision loop:
   deployment status (garrisoned units blocked from offensive actions),
   verifies legion coordination and section campaign authority. Military data
   dict threaded through NPCWaveResolver → DayOrchestrator.
+  Post-execution: `requires_garrison_assignment` flag from DISPATCH_COURTIER
+  acceptance processed by `_apply_garrison_assignment()` in
+  `_process_military_effects()`. Applies +0.1 honor to accepting daimyo via
+  HonorGlorySystem, transfers 1.0 garrison_pu from daimyo's province
+  settlement to Wall tower settlement in target province (partial transfer
+  when source garrison < 1.0).
 - **ResourceAvailability** — Phase 5 scoring: `resource_modifier` field on
   ScoredAction. `_compute_resource_modifier` in npc_decision_engine.gd calls
   `ResourceAvailability.compute_resource_modifier()`. Koku ratio thresholds:
