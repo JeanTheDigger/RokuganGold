@@ -586,7 +586,7 @@ Key: **DONE** = simulation code written and tested | **PARTIAL** = code exists, 
 
 | GDD Section | Status | Notes |
 |-------------|--------|-------|
-| s2.4 The Shadowlands / Kaiu Wall | **PARTIAL** | WallSystem, HordeSystem, OniGenerator done. HordeSystem.resolve_horde_assault (s2.4.5–2.4.7) and resolve_sortie_combat (s2.4.10) done — ArmyCombatSystem integration, SI hit, ShadowlandsUnitType offset. Deferred: garrison shortage NPC pipeline (s2.4.12–14), wall_breaker_si_ignore, horde special abilities (horde_command, pack_hunters, feeding_frenzy, brutal_authority, dark_spellcraft), sortie wiring into DayOrchestrator. |
+| s2.4 The Shadowlands / Kaiu Wall | **PARTIAL** | WallSystem, HordeSystem, OniGenerator done. HordeSystem.resolve_horde_assault (s2.4.5–2.4.7) and resolve_sortie_combat (s2.4.10) done. DayOrchestrator._process_sortie_results now runs full combat (synthetic GARRISON states, casualties applied to garrison_pu). Deferred: garrison shortage NPC pipeline (s2.4.12–14), wall_breaker_si_ignore, horde special abilities (horde_command, pack_hunters, feeding_frenzy, brutal_authority, dark_spellcraft). |
 | s4.3 Resource Systems | **PARTIAL** | ResourceTick, RiceMarketSystem, TradeRouteData, FeasibilityLedger, ConstructionSystem done. `last_autumn_emperor_tax_income` is approximate. `is_coastal` detection always false until coordinate system exists. Forge infrastructure for arms projection and stipend obligations deferred. |
 | s4.4 The Local Interface / ASCII Map | **NOT STARTED** | Needs coordinate system first |
 | s4.5 L5R Rules Integration (dice/stats) | **DONE** | DiceEngine, CharacterStats, SkillResolver |
