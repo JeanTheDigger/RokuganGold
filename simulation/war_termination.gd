@@ -397,6 +397,55 @@ static func _get_opponent_clan(war: WarData, clan: String) -> String:
 	return ""
 
 
+# -- Territory Transfer (GDD s53 Ending War Status) ---------------------------
+
+# Apply province clan changes when peace terms include territory_transferred.
+# Called by the day orchestrator after any war resolution with a non-empty
+# territory_transferred list.
+# provinces: Dictionary of province_id -> ProvinceData
+# Returns Array[Dictionary] of {province_id, old_clan, new_clan} for logging.
+static func apply_territory_transfers(
+	resolution: Dictionary,
+	provinces: Dictionary,
+) -> Array[Dictionary]:
+	var transferred: Array = resolution.get("territory_transferred", [])
+	if transferred.is_empty():
+		return []
+
+	var winner_clan: String = _resolve_winner_clan(resolution)
+	if winner_clan.is_empty():
+		return []
+
+	var log: Array[Dictionary] = []
+	for pid: Variant in transferred:
+		var province: ProvinceData = provinces.get(pid) as ProvinceData
+		if province == null:
+			continue
+		var old_clan: String = province.clan
+		if old_clan == winner_clan:
+			continue
+		province.clan = winner_clan
+		log.append({
+			"province_id": pid,
+			"old_clan": old_clan,
+			"new_clan": winner_clan,
+		})
+	return log
+
+
+static func _resolve_winner_clan(resolution: Dictionary) -> String:
+	var res_type: String = resolution.get("resolution", "")
+	match res_type:
+		"formal_surrender":
+			return resolution.get("winner_clan", "")
+		"negotiated_settlement":
+			return resolution.get("proposing_clan", "")
+		"annihilation":
+			return resolution.get("victor_clan", "")
+		_:
+			return ""
+
+
 # -- Trade Route Suspension (GDD s53 Mechanical Effects) -----------------------
 
 static func suspend_trade_routes_for_war(

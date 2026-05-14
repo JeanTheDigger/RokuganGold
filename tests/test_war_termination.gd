@@ -645,3 +645,94 @@ func test_orchestrator_restores_routes_on_edict() -> void:
 	)
 	assert_eq(results.size(), 1)
 	assert_false(route.is_disrupted)
+
+
+# -- Territory Transfer Mutations -----------------------------------------------
+
+func _make_province(pid: int, clan: String) -> ProvinceData:
+	var p: ProvinceData = ProvinceData.new()
+	p.province_id = pid
+	p.clan = clan
+	return p
+
+
+func test_surrender_transfers_province_clan() -> void:
+	var p1: ProvinceData = _make_province(1, "Crane")
+	var p2: ProvinceData = _make_province(2, "Crane")
+	var provinces: Dictionary = {1: p1, 2: p2}
+	var resolution: Dictionary = {
+		"resolution": "formal_surrender",
+		"winner_clan": "Crab",
+		"territory_transferred": [1, 2],
+	}
+	var log: Array[Dictionary] = WarTermination.apply_territory_transfers(resolution, provinces)
+	assert_eq(p1.clan, "Crab")
+	assert_eq(p2.clan, "Crab")
+	assert_eq(log.size(), 2)
+
+
+func test_negotiated_settlement_transfers_partial() -> void:
+	var p1: ProvinceData = _make_province(10, "Crane")
+	var provinces: Dictionary = {10: p1}
+	var resolution: Dictionary = {
+		"resolution": "negotiated_settlement",
+		"proposing_clan": "Crab",
+		"territory_transferred": [10],
+	}
+	var log: Array[Dictionary] = WarTermination.apply_territory_transfers(resolution, provinces)
+	assert_eq(p1.clan, "Crab")
+	assert_eq(log[0]["old_clan"], "Crane")
+	assert_eq(log[0]["new_clan"], "Crab")
+
+
+func test_no_transfer_when_empty() -> void:
+	var provinces: Dictionary = {}
+	var resolution: Dictionary = {
+		"resolution": "negotiated_settlement",
+		"proposing_clan": "Crab",
+		"territory_transferred": [],
+	}
+	var log: Array[Dictionary] = WarTermination.apply_territory_transfers(resolution, provinces)
+	assert_eq(log.size(), 0)
+
+
+func test_imperial_edict_no_transfer() -> void:
+	# Status quo ante — no territory changes hands
+	var p: ProvinceData = _make_province(5, "Crane")
+	var provinces: Dictionary = {5: p}
+	var resolution: Dictionary = {
+		"resolution": "imperial_edict",
+		"clan_a": "Crab",
+		"clan_b": "Crane",
+		"territory_transferred": [],
+	}
+	WarTermination.apply_territory_transfers(resolution, provinces)
+	assert_eq(p.clan, "Crane")  # unchanged
+
+
+func test_transfer_skips_already_correct_clan() -> void:
+	var p: ProvinceData = _make_province(7, "Crab")  # already Crab's
+	var provinces: Dictionary = {7: p}
+	var resolution: Dictionary = {
+		"resolution": "formal_surrender",
+		"winner_clan": "Crab",
+		"territory_transferred": [7],
+	}
+	var log: Array[Dictionary] = WarTermination.apply_territory_transfers(resolution, provinces)
+	assert_eq(log.size(), 0)  # no change logged — clan was already correct
+
+
+func test_orchestrator_applies_territory_transfers() -> void:
+	var p: ProvinceData = _make_province(3, "Crane")
+	var provinces: Dictionary = {3: p}
+	var war_termination_results: Array[Dictionary] = [{
+		"resolution": "formal_surrender",
+		"winner_clan": "Crab",
+		"territory_transferred": [3],
+	}]
+	var result: Array[Dictionary] = DayOrchestrator._apply_war_territory_transfers(
+		war_termination_results, provinces,
+	)
+	assert_eq(p.clan, "Crab")
+	assert_eq(result.size(), 1)
+	assert_eq(result[0]["new_clan"], "Crab")

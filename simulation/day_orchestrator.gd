@@ -361,6 +361,10 @@ static func advance_day(
 	if not peace_route_results.is_empty():
 		LetterSystem.unblock_letters(pending_letters)
 
+	var territory_transfer_results: Array[Dictionary] = _apply_war_territory_transfers(
+		war_termination_results, provinces,
+	)
+
 	var military_topics: Array[TopicData] = _generate_military_event_topics(
 		military_daily, military_effects, active_topics, next_topic_id, ic_day,
 	)
@@ -631,6 +635,7 @@ static func advance_day(
 		"war_declarations": war_declarations,
 		"ladder_effects_results": ladder_effects_results,
 		"war_termination_results": war_termination_results,
+		"territory_transfer_results": territory_transfer_results,
 		"trade_route_results": trade_route_results,
 		"starvation_results": starvation_results,
 		"supply_sharing_results": supply_sharing_results,
@@ -5716,6 +5721,21 @@ static func _find_war_by_id(
 		if war.war_id == war_id:
 			return war
 	return null
+
+
+# -- Territory Transfer on War End ----------------------------------------------
+
+static func _apply_war_territory_transfers(
+	war_termination_results: Array[Dictionary],
+	provinces: Dictionary,
+) -> Array[Dictionary]:
+	var all_transfers: Array[Dictionary] = []
+	for resolution: Dictionary in war_termination_results:
+		var transfers: Array[Dictionary] = WarTermination.apply_territory_transfers(
+			resolution, provinces,
+		)
+		all_transfers.append_array(transfers)
+	return all_transfers
 
 
 # -- Trade Route Suspension on War/Peace ---------------------------------------
