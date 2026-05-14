@@ -628,14 +628,14 @@ Key: **DONE** = simulation code written and tested | **PARTIAL** = code exists, 
 | s29.15 Courtier School Framework | **DONE** | School bonuses wired into SkillResolver, ActionExecutor |
 | s31–s37 Magic & Spells | **REFERENCE** | Source material only — casting mechanics not designed for NPC engine |
 | s38 Kiho | **REFERENCE** | Source material only |
-| s40 Individual Combat | **NOT STARTED** | GDD locked but no simulation code; needed for PC gameplay |
+| s40 Individual Combat | **PARTIAL** | IndividualCombat implemented: initiative, stances, Armor TN, attack/damage, maneuvers (disarm, feint, knockdown), grapple, sumai, iaijutsu duel (Assessment/Focus/Strike), Void Point spending, Center Stance bonus, conditions (Dazed/Blinded/Prone/Fatigued/Stunned/Grappled/Mounted/Entangled). VoidSystem separate class. Wired into ActionExecutor (ISSUE_DUEL_CHALLENGE). Deferred: ASCII map tile positioning/range tracking (needs coordinate system), Guard TN wiring, Mounted attack bonus, contested_roll per-side unskilled-explode. |
 | s43 Maho | **PARTIAL** | PTL tracking and any-maho-raises-PTL rule enforced. Maho spell casting resolution not implemented. |
 | s44 Shadowlands Mutations | **REFERENCE** | Source material only |
 | s45 Advantages & Disadvantages | **REFERENCE** | Source material only |
 | s47 Mass Battle Rules | **DONE** | ArmyCombatSystem |
 | s49 Artisan & Crafting System | **PARTIAL** | Gift quality tiers wired into GiftGivingSystem. Tattoo quality into TattooSystem. Full artisan progression not implemented. |
 | s52 World Population System | **PARTIAL** | WorldPopulationGenerator, GempukkuSystem done. Mantis school stat blocks not in SCHOOL_DATA — Mantis characters generate with basic stats only. |
-| s53 War Status System | **PARTIAL** | WarSystem, WarJustification done. WarTermination done but deferred: peace court mechanics (formal court session), Imperial edict action path, territory transfer mutations on settlement/province data. |
+| s53 War Status System | **PARTIAL** | WarSystem, WarJustification done. WarTermination done. Territory transfer mutations implemented (ProvinceData.clan updated on peace). Imperial edict → CEASE_HOSTILITIES path fully wired. Remaining deferred: peace court mechanics (formal court session via Court System, s15 integration). |
 | s53.2 Intra-Clan Civil War | **PARTIAL** | IntraClanCivilWar done. `holds_seat` is placeholder. Army reconstitution, full Imperial Edict gating deferred. |
 | s54.7 (a–i) The Kolat | **REFERENCE** | Fully designed across 9 sub-sections, none LOCKED. No code. |
 | s55 NPC Decision Engine | **DONE** | Full 7-phase loop, all amendments through s57.21 |
