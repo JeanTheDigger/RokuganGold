@@ -586,7 +586,7 @@ Key: **DONE** = simulation code written and tested | **PARTIAL** = code exists, 
 
 | GDD Section | Status | Notes |
 |-------------|--------|-------|
-| s2.4 The Shadowlands / Kaiu Wall | **PARTIAL** | WallSystem, HordeSystem, OniGenerator done. Deferred: horde combat resolution (s2.4.7), sortie combat, garrison shortage NPC pipeline (s2.4.12–14) |
+| s2.4 The Shadowlands / Kaiu Wall | **PARTIAL** | WallSystem, HordeSystem, OniGenerator done. HordeSystem.resolve_horde_assault (s2.4.5–2.4.7) and resolve_sortie_combat (s2.4.10) done — ArmyCombatSystem integration, SI hit, ShadowlandsUnitType offset. Deferred: garrison shortage NPC pipeline (s2.4.12–14), wall_breaker_si_ignore, horde special abilities (horde_command, pack_hunters, feeding_frenzy, brutal_authority, dark_spellcraft), sortie wiring into DayOrchestrator. |
 | s4.3 Resource Systems | **PARTIAL** | ResourceTick, RiceMarketSystem, TradeRouteData, FeasibilityLedger, ConstructionSystem done. `last_autumn_emperor_tax_income` is approximate. `is_coastal` detection always false until coordinate system exists. Forge infrastructure for arms projection and stipend obligations deferred. |
 | s4.4 The Local Interface / ASCII Map | **NOT STARTED** | Needs coordinate system first |
 | s4.5 L5R Rules Integration (dice/stats) | **DONE** | DiceEngine, CharacterStats, SkillResolver |
@@ -613,7 +613,7 @@ Key: **DONE** = simulation code written and tested | **PARTIAL** = code exists, 
 | s12.11 Inventory System | **DONE** | InventorySystem |
 | s13 Time System | **DONE** | TimeSystem |
 | s14 Action Point System | **DONE** | ActionPointSystem |
-| s15.1–15.8 Court System | **PARTIAL** | CourtSystem, CourtActionSystem, CourtPrioritySystem, CourtAvailability, ImperialEdictSystem done. Per-type compliance effects for TAX_REFORM, AUTHORIZE_WAR, APPOINT_POSITION, STRIP_AUTONOMY, GENERAL_DECREE need additional GDD specification. |
+| s15.1–15.8 Court System | **PARTIAL** | CourtSystem, CourtActionSystem, CourtPrioritySystem, CourtAvailability, ImperialEdictSystem done. ASK_FOR_INTRODUCTION done (s55.7.3 spec — Courtier/Etiquette roll, kuge gate, intermediary status gate, Bureaucracy emphasis). Per-type compliance effects for TAX_REFORM, AUTHORIZE_WAR, APPOINT_POSITION, STRIP_AUTONOMY, GENERAL_DECREE need additional GDD specification. |
 | s16 Topic & Momentum System | **DONE** | TopicMomentumSystem |
 | s17 Personal Visits | **DONE** | PersonalVisitSystem |
 | s18 NPC Objective System | **DONE** | Wired into NPCDecisionEngine |
@@ -635,12 +635,13 @@ Key: **DONE** = simulation code written and tested | **PARTIAL** = code exists, 
 | s47 Mass Battle Rules | **DONE** | ArmyCombatSystem |
 | s49 Artisan & Crafting System | **PARTIAL** | Gift quality tiers wired into GiftGivingSystem. Tattoo quality into TattooSystem. Full artisan progression not implemented. |
 | s52 World Population System | **DONE** | WorldPopulationGenerator, GempukkuSystem done. Mantis school stat blocks (Yoritomo Bushi, Moshi Shugenja, Tsuruchi Archer) added to SCHOOL_DATA. |
-| s53 War Status System | **PARTIAL** | WarSystem, WarJustification done. WarTermination done. Territory transfer mutations implemented (ProvinceData.clan updated on peace). Imperial edict → CEASE_HOSTILITIES path fully wired. Remaining deferred: peace court mechanics (formal court session via Court System, s15 integration). |
+| s53 War Status System | **DONE** | WarSystem, WarJustification, WarTermination done. Territory transfer mutations implemented. Imperial edict → CEASE_HOSTILITIES path fully wired. Peace court mechanics done: PEACE_COURT CourtType, proxy rank validation, willingness modifiers, conclude_peace_court (acceptance → negotiate settlement, always closes court). |
 | s53.2 Intra-Clan Civil War | **PARTIAL** | IntraClanCivilWar done. `holds_seat` is placeholder. Army reconstitution, full Imperial Edict gating deferred. |
 | s54.7 (a–i) The Kolat | **REFERENCE** | Fully designed across 9 sub-sections, none LOCKED. No code. |
 | s55 NPC Decision Engine | **DONE** | Full 7-phase loop, all amendments through s57.21 |
 | s55.10.2 Dragon Governance (Togashi) | **PARTIAL** | TogashiOversight done. Dragon Schism Crisis, removal-via-succession deferred. |
 | s55.10.3 Phoenix Governance (Council) | **PARTIAL** | PhoenixCouncil done. Phoenix Schism Crisis, Shiba Reincarnation deferred. |
+| s55.7 Contact Discovery System | **PARTIAL** | ASK_FOR_INTRODUCTION done (resolve function + ActionExecutor wiring, kuge gate, Bureaucracy emphasis, intermediary status gate). OBSERVE_COURT_ATTENDEES stub only — roll and 1–3 attendee reveal not implemented. |
 | s55.22b Otomo Seiyaku | **DONE** | OtomoSeiyakuSystem |
 | s55.23a Wall Management NeedTypes | **DONE** | Wall NeedTypes in scoring tables and decomposer |
 | s56 Quest System / ASCII Map | **NOT STARTED** | All templates LOCKED in GDD. Requires coordinate system and local interface (s4.4) first. |
