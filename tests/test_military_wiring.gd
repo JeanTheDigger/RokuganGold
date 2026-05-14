@@ -206,13 +206,17 @@ func _make_settlement(
 
 func test_levy_pu_effect_consumes_pu() -> void:
 	var s: SettlementData = _make_settlement(10, 1, 10, 3)
+	var companies: Array[Dictionary] = []
+	var next_id: Array[int] = [100]
 	var applied: Dictionary = {
 		"character_id": 5,
 		"target_province_id": 1,
 		"effects": {"requires_levy_pu": true},
 	}
-	var r: Dictionary = DayOrchestrator._apply_levy_pu_effect(applied, [s])
-	assert_eq(r["type"], "levy_pu_consumed")
+	var r: Dictionary = DayOrchestrator._apply_levy_pu_effect(
+		applied, [s], companies, next_id,
+	)
+	assert_eq(r["type"], "levy_raised")
 	assert_eq(r["pu_consumed"], 1)
 	assert_eq(s.military_pu, 2)
 	assert_eq(s.population_pu, 9)
@@ -226,6 +230,124 @@ func test_levy_pu_effect_no_province() -> void:
 	}
 	var r: Dictionary = DayOrchestrator._apply_levy_pu_effect(applied, [])
 	assert_true(r.is_empty())
+
+
+func test_levy_creates_company_dict() -> void:
+	var s: SettlementData = _make_settlement(10, 1, 10, 3)
+	var companies: Array[Dictionary] = []
+	var next_id: Array[int] = [100]
+	var applied: Dictionary = {
+		"character_id": 5,
+		"target_province_id": 1,
+		"effects": {"requires_levy_pu": true},
+	}
+	var r: Dictionary = DayOrchestrator._apply_levy_pu_effect(
+		applied, [s], companies, next_id,
+	)
+	assert_eq(companies.size(), 1)
+	assert_eq(companies[0]["company_id"], 100)
+	assert_eq(companies[0]["lord_id"], 5)
+	assert_eq(companies[0]["source_province_id"], 1)
+	assert_eq(companies[0]["army_id"], -1)
+	assert_false(companies[0]["destroyed"])
+	assert_eq(r["company_id"], 100)
+	assert_eq(r["unit_type"], Enums.CompanyUnitType.ASHIGARU_SPEARMEN)
+
+
+func test_levy_increments_company_id() -> void:
+	var s: SettlementData = _make_settlement(10, 1, 10, 5)
+	var companies: Array[Dictionary] = []
+	var next_id: Array[int] = [50]
+	var applied: Dictionary = {
+		"character_id": 5,
+		"target_province_id": 1,
+		"effects": {"requires_levy_pu": true},
+	}
+	DayOrchestrator._apply_levy_pu_effect(applied, [s], companies, next_id)
+	assert_eq(next_id[0], 51)
+
+
+func test_levy_respects_unit_type_metadata() -> void:
+	var s: SettlementData = _make_settlement(10, 1, 10, 3)
+	var companies: Array[Dictionary] = []
+	var next_id: Array[int] = [1]
+	var applied: Dictionary = {
+		"character_id": 5,
+		"target_province_id": 1,
+		"effects": {
+			"requires_levy_pu": true,
+			"levy_unit_type": Enums.CompanyUnitType.PEASANT_LEVY,
+		},
+	}
+	var r: Dictionary = DayOrchestrator._apply_levy_pu_effect(
+		applied, [s], companies, next_id,
+	)
+	assert_eq(companies[0]["unit_type"], Enums.CompanyUnitType.PEASANT_LEVY)
+	assert_eq(r["unit_type"], Enums.CompanyUnitType.PEASANT_LEVY)
+
+
+func test_levy_defaults_to_ashigaru_spearmen() -> void:
+	var s: SettlementData = _make_settlement(10, 1, 10, 3)
+	var companies: Array[Dictionary] = []
+	var next_id: Array[int] = [1]
+	var applied: Dictionary = {
+		"character_id": 5,
+		"target_province_id": 1,
+		"effects": {"requires_levy_pu": true},
+	}
+	DayOrchestrator._apply_levy_pu_effect(applied, [s], companies, next_id)
+	assert_eq(companies[0]["unit_type"], Enums.CompanyUnitType.ASHIGARU_SPEARMEN)
+
+
+func test_levy_company_has_correct_health() -> void:
+	var s: SettlementData = _make_settlement(10, 1, 10, 3)
+	var companies: Array[Dictionary] = []
+	var next_id: Array[int] = [1]
+	var applied: Dictionary = {
+		"character_id": 5,
+		"target_province_id": 1,
+		"effects": {"requires_levy_pu": true},
+	}
+	DayOrchestrator._apply_levy_pu_effect(applied, [s], companies, next_id)
+	var stats: Dictionary = ArmyCombatSystem.UNIT_STATS[Enums.CompanyUnitType.ASHIGARU_SPEARMEN]
+	assert_eq(companies[0]["health"], stats["health"])
+	assert_eq(companies[0]["morale"], stats["morale"])
+
+
+func test_levy_returns_arms_cost() -> void:
+	var s: SettlementData = _make_settlement(10, 1, 10, 3)
+	var companies: Array[Dictionary] = []
+	var next_id: Array[int] = [1]
+	var applied: Dictionary = {
+		"character_id": 5,
+		"target_province_id": 1,
+		"effects": {"requires_levy_pu": true},
+	}
+	var r: Dictionary = DayOrchestrator._apply_levy_pu_effect(
+		applied, [s], companies, next_id,
+	)
+	var expected_cost: float = ArmyUpkeepSystem.get_arms_equip_cost(
+		Enums.CompanyUnitType.ASHIGARU_SPEARMEN,
+	)
+	assert_eq(r["arms_cost"], expected_cost)
+
+
+func test_levy_scanned_in_process_military_effects() -> void:
+	var s: SettlementData = _make_settlement(10, 1, 10, 3)
+	var companies: Array[Dictionary] = []
+	var next_id: Array[int] = [200]
+	var applied_list: Array = [{
+		"character_id": 5,
+		"target_province_id": 1,
+		"effects": {"requires_levy_pu": true},
+	}]
+	var results: Array[Dictionary] = DayOrchestrator._process_military_effects(
+		applied_list, [s], {}, companies, {}, next_id,
+	)
+	assert_eq(results.size(), 1)
+	assert_eq(results[0]["type"], "levy_raised")
+	assert_eq(companies.size(), 1)
+	assert_eq(companies[0]["company_id"], 200)
 
 
 func test_battle_pu_reconciliation_effect() -> void:

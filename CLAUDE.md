@@ -608,7 +608,7 @@ All in /tests/, one file per system:
 - test_order_system.gd (~30 tests)
 - test_military_service_system.gd (~35 tests)
 - test_pu_reconciliation.gd (~30 tests)
-- test_military_wiring.gd (~219 tests)
+- test_military_wiring.gd (~245 tests)
 - test_war_system.gd (~61 tests)
 - test_war_justification.gd (~55 tests)
 - test_war_termination.gd (~46 tests)
@@ -3342,7 +3342,13 @@ The following subsystems are now integrated into the NPC decision loop:
   WorldStateData gains matching fields. Return dict gains `military_daily`.
   Post-execution: `_process_military_effects()` scans day results for effect
   flags. ORDER_LEVY → `_apply_levy_pu_effect()` calls
-  `PUReconciliation.consume_levy_pu()` on source settlement. ORDER_BATTLE →
+  `PUReconciliation.consume_levy_pu()` on source settlement AND
+  `LevySystem.raise_levy()` to create a CompanyData, converted to a company
+  dict and appended to the `companies` array. Unit type read from
+  `effects.levy_unit_type` (default ASHIGARU_SPEARMEN). `next_company_id`
+  counter threaded through for ID assignment. New company dict includes
+  `army_id: -1` (levy companies exist outside Go-hatamoto hierarchy).
+  WorldStateData gains `next_company_id: Array[int]`. ORDER_BATTLE →
   `_apply_battle_pu_reconciliation()` calls `PUReconciliation.reconcile_battle()`
   with victor/loser company data from effects dict. ASSIGN_TO_MILITARY_SERVICE →
   `_apply_service_assignment_effect()` calls

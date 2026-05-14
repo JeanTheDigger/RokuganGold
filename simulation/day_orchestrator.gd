@@ -68,6 +68,7 @@ static func advance_day(
 	phoenix_council_state: Dictionary = {},
 	active_civil_wars: Array[Dictionary] = [],
 	precedent_modifiers: Dictionary = {},
+	next_company_id: Array[int] = [1],
 ) -> Dictionary:
 	var prev_season: int = time_system.get_season()
 
@@ -180,6 +181,7 @@ static func advance_day(
 		characters_by_id,
 		companies,
 		provinces,
+		next_company_id,
 	)
 
 	var wall_engineering_results: Array[Dictionary] = _process_wall_engineering_effects(
@@ -3348,8 +3350,9 @@ static func _process_military_effects(
 	applied_list: Array,
 	settlements: Array[SettlementData],
 	characters_by_id: Dictionary,
-	_companies: Array[Dictionary],
+	companies: Array[Dictionary],
 	provinces: Dictionary = {},
+	next_company_id: Array[int] = [1],
 ) -> Array[Dictionary]:
 	var results: Array[Dictionary] = []
 	var settlements_by_province: Dictionary = _build_settlements_by_province(settlements)
@@ -3358,7 +3361,9 @@ static func _process_military_effects(
 		var effects: Dictionary = applied.get("effects", {})
 
 		if effects.get("requires_levy_pu", false):
-			var r: Dictionary = _apply_levy_pu_effect(applied, settlements)
+			var r: Dictionary = _apply_levy_pu_effect(
+				applied, settlements, companies, next_company_id,
+			)
 			if not r.is_empty():
 				results.append(r)
 
@@ -4513,6 +4518,8 @@ static func _create_siege_event_topic(
 static func _apply_levy_pu_effect(
 	applied: Dictionary,
 	settlements: Array[SettlementData],
+	companies: Array[Dictionary] = [],
+	next_company_id: Array[int] = [1],
 ) -> Dictionary:
 	var province_id: int = applied.get("target_province_id", -1)
 	if province_id < 0:
@@ -4528,12 +4535,45 @@ static func _apply_levy_pu_effect(
 		return {}
 
 	var r: Dictionary = PUReconciliation.consume_levy_pu(target_settlement)
+
+	var effects: Dictionary = applied.get("effects", {})
+	var unit_type: int = effects.get("levy_unit_type", Enums.CompanyUnitType.ASHIGARU_SPEARMEN)
+	var lord_id: int = applied.get("character_id", -1)
+
+	var cid: int = next_company_id[0]
+	next_company_id[0] += 1
+
+	var levy_result: Dictionary = LevySystem.raise_levy(
+		cid, unit_type, lord_id, province_id, target_settlement.settlement_id,
+	)
+
+	var company_dict: Dictionary = {}
+	if levy_result.get("success", false):
+		var cd: MilitaryUnitData.CompanyData = levy_result["company"]
+		company_dict = {
+			"company_id": cd.company_id,
+			"unit_type": cd.unit_type,
+			"health": cd.health,
+			"morale": cd.morale,
+			"commander_id": cd.commander_id,
+			"parent_legion_id": cd.parent_legion_id,
+			"source_province_id": cd.source_province_id,
+			"army_id": -1,
+			"lord_id": lord_id,
+			"destroyed": false,
+			"routed": false,
+		}
+		companies.append(company_dict)
+
 	return {
-		"type": "levy_pu_consumed",
-		"character_id": applied.get("character_id", -1),
+		"type": "levy_raised",
+		"character_id": lord_id,
 		"province_id": province_id,
 		"settlement_id": target_settlement.settlement_id,
 		"pu_consumed": r["pu_consumed"],
+		"company_id": cid if levy_result.get("success", false) else -1,
+		"unit_type": unit_type,
+		"arms_cost": levy_result.get("arms_cost", 0.0),
 	}
 
 

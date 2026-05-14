@@ -58,6 +58,7 @@ var active_sieges: Array[Dictionary] = []
 var active_tethers: Array[Dictionary] = []
 var order_states: Array[Dictionary] = []
 var military_companies: Array[Dictionary] = []
+var next_company_id: Array[int] = [1]
 var active_wars: Array[WarData] = []
 var next_war_id: Array[int] = [1]
 var trade_routes: Array = []
@@ -215,6 +216,7 @@ func advance_one_day() -> Dictionary:
 		phoenix_council_state,
 		active_civil_wars,
 		precedent_modifiers,
+		next_company_id,
 	)
 
 
