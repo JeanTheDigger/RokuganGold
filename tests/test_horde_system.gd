@@ -482,6 +482,78 @@ func test_horde_companies_to_battle_states_maho_tsukai_row2() -> void:
 
 
 # =============================================================================
+# Shadowlands special ability flag propagation (s2.4.7 — LOCKED)
+# =============================================================================
+
+func test_sl_dark_spellcraft_flag_propagated() -> void:
+	var stats := HordeSystem.get_unit_stats(Enums.ShadowlandsUnitType.BAKEMONO_SHAMAN)
+	var bc := HordeSystem.make_horde_battle_company(stats, 1, 0, "attacker", 5000)
+	assert_true(bc["sl_dark_spellcraft"], "Bakemono Shaman must carry sl_dark_spellcraft flag")
+
+
+func test_sl_pack_hunters_flag_propagated() -> void:
+	var stats := HordeSystem.get_unit_stats(Enums.ShadowlandsUnitType.OMONI_BAKEMONO)
+	var bc := HordeSystem.make_horde_battle_company(stats, 1, 0, "attacker", 5000)
+	assert_true(bc["sl_pack_hunters"])
+
+
+func test_sl_first_round_atk_bonus_propagated_skeleton() -> void:
+	var stats := HordeSystem.get_unit_stats(Enums.ShadowlandsUnitType.SKELETON_WARRIOR)
+	var bc := HordeSystem.make_horde_battle_company(stats, 1, 0, "attacker", 5000)
+	assert_eq(bc["sl_first_round_atk_bonus"], 1)
+
+
+func test_sl_horde_command_flag_propagated() -> void:
+	var stats := HordeSystem.get_unit_stats(Enums.ShadowlandsUnitType.MAHO_TSUKAI)
+	var bc := HordeSystem.make_horde_battle_company(stats, 2, 0, "attacker", 5000)
+	assert_true(bc["sl_horde_command"])
+
+
+func test_sl_feeding_frenzy_flag_propagated() -> void:
+	var stats := HordeSystem.get_unit_stats(Enums.ShadowlandsUnitType.RAVENOUS_OGRE)
+	var bc := HordeSystem.make_horde_battle_company(stats, 1, 0, "attacker", 5000)
+	assert_true(bc["sl_feeding_frenzy"])
+
+
+func test_sl_brutal_authority_flag_propagated() -> void:
+	var stats := HordeSystem.get_unit_stats(Enums.ShadowlandsUnitType.OGRE_WARLORD)
+	var bc := HordeSystem.make_horde_battle_company(stats, 1, 0, "attacker", 5000)
+	assert_true(bc["sl_brutal_authority"])
+
+
+func test_sl_wall_breaker_si_ignore_in_assault() -> void:
+	var stats := HordeSystem.get_unit_stats(Enums.ShadowlandsUnitType.OGRE_WARRIOR)
+	var bc_assault := HordeSystem.make_horde_battle_company(stats, 1, 0, "attacker", 5000, true)
+	var bc_sortie := HordeSystem.make_horde_battle_company(stats, 1, 0, "attacker", 5001, false)
+	assert_eq(bc_assault["sl_wall_breaker_si_ignore"], 2, "SI ignore applies in tower assault")
+	assert_eq(bc_sortie["sl_wall_breaker_si_ignore"], 0, "SI ignore is 0 outside tower assault")
+
+
+func test_sl_undead_flag_set_for_zombie() -> void:
+	var stats := HordeSystem.get_unit_stats(Enums.ShadowlandsUnitType.ZOMBIE)
+	var bc := HordeSystem.make_horde_battle_company(stats, 1, 0, "attacker", 5000)
+	assert_true(bc["sl_undead"])
+
+
+func test_sl_undead_flag_set_for_skeleton() -> void:
+	var stats := HordeSystem.get_unit_stats(Enums.ShadowlandsUnitType.SKELETON_WARRIOR)
+	var bc := HordeSystem.make_horde_battle_company(stats, 1, 0, "attacker", 5000)
+	assert_true(bc["sl_undead"])
+
+
+func test_sl_undead_flag_false_for_bakemono() -> void:
+	var stats := HordeSystem.get_unit_stats(Enums.ShadowlandsUnitType.BAKEMONO)
+	var bc := HordeSystem.make_horde_battle_company(stats, 1, 0, "attacker", 5000)
+	assert_false(bc["sl_undead"])
+
+
+func test_sl_undead_flag_false_for_maho_tsukai() -> void:
+	var stats := HordeSystem.get_unit_stats(Enums.ShadowlandsUnitType.MAHO_TSUKAI)
+	var bc := HordeSystem.make_horde_battle_company(stats, 2, 0, "attacker", 5000)
+	assert_false(bc["sl_undead"], "Maho-tsukai is not undead — it has morale")
+
+
+# =============================================================================
 # resolve_horde_assault (s2.4.5)
 # =============================================================================
 

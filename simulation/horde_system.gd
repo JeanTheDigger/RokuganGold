@@ -392,6 +392,17 @@ static func make_horde_battle_company(
 		"survival_thresholds_triggered": [],
 		"no_morale": no_morale,
 		"immune_routing_contagion": unit_stats.get("immune_routing_contagion", false),
+		# Shadowlands special ability flags (s2.4.7 — LOCKED)
+		"sl_dark_spellcraft": unit_stats.get("dark_spellcraft", false),
+		"sl_pack_hunters": unit_stats.get("pack_hunters", false),
+		"sl_first_round_atk_bonus": unit_stats.get("first_round_attack_bonus", 0),
+		"sl_horde_command": unit_stats.get("horde_command", false),
+		"sl_feeding_frenzy": unit_stats.get("feeding_frenzy", false),
+		"sl_brutal_authority": unit_stats.get("brutal_authority", false),
+		# Wall Breaker SI ignore only applies in tower assault context.
+		"sl_wall_breaker_si_ignore": unit_stats.get("wall_breaker_si_ignore", 0) if is_tower_assault else 0,
+		# True for Zombie, Skeleton Warrior, Undead Revenant — targeted by Horde Command.
+		"sl_undead": no_morale,
 	}
 
 
