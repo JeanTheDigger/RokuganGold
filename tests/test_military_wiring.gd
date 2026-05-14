@@ -4745,3 +4745,33 @@ func test_get_fortification_bonus_wrong_province() -> void:
 func test_get_fortification_bonus_empty_settlements() -> void:
 	var bonus: int = DayOrchestrator._get_fortification_bonus(1, "Crab", [])
 	assert_eq(bonus, 0)
+
+
+func test_get_fortification_bonus_defender_owns_province() -> void:
+	var p: ProvinceData = ProvinceData.new()
+	p.province_id = 1
+	p.clan = "Crab"
+	var s: SettlementData = SettlementData.new()
+	s.province_id = 1
+	s.settlement_type = Enums.SettlementType.FORTIFICATION
+	var bonus: int = DayOrchestrator._get_fortification_bonus(1, "Crab", [s], {1: p})
+	assert_eq(bonus, DayOrchestrator.FORTIFICATION_DEFENSE_BONUS)
+
+
+func test_get_fortification_bonus_attacker_in_enemy_province() -> void:
+	var p: ProvinceData = ProvinceData.new()
+	p.province_id = 1
+	p.clan = "Crab"
+	var s: SettlementData = SettlementData.new()
+	s.province_id = 1
+	s.settlement_type = Enums.SettlementType.CASTLE
+	var bonus: int = DayOrchestrator._get_fortification_bonus(1, "Lion", [s], {1: p})
+	assert_eq(bonus, 0)
+
+
+func test_get_fortification_bonus_no_province_data_allows_bonus() -> void:
+	var s: SettlementData = SettlementData.new()
+	s.province_id = 1
+	s.settlement_type = Enums.SettlementType.KEEP
+	var bonus: int = DayOrchestrator._get_fortification_bonus(1, "Lion", [s], {})
+	assert_eq(bonus, DayOrchestrator.FORTIFICATION_DEFENSE_BONUS)

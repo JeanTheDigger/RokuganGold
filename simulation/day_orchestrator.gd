@@ -2768,7 +2768,7 @@ static func _resolve_army_battles(
 			battle_province_id, provinces, settlements,
 		)
 		var fort_bonus: int = _get_fortification_bonus(
-			battle_province_id, defender_clan, settlements,
+			battle_province_id, defender_clan, settlements, provinces,
 		)
 
 		var battle_result: Dictionary = resolve_and_reconcile_battle(
@@ -2862,7 +2862,12 @@ static func _get_fortification_bonus(
 	province_id: int,
 	defender_clan: String,
 	settlements: Array[SettlementData],
+	provinces: Dictionary = {},
 ) -> int:
+	if provinces.has(province_id):
+		var prov: ProvinceData = provinces[province_id]
+		if prov.clan != defender_clan:
+			return 0
 	for s: SettlementData in settlements:
 		if s.province_id == province_id and s.is_military():
 			return FORTIFICATION_DEFENSE_BONUS
