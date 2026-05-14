@@ -164,6 +164,10 @@ static func advance_day(
 		pending_letters, ic_day, dice_engine, next_letter_id,
 	)
 
+	_apply_garrison_shortage_letter_writebacks(
+		letter_pass_results, characters_by_id, settlements, current_season
+	)
+
 	var crime_results: Array[Dictionary] = _process_crime_detection(
 		day_result.get("results", []),
 		characters_by_id,
@@ -5166,6 +5170,30 @@ static func _apply_service_assignment_effect(
 	}
 
 
+## When a Champion or Shireikan writes a garrison shortage letter (s2.4.13–14),
+## mark the tower's garrison_shortage_letter_season so the escalation pipeline
+## can advance to DISPATCH_COURTIER the following season.
+static func _apply_garrison_shortage_letter_writebacks(
+	letter_results: Array[Dictionary],
+	characters_by_id: Dictionary,
+	settlements: Array[SettlementData],
+	current_season: int,
+) -> void:
+	for r: Dictionary in letter_results:
+		if r.get("need_type", "") != "STRENGTHEN_WALL":
+			continue
+		var char_id: int = r.get("character_id", -1)
+		var character: L5RCharacterData = characters_by_id.get(char_id)
+		if character == null:
+			continue
+		var loc: String = character.physical_location
+		for s: SettlementData in settlements:
+			if s.settlement_type == Enums.SettlementType.WALL_TOWER \
+					and str(s.settlement_id) == loc:
+				s.garrison_shortage_letter_season = current_season
+				break
+
+
 static func _apply_garrison_assignment(
 	applied: Dictionary,
 	characters_by_id: Dictionary,
@@ -5201,6 +5229,8 @@ static func _apply_garrison_assignment(
 
 	var pu_transferred: float = 0.0
 	if wall_tower != null:
+		# Mark courtier as dispatched for this tower's shortage pipeline.
+		wall_tower.garrison_shortage_courtier_dispatched = true
 		var transfer: float = 1.0
 		if source_settlement != null and source_settlement.garrison_pu >= transfer:
 			source_settlement.garrison_pu -= transfer
@@ -5210,6 +5240,10 @@ static func _apply_garrison_assignment(
 			pu_transferred = source_settlement.garrison_pu
 			wall_tower.garrison_pu += pu_transferred
 			source_settlement.garrison_pu = 0.0
+		# Reset shortage tracking once garrison is no longer below minimum.
+		if not WallSystem.is_garrison_below_minimum(wall_tower.garrison_pu):
+			wall_tower.garrison_shortage_letter_season = -1
+			wall_tower.garrison_shortage_courtier_dispatched = false
 
 	var requester_id: int = applied.get("character_id", -1)
 	return {
@@ -6083,7 +6117,10 @@ static func _set_wall_tower_context_flags(
 		wstat.province_id = tower.province_id
 		wstat.si = tower.wall_si
 		wstat.ss = ss
+		wstat.minimum_garrison = int(WallSystem.MINIMUM_GARRISON_PU)
 		wstat.garrison_above_minimum = not WallSystem.is_garrison_below_minimum(tower.garrison_pu)
+		wstat.garrison_shortage_letter_season = tower.garrison_shortage_letter_season
+		wstat.garrison_shortage_courtier_dispatched = tower.garrison_shortage_courtier_dispatched
 		var min_jade: float = float(
 			int(tower.garrison_pu * WallSystem.SORTIE_SMALL_MAX_PCT)
 			* WallSystem.SORTIE_SMALL_JADE_PER_WARRIOR

@@ -4008,6 +4008,142 @@ func test_garrison_assignment_requester_id_captured() -> void:
 	assert_eq(r["requester_id"], 42)
 
 
+func test_garrison_assignment_sets_courtier_dispatched_flag() -> void:
+	var daimyo: L5RCharacterData = _make_character_for_garrison(10, "Crane")
+	var wall: SettlementData = _make_wall_tower(1, 100, 0.0)  # below minimum
+	wall.garrison_shortage_courtier_dispatched = false
+	var source: SettlementData = _make_settlement(2, 200)
+	source.garrison_pu = 0.5
+	var province_crane: ProvinceData = _make_province(200, "Crane")
+	var applied: Dictionary = {
+		"character_id": 5,
+		"effects": {
+			"requires_garrison_assignment": true,
+			"target_npc_id": 10,
+			"target_province_id": 100,
+		},
+	}
+	DayOrchestrator._apply_garrison_assignment(
+		applied, {10: daimyo}, [wall, source], {200: province_crane}
+	)
+	assert_true(wall.garrison_shortage_courtier_dispatched)
+
+
+func test_garrison_assignment_resets_shortage_flags_when_resolved() -> void:
+	# Transfer enough PU to bring garrison above minimum (MINIMUM_GARRISON_PU = 1.0).
+	var daimyo: L5RCharacterData = _make_character_for_garrison(10, "Crane")
+	var wall: SettlementData = _make_wall_tower(1, 100, 0.0)
+	wall.garrison_shortage_letter_season = 3
+	wall.garrison_shortage_courtier_dispatched = true
+	var source: SettlementData = _make_settlement(2, 200)
+	source.garrison_pu = 5.0  # plenty to bring tower above minimum
+	var province_crane: ProvinceData = _make_province(200, "Crane")
+	var applied: Dictionary = {
+		"character_id": 5,
+		"effects": {
+			"requires_garrison_assignment": true,
+			"target_npc_id": 10,
+			"target_province_id": 100,
+		},
+	}
+	DayOrchestrator._apply_garrison_assignment(
+		applied, {10: daimyo}, [wall, source], {200: province_crane}
+	)
+	# wall.garrison_pu is now 1.0 which equals MINIMUM_GARRISON_PU → resolved
+	assert_eq(wall.garrison_shortage_letter_season, -1)
+	assert_false(wall.garrison_shortage_courtier_dispatched)
+
+
+func test_garrison_assignment_keeps_flags_when_still_below_minimum() -> void:
+	# Partial transfer — garrison still below minimum; flags should NOT reset.
+	var daimyo: L5RCharacterData = _make_character_for_garrison(10, "Crane")
+	var wall: SettlementData = _make_wall_tower(1, 100, 0.0)
+	wall.garrison_shortage_letter_season = 2
+	wall.garrison_shortage_courtier_dispatched = true
+	var source: SettlementData = _make_settlement(2, 200)
+	source.garrison_pu = 0.5  # partial — wall becomes 0.5 which is still < 1.0
+	var province_crane: ProvinceData = _make_province(200, "Crane")
+	var applied: Dictionary = {
+		"character_id": 5,
+		"effects": {
+			"requires_garrison_assignment": true,
+			"target_npc_id": 10,
+			"target_province_id": 100,
+		},
+	}
+	DayOrchestrator._apply_garrison_assignment(
+		applied, {10: daimyo}, [wall, source], {200: province_crane}
+	)
+	assert_eq(wall.garrison_shortage_letter_season, 2)  # unchanged
+	assert_true(wall.garrison_shortage_courtier_dispatched)  # unchanged
+
+
+# -- Garrison shortage letter write-back (s2.4.13–14) -------------------------
+
+func _make_character_at_tower(id: int, tower_id: int) -> L5RCharacterData:
+	var c: L5RCharacterData = L5RCharacterData.new()
+	c.character_id = id
+	c.physical_location = str(tower_id)
+	return c
+
+
+func test_letter_writeback_marks_tower_letter_season() -> void:
+	var tower: SettlementData = _make_wall_tower(1, 10, 0.0)
+	tower.settlement_id = 1
+	var char: L5RCharacterData = _make_character_at_tower(5, 1)
+	var letter_results: Array[Dictionary] = [{
+		"character_id": 5,
+		"need_type": "STRENGTHEN_WALL",
+		"action_id": "WRITE_LETTER",
+	}]
+	DayOrchestrator._apply_garrison_shortage_letter_writebacks(
+		letter_results, {5: char}, [tower] as Array[SettlementData], 4
+	)
+	assert_eq(tower.garrison_shortage_letter_season, 4)
+
+
+func test_letter_writeback_ignores_non_strengthen_wall_need() -> void:
+	var tower: SettlementData = _make_wall_tower(1, 10, 0.0)
+	var char: L5RCharacterData = _make_character_at_tower(5, 1)
+	var letter_results: Array[Dictionary] = [{
+		"character_id": 5,
+		"need_type": "MAXIMIZE_PROSPERITY",
+		"action_id": "WRITE_LETTER",
+	}]
+	DayOrchestrator._apply_garrison_shortage_letter_writebacks(
+		letter_results, {5: char}, [tower] as Array[SettlementData], 4
+	)
+	assert_eq(tower.garrison_shortage_letter_season, -1)
+
+
+func test_letter_writeback_ignores_unknown_character() -> void:
+	var tower: SettlementData = _make_wall_tower(1, 10, 0.0)
+	var letter_results: Array[Dictionary] = [{
+		"character_id": 999,  # not in characters_by_id
+		"need_type": "STRENGTHEN_WALL",
+		"action_id": "WRITE_LETTER",
+	}]
+	DayOrchestrator._apply_garrison_shortage_letter_writebacks(
+		letter_results, {}, [tower] as Array[SettlementData], 4
+	)
+	assert_eq(tower.garrison_shortage_letter_season, -1)
+
+
+func test_letter_writeback_ignores_non_tower_settlement() -> void:
+	var town: SettlementData = _make_settlement(1, 10)  # not a WALL_TOWER
+	var char: L5RCharacterData = _make_character_at_tower(5, 1)
+	var letter_results: Array[Dictionary] = [{
+		"character_id": 5,
+		"need_type": "STRENGTHEN_WALL",
+		"action_id": "WRITE_LETTER",
+	}]
+	DayOrchestrator._apply_garrison_shortage_letter_writebacks(
+		letter_results, {5: char}, [town] as Array[SettlementData], 4
+	)
+	# Town should be unchanged (not a WALL_TOWER)
+	assert_eq(town.garrison_shortage_letter_season, -1)
+
+
 # -- Army Battle Resolution Tests -----------------------------------------------
 
 func _make_company_dict_for_battle(

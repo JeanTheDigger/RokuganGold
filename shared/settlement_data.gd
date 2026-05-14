@@ -42,6 +42,11 @@ extends Resource
 # Active only while kaiu_reinforce_seasons_remaining > 0.
 @export var kaiu_decay_reduction: float = 0.0
 @export var kaiu_reinforce_seasons_remaining: int = 0
+# Garrison shortage escalation state (s2.4.13–14): season when Champion/Shireikan
+# first sent letters about this shortage; -1 = no campaign started.
+@export var garrison_shortage_letter_season: int = -1
+# True once a DISPATCH_COURTIER has been sent for the current shortage.
+@export var garrison_shortage_courtier_dispatched: bool = false
 
 
 func has_infrastructure(feature: String) -> bool:
