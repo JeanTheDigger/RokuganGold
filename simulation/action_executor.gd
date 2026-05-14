@@ -3031,7 +3031,7 @@ static func _execute_observe_court_attendees(
 			if pool.is_empty():
 				break
 			var idx: int = dice_engine.roll_and_keep(1, 1, 0).total % pool.size()
-			learned_ids.append(pool[idx])
+			learned_ids.append(int(pool[idx]))
 			pool.remove_at(idx)
 
 		var learned_info: Array[Dictionary] = []
