@@ -113,6 +113,8 @@ class Participant:
 	var void_ring_bonus: int = 0     # from Center Stance carry-forward
 	var center_stance_bonus_used: bool = false
 	var fatigue_days: int = 0        # consecutive days without rest
+	var void_spent_this_round: bool = false  # once-per-Round Void spend restriction (RAW)
+	var void_armor_tn_bonus: int = 0         # from Void spend_for_armor_tn (RAW)
 
 
 class CombatState:
@@ -217,7 +219,7 @@ static func get_armor_tn(
 		return character.reflexes + 5 + character.armor_tn_bonus
 
 	# Two-weapon bonus: +InsightRank to Armor TN (handled by caller marking dual_wielding)
-	return base_tn + stance_mod + defense_bonus + full_def_bonus + cond_mod
+	return base_tn + stance_mod + defense_bonus + full_def_bonus + cond_mod + participant.void_armor_tn_bonus
 
 
 static func roll_full_defense_bonus(
@@ -250,6 +252,7 @@ static func resolve_attack(
 	raises: int,
 	dice_engine: DiceEngine,
 	is_ranged_in_melee: bool = false,
+	spend_void: bool = false,
 ) -> Dictionary:
 	var weapon: Dictionary = get_weapon_profile(weapon_name)
 	var skill_name: String = weapon.get("skill", "Kenjutsu")
@@ -261,6 +264,16 @@ static func resolve_attack(
 	var trait_value: int = attacker.reflexes if trait_name == "reflexes" else attacker.agility
 	var rolled: int = trait_value + skill_rank
 	var kept: int = trait_value
+
+	# Void spend for +1k1 (or +2k2) on attack roll (RAW). Not valid for Damage Rolls.
+	var void_used: bool = false
+	if spend_void and VoidSystem.can_spend(attacker) and not attacker_p.void_spent_this_round:
+		var vbonus: Dictionary = VoidSystem.spend_for_roll(attacker)
+		if vbonus["success"]:
+			rolled += vbonus["rolled_bonus"]
+			kept += vbonus["kept_bonus"]
+			attacker_p.void_spent_this_round = true
+			void_used = true
 
 	# Stance bonuses
 	rolled += STANCE_ATTACK_ROLLED_BONUS.get(attacker_p.stance, 0)
@@ -306,6 +319,7 @@ static func resolve_attack(
 		"target_tn": result["tn"],
 		"margin": result["margin"],
 		"raises_called": raises,
+		"void_used": void_used,
 	}
 
 
@@ -713,6 +727,7 @@ static func _iaijutsu_attack(
 	striker_p: Participant,
 	target_tn: int,
 	dice_engine: DiceEngine,
+	spend_void: bool = false,
 ) -> Dictionary:
 	# Duel strike: Iaijutsu/Reflexes attack roll (s40 — explicit "Iaijutsu/Reflexes attack roll")
 	var iai_rank: int = striker.skills.get("Iaijutsu", 0)
@@ -728,6 +743,16 @@ static func _iaijutsu_attack(
 		flat_bonus += striker_p.void_ring_bonus
 		striker_p.center_stance_bonus_used = true
 
+	# Void spend for +1k1 (or +2k2) on duel strike (RAW). Not valid for Damage Rolls.
+	var void_used: bool = false
+	if spend_void and VoidSystem.can_spend(striker) and not striker_p.void_spent_this_round:
+		var vbonus: Dictionary = VoidSystem.spend_for_roll(striker)
+		if vbonus["success"]:
+			rolled += vbonus["rolled_bonus"]
+			kept += vbonus["kept_bonus"]
+			striker_p.void_spent_this_round = true
+			void_used = true
+
 	# Free Raises from Focus grant effects without raising TN (s40); they are used
 	# for Increased Damage in resolve_duel_strike(), so passes raises=0 here.
 	var result: Dictionary = dice_engine.roll_check(rolled, kept, target_tn, 0, flat_bonus)
@@ -737,6 +762,7 @@ static func _iaijutsu_attack(
 		"roll": result["total"],
 		"target_tn": result["tn"],
 		"margin": result["margin"],
+		"void_used": void_used,
 	}
 
 
@@ -880,6 +906,8 @@ static func begin_round(state: CombatState) -> void:
 	for p: Participant in state.participants.values():
 		p.has_acted_this_round = false
 		p.is_delaying = false
+		p.void_spent_this_round = false
+		p.void_armor_tn_bonus = 0
 		# Center Stance bonus only lasts one round (s40)
 		if p.stance == Enums.Stance.CENTER and p.void_ring_bonus > 0:
 			p.center_stance_bonus_used = true
