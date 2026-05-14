@@ -1773,7 +1773,9 @@ All in /tests/, one file per system:
   10 ticks after threshold (default 30, aggressive 20, pragmatic 45). Sortie
   resets counter. `process_siege_tick()` orchestrates starvation + honor +
   event firing per tick.
-  **Storm assault wiring** — CONDUCT_STORM_ASSAULT intercepted in ActionExecutor
+  **Storm assault wiring** — Phase 3 metadata: `_populate_action_metadata()` sets
+  `siege_settlement_id` from `ctx.location_id` for CONDUCT_STORM_ASSAULT and
+  MAINTAIN_SIEGE. CONDUCT_STORM_ASSAULT intercepted in ActionExecutor
   before generic military path. Returns `requires_storm_assault: true` with
   `siege_settlement_id`. DayOrchestrator `_process_storm_assault_results()` finds
   the siege by settlement ID, gathers attacker/defender companies, runs
@@ -3240,6 +3242,10 @@ The following subsystems are now integrated into the NPC decision loop:
   3 (Veteran/max). Stored on company dict as `training_level`/`training_points`.
   Training level stat modifiers in combat deferred until ArmyCombatSystem
   integration.
+  Remaining military stubs (return simple effect dicts, no orchestrator
+  mutation): ORDER_DEPLOY, ORDER_FORTIFY, ORDER_RETREAT, ASSIGN_GARRISON,
+  CONDUCT_RAID — all blocked on coordinate system or missing GDD
+  specification.
 - **ResourceAvailability** — Phase 5 scoring: `resource_modifier` field on
   ScoredAction. `_compute_resource_modifier` in npc_decision_engine.gd calls
   `ResourceAvailability.compute_resource_modifier()`. Koku ratio thresholds:
@@ -3419,7 +3425,8 @@ The following subsystems are now integrated into the NPC decision loop:
   Mountains→Mountain, River Delta→Plains). Towns/Cities/Imperial Capital
   override to URBAN. `_get_fortification_bonus()` returns +5 Defense
   when a military settlement (Fortification/Keep/Castle/Family Castle/
-  Wall Tower) exists in the battle province. Both threaded through
+  Wall Tower) exists in the battle province AND the province belongs to
+  the defending clan (attackers don't benefit from enemy forts). Both threaded through
   `_process_military_daily()` → `_resolve_army_battles()` via
   `provinces` parameter. Sub-tile terrain deferred until coordinate
   system exists.
