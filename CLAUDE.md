@@ -93,10 +93,10 @@ When implementing or auditing a system, go here first:
 | War termination                               | 53                   |
 | Intra-clan civil war                          | 53.2                 |
 | Individual combat                             | 40 (not yet built)   |
-| ASCII map mission generation                  | 56 (all subsects)    |
-| Quest seeds                                   | 56.1                 |
-| Spiritual insurgency                          | 56.16                |
-| Bloodspeaker cult network                     | 56.14                |
+| ASCII map mission generation                  | 56 (not yet built)   |
+| Quest seeds                                   | 56.1 (not yet built) |
+| Spiritual insurgency                          | 56.16 (not yet built)|
+| Bloodspeaker cult network                     | 56.14 (not yet built)|
 | NPC decision engine — core loop               | 55 (all subsects)    |
 | NPC decision engine — amendments              | 57 (all subsects)    |
 | Province triage                               | 55.9                 |
