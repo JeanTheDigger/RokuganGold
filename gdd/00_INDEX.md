@@ -587,7 +587,7 @@ Key: **DONE** = simulation code written and tested | **PARTIAL** = code exists, 
 | GDD Section | Status | Notes |
 |-------------|--------|-------|
 | s2.4 The Shadowlands / Kaiu Wall | **PARTIAL** | WallSystem, HordeSystem, OniGenerator done. Deferred: horde combat resolution (s2.4.7), sortie combat, garrison shortage NPC pipeline (s2.4.12–14) |
-| s4.3 Resource Systems | **PARTIAL** | ResourceTick, RiceMarketSystem, TradeRouteData done. `last_autumn_emperor_tax_income` is approximate. |
+| s4.3 Resource Systems | **PARTIAL** | ResourceTick, RiceMarketSystem, TradeRouteData, FeasibilityLedger, ConstructionSystem done. `last_autumn_emperor_tax_income` is approximate. `is_coastal` detection always false until coordinate system exists. Forge infrastructure for arms projection and stipend obligations deferred. |
 | s4.4 The Local Interface / ASCII Map | **NOT STARTED** | Needs coordinate system first |
 | s4.5 L5R Rules Integration (dice/stats) | **DONE** | DiceEngine, CharacterStats, SkillResolver |
 | s4.6 Honor & Glory | **DONE** | HonorGlorySystem |
@@ -597,7 +597,7 @@ Key: **DONE** = simulation code written and tested | **PARTIAL** = code exists, 
 | s11.7 Army Combat | **PARTIAL** | ArmyCombatSystem done. Sub-tile pathfinding uses placeholder IDs. 5 military stub ActionIDs pending coordinate system. |
 | s11.7b Event Durations | **DONE** | EventDurations constants |
 | s11.8 Regional Price Modifiers | **DONE** | RegionalPriceModifiers |
-| s11.9 Ship Types & Naval | **PARTIAL** | NavalSystem, NavalCombatSystem done. Ship movement initiation needs coordinate system. |
+| s11.9 Ship Types & Naval | **PARTIAL** | NavalSystem, NavalCombatSystem done. Ship movement initiation needs coordinate system. Weather is global per day (placeholder). Naval blockade not integrated. Tortoise Escape Attempt not yet in battle round. |
 | s11.10 Way of the Daimyo | **REFERENCE** | Lore reference, no design to implement |
 | s11.11 Insurgency System | **DONE** | InsurgencySystem |
 | s12.1 Diplomacy Framework | **DONE** | Architecture only — wired into all other systems |
@@ -613,7 +613,7 @@ Key: **DONE** = simulation code written and tested | **PARTIAL** = code exists, 
 | s12.11 Inventory System | **DONE** | InventorySystem |
 | s13 Time System | **DONE** | TimeSystem |
 | s14 Action Point System | **DONE** | ActionPointSystem |
-| s15.1–15.8 Court System | **DONE** | CourtSystem, CourtActionSystem, CourtPrioritySystem, CourtAvailability |
+| s15.1–15.8 Court System | **PARTIAL** | CourtSystem, CourtActionSystem, CourtPrioritySystem, CourtAvailability, ImperialEdictSystem done. Per-type compliance effects for TAX_REFORM, AUTHORIZE_WAR, APPOINT_POSITION, STRIP_AUTONOMY, GENERAL_DECREE need additional GDD specification. |
 | s16 Topic & Momentum System | **DONE** | TopicMomentumSystem |
 | s17 Personal Visits | **DONE** | PersonalVisitSystem |
 | s18 NPC Objective System | **DONE** | Wired into NPCDecisionEngine |
@@ -634,8 +634,8 @@ Key: **DONE** = simulation code written and tested | **PARTIAL** = code exists, 
 | s45 Advantages & Disadvantages | **REFERENCE** | Source material only |
 | s47 Mass Battle Rules | **DONE** | ArmyCombatSystem |
 | s49 Artisan & Crafting System | **PARTIAL** | Gift quality tiers wired into GiftGivingSystem. Tattoo quality into TattooSystem. Full artisan progression not implemented. |
-| s52 World Population System | **DONE** | WorldPopulationGenerator, GempukkuSystem |
-| s53 War Status System | **DONE** | WarSystem, WarJustification, WarTermination |
+| s52 World Population System | **PARTIAL** | WorldPopulationGenerator, GempukkuSystem done. Mantis school stat blocks not in SCHOOL_DATA — Mantis characters generate with basic stats only. |
+| s53 War Status System | **PARTIAL** | WarSystem, WarJustification done. WarTermination done but deferred: peace court mechanics (formal court session), Imperial edict action path, territory transfer mutations on settlement/province data. |
 | s53.2 Intra-Clan Civil War | **PARTIAL** | IntraClanCivilWar done. `holds_seat` is placeholder. Army reconstitution, full Imperial Edict gating deferred. |
 | s54.7 (a–i) The Kolat | **REFERENCE** | Fully designed across 9 sub-sections, none LOCKED. No code. |
 | s55 NPC Decision Engine | **DONE** | Full 7-phase loop, all amendments through s57.21 |
