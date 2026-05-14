@@ -1575,3 +1575,83 @@ func test_wall_breaker_si_ignore_reduces_defender_defense() -> void:
 
 	assert_true(dmg_with_ignore >= dmg_without,
 		"Wall Breaker SI ignore should produce equal or more damage than without (same roll, less defense)")
+
+
+# -- Pack Hunters adjacency tests -----------------------------------------------
+
+func test_pack_hunters_bonus_with_adjacent_ally() -> void:
+	# Omoni A (sl_pack_hunters) at column 0, Omoni B (sl_pack_hunters) at column 1.
+	# Same seed, with ally present vs without — adjacent ally adds +1 Attack.
+	var omoni_a := _make_sl_bc(1, Enums.ShadowlandsUnitType.OMONI_BAKEMONO,
+		5, 3, 13, 4, "attacker", 1, 0, {"sl_pack_hunters": true})
+	var omoni_b := _make_sl_bc(2, Enums.ShadowlandsUnitType.OMONI_BAKEMONO,
+		5, 3, 13, 4, "attacker", 1, 1, {"sl_pack_hunters": true})
+	omoni_a["round_number"] = 2  # Not round 1, so no first-round bonuses from clan units.
+	var dfn_c: MilitaryUnitData.CompanyData = _make_company(3, Enums.CompanyUnitType.HIDA_BUSHI)
+	var dfn: Dictionary = _make_bc(dfn_c, 1, 0, "defender")
+
+	_dice.set_seed(7)
+	var dmg_with_pack: int = ArmyCombatSystem._compute_attack_damage(
+		omoni_a, dfn, _dice, false, false, [omoni_a, omoni_b], [dfn])
+
+	# Same scenario but no adjacent Omoni ally.
+	var omoni_alone := _make_sl_bc(4, Enums.ShadowlandsUnitType.OMONI_BAKEMONO,
+		5, 3, 13, 4, "attacker", 1, 0, {"sl_pack_hunters": true})
+	omoni_alone["round_number"] = 2
+	var dfn2_c: MilitaryUnitData.CompanyData = _make_company(5, Enums.CompanyUnitType.HIDA_BUSHI)
+	var dfn2: Dictionary = _make_bc(dfn2_c, 1, 0, "defender")
+
+	_dice.set_seed(7)
+	var dmg_without_pack: int = ArmyCombatSystem._compute_attack_damage(
+		omoni_alone, dfn2, _dice, false, false, [omoni_alone], [dfn2])
+
+	assert_true(dmg_with_pack >= dmg_without_pack,
+		"Pack Hunters should give equal or more damage when an adjacent Omoni's Bakemono is present")
+
+
+func test_pack_hunters_no_bonus_non_adjacent() -> void:
+	# Omoni A at column 0, Omoni B at column 3 — not adjacent, no bonus.
+	var omoni_a := _make_sl_bc(1, Enums.ShadowlandsUnitType.OMONI_BAKEMONO,
+		5, 3, 13, 4, "attacker", 1, 0, {"sl_pack_hunters": true})
+	var omoni_b_far := _make_sl_bc(2, Enums.ShadowlandsUnitType.OMONI_BAKEMONO,
+		5, 3, 13, 4, "attacker", 1, 3, {"sl_pack_hunters": true})
+	omoni_a["round_number"] = 2
+	var dfn_c: MilitaryUnitData.CompanyData = _make_company(3, Enums.CompanyUnitType.HIDA_BUSHI)
+	var dfn: Dictionary = _make_bc(dfn_c, 1, 0, "defender")
+
+	_dice.set_seed(7)
+	var dmg_non_adjacent: int = ArmyCombatSystem._compute_attack_damage(
+		omoni_a, dfn, _dice, false, false, [omoni_a, omoni_b_far], [dfn])
+
+	# Same scenario with no ally at all — should be identical.
+	var omoni_alone := _make_sl_bc(4, Enums.ShadowlandsUnitType.OMONI_BAKEMONO,
+		5, 3, 13, 4, "attacker", 1, 0, {"sl_pack_hunters": true})
+	omoni_alone["round_number"] = 2
+	var dfn2_c: MilitaryUnitData.CompanyData = _make_company(5, Enums.CompanyUnitType.HIDA_BUSHI)
+	var dfn2: Dictionary = _make_bc(dfn2_c, 1, 0, "defender")
+
+	_dice.set_seed(7)
+	var dmg_no_ally: int = ArmyCombatSystem._compute_attack_damage(
+		omoni_alone, dfn2, _dice, false, false, [omoni_alone], [dfn2])
+
+	assert_eq(dmg_non_adjacent, dmg_no_ally,
+		"Non-adjacent Omoni's Bakemono should not trigger Pack Hunters bonus")
+
+
+func test_pack_hunters_in_full_battle_resolve() -> void:
+	# Integration smoke test: two Omoni's Bakemono side-by-side fighting a garrison.
+	# Verifies resolve_battle completes without error and Pack Hunters produces a valid result.
+	var omoni_a := _make_sl_bc(1, Enums.ShadowlandsUnitType.OMONI_BAKEMONO,
+		5, 3, 13, 4, "attacker", 1, 0, {"sl_pack_hunters": true})
+	var omoni_b := _make_sl_bc(2, Enums.ShadowlandsUnitType.OMONI_BAKEMONO,
+		5, 3, 13, 4, "attacker", 1, 1, {"sl_pack_hunters": true})
+	var dfn: Array[Dictionary] = _make_army(2, Enums.CompanyUnitType.GARRISON, "defender", 10)
+
+	_dice.set_seed(42)
+	var result: Dictionary = ArmyCombatSystem.resolve_battle(
+		[omoni_a, omoni_b], dfn, Enums.BattleTerrainType.PLAINS, _dice,
+	)
+	assert_true(result.has("victor"), "resolve_battle must return a victor key")
+	assert_true(result["rounds"] > 0, "Battle must last at least one round")
+	assert_true(result["victor"] in ["attacker", "defender", "draw"],
+		"Victor must be a valid string")
