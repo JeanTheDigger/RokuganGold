@@ -1345,3 +1345,46 @@ func test_gossip_metadata_uses_split() -> void:
 	NPCDecisionEngine._populate_action_metadata(action, need, ctx)
 	assert_eq(action.metadata.get("concealment_raises", -1), 1)
 	assert_eq(action.metadata.get("damage_raises", -1), 98)
+
+
+# -- ASK_FOR_INTRODUCTION (s55.7.3) -------------------------------------------
+
+func test_ask_intro_success_normal_target() -> void:
+	# Roll meets TN 15, non-kuge target → +3 disposition.
+	var r: Dictionary = CourtActionSystem.resolve_ask_for_introduction(15, false, 0.0)
+	assert_true(r["success"])
+	assert_eq(r["disposition_gain"], CourtActionSystem.ASK_FOR_INTRODUCTION_BASE_DISP)
+	assert_true(r["contact_added"])
+
+
+func test_ask_intro_failure_roll_below_tn() -> void:
+	var r: Dictionary = CourtActionSystem.resolve_ask_for_introduction(14, false, 0.0)
+	assert_false(r["success"])
+
+
+func test_ask_intro_success_kuge_target_disposition_reduced() -> void:
+	# Kuge target (Status 7+) grants only +2 disposition on success.
+	var r: Dictionary = CourtActionSystem.resolve_ask_for_introduction(20, true, 5.0)
+	assert_true(r["success"])
+	assert_eq(r["disposition_gain"], CourtActionSystem.ASK_FOR_INTRODUCTION_KUGE_DISP)
+	assert_true(r.get("target_is_kuge", false))
+
+
+func test_ask_intro_kuge_blocked_intermediary_too_low() -> void:
+	# Intermediary Status < 4.0 → blocked for kuge targets.
+	var r: Dictionary = CourtActionSystem.resolve_ask_for_introduction(99, true, 3.9)
+	assert_false(r["success"])
+	assert_eq(r["blocked_reason"], "intermediary_insufficient_status")
+
+
+func test_ask_intro_kuge_gate_not_applied_for_normal_target() -> void:
+	# Intermediary status gate only applies to kuge targets.
+	var r: Dictionary = CourtActionSystem.resolve_ask_for_introduction(15, false, 0.0)
+	assert_true(r["success"])
+
+
+func test_ask_intro_kuge_exact_intermediary_threshold_passes() -> void:
+	# Exactly Status 4.0 satisfies the kuge intermediary gate.
+	var r: Dictionary = CourtActionSystem.resolve_ask_for_introduction(20, true, 4.0)
+	assert_true(r["success"])
+	assert_eq(r["disposition_gain"], CourtActionSystem.ASK_FOR_INTRODUCTION_KUGE_DISP)

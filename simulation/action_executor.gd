@@ -148,6 +148,9 @@ static func execute(
 	if action_id == "PROBE":
 		return _execute_probe(action, character, ctx, dice_engine, characters_by_id)
 
+	if action_id == "ASK_FOR_INTRODUCTION":
+		return _execute_ask_for_introduction(action, character, ctx, dice_engine, characters_by_id)
+
 	if action_id == "NEGOTIATE_SURRENDER":
 		var peace_effects: Dictionary = _execute_negotiate_surrender(
 			action, character, ctx, dice_engine
@@ -2929,5 +2932,68 @@ static func _execute_duel_challenge(
 		"ic_day": ctx.ic_day,
 		"season": ctx.season,
 		"actor_won": actor_is_winner,
+		"effects": effects,
+	}
+
+
+# -- ASK_FOR_INTRODUCTION (s55.7.3 — LOCKED) ----------------------------------
+
+static func _execute_ask_for_introduction(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	dice_engine: DiceEngine,
+	characters_by_id: Dictionary,
+) -> Dictionary:
+	var target_id: int = action.target_npc_id
+	var target: L5RCharacterData = characters_by_id.get(target_id)
+	var intermediary_id: int = action.metadata.get("intermediary_id", -1)
+	var intermediary: L5RCharacterData = characters_by_id.get(intermediary_id)
+
+	var target_is_kuge: bool = false
+	if target != null:
+		target_is_kuge = target.status >= CourtActionSystem.KUGE_STATUS_THRESHOLD
+	var intermediary_status: float = intermediary.status if intermediary != null else 0.0
+
+	# Skill selection: kuge targets use Etiquette/Awareness; others use Courtier/Awareness.
+	var skill: String = "Etiquette" if target_is_kuge else "Courtier"
+	var skill_rank: int = character.skills.get(skill, 0)
+	var trait_val: int = character.traits.get("Awareness", 2)
+
+	# Bureaucracy emphasis grants +1k0 on kuge rolls per s55.7.3.
+	var has_emphasis: bool = target_is_kuge and character.skills.has("Bureaucracy")
+	var roll_result: Dictionary = dice_engine.roll_skill_check(
+		trait_val, skill_rank, 0, 0, 0, has_emphasis
+	)
+	var roll_total: int = roll_result.get("total", 0)
+
+	var resolution: Dictionary = CourtActionSystem.resolve_ask_for_introduction(
+		roll_total, target_is_kuge, intermediary_status
+	)
+
+	var effects: Dictionary = {}
+	if resolution.get("success", false):
+		effects["contact_added"] = true
+		effects["contact_id"] = target_id
+		effects["disposition_gain"] = resolution.get("disposition_gain", 0)
+		effects["target_is_kuge"] = target_is_kuge
+	elif resolution.has("blocked_reason"):
+		effects["blocked_reason"] = resolution["blocked_reason"]
+		effects["failed"] = true
+	else:
+		effects["failed"] = true
+
+	return {
+		"success": resolution.get("success", false),
+		"action_id": "ASK_FOR_INTRODUCTION",
+		"character_id": ctx.character_id,
+		"target_npc_id": target_id,
+		"target_province_id": action.target_province_id,
+		"ic_day": ctx.ic_day,
+		"season": ctx.season,
+		"skill_used": skill,
+		"roll_total": roll_total,
+		"tn": CourtActionSystem.ASK_FOR_INTRODUCTION_TN,
+		"margin": roll_total - CourtActionSystem.ASK_FOR_INTRODUCTION_TN,
 		"effects": effects,
 	}

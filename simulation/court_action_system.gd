@@ -546,6 +546,42 @@ static func resolve_discern_need(
 	}
 
 
+# -- Contact Discovery: ASK_FOR_INTRODUCTION (s55.7.3 — LOCKED) ---------------
+
+const ASK_FOR_INTRODUCTION_TN: int = 15
+const ASK_FOR_INTRODUCTION_BASE_DISP: int = 3
+const ASK_FOR_INTRODUCTION_KUGE_DISP: int = 2
+const KUGE_STATUS_THRESHOLD: float = 7.0
+const KUGE_INTERMEDIARY_MIN_STATUS: float = 4.0
+
+## Resolve ASK_FOR_INTRODUCTION per s55.7.3.
+## roll_total: pre-rolled Courtier/Awareness (normal) or Etiquette/Awareness (kuge).
+## target_is_kuge: target Status >= KUGE_STATUS_THRESHOLD.
+## intermediary_status: the Friend+ contact's Status (kuge gate: must be >= 4.0).
+static func resolve_ask_for_introduction(
+	roll_total: int,
+	target_is_kuge: bool,
+	intermediary_status: float,
+) -> Dictionary:
+	if target_is_kuge and intermediary_status < KUGE_INTERMEDIARY_MIN_STATUS:
+		return {
+			"success": false,
+			"blocked_reason": "intermediary_insufficient_status",
+		}
+
+	if roll_total < ASK_FOR_INTRODUCTION_TN:
+		return {"success": false}
+
+	var disp_gain: int = ASK_FOR_INTRODUCTION_KUGE_DISP if target_is_kuge \
+		else ASK_FOR_INTRODUCTION_BASE_DISP
+	return {
+		"success": true,
+		"disposition_gain": disp_gain,
+		"contact_added": true,
+		"target_is_kuge": target_is_kuge,
+	}
+
+
 # -- Debate Disposition Tier Lookup -------------------------------------------
 
 static func get_debate_disposition_tier(disposition: int) -> int:
