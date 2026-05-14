@@ -11,18 +11,20 @@ class_name IndividualCombat
 # confirm against Equipment section when that GDD section is locked.
 
 const WEAPON_CATALOG: Dictionary = {
-	"katana":     {"rolled": 3, "kept": 2, "strength_adds": true,  "skill": "Kenjutsu",  "size": "Medium", "melee": true},
-	"wakizashi":  {"rolled": 3, "kept": 2, "strength_adds": true,  "skill": "Kenjutsu",  "size": "Small",  "melee": true},
-	"tanto":      {"rolled": 1, "kept": 1, "strength_adds": true,  "skill": "Knives",    "size": "Small",  "melee": true},
-	"bo":         {"rolled": 2, "kept": 2, "strength_adds": true,  "skill": "Bo",        "size": "Large",  "melee": true},
-	"naginata":   {"rolled": 3, "kept": 2, "strength_adds": true,  "skill": "Polearms",  "size": "Large",  "melee": true},
-	"tetsubo":    {"rolled": 3, "kept": 2, "strength_adds": true,  "skill": "Heavy Weapons", "size": "Large", "melee": true},
-	"yumi":       {"rolled": 2, "kept": 2, "strength_adds": false, "skill": "Kyujutsu",  "size": "Large",  "melee": false},
-	"unarmed":    {"rolled": 0, "kept": 1, "strength_adds": true,  "skill": "Jiujutsu",  "size": "Small",  "melee": true},
+	# trait: "agility" is standard for melee (s4.5 "Agility for attacks").
+	# Iaijutsu duels use Reflexes — handled directly in resolve_duel_strike(), not via this table.
+	"katana":     {"rolled": 3, "kept": 2, "strength_adds": true,  "skill": "Kenjutsu",      "size": "Medium", "melee": true,  "trait": "agility"},
+	"wakizashi":  {"rolled": 3, "kept": 2, "strength_adds": true,  "skill": "Kenjutsu",      "size": "Small",  "melee": true,  "trait": "agility"},
+	"tanto":      {"rolled": 1, "kept": 1, "strength_adds": true,  "skill": "Knives",         "size": "Small",  "melee": true,  "trait": "agility"},
+	"bo":         {"rolled": 2, "kept": 2, "strength_adds": true,  "skill": "Bo",             "size": "Large",  "melee": true,  "trait": "agility"},
+	"naginata":   {"rolled": 3, "kept": 2, "strength_adds": true,  "skill": "Polearms",       "size": "Large",  "melee": true,  "trait": "agility"},
+	"tetsubo":    {"rolled": 3, "kept": 2, "strength_adds": true,  "skill": "Heavy Weapons",  "size": "Large",  "melee": true,  "trait": "agility"},
+	"yumi":       {"rolled": 2, "kept": 2, "strength_adds": false, "skill": "Kyujutsu",       "size": "Large",  "melee": false, "trait": "agility"},
+	"unarmed":    {"rolled": 0, "kept": 1, "strength_adds": true,  "skill": "Jiujutsu",       "size": "Small",  "melee": true,  "trait": "agility"},
 }
 
 const DEFAULT_WEAPON: Dictionary = {
-	"rolled": 2, "kept": 1, "strength_adds": true, "skill": "Kenjutsu", "size": "Medium", "melee": true,
+	"rolled": 2, "kept": 1, "strength_adds": true, "skill": "Kenjutsu", "size": "Medium", "melee": true, "trait": "agility",
 }
 
 # -- Stance Constants ----------------------------------------------------------
@@ -223,8 +225,10 @@ static func roll_full_defense_bonus(
 	participant: Participant,
 	dice_engine: DiceEngine,
 ) -> int:
+	var def_rank: int = character.skills.get("Defense", 0)
 	var wound_penalty: int = CharacterStats.get_wound_penalty(character)
-	var result: DiceResult = dice_engine.roll_and_keep(character.reflexes, character.reflexes)
+	# Full Defense: Defense/Reflexes — roll (Reflexes + Defense Rank), keep Reflexes (s40)
+	var result: DiceResult = dice_engine.roll_and_keep(character.reflexes + def_rank, character.reflexes)
 	var half_result: int = ceili(float(result.total + wound_penalty) / 2.0)
 	participant.full_defense_bonus = half_result
 	return half_result
@@ -252,9 +256,11 @@ static func resolve_attack(
 	var skill_rank: int = attacker.skills.get(skill_name, 0)
 	var wound_penalty: int = CharacterStats.get_wound_penalty(attacker)
 
-	# Base dice: Skill Rank + Insight Rank (rolled), keep Skill Rank
-	var rolled: int = skill_rank + CharacterStats.get_insight_rank(attacker)
-	var kept: int = skill_rank
+	# Attack roll: Trait + Skill rolled, keep Trait (s4.5 "Agility for attacks").
+	var trait_name: String = weapon.get("trait", "agility")
+	var trait_value: int = attacker.reflexes if trait_name == "reflexes" else attacker.agility
+	var rolled: int = trait_value + skill_rank
+	var kept: int = trait_value
 
 	# Stance bonuses
 	rolled += STANCE_ATTACK_ROLLED_BONUS.get(attacker_p.stance, 0)
@@ -498,9 +504,12 @@ static func resolve_grapple_control(
 	defender: L5RCharacterData,
 	dice_engine: DiceEngine,
 ) -> Dictionary:
+	# Contested Jiujutsu/Strength: roll (Strength + Jiujutsu), keep Strength (s4.5 / s40)
+	var att_jiu: int = attacker.skills.get("Jiujutsu", 0)
+	var def_jiu: int = defender.skills.get("Jiujutsu", 0)
 	var contested: Dictionary = dice_engine.contested_roll(
-		attacker.strength, attacker.strength,
-		defender.strength, defender.strength,
+		attacker.strength + att_jiu, attacker.strength,
+		defender.strength + def_jiu, defender.strength,
 	)
 	return {
 		"attacker_roll": contested["total_a"],
@@ -692,6 +701,30 @@ static func resolve_duel_focus(
 	}
 
 
+static func _iaijutsu_attack(
+	striker: L5RCharacterData,
+	striker_p: Participant,
+	target_tn: int,
+	free_raises: int,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	# Duel strike: Iaijutsu/Reflexes attack roll (s40 — explicit "Iaijutsu/Reflexes attack roll")
+	var iai_rank: int = striker.skills.get("Iaijutsu", 0)
+	var wound_penalty: int = CharacterStats.get_wound_penalty(striker)
+	var rolled: int = striker.reflexes + iai_rank
+	var kept: int = striker.reflexes
+	# Free Raises reduce the effective TN (roll_check adds raises*5 to TN; free raises offset that)
+	var result: Dictionary = dice_engine.roll_check(rolled, kept, target_tn, free_raises, wound_penalty)
+	return {
+		"success": result["success"],
+		"hit": result["success"],
+		"roll": result["total"],
+		"target_tn": result["tn"],
+		"margin": result["margin"],
+		"raises_called": free_raises,
+	}
+
+
 static func resolve_duel_strike(
 	first_striker: L5RCharacterData,
 	first_striker_p: Participant,
@@ -702,8 +735,8 @@ static func resolve_duel_strike(
 ) -> Dictionary:
 	# Both duelists in Center Stance for the full duel
 	var first_armor_tn: int = get_armor_tn(second_striker, second_striker_p, dice_engine)
-	var first_attack: Dictionary = resolve_attack(
-		first_striker, first_striker_p, "katana",
+	var first_attack: Dictionary = _iaijutsu_attack(
+		first_striker, first_striker_p,
 		first_armor_tn, duel.free_raises_first, dice_engine
 	)
 
@@ -719,8 +752,8 @@ static func resolve_duel_strike(
 	var second_attack: Dictionary = {}
 	if duel.simultaneous or (not duel.simultaneous and not CharacterStats.is_dead(second_striker)):
 		var second_armor_tn: int = get_armor_tn(first_striker, first_striker_p, dice_engine)
-		second_attack = resolve_attack(
-			second_striker, second_striker_p, "katana",
+		second_attack = _iaijutsu_attack(
+			second_striker, second_striker_p,
 			second_armor_tn, 0, dice_engine
 		)
 		if second_attack.get("hit", false):

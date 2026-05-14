@@ -184,10 +184,10 @@ func test_attack_returns_hit_or_miss() -> void:
 
 func test_attack_hits_trivial_tn() -> void:
 	_char_a.skills = {"Kenjutsu": 5}
-	_char_a.agility = 4  # Insight Rank
+	_char_a.agility = 4
 	var p := IndividualCombat.Participant.new()
 	p.stance = Enums.Stance.ATTACK
-	# TN 5 is effectively impossible to miss with skill 5
+	# Attack roll: Agility(4) + Kenjutsu(5) = 9k4 — trivially beats TN 5
 	var hits: int = 0
 	for i: int in range(20):
 		var dice: DiceEngine = DiceEngine.new(i)
@@ -195,6 +195,23 @@ func test_attack_hits_trivial_tn() -> void:
 		if r["hit"]:
 			hits += 1
 	assert_true(hits >= 18, "Should hit TN 5 almost always with high skill")
+
+
+func test_attack_uses_agility_not_insight_rank() -> void:
+	# Two characters: same Kenjutsu skill, different Agility — higher Agility should win more
+	var high_agi: L5RCharacterData = _make_char(10, 2, 2, 5, 2, 2, 2, 2, 2)  # agility=5
+	var low_agi: L5RCharacterData  = _make_char(11, 2, 2, 2, 2, 2, 2, 2, 2)  # agility=2
+	high_agi.skills = {"Kenjutsu": 2}
+	low_agi.skills  = {"Kenjutsu": 2}
+	var p := IndividualCombat.Participant.new()
+	var high_total: int = 0
+	var low_total: int = 0
+	for i: int in range(20):
+		var r_h: Dictionary = IndividualCombat.resolve_attack(high_agi, p, "katana", 5, 0, DiceEngine.new(i))
+		var r_l: Dictionary = IndividualCombat.resolve_attack(low_agi,  p, "katana", 5, 0, DiceEngine.new(i))
+		high_total += r_h["roll"]
+		low_total  += r_l["roll"]
+	assert_true(high_total > low_total, "Higher Agility should produce higher attack totals")
 
 
 func test_prone_blocks_large_weapon_attack() -> void:
@@ -471,6 +488,22 @@ func test_duel_to_death_wounds_loser() -> void:
 	var result: Dictionary = IndividualCombat.resolve_full_duel(_char_a, _char_b, true, _dice)
 	assert_true(result.has("winner_id"))
 	assert_true(result.has("simultaneous"))
+
+
+func test_duel_strike_uses_iaijutsu_not_kenjutsu() -> void:
+	# Duelist with high Iaijutsu but zero Kenjutsu should still hit reliably (s40: Iaijutsu/Reflexes)
+	var duelist: L5RCharacterData = _make_char(10, 2, 2, 2, 2, 5, 2, 2, 2)  # reflexes=5
+	var weak: L5RCharacterData    = _make_char(11, 1, 1, 1, 1, 1, 1, 1, 1)
+	duelist.skills = {"Iaijutsu": 5}  # no Kenjutsu at all
+	duelist.void_ring = 3
+	weak.skills = {"Iaijutsu": 0}
+	weak.void_ring = 1
+	var hits: int = 0
+	for i: int in range(10):
+		var result: Dictionary = IndividualCombat.resolve_full_duel(duelist, weak, false, DiceEngine.new(i))
+		if result.get("strike", {}).get("first_attack", {}).get("hit", false):
+			hits += 1
+	assert_true(hits >= 7, "High-Iaijutsu duelist should hit reliably even with zero Kenjutsu")
 
 
 # -- Round Advancement ---------------------------------------------------------
