@@ -4193,3 +4193,77 @@ func test_resolve_army_battles_in_military_daily() -> void:
 		[war], {},
 	)
 	assert_true(result.has("battle_results"))
+
+
+# -- Levy Unit Type Selection Tests ----------------------------------------------
+
+func test_select_levy_unit_type_default_is_ashigaru_spearmen() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.can_sustain_iron_upkeep = true
+	ctx.unit_training_counts = {}
+	var ut: int = NPCDecisionEngine._select_levy_unit_type(ctx)
+	assert_eq(ut, Enums.CompanyUnitType.ASHIGARU_SPEARMEN)
+
+
+func test_select_levy_peasant_when_no_iron() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.can_sustain_iron_upkeep = false
+	ctx.unit_training_counts = {}
+	var ut: int = NPCDecisionEngine._select_levy_unit_type(ctx)
+	assert_eq(ut, Enums.CompanyUnitType.PEASANT_LEVY)
+
+
+func test_select_levy_archers_when_enough_spearmen() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.can_sustain_iron_upkeep = true
+	ctx.unit_training_counts = {Enums.CompanyUnitType.ASHIGARU_SPEARMEN: 2}
+	var ut: int = NPCDecisionEngine._select_levy_unit_type(ctx)
+	assert_eq(ut, Enums.CompanyUnitType.ASHIGARU_ARCHERS)
+
+
+func test_select_levy_spearmen_when_already_have_archers() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.can_sustain_iron_upkeep = true
+	ctx.unit_training_counts = {
+		Enums.CompanyUnitType.ASHIGARU_SPEARMEN: 2,
+		Enums.CompanyUnitType.ASHIGARU_ARCHERS: 1,
+	}
+	var ut: int = NPCDecisionEngine._select_levy_unit_type(ctx)
+	assert_eq(ut, Enums.CompanyUnitType.ASHIGARU_SPEARMEN)
+
+
+func test_select_levy_iron_gate_overrides_composition() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.can_sustain_iron_upkeep = false
+	ctx.unit_training_counts = {Enums.CompanyUnitType.ASHIGARU_SPEARMEN: 5}
+	var ut: int = NPCDecisionEngine._select_levy_unit_type(ctx)
+	assert_eq(ut, Enums.CompanyUnitType.PEASANT_LEVY)
+
+
+func test_populate_metadata_order_levy() -> void:
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "ORDER_LEVY"
+	var need := NPCDataStructures.ImmediateNeed.new()
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.can_sustain_iron_upkeep = true
+	ctx.unit_training_counts = {}
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_true(option.metadata.has("levy_unit_type"))
+	assert_eq(option.metadata["levy_unit_type"], Enums.CompanyUnitType.ASHIGARU_SPEARMEN)
+
+
+func test_executor_order_levy_passes_unit_type() -> void:
+	var action := NPCDataStructures.ScoredAction.new()
+	action.action_id = "ORDER_LEVY"
+	action.metadata = {"levy_unit_type": Enums.CompanyUnitType.ASHIGARU_ARCHERS}
+	var effects: Dictionary = ActionExecutor._compute_military_effects("ORDER_LEVY", action)
+	assert_eq(effects["levy_unit_type"], Enums.CompanyUnitType.ASHIGARU_ARCHERS)
+	assert_true(effects["requires_levy_pu"])
+
+
+func test_executor_order_levy_defaults_without_metadata() -> void:
+	var action := NPCDataStructures.ScoredAction.new()
+	action.action_id = "ORDER_LEVY"
+	action.metadata = {}
+	var effects: Dictionary = ActionExecutor._compute_military_effects("ORDER_LEVY", action)
+	assert_eq(effects["levy_unit_type"], Enums.CompanyUnitType.ASHIGARU_SPEARMEN)

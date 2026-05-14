@@ -1522,6 +1522,10 @@ static func _populate_action_metadata(
 		option.metadata = {
 			"letter_id": need.target_settlement_id if need.target_settlement_id >= 0 else -1,
 		}
+	elif option.action_id == "ORDER_LEVY":
+		option.metadata = {
+			"levy_unit_type": _select_levy_unit_type(ctx),
+		}
 
 
 static func _pick_court_agenda_topic(ctx: NPCDataStructures.ContextSnapshot) -> int:
@@ -2003,6 +2007,22 @@ static func _zone_to_worship_location(zone: Enums.ZoneSubtype) -> String:
 		Enums.ZoneSubtype.TEMPLE_GROUNDS:
 			return "local_shrine"
 	return "roadside_shrine"
+
+
+static func _select_levy_unit_type(ctx: NPCDataStructures.ContextSnapshot) -> int:
+	if not ctx.can_sustain_iron_upkeep:
+		return Enums.CompanyUnitType.PEASANT_LEVY
+
+	var spear_count: int = ctx.unit_training_counts.get(
+		Enums.CompanyUnitType.ASHIGARU_SPEARMEN, 0,
+	)
+	var archer_count: int = ctx.unit_training_counts.get(
+		Enums.CompanyUnitType.ASHIGARU_ARCHERS, 0,
+	)
+	if spear_count >= 2 and archer_count == 0:
+		return Enums.CompanyUnitType.ASHIGARU_ARCHERS
+
+	return Enums.CompanyUnitType.ASHIGARU_SPEARMEN
 
 
 static func _filter_province_ids_by_clan(

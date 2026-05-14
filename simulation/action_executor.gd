@@ -1191,9 +1191,13 @@ static func _compute_covert_effects(action_id: String, margin: int) -> Dictionar
 static func _compute_military_effects(action_id: String, action: NPCDataStructures.ScoredAction) -> Dictionary:
 	match action_id:
 		"ORDER_LEVY":
+			var levy_type: int = action.metadata.get(
+				"levy_unit_type", Enums.CompanyUnitType.ASHIGARU_SPEARMEN,
+			)
 			return {
 				"effect": "levy_raised",
 				"requires_levy_pu": true,
+				"levy_unit_type": levy_type,
 			}
 		"ORDER_DEPLOY":
 			return {"effect": "unit_deployed"}
