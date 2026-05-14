@@ -182,6 +182,7 @@ static func advance_day(
 		companies,
 		provinces,
 		next_company_id,
+		clans,
 	)
 
 	var wall_engineering_results: Array[Dictionary] = _process_wall_engineering_effects(
@@ -3353,6 +3354,7 @@ static func _process_military_effects(
 	companies: Array[Dictionary],
 	provinces: Dictionary = {},
 	next_company_id: Array[int] = [1],
+	clans: Dictionary = {},
 ) -> Array[Dictionary]:
 	var results: Array[Dictionary] = []
 	var settlements_by_province: Dictionary = _build_settlements_by_province(settlements)
@@ -3363,6 +3365,7 @@ static func _process_military_effects(
 		if effects.get("requires_levy_pu", false):
 			var r: Dictionary = _apply_levy_pu_effect(
 				applied, settlements, companies, next_company_id,
+				characters_by_id, clans,
 			)
 			if not r.is_empty():
 				results.append(r)
@@ -4520,6 +4523,8 @@ static func _apply_levy_pu_effect(
 	settlements: Array[SettlementData],
 	companies: Array[Dictionary] = [],
 	next_company_id: Array[int] = [1],
+	characters_by_id: Dictionary = {},
+	clans: Dictionary = {},
 ) -> Dictionary:
 	var province_id: int = applied.get("target_province_id", -1)
 	if province_id < 0:
@@ -4547,6 +4552,17 @@ static func _apply_levy_pu_effect(
 		cid, unit_type, lord_id, province_id, target_settlement.settlement_id,
 	)
 
+	var arms_cost: float = levy_result.get("arms_cost", 0.0)
+	var arms_deducted: float = 0.0
+
+	if levy_result.get("success", false) and arms_cost > 0.0:
+		var lord_char: L5RCharacterData = characters_by_id.get(lord_id)
+		if lord_char != null:
+			var clan_data: ClanData = clans.get(lord_char.clan)
+			if clan_data != null:
+				arms_deducted = minf(arms_cost, clan_data.arms_stockpile)
+				clan_data.arms_stockpile = maxf(clan_data.arms_stockpile - arms_cost, 0.0)
+
 	var company_dict: Dictionary = {}
 	if levy_result.get("success", false):
 		var cd: MilitaryUnitData.CompanyData = levy_result["company"]
@@ -4573,7 +4589,8 @@ static func _apply_levy_pu_effect(
 		"pu_consumed": r["pu_consumed"],
 		"company_id": cid if levy_result.get("success", false) else -1,
 		"unit_type": unit_type,
-		"arms_cost": levy_result.get("arms_cost", 0.0),
+		"arms_cost": arms_cost,
+		"arms_deducted": arms_deducted,
 	}
 
 

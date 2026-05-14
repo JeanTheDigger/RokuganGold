@@ -608,7 +608,7 @@ All in /tests/, one file per system:
 - test_order_system.gd (~30 tests)
 - test_military_service_system.gd (~35 tests)
 - test_pu_reconciliation.gd (~30 tests)
-- test_military_wiring.gd (~253 tests)
+- test_military_wiring.gd (~257 tests)
 - test_war_system.gd (~61 tests)
 - test_war_justification.gd (~55 tests)
 - test_war_termination.gd (~46 tests)
@@ -3348,6 +3348,8 @@ The following subsystems are now integrated into the NPC decision loop:
   `effects.levy_unit_type` (default ASHIGARU_SPEARMEN). `next_company_id`
   counter threaded through for ID assignment. New company dict includes
   `army_id: -1` (levy companies exist outside Go-hatamoto hierarchy).
+  Arms equip cost deducted from `ClanData.arms_stockpile` (looked up via
+  character clan, clamped at 0). `arms_deducted` returned in result dict.
   WorldStateData gains `next_company_id: Array[int]`. ORDER_BATTLE →
   `_apply_battle_pu_reconciliation()` calls `PUReconciliation.reconcile_battle()`
   with victor/loser company data from effects dict. ASSIGN_TO_MILITARY_SERVICE →

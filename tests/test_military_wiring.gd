@@ -4267,3 +4267,101 @@ func test_executor_order_levy_defaults_without_metadata() -> void:
 	action.metadata = {}
 	var effects: Dictionary = ActionExecutor._compute_military_effects("ORDER_LEVY", action)
 	assert_eq(effects["levy_unit_type"], Enums.CompanyUnitType.ASHIGARU_SPEARMEN)
+
+
+# -- Arms Equip Deduction Tests --------------------------------------------------
+
+func _make_char_for_levy(id: int, clan: String) -> L5RCharacterData:
+	var c: L5RCharacterData = L5RCharacterData.new()
+	c.character_id = id
+	c.clan = clan
+	return c
+
+
+func test_levy_deducts_arms_from_clan() -> void:
+	var s: SettlementData = _make_settlement(10, 1, 10, 3)
+	var companies: Array[Dictionary] = []
+	var next_id: Array[int] = [1]
+	var lord: L5RCharacterData = _make_char_for_levy(5, "Crab")
+	var clan: ClanData = _make_clan("Crab", [1])
+	clan.arms_stockpile = 10.0
+	var chars_by_id: Dictionary = {5: lord}
+	var clans_dict: Dictionary = {"Crab": clan}
+	var applied: Dictionary = {
+		"character_id": 5,
+		"target_province_id": 1,
+		"effects": {"requires_levy_pu": true},
+	}
+	var r: Dictionary = DayOrchestrator._apply_levy_pu_effect(
+		applied, [s], companies, next_id, chars_by_id, clans_dict,
+	)
+	var expected_cost: float = ArmyUpkeepSystem.get_arms_equip_cost(
+		Enums.CompanyUnitType.ASHIGARU_SPEARMEN,
+	)
+	assert_eq(r["arms_deducted"], expected_cost)
+	assert_almost_eq(clan.arms_stockpile, 10.0 - expected_cost, 0.001)
+
+
+func test_levy_arms_clamped_at_zero() -> void:
+	var s: SettlementData = _make_settlement(10, 1, 10, 3)
+	var companies: Array[Dictionary] = []
+	var next_id: Array[int] = [1]
+	var lord: L5RCharacterData = _make_char_for_levy(5, "Crab")
+	var clan: ClanData = _make_clan("Crab", [1])
+	clan.arms_stockpile = 0.5
+	var chars_by_id: Dictionary = {5: lord}
+	var clans_dict: Dictionary = {"Crab": clan}
+	var applied: Dictionary = {
+		"character_id": 5,
+		"target_province_id": 1,
+		"effects": {"requires_levy_pu": true},
+	}
+	DayOrchestrator._apply_levy_pu_effect(
+		applied, [s], companies, next_id, chars_by_id, clans_dict,
+	)
+	assert_eq(clan.arms_stockpile, 0.0)
+
+
+func test_levy_no_arms_deduction_without_clan() -> void:
+	var s: SettlementData = _make_settlement(10, 1, 10, 3)
+	var companies: Array[Dictionary] = []
+	var next_id: Array[int] = [1]
+	var lord: L5RCharacterData = _make_char_for_levy(5, "Crab")
+	var chars_by_id: Dictionary = {5: lord}
+	var applied: Dictionary = {
+		"character_id": 5,
+		"target_province_id": 1,
+		"effects": {"requires_levy_pu": true},
+	}
+	var r: Dictionary = DayOrchestrator._apply_levy_pu_effect(
+		applied, [s], companies, next_id, chars_by_id, {},
+	)
+	assert_eq(r["arms_deducted"], 0.0)
+	assert_eq(companies.size(), 1)
+
+
+func test_levy_peasant_levy_cheaper_arms() -> void:
+	var s: SettlementData = _make_settlement(10, 1, 10, 3)
+	var companies: Array[Dictionary] = []
+	var next_id: Array[int] = [1]
+	var lord: L5RCharacterData = _make_char_for_levy(5, "Crab")
+	var clan: ClanData = _make_clan("Crab", [1])
+	clan.arms_stockpile = 10.0
+	var chars_by_id: Dictionary = {5: lord}
+	var clans_dict: Dictionary = {"Crab": clan}
+	var applied: Dictionary = {
+		"character_id": 5,
+		"target_province_id": 1,
+		"effects": {
+			"requires_levy_pu": true,
+			"levy_unit_type": Enums.CompanyUnitType.PEASANT_LEVY,
+		},
+	}
+	var r: Dictionary = DayOrchestrator._apply_levy_pu_effect(
+		applied, [s], companies, next_id, chars_by_id, clans_dict,
+	)
+	var expected_cost: float = ArmyUpkeepSystem.get_arms_equip_cost(
+		Enums.CompanyUnitType.PEASANT_LEVY,
+	)
+	assert_eq(r["arms_deducted"], expected_cost)
+	assert_true(expected_cost < 1.0)
