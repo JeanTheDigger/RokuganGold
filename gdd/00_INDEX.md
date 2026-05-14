@@ -620,7 +620,7 @@ Key: **DONE** = simulation code written and tested | **PARTIAL** = code exists, 
 | s19 Personality System | **DONE** | Wired into all scoring/filtering |
 | s22.3 Character Sheet | **DONE** | L5RCharacterData |
 | s22.4 Generation Templates | **DONE** | WorldGenerator |
-| s22.5 Character Death & Replacement | **PARTIAL** | SuccessionSystem done. Adopted heir (priority 4), Dragon/Phoenix exceptions deferred. |
+| s22.5 Character Death & Replacement | **DONE** | SuccessionSystem complete: adopted heir (CandidatePriority.ADOPTED_HEIR=4, excluded if dead or wrong clan), Dragon Togashi removal (`resolve_dragon_togashi_removal`), Phoenix Shiba reincarnation (`resolve_shiba_reincarnation`), is_phoenix_champion_succession, is_dragon_togashi_removal. |
 | s22.6 Biological Family Web | **DONE** | BiologicalFamily |
 | s22.7 Marriage System | **DONE** | MarriageSystem |
 | s22.8 Positions of Power | **DONE** | WorldPopulationGenerator covers all positions |
@@ -639,8 +639,8 @@ Key: **DONE** = simulation code written and tested | **PARTIAL** = code exists, 
 | s53.2 Intra-Clan Civil War | **PARTIAL** | IntraClanCivilWar done. `holds_seat` is placeholder. Army reconstitution, full Imperial Edict gating deferred. |
 | s54.7 (a–i) The Kolat | **REFERENCE** | Fully designed across 9 sub-sections, none LOCKED. No code. |
 | s55 NPC Decision Engine | **DONE** | Full 7-phase loop, all amendments through s57.21 |
-| s55.10.2 Dragon Governance (Togashi) | **PARTIAL** | TogashiOversight done. Dragon Schism Crisis, removal-via-succession deferred. |
-| s55.10.3 Phoenix Governance (Council) | **PARTIAL** | PhoenixCouncil done. Phoenix Schism Crisis, Shiba Reincarnation deferred. |
+| s55.10.2 Dragon Governance (Togashi) | **PARTIAL** | TogashiOversight done. `resolve_dragon_togashi_removal` done (Stage 4 removal wires Togashi as confirming authority). Dragon Schism Crisis (s55.10.2.8) deferred — full faction loyalty, schism victory conditions, treaty penalties not implemented. |
+| s55.10.3 Phoenix Governance (Council) | **PARTIAL** | PhoenixCouncil done. `resolve_shiba_reincarnation` done (random Shiba selection, void master lookup, bypass emperor confirmation, reincarnation topic). Phoenix Schism Crisis (s55.10.3.7) deferred — IntraClanCivilWar integration, honor-path modifiers, Master death mechanics not implemented. |
 | s55.7 Contact Discovery System | **DONE** | ASK_FOR_INTRODUCTION done (Courtier/Etiquette roll, kuge gate, intermediary status gate, Bureaucracy emphasis). OBSERVE_COURT_ATTENDEES done (Perception+Investigation vs TN 15, 1–3 attendees by raises, capped by observable pool). NPC metadata population done: observable_attendee_ids filters met_characters; intermediary_id picks highest Friend+ contact who is not the target. |
 | s55.22b Otomo Seiyaku | **DONE** | OtomoSeiyakuSystem |
 | s55.23a Wall Management NeedTypes | **DONE** | Wall NeedTypes in scoring tables and decomposer |
