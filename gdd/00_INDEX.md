@@ -656,7 +656,7 @@ Key: **DONE** = simulation code written and tested | **PARTIAL** = code exists, 
 | s57.31 Medicine System | **REFERENCE** | Not yet LOCKED |
 | s57.32 Meditation System | **REFERENCE** | Not yet LOCKED |
 | s57.33 REQUEST_PERFORMANCE System | **REFERENCE** | Not yet LOCKED |
-| s57.34 Civilian Order Budget | **NOT STARTED** | LOCKED but no simulation code |
+| s57.34 Civilian Order Budget | **DONE** | CivilianOrderBudget, character fields, NPC engine integration, day orchestrator refresh, letter system wiring |
 | s57.36 Zone Subtype Definitions | **DONE** | ZoneFlagMatrix |
 | s57.37 Tea Ceremony | **REFERENCE** | Not yet LOCKED |
 | s57.38 Hunting Party | **REFERENCE** | Not yet LOCKED |
