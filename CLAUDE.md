@@ -608,7 +608,7 @@ All in /tests/, one file per system:
 - test_order_system.gd (~30 tests)
 - test_military_service_system.gd (~35 tests)
 - test_pu_reconciliation.gd (~30 tests)
-- test_military_wiring.gd (~322 tests)
+- test_military_wiring.gd (~352 tests)
 - test_war_system.gd (~61 tests)
 - test_war_justification.gd (~55 tests)
 - test_war_termination.gd (~46 tests)
@@ -3221,6 +3221,25 @@ The following subsystems are now integrated into the NPC decision loop:
   HonorGlorySystem, transfers 1.0 garrison_pu from daimyo's province
   settlement to Wall tower settlement in target province (partial transfer
   when source garrison < 1.0).
+- **Military Stub Actions** — Four military ActionIDs fully wired (executor →
+  orchestrator mutation):
+  MAINTAIN_SIEGE: stamps `last_maintained_ic_day` on siege state dict.
+  ORDER_PATROL: stamps `season_meta["patrolled_provinces"][pid]`, halves
+  insurgency spawn chance via `is_patrolled` world_state flag, reduces
+  concealment by −1 on hidden insurgencies in patrolled provinces (auto-detects
+  at concealment 0). Patrol flags cleared each season boundary.
+  PURIFY_TAINTED_GROUND: full executor intercept with Lore:Shadowlands +
+  Intelligence vs TN 15 + (PTL × 5). Success: PTL reduction 0.5 + 0.25/raise.
+  Kuni Ward system: bleed reduction 0.1–0.3 by school rank, duration 2–6
+  seasons, stored in `season_meta["kuni_wards"]` keyed by province ID string.
+  Stronger wards replace weaker. `_tick_kuni_wards()` decrements on season
+  boundary. Ward bleed reduction subtracted from PTL gain in wall seasonal
+  pressure processing.
+  DRILL_TROOPS: Battle vs TN 15. Success: +1 training point + 1/raise.
+  10 points per level-up. Training levels: 0 (Raw), 1 (Drilled), 2 (Trained),
+  3 (Veteran/max). Stored on company dict as `training_level`/`training_points`.
+  Training level stat modifiers in combat deferred until ArmyCombatSystem
+  integration.
 - **ResourceAvailability** — Phase 5 scoring: `resource_modifier` field on
   ScoredAction. `_compute_resource_modifier` in npc_decision_engine.gd calls
   `ResourceAvailability.compute_resource_modifier()`. Koku ratio thresholds:
