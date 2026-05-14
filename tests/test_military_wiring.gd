@@ -4533,3 +4533,78 @@ func test_levy_company_dict_has_raised_season() -> void:
 		applied, [s], companies, next_id, {}, {}, 7,
 	)
 	assert_eq(companies[0]["levy_raised_season"], 7)
+
+
+# -- Levy PU Validation Tests ----------------------------------------------------
+
+func test_levy_fails_with_insufficient_pu() -> void:
+	var s: SettlementData = _make_settlement(10, 1, 10, 0)
+	s.garrison_pu = 10
+	var companies: Array[Dictionary] = []
+	var next_id: Array[int] = [1]
+	var applied: Dictionary = {
+		"character_id": 5,
+		"target_province_id": 1,
+		"effects": {"requires_levy_pu": true},
+	}
+	var r: Dictionary = DayOrchestrator._apply_levy_pu_effect(
+		applied, [s], companies, next_id,
+	)
+	assert_eq(r["type"], "levy_failed")
+	assert_eq(r["reason"], "insufficient_pu")
+	assert_eq(companies.size(), 0)
+
+
+func test_levy_fails_no_military_pu() -> void:
+	var s: SettlementData = SettlementData.new()
+	s.settlement_id = 10
+	s.province_id = 1
+	s.population_pu = 5
+	s.military_pu = 0
+	s.garrison_pu = 0
+	var companies: Array[Dictionary] = []
+	var next_id: Array[int] = [1]
+	var applied: Dictionary = {
+		"character_id": 5,
+		"target_province_id": 1,
+		"effects": {"requires_levy_pu": true},
+	}
+	var r: Dictionary = DayOrchestrator._apply_levy_pu_effect(
+		applied, [s], companies, next_id,
+	)
+	assert_eq(r["type"], "levy_failed")
+	assert_eq(r["reason"], "insufficient_pu")
+	assert_eq(companies.size(), 0)
+
+
+func test_levy_succeeds_with_sufficient_pu() -> void:
+	var s: SettlementData = _make_settlement(10, 1, 10, 3)
+	s.garrison_pu = 1
+	var companies: Array[Dictionary] = []
+	var next_id: Array[int] = [1]
+	var applied: Dictionary = {
+		"character_id": 5,
+		"target_province_id": 1,
+		"effects": {"requires_levy_pu": true},
+	}
+	var r: Dictionary = DayOrchestrator._apply_levy_pu_effect(
+		applied, [s], companies, next_id,
+	)
+	assert_eq(r["type"], "levy_raised")
+	assert_eq(companies.size(), 1)
+
+
+func test_levy_fails_does_not_increment_company_id() -> void:
+	var s: SettlementData = _make_settlement(10, 1, 10, 0)
+	s.garrison_pu = 10
+	var companies: Array[Dictionary] = []
+	var next_id: Array[int] = [50]
+	var applied: Dictionary = {
+		"character_id": 5,
+		"target_province_id": 1,
+		"effects": {"requires_levy_pu": true},
+	}
+	DayOrchestrator._apply_levy_pu_effect(
+		applied, [s], companies, next_id,
+	)
+	assert_eq(next_id[0], 50)

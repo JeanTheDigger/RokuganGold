@@ -4626,10 +4626,24 @@ static func _apply_levy_pu_effect(
 	if target_settlement == null:
 		return {}
 
-	var r: Dictionary = PUReconciliation.consume_levy_pu(target_settlement)
-
 	var effects: Dictionary = applied.get("effects", {})
 	var unit_type: int = effects.get("levy_unit_type", Enums.CompanyUnitType.ASHIGARU_SPEARMEN)
+
+	var can_raise: Dictionary = LevySystem.can_raise_levy(
+		target_settlement.military_pu,
+		target_settlement.garrison_pu,
+		unit_type,
+	)
+	if not can_raise.get("can_raise", false):
+		return {
+			"type": "levy_failed",
+			"character_id": applied.get("character_id", -1),
+			"province_id": province_id,
+			"reason": can_raise.get("reason", "unknown"),
+		}
+
+	var r: Dictionary = PUReconciliation.consume_levy_pu(target_settlement)
+
 	var lord_id: int = applied.get("character_id", -1)
 
 	var cid: int = next_company_id[0]
