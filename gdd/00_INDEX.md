@@ -629,7 +629,7 @@ Key: **DONE** = simulation code written and tested | **PARTIAL** = code exists, 
 | s31–s37 Magic & Spells | **REFERENCE** | Source material only — casting mechanics not designed for NPC engine |
 | s38 Kiho | **REFERENCE** | Source material only |
 | s40 Individual Combat | **PARTIAL** | IndividualCombat implemented: initiative, stances, Armor TN, attack/damage, maneuvers (disarm, feint, knockdown), grapple, sumai, iaijutsu duel (Assessment/Focus/Strike), Void Point spending, Center Stance bonus, conditions (Dazed/Blinded/Prone/Fatigued/Stunned/Grappled/Mounted/Entangled). VoidSystem separate class. Wired into ActionExecutor (ISSUE_DUEL_CHALLENGE). Deferred: ASCII map tile positioning/range tracking (needs coordinate system), Guard TN wiring, Mounted attack bonus, contested_roll per-side unskilled-explode. |
-| s43 Maho | **PARTIAL** | PTL tracking and any-maho-raises-PTL rule enforced. Maho spell casting resolution not implemented. |
+| s43 Maho | **PARTIAL** | MahoSystem done: blood cost helpers, taint gain, at-act honor loss (Table 2.3), PTL increment, CrimeType.MAHO record. Spell cast roll TN not implemented — GDD s43 does not specify it. |
 | s44 Shadowlands Mutations | **REFERENCE** | Source material only |
 | s45 Advantages & Disadvantages | **REFERENCE** | Source material only |
 | s47 Mass Battle Rules | **DONE** | ArmyCombatSystem |
