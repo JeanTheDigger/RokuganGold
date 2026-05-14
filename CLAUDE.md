@@ -3152,6 +3152,15 @@ All in /tests/, one file per system:
   Known limitations: Senior Courtier detection deferred (unclear vacancy
   trigger).
 
+### ActionID Wiring Audit — COMPLETE
+All 18 ActionIDs that produce `requires_*` effect flags have matching
+orchestrator handlers. No orphan flags or handlers on either side.
+The 5 remaining military stubs (ORDER_DEPLOY, ORDER_FORTIFY,
+ORDER_RETREAT, ASSIGN_GARRISON, CONDUCT_RAID) return simple effect
+labels with no deferred processing — all are blocked on the coordinate
+system or missing GDD specification. Do NOT re-audit the executor →
+orchestrator wiring unless new ActionIDs are added.
+
 ### What's Next
 1. World generation coordinate system and adjacency
 
