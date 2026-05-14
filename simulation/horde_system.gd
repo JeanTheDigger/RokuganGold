@@ -1,5 +1,5 @@
 class_name HordeSystem
-## Jigoku Horde generation per GDD s2.4.4, s2.4.5, s2.4.6, s2.4.7.
+## Jigoku Horde generation and combat resolution per GDD s2.4.4–s2.4.7, s2.4.10.
 ## Pure static functions — caller owns all HordeData and world state.
 
 
@@ -335,3 +335,220 @@ static func generate_horde(
 	horde.has_spawn = invasion_type == Enums.InvasionType.ONI_LED_SPAWN
 
 	return horde
+
+
+# -- Horde Battle Company Construction (s2.4.5, s2.4.7) -----------------------
+
+## Offset added to ShadowlandsUnitType int values in battle company dicts.
+## Prevents collision with CompanyUnitType int values (both enums start at 0).
+const SHADOWLANDS_UNIT_TYPE_OFFSET: int = 10000
+
+## Build a battle company dict for a Shadowlands unit, compatible with
+## ArmyCombatSystem.resolve_battle. unit_type is offset by
+## SHADOWLANDS_UNIT_TYPE_OFFSET to prevent collision with CompanyUnitType.
+## wall_breaker_attack_bonus (Ogre Warrior, Ogre Warlord) is applied to
+## base_attack directly when is_tower_assault is true.
+static func make_horde_battle_company(
+	unit_stats: Dictionary,
+	row: int,
+	column: int,
+	side: String,
+	company_id: int,
+	is_tower_assault: bool = false,
+) -> Dictionary:
+	var raw_morale: int = unit_stats.get("morale", 10)
+	var no_morale: bool = unit_stats.get("no_morale", false)
+	# Undead have morale sentinel -1 — use 1 as starting_morale to prevent div-by-zero.
+	# no_morale flag causes ArmyCombatSystem to skip all morale checks anyway.
+	var start_morale: int = 1 if no_morale else raw_morale
+	var cur_morale: int = 0 if no_morale else raw_morale
+	var raw_md: int = unit_stats.get("morale_defense", 0)
+	var base_md: int = maxi(raw_md, 0)
+
+	var base_attack: int = unit_stats.get("attack", 0)
+	if is_tower_assault and unit_stats.get("wall_breaker_attack_bonus", 0) > 0:
+		base_attack += unit_stats["wall_breaker_attack_bonus"]
+
+	return {
+		"company": null,
+		"company_id": company_id,
+		"unit_type": SHADOWLANDS_UNIT_TYPE_OFFSET + unit_stats.get("unit_type", 0),
+		"starting_health": unit_stats.get("health", 153),
+		"current_health": unit_stats.get("current_health", unit_stats.get("health", 153)),
+		"starting_morale": start_morale,
+		"current_morale": cur_morale,
+		"base_attack": base_attack,
+		"base_defense": unit_stats.get("defense", 0),
+		"base_morale_defense": base_md,
+		"row": row,
+		"column": column,
+		"side": side,
+		"is_routed": false,
+		"is_destroyed": false,
+		"commander": null,
+		"commander_bonus": {},
+		"commander_injured": false,
+		"commander_dead": false,
+		"survival_thresholds_triggered": [],
+		"no_morale": no_morale,
+		"immune_routing_contagion": unit_stats.get("immune_routing_contagion", false),
+	}
+
+
+## Convert an Array[Dictionary] of horde unit_stats (from generate_horde_companies)
+## into an Array[Dictionary] of battle companies compatible with ArmyCombatSystem.
+## Companies are assigned to rows/columns in waves: front row first.
+static func horde_companies_to_battle_states(
+	companies: Array[Dictionary],
+	side: String,
+	start_company_id: int = 5000,
+	is_tower_assault: bool = false,
+) -> Array[Dictionary]:
+	var states: Array[Dictionary] = []
+	var id: int = start_company_id
+	# Maho-tsukai goes to row 2 (back); all others to row 1 (front).
+	# Columns assigned left to right.
+	var front_col: int = 0
+	var back_col: int = 0
+	for stats: Dictionary in companies:
+		var row: int = 2 if stats.get("commander_unit", false) else 1
+		var col: int = back_col if row == 2 else front_col
+		states.append(make_horde_battle_company(stats, row, col, side, id, is_tower_assault))
+		id += 1
+		if row == 2:
+			back_col += 1
+		else:
+			front_col += 1
+	return states
+
+
+# -- Horde Assault Combat (s2.4.5, s2.4.7) ------------------------------------
+
+## Map an ArmyCombatSystem victor string + round data to HordeBattleOutcome.
+## Per s2.4.5: outcome determines SI hit applied after the battle.
+static func _map_battle_outcome(battle_result: Dictionary, rounds: int) -> int:
+	var victor: String = battle_result.get("victor", "draw")
+	if victor == "defender":
+		# Decisive if horde routed quickly (<=2 rounds), else Contested.
+		if rounds <= 2:
+			return Enums.HordeBattleOutcome.DECISIVE_DEFENDER_VICTORY
+		return Enums.HordeBattleOutcome.CONTESTED_BATTLE
+	elif victor == "attacker":
+		return Enums.HordeBattleOutcome.DEFENDER_OVERRUN
+	else:
+		# Draw: garrison badly damaged but horde stopped.
+		return Enums.HordeBattleOutcome.ATTACKER_PUSHED_BACK
+
+
+## Resolve a Shadowlands horde assault on a Wall Tower (s2.4.5).
+## garrison_states: Array[Dictionary] of battle companies for the defending garrison.
+## horde_companies: Array[Dictionary] of unit_stats from HordeSystem (raw dicts).
+## si: current Tower SI, used for fortification bonus and the SI hit afterwards.
+## tower_settlement: SettlementData whose wall_si will be mutated on return.
+## Returns full result including battle log, outcome, SI hit, and breach flag.
+static func resolve_horde_assault(
+	garrison_states: Array[Dictionary],
+	horde_companies: Array[Dictionary],
+	tower_settlement: SettlementData,
+	dice: DiceEngine,
+) -> Dictionary:
+	var si: int = tower_settlement.wall_si
+	var fortification_bonus: int = WallSystem.get_si_defense_bonus(si)
+
+	var horde_states: Array[Dictionary] = horde_companies_to_battle_states(
+		horde_companies, "attacker", 5000, true,
+	)
+
+	var battle_result: Dictionary = ArmyCombatSystem.resolve_battle(
+		horde_states,
+		garrison_states,
+		Enums.BattleTerrainType.PLAINS,
+		dice,
+		false,
+		fortification_bonus,
+	)
+
+	var rounds: int = battle_result.get("rounds", 0)
+	var outcome: int = _map_battle_outcome(battle_result, rounds)
+
+	var si_result: Dictionary = apply_assault_si_hit(tower_settlement, outcome)
+
+	return {
+		"outcome": outcome,
+		"victor": battle_result.get("victor", "draw"),
+		"rounds": rounds,
+		"si_hit": si_result["si_hit"],
+		"new_si": si_result["new_si"],
+		"breach": si_result["breach"],
+		"battle_result": battle_result,
+	}
+
+
+# -- Sortie Combat (s2.4.10) ---------------------------------------------------
+
+## Generate a Jigoku Horde scaled to the current SS for a sortie engagement.
+## Per s2.4.10: "the game generates a Jigoku Horde proportional to current SS."
+## Uses SS tier to determine company count: Low→2, Medium→4, High→6.
+static func _generate_sortie_horde_companies(
+	ss: int,
+	dice: DiceEngine,
+) -> Array[Dictionary]:
+	var count: int
+	if ss >= 9:
+		count = 6
+	elif ss >= 5:
+		count = 4
+	else:
+		count = 2
+
+	var companies: Array[Dictionary] = []
+	for i: int in range(count):
+		# Alternate Bakemono / Bakemono Warrior with a single Ogre Warrior at end.
+		if i == count - 1:
+			companies.append(get_unit_stats(Enums.ShadowlandsUnitType.OGRE_WARRIOR))
+		elif i % 2 == 0:
+			companies.append(get_unit_stats(Enums.ShadowlandsUnitType.BAKEMONO))
+		else:
+			companies.append(get_unit_stats(Enums.ShadowlandsUnitType.BAKEMONO_WARRIOR))
+	return companies
+
+
+## Resolve a sortie's combat against a scaled Jigoku Horde (s2.4.10).
+## sortie_states: garrison battle companies committed to the sortie.
+## Returns {success, ss_reduction, casualties, battle_result}.
+## A successful sortie means the horde is routed/destroyed (attacker wins).
+## A failed sortie: garrison takes casualties, no SS reduction.
+static func resolve_sortie_combat(
+	sortie_states: Array[Dictionary],
+	ss_reduction: int,
+	ss: int,
+	dice: DiceEngine,
+) -> Dictionary:
+	var horde_companies: Array[Dictionary] = _generate_sortie_horde_companies(ss, dice)
+	var horde_states: Array[Dictionary] = horde_companies_to_battle_states(
+		horde_companies, "attacker", 6000, false,
+	)
+
+	# Sortie fights in the open Shadowlands — no fortification bonus for either side.
+	var battle_result: Dictionary = ArmyCombatSystem.resolve_battle(
+		horde_states,
+		sortie_states,
+		Enums.BattleTerrainType.PLAINS,
+		dice,
+		false,
+		0,
+	)
+
+	var victor: String = battle_result.get("victor", "draw")
+	var success: bool = victor == "defender"
+
+	var casualties: int = 0
+	for bc: Dictionary in battle_result.get("defender_states", []):
+		casualties += bc["starting_health"] - bc["current_health"]
+
+	return {
+		"success": success,
+		"ss_reduction": ss_reduction if success else 0,
+		"casualties_health": casualties,
+		"battle_result": battle_result,
+	}

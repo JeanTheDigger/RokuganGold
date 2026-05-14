@@ -413,3 +413,210 @@ func test_generate_horde_ic_day_recorded() -> void:
 	var counters: Dictionary = {}
 	var horde := HordeSystem.generate_horde(towers, -1, counters, dice, 250)
 	assert_eq(horde.ic_day_generated, 250)
+
+
+# =============================================================================
+# make_horde_battle_company (s2.4.5, s2.4.7)
+# =============================================================================
+
+func test_make_horde_battle_company_fields_present() -> void:
+	var stats := HordeSystem.get_unit_stats(Enums.ShadowlandsUnitType.BAKEMONO)
+	var bc := HordeSystem.make_horde_battle_company(stats, 1, 0, "attacker", 5000)
+	assert_true(bc.has("current_health"))
+	assert_true(bc.has("base_attack"))
+	assert_true(bc.has("base_defense"))
+	assert_true(bc.has("is_routed"))
+	assert_true(bc.has("no_morale"))
+
+
+func test_make_horde_battle_company_unit_type_offset() -> void:
+	var stats := HordeSystem.get_unit_stats(Enums.ShadowlandsUnitType.BAKEMONO)
+	var bc := HordeSystem.make_horde_battle_company(stats, 1, 0, "attacker", 5000)
+	assert_eq(bc["unit_type"],
+		HordeSystem.SHADOWLANDS_UNIT_TYPE_OFFSET + Enums.ShadowlandsUnitType.BAKEMONO)
+
+
+func test_make_horde_battle_company_bakemono_no_morale_false() -> void:
+	var stats := HordeSystem.get_unit_stats(Enums.ShadowlandsUnitType.BAKEMONO)
+	var bc := HordeSystem.make_horde_battle_company(stats, 1, 0, "attacker", 5000)
+	assert_false(bc["no_morale"])
+	assert_true(bc["immune_routing_contagion"])
+
+
+func test_make_horde_battle_company_zombie_no_morale_true() -> void:
+	var stats := HordeSystem.get_unit_stats(Enums.ShadowlandsUnitType.ZOMBIE)
+	var bc := HordeSystem.make_horde_battle_company(stats, 1, 0, "attacker", 5000)
+	assert_true(bc["no_morale"])
+	assert_gt(bc["starting_morale"], 0)  # sentinel replaced — no div-by-zero
+
+
+func test_make_horde_battle_company_wall_breaker_bonus_applied() -> void:
+	var stats := HordeSystem.get_unit_stats(Enums.ShadowlandsUnitType.OGRE_WARRIOR)
+	var bc_assault := HordeSystem.make_horde_battle_company(stats, 1, 0, "attacker", 5000, true)
+	var bc_sortie := HordeSystem.make_horde_battle_company(stats, 1, 0, "attacker", 5001, false)
+	# Tower assault: base_attack includes wall_breaker_attack_bonus (+3)
+	assert_eq(bc_assault["base_attack"], stats["attack"] + stats["wall_breaker_attack_bonus"])
+	# Sortie (open field): no bonus
+	assert_eq(bc_sortie["base_attack"], stats["attack"])
+
+
+func test_horde_companies_to_battle_states_count() -> void:
+	var companies: Array[Dictionary] = [
+		HordeSystem.get_unit_stats(Enums.ShadowlandsUnitType.BAKEMONO),
+		HordeSystem.get_unit_stats(Enums.ShadowlandsUnitType.BAKEMONO),
+		HordeSystem.get_unit_stats(Enums.ShadowlandsUnitType.OGRE_WARRIOR),
+	]
+	var states := HordeSystem.horde_companies_to_battle_states(companies, "attacker", 5000)
+	assert_eq(states.size(), 3)
+
+
+func test_horde_companies_to_battle_states_maho_tsukai_row2() -> void:
+	var companies: Array[Dictionary] = [
+		HordeSystem.get_unit_stats(Enums.ShadowlandsUnitType.ZOMBIE),
+		HordeSystem.get_unit_stats(Enums.ShadowlandsUnitType.MAHO_TSUKAI),
+	]
+	var states := HordeSystem.horde_companies_to_battle_states(companies, "attacker", 5000)
+	var rows: Array = states.map(func(bc: Dictionary) -> int: return bc["row"])
+	assert_true(1 in rows, "Non-commander in row 1")
+	assert_true(2 in rows, "Maho-tsukai in row 2")
+
+
+# =============================================================================
+# resolve_horde_assault (s2.4.5)
+# =============================================================================
+
+func _make_garrison_battle_company(company_id: int, attack: int, defense: int, health: int) -> Dictionary:
+	# Minimal battle company dict representing a garrison unit.
+	return {
+		"company": null,
+		"company_id": company_id,
+		"unit_type": Enums.CompanyUnitType.HIDA_BUSHI,
+		"starting_health": health,
+		"current_health": health,
+		"starting_morale": 18,
+		"current_morale": 18,
+		"base_attack": attack,
+		"base_defense": defense,
+		"base_morale_defense": 8,
+		"row": 1,
+		"column": company_id,
+		"side": "defender",
+		"is_routed": false,
+		"is_destroyed": false,
+		"commander": null,
+		"commander_bonus": {},
+		"commander_injured": false,
+		"commander_dead": false,
+		"survival_thresholds_triggered": [],
+	}
+
+
+func test_resolve_horde_assault_returns_outcome() -> void:
+	var dice := DiceEngine.new()
+	dice.set_seed(42)
+	var tower := _make_tower_settlement(10, 8)
+	# Strong garrison: 4 elite companies vs standard Jigoku horde
+	var garrison: Array[Dictionary] = []
+	for i: int in range(4):
+		garrison.append(_make_garrison_battle_company(i, 12, 10, 153))
+	var horde_companies := HordeSystem._generate_jigoku_companies(0, dice)
+	var result := HordeSystem.resolve_horde_assault(garrison, horde_companies, tower, dice)
+	assert_true(result.has("outcome"))
+	assert_true(result.has("victor"))
+	assert_true(result.has("si_hit"))
+	assert_true(result.has("new_si"))
+	assert_true(result.has("breach"))
+
+
+func test_resolve_horde_assault_si_reduced() -> void:
+	var dice := DiceEngine.new()
+	dice.set_seed(99)
+	var tower := _make_tower_settlement(10, 8)
+	var old_si: int = tower.wall_si
+	var garrison: Array[Dictionary] = []
+	for i: int in range(3):
+		garrison.append(_make_garrison_battle_company(i, 10, 8, 153))
+	var horde_companies := HordeSystem._generate_jigoku_companies(0, dice)
+	HordeSystem.resolve_horde_assault(garrison, horde_companies, tower, dice)
+	# SI must always drop by at least 1 per s2.4.5
+	assert_lt(tower.wall_si, old_si)
+
+
+func test_resolve_horde_assault_outcome_in_valid_range() -> void:
+	var dice := DiceEngine.new()
+	dice.set_seed(7)
+	var tower := _make_tower_settlement(10, 6)
+	var garrison: Array[Dictionary] = [
+		_make_garrison_battle_company(0, 10, 8, 153)
+	]
+	var horde_companies := HordeSystem._generate_jigoku_companies(0, dice)
+	var result := HordeSystem.resolve_horde_assault(garrison, horde_companies, tower, dice)
+	var valid_outcomes: Array = [
+		Enums.HordeBattleOutcome.DECISIVE_DEFENDER_VICTORY,
+		Enums.HordeBattleOutcome.CONTESTED_BATTLE,
+		Enums.HordeBattleOutcome.ATTACKER_PUSHED_BACK,
+		Enums.HordeBattleOutcome.DEFENDER_OVERRUN,
+	]
+	assert_true(result["outcome"] in valid_outcomes)
+
+
+# =============================================================================
+# resolve_sortie_combat (s2.4.10)
+# =============================================================================
+
+func test_resolve_sortie_combat_returns_expected_keys() -> void:
+	var dice := DiceEngine.new()
+	dice.set_seed(42)
+	var sortie: Array[Dictionary] = []
+	for i: int in range(3):
+		sortie.append(_make_garrison_battle_company(i, 12, 10, 153))
+	var result := HordeSystem.resolve_sortie_combat(sortie, 1, 6, dice)
+	assert_true(result.has("success"))
+	assert_true(result.has("ss_reduction"))
+	assert_true(result.has("casualties_health"))
+	assert_true(result.has("battle_result"))
+
+
+func test_resolve_sortie_combat_failed_sortie_no_ss_reduction() -> void:
+	var dice := DiceEngine.new()
+	dice.set_seed(3)
+	# Weak sortie force vs Medium SS horde
+	var sortie: Array[Dictionary] = [
+		_make_garrison_battle_company(0, 1, 1, 10),  # nearly dead
+	]
+	var result := HordeSystem.resolve_sortie_combat(sortie, 1, 6, dice)
+	if not result["success"]:
+		assert_eq(result["ss_reduction"], 0)
+
+
+func test_resolve_sortie_combat_successful_sortie_applies_ss_reduction() -> void:
+	var dice := DiceEngine.new()
+	dice.set_seed(50)
+	# Very strong sortie force
+	var sortie: Array[Dictionary] = []
+	for i: int in range(8):
+		sortie.append(_make_garrison_battle_company(i, 14, 12, 153))
+	var result := HordeSystem.resolve_sortie_combat(sortie, 2, 9, dice)
+	if result["success"]:
+		assert_eq(result["ss_reduction"], 2)
+
+
+func test_generate_sortie_horde_medium_ss_four_companies() -> void:
+	var dice := DiceEngine.new()
+	dice.set_seed(1)
+	var companies := HordeSystem._generate_sortie_horde_companies(6, dice)
+	assert_eq(companies.size(), 4)
+
+
+func test_generate_sortie_horde_high_ss_six_companies() -> void:
+	var dice := DiceEngine.new()
+	dice.set_seed(1)
+	var companies := HordeSystem._generate_sortie_horde_companies(9, dice)
+	assert_eq(companies.size(), 6)
+
+
+func test_generate_sortie_horde_low_ss_two_companies() -> void:
+	var dice := DiceEngine.new()
+	dice.set_seed(1)
+	var companies := HordeSystem._generate_sortie_horde_companies(3, dice)
+	assert_eq(companies.size(), 2)

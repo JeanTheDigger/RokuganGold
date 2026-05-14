@@ -1235,7 +1235,7 @@ static func _process_rout_contagion(
 			for bc: Dictionary in side:
 				if not is_active(bc):
 					continue
-				if bc.get("no_morale", false):
+				if bc.get("no_morale", false) or bc.get("immune_routing_contagion", false):
 					continue
 				if absi(bc["column"] - routed["column"]) <= 1 and bc["row"] == routed["row"]:
 					var roll: int = dice_engine.rand_int_range(1, 10)

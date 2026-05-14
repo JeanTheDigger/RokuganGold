@@ -334,9 +334,9 @@ static func validate_sortie(
 
 
 ## Full sortie resolution entry point called from ActionExecutor.
-## Returns a result dict. The actual horde combat (s2.4.7) is deferred until
-## Jigoku Horde generation is implemented — emits requires_sortie_combat: true
-## with all parameters the Horde system needs.
+## Returns a result dict. Actual horde combat resolves via
+## HordeSystem.resolve_sortie_combat — call it from DayOrchestrator
+## using the committed garrison companies and pass ss_reduction from here.
 static func resolve_sortie(
 	ss: int,
 	si: int,
