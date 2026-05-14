@@ -47,6 +47,9 @@ extends Resource
 @export var garrison_shortage_letter_season: int = -1
 # True once a DISPATCH_COURTIER has been sent for the current shortage.
 @export var garrison_shortage_courtier_dispatched: bool = false
+# True if the most recent courtier was explicitly refused by the Daimyo (s2.4.14).
+# Gates the wall-wide emergency declaration trigger (Decision 6).
+@export var garrison_shortage_courtier_refused: bool = false
 
 
 func has_infrastructure(feature: String) -> bool:

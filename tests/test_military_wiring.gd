@@ -4144,6 +4144,77 @@ func test_letter_writeback_ignores_non_tower_settlement() -> void:
 	assert_eq(town.garrison_shortage_letter_season, -1)
 
 
+# -- Garrison courtier refusal write-back (s2.4.14) ----------------------------
+
+func test_refusal_writeback_sets_courtier_refused_flag() -> void:
+	var tower: SettlementData = _make_wall_tower(1, 100, 0.0)
+	tower.garrison_shortage_courtier_refused = false
+	var results: Array[Dictionary] = [{
+		"action_id": "DISPATCH_COURTIER",
+		"effects": {
+			"garrison_refused": true,
+			"target_province_id": 100,
+		},
+	}]
+	DayOrchestrator._apply_garrison_courtier_refusal_writebacks(
+		results, [tower] as Array[SettlementData]
+	)
+	assert_true(tower.garrison_shortage_courtier_refused)
+
+
+func test_refusal_writeback_ignores_non_refused_effects() -> void:
+	var tower: SettlementData = _make_wall_tower(1, 100, 0.0)
+	tower.garrison_shortage_courtier_refused = false
+	var results: Array[Dictionary] = [{
+		"action_id": "DISPATCH_COURTIER",
+		"effects": {
+			"garrison_refused": false,
+			"target_province_id": 100,
+		},
+	}]
+	DayOrchestrator._apply_garrison_courtier_refusal_writebacks(
+		results, [tower] as Array[SettlementData]
+	)
+	assert_false(tower.garrison_shortage_courtier_refused)
+
+
+func test_refusal_writeback_ignores_mismatched_province() -> void:
+	var tower: SettlementData = _make_wall_tower(1, 200, 0.0)  # province 200
+	tower.garrison_shortage_courtier_refused = false
+	var results: Array[Dictionary] = [{
+		"action_id": "DISPATCH_COURTIER",
+		"effects": {
+			"garrison_refused": true,
+			"target_province_id": 100,  # different province
+		},
+	}]
+	DayOrchestrator._apply_garrison_courtier_refusal_writebacks(
+		results, [tower] as Array[SettlementData]
+	)
+	assert_false(tower.garrison_shortage_courtier_refused)
+
+
+func test_garrison_assignment_resets_courtier_refused_when_resolved() -> void:
+	var daimyo: L5RCharacterData = _make_character_for_garrison(10, "Crane")
+	var wall: SettlementData = _make_wall_tower(1, 100, 0.0)
+	wall.garrison_shortage_courtier_refused = true
+	var source: SettlementData = _make_settlement(2, 200)
+	source.garrison_pu = 5.0
+	var province_crane: ProvinceData = _make_province(200, "Crane")
+	var applied: Dictionary = {
+		"character_id": 5,
+		"effects": {
+			"requires_garrison_assignment": true,
+			"target_npc_id": 10,
+			"target_province_id": 100,
+		},
+	}
+	DayOrchestrator._apply_garrison_assignment(
+		applied, {10: daimyo}, [wall, source], {200: province_crane}
+	)
+	assert_false(wall.garrison_shortage_courtier_refused)
+
+
 # -- Army Battle Resolution Tests -----------------------------------------------
 
 func _make_company_dict_for_battle(

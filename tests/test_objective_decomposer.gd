@@ -899,6 +899,46 @@ func test_strengthen_wall_non_champion_lord_skips_escalation() -> void:
 	assert_eq(need.need_type, "DEFEND_PROVINCE")
 
 
+func test_strengthen_wall_champion_courtier_refused_critical_si_uses_defend_stub() -> void:
+	# Step 3 emergency trigger: courtier refused AND si < 6.
+	# Returns DEFEND_PROVINCE as placeholder for DECLARE_WALL_EMERGENCY (s2.4.14 Decision 6).
+	_ctx.is_lord = true
+	_ctx.lord_rank = Enums.LordRank.CLAN_CHAMPION
+	_ctx.season = 4
+	var ws: NPCDataStructures.WallStatus = _make_wall_status(5, 4)  # si = 4
+	ws.minimum_garrison = 5
+	ws.garrison_shortage_letter_season = 2
+	ws.garrison_shortage_courtier_dispatched = true
+	ws.garrison_shortage_courtier_refused = true
+	var ps: NPCDataStructures.ProvinceStatus = _make_wall_province_status(5)
+	ps.garrison_pu = 2
+	_ctx.wall_statuses = [ws]
+	_ctx.province_statuses = [ps]
+	var obj: Dictionary = {"need_type": "STRENGTHEN_WALL"}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
+	assert_eq(need.need_type, "DEFEND_PROVINCE")
+	assert_eq(need.target_province_id, 5)
+
+
+func test_strengthen_wall_champion_courtier_dispatched_not_refused_uses_defend() -> void:
+	# Courtier dispatched but no refusal yet: commit reserve armies (Decision 2).
+	_ctx.is_lord = true
+	_ctx.lord_rank = Enums.LordRank.CLAN_CHAMPION
+	_ctx.season = 4
+	var ws: NPCDataStructures.WallStatus = _make_wall_status(5, 8)  # si = 8
+	ws.minimum_garrison = 5
+	ws.garrison_shortage_letter_season = 2
+	ws.garrison_shortage_courtier_dispatched = true
+	ws.garrison_shortage_courtier_refused = false
+	var ps: NPCDataStructures.ProvinceStatus = _make_wall_province_status(5)
+	ps.garrison_pu = 2
+	_ctx.wall_statuses = [ws]
+	_ctx.province_statuses = [ps]
+	var obj: Dictionary = {"need_type": "STRENGTHEN_WALL"}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
+	assert_eq(need.need_type, "DEFEND_PROVINCE")
+
+
 # =============================================================================
 # Military Dominance (s55.23.2)
 # =============================================================================

@@ -220,6 +220,7 @@ class WallStatus:
 	var minimum_garrison: int = 0
 	var garrison_shortage_letter_season: int = -1  # -1 = no letter campaign started
 	var garrison_shortage_courtier_dispatched: bool = false
+	var garrison_shortage_courtier_refused: bool = false
 
 
 # -- Competence Modifier Table (s55.5) -----------------------------------------

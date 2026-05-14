@@ -191,6 +191,10 @@ static func advance_day(
 		current_season_count,
 	)
 
+	_apply_garrison_courtier_refusal_writebacks(
+		day_result.get("results", []), settlements
+	)
+
 	var wall_engineering_results: Array[Dictionary] = _process_wall_engineering_effects(
 		day_result.get("results", []),
 		settlements,
@@ -5170,6 +5174,27 @@ static func _apply_service_assignment_effect(
 	}
 
 
+## When a Daimyo refuses the Champion's courtier (s2.4.14 Decision 4), set the
+## garrison_shortage_courtier_refused flag on the affected wall tower so the
+## decomposer's Step 3 can detect the emergency-declaration trigger condition.
+static func _apply_garrison_courtier_refusal_writebacks(
+	results: Array[Dictionary],
+	settlements: Array[SettlementData],
+) -> void:
+	for r: Dictionary in results:
+		var effects: Dictionary = r.get("effects", {})
+		if not effects.get("garrison_refused", false):
+			continue
+		var target_province_id: int = effects.get("target_province_id", -1)
+		if target_province_id < 0:
+			continue
+		for s: SettlementData in settlements:
+			if s.settlement_type == Enums.SettlementType.WALL_TOWER \
+					and s.province_id == target_province_id:
+				s.garrison_shortage_courtier_refused = true
+				break
+
+
 ## When a Champion or Shireikan writes a garrison shortage letter (s2.4.13–14),
 ## mark the tower's garrison_shortage_letter_season so the escalation pipeline
 ## can advance to DISPATCH_COURTIER the following season.
@@ -5244,6 +5269,7 @@ static func _apply_garrison_assignment(
 		if not WallSystem.is_garrison_below_minimum(wall_tower.garrison_pu):
 			wall_tower.garrison_shortage_letter_season = -1
 			wall_tower.garrison_shortage_courtier_dispatched = false
+			wall_tower.garrison_shortage_courtier_refused = false
 
 	var requester_id: int = applied.get("character_id", -1)
 	return {
@@ -6121,6 +6147,7 @@ static func _set_wall_tower_context_flags(
 		wstat.garrison_above_minimum = not WallSystem.is_garrison_below_minimum(tower.garrison_pu)
 		wstat.garrison_shortage_letter_season = tower.garrison_shortage_letter_season
 		wstat.garrison_shortage_courtier_dispatched = tower.garrison_shortage_courtier_dispatched
+		wstat.garrison_shortage_courtier_refused = tower.garrison_shortage_courtier_refused
 		var min_jade: float = float(
 			int(tower.garrison_pu * WallSystem.SORTIE_SMALL_MAX_PCT)
 			* WallSystem.SORTIE_SMALL_JADE_PER_WARRIOR
