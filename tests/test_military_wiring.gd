@@ -180,6 +180,7 @@ func test_military_daily_returns_all_keys() -> void:
 		[], [], [], [], DiceEngine.new(), [], [],
 	)
 	assert_true(r.has("movement_results"))
+	assert_true(r.has("battle_results"))
 	assert_true(r.has("siege_results"))
 	assert_true(r.has("tether_results"))
 	assert_true(r.has("order_results"))
@@ -3883,3 +3884,190 @@ func test_garrison_assignment_requester_id_captured() -> void:
 		applied, {10: daimyo}, [wall, source], {200: province_crane},
 	)
 	assert_eq(r["requester_id"], 42)
+
+
+# -- Army Battle Resolution Tests -----------------------------------------------
+
+func _make_company_dict_for_battle(
+	id: int,
+	army_id: int,
+	clan: String = "Crab",
+	ut: int = Enums.CompanyUnitType.BUSHI_RETAINER,
+) -> Dictionary:
+	var stats: Dictionary = ArmyCombatSystem.UNIT_STATS.get(ut, {})
+	return {
+		"company_id": id,
+		"army_id": army_id,
+		"unit_type": ut,
+		"clan_name": clan,
+		"commander_id": -1,
+		"source_province_id": 1,
+		"current_health": stats.get("health", 153),
+		"current_morale": stats.get("morale", 10),
+	}
+
+
+func test_company_dict_to_data_converts_correctly() -> void:
+	var cd: Dictionary = _make_company_dict_for_battle(1, 10, "Crab")
+	var data: MilitaryUnitData.CompanyData = DayOrchestrator._company_dict_to_data(cd)
+	assert_eq(data.company_id, 1)
+	assert_eq(data.unit_type, Enums.CompanyUnitType.BUSHI_RETAINER)
+	assert_true(data.health > 0)
+	assert_true(data.attack > 0)
+
+
+func test_get_army_companies_filters_by_army_id() -> void:
+	var c1: Dictionary = _make_company_dict_for_battle(1, 10)
+	var c2: Dictionary = _make_company_dict_for_battle(2, 10)
+	var c3: Dictionary = _make_company_dict_for_battle(3, 20)
+	var result: Array[Dictionary] = DayOrchestrator._get_army_companies(
+		10, [c1, c2, c3],
+	)
+	assert_eq(result.size(), 2)
+
+
+func test_build_battle_states_creates_states() -> void:
+	var cd: Dictionary = _make_company_dict_for_battle(1, 10)
+	var states: Array[Dictionary] = DayOrchestrator._build_battle_states(
+		[cd], "attacker", {},
+	)
+	assert_eq(states.size(), 1)
+	assert_eq(states[0]["side"], "attacker")
+	assert_eq(states[0]["company_id"], 1)
+	assert_true(states[0]["starting_health"] > 0)
+
+
+func test_write_battle_results_updates_companies() -> void:
+	var cd: Dictionary = _make_company_dict_for_battle(1, 10)
+	cd["current_health"] = 153
+	var battle_result: Dictionary = {
+		"attacker_states": [
+			{"company_id": 1, "current_health": 50, "current_morale": 3,
+			 "is_destroyed": false, "is_routed": false, "commander_dead": false},
+		],
+		"defender_states": [],
+	}
+	DayOrchestrator._write_battle_results_to_companies(battle_result, [cd])
+	assert_eq(cd["current_health"], 50)
+	assert_eq(cd["current_morale"], 3)
+
+
+func test_write_battle_results_marks_destroyed() -> void:
+	var cd: Dictionary = _make_company_dict_for_battle(1, 10)
+	cd["commander_id"] = 5
+	var battle_result: Dictionary = {
+		"attacker_states": [
+			{"company_id": 1, "current_health": 0, "current_morale": 0,
+			 "is_destroyed": true, "is_routed": false, "commander_dead": true},
+		],
+		"defender_states": [],
+	}
+	DayOrchestrator._write_battle_results_to_companies(battle_result, [cd])
+	assert_eq(cd["current_health"], 0)
+	assert_true(cd.get("is_destroyed", false))
+	assert_true(cd.get("commander_dead", false))
+	assert_eq(cd["commander_id"], -1)
+
+
+func test_resolve_army_battles_no_trigger_returns_empty() -> void:
+	var movement_results: Array[Dictionary] = [
+		{"army_id": 1, "arrived": true, "battle_check": {"battle_triggered": false}},
+	]
+	var results: Array[Dictionary] = DayOrchestrator._resolve_army_battles(
+		movement_results, [], [], [], DiceEngine.new(), [], {}, {},
+	)
+	assert_eq(results.size(), 0)
+
+
+func test_resolve_army_battles_skips_when_not_at_war() -> void:
+	var army_a: Dictionary = ArmyMovementSystem.create_army_state(1, 5, "Crab")
+	var army_b: Dictionary = ArmyMovementSystem.create_army_state(2, 5, "Crane")
+	var c1: Dictionary = _make_company_dict_for_battle(1, 1, "Crab")
+	var c2: Dictionary = _make_company_dict_for_battle(2, 2, "Crane")
+	var movement_results: Array[Dictionary] = [
+		{
+			"army_id": 1, "arrived": true,
+			"battle_check": {
+				"battle_triggered": true,
+				"enemy_army_ids": [2],
+			},
+		},
+	]
+	var results: Array[Dictionary] = DayOrchestrator._resolve_army_battles(
+		movement_results, [army_a, army_b], [c1, c2],
+		[], DiceEngine.new(42), [], {}, {},
+	)
+	assert_eq(results.size(), 0)
+
+
+func test_resolve_army_battles_resolves_combat_when_at_war() -> void:
+	var dice: DiceEngine = DiceEngine.new(42)
+	var army_a: Dictionary = ArmyMovementSystem.create_army_state(1, 5, "Crab")
+	var army_b: Dictionary = ArmyMovementSystem.create_army_state(2, 5, "Crane")
+	var c1: Dictionary = _make_company_dict_for_battle(
+		1, 1, "Crab", Enums.CompanyUnitType.BUSHI_RETAINER,
+	)
+	var c2: Dictionary = _make_company_dict_for_battle(
+		2, 2, "Crane", Enums.CompanyUnitType.PEASANT_LEVY,
+	)
+	var war: WarData = WarSystem.declare_war(1, "Crab", "Crane", 1, 1, 2)
+	var s1: SettlementData = _make_settlement(10, 1, 10, 3)
+	var movement_results: Array[Dictionary] = [
+		{
+			"army_id": 1, "arrived": true,
+			"battle_check": {
+				"battle_triggered": true,
+				"enemy_army_ids": [2],
+			},
+		},
+	]
+	var results: Array[Dictionary] = DayOrchestrator._resolve_army_battles(
+		movement_results, [army_a, army_b], [c1, c2],
+		[war], dice, [s1], {}, {},
+	)
+	assert_eq(results.size(), 1)
+	assert_true(results[0].has("victor"))
+	assert_true(results[0].has("reconciliation"))
+	assert_eq(results[0]["attacker_clan"], "Crab")
+	assert_eq(results[0]["defender_clan"], "Crane")
+	# Companies should have been mutated
+	var health_changed: bool = (
+		c1["current_health"] != 153 or c2["current_health"] != 153
+	)
+	assert_true(health_changed, "At least one company should take damage")
+
+
+func test_resolve_army_battles_marks_battle_resolved_on_movement() -> void:
+	var dice: DiceEngine = DiceEngine.new(42)
+	var army_a: Dictionary = ArmyMovementSystem.create_army_state(1, 5, "Crab")
+	var army_b: Dictionary = ArmyMovementSystem.create_army_state(2, 5, "Crane")
+	var c1: Dictionary = _make_company_dict_for_battle(1, 1, "Crab")
+	var c2: Dictionary = _make_company_dict_for_battle(2, 2, "Crane")
+	var war: WarData = WarSystem.declare_war(1, "Crab", "Crane", 1, 1, 2)
+	var mr: Dictionary = {
+		"army_id": 1, "arrived": true,
+		"battle_check": {"battle_triggered": true, "enemy_army_ids": [2]},
+	}
+	DayOrchestrator._resolve_army_battles(
+		[mr], [army_a, army_b], [c1, c2],
+		[war], dice, [], {}, {},
+	)
+	assert_true(mr.get("battle_resolved", false))
+
+
+func test_resolve_army_battles_in_military_daily() -> void:
+	var dice: DiceEngine = DiceEngine.new(42)
+	var army_a: Dictionary = ArmyMovementSystem.create_army_state(1, 5, "Crab")
+	army_a["is_moving"] = true
+	army_a["days_remaining"] = 1
+	army_a["path"] = [0, 5]
+	army_a["path_index"] = 0
+	var army_b: Dictionary = ArmyMovementSystem.create_army_state(2, 5, "Crane")
+	var c1: Dictionary = _make_company_dict_for_battle(1, 1, "Crab")
+	var c2: Dictionary = _make_company_dict_for_battle(2, 2, "Crane")
+	var war: WarData = WarSystem.declare_war(1, "Crab", "Crane", 1, 1, 2)
+	var result: Dictionary = DayOrchestrator._process_military_daily(
+		[army_a, army_b], [], [], [], dice, [], [c1, c2], {},
+		[war], {},
+	)
+	assert_true(result.has("battle_results"))

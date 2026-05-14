@@ -132,6 +132,7 @@ static func advance_day(
 	var military_daily: Dictionary = _process_military_daily(
 		active_armies, active_sieges, active_tethers, order_states,
 		dice_engine, settlements, companies, wm_for_military,
+		active_wars, characters_by_id,
 	)
 
 	var naval_weather: int = _process_naval_weather(
@@ -2621,11 +2622,17 @@ static func _process_military_daily(
 	settlements: Array[SettlementData],
 	companies: Array[Dictionary] = [],
 	worship_maluses: Dictionary = {},
+	active_wars: Array[WarData] = [],
+	characters_by_id: Dictionary = {},
 ) -> Dictionary:
 	var disband_results: Array[Dictionary] = _process_disbands(
 		active_armies, companies, settlements,
 	)
 	var movement_results: Array[Dictionary] = _process_army_movements(active_armies)
+	var battle_results: Array[Dictionary] = _resolve_army_battles(
+		movement_results, active_armies, companies, active_wars,
+		dice_engine, settlements, characters_by_id, worship_maluses,
+	)
 	var retreat_arrival_results: Array[Dictionary] = _process_retreat_arrivals(
 		movement_results, active_armies, active_tethers,
 	)
@@ -2648,6 +2655,7 @@ static func _process_military_daily(
 
 	return {
 		"movement_results": movement_results,
+		"battle_results": battle_results,
 		"retreat_arrival_results": retreat_arrival_results,
 		"siege_results": siege_results,
 		"tether_results": tether_results,
@@ -2677,6 +2685,162 @@ static func _process_army_movements(
 				r["retreat_arrived"] = true
 		results.append(r)
 	return results
+
+
+static func _resolve_army_battles(
+	movement_results: Array[Dictionary],
+	active_armies: Array[Dictionary],
+	companies: Array[Dictionary],
+	active_wars: Array[WarData],
+	dice_engine: DiceEngine,
+	settlements: Array[SettlementData],
+	characters_by_id: Dictionary,
+	worship_maluses: Dictionary,
+) -> Array[Dictionary]:
+	var results: Array[Dictionary] = []
+
+	for mr: Dictionary in movement_results:
+		var bc: Dictionary = mr.get("battle_check", {})
+		if not bc.get("battle_triggered", false):
+			continue
+
+		var arriving_army_id: int = mr.get("army_id", -1)
+		var arriving_army: Dictionary = _find_army_by_id(arriving_army_id, active_armies)
+		if arriving_army.is_empty():
+			continue
+
+		var enemy_army_ids: Array = bc.get("enemy_army_ids", [])
+		if enemy_army_ids.is_empty():
+			continue
+
+		var attacker_clan: String = arriving_army.get(
+			"owning_clan", arriving_army.get("clan_name", ""),
+		)
+		if attacker_clan.is_empty():
+			continue
+
+		var first_enemy: Dictionary = _find_army_by_id(enemy_army_ids[0], active_armies)
+		var defender_clan: String = first_enemy.get(
+			"owning_clan", first_enemy.get("clan_name", ""),
+		)
+		if not WarSystem.are_clans_at_war(active_wars, attacker_clan, defender_clan):
+			continue
+
+		var atk_company_dicts: Array[Dictionary] = _get_army_companies(
+			arriving_army_id, companies,
+		)
+		var def_company_dicts: Array[Dictionary] = []
+		for eid: Variant in enemy_army_ids:
+			if eid is int:
+				def_company_dicts.append_array(_get_army_companies(eid, companies))
+
+		if atk_company_dicts.is_empty() or def_company_dicts.is_empty():
+			continue
+
+		var atk_states: Array[Dictionary] = _build_battle_states(
+			atk_company_dicts, "attacker", characters_by_id,
+		)
+		var def_states: Array[Dictionary] = _build_battle_states(
+			def_company_dicts, "defender", characters_by_id,
+		)
+
+		var battle_result: Dictionary = resolve_and_reconcile_battle(
+			atk_states, def_states, Enums.BattleTerrainType.PLAINS,
+			dice_engine, settlements, false, 0, worship_maluses,
+		)
+
+		_write_battle_results_to_companies(battle_result, companies)
+
+		battle_result["attacker_army_id"] = arriving_army_id
+		battle_result["defender_army_ids"] = enemy_army_ids
+		battle_result["attacker_clan"] = attacker_clan
+		battle_result["defender_clan"] = defender_clan
+		mr["battle_resolved"] = true
+		mr["company_count"] = atk_company_dicts.size() + def_company_dicts.size()
+		results.append(battle_result)
+
+	return results
+
+
+static func _get_army_companies(
+	army_id: int,
+	companies: Array[Dictionary],
+) -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	for c: Dictionary in companies:
+		if c.get("army_id", -1) == army_id:
+			result.append(c)
+	return result
+
+
+static func _build_battle_states(
+	company_dicts: Array[Dictionary],
+	side: String,
+	characters_by_id: Dictionary,
+) -> Array[Dictionary]:
+	var states: Array[Dictionary] = []
+	var col: int = 0
+	for cd: Dictionary in company_dicts:
+		var company_data: MilitaryUnitData.CompanyData = _company_dict_to_data(cd)
+		var commander: L5RCharacterData = null
+		var commander_bonus: Dictionary = {}
+		var cmd_id: int = cd.get("commander_id", -1)
+		if cmd_id >= 0 and characters_by_id.has(cmd_id):
+			commander = characters_by_id[cmd_id]
+			commander_bonus = _compute_captain_bonus(commander)
+		var ut: int = cd.get("unit_type", Enums.CompanyUnitType.PEASANT_LEVY)
+		var row: int = 1
+		if ut == Enums.CompanyUnitType.ASHIGARU_ARCHERS and col > 0:
+			row = 2
+		states.append(ArmyCombatSystem.make_battle_company(
+			company_data, row, col, side, commander, commander_bonus,
+		))
+		col += 1
+	return states
+
+
+static func _company_dict_to_data(cd: Dictionary) -> MilitaryUnitData.CompanyData:
+	var c: MilitaryUnitData.CompanyData = MilitaryUnitData.CompanyData.new()
+	c.company_id = cd.get("company_id", -1)
+	c.unit_type = cd.get("unit_type", Enums.CompanyUnitType.PEASANT_LEVY)
+	c.commander_id = cd.get("commander_id", -1)
+	c.source_province_id = cd.get("source_province_id", -1)
+	var stats: Dictionary = ArmyCombatSystem.UNIT_STATS.get(c.unit_type, {})
+	c.health = cd.get("current_health", stats.get("health", 153))
+	c.attack = stats.get("attack", 0)
+	c.defense = stats.get("defense", 0)
+	c.morale = cd.get("current_morale", stats.get("morale", 10))
+	c.morale_defense = stats.get("morale_defense", 0)
+	return c
+
+
+static func _write_battle_results_to_companies(
+	battle_result: Dictionary,
+	companies: Array[Dictionary],
+) -> void:
+	var all_states: Array = []
+	all_states.append_array(battle_result.get("attacker_states", []))
+	all_states.append_array(battle_result.get("defender_states", []))
+
+	for bs: Variant in all_states:
+		if not (bs is Dictionary):
+			continue
+		var bsd: Dictionary = bs
+		var cid: int = bsd.get("company_id", -1)
+		if cid < 0:
+			continue
+		for cd: Dictionary in companies:
+			if cd.get("company_id", -1) == cid:
+				cd["current_health"] = maxi(bsd.get("current_health", 0), 0)
+				cd["current_morale"] = maxi(bsd.get("current_morale", 0), 0)
+				if bsd.get("is_destroyed", false):
+					cd["is_destroyed"] = true
+				if bsd.get("is_routed", false):
+					cd["is_routed"] = true
+				if bsd.get("commander_dead", false):
+					cd["commander_dead"] = true
+					cd["commander_id"] = -1
+				break
 
 
 const _RETREAT_DEFAULT_DAYS: int = 3

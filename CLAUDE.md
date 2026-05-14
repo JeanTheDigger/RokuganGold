@@ -3362,7 +3362,14 @@ The following subsystems are now integrated into the NPC decision loop:
   `PUReconciliation.process_army_dissolution()`). Pursuit casualties
   distributed across non-destroyed loser companies before dissolution.
   Army movement processing detects battle triggers on arrival via
-  `ArmyMovementSystem.check_battle_trigger()`.
+  `ArmyMovementSystem.check_battle_trigger()`. When a battle trigger fires
+  and the clans are at war, `_resolve_army_battles()` runs the full combat
+  pipeline: converts company dicts to CompanyData via `_company_dict_to_data()`,
+  builds battle states via `_build_battle_states()`, calls
+  `resolve_and_reconcile_battle()`, then writes results back to company dicts
+  via `_write_battle_results_to_companies()` (health, morale, destroyed,
+  routed, commander death). Terrain defaults to PLAINS (real terrain mapping
+  deferred until coordinate system exists).
   `ArmyCombatSystem.is_cavalry()` public helper for cavalry detection.
   Rice upkeep deduction: `_deduct_rice_upkeep()` deducts seasonal rice costs
   from clan settlements' `rice_stockpile` using `ClanData.province_ids` to
