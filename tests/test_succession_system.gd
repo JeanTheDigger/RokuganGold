@@ -720,3 +720,243 @@ func test_evaluate_candidate_total_positive() -> void:
 	var result := SuccessionSystem.evaluate_candidate(
 		lord, candidate, SuccessionSystem.CandidatePriority.ELDEST_CHILD, weights)
 	assert_gt(result["total"], 0.0)
+
+
+# ==============================================================================
+# Priority 4 — Adopted Heir
+# ==============================================================================
+
+func test_adopted_heir_appears_as_priority_4() -> void:
+	var deceased := _make_char(1, "Crane", "Doji")
+	var adopted := _make_char(10, "Crane", "Doji")
+	deceased.adopted_children_ids = [10]
+	var chars: Dictionary = {1: deceased, 10: adopted}
+	var candidates := SuccessionSystem.get_candidates(deceased, chars)
+	var found: bool = false
+	for c in candidates:
+		if c["id"] == 10 and c["priority"] == SuccessionSystem.CandidatePriority.ADOPTED_HEIR:
+			found = true
+	assert_true(found, "Adopted heir should appear at Priority 4")
+
+
+func test_adopted_heir_ranked_below_biological_child() -> void:
+	var deceased := _make_char(1, "Crane", "Doji")
+	var bio_child := _make_char(20, "Crane", "Doji")
+	bio_child.age = 25
+	var adopted := _make_char(21, "Crane", "Doji")
+	deceased.children_ids = [20]
+	deceased.adopted_children_ids = [21]
+	var chars: Dictionary = {1: deceased, 20: bio_child, 21: adopted}
+	var candidates := SuccessionSystem.get_candidates(deceased, chars)
+	var bio_priority: int = -1
+	var adopted_priority: int = -1
+	for c in candidates:
+		if c["id"] == 20:
+			bio_priority = c["priority"]
+		if c["id"] == 21:
+			adopted_priority = c["priority"]
+	assert_true(bio_priority < adopted_priority,
+		"Biological child (P2) must rank above adopted heir (P4)")
+
+
+func test_dead_adopted_heir_excluded() -> void:
+	var deceased := _make_char(1, "Crane", "Doji")
+	var dead_adopted := _make_dead_char(30, "Crane")
+	deceased.adopted_children_ids = [30]
+	var chars: Dictionary = {1: deceased, 30: dead_adopted}
+	var candidates := SuccessionSystem.get_candidates(deceased, chars)
+	for c in candidates:
+		assert_ne(c["id"], 30, "Dead adopted heir must be excluded")
+
+
+func test_adopted_heir_wrong_clan_excluded() -> void:
+	var deceased := _make_char(1, "Crane", "Doji")
+	var lion_adopted := _make_char(31, "Lion", "Akodo")
+	deceased.adopted_children_ids = [31]
+	var chars: Dictionary = {1: deceased, 31: lion_adopted}
+	var candidates := SuccessionSystem.get_candidates(deceased, chars)
+	for c in candidates:
+		assert_ne(c["id"], 31, "Adopted heir from wrong clan must be excluded")
+
+
+func test_adopted_heir_not_duplicated_if_also_designated() -> void:
+	var deceased := _make_char(1, "Crane", "Doji")
+	var adopted := _make_char(40, "Crane", "Doji")
+	deceased.designated_heir_id = 40
+	deceased.adopted_children_ids = [40]
+	var chars: Dictionary = {1: deceased, 40: adopted}
+	var candidates := SuccessionSystem.get_candidates(deceased, chars)
+	var count: int = 0
+	for c in candidates:
+		if c["id"] == 40:
+			count += 1
+	assert_eq(count, 1, "Same character should not appear twice in candidate list")
+
+
+func test_birth_order_score_for_adopted_heir_is_4() -> void:
+	assert_eq(
+		SuccessionSystem._score_birth_order(SuccessionSystem.CandidatePriority.ADOPTED_HEIR),
+		4
+	)
+
+
+# ==============================================================================
+# Dragon Exception — Togashi Formal Removal
+# ==============================================================================
+
+func test_dragon_togashi_removal_returns_removal_cause() -> void:
+	var mirumoto_fc := _make_char(50, "Dragon", "Mirumoto")
+	mirumoto_fc.status = 5.5
+	var togashi := _make_char(51, "Dragon", "Togashi")
+	togashi.status = 7.0
+	var chars: Dictionary = {50: mirumoto_fc, 51: togashi}
+	var result := SuccessionSystem.resolve_dragon_togashi_removal(mirumoto_fc, 100, chars)
+	assert_eq(result["succession"].cause, SuccessionData.VacancyCause.REMOVAL)
+
+
+func test_dragon_togashi_removal_is_immediate() -> void:
+	var mirumoto_fc := _make_char(50, "Dragon", "Mirumoto")
+	mirumoto_fc.status = 5.5
+	var chars: Dictionary = {50: mirumoto_fc}
+	var result := SuccessionSystem.resolve_dragon_togashi_removal(mirumoto_fc, 100, chars)
+	assert_true(result["immediate"])
+
+
+func test_dragon_togashi_removal_finds_togashi_as_confirming() -> void:
+	var mirumoto_fc := _make_char(50, "Dragon", "Mirumoto")
+	mirumoto_fc.status = 5.5
+	var togashi := _make_char(51, "Dragon", "Togashi")
+	togashi.status = 7.0
+	var chars: Dictionary = {50: mirumoto_fc, 51: togashi}
+	var result := SuccessionSystem.resolve_dragon_togashi_removal(mirumoto_fc, 100, chars)
+	assert_eq(result["confirming_id"], 51,
+		"Confirming authority should be Togashi (Dragon Clan Champion)")
+
+
+func test_dragon_togashi_removal_no_champion_returns_minus_one() -> void:
+	var mirumoto_fc := _make_char(50, "Dragon", "Mirumoto")
+	mirumoto_fc.status = 5.5
+	var chars: Dictionary = {50: mirumoto_fc}
+	var result := SuccessionSystem.resolve_dragon_togashi_removal(mirumoto_fc, 100, chars)
+	assert_eq(result["confirming_id"], -1)
+
+
+func test_dragon_togashi_removal_succession_clan_is_dragon() -> void:
+	var mirumoto_fc := _make_char(50, "Dragon", "Mirumoto")
+	mirumoto_fc.status = 5.5
+	var chars: Dictionary = {50: mirumoto_fc}
+	var result := SuccessionSystem.resolve_dragon_togashi_removal(mirumoto_fc, 100, chars)
+	assert_eq(result["succession"].clan, "Dragon")
+
+
+# ==============================================================================
+# Phoenix Exception — Shiba Reincarnation
+# ==============================================================================
+
+func _make_shiba(id: int, status: float = 3.0) -> L5RCharacterData:
+	var c := _make_char(id, "Phoenix", "Shiba")
+	c.status = status
+	return c
+
+
+func test_shiba_reincarnation_selects_a_shiba() -> void:
+	var shiba1 := _make_shiba(100)
+	var shiba2 := _make_shiba(101)
+	var chars: Dictionary = {100: shiba1, 101: shiba2}
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 1
+	var result := SuccessionSystem.resolve_shiba_reincarnation(chars, rng)
+	assert_true(result["new_champion_id"] == 100 or result["new_champion_id"] == 101,
+		"Result must be one of the Shiba characters")
+
+
+func test_shiba_reincarnation_bypasses_emperor_confirmation() -> void:
+	var shiba := _make_shiba(100)
+	var chars: Dictionary = {100: shiba}
+	var rng := RandomNumberGenerator.new()
+	var result := SuccessionSystem.resolve_shiba_reincarnation(chars, rng)
+	assert_true(result["bypasses_emperor_confirmation"])
+
+
+func test_shiba_reincarnation_excludes_dead_characters() -> void:
+	var dead_shiba := _make_shiba(100)
+	dead_shiba.wounds_taken = 999
+	var live_shiba := _make_shiba(101)
+	var chars: Dictionary = {100: dead_shiba, 101: live_shiba}
+	var rng := RandomNumberGenerator.new()
+	var result := SuccessionSystem.resolve_shiba_reincarnation(chars, rng)
+	assert_eq(result["new_champion_id"], 101, "Dead Shiba must be excluded")
+
+
+func test_shiba_reincarnation_excludes_captives() -> void:
+	var captive_shiba := _make_shiba(100)
+	captive_shiba.captive_status = "hostage"
+	var free_shiba := _make_shiba(101)
+	var chars: Dictionary = {100: captive_shiba, 101: free_shiba}
+	var rng := RandomNumberGenerator.new()
+	var result := SuccessionSystem.resolve_shiba_reincarnation(chars, rng)
+	assert_eq(result["new_champion_id"], 101, "Captive Shiba must be excluded")
+
+
+func test_shiba_reincarnation_excludes_non_shiba() -> void:
+	var isawa := _make_char(100, "Phoenix", "Isawa")
+	var shiba := _make_shiba(101)
+	var chars: Dictionary = {100: isawa, 101: shiba}
+	var rng := RandomNumberGenerator.new()
+	var result := SuccessionSystem.resolve_shiba_reincarnation(chars, rng)
+	assert_eq(result["new_champion_id"], 101, "Non-Shiba Phoenix must be excluded")
+
+
+func test_shiba_reincarnation_no_eligible_returns_minus_one() -> void:
+	var dead_shiba := _make_shiba(100)
+	dead_shiba.wounds_taken = 999
+	var chars: Dictionary = {100: dead_shiba}
+	var rng := RandomNumberGenerator.new()
+	var result := SuccessionSystem.resolve_shiba_reincarnation(chars, rng)
+	assert_eq(result["new_champion_id"], -1)
+
+
+func test_shiba_reincarnation_finds_void_master() -> void:
+	var shiba := _make_shiba(100)
+	var void_master := _make_char(200, "Phoenix", "Isawa")
+	void_master.role_position = "Master of Void"
+	var chars: Dictionary = {100: shiba, 200: void_master}
+	var rng := RandomNumberGenerator.new()
+	var result := SuccessionSystem.resolve_shiba_reincarnation(chars, rng)
+	assert_eq(result["void_master_id"], 200)
+
+
+func test_shiba_reincarnation_void_master_missing_returns_minus_one() -> void:
+	var shiba := _make_shiba(100)
+	var chars: Dictionary = {100: shiba}
+	var rng := RandomNumberGenerator.new()
+	var result := SuccessionSystem.resolve_shiba_reincarnation(chars, rng)
+	assert_eq(result["void_master_id"], -1)
+
+
+func test_shiba_reincarnation_generates_tier3_topic() -> void:
+	var shiba := _make_shiba(100)
+	var chars: Dictionary = {100: shiba}
+	var rng := RandomNumberGenerator.new()
+	var result := SuccessionSystem.resolve_shiba_reincarnation(chars, rng)
+	assert_eq(result["topic"]["tier"], 3)
+	assert_eq(result["topic"]["variant"], "reincarnation")
+	assert_eq(result["topic"]["category"], "SPIRITUAL")
+
+
+func test_shiba_reincarnation_detects_previous_position_vacated() -> void:
+	var high_status_shiba := _make_shiba(100, 5.5)
+	var chars: Dictionary = {100: high_status_shiba}
+	var rng := RandomNumberGenerator.new()
+	var result := SuccessionSystem.resolve_shiba_reincarnation(chars, rng)
+	assert_true(result["previous_position_vacated"],
+		"A high-status Shiba holding a lordship should trigger a position vacancy")
+
+
+func test_shiba_reincarnation_low_status_no_vacancy() -> void:
+	var low_status_shiba := _make_shiba(100, 1.0)
+	var chars: Dictionary = {100: low_status_shiba}
+	var rng := RandomNumberGenerator.new()
+	var result := SuccessionSystem.resolve_shiba_reincarnation(chars, rng)
+	assert_false(result["previous_position_vacated"],
+		"A low-status Shiba with no lordship should not trigger a position vacancy")

@@ -179,6 +179,9 @@ extends Resource
 @export var father_id: int = -1
 @export var sibling_ids: Array[int] = []
 @export var children_ids: Array[int] = []
+## Characters formally adopted for succession purposes (1 AP action, s22.5 Priority 4).
+## Distinct from children_ids (biological) so succession can rank them correctly.
+@export var adopted_children_ids: Array[int] = []
 @export var spouse_id: int = -1
 @export var birth_clan: String = ""
 @export var birth_family: String = ""

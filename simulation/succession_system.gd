@@ -145,6 +145,19 @@ static func get_candidates(
 		if not already:
 			candidates.append({"id": children[i]["id"], "priority": pri, "character": children[i]["character"]})
 
+	# Priority 4 — Adopted Heirs
+	for aid in deceased.adopted_children_ids:
+		var adopted: L5RCharacterData = chars_by_id.get(aid)
+		if adopted == null or _is_dead(adopted) or adopted.clan != clan:
+			continue
+		var already: bool = false
+		for c in candidates:
+			if c["id"] == adopted.character_id:
+				already = true
+				break
+		if not already:
+			candidates.append({"id": adopted.character_id, "priority": CandidatePriority.ADOPTED_HEIR, "character": adopted})
+
 	# Priority 5 — Siblings
 	for sid in deceased.sibling_ids:
 		var sib: L5RCharacterData = chars_by_id.get(sid)
@@ -530,6 +543,131 @@ static func is_phoenix_champion_succession(clan: String, position_tier: Enums.Lo
 
 static func is_dragon_togashi_removal(clan: String, position_tier: Enums.LordRank) -> bool:
 	return clan == "Dragon" and position_tier == Enums.LordRank.CLAN_CHAMPION
+
+
+# ==============================================================================
+# Dragon Exception — Togashi Formal Removal (s22.5 cross-ref, s55.10.2.6)
+# ==============================================================================
+
+## Builds a SuccessionData for a Mirumoto FC removed by Togashi at Stage 4.
+## Cause is REMOVAL. The confirming authority is Togashi (Dragon Clan Champion)
+## which is the standard path for Family Daimyo succession — no special override
+## is needed. The key difference from a natural vacancy is that Togashi confirms
+## immediately (duration = CLEAN_SUCCESSION_MIN_TICKS) since he is both remover
+## and confirmer with no political opposition to his own decision.
+##
+## Returns a Dictionary:
+##   succession      : SuccessionData  — ready for candidate evaluation
+##   confirming_id   : int             — Togashi's character_id (-1 if not found)
+##   immediate       : bool            — always true (Togashi self-confirms)
+static func resolve_dragon_togashi_removal(
+	mirumoto_fc: L5RCharacterData,
+	current_tick: int,
+	chars_by_id: Dictionary,
+) -> Dictionary:
+	var data: SuccessionData = trigger_succession(
+		mirumoto_fc,
+		SuccessionData.VacancyCause.REMOVAL,
+		Enums.LordRank.FAMILY_DAIMYO,
+		current_tick,
+		false,
+	)
+	var togashi_id: int = find_confirming_authority(
+		Enums.LordRank.FAMILY_DAIMYO, "Dragon", chars_by_id
+	)
+	return {
+		"succession":    data,
+		"confirming_id": togashi_id,
+		"immediate":     true,
+	}
+
+
+# ==============================================================================
+# Phoenix Exception — Shiba Reincarnation (s55.10.3.8)
+# ==============================================================================
+
+## Resolves Shiba Champion succession through divine reincarnation.
+## Bypasses standard succession order and Emperor confirmation entirely.
+## A randomly selected living, non-captive Shiba character becomes Champion.
+##
+## Parameters:
+##   chars_by_id  — full character roster
+##   rng          — caller-owned RandomNumberGenerator (seeded or not)
+##
+## Returns a Dictionary:
+##   new_champion_id           : int   — the reincarnated Champion's character_id
+##                                       (-1 if no eligible Shiba exist)
+##   void_master_id            : int   — Void Master character_id for confirmation
+##                                       (-1 if no living Void Master)
+##   bypasses_emperor_confirmation : bool — always true
+##   previous_position_vacated : bool  — true if the new Champion held a position
+##   previous_position_tier    : Enums.LordRank — only valid if above is true
+##   topic                     : Dictionary — reincarnation topic to generate
+static func resolve_shiba_reincarnation(
+	chars_by_id: Dictionary,
+	rng: RandomNumberGenerator,
+) -> Dictionary:
+	# Gather all living, non-captive Shiba characters
+	var eligible: Array[L5RCharacterData] = []
+	for c: L5RCharacterData in chars_by_id.values():
+		if c.family != "Shiba":
+			continue
+		if _is_dead(c):
+			continue
+		if c.captive_status != "":
+			continue
+		eligible.append(c)
+
+	if eligible.is_empty():
+		return {
+			"new_champion_id":               -1,
+			"void_master_id":                _find_void_master_id(chars_by_id),
+			"bypasses_emperor_confirmation": true,
+			"previous_position_vacated":     false,
+			"previous_position_tier":        Enums.LordRank.VILLAGE_HEADMAN,
+			"topic":                         {},
+		}
+
+	# True random selection per GDD s55.10.3.8 — no weighting
+	var selected: L5RCharacterData = eligible[rng.randi_range(0, eligible.size() - 1)]
+
+	var had_position: bool = selected.status >= _min_status_for_tier(Enums.LordRank.CITY_DAIMYO)
+	var prev_tier: Enums.LordRank = _estimate_lord_rank(selected.status)
+
+	return {
+		"new_champion_id":               selected.character_id,
+		"void_master_id":                _find_void_master_id(chars_by_id),
+		"bypasses_emperor_confirmation": true,
+		"previous_position_vacated":     had_position,
+		"previous_position_tier":        prev_tier,
+		"topic": {
+			"tier":        3,
+			"momentum":    40.0,
+			"category":    "SPIRITUAL",
+			"slug":        "shiba_reincarnation_%d" % selected.character_id,
+			"subject_ids": [selected.character_id],
+			"variant":     "reincarnation",
+		},
+	}
+
+
+static func _find_void_master_id(chars_by_id: Dictionary) -> int:
+	for c: L5RCharacterData in chars_by_id.values():
+		if c.clan == "Phoenix" and c.role_position == "Master of Void" and not _is_dead(c):
+			return c.character_id
+	return -1
+
+
+static func _estimate_lord_rank(status: float) -> Enums.LordRank:
+	if status >= 8.0:
+		return Enums.LordRank.IMPERIAL
+	if status >= 6.0:
+		return Enums.LordRank.CLAN_CHAMPION
+	if status >= 5.0:
+		return Enums.LordRank.FAMILY_DAIMYO
+	if status >= 4.0:
+		return Enums.LordRank.PROVINCIAL_DAIMYO
+	return Enums.LordRank.CITY_DAIMYO
 
 
 # ==============================================================================
