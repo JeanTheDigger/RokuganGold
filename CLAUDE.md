@@ -3378,8 +3378,13 @@ The following subsystems are now integrated into the NPC decision loop:
   flags. ORDER_LEVY → `_apply_levy_pu_effect()` calls
   `PUReconciliation.consume_levy_pu()` on source settlement AND
   `LevySystem.raise_levy()` to create a CompanyData, converted to a company
-  dict and appended to the `companies` array. Unit type read from
-  `effects.levy_unit_type` (default ASHIGARU_SPEARMEN). `next_company_id`
+  dict and appended to the `companies` array. `can_raise_levy()` validation
+  gate prevents levy when insufficient military PU exists above garrison
+  requirements. Phase 3 metadata: `_select_levy_unit_type()` picks unit type
+  based on context (PEASANT_LEVY when iron unsustainable, ASHIGARU_ARCHERS
+  when 2+ spearmen exist with no archers, ASHIGARU_SPEARMEN default).
+  `target_province_id` populated from lord's province with highest
+  `total_settlement_pu`. `next_company_id`
   counter threaded through for ID assignment. New company dict includes
   `army_id: -1` (levy companies exist outside Go-hatamoto hierarchy).
   Arms equip cost deducted from `ClanData.arms_stockpile` (looked up via
