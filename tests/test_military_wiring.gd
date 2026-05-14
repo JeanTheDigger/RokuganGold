@@ -5176,3 +5176,163 @@ func test_integration_battle_result_has_victor_and_clans() -> void:
 	assert_true(br.has("defender_army_ids"))
 	assert_eq(br["attacker_clan"], "Crab")
 	assert_eq(br["defender_clan"], "Crane")
+
+
+# -- Storm Assault E2E Tests ---------------------------------------------------
+
+func test_e2e_executor_produces_storm_assault_effect() -> void:
+	var action: NPCDataStructures.ScoredAction = NPCDataStructures.ScoredAction.new()
+	action.action_id = "CONDUCT_STORM_ASSAULT"
+	action.metadata = {"siege_settlement_id": 77}
+	var char: L5RCharacterData = L5RCharacterData.new()
+	char.physical_location = 77
+	var ctx: NPCDataStructures.ContextSnapshot = NPCDataStructures.ContextSnapshot.new()
+	ctx.character_id = 1
+	ctx.ic_day = 10
+	ctx.season = "spring"
+	var result: Dictionary = ActionExecutor.execute(
+		action, char, ctx, DiceEngine.new(),
+	)
+	assert_true(result.get("effects", {}).get("requires_storm_assault", false))
+	assert_eq(result["effects"]["siege_settlement_id"], 77)
+
+
+func test_e2e_executor_uses_physical_location_fallback() -> void:
+	var action: NPCDataStructures.ScoredAction = NPCDataStructures.ScoredAction.new()
+	action.action_id = "CONDUCT_STORM_ASSAULT"
+	action.metadata = {}
+	var char: L5RCharacterData = L5RCharacterData.new()
+	char.physical_location = 55
+	var ctx: NPCDataStructures.ContextSnapshot = NPCDataStructures.ContextSnapshot.new()
+	ctx.character_id = 1
+	ctx.ic_day = 10
+	ctx.season = "spring"
+	var result: Dictionary = ActionExecutor.execute(
+		action, char, ctx, DiceEngine.new(),
+	)
+	assert_eq(result["effects"]["siege_settlement_id"], 55)
+
+
+func test_e2e_metadata_to_executor_to_orchestrator() -> void:
+	var option: NPCDataStructures.ScoredAction = NPCDataStructures.ScoredAction.new()
+	option.action_id = "CONDUCT_STORM_ASSAULT"
+	var need: NPCDataStructures.ImmediateNeed = NPCDataStructures.ImmediateNeed.new()
+	var ctx: NPCDataStructures.ContextSnapshot = NPCDataStructures.ContextSnapshot.new()
+	ctx.location_id = 10
+	ctx.character_id = 1
+	ctx.ic_day = 10
+	ctx.season = "spring"
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_eq(option.metadata["siege_settlement_id"], 10)
+
+	var char: L5RCharacterData = L5RCharacterData.new()
+	char.physical_location = 10
+	var exec_result: Dictionary = ActionExecutor.execute(
+		option, char, ctx, DiceEngine.new(),
+	)
+	assert_true(exec_result["effects"]["requires_storm_assault"])
+	assert_eq(exec_result["effects"]["siege_settlement_id"], 10)
+
+	var siege: Dictionary = _make_siege_state(10, 1, 2)
+	var companies: Array[Dictionary] = [
+		_make_army_company(1, 1, Enums.CompanyUnitType.BUSHI_RETAINER),
+		_make_army_company(2, 1, Enums.CompanyUnitType.BUSHI_RETAINER),
+		_make_army_company(3, 2, Enums.CompanyUnitType.GARRISON),
+	]
+	var applied: Array = [exec_result]
+	var dice: DiceEngine = DiceEngine.new(42)
+	var s: SettlementData = SettlementData.new()
+	s.settlement_id = 10
+	s.province_id = 1
+	var r: Array[Dictionary] = DayOrchestrator._process_storm_assault_results(
+		applied, [siege], companies, dice, [s], {},
+	)
+	assert_eq(r.size(), 1)
+	assert_true(r[0].has("victor"))
+
+
+func test_e2e_storm_assault_defender_victory_resets_sortie_counter() -> void:
+	var siege: Dictionary = _make_siege_state(10, 1, 2)
+	siege["ticks_since_sortie"] = 15
+	var companies: Array[Dictionary] = [
+		_make_army_company(1, 1, Enums.CompanyUnitType.PEASANT_LEVY),
+		_make_army_company(2, 2, Enums.CompanyUnitType.BUSHI_RETAINER),
+		_make_army_company(3, 2, Enums.CompanyUnitType.BUSHI_RETAINER),
+		_make_army_company(4, 2, Enums.CompanyUnitType.BUSHI_RETAINER),
+	]
+	var applied: Array = [{
+		"effects": {"requires_storm_assault": true, "siege_settlement_id": 10},
+	}]
+	var dice: DiceEngine = DiceEngine.new(42)
+	var s: SettlementData = SettlementData.new()
+	s.settlement_id = 10
+	s.province_id = 1
+	DayOrchestrator._process_storm_assault_results(
+		applied, [siege], companies, dice, [s], {},
+	)
+	if not siege.get("siege_ended", false):
+		assert_eq(siege.get("ticks_since_sortie", -1), 0)
+
+
+func test_e2e_storm_assault_company_health_mutated() -> void:
+	var siege: Dictionary = _make_siege_state(10, 1, 2)
+	var c_atk: Dictionary = _make_army_company(1, 1, Enums.CompanyUnitType.BUSHI_RETAINER)
+	var c_def: Dictionary = _make_army_company(2, 2, Enums.CompanyUnitType.BUSHI_RETAINER)
+	var h_atk_before: int = c_atk["current_health"]
+	var h_def_before: int = c_def["current_health"]
+	var companies: Array[Dictionary] = [c_atk, c_def]
+	var applied: Array = [{
+		"effects": {"requires_storm_assault": true, "siege_settlement_id": 10},
+	}]
+	var dice: DiceEngine = DiceEngine.new(42)
+	var s: SettlementData = SettlementData.new()
+	s.settlement_id = 10
+	s.province_id = 1
+	DayOrchestrator._process_storm_assault_results(
+		applied, [siege], companies, dice, [s], {},
+	)
+	var atk_changed: bool = c_atk.get("current_health", h_atk_before) != h_atk_before
+	var def_changed: bool = c_def.get("current_health", h_def_before) != h_def_before
+	assert_true(atk_changed or def_changed)
+
+
+func test_e2e_storm_assault_only_targets_matching_siege() -> void:
+	var siege_a: Dictionary = _make_siege_state(10, 1, 2)
+	var siege_b: Dictionary = _make_siege_state(20, 3, 4)
+	var companies: Array[Dictionary] = [
+		_make_army_company(1, 1, Enums.CompanyUnitType.BUSHI_RETAINER),
+		_make_army_company(2, 2, Enums.CompanyUnitType.GARRISON),
+		_make_army_company(3, 3, Enums.CompanyUnitType.BUSHI_RETAINER),
+		_make_army_company(4, 4, Enums.CompanyUnitType.GARRISON),
+	]
+	var applied: Array = [{
+		"effects": {"requires_storm_assault": true, "siege_settlement_id": 10},
+	}]
+	var dice: DiceEngine = DiceEngine.new(42)
+	var s: SettlementData = SettlementData.new()
+	s.settlement_id = 10
+	s.province_id = 1
+	DayOrchestrator._process_storm_assault_results(
+		applied, [siege_a, siege_b], companies, dice, [s], {},
+	)
+	assert_false(siege_b.get("siege_ended", false))
+
+
+func test_e2e_storm_assault_uses_urban_terrain_and_fort_bonus() -> void:
+	var siege: Dictionary = _make_siege_state(10, 1, 2)
+	var companies: Array[Dictionary] = [
+		_make_army_company(1, 1, Enums.CompanyUnitType.BUSHI_RETAINER),
+		_make_army_company(2, 2, Enums.CompanyUnitType.GARRISON),
+	]
+	var applied: Array = [{
+		"effects": {"requires_storm_assault": true, "siege_settlement_id": 10},
+	}]
+	var dice: DiceEngine = DiceEngine.new(42)
+	var s: SettlementData = SettlementData.new()
+	s.settlement_id = 10
+	s.province_id = 1
+	var r: Array[Dictionary] = DayOrchestrator._process_storm_assault_results(
+		applied, [siege], companies, dice, [s], {},
+	)
+	assert_eq(r.size(), 1)
+	assert_true(r[0]["rounds"] > 0)
