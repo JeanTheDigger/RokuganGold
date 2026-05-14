@@ -1528,6 +1528,10 @@ static func _populate_action_metadata(
 		option.metadata = {
 			"levy_unit_type": _select_levy_unit_type(ctx),
 		}
+	elif option.action_id == "CONDUCT_STORM_ASSAULT":
+		option.metadata = {
+			"siege_settlement_id": ctx.location_id,
+		}
 
 
 static func _pick_court_agenda_topic(ctx: NPCDataStructures.ContextSnapshot) -> int:

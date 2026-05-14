@@ -4901,3 +4901,13 @@ func test_storm_assault_uses_urban_terrain_and_fort_bonus() -> void:
 	# Verify that storm assault applies the siege defense bonus
 	var fort_bonus: int = SiegeSystem.get_storm_defense_bonus()
 	assert_eq(fort_bonus, 8)
+
+
+func test_storm_assault_metadata_sets_settlement_id() -> void:
+	var option: NPCDataStructures.ScoredAction = NPCDataStructures.ScoredAction.new()
+	option.action_id = "CONDUCT_STORM_ASSAULT"
+	var need: NPCDataStructures.ImmediateNeed = NPCDataStructures.ImmediateNeed.new()
+	var ctx: NPCDataStructures.ContextSnapshot = NPCDataStructures.ContextSnapshot.new()
+	ctx.location_id = 42
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_eq(option.metadata.get("siege_settlement_id", -1), 42)
