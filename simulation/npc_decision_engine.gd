@@ -21,6 +21,8 @@ static func build_context(
 	ctx.school = character.school
 	ctx.school_type = character.school_type
 	ctx.is_lord = world_state.get("is_lord", false)
+	ctx.lord_rank = CivilianOrderBudget.lord_rank_from_status(character.status)
+	ctx.civilian_orders_remaining = character.civilian_orders_remaining
 
 	# Location & situation
 	ctx.location_id = character.physical_location
@@ -233,6 +235,7 @@ static func generate_options(
 ) -> Array[NPCDataStructures.ScoredAction]:
 	var options: Array[NPCDataStructures.ScoredAction] = []
 	var available_actions: Array[String] = _get_actions_for_context(ctx.context_flag)
+	var has_mil_rank: bool = ctx.military_rank > Enums.MilitaryRank.NONE
 
 	for action_id: String in available_actions:
 		if _is_zone_blocked(action_id, ctx.zone_flags):
@@ -252,6 +255,15 @@ static func generate_options(
 		option.target_settlement_id = need.target_settlement_id
 		option.target_province_id = need.target_province_id
 		option.ap_cost = _get_ap_cost(action_id)
+		option.is_order = CivilianOrderBudget.is_order_action(action_id, ctx.is_lord, has_mil_rank)
+		if option.is_order:
+			# Dual-cost actions (SEND_INVITATION) keep 1 AP; all others drop to 0 AP.
+			if not (action_id in CivilianOrderBudget.DUAL_COST_ACTIONS):
+				option.ap_cost = 0
+			# Filter out if no civilian orders available (military orders handled separately).
+			if ctx.civilian_orders_remaining <= 0:
+				if not CivilianOrderBudget.draws_from_military_pool(action_id, has_mil_rank):
+					continue
 		_populate_action_metadata(option, need, ctx)
 		options.append(option)
 
@@ -396,6 +408,21 @@ static func execute_action(
 			"action_id": chosen.action_id,
 		}
 
+	var orders_spent: int = 0
+	if chosen.is_order:
+		var has_mil_rank: bool = character.military_rank > Enums.MilitaryRank.NONE
+		if not CivilianOrderBudget.draws_from_military_pool(chosen.action_id, has_mil_rank):
+			var order_result: Dictionary = CivilianOrderBudget.spend_order(character)
+			if not order_result["success"]:
+				# Refund the AP already spent and abort.
+				character.action_points_current += chosen.ap_cost
+				return {
+					"success": false,
+					"reason": "insufficient_civilian_orders",
+					"action_id": chosen.action_id,
+				}
+			orders_spent = 1
+
 	var decision: Dictionary = {
 		"success": true,
 		"action_id": chosen.action_id,
@@ -404,6 +431,7 @@ static func execute_action(
 		"target_settlement_id": chosen.target_settlement_id,
 		"target_province_id": chosen.target_province_id,
 		"ap_spent": chosen.ap_cost,
+		"orders_spent": orders_spent,
 		"total_score": chosen.get_total_score(),
 		"character_id": ctx.character_id,
 		"ic_day": ctx.ic_day,
@@ -1249,7 +1277,11 @@ const LORD_ONLY_ACTIONS: Array[String] = [
 	"APPOINT_TO_POSITION", "DECLARE_WAR", "FOUND_VILLAGE",
 	"BUILD_FORTIFICATION", "BUILD_SHRINE", "FOUND_TEMPLE",
 	"FOUND_MONASTERY", "COMMISSION_SHIP", "ARRANGE_MARRIAGE",
+	# Reclassified from AP to Civilian Order per s57.34.4 — lord-only
 	"SET_TAX_RATE", "SET_STIPEND_RATE",
+	"REQUEST_ART", "REQUEST_PERFORMANCE",
+	"ASSIGN_VASSAL_OBJECTIVE", "ASSIGN_TO_MILITARY_SERVICE",
+	"SEND_INVITATION",
 ]
 
 
@@ -1267,6 +1299,10 @@ static func _is_military_blocked(
 	ctx: NPCDataStructures.ContextSnapshot,
 ) -> bool:
 	if action_id in MILITARY_ORDER_ACTIONS:
+		# Lords can issue military-or-civilian order actions via Civilian Orders
+		# even without a commanded unit (s57.34.4).
+		if ctx.is_lord and action_id in CivilianOrderBudget.MILITARY_OR_CIVILIAN_ACTIONS:
+			return false
 		return ctx.commanded_unit_id < 0
 	if COMMANDER_RANK_ACTIONS.has(action_id):
 		var min_rank: int = COMMANDER_RANK_ACTIONS[action_id]
@@ -1329,6 +1365,9 @@ static func resolve_daily_letter(
 	scoring_tables: Dictionary,
 	ctx: NPCDataStructures.ContextSnapshot,
 ) -> Dictionary:
+	# Lords write letters via the Civilian Order Budget, not the free daily pass (s57.34.7).
+	if character.civilian_order_budget_max > 0:
+		return {}
 	var need_type: String = _get_letter_need_type(objectives)
 	if need_type.is_empty():
 		return {}

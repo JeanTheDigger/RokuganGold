@@ -27,6 +27,7 @@ class ScoredAction:
 	var target_settlement_id: int = -1
 	var target_province_id: int = -1
 	var ap_cost: int = 1
+	var is_order: bool = false
 	var metadata: Dictionary = {}
 
 	# Eight base scoring components per s55.4 Phase 5
@@ -75,6 +76,8 @@ class ContextSnapshot:
 	var school: String = ""
 	var school_type: Enums.SchoolType = Enums.SchoolType.BUSHI
 	var is_lord: bool = false
+	var lord_rank: Enums.LordRank = Enums.LordRank.VILLAGE_HEADMAN
+	var civilian_orders_remaining: int = 0
 
 	# Location & situation
 	var location_id: String = ""
