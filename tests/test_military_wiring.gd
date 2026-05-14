@@ -4608,3 +4608,140 @@ func test_levy_fails_does_not_increment_company_id() -> void:
 		applied, [s], companies, next_id,
 	)
 	assert_eq(next_id[0], 50)
+
+
+# -- Battle Terrain & Fortification Tests ----------------------------------------
+
+func test_get_battle_terrain_plains_province() -> void:
+	var p: ProvinceData = ProvinceData.new()
+	p.province_id = 1
+	p.terrain_type = Enums.TerrainType.PLAINS
+	var provinces: Dictionary = {1: p}
+	var terrain: int = DayOrchestrator._get_battle_terrain(1, provinces, [])
+	assert_eq(terrain, Enums.BattleTerrainType.PLAINS)
+
+
+func test_get_battle_terrain_forest_province() -> void:
+	var p: ProvinceData = ProvinceData.new()
+	p.province_id = 1
+	p.terrain_type = Enums.TerrainType.FOREST
+	var provinces: Dictionary = {1: p}
+	var terrain: int = DayOrchestrator._get_battle_terrain(1, provinces, [])
+	assert_eq(terrain, Enums.BattleTerrainType.FOREST)
+
+
+func test_get_battle_terrain_mountains_province() -> void:
+	var p: ProvinceData = ProvinceData.new()
+	p.province_id = 1
+	p.terrain_type = Enums.TerrainType.MOUNTAINS
+	var provinces: Dictionary = {1: p}
+	var terrain: int = DayOrchestrator._get_battle_terrain(1, provinces, [])
+	assert_eq(terrain, Enums.BattleTerrainType.MOUNTAIN)
+
+
+func test_get_battle_terrain_hills_province() -> void:
+	var p: ProvinceData = ProvinceData.new()
+	p.province_id = 1
+	p.terrain_type = Enums.TerrainType.HILLS
+	var provinces: Dictionary = {1: p}
+	var terrain: int = DayOrchestrator._get_battle_terrain(1, provinces, [])
+	assert_eq(terrain, Enums.BattleTerrainType.HILLS)
+
+
+func test_get_battle_terrain_river_delta_maps_to_plains() -> void:
+	var p: ProvinceData = ProvinceData.new()
+	p.province_id = 1
+	p.terrain_type = Enums.TerrainType.RIVER_DELTA
+	var provinces: Dictionary = {1: p}
+	var terrain: int = DayOrchestrator._get_battle_terrain(1, provinces, [])
+	assert_eq(terrain, Enums.BattleTerrainType.PLAINS)
+
+
+func test_get_battle_terrain_urban_overrides_province() -> void:
+	var p: ProvinceData = ProvinceData.new()
+	p.province_id = 1
+	p.terrain_type = Enums.TerrainType.FOREST
+	var s: SettlementData = SettlementData.new()
+	s.province_id = 1
+	s.settlement_type = Enums.SettlementType.TOWN
+	var provinces: Dictionary = {1: p}
+	var terrain: int = DayOrchestrator._get_battle_terrain(1, provinces, [s])
+	assert_eq(terrain, Enums.BattleTerrainType.URBAN)
+
+
+func test_get_battle_terrain_city_is_urban() -> void:
+	var s: SettlementData = SettlementData.new()
+	s.province_id = 1
+	s.settlement_type = Enums.SettlementType.CITY
+	var terrain: int = DayOrchestrator._get_battle_terrain(1, {}, [s])
+	assert_eq(terrain, Enums.BattleTerrainType.URBAN)
+
+
+func test_get_battle_terrain_imperial_capital_is_urban() -> void:
+	var s: SettlementData = SettlementData.new()
+	s.province_id = 1
+	s.settlement_type = Enums.SettlementType.IMPERIAL_CAPITAL
+	var terrain: int = DayOrchestrator._get_battle_terrain(1, {}, [s])
+	assert_eq(terrain, Enums.BattleTerrainType.URBAN)
+
+
+func test_get_battle_terrain_village_does_not_override() -> void:
+	var p: ProvinceData = ProvinceData.new()
+	p.province_id = 1
+	p.terrain_type = Enums.TerrainType.FOREST
+	var s: SettlementData = SettlementData.new()
+	s.province_id = 1
+	s.settlement_type = Enums.SettlementType.VILLAGE
+	var provinces: Dictionary = {1: p}
+	var terrain: int = DayOrchestrator._get_battle_terrain(1, provinces, [s])
+	assert_eq(terrain, Enums.BattleTerrainType.FOREST)
+
+
+func test_get_battle_terrain_unknown_province_defaults_plains() -> void:
+	var terrain: int = DayOrchestrator._get_battle_terrain(999, {}, [])
+	assert_eq(terrain, Enums.BattleTerrainType.PLAINS)
+
+
+func test_get_fortification_bonus_with_fort() -> void:
+	var s: SettlementData = SettlementData.new()
+	s.province_id = 1
+	s.settlement_type = Enums.SettlementType.FORTIFICATION
+	var bonus: int = DayOrchestrator._get_fortification_bonus(1, "Crab", [s])
+	assert_eq(bonus, DayOrchestrator.FORTIFICATION_DEFENSE_BONUS)
+
+
+func test_get_fortification_bonus_with_castle() -> void:
+	var s: SettlementData = SettlementData.new()
+	s.province_id = 1
+	s.settlement_type = Enums.SettlementType.CASTLE
+	var bonus: int = DayOrchestrator._get_fortification_bonus(1, "Lion", [s])
+	assert_eq(bonus, DayOrchestrator.FORTIFICATION_DEFENSE_BONUS)
+
+
+func test_get_fortification_bonus_with_wall_tower() -> void:
+	var s: SettlementData = SettlementData.new()
+	s.province_id = 1
+	s.settlement_type = Enums.SettlementType.WALL_TOWER
+	var bonus: int = DayOrchestrator._get_fortification_bonus(1, "Crab", [s])
+	assert_eq(bonus, DayOrchestrator.FORTIFICATION_DEFENSE_BONUS)
+
+
+func test_get_fortification_bonus_no_fort() -> void:
+	var s: SettlementData = SettlementData.new()
+	s.province_id = 1
+	s.settlement_type = Enums.SettlementType.VILLAGE
+	var bonus: int = DayOrchestrator._get_fortification_bonus(1, "Crab", [s])
+	assert_eq(bonus, 0)
+
+
+func test_get_fortification_bonus_wrong_province() -> void:
+	var s: SettlementData = SettlementData.new()
+	s.province_id = 2
+	s.settlement_type = Enums.SettlementType.CASTLE
+	var bonus: int = DayOrchestrator._get_fortification_bonus(1, "Lion", [s])
+	assert_eq(bonus, 0)
+
+
+func test_get_fortification_bonus_empty_settlements() -> void:
+	var bonus: int = DayOrchestrator._get_fortification_bonus(1, "Crab", [])
+	assert_eq(bonus, 0)

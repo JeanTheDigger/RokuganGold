@@ -133,7 +133,7 @@ static func advance_day(
 	var military_daily: Dictionary = _process_military_daily(
 		active_armies, active_sieges, active_tethers, order_states,
 		dice_engine, settlements, companies, wm_for_military,
-		active_wars, characters_by_id,
+		active_wars, characters_by_id, provinces,
 	)
 
 	var naval_weather: int = _process_naval_weather(
@@ -2634,6 +2634,7 @@ static func _process_military_daily(
 	worship_maluses: Dictionary = {},
 	active_wars: Array[WarData] = [],
 	characters_by_id: Dictionary = {},
+	provinces: Dictionary = {},
 ) -> Dictionary:
 	var disband_results: Array[Dictionary] = _process_disbands(
 		active_armies, companies, settlements,
@@ -2642,6 +2643,7 @@ static func _process_military_daily(
 	var battle_results: Array[Dictionary] = _resolve_army_battles(
 		movement_results, active_armies, companies, active_wars,
 		dice_engine, settlements, characters_by_id, worship_maluses,
+		provinces,
 	)
 	var retreat_arrival_results: Array[Dictionary] = _process_retreat_arrivals(
 		movement_results, active_armies, active_tethers,
@@ -2706,6 +2708,7 @@ static func _resolve_army_battles(
 	settlements: Array[SettlementData],
 	characters_by_id: Dictionary,
 	worship_maluses: Dictionary,
+	provinces: Dictionary = {},
 ) -> Array[Dictionary]:
 	var results: Array[Dictionary] = []
 
@@ -2754,9 +2757,17 @@ static func _resolve_army_battles(
 			def_company_dicts, "defender", characters_by_id,
 		)
 
+		var battle_province_id: int = arriving_army.get("province_id", -1)
+		var battle_terrain: Enums.BattleTerrainType = _get_battle_terrain(
+			battle_province_id, provinces, settlements,
+		)
+		var fort_bonus: int = _get_fortification_bonus(
+			battle_province_id, defender_clan, settlements,
+		)
+
 		var battle_result: Dictionary = resolve_and_reconcile_battle(
-			atk_states, def_states, Enums.BattleTerrainType.PLAINS,
-			dice_engine, settlements, false, 0, worship_maluses,
+			atk_states, def_states, battle_terrain,
+			dice_engine, settlements, false, fort_bonus, worship_maluses,
 		)
 
 		_write_battle_results_to_companies(battle_result, companies)
@@ -2807,6 +2818,49 @@ static func _build_battle_states(
 		))
 		col += 1
 	return states
+
+
+const _TERRAIN_TO_BATTLE_TERRAIN: Dictionary = {
+	Enums.TerrainType.PLAINS: Enums.BattleTerrainType.PLAINS,
+	Enums.TerrainType.RIVER_DELTA: Enums.BattleTerrainType.PLAINS,
+	Enums.TerrainType.FOREST: Enums.BattleTerrainType.FOREST,
+	Enums.TerrainType.HILLS: Enums.BattleTerrainType.HILLS,
+	Enums.TerrainType.MOUNTAINS: Enums.BattleTerrainType.MOUNTAIN,
+}
+
+const FORTIFICATION_DEFENSE_BONUS: int = 5
+
+
+static func _get_battle_terrain(
+	province_id: int,
+	provinces: Dictionary,
+	settlements: Array[SettlementData],
+) -> Enums.BattleTerrainType:
+	for s: SettlementData in settlements:
+		if s.province_id == province_id:
+			if s.settlement_type in [
+				Enums.SettlementType.TOWN,
+				Enums.SettlementType.CITY,
+				Enums.SettlementType.IMPERIAL_CAPITAL,
+			]:
+				return Enums.BattleTerrainType.URBAN
+	if provinces.has(province_id):
+		var prov: ProvinceData = provinces[province_id]
+		return _TERRAIN_TO_BATTLE_TERRAIN.get(
+			prov.terrain_type, Enums.BattleTerrainType.PLAINS,
+		)
+	return Enums.BattleTerrainType.PLAINS
+
+
+static func _get_fortification_bonus(
+	province_id: int,
+	defender_clan: String,
+	settlements: Array[SettlementData],
+) -> int:
+	for s: SettlementData in settlements:
+		if s.province_id == province_id and s.is_military():
+			return FORTIFICATION_DEFENSE_BONUS
+	return 0
 
 
 static func _company_dict_to_data(cd: Dictionary) -> MilitaryUnitData.CompanyData:

@@ -608,7 +608,7 @@ All in /tests/, one file per system:
 - test_order_system.gd (~30 tests)
 - test_military_service_system.gd (~35 tests)
 - test_pu_reconciliation.gd (~30 tests)
-- test_military_wiring.gd (~272 tests)
+- test_military_wiring.gd (~288 tests)
 - test_war_system.gd (~61 tests)
 - test_war_justification.gd (~55 tests)
 - test_war_termination.gd (~46 tests)
@@ -3385,8 +3385,16 @@ The following subsystems are now integrated into the NPC decision loop:
   builds battle states via `_build_battle_states()`, calls
   `resolve_and_reconcile_battle()`, then writes results back to company dicts
   via `_write_battle_results_to_companies()` (health, morale, destroyed,
-  routed, commander death). Terrain defaults to PLAINS (real terrain mapping
-  deferred until coordinate system exists).
+  routed, commander death). Terrain determined from province data:
+  `_get_battle_terrain()` maps `ProvinceData.terrain_type` to
+  `BattleTerrainType` (Plains→Plains, Forest→Forest, Hills→Hills,
+  Mountains→Mountain, River Delta→Plains). Towns/Cities/Imperial Capital
+  override to URBAN. `_get_fortification_bonus()` returns +5 Defense
+  when a military settlement (Fortification/Keep/Castle/Family Castle/
+  Wall Tower) exists in the battle province. Both threaded through
+  `_process_military_daily()` → `_resolve_army_battles()` via
+  `provinces` parameter. Sub-tile terrain deferred until coordinate
+  system exists.
   `ArmyCombatSystem.is_cavalry()` public helper for cavalry detection.
   Rice upkeep deduction: `_deduct_rice_upkeep()` deducts seasonal rice costs
   from clan settlements' `rice_stockpile` using `ClanData.province_ids` to
