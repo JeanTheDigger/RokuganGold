@@ -778,6 +778,127 @@ func test_strengthen_wall_lord_all_clear_levy() -> void:
 	assert_eq(need.priority, 1)
 
 
+# -- Garrison Shortage Escalation Pipeline (s2.4.12–14) -----------------------
+
+
+func test_strengthen_wall_champion_no_letter_sends_letter() -> void:
+	_ctx.is_lord = true
+	_ctx.lord_rank = Enums.LordRank.CLAN_CHAMPION
+	var ws: NPCDataStructures.WallStatus = _make_wall_status(5)
+	ws.minimum_garrison = 5
+	ws.garrison_shortage_letter_season = -1
+	var ps: NPCDataStructures.ProvinceStatus = _make_wall_province_status(5)
+	ps.garrison_pu = 2
+	_ctx.wall_statuses = [ws]
+	_ctx.province_statuses = [ps]
+	_ctx.season = 3
+	var obj: Dictionary = {"need_type": "STRENGTHEN_WALL"}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
+	assert_eq(need.need_type, "SEND_LETTER")
+	assert_eq(need.target_province_id, 5)
+	assert_eq(need.priority, 3)
+
+
+func test_strengthen_wall_champion_letter_sent_same_season_uses_defend() -> void:
+	_ctx.is_lord = true
+	_ctx.lord_rank = Enums.LordRank.CLAN_CHAMPION
+	var ws: NPCDataStructures.WallStatus = _make_wall_status(5)
+	ws.minimum_garrison = 5
+	ws.garrison_shortage_letter_season = 3  # same season — not enough time
+	ws.garrison_shortage_courtier_dispatched = false
+	var ps: NPCDataStructures.ProvinceStatus = _make_wall_province_status(5)
+	ps.garrison_pu = 2
+	_ctx.wall_statuses = [ws]
+	_ctx.province_statuses = [ps]
+	_ctx.season = 3
+	var obj: Dictionary = {"need_type": "STRENGTHEN_WALL"}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
+	assert_eq(need.need_type, "DEFEND_PROVINCE")
+
+
+func test_strengthen_wall_champion_one_season_later_dispatches_courtier() -> void:
+	_ctx.is_lord = true
+	_ctx.lord_rank = Enums.LordRank.CLAN_CHAMPION
+	var ws: NPCDataStructures.WallStatus = _make_wall_status(5)
+	ws.minimum_garrison = 5
+	ws.garrison_shortage_letter_season = 2  # one season ago
+	ws.garrison_shortage_courtier_dispatched = false
+	var ps: NPCDataStructures.ProvinceStatus = _make_wall_province_status(5)
+	ps.garrison_pu = 2
+	_ctx.wall_statuses = [ws]
+	_ctx.province_statuses = [ps]
+	_ctx.season = 3
+	var obj: Dictionary = {"need_type": "STRENGTHEN_WALL"}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
+	assert_eq(need.need_type, "DISPATCH_COURTIER")
+	assert_eq(need.target_province_id, 5)
+	assert_eq(need.priority, 3)
+
+
+func test_strengthen_wall_champion_courtier_dispatched_falls_back_to_defend() -> void:
+	_ctx.is_lord = true
+	_ctx.lord_rank = Enums.LordRank.CLAN_CHAMPION
+	var ws: NPCDataStructures.WallStatus = _make_wall_status(5)
+	ws.minimum_garrison = 5
+	ws.garrison_shortage_letter_season = 2
+	ws.garrison_shortage_courtier_dispatched = true
+	var ps: NPCDataStructures.ProvinceStatus = _make_wall_province_status(5)
+	ps.garrison_pu = 2
+	_ctx.wall_statuses = [ws]
+	_ctx.province_statuses = [ps]
+	_ctx.season = 3
+	var obj: Dictionary = {"need_type": "STRENGTHEN_WALL"}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
+	assert_eq(need.need_type, "DEFEND_PROVINCE")
+	assert_eq(need.target_province_id, 5)
+
+
+func test_strengthen_wall_shireikan_no_letter_sends_letter() -> void:
+	_ctx.is_lord = true
+	_ctx.military_rank = Enums.MilitaryRank.SHIREIKAN
+	var ws: NPCDataStructures.WallStatus = _make_wall_status(5)
+	ws.minimum_garrison = 5
+	ws.garrison_shortage_letter_season = -1
+	var ps: NPCDataStructures.ProvinceStatus = _make_wall_province_status(5)
+	ps.garrison_pu = 2
+	_ctx.wall_statuses = [ws]
+	_ctx.province_statuses = [ps]
+	var obj: Dictionary = {"need_type": "STRENGTHEN_WALL"}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
+	assert_eq(need.need_type, "SEND_LETTER")
+	assert_eq(need.target_province_id, 5)
+	assert_eq(need.priority, 3)
+
+
+func test_strengthen_wall_shireikan_letter_sent_uses_defend() -> void:
+	_ctx.is_lord = true
+	_ctx.military_rank = Enums.MilitaryRank.SHIREIKAN
+	var ws: NPCDataStructures.WallStatus = _make_wall_status(5)
+	ws.minimum_garrison = 5
+	ws.garrison_shortage_letter_season = 2
+	var ps: NPCDataStructures.ProvinceStatus = _make_wall_province_status(5)
+	ps.garrison_pu = 2
+	_ctx.wall_statuses = [ws]
+	_ctx.province_statuses = [ps]
+	var obj: Dictionary = {"need_type": "STRENGTHEN_WALL"}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
+	assert_eq(need.need_type, "DEFEND_PROVINCE")
+
+
+func test_strengthen_wall_non_champion_lord_skips_escalation() -> void:
+	_ctx.is_lord = true
+	_ctx.lord_rank = Enums.LordRank.FAMILY_DAIMYO
+	var ws: NPCDataStructures.WallStatus = _make_wall_status(5)
+	ws.minimum_garrison = 5
+	var ps: NPCDataStructures.ProvinceStatus = _make_wall_province_status(5)
+	ps.garrison_pu = 2
+	_ctx.wall_statuses = [ws]
+	_ctx.province_statuses = [ps]
+	var obj: Dictionary = {"need_type": "STRENGTHEN_WALL"}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
+	assert_eq(need.need_type, "DEFEND_PROVINCE")
+
+
 # =============================================================================
 # Military Dominance (s55.23.2)
 # =============================================================================

@@ -781,6 +781,18 @@ static func _decompose_strengthen_wall(
 		var w: NPCDataStructures.WallStatus = ws as NPCDataStructures.WallStatus
 		var ps: NPCDataStructures.ProvinceStatus = _get_province_status(ctx, w.province_id)
 		if ps != null and ps.garrison_pu < w.minimum_garrison:
+			# Champion: 3-step escalation pipeline (s2.4.14 Decision 4)
+			if ctx.lord_rank == Enums.LordRank.CLAN_CHAMPION:
+				if w.garrison_shortage_letter_season < 0:
+					return _make_need("SEND_LETTER", 3, {"target_province_id": w.province_id})
+				if ctx.season - w.garrison_shortage_letter_season >= 1 \
+						and not w.garrison_shortage_courtier_dispatched:
+					return _make_need("DISPATCH_COURTIER", 3, {"target_province_id": w.province_id})
+				return _make_need("DEFEND_PROVINCE", 3, {"target_province_id": w.province_id})
+			# Shireikan: own parallel letter campaign before redeployment (s2.4.13 Decision 10)
+			if ctx.military_rank == Enums.MilitaryRank.SHIREIKAN \
+					and w.garrison_shortage_letter_season < 0:
+				return _make_need("SEND_LETTER", 3, {"target_province_id": w.province_id})
 			return _make_need("DEFEND_PROVINCE", 3, {"target_province_id": w.province_id})
 
 	var crisis: int = _find_crisis_province(ctx)
