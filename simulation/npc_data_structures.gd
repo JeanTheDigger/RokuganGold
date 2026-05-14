@@ -136,6 +136,10 @@ class ContextSnapshot:
 
 	# Wall management (s55.23)
 	var wall_statuses: Array = []
+	# Precomputed garrison shortage personality modifier per known contact
+	# (character_id → float from WallSystem personality table, s2.4.12–13).
+	# Populated only for characters with wall_statuses; empty otherwise.
+	var contact_garrison_scores: Dictionary = {}
 
 	# Military intelligence (s55.23)
 	var known_clan_strengths: Dictionary = {}

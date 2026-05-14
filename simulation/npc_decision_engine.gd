@@ -133,6 +133,16 @@ static func build_context(
 
 	# Military intelligence (s55.23)
 	ctx.wall_statuses = world_state.get("wall_statuses", [])
+	# Garrison shortage personality scores for known contacts (s2.4.12–13).
+	# Only computed when the character has wall management responsibilities.
+	if not ctx.wall_statuses.is_empty() and not chars_by_id.is_empty():
+		for cid: int in ctx.known_contacts:
+			var contact: L5RCharacterData = chars_by_id.get(cid)
+			if contact != null:
+				ctx.contact_garrison_scores[cid] = \
+					WallSystem.compute_garrison_shortage_personality_modifier(
+						contact.bushido_virtue, contact.shourido_virtue
+					)
 	ctx.known_clan_strengths = world_state.get("known_clan_strengths", {})
 	ctx.unit_training_counts = world_state.get("unit_training_counts", {})
 	ctx.available_levy_pu = world_state.get("available_levy_pu", 0.0)
@@ -1410,6 +1420,22 @@ static func _select_letter_target(
 	var primary: Dictionary = objectives.get("primary", {})
 	if primary.has("target_npc_id") and primary["target_npc_id"] >= 0:
 		return primary["target_npc_id"]
+
+	# Garrison shortage: prefer the known contact with the highest positive
+	# personality score for responding to Wall reinforcement requests (s2.4.13).
+	var need_type: String = primary.get("need_type", \
+		objectives.get("standing", {}).get("need_type", ""))
+	if need_type == "STRENGTHEN_WALL" and not ctx.contact_garrison_scores.is_empty():
+		var best_id: int = -1
+		var best_score: float = -999.0
+		for cid: int in ctx.contact_garrison_scores:
+			var score: float = ctx.contact_garrison_scores[cid]
+			if score > best_score:
+				best_score = score
+				best_id = cid
+		if best_id >= 0:
+			return best_id
+
 	if ctx.lord_id >= 0:
 		return ctx.lord_id
 	var met: Array[int] = ctx.met_characters
