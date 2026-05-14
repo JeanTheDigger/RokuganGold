@@ -577,3 +577,94 @@ Content has not been modified — only split at section boundaries.
 ---
 
 **Total: 273 files, ~6,334,000 characters (6334K)**
+
+---
+
+## Code Implementation Status
+
+Key: **DONE** = simulation code written and tested | **PARTIAL** = code exists, deferred sub-features | **NOT STARTED** = GDD section is LOCKED but no simulation code written | **REFERENCE** = not yet ready to implement (design still Reference/No tags)
+
+| GDD Section | Status | Notes |
+|-------------|--------|-------|
+| s2.4 The Shadowlands / Kaiu Wall | **PARTIAL** | WallSystem, HordeSystem, OniGenerator done. Deferred: horde combat resolution (s2.4.7), sortie combat, garrison shortage NPC pipeline (s2.4.12–14) |
+| s4.3 Resource Systems | **PARTIAL** | ResourceTick, RiceMarketSystem, TradeRouteData, FeasibilityLedger, ConstructionSystem done. `last_autumn_emperor_tax_income` is approximate. `is_coastal` detection always false until coordinate system exists. Forge infrastructure for arms projection and stipend obligations deferred. |
+| s4.4 The Local Interface / ASCII Map | **NOT STARTED** | Needs coordinate system first |
+| s4.5 L5R Rules Integration (dice/stats) | **DONE** | DiceEngine, CharacterStats, SkillResolver |
+| s4.6 Honor & Glory | **DONE** | HonorGlorySystem |
+| s11.5 Festival System | **DONE** | FestivalSystem |
+| s11.5b Miya's Blessing | **DONE** | MiyaBlessingSystem |
+| s11.6 Military Units | **DONE** | ArmyCombatSystem unit types |
+| s11.7 Army Combat | **PARTIAL** | ArmyCombatSystem done. Sub-tile pathfinding uses placeholder IDs. 5 military stub ActionIDs pending coordinate system. |
+| s11.7b Event Durations | **DONE** | EventDurations constants |
+| s11.8 Regional Price Modifiers | **DONE** | RegionalPriceModifiers |
+| s11.9 Ship Types & Naval | **PARTIAL** | NavalSystem, NavalCombatSystem done. Ship movement initiation needs coordinate system. Weather is global per day (placeholder). Naval blockade not integrated. Tortoise Escape Attempt not yet in battle round. |
+| s11.10 Way of the Daimyo | **REFERENCE** | Lore reference, no design to implement |
+| s11.11 Insurgency System | **DONE** | InsurgencySystem |
+| s12.1 Diplomacy Framework | **DONE** | Architecture only — wired into all other systems |
+| s12.2 Disposition System | **DONE** | DispositionSystem |
+| s12.2b Collective Disposition | **DONE** | CollectiveDisposition with all clan/family baselines |
+| s12.3 Gift Giving | **DONE** | GiftGivingSystem |
+| s12.4 Performative Arts | **DONE** | PerformativeArtsSystem |
+| s12.6 Daily Conversation | **DONE** | DailyConversation |
+| s12.7 Letter System | **DONE** | LetterSystem |
+| s12.8 Secret System | **DONE** | SecretSystem, SeductionSystem, AssassinationSystem, BoundEscapeSystem |
+| s12.9 Intimidation & Blackmail | **DONE** | IntimidationSystem |
+| s12.10 Favor System | **DONE** | FavorSystem |
+| s12.11 Inventory System | **DONE** | InventorySystem |
+| s13 Time System | **DONE** | TimeSystem |
+| s14 Action Point System | **DONE** | ActionPointSystem |
+| s15.1–15.8 Court System | **PARTIAL** | CourtSystem, CourtActionSystem, CourtPrioritySystem, CourtAvailability, ImperialEdictSystem done. Per-type compliance effects for TAX_REFORM, AUTHORIZE_WAR, APPOINT_POSITION, STRIP_AUTONOMY, GENERAL_DECREE need additional GDD specification. |
+| s16 Topic & Momentum System | **DONE** | TopicMomentumSystem |
+| s17 Personal Visits | **DONE** | PersonalVisitSystem |
+| s18 NPC Objective System | **DONE** | Wired into NPCDecisionEngine |
+| s19 Personality System | **DONE** | Wired into all scoring/filtering |
+| s22.3 Character Sheet | **DONE** | L5RCharacterData |
+| s22.4 Generation Templates | **DONE** | WorldGenerator |
+| s22.5 Character Death & Replacement | **PARTIAL** | SuccessionSystem done. Adopted heir (priority 4), Dragon/Phoenix exceptions deferred. |
+| s22.6 Biological Family Web | **DONE** | BiologicalFamily |
+| s22.7 Marriage System | **DONE** | MarriageSystem |
+| s22.8 Positions of Power | **DONE** | WorldPopulationGenerator covers all positions |
+| s22.9 Hostage System | **DONE** | HostageSystem |
+| s29.15 Courtier School Framework | **DONE** | School bonuses wired into SkillResolver, ActionExecutor |
+| s31–s37 Magic & Spells | **REFERENCE** | Source material only — casting mechanics not designed for NPC engine |
+| s38 Kiho | **REFERENCE** | Source material only |
+| s40 Individual Combat | **NOT STARTED** | GDD locked but no simulation code; needed for PC gameplay |
+| s43 Maho | **PARTIAL** | PTL tracking and any-maho-raises-PTL rule enforced. Maho spell casting resolution not implemented. |
+| s44 Shadowlands Mutations | **REFERENCE** | Source material only |
+| s45 Advantages & Disadvantages | **REFERENCE** | Source material only |
+| s47 Mass Battle Rules | **DONE** | ArmyCombatSystem |
+| s49 Artisan & Crafting System | **PARTIAL** | Gift quality tiers wired into GiftGivingSystem. Tattoo quality into TattooSystem. Full artisan progression not implemented. |
+| s52 World Population System | **PARTIAL** | WorldPopulationGenerator, GempukkuSystem done. Mantis school stat blocks not in SCHOOL_DATA — Mantis characters generate with basic stats only. |
+| s53 War Status System | **PARTIAL** | WarSystem, WarJustification done. WarTermination done but deferred: peace court mechanics (formal court session), Imperial edict action path, territory transfer mutations on settlement/province data. |
+| s53.2 Intra-Clan Civil War | **PARTIAL** | IntraClanCivilWar done. `holds_seat` is placeholder. Army reconstitution, full Imperial Edict gating deferred. |
+| s54.7 (a–i) The Kolat | **REFERENCE** | Fully designed across 9 sub-sections, none LOCKED. No code. |
+| s55 NPC Decision Engine | **DONE** | Full 7-phase loop, all amendments through s57.21 |
+| s55.10.2 Dragon Governance (Togashi) | **PARTIAL** | TogashiOversight done. Dragon Schism Crisis, removal-via-succession deferred. |
+| s55.10.3 Phoenix Governance (Council) | **PARTIAL** | PhoenixCouncil done. Phoenix Schism Crisis, Shiba Reincarnation deferred. |
+| s55.22b Otomo Seiyaku | **DONE** | OtomoSeiyakuSystem |
+| s55.23a Wall Management NeedTypes | **DONE** | Wall NeedTypes in scoring tables and decomposer |
+| s56 Quest System / ASCII Map | **NOT STARTED** | All templates LOCKED in GDD. Requires coordinate system and local interface (s4.4) first. |
+| s57.22 Theater Piece System | **REFERENCE** | Not yet LOCKED |
+| s57.23 Garden System | **REFERENCE** | Not yet LOCKED |
+| s57.24 Bonsai System | **REFERENCE** | Not yet LOCKED |
+| s57.25 Tattoo System | **DONE** | TattooSystem |
+| s57.26 Origami System | **REFERENCE** | Not yet LOCKED |
+| s57.27 Painting System | **REFERENCE** | Not yet LOCKED |
+| s57.28 Sculpture System | **REFERENCE** | Not yet LOCKED |
+| s57.29 Ikebana System | **REFERENCE** | Not yet LOCKED |
+| s57.30 Calligraphy System | **REFERENCE** | Letter quality uses Calligraphy skill; full artisan system not implemented |
+| s57.31 Medicine System | **REFERENCE** | Not yet LOCKED |
+| s57.32 Meditation System | **REFERENCE** | Not yet LOCKED |
+| s57.33 REQUEST_PERFORMANCE System | **REFERENCE** | Not yet LOCKED |
+| s57.34 Civilian Order Budget | **NOT STARTED** | LOCKED but no simulation code |
+| s57.36 Zone Subtype Definitions | **DONE** | ZoneFlagMatrix |
+| s57.37 Tea Ceremony | **REFERENCE** | Not yet LOCKED |
+| s57.38 Hunting Party | **REFERENCE** | Not yet LOCKED |
+| s57.39 Animal Handling | **REFERENCE** | Not yet LOCKED |
+| s57.40 Commerce & Caste Stigma | **REFERENCE** | Not yet LOCKED |
+| s57.42–s57.43 Sailing / Ship Zones | **REFERENCE** | Not yet LOCKED |
+| s57.44 Wind-Down System | **REFERENCE** | Not yet LOCKED |
+| s57.45 Geisha Intelligence | **REFERENCE** | Not yet LOCKED |
+| s57.46 Allied NPC Companion | **REFERENCE** | Not yet LOCKED |
+| s57.47 Crime Severity | **DONE** | CrimeSystem, InvestigationSystem, InvestigationDecomposer |
+| s57.48 Musha Shugyo | **DONE** | MushaShugyo including ronin conversion |
