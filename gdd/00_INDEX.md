@@ -641,7 +641,7 @@ Key: **DONE** = simulation code written and tested | **PARTIAL** = code exists, 
 | s55 NPC Decision Engine | **DONE** | Full 7-phase loop, all amendments through s57.21 |
 | s55.10.2 Dragon Governance (Togashi) | **PARTIAL** | TogashiOversight done. Dragon Schism Crisis, removal-via-succession deferred. |
 | s55.10.3 Phoenix Governance (Council) | **PARTIAL** | PhoenixCouncil done. Phoenix Schism Crisis, Shiba Reincarnation deferred. |
-| s55.7 Contact Discovery System | **DONE** | ASK_FOR_INTRODUCTION done (Courtier/Etiquette roll, kuge gate, intermediary status gate, Bureaucracy emphasis). OBSERVE_COURT_ATTENDEES done (Perception+Investigation vs TN 15, 1–3 attendees by raises, capped by observable pool). |
+| s55.7 Contact Discovery System | **DONE** | ASK_FOR_INTRODUCTION done (Courtier/Etiquette roll, kuge gate, intermediary status gate, Bureaucracy emphasis). OBSERVE_COURT_ATTENDEES done (Perception+Investigation vs TN 15, 1–3 attendees by raises, capped by observable pool). NPC metadata population done: observable_attendee_ids filters met_characters; intermediary_id picks highest Friend+ contact who is not the target. |
 | s55.22b Otomo Seiyaku | **DONE** | OtomoSeiyakuSystem |
 | s55.23a Wall Management NeedTypes | **DONE** | Wall NeedTypes in scoring tables and decomposer |
 | s56 Quest System / ASCII Map | **NOT STARTED** | All templates LOCKED in GDD. Requires coordinate system and local interface (s4.4) first. |
