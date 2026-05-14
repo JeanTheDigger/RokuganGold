@@ -2720,16 +2720,19 @@ static func _resolve_army_battles(
 		var arriving_army_id: int = mr.get("army_id", -1)
 		var arriving_army: Dictionary = _find_army_by_id(arriving_army_id, active_armies)
 		if arriving_army.is_empty():
+			push_warning("[Battle] Skipped: army %d not found in active_armies" % arriving_army_id)
 			continue
 
 		var enemy_army_ids: Array = bc.get("enemy_army_ids", [])
 		if enemy_army_ids.is_empty():
+			push_warning("[Battle] Skipped: no enemy army IDs for army %d" % arriving_army_id)
 			continue
 
 		var attacker_clan: String = arriving_army.get(
 			"owning_clan", arriving_army.get("clan_name", ""),
 		)
 		if attacker_clan.is_empty():
+			push_warning("[Battle] Skipped: army %d has no clan" % arriving_army_id)
 			continue
 
 		var first_enemy: Dictionary = _find_army_by_id(enemy_army_ids[0], active_armies)
@@ -2748,6 +2751,9 @@ static func _resolve_army_battles(
 				def_company_dicts.append_array(_get_army_companies(eid, companies))
 
 		if atk_company_dicts.is_empty() or def_company_dicts.is_empty():
+			push_warning("[Battle] Skipped: army %d has %d companies, defenders have %d" % [
+				arriving_army_id, atk_company_dicts.size(), def_company_dicts.size(),
+			])
 			continue
 
 		var atk_states: Array[Dictionary] = _build_battle_states(
