@@ -310,9 +310,10 @@ static func resolve_attack(
 	if is_ranged_in_melee and not weapon.get("melee", true):
 		flat_bonus -= 10
 
-	# raises passed directly — roll_check applies raises * 5 to TN
+	# Unskilled rolls (skill_rank == 0) do not explode per L5R4e p.78.
+	# raises passed directly — roll_check applies raises * 5 to TN.
 	var result: Dictionary = dice_engine.roll_check(
-		rolled, kept, target_armor_tn, raises, flat_bonus
+		rolled, kept, target_armor_tn, raises, flat_bonus, skill_rank > 0
 	)
 
 	return {
@@ -756,9 +757,10 @@ static func _iaijutsu_attack(
 			striker_p.void_spent_this_round = true
 			void_used = true
 
-	# Free Raises from Focus grant effects without raising TN (s40); they are used
-	# for Increased Damage in resolve_duel_strike(), so passes raises=0 here.
-	var result: Dictionary = dice_engine.roll_check(rolled, kept, target_tn, 0, flat_bonus)
+	# Free Raises from Focus grant effects without raising TN (s40); applied as
+	# Increased Damage in resolve_duel_strike(), so raises=0 here.
+	# Unskilled Iaijutsu (rank 0) does not explode per L5R4e p.78.
+	var result: Dictionary = dice_engine.roll_check(rolled, kept, target_tn, 0, flat_bonus, iai_rank > 0)
 	return {
 		"success": result["success"],
 		"hit": result["success"],
