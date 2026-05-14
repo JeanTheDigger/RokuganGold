@@ -4365,3 +4365,48 @@ func test_levy_peasant_levy_cheaper_arms() -> void:
 	)
 	assert_eq(r["arms_deducted"], expected_cost)
 	assert_true(expected_cost < 1.0)
+
+
+# -- Levy Province Selection Tests -----------------------------------------------
+
+func test_pick_levy_province_returns_largest_pu() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	var ps1 := NPCDataStructures.ProvinceStatus.new()
+	ps1.province_id = 10
+	ps1.total_settlement_pu = 5
+	var ps2 := NPCDataStructures.ProvinceStatus.new()
+	ps2.province_id = 20
+	ps2.total_settlement_pu = 12
+	ctx.province_statuses = [ps1, ps2]
+	var pid: int = NPCDecisionEngine._pick_levy_province(ctx)
+	assert_eq(pid, 20)
+
+
+func test_pick_levy_province_single() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	var ps1 := NPCDataStructures.ProvinceStatus.new()
+	ps1.province_id = 7
+	ps1.total_settlement_pu = 3
+	ctx.province_statuses = [ps1]
+	assert_eq(NPCDecisionEngine._pick_levy_province(ctx), 7)
+
+
+func test_pick_levy_province_empty() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.province_statuses = []
+	assert_eq(NPCDecisionEngine._pick_levy_province(ctx), -1)
+
+
+func test_populate_metadata_order_levy_sets_province() -> void:
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "ORDER_LEVY"
+	var need := NPCDataStructures.ImmediateNeed.new()
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.can_sustain_iron_upkeep = true
+	ctx.unit_training_counts = {}
+	var ps := NPCDataStructures.ProvinceStatus.new()
+	ps.province_id = 42
+	ps.total_settlement_pu = 8
+	ctx.province_statuses = [ps]
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_eq(option.target_province_id, 42)

@@ -1523,6 +1523,8 @@ static func _populate_action_metadata(
 			"letter_id": need.target_settlement_id if need.target_settlement_id >= 0 else -1,
 		}
 	elif option.action_id == "ORDER_LEVY":
+		var levy_province_id: int = _pick_levy_province(ctx)
+		option.target_province_id = levy_province_id
 		option.metadata = {
 			"levy_unit_type": _select_levy_unit_type(ctx),
 		}
@@ -2007,6 +2009,18 @@ static func _zone_to_worship_location(zone: Enums.ZoneSubtype) -> String:
 		Enums.ZoneSubtype.TEMPLE_GROUNDS:
 			return "local_shrine"
 	return "roadside_shrine"
+
+
+static func _pick_levy_province(ctx: NPCDataStructures.ContextSnapshot) -> int:
+	var best_id: int = -1
+	var best_pu: int = -1
+	for ps: Variant in ctx.province_statuses:
+		var pid: int = (ps as NPCDataStructures.ProvinceStatus).province_id
+		var pu: int = (ps as NPCDataStructures.ProvinceStatus).total_settlement_pu
+		if pu > best_pu:
+			best_pu = pu
+			best_id = pid
+	return best_id
 
 
 static func _select_levy_unit_type(ctx: NPCDataStructures.ContextSnapshot) -> int:
