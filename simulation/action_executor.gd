@@ -225,6 +225,9 @@ static func execute(
 	if action_id == "SEAL_WALL_BREACH":
 		return _execute_seal_wall_breach(action, character, ctx, dice_engine)
 
+	if action_id == "PURIFY_TAINTED_GROUND":
+		return _execute_purify_tainted_ground(action, character, ctx, dice_engine)
+
 	if action_id == "EXAMINE_LETTER":
 		return _execute_examine_letter(action, character, ctx)
 
@@ -1214,11 +1217,19 @@ static func _compute_military_effects(action_id: String, action: NPCDataStructur
 				"requires_battle_resolution": true,
 			}
 		"ORDER_PATROL":
-			return {"effect": "patrol_dispatched"}
+			return {
+				"effect": "patrol_dispatched",
+				"requires_patrol": true,
+				"patrol_province_id": action.target_province_id,
+			}
 		"ASSIGN_GARRISON":
 			return {"effect": "garrison_assigned"}
 		"DRILL_TROOPS":
-			return {"effect": "training_bonus"}
+			return {
+				"effect": "training_bonus",
+				"requires_drill": true,
+				"target_company_id": action.metadata.get("target_company_id", -1),
+			}
 		"CONDUCT_RAID":
 			return {"effect": "raid_executed"}
 		"RAID_HARVEST":
@@ -1228,7 +1239,14 @@ static func _compute_military_effects(action_id: String, action: NPCDataStructur
 		"CONDUCT_STORM_ASSAULT":
 			return {"effect": "assault_executed"}
 		"MAINTAIN_SIEGE":
-			return {"effect": "siege_maintained"}
+			var sid: int = action.metadata.get(
+				"siege_settlement_id", -1,
+			)
+			return {
+				"effect": "siege_maintained",
+				"requires_siege_maintenance": true,
+				"siege_settlement_id": sid,
+			}
 		"BLOCKADE_TRADE_ROUTE":
 			return _compute_blockade_effects(action)
 		"ASSIGN_TO_MILITARY_SERVICE":
@@ -1750,6 +1768,76 @@ static func _execute_seal_wall_breach(
 			"requires_breach_seal": success,
 			"koku_cost": SEAL_KOKU_COST,
 			"target_province_id": target_province_id,
+		},
+	}
+
+
+static func _execute_purify_tainted_ground(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	var province_id: int = action.target_province_id
+	if province_id < 0:
+		province_id = action.metadata.get("province_id", -1)
+
+	var ptl: float = action.metadata.get("ptl", 0.0)
+	var tn: int = 15 + int(ptl * 5.0)
+
+	var roll_result: Dictionary = SkillResolver.resolve_skill_check(
+		character, dice_engine, "Lore: Shadowlands", tn,
+	)
+	var success: bool = roll_result.get("success", false)
+	var margin: int = roll_result.get("margin", 0)
+	var raises: int = maxi(margin / 5, 0) if success else 0
+
+	var ptl_reduction: float = 0.0
+	if success:
+		ptl_reduction = 0.5 + (raises * 0.25)
+
+	var school_rank: int = CharacterStats.get_insight_rank(character)
+	var ward_bleed_reduction: float = 0.0
+	var ward_duration: int = 0
+	if success:
+		match school_rank:
+			1:
+				ward_bleed_reduction = 0.1
+				ward_duration = 2
+			2:
+				ward_bleed_reduction = 0.1
+				ward_duration = 3
+			3:
+				ward_bleed_reduction = 0.2
+				ward_duration = 4
+			4:
+				ward_bleed_reduction = 0.2
+				ward_duration = 5
+			_:
+				ward_bleed_reduction = 0.3
+				ward_duration = 6
+
+	return {
+		"success": success,
+		"action_id": "PURIFY_TAINTED_GROUND",
+		"character_id": ctx.character_id,
+		"target_npc_id": action.target_npc_id,
+		"target_province_id": province_id,
+		"ic_day": ctx.ic_day,
+		"season": ctx.season,
+		"skill_used": "Lore: Shadowlands",
+		"roll_total": roll_result.get("total", 0),
+		"tn": tn,
+		"margin": margin,
+		"raises": raises,
+		"effects": {
+			"effect": "taint_purified" if success else "purification_failed",
+			"requires_purification": success,
+			"ptl_reduction": ptl_reduction,
+			"province_id": province_id,
+			"ward_bleed_reduction": ward_bleed_reduction,
+			"ward_duration": ward_duration,
+			"ward_school_rank": school_rank,
 		},
 	}
 

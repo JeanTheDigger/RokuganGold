@@ -207,6 +207,30 @@ static func advance_day(
 		characters_by_id,
 	)
 
+	var purification_results: Array[Dictionary] = _process_purification_effects(
+		day_result.get("results", []),
+		provinces,
+		season_meta,
+	)
+
+	var patrol_results: Array[Dictionary] = _process_patrol_effects(
+		day_result.get("results", []),
+		season_meta,
+	)
+
+	_process_siege_maintenance(
+		day_result.get("results", []),
+		active_sieges,
+		ic_day,
+	)
+
+	var drill_results: Array[Dictionary] = _process_drill_effects(
+		day_result.get("results", []),
+		companies,
+		characters_by_id,
+		dice_engine,
+	)
+
 	var horde_assault_results: Array[Dictionary] = _process_horde_assaults(
 		active_hordes, settlements, active_topics, next_topic_id, ic_day, provinces,
 	)
@@ -481,7 +505,10 @@ static func advance_day(
 		insurgency_results = _process_insurgencies(
 			insurgencies, provinces, dice_engine, current_season,
 			next_insurgency_id, world_states, worship_maluses,
+			season_meta,
 		)
+		_tick_kuni_wards(season_meta)
+		season_meta.erase("patrolled_provinces")
 		_process_construction_completions(
 			constructions, settlements, provinces, ships, dice_engine,
 			next_settlement_id, active_topics, next_topic_id, ic_day,
@@ -635,6 +662,9 @@ static func advance_day(
 		"worship_seasonal_results": worship_seasonal_results,
 		"construction_results": construction_results,
 		"commitment_seasonal_result": commitment_seasonal_result,
+		"purification_results": purification_results,
+		"patrol_results": patrol_results,
+		"drill_results": drill_results,
 		"togashi_results": togashi_results,
 		"phoenix_council_results": phoenix_council_results,
 		"civil_war_results": civil_war_results_seasonal,
@@ -897,6 +927,11 @@ static func _process_wall_seasonal_pressure(
 			continue
 		var prov: ProvinceData = province as ProvinceData
 		var ptl_gain: float = WallSystem.compute_ptl_contribution(s.wall_si, true)
+		var ward_key: String = str(s.province_id)
+		var kuni_wards: Dictionary = season_meta.get("kuni_wards", {})
+		if kuni_wards.has(ward_key):
+			var ward: Dictionary = kuni_wards[ward_key]
+			ptl_gain = maxf(ptl_gain - ward.get("bleed_reduction", 0.0), 0.0)
 		prov.province_taint_level = clampf(
 			prov.province_taint_level + ptl_gain, 0.0, 10.0
 		)
@@ -1134,6 +1169,159 @@ static func _find_siege_by_settlement(
 		if siege.get("settlement_id", -1) == settlement_id:
 			return siege
 	return {}
+
+
+static func _process_drill_effects(
+	applied_list: Array,
+	companies: Array[Dictionary],
+	characters_by_id: Dictionary,
+	dice_engine: DiceEngine,
+) -> Array[Dictionary]:
+	var results: Array[Dictionary] = []
+	for applied: Dictionary in applied_list:
+		var effects: Dictionary = applied.get("effects", {})
+		if not effects.get("requires_drill", false):
+			continue
+		var char_id: int = applied.get("character_id", -1)
+		var target_cid: int = effects.get("target_company_id", -1)
+		var character: L5RCharacterData = characters_by_id.get(char_id)
+		if character == null:
+			continue
+
+		var company: Dictionary = {}
+		for c: Dictionary in companies:
+			if c.get("company_id", -1) == target_cid:
+				company = c
+				break
+		if company.is_empty():
+			for c: Dictionary in companies:
+				if c.get("commander_id", -1) == char_id:
+					company = c
+					break
+		if company.is_empty():
+			continue
+
+		const DRILL_TN: int = 15
+		var roll_result: Dictionary = SkillResolver.resolve_skill_check(
+			character, dice_engine, "Battle", DRILL_TN,
+		)
+		var success: bool = roll_result.get("success", false)
+		var margin: int = roll_result.get("margin", 0)
+		var points: int = 0
+		if success:
+			points = 1 + maxi(margin / 5, 0)
+
+		var current_points: int = company.get("training_points", 0) + points
+		var current_level: int = company.get("training_level", 2)
+		const POINTS_PER_LEVEL: int = 10
+		const MAX_LEVEL: int = 3
+		if current_level < MAX_LEVEL and current_points >= POINTS_PER_LEVEL:
+			current_points -= POINTS_PER_LEVEL
+			current_level += 1
+		company["training_points"] = current_points
+		company["training_level"] = current_level
+
+		results.append({
+			"company_id": company.get("company_id", -1),
+			"character_id": char_id,
+			"success": success,
+			"points_added": points,
+			"new_level": current_level,
+			"new_points": current_points,
+		})
+	return results
+
+
+static func _tick_kuni_wards(season_meta: Dictionary) -> void:
+	var wards: Dictionary = season_meta.get("kuni_wards", {})
+	var expired: Array[String] = []
+	for key: String in wards:
+		var ward: Dictionary = wards[key]
+		ward["seasons_remaining"] = ward.get("seasons_remaining", 0) - 1
+		if ward["seasons_remaining"] <= 0:
+			expired.append(key)
+	for key: String in expired:
+		wards.erase(key)
+	if wards.is_empty():
+		season_meta.erase("kuni_wards")
+	else:
+		season_meta["kuni_wards"] = wards
+
+
+static func _process_purification_effects(
+	applied_list: Array,
+	provinces: Dictionary,
+	season_meta: Dictionary,
+) -> Array[Dictionary]:
+	var results: Array[Dictionary] = []
+	for applied: Dictionary in applied_list:
+		var effects: Dictionary = applied.get("effects", {})
+		if not effects.get("requires_purification", false):
+			continue
+		var pid: int = effects.get("province_id", -1)
+		if pid < 0 or not provinces.has(pid):
+			continue
+		var prov: ProvinceData = provinces[pid]
+		var reduction: float = effects.get("ptl_reduction", 0.0)
+		prov.province_taint_level = maxf(prov.province_taint_level - reduction, 0.0)
+
+		var ward_reduction: float = effects.get("ward_bleed_reduction", 0.0)
+		var ward_duration: int = effects.get("ward_duration", 0)
+		var ward_rank: int = effects.get("ward_school_rank", 0)
+		if ward_duration > 0:
+			var existing_ward: Dictionary = season_meta.get(
+				"kuni_wards", {},
+			).get(str(pid), {})
+			if existing_ward.is_empty() or ward_reduction >= existing_ward.get("bleed_reduction", 0.0):
+				var wards: Dictionary = season_meta.get("kuni_wards", {})
+				wards[str(pid)] = {
+					"bleed_reduction": ward_reduction,
+					"seasons_remaining": ward_duration,
+					"school_rank": ward_rank,
+				}
+				season_meta["kuni_wards"] = wards
+
+		results.append({
+			"province_id": pid,
+			"ptl_reduction": reduction,
+			"new_ptl": prov.province_taint_level,
+			"ward_set": ward_duration > 0,
+		})
+	return results
+
+
+static func _process_patrol_effects(
+	applied_list: Array,
+	season_meta: Dictionary,
+) -> Array[Dictionary]:
+	var results: Array[Dictionary] = []
+	for applied: Dictionary in applied_list:
+		var effects: Dictionary = applied.get("effects", {})
+		if not effects.get("requires_patrol", false):
+			continue
+		var pid: int = effects.get("patrol_province_id", -1)
+		if pid < 0:
+			continue
+		var patrolled: Dictionary = season_meta.get("patrolled_provinces", {})
+		patrolled[pid] = true
+		season_meta["patrolled_provinces"] = patrolled
+		results.append({"province_id": pid, "character_id": applied.get("character_id", -1)})
+	return results
+
+
+static func _process_siege_maintenance(
+	applied_list: Array,
+	active_sieges: Array[Dictionary],
+	ic_day: int,
+) -> void:
+	for applied: Dictionary in applied_list:
+		var effects: Dictionary = applied.get("effects", {})
+		if not effects.get("requires_siege_maintenance", false):
+			continue
+		var sid: int = effects.get("siege_settlement_id", -1)
+		var siege: Dictionary = _find_siege_by_settlement(sid, active_sieges)
+		if not siege.is_empty():
+			siege["last_maintained_ic_day"] = ic_day
 
 
 # -- Horde Assault SI Processing (s2.4.5 — LOCKED) ----------------------------
@@ -2557,15 +2745,20 @@ static func _process_insurgencies(
 	next_insurgency_id: Array[int],
 	world_states: Dictionary,
 	worship_maluses: Dictionary = {},
+	season_meta: Dictionary = {},
 ) -> Dictionary:
 	var ptls: Dictionary = {}
 	for pid: int in provinces:
 		var prov: ProvinceData = provinces[pid]
 		ptls[pid] = prov.province_taint_level
 
+	var patrolled: Dictionary = season_meta.get("patrolled_provinces", {})
 	var per_province_ws: Dictionary = {}
 	for pid: int in provinces:
-		per_province_ws[pid] = world_states.get(pid, {})
+		var ws: Dictionary = world_states.get(pid, {}).duplicate()
+		if patrolled.has(pid):
+			ws["is_patrolled"] = true
+		per_province_ws[pid] = ws
 
 	var result: Dictionary = InsurgencySystem.process_season(
 		insurgencies, provinces, ptls, dice_engine, current_season,
@@ -2576,6 +2769,12 @@ static func _process_insurgencies(
 		insurgencies.append(new_ins)
 
 	next_insurgency_id[0] = result.get("next_id", next_insurgency_id[0])
+
+	for ins: InsurgencyData in insurgencies:
+		if patrolled.has(ins.province_id) and not ins.detected:
+			ins.concealment = maxi(ins.concealment - 1, 0)
+			if ins.concealment <= 0:
+				ins.detected = true
 
 	var removed: Array[InsurgencyData] = []
 	for ins: InsurgencyData in insurgencies:

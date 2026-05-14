@@ -1528,7 +1528,7 @@ static func _populate_action_metadata(
 		option.metadata = {
 			"levy_unit_type": _select_levy_unit_type(ctx),
 		}
-	elif option.action_id == "CONDUCT_STORM_ASSAULT":
+	elif option.action_id in ["CONDUCT_STORM_ASSAULT", "MAINTAIN_SIEGE"]:
 		option.metadata = {
 			"siege_settlement_id": ctx.location_id,
 		}

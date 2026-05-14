@@ -5336,3 +5336,483 @@ func test_e2e_storm_assault_uses_urban_terrain_and_fort_bonus() -> void:
 	)
 	assert_eq(r.size(), 1)
 	assert_true(r[0]["rounds"] > 0)
+
+
+# -- MAINTAIN_SIEGE wiring tests -----------------------------------------------
+
+func test_maintain_siege_executor_returns_requires_flag() -> void:
+	var action: ScoredAction = ScoredAction.new()
+	action.action_id = "MAINTAIN_SIEGE"
+	action.metadata = {"siege_settlement_id": 10}
+	var ctx: ContextSnapshot = ContextSnapshot.new()
+	var dice: DiceEngine = DiceEngine.new(1)
+	var result: Dictionary = ActionExecutor.execute(action, ctx, dice)
+	var effects: Dictionary = result.get("effects", {})
+	assert_true(effects.get("requires_siege_maintenance", false))
+	assert_eq(effects.get("siege_settlement_id", -1), 10)
+
+
+func test_maintain_siege_stamps_last_maintained_ic_day() -> void:
+	var siege: Dictionary = {"settlement_id": 10, "siege_ended": false}
+	var applied: Array = [{
+		"effects": {"requires_siege_maintenance": true, "siege_settlement_id": 10},
+	}]
+	DayOrchestrator._process_siege_maintenance(applied, [siege] as Array[Dictionary], 42)
+	assert_eq(siege.get("last_maintained_ic_day", -1), 42)
+
+
+func test_maintain_siege_no_match_leaves_siege_untouched() -> void:
+	var siege: Dictionary = {"settlement_id": 5, "siege_ended": false}
+	var applied: Array = [{
+		"effects": {"requires_siege_maintenance": true, "siege_settlement_id": 10},
+	}]
+	DayOrchestrator._process_siege_maintenance(applied, [siege] as Array[Dictionary], 42)
+	assert_false(siege.has("last_maintained_ic_day"))
+
+
+func test_maintain_siege_skips_non_siege_effects() -> void:
+	var siege: Dictionary = {"settlement_id": 10}
+	var applied: Array = [{"effects": {"effect": "something_else"}}]
+	DayOrchestrator._process_siege_maintenance(applied, [siege] as Array[Dictionary], 42)
+	assert_false(siege.has("last_maintained_ic_day"))
+
+
+func test_maintain_siege_metadata_population() -> void:
+	var npc: L5RCharacterData = _make_char(1, "Crab")
+	npc.physical_location = "settlement_10"
+	var ctx: ContextSnapshot = ContextSnapshot.new()
+	ctx.location_id = 10
+	var option: ScoredAction = ScoredAction.new()
+	option.action_id = "MAINTAIN_SIEGE"
+	NPCDecisionEngine._populate_action_metadata(option, ctx, {})
+	assert_eq(option.metadata.get("siege_settlement_id", -1), 10)
+
+
+# -- ORDER_PATROL wiring tests ------------------------------------------------
+
+func test_order_patrol_executor_returns_requires_flag() -> void:
+	var action: ScoredAction = ScoredAction.new()
+	action.action_id = "ORDER_PATROL"
+	action.target_province_id = 5
+	var ctx: ContextSnapshot = ContextSnapshot.new()
+	var dice: DiceEngine = DiceEngine.new(1)
+	var result: Dictionary = ActionExecutor.execute(action, ctx, dice)
+	var effects: Dictionary = result.get("effects", {})
+	assert_true(effects.get("requires_patrol", false))
+	assert_eq(effects.get("patrol_province_id", -1), 5)
+
+
+func test_patrol_stamps_season_meta() -> void:
+	var applied: Array = [{
+		"effects": {"requires_patrol": true, "patrol_province_id": 5},
+		"character_id": 1,
+	}]
+	var season_meta: Dictionary = {}
+	var r: Array[Dictionary] = DayOrchestrator._process_patrol_effects(applied, season_meta)
+	assert_eq(r.size(), 1)
+	assert_eq(r[0]["province_id"], 5)
+	assert_true(season_meta.get("patrolled_provinces", {}).has(5))
+
+
+func test_patrol_multiple_provinces() -> void:
+	var applied: Array = [
+		{"effects": {"requires_patrol": true, "patrol_province_id": 5}, "character_id": 1},
+		{"effects": {"requires_patrol": true, "patrol_province_id": 8}, "character_id": 2},
+	]
+	var season_meta: Dictionary = {}
+	var r: Array[Dictionary] = DayOrchestrator._process_patrol_effects(applied, season_meta)
+	assert_eq(r.size(), 2)
+	var patrolled: Dictionary = season_meta.get("patrolled_provinces", {})
+	assert_true(patrolled.has(5))
+	assert_true(patrolled.has(8))
+
+
+func test_patrol_skips_invalid_province() -> void:
+	var applied: Array = [{
+		"effects": {"requires_patrol": true, "patrol_province_id": -1},
+		"character_id": 1,
+	}]
+	var season_meta: Dictionary = {}
+	var r: Array[Dictionary] = DayOrchestrator._process_patrol_effects(applied, season_meta)
+	assert_eq(r.size(), 0)
+
+
+func test_patrol_reduces_insurgency_spawn_chance() -> void:
+	var ws: Dictionary = {"is_patrolled": true}
+	var base_chance: float = InsurgencySystem.get_spawn_chance(
+		Enums.InsurgencyType.PEASANT_REVOLT, Enums.StabilityTier.RESTLESS, {},
+	)
+	var patrolled_chance: float = InsurgencySystem.get_spawn_chance(
+		Enums.InsurgencyType.PEASANT_REVOLT, Enums.StabilityTier.RESTLESS, ws,
+	)
+	assert_true(patrolled_chance < base_chance)
+	assert_almost_eq(patrolled_chance, base_chance * 0.5, 0.001)
+
+
+func test_patrol_concealment_reduction_on_hidden_insurgency() -> void:
+	var ins: InsurgencyData = InsurgencyData.new()
+	ins.province_id = 5
+	ins.concealment = 3
+	ins.detected = false
+	ins.strength = 5
+	var province: ProvinceData = ProvinceData.new()
+	province.province_id = 5
+	var season_meta: Dictionary = {"patrolled_provinces": {5: true}}
+	var provinces: Dictionary = {5: province}
+	var insurgencies: Array[InsurgencyData] = [ins]
+	var dice: DiceEngine = DiceEngine.new(1)
+	var next_id: Array[int] = [100]
+	DayOrchestrator._process_insurgencies(
+		insurgencies, provinces, dice, 0,
+		next_id, {}, {}, season_meta,
+	)
+	assert_eq(ins.concealment, 2)
+
+
+func test_patrol_auto_detects_at_concealment_one() -> void:
+	var ins: InsurgencyData = InsurgencyData.new()
+	ins.province_id = 5
+	ins.concealment = 1
+	ins.detected = false
+	ins.strength = 5
+	var province: ProvinceData = ProvinceData.new()
+	province.province_id = 5
+	var season_meta: Dictionary = {"patrolled_provinces": {5: true}}
+	var provinces: Dictionary = {5: province}
+	var insurgencies: Array[InsurgencyData] = [ins]
+	var dice: DiceEngine = DiceEngine.new(1)
+	var next_id: Array[int] = [100]
+	DayOrchestrator._process_insurgencies(
+		insurgencies, provinces, dice, 0,
+		next_id, {}, {}, season_meta,
+	)
+	assert_eq(ins.concealment, 0)
+	assert_true(ins.detected)
+
+
+func test_patrolled_provinces_cleared_on_season_boundary() -> void:
+	var season_meta: Dictionary = {"patrolled_provinces": {5: true, 8: true}}
+	season_meta.erase("patrolled_provinces")
+	assert_false(season_meta.has("patrolled_provinces"))
+
+
+# -- PURIFY_TAINTED_GROUND wiring tests ----------------------------------------
+
+func _make_kuni_shugenja(char_id: int, school_rank: int) -> L5RCharacterData:
+	var c: L5RCharacterData = _make_char(char_id, "Crab")
+	c.family = "Kuni"
+	c.school = "Kuni Shugenja"
+	c.school_type = Enums.SchoolType.SHUGENJA
+	c.set_trait_value(Enums.Trait.INTELLIGENCE, 4)
+	c.skills["Lore: Shadowlands"] = school_rank
+	c.insight_rank = school_rank
+	return c
+
+
+func test_purify_executor_success_returns_flag() -> void:
+	var c: L5RCharacterData = _make_kuni_shugenja(1, 3)
+	var action: ScoredAction = ScoredAction.new()
+	action.action_id = "PURIFY_TAINTED_GROUND"
+	action.target_province_id = 5
+	var ctx: ContextSnapshot = ContextSnapshot.new()
+	ctx.character_id = 1
+	ctx.ic_day = 10
+	ctx.season = "spring"
+	var dice: DiceEngine = DiceEngine.new(99)
+	var result: Dictionary = ActionExecutor._execute_purify_tainted_ground(
+		action, ctx, c, dice, 1.0,
+	)
+	var effects: Dictionary = result.get("effects", {})
+	if effects.get("requires_purification", false):
+		assert_true(effects.get("ptl_reduction", 0.0) > 0.0)
+		assert_eq(effects.get("province_id", -1), 5)
+
+
+func test_purify_orchestrator_reduces_ptl() -> void:
+	var province: ProvinceData = ProvinceData.new()
+	province.province_id = 5
+	province.province_taint_level = 3.0
+	var applied: Array = [{
+		"effects": {
+			"requires_purification": true,
+			"province_id": 5,
+			"ptl_reduction": 0.75,
+			"ward_bleed_reduction": 0.2,
+			"ward_duration": 4,
+			"ward_school_rank": 3,
+		},
+	}]
+	var season_meta: Dictionary = {}
+	var r: Array[Dictionary] = DayOrchestrator._process_purification_effects(
+		applied, {5: province}, season_meta,
+	)
+	assert_eq(r.size(), 1)
+	assert_almost_eq(province.province_taint_level, 2.25, 0.001)
+	assert_true(r[0].get("ward_set", false))
+
+
+func test_purify_sets_kuni_ward_in_season_meta() -> void:
+	var province: ProvinceData = ProvinceData.new()
+	province.province_id = 5
+	province.province_taint_level = 2.0
+	var applied: Array = [{
+		"effects": {
+			"requires_purification": true,
+			"province_id": 5,
+			"ptl_reduction": 0.5,
+			"ward_bleed_reduction": 0.2,
+			"ward_duration": 4,
+			"ward_school_rank": 3,
+		},
+	}]
+	var season_meta: Dictionary = {}
+	DayOrchestrator._process_purification_effects(applied, {5: province}, season_meta)
+	var wards: Dictionary = season_meta.get("kuni_wards", {})
+	assert_true(wards.has("5"))
+	assert_eq(wards["5"]["bleed_reduction"], 0.2)
+	assert_eq(wards["5"]["seasons_remaining"], 4)
+
+
+func test_purify_ptl_floors_at_zero() -> void:
+	var province: ProvinceData = ProvinceData.new()
+	province.province_id = 5
+	province.province_taint_level = 0.3
+	var applied: Array = [{
+		"effects": {
+			"requires_purification": true,
+			"province_id": 5,
+			"ptl_reduction": 1.0,
+			"ward_bleed_reduction": 0.1,
+			"ward_duration": 2,
+			"ward_school_rank": 1,
+		},
+	}]
+	var season_meta: Dictionary = {}
+	DayOrchestrator._process_purification_effects(applied, {5: province}, season_meta)
+	assert_almost_eq(province.province_taint_level, 0.0, 0.001)
+
+
+func test_purify_stronger_ward_replaces_weaker() -> void:
+	var province: ProvinceData = ProvinceData.new()
+	province.province_id = 5
+	province.province_taint_level = 5.0
+	var season_meta: Dictionary = {
+		"kuni_wards": {"5": {"bleed_reduction": 0.1, "seasons_remaining": 2, "school_rank": 1}},
+	}
+	var applied: Array = [{
+		"effects": {
+			"requires_purification": true,
+			"province_id": 5,
+			"ptl_reduction": 0.5,
+			"ward_bleed_reduction": 0.3,
+			"ward_duration": 6,
+			"ward_school_rank": 5,
+		},
+	}]
+	DayOrchestrator._process_purification_effects(applied, {5: province}, season_meta)
+	var ward: Dictionary = season_meta["kuni_wards"]["5"]
+	assert_eq(ward["bleed_reduction"], 0.3)
+	assert_eq(ward["seasons_remaining"], 6)
+
+
+func test_purify_weaker_ward_does_not_replace() -> void:
+	var province: ProvinceData = ProvinceData.new()
+	province.province_id = 5
+	province.province_taint_level = 5.0
+	var season_meta: Dictionary = {
+		"kuni_wards": {"5": {"bleed_reduction": 0.3, "seasons_remaining": 5, "school_rank": 5}},
+	}
+	var applied: Array = [{
+		"effects": {
+			"requires_purification": true,
+			"province_id": 5,
+			"ptl_reduction": 0.5,
+			"ward_bleed_reduction": 0.1,
+			"ward_duration": 2,
+			"ward_school_rank": 1,
+		},
+	}]
+	DayOrchestrator._process_purification_effects(applied, {5: province}, season_meta)
+	var ward: Dictionary = season_meta["kuni_wards"]["5"]
+	assert_eq(ward["bleed_reduction"], 0.3)
+	assert_eq(ward["seasons_remaining"], 5)
+
+
+func test_kuni_ward_tick_decrements_duration() -> void:
+	var season_meta: Dictionary = {
+		"kuni_wards": {
+			"5": {"bleed_reduction": 0.2, "seasons_remaining": 3, "school_rank": 3},
+			"8": {"bleed_reduction": 0.1, "seasons_remaining": 1, "school_rank": 1},
+		},
+	}
+	DayOrchestrator._tick_kuni_wards(season_meta)
+	var wards: Dictionary = season_meta.get("kuni_wards", {})
+	assert_true(wards.has("5"))
+	assert_eq(wards["5"]["seasons_remaining"], 2)
+	assert_false(wards.has("8"))
+
+
+func test_kuni_ward_tick_removes_all_expired() -> void:
+	var season_meta: Dictionary = {
+		"kuni_wards": {
+			"5": {"bleed_reduction": 0.1, "seasons_remaining": 1, "school_rank": 1},
+		},
+	}
+	DayOrchestrator._tick_kuni_wards(season_meta)
+	assert_false(season_meta.has("kuni_wards"))
+
+
+func test_purify_skips_nonexistent_province() -> void:
+	var applied: Array = [{
+		"effects": {
+			"requires_purification": true,
+			"province_id": 99,
+			"ptl_reduction": 0.5,
+			"ward_bleed_reduction": 0.1,
+			"ward_duration": 2,
+			"ward_school_rank": 1,
+		},
+	}]
+	var r: Array[Dictionary] = DayOrchestrator._process_purification_effects(applied, {}, {})
+	assert_eq(r.size(), 0)
+
+
+# -- DRILL_TROOPS wiring tests ------------------------------------------------
+
+func _make_trainable_company(cid: int, commander_id: int) -> Dictionary:
+	return {
+		"company_id": cid,
+		"commander_id": commander_id,
+		"training_level": 0,
+		"training_points": 0,
+		"health": 100,
+		"max_health": 100,
+		"destroyed": false,
+	}
+
+
+func test_drill_executor_returns_requires_flag() -> void:
+	var action: ScoredAction = ScoredAction.new()
+	action.action_id = "DRILL_TROOPS"
+	action.metadata = {"target_company_id": 10}
+	var ctx: ContextSnapshot = ContextSnapshot.new()
+	var dice: DiceEngine = DiceEngine.new(1)
+	var result: Dictionary = ActionExecutor.execute(action, ctx, dice)
+	var effects: Dictionary = result.get("effects", {})
+	assert_true(effects.get("requires_drill", false))
+	assert_eq(effects.get("target_company_id", -1), 10)
+
+
+func test_drill_success_adds_training_points() -> void:
+	var c: L5RCharacterData = _make_char(1, "Lion")
+	c.skills["Battle"] = 3
+	c.set_trait_value(Enums.Trait.PERCEPTION, 3)
+	var company: Dictionary = _make_trainable_company(10, 1)
+	var applied: Array = [{
+		"effects": {"requires_drill": true, "target_company_id": 10},
+		"character_id": 1,
+	}]
+	var dice: DiceEngine = DiceEngine.new(99)
+	var r: Array[Dictionary] = DayOrchestrator._process_drill_effects(
+		applied, [company] as Array[Dictionary],
+		{1: c}, dice,
+	)
+	assert_eq(r.size(), 1)
+	assert_true(r[0].get("success", false))
+	assert_true(r[0].get("points_added", 0) >= 1)
+	assert_true(company.get("training_points", 0) >= 1)
+
+
+func test_drill_fallback_to_commander_id() -> void:
+	var c: L5RCharacterData = _make_char(1, "Lion")
+	c.skills["Battle"] = 3
+	c.set_trait_value(Enums.Trait.PERCEPTION, 3)
+	var company: Dictionary = _make_trainable_company(10, 1)
+	var applied: Array = [{
+		"effects": {"requires_drill": true, "target_company_id": -1},
+		"character_id": 1,
+	}]
+	var dice: DiceEngine = DiceEngine.new(99)
+	var r: Array[Dictionary] = DayOrchestrator._process_drill_effects(
+		applied, [company] as Array[Dictionary],
+		{1: c}, dice,
+	)
+	assert_eq(r.size(), 1)
+	assert_eq(r[0].get("company_id", -1), 10)
+
+
+func test_drill_level_up_at_10_points() -> void:
+	var c: L5RCharacterData = _make_char(1, "Lion")
+	c.skills["Battle"] = 5
+	c.set_trait_value(Enums.Trait.PERCEPTION, 5)
+	var company: Dictionary = _make_trainable_company(10, 1)
+	company["training_points"] = 9
+	company["training_level"] = 0
+	var applied: Array = [{
+		"effects": {"requires_drill": true, "target_company_id": 10},
+		"character_id": 1,
+	}]
+	var dice: DiceEngine = DiceEngine.new(99)
+	var r: Array[Dictionary] = DayOrchestrator._process_drill_effects(
+		applied, [company] as Array[Dictionary],
+		{1: c}, dice,
+	)
+	if r[0].get("success", false) and r[0].get("points_added", 0) >= 1:
+		assert_eq(company.get("training_level", 0), 1)
+
+
+func test_drill_max_level_cap() -> void:
+	var c: L5RCharacterData = _make_char(1, "Lion")
+	c.skills["Battle"] = 5
+	c.set_trait_value(Enums.Trait.PERCEPTION, 5)
+	var company: Dictionary = _make_trainable_company(10, 1)
+	company["training_points"] = 9
+	company["training_level"] = 3
+	var applied: Array = [{
+		"effects": {"requires_drill": true, "target_company_id": 10},
+		"character_id": 1,
+	}]
+	var dice: DiceEngine = DiceEngine.new(99)
+	DayOrchestrator._process_drill_effects(
+		applied, [company] as Array[Dictionary],
+		{1: c}, dice,
+	)
+	assert_eq(company.get("training_level", 0), 3)
+
+
+func test_drill_no_character_skips() -> void:
+	var company: Dictionary = _make_trainable_company(10, 1)
+	var applied: Array = [{
+		"effects": {"requires_drill": true, "target_company_id": 10},
+		"character_id": 999,
+	}]
+	var dice: DiceEngine = DiceEngine.new(1)
+	var r: Array[Dictionary] = DayOrchestrator._process_drill_effects(
+		applied, [company] as Array[Dictionary],
+		{}, dice,
+	)
+	assert_eq(r.size(), 0)
+
+
+func test_drill_no_company_skips() -> void:
+	var c: L5RCharacterData = _make_char(1, "Lion")
+	c.skills["Battle"] = 3
+	var applied: Array = [{
+		"effects": {"requires_drill": true, "target_company_id": 99},
+		"character_id": 1,
+	}]
+	var dice: DiceEngine = DiceEngine.new(1)
+	var r: Array[Dictionary] = DayOrchestrator._process_drill_effects(
+		applied, [] as Array[Dictionary],
+		{1: c}, dice,
+	)
+	assert_eq(r.size(), 0)
+
+
+func test_drill_results_in_advance_day_return() -> void:
+	var applied: Array = [{"effects": {"effect": "nothing"}}]
+	var dice: DiceEngine = DiceEngine.new(1)
+	var r: Array[Dictionary] = DayOrchestrator._process_drill_effects(
+		applied, [] as Array[Dictionary], {}, dice,
+	)
+	assert_eq(r.size(), 0)

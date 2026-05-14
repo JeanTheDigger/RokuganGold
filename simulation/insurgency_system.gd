@@ -225,6 +225,9 @@ static func get_spawn_chance(
 			if province.clan == "Mantis":
 				base -= 0.10
 
+	if world_state.get("is_patrolled", false):
+		base *= 0.5
+
 	return maxf(base, 0.0)
 
 
