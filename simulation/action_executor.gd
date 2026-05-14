@@ -151,6 +151,9 @@ static func execute(
 	if action_id == "ASK_FOR_INTRODUCTION":
 		return _execute_ask_for_introduction(action, character, ctx, dice_engine, characters_by_id)
 
+	if action_id == "OBSERVE_COURT_ATTENDEES":
+		return _execute_observe_court_attendees(action, character, ctx, dice_engine, characters_by_id)
+
 	if action_id == "NEGOTIATE_SURRENDER":
 		var peace_effects: Dictionary = _execute_negotiate_surrender(
 			action, character, ctx, dice_engine
@@ -1866,7 +1869,7 @@ static func _compute_self_effects(action_id: String) -> Dictionary:
 		"MENTOR":
 			return {"effect": "student_trained"}
 		"OBSERVE_COURT_ATTENDEES":
-			return {"effect": "court_observed", "info_gained": true}
+			return {"effect": "court_observed", "info_gained": true}  # fallback — should not reach here
 	return {"effect": "self_action_completed"}
 
 
@@ -2995,5 +2998,70 @@ static func _execute_ask_for_introduction(
 		"roll_total": roll_total,
 		"tn": CourtActionSystem.ASK_FOR_INTRODUCTION_TN,
 		"margin": roll_total - CourtActionSystem.ASK_FOR_INTRODUCTION_TN,
+		"effects": effects,
+	}
+
+
+# -- OBSERVE_COURT_ATTENDEES (s55.7.3 — LOCKED) --------------------------------
+
+static func _execute_observe_court_attendees(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	dice_engine: DiceEngine,
+	characters_by_id: Dictionary,
+) -> Dictionary:
+	var skill_rank: int = character.skills.get("Investigation", 0)
+	var trait_val: int = character.traits.get("Perception", 2)
+	var roll_result: Dictionary = dice_engine.roll_skill_check(trait_val, skill_rank, 0)
+	var roll_total: int = roll_result.get("total", 0)
+
+	var observable_ids: Array = action.metadata.get("observable_attendee_ids", [])
+	var resolution: Dictionary = CourtActionSystem.resolve_observe_court_attendees(
+		roll_total, observable_ids.size()
+	)
+
+	var effects: Dictionary = {}
+	if resolution.get("success", false):
+		var learn_count: int = resolution.get("learn_count", 0)
+		# Pick learn_count random IDs from the observable pool.
+		var pool: Array = observable_ids.duplicate()
+		var learned_ids: Array[int] = []
+		for _i: int in range(learn_count):
+			if pool.is_empty():
+				break
+			var idx: int = dice_engine.roll_and_keep(1, 1, 0).total % pool.size()
+			learned_ids.append(pool[idx])
+			pool.remove_at(idx)
+
+		var learned_info: Array[Dictionary] = []
+		for npc_id: int in learned_ids:
+			var npc: L5RCharacterData = characters_by_id.get(npc_id)
+			if npc != null:
+				learned_info.append({
+					"character_id": npc_id,
+					"clan": npc.clan,
+					"family": npc.family,
+					"status": npc.status,
+				})
+
+		effects["info_gained"] = true
+		effects["learn_count"] = learn_count
+		effects["learned_attendees"] = learned_info
+	else:
+		effects["failed"] = true
+
+	return {
+		"success": resolution.get("success", false),
+		"action_id": "OBSERVE_COURT_ATTENDEES",
+		"character_id": ctx.character_id,
+		"target_npc_id": action.target_npc_id,
+		"target_province_id": action.target_province_id,
+		"ic_day": ctx.ic_day,
+		"season": ctx.season,
+		"skill_used": "Investigation",
+		"roll_total": roll_total,
+		"tn": CourtActionSystem.OBSERVE_COURT_TN,
+		"margin": roll_total - CourtActionSystem.OBSERVE_COURT_TN,
 		"effects": effects,
 	}

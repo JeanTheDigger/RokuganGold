@@ -1387,4 +1387,54 @@ func test_ask_intro_kuge_exact_intermediary_threshold_passes() -> void:
 	# Exactly Status 4.0 satisfies the kuge intermediary gate.
 	var r: Dictionary = CourtActionSystem.resolve_ask_for_introduction(20, true, 4.0)
 	assert_true(r["success"])
+
+
+# -- OBSERVE_COURT_ATTENDEES (s55.7.3) -----------------------------------------
+
+func test_observe_court_failure_roll_below_tn() -> void:
+	var r: Dictionary = CourtActionSystem.resolve_observe_court_attendees(14, 5)
+	assert_false(r["success"])
+	assert_eq(r["learn_count"], 0)
+
+
+func test_observe_court_success_base_one_attendee() -> void:
+	# Exactly meets TN 15, no raises → 1 attendee.
+	var r: Dictionary = CourtActionSystem.resolve_observe_court_attendees(15, 5)
+	assert_true(r["success"])
+	assert_eq(r["learn_count"], 1)
+
+
+func test_observe_court_one_raise_two_attendees() -> void:
+	# margin = 20 - 15 = 5 → 1 Raise → 2 attendees.
+	var r: Dictionary = CourtActionSystem.resolve_observe_court_attendees(20, 5)
+	assert_true(r["success"])
+	assert_eq(r["learn_count"], 2)
+
+
+func test_observe_court_two_raises_three_attendees() -> void:
+	# margin = 25 - 15 = 10 → 2 Raises → 3 attendees.
+	var r: Dictionary = CourtActionSystem.resolve_observe_court_attendees(25, 5)
+	assert_true(r["success"])
+	assert_eq(r["learn_count"], 3)
+
+
+func test_observe_court_capped_at_three() -> void:
+	# Very high roll → still capped at 3.
+	var r: Dictionary = CourtActionSystem.resolve_observe_court_attendees(99, 10)
+	assert_true(r["success"])
+	assert_eq(r["learn_count"], 3)
+
+
+func test_observe_court_capped_by_observable_pool() -> void:
+	# Only 2 attendees available → cannot learn more than 2.
+	var r: Dictionary = CourtActionSystem.resolve_observe_court_attendees(99, 2)
+	assert_true(r["success"])
+	assert_eq(r["learn_count"], 2)
+
+
+func test_observe_court_empty_pool() -> void:
+	# No unknown attendees → learn_count 0 even on success.
+	var r: Dictionary = CourtActionSystem.resolve_observe_court_attendees(99, 0)
+	assert_true(r["success"])
+	assert_eq(r["learn_count"], 0)
 	assert_eq(r["disposition_gain"], CourtActionSystem.ASK_FOR_INTRODUCTION_KUGE_DISP)
