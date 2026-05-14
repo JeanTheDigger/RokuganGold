@@ -13,6 +13,7 @@ const SOCIAL_ACTIONS: Array[String] = [
 	"PUBLIC_DEBATE", "PUBLIC_INSULT", "PUBLIC_DECLARATION",
 	"PUBLIC_PERFORMANCE", "DELIVER_GIFT", "OFFER_FAVOR",
 	"PERFORM_FOR", "DISCLOSE", "ASK_FOR_INTRODUCTION",
+	"PROVOKE_EMOTION", "PLAY_GAME", "DISCERN_NEED",
 ]
 
 const COVERT_ACTIONS: Array[String] = [
@@ -108,7 +109,10 @@ static func execute(
 	if action_id == "PERFORM_FOR":
 		return _execute_perform_for(action, character, ctx, dice_engine, characters_by_id)
 
-	if action_id == "PUBLIC_DEBATE" or action_id == "PUBLIC_DECLARATION":
+	if action_id == "PUBLIC_DEBATE":
+		return _execute_public_debate(action, character, ctx, dice_engine, action_skill_map, characters_by_id)
+
+	if action_id == "PUBLIC_DECLARATION":
 		return _execute_broadcast_social(action, character, ctx, dice_engine, action_skill_map, characters_by_id)
 
 	if action_id == "GOSSIP":
@@ -123,6 +127,26 @@ static func execute(
 		)
 		if not intim_result.is_empty():
 			return intim_result
+
+	if action_id in _CONTESTED_COURT_ACTIONS:
+		return _execute_contested_court_action(
+			action, character, ctx, dice_engine, action_skill_map, characters_by_id
+		)
+
+	if action_id == "PROVOKE_EMOTION":
+		return _execute_provoke_emotion(action, character, ctx, dice_engine, characters_by_id)
+
+	if action_id == "PLAY_GAME":
+		return _execute_play_game(action, character, ctx, dice_engine, characters_by_id)
+
+	if action_id == "DISCERN_NEED":
+		return _execute_discern_need(action, character, ctx, dice_engine, characters_by_id)
+
+	if action_id == "READ_CHARACTER":
+		return _execute_read_character(action, character, ctx, dice_engine, characters_by_id)
+
+	if action_id == "PROBE":
+		return _execute_probe(action, character, ctx, dice_engine, characters_by_id)
 
 	if action_id == "NEGOTIATE_SURRENDER":
 		var peace_effects: Dictionary = _execute_negotiate_surrender(
@@ -192,11 +216,20 @@ static func execute(
 	if action_id == "CONDUCT_SORTIE":
 		return _execute_conduct_sortie(action, character, ctx)
 
+	if action_id == "CONDUCT_STORM_ASSAULT":
+		return _execute_conduct_storm_assault(action, character, ctx)
+
 	if action_id == "FORTIFY_WALL_SECTION":
 		return _execute_fortify_wall_section(action, character, ctx, dice_engine)
 
 	if action_id == "SEAL_WALL_BREACH":
 		return _execute_seal_wall_breach(action, character, ctx, dice_engine)
+
+	if action_id == "PURIFY_TAINTED_GROUND":
+		return _execute_purify_tainted_ground(action, character, ctx, dice_engine)
+
+	if action_id == "EXAMINE_LETTER":
+		return _execute_examine_letter(action, character, ctx)
 
 	if action_id in COVERT_ACTIONS:
 		var covert_result: Dictionary = _try_execute_covert(
@@ -580,25 +613,34 @@ static func _execute_gossip(
 		trait_val, skill_rank, tn
 	)
 
-	var success: bool = roll_result.get("success", false)
-	var margin: int = roll_result.get("total", 0) - tn
-	var raises: int = maxi(int(margin / 5.0), 0)
-	var effects: Dictionary = {}
+	var roll_total: int = roll_result.get("total", 0)
+	var margin: int = roll_total - tn
+	var total_raises: int = maxi(int(margin / 5.0), 0)
+	var damage_raises: int = action.metadata.get("damage_raises", total_raises)
+	var concealment_raises: int = action.metadata.get("concealment_raises", 0)
+	if damage_raises + concealment_raises > total_raises:
+		damage_raises = total_raises
+		concealment_raises = 0
 
-	if success:
-		var disp_toward_subject: int = -5 - (raises * 2)
-		effects = {
-			"gossip_subject_id": subject_id,
-			"gossip_subject_disposition": disp_toward_subject,
-			"info_gained": true,
-		}
+	var resolution: Dictionary = CourtActionSystem.resolve_gossip(
+		roll_total, tn, damage_raises, concealment_raises
+	)
+
+	var effects: Dictionary = {}
+	if resolution.get("success", false):
+		effects["gossip_subject_id"] = subject_id
+		effects["gossip_subject_disposition"] = resolution["gossip_subject_disposition"]
+		effects["info_gained"] = true
+		var is_bayushi: bool = character.school.begins_with("Bayushi Courtier")
+		effects["source_concealed"] = resolution.get("source_concealed", false) or is_bayushi
+		effects["concealment_depth"] = resolution.get("concealment_depth", 0)
 	else:
-		effects = {"failed": true}
-		if margin <= -10:
-			effects["disposition_change"] = -5
+		effects["failed"] = true
+		if resolution.has("disposition_change"):
+			effects["disposition_change"] = resolution["disposition_change"]
 
 	return {
-		"success": success,
+		"success": resolution.get("success", false),
 		"action_id": "GOSSIP",
 		"character_id": ctx.character_id,
 		"target_npc_id": listener_id,
@@ -606,7 +648,7 @@ static func _execute_gossip(
 		"ic_day": ctx.ic_day,
 		"season": ctx.season,
 		"skill_used": primary_skill,
-		"roll_total": roll_result.get("total", 0),
+		"roll_total": roll_total,
 		"tn": tn,
 		"margin": margin,
 		"effects": effects,
@@ -735,6 +777,80 @@ static func _execute_broadcast_social(
 		"skill_used": primary_skill,
 		"roll_total": roll_result.get("total", 0),
 		"tn": tn,
+		"margin": margin,
+		"effects": effects,
+	}
+
+
+# -- PUBLIC_DEBATE per-witness (s15.4 Category 4) -----------------------------
+
+static func _execute_public_debate(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	dice_engine: DiceEngine,
+	action_skill_map: Dictionary,
+	characters_by_id: Dictionary,
+) -> Dictionary:
+	var target_id: int = action.target_npc_id
+	var target: L5RCharacterData = characters_by_id.get(target_id)
+
+	var skill_entry: Dictionary = action_skill_map.get("PUBLIC_DEBATE", {})
+	var primary_skill: String = skill_entry.get("primary", "Courtier")
+	var a_trait_name: String = skill_entry.get("secondary", "Awareness")
+	var a_skill_rank: int = character.skills.get(primary_skill, 0)
+	var a_trait_val: int = character.traits.get(a_trait_name, 2)
+	var a_roll: int = dice_engine.roll_skill_check(
+		a_trait_val, a_skill_rank, 0
+	).get("total", 0)
+
+	var b_roll: int = 0
+	if target != null:
+		var b_courtier: int = target.skills.get("Courtier", 0)
+		var b_awareness: int = target.traits.get("Awareness", 2)
+		b_roll = dice_engine.roll_skill_check(
+			b_awareness, b_courtier, 0
+		).get("total", 0)
+
+	var margin: int = a_roll - b_roll
+	var raises: int = maxi(int(margin / 5.0), 0) if margin > 0 else 0
+	var witness_ids: Array[int] = _get_co_located_ids(character, characters_by_id)
+
+	var witness_disp_a: Dictionary = {}
+	var witness_disp_b: Dictionary = {}
+	for wid: int in witness_ids:
+		var w: L5RCharacterData = characters_by_id.get(wid)
+		if w != null:
+			var w_disp_a: int = w.disposition_values.get(character.character_id, 0)
+			var w_disp_b: int = w.disposition_values.get(target_id, 0)
+			witness_disp_a[wid] = CourtActionSystem.get_debate_disposition_tier(w_disp_a)
+			witness_disp_b[wid] = CourtActionSystem.get_debate_disposition_tier(w_disp_b)
+
+	var resolution: Dictionary = CourtActionSystem.resolve_public_debate(
+		a_roll, b_roll, witness_disp_a, witness_disp_b, raises
+	)
+
+	var effects: Dictionary = {
+		"debate_per_witness": resolution.get("per_witness_results", []),
+		"witnesses": witness_ids,
+	}
+
+	if not resolution.get("success", false):
+		effects["failed"] = true
+		if margin <= -10:
+			effects["glory_change"] = -0.1
+
+	return {
+		"success": resolution.get("success", false),
+		"action_id": "PUBLIC_DEBATE",
+		"character_id": ctx.character_id,
+		"target_npc_id": target_id,
+		"target_province_id": action.target_province_id,
+		"ic_day": ctx.ic_day,
+		"season": ctx.season,
+		"skill_used": primary_skill,
+		"roll_total": a_roll,
+		"tn": b_roll,
 		"margin": margin,
 		"effects": effects,
 	}
@@ -1081,9 +1197,13 @@ static func _compute_covert_effects(action_id: String, margin: int) -> Dictionar
 static func _compute_military_effects(action_id: String, action: NPCDataStructures.ScoredAction) -> Dictionary:
 	match action_id:
 		"ORDER_LEVY":
+			var levy_type: int = action.metadata.get(
+				"levy_unit_type", Enums.CompanyUnitType.ASHIGARU_SPEARMEN,
+			)
 			return {
 				"effect": "levy_raised",
 				"requires_levy_pu": true,
+				"levy_unit_type": levy_type,
 			}
 		"ORDER_DEPLOY":
 			return {"effect": "unit_deployed"}
@@ -1097,11 +1217,19 @@ static func _compute_military_effects(action_id: String, action: NPCDataStructur
 				"requires_battle_resolution": true,
 			}
 		"ORDER_PATROL":
-			return {"effect": "patrol_dispatched"}
+			return {
+				"effect": "patrol_dispatched",
+				"requires_patrol": true,
+				"patrol_province_id": action.target_province_id,
+			}
 		"ASSIGN_GARRISON":
 			return {"effect": "garrison_assigned"}
 		"DRILL_TROOPS":
-			return {"effect": "training_bonus"}
+			return {
+				"effect": "training_bonus",
+				"requires_drill": true,
+				"target_company_id": action.metadata.get("target_company_id", -1),
+			}
 		"CONDUCT_RAID":
 			return {"effect": "raid_executed"}
 		"RAID_HARVEST":
@@ -1111,7 +1239,14 @@ static func _compute_military_effects(action_id: String, action: NPCDataStructur
 		"CONDUCT_STORM_ASSAULT":
 			return {"effect": "assault_executed"}
 		"MAINTAIN_SIEGE":
-			return {"effect": "siege_maintained"}
+			var sid: int = action.metadata.get(
+				"siege_settlement_id", -1,
+			)
+			return {
+				"effect": "siege_maintained",
+				"requires_siege_maintenance": true,
+				"siege_settlement_id": sid,
+			}
 		"BLOCKADE_TRADE_ROUTE":
 			return _compute_blockade_effects(action)
 		"ASSIGN_TO_MILITARY_SERVICE":
@@ -1381,6 +1516,28 @@ static func _execute_scout_enemy(
 	}
 
 
+static func _execute_examine_letter(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> Dictionary:
+	var letter_id: int = action.metadata.get("letter_id", -1)
+	return {
+		"success": true,
+		"action_id": "EXAMINE_LETTER",
+		"character_id": character.character_id,
+		"target_npc_id": action.target_npc_id,
+		"target_province_id": action.target_province_id,
+		"ic_day": ctx.ic_day,
+		"season": ctx.season,
+		"effects": {
+			"requires_letter_examination": true,
+			"letter_id": letter_id,
+			"examiner_id": character.character_id,
+		},
+	}
+
+
 static func _execute_conduct_sortie(
 	action: NPCDataStructures.ScoredAction,
 	character: L5RCharacterData,
@@ -1449,6 +1606,30 @@ static func _execute_conduct_sortie(
 			"ss_reduction": sortie_result["ss_reduction"],
 			"jade_per_warrior": sortie_result["jade_per_warrior"],
 			"target_province_id": target_province_id,
+		},
+	}
+
+
+static func _execute_conduct_storm_assault(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> Dictionary:
+	var settlement_id: int = action.metadata.get(
+		"siege_settlement_id", character.physical_location,
+	)
+	return {
+		"success": true,
+		"action_id": "CONDUCT_STORM_ASSAULT",
+		"character_id": ctx.character_id,
+		"target_npc_id": action.target_npc_id,
+		"target_province_id": action.target_province_id,
+		"ic_day": ctx.ic_day,
+		"season": ctx.season,
+		"effects": {
+			"effect": "storm_assault_ordered",
+			"requires_storm_assault": true,
+			"siege_settlement_id": settlement_id,
 		},
 	}
 
@@ -1591,6 +1772,76 @@ static func _execute_seal_wall_breach(
 	}
 
 
+static func _execute_purify_tainted_ground(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	var province_id: int = action.target_province_id
+	if province_id < 0:
+		province_id = action.metadata.get("province_id", -1)
+
+	var ptl: float = action.metadata.get("ptl", 0.0)
+	var tn: int = 15 + int(ptl * 5.0)
+
+	var roll_result: Dictionary = SkillResolver.resolve_skill_check(
+		character, dice_engine, "Lore: Shadowlands", tn,
+	)
+	var success: bool = roll_result.get("success", false)
+	var margin: int = roll_result.get("margin", 0)
+	var raises: int = maxi(margin / 5, 0) if success else 0
+
+	var ptl_reduction: float = 0.0
+	if success:
+		ptl_reduction = 0.5 + (raises * 0.25)
+
+	var school_rank: int = CharacterStats.get_insight_rank(character)
+	var ward_bleed_reduction: float = 0.0
+	var ward_duration: int = 0
+	if success:
+		match school_rank:
+			1:
+				ward_bleed_reduction = 0.1
+				ward_duration = 2
+			2:
+				ward_bleed_reduction = 0.1
+				ward_duration = 3
+			3:
+				ward_bleed_reduction = 0.2
+				ward_duration = 4
+			4:
+				ward_bleed_reduction = 0.2
+				ward_duration = 5
+			_:
+				ward_bleed_reduction = 0.3
+				ward_duration = 6
+
+	return {
+		"success": success,
+		"action_id": "PURIFY_TAINTED_GROUND",
+		"character_id": ctx.character_id,
+		"target_npc_id": action.target_npc_id,
+		"target_province_id": province_id,
+		"ic_day": ctx.ic_day,
+		"season": ctx.season,
+		"skill_used": "Lore: Shadowlands",
+		"roll_total": roll_result.get("total", 0),
+		"tn": tn,
+		"margin": margin,
+		"raises": raises,
+		"effects": {
+			"effect": "taint_purified" if success else "purification_failed",
+			"requires_purification": success,
+			"ptl_reduction": ptl_reduction,
+			"province_id": province_id,
+			"ward_bleed_reduction": ward_bleed_reduction,
+			"ward_duration": ward_duration,
+			"ward_school_rank": school_rank,
+		},
+	}
+
+
 static func _compute_self_effects(action_id: String) -> Dictionary:
 	match action_id:
 		"TRAIN":
@@ -1634,6 +1885,8 @@ const CRITICAL_FAILURE_DISPOSITION: Dictionary = {
 	"INTIMIDATE": -8,
 	"DISCLOSE": -5,
 	"GOSSIP": -5,
+	"PROVOKE_EMOTION": -5,
+	"DISCERN_NEED": -3,
 }
 
 
@@ -2105,5 +2358,491 @@ static func _execute_construction(
 		"target_province_id": effects["province_id"],
 		"ic_day": ctx.ic_day,
 		"season": ctx.season,
+		"effects": effects,
+	}
+
+
+# -- Contested Court Actions (s15.4 Category 1) -------------------------------
+
+const _CONTESTED_COURT_ACTIONS: Array[String] = [
+	"NEGOTIATE", "PERSUADE", "CHARM", "IMPRESS", "LISTEN_REFLECT",
+	"OFFER_FAVOR", "DISCLOSE",
+]
+
+
+static func _execute_contested_court_action(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	dice_engine: DiceEngine,
+	action_skill_map: Dictionary,
+	characters_by_id: Dictionary,
+) -> Dictionary:
+	var action_id: String = action.action_id
+	var target_id: int = action.target_npc_id
+	var target: L5RCharacterData = characters_by_id.get(target_id)
+
+	var skill_entry: Dictionary = action_skill_map.get(action_id, {})
+	var a_skill: String = _CONTESTED_ATTACKER_SKILL.get(action_id, skill_entry.get("primary", "Courtier"))
+	var a_trait_name: String = _CONTESTED_ATTACKER_TRAIT.get(action_id, skill_entry.get("secondary", "Awareness"))
+	var a_skill_rank: int = character.skills.get(a_skill, 0)
+	var a_trait_val: int = character.traits.get(a_trait_name, 2)
+	var wc_bonus: int = _get_winter_court_skill_bonus(character, a_skill, ctx)
+	var attacker_roll: int = dice_engine.roll_skill_check(
+		a_trait_val, a_skill_rank, 0
+	).get("total", 0) + wc_bonus
+
+	var defender_roll: int = 0
+	if target != null:
+		var d_skill: String = _CONTESTED_DEFENDER_SKILL.get(action_id, "Etiquette")
+		var d_trait_name: String = _CONTESTED_DEFENDER_TRAIT.get(action_id, "Awareness")
+		var d_skill_rank: int = target.skills.get(d_skill, 0)
+		var d_trait_val: int = target.traits.get(d_trait_name, 2)
+		defender_roll = dice_engine.roll_skill_check(
+			d_trait_val, d_skill_rank, 0
+		).get("total", 0)
+
+	var margin: int = attacker_roll - defender_roll
+	var raises: int = maxi(int(margin / 5.0), 0)
+	var has_topic: bool = action.metadata.get("has_topic", false)
+	var current_disp: int = ctx.dispositions.get(target_id, 0)
+
+	var resolution: Dictionary
+	match action_id:
+		"NEGOTIATE":
+			var session_count: int = action.metadata.get("session_negotiate_count", 0)
+			resolution = CourtActionSystem.resolve_negotiate(
+				attacker_roll, defender_roll, raises, has_topic, session_count
+			)
+		"PERSUADE":
+			resolution = CourtActionSystem.resolve_persuade(
+				attacker_roll, defender_roll, raises, has_topic
+			)
+		"CHARM":
+			var charm_count: int = action.metadata.get("session_charm_count", 0)
+			resolution = CourtActionSystem.resolve_charm(
+				attacker_roll, defender_roll, raises, current_disp, charm_count
+			)
+		"IMPRESS":
+			resolution = CourtActionSystem.resolve_impress(
+				attacker_roll, defender_roll, raises
+			)
+		"LISTEN_REFLECT":
+			resolution = CourtActionSystem.resolve_listen_reflect(
+				attacker_roll, defender_roll, raises
+			)
+		"OFFER_FAVOR":
+			resolution = CourtActionSystem.resolve_offer_favor(
+				attacker_roll, defender_roll
+			)
+		"DISCLOSE":
+			var disclosed_opinion: int = action.metadata.get("disclosed_opinion", 0)
+			resolution = CourtActionSystem.resolve_disclose(
+				attacker_roll, defender_roll, disclosed_opinion
+			)
+		_:
+			resolution = {"success": false}
+
+	var effects: Dictionary = {}
+	if resolution.get("success", false):
+		effects["disposition_change"] = resolution.get("disposition_change", 0)
+		if resolution.has("target_position_shift"):
+			effects["target_position_shift"] = resolution["target_position_shift"]
+		if resolution.has("position_durable"):
+			effects["position_durable"] = true
+		if resolution.has("position_hardened"):
+			effects["position_hardened"] = true
+		if resolution.has("session_tn_reduction"):
+			effects["session_tn_reduction"] = resolution["session_tn_reduction"]
+		if resolution.has("persuade_negotiate_tn_reduction"):
+			effects["persuade_negotiate_tn_reduction"] = resolution["persuade_negotiate_tn_reduction"]
+		if resolution.has("charm_ceiling_active"):
+			effects["charm_ceiling_active"] = resolution["charm_ceiling_active"]
+		if resolution.has("requires_favor_creation"):
+			effects["requires_favor_creation"] = true
+			effects["favor_creditor_id"] = ctx.character_id
+			effects["favor_debtor_id"] = target_id
+		if resolution.has("info_gained"):
+			effects["info_gained"] = resolution["info_gained"]
+		if resolution.has("disclosed_opinion"):
+			effects["disclosed_opinion"] = resolution["disclosed_opinion"]
+			effects["disclose_about_id"] = action.metadata.get("disclose_about_id", -1)
+	else:
+		effects["failed"] = true
+		var fail_disp: int = resolution.get("disposition_change", 0)
+		if fail_disp != 0:
+			effects["disposition_change"] = fail_disp
+		if resolution.has("target_position_shift"):
+			effects["target_position_shift"] = resolution["target_position_shift"]
+		if resolution.has("position_hardened"):
+			effects["position_hardened"] = true
+
+	if not action.metadata.is_empty():
+		effects["_action_metadata"] = action.metadata
+
+	return {
+		"success": resolution.get("success", false),
+		"action_id": action_id,
+		"character_id": ctx.character_id,
+		"target_npc_id": target_id,
+		"target_province_id": action.target_province_id,
+		"ic_day": ctx.ic_day,
+		"season": ctx.season,
+		"skill_used": a_skill,
+		"roll_total": attacker_roll,
+		"tn": defender_roll,
+		"margin": margin,
+		"effects": effects,
+	}
+
+
+const _CONTESTED_ATTACKER_SKILL: Dictionary = {
+	"NEGOTIATE": "Courtier",
+	"PERSUADE": "Sincerity",
+	"CHARM": "Etiquette",
+	"IMPRESS": "Lore",
+	"LISTEN_REFLECT": "Investigation",
+	"OFFER_FAVOR": "Sincerity",
+	"DISCLOSE": "Sincerity",
+}
+
+const _CONTESTED_ATTACKER_TRAIT: Dictionary = {
+	"NEGOTIATE": "Awareness",
+	"PERSUADE": "Awareness",
+	"CHARM": "Awareness",
+	"IMPRESS": "Intelligence",
+	"LISTEN_REFLECT": "Perception",
+	"OFFER_FAVOR": "Awareness",
+	"DISCLOSE": "Perception",
+}
+
+const _CONTESTED_DEFENDER_SKILL: Dictionary = {
+	"NEGOTIATE": "Courtier",
+	"PERSUADE": "Sincerity",
+	"CHARM": "Etiquette",
+	"IMPRESS": "Etiquette",
+	"LISTEN_REFLECT": "Sincerity",
+	"OFFER_FAVOR": "Sincerity",
+	"DISCLOSE": "Sincerity",
+}
+
+const _CONTESTED_DEFENDER_TRAIT: Dictionary = {
+	"NEGOTIATE": "Awareness",
+	"PERSUADE": "Willpower",
+	"CHARM": "Awareness",
+	"IMPRESS": "Awareness",
+	"LISTEN_REFLECT": "Awareness",
+	"OFFER_FAVOR": "Perception",
+	"DISCLOSE": "Perception",
+}
+
+
+# -- PROVOKE_EMOTION (s15.4 Category 4) ---------------------------------------
+
+static func _execute_provoke_emotion(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	dice_engine: DiceEngine,
+	characters_by_id: Dictionary,
+) -> Dictionary:
+	var target_id: int = action.target_npc_id
+	var target: L5RCharacterData = characters_by_id.get(target_id)
+
+	var a_skill_rank: int = character.skills.get("Courtier", 0)
+	var a_trait_val: int = character.traits.get("Awareness", 2)
+	var attacker_roll: int = dice_engine.roll_skill_check(
+		a_trait_val, a_skill_rank, 0
+	).get("total", 0)
+
+	var defender_roll: int = 0
+	if target != null:
+		var d_etiquette: int = target.skills.get("Etiquette", 0)
+		var d_willpower: int = target.traits.get("Willpower", 2)
+		defender_roll = dice_engine.roll_skill_check(
+			d_willpower, d_etiquette, 0
+		).get("total", 0)
+
+	var witness_ids: Array[int] = _get_co_located_ids(character, characters_by_id)
+	var resolution: Dictionary = CourtActionSystem.resolve_provoke_emotion(
+		attacker_roll, defender_roll, witness_ids
+	)
+
+	# Ikoma Bard R2 exemption: emotion on behalf of Lion or honorable cause
+	var ikoma_exempt: bool = (
+		target != null
+		and target.school.begins_with("Ikoma Bard")
+		and target.clan == "Lion"
+	)
+
+	var effects: Dictionary = {}
+	if resolution.get("success", false):
+		if ikoma_exempt:
+			effects["ikoma_bard_exempt"] = true
+		else:
+			effects["target_honor_change"] = resolution["target_honor_change"]
+			effects["target_glory_change"] = resolution["target_glory_change"]
+			effects["target_witness_disposition"] = resolution["target_witness_disposition"]
+			effects["witnesses"] = resolution["witnesses"]
+	else:
+		effects["failed"] = true
+		if resolution.has("witness_disposition_loss"):
+			effects["witness_disposition_loss"] = resolution["witness_disposition_loss"]
+			effects["witnesses"] = resolution["witnesses"]
+
+	return {
+		"success": resolution.get("success", false),
+		"action_id": "PROVOKE_EMOTION",
+		"character_id": ctx.character_id,
+		"target_npc_id": target_id,
+		"target_province_id": action.target_province_id,
+		"ic_day": ctx.ic_day,
+		"season": ctx.season,
+		"skill_used": "Courtier",
+		"roll_total": attacker_roll,
+		"tn": defender_roll,
+		"margin": attacker_roll - defender_roll,
+		"effects": effects,
+	}
+
+
+# -- PLAY_GAME (s15.4 Category 1) ---------------------------------------------
+
+static func _execute_play_game(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	dice_engine: DiceEngine,
+	characters_by_id: Dictionary,
+) -> Dictionary:
+	var target_id: int = action.target_npc_id
+	var target: L5RCharacterData = characters_by_id.get(target_id)
+
+	var game_skill: String = action.metadata.get("game_skill", "Games: Go")
+	var game_trait: String = _GAME_TRAIT_MAP.get(game_skill, "Awareness")
+
+	var a_skill_rank: int = character.skills.get(game_skill, 0)
+	var a_trait_val: int = character.traits.get(game_trait, 2)
+	var a_roll: int = dice_engine.roll_skill_check(
+		a_trait_val, a_skill_rank, 0
+	).get("total", 0)
+
+	var b_roll: int = 0
+	if target != null:
+		var b_skill_rank: int = target.skills.get(game_skill, 0)
+		var b_trait_val: int = target.traits.get(game_trait, 2)
+		b_roll = dice_engine.roll_skill_check(
+			b_trait_val, b_skill_rank, 0
+		).get("total", 0)
+
+	var resolution: Dictionary = CourtActionSystem.resolve_play_game(
+		a_roll, b_roll, character.character_id, target_id
+	)
+
+	return {
+		"success": true,
+		"action_id": "PLAY_GAME",
+		"character_id": ctx.character_id,
+		"target_npc_id": target_id,
+		"target_province_id": action.target_province_id,
+		"ic_day": ctx.ic_day,
+		"season": ctx.season,
+		"effects": {
+			"play_game_result": resolution,
+			"a_disposition_toward_b": resolution["a_disposition_toward_b"],
+			"b_disposition_toward_a": resolution["b_disposition_toward_a"],
+			"winner_id": resolution["winner_id"],
+		},
+	}
+
+
+const _GAME_TRAIT_MAP: Dictionary = {
+	"Games: Go": "Intelligence",
+	"Games: Shogi": "Intelligence",
+	"Games: Kemari": "Agility",
+	"Games: Fortunes & Winds": "Awareness",
+	"Games: Letters": "Awareness",
+	"Games: Sadane": "Awareness",
+}
+
+
+# -- DISCERN_NEED (s15.4 Category 5) ------------------------------------------
+
+static func _execute_discern_need(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	dice_engine: DiceEngine,
+	characters_by_id: Dictionary,
+) -> Dictionary:
+	var target_id: int = action.target_npc_id
+	var target: L5RCharacterData = characters_by_id.get(target_id)
+
+	var a_skill: String = "Investigation"
+	var a_trait_name: String = "Awareness"
+	if character.school.begins_with("Yasuki"):
+		a_skill = "Commerce"
+		a_trait_name = "Perception"
+	elif character.school.begins_with("Doji"):
+		a_skill = "Courtier"
+
+	var a_skill_rank: int = character.skills.get(a_skill, 0)
+	var a_trait_val: int = character.traits.get(a_trait_name, 2)
+	var attacker_roll: int = dice_engine.roll_skill_check(
+		a_trait_val, a_skill_rank, 0
+	).get("total", 0)
+
+	var defender_roll: int = 0
+	if target != null:
+		var d_etiquette: int = target.skills.get("Etiquette", 0)
+		var d_awareness: int = target.traits.get("Awareness", 2)
+		defender_roll = dice_engine.roll_skill_check(
+			d_awareness, d_etiquette, 0
+		).get("total", 0)
+
+	var resolution: Dictionary = CourtActionSystem.resolve_discern_need(
+		attacker_roll, defender_roll
+	)
+
+	var effects: Dictionary = {}
+	if resolution.get("success", false):
+		effects["info_gained"] = true
+		effects["info_type"] = "priority_objective"
+		if resolution.get("detected", false):
+			effects["detected"] = true
+	else:
+		effects["failed"] = true
+		if resolution.get("critical_failure", false):
+			effects["disposition_change"] = resolution.get("disposition_change", 0)
+			effects["detected"] = true
+
+	return {
+		"success": resolution.get("success", false),
+		"action_id": "DISCERN_NEED",
+		"character_id": ctx.character_id,
+		"target_npc_id": target_id,
+		"target_province_id": action.target_province_id,
+		"ic_day": ctx.ic_day,
+		"season": ctx.season,
+		"skill_used": a_skill,
+		"roll_total": attacker_roll,
+		"tn": defender_roll,
+		"margin": attacker_roll - defender_roll,
+		"effects": effects,
+	}
+
+
+# -- Read Character / Probe (s15.4 Category 5) --------------------------------
+
+static func _execute_read_character(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	dice_engine: DiceEngine,
+	characters_by_id: Dictionary,
+) -> Dictionary:
+	var target_id: int = action.target_npc_id
+	var target: L5RCharacterData = characters_by_id.get(target_id)
+
+	var a_skill_rank: int = character.skills.get("Investigation", 0)
+	var a_trait_val: int = character.traits.get("Perception", 2)
+	var attacker_roll: int = dice_engine.roll_skill_check(
+		a_trait_val, a_skill_rank, 0
+	).get("total", 0)
+
+	var defender_roll: int = 0
+	if target != null:
+		var d_etiquette: int = target.skills.get("Etiquette", 0)
+		var d_awareness: int = target.traits.get("Awareness", 2)
+		defender_roll = dice_engine.roll_skill_check(
+			d_awareness, d_etiquette, 0
+		).get("total", 0)
+
+	var resolution: Dictionary = CourtActionSystem.resolve_read_character(
+		attacker_roll, defender_roll, dice_engine
+	)
+
+	var effects: Dictionary = {}
+	if resolution.get("success", false):
+		effects["info_gained"] = true
+		effects["info_types"] = resolution.get("info_types", [])
+		effects["info_count"] = resolution.get("info_count", 0)
+		if resolution.get("partial", false):
+			effects["partial"] = true
+	else:
+		effects["failed"] = true
+		if resolution.get("critical_failure", false):
+			effects["false_info"] = resolution.get("false_info", [])
+
+	return {
+		"success": resolution.get("success", false),
+		"action_id": "READ_CHARACTER",
+		"character_id": ctx.character_id,
+		"target_npc_id": target_id,
+		"target_province_id": action.target_province_id,
+		"ic_day": ctx.ic_day,
+		"season": ctx.season,
+		"skill_used": "Investigation",
+		"roll_total": attacker_roll,
+		"tn": defender_roll,
+		"margin": attacker_roll - defender_roll,
+		"effects": effects,
+	}
+
+
+static func _execute_probe(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	dice_engine: DiceEngine,
+	characters_by_id: Dictionary,
+) -> Dictionary:
+	var target_id: int = action.target_npc_id
+	var target: L5RCharacterData = characters_by_id.get(target_id)
+
+	var a_skill_rank: int = character.skills.get("Courtier", 0)
+	var a_trait_val: int = character.traits.get("Perception", 2)
+	var attacker_roll: int = dice_engine.roll_skill_check(
+		a_trait_val, a_skill_rank, 0
+	).get("total", 0)
+
+	var defender_roll: int = 0
+	if target != null:
+		var d_sincerity: int = target.skills.get("Sincerity", 0)
+		var d_awareness: int = target.traits.get("Awareness", 2)
+		defender_roll = dice_engine.roll_skill_check(
+			d_awareness, d_sincerity, 0
+		).get("total", 0)
+
+	var resolution: Dictionary = CourtActionSystem.resolve_probe(
+		attacker_roll, defender_roll, dice_engine
+	)
+
+	var effects: Dictionary = {}
+	if resolution.get("success", false):
+		effects["info_gained"] = true
+		effects["info_types"] = resolution.get("info_types", [])
+		effects["info_count"] = resolution.get("info_count", 0)
+		if resolution.get("partial", false):
+			effects["partial"] = true
+		effects["detected"] = true
+	else:
+		effects["failed"] = true
+		effects["detected"] = true
+		if resolution.get("critical_failure", false):
+			effects["false_info"] = resolution.get("false_info", [])
+
+	return {
+		"success": resolution.get("success", false),
+		"action_id": "PROBE",
+		"character_id": ctx.character_id,
+		"target_npc_id": target_id,
+		"target_province_id": action.target_province_id,
+		"ic_day": ctx.ic_day,
+		"season": ctx.season,
+		"skill_used": "Courtier",
+		"roll_total": attacker_roll,
+		"tn": defender_roll,
+		"margin": attacker_roll - defender_roll,
 		"effects": effects,
 	}

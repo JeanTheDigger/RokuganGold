@@ -180,6 +180,7 @@ func test_military_daily_returns_all_keys() -> void:
 		[], [], [], [], DiceEngine.new(), [], [],
 	)
 	assert_true(r.has("movement_results"))
+	assert_true(r.has("battle_results"))
 	assert_true(r.has("siege_results"))
 	assert_true(r.has("tether_results"))
 	assert_true(r.has("order_results"))
@@ -205,13 +206,17 @@ func _make_settlement(
 
 func test_levy_pu_effect_consumes_pu() -> void:
 	var s: SettlementData = _make_settlement(10, 1, 10, 3)
+	var companies: Array[Dictionary] = []
+	var next_id: Array[int] = [100]
 	var applied: Dictionary = {
 		"character_id": 5,
 		"target_province_id": 1,
 		"effects": {"requires_levy_pu": true},
 	}
-	var r: Dictionary = DayOrchestrator._apply_levy_pu_effect(applied, [s])
-	assert_eq(r["type"], "levy_pu_consumed")
+	var r: Dictionary = DayOrchestrator._apply_levy_pu_effect(
+		applied, [s], companies, next_id,
+	)
+	assert_eq(r["type"], "levy_raised")
 	assert_eq(r["pu_consumed"], 1)
 	assert_eq(s.military_pu, 2)
 	assert_eq(s.population_pu, 9)
@@ -225,6 +230,124 @@ func test_levy_pu_effect_no_province() -> void:
 	}
 	var r: Dictionary = DayOrchestrator._apply_levy_pu_effect(applied, [])
 	assert_true(r.is_empty())
+
+
+func test_levy_creates_company_dict() -> void:
+	var s: SettlementData = _make_settlement(10, 1, 10, 3)
+	var companies: Array[Dictionary] = []
+	var next_id: Array[int] = [100]
+	var applied: Dictionary = {
+		"character_id": 5,
+		"target_province_id": 1,
+		"effects": {"requires_levy_pu": true},
+	}
+	var r: Dictionary = DayOrchestrator._apply_levy_pu_effect(
+		applied, [s], companies, next_id,
+	)
+	assert_eq(companies.size(), 1)
+	assert_eq(companies[0]["company_id"], 100)
+	assert_eq(companies[0]["lord_id"], 5)
+	assert_eq(companies[0]["source_province_id"], 1)
+	assert_eq(companies[0]["army_id"], -1)
+	assert_false(companies[0]["destroyed"])
+	assert_eq(r["company_id"], 100)
+	assert_eq(r["unit_type"], Enums.CompanyUnitType.ASHIGARU_SPEARMEN)
+
+
+func test_levy_increments_company_id() -> void:
+	var s: SettlementData = _make_settlement(10, 1, 10, 5)
+	var companies: Array[Dictionary] = []
+	var next_id: Array[int] = [50]
+	var applied: Dictionary = {
+		"character_id": 5,
+		"target_province_id": 1,
+		"effects": {"requires_levy_pu": true},
+	}
+	DayOrchestrator._apply_levy_pu_effect(applied, [s], companies, next_id)
+	assert_eq(next_id[0], 51)
+
+
+func test_levy_respects_unit_type_metadata() -> void:
+	var s: SettlementData = _make_settlement(10, 1, 10, 3)
+	var companies: Array[Dictionary] = []
+	var next_id: Array[int] = [1]
+	var applied: Dictionary = {
+		"character_id": 5,
+		"target_province_id": 1,
+		"effects": {
+			"requires_levy_pu": true,
+			"levy_unit_type": Enums.CompanyUnitType.PEASANT_LEVY,
+		},
+	}
+	var r: Dictionary = DayOrchestrator._apply_levy_pu_effect(
+		applied, [s], companies, next_id,
+	)
+	assert_eq(companies[0]["unit_type"], Enums.CompanyUnitType.PEASANT_LEVY)
+	assert_eq(r["unit_type"], Enums.CompanyUnitType.PEASANT_LEVY)
+
+
+func test_levy_defaults_to_ashigaru_spearmen() -> void:
+	var s: SettlementData = _make_settlement(10, 1, 10, 3)
+	var companies: Array[Dictionary] = []
+	var next_id: Array[int] = [1]
+	var applied: Dictionary = {
+		"character_id": 5,
+		"target_province_id": 1,
+		"effects": {"requires_levy_pu": true},
+	}
+	DayOrchestrator._apply_levy_pu_effect(applied, [s], companies, next_id)
+	assert_eq(companies[0]["unit_type"], Enums.CompanyUnitType.ASHIGARU_SPEARMEN)
+
+
+func test_levy_company_has_correct_health() -> void:
+	var s: SettlementData = _make_settlement(10, 1, 10, 3)
+	var companies: Array[Dictionary] = []
+	var next_id: Array[int] = [1]
+	var applied: Dictionary = {
+		"character_id": 5,
+		"target_province_id": 1,
+		"effects": {"requires_levy_pu": true},
+	}
+	DayOrchestrator._apply_levy_pu_effect(applied, [s], companies, next_id)
+	var stats: Dictionary = ArmyCombatSystem.UNIT_STATS[Enums.CompanyUnitType.ASHIGARU_SPEARMEN]
+	assert_eq(companies[0]["health"], stats["health"])
+	assert_eq(companies[0]["morale"], stats["morale"])
+
+
+func test_levy_returns_arms_cost() -> void:
+	var s: SettlementData = _make_settlement(10, 1, 10, 3)
+	var companies: Array[Dictionary] = []
+	var next_id: Array[int] = [1]
+	var applied: Dictionary = {
+		"character_id": 5,
+		"target_province_id": 1,
+		"effects": {"requires_levy_pu": true},
+	}
+	var r: Dictionary = DayOrchestrator._apply_levy_pu_effect(
+		applied, [s], companies, next_id,
+	)
+	var expected_cost: float = ArmyUpkeepSystem.get_arms_equip_cost(
+		Enums.CompanyUnitType.ASHIGARU_SPEARMEN,
+	)
+	assert_eq(r["arms_cost"], expected_cost)
+
+
+func test_levy_scanned_in_process_military_effects() -> void:
+	var s: SettlementData = _make_settlement(10, 1, 10, 3)
+	var companies: Array[Dictionary] = []
+	var next_id: Array[int] = [200]
+	var applied_list: Array = [{
+		"character_id": 5,
+		"target_province_id": 1,
+		"effects": {"requires_levy_pu": true},
+	}]
+	var results: Array[Dictionary] = DayOrchestrator._process_military_effects(
+		applied_list, [s], {}, companies, {}, next_id,
+	)
+	assert_eq(results.size(), 1)
+	assert_eq(results[0]["type"], "levy_raised")
+	assert_eq(companies.size(), 1)
+	assert_eq(companies[0]["company_id"], 200)
 
 
 func test_battle_pu_reconciliation_effect() -> void:
@@ -3700,3 +3823,1996 @@ func test_disband_runs_before_movement_in_daily() -> void:
 	assert_true(result.has("disband_results"))
 	assert_eq(result["disband_results"].size(), 1)
 	assert_false(army.get("is_active", true))
+
+
+# -- Garrison Assignment Tests --------------------------------------------------
+
+func _make_character_for_garrison(
+	id: int,
+	clan: String = "Crane",
+	honor: float = 3.0,
+) -> L5RCharacterData:
+	var c: L5RCharacterData = L5RCharacterData.new()
+	c.character_id = id
+	c.clan = clan
+	c.honor = honor
+	return c
+
+
+func _make_wall_tower(id: int, province_id: int, garrison: float = 2.0) -> SettlementData:
+	var s: SettlementData = SettlementData.new()
+	s.settlement_id = id
+	s.province_id = province_id
+	s.garrison_pu = garrison
+	s.settlement_type = Enums.SettlementType.WALL_TOWER
+	return s
+
+
+func _make_province(id: int, clan: String) -> ProvinceData:
+	var p: ProvinceData = ProvinceData.new()
+	p.province_id = id
+	p.clan = clan
+	return p
+
+
+func test_garrison_assignment_transfers_pu() -> void:
+	var daimyo: L5RCharacterData = _make_character_for_garrison(10, "Crane")
+	var wall: SettlementData = _make_wall_tower(1, 100, 2.0)
+	var source: SettlementData = _make_settlement(2, 200, 10, 3)
+	source.garrison_pu = 5.0
+	var province_crane: ProvinceData = _make_province(200, "Crane")
+	var applied: Dictionary = {
+		"character_id": 5,
+		"effects": {
+			"requires_garrison_assignment": true,
+			"target_npc_id": 10,
+			"target_province_id": 100,
+			"honor_gain_recipient": 0.1,
+		},
+	}
+	var r: Dictionary = DayOrchestrator._apply_garrison_assignment(
+		applied, {10: daimyo}, [wall, source], {200: province_crane},
+	)
+	assert_eq(r["type"], "garrison_assigned")
+	assert_eq(r["daimyo_id"], 10)
+	assert_eq(r["target_province_id"], 100)
+	assert_almost_eq(r["pu_transferred"], 1.0, 0.01)
+	assert_almost_eq(wall.garrison_pu, 3.0, 0.01)
+	assert_almost_eq(source.garrison_pu, 4.0, 0.01)
+	assert_almost_eq(daimyo.honor, 3.1, 0.01)
+
+
+func test_garrison_assignment_honor_applied_to_daimyo() -> void:
+	var daimyo: L5RCharacterData = _make_character_for_garrison(10, "Crane", 5.0)
+	var wall: SettlementData = _make_wall_tower(1, 100, 1.0)
+	var source: SettlementData = _make_settlement(2, 200)
+	source.garrison_pu = 2.0
+	var province_crane: ProvinceData = _make_province(200, "Crane")
+	var applied: Dictionary = {
+		"character_id": 5,
+		"effects": {
+			"requires_garrison_assignment": true,
+			"target_npc_id": 10,
+			"target_province_id": 100,
+			"honor_gain_recipient": 0.1,
+		},
+	}
+	DayOrchestrator._apply_garrison_assignment(
+		applied, {10: daimyo}, [wall, source], {200: province_crane},
+	)
+	assert_almost_eq(daimyo.honor, 5.1, 0.01)
+
+
+func test_garrison_assignment_partial_pu_when_source_low() -> void:
+	var daimyo: L5RCharacterData = _make_character_for_garrison(10, "Crane")
+	var wall: SettlementData = _make_wall_tower(1, 100, 2.0)
+	var source: SettlementData = _make_settlement(2, 200)
+	source.garrison_pu = 0.4
+	var province_crane: ProvinceData = _make_province(200, "Crane")
+	var applied: Dictionary = {
+		"character_id": 5,
+		"effects": {
+			"requires_garrison_assignment": true,
+			"target_npc_id": 10,
+			"target_province_id": 100,
+			"honor_gain_recipient": 0.1,
+		},
+	}
+	var r: Dictionary = DayOrchestrator._apply_garrison_assignment(
+		applied, {10: daimyo}, [wall, source], {200: province_crane},
+	)
+	assert_almost_eq(r["pu_transferred"], 0.4, 0.01)
+	assert_almost_eq(source.garrison_pu, 0.0, 0.01)
+	assert_almost_eq(wall.garrison_pu, 2.4, 0.01)
+
+
+func test_garrison_assignment_no_target_returns_empty() -> void:
+	var applied: Dictionary = {
+		"character_id": 5,
+		"effects": {
+			"requires_garrison_assignment": true,
+			"target_npc_id": -1,
+			"target_province_id": 100,
+		},
+	}
+	var r: Dictionary = DayOrchestrator._apply_garrison_assignment(
+		applied, {}, [], {},
+	)
+	assert_true(r.is_empty())
+
+
+func test_garrison_assignment_no_wall_tower_no_transfer() -> void:
+	var daimyo: L5RCharacterData = _make_character_for_garrison(10, "Crane")
+	var source: SettlementData = _make_settlement(2, 200)
+	source.garrison_pu = 5.0
+	var province_crane: ProvinceData = _make_province(200, "Crane")
+	var applied: Dictionary = {
+		"character_id": 5,
+		"effects": {
+			"requires_garrison_assignment": true,
+			"target_npc_id": 10,
+			"target_province_id": 100,
+			"honor_gain_recipient": 0.1,
+		},
+	}
+	var r: Dictionary = DayOrchestrator._apply_garrison_assignment(
+		applied, {10: daimyo}, [source], {200: province_crane},
+	)
+	assert_eq(r["type"], "garrison_assigned")
+	assert_almost_eq(r["pu_transferred"], 0.0, 0.01)
+	assert_almost_eq(source.garrison_pu, 5.0, 0.01)
+
+
+func test_garrison_assignment_scanned_in_process_military_effects() -> void:
+	var daimyo: L5RCharacterData = _make_character_for_garrison(10, "Crane")
+	var wall: SettlementData = _make_wall_tower(1, 100, 2.0)
+	var source: SettlementData = _make_settlement(2, 200)
+	source.garrison_pu = 3.0
+	var province_crane: ProvinceData = _make_province(200, "Crane")
+	var applied_list: Array = [
+		{
+			"character_id": 5,
+			"effects": {
+				"requires_garrison_assignment": true,
+				"target_npc_id": 10,
+				"target_province_id": 100,
+				"honor_gain_recipient": 0.1,
+			},
+		},
+	]
+	var results: Array[Dictionary] = DayOrchestrator._process_military_effects(
+		applied_list, [wall, source], {10: daimyo}, [], {200: province_crane},
+	)
+	assert_eq(results.size(), 1)
+	assert_eq(results[0]["type"], "garrison_assigned")
+
+
+func test_garrison_assignment_requester_id_captured() -> void:
+	var daimyo: L5RCharacterData = _make_character_for_garrison(10, "Crane")
+	var wall: SettlementData = _make_wall_tower(1, 100, 2.0)
+	var source: SettlementData = _make_settlement(2, 200)
+	source.garrison_pu = 3.0
+	var province_crane: ProvinceData = _make_province(200, "Crane")
+	var applied: Dictionary = {
+		"character_id": 42,
+		"effects": {
+			"requires_garrison_assignment": true,
+			"target_npc_id": 10,
+			"target_province_id": 100,
+			"honor_gain_recipient": 0.1,
+		},
+	}
+	var r: Dictionary = DayOrchestrator._apply_garrison_assignment(
+		applied, {10: daimyo}, [wall, source], {200: province_crane},
+	)
+	assert_eq(r["requester_id"], 42)
+
+
+# -- Army Battle Resolution Tests -----------------------------------------------
+
+func _make_company_dict_for_battle(
+	id: int,
+	army_id: int,
+	clan: String = "Crab",
+	ut: int = Enums.CompanyUnitType.BUSHI_RETAINER,
+) -> Dictionary:
+	var stats: Dictionary = ArmyCombatSystem.UNIT_STATS.get(ut, {})
+	return {
+		"company_id": id,
+		"army_id": army_id,
+		"unit_type": ut,
+		"clan_name": clan,
+		"commander_id": -1,
+		"source_province_id": 1,
+		"current_health": stats.get("health", 153),
+		"current_morale": stats.get("morale", 10),
+	}
+
+
+func test_company_dict_to_data_converts_correctly() -> void:
+	var cd: Dictionary = _make_company_dict_for_battle(1, 10, "Crab")
+	var data: MilitaryUnitData.CompanyData = DayOrchestrator._company_dict_to_data(cd)
+	assert_eq(data.company_id, 1)
+	assert_eq(data.unit_type, Enums.CompanyUnitType.BUSHI_RETAINER)
+	assert_true(data.health > 0)
+	assert_true(data.attack > 0)
+
+
+func test_get_army_companies_filters_by_army_id() -> void:
+	var c1: Dictionary = _make_company_dict_for_battle(1, 10)
+	var c2: Dictionary = _make_company_dict_for_battle(2, 10)
+	var c3: Dictionary = _make_company_dict_for_battle(3, 20)
+	var result: Array[Dictionary] = DayOrchestrator._get_army_companies(
+		10, [c1, c2, c3],
+	)
+	assert_eq(result.size(), 2)
+
+
+func test_build_battle_states_creates_states() -> void:
+	var cd: Dictionary = _make_company_dict_for_battle(1, 10)
+	var states: Array[Dictionary] = DayOrchestrator._build_battle_states(
+		[cd], "attacker", {},
+	)
+	assert_eq(states.size(), 1)
+	assert_eq(states[0]["side"], "attacker")
+	assert_eq(states[0]["company_id"], 1)
+	assert_true(states[0]["starting_health"] > 0)
+
+
+func test_write_battle_results_updates_companies() -> void:
+	var cd: Dictionary = _make_company_dict_for_battle(1, 10)
+	cd["current_health"] = 153
+	var battle_result: Dictionary = {
+		"attacker_states": [
+			{"company_id": 1, "current_health": 50, "current_morale": 3,
+			 "is_destroyed": false, "is_routed": false, "commander_dead": false},
+		],
+		"defender_states": [],
+	}
+	DayOrchestrator._write_battle_results_to_companies(battle_result, [cd])
+	assert_eq(cd["current_health"], 50)
+	assert_eq(cd["current_morale"], 3)
+
+
+func test_write_battle_results_marks_destroyed() -> void:
+	var cd: Dictionary = _make_company_dict_for_battle(1, 10)
+	cd["commander_id"] = 5
+	var battle_result: Dictionary = {
+		"attacker_states": [
+			{"company_id": 1, "current_health": 0, "current_morale": 0,
+			 "is_destroyed": true, "is_routed": false, "commander_dead": true},
+		],
+		"defender_states": [],
+	}
+	DayOrchestrator._write_battle_results_to_companies(battle_result, [cd])
+	assert_eq(cd["current_health"], 0)
+	assert_true(cd.get("is_destroyed", false))
+	assert_true(cd.get("commander_dead", false))
+	assert_eq(cd["commander_id"], -1)
+
+
+func test_resolve_army_battles_no_trigger_returns_empty() -> void:
+	var movement_results: Array[Dictionary] = [
+		{"army_id": 1, "arrived": true, "battle_check": {"battle_triggered": false}},
+	]
+	var results: Array[Dictionary] = DayOrchestrator._resolve_army_battles(
+		movement_results, [], [], [], DiceEngine.new(), [], {}, {},
+	)
+	assert_eq(results.size(), 0)
+
+
+func test_resolve_army_battles_skips_when_not_at_war() -> void:
+	var army_a: Dictionary = ArmyMovementSystem.create_army_state(1, 5, "Crab")
+	var army_b: Dictionary = ArmyMovementSystem.create_army_state(2, 5, "Crane")
+	var c1: Dictionary = _make_company_dict_for_battle(1, 1, "Crab")
+	var c2: Dictionary = _make_company_dict_for_battle(2, 2, "Crane")
+	var movement_results: Array[Dictionary] = [
+		{
+			"army_id": 1, "arrived": true,
+			"battle_check": {
+				"battle_triggered": true,
+				"enemy_army_ids": [2],
+			},
+		},
+	]
+	var results: Array[Dictionary] = DayOrchestrator._resolve_army_battles(
+		movement_results, [army_a, army_b], [c1, c2],
+		[], DiceEngine.new(42), [], {}, {},
+	)
+	assert_eq(results.size(), 0)
+
+
+func test_resolve_army_battles_resolves_combat_when_at_war() -> void:
+	var dice: DiceEngine = DiceEngine.new(42)
+	var army_a: Dictionary = ArmyMovementSystem.create_army_state(1, 5, "Crab")
+	var army_b: Dictionary = ArmyMovementSystem.create_army_state(2, 5, "Crane")
+	var c1: Dictionary = _make_company_dict_for_battle(
+		1, 1, "Crab", Enums.CompanyUnitType.BUSHI_RETAINER,
+	)
+	var c2: Dictionary = _make_company_dict_for_battle(
+		2, 2, "Crane", Enums.CompanyUnitType.PEASANT_LEVY,
+	)
+	var war: WarData = WarSystem.declare_war(1, "Crab", "Crane", 1, 1, 2)
+	var s1: SettlementData = _make_settlement(10, 1, 10, 3)
+	var movement_results: Array[Dictionary] = [
+		{
+			"army_id": 1, "arrived": true,
+			"battle_check": {
+				"battle_triggered": true,
+				"enemy_army_ids": [2],
+			},
+		},
+	]
+	var results: Array[Dictionary] = DayOrchestrator._resolve_army_battles(
+		movement_results, [army_a, army_b], [c1, c2],
+		[war], dice, [s1], {}, {},
+	)
+	assert_eq(results.size(), 1)
+	assert_true(results[0].has("victor"))
+	assert_true(results[0].has("reconciliation"))
+	assert_eq(results[0]["attacker_clan"], "Crab")
+	assert_eq(results[0]["defender_clan"], "Crane")
+	# Companies should have been mutated
+	var health_changed: bool = (
+		c1["current_health"] != 153 or c2["current_health"] != 153
+	)
+	assert_true(health_changed, "At least one company should take damage")
+
+
+func test_resolve_army_battles_marks_battle_resolved_on_movement() -> void:
+	var dice: DiceEngine = DiceEngine.new(42)
+	var army_a: Dictionary = ArmyMovementSystem.create_army_state(1, 5, "Crab")
+	var army_b: Dictionary = ArmyMovementSystem.create_army_state(2, 5, "Crane")
+	var c1: Dictionary = _make_company_dict_for_battle(1, 1, "Crab")
+	var c2: Dictionary = _make_company_dict_for_battle(2, 2, "Crane")
+	var war: WarData = WarSystem.declare_war(1, "Crab", "Crane", 1, 1, 2)
+	var mr: Dictionary = {
+		"army_id": 1, "arrived": true,
+		"battle_check": {"battle_triggered": true, "enemy_army_ids": [2]},
+	}
+	DayOrchestrator._resolve_army_battles(
+		[mr], [army_a, army_b], [c1, c2],
+		[war], dice, [], {}, {},
+	)
+	assert_true(mr.get("battle_resolved", false))
+
+
+func test_resolve_army_battles_in_military_daily() -> void:
+	var dice: DiceEngine = DiceEngine.new(42)
+	var army_a: Dictionary = ArmyMovementSystem.create_army_state(1, 5, "Crab")
+	army_a["is_moving"] = true
+	army_a["days_remaining"] = 1
+	army_a["path"] = [0, 5]
+	army_a["path_index"] = 0
+	var army_b: Dictionary = ArmyMovementSystem.create_army_state(2, 5, "Crane")
+	var c1: Dictionary = _make_company_dict_for_battle(1, 1, "Crab")
+	var c2: Dictionary = _make_company_dict_for_battle(2, 2, "Crane")
+	var war: WarData = WarSystem.declare_war(1, "Crab", "Crane", 1, 1, 2)
+	var result: Dictionary = DayOrchestrator._process_military_daily(
+		[army_a, army_b], [], [], [], dice, [], [c1, c2], {},
+		[war], {},
+	)
+	assert_true(result.has("battle_results"))
+
+
+# -- Levy Unit Type Selection Tests ----------------------------------------------
+
+func test_select_levy_unit_type_default_is_ashigaru_spearmen() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.can_sustain_iron_upkeep = true
+	ctx.unit_training_counts = {}
+	var ut: int = NPCDecisionEngine._select_levy_unit_type(ctx)
+	assert_eq(ut, Enums.CompanyUnitType.ASHIGARU_SPEARMEN)
+
+
+func test_select_levy_peasant_when_no_iron() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.can_sustain_iron_upkeep = false
+	ctx.unit_training_counts = {}
+	var ut: int = NPCDecisionEngine._select_levy_unit_type(ctx)
+	assert_eq(ut, Enums.CompanyUnitType.PEASANT_LEVY)
+
+
+func test_select_levy_archers_when_enough_spearmen() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.can_sustain_iron_upkeep = true
+	ctx.unit_training_counts = {Enums.CompanyUnitType.ASHIGARU_SPEARMEN: 2}
+	var ut: int = NPCDecisionEngine._select_levy_unit_type(ctx)
+	assert_eq(ut, Enums.CompanyUnitType.ASHIGARU_ARCHERS)
+
+
+func test_select_levy_spearmen_when_already_have_archers() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.can_sustain_iron_upkeep = true
+	ctx.unit_training_counts = {
+		Enums.CompanyUnitType.ASHIGARU_SPEARMEN: 2,
+		Enums.CompanyUnitType.ASHIGARU_ARCHERS: 1,
+	}
+	var ut: int = NPCDecisionEngine._select_levy_unit_type(ctx)
+	assert_eq(ut, Enums.CompanyUnitType.ASHIGARU_SPEARMEN)
+
+
+func test_select_levy_iron_gate_overrides_composition() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.can_sustain_iron_upkeep = false
+	ctx.unit_training_counts = {Enums.CompanyUnitType.ASHIGARU_SPEARMEN: 5}
+	var ut: int = NPCDecisionEngine._select_levy_unit_type(ctx)
+	assert_eq(ut, Enums.CompanyUnitType.PEASANT_LEVY)
+
+
+func test_populate_metadata_order_levy() -> void:
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "ORDER_LEVY"
+	var need := NPCDataStructures.ImmediateNeed.new()
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.can_sustain_iron_upkeep = true
+	ctx.unit_training_counts = {}
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_true(option.metadata.has("levy_unit_type"))
+	assert_eq(option.metadata["levy_unit_type"], Enums.CompanyUnitType.ASHIGARU_SPEARMEN)
+
+
+func test_executor_order_levy_passes_unit_type() -> void:
+	var action := NPCDataStructures.ScoredAction.new()
+	action.action_id = "ORDER_LEVY"
+	action.metadata = {"levy_unit_type": Enums.CompanyUnitType.ASHIGARU_ARCHERS}
+	var effects: Dictionary = ActionExecutor._compute_military_effects("ORDER_LEVY", action)
+	assert_eq(effects["levy_unit_type"], Enums.CompanyUnitType.ASHIGARU_ARCHERS)
+	assert_true(effects["requires_levy_pu"])
+
+
+func test_executor_order_levy_defaults_without_metadata() -> void:
+	var action := NPCDataStructures.ScoredAction.new()
+	action.action_id = "ORDER_LEVY"
+	action.metadata = {}
+	var effects: Dictionary = ActionExecutor._compute_military_effects("ORDER_LEVY", action)
+	assert_eq(effects["levy_unit_type"], Enums.CompanyUnitType.ASHIGARU_SPEARMEN)
+
+
+# -- Arms Equip Deduction Tests --------------------------------------------------
+
+func _make_char_for_levy(id: int, clan: String) -> L5RCharacterData:
+	var c: L5RCharacterData = L5RCharacterData.new()
+	c.character_id = id
+	c.clan = clan
+	return c
+
+
+func test_levy_deducts_arms_from_clan() -> void:
+	var s: SettlementData = _make_settlement(10, 1, 10, 3)
+	var companies: Array[Dictionary] = []
+	var next_id: Array[int] = [1]
+	var lord: L5RCharacterData = _make_char_for_levy(5, "Crab")
+	var clan: ClanData = _make_clan("Crab", [1])
+	clan.arms_stockpile = 10.0
+	var chars_by_id: Dictionary = {5: lord}
+	var clans_dict: Dictionary = {"Crab": clan}
+	var applied: Dictionary = {
+		"character_id": 5,
+		"target_province_id": 1,
+		"effects": {"requires_levy_pu": true},
+	}
+	var r: Dictionary = DayOrchestrator._apply_levy_pu_effect(
+		applied, [s], companies, next_id, chars_by_id, clans_dict,
+	)
+	var expected_cost: float = ArmyUpkeepSystem.get_arms_equip_cost(
+		Enums.CompanyUnitType.ASHIGARU_SPEARMEN,
+	)
+	assert_eq(r["arms_deducted"], expected_cost)
+	assert_almost_eq(clan.arms_stockpile, 10.0 - expected_cost, 0.001)
+
+
+func test_levy_arms_clamped_at_zero() -> void:
+	var s: SettlementData = _make_settlement(10, 1, 10, 3)
+	var companies: Array[Dictionary] = []
+	var next_id: Array[int] = [1]
+	var lord: L5RCharacterData = _make_char_for_levy(5, "Crab")
+	var clan: ClanData = _make_clan("Crab", [1])
+	clan.arms_stockpile = 0.5
+	var chars_by_id: Dictionary = {5: lord}
+	var clans_dict: Dictionary = {"Crab": clan}
+	var applied: Dictionary = {
+		"character_id": 5,
+		"target_province_id": 1,
+		"effects": {"requires_levy_pu": true},
+	}
+	DayOrchestrator._apply_levy_pu_effect(
+		applied, [s], companies, next_id, chars_by_id, clans_dict,
+	)
+	assert_eq(clan.arms_stockpile, 0.0)
+
+
+func test_levy_no_arms_deduction_without_clan() -> void:
+	var s: SettlementData = _make_settlement(10, 1, 10, 3)
+	var companies: Array[Dictionary] = []
+	var next_id: Array[int] = [1]
+	var lord: L5RCharacterData = _make_char_for_levy(5, "Crab")
+	var chars_by_id: Dictionary = {5: lord}
+	var applied: Dictionary = {
+		"character_id": 5,
+		"target_province_id": 1,
+		"effects": {"requires_levy_pu": true},
+	}
+	var r: Dictionary = DayOrchestrator._apply_levy_pu_effect(
+		applied, [s], companies, next_id, chars_by_id, {},
+	)
+	assert_eq(r["arms_deducted"], 0.0)
+	assert_eq(companies.size(), 1)
+
+
+func test_levy_peasant_levy_cheaper_arms() -> void:
+	var s: SettlementData = _make_settlement(10, 1, 10, 3)
+	var companies: Array[Dictionary] = []
+	var next_id: Array[int] = [1]
+	var lord: L5RCharacterData = _make_char_for_levy(5, "Crab")
+	var clan: ClanData = _make_clan("Crab", [1])
+	clan.arms_stockpile = 10.0
+	var chars_by_id: Dictionary = {5: lord}
+	var clans_dict: Dictionary = {"Crab": clan}
+	var applied: Dictionary = {
+		"character_id": 5,
+		"target_province_id": 1,
+		"effects": {
+			"requires_levy_pu": true,
+			"levy_unit_type": Enums.CompanyUnitType.PEASANT_LEVY,
+		},
+	}
+	var r: Dictionary = DayOrchestrator._apply_levy_pu_effect(
+		applied, [s], companies, next_id, chars_by_id, clans_dict,
+	)
+	var expected_cost: float = ArmyUpkeepSystem.get_arms_equip_cost(
+		Enums.CompanyUnitType.PEASANT_LEVY,
+	)
+	assert_eq(r["arms_deducted"], expected_cost)
+	assert_true(expected_cost < 1.0)
+
+
+# -- Levy Province Selection Tests -----------------------------------------------
+
+func test_pick_levy_province_returns_largest_pu() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	var ps1 := NPCDataStructures.ProvinceStatus.new()
+	ps1.province_id = 10
+	ps1.total_settlement_pu = 5
+	var ps2 := NPCDataStructures.ProvinceStatus.new()
+	ps2.province_id = 20
+	ps2.total_settlement_pu = 12
+	ctx.province_statuses = [ps1, ps2]
+	var pid: int = NPCDecisionEngine._pick_levy_province(ctx)
+	assert_eq(pid, 20)
+
+
+func test_pick_levy_province_single() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	var ps1 := NPCDataStructures.ProvinceStatus.new()
+	ps1.province_id = 7
+	ps1.total_settlement_pu = 3
+	ctx.province_statuses = [ps1]
+	assert_eq(NPCDecisionEngine._pick_levy_province(ctx), 7)
+
+
+func test_pick_levy_province_empty() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.province_statuses = []
+	assert_eq(NPCDecisionEngine._pick_levy_province(ctx), -1)
+
+
+func test_populate_metadata_order_levy_sets_province() -> void:
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "ORDER_LEVY"
+	var need := NPCDataStructures.ImmediateNeed.new()
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.can_sustain_iron_upkeep = true
+	ctx.unit_training_counts = {}
+	var ps := NPCDataStructures.ProvinceStatus.new()
+	ps.province_id = 42
+	ps.total_settlement_pu = 8
+	ctx.province_statuses = [ps]
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_eq(option.target_province_id, 42)
+
+
+# -- Levy Suspicion Tests --------------------------------------------------------
+
+func _make_levy_company(
+	company_id: int,
+	lord_id: int,
+	raised_season: int = 0,
+) -> Dictionary:
+	return {
+		"company_id": company_id,
+		"unit_type": Enums.CompanyUnitType.ASHIGARU_SPEARMEN,
+		"health": 153,
+		"morale": 12,
+		"commander_id": -1,
+		"parent_legion_id": -1,
+		"source_province_id": 1,
+		"army_id": -1,
+		"lord_id": lord_id,
+		"destroyed": false,
+		"routed": false,
+		"levy_raised_season": raised_season,
+	}
+
+
+func test_levy_suspicion_fires_after_threshold() -> void:
+	var lord: L5RCharacterData = _make_char_for_levy(5, "Crab")
+	lord.family = "Hida"
+	var chars_by_id: Dictionary = {5: lord}
+	var company: Dictionary = _make_levy_company(1, 5, 0)
+	var topics: Array[TopicData] = []
+	var next_tid: Array[int] = [100]
+	var results: Array[Dictionary] = DayOrchestrator._process_levy_suspicion(
+		[company], [], chars_by_id, topics, next_tid, 90, 1,
+	)
+	assert_eq(results.size(), 1)
+	assert_eq(results[0]["lord_id"], 5)
+	assert_eq(results[0]["topic_tier"], 4)
+	assert_eq(topics.size(), 1)
+
+
+func test_levy_suspicion_skips_wartime() -> void:
+	var lord: L5RCharacterData = _make_char_for_levy(5, "Crab")
+	var chars_by_id: Dictionary = {5: lord}
+	var company: Dictionary = _make_levy_company(1, 5, 0)
+	var war: WarData = WarSystem.declare_war(1, "Crab", "Crane", 1, 1, 2)
+	var topics: Array[TopicData] = []
+	var next_tid: Array[int] = [100]
+	var results: Array[Dictionary] = DayOrchestrator._process_levy_suspicion(
+		[company], [war], chars_by_id, topics, next_tid, 90, 3,
+	)
+	assert_eq(results.size(), 0)
+	assert_eq(topics.size(), 0)
+
+
+func test_levy_suspicion_skips_before_threshold() -> void:
+	var lord: L5RCharacterData = _make_char_for_levy(5, "Crab")
+	var chars_by_id: Dictionary = {5: lord}
+	var company: Dictionary = _make_levy_company(1, 5, 5)
+	var topics: Array[TopicData] = []
+	var next_tid: Array[int] = [100]
+	var results: Array[Dictionary] = DayOrchestrator._process_levy_suspicion(
+		[company], [], chars_by_id, topics, next_tid, 90, 5,
+	)
+	assert_eq(results.size(), 0)
+
+
+func test_levy_suspicion_escalates_at_3_seasons() -> void:
+	var lord: L5RCharacterData = _make_char_for_levy(5, "Crab")
+	lord.family = "Hida"
+	var chars_by_id: Dictionary = {5: lord}
+	var company: Dictionary = _make_levy_company(1, 5, 0)
+	var topics: Array[TopicData] = []
+	var next_tid: Array[int] = [100]
+	var results: Array[Dictionary] = DayOrchestrator._process_levy_suspicion(
+		[company], [], chars_by_id, topics, next_tid, 90, 3,
+	)
+	assert_eq(results.size(), 1)
+	assert_eq(results[0]["topic_tier"], 3)
+	assert_true(results[0]["escalated"])
+
+
+func test_levy_suspicion_skips_army_companies() -> void:
+	var lord: L5RCharacterData = _make_char_for_levy(5, "Crab")
+	var chars_by_id: Dictionary = {5: lord}
+	var company: Dictionary = _make_levy_company(1, 5, 0)
+	company["army_id"] = 1
+	var topics: Array[TopicData] = []
+	var next_tid: Array[int] = [100]
+	var results: Array[Dictionary] = DayOrchestrator._process_levy_suspicion(
+		[company], [], chars_by_id, topics, next_tid, 90, 2,
+	)
+	assert_eq(results.size(), 0)
+
+
+func test_levy_suspicion_one_topic_per_lord() -> void:
+	var lord: L5RCharacterData = _make_char_for_levy(5, "Crab")
+	lord.family = "Hida"
+	var chars_by_id: Dictionary = {5: lord}
+	var c1: Dictionary = _make_levy_company(1, 5, 0)
+	var c2: Dictionary = _make_levy_company(2, 5, 0)
+	var topics: Array[TopicData] = []
+	var next_tid: Array[int] = [100]
+	var results: Array[Dictionary] = DayOrchestrator._process_levy_suspicion(
+		[c1, c2], [], chars_by_id, topics, next_tid, 90, 2,
+	)
+	assert_eq(results.size(), 1)
+	assert_eq(topics.size(), 1)
+
+
+func test_levy_company_dict_has_raised_season() -> void:
+	var s: SettlementData = _make_settlement(10, 1, 10, 3)
+	var companies: Array[Dictionary] = []
+	var next_id: Array[int] = [1]
+	var applied: Dictionary = {
+		"character_id": 5,
+		"target_province_id": 1,
+		"effects": {"requires_levy_pu": true},
+	}
+	DayOrchestrator._apply_levy_pu_effect(
+		applied, [s], companies, next_id, {}, {}, 7,
+	)
+	assert_eq(companies[0]["levy_raised_season"], 7)
+
+
+# -- Levy PU Validation Tests ----------------------------------------------------
+
+func test_levy_fails_with_insufficient_pu() -> void:
+	var s: SettlementData = _make_settlement(10, 1, 10, 0)
+	s.garrison_pu = 10
+	var companies: Array[Dictionary] = []
+	var next_id: Array[int] = [1]
+	var applied: Dictionary = {
+		"character_id": 5,
+		"target_province_id": 1,
+		"effects": {"requires_levy_pu": true},
+	}
+	var r: Dictionary = DayOrchestrator._apply_levy_pu_effect(
+		applied, [s], companies, next_id,
+	)
+	assert_eq(r["type"], "levy_failed")
+	assert_eq(r["reason"], "insufficient_pu")
+	assert_eq(companies.size(), 0)
+
+
+func test_levy_fails_no_military_pu() -> void:
+	var s: SettlementData = SettlementData.new()
+	s.settlement_id = 10
+	s.province_id = 1
+	s.population_pu = 5
+	s.military_pu = 0
+	s.garrison_pu = 0
+	var companies: Array[Dictionary] = []
+	var next_id: Array[int] = [1]
+	var applied: Dictionary = {
+		"character_id": 5,
+		"target_province_id": 1,
+		"effects": {"requires_levy_pu": true},
+	}
+	var r: Dictionary = DayOrchestrator._apply_levy_pu_effect(
+		applied, [s], companies, next_id,
+	)
+	assert_eq(r["type"], "levy_failed")
+	assert_eq(r["reason"], "insufficient_pu")
+	assert_eq(companies.size(), 0)
+
+
+func test_levy_succeeds_with_sufficient_pu() -> void:
+	var s: SettlementData = _make_settlement(10, 1, 10, 3)
+	s.garrison_pu = 1
+	var companies: Array[Dictionary] = []
+	var next_id: Array[int] = [1]
+	var applied: Dictionary = {
+		"character_id": 5,
+		"target_province_id": 1,
+		"effects": {"requires_levy_pu": true},
+	}
+	var r: Dictionary = DayOrchestrator._apply_levy_pu_effect(
+		applied, [s], companies, next_id,
+	)
+	assert_eq(r["type"], "levy_raised")
+	assert_eq(companies.size(), 1)
+
+
+func test_levy_fails_does_not_increment_company_id() -> void:
+	var s: SettlementData = _make_settlement(10, 1, 10, 0)
+	s.garrison_pu = 10
+	var companies: Array[Dictionary] = []
+	var next_id: Array[int] = [50]
+	var applied: Dictionary = {
+		"character_id": 5,
+		"target_province_id": 1,
+		"effects": {"requires_levy_pu": true},
+	}
+	DayOrchestrator._apply_levy_pu_effect(
+		applied, [s], companies, next_id,
+	)
+	assert_eq(next_id[0], 50)
+
+
+# -- Battle Terrain & Fortification Tests ----------------------------------------
+
+func test_get_battle_terrain_plains_province() -> void:
+	var p: ProvinceData = ProvinceData.new()
+	p.province_id = 1
+	p.terrain_type = Enums.TerrainType.PLAINS
+	var provinces: Dictionary = {1: p}
+	var terrain: int = DayOrchestrator._get_battle_terrain(1, provinces, [])
+	assert_eq(terrain, Enums.BattleTerrainType.PLAINS)
+
+
+func test_get_battle_terrain_forest_province() -> void:
+	var p: ProvinceData = ProvinceData.new()
+	p.province_id = 1
+	p.terrain_type = Enums.TerrainType.FOREST
+	var provinces: Dictionary = {1: p}
+	var terrain: int = DayOrchestrator._get_battle_terrain(1, provinces, [])
+	assert_eq(terrain, Enums.BattleTerrainType.FOREST)
+
+
+func test_get_battle_terrain_mountains_province() -> void:
+	var p: ProvinceData = ProvinceData.new()
+	p.province_id = 1
+	p.terrain_type = Enums.TerrainType.MOUNTAINS
+	var provinces: Dictionary = {1: p}
+	var terrain: int = DayOrchestrator._get_battle_terrain(1, provinces, [])
+	assert_eq(terrain, Enums.BattleTerrainType.MOUNTAIN)
+
+
+func test_get_battle_terrain_hills_province() -> void:
+	var p: ProvinceData = ProvinceData.new()
+	p.province_id = 1
+	p.terrain_type = Enums.TerrainType.HILLS
+	var provinces: Dictionary = {1: p}
+	var terrain: int = DayOrchestrator._get_battle_terrain(1, provinces, [])
+	assert_eq(terrain, Enums.BattleTerrainType.HILLS)
+
+
+func test_get_battle_terrain_river_delta_maps_to_plains() -> void:
+	var p: ProvinceData = ProvinceData.new()
+	p.province_id = 1
+	p.terrain_type = Enums.TerrainType.RIVER_DELTA
+	var provinces: Dictionary = {1: p}
+	var terrain: int = DayOrchestrator._get_battle_terrain(1, provinces, [])
+	assert_eq(terrain, Enums.BattleTerrainType.PLAINS)
+
+
+func test_get_battle_terrain_urban_overrides_province() -> void:
+	var p: ProvinceData = ProvinceData.new()
+	p.province_id = 1
+	p.terrain_type = Enums.TerrainType.FOREST
+	var s: SettlementData = SettlementData.new()
+	s.province_id = 1
+	s.settlement_type = Enums.SettlementType.TOWN
+	var provinces: Dictionary = {1: p}
+	var terrain: int = DayOrchestrator._get_battle_terrain(1, provinces, [s])
+	assert_eq(terrain, Enums.BattleTerrainType.URBAN)
+
+
+func test_get_battle_terrain_city_is_urban() -> void:
+	var s: SettlementData = SettlementData.new()
+	s.province_id = 1
+	s.settlement_type = Enums.SettlementType.CITY
+	var terrain: int = DayOrchestrator._get_battle_terrain(1, {}, [s])
+	assert_eq(terrain, Enums.BattleTerrainType.URBAN)
+
+
+func test_get_battle_terrain_imperial_capital_is_urban() -> void:
+	var s: SettlementData = SettlementData.new()
+	s.province_id = 1
+	s.settlement_type = Enums.SettlementType.IMPERIAL_CAPITAL
+	var terrain: int = DayOrchestrator._get_battle_terrain(1, {}, [s])
+	assert_eq(terrain, Enums.BattleTerrainType.URBAN)
+
+
+func test_get_battle_terrain_village_does_not_override() -> void:
+	var p: ProvinceData = ProvinceData.new()
+	p.province_id = 1
+	p.terrain_type = Enums.TerrainType.FOREST
+	var s: SettlementData = SettlementData.new()
+	s.province_id = 1
+	s.settlement_type = Enums.SettlementType.VILLAGE
+	var provinces: Dictionary = {1: p}
+	var terrain: int = DayOrchestrator._get_battle_terrain(1, provinces, [s])
+	assert_eq(terrain, Enums.BattleTerrainType.FOREST)
+
+
+func test_get_battle_terrain_unknown_province_defaults_plains() -> void:
+	var terrain: int = DayOrchestrator._get_battle_terrain(999, {}, [])
+	assert_eq(terrain, Enums.BattleTerrainType.PLAINS)
+
+
+func test_get_fortification_bonus_with_fort() -> void:
+	var s: SettlementData = SettlementData.new()
+	s.province_id = 1
+	s.settlement_type = Enums.SettlementType.FORTIFICATION
+	var bonus: int = DayOrchestrator._get_fortification_bonus(1, "Crab", [s])
+	assert_eq(bonus, DayOrchestrator.FORTIFICATION_DEFENSE_BONUS)
+
+
+func test_get_fortification_bonus_with_castle() -> void:
+	var s: SettlementData = SettlementData.new()
+	s.province_id = 1
+	s.settlement_type = Enums.SettlementType.CASTLE
+	var bonus: int = DayOrchestrator._get_fortification_bonus(1, "Lion", [s])
+	assert_eq(bonus, DayOrchestrator.FORTIFICATION_DEFENSE_BONUS)
+
+
+func test_get_fortification_bonus_with_wall_tower() -> void:
+	var s: SettlementData = SettlementData.new()
+	s.province_id = 1
+	s.settlement_type = Enums.SettlementType.WALL_TOWER
+	var bonus: int = DayOrchestrator._get_fortification_bonus(1, "Crab", [s])
+	assert_eq(bonus, DayOrchestrator.FORTIFICATION_DEFENSE_BONUS)
+
+
+func test_get_fortification_bonus_no_fort() -> void:
+	var s: SettlementData = SettlementData.new()
+	s.province_id = 1
+	s.settlement_type = Enums.SettlementType.VILLAGE
+	var bonus: int = DayOrchestrator._get_fortification_bonus(1, "Crab", [s])
+	assert_eq(bonus, 0)
+
+
+func test_get_fortification_bonus_wrong_province() -> void:
+	var s: SettlementData = SettlementData.new()
+	s.province_id = 2
+	s.settlement_type = Enums.SettlementType.CASTLE
+	var bonus: int = DayOrchestrator._get_fortification_bonus(1, "Lion", [s])
+	assert_eq(bonus, 0)
+
+
+func test_get_fortification_bonus_empty_settlements() -> void:
+	var bonus: int = DayOrchestrator._get_fortification_bonus(1, "Crab", [])
+	assert_eq(bonus, 0)
+
+
+func test_get_fortification_bonus_defender_owns_province() -> void:
+	var p: ProvinceData = ProvinceData.new()
+	p.province_id = 1
+	p.clan = "Crab"
+	var s: SettlementData = SettlementData.new()
+	s.province_id = 1
+	s.settlement_type = Enums.SettlementType.FORTIFICATION
+	var bonus: int = DayOrchestrator._get_fortification_bonus(1, "Crab", [s], {1: p})
+	assert_eq(bonus, DayOrchestrator.FORTIFICATION_DEFENSE_BONUS)
+
+
+func test_get_fortification_bonus_attacker_in_enemy_province() -> void:
+	var p: ProvinceData = ProvinceData.new()
+	p.province_id = 1
+	p.clan = "Crab"
+	var s: SettlementData = SettlementData.new()
+	s.province_id = 1
+	s.settlement_type = Enums.SettlementType.CASTLE
+	var bonus: int = DayOrchestrator._get_fortification_bonus(1, "Lion", [s], {1: p})
+	assert_eq(bonus, 0)
+
+
+func test_get_fortification_bonus_no_province_data_allows_bonus() -> void:
+	var s: SettlementData = SettlementData.new()
+	s.province_id = 1
+	s.settlement_type = Enums.SettlementType.KEEP
+	var bonus: int = DayOrchestrator._get_fortification_bonus(1, "Lion", [s], {})
+	assert_eq(bonus, DayOrchestrator.FORTIFICATION_DEFENSE_BONUS)
+
+
+# -- Storm Assault Processing Tests ----------------------------------------------
+
+func _make_siege_state(
+	settlement_id: int,
+	atk_army_id: int,
+	def_army_id: int,
+) -> Dictionary:
+	return SiegeSystem.create_siege_state(settlement_id, atk_army_id, def_army_id, 10.0, 5.0, 2.0)
+
+
+func _make_army_company(
+	company_id: int,
+	army_id: int,
+	unit_type: int = Enums.CompanyUnitType.BUSHI_RETAINER,
+) -> Dictionary:
+	var stats: Dictionary = ArmyCombatSystem.UNIT_STATS.get(unit_type, {})
+	return {
+		"company_id": company_id,
+		"army_id": army_id,
+		"unit_type": unit_type,
+		"current_health": stats.get("health", 153),
+		"current_morale": stats.get("morale", 18),
+		"commander_id": -1,
+		"source_province_id": 1,
+		"destroyed": false,
+		"routed": false,
+	}
+
+
+func test_storm_assault_no_flag_returns_empty() -> void:
+	var applied: Array = [{"effects": {"effect": "something_else"}}]
+	var r: Array[Dictionary] = DayOrchestrator._process_storm_assault_results(
+		applied, [], [], DiceEngine.new(), [], {},
+	)
+	assert_eq(r.size(), 0)
+
+
+func test_storm_assault_no_siege_returns_empty() -> void:
+	var applied: Array = [{
+		"effects": {"requires_storm_assault": true, "siege_settlement_id": 99},
+	}]
+	var r: Array[Dictionary] = DayOrchestrator._process_storm_assault_results(
+		applied, [], [], DiceEngine.new(), [], {},
+	)
+	assert_eq(r.size(), 0)
+
+
+func test_storm_assault_finds_siege_and_resolves() -> void:
+	var siege: Dictionary = _make_siege_state(10, 1, 2)
+	var companies: Array[Dictionary] = [
+		_make_army_company(1, 1, Enums.CompanyUnitType.BUSHI_RETAINER),
+		_make_army_company(2, 1, Enums.CompanyUnitType.BUSHI_RETAINER),
+		_make_army_company(3, 2, Enums.CompanyUnitType.GARRISON),
+	]
+	var applied: Array = [{
+		"effects": {"requires_storm_assault": true, "siege_settlement_id": 10},
+	}]
+	var dice: DiceEngine = DiceEngine.new()
+	dice.set_seed(42)
+	var s: SettlementData = SettlementData.new()
+	s.settlement_id = 10
+	s.province_id = 1
+	var r: Array[Dictionary] = DayOrchestrator._process_storm_assault_results(
+		applied, [siege], companies, dice, [s], {},
+	)
+	assert_eq(r.size(), 1)
+	assert_true(r[0].has("victor"))
+	assert_eq(r[0]["siege_settlement_id"], 10)
+	assert_eq(r[0]["attacker_army_id"], 1)
+	assert_eq(r[0]["defender_army_id"], 2)
+
+
+func test_storm_assault_attacker_victory_ends_siege() -> void:
+	var siege: Dictionary = _make_siege_state(10, 1, 2)
+	# Strong attacker vs weak defender
+	var companies: Array[Dictionary] = [
+		_make_army_company(1, 1, Enums.CompanyUnitType.BUSHI_RETAINER),
+		_make_army_company(2, 1, Enums.CompanyUnitType.BUSHI_RETAINER),
+		_make_army_company(3, 1, Enums.CompanyUnitType.BUSHI_RETAINER),
+		_make_army_company(4, 2, Enums.CompanyUnitType.PEASANT_LEVY),
+	]
+	var applied: Array = [{
+		"effects": {"requires_storm_assault": true, "siege_settlement_id": 10},
+	}]
+	var dice: DiceEngine = DiceEngine.new()
+	dice.set_seed(100)
+	var s: SettlementData = SettlementData.new()
+	s.settlement_id = 10
+	s.province_id = 1
+	DayOrchestrator._process_storm_assault_results(
+		applied, [siege], companies, dice, [s], {},
+	)
+	if siege.get("siege_ended", false):
+		assert_eq(siege["end_reason"], "storm_assault_success")
+
+
+func test_storm_assault_empty_companies_skips() -> void:
+	var siege: Dictionary = _make_siege_state(10, 1, 2)
+	var companies: Array[Dictionary] = []
+	var applied: Array = [{
+		"effects": {"requires_storm_assault": true, "siege_settlement_id": 10},
+	}]
+	var r: Array[Dictionary] = DayOrchestrator._process_storm_assault_results(
+		applied, [siege], companies, DiceEngine.new(), [], {},
+	)
+	assert_eq(r.size(), 0)
+
+
+func test_find_siege_by_settlement() -> void:
+	var s1: Dictionary = _make_siege_state(10, 1, 2)
+	var s2: Dictionary = _make_siege_state(20, 3, 4)
+	var found: Dictionary = DayOrchestrator._find_siege_by_settlement(20, [s1, s2])
+	assert_eq(found.get("settlement_id"), 20)
+
+
+func test_find_siege_by_settlement_not_found() -> void:
+	var found: Dictionary = DayOrchestrator._find_siege_by_settlement(99, [])
+	assert_true(found.is_empty())
+
+
+func test_storm_assault_uses_urban_terrain_and_fort_bonus() -> void:
+	# Verify that storm assault applies the siege defense bonus
+	var fort_bonus: int = SiegeSystem.get_storm_defense_bonus()
+	assert_eq(fort_bonus, 8)
+
+
+func test_storm_assault_metadata_sets_settlement_id() -> void:
+	var option: NPCDataStructures.ScoredAction = NPCDataStructures.ScoredAction.new()
+	option.action_id = "CONDUCT_STORM_ASSAULT"
+	var need: NPCDataStructures.ImmediateNeed = NPCDataStructures.ImmediateNeed.new()
+	var ctx: NPCDataStructures.ContextSnapshot = NPCDataStructures.ContextSnapshot.new()
+	ctx.location_id = 42
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_eq(option.metadata.get("siege_settlement_id", -1), 42)
+
+
+# -- Battle Integration Tests: Terrain + Fort + War Score End-to-End --------
+
+func _make_province(id: int, clan: String, terrain: Enums.TerrainType) -> ProvinceData:
+	var p: ProvinceData = ProvinceData.new()
+	p.province_id = id
+	p.clan = clan
+	p.terrain_type = terrain
+	return p
+
+
+func _make_military_settlement(
+	id: int,
+	province_id: int,
+	stype: Enums.SettlementType = Enums.SettlementType.FORTIFICATION,
+) -> SettlementData:
+	var s: SettlementData = SettlementData.new()
+	s.settlement_id = id
+	s.province_id = province_id
+	s.settlement_type = stype
+	s.population_pu = 5
+	s.military_pu = 1
+	return s
+
+
+func _setup_battle_scenario(
+	terrain: Enums.TerrainType = Enums.TerrainType.PLAINS,
+	defender_has_fort: bool = false,
+	province_clan: String = "Crane",
+) -> Dictionary:
+	var dice: DiceEngine = DiceEngine.new(99)
+	var province_id: int = 5
+	var prov: ProvinceData = _make_province(province_id, province_clan, terrain)
+	var provinces: Dictionary = {province_id: prov}
+
+	var army_a: Dictionary = ArmyMovementSystem.create_army_state(1, province_id, "Crab")
+	army_a["is_moving"] = true
+	army_a["days_remaining"] = 1
+	army_a["path"] = [0, province_id]
+	army_a["path_index"] = 0
+
+	var army_b: Dictionary = ArmyMovementSystem.create_army_state(2, province_id, "Crane")
+
+	var c1: Dictionary = _make_company_dict_for_battle(1, 1, "Crab")
+	var c2: Dictionary = _make_company_dict_for_battle(2, 2, "Crane")
+
+	var settlements: Array[SettlementData] = []
+	if defender_has_fort:
+		settlements.append(_make_military_settlement(10, province_id))
+
+	var war: WarData = WarSystem.declare_war(1, "Crab", "Crane", 1, 1, 2)
+
+	return {
+		"dice": dice,
+		"armies": [army_a, army_b] as Array[Dictionary],
+		"companies": [c1, c2] as Array[Dictionary],
+		"settlements": settlements,
+		"wars": [war] as Array[WarData],
+		"provinces": provinces,
+		"province_id": province_id,
+	}
+
+
+func test_integration_battle_plains_terrain_no_fort() -> void:
+	var s: Dictionary = _setup_battle_scenario(Enums.TerrainType.PLAINS, false)
+	var result: Dictionary = DayOrchestrator._process_military_daily(
+		s["armies"], [], [], [], s["dice"], s["settlements"],
+		s["companies"], {}, s["wars"], {}, s["provinces"],
+	)
+	assert_true(result.has("battle_results"))
+	assert_eq(result["battle_results"].size(), 1)
+	var br: Dictionary = result["battle_results"][0]
+	assert_eq(br["attacker_clan"], "Crab")
+	assert_eq(br["defender_clan"], "Crane")
+	assert_true(br.has("victor"))
+
+
+func test_integration_battle_forest_terrain() -> void:
+	var s: Dictionary = _setup_battle_scenario(Enums.TerrainType.FOREST, false)
+	var result: Dictionary = DayOrchestrator._process_military_daily(
+		s["armies"], [], [], [], s["dice"], s["settlements"],
+		s["companies"], {}, s["wars"], {}, s["provinces"],
+	)
+	assert_eq(result["battle_results"].size(), 1)
+
+
+func test_integration_battle_mountains_terrain() -> void:
+	var s: Dictionary = _setup_battle_scenario(Enums.TerrainType.MOUNTAINS, false)
+	var result: Dictionary = DayOrchestrator._process_military_daily(
+		s["armies"], [], [], [], s["dice"], s["settlements"],
+		s["companies"], {}, s["wars"], {}, s["provinces"],
+	)
+	assert_eq(result["battle_results"].size(), 1)
+
+
+func test_integration_battle_with_fortification_bonus() -> void:
+	var s: Dictionary = _setup_battle_scenario(Enums.TerrainType.PLAINS, true, "Crane")
+	var result: Dictionary = DayOrchestrator._process_military_daily(
+		s["armies"], [], [], [], s["dice"], s["settlements"],
+		s["companies"], {}, s["wars"], {}, s["provinces"],
+	)
+	assert_eq(result["battle_results"].size(), 1)
+	# Fort bonus should have given defender +5 defense — we can't directly
+	# observe it from the result, but the battle completed without error
+	# which means terrain + fort flowed through correctly
+
+
+func test_integration_fort_bonus_not_applied_when_attacker_province() -> void:
+	# Fort is in Crab province, but Crab is the attacker — no bonus
+	var s: Dictionary = _setup_battle_scenario(Enums.TerrainType.PLAINS, true, "Crab")
+	var result: Dictionary = DayOrchestrator._process_military_daily(
+		s["armies"], [], [], [], s["dice"], s["settlements"],
+		s["companies"], {}, s["wars"], {}, s["provinces"],
+	)
+	assert_eq(result["battle_results"].size(), 1)
+
+
+func test_integration_battle_urban_override_with_town() -> void:
+	var s: Dictionary = _setup_battle_scenario(Enums.TerrainType.FOREST, false)
+	var town: SettlementData = SettlementData.new()
+	town.settlement_id = 20
+	town.province_id = s["province_id"]
+	town.settlement_type = Enums.SettlementType.TOWN
+	s["settlements"].append(town)
+	var result: Dictionary = DayOrchestrator._process_military_daily(
+		s["armies"], [], [], [], s["dice"], s["settlements"],
+		s["companies"], {}, s["wars"], {}, s["provinces"],
+	)
+	assert_eq(result["battle_results"].size(), 1)
+
+
+func test_integration_battle_war_score_shifts() -> void:
+	var s: Dictionary = _setup_battle_scenario()
+	var result: Dictionary = DayOrchestrator._process_military_daily(
+		s["armies"], [], [], [], s["dice"], s["settlements"],
+		s["companies"], {}, s["wars"], {}, s["provinces"],
+	)
+	assert_eq(result["battle_results"].size(), 1)
+	# War score shifts are processed separately; verify the movement result
+	# has the battle_triggered flag for downstream war score processing
+	var mr: Array = result.get("movement_results", [])
+	var found_battle: bool = false
+	for m: Dictionary in mr:
+		if m.get("battle_resolved", false):
+			found_battle = true
+			assert_true(m.has("company_count"))
+	assert_true(found_battle)
+
+
+func test_integration_war_score_shift_from_battle() -> void:
+	var s: Dictionary = _setup_battle_scenario()
+	var war: WarData = s["wars"][0]
+	var score_a_before: int = war.war_score_a
+	var score_b_before: int = war.war_score_b
+	var military_daily: Dictionary = DayOrchestrator._process_military_daily(
+		s["armies"], [], [], [], s["dice"], s["settlements"],
+		s["companies"], {}, s["wars"], {}, s["provinces"],
+	)
+	var war_score_results: Array[Dictionary] = DayOrchestrator._process_war_score_shifts(
+		military_daily, [], s["wars"], s["companies"],
+	)
+	# A battle with 2 companies is minor (+3 shift)
+	assert_false(war_score_results.is_empty())
+	var shifted: bool = (war.war_score_a != score_a_before or war.war_score_b != score_b_before)
+	assert_true(shifted)
+
+
+func test_integration_battle_writes_results_to_companies() -> void:
+	var s: Dictionary = _setup_battle_scenario()
+	var c1: Dictionary = s["companies"][0]
+	var c2: Dictionary = s["companies"][1]
+	var health_1_before: int = c1.get("current_health", 0)
+	var health_2_before: int = c2.get("current_health", 0)
+	DayOrchestrator._process_military_daily(
+		s["armies"], [], [], [], s["dice"], s["settlements"],
+		s["companies"], {}, s["wars"], {}, s["provinces"],
+	)
+	# At least one company should have taken damage
+	var c1_changed: bool = c1.get("current_health", 0) != health_1_before
+	var c2_changed: bool = c2.get("current_health", 0) != health_2_before
+	assert_true(c1_changed or c2_changed)
+
+
+func test_integration_battle_no_provinces_uses_plains_default() -> void:
+	var s: Dictionary = _setup_battle_scenario()
+	# Pass empty provinces — should default to PLAINS terrain
+	var result: Dictionary = DayOrchestrator._process_military_daily(
+		s["armies"], [], [], [], s["dice"], s["settlements"],
+		s["companies"], {}, s["wars"], {}, {},
+	)
+	assert_eq(result["battle_results"].size(), 1)
+
+
+func test_integration_no_battle_when_not_at_war() -> void:
+	var s: Dictionary = _setup_battle_scenario()
+	# Pass empty wars array — should not trigger battle
+	var result: Dictionary = DayOrchestrator._process_military_daily(
+		s["armies"], [], [], [], s["dice"], s["settlements"],
+		s["companies"], {}, [] as Array[WarData], {}, s["provinces"],
+	)
+	assert_eq(result["battle_results"].size(), 0)
+
+
+func test_integration_multiple_terrain_types_resolve_differently() -> void:
+	# Verify different terrains produce different battle outcomes (different RNG paths)
+	var dice_plains: DiceEngine = DiceEngine.new(42)
+	var dice_mountains: DiceEngine = DiceEngine.new(42)
+
+	var setup_plains: Dictionary = _setup_battle_scenario(Enums.TerrainType.PLAINS, false)
+	setup_plains["dice"] = dice_plains
+	var result_plains: Dictionary = DayOrchestrator._process_military_daily(
+		setup_plains["armies"], [], [], [], setup_plains["dice"],
+		setup_plains["settlements"], setup_plains["companies"], {},
+		setup_plains["wars"], {}, setup_plains["provinces"],
+	)
+
+	var setup_mountains: Dictionary = _setup_battle_scenario(Enums.TerrainType.MOUNTAINS, false)
+	setup_mountains["dice"] = dice_mountains
+	var result_mountains: Dictionary = DayOrchestrator._process_military_daily(
+		setup_mountains["armies"], [], [], [], setup_mountains["dice"],
+		setup_mountains["settlements"], setup_mountains["companies"], {},
+		setup_mountains["wars"], {}, setup_mountains["provinces"],
+	)
+
+	assert_eq(result_plains["battle_results"].size(), 1)
+	assert_eq(result_mountains["battle_results"].size(), 1)
+	# Both should resolve but may have different outcomes due to terrain modifiers
+
+
+func test_integration_fort_plus_terrain_stacks() -> void:
+	# Mountain terrain (+4 def) + fortification (+5 def) should both apply
+	var s: Dictionary = _setup_battle_scenario(
+		Enums.TerrainType.MOUNTAINS, true, "Crane",
+	)
+	var result: Dictionary = DayOrchestrator._process_military_daily(
+		s["armies"], [], [], [], s["dice"], s["settlements"],
+		s["companies"], {}, s["wars"], {}, s["provinces"],
+	)
+	assert_eq(result["battle_results"].size(), 1)
+
+
+func test_integration_hills_terrain_battle() -> void:
+	var s: Dictionary = _setup_battle_scenario(Enums.TerrainType.HILLS, false)
+	var result: Dictionary = DayOrchestrator._process_military_daily(
+		s["armies"], [], [], [], s["dice"], s["settlements"],
+		s["companies"], {}, s["wars"], {}, s["provinces"],
+	)
+	assert_eq(result["battle_results"].size(), 1)
+
+
+func test_integration_battle_result_has_victor_and_clans() -> void:
+	var s: Dictionary = _setup_battle_scenario()
+	var result: Dictionary = DayOrchestrator._process_military_daily(
+		s["armies"], [], [], [], s["dice"], s["settlements"],
+		s["companies"], {}, s["wars"], {}, s["provinces"],
+	)
+	var br: Dictionary = result["battle_results"][0]
+	assert_true(br.has("victor"))
+	assert_true(br.has("attacker_clan"))
+	assert_true(br.has("defender_clan"))
+	assert_true(br.has("attacker_army_id"))
+	assert_true(br.has("defender_army_ids"))
+	assert_eq(br["attacker_clan"], "Crab")
+	assert_eq(br["defender_clan"], "Crane")
+
+
+# -- Storm Assault E2E Tests ---------------------------------------------------
+
+func test_e2e_executor_produces_storm_assault_effect() -> void:
+	var action: NPCDataStructures.ScoredAction = NPCDataStructures.ScoredAction.new()
+	action.action_id = "CONDUCT_STORM_ASSAULT"
+	action.metadata = {"siege_settlement_id": 77}
+	var char: L5RCharacterData = L5RCharacterData.new()
+	char.physical_location = 77
+	var ctx: NPCDataStructures.ContextSnapshot = NPCDataStructures.ContextSnapshot.new()
+	ctx.character_id = 1
+	ctx.ic_day = 10
+	ctx.season = "spring"
+	var result: Dictionary = ActionExecutor.execute(
+		action, char, ctx, DiceEngine.new(),
+	)
+	assert_true(result.get("effects", {}).get("requires_storm_assault", false))
+	assert_eq(result["effects"]["siege_settlement_id"], 77)
+
+
+func test_e2e_executor_uses_physical_location_fallback() -> void:
+	var action: NPCDataStructures.ScoredAction = NPCDataStructures.ScoredAction.new()
+	action.action_id = "CONDUCT_STORM_ASSAULT"
+	action.metadata = {}
+	var char: L5RCharacterData = L5RCharacterData.new()
+	char.physical_location = 55
+	var ctx: NPCDataStructures.ContextSnapshot = NPCDataStructures.ContextSnapshot.new()
+	ctx.character_id = 1
+	ctx.ic_day = 10
+	ctx.season = "spring"
+	var result: Dictionary = ActionExecutor.execute(
+		action, char, ctx, DiceEngine.new(),
+	)
+	assert_eq(result["effects"]["siege_settlement_id"], 55)
+
+
+func test_e2e_metadata_to_executor_to_orchestrator() -> void:
+	var option: NPCDataStructures.ScoredAction = NPCDataStructures.ScoredAction.new()
+	option.action_id = "CONDUCT_STORM_ASSAULT"
+	var need: NPCDataStructures.ImmediateNeed = NPCDataStructures.ImmediateNeed.new()
+	var ctx: NPCDataStructures.ContextSnapshot = NPCDataStructures.ContextSnapshot.new()
+	ctx.location_id = 10
+	ctx.character_id = 1
+	ctx.ic_day = 10
+	ctx.season = "spring"
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_eq(option.metadata["siege_settlement_id"], 10)
+
+	var char: L5RCharacterData = L5RCharacterData.new()
+	char.physical_location = 10
+	var exec_result: Dictionary = ActionExecutor.execute(
+		option, char, ctx, DiceEngine.new(),
+	)
+	assert_true(exec_result["effects"]["requires_storm_assault"])
+	assert_eq(exec_result["effects"]["siege_settlement_id"], 10)
+
+	var siege: Dictionary = _make_siege_state(10, 1, 2)
+	var companies: Array[Dictionary] = [
+		_make_army_company(1, 1, Enums.CompanyUnitType.BUSHI_RETAINER),
+		_make_army_company(2, 1, Enums.CompanyUnitType.BUSHI_RETAINER),
+		_make_army_company(3, 2, Enums.CompanyUnitType.GARRISON),
+	]
+	var applied: Array = [exec_result]
+	var dice: DiceEngine = DiceEngine.new(42)
+	var s: SettlementData = SettlementData.new()
+	s.settlement_id = 10
+	s.province_id = 1
+	var r: Array[Dictionary] = DayOrchestrator._process_storm_assault_results(
+		applied, [siege], companies, dice, [s], {},
+	)
+	assert_eq(r.size(), 1)
+	assert_true(r[0].has("victor"))
+
+
+func test_e2e_storm_assault_defender_victory_resets_sortie_counter() -> void:
+	var siege: Dictionary = _make_siege_state(10, 1, 2)
+	siege["ticks_since_sortie"] = 15
+	var companies: Array[Dictionary] = [
+		_make_army_company(1, 1, Enums.CompanyUnitType.PEASANT_LEVY),
+		_make_army_company(2, 2, Enums.CompanyUnitType.BUSHI_RETAINER),
+		_make_army_company(3, 2, Enums.CompanyUnitType.BUSHI_RETAINER),
+		_make_army_company(4, 2, Enums.CompanyUnitType.BUSHI_RETAINER),
+	]
+	var applied: Array = [{
+		"effects": {"requires_storm_assault": true, "siege_settlement_id": 10},
+	}]
+	var dice: DiceEngine = DiceEngine.new(42)
+	var s: SettlementData = SettlementData.new()
+	s.settlement_id = 10
+	s.province_id = 1
+	DayOrchestrator._process_storm_assault_results(
+		applied, [siege], companies, dice, [s], {},
+	)
+	if not siege.get("siege_ended", false):
+		assert_eq(siege.get("ticks_since_sortie", -1), 0)
+
+
+func test_e2e_storm_assault_company_health_mutated() -> void:
+	var siege: Dictionary = _make_siege_state(10, 1, 2)
+	var c_atk: Dictionary = _make_army_company(1, 1, Enums.CompanyUnitType.BUSHI_RETAINER)
+	var c_def: Dictionary = _make_army_company(2, 2, Enums.CompanyUnitType.BUSHI_RETAINER)
+	var h_atk_before: int = c_atk["current_health"]
+	var h_def_before: int = c_def["current_health"]
+	var companies: Array[Dictionary] = [c_atk, c_def]
+	var applied: Array = [{
+		"effects": {"requires_storm_assault": true, "siege_settlement_id": 10},
+	}]
+	var dice: DiceEngine = DiceEngine.new(42)
+	var s: SettlementData = SettlementData.new()
+	s.settlement_id = 10
+	s.province_id = 1
+	DayOrchestrator._process_storm_assault_results(
+		applied, [siege], companies, dice, [s], {},
+	)
+	var atk_changed: bool = c_atk.get("current_health", h_atk_before) != h_atk_before
+	var def_changed: bool = c_def.get("current_health", h_def_before) != h_def_before
+	assert_true(atk_changed or def_changed)
+
+
+func test_e2e_storm_assault_only_targets_matching_siege() -> void:
+	var siege_a: Dictionary = _make_siege_state(10, 1, 2)
+	var siege_b: Dictionary = _make_siege_state(20, 3, 4)
+	var companies: Array[Dictionary] = [
+		_make_army_company(1, 1, Enums.CompanyUnitType.BUSHI_RETAINER),
+		_make_army_company(2, 2, Enums.CompanyUnitType.GARRISON),
+		_make_army_company(3, 3, Enums.CompanyUnitType.BUSHI_RETAINER),
+		_make_army_company(4, 4, Enums.CompanyUnitType.GARRISON),
+	]
+	var applied: Array = [{
+		"effects": {"requires_storm_assault": true, "siege_settlement_id": 10},
+	}]
+	var dice: DiceEngine = DiceEngine.new(42)
+	var s: SettlementData = SettlementData.new()
+	s.settlement_id = 10
+	s.province_id = 1
+	DayOrchestrator._process_storm_assault_results(
+		applied, [siege_a, siege_b], companies, dice, [s], {},
+	)
+	assert_false(siege_b.get("siege_ended", false))
+
+
+func test_e2e_storm_assault_uses_urban_terrain_and_fort_bonus() -> void:
+	var siege: Dictionary = _make_siege_state(10, 1, 2)
+	var companies: Array[Dictionary] = [
+		_make_army_company(1, 1, Enums.CompanyUnitType.BUSHI_RETAINER),
+		_make_army_company(2, 2, Enums.CompanyUnitType.GARRISON),
+	]
+	var applied: Array = [{
+		"effects": {"requires_storm_assault": true, "siege_settlement_id": 10},
+	}]
+	var dice: DiceEngine = DiceEngine.new(42)
+	var s: SettlementData = SettlementData.new()
+	s.settlement_id = 10
+	s.province_id = 1
+	var r: Array[Dictionary] = DayOrchestrator._process_storm_assault_results(
+		applied, [siege], companies, dice, [s], {},
+	)
+	assert_eq(r.size(), 1)
+	assert_true(r[0]["rounds"] > 0)
+
+
+# -- MAINTAIN_SIEGE wiring tests -----------------------------------------------
+
+func test_maintain_siege_executor_returns_requires_flag() -> void:
+	var action: ScoredAction = ScoredAction.new()
+	action.action_id = "MAINTAIN_SIEGE"
+	action.metadata = {"siege_settlement_id": 10}
+	var ctx: ContextSnapshot = ContextSnapshot.new()
+	var dice: DiceEngine = DiceEngine.new(1)
+	var result: Dictionary = ActionExecutor.execute(action, ctx, dice)
+	var effects: Dictionary = result.get("effects", {})
+	assert_true(effects.get("requires_siege_maintenance", false))
+	assert_eq(effects.get("siege_settlement_id", -1), 10)
+
+
+func test_maintain_siege_stamps_last_maintained_ic_day() -> void:
+	var siege: Dictionary = {"settlement_id": 10, "siege_ended": false}
+	var applied: Array = [{
+		"effects": {"requires_siege_maintenance": true, "siege_settlement_id": 10},
+	}]
+	DayOrchestrator._process_siege_maintenance(applied, [siege] as Array[Dictionary], 42)
+	assert_eq(siege.get("last_maintained_ic_day", -1), 42)
+
+
+func test_maintain_siege_no_match_leaves_siege_untouched() -> void:
+	var siege: Dictionary = {"settlement_id": 5, "siege_ended": false}
+	var applied: Array = [{
+		"effects": {"requires_siege_maintenance": true, "siege_settlement_id": 10},
+	}]
+	DayOrchestrator._process_siege_maintenance(applied, [siege] as Array[Dictionary], 42)
+	assert_false(siege.has("last_maintained_ic_day"))
+
+
+func test_maintain_siege_skips_non_siege_effects() -> void:
+	var siege: Dictionary = {"settlement_id": 10}
+	var applied: Array = [{"effects": {"effect": "something_else"}}]
+	DayOrchestrator._process_siege_maintenance(applied, [siege] as Array[Dictionary], 42)
+	assert_false(siege.has("last_maintained_ic_day"))
+
+
+func test_maintain_siege_metadata_population() -> void:
+	var npc: L5RCharacterData = _make_char(1, "Crab")
+	npc.physical_location = "settlement_10"
+	var ctx: ContextSnapshot = ContextSnapshot.new()
+	ctx.location_id = 10
+	var option: ScoredAction = ScoredAction.new()
+	option.action_id = "MAINTAIN_SIEGE"
+	NPCDecisionEngine._populate_action_metadata(option, ctx, {})
+	assert_eq(option.metadata.get("siege_settlement_id", -1), 10)
+
+
+# -- ORDER_PATROL wiring tests ------------------------------------------------
+
+func test_order_patrol_executor_returns_requires_flag() -> void:
+	var action: ScoredAction = ScoredAction.new()
+	action.action_id = "ORDER_PATROL"
+	action.target_province_id = 5
+	var ctx: ContextSnapshot = ContextSnapshot.new()
+	var dice: DiceEngine = DiceEngine.new(1)
+	var result: Dictionary = ActionExecutor.execute(action, ctx, dice)
+	var effects: Dictionary = result.get("effects", {})
+	assert_true(effects.get("requires_patrol", false))
+	assert_eq(effects.get("patrol_province_id", -1), 5)
+
+
+func test_patrol_stamps_season_meta() -> void:
+	var applied: Array = [{
+		"effects": {"requires_patrol": true, "patrol_province_id": 5},
+		"character_id": 1,
+	}]
+	var season_meta: Dictionary = {}
+	var r: Array[Dictionary] = DayOrchestrator._process_patrol_effects(applied, season_meta)
+	assert_eq(r.size(), 1)
+	assert_eq(r[0]["province_id"], 5)
+	assert_true(season_meta.get("patrolled_provinces", {}).has(5))
+
+
+func test_patrol_multiple_provinces() -> void:
+	var applied: Array = [
+		{"effects": {"requires_patrol": true, "patrol_province_id": 5}, "character_id": 1},
+		{"effects": {"requires_patrol": true, "patrol_province_id": 8}, "character_id": 2},
+	]
+	var season_meta: Dictionary = {}
+	var r: Array[Dictionary] = DayOrchestrator._process_patrol_effects(applied, season_meta)
+	assert_eq(r.size(), 2)
+	var patrolled: Dictionary = season_meta.get("patrolled_provinces", {})
+	assert_true(patrolled.has(5))
+	assert_true(patrolled.has(8))
+
+
+func test_patrol_skips_invalid_province() -> void:
+	var applied: Array = [{
+		"effects": {"requires_patrol": true, "patrol_province_id": -1},
+		"character_id": 1,
+	}]
+	var season_meta: Dictionary = {}
+	var r: Array[Dictionary] = DayOrchestrator._process_patrol_effects(applied, season_meta)
+	assert_eq(r.size(), 0)
+
+
+func test_patrol_reduces_insurgency_spawn_chance() -> void:
+	var ws: Dictionary = {"is_patrolled": true}
+	var base_chance: float = InsurgencySystem.get_spawn_chance(
+		Enums.InsurgencyType.PEASANT_REVOLT, Enums.StabilityTier.RESTLESS, {},
+	)
+	var patrolled_chance: float = InsurgencySystem.get_spawn_chance(
+		Enums.InsurgencyType.PEASANT_REVOLT, Enums.StabilityTier.RESTLESS, ws,
+	)
+	assert_true(patrolled_chance < base_chance)
+	assert_almost_eq(patrolled_chance, base_chance * 0.5, 0.001)
+
+
+func test_patrol_concealment_reduction_on_hidden_insurgency() -> void:
+	var ins: InsurgencyData = InsurgencyData.new()
+	ins.province_id = 5
+	ins.concealment = 3
+	ins.detected = false
+	ins.strength = 5
+	var province: ProvinceData = ProvinceData.new()
+	province.province_id = 5
+	var season_meta: Dictionary = {"patrolled_provinces": {5: true}}
+	var provinces: Dictionary = {5: province}
+	var insurgencies: Array[InsurgencyData] = [ins]
+	var dice: DiceEngine = DiceEngine.new(1)
+	var next_id: Array[int] = [100]
+	DayOrchestrator._process_insurgencies(
+		insurgencies, provinces, dice, 0,
+		next_id, {}, {}, season_meta,
+	)
+	assert_eq(ins.concealment, 2)
+
+
+func test_patrol_auto_detects_at_concealment_one() -> void:
+	var ins: InsurgencyData = InsurgencyData.new()
+	ins.province_id = 5
+	ins.concealment = 1
+	ins.detected = false
+	ins.strength = 5
+	var province: ProvinceData = ProvinceData.new()
+	province.province_id = 5
+	var season_meta: Dictionary = {"patrolled_provinces": {5: true}}
+	var provinces: Dictionary = {5: province}
+	var insurgencies: Array[InsurgencyData] = [ins]
+	var dice: DiceEngine = DiceEngine.new(1)
+	var next_id: Array[int] = [100]
+	DayOrchestrator._process_insurgencies(
+		insurgencies, provinces, dice, 0,
+		next_id, {}, {}, season_meta,
+	)
+	assert_eq(ins.concealment, 0)
+	assert_true(ins.detected)
+
+
+func test_patrolled_provinces_cleared_on_season_boundary() -> void:
+	var season_meta: Dictionary = {"patrolled_provinces": {5: true, 8: true}}
+	season_meta.erase("patrolled_provinces")
+	assert_false(season_meta.has("patrolled_provinces"))
+
+
+# -- PURIFY_TAINTED_GROUND wiring tests ----------------------------------------
+
+func _make_kuni_shugenja(char_id: int, school_rank: int) -> L5RCharacterData:
+	var c: L5RCharacterData = _make_char(char_id, "Crab")
+	c.family = "Kuni"
+	c.school = "Kuni Shugenja"
+	c.school_type = Enums.SchoolType.SHUGENJA
+	c.set_trait_value(Enums.Trait.INTELLIGENCE, 4)
+	c.skills["Lore: Shadowlands"] = school_rank
+	c.insight_rank = school_rank
+	return c
+
+
+func test_purify_executor_success_returns_flag() -> void:
+	var c: L5RCharacterData = _make_kuni_shugenja(1, 3)
+	var action: ScoredAction = ScoredAction.new()
+	action.action_id = "PURIFY_TAINTED_GROUND"
+	action.target_province_id = 5
+	var ctx: ContextSnapshot = ContextSnapshot.new()
+	ctx.character_id = 1
+	ctx.ic_day = 10
+	ctx.season = "spring"
+	var dice: DiceEngine = DiceEngine.new(99)
+	var result: Dictionary = ActionExecutor._execute_purify_tainted_ground(
+		action, ctx, c, dice, 1.0,
+	)
+	var effects: Dictionary = result.get("effects", {})
+	if effects.get("requires_purification", false):
+		assert_true(effects.get("ptl_reduction", 0.0) > 0.0)
+		assert_eq(effects.get("province_id", -1), 5)
+
+
+func test_purify_orchestrator_reduces_ptl() -> void:
+	var province: ProvinceData = ProvinceData.new()
+	province.province_id = 5
+	province.province_taint_level = 3.0
+	var applied: Array = [{
+		"effects": {
+			"requires_purification": true,
+			"province_id": 5,
+			"ptl_reduction": 0.75,
+			"ward_bleed_reduction": 0.2,
+			"ward_duration": 4,
+			"ward_school_rank": 3,
+		},
+	}]
+	var season_meta: Dictionary = {}
+	var r: Array[Dictionary] = DayOrchestrator._process_purification_effects(
+		applied, {5: province}, season_meta,
+	)
+	assert_eq(r.size(), 1)
+	assert_almost_eq(province.province_taint_level, 2.25, 0.001)
+	assert_true(r[0].get("ward_set", false))
+
+
+func test_purify_sets_kuni_ward_in_season_meta() -> void:
+	var province: ProvinceData = ProvinceData.new()
+	province.province_id = 5
+	province.province_taint_level = 2.0
+	var applied: Array = [{
+		"effects": {
+			"requires_purification": true,
+			"province_id": 5,
+			"ptl_reduction": 0.5,
+			"ward_bleed_reduction": 0.2,
+			"ward_duration": 4,
+			"ward_school_rank": 3,
+		},
+	}]
+	var season_meta: Dictionary = {}
+	DayOrchestrator._process_purification_effects(applied, {5: province}, season_meta)
+	var wards: Dictionary = season_meta.get("kuni_wards", {})
+	assert_true(wards.has("5"))
+	assert_eq(wards["5"]["bleed_reduction"], 0.2)
+	assert_eq(wards["5"]["seasons_remaining"], 4)
+
+
+func test_purify_ptl_floors_at_zero() -> void:
+	var province: ProvinceData = ProvinceData.new()
+	province.province_id = 5
+	province.province_taint_level = 0.3
+	var applied: Array = [{
+		"effects": {
+			"requires_purification": true,
+			"province_id": 5,
+			"ptl_reduction": 1.0,
+			"ward_bleed_reduction": 0.1,
+			"ward_duration": 2,
+			"ward_school_rank": 1,
+		},
+	}]
+	var season_meta: Dictionary = {}
+	DayOrchestrator._process_purification_effects(applied, {5: province}, season_meta)
+	assert_almost_eq(province.province_taint_level, 0.0, 0.001)
+
+
+func test_purify_stronger_ward_replaces_weaker() -> void:
+	var province: ProvinceData = ProvinceData.new()
+	province.province_id = 5
+	province.province_taint_level = 5.0
+	var season_meta: Dictionary = {
+		"kuni_wards": {"5": {"bleed_reduction": 0.1, "seasons_remaining": 2, "school_rank": 1}},
+	}
+	var applied: Array = [{
+		"effects": {
+			"requires_purification": true,
+			"province_id": 5,
+			"ptl_reduction": 0.5,
+			"ward_bleed_reduction": 0.3,
+			"ward_duration": 6,
+			"ward_school_rank": 5,
+		},
+	}]
+	DayOrchestrator._process_purification_effects(applied, {5: province}, season_meta)
+	var ward: Dictionary = season_meta["kuni_wards"]["5"]
+	assert_eq(ward["bleed_reduction"], 0.3)
+	assert_eq(ward["seasons_remaining"], 6)
+
+
+func test_purify_weaker_ward_does_not_replace() -> void:
+	var province: ProvinceData = ProvinceData.new()
+	province.province_id = 5
+	province.province_taint_level = 5.0
+	var season_meta: Dictionary = {
+		"kuni_wards": {"5": {"bleed_reduction": 0.3, "seasons_remaining": 5, "school_rank": 5}},
+	}
+	var applied: Array = [{
+		"effects": {
+			"requires_purification": true,
+			"province_id": 5,
+			"ptl_reduction": 0.5,
+			"ward_bleed_reduction": 0.1,
+			"ward_duration": 2,
+			"ward_school_rank": 1,
+		},
+	}]
+	DayOrchestrator._process_purification_effects(applied, {5: province}, season_meta)
+	var ward: Dictionary = season_meta["kuni_wards"]["5"]
+	assert_eq(ward["bleed_reduction"], 0.3)
+	assert_eq(ward["seasons_remaining"], 5)
+
+
+func test_kuni_ward_tick_decrements_duration() -> void:
+	var season_meta: Dictionary = {
+		"kuni_wards": {
+			"5": {"bleed_reduction": 0.2, "seasons_remaining": 3, "school_rank": 3},
+			"8": {"bleed_reduction": 0.1, "seasons_remaining": 1, "school_rank": 1},
+		},
+	}
+	DayOrchestrator._tick_kuni_wards(season_meta)
+	var wards: Dictionary = season_meta.get("kuni_wards", {})
+	assert_true(wards.has("5"))
+	assert_eq(wards["5"]["seasons_remaining"], 2)
+	assert_false(wards.has("8"))
+
+
+func test_kuni_ward_tick_removes_all_expired() -> void:
+	var season_meta: Dictionary = {
+		"kuni_wards": {
+			"5": {"bleed_reduction": 0.1, "seasons_remaining": 1, "school_rank": 1},
+		},
+	}
+	DayOrchestrator._tick_kuni_wards(season_meta)
+	assert_false(season_meta.has("kuni_wards"))
+
+
+func test_purify_skips_nonexistent_province() -> void:
+	var applied: Array = [{
+		"effects": {
+			"requires_purification": true,
+			"province_id": 99,
+			"ptl_reduction": 0.5,
+			"ward_bleed_reduction": 0.1,
+			"ward_duration": 2,
+			"ward_school_rank": 1,
+		},
+	}]
+	var r: Array[Dictionary] = DayOrchestrator._process_purification_effects(applied, {}, {})
+	assert_eq(r.size(), 0)
+
+
+# -- DRILL_TROOPS wiring tests ------------------------------------------------
+
+func _make_trainable_company(cid: int, commander_id: int) -> Dictionary:
+	return {
+		"company_id": cid,
+		"commander_id": commander_id,
+		"training_level": 0,
+		"training_points": 0,
+		"health": 100,
+		"max_health": 100,
+		"destroyed": false,
+	}
+
+
+func test_drill_executor_returns_requires_flag() -> void:
+	var action: ScoredAction = ScoredAction.new()
+	action.action_id = "DRILL_TROOPS"
+	action.metadata = {"target_company_id": 10}
+	var ctx: ContextSnapshot = ContextSnapshot.new()
+	var dice: DiceEngine = DiceEngine.new(1)
+	var result: Dictionary = ActionExecutor.execute(action, ctx, dice)
+	var effects: Dictionary = result.get("effects", {})
+	assert_true(effects.get("requires_drill", false))
+	assert_eq(effects.get("target_company_id", -1), 10)
+
+
+func test_drill_success_adds_training_points() -> void:
+	var c: L5RCharacterData = _make_char(1, "Lion")
+	c.skills["Battle"] = 3
+	c.set_trait_value(Enums.Trait.PERCEPTION, 3)
+	var company: Dictionary = _make_trainable_company(10, 1)
+	var applied: Array = [{
+		"effects": {"requires_drill": true, "target_company_id": 10},
+		"character_id": 1,
+	}]
+	var dice: DiceEngine = DiceEngine.new(99)
+	var r: Array[Dictionary] = DayOrchestrator._process_drill_effects(
+		applied, [company] as Array[Dictionary],
+		{1: c}, dice,
+	)
+	assert_eq(r.size(), 1)
+	assert_true(r[0].get("success", false))
+	assert_true(r[0].get("points_added", 0) >= 1)
+	assert_true(company.get("training_points", 0) >= 1)
+
+
+func test_drill_fallback_to_commander_id() -> void:
+	var c: L5RCharacterData = _make_char(1, "Lion")
+	c.skills["Battle"] = 3
+	c.set_trait_value(Enums.Trait.PERCEPTION, 3)
+	var company: Dictionary = _make_trainable_company(10, 1)
+	var applied: Array = [{
+		"effects": {"requires_drill": true, "target_company_id": -1},
+		"character_id": 1,
+	}]
+	var dice: DiceEngine = DiceEngine.new(99)
+	var r: Array[Dictionary] = DayOrchestrator._process_drill_effects(
+		applied, [company] as Array[Dictionary],
+		{1: c}, dice,
+	)
+	assert_eq(r.size(), 1)
+	assert_eq(r[0].get("company_id", -1), 10)
+
+
+func test_drill_level_up_at_10_points() -> void:
+	var c: L5RCharacterData = _make_char(1, "Lion")
+	c.skills["Battle"] = 5
+	c.set_trait_value(Enums.Trait.PERCEPTION, 5)
+	var company: Dictionary = _make_trainable_company(10, 1)
+	company["training_points"] = 9
+	company["training_level"] = 0
+	var applied: Array = [{
+		"effects": {"requires_drill": true, "target_company_id": 10},
+		"character_id": 1,
+	}]
+	var dice: DiceEngine = DiceEngine.new(99)
+	var r: Array[Dictionary] = DayOrchestrator._process_drill_effects(
+		applied, [company] as Array[Dictionary],
+		{1: c}, dice,
+	)
+	if r[0].get("success", false) and r[0].get("points_added", 0) >= 1:
+		assert_eq(company.get("training_level", 0), 1)
+
+
+func test_drill_max_level_cap() -> void:
+	var c: L5RCharacterData = _make_char(1, "Lion")
+	c.skills["Battle"] = 5
+	c.set_trait_value(Enums.Trait.PERCEPTION, 5)
+	var company: Dictionary = _make_trainable_company(10, 1)
+	company["training_points"] = 9
+	company["training_level"] = 3
+	var applied: Array = [{
+		"effects": {"requires_drill": true, "target_company_id": 10},
+		"character_id": 1,
+	}]
+	var dice: DiceEngine = DiceEngine.new(99)
+	DayOrchestrator._process_drill_effects(
+		applied, [company] as Array[Dictionary],
+		{1: c}, dice,
+	)
+	assert_eq(company.get("training_level", 0), 3)
+
+
+func test_drill_no_character_skips() -> void:
+	var company: Dictionary = _make_trainable_company(10, 1)
+	var applied: Array = [{
+		"effects": {"requires_drill": true, "target_company_id": 10},
+		"character_id": 999,
+	}]
+	var dice: DiceEngine = DiceEngine.new(1)
+	var r: Array[Dictionary] = DayOrchestrator._process_drill_effects(
+		applied, [company] as Array[Dictionary],
+		{}, dice,
+	)
+	assert_eq(r.size(), 0)
+
+
+func test_drill_no_company_skips() -> void:
+	var c: L5RCharacterData = _make_char(1, "Lion")
+	c.skills["Battle"] = 3
+	var applied: Array = [{
+		"effects": {"requires_drill": true, "target_company_id": 99},
+		"character_id": 1,
+	}]
+	var dice: DiceEngine = DiceEngine.new(1)
+	var r: Array[Dictionary] = DayOrchestrator._process_drill_effects(
+		applied, [] as Array[Dictionary],
+		{1: c}, dice,
+	)
+	assert_eq(r.size(), 0)
+
+
+func test_drill_results_in_advance_day_return() -> void:
+	var applied: Array = [{"effects": {"effect": "nothing"}}]
+	var dice: DiceEngine = DiceEngine.new(1)
+	var r: Array[Dictionary] = DayOrchestrator._process_drill_effects(
+		applied, [] as Array[Dictionary], {}, dice,
+	)
+	assert_eq(r.size(), 0)

@@ -922,3 +922,484 @@ func test_build_context_populates_school() -> void:
 		_char, ws
 	)
 	assert_eq(ctx.school, "Kaiu Engineer")
+
+
+# --- Topic position scoring (s55.14, s55.26 Annex H) ---
+
+func test_interpolate_strong_support_returns_cap() -> void:
+	var entry: Dictionary = {"strong_support": 12, "strong_opposition": -8}
+	var result: float = NPCDecisionEngine._interpolate_topic_position(60.0, entry)
+	assert_eq(result, 12.0)
+
+
+func test_interpolate_strong_opposition_returns_cap() -> void:
+	var entry: Dictionary = {"strong_support": 12, "strong_opposition": -8}
+	var result: float = NPCDecisionEngine._interpolate_topic_position(-60.0, entry)
+	assert_eq(result, -8.0)
+
+
+func test_interpolate_neutral_returns_zero() -> void:
+	var entry: Dictionary = {"strong_support": 15, "strong_opposition": -15}
+	assert_eq(NPCDecisionEngine._interpolate_topic_position(0.0, entry), 0.0)
+	assert_eq(NPCDecisionEngine._interpolate_topic_position(10.0, entry), 0.0)
+	assert_eq(NPCDecisionEngine._interpolate_topic_position(-10.0, entry), 0.0)
+
+
+func test_interpolate_partial_positive() -> void:
+	var entry: Dictionary = {"strong_support": 15, "strong_opposition": -15}
+	var result: float = NPCDecisionEngine._interpolate_topic_position(32.5, entry)
+	assert_almost_eq(result, 7.5, 0.01)
+
+
+func test_interpolate_partial_negative() -> void:
+	var entry: Dictionary = {"strong_support": 15, "strong_opposition": -15}
+	var result: float = NPCDecisionEngine._interpolate_topic_position(-32.5, entry)
+	assert_almost_eq(result, -7.5, 0.01)
+
+
+func test_interpolate_asymmetric_caps() -> void:
+	var entry: Dictionary = {"strong_support": 10, "strong_opposition": 0}
+	assert_eq(NPCDecisionEngine._interpolate_topic_position(60.0, entry), 10.0)
+	assert_eq(NPCDecisionEngine._interpolate_topic_position(-60.0, entry), 0.0)
+
+
+func test_compute_topic_position_modifier_uses_table() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.known_topics = [1, 2]
+	ctx.known_positions = {1: 60.0, 2: -30.0}
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "GATHER_INTELLIGENCE"
+	var tables: Dictionary = {
+		"topic_position_alignment": {
+			"GATHER_INTELLIGENCE": {"strong_support": 10, "strong_opposition": 0},
+		},
+	}
+	var result: float = NPCDecisionEngine._compute_topic_position_modifier(
+		"PROBE", need, ctx, tables,
+	)
+	assert_eq(result, 10.0)
+
+
+func test_compute_topic_position_modifier_missing_need_type() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.known_topics = [1]
+	ctx.known_positions = {1: 80.0}
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "UNKNOWN_NEED"
+	var tables: Dictionary = {
+		"topic_position_alignment": {
+			"GATHER_INTELLIGENCE": {"strong_support": 10, "strong_opposition": 0},
+		},
+	}
+	var result: float = NPCDecisionEngine._compute_topic_position_modifier(
+		"PROBE", need, ctx, tables,
+	)
+	assert_eq(result, 0.0)
+
+
+# --- Letter topic routing ---
+
+func test_pick_letter_topic_strongest_position() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.known_topics = [10, 20, 30]
+	ctx.known_positions = {10: 5.0, 20: -40.0, 30: 15.0}
+	var tid: int = NPCDecisionEngine._pick_letter_topic(ctx)
+	assert_eq(tid, 20, "Should pick topic with strongest absolute position")
+
+
+func test_pick_letter_topic_fallback_first() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.known_topics = [10, 20]
+	ctx.known_positions = {}
+	var tid: int = NPCDecisionEngine._pick_letter_topic(ctx)
+	assert_eq(tid, 10, "Falls back to first known topic when no positions")
+
+
+func test_pick_letter_topic_empty_returns_negative() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.known_topics = []
+	var tid: int = NPCDecisionEngine._pick_letter_topic(ctx)
+	assert_eq(tid, -1)
+
+
+func test_resolve_daily_letter_includes_topic_id() -> void:
+	var char := L5RCharacterData.new()
+	char.character_id = 1
+	char.topic_pool = [42, 55]
+	char.topic_positions = {42: 30.0, 55: -10.0}
+	char.skills = {"Courtier": 3}
+	char.traits = {"Awareness": 3}
+	var objectives: Dictionary = {
+		"primary": {"need_type": "RAISE_DISPOSITION", "target_npc_id": 5},
+	}
+	var scoring_tables: Dictionary = {
+		"objective_alignment": {
+			"RAISE_DISPOSITION": {"WRITE_LETTER": 60},
+		},
+	}
+	var ws: Dictionary = {"is_lord": false}
+	var ctx := NPCDecisionEngine.build_context(char, ws)
+	var result: Dictionary = NPCDecisionEngine.resolve_daily_letter(
+		char, objectives, scoring_tables, ctx,
+	)
+	assert_eq(result.get("topic_id", -1), 42, "Should include strongest position topic")
+
+
+# --- SEEK_PEACE position inversion (s55.26 Annex H) ---
+
+func test_seek_peace_inverts_position_pro_war_penalized() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.known_topics = [1]
+	ctx.known_positions = {1: 60.0}
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "SEEK_PEACE"
+	var tables: Dictionary = {
+		"topic_position_alignment": {
+			"SEEK_PEACE": {"strong_support": 15, "strong_opposition": -15},
+		},
+	}
+	var result: float = NPCDecisionEngine._compute_topic_position_modifier(
+		"NEGOTIATE_SURRENDER", need, ctx, tables,
+	)
+	assert_eq(result, -15.0, "Pro-war NPC (pos +60) should get -15 on SEEK_PEACE")
+
+
+func test_seek_peace_inverts_position_anti_war_boosted() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.known_topics = [1]
+	ctx.known_positions = {1: -60.0}
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "SEEK_PEACE"
+	var tables: Dictionary = {
+		"topic_position_alignment": {
+			"SEEK_PEACE": {"strong_support": 15, "strong_opposition": -15},
+		},
+	}
+	var result: float = NPCDecisionEngine._compute_topic_position_modifier(
+		"NEGOTIATE_SURRENDER", need, ctx, tables,
+	)
+	assert_eq(result, 15.0, "Anti-war NPC (pos -60) should get +15 on SEEK_PEACE")
+
+
+func test_seek_peace_neutral_position_zero() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.known_topics = [1]
+	ctx.known_positions = {1: 5.0}
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "SEEK_PEACE"
+	var tables: Dictionary = {
+		"topic_position_alignment": {
+			"SEEK_PEACE": {"strong_support": 15, "strong_opposition": -15},
+		},
+	}
+	var result: float = NPCDecisionEngine._compute_topic_position_modifier(
+		"NEGOTIATE_SURRENDER", need, ctx, tables,
+	)
+	assert_eq(result, 0.0, "Neutral position should still be zero after inversion")
+
+
+# -- Topic type filtering tests -------------------------------------------------
+
+func test_build_known_topic_types_from_topic_data() -> void:
+	var t1 := TopicData.new()
+	t1.topic_id = 10
+	t1.topic_type = "Clan_War"
+	var t2 := TopicData.new()
+	t2.topic_id = 20
+	t2.topic_type = "Provincial_Famine"
+	var t3 := TopicData.new()
+	t3.topic_id = 30
+	t3.topic_type = ""
+	var pool: Array[int] = [10, 20, 30]
+	var result: Dictionary = NPCDecisionEngine._build_known_topic_types(pool, [t1, t2, t3])
+	assert_eq(result.get(10, ""), "Clan_War")
+	assert_eq(result.get(20, ""), "Provincial_Famine")
+	assert_false(result.has(30), "Empty topic_type should be excluded")
+
+
+func test_build_known_topic_types_from_dicts() -> void:
+	var topics: Array = [
+		{"topic_id": 5, "topic_type": "Siege_Beginning"},
+		{"topic_id": 6, "topic_type": "Betrayal"},
+	]
+	var pool: Array[int] = [5, 6]
+	var result: Dictionary = NPCDecisionEngine._build_known_topic_types(pool, topics)
+	assert_eq(result.get(5, ""), "Siege_Beginning")
+	assert_eq(result.get(6, ""), "Betrayal")
+
+
+func test_build_known_topic_types_filters_by_pool() -> void:
+	var t1 := TopicData.new()
+	t1.topic_id = 10
+	t1.topic_type = "Clan_War"
+	var t2 := TopicData.new()
+	t2.topic_id = 20
+	t2.topic_type = "Provincial_Raid"
+	var pool: Array[int] = [10]
+	var result: Dictionary = NPCDecisionEngine._build_known_topic_types(pool, [t1, t2])
+	assert_true(result.has(10))
+	assert_false(result.has(20), "Topic not in pool should be excluded")
+
+
+func test_topic_type_filter_levy_troops_matches_war_topic() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.known_topics = [1]
+	ctx.known_positions = {1: 40.0}
+	ctx.known_topic_types = {1: "Clan_War"}
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "LEVY_TROOPS"
+	var tables: Dictionary = {
+		"topic_position_alignment": {
+			"LEVY_TROOPS": {
+				"strong_support": 15, "strong_opposition": -10,
+				"topic_types": ["Clan_War", "Provincial_Raid", "Shadowlands_Incursion", "Siege_Beginning"],
+			},
+		},
+	}
+	var result: float = NPCDecisionEngine._compute_topic_position_modifier(
+		"LEVY_TROOPS", need, ctx, tables,
+	)
+	assert_true(result > 0.0, "War topic should produce positive modifier for LEVY_TROOPS")
+
+
+func test_topic_type_filter_levy_troops_skips_famine_topic() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.known_topics = [1]
+	ctx.known_positions = {1: 40.0}
+	ctx.known_topic_types = {1: "Provincial_Famine"}
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "LEVY_TROOPS"
+	var tables: Dictionary = {
+		"topic_position_alignment": {
+			"LEVY_TROOPS": {
+				"strong_support": 15, "strong_opposition": -10,
+				"topic_types": ["Clan_War", "Provincial_Raid", "Shadowlands_Incursion", "Siege_Beginning"],
+			},
+		},
+	}
+	var result: float = NPCDecisionEngine._compute_topic_position_modifier(
+		"LEVY_TROOPS", need, ctx, tables,
+	)
+	assert_eq(result, 0.0, "Famine topic should not boost LEVY_TROOPS")
+
+
+func test_topic_type_filter_empty_array_matches_all() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.known_topics = [1]
+	ctx.known_positions = {1: 40.0}
+	ctx.known_topic_types = {1: "Whatever_Type"}
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "RAISE_DISPOSITION"
+	var tables: Dictionary = {
+		"topic_position_alignment": {
+			"RAISE_DISPOSITION": {"strong_support": 15, "strong_opposition": -15},
+		},
+	}
+	var result: float = NPCDecisionEngine._compute_topic_position_modifier(
+		"CHARM", need, ctx, tables,
+	)
+	assert_true(result > 0.0, "No topic_types filter should match all topics")
+
+
+func test_topic_type_filter_unknown_type_passes_through() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.known_topics = [1]
+	ctx.known_positions = {1: 40.0}
+	ctx.known_topic_types = {}
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "LEVY_TROOPS"
+	var tables: Dictionary = {
+		"topic_position_alignment": {
+			"LEVY_TROOPS": {
+				"strong_support": 15, "strong_opposition": -10,
+				"topic_types": ["Clan_War", "Provincial_Raid"],
+			},
+		},
+	}
+	var result: float = NPCDecisionEngine._compute_topic_position_modifier(
+		"LEVY_TROOPS", need, ctx, tables,
+	)
+	assert_true(result > 0.0, "Topic with unknown type should pass through filter")
+
+
+# -- Disposition modifier tests ------------------------------------------------
+
+func test_disposition_modifier_cooperative_friend() -> void:
+	var disp: Dictionary = {10: 45}
+	var result: float = NPCDecisionEngine._lookup_disposition_modifier(
+		10, disp, _scoring_tables, "CHARM"
+	)
+	assert_eq(result, 10.0, "Friend disposition should give +10 for cooperative action")
+
+
+func test_disposition_modifier_hostile_enemy() -> void:
+	var disp: Dictionary = {10: -45}
+	var result: float = NPCDecisionEngine._lookup_disposition_modifier(
+		10, disp, _scoring_tables, "INTIMIDATE"
+	)
+	assert_eq(result, 10.0, "Enemy disposition should give +10 for hostile action")
+
+
+func test_disposition_modifier_hostile_friend_penalizes() -> void:
+	var disp: Dictionary = {10: 45}
+	var result: float = NPCDecisionEngine._lookup_disposition_modifier(
+		10, disp, _scoring_tables, "INTIMIDATE"
+	)
+	assert_eq(result, -10.0, "Friend disposition should give -10 for hostile action")
+
+
+func test_disposition_modifier_provoke_emotion_is_hostile() -> void:
+	var disp: Dictionary = {10: 45}
+	var result: float = NPCDecisionEngine._lookup_disposition_modifier(
+		10, disp, _scoring_tables, "PROVOKE_EMOTION"
+	)
+	assert_eq(result, -10.0, "PROVOKE_EMOTION should use hostile column")
+
+
+func test_disposition_modifier_no_target() -> void:
+	var disp: Dictionary = {10: 45}
+	var result: float = NPCDecisionEngine._lookup_disposition_modifier(
+		-1, disp, _scoring_tables, "CHARM"
+	)
+	assert_eq(result, 0.0, "No target should return 0")
+
+
+func test_disposition_modifier_stranger_neutral() -> void:
+	var disp: Dictionary = {10: 0}
+	var result: float = NPCDecisionEngine._lookup_disposition_modifier(
+		10, disp, _scoring_tables, "CHARM"
+	)
+	assert_eq(result, 0.0, "Stranger should return 0 for cooperative")
+
+
+func test_disposition_modifier_devoted_cooperative() -> void:
+	var disp: Dictionary = {10: 95}
+	var result: float = NPCDecisionEngine._lookup_disposition_modifier(
+		10, disp, _scoring_tables, "CHARM"
+	)
+	assert_eq(result, 25.0, "Devoted should give +25 for cooperative")
+
+
+# -- Known contacts injection tests --------------------------------------------
+
+func test_known_contacts_populated_from_character() -> void:
+	_char.known_contacts_by_clan = {"Crane": [10, 11], "Lion": [20]}
+	var ctx: NPCDataStructures.ContextSnapshot = NPCDecisionEngine.build_context(
+		_char, _world_state
+	)
+	assert_eq(ctx.known_contacts.size(), 3, "Should have 3 contacts total")
+	assert_true(10 in ctx.known_contacts, "Contact 10 should be present")
+	assert_true(11 in ctx.known_contacts, "Contact 11 should be present")
+	assert_true(20 in ctx.known_contacts, "Contact 20 should be present")
+
+
+func test_contact_clans_populated_from_character() -> void:
+	_char.known_contacts_by_clan = {"Crane": [10], "Lion": [20]}
+	var ctx: NPCDataStructures.ContextSnapshot = NPCDecisionEngine.build_context(
+		_char, _world_state
+	)
+	assert_eq(ctx.contact_clans.get(10, ""), "Crane", "Contact 10 should map to Crane")
+	assert_eq(ctx.contact_clans.get(20, ""), "Lion", "Contact 20 should map to Lion")
+
+
+func test_known_contacts_empty_when_no_contacts() -> void:
+	_char.known_contacts_by_clan = {}
+	var ctx: NPCDataStructures.ContextSnapshot = NPCDecisionEngine.build_context(
+		_char, _world_state
+	)
+	assert_eq(ctx.known_contacts.size(), 0, "Should have no contacts")
+	assert_eq(ctx.contact_clans.size(), 0, "Should have no clan mappings")
+
+
+func test_known_contacts_no_duplicates() -> void:
+	_char.known_contacts_by_clan = {"Crane": [10], "Lion": [10]}
+	var ctx: NPCDataStructures.ContextSnapshot = NPCDecisionEngine.build_context(
+		_char, _world_state
+	)
+	var count: int = 0
+	for c_id: int in ctx.known_contacts:
+		if c_id == 10:
+			count += 1
+	assert_eq(count, 1, "Contact 10 should appear only once in flat list")
+
+
+# -- Competence modifier tests ------------------------------------------------
+
+func test_competence_modifier_with_primary_skill() -> void:
+	var tables: Dictionary = {
+		"action_skill_map": {
+			"CHARM": {"primary": "Etiquette", "secondary": "Courtier"},
+		},
+	}
+	var skills: Dictionary = {"Etiquette": 5, "Courtier": 3}
+	var result: float = NPCDecisionEngine._compute_competence_modifier(
+		"CHARM", skills, tables,
+	)
+	assert_almost_eq(result, 10.0, 0.01, "Rank 5 primary = +10")
+
+
+func test_competence_modifier_with_secondary_half_value() -> void:
+	var tables: Dictionary = {
+		"action_skill_map": {
+			"TEST": {"primary": "Battle", "secondary": "Etiquette"},
+		},
+	}
+	var skills: Dictionary = {"Battle": 3, "Etiquette": 5}
+	var result: float = NPCDecisionEngine._compute_competence_modifier(
+		"TEST", skills, tables,
+	)
+	assert_almost_eq(result, 5.0, 0.01, "Rank 3 primary (0) + rank 5 secondary (10*0.5=5)")
+
+
+func test_competence_modifier_null_secondary_no_penalty() -> void:
+	var tables: Dictionary = {
+		"action_skill_map": {
+			"INTIMIDATE": {"primary": "Intimidation", "secondary": null},
+		},
+	}
+	var skills: Dictionary = {"Intimidation": 4}
+	var result: float = NPCDecisionEngine._compute_competence_modifier(
+		"INTIMIDATE", skills, tables,
+	)
+	assert_almost_eq(result, 5.0, 0.01, "Rank 4 = +5, null secondary should not add penalty")
+
+
+func test_competence_modifier_null_primary_returns_zero() -> void:
+	var tables: Dictionary = {
+		"action_skill_map": {
+			"DO_NOTHING": {"primary": null, "secondary": null},
+		},
+	}
+	var result: float = NPCDecisionEngine._compute_competence_modifier(
+		"DO_NOTHING", {}, tables,
+	)
+	assert_eq(result, 0.0, "Null primary should return 0")
+
+
+func test_competence_modifier_unknown_action() -> void:
+	var tables: Dictionary = {"action_skill_map": {}}
+	var result: float = NPCDecisionEngine._compute_competence_modifier(
+		"NONEXISTENT", {}, tables,
+	)
+	assert_eq(result, 0.0, "Unknown action should return 0")
+
+
+# -- Province status rice stockpile population ---------------------------------
+
+func test_province_status_rice_stockpile_from_settlements() -> void:
+	var p := ProvinceData.new()
+	p.province_id = 100
+	p.clan = "Crane"
+	var s1 := SettlementData.new()
+	s1.settlement_id = 1
+	s1.province_id = 100
+	s1.rice_stockpile = 25.0
+	var s2 := SettlementData.new()
+	s2.settlement_id = 2
+	s2.province_id = 100
+	s2.rice_stockpile = 15.0
+	var statuses: Array = NPCDecisionEngine.build_province_statuses_from_data(
+		[p], [s1, s2],
+	)
+	assert_eq(statuses.size(), 1)
+	assert_almost_eq(statuses[0].rice_stockpile, 40.0, 0.01, "Rice should sum settlements")

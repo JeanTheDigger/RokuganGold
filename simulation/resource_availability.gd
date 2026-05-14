@@ -55,7 +55,7 @@ static func _get_available_resource(
 		"koku":
 			return character.koku
 		"inventory_item":
-			return float(character.outfit.size())
+			return float(character.items.size())
 		"rice":
 			return province_data.get("rice_stockpile", 0.0) as float
 		"troop_pu":

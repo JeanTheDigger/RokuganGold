@@ -63,6 +63,12 @@ static func advance_day(
 	constructions: Array[ConstructionData] = [],
 	next_settlement_id: Array[int] = [5000],
 	next_construction_id: Array[int] = [1],
+	court_commitments: Array[CourtCommitmentData] = [],
+	togashi_state: Dictionary = {},
+	phoenix_council_state: Dictionary = {},
+	active_civil_wars: Array[Dictionary] = [],
+	precedent_modifiers: Dictionary = {},
+	next_company_id: Array[int] = [1],
 ) -> Dictionary:
 	var prev_season: int = time_system.get_season()
 
@@ -80,6 +86,7 @@ static func advance_day(
 
 	_populate_infrastructure_intelligence(world_states, provinces, settlements, ships, worship_state)
 	_populate_vacancy_intelligence(world_states, characters, characters_by_id, companies, settlements, provinces, season_meta)
+	_populate_resource_stockpiles(world_states, characters, provinces, settlements, clans, companies)
 
 	var festival_results: Dictionary = _process_festivals(ic_day, world_states)
 
@@ -107,20 +114,26 @@ static func advance_day(
 		active_courts, active_topics, next_topic_id, ic_day,
 		active_edicts, next_edict_id, active_wars,
 		characters_by_id, world_states,
+		court_commitments, characters,
 	)
 	_set_court_context_flags(active_courts, world_states)
 	_set_wall_tower_context_flags(characters, settlements, provinces, world_states)
+	_populate_court_availability_data(
+		active_courts, characters, characters_by_id, world_states, favors,
+	)
 
 	var edict_results: Array[Dictionary] = _process_edict_compliance(
 		active_edicts, active_wars, characters, active_topics, next_topic_id, ic_day,
 	)
 
 	_inject_edict_reactive_events(active_edicts, characters, world_states, ic_day)
+	_inject_commitment_needs(court_commitments, characters, world_states)
 
 	var wm_for_military: Dictionary = world_states.get("_worship_maluses", {})
 	var military_daily: Dictionary = _process_military_daily(
 		active_armies, active_sieges, active_tethers, order_states,
 		dice_engine, settlements, companies, wm_for_military,
+		active_wars, characters_by_id, provinces,
 	)
 
 	var naval_weather: int = _process_naval_weather(
@@ -134,14 +147,21 @@ static func advance_day(
 	)
 	_apply_naval_battle_mutations(naval_battle_results, ships, characters_by_id)
 
+	_inject_urgency_data(
+		world_states, characters, favors, active_tethers, active_sieges,
+		objectives_map, active_topics,
+	)
+
 	var day_result: Dictionary = NPCWaveResolver.resolve_day_applied(
 		characters, world_states, objectives_map, scoring_tables, filter_data,
 		dice_engine, action_skill_map, characters_by_id, provinces, action_log,
 		approach_penalties, commitments, military_data, settlements
 	)
 
+	var next_letter_id: Array[int] = [pending_letters.size() + 1]
 	var letter_pass_results: Array[Dictionary] = _process_daily_letter_pass(
-		characters, characters_by_id, objectives_map, scoring_tables, world_states
+		characters, characters_by_id, objectives_map, scoring_tables, world_states,
+		pending_letters, ic_day, dice_engine, next_letter_id,
 	)
 
 	var crime_results: Array[Dictionary] = _process_crime_detection(
@@ -155,11 +175,16 @@ static func advance_day(
 		world_states,
 	)
 
+	var current_season_count: int = int(season_meta.get("horde_season_count", 0))
 	var military_effects: Array[Dictionary] = _process_military_effects(
 		day_result.get("results", []),
 		settlements,
 		characters_by_id,
 		companies,
+		provinces,
+		next_company_id,
+		clans,
+		current_season_count,
 	)
 
 	var wall_engineering_results: Array[Dictionary] = _process_wall_engineering_effects(
@@ -171,6 +196,39 @@ static func advance_day(
 		day_result.get("results", []),
 		settlements,
 		provinces,
+	)
+
+	var storm_assault_results: Array[Dictionary] = _process_storm_assault_results(
+		day_result.get("results", []),
+		active_sieges,
+		companies,
+		dice_engine,
+		settlements,
+		characters_by_id,
+	)
+
+	var purification_results: Array[Dictionary] = _process_purification_effects(
+		day_result.get("results", []),
+		provinces,
+		season_meta,
+	)
+
+	var patrol_results: Array[Dictionary] = _process_patrol_effects(
+		day_result.get("results", []),
+		season_meta,
+	)
+
+	_process_siege_maintenance(
+		day_result.get("results", []),
+		active_sieges,
+		ic_day,
+	)
+
+	var drill_results: Array[Dictionary] = _process_drill_effects(
+		day_result.get("results", []),
+		companies,
+		characters_by_id,
+		dice_engine,
 	)
 
 	var horde_assault_results: Array[Dictionary] = _process_horde_assaults(
@@ -200,6 +258,13 @@ static func advance_day(
 		day_result.get("results", []), worship_state,
 	)
 
+	var letter_examination_results: Array[Dictionary] = _process_letter_examinations(
+		day_result.get("results", []),
+		pending_letters,
+		characters_by_id,
+		dice_engine,
+	)
+
 	var construction_results: Array[Dictionary] = _process_construction_effects(
 		day_result.get("results", []),
 		characters_by_id,
@@ -220,6 +285,19 @@ static func advance_day(
 	_process_edict_compliance_actions(
 		day_result.get("results", []),
 		active_edicts,
+	)
+
+	_process_voluntary_declarations(
+		day_result.get("results", []),
+		active_courts, active_topics, court_commitments,
+		characters_by_id, ic_day, time_system,
+	)
+
+	_process_court_action_effects(
+		day_result.get("results", []),
+		characters_by_id,
+		favors,
+		ic_day,
 	)
 
 	var governance_results: Dictionary = _process_governance_effects(
@@ -280,6 +358,8 @@ static func advance_day(
 		war_termination_results, trade_routes,
 	)
 	trade_route_results.append_array(peace_route_results)
+	if not peace_route_results.is_empty():
+		LetterSystem.unblock_letters(pending_letters)
 
 	var military_topics: Array[TopicData] = _generate_military_event_topics(
 		military_daily, military_effects, active_topics, next_topic_id, ic_day,
@@ -300,7 +380,7 @@ static func advance_day(
 	)
 
 	var conversation_results: Array[Dictionary] = _process_daily_conversations(
-		characters, dice_engine, current_season
+		characters, dice_engine, current_season, active_topics
 	)
 
 	_wire_discussion_counts(conversation_results, active_topics)
@@ -330,9 +410,21 @@ static func advance_day(
 	)
 
 	var letter_results: Array[Dictionary] = LetterSystem.process_pending_letters(
-		pending_letters, characters_by_id, ic_day, current_season, action_log
+		pending_letters, characters_by_id, ic_day, current_season, action_log,
+		active_wars if active_wars != null else [], dice_engine,
 	)
 	_compute_positions_from_letters(letter_results, active_topics, characters_by_id)
+
+	var reply_letters: Array[LetterData] = []
+	if dice_engine != null:
+		var reply_next_id: Array[int] = [next_letter_id[0]]
+		reply_letters = LetterSystem.generate_replies(
+			letter_results, pending_letters, characters_by_id,
+			ic_day, dice_engine, reply_next_id,
+		)
+		for reply: LetterData in reply_letters:
+			pending_letters.append(reply)
+		next_letter_id[0] = reply_next_id[0]
 
 	var seasonal_result: Dictionary = {}
 	var strategic_results: Array[Dictionary] = []
@@ -345,7 +437,9 @@ static func advance_day(
 	var ronin_results: Dictionary = {}
 	var pregnancy_results: Array[Dictionary] = []
 	var seiyaku_results: Dictionary = {}
+	var commitment_seasonal_result: Dictionary = {}
 	var worship_seasonal_results: Dictionary = {}
+	var civil_war_results_seasonal: Dictionary = {}
 	if current_season != prev_season:
 		# Add the IC year to miya_inputs so per-province blessed-year tracking
 		# stays consistent. Year is computed from the time system's tick count.
@@ -384,6 +478,11 @@ static func advance_day(
 			companies, settlements, clans, characters_by_id,
 			dice_engine, _season_to_name(current_season),
 		)
+		military_seasonal_result["levy_suspicion"] = _process_levy_suspicion(
+			companies, active_wars, characters_by_id,
+			active_topics, next_topic_id, ic_day,
+			int(season_meta.get("horde_season_count", 0)),
+		)
 		_process_war_seasonal(active_wars, characters)
 		military_seasonal_result["blockade_honor"] = StarvationWarfare.process_seasonal_blockade_honor(
 			trade_routes, characters_by_id,
@@ -397,10 +496,19 @@ static func advance_day(
 			world_states, active_armies, active_topics,
 			next_topic_id, ic_day,
 		)
+		var season_count_for_cw: int = int(season_meta.get("horde_season_count", 0))
+		civil_war_results_seasonal = _process_civil_war_seasonal(
+			active_civil_wars, precedent_modifiers, characters_by_id,
+			provinces, season_count_for_cw, objectives_map,
+			active_topics, next_topic_id, ic_day, season_meta,
+		)
 		insurgency_results = _process_insurgencies(
 			insurgencies, provinces, dice_engine, current_season,
 			next_insurgency_id, world_states, worship_maluses,
+			season_meta,
 		)
+		_tick_kuni_wards(season_meta)
+		season_meta.erase("patrolled_provinces")
 		_process_construction_completions(
 			constructions, settlements, provinces, ships, dice_engine,
 			next_settlement_id, active_topics, next_topic_id, ic_day,
@@ -430,6 +538,23 @@ static func advance_day(
 		strategic_results = _run_strategic_reviews(
 			characters, objectives_map, world_states
 		)
+		var togashi_results: Dictionary = {}
+		var cw_season_count: int = int(season_meta.get("horde_season_count", 0))
+		if not togashi_state.is_empty():
+			togashi_results = _process_togashi_oversight(
+				togashi_state, strategic_results, characters,
+				characters_by_id, world_states, active_topics,
+				next_topic_id, ic_day, active_civil_wars,
+				objectives_map, cw_season_count,
+			)
+		var phoenix_council_results: Dictionary = {}
+		if not phoenix_council_state.is_empty():
+			phoenix_council_results = _process_phoenix_council_gating(
+				phoenix_council_state, strategic_results, characters,
+				characters_by_id, dice_engine, active_topics,
+				next_topic_id, ic_day, active_civil_wars,
+				objectives_map, cw_season_count,
+			)
 		_evaluate_heir_designations(
 			characters, characters_by_id, active_topics
 		)
@@ -454,6 +579,10 @@ static func advance_day(
 			)
 		var season_count: int = int(season_meta.get("horde_season_count", 0))
 		ronin_results = _process_seasonal_ronin(characters, season_count)
+		commitment_seasonal_result = _process_commitment_seasonal(
+			court_commitments, action_log, ic_day, characters_by_id,
+			active_topics, next_topic_id,
+		)
 		_increment_vacancy_seasons(season_meta)
 		pregnancy_results = _process_pregnancy_checks(
 			marriages, characters_by_id, children, dice_engine, ic_day,
@@ -478,6 +607,7 @@ static func advance_day(
 		"broadcast_results": broadcast_results,
 		"info_results": info_results,
 		"letter_results": letter_results,
+		"reply_letters": reply_letters,
 		"seasonal_result": seasonal_result,
 		"crime_results": crime_results,
 		"commitment_results": commitment_results,
@@ -514,6 +644,7 @@ static func advance_day(
 		"wall_seasonal": wall_seasonal_result,
 		"wall_engineering_results": wall_engineering_results,
 		"sortie_results": sortie_results,
+		"storm_assault_results": storm_assault_results,
 		"horde_assault_results": horde_assault_results,
 		"horde_results": horde_results,
 		"naval_weather": naval_weather,
@@ -527,8 +658,16 @@ static func advance_day(
 		"pregnancy_results": pregnancy_results,
 		"seiyaku_results": seiyaku_results,
 		"worship_accumulation_results": worship_accumulation_results,
+		"letter_examination_results": letter_examination_results,
 		"worship_seasonal_results": worship_seasonal_results,
 		"construction_results": construction_results,
+		"commitment_seasonal_result": commitment_seasonal_result,
+		"purification_results": purification_results,
+		"patrol_results": patrol_results,
+		"drill_results": drill_results,
+		"togashi_results": togashi_results,
+		"phoenix_council_results": phoenix_council_results,
+		"civil_war_results": civil_war_results_seasonal,
 	}
 
 
@@ -590,37 +729,72 @@ static func _process_daily_conversations(
 	characters: Array[L5RCharacterData],
 	dice_engine: DiceEngine,
 	current_season: int,
+	active_topics: Array[TopicData] = [],
 ) -> Array[Dictionary]:
-	var by_location: Dictionary = {}
+	var topics_by_id: Dictionary = {}
+	for t: TopicData in active_topics:
+		topics_by_id[t.topic_id] = t
+
+	var eligible: Array[L5RCharacterData] = []
 	for c: L5RCharacterData in characters:
-		var loc: String = c.physical_location
-		if loc.is_empty():
+		if CharacterStats.is_dead(c):
 			continue
-		if not by_location.has(loc):
-			by_location[loc] = []
-		by_location[loc].append(c)
+		if TravelSystem.is_traveling(c):
+			continue
+		eligible.append(c)
+
+	var by_location: Dictionary = {}
+	var by_ship: Dictionary = {}
+	for c: L5RCharacterData in eligible:
+		if c.aboard_ship_id >= 0:
+			if not by_ship.has(c.aboard_ship_id):
+				by_ship[c.aboard_ship_id] = []
+			by_ship[c.aboard_ship_id].append(c)
+		else:
+			var loc: String = c.physical_location
+			if loc.is_empty():
+				continue
+			if not by_location.has(loc):
+				by_location[loc] = []
+			by_location[loc].append(c)
 
 	var all_results: Array[Dictionary] = []
+
 	for loc: String in by_location:
-		var group: Array[L5RCharacterData] = []
-		for c: Variant in by_location[loc]:
-			if c is L5RCharacterData:
-				group.append(c)
-		if group.size() < 2:
-			continue
-
-		var pair_count: int = group.size() * (group.size() - 1) >> 1
-		var rng_needed: int = pair_count * 3
-		var rng: Array[int] = []
-		for i: int in range(rng_needed):
-			rng.append(dice_engine.rand_int_range(0, 99))
-
-		var results: Array[Dictionary] = DailyConversation.resolve_settlement_conversations(
-			group, rng, current_season
+		all_results.append_array(
+			_resolve_group_conversations(by_location[loc], dice_engine, current_season, topics_by_id)
 		)
-		all_results.append_array(results)
+
+	for ship_id: int in by_ship:
+		all_results.append_array(
+			_resolve_group_conversations(by_ship[ship_id], dice_engine, current_season, topics_by_id)
+		)
 
 	return all_results
+
+
+static func _resolve_group_conversations(
+	raw_group: Array,
+	dice_engine: DiceEngine,
+	current_season: int,
+	topics_by_id: Dictionary,
+) -> Array[Dictionary]:
+	var group: Array[L5RCharacterData] = []
+	for c: Variant in raw_group:
+		if c is L5RCharacterData:
+			group.append(c)
+	if group.size() < 2:
+		return []
+
+	var pair_count: int = group.size() * (group.size() - 1) >> 1
+	var rng_needed: int = pair_count * 3
+	var rng: Array[int] = []
+	for i: int in range(rng_needed):
+		rng.append(dice_engine.rand_int_range(0, 99))
+
+	return DailyConversation.resolve_settlement_conversations(
+		group, rng, current_season, topics_by_id
+	)
 
 
 # -- Season Transition ---------------------------------------------------------
@@ -753,6 +927,11 @@ static func _process_wall_seasonal_pressure(
 			continue
 		var prov: ProvinceData = province as ProvinceData
 		var ptl_gain: float = WallSystem.compute_ptl_contribution(s.wall_si, true)
+		var ward_key: String = str(s.province_id)
+		var kuni_wards: Dictionary = season_meta.get("kuni_wards", {})
+		if kuni_wards.has(ward_key):
+			var ward: Dictionary = kuni_wards[ward_key]
+			ptl_gain = maxf(ptl_gain - ward.get("bleed_reduction", 0.0), 0.0)
 		prov.province_taint_level = clampf(
 			prov.province_taint_level + ptl_gain, 0.0, 10.0
 		)
@@ -906,6 +1085,243 @@ static func _process_sortie_results(
 		})
 
 	return results
+
+
+# -- Storm Assault Processing (s11.7) ------------------------------------------
+
+static func _process_storm_assault_results(
+	applied_list: Array,
+	active_sieges: Array[Dictionary],
+	companies: Array[Dictionary],
+	dice_engine: DiceEngine,
+	settlements: Array[SettlementData],
+	characters_by_id: Dictionary,
+) -> Array[Dictionary]:
+	var results: Array[Dictionary] = []
+
+	for applied: Dictionary in applied_list:
+		var effects: Dictionary = applied.get("effects", {})
+		if not effects.get("requires_storm_assault", false):
+			continue
+
+		var siege_settlement_id: int = effects.get("siege_settlement_id", -1)
+		var siege: Dictionary = _find_siege_by_settlement(
+			siege_settlement_id, active_sieges,
+		)
+		if siege.is_empty():
+			push_warning(
+				"[StormAssault] No siege found at settlement %d" % siege_settlement_id,
+			)
+			continue
+
+		var atk_army_id: int = siege.get("attacker_army_id", -1)
+		var def_army_id: int = siege.get("defender_army_id", -1)
+
+		var atk_dicts: Array[Dictionary] = _get_army_companies(atk_army_id, companies)
+		var def_dicts: Array[Dictionary] = _get_army_companies(def_army_id, companies)
+
+		if atk_dicts.is_empty() or def_dicts.is_empty():
+			push_warning(
+				"[StormAssault] Empty companies: atk=%d def=%d" % [
+					atk_dicts.size(), def_dicts.size(),
+				],
+			)
+			continue
+
+		var atk_states: Array[Dictionary] = _build_battle_states(
+			atk_dicts, "attacker", characters_by_id,
+		)
+		var def_states: Array[Dictionary] = _build_battle_states(
+			def_dicts, "defender", characters_by_id,
+		)
+
+		var fort_bonus: int = SiegeSystem.get_storm_defense_bonus()
+		var battle_result: Dictionary = resolve_and_reconcile_battle(
+			atk_states, def_states, Enums.BattleTerrainType.URBAN,
+			dice_engine, settlements, false, fort_bonus,
+		)
+
+		_write_battle_results_to_companies(battle_result, companies)
+
+		var victor: String = battle_result.get("victor", "draw")
+		if victor == "attacker":
+			siege["siege_ended"] = true
+			siege["end_reason"] = "storm_assault_success"
+		elif victor == "defender":
+			siege["ticks_since_sortie"] = 0
+
+		results.append({
+			"siege_settlement_id": siege_settlement_id,
+			"victor": victor,
+			"rounds": battle_result.get("rounds", 0),
+			"attacker_army_id": atk_army_id,
+			"defender_army_id": def_army_id,
+		})
+
+	return results
+
+
+static func _find_siege_by_settlement(
+	settlement_id: int,
+	active_sieges: Array[Dictionary],
+) -> Dictionary:
+	for siege: Dictionary in active_sieges:
+		if siege.get("settlement_id", -1) == settlement_id:
+			return siege
+	return {}
+
+
+static func _process_drill_effects(
+	applied_list: Array,
+	companies: Array[Dictionary],
+	characters_by_id: Dictionary,
+	dice_engine: DiceEngine,
+) -> Array[Dictionary]:
+	var results: Array[Dictionary] = []
+	for applied: Dictionary in applied_list:
+		var effects: Dictionary = applied.get("effects", {})
+		if not effects.get("requires_drill", false):
+			continue
+		var char_id: int = applied.get("character_id", -1)
+		var target_cid: int = effects.get("target_company_id", -1)
+		var character: L5RCharacterData = characters_by_id.get(char_id)
+		if character == null:
+			continue
+
+		var company: Dictionary = {}
+		for c: Dictionary in companies:
+			if c.get("company_id", -1) == target_cid:
+				company = c
+				break
+		if company.is_empty():
+			for c: Dictionary in companies:
+				if c.get("commander_id", -1) == char_id:
+					company = c
+					break
+		if company.is_empty():
+			continue
+
+		const DRILL_TN: int = 15
+		var roll_result: Dictionary = SkillResolver.resolve_skill_check(
+			character, dice_engine, "Battle", DRILL_TN,
+		)
+		var success: bool = roll_result.get("success", false)
+		var margin: int = roll_result.get("margin", 0)
+		var points: int = 0
+		if success:
+			points = 1 + maxi(margin / 5, 0)
+
+		var current_points: int = company.get("training_points", 0) + points
+		var current_level: int = company.get("training_level", 2)
+		const POINTS_PER_LEVEL: int = 10
+		const MAX_LEVEL: int = 3
+		if current_level < MAX_LEVEL and current_points >= POINTS_PER_LEVEL:
+			current_points -= POINTS_PER_LEVEL
+			current_level += 1
+		company["training_points"] = current_points
+		company["training_level"] = current_level
+
+		results.append({
+			"company_id": company.get("company_id", -1),
+			"character_id": char_id,
+			"success": success,
+			"points_added": points,
+			"new_level": current_level,
+			"new_points": current_points,
+		})
+	return results
+
+
+static func _tick_kuni_wards(season_meta: Dictionary) -> void:
+	var wards: Dictionary = season_meta.get("kuni_wards", {})
+	var expired: Array[String] = []
+	for key: String in wards:
+		var ward: Dictionary = wards[key]
+		ward["seasons_remaining"] = ward.get("seasons_remaining", 0) - 1
+		if ward["seasons_remaining"] <= 0:
+			expired.append(key)
+	for key: String in expired:
+		wards.erase(key)
+	if wards.is_empty():
+		season_meta.erase("kuni_wards")
+	else:
+		season_meta["kuni_wards"] = wards
+
+
+static func _process_purification_effects(
+	applied_list: Array,
+	provinces: Dictionary,
+	season_meta: Dictionary,
+) -> Array[Dictionary]:
+	var results: Array[Dictionary] = []
+	for applied: Dictionary in applied_list:
+		var effects: Dictionary = applied.get("effects", {})
+		if not effects.get("requires_purification", false):
+			continue
+		var pid: int = effects.get("province_id", -1)
+		if pid < 0 or not provinces.has(pid):
+			continue
+		var prov: ProvinceData = provinces[pid]
+		var reduction: float = effects.get("ptl_reduction", 0.0)
+		prov.province_taint_level = maxf(prov.province_taint_level - reduction, 0.0)
+
+		var ward_reduction: float = effects.get("ward_bleed_reduction", 0.0)
+		var ward_duration: int = effects.get("ward_duration", 0)
+		var ward_rank: int = effects.get("ward_school_rank", 0)
+		if ward_duration > 0:
+			var existing_ward: Dictionary = season_meta.get(
+				"kuni_wards", {},
+			).get(str(pid), {})
+			if existing_ward.is_empty() or ward_reduction >= existing_ward.get("bleed_reduction", 0.0):
+				var wards: Dictionary = season_meta.get("kuni_wards", {})
+				wards[str(pid)] = {
+					"bleed_reduction": ward_reduction,
+					"seasons_remaining": ward_duration,
+					"school_rank": ward_rank,
+				}
+				season_meta["kuni_wards"] = wards
+
+		results.append({
+			"province_id": pid,
+			"ptl_reduction": reduction,
+			"new_ptl": prov.province_taint_level,
+			"ward_set": ward_duration > 0,
+		})
+	return results
+
+
+static func _process_patrol_effects(
+	applied_list: Array,
+	season_meta: Dictionary,
+) -> Array[Dictionary]:
+	var results: Array[Dictionary] = []
+	for applied: Dictionary in applied_list:
+		var effects: Dictionary = applied.get("effects", {})
+		if not effects.get("requires_patrol", false):
+			continue
+		var pid: int = effects.get("patrol_province_id", -1)
+		if pid < 0:
+			continue
+		var patrolled: Dictionary = season_meta.get("patrolled_provinces", {})
+		patrolled[pid] = true
+		season_meta["patrolled_provinces"] = patrolled
+		results.append({"province_id": pid, "character_id": applied.get("character_id", -1)})
+	return results
+
+
+static func _process_siege_maintenance(
+	applied_list: Array,
+	active_sieges: Array[Dictionary],
+	ic_day: int,
+) -> void:
+	for applied: Dictionary in applied_list:
+		var effects: Dictionary = applied.get("effects", {})
+		if not effects.get("requires_siege_maintenance", false):
+			continue
+		var sid: int = effects.get("siege_settlement_id", -1)
+		var siege: Dictionary = _find_siege_by_settlement(sid, active_sieges)
+		if not siege.is_empty():
+			siege["last_maintained_ic_day"] = ic_day
 
 
 # -- Horde Assault SI Processing (s2.4.5 — LOCKED) ----------------------------
@@ -2228,6 +2644,10 @@ static func _process_daily_letter_pass(
 	objectives_map: Dictionary,
 	scoring_tables: Dictionary,
 	world_states: Dictionary,
+	pending_letters: Array = [],
+	ic_day: int = 0,
+	dice_engine: DiceEngine = null,
+	next_letter_id: Array[int] = [1],
 ) -> Array[Dictionary]:
 	var results: Array[Dictionary] = []
 	for character: L5RCharacterData in characters:
@@ -2240,6 +2660,17 @@ static func _process_daily_letter_pass(
 		)
 		if not letter_result.is_empty():
 			results.append(letter_result)
+			if dice_engine != null:
+				var lid: int = next_letter_id[0]
+				next_letter_id[0] = lid + 1
+				var topic_id: int = letter_result.get("topic_id", -1)
+				var letter: LetterData = LetterSystem.write_letter(
+					lid, character,
+					letter_result["target_npc_id"],
+					topic_id, ic_day, dice_engine,
+					3,
+				)
+				pending_letters.append(letter)
 	return results
 
 
@@ -2314,15 +2745,20 @@ static func _process_insurgencies(
 	next_insurgency_id: Array[int],
 	world_states: Dictionary,
 	worship_maluses: Dictionary = {},
+	season_meta: Dictionary = {},
 ) -> Dictionary:
 	var ptls: Dictionary = {}
 	for pid: int in provinces:
 		var prov: ProvinceData = provinces[pid]
 		ptls[pid] = prov.province_taint_level
 
+	var patrolled: Dictionary = season_meta.get("patrolled_provinces", {})
 	var per_province_ws: Dictionary = {}
 	for pid: int in provinces:
-		per_province_ws[pid] = world_states.get(pid, {})
+		var ws: Dictionary = world_states.get(pid, {}).duplicate()
+		if patrolled.has(pid):
+			ws["is_patrolled"] = true
+		per_province_ws[pid] = ws
 
 	var result: Dictionary = InsurgencySystem.process_season(
 		insurgencies, provinces, ptls, dice_engine, current_season,
@@ -2333,6 +2769,12 @@ static func _process_insurgencies(
 		insurgencies.append(new_ins)
 
 	next_insurgency_id[0] = result.get("next_id", next_insurgency_id[0])
+
+	for ins: InsurgencyData in insurgencies:
+		if patrolled.has(ins.province_id) and not ins.detected:
+			ins.concealment = maxi(ins.concealment - 1, 0)
+			if ins.concealment <= 0:
+				ins.detected = true
 
 	var removed: Array[InsurgencyData] = []
 	for ins: InsurgencyData in insurgencies:
@@ -2483,11 +2925,19 @@ static func _process_military_daily(
 	settlements: Array[SettlementData],
 	companies: Array[Dictionary] = [],
 	worship_maluses: Dictionary = {},
+	active_wars: Array[WarData] = [],
+	characters_by_id: Dictionary = {},
+	provinces: Dictionary = {},
 ) -> Dictionary:
 	var disband_results: Array[Dictionary] = _process_disbands(
 		active_armies, companies, settlements,
 	)
 	var movement_results: Array[Dictionary] = _process_army_movements(active_armies)
+	var battle_results: Array[Dictionary] = _resolve_army_battles(
+		movement_results, active_armies, companies, active_wars,
+		dice_engine, settlements, characters_by_id, worship_maluses,
+		provinces,
+	)
 	var retreat_arrival_results: Array[Dictionary] = _process_retreat_arrivals(
 		movement_results, active_armies, active_tethers,
 	)
@@ -2510,6 +2960,7 @@ static func _process_military_daily(
 
 	return {
 		"movement_results": movement_results,
+		"battle_results": battle_results,
 		"retreat_arrival_results": retreat_arrival_results,
 		"siege_results": siege_results,
 		"tether_results": tether_results,
@@ -2539,6 +2990,225 @@ static func _process_army_movements(
 				r["retreat_arrived"] = true
 		results.append(r)
 	return results
+
+
+static func _resolve_army_battles(
+	movement_results: Array[Dictionary],
+	active_armies: Array[Dictionary],
+	companies: Array[Dictionary],
+	active_wars: Array[WarData],
+	dice_engine: DiceEngine,
+	settlements: Array[SettlementData],
+	characters_by_id: Dictionary,
+	worship_maluses: Dictionary,
+	provinces: Dictionary = {},
+) -> Array[Dictionary]:
+	var results: Array[Dictionary] = []
+
+	for mr: Dictionary in movement_results:
+		var bc: Dictionary = mr.get("battle_check", {})
+		if not bc.get("battle_triggered", false):
+			continue
+
+		var arriving_army_id: int = mr.get("army_id", -1)
+		var arriving_army: Dictionary = _find_army_by_id(arriving_army_id, active_armies)
+		if arriving_army.is_empty():
+			push_warning("[Battle] Skipped: army %d not found in active_armies" % arriving_army_id)
+			continue
+
+		var enemy_army_ids: Array = bc.get("enemy_army_ids", [])
+		if enemy_army_ids.is_empty():
+			push_warning("[Battle] Skipped: no enemy army IDs for army %d" % arriving_army_id)
+			continue
+
+		var attacker_clan: String = arriving_army.get(
+			"owning_clan", arriving_army.get("clan_name", ""),
+		)
+		if attacker_clan.is_empty():
+			push_warning("[Battle] Skipped: army %d has no clan" % arriving_army_id)
+			continue
+
+		var first_enemy: Dictionary = _find_army_by_id(enemy_army_ids[0], active_armies)
+		var defender_clan: String = first_enemy.get(
+			"owning_clan", first_enemy.get("clan_name", ""),
+		)
+		if not WarSystem.are_clans_at_war(active_wars, attacker_clan, defender_clan):
+			continue
+
+		var atk_company_dicts: Array[Dictionary] = _get_army_companies(
+			arriving_army_id, companies,
+		)
+		var def_company_dicts: Array[Dictionary] = []
+		for eid: Variant in enemy_army_ids:
+			if eid is int:
+				def_company_dicts.append_array(_get_army_companies(eid, companies))
+
+		if atk_company_dicts.is_empty() or def_company_dicts.is_empty():
+			push_warning("[Battle] Skipped: army %d has %d companies, defenders have %d" % [
+				arriving_army_id, atk_company_dicts.size(), def_company_dicts.size(),
+			])
+			continue
+
+		var atk_states: Array[Dictionary] = _build_battle_states(
+			atk_company_dicts, "attacker", characters_by_id,
+		)
+		var def_states: Array[Dictionary] = _build_battle_states(
+			def_company_dicts, "defender", characters_by_id,
+		)
+
+		var battle_province_id: int = arriving_army.get("province_id", -1)
+		var battle_terrain: Enums.BattleTerrainType = _get_battle_terrain(
+			battle_province_id, provinces, settlements,
+		)
+		var fort_bonus: int = _get_fortification_bonus(
+			battle_province_id, defender_clan, settlements, provinces,
+		)
+
+		var battle_result: Dictionary = resolve_and_reconcile_battle(
+			atk_states, def_states, battle_terrain,
+			dice_engine, settlements, false, fort_bonus, worship_maluses,
+		)
+
+		_write_battle_results_to_companies(battle_result, companies)
+
+		battle_result["attacker_army_id"] = arriving_army_id
+		battle_result["defender_army_ids"] = enemy_army_ids
+		battle_result["attacker_clan"] = attacker_clan
+		battle_result["defender_clan"] = defender_clan
+		mr["battle_resolved"] = true
+		mr["company_count"] = atk_company_dicts.size() + def_company_dicts.size()
+		results.append(battle_result)
+
+	return results
+
+
+static func _get_army_companies(
+	army_id: int,
+	companies: Array[Dictionary],
+) -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	for c: Dictionary in companies:
+		if c.get("army_id", -1) == army_id:
+			result.append(c)
+	return result
+
+
+static func _build_battle_states(
+	company_dicts: Array[Dictionary],
+	side: String,
+	characters_by_id: Dictionary,
+) -> Array[Dictionary]:
+	var states: Array[Dictionary] = []
+	var col: int = 0
+	for cd: Dictionary in company_dicts:
+		var company_data: MilitaryUnitData.CompanyData = _company_dict_to_data(cd)
+		var commander: L5RCharacterData = null
+		var commander_bonus: Dictionary = {}
+		var cmd_id: int = cd.get("commander_id", -1)
+		if cmd_id >= 0 and characters_by_id.has(cmd_id):
+			commander = characters_by_id[cmd_id]
+			commander_bonus = _compute_captain_bonus(commander)
+		var ut: int = cd.get("unit_type", Enums.CompanyUnitType.PEASANT_LEVY)
+		var row: int = 1
+		if ut == Enums.CompanyUnitType.ASHIGARU_ARCHERS and col > 0:
+			row = 2
+		states.append(ArmyCombatSystem.make_battle_company(
+			company_data, row, col, side, commander, commander_bonus,
+		))
+		col += 1
+	return states
+
+
+const _TERRAIN_TO_BATTLE_TERRAIN: Dictionary = {
+	Enums.TerrainType.PLAINS: Enums.BattleTerrainType.PLAINS,
+	Enums.TerrainType.RIVER_DELTA: Enums.BattleTerrainType.PLAINS,
+	Enums.TerrainType.FOREST: Enums.BattleTerrainType.FOREST,
+	Enums.TerrainType.HILLS: Enums.BattleTerrainType.HILLS,
+	Enums.TerrainType.MOUNTAINS: Enums.BattleTerrainType.MOUNTAIN,
+}
+
+const FORTIFICATION_DEFENSE_BONUS: int = 5
+
+
+static func _get_battle_terrain(
+	province_id: int,
+	provinces: Dictionary,
+	settlements: Array[SettlementData],
+) -> Enums.BattleTerrainType:
+	for s: SettlementData in settlements:
+		if s.province_id == province_id:
+			if s.settlement_type in [
+				Enums.SettlementType.TOWN,
+				Enums.SettlementType.CITY,
+				Enums.SettlementType.IMPERIAL_CAPITAL,
+			]:
+				return Enums.BattleTerrainType.URBAN
+	if provinces.has(province_id):
+		var prov: ProvinceData = provinces[province_id]
+		return _TERRAIN_TO_BATTLE_TERRAIN.get(
+			prov.terrain_type, Enums.BattleTerrainType.PLAINS,
+		)
+	return Enums.BattleTerrainType.PLAINS
+
+
+static func _get_fortification_bonus(
+	province_id: int,
+	defender_clan: String,
+	settlements: Array[SettlementData],
+	provinces: Dictionary = {},
+) -> int:
+	if provinces.has(province_id):
+		var prov: ProvinceData = provinces[province_id]
+		if prov.clan != defender_clan:
+			return 0
+	for s: SettlementData in settlements:
+		if s.province_id == province_id and s.is_military():
+			return FORTIFICATION_DEFENSE_BONUS
+	return 0
+
+
+static func _company_dict_to_data(cd: Dictionary) -> MilitaryUnitData.CompanyData:
+	var c: MilitaryUnitData.CompanyData = MilitaryUnitData.CompanyData.new()
+	c.company_id = cd.get("company_id", -1)
+	c.unit_type = cd.get("unit_type", Enums.CompanyUnitType.PEASANT_LEVY)
+	c.commander_id = cd.get("commander_id", -1)
+	c.source_province_id = cd.get("source_province_id", -1)
+	var stats: Dictionary = ArmyCombatSystem.UNIT_STATS.get(c.unit_type, {})
+	c.health = cd.get("current_health", stats.get("health", 153))
+	c.attack = stats.get("attack", 0)
+	c.defense = stats.get("defense", 0)
+	c.morale = cd.get("current_morale", stats.get("morale", 10))
+	c.morale_defense = stats.get("morale_defense", 0)
+	return c
+
+
+static func _write_battle_results_to_companies(
+	battle_result: Dictionary,
+	companies: Array[Dictionary],
+) -> void:
+	var all_states: Array = []
+	all_states.append_array(battle_result.get("attacker_states", []))
+	all_states.append_array(battle_result.get("defender_states", []))
+
+	for bs: Variant in all_states:
+		if not (bs is Dictionary):
+			continue
+		var bsd: Dictionary = bs
+		var cid: int = bsd.get("company_id", -1)
+		if cid < 0:
+			continue
+		for cd: Dictionary in companies:
+			if cd.get("company_id", -1) == cid:
+				cd["current_health"] = maxi(bsd.get("current_health", 0), 0)
+				cd["current_morale"] = maxi(bsd.get("current_morale", 0), 0)
+				if bsd.get("is_destroyed", false):
+					cd["is_destroyed"] = true
+				if bsd.get("is_routed", false):
+					cd["is_routed"] = true
+				if bsd.get("commander_dead", false):
+					cd["commander_dead"] = true
+					cd["commander_id"] = -1
+				break
 
 
 const _RETREAT_DEFAULT_DAYS: int = 3
@@ -2897,6 +3567,84 @@ static func _process_military_seasonal(
 	}
 
 
+static func _process_levy_suspicion(
+	companies: Array[Dictionary],
+	active_wars: Array[WarData],
+	characters_by_id: Dictionary,
+	active_topics: Array[TopicData],
+	next_topic_id: Array[int],
+	ic_day: int,
+	season_count: int,
+) -> Array[Dictionary]:
+	var results: Array[Dictionary] = []
+	var war_clans: Dictionary = {}
+	for w: WarData in active_wars:
+		war_clans[w.clan_a] = true
+		war_clans[w.clan_b] = true
+		for ac: String in w.allied_clans_a:
+			war_clans[ac] = true
+		for ac: String in w.allied_clans_b:
+			war_clans[ac] = true
+
+	var lords_checked: Dictionary = {}
+	for company: Dictionary in companies:
+		if company.get("destroyed", false):
+			continue
+		if company.get("army_id", -1) >= 0:
+			continue
+		var lord_id: int = company.get("lord_id", -1)
+		if lord_id < 0 or lord_id in lords_checked:
+			continue
+		lords_checked[lord_id] = true
+
+		var lord: L5RCharacterData = characters_by_id.get(lord_id)
+		if lord == null:
+			continue
+
+		var is_wartime: bool = lord.clan in war_clans
+		var raised_season: int = company.get("levy_raised_season", season_count)
+		var seasons_maintained: int = season_count - raised_season
+
+		var check: Dictionary = LevySystem.check_suspicion(seasons_maintained, is_wartime)
+		if not check.get("suspicion", false):
+			continue
+
+		var tid: int = next_topic_id[0]
+		next_topic_id[0] += 1
+		var tier_val: int = check["topic_tier"]
+		var tier: TopicData.Tier = TopicData.Tier.TIER_4 if tier_val == 4 else TopicData.Tier.TIER_3
+		var momentum: float = 11.0 if tier_val == 4 else 26.0
+		var topic: TopicData = TopicMomentumSystem.create_topic(
+			tid,
+			"Private Army Suspicion — %s" % lord.family,
+			tier,
+			TopicData.Category.POLITICAL,
+			ic_day,
+			momentum,
+			[],
+			"",
+			lord.clan,
+			-1,
+			"private_army",
+			"suspicion",
+		)
+		topic.slug = "private_army_%d_season_%d" % [lord_id, season_count]
+		active_topics.append(topic)
+
+		results.append({
+			"lord_id": lord_id,
+			"clan": lord.clan,
+			"seasons_maintained": seasons_maintained,
+			"topic_tier": tier_val,
+			"disposition_loss_lord": check.get("disposition_loss_lord", 0),
+			"disposition_loss_neighbor": check.get("disposition_loss_neighbor", 0),
+			"escalated": check.get("escalated", false),
+			"topic_id": tid,
+		})
+
+	return results
+
+
 static func _process_army_upkeep(
 	companies: Array[Dictionary],
 	settlements: Array[SettlementData],
@@ -3046,7 +3794,11 @@ static func _process_military_effects(
 	applied_list: Array,
 	settlements: Array[SettlementData],
 	characters_by_id: Dictionary,
-	_companies: Array[Dictionary],
+	companies: Array[Dictionary],
+	provinces: Dictionary = {},
+	next_company_id: Array[int] = [1],
+	clans: Dictionary = {},
+	season_count: int = 0,
 ) -> Array[Dictionary]:
 	var results: Array[Dictionary] = []
 	var settlements_by_province: Dictionary = _build_settlements_by_province(settlements)
@@ -3055,7 +3807,10 @@ static func _process_military_effects(
 		var effects: Dictionary = applied.get("effects", {})
 
 		if effects.get("requires_levy_pu", false):
-			var r: Dictionary = _apply_levy_pu_effect(applied, settlements)
+			var r: Dictionary = _apply_levy_pu_effect(
+				applied, settlements, companies, next_company_id,
+				characters_by_id, clans, season_count,
+			)
 			if not r.is_empty():
 				results.append(r)
 
@@ -3069,6 +3824,13 @@ static func _process_military_effects(
 		if effects.get("requires_battle_resolution", false):
 			var r: Dictionary = _apply_battle_pu_reconciliation(
 				applied, settlements_by_province,
+			)
+			if not r.is_empty():
+				results.append(r)
+
+		if effects.get("requires_garrison_assignment", false):
+			var r: Dictionary = _apply_garrison_assignment(
+				applied, characters_by_id, settlements, provinces,
 			)
 			if not r.is_empty():
 				results.append(r)
@@ -3877,6 +4639,72 @@ static func _consume_supply_status_results(
 			)
 
 
+static func _inject_urgency_data(
+	world_states: Dictionary,
+	characters: Array[L5RCharacterData],
+	favors: Array,
+	active_tethers: Array[Dictionary],
+	active_sieges: Array[Dictionary],
+	objectives_map: Dictionary,
+	active_topics: Array[TopicData],
+) -> void:
+	var besieged_settlements: Dictionary = {}
+	for siege: Dictionary in active_sieges:
+		if siege.get("siege_ended", false):
+			continue
+		var sid: int = siege.get("settlement_id", -1)
+		if sid >= 0:
+			if siege.get("garrison_starved", false):
+				besieged_settlements[sid] = 0.0
+			else:
+				var rice: float = siege.get("rice_stockpile", 1.0)
+				var pu: float = siege.get("garrison_pu", 1.0) + siege.get("civilian_pu", 0.0)
+				var rice_per_pu: float = rice / maxf(pu, 0.01)
+				besieged_settlements[sid] = clampf(rice_per_pu, 0.0, 1.0)
+
+	var location_characters: Dictionary = {}
+	for c: L5RCharacterData in characters:
+		if CharacterStats.is_dead(c):
+			continue
+		if TravelSystem.is_traveling(c):
+			continue
+		var loc: String = c.physical_location
+		if loc.is_empty():
+			continue
+		if not location_characters.has(loc):
+			location_characters[loc] = [] as Array[int]
+		location_characters[loc].append(c.character_id)
+
+	for c: L5RCharacterData in characters:
+		var ws: Dictionary = world_states.get(c.character_id, {})
+		if ws.is_empty():
+			ws = {}
+			world_states[c.character_id] = ws
+		ws["favors"] = favors
+		ws["active_tethers"] = active_tethers
+		ws["active_topics"] = active_topics
+		var char_objs: Dictionary = objectives_map.get(c.character_id, {})
+		var primary: Dictionary = char_objs.get("primary", {})
+		ws["objective_stalled_seasons"] = primary.get("seasons_without_progress", 0)
+		var standing: Dictionary = char_objs.get("standing", {})
+		var known_objs: Dictionary = ws.get("known_objectives", {})
+		if not standing.is_empty():
+			known_objs["standing_need_type"] = standing.get("need_type", "")
+		ws["known_objectives"] = known_objs
+		var loc: int = int(c.physical_location) if c.physical_location.is_valid_int() else -1
+		if besieged_settlements.has(loc):
+			ws["besieged_settlement_health_pct"] = besieged_settlements[loc]
+		else:
+			ws["besieged_settlement_health_pct"] = 1.0
+		var char_loc: String = c.physical_location
+		var present: Array[int] = location_characters.get(char_loc, [] as Array[int])
+		var others: Array[int] = []
+		for pid: int in present:
+			if pid != c.character_id:
+				others.append(pid)
+		ws["characters_present"] = others
+
+
 static func _inject_edict_reactive_events(
 	active_edicts: Array[EdictData],
 	characters: Array[L5RCharacterData],
@@ -4137,6 +4965,11 @@ static func _create_siege_event_topic(
 static func _apply_levy_pu_effect(
 	applied: Dictionary,
 	settlements: Array[SettlementData],
+	companies: Array[Dictionary] = [],
+	next_company_id: Array[int] = [1],
+	characters_by_id: Dictionary = {},
+	clans: Dictionary = {},
+	season_count: int = 0,
 ) -> Dictionary:
 	var province_id: int = applied.get("target_province_id", -1)
 	if province_id < 0:
@@ -4151,13 +4984,73 @@ static func _apply_levy_pu_effect(
 	if target_settlement == null:
 		return {}
 
+	var effects: Dictionary = applied.get("effects", {})
+	var unit_type: int = effects.get("levy_unit_type", Enums.CompanyUnitType.ASHIGARU_SPEARMEN)
+
+	var can_raise: Dictionary = LevySystem.can_raise_levy(
+		target_settlement.military_pu,
+		target_settlement.garrison_pu,
+		unit_type,
+	)
+	if not can_raise.get("can_raise", false):
+		return {
+			"type": "levy_failed",
+			"character_id": applied.get("character_id", -1),
+			"province_id": province_id,
+			"reason": can_raise.get("reason", "unknown"),
+		}
+
 	var r: Dictionary = PUReconciliation.consume_levy_pu(target_settlement)
+
+	var lord_id: int = applied.get("character_id", -1)
+
+	var cid: int = next_company_id[0]
+	next_company_id[0] += 1
+
+	var levy_result: Dictionary = LevySystem.raise_levy(
+		cid, unit_type, lord_id, province_id, target_settlement.settlement_id,
+	)
+
+	var arms_cost: float = levy_result.get("arms_cost", 0.0)
+	var arms_deducted: float = 0.0
+
+	if levy_result.get("success", false) and arms_cost > 0.0:
+		var lord_char: L5RCharacterData = characters_by_id.get(lord_id)
+		if lord_char != null:
+			var clan_data: ClanData = clans.get(lord_char.clan)
+			if clan_data != null:
+				arms_deducted = minf(arms_cost, clan_data.arms_stockpile)
+				clan_data.arms_stockpile = maxf(clan_data.arms_stockpile - arms_cost, 0.0)
+
+	var company_dict: Dictionary = {}
+	if levy_result.get("success", false):
+		var cd: MilitaryUnitData.CompanyData = levy_result["company"]
+		company_dict = {
+			"company_id": cd.company_id,
+			"unit_type": cd.unit_type,
+			"health": cd.health,
+			"morale": cd.morale,
+			"commander_id": cd.commander_id,
+			"parent_legion_id": cd.parent_legion_id,
+			"source_province_id": cd.source_province_id,
+			"army_id": -1,
+			"lord_id": lord_id,
+			"destroyed": false,
+			"routed": false,
+			"levy_raised_season": season_count,
+		}
+		companies.append(company_dict)
+
 	return {
-		"type": "levy_pu_consumed",
-		"character_id": applied.get("character_id", -1),
+		"type": "levy_raised",
+		"character_id": lord_id,
 		"province_id": province_id,
 		"settlement_id": target_settlement.settlement_id,
 		"pu_consumed": r["pu_consumed"],
+		"company_id": cid if levy_result.get("success", false) else -1,
+		"unit_type": unit_type,
+		"arms_cost": arms_cost,
+		"arms_deducted": arms_deducted,
 	}
 
 
@@ -4198,6 +5091,63 @@ static func _apply_service_assignment_effect(
 		"character_id": target.character_id,
 		"new_commander_id": commander_id,
 		"assigned_unit_id": unit_id,
+	}
+
+
+static func _apply_garrison_assignment(
+	applied: Dictionary,
+	characters_by_id: Dictionary,
+	settlements: Array[SettlementData],
+	provinces: Dictionary,
+) -> Dictionary:
+	var effects: Dictionary = applied.get("effects", {})
+	var target_id: int = effects.get("target_npc_id", -1)
+	var target_province_id: int = effects.get("target_province_id", -1)
+	if target_id < 0 or target_province_id < 0:
+		return {}
+
+	var daimyo: L5RCharacterData = characters_by_id.get(target_id)
+	if daimyo == null:
+		return {}
+
+	var honor_gain: float = effects.get("honor_gain_recipient", 0.0)
+	if honor_gain != 0.0:
+		HonorGlorySystem.apply_honor_change(daimyo, honor_gain)
+
+	var wall_tower: SettlementData = null
+	var source_settlement: SettlementData = null
+	var daimyo_province_id: int = _find_lord_province_id(daimyo, provinces)
+
+	for s: SettlementData in settlements:
+		if s.province_id == target_province_id \
+				and s.settlement_type == Enums.SettlementType.WALL_TOWER \
+				and wall_tower == null:
+			wall_tower = s
+		if s.province_id == daimyo_province_id \
+				and source_settlement == null:
+			source_settlement = s
+
+	var pu_transferred: float = 0.0
+	if wall_tower != null:
+		var transfer: float = 1.0
+		if source_settlement != null and source_settlement.garrison_pu >= transfer:
+			source_settlement.garrison_pu -= transfer
+			wall_tower.garrison_pu += transfer
+			pu_transferred = transfer
+		elif source_settlement != null and source_settlement.garrison_pu > 0.0:
+			pu_transferred = source_settlement.garrison_pu
+			wall_tower.garrison_pu += pu_transferred
+			source_settlement.garrison_pu = 0.0
+
+	var requester_id: int = applied.get("character_id", -1)
+	return {
+		"type": "garrison_assigned",
+		"daimyo_id": target_id,
+		"requester_id": requester_id,
+		"target_province_id": target_province_id,
+		"source_province_id": daimyo_province_id,
+		"pu_transferred": pu_transferred,
+		"honor_gained": honor_gain,
 	}
 
 
@@ -4832,6 +5782,8 @@ static func _process_active_courts(
 	active_wars: Array[WarData] = [],
 	characters_by_id: Dictionary = {},
 	world_states: Dictionary = {},
+	court_commitments: Array[CourtCommitmentData] = [],
+	characters: Array[L5RCharacterData] = [],
 ) -> Array[Dictionary]:
 	var results: Array[Dictionary] = []
 	for court: CourtSessionData in active_courts:
@@ -4843,6 +5795,7 @@ static func _process_active_courts(
 			var edicts_issued: Array[EdictData] = _generate_court_edicts(
 				court, active_edicts, next_edict_id, active_wars,
 				active_topics, next_topic_id, characters_by_id, world_states, ic_day,
+				court_commitments, characters,
 			)
 			if not edicts_issued.is_empty():
 				close_result["edicts_issued"] = edicts_issued.size()
@@ -4902,6 +5855,8 @@ static func _generate_court_edicts(
 	characters_by_id: Dictionary,
 	world_states: Dictionary,
 	ic_day: int,
+	court_commitments: Array[CourtCommitmentData] = [],
+	characters: Array[L5RCharacterData] = [],
 ) -> Array[EdictData]:
 	if not court.emperor_present:
 		return []
@@ -4921,17 +5876,66 @@ static func _generate_court_edicts(
 		return []
 	archetype = world_states.get("emperor_archetype", StrategicReview.EmperorArchetype.IRON)
 
-	var edicts: Array[EdictData] = ImperialEdictSystem.generate_winter_court_edicts(
-		emperor, archetype, court.agenda_topic_ids, active_topics,
-		active_wars, next_edict_id, ic_day, court.court_id,
+	var attendees: Array[L5RCharacterData] = _gather_attendees(court, characters_by_id)
+	var agg_result: Dictionary = ImperialEdictSystem.generate_edicts_from_aggregate(
+		emperor, archetype, court, attendees,
+		active_topics, active_wars, next_edict_id, ic_day,
 	)
+	var edicts: Array[EdictData] = []
+	for e: EdictData in agg_result.get("edicts", []):
+		edicts.append(e)
+
+	var deadline_ic_day: int = ic_day + 90
+	var lords: Array[L5RCharacterData] = _gather_lord_tier_characters(characters)
+
 	for edict: EdictData in edicts:
 		active_edicts.append(edict)
 		var topic_dict: Dictionary = ImperialEdictSystem.generate_edict_topic(edict)
 		if not topic_dict.is_empty():
 			var t: TopicData = _topic_from_dict(topic_dict, next_topic_id, ic_day)
 			active_topics.append(t)
+		var edict_topic: TopicData = _find_topic_by_id(edict.target_topic_id, active_topics)
+		if edict_topic != null:
+			var new_commitments: Array[CourtCommitmentData] = ImperialEdictSystem.generate_edict_commitments(
+				edict, edict_topic, lords, ic_day, deadline_ic_day,
+			)
+			for cc: CourtCommitmentData in new_commitments:
+				court_commitments.append(cc)
 	return edicts
+
+
+static func _gather_attendees(
+	court: CourtSessionData,
+	characters_by_id: Dictionary,
+) -> Array[L5RCharacterData]:
+	var result: Array[L5RCharacterData] = []
+	for char_id: int in court.attendee_ids:
+		var c: L5RCharacterData = characters_by_id.get(char_id) as L5RCharacterData
+		if c != null:
+			result.append(c)
+	return result
+
+
+static func _gather_lord_tier_characters(
+	characters: Array[L5RCharacterData],
+) -> Array[L5RCharacterData]:
+	var result: Array[L5RCharacterData] = []
+	for c: L5RCharacterData in characters:
+		if CharacterStats.is_dead(c):
+			continue
+		if c.status >= 5.0 or c.lord_id == -1:
+			result.append(c)
+	return result
+
+
+static func _find_topic_by_id(
+	topic_id: int,
+	active_topics: Array[TopicData],
+) -> TopicData:
+	for t: TopicData in active_topics:
+		if t.topic_id == topic_id:
+			return t
+	return null
 
 
 static func _set_court_context_flags(
@@ -4945,7 +5949,8 @@ static func _set_court_context_flags(
 		for char_id: int in court.attendee_ids:
 			var ws: Dictionary = world_states.get(char_id, {})
 			if ws.is_empty():
-				continue
+				ws = {}
+				world_states[char_id] = ws
 			ws["context_flag"] = Enums.ContextFlag.AT_COURT
 			ws["active_court_at_location"] = ctx_dict
 
@@ -4973,7 +5978,8 @@ static func _set_wall_tower_context_flags(
 			continue
 		var ws: Dictionary = world_states.get(character.character_id, {})
 		if ws.is_empty():
-			continue
+			ws = {}
+			world_states[character.character_id] = ws
 
 		# AT_COURT takes priority — court overrides wall tower context.
 		if ws.get("context_flag", -1) == Enums.ContextFlag.AT_COURT:
@@ -5903,6 +6909,452 @@ static func _get_otomo_courtier_ids(characters: Array[L5RCharacterData]) -> Arra
 	return ids
 
 
+# -- Togashi Oversight (s55.10.2) -----------------------------------------------
+
+static func _process_togashi_oversight(
+	togashi_state: Dictionary,
+	strategic_results: Array[Dictionary],
+	characters: Array[L5RCharacterData],
+	characters_by_id: Dictionary,
+	world_states: Dictionary,
+	active_topics: Array[TopicData],
+	next_topic_id: Array[int],
+	ic_day: int,
+	active_civil_wars: Array[Dictionary] = [],
+	objectives_map: Dictionary = {},
+	current_season: int = 0,
+) -> Dictionary:
+	var mirumoto_fc: L5RCharacterData = _find_mirumoto_fc(characters)
+	if mirumoto_fc == null:
+		return {"skipped": true, "reason": "no_mirumoto_fc"}
+
+	var togashi_id: int = _find_togashi_id(characters)
+
+	var fc_directives: Array[Dictionary] = []
+	for d: Dictionary in strategic_results:
+		if int(d.get("lord_id", -1)) == mirumoto_fc.character_id:
+			fc_directives.append(d)
+
+	var oversight_world: Dictionary = _build_togashi_world_state(
+		world_states, characters, characters_by_id,
+	)
+
+	var result: Dictionary = TogashiOversight.process_seasonal_oversight(
+		togashi_state, oversight_world, fc_directives,
+		mirumoto_fc, togashi_id,
+	)
+
+	if result.get("intervention_fired", false):
+		var compliance: Dictionary = result.get("compliance", {})
+		var directive: Dictionary = result.get("forced_directive", {})
+
+		if compliance.get("comply", false):
+			directive["lord_id"] = mirumoto_fc.character_id
+			strategic_results.append(directive)
+
+		var stage: int = int(togashi_state.get("stage", 0))
+		if stage >= 1:
+			var topic := TopicData.new()
+			topic.topic_id = next_topic_id[0]
+			next_topic_id[0] += 1
+			var axis_name: String = _axis_to_string(int(result["forced_directive"].get("axis", 0)))
+			if compliance.get("comply", false):
+				topic.slug = "togashi_directive_comply_%s_%d" % [axis_name, ic_day]
+				topic.variant = "togashi_directive_comply"
+			else:
+				topic.slug = "togashi_defiance_stage_%d_%d" % [stage, ic_day]
+				topic.variant = "togashi_defiance"
+				HonorGlorySystem.apply_honor_change(mirumoto_fc, -0.3)
+			topic.topic_type = "political"
+			topic.tier = TopicData.Tier.TIER_4 if stage <= 2 else TopicData.Tier.TIER_3
+			topic.momentum = 11.0 if stage <= 2 else 26.0
+			topic.category = TopicData.Category.POLITICAL
+			active_topics.append(topic)
+			result["topic_id"] = topic.topic_id
+
+		if TogashiOversight.is_authority_locked(togashi_state):
+			result["diplomatic_penalty"] = TogashiOversight.STAGE_DIPLOMATIC_PENALTY
+
+	if TogashiOversight.is_removal_triggered(togashi_state):
+		var togashi_id: int = _find_togashi_id(characters)
+		var fc_id: int = mirumoto_fc.character_id
+		if togashi_id >= 0:
+			var cw_result: Dictionary = _trigger_civil_war(
+				fc_id, togashi_id, "Dragon", "removal order",
+				characters, characters_by_id, objectives_map,
+				active_civil_wars, active_topics, next_topic_id,
+				ic_day, current_season,
+			)
+			result["civil_war_triggered"] = cw_result
+
+	return result
+
+
+static func _find_mirumoto_fc(characters: Array[L5RCharacterData]) -> L5RCharacterData:
+	var best: L5RCharacterData = null
+	for c: L5RCharacterData in characters:
+		if c.clan != "Dragon" or c.family != "Mirumoto":
+			continue
+		if CharacterStats.is_dead(c.wounds_taken, CharacterStats.get_ring_value(c, Enums.Ring.EARTH)):
+			continue
+		if c.lord_id != -1:
+			continue
+		if best == null or c.status > best.status:
+			best = c
+		elif c.status == best.status and c.character_id < best.character_id:
+			best = c
+	return best
+
+
+static func _find_togashi_id(characters: Array[L5RCharacterData]) -> int:
+	for c: L5RCharacterData in characters:
+		if c.clan != "Dragon" or c.family != "Togashi":
+			continue
+		if CharacterStats.is_dead(c.wounds_taken, CharacterStats.get_ring_value(c, Enums.Ring.EARTH)):
+			continue
+		if c.lord_id == -1 and c.status >= 7.0:
+			return c.character_id
+	return -1
+
+
+static func _build_togashi_world_state(
+	world_states: Dictionary,
+	characters: Array[L5RCharacterData],
+	characters_by_id: Dictionary,
+) -> Dictionary:
+	var clan_strengths: Dictionary = {}
+	for c: L5RCharacterData in characters:
+		if c.clan.is_empty():
+			continue
+		if CharacterStats.is_dead(c.wounds_taken, CharacterStats.get_ring_value(c, Enums.Ring.EARTH)):
+			continue
+		clan_strengths[c.clan] = float(clan_strengths.get(c.clan, 0.0)) + c.status
+
+	var active_wars: Array = world_states.get("active_wars", [])
+	var inter_clan_wars: int = 0
+	for w in active_wars:
+		if w is Dictionary:
+			inter_clan_wars += 1
+
+	var provinces_data: Array = world_states.get("province_data", [])
+	var rebellion_count: int = 0
+	var max_non_sl_ptl: float = 0.0
+	var wall_breach: bool = false
+	var failing_worship: int = 0
+	for p in provinces_data:
+		if p is ProvinceData:
+			if p.active_insurgency_id >= 0:
+				rebellion_count += 1
+			if p.province_taint_level > 0.0 and p.clan != "Crab":
+				max_non_sl_ptl = maxf(max_non_sl_ptl, p.province_taint_level)
+			if p.shadowlands_strength > 0 and p.stability < 30.0:
+				wall_breach = true
+
+	var worship_maluses: Dictionary = world_states.get("_worship_maluses", {})
+	for prov_id in worship_maluses:
+		var pm: Dictionary = worship_maluses[prov_id]
+		if pm.is_empty():
+			continue
+		for fortune_key in pm:
+			var malus: Dictionary = pm[fortune_key]
+			if malus.get("tier", 0) >= 2:
+				failing_worship += 1
+				break
+
+	var emperor_vacant: bool = int(world_states.get("emperor_id", -1)) < 0
+
+	return {
+		"clan_strengths": clan_strengths,
+		"active_inter_clan_wars": inter_clan_wars,
+		"emperor_vacant": emperor_vacant,
+		"provinces_in_rebellion": rebellion_count,
+		"failing_worship_provinces": failing_worship,
+		"realm_overlaps_empire_wide": 0,
+		"realm_overlap_in_dragon_territory": false,
+		"max_non_shadowlands_ptl": max_non_sl_ptl,
+		"wall_breach_active": wall_breach,
+		"shadowlands_incursion_tier": 0,
+		"crab_military_readiness": 1.0,
+	}
+
+
+static func _axis_to_string(axis: int) -> String:
+	match axis:
+		TogashiOversight.Axis.BALANCE_OF_POWER: return "balance"
+		TogashiOversight.Axis.IMPERIAL_COHESION: return "cohesion"
+		TogashiOversight.Axis.SPIRITUAL_HEALTH: return "spiritual"
+		TogashiOversight.Axis.SHADOWLANDS_CONTAINMENT: return "shadowlands"
+	return "unknown"
+
+
+# -- Phoenix Council Gating (s55.10.3) -----------------------------------------
+
+static func _process_phoenix_council_gating(
+	phoenix_state: Dictionary,
+	strategic_results: Array[Dictionary],
+	characters: Array[L5RCharacterData],
+	characters_by_id: Dictionary,
+	dice_engine: DiceEngine,
+	active_topics: Array[TopicData],
+	next_topic_id: Array[int],
+	ic_day: int,
+	active_civil_wars: Array[Dictionary] = [],
+	objectives_map: Dictionary = {},
+	current_season: int = 0,
+) -> Dictionary:
+	var shiba_champion: L5RCharacterData = _find_shiba_champion(characters)
+	if shiba_champion == null:
+		return {"skipped": true, "reason": "no_shiba_champion"}
+
+	if PhoenixCouncil.has_champion_authority(phoenix_state):
+		return {"skipped": true, "reason": "champion_has_authority"}
+
+	var living_masters: Array = _find_living_elemental_masters(characters)
+	if not PhoenixCouncil.can_council_self_govern(living_masters):
+		return {"skipped": true, "reason": "council_below_quorum"}
+
+	var master_virtues: Dictionary = _build_master_virtues(living_masters, characters_by_id)
+	var dispositions_to_champion: Dictionary = _build_master_dispositions(
+		living_masters, characters_by_id, shiba_champion.character_id,
+	)
+
+	var vetoed: Array[Dictionary] = []
+	var approved: Array[Dictionary] = []
+	var had_any_major: bool = false
+	var had_any_proposal: bool = false
+	var all_rejected: bool = true
+
+	var directives_to_remove: Array[int] = []
+
+	for idx: int in range(strategic_results.size()):
+		var d: Dictionary = strategic_results[idx]
+		if int(d.get("lord_id", -1)) != shiba_champion.character_id:
+			continue
+
+		var decision_type: int = _directive_to_decision_type(d)
+		if decision_type < 0:
+			continue
+
+		if not PhoenixCouncil.is_major_decision(decision_type as PhoenixCouncil.DecisionType):
+			continue
+
+		had_any_major = true
+		had_any_proposal = true
+
+		var current_season: int = int(d.get("_season_count", 0))
+		if PhoenixCouncil.is_proposal_banned(phoenix_state, decision_type as PhoenixCouncil.DecisionType, current_season):
+			directives_to_remove.append(idx)
+			vetoed.append({"directive": d, "reason": "banned_resubmission"})
+			continue
+
+		var proposal: Dictionary = {
+			"decision_type": decision_type,
+			"crisis_response": d.get("crisis_response", false),
+			"threatens_element": d.get("threatens_element", -1),
+			"spiritual_dimension": d.get("spiritual_dimension", false),
+		}
+
+		var vote_result: Dictionary = PhoenixCouncil.tally_vote(
+			living_masters, proposal, dispositions_to_champion,
+			dice_engine, master_virtues,
+		)
+
+		if vote_result.get("passed", false):
+			approved.append({"directive": d, "vote": vote_result})
+			all_rejected = false
+			PhoenixCouncil.reset_crisis_veto_streak(phoenix_state)
+			PhoenixCouncil.reset_obstruction_streak(phoenix_state)
+			PhoenixCouncil.clear_failed_proposal(phoenix_state, decision_type as PhoenixCouncil.DecisionType)
+		elif vote_result.get("deadlocked", false):
+			if PhoenixCouncil.champion_may_break_tie(phoenix_state, decision_type as PhoenixCouncil.DecisionType):
+				approved.append({"directive": d, "vote": vote_result, "tie_broken": true})
+				all_rejected = false
+				HonorGlorySystem.apply_honor_change(shiba_champion, PhoenixCouncil.DEFIANCE_STAGE_1_HONOR_PENALTY)
+			else:
+				PhoenixCouncil.table_proposal(phoenix_state, decision_type as PhoenixCouncil.DecisionType, current_season)
+				directives_to_remove.append(idx)
+				vetoed.append({"directive": d, "vote": vote_result, "tabled": true})
+		else:
+			directives_to_remove.append(idx)
+			vetoed.append({"directive": d, "vote": vote_result})
+			if d.get("crisis_response", false):
+				PhoenixCouncil.track_consecutive_crisis_veto(phoenix_state)
+			PhoenixCouncil.record_failed_proposal(phoenix_state, decision_type as PhoenixCouncil.DecisionType, current_season)
+
+	directives_to_remove.sort()
+	directives_to_remove.reverse()
+	for idx: int in directives_to_remove:
+		strategic_results.remove_at(idx)
+
+	if had_any_major and all_rejected:
+		PhoenixCouncil.track_consecutive_obstruction(phoenix_state)
+	elif had_any_major:
+		PhoenixCouncil.reset_obstruction_streak(phoenix_state)
+
+	if had_any_proposal:
+		if not all_rejected:
+			PhoenixCouncil.handle_compliant_season(phoenix_state)
+
+	if not vetoed.is_empty():
+		var topic := TopicData.new()
+		topic.topic_id = next_topic_id[0]
+		next_topic_id[0] += 1
+		var overreach_stage: int = int(phoenix_state.get("overreach_stage", 0))
+		topic.slug = "phoenix_council_veto_%d" % ic_day
+		topic.variant = "phoenix_council_veto"
+		topic.topic_type = "political"
+		topic.tier = TopicData.Tier.TIER_4 if overreach_stage <= 1 else TopicData.Tier.TIER_3
+		topic.momentum = 11.0 if overreach_stage <= 1 else 26.0
+		topic.category = TopicData.Category.POLITICAL
+		active_topics.append(topic)
+
+	var result_dict: Dictionary = {
+		"vetoed": vetoed,
+		"approved": approved,
+		"had_major_decisions": had_any_major,
+		"defiance_stage": int(phoenix_state.get("defiance_stage", 0)),
+		"overreach_stage": int(phoenix_state.get("overreach_stage", 0)),
+		"living_masters_count": living_masters.size(),
+	}
+
+	if PhoenixCouncil.is_overreach_schism_imminent(phoenix_state):
+		var senior_master_id: int = _find_senior_elemental_master_id(living_masters, characters_by_id)
+		if senior_master_id >= 0:
+			var cw_result: Dictionary = _trigger_civil_war(
+				senior_master_id, shiba_champion.character_id,
+				"Phoenix", "council overreach",
+				characters, characters_by_id, objectives_map,
+				active_civil_wars, active_topics, next_topic_id,
+				ic_day, current_season,
+			)
+			result_dict["civil_war_triggered"] = cw_result
+
+	return result_dict
+
+
+static func _find_shiba_champion(characters: Array[L5RCharacterData]) -> L5RCharacterData:
+	var best: L5RCharacterData = null
+	for c: L5RCharacterData in characters:
+		if c.clan != "Phoenix":
+			continue
+		if c.lord_id != -1:
+			continue
+		if CharacterStats.is_dead(c.wounds_taken, CharacterStats.get_ring_value(c, Enums.Ring.EARTH)):
+			continue
+		if best == null or c.status > best.status:
+			best = c
+		elif c.status == best.status and c.character_id < best.character_id:
+			best = c
+	return best
+
+
+static func _find_living_elemental_masters(characters: Array[L5RCharacterData]) -> Array:
+	var masters: Array = []
+	var found_by_role: Dictionary = {}
+	for c: L5RCharacterData in characters:
+		if c.clan != "Phoenix":
+			continue
+		if CharacterStats.is_dead(c.wounds_taken, CharacterStats.get_ring_value(c, Enums.Ring.EARTH)):
+			continue
+		if c.role_position.begins_with("Master of "):
+			var element: String = c.role_position.replace("Master of ", "")
+			var master_enum: int = _element_string_to_master(element)
+			if master_enum >= 0 and not found_by_role.has(master_enum):
+				found_by_role[master_enum] = c
+	for m in found_by_role:
+		masters.append(m)
+	return masters
+
+
+static func _find_senior_elemental_master_id(
+	_living_masters: Array,
+	characters_by_id: Dictionary,
+) -> int:
+	var best_id: int = -1
+	var best_status: float = -1.0
+	for c: L5RCharacterData in characters_by_id.values():
+		if c.clan != "Phoenix":
+			continue
+		if not c.role_position.begins_with("Master of "):
+			continue
+		if CharacterStats.is_dead(c):
+			continue
+		if c.status > best_status:
+			best_status = c.status
+			best_id = c.character_id
+	return best_id
+
+
+static func _element_string_to_master(element: String) -> int:
+	match element.to_lower():
+		"fire": return PhoenixCouncil.Master.FIRE
+		"water": return PhoenixCouncil.Master.WATER
+		"air": return PhoenixCouncil.Master.AIR
+		"earth": return PhoenixCouncil.Master.EARTH
+		"void": return PhoenixCouncil.Master.VOID
+	return -1
+
+
+static func _build_master_virtues(
+	living_masters: Array,
+	characters_by_id: Dictionary,
+) -> Dictionary:
+	var virtues: Dictionary = {}
+	for m in living_masters:
+		var master_char: L5RCharacterData = _find_master_character(m, characters_by_id)
+		if master_char != null:
+			virtues[m] = {
+				"bushido": master_char.bushido_virtue,
+				"shourido": master_char.shourido_virtue,
+			}
+	return virtues
+
+
+static func _build_master_dispositions(
+	living_masters: Array,
+	characters_by_id: Dictionary,
+	champion_id: int,
+) -> Dictionary:
+	var dispositions: Dictionary = {}
+	for m in living_masters:
+		var master_char: L5RCharacterData = _find_master_character(m, characters_by_id)
+		if master_char != null:
+			dispositions[m] = int(master_char.disposition_values.get(champion_id, 0))
+		else:
+			dispositions[m] = 0
+	return dispositions
+
+
+static func _find_master_character(
+	master_enum: int,
+	characters_by_id: Dictionary,
+) -> L5RCharacterData:
+	var element_name: String = ""
+	match master_enum:
+		PhoenixCouncil.Master.FIRE: element_name = "Fire"
+		PhoenixCouncil.Master.WATER: element_name = "Water"
+		PhoenixCouncil.Master.AIR: element_name = "Air"
+		PhoenixCouncil.Master.EARTH: element_name = "Earth"
+		PhoenixCouncil.Master.VOID: element_name = "Void"
+	var target_role: String = "Master of " + element_name
+	for id in characters_by_id:
+		var c: L5RCharacterData = characters_by_id[id]
+		if c.clan == "Phoenix" and c.role_position == target_role:
+			if not CharacterStats.is_dead(c.wounds_taken, CharacterStats.get_ring_value(c, Enums.Ring.EARTH)):
+				return c
+	return null
+
+
+static func _directive_to_decision_type(directive: Dictionary) -> int:
+	var dtype: int = int(directive.get("directive", -1))
+	match dtype:
+		StrategicReview.Directive.WAR_READINESS:
+			return PhoenixCouncil.DecisionType.DEPLOY_GO_HATAMOTO
+		StrategicReview.Directive.SEEK_PEACE:
+			return PhoenixCouncil.DecisionType.SIGN_TREATY
+	return -1
+
+
 # -- Gempukku & Population -----------------------------------------------------
 
 static func _process_gempukku(
@@ -6410,6 +7862,41 @@ static func _process_worship_accumulation(
 				"province_id": province_id,
 				"total_wp": effects.get("total_wp", 0.0),
 			})
+	return results
+
+
+static func _process_letter_examinations(
+	day_results: Array,
+	pending_letters: Array,
+	characters_by_id: Dictionary,
+	dice_engine: DiceEngine,
+) -> Array[Dictionary]:
+	var results: Array[Dictionary] = []
+	if dice_engine == null:
+		return results
+	for r: Variant in day_results:
+		if not (r is Dictionary):
+			continue
+		var result: Dictionary = r as Dictionary
+		var effects: Dictionary = result.get("effects", {})
+		if not effects.get("requires_letter_examination", false):
+			continue
+		var letter_id: int = effects.get("letter_id", -1)
+		var examiner_id: int = effects.get("examiner_id", -1)
+		if letter_id < 0 or examiner_id < 0:
+			continue
+		var examiner: L5RCharacterData = characters_by_id.get(examiner_id)
+		if examiner == null:
+			continue
+		var letter: LetterData = LetterSystem._find_letter_by_id(pending_letters, letter_id)
+		if letter == null:
+			continue
+		var exam_result: Dictionary = LetterSystem.deliberate_examine_letter(
+			letter, examiner, dice_engine, pending_letters,
+		)
+		exam_result["letter_id"] = letter_id
+		exam_result["examiner_id"] = examiner_id
+		results.append(exam_result)
 	return results
 
 
@@ -7360,3 +8847,905 @@ static func _find_vacancy_candidate(
 			best_score = score
 			best_id = c.character_id
 	return best_id
+
+
+# -- Court Commitment Wiring ---------------------------------------------------
+
+static func _inject_commitment_needs(
+	court_commitments: Array[CourtCommitmentData],
+	characters: Array[L5RCharacterData],
+	world_states: Dictionary,
+) -> void:
+	for cc: CourtCommitmentData in court_commitments:
+		if cc.fulfilled:
+			continue
+		var lord_id: int = cc.lord_id
+		var ws: Dictionary = world_states.get(lord_id, {})
+		if ws.is_empty():
+			ws = {}
+			world_states[lord_id] = ws
+		if not ws.has("pending_events"):
+			ws["pending_events"] = []
+		var already_injected: bool = false
+		for ev: Variant in ws["pending_events"]:
+			if ev is Dictionary and ev.get("source", "") == "commitment_honor" \
+					and ev.get("topic_id", -1) == cc.topic_id:
+				already_injected = true
+				break
+		if already_injected:
+			continue
+		var virtue: Enums.BushidoVirtue = Enums.BushidoVirtue.NONE
+		for c: L5RCharacterData in characters:
+			if c.character_id == lord_id:
+				virtue = c.bushido_virtue
+				break
+		var priority: int = CourtCommitmentSystem.get_priority(virtue)
+		ws["pending_events"].append({
+			"need_type": "HONOR_COMMITMENT",
+			"priority": priority,
+			"topic_id": cc.topic_id,
+			"commitment_type": cc.commitment_type,
+			"source": "commitment_honor",
+		})
+
+
+static func _process_commitment_seasonal(
+	court_commitments: Array[CourtCommitmentData],
+	action_log: Array[Dictionary],
+	ic_day: int,
+	characters_by_id: Dictionary,
+	active_topics: Array[TopicData],
+	next_topic_id: Array[int],
+) -> Dictionary:
+	if court_commitments.is_empty():
+		return {}
+	var result: Dictionary = CourtCommitmentSystem.process_seasonal_commitments(
+		court_commitments, action_log, ic_day, characters_by_id,
+	)
+	for renege_info: Dictionary in result.get("reneged", []):
+		var lord_id: int = renege_info.get("lord_id", -1)
+		var lord: L5RCharacterData = characters_by_id.get(lord_id)
+		if lord == null:
+			continue
+		var honor_change: float = renege_info.get("honor_change", 0.0)
+		if honor_change != 0.0:
+			HonorGlorySystem.apply_honor_change(lord, honor_change)
+		var disp_penalty: int = renege_info.get("disposition_penalty", 0)
+		if disp_penalty != 0:
+			for other: L5RCharacterData in characters_by_id.values():
+				if other.character_id == lord_id:
+					continue
+				if other.disposition_values.has(lord_id):
+					other.disposition_values[lord_id] = clampi(
+						other.disposition_values[lord_id] + disp_penalty, -100, 100,
+					)
+		var topic_tier: int = renege_info.get("topic_tier", 3)
+		var topic_type: String = renege_info.get("topic_type", "renege")
+		var topic_variant: String = renege_info.get("topic_variant", "commitment_broken")
+		var topic_id: int = next_topic_id[0]
+		next_topic_id[0] += 1
+		var topic: TopicData = TopicData.new()
+		topic.topic_id = topic_id
+		topic.slug = "renege_%d_%d" % [lord_id, renege_info.get("topic_id", 0)]
+		topic.tier = topic_tier
+		topic.topic_type = topic_type
+		topic.variant = topic_variant
+		topic.momentum = 11.0 if topic_tier >= 3 else 30.0
+		topic.category = TopicData.Category.POLITICAL
+		topic.ic_day_created = ic_day
+		active_topics.append(topic)
+	return result
+
+
+static func _process_voluntary_declarations(
+	applied_results: Array,
+	active_courts: Array[CourtSessionData],
+	active_topics: Array[TopicData],
+	court_commitments: Array[CourtCommitmentData],
+	characters_by_id: Dictionary,
+	ic_day: int,
+	time_system: TimeSystem,
+) -> Array[CourtCommitmentData]:
+	## Scans day results for successful PUBLIC_DECLARATION actions. When the
+	## declaring lord's position exceeds +50 on an agenda action topic at their
+	## current court, creates a voluntary CourtCommitmentData per GDD s16.4.
+	var created: Array[CourtCommitmentData] = []
+	for result: Variant in applied_results:
+		if not result is Dictionary:
+			continue
+		var d: Dictionary = result as Dictionary
+		if d.get("action_id", "") != "PUBLIC_DECLARATION":
+			continue
+		var effects: Dictionary = d.get("effects", {})
+		if effects.get("failed", false):
+			continue
+		var lord_id: int = d.get("character_id", -1)
+		var lord: L5RCharacterData = characters_by_id.get(lord_id)
+		if lord == null:
+			continue
+		if not _is_lord_tier(lord):
+			continue
+		var court: CourtSessionData = _find_active_court_for_character(
+			active_courts, lord_id,
+		)
+		if court == null:
+			continue
+		var declarable: Array[TopicData] = CourtCommitmentSystem.find_declarable_topics(
+			lord, court.agenda_topic_ids, active_topics, court_commitments,
+		)
+		if declarable.is_empty():
+			continue
+		var topic: TopicData = declarable[0]
+		var commitment_type: String = ImperialEdictSystem.get_commitment_type_for_topic(topic)
+		var deadline: int = _compute_next_season_end_ic_day(time_system)
+		var cc: CourtCommitmentData = CourtCommitmentSystem.create_commitment(
+			lord_id, topic.topic_id, commitment_type,
+			CourtCommitmentData.CommitmentSource.VOLUNTARY,
+			ic_day, deadline,
+		)
+		court_commitments.append(cc)
+		created.append(cc)
+	return created
+
+
+static func _find_active_court_for_character(
+	active_courts: Array[CourtSessionData],
+	character_id: int,
+) -> CourtSessionData:
+	for court: CourtSessionData in active_courts:
+		if court.phase != CourtSessionData.CourtPhase.ACTIVE:
+			continue
+		if character_id in court.attendee_ids:
+			return court
+	return null
+
+
+static func _compute_next_season_end_ic_day(time_system: TimeSystem) -> int:
+	## Returns the last IC day of the next season (deadline for voluntary
+	## commitments per GDD s16.4: "default: last day of the next IC season").
+	var day_of_year: int = time_system.get_ic_day_of_year()
+	var ic_day: int = time_system.get_ic_day()
+	# Season end boundaries (cumulative): Spring=90, Summer=180, Autumn=240, Winter=360
+	var ends: Array[int] = [90, 180, 240, 360]
+	# Find the NEXT season boundary after current day_of_year, then add one more
+	var found_current_end: bool = false
+	for e: int in ends:
+		if day_of_year < e:
+			if not found_current_end:
+				found_current_end = true
+				continue
+			return ic_day + (e - day_of_year) - 1
+	# Wrapped: next season end is Spring of next year
+	return ic_day + (360 - day_of_year) + 90 - 1
+
+
+# -- Court Action Effects (s15.4) ---------------------------------------------
+
+static func _process_court_action_effects(
+	day_results: Array,
+	characters_by_id: Dictionary,
+	favors: Array = [],
+	ic_day: int = 0,
+) -> void:
+	for entry: Dictionary in day_results:
+		var effects: Dictionary = entry.get("effects", {})
+		if effects.is_empty():
+			continue
+
+		var action_id: String = entry.get("action_id", "")
+		var target_id: int = entry.get("target_npc_id", -1)
+		var target: L5RCharacterData = characters_by_id.get(target_id)
+		var action_meta: Dictionary = effects.get("_action_metadata", {})
+
+		# Topic position shift from Negotiate/Persuade
+		if effects.has("target_position_shift") and target != null:
+			var shift: float = effects["target_position_shift"]
+			var topic_id: int = action_meta.get("topic_id", -1)
+			if topic_id >= 0:
+				var current_pos: float = target.topic_positions.get(topic_id, 0.0)
+				target.topic_positions[topic_id] = clampf(current_pos + shift, -100.0, 100.0)
+
+		# Provoke Emotion target effects
+		if target != null:
+			if effects.has("target_honor_change"):
+				target.honor = clampf(target.honor + effects["target_honor_change"], 0.0, 10.0)
+			if effects.has("target_glory_change"):
+				target.glory = clampf(target.glory + effects["target_glory_change"], 0.0, 10.0)
+
+		# Provoke Emotion witness disposition loss against target
+		if effects.has("target_witness_disposition"):
+			var per_witness: int = effects["target_witness_disposition"]
+			var witnesses: Array = effects.get("witnesses", [])
+			for wid in witnesses:
+				var w: L5RCharacterData = characters_by_id.get(wid)
+				if w != null and target_id >= 0:
+					var current: int = w.disposition_values.get(target_id, 0)
+					w.disposition_values[target_id] = clampi(current + per_witness, -100, 100)
+
+		# Play a Game bilateral disposition
+		if effects.has("play_game_result") and target != null:
+			var actor_id: int = entry.get("character_id", -1)
+			var actor: L5RCharacterData = characters_by_id.get(actor_id)
+			if actor != null:
+				var a_disp: int = effects.get("a_disposition_toward_b", 0)
+				var b_disp: int = effects.get("b_disposition_toward_a", 0)
+				var cur_a: int = actor.disposition_values.get(target_id, 0)
+				actor.disposition_values[target_id] = clampi(cur_a + a_disp, -100, 100)
+				var cur_b: int = target.disposition_values.get(actor_id, 0)
+				target.disposition_values[actor_id] = clampi(cur_b + b_disp, -100, 100)
+
+		# Gossip subject disposition on listener
+		if effects.has("gossip_subject_disposition") and target != null:
+			var subject_id: int = effects.get("gossip_subject_id", -1)
+			var disp_change: int = effects["gossip_subject_disposition"]
+			if subject_id >= 0:
+				var cur: int = target.disposition_values.get(subject_id, 0)
+				target.disposition_values[subject_id] = clampi(cur + disp_change, -100, 100)
+
+		# Disclose downstream opinion transfer
+		if effects.has("disclosed_opinion") and target != null:
+			var about_id: int = effects.get("disclose_about_id", -1)
+			var opinion: int = effects["disclosed_opinion"]
+			if about_id >= 0 and opinion != 0:
+				var cur: int = target.disposition_values.get(about_id, 0)
+				var shift: int = int(opinion * 0.5)
+				if shift != 0:
+					target.disposition_values[about_id] = clampi(cur + shift, -100, 100)
+
+		# OFFER_FAVOR creation
+		if effects.get("requires_favor_creation", false):
+			var creditor_id: int = effects.get("favor_creditor_id", -1)
+			var debtor_id: int = effects.get("favor_debtor_id", -1)
+			if creditor_id >= 0 and debtor_id >= 0:
+				var max_id: int = 0
+				for f: Variant in favors:
+					if f is FavorData and (f as FavorData).favor_id >= max_id:
+						max_id = (f as FavorData).favor_id + 1
+				var favor: FavorData = FavorSystem.offer_favor(
+					FavorData.FavorType.GENERAL,
+					FavorData.FavorTier.MINOR,
+					creditor_id,
+					debtor_id,
+					ic_day,
+					"Court favor offered",
+					"OFFER_FAVOR",
+					max_id,
+				)
+				favors.append(favor)
+
+		# Public Debate per-witness disposition and position shifts
+		if effects.has("debate_per_witness"):
+			var actor_id: int = entry.get("character_id", -1)
+			var topic_id: int = action_meta.get("topic_id", -1)
+			var pw_results: Array = effects["debate_per_witness"]
+			for pw: Dictionary in pw_results:
+				var wid: int = pw.get("witness_id", -1)
+				var w: L5RCharacterData = characters_by_id.get(wid)
+				if w == null:
+					continue
+				var a_disp_change: int = pw.get("a_disposition_change", 0)
+				var b_disp_change: int = pw.get("b_disposition_change", 0)
+				if a_disp_change != 0:
+					var cur: int = w.disposition_values.get(actor_id, 0)
+					w.disposition_values[actor_id] = clampi(cur + a_disp_change, -100, 100)
+				if b_disp_change != 0:
+					var cur: int = w.disposition_values.get(target_id, 0)
+					w.disposition_values[target_id] = clampi(cur + b_disp_change, -100, 100)
+				if topic_id >= 0:
+					var pos_shift: float = pw.get("position_shift_toward_a", 0.0)
+					if pos_shift != 0.0:
+						var cur_pos: float = w.topic_positions.get(topic_id, 0.0)
+						w.topic_positions[topic_id] = clampf(cur_pos + pos_shift, -100.0, 100.0)
+
+
+# -- Court Availability Data Population ----------------------------------------
+
+
+static func _populate_court_availability_data(
+	active_courts: Array[CourtSessionData],
+	characters: Array[L5RCharacterData],
+	characters_by_id: Dictionary,
+	world_states: Dictionary,
+	favors: Array,
+) -> void:
+	var upcoming: Array[Dictionary] = []
+	for court: CourtSessionData in active_courts:
+		if court.court_phase == CourtSessionData.CourtPhase.SCHEDULED:
+			upcoming.append({
+				"settlement_id": court.host_settlement_id,
+				"prestige": court.prestige,
+				"court_id": court.court_id,
+			})
+
+	var creditor_favors: Dictionary = {}
+	for fv: Variant in favors:
+		if fv is FavorData:
+			var f: FavorData = fv as FavorData
+			if f.invoked or f.creditor_id < 0:
+				continue
+			if not creditor_favors.has(f.creditor_id):
+				creditor_favors[f.creditor_id] = []
+			var debtor: Variant = characters_by_id.get(f.debtor_id)
+			var target_lord: int = -1
+			if debtor is L5RCharacterData:
+				target_lord = (debtor as L5RCharacterData).lord_id
+			creditor_favors[f.creditor_id].append({
+				"debtor_id": f.debtor_id,
+				"target_lord_id": target_lord,
+				"tier": f.tier,
+			})
+
+	for c: L5RCharacterData in characters:
+		var ws: Dictionary = world_states.get(c.character_id, {})
+		if ws.is_empty():
+			ws = {}
+			world_states[c.character_id] = ws
+
+		ws["upcoming_courts"] = upcoming
+		ws["held_leverage"] = creditor_favors.get(c.character_id, [] as Array[Dictionary])
+
+		var locations: Dictionary = {}
+		for entry: KnowledgeEntry in c.knowledge_pool:
+			if entry.entry_type == "location":
+				var cid: int = entry.data.get("character_id", -1)
+				var sid_str: String = str(entry.data.get("settlement_id", ""))
+				if cid >= 0 and sid_str.is_valid_int():
+					locations[cid] = int(sid_str)
+		ws["known_npc_locations"] = locations
+
+
+# -- Resource Stockpiles Population --------------------------------------------
+
+
+static func _populate_resource_stockpiles(
+	world_states: Dictionary,
+	characters: Array[L5RCharacterData],
+	provinces: Dictionary,
+	settlements: Array[SettlementData],
+	clans: Dictionary,
+	companies: Array[Dictionary],
+) -> void:
+	var clan_settlements: Dictionary = {}
+	for s: SettlementData in settlements:
+		var pid: int = s.province_id
+		var prov: Variant = provinces.get(pid)
+		if prov == null or not (prov is ProvinceData):
+			continue
+		var clan_name: String = (prov as ProvinceData).clan
+		if clan_name.is_empty():
+			continue
+		if not clan_settlements.has(clan_name):
+			clan_settlements[clan_name] = []
+		clan_settlements[clan_name].append(s)
+
+	var clan_military_upkeep: Dictionary = {}
+	for comp: Dictionary in companies:
+		var comp_clan: String = comp.get("clan", "")
+		if comp_clan.is_empty():
+			continue
+		var rice_cost: float = comp.get("rice_upkeep", 0.35)
+		clan_military_upkeep[comp_clan] = clan_military_upkeep.get(comp_clan, 0.0) + rice_cost
+
+	for c: L5RCharacterData in characters:
+		if c.status < 5.0 and c.lord_id != -1:
+			continue
+		var ws: Dictionary = world_states.get(c.character_id, {})
+		if ws.is_empty():
+			ws = {}
+			world_states[c.character_id] = ws
+
+		var slist: Array = clan_settlements.get(c.clan, [])
+		var total_rice: float = 0.0
+		var total_koku: float = 0.0
+		var total_pop_pu: float = 0.0
+		var total_rice_consumption: float = 0.0
+		var total_military_pu: float = 0.0
+		for sv: Variant in slist:
+			if sv is SettlementData:
+				var sd: SettlementData = sv as SettlementData
+				total_rice += sd.rice_stockpile
+				total_koku += sd.koku_stockpile
+				total_pop_pu += sd.population_pu
+				total_rice_consumption += sd.population_pu * 0.25
+				total_military_pu += sd.military_pu
+
+		var clan_data: Variant = clans.get(c.clan)
+		var arms: float = 0.0
+		var iron: float = 0.0
+		if clan_data is ClanData:
+			arms = (clan_data as ClanData).arms_stockpile
+			iron = (clan_data as ClanData).iron_stockpile
+
+		var arms_upkeep: float = 0.0
+		for comp: Dictionary in companies:
+			if comp.get("clan", "") == c.clan:
+				arms_upkeep += comp.get("iron_upkeep", 0.1)
+
+		ws["resource_stockpiles"] = {
+			"rice": total_rice,
+			"rice_consumption": maxf(total_rice_consumption, 0.01),
+			"koku": total_koku,
+			"population_pu": maxf(total_pop_pu, 1.0),
+			"arms": arms,
+			"arms_upkeep": maxf(arms_upkeep, 0.01),
+			"iron": iron,
+			"military_upkeep": maxf(clan_military_upkeep.get(c.clan, 0.0), 0.01),
+		}
+		ws["available_levy_pu"] = total_military_pu
+
+
+# -- Civil War Seasonal Processing (s53.2) ------------------------------------
+
+static func _process_civil_war_seasonal(
+	active_civil_wars: Array[Dictionary],
+	precedent_modifiers: Dictionary,
+	characters_by_id: Dictionary,
+	provinces: Dictionary,
+	current_season: int,
+	objectives_map: Dictionary,
+	active_topics: Array[TopicData],
+	next_topic_id: Array[int],
+	ic_day: int,
+	season_meta: Dictionary,
+) -> Dictionary:
+	var precedent_decay_count: int = IntraClanCivilWar.tick_precedent_decay(
+		precedent_modifiers, current_season,
+	)
+	var per_war_results: Array[Dictionary] = []
+	var defections: Array[Dictionary] = []
+	var resolutions: Array[Dictionary] = []
+
+	for state: Dictionary in active_civil_wars:
+		if not state.get("active", false):
+			continue
+		var clan: String = state.get("clan", "")
+		var rebel_lord_id: int = int(state.get("rebel_lord_id", -1))
+		var authority_lord_id: int = int(state.get("authority_lord_id", -1))
+		var rebel_lord: L5RCharacterData = characters_by_id.get(rebel_lord_id)
+		var authority_lord: L5RCharacterData = characters_by_id.get(authority_lord_id)
+
+		var clan_provinces: Array[ProvinceData] = []
+		for prov: Variant in provinces.values():
+			if prov is ProvinceData and (prov as ProvinceData).clan == clan:
+				clan_provinces.append(prov as ProvinceData)
+
+		var consequence_result: Dictionary = IntraClanCivilWar.apply_seasonal_consequences(
+			state, rebel_lord, clan_provinces, current_season,
+		)
+
+		var war_defections: Array[Dictionary] = _check_civil_war_defections(
+			state, characters_by_id, objectives_map, current_season,
+		)
+		defections.append_array(war_defections)
+
+		var resolution: Dictionary = _check_civil_war_resolution(
+			state, rebel_lord, authority_lord, characters_by_id,
+			precedent_modifiers, current_season, active_topics,
+			next_topic_id, ic_day, season_meta, clan,
+		)
+		if not resolution.is_empty():
+			resolutions.append(resolution)
+
+		per_war_results.append({
+			"clan": clan,
+			"consequence_result": consequence_result,
+			"defection_count": war_defections.size(),
+		})
+
+	_decay_civil_war_scars(characters_by_id, season_meta)
+
+	return {
+		"precedent_decay_count": precedent_decay_count,
+		"per_war": per_war_results,
+		"defections": defections,
+		"resolutions": resolutions,
+	}
+
+
+static func _check_civil_war_defections(
+	state: Dictionary,
+	characters_by_id: Dictionary,
+	objectives_map: Dictionary,
+	current_season: int,
+) -> Array[Dictionary]:
+	var results: Array[Dictionary] = []
+	var assignments: Dictionary = state.get("faction_assignments", {})
+	var rebel_lord_id: int = int(state.get("rebel_lord_id", -1))
+	var authority_lord_id: int = int(state.get("authority_lord_id", -1))
+	var trigger_topic_id: int = int(state.get("trigger_topic_id", -1))
+
+	for char_id_var: Variant in assignments.keys():
+		var char_id: int = int(char_id_var)
+		var faction: int = int(assignments.get(char_id, IntraClanCivilWar.Faction.NONE))
+		if faction == IntraClanCivilWar.Faction.NONE or faction == IntraClanCivilWar.Faction.RONIN:
+			continue
+		var npc: L5RCharacterData = characters_by_id.get(char_id)
+		if npc == null:
+			continue
+		if CharacterStats.is_dead(npc):
+			continue
+		var faction_leader_id: int = (
+			authority_lord_id if faction == IntraClanCivilWar.Faction.LEGITIMACY
+			else rebel_lord_id
+		)
+		if not IntraClanCivilWar.defection_trigger_fired(state, npc, faction_leader_id):
+			continue
+
+		var rebel_completion: float = _get_rebel_completion_rate(rebel_lord_id, objectives_map)
+		var grievance_visible: bool = trigger_topic_id in npc.topic_pool
+		var rebel_was_failing: bool = rebel_completion < 0.50
+		var loyalty: Dictionary = IntraClanCivilWar.evaluate_loyalty(
+			npc, rebel_lord_id, rebel_completion, grievance_visible, rebel_was_failing,
+		)
+		var new_faction: int = int(loyalty.get("faction", IntraClanCivilWar.Faction.NONE))
+		if new_faction == faction:
+			continue
+
+		var is_family_daimyo: bool = npc.status >= 5.0
+		var to_legitimacy: bool = new_faction == IntraClanCivilWar.Faction.LEGITIMACY
+		IntraClanCivilWar.record_defection(state, char_id, is_family_daimyo, to_legitimacy)
+
+		var former_members: Array[L5RCharacterData] = []
+		for other_id_var: Variant in assignments.keys():
+			var other_id: int = int(other_id_var)
+			if other_id == char_id:
+				continue
+			var other_faction: int = int(assignments.get(other_id, IntraClanCivilWar.Faction.NONE))
+			if other_faction == faction:
+				var other: L5RCharacterData = characters_by_id.get(other_id)
+				if other != null:
+					former_members.append(other)
+		IntraClanCivilWar.apply_defection_consequences(npc, former_members)
+
+		results.append({
+			"character_id": char_id,
+			"from_faction": faction,
+			"to_faction": new_faction,
+			"is_family_daimyo": is_family_daimyo,
+		})
+	return results
+
+
+static func _check_civil_war_resolution(
+	state: Dictionary,
+	rebel_lord: L5RCharacterData,
+	authority_lord: L5RCharacterData,
+	characters_by_id: Dictionary,
+	precedent_modifiers: Dictionary,
+	current_season: int,
+	active_topics: Array[TopicData],
+	next_topic_id: Array[int],
+	ic_day: int,
+	season_meta: Dictionary,
+	clan: String,
+) -> Dictionary:
+	var rebel_dead: bool = rebel_lord == null or CharacterStats.is_dead(rebel_lord)
+	if rebel_dead:
+		return _resolve_civil_war(
+			state, true, characters_by_id, precedent_modifiers,
+			current_season, active_topics, next_topic_id, ic_day,
+			season_meta, clan,
+		)
+
+	var rebel_capitulated: bool = false
+	var rebel_seat_lost: bool = false
+
+	if IntraClanCivilWar.check_legitimacy_victory(
+		state, rebel_lord, rebel_capitulated, rebel_seat_lost,
+	):
+		return _resolve_civil_war(
+			state, true, characters_by_id, precedent_modifiers,
+			current_season, active_topics, next_topic_id, ic_day,
+			season_meta, clan,
+		)
+
+	var assignments: Dictionary = state.get("faction_assignments", {})
+	var has_allied_fd: bool = false
+	for cid_var: Variant in assignments.keys():
+		var cid: int = int(cid_var)
+		if int(assignments[cid]) != IntraClanCivilWar.Faction.REBEL:
+			continue
+		if cid == int(state.get("rebel_lord_id", -1)):
+			continue
+		var c: L5RCharacterData = characters_by_id.get(cid)
+		if c != null and not CharacterStats.is_dead(c) and c.status >= 5.0:
+			has_allied_fd = true
+			break
+
+	var holds_seat: bool = rebel_lord != null and not rebel_dead
+	IntraClanCivilWar.tick_rebel_victory_counter(
+		state, rebel_lord, holds_seat, has_allied_fd,
+	)
+
+	if IntraClanCivilWar.is_rebel_victory_achieved(state):
+		return _resolve_civil_war(
+			state, false, characters_by_id, precedent_modifiers,
+			current_season, active_topics, next_topic_id, ic_day,
+			season_meta, clan,
+		)
+
+	return {}
+
+
+static func _resolve_civil_war(
+	state: Dictionary,
+	legitimacy_won: bool,
+	characters_by_id: Dictionary,
+	precedent_modifiers: Dictionary,
+	current_season: int,
+	active_topics: Array[TopicData],
+	next_topic_id: Array[int],
+	ic_day: int,
+	season_meta: Dictionary,
+	clan: String,
+) -> Dictionary:
+	var assignments: Dictionary = state.get("faction_assignments", {})
+	var all_chars: Array[L5RCharacterData] = []
+	for cid_var: Variant in assignments.keys():
+		var c: L5RCharacterData = characters_by_id.get(int(cid_var))
+		if c != null:
+			all_chars.append(c)
+
+	var scar_result: Dictionary = IntraClanCivilWar.apply_post_resolution_scars(
+		state, all_chars,
+	)
+	var scar_entries: Array[Dictionary] = []
+	for s: Dictionary in scar_result.get("scars", []):
+		var entry: Dictionary = s.duplicate()
+		entry["base_remaining"] = IntraClanCivilWar.POST_WAR_SCAR_BASE
+		scar_entries.append(entry)
+	if not scar_entries.is_empty():
+		var all_scars: Array = season_meta.get("civil_war_scars", [])
+		all_scars.append_array(scar_entries)
+		season_meta["civil_war_scars"] = all_scars
+
+	var rebel_consequences: Dictionary = {}
+	var from_seizure: bool = false
+	if legitimacy_won:
+		var rebels: Array[L5RCharacterData] = []
+		var family_daimyo_ids: Array[int] = []
+		for cid_var: Variant in assignments.keys():
+			var cid: int = int(cid_var)
+			if int(assignments[cid]) == IntraClanCivilWar.Faction.REBEL:
+				var c: L5RCharacterData = characters_by_id.get(cid)
+				if c != null:
+					rebels.append(c)
+					if c.status >= 5.0:
+						family_daimyo_ids.append(cid)
+		rebel_consequences = IntraClanCivilWar.apply_rebel_consequences_on_legitimacy_victory(
+			rebels, family_daimyo_ids,
+		)
+	else:
+		var rebel_lord_id: int = int(state.get("rebel_lord_id", -1))
+		var rebel_lord: L5RCharacterData = characters_by_id.get(rebel_lord_id)
+		var was_fd: bool = rebel_lord != null and rebel_lord.status >= 5.0
+		var authority_lord: L5RCharacterData = characters_by_id.get(
+			int(state.get("authority_lord_id", -1))
+		)
+		var incumbent_gone: bool = authority_lord == null or CharacterStats.is_dead(authority_lord) or authority_lord.honor < 0.0
+		from_seizure = IntraClanCivilWar.can_seize_championship(
+			state, clan, was_fd, incumbent_gone,
+		)
+		IntraClanCivilWar.apply_precedent_effect(
+			precedent_modifiers, current_season, from_seizure,
+		)
+
+	IntraClanCivilWar.finalise(state, current_season, legitimacy_won)
+
+	var topic_id: int = next_topic_id[0]
+	next_topic_id[0] += 1
+	var topic: TopicData = TopicData.new()
+	topic.topic_id = topic_id
+	topic.slug = "civil_war_resolved_%s_%d" % [clan.to_lower(), ic_day]
+	topic.tier = 2
+	topic.topic_type = "civil_war"
+	topic.variant = "legitimacy_victory" if legitimacy_won else ("championship_seizure" if from_seizure else "rebel_victory")
+	topic.momentum = 60.0
+	topic.category = TopicData.Category.POLITICAL
+	topic.ic_day_created = ic_day
+	active_topics.append(topic)
+
+	return {
+		"clan": clan,
+		"legitimacy_won": legitimacy_won,
+		"from_seizure": from_seizure,
+		"scar_count": scar_entries.size(),
+		"rebel_consequences": rebel_consequences,
+		"topic_id": topic_id,
+	}
+
+
+static func _get_rebel_completion_rate(
+	rebel_lord_id: int,
+	objectives_map: Dictionary,
+) -> float:
+	var lord_obj: Variant = objectives_map.get(rebel_lord_id)
+	if lord_obj is Dictionary:
+		var primary: Variant = (lord_obj as Dictionary).get("primary")
+		if primary is Dictionary:
+			return float((primary as Dictionary).get("last_measured_progress", 0.5))
+	return 0.5
+
+
+static func _decay_civil_war_scars(
+	characters_by_id: Dictionary,
+	season_meta: Dictionary,
+) -> void:
+	var all_scars: Array = season_meta.get("civil_war_scars", [])
+	if all_scars.is_empty():
+		return
+	var chars_array: Array[L5RCharacterData] = []
+	for c: Variant in characters_by_id.values():
+		if c is L5RCharacterData:
+			chars_array.append(c as L5RCharacterData)
+	var typed_scars: Array[Dictionary] = []
+	for s: Variant in all_scars:
+		if s is Dictionary:
+			typed_scars.append(s as Dictionary)
+	IntraClanCivilWar.decay_post_war_scars(chars_array, typed_scars)
+	var remaining: Array = []
+	for entry: Dictionary in typed_scars:
+		if int(entry.get("base_remaining", 0)) < 0:
+			remaining.append(entry)
+	season_meta["civil_war_scars"] = remaining
+
+
+# -- Civil War Trigger & Faction Formation (s53.2.1, s53.2.2) ----------------
+
+static func _trigger_civil_war(
+	rebel_lord_id: int,
+	authority_lord_id: int,
+	clan: String,
+	order_type: String,
+	characters: Array[L5RCharacterData],
+	characters_by_id: Dictionary,
+	objectives_map: Dictionary,
+	active_civil_wars: Array[Dictionary],
+	active_topics: Array[TopicData],
+	next_topic_id: Array[int],
+	ic_day: int,
+	current_season: int,
+) -> Dictionary:
+	## Triggers an intra-clan civil war per GDD s53.2.1. Creates initial state,
+	## generates the Tier 2 crisis topic, evaluates loyalty for all named clan
+	## NPCs, and processes ronin departures.
+	## Returns a result dict describing what happened.
+
+	for existing: Dictionary in active_civil_wars:
+		if existing.get("active", false) and existing.get("clan", "") == clan:
+			return {"triggered": false, "reason": "already_active"}
+
+	var topic_id: int = next_topic_id[0]
+	next_topic_id[0] += 1
+	var topic := TopicData.new()
+	topic.topic_id = topic_id
+	var rebel: L5RCharacterData = characters_by_id.get(rebel_lord_id)
+	var authority: L5RCharacterData = characters_by_id.get(authority_lord_id)
+	var rebel_name: String = rebel.character_name if rebel != null else "Unknown"
+	var auth_name: String = authority.character_name if authority != null else "Unknown"
+	topic.slug = "civil_war_%s_%s_refuses_%s_%d" % [
+		clan.to_lower(), rebel_name.to_lower().replace(" ", "_"),
+		order_type.to_lower().replace(" ", "_"), ic_day,
+	]
+	topic.tier = TopicData.Tier.TIER_2
+	topic.topic_type = "civil_war"
+	topic.variant = "civil_war_triggered"
+	topic.momentum = 60.0
+	topic.category = TopicData.Category.POLITICAL
+	topic.ic_day_created = ic_day
+	active_topics.append(topic)
+
+	var state: Dictionary = IntraClanCivilWar.make_initial_state(
+		rebel_lord_id, authority_lord_id, clan, topic_id, current_season,
+	)
+
+	var rebel_completion: float = _get_rebel_completion_rate(rebel_lord_id, objectives_map)
+	var rebel_was_failing: bool = rebel_completion < 0.50
+
+	var clan_npcs: Array[L5RCharacterData] = []
+	for c: L5RCharacterData in characters:
+		if c.clan == clan and not CharacterStats.is_dead(c):
+			clan_npcs.append(c)
+
+	var family_daimyo: Array[L5RCharacterData] = []
+	var others: Array[L5RCharacterData] = []
+	for c: L5RCharacterData in clan_npcs:
+		if c.character_id == rebel_lord_id or c.character_id == authority_lord_id:
+			continue
+		if c.status >= 5.0:
+			family_daimyo.append(c)
+		else:
+			others.append(c)
+
+	IntraClanCivilWar.assign_faction(
+		state, rebel_lord_id, IntraClanCivilWar.Faction.REBEL,
+	)
+	IntraClanCivilWar.assign_faction(
+		state, authority_lord_id, IntraClanCivilWar.Faction.LEGITIMACY,
+	)
+
+	var ronin_departures: Array[int] = []
+	var faction_counts: Dictionary = {
+		IntraClanCivilWar.Faction.LEGITIMACY: 1,
+		IntraClanCivilWar.Faction.REBEL: 1,
+		IntraClanCivilWar.Faction.RONIN: 0,
+	}
+
+	var all_to_evaluate: Array[L5RCharacterData] = []
+	all_to_evaluate.append_array(family_daimyo)
+	all_to_evaluate.append_array(others)
+
+	for npc: L5RCharacterData in all_to_evaluate:
+		var grievance_visible: bool = topic_id in npc.topic_pool
+		var loyalty: Dictionary = IntraClanCivilWar.evaluate_loyalty(
+			npc, rebel_lord_id, rebel_completion, grievance_visible,
+			rebel_was_failing,
+		)
+		var faction: int = int(loyalty.get("faction", IntraClanCivilWar.Faction.LEGITIMACY))
+
+		if faction == IntraClanCivilWar.Faction.RONIN:
+			IntraClanCivilWar.apply_ronin_departure(npc)
+			RoninSystem.make_ronin(npc, RoninSystem.RoninCause.VOLUNTARY_DEPARTURE)
+			npc.permanent_ronin = true
+			ronin_departures.append(npc.character_id)
+			faction_counts[IntraClanCivilWar.Faction.RONIN] = int(faction_counts.get(IntraClanCivilWar.Faction.RONIN, 0)) + 1
+		else:
+			IntraClanCivilWar.assign_faction(state, npc.character_id, faction)
+			faction_counts[faction] = int(faction_counts.get(faction, 0)) + 1
+
+	_reassign_broken_feudal_chains(state, characters_by_id, rebel_lord_id, authority_lord_id)
+
+	active_civil_wars.append(state)
+
+	return {
+		"triggered": true,
+		"clan": clan,
+		"rebel_lord_id": rebel_lord_id,
+		"authority_lord_id": authority_lord_id,
+		"topic_id": topic_id,
+		"faction_counts": faction_counts,
+		"ronin_departures": ronin_departures,
+	}
+
+
+static func _reassign_broken_feudal_chains(
+	state: Dictionary,
+	characters_by_id: Dictionary,
+	rebel_lord_id: int,
+	authority_lord_id: int,
+) -> void:
+	## When a vassal and their immediate lord are on opposite factions,
+	## reassign the vassal's lord_id to the highest-ranking member of
+	## their own faction in the chain. Per GDD s53.2.2.
+	var assignments: Dictionary = state.get("faction_assignments", {})
+	for cid_var: Variant in assignments.keys():
+		var cid: int = int(cid_var)
+		var npc: L5RCharacterData = characters_by_id.get(cid)
+		if npc == null:
+			continue
+		var npc_faction: int = int(assignments.get(cid, IntraClanCivilWar.Faction.NONE))
+		if npc_faction == IntraClanCivilWar.Faction.NONE:
+			continue
+
+		var lord: L5RCharacterData = characters_by_id.get(npc.lord_id)
+		if lord == null:
+			continue
+		var lord_faction: int = int(assignments.get(lord.character_id, IntraClanCivilWar.Faction.NONE))
+		if lord_faction == npc_faction:
+			continue
+
+		var best_lord_id: int = rebel_lord_id if npc_faction == IntraClanCivilWar.Faction.REBEL else authority_lord_id
+		var best_status: float = -1.0
+		for other_id_var: Variant in assignments.keys():
+			var other_id: int = int(other_id_var)
+			if other_id == cid:
+				continue
+			if int(assignments.get(other_id, IntraClanCivilWar.Faction.NONE)) != npc_faction:
+				continue
+			var other: L5RCharacterData = characters_by_id.get(other_id)
+			if other == null:
+				continue
+			if other.status > best_status:
+				best_status = other.status
+				best_lord_id = other_id
+		npc.lord_id = best_lord_id

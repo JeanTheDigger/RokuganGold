@@ -1,1 +1,125 @@
-{}
+{
+	"RAISE_DISPOSITION": {
+		"strong_support": 15,
+		"strong_opposition": -15
+	},
+	"DAMAGE_RELATIONSHIP": {
+		"strong_support": -15,
+		"strong_opposition": 15
+	},
+	"MOVE_TOPIC_POSITION": {
+		"strong_support": 15,
+		"strong_opposition": -15
+	},
+	"TRIGGER_COMMITMENT": {
+		"strong_support": 15,
+		"strong_opposition": -15
+	},
+	"GATHER_INTELLIGENCE": {
+		"strong_support": 10,
+		"strong_opposition": 0,
+		"topic_types": ["Spy_Uncovered", "Betrayal", "Succession_Dispute", "Kolat_Conspiracy", "Disappearance"]
+	},
+	"ACQUIRE_LEVERAGE": {
+		"strong_support": 12,
+		"strong_opposition": 0,
+		"topic_types": ["Spy_Uncovered", "Betrayal", "Kolat_Conspiracy", "Romantic_Scandal", "Disgrace"]
+	},
+	"IDENTIFY_CONTACT": {
+		"strong_support": 10,
+		"strong_opposition": -8
+	},
+	"LEVY_TROOPS": {
+		"strong_support": 15,
+		"strong_opposition": -10,
+		"topic_types": ["Clan_War", "Provincial_Raid", "Shadowlands_Incursion", "Siege_Beginning"]
+	},
+	"DEPLOY_ARMY": {
+		"strong_support": 15,
+		"strong_opposition": -10,
+		"topic_types": ["Clan_War", "Provincial_Raid", "Shadowlands_Incursion"]
+	},
+	"DEFEND_PROVINCE": {
+		"strong_support": 15,
+		"strong_opposition": 0,
+		"topic_types": ["Siege_Beginning", "Shadowlands_Incursion"]
+	},
+	"INITIATE_WAR_CHECK": {
+		"strong_support": 15,
+		"strong_opposition": -12,
+		"topic_types": ["Clan_War", "Provincial_Raid"]
+	},
+	"SEEK_PEACE": {
+		"strong_support": 15,
+		"strong_opposition": -15,
+		"topic_types": ["Clan_War", "Provincial_Raid"]
+	},
+	"CONDUCT_SIEGE": {
+		"strong_support": 15,
+		"strong_opposition": -10,
+		"topic_types": ["Clan_War"]
+	},
+	"CONDUCT_SORTIE": {
+		"strong_support": 12,
+		"strong_opposition": 0,
+		"topic_types": ["Siege_Beginning"]
+	},
+	"INVESTIGATE_THREAT": {
+		"strong_support": 15,
+		"strong_opposition": 0,
+		"topic_types": ["Shadowlands_Incursion", "Maho_Cult_Spreading", "Low_level_Taint_Discovered"]
+	},
+	"PATROL_PROVINCE": {
+		"strong_support": 12,
+		"strong_opposition": 0,
+		"topic_types": ["Provincial_Raid"]
+	},
+	"ACQUIRE_RESOURCE": {
+		"strong_support": 15,
+		"strong_opposition": 0,
+		"topic_types": ["Multi_Province_Famine", "Provincial_Famine", "Harvest_Failure"]
+	},
+	"REQUEST_AID": {
+		"strong_support": 12,
+		"strong_opposition": -10,
+		"topic_types": ["Provincial_Famine", "Siege_Beginning"]
+	},
+	"ADJUST_TAX": {
+		"strong_support": 10,
+		"strong_opposition": 0,
+		"topic_types": ["Resource_Shortage"]
+	},
+	"SEEK_GLORY": {
+		"strong_support": 10,
+		"strong_opposition": -5,
+		"topic_types": ["Battle_Outcome", "Duel", "Provincial_Raid", "Clan_War"]
+	},
+	"RESTORE_HONOR": {
+		"strong_support": 15,
+		"strong_opposition": 0,
+		"topic_types": ["Betrayal", "Disgrace"]
+	},
+	"MENTOR_CHARACTER": {
+		"strong_support": 8,
+		"strong_opposition": 0,
+		"topic_types": ["Promotion_or_Appointment"]
+	},
+	"ATTEND_COURT": {
+		"strong_support": 12,
+		"strong_opposition": -5
+	},
+	"EVALUATE_PROVINCES": {
+		"strong_support": 10,
+		"strong_opposition": 0,
+		"topic_types": ["Resource_Shortage", "Provincial_Famine", "Harvest_Failure"]
+	},
+	"PERFORM_RITUAL": {
+		"strong_support": 15,
+		"strong_opposition": 0,
+		"topic_types": ["Ancestor_Displeasure", "Omen_Observed", "Spirit_Manifestation", "Ancestral_Spirit_Disruption", "Cursed_Location_Discovered"]
+	},
+	"ASSIGN_OBJECTIVE": {
+		"strong_support": 8,
+		"strong_opposition": 0
+	}
+}

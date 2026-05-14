@@ -235,8 +235,10 @@ static func _select_objective_for_vassal(
 	if not threats.is_empty():
 		var top_threat: Dictionary = threats[0] if threats[0] is Dictionary else {}
 		if not top_threat.is_empty():
+			var nt: String = "ELIMINATE_SHADOWLANDS" if top_threat.get("type", "") == "shadowlands" else "MAINTAIN_PEACE"
 			return {
-				"objective_type": "ELIMINATE_SHADOWLANDS" if top_threat.get("type", "") == "shadowlands" else "MAINTAIN_PEACE",
+				"need_type": nt,
+				"objective_type": nt,
 				"assigning_lord_id": lord.character_id,
 				"status": "ACTIVE",
 				"target": top_threat.get("target", ""),
@@ -245,6 +247,7 @@ static func _select_objective_for_vassal(
 	var low_stability: Array = world_state.get("low_stability_provinces", [])
 	if not low_stability.is_empty():
 		return {
+			"need_type": "MAXIMIZE_PROSPERITY",
 			"objective_type": "MAXIMIZE_PROSPERITY",
 			"assigning_lord_id": lord.character_id,
 			"status": "ACTIVE",
@@ -252,6 +255,7 @@ static func _select_objective_for_vassal(
 		}
 
 	return {
+		"need_type": "MAINTAIN_PEACE",
 		"objective_type": "MAINTAIN_PEACE",
 		"assigning_lord_id": lord.character_id,
 		"status": "ACTIVE",
@@ -555,6 +559,7 @@ static func _evaluate_self_selection(
 		"vassal_id": lord.character_id,
 		"decision": "SELF_SELECT",
 		"new_objective": {
+			"need_type": selected["objective_type"],
 			"objective_type": selected["objective_type"],
 			"target_fields": selected["target_fields"],
 			"assigning_lord_id": lord.character_id,

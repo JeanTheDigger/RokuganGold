@@ -463,6 +463,7 @@ func _make_court_with_emperor(court_id: int, emperor_id: int) -> CourtSessionDat
 
 func test_court_close_generates_edicts_when_emperor_present():
 	var emperor := _make_emperor(1)
+	emperor.topic_positions[100] = 60.0
 	var chars_by_id: Dictionary = {1: emperor}
 	var world_states: Dictionary = {
 		"emperor_id": 1,
@@ -519,6 +520,7 @@ func test_court_close_no_edicts_without_emperor():
 
 func test_edict_topics_created_on_court_close():
 	var emperor := _make_emperor(1)
+	emperor.topic_positions[300] = 60.0
 	var chars_by_id: Dictionary = {1: emperor}
 	var world_states: Dictionary = {
 		"emperor_id": 1,
@@ -947,3 +949,733 @@ func test_inject_no_lord_found_skips():
 	DayOrchestrator._inject_edict_reactive_events(edicts, characters, world_states, 10)
 
 	assert_false(world_states.has(90), "No event injected when no lord found")
+
+
+# =============================================================================
+# AGGREGATE OPINION EDICT SELECTION (s16.4)
+# =============================================================================
+
+func _make_court(
+	court_id: int = 1,
+	agenda_ids: Array[int] = [],
+) -> CourtSessionData:
+	var c := CourtSessionData.new()
+	c.court_id = court_id
+	c.court_type = CourtSessionData.CourtType.IMPERIAL_WINTER_COURT
+	c.phase = CourtSessionData.CourtPhase.ACTIVE
+	c.emperor_present = true
+	c.agenda_topic_ids = agenda_ids
+	return c
+
+
+func _make_attendee(
+	id: int,
+	clan: String = "Crane",
+	status: float = 5.0,
+	family: String = "",
+) -> L5RCharacterData:
+	var c := L5RCharacterData.new()
+	c.character_id = id
+	c.clan = clan
+	c.family = family
+	c.status = status
+	c.bushido_virtue = Enums.BushidoVirtue.NONE
+	c.shourido_virtue = Enums.ShouridoVirtue.NONE
+	return c
+
+
+# -- Emperor Weight ------------------------------------------------------------
+
+func test_emperor_weight_formula():
+	var w: float = ImperialEdictSystem.compute_emperor_weight(10.0, 100.0)
+	assert_almost_eq(w, 60.0, 0.01)
+
+func test_emperor_weight_zero_relevance():
+	var w: float = ImperialEdictSystem.compute_emperor_weight(10.0, 0.0)
+	assert_almost_eq(w, 0.0, 0.01)
+
+func test_emperor_weight_half_relevance():
+	var w: float = ImperialEdictSystem.compute_emperor_weight(10.0, 50.0)
+	assert_almost_eq(w, 30.0, 0.01)
+
+
+# -- Topic Aggregate -----------------------------------------------------------
+
+func test_aggregate_positive_consensus():
+	var topic := _make_topic(1, 50.0, "famine", TopicData.Category.POLITICAL, "Crane")
+	var emperor := _make_attendee(100, "Imperial", 10.0)
+	emperor.topic_positions[1] = 50.0
+	var lord_a := _make_attendee(2, "Crane", 7.0)
+	lord_a.topic_positions[1] = 40.0
+	var lord_b := _make_attendee(3, "Lion", 6.0)
+	lord_b.topic_positions[1] = 30.0
+	var attendees: Array[L5RCharacterData] = [emperor, lord_a, lord_b]
+	var agg: float = ImperialEdictSystem.compute_topic_aggregate(topic, attendees, 100)
+	assert_true(agg > ImperialEdictSystem.EDICT_POSITIVE_THRESHOLD)
+
+func test_aggregate_negative_consensus():
+	var topic := _make_topic(1, 50.0, "war", TopicData.Category.MILITARY, "Lion")
+	var emperor := _make_attendee(100, "Imperial", 10.0)
+	emperor.topic_positions[1] = -60.0
+	var lord_a := _make_attendee(2, "Crane", 7.0)
+	lord_a.topic_positions[1] = -40.0
+	var attendees: Array[L5RCharacterData] = [emperor, lord_a]
+	var agg: float = ImperialEdictSystem.compute_topic_aggregate(topic, attendees, 100)
+	assert_true(agg < ImperialEdictSystem.EDICT_NEGATIVE_THRESHOLD)
+
+func test_aggregate_divided_no_edict():
+	var topic := _make_topic(1, 50.0, "famine", TopicData.Category.POLITICAL, "Crane")
+	var emperor := _make_attendee(100, "Imperial", 10.0)
+	emperor.topic_positions[1] = 10.0
+	var lord_a := _make_attendee(2, "Crane", 7.0)
+	lord_a.topic_positions[1] = 20.0
+	var lord_b := _make_attendee(3, "Lion", 7.0)
+	lord_b.topic_positions[1] = -20.0
+	var attendees: Array[L5RCharacterData] = [emperor, lord_a, lord_b]
+	var agg: float = ImperialEdictSystem.compute_topic_aggregate(topic, attendees, 100)
+	assert_true(agg > ImperialEdictSystem.EDICT_NEGATIVE_THRESHOLD and agg < ImperialEdictSystem.EDICT_POSITIVE_THRESHOLD)
+
+func test_aggregate_emperor_dominates():
+	var topic := _make_topic(1, 80.0, "shadowlands_incursion", TopicData.Category.MILITARY, "Crab", TopicData.Tier.TIER_1)
+	var emperor := _make_attendee(100, "Imperial", 10.0)
+	emperor.topic_positions[1] = 80.0
+	var lord_a := _make_attendee(2, "Scorpion", 5.0)
+	lord_a.topic_positions[1] = -10.0
+	var lord_b := _make_attendee(3, "Crane", 5.0)
+	lord_b.topic_positions[1] = -10.0
+	var attendees: Array[L5RCharacterData] = [emperor, lord_a, lord_b]
+	var agg: float = ImperialEdictSystem.compute_topic_aggregate(topic, attendees, 100)
+	assert_true(agg > 0.0, "Emperor x3 weight should keep aggregate positive")
+
+
+# -- Generate Edicts From Aggregate --------------------------------------------
+
+func test_generate_edicts_compelling():
+	var topic := _make_topic(1, 60.0, "famine", TopicData.Category.POLITICAL, "Crane")
+	var court := _make_court(1, [1])
+	var emperor := _make_attendee(100, "Imperial", 10.0)
+	emperor.topic_positions[1] = 50.0
+	var lord_a := _make_attendee(2, "Crane", 7.0)
+	lord_a.topic_positions[1] = 50.0
+	var attendees: Array[L5RCharacterData] = [emperor, lord_a]
+	var active_topics: Array[TopicData] = [topic]
+	var active_wars: Array[WarData] = []
+	var next_id: Array[int] = [1]
+	var result: Dictionary = ImperialEdictSystem.generate_edicts_from_aggregate(
+		emperor, StrategicReview.EmperorArchetype.IRON, court, attendees,
+		active_topics, active_wars, next_id, 100
+	)
+	assert_eq(result["edicts"].size(), 1)
+	assert_eq(result["aggregates"][0]["direction"], "compelling")
+	var edict: EdictData = result["edicts"][0]
+	assert_eq(edict.target_topic_id, 1)
+
+func test_generate_edicts_blocking():
+	var topic := _make_topic(1, 60.0, "war", TopicData.Category.MILITARY, "Lion")
+	var court := _make_court(1, [1])
+	var emperor := _make_attendee(100, "Imperial", 10.0)
+	emperor.topic_positions[1] = -60.0
+	var lord_a := _make_attendee(2, "Crane", 7.0)
+	lord_a.topic_positions[1] = -50.0
+	var attendees: Array[L5RCharacterData] = [emperor, lord_a]
+	var active_topics: Array[TopicData] = [topic]
+	var active_wars: Array[WarData] = []
+	var next_id: Array[int] = [1]
+	var result: Dictionary = ImperialEdictSystem.generate_edicts_from_aggregate(
+		emperor, StrategicReview.EmperorArchetype.IRON, court, attendees,
+		active_topics, active_wars, next_id, 100
+	)
+	assert_eq(result["edicts"].size(), 1)
+	assert_eq(result["aggregates"][0]["direction"], "blocking")
+
+func test_generate_edicts_no_edict_divided():
+	var topic := _make_topic(1, 60.0, "famine", TopicData.Category.POLITICAL, "Crane")
+	var court := _make_court(1, [1])
+	var emperor := _make_attendee(100, "Imperial", 10.0)
+	emperor.topic_positions[1] = 5.0
+	var lord_a := _make_attendee(2, "Crane", 7.0)
+	lord_a.topic_positions[1] = -5.0
+	var attendees: Array[L5RCharacterData] = [emperor, lord_a]
+	var active_topics: Array[TopicData] = [topic]
+	var active_wars: Array[WarData] = []
+	var next_id: Array[int] = [1]
+	var result: Dictionary = ImperialEdictSystem.generate_edicts_from_aggregate(
+		emperor, StrategicReview.EmperorArchetype.IRON, court, attendees,
+		active_topics, active_wars, next_id, 100
+	)
+	assert_eq(result["edicts"].size(), 0)
+	assert_eq(result["aggregates"][0]["direction"], "none")
+
+func test_generate_edicts_max_3():
+	var topics: Array[TopicData] = []
+	var ids: Array[int] = []
+	for i: int in range(4):
+		var t := _make_topic(i + 1, 80.0 - float(i), "famine", TopicData.Category.POLITICAL, "Crane")
+		topics.append(t)
+		ids.append(i + 1)
+	var court := _make_court(1, ids)
+	var emperor := _make_attendee(100, "Imperial", 10.0)
+	var lord_a := _make_attendee(2, "Crane", 7.0)
+	for t: TopicData in topics:
+		emperor.topic_positions[t.topic_id] = 60.0
+		lord_a.topic_positions[t.topic_id] = 60.0
+	var attendees: Array[L5RCharacterData] = [emperor, lord_a]
+	var active_wars: Array[WarData] = []
+	var next_id: Array[int] = [1]
+	var result: Dictionary = ImperialEdictSystem.generate_edicts_from_aggregate(
+		emperor, StrategicReview.EmperorArchetype.TYRANT, court, attendees,
+		topics, active_wars, next_id, 100
+	)
+	assert_true(result["edicts"].size() <= ImperialEdictSystem.MAX_EDICTS_PER_WINTER_COURT)
+
+func test_generate_edicts_top_3_momentum():
+	var t1 := _make_topic(1, 90.0, "famine", TopicData.Category.POLITICAL, "Crane")
+	var t2 := _make_topic(2, 50.0, "criminal", TopicData.Category.POLITICAL, "Lion")
+	var t3 := _make_topic(3, 30.0, "border_raid", TopicData.Category.MILITARY, "Dragon")
+	var t4 := _make_topic(4, 10.0, "famine", TopicData.Category.POLITICAL, "Phoenix")
+	var court := _make_court(1, [1, 2, 3, 4])
+	var emperor := _make_attendee(100, "Imperial", 10.0)
+	for t: TopicData in [t1, t2, t3, t4]:
+		emperor.topic_positions[t.topic_id] = 60.0
+	var attendees: Array[L5RCharacterData] = [emperor]
+	var active_topics: Array[TopicData] = [t1, t2, t3, t4]
+	var active_wars: Array[WarData] = []
+	var next_id: Array[int] = [1]
+	var result: Dictionary = ImperialEdictSystem.generate_edicts_from_aggregate(
+		emperor, StrategicReview.EmperorArchetype.IRON, court, attendees,
+		active_topics, active_wars, next_id, 100
+	)
+	assert_eq(result["aggregates"].size(), 3, "Only top 3 by momentum evaluated")
+
+func test_famine_edict_type_is_tax_reform():
+	var topic := _make_topic(1, 60.0, "famine", TopicData.Category.POLITICAL, "Crane")
+	var court := _make_court(1, [1])
+	var emperor := _make_attendee(100, "Imperial", 10.0)
+	emperor.topic_positions[1] = 80.0
+	var attendees: Array[L5RCharacterData] = [emperor]
+	var active_topics: Array[TopicData] = [topic]
+	var active_wars: Array[WarData] = []
+	var next_id: Array[int] = [1]
+	var result: Dictionary = ImperialEdictSystem.generate_edicts_from_aggregate(
+		emperor, StrategicReview.EmperorArchetype.IRON, court, attendees,
+		active_topics, active_wars, next_id, 100
+	)
+	assert_eq(result["edicts"].size(), 1)
+	var edict: EdictData = result["edicts"][0]
+	assert_eq(edict.edict_type, EdictData.EdictType.TAX_REFORM)
+
+func test_war_topic_creates_cease_hostilities():
+	var topic := _make_topic(1, 60.0, "war", TopicData.Category.MILITARY, "Lion")
+	var court := _make_court(1, [1])
+	var war := _make_war(1, "Lion", "Crane")
+	var emperor := _make_attendee(100, "Imperial", 10.0)
+	emperor.topic_positions[1] = 80.0
+	var attendees: Array[L5RCharacterData] = [emperor]
+	var active_topics: Array[TopicData] = [topic]
+	var active_wars: Array[WarData] = [war]
+	var next_id: Array[int] = [1]
+	var result: Dictionary = ImperialEdictSystem.generate_edicts_from_aggregate(
+		emperor, StrategicReview.EmperorArchetype.IRON, court, attendees,
+		active_topics, active_wars, next_id, 100
+	)
+	assert_eq(result["edicts"].size(), 1)
+	var edict: EdictData = result["edicts"][0]
+	assert_eq(edict.edict_type, EdictData.EdictType.CEASE_HOSTILITIES)
+
+func test_archetype_limits_edict_count():
+	var topic := _make_topic(1, 60.0, "famine", TopicData.Category.POLITICAL, "Crane")
+	var court := _make_court(1, [1])
+	var emperor := _make_attendee(100, "Imperial", 10.0)
+	emperor.topic_positions[1] = 80.0
+	var attendees: Array[L5RCharacterData] = [emperor]
+	var active_topics: Array[TopicData] = [topic]
+	var active_wars: Array[WarData] = []
+	var next_id: Array[int] = [1]
+	var result: Dictionary = ImperialEdictSystem.generate_edicts_from_aggregate(
+		emperor, StrategicReview.EmperorArchetype.BENEVOLENT, court, attendees,
+		active_topics, active_wars, next_id, 100
+	)
+	assert_eq(result["edicts"].size(), 1)
+
+
+# -- Commitment Type for Crisis ------------------------------------------------
+
+func test_commitment_type_famine():
+	var t := _make_topic(1, 50.0, "famine")
+	assert_eq(ImperialEdictSystem.get_commitment_type_for_topic(t), "send_supplies")
+
+func test_commitment_type_shadowlands():
+	var t := _make_topic(1, 50.0, "shadowlands_incursion")
+	assert_eq(ImperialEdictSystem.get_commitment_type_for_topic(t), "send_military_aid")
+
+func test_commitment_type_maho():
+	var t := _make_topic(1, 50.0, "maho_cult")
+	assert_eq(ImperialEdictSystem.get_commitment_type_for_topic(t), "send_magistrates")
+
+func test_commitment_type_unknown():
+	var t := _make_topic(1, 50.0, "unknown_crisis")
+	assert_eq(ImperialEdictSystem.get_commitment_type_for_topic(t), "")
+
+
+# -- Edict Commitment Generation -----------------------------------------------
+
+func test_generate_edict_commitments():
+	var topic := _make_topic(1, 50.0, "famine")
+	var edict := ImperialEdictSystem.create_edict(1, EdictData.EdictType.TAX_REFORM, 100, 500)
+	edict.target_topic_id = 1
+	var lord_a := _make_attendee(2, "Crane", 7.0)
+	var lord_b := _make_attendee(3, "Lion", 6.0)
+	var lords: Array[L5RCharacterData] = [lord_a, lord_b]
+	var commitments: Array[CourtCommitmentData] = ImperialEdictSystem.generate_edict_commitments(
+		edict, topic, lords, 500, 590
+	)
+	assert_eq(commitments.size(), 2)
+	assert_eq(commitments[0].lord_id, 2)
+	assert_eq(commitments[0].commitment_type, "send_supplies")
+	assert_eq(commitments[0].source, CourtCommitmentData.CommitmentSource.EDICT)
+	assert_eq(commitments[0].deadline_ic_day, 590)
+	assert_eq(commitments[1].lord_id, 3)
+
+func test_generate_edict_commitments_unknown_type_empty():
+	var topic := _make_topic(1, 50.0, "unknown_type")
+	var edict := ImperialEdictSystem.create_edict(1, EdictData.EdictType.GENERAL_DECREE, 100, 500)
+	var lords: Array[L5RCharacterData] = [_make_attendee(2)]
+	var commitments: Array[CourtCommitmentData] = ImperialEdictSystem.generate_edict_commitments(
+		edict, topic, lords, 500, 590
+	)
+	assert_eq(commitments.size(), 0)
+
+
+# -- Orchestrator Commitment Wiring --------------------------------------------
+
+func test_court_close_creates_commitments_for_lords():
+	var emperor := _make_emperor(1)
+	emperor.topic_positions[50] = 60.0
+	var lord_a := _make_attendee(10, "Crane", 7.0)
+	lord_a.lord_id = -1
+	var lord_b := _make_attendee(11, "Lion", 6.0)
+	lord_b.lord_id = -1
+	var vassal := _make_attendee(12, "Crane", 3.0)
+	vassal.lord_id = 10
+	var chars_by_id: Dictionary = {1: emperor, 10: lord_a, 11: lord_b, 12: vassal}
+	var characters: Array[L5RCharacterData] = [emperor, lord_a, lord_b, vassal]
+	var world_states: Dictionary = {
+		"emperor_id": 1,
+		"emperor_archetype": StrategicReview.EmperorArchetype.IRON,
+	}
+	var topic := _make_topic(50, 60.0, "famine", TopicData.Category.POLITICAL, "Crane")
+	var active_topics: Array[TopicData] = [topic]
+	var court := _make_court_with_emperor(1, 1)
+	court.agenda_topic_ids = [50]
+	var active_courts: Array[CourtSessionData] = [court]
+	var active_edicts: Array[EdictData] = []
+	var next_edict_id: Array[int] = [1]
+	var next_topic_id: Array[int] = [500]
+	var court_commitments: Array[CourtCommitmentData] = []
+
+	DayOrchestrator._process_active_courts(
+		active_courts, active_topics, next_topic_id, 100,
+		active_edicts, next_edict_id, [],
+		chars_by_id, world_states,
+		court_commitments, characters,
+	)
+	assert_true(court_commitments.size() > 0, "Commitments should be created")
+	for cc: CourtCommitmentData in court_commitments:
+		assert_eq(cc.source, CourtCommitmentData.CommitmentSource.EDICT)
+		assert_eq(cc.commitment_type, "send_supplies")
+
+func test_court_close_commitments_only_for_lords():
+	var emperor := _make_emperor(1)
+	emperor.topic_positions[50] = 60.0
+	var lord := _make_attendee(10, "Crane", 7.0)
+	lord.lord_id = -1
+	var vassal := _make_attendee(12, "Crane", 3.0)
+	vassal.lord_id = 10
+	var chars_by_id: Dictionary = {1: emperor, 10: lord, 12: vassal}
+	var characters: Array[L5RCharacterData] = [emperor, lord, vassal]
+	var world_states: Dictionary = {
+		"emperor_id": 1,
+		"emperor_archetype": StrategicReview.EmperorArchetype.IRON,
+	}
+	var topic := _make_topic(50, 60.0, "famine", TopicData.Category.POLITICAL, "Crane")
+	var active_topics: Array[TopicData] = [topic]
+	var court := _make_court_with_emperor(1, 1)
+	court.agenda_topic_ids = [50]
+	var active_courts: Array[CourtSessionData] = [court]
+	var active_edicts: Array[EdictData] = []
+	var next_edict_id: Array[int] = [1]
+	var next_topic_id: Array[int] = [500]
+	var court_commitments: Array[CourtCommitmentData] = []
+
+	DayOrchestrator._process_active_courts(
+		active_courts, active_topics, next_topic_id, 100,
+		active_edicts, next_edict_id, [],
+		chars_by_id, world_states,
+		court_commitments, characters,
+	)
+	for cc: CourtCommitmentData in court_commitments:
+		assert_true(cc.lord_id == 1 or cc.lord_id == 10, "Only lord-tier chars get commitments")
+
+func test_no_commitments_when_no_edict():
+	var emperor := _make_emperor(1)
+	emperor.topic_positions[50] = 5.0
+	var chars_by_id: Dictionary = {1: emperor}
+	var characters: Array[L5RCharacterData] = [emperor]
+	var world_states: Dictionary = {
+		"emperor_id": 1,
+		"emperor_archetype": StrategicReview.EmperorArchetype.IRON,
+	}
+	var topic := _make_topic(50, 60.0, "famine", TopicData.Category.POLITICAL, "Crane")
+	var active_topics: Array[TopicData] = [topic]
+	var court := _make_court_with_emperor(1, 1)
+	court.agenda_topic_ids = [50]
+	var active_courts: Array[CourtSessionData] = [court]
+	var active_edicts: Array[EdictData] = []
+	var next_edict_id: Array[int] = [1]
+	var next_topic_id: Array[int] = [500]
+	var court_commitments: Array[CourtCommitmentData] = []
+
+	DayOrchestrator._process_active_courts(
+		active_courts, active_topics, next_topic_id, 100,
+		active_edicts, next_edict_id, [],
+		chars_by_id, world_states,
+		court_commitments, characters,
+	)
+	assert_eq(court_commitments.size(), 0, "No commitments when aggregate between thresholds")
+
+
+# -- Commitment Need Injection -------------------------------------------------
+
+func test_inject_commitment_needs_creates_pending_event():
+	var lord := _make_attendee(10, "Crane", 7.0)
+	lord.lord_id = -1
+	lord.bushido_virtue = Enums.BushidoVirtue.NONE
+	var characters: Array[L5RCharacterData] = [lord]
+	var cc := CourtCommitmentSystem.create_edict_commitment(10, 50, "send_supplies", 100, 200, 3)
+	var court_commitments: Array[CourtCommitmentData] = [cc]
+	var world_states: Dictionary = {}
+
+	DayOrchestrator._inject_commitment_needs(court_commitments, characters, world_states)
+	var ws: Dictionary = world_states.get(10, {})
+	var events: Array = ws.get("pending_events", [])
+	assert_eq(events.size(), 1)
+	assert_eq(events[0]["need_type"], "HONOR_COMMITMENT")
+	assert_eq(events[0]["priority"], 95)
+	assert_eq(events[0]["source"], "commitment_honor")
+	assert_eq(events[0]["topic_id"], 50)
+
+func test_inject_commitment_needs_chugi_priority():
+	var lord := _make_attendee(10, "Crane", 7.0)
+	lord.lord_id = -1
+	lord.bushido_virtue = Enums.BushidoVirtue.CHUGI
+	var characters: Array[L5RCharacterData] = [lord]
+	var cc := CourtCommitmentSystem.create_edict_commitment(10, 50, "send_supplies", 100, 200, 3)
+	var court_commitments: Array[CourtCommitmentData] = [cc]
+	var world_states: Dictionary = {}
+
+	DayOrchestrator._inject_commitment_needs(court_commitments, characters, world_states)
+	var events: Array = world_states.get(10, {}).get("pending_events", [])
+	assert_eq(events[0]["priority"], 100)
+
+func test_inject_commitment_needs_skips_fulfilled():
+	var lord := _make_attendee(10, "Crane", 7.0)
+	lord.lord_id = -1
+	lord.bushido_virtue = Enums.BushidoVirtue.NONE
+	var characters: Array[L5RCharacterData] = [lord]
+	var cc := CourtCommitmentSystem.create_edict_commitment(10, 50, "send_supplies", 100, 200, 3)
+	cc.fulfilled = true
+	var court_commitments: Array[CourtCommitmentData] = [cc]
+	var world_states: Dictionary = {}
+
+	DayOrchestrator._inject_commitment_needs(court_commitments, characters, world_states)
+	assert_false(world_states.has(10))
+
+func test_inject_commitment_needs_deduplicates():
+	var lord := _make_attendee(10, "Crane", 7.0)
+	lord.lord_id = -1
+	lord.bushido_virtue = Enums.BushidoVirtue.NONE
+	var characters: Array[L5RCharacterData] = [lord]
+	var cc := CourtCommitmentSystem.create_edict_commitment(10, 50, "send_supplies", 100, 200, 3)
+	var court_commitments: Array[CourtCommitmentData] = [cc]
+	var world_states: Dictionary = {}
+
+	DayOrchestrator._inject_commitment_needs(court_commitments, characters, world_states)
+	DayOrchestrator._inject_commitment_needs(court_commitments, characters, world_states)
+	var events: Array = world_states.get(10, {}).get("pending_events", [])
+	assert_eq(events.size(), 1, "Should not duplicate injection")
+
+func test_inject_commitment_needs_multiple_lords():
+	var lord_a := _make_attendee(10, "Crane", 7.0)
+	lord_a.lord_id = -1
+	lord_a.bushido_virtue = Enums.BushidoVirtue.NONE
+	var lord_b := _make_attendee(11, "Lion", 7.0)
+	lord_b.lord_id = -1
+	lord_b.bushido_virtue = Enums.BushidoVirtue.NONE
+	var characters: Array[L5RCharacterData] = [lord_a, lord_b]
+	var cc_a := CourtCommitmentSystem.create_edict_commitment(10, 50, "send_supplies", 100, 200, 3)
+	var cc_b := CourtCommitmentSystem.create_edict_commitment(11, 50, "send_military_aid", 100, 200, -1)
+	var court_commitments: Array[CourtCommitmentData] = [cc_a, cc_b]
+	var world_states: Dictionary = {}
+
+	DayOrchestrator._inject_commitment_needs(court_commitments, characters, world_states)
+	assert_eq(world_states.get(10, {}).get("pending_events", []).size(), 1)
+	assert_eq(world_states.get(11, {}).get("pending_events", []).size(), 1)
+
+
+# -- Commitment Seasonal Processing --------------------------------------------
+
+func test_commitment_seasonal_empty():
+	var commitments: Array[CourtCommitmentData] = []
+	var log: Array[Dictionary] = []
+	var topics: Array[TopicData] = []
+	var next_id: Array[int] = [500]
+	var result: Dictionary = DayOrchestrator._process_commitment_seasonal(
+		commitments, log, 250, {}, topics, next_id,
+	)
+	assert_true(result.is_empty())
+
+func test_commitment_seasonal_detects_fulfillment():
+	var lord := _make_attendee(10, "Crane", 5.0)
+	lord.honor = 5.0
+	var cc := CourtCommitmentSystem.create_edict_commitment(10, 50, "send_supplies", 100, 200, 5)
+	var commitments: Array[CourtCommitmentData] = [cc]
+	var log: Array[Dictionary] = [
+		{"character_id": 10, "action_id": "SHARE_SUPPLIES", "amount": 5},
+	]
+	var chars_by_id: Dictionary = {10: lord}
+	var topics: Array[TopicData] = []
+	var next_id: Array[int] = [500]
+	var result: Dictionary = DayOrchestrator._process_commitment_seasonal(
+		commitments, log, 150, chars_by_id, topics, next_id,
+	)
+	assert_eq(result["fulfilled_count"], 1)
+	assert_true(cc.fulfilled)
+	assert_eq(topics.size(), 0, "No topic for fulfilled commitment")
+
+func test_commitment_seasonal_renege_applies_honor():
+	var lord := _make_attendee(10, "Crane", 5.0)
+	lord.honor = 5.0
+	var cc := CourtCommitmentSystem.create_edict_commitment(10, 50, "send_supplies", 100, 200, 100)
+	var commitments: Array[CourtCommitmentData] = [cc]
+	var log: Array[Dictionary] = []
+	var chars_by_id: Dictionary = {10: lord}
+	var topics: Array[TopicData] = []
+	var next_id: Array[int] = [500]
+	DayOrchestrator._process_commitment_seasonal(
+		commitments, log, 250, chars_by_id, topics, next_id,
+	)
+	assert_true(lord.honor < 5.0, "Honor should decrease on renege")
+
+func test_commitment_seasonal_renege_generates_topic():
+	var lord := _make_attendee(10, "Crane", 5.0)
+	lord.honor = 5.0
+	var cc := CourtCommitmentSystem.create_edict_commitment(10, 50, "send_supplies", 100, 200, 100)
+	var commitments: Array[CourtCommitmentData] = [cc]
+	var log: Array[Dictionary] = []
+	var chars_by_id: Dictionary = {10: lord}
+	var topics: Array[TopicData] = []
+	var next_id: Array[int] = [500]
+	DayOrchestrator._process_commitment_seasonal(
+		commitments, log, 250, chars_by_id, topics, next_id,
+	)
+	assert_eq(topics.size(), 1, "Renege should generate a topic")
+	assert_eq(topics[0].topic_type, "renege")
+	assert_eq(topics[0].variant, "commitment_broken")
+	assert_eq(topics[0].category, TopicData.Category.POLITICAL)
+
+func test_commitment_seasonal_renege_disposition_penalty():
+	var lord := _make_attendee(10, "Crane", 5.0)
+	lord.honor = 5.0
+	var other := _make_attendee(11, "Lion", 5.0)
+	other.disposition_values[10] = 20
+	var cc := CourtCommitmentSystem.create_edict_commitment(10, 50, "send_supplies", 100, 200, 100)
+	var commitments: Array[CourtCommitmentData] = [cc]
+	var log: Array[Dictionary] = []
+	var chars_by_id: Dictionary = {10: lord, 11: other}
+	var topics: Array[TopicData] = []
+	var next_id: Array[int] = [500]
+	DayOrchestrator._process_commitment_seasonal(
+		commitments, log, 250, chars_by_id, topics, next_id,
+	)
+	assert_eq(other.disposition_values[10], 5, "Others disposition toward reneging lord should drop by 15")
+
+func test_commitment_seasonal_edict_renege_tier_2_topic():
+	var lord := _make_attendee(10, "Crane", 5.0)
+	lord.honor = 3.0
+	var cc := CourtCommitmentSystem.create_edict_commitment(10, 50, "send_supplies", 100, 200, 100)
+	var commitments: Array[CourtCommitmentData] = [cc]
+	var log: Array[Dictionary] = []
+	var chars_by_id: Dictionary = {10: lord}
+	var topics: Array[TopicData] = []
+	var next_id: Array[int] = [500]
+	DayOrchestrator._process_commitment_seasonal(
+		commitments, log, 250, chars_by_id, topics, next_id,
+	)
+	assert_eq(topics[0].tier, 2, "Edict renege should produce Tier 2 topic")
+	assert_eq(topics[0].momentum, 30.0, "Tier 2 topic gets higher momentum")
+
+func test_commitment_seasonal_next_topic_id_increments():
+	var lord := _make_attendee(10, "Crane", 5.0)
+	lord.honor = 5.0
+	var cc := CourtCommitmentSystem.create_edict_commitment(10, 50, "send_supplies", 100, 200, 100)
+	var commitments: Array[CourtCommitmentData] = [cc]
+	var log: Array[Dictionary] = []
+	var chars_by_id: Dictionary = {10: lord}
+	var topics: Array[TopicData] = []
+	var next_id: Array[int] = [500]
+	DayOrchestrator._process_commitment_seasonal(
+		commitments, log, 250, chars_by_id, topics, next_id,
+	)
+	assert_eq(next_id[0], 501)
+	assert_eq(topics[0].topic_id, 500)
+
+
+# -- Voluntary Declaration Wiring ---------------------------------------------
+
+func _make_active_court(court_id: int, attendees: Array[int] = [],
+		agenda: Array[int] = []) -> CourtSessionData:
+	var c := CourtSessionData.new()
+	c.court_id = court_id
+	c.phase = CourtSessionData.CourtPhase.ACTIVE
+	c.attendee_ids = attendees
+	c.agenda_topic_ids = agenda
+	return c
+
+func _make_declaration_result(lord_id: int, success: bool = true) -> Dictionary:
+	var effects: Dictionary = {}
+	if not success:
+		effects["failed"] = true
+	else:
+		effects["witness_disposition_gain"] = 2
+	return {
+		"action_id": "PUBLIC_DECLARATION",
+		"character_id": lord_id,
+		"effects": effects,
+	}
+
+func test_voluntary_declaration_creates_commitment():
+	var lord := _make_attendee(10, "Crane", 7.0)
+	lord.lord_id = -1
+	lord.topic_positions[50] = 60.0
+	var chars_by_id: Dictionary = {10: lord}
+	var topic := _make_topic(50, 40.0, "famine", TopicData.Category.POLITICAL)
+	var active_topics: Array[TopicData] = [topic]
+	var court := _make_active_court(1, [10], [50])
+	var active_courts: Array[CourtSessionData] = [court]
+	var court_commitments: Array[CourtCommitmentData] = []
+	var ts := TimeSystem.new(1120, 45)  # Mid-Spring (day 45)
+	var results: Array = [_make_declaration_result(10)]
+	var created: Array[CourtCommitmentData] = DayOrchestrator._process_voluntary_declarations(
+		results, active_courts, active_topics, court_commitments,
+		chars_by_id, 45, ts,
+	)
+	assert_eq(created.size(), 1)
+	assert_eq(created[0].lord_id, 10)
+	assert_eq(created[0].topic_id, 50)
+	assert_eq(created[0].commitment_type, "send_supplies")
+	assert_eq(created[0].source, CourtCommitmentData.CommitmentSource.VOLUNTARY)
+
+func test_voluntary_declaration_skips_failed():
+	var lord := _make_attendee(10, "Crane", 7.0)
+	lord.lord_id = -1
+	lord.topic_positions[50] = 60.0
+	var chars_by_id: Dictionary = {10: lord}
+	var topic := _make_topic(50, 40.0, "famine", TopicData.Category.POLITICAL)
+	var active_topics: Array[TopicData] = [topic]
+	var court := _make_active_court(1, [10], [50])
+	var active_courts: Array[CourtSessionData] = [court]
+	var court_commitments: Array[CourtCommitmentData] = []
+	var ts := TimeSystem.new(1120, 45)
+	var results: Array = [_make_declaration_result(10, false)]
+	var created: Array[CourtCommitmentData] = DayOrchestrator._process_voluntary_declarations(
+		results, active_courts, active_topics, court_commitments,
+		chars_by_id, 45, ts,
+	)
+	assert_eq(created.size(), 0)
+
+func test_voluntary_declaration_skips_non_lord():
+	var vassal := _make_attendee(10, "Crane", 3.0)
+	vassal.lord_id = 5
+	vassal.topic_positions[50] = 60.0
+	var chars_by_id: Dictionary = {10: vassal}
+	var topic := _make_topic(50, 40.0, "famine", TopicData.Category.POLITICAL)
+	var active_topics: Array[TopicData] = [topic]
+	var court := _make_active_court(1, [10], [50])
+	var active_courts: Array[CourtSessionData] = [court]
+	var court_commitments: Array[CourtCommitmentData] = []
+	var ts := TimeSystem.new(1120, 45)
+	var results: Array = [_make_declaration_result(10)]
+	var created: Array[CourtCommitmentData] = DayOrchestrator._process_voluntary_declarations(
+		results, active_courts, active_topics, court_commitments,
+		chars_by_id, 45, ts,
+	)
+	assert_eq(created.size(), 0)
+
+func test_voluntary_declaration_skips_below_threshold():
+	var lord := _make_attendee(10, "Crane", 7.0)
+	lord.lord_id = -1
+	lord.topic_positions[50] = 40.0
+	var chars_by_id: Dictionary = {10: lord}
+	var topic := _make_topic(50, 40.0, "famine", TopicData.Category.POLITICAL)
+	var active_topics: Array[TopicData] = [topic]
+	var court := _make_active_court(1, [10], [50])
+	var active_courts: Array[CourtSessionData] = [court]
+	var court_commitments: Array[CourtCommitmentData] = []
+	var ts := TimeSystem.new(1120, 45)
+	var results: Array = [_make_declaration_result(10)]
+	var created: Array[CourtCommitmentData] = DayOrchestrator._process_voluntary_declarations(
+		results, active_courts, active_topics, court_commitments,
+		chars_by_id, 45, ts,
+	)
+	assert_eq(created.size(), 0)
+
+func test_voluntary_declaration_no_duplicate():
+	var lord := _make_attendee(10, "Crane", 7.0)
+	lord.lord_id = -1
+	lord.topic_positions[50] = 60.0
+	var chars_by_id: Dictionary = {10: lord}
+	var topic := _make_topic(50, 40.0, "famine", TopicData.Category.POLITICAL)
+	var active_topics: Array[TopicData] = [topic]
+	var court := _make_active_court(1, [10], [50])
+	var active_courts: Array[CourtSessionData] = [court]
+	var existing_cc := CourtCommitmentSystem.create_commitment(
+		10, 50, "send_supplies", CourtCommitmentData.CommitmentSource.VOLUNTARY, 40, 200,
+	)
+	var court_commitments: Array[CourtCommitmentData] = [existing_cc]
+	var ts := TimeSystem.new(1120, 45)
+	var results: Array = [_make_declaration_result(10)]
+	var created: Array[CourtCommitmentData] = DayOrchestrator._process_voluntary_declarations(
+		results, active_courts, active_topics, court_commitments,
+		chars_by_id, 45, ts,
+	)
+	assert_eq(created.size(), 0, "Should not create duplicate commitment")
+
+func test_voluntary_declaration_not_at_court():
+	var lord := _make_attendee(10, "Crane", 7.0)
+	lord.lord_id = -1
+	lord.topic_positions[50] = 60.0
+	var chars_by_id: Dictionary = {10: lord}
+	var topic := _make_topic(50, 40.0, "famine", TopicData.Category.POLITICAL)
+	var active_topics: Array[TopicData] = [topic]
+	var court := _make_active_court(1, [20], [50])  # lord NOT in attendees
+	var active_courts: Array[CourtSessionData] = [court]
+	var court_commitments: Array[CourtCommitmentData] = []
+	var ts := TimeSystem.new(1120, 45)
+	var results: Array = [_make_declaration_result(10)]
+	var created: Array[CourtCommitmentData] = DayOrchestrator._process_voluntary_declarations(
+		results, active_courts, active_topics, court_commitments,
+		chars_by_id, 45, ts,
+	)
+	assert_eq(created.size(), 0)
+
+func test_next_season_end_spring():
+	var ts := TimeSystem.new(1120, 45)  # Day 45 = mid Spring
+	# Current season end: day 89 (Spring). Next season end: day 179 (Summer)
+	var result: int = DayOrchestrator._compute_next_season_end_ic_day(ts)
+	assert_eq(result, 179)
+
+func test_next_season_end_winter():
+	var ts := TimeSystem.new(1120, 300)  # Day 300 = Winter
+	# Current season end: day 359. Next season end: Spring of next year = day 449
+	var result: int = DayOrchestrator._compute_next_season_end_ic_day(ts)
+	assert_eq(result, 449)

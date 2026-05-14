@@ -263,6 +263,10 @@
 		"primary": "Investigation",
 		"secondary": "Perception"
 	},
+	"EXAMINE_LETTER": {
+		"primary": "Investigation",
+		"secondary": "Perception"
+	},
 	"INVESTIGATE_PROVINCE": {
 		"primary": "Investigation",
 		"secondary": "Lore: Shadowlands"
@@ -394,5 +398,17 @@
 	"SCOUT_ENEMY": {
 		"primary": "Battle",
 		"secondary": "Perception"
+	},
+	"PROVOKE_EMOTION": {
+		"primary": "Courtier",
+		"secondary": "Awareness"
+	},
+	"PLAY_GAME": {
+		"primary": "Games",
+		"secondary": "Awareness"
+	},
+	"DISCERN_NEED": {
+		"primary": "Investigation",
+		"secondary": "Awareness"
 	}
 }

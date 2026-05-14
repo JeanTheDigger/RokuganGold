@@ -57,6 +57,63 @@ static func select_topic_to_share(character: L5RCharacterData, rng_value: int) -
 	return character.topic_pool[index]
 
 
+static func _compute_topic_relevance(
+	topic: TopicData,
+	character: L5RCharacterData,
+) -> float:
+	var clan_relation: TopicMomentumSystem.ClanRelation
+	if topic.clan_involved == character.clan and not topic.clan_involved.is_empty():
+		clan_relation = TopicMomentumSystem.ClanRelation.OWN
+	else:
+		clan_relation = TopicMomentumSystem.ClanRelation.DISTANT
+
+	var is_own_family: bool = (
+		not topic.family_involved.is_empty()
+		and topic.family_involved == character.family
+		and topic.clan_involved == character.clan
+	)
+	var is_same_clan_family: bool = (
+		not topic.family_involved.is_empty()
+		and topic.clan_involved == character.clan
+		and topic.family_involved != character.family
+	)
+
+	return TopicMomentumSystem.calculate_personal_relevance(
+		topic, clan_relation, is_own_family, is_same_clan_family
+	)
+
+
+static func select_topic_to_share_weighted(
+	character: L5RCharacterData,
+	rng_value: int,
+	topics_by_id: Dictionary,
+) -> int:
+	if character.topic_pool.is_empty():
+		return -1
+
+	var weights: Array[float] = []
+	var total_weight: float = 0.0
+	for tid: int in character.topic_pool:
+		var topic: TopicData = topics_by_id.get(tid)
+		var w: float = 1.0
+		if topic != null:
+			w = maxf(_compute_topic_relevance(topic, character), 1.0)
+		weights.append(w)
+		total_weight += w
+
+	if total_weight <= 0.0:
+		return character.topic_pool[0]
+
+	var pick: float = float(rng_value % 100) / 100.0 * total_weight
+	var cumulative: float = 0.0
+	for i: int in range(weights.size()):
+		cumulative += weights[i]
+		if pick < cumulative:
+			return character.topic_pool[i]
+
+	return character.topic_pool[character.topic_pool.size() - 1]
+
+
 static func transfer_topic(
 	_from_char: L5RCharacterData,
 	to_char: L5RCharacterData,
@@ -87,9 +144,16 @@ static func resolve_conversation(
 	rng_a: int,
 	rng_b: int,
 	current_season: int,
+	topics_by_id: Dictionary = {},
 ) -> Dictionary:
-	var topic_a: int = select_topic_to_share(char_a, rng_a)
-	var topic_b: int = select_topic_to_share(char_b, rng_b)
+	var topic_a: int
+	var topic_b: int
+	if topics_by_id.is_empty():
+		topic_a = select_topic_to_share(char_a, rng_a)
+		topic_b = select_topic_to_share(char_b, rng_b)
+	else:
+		topic_a = select_topic_to_share_weighted(char_a, rng_a, topics_by_id)
+		topic_b = select_topic_to_share_weighted(char_b, rng_b, topics_by_id)
 
 	var transferred_to_b: bool = transfer_topic(char_a, char_b, topic_a)
 	var transferred_to_a: bool = transfer_topic(char_b, char_a, topic_b)
@@ -126,6 +190,7 @@ static func resolve_settlement_conversations(
 	characters: Array[L5RCharacterData],
 	rng: Array[int],
 	current_season: int,
+	topics_by_id: Dictionary = {},
 ) -> Array[Dictionary]:
 	var results: Array[Dictionary] = []
 	var conversation_counts: Dictionary = {}
@@ -155,7 +220,7 @@ static func resolve_settlement_conversations(
 			var rng_b: int = rng[rng_index] if rng_index < rng.size() else 0
 			rng_index += 1
 
-			var result: Dictionary = resolve_conversation(char_a, char_b, rng_a, rng_b, current_season)
+			var result: Dictionary = resolve_conversation(char_a, char_b, rng_a, rng_b, current_season, topics_by_id)
 			result["char_a_id"] = char_a.character_id
 			result["char_b_id"] = char_b.character_id
 			results.append(result)

@@ -58,6 +58,7 @@ var active_sieges: Array[Dictionary] = []
 var active_tethers: Array[Dictionary] = []
 var order_states: Array[Dictionary] = []
 var military_companies: Array[Dictionary] = []
+var next_company_id: Array[int] = [1]
 var active_wars: Array[WarData] = []
 var next_war_id: Array[int] = [1]
 var trade_routes: Array = []
@@ -92,6 +93,19 @@ var marriages: Array[Dictionary] = []
 var constructions: Array[ConstructionData] = []
 var next_settlement_id: Array[int] = [5000]
 var next_construction_id: Array[int] = [1]
+
+# -- Court Commitments (s16.4) ------------------------------------------------
+var court_commitments: Array[CourtCommitmentData] = []
+
+# -- Dragon Clan Governance (s55.10.2) ----------------------------------------
+var togashi_state: Dictionary = TogashiOversight.make_initial_state()
+
+# -- Phoenix Clan Governance (s55.10.3) ---------------------------------------
+var phoenix_council_state: Dictionary = PhoenixCouncil.make_initial_state()
+
+# -- Intra-Clan Civil War (s53.2) ---------------------------------------------
+var active_civil_wars: Array[Dictionary] = []
+var precedent_modifiers: Dictionary = {}
 
 # -- Kami Worship (s4.3.21) ---------------------------------------------------
 var worship_state: Dictionary = WorshipSystem.make_initial_worship_state()
@@ -197,6 +211,12 @@ func advance_one_day() -> Dictionary:
 		constructions,
 		next_settlement_id,
 		next_construction_id,
+		court_commitments,
+		togashi_state,
+		phoenix_council_state,
+		active_civil_wars,
+		precedent_modifiers,
+		next_company_id,
 	)
 
 

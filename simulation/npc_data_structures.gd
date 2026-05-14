@@ -105,6 +105,7 @@ class ContextSnapshot:
 	var disposition_values: Dictionary = {}
 	var known_topics: Array[int] = []
 	var known_positions: Dictionary = {}
+	var known_topic_types: Dictionary = {}
 	var known_objectives: Dictionary = {}
 	var known_contacts: Array[int] = []
 	var contact_clans: Dictionary = {}

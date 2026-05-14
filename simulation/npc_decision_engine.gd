@@ -70,12 +70,22 @@ static func build_context(
 			var combined: int = clampi(current + bond, -100, 100)
 			ctx.dispositions[other_id] = combined
 			ctx.disposition_values[other_id] = combined
-	ctx.known_topics = world_state.get("known_topics", [] as Array[int])
-	ctx.known_positions = world_state.get("known_positions", {})
+	ctx.known_topics = character.topic_pool.duplicate()
+	ctx.known_positions = character.topic_positions.duplicate()
+	ctx.known_topic_types = _build_known_topic_types(
+		character.topic_pool, world_state.get("active_topics", []),
+	)
 	ctx.known_objectives = world_state.get("known_objectives", {})
-	ctx.known_contacts = world_state.get("known_contacts", [] as Array[int])
-	ctx.contact_clans = world_state.get("contact_clans", {})
 	ctx.known_contacts_by_clan = character.known_contacts_by_clan.duplicate()
+	var flat_contacts: Array[int] = []
+	var clan_lookup: Dictionary = {}
+	for clan_key: String in character.known_contacts_by_clan:
+		for cid: int in character.known_contacts_by_clan[clan_key]:
+			if cid not in flat_contacts:
+				flat_contacts.append(cid)
+			clan_lookup[cid] = clan_key
+	ctx.known_contacts = flat_contacts
+	ctx.contact_clans = clan_lookup
 	ctx.met_characters = character.met_characters.duplicate()
 	ctx.knowledge_pool = character.knowledge_pool
 
@@ -525,6 +535,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array[S
 				"TRAIN", "MEDITATE",
 				"ASSESS_PROVINCE_STATUS", "INVESTIGATE_PROVINCE",
 				"INVESTIGATE_RUMOR", "ORDER_PATROL",
+				"EXAMINE_LETTER",
 				"SCOUT_ENEMY",
 				"FOUND_VILLAGE", "BUILD_FORTIFICATION", "BUILD_SHRINE",
 				"FOUND_TEMPLE", "FOUND_MONASTERY", "COMMISSION_SHIP",
@@ -544,12 +555,14 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array[S
 				"PUBLIC_DEBATE", "PUBLIC_INSULT", "PUBLIC_DECLARATION",
 				"PUBLIC_PERFORMANCE", "DELIVER_GIFT", "OFFER_FAVOR",
 				"PERFORM_FOR", "DISCLOSE",
+				"PROVOKE_EMOTION", "PLAY_GAME", "DISCERN_NEED",
 				"ASK_FOR_INTRODUCTION", "OBSERVE_COURT_ATTENDEES",
 				"ARRANGE_MARRIAGE", "APPOINT_TO_POSITION",
 				"COMPLY_WITH_EDICT", "DEFY_EDICT",
 				"TRAIN", "MEDITATE",
 				"BRIBE_FOR_INFO", "EAVESDROP",
 				"INTERCEPT_LETTER", "SEARCH_QUARTERS",
+				"EXAMINE_LETTER",
 				"DO_NOTHING", "REST",
 			]
 		Enums.ContextFlag.VISITING:
@@ -789,13 +802,15 @@ static func _lookup_objective_alignment(
 # Actions that target someone adversarially use the "hostile" disposition column.
 # All others use "cooperative". Per GDD s55.4.5 / s57.3 scoring examples.
 const HOSTILE_ACTIONS: Array[String] = [
-	"INTIMIDATE", "PUBLIC_INSULT",
+	"INTIMIDATE", "PUBLIC_INSULT", "PROVOKE_EMOTION",
+	"DAMAGE_RELATIONSHIP",
 	"BRIBE_FOR_INFO", "EAVESDROP", "INTERCEPT_LETTER", "SEARCH_QUARTERS",
 	"SHADOW_TARGET", "SEARCH_PERSON",
 	"EXPOSE_SECRET_PRIVATELY", "EXPOSE_SECRET_PUBLICLY", "FABRICATE_SECRET",
 	"CONCEAL_ITEM",
 	"SEDUCE", "SEDUCE_FOR_INFO", "SEDUCE_FOR_ACCESS",
 	"SEDUCE_FOR_LEVERAGE", "SEDUCE_TO_COMPROMISE",
+	"ASSASSINATE", "ISSUE_DUEL_CHALLENGE",
 ]
 
 
@@ -852,14 +867,16 @@ static func _compute_competence_modifier(
 	var skill_map: Dictionary = scoring_tables.get("action_skill_map", {})
 	var action_skills: Dictionary = skill_map.get(action_id, {})
 
-	var primary_skill: String = action_skills.get("primary", "")
+	var primary_raw: Variant = action_skills.get("primary", "")
+	var primary_skill: String = str(primary_raw) if primary_raw != null else ""
 	if primary_skill == "":
 		return 0.0
 
 	var rank: int = int(skill_ranks.get(primary_skill, 0))
 	var modifier: float = float(NPCDataStructures.get_competence_modifier(rank))
 
-	var secondary_skill: String = action_skills.get("secondary", "")
+	var secondary_raw: Variant = action_skills.get("secondary", "")
+	var secondary_skill: String = str(secondary_raw) if secondary_raw != null else ""
 	if secondary_skill != "":
 		var sec_rank: int = int(skill_ranks.get(secondary_skill, 0))
 		modifier += float(NPCDataStructures.get_competence_modifier(sec_rank)) * 0.5
@@ -1049,6 +1066,25 @@ static func _compute_standing_influence(
 	return clampf(raw, 0.0, 15.0)
 
 
+static func _build_known_topic_types(
+	topic_pool: Array[int],
+	active_topics: Array,
+) -> Dictionary:
+	var result: Dictionary = {}
+	for topic: Variant in active_topics:
+		var tid: int = -1
+		var tt: String = ""
+		if topic is Dictionary:
+			tid = int(topic.get("topic_id", -1))
+			tt = topic.get("topic_type", "")
+		elif topic is Resource:
+			tid = topic.topic_id
+			tt = topic.topic_type
+		if tid >= 0 and tid in topic_pool and tt != "":
+			result[tid] = tt
+	return result
+
+
 static func _compute_topic_position_modifier(
 	_action_id: String,
 	need: NPCDataStructures.ImmediateNeed,
@@ -1063,9 +1099,17 @@ static func _compute_topic_position_modifier(
 	if need_entry.is_empty():
 		return 0.0
 
+	var invert: bool = need.need_type == "SEEK_PEACE"
+	var type_filter: Array = need_entry.get("topic_types", [])
 	var best_modifier: float = 0.0
 	for topic_id in ctx.known_topics:
+		if not type_filter.is_empty():
+			var tt: String = ctx.known_topic_types.get(topic_id, "")
+			if not tt.is_empty() and tt not in type_filter:
+				continue
 		var position: float = float(ctx.known_positions.get(topic_id, 0))
+		if invert:
+			position = -position
 		var modifier: float = _interpolate_topic_position(position, need_entry)
 		if absf(modifier) > absf(best_modifier):
 			best_modifier = modifier
@@ -1075,17 +1119,19 @@ static func _compute_topic_position_modifier(
 
 static func _interpolate_topic_position(
 	position: float,
-	_need_entry: Dictionary,
+	need_entry: Dictionary,
 ) -> float:
+	var cap_pos: float = float(need_entry.get("strong_support", 15))
+	var cap_neg: float = float(need_entry.get("strong_opposition", -15))
 	if position <= -50.0:
-		return -15.0
+		return cap_neg
 	if position >= 50.0:
-		return 15.0
+		return cap_pos
 	if position >= -15.0 and position <= 15.0:
 		return 0.0
 	if position < -15.0:
-		return lerpf(0.0, -15.0, (absf(position) - 15.0) / 35.0)
-	return lerpf(0.0, 15.0, (position - 15.0) / 35.0)
+		return lerpf(0.0, cap_neg, (absf(position) - 15.0) / 35.0)
+	return lerpf(0.0, cap_pos, (position - 15.0) / 35.0)
 
 
 static func _compute_resource_modifier(
@@ -1297,11 +1343,14 @@ static func resolve_daily_letter(
 	if target_id < 0:
 		return {}
 
+	var topic_id: int = _pick_letter_topic(ctx)
+
 	return {
 		"character_id": character.character_id,
 		"action_id": "WRITE_LETTER",
 		"target_npc_id": target_id,
 		"need_type": need_type,
+		"topic_id": topic_id,
 	}
 
 
@@ -1330,6 +1379,21 @@ static func _select_letter_target(
 	return -1
 
 
+static func _pick_letter_topic(ctx: NPCDataStructures.ContextSnapshot) -> int:
+	if ctx.known_topics.is_empty():
+		return -1
+	var best_id: int = -1
+	var best_pos: float = -1.0
+	for tid: int in ctx.known_topics:
+		var pos: float = absf(ctx.known_positions.get(tid, 0.0))
+		if pos > best_pos:
+			best_pos = pos
+			best_id = tid
+	if best_id >= 0:
+		return best_id
+	return ctx.known_topics[0]
+
+
 # -- Province Status Builder ---------------------------------------------------
 
 static func build_province_statuses_from_data(
@@ -1340,12 +1404,14 @@ static func build_province_statuses_from_data(
 	var result: Array = []
 	var settlement_garrison: Dictionary = {}
 	var settlement_total_pu: Dictionary = {}
+	var settlement_rice: Dictionary = {}
 	for s: Variant in settlements:
 		if s is SettlementData:
 			var sd: SettlementData = s
 			var pid: int = sd.province_id
 			settlement_garrison[pid] = settlement_garrison.get(pid, 0) + sd.garrison_pu
 			settlement_total_pu[pid] = settlement_total_pu.get(pid, 0) + sd.population_pu
+			settlement_rice[pid] = settlement_rice.get(pid, 0.0) + sd.rice_stockpile
 
 	var armies_by_province: Dictionary = {}
 	for army: Variant in active_armies:
@@ -1375,6 +1441,7 @@ static func build_province_statuses_from_data(
 		ps.last_report_ic_day = pd.last_report_ic_day
 		ps.garrison_pu = settlement_garrison.get(pd.province_id, 0)
 		ps.total_settlement_pu = settlement_total_pu.get(pd.province_id, 0)
+		ps.rice_stockpile = settlement_rice.get(pd.province_id, 0.0)
 		ps.confidence = 2
 		var army_clans: Array = armies_by_province.get(pd.province_id, [])
 		for ac: Variant in army_clans:
@@ -1428,6 +1495,96 @@ static func _populate_action_metadata(
 			"settlement_id": need.target_settlement_id,
 			"target_intent": need.target_intent,
 		}
+	elif option.action_id == "GOSSIP":
+		var subject: int = need.target_npc_id if need.target_npc_id >= 0 else -1
+		if subject < 0:
+			subject = _pick_gossip_subject(ctx)
+		var split: Dictionary = _compute_gossip_raise_split(ctx)
+		option.metadata = {
+			"gossip_subject_id": subject,
+			"damage_raises": split["damage"],
+			"concealment_raises": split["concealment"],
+		}
+	elif option.action_id in ["NEGOTIATE", "PERSUADE", "PUBLIC_DEBATE"]:
+		option.metadata = {
+			"topic_id": _pick_court_agenda_topic(ctx),
+		}
+	elif option.action_id == "DISCLOSE":
+		var about_id: int = need.target_npc_id if need.target_npc_id >= 0 else -1
+		var opinion: int = 0
+		if about_id >= 0:
+			opinion = ctx.disposition_values.get(about_id, 0)
+		option.metadata = {
+			"disclose_about_id": about_id,
+			"disclosed_opinion": opinion,
+		}
+	elif option.action_id == "EXAMINE_LETTER":
+		option.metadata = {
+			"letter_id": need.target_settlement_id if need.target_settlement_id >= 0 else -1,
+		}
+	elif option.action_id == "ORDER_LEVY":
+		var levy_province_id: int = _pick_levy_province(ctx)
+		option.target_province_id = levy_province_id
+		option.metadata = {
+			"levy_unit_type": _select_levy_unit_type(ctx),
+		}
+	elif option.action_id in ["CONDUCT_STORM_ASSAULT", "MAINTAIN_SIEGE"]:
+		option.metadata = {
+			"siege_settlement_id": ctx.location_id,
+		}
+
+
+static func _pick_court_agenda_topic(ctx: NPCDataStructures.ContextSnapshot) -> int:
+	var court: Dictionary = ctx.active_court_at_location
+	if court.is_empty():
+		return -1
+	var topics: Array = court.get("topics", [])
+	if topics.is_empty():
+		return -1
+	var best_id: int = int(topics[0])
+	var best_score: float = -1.0
+	for t: Variant in topics:
+		var tid: int = int(t)
+		if tid not in ctx.known_topics:
+			continue
+		var pos: float = absf(ctx.known_positions.get(tid, 0.0))
+		if pos > best_score:
+			best_score = pos
+			best_id = tid
+	return best_id
+
+
+static func _pick_gossip_subject(ctx: NPCDataStructures.ContextSnapshot) -> int:
+	var worst_id: int = -1
+	var worst_disp: int = 0
+	for cid: Variant in ctx.disposition_values:
+		var disp: int = ctx.disposition_values[cid]
+		if disp < worst_disp:
+			worst_disp = disp
+			worst_id = int(cid)
+	return worst_id
+
+
+static func _compute_gossip_raise_split(
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> Dictionary:
+	if ctx.school.begins_with("Bayushi Courtier"):
+		return {"damage": 99, "concealment": 0}
+	if ctx.bushido_virtue in [
+		Enums.BushidoVirtue.GI,
+		Enums.BushidoVirtue.MAKOTO,
+		Enums.BushidoVirtue.MEIYO,
+	]:
+		return {"damage": 99, "concealment": 0}
+	if ctx.shourido_virtue in [
+		Enums.ShouridoVirtue.SEIGYO,
+		Enums.ShouridoVirtue.DOSATSU,
+		Enums.ShouridoVirtue.CHISHIKI,
+	]:
+		return {"damage": 98, "concealment": 1}
+	if ctx.clan == "Scorpion":
+		return {"damage": 98, "concealment": 1}
+	return {"damage": 99, "concealment": 0}
 
 
 static func _build_declare_war_metadata(
@@ -1856,6 +2013,34 @@ static func _zone_to_worship_location(zone: Enums.ZoneSubtype) -> String:
 		Enums.ZoneSubtype.TEMPLE_GROUNDS:
 			return "local_shrine"
 	return "roadside_shrine"
+
+
+static func _pick_levy_province(ctx: NPCDataStructures.ContextSnapshot) -> int:
+	var best_id: int = -1
+	var best_pu: int = -1
+	for ps: Variant in ctx.province_statuses:
+		var pid: int = (ps as NPCDataStructures.ProvinceStatus).province_id
+		var pu: int = (ps as NPCDataStructures.ProvinceStatus).total_settlement_pu
+		if pu > best_pu:
+			best_pu = pu
+			best_id = pid
+	return best_id
+
+
+static func _select_levy_unit_type(ctx: NPCDataStructures.ContextSnapshot) -> int:
+	if not ctx.can_sustain_iron_upkeep:
+		return Enums.CompanyUnitType.PEASANT_LEVY
+
+	var spear_count: int = ctx.unit_training_counts.get(
+		Enums.CompanyUnitType.ASHIGARU_SPEARMEN, 0,
+	)
+	var archer_count: int = ctx.unit_training_counts.get(
+		Enums.CompanyUnitType.ASHIGARU_ARCHERS, 0,
+	)
+	if spear_count >= 2 and archer_count == 0:
+		return Enums.CompanyUnitType.ASHIGARU_ARCHERS
+
+	return Enums.CompanyUnitType.ASHIGARU_SPEARMEN
 
 
 static func _filter_province_ids_by_clan(

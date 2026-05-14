@@ -87,6 +87,7 @@ static func select_primary_objective(
 
 	var best: Opportunity = opportunities[0]
 	return {
+		"need_type": best.objective_type,
 		"objective_type": best.objective_type,
 		"target_fields": best.target_fields,
 		"score": best.get_score(),

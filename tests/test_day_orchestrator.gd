@@ -1509,3 +1509,421 @@ func test_supply_sharing_receiver_not_starving_skips() -> void:
 	)
 
 	assert_eq(results.size(), 0, "Well-fed receiver needs no sharing")
+
+
+# -- Urgency data injection tests -----------------------------------------------
+
+func test_inject_urgency_data_favors() -> void:
+	var ws: Dictionary = {1: {}}
+	var c := L5RCharacterData.new()
+	c.character_id = 1
+	var favors: Array = [FavorData.new()]
+	DayOrchestrator._inject_urgency_data(
+		ws, [c], favors, [], [], {}, [],
+	)
+	assert_eq(ws[1]["favors"], favors)
+
+
+func test_inject_urgency_data_active_tethers() -> void:
+	var ws: Dictionary = {1: {}}
+	var c := L5RCharacterData.new()
+	c.character_id = 1
+	var tethers: Array[Dictionary] = [{"army_id": 5, "overall_state": 2}]
+	DayOrchestrator._inject_urgency_data(
+		ws, [c], [], tethers, [], {}, [],
+	)
+	assert_eq(ws[1]["active_tethers"], tethers)
+
+
+func test_inject_urgency_data_active_topics() -> void:
+	var ws: Dictionary = {1: {}}
+	var c := L5RCharacterData.new()
+	c.character_id = 1
+	var topics: Array[TopicData] = [TopicData.new()]
+	DayOrchestrator._inject_urgency_data(
+		ws, [c], [], [], [], {}, topics,
+	)
+	assert_eq(ws[1]["active_topics"], topics)
+
+
+func test_inject_urgency_data_objective_stalled_seasons() -> void:
+	var ws: Dictionary = {1: {}}
+	var c := L5RCharacterData.new()
+	c.character_id = 1
+	var objectives_map: Dictionary = {
+		1: {"primary": {"need_type": "CONQUER_PROVINCE", "seasons_without_progress": 3}},
+	}
+	DayOrchestrator._inject_urgency_data(
+		ws, [c], [], [], [], objectives_map, [],
+	)
+	assert_eq(ws[1]["objective_stalled_seasons"], 3)
+
+
+func test_inject_urgency_data_no_primary_objective() -> void:
+	var ws: Dictionary = {1: {}}
+	var c := L5RCharacterData.new()
+	c.character_id = 1
+	DayOrchestrator._inject_urgency_data(
+		ws, [c], [], [], [], {}, [],
+	)
+	assert_eq(ws[1]["objective_stalled_seasons"], 0)
+
+
+func test_inject_urgency_data_besieged_settlement() -> void:
+	var ws: Dictionary = {1: {}}
+	var c := L5RCharacterData.new()
+	c.character_id = 1
+	c.physical_location = "42"
+	var siege: Dictionary = SiegeSystem.create_siege_state(42, 1, 2, 0.5, 10.0, 1.0)
+	DayOrchestrator._inject_urgency_data(
+		ws, [c], [], [], [siege], {}, [],
+	)
+	assert_true(ws[1]["besieged_settlement_health_pct"] < 1.0, "Besieged location should have pct < 1")
+
+
+func test_inject_urgency_data_starved_garrison() -> void:
+	var ws: Dictionary = {1: {}}
+	var c := L5RCharacterData.new()
+	c.character_id = 1
+	c.physical_location = "42"
+	var siege: Dictionary = SiegeSystem.create_siege_state(42, 1, 2, 0.0, 10.0, 1.0)
+	siege["garrison_starved"] = true
+	DayOrchestrator._inject_urgency_data(
+		ws, [c], [], [], [siege], {}, [],
+	)
+	assert_eq(ws[1]["besieged_settlement_health_pct"], 0.0, "Starved garrison = 0 pct")
+
+
+func test_inject_urgency_data_not_besieged() -> void:
+	var ws: Dictionary = {1: {}}
+	var c := L5RCharacterData.new()
+	c.character_id = 1
+	c.physical_location = "99"
+	var siege: Dictionary = SiegeSystem.create_siege_state(42, 1, 2, 0.5, 10.0, 1.0)
+	DayOrchestrator._inject_urgency_data(
+		ws, [c], [], [], [siege], {}, [],
+	)
+	assert_eq(ws[1]["besieged_settlement_health_pct"], 1.0, "Not at besieged settlement")
+
+
+func test_inject_urgency_data_creates_ws_for_unknown_character() -> void:
+	var ws: Dictionary = {}
+	var c := L5RCharacterData.new()
+	c.character_id = 5
+	DayOrchestrator._inject_urgency_data(
+		ws, [c], [], [], [], {}, [],
+	)
+	assert_true(ws.has(5), "Should create per-character ws dict")
+
+
+func test_inject_urgency_data_standing_need_type() -> void:
+	var ws: Dictionary = {1: {}}
+	var c := L5RCharacterData.new()
+	c.character_id = 1
+	var objectives_map: Dictionary = {
+		1: {"standing": {"need_type": "SEEK_GLORY"}},
+	}
+	DayOrchestrator._inject_urgency_data(
+		ws, [c], [], [], [], objectives_map, [],
+	)
+	var known_objs: Dictionary = ws[1].get("known_objectives", {})
+	assert_eq(known_objs.get("standing_need_type", ""), "SEEK_GLORY")
+
+
+func test_inject_urgency_data_no_standing_objective() -> void:
+	var ws: Dictionary = {1: {}}
+	var c := L5RCharacterData.new()
+	c.character_id = 1
+	DayOrchestrator._inject_urgency_data(
+		ws, [c], [], [], [], {}, [],
+	)
+	var known_objs: Dictionary = ws[1].get("known_objectives", {})
+	assert_eq(known_objs.get("standing_need_type", ""), "", "No standing obj = empty string")
+
+
+# -- Characters present injection tests ----------------------------------------
+
+func test_inject_characters_present_co_located() -> void:
+	var ws: Dictionary = {1: {}, 2: {}, 3: {}}
+	var c1 := L5RCharacterData.new()
+	c1.character_id = 1
+	c1.physical_location = "100"
+	var c2 := L5RCharacterData.new()
+	c2.character_id = 2
+	c2.physical_location = "100"
+	var c3 := L5RCharacterData.new()
+	c3.character_id = 3
+	c3.physical_location = "200"
+	DayOrchestrator._inject_urgency_data(
+		ws, [c1, c2, c3], [], [], [], {}, [],
+	)
+	var present_1: Array = ws[1].get("characters_present", [])
+	assert_true(2 in present_1, "Char 1 should see char 2")
+	assert_false(3 in present_1, "Char 1 should not see char 3")
+	var present_2: Array = ws[2].get("characters_present", [])
+	assert_true(1 in present_2, "Char 2 should see char 1")
+
+
+func test_inject_characters_present_excludes_self() -> void:
+	var ws: Dictionary = {1: {}}
+	var c1 := L5RCharacterData.new()
+	c1.character_id = 1
+	c1.physical_location = "100"
+	DayOrchestrator._inject_urgency_data(
+		ws, [c1], [], [], [], {}, [],
+	)
+	var present: Array = ws[1].get("characters_present", [])
+	assert_eq(present.size(), 0, "Should not include self")
+
+
+func test_inject_characters_present_excludes_dead() -> void:
+	var ws: Dictionary = {1: {}, 2: {}}
+	var c1 := L5RCharacterData.new()
+	c1.character_id = 1
+	c1.physical_location = "100"
+	var c2 := L5RCharacterData.new()
+	c2.character_id = 2
+	c2.physical_location = "100"
+	c2.wounds_taken = 999
+	DayOrchestrator._inject_urgency_data(
+		ws, [c1, c2], [], [], [], {}, [],
+	)
+	var present: Array = ws[1].get("characters_present", [])
+	assert_false(2 in present, "Dead character should not be present")
+
+
+func test_inject_characters_present_excludes_traveling() -> void:
+	var ws: Dictionary = {1: {}, 2: {}}
+	var c1 := L5RCharacterData.new()
+	c1.character_id = 1
+	c1.physical_location = "100"
+	var c2 := L5RCharacterData.new()
+	c2.character_id = 2
+	c2.physical_location = "100"
+	c2.travel_destination = "200"
+	c2.travel_days_remaining = 3
+	DayOrchestrator._inject_urgency_data(
+		ws, [c1, c2], [], [], [], {}, [],
+	)
+	var present: Array = ws[1].get("characters_present", [])
+	assert_false(2 in present, "Traveling character should not be present")
+
+
+func test_inject_characters_present_empty_location() -> void:
+	var ws: Dictionary = {1: {}}
+	var c1 := L5RCharacterData.new()
+	c1.character_id = 1
+	c1.physical_location = ""
+	DayOrchestrator._inject_urgency_data(
+		ws, [c1], [], [], [], {}, [],
+	)
+	var present: Array = ws[1].get("characters_present", [])
+	assert_eq(present.size(), 0, "Empty location should have no co-located chars")
+
+
+# -- Resource stockpiles population tests --------------------------------------
+
+func _make_province(pid: int, clan: String) -> ProvinceData:
+	var p := ProvinceData.new()
+	p.province_id = pid
+	p.clan = clan
+	return p
+
+
+func _make_settlement_for(sid: int, pid: int, rice: float, koku: float, pop: int) -> SettlementData:
+	var s := SettlementData.new()
+	s.settlement_id = sid
+	s.province_id = pid
+	s.rice_stockpile = rice
+	s.koku_stockpile = koku
+	s.population_pu = pop
+	return s
+
+
+func test_resource_stockpiles_populated_for_lord() -> void:
+	var ws: Dictionary = {}
+	var lord := L5RCharacterData.new()
+	lord.character_id = 1
+	lord.clan = "Crane"
+	lord.status = 6.0
+	lord.lord_id = -1
+	var prov := _make_province(100, "Crane")
+	var s1 := _make_settlement_for(1, 100, 50.0, 20.0, 10)
+	var s2 := _make_settlement_for(2, 100, 30.0, 10.0, 5)
+	var clan := ClanData.new()
+	clan.clan_name = "Crane"
+	clan.arms_stockpile = 15.0
+	clan.iron_stockpile = 8.0
+	DayOrchestrator._populate_resource_stockpiles(
+		ws, [lord], {100: prov}, [s1, s2], {"Crane": clan}, [],
+	)
+	var rs: Dictionary = ws[1].get("resource_stockpiles", {})
+	assert_eq(rs.get("rice", 0.0), 80.0, "Rice should sum both settlements")
+	assert_eq(rs.get("koku", 0.0), 30.0, "Koku should sum both settlements")
+	assert_eq(rs.get("arms", 0.0), 15.0, "Arms from clan data")
+	assert_eq(rs.get("iron", 0.0), 8.0, "Iron from clan data")
+	assert_true(rs.get("population_pu", 0.0) >= 15.0, "Population PU summed")
+
+
+func test_resource_stockpiles_skipped_for_non_lord() -> void:
+	var ws: Dictionary = {}
+	var samurai := L5RCharacterData.new()
+	samurai.character_id = 2
+	samurai.clan = "Crane"
+	samurai.status = 3.0
+	samurai.lord_id = 1
+	DayOrchestrator._populate_resource_stockpiles(
+		ws, [samurai], {}, [], {}, [],
+	)
+	assert_false(ws.has(2), "Non-lord should not get resource stockpiles")
+
+
+func test_resource_stockpiles_rice_consumption() -> void:
+	var ws: Dictionary = {}
+	var lord := L5RCharacterData.new()
+	lord.character_id = 1
+	lord.clan = "Lion"
+	lord.status = 5.0
+	lord.lord_id = -1
+	var prov := _make_province(200, "Lion")
+	var s1 := _make_settlement_for(10, 200, 100.0, 0.0, 20)
+	DayOrchestrator._populate_resource_stockpiles(
+		ws, [lord], {200: prov}, [s1], {}, [],
+	)
+	var rs: Dictionary = ws[1].get("resource_stockpiles", {})
+	assert_almost_eq(rs.get("rice_consumption", 0.0), 5.0, 0.01, "20 PU * 0.25 = 5.0")
+
+
+func test_resource_stockpiles_no_matching_clan() -> void:
+	var ws: Dictionary = {}
+	var lord := L5RCharacterData.new()
+	lord.character_id = 1
+	lord.clan = "Scorpion"
+	lord.status = 6.0
+	lord.lord_id = -1
+	var prov := _make_province(100, "Crane")
+	var s1 := _make_settlement_for(1, 100, 50.0, 20.0, 10)
+	DayOrchestrator._populate_resource_stockpiles(
+		ws, [lord], {100: prov}, [s1], {}, [],
+	)
+	var rs: Dictionary = ws[1].get("resource_stockpiles", {})
+	assert_eq(rs.get("rice", 0.0), 0.0, "No Scorpion settlements")
+
+
+# -- Court availability data population tests ----------------------------------
+
+func test_upcoming_courts_populated() -> void:
+	var ws: Dictionary = {1: {}}
+	var c := L5RCharacterData.new()
+	c.character_id = 1
+	var court := CourtSessionData.new()
+	court.court_id = 10
+	court.host_settlement_id = 50
+	court.prestige = 2
+	court.court_phase = CourtSessionData.CourtPhase.SCHEDULED
+	DayOrchestrator._populate_court_availability_data(
+		[court], [c], {1: c}, ws, [],
+	)
+	var upcoming: Array = ws[1].get("upcoming_courts", [])
+	assert_eq(upcoming.size(), 1, "Should have 1 upcoming court")
+	assert_eq(upcoming[0].get("settlement_id", -1), 50)
+	assert_eq(upcoming[0].get("prestige", 0), 2)
+
+
+func test_upcoming_courts_excludes_active() -> void:
+	var ws: Dictionary = {1: {}}
+	var c := L5RCharacterData.new()
+	c.character_id = 1
+	var court := CourtSessionData.new()
+	court.court_phase = CourtSessionData.CourtPhase.ACTIVE
+	DayOrchestrator._populate_court_availability_data(
+		[court], [c], {1: c}, ws, [],
+	)
+	var upcoming: Array = ws[1].get("upcoming_courts", [])
+	assert_eq(upcoming.size(), 0, "Active courts should not appear as upcoming")
+
+
+func test_held_leverage_from_favors() -> void:
+	var ws: Dictionary = {1: {}, 2: {}}
+	var c1 := L5RCharacterData.new()
+	c1.character_id = 1
+	var c2 := L5RCharacterData.new()
+	c2.character_id = 2
+	c2.lord_id = 5
+	var f := FavorData.new()
+	f.creditor_id = 1
+	f.debtor_id = 2
+	f.invoked = false
+	f.tier = FavorData.FavorTier.MODERATE
+	DayOrchestrator._populate_court_availability_data(
+		[], [c1, c2], {1: c1, 2: c2}, ws, [f],
+	)
+	var leverage: Array = ws[1].get("held_leverage", [])
+	assert_eq(leverage.size(), 1, "Creditor should have 1 leverage entry")
+	assert_eq(leverage[0].get("debtor_id", -1), 2)
+	assert_eq(leverage[0].get("target_lord_id", -1), 5)
+	var lev2: Array = ws[2].get("held_leverage", [])
+	assert_eq(lev2.size(), 0, "Debtor should have no leverage")
+
+
+func test_held_leverage_excludes_invoked() -> void:
+	var ws: Dictionary = {1: {}}
+	var c := L5RCharacterData.new()
+	c.character_id = 1
+	var f := FavorData.new()
+	f.creditor_id = 1
+	f.debtor_id = 2
+	f.invoked = true
+	DayOrchestrator._populate_court_availability_data(
+		[], [c], {1: c}, ws, [f],
+	)
+	var leverage: Array = ws[1].get("held_leverage", [])
+	assert_eq(leverage.size(), 0, "Invoked favors should not appear as leverage")
+
+
+func test_known_npc_locations_from_knowledge_pool() -> void:
+	var ws: Dictionary = {1: {}}
+	var c := L5RCharacterData.new()
+	c.character_id = 1
+	var entry := KnowledgeEntry.new()
+	entry.entry_type = "location"
+	entry.data = {"character_id": 5, "settlement_id": "300"}
+	c.knowledge_pool.append(entry)
+	DayOrchestrator._populate_court_availability_data(
+		[], [c], {1: c}, ws, [],
+	)
+	var locations: Dictionary = ws[1].get("known_npc_locations", {})
+	assert_eq(locations.get(5, -1), 300, "Should map NPC 5 to settlement 300")
+
+
+func test_available_levy_pu_populated_for_lord() -> void:
+	var ws: Dictionary = {}
+	var lord := L5RCharacterData.new()
+	lord.character_id = 1
+	lord.clan = "Crab"
+	lord.status = 6.0
+	lord.lord_id = -1
+	var prov := _make_province(100, "Crab")
+	var s1 := _make_settlement_for(1, 100, 10.0, 5.0, 10)
+	s1.military_pu = 3
+	var s2 := _make_settlement_for(2, 100, 5.0, 2.0, 5)
+	s2.military_pu = 2
+	DayOrchestrator._populate_resource_stockpiles(
+		ws, [lord], {100: prov}, [s1, s2], {}, [],
+	)
+	assert_eq(ws[1].get("available_levy_pu", 0.0), 5.0, "Sum of military_pu")
+
+
+# -- Court context flag gap fix tests ------------------------------------------
+
+func test_court_context_creates_world_state_entry() -> void:
+	var ws: Dictionary = {}
+	var court := CourtSessionData.new()
+	court.court_phase = CourtSessionData.CourtPhase.ACTIVE
+	court.elapsed_ticks = 1
+	court.duration_ticks = 10
+	court.attendee_ids = [42]
+	DayOrchestrator._set_court_context_flags([court], ws)
+	assert_true(ws.has(42), "Should create world_state entry for attendee")
+	assert_eq(ws[42].get("context_flag", -1), Enums.ContextFlag.AT_COURT)
+	assert_false(ws[42].get("active_court_at_location", {}).is_empty())

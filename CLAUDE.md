@@ -216,7 +216,18 @@ single-dice-entry-point and server-authoritative constraints.
   objective_alignment (82 NeedTypes), personality_lean (14 virtues),
   personality_filter (bushido/shourido blocks), action_skill_map (76+ ActionIDs),
   competence_table (ranks 0-10), disposition_tiers (8 tiers),
-  urgency_rules (10 rules), topic_position_alignment.
+  urgency_rules (10 rules), topic_position_alignment (24 NeedTypes with
+  per-NeedType strong_support/strong_opposition caps per GDD s55.26 Annex H,
+  topic_types arrays for NeedType-specific topic filtering).
+  SEEK_PEACE position inversion: pro-war NPCs (positive position on war
+  topics) get −15 penalty, anti-war NPCs get +15 bonus — position inverted
+  before interpolation per GDD special case note.
+  Topic type filtering: NeedTypes with `topic_types` arrays (e.g. LEVY_TROOPS,
+  DEPLOY_ARMY, DEFEND_PROVINCE) only match topics whose `topic_type` appears
+  in the filter list. Topics with unknown type pass through (benefit of the
+  doubt). NeedTypes without `topic_types` (e.g. RAISE_DISPOSITION) match all
+  topics. `_build_known_topic_types()` populates `ctx.known_topic_types` from
+  active_topics during `build_context()`.
 
 ### Objective Decomposition
 - **simulation/objective_decomposer.gd** — Routes standing objectives to
@@ -320,6 +331,109 @@ single-dice-entry-point and server-authoritative constraints.
   state. Commission system. Provenance investigation. World gen helpers.
 - **shared/tattoo_data.gd** — TattooData Resource (9 body locations).
 
+### Daily Conversation System (s12.6)
+- **simulation/daily_conversation.gd** — Organic social interaction between
+  co-located characters per GDD s12.6. Fires once per IC day for every
+  qualifying pair sharing a settlement or ship.
+  Disposition-based probability: 7 brackets from Acquaintance (10%) through
+  Devoted max (65%). Uses lower of two mutual dispositions.
+  Topic exchange: each character shares one topic weighted by personal
+  relevance via `select_topic_to_share_weighted()` — calls
+  `TopicMomentumSystem.calculate_personal_relevance()` to compute per-topic
+  weights, then weighted random selection. Own-clan/family topics weighted
+  higher. Falls back to uniform random when no topic data provided.
+  +1 disposition bonus per conversation. 5-per-day cap per character.
+  `resolve_settlement_conversations()` processes all pairs in a group.
+- **DayOrchestrator wiring** — `_process_daily_conversations()` filters out
+  dead (`CharacterStats.is_dead()`) and traveling
+  (`TravelSystem.is_traveling()`) characters. Groups eligible characters by
+  `physical_location` (settlement) and by `aboard_ship_id` (ship co-location
+  per GDD s12.6). Ship-boarded characters excluded from location groups to
+  prevent double-processing. `_resolve_group_conversations()` helper handles
+  RNG generation and delegation. `active_topics` threaded through for
+  relevance-weighted topic selection.
+
+### Court Commitment System (s16.4)
+- **shared/court_commitment_data.gd** — CourtCommitmentData Resource per GDD
+  s16.4. Distinct from CommitmentData (s55.31) — tracks promises made at court
+  or imposed by Imperial Edict, fulfilled through the NPC Decision Engine.
+  CommitmentSource enum (VOLUNTARY, EDICT). Fields: lord_id, topic_id,
+  commitment_type (String), resource_amount, source, declared_at_ic_day,
+  deadline_ic_day, fulfilled, good_faith, ap_spent_toward.
+- **simulation/court_commitment_system.gd** — Commitment Execution Bridge per
+  GDD s16.4. Pure static functions.
+  Factory: `create_commitment()`, `create_edict_commitment()`.
+  HONOR_COMMITMENT NeedType priority: 95 base, 100 for Chugi virtue.
+  Decomposition: commitment_type → ActionID mapping (send_military_aid →
+  ORDER_DEPLOY, send_supplies → SHARE_SUPPLIES, send_shugenja/send_magistrates
+  → ASSIGN_VASSAL_OBJECTIVE, unknown → DO_NOTHING).
+  Personality evaluation: `should_deprioritize()` (Seigyo deprioritizes),
+  `get_renege_willingness()` (Seigyo 0.8, Chugi 0.05, Makoto 0.1, default 0.3).
+  Fulfillment detection: resource-based (sum SHARE_SUPPLIES amounts ≥ target)
+  and dispatch-based (ORDER_DEPLOY/ASSIGN_VASSAL_OBJECTIVE with fulfilled flag).
+  AP tracking counts all fulfillment actions by lord.
+  Renege detection: binary — zero AP spent past deadline = renege.
+  Renege consequences: honor loss scaled by rank (VOLUNTARY_RENEGE_HONOR_BY_RANK
+  table, 0–10), edict adds −3.0 extra, −15 disposition, topic tier 3
+  (voluntary) or 2 (edict).
+  Good faith: fulfilled = true, or ap_spent_toward > 0.
+  Seasonal processing: `process_seasonal_commitments()` checks fulfillment,
+  evaluates good faith, detects reneges, computes consequences.
+  Queries: `get_active_commitments()`, `has_unfulfilled_commitments()`,
+  `has_commitment_on_topic()`.
+  Voluntary declaration: `find_declarable_topics()` returns action topics on the
+  court agenda where the lord's position exceeds +50 and no existing commitment
+  exists. `VOLUNTARY_POSITION_THRESHOLD = 50.0`.
+- **objective_alignment.json** — HONOR_COMMITMENT NeedType added: ORDER_DEPLOY
+  (95), SHARE_SUPPLIES (90), ASSIGN_VASSAL_OBJECTIVE (85), BEGIN_TRAVEL (70),
+  WRITE_LETTER (60), ASSESS_PROVINCE_STATUS (40), DO_NOTHING (0).
+
+### Letter System Delivery Pipeline (s12.7, s57.5)
+- **shared/letter_data.gd** — LetterData Resource: letter_id, sender_id,
+  recipient_id, topic (int), quality (0–3 Calligraphy tiers), disposition_bonus,
+  ic_day_sent, ic_day_arrival, delivered, is_reply, route info
+  (province_distance, mountain_provinces, warzone_provinces, ocean_segments,
+  has_miya_route). Forgery fields: is_forged, forged_sender_id, forgery_tn,
+  forgery_detected. Blockade field: blocked_by_blockade.
+- **simulation/letter_system.gd** — Full letter lifecycle per GDD s12.7.
+  `calculate_delivery_time()` — provinces/3 + mountain + warzone + ocean×2 − miya.
+  `roll_letter_quality()` — Calligraphy + Trait vs TN 15, max quality 3 (+3 disp).
+  `write_letter()` — creates LetterData with quality roll and computed arrival.
+  `deliver_letter()` — topic transfer, disposition bonus, knowledge entry, action log.
+  `get_reply_chance()` — 20% base + 0.8%/disposition point + 15% Rei bonus (cap 95%).
+  Hostile threshold −30 = 0% reply.
+  `should_reply()` — RNG check against computed chance.
+  `apply_exchange_bonus()` — +1 mutual disposition on completed exchange.
+  `generate_replies()` — after delivery, checks reply chance for each delivered
+  letter, creates reply LetterData with original route info, applies exchange
+  bonus. Skips dead senders/recipients and undeliverable letters.
+  `has_prior_correspondence()` — checks if recipient has received an authentic
+  (non-forged) delivered letter from the apparent sender.
+  `auto_detect_forgery()` — silent Investigation+Perception vs forgery_tn on
+  receipt. Requires prior correspondence as reference. Called during batch delivery.
+  `deliberate_examine_letter()` — 1 AP action with Forgery Rank 5 mastery bonus
+  (+1k0). Returns detected/no_reference/authentic states.
+  `is_blocked_by_blockade()` — ocean letters blocked when active war has naval
+  component. `unblock_letters()` clears blockade flag on all pending letters.
+  `is_recipient_dead()` — dead recipient check via CharacterStats.is_dead().
+  `process_pending_letters()` — batch delivery with dead recipient skip, blockade
+  check, auto-forgery detection, and forgery info in results.
+- **DayOrchestrator wiring** — `process_pending_letters()` called with
+  active_wars and dice_engine for blockade and forgery detection. Reply letters
+  generated after delivery via `generate_replies()`, appended to pending_letters.
+  `unblock_letters()` called when peace trade routes are restored. Reply results
+  returned in `reply_letters` key.
+- **EXAMINE_LETTER wiring** — Deliberate letter examination as a daily AP action
+  (1 AP). Added to: action_skill_map.json (Investigation/Perception),
+  objective_alignment.json (INVESTIGATE_THREAT: 85, GATHER_INTELLIGENCE: 75),
+  personality_lean.json (all 14 virtues), AT_OWN_HOLDINGS and AT_COURT context
+  action lists. ActionExecutor intercepts EXAMINE_LETTER before generic path,
+  returns `requires_letter_examination: true` effect flag with letter_id and
+  examiner_id (Pattern A deferred). DayOrchestrator `_process_letter_examinations()`
+  resolves via `LetterSystem.deliberate_examine_letter()` using pending_letters
+  for prior correspondence check and Forgery Rank 5 mastery bonus. Results
+  returned in `letter_examination_results` key.
+
 ### Topic Propagation (s16, s15.5, s15.6)
 - **simulation/topic_system.gd** — TopicMomentumSystem with three propagation
   features wired into DayOrchestrator:
@@ -419,7 +533,7 @@ All in /tests/, one file per system:
 - test_time_system.gd (~15 tests)
 - test_skill_resolver.gd (~20 tests)
 - test_action_point_system.gd (~12 tests)
-- test_npc_decision_engine.gd (~48 tests)
+- test_npc_decision_engine.gd (~117 tests)
 - test_scoring_table_loader.gd (~15 tests)
 - test_action_executor.gd (~35 tests)
 - test_effect_applicator.gd (~37 tests)
@@ -427,9 +541,13 @@ All in /tests/, one file per system:
 - test_resource_tick.gd (~30 tests)
 - test_objective_decomposer.gd (~125 tests)
 - test_information_system.gd (~40 tests)
+- test_daily_conversation.gd (~37 tests)
+- test_letter_system.gd (~76 tests)
+- test_court_commitment_system.gd (~49 tests)
+- test_court_action_system.gd (~140 tests)
 - test_topic_system.gd (~55 tests)
 - test_investigation_system.gd (~40 tests)
-- test_day_orchestrator.gd (~54 tests)
+- test_day_orchestrator.gd (~83 tests)
 - test_approach_evaluation.gd (~55 tests)
 - test_commitment_registry.gd (~60 tests)
 - test_military_hierarchy.gd (~47 tests)
@@ -444,7 +562,7 @@ All in /tests/, one file per system:
 - test_resource_availability.gd (~25 tests)
 - test_court_availability.gd (~15 tests)
 - test_orphaned_objectives.gd (~25 tests)
-- test_strategic_review.gd (~35 tests)
+- test_strategic_review.gd (~38 tests)
 - test_province_triage.gd (~30 tests)
 - test_reactive_decisions.gd (~30 tests)
 - test_opportunity_scanner.gd (~25 tests)
@@ -490,14 +608,14 @@ All in /tests/, one file per system:
 - test_order_system.gd (~30 tests)
 - test_military_service_system.gd (~35 tests)
 - test_pu_reconciliation.gd (~30 tests)
-- test_military_wiring.gd (~219 tests)
+- test_military_wiring.gd (~352 tests)
 - test_war_system.gd (~61 tests)
 - test_war_justification.gd (~55 tests)
 - test_war_termination.gd (~46 tests)
 - test_feasibility_ledger.gd (~148 tests)
 - test_starvation_warfare.gd (~55 tests)
 - test_court_system.gd (~76 tests)
-- test_imperial_edict_system.gd (~57 tests)
+- test_imperial_edict_system.gd (~103 tests)
 - test_horde_system.gd (~43 tests)
 - test_oni_generator.gd (~80 tests)
 - test_naval_system.gd (~113 tests)
@@ -512,6 +630,7 @@ All in /tests/, one file per system:
 - test_ronin_system.gd (~44 tests)
 - test_musha_shugyo_system.gd (~75 tests)
 - test_governance_wiring.gd (~78 tests)
+- test_governance_exceptions_wiring.gd (~30 tests)
 - test_marriage_wiring.gd (~65 tests)
 - test_worship_system.gd (~67 tests)
 - test_worship_wiring.gd (~50 tests)
@@ -869,7 +988,11 @@ All in /tests/, one file per system:
   in Phase 3. Daily letter pass: `resolve_daily_letter()` runs after AP
   resolution via `_process_daily_letter_pass()` in DayOrchestrator. Each NPC
   gets one free letter per IC day, targeting the best recipient based on
-  SEND_LETTER alignment entries.
+  SEND_LETTER alignment entries. `_pick_letter_topic()` selects the topic
+  with strongest absolute position from the NPC's known topics.
+  `_process_daily_letter_pass()` creates actual LetterData objects via
+  `LetterSystem.write_letter()` and appends them to `pending_letters`,
+  enabling topic propagation through the letter delivery pipeline.
 - **s57.20 New Decision Paths** — 3 NeedTypes added: BUILD_INFRASTRUCTURE,
   ARRANGE_MARRIAGE, FILL_VACANCY. 8 ActionIDs: FOUND_VILLAGE,
   BUILD_FORTIFICATION, BUILD_SHRINE, FOUND_TEMPLE, FOUND_MONASTERY,
@@ -1650,8 +1773,19 @@ All in /tests/, one file per system:
   10 ticks after threshold (default 30, aggressive 20, pragmatic 45). Sortie
   resets counter. `process_siege_tick()` orchestrates starvation + honor +
   event firing per tick.
-  Deferred: Full battle integration for storm assaults and sorties (uses
-  ArmyCombatSystem), personality-driven sortie decisions (s19.3), ASCII map
+  **Storm assault wiring** — Phase 3 metadata: `_populate_action_metadata()` sets
+  `siege_settlement_id` from `ctx.location_id` for CONDUCT_STORM_ASSAULT and
+  MAINTAIN_SIEGE. CONDUCT_STORM_ASSAULT intercepted in ActionExecutor
+  before generic military path. Returns `requires_storm_assault: true` with
+  `siege_settlement_id`. DayOrchestrator `_process_storm_assault_results()` finds
+  the siege by settlement ID, gathers attacker/defender companies, runs
+  `resolve_and_reconcile_battle()` with URBAN terrain and +8 defense bonus
+  (Urban +3, Fortification +5 from `SiegeSystem.get_storm_defense_bonus()`).
+  Attacker victory ends the siege (`siege_ended=true`,
+  `end_reason="storm_assault_success"`). Defender victory resets
+  `ticks_since_sortie` (honor cowardice counter). Company health/morale/
+  destroyed/routed written back after battle.
+  Deferred: Personality-driven sortie decisions (s19.3), ASCII map
   event scenarios, mutual event (treachery) resolution.
 
 ### Army Movement System (s11.7a)
@@ -2150,6 +2284,63 @@ All in /tests/, one file per system:
   Honor gain scaled by recipient starvation stage per existing sharing honor
   table. Return dict gains `supply_sharing_results`.
 
+### Court Action Menu (s15.4)
+- **simulation/court_action_system.gd** — Court action resolution per GDD s15.4.
+  All Category 1 direct conversation actions use contested rolls (attacker vs
+  defender) instead of flat TN. Negotiate (Courtier vs Courtier): topic position
+  shift +5 base +2/raise, session TN reduction. Persuade (Sincerity vs Sincerity):
+  stronger position shift +8 base +4/raise, durable. Charm (Etiquette vs
+  Etiquette): ceiling at +40, diminishing returns (full→half→minimal per session).
+  Impress (Lore vs Etiquette): +5 TN reduction next action. Listen and Reflect
+  (Investigation vs Sincerity): opens Persuade/Negotiate with −5 TN. Offer Favor
+  (Sincerity vs Sincerity): returns `requires_favor_creation`. Disclose (Sincerity
+  vs Sincerity): information transfer, downstream disposition.
+  Category 4: Provoke Emotion (Courtier vs Etiquette): −0.2 Honor, −0.1 Glory,
+  −3 witness disposition on target. Public Debate per-witness formula:
+  (A_roll − B_roll) + tier_A − tier_B per witness, position shift 2/4/6/8 by
+  raises. Play a Game (contested Games sub-skill): +3 disposition both, +1
+  winner bonus. Category 5: Read Character (Investigation vs Etiquette):
+  1-3 random info pieces by raises, partial at margin <5, critical failure
+  false info. Probe (Courtier vs Sincerity): 1-2 info types, always detected.
+  Discern Need (school-dependent vs Etiquette): returns priority objective.
+- **ActionExecutor** — 7 contested court actions (`_CONTESTED_COURT_ACTIONS`)
+  routed through `_execute_contested_court_action()` with per-action
+  attacker/defender skill/trait lookup tables. Dedicated handlers for
+  PROVOKE_EMOTION, PLAY_GAME, DISCERN_NEED, READ_CHARACTER, PROBE,
+  PUBLIC_DEBATE (per-witness). Game trait mapping for 6 Games sub-skills.
+  Yasuki/Doji school-specific skill routing for DISCERN_NEED.
+- **DayOrchestrator** — `_process_court_action_effects()` processes target
+  position shifts, Provoke Emotion honor/glory/witness effects, Play a Game
+  bilateral disposition, Public Debate per-witness disposition/position,
+  Gossip subject disposition on listener, Disclose downstream opinion transfer
+  (disclosed_opinion × 0.5 to listener's disposition toward subject),
+  OFFER_FAVOR → FavorData creation (GENERAL type, MINOR tier), and debate
+  topic position shifts per witness (requires topic_id in action metadata).
+  Action metadata threaded through contested court actions via
+  `_action_metadata` key in effects dict.
+- **School exceptions** — Bayushi Courtier R1 ("Weakness is My Strength"):
+  GOSSIP is always source_concealed without spending a concealment Raise.
+  Ikoma Bard R2 ("The Heart of the Lion"): PROVOKE_EMOTION targeting a Lion
+  Ikoma Bard skips all penalties (honor, glory, witness disposition loss).
+  GOSSIP executor refactored to delegate to `CourtActionSystem.resolve_gossip()`
+  with damage/concealment raise split from action metadata.
+- **NPC engine** — PROVOKE_EMOTION, PLAY_GAME, DISCERN_NEED added to AT_COURT
+  context list, action_skill_map.json, objective_alignment.json (SEEK_PRETEXT,
+  GATHER_INTELLIGENCE, RAISE_DISPOSITION), personality_lean.json (14 virtues).
+  Phase 3 metadata population: NEGOTIATE/PERSUADE/PUBLIC_DEBATE get `topic_id`
+  from court agenda (topic with strongest absolute position, falling back to
+  first topic when none known). GOSSIP gets `gossip_subject_id` from need
+  target or worst-disposition known character, with damage/concealment raise
+  split. Gossip concealment AI: `_compute_gossip_raise_split()` assigns
+  raises based on personality — Bayushi Courtier all-damage (free school
+  concealment), Gi/Makoto/Meiyo all-damage, Seigyo/Dosatsu/Chishiki and
+  Scorpion clan reserve 1 raise for concealment, default all-damage.
+  DISCLOSE gets `disclose_about_id` and `disclosed_opinion` from
+  character's disposition toward the target.
+  `build_context()` now reads `known_topics` from `character.topic_pool` and
+  `known_positions` from `character.topic_positions` directly (previously read
+  from world_state dict entries that were never populated).
+
 ### Court System (s15.1, s15.2)
 - **shared/court_session_data.gd** — CourtSessionData Resource: 3 CourtType
   (IMPERIAL_WINTER_COURT, CLAN_CHAMPION_COURT, PROVINCIAL_FAMILY_COURT),
@@ -2197,6 +2388,52 @@ All in /tests/, one file per system:
   Daily compliance processing: auto-ceasefire when war resolved, deadline
   enforcement, defiance consequences (honor/disposition), all-compliant
   triggers edict application and deactivation.
+  **Aggregate-opinion edict selection (s16.4)** —
+  `compute_emperor_weight()` applies ×3 multiplier to Emperor's position
+  weight (Status × relevance/50 × 3; at relevance 100: weight 60).
+  `compute_topic_aggregate()` computes weighted average opinion across all
+  attending lords using `TopicMomentumSystem.calculate_position_weight()`
+  for regular lords and `compute_emperor_weight()` for the Emperor.
+  `generate_edicts_from_aggregate()` evaluates top 3 agenda topics by
+  momentum. Thresholds: aggregate > +25 → compelling edict, < −25 →
+  blocking edict, between → no edict. Returns edicts + per-topic aggregate
+  diagnostics. `_crisis_to_edict_type()` maps crisis topic_type to
+  EdictType (famine → TAX_REFORM, war → CEASE_HOSTILITIES, others →
+  GENERAL_DECREE). `CRISIS_COMMITMENT_TYPE` maps 10 crisis topic_types to
+  commitment_type strings (send_military_aid, send_supplies,
+  send_magistrates). `generate_edict_commitments()` creates
+  CourtCommitmentData (EDICT source) for every lord when an edict fires.
+  Wired into DayOrchestrator: `_generate_court_edicts()` now uses the
+  aggregate path via `generate_edicts_from_aggregate()`. Builds attendee
+  list from `court.attendee_ids`, gathers lord-tier characters (status >= 5.0
+  or lord_id == -1) for commitment binding. On edict issuance, generates
+  CourtCommitmentData for all lords and appends to `court_commitments`.
+  Deadline defaults to IC day + 90. `advance_day()` gains
+  `court_commitments: Array[CourtCommitmentData]` parameter.
+  WorldStateData gains `court_commitments` field.
+- **Commitment need injection** — `_inject_commitment_needs()` runs daily
+  after edict injection and before NPC wave resolution. Iterates unfulfilled
+  court commitments, injects `HONOR_COMMITMENT` reactive events into each
+  lord's `pending_events` with priority from `CourtCommitmentSystem.get_priority()`
+  (95 base, 100 for Chugi). Deduplication by `source + topic_id`. Event dict
+  includes `commitment_type` for decomposition routing.
+- **Commitment seasonal processing** — `_process_commitment_seasonal()` runs
+  on season boundary after ronin processing. Delegates to
+  `CourtCommitmentSystem.process_seasonal_commitments()` for fulfillment/renege
+  detection. On renege: applies honor loss via `HonorGlorySystem.apply_honor_change()`,
+  applies disposition penalty (−15) from all characters who know the reneging
+  lord (inbound disposition), generates renege topic (Tier 3 for voluntary,
+  Tier 2 for edict-compelled, POLITICAL category, "commitment_broken" variant).
+  Return dict gains `commitment_seasonal_result`.
+- **Voluntary declaration processing** — `_process_voluntary_declarations()` runs
+  daily after edict compliance processing. Scans day results for successful
+  PUBLIC_DECLARATION actions from lord-tier characters at active courts. When the
+  declaring lord's position exceeds +50 on an agenda topic with a commitment type
+  mapping (via `ImperialEdictSystem.get_commitment_type_for_topic()`), creates a
+  VOLUNTARY CourtCommitmentData. Deduplication via `has_commitment_on_topic()`.
+  Deadline computed as last day of the next IC season via
+  `_compute_next_season_end_ic_day()`. `_find_active_court_for_character()` helper
+  locates the lord's court by attendee ID.
 - **NPC edict response wiring** — COMPLY_WITH_EDICT and DEFY_EDICT ActionIDs
   in context lists, scoring tables, and ActionExecutor. RESPOND_TO_EDICT
   NeedType in objective_alignment.json. `_inject_edict_reactive_events()`
@@ -2915,6 +3152,15 @@ All in /tests/, one file per system:
   Known limitations: Senior Courtier detection deferred (unclear vacancy
   trigger).
 
+### ActionID Wiring Audit — COMPLETE
+All 18 ActionIDs that produce `requires_*` effect flags have matching
+orchestrator handlers. No orphan flags or handlers on either side.
+The 5 remaining military stubs (ORDER_DEPLOY, ORDER_FORTIFY,
+ORDER_RETREAT, ASSIGN_GARRISON, CONDUCT_RAID) return simple effect
+labels with no deferred processing — all are blocked on the coordinate
+system or missing GDD specification. Do NOT re-audit the executor →
+orchestrator wiring unless new ActionIDs are added.
+
 ### What's Next
 1. World generation coordinate system and adjacency
 
@@ -2980,6 +3226,35 @@ The following subsystems are now integrated into the NPC decision loop:
   deployment status (garrisoned units blocked from offensive actions),
   verifies legion coordination and section campaign authority. Military data
   dict threaded through NPCWaveResolver → DayOrchestrator.
+  Post-execution: `requires_garrison_assignment` flag from DISPATCH_COURTIER
+  acceptance processed by `_apply_garrison_assignment()` in
+  `_process_military_effects()`. Applies +0.1 honor to accepting daimyo via
+  HonorGlorySystem, transfers 1.0 garrison_pu from daimyo's province
+  settlement to Wall tower settlement in target province (partial transfer
+  when source garrison < 1.0).
+- **Military Stub Actions** — Four military ActionIDs fully wired (executor →
+  orchestrator mutation):
+  MAINTAIN_SIEGE: stamps `last_maintained_ic_day` on siege state dict.
+  ORDER_PATROL: stamps `season_meta["patrolled_provinces"][pid]`, halves
+  insurgency spawn chance via `is_patrolled` world_state flag, reduces
+  concealment by −1 on hidden insurgencies in patrolled provinces (auto-detects
+  at concealment 0). Patrol flags cleared each season boundary.
+  PURIFY_TAINTED_GROUND: full executor intercept with Lore:Shadowlands +
+  Intelligence vs TN 15 + (PTL × 5). Success: PTL reduction 0.5 + 0.25/raise.
+  Kuni Ward system: bleed reduction 0.1–0.3 by school rank, duration 2–6
+  seasons, stored in `season_meta["kuni_wards"]` keyed by province ID string.
+  Stronger wards replace weaker. `_tick_kuni_wards()` decrements on season
+  boundary. Ward bleed reduction subtracted from PTL gain in wall seasonal
+  pressure processing.
+  DRILL_TROOPS: Battle vs TN 15. Success: +1 training point + 1/raise.
+  10 points per level-up. Training levels: 0 (Raw), 1 (Drilled), 2 (Trained),
+  3 (Veteran/max). Stored on company dict as `training_level`/`training_points`.
+  Training level stat modifiers in combat deferred until ArmyCombatSystem
+  integration.
+  Remaining military stubs (return simple effect dicts, no orchestrator
+  mutation): ORDER_DEPLOY, ORDER_FORTIFY, ORDER_RETREAT, ASSIGN_GARRISON,
+  CONDUCT_RAID — all blocked on coordinate system or missing GDD
+  specification.
 - **ResourceAvailability** — Phase 5 scoring: `resource_modifier` field on
   ScoredAction. `_compute_resource_modifier` in npc_decision_engine.gd calls
   `ResourceAvailability.compute_resource_modifier()`. Koku ratio thresholds:
@@ -3004,6 +3279,29 @@ The following subsystems are now integrated into the NPC decision loop:
   Returns active festivals, effects, honor/glory gains. NPC loop can read
   world_state flags to gate military actions (ceasefire) and labor
   (Chrysanthemum halt).
+- **Urgency data injection** — `_inject_urgency_data()` runs before NPC
+  wave resolution. Injects 5 keys into each per-character world_state dict:
+  `favors` (global favors array for expiring favor urgency detection),
+  `active_tethers` (for cut supply army urgency), `active_topics` (for topic
+  type filtering in Phase 5 scoring), `objective_stalled_seasons` (from
+  primary objective's `seasons_without_progress`), `besieged_settlement_health_pct`
+  (computed from siege state rice/PU ratio at character's physical_location,
+  0.0 if garrison starved), `known_objectives["standing_need_type"]` (from
+  objectives_map standing objective for Phase 5 standing influence scoring).
+  Without this injection, urgency conditions, topic type filtering, and
+  standing influence would silently use defaults.
+  Also injects `characters_present` — builds location groups from
+  `physical_location`, excludes dead and traveling characters, and
+  populates each character's world_state with co-located NPC IDs
+  (excluding self). Fixes `_find_clan_contact_present()`,
+  `_find_highest_status_present()`, and all social targeting in
+  ObjectiveDecomposer and PrimaryObjectiveDecomposer.
+- **Disposition modifier audit** — `HOSTILE_ACTIONS` const expanded with 4
+  additional actions: PROVOKE_EMOTION, DAMAGE_RELATIONSHIP, ASSASSINATE,
+  ISSUE_DUEL_CHALLENGE. These use the hostile disposition column (high
+  disposition toward target = penalty, low = bonus) per GDD s57.3. GOSSIP
+  intentionally excluded: its `target_npc_id` is the conversation partner
+  (cooperative), not the gossip subject.
 - **DispositionSystem** — Daily: `_apply_cohabitation()` increments
   `cohabitation_days` dict on L5RCharacterData for all character pairs
   sharing a `physical_location`. Seasonal: `_decay_all_historical_modifiers()`
@@ -3087,7 +3385,29 @@ The following subsystems are now integrated into the NPC decision loop:
   WorldStateData gains matching fields. Return dict gains `military_daily`.
   Post-execution: `_process_military_effects()` scans day results for effect
   flags. ORDER_LEVY → `_apply_levy_pu_effect()` calls
-  `PUReconciliation.consume_levy_pu()` on source settlement. ORDER_BATTLE →
+  `PUReconciliation.consume_levy_pu()` on source settlement AND
+  `LevySystem.raise_levy()` to create a CompanyData, converted to a company
+  dict and appended to the `companies` array. `can_raise_levy()` validation
+  gate prevents levy when insufficient military PU exists above garrison
+  requirements. Phase 3 metadata: `_select_levy_unit_type()` picks unit type
+  based on context (PEASANT_LEVY when iron unsustainable, ASHIGARU_ARCHERS
+  when 2+ spearmen exist with no archers, ASHIGARU_SPEARMEN default).
+  `target_province_id` populated from lord's province with highest
+  `total_settlement_pu`. `next_company_id`
+  counter threaded through for ID assignment. New company dict includes
+  `army_id: -1` (levy companies exist outside Go-hatamoto hierarchy).
+  Arms equip cost deducted from `ClanData.arms_stockpile` (looked up via
+  character clan, clamped at 0). `arms_deducted` returned in result dict.
+  Company dict stamped with `levy_raised_season` for suspicion tracking.
+  WorldStateData gains `next_company_id: Array[int]`.
+  Seasonal: `_process_levy_suspicion()` runs on season boundary after upkeep.
+  Iterates levy companies (army_id == -1), computes seasons maintained since
+  `levy_raised_season`, checks wartime exemption (all clans in active wars
+  including allies), calls `LevySystem.check_suspicion()`. On suspicion:
+  generates Tier 4 topic (momentum 11) initially, escalates to Tier 3
+  (momentum 26) at 3+ seasons. One topic per lord per season boundary.
+  Skips destroyed companies and companies assigned to armies.
+  ORDER_BATTLE →
   `_apply_battle_pu_reconciliation()` calls `PUReconciliation.reconcile_battle()`
   with victor/loser company data from effects dict. ASSIGN_TO_MILITARY_SERVICE →
   `_apply_service_assignment_effect()` calls
@@ -3107,7 +3427,23 @@ The following subsystems are now integrated into the NPC decision loop:
   `PUReconciliation.process_army_dissolution()`). Pursuit casualties
   distributed across non-destroyed loser companies before dissolution.
   Army movement processing detects battle triggers on arrival via
-  `ArmyMovementSystem.check_battle_trigger()`.
+  `ArmyMovementSystem.check_battle_trigger()`. When a battle trigger fires
+  and the clans are at war, `_resolve_army_battles()` runs the full combat
+  pipeline: converts company dicts to CompanyData via `_company_dict_to_data()`,
+  builds battle states via `_build_battle_states()`, calls
+  `resolve_and_reconcile_battle()`, then writes results back to company dicts
+  via `_write_battle_results_to_companies()` (health, morale, destroyed,
+  routed, commander death). Terrain determined from province data:
+  `_get_battle_terrain()` maps `ProvinceData.terrain_type` to
+  `BattleTerrainType` (Plains→Plains, Forest→Forest, Hills→Hills,
+  Mountains→Mountain, River Delta→Plains). Towns/Cities/Imperial Capital
+  override to URBAN. `_get_fortification_bonus()` returns +5 Defense
+  when a military settlement (Fortification/Keep/Castle/Family Castle/
+  Wall Tower) exists in the battle province AND the province belongs to
+  the defending clan (attackers don't benefit from enemy forts). Both threaded through
+  `_process_military_daily()` → `_resolve_army_battles()` via
+  `provinces` parameter. Sub-tile terrain deferred until coordinate
+  system exists.
   `ArmyCombatSystem.is_cavalry()` public helper for cavalry detection.
   Rice upkeep deduction: `_deduct_rice_upkeep()` deducts seasonal rice costs
   from clan settlements' `rice_stockpile` using `ClanData.province_ids` to
@@ -3196,6 +3532,79 @@ The following subsystems are now integrated into the NPC decision loop:
   `rank4_commander_risk_checks` adds +3 TN to commander survival for
   Insight Rank 4+ commanders via `_inject_worship_battle_maluses()`.
   All worship malus hooks are now wired.
+- **TogashiOversight** — Seasonal: `_process_togashi_oversight()` runs after
+  `_run_strategic_reviews()` but before directive consumption. Finds Mirumoto
+  FC (Dragon, Mirumoto, lord_id==-1, highest status) and Togashi (Dragon,
+  Togashi, lord_id==-1, status>=7.0). Extracts FC's directives from
+  strategic_results, builds world state for concern checks (clan strengths,
+  inter-clan wars, emperor vacant, rebellions, worship failures, wall breach,
+  PTL). Calls `TogashiOversight.process_seasonal_oversight()`. On compliance:
+  injects forced directive into strategic_results. On defiance: applies −0.3
+  Honor to Mirumoto FC. Generates topic (Tier 4 at stage ≤2, Tier 3 at
+  stage 3+; POLITICAL category, momentum 11/26). Reports
+  `diplomatic_penalty` when authority is locked (Stage 2+). Skipped when
+  `togashi_state` is empty or no Mirumoto FC found. WorldStateData holds
+  `togashi_state: Dictionary`.
+- **PhoenixCouncil** — Seasonal: `_process_phoenix_council_gating()` runs
+  after `_run_strategic_reviews()` alongside Togashi processing. Finds
+  Shiba Champion (Phoenix, lord_id==-1, highest status) and Elemental
+  Masters (Phoenix, role_position "Master of {Element}"). Skipped when
+  champion has post-schism authority or Council below quorum (< 3 masters).
+  Maps StrategicReview directives to PhoenixCouncil DecisionType:
+  WAR_READINESS → DEPLOY_GO_HATAMOTO, SEEK_PEACE → SIGN_TREATY. Non-major
+  directives (ADJUST_TAX, CALL_COURT, etc.) pass through without vote.
+  For major decisions: runs `PhoenixCouncil.tally_vote()` with per-master
+  virtues and dispositions. Approved directives kept in strategic_results.
+  Vetoed directives removed. Deadlocked proposals tabled (Champion may
+  break tie after 2 tablings at −0.3 Honor). Tracks crisis veto streak
+  and consecutive obstruction for Overreach path. Generates veto topic
+  (Tier 4 at overreach ≤1, Tier 3 at overreach 2+; POLITICAL category).
+  Failed proposals banned from resubmission per `is_proposal_banned()`.
+  WorldStateData holds `phoenix_council_state: Dictionary`.
+- **IntraClanCivilWar** — Seasonal: `_process_civil_war_seasonal()` runs after
+  `_consume_supply_status_results()` and before `_process_insurgencies()` so
+  stability damage feeds into insurgency spawn calculations.
+  Precedent decay runs unconditionally (even with no active wars).
+  Per active war: `apply_seasonal_consequences()` applies −3/−5/−7 stability
+  penalty (escalating at 8 and 12 seasons) to all clan provinces, and −0.3
+  Honor/season hemorrhage to the rebel lord.
+  `_check_civil_war_defections()` iterates faction_assignments, checks all 4
+  GDD defection triggers via `defection_trigger_fired()`, re-evaluates loyalty
+  via `evaluate_loyalty()`, calls `record_defection()` + `apply_defection_consequences()`
+  on faction change.
+  `_check_civil_war_resolution()` checks legitimacy victory (rebel dead, rebel
+  honor < 0, capitulation, seat lost) and ticks the rebel victory counter
+  (requires allied Family Daimyo + holds seat for 6 consecutive seasons).
+  `_resolve_civil_war()` applies post-resolution scars (stored in
+  `season_meta["civil_war_scars"]`), rebel consequences on legitimacy victory
+  (honor loss for rebel Family Daimyo), precedent effect on rebel victory
+  (+3 standard, +5 championship seizure, expires 5 seasons), generates
+  Tier 2 POLITICAL resolution topic. `_decay_civil_war_scars()` runs each
+  season, pruning fully-decayed entries.
+  `holds_seat` is a placeholder (true when rebel alive) — needs coordinate
+  system for real province ownership check. `rebel_completion_rate` reads
+  from ObjectiveProgress via `objectives_map`.
+  New params on `advance_day()`: `active_civil_wars: Array[Dictionary]`,
+  `precedent_modifiers: Dictionary`. Return dict gains `civil_war_results`.
+  WorldStateData gains `active_civil_wars` and `precedent_modifiers` fields.
+  **Trigger & Faction Formation (s53.2.1, s53.2.2)** —
+  `_trigger_civil_war()` creates initial state via `make_initial_state()`,
+  generates Tier 2 POLITICAL crisis topic, evaluates loyalty for all living
+  clan NPCs (Family Daimyo first, then others), processes ronin departures
+  (permanent via `RoninSystem.make_ronin()` + `permanent_ronin = true`),
+  and reassigns broken feudal chains (`_reassign_broken_feudal_chains()`
+  assigns vassals whose lord picked the opposite faction to the highest-
+  status same-faction member). Guards against duplicate active wars for
+  the same clan.
+  Wired from two existing defiance paths:
+  `_process_togashi_oversight()` — when `is_removal_triggered()` (Stage 4),
+  triggers Dragon civil war with Mirumoto FC as rebel, Togashi as authority.
+  `_process_phoenix_council_gating()` — when `is_overreach_schism_imminent()`
+  (Stage 4), triggers Phoenix civil war with senior Elemental Master as
+  rebel, Shiba Champion as authority.
+  NPC AI decision to refuse a directive is NOT implemented — triggers only
+  fire from existing governance escalation paths. Adding a general refusal
+  mechanic requires GDD specification.
 
 ## Resolved Design Decisions
 
