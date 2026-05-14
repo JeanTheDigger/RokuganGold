@@ -179,6 +179,9 @@ static func execute(
 			"effects": war_effects,
 		}
 
+	if action_id == "ISSUE_DUEL_CHALLENGE":
+		return _execute_duel_challenge(action, character, ctx, dice_engine, characters_by_id)
+
 	if action_id == "COMPLY_WITH_EDICT" or action_id == "DEFY_EDICT":
 		var compliant: bool = action_id == "COMPLY_WITH_EDICT"
 		var edict_id: int = action.metadata.get("edict_id", -1)
@@ -2844,5 +2847,87 @@ static func _execute_probe(
 		"roll_total": attacker_roll,
 		"tn": defender_roll,
 		"margin": attacker_roll - defender_roll,
+		"effects": effects,
+	}
+
+
+# -- Duel Challenge -----------------------------------------------------------
+
+static func _execute_duel_challenge(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	dice_engine: DiceEngine,
+	characters_by_id: Dictionary,
+) -> Dictionary:
+	var target_id: int = action.target_npc_id
+	var target: L5RCharacterData = characters_by_id.get(target_id)
+
+	if target == null:
+		return {
+			"success": false,
+			"action_id": "ISSUE_DUEL_CHALLENGE",
+			"character_id": ctx.character_id,
+			"target_npc_id": target_id,
+			"ic_day": ctx.ic_day,
+			"season": ctx.season,
+			"effects": {"failed": true, "reason": "target_not_found"},
+		}
+
+	var to_death: bool = action.metadata.get("to_death", false)
+	var is_sanctioned: bool = action.metadata.get("is_sanctioned", true)
+
+	var duel_result: Dictionary = IndividualCombat.resolve_full_duel(
+		character, target, to_death, dice_engine
+	)
+
+	var winner_id: int = duel_result.get("winner_id", -1)
+	var loser_id: int = duel_result.get("loser_id", -1)
+	var simultaneous: bool = duel_result.get("simultaneous", false)
+
+	var challenger_dead: bool = CharacterStats.is_dead(character)
+	var defender_dead: bool = CharacterStats.is_dead(target)
+	var death_occurred: bool = challenger_dead or defender_dead
+
+	var effects: Dictionary = {
+		"duel_result": duel_result,
+		"winner_id": winner_id,
+		"loser_id": loser_id,
+		"simultaneous": simultaneous,
+		"death_occurred": death_occurred,
+		"challenger_dead": challenger_dead,
+		"defender_dead": defender_dead,
+	}
+
+	# Glory bonus for winning a witnessed duel at court (s40 / s4.6)
+	if winner_id != -1 and ctx.context_flag == Enums.ContextFlag.AT_COURT:
+		if winner_id == character.character_id:
+			effects["glory_change"] = 0.5
+		else:
+			effects["winner_glory_change"] = 0.5
+			effects["winner_glory_recipient_id"] = winner_id
+
+	# Crime record if an unsanctioned duel caused a death (s40 / s2.8.11)
+	if death_occurred and not is_sanctioned:
+		var killer_id: int = -1
+		if challenger_dead:
+			killer_id = target.character_id
+		elif defender_dead:
+			killer_id = character.character_id
+		effects["requires_crime_creation"] = true
+		effects["crime_type"] = Enums.CrimeType.UNSANCTIONED_DUEL_DEATH
+		effects["crime_perpetrator_id"] = killer_id
+		effects["crime_victim_id"] = loser_id
+
+	var actor_is_winner: bool = winner_id == character.character_id
+	return {
+		"success": not simultaneous and winner_id != -1,
+		"action_id": "ISSUE_DUEL_CHALLENGE",
+		"character_id": ctx.character_id,
+		"target_npc_id": target_id,
+		"target_province_id": action.target_province_id,
+		"ic_day": ctx.ic_day,
+		"season": ctx.season,
+		"actor_won": actor_is_winner,
 		"effects": effects,
 	}
