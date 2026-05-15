@@ -533,3 +533,184 @@ func test_battle_not_ended_with_active_ship() -> void:
 	var atk := _make_attacker(1, Enums.ShipClass.KOBUNE, 0)
 	var states: Array[Dictionary] = _to_typed_array([atk])
 	assert_false(NavalCombatSystem._check_battle_end(states))
+
+
+# =============================================================================
+# Tortoise Escape Attempt (s11.9)
+# =============================================================================
+
+func _make_captain(nav: int, intel: int) -> L5RCharacterData:
+	var cap := L5RCharacterData.new()
+	cap.character_id = 9000
+	cap.intelligence = intel
+	cap.skills["Navigation"] = nav
+	cap.skills["Battle"] = 0
+	return cap
+
+
+func _make_tortoise(id: int, col: int, side: String,
+		cap: L5RCharacterData = null) -> Dictionary:
+	var ship := _make_ship(id, Enums.ShipClass.TORTOISE_OCEANGOING)
+	var nc := NavalCombatSystem.make_naval_company(
+		ship, 1, col, side, Enums.NavalWeather.CLEAR, false, cap)
+	return nc
+
+
+func test_is_active_returns_false_for_escaped_ship() -> void:
+	var nc := _make_tortoise(1, 0, "attacker")
+	nc["is_escaped"] = true
+	assert_false(NavalCombatSystem.is_active(nc))
+
+
+func test_escape_attempted_set_after_attempt() -> void:
+	var cap := _make_captain(0, 2)
+	var tortoise := _make_tortoise(1, 0, "attacker", cap)
+	var enemy := _make_defender(2, Enums.ShipClass.SENGOKOBUNE, 0)
+	var own: Array[Dictionary] = _to_typed_array([tortoise])
+	var foe: Array[Dictionary] = _to_typed_array([enemy])
+	NavalCombatSystem._process_tortoise_escapes(own, foe, _dice, Enums.NavalWeather.CLEAR)
+	assert_true(tortoise["escape_attempted"])
+
+
+func test_escape_attempted_flag_prevents_retry() -> void:
+	var cap := _make_captain(0, 2)
+	var tortoise := _make_tortoise(1, 0, "attacker", cap)
+	tortoise["escape_attempted"] = true
+	var enemy := _make_defender(2, Enums.ShipClass.SENGOKOBUNE, 0)
+	var own: Array[Dictionary] = _to_typed_array([tortoise])
+	var foe: Array[Dictionary] = _to_typed_array([enemy])
+	var results: Array[Dictionary] = NavalCombatSystem._process_tortoise_escapes(
+		own, foe, _dice, Enums.NavalWeather.CLEAR)
+	assert_eq(results.size(), 0, "Already-attempted ship should produce no result")
+
+
+func test_non_tortoise_ships_skipped_by_escape() -> void:
+	var atk := _make_attacker(1, Enums.ShipClass.SENGOKOBUNE, 0)
+	var enemy := _make_defender(2, Enums.ShipClass.SENGOKOBUNE, 0)
+	var own: Array[Dictionary] = _to_typed_array([atk])
+	var foe: Array[Dictionary] = _to_typed_array([enemy])
+	var results: Array[Dictionary] = NavalCombatSystem._process_tortoise_escapes(
+		own, foe, _dice, Enums.NavalWeather.CLEAR)
+	assert_eq(results.size(), 0, "Non-Tortoise ships must not attempt escape")
+
+
+func test_process_tortoise_escapes_result_has_required_keys() -> void:
+	var cap := _make_captain(0, 2)
+	var tortoise := _make_tortoise(1, 0, "attacker", cap)
+	var enemy := _make_defender(2, Enums.ShipClass.SENGOKOBUNE, 0)
+	var own: Array[Dictionary] = _to_typed_array([tortoise])
+	var foe: Array[Dictionary] = _to_typed_array([enemy])
+	var results: Array[Dictionary] = NavalCombatSystem._process_tortoise_escapes(
+		own, foe, _dice, Enums.NavalWeather.CLEAR)
+	assert_eq(results.size(), 1)
+	var r: Dictionary = results[0]
+	assert_has(r, "company_id")
+	assert_has(r, "ship_id")
+	assert_has(r, "escaped")
+	assert_has(r, "escape_total")
+	assert_has(r, "pursue_total")
+	assert_has(r, "weather_bonus")
+
+
+func test_tortoise_escape_with_overwhelming_nav_skill() -> void:
+	# Navigation 10 + Intelligence 10 vs Battle 0 + Intelligence 2 = escape is near-certain.
+	# Roll range 1-10 on both sides: attacker gets 10+20=30 minimum, enemy gets at most 10+2=12.
+	var cap := _make_captain(10, 10)
+	var tortoise := _make_tortoise(1, 0, "attacker", cap)
+	var enemy := _make_defender(2, Enums.ShipClass.SENGOKOBUNE, 0)
+	var own: Array[Dictionary] = _to_typed_array([tortoise])
+	var foe: Array[Dictionary] = _to_typed_array([enemy])
+	var results: Array[Dictionary] = NavalCombatSystem._process_tortoise_escapes(
+		own, foe, _dice, Enums.NavalWeather.CLEAR)
+	assert_eq(results.size(), 1)
+	assert_true(results[0]["escaped"], "Overwhelming Nav/Int should escape vs 0-Battle enemy")
+	assert_true(tortoise["is_escaped"])
+
+
+func test_tortoise_escape_with_zero_nav_vs_strong_pursuer() -> void:
+	# Navigation 0 + Intelligence 2 vs Battle 10 + Intelligence 10: escape is near-impossible.
+	var cap := _make_captain(0, 2)
+	var tortoise := _make_tortoise(1, 0, "attacker", cap)
+	var enemy_cap := _make_captain(10, 10)
+	enemy_cap.skills["Battle"] = 10
+	var enemy := _make_defender(2, Enums.ShipClass.SENGOKOBUNE, 0)
+	enemy["captain"] = enemy_cap
+	var own: Array[Dictionary] = _to_typed_array([tortoise])
+	var foe: Array[Dictionary] = _to_typed_array([enemy])
+	var results: Array[Dictionary] = NavalCombatSystem._process_tortoise_escapes(
+		own, foe, _dice, Enums.NavalWeather.CLEAR)
+	assert_eq(results.size(), 1)
+	assert_false(results[0]["escaped"], "Zero-nav Tortoise vs strong pursuer should fail to escape")
+	assert_false(tortoise["is_escaped"])
+
+
+func test_escaped_ship_excluded_from_matchups() -> void:
+	var cap := _make_captain(10, 10)
+	var tortoise := _make_tortoise(1, 0, "attacker", cap)
+	var enemy := _make_defender(2, Enums.ShipClass.SENGOKOBUNE, 0)
+	var atk: Array[Dictionary] = _to_typed_array([tortoise])
+	var def: Array[Dictionary] = _to_typed_array([enemy])
+	# Run escape processing — with high nav the ship should escape
+	NavalCombatSystem._process_tortoise_escapes(atk, def, _dice, Enums.NavalWeather.CLEAR)
+	if tortoise["is_escaped"]:
+		assert_false(NavalCombatSystem.is_active(tortoise),
+			"Escaped ship must not be active for matchup building")
+
+
+func test_battle_result_has_escaped_ships_key() -> void:
+	var atk: Array[Dictionary] = _to_typed_array([_make_attacker(1, Enums.ShipClass.SENGOKOBUNE, 0)])
+	var def: Array[Dictionary] = _to_typed_array([_make_defender(2, Enums.ShipClass.SENGOKOBUNE, 0)])
+	var result: Dictionary = NavalCombatSystem.resolve_naval_battle(
+		atk, def, Enums.NavalWeather.CLEAR, _dice)
+	assert_has(result, "escaped_ships")
+	assert_true(result["escaped_ships"] is Array)
+
+
+func test_round_log_has_escape_results_key() -> void:
+	var atk: Array[Dictionary] = _to_typed_array([_make_attacker(1, Enums.ShipClass.SENGOKOBUNE, 0)])
+	var def: Array[Dictionary] = _to_typed_array([_make_defender(2, Enums.ShipClass.SENGOKOBUNE, 0)])
+	var result: Dictionary = NavalCombatSystem.resolve_naval_battle(
+		atk, def, Enums.NavalWeather.CLEAR, _dice)
+	assert_true(result["round_log"].size() > 0)
+	assert_has(result["round_log"][0], "escape_results")
+
+
+func test_tortoise_escape_with_typhoon_bonus_increases_escape_total() -> void:
+	var cap := _make_captain(3, 2)
+	var tortoise_clear := _make_tortoise(10, 0, "attacker", cap)
+	var tortoise_typhoon := _make_tortoise(11, 0, "attacker", cap)
+	var enemy := _make_defender(20, Enums.ShipClass.SENGOKOBUNE, 0)
+	var foe: Array[Dictionary] = _to_typed_array([enemy])
+
+	var dice_clear := DiceEngine.new(99)
+	var own_clear: Array[Dictionary] = _to_typed_array([tortoise_clear])
+	var res_clear: Array[Dictionary] = NavalCombatSystem._process_tortoise_escapes(
+		own_clear, foe, dice_clear, Enums.NavalWeather.CLEAR)
+
+	var dice_typhoon := DiceEngine.new(99)
+	var own_typhoon: Array[Dictionary] = _to_typed_array([tortoise_typhoon])
+	var res_typhoon: Array[Dictionary] = NavalCombatSystem._process_tortoise_escapes(
+		own_typhoon, foe, dice_typhoon, Enums.NavalWeather.TYPHOON)
+
+	assert_eq(res_clear.size(), 1)
+	assert_eq(res_typhoon.size(), 1)
+	assert_true(
+		res_typhoon[0]["weather_bonus"] > res_clear[0]["weather_bonus"],
+		"Typhoon escape bonus should exceed Clear bonus"
+	)
+
+
+func test_collect_escaped_ships_returns_correct_side() -> void:
+	var atk := _make_tortoise(1, 0, "attacker")
+	atk["is_escaped"] = true
+	var def := _make_tortoise(2, 0, "defender")
+	def["is_escaped"] = true
+	var atk_arr: Array[Dictionary] = _to_typed_array([atk])
+	var def_arr: Array[Dictionary] = _to_typed_array([def])
+	var escaped: Array[Dictionary] = NavalCombatSystem._collect_escaped_ships(atk_arr, def_arr)
+	assert_eq(escaped.size(), 2)
+	var sides: Array[String] = []
+	for e: Dictionary in escaped:
+		sides.append(e["side"])
+	sides.sort()
+	assert_eq(sides, ["attacker", "defender"])
