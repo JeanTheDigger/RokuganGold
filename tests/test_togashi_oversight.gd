@@ -856,3 +856,53 @@ func test_tick_order_reconstitution_no_op_at_zero():
 	var done: bool = TogashiOversight.tick_order_reconstitution(_state)
 	# Returns false when already zero and not yet reappeared.
 	assert_false(done)
+
+
+# =============================================================================
+# REAPPEARANCE BEFORE AUTONOMOUS RULE GATE
+# Verifies the fix for the critical bug: reappear_togashi must fire even when
+# dragon_autonomous_rule is true (the assaulting FC always holds autonomous rule).
+# =============================================================================
+
+func test_reappear_togashi_clears_autonomous_rule_flag():
+	# Simulates: FC assaulted, won autonomous rule, then died; new FC now in place.
+	_state["togashi_vanished"] = true
+	_state["dragon_autonomous_rule"] = true
+	_state["last_assaulter_fc_id"] = 10
+	_state["order_dissolved_by_assault"] = true
+
+	var togashi: L5RCharacterData = L5RCharacterData.new()
+	togashi.character_id = 99
+
+	var dragon_temple := SettlementData.new()
+	dragon_temple.settlement_id = 200
+	dragon_temple.settlement_name = "Togashi Temple"
+	dragon_temple.settlement_type = Enums.SettlementType.MONASTERY
+	dragon_temple.province_id = 1
+
+	var prov_data := ProvinceData.new()
+	prov_data.province_id = 1
+	prov_data.clan = "Dragon"
+
+	var result: Dictionary = TogashiOversight.reappear_togashi(
+		_state, togashi, [dragon_temple], {1: prov_data}, {}
+	)
+
+	assert_true(result.get("reappeared", false))
+	assert_false(_state.get("togashi_vanished", true), "togashi_vanished should be cleared")
+	assert_false(_state.get("dragon_autonomous_rule", true), "dragon_autonomous_rule should be cleared")
+	assert_eq(int(_state.get("order_reconstitution_seasons_remaining", 0)), 4)
+
+
+func test_has_active_dragon_schism_true():
+	var wars: Array[Dictionary] = [{"clan": "Dragon", "active": true}]
+	assert_true(DayOrchestrator._has_active_dragon_schism(wars))
+
+
+func test_has_active_dragon_schism_false_when_inactive():
+	var wars: Array[Dictionary] = [{"clan": "Dragon", "active": false}]
+	assert_false(DayOrchestrator._has_active_dragon_schism(wars))
+
+
+func test_has_active_dragon_schism_false_when_empty():
+	assert_false(DayOrchestrator._has_active_dragon_schism([]))

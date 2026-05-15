@@ -137,7 +137,11 @@ static func advance_day(
 	)
 
 	var dragon_schism_siege_event: Dictionary = {}
-	if not togashi_state.is_empty() and not togashi_state.get("togashi_vanished", false):
+	if (
+		not togashi_state.is_empty()
+		and not togashi_state.get("togashi_vanished", false)
+		and _has_active_dragon_schism(active_civil_wars)
+	):
 		dragon_schism_siege_event = _check_dragon_schism_siege_events(
 			military_daily, togashi_state, characters, characters_by_id,
 			settlements, active_topics, next_topic_id, ic_day,
@@ -7274,9 +7278,41 @@ static func _process_togashi_oversight(
 	settlements: Array[SettlementData] = [],
 	provinces: Dictionary = {},
 ) -> Dictionary:
+	# Reappearance check runs BEFORE the dragon_autonomous_rule gate.
+	# The assaulting FC held autonomous rule; when he dies a new FC is found here.
+	# This is the only path that clears togashi_vanished and dragon_autonomous_rule (s55.10.2.8).
+	if TogashiOversight.is_togashi_off_map(togashi_state):
+		var last_assaulter_id: int = int(togashi_state.get("last_assaulter_fc_id", -1))
+		var candidate_fc: L5RCharacterData = _find_mirumoto_fc(characters)
+		if (
+			candidate_fc != null
+			and last_assaulter_id >= 0
+			and candidate_fc.character_id != last_assaulter_id
+		):
+			var togashi_char: L5RCharacterData = characters_by_id.get(_find_togashi_id(characters))
+			var settled_cw: Dictionary = {}
+			for cw: Dictionary in active_civil_wars:
+				if not cw.get("active", false) and cw.get("clan", "") == "Dragon":
+					settled_cw = cw.get("faction_assignments", {})
+					break
+			var reappear: Dictionary = TogashiOversight.reappear_togashi(
+				togashi_state, togashi_char, settlements, provinces, settled_cw
+			)
+			return {
+				"togashi_reappeared": reappear.get("reappeared", false),
+				"togashi_reappear_settlement": reappear.get("settlement_id", -1),
+			}
+
 	# Dragon FC won autonomous rule — Oversight System suspended for his lifetime (s55.10.2.8).
 	if togashi_state.get("dragon_autonomous_rule", false):
 		return {"skipped": true, "reason": "dragon_autonomous_rule_active"}
+
+	# Order reconstitution tick: countdown runs once per season after Togashi reappears (s55.10.2.8).
+	if int(togashi_state.get("order_reconstitution_seasons_remaining", 0)) > 0:
+		var done: bool = TogashiOversight.tick_order_reconstitution(togashi_state)
+		var recon_result: Dictionary = {"order_reconstitution_done": done}
+		if done:
+			return recon_result
 
 	var mirumoto_fc: L5RCharacterData = _find_mirumoto_fc(characters)
 	if mirumoto_fc == null:
@@ -7344,34 +7380,14 @@ static func _process_togashi_oversight(
 			)
 			result["civil_war_triggered"] = cw_result
 
-	# Togashi reappearance: fires when a new FC has taken position after the assaulting
-	# FC died or was removed, and Togashi is still off-map (s55.10.2.8).
-	if TogashiOversight.is_togashi_off_map(togashi_state):
-		var last_assaulter_id: int = int(togashi_state.get("last_assaulter_fc_id", -1))
-		var current_fc: L5RCharacterData = mirumoto_fc
-		if (
-			current_fc != null
-			and last_assaulter_id >= 0
-			and current_fc.character_id != last_assaulter_id
-		):
-			var togashi_char: L5RCharacterData = characters_by_id.get(_find_togashi_id(characters))
-			var settled_cw: Dictionary = {}
-			for cw: Dictionary in active_civil_wars:
-				if not cw.get("active", false) and cw.get("clan", "") == "Dragon":
-					settled_cw = cw.get("faction_assignments", {})
-					break
-			var reappear: Dictionary = TogashiOversight.reappear_togashi(
-				togashi_state, togashi_char, settlements, provinces, settled_cw
-			)
-			result["togashi_reappeared"] = reappear.get("reappeared", false)
-			result["togashi_reappear_settlement"] = reappear.get("settlement_id", -1)
-
-	# Order reconstitution tick: countdown runs once per season after Togashi reappears (s55.10.2.8).
-	if int(togashi_state.get("order_reconstitution_seasons_remaining", 0)) > 0:
-		var done: bool = TogashiOversight.tick_order_reconstitution(togashi_state)
-		result["order_reconstitution_done"] = done
-
 	return result
+
+
+static func _has_active_dragon_schism(active_civil_wars: Array[Dictionary]) -> bool:
+	for cw: Dictionary in active_civil_wars:
+		if cw.get("clan", "") == "Dragon" and cw.get("active", false):
+			return true
+	return false
 
 
 static func _find_mirumoto_fc(characters: Array[L5RCharacterData]) -> L5RCharacterData:
