@@ -452,6 +452,42 @@ func test_iron_upkeep_dict_resets_on_supply() -> void:
 	assert_eq(iron_state[1], 0)
 
 
+# -- Iron Upkeep Deducts from iron_stockpile (GDD s4.3.10) ----------------------
+# GDD s4.3.10 is explicit: "paid in Iron, not Arms."
+# Confirmed the day_orchestrator reads/writes iron_stockpile, not arms_stockpile.
+
+func test_army_upkeep_iron_deducts_from_iron_stockpile() -> void:
+	var companies: Array[Dictionary] = [
+		_make_company_dict(1, Enums.CompanyUnitType.ASHIGARU_SPEARMEN),
+	]
+	var s: SettlementData = _make_settlement(10, 1, 10, 3)
+	var clan: ClanData = _make_clan("Crab", [1])
+	clan.iron_stockpile = 10.0
+	clan.arms_stockpile = 99.0  # must not change
+	var clans: Dictionary = {"Crab": clan}
+
+	DayOrchestrator._process_army_upkeep(companies, [s], clans)
+	assert_almost_eq(clan.arms_stockpile, 99.0, 0.001, "arms_stockpile must not be touched by iron upkeep")
+	assert_true(clan.iron_stockpile < 10.0, "iron_stockpile must decrease by iron upkeep cost")
+
+
+func test_army_upkeep_insufficient_iron_does_not_touch_arms() -> void:
+	var companies: Array[Dictionary] = [
+		_make_company_dict(1, Enums.CompanyUnitType.ASHIGARU_SPEARMEN),
+	]
+	var s: SettlementData = _make_settlement(10, 1, 10, 3)
+	var clan: ClanData = _make_clan("Crab", [1])
+	clan.iron_stockpile = 0.0
+	clan.arms_stockpile = 99.0
+	var clans: Dictionary = {"Crab": clan}
+
+	var r: Dictionary = DayOrchestrator._process_army_upkeep(companies, [s], clans)
+	assert_almost_eq(clan.arms_stockpile, 99.0, 0.001, "arms_stockpile untouched when iron runs out")
+	assert_almost_eq(clan.iron_stockpile, 0.0, 0.001, "iron_stockpile floors at 0")
+	var iron_result: Dictionary = r["iron_results"][0]
+	assert_false(iron_result["supplied"])
+
+
 # -- Battle Flow Integration Tests ----------------------------------------------
 
 func _make_battle_company_state(
@@ -608,6 +644,7 @@ func _make_clan(name: String, province_ids: Array[int]) -> ClanData:
 	c.clan_name = name
 	c.province_ids = province_ids
 	c.arms_stockpile = 10.0
+	c.iron_stockpile = 10.0
 	return c
 
 
@@ -2912,7 +2949,7 @@ func test_supply_status_check_war_score_from_correct_side() -> void:
 	var clan: ClanData = ClanData.new()
 	clan.clan_name = "Crane"
 	clan.province_ids = [1]
-	clan.arms_stockpile = 10.0
+	clan.iron_stockpile = 10.0
 	var provinces: Dictionary = {1: prov}
 	var results: Array[Dictionary] = DayOrchestrator._process_supply_status_checks(
 		[lord], [war], [s], provinces, companies, {"Crane": clan}, [],
@@ -2950,7 +2987,7 @@ func test_supply_status_check_uninvolved_clan_skipped() -> void:
 	var clan: ClanData = ClanData.new()
 	clan.clan_name = "Lion"
 	clan.province_ids = [1]
-	clan.arms_stockpile = 10.0
+	clan.iron_stockpile = 10.0
 	var provinces: Dictionary = {1: prov}
 	var results: Array[Dictionary] = DayOrchestrator._process_supply_status_checks(
 		[lord], [war], [s], provinces, companies, {"Lion": clan}, [],

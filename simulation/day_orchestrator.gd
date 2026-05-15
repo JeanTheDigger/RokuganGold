@@ -3809,9 +3809,9 @@ static func _process_army_upkeep(
 				clan_companies.append(c)
 		var iron_state: Dictionary = clan.get_meta("iron_state", {}) if clan.has_meta("iron_state") else {}
 		var r: Dictionary = ArmyUpkeepSystem.process_iron_upkeep_dict(
-			clan_companies, iron_state, clan.arms_stockpile,
+			clan_companies, iron_state, clan.iron_stockpile,
 		)
-		clan.arms_stockpile = maxf(clan.arms_stockpile - r["iron_consumed"], 0.0)
+		clan.iron_stockpile = maxf(clan.iron_stockpile - r["iron_consumed"], 0.0)
 		if not iron_state.is_empty():
 			clan.set_meta("iron_state", iron_state)
 		iron_results.append({
@@ -4516,7 +4516,7 @@ static func _process_supply_status_checks(
 		var clan_iron: float = 0.0
 		var clan_data: ClanData = clans.get(lord.clan)
 		if clan_data != null:
-			clan_iron = clan_data.arms_stockpile
+			clan_iron = clan_data.iron_stockpile
 
 		var total_iron_upkeep: float = 0.0
 		for comp: Dictionary in clan_companies:
