@@ -194,6 +194,7 @@ static func get_armor_tn(
 	participant: Participant,
 	dice_engine: DiceEngine,
 	is_melee_attack: bool = true,
+	is_being_guarded: bool = false,
 ) -> int:
 	var base_tn: int = CharacterStats.get_armor_tn(character)
 	var stance_mod: int = STANCE_ARMOR_TN_BONUS.get(participant.stance, 0)
@@ -207,6 +208,12 @@ static func get_armor_tn(
 	var full_def_bonus: int = 0
 	if participant.stance == Enums.Stance.FULL_DEFENSE:
 		full_def_bonus = participant.full_defense_bonus
+
+	# Guard maneuver: guarding another character costs -5 to own Armor TN (s40)
+	var guard_self_mod: int = -5 if participant.guarding_id != -1 else 0
+
+	# Guard maneuver: being guarded grants +10 Armor TN (s40)
+	var guard_protection: int = 10 if is_being_guarded else 0
 
 	# Conditional modifiers
 	var cond_mod: int = 0
@@ -222,7 +229,7 @@ static func get_armor_tn(
 		return character.reflexes + 5 + character.armor_tn_bonus
 
 	# Two-weapon bonus: +InsightRank to Armor TN (handled by caller marking dual_wielding)
-	return base_tn + stance_mod + defense_bonus + full_def_bonus + cond_mod + participant.void_armor_tn_bonus
+	return base_tn + stance_mod + defense_bonus + full_def_bonus + cond_mod + participant.void_armor_tn_bonus + guard_self_mod + guard_protection
 
 
 static func roll_full_defense_bonus(
@@ -256,6 +263,7 @@ static func resolve_attack(
 	dice_engine: DiceEngine,
 	is_ranged_in_melee: bool = false,
 	spend_void: bool = false,
+	target_is_mounted: bool = false,
 ) -> Dictionary:
 	var weapon: Dictionary = get_weapon_profile(weapon_name)
 	var skill_name: String = weapon.get("skill", "Kenjutsu")
@@ -281,6 +289,10 @@ static func resolve_attack(
 	# Stance bonuses
 	rolled += STANCE_ATTACK_ROLLED_BONUS.get(attacker_p.stance, 0)
 	kept += STANCE_ATTACK_KEPT_BONUS.get(attacker_p.stance, 0)
+
+	# Mounted / Higher Ground: +1k0 against unmounted or lower characters (s40)
+	if CONDITION_MOUNTED in attacker_p.conditions and not target_is_mounted:
+		rolled += 1
 
 	# Conditional modifiers: -3k0 Dazed, -1k1 or -3k3 Blinded, Prone restrictions
 	if CONDITION_DAZED in attacker_p.conditions:
@@ -409,6 +421,20 @@ static func resolve_knockdown(
 	}
 
 
+static func resolve_guard(
+	guardian_p: Participant,
+	target_id: int,
+) -> void:
+	## Guard maneuver (s40): guardian designates one person within 5 feet.
+	## The caller must verify stance != Full Attack and target proximity.
+	## Sets guarding_id; get_armor_tn() applies +10 to guarded and -5 to guardian.
+	guardian_p.guarding_id = target_id
+
+
+static func clear_guard(guardian_p: Participant) -> void:
+	guardian_p.guarding_id = -1
+
+
 # =============================================================================
 # -- Move Actions (s40) -------------------------------------------------------
 # =============================================================================
@@ -530,16 +556,20 @@ static func resolve_grapple_control(
 	dice_engine: DiceEngine,
 ) -> Dictionary:
 	# Contested Jiujutsu/Strength: roll (Strength + Jiujutsu), keep Strength (s4.5 / s40)
+	# Unskilled (rank 0) rolls do not explode per L5R4e p.78.
 	var att_jiu: int = attacker.skills.get("Jiujutsu", 0)
 	var def_jiu: int = defender.skills.get("Jiujutsu", 0)
-	var contested: Dictionary = dice_engine.contested_roll(
-		attacker.strength + att_jiu, attacker.strength,
-		defender.strength + def_jiu, defender.strength,
+	var att_result: DiceResult = dice_engine.roll_and_keep(
+		attacker.strength + att_jiu, attacker.strength, att_jiu > 0,
 	)
+	var def_result: DiceResult = dice_engine.roll_and_keep(
+		defender.strength + def_jiu, defender.strength, def_jiu > 0,
+	)
+	var att_wins: bool = att_result.total >= def_result.total  # attacker wins ties (s40)
 	return {
-		"attacker_roll": contested["total_a"],
-		"defender_roll": contested["total_b"],
-		"attacker_wins": contested["winner"] != "b",  # attacker wins ties
+		"attacker_roll": att_result.total,
+		"defender_roll": def_result.total,
+		"attacker_wins": att_wins,
 	}
 
 
@@ -569,21 +599,20 @@ static func resolve_sumai_bout(
 	w1_larger: bool,
 	dice_engine: DiceEngine,
 ) -> Dictionary:
+	# Unskilled Jiujutsu (rank 0) rolls do not explode per L5R4e p.78.
 	var w1_jiu: int = wrestler1.skills.get("Jiujutsu", 0)
 	var w2_jiu: int = wrestler2.skills.get("Jiujutsu", 0)
 	var w1_rolled: int = wrestler1.strength + w1_jiu + (1 if w1_larger else 0)
 	var w2_rolled: int = wrestler2.strength + w2_jiu
-	var contested: Dictionary = dice_engine.contested_roll(
-		w1_rolled, wrestler1.strength,
-		w2_rolled, wrestler2.strength,
-	)
-	var margin: int = abs(contested["total_a"] - contested["total_b"])
+	var w1_result: DiceResult = dice_engine.roll_and_keep(w1_rolled, wrestler1.strength, w1_jiu > 0)
+	var w2_result: DiceResult = dice_engine.roll_and_keep(w2_rolled, wrestler2.strength, w2_jiu > 0)
+	var margin: int = abs(w1_result.total - w2_result.total)
 	var bout_over: bool = margin >= 5
 	return {
-		"wrestler1_roll": contested["total_a"],
-		"wrestler2_roll": contested["total_b"],
-		"winner_wrestler1": contested["total_a"] > contested["total_b"] and bout_over,
-		"winner_wrestler2": contested["total_b"] > contested["total_a"] and bout_over,
+		"wrestler1_roll": w1_result.total,
+		"wrestler2_roll": w2_result.total,
+		"winner_wrestler1": w1_result.total > w2_result.total and bout_over,
+		"winner_wrestler2": w2_result.total > w1_result.total and bout_over,
 		"bout_over": bout_over,
 		"continue": not bout_over,
 	}
