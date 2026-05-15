@@ -834,6 +834,22 @@ func test_check_dragon_schism_no_fire_on_defender_victory():
 	assert_true(result.is_empty())
 
 
+func test_check_dragon_schism_no_disposition_write_when_no_fc():
+	# If no Mirumoto FC exists, fc_id == -1; disposition dict must not gain a -1 key.
+	var high_house: SettlementData = _make_high_house_settlement(99)
+	var military_daily: Dictionary = {
+		"siege_results": [_make_dragon_siege_result(99, "attacker_victory", "Dragon")],
+	}
+	var bystander := L5RCharacterData.new()
+	bystander.character_id = 55
+	bystander.clan = "Crane"
+	bystander.status = 6.0
+	DayOrchestrator._check_dragon_schism_siege_events(
+		military_daily, _state, [], {}, [high_house], [], [1000], 300
+	)
+	assert_false(bystander.disposition_values.has(-1))
+
+
 # =============================================================================
 # ORDER RECONSTITUTION (tick_order_reconstitution)
 # =============================================================================

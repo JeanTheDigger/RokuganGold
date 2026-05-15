@@ -4487,8 +4487,7 @@ static func _check_dragon_schism_siege_events(
 
 		# Apply empire-wide disposition penalty to all status-5+ clan representatives.
 		var disp_change: int = int(assault_result.get("empire_disposition_change", 0))
-		if disp_change != 0:
-			var togashi_id: int = togashi_char_id if togashi_char != null else -1
+		if disp_change != 0 and fc_id >= 0:
 			for c: L5RCharacterData in characters:
 				if c.status < 5.0:
 					continue
@@ -7307,12 +7306,9 @@ static func _process_togashi_oversight(
 	if togashi_state.get("dragon_autonomous_rule", false):
 		return {"skipped": true, "reason": "dragon_autonomous_rule_active"}
 
-	# Order reconstitution tick: countdown runs once per season after Togashi reappears (s55.10.2.8).
+	var order_recon_done: bool = false
 	if int(togashi_state.get("order_reconstitution_seasons_remaining", 0)) > 0:
-		var done: bool = TogashiOversight.tick_order_reconstitution(togashi_state)
-		var recon_result: Dictionary = {"order_reconstitution_done": done}
-		if done:
-			return recon_result
+		order_recon_done = TogashiOversight.tick_order_reconstitution(togashi_state)
 
 	var mirumoto_fc: L5RCharacterData = _find_mirumoto_fc(characters)
 	if mirumoto_fc == null:
@@ -7379,6 +7375,9 @@ static func _process_togashi_oversight(
 				false, "dragon_schism", snapshot,
 			)
 			result["civil_war_triggered"] = cw_result
+
+	if order_recon_done:
+		result["order_reconstitution_done"] = true
 
 	return result
 
