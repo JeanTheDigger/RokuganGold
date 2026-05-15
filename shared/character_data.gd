@@ -225,6 +225,11 @@ extends Resource
 @export var original_lord_id: int = -1
 @export var permanent_ronin: bool = false
 
+# -- Kami Status (Section 55.10.2.7) ------------------------------------------
+# Hidden from all information channels. True only for Togashi.
+
+@export var is_kami: bool = false
+
 # -- Progression (Section 48) -------------------------------------------------
 
 @export var xp_total: int = 0

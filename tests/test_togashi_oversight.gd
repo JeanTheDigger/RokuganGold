@@ -520,3 +520,206 @@ func test_repeated_letter_detected_when_directive_exists_on_axis() -> void:
 		_state, ws, [], _fc, 99
 	)
 	assert_true(r2["intervention_fired"])
+
+
+# -- High House assault (s55.10.2.8) -----------------------------------------
+
+func test_assault_high_house_sets_vanished_and_dissolves_order() -> void:
+	var togashi: L5RCharacterData = L5RCharacterData.new()
+	togashi.character_id = 99
+	togashi.physical_location = "high_house_settlement_1"
+	togashi.is_kami = true
+
+	var result: Dictionary = TogashiOversight.assault_high_house(
+		_state, togashi, 1001, 300
+	)
+
+	assert_true(_state["togashi_vanished"])
+	assert_true(_state["order_dissolved_by_assault"])
+	assert_eq(togashi.physical_location, "")
+	assert_almost_eq(float(result["honor_change"]), -2.0, 0.001)
+	assert_eq(int(result["empire_disposition_change"]), -20)
+	assert_true(result["togashi_vanished"])
+	assert_true(result["topic"] is TopicData)
+	assert_eq(result["topic"].tier, TopicData.Tier.TIER_1)
+	assert_eq(int(result["topic"].topic_id), 1001)
+
+
+func test_assault_high_house_null_togashi_still_sets_state() -> void:
+	var result: Dictionary = TogashiOversight.assault_high_house(
+		_state, null, 1002, 300
+	)
+	assert_true(_state["togashi_vanished"])
+	assert_true(result.has("topic"))
+
+
+func test_is_togashi_off_map_reflects_vanished_flag() -> void:
+	assert_false(TogashiOversight.is_togashi_off_map(_state))
+	_state["togashi_vanished"] = true
+	assert_true(TogashiOversight.is_togashi_off_map(_state))
+
+
+func test_oversight_skipped_when_togashi_vanished() -> void:
+	_state["togashi_vanished"] = true
+	_state["dissatisfaction"][TogashiOversight.Axis.SPIRITUAL_HEALTH] = 60.0
+	var ws: Dictionary = {"realm_overlaps_empire_wide": 5}
+	var result: Dictionary = TogashiOversight.process_seasonal_oversight(
+		_state, ws, [], _fc, 99
+	)
+	assert_false(result["intervention_fired"])
+	assert_true(result.get("skipped", false))
+
+
+func test_oversight_skipped_when_dragon_autonomous_rule() -> void:
+	_state["dragon_autonomous_rule"] = true
+	_state["dissatisfaction"][TogashiOversight.Axis.IMPERIAL_COHESION] = 60.0
+	var ws: Dictionary = {"active_inter_clan_wars": 2}
+	var result: Dictionary = TogashiOversight.process_seasonal_oversight(
+		_state, ws, [], _fc, 99
+	)
+	assert_false(result["intervention_fired"])
+	assert_true(result.get("skipped", false))
+
+
+# -- Togashi reappearance (s55.10.2.8) ----------------------------------------
+
+func test_reappear_togashi_finds_dragon_temple_first() -> void:
+	var togashi: L5RCharacterData = L5RCharacterData.new()
+	togashi.character_id = 99
+	togashi.physical_location = ""
+	_state["togashi_vanished"] = true
+
+	# Build a Dragon temple settlement and province.
+	var dragon_prov: ProvinceData = ProvinceData.new()
+	dragon_prov.province_id = 1
+	dragon_prov.clan = "Dragon"
+
+	var temple_s: SettlementData = SettlementData.new()
+	temple_s.settlement_id = 501
+	temple_s.province_id = 1
+	temple_s.settlement_type = Enums.SettlementType.TEMPLE
+
+	var provinces: Dictionary = {1: dragon_prov}
+	var settlements: Array = [temple_s]
+
+	var result: Dictionary = TogashiOversight.reappear_togashi(
+		_state, togashi, settlements, provinces, {}
+	)
+
+	assert_true(result["reappeared"])
+	assert_eq(int(result["settlement_id"]), 501)
+	assert_eq(togashi.physical_location, "501")
+	assert_false(_state["togashi_vanished"])
+	assert_false(_state["dragon_autonomous_rule"])
+	assert_eq(_state["order_reconstitution_seasons_remaining"], 4)
+
+
+func test_reappear_togashi_falls_back_to_non_dragon_temple() -> void:
+	var togashi: L5RCharacterData = L5RCharacterData.new()
+	togashi.character_id = 99
+	_state["togashi_vanished"] = true
+
+	var lion_prov: ProvinceData = ProvinceData.new()
+	lion_prov.province_id = 2
+	lion_prov.clan = "Lion"
+
+	var temple_s: SettlementData = SettlementData.new()
+	temple_s.settlement_id = 502
+	temple_s.province_id = 2
+	temple_s.settlement_type = Enums.SettlementType.SHINDEN
+
+	var provinces: Dictionary = {2: lion_prov}
+	var result: Dictionary = TogashiOversight.reappear_togashi(
+		_state, togashi, [temple_s], provinces, {}
+	)
+
+	assert_true(result["reappeared"])
+	assert_eq(int(result["settlement_id"]), 502)
+
+
+func test_reappear_togashi_fails_with_no_temples() -> void:
+	var togashi: L5RCharacterData = L5RCharacterData.new()
+	togashi.character_id = 99
+	_state["togashi_vanished"] = true
+
+	var prov: ProvinceData = ProvinceData.new()
+	prov.province_id = 3
+	prov.clan = "Crab"
+
+	var village: SettlementData = SettlementData.new()
+	village.settlement_id = 503
+	village.province_id = 3
+	village.settlement_type = Enums.SettlementType.VILLAGE
+
+	var result: Dictionary = TogashiOversight.reappear_togashi(
+		_state, togashi, [village], {3: prov}, {}
+	)
+
+	assert_false(result["reappeared"])
+	assert_eq(int(result["settlement_id"]), -1)
+
+
+func test_reappear_togashi_null_returns_false() -> void:
+	var result: Dictionary = TogashiOversight.reappear_togashi(
+		_state, null, [], {}, {}
+	)
+	assert_false(result["reappeared"])
+
+
+# -- Order reconstitution tick ------------------------------------------------
+
+func test_order_reconstitution_counts_down() -> void:
+	_state["order_reconstitution_seasons_remaining"] = 4
+	_state["togashi_vanished"] = false
+	var done_1: bool = TogashiOversight.tick_order_reconstitution(_state)
+	assert_false(done_1)
+	assert_eq(_state["order_reconstitution_seasons_remaining"], 3)
+
+
+func test_order_reconstitution_completes_at_zero() -> void:
+	_state["order_reconstitution_seasons_remaining"] = 1
+	_state["togashi_vanished"] = false
+	var done: bool = TogashiOversight.tick_order_reconstitution(_state)
+	assert_true(done)
+	assert_eq(_state["order_reconstitution_seasons_remaining"], 0)
+
+
+func test_order_reconstitution_no_tick_when_already_done() -> void:
+	_state["order_reconstitution_seasons_remaining"] = 0
+	_state["togashi_vanished"] = false
+	var done: bool = TogashiOversight.tick_order_reconstitution(_state)
+	assert_true(done)
+	assert_eq(_state["order_reconstitution_seasons_remaining"], 0)
+
+
+# -- Pyrrhic victory ----------------------------------------------------------
+
+func test_order_dissolved_permanently_requires_both_flags() -> void:
+	_state["dragon_autonomous_rule"] = false
+	_state["order_dissolved_by_assault"] = false
+	assert_false(TogashiOversight.is_order_dissolved_permanently(_state))
+
+	_state["dragon_autonomous_rule"] = true
+	assert_false(TogashiOversight.is_order_dissolved_permanently(_state))
+
+	_state["order_dissolved_by_assault"] = true
+	assert_true(TogashiOversight.is_order_dissolved_permanently(_state))
+
+
+func test_order_dissolved_by_assault_flag_readable() -> void:
+	assert_false(TogashiOversight.is_order_dissolved_by_assault(_state))
+	_state["order_dissolved_by_assault"] = true
+	assert_true(TogashiOversight.is_order_dissolved_by_assault(_state))
+
+
+# -- is_kami field on L5RCharacterData ---------------------------------------
+
+func test_togashi_is_kami_flag_defaults_false() -> void:
+	var c: L5RCharacterData = L5RCharacterData.new()
+	assert_false(c.is_kami)
+
+
+func test_togashi_is_kami_flag_settable() -> void:
+	var togashi: L5RCharacterData = L5RCharacterData.new()
+	togashi.is_kami = true
+	assert_true(togashi.is_kami)
