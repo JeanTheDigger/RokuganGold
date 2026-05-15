@@ -230,12 +230,33 @@ static func get_province_rice(
 # Seasonal Tick Entry Point
 # ==============================================================================
 
-## Effective fraction of each province's local-tier passed-up rice that
-## ultimately reaches the Emperor's stockpile through the four upper
-## tiers of the cascade per GDD s4.3.7. Approximation only — does not
-## yet account for per-tier personality modifiers (those need the full
-## hierarchy wired up). 0.70 (provincial passes 70%) × 0.75 × 0.80 × 0.15.
+## Product of the three intermediate tier pass-through fractions:
+## provincial (0.70) × family (0.75) × clan (0.80) per GDD s4.3.7.
+const UPPER_TIER_PASSTHROUGH: float = 0.42
+
+const EMPEROR_BASE_RATE: float = 0.15
+
+## Legacy constant kept for reference; new code uses compute_emperor_take_rate().
 const EMPEROR_TAKE_FROM_PASSED_UP: float = 0.063
+
+
+static func compute_emperor_take_rate(emperor_tax_config: Dictionary) -> float:
+	var archetype: int = int(emperor_tax_config.get("archetype", StrategicReview.EmperorArchetype.IRON))
+	var archetype_mod: float = float(StrategicReview.ARCHETYPE_TAX_MODIFIER.get(archetype, 0)) / 100.0
+	return clampf(EMPEROR_BASE_RATE + archetype_mod, 0.0, 1.0)
+
+
+static func compute_cunning_clan_modifier(
+	province_clan: String,
+	clan_dispositions: Dictionary,
+) -> float:
+	var disp: int = int(clan_dispositions.get(province_clan, 0))
+	var tier: int = DispositionSystem.get_tier(disp)
+	if tier >= DispositionSystem.Tier.FRIEND:
+		return 0.10
+	if tier <= DispositionSystem.Tier.RIVAL:
+		return -0.10
+	return 0.0
 
 
 static func process_seasonal_tick(
@@ -245,6 +266,7 @@ static func process_seasonal_tick(
 	settlement_meta: Dictionary,
 	miya_inputs: Dictionary = {},
 	worship_maluses: Dictionary = {},
+	emperor_tax_config: Dictionary = {},
 ) -> Dictionary:
 	var results: Dictionary = {
 		"rice_consumed": {},
@@ -287,11 +309,12 @@ static func process_seasonal_tick(
 	if season == "autumn":
 		var taxes: Dictionary = _process_tax_cascade(provinces, settlements, settlement_meta)
 		results["tax_collected"] = taxes
-		# Persist the Emperor's approximate income for next Spring's Blessing
-		# allocation (s11.5b §2.1).
-		settlement_meta["last_autumn_emperor_tax_income"] = (
-			_compute_emperor_income_from_cascade(taxes)
+		var emperor_income: Dictionary = _compute_emperor_income_from_cascade(
+			taxes, provinces, emperor_tax_config,
 		)
+		results["emperor_income"] = emperor_income
+		settlement_meta["last_autumn_emperor_tax_income"] = emperor_income.get("rice", 0.0)
+		settlement_meta["last_autumn_arms_redirect"] = emperor_income.get("arms_redirect", 0.0)
 
 	var pop_changes: Dictionary = _process_population_adjustment(provinces, settlements, settlement_meta)
 	results["population_changes"] = pop_changes
@@ -464,15 +487,49 @@ static func _group_settlements_by_province(
 	return grouped
 
 
-static func _compute_emperor_income_from_cascade(taxes: Dictionary) -> float:
-	## Approximation of Emperor's Autumn income from the local-tier cascade
-	## results. Real cascade should sum each tier's retention; until the full
-	## hierarchy is wired, multiply total passed-up rice by the upper-tier
-	## product (0.70 × 0.75 × 0.80 × 0.15 = 0.063).
-	var total_passed_up: float = 0.0
-	for pid in taxes:
-		total_passed_up += float(taxes[pid].get("passed_up", 0.0))
-	return total_passed_up * EMPEROR_TAKE_FROM_PASSED_UP
+static func _compute_emperor_income_from_cascade(
+	taxes: Dictionary,
+	provinces: Array[ProvinceData] = [],
+	emperor_tax_config: Dictionary = {},
+) -> Dictionary:
+	var emperor_rate: float = compute_emperor_take_rate(emperor_tax_config)
+	var archetype: int = int(emperor_tax_config.get("archetype", StrategicReview.EmperorArchetype.IRON))
+	var clan_dispositions: Dictionary = emperor_tax_config.get("clan_dispositions", {})
+	var is_cunning: bool = archetype == StrategicReview.EmperorArchetype.CUNNING
+	var is_warlike: bool = archetype == StrategicReview.EmperorArchetype.WARLIKE
+
+	var clan_by_pid: Dictionary = {}
+	for prov: ProvinceData in provinces:
+		clan_by_pid[prov.province_id] = prov.clan
+
+	var total_rice: float = 0.0
+	var total_arms_redirect: float = 0.0
+	var baseline_take: float = UPPER_TIER_PASSTHROUGH * EMPEROR_BASE_RATE
+
+	for pid: int in taxes:
+		var passed_up: float = float(taxes[pid].get("passed_up", 0.0))
+		var effective_rate: float = emperor_rate
+
+		if is_cunning and clan_by_pid.has(pid):
+			effective_rate += compute_cunning_clan_modifier(
+				clan_by_pid[pid], clan_dispositions,
+			)
+			effective_rate = clampf(effective_rate, 0.0, 1.0)
+
+		var income: float = passed_up * UPPER_TIER_PASSTHROUGH * effective_rate
+
+		if is_warlike:
+			var baseline_income: float = passed_up * baseline_take
+			var extra: float = maxf(0.0, income - baseline_income)
+			total_arms_redirect += extra
+			total_rice += baseline_income
+		else:
+			total_rice += income
+
+	return {
+		"rice": total_rice,
+		"arms_redirect": total_arms_redirect,
+	}
 
 
 # ==============================================================================

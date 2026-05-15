@@ -488,9 +488,13 @@ static func advance_day(
 			worship_state, provinces,
 		)
 		world_states["_worship_maluses"] = worship_maluses
+		var emperor_tax_cfg: Dictionary = _build_emperor_tax_config(
+			world_states, characters_by_id,
+		)
 		seasonal_result = _process_season_transition(
 			characters, provinces, current_season, season_meta,
 			approach_penalties, settlements, spring_inputs, worship_maluses,
+			emperor_tax_cfg,
 		)
 		_apply_worship_stability_maluses(worship_maluses, provinces)
 		_apply_tyrant_stability_penalty(
@@ -868,6 +872,7 @@ static func _process_season_transition(
 	settlements: Array[SettlementData] = [],
 	miya_inputs: Dictionary = {},
 	worship_maluses: Dictionary = {},
+	emperor_tax_config: Dictionary = {},
 ) -> Dictionary:
 	_decay_all_knowledge(characters, current_season)
 
@@ -893,7 +898,7 @@ static func _process_season_transition(
 
 	var tick_result: Dictionary = ResourceTick.process_seasonal_tick(
 		province_array, settlements, season_name, season_meta, resolved_inputs,
-		worship_maluses,
+		worship_maluses, emperor_tax_config,
 	)
 
 	return {
@@ -8567,6 +8572,33 @@ static func _apply_tyrant_stability_penalty(
 		prov.stability = clampf(
 			prov.stability + StrategicReview.TYRANT_STABILITY_PENALTY, 0.0, 100.0
 		)
+
+
+static func _build_emperor_tax_config(
+	world_states: Dictionary,
+	characters_by_id: Dictionary,
+) -> Dictionary:
+	var archetype: int = int(world_states.get(
+		"emperor_archetype", StrategicReview.EmperorArchetype.IRON
+	))
+	var config: Dictionary = {"archetype": archetype}
+	if archetype != StrategicReview.EmperorArchetype.CUNNING:
+		return config
+	var emperor_id: int = int(world_states.get("emperor_id", -1))
+	if emperor_id < 0:
+		return config
+	var emperor: L5RCharacterData = characters_by_id.get(emperor_id) as L5RCharacterData
+	if emperor == null:
+		return config
+	var clan_disps: Dictionary = {}
+	for cid: Variant in characters_by_id:
+		var c: L5RCharacterData = characters_by_id[cid] as L5RCharacterData
+		if c == null or c.clan == "" or c.status < 7.0 or c.lord_id != -1:
+			continue
+		var disp: int = int(emperor.disposition_values.get(c.character_id, 0))
+		clan_disps[c.clan] = disp
+	config["clan_dispositions"] = clan_disps
+	return config
 
 
 static func _inject_worship_battle_maluses(

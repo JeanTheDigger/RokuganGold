@@ -1918,3 +1918,72 @@ func test_civil_war_guard_allows_after_resolution() -> void:
 
 	assert_eq(active_topics.size(), 2, "Should create new civil war after prior one resolved")
 	assert_eq(next_topic_id[0], 601)
+
+
+# -- Emperor Tax Config Builder (GDD s55.10) -----------------------------------
+
+func test_build_emperor_tax_config_iron_archetype() -> void:
+	var world_states: Dictionary = {
+		"emperor_archetype": StrategicReview.EmperorArchetype.IRON,
+		"emperor_id": 100,
+	}
+	var config: Dictionary = DayOrchestrator._build_emperor_tax_config(world_states, {})
+	assert_eq(config["archetype"], StrategicReview.EmperorArchetype.IRON)
+	assert_false(config.has("clan_dispositions"))
+
+
+func test_build_emperor_tax_config_cunning_builds_dispositions() -> void:
+	var emperor := _make_emperor()
+	emperor.disposition_values = {200: 40, 300: -20}
+	var crane_champ := _make_champion()
+	crane_champ.character_id = 200
+	crane_champ.clan = "Crane"
+	crane_champ.status = 7.5
+	crane_champ.lord_id = -1
+	var lion_champ := _make_champion()
+	lion_champ.character_id = 300
+	lion_champ.clan = "Lion"
+	lion_champ.status = 7.5
+	lion_champ.lord_id = -1
+	var by_id: Dictionary = {
+		100: emperor,
+		200: crane_champ,
+		300: lion_champ,
+	}
+	var world_states: Dictionary = {
+		"emperor_archetype": StrategicReview.EmperorArchetype.CUNNING,
+		"emperor_id": 100,
+	}
+	var config: Dictionary = DayOrchestrator._build_emperor_tax_config(world_states, by_id)
+	assert_eq(config["archetype"], StrategicReview.EmperorArchetype.CUNNING)
+	assert_true(config.has("clan_dispositions"))
+	var disps: Dictionary = config["clan_dispositions"]
+	assert_eq(disps["Crane"], 40)
+	assert_eq(disps["Lion"], -20)
+
+
+func test_build_emperor_tax_config_cunning_skips_non_champions() -> void:
+	var emperor := _make_emperor()
+	emperor.disposition_values = {200: 50}
+	var retainer := L5RCharacterData.new()
+	retainer.character_id = 200
+	retainer.clan = "Crane"
+	retainer.status = 3.0
+	retainer.lord_id = 100
+	var by_id: Dictionary = {100: emperor, 200: retainer}
+	var world_states: Dictionary = {
+		"emperor_archetype": StrategicReview.EmperorArchetype.CUNNING,
+		"emperor_id": 100,
+	}
+	var config: Dictionary = DayOrchestrator._build_emperor_tax_config(world_states, by_id)
+	assert_true(config["clan_dispositions"].is_empty())
+
+
+func test_build_emperor_tax_config_warlike_no_dispositions() -> void:
+	var world_states: Dictionary = {
+		"emperor_archetype": StrategicReview.EmperorArchetype.WARLIKE,
+		"emperor_id": 100,
+	}
+	var config: Dictionary = DayOrchestrator._build_emperor_tax_config(world_states, {})
+	assert_eq(config["archetype"], StrategicReview.EmperorArchetype.WARLIKE)
+	assert_false(config.has("clan_dispositions"))

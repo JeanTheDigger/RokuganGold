@@ -466,3 +466,197 @@ func test_stipend_disposition_delta_plus_fifteen_gives_plus_two() -> void:
 
 func test_stipend_disposition_delta_minus_fifteen_gives_minus_two() -> void:
 	assert_eq(ResourceTick.compute_stipend_disposition_delta(-0.15), -2)
+
+
+# -- Emperor Tax Rate (GDD s55.10) ---------------------------------------------
+
+func test_emperor_take_rate_iron_is_baseline() -> void:
+	var rate: float = ResourceTick.compute_emperor_take_rate(
+		{"archetype": StrategicReview.EmperorArchetype.IRON}
+	)
+	assert_almost_eq(rate, 0.15, 0.001)
+
+
+func test_emperor_take_rate_benevolent_minus_five() -> void:
+	var rate: float = ResourceTick.compute_emperor_take_rate(
+		{"archetype": StrategicReview.EmperorArchetype.BENEVOLENT}
+	)
+	assert_almost_eq(rate, 0.10, 0.001)
+
+
+func test_emperor_take_rate_warlike_plus_five() -> void:
+	var rate: float = ResourceTick.compute_emperor_take_rate(
+		{"archetype": StrategicReview.EmperorArchetype.WARLIKE}
+	)
+	assert_almost_eq(rate, 0.20, 0.001)
+
+
+func test_emperor_take_rate_tyrant_plus_ten() -> void:
+	var rate: float = ResourceTick.compute_emperor_take_rate(
+		{"archetype": StrategicReview.EmperorArchetype.TYRANT}
+	)
+	assert_almost_eq(rate, 0.25, 0.001)
+
+
+func test_emperor_take_rate_cunning_unchanged() -> void:
+	var rate: float = ResourceTick.compute_emperor_take_rate(
+		{"archetype": StrategicReview.EmperorArchetype.CUNNING}
+	)
+	assert_almost_eq(rate, 0.15, 0.001)
+
+
+func test_emperor_take_rate_empty_config_defaults_to_iron() -> void:
+	var rate: float = ResourceTick.compute_emperor_take_rate({})
+	assert_almost_eq(rate, 0.15, 0.001)
+
+
+# -- Cunning Clan Redistribution (GDD s55.10) ----------------------------------
+
+func test_cunning_modifier_friend_clan_gets_plus_ten() -> void:
+	var mod: float = ResourceTick.compute_cunning_clan_modifier(
+		"Crane", {"Crane": 40}
+	)
+	assert_almost_eq(mod, 0.10, 0.001)
+
+
+func test_cunning_modifier_rival_clan_gets_minus_ten() -> void:
+	var mod: float = ResourceTick.compute_cunning_clan_modifier(
+		"Lion", {"Lion": -15}
+	)
+	assert_almost_eq(mod, -0.10, 0.001)
+
+
+func test_cunning_modifier_stranger_clan_gets_zero() -> void:
+	var mod: float = ResourceTick.compute_cunning_clan_modifier(
+		"Dragon", {"Dragon": 5}
+	)
+	assert_almost_eq(mod, 0.0, 0.001)
+
+
+func test_cunning_modifier_unknown_clan_gets_zero() -> void:
+	var mod: float = ResourceTick.compute_cunning_clan_modifier("Mantis", {})
+	assert_almost_eq(mod, 0.0, 0.001)
+
+
+func test_cunning_modifier_devoted_gets_plus_ten() -> void:
+	var mod: float = ResourceTick.compute_cunning_clan_modifier(
+		"Scorpion", {"Scorpion": 95}
+	)
+	assert_almost_eq(mod, 0.10, 0.001)
+
+
+func test_cunning_modifier_blood_enemy_gets_minus_ten() -> void:
+	var mod: float = ResourceTick.compute_cunning_clan_modifier(
+		"Crab", {"Crab": -80}
+	)
+	assert_almost_eq(mod, -0.10, 0.001)
+
+
+# -- Emperor Income from Cascade (GDD s55.10) ----------------------------------
+
+func _make_tax_result(passed_up: float) -> Dictionary:
+	return {"surplus": 10.0, "total_collected": 4.0, "passed_up": passed_up}
+
+
+func test_emperor_income_iron_matches_legacy_constant() -> void:
+	var taxes: Dictionary = {1: _make_tax_result(6.0)}
+	var prov: ProvinceData = ProvinceData.new()
+	prov.province_id = 1
+	prov.clan = "Crane"
+	var result: Dictionary = ResourceTick._compute_emperor_income_from_cascade(
+		taxes, [prov], {"archetype": StrategicReview.EmperorArchetype.IRON}
+	)
+	# 6.0 * 0.42 * 0.15 = 0.378
+	assert_almost_eq(result["rice"], 0.378, 0.001)
+	assert_almost_eq(result["arms_redirect"], 0.0, 0.001)
+
+
+func test_emperor_income_tyrant_higher_rate() -> void:
+	var taxes: Dictionary = {1: _make_tax_result(6.0)}
+	var prov: ProvinceData = ProvinceData.new()
+	prov.province_id = 1
+	prov.clan = "Crane"
+	var result: Dictionary = ResourceTick._compute_emperor_income_from_cascade(
+		taxes, [prov], {"archetype": StrategicReview.EmperorArchetype.TYRANT}
+	)
+	# 6.0 * 0.42 * 0.25 = 0.63
+	assert_almost_eq(result["rice"], 0.63, 0.001)
+	assert_almost_eq(result["arms_redirect"], 0.0, 0.001)
+
+
+func test_emperor_income_warlike_splits_arms_redirect() -> void:
+	var taxes: Dictionary = {1: _make_tax_result(6.0)}
+	var prov: ProvinceData = ProvinceData.new()
+	prov.province_id = 1
+	prov.clan = "Lion"
+	var result: Dictionary = ResourceTick._compute_emperor_income_from_cascade(
+		taxes, [prov], {"archetype": StrategicReview.EmperorArchetype.WARLIKE}
+	)
+	# baseline: 6.0 * 0.42 * 0.15 = 0.378 (rice)
+	# warlike:  6.0 * 0.42 * 0.20 = 0.504 (total)
+	# arms_redirect = 0.504 - 0.378 = 0.126
+	assert_almost_eq(result["rice"], 0.378, 0.001)
+	assert_almost_eq(result["arms_redirect"], 0.126, 0.001)
+
+
+func test_emperor_income_cunning_friend_clan_gets_more() -> void:
+	var taxes: Dictionary = {1: _make_tax_result(6.0)}
+	var prov: ProvinceData = ProvinceData.new()
+	prov.province_id = 1
+	prov.clan = "Crane"
+	var config: Dictionary = {
+		"archetype": StrategicReview.EmperorArchetype.CUNNING,
+		"clan_dispositions": {"Crane": 40},
+	}
+	var result: Dictionary = ResourceTick._compute_emperor_income_from_cascade(
+		taxes, [prov], config
+	)
+	# 6.0 * 0.42 * (0.15 + 0.10) = 6.0 * 0.42 * 0.25 = 0.63
+	assert_almost_eq(result["rice"], 0.63, 0.001)
+
+
+func test_emperor_income_cunning_rival_clan_gets_less() -> void:
+	var taxes: Dictionary = {1: _make_tax_result(6.0)}
+	var prov: ProvinceData = ProvinceData.new()
+	prov.province_id = 1
+	prov.clan = "Lion"
+	var config: Dictionary = {
+		"archetype": StrategicReview.EmperorArchetype.CUNNING,
+		"clan_dispositions": {"Lion": -20},
+	}
+	var result: Dictionary = ResourceTick._compute_emperor_income_from_cascade(
+		taxes, [prov], config
+	)
+	# 6.0 * 0.42 * (0.15 - 0.10) = 6.0 * 0.42 * 0.05 = 0.126
+	assert_almost_eq(result["rice"], 0.126, 0.001)
+
+
+func test_emperor_income_cunning_mixed_clans() -> void:
+	var taxes: Dictionary = {
+		1: _make_tax_result(6.0),
+		2: _make_tax_result(6.0),
+	}
+	var prov1: ProvinceData = ProvinceData.new()
+	prov1.province_id = 1
+	prov1.clan = "Crane"
+	var prov2: ProvinceData = ProvinceData.new()
+	prov2.province_id = 2
+	prov2.clan = "Lion"
+	var config: Dictionary = {
+		"archetype": StrategicReview.EmperorArchetype.CUNNING,
+		"clan_dispositions": {"Crane": 40, "Lion": -20},
+	}
+	var result: Dictionary = ResourceTick._compute_emperor_income_from_cascade(
+		taxes, [prov1, prov2], config
+	)
+	# Crane (Friend): 6.0 * 0.42 * 0.25 = 0.63
+	# Lion (Rival):   6.0 * 0.42 * 0.05 = 0.126
+	# Total = 0.756
+	assert_almost_eq(result["rice"], 0.756, 0.001)
+
+
+func test_emperor_income_empty_config_uses_baseline() -> void:
+	var taxes: Dictionary = {1: _make_tax_result(6.0)}
+	var result: Dictionary = ResourceTick._compute_emperor_income_from_cascade(taxes)
+	# Legacy path: 6.0 * 0.42 * 0.15 = 0.378
+	assert_almost_eq(result["rice"], 0.378, 0.001)
