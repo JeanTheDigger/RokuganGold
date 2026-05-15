@@ -9781,7 +9781,12 @@ static func _process_court_action_effects(
 
 		# Tyrant court honor penalty: opposing the Emperor costs -0.5 Honor
 		if emperor_archetype == StrategicReview.EmperorArchetype.TYRANT and emperor_id >= 0:
+			var triggers_penalty: bool = false
 			if target_id == emperor_id and effects.has("target_position_shift"):
+				triggers_penalty = true
+			if action_id == "PUBLIC_DEBATE" and target_id == emperor_id:
+				triggers_penalty = true
+			if triggers_penalty:
 				var actor: L5RCharacterData = characters_by_id.get(actor_id)
 				if actor != null:
 					actor.honor = clampf(

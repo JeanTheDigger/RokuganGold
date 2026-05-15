@@ -1669,6 +1669,82 @@ func test_tyrant_court_penalty_not_applied_to_non_emperor_target() -> void:
 	assert_almost_eq(actor.honor, 5.0, 0.01)
 
 
+func test_tyrant_court_honor_penalty_for_public_debate_vs_emperor() -> void:
+	var actor := L5RCharacterData.new()
+	actor.character_id = 50
+	actor.honor = 5.0
+	var emperor := _make_emperor()
+	var characters_by_id: Dictionary = {50: actor, 100: emperor}
+
+	var day_results: Array = [{
+		"character_id": 50,
+		"target_npc_id": 100,
+		"action_id": "PUBLIC_DEBATE",
+		"effects": {
+			"debate_per_witness": [],
+			"witnesses": [],
+		},
+	}]
+
+	DayOrchestrator._process_court_action_effects(
+		day_results, characters_by_id, [], 1, 100,
+		StrategicReview.EmperorArchetype.TYRANT,
+	)
+
+	assert_almost_eq(actor.honor, 4.5, 0.01)
+
+
+func test_non_tyrant_no_penalty_for_public_debate_vs_emperor() -> void:
+	var actor := L5RCharacterData.new()
+	actor.character_id = 50
+	actor.honor = 5.0
+	var emperor := _make_emperor()
+	var characters_by_id: Dictionary = {50: actor, 100: emperor}
+
+	var day_results: Array = [{
+		"character_id": 50,
+		"target_npc_id": 100,
+		"action_id": "PUBLIC_DEBATE",
+		"effects": {
+			"debate_per_witness": [],
+			"witnesses": [],
+		},
+	}]
+
+	DayOrchestrator._process_court_action_effects(
+		day_results, characters_by_id, [], 1, 100,
+		StrategicReview.EmperorArchetype.IRON,
+	)
+
+	assert_almost_eq(actor.honor, 5.0, 0.01)
+
+
+func test_tyrant_public_debate_penalty_not_applied_to_non_emperor() -> void:
+	var actor := L5RCharacterData.new()
+	actor.character_id = 50
+	actor.honor = 5.0
+	var other := L5RCharacterData.new()
+	other.character_id = 60
+	var characters_by_id: Dictionary = {50: actor, 60: other}
+
+	var day_results: Array = [{
+		"character_id": 50,
+		"target_npc_id": 60,
+		"action_id": "PUBLIC_DEBATE",
+		"effects": {
+			"debate_per_witness": [],
+			"witnesses": [],
+		},
+	}]
+
+	DayOrchestrator._process_court_action_effects(
+		day_results, characters_by_id, [], 1, 100,
+		StrategicReview.EmperorArchetype.TYRANT,
+	)
+
+	assert_almost_eq(actor.honor, 5.0, 0.01)
+
+
 # -- Tyrant Directive Consumers -------------------------------------------------
 
 func test_disgrace_directive_creates_topic() -> void:
