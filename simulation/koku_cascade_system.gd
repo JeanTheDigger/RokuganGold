@@ -22,7 +22,7 @@ const STIPEND_BY_LORD_TIER: Dictionary = {
 	"family_daimyo": 3.0,
 	"provincial_daimyo": 2.0,
 	"local_daimyo": 1.0,
-	"indirect": 0.06,
+	"indirect": 0.6,
 }
 
 # -- Scale Conversion ---------------------------------------------------------
