@@ -2871,3 +2871,86 @@ func test_tax_modifier_multiple_provinces() -> void:
 	DayOrchestrator._populate_tax_modifiers(chars, by_id, provinces, meta)
 	assert_almost_eq(meta["_tax_modifier"][8], -0.10, 0.001)
 	assert_almost_eq(meta["_tax_modifier"][9], 0.05, 0.001)
+
+
+# -- Clan Balance Weight (Cunning s55.10) --------------------------------------
+
+func _make_retainer(id: int, lord_id: int, clan: String, status: float = 2.0) -> L5RCharacterData:
+	var c := L5RCharacterData.new()
+	c.character_id = id
+	c.lord_id = lord_id
+	c.clan = clan
+	c.status = status
+	c.honor = 3.0
+	c.glory = 2.0
+	c.stamina = 2
+	c.willpower = 2
+	return c
+
+
+func test_clan_position_counts() -> void:
+	var emperor_id: int = 1
+	var r1 := _make_retainer(10, emperor_id, "Crane")
+	r1.role_position = "Emerald Magistrate"
+	var r2 := _make_retainer(11, emperor_id, "Crane")
+	r2.role_position = "Imperial Advisor"
+	var r3 := _make_retainer(12, emperor_id, "Lion")
+	r3.role_position = "Imperial Herald"
+	var r4 := _make_retainer(13, emperor_id, "Scorpion")
+	var chars: Array[L5RCharacterData] = [r1, r2, r3, r4]
+	var counts: Dictionary = DayOrchestrator._compute_clan_position_counts(emperor_id, chars)
+	assert_eq(counts.get("Crane", 0), 2)
+	assert_eq(counts.get("Lion", 0), 1)
+	assert_false(counts.has("Scorpion"))
+
+
+func test_clan_balance_favors_underrepresented_clan() -> void:
+	var emperor_id: int = 1
+	var crane := _make_retainer(10, emperor_id, "Crane")
+	var lion := _make_retainer(11, emperor_id, "Lion")
+	# Crane holds 3 positions, Lion holds 0 → Lion is underrepresented
+	var clan_counts: Dictionary = {"Crane": 3, "Lion": 0}
+	var by_id: Dictionary = {10: crane, 11: lion}
+	var chars: Array[L5RCharacterData] = [crane, lion]
+	# Without balance: same base scores → first candidate wins
+	var no_balance: int = DayOrchestrator._find_vacancy_candidate(
+		emperor_id, "Magistrate", chars, by_id, 0.0, {},
+	)
+	# With balance weight 25: Lion gets bonus, Crane gets penalty
+	var with_balance: int = DayOrchestrator._find_vacancy_candidate(
+		emperor_id, "Magistrate", chars, by_id, 25.0, clan_counts,
+	)
+	assert_eq(with_balance, 11)
+
+
+func test_clan_balance_zero_weight_no_effect() -> void:
+	var emperor_id: int = 1
+	var crane := _make_retainer(10, emperor_id, "Crane")
+	crane.honor = 10.0
+	var lion := _make_retainer(11, emperor_id, "Lion")
+	lion.honor = 1.0
+	var clan_counts: Dictionary = {"Crane": 5, "Lion": 0}
+	var chars: Array[L5RCharacterData] = [crane, lion]
+	var by_id: Dictionary = {10: crane, 11: lion}
+	var result: int = DayOrchestrator._find_vacancy_candidate(
+		emperor_id, "Magistrate", chars, by_id, 0.0, clan_counts,
+	)
+	assert_eq(result, 10)
+
+
+func test_clan_balance_skill_still_matters() -> void:
+	var emperor_id: int = 1
+	var crane := _make_retainer(10, emperor_id, "Crane")
+	crane.honor = 20.0
+	crane.glory = 10.0
+	var lion := _make_retainer(11, emperor_id, "Lion")
+	lion.honor = 1.0
+	lion.glory = 1.0
+	var clan_counts: Dictionary = {"Crane": 2, "Lion": 0}
+	var chars: Array[L5RCharacterData] = [crane, lion]
+	var by_id: Dictionary = {10: crane, 11: lion}
+	# Crane's base score is much higher — balance weight shouldn't override that
+	var result: int = DayOrchestrator._find_vacancy_candidate(
+		emperor_id, "Magistrate", chars, by_id, 25.0, clan_counts,
+	)
+	assert_eq(result, 10)

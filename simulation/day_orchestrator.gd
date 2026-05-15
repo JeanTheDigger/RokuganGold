@@ -9198,6 +9198,16 @@ static func _populate_vacancy_intelligence(
 ) -> void:
 	var lord_vacancies: Dictionary = {}
 
+	var emperor_id: int = int(world_states.get("emperor_id", -1))
+	var emperor_archetype: int = int(world_states.get(
+		"emperor_archetype", StrategicReview.EmperorArchetype.IRON
+	))
+	var cunning_balance_weight: float = 0.0
+	var emperor_clan_counts: Dictionary = {}
+	if emperor_id >= 0 and emperor_archetype == StrategicReview.EmperorArchetype.CUNNING:
+		cunning_balance_weight = float(StrategicReview.CUNNING_CLAN_BALANCE_WEIGHT)
+		emperor_clan_counts = _compute_clan_position_counts(emperor_id, characters)
+
 	# Military vacancies: units with no commander
 	for company_data: Variant in companies:
 		if company_data is Dictionary:
@@ -9266,8 +9276,11 @@ static func _populate_vacancy_intelligence(
 		var lord_positions: Array = filled_positions.get(lord_id, [])
 
 		if not _has_position(lord_positions, "Magistrate"):
+			var bal_w: float = cunning_balance_weight if lord_id == emperor_id else 0.0
+			var bal_c: Dictionary = emperor_clan_counts if lord_id == emperor_id else {}
 			var candidate: int = _find_vacancy_candidate(
 				lord_id, "Magistrate", characters, characters_by_id,
+				bal_w, bal_c,
 			)
 			if not lord_vacancies.has(lord_id):
 				lord_vacancies[lord_id] = []
@@ -9287,8 +9300,11 @@ static func _populate_vacancy_intelligence(
 		var lord_positions: Array = filled_positions.get(lord_id, [])
 
 		if s.is_military() and not _has_position(lord_positions, "Garrison Commander"):
+			var bal_w2: float = cunning_balance_weight if lord_id == emperor_id else 0.0
+			var bal_c2: Dictionary = emperor_clan_counts if lord_id == emperor_id else {}
 			var candidate: int = _find_vacancy_candidate(
 				lord_id, "Garrison Commander", characters, characters_by_id,
+				bal_w2, bal_c2,
 			)
 			if not lord_vacancies.has(lord_id):
 				lord_vacancies[lord_id] = []
@@ -9306,8 +9322,11 @@ static func _populate_vacancy_intelligence(
 			filled_positions[lord_id].append("Garrison Commander (pending)")
 
 		if s.settlement_type == Enums.SettlementType.TEMPLE and not _has_position(lord_positions, "Temple Head"):
+			var bal_w3: float = cunning_balance_weight if lord_id == emperor_id else 0.0
+			var bal_c3: Dictionary = emperor_clan_counts if lord_id == emperor_id else {}
 			var candidate: int = _find_vacancy_candidate(
 				lord_id, "Temple Head", characters, characters_by_id,
+				bal_w3, bal_c3,
 			)
 			if not lord_vacancies.has(lord_id):
 				lord_vacancies[lord_id] = []
@@ -9324,8 +9343,11 @@ static func _populate_vacancy_intelligence(
 			filled_positions[lord_id].append("Temple Head (pending)")
 
 		if s.settlement_type == Enums.SettlementType.MONASTERY and not _has_position(lord_positions, "Monastery Abbot"):
+			var bal_w4: float = cunning_balance_weight if lord_id == emperor_id else 0.0
+			var bal_c4: Dictionary = emperor_clan_counts if lord_id == emperor_id else {}
 			var candidate: int = _find_vacancy_candidate(
 				lord_id, "Monastery Abbot", characters, characters_by_id,
+				bal_w4, bal_c4,
 			)
 			if not lord_vacancies.has(lord_id):
 				lord_vacancies[lord_id] = []
@@ -9379,8 +9401,11 @@ static func _populate_vacancy_intelligence(
 		var family_key: String = "School Master (%s)" % fam
 		if _has_position(lord_positions, family_key):
 			continue
+		var bal_w5: float = cunning_balance_weight if lord_id == emperor_id else 0.0
+		var bal_c5: Dictionary = emperor_clan_counts if lord_id == emperor_id else {}
 		var candidate: int = _find_vacancy_candidate(
 			lord_id, "School Master", characters, characters_by_id,
+			bal_w5, bal_c5,
 		)
 		if not lord_vacancies.has(lord_id):
 			lord_vacancies[lord_id] = []
@@ -9483,12 +9508,20 @@ static func _find_vacancy_candidate(
 	position_type: String,
 	characters: Array[L5RCharacterData],
 	_characters_by_id: Dictionary,
+	clan_balance_weight: float = 0.0,
+	clan_position_counts: Dictionary = {},
 ) -> int:
 	var best_id: int = -1
 	var best_score: float = -999.0
 	var skill_keys: Array = POSITION_SKILL_WEIGHTS.get(position_type, [])
 	var virtue_list: Array = POSITION_VIRTUE_BONUSES.get(position_type, [])
 	var school_types: Array = POSITION_SCHOOL_TYPE_BONUS.get(position_type, [])
+	var avg_positions: float = 0.0
+	if clan_balance_weight > 0.0 and not clan_position_counts.is_empty():
+		var total: float = 0.0
+		for clan_name: String in clan_position_counts:
+			total += float(clan_position_counts[clan_name])
+		avg_positions = total / float(clan_position_counts.size())
 	for c: L5RCharacterData in characters:
 		if CharacterStats.is_dead(c):
 			continue
@@ -9512,10 +9545,29 @@ static func _find_vacancy_candidate(
 		# School type fit: bonus for matching school type (+2)
 		if not school_types.is_empty() and c.school_type in school_types:
 			score += 2.0
+		if clan_balance_weight > 0.0 and not clan_position_counts.is_empty():
+			var clan_count: float = float(clan_position_counts.get(c.clan, 0))
+			score += (avg_positions - clan_count) * clan_balance_weight / 100.0
 		if score > best_score:
 			best_score = score
 			best_id = c.character_id
 	return best_id
+
+
+static func _compute_clan_position_counts(
+	lord_id: int,
+	characters: Array[L5RCharacterData],
+) -> Dictionary:
+	var counts: Dictionary = {}
+	for c: L5RCharacterData in characters:
+		if CharacterStats.is_dead(c):
+			continue
+		if c.lord_id != lord_id:
+			continue
+		if c.role_position.is_empty():
+			continue
+		counts[c.clan] = counts.get(c.clan, 0) + 1
+	return counts
 
 
 # -- Court Commitment Wiring ---------------------------------------------------
