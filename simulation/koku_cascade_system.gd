@@ -245,6 +245,10 @@ static func _pay_individual_stipends(
 				in_crisis = true
 		else:
 			c.months_without_stipend = 0
+		var is_reduced: bool = ratio >= REDUCED_STIPEND_FLOOR and ratio < REDUCED_STIPEND_CEILING
+		var generates_topic: bool = is_reduced or (
+			in_crisis and c.months_without_stipend == MONTHS_WITHOUT_PAY_CRISIS
+		)
 		results[c.character_id] = {
 			"base_stipend": base_stipend,
 			"actual_payment": actual_payment,
@@ -252,6 +256,8 @@ static func _pay_individual_stipends(
 			"consequence": consequence,
 			"is_indirect": asgn["is_indirect"],
 			"in_crisis": in_crisis,
+			"generates_topic": generates_topic,
+			"lord_id": c.lord_id,
 		}
 	return results
 

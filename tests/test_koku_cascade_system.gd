@@ -350,6 +350,88 @@ func test_crisis_persists_beyond_three() -> void:
 	assert_true(result[2]["in_crisis"])
 
 
+# -- Topic Generation Flags ----------------------------------------------------
+
+func test_reduced_stipend_generates_topic() -> void:
+	var local := _make_character(1, "Crane", 4.0)
+	var retainer := _make_character(2, "Crane", 2.0, 1)
+	var chars: Array[L5RCharacterData] = [local, retainer]
+	var by_id: Dictionary = {1: local, 2: retainer}
+	# Pool = 0.0012 * 500 = 0.6. Need 1.0. Ratio = 0.6 → reduced (50-75%)
+	var lord_pools: Dictionary = {
+		1: {"tier": "local_daimyo", "retained": 0.0, "passed_down": 0.0012},
+	}
+	var result: Dictionary = KokuCascadeSystem._pay_individual_stipends(
+		lord_pools, chars, by_id,
+	)
+	assert_true(result[2]["ratio"] >= 0.50 and result[2]["ratio"] < 0.75)
+	assert_true(result[2]["generates_topic"])
+	assert_eq(result[2]["lord_id"], 1)
+
+
+func test_full_stipend_no_topic() -> void:
+	var local := _make_character(1, "Crane", 4.0)
+	var retainer := _make_character(2, "Crane", 2.0, 1)
+	var chars: Array[L5RCharacterData] = [local, retainer]
+	var by_id: Dictionary = {1: local, 2: retainer}
+	var lord_pools: Dictionary = {
+		1: {"tier": "local_daimyo", "retained": 0.5, "passed_down": 3.0},
+	}
+	var result: Dictionary = KokuCascadeSystem._pay_individual_stipends(
+		lord_pools, chars, by_id,
+	)
+	assert_false(result[2]["generates_topic"])
+
+
+func test_severely_reduced_no_topic() -> void:
+	var local := _make_character(1, "Crane", 4.0)
+	var retainer := _make_character(2, "Crane", 2.0, 1)
+	var chars: Array[L5RCharacterData] = [local, retainer]
+	var by_id: Dictionary = {1: local, 2: retainer}
+	# Pool = 0.0004 * 500 = 0.2. Need 1.0. Ratio = 0.2 → severely reduced (<50%)
+	var lord_pools: Dictionary = {
+		1: {"tier": "local_daimyo", "retained": 0.0, "passed_down": 0.0004},
+	}
+	var result: Dictionary = KokuCascadeSystem._pay_individual_stipends(
+		lord_pools, chars, by_id,
+	)
+	assert_true(result[2]["ratio"] < 0.50 and result[2]["ratio"] > 0.0)
+	assert_false(result[2]["generates_topic"])
+
+
+func test_crisis_month_generates_topic() -> void:
+	var local := _make_character(1, "Crane", 4.0)
+	var retainer := _make_character(2, "Crane", 2.0, 1)
+	retainer.months_without_stipend = 2
+	var chars: Array[L5RCharacterData] = [local, retainer]
+	var by_id: Dictionary = {1: local, 2: retainer}
+	var lord_pools: Dictionary = {
+		1: {"tier": "local_daimyo", "retained": 0.0, "passed_down": 0.0},
+	}
+	var result: Dictionary = KokuCascadeSystem._pay_individual_stipends(
+		lord_pools, chars, by_id,
+	)
+	assert_eq(retainer.months_without_stipend, 3)
+	assert_true(result[2]["generates_topic"])
+
+
+func test_crisis_beyond_three_no_repeat_topic() -> void:
+	var local := _make_character(1, "Crane", 4.0)
+	var retainer := _make_character(2, "Crane", 2.0, 1)
+	retainer.months_without_stipend = 3
+	var chars: Array[L5RCharacterData] = [local, retainer]
+	var by_id: Dictionary = {1: local, 2: retainer}
+	var lord_pools: Dictionary = {
+		1: {"tier": "local_daimyo", "retained": 0.0, "passed_down": 0.0},
+	}
+	var result: Dictionary = KokuCascadeSystem._pay_individual_stipends(
+		lord_pools, chars, by_id,
+	)
+	assert_eq(retainer.months_without_stipend, 4)
+	assert_true(result[2]["in_crisis"])
+	assert_false(result[2]["generates_topic"])
+
+
 # -- Full Flow Integration -----------------------------------------------------
 
 func test_full_flow_single_clan() -> void:
