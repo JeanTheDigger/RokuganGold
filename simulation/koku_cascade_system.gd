@@ -238,12 +238,20 @@ static func _pay_individual_stipends(
 		if consequence != 0:
 			var old_disp: int = c.disposition_values.get(c.lord_id, 0)
 			c.disposition_values[c.lord_id] = clampi(old_disp + consequence, -100, 100)
+		var in_crisis: bool = false
+		if ratio == 0.0:
+			c.months_without_stipend += 1
+			if c.months_without_stipend >= MONTHS_WITHOUT_PAY_CRISIS:
+				in_crisis = true
+		else:
+			c.months_without_stipend = 0
 		results[c.character_id] = {
 			"base_stipend": base_stipend,
 			"actual_payment": actual_payment,
 			"ratio": ratio,
 			"consequence": consequence,
 			"is_indirect": asgn["is_indirect"],
+			"in_crisis": in_crisis,
 		}
 	return results
 

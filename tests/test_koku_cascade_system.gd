@@ -259,6 +259,97 @@ func test_consequence_no_stipend() -> void:
 	assert_eq(KokuCascadeSystem._stipend_consequence(0.0), KokuCascadeSystem.DISPOSITION_NO_STIPEND)
 
 
+# -- Consecutive Unpaid Tracking -----------------------------------------------
+
+func test_months_without_stipend_increments_on_zero_payment() -> void:
+	var local := _make_character(1, "Crane", 4.0)
+	var retainer := _make_character(2, "Crane", 2.0, 1)
+	var chars: Array[L5RCharacterData] = [local, retainer]
+	var by_id: Dictionary = {1: local, 2: retainer}
+	var lord_pools: Dictionary = {
+		1: {"tier": "local_daimyo", "retained": 0.0, "passed_down": 0.0},
+	}
+	KokuCascadeSystem._pay_individual_stipends(lord_pools, chars, by_id)
+	assert_eq(retainer.months_without_stipend, 1)
+	KokuCascadeSystem._pay_individual_stipends(lord_pools, chars, by_id)
+	assert_eq(retainer.months_without_stipend, 2)
+
+
+func test_months_without_stipend_resets_on_any_payment() -> void:
+	var local := _make_character(1, "Crane", 4.0)
+	var retainer := _make_character(2, "Crane", 2.0, 1)
+	retainer.months_without_stipend = 2
+	var chars: Array[L5RCharacterData] = [local, retainer]
+	var by_id: Dictionary = {1: local, 2: retainer}
+	var lord_pools: Dictionary = {
+		1: {"tier": "local_daimyo", "retained": 0.5, "passed_down": 3.0},
+	}
+	KokuCascadeSystem._pay_individual_stipends(lord_pools, chars, by_id)
+	assert_eq(retainer.months_without_stipend, 0)
+
+
+func test_severely_reduced_resets_counter() -> void:
+	var local := _make_character(1, "Crane", 4.0)
+	var retainer := _make_character(2, "Crane", 2.0, 1)
+	retainer.months_without_stipend = 2
+	var chars: Array[L5RCharacterData] = [local, retainer]
+	var by_id: Dictionary = {1: local, 2: retainer}
+	# Pool = 0.0002 * 500 = 0.1 koku. Need 1.0. Ratio = 0.1 (severely reduced but nonzero)
+	var lord_pools: Dictionary = {
+		1: {"tier": "local_daimyo", "retained": 0.0, "passed_down": 0.0002},
+	}
+	KokuCascadeSystem._pay_individual_stipends(lord_pools, chars, by_id)
+	assert_eq(retainer.months_without_stipend, 0)
+
+
+func test_crisis_flag_after_three_months() -> void:
+	var local := _make_character(1, "Crane", 4.0)
+	var retainer := _make_character(2, "Crane", 2.0, 1)
+	retainer.months_without_stipend = 2
+	var chars: Array[L5RCharacterData] = [local, retainer]
+	var by_id: Dictionary = {1: local, 2: retainer}
+	var lord_pools: Dictionary = {
+		1: {"tier": "local_daimyo", "retained": 0.0, "passed_down": 0.0},
+	}
+	var result: Dictionary = KokuCascadeSystem._pay_individual_stipends(
+		lord_pools, chars, by_id,
+	)
+	assert_eq(retainer.months_without_stipend, 3)
+	assert_true(result[2]["in_crisis"])
+
+
+func test_no_crisis_at_two_months() -> void:
+	var local := _make_character(1, "Crane", 4.0)
+	var retainer := _make_character(2, "Crane", 2.0, 1)
+	retainer.months_without_stipend = 1
+	var chars: Array[L5RCharacterData] = [local, retainer]
+	var by_id: Dictionary = {1: local, 2: retainer}
+	var lord_pools: Dictionary = {
+		1: {"tier": "local_daimyo", "retained": 0.0, "passed_down": 0.0},
+	}
+	var result: Dictionary = KokuCascadeSystem._pay_individual_stipends(
+		lord_pools, chars, by_id,
+	)
+	assert_eq(retainer.months_without_stipend, 2)
+	assert_false(result[2]["in_crisis"])
+
+
+func test_crisis_persists_beyond_three() -> void:
+	var local := _make_character(1, "Crane", 4.0)
+	var retainer := _make_character(2, "Crane", 2.0, 1)
+	retainer.months_without_stipend = 5
+	var chars: Array[L5RCharacterData] = [local, retainer]
+	var by_id: Dictionary = {1: local, 2: retainer}
+	var lord_pools: Dictionary = {
+		1: {"tier": "local_daimyo", "retained": 0.0, "passed_down": 0.0},
+	}
+	var result: Dictionary = KokuCascadeSystem._pay_individual_stipends(
+		lord_pools, chars, by_id,
+	)
+	assert_eq(retainer.months_without_stipend, 6)
+	assert_true(result[2]["in_crisis"])
+
+
 # -- Full Flow Integration -----------------------------------------------------
 
 func test_full_flow_single_clan() -> void:

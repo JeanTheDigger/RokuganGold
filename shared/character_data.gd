@@ -82,6 +82,7 @@ extends Resource
 @export var armor_reduction: int = 0
 @export var outfit: Array[String] = []
 @export var koku: float = 0.0
+@export var months_without_stipend: int = 0
 
 # -- Inventory (Section 12.11) -------------------------------------------------
 # Item dicts as produced by InventorySystem.create_item / create_gift_item.
