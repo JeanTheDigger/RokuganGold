@@ -545,4 +545,83 @@ func test_overreach_returns_consequences() -> void:
 	assert_eq(result["stage"], 1)
 	assert_eq(result["topic_tier"], 4)
 	assert_false(_state["phoenix_champion_authority"])
+
+
+# -- evaluate_reincarnation_schism_outcome (s55.10.3.7) ----------------------
+
+func _make_phoenix_champion(
+	bv: Enums.BushidoVirtue, sv: Enums.ShouridoVirtue
+) -> L5RCharacterData:
+	var c := L5RCharacterData.new()
+	c.character_id = 200
+	c.character_name = "Shiba Reborn"
+	c.clan = "Phoenix"
+	c.family = "Shiba"
+	c.bushido_virtue = bv
+	c.shourido_virtue = sv
+	return c
+
+
+func test_chugi_high_duty_capitulates() -> void:
+	var c: L5RCharacterData = _make_phoenix_champion(
+		Enums.BushidoVirtue.CHUGI, Enums.ShouridoVirtue.NONE
+	)
+	var result: Dictionary = PhoenixCouncil.evaluate_reincarnation_schism_outcome(c, 0, 70)
+	assert_true(result["capitulates"])
+	assert_eq(result["reason"], "chugi_duty")
+
+
+func test_chugi_low_duty_falls_to_disposition() -> void:
+	# Chugi but duty_score < 60 — doesn't auto-capitulate; check disposition.
+	var c: L5RCharacterData = _make_phoenix_champion(
+		Enums.BushidoVirtue.CHUGI, Enums.ShouridoVirtue.NONE
+	)
+	var result: Dictionary = PhoenixCouncil.evaluate_reincarnation_schism_outcome(c, 0, 50)
+	# disposition 0 is not Friend+ (threshold 31), so does not capitulate.
+	assert_false(result["capitulates"])
+	assert_eq(result["reason"], "neutral_or_hostile")
+
+
+func test_ishi_continues_defiance() -> void:
+	var c: L5RCharacterData = _make_phoenix_champion(
+		Enums.BushidoVirtue.NONE, Enums.ShouridoVirtue.ISHI
+	)
+	var result: Dictionary = PhoenixCouncil.evaluate_reincarnation_schism_outcome(c, 0, 30)
+	assert_false(result["capitulates"])
+	assert_eq(result["reason"], "ishi_will")
+
+
+func test_seigyo_continues_defiance() -> void:
+	var c: L5RCharacterData = _make_phoenix_champion(
+		Enums.BushidoVirtue.NONE, Enums.ShouridoVirtue.SEIGYO
+	)
+	var result: Dictionary = PhoenixCouncil.evaluate_reincarnation_schism_outcome(c, 35, 30)
+	# Even with friend-level disposition, Seigyo keeps power.
+	assert_false(result["capitulates"])
+	assert_eq(result["reason"], "seigyo_control")
+
+
+func test_friendly_disposition_capitulates_without_strong_virtue() -> void:
+	var c: L5RCharacterData = _make_phoenix_champion(
+		Enums.BushidoVirtue.JIN, Enums.ShouridoVirtue.NONE
+	)
+	var result: Dictionary = PhoenixCouncil.evaluate_reincarnation_schism_outcome(c, 35, 30)
+	# disposition_to_council_avg >= FRIEND_DISPOSITION_THRESHOLD (31)
+	assert_true(result["capitulates"])
+	assert_eq(result["reason"], "friendly_disposition")
+
+
+func test_hostile_disposition_continues_defiance() -> void:
+	var c: L5RCharacterData = _make_phoenix_champion(
+		Enums.BushidoVirtue.JIN, Enums.ShouridoVirtue.NONE
+	)
+	var result: Dictionary = PhoenixCouncil.evaluate_reincarnation_schism_outcome(c, 10, 30)
+	assert_false(result["capitulates"])
+	assert_eq(result["reason"], "neutral_or_hostile")
+
+
+func test_null_champion_capitulates() -> void:
+	var result: Dictionary = PhoenixCouncil.evaluate_reincarnation_schism_outcome(null, 0, 0)
+	assert_true(result["capitulates"])
+	assert_eq(result["reason"], "no_champion")
 	assert_eq(_state["tabled_proposals"], {})

@@ -718,3 +718,123 @@ func test_trigger_reassigns_broken_feudal_chains() -> void:
 	if assignments.get(50) == IntraClanCivilWar.Faction.LEGITIMACY:
 		assert_ne(vassal.lord_id, 100,
 			"Vassal on legitimacy side should not report to rebel lord")
+
+
+# -- Phoenix reincarnation during schism (s55.10.3.7) ------------------------
+
+
+func _make_phoenix_schism_state(
+	champion_id: int, council_id: int
+) -> Dictionary:
+	var state: Dictionary = IntraClanCivilWar.make_initial_state(
+		champion_id, council_id, "Phoenix", 5000, 0
+	)
+	state["faction_assignments"] = {
+		champion_id: IntraClanCivilWar.Faction.REBEL,
+		council_id: IntraClanCivilWar.Faction.LEGITIMACY,
+	}
+	return state
+
+
+func test_phoenix_dead_champion_chugi_capitulates_resolves_war() -> void:
+	# Champion is dead. Eligible Shiba reincarnation candidate has Chugi virtue
+	# → auto-capitulates → schism resolves as Council Victory.
+	var dead_champion: L5RCharacterData = _make_char(100, "Phoenix")
+	dead_champion.family = "Shiba"
+	dead_champion.wounds_taken = 999   # dead
+
+	var authority: L5RCharacterData = _make_char(1, "Phoenix")
+	authority.family = "Isawa"
+	authority.status = 7.0
+
+	var shiba_candidate: L5RCharacterData = _make_char(200, "Phoenix")
+	shiba_candidate.family = "Shiba"
+	shiba_candidate.bushido_virtue = Enums.BushidoVirtue.CHUGI
+	shiba_candidate.shourido_virtue = Enums.ShouridoVirtue.NONE
+
+	var state: Dictionary = _make_phoenix_schism_state(100, 1)
+	var chars_by_id: Dictionary = {
+		100: dead_champion, 1: authority, 200: shiba_candidate,
+	}
+	var topics: Array[TopicData] = []
+	var tid: Array[int] = [5000]
+	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
+	rng.seed = 1
+
+	var result: Dictionary = DayOrchestrator._check_civil_war_resolution(
+		state, dead_champion, authority, chars_by_id,
+		{}, 5, topics, tid, 300, {}, "Phoenix",
+		{}, [], rng,
+	)
+
+	# Chugi champion capitulates → Legitimacy Victory → war resolved.
+	assert_false(state.get("active", true), "Schism should resolve when champion capitulates")
+	assert_gt(result.size(), 0, "Resolution dict should be non-empty")
+
+
+func test_phoenix_dead_champion_ishi_continues_schism() -> void:
+	# Champion is dead. Reincarnation candidate has Ishi virtue
+	# → continues defiance → schism persists, rebel_lord_id updates.
+	var dead_champion: L5RCharacterData = _make_char(100, "Phoenix")
+	dead_champion.family = "Shiba"
+	dead_champion.wounds_taken = 999   # dead
+
+	var authority: L5RCharacterData = _make_char(1, "Phoenix")
+	authority.family = "Isawa"
+	authority.status = 7.0
+
+	var shiba_candidate: L5RCharacterData = _make_char(200, "Phoenix")
+	shiba_candidate.family = "Shiba"
+	shiba_candidate.bushido_virtue = Enums.BushidoVirtue.NONE
+	shiba_candidate.shourido_virtue = Enums.ShouridoVirtue.ISHI
+
+	var state: Dictionary = _make_phoenix_schism_state(100, 1)
+	var chars_by_id: Dictionary = {
+		100: dead_champion, 1: authority, 200: shiba_candidate,
+	}
+	var topics: Array[TopicData] = []
+	var tid: Array[int] = [5000]
+	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
+	rng.seed = 1
+
+	var result: Dictionary = DayOrchestrator._check_civil_war_resolution(
+		state, dead_champion, authority, chars_by_id,
+		{}, 5, topics, tid, 300, {}, "Phoenix",
+		{}, [], rng,
+	)
+
+	# Ishi champion continues → schism persists → empty resolution dict.
+	assert_eq(result.size(), 0, "No resolution when schism continues")
+	assert_true(state.get("active", false), "Schism should still be active")
+	assert_eq(
+		int(state.get("rebel_lord_id", -1)), 200,
+		"rebel_lord_id should update to the new Champion"
+	)
+
+
+func test_phoenix_dead_champion_no_eligible_shiba_resolves_war() -> void:
+	# No eligible Shiba → reincarnation returns -1 → treat as capitulation
+	# (no new Champion to continue the defiance) → Legitimacy Victory.
+	var dead_champion: L5RCharacterData = _make_char(100, "Phoenix")
+	dead_champion.family = "Shiba"
+	dead_champion.wounds_taken = 999   # dead
+
+	var authority: L5RCharacterData = _make_char(1, "Phoenix")
+	authority.family = "Isawa"
+	authority.status = 7.0
+
+	# No Shiba characters in the roster.
+	var state: Dictionary = _make_phoenix_schism_state(100, 1)
+	var chars_by_id: Dictionary = {100: dead_champion, 1: authority}
+	var topics: Array[TopicData] = []
+	var tid: Array[int] = [5000]
+	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
+
+	var result: Dictionary = DayOrchestrator._check_civil_war_resolution(
+		state, dead_champion, authority, chars_by_id,
+		{}, 5, topics, tid, 300, {}, "Phoenix",
+		{}, [], rng,
+	)
+
+	assert_false(state.get("active", true), "Schism should resolve with no eligible Shiba")
+	assert_gt(result.size(), 0)

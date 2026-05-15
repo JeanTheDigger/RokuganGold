@@ -9531,7 +9531,7 @@ static func _process_civil_war_seasonal(
 			state, rebel_lord, authority_lord, characters_by_id,
 			precedent_modifiers, current_season, active_topics,
 			next_topic_id, ic_day, season_meta, clan,
-			provinces, companies,
+			provinces, companies, null,
 		)
 		if not resolution.is_empty():
 			resolutions.append(resolution)
@@ -9630,9 +9630,32 @@ static func _check_civil_war_resolution(
 	clan: String,
 	provinces: Dictionary = {},
 	companies: Array[Dictionary] = [],
+	rng: RandomNumberGenerator = null,
 ) -> Dictionary:
 	var rebel_dead: bool = rebel_lord == null or CharacterStats.is_dead(rebel_lord)
 	if rebel_dead:
+		# Phoenix schism: Champion death triggers reincarnation (s55.10.3.7).
+		# The new Champion's personality determines whether the schism auto-resolves.
+		if clan == "Phoenix":
+			var reincarnation_rng: RandomNumberGenerator = rng
+			if reincarnation_rng == null:
+				reincarnation_rng = RandomNumberGenerator.new()
+			var reincarnation: Dictionary = SuccessionSystem.resolve_shiba_reincarnation(
+				characters_by_id, reincarnation_rng
+			)
+			var new_champ_id: int = int(reincarnation.get("new_champion_id", -1))
+			var new_champ: L5RCharacterData = characters_by_id.get(new_champ_id)
+			if new_champ != null:
+				var duty_score: int = 70 if new_champ.bushido_virtue == Enums.BushidoVirtue.CHUGI else 30
+				var avg_disp: int = _compute_avg_council_disposition(new_champ, characters_by_id)
+				var outcome: Dictionary = PhoenixCouncil.evaluate_reincarnation_schism_outcome(
+					new_champ, avg_disp, duty_score
+				)
+				if not outcome.get("capitulates", true):
+					# Schism continues — update rebel_lord_id to the new Champion.
+					state["rebel_lord_id"] = new_champ_id
+					return {}
+				# Capitulates → fall through to Legitimacy Victory below.
 		return _resolve_civil_war(
 			state, true, characters_by_id, precedent_modifiers,
 			current_season, active_topics, next_topic_id, ic_day,
@@ -9855,6 +9878,28 @@ static func _apply_dragon_spiritual_reeval(
 ## The Champion is the rebel_lord in the Defiance path and authority_lord in
 ## the Overreach path. Uses schism_path to determine which.
 ## Returns the count of newly penalized Masters this tick.
+static func _compute_avg_council_disposition(
+	new_champion: L5RCharacterData,
+	characters_by_id: Dictionary,
+) -> int:
+	## Computes the average disposition of a new Phoenix Champion toward the
+	## Elemental Council Masters. Used by the post-reincarnation schism
+	## evaluation (s55.10.3.7).
+	var total: int = 0
+	var count: int = 0
+	var master_positions: Array[String] = [
+		"Master of Fire", "Master of Water", "Master of Air",
+		"Master of Earth", "Master of Void",
+	]
+	for c: L5RCharacterData in characters_by_id.values():
+		if c.role_position in master_positions and not CharacterStats.is_dead(c):
+			total += int(new_champion.disposition_values.get(c.character_id, 0))
+			count += 1
+	if count == 0:
+		return 0
+	return int(total / count)
+
+
 static func _apply_phoenix_master_death_honor_penalty(
 	state: Dictionary,
 	characters_by_id: Dictionary,

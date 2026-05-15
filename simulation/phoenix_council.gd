@@ -566,6 +566,48 @@ static func reincarnated_champion_evaluates_restore(
 	return disposition_to_council_avg >= FRIEND_DISPOSITION_THRESHOLD
 
 
+# -- Post-reincarnation schism auto-resolve (s55.10.3.7) --------------------
+#
+# Called after resolve_shiba_reincarnation fires during an active Phoenix
+# Schism. The new Champion evaluates whether to capitulate (Council Victory)
+# or continue the defiance with fresh resolve.
+#
+# duty_score: caller-computed duty inclination (0..100). Convention: pass 70
+#   when bushido_virtue == CHUGI, 30 otherwise. Matches the 60-point threshold
+#   in s55.10.3.7 ("Chugi-dominant Champions, Duty score above PROVISIONAL 60").
+#
+# Returns:
+#   {
+#     "capitulates": bool,
+#     "reason":      String,   # "chugi_duty" | "ishi_will" | "seigyo_control" |
+#                              # "friendly_disposition" | "neutral_or_hostile"
+#   }
+
+static func evaluate_reincarnation_schism_outcome(
+	new_champion: L5RCharacterData,
+	disposition_to_council_avg: int,
+	duty_score: int,
+) -> Dictionary:
+	if new_champion == null:
+		return {"capitulates": true, "reason": "no_champion"}
+
+	# High Chugi + high duty score: the oath compels the new Champion to yield.
+	if new_champion.bushido_virtue == Enums.BushidoVirtue.CHUGI and duty_score >= 60:
+		return {"capitulates": true, "reason": "chugi_duty"}
+
+	# Ishi (iron will) or Seigyo (self-mastery) — continues independence.
+	if new_champion.shourido_virtue == Enums.ShouridoVirtue.ISHI:
+		return {"capitulates": false, "reason": "ishi_will"}
+	if new_champion.shourido_virtue == Enums.ShouridoVirtue.SEIGYO:
+		return {"capitulates": false, "reason": "seigyo_control"}
+
+	# Disposition-driven: friend-level relationship with the Council → yields.
+	if disposition_to_council_avg >= FRIEND_DISPOSITION_THRESHOLD:
+		return {"capitulates": true, "reason": "friendly_disposition"}
+
+	return {"capitulates": false, "reason": "neutral_or_hostile"}
+
+
 # -- Master vacancy / extinction (s55.10.3.9) -------------------------------
 
 static func count_living_masters(living_masters: Array) -> int:
