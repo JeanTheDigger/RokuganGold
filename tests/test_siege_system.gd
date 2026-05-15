@@ -300,6 +300,23 @@ func test_garrison_effective_defense_with_home() -> void:
 	assert_eq(eff, 15)
 
 
+func test_storm_defense_bonus_town_no_fortification() -> void:
+	# GDD s11.7: towns have Urban +3 only, no fortification bonus
+	assert_eq(SiegeSystem.get_storm_defense_bonus(false), 3)
+
+
+func test_garrison_effective_defense_town_no_fortification() -> void:
+	# Town: Base 5 + Urban 3 = 8 (no fortification +5)
+	var eff: int = SiegeSystem.compute_garrison_effective_defense(5, false, false)
+	assert_eq(eff, 8)
+
+
+func test_garrison_effective_defense_town_with_home() -> void:
+	# Town with home settlement: Base 5 + Urban 3 + Home 2 = 10
+	var eff: int = SiegeSystem.compute_garrison_effective_defense(5, true, false)
+	assert_eq(eff, 10)
+
+
 # -- Honor Cowardice Tests ------------------------------------------------------
 
 func test_honor_no_loss_before_threshold() -> void:
@@ -445,3 +462,24 @@ func test_event_tick_change_positive() -> void:
 	var before: float = s["rice_stockpile"]
 	SiegeSystem.apply_event_tick_change(s, 15)
 	assert_true(s["rice_stockpile"] > before)
+
+
+# -- Tether Collapse Tests -------------------------------------------------------
+
+func test_tether_broken_ends_siege() -> void:
+	# GDD s11.7: "if that tether is cut... the siege collapses"
+	assert_true(
+		SiegeSystem.check_tether_ends_siege(SupplyTetherSystem.TetherState.BROKEN),
+	)
+
+
+func test_tether_solid_does_not_end_siege() -> void:
+	assert_false(
+		SiegeSystem.check_tether_ends_siege(SupplyTetherSystem.TetherState.SOLID),
+	)
+
+
+func test_tether_threatened_does_not_end_siege() -> void:
+	assert_false(
+		SiegeSystem.check_tether_ends_siege(SupplyTetherSystem.TetherState.THREATENED),
+	)
