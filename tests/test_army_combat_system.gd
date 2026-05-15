@@ -667,6 +667,107 @@ func test_rout_dissolved_below_20pct() -> void:
 	assert_true(result["dissolved"], "Army below 20%% should dissolve")
 
 
+# -- Routing Contagion Tests (GDD s11.7) ------------------------------------------
+
+func _make_contagion_bc(
+	id: int, row: int, col: int, morale: int, morale_defense: int,
+	extra: Dictionary = {},
+) -> Dictionary:
+	var bc: Dictionary = {
+		"company_id": id,
+		"unit_type": Enums.CompanyUnitType.BUSHI_RETAINER,
+		"row": row,
+		"column": col,
+		"current_morale": morale,
+		"starting_morale": morale,
+		"current_health": 153,
+		"starting_health": 153,
+		"base_morale_defense": morale_defense,
+		"is_routed": false,
+		"is_destroyed": false,
+		"no_morale": false,
+		"commander_bonus": {},
+		"commander_injured": false,
+		"commander_dead": false,
+	}
+	for k: String in extra:
+		bc[k] = extra[k]
+	return bc
+
+
+func test_contagion_adjacent_unit_loses_morale() -> void:
+	# Company 0 routs. Company 1 is in same row, adjacent column. MD=0 so
+	# morale damage = roll (1-10). With any seed company 1 loses morale.
+	var company0 := _make_contagion_bc(0, 0, 0, 8, 0)
+	var company1 := _make_contagion_bc(1, 0, 1, 12, 0)
+	company0["is_routed"] = true
+	var side: Array[Dictionary] = [company0, company1]
+	_dice.set_seed(1)
+	ArmyCombatSystem._process_rout_contagion(side, _dice)
+	assert_true(company1["current_morale"] < 12, "Adjacent unit should lose morale from contagion")
+
+
+func test_contagion_high_morale_defense_resists() -> void:
+	# MD=15 ensures max(roll - 15, 0) = 0 — no morale damage regardless of roll.
+	var company0 := _make_contagion_bc(0, 0, 0, 8, 0)
+	var company1 := _make_contagion_bc(1, 0, 1, 12, 15)
+	company0["is_routed"] = true
+	var side: Array[Dictionary] = [company0, company1]
+	_dice.set_seed(1)
+	ArmyCombatSystem._process_rout_contagion(side, _dice)
+	assert_eq(company1["current_morale"], 12, "High MD unit should suffer 0 morale damage")
+
+
+func test_contagion_immune_unit_unaffected() -> void:
+	var company0 := _make_contagion_bc(0, 0, 0, 8, 0)
+	var company1 := _make_contagion_bc(1, 0, 1, 12, 0, {"immune_routing_contagion": true})
+	company0["is_routed"] = true
+	var side: Array[Dictionary] = [company0, company1]
+	_dice.set_seed(1)
+	ArmyCombatSystem._process_rout_contagion(side, _dice)
+	assert_eq(company1["current_morale"], 12, "Immune unit should not be affected by contagion")
+
+
+func test_contagion_no_morale_unit_unaffected() -> void:
+	var company0 := _make_contagion_bc(0, 0, 0, 8, 0)
+	var company1 := _make_contagion_bc(1, 0, 1, 0, 0, {"no_morale": true})
+	company0["is_routed"] = true
+	var side: Array[Dictionary] = [company0, company1]
+	_dice.set_seed(1)
+	ArmyCombatSystem._process_rout_contagion(side, _dice)
+	assert_false(company1["is_routed"], "No-morale unit should not be routed by contagion")
+
+
+func test_contagion_non_adjacent_column_unaffected() -> void:
+	# Column 2 away from routed column 0 — should not be affected.
+	var company0 := _make_contagion_bc(0, 0, 0, 8, 0)
+	var company1 := _make_contagion_bc(1, 0, 2, 12, 0)
+	company0["is_routed"] = true
+	var side: Array[Dictionary] = [company0, company1]
+	_dice.set_seed(1)
+	ArmyCombatSystem._process_rout_contagion(side, _dice)
+	assert_eq(company1["current_morale"], 12, "Non-adjacent unit should not take contagion damage")
+
+
+func test_contagion_chains_to_second_unit() -> void:
+	# Company 0 routs. Company 1 (adjacent, MD=0, morale=1) routs from damage.
+	# Company 2 (adjacent to company 1, MD=0, morale=12) should then take damage too.
+	var company0 := _make_contagion_bc(0, 0, 0, 8, 0)
+	var company1 := _make_contagion_bc(1, 0, 1, 1, 0)
+	var company2 := _make_contagion_bc(2, 0, 2, 12, 0)
+	company0["is_routed"] = true
+	var side: Array[Dictionary] = [company0, company1, company2]
+	# Force die to always return 10 to guarantee company1 routs and chain fires
+	_dice.set_seed(0)
+	# We need company1 to lose all morale. With morale=1 and MD=0, any roll >= 1 routs it.
+	# Confirm company1 routes and company2 takes damage.
+	ArmyCombatSystem._process_rout_contagion(side, _dice)
+	# company1 should have routed (morale 1, MD 0, any roll >= 1 causes rout)
+	assert_true(company1["is_routed"], "Company 1 should rout from initial contagion")
+	# company2 should have taken damage from the chain
+	assert_true(company2["current_morale"] < 12, "Company 2 should take chain contagion damage")
+
+
 # -- Post-Battle Recovery Tests --------------------------------------------------
 
 func test_post_battle_recovery() -> void:
