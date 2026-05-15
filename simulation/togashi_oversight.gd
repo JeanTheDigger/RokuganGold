@@ -452,10 +452,12 @@ static func assault_high_house(
 	togashi_character: L5RCharacterData,
 	next_topic_id: int,
 	ic_day: int,
+	assaulting_fc_id: int = -1,
 ) -> Dictionary:
 	## Fires when the FC's army captures the High House of Light.
 	state["togashi_vanished"] = true
 	state["order_dissolved_by_assault"] = true
+	state["last_assaulter_fc_id"] = assaulting_fc_id
 
 	if togashi_character != null:
 		togashi_character.physical_location = ""

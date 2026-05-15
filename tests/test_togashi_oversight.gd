@@ -723,3 +723,136 @@ func test_togashi_is_kami_flag_settable() -> void:
 	var togashi: L5RCharacterData = L5RCharacterData.new()
 	togashi.is_kami = true
 	assert_true(togashi.is_kami)
+
+
+# =============================================================================
+# ASSAULT HIGH HOUSE: FC ID STORED (wiring)
+# =============================================================================
+
+func test_assault_high_house_stores_fc_id() -> void:
+	var result: Dictionary = TogashiOversight.assault_high_house(_state, null, 1001, 300, 42)
+	assert_eq(int(_state.get("last_assaulter_fc_id", -1)), 42)
+
+
+func test_assault_high_house_fc_id_defaults_to_minus_one() -> void:
+	TogashiOversight.assault_high_house(_state, null, 1001, 300)
+	assert_eq(int(_state.get("last_assaulter_fc_id", -1)), -1)
+
+
+# =============================================================================
+# _check_dragon_schism_siege_events (DayOrchestrator wiring)
+# =============================================================================
+
+func _make_high_house_settlement(id: int) -> SettlementData:
+	var s := SettlementData.new()
+	s.settlement_id = id
+	s.settlement_name = "High House of Light"
+	s.settlement_type = Enums.SettlementType.CASTLE
+	return s
+
+
+func _make_dragon_siege_result(settlement_id: int, resolved: String, attacker_clan: String) -> Dictionary:
+	return {
+		"settlement_id": settlement_id,
+		"resolved": resolved,
+		"attacker_clan": attacker_clan,
+		"defender_clan": "Dragon" if attacker_clan != "Dragon" else "Crane",
+	}
+
+
+func _make_dragon_fc(id: int) -> L5RCharacterData:
+	var fc := L5RCharacterData.new()
+	fc.character_id = id
+	fc.character_name = "Mirumoto Dairuko"
+	fc.clan = "Dragon"
+	fc.family = "Mirumoto"
+	fc.status = 6.0
+	fc.lord_id = -1
+	fc.honor = 5.0
+	fc.wounds_taken = 0
+	fc.stamina = 3
+	fc.willpower = 3
+	fc.void_ring = 2
+	return fc
+
+
+func test_check_dragon_schism_fires_on_high_house_capture():
+	var fc: L5RCharacterData = _make_dragon_fc(10)
+	var high_house: SettlementData = _make_high_house_settlement(99)
+	var military_daily: Dictionary = {
+		"siege_results": [_make_dragon_siege_result(99, "attacker_victory", "Dragon")],
+	}
+	var topics: Array[TopicData] = []
+	var next_tid: Array[int] = [1000]
+
+	var result: Dictionary = DayOrchestrator._check_dragon_schism_siege_events(
+		military_daily, _state, [fc], {10: fc}, [high_house], topics, next_tid, 300
+	)
+
+	assert_true(result.get("togashi_vanished", false))
+	assert_true(_state.get("togashi_vanished", false))
+	assert_eq(int(_state.get("last_assaulter_fc_id", -1)), 10)
+	assert_eq(topics.size(), 1)
+	assert_true(fc.honor < 5.0)
+
+
+func test_check_dragon_schism_no_fire_on_non_dragon_attacker():
+	var military_daily: Dictionary = {
+		"siege_results": [_make_dragon_siege_result(99, "attacker_victory", "Crane")],
+	}
+	var high_house: SettlementData = _make_high_house_settlement(99)
+	var result: Dictionary = DayOrchestrator._check_dragon_schism_siege_events(
+		military_daily, _state, [], {}, [high_house], [], [1000], 300
+	)
+	assert_true(result.is_empty())
+	assert_false(_state.get("togashi_vanished", false))
+
+
+func test_check_dragon_schism_no_fire_on_wrong_settlement():
+	var fc: L5RCharacterData = _make_dragon_fc(10)
+	var other_castle := SettlementData.new()
+	other_castle.settlement_id = 99
+	other_castle.settlement_name = "Some Other Castle"
+	var military_daily: Dictionary = {
+		"siege_results": [_make_dragon_siege_result(99, "attacker_victory", "Dragon")],
+	}
+	var result: Dictionary = DayOrchestrator._check_dragon_schism_siege_events(
+		military_daily, _state, [fc], {10: fc}, [other_castle], [], [1000], 300
+	)
+	assert_true(result.is_empty())
+
+
+func test_check_dragon_schism_no_fire_on_defender_victory():
+	var fc: L5RCharacterData = _make_dragon_fc(10)
+	var high_house: SettlementData = _make_high_house_settlement(99)
+	var military_daily: Dictionary = {
+		"siege_results": [_make_dragon_siege_result(99, "defender_victory", "Dragon")],
+	}
+	var result: Dictionary = DayOrchestrator._check_dragon_schism_siege_events(
+		military_daily, _state, [fc], {10: fc}, [high_house], [], [1000], 300
+	)
+	assert_true(result.is_empty())
+
+
+# =============================================================================
+# ORDER RECONSTITUTION (tick_order_reconstitution)
+# =============================================================================
+
+func test_tick_order_reconstitution_decrements_counter():
+	_state["order_reconstitution_seasons_remaining"] = 3
+	TogashiOversight.tick_order_reconstitution(_state)
+	assert_eq(int(_state["order_reconstitution_seasons_remaining"]), 2)
+
+
+func test_tick_order_reconstitution_returns_true_on_completion():
+	_state["order_reconstitution_seasons_remaining"] = 1
+	var done: bool = TogashiOversight.tick_order_reconstitution(_state)
+	assert_true(done)
+	assert_eq(int(_state["order_reconstitution_seasons_remaining"]), 0)
+
+
+func test_tick_order_reconstitution_no_op_at_zero():
+	_state["order_reconstitution_seasons_remaining"] = 0
+	var done: bool = TogashiOversight.tick_order_reconstitution(_state)
+	# Returns false when already zero and not yet reappeared.
+	assert_false(done)

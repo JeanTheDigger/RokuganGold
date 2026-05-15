@@ -136,6 +136,13 @@ static func advance_day(
 		active_wars, characters_by_id, provinces,
 	)
 
+	var dragon_schism_siege_event: Dictionary = {}
+	if not togashi_state.is_empty() and not togashi_state.get("togashi_vanished", false):
+		dragon_schism_siege_event = _check_dragon_schism_siege_events(
+			military_daily, togashi_state, characters, characters_by_id,
+			settlements, active_topics, next_topic_id, ic_day,
+		)
+
 	var naval_weather: int = _process_naval_weather(
 		dice_engine, _season_to_name(current_season), season_meta,
 	)
@@ -574,6 +581,7 @@ static func advance_day(
 				characters_by_id, world_states, active_topics,
 				next_topic_id, ic_day, active_civil_wars,
 				objectives_map, cw_season_count,
+				settlements, provinces,
 			)
 		var phoenix_council_results: Dictionary = {}
 		if not phoenix_council_state.is_empty():
@@ -699,6 +707,7 @@ static func advance_day(
 		"patrol_results": patrol_results,
 		"drill_results": drill_results,
 		"togashi_results": togashi_results,
+		"dragon_schism_siege_event": dragon_schism_siege_event,
 		"phoenix_council_results": phoenix_council_results,
 		"civil_war_results": civil_war_results_seasonal,
 	}
@@ -4424,6 +4433,79 @@ static func _process_siege_war_scores(
 				break
 
 
+# -- Dragon Schism: High House of Light siege detection (s55.10.2.8) -----------
+# Checks daily siege results for an attacker_victory on the High House of Light.
+# Fires TogashiOversight.assault_high_house() and applies honor/disposition effects.
+# Called once per daily tick before Togashi is already off the map.
+
+static func _check_dragon_schism_siege_events(
+	military_daily: Dictionary,
+	togashi_state: Dictionary,
+	characters: Array[L5RCharacterData],
+	characters_by_id: Dictionary,
+	settlements: Array[SettlementData],
+	active_topics: Array[TopicData],
+	next_topic_id: Array[int],
+	ic_day: int,
+) -> Dictionary:
+	var siege_results: Array = military_daily.get("siege_results", [])
+	for sr: Variant in siege_results:
+		if not (sr is Dictionary):
+			continue
+		var sd: Dictionary = sr
+		if sd.get("resolved", "") != "attacker_victory":
+			continue
+		if sd.get("attacker_clan", "") != "Dragon":
+			continue
+
+		var target_id: int = int(sd.get("settlement_id", -1))
+		var target_settlement: SettlementData = null
+		for s: SettlementData in settlements:
+			if s.settlement_id == target_id:
+				target_settlement = s
+				break
+		if target_settlement == null or target_settlement.settlement_name != "High House of Light":
+			continue
+
+		var mirumoto_fc: L5RCharacterData = _find_mirumoto_fc(characters)
+		var fc_id: int = mirumoto_fc.character_id if mirumoto_fc != null else -1
+		var togashi_char_id: int = _find_togashi_id(characters)
+		var togashi_char: L5RCharacterData = characters_by_id.get(togashi_char_id)
+
+		var assault_result: Dictionary = TogashiOversight.assault_high_house(
+			togashi_state, togashi_char, next_topic_id[0], ic_day, fc_id,
+		)
+		next_topic_id[0] += 1
+
+		# Apply Honor cost to the FC (s55.10.2.8).
+		if mirumoto_fc != null:
+			HonorGlorySystem.apply_honor_change(mirumoto_fc, float(assault_result.get("honor_change", 0.0)))
+
+		# Apply empire-wide disposition penalty to all status-5+ clan representatives.
+		var disp_change: int = int(assault_result.get("empire_disposition_change", 0))
+		if disp_change != 0:
+			var togashi_id: int = togashi_char_id if togashi_char != null else -1
+			for c: L5RCharacterData in characters:
+				if c.status < 5.0:
+					continue
+				if c.clan == "Dragon":
+					continue
+				var cur: int = c.disposition_values.get(fc_id, 0)
+				c.disposition_values[fc_id] = clampi(cur + disp_change, -100, 100)
+
+		# Inject topic.
+		var topic_obj: TopicData = assault_result.get("topic")
+		if topic_obj != null:
+			active_topics.append(topic_obj)
+
+		assault_result.erase("topic")
+		assault_result["settlement_id"] = target_id
+		assault_result["event"] = "high_house_assault"
+		return assault_result
+
+	return {}
+
+
 static func _process_tether_war_scores(
 	military_daily: Dictionary,
 	active_wars: Array[WarData],
@@ -7189,6 +7271,8 @@ static func _process_togashi_oversight(
 	active_civil_wars: Array[Dictionary] = [],
 	objectives_map: Dictionary = {},
 	current_season: int = 0,
+	settlements: Array[SettlementData] = [],
+	provinces: Dictionary = {},
 ) -> Dictionary:
 	# Dragon FC won autonomous rule — Oversight System suspended for his lifetime (s55.10.2.8).
 	if togashi_state.get("dragon_autonomous_rule", false):
@@ -7259,6 +7343,33 @@ static func _process_togashi_oversight(
 				false, "dragon_schism", snapshot,
 			)
 			result["civil_war_triggered"] = cw_result
+
+	# Togashi reappearance: fires when a new FC has taken position after the assaulting
+	# FC died or was removed, and Togashi is still off-map (s55.10.2.8).
+	if TogashiOversight.is_togashi_off_map(togashi_state):
+		var last_assaulter_id: int = int(togashi_state.get("last_assaulter_fc_id", -1))
+		var current_fc: L5RCharacterData = mirumoto_fc
+		if (
+			current_fc != null
+			and last_assaulter_id >= 0
+			and current_fc.character_id != last_assaulter_id
+		):
+			var togashi_char: L5RCharacterData = characters_by_id.get(_find_togashi_id(characters))
+			var settled_cw: Dictionary = {}
+			for cw: Dictionary in active_civil_wars:
+				if not cw.get("active", false) and cw.get("clan", "") == "Dragon":
+					settled_cw = cw.get("faction_assignments", {})
+					break
+			var reappear: Dictionary = TogashiOversight.reappear_togashi(
+				togashi_state, togashi_char, settlements, provinces, settled_cw
+			)
+			result["togashi_reappeared"] = reappear.get("reappeared", false)
+			result["togashi_reappear_settlement"] = reappear.get("settlement_id", -1)
+
+	# Order reconstitution tick: countdown runs once per season after Togashi reappears (s55.10.2.8).
+	if int(togashi_state.get("order_reconstitution_seasons_remaining", 0)) > 0:
+		var done: bool = TogashiOversight.tick_order_reconstitution(togashi_state)
+		result["order_reconstitution_done"] = done
 
 	return result
 
