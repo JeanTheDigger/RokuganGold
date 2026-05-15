@@ -24,6 +24,19 @@ const NO_SUPPLY_FRACTION: float = 0.0
 const STEP_DOWN_FULL_RATE: int = 1
 const STEP_DOWN_PARTIAL_RATE: int = 2
 
+# Rice deprivation: morale_loss and health_loss per tick at each deprivation stage.
+# Index = deprivation tick (0=none/warning, 1=warning, 2=tick2, 3=tick3, 4+=tick4+)
+const RICE_DEPRIVATION_MORALE_LOSS: Dictionary = {0: 0, 1: 0, 2: -3, 3: -3, 4: -5}
+const RICE_DEPRIVATION_HEALTH_LOSS: Dictionary = {0: 0, 1: 0, 2: 0, 3: -5, 4: -10}
+
+# Arms deprivation: attack and defense malus at each deprivation stage.
+const ARMS_DEPRIVATION_ATTACK_MALUS: Dictionary = {0: 0, 1: 0, 2: -2, 3: -4, 4: -6}
+const ARMS_DEPRIVATION_DEFENSE_MALUS: Dictionary = {0: 0, 1: 0, 2: -2, 3: -4, 4: -6}
+
+# Stationary supply recovery constants (per Company per tick, GDD s11.7).
+const RECOVERY_HEALTH_PER_TICK: int = 5
+const RECOVERY_MORALE_PER_TICK: int = 3
+
 
 # -- Tether Data Factory ---------------------------------------------------------
 
@@ -376,6 +389,40 @@ static func process_supply_tick(
 		"rice_deprivation_tick": tether["rice_deprivation_tick"],
 		"arms_deprivation_tick": tether["arms_deprivation_tick"],
 		"deprivation": dep_result,
+	}
+
+
+# -- Deprivation Effects ---------------------------------------------------------
+
+static func compute_rice_deprivation_effects(rice_tick: int) -> Dictionary:
+	var stage: int = clampi(rice_tick, 0, 4)
+	return {
+		"morale_loss": RICE_DEPRIVATION_MORALE_LOSS[stage],
+		"health_loss": RICE_DEPRIVATION_HEALTH_LOSS[stage],
+	}
+
+
+static func compute_arms_deprivation_effects(arms_tick: int) -> Dictionary:
+	var stage: int = clampi(arms_tick, 0, 4)
+	return {
+		"attack_malus": ARMS_DEPRIVATION_ATTACK_MALUS[stage],
+		"defense_malus": ARMS_DEPRIVATION_DEFENSE_MALUS[stage],
+	}
+
+
+static func compute_stationary_recovery(
+	rice_tick: int,
+	arms_tick: int,
+) -> Dictionary:
+	## Returns per-Company per-tick recovery values when stationary in friendly
+	## territory with supply restored. Morale/Health recovery only if rice_tick > 0.
+	## Arms recovery requires arms_tick > 0 and is 1 tier per tick (caller handles tier step).
+	var health_gain: int = RECOVERY_HEALTH_PER_TICK if rice_tick > 0 else 0
+	var morale_gain: int = RECOVERY_MORALE_PER_TICK if rice_tick > 0 else 0
+	return {
+		"health_gain": health_gain,
+		"morale_gain": morale_gain,
+		"arms_recovers": arms_tick > 0,
 	}
 
 
