@@ -221,6 +221,22 @@ static func process_iron_upkeep(
 	}
 
 
+static func apply_iron_failure_to_dict(
+	company: Dictionary,
+	seasons_without_iron: int,
+) -> Dictionary:
+	var unit_type: int = company.get("unit_type", Enums.CompanyUnitType.ASHIGARU_SPEARMEN)
+	var base: Dictionary = ArmyCombatSystem.UNIT_STATS.get(unit_type, {})
+	if base.is_empty():
+		return {"attack": 0, "defense": 0, "morale": 0, "morale_defense": 0}
+	var penalties: Dictionary = get_iron_failure_penalties(seasons_without_iron)
+	company["attack"] = maxi(base.get("attack", 0) + penalties["attack"], 0)
+	company["defense"] = maxi(base.get("defense", 0) + penalties["defense"], 0)
+	company["morale"] = maxi(base.get("morale", 0) + penalties["morale"], 0)
+	company["morale_defense"] = maxi(base.get("morale_defense", 0) + penalties["morale_defense"], 0)
+	return penalties
+
+
 static func process_iron_upkeep_dict(
 	companies: Array[Dictionary],
 	iron_state: Dictionary,
@@ -242,8 +258,10 @@ static func process_iron_upkeep_dict(
 		if supplied:
 			if iron_state[cid] > 0:
 				iron_state[cid] = 0
+				apply_iron_failure_to_dict(c, 0)  # reset stats to base
 		else:
 			iron_state[cid] += 1
+			apply_iron_failure_to_dict(c, iron_state[cid])
 			degraded.append(cid)
 
 	return {
