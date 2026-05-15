@@ -123,7 +123,7 @@ static func advance_day(
 	)
 
 	var edict_results: Array[Dictionary] = _process_edict_compliance(
-		active_edicts, active_wars, characters, active_topics, next_topic_id, ic_day,
+		active_edicts, active_wars, characters, active_topics, next_topic_id, ic_day, season_meta,
 	)
 
 	_inject_edict_reactive_events(active_edicts, characters, world_states, ic_day)
@@ -6448,17 +6448,23 @@ static func _process_edict_compliance(
 	active_topics: Array[TopicData],
 	next_topic_id: Array[int],
 	ic_day: int,
+	season_meta: Dictionary,
 ) -> Array[Dictionary]:
 	var results: Array[Dictionary] = ImperialEdictSystem.process_daily_compliance(
 		active_edicts, active_wars, characters, ic_day,
 	)
 	for r: Dictionary in results:
 		var topic_dict: Dictionary = r.get("defiance_topic", {})
-		if topic_dict.is_empty():
-			continue
-		var t: TopicData = _topic_from_dict(topic_dict, next_topic_id, ic_day)
-		active_topics.append(t)
-		r["defiance_topic_id"] = t.topic_id
+		if not topic_dict.is_empty():
+			var t: TopicData = _topic_from_dict(topic_dict, next_topic_id, ic_day)
+			active_topics.append(t)
+			r["defiance_topic_id"] = t.topic_id
+		if r.get("tax_reform_active", false):
+			season_meta["tax_reform_active"] = true
+			season_meta["tax_reform_edict_id"] = r.get("tax_reform_edict_id", -1)
+		if r.has("last_general_decree_id"):
+			season_meta["last_general_decree_id"] = r["last_general_decree_id"]
+			season_meta["last_general_decree_day"] = r.get("last_general_decree_day", ic_day)
 	return results
 
 

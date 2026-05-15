@@ -26,6 +26,7 @@ const SCORE_SHIFTS: Dictionary = {
 	"clan_champion_commits": 10,
 	"allied_clan_joins": 8,
 	"condemn_clan": 10,
+	"authorize_war": 10,
 }
 
 
