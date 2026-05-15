@@ -76,6 +76,30 @@ const SHOURIDO_TAX_MODIFIERS: Dictionary = {
 	"ISHI": 0.05,
 }
 
+# -- Personality Stipend Modifiers per GDD s4.3.9 ------------------------------
+# Positive = distributes more Koku downward. Negative = hoards.
+# Range: −15% to +15%.
+
+const BUSHIDO_STIPEND_MODIFIERS: Dictionary = {
+	"JIN": 0.10,
+	"MEIYO": 0.05,
+	"YU": 0.0,
+	"REI": 0.0,
+	"CHUGI": 0.0,
+	"GI": 0.0,
+	"MAKOTO": 0.0,
+}
+
+const SHOURIDO_STIPEND_MODIFIERS: Dictionary = {
+	"KYORYOKU": -0.10,
+	"SEIGYO": -0.05,
+	"ISHI": -0.05,
+	"KETSUI": 0.0,
+	"DOSATSU": 0.0,
+	"CHISHIKI": 0.0,
+	"KANPEKI": 0.0,
+}
+
 # -- Tax Stability Effects per GDD s4.3.7 -------------------------------------
 
 const TAX_STABILITY_EFFECTS: Dictionary = {
@@ -653,6 +677,36 @@ static func compute_tax_modifier(
 		var name: String = Enums.shourido_virtue_name(shourido_virtue)
 		modifier += SHOURIDO_TAX_MODIFIERS.get(name, 0.0)
 	return clampf(modifier, -0.15, 0.15)
+
+
+static func compute_stipend_modifier(
+	bushido_virtue: Enums.BushidoVirtue,
+	shourido_virtue: Enums.ShouridoVirtue,
+) -> float:
+	## Returns the lord's stipend generosity modifier per GDD s4.3.9.
+	## Positive = distributes more Koku downward; negative = hoards.
+	var modifier: float = 0.0
+	if bushido_virtue != Enums.BushidoVirtue.NONE:
+		var name: String = Enums.bushido_virtue_name(bushido_virtue)
+		modifier += BUSHIDO_STIPEND_MODIFIERS.get(name, 0.0)
+	if shourido_virtue != Enums.ShouridoVirtue.NONE:
+		var name: String = Enums.shourido_virtue_name(shourido_virtue)
+		modifier += SHOURIDO_STIPEND_MODIFIERS.get(name, 0.0)
+	return clampf(modifier, -0.15, 0.15)
+
+
+static func compute_stipend_disposition_delta(stipend_modifier: float) -> int:
+	## Returns the per-season disposition delta toward direct retainers
+	## based on the lord's stipend modifier per GDD s4.3.9.
+	if stipend_modifier >= 0.10:
+		return 2
+	if stipend_modifier >= 0.05:
+		return 1
+	if stipend_modifier <= -0.10:
+		return -2
+	if stipend_modifier <= -0.05:
+		return -1
+	return 0
 
 
 static func compute_taxable_surplus(total_population_pu: int, autumn_yield: float) -> float:

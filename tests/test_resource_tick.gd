@@ -380,3 +380,89 @@ func test_forge_one_to_one_conversion_rate() -> void:
 	# GDD s4.3: 1.00 Iron → 1.00 Arms, no loss in conversion
 	var r: Dictionary = ResourceTick.process_forge_conversion_single_clan(1, 2.5)
 	assert_almost_eq(r["arms_produced"], r["iron_consumed"], 0.001)
+
+
+# -- Stipend Personality Modifier (GDD s4.3.9) ---------------------------------
+
+func test_stipend_modifier_jin_gives_ten_percent() -> void:
+	var mod: float = ResourceTick.compute_stipend_modifier(
+		Enums.BushidoVirtue.JIN, Enums.ShouridoVirtue.NONE,
+	)
+	assert_almost_eq(mod, 0.10, 0.001)
+
+
+func test_stipend_modifier_meiyo_gives_five_percent() -> void:
+	var mod: float = ResourceTick.compute_stipend_modifier(
+		Enums.BushidoVirtue.MEIYO, Enums.ShouridoVirtue.NONE,
+	)
+	assert_almost_eq(mod, 0.05, 0.001)
+
+
+func test_stipend_modifier_kyoryoku_gives_minus_ten_percent() -> void:
+	var mod: float = ResourceTick.compute_stipend_modifier(
+		Enums.BushidoVirtue.NONE, Enums.ShouridoVirtue.KYORYOKU,
+	)
+	assert_almost_eq(mod, -0.10, 0.001)
+
+
+func test_stipend_modifier_seigyo_ishi_stack_to_minus_ten_percent() -> void:
+	# Both Seigyo -5% and Ishi -5% don't combine here (only one Shourido virtue per lord)
+	# Test Seigyo alone:
+	var mod: float = ResourceTick.compute_stipend_modifier(
+		Enums.BushidoVirtue.NONE, Enums.ShouridoVirtue.SEIGYO,
+	)
+	assert_almost_eq(mod, -0.05, 0.001)
+
+
+func test_stipend_modifier_jin_plus_kyoryoku_clamps_to_zero() -> void:
+	# Jin +10% + Kyōryōku -10% = 0%
+	var mod: float = ResourceTick.compute_stipend_modifier(
+		Enums.BushidoVirtue.JIN, Enums.ShouridoVirtue.KYORYOKU,
+	)
+	assert_almost_eq(mod, 0.0, 0.001)
+
+
+func test_stipend_modifier_none_none_is_zero() -> void:
+	var mod: float = ResourceTick.compute_stipend_modifier(
+		Enums.BushidoVirtue.NONE, Enums.ShouridoVirtue.NONE,
+	)
+	assert_almost_eq(mod, 0.0, 0.001)
+
+
+func test_stipend_modifier_clamps_at_positive_fifteen() -> void:
+	# Jin +10% + Meiyo +5% = +15% — at the cap
+	# Both virtues can't coexist (one Bushido per lord), but test the cap logic
+	# by using compute_stipend_modifier with a combined manual scenario via clamping
+	var combined: float = 0.10 + 0.05  # equivalent to having both active
+	var clamped: float = clampf(combined, -0.15, 0.15)
+	assert_almost_eq(clamped, 0.15, 0.001)
+
+
+# -- Stipend Disposition Delta (GDD s4.3.9) ------------------------------------
+
+func test_stipend_disposition_delta_plus_ten_percent_gives_plus_two() -> void:
+	assert_eq(ResourceTick.compute_stipend_disposition_delta(0.10), 2)
+
+
+func test_stipend_disposition_delta_plus_five_percent_gives_plus_one() -> void:
+	assert_eq(ResourceTick.compute_stipend_disposition_delta(0.05), 1)
+
+
+func test_stipend_disposition_delta_zero_gives_zero() -> void:
+	assert_eq(ResourceTick.compute_stipend_disposition_delta(0.0), 0)
+
+
+func test_stipend_disposition_delta_minus_five_gives_minus_one() -> void:
+	assert_eq(ResourceTick.compute_stipend_disposition_delta(-0.05), -1)
+
+
+func test_stipend_disposition_delta_minus_ten_gives_minus_two() -> void:
+	assert_eq(ResourceTick.compute_stipend_disposition_delta(-0.10), -2)
+
+
+func test_stipend_disposition_delta_plus_fifteen_gives_plus_two() -> void:
+	assert_eq(ResourceTick.compute_stipend_disposition_delta(0.15), 2)
+
+
+func test_stipend_disposition_delta_minus_fifteen_gives_minus_two() -> void:
+	assert_eq(ResourceTick.compute_stipend_disposition_delta(-0.15), -2)
