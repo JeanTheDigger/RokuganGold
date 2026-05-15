@@ -678,7 +678,7 @@ func test_emperor_winter_court_host_selected_in_autumn() -> void:
 	assert_has(["Crane", "Lion"], host_found["host_clan"])
 
 
-func test_emperor_vacancy_fill_respects_delay() -> void:
+func test_emperor_vacancy_fill_iron_immediate() -> void:
 	var emperor := _make_lord()
 	var champions: Array[L5RCharacterData] = []
 	var objectives_map: Dictionary = {}
@@ -696,39 +696,7 @@ func test_emperor_vacancy_fill_respects_delay() -> void:
 		"last_host_seasons": {},
 		"crisis_momentum_by_clan": {},
 		"current_season_index": 4,
-		"vacancies": [{"position": "Emerald_Champion"}],
-		"ticks_since_oldest_vacancy": 5,
-		"shogun_exists": false,
-	}
-
-	var results: Array[Dictionary] = StrategicReview.run_emperor_review(
-		emperor, StrategicReview.EmperorArchetype.IRON, champions, world_state, objectives_map
-	)
-
-	for r: Dictionary in results:
-		assert_ne(r.get("directive", ""), "FILL_VACANCY")
-
-
-func test_emperor_vacancy_fill_after_delay() -> void:
-	var emperor := _make_lord()
-	var champions: Array[L5RCharacterData] = []
-	var objectives_map: Dictionary = {}
-	var world_state: Dictionary = {
-		"last_court_season": 0,
-		"current_season": TimeSystem.Season.AUTUMN,
-		"active_crises": [],
-		"province_threats": [],
-		"low_stability_provinces": [],
-		"avg_province_stability": 50.0,
-		"treasury_ratio": 1.0,
-		"active_wars": [],
-		"escalating_conflicts": [],
-		"military_readiness": 1.0,
-		"last_host_seasons": {},
-		"crisis_momentum_by_clan": {},
-		"current_season_index": 4,
-		"vacancies": [{"position": "Emerald_Champion"}],
-		"ticks_since_oldest_vacancy": 30,
+		"vacancies": [{"position_type": "Clan Magistrate", "priority": 3, "seasons_vacant": 0}],
 		"shogun_exists": false,
 	}
 
@@ -746,7 +714,7 @@ func test_emperor_vacancy_fill_after_delay() -> void:
 	assert_true(vacancy_found)
 
 
-func test_cunning_emperor_delays_vacancy_longer() -> void:
+func test_cunning_emperor_delays_vacancy_season_zero() -> void:
 	var emperor := _make_lord()
 	var champions: Array[L5RCharacterData] = []
 	var objectives_map: Dictionary = {}
@@ -764,8 +732,7 @@ func test_cunning_emperor_delays_vacancy_longer() -> void:
 		"last_host_seasons": {},
 		"crisis_momentum_by_clan": {},
 		"current_season_index": 4,
-		"vacancies": [{"position": "Emerald_Champion"}],
-		"ticks_since_oldest_vacancy": 30,
+		"vacancies": [{"position_type": "Clan Magistrate", "priority": 3, "seasons_vacant": 0}],
 		"shogun_exists": false,
 	}
 
@@ -775,6 +742,286 @@ func test_cunning_emperor_delays_vacancy_longer() -> void:
 
 	for r: Dictionary in results:
 		assert_ne(r.get("directive", ""), "FILL_VACANCY")
+
+
+func test_cunning_emperor_fills_after_one_season() -> void:
+	var emperor := _make_lord()
+	var champions: Array[L5RCharacterData] = []
+	var objectives_map: Dictionary = {}
+	var world_state: Dictionary = {
+		"last_court_season": 0,
+		"current_season": TimeSystem.Season.AUTUMN,
+		"active_crises": [],
+		"province_threats": [],
+		"low_stability_provinces": [],
+		"avg_province_stability": 50.0,
+		"treasury_ratio": 1.0,
+		"active_wars": [],
+		"escalating_conflicts": [],
+		"military_readiness": 1.0,
+		"last_host_seasons": {},
+		"crisis_momentum_by_clan": {},
+		"current_season_index": 4,
+		"vacancies": [{"position_type": "Clan Magistrate", "priority": 3, "seasons_vacant": 1}],
+		"shogun_exists": false,
+	}
+
+	var results: Array[Dictionary] = StrategicReview.run_emperor_review(
+		emperor, StrategicReview.EmperorArchetype.CUNNING, champions, world_state, objectives_map
+	)
+
+	var vacancy_found: bool = false
+	for r: Dictionary in results:
+		if r.get("directive", "") == "FILL_VACANCY":
+			vacancy_found = true
+			assert_true(r.has("clan_balance_weight"), "Cunning should include clan_balance_weight")
+			assert_eq(r["clan_balance_weight"], 25)
+			break
+	assert_true(vacancy_found)
+
+
+# -- Warlike Dual Vacancy Delays ------------------------------------------------
+
+func test_warlike_fills_military_vacancy_immediately() -> void:
+	var emperor := _make_lord()
+	var champions: Array[L5RCharacterData] = []
+	var objectives_map: Dictionary = {}
+	var world_state: Dictionary = {
+		"last_court_season": 0,
+		"current_season": TimeSystem.Season.AUTUMN,
+		"active_crises": [],
+		"province_threats": [],
+		"low_stability_provinces": [],
+		"avg_province_stability": 50.0,
+		"treasury_ratio": 1.0,
+		"active_wars": [],
+		"escalating_conflicts": [],
+		"military_readiness": 1.0,
+		"last_host_seasons": {},
+		"crisis_momentum_by_clan": {},
+		"current_season_index": 4,
+		"vacancies": [{"position_type": "military_commander", "priority": 3, "seasons_vacant": 0}],
+		"shogun_exists": false,
+	}
+
+	var results: Array[Dictionary] = StrategicReview.run_emperor_review(
+		emperor, StrategicReview.EmperorArchetype.WARLIKE, champions, world_state, objectives_map
+	)
+
+	var vacancy_found: bool = false
+	for r: Dictionary in results:
+		if r.get("directive", "") == "FILL_VACANCY":
+			vacancy_found = true
+			break
+	assert_true(vacancy_found, "Warlike should fill military vacancy immediately")
+
+
+func test_warlike_delays_political_vacancy() -> void:
+	var emperor := _make_lord()
+	var champions: Array[L5RCharacterData] = []
+	var objectives_map: Dictionary = {}
+	var world_state: Dictionary = {
+		"last_court_season": 0,
+		"current_season": TimeSystem.Season.AUTUMN,
+		"active_crises": [],
+		"province_threats": [],
+		"low_stability_provinces": [],
+		"avg_province_stability": 50.0,
+		"treasury_ratio": 1.0,
+		"active_wars": [],
+		"escalating_conflicts": [],
+		"military_readiness": 1.0,
+		"last_host_seasons": {},
+		"crisis_momentum_by_clan": {},
+		"current_season_index": 4,
+		"vacancies": [{"position_type": "Clan Magistrate", "priority": 3, "seasons_vacant": 0}],
+		"shogun_exists": false,
+	}
+
+	var results: Array[Dictionary] = StrategicReview.run_emperor_review(
+		emperor, StrategicReview.EmperorArchetype.WARLIKE, champions, world_state, objectives_map
+	)
+
+	for r: Dictionary in results:
+		assert_ne(r.get("directive", ""), "FILL_VACANCY", "Warlike should delay political vacancy")
+
+
+func test_warlike_fills_political_after_season() -> void:
+	var emperor := _make_lord()
+	var champions: Array[L5RCharacterData] = []
+	var objectives_map: Dictionary = {}
+	var world_state: Dictionary = {
+		"last_court_season": 0,
+		"current_season": TimeSystem.Season.AUTUMN,
+		"active_crises": [],
+		"province_threats": [],
+		"low_stability_provinces": [],
+		"avg_province_stability": 50.0,
+		"treasury_ratio": 1.0,
+		"active_wars": [],
+		"escalating_conflicts": [],
+		"military_readiness": 1.0,
+		"last_host_seasons": {},
+		"crisis_momentum_by_clan": {},
+		"current_season_index": 4,
+		"vacancies": [{"position_type": "Clan Magistrate", "priority": 3, "seasons_vacant": 1}],
+		"shogun_exists": false,
+	}
+
+	var results: Array[Dictionary] = StrategicReview.run_emperor_review(
+		emperor, StrategicReview.EmperorArchetype.WARLIKE, champions, world_state, objectives_map
+	)
+
+	var vacancy_found: bool = false
+	for r: Dictionary in results:
+		if r.get("directive", "") == "FILL_VACANCY":
+			vacancy_found = true
+			break
+	assert_true(vacancy_found, "Warlike should fill political vacancy after 1 season")
+
+
+func test_warlike_prefers_military_over_political() -> void:
+	var emperor := _make_lord()
+	var champions: Array[L5RCharacterData] = []
+	var objectives_map: Dictionary = {}
+	var world_state: Dictionary = {
+		"last_court_season": 0,
+		"current_season": TimeSystem.Season.AUTUMN,
+		"active_crises": [],
+		"province_threats": [],
+		"low_stability_provinces": [],
+		"avg_province_stability": 50.0,
+		"treasury_ratio": 1.0,
+		"active_wars": [],
+		"escalating_conflicts": [],
+		"military_readiness": 1.0,
+		"last_host_seasons": {},
+		"crisis_momentum_by_clan": {},
+		"current_season_index": 4,
+		"vacancies": [
+			{"position_type": "Clan Magistrate", "priority": 2, "seasons_vacant": 1},
+			{"position_type": "military_commander", "priority": 3, "seasons_vacant": 0},
+		],
+		"shogun_exists": false,
+	}
+
+	var results: Array[Dictionary] = StrategicReview.run_emperor_review(
+		emperor, StrategicReview.EmperorArchetype.WARLIKE, champions, world_state, objectives_map
+	)
+
+	for r: Dictionary in results:
+		if r.get("directive", "") == "FILL_VACANCY":
+			assert_eq(r["vacancy"]["position_type"], "military_commander",
+				"Warlike should pick military vacancy (higher priority)")
+			break
+
+
+# -- Warlike Bushi Disposition Baselines ----------------------------------------
+
+func test_warlike_seeds_bushi_champion_acquaintance() -> void:
+	var emperor := _make_emperor()
+	var champion := _make_champion(10, "Crab")
+	champion.school_type = Enums.SchoolType.BUSHI
+
+	var champions: Array[L5RCharacterData] = [champion]
+	var ws: Dictionary = _base_emperor_world_state()
+	StrategicReview.run_emperor_review(
+		emperor, StrategicReview.EmperorArchetype.WARLIKE, champions, ws, {}
+	)
+
+	assert_eq(emperor.disposition_values.get(10, -999), 15,
+		"Warlike Emperor should seed bushi champion at Acquaintance (+15)")
+
+
+func test_warlike_seeds_courtier_champion_stranger() -> void:
+	var emperor := _make_emperor()
+	var champion := _make_champion(11, "Crane")
+	champion.school_type = Enums.SchoolType.COURTIER
+
+	var champions: Array[L5RCharacterData] = [champion]
+	var ws: Dictionary = _base_emperor_world_state()
+	StrategicReview.run_emperor_review(
+		emperor, StrategicReview.EmperorArchetype.WARLIKE, champions, ws, {}
+	)
+
+	assert_false(emperor.disposition_values.has(11),
+		"Warlike Emperor should not seed courtier (baseline 0 = no entry)")
+
+
+func test_warlike_does_not_overwrite_existing_disposition() -> void:
+	var emperor := _make_emperor()
+	var champion := _make_champion(10, "Crab")
+	champion.school_type = Enums.SchoolType.BUSHI
+	emperor.disposition_values[10] = -20  # Already has disposition
+
+	var champions: Array[L5RCharacterData] = [champion]
+	var ws: Dictionary = _base_emperor_world_state()
+	StrategicReview.run_emperor_review(
+		emperor, StrategicReview.EmperorArchetype.WARLIKE, champions, ws, {}
+	)
+
+	assert_eq(emperor.disposition_values.get(10, 0), -20,
+		"Should not overwrite existing disposition")
+
+
+func test_benevolent_seeds_all_champions_acquaintance() -> void:
+	var emperor := _make_emperor()
+	var bushi := _make_champion(10, "Lion")
+	bushi.school_type = Enums.SchoolType.BUSHI
+	var courtier := _make_champion(11, "Crane")
+	courtier.school_type = Enums.SchoolType.COURTIER
+
+	var champions: Array[L5RCharacterData] = [bushi, courtier]
+	var ws: Dictionary = _base_emperor_world_state()
+	StrategicReview.run_emperor_review(
+		emperor, StrategicReview.EmperorArchetype.BENEVOLENT, champions, ws, {}
+	)
+
+	assert_eq(emperor.disposition_values.get(10, -999), 15,
+		"Benevolent Emperor should seed all champions at Acquaintance (+15)")
+	assert_eq(emperor.disposition_values.get(11, -999), 15,
+		"Benevolent Emperor should seed courtier at Acquaintance (+15) too")
+
+
+func test_iron_does_not_seed_champion_baselines() -> void:
+	var emperor := _make_emperor()
+	var champion := _make_champion(10, "Crab")
+	champion.school_type = Enums.SchoolType.BUSHI
+
+	var champions: Array[L5RCharacterData] = [champion]
+	var ws: Dictionary = _base_emperor_world_state()
+	StrategicReview.run_emperor_review(
+		emperor, StrategicReview.EmperorArchetype.IRON, champions, ws, {}
+	)
+
+	assert_false(emperor.disposition_values.has(10),
+		"Iron Emperor starts at Stranger (0) — no entry seeded")
+
+
+# -- Archetype Baseline Utility -------------------------------------------------
+
+func test_get_archetype_baseline_warlike_bushi() -> void:
+	assert_eq(
+		StrategicReview.get_archetype_champion_baseline(
+			StrategicReview.EmperorArchetype.WARLIKE, Enums.SchoolType.BUSHI
+		), 15
+	)
+
+
+func test_get_archetype_baseline_warlike_courtier() -> void:
+	assert_eq(
+		StrategicReview.get_archetype_champion_baseline(
+			StrategicReview.EmperorArchetype.WARLIKE, Enums.SchoolType.COURTIER
+		), 0
+	)
+
+
+func test_get_archetype_baseline_benevolent() -> void:
+	assert_eq(
+		StrategicReview.get_archetype_champion_baseline(
+			StrategicReview.EmperorArchetype.BENEVOLENT, Enums.SchoolType.SHUGENJA
+		), 15
+	)
 
 
 # -- Shogun Creation -----------------------------------------------------------
