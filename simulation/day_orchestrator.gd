@@ -491,6 +491,7 @@ static func advance_day(
 		var emperor_tax_cfg: Dictionary = _build_emperor_tax_config(
 			world_states, characters_by_id,
 		)
+		_populate_tax_modifiers(characters, characters_by_id, provinces, season_meta)
 		seasonal_result = _process_season_transition(
 			characters, provinces, current_season, season_meta,
 			approach_penalties, settlements, spring_inputs, worship_maluses,
@@ -940,6 +941,44 @@ static func _process_seasonal_stipend_disposition(
 		retainer.disposition_values[lord.character_id] = clampi(old_disp + delta, -100, 100)
 		updates_applied += 1
 	return updates_applied
+
+
+static func _populate_tax_modifiers(
+	characters: Array[L5RCharacterData],
+	characters_by_id: Dictionary,
+	provinces: Dictionary,
+	season_meta: Dictionary,
+) -> void:
+	var tax_mod: Dictionary = {}
+	for pid: Variant in provinces:
+		var prov: ProvinceData = provinces[pid] as ProvinceData
+		if prov == null:
+			continue
+		var best_id: int = -1
+		var best_status: float = -1.0
+		for c: L5RCharacterData in characters:
+			if CharacterStats.is_dead(c):
+				continue
+			if c.clan != prov.clan:
+				continue
+			if c.lord_id >= 0 and c.status < 5.0:
+				continue
+			if c.status < 3.0:
+				continue
+			if c.status > best_status:
+				best_status = c.status
+				best_id = c.character_id
+		if best_id < 0:
+			continue
+		var lord: L5RCharacterData = characters_by_id.get(best_id) as L5RCharacterData
+		if lord == null:
+			continue
+		var mod: float = ResourceTick.compute_tax_modifier(
+			lord.bushido_virtue, lord.shourido_virtue,
+		)
+		if mod != 0.0:
+			tax_mod[int(pid)] = mod
+	season_meta["_tax_modifier"] = tax_mod
 
 
 static func _process_wall_seasonal_pressure(

@@ -2722,3 +2722,152 @@ func test_stipend_missing_lord_skipped() -> void:
 
 	DayOrchestrator._process_seasonal_stipend_disposition(chars, by_id)
 	assert_eq(retainer.disposition_values.get(77, 0), 0)
+
+
+# -- Tax Modifier Population (s4.3.7) -----------------------------------------
+
+func _make_province_with_lord(
+	pid: int, clan: String, lord_id: int, status: float,
+	bushido: Enums.BushidoVirtue = Enums.BushidoVirtue.NONE,
+	shourido: Enums.ShouridoVirtue = Enums.ShouridoVirtue.NONE,
+) -> Dictionary:
+	var prov := ProvinceData.new()
+	prov.province_id = pid
+	prov.clan = clan
+	var lord := L5RCharacterData.new()
+	lord.character_id = lord_id
+	lord.clan = clan
+	lord.status = status
+	lord.lord_id = -1
+	lord.bushido_virtue = bushido
+	lord.shourido_virtue = shourido
+	return {"province": prov, "lord": lord}
+
+
+func test_tax_modifier_jin_lord_negative() -> void:
+	var d: Dictionary = _make_province_with_lord(
+		1, "Crane", 10, 5.0, Enums.BushidoVirtue.JIN,
+	)
+	var provinces: Dictionary = {1: d["province"]}
+	var lord: L5RCharacterData = d["lord"]
+	var chars: Array[L5RCharacterData] = [lord]
+	var by_id: Dictionary = {10: lord}
+	var meta: Dictionary = {}
+	DayOrchestrator._populate_tax_modifiers(chars, by_id, provinces, meta)
+	var tax_mods: Dictionary = meta.get("_tax_modifier", {})
+	assert_true(tax_mods.has(1))
+	assert_almost_eq(tax_mods[1], -0.10, 0.001)
+
+
+func test_tax_modifier_kyoryoku_lord_positive() -> void:
+	var d: Dictionary = _make_province_with_lord(
+		2, "Crab", 20, 6.0,
+		Enums.BushidoVirtue.NONE, Enums.ShouridoVirtue.KYORYOKU,
+	)
+	var provinces: Dictionary = {2: d["province"]}
+	var lord: L5RCharacterData = d["lord"]
+	var chars: Array[L5RCharacterData] = [lord]
+	var by_id: Dictionary = {20: lord}
+	var meta: Dictionary = {}
+	DayOrchestrator._populate_tax_modifiers(chars, by_id, provinces, meta)
+	assert_almost_eq(meta["_tax_modifier"][2], 0.10, 0.001)
+
+
+func test_tax_modifier_no_virtue_no_entry() -> void:
+	var d: Dictionary = _make_province_with_lord(3, "Lion", 30, 5.0)
+	var provinces: Dictionary = {3: d["province"]}
+	var lord: L5RCharacterData = d["lord"]
+	var chars: Array[L5RCharacterData] = [lord]
+	var by_id: Dictionary = {30: lord}
+	var meta: Dictionary = {}
+	DayOrchestrator._populate_tax_modifiers(chars, by_id, provinces, meta)
+	var tax_mods: Dictionary = meta.get("_tax_modifier", {})
+	assert_false(tax_mods.has(3))
+
+
+func test_tax_modifier_combined_bushido_shourido() -> void:
+	var d: Dictionary = _make_province_with_lord(
+		4, "Scorpion", 40, 5.0,
+		Enums.BushidoVirtue.CHUGI, Enums.ShouridoVirtue.SEIGYO,
+	)
+	var provinces: Dictionary = {4: d["province"]}
+	var lord: L5RCharacterData = d["lord"]
+	var chars: Array[L5RCharacterData] = [lord]
+	var by_id: Dictionary = {40: lord}
+	var meta: Dictionary = {}
+	DayOrchestrator._populate_tax_modifiers(chars, by_id, provinces, meta)
+	# CHUGI +0.05 + SEIGYO +0.05 = +0.10
+	assert_almost_eq(meta["_tax_modifier"][4], 0.10, 0.001)
+
+
+func test_tax_modifier_dead_lord_skipped() -> void:
+	var d: Dictionary = _make_province_with_lord(
+		5, "Phoenix", 50, 5.0, Enums.BushidoVirtue.JIN,
+	)
+	var lord: L5RCharacterData = d["lord"]
+	lord.stamina = 0
+	lord.willpower = 0
+	var provinces: Dictionary = {5: d["province"]}
+	var chars: Array[L5RCharacterData] = [lord]
+	var by_id: Dictionary = {50: lord}
+	var meta: Dictionary = {}
+	DayOrchestrator._populate_tax_modifiers(chars, by_id, provinces, meta)
+	var tax_mods: Dictionary = meta.get("_tax_modifier", {})
+	assert_false(tax_mods.has(5))
+
+
+func test_tax_modifier_low_status_ignored() -> void:
+	var d: Dictionary = _make_province_with_lord(
+		6, "Dragon", 60, 2.0, Enums.BushidoVirtue.JIN,
+	)
+	var provinces: Dictionary = {6: d["province"]}
+	var lord: L5RCharacterData = d["lord"]
+	var chars: Array[L5RCharacterData] = [lord]
+	var by_id: Dictionary = {60: lord}
+	var meta: Dictionary = {}
+	DayOrchestrator._populate_tax_modifiers(chars, by_id, provinces, meta)
+	var tax_mods: Dictionary = meta.get("_tax_modifier", {})
+	assert_false(tax_mods.has(6))
+
+
+func test_tax_modifier_highest_status_lord_wins() -> void:
+	var prov := ProvinceData.new()
+	prov.province_id = 7
+	prov.clan = "Unicorn"
+	var lesser_lord := L5RCharacterData.new()
+	lesser_lord.character_id = 70
+	lesser_lord.clan = "Unicorn"
+	lesser_lord.status = 4.0
+	lesser_lord.lord_id = -1
+	lesser_lord.bushido_virtue = Enums.BushidoVirtue.JIN
+	var greater_lord := L5RCharacterData.new()
+	greater_lord.character_id = 71
+	greater_lord.clan = "Unicorn"
+	greater_lord.status = 7.0
+	greater_lord.lord_id = -1
+	greater_lord.shourido_virtue = Enums.ShouridoVirtue.KYORYOKU
+	var provinces: Dictionary = {7: prov}
+	var chars: Array[L5RCharacterData] = [lesser_lord, greater_lord]
+	var by_id: Dictionary = {70: lesser_lord, 71: greater_lord}
+	var meta: Dictionary = {}
+	DayOrchestrator._populate_tax_modifiers(chars, by_id, provinces, meta)
+	# Greater lord has KYORYOKU (+0.10), lesser has JIN (-0.10).
+	# Highest status (7.0) wins → KYORYOKU's +0.10.
+	assert_almost_eq(meta["_tax_modifier"][7], 0.10, 0.001)
+
+
+func test_tax_modifier_multiple_provinces() -> void:
+	var d1: Dictionary = _make_province_with_lord(
+		8, "Crane", 80, 5.0, Enums.BushidoVirtue.JIN,
+	)
+	var d2: Dictionary = _make_province_with_lord(
+		9, "Lion", 90, 5.0,
+		Enums.BushidoVirtue.NONE, Enums.ShouridoVirtue.ISHI,
+	)
+	var provinces: Dictionary = {8: d1["province"], 9: d2["province"]}
+	var chars: Array[L5RCharacterData] = [d1["lord"], d2["lord"]]
+	var by_id: Dictionary = {80: d1["lord"], 90: d2["lord"]}
+	var meta: Dictionary = {}
+	DayOrchestrator._populate_tax_modifiers(chars, by_id, provinces, meta)
+	assert_almost_eq(meta["_tax_modifier"][8], -0.10, 0.001)
+	assert_almost_eq(meta["_tax_modifier"][9], 0.05, 0.001)
