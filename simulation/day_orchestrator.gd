@@ -6498,6 +6498,10 @@ static func _create_winter_court_from_directive(
 	var agenda: Array[int] = CourtSystem.select_agenda_topics(
 		active_topics, CourtSessionData.CourtType.IMPERIAL_WINTER_COURT
 	)
+	var host_champion: L5RCharacterData = characters_by_id.get(host_champion_id) as L5RCharacterData
+	agenda = WinterCourtSystem.order_agenda_for_host(
+		agenda, active_topics, host_clan, host_champion, characters_by_id,
+	)
 
 	var start_day: int = ic_day + (WinterCourtSystem.WINTER_START_IC_DAY - WinterCourtSystem.ANNOUNCEMENT_IC_DAY)
 	var prestige: int = host_result.get("prestige", CourtSystem.PRESTIGE_IMPERIAL)

@@ -488,6 +488,64 @@ static func get_agenda_day_allocation() -> Array[int]:
 	return AGENDA_TOPIC_DAYS.duplicate()
 
 
+## Reorders the three Winter Court agenda topics per s55.10 Champion ordering AI.
+## The host Champion places the topic they want the most attention on in slot 1
+## (45 court days) and buries rivals' crises in slot 3 (25 court days).
+##
+## Ordering rules (per GDD s55.10 — Tactical Advantage, Agenda Topic Ordering):
+## 1. Topics where clan_involved == host_clan → slot 1 (own crises get maximum floor).
+## 2. Topics where the host Champion's disposition toward the affected clan's
+##    Champion is at Rival or below (< -20) → slot 3 (bury rival's crisis).
+## 3. Remaining topics fill the middle slot, ordered by descending momentum.
+## If multiple topics compete for the same slot, descending momentum breaks ties.
+static func order_agenda_for_host(
+	topic_ids: Array[int],
+	active_topics: Array[TopicData],
+	host_clan: String,
+	host_champion: L5RCharacterData,
+	characters_by_id: Dictionary,
+) -> Array[int]:
+	if topic_ids.size() <= 1:
+		return topic_ids.duplicate()
+	# Build a map of topic_id → TopicData for fast lookup.
+	var topic_map: Dictionary = {}
+	for t: TopicData in active_topics:
+		topic_map[t.topic_id] = t
+	# Build a map of clan → champion character_id (for disposition check).
+	var clan_champion_id: Dictionary = {}
+	for cid: int in characters_by_id:
+		var c: L5RCharacterData = characters_by_id[cid] as L5RCharacterData
+		if c == null or CharacterStats.is_dead(c):
+			continue
+		if c.lord_id == -1 and c.status >= 7.0:
+			clan_champion_id[c.clan] = c.character_id
+	# Score each topic: 2 = own clan, 0 = rival clan, 1 = other.
+	var scored: Array[Dictionary] = []
+	for tid: int in topic_ids:
+		var topic: TopicData = topic_map.get(tid) as TopicData
+		var momentum: float = topic.momentum if topic != null else 0.0
+		var involved_clan: String = topic.clan_involved if topic != null else ""
+		var priority: int = 1
+		if involved_clan == host_clan:
+			priority = 2
+		elif host_champion != null and not involved_clan.is_empty():
+			var rival_champ_id: int = clan_champion_id.get(involved_clan, -1)
+			if rival_champ_id >= 0:
+				var disp: int = int(host_champion.disposition_values.get(rival_champ_id, 0))
+				if disp < -20:
+					priority = 0
+		scored.append({"topic_id": tid, "priority": priority, "momentum": momentum})
+	scored.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		if a["priority"] != b["priority"]:
+			return a["priority"] > b["priority"]
+		return a["momentum"] > b["momentum"]
+	)
+	var result: Array[int] = []
+	for entry: Dictionary in scored:
+		result.append(int(entry["topic_id"]))
+	return result
+
+
 # -- Regent Substitution -------------------------------------------------------
 
 static func should_use_regent(
