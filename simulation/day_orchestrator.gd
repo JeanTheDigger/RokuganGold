@@ -3727,6 +3727,34 @@ static func _process_levy_suspicion(
 		topic.slug = "private_army_%d_season_%d" % [lord_id, season_count]
 		active_topics.append(topic)
 
+		# Apply disposition penalty to Family Daimyo and Clan Champion (s11.7a).
+		# Neighboring Provincial Daimyo deferred — requires coordinate system.
+		var disposition_penalty: int = check.get("disposition_loss_lord", 0)
+		if disposition_penalty != 0:
+			var penalized_ids: Dictionary = {}
+			var family_daimyo: L5RCharacterData = (
+				characters_by_id.get(lord.lord_id) if lord.lord_id >= 0 else null
+			)
+			if family_daimyo != null:
+				var cur_fd: int = family_daimyo.disposition_values.get(lord_id, 0)
+				family_daimyo.disposition_values[lord_id] = clampi(
+					cur_fd + disposition_penalty, -100, 100,
+				)
+				penalized_ids[family_daimyo.character_id] = true
+			for cid2: int in characters_by_id:
+				var ch2: L5RCharacterData = characters_by_id[cid2]
+				if ch2.clan != lord.clan:
+					continue
+				if CivilianOrderBudget.lord_rank_from_status(ch2.status) != Enums.LordRank.CLAN_CHAMPION:
+					continue
+				if ch2.character_id in penalized_ids:
+					break
+				var cur_ch: int = ch2.disposition_values.get(lord_id, 0)
+				ch2.disposition_values[lord_id] = clampi(
+					cur_ch + disposition_penalty, -100, 100,
+				)
+				break
+
 		results.append({
 			"lord_id": lord_id,
 			"clan": lord.clan,
