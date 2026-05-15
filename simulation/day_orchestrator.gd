@@ -514,6 +514,7 @@ static func advance_day(
 			active_civil_wars, precedent_modifiers, characters_by_id,
 			provinces, season_count_for_cw, objectives_map,
 			active_topics, next_topic_id, ic_day, season_meta,
+			companies, active_edicts,
 		)
 		insurgency_results = _process_insurgencies(
 			insurgencies, provinces, dice_engine, current_season,
@@ -9438,6 +9439,8 @@ static func _process_civil_war_seasonal(
 	next_topic_id: Array[int],
 	ic_day: int,
 	season_meta: Dictionary,
+	companies: Array[Dictionary] = [],
+	active_edicts: Array[EdictData] = [],
 ) -> Dictionary:
 	var precedent_decay_count: int = IntraClanCivilWar.tick_precedent_decay(
 		precedent_modifiers, current_season,
@@ -9464,6 +9467,8 @@ static func _process_civil_war_seasonal(
 			state, rebel_lord, clan_provinces, current_season,
 		)
 
+		_apply_civil_war_edict_shifts(state, rebel_lord_id, authority_lord_id, active_edicts)
+
 		var war_defections: Array[Dictionary] = _check_civil_war_defections(
 			state, characters_by_id, objectives_map, current_season,
 		)
@@ -9473,6 +9478,7 @@ static func _process_civil_war_seasonal(
 			state, rebel_lord, authority_lord, characters_by_id,
 			precedent_modifiers, current_season, active_topics,
 			next_topic_id, ic_day, season_meta, clan,
+			provinces, companies,
 		)
 		if not resolution.is_empty():
 			resolutions.append(resolution)
@@ -9569,17 +9575,20 @@ static func _check_civil_war_resolution(
 	ic_day: int,
 	season_meta: Dictionary,
 	clan: String,
+	provinces: Dictionary = {},
+	companies: Array[Dictionary] = [],
 ) -> Dictionary:
 	var rebel_dead: bool = rebel_lord == null or CharacterStats.is_dead(rebel_lord)
 	if rebel_dead:
 		return _resolve_civil_war(
 			state, true, characters_by_id, precedent_modifiers,
 			current_season, active_topics, next_topic_id, ic_day,
-			season_meta, clan,
+			season_meta, clan, companies,
 		)
 
 	var rebel_capitulated: bool = false
-	var rebel_seat_lost: bool = false
+	var holds_seat: bool = _rebel_holds_seat(rebel_lord, provinces)
+	var rebel_seat_lost: bool = not holds_seat
 
 	if IntraClanCivilWar.check_legitimacy_victory(
 		state, rebel_lord, rebel_capitulated, rebel_seat_lost,
@@ -9587,7 +9596,7 @@ static func _check_civil_war_resolution(
 		return _resolve_civil_war(
 			state, true, characters_by_id, precedent_modifiers,
 			current_season, active_topics, next_topic_id, ic_day,
-			season_meta, clan,
+			season_meta, clan, companies,
 		)
 
 	var assignments: Dictionary = state.get("faction_assignments", {})
@@ -9603,7 +9612,6 @@ static func _check_civil_war_resolution(
 			has_allied_fd = true
 			break
 
-	var holds_seat: bool = rebel_lord != null and not rebel_dead
 	IntraClanCivilWar.tick_rebel_victory_counter(
 		state, rebel_lord, holds_seat, has_allied_fd,
 	)
@@ -9612,7 +9620,7 @@ static func _check_civil_war_resolution(
 		return _resolve_civil_war(
 			state, false, characters_by_id, precedent_modifiers,
 			current_season, active_topics, next_topic_id, ic_day,
-			season_meta, clan,
+			season_meta, clan, companies,
 		)
 
 	return {}
@@ -9629,6 +9637,7 @@ static func _resolve_civil_war(
 	ic_day: int,
 	season_meta: Dictionary,
 	clan: String,
+	companies: Array[Dictionary] = [],
 ) -> Dictionary:
 	var assignments: Dictionary = state.get("faction_assignments", {})
 	var all_chars: Array[L5RCharacterData] = []
@@ -9683,6 +9692,10 @@ static func _resolve_civil_war(
 
 	IntraClanCivilWar.finalise(state, current_season, legitimacy_won)
 
+	var reconstitution: Dictionary = _reconstitute_clan_military(
+		state, legitimacy_won, companies, characters_by_id,
+	)
+
 	var topic_id: int = next_topic_id[0]
 	next_topic_id[0] += 1
 	var topic: TopicData = TopicData.new()
@@ -9703,6 +9716,7 @@ static func _resolve_civil_war(
 		"scar_count": scar_entries.size(),
 		"rebel_consequences": rebel_consequences,
 		"topic_id": topic_id,
+		"reconstitution": reconstitution,
 	}
 
 
@@ -9716,6 +9730,118 @@ static func _get_rebel_completion_rate(
 		if primary is Dictionary:
 			return float((primary as Dictionary).get("last_measured_progress", 0.5))
 	return 0.5
+
+
+## Returns true when the rebel lord's physical location is a settlement
+## inside their family's home province — per s53.2.7 "losing their seat of power".
+static func _rebel_holds_seat(
+	rebel_lord: L5RCharacterData,
+	provinces: Dictionary,
+) -> bool:
+	if rebel_lord == null:
+		return false
+	if provinces.is_empty():
+		return true  # no province data → cannot confirm seat lost; assume held
+	if not rebel_lord.physical_location.is_valid_int():
+		return false
+	var loc_settlement_id: int = int(rebel_lord.physical_location)
+	for prov_var: Variant in provinces.values():
+		if not (prov_var is ProvinceData):
+			continue
+		var prov: ProvinceData = prov_var as ProvinceData
+		if prov.clan == rebel_lord.clan and prov.family == rebel_lord.family:
+			return loc_settlement_id in prov.settlement_ids
+	return false
+
+
+## Post-resolution reconstitution per s53.2.3:
+## Clears commanders on the losing side from their companies (Step 1),
+## then consolidates pairs of understrength companies (Step 3).
+## Step 2 (unit march to friendly territory) and Step 4 (FILL_VACANCY) are
+## handled downstream: stranded units are already detached, and vacancies are
+## signalled in the return dict for the strategic review to issue FILL_VACANCY.
+static func _reconstitute_clan_military(
+	state: Dictionary,
+	legitimacy_won: bool,
+	companies: Array[Dictionary],
+	characters_by_id: Dictionary,
+) -> Dictionary:
+	var assignments: Dictionary = state.get("faction_assignments", {})
+	var losing_faction: int = (
+		IntraClanCivilWar.Faction.REBEL if legitimacy_won
+		else IntraClanCivilWar.Faction.LEGITIMACY
+	)
+	var vacancies_created: int = 0
+	var companies_dissolved: int = 0
+	var clan_companies: Array[Dictionary] = []
+	for cd: Dictionary in companies:
+		var cmd_id: int = cd.get("commander_id", -1)
+		if cmd_id < 0:
+			continue
+		if not assignments.has(cmd_id):
+			continue
+		var faction: int = int(assignments[cmd_id])
+		clan_companies.append(cd)
+		if faction == losing_faction:
+			cd["commander_id"] = -1
+			vacancies_created += 1
+		else:
+			var commander: L5RCharacterData = characters_by_id.get(cmd_id)
+			if commander == null or CharacterStats.is_dead(commander):
+				cd["commander_id"] = -1
+				vacancies_created += 1
+	# Step 3: consolidate understrength pairs (health < 50% of starting).
+	var understrength: Array[Dictionary] = []
+	for cd: Dictionary in clan_companies:
+		var start_hp: int = cd.get("starting_health", 153)
+		var cur_hp: int = cd.get("current_health", start_hp)
+		if cur_hp < start_hp / 2:
+			understrength.append(cd)
+	var i: int = 0
+	while i + 1 < understrength.size():
+		var absorber: Dictionary = understrength[i]
+		var dissolved: Dictionary = understrength[i + 1]
+		var start_hp: int = absorber.get("starting_health", 153)
+		var combined: int = absorber.get("current_health", 0) + dissolved.get("current_health", 0)
+		absorber["current_health"] = mini(combined, start_hp)
+		dissolved["current_health"] = 0
+		dissolved["is_destroyed"] = true
+		companies_dissolved += 1
+		i += 2
+	return {
+		"vacancies_created": vacancies_created,
+		"companies_dissolved": companies_dissolved,
+	}
+
+
+## Scans active edicts for those that shift civil war score per s53.2.5.
+## Only CONDEMN_CLAN edicts targeting the rebel or authority lord (by
+## target_character_id) are mapped — clan-level edicts are ambiguous in a
+## civil war and are skipped to avoid inventing mechanics.
+## Processed edict IDs are stored in state["processed_edict_ids"] to prevent
+## double-counting across seasonal ticks.
+static func _apply_civil_war_edict_shifts(
+	state: Dictionary,
+	rebel_lord_id: int,
+	authority_lord_id: int,
+	active_edicts: Array[EdictData],
+) -> void:
+	var processed: Array = state.get("processed_edict_ids", [])
+	for edict: EdictData in active_edicts:
+		if not edict.is_active:
+			continue
+		if edict.edict_id in processed:
+			continue
+		if edict.edict_type != EdictData.EdictType.CONDEMN_CLAN:
+			continue
+		var target_char: int = edict.target_character_id
+		if target_char == rebel_lord_id:
+			IntraClanCivilWar.record_imperial_edict(state, true)
+			processed.append(edict.edict_id)
+		elif target_char == authority_lord_id:
+			IntraClanCivilWar.record_imperial_edict(state, false)
+			processed.append(edict.edict_id)
+	state["processed_edict_ids"] = processed
 
 
 static func _decay_civil_war_scars(

@@ -2047,3 +2047,202 @@ func test_build_garrison_sortie_states_fields() -> void:
 func test_build_garrison_sortie_states_zero_returns_empty() -> void:
 	var states: Array[Dictionary] = DayOrchestrator._build_garrison_sortie_states(0)
 	assert_eq(states.size(), 0)
+
+
+# =============================================================================
+# _rebel_holds_seat (s53.2.7 — Gap 1)
+# =============================================================================
+
+func _make_province_for_seat(pid: int, clan: String, family: String, settlement_id: int) -> ProvinceData:
+	var p := ProvinceData.new()
+	p.province_id = pid
+	p.clan = clan
+	p.family = family
+	p.settlement_ids = [settlement_id]
+	return p
+
+
+func _make_rebel_at(cid: int, clan: String, family: String, loc_settlement: int) -> L5RCharacterData:
+	var r := L5RCharacterData.new()
+	r.character_id = cid
+	r.clan = clan
+	r.family = family
+	r.physical_location = str(loc_settlement)
+	return r
+
+
+func test_rebel_holds_seat_when_in_family_province() -> void:
+	var prov := _make_province_for_seat(10, "Lion", "Matsu", 500)
+	var rebel := _make_rebel_at(101, "Lion", "Matsu", 500)
+	assert_true(DayOrchestrator._rebel_holds_seat(rebel, {10: prov}))
+
+
+func test_rebel_seat_lost_when_outside_family_province() -> void:
+	var prov := _make_province_for_seat(10, "Lion", "Matsu", 500)
+	var rebel := _make_rebel_at(101, "Lion", "Matsu", 999)  # wrong settlement
+	assert_false(DayOrchestrator._rebel_holds_seat(rebel, {10: prov}))
+
+
+func test_rebel_holds_seat_null_lord_returns_false() -> void:
+	var prov := _make_province_for_seat(10, "Lion", "Matsu", 500)
+	assert_false(DayOrchestrator._rebel_holds_seat(null, {10: prov}))
+
+
+func test_rebel_holds_seat_no_matching_province_returns_false() -> void:
+	var prov := _make_province_for_seat(10, "Crane", "Doji", 500)
+	var rebel := _make_rebel_at(101, "Lion", "Matsu", 500)
+	assert_false(DayOrchestrator._rebel_holds_seat(rebel, {10: prov}))
+
+
+func test_rebel_holds_seat_invalid_location_returns_false() -> void:
+	var prov := _make_province_for_seat(10, "Lion", "Matsu", 500)
+	var rebel := _make_rebel_at(101, "Lion", "Matsu", 500)
+	rebel.physical_location = "not_an_int"
+	assert_false(DayOrchestrator._rebel_holds_seat(rebel, {10: prov}))
+
+
+# =============================================================================
+# _reconstitute_clan_military (s53.2.3 — Gap 2)
+# =============================================================================
+
+func _make_state_with_factions(rebel_id: int, auth_id: int) -> Dictionary:
+	var s: Dictionary = IntraClanCivilWar.make_initial_state(rebel_id, auth_id, "Lion", 5000, 1)
+	IntraClanCivilWar.assign_faction(s, rebel_id, IntraClanCivilWar.Faction.REBEL)
+	IntraClanCivilWar.assign_faction(s, auth_id, IntraClanCivilWar.Faction.LEGITIMACY)
+	return s
+
+
+func _make_company(cid: int, cmd_id: int, hp: int = 153, start_hp: int = 153) -> Dictionary:
+	return {
+		"company_id": cid,
+		"commander_id": cmd_id,
+		"current_health": hp,
+		"starting_health": start_hp,
+		"is_destroyed": false,
+	}
+
+
+func test_reconstitute_clears_losing_rebel_commanders() -> void:
+	var state: Dictionary = _make_state_with_factions(101, 1)
+	var rebel_char := L5RCharacterData.new()
+	rebel_char.character_id = 101
+	rebel_char.wounds_taken = 0
+	var co: Dictionary = _make_company(1, 101)
+	var chars: Dictionary = {101: rebel_char}
+	# Legitimacy wins → rebel commander loses their company.
+	DayOrchestrator._reconstitute_clan_military(state, true, [co], chars)
+	assert_eq(co["commander_id"], -1)
+
+
+func test_reconstitute_keeps_winning_faction_commanders() -> void:
+	var state: Dictionary = _make_state_with_factions(101, 1)
+	var auth_char := L5RCharacterData.new()
+	auth_char.character_id = 1
+	auth_char.wounds_taken = 0
+	var co: Dictionary = _make_company(2, 1)
+	var chars: Dictionary = {1: auth_char}
+	# Legitimacy wins → legitimacy commander keeps their company.
+	DayOrchestrator._reconstitute_clan_military(state, true, [co], chars)
+	assert_eq(co["commander_id"], 1)
+
+
+func test_reconstitute_clears_dead_commanders() -> void:
+	var state: Dictionary = _make_state_with_factions(101, 1)
+	var auth_char := L5RCharacterData.new()
+	auth_char.character_id = 1
+	auth_char.wounds_taken = 999  # effectively dead
+	var co: Dictionary = _make_company(2, 1)
+	var chars: Dictionary = {1: auth_char}
+	DayOrchestrator._reconstitute_clan_military(state, true, [co], chars)
+	assert_eq(co["commander_id"], -1)
+
+
+func test_reconstitute_reports_vacancies() -> void:
+	var state: Dictionary = _make_state_with_factions(101, 1)
+	var rebel_char := L5RCharacterData.new()
+	rebel_char.character_id = 101
+	rebel_char.wounds_taken = 0
+	var co: Dictionary = _make_company(1, 101)
+	var chars: Dictionary = {101: rebel_char}
+	var result: Dictionary = DayOrchestrator._reconstitute_clan_military(state, true, [co], chars)
+	assert_eq(result["vacancies_created"], 1)
+
+
+func test_reconstitute_consolidates_understrength_pair() -> void:
+	var state: Dictionary = _make_state_with_factions(101, 1)
+	var auth_char := L5RCharacterData.new()
+	auth_char.character_id = 1
+	auth_char.wounds_taken = 0
+	# Both companies at 40% health — below 50% threshold.
+	var co1: Dictionary = _make_company(10, 1, 61, 153)
+	var co2: Dictionary = _make_company(11, 1, 61, 153)
+	var chars: Dictionary = {1: auth_char}
+	var result: Dictionary = DayOrchestrator._reconstitute_clan_military(state, true, [co1, co2], chars)
+	assert_eq(result["companies_dissolved"], 1)
+	assert_true(co2["is_destroyed"])
+	assert_true(co1["current_health"] > 61)  # absorbed co2's health
+
+
+func test_reconstitute_no_dissolution_if_healthy() -> void:
+	var state: Dictionary = _make_state_with_factions(101, 1)
+	var auth_char := L5RCharacterData.new()
+	auth_char.character_id = 1
+	auth_char.wounds_taken = 0
+	var co1: Dictionary = _make_company(10, 1, 100, 153)
+	var co2: Dictionary = _make_company(11, 1, 100, 153)
+	var chars: Dictionary = {1: auth_char}
+	var result: Dictionary = DayOrchestrator._reconstitute_clan_military(state, true, [co1, co2], chars)
+	assert_eq(result["companies_dissolved"], 0)
+
+
+# =============================================================================
+# _apply_civil_war_edict_shifts (s53.2.5 — Gap 3)
+# =============================================================================
+
+func _make_condemn_edict(eid: int, target_clan: String, target_char: int) -> EdictData:
+	var e := EdictData.new()
+	e.edict_id = eid
+	e.edict_type = EdictData.EdictType.CONDEMN_CLAN
+	e.target_clan = target_clan
+	e.target_character_id = target_char
+	e.is_active = true
+	return e
+
+
+func test_edict_targeting_rebel_shifts_to_legitimacy() -> void:
+	var state: Dictionary = IntraClanCivilWar.make_initial_state(101, 1, "Lion", 5000, 1)
+	var edict := _make_condemn_edict(1, "Lion", 101)
+	DayOrchestrator._apply_civil_war_edict_shifts(state, 101, 1, [edict])
+	assert_true(state["war_score"] > 50)  # shifted toward legitimacy
+
+
+func test_edict_targeting_authority_shifts_to_rebel() -> void:
+	var state: Dictionary = IntraClanCivilWar.make_initial_state(101, 1, "Lion", 5000, 1)
+	var edict := _make_condemn_edict(1, "Lion", 1)
+	DayOrchestrator._apply_civil_war_edict_shifts(state, 101, 1, [edict])
+	assert_true(state["war_score"] < 50)  # shifted toward rebel
+
+
+func test_edict_not_processed_twice() -> void:
+	var state: Dictionary = IntraClanCivilWar.make_initial_state(101, 1, "Lion", 5000, 1)
+	var edict := _make_condemn_edict(1, "Lion", 101)
+	DayOrchestrator._apply_civil_war_edict_shifts(state, 101, 1, [edict])
+	var score_after_first: int = state["war_score"]
+	DayOrchestrator._apply_civil_war_edict_shifts(state, 101, 1, [edict])
+	assert_eq(state["war_score"], score_after_first)
+
+
+func test_edict_with_no_character_target_skipped() -> void:
+	var state: Dictionary = IntraClanCivilWar.make_initial_state(101, 1, "Lion", 5000, 1)
+	# target_character_id = -1 → clan-level only, ambiguous, must be skipped.
+	var edict := _make_condemn_edict(1, "Lion", -1)
+	DayOrchestrator._apply_civil_war_edict_shifts(state, 101, 1, [edict])
+	assert_eq(state["war_score"], 50)
+
+
+func test_inactive_edict_skipped() -> void:
+	var state: Dictionary = IntraClanCivilWar.make_initial_state(101, 1, "Lion", 5000, 1)
+	var edict := _make_condemn_edict(1, "Lion", 101)
+	edict.is_active = false
+	DayOrchestrator._apply_civil_war_edict_shifts(state, 101, 1, [edict])
+	assert_eq(state["war_score"], 50)
