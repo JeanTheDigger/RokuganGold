@@ -623,6 +623,10 @@ static func advance_day(
 		_process_vassal_reassignments(
 			strategic_results, objectives_map, characters_by_id,
 		)
+		_process_tyrant_directives(
+			strategic_results, active_topics, next_topic_id, ic_day,
+			characters_by_id,
+		)
 		if not seiyaku_state.is_empty():
 			seiyaku_results = _process_seiyaku_review(
 				seiyaku_state, characters, characters_by_id,
@@ -8308,6 +8312,85 @@ static func _process_vassal_reassignments(
 		elif decision == "CANCEL":
 			var objectives: Dictionary = objectives_map.get(vassal_id, {})
 			OrphanedObjectives.resolve_orphaned_objective(objectives, "CANCEL")
+
+
+# -- Tyrant Directive Consumers (s55.10) ----------------------------------------
+
+static func _process_tyrant_directives(
+	strategic_results: Array[Dictionary],
+	active_topics: Array[TopicData],
+	next_topic_id: Array[int],
+	ic_day: int,
+	characters_by_id: Dictionary,
+) -> void:
+	for directive: Dictionary in strategic_results:
+		var dtype: String = str(directive.get("directive", ""))
+		if dtype == "FABRICATE_DISGRACE":
+			_create_disgrace_topic(
+				directive, active_topics, next_topic_id, ic_day, characters_by_id
+			)
+		elif dtype == "IMPERIAL_CIVIL_WAR":
+			_create_imperial_civil_war_topic(
+				directive, active_topics, next_topic_id, ic_day
+			)
+
+
+static func _create_disgrace_topic(
+	directive: Dictionary,
+	active_topics: Array[TopicData],
+	next_topic_id: Array[int],
+	ic_day: int,
+	characters_by_id: Dictionary,
+) -> void:
+	var target_id: int = directive.get("target_id", -1)
+	var target_clan: String = directive.get("target_clan", "")
+	var target: L5RCharacterData = characters_by_id.get(target_id) as L5RCharacterData
+	var target_name: String = target.character_name if target != null and target.character_name != "" else "Champion"
+
+	var topic_id: int = next_topic_id[0]
+	next_topic_id[0] += 1
+
+	var topic: TopicData = TopicMomentumSystem.create_topic(
+		topic_id,
+		"Disgrace of %s (%s)" % [target_name, target_clan],
+		TopicData.Tier.TIER_3,
+		TopicData.Category.PERSONAL,
+		ic_day,
+		TopicMomentumSystem.initial_momentum_for_tier(TopicData.Tier.TIER_3),
+		[],
+		target_clan,
+		"",
+		target_id,
+		"disgrace",
+		"fabricated",
+	)
+	topic.slug = "tyrant_disgrace_%d_d%d" % [target_id, ic_day]
+	active_topics.append(topic)
+
+
+static func _create_imperial_civil_war_topic(
+	directive: Dictionary,
+	active_topics: Array[TopicData],
+	next_topic_id: Array[int],
+	ic_day: int,
+) -> void:
+	var topic_id: int = next_topic_id[0]
+	next_topic_id[0] += 1
+
+	var hostile_count: int = directive.get("hostile_clan_count", 3)
+
+	var topic: TopicData = TopicMomentumSystem.create_topic(
+		topic_id,
+		"Imperial Civil War — %d Great Clans in Revolt" % hostile_count,
+		TopicData.Tier.TIER_1,
+		TopicData.Category.MILITARY,
+		ic_day,
+		TopicMomentumSystem.initial_momentum_for_tier(TopicData.Tier.TIER_1),
+	)
+	topic.slug = "imperial_civil_war_d%d" % ic_day
+	topic.topic_type = "crisis"
+	topic.variant = "imperial_civil_war"
+	active_topics.append(topic)
 
 
 # -- Helpers -------------------------------------------------------------------

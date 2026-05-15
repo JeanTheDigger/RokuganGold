@@ -1420,3 +1420,116 @@ func test_tyrant_court_penalty_not_applied_to_non_emperor_target() -> void:
 	)
 
 	assert_almost_eq(actor.honor, 5.0, 0.01)
+
+
+# -- Tyrant Directive Consumers -------------------------------------------------
+
+func test_disgrace_directive_creates_topic() -> void:
+	var emperor := _make_emperor()
+	var crab := _make_champion(10, "Crab")
+	crab.character_name = "Hida Kisada"
+	var characters_by_id: Dictionary = {100: emperor, 10: crab}
+
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [500]
+	var strategic_results: Array[Dictionary] = [{
+		"directive": "FABRICATE_DISGRACE",
+		"lord_id": 100,
+		"target_id": 10,
+		"target_clan": "Crab",
+		"disposition": -20,
+	}]
+
+	DayOrchestrator._process_tyrant_directives(
+		strategic_results, active_topics, next_topic_id, 30, characters_by_id
+	)
+
+	assert_eq(active_topics.size(), 1)
+	var topic: TopicData = active_topics[0]
+	assert_eq(topic.topic_id, 500)
+	assert_eq(topic.tier, TopicData.Tier.TIER_3)
+	assert_eq(topic.category, TopicData.Category.PERSONAL)
+	assert_eq(topic.subject_character_id, 10)
+	assert_eq(topic.clan_involved, "Crab")
+	assert_eq(topic.topic_type, "disgrace")
+	assert_eq(topic.variant, "fabricated")
+	assert_string_contains(topic.title, "Hida Kisada")
+	assert_eq(next_topic_id[0], 501)
+
+
+func test_imperial_civil_war_directive_creates_tier1_topic() -> void:
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [600]
+	var strategic_results: Array[Dictionary] = [{
+		"directive": "IMPERIAL_CIVIL_WAR",
+		"lord_id": 100,
+		"hostile_clan_count": 4,
+	}]
+
+	DayOrchestrator._process_tyrant_directives(
+		strategic_results, active_topics, next_topic_id, 45, {}
+	)
+
+	assert_eq(active_topics.size(), 1)
+	var topic: TopicData = active_topics[0]
+	assert_eq(topic.topic_id, 600)
+	assert_eq(topic.tier, TopicData.Tier.TIER_1)
+	assert_eq(topic.category, TopicData.Category.MILITARY)
+	assert_eq(topic.topic_type, "crisis")
+	assert_eq(topic.variant, "imperial_civil_war")
+	assert_string_contains(topic.title, "4 Great Clans")
+	assert_almost_eq(topic.momentum, 80.0, 0.1)
+	assert_eq(next_topic_id[0], 601)
+
+
+func test_multiple_disgrace_directives_create_multiple_topics() -> void:
+	var emperor := _make_emperor()
+	var crab := _make_champion(10, "Crab")
+	var lion := _make_champion(12, "Lion")
+	crab.character_name = "Hida Kisada"
+	lion.character_name = "Akodo Toturi"
+	var characters_by_id: Dictionary = {100: emperor, 10: crab, 12: lion}
+
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [700]
+	var strategic_results: Array[Dictionary] = [
+		{
+			"directive": "FABRICATE_DISGRACE",
+			"lord_id": 100,
+			"target_id": 10,
+			"target_clan": "Crab",
+			"disposition": -20,
+		},
+		{
+			"directive": "FABRICATE_DISGRACE",
+			"lord_id": 100,
+			"target_id": 12,
+			"target_clan": "Lion",
+			"disposition": -40,
+		},
+	]
+
+	DayOrchestrator._process_tyrant_directives(
+		strategic_results, active_topics, next_topic_id, 50, characters_by_id
+	)
+
+	assert_eq(active_topics.size(), 2)
+	assert_eq(active_topics[0].subject_character_id, 10)
+	assert_eq(active_topics[1].subject_character_id, 12)
+	assert_eq(next_topic_id[0], 702)
+
+
+func test_non_tyrant_directives_ignored() -> void:
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [800]
+	var strategic_results: Array[Dictionary] = [
+		{"directive": StrategicReview.Directive.CALL_COURT, "lord_id": 1},
+		{"directive": "FILL_VACANCY", "lord_id": 100},
+	]
+
+	DayOrchestrator._process_tyrant_directives(
+		strategic_results, active_topics, next_topic_id, 60, {}
+	)
+
+	assert_eq(active_topics.size(), 0)
+	assert_eq(next_topic_id[0], 800)
