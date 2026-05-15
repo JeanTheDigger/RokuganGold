@@ -4,6 +4,10 @@ class_name DayOrchestrator
 ## info events → letter delivery → topic tick →
 ## (season boundary) resource tick + confidence decay.
 
+const _COMBAT_EVENT_MOMENTUM: float = 30.0
+const _CIVIL_WAR_MOMENTUM: float = 60.0
+const _CONSTRUCTION_TIER2_MOMENTUM: float = 40.0
+
 
 static func advance_day(
 	time_system: TimeSystem,
@@ -1522,7 +1526,7 @@ static func _process_horde_assaults(
 			topic.variant = "shadowlands_incursion"
 			topic.category = TopicData.Category.MILITARY
 			topic.tier = TopicData.Tier.TIER_1
-			topic.momentum = 80.0  # Tier 1 crisis starts with high momentum.
+			topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)
 			topic.clan_involved = clan_str
 			topic.ic_day_created = ic_day
 			topic.provinces_affected = [horde.target_province_id]
@@ -1609,7 +1613,7 @@ static func _process_horde_rolls(
 		topic.topic_type = "military"
 		topic.category = TopicData.Category.POLITICAL
 		topic.tier = TopicData.Tier.TIER_3
-		topic.momentum = 30.0
+		topic.momentum = _COMBAT_EVENT_MOMENTUM
 		topic.ic_day_created = ic_day
 		var province: Variant = provinces.get(horde.target_province_id, null)
 		if province is ProvinceData:
@@ -1762,7 +1766,7 @@ static func _create_blessing_topic(
 	topic.variant = variant
 	topic.tier = TopicData.Tier.TIER_4
 	topic.category = TopicData.Category.POLITICAL
-	topic.momentum = 11.0  # Minor topic — broadcasts to affected province.
+	topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)
 	topic.provinces_affected = [prov.province_id]
 	topic.clan_involved = prov.clan
 	topic.subject_role = "BENEFICIARY"
@@ -1790,7 +1794,7 @@ static func _create_suspension_topic(
 	topic.variant = variant
 	topic.tier = tier
 	topic.category = TopicData.Category.POLITICAL
-	topic.momentum = 26.0 if tier == TopicData.Tier.TIER_3 else 11.0
+	topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(tier)
 	topic.subject_role = "PERPETRATOR"   # Emperor / Imperial decision
 	topic.ic_day_created = ic_day
 	active_topics.append(topic)
@@ -3754,7 +3758,7 @@ static func _process_levy_suspicion(
 		next_topic_id[0] += 1
 		var tier_val: int = check["topic_tier"]
 		var tier: TopicData.Tier = TopicData.Tier.TIER_4 if tier_val == 4 else TopicData.Tier.TIER_3
-		var momentum: float = 11.0 if tier_val == 4 else 26.0
+		var momentum: float = TopicMomentumSystem.initial_momentum_for_tier(tier)
 		var topic: TopicData = TopicMomentumSystem.create_topic(
 			tid,
 			"Private Army Suspicion — %s" % lord.family,
@@ -5073,7 +5077,7 @@ static func _create_disband_topic(
 	topic.category = TopicData.Category.POLITICAL
 	topic.clan_involved = clan
 	topic.ic_day_created = ic_day
-	topic.momentum = 11.0
+	topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)
 	active_topics.append(topic)
 
 
@@ -5143,7 +5147,7 @@ static func _create_battle_topic(
 
 	var variant: String = "victory_clean"
 	var tier: TopicData.Tier = TopicData.Tier.TIER_3
-	var momentum: float = 30.0
+	var momentum: float = _COMBAT_EVENT_MOMENTUM
 
 	var title: String = "Battle at province %d" % province_id
 
@@ -5176,7 +5180,7 @@ static func _create_heavy_casualties_topic(
 
 	var topic: TopicData = TopicMomentumSystem.create_topic(
 		topic_id, title, TopicData.Tier.TIER_3, TopicData.Category.MILITARY,
-		ic_day, 25.0, provinces, "", "", -1,
+		ic_day, TopicMomentumSystem.initial_momentum_for_tier(TopicData.Tier.TIER_3), provinces, "", "", -1,
 		"battle_outcome", "heavy_casualties",
 	)
 	topic.slug = "casualties_day_%d" % ic_day
@@ -5201,7 +5205,7 @@ static func _create_siege_event_topic(
 
 	var topic: TopicData = TopicMomentumSystem.create_topic(
 		topic_id, title, TopicData.Tier.TIER_4, TopicData.Category.MILITARY,
-		ic_day, 11.0, [], "", "", -1,
+		ic_day, TopicMomentumSystem.initial_momentum_for_tier(TopicData.Tier.TIER_4), [], "", "", -1,
 		"siege", event_type,
 	)
 	topic.slug = "siege_%d_event_%s_day_%d" % [siege_id, event_type, ic_day]
@@ -5923,9 +5927,7 @@ static func _create_ladder_topic(
 	topic.clan_involved = declaring_clan
 	topic.ic_day_created = ic_day
 
-	match topic.tier:
-		TopicData.Tier.TIER_3: topic.momentum = 26.0
-		_: topic.momentum = 11.0
+	topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)
 
 	active_topics.append(topic)
 	return topic
@@ -6173,7 +6175,7 @@ static func _topic_from_dict(
 	t.slug = topic_dict.get("slug", "")
 	t.tier = topic_dict.get("tier", TopicData.Tier.TIER_4)
 	t.category = topic_dict.get("category", TopicData.Category.POLITICAL)
-	t.momentum = topic_dict.get("momentum", 11.0)
+	t.momentum = topic_dict.get("momentum", TopicMomentumSystem.MOMENTUM_MINOR_FLOOR)
 	t.clan_involved = topic_dict.get("clan_involved", "")
 	t.subject_character_id = topic_dict.get("subject_character_id", -1)
 	t.subject_role = topic_dict.get("subject_role", "NEUTRAL")
@@ -7127,7 +7129,7 @@ static func _generate_naval_battle_topics(
 		topic.variant = "naval_battle"
 		topic.slug = "naval_battle_%s_vs_%s_d%d" % [atk_clan.to_lower(), def_clan.to_lower(), ic_day]
 		topic.tier = TopicData.Tier.TIER_3
-		topic.momentum = 30.0
+		topic.momentum = _COMBAT_EVENT_MOMENTUM
 		topic.category = TopicData.Category.MILITARY
 		topic.ic_day_created = ic_day
 		topic.resolved = false
@@ -7203,7 +7205,7 @@ static func _process_seiyaku_review(
 		topic.topic_type = "political"
 		topic.variant = "otomo_exhaustion"
 		topic.tier = TopicData.Tier.TIER_4
-		topic.momentum = 11.0
+		topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)
 		topic.category = TopicData.Category.POLITICAL
 		active_topics.append(topic)
 		result["exhaustion_topic_id"] = topic.topic_id
@@ -7353,7 +7355,7 @@ static func _process_togashi_oversight(
 				HonorGlorySystem.apply_honor_change(mirumoto_fc, -0.3)
 			topic.topic_type = "political"
 			topic.tier = TopicData.Tier.TIER_4 if stage <= 2 else TopicData.Tier.TIER_3
-			topic.momentum = 11.0 if stage <= 2 else 26.0
+			topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)
 			topic.category = TopicData.Category.POLITICAL
 			active_topics.append(topic)
 			result["topic_id"] = topic.topic_id
@@ -7638,7 +7640,7 @@ static func _process_phoenix_council_gating(
 		topic.variant = "phoenix_council_veto"
 		topic.topic_type = "political"
 		topic.tier = TopicData.Tier.TIER_4 if overreach_stage <= 1 else TopicData.Tier.TIER_3
-		topic.momentum = 11.0 if overreach_stage <= 1 else 26.0
+		topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)
 		topic.category = TopicData.Category.POLITICAL
 		active_topics.append(topic)
 
@@ -7881,7 +7883,7 @@ static func _process_gempukku(
 			topic.topic_type = "death"
 			topic.variant = "natural"
 			topic.tier = TopicData.Tier.TIER_4
-			topic.momentum = 11.0
+			topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)
 			topic.category = TopicData.Category.PERSONAL
 			active_topics.append(topic)
 
@@ -8114,7 +8116,7 @@ static func _apply_marriage(
 		topic.variant = _marriage_type_to_variant(marriage_type)
 		topic.category = TopicData.Category.POLITICAL
 		topic.tier = TopicData.Tier.TIER_4
-		topic.momentum = 11.0
+		topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)
 		topic.ic_day_created = ic_day
 		if char_a.clan != char_b.clan:
 			topic.clan_involved = char_a.clan + "," + char_b.clan
@@ -8831,7 +8833,7 @@ static func _process_organic_villages(
 			topic.variant = "organic_formation"
 			topic.ic_day_created = ic_day
 			topic.tier = TopicData.Tier.TIER_4
-			topic.momentum = 11.0
+			topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)
 			active_topics.append(topic)
 
 
@@ -8846,7 +8848,6 @@ static func _generate_construction_topic(
 	next_topic_id[0] += 1
 	topic.ic_day_created = ic_day
 	topic.tier = TopicData.Tier.TIER_4
-	topic.momentum = 11.0
 	topic.topic_type = "construction"
 
 	match cd.construction_type:
@@ -8854,23 +8855,24 @@ static func _generate_construction_topic(
 			topic.slug = "temple_completed_%d" % cd.construction_id
 			topic.variant = "temple_completed"
 			topic.tier = TopicData.Tier.TIER_3
-			topic.momentum = 25.0
 		ConstructionData.ConstructionType.SHINDEN:
 			topic.slug = "shinden_completed_%d" % cd.construction_id
 			topic.variant = "shinden_completed"
 			topic.tier = TopicData.Tier.TIER_2
-			topic.momentum = 40.0
+			topic.momentum = _CONSTRUCTION_TIER2_MOMENTUM
 		ConstructionData.ConstructionType.MONASTERY:
 			topic.slug = "monastery_completed_%d" % cd.construction_id
 			topic.variant = "monastery_completed"
 			topic.tier = TopicData.Tier.TIER_3
-			topic.momentum = 25.0
 		ConstructionData.ConstructionType.SHIP:
 			topic.slug = "ship_launched_%d" % cd.construction_id
 			topic.variant = "ship_launched"
 		_:
 			topic.slug = "construction_%d" % cd.construction_id
 			topic.variant = "shrine_completed"
+
+	if topic.momentum == 0.0:
+		topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)
 
 	active_topics.append(topic)
 
@@ -9430,7 +9432,7 @@ static func _process_commitment_seasonal(
 		topic.tier = topic_tier
 		topic.topic_type = topic_type
 		topic.variant = topic_variant
-		topic.momentum = 11.0 if topic_tier >= 3 else 30.0
+		topic.momentum = TopicMomentumSystem.MOMENTUM_MINOR_FLOOR if topic_tier >= 3 else _COMBAT_EVENT_MOMENTUM
 		topic.category = TopicData.Category.POLITICAL
 		topic.ic_day_created = ic_day
 		active_topics.append(topic)
@@ -10092,7 +10094,7 @@ static func _resolve_civil_war(
 	topic.tier = 2
 	topic.topic_type = "civil_war"
 	topic.variant = "legitimacy_victory" if legitimacy_won else ("championship_seizure" if from_seizure else "rebel_victory")
-	topic.momentum = 60.0
+	topic.momentum = _CIVIL_WAR_MOMENTUM
 	topic.category = TopicData.Category.POLITICAL
 	topic.ic_day_created = ic_day
 	active_topics.append(topic)
@@ -10438,7 +10440,7 @@ static func _trigger_civil_war(
 	topic.tier = TopicData.Tier.TIER_2
 	topic.topic_type = "civil_war"
 	topic.variant = "civil_war_triggered"
-	topic.momentum = 60.0
+	topic.momentum = _CIVIL_WAR_MOMENTUM
 	topic.category = TopicData.Category.POLITICAL
 	topic.ic_day_created = ic_day
 	active_topics.append(topic)
