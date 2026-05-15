@@ -72,15 +72,16 @@ static func get_terrain_cost(
 ) -> int:
 	var base: int = BASE_TERRAIN_COST.get(terrain, 1)
 
-	if season == Season.WINTER:
-		base *= WINTER_MULTIPLIER
-
 	var river_cost: int = 0
 	if has_river_crossing:
 		if season == Season.SPRING:
 			river_cost = SPRING_RIVER_CROSSING_COST
 		else:
 			river_cost = RIVER_CROSSING_COST
+
+	if season == Season.WINTER:
+		base *= WINTER_MULTIPLIER
+		river_cost *= WINTER_MULTIPLIER
 
 	return base + river_cost
 

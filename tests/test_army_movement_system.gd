@@ -152,13 +152,14 @@ func test_terrain_cost_river_crossing_spring() -> void:
 
 
 func test_terrain_cost_mountains_winter_with_river() -> void:
-	# (3 * 2) + 1 = 7
+	# GDD s11.7a: "A river crossing into mountains in winter = 8 days (3 ×2 + 2)"
+	# Winter multiplier applies to river cost too: (3 * 2) + (1 * 2) = 8
 	assert_eq(
 		ArmyMovementSystem.get_terrain_cost(
 			ArmyMovementSystem.MovementTerrain.MOUNTAINS,
 			ArmyMovementSystem.Season.WINTER, true,
 		),
-		7,
+		8,
 	)
 
 
