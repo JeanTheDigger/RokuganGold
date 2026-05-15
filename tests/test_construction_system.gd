@@ -1189,3 +1189,48 @@ func test_integration_dedicated_roadside_shrine_fortune() -> void:
 	assert_true(s.worship_locations[0].get("dedicated", false))
 	assert_eq(s.worship_locations[0].get("fortune", -1), 4)
 	assert_eq(s.koku_stockpile, 8.0)
+
+
+# -- Forge Construction (GDD s4.3) ---------------------------------------------
+
+func test_forge_koku_cost_constant() -> void:
+	assert_almost_eq(ConstructionSystem.FORGE_KOKU_COST, 35.0, 0.01)
+
+
+func test_forge_build_seasons_constant() -> void:
+	assert_eq(ConstructionSystem.FORGE_BUILD_SEASONS, 2)
+
+
+func test_validate_forge_sufficient_koku() -> void:
+	var c := _make_char(1, 3.0)
+	var s := _make_settlement(10, 1, Enums.SettlementType.VILLAGE, 5, 10.0, 40.0)
+	var r: Dictionary = ConstructionSystem.validate_forge_construction(c, s)
+	assert_true(r["valid"])
+
+
+func test_validate_forge_insufficient_koku() -> void:
+	var c := _make_char(1, 3.0)
+	var s := _make_settlement(10, 1, Enums.SettlementType.VILLAGE, 5, 10.0, 10.0)
+	var r: Dictionary = ConstructionSystem.validate_forge_construction(c, s)
+	assert_false(r["valid"])
+	assert_eq(r["reason"], "insufficient_koku")
+
+
+func test_validate_forge_insufficient_authority() -> void:
+	var c := _make_char(1, 1.0)
+	var s := _make_settlement(10, 1, Enums.SettlementType.VILLAGE, 5, 10.0, 40.0)
+	var r: Dictionary = ConstructionSystem.validate_forge_construction(c, s)
+	assert_false(r["valid"])
+	assert_eq(r["reason"], "insufficient_authority")
+
+
+func test_forge_get_build_seasons() -> void:
+	var cd_data := ConstructionData.new()
+	cd_data.construction_type = ConstructionData.ConstructionType.FORGE
+	cd_data.seasons_remaining = 2
+	# Verify the enum is wired into _get_build_seasons via create_construction
+	var cd_out: ConstructionData = ConstructionSystem.create_construction(
+		99, ConstructionData.ConstructionType.FORGE, 1, 1, 0, 35.0,
+	)
+	assert_eq(cd_out.seasons_remaining, 2)
+	assert_eq(cd_out.seasons_total, 2)

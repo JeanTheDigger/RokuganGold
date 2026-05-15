@@ -11,6 +11,7 @@ enum ConstructionType {
 	SHINDEN,
 	MONASTERY,
 	SHIP,
+	FORGE,
 }
 
 @export var construction_id: int = -1

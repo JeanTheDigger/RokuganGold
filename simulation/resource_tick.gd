@@ -275,6 +275,9 @@ static func process_seasonal_tick(
 	var iron: Dictionary = _process_iron_production(settlements, settlement_meta)
 	results["iron_produced"] = iron
 
+	var arms: Dictionary = _process_forge_conversion(settlements, settlement_meta)
+	results["arms_produced"] = arms
+
 	var koku: Dictionary = _process_koku_generation(settlements, settlement_meta)
 	results["koku_generated"] = koku
 
@@ -809,6 +812,67 @@ static func _process_iron_production(
 static func produce_iron_settlement(settlement: SettlementData, mine_quality: float) -> Dictionary:
 	var iron: float = float(settlement.mining_pu) * IRON_PER_MINING_PU_PER_SEASON * mine_quality
 	return {"iron_produced": iron}
+
+
+# ==============================================================================
+# Forge Conversion — Iron → Arms per GDD s4.3
+# 3.00 Arms capacity per Forge per season. 1.00 Iron = 1.00 Arms (no loss).
+# Each Forge converts up to 3.00 Iron; conversion is capped by Iron available.
+# ==============================================================================
+
+const ARMS_PER_FORGE_PER_SEASON: float = 3.0
+
+static func _process_forge_conversion(
+	settlements: Array[SettlementData],
+	settlement_meta: Dictionary,
+) -> Dictionary:
+	var clan_data: Dictionary = settlement_meta.get("_clan_data", {})
+	var results: Dictionary = {}
+
+	# Build forge count per clan by summing forges in each settlement
+	var clan_forge_count: Dictionary = {}
+	for s: SettlementData in settlements:
+		var forge_count: int = 0
+		for tag: String in s.infrastructure:
+			if tag == "forge":
+				forge_count += 1
+		if forge_count == 0:
+			continue
+		# Map settlement → clan by province_id
+		for clan_name: String in clan_data:
+			var cd: ClanData = clan_data[clan_name]
+			if s.province_id in cd.province_ids:
+				clan_forge_count[clan_name] = clan_forge_count.get(clan_name, 0) + forge_count
+				break
+
+	for clan_name: String in clan_forge_count:
+		var cd: ClanData = clan_data[clan_name]
+		var capacity: float = float(clan_forge_count[clan_name]) * ARMS_PER_FORGE_PER_SEASON
+		var converted: float = minf(capacity, cd.iron_stockpile)
+		cd.iron_stockpile -= converted
+		cd.arms_stockpile += converted
+		results[clan_name] = {
+			"forge_count": clan_forge_count[clan_name],
+			"capacity": capacity,
+			"arms_produced": converted,
+			"iron_consumed": converted,
+		}
+
+	return results
+
+
+static func process_forge_conversion_single_clan(
+	forge_count: int,
+	iron_available: float,
+) -> Dictionary:
+	var capacity: float = float(forge_count) * ARMS_PER_FORGE_PER_SEASON
+	var converted: float = minf(capacity, iron_available)
+	return {
+		"forge_count": forge_count,
+		"capacity": capacity,
+		"arms_produced": converted,
+		"iron_consumed": converted,
+	}
 
 
 # ==============================================================================

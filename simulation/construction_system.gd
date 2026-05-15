@@ -41,6 +41,9 @@ const SHIP_COSTS: Dictionary = {
 }
 const SHIP_BUILD_SEASONS: int = 1
 
+const FORGE_KOKU_COST: float = 35.0
+const FORGE_BUILD_SEASONS: int = 2
+
 # -- Terrain Difficulty (GDD s4.3.22) -----------------------------------------
 
 const TERRAIN_FOUNDING_DIFFICULTY: Dictionary = {
@@ -103,6 +106,11 @@ const CONSTRUCTION_AUTHORITY: Dictionary = {
 		AuthorityLevel.CLAN_CHAMPION,
 	],
 	ConstructionData.ConstructionType.SHIP: [
+		AuthorityLevel.PROVINCIAL_DAIMYO,
+		AuthorityLevel.FAMILY_DAIMYO,
+		AuthorityLevel.CLAN_CHAMPION,
+	],
+	ConstructionData.ConstructionType.FORGE: [
 		AuthorityLevel.PROVINCIAL_DAIMYO,
 		AuthorityLevel.FAMILY_DAIMYO,
 		AuthorityLevel.CLAN_CHAMPION,
@@ -260,6 +268,17 @@ static func validate_ship_commission(
 	return {"valid": true}
 
 
+static func validate_forge_construction(
+	character: L5RCharacterData,
+	settlement: SettlementData,
+) -> Dictionary:
+	if not has_authority(ConstructionData.ConstructionType.FORGE, character):
+		return {"valid": false, "reason": "insufficient_authority"}
+	if settlement.koku_stockpile < FORGE_KOKU_COST:
+		return {"valid": false, "reason": "insufficient_koku"}
+	return {"valid": true}
+
+
 # -- Construction Queue --------------------------------------------------------
 
 
@@ -317,6 +336,8 @@ static func _get_build_seasons(ct: ConstructionData.ConstructionType) -> int:
 			return MONASTERY_BUILD_SEASONS
 		ConstructionData.ConstructionType.SHIP:
 			return SHIP_BUILD_SEASONS
+		ConstructionData.ConstructionType.FORGE:
+			return FORGE_BUILD_SEASONS
 	return 1
 
 

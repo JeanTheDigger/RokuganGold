@@ -4716,11 +4716,16 @@ static func _build_friendly_province_list(
 			var d: Dictionary = by_province[pd.province_id]
 			if d["civ_pu"] > 0.0:
 				rice_per_pu = d["rice"] / d["civ_pu"]
+		var province_has_forge: bool = false
+		for s: SettlementData in settlements:
+			if s.province_id == pd.province_id and s.has_infrastructure("forge"):
+				province_has_forge = true
+				break
 		result.append({
 			"province_id": pd.province_id,
 			"distance": 1,
 			"rice_per_pu": rice_per_pu,
-			"has_forge": false,
+			"has_forge": province_has_forge,
 		})
 	return result
 
@@ -8572,6 +8577,11 @@ static func _process_construction_completions(
 					)
 					next_settlement_id[0] += 1
 					settlements.append(monastery)
+
+			ConstructionData.ConstructionType.FORGE:
+				var target_s: Variant = _find_settlement_by_id(settlements, cd.settlement_id)
+				if target_s != null:
+					(target_s as SettlementData).infrastructure.append("forge")
 
 			ConstructionData.ConstructionType.SHIP:
 				var ship := ShipData.new()

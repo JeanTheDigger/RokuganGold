@@ -337,3 +337,46 @@ func test_process_seasonal_tick_spring_locks_planting() -> void:
 	var meta: Dictionary = {"_peace_seasons": {1: 0}, "_deficit_seasons": {1: 0}}
 	ResourceTick.process_seasonal_tick(provinces, settlements, "spring", meta)
 	assert_eq(int(meta[1]["locked_farming_pu"]), 4)
+
+
+# -- Forge Conversion (GDD s4.3) -----------------------------------------------
+
+func test_forge_single_forge_full_capacity() -> void:
+	# 1 forge, 5.0 iron → converts 3.0 (capacity cap)
+	var r: Dictionary = ResourceTick.process_forge_conversion_single_clan(1, 5.0)
+	assert_almost_eq(r["capacity"], 3.0, 0.01)
+	assert_almost_eq(r["arms_produced"], 3.0, 0.01)
+	assert_almost_eq(r["iron_consumed"], 3.0, 0.01)
+
+
+func test_forge_single_forge_limited_iron() -> void:
+	# 1 forge, 1.5 iron → converts only 1.5 (iron-limited)
+	var r: Dictionary = ResourceTick.process_forge_conversion_single_clan(1, 1.5)
+	assert_almost_eq(r["capacity"], 3.0, 0.01)
+	assert_almost_eq(r["arms_produced"], 1.5, 0.01)
+	assert_almost_eq(r["iron_consumed"], 1.5, 0.01)
+
+
+func test_forge_two_forges_doubles_capacity() -> void:
+	# 2 forges, 10.0 iron → capacity 6.0, converts 6.0
+	var r: Dictionary = ResourceTick.process_forge_conversion_single_clan(2, 10.0)
+	assert_almost_eq(r["capacity"], 6.0, 0.01)
+	assert_almost_eq(r["arms_produced"], 6.0, 0.01)
+
+
+func test_forge_no_forges_no_conversion() -> void:
+	var r: Dictionary = ResourceTick.process_forge_conversion_single_clan(0, 10.0)
+	assert_almost_eq(r["arms_produced"], 0.0, 0.01)
+	assert_almost_eq(r["iron_consumed"], 0.0, 0.01)
+
+
+func test_forge_no_iron_no_conversion() -> void:
+	var r: Dictionary = ResourceTick.process_forge_conversion_single_clan(1, 0.0)
+	assert_almost_eq(r["arms_produced"], 0.0, 0.01)
+	assert_almost_eq(r["iron_consumed"], 0.0, 0.01)
+
+
+func test_forge_one_to_one_conversion_rate() -> void:
+	# GDD s4.3: 1.00 Iron → 1.00 Arms, no loss in conversion
+	var r: Dictionary = ResourceTick.process_forge_conversion_single_clan(1, 2.5)
+	assert_almost_eq(r["arms_produced"], r["iron_consumed"], 0.001)
