@@ -193,6 +193,9 @@ static func build_context(
 	ctx.besieged_settlement_health_pct = world_state.get("besieged_settlement_health_pct", 1.0)
 	ctx.objective_stalled_seasons = world_state.get("objective_stalled_seasons", 0)
 
+	# Phoenix governance (s55.10.3.7) — set when the Champion holds autonomous authority.
+	ctx.phoenix_champion_authority = world_state.get("phoenix_champion_authority", false)
+
 	return ctx
 
 
@@ -258,6 +261,10 @@ static func generate_options(
 		if ctx.is_ceasefire_day and _is_ceasefire_blocked(action_id):
 			continue
 		if ctx.is_labor_halt_day and _is_labor_halt_blocked(action_id):
+			continue
+		# RESTORE_COUNCIL_COMPACT is only available to Phoenix Champions holding
+		# autonomous rule (s55.10.3.7 — only the Champion can give back the authority).
+		if action_id == "RESTORE_COUNCIL_COMPACT" and not ctx.phoenix_champion_authority:
 			continue
 		var option := NPCDataStructures.ScoredAction.new()
 		option.action_id = action_id
@@ -583,6 +590,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array[S
 				"DISPATCH_COURTIER",
 				"DECLARE_WAR", "NEGOTIATE_SURRENDER",
 				"COMPLY_WITH_EDICT", "DEFY_EDICT",
+				"RESTORE_COUNCIL_COMPACT",
 				"SHARE_SUPPLIES",
 				"CRAFT", "MENTOR",
 				"DO_NOTHING", "REST",
@@ -735,6 +743,7 @@ static func _get_ap_cost(action_id: String) -> int:
 		"FOUND_TEMPLE": 1,
 		"FOUND_MONASTERY": 1,
 		"COMMISSION_SHIP": 1,
+		"RESTORE_COUNCIL_COMPACT": 1,
 	}
 	return costs.get(action_id, 1)
 

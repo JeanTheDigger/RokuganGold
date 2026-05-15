@@ -187,6 +187,9 @@ class ContextSnapshot:
 	var bushido_virtue: Enums.BushidoVirtue = Enums.BushidoVirtue.NONE
 	var shourido_virtue: Enums.ShouridoVirtue = Enums.ShouridoVirtue.NONE
 
+	# Phoenix-specific governance (s55.10.3.7)
+	var phoenix_champion_authority: bool = false
+
 
 class ProvinceStatus:
 	var province_id: int = -1

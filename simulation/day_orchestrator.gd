@@ -378,6 +378,11 @@ static func advance_day(
 		military_daily, military_effects, active_topics, next_topic_id, ic_day,
 	)
 
+	var compact_restoration_results: Array[Dictionary] = _process_compact_restorations(
+		day_result.get("results", []),
+		phoenix_council_state,
+	)
+
 	var commitment_results: Array[Dictionary] = _process_commitment_deadlines(
 		commitments, ic_day, characters_by_id
 	)
@@ -652,6 +657,7 @@ static func advance_day(
 		"military_topics": military_topics,
 		"war_score_results": war_score_results,
 		"war_declarations": war_declarations,
+		"compact_restoration_results": compact_restoration_results,
 		"ladder_effects_results": ladder_effects_results,
 		"war_termination_results": war_termination_results,
 		"territory_transfer_results": territory_transfer_results,
@@ -5475,6 +5481,30 @@ static func _build_settlements_by_province(
 
 
 # -- War Declaration Processing ------------------------------------------------
+
+static func _process_compact_restorations(
+	applied_list: Array,
+	phoenix_council_state: Dictionary,
+) -> Array[Dictionary]:
+	## Intercepts RESTORE_COUNCIL_COMPACT action results and applies the
+	## restoration to phoenix_council_state (s55.10.3.7).
+	var results: Array[Dictionary] = []
+	if phoenix_council_state.is_empty():
+		return results
+	for applied: Variant in applied_list:
+		if not (applied is Dictionary):
+			continue
+		var ad: Dictionary = applied
+		var effects: Dictionary = ad.get("effects", {})
+		if not effects.get("requires_compact_restoration", false):
+			continue
+		PhoenixCouncil.restore_council_compact(phoenix_council_state)
+		results.append({
+			"event": "compact_restored",
+			"restoring_champion_id": int(effects.get("restoring_champion_id", -1)),
+		})
+	return results
+
 
 static func _process_war_declarations(
 	applied_list: Array,

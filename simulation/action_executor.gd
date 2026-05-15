@@ -47,6 +47,7 @@ const ADMINISTRATIVE_ACTIONS: Array[String] = [
 	"PURIFY_TAINTED_GROUND", "FORTIFY_WALL_SECTION", "SEAL_WALL_BREACH",
 	"DECLARE_WAR",
 	"COMPLY_WITH_EDICT", "DEFY_EDICT",
+	"RESTORE_COUNCIL_COMPACT",
 ]
 
 const INTELLIGENCE_ACTIONS: Array[String] = [
@@ -239,6 +240,21 @@ static func execute(
 
 	if action_id == "EXAMINE_LETTER":
 		return _execute_examine_letter(action, character, ctx)
+
+	if action_id == "RESTORE_COUNCIL_COMPACT":
+		return {
+			"success": true,
+			"action_id": action_id,
+			"character_id": character.character_id,
+			"target_npc_id": -1,
+			"target_province_id": -1,
+			"ic_day": ctx.ic_day,
+			"season": ctx.season,
+			"effects": {
+				"requires_compact_restoration": true,
+				"restoring_champion_id": character.character_id,
+			},
+		}
 
 	if action_id in COVERT_ACTIONS:
 		var covert_result: Dictionary = _try_execute_covert(

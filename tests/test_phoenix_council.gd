@@ -744,3 +744,110 @@ func test_first_ever_call_sets_known_champion_no_eval() -> void:
 	# Authority still held.
 	assert_true(PhoenixCouncil.has_champion_authority(_state))
 	assert_eq(_state["tabled_proposals"], {})
+
+
+# -- RESTORE_COUNCIL_COMPACT: ActionExecutor output --------------------------
+
+func test_restore_compact_action_returns_required_effect() -> void:
+	var action := NPCDataStructures.ScoredAction.new()
+	action.action_id = "RESTORE_COUNCIL_COMPACT"
+	action.target_npc_id = -1
+	action.target_province_id = -1
+
+	var champion: L5RCharacterData = _make_champion(10, Enums.BushidoVirtue.CHUGI, Enums.ShouridoVirtue.NONE)
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.character_id = 10
+	ctx.ic_day = 100
+	ctx.season = 5
+	ctx.phoenix_champion_authority = true
+
+	var result: Dictionary = ActionExecutor.execute(
+		action, champion, ctx, DiceEngine.new(), {}
+	)
+
+	assert_true(result["success"])
+	assert_eq(result["action_id"], "RESTORE_COUNCIL_COMPACT")
+	assert_true(result["effects"].get("requires_compact_restoration", false))
+	assert_eq(int(result["effects"]["restoring_champion_id"]), 10)
+
+
+# -- RESTORE_COUNCIL_COMPACT: _process_compact_restorations wiring -----------
+
+func test_process_compact_restorations_clears_authority_flag() -> void:
+	PhoenixCouncil.grant_champion_authority(_state)
+	assert_true(PhoenixCouncil.has_champion_authority(_state))
+
+	var applied_list: Array = [
+		{
+			"action_id": "RESTORE_COUNCIL_COMPACT",
+			"character_id": 10,
+			"effects": {
+				"requires_compact_restoration": true,
+				"restoring_champion_id": 10,
+			},
+		}
+	]
+
+	var results: Array[Dictionary] = DayOrchestrator._process_compact_restorations(
+		applied_list, _state
+	)
+
+	assert_false(PhoenixCouncil.has_champion_authority(_state))
+	assert_eq(results.size(), 1)
+	assert_eq(results[0]["event"], "compact_restored")
+	assert_eq(int(results[0]["restoring_champion_id"]), 10)
+
+
+func test_process_compact_restorations_skips_empty_state() -> void:
+	var results: Array[Dictionary] = DayOrchestrator._process_compact_restorations(
+		[{"effects": {"requires_compact_restoration": true}}],
+		{}   # empty state
+	)
+	assert_eq(results.size(), 0)
+
+
+func test_process_compact_restorations_ignores_non_compact_effects() -> void:
+	PhoenixCouncil.grant_champion_authority(_state)
+	var applied_list: Array = [
+		{"effects": {"requires_war_creation": true}},
+		{"effects": {}},
+	]
+	DayOrchestrator._process_compact_restorations(applied_list, _state)
+	assert_true(PhoenixCouncil.has_champion_authority(_state))
+
+
+# -- RESTORE_COUNCIL_COMPACT: generate_options gate --------------------------
+
+func test_generate_options_excludes_compact_when_no_authority() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.character_id = 10
+	ctx.clan = "Phoenix"
+	ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
+	ctx.phoenix_champion_authority = false
+	ctx.is_lord = true
+	ctx.civilian_orders_remaining = 3
+
+	var need := NPCDataStructures.ImmediateNeed.new()
+	var options: Array[NPCDataStructures.ScoredAction] = NPCDecisionEngine.generate_options(ctx, need)
+	var action_ids: Array[String] = []
+	for opt in options:
+		action_ids.append(opt.action_id)
+	assert_false("RESTORE_COUNCIL_COMPACT" in action_ids)
+
+
+func test_generate_options_includes_compact_when_authority_held() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.character_id = 10
+	ctx.clan = "Phoenix"
+	ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
+	ctx.phoenix_champion_authority = true
+	ctx.is_lord = true
+	ctx.civilian_orders_remaining = 3
+	ctx.ap_remaining = 5
+
+	var need := NPCDataStructures.ImmediateNeed.new()
+	var options: Array[NPCDataStructures.ScoredAction] = NPCDecisionEngine.generate_options(ctx, need)
+	var action_ids: Array[String] = []
+	for opt in options:
+		action_ids.append(opt.action_id)
+	assert_true("RESTORE_COUNCIL_COMPACT" in action_ids)
