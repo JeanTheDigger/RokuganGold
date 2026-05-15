@@ -8343,6 +8343,11 @@ static func _create_disgrace_topic(
 	characters_by_id: Dictionary,
 ) -> void:
 	var target_id: int = directive.get("target_id", -1)
+
+	for existing: TopicData in active_topics:
+		if existing.topic_type == "disgrace" and existing.subject_character_id == target_id and not existing.resolved:
+			return
+
 	var target_clan: String = directive.get("target_clan", "")
 	var target: L5RCharacterData = characters_by_id.get(target_id) as L5RCharacterData
 	var target_name: String = target.character_name if target != null and target.character_name != "" else "Champion"
@@ -8374,6 +8379,10 @@ static func _create_imperial_civil_war_topic(
 	next_topic_id: Array[int],
 	ic_day: int,
 ) -> void:
+	for existing: TopicData in active_topics:
+		if existing.variant == "imperial_civil_war" and not existing.resolved:
+			return
+
 	var topic_id: int = next_topic_id[0]
 	next_topic_id[0] += 1
 

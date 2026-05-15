@@ -1533,3 +1533,141 @@ func test_non_tyrant_directives_ignored() -> void:
 
 	assert_eq(active_topics.size(), 0)
 	assert_eq(next_topic_id[0], 800)
+
+
+# -- Repeat-Fire Guards ---------------------------------------------------------
+
+func test_disgrace_guard_prevents_duplicate_for_same_champion() -> void:
+	var emperor := _make_emperor()
+	var crab := _make_champion(10, "Crab")
+	crab.character_name = "Hida Kisada"
+	var characters_by_id: Dictionary = {100: emperor, 10: crab}
+
+	var existing_topic := TopicData.new()
+	existing_topic.topic_id = 400
+	existing_topic.topic_type = "disgrace"
+	existing_topic.subject_character_id = 10
+	existing_topic.resolved = false
+	var active_topics: Array[TopicData] = [existing_topic]
+
+	var next_topic_id: Array[int] = [500]
+	var strategic_results: Array[Dictionary] = [{
+		"directive": "FABRICATE_DISGRACE",
+		"lord_id": 100,
+		"target_id": 10,
+		"target_clan": "Crab",
+		"disposition": -20,
+	}]
+
+	DayOrchestrator._process_tyrant_directives(
+		strategic_results, active_topics, next_topic_id, 30, characters_by_id
+	)
+
+	assert_eq(active_topics.size(), 1, "Should not create duplicate disgrace topic")
+	assert_eq(next_topic_id[0], 500, "Should not consume topic ID")
+
+
+func test_disgrace_guard_allows_after_resolution() -> void:
+	var emperor := _make_emperor()
+	var crab := _make_champion(10, "Crab")
+	crab.character_name = "Hida Kisada"
+	var characters_by_id: Dictionary = {100: emperor, 10: crab}
+
+	var resolved_topic := TopicData.new()
+	resolved_topic.topic_id = 400
+	resolved_topic.topic_type = "disgrace"
+	resolved_topic.subject_character_id = 10
+	resolved_topic.resolved = true
+	var active_topics: Array[TopicData] = [resolved_topic]
+
+	var next_topic_id: Array[int] = [500]
+	var strategic_results: Array[Dictionary] = [{
+		"directive": "FABRICATE_DISGRACE",
+		"lord_id": 100,
+		"target_id": 10,
+		"target_clan": "Crab",
+		"disposition": -20,
+	}]
+
+	DayOrchestrator._process_tyrant_directives(
+		strategic_results, active_topics, next_topic_id, 90, characters_by_id
+	)
+
+	assert_eq(active_topics.size(), 2, "Should create new disgrace after prior one resolved")
+	assert_eq(next_topic_id[0], 501)
+
+
+func test_disgrace_guard_allows_different_champion() -> void:
+	var emperor := _make_emperor()
+	var crab := _make_champion(10, "Crab")
+	var lion := _make_champion(12, "Lion")
+	crab.character_name = "Hida Kisada"
+	lion.character_name = "Akodo Toturi"
+	var characters_by_id: Dictionary = {100: emperor, 10: crab, 12: lion}
+
+	var existing_topic := TopicData.new()
+	existing_topic.topic_id = 400
+	existing_topic.topic_type = "disgrace"
+	existing_topic.subject_character_id = 10
+	existing_topic.resolved = false
+	var active_topics: Array[TopicData] = [existing_topic]
+
+	var next_topic_id: Array[int] = [500]
+	var strategic_results: Array[Dictionary] = [{
+		"directive": "FABRICATE_DISGRACE",
+		"lord_id": 100,
+		"target_id": 12,
+		"target_clan": "Lion",
+		"disposition": -30,
+	}]
+
+	DayOrchestrator._process_tyrant_directives(
+		strategic_results, active_topics, next_topic_id, 30, characters_by_id
+	)
+
+	assert_eq(active_topics.size(), 2, "Should allow disgrace for different champion")
+	assert_eq(active_topics[1].subject_character_id, 12)
+
+
+func test_civil_war_guard_prevents_duplicate() -> void:
+	var existing_topic := TopicData.new()
+	existing_topic.topic_id = 400
+	existing_topic.variant = "imperial_civil_war"
+	existing_topic.resolved = false
+	var active_topics: Array[TopicData] = [existing_topic]
+
+	var next_topic_id: Array[int] = [600]
+	var strategic_results: Array[Dictionary] = [{
+		"directive": "IMPERIAL_CIVIL_WAR",
+		"lord_id": 100,
+		"hostile_clan_count": 4,
+	}]
+
+	DayOrchestrator._process_tyrant_directives(
+		strategic_results, active_topics, next_topic_id, 45, {}
+	)
+
+	assert_eq(active_topics.size(), 1, "Should not create duplicate civil war topic")
+	assert_eq(next_topic_id[0], 600, "Should not consume topic ID")
+
+
+func test_civil_war_guard_allows_after_resolution() -> void:
+	var resolved_topic := TopicData.new()
+	resolved_topic.topic_id = 400
+	resolved_topic.variant = "imperial_civil_war"
+	resolved_topic.resolved = true
+	var active_topics: Array[TopicData] = [resolved_topic]
+
+	var next_topic_id: Array[int] = [600]
+	var strategic_results: Array[Dictionary] = [{
+		"directive": "IMPERIAL_CIVIL_WAR",
+		"lord_id": 100,
+		"hostile_clan_count": 3,
+	}]
+
+	DayOrchestrator._process_tyrant_directives(
+		strategic_results, active_topics, next_topic_id, 90, {}
+	)
+
+	assert_eq(active_topics.size(), 2, "Should create new civil war after prior one resolved")
+	assert_eq(next_topic_id[0], 601)
