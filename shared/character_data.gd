@@ -30,8 +30,8 @@ extends Resource
 
 # -- Void Points ---------------------------------------------------------------
 
-@export var void_points_current: int = 2
-@export var void_points_max: int = 2
+@export var current_void_points: int = 2
+@export var max_void_points: int = 2
 
 # -- Skills --------------------------------------------------------------------
 # Dict of { skill_name: String -> rank: int }. Only skills at rank >= 1 present.

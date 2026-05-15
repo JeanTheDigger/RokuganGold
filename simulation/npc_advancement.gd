@@ -157,7 +157,7 @@ static func _get_ring_rank(character: L5RCharacterData, ring: Enums.Ring) -> int
 static func _raise_ring(character: L5RCharacterData, ring: Enums.Ring) -> void:
 	if ring == Enums.Ring.VOID:
 		character.void_ring += 1
-		character.void_points_max = character.void_ring
+		character.max_void_points = character.void_ring
 		return
 	var traits: Array = Enums.RING_TRAITS[ring]
 	var t1_val: int = character.get_trait_value(traits[0])

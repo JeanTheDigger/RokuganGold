@@ -10,8 +10,8 @@ func before_each() -> void:
 	_char = L5RCharacterData.new()
 	_char.character_id = 1
 	_char.void_ring = 3
-	_char.void_points_max = 3
-	_char.void_points_current = 3
+	_char.max_void_points = 3
+	_char.current_void_points = 3
 	_char.enhanced_void = false
 	_char.agility = 3
 	_char.reflexes = 3
@@ -32,40 +32,40 @@ func test_can_spend_when_pool_full() -> void:
 
 
 func test_cannot_spend_when_pool_empty() -> void:
-	_char.void_points_current = 0
+	_char.current_void_points = 0
 	assert_false(VoidSystem.can_spend(_char))
 
 
 func test_spend_decrements_pool() -> void:
 	VoidSystem.spend(_char)
-	assert_eq(_char.void_points_current, 2)
+	assert_eq(_char.current_void_points, 2)
 
 
 func test_spend_fails_at_zero_and_does_not_go_negative() -> void:
-	_char.void_points_current = 0
+	_char.current_void_points = 0
 	var ok: bool = VoidSystem.spend(_char)
 	assert_false(ok)
-	assert_eq(_char.void_points_current, 0)
+	assert_eq(_char.current_void_points, 0)
 
 
 # -- recover / restore_full ----------------------------------------------------
 
 func test_recover_adds_points_capped_at_max() -> void:
-	_char.void_points_current = 1
+	_char.current_void_points = 1
 	VoidSystem.recover(_char, 5)
-	assert_eq(_char.void_points_current, 3)  # capped at max=3
+	assert_eq(_char.current_void_points, 3)  # capped at max=3
 
 
 func test_recover_partial() -> void:
-	_char.void_points_current = 1
+	_char.current_void_points = 1
 	VoidSystem.recover(_char, 1)
-	assert_eq(_char.void_points_current, 2)
+	assert_eq(_char.current_void_points, 2)
 
 
 func test_restore_full_fills_pool() -> void:
-	_char.void_points_current = 0
+	_char.current_void_points = 0
 	VoidSystem.restore_full(_char)
-	assert_eq(_char.void_points_current, 3)
+	assert_eq(_char.current_void_points, 3)
 
 
 # -- roll_bonus ----------------------------------------------------------------
@@ -90,11 +90,11 @@ func test_spend_for_roll_succeeds_and_returns_bonus() -> void:
 	assert_true(result["success"])
 	assert_eq(result["rolled_bonus"], 1)
 	assert_eq(result["kept_bonus"], 1)
-	assert_eq(_char.void_points_current, 2)
+	assert_eq(_char.current_void_points, 2)
 
 
 func test_spend_for_roll_fails_when_empty() -> void:
-	_char.void_points_current = 0
+	_char.current_void_points = 0
 	var result: Dictionary = VoidSystem.spend_for_roll(_char)
 	assert_false(result["success"])
 	assert_eq(result["rolled_bonus"], 0)
@@ -114,7 +114,7 @@ func test_wound_reduction_reduces_by_10() -> void:
 	var result: Dictionary = VoidSystem.spend_for_wound_reduction(_char, 25)
 	assert_true(result["success"])
 	assert_eq(result["reduced_damage"], 15)
-	assert_eq(_char.void_points_current, 2)
+	assert_eq(_char.current_void_points, 2)
 
 
 func test_wound_reduction_cannot_go_below_zero() -> void:
@@ -123,7 +123,7 @@ func test_wound_reduction_cannot_go_below_zero() -> void:
 
 
 func test_wound_reduction_fails_when_no_void() -> void:
-	_char.void_points_current = 0
+	_char.current_void_points = 0
 	var result: Dictionary = VoidSystem.spend_for_wound_reduction(_char, 20)
 	assert_false(result["success"])
 	assert_eq(result["reduced_damage"], 20)  # unchanged
@@ -135,11 +135,11 @@ func test_armor_tn_boost_returns_10() -> void:
 	var result: Dictionary = VoidSystem.spend_for_armor_tn(_char)
 	assert_true(result["success"])
 	assert_eq(result["armor_tn_bonus"], 10)
-	assert_eq(_char.void_points_current, 2)
+	assert_eq(_char.current_void_points, 2)
 
 
 func test_armor_tn_boost_fails_when_no_void() -> void:
-	_char.void_points_current = 0
+	_char.current_void_points = 0
 	var result: Dictionary = VoidSystem.spend_for_armor_tn(_char)
 	assert_false(result["success"])
 	assert_eq(result["armor_tn_bonus"], 0)
@@ -151,11 +151,11 @@ func test_initiative_bonus_returns_10() -> void:
 	var result: Dictionary = VoidSystem.spend_for_initiative_bonus(_char)
 	assert_true(result["success"])
 	assert_eq(result["initiative_bonus"], 10)
-	assert_eq(_char.void_points_current, 2)
+	assert_eq(_char.current_void_points, 2)
 
 
 func test_initiative_bonus_fails_when_no_void() -> void:
-	_char.void_points_current = 0
+	_char.current_void_points = 0
 	var result: Dictionary = VoidSystem.spend_for_initiative_bonus(_char)
 	assert_false(result["success"])
 	assert_eq(result["initiative_bonus"], 0)
@@ -171,10 +171,10 @@ func test_attack_void_spend_increases_roll() -> void:
 	var total_yes: int = 0
 	for i: int in range(20):
 		var r_no:  Dictionary = IndividualCombat.resolve_attack(_char, p_no,  "katana", 5, 0, DiceEngine.new(i), false, false)
-		_char.void_points_current = 3
+		_char.current_void_points = 3
 		p_yes.void_spent_this_round = false
 		var r_yes: Dictionary = IndividualCombat.resolve_attack(_char, p_yes, "katana", 5, 0, DiceEngine.new(i), false, true)
-		_char.void_points_current = 3
+		_char.current_void_points = 3
 		total_no  += r_no["roll"]
 		total_yes += r_yes["roll"]
 	assert_true(total_yes > total_no, "Void spend should increase attack roll totals")
@@ -191,18 +191,18 @@ func test_attack_void_not_spent_twice_per_round() -> void:
 	_char.skills = {"Kenjutsu": 3}
 	var p := IndividualCombat.Participant.new()
 	p.void_spent_this_round = true  # already spent this round
-	_char.void_points_current = 3
+	_char.current_void_points = 3
 	IndividualCombat.resolve_attack(_char, p, "katana", 5, 0, _dice, false, true)
-	assert_eq(_char.void_points_current, 3)  # pool unchanged — not spent again
+	assert_eq(_char.current_void_points, 3)  # pool unchanged — not spent again
 
 
 func test_attack_void_not_spent_when_pool_empty() -> void:
 	_char.skills = {"Kenjutsu": 3}
-	_char.void_points_current = 0
+	_char.current_void_points = 0
 	var p := IndividualCombat.Participant.new()
 	var result: Dictionary = IndividualCombat.resolve_attack(_char, p, "katana", 5, 0, _dice, false, true)
 	assert_false(result["void_used"])
-	assert_eq(_char.void_points_current, 0)
+	assert_eq(_char.current_void_points, 0)
 
 
 # -- IndividualCombat wiring: Armor TN Void bonus ------------------------------

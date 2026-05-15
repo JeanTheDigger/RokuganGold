@@ -518,8 +518,8 @@ static func generate_character(
 
 	_assign_personality(c, clan, dice_engine)
 
-	c.void_points_max = c.void_ring
-	c.void_points_current = c.void_ring
+	c.max_void_points = c.void_ring
+	c.current_void_points = c.void_ring
 	c.action_points_max = 2
 	c.action_points_current = 2
 

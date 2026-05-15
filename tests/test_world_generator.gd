@@ -126,8 +126,8 @@ func test_void_points_match_ring() -> void:
 	var c: L5RCharacterData = WorldGenerator.generate_character(
 		1, "Test", "Dragon", "Tamori", "Tamori Shugenja", 2, _dice
 	)
-	assert_eq(c.void_points_max, c.void_ring)
-	assert_eq(c.void_points_current, c.void_ring)
+	assert_eq(c.max_void_points, c.void_ring)
+	assert_eq(c.current_void_points, c.void_ring)
 
 
 # =============================================================================

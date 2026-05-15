@@ -18,25 +18,25 @@ class_name VoidSystem
 # -- Core pool management ------------------------------------------------------
 
 static func can_spend(character: L5RCharacterData) -> bool:
-	return character.void_points_current > 0
+	return character.current_void_points > 0
 
 
 static func spend(character: L5RCharacterData) -> bool:
-	if character.void_points_current <= 0:
+	if character.current_void_points <= 0:
 		return false
-	character.void_points_current -= 1
+	character.current_void_points -= 1
 	return true
 
 
 static func recover(character: L5RCharacterData, amount: int) -> void:
-	character.void_points_current = mini(
-		character.void_points_current + amount,
-		character.void_points_max,
+	character.current_void_points = mini(
+		character.current_void_points + amount,
+		character.max_void_points,
 	)
 
 
 static func restore_full(character: L5RCharacterData) -> void:
-	character.void_points_current = character.void_points_max
+	character.current_void_points = character.max_void_points
 
 
 # -- Roll bonus ----------------------------------------------------------------
