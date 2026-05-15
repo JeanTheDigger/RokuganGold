@@ -207,13 +207,26 @@ file, search `/simulation/` and `/shared/` to confirm the system doesn't already
 For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
 **Code Implementation Status** table at the bottom of `/gdd/00_INDEX.md`.
 
-### What's Next
-1. World generation coordinate system and adjacency (gates: sub-tile pathfinding,
-   real army movement routes, naval sub-tile routing, province adjacency for map
-   display, and all travel-time calculations that currently use placeholder IDs)
+### Blocked Sections — Do Not Re-Audit
+As of 2026-05-15, every remaining PARTIAL and NOT STARTED section is blocked.
+Do not re-audit this; the list is settled. Ask the user before investigating any of these.
 
-For per-GDD-section implementation status (DONE / PARTIAL / NOT STARTED / REFERENCE),
-see the **Code Implementation Status** table at the bottom of `/gdd/00_INDEX.md`.
+**Blocked on world map / adjacency data (not yet available):**
+- s4.3 — `is_coastal` flag always false
+- s11.7 — sub-tile pathfinding; 5 stub military ActionIDs
+- s11.9 — ship movement initiation; naval blockade (per-sub-tile military unit)
+- s40 — ASCII map tile positioning and range tracking
+- s4.4 — Local Interface / ASCII Map (NOT STARTED)
+- s56 — Quest System / ASCII Map (NOT STARTED)
+
+**Blocked on GDD spec gap (no LOCKED spec; do not implement until GDD specifies it):**
+- s2.4 — `DECLARE_WALL_EMERGENCY` ActionID: s2.4.14 Decision 6 has no LOCKED spec
+  (AP cost, agenda topic format, compliance enforcement all unspecified)
+- s43 — Maho spell cast roll TN: GDD s43 does not specify it
+- s49 — Artisan progression beyond gift/tattoo quality tiers: GDD s49 not LOCKED
+
+**REFERENCE sections** (source material only, design not started): s31–s37, s38,
+s44, s45, s54.7, s57.22–s57.33, s57.37–s57.46.
 
 ### Pending Redesign
 (None currently pending.)
