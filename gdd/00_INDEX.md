@@ -597,7 +597,7 @@ Key: **DONE** = simulation code written and tested | **PARTIAL** = code exists, 
 | s11.7 Army Combat | **PARTIAL** | ArmyCombatSystem done. Sub-tile pathfinding uses placeholder IDs. 5 military stub ActionIDs pending coordinate system. |
 | s11.7b Event Durations | **DONE** | EventDurations constants |
 | s11.8 Regional Price Modifiers | **DONE** | RegionalPriceModifiers |
-| s11.9 Ship Types & Naval | **PARTIAL** | NavalSystem, NavalCombatSystem done. Ship movement initiation needs coordinate system. Weather is global per day (placeholder). Naval blockade not integrated. Tortoise Escape Attempt not yet in battle round. |
+| s11.9 Ship Types & Naval | **PARTIAL** | NavalSystem, NavalCombatSystem done. Tortoise Escape Attempt wired into battle round. Ship movement initiation needs coordinate system. Weather is global per day (coordinate placeholder). Naval blockade needs coordinate system (military unit per sub-tile — one sentence spec, genuinely blocked on world map). |
 | s11.10 Way of the Daimyo | **REFERENCE** | Lore reference, no design to implement |
 | s11.11 Insurgency System | **DONE** | InsurgencySystem |
 | s12.1 Diplomacy Framework | **DONE** | Architecture only — wired into all other systems |
