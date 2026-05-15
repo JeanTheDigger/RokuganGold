@@ -9200,6 +9200,23 @@ static func _process_commitment_seasonal(
 					other.disposition_values[lord_id] = clampi(
 						other.disposition_values[lord_id] + disp_penalty, -100, 100,
 					)
+		# Apply permanent historical modifier to each witness (s15.2).
+		var witness_ids: Array = renege_info.get("witness_ids", [])
+		if not witness_ids.is_empty():
+			var renege_mod: Dictionary = DispositionSystem.create_historical_modifier(
+				"reneged_commitment", ic_day,
+			)
+			if not renege_mod.is_empty():
+				for wid: Variant in witness_ids:
+					if int(wid) == lord_id:
+						continue
+					var witness: L5RCharacterData = characters_by_id.get(int(wid))
+					if witness == null:
+						continue
+					if not witness.historical_modifiers.has(lord_id):
+						witness.historical_modifiers[lord_id] = []
+					(witness.historical_modifiers[lord_id] as Array).append(renege_mod.duplicate())
+
 		var topic_tier: int = renege_info.get("topic_tier", 3)
 		var topic_type: String = renege_info.get("topic_type", "renege")
 		var topic_variant: String = renege_info.get("topic_variant", "commitment_broken")
@@ -9264,6 +9281,7 @@ static func _process_voluntary_declarations(
 			CourtCommitmentData.CommitmentSource.VOLUNTARY,
 			ic_day, deadline,
 		)
+		cc.witness_ids = court.attendee_ids.duplicate()
 		court_commitments.append(cc)
 		created.append(cc)
 	return created

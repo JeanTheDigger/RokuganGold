@@ -16,3 +16,4 @@ enum CommitmentSource { VOLUNTARY, EDICT }
 @export var fulfilled: bool = false
 @export var good_faith: bool = true
 @export var ap_spent_toward: int = 0
+@export var witness_ids: Array[int] = []

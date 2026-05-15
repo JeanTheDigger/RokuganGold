@@ -427,3 +427,40 @@ func test_find_declarable_topics_skips_resolved():
 		lord, agenda, topics, commitments,
 	)
 	assert_eq(result.size(), 0)
+
+
+# -- Witness IDs and Historical Modifier (s15.2) --------------------------------
+
+func test_witness_ids_field_default_empty() -> void:
+	var c: CourtCommitmentData = _make_commitment()
+	assert_eq(c.witness_ids.size(), 0)
+
+
+func test_process_seasonal_includes_witness_ids_in_renege() -> void:
+	var lord: L5RCharacterData = _make_lord(1)
+	lord.honor = 5.0
+	var c: CourtCommitmentData = _make_commitment(1, "send_supplies",
+		CourtCommitmentData.CommitmentSource.VOLUNTARY, 100, 200)
+	c.witness_ids = [2, 3]
+	var chars: Dictionary = {1: lord}
+	var result: Dictionary = CourtCommitmentSystem.process_seasonal_commitments(
+		[c], [], 201, chars,
+	)
+	var reneged: Array = result.get("reneged", [])
+	assert_eq(reneged.size(), 1)
+	var entry: Dictionary = reneged[0]
+	assert_true(entry.has("witness_ids"))
+	assert_eq(entry["witness_ids"], [2, 3])
+
+
+func test_process_seasonal_witness_ids_empty_when_none_set() -> void:
+	var lord: L5RCharacterData = _make_lord(1)
+	var c: CourtCommitmentData = _make_commitment(1, "send_supplies",
+		CourtCommitmentData.CommitmentSource.VOLUNTARY, 100, 200)
+	var chars: Dictionary = {1: lord}
+	var result: Dictionary = CourtCommitmentSystem.process_seasonal_commitments(
+		[c], [], 201, chars,
+	)
+	var reneged: Array = result.get("reneged", [])
+	assert_eq(reneged.size(), 1)
+	assert_eq(reneged[0].get("witness_ids", []), [])
