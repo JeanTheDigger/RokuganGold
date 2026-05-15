@@ -7279,6 +7279,39 @@ static func _process_phoenix_council_gating(
 		return {"skipped": true, "reason": "no_shiba_champion"}
 
 	if PhoenixCouncil.has_champion_authority(phoenix_state):
+		# Detect reincarnation: champion changed while authority flag is active.
+		# The new Champion evaluates compact restoration on their first season (s55.10.3.7).
+		var known_champ_id: int = int(phoenix_state.get("known_champion_id", -1))
+		var current_champ_id: int = shiba_champion.character_id if shiba_champion != null else -1
+		if current_champ_id >= 0 and current_champ_id != known_champ_id and known_champ_id >= 0:
+			# New Champion detected — run first-season restoration evaluation.
+			var duty_score: int = (
+				70 if shiba_champion.bushido_virtue == Enums.BushidoVirtue.CHUGI else 30
+			)
+			var avg_disp: int = _compute_avg_council_disposition(
+				shiba_champion, characters_by_id
+			)
+			var restores: bool = PhoenixCouncil.reincarnated_champion_evaluates_restore(
+				shiba_champion, avg_disp, duty_score
+			)
+			phoenix_state["known_champion_id"] = current_champ_id
+			if restores:
+				PhoenixCouncil.restore_council_compact(phoenix_state)
+				return {
+					"reincarnation_eval": true,
+					"compact_restored": true,
+					"new_champion_id": current_champ_id,
+				}
+			return {
+				"reincarnation_eval": true,
+				"compact_restored": false,
+				"new_champion_id": current_champ_id,
+				"skipped": true,
+				"reason": "champion_authority_retained",
+			}
+		# No champion change (or first-ever call) — update known_champion_id and skip.
+		if current_champ_id >= 0:
+			phoenix_state["known_champion_id"] = current_champ_id
 		return {"skipped": true, "reason": "champion_has_authority"}
 
 	var living_masters: Array = _find_living_elemental_masters(characters)

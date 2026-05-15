@@ -624,4 +624,123 @@ func test_null_champion_capitulates() -> void:
 	var result: Dictionary = PhoenixCouncil.evaluate_reincarnation_schism_outcome(null, 0, 0)
 	assert_true(result["capitulates"])
 	assert_eq(result["reason"], "no_champion")
+
+
+# -- make_initial_state includes known_champion_id ----------------------------
+
+func test_initial_state_has_known_champion_id() -> void:
+	assert_has(_state, "known_champion_id")
+	assert_eq(int(_state["known_champion_id"]), -1)
+
+
+# -- Reincarnation-with-flag: first-season evaluation (s55.10.3.7) -----------
+# Tests call DayOrchestrator._process_phoenix_council_gating() directly.
+
+
+func _make_champion(id: int, bv: Enums.BushidoVirtue, sv: Enums.ShouridoVirtue) -> L5RCharacterData:
+	var c := L5RCharacterData.new()
+	c.character_id = id
+	c.character_name = "Champion %d" % id
+	c.clan = "Phoenix"
+	c.family = "Shiba"
+	c.status = 6.0
+	c.lord_id = -1
+	c.wounds_taken = 0
+	c.stamina = 3   # Earth ring = min(stamina, willpower)
+	c.willpower = 3
+	c.void_ring = 2
+	c.bushido_virtue = bv
+	c.shourido_virtue = sv
+	return c
+
+
+func test_known_champion_id_updated_on_first_season() -> void:
+	PhoenixCouncil.grant_champion_authority(_state)
+	var champion: L5RCharacterData = _make_champion(
+		10, Enums.BushidoVirtue.NONE, Enums.ShouridoVirtue.NONE
+	)
+	var result: Dictionary = DayOrchestrator._process_phoenix_council_gating(
+		_state, [], [champion], {10: champion},
+		DiceEngine.new(), [], [9000], 1, [], {}, 0,
+	)
+	assert_eq(int(_state["known_champion_id"]), 10)
+	assert_true(result.get("skipped", false))
+
+
+func test_champion_change_triggers_reincarnation_eval() -> void:
+	PhoenixCouncil.grant_champion_authority(_state)
+	_state["known_champion_id"] = 99   # previous champion
+
+	# New champion with Chugi virtue → restores compact.
+	var new_champ: L5RCharacterData = _make_champion(
+		10, Enums.BushidoVirtue.CHUGI, Enums.ShouridoVirtue.NONE
+	)
+	var result: Dictionary = DayOrchestrator._process_phoenix_council_gating(
+		_state, [], [new_champ], {10: new_champ},
+		DiceEngine.new(), [], [9000], 1, [], {}, 0,
+	)
+	assert_true(result.get("reincarnation_eval", false))
+	assert_true(result.get("compact_restored", false))
+	assert_false(
+		PhoenixCouncil.has_champion_authority(_state),
+		"Compact should be restored — authority flag cleared"
+	)
+	assert_eq(int(_state["known_champion_id"]), 10)
+
+
+func test_champion_change_ishi_retains_authority() -> void:
+	PhoenixCouncil.grant_champion_authority(_state)
+	_state["known_champion_id"] = 99   # previous champion
+
+	# New champion with Ishi virtue → keeps authority.
+	var new_champ: L5RCharacterData = _make_champion(
+		10, Enums.BushidoVirtue.NONE, Enums.ShouridoVirtue.ISHI
+	)
+	var result: Dictionary = DayOrchestrator._process_phoenix_council_gating(
+		_state, [], [new_champ], {10: new_champ},
+		DiceEngine.new(), [], [9000], 1, [], {}, 0,
+	)
+	assert_true(result.get("reincarnation_eval", false))
+	assert_false(result.get("compact_restored", false))
+	assert_true(
+		PhoenixCouncil.has_champion_authority(_state),
+		"Authority should be retained when Ishi champion declines restoration"
+	)
+
+
+func test_no_champion_change_skips_without_eval() -> void:
+	PhoenixCouncil.grant_champion_authority(_state)
+	_state["known_champion_id"] = 10   # same champion
+
+	var same_champ: L5RCharacterData = _make_champion(
+		10, Enums.BushidoVirtue.CHUGI, Enums.ShouridoVirtue.NONE
+	)
+	var result: Dictionary = DayOrchestrator._process_phoenix_council_gating(
+		_state, [], [same_champ], {10: same_champ},
+		DiceEngine.new(), [], [9000], 1, [], {}, 0,
+	)
+	# Same champion — no eval. Skips normally.
+	assert_false(result.get("reincarnation_eval", false))
+	assert_true(result.get("skipped", false))
+	# Authority stays.
+	assert_true(PhoenixCouncil.has_champion_authority(_state))
+
+
+func test_first_ever_call_sets_known_champion_no_eval() -> void:
+	# known_champion_id == -1 (initial state) AND champion present.
+	# Should NOT trigger eval — this is the very first season, not a reincarnation.
+	PhoenixCouncil.grant_champion_authority(_state)
+	assert_eq(int(_state["known_champion_id"]), -1)
+
+	var champion: L5RCharacterData = _make_champion(
+		10, Enums.BushidoVirtue.CHUGI, Enums.ShouridoVirtue.NONE
+	)
+	var result: Dictionary = DayOrchestrator._process_phoenix_council_gating(
+		_state, [], [champion], {10: champion},
+		DiceEngine.new(), [], [9000], 1, [], {}, 0,
+	)
+	assert_false(result.get("reincarnation_eval", false))
+	assert_eq(int(_state["known_champion_id"]), 10)
+	# Authority still held.
+	assert_true(PhoenixCouncil.has_champion_authority(_state))
 	assert_eq(_state["tabled_proposals"], {})

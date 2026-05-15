@@ -642,4 +642,9 @@ static func make_initial_state() -> Dictionary:
 		"failed_proposals": {},
 		"consecutive_crisis_vetoes": 0,
 		"consecutive_obstruction_seasons": 0,
+		# Tracks reincarnation-with-flag evaluation (s55.10.3.7).
+		# Updated each season in _process_phoenix_council_gating; a champion-ID
+		# change while phoenix_champion_authority is true triggers the first-season
+		# compact restoration evaluation.
+		"known_champion_id": -1,
 	}
