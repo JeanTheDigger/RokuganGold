@@ -68,6 +68,11 @@ static func make_initial_state() -> Dictionary:
 		"defiance_count": 0,
 		"stage": 0,
 		"last_directive_axis": -1,
+		# High House assault state (s55.10.2.8).
+		"togashi_vanished": false,
+		"order_dissolved_by_assault": false,
+		"order_reconstitution_seasons_remaining": 0,
+		"dragon_autonomous_rule": false,
 	}
 
 
@@ -430,6 +435,168 @@ static func add_forced_directive(state: Dictionary, directive: Dictionary) -> vo
 	state["active_forced_directives"] = kept
 
 
+# -- High House of Light assault (s55.10.2.8) --------------------------------
+#
+# Called when the Mirumoto FC's army successfully takes the High House of Light
+# during a Dragon Schism. Togashi cannot be killed; he vanishes instead.
+#
+# Returns a result dict. Caller is responsible for:
+#   - Applying honor_change to the FC.
+#   - Applying empire_disposition_change to all clan collective dispositions.
+#   - Adding the returned topic to active_topics.
+#
+# togashi_character is mutated directly: physical_location is cleared.
+
+static func assault_high_house(
+	state: Dictionary,
+	togashi_character: L5RCharacterData,
+	next_topic_id: int,
+	ic_day: int,
+	assaulting_fc_id: int = -1,
+) -> Dictionary:
+	## Fires when the FC's army captures the High House of Light.
+	state["togashi_vanished"] = true
+	state["order_dissolved_by_assault"] = true
+	state["last_assaulter_fc_id"] = assaulting_fc_id
+
+	if togashi_character != null:
+		togashi_character.physical_location = ""
+
+	var topic := TopicData.new()
+	topic.topic_id = next_topic_id
+	topic.slug = "togashi_vanished_y%d" % ic_day
+	topic.tier = TopicData.Tier.TIER_1
+	topic.momentum = 100.0
+	topic.category = TopicData.Category.SPIRITUAL
+	topic.ic_day_created = ic_day
+
+	return {
+		"honor_change": -2.0,
+		"empire_disposition_change": -20,
+		"topic": topic,
+		"togashi_vanished": true,
+	}
+
+
+static func is_togashi_off_map(state: Dictionary) -> bool:
+	return bool(state.get("togashi_vanished", false))
+
+
+static func is_order_dissolved_by_assault(state: Dictionary) -> bool:
+	return bool(state.get("order_dissolved_by_assault", false))
+
+
+# -- Togashi reappearance (s55.10.2.8) ----------------------------------------
+#
+# Fires when a new Mirumoto FC takes position after the previous one dies or
+# is removed. Locates the nearest Dragon temple/monastery controlled by a
+# Legitimacy-aligned lord; falls back to the nearest temple outside Dragon
+# territory if none exists.
+#
+# settlements: Array[SettlementData] — the full settlement list.
+# provinces: Dictionary[int -> ProvinceData].
+# faction_assignments: Dictionary[int -> IntraClanCivilWar.Faction] for the
+#   resolved schism, used to identify Legitimacy-aligned lords. Pass {} if
+#   the schism was not assaulted (fallback path).
+#
+# Returns { "reappeared": bool, "settlement_id": int }.
+
+static func reappear_togashi(
+	state: Dictionary,
+	togashi_character: L5RCharacterData,
+	settlements: Array,
+	provinces: Dictionary,
+	faction_assignments: Dictionary,
+) -> Dictionary:
+	if togashi_character == null:
+		return {"reappeared": false, "settlement_id": -1}
+
+	var target_id: int = _find_reappearance_settlement(
+		settlements, provinces, faction_assignments
+	)
+	if target_id < 0:
+		return {"reappeared": false, "settlement_id": -1}
+
+	togashi_character.physical_location = str(target_id)
+	state["togashi_vanished"] = false
+	state["dragon_autonomous_rule"] = false
+	# Order reconstitutes over 4 seasons (s55.10.2.8) only if not assaulted;
+	# assault dissolves the Order permanently for the autonomous FC's lifetime —
+	# but a new FC clears autonomous rule, so reconstitution restarts then.
+	# Pyrrhic: dissolved_by_assault stays true to track the history.
+	state["order_reconstitution_seasons_remaining"] = 4
+
+	return {"reappeared": true, "settlement_id": target_id}
+
+
+static func _find_reappearance_settlement(
+	settlements: Array,
+	provinces: Dictionary,
+	faction_assignments: Dictionary,
+) -> int:
+	# First pass: Dragon temple or monastery in a Legitimacy-aligned lord's province.
+	for s: SettlementData in settlements:
+		if not (
+			s.settlement_type == Enums.SettlementType.TEMPLE
+			or s.settlement_type == Enums.SettlementType.SHINDEN
+			or s.settlement_type == Enums.SettlementType.MONASTERY
+		):
+			continue
+		var prov: ProvinceData = provinces.get(s.province_id, null)
+		if prov == null:
+			continue
+		if prov.clan != "Dragon":
+			continue
+		# Accept if at least one Legitimacy-aligned character governs the province,
+		# or if no faction data (clear schism, any Dragon temple works).
+		if faction_assignments.is_empty():
+			return s.settlement_id
+		for char_id: int in faction_assignments:
+			var f: int = int(faction_assignments[char_id])
+			if f == IntraClanCivilWar.Faction.LEGITIMACY:
+				return s.settlement_id
+
+	# Fallback: nearest temple or monastery outside Dragon territory.
+	for s: SettlementData in settlements:
+		if not (
+			s.settlement_type == Enums.SettlementType.TEMPLE
+			or s.settlement_type == Enums.SettlementType.SHINDEN
+			or s.settlement_type == Enums.SettlementType.MONASTERY
+		):
+			continue
+		var prov: ProvinceData = provinces.get(s.province_id, null)
+		if prov == null:
+			continue
+		if prov.clan == "Dragon":
+			continue
+		return s.settlement_id
+
+	return -1
+
+
+# -- Order reconstitution tick (s55.10.2.8) -----------------------------------
+# Call once per season. Returns true when reconstitution is complete.
+
+static func tick_order_reconstitution(state: Dictionary) -> bool:
+	var remaining: int = int(state.get("order_reconstitution_seasons_remaining", 0))
+	if remaining <= 0:
+		return remaining == 0 and not bool(state.get("togashi_vanished", false))
+	remaining -= 1
+	state["order_reconstitution_seasons_remaining"] = remaining
+	return remaining == 0
+
+
+# -- Pyrrhic victory: Order status after FC rebel win ------------------------
+
+static func is_order_dissolved_permanently(state: Dictionary) -> bool:
+	## True when the FC holds dragon_autonomous_rule AND the Order was
+	## dissolved by assault. The Order stays dissolved for the FC's lifetime.
+	return (
+		bool(state.get("dragon_autonomous_rule", false))
+		and bool(state.get("order_dissolved_by_assault", false))
+	)
+
+
 # -- High-level driver ------------------------------------------------------
 #
 # DayOrchestrator (or a Dragon-specific hook on season transitions) calls this
@@ -445,6 +612,17 @@ static func process_seasonal_oversight(
 	togashi_id: int,
 	conflict_modifier: int = 0,
 ) -> Dictionary:
+	# Oversight is suspended while Togashi is off-map (s55.10.2.8) or while the
+	# FC holds autonomous rule (s55.10.2.8 rebel victory).
+	if is_togashi_off_map(state) or bool(state.get("dragon_autonomous_rule", false)):
+		return {
+			"tick": {},
+			"intervention_fired": false,
+			"compliance": {},
+			"forced_directive": {},
+			"skipped": true,
+		}
+
 	var tick: Dictionary = tick_oversight(state, world_state, strategic_directives)
 
 	# Lift any forced directives whose axis dissatisfaction dropped below the

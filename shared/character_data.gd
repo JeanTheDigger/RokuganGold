@@ -30,8 +30,8 @@ extends Resource
 
 # -- Void Points ---------------------------------------------------------------
 
-@export var void_points_current: int = 2
-@export var void_points_max: int = 2
+@export var current_void_points: int = 2
+@export var max_void_points: int = 2
 
 # -- Skills --------------------------------------------------------------------
 # Dict of { skill_name: String -> rank: int }. Only skills at rank >= 1 present.
@@ -179,6 +179,9 @@ extends Resource
 @export var father_id: int = -1
 @export var sibling_ids: Array[int] = []
 @export var children_ids: Array[int] = []
+## Characters formally adopted for succession purposes (1 AP action, s22.5 Priority 4).
+## Distinct from children_ids (biological) so succession can rank them correctly.
+@export var adopted_children_ids: Array[int] = []
 @export var spouse_id: int = -1
 @export var birth_clan: String = ""
 @export var birth_family: String = ""
@@ -221,6 +224,11 @@ extends Resource
 @export var musha_shugyo_end_ic_day: int = -1
 @export var original_lord_id: int = -1
 @export var permanent_ronin: bool = false
+
+# -- Kami Status (Section 55.10.2.7) ------------------------------------------
+# Hidden from all information channels. True only for Togashi.
+
+@export var is_kami: bool = false
 
 # -- Progression (Section 48) -------------------------------------------------
 

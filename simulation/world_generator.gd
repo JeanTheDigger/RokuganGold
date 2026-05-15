@@ -322,6 +322,35 @@ const SCHOOL_DATA: Dictionary = {
 		"focus_rings": [Enums.Ring.AIR, Enums.Ring.WATER],
 		"skill_rank_2": ["Horsemanship"],
 	},
+	# -- Mantis --
+	"Yoritomo Bushi": {
+		"clan": "Mantis", "family": "Yoritomo",
+		"type": Enums.SchoolType.BUSHI,
+		"benefit": "strength", "honor": 3.5,
+		"skills": ["Commerce", "Defense", "Jiujutsu", "Kenjutsu", "Knives", "Sailing"],
+		"wildcards": ["Skill"],
+		"focus_rings": [Enums.Ring.WATER, Enums.Ring.FIRE],
+		"skill_rank_2": [],
+	},
+	"Moshi Shugenja": {
+		"clan": "Mantis", "family": "Moshi",
+		"type": Enums.SchoolType.SHUGENJA,
+		"benefit": "awareness", "honor": 4.5,
+		"skills": ["Calligraphy", "Divination", "Lore: Theology", "Meditation", "Spellcraft"],
+		"wildcards": ["High", "High"],
+		"focus_rings": [Enums.Ring.AIR, Enums.Ring.FIRE],
+		"skill_rank_2": [],
+		"affinity": Enums.Ring.AIR, "deficiency": Enums.Ring.EARTH,
+	},
+	"Tsuruchi Archer": {
+		"clan": "Mantis", "family": "Tsuruchi",
+		"type": Enums.SchoolType.BUSHI,
+		"benefit": "reflexes", "honor": 3.5,
+		"skills": ["Athletics", "Defense", "Hunting", "Investigation", "Kyujutsu"],
+		"wildcards": ["Skill"],
+		"focus_rings": [Enums.Ring.AIR, Enums.Ring.FIRE],
+		"skill_rank_2": ["Kyujutsu"],
+	},
 }
 
 
@@ -489,8 +518,8 @@ static func generate_character(
 
 	_assign_personality(c, clan, dice_engine)
 
-	c.void_points_max = c.void_ring
-	c.void_points_current = c.void_ring
+	c.max_void_points = c.void_ring
+	c.current_void_points = c.void_ring
 	c.action_points_max = 2
 	c.action_points_current = 2
 

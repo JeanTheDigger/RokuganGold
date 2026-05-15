@@ -893,6 +893,140 @@ func test_advance_day_with_no_ships() -> void:
 	assert_eq(result["naval_topics"].size(), 0)
 
 
+# =============================================================================
+# s57.18 Naval NPC Connection
+# =============================================================================
+
+func _make_ctx_with_naval(
+	has_naval_assets: bool,
+	has_pirate_province: bool,
+	province_stability: float = 60.0,
+) -> NPCDataStructures.ContextSnapshot:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.is_lord = true
+	ctx.has_naval_assets = has_naval_assets
+	ctx.is_coastal = true
+	ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
+
+	if has_pirate_province:
+		var ps := NPCDataStructures.ProvinceStatus.new()
+		ps.province_id = 42
+		ps.stability = province_stability
+		ps.active_insurgency_id = 1
+		ps.insurgency_type = "PIRATE_FLEET"
+		ctx.province_statuses.append(ps)
+
+	return ctx
+
+
+func test_ctx_snapshot_has_naval_assets_field() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.has_naval_assets = true
+	assert_true(ctx.has_naval_assets)
+	ctx.has_naval_assets = false
+	assert_false(ctx.has_naval_assets)
+
+
+func test_province_status_has_insurgency_type_field() -> void:
+	var ps := NPCDataStructures.ProvinceStatus.new()
+	ps.insurgency_type = "PIRATE_FLEET"
+	assert_eq(ps.insurgency_type, "PIRATE_FLEET")
+
+
+func test_build_province_statuses_populates_insurgency_type() -> void:
+	var pd := ProvinceData.new()
+	pd.province_id = 10
+	pd.active_insurgency_id = 5
+
+	var ins := InsurgencyData.new()
+	ins.province_id = 10
+	ins.insurgency_type = Enums.InsurgencyType.PIRATE_FLEET
+
+	var result: Array = NPCDecisionEngine.build_province_statuses_from_data(
+		[pd], [], [], [ins],
+	)
+	assert_eq(result.size(), 1)
+	var ps: NPCDataStructures.ProvinceStatus = result[0]
+	assert_eq(ps.insurgency_type, "PIRATE_FLEET")
+
+
+func test_build_province_statuses_no_insurgency_leaves_type_empty() -> void:
+	var pd := ProvinceData.new()
+	pd.province_id = 10
+
+	var result: Array = NPCDecisionEngine.build_province_statuses_from_data([pd])
+	assert_eq(result.size(), 1)
+	assert_eq((result[0] as NPCDataStructures.ProvinceStatus).insurgency_type, "")
+
+
+func test_s57_18_1_deploy_army_when_pirate_fleet_and_has_ships() -> void:
+	var ctx := _make_ctx_with_naval(true, true, 60.0)
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer._decompose_protect_dependents(
+		{}, ctx,
+	)
+	assert_eq(need.need_type, "DEPLOY_ARMY",
+		"Lord with ships vs pirate fleet should DEPLOY_ARMY")
+	assert_eq(need.data.get("target_intent", ""), "SUPPRESS_PIRACY")
+	assert_eq(need.data.get("target_province_id", -1), 42)
+
+
+func test_s57_18_1_request_aid_when_pirate_fleet_and_no_ships() -> void:
+	var ctx := _make_ctx_with_naval(false, true, 60.0)
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer._decompose_protect_dependents(
+		{}, ctx,
+	)
+	assert_eq(need.need_type, "REQUEST_AID",
+		"Lord without ships vs pirate fleet should REQUEST_AID")
+	assert_eq(need.data.get("target_intent", ""), "naval_suppression")
+
+
+func test_s57_18_1_no_pirate_fleet_gives_patrol_province() -> void:
+	var ctx := _make_ctx_with_naval(true, false)
+	# Add a non-pirate unstable province
+	var ps := NPCDataStructures.ProvinceStatus.new()
+	ps.province_id = 99
+	ps.stability = 60.0
+	ps.active_insurgency_id = -1
+	ps.insurgency_type = ""
+	ctx.province_statuses.append(ps)
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer._decompose_protect_dependents(
+		{}, ctx,
+	)
+	assert_eq(need.need_type, "PATROL_PROVINCE",
+		"Non-pirate unstable province should still give PATROL_PROVINCE")
+
+
+func test_s57_18_2_patrol_province_allowed_with_ships() -> void:
+	# ProvinceTriage returns PATROL_PROVINCE for stability <= 50
+	var ctx := _make_ctx_with_naval(true, true, 40.0)
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer._decompose_defend_territory(
+		{}, ctx,
+	)
+	assert_eq(need.need_type, "PATROL_PROVINCE",
+		"Lord with ships should be allowed to PATROL_PROVINCE even for pirate threat")
+
+
+func test_s57_18_2_write_letter_when_no_ships_for_pirate_patrol() -> void:
+	# ProvinceTriage returns PATROL_PROVINCE for stability <= 50
+	var ctx := _make_ctx_with_naval(false, true, 40.0)
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer._decompose_defend_territory(
+		{}, ctx,
+	)
+	assert_eq(need.need_type, "WRITE_LETTER",
+		"Lord without ships cannot patrol pirate waters — should WRITE_LETTER")
+	assert_eq(need.data.get("target_intent", ""), "report_piracy")
+
+
+func test_province_has_pirate_fleet_helper_true_case() -> void:
+	var ctx := _make_ctx_with_naval(false, true)
+	assert_true(ObjectiveDecomposer._province_has_pirate_fleet_insurgency(42, ctx))
+
+
+func test_province_has_pirate_fleet_helper_false_case() -> void:
+	var ctx := _make_ctx_with_naval(false, false)
+	assert_false(ObjectiveDecomposer._province_has_pirate_fleet_insurgency(42, ctx))
+
+
 func test_advance_day_naval_battle_with_war() -> void:
 	var ship_a: ShipData = NavalSystem.create_ship(1, Enums.ShipClass.SENGOKOBUNE, "Crane")
 	ship_a.current_subtile_id = 5

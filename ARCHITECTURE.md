@@ -27,7 +27,7 @@ For design rationale and implementation rules, see CLAUDE.md.
 |-------|--------|
 | Identity | `character_id`, `character_name`, `clan`, `family`, `school`, `school_type`, `age`, `gender` |
 | Traits | `stamina`, `willpower`, `strength`, `perception`, `agility`, `intelligence`, `reflexes`, `awareness` |
-| Void | `void_ring`, `void_points_current`, `void_points_max` |
+| Void | `void_ring`, `current_void_points`, `max_void_points` |
 | Skills | `skills: Dictionary`, `emphases: Dictionary` |
 | Abilities | `techniques`, `kiho`, `katas`, `spells_known` (all `Array[String]`) |
 | Shugenja | `affinity_element`, `deficiency_element` |

@@ -563,6 +563,18 @@ static func _decompose_protect_dependents(
 
 		var unstable: int = _find_unstable_province(ctx, 75)
 		if unstable >= 0:
+			if _province_has_pirate_fleet_insurgency(unstable, ctx):
+				# s57.18.1: naval gate — deploy fleet or escalate diplomatically
+				if ctx.has_naval_assets:
+					return _make_need("DEPLOY_ARMY", 2, {
+						"target_province_id": unstable,
+						"target_intent": "SUPPRESS_PIRACY",
+					})
+				else:
+					return _make_need("REQUEST_AID", 2, {
+						"target_intent": "naval_suppression",
+						"target_province_id": unstable,
+					})
 			return _make_need("PATROL_PROVINCE", 2, {"target_province_id": unstable})
 
 		var rice_per_pu: float = _get_rice_per_pu(ctx)
@@ -729,6 +741,18 @@ static func _decompose_defend_territory(
 		ctx.province_statuses
 	)
 	if triage_mil.score > 0.0 and triage_mil.province_id >= 0:
+		if triage_mil.recommended_need == "PATROL_PROVINCE" \
+				and _province_has_pirate_fleet_insurgency(triage_mil.province_id, ctx):
+			# s57.18.2: naval gate — patrol needs ships
+			if ctx.has_naval_assets:
+				return _make_need("PATROL_PROVINCE", triage_mil.priority, {
+					"target_province_id": triage_mil.province_id,
+				})
+			else:
+				return _make_need("WRITE_LETTER", triage_mil.priority, {
+					"target_intent": "report_piracy",
+					"target_province_id": triage_mil.province_id,
+				})
 		return _make_need(triage_mil.recommended_need, triage_mil.priority, {
 			"target_province_id": triage_mil.province_id,
 		})
@@ -781,6 +805,25 @@ static func _decompose_strengthen_wall(
 		var w: NPCDataStructures.WallStatus = ws as NPCDataStructures.WallStatus
 		var ps: NPCDataStructures.ProvinceStatus = _get_province_status(ctx, w.province_id)
 		if ps != null and ps.garrison_pu < w.minimum_garrison:
+			# Champion: 3-step escalation pipeline (s2.4.14 Decision 4)
+			if ctx.lord_rank == Enums.LordRank.CLAN_CHAMPION:
+				if w.garrison_shortage_letter_season < 0:
+					return _make_need("SEND_LETTER", 3, {"target_province_id": w.province_id})
+				if ctx.season - w.garrison_shortage_letter_season >= 1 \
+						and not w.garrison_shortage_courtier_dispatched:
+					return _make_need("DISPATCH_COURTIER", 3, {"target_province_id": w.province_id})
+				# Step 3: courtier refused + critical SI → Wall-wide emergency.
+				# TODO: replace DEFEND_PROVINCE with DECLARE_WALL_EMERGENCY once
+				# the ActionID is specced in GDD s2.4.14 Decision 6.
+				if w.garrison_shortage_courtier_refused and w.si < 6:
+					return _make_need("DEFEND_PROVINCE", 3, {"target_province_id": w.province_id})
+				# Courtier dispatched but not yet refused, or SI not yet critical:
+				# commit reserve armies directly (s2.4.14 Decision 2).
+				return _make_need("DEFEND_PROVINCE", 3, {"target_province_id": w.province_id})
+			# Shireikan: own parallel letter campaign before redeployment (s2.4.13 Decision 10)
+			if ctx.military_rank == Enums.MilitaryRank.SHIREIKAN \
+					and w.garrison_shortage_letter_season < 0:
+				return _make_need("SEND_LETTER", 3, {"target_province_id": w.province_id})
 			return _make_need("DEFEND_PROVINCE", 3, {"target_province_id": w.province_id})
 
 	var crisis: int = _find_crisis_province(ctx)
@@ -1181,6 +1224,18 @@ static func _find_unstable_province(
 	return -1
 
 
+static func _province_has_pirate_fleet_insurgency(
+	province_id: int,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> bool:
+	for ps: Variant in ctx.province_statuses:
+		if ps is NPCDataStructures.ProvinceStatus:
+			var status: NPCDataStructures.ProvinceStatus = ps
+			if status.province_id == province_id:
+				return status.insurgency_type == "PIRATE_FLEET"
+	return false
+
+
 static func _find_weak_neighbor_province(ctx: NPCDataStructures.ContextSnapshot) -> int:
 	for ps: Variant in ctx.province_statuses:
 		if ps is NPCDataStructures.ProvinceStatus:
@@ -1412,7 +1467,7 @@ static func _decompose_infrastructure(
 		})
 
 	# 4. Coastal with naval threats and no ships → COMMISSION_SHIP (priority 3)
-	if ctx.is_coastal and ctx.has_naval_threat and not ctx.has_ships:
+	if ctx.is_coastal and ctx.has_naval_threat and not ctx.has_naval_assets:
 		return _make_need("BUILD_INFRASTRUCTURE", 3, {
 			"target_intent": "COMMISSION_SHIP",
 		})

@@ -27,6 +27,7 @@ class ScoredAction:
 	var target_settlement_id: int = -1
 	var target_province_id: int = -1
 	var ap_cost: int = 1
+	var is_order: bool = false
 	var metadata: Dictionary = {}
 
 	# Eight base scoring components per s55.4 Phase 5
@@ -75,6 +76,8 @@ class ContextSnapshot:
 	var school: String = ""
 	var school_type: Enums.SchoolType = Enums.SchoolType.BUSHI
 	var is_lord: bool = false
+	var lord_rank: Enums.LordRank = Enums.LordRank.VILLAGE_HEADMAN
+	var civilian_orders_remaining: int = 0
 
 	# Location & situation
 	var location_id: String = ""
@@ -133,6 +136,10 @@ class ContextSnapshot:
 
 	# Wall management (s55.23)
 	var wall_statuses: Array = []
+	# Precomputed garrison shortage personality modifier per known contact
+	# (character_id → float from WallSystem personality table, s2.4.12–13).
+	# Populated only for characters with wall_statuses; empty otherwise.
+	var contact_garrison_scores: Dictionary = {}
 
 	# Military intelligence (s55.23)
 	var known_clan_strengths: Dictionary = {}
@@ -155,7 +162,7 @@ class ContextSnapshot:
 	var border_province_ids_without_fort: Array[int] = []
 	var surplus_pu_province_ids: Array[int] = []
 	var is_coastal: bool = false
-	var has_ships: bool = false
+	var has_naval_assets: bool = false
 	var has_naval_threat: bool = false
 
 	# Festival state (s11.5)
@@ -180,6 +187,9 @@ class ContextSnapshot:
 	var bushido_virtue: Enums.BushidoVirtue = Enums.BushidoVirtue.NONE
 	var shourido_virtue: Enums.ShouridoVirtue = Enums.ShouridoVirtue.NONE
 
+	# Phoenix-specific governance (s55.10.3.7)
+	var phoenix_champion_authority: bool = false
+
 
 class ProvinceStatus:
 	var province_id: int = -1
@@ -191,6 +201,7 @@ class ProvinceStatus:
 	var has_alliance_protection: bool = false
 	var active_crisis_id: int = -1
 	var active_insurgency_id: int = -1
+	var insurgency_type: String = ""
 	var rice_stockpile: float = 0.0
 	var starvation_stage: int = 0
 	var last_report_ic_day: int = -1
@@ -211,6 +222,9 @@ class WallStatus:
 	var scout_report_elevated_activity: bool = false
 	var garrison_above_minimum: bool = true
 	var minimum_garrison: int = 0
+	var garrison_shortage_letter_season: int = -1  # -1 = no letter campaign started
+	var garrison_shortage_courtier_dispatched: bool = false
+	var garrison_shortage_courtier_refused: bool = false
 
 
 # -- Competence Modifier Table (s55.5) -----------------------------------------

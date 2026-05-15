@@ -545,4 +545,401 @@ func test_overreach_returns_consequences() -> void:
 	assert_eq(result["stage"], 1)
 	assert_eq(result["topic_tier"], 4)
 	assert_false(_state["phoenix_champion_authority"])
+
+
+# -- evaluate_reincarnation_schism_outcome (s55.10.3.7) ----------------------
+
+func _make_phoenix_champion(
+	bv: Enums.BushidoVirtue, sv: Enums.ShouridoVirtue
+) -> L5RCharacterData:
+	var c := L5RCharacterData.new()
+	c.character_id = 200
+	c.character_name = "Shiba Reborn"
+	c.clan = "Phoenix"
+	c.family = "Shiba"
+	c.bushido_virtue = bv
+	c.shourido_virtue = sv
+	return c
+
+
+func test_chugi_high_duty_capitulates() -> void:
+	var c: L5RCharacterData = _make_phoenix_champion(
+		Enums.BushidoVirtue.CHUGI, Enums.ShouridoVirtue.NONE
+	)
+	var result: Dictionary = PhoenixCouncil.evaluate_reincarnation_schism_outcome(c, 0, 70)
+	assert_true(result["capitulates"])
+	assert_eq(result["reason"], "chugi_duty")
+
+
+func test_chugi_low_duty_falls_to_disposition() -> void:
+	# Chugi but duty_score < 60 — doesn't auto-capitulate; check disposition.
+	var c: L5RCharacterData = _make_phoenix_champion(
+		Enums.BushidoVirtue.CHUGI, Enums.ShouridoVirtue.NONE
+	)
+	var result: Dictionary = PhoenixCouncil.evaluate_reincarnation_schism_outcome(c, 0, 50)
+	# disposition 0 is not Friend+ (threshold 31), so does not capitulate.
+	assert_false(result["capitulates"])
+	assert_eq(result["reason"], "neutral_or_hostile")
+
+
+func test_ishi_continues_defiance() -> void:
+	var c: L5RCharacterData = _make_phoenix_champion(
+		Enums.BushidoVirtue.NONE, Enums.ShouridoVirtue.ISHI
+	)
+	var result: Dictionary = PhoenixCouncil.evaluate_reincarnation_schism_outcome(c, 0, 30)
+	assert_false(result["capitulates"])
+	assert_eq(result["reason"], "ishi_will")
+
+
+func test_seigyo_continues_defiance() -> void:
+	var c: L5RCharacterData = _make_phoenix_champion(
+		Enums.BushidoVirtue.NONE, Enums.ShouridoVirtue.SEIGYO
+	)
+	var result: Dictionary = PhoenixCouncil.evaluate_reincarnation_schism_outcome(c, 35, 30)
+	# Even with friend-level disposition, Seigyo keeps power.
+	assert_false(result["capitulates"])
+	assert_eq(result["reason"], "seigyo_control")
+
+
+func test_friendly_disposition_capitulates_without_strong_virtue() -> void:
+	var c: L5RCharacterData = _make_phoenix_champion(
+		Enums.BushidoVirtue.JIN, Enums.ShouridoVirtue.NONE
+	)
+	var result: Dictionary = PhoenixCouncil.evaluate_reincarnation_schism_outcome(c, 35, 30)
+	# disposition_to_council_avg >= FRIEND_DISPOSITION_THRESHOLD (31)
+	assert_true(result["capitulates"])
+	assert_eq(result["reason"], "friendly_disposition")
+
+
+func test_hostile_disposition_continues_defiance() -> void:
+	var c: L5RCharacterData = _make_phoenix_champion(
+		Enums.BushidoVirtue.JIN, Enums.ShouridoVirtue.NONE
+	)
+	var result: Dictionary = PhoenixCouncil.evaluate_reincarnation_schism_outcome(c, 10, 30)
+	assert_false(result["capitulates"])
+	assert_eq(result["reason"], "neutral_or_hostile")
+
+
+func test_null_champion_capitulates() -> void:
+	var result: Dictionary = PhoenixCouncil.evaluate_reincarnation_schism_outcome(null, 0, 0)
+	assert_true(result["capitulates"])
+	assert_eq(result["reason"], "no_champion")
+
+
+# -- make_initial_state includes known_champion_id ----------------------------
+
+func test_initial_state_has_known_champion_id() -> void:
+	assert_has(_state, "known_champion_id")
+	assert_eq(int(_state["known_champion_id"]), -1)
+
+
+# -- Reincarnation-with-flag: first-season evaluation (s55.10.3.7) -----------
+# Tests call DayOrchestrator._process_phoenix_council_gating() directly.
+
+
+func _make_champion(id: int, bv: Enums.BushidoVirtue, sv: Enums.ShouridoVirtue) -> L5RCharacterData:
+	var c := L5RCharacterData.new()
+	c.character_id = id
+	c.character_name = "Champion %d" % id
+	c.clan = "Phoenix"
+	c.family = "Shiba"
+	c.status = 6.0
+	c.lord_id = -1
+	c.wounds_taken = 0
+	c.stamina = 3   # Earth ring = min(stamina, willpower)
+	c.willpower = 3
+	c.void_ring = 2
+	c.bushido_virtue = bv
+	c.shourido_virtue = sv
+	return c
+
+
+func test_known_champion_id_updated_on_first_season() -> void:
+	PhoenixCouncil.grant_champion_authority(_state)
+	var champion: L5RCharacterData = _make_champion(
+		10, Enums.BushidoVirtue.NONE, Enums.ShouridoVirtue.NONE
+	)
+	var result: Dictionary = DayOrchestrator._process_phoenix_council_gating(
+		_state, [], [champion], {10: champion},
+		DiceEngine.new(), [], [9000], 1, [], {}, 0,
+	)
+	assert_eq(int(_state["known_champion_id"]), 10)
+	assert_true(result.get("skipped", false))
+
+
+func test_champion_change_triggers_reincarnation_eval() -> void:
+	PhoenixCouncil.grant_champion_authority(_state)
+	_state["known_champion_id"] = 99   # previous champion
+
+	# New champion with Chugi virtue → restores compact.
+	var new_champ: L5RCharacterData = _make_champion(
+		10, Enums.BushidoVirtue.CHUGI, Enums.ShouridoVirtue.NONE
+	)
+	var result: Dictionary = DayOrchestrator._process_phoenix_council_gating(
+		_state, [], [new_champ], {10: new_champ},
+		DiceEngine.new(), [], [9000], 1, [], {}, 0,
+	)
+	assert_true(result.get("reincarnation_eval", false))
+	assert_true(result.get("compact_restored", false))
+	assert_false(
+		PhoenixCouncil.has_champion_authority(_state),
+		"Compact should be restored — authority flag cleared"
+	)
+	assert_eq(int(_state["known_champion_id"]), 10)
+
+
+func test_champion_change_ishi_retains_authority() -> void:
+	PhoenixCouncil.grant_champion_authority(_state)
+	_state["known_champion_id"] = 99   # previous champion
+
+	# New champion with Ishi virtue → keeps authority.
+	var new_champ: L5RCharacterData = _make_champion(
+		10, Enums.BushidoVirtue.NONE, Enums.ShouridoVirtue.ISHI
+	)
+	var result: Dictionary = DayOrchestrator._process_phoenix_council_gating(
+		_state, [], [new_champ], {10: new_champ},
+		DiceEngine.new(), [], [9000], 1, [], {}, 0,
+	)
+	assert_true(result.get("reincarnation_eval", false))
+	assert_false(result.get("compact_restored", false))
+	assert_true(
+		PhoenixCouncil.has_champion_authority(_state),
+		"Authority should be retained when Ishi champion declines restoration"
+	)
+
+
+func test_no_champion_change_skips_without_eval() -> void:
+	PhoenixCouncil.grant_champion_authority(_state)
+	_state["known_champion_id"] = 10   # same champion
+
+	var same_champ: L5RCharacterData = _make_champion(
+		10, Enums.BushidoVirtue.CHUGI, Enums.ShouridoVirtue.NONE
+	)
+	var result: Dictionary = DayOrchestrator._process_phoenix_council_gating(
+		_state, [], [same_champ], {10: same_champ},
+		DiceEngine.new(), [], [9000], 1, [], {}, 0,
+	)
+	# Same champion — no eval. Skips normally.
+	assert_false(result.get("reincarnation_eval", false))
+	assert_true(result.get("skipped", false))
+	# Authority stays.
+	assert_true(PhoenixCouncil.has_champion_authority(_state))
+
+
+func test_first_ever_call_sets_known_champion_no_eval() -> void:
+	# known_champion_id == -1 (initial state) AND champion present.
+	# Should NOT trigger eval — this is the very first season, not a reincarnation.
+	PhoenixCouncil.grant_champion_authority(_state)
+	assert_eq(int(_state["known_champion_id"]), -1)
+
+	var champion: L5RCharacterData = _make_champion(
+		10, Enums.BushidoVirtue.CHUGI, Enums.ShouridoVirtue.NONE
+	)
+	var result: Dictionary = DayOrchestrator._process_phoenix_council_gating(
+		_state, [], [champion], {10: champion},
+		DiceEngine.new(), [], [9000], 1, [], {}, 0,
+	)
+	assert_false(result.get("reincarnation_eval", false))
+	assert_eq(int(_state["known_champion_id"]), 10)
+	# Authority still held.
+	assert_true(PhoenixCouncil.has_champion_authority(_state))
 	assert_eq(_state["tabled_proposals"], {})
+
+
+# -- RESTORE_COUNCIL_COMPACT: ActionExecutor output --------------------------
+
+func test_restore_compact_action_returns_required_effect() -> void:
+	var action := NPCDataStructures.ScoredAction.new()
+	action.action_id = "RESTORE_COUNCIL_COMPACT"
+	action.target_npc_id = -1
+	action.target_province_id = -1
+
+	var champion: L5RCharacterData = _make_champion(10, Enums.BushidoVirtue.CHUGI, Enums.ShouridoVirtue.NONE)
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.character_id = 10
+	ctx.ic_day = 100
+	ctx.season = 5
+	ctx.phoenix_champion_authority = true
+
+	var result: Dictionary = ActionExecutor.execute(
+		action, champion, ctx, DiceEngine.new(), {}
+	)
+
+	assert_true(result["success"])
+	assert_eq(result["action_id"], "RESTORE_COUNCIL_COMPACT")
+	assert_true(result["effects"].get("requires_compact_restoration", false))
+	assert_eq(int(result["effects"]["restoring_champion_id"]), 10)
+
+
+# -- RESTORE_COUNCIL_COMPACT: _process_compact_restorations wiring -----------
+
+func test_process_compact_restorations_clears_authority_flag() -> void:
+	PhoenixCouncil.grant_champion_authority(_state)
+	assert_true(PhoenixCouncil.has_champion_authority(_state))
+
+	var applied_list: Array = [
+		{
+			"action_id": "RESTORE_COUNCIL_COMPACT",
+			"character_id": 10,
+			"effects": {
+				"requires_compact_restoration": true,
+				"restoring_champion_id": 10,
+			},
+		}
+	]
+
+	var results: Array[Dictionary] = DayOrchestrator._process_compact_restorations(
+		applied_list, _state
+	)
+
+	assert_false(PhoenixCouncil.has_champion_authority(_state))
+	assert_eq(results.size(), 1)
+	assert_eq(results[0]["event"], "compact_restored")
+	assert_eq(int(results[0]["restoring_champion_id"]), 10)
+
+
+func test_process_compact_restorations_skips_empty_state() -> void:
+	var results: Array[Dictionary] = DayOrchestrator._process_compact_restorations(
+		[{"effects": {"requires_compact_restoration": true}}],
+		{}   # empty state
+	)
+	assert_eq(results.size(), 0)
+
+
+func test_process_compact_restorations_ignores_non_compact_effects() -> void:
+	PhoenixCouncil.grant_champion_authority(_state)
+	var applied_list: Array = [
+		{"effects": {"requires_war_creation": true}},
+		{"effects": {}},
+	]
+	DayOrchestrator._process_compact_restorations(applied_list, _state)
+	assert_true(PhoenixCouncil.has_champion_authority(_state))
+
+
+# -- RESTORE_COUNCIL_COMPACT: generate_options gate --------------------------
+
+func test_generate_options_excludes_compact_when_no_authority() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.character_id = 10
+	ctx.clan = "Phoenix"
+	ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
+	ctx.phoenix_champion_authority = false
+	ctx.is_lord = true
+	ctx.civilian_orders_remaining = 3
+
+	var need := NPCDataStructures.ImmediateNeed.new()
+	var options: Array[NPCDataStructures.ScoredAction] = NPCDecisionEngine.generate_options(ctx, need)
+	var action_ids: Array[String] = []
+	for opt in options:
+		action_ids.append(opt.action_id)
+	assert_false("RESTORE_COUNCIL_COMPACT" in action_ids)
+
+
+func test_generate_options_includes_compact_when_authority_held() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.character_id = 10
+	ctx.clan = "Phoenix"
+	ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
+	ctx.phoenix_champion_authority = true
+	ctx.is_lord = true
+	ctx.civilian_orders_remaining = 3
+	ctx.ap_remaining = 5
+
+	var need := NPCDataStructures.ImmediateNeed.new()
+	var options: Array[NPCDataStructures.ScoredAction] = NPCDecisionEngine.generate_options(ctx, need)
+	var action_ids: Array[String] = []
+	for opt in options:
+		action_ids.append(opt.action_id)
+	assert_true("RESTORE_COUNCIL_COMPACT" in action_ids)
+
+
+# =============================================================================
+# GRAND RITUAL DEVASTATING EFFECT (s55.10.3.7)
+# =============================================================================
+
+func _make_master(id: int) -> L5RCharacterData:
+	var c := L5RCharacterData.new()
+	c.character_id = id
+	c.clan = "Phoenix"
+	c.family = "Isawa"
+	c.status = 5.0
+	c.honor = 5.0
+	return c
+
+
+func _make_province(id: int) -> ProvinceData:
+	var p := ProvinceData.new()
+	p.province_id = id
+	p.stability = 80.0
+	p.grand_ritual_devastated = false
+	return p
+
+
+func test_grand_ritual_sets_stability_to_zero():
+	var province: ProvinceData = _make_province(1)
+	var result: Dictionary = PhoenixCouncil.apply_grand_ritual_devastation(
+		province, [], [], -1
+	)
+	assert_true(result.get("applied", false))
+	assert_eq(province.stability, 0.0)
+
+
+func test_grand_ritual_sets_devastated_flag():
+	var province: ProvinceData = _make_province(1)
+	PhoenixCouncil.apply_grand_ritual_devastation(province, [], [], -1)
+	assert_true(province.grand_ritual_devastated)
+
+
+func test_grand_ritual_penalizes_surviving_masters():
+	var province: ProvinceData = _make_province(1)
+	var m1: L5RCharacterData = _make_master(10)
+	var m2: L5RCharacterData = _make_master(11)
+	var result: Dictionary = PhoenixCouncil.apply_grand_ritual_devastation(
+		province, [m1, m2], [], -1
+	)
+	assert_eq(result.get("honor_cost_per_master", 0.0), PhoenixCouncil.GRAND_RITUAL_HONOR_COST)
+	assert_true(m1.honor < 5.0)
+	assert_true(m2.honor < 5.0)
+	assert_eq(result["masters_penalized"].size(), 2)
+
+
+func test_grand_ritual_applies_empire_disposition_to_status5_reps():
+	var province: ProvinceData = _make_province(1)
+	var rep: L5RCharacterData = L5RCharacterData.new()
+	rep.character_id = 50
+	rep.clan = "Crane"
+	rep.status = 6.0
+	var low_rank: L5RCharacterData = L5RCharacterData.new()
+	low_rank.character_id = 51
+	low_rank.clan = "Crab"
+	low_rank.status = 2.0
+	var result: Dictionary = PhoenixCouncil.apply_grand_ritual_devastation(
+		province, [], [rep, low_rank], 99
+	)
+	assert_eq(rep.disposition_values.get(99, 0), PhoenixCouncil.GRAND_RITUAL_EMPIRE_DISPOSITION)
+	assert_eq(low_rank.disposition_values.get(99, 0), 0, "Status < 5 should not be affected")
+	assert_eq(result["reps_affected"].size(), 1)
+
+
+func test_grand_ritual_skips_phoenix_clan_reps():
+	var province: ProvinceData = _make_province(1)
+	var phoenix_rep: L5RCharacterData = L5RCharacterData.new()
+	phoenix_rep.character_id = 55
+	phoenix_rep.clan = "Phoenix"
+	phoenix_rep.status = 7.0
+	PhoenixCouncil.apply_grand_ritual_devastation(province, [], [phoenix_rep], 99)
+	assert_eq(phoenix_rep.disposition_values.get(99, 0), 0, "Phoenix members should not be affected")
+
+
+func test_grand_ritual_returns_crisis_topic_dict():
+	var province: ProvinceData = _make_province(1)
+	var result: Dictionary = PhoenixCouncil.apply_grand_ritual_devastation(province, [], [], -1)
+	var ct: Dictionary = result.get("crisis_topic", {})
+	assert_false(ct.is_empty())
+	assert_eq(ct.get("tier", -1), TopicData.Tier.TIER_1)
+	assert_eq(ct.get("variant", ""), "grand_ritual_devastation")
+
+
+func test_grand_ritual_null_province_returns_not_applied():
+	var result: Dictionary = PhoenixCouncil.apply_grand_ritual_devastation(null, [], [], -1)
+	assert_false(result.get("applied", true))

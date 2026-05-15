@@ -207,13 +207,26 @@ file, search `/simulation/` and `/shared/` to confirm the system doesn't already
 For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
 **Code Implementation Status** table at the bottom of `/gdd/00_INDEX.md`.
 
-### What's Next
-1. World generation coordinate system and adjacency (gates: sub-tile pathfinding,
-   real army movement routes, naval sub-tile routing, province adjacency for map
-   display, and all travel-time calculations that currently use placeholder IDs)
+### Blocked Sections — Do Not Re-Audit
+As of 2026-05-15, every remaining PARTIAL and NOT STARTED section is blocked.
+Do not re-audit this; the list is settled. Ask the user before investigating any of these.
 
-For per-GDD-section implementation status (DONE / PARTIAL / NOT STARTED / REFERENCE),
-see the **Code Implementation Status** table at the bottom of `/gdd/00_INDEX.md`.
+**Blocked on world map / adjacency data (not yet available):**
+- s4.3 — `is_coastal` flag always false
+- s11.7 — sub-tile pathfinding; 5 stub military ActionIDs
+- s11.9 — ship movement initiation; naval blockade (per-sub-tile military unit)
+- s40 — ASCII map tile positioning and range tracking
+- s4.4 — Local Interface / ASCII Map (NOT STARTED)
+- s56 — Quest System / ASCII Map (NOT STARTED)
+
+**Blocked on GDD spec gap (no LOCKED spec; do not implement until GDD specifies it):**
+- s2.4 — `DECLARE_WALL_EMERGENCY` ActionID: s2.4.14 Decision 6 has no LOCKED spec
+  (AP cost, agenda topic format, compliance enforcement all unspecified)
+- s43 — Maho spell cast roll TN: GDD s43 does not specify it
+- s49 — Artisan progression beyond gift/tattoo quality tiers: GDD s49 not LOCKED
+
+**REFERENCE sections** (source material only, design not started): s31–s37, s38,
+s44, s45, s54.7, s57.22–s57.33, s57.37–s57.46.
 
 ### Pending Redesign
 (None currently pending.)
@@ -289,7 +302,83 @@ see the **Code Implementation Status** table at the bottom of `/gdd/00_INDEX.md`
   Godot Resource serialization. Compact and predictable for network sync.
   Autocomplete and static analysis support in GDScript.
 
-### 5. Effect Application Pattern — RESOLVED: dual pattern with naming guard
+### 5. Maho Detection Pipeline — RESOLVED: three-channel topic generation
+**Decision:** Maho use is never directly observable. Detection flows through three
+independent channels; no single channel is reliable alone (per s57.47.7). All
+three feed the same downstream machinery: a topic enters a magistrate's
+`known_topics` → UPHOLD_LAW fires → INVESTIGATE_CRIME assigned.
+
+**Channel 1 — PTL accumulation (province-level, passive, already LOCKED)**
+Every maho cast raises PTL +1.0 (MahoSystem.PTL_PER_CAST). s11.11 (LOCKED)
+already defines what happens next:
+- PTL 3 → Province Taint Manifestation insurgency spawns; Tier 3 crisis topic
+  generated automatically. Observable to any lord monitoring province reports.
+- PTL 6 → Tier 2 crisis topic generated on first crossing.
+- PTL 9 → Tier 1 crisis topic generated immediately.
+These crisis topics are the primary indirect signal. Nobody knows maho caused
+the PTL rise — they know the province is spiritually sick. Investigation traces
+it back. No new topic generation code needed for Channel 1: the insurgency
+system already produces the signal. PTL detection roll for shugenja:
+Perception + Lore: Shadowlands vs TN (PTL × 5); Kuni and Asako +2k0 (s11.11).
+
+**Channel 2 — Physical evidence at casting site (zone-level, active)**
+Blood at the casting site follows the poison residue pattern from s57.48.8
+exactly:
+- At cast time: caster makes a Stealth / Agility roll (same formula as
+  CONCEAL_ITEM). The result becomes the blood evidence `concealment_tn`.
+- Evidence persists in `zone_event_log` for 1 IC season (same purge cycle
+  as s57.48.8).
+- Any character who runs EXAMINE_CRIME_SCENE in that zone rolls
+  Investigation (Notice) / Perception against the `concealment_tn`.
+- On success: generates a **Tier 3 topic** ("Evidence of blood magic in
+  [zone]"). Topic does NOT name a perpetrator — the crime record exists
+  at world level, but the investigator must narrow suspects via
+  `zone_event_log` entries for who was present during the evidence window.
+- No new ActionID or topic type needed; this uses existing EXAMINE_CRIME_SCENE
+  and the world-known CrimeRecord.
+
+**Channel 3 — Taint symptoms on the caster (personal, proximity-based)**
+Caster's accumulating Taint is the most direct signal but requires physical
+proximity. Two detection paths, both gated on proximity:
+- **Sense spell** (Section 31, not yet designed): a shugenja present in the
+  same zone may cast Sense to detect kansen residue on a character. TN
+  deferred to Section 31 design.
+- **Lore: Shadowlands check** during any action that puts the detector in
+  social proximity (INVESTIGATE_PROVINCE, court attendance, COMMUNE_WITH_SPIRITS
+  near the suspect): Kuni Witch-Hunters and Asako Inquisitors automatically
+  attempt this check when their known_topics include a Taint-related event in
+  the same province. Other shugenja only attempt it if they hold Lore:
+  Shadowlands 3+.
+- Threshold triggering a topic: target's Taint Rank ≥ 2 AND no Wall service
+  record on file (per s57.47.7: "has no innocent explanation").
+- On detection success: generates a **Tier 3 topic** naming the specific
+  character as a suspected maho user. This is a direct accusation topic —
+  unlike Channel 1 and 2, it names a perpetrator.
+- TN for the Lore: Shadowlands check is deferred to Section 31 / Section 42
+  (Taint consequence design). Do not implement Channel 3's detection roll
+  until those sections are LOCKED.
+
+**Channel 4 — Direct witnesses (already handled)**
+If `witnesses` is non-empty on the CrimeRecord, those characters carry direct
+knowledge. They can testify through the existing court/investigation system.
+No new code. The witness list in CrimeRecord IS the fourth channel.
+
+**What is not yet implementable:**
+- Channel 3 detection roll TN (blocked on Section 31 Sense spell design)
+- Kuni/Asako/Kuroiban as Named Characters with UPHOLD_LAW standing objectives
+  (blocked on s11.3.5 becoming LOCKED — currently PARTIALLY DESIGNED)
+- `CAST_MAHO` as an NPC ActionID (no LOCKED specification exists for maho as
+  a deliberate NPC action; do not implement until Section 43 or 55 specifies it)
+
+**Rationale:** Channels 1 and 2 are wirable now — they use entirely existing
+systems (insurgency topic generation, zone_event_log, EXAMINE_CRIME_SCENE).
+Channel 3 is partially wirable (proximity check) but its TN is a pending design
+gap. This mirrors the GDD's intent: "multiple channels, none reliable alone."
+The caster who casts once in a remote province and leaves quickly may never be
+caught. The one who casts repeatedly in a populated area accumulates risk across
+all four channels simultaneously.
+
+### 6. Effect Application Pattern — RESOLVED: dual pattern with naming guard
 **Decision:** Two coexisting patterns for applying character mutations:
 - **Pattern A (Deferred):** System returns effect keys → EffectApplicator
   reads them and mutates characters centrally. Standard keys consumed:

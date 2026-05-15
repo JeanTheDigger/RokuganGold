@@ -7,6 +7,7 @@ enum CourtType {
 	IMPERIAL_WINTER_COURT,
 	CLAN_CHAMPION_COURT,
 	PROVINCIAL_FAMILY_COURT,
+	PEACE_COURT,
 }
 
 enum CourtPhase {
@@ -39,3 +40,7 @@ enum CourtPhase {
 @export var personal_invitation_ids: Array[int] = []
 @export var clan_delegation_ids: Dictionary = {}
 @export var announcement_topic_id: int = -1
+## Peace court link and accumulated willingness modifiers (PEACE_COURT only).
+@export var peace_court_war_id: int = -1
+@export var willingness_modifier_clan_a: int = 0
+@export var willingness_modifier_clan_b: int = 0

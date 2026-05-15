@@ -220,6 +220,43 @@ func test_seasonal_consequences_honor_floors_at_zero() -> void:
 	assert_eq(_rebel.honor, 0.0)
 
 
+func test_seasonal_consequences_suppress_hemorrhage_skips_honor_loss() -> void:
+	# Council Overreach Path: no automatic honor hemorrhage (s55.10.3.7).
+	_rebel.honor = 5.0
+	var result: Dictionary = IntraClanCivilWar.apply_seasonal_consequences(
+		_state, _rebel, [], 101, true
+	)
+	assert_almost_eq(_rebel.honor, 5.0, 0.001)
+	assert_true(result["hemorrhage_suppressed"])
+
+
+func test_seasonal_consequences_suppress_false_still_bleeds() -> void:
+	_rebel.honor = 5.0
+	var result: Dictionary = IntraClanCivilWar.apply_seasonal_consequences(
+		_state, _rebel, [], 101, false
+	)
+	assert_almost_eq(_rebel.honor, 4.7, 0.001)
+	assert_false(result["hemorrhage_suppressed"])
+
+
+func test_get_dragon_treaty_penalty_active_war() -> void:
+	var dragon_state: Dictionary = IntraClanCivilWar.make_initial_state(10, 20, "Dragon", 1, 0)
+	dragon_state["dragon_treaty_penalty"] = -15
+	assert_eq(IntraClanCivilWar.get_dragon_treaty_penalty([dragon_state]), -15)
+
+
+func test_get_dragon_treaty_penalty_no_dragon_war() -> void:
+	var lion_state: Dictionary = IntraClanCivilWar.make_initial_state(10, 20, "Lion", 1, 0)
+	assert_eq(IntraClanCivilWar.get_dragon_treaty_penalty([lion_state]), 0)
+
+
+func test_get_dragon_treaty_penalty_inactive_war_ignored() -> void:
+	var dragon_state: Dictionary = IntraClanCivilWar.make_initial_state(10, 20, "Dragon", 1, 0)
+	dragon_state["dragon_treaty_penalty"] = -15
+	dragon_state["active"] = false
+	assert_eq(IntraClanCivilWar.get_dragon_treaty_penalty([dragon_state]), 0)
+
+
 func test_seasonal_consequences_uses_correct_escalation() -> void:
 	var p1: ProvinceData = ProvinceData.new()
 	p1.province_id = 10
@@ -551,3 +588,50 @@ func test_rebel_consequences_rank_and_file_no_penalty() -> void:
 	)
 	assert_eq(rf.honor, 3.5)  # unchanged
 	assert_eq(result["rebel_consequences"].size(), 0)
+
+
+# =============================================================================
+# PHOENIX AMBIGUOUS LEGITIMACY (s55.10.3.7)
+# =============================================================================
+
+func test_phoenix_chugi_favors_council():
+	# Chugi-dominant: the compact is duty → 0 rebel contribution from belief factor.
+	var n: L5RCharacterData = _make_npc(10, Enums.BushidoVirtue.CHUGI, Enums.ShouridoVirtue.NONE, 0)
+	# Use is_phoenix_schism=true. Rebel lord 101, low completion, no disp pull.
+	var result: Dictionary = IntraClanCivilWar.evaluate_loyalty(n, 101, 0.3, true, false, true)
+	# Chugi belief = 0 → less rebel contribution vs standard path.
+	assert_eq(result.get("faction", IntraClanCivilWar.Faction.LEGITIMACY), IntraClanCivilWar.Faction.LEGITIMACY)
+
+
+func test_phoenix_meiyo_favors_champion():
+	# Meiyo-dominant: divine mandate → full rebel contribution from belief factor.
+	var n: L5RCharacterData = _make_npc(10, Enums.BushidoVirtue.MEIYO, Enums.ShouridoVirtue.NONE, 80)
+	n.shourido_virtue = Enums.ShouridoVirtue.NONE
+	var result: Dictionary = IntraClanCivilWar.evaluate_loyalty(n, 101, 0.8, true, false, true)
+	assert_eq(result.get("faction", IntraClanCivilWar.Faction.LEGITIMACY), IntraClanCivilWar.Faction.REBEL)
+
+
+func test_phoenix_gi_rebel_failing_weakens_rebel_belief():
+	# Gi: "honest side wins." Council (rebel_lord) was failing → weaker rebel support.
+	var gi: L5RCharacterData = _make_npc(10, Enums.BushidoVirtue.GI, Enums.ShouridoVirtue.NONE, 0)
+	var result_failing: Dictionary = IntraClanCivilWar.evaluate_loyalty(gi, 101, 0.3, true, true, true)
+	var result_strong: Dictionary = IntraClanCivilWar.evaluate_loyalty(gi, 101, 0.9, true, false, true)
+	assert_true(int(result_strong.get("rebel_score", 0)) > int(result_failing.get("rebel_score", 0)))
+
+
+func test_phoenix_seigyo_follows_disposition():
+	# Seigyo: self-interest. High disposition → believes rebel is right.
+	var seigyo_friend: L5RCharacterData = _make_npc(10, Enums.BushidoVirtue.NONE, Enums.ShouridoVirtue.SEIGYO, 80)
+	var seigyo_foe: L5RCharacterData = _make_npc(11, Enums.BushidoVirtue.NONE, Enums.ShouridoVirtue.SEIGYO, 10)
+	var r_friend: Dictionary = IntraClanCivilWar.evaluate_loyalty(seigyo_friend, 101, 0.5, true, false, true)
+	var r_foe: Dictionary = IntraClanCivilWar.evaluate_loyalty(seigyo_foe, 101, 0.5, true, false, true)
+	assert_true(int(r_friend.get("rebel_score", 0)) > int(r_foe.get("rebel_score", 0)))
+
+
+func test_phoenix_path_default_is_no_info():
+	# Non-Chugi/Meiyo/Gi/Seigyo → GRIEVANCE_PTS_NO_INFO contribution (5/15 neutral).
+	var n: L5RCharacterData = _make_npc(10, Enums.BushidoVirtue.NONE, Enums.ShouridoVirtue.NONE, 0)
+	var phoenix_result: Dictionary = IntraClanCivilWar.evaluate_loyalty(n, 101, 0.5, false, false, true)
+	var standard_result: Dictionary = IntraClanCivilWar.evaluate_loyalty(n, 101, 0.5, false, false, false)
+	# With no visibility in standard, both use GRIEVANCE_PTS_NO_INFO (5) → scores should match.
+	assert_eq(phoenix_result.get("rebel_score", -1), standard_result.get("rebel_score", -2))

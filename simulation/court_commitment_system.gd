@@ -254,6 +254,7 @@ static func process_seasonal_commitments(
 				consequences["lord_id"] = c.lord_id
 				consequences["commitment_index"] = i
 				consequences["topic_id"] = c.topic_id
+				consequences["witness_ids"] = c.witness_ids.duplicate()
 				reneged.append(consequences)
 
 	return {

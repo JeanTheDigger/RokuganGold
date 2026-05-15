@@ -1927,3 +1927,798 @@ func test_court_context_creates_world_state_entry() -> void:
 	assert_true(ws.has(42), "Should create world_state entry for attendee")
 	assert_eq(ws[42].get("context_flag", -1), Enums.ContextFlag.AT_COURT)
 	assert_false(ws[42].get("active_court_at_location", {}).is_empty())
+
+
+# -- Sortie wiring (_process_sortie_results) ------------------------------------
+
+func _make_wall_tower(sid: int, pid: int, garrison: int, jade: float, si: int = 8) -> SettlementData:
+	var s := SettlementData.new()
+	s.settlement_id = sid
+	s.province_id = pid
+	s.settlement_type = Enums.SettlementType.WALL_TOWER
+	s.garrison_pu = garrison
+	s.jade_stockpile = jade
+	s.wall_si = si
+	return s
+
+
+func _make_shadowlands_province(pid: int, ss: int) -> ProvinceData:
+	var p := ProvinceData.new()
+	p.province_id = pid
+	p.shadowlands_strength = ss
+	return p
+
+
+func _make_sortie_applied(pid: int, force_pct: float, ss_red: int, jade_pw: int) -> Dictionary:
+	return {
+		"effects": {
+			"requires_sortie_combat": true,
+			"target_province_id": pid,
+			"ss_reduction": ss_red,
+			"force_pct": force_pct,
+			"jade_per_warrior": jade_pw,
+		}
+	}
+
+
+func test_sortie_no_requires_flag_skipped() -> void:
+	var applied: Array = [{"effects": {"ss_reduction": 3}}]
+	var tower := _make_wall_tower(1, 10, 5, 20.0)
+	var prov := _make_shadowlands_province(10, 6)
+	var results: Array[Dictionary] = DayOrchestrator._process_sortie_results(
+		applied, [tower], {10: prov}, _dice
+	)
+	assert_eq(results.size(), 0)
+	assert_eq(prov.shadowlands_strength, 6)
+
+
+func test_sortie_jade_consumed_regardless_of_outcome() -> void:
+	# force_pct=0.4 × garrison=5 = 2 committed warriors, jade_per_warrior=2 → 4 jade
+	var applied: Array = [_make_sortie_applied(10, 0.4, 2, 2)]
+	var tower := _make_wall_tower(1, 10, 5, 20.0)
+	var prov := _make_shadowlands_province(10, 6)
+	DayOrchestrator._process_sortie_results(applied, [tower], {10: prov}, _dice)
+	# jade consumed = 2 warriors × 2 jade = 4 regardless of combat success
+	assert_eq(tower.jade_stockpile, 16.0)
+
+
+func test_sortie_result_has_expected_keys() -> void:
+	var applied: Array = [_make_sortie_applied(10, 0.4, 2, 1)]
+	var tower := _make_wall_tower(1, 10, 5, 20.0)
+	var prov := _make_shadowlands_province(10, 6)
+	var results: Array[Dictionary] = DayOrchestrator._process_sortie_results(
+		applied, [tower], {10: prov}, _dice
+	)
+	assert_eq(results.size(), 1)
+	var r: Dictionary = results[0]
+	assert_true(r.has("province_id"))
+	assert_true(r.has("sortie_success"))
+	assert_true(r.has("ss_reduction_applied"))
+	assert_true(r.has("new_ss"))
+	assert_true(r.has("pu_lost"))
+	assert_true(r.has("jade_consumed"))
+
+
+func test_sortie_ss_reduction_only_on_success() -> void:
+	# With garrison_pu=5 and force_pct=0.4 → 2 garrison companies.
+	# SS=12 (High tier), planned ss_reduction=3.
+	# If combat succeeds, SS drops. If fails, SS unchanged.
+	var applied: Array = [_make_sortie_applied(10, 0.4, 3, 1)]
+	var tower := _make_wall_tower(1, 10, 5, 20.0)
+	var prov := _make_shadowlands_province(10, 12)
+	var results: Array[Dictionary] = DayOrchestrator._process_sortie_results(
+		applied, [tower], {10: prov}, _dice
+	)
+	assert_eq(results.size(), 1)
+	var r: Dictionary = results[0]
+	if r["sortie_success"]:
+		assert_eq(r["ss_reduction_applied"], 3)
+		assert_eq(prov.shadowlands_strength, 9)
+	else:
+		assert_eq(r["ss_reduction_applied"], 0)
+		assert_eq(prov.shadowlands_strength, 12)
+
+
+func test_sortie_garrison_pu_reduced_by_casualties() -> void:
+	# garrison_pu starts at 10, force_pct=1.0 → all 10 committed.
+	var applied: Array = [_make_sortie_applied(10, 1.0, 2, 1)]
+	var tower := _make_wall_tower(1, 10, 10, 20.0)
+	var prov := _make_shadowlands_province(10, 8)
+	DayOrchestrator._process_sortie_results(applied, [tower], {10: prov}, _dice)
+	# Garrison PU must not increase and should stay >= 0
+	assert_true(tower.garrison_pu >= 0)
+	assert_true(tower.garrison_pu <= 10)
+
+
+func test_build_garrison_sortie_states_count() -> void:
+	var states: Array[Dictionary] = DayOrchestrator._build_garrison_sortie_states(3)
+	assert_eq(states.size(), 3)
+
+
+func test_build_garrison_sortie_states_fields() -> void:
+	var states: Array[Dictionary] = DayOrchestrator._build_garrison_sortie_states(1)
+	var bc: Dictionary = states[0]
+	assert_eq(bc["side"], "defender")
+	assert_eq(bc["unit_type"], Enums.CompanyUnitType.GARRISON)
+	assert_eq(bc["starting_health"], 153)
+	assert_false(bc["no_morale"])
+
+
+func test_build_garrison_sortie_states_zero_returns_empty() -> void:
+	var states: Array[Dictionary] = DayOrchestrator._build_garrison_sortie_states(0)
+	assert_eq(states.size(), 0)
+
+
+# =============================================================================
+# _rebel_holds_seat (s53.2.7 — Gap 1)
+# =============================================================================
+
+func _make_province_for_seat(pid: int, clan: String, family: String, settlement_id: int) -> ProvinceData:
+	var p := ProvinceData.new()
+	p.province_id = pid
+	p.clan = clan
+	p.family = family
+	p.settlement_ids = [settlement_id]
+	return p
+
+
+func _make_rebel_at(cid: int, clan: String, family: String, loc_settlement: int) -> L5RCharacterData:
+	var r := L5RCharacterData.new()
+	r.character_id = cid
+	r.clan = clan
+	r.family = family
+	r.physical_location = str(loc_settlement)
+	return r
+
+
+func test_rebel_holds_seat_when_in_family_province() -> void:
+	var prov := _make_province_for_seat(10, "Lion", "Matsu", 500)
+	var rebel := _make_rebel_at(101, "Lion", "Matsu", 500)
+	assert_true(DayOrchestrator._rebel_holds_seat(rebel, {10: prov}))
+
+
+func test_rebel_seat_lost_when_outside_family_province() -> void:
+	var prov := _make_province_for_seat(10, "Lion", "Matsu", 500)
+	var rebel := _make_rebel_at(101, "Lion", "Matsu", 999)  # wrong settlement
+	assert_false(DayOrchestrator._rebel_holds_seat(rebel, {10: prov}))
+
+
+func test_rebel_holds_seat_null_lord_returns_false() -> void:
+	var prov := _make_province_for_seat(10, "Lion", "Matsu", 500)
+	assert_false(DayOrchestrator._rebel_holds_seat(null, {10: prov}))
+
+
+func test_rebel_holds_seat_no_matching_province_returns_false() -> void:
+	var prov := _make_province_for_seat(10, "Crane", "Doji", 500)
+	var rebel := _make_rebel_at(101, "Lion", "Matsu", 500)
+	assert_false(DayOrchestrator._rebel_holds_seat(rebel, {10: prov}))
+
+
+func test_rebel_holds_seat_invalid_location_returns_false() -> void:
+	var prov := _make_province_for_seat(10, "Lion", "Matsu", 500)
+	var rebel := _make_rebel_at(101, "Lion", "Matsu", 500)
+	rebel.physical_location = "not_an_int"
+	assert_false(DayOrchestrator._rebel_holds_seat(rebel, {10: prov}))
+
+
+# =============================================================================
+# _reconstitute_clan_military (s53.2.3 — Gap 2)
+# =============================================================================
+
+func _make_state_with_factions(rebel_id: int, auth_id: int) -> Dictionary:
+	var s: Dictionary = IntraClanCivilWar.make_initial_state(rebel_id, auth_id, "Lion", 5000, 1)
+	IntraClanCivilWar.assign_faction(s, rebel_id, IntraClanCivilWar.Faction.REBEL)
+	IntraClanCivilWar.assign_faction(s, auth_id, IntraClanCivilWar.Faction.LEGITIMACY)
+	return s
+
+
+func _make_company(cid: int, cmd_id: int, hp: int = 153, start_hp: int = 153) -> Dictionary:
+	return {
+		"company_id": cid,
+		"commander_id": cmd_id,
+		"current_health": hp,
+		"starting_health": start_hp,
+		"is_destroyed": false,
+	}
+
+
+func test_reconstitute_clears_losing_rebel_commanders() -> void:
+	var state: Dictionary = _make_state_with_factions(101, 1)
+	var rebel_char := L5RCharacterData.new()
+	rebel_char.character_id = 101
+	rebel_char.wounds_taken = 0
+	var co: Dictionary = _make_company(1, 101)
+	var chars: Dictionary = {101: rebel_char}
+	# Legitimacy wins → rebel commander loses their company.
+	DayOrchestrator._reconstitute_clan_military(state, true, [co], chars)
+	assert_eq(co["commander_id"], -1)
+
+
+func test_reconstitute_keeps_winning_faction_commanders() -> void:
+	var state: Dictionary = _make_state_with_factions(101, 1)
+	var auth_char := L5RCharacterData.new()
+	auth_char.character_id = 1
+	auth_char.wounds_taken = 0
+	var co: Dictionary = _make_company(2, 1)
+	var chars: Dictionary = {1: auth_char}
+	# Legitimacy wins → legitimacy commander keeps their company.
+	DayOrchestrator._reconstitute_clan_military(state, true, [co], chars)
+	assert_eq(co["commander_id"], 1)
+
+
+func test_reconstitute_clears_dead_commanders() -> void:
+	var state: Dictionary = _make_state_with_factions(101, 1)
+	var auth_char := L5RCharacterData.new()
+	auth_char.character_id = 1
+	auth_char.wounds_taken = 999  # effectively dead
+	var co: Dictionary = _make_company(2, 1)
+	var chars: Dictionary = {1: auth_char}
+	DayOrchestrator._reconstitute_clan_military(state, true, [co], chars)
+	assert_eq(co["commander_id"], -1)
+
+
+func test_reconstitute_reports_vacancies() -> void:
+	var state: Dictionary = _make_state_with_factions(101, 1)
+	var rebel_char := L5RCharacterData.new()
+	rebel_char.character_id = 101
+	rebel_char.wounds_taken = 0
+	var co: Dictionary = _make_company(1, 101)
+	var chars: Dictionary = {101: rebel_char}
+	var result: Dictionary = DayOrchestrator._reconstitute_clan_military(state, true, [co], chars)
+	assert_eq(result["vacancies_created"], 1)
+
+
+func test_reconstitute_consolidates_understrength_pair() -> void:
+	var state: Dictionary = _make_state_with_factions(101, 1)
+	var auth_char := L5RCharacterData.new()
+	auth_char.character_id = 1
+	auth_char.wounds_taken = 0
+	# Both companies at 40% health — below 50% threshold.
+	var co1: Dictionary = _make_company(10, 1, 61, 153)
+	var co2: Dictionary = _make_company(11, 1, 61, 153)
+	var chars: Dictionary = {1: auth_char}
+	var result: Dictionary = DayOrchestrator._reconstitute_clan_military(state, true, [co1, co2], chars)
+	assert_eq(result["companies_dissolved"], 1)
+	assert_true(co2["is_destroyed"])
+	assert_true(co1["current_health"] > 61)  # absorbed co2's health
+
+
+func test_reconstitute_no_dissolution_if_healthy() -> void:
+	var state: Dictionary = _make_state_with_factions(101, 1)
+	var auth_char := L5RCharacterData.new()
+	auth_char.character_id = 1
+	auth_char.wounds_taken = 0
+	var co1: Dictionary = _make_company(10, 1, 100, 153)
+	var co2: Dictionary = _make_company(11, 1, 100, 153)
+	var chars: Dictionary = {1: auth_char}
+	var result: Dictionary = DayOrchestrator._reconstitute_clan_military(state, true, [co1, co2], chars)
+	assert_eq(result["companies_dissolved"], 0)
+
+
+# =============================================================================
+# _apply_civil_war_edict_shifts (s53.2.5 — Gap 3)
+# =============================================================================
+
+func _make_condemn_edict(eid: int, target_clan: String, target_char: int) -> EdictData:
+	var e := EdictData.new()
+	e.edict_id = eid
+	e.edict_type = EdictData.EdictType.CONDEMN_CLAN
+	e.target_clan = target_clan
+	e.target_character_id = target_char
+	e.is_active = true
+	return e
+
+
+func test_edict_targeting_rebel_shifts_to_legitimacy() -> void:
+	var state: Dictionary = IntraClanCivilWar.make_initial_state(101, 1, "Lion", 5000, 1)
+	var edict := _make_condemn_edict(1, "Lion", 101)
+	DayOrchestrator._apply_civil_war_edict_shifts(state, 101, 1, [edict])
+	assert_true(state["war_score"] > 50)  # shifted toward legitimacy
+
+
+func test_edict_targeting_authority_shifts_to_rebel() -> void:
+	var state: Dictionary = IntraClanCivilWar.make_initial_state(101, 1, "Lion", 5000, 1)
+	var edict := _make_condemn_edict(1, "Lion", 1)
+	DayOrchestrator._apply_civil_war_edict_shifts(state, 101, 1, [edict])
+	assert_true(state["war_score"] < 50)  # shifted toward rebel
+
+
+func test_edict_not_processed_twice() -> void:
+	var state: Dictionary = IntraClanCivilWar.make_initial_state(101, 1, "Lion", 5000, 1)
+	var edict := _make_condemn_edict(1, "Lion", 101)
+	DayOrchestrator._apply_civil_war_edict_shifts(state, 101, 1, [edict])
+	var score_after_first: int = state["war_score"]
+	DayOrchestrator._apply_civil_war_edict_shifts(state, 101, 1, [edict])
+	assert_eq(state["war_score"], score_after_first)
+
+
+func test_edict_with_no_character_target_skipped() -> void:
+	var state: Dictionary = IntraClanCivilWar.make_initial_state(101, 1, "Lion", 5000, 1)
+	# target_character_id = -1 → clan-level only, ambiguous, must be skipped.
+	var edict := _make_condemn_edict(1, "Lion", -1)
+	DayOrchestrator._apply_civil_war_edict_shifts(state, 101, 1, [edict])
+	assert_eq(state["war_score"], 50)
+
+
+func test_inactive_edict_skipped() -> void:
+	var state: Dictionary = IntraClanCivilWar.make_initial_state(101, 1, "Lion", 5000, 1)
+	var edict := _make_condemn_edict(1, "Lion", 101)
+	edict.is_active = false
+	DayOrchestrator._apply_civil_war_edict_shifts(state, 101, 1, [edict])
+	assert_eq(state["war_score"], 50)
+
+
+# =============================================================================
+# s55.10.2.8 / s55.10.3.7 — Schism Crisis clan-specific faction rules
+# =============================================================================
+
+func _make_clan_char(cid: int, clan: String, family: String, lord_id: int = -1,
+		status: float = 3.0) -> L5RCharacterData:
+	var c := L5RCharacterData.new()
+	c.character_id = cid
+	c.clan = clan
+	c.family = family
+	c.lord_id = lord_id
+	c.status = status
+	c.honor = 5.0
+	return c
+
+
+func _make_trigger_cw_setup(clan: String, rebel_id: int, auth_id: int,
+		extra_npcs: Array[L5RCharacterData] = []) -> Dictionary:
+	var rebel := _make_clan_char(rebel_id, clan, "Mirumoto" if clan == "Dragon" else "Shiba",
+		-1, 7.0)
+	var authority := _make_clan_char(auth_id, clan,
+		"Togashi" if clan == "Dragon" else "Isawa", -1, 7.0)
+	var characters: Array[L5RCharacterData] = [rebel, authority]
+	characters.append_array(extra_npcs)
+	var by_id: Dictionary = {}
+	for c: L5RCharacterData in characters:
+		by_id[c.character_id] = c
+	return {
+		"rebel": rebel,
+		"authority": authority,
+		"characters": characters,
+		"by_id": by_id,
+	}
+
+
+func test_dragon_trigger_auto_assigns_togashi_family_to_legitimacy() -> void:
+	# Togashi Order monks must side with Togashi unconditionally (s55.10.2.8).
+	var monk := _make_clan_char(99, "Dragon", "Togashi", -1, 2.0)
+	var kitsuki := _make_clan_char(98, "Dragon", "Kitsuki", -1, 2.0)
+	var setup: Dictionary = _make_trigger_cw_setup("Dragon", 10, 20, [monk, kitsuki])
+	var wars: Array[Dictionary] = []
+	var topics: Array[TopicData] = []
+	var next_id: Array[int] = [1]
+	DayOrchestrator._trigger_civil_war(
+		10, 20, "Dragon", "removal order",
+		setup["characters"], setup["by_id"], {},
+		wars, topics, next_id, 100, 5,
+		false, "dragon_schism",
+	)
+	var state: Dictionary = wars[0]
+	assert_eq(int(state["faction_assignments"].get(99, -1)), IntraClanCivilWar.Faction.LEGITIMACY)
+	# Kitsuki evaluated normally (went LEGITIMACY by default with no rebel pull)
+	assert_ne(int(state["faction_assignments"].get(98, -1)), -1)
+
+
+func test_dragon_trigger_stores_treaty_penalty() -> void:
+	var setup: Dictionary = _make_trigger_cw_setup("Dragon", 10, 20)
+	var wars: Array[Dictionary] = []
+	var topics: Array[TopicData] = []
+	var next_id: Array[int] = [1]
+	DayOrchestrator._trigger_civil_war(
+		10, 20, "Dragon", "removal order",
+		setup["characters"], setup["by_id"], {},
+		wars, topics, next_id, 100, 5,
+	)
+	assert_eq(int(wars[0].get("dragon_treaty_penalty", 0)), -15)
+
+
+func test_phoenix_trigger_auto_assigns_isawa_to_legitimacy() -> void:
+	# All Isawa side with Council unconditionally (s55.10.3.7).
+	var isawa_monk := _make_clan_char(99, "Phoenix", "Isawa", -1, 2.0)
+	var shiba_soldier := _make_clan_char(98, "Phoenix", "Shiba", -1, 2.0)
+	var champion := _make_clan_char(10, "Phoenix", "Shiba", -1, 7.0)
+	var master := _make_clan_char(20, "Phoenix", "Isawa", -1, 7.0)
+	master.role_position = "Master of Fire"
+	var characters: Array[L5RCharacterData] = [champion, master, isawa_monk, shiba_soldier]
+	var by_id: Dictionary = {}
+	for c: L5RCharacterData in characters:
+		by_id[c.character_id] = c
+	var wars: Array[Dictionary] = []
+	var topics: Array[TopicData] = []
+	var next_id: Array[int] = [1]
+	# Defiance Path: rebel = champion, authority = master
+	DayOrchestrator._trigger_civil_war(
+		10, 20, "Phoenix", "champion defiance",
+		characters, by_id, {},
+		wars, topics, next_id, 100, 5,
+		false, "defiance",
+	)
+	var state: Dictionary = wars[0]
+	assert_eq(int(state["faction_assignments"].get(99, -1)), IntraClanCivilWar.Faction.LEGITIMACY)
+	# Shiba soldier evaluated normally
+	assert_ne(int(state["faction_assignments"].get(98, -1)), -1)
+
+
+func test_phoenix_overreach_trigger_suppresses_hemorrhage() -> void:
+	# Council Overreach Path: suppress_honor_hemorrhage must be true (s55.10.3.7).
+	var setup: Dictionary = _make_trigger_cw_setup("Phoenix", 20, 10)
+	var wars: Array[Dictionary] = []
+	var topics: Array[TopicData] = []
+	var next_id: Array[int] = [1]
+	DayOrchestrator._trigger_civil_war(
+		20, 10, "Phoenix", "council overreach",
+		setup["characters"], setup["by_id"], {},
+		wars, topics, next_id, 100, 5,
+		true, "overreach",
+	)
+	assert_true(wars[0].get("suppress_honor_hemorrhage", false))
+	assert_eq(wars[0].get("schism_path", ""), "overreach")
+
+
+func test_phoenix_defiance_trigger_no_hemorrhage_suppression() -> void:
+	# Defiance Path: standard −0.3/season applies (s55.10.3.7).
+	var setup: Dictionary = _make_trigger_cw_setup("Phoenix", 10, 20)
+	var wars: Array[Dictionary] = []
+	var topics: Array[TopicData] = []
+	var next_id: Array[int] = [1]
+	DayOrchestrator._trigger_civil_war(
+		10, 20, "Phoenix", "champion defiance",
+		setup["characters"], setup["by_id"], {},
+		wars, topics, next_id, 100, 5,
+		false, "defiance",
+	)
+	assert_false(wars[0].get("suppress_honor_hemorrhage", false))
+	assert_eq(wars[0].get("schism_path", ""), "defiance")
+
+
+# =============================================================================
+# _apply_phoenix_master_death_honor_penalty (s55.10.3.7)
+# =============================================================================
+
+func _make_phoenix_schism_state(schism_path: String, rebel_id: int,
+		auth_id: int) -> Dictionary:
+	var s: Dictionary = IntraClanCivilWar.make_initial_state(rebel_id, auth_id, "Phoenix", 1, 0)
+	s["schism_path"] = schism_path
+	return s
+
+
+func test_dead_master_penalizes_defiance_path_champion() -> void:
+	# Defiance: rebel = champion → champion takes −0.5 for each dead Master.
+	var state: Dictionary = _make_phoenix_schism_state("defiance", 10, 20)
+	var champion := _make_clan_char(10, "Phoenix", "Shiba", -1, 7.0)
+	champion.honor = 5.0
+	var master := _make_clan_char(20, "Phoenix", "Isawa", -1, 7.0)
+	master.role_position = "Master of Fire"
+	master.wounds_taken = 999  # dead
+	IntraClanCivilWar.assign_faction(state, 20, IntraClanCivilWar.Faction.LEGITIMACY)
+	var by_id: Dictionary = {10: champion, 20: master}
+	var count: int = DayOrchestrator._apply_phoenix_master_death_honor_penalty(state, by_id)
+	assert_eq(count, 1)
+	assert_almost_eq(champion.honor, 4.5, 0.001)
+
+
+func test_dead_master_not_double_penalized() -> void:
+	var state: Dictionary = _make_phoenix_schism_state("defiance", 10, 20)
+	var champion := _make_clan_char(10, "Phoenix", "Shiba", -1, 7.0)
+	champion.honor = 5.0
+	var master := _make_clan_char(20, "Phoenix", "Isawa", -1, 7.0)
+	master.role_position = "Master of Water"
+	master.wounds_taken = 999
+	IntraClanCivilWar.assign_faction(state, 20, IntraClanCivilWar.Faction.LEGITIMACY)
+	var by_id: Dictionary = {10: champion, 20: master}
+	DayOrchestrator._apply_phoenix_master_death_honor_penalty(state, by_id)
+	var second_pass: int = DayOrchestrator._apply_phoenix_master_death_honor_penalty(state, by_id)
+	assert_eq(second_pass, 0)
+	assert_almost_eq(champion.honor, 4.5, 0.001)
+
+
+func test_living_master_not_penalized() -> void:
+	var state: Dictionary = _make_phoenix_schism_state("defiance", 10, 20)
+	var champion := _make_clan_char(10, "Phoenix", "Shiba", -1, 7.0)
+	champion.honor = 5.0
+	var master := _make_clan_char(20, "Phoenix", "Isawa", -1, 7.0)
+	master.role_position = "Master of Earth"
+	master.wounds_taken = 0  # alive
+	IntraClanCivilWar.assign_faction(state, 20, IntraClanCivilWar.Faction.LEGITIMACY)
+	var by_id: Dictionary = {10: champion, 20: master}
+	var count: int = DayOrchestrator._apply_phoenix_master_death_honor_penalty(state, by_id)
+	assert_eq(count, 0)
+	assert_almost_eq(champion.honor, 5.0, 0.001)
+
+
+func test_non_phoenix_civil_war_skips_master_penalty() -> void:
+	var state: Dictionary = IntraClanCivilWar.make_initial_state(10, 20, "Dragon", 1, 0)
+	var by_id: Dictionary = {}
+	var count: int = DayOrchestrator._apply_phoenix_master_death_honor_penalty(state, by_id)
+	assert_eq(count, 0)
+
+
+func test_overreach_path_champion_is_authority_lord() -> void:
+	# Overreach: authority = champion → champion takes −0.5 for each dead Master.
+	var state: Dictionary = _make_phoenix_schism_state("overreach", 20, 10)
+	var champion := _make_clan_char(10, "Phoenix", "Shiba", -1, 7.0)
+	champion.honor = 5.0
+	var master := _make_clan_char(20, "Phoenix", "Isawa", -1, 7.0)
+	master.role_position = "Master of Air"
+	master.wounds_taken = 999
+	IntraClanCivilWar.assign_faction(state, 20, IntraClanCivilWar.Faction.LEGITIMACY)
+	var by_id: Dictionary = {10: champion, 20: master}
+	var count: int = DayOrchestrator._apply_phoenix_master_death_honor_penalty(state, by_id)
+	assert_eq(count, 1)
+	assert_almost_eq(champion.honor, 4.5, 0.001)
+
+
+# =============================================================================
+# _resolve_civil_war — victory_flags (s55.10.2.8 / s55.10.3.7)
+# =============================================================================
+
+func test_dragon_rebel_victory_returns_autonomous_rule_flag() -> void:
+	var state: Dictionary = IntraClanCivilWar.make_initial_state(10, 20, "Dragon", 1, 0)
+	state["schism_path"] = "dragon_schism"
+	IntraClanCivilWar.assign_faction(state, 10, IntraClanCivilWar.Faction.REBEL)
+	IntraClanCivilWar.assign_faction(state, 20, IntraClanCivilWar.Faction.LEGITIMACY)
+	var topics: Array[TopicData] = []
+	var next_id: Array[int] = [100]
+	var result: Dictionary = DayOrchestrator._resolve_civil_war(
+		state, false, {}, {}, 5, topics, next_id, 100, {}, "Dragon",
+	)
+	assert_true(result["victory_flags"].get("dragon_autonomous_rule", false))
+
+
+func test_dragon_legitimacy_victory_no_autonomous_rule_flag() -> void:
+	var state: Dictionary = IntraClanCivilWar.make_initial_state(10, 20, "Dragon", 1, 0)
+	IntraClanCivilWar.assign_faction(state, 10, IntraClanCivilWar.Faction.REBEL)
+	IntraClanCivilWar.assign_faction(state, 20, IntraClanCivilWar.Faction.LEGITIMACY)
+	var topics: Array[TopicData] = []
+	var next_id: Array[int] = [100]
+	var result: Dictionary = DayOrchestrator._resolve_civil_war(
+		state, true, {}, {}, 5, topics, next_id, 100, {}, "Dragon",
+	)
+	assert_false(result["victory_flags"].get("dragon_autonomous_rule", false))
+
+
+func test_phoenix_rebel_victory_returns_champion_authority_flag() -> void:
+	var state: Dictionary = IntraClanCivilWar.make_initial_state(10, 20, "Phoenix", 1, 0)
+	state["schism_path"] = "defiance"
+	IntraClanCivilWar.assign_faction(state, 10, IntraClanCivilWar.Faction.REBEL)
+	IntraClanCivilWar.assign_faction(state, 20, IntraClanCivilWar.Faction.LEGITIMACY)
+	var topics: Array[TopicData] = []
+	var next_id: Array[int] = [100]
+	var result: Dictionary = DayOrchestrator._resolve_civil_war(
+		state, false, {}, {}, 5, topics, next_id, 100, {}, "Phoenix",
+	)
+	assert_true(result["victory_flags"].get("phoenix_champion_authority", false))
+
+
+func test_non_clan_specific_war_no_victory_flags() -> void:
+	var state: Dictionary = IntraClanCivilWar.make_initial_state(10, 20, "Lion", 1, 0)
+	IntraClanCivilWar.assign_faction(state, 10, IntraClanCivilWar.Faction.REBEL)
+	IntraClanCivilWar.assign_faction(state, 20, IntraClanCivilWar.Faction.LEGITIMACY)
+	var topics: Array[TopicData] = []
+	var next_id: Array[int] = [100]
+	var result: Dictionary = DayOrchestrator._resolve_civil_war(
+		state, false, {}, {}, 5, topics, next_id, 100, {}, "Lion",
+	)
+	assert_true(result["victory_flags"].is_empty())
+
+
+# =============================================================================
+# _apply_dragon_spiritual_reeval (s55.10.2.8 — spiritual concern re-evaluation)
+# =============================================================================
+
+func _make_dragon_schism_state(rebel_id: int, auth_id: int,
+		snap_dissat: float = 0.0) -> Dictionary:
+	var s: Dictionary = IntraClanCivilWar.make_initial_state(rebel_id, auth_id, "Dragon", 1, 0)
+	s["schism_path"] = "dragon_schism"
+	# Snapshot: some initial dissatisfaction
+	var axis_key: int = TogashiOversight.Axis.SPIRITUAL_HEALTH
+	s["concern_snapshot"] = {axis_key: snap_dissat}
+	IntraClanCivilWar.assign_faction(s, rebel_id, IntraClanCivilWar.Faction.REBEL)
+	IntraClanCivilWar.assign_faction(s, auth_id, IntraClanCivilWar.Faction.LEGITIMACY)
+	return s
+
+
+func test_spiritual_reeval_worsened_flips_rebel_npc_to_legitimacy() -> void:
+	var state: Dictionary = _make_dragon_schism_state(10, 20, 1.0)
+	# Rebel NPC with Chugi virtue → strong Legitimacy pull, will flip when grievance is strong
+	var npc := _make_clan_char(99, "Dragon", "Mirumoto", -1, 2.0)
+	npc.bushido_virtue = Enums.BushidoVirtue.CHUGI
+	IntraClanCivilWar.assign_faction(state, 99, IntraClanCivilWar.Faction.REBEL)
+	var by_id: Dictionary = {10: _make_clan_char(10, "Dragon", "Mirumoto"), 20: _make_clan_char(20, "Dragon", "Togashi"), 99: npc}
+	# Togashi state with worsened concern
+	var axis_key: int = TogashiOversight.Axis.SPIRITUAL_HEALTH
+	var togashi_st: Dictionary = {"dissatisfaction": {axis_key: 5.0}}  # higher than snapshot 1.0
+	var result: Array[Dictionary] = DayOrchestrator._apply_dragon_spiritual_reeval(
+		state, togashi_st, by_id, {}
+	)
+	assert_eq(result.size(), 1)
+	assert_eq(result[0]["character_id"], 99)
+	assert_eq(result[0]["reason"], "spiritual_reeval")
+	assert_eq(int(state["faction_assignments"][99]), IntraClanCivilWar.Faction.LEGITIMACY)
+
+
+func test_spiritual_reeval_no_change_when_concern_same() -> void:
+	var state: Dictionary = _make_dragon_schism_state(10, 20, 3.0)
+	var npc := _make_clan_char(99, "Dragon", "Mirumoto")
+	npc.bushido_virtue = Enums.BushidoVirtue.CHUGI
+	IntraClanCivilWar.assign_faction(state, 99, IntraClanCivilWar.Faction.REBEL)
+	var by_id: Dictionary = {99: npc}
+	var axis_key: int = TogashiOversight.Axis.SPIRITUAL_HEALTH
+	# Current same as snapshot — no worsening
+	var togashi_st: Dictionary = {"dissatisfaction": {axis_key: 3.0}}
+	var result: Array[Dictionary] = DayOrchestrator._apply_dragon_spiritual_reeval(
+		state, togashi_st, by_id, {}
+	)
+	assert_eq(result.size(), 0)
+
+
+func test_spiritual_reeval_togashi_monks_never_reeval() -> void:
+	# Togashi Order monks are auto-assigned — spiritual re-eval skips them.
+	var state: Dictionary = _make_dragon_schism_state(10, 20, 0.0)
+	var monk := _make_clan_char(99, "Dragon", "Togashi")
+	monk.bushido_virtue = Enums.BushidoVirtue.NONE  # would be ronin-candidate otherwise
+	IntraClanCivilWar.assign_faction(state, 99, IntraClanCivilWar.Faction.REBEL)
+	var by_id: Dictionary = {99: monk}
+	var axis_key: int = TogashiOversight.Axis.SPIRITUAL_HEALTH
+	var togashi_st: Dictionary = {"dissatisfaction": {axis_key: 99.0}}
+	var result: Array[Dictionary] = DayOrchestrator._apply_dragon_spiritual_reeval(
+		state, togashi_st, by_id, {}
+	)
+	assert_eq(result.size(), 0)
+
+
+func test_spiritual_reeval_no_snapshot_skips_reeval() -> void:
+	var state: Dictionary = IntraClanCivilWar.make_initial_state(10, 20, "Dragon", 1, 0)
+	state["schism_path"] = "dragon_schism"
+	# No concern_snapshot stored
+	var npc := _make_clan_char(99, "Dragon", "Mirumoto")
+	IntraClanCivilWar.assign_faction(state, 99, IntraClanCivilWar.Faction.REBEL)
+	var by_id: Dictionary = {99: npc}
+	var axis_key: int = TogashiOversight.Axis.SPIRITUAL_HEALTH
+	var togashi_st: Dictionary = {"dissatisfaction": {axis_key: 99.0}}
+	var result: Array[Dictionary] = DayOrchestrator._apply_dragon_spiritual_reeval(
+		state, togashi_st, by_id, {}
+	)
+	assert_eq(result.size(), 0)
+
+
+func test_spiritual_reeval_skips_non_dragon_civil_war() -> void:
+	var state: Dictionary = IntraClanCivilWar.make_initial_state(10, 20, "Lion", 1, 0)
+	var axis_key: int = TogashiOversight.Axis.SPIRITUAL_HEALTH
+	state["concern_snapshot"] = {axis_key: 0.0}
+	var npc := _make_clan_char(99, "Lion", "Matsu")
+	IntraClanCivilWar.assign_faction(state, 99, IntraClanCivilWar.Faction.REBEL)
+	var by_id: Dictionary = {99: npc}
+	var togashi_st: Dictionary = {"dissatisfaction": {axis_key: 99.0}}
+	var result: Array[Dictionary] = DayOrchestrator._apply_dragon_spiritual_reeval(
+		state, togashi_st, by_id, {}
+	)
+	assert_eq(result.size(), 0)
+
+
+# =============================================================================
+# -- Stipend Disposition Update (GDD s4.3.9) ----------------------------------
+# =============================================================================
+
+func _make_lord_retainer_pair(
+	lord_id: int, retainer_id: int,
+	bushido: Enums.BushidoVirtue = Enums.BushidoVirtue.NONE,
+	shourido: Enums.ShouridoVirtue = Enums.ShouridoVirtue.NONE,
+) -> Array[L5RCharacterData]:
+	var lord := L5RCharacterData.new()
+	lord.character_id = lord_id
+	lord.lord_id = -1
+	lord.bushido_virtue = bushido
+	lord.shourido_virtue = shourido
+
+	var retainer := L5RCharacterData.new()
+	retainer.character_id = retainer_id
+	retainer.lord_id = lord_id
+
+	return [lord, retainer]
+
+
+func test_stipend_jin_lord_adds_two_disposition_to_retainer() -> void:
+	# Jin lord: +10% stipend → +2 disposition per season (GDD s4.3.9)
+	var pair: Array[L5RCharacterData] = _make_lord_retainer_pair(
+		1, 2, Enums.BushidoVirtue.JIN, Enums.ShouridoVirtue.NONE,
+	)
+	var lord: L5RCharacterData = pair[0]
+	var retainer: L5RCharacterData = pair[1]
+	var by_id: Dictionary = {1: lord, 2: retainer}
+	var chars: Array[L5RCharacterData] = [lord, retainer]
+
+	DayOrchestrator._process_seasonal_stipend_disposition(chars, by_id)
+	assert_eq(retainer.disposition_values.get(1, 0), 2)
+
+
+func test_stipend_kyoryoku_lord_subtracts_two_disposition() -> void:
+	# Kyōryōku lord: -10% stipend → -2 disposition per season (GDD s4.3.9)
+	var pair: Array[L5RCharacterData] = _make_lord_retainer_pair(
+		1, 2, Enums.BushidoVirtue.NONE, Enums.ShouridoVirtue.KYORYOKU,
+	)
+	var retainer: L5RCharacterData = pair[1]
+	var by_id: Dictionary = {1: pair[0], 2: retainer}
+	var chars: Array[L5RCharacterData] = pair
+
+	DayOrchestrator._process_seasonal_stipend_disposition(chars, by_id)
+	assert_eq(retainer.disposition_values.get(1, 0), -2)
+
+
+func test_stipend_no_virtue_no_disposition_change() -> void:
+	# No virtue → 0 modifier → no disposition delta (GDD s4.3.9: 0% → no change)
+	var pair: Array[L5RCharacterData] = _make_lord_retainer_pair(1, 2)
+	var retainer: L5RCharacterData = pair[1]
+	var by_id: Dictionary = {1: pair[0], 2: retainer}
+	var chars: Array[L5RCharacterData] = pair
+
+	DayOrchestrator._process_seasonal_stipend_disposition(chars, by_id)
+	assert_eq(retainer.disposition_values.get(1, 0), 0)
+
+
+func test_stipend_meiyo_lord_adds_one_disposition() -> void:
+	# Meiyo lord: +5% stipend → +1 disposition per season
+	var pair: Array[L5RCharacterData] = _make_lord_retainer_pair(
+		1, 2, Enums.BushidoVirtue.MEIYO, Enums.ShouridoVirtue.NONE,
+	)
+	var retainer: L5RCharacterData = pair[1]
+	var by_id: Dictionary = {1: pair[0], 2: retainer}
+	var chars: Array[L5RCharacterData] = pair
+
+	DayOrchestrator._process_seasonal_stipend_disposition(chars, by_id)
+	assert_eq(retainer.disposition_values.get(1, 0), 1)
+
+
+func test_stipend_disposition_clamps_at_100() -> void:
+	var pair: Array[L5RCharacterData] = _make_lord_retainer_pair(
+		1, 2, Enums.BushidoVirtue.JIN, Enums.ShouridoVirtue.NONE,
+	)
+	var retainer: L5RCharacterData = pair[1]
+	retainer.disposition_values[1] = 99
+	var by_id: Dictionary = {1: pair[0], 2: retainer}
+	var chars: Array[L5RCharacterData] = pair
+
+	DayOrchestrator._process_seasonal_stipend_disposition(chars, by_id)
+	assert_eq(retainer.disposition_values.get(1, 0), 100)
+
+
+func test_stipend_disposition_clamps_at_minus_100() -> void:
+	var pair: Array[L5RCharacterData] = _make_lord_retainer_pair(
+		1, 2, Enums.BushidoVirtue.NONE, Enums.ShouridoVirtue.KYORYOKU,
+	)
+	var retainer: L5RCharacterData = pair[1]
+	retainer.disposition_values[1] = -99
+	var by_id: Dictionary = {1: pair[0], 2: retainer}
+	var chars: Array[L5RCharacterData] = pair
+
+	DayOrchestrator._process_seasonal_stipend_disposition(chars, by_id)
+	assert_eq(retainer.disposition_values.get(1, 0), -100)
+
+
+func test_stipend_no_lord_id_skipped() -> void:
+	# Characters without a lord (lord_id == -1) should be unaffected
+	var standalone := L5RCharacterData.new()
+	standalone.character_id = 5
+	standalone.lord_id = -1
+	standalone.bushido_virtue = Enums.BushidoVirtue.JIN
+	var by_id: Dictionary = {5: standalone}
+	var chars: Array[L5RCharacterData] = [standalone]
+
+	DayOrchestrator._process_seasonal_stipend_disposition(chars, by_id)
+	assert_eq(standalone.disposition_values.get(5, 0), 0)
+
+
+func test_stipend_missing_lord_skipped() -> void:
+	# Retainer whose lord is not in characters_by_id — should not crash
+	var retainer := L5RCharacterData.new()
+	retainer.character_id = 99
+	retainer.lord_id = 77  # lord 77 is not in by_id
+	var by_id: Dictionary = {99: retainer}
+	var chars: Array[L5RCharacterData] = [retainer]
+
+	DayOrchestrator._process_seasonal_stipend_disposition(chars, by_id)
+	assert_eq(retainer.disposition_values.get(77, 0), 0)

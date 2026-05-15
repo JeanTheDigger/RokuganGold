@@ -584,10 +584,12 @@ Content has not been modified — only split at section boundaries.
 
 Key: **DONE** = simulation code written and tested | **PARTIAL** = code exists, deferred sub-features | **NOT STARTED** = GDD section is LOCKED but no simulation code written | **REFERENCE** = not yet ready to implement (design still Reference/No tags)
 
+> **Status as of 2026-05-15:** All PARTIAL and NOT STARTED sections are blocked — either on world map/adjacency data that does not yet exist, or on GDD spec gaps. See the "Blocked Sections" list in CLAUDE.md before starting any new work. Do not re-audit which sections are blocked.
+
 | GDD Section | Status | Notes |
 |-------------|--------|-------|
-| s2.4 The Shadowlands / Kaiu Wall | **PARTIAL** | WallSystem, HordeSystem, OniGenerator done. Deferred: horde combat resolution (s2.4.7), sortie combat, garrison shortage NPC pipeline (s2.4.12–14) |
-| s4.3 Resource Systems | **PARTIAL** | ResourceTick, RiceMarketSystem, TradeRouteData, FeasibilityLedger, ConstructionSystem done. `last_autumn_emperor_tax_income` is approximate. `is_coastal` detection always false until coordinate system exists. Forge infrastructure for arms projection and stipend obligations deferred. |
+| s2.4 The Shadowlands / Kaiu Wall | **PARTIAL** | WallSystem, HordeSystem, OniGenerator done. HordeSystem.resolve_horde_assault (s2.4.5–2.4.7) and resolve_sortie_combat (s2.4.10) done. DayOrchestrator._process_sortie_results runs full combat (synthetic GARRISON states, casualties applied to garrison_pu). All seven s2.4.7 special abilities implemented in ArmyCombatSystem: dark_spellcraft, pack_hunters, skeleton first-round bonus, horde_command + revenant death effect, wall_breaker SI ignore, feeding_frenzy, brutal_authority. Garrison shortage NPC pipeline (s2.4.12–14): WallSystem.compute_garrison_honor_gain and compute_garrison_shortage_personality_modifier implemented; WallStatus/SettlementData shortage fields (letter_season, courtier_dispatched, courtier_refused) added; ObjectiveDecomposer escalation pipeline (Step 1 SEND_LETTER → Step 2 DISPATCH_COURTIER → Step 3 DEFEND_PROVINCE) wired for Champion and Shireikan; write-backs in DayOrchestrator; Shireikan letter target selection by garrison personality score. Deferred: DECLARE_WALL_EMERGENCY ActionID (s2.4.14 Decision 6) — no LOCKED spec; Step 3 routes to DEFEND_PROVINCE stub with TODO comment. |
+| s4.3 Resource Systems | **PARTIAL** | ResourceTick, RiceMarketSystem, TradeRouteData, FeasibilityLedger, ConstructionSystem, ForgeSystem (Iron→Arms conversion) done. Stipend personality modifier (s4.3.9) and retainer disposition delta wired into seasonal pass. `last_autumn_emperor_tax_income` is approximate. `is_coastal` detection always false until coordinate system exists. |
 | s4.4 The Local Interface / ASCII Map | **NOT STARTED** | Needs coordinate system first |
 | s4.5 L5R Rules Integration (dice/stats) | **DONE** | DiceEngine, CharacterStats, SkillResolver |
 | s4.6 Honor & Glory | **DONE** | HonorGlorySystem |
@@ -597,7 +599,7 @@ Key: **DONE** = simulation code written and tested | **PARTIAL** = code exists, 
 | s11.7 Army Combat | **PARTIAL** | ArmyCombatSystem done. Sub-tile pathfinding uses placeholder IDs. 5 military stub ActionIDs pending coordinate system. |
 | s11.7b Event Durations | **DONE** | EventDurations constants |
 | s11.8 Regional Price Modifiers | **DONE** | RegionalPriceModifiers |
-| s11.9 Ship Types & Naval | **PARTIAL** | NavalSystem, NavalCombatSystem done. Ship movement initiation needs coordinate system. Weather is global per day (placeholder). Naval blockade not integrated. Tortoise Escape Attempt not yet in battle round. |
+| s11.9 Ship Types & Naval | **PARTIAL** | NavalSystem, NavalCombatSystem done. Tortoise Escape Attempt wired into battle round. Ship movement initiation needs coordinate system. Weather is global per day (coordinate placeholder). Naval blockade needs coordinate system (military unit per sub-tile — one sentence spec, genuinely blocked on world map). |
 | s11.10 Way of the Daimyo | **REFERENCE** | Lore reference, no design to implement |
 | s11.11 Insurgency System | **DONE** | InsurgencySystem |
 | s12.1 Diplomacy Framework | **DONE** | Architecture only — wired into all other systems |
@@ -613,14 +615,14 @@ Key: **DONE** = simulation code written and tested | **PARTIAL** = code exists, 
 | s12.11 Inventory System | **DONE** | InventorySystem |
 | s13 Time System | **DONE** | TimeSystem |
 | s14 Action Point System | **DONE** | ActionPointSystem |
-| s15.1–15.8 Court System | **PARTIAL** | CourtSystem, CourtActionSystem, CourtPrioritySystem, CourtAvailability, ImperialEdictSystem done. Per-type compliance effects for TAX_REFORM, AUTHORIZE_WAR, APPOINT_POSITION, STRIP_AUTONOMY, GENERAL_DECREE need additional GDD specification. |
+| s15.1–15.8 Court System | **DONE** | CourtSystem, CourtActionSystem, CourtPrioritySystem, CourtAvailability, ImperialEdictSystem done. ASK_FOR_INTRODUCTION done. All edict compliance effects implemented: CEASE_HOSTILITIES (war termination), CONDEMN_CLAN (+10 war score vs. clan), AUTHORIZE_WAR (+10 war score for authorized clan), TAX_REFORM (season_meta flag for future ResourceTick), APPOINT_POSITION (+1.0 status to target character), STRIP_AUTONOMY (−5 Honor to Champion, −10 Emperor disposition to status-5+ clan), GENERAL_DECREE (season_meta record). |
 | s16 Topic & Momentum System | **DONE** | TopicMomentumSystem |
 | s17 Personal Visits | **DONE** | PersonalVisitSystem |
 | s18 NPC Objective System | **DONE** | Wired into NPCDecisionEngine |
 | s19 Personality System | **DONE** | Wired into all scoring/filtering |
 | s22.3 Character Sheet | **DONE** | L5RCharacterData |
 | s22.4 Generation Templates | **DONE** | WorldGenerator |
-| s22.5 Character Death & Replacement | **PARTIAL** | SuccessionSystem done. Adopted heir (priority 4), Dragon/Phoenix exceptions deferred. |
+| s22.5 Character Death & Replacement | **DONE** | SuccessionSystem complete: adopted heir (CandidatePriority.ADOPTED_HEIR=4, excluded if dead or wrong clan), Dragon Togashi removal (`resolve_dragon_togashi_removal`), Phoenix Shiba reincarnation (`resolve_shiba_reincarnation`), is_phoenix_champion_succession, is_dragon_togashi_removal. |
 | s22.6 Biological Family Web | **DONE** | BiologicalFamily |
 | s22.7 Marriage System | **DONE** | MarriageSystem |
 | s22.8 Positions of Power | **DONE** | WorldPopulationGenerator covers all positions |
@@ -628,19 +630,21 @@ Key: **DONE** = simulation code written and tested | **PARTIAL** = code exists, 
 | s29.15 Courtier School Framework | **DONE** | School bonuses wired into SkillResolver, ActionExecutor |
 | s31–s37 Magic & Spells | **REFERENCE** | Source material only — casting mechanics not designed for NPC engine |
 | s38 Kiho | **REFERENCE** | Source material only |
-| s40 Individual Combat | **NOT STARTED** | GDD locked but no simulation code; needed for PC gameplay |
-| s43 Maho | **PARTIAL** | PTL tracking and any-maho-raises-PTL rule enforced. Maho spell casting resolution not implemented. |
+| s40 Individual Combat | **PARTIAL** | IndividualCombat implemented: initiative, stances, Armor TN, attack/damage, maneuvers (disarm, feint, knockdown), grapple, sumai, iaijutsu duel (Assessment/Focus/Strike), Void Point spending, Center Stance bonus, conditions (Dazed/Blinded/Prone/Fatigued/Stunned/Grappled/Mounted/Entangled). VoidSystem separate class. Wired into ActionExecutor (ISSUE_DUEL_CHALLENGE). Guard TN wiring, mounted attack bonus (+1k0), unskilled contested-roll explode (grapple/sumai) all done. Deferred: ASCII map tile positioning/range tracking (needs coordinate system). |
+| s43 Maho | **PARTIAL** | MahoSystem done: blood cost helpers, taint gain, at-act honor loss (Table 2.3), PTL increment, CrimeType.MAHO record. Spell cast roll TN not implemented — GDD s43 does not specify it. |
 | s44 Shadowlands Mutations | **REFERENCE** | Source material only |
 | s45 Advantages & Disadvantages | **REFERENCE** | Source material only |
 | s47 Mass Battle Rules | **DONE** | ArmyCombatSystem |
 | s49 Artisan & Crafting System | **PARTIAL** | Gift quality tiers wired into GiftGivingSystem. Tattoo quality into TattooSystem. Full artisan progression not implemented. |
-| s52 World Population System | **PARTIAL** | WorldPopulationGenerator, GempukkuSystem done. Mantis school stat blocks not in SCHOOL_DATA — Mantis characters generate with basic stats only. |
-| s53 War Status System | **PARTIAL** | WarSystem, WarJustification done. WarTermination done but deferred: peace court mechanics (formal court session), Imperial edict action path, territory transfer mutations on settlement/province data. |
-| s53.2 Intra-Clan Civil War | **PARTIAL** | IntraClanCivilWar done. `holds_seat` is placeholder. Army reconstitution, full Imperial Edict gating deferred. |
+| s52 World Population System | **DONE** | WorldPopulationGenerator, GempukkuSystem done. Mantis school stat blocks (Yoritomo Bushi, Moshi Shugenja, Tsuruchi Archer) added to SCHOOL_DATA. |
+| s53 War Status System | **DONE** | WarSystem, WarJustification, WarTermination done. Territory transfer mutations implemented. Imperial edict → CEASE_HOSTILITIES path fully wired. Peace court mechanics done: PEACE_COURT CourtType, proxy rank validation, willingness modifiers, conclude_peace_court (acceptance → negotiate settlement, always closes court). |
+| s53.2 Intra-Clan Civil War | **DONE** | `_rebel_holds_seat`: checks rebel lord's settlement against family home province. Army reconstitution: losing-side commanders cleared, understrength pairs consolidated, vacancies signalled. Imperial Edict wiring: CONDEMN_CLAN targeting rebel/authority lord shifts war score; clan-level edicts skipped (ambiguous). Processed edict IDs tracked per civil war state to prevent double-counting. |
 | s54.7 (a–i) The Kolat | **REFERENCE** | Fully designed across 9 sub-sections, none LOCKED. No code. |
 | s55 NPC Decision Engine | **DONE** | Full 7-phase loop, all amendments through s57.21 |
-| s55.10.2 Dragon Governance (Togashi) | **PARTIAL** | TogashiOversight done. Dragon Schism Crisis, removal-via-succession deferred. |
-| s55.10.3 Phoenix Governance (Council) | **PARTIAL** | PhoenixCouncil done. Phoenix Schism Crisis, Shiba Reincarnation deferred. |
+| s55.10 Winter Court Lifecycle | **DONE** | Host selection, invitation pipeline, Emperor's Peace, regent substitution, glory rewards all done. Champion agenda ordering AI: `order_agenda_for_host` — own clan crisis → slot 1, rival clan (disp < −20) → slot 3, others by momentum. +5 home ground bonus wired in action_executor. Late arrival handling via `_process_court_attendance`. Letter dispatch done. Distance-dependent delivery blocked on coordinate system. |
+| s55.10.2 Dragon Governance (Togashi) | **DONE** | TogashiOversight done. `resolve_dragon_togashi_removal` done (Stage 4 removal wires Togashi as confirming authority). Dragon Schism Crisis (s55.10.2.8) fully done: Togashi Order auto-LEGITIMACY at trigger, dragon_autonomous_rule flag set on FC rebel victory (suspends Oversight), dragon_treaty_penalty −15 stored in state (exposed via get_dragon_treaty_penalty), FC death → legitimacy victory via existing rebel_dead path, spiritual concern re-evaluation: dissatisfaction snapshotted at trigger, each season `_apply_dragon_spiritual_reeval` re-evaluates REBEL NPCs when any axis worsens (Togashi monks excluded, flipped via record_defection). High House of Light assault/vanish: _check_dragon_schism_siege_events() fires daily on Dragon attacker_victory at "High House of Light" settlement — sets togashi_vanished, stores assaulter FC ID, applies −2.0 Honor + −20 empire disposition, injects Tier 1 topic. Reappearance: fires in _process_togashi_oversight when new FC detected after assault. Order reconstitution: tick_order_reconstitution() runs each season for 4 seasons. |
+| s55.10.3 Phoenix Governance (Council) | **DONE** | PhoenixCouncil done. `resolve_shiba_reincarnation` done (random Shiba selection, void master lookup, bypass emperor confirmation, reincarnation topic). Phoenix Schism Crisis (s55.10.3.7) fully done: Champion Defiance Path civil war trigger wired, all Isawa auto-LEGITIMACY at trigger, Council Overreach Path has suppress_honor_hemorrhage=true (no automatic hemorrhage), Defiance Path has standard −0.3/season on Champion, Master death penalty (−0.5 Honor per dead Master, tracked per ID), Champion rebel victory sets phoenix_champion_authority via grant_champion_authority. RESTORE_COUNCIL_COMPACT: 1 AP, gated on phoenix_champion_authority=true, wired in ActionExecutor + DayOrchestrator. Post-reincarnation auto-resolution: evaluate_reincarnation_schism_outcome called in DayOrchestrator when reincarnation fires during schism. Ambiguous legitimacy: evaluate_loyalty gains is_phoenix_schism param — Chugi→Council, Meiyo→Champion, Gi→honest side, Seigyo→most beneficial; all three loyalty callsites updated. Grand ritual devastating effect: apply_grand_ritual_devastation() sets stability to 0 + grand_ritual_devastated flag + −2.0 Honor per Master + −20 Emperor disposition empire-wide; Tier 1 crisis topic injected on GRAND_RITUAL directive approval. |
+| s55.7 Contact Discovery System | **DONE** | ASK_FOR_INTRODUCTION done (Courtier/Etiquette roll, kuge gate, intermediary status gate, Bureaucracy emphasis). OBSERVE_COURT_ATTENDEES done (Perception+Investigation vs TN 15, 1–3 attendees by raises, capped by observable pool). NPC metadata population done: observable_attendee_ids filters met_characters; intermediary_id picks highest Friend+ contact who is not the target. |
 | s55.22b Otomo Seiyaku | **DONE** | OtomoSeiyakuSystem |
 | s55.23a Wall Management NeedTypes | **DONE** | Wall NeedTypes in scoring tables and decomposer |
 | s56 Quest System / ASCII Map | **NOT STARTED** | All templates LOCKED in GDD. Requires coordinate system and local interface (s4.4) first. |
@@ -656,7 +660,7 @@ Key: **DONE** = simulation code written and tested | **PARTIAL** = code exists, 
 | s57.31 Medicine System | **REFERENCE** | Not yet LOCKED |
 | s57.32 Meditation System | **REFERENCE** | Not yet LOCKED |
 | s57.33 REQUEST_PERFORMANCE System | **REFERENCE** | Not yet LOCKED |
-| s57.34 Civilian Order Budget | **NOT STARTED** | LOCKED but no simulation code |
+| s57.34 Civilian Order Budget | **DONE** | CivilianOrderBudget, character fields, NPC engine integration, day orchestrator refresh, letter system wiring |
 | s57.36 Zone Subtype Definitions | **DONE** | ZoneFlagMatrix |
 | s57.37 Tea Ceremony | **REFERENCE** | Not yet LOCKED |
 | s57.38 Hunting Party | **REFERENCE** | Not yet LOCKED |

@@ -123,7 +123,7 @@ static func advance_day(
 	)
 
 	var edict_results: Array[Dictionary] = _process_edict_compliance(
-		active_edicts, active_wars, characters, active_topics, next_topic_id, ic_day,
+		active_edicts, active_wars, characters, active_topics, next_topic_id, ic_day, season_meta,
 	)
 
 	_inject_edict_reactive_events(active_edicts, characters, world_states, ic_day)
@@ -135,6 +135,17 @@ static func advance_day(
 		dice_engine, settlements, companies, wm_for_military,
 		active_wars, characters_by_id, provinces,
 	)
+
+	var dragon_schism_siege_event: Dictionary = {}
+	if (
+		not togashi_state.is_empty()
+		and not togashi_state.get("togashi_vanished", false)
+		and _has_active_dragon_schism(active_civil_wars)
+	):
+		dragon_schism_siege_event = _check_dragon_schism_siege_events(
+			military_daily, togashi_state, characters, characters_by_id,
+			settlements, active_topics, next_topic_id, ic_day,
+		)
 
 	var naval_weather: int = _process_naval_weather(
 		dice_engine, _season_to_name(current_season), season_meta,
@@ -164,6 +175,10 @@ static func advance_day(
 		pending_letters, ic_day, dice_engine, next_letter_id,
 	)
 
+	_apply_garrison_shortage_letter_writebacks(
+		letter_pass_results, characters_by_id, settlements, current_season
+	)
+
 	var crime_results: Array[Dictionary] = _process_crime_detection(
 		day_result.get("results", []),
 		characters_by_id,
@@ -187,6 +202,10 @@ static func advance_day(
 		current_season_count,
 	)
 
+	_apply_garrison_courtier_refusal_writebacks(
+		day_result.get("results", []), settlements
+	)
+
 	var wall_engineering_results: Array[Dictionary] = _process_wall_engineering_effects(
 		day_result.get("results", []),
 		settlements,
@@ -196,6 +215,7 @@ static func advance_day(
 		day_result.get("results", []),
 		settlements,
 		provinces,
+		dice_engine,
 	)
 
 	var storm_assault_results: Array[Dictionary] = _process_storm_assault_results(
@@ -361,8 +381,17 @@ static func advance_day(
 	if not peace_route_results.is_empty():
 		LetterSystem.unblock_letters(pending_letters)
 
+	var territory_transfer_results: Array[Dictionary] = _apply_war_territory_transfers(
+		war_termination_results, provinces,
+	)
+
 	var military_topics: Array[TopicData] = _generate_military_event_topics(
 		military_daily, military_effects, active_topics, next_topic_id, ic_day,
+	)
+
+	var compact_restoration_results: Array[Dictionary] = _process_compact_restorations(
+		day_result.get("results", []),
+		phoenix_council_state,
 	)
 
 	var commitment_results: Array[Dictionary] = _process_commitment_deadlines(
@@ -501,7 +530,17 @@ static func advance_day(
 			active_civil_wars, precedent_modifiers, characters_by_id,
 			provinces, season_count_for_cw, objectives_map,
 			active_topics, next_topic_id, ic_day, season_meta,
+			companies, active_edicts, togashi_state,
 		)
+		# Apply post-resolution governance flags from clan-specific schism victories.
+		# Dragon FC rebel victory → dragon_autonomous_rule suspends Oversight (s55.10.2.8).
+		# Phoenix Champion rebel victory → phoenix_champion_authority suspends Council gate (s55.10.3.7).
+		for _cwr: Dictionary in civil_war_results_seasonal.get("resolutions", []):
+			var vflags: Dictionary = _cwr.get("victory_flags", {})
+			if vflags.get("dragon_autonomous_rule", false) and not togashi_state.is_empty():
+				togashi_state["dragon_autonomous_rule"] = true
+			if vflags.get("phoenix_champion_authority", false) and not phoenix_council_state.is_empty():
+				PhoenixCouncil.grant_champion_authority(phoenix_council_state)
 		insurgency_results = _process_insurgencies(
 			insurgencies, provinces, dice_engine, current_season,
 			next_insurgency_id, world_states, worship_maluses,
@@ -546,14 +585,17 @@ static func advance_day(
 				characters_by_id, world_states, active_topics,
 				next_topic_id, ic_day, active_civil_wars,
 				objectives_map, cw_season_count,
+				settlements, provinces,
 			)
 		var phoenix_council_results: Dictionary = {}
 		if not phoenix_council_state.is_empty():
+			var emperor_id_for_phoenix: int = int(world_states.get("emperor_id", -1))
 			phoenix_council_results = _process_phoenix_council_gating(
 				phoenix_council_state, strategic_results, characters,
 				characters_by_id, dice_engine, active_topics,
 				next_topic_id, ic_day, active_civil_wars,
 				objectives_map, cw_season_count,
+				provinces, emperor_id_for_phoenix,
 			)
 		_evaluate_heir_designations(
 			characters, characters_by_id, active_topics
@@ -584,6 +626,7 @@ static func advance_day(
 			active_topics, next_topic_id,
 		)
 		_increment_vacancy_seasons(season_meta)
+		_process_seasonal_stipend_disposition(characters, characters_by_id)
 		pregnancy_results = _process_pregnancy_checks(
 			marriages, characters_by_id, children, dice_engine, ic_day,
 			next_character_id,
@@ -629,8 +672,10 @@ static func advance_day(
 		"military_topics": military_topics,
 		"war_score_results": war_score_results,
 		"war_declarations": war_declarations,
+		"compact_restoration_results": compact_restoration_results,
 		"ladder_effects_results": ladder_effects_results,
 		"war_termination_results": war_termination_results,
+		"territory_transfer_results": territory_transfer_results,
 		"trade_route_results": trade_route_results,
 		"starvation_results": starvation_results,
 		"supply_sharing_results": supply_sharing_results,
@@ -666,6 +711,7 @@ static func advance_day(
 		"patrol_results": patrol_results,
 		"drill_results": drill_results,
 		"togashi_results": togashi_results,
+		"dragon_schism_siege_event": dragon_schism_siege_event,
 		"phoenix_council_results": phoenix_council_results,
 		"civil_war_results": civil_war_results_seasonal,
 	}
@@ -847,6 +893,35 @@ static func _process_season_transition(
 # -- Wall Seasonal Pressure (s2.4.3, s2.4.10) ----------------------------------
 # Applies SI decay, adjacent bleed, and PTL accumulation to wall tower settlements
 # once per season. Mutates settlement.wall_si and province.province_taint_level.
+
+
+# -- Stipend Disposition Update (s4.3.9) ---------------------------------------
+# Once per season, each retainer's disposition toward their immediate lord
+# is adjusted by the lord's stipend personality modifier.
+# Generous lords (Jin +10%, Meiyo +5%) build loyalty; hoarding lords lose it.
+
+static func _process_seasonal_stipend_disposition(
+	characters: Array[L5RCharacterData],
+	characters_by_id: Dictionary,
+) -> int:
+	var updates_applied: int = 0
+	for retainer: L5RCharacterData in characters:
+		if retainer.lord_id < 0:
+			continue
+		var lord: L5RCharacterData = characters_by_id.get(retainer.lord_id)
+		if lord == null:
+			continue
+		var modifier: float = ResourceTick.compute_stipend_modifier(
+			lord.bushido_virtue, lord.shourido_virtue,
+		)
+		var delta: int = ResourceTick.compute_stipend_disposition_delta(modifier)
+		if delta == 0:
+			continue
+		var old_disp: int = retainer.disposition_values.get(lord.character_id, 0)
+		retainer.disposition_values[lord.character_id] = clampi(old_disp + delta, -100, 100)
+		updates_applied += 1
+	return updates_applied
+
 
 static func _process_wall_seasonal_pressure(
 	settlements: Array[SettlementData],
@@ -1038,10 +1113,11 @@ static func _process_sortie_results(
 	applied_list: Array,
 	settlements: Array[SettlementData],
 	provinces: Dictionary,
+	dice_engine: DiceEngine,
 ) -> Array[Dictionary]:
 	var results: Array[Dictionary] = []
 
-	# Build province_id → wall tower settlement map for jade deduction.
+	# Build province_id → wall tower settlement map.
 	var wall_by_province: Dictionary = {}
 	for s: SettlementData in settlements:
 		if s.settlement_type == Enums.SettlementType.WALL_TOWER:
@@ -1053,38 +1129,103 @@ static func _process_sortie_results(
 			continue
 
 		var target_pid: int = effects.get("target_province_id", -1)
-		var ss_reduction: int = int(effects.get("ss_reduction", 0))
+		var planned_ss_reduction: int = int(effects.get("ss_reduction", 0))
 		var force_pct: float = float(effects.get("force_pct", 0.0))
 		var jade_per_warrior: int = int(effects.get("jade_per_warrior", 1))
 
-		# Apply SS reduction to the Shadowlands province (s2.4.11).
-		# Horde combat resolution is deferred (s2.4.7); SS reduction is applied
-		# immediately as a simplified sortie outcome.
-		var new_ss: int = 0
-		var province: Variant = provinces.get(target_pid, null)
-		if province is ProvinceData:
-			var prov: ProvinceData = province as ProvinceData
-			new_ss = maxi(0, prov.shadowlands_strength - ss_reduction)
-			prov.shadowlands_strength = new_ss
-
-		# Consume jade from the Tower stockpile (s2.4.15).
-		# warriors = floor(garrison_pu × force_pct); jade = warriors × jade_per_warrior.
-		var jade_consumed: float = 0.0
 		var settlement: Variant = wall_by_province.get(target_pid, null)
+		var province: Variant = provinces.get(target_pid, null)
+
+		# Build synthetic garrison battle states from committed PU.
+		var committed_pu: int = 0
+		var garrison_states: Array[Dictionary] = []
 		if settlement is SettlementData:
 			var s: SettlementData = settlement as SettlementData
-			var warriors: int = int(s.garrison_pu * force_pct)
+			committed_pu = int(s.garrison_pu * force_pct)
+			garrison_states = _build_garrison_sortie_states(committed_pu)
+
+		# Resolve sortie combat via HordeSystem (s2.4.10).
+		var ss: int = 0
+		if province is ProvinceData:
+			ss = (province as ProvinceData).shadowlands_strength
+
+		var combat_result: Dictionary = {}
+		var actual_ss_reduction: int = 0
+		var casualties_health: int = 0
+		if not garrison_states.is_empty():
+			combat_result = HordeSystem.resolve_sortie_combat(
+				garrison_states, planned_ss_reduction, ss, dice_engine,
+			)
+			actual_ss_reduction = int(combat_result.get("ss_reduction", 0))
+			casualties_health = int(combat_result.get("casualties_health", 0))
+
+		# Apply SS reduction only if combat succeeded.
+		var new_ss: int = ss
+		if province is ProvinceData and actual_ss_reduction > 0:
+			var prov: ProvinceData = province as ProvinceData
+			new_ss = maxi(0, prov.shadowlands_strength - actual_ss_reduction)
+			prov.shadowlands_strength = new_ss
+
+		# Reduce garrison PU by combat casualties (153 health = 1 PU).
+		var pu_lost: int = 0
+		var jade_consumed: float = 0.0
+		if settlement is SettlementData:
+			var s: SettlementData = settlement as SettlementData
+			pu_lost = int(casualties_health / 153.0)
+			s.garrison_pu = maxi(0, s.garrison_pu - pu_lost)
+
+			# Consume jade regardless of combat outcome (s2.4.15).
+			var warriors: int = committed_pu
 			jade_consumed = float(warriors * jade_per_warrior)
 			s.jade_stockpile = maxf(0.0, s.jade_stockpile - jade_consumed)
 
 		results.append({
 			"province_id": target_pid,
-			"ss_reduction_applied": ss_reduction,
+			"sortie_success": combat_result.get("success", false),
+			"ss_reduction_applied": actual_ss_reduction,
 			"new_ss": new_ss,
+			"pu_lost": pu_lost,
 			"jade_consumed": jade_consumed,
+			"battle_result": combat_result.get("battle_result", {}),
 		})
 
 	return results
+
+
+## Build synthetic GARRISON-type battle company dicts for sortie_states.
+## garrison_pu: number of companies committed (each = 153 health / 1 PU).
+static func _build_garrison_sortie_states(garrison_pu: int) -> Array[Dictionary]:
+	var states: Array[Dictionary] = []
+	var stats: Dictionary = ArmyCombatSystem.UNIT_STATS.get(
+		Enums.CompanyUnitType.GARRISON, {}
+	)
+	for i: int in range(garrison_pu):
+		states.append({
+			"company": null,
+			"company_id": 7000 + i,
+			"unit_type": Enums.CompanyUnitType.GARRISON,
+			"starting_health": stats.get("health", 153),
+			"current_health": stats.get("health", 153),
+			"starting_morale": stats.get("morale", 16),
+			"current_morale": stats.get("morale", 16),
+			"base_attack": stats.get("attack", 3),
+			"base_defense": stats.get("defense", 5),
+			"base_morale_defense": stats.get("morale_defense", 7),
+			"row": 1,
+			"column": i,
+			"side": "defender",
+			"is_routed": false,
+			"is_destroyed": false,
+			"commander": null,
+			"commander_bonus": {},
+			"commander_injured": false,
+			"commander_dead": false,
+			"survival_thresholds_triggered": [],
+			"health_damage_this_round": 0,
+			"no_morale": false,
+			"round_number": 0,
+		})
+	return states
 
 
 # -- Storm Assault Processing (s11.7) ------------------------------------------
@@ -3631,6 +3772,34 @@ static func _process_levy_suspicion(
 		topic.slug = "private_army_%d_season_%d" % [lord_id, season_count]
 		active_topics.append(topic)
 
+		# Apply disposition penalty to Family Daimyo and Clan Champion (s11.7a).
+		# Neighboring Provincial Daimyo deferred — requires coordinate system.
+		var disposition_penalty: int = check.get("disposition_loss_lord", 0)
+		if disposition_penalty != 0:
+			var penalized_ids: Dictionary = {}
+			var family_daimyo: L5RCharacterData = (
+				characters_by_id.get(lord.lord_id) if lord.lord_id >= 0 else null
+			)
+			if family_daimyo != null:
+				var cur_fd: int = family_daimyo.disposition_values.get(lord_id, 0)
+				family_daimyo.disposition_values[lord_id] = clampi(
+					cur_fd + disposition_penalty, -100, 100,
+				)
+				penalized_ids[family_daimyo.character_id] = true
+			for cid2: int in characters_by_id:
+				var ch2: L5RCharacterData = characters_by_id[cid2]
+				if ch2.clan != lord.clan:
+					continue
+				if CivilianOrderBudget.lord_rank_from_status(ch2.status) != Enums.LordRank.CLAN_CHAMPION:
+					continue
+				if ch2.character_id in penalized_ids:
+					break
+				var cur_ch: int = ch2.disposition_values.get(lord_id, 0)
+				ch2.disposition_values[lord_id] = clampi(
+					cur_ch + disposition_penalty, -100, 100,
+				)
+				break
+
 		results.append({
 			"lord_id": lord_id,
 			"clan": lord.clan,
@@ -3685,9 +3854,9 @@ static func _process_army_upkeep(
 				clan_companies.append(c)
 		var iron_state: Dictionary = clan.get_meta("iron_state", {}) if clan.has_meta("iron_state") else {}
 		var r: Dictionary = ArmyUpkeepSystem.process_iron_upkeep_dict(
-			clan_companies, iron_state, clan.arms_stockpile,
+			clan_companies, iron_state, clan.iron_stockpile,
 		)
-		clan.arms_stockpile = maxf(clan.arms_stockpile - r["iron_consumed"], 0.0)
+		clan.iron_stockpile = maxf(clan.iron_stockpile - r["iron_consumed"], 0.0)
 		if not iron_state.is_empty():
 			clan.set_meta("iron_state", iron_state)
 		iron_results.append({
@@ -4268,6 +4437,78 @@ static func _process_siege_war_scores(
 				break
 
 
+# -- Dragon Schism: High House of Light siege detection (s55.10.2.8) -----------
+# Checks daily siege results for an attacker_victory on the High House of Light.
+# Fires TogashiOversight.assault_high_house() and applies honor/disposition effects.
+# Called once per daily tick before Togashi is already off the map.
+
+static func _check_dragon_schism_siege_events(
+	military_daily: Dictionary,
+	togashi_state: Dictionary,
+	characters: Array[L5RCharacterData],
+	characters_by_id: Dictionary,
+	settlements: Array[SettlementData],
+	active_topics: Array[TopicData],
+	next_topic_id: Array[int],
+	ic_day: int,
+) -> Dictionary:
+	var siege_results: Array = military_daily.get("siege_results", [])
+	for sr: Variant in siege_results:
+		if not (sr is Dictionary):
+			continue
+		var sd: Dictionary = sr
+		if sd.get("resolved", "") != "attacker_victory":
+			continue
+		if sd.get("attacker_clan", "") != "Dragon":
+			continue
+
+		var target_id: int = int(sd.get("settlement_id", -1))
+		var target_settlement: SettlementData = null
+		for s: SettlementData in settlements:
+			if s.settlement_id == target_id:
+				target_settlement = s
+				break
+		if target_settlement == null or target_settlement.settlement_name != "High House of Light":
+			continue
+
+		var mirumoto_fc: L5RCharacterData = _find_mirumoto_fc(characters)
+		var fc_id: int = mirumoto_fc.character_id if mirumoto_fc != null else -1
+		var togashi_char_id: int = _find_togashi_id(characters)
+		var togashi_char: L5RCharacterData = characters_by_id.get(togashi_char_id)
+
+		var assault_result: Dictionary = TogashiOversight.assault_high_house(
+			togashi_state, togashi_char, next_topic_id[0], ic_day, fc_id,
+		)
+		next_topic_id[0] += 1
+
+		# Apply Honor cost to the FC (s55.10.2.8).
+		if mirumoto_fc != null:
+			HonorGlorySystem.apply_honor_change(mirumoto_fc, float(assault_result.get("honor_change", 0.0)))
+
+		# Apply empire-wide disposition penalty to all status-5+ clan representatives.
+		var disp_change: int = int(assault_result.get("empire_disposition_change", 0))
+		if disp_change != 0 and fc_id >= 0:
+			for c: L5RCharacterData in characters:
+				if c.status < 5.0:
+					continue
+				if c.clan == "Dragon":
+					continue
+				var cur: int = c.disposition_values.get(fc_id, 0)
+				c.disposition_values[fc_id] = clampi(cur + disp_change, -100, 100)
+
+		# Inject topic.
+		var topic_obj: TopicData = assault_result.get("topic")
+		if topic_obj != null:
+			active_topics.append(topic_obj)
+
+		assault_result.erase("topic")
+		assault_result["settlement_id"] = target_id
+		assault_result["event"] = "high_house_assault"
+		return assault_result
+
+	return {}
+
+
 static func _process_tether_war_scores(
 	military_daily: Dictionary,
 	active_wars: Array[WarData],
@@ -4392,7 +4633,7 @@ static func _process_supply_status_checks(
 		var clan_iron: float = 0.0
 		var clan_data: ClanData = clans.get(lord.clan)
 		if clan_data != null:
-			clan_iron = clan_data.arms_stockpile
+			clan_iron = clan_data.iron_stockpile
 
 		var total_iron_upkeep: float = 0.0
 		for comp: Dictionary in clan_companies:
@@ -4592,11 +4833,16 @@ static func _build_friendly_province_list(
 			var d: Dictionary = by_province[pd.province_id]
 			if d["civ_pu"] > 0.0:
 				rice_per_pu = d["rice"] / d["civ_pu"]
+		var province_has_forge: bool = false
+		for s: SettlementData in settlements:
+			if s.province_id == pd.province_id and s.has_infrastructure("forge"):
+				province_has_forge = true
+				break
 		result.append({
 			"province_id": pd.province_id,
 			"distance": 1,
 			"rice_per_pu": rice_per_pu,
-			"has_forge": false,
+			"has_forge": province_has_forge,
 		})
 	return result
 
@@ -5094,6 +5340,51 @@ static func _apply_service_assignment_effect(
 	}
 
 
+## When a Daimyo refuses the Champion's courtier (s2.4.14 Decision 4), set the
+## garrison_shortage_courtier_refused flag on the affected wall tower so the
+## decomposer's Step 3 can detect the emergency-declaration trigger condition.
+static func _apply_garrison_courtier_refusal_writebacks(
+	results: Array[Dictionary],
+	settlements: Array[SettlementData],
+) -> void:
+	for r: Dictionary in results:
+		var effects: Dictionary = r.get("effects", {})
+		if not effects.get("garrison_refused", false):
+			continue
+		var target_province_id: int = effects.get("target_province_id", -1)
+		if target_province_id < 0:
+			continue
+		for s: SettlementData in settlements:
+			if s.settlement_type == Enums.SettlementType.WALL_TOWER \
+					and s.province_id == target_province_id:
+				s.garrison_shortage_courtier_refused = true
+				break
+
+
+## When a Champion or Shireikan writes a garrison shortage letter (s2.4.13–14),
+## mark the tower's garrison_shortage_letter_season so the escalation pipeline
+## can advance to DISPATCH_COURTIER the following season.
+static func _apply_garrison_shortage_letter_writebacks(
+	letter_results: Array[Dictionary],
+	characters_by_id: Dictionary,
+	settlements: Array[SettlementData],
+	current_season: int,
+) -> void:
+	for r: Dictionary in letter_results:
+		if r.get("need_type", "") != "STRENGTHEN_WALL":
+			continue
+		var char_id: int = r.get("character_id", -1)
+		var character: L5RCharacterData = characters_by_id.get(char_id)
+		if character == null:
+			continue
+		var loc: String = character.physical_location
+		for s: SettlementData in settlements:
+			if s.settlement_type == Enums.SettlementType.WALL_TOWER \
+					and str(s.settlement_id) == loc:
+				s.garrison_shortage_letter_season = current_season
+				break
+
+
 static func _apply_garrison_assignment(
 	applied: Dictionary,
 	characters_by_id: Dictionary,
@@ -5129,6 +5420,8 @@ static func _apply_garrison_assignment(
 
 	var pu_transferred: float = 0.0
 	if wall_tower != null:
+		# Mark courtier as dispatched for this tower's shortage pipeline.
+		wall_tower.garrison_shortage_courtier_dispatched = true
 		var transfer: float = 1.0
 		if source_settlement != null and source_settlement.garrison_pu >= transfer:
 			source_settlement.garrison_pu -= transfer
@@ -5138,6 +5431,11 @@ static func _apply_garrison_assignment(
 			pu_transferred = source_settlement.garrison_pu
 			wall_tower.garrison_pu += pu_transferred
 			source_settlement.garrison_pu = 0.0
+		# Reset shortage tracking once garrison is no longer below minimum.
+		if not WallSystem.is_garrison_below_minimum(wall_tower.garrison_pu):
+			wall_tower.garrison_shortage_letter_season = -1
+			wall_tower.garrison_shortage_courtier_dispatched = false
+			wall_tower.garrison_shortage_courtier_refused = false
 
 	var requester_id: int = applied.get("character_id", -1)
 	return {
@@ -5333,6 +5631,30 @@ static func _build_settlements_by_province(
 
 
 # -- War Declaration Processing ------------------------------------------------
+
+static func _process_compact_restorations(
+	applied_list: Array,
+	phoenix_council_state: Dictionary,
+) -> Array[Dictionary]:
+	## Intercepts RESTORE_COUNCIL_COMPACT action results and applies the
+	## restoration to phoenix_council_state (s55.10.3.7).
+	var results: Array[Dictionary] = []
+	if phoenix_council_state.is_empty():
+		return results
+	for applied: Variant in applied_list:
+		if not (applied is Dictionary):
+			continue
+		var ad: Dictionary = applied
+		var effects: Dictionary = ad.get("effects", {})
+		if not effects.get("requires_compact_restoration", false):
+			continue
+		PhoenixCouncil.restore_council_compact(phoenix_council_state)
+		results.append({
+			"event": "compact_restored",
+			"restoring_champion_id": int(effects.get("restoring_champion_id", -1)),
+		})
+	return results
+
 
 static func _process_war_declarations(
 	applied_list: Array,
@@ -5718,6 +6040,21 @@ static func _find_war_by_id(
 	return null
 
 
+# -- Territory Transfer on War End ----------------------------------------------
+
+static func _apply_war_territory_transfers(
+	war_termination_results: Array[Dictionary],
+	provinces: Dictionary,
+) -> Array[Dictionary]:
+	var all_transfers: Array[Dictionary] = []
+	for resolution: Dictionary in war_termination_results:
+		var transfers: Array[Dictionary] = WarTermination.apply_territory_transfers(
+			resolution, provinces,
+		)
+		all_transfers.append_array(transfers)
+	return all_transfers
+
+
 # -- Trade Route Suspension on War/Peace ---------------------------------------
 
 static func _process_war_trade_routes(
@@ -5996,7 +6333,11 @@ static func _set_wall_tower_context_flags(
 		wstat.province_id = tower.province_id
 		wstat.si = tower.wall_si
 		wstat.ss = ss
+		wstat.minimum_garrison = int(WallSystem.MINIMUM_GARRISON_PU)
 		wstat.garrison_above_minimum = not WallSystem.is_garrison_below_minimum(tower.garrison_pu)
+		wstat.garrison_shortage_letter_season = tower.garrison_shortage_letter_season
+		wstat.garrison_shortage_courtier_dispatched = tower.garrison_shortage_courtier_dispatched
+		wstat.garrison_shortage_courtier_refused = tower.garrison_shortage_courtier_refused
 		var min_jade: float = float(
 			int(tower.garrison_pu * WallSystem.SORTIE_SMALL_MAX_PCT)
 			* WallSystem.SORTIE_SMALL_JADE_PER_WARRIOR
@@ -6194,17 +6535,23 @@ static func _process_edict_compliance(
 	active_topics: Array[TopicData],
 	next_topic_id: Array[int],
 	ic_day: int,
+	season_meta: Dictionary,
 ) -> Array[Dictionary]:
 	var results: Array[Dictionary] = ImperialEdictSystem.process_daily_compliance(
 		active_edicts, active_wars, characters, ic_day,
 	)
 	for r: Dictionary in results:
 		var topic_dict: Dictionary = r.get("defiance_topic", {})
-		if topic_dict.is_empty():
-			continue
-		var t: TopicData = _topic_from_dict(topic_dict, next_topic_id, ic_day)
-		active_topics.append(t)
-		r["defiance_topic_id"] = t.topic_id
+		if not topic_dict.is_empty():
+			var t: TopicData = _topic_from_dict(topic_dict, next_topic_id, ic_day)
+			active_topics.append(t)
+			r["defiance_topic_id"] = t.topic_id
+		if r.get("tax_reform_active", false):
+			season_meta["tax_reform_active"] = true
+			season_meta["tax_reform_edict_id"] = r.get("tax_reform_edict_id", -1)
+		if r.has("last_general_decree_id"):
+			season_meta["last_general_decree_id"] = r["last_general_decree_id"]
+			season_meta["last_general_decree_day"] = r.get("last_general_decree_day", ic_day)
 	return results
 
 
@@ -6345,6 +6692,10 @@ static func _create_winter_court_from_directive(
 
 	var agenda: Array[int] = CourtSystem.select_agenda_topics(
 		active_topics, CourtSessionData.CourtType.IMPERIAL_WINTER_COURT
+	)
+	var host_champion: L5RCharacterData = characters_by_id.get(host_champion_id) as L5RCharacterData
+	agenda = WinterCourtSystem.order_agenda_for_host(
+		agenda, active_topics, host_clan, host_champion, characters_by_id,
 	)
 
 	var start_day: int = ic_day + (WinterCourtSystem.WINTER_START_IC_DAY - WinterCourtSystem.ANNOUNCEMENT_IC_DAY)
@@ -6923,7 +7274,42 @@ static func _process_togashi_oversight(
 	active_civil_wars: Array[Dictionary] = [],
 	objectives_map: Dictionary = {},
 	current_season: int = 0,
+	settlements: Array[SettlementData] = [],
+	provinces: Dictionary = {},
 ) -> Dictionary:
+	# Reappearance check runs BEFORE the dragon_autonomous_rule gate.
+	# The assaulting FC held autonomous rule; when he dies a new FC is found here.
+	# This is the only path that clears togashi_vanished and dragon_autonomous_rule (s55.10.2.8).
+	if TogashiOversight.is_togashi_off_map(togashi_state):
+		var last_assaulter_id: int = int(togashi_state.get("last_assaulter_fc_id", -1))
+		var candidate_fc: L5RCharacterData = _find_mirumoto_fc(characters)
+		if (
+			candidate_fc != null
+			and last_assaulter_id >= 0
+			and candidate_fc.character_id != last_assaulter_id
+		):
+			var togashi_char: L5RCharacterData = characters_by_id.get(_find_togashi_id(characters))
+			var settled_cw: Dictionary = {}
+			for cw: Dictionary in active_civil_wars:
+				if not cw.get("active", false) and cw.get("clan", "") == "Dragon":
+					settled_cw = cw.get("faction_assignments", {})
+					break
+			var reappear: Dictionary = TogashiOversight.reappear_togashi(
+				togashi_state, togashi_char, settlements, provinces, settled_cw
+			)
+			return {
+				"togashi_reappeared": reappear.get("reappeared", false),
+				"togashi_reappear_settlement": reappear.get("settlement_id", -1),
+			}
+
+	# Dragon FC won autonomous rule — Oversight System suspended for his lifetime (s55.10.2.8).
+	if togashi_state.get("dragon_autonomous_rule", false):
+		return {"skipped": true, "reason": "dragon_autonomous_rule_active"}
+
+	var order_recon_done: bool = false
+	if int(togashi_state.get("order_reconstitution_seasons_remaining", 0)) > 0:
+		order_recon_done = TogashiOversight.tick_order_reconstitution(togashi_state)
+
 	var mirumoto_fc: L5RCharacterData = _find_mirumoto_fc(characters)
 	if mirumoto_fc == null:
 		return {"skipped": true, "reason": "no_mirumoto_fc"}
@@ -6979,15 +7365,28 @@ static func _process_togashi_oversight(
 		var togashi_id: int = _find_togashi_id(characters)
 		var fc_id: int = mirumoto_fc.character_id
 		if togashi_id >= 0:
+			# Snapshot dissatisfaction so seasonal re-evaluation can detect worsening (s55.10.2.8).
+			var snapshot: Dictionary = togashi_state.get("dissatisfaction", {}).duplicate()
 			var cw_result: Dictionary = _trigger_civil_war(
 				fc_id, togashi_id, "Dragon", "removal order",
 				characters, characters_by_id, objectives_map,
 				active_civil_wars, active_topics, next_topic_id,
 				ic_day, current_season,
+				false, "dragon_schism", snapshot,
 			)
 			result["civil_war_triggered"] = cw_result
 
+	if order_recon_done:
+		result["order_reconstitution_done"] = true
+
 	return result
+
+
+static func _has_active_dragon_schism(active_civil_wars: Array[Dictionary]) -> bool:
+	for cw: Dictionary in active_civil_wars:
+		if cw.get("clan", "") == "Dragon" and cw.get("active", false):
+			return true
+	return false
 
 
 static func _find_mirumoto_fc(characters: Array[L5RCharacterData]) -> L5RCharacterData:
@@ -7101,12 +7500,47 @@ static func _process_phoenix_council_gating(
 	active_civil_wars: Array[Dictionary] = [],
 	objectives_map: Dictionary = {},
 	current_season: int = 0,
+	provinces: Dictionary = {},
+	emperor_id: int = -1,
 ) -> Dictionary:
 	var shiba_champion: L5RCharacterData = _find_shiba_champion(characters)
 	if shiba_champion == null:
 		return {"skipped": true, "reason": "no_shiba_champion"}
 
 	if PhoenixCouncil.has_champion_authority(phoenix_state):
+		# Detect reincarnation: champion changed while authority flag is active.
+		# The new Champion evaluates compact restoration on their first season (s55.10.3.7).
+		var known_champ_id: int = int(phoenix_state.get("known_champion_id", -1))
+		var current_champ_id: int = shiba_champion.character_id if shiba_champion != null else -1
+		if current_champ_id >= 0 and current_champ_id != known_champ_id and known_champ_id >= 0:
+			# New Champion detected — run first-season restoration evaluation.
+			var duty_score: int = (
+				70 if shiba_champion.bushido_virtue == Enums.BushidoVirtue.CHUGI else 30
+			)
+			var avg_disp: int = _compute_avg_council_disposition(
+				shiba_champion, characters_by_id
+			)
+			var restores: bool = PhoenixCouncil.reincarnated_champion_evaluates_restore(
+				shiba_champion, avg_disp, duty_score
+			)
+			phoenix_state["known_champion_id"] = current_champ_id
+			if restores:
+				PhoenixCouncil.restore_council_compact(phoenix_state)
+				return {
+					"reincarnation_eval": true,
+					"compact_restored": true,
+					"new_champion_id": current_champ_id,
+				}
+			return {
+				"reincarnation_eval": true,
+				"compact_restored": false,
+				"new_champion_id": current_champ_id,
+				"skipped": true,
+				"reason": "champion_authority_retained",
+			}
+		# No champion change (or first-ever call) — update known_champion_id and skip.
+		if current_champ_id >= 0:
+			phoenix_state["known_champion_id"] = current_champ_id
 		return {"skipped": true, "reason": "champion_has_authority"}
 
 	var living_masters: Array = _find_living_elemental_masters(characters)
@@ -7208,6 +7642,31 @@ static func _process_phoenix_council_gating(
 		topic.category = TopicData.Category.POLITICAL
 		active_topics.append(topic)
 
+	# Apply devastating effect for any approved GRAND_RITUAL directive (s55.10.3.7).
+	var grand_ritual_results: Array[Dictionary] = []
+	for approval: Dictionary in approved:
+		var directive: Dictionary = approval.get("directive", {})
+		var dt: int = int(directive.get("decision_type", -1))
+		if dt != PhoenixCouncil.DecisionType.GRAND_RITUAL:
+			continue
+		var target_province_id: int = int(directive.get("target_province_id", -1))
+		var target_province: ProvinceData = provinces.get(target_province_id) as ProvinceData
+		if target_province == null:
+			continue
+		var all_reps: Array[L5RCharacterData] = characters.filter(
+			func(c: L5RCharacterData) -> bool: return c.status >= 5.0
+		)
+		var ritual_result: Dictionary = PhoenixCouncil.apply_grand_ritual_devastation(
+			target_province, living_masters, all_reps, emperor_id
+		)
+		if ritual_result.get("applied", false):
+			var crisis_dict: Dictionary = ritual_result.get("crisis_topic", {})
+			if not crisis_dict.is_empty():
+				var ct: TopicData = _topic_from_dict(crisis_dict, next_topic_id, ic_day)
+				active_topics.append(ct)
+				ritual_result["crisis_topic_id"] = ct.topic_id
+		grand_ritual_results.append(ritual_result)
+
 	var result_dict: Dictionary = {
 		"vetoed": vetoed,
 		"approved": approved,
@@ -7215,19 +7674,38 @@ static func _process_phoenix_council_gating(
 		"defiance_stage": int(phoenix_state.get("defiance_stage", 0)),
 		"overreach_stage": int(phoenix_state.get("overreach_stage", 0)),
 		"living_masters_count": living_masters.size(),
+		"grand_ritual_results": grand_ritual_results,
 	}
 
 	if PhoenixCouncil.is_overreach_schism_imminent(phoenix_state):
 		var senior_master_id: int = _find_senior_elemental_master_id(living_masters, characters_by_id)
 		if senior_master_id >= 0:
+			# Council Overreach: no automatic honor hemorrhage on either side (s55.10.3.7).
 			var cw_result: Dictionary = _trigger_civil_war(
 				senior_master_id, shiba_champion.character_id,
 				"Phoenix", "council overreach",
 				characters, characters_by_id, objectives_map,
 				active_civil_wars, active_topics, next_topic_id,
 				ic_day, current_season,
+				true, "overreach",
 			)
 			result_dict["civil_war_triggered"] = cw_result
+
+	# Champion Defiance Path schism: Champion refuses Stage 4 removal (s55.10.3.5, s55.10.3.7).
+	# Rebel = Champion (defied Council 4 times), Authority = Senior Master (Council representative).
+	# Standard −0.3 Honor/season hemorrhage applies to the Champion (suppress_hemorrhage = false).
+	if PhoenixCouncil.is_unfit_declaration_active(phoenix_state):
+		var senior_master_id: int = _find_senior_elemental_master_id(living_masters, characters_by_id)
+		if senior_master_id >= 0:
+			var cw_result: Dictionary = _trigger_civil_war(
+				shiba_champion.character_id, senior_master_id,
+				"Phoenix", "champion defiance",
+				characters, characters_by_id, objectives_map,
+				active_civil_wars, active_topics, next_topic_id,
+				ic_day, current_season,
+				false, "defiance",
+			)
+			result_dict["champion_defiance_civil_war_triggered"] = cw_result
 
 	return result_dict
 
@@ -8292,6 +8770,11 @@ static func _process_construction_completions(
 					next_settlement_id[0] += 1
 					settlements.append(monastery)
 
+			ConstructionData.ConstructionType.FORGE:
+				var target_s: Variant = _find_settlement_by_id(settlements, cd.settlement_id)
+				if target_s != null:
+					(target_s as SettlementData).infrastructure.append("forge")
+
 			ConstructionData.ConstructionType.SHIP:
 				var ship := ShipData.new()
 				ship.ship_id = next_settlement_id[0]
@@ -8426,7 +8909,7 @@ static func _populate_infrastructure_intelligence(
 	var border_no_fort: Dictionary = {}  # province_id → clan
 	var surplus_pu: Dictionary = {}  # province_id → clan
 	var coastal: bool = false
-	var has_ships_flag: bool = false
+	var has_naval_assets_flag: bool = false
 	var naval_threat: bool = false
 
 	var province_settlements: Dictionary = {}
@@ -8483,7 +8966,7 @@ static func _populate_infrastructure_intelligence(
 	# Coastal / naval detection
 	for s: ShipData in ships:
 		if not s.is_destroyed:
-			has_ships_flag = true
+			has_naval_assets_flag = true
 			break
 
 	# Naval threat: at war AND enemy clan has ships
@@ -8502,7 +8985,7 @@ static func _populate_infrastructure_intelligence(
 	world_states["border_province_ids_without_fort"] = border_no_fort
 	world_states["surplus_pu_province_ids"] = surplus_pu
 	world_states["is_coastal"] = coastal
-	world_states["has_ships"] = has_ships_flag
+	world_states["has_naval_assets"] = has_naval_assets_flag
 	world_states["has_naval_threat"] = naval_threat
 
 
@@ -8919,6 +9402,23 @@ static func _process_commitment_seasonal(
 					other.disposition_values[lord_id] = clampi(
 						other.disposition_values[lord_id] + disp_penalty, -100, 100,
 					)
+		# Apply permanent historical modifier to each witness (s15.2).
+		var witness_ids: Array = renege_info.get("witness_ids", [])
+		if not witness_ids.is_empty():
+			var renege_mod: Dictionary = DispositionSystem.create_historical_modifier(
+				"reneged_commitment", ic_day,
+			)
+			if not renege_mod.is_empty():
+				for wid: Variant in witness_ids:
+					if int(wid) == lord_id:
+						continue
+					var witness: L5RCharacterData = characters_by_id.get(int(wid))
+					if witness == null:
+						continue
+					if not witness.historical_modifiers.has(lord_id):
+						witness.historical_modifiers[lord_id] = []
+					(witness.historical_modifiers[lord_id] as Array).append(renege_mod.duplicate())
+
 		var topic_tier: int = renege_info.get("topic_tier", 3)
 		var topic_type: String = renege_info.get("topic_type", "renege")
 		var topic_variant: String = renege_info.get("topic_variant", "commitment_broken")
@@ -8983,6 +9483,7 @@ static func _process_voluntary_declarations(
 			CourtCommitmentData.CommitmentSource.VOLUNTARY,
 			ic_day, deadline,
 		)
+		cc.witness_ids = court.attendee_ids.duplicate()
 		court_commitments.append(cc)
 		created.append(cc)
 	return created
@@ -9287,6 +9788,9 @@ static func _process_civil_war_seasonal(
 	next_topic_id: Array[int],
 	ic_day: int,
 	season_meta: Dictionary,
+	companies: Array[Dictionary] = [],
+	active_edicts: Array[EdictData] = [],
+	togashi_state: Dictionary = {},
 ) -> Dictionary:
 	var precedent_decay_count: int = IntraClanCivilWar.tick_precedent_decay(
 		precedent_modifiers, current_season,
@@ -9309,9 +9813,25 @@ static func _process_civil_war_seasonal(
 			if prov is ProvinceData and (prov as ProvinceData).clan == clan:
 				clan_provinces.append(prov as ProvinceData)
 
+		var suppress_hem: bool = state.get("suppress_honor_hemorrhage", false)
 		var consequence_result: Dictionary = IntraClanCivilWar.apply_seasonal_consequences(
-			state, rebel_lord, clan_provinces, current_season,
+			state, rebel_lord, clan_provinces, current_season, suppress_hem,
 		)
+
+		# Phoenix schism: each dead Master costs the Champion −0.5 Honor (s55.10.3.7).
+		var master_deaths: int = _apply_phoenix_master_death_honor_penalty(state, characters_by_id)
+		if master_deaths > 0:
+			consequence_result["phoenix_master_deaths_penalized"] = master_deaths
+
+		# Dragon schism: re-evaluate loyalty when spiritual concern worsens (s55.10.2.8).
+		var spiritual_defections: Array[Dictionary] = _apply_dragon_spiritual_reeval(
+			state, togashi_state, characters_by_id, objectives_map,
+		)
+		if not spiritual_defections.is_empty():
+			consequence_result["spiritual_reeval_defections"] = spiritual_defections
+			defections.append_array(spiritual_defections)
+
+		_apply_civil_war_edict_shifts(state, rebel_lord_id, authority_lord_id, active_edicts)
 
 		var war_defections: Array[Dictionary] = _check_civil_war_defections(
 			state, characters_by_id, objectives_map, current_season,
@@ -9322,6 +9842,7 @@ static func _process_civil_war_seasonal(
 			state, rebel_lord, authority_lord, characters_by_id,
 			precedent_modifiers, current_season, active_topics,
 			next_topic_id, ic_day, season_meta, clan,
+			provinces, companies, null,
 		)
 		if not resolution.is_empty():
 			resolutions.append(resolution)
@@ -9374,8 +9895,9 @@ static func _check_civil_war_defections(
 		var rebel_completion: float = _get_rebel_completion_rate(rebel_lord_id, objectives_map)
 		var grievance_visible: bool = trigger_topic_id in npc.topic_pool
 		var rebel_was_failing: bool = rebel_completion < 0.50
+		var is_phoenix: bool = state.get("clan", "") == "Phoenix"
 		var loyalty: Dictionary = IntraClanCivilWar.evaluate_loyalty(
-			npc, rebel_lord_id, rebel_completion, grievance_visible, rebel_was_failing,
+			npc, rebel_lord_id, rebel_completion, grievance_visible, rebel_was_failing, is_phoenix,
 		)
 		var new_faction: int = int(loyalty.get("faction", IntraClanCivilWar.Faction.NONE))
 		if new_faction == faction:
@@ -9418,17 +9940,43 @@ static func _check_civil_war_resolution(
 	ic_day: int,
 	season_meta: Dictionary,
 	clan: String,
+	provinces: Dictionary = {},
+	companies: Array[Dictionary] = [],
+	rng: RandomNumberGenerator = null,
 ) -> Dictionary:
 	var rebel_dead: bool = rebel_lord == null or CharacterStats.is_dead(rebel_lord)
 	if rebel_dead:
+		# Phoenix schism: Champion death triggers reincarnation (s55.10.3.7).
+		# The new Champion's personality determines whether the schism auto-resolves.
+		if clan == "Phoenix":
+			var reincarnation_rng: RandomNumberGenerator = rng
+			if reincarnation_rng == null:
+				reincarnation_rng = RandomNumberGenerator.new()
+			var reincarnation: Dictionary = SuccessionSystem.resolve_shiba_reincarnation(
+				characters_by_id, reincarnation_rng
+			)
+			var new_champ_id: int = int(reincarnation.get("new_champion_id", -1))
+			var new_champ: L5RCharacterData = characters_by_id.get(new_champ_id)
+			if new_champ != null:
+				var duty_score: int = 70 if new_champ.bushido_virtue == Enums.BushidoVirtue.CHUGI else 30
+				var avg_disp: int = _compute_avg_council_disposition(new_champ, characters_by_id)
+				var outcome: Dictionary = PhoenixCouncil.evaluate_reincarnation_schism_outcome(
+					new_champ, avg_disp, duty_score
+				)
+				if not outcome.get("capitulates", true):
+					# Schism continues — update rebel_lord_id to the new Champion.
+					state["rebel_lord_id"] = new_champ_id
+					return {}
+				# Capitulates → fall through to Legitimacy Victory below.
 		return _resolve_civil_war(
 			state, true, characters_by_id, precedent_modifiers,
 			current_season, active_topics, next_topic_id, ic_day,
-			season_meta, clan,
+			season_meta, clan, companies,
 		)
 
 	var rebel_capitulated: bool = false
-	var rebel_seat_lost: bool = false
+	var holds_seat: bool = _rebel_holds_seat(rebel_lord, provinces)
+	var rebel_seat_lost: bool = not holds_seat
 
 	if IntraClanCivilWar.check_legitimacy_victory(
 		state, rebel_lord, rebel_capitulated, rebel_seat_lost,
@@ -9436,7 +9984,7 @@ static func _check_civil_war_resolution(
 		return _resolve_civil_war(
 			state, true, characters_by_id, precedent_modifiers,
 			current_season, active_topics, next_topic_id, ic_day,
-			season_meta, clan,
+			season_meta, clan, companies,
 		)
 
 	var assignments: Dictionary = state.get("faction_assignments", {})
@@ -9452,7 +10000,6 @@ static func _check_civil_war_resolution(
 			has_allied_fd = true
 			break
 
-	var holds_seat: bool = rebel_lord != null and not rebel_dead
 	IntraClanCivilWar.tick_rebel_victory_counter(
 		state, rebel_lord, holds_seat, has_allied_fd,
 	)
@@ -9461,7 +10008,7 @@ static func _check_civil_war_resolution(
 		return _resolve_civil_war(
 			state, false, characters_by_id, precedent_modifiers,
 			current_season, active_topics, next_topic_id, ic_day,
-			season_meta, clan,
+			season_meta, clan, companies,
 		)
 
 	return {}
@@ -9478,6 +10025,7 @@ static func _resolve_civil_war(
 	ic_day: int,
 	season_meta: Dictionary,
 	clan: String,
+	companies: Array[Dictionary] = [],
 ) -> Dictionary:
 	var assignments: Dictionary = state.get("faction_assignments", {})
 	var all_chars: Array[L5RCharacterData] = []
@@ -9532,6 +10080,10 @@ static func _resolve_civil_war(
 
 	IntraClanCivilWar.finalise(state, current_season, legitimacy_won)
 
+	var reconstitution: Dictionary = _reconstitute_clan_military(
+		state, legitimacy_won, companies, characters_by_id,
+	)
+
 	var topic_id: int = next_topic_id[0]
 	next_topic_id[0] += 1
 	var topic: TopicData = TopicData.new()
@@ -9545,6 +10097,17 @@ static func _resolve_civil_war(
 	topic.ic_day_created = ic_day
 	active_topics.append(topic)
 
+	# Clan-specific victory flags to be applied by the caller to the
+	# appropriate governance state dict (s55.10.2.8, s55.10.3.7).
+	var victory_flags: Dictionary = {}
+	if not legitimacy_won:
+		if clan == "Dragon":
+			# FC wins autonomous rule; Oversight System suspends for FC's lifetime.
+			victory_flags["dragon_autonomous_rule"] = true
+		elif clan == "Phoenix":
+			# Champion wins sole authority; Council vote requirement suspended.
+			victory_flags["phoenix_champion_authority"] = true
+
 	return {
 		"clan": clan,
 		"legitimacy_won": legitimacy_won,
@@ -9552,7 +10115,137 @@ static func _resolve_civil_war(
 		"scar_count": scar_entries.size(),
 		"rebel_consequences": rebel_consequences,
 		"topic_id": topic_id,
+		"reconstitution": reconstitution,
+		"victory_flags": victory_flags,
 	}
+
+
+## Dragon schism seasonal spiritual re-evaluation (s55.10.2.8).
+## When dissatisfaction on any concern axis has risen since the schism began,
+## Togashi is being proved right — loyalty re-evaluates for all non-auto-assigned
+## Dragon NPCs still on the REBEL faction. Those who flip are moved to LEGITIMACY
+## and the war score shifts accordingly (provincial-daimyo weight by status).
+## Returns an array of defection records compatible with the main defection list.
+static func _apply_dragon_spiritual_reeval(
+	state: Dictionary,
+	togashi_state: Dictionary,
+	characters_by_id: Dictionary,
+	objectives_map: Dictionary,
+) -> Array[Dictionary]:
+	if state.get("clan", "") != "Dragon":
+		return []
+	if togashi_state.is_empty():
+		return []
+	var snapshot: Dictionary = state.get("concern_snapshot", {})
+	if snapshot.is_empty():
+		return []
+	var current_dissat: Dictionary = togashi_state.get("dissatisfaction", {})
+	# Check whether any axis has worsened (higher dissatisfaction than at trigger).
+	var worsened: bool = false
+	for axis_var: Variant in current_dissat.keys():
+		var current_val: float = float(current_dissat[axis_var])
+		var snap_val: float = float(snapshot.get(axis_var, 0.0))
+		if current_val > snap_val:
+			worsened = true
+			break
+	if not worsened:
+		return []
+	# Re-evaluate all REBEL-faction Dragon NPCs (Togashi monks are already auto-LEGITIMACY).
+	var assignments: Dictionary = state.get("faction_assignments", {})
+	var rebel_lord_id: int = int(state.get("rebel_lord_id", -1))
+	var rebel_completion: float = _get_rebel_completion_rate(rebel_lord_id, objectives_map)
+	var topic_id: int = int(state.get("trigger_topic_id", -1))
+	var defections: Array[Dictionary] = []
+	for cid_var: Variant in assignments.keys():
+		var cid: int = int(cid_var)
+		if int(assignments[cid]) != IntraClanCivilWar.Faction.REBEL:
+			continue
+		if cid == rebel_lord_id:
+			continue
+		var npc: L5RCharacterData = characters_by_id.get(cid)
+		if npc == null or CharacterStats.is_dead(npc):
+			continue
+		if npc.family == "Togashi":
+			continue  # auto-assigned, never re-evaluate
+		# Re-evaluate with strong grievance: concern proved Togashi right (rebel_was_failing = false).
+		var loyalty: Dictionary = IntraClanCivilWar.evaluate_loyalty(
+			npc, rebel_lord_id, rebel_completion, topic_id in npc.topic_pool, false,
+		)
+		var new_faction: int = int(loyalty.get("faction", IntraClanCivilWar.Faction.LEGITIMACY))
+		if new_faction == IntraClanCivilWar.Faction.LEGITIMACY:
+			var was_fd: bool = npc.status >= 5.0
+			IntraClanCivilWar.record_defection(state, cid, was_fd, true)
+			defections.append({
+				"character_id": cid,
+				"from_faction": IntraClanCivilWar.Faction.REBEL,
+				"to_faction": IntraClanCivilWar.Faction.LEGITIMACY,
+				"reason": "spiritual_reeval",
+			})
+	return defections
+
+
+## For an active Phoenix civil war, scans all Masters assigned LEGITIMACY.
+## For each dead Master not yet penalized, applies −0.5 Honor to the Champion
+## (per s55.10.3.7: "Each Master killed generates −0.5 Honor for the Champion").
+## The Champion is the rebel_lord in the Defiance path and authority_lord in
+## the Overreach path. Uses schism_path to determine which.
+## Returns the count of newly penalized Masters this tick.
+static func _compute_avg_council_disposition(
+	new_champion: L5RCharacterData,
+	characters_by_id: Dictionary,
+) -> int:
+	## Computes the average disposition of a new Phoenix Champion toward the
+	## Elemental Council Masters. Used by the post-reincarnation schism
+	## evaluation (s55.10.3.7).
+	var total: int = 0
+	var count: int = 0
+	var master_positions: Array[String] = [
+		"Master of Fire", "Master of Water", "Master of Air",
+		"Master of Earth", "Master of Void",
+	]
+	for c: L5RCharacterData in characters_by_id.values():
+		if c.role_position in master_positions and not CharacterStats.is_dead(c):
+			total += int(new_champion.disposition_values.get(c.character_id, 0))
+			count += 1
+	if count == 0:
+		return 0
+	return int(total / count)
+
+
+static func _apply_phoenix_master_death_honor_penalty(
+	state: Dictionary,
+	characters_by_id: Dictionary,
+) -> int:
+	if state.get("clan", "") != "Phoenix":
+		return 0
+	var assignments: Dictionary = state.get("faction_assignments", {})
+	var penalized: Array = state.get("master_death_penalized_ids", [])
+	var schism_path: String = state.get("schism_path", "")
+	var champion_id: int = (
+		int(state.get("rebel_lord_id", -1)) if schism_path == "defiance"
+		else int(state.get("authority_lord_id", -1))
+	)
+	var champion: L5RCharacterData = characters_by_id.get(champion_id)
+	if champion == null:
+		return 0
+	var penalty_count: int = 0
+	for cid_var: Variant in assignments.keys():
+		var cid: int = int(cid_var)
+		if cid in penalized:
+			continue
+		if int(assignments[cid]) != IntraClanCivilWar.Faction.LEGITIMACY:
+			continue
+		var master: L5RCharacterData = characters_by_id.get(cid)
+		if master == null:
+			continue
+		if not master.role_position.begins_with("Master of "):
+			continue
+		if CharacterStats.is_dead(master):
+			HonorGlorySystem.apply_honor_change(champion, -0.5)
+			penalized.append(cid)
+			penalty_count += 1
+	state["master_death_penalized_ids"] = penalized
+	return penalty_count
 
 
 static func _get_rebel_completion_rate(
@@ -9565,6 +10258,118 @@ static func _get_rebel_completion_rate(
 		if primary is Dictionary:
 			return float((primary as Dictionary).get("last_measured_progress", 0.5))
 	return 0.5
+
+
+## Returns true when the rebel lord's physical location is a settlement
+## inside their family's home province — per s53.2.7 "losing their seat of power".
+static func _rebel_holds_seat(
+	rebel_lord: L5RCharacterData,
+	provinces: Dictionary,
+) -> bool:
+	if rebel_lord == null:
+		return false
+	if provinces.is_empty():
+		return true  # no province data → cannot confirm seat lost; assume held
+	if not rebel_lord.physical_location.is_valid_int():
+		return false
+	var loc_settlement_id: int = int(rebel_lord.physical_location)
+	for prov_var: Variant in provinces.values():
+		if not (prov_var is ProvinceData):
+			continue
+		var prov: ProvinceData = prov_var as ProvinceData
+		if prov.clan == rebel_lord.clan and prov.family == rebel_lord.family:
+			return loc_settlement_id in prov.settlement_ids
+	return false
+
+
+## Post-resolution reconstitution per s53.2.3:
+## Clears commanders on the losing side from their companies (Step 1),
+## then consolidates pairs of understrength companies (Step 3).
+## Step 2 (unit march to friendly territory) and Step 4 (FILL_VACANCY) are
+## handled downstream: stranded units are already detached, and vacancies are
+## signalled in the return dict for the strategic review to issue FILL_VACANCY.
+static func _reconstitute_clan_military(
+	state: Dictionary,
+	legitimacy_won: bool,
+	companies: Array[Dictionary],
+	characters_by_id: Dictionary,
+) -> Dictionary:
+	var assignments: Dictionary = state.get("faction_assignments", {})
+	var losing_faction: int = (
+		IntraClanCivilWar.Faction.REBEL if legitimacy_won
+		else IntraClanCivilWar.Faction.LEGITIMACY
+	)
+	var vacancies_created: int = 0
+	var companies_dissolved: int = 0
+	var clan_companies: Array[Dictionary] = []
+	for cd: Dictionary in companies:
+		var cmd_id: int = cd.get("commander_id", -1)
+		if cmd_id < 0:
+			continue
+		if not assignments.has(cmd_id):
+			continue
+		var faction: int = int(assignments[cmd_id])
+		clan_companies.append(cd)
+		if faction == losing_faction:
+			cd["commander_id"] = -1
+			vacancies_created += 1
+		else:
+			var commander: L5RCharacterData = characters_by_id.get(cmd_id)
+			if commander == null or CharacterStats.is_dead(commander):
+				cd["commander_id"] = -1
+				vacancies_created += 1
+	# Step 3: consolidate understrength pairs (health < 50% of starting).
+	var understrength: Array[Dictionary] = []
+	for cd: Dictionary in clan_companies:
+		var start_hp: int = cd.get("starting_health", 153)
+		var cur_hp: int = cd.get("current_health", start_hp)
+		if cur_hp < start_hp / 2:
+			understrength.append(cd)
+	var i: int = 0
+	while i + 1 < understrength.size():
+		var absorber: Dictionary = understrength[i]
+		var dissolved: Dictionary = understrength[i + 1]
+		var start_hp: int = absorber.get("starting_health", 153)
+		var combined: int = absorber.get("current_health", 0) + dissolved.get("current_health", 0)
+		absorber["current_health"] = mini(combined, start_hp)
+		dissolved["current_health"] = 0
+		dissolved["is_destroyed"] = true
+		companies_dissolved += 1
+		i += 2
+	return {
+		"vacancies_created": vacancies_created,
+		"companies_dissolved": companies_dissolved,
+	}
+
+
+## Scans active edicts for those that shift civil war score per s53.2.5.
+## Only CONDEMN_CLAN edicts targeting the rebel or authority lord (by
+## target_character_id) are mapped — clan-level edicts are ambiguous in a
+## civil war and are skipped to avoid inventing mechanics.
+## Processed edict IDs are stored in state["processed_edict_ids"] to prevent
+## double-counting across seasonal ticks.
+static func _apply_civil_war_edict_shifts(
+	state: Dictionary,
+	rebel_lord_id: int,
+	authority_lord_id: int,
+	active_edicts: Array[EdictData],
+) -> void:
+	var processed: Array = state.get("processed_edict_ids", [])
+	for edict: EdictData in active_edicts:
+		if not edict.is_active:
+			continue
+		if edict.edict_id in processed:
+			continue
+		if edict.edict_type != EdictData.EdictType.CONDEMN_CLAN:
+			continue
+		var target_char: int = edict.target_character_id
+		if target_char == rebel_lord_id:
+			IntraClanCivilWar.record_imperial_edict(state, true)
+			processed.append(edict.edict_id)
+		elif target_char == authority_lord_id:
+			IntraClanCivilWar.record_imperial_edict(state, false)
+			processed.append(edict.edict_id)
+	state["processed_edict_ids"] = processed
 
 
 static func _decay_civil_war_scars(
@@ -9605,6 +10410,9 @@ static func _trigger_civil_war(
 	next_topic_id: Array[int],
 	ic_day: int,
 	current_season: int,
+	suppress_honor_hemorrhage: bool = false,
+	schism_path: String = "",
+	concern_snapshot: Dictionary = {},
 ) -> Dictionary:
 	## Triggers an intra-clan civil war per GDD s53.2.1. Creates initial state,
 	## generates the Tier 2 crisis topic, evaluates loyalty for all named clan
@@ -9638,6 +10446,16 @@ static func _trigger_civil_war(
 	var state: Dictionary = IntraClanCivilWar.make_initial_state(
 		rebel_lord_id, authority_lord_id, clan, topic_id, current_season,
 	)
+	if suppress_honor_hemorrhage:
+		state["suppress_honor_hemorrhage"] = true
+	if not schism_path.is_empty():
+		state["schism_path"] = schism_path
+	# Dragon schism: treaty credibility reduced during crisis (s55.10.2.8).
+	if clan == "Dragon":
+		state["dragon_treaty_penalty"] = -15
+	# Snapshot concern axis dissatisfaction at trigger for seasonal re-evaluation.
+	if not concern_snapshot.is_empty():
+		state["concern_snapshot"] = concern_snapshot.duplicate()
 
 	var rebel_completion: float = _get_rebel_completion_rate(rebel_lord_id, objectives_map)
 	var rebel_was_failing: bool = rebel_completion < 0.50
@@ -9671,15 +10489,35 @@ static func _trigger_civil_war(
 		IntraClanCivilWar.Faction.RONIN: 0,
 	}
 
-	var all_to_evaluate: Array[L5RCharacterData] = []
-	all_to_evaluate.append_array(family_daimyo)
-	all_to_evaluate.append_array(others)
+	# Dragon: Togashi Order monks side with Togashi unconditionally (s55.10.2.8).
+	# Phoenix: All Isawa (including Masters) side with the Council unconditionally (s55.10.3.7).
+	# Removed from the general evaluation pool — they do not evaluate loyalty.
+	var auto_legitimacy_families: Array[String] = []
+	if clan == "Dragon":
+		auto_legitimacy_families = ["Togashi"]
+	elif clan == "Phoenix":
+		auto_legitimacy_families = ["Isawa"]
 
+	var all_to_evaluate: Array[L5RCharacterData] = []
+	for npc: L5RCharacterData in family_daimyo:
+		if npc.family in auto_legitimacy_families:
+			IntraClanCivilWar.assign_faction(state, npc.character_id, IntraClanCivilWar.Faction.LEGITIMACY)
+			faction_counts[IntraClanCivilWar.Faction.LEGITIMACY] = int(faction_counts.get(IntraClanCivilWar.Faction.LEGITIMACY, 0)) + 1
+		else:
+			all_to_evaluate.append(npc)
+	for npc: L5RCharacterData in others:
+		if npc.family in auto_legitimacy_families:
+			IntraClanCivilWar.assign_faction(state, npc.character_id, IntraClanCivilWar.Faction.LEGITIMACY)
+			faction_counts[IntraClanCivilWar.Faction.LEGITIMACY] = int(faction_counts.get(IntraClanCivilWar.Faction.LEGITIMACY, 0)) + 1
+		else:
+			all_to_evaluate.append(npc)
+
+	var is_phoenix_war: bool = clan == "Phoenix"
 	for npc: L5RCharacterData in all_to_evaluate:
 		var grievance_visible: bool = topic_id in npc.topic_pool
 		var loyalty: Dictionary = IntraClanCivilWar.evaluate_loyalty(
 			npc, rebel_lord_id, rebel_completion, grievance_visible,
-			rebel_was_failing,
+			rebel_was_failing, is_phoenix_war,
 		)
 		var faction: int = int(loyalty.get("faction", IntraClanCivilWar.Faction.LEGITIMACY))
 

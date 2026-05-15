@@ -375,7 +375,7 @@ func test_shugenja_void_ring_advancement():
 	c.xp_spent = 0
 	NPCAdvancement.spend_accumulated_xp(c)
 	assert_eq(c.void_ring, 3)
-	assert_eq(c.void_points_max, 3)
+	assert_eq(c.max_void_points, 3)
 
 func test_non_shugenja_no_void_advancement():
 	var c := _make_character()

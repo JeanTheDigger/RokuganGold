@@ -776,3 +776,83 @@ func test_sortie_two_independent_sorties() -> void:
 	assert_eq(p2.shadowlands_strength, 7)
 	assert_almost_eq(s1.jade_stockpile, 18.0, 0.001)
 	assert_almost_eq(s2.jade_stockpile, 24.0, 0.001)
+
+
+# -- Garrison Honor Gain (s2.4.12) --------------------------------------------
+
+func test_garrison_honor_gain_single_unit() -> void:
+	assert_almost_eq(WallSystem.compute_garrison_honor_gain("unit"), 0.3, 0.001)
+
+
+func test_garrison_honor_gain_guntai() -> void:
+	assert_almost_eq(WallSystem.compute_garrison_honor_gain("guntai"), 0.5, 0.001)
+
+
+func test_garrison_honor_gain_one_kaisha() -> void:
+	assert_almost_eq(WallSystem.compute_garrison_honor_gain("kaisha", 1), 1.0, 0.001)
+
+
+func test_garrison_honor_gain_multiple_kaisha() -> void:
+	assert_almost_eq(WallSystem.compute_garrison_honor_gain("kaisha", 3), 3.0, 0.001)
+
+
+func test_garrison_honor_gain_unknown_type_returns_zero() -> void:
+	assert_almost_eq(WallSystem.compute_garrison_honor_gain("unknown"), 0.0, 0.001)
+
+
+# -- Garrison Shortage Personality Modifier (s2.4.12) -------------------------
+
+func test_garrison_personality_modifier_chugi() -> void:
+	var mod: float = WallSystem.compute_garrison_shortage_personality_modifier(
+		Enums.BushidoVirtue.CHUGI, Enums.ShouridoVirtue.NONE
+	)
+	assert_almost_eq(mod, 15.0, 0.001)
+
+
+func test_garrison_personality_modifier_yu() -> void:
+	var mod: float = WallSystem.compute_garrison_shortage_personality_modifier(
+		Enums.BushidoVirtue.YU, Enums.ShouridoVirtue.NONE
+	)
+	assert_almost_eq(mod, 8.0, 0.001)
+
+
+func test_garrison_personality_modifier_meiyo() -> void:
+	var mod: float = WallSystem.compute_garrison_shortage_personality_modifier(
+		Enums.BushidoVirtue.MEIYO, Enums.ShouridoVirtue.NONE
+	)
+	assert_almost_eq(mod, 8.0, 0.001)
+
+
+func test_garrison_personality_modifier_jin() -> void:
+	var mod: float = WallSystem.compute_garrison_shortage_personality_modifier(
+		Enums.BushidoVirtue.JIN, Enums.ShouridoVirtue.NONE
+	)
+	assert_almost_eq(mod, 6.0, 0.001)
+
+
+func test_garrison_personality_modifier_kyoryoku() -> void:
+	var mod: float = WallSystem.compute_garrison_shortage_personality_modifier(
+		Enums.BushidoVirtue.NONE, Enums.ShouridoVirtue.KYORYOKU
+	)
+	assert_almost_eq(mod, -5.0, 0.001)
+
+
+func test_garrison_personality_modifier_seigyo() -> void:
+	var mod: float = WallSystem.compute_garrison_shortage_personality_modifier(
+		Enums.BushidoVirtue.NONE, Enums.ShouridoVirtue.SEIGYO
+	)
+	assert_almost_eq(mod, -5.0, 0.001)
+
+
+func test_garrison_personality_modifier_no_virtue() -> void:
+	var mod: float = WallSystem.compute_garrison_shortage_personality_modifier(
+		Enums.BushidoVirtue.NONE, Enums.ShouridoVirtue.NONE
+	)
+	assert_almost_eq(mod, 0.0, 0.001)
+
+
+func test_garrison_personality_modifier_chugi_with_seigyo() -> void:
+	var mod: float = WallSystem.compute_garrison_shortage_personality_modifier(
+		Enums.BushidoVirtue.CHUGI, Enums.ShouridoVirtue.SEIGYO
+	)
+	assert_almost_eq(mod, 10.0, 0.001)  # 15 - 5

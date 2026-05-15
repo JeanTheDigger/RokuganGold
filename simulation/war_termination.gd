@@ -325,6 +325,153 @@ static func resolve_negotiate_surrender(
 	}
 
 
+# -- Peace Court ---------------------------------------------------------------
+
+## Minimum required lord rank for a proxy to speak at a peace court.
+## Per GDD s53: authority level of the war determines who must attend.
+static func get_required_proxy_rank(war: WarData) -> Enums.LordRank:
+	match war.authority_level:
+		WarData.AuthorityLevel.CLAN_WAR:
+			return Enums.LordRank.CLAN_CHAMPION
+		WarData.AuthorityLevel.FAMILY_WAR, WarData.AuthorityLevel.BORDER_CONFLICT:
+			return Enums.LordRank.FAMILY_DAIMYO
+		_:
+			return Enums.LordRank.PROVINCIAL_DAIMYO
+
+
+## Return true if the character holds a lord rank high enough to speak for
+## their side at this war's peace court.
+static func is_valid_peace_proxy(
+	character: L5RCharacterData,
+	war: WarData,
+) -> bool:
+	var required: Enums.LordRank = get_required_proxy_rank(war)
+	var char_rank: Enums.LordRank = _estimate_lord_rank(character.status)
+	return char_rank >= required
+
+
+## Create and open a peace court CourtSessionData for the given war.
+## The court links to war_id and tracks willingness modifiers accumulated
+## during the session. host_settlement_id locates it in the world.
+static func create_peace_court(
+	court_id: int,
+	war: WarData,
+	host_lord_id: int,
+	host_settlement_id: int,
+	host_clan: String,
+	ic_day: int,
+) -> CourtSessionData:
+	var court: CourtSessionData = CourtSystem.create_court(
+		court_id,
+		CourtSessionData.CourtType.PEACE_COURT,
+		host_lord_id,
+		host_settlement_id,
+		host_clan,
+		ic_day,
+	)
+	court.peace_court_war_id = war.war_id
+	CourtSystem.open_court(court, ic_day)
+	return court
+
+
+## Apply a willingness modifier for one side during an ongoing peace court.
+## Positive values move a reluctant side closer to acceptance.
+## clan must match war.clan_a or war.clan_b.
+static func apply_willingness_modifier(
+	court: CourtSessionData,
+	war: WarData,
+	clan: String,
+	delta: int,
+) -> Dictionary:
+	if court.phase != CourtSessionData.CourtPhase.ACTIVE:
+		return {"applied": false, "reason": "court_not_active"}
+	if court.peace_court_war_id != war.war_id:
+		return {"applied": false, "reason": "court_war_mismatch"}
+	if clan == war.clan_a:
+		court.willingness_modifier_clan_a += delta
+		return {"applied": true, "clan": clan, "new_modifier": court.willingness_modifier_clan_a}
+	if clan == war.clan_b:
+		court.willingness_modifier_clan_b += delta
+		return {"applied": true, "clan": clan, "new_modifier": court.willingness_modifier_clan_b}
+	return {"applied": false, "reason": "clan_not_in_war"}
+
+
+## Conclude a peace court: evaluate both sides' willingness with accumulated
+## modifiers, close the court, and return a resolution dict.
+## Returns {concluded, accepted_by_both, resolution_type, ...} for the
+## DayOrchestrator to process.
+static func conclude_peace_court(
+	court: CourtSessionData,
+	war: WarData,
+	terms: Dictionary,
+	clan_a_virtue: String,
+	clan_b_virtue: String,
+	clan_a_hostage: bool,
+	clan_b_hostage: bool,
+) -> Dictionary:
+	if court.phase != CourtSessionData.CourtPhase.ACTIVE:
+		return {"concluded": false, "reason": "court_not_active"}
+	if court.peace_court_war_id != war.war_id:
+		return {"concluded": false, "reason": "court_war_mismatch"}
+
+	var proposing_clan: String = terms.get("proposing_clan", war.clan_a)
+	var receiving_clan: String = _get_opponent_clan(war, proposing_clan)
+
+	var receiving_modifier: int = (
+		court.willingness_modifier_clan_a
+		if receiving_clan == war.clan_a
+		else court.willingness_modifier_clan_b
+	)
+
+	var acceptance: Dictionary = evaluate_peace_acceptance(
+		war,
+		terms,
+		receiving_clan,
+		clan_b_virtue if receiving_clan == war.clan_b else clan_a_virtue,
+		clan_b_hostage if receiving_clan == war.clan_b else clan_a_hostage,
+		false,
+	)
+
+	var boosted_willingness: int = acceptance.get("willingness", 0) + receiving_modifier
+	var accepted: bool = boosted_willingness >= PEACE_ACCEPTANCE_THRESHOLD
+
+	var close_result: Dictionary = CourtSystem.close_court(court)
+
+	if not accepted:
+		return {
+			"concluded": true,
+			"accepted_by_both": false,
+			"willingness": boosted_willingness,
+			"threshold": PEACE_ACCEPTANCE_THRESHOLD,
+			"war_id": war.war_id,
+			"close_result": close_result,
+		}
+
+	var resolution: Dictionary = resolve_negotiated_settlement(war, terms)
+	resolution["peace_court_id"] = court.court_id
+	resolution["willingness"] = boosted_willingness
+
+	return {
+		"concluded": true,
+		"accepted_by_both": true,
+		"war_id": war.war_id,
+		"resolution": resolution,
+		"close_result": close_result,
+	}
+
+
+static func _estimate_lord_rank(status: float) -> Enums.LordRank:
+	if status >= 6.0:
+		return Enums.LordRank.CLAN_CHAMPION
+	elif status >= 4.0:
+		return Enums.LordRank.FAMILY_DAIMYO
+	elif status >= 2.0:
+		return Enums.LordRank.PROVINCIAL_DAIMYO
+	elif status >= 1.0:
+		return Enums.LordRank.CITY_DAIMYO
+	return Enums.LordRank.VILLAGE_HEADMAN
+
+
 # -- Generate War End Topic ----------------------------------------------------
 
 static func generate_war_end_topic(
@@ -395,6 +542,55 @@ static func _get_opponent_clan(war: WarData, clan: String) -> String:
 	if clan == war.clan_b:
 		return war.clan_a
 	return ""
+
+
+# -- Territory Transfer (GDD s53 Ending War Status) ---------------------------
+
+# Apply province clan changes when peace terms include territory_transferred.
+# Called by the day orchestrator after any war resolution with a non-empty
+# territory_transferred list.
+# provinces: Dictionary of province_id -> ProvinceData
+# Returns Array[Dictionary] of {province_id, old_clan, new_clan} for logging.
+static func apply_territory_transfers(
+	resolution: Dictionary,
+	provinces: Dictionary,
+) -> Array[Dictionary]:
+	var transferred: Array = resolution.get("territory_transferred", [])
+	if transferred.is_empty():
+		return []
+
+	var winner_clan: String = _resolve_winner_clan(resolution)
+	if winner_clan.is_empty():
+		return []
+
+	var log: Array[Dictionary] = []
+	for pid: Variant in transferred:
+		var province: ProvinceData = provinces.get(pid) as ProvinceData
+		if province == null:
+			continue
+		var old_clan: String = province.clan
+		if old_clan == winner_clan:
+			continue
+		province.clan = winner_clan
+		log.append({
+			"province_id": pid,
+			"old_clan": old_clan,
+			"new_clan": winner_clan,
+		})
+	return log
+
+
+static func _resolve_winner_clan(resolution: Dictionary) -> String:
+	var res_type: String = resolution.get("resolution", "")
+	match res_type:
+		"formal_surrender":
+			return resolution.get("winner_clan", "")
+		"negotiated_settlement":
+			return resolution.get("proposing_clan", "")
+		"annihilation":
+			return resolution.get("victor_clan", "")
+		_:
+			return ""
 
 
 # -- Trade Route Suspension (GDD s53 Mechanical Effects) -----------------------

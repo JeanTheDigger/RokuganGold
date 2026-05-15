@@ -40,8 +40,8 @@ func test_trait_defaults():
 	assert_eq(_char.void_ring, 2)
 
 func test_void_points():
-	assert_eq(_char.void_points_current, 2)
-	assert_eq(_char.void_points_max, 2)
+	assert_eq(_char.current_void_points, 2)
+	assert_eq(_char.max_void_points, 2)
 
 
 # =============================================================================

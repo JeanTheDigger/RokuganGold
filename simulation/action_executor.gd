@@ -47,6 +47,7 @@ const ADMINISTRATIVE_ACTIONS: Array[String] = [
 	"PURIFY_TAINTED_GROUND", "FORTIFY_WALL_SECTION", "SEAL_WALL_BREACH",
 	"DECLARE_WAR",
 	"COMPLY_WITH_EDICT", "DEFY_EDICT",
+	"RESTORE_COUNCIL_COMPACT",
 ]
 
 const INTELLIGENCE_ACTIONS: Array[String] = [
@@ -148,6 +149,12 @@ static func execute(
 	if action_id == "PROBE":
 		return _execute_probe(action, character, ctx, dice_engine, characters_by_id)
 
+	if action_id == "ASK_FOR_INTRODUCTION":
+		return _execute_ask_for_introduction(action, character, ctx, dice_engine, characters_by_id)
+
+	if action_id == "OBSERVE_COURT_ATTENDEES":
+		return _execute_observe_court_attendees(action, character, ctx, dice_engine, characters_by_id)
+
 	if action_id == "NEGOTIATE_SURRENDER":
 		var peace_effects: Dictionary = _execute_negotiate_surrender(
 			action, character, ctx, dice_engine
@@ -178,6 +185,9 @@ static func execute(
 			"season": ctx.season,
 			"effects": war_effects,
 		}
+
+	if action_id == "ISSUE_DUEL_CHALLENGE":
+		return _execute_duel_challenge(action, character, ctx, dice_engine, characters_by_id)
 
 	if action_id == "COMPLY_WITH_EDICT" or action_id == "DEFY_EDICT":
 		var compliant: bool = action_id == "COMPLY_WITH_EDICT"
@@ -230,6 +240,21 @@ static func execute(
 
 	if action_id == "EXAMINE_LETTER":
 		return _execute_examine_letter(action, character, ctx)
+
+	if action_id == "RESTORE_COUNCIL_COMPACT":
+		return {
+			"success": true,
+			"action_id": action_id,
+			"character_id": character.character_id,
+			"target_npc_id": -1,
+			"target_province_id": -1,
+			"ic_day": ctx.ic_day,
+			"season": ctx.season,
+			"effects": {
+				"requires_compact_restoration": true,
+				"restoring_champion_id": character.character_id,
+			},
+		}
 
 	if action_id in COVERT_ACTIONS:
 		var covert_result: Dictionary = _try_execute_covert(
@@ -1860,7 +1885,7 @@ static func _compute_self_effects(action_id: String) -> Dictionary:
 		"MENTOR":
 			return {"effect": "student_trained"}
 		"OBSERVE_COURT_ATTENDEES":
-			return {"effect": "court_observed", "info_gained": true}
+			return {"effect": "court_observed", "info_gained": true}  # fallback — should not reach here
 	return {"effect": "self_action_completed"}
 
 
@@ -2844,5 +2869,215 @@ static func _execute_probe(
 		"roll_total": attacker_roll,
 		"tn": defender_roll,
 		"margin": attacker_roll - defender_roll,
+		"effects": effects,
+	}
+
+
+# -- Duel Challenge -----------------------------------------------------------
+
+static func _execute_duel_challenge(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	dice_engine: DiceEngine,
+	characters_by_id: Dictionary,
+) -> Dictionary:
+	var target_id: int = action.target_npc_id
+	var target: L5RCharacterData = characters_by_id.get(target_id)
+
+	if target == null:
+		return {
+			"success": false,
+			"action_id": "ISSUE_DUEL_CHALLENGE",
+			"character_id": ctx.character_id,
+			"target_npc_id": target_id,
+			"ic_day": ctx.ic_day,
+			"season": ctx.season,
+			"effects": {"failed": true, "reason": "target_not_found"},
+		}
+
+	var to_death: bool = action.metadata.get("to_death", false)
+	var is_sanctioned: bool = action.metadata.get("is_sanctioned", true)
+
+	var duel_result: Dictionary = IndividualCombat.resolve_full_duel(
+		character, target, to_death, dice_engine
+	)
+
+	var winner_id: int = duel_result.get("winner_id", -1)
+	var loser_id: int = duel_result.get("loser_id", -1)
+	var simultaneous: bool = duel_result.get("simultaneous", false)
+
+	var challenger_dead: bool = CharacterStats.is_dead(character)
+	var defender_dead: bool = CharacterStats.is_dead(target)
+	var death_occurred: bool = challenger_dead or defender_dead
+
+	var effects: Dictionary = {
+		"duel_result": duel_result,
+		"winner_id": winner_id,
+		"loser_id": loser_id,
+		"simultaneous": simultaneous,
+		"death_occurred": death_occurred,
+		"challenger_dead": challenger_dead,
+		"defender_dead": defender_dead,
+	}
+
+	# Glory bonus for winning a witnessed duel at court (s40 / s4.6)
+	if winner_id != -1 and ctx.context_flag == Enums.ContextFlag.AT_COURT:
+		if winner_id == character.character_id:
+			effects["glory_change"] = 0.5
+		else:
+			effects["winner_glory_change"] = 0.5
+			effects["winner_glory_recipient_id"] = winner_id
+
+	# Crime record if an unsanctioned duel caused a death (s40 / s2.8.11)
+	if death_occurred and not is_sanctioned:
+		var killer_id: int = -1
+		if challenger_dead:
+			killer_id = target.character_id
+		elif defender_dead:
+			killer_id = character.character_id
+		effects["requires_crime_creation"] = true
+		effects["crime_type"] = Enums.CrimeType.UNSANCTIONED_DUEL_DEATH
+		effects["crime_perpetrator_id"] = killer_id
+		effects["crime_victim_id"] = loser_id
+
+	var actor_is_winner: bool = winner_id == character.character_id
+	return {
+		"success": not simultaneous and winner_id != -1,
+		"action_id": "ISSUE_DUEL_CHALLENGE",
+		"character_id": ctx.character_id,
+		"target_npc_id": target_id,
+		"target_province_id": action.target_province_id,
+		"ic_day": ctx.ic_day,
+		"season": ctx.season,
+		"actor_won": actor_is_winner,
+		"effects": effects,
+	}
+
+
+# -- ASK_FOR_INTRODUCTION (s55.7.3 — LOCKED) ----------------------------------
+
+static func _execute_ask_for_introduction(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	dice_engine: DiceEngine,
+	characters_by_id: Dictionary,
+) -> Dictionary:
+	var target_id: int = action.target_npc_id
+	var target: L5RCharacterData = characters_by_id.get(target_id)
+	var intermediary_id: int = action.metadata.get("intermediary_id", -1)
+	var intermediary: L5RCharacterData = characters_by_id.get(intermediary_id)
+
+	var target_is_kuge: bool = false
+	if target != null:
+		target_is_kuge = target.status >= CourtActionSystem.KUGE_STATUS_THRESHOLD
+	var intermediary_status: float = intermediary.status if intermediary != null else 0.0
+
+	# Skill selection: kuge targets use Etiquette/Awareness; others use Courtier/Awareness.
+	var skill: String = "Etiquette" if target_is_kuge else "Courtier"
+	var skill_rank: int = character.skills.get(skill, 0)
+	var trait_val: int = character.traits.get("Awareness", 2)
+
+	# Bureaucracy emphasis grants +1k0 on kuge rolls per s55.7.3.
+	var has_emphasis: bool = target_is_kuge and character.skills.has("Bureaucracy")
+	var roll_result: Dictionary = dice_engine.roll_skill_check(
+		trait_val, skill_rank, 0, 0, 0, has_emphasis
+	)
+	var roll_total: int = roll_result.get("total", 0)
+
+	var resolution: Dictionary = CourtActionSystem.resolve_ask_for_introduction(
+		roll_total, target_is_kuge, intermediary_status
+	)
+
+	var effects: Dictionary = {}
+	if resolution.get("success", false):
+		effects["contact_added"] = true
+		effects["contact_id"] = target_id
+		effects["disposition_gain"] = resolution.get("disposition_gain", 0)
+		effects["target_is_kuge"] = target_is_kuge
+	elif resolution.has("blocked_reason"):
+		effects["blocked_reason"] = resolution["blocked_reason"]
+		effects["failed"] = true
+	else:
+		effects["failed"] = true
+
+	return {
+		"success": resolution.get("success", false),
+		"action_id": "ASK_FOR_INTRODUCTION",
+		"character_id": ctx.character_id,
+		"target_npc_id": target_id,
+		"target_province_id": action.target_province_id,
+		"ic_day": ctx.ic_day,
+		"season": ctx.season,
+		"skill_used": skill,
+		"roll_total": roll_total,
+		"tn": CourtActionSystem.ASK_FOR_INTRODUCTION_TN,
+		"margin": roll_total - CourtActionSystem.ASK_FOR_INTRODUCTION_TN,
+		"effects": effects,
+	}
+
+
+# -- OBSERVE_COURT_ATTENDEES (s55.7.3 — LOCKED) --------------------------------
+
+static func _execute_observe_court_attendees(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	dice_engine: DiceEngine,
+	characters_by_id: Dictionary,
+) -> Dictionary:
+	var skill_rank: int = character.skills.get("Investigation", 0)
+	var trait_val: int = character.traits.get("Perception", 2)
+	var roll_result: Dictionary = dice_engine.roll_skill_check(trait_val, skill_rank, 0)
+	var roll_total: int = roll_result.get("total", 0)
+
+	var observable_ids: Array = action.metadata.get("observable_attendee_ids", [])
+	var resolution: Dictionary = CourtActionSystem.resolve_observe_court_attendees(
+		roll_total, observable_ids.size()
+	)
+
+	var effects: Dictionary = {}
+	if resolution.get("success", false):
+		var learn_count: int = resolution.get("learn_count", 0)
+		# Pick learn_count random IDs from the observable pool.
+		var pool: Array = observable_ids.duplicate()
+		var learned_ids: Array[int] = []
+		for _i: int in range(learn_count):
+			if pool.is_empty():
+				break
+			var idx: int = dice_engine.roll_and_keep(1, 1, 0).total % pool.size()
+			learned_ids.append(int(pool[idx]))
+			pool.remove_at(idx)
+
+		var learned_info: Array[Dictionary] = []
+		for npc_id: int in learned_ids:
+			var npc: L5RCharacterData = characters_by_id.get(npc_id)
+			if npc != null:
+				learned_info.append({
+					"character_id": npc_id,
+					"clan": npc.clan,
+					"family": npc.family,
+					"status": npc.status,
+				})
+
+		effects["info_gained"] = true
+		effects["learn_count"] = learn_count
+		effects["learned_attendees"] = learned_info
+	else:
+		effects["failed"] = true
+
+	return {
+		"success": resolution.get("success", false),
+		"action_id": "OBSERVE_COURT_ATTENDEES",
+		"character_id": ctx.character_id,
+		"target_npc_id": action.target_npc_id,
+		"target_province_id": action.target_province_id,
+		"ic_day": ctx.ic_day,
+		"season": ctx.season,
+		"skill_used": "Investigation",
+		"roll_total": roll_total,
+		"tn": CourtActionSystem.OBSERVE_COURT_TN,
+		"margin": roll_total - CourtActionSystem.OBSERVE_COURT_TN,
 		"effects": effects,
 	}

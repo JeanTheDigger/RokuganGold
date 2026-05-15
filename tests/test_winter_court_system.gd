@@ -1036,3 +1036,98 @@ func test_late_arrival_not_added_if_at_different_settlement() -> void:
 		active_courts, [_emperor, distant] as Array[L5RCharacterData], _characters_by_id
 	)
 	assert_false(51 in court.attendee_ids)
+
+
+# =============================================================================
+# Champion Agenda Ordering AI (s55.10 — Agenda Topic Ordering)
+# =============================================================================
+
+func _make_topic_for_clan(id: int, clan: String, momentum: float) -> TopicData:
+	var t := TopicData.new()
+	t.topic_id = id
+	t.clan_involved = clan
+	t.momentum = momentum
+	t.resolved = false
+	return t
+
+
+func _make_champion(cid: int, clan: String) -> L5RCharacterData:
+	var c := L5RCharacterData.new()
+	c.character_id = cid
+	c.clan = clan
+	c.lord_id = -1
+	c.status = 7.5
+	return c
+
+
+func test_agenda_order_own_clan_first() -> void:
+	var host_champion := _make_champion(100, "Crane")
+	# Topic 1: Crab crisis (high momentum)
+	# Topic 2: Crane crisis (lower momentum)
+	# Topic 3: Lion crisis (medium momentum)
+	var t1 := _make_topic_for_clan(1, "Crab", 90.0)
+	var t2 := _make_topic_for_clan(2, "Crane", 70.0)
+	var t3 := _make_topic_for_clan(3, "Lion", 80.0)
+	var topics: Array[TopicData] = [t1, t2, t3]
+	var topic_ids: Array[int] = [1, 2, 3]
+	var result: Array[int] = WinterCourtSystem.order_agenda_for_host(
+		topic_ids, topics, "Crane", host_champion, {}
+	)
+	# Crane topic (id=2) should be slot 1 despite lower momentum.
+	assert_eq(result[0], 2, "Own clan crisis must go to slot 1")
+
+
+func test_agenda_order_rival_clan_last() -> void:
+	var host_champion := _make_champion(100, "Crane")
+	var rival_champ := _make_champion(200, "Lion")
+	host_champion.disposition_values = {200: -50}  # Lion champion at Enemy
+	_characters_by_id[200] = rival_champ
+
+	var t1 := _make_topic_for_clan(1, "Crab", 80.0)
+	var t2 := _make_topic_for_clan(2, "Lion", 90.0)  # rival, high momentum
+	var t3 := _make_topic_for_clan(3, "Scorpion", 70.0)
+	var topics: Array[TopicData] = [t1, t2, t3]
+	var topic_ids: Array[int] = [1, 2, 3]
+	var result: Array[int] = WinterCourtSystem.order_agenda_for_host(
+		topic_ids, topics, "Crane", host_champion, _characters_by_id
+	)
+	# Lion topic (id=2) should be slot 3 despite highest momentum.
+	assert_eq(result[2], 2, "Rival clan crisis must go to slot 3")
+
+
+func test_agenda_order_neutral_topics_by_momentum() -> void:
+	var host_champion := _make_champion(100, "Crane")
+	var t1 := _make_topic_for_clan(1, "Crab", 60.0)
+	var t2 := _make_topic_for_clan(2, "Lion", 80.0)
+	var t3 := _make_topic_for_clan(3, "Scorpion", 70.0)
+	var topics: Array[TopicData] = [t1, t2, t3]
+	var topic_ids: Array[int] = [1, 2, 3]
+	var result: Array[int] = WinterCourtSystem.order_agenda_for_host(
+		topic_ids, topics, "Crane", host_champion, {}
+	)
+	# No own-clan or rival topics — sort by descending momentum.
+	assert_eq(result[0], 2)  # Lion 80
+	assert_eq(result[1], 3)  # Scorpion 70
+	assert_eq(result[2], 1)  # Crab 60
+
+
+func test_agenda_order_single_topic_unchanged() -> void:
+	var host_champion := _make_champion(100, "Crane")
+	var t1 := _make_topic_for_clan(1, "Crab", 80.0)
+	var result: Array[int] = WinterCourtSystem.order_agenda_for_host(
+		[1], [t1], "Crane", host_champion, {}
+	)
+	assert_eq(result.size(), 1)
+	assert_eq(result[0], 1)
+
+
+func test_agenda_order_null_champion_uses_momentum_only() -> void:
+	var t1 := _make_topic_for_clan(1, "Crab", 60.0)
+	var t2 := _make_topic_for_clan(2, "Lion", 80.0)
+	var t3 := _make_topic_for_clan(3, "Scorpion", 70.0)
+	var topics: Array[TopicData] = [t1, t2, t3]
+	var result: Array[int] = WinterCourtSystem.order_agenda_for_host(
+		[1, 2, 3], topics, "Crane", null, {}
+	)
+	# No champion → can't check disposition; own-clan check still applies but no own clan topic.
+	assert_eq(result[0], 2)  # highest momentum first

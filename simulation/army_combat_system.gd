@@ -643,6 +643,15 @@ const COMMANDER_SURVIVAL_TNS: Dictionary = {
 
 const MAX_ROUNDS: int = 200
 
+# -- Shadowlands Special Ability Constants (s2.4.7 — LOCKED) --------------------
+# Must match HordeSystem.SHADOWLANDS_UNIT_TYPE_OFFSET (both are 10000).
+const SHADOWLANDS_UNIT_TYPE_OFFSET: int = 10000
+const SL_OGRE_UNIT_TYPES: Array[int] = [
+	10000 + Enums.ShadowlandsUnitType.OGRE_WARRIOR,
+	10000 + Enums.ShadowlandsUnitType.RAVENOUS_OGRE,
+	10000 + Enums.ShadowlandsUnitType.OGRE_WARLORD,
+]
+
 
 # -- Battle Company State --------------------------------------------------------
 
@@ -809,6 +818,7 @@ static func _reset_ally_buffs(side: Array[Dictionary]) -> void:
 	for bc: Dictionary in side:
 		bc["ally_buff_attack"] = 0
 		bc["ally_buff_defense"] = 0
+		bc["ally_buff_morale_defense"] = 0
 
 
 static func _apply_ally_buffs(side: Array[Dictionary]) -> void:
@@ -860,6 +870,49 @@ static func _apply_ally_buffs(side: Array[Dictionary]) -> void:
 						break
 
 
+# -- Shadowlands Ally Buffs (s2.4.7 — LOCKED) -----------------------------------
+
+static func _apply_shadowlands_ally_buffs(side: Array[Dictionary]) -> void:
+	for bc: Dictionary in side:
+		if not is_active(bc):
+			continue
+		# Horde Command (Maho-tsukai): while alive, all undead allies gain +1 Attack.
+		if bc.get("sl_horde_command", false):
+			for ally: Dictionary in side:
+				if not is_active(ally):
+					continue
+				if ally.get("sl_undead", false):
+					ally["ally_buff_attack"] += 1
+		# Brutal Authority (Ogre Warlord): Ogre allies within 2 columns get +1 Attack and +1 MD.
+		if bc.get("sl_brutal_authority", false):
+			for ally: Dictionary in side:
+				if ally["company_id"] == bc["company_id"]:
+					continue
+				if not is_active(ally):
+					continue
+				if ally["unit_type"] in SL_OGRE_UNIT_TYPES:
+					if absi(ally["column"] - bc["column"]) <= 2:
+						ally["ally_buff_attack"] += 1
+						ally["ally_buff_morale_defense"] += 1
+
+
+# Detect maho-tsukai destruction and strip Undead Revenant tactical capability.
+static func _apply_maho_tsukai_death_effect(side: Array[Dictionary]) -> void:
+	var maho_type: int = SHADOWLANDS_UNIT_TYPE_OFFSET + Enums.ShadowlandsUnitType.MAHO_TSUKAI
+	var just_died: bool = false
+	for bc: Dictionary in side:
+		if bc["unit_type"] == maho_type and bc["is_destroyed"]:
+			if not bc.get("sl_death_effect_applied", false):
+				bc["sl_death_effect_applied"] = true
+				just_died = true
+	if not just_died:
+		return
+	var revenant_type: int = SHADOWLANDS_UNIT_TYPE_OFFSET + Enums.ShadowlandsUnitType.UNDEAD_REVENANT
+	for bc: Dictionary in side:
+		if bc["unit_type"] == revenant_type:
+			bc["sl_tactical_capability_lost"] = true
+
+
 # -- Combat Round ----------------------------------------------------------------
 
 static func _resolve_combat_round(
@@ -876,14 +929,17 @@ static func _resolve_combat_round(
 		bc["health_damage_this_round"] = 0
 		bc["round_number"] = bc.get("round_number", 0) + 1
 
-	# Apply per-round ally buffs (Yamabushi, Elemental Guard, Storm Riders, Mirumoto)
+	# Apply per-round ally buffs (Yamabushi, Elemental Guard, Storm Riders, Mirumoto, Shadowlands)
 	_reset_ally_buffs(attackers)
 	_reset_ally_buffs(defenders)
 	_apply_ally_buffs(attackers)
 	_apply_ally_buffs(defenders)
+	_apply_shadowlands_ally_buffs(attackers)
+	_apply_shadowlands_ally_buffs(defenders)
 
 	var pending_damage: Dictionary = {}
 	var pending_morale_triggers: Dictionary = {}
+	var pending_direct_morale: Dictionary = {}  # Dark Spellcraft (s2.4.7) — bypasses Morale Defense.
 	var commander_deaths: Array[Dictionary] = []
 
 	var active_atk_r1: Array[Dictionary] = _get_active_row(attackers, 1)
@@ -900,19 +956,24 @@ static func _resolve_combat_round(
 		var atk: Dictionary = m["attacker"]
 		var dfn: Dictionary = m["defender"]
 
-		var atk_dmg: int = _compute_attack_damage(
-			atk, dfn, dice_engine, false, false, attackers, defenders,
-		)
+		# Dark Spellcraft (Bakemono Shaman, s2.4.7): 1d10 direct Morale damage, no Morale Defense.
+		if atk.get("sl_dark_spellcraft", false):
+			var spell_dmg: int = dice_engine.rand_int_range(1, 10)
+			pending_direct_morale[dfn["company_id"]] = \
+				pending_direct_morale.get(dfn["company_id"], 0) + spell_dmg
+		else:
+			var atk_dmg: int = _compute_attack_damage(
+				atk, dfn, dice_engine, false, false, attackers, defenders,
+			)
+			_add_pending(pending_damage, dfn, atk_dmg)
+			if atk_dmg > 0:
+				_ensure_trigger(pending_morale_triggers, dfn)
+				_add_extra_morale_damage(pending_morale_triggers, dfn, atk["unit_type"])
+
 		var def_dmg: int = _compute_attack_damage(
 			dfn, atk, dice_engine, false, false, defenders, attackers,
 		)
-
-		_add_pending(pending_damage, dfn, atk_dmg)
 		_add_pending(pending_damage, atk, def_dmg)
-
-		if atk_dmg > 0:
-			_ensure_trigger(pending_morale_triggers, dfn)
-			_add_extra_morale_damage(pending_morale_triggers, dfn, atk["unit_type"])
 		if def_dmg > 0:
 			_ensure_trigger(pending_morale_triggers, atk)
 			_add_extra_morale_damage(pending_morale_triggers, atk, dfn["unit_type"])
@@ -995,6 +1056,21 @@ static func _resolve_combat_round(
 		var bc_enemies: Array[Dictionary] = defenders if bc["side"] == "attacker" else attackers
 		_resolve_morale_check(bc, triggers, dice_engine, commander_deaths, bc_allies, bc_enemies)
 
+	# Maho-tsukai death strips Undead Revenant tactical capability (s2.4.7 Horde Command).
+	_apply_maho_tsukai_death_effect(attackers)
+	_apply_maho_tsukai_death_effect(defenders)
+
+	# Dark Spellcraft direct morale damage (s2.4.7): bypasses Morale Defense.
+	for bc_id: int in pending_direct_morale:
+		var bc: Dictionary = _find_bc_by_id(attackers, defenders, bc_id)
+		if bc.is_empty() or not is_active(bc):
+			continue
+		if bc.get("no_morale", false):
+			continue
+		bc["current_morale"] = maxi(bc["current_morale"] - pending_direct_morale[bc_id], 0)
+		if bc["current_morale"] <= 0 and _can_rout(bc):
+			bc["is_routed"] = true
+
 	_process_rout_contagion(attackers, dice_engine)
 	_process_rout_contagion(defenders, dice_engine)
 
@@ -1058,6 +1134,8 @@ static func _find_flanking_opportunities(
 			continue
 		if atk.get("terrain_flanking_disabled", false):
 			continue
+		if atk.get("sl_tactical_capability_lost", false):
+			continue
 		var target: Dictionary = _find_adjacent_flank_target(atk, def_r1)
 		if not target.is_empty():
 			flanks.append({"flanker": atk, "target": target})
@@ -1071,6 +1149,8 @@ static func _find_flanking_opportunities(
 		if engaged:
 			continue
 		if dfn.get("terrain_flanking_disabled", false):
+			continue
+		if dfn.get("sl_tactical_capability_lost", false):
 			continue
 		var target: Dictionary = _find_adjacent_flank_target(dfn, atk_r1)
 		if not target.is_empty():
@@ -1111,7 +1191,8 @@ static func _compute_attack_damage(
 	def_val += _get_vs_attacker_defense_bonus(defender["unit_type"], attacker["unit_type"])
 	def_val += defender.get("ally_buff_defense", 0)
 
-	var def_ignore: int = _get_defense_ignore(attacker["unit_type"])
+	var def_ignore: int = _get_defense_ignore(attacker["unit_type"]) \
+		+ attacker.get("sl_wall_breaker_si_ignore", 0)
 	def_val = maxi(def_val - def_ignore, 0)
 
 	if is_archer_fire:
@@ -1135,6 +1216,28 @@ static func _compute_attack_damage(
 
 	if attacker.get("round_number", 0) == 1:
 		bonus += _get_first_round_attack_bonus(attacker["unit_type"])
+		# Skeleton Warrior first-round bonus (s2.4.7).
+		bonus += attacker.get("sl_first_round_atk_bonus", 0)
+
+	# Pack Hunters (Omoni's Bakemono, s2.4.7): +1 Attack when adjacent to another Omoni's Bakemono.
+	if attacker.get("sl_pack_hunters", false):
+		var omoni_type: int = SHADOWLANDS_UNIT_TYPE_OFFSET + Enums.ShadowlandsUnitType.OMONI_BAKEMONO
+		for ally: Dictionary in attacker_allies:
+			if ally["company_id"] == attacker["company_id"]:
+				continue
+			if not is_active(ally):
+				continue
+			if ally["unit_type"] == omoni_type and absi(ally["column"] - attacker["column"]) <= 1:
+				bonus += 1
+				break
+
+	# Feeding Frenzy (Ravenous Ogre, s2.4.7): +1 Attack per adjacent destroyed ally, max +3.
+	if attacker.get("sl_feeding_frenzy", false):
+		var frenzy: int = 0
+		for ally: Dictionary in attacker_allies:
+			if ally.get("is_destroyed", false) and absi(ally["column"] - attacker["column"]) <= 1:
+				frenzy += 1
+		bonus += mini(frenzy, 3)
 
 	if attacker["unit_type"] == Enums.CompanyUnitType.ASHIGARU_ARCHERS:
 		bonus -= 3
@@ -1210,6 +1313,7 @@ static func _resolve_morale_check(
 	var md: int = _get_effective_morale_defense(bc)
 	md += _get_adjacency_morale_defense_bonus(bc, all_allies)
 	md += _get_adjacency_morale_defense_penalty(bc, all_enemies)
+	md += bc.get("ally_buff_morale_defense", 0)  # Brutal Authority (s2.4.7).
 	var morale_dmg: int = maxi(roll + modifier - md, 0)
 
 	bc["current_morale"] = maxi(bc["current_morale"] - morale_dmg, 0)
@@ -1235,7 +1339,7 @@ static func _process_rout_contagion(
 			for bc: Dictionary in side:
 				if not is_active(bc):
 					continue
-				if bc.get("no_morale", false):
+				if bc.get("no_morale", false) or bc.get("immune_routing_contagion", false):
 					continue
 				if absi(bc["column"] - routed["column"]) <= 1 and bc["row"] == routed["row"]:
 					var roll: int = dice_engine.rand_int_range(1, 10)

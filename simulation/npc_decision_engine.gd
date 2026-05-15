@@ -21,6 +21,8 @@ static func build_context(
 	ctx.school = character.school
 	ctx.school_type = character.school_type
 	ctx.is_lord = world_state.get("is_lord", false)
+	ctx.lord_rank = CivilianOrderBudget.lord_rank_from_status(character.status)
+	ctx.civilian_orders_remaining = character.civilian_orders_remaining
 
 	# Location & situation
 	ctx.location_id = character.physical_location
@@ -97,9 +99,10 @@ static func build_context(
 			var prov_data: Array = world_state.get("province_data", [])
 			var settlements_arr: Array = world_state.get("settlements", [])
 			var armies_arr: Array = world_state.get("active_armies", [])
+			var insurgencies_arr: Array = world_state.get("active_insurgencies", [])
 			if not prov_data.is_empty():
 				ctx.province_statuses = build_province_statuses_from_data(
-					prov_data, settlements_arr, armies_arr,
+					prov_data, settlements_arr, armies_arr, insurgencies_arr,
 				)
 		ctx.feasibility_data = _build_feasibility_data(character, world_state)
 
@@ -131,6 +134,16 @@ static func build_context(
 
 	# Military intelligence (s55.23)
 	ctx.wall_statuses = world_state.get("wall_statuses", [])
+	# Garrison shortage personality scores for known contacts (s2.4.12–13).
+	# Only computed when the character has wall management responsibilities.
+	if not ctx.wall_statuses.is_empty() and not chars_by_id.is_empty():
+		for cid: int in ctx.known_contacts:
+			var contact: L5RCharacterData = chars_by_id.get(cid)
+			if contact != null:
+				ctx.contact_garrison_scores[cid] = \
+					WallSystem.compute_garrison_shortage_personality_modifier(
+						contact.bushido_virtue, contact.shourido_virtue
+					)
 	ctx.known_clan_strengths = world_state.get("known_clan_strengths", {})
 	ctx.unit_training_counts = world_state.get("unit_training_counts", {})
 	ctx.available_levy_pu = world_state.get("available_levy_pu", 0.0)
@@ -153,7 +166,7 @@ static func build_context(
 		world_state.get("surplus_pu_province_ids", {}), character.clan,
 	)
 	ctx.is_coastal = world_state.get("is_coastal", false)
-	ctx.has_ships = world_state.get("has_ships", false)
+	ctx.has_naval_assets = world_state.get("has_naval_assets", false)
 	ctx.has_naval_threat = world_state.get("has_naval_threat", false)
 
 	# Festival state (s11.5)
@@ -179,6 +192,9 @@ static func build_context(
 	ctx.cut_supply_army_ids = _extract_cut_supply_army_ids(world_state)
 	ctx.besieged_settlement_health_pct = world_state.get("besieged_settlement_health_pct", 1.0)
 	ctx.objective_stalled_seasons = world_state.get("objective_stalled_seasons", 0)
+
+	# Phoenix governance (s55.10.3.7) — set when the Champion holds autonomous authority.
+	ctx.phoenix_champion_authority = world_state.get("phoenix_champion_authority", false)
 
 	return ctx
 
@@ -233,6 +249,7 @@ static func generate_options(
 ) -> Array[NPCDataStructures.ScoredAction]:
 	var options: Array[NPCDataStructures.ScoredAction] = []
 	var available_actions: Array[String] = _get_actions_for_context(ctx.context_flag)
+	var has_mil_rank: bool = ctx.military_rank > Enums.MilitaryRank.NONE
 
 	for action_id: String in available_actions:
 		if _is_zone_blocked(action_id, ctx.zone_flags):
@@ -245,6 +262,10 @@ static func generate_options(
 			continue
 		if ctx.is_labor_halt_day and _is_labor_halt_blocked(action_id):
 			continue
+		# RESTORE_COUNCIL_COMPACT is only available to Phoenix Champions holding
+		# autonomous rule (s55.10.3.7 — only the Champion can give back the authority).
+		if action_id == "RESTORE_COUNCIL_COMPACT" and not ctx.phoenix_champion_authority:
+			continue
 		var option := NPCDataStructures.ScoredAction.new()
 		option.action_id = action_id
 		option.target_npc_id = need.target_npc_id
@@ -252,6 +273,15 @@ static func generate_options(
 		option.target_settlement_id = need.target_settlement_id
 		option.target_province_id = need.target_province_id
 		option.ap_cost = _get_ap_cost(action_id)
+		option.is_order = CivilianOrderBudget.is_order_action(action_id, ctx.is_lord, has_mil_rank)
+		if option.is_order:
+			# Dual-cost actions (SEND_INVITATION) keep 1 AP; all others drop to 0 AP.
+			if not (action_id in CivilianOrderBudget.DUAL_COST_ACTIONS):
+				option.ap_cost = 0
+			# Filter out if no civilian orders available (military orders handled separately).
+			if ctx.civilian_orders_remaining <= 0:
+				if not CivilianOrderBudget.draws_from_military_pool(action_id, has_mil_rank):
+					continue
 		_populate_action_metadata(option, need, ctx)
 		options.append(option)
 
@@ -396,6 +426,21 @@ static func execute_action(
 			"action_id": chosen.action_id,
 		}
 
+	var orders_spent: int = 0
+	if chosen.is_order:
+		var has_mil_rank: bool = character.military_rank > Enums.MilitaryRank.NONE
+		if not CivilianOrderBudget.draws_from_military_pool(chosen.action_id, has_mil_rank):
+			var order_result: Dictionary = CivilianOrderBudget.spend_order(character)
+			if not order_result["success"]:
+				# Refund the AP already spent and abort.
+				character.action_points_current += chosen.ap_cost
+				return {
+					"success": false,
+					"reason": "insufficient_civilian_orders",
+					"action_id": chosen.action_id,
+				}
+			orders_spent = 1
+
 	var decision: Dictionary = {
 		"success": true,
 		"action_id": chosen.action_id,
@@ -404,6 +449,7 @@ static func execute_action(
 		"target_settlement_id": chosen.target_settlement_id,
 		"target_province_id": chosen.target_province_id,
 		"ap_spent": chosen.ap_cost,
+		"orders_spent": orders_spent,
 		"total_score": chosen.get_total_score(),
 		"character_id": ctx.character_id,
 		"ic_day": ctx.ic_day,
@@ -544,6 +590,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array[S
 				"DISPATCH_COURTIER",
 				"DECLARE_WAR", "NEGOTIATE_SURRENDER",
 				"COMPLY_WITH_EDICT", "DEFY_EDICT",
+				"RESTORE_COUNCIL_COMPACT",
 				"SHARE_SUPPLIES",
 				"CRAFT", "MENTOR",
 				"DO_NOTHING", "REST",
@@ -696,6 +743,7 @@ static func _get_ap_cost(action_id: String) -> int:
 		"FOUND_TEMPLE": 1,
 		"FOUND_MONASTERY": 1,
 		"COMMISSION_SHIP": 1,
+		"RESTORE_COUNCIL_COMPACT": 1,
 	}
 	return costs.get(action_id, 1)
 
@@ -1249,7 +1297,11 @@ const LORD_ONLY_ACTIONS: Array[String] = [
 	"APPOINT_TO_POSITION", "DECLARE_WAR", "FOUND_VILLAGE",
 	"BUILD_FORTIFICATION", "BUILD_SHRINE", "FOUND_TEMPLE",
 	"FOUND_MONASTERY", "COMMISSION_SHIP", "ARRANGE_MARRIAGE",
+	# Reclassified from AP to Civilian Order per s57.34.4 — lord-only
 	"SET_TAX_RATE", "SET_STIPEND_RATE",
+	"REQUEST_ART", "REQUEST_PERFORMANCE",
+	"ASSIGN_VASSAL_OBJECTIVE", "ASSIGN_TO_MILITARY_SERVICE",
+	"SEND_INVITATION",
 ]
 
 
@@ -1267,6 +1319,10 @@ static func _is_military_blocked(
 	ctx: NPCDataStructures.ContextSnapshot,
 ) -> bool:
 	if action_id in MILITARY_ORDER_ACTIONS:
+		# Lords can issue military-or-civilian order actions via Civilian Orders
+		# even without a commanded unit (s57.34.4).
+		if ctx.is_lord and action_id in CivilianOrderBudget.MILITARY_OR_CIVILIAN_ACTIONS:
+			return false
 		return ctx.commanded_unit_id < 0
 	if COMMANDER_RANK_ACTIONS.has(action_id):
 		var min_rank: int = COMMANDER_RANK_ACTIONS[action_id]
@@ -1329,6 +1385,9 @@ static func resolve_daily_letter(
 	scoring_tables: Dictionary,
 	ctx: NPCDataStructures.ContextSnapshot,
 ) -> Dictionary:
+	# Lords write letters via the Civilian Order Budget, not the free daily pass (s57.34.7).
+	if character.civilian_order_budget_max > 0:
+		return {}
 	var need_type: String = _get_letter_need_type(objectives)
 	if need_type.is_empty():
 		return {}
@@ -1371,6 +1430,22 @@ static func _select_letter_target(
 	var primary: Dictionary = objectives.get("primary", {})
 	if primary.has("target_npc_id") and primary["target_npc_id"] >= 0:
 		return primary["target_npc_id"]
+
+	# Garrison shortage: prefer the known contact with the highest positive
+	# personality score for responding to Wall reinforcement requests (s2.4.13).
+	var need_type: String = primary.get("need_type", \
+		objectives.get("standing", {}).get("need_type", ""))
+	if need_type == "STRENGTHEN_WALL" and not ctx.contact_garrison_scores.is_empty():
+		var best_id: int = -1
+		var best_score: float = -999.0
+		for cid: int in ctx.contact_garrison_scores:
+			var score: float = ctx.contact_garrison_scores[cid]
+			if score > best_score:
+				best_score = score
+				best_id = cid
+		if best_id >= 0:
+			return best_id
+
 	if ctx.lord_id >= 0:
 		return ctx.lord_id
 	var met: Array[int] = ctx.met_characters
@@ -1400,6 +1475,7 @@ static func build_province_statuses_from_data(
 	province_data: Array,
 	settlements: Array = [],
 	active_armies: Array = [],
+	active_insurgencies: Array = [],
 ) -> Array:
 	var result: Array = []
 	var settlement_garrison: Dictionary = {}
@@ -1438,6 +1514,10 @@ static func build_province_statuses_from_data(
 		ps.stability = pd.stability
 		ps.active_crisis_id = pd.active_crisis_id
 		ps.active_insurgency_id = pd.active_insurgency_id
+		for ins: Variant in active_insurgencies:
+			if ins is InsurgencyData and ins.province_id == pd.province_id:
+				ps.insurgency_type = Enums.InsurgencyType.keys()[ins.insurgency_type]
+				break
 		ps.last_report_ic_day = pd.last_report_ic_day
 		ps.garrison_pu = settlement_garrison.get(pd.province_id, 0)
 		ps.total_settlement_pu = settlement_total_pu.get(pd.province_id, 0)
@@ -1532,6 +1612,32 @@ static func _populate_action_metadata(
 		option.metadata = {
 			"siege_settlement_id": ctx.location_id,
 		}
+	elif option.action_id == "OBSERVE_COURT_ATTENDEES":
+		# Populate the list of attendees this NPC hasn't met yet (s55.7.3).
+		var court: Dictionary = ctx.active_court_at_location
+		var attendee_ids: Array = court.get("attendee_ids", [])
+		var observable: Array[int] = []
+		for aid: Variant in attendee_ids:
+			var aid_int: int = int(aid)
+			if aid_int != ctx.character_id and aid_int not in ctx.met_characters:
+				observable.append(aid_int)
+		option.metadata = {"observable_attendee_ids": observable}
+	elif option.action_id == "ASK_FOR_INTRODUCTION":
+		# Intermediary: highest-disposition Friend+ contact who is not the target (s55.7.3).
+		var target_id: int = option.target_npc_id
+		if target_id < 0:
+			target_id = need.target_npc_id
+		var best_intermediary: int = -1
+		var best_disp: int = 30
+		for cid: Variant in ctx.disposition_values:
+			var cid_int: int = int(cid)
+			if cid_int == target_id or cid_int == ctx.character_id:
+				continue
+			var disp: int = int(ctx.disposition_values[cid])
+			if disp >= 31 and disp > best_disp:
+				best_disp = disp
+				best_intermediary = cid_int
+		option.metadata = {"intermediary_id": best_intermediary}
 
 
 static func _pick_court_agenda_topic(ctx: NPCDataStructures.ContextSnapshot) -> int:

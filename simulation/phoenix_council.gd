@@ -566,6 +566,109 @@ static func reincarnated_champion_evaluates_restore(
 	return disposition_to_council_avg >= FRIEND_DISPOSITION_THRESHOLD
 
 
+# -- Post-reincarnation schism auto-resolve (s55.10.3.7) --------------------
+#
+# Called after resolve_shiba_reincarnation fires during an active Phoenix
+# Schism. The new Champion evaluates whether to capitulate (Council Victory)
+# or continue the defiance with fresh resolve.
+#
+# duty_score: caller-computed duty inclination (0..100). Convention: pass 70
+#   when bushido_virtue == CHUGI, 30 otherwise. Matches the 60-point threshold
+#   in s55.10.3.7 ("Chugi-dominant Champions, Duty score above PROVISIONAL 60").
+#
+# Returns:
+#   {
+#     "capitulates": bool,
+#     "reason":      String,   # "chugi_duty" | "ishi_will" | "seigyo_control" |
+#                              # "friendly_disposition" | "neutral_or_hostile"
+#   }
+
+static func evaluate_reincarnation_schism_outcome(
+	new_champion: L5RCharacterData,
+	disposition_to_council_avg: int,
+	duty_score: int,
+) -> Dictionary:
+	if new_champion == null:
+		return {"capitulates": true, "reason": "no_champion"}
+
+	# High Chugi + high duty score: the oath compels the new Champion to yield.
+	if new_champion.bushido_virtue == Enums.BushidoVirtue.CHUGI and duty_score >= 60:
+		return {"capitulates": true, "reason": "chugi_duty"}
+
+	# Ishi (iron will) or Seigyo (self-mastery) — continues independence.
+	if new_champion.shourido_virtue == Enums.ShouridoVirtue.ISHI:
+		return {"capitulates": false, "reason": "ishi_will"}
+	if new_champion.shourido_virtue == Enums.ShouridoVirtue.SEIGYO:
+		return {"capitulates": false, "reason": "seigyo_control"}
+
+	# Disposition-driven: friend-level relationship with the Council → yields.
+	if disposition_to_council_avg >= FRIEND_DISPOSITION_THRESHOLD:
+		return {"capitulates": true, "reason": "friendly_disposition"}
+
+	return {"capitulates": false, "reason": "neutral_or_hostile"}
+
+
+# -- Grand Ritual devastating effect (s55.10.3.7) ----------------------------
+# When the Council uses the grand ritual against Phoenix territory it is an
+# act of desperation. All four effects apply simultaneously:
+#
+#   1. Target province stability → 0, devastated flag set.
+#   2. Every surviving Master suffers −2.0 Honor (PROVISIONAL per GDD).
+#   3. All empire-wide champions/representatives receive −20 disposition toward
+#      the Emperor ID passed in (Council authority acted against its own clan).
+#   4. Returns a topic-creation dict (Tier 1 political crisis) for the caller
+#      to inject into active_topics.
+#
+# The caller is responsible for injecting the topic; this function only
+# mutates the province, master honor, and dispositions.
+
+const GRAND_RITUAL_HONOR_COST: float = -2.0
+const GRAND_RITUAL_EMPIRE_DISPOSITION: int = -20
+
+static func apply_grand_ritual_devastation(
+	target_province: ProvinceData,
+	surviving_masters: Array[L5RCharacterData],
+	all_clan_representatives: Array[L5RCharacterData],
+	emperor_id: int,
+) -> Dictionary:
+	if target_province == null:
+		return {"applied": false, "reason": "no_province"}
+
+	target_province.stability = 0.0
+	target_province.grand_ritual_devastated = true
+
+	var master_ids: Array[int] = []
+	for master: L5RCharacterData in surviving_masters:
+		HonorGlorySystem.apply_honor_change(master, GRAND_RITUAL_HONOR_COST)
+		master_ids.append(master.character_id)
+
+	var rep_ids: Array[int] = []
+	if emperor_id >= 0:
+		for rep: L5RCharacterData in all_clan_representatives:
+			if rep.clan == "Phoenix":
+				continue
+			var cur: int = rep.disposition_values.get(emperor_id, 0)
+			rep.disposition_values[emperor_id] = clampi(cur + GRAND_RITUAL_EMPIRE_DISPOSITION, -100, 100)
+			rep_ids.append(rep.character_id)
+
+	return {
+		"applied": true,
+		"target_province_id": target_province.province_id,
+		"masters_penalized": master_ids,
+		"honor_cost_per_master": GRAND_RITUAL_HONOR_COST,
+		"reps_affected": rep_ids,
+		"disposition_cost": GRAND_RITUAL_EMPIRE_DISPOSITION,
+		"crisis_topic": {
+			"topic_type": "phoenix_grand_ritual",
+			"tier": TopicData.Tier.TIER_1,
+			"category": TopicData.Category.POLITICAL,
+			"momentum": 90.0,
+			"clan_involved": "Phoenix",
+			"variant": "grand_ritual_devastation",
+		},
+	}
+
+
 # -- Master vacancy / extinction (s55.10.3.9) -------------------------------
 
 static func count_living_masters(living_masters: Array) -> int:
@@ -600,4 +703,9 @@ static func make_initial_state() -> Dictionary:
 		"failed_proposals": {},
 		"consecutive_crisis_vetoes": 0,
 		"consecutive_obstruction_seasons": 0,
+		# Tracks reincarnation-with-flag evaluation (s55.10.3.7).
+		# Updated each season in _process_phoenix_council_gating; a champion-ID
+		# change while phoenix_champion_authority is true triggers the first-season
+		# compact restoration evaluation.
+		"known_champion_id": -1,
 	}

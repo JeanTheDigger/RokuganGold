@@ -327,6 +327,175 @@ func test_apply_condemn_wrong_type():
 
 
 # =============================================================================
+# APPLY AUTHORIZE_WAR
+# =============================================================================
+
+func test_apply_authorize_war_with_active_war():
+	var war := _make_war(10, "Lion", "Crane")
+	var wars: Array[WarData] = [war]
+	var e := ImperialEdictSystem.create_edict(1, EdictData.EdictType.AUTHORIZE_WAR, 100, 50)
+	e.target_clan = "Lion"
+	e.target_war_id = 10
+	var result := ImperialEdictSystem.apply_authorize_war(e, wars)
+	assert_true(result.get("applied", false))
+	assert_eq(result["authorized_clan"], "Lion")
+	assert_eq(result["war_id"], 10)
+	assert_eq(result["score_shift"], ImperialEdictSystem.CONDEMN_WAR_SCORE_SHIFT)
+	assert_true(war.war_score_a > 50)
+
+
+func test_apply_authorize_war_no_active_war():
+	var e := ImperialEdictSystem.create_edict(1, EdictData.EdictType.AUTHORIZE_WAR, 100, 50)
+	e.target_clan = "Lion"
+	e.target_war_id = 99
+	var result := ImperialEdictSystem.apply_authorize_war(e, [])
+	assert_true(result.get("applied", false))
+	assert_true(result.get("no_active_war", false))
+
+
+func test_apply_authorize_war_wrong_type():
+	var e := ImperialEdictSystem.create_edict(1, EdictData.EdictType.CEASE_HOSTILITIES, 100, 50)
+	var result := ImperialEdictSystem.apply_authorize_war(e, [])
+	assert_false(result.get("applied", true))
+
+
+# =============================================================================
+# APPLY TAX_REFORM
+# =============================================================================
+
+func test_apply_tax_reform_sets_flag():
+	var e := ImperialEdictSystem.create_edict(5, EdictData.EdictType.TAX_REFORM, 100, 50)
+	var result := ImperialEdictSystem.apply_tax_reform(e)
+	assert_true(result.get("applied", false))
+	assert_true(result.get("tax_reform_active", false))
+	assert_eq(result.get("tax_reform_edict_id", -1), 5)
+
+
+func test_apply_tax_reform_wrong_type():
+	var e := ImperialEdictSystem.create_edict(1, EdictData.EdictType.CEASE_HOSTILITIES, 100, 50)
+	var result := ImperialEdictSystem.apply_tax_reform(e)
+	assert_false(result.get("applied", true))
+
+
+# =============================================================================
+# APPLY APPOINT_POSITION
+# =============================================================================
+
+func _make_char_with_status(id: int, status: float) -> L5RCharacterData:
+	var c := L5RCharacterData.new()
+	c.character_id = id
+	c.status = status
+	return c
+
+
+func test_apply_appoint_position_raises_status():
+	var c := _make_char_with_status(7, 4.0)
+	var chars: Array[L5RCharacterData] = [c]
+	var e := ImperialEdictSystem.create_edict(1, EdictData.EdictType.APPOINT_POSITION, 100, 50)
+	e.target_character_id = 7
+	var result := ImperialEdictSystem.apply_appoint_position(e, chars)
+	assert_true(result.get("applied", false))
+	assert_eq(result["appointed_character_id"], 7)
+	assert_eq(result["old_status"], 4.0)
+	assert_eq(result["new_status"], 5.0)
+	assert_eq(c.status, 5.0)
+
+
+func test_apply_appoint_position_clamps_at_10():
+	var c := _make_char_with_status(7, 10.0)
+	var chars: Array[L5RCharacterData] = [c]
+	var e := ImperialEdictSystem.create_edict(1, EdictData.EdictType.APPOINT_POSITION, 100, 50)
+	e.target_character_id = 7
+	ImperialEdictSystem.apply_appoint_position(e, chars)
+	assert_eq(c.status, 10.0)
+
+
+func test_apply_appoint_position_character_not_found():
+	var e := ImperialEdictSystem.create_edict(1, EdictData.EdictType.APPOINT_POSITION, 100, 50)
+	e.target_character_id = 99
+	var result := ImperialEdictSystem.apply_appoint_position(e, [])
+	assert_true(result.get("applied", false))
+	assert_true(result.get("character_not_found", false))
+
+
+func test_apply_appoint_position_wrong_type():
+	var e := ImperialEdictSystem.create_edict(1, EdictData.EdictType.CEASE_HOSTILITIES, 100, 50)
+	var result := ImperialEdictSystem.apply_appoint_position(e, [])
+	assert_false(result.get("applied", true))
+
+
+# =============================================================================
+# APPLY STRIP_AUTONOMY
+# =============================================================================
+
+func _make_clan_member(id: int, clan: String, status: float) -> L5RCharacterData:
+	var c := L5RCharacterData.new()
+	c.character_id = id
+	c.clan = clan
+	c.status = status
+	c.honor = 5.0
+	return c
+
+
+func test_apply_strip_autonomy_champion_loses_honor():
+	var champ := _make_clan_member(1, "Phoenix", 7.0)
+	var retainer := _make_clan_member(2, "Phoenix", 5.0)
+	var chars: Array[L5RCharacterData] = [champ, retainer]
+	var e := ImperialEdictSystem.create_edict(1, EdictData.EdictType.STRIP_AUTONOMY, 99, 50)
+	e.target_clan = "Phoenix"
+	e.emperor_id = 99
+	var result := ImperialEdictSystem.apply_strip_autonomy(e, chars)
+	assert_true(result.get("applied", false))
+	assert_eq(result["champion_id"], 1)
+	assert_true(champ.honor < 5.0)
+
+
+func test_apply_strip_autonomy_status5_get_disposition_penalty():
+	var champ := _make_clan_member(1, "Phoenix", 7.0)
+	var member := _make_clan_member(2, "Phoenix", 5.0)
+	var low_rank := _make_clan_member(3, "Phoenix", 2.0)
+	var chars: Array[L5RCharacterData] = [champ, member, low_rank]
+	var e := ImperialEdictSystem.create_edict(1, EdictData.EdictType.STRIP_AUTONOMY, 99, 50)
+	e.target_clan = "Phoenix"
+	e.emperor_id = 99
+	ImperialEdictSystem.apply_strip_autonomy(e, chars)
+	assert_eq(champ.disposition_values.get(99, 0), ImperialEdictSystem.STRIP_AUTONOMY_EMPEROR_DISPOSITION)
+	assert_eq(member.disposition_values.get(99, 0), ImperialEdictSystem.STRIP_AUTONOMY_EMPEROR_DISPOSITION)
+	assert_eq(low_rank.disposition_values.get(99, 0), 0, "Status < 5 should not be affected")
+
+
+func test_apply_strip_autonomy_no_target_clan():
+	var e := ImperialEdictSystem.create_edict(1, EdictData.EdictType.STRIP_AUTONOMY, 99, 50)
+	var result := ImperialEdictSystem.apply_strip_autonomy(e, [])
+	assert_true(result.get("applied", false))
+	assert_true(result.get("no_target_clan", false))
+
+
+func test_apply_strip_autonomy_wrong_type():
+	var e := ImperialEdictSystem.create_edict(1, EdictData.EdictType.CEASE_HOSTILITIES, 99, 50)
+	var result := ImperialEdictSystem.apply_strip_autonomy(e, [])
+	assert_false(result.get("applied", true))
+
+
+# =============================================================================
+# APPLY GENERAL_DECREE
+# =============================================================================
+
+func test_apply_general_decree_records_in_result():
+	var e := ImperialEdictSystem.create_edict(42, EdictData.EdictType.GENERAL_DECREE, 100, 50)
+	var result := ImperialEdictSystem.apply_general_decree(e, 200)
+	assert_true(result.get("applied", false))
+	assert_eq(result.get("last_general_decree_id", -1), 42)
+	assert_eq(result.get("last_general_decree_day", -1), 200)
+
+
+func test_apply_general_decree_wrong_type():
+	var e := ImperialEdictSystem.create_edict(1, EdictData.EdictType.CEASE_HOSTILITIES, 100, 50)
+	var result := ImperialEdictSystem.apply_general_decree(e, 200)
+	assert_false(result.get("applied", true))
+
+
+# =============================================================================
 # TOPIC GENERATION
 # =============================================================================
 

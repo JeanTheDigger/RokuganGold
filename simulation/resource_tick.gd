@@ -76,6 +76,30 @@ const SHOURIDO_TAX_MODIFIERS: Dictionary = {
 	"ISHI": 0.05,
 }
 
+# -- Personality Stipend Modifiers per GDD s4.3.9 ------------------------------
+# Positive = distributes more Koku downward. Negative = hoards.
+# Range: −15% to +15%.
+
+const BUSHIDO_STIPEND_MODIFIERS: Dictionary = {
+	"JIN": 0.10,
+	"MEIYO": 0.05,
+	"YU": 0.0,
+	"REI": 0.0,
+	"CHUGI": 0.0,
+	"GI": 0.0,
+	"MAKOTO": 0.0,
+}
+
+const SHOURIDO_STIPEND_MODIFIERS: Dictionary = {
+	"KYORYOKU": -0.10,
+	"SEIGYO": -0.05,
+	"ISHI": -0.05,
+	"KETSUI": 0.0,
+	"DOSATSU": 0.0,
+	"CHISHIKI": 0.0,
+	"KANPEKI": 0.0,
+}
+
 # -- Tax Stability Effects per GDD s4.3.7 -------------------------------------
 
 const TAX_STABILITY_EFFECTS: Dictionary = {
@@ -274,6 +298,9 @@ static func process_seasonal_tick(
 
 	var iron: Dictionary = _process_iron_production(settlements, settlement_meta)
 	results["iron_produced"] = iron
+
+	var arms: Dictionary = _process_forge_conversion(settlements, settlement_meta)
+	results["arms_produced"] = arms
 
 	var koku: Dictionary = _process_koku_generation(settlements, settlement_meta)
 	results["koku_generated"] = koku
@@ -652,6 +679,36 @@ static func compute_tax_modifier(
 	return clampf(modifier, -0.15, 0.15)
 
 
+static func compute_stipend_modifier(
+	bushido_virtue: Enums.BushidoVirtue,
+	shourido_virtue: Enums.ShouridoVirtue,
+) -> float:
+	## Returns the lord's stipend generosity modifier per GDD s4.3.9.
+	## Positive = distributes more Koku downward; negative = hoards.
+	var modifier: float = 0.0
+	if bushido_virtue != Enums.BushidoVirtue.NONE:
+		var name: String = Enums.bushido_virtue_name(bushido_virtue)
+		modifier += BUSHIDO_STIPEND_MODIFIERS.get(name, 0.0)
+	if shourido_virtue != Enums.ShouridoVirtue.NONE:
+		var name: String = Enums.shourido_virtue_name(shourido_virtue)
+		modifier += SHOURIDO_STIPEND_MODIFIERS.get(name, 0.0)
+	return clampf(modifier, -0.15, 0.15)
+
+
+static func compute_stipend_disposition_delta(stipend_modifier: float) -> int:
+	## Returns the per-season disposition delta toward direct retainers
+	## based on the lord's stipend modifier per GDD s4.3.9.
+	if stipend_modifier >= 0.10:
+		return 2
+	if stipend_modifier >= 0.05:
+		return 1
+	if stipend_modifier <= -0.10:
+		return -2
+	if stipend_modifier <= -0.05:
+		return -1
+	return 0
+
+
 static func compute_taxable_surplus(total_population_pu: int, autumn_yield: float) -> float:
 	var subsistence: float = float(total_population_pu) * SUBSISTENCE_FLOOR_PER_PU
 	return maxf(0.0, autumn_yield - subsistence)
@@ -809,6 +866,67 @@ static func _process_iron_production(
 static func produce_iron_settlement(settlement: SettlementData, mine_quality: float) -> Dictionary:
 	var iron: float = float(settlement.mining_pu) * IRON_PER_MINING_PU_PER_SEASON * mine_quality
 	return {"iron_produced": iron}
+
+
+# ==============================================================================
+# Forge Conversion — Iron → Arms per GDD s4.3
+# 3.00 Arms capacity per Forge per season. 1.00 Iron = 1.00 Arms (no loss).
+# Each Forge converts up to 3.00 Iron; conversion is capped by Iron available.
+# ==============================================================================
+
+const ARMS_PER_FORGE_PER_SEASON: float = 3.0
+
+static func _process_forge_conversion(
+	settlements: Array[SettlementData],
+	settlement_meta: Dictionary,
+) -> Dictionary:
+	var clan_data: Dictionary = settlement_meta.get("_clan_data", {})
+	var results: Dictionary = {}
+
+	# Build forge count per clan by summing forges in each settlement
+	var clan_forge_count: Dictionary = {}
+	for s: SettlementData in settlements:
+		var forge_count: int = 0
+		for tag: String in s.infrastructure:
+			if tag == "forge":
+				forge_count += 1
+		if forge_count == 0:
+			continue
+		# Map settlement → clan by province_id
+		for clan_name: String in clan_data:
+			var cd: ClanData = clan_data[clan_name]
+			if s.province_id in cd.province_ids:
+				clan_forge_count[clan_name] = clan_forge_count.get(clan_name, 0) + forge_count
+				break
+
+	for clan_name: String in clan_forge_count:
+		var cd: ClanData = clan_data[clan_name]
+		var capacity: float = float(clan_forge_count[clan_name]) * ARMS_PER_FORGE_PER_SEASON
+		var converted: float = minf(capacity, cd.iron_stockpile)
+		cd.iron_stockpile -= converted
+		cd.arms_stockpile += converted
+		results[clan_name] = {
+			"forge_count": clan_forge_count[clan_name],
+			"capacity": capacity,
+			"arms_produced": converted,
+			"iron_consumed": converted,
+		}
+
+	return results
+
+
+static func process_forge_conversion_single_clan(
+	forge_count: int,
+	iron_available: float,
+) -> Dictionary:
+	var capacity: float = float(forge_count) * ARMS_PER_FORGE_PER_SEASON
+	var converted: float = minf(capacity, iron_available)
+	return {
+		"forge_count": forge_count,
+		"capacity": capacity,
+		"arms_produced": converted,
+		"iron_consumed": converted,
+	}
 
 
 # ==============================================================================

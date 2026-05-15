@@ -1072,4 +1072,68 @@ func test_status_to_lord_rank_mapping():
 	assert_eq(DayOrchestrator._status_to_lord_rank(6.0), Enums.LordRank.FAMILY_DAIMYO)
 	assert_eq(DayOrchestrator._status_to_lord_rank(5.0), Enums.LordRank.PROVINCIAL_DAIMYO)
 	assert_eq(DayOrchestrator._status_to_lord_rank(4.0), Enums.LordRank.CITY_DAIMYO)
+
+
+# -- Renege Historical Modifier (s15.2) ----------------------------------------
+
+func _make_renege_commitment(lord_id: int, witnesses: Array[int]) -> CourtCommitmentData:
+	var c: CourtCommitmentData = CourtCommitmentSystem.create_commitment(
+		lord_id, 10, "send_supplies",
+		CourtCommitmentData.CommitmentSource.VOLUNTARY,
+		100, 200,
+	)
+	c.witness_ids = witnesses
+	return c
+
+
+func _make_char(id: int, honor: float = 5.0) -> L5RCharacterData:
+	var c := L5RCharacterData.new()
+	c.character_id = id
+	c.honor = honor
+	return c
+
+
+func test_renege_applies_historical_modifier_to_witness() -> void:
+	var lord: L5RCharacterData = _make_char(1)
+	var witness: L5RCharacterData = _make_char(2)
+	var characters_by_id: Dictionary = {1: lord, 2: witness}
+	var cc: CourtCommitmentData = _make_renege_commitment(1, [2])
+	var topics: Array[TopicData] = []
+	var next_id: Array[int] = [1]
+	DayOrchestrator._process_commitment_seasonal(
+		[cc], [], 201, characters_by_id, topics, next_id,
+	)
+	assert_true(witness.historical_modifiers.has(1))
+	var mods: Array = witness.historical_modifiers[1]
+	assert_eq(mods.size(), 1)
+	assert_eq(mods[0].get("event_type", ""), "reneged_commitment")
+
+
+func test_renege_skips_historical_modifier_when_no_witnesses() -> void:
+	var lord: L5RCharacterData = _make_char(1)
+	var characters_by_id: Dictionary = {1: lord}
+	var cc: CourtCommitmentData = _make_renege_commitment(1, [])
+	var topics: Array[TopicData] = []
+	var next_id: Array[int] = [1]
+	DayOrchestrator._process_commitment_seasonal(
+		[cc], [], 201, characters_by_id, topics, next_id,
+	)
+	# Lord's own modifier dict should not have self-entry.
+	assert_false(lord.historical_modifiers.has(1))
+
+
+func test_renege_excludes_reneging_lord_from_own_modifier() -> void:
+	var lord: L5RCharacterData = _make_char(1)
+	var witness: L5RCharacterData = _make_char(2)
+	var characters_by_id: Dictionary = {1: lord, 2: witness}
+	# Include lord's own ID in witness list — should be skipped.
+	var cc: CourtCommitmentData = _make_renege_commitment(1, [1, 2])
+	var topics: Array[TopicData] = []
+	var next_id: Array[int] = [1]
+	DayOrchestrator._process_commitment_seasonal(
+		[cc], [], 201, characters_by_id, topics, next_id,
+	)
+	# Witness gets modifier; lord does not get self-referential modifier.
+	assert_true(witness.historical_modifiers.has(1))
+	assert_false(lord.historical_modifiers.has(1))
 	assert_eq(DayOrchestrator._status_to_lord_rank(2.0), Enums.LordRank.VILLAGE_HEADMAN)

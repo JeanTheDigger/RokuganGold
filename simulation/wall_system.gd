@@ -249,6 +249,49 @@ static func get_ss_reduction(force_size: String) -> int:
 	return 0
 
 
+# -- Garrison Shortage Honor Table (s2.4.12 — PROVISIONAL) --------------------
+
+## Honor gained by a lord who sends troops to the Wall (s2.4.12).
+## contribution_type: "unit" | "guntai" | "kaisha"
+## company_count: number of Kaisha (ignored for "unit" and "guntai" tiers).
+static func compute_garrison_honor_gain(
+	contribution_type: String,
+	company_count: int = 1,
+) -> float:
+	match contribution_type:
+		"unit":
+			return 0.3
+		"guntai":
+			return 0.5
+		"kaisha":
+			return 1.0 * maxi(company_count, 1)
+	return 0.0
+
+
+## Personality modifier on the "Send bushi to [Tower X]" action topic (s2.4.12).
+## Pass the receiving lord's virtue enums. Returns net position modifier.
+static func compute_garrison_shortage_personality_modifier(
+	bushido_virtue: Enums.BushidoVirtue,
+	shourido_virtue: Enums.ShouridoVirtue,
+) -> float:
+	var modifier: float = 0.0
+	match bushido_virtue:
+		Enums.BushidoVirtue.CHUGI:
+			modifier += 15.0
+		Enums.BushidoVirtue.YU:
+			modifier += 8.0
+		Enums.BushidoVirtue.MEIYO:
+			modifier += 8.0
+		Enums.BushidoVirtue.JIN:
+			modifier += 6.0
+	match shourido_virtue:
+		Enums.ShouridoVirtue.KYORYOKU:
+			modifier -= 5.0
+		Enums.ShouridoVirtue.SEIGYO:
+			modifier -= 5.0
+	return modifier
+
+
 ## Returns the garrison fraction committed for a given force size.
 ## Uses the upper bound of each tier per s2.4.10.
 static func get_force_pct(force_size: String) -> float:
@@ -334,9 +377,9 @@ static func validate_sortie(
 
 
 ## Full sortie resolution entry point called from ActionExecutor.
-## Returns a result dict. The actual horde combat (s2.4.7) is deferred until
-## Jigoku Horde generation is implemented — emits requires_sortie_combat: true
-## with all parameters the Horde system needs.
+## Returns a result dict. Actual horde combat resolves via
+## HordeSystem.resolve_sortie_combat — call it from DayOrchestrator
+## using the committed garrison companies and pass ss_reduction from here.
 static func resolve_sortie(
 	ss: int,
 	si: int,

@@ -319,15 +319,20 @@ static func apply_event_tick_change(
 
 # -- Storm Assault ---------------------------------------------------------------
 
-static func get_storm_defense_bonus() -> int:
-	return STORM_URBAN_DEFENSE_BONUS + FORTIFICATION_DEFENSE_BONUS
+static func get_storm_defense_bonus(has_fortification: bool = true) -> int:
+	if has_fortification:
+		return STORM_URBAN_DEFENSE_BONUS + FORTIFICATION_DEFENSE_BONUS
+	return STORM_URBAN_DEFENSE_BONUS
 
 
 static func compute_garrison_effective_defense(
 	base_defense: int,
 	is_home_settlement: bool,
+	has_fortification: bool = true,
 ) -> int:
-	var total: int = base_defense + STORM_URBAN_DEFENSE_BONUS + FORTIFICATION_DEFENSE_BONUS
+	var total: int = base_defense + STORM_URBAN_DEFENSE_BONUS
+	if has_fortification:
+		total += FORTIFICATION_DEFENSE_BONUS
 	if is_home_settlement:
 		total += 2
 	return total
@@ -385,6 +390,16 @@ static func compute_sortie_terrain_bonus() -> Dictionary:
 		"defender_defense_bonus": STORM_URBAN_DEFENSE_BONUS,
 		"fortification_bonus": 0,
 	}
+
+
+# -- Tether Collapse Detection --------------------------------------------------
+
+static func check_tether_ends_siege(
+	tether_state: SupplyTetherSystem.TetherState,
+) -> bool:
+	## Returns true when the attacker's supply tether is fully broken, collapsing
+	## the siege per GDD s11.7: "if that tether is cut... the siege collapses."
+	return tether_state == SupplyTetherSystem.TetherState.BROKEN
 
 
 # -- Siege Resolution ------------------------------------------------------------

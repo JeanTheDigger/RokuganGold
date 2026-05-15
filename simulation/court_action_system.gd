@@ -546,6 +546,65 @@ static func resolve_discern_need(
 	}
 
 
+# -- Contact Discovery: OBSERVE_COURT_ATTENDEES (s55.7.3 — LOCKED) ------------
+
+const OBSERVE_COURT_TN: int = 15
+const OBSERVE_COURT_MAX_ATTENDEES: int = 3
+
+## Resolve OBSERVE_COURT_ATTENDEES per s55.7.3.
+## roll_total: Perception + Investigation roll result.
+## observable_count: how many unknown attendees are available to learn about.
+## Returns {"success": bool, "learn_count": int} — caller picks which attendees.
+static func resolve_observe_court_attendees(
+	roll_total: int,
+	observable_count: int,
+) -> Dictionary:
+	if roll_total < OBSERVE_COURT_TN:
+		return {"success": false, "learn_count": 0}
+
+	var margin: int = roll_total - OBSERVE_COURT_TN
+	var raises: int = int(margin / 5.0)
+	var learn_count: int = mini(1 + raises, OBSERVE_COURT_MAX_ATTENDEES)
+	learn_count = mini(learn_count, observable_count)
+	return {"success": true, "learn_count": learn_count}
+
+
+# -- Contact Discovery: ASK_FOR_INTRODUCTION (s55.7.3 — LOCKED) ---------------
+
+const ASK_FOR_INTRODUCTION_TN: int = 15
+const ASK_FOR_INTRODUCTION_BASE_DISP: int = 3
+const ASK_FOR_INTRODUCTION_KUGE_DISP: int = 2
+const KUGE_STATUS_THRESHOLD: float = 7.0
+const KUGE_INTERMEDIARY_MIN_STATUS: float = 4.0
+
+## Resolve ASK_FOR_INTRODUCTION per s55.7.3.
+## roll_total: pre-rolled Courtier/Awareness (normal) or Etiquette/Awareness (kuge).
+## target_is_kuge: target Status >= KUGE_STATUS_THRESHOLD.
+## intermediary_status: the Friend+ contact's Status (kuge gate: must be >= 4.0).
+static func resolve_ask_for_introduction(
+	roll_total: int,
+	target_is_kuge: bool,
+	intermediary_status: float,
+) -> Dictionary:
+	if target_is_kuge and intermediary_status < KUGE_INTERMEDIARY_MIN_STATUS:
+		return {
+			"success": false,
+			"blocked_reason": "intermediary_insufficient_status",
+		}
+
+	if roll_total < ASK_FOR_INTRODUCTION_TN:
+		return {"success": false}
+
+	var disp_gain: int = ASK_FOR_INTRODUCTION_KUGE_DISP if target_is_kuge \
+		else ASK_FOR_INTRODUCTION_BASE_DISP
+	return {
+		"success": true,
+		"disposition_gain": disp_gain,
+		"contact_added": true,
+		"target_is_kuge": target_is_kuge,
+	}
+
+
 # -- Debate Disposition Tier Lookup -------------------------------------------
 
 static func get_debate_disposition_tier(disposition: int) -> int:

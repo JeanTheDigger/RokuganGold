@@ -1345,3 +1345,173 @@ func test_gossip_metadata_uses_split() -> void:
 	NPCDecisionEngine._populate_action_metadata(action, need, ctx)
 	assert_eq(action.metadata.get("concealment_raises", -1), 1)
 	assert_eq(action.metadata.get("damage_raises", -1), 98)
+
+
+# -- ASK_FOR_INTRODUCTION (s55.7.3) -------------------------------------------
+
+func test_ask_intro_success_normal_target() -> void:
+	# Roll meets TN 15, non-kuge target → +3 disposition.
+	var r: Dictionary = CourtActionSystem.resolve_ask_for_introduction(15, false, 0.0)
+	assert_true(r["success"])
+	assert_eq(r["disposition_gain"], CourtActionSystem.ASK_FOR_INTRODUCTION_BASE_DISP)
+	assert_true(r["contact_added"])
+
+
+func test_ask_intro_failure_roll_below_tn() -> void:
+	var r: Dictionary = CourtActionSystem.resolve_ask_for_introduction(14, false, 0.0)
+	assert_false(r["success"])
+
+
+func test_ask_intro_success_kuge_target_disposition_reduced() -> void:
+	# Kuge target (Status 7+) grants only +2 disposition on success.
+	var r: Dictionary = CourtActionSystem.resolve_ask_for_introduction(20, true, 5.0)
+	assert_true(r["success"])
+	assert_eq(r["disposition_gain"], CourtActionSystem.ASK_FOR_INTRODUCTION_KUGE_DISP)
+	assert_true(r.get("target_is_kuge", false))
+
+
+func test_ask_intro_kuge_blocked_intermediary_too_low() -> void:
+	# Intermediary Status < 4.0 → blocked for kuge targets.
+	var r: Dictionary = CourtActionSystem.resolve_ask_for_introduction(99, true, 3.9)
+	assert_false(r["success"])
+	assert_eq(r["blocked_reason"], "intermediary_insufficient_status")
+
+
+func test_ask_intro_kuge_gate_not_applied_for_normal_target() -> void:
+	# Intermediary status gate only applies to kuge targets.
+	var r: Dictionary = CourtActionSystem.resolve_ask_for_introduction(15, false, 0.0)
+	assert_true(r["success"])
+
+
+func test_ask_intro_kuge_exact_intermediary_threshold_passes() -> void:
+	# Exactly Status 4.0 satisfies the kuge intermediary gate.
+	var r: Dictionary = CourtActionSystem.resolve_ask_for_introduction(20, true, 4.0)
+	assert_true(r["success"])
+
+
+# -- OBSERVE_COURT_ATTENDEES (s55.7.3) -----------------------------------------
+
+func test_observe_court_failure_roll_below_tn() -> void:
+	var r: Dictionary = CourtActionSystem.resolve_observe_court_attendees(14, 5)
+	assert_false(r["success"])
+	assert_eq(r["learn_count"], 0)
+
+
+func test_observe_court_success_base_one_attendee() -> void:
+	# Exactly meets TN 15, no raises → 1 attendee.
+	var r: Dictionary = CourtActionSystem.resolve_observe_court_attendees(15, 5)
+	assert_true(r["success"])
+	assert_eq(r["learn_count"], 1)
+
+
+func test_observe_court_one_raise_two_attendees() -> void:
+	# margin = 20 - 15 = 5 → 1 Raise → 2 attendees.
+	var r: Dictionary = CourtActionSystem.resolve_observe_court_attendees(20, 5)
+	assert_true(r["success"])
+	assert_eq(r["learn_count"], 2)
+
+
+func test_observe_court_two_raises_three_attendees() -> void:
+	# margin = 25 - 15 = 10 → 2 Raises → 3 attendees.
+	var r: Dictionary = CourtActionSystem.resolve_observe_court_attendees(25, 5)
+	assert_true(r["success"])
+	assert_eq(r["learn_count"], 3)
+
+
+func test_observe_court_capped_at_three() -> void:
+	# Very high roll → still capped at 3.
+	var r: Dictionary = CourtActionSystem.resolve_observe_court_attendees(99, 10)
+	assert_true(r["success"])
+	assert_eq(r["learn_count"], 3)
+
+
+func test_observe_court_capped_by_observable_pool() -> void:
+	# Only 2 attendees available → cannot learn more than 2.
+	var r: Dictionary = CourtActionSystem.resolve_observe_court_attendees(99, 2)
+	assert_true(r["success"])
+	assert_eq(r["learn_count"], 2)
+
+
+func test_observe_court_empty_pool() -> void:
+	# No unknown attendees → learn_count 0 even on success.
+	var r: Dictionary = CourtActionSystem.resolve_observe_court_attendees(99, 0)
+	assert_true(r["success"])
+	assert_eq(r["learn_count"], 0)
+
+
+# -- NPC metadata population: OBSERVE_COURT_ATTENDEES / ASK_FOR_INTRODUCTION ---
+
+func _make_contact_ctx(char_id: int, court_attendees: Array[int], met: Array[int], disp: Dictionary = {}) -> NPCDataStructures.ContextSnapshot:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.character_id = char_id
+	ctx.met_characters = met
+	ctx.disposition_values = disp
+	ctx.dispositions = disp.duplicate()
+	ctx.active_court_at_location = {"attendee_ids": court_attendees}
+	return ctx
+
+
+func test_observe_metadata_filters_met_characters() -> void:
+	# Attendees [2,3,4]; met=[3] → observable=[2,4]
+	var ctx: NPCDataStructures.ContextSnapshot = _make_contact_ctx(1, [2,3,4], [3])
+	var action := NPCDataStructures.ScoredAction.new()
+	action.action_id = "OBSERVE_COURT_ATTENDEES"
+	var need := NPCDataStructures.ImmediateNeed.new()
+	NPCDecisionEngine._populate_action_metadata(action, need, ctx)
+	var obs: Array = action.metadata.get("observable_attendee_ids", [])
+	assert_eq(obs.size(), 2)
+	assert_true(3 not in obs)
+	assert_true(2 in obs)
+	assert_true(4 in obs)
+
+
+func test_observe_metadata_excludes_self() -> void:
+	# Self (char_id=1) is in attendee list but should be excluded.
+	var ctx: NPCDataStructures.ContextSnapshot = _make_contact_ctx(1, [1,2,3], [])
+	var action := NPCDataStructures.ScoredAction.new()
+	action.action_id = "OBSERVE_COURT_ATTENDEES"
+	NPCDecisionEngine._populate_action_metadata(action, NPCDataStructures.ImmediateNeed.new(), ctx)
+	var obs: Array = action.metadata.get("observable_attendee_ids", [])
+	assert_true(1 not in obs)
+	assert_eq(obs.size(), 2)
+
+
+func test_observe_metadata_no_court_gives_empty_pool() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.character_id = 1
+	# active_court_at_location is empty dict by default
+	var action := NPCDataStructures.ScoredAction.new()
+	action.action_id = "OBSERVE_COURT_ATTENDEES"
+	NPCDecisionEngine._populate_action_metadata(action, NPCDataStructures.ImmediateNeed.new(), ctx)
+	assert_eq(action.metadata.get("observable_attendee_ids", []).size(), 0)
+
+
+func test_ask_intro_metadata_picks_best_friend_intermediary() -> void:
+	# Dispositions: 2=50 (Friend+), 3=20 (Acquaintance), 4=60 (best Friend+)
+	# Target = 2 → intermediary must not be 2 → picks 4 (highest Friend+)
+	var ctx: NPCDataStructures.ContextSnapshot = _make_contact_ctx(1, [], [], {2: 50, 3: 20, 4: 60})
+	var action := NPCDataStructures.ScoredAction.new()
+	action.action_id = "ASK_FOR_INTRODUCTION"
+	action.target_npc_id = 2
+	NPCDecisionEngine._populate_action_metadata(action, NPCDataStructures.ImmediateNeed.new(), ctx)
+	assert_eq(action.metadata.get("intermediary_id", -1), 4)
+
+
+func test_ask_intro_metadata_no_friend_gives_minus_one() -> void:
+	# No one has Friend+ disposition → intermediary = -1
+	var ctx: NPCDataStructures.ContextSnapshot = _make_contact_ctx(1, [], [], {2: 20, 3: 10})
+	var action := NPCDataStructures.ScoredAction.new()
+	action.action_id = "ASK_FOR_INTRODUCTION"
+	action.target_npc_id = 5
+	NPCDecisionEngine._populate_action_metadata(action, NPCDataStructures.ImmediateNeed.new(), ctx)
+	assert_eq(action.metadata.get("intermediary_id", -1), -1)
+
+
+func test_ask_intro_metadata_excludes_target_as_intermediary() -> void:
+	# Only Friend+ is character 2, but 2 is also the target → no valid intermediary
+	var ctx: NPCDataStructures.ContextSnapshot = _make_contact_ctx(1, [], [], {2: 70})
+	var action := NPCDataStructures.ScoredAction.new()
+	action.action_id = "ASK_FOR_INTRODUCTION"
+	action.target_npc_id = 2
+	NPCDecisionEngine._populate_action_metadata(action, NPCDataStructures.ImmediateNeed.new(), ctx)
+	assert_eq(action.metadata.get("intermediary_id", -1), -1)

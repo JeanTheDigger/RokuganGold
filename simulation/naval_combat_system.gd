@@ -72,12 +72,19 @@ static func make_naval_company(
 		"round_number": 0,
 		"ram_used": false,
 		"escape_attempted": false,
+		"is_escaped": false,
 		"is_mantis_operated": is_mantis_operated,
 	}
 
 
 static func is_active(bc: Dictionary) -> bool:
-	return not bc["is_routed"] and not bc["is_destroyed"] and not bc.get("is_captured", false) and not bc.get("auto_flees", false)
+	return (
+		not bc["is_routed"]
+		and not bc["is_destroyed"]
+		and not bc.get("is_captured", false)
+		and not bc.get("auto_flees", false)
+		and not bc.get("is_escaped", false)
+	)
 
 
 # -- Pre-Battle: Civilian Processing ---------------------------------------------
@@ -155,6 +162,7 @@ static func resolve_naval_battle(
 		victor = "attacker"
 
 	var captured_ships: Array[Dictionary] = _collect_captured_ships(attacker_states, defender_states)
+	var escaped_ships: Array[Dictionary] = _collect_escaped_ships(attacker_states, defender_states)
 
 	return {
 		"victor": victor,
@@ -165,6 +173,7 @@ static func resolve_naval_battle(
 		"captain_deaths": captain_deaths,
 		"civilian_result": civilian_result,
 		"captured_ships": captured_ships,
+		"escaped_ships": escaped_ships,
 		"weather": weather,
 	}
 
@@ -200,6 +209,77 @@ static func _apply_atakebune_defense(side: Array[Dictionary]) -> void:
 					ally["atakebune_def_bonus"] = NavalSystem.ATAKEBUNE_ADJACENT_DEFENSE_BONUS
 
 
+# -- Tortoise Escape Attempt (s11.9) --------------------------------------------
+# Tortoise ships attempt escape before the round's matchups (consuming their
+# Company action). NPC captains always flee — the design philosophy is
+# flee-before-fight. Escape is contested once per engagement; escape_attempted
+# blocks retries on failure.
+
+static func _tortoise_captain_nav_int(bc: Dictionary) -> Dictionary:
+	var cap: L5RCharacterData = bc.get("captain") as L5RCharacterData
+	if cap == null:
+		return {"navigation": 0, "intelligence": 2}
+	return {
+		"navigation": cap.skills.get("Navigation", 0),
+		"intelligence": cap.intelligence,
+	}
+
+
+static func _best_enemy_battle_int(enemy_side: Array[Dictionary]) -> Dictionary:
+	var best_battle: int = 0
+	var best_int: int = 2
+	for bc: Dictionary in enemy_side:
+		if not is_active(bc):
+			continue
+		var cap: L5RCharacterData = bc.get("captain") as L5RCharacterData
+		if cap == null:
+			continue
+		var bat: int = cap.skills.get("Battle", 0)
+		var intel: int = cap.intelligence
+		if bat + intel > best_battle + best_int:
+			best_battle = bat
+			best_int = intel
+	return {"battle": best_battle, "intelligence": best_int}
+
+
+static func _process_tortoise_escapes(
+	own_side: Array[Dictionary],
+	enemy_side: Array[Dictionary],
+	dice_engine: DiceEngine,
+	weather: int,
+) -> Array[Dictionary]:
+	var results: Array[Dictionary] = []
+	var enemy_stats: Dictionary = _best_enemy_battle_int(enemy_side)
+	for bc: Dictionary in own_side:
+		if bc["ship_class"] != Enums.ShipClass.TORTOISE_OCEANGOING:
+			continue
+		if not is_active(bc):
+			continue
+		if bc.get("escape_attempted", false):
+			continue
+		bc["escape_attempted"] = true
+		var nav_int: Dictionary = _tortoise_captain_nav_int(bc)
+		var attempt: Dictionary = NavalSystem.resolve_escape_attempt(
+			dice_engine,
+			nav_int["navigation"],
+			nav_int["intelligence"],
+			enemy_stats["battle"],
+			enemy_stats["intelligence"],
+			weather,
+		)
+		if attempt["escaped"]:
+			bc["is_escaped"] = true
+		results.append({
+			"company_id": bc["company_id"],
+			"ship_id": bc.get("ship", {}).get("ship_id", bc["company_id"]),
+			"escaped": attempt["escaped"],
+			"escape_total": attempt["escape_total"],
+			"pursue_total": attempt["pursue_total"],
+			"weather_bonus": attempt["weather_bonus"],
+		})
+	return results
+
+
 # -- Combat Round ----------------------------------------------------------------
 
 static func _resolve_naval_round(
@@ -217,6 +297,11 @@ static func _resolve_naval_round(
 		bc["health_damage_this_round"] = 0
 		bc["round_number"] = round_num
 		bc["atakebune_def_bonus"] = 0
+
+	# Tortoise escape attempts happen before matchups (consumes Company action).
+	var escape_results: Array[Dictionary] = []
+	escape_results.append_array(_process_tortoise_escapes(attackers, defenders, dice_engine, weather))
+	escape_results.append_array(_process_tortoise_escapes(defenders, attackers, dice_engine, weather))
 
 	_apply_atakebune_defense(attackers)
 	_apply_atakebune_defense(defenders)
@@ -298,6 +383,7 @@ static func _resolve_naval_round(
 	return {
 		"matchups": matchups.size(),
 		"captain_deaths": captain_deaths,
+		"escape_results": escape_results,
 	}
 
 
@@ -639,6 +725,30 @@ static func _collect_captured_ships(
 					"prize_value": NavalSystem.compute_capture_prize_value(bc["ship_class"]),
 				})
 	return captured
+
+
+# -- Escaped Ship Collection ---------------------------------------------------
+
+static func _collect_escaped_ships(
+	attackers: Array[Dictionary],
+	defenders: Array[Dictionary],
+) -> Array[Dictionary]:
+	var escaped: Array[Dictionary] = []
+	for bc: Dictionary in attackers:
+		if bc.get("is_escaped", false):
+			escaped.append({
+				"ship_id": bc["company_id"],
+				"ship_class": bc["ship_class"],
+				"side": "attacker",
+			})
+	for bc: Dictionary in defenders:
+		if bc.get("is_escaped", false):
+			escaped.append({
+				"ship_id": bc["company_id"],
+				"ship_class": bc["ship_class"],
+				"side": "defender",
+			})
+	return escaped
 
 
 # -- Rout Resolution (naval — same structure as land) ---------------------------

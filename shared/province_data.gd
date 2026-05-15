@@ -28,6 +28,7 @@ extends Resource
 @export var active_insurgency_id: int = -1
 @export var province_taint_level: float = 0.0
 @export var last_report_ic_day: int = -1
+@export var grand_ritual_devastated: bool = false
 
 # -- Miya's Blessing tracking (s11.5b) -----------------------------------------
 # IC year of the most recent Miya's Blessing received. -1 = never blessed.

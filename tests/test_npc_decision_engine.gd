@@ -1403,3 +1403,82 @@ func test_province_status_rice_stockpile_from_settlements() -> void:
 	)
 	assert_eq(statuses.size(), 1)
 	assert_almost_eq(statuses[0].rice_stockpile, 40.0, 0.01, "Rice should sum settlements")
+
+
+# =============================================================================
+# Garrison shortage target selection (s2.4.13 Decision 10)
+# =============================================================================
+
+
+func _make_crab_character(id: int, bushido: Enums.BushidoVirtue, shourido: Enums.ShouridoVirtue) -> L5RCharacterData:
+	var c := L5RCharacterData.new()
+	c.character_id = id
+	c.clan = "Crab"
+	c.bushido_virtue = bushido
+	c.shourido_virtue = shourido
+	return c
+
+
+func test_build_context_populates_contact_garrison_scores_when_wall_statuses_present() -> void:
+	var writer := L5RCharacterData.new()
+	writer.character_id = 1
+	var chugi_lord := _make_crab_character(10, Enums.BushidoVirtue.CHUGI, Enums.ShouridoVirtue.NONE)
+	writer.known_contacts_by_clan = {"Crab": [10]}
+	var ws_obj := NPCDataStructures.WallStatus.new()
+	ws_obj.province_id = 5
+	var world_state: Dictionary = {"wall_statuses": [ws_obj]}
+	var ctx := NPCDecisionEngine.build_context(writer, world_state, {10: chugi_lord})
+	assert_true(ctx.contact_garrison_scores.has(10))
+	assert_almost_eq(ctx.contact_garrison_scores[10], 15.0, 0.001)
+
+
+func test_build_context_empty_garrison_scores_without_wall_statuses() -> void:
+	var writer := L5RCharacterData.new()
+	writer.character_id = 1
+	var chugi_lord := _make_crab_character(10, Enums.BushidoVirtue.CHUGI, Enums.ShouridoVirtue.NONE)
+	writer.known_contacts_by_clan = {"Crab": [10]}
+	var world_state: Dictionary = {"wall_statuses": []}
+	var ctx := NPCDecisionEngine.build_context(writer, world_state, {10: chugi_lord})
+	assert_true(ctx.contact_garrison_scores.is_empty())
+
+
+func test_select_letter_target_prefers_chugi_over_seigyo_for_strengthen_wall() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.contact_garrison_scores = {10: 15.0, 20: -5.0}  # Chugi vs Seigyo
+	var objectives: Dictionary = {"primary": {"need_type": "STRENGTHEN_WALL"}}
+	var target: int = NPCDecisionEngine._select_letter_target(objectives, ctx)
+	assert_eq(target, 10)
+
+
+func test_select_letter_target_prefers_yu_over_seigyo_for_strengthen_wall() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.contact_garrison_scores = {30: 8.0, 40: -5.0}  # Yu vs Seigyo
+	var objectives: Dictionary = {"primary": {"need_type": "STRENGTHEN_WALL"}}
+	var target: int = NPCDecisionEngine._select_letter_target(objectives, ctx)
+	assert_eq(target, 30)
+
+
+func test_select_letter_target_falls_back_to_lord_id_when_no_scores() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.lord_id = 7
+	ctx.contact_garrison_scores = {}
+	var objectives: Dictionary = {"primary": {"need_type": "STRENGTHEN_WALL"}}
+	var target: int = NPCDecisionEngine._select_letter_target(objectives, ctx)
+	assert_eq(target, 7)
+
+
+func test_select_letter_target_ignores_garrison_scores_for_non_strengthen_wall() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.lord_id = 7
+	ctx.contact_garrison_scores = {10: 15.0}
+	var objectives: Dictionary = {"primary": {"need_type": "RAISE_DISPOSITION", "target_npc_id": -1}}
+	var target: int = NPCDecisionEngine._select_letter_target(objectives, ctx)
+	assert_eq(target, 7)
+
+
+func test_select_letter_target_explicit_npc_id_still_overrides_garrison_scores() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.contact_garrison_scores = {10: 15.0}
+	var objectives: Dictionary = {"primary": {"need_type": "STRENGTHEN_WALL", "target_npc_id": 99}}
+	var target: int = NPCDecisionEngine._select_letter_target(objectives, ctx)
+	assert_eq(target, 99)

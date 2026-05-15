@@ -431,3 +431,106 @@ func test_character_at_tower_with_preloaded_other_status_keeps_both() -> void:
 
 	var statuses: Array = world_states[1]["wall_statuses"]
 	assert_eq(statuses.size(), 2)
+
+
+# =============================================================================
+# Garrison shortage state propagated from SettlementData (s2.4.13–14)
+# =============================================================================
+
+func test_minimum_garrison_populated_from_wall_system_constant() -> void:
+	var tower := _make_wall_tower(100, 10)
+	var char := _make_character(1, "100")
+	var provinces: Dictionary = {10: _make_province(10)}
+	var world_states := _make_ws(1)
+
+	DayOrchestrator._set_wall_tower_context_flags(
+		[char] as Array[L5RCharacterData],
+		[tower] as Array[SettlementData],
+		provinces, world_states
+	)
+
+	var ws: NPCDataStructures.WallStatus = world_states[1]["wall_statuses"][0]
+	assert_eq(ws.minimum_garrison, int(WallSystem.MINIMUM_GARRISON_PU))
+
+
+func test_garrison_shortage_letter_season_propagated() -> void:
+	var tower := _make_wall_tower(100, 10)
+	tower.garrison_shortage_letter_season = 7
+	var char := _make_character(1, "100")
+	var provinces: Dictionary = {10: _make_province(10)}
+	var world_states := _make_ws(1)
+
+	DayOrchestrator._set_wall_tower_context_flags(
+		[char] as Array[L5RCharacterData],
+		[tower] as Array[SettlementData],
+		provinces, world_states
+	)
+
+	var ws: NPCDataStructures.WallStatus = world_states[1]["wall_statuses"][0]
+	assert_eq(ws.garrison_shortage_letter_season, 7)
+
+
+func test_garrison_shortage_letter_season_default_is_sentinel() -> void:
+	var tower := _make_wall_tower(100, 10)
+	var char := _make_character(1, "100")
+	var provinces: Dictionary = {10: _make_province(10)}
+	var world_states := _make_ws(1)
+
+	DayOrchestrator._set_wall_tower_context_flags(
+		[char] as Array[L5RCharacterData],
+		[tower] as Array[SettlementData],
+		provinces, world_states
+	)
+
+	var ws: NPCDataStructures.WallStatus = world_states[1]["wall_statuses"][0]
+	assert_eq(ws.garrison_shortage_letter_season, -1)
+
+
+func test_garrison_shortage_courtier_dispatched_propagated() -> void:
+	var tower := _make_wall_tower(100, 10)
+	tower.garrison_shortage_courtier_dispatched = true
+	var char := _make_character(1, "100")
+	var provinces: Dictionary = {10: _make_province(10)}
+	var world_states := _make_ws(1)
+
+	DayOrchestrator._set_wall_tower_context_flags(
+		[char] as Array[L5RCharacterData],
+		[tower] as Array[SettlementData],
+		provinces, world_states
+	)
+
+	var ws: NPCDataStructures.WallStatus = world_states[1]["wall_statuses"][0]
+	assert_true(ws.garrison_shortage_courtier_dispatched)
+
+
+func test_garrison_shortage_courtier_refused_propagated() -> void:
+	var tower := _make_wall_tower(100, 10)
+	tower.garrison_shortage_courtier_refused = true
+	var char := _make_character(1, "100")
+	var provinces: Dictionary = {10: _make_province(10)}
+	var world_states := _make_ws(1)
+
+	DayOrchestrator._set_wall_tower_context_flags(
+		[char] as Array[L5RCharacterData],
+		[tower] as Array[SettlementData],
+		provinces, world_states
+	)
+
+	var ws: NPCDataStructures.WallStatus = world_states[1]["wall_statuses"][0]
+	assert_true(ws.garrison_shortage_courtier_refused)
+
+
+func test_garrison_shortage_courtier_refused_default_is_false() -> void:
+	var tower := _make_wall_tower(100, 10)
+	var char := _make_character(1, "100")
+	var provinces: Dictionary = {10: _make_province(10)}
+	var world_states := _make_ws(1)
+
+	DayOrchestrator._set_wall_tower_context_flags(
+		[char] as Array[L5RCharacterData],
+		[tower] as Array[SettlementData],
+		provinces, world_states
+	)
+
+	var ws: NPCDataStructures.WallStatus = world_states[1]["wall_statuses"][0]
+	assert_false(ws.garrison_shortage_courtier_refused)

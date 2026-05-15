@@ -645,3 +645,292 @@ func test_orchestrator_restores_routes_on_edict() -> void:
 	)
 	assert_eq(results.size(), 1)
 	assert_false(route.is_disrupted)
+
+
+# -- Territory Transfer Mutations -----------------------------------------------
+
+func _make_province(pid: int, clan: String) -> ProvinceData:
+	var p: ProvinceData = ProvinceData.new()
+	p.province_id = pid
+	p.clan = clan
+	return p
+
+
+func test_surrender_transfers_province_clan() -> void:
+	var p1: ProvinceData = _make_province(1, "Crane")
+	var p2: ProvinceData = _make_province(2, "Crane")
+	var provinces: Dictionary = {1: p1, 2: p2}
+	var resolution: Dictionary = {
+		"resolution": "formal_surrender",
+		"winner_clan": "Crab",
+		"territory_transferred": [1, 2],
+	}
+	var log: Array[Dictionary] = WarTermination.apply_territory_transfers(resolution, provinces)
+	assert_eq(p1.clan, "Crab")
+	assert_eq(p2.clan, "Crab")
+	assert_eq(log.size(), 2)
+
+
+func test_negotiated_settlement_transfers_partial() -> void:
+	var p1: ProvinceData = _make_province(10, "Crane")
+	var provinces: Dictionary = {10: p1}
+	var resolution: Dictionary = {
+		"resolution": "negotiated_settlement",
+		"proposing_clan": "Crab",
+		"territory_transferred": [10],
+	}
+	var log: Array[Dictionary] = WarTermination.apply_territory_transfers(resolution, provinces)
+	assert_eq(p1.clan, "Crab")
+	assert_eq(log[0]["old_clan"], "Crane")
+	assert_eq(log[0]["new_clan"], "Crab")
+
+
+func test_no_transfer_when_empty() -> void:
+	var provinces: Dictionary = {}
+	var resolution: Dictionary = {
+		"resolution": "negotiated_settlement",
+		"proposing_clan": "Crab",
+		"territory_transferred": [],
+	}
+	var log: Array[Dictionary] = WarTermination.apply_territory_transfers(resolution, provinces)
+	assert_eq(log.size(), 0)
+
+
+func test_imperial_edict_no_transfer() -> void:
+	# Status quo ante — no territory changes hands
+	var p: ProvinceData = _make_province(5, "Crane")
+	var provinces: Dictionary = {5: p}
+	var resolution: Dictionary = {
+		"resolution": "imperial_edict",
+		"clan_a": "Crab",
+		"clan_b": "Crane",
+		"territory_transferred": [],
+	}
+	WarTermination.apply_territory_transfers(resolution, provinces)
+	assert_eq(p.clan, "Crane")  # unchanged
+
+
+func test_transfer_skips_already_correct_clan() -> void:
+	var p: ProvinceData = _make_province(7, "Crab")  # already Crab's
+	var provinces: Dictionary = {7: p}
+	var resolution: Dictionary = {
+		"resolution": "formal_surrender",
+		"winner_clan": "Crab",
+		"territory_transferred": [7],
+	}
+	var log: Array[Dictionary] = WarTermination.apply_territory_transfers(resolution, provinces)
+	assert_eq(log.size(), 0)  # no change logged — clan was already correct
+
+
+func test_orchestrator_applies_territory_transfers() -> void:
+	var p: ProvinceData = _make_province(3, "Crane")
+	var provinces: Dictionary = {3: p}
+	var war_termination_results: Array[Dictionary] = [{
+		"resolution": "formal_surrender",
+		"winner_clan": "Crab",
+		"territory_transferred": [3],
+	}]
+	var result: Array[Dictionary] = DayOrchestrator._apply_war_territory_transfers(
+		war_termination_results, provinces,
+	)
+	assert_eq(p.clan, "Crab")
+	assert_eq(result.size(), 1)
+	assert_eq(result[0]["new_clan"], "Crab")
+
+
+# -- Peace Court ---------------------------------------------------------------
+
+func _make_peace_court(ic_day: int = 1) -> CourtSessionData:
+	return WarTermination.create_peace_court(
+		99, _war, 100, 200, "Crab", ic_day,
+	)
+
+
+func test_create_peace_court_type_and_phase() -> void:
+	var court: CourtSessionData = _make_peace_court()
+	assert_eq(court.court_type, CourtSessionData.CourtType.PEACE_COURT)
+	assert_eq(court.phase, CourtSessionData.CourtPhase.ACTIVE)
+
+
+func test_create_peace_court_links_war_id() -> void:
+	var court: CourtSessionData = _make_peace_court()
+	assert_eq(court.peace_court_war_id, _war.war_id)
+
+
+func test_create_peace_court_has_clan_prestige() -> void:
+	var court: CourtSessionData = _make_peace_court()
+	assert_eq(court.prestige, CourtSystem.PRESTIGE_CLAN)
+
+
+func test_create_peace_court_default_duration_is_max() -> void:
+	var court: CourtSessionData = _make_peace_court()
+	assert_eq(court.duration_ticks, CourtSystem.PEACE_COURT_MAX_DURATION)
+
+
+func test_get_required_proxy_rank_clan_war() -> void:
+	_war.authority_level = WarData.AuthorityLevel.CLAN_WAR
+	assert_eq(WarTermination.get_required_proxy_rank(_war), Enums.LordRank.CLAN_CHAMPION)
+
+
+func test_get_required_proxy_rank_family_war() -> void:
+	_war.authority_level = WarData.AuthorityLevel.FAMILY_WAR
+	assert_eq(WarTermination.get_required_proxy_rank(_war), Enums.LordRank.FAMILY_DAIMYO)
+
+
+func test_get_required_proxy_rank_border_conflict() -> void:
+	_war.authority_level = WarData.AuthorityLevel.BORDER_CONFLICT
+	assert_eq(WarTermination.get_required_proxy_rank(_war), Enums.LordRank.FAMILY_DAIMYO)
+
+
+func test_get_required_proxy_rank_provincial_raid() -> void:
+	_war.authority_level = WarData.AuthorityLevel.PROVINCIAL_RAID
+	assert_eq(WarTermination.get_required_proxy_rank(_war), Enums.LordRank.PROVINCIAL_DAIMYO)
+
+
+func test_is_valid_peace_proxy_champion_for_clan_war() -> void:
+	_war.authority_level = WarData.AuthorityLevel.CLAN_WAR
+	var c: L5RCharacterData = L5RCharacterData.new()
+	c.status = 6.5  # Clan Champion tier
+	assert_true(WarTermination.is_valid_peace_proxy(c, _war))
+
+
+func test_is_valid_peace_proxy_low_rank_fails_clan_war() -> void:
+	_war.authority_level = WarData.AuthorityLevel.CLAN_WAR
+	var c: L5RCharacterData = L5RCharacterData.new()
+	c.status = 3.5  # Provincial Daimyo tier — not high enough
+	assert_false(WarTermination.is_valid_peace_proxy(c, _war))
+
+
+func test_is_valid_peace_proxy_family_daimyo_for_family_war() -> void:
+	_war.authority_level = WarData.AuthorityLevel.FAMILY_WAR
+	var c: L5RCharacterData = L5RCharacterData.new()
+	c.status = 4.5  # Family Daimyo tier
+	assert_true(WarTermination.is_valid_peace_proxy(c, _war))
+
+
+func test_apply_willingness_modifier_clan_a() -> void:
+	var court: CourtSessionData = _make_peace_court()
+	var result: Dictionary = WarTermination.apply_willingness_modifier(court, _war, "Crab", 10)
+	assert_true(result["applied"])
+	assert_eq(court.willingness_modifier_clan_a, 10)
+	assert_eq(court.willingness_modifier_clan_b, 0)
+
+
+func test_apply_willingness_modifier_clan_b() -> void:
+	var court: CourtSessionData = _make_peace_court()
+	var result: Dictionary = WarTermination.apply_willingness_modifier(court, _war, "Crane", 15)
+	assert_true(result["applied"])
+	assert_eq(court.willingness_modifier_clan_b, 15)
+	assert_eq(court.willingness_modifier_clan_a, 0)
+
+
+func test_apply_willingness_modifier_accumulates() -> void:
+	var court: CourtSessionData = _make_peace_court()
+	WarTermination.apply_willingness_modifier(court, _war, "Crane", 10)
+	WarTermination.apply_willingness_modifier(court, _war, "Crane", 5)
+	assert_eq(court.willingness_modifier_clan_b, 15)
+
+
+func test_apply_willingness_modifier_wrong_clan_fails() -> void:
+	var court: CourtSessionData = _make_peace_court()
+	var result: Dictionary = WarTermination.apply_willingness_modifier(court, _war, "Lion", 10)
+	assert_false(result["applied"])
+	assert_eq(result["reason"], "clan_not_in_war")
+
+
+func test_apply_willingness_modifier_closed_court_fails() -> void:
+	var court: CourtSessionData = _make_peace_court()
+	CourtSystem.close_court(court)
+	var result: Dictionary = WarTermination.apply_willingness_modifier(court, _war, "Crab", 5)
+	assert_false(result["applied"])
+	assert_eq(result["reason"], "court_not_active")
+
+
+func test_apply_willingness_modifier_war_mismatch_fails() -> void:
+	var court: CourtSessionData = _make_peace_court()
+	var other_war: WarData = WarData.new()
+	other_war.war_id = 999
+	other_war.clan_a = "Crab"
+	other_war.clan_b = "Crane"
+	var result: Dictionary = WarTermination.apply_willingness_modifier(court, other_war, "Crab", 5)
+	assert_false(result["applied"])
+	assert_eq(result["reason"], "court_war_mismatch")
+
+
+func test_conclude_peace_court_accepted_ends_war() -> void:
+	_war.war_score_a = 55
+	_war.war_score_b = 45
+	var court: CourtSessionData = _make_peace_court()
+	# Apply large modifier so willingness crosses threshold
+	WarTermination.apply_willingness_modifier(court, _war, "Crane", 60)
+	var terms: Dictionary = WarTermination.compute_peace_terms(_war, "Crab")
+	var result: Dictionary = WarTermination.conclude_peace_court(
+		court, _war, terms, "Gi", "Gi", false, false,
+	)
+	assert_true(result["concluded"])
+	assert_true(result["accepted_by_both"])
+	assert_false(_war.is_active)
+
+
+func test_conclude_peace_court_rejected_war_stays_active() -> void:
+	_war.war_score_a = 85
+	_war.war_score_b = 15
+	_war.provinces_captured_by_a = [1, 2, 3]
+	var court: CourtSessionData = _make_peace_court()
+	# No willingness modifier — Desperate side still won't accept full conquest terms
+	var terms: Dictionary = WarTermination.compute_peace_terms(_war, "Crab")
+	var result: Dictionary = WarTermination.conclude_peace_court(
+		court, _war, terms, "Yu", "Yu", false, false,
+	)
+	assert_true(result["concluded"])
+	assert_false(result["accepted_by_both"])
+	assert_true(_war.is_active)
+
+
+func test_conclude_peace_court_closes_court_regardless() -> void:
+	var court: CourtSessionData = _make_peace_court()
+	var terms: Dictionary = WarTermination.compute_peace_terms(_war, "Crab")
+	WarTermination.conclude_peace_court(court, _war, terms, "Gi", "Gi", false, false)
+	assert_eq(court.phase, CourtSessionData.CourtPhase.CLOSED)
+
+
+func test_conclude_peace_court_accepted_includes_court_id() -> void:
+	_war.war_score_a = 50
+	_war.war_score_b = 50
+	var court: CourtSessionData = _make_peace_court()
+	WarTermination.apply_willingness_modifier(court, _war, "Crane", 70)
+	var terms: Dictionary = WarTermination.compute_peace_terms(_war, "Crab")
+	var result: Dictionary = WarTermination.conclude_peace_court(
+		court, _war, terms, "Gi", "Gi", false, false,
+	)
+	if result["accepted_by_both"]:
+		assert_eq(result["resolution"]["peace_court_id"], court.court_id)
+
+
+func test_conclude_peace_court_wrong_war_fails() -> void:
+	var court: CourtSessionData = _make_peace_court()
+	var other_war: WarData = WarData.new()
+	other_war.war_id = 999
+	other_war.clan_a = "Crab"
+	other_war.clan_b = "Crane"
+	other_war.is_active = true
+	var terms: Dictionary = {"proposing_clan": "Crab"}
+	var result: Dictionary = WarTermination.conclude_peace_court(
+		court, other_war, terms, "Gi", "Gi", false, false,
+	)
+	assert_false(result["concluded"])
+	assert_eq(result["reason"], "court_war_mismatch")
+
+
+func test_court_system_peace_court_duration() -> void:
+	assert_eq(
+		CourtSystem.get_default_duration(CourtSessionData.CourtType.PEACE_COURT),
+		CourtSystem.PEACE_COURT_MAX_DURATION,
+	)
+
+
+func test_court_system_peace_court_prestige() -> void:
+	var court: CourtSessionData = CourtSystem.create_court(
+		1, CourtSessionData.CourtType.PEACE_COURT, 10, 20, "Lion", 1,
+	)
+	assert_eq(court.prestige, CourtSystem.PRESTIGE_CLAN)

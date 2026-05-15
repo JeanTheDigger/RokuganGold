@@ -579,7 +579,7 @@ static func process_daily_compliance(
 				results.append(consequence)
 
 		if are_all_compliant(edict):
-			var applied: Dictionary = _apply_compliant_edict(edict, active_wars)
+			var applied: Dictionary = _apply_compliant_edict(edict, active_wars, characters, ic_day)
 			if not applied.is_empty():
 				results.append(applied)
 			deactivate_edict(edict)
@@ -642,11 +642,144 @@ static func _apply_defiance_to_characters(
 static func _apply_compliant_edict(
 	edict: EdictData,
 	active_wars: Array[WarData],
+	characters: Array[L5RCharacterData],
+	ic_day: int,
 ) -> Dictionary:
 	match edict.edict_type:
 		EdictData.EdictType.CEASE_HOSTILITIES:
 			return apply_cease_hostilities(edict, active_wars)
 		EdictData.EdictType.CONDEMN_CLAN:
 			return apply_condemn_clan(edict, active_wars)
+		EdictData.EdictType.AUTHORIZE_WAR:
+			return apply_authorize_war(edict, active_wars)
+		EdictData.EdictType.TAX_REFORM:
+			return apply_tax_reform(edict)
+		EdictData.EdictType.APPOINT_POSITION:
+			return apply_appoint_position(edict, characters)
+		EdictData.EdictType.STRIP_AUTONOMY:
+			return apply_strip_autonomy(edict, characters)
+		EdictData.EdictType.GENERAL_DECREE:
+			return apply_general_decree(edict, ic_day)
 		_:
 			return {"applied": true, "edict_id": edict.edict_id}
+
+
+# -- Compliance effect: AUTHORIZE_WAR -----------------------------------------
+# Shifts war score +10 toward the authorized clan when all clans comply.
+# If the target war is already resolved, returns a no-op result.
+
+static func apply_authorize_war(
+	edict: EdictData,
+	active_wars: Array[WarData],
+) -> Dictionary:
+	if edict.edict_type != EdictData.EdictType.AUTHORIZE_WAR:
+		return {"applied": false, "reason": "wrong_type"}
+	for w: WarData in active_wars:
+		if w.war_id == edict.target_war_id:
+			WarSystem.apply_score_shift(w, "authorize_war", edict.target_clan)
+			return {
+				"applied": true,
+				"edict_id": edict.edict_id,
+				"authorized_clan": edict.target_clan,
+				"war_id": w.war_id,
+				"score_shift": CONDEMN_WAR_SCORE_SHIFT,
+			}
+	return {"applied": true, "edict_id": edict.edict_id, "no_active_war": true}
+
+
+# -- Compliance effect: TAX_REFORM --------------------------------------------
+# Sets a season_meta flag for ResourceTick to consume in the next pass.
+# Actual rate change is deferred until ResourceTick's seasonal pass is extended.
+
+static func apply_tax_reform(edict: EdictData) -> Dictionary:
+	if edict.edict_type != EdictData.EdictType.TAX_REFORM:
+		return {"applied": false, "reason": "wrong_type"}
+	return {
+		"applied": true,
+		"edict_id": edict.edict_id,
+		"tax_reform_active": true,
+		"tax_reform_edict_id": edict.edict_id,
+	}
+
+
+# -- Compliance effect: APPOINT_POSITION --------------------------------------
+# Raises the appointed character's status by +1.0 (formal Imperial appointment).
+
+const APPOINTMENT_STATUS_GAIN: float = 1.0
+
+static func apply_appoint_position(
+	edict: EdictData,
+	characters: Array[L5RCharacterData],
+) -> Dictionary:
+	if edict.edict_type != EdictData.EdictType.APPOINT_POSITION:
+		return {"applied": false, "reason": "wrong_type"}
+	for c: L5RCharacterData in characters:
+		if c.character_id == edict.target_character_id:
+			var old_status: float = c.status
+			c.status = minf(c.status + APPOINTMENT_STATUS_GAIN, 10.0)
+			return {
+				"applied": true,
+				"edict_id": edict.edict_id,
+				"appointed_character_id": c.character_id,
+				"old_status": old_status,
+				"new_status": c.status,
+			}
+	return {"applied": true, "edict_id": edict.edict_id, "character_not_found": true}
+
+
+# -- Compliance effect: STRIP_AUTONOMY ----------------------------------------
+# The stripped clan's highest-status character (Champion) loses 5 Honor.
+# All status-5+ members of the stripped clan gain −10 disposition toward
+# the Emperor (they submitted, but resent it).
+
+const STRIP_AUTONOMY_HONOR_COST: float = -5.0
+const STRIP_AUTONOMY_EMPEROR_DISPOSITION: int = -10
+
+static func apply_strip_autonomy(
+	edict: EdictData,
+	characters: Array[L5RCharacterData],
+) -> Dictionary:
+	if edict.edict_type != EdictData.EdictType.STRIP_AUTONOMY:
+		return {"applied": false, "reason": "wrong_type"}
+	if edict.target_clan.is_empty():
+		return {"applied": true, "edict_id": edict.edict_id, "no_target_clan": true}
+
+	var champion: L5RCharacterData = null
+	var stripped_members: Array[int] = []
+	for c: L5RCharacterData in characters:
+		if c.clan != edict.target_clan:
+			continue
+		if champion == null or c.status > champion.status:
+			champion = c
+		if c.status >= 5.0:
+			stripped_members.append(c.character_id)
+			if edict.emperor_id >= 0:
+				var cur: int = c.disposition_values.get(edict.emperor_id, 0)
+				c.disposition_values[edict.emperor_id] = clampi(cur + STRIP_AUTONOMY_EMPEROR_DISPOSITION, -100, 100)
+
+	if champion != null:
+		HonorGlorySystem.apply_honor_change(champion, STRIP_AUTONOMY_HONOR_COST)
+
+	return {
+		"applied": true,
+		"edict_id": edict.edict_id,
+		"stripped_clan": edict.target_clan,
+		"champion_id": champion.character_id if champion != null else -1,
+		"honor_cost": STRIP_AUTONOMY_HONOR_COST,
+		"members_affected": stripped_members,
+	}
+
+
+# -- Compliance effect: GENERAL_DECREE ----------------------------------------
+# Records the decree's passage in the return dict for callers to persist into
+# season_meta. No immediate disposition mutations.
+
+static func apply_general_decree(edict: EdictData, ic_day: int) -> Dictionary:
+	if edict.edict_type != EdictData.EdictType.GENERAL_DECREE:
+		return {"applied": false, "reason": "wrong_type"}
+	return {
+		"applied": true,
+		"edict_id": edict.edict_id,
+		"last_general_decree_id": edict.edict_id,
+		"last_general_decree_day": ic_day,
+	}
