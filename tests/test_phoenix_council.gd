@@ -851,3 +851,95 @@ func test_generate_options_includes_compact_when_authority_held() -> void:
 	for opt in options:
 		action_ids.append(opt.action_id)
 	assert_true("RESTORE_COUNCIL_COMPACT" in action_ids)
+
+
+# =============================================================================
+# GRAND RITUAL DEVASTATING EFFECT (s55.10.3.7)
+# =============================================================================
+
+func _make_master(id: int) -> L5RCharacterData:
+	var c := L5RCharacterData.new()
+	c.character_id = id
+	c.clan = "Phoenix"
+	c.family = "Isawa"
+	c.status = 5.0
+	c.honor = 5.0
+	return c
+
+
+func _make_province(id: int) -> ProvinceData:
+	var p := ProvinceData.new()
+	p.province_id = id
+	p.stability = 80.0
+	p.grand_ritual_devastated = false
+	return p
+
+
+func test_grand_ritual_sets_stability_to_zero():
+	var province: ProvinceData = _make_province(1)
+	var result: Dictionary = PhoenixCouncil.apply_grand_ritual_devastation(
+		province, [], [], -1
+	)
+	assert_true(result.get("applied", false))
+	assert_eq(province.stability, 0.0)
+
+
+func test_grand_ritual_sets_devastated_flag():
+	var province: ProvinceData = _make_province(1)
+	PhoenixCouncil.apply_grand_ritual_devastation(province, [], [], -1)
+	assert_true(province.grand_ritual_devastated)
+
+
+func test_grand_ritual_penalizes_surviving_masters():
+	var province: ProvinceData = _make_province(1)
+	var m1: L5RCharacterData = _make_master(10)
+	var m2: L5RCharacterData = _make_master(11)
+	var result: Dictionary = PhoenixCouncil.apply_grand_ritual_devastation(
+		province, [m1, m2], [], -1
+	)
+	assert_eq(result.get("honor_cost_per_master", 0.0), PhoenixCouncil.GRAND_RITUAL_HONOR_COST)
+	assert_true(m1.honor < 5.0)
+	assert_true(m2.honor < 5.0)
+	assert_eq(result["masters_penalized"].size(), 2)
+
+
+func test_grand_ritual_applies_empire_disposition_to_status5_reps():
+	var province: ProvinceData = _make_province(1)
+	var rep: L5RCharacterData = L5RCharacterData.new()
+	rep.character_id = 50
+	rep.clan = "Crane"
+	rep.status = 6.0
+	var low_rank: L5RCharacterData = L5RCharacterData.new()
+	low_rank.character_id = 51
+	low_rank.clan = "Crab"
+	low_rank.status = 2.0
+	var result: Dictionary = PhoenixCouncil.apply_grand_ritual_devastation(
+		province, [], [rep, low_rank], 99
+	)
+	assert_eq(rep.disposition_values.get(99, 0), PhoenixCouncil.GRAND_RITUAL_EMPIRE_DISPOSITION)
+	assert_eq(low_rank.disposition_values.get(99, 0), 0, "Status < 5 should not be affected")
+	assert_eq(result["reps_affected"].size(), 1)
+
+
+func test_grand_ritual_skips_phoenix_clan_reps():
+	var province: ProvinceData = _make_province(1)
+	var phoenix_rep: L5RCharacterData = L5RCharacterData.new()
+	phoenix_rep.character_id = 55
+	phoenix_rep.clan = "Phoenix"
+	phoenix_rep.status = 7.0
+	PhoenixCouncil.apply_grand_ritual_devastation(province, [], [phoenix_rep], 99)
+	assert_eq(phoenix_rep.disposition_values.get(99, 0), 0, "Phoenix members should not be affected")
+
+
+func test_grand_ritual_returns_crisis_topic_dict():
+	var province: ProvinceData = _make_province(1)
+	var result: Dictionary = PhoenixCouncil.apply_grand_ritual_devastation(province, [], [], -1)
+	var ct: Dictionary = result.get("crisis_topic", {})
+	assert_false(ct.is_empty())
+	assert_eq(ct.get("tier", -1), TopicData.Tier.TIER_1)
+	assert_eq(ct.get("variant", ""), "grand_ritual_devastation")
+
+
+func test_grand_ritual_null_province_returns_not_applied():
+	var result: Dictionary = PhoenixCouncil.apply_grand_ritual_devastation(null, [], [], -1)
+	assert_false(result.get("applied", true))

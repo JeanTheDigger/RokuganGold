@@ -588,3 +588,50 @@ func test_rebel_consequences_rank_and_file_no_penalty() -> void:
 	)
 	assert_eq(rf.honor, 3.5)  # unchanged
 	assert_eq(result["rebel_consequences"].size(), 0)
+
+
+# =============================================================================
+# PHOENIX AMBIGUOUS LEGITIMACY (s55.10.3.7)
+# =============================================================================
+
+func test_phoenix_chugi_favors_council():
+	# Chugi-dominant: the compact is duty → 0 rebel contribution from belief factor.
+	var n: L5RCharacterData = _make_npc(10, Enums.BushidoVirtue.CHUGI, Enums.ShouridoVirtue.NONE, 0)
+	# Use is_phoenix_schism=true. Rebel lord 101, low completion, no disp pull.
+	var result: Dictionary = IntraClanCivilWar.evaluate_loyalty(n, 101, 0.3, true, false, true)
+	# Chugi belief = 0 → less rebel contribution vs standard path.
+	assert_eq(result.get("faction", IntraClanCivilWar.Faction.LEGITIMACY), IntraClanCivilWar.Faction.LEGITIMACY)
+
+
+func test_phoenix_meiyo_favors_champion():
+	# Meiyo-dominant: divine mandate → full rebel contribution from belief factor.
+	var n: L5RCharacterData = _make_npc(10, Enums.BushidoVirtue.MEIYO, Enums.ShouridoVirtue.NONE, 80)
+	n.shourido_virtue = Enums.ShouridoVirtue.NONE
+	var result: Dictionary = IntraClanCivilWar.evaluate_loyalty(n, 101, 0.8, true, false, true)
+	assert_eq(result.get("faction", IntraClanCivilWar.Faction.LEGITIMACY), IntraClanCivilWar.Faction.REBEL)
+
+
+func test_phoenix_gi_rebel_failing_weakens_rebel_belief():
+	# Gi: "honest side wins." Council (rebel_lord) was failing → weaker rebel support.
+	var gi: L5RCharacterData = _make_npc(10, Enums.BushidoVirtue.GI, Enums.ShouridoVirtue.NONE, 0)
+	var result_failing: Dictionary = IntraClanCivilWar.evaluate_loyalty(gi, 101, 0.3, true, true, true)
+	var result_strong: Dictionary = IntraClanCivilWar.evaluate_loyalty(gi, 101, 0.9, true, false, true)
+	assert_true(int(result_strong.get("rebel_score", 0)) > int(result_failing.get("rebel_score", 0)))
+
+
+func test_phoenix_seigyo_follows_disposition():
+	# Seigyo: self-interest. High disposition → believes rebel is right.
+	var seigyo_friend: L5RCharacterData = _make_npc(10, Enums.BushidoVirtue.NONE, Enums.ShouridoVirtue.SEIGYO, 80)
+	var seigyo_foe: L5RCharacterData = _make_npc(11, Enums.BushidoVirtue.NONE, Enums.ShouridoVirtue.SEIGYO, 10)
+	var r_friend: Dictionary = IntraClanCivilWar.evaluate_loyalty(seigyo_friend, 101, 0.5, true, false, true)
+	var r_foe: Dictionary = IntraClanCivilWar.evaluate_loyalty(seigyo_foe, 101, 0.5, true, false, true)
+	assert_true(int(r_friend.get("rebel_score", 0)) > int(r_foe.get("rebel_score", 0)))
+
+
+func test_phoenix_path_default_is_no_info():
+	# Non-Chugi/Meiyo/Gi/Seigyo → GRIEVANCE_PTS_NO_INFO contribution (5/15 neutral).
+	var n: L5RCharacterData = _make_npc(10, Enums.BushidoVirtue.NONE, Enums.ShouridoVirtue.NONE, 0)
+	var phoenix_result: Dictionary = IntraClanCivilWar.evaluate_loyalty(n, 101, 0.5, false, false, true)
+	var standard_result: Dictionary = IntraClanCivilWar.evaluate_loyalty(n, 101, 0.5, false, false, false)
+	# With no visibility in standard, both use GRIEVANCE_PTS_NO_INFO (5) → scores should match.
+	assert_eq(phoenix_result.get("rebel_score", -1), standard_result.get("rebel_score", -2))

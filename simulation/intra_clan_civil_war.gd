@@ -202,6 +202,7 @@ static func evaluate_loyalty(
 	rebel_completion_rate: float,
 	grievance_visible: bool,
 	rebel_was_failing: bool,
+	is_phoenix_schism: bool = false,
 ) -> Dictionary:
 	if npc == null:
 		return {"faction": Faction.NONE, "rebel_score": 0, "chugi_pull": 0, "disposition_pull": 0}
@@ -210,16 +211,17 @@ static func evaluate_loyalty(
 	var disp_pull: int = compute_disposition_pull(npc, rebel_lord_id)
 	var ambition_pull: int = compute_ambition_pull(npc)
 
-	# Rebel-favoring contribution from each factor:
-	#   Low Chugi → high contribution (1.0 - chugi/100) * weight
-	#   High disposition toward rebel → high contribution (disp/100) * weight
-	#   Strong rebel competence → high contribution
-	#   Strong grievance → high contribution
-	#   High Ishi → high contribution
 	var chugi_contrib: float = (1.0 - float(chugi_pull) / 100.0) * float(WEIGHT_CHUGI)
 	var disp_contrib: float = float(disp_pull) / 100.0 * float(WEIGHT_DISPOSITION)
 	var comp_contrib: float = float(competence_points(rebel_completion_rate))
-	var griev_contrib: float = float(grievance_points(grievance_visible, rebel_was_failing))
+	var griev_contrib: float
+	if is_phoenix_schism:
+		# Per s55.10.3.7 "Ambiguous Legitimacy": the standard grievance factor
+		# is replaced by a personality-driven "which side do I believe is right"
+		# score at the same 15% weight.
+		griev_contrib = float(_phoenix_belief_points(npc, disp_pull, rebel_was_failing))
+	else:
+		griev_contrib = float(grievance_points(grievance_visible, rebel_was_failing))
 	var amb_contrib: float = float(ambition_pull) / 100.0 * float(WEIGHT_AMBITION)
 
 	var rebel_score: int = int(round(
@@ -227,8 +229,6 @@ static func evaluate_loyalty(
 	))
 	rebel_score = clampi(rebel_score, 0, 100)
 
-	# Ronin path — low Chugi (weak Legitimacy pull) AND low disposition
-	# toward rebel (weak Rebel pull) — character has no strong attachment.
 	if chugi_pull < RONIN_PULL_THRESHOLD and disp_pull < RONIN_PULL_THRESHOLD:
 		return {
 			"faction": Faction.RONIN,
@@ -246,6 +246,37 @@ static func evaluate_loyalty(
 		"chugi_pull": chugi_pull,
 		"disposition_pull": disp_pull,
 	}
+
+
+# Returns an int (0..GRIEVANCE_PTS_STRONG) representing the Phoenix-schism
+# belief contribution. Replaces grievance_points() when is_phoenix_schism.
+# Personality mapping from s55.10.3.7 "Ambiguous Legitimacy":
+#   Chugi-dominant → Council (compact is duty) → 0 rebel contribution
+#   Meiyo-dominant → Champion (divine mandate) → full rebel contribution
+#   Gi-dominant → honest side wins → weak rebel if lord was failing, strong if not
+#   Seigyo-dominant → most beneficial → mirrors disposition pull
+#   Other → split default (half weight)
+static func _phoenix_belief_points(
+	npc: L5RCharacterData,
+	disp_pull: int,
+	rebel_was_failing: bool,
+) -> int:
+	match npc.bushido_virtue:
+		Enums.BushidoVirtue.CHUGI:
+			return 0
+		Enums.BushidoVirtue.MEIYO:
+			return GRIEVANCE_PTS_STRONG
+		Enums.BushidoVirtue.GI:
+			return GRIEVANCE_PTS_WEAK if rebel_was_failing else GRIEVANCE_PTS_STRONG
+		_:
+			pass
+	match npc.shourido_virtue:
+		Enums.ShouridoVirtue.SEIGYO:
+			# Self-interest: high rebel disposition → supports rebel
+			return GRIEVANCE_PTS_STRONG if disp_pull >= 60 else GRIEVANCE_PTS_WEAK
+		_:
+			pass
+	return GRIEVANCE_PTS_NO_INFO
 
 
 static func assign_faction(state: Dictionary, character_id: int, faction: Faction) -> void:

@@ -577,11 +577,13 @@ static func advance_day(
 			)
 		var phoenix_council_results: Dictionary = {}
 		if not phoenix_council_state.is_empty():
+			var emperor_id_for_phoenix: int = int(world_states.get("emperor_id", -1))
 			phoenix_council_results = _process_phoenix_council_gating(
 				phoenix_council_state, strategic_results, characters,
 				characters_by_id, dice_engine, active_topics,
 				next_topic_id, ic_day, active_civil_wars,
 				objectives_map, cw_season_count,
+				provinces, emperor_id_for_phoenix,
 			)
 		_evaluate_heir_designations(
 			characters, characters_by_id, active_topics
@@ -7372,6 +7374,8 @@ static func _process_phoenix_council_gating(
 	active_civil_wars: Array[Dictionary] = [],
 	objectives_map: Dictionary = {},
 	current_season: int = 0,
+	provinces: Dictionary = {},
+	emperor_id: int = -1,
 ) -> Dictionary:
 	var shiba_champion: L5RCharacterData = _find_shiba_champion(characters)
 	if shiba_champion == null:
@@ -7512,6 +7516,31 @@ static func _process_phoenix_council_gating(
 		topic.category = TopicData.Category.POLITICAL
 		active_topics.append(topic)
 
+	# Apply devastating effect for any approved GRAND_RITUAL directive (s55.10.3.7).
+	var grand_ritual_results: Array[Dictionary] = []
+	for approval: Dictionary in approved:
+		var directive: Dictionary = approval.get("directive", {})
+		var dt: int = int(directive.get("decision_type", -1))
+		if dt != PhoenixCouncil.DecisionType.GRAND_RITUAL:
+			continue
+		var target_province_id: int = int(directive.get("target_province_id", -1))
+		var target_province: ProvinceData = provinces.get(target_province_id) as ProvinceData
+		if target_province == null:
+			continue
+		var all_reps: Array[L5RCharacterData] = characters.filter(
+			func(c: L5RCharacterData) -> bool: return c.status >= 5.0
+		)
+		var ritual_result: Dictionary = PhoenixCouncil.apply_grand_ritual_devastation(
+			target_province, living_masters, all_reps, emperor_id
+		)
+		if ritual_result.get("applied", false):
+			var crisis_dict: Dictionary = ritual_result.get("crisis_topic", {})
+			if not crisis_dict.is_empty():
+				var ct: TopicData = _topic_from_dict(crisis_dict, next_topic_id, ic_day)
+				active_topics.append(ct)
+				ritual_result["crisis_topic_id"] = ct.topic_id
+		grand_ritual_results.append(ritual_result)
+
 	var result_dict: Dictionary = {
 		"vetoed": vetoed,
 		"approved": approved,
@@ -7519,6 +7548,7 @@ static func _process_phoenix_council_gating(
 		"defiance_stage": int(phoenix_state.get("defiance_stage", 0)),
 		"overreach_stage": int(phoenix_state.get("overreach_stage", 0)),
 		"living_masters_count": living_masters.size(),
+		"grand_ritual_results": grand_ritual_results,
 	}
 
 	if PhoenixCouncil.is_overreach_schism_imminent(phoenix_state):
@@ -9739,8 +9769,9 @@ static func _check_civil_war_defections(
 		var rebel_completion: float = _get_rebel_completion_rate(rebel_lord_id, objectives_map)
 		var grievance_visible: bool = trigger_topic_id in npc.topic_pool
 		var rebel_was_failing: bool = rebel_completion < 0.50
+		var is_phoenix: bool = state.get("clan", "") == "Phoenix"
 		var loyalty: Dictionary = IntraClanCivilWar.evaluate_loyalty(
-			npc, rebel_lord_id, rebel_completion, grievance_visible, rebel_was_failing,
+			npc, rebel_lord_id, rebel_completion, grievance_visible, rebel_was_failing, is_phoenix,
 		)
 		var new_faction: int = int(loyalty.get("faction", IntraClanCivilWar.Faction.NONE))
 		if new_faction == faction:
@@ -10355,11 +10386,12 @@ static func _trigger_civil_war(
 		else:
 			all_to_evaluate.append(npc)
 
+	var is_phoenix_war: bool = clan == "Phoenix"
 	for npc: L5RCharacterData in all_to_evaluate:
 		var grievance_visible: bool = topic_id in npc.topic_pool
 		var loyalty: Dictionary = IntraClanCivilWar.evaluate_loyalty(
 			npc, rebel_lord_id, rebel_completion, grievance_visible,
-			rebel_was_failing,
+			rebel_was_failing, is_phoenix_war,
 		)
 		var faction: int = int(loyalty.get("faction", IntraClanCivilWar.Faction.LEGITIMACY))
 
