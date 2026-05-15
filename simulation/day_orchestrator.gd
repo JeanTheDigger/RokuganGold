@@ -322,6 +322,8 @@ static func advance_day(
 		characters_by_id,
 		favors,
 		ic_day,
+		int(world_states.get("emperor_id", -1)),
+		int(world_states.get("emperor_archetype", StrategicReview.EmperorArchetype.IRON)),
 	)
 
 	var governance_results: Dictionary = _process_governance_effects(
@@ -491,6 +493,10 @@ static func advance_day(
 			approach_penalties, settlements, spring_inputs, worship_maluses,
 		)
 		_apply_worship_stability_maluses(worship_maluses, provinces)
+		_apply_tyrant_stability_penalty(
+			world_states.get("emperor_archetype", StrategicReview.EmperorArchetype.IRON),
+			provinces,
+		)
 		wall_seasonal_result = _process_wall_seasonal_pressure(
 			settlements, provinces, current_season, season_meta
 		)
@@ -8456,6 +8462,21 @@ static func _apply_worship_stability_maluses(
 		prov.stability = clampf(prov.stability + stability_delta, 0.0, 100.0)
 
 
+static func _apply_tyrant_stability_penalty(
+	emperor_archetype: int,
+	provinces: Dictionary,
+) -> void:
+	if emperor_archetype != StrategicReview.EmperorArchetype.TYRANT:
+		return
+	for pid: Variant in provinces:
+		var prov: ProvinceData = provinces[pid] as ProvinceData
+		if prov == null:
+			continue
+		prov.stability = clampf(
+			prov.stability + StrategicReview.TYRANT_STABILITY_PENALTY, 0.0, 100.0
+		)
+
+
 static func _inject_worship_battle_maluses(
 	battle_states: Array[Dictionary],
 	worship_maluses: Dictionary,
@@ -9529,6 +9550,8 @@ static func _process_court_action_effects(
 	characters_by_id: Dictionary,
 	favors: Array = [],
 	ic_day: int = 0,
+	emperor_id: int = -1,
+	emperor_archetype: int = StrategicReview.EmperorArchetype.IRON,
 ) -> void:
 	for entry: Dictionary in day_results:
 		var effects: Dictionary = entry.get("effects", {})
@@ -9536,9 +9559,19 @@ static func _process_court_action_effects(
 			continue
 
 		var action_id: String = entry.get("action_id", "")
+		var actor_id: int = entry.get("character_id", -1)
 		var target_id: int = entry.get("target_npc_id", -1)
 		var target: L5RCharacterData = characters_by_id.get(target_id)
 		var action_meta: Dictionary = effects.get("_action_metadata", {})
+
+		# Tyrant court honor penalty: opposing the Emperor costs -0.5 Honor
+		if emperor_archetype == StrategicReview.EmperorArchetype.TYRANT and emperor_id >= 0:
+			if target_id == emperor_id and effects.has("target_position_shift"):
+				var actor: L5RCharacterData = characters_by_id.get(actor_id)
+				if actor != null:
+					actor.honor = clampf(
+						actor.honor + StrategicReview.TYRANT_COURT_HONOR_PENALTY, 0.0, 10.0
+					)
 
 		# Topic position shift from Negotiate/Persuade
 		if effects.has("target_position_shift") and target != null:

@@ -64,6 +64,14 @@ const ORPHAN_RESOLUTION_BY_VIRTUE: Dictionary = {
 	Enums.BushidoVirtue.YU: "CONFIRM",
 }
 
+const TYRANT_STABILITY_PENALTY: float = -2.0
+const TYRANT_COURT_HONOR_PENALTY: float = -0.5
+const BREAKING_POINT_CLAN_COUNT: int = 3
+
+const GREAT_CLANS: Array[String] = [
+	"Crab", "Crane", "Dragon", "Lion", "Mantis", "Phoenix", "Scorpion", "Unicorn",
+]
+
 
 static func run_seasonal_review(
 	lord: L5RCharacterData,
@@ -392,6 +400,17 @@ static func run_emperor_review(
 	if not shogun.is_empty():
 		directives.append(shogun)
 
+	var disgrace_directives: Array[Dictionary] = _evaluate_disgrace_fabrication(
+		emperor, archetype, clan_champions
+	)
+	directives.append_array(disgrace_directives)
+
+	var breaking_point: Dictionary = _evaluate_breaking_point(
+		emperor, archetype, clan_champions
+	)
+	if not breaking_point.is_empty():
+		directives.append(breaking_point)
+
 	return directives
 
 
@@ -526,6 +545,56 @@ static func _evaluate_shogun_creation(
 			"reason": reason,
 		}
 
+	return {}
+
+
+# -- Tyrant Emperor Effects (s55.10) -------------------------------------------
+
+static func _evaluate_disgrace_fabrication(
+	emperor: L5RCharacterData,
+	archetype: int,
+	clan_champions: Array[L5RCharacterData],
+) -> Array[Dictionary]:
+	if archetype != EmperorArchetype.TYRANT:
+		return []
+
+	var results: Array[Dictionary] = []
+	for champion: L5RCharacterData in clan_champions:
+		var disp: int = emperor.disposition_values.get(champion.character_id, 0)
+		var tier: int = DispositionSystem.get_tier(disp)
+		if tier <= DispositionSystem.Tier.RIVAL:
+			results.append({
+				"directive": "FABRICATE_DISGRACE",
+				"lord_id": emperor.character_id,
+				"target_id": champion.character_id,
+				"target_clan": champion.clan,
+				"disposition": disp,
+			})
+	return results
+
+
+static func _evaluate_breaking_point(
+	emperor: L5RCharacterData,
+	archetype: int,
+	clan_champions: Array[L5RCharacterData],
+) -> Dictionary:
+	if archetype != EmperorArchetype.TYRANT:
+		return {}
+
+	var hostile_clan_count: int = 0
+	for champion: L5RCharacterData in clan_champions:
+		if champion.clan not in GREAT_CLANS:
+			continue
+		var disp: int = champion.disposition_values.get(emperor.character_id, 0)
+		if disp <= -31:
+			hostile_clan_count += 1
+
+	if hostile_clan_count >= BREAKING_POINT_CLAN_COUNT:
+		return {
+			"directive": "IMPERIAL_CIVIL_WAR",
+			"lord_id": emperor.character_id,
+			"hostile_clan_count": hostile_clan_count,
+		}
 	return {}
 
 

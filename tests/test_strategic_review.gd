@@ -1088,3 +1088,335 @@ func test_vassal_objective_low_stability_has_need_type() -> void:
 	var obj: Dictionary = StrategicReview._select_objective_for_vassal(lord, 2, [], ws)
 	assert_true(obj.has("need_type"))
 	assert_eq(obj["need_type"], "MAXIMIZE_PROSPERITY")
+
+
+# -- Tyrant Emperor Effects (s55.10) -------------------------------------------
+
+func _make_emperor(id: int = 100) -> L5RCharacterData:
+	var c := L5RCharacterData.new()
+	c.character_id = id
+	c.clan = "Imperial"
+	c.lord_id = -1
+	c.status = 10.0
+	c.bushido_virtue = Enums.BushidoVirtue.CHUGI
+	c.shourido_virtue = Enums.ShouridoVirtue.SEIGYO
+	return c
+
+
+func _make_champion(id: int, clan: String) -> L5RCharacterData:
+	var c := L5RCharacterData.new()
+	c.character_id = id
+	c.clan = clan
+	c.lord_id = -1
+	c.status = 7.0
+	c.bushido_virtue = Enums.BushidoVirtue.CHUGI
+	return c
+
+
+func _base_emperor_world_state() -> Dictionary:
+	return {
+		"last_court_season": 0,
+		"current_season": TimeSystem.Season.SPRING,
+		"active_crises": [],
+		"province_threats": [],
+		"low_stability_provinces": [],
+		"avg_province_stability": 50.0,
+		"treasury_ratio": 1.0,
+		"active_wars": [],
+		"escalating_conflicts": [],
+		"military_readiness": 0.8,
+		"has_maximally_loyal_candidate": false,
+		"last_host_seasons": {},
+		"crisis_momentum_by_clan": {},
+		"current_season_index": 4,
+		"vacancies": [],
+		"shogun_exists": false,
+	}
+
+
+# -- Disgrace Fabrication -------------------------------------------------------
+
+func test_tyrant_fabricates_disgrace_for_rival_champions() -> void:
+	var emperor := _make_emperor()
+	var crab := _make_champion(10, "Crab")
+	var crane := _make_champion(11, "Crane")
+	emperor.disposition_values[10] = -15  # Rival
+	emperor.disposition_values[11] = 20   # Acquaintance
+
+	var champions: Array[L5RCharacterData] = [crab, crane]
+	var results: Array[Dictionary] = StrategicReview._evaluate_disgrace_fabrication(
+		emperor, StrategicReview.EmperorArchetype.TYRANT, champions
+	)
+
+	assert_eq(results.size(), 1)
+	assert_eq(results[0]["directive"], "FABRICATE_DISGRACE")
+	assert_eq(results[0]["target_id"], 10)
+	assert_eq(results[0]["target_clan"], "Crab")
+
+
+func test_tyrant_fabricates_disgrace_for_enemy_champions() -> void:
+	var emperor := _make_emperor()
+	var lion := _make_champion(12, "Lion")
+	emperor.disposition_values[12] = -50  # Enemy
+
+	var champions: Array[L5RCharacterData] = [lion]
+	var results: Array[Dictionary] = StrategicReview._evaluate_disgrace_fabrication(
+		emperor, StrategicReview.EmperorArchetype.TYRANT, champions
+	)
+
+	assert_eq(results.size(), 1)
+	assert_eq(results[0]["target_id"], 12)
+
+
+func test_tyrant_no_disgrace_for_friendly_champions() -> void:
+	var emperor := _make_emperor()
+	var crane := _make_champion(11, "Crane")
+	emperor.disposition_values[11] = 40  # Friend
+
+	var champions: Array[L5RCharacterData] = [crane]
+	var results: Array[Dictionary] = StrategicReview._evaluate_disgrace_fabrication(
+		emperor, StrategicReview.EmperorArchetype.TYRANT, champions
+	)
+
+	assert_eq(results.size(), 0)
+
+
+func test_non_tyrant_no_disgrace_fabrication() -> void:
+	var emperor := _make_emperor()
+	var crab := _make_champion(10, "Crab")
+	emperor.disposition_values[10] = -50
+
+	var champions: Array[L5RCharacterData] = [crab]
+	var results: Array[Dictionary] = StrategicReview._evaluate_disgrace_fabrication(
+		emperor, StrategicReview.EmperorArchetype.IRON, champions
+	)
+
+	assert_eq(results.size(), 0)
+
+
+func test_tyrant_disgrace_stranger_not_targeted() -> void:
+	var emperor := _make_emperor()
+	var dragon := _make_champion(13, "Dragon")
+	emperor.disposition_values[13] = 0  # Stranger
+
+	var champions: Array[L5RCharacterData] = [dragon]
+	var results: Array[Dictionary] = StrategicReview._evaluate_disgrace_fabrication(
+		emperor, StrategicReview.EmperorArchetype.TYRANT, champions
+	)
+
+	assert_eq(results.size(), 0)
+
+
+# -- Breaking Point (Imperial Civil War) ----------------------------------------
+
+func test_breaking_point_fires_with_three_hostile_clans() -> void:
+	var emperor := _make_emperor()
+	var crab := _make_champion(10, "Crab")
+	var crane := _make_champion(11, "Crane")
+	var lion := _make_champion(12, "Lion")
+	var dragon := _make_champion(13, "Dragon")
+	# Three clans hate the Emperor (disposition toward Emperor <= -31)
+	crab.disposition_values[emperor.character_id] = -40
+	crane.disposition_values[emperor.character_id] = -50
+	lion.disposition_values[emperor.character_id] = -35
+	dragon.disposition_values[emperor.character_id] = 10  # Neutral
+
+	var champions: Array[L5RCharacterData] = [crab, crane, lion, dragon]
+	var result: Dictionary = StrategicReview._evaluate_breaking_point(
+		emperor, StrategicReview.EmperorArchetype.TYRANT, champions
+	)
+
+	assert_false(result.is_empty())
+	assert_eq(result["directive"], "IMPERIAL_CIVIL_WAR")
+	assert_eq(result["hostile_clan_count"], 3)
+
+
+func test_breaking_point_does_not_fire_with_two_hostile_clans() -> void:
+	var emperor := _make_emperor()
+	var crab := _make_champion(10, "Crab")
+	var crane := _make_champion(11, "Crane")
+	var lion := _make_champion(12, "Lion")
+	crab.disposition_values[emperor.character_id] = -40
+	crane.disposition_values[emperor.character_id] = -50
+	lion.disposition_values[emperor.character_id] = -20  # Rival, not Enemy
+
+	var champions: Array[L5RCharacterData] = [crab, crane, lion]
+	var result: Dictionary = StrategicReview._evaluate_breaking_point(
+		emperor, StrategicReview.EmperorArchetype.TYRANT, champions
+	)
+
+	assert_true(result.is_empty())
+
+
+func test_breaking_point_ignores_minor_clans() -> void:
+	var emperor := _make_emperor()
+	var sparrow := _make_champion(20, "Sparrow")
+	var fox := _make_champion(21, "Fox")
+	var wasp := _make_champion(22, "Wasp")
+	sparrow.disposition_values[emperor.character_id] = -80
+	fox.disposition_values[emperor.character_id] = -60
+	wasp.disposition_values[emperor.character_id] = -45
+
+	var champions: Array[L5RCharacterData] = [sparrow, fox, wasp]
+	var result: Dictionary = StrategicReview._evaluate_breaking_point(
+		emperor, StrategicReview.EmperorArchetype.TYRANT, champions
+	)
+
+	assert_true(result.is_empty())
+
+
+func test_breaking_point_non_tyrant_never_fires() -> void:
+	var emperor := _make_emperor()
+	var crab := _make_champion(10, "Crab")
+	var crane := _make_champion(11, "Crane")
+	var lion := _make_champion(12, "Lion")
+	crab.disposition_values[emperor.character_id] = -80
+	crane.disposition_values[emperor.character_id] = -80
+	lion.disposition_values[emperor.character_id] = -80
+
+	var champions: Array[L5RCharacterData] = [crab, crane, lion]
+	var result: Dictionary = StrategicReview._evaluate_breaking_point(
+		emperor, StrategicReview.EmperorArchetype.BENEVOLENT, champions
+	)
+
+	assert_true(result.is_empty())
+
+
+# -- Emperor Review Integration -------------------------------------------------
+
+func test_emperor_review_includes_tyrant_directives() -> void:
+	var emperor := _make_emperor()
+	var crab := _make_champion(10, "Crab")
+	var crane := _make_champion(11, "Crane")
+	var lion := _make_champion(12, "Lion")
+	emperor.disposition_values[10] = -20  # Rival — triggers disgrace
+	crab.disposition_values[emperor.character_id] = -40
+	crane.disposition_values[emperor.character_id] = -50
+	lion.disposition_values[emperor.character_id] = -35
+
+	var champions: Array[L5RCharacterData] = [crab, crane, lion]
+	var ws: Dictionary = _base_emperor_world_state()
+	var results: Array[Dictionary] = StrategicReview.run_emperor_review(
+		emperor, StrategicReview.EmperorArchetype.TYRANT, champions, ws, {}
+	)
+
+	var disgrace_found: bool = false
+	var civil_war_found: bool = false
+	for r: Dictionary in results:
+		if r.get("directive", "") == "FABRICATE_DISGRACE":
+			disgrace_found = true
+		if r.get("directive", "") == "IMPERIAL_CIVIL_WAR":
+			civil_war_found = true
+
+	assert_true(disgrace_found, "Tyrant should fabricate disgrace for Rival champion")
+	assert_true(civil_war_found, "Breaking point should fire with 3 hostile Great Clans")
+
+
+# -- Tyrant Stability Penalty ---------------------------------------------------
+
+func test_tyrant_stability_penalty_applied() -> void:
+	var p1 := ProvinceData.new()
+	p1.province_id = 1
+	p1.stability = 50.0
+	var p2 := ProvinceData.new()
+	p2.province_id = 2
+	p2.stability = 1.0
+	var provinces: Dictionary = {1: p1, 2: p2}
+
+	DayOrchestrator._apply_tyrant_stability_penalty(
+		StrategicReview.EmperorArchetype.TYRANT, provinces
+	)
+
+	assert_almost_eq(p1.stability, 48.0, 0.01)
+	assert_almost_eq(p2.stability, 0.0, 0.01)  # Clamped at 0
+
+
+func test_non_tyrant_stability_penalty_not_applied() -> void:
+	var p := ProvinceData.new()
+	p.province_id = 1
+	p.stability = 50.0
+	var provinces: Dictionary = {1: p}
+
+	DayOrchestrator._apply_tyrant_stability_penalty(
+		StrategicReview.EmperorArchetype.IRON, provinces
+	)
+
+	assert_almost_eq(p.stability, 50.0, 0.01)
+
+
+# -- Tyrant Court Honor Penalty -------------------------------------------------
+
+func test_tyrant_court_honor_penalty_for_opposing_emperor() -> void:
+	var actor := L5RCharacterData.new()
+	actor.character_id = 50
+	actor.honor = 5.0
+	var emperor := _make_emperor()
+	var characters_by_id: Dictionary = {50: actor, 100: emperor}
+
+	var day_results: Array = [{
+		"character_id": 50,
+		"target_npc_id": 100,
+		"action_id": "NEGOTIATE",
+		"effects": {
+			"target_position_shift": 5.0,
+			"_action_metadata": {"topic_id": 1},
+		},
+	}]
+
+	DayOrchestrator._process_court_action_effects(
+		day_results, characters_by_id, [], 1, 100,
+		StrategicReview.EmperorArchetype.TYRANT,
+	)
+
+	assert_almost_eq(actor.honor, 4.5, 0.01)
+
+
+func test_non_tyrant_no_court_honor_penalty() -> void:
+	var actor := L5RCharacterData.new()
+	actor.character_id = 50
+	actor.honor = 5.0
+	var emperor := _make_emperor()
+	var characters_by_id: Dictionary = {50: actor, 100: emperor}
+
+	var day_results: Array = [{
+		"character_id": 50,
+		"target_npc_id": 100,
+		"action_id": "NEGOTIATE",
+		"effects": {
+			"target_position_shift": 5.0,
+			"_action_metadata": {"topic_id": 1},
+		},
+	}]
+
+	DayOrchestrator._process_court_action_effects(
+		day_results, characters_by_id, [], 1, 100,
+		StrategicReview.EmperorArchetype.IRON,
+	)
+
+	assert_almost_eq(actor.honor, 5.0, 0.01)
+
+
+func test_tyrant_court_penalty_not_applied_to_non_emperor_target() -> void:
+	var actor := L5RCharacterData.new()
+	actor.character_id = 50
+	actor.honor = 5.0
+	var other := L5RCharacterData.new()
+	other.character_id = 60
+	var characters_by_id: Dictionary = {50: actor, 60: other}
+
+	var day_results: Array = [{
+		"character_id": 50,
+		"target_npc_id": 60,
+		"action_id": "NEGOTIATE",
+		"effects": {
+			"target_position_shift": 5.0,
+			"_action_metadata": {"topic_id": 1},
+		},
+	}]
+
+	DayOrchestrator._process_court_action_effects(
+		day_results, characters_by_id, [], 1, 100,
+		StrategicReview.EmperorArchetype.TYRANT,
+	)
+
+	assert_almost_eq(actor.honor, 5.0, 0.01)
