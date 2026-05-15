@@ -2598,3 +2598,127 @@ func test_spiritual_reeval_skips_non_dragon_civil_war() -> void:
 		state, togashi_st, by_id, {}
 	)
 	assert_eq(result.size(), 0)
+
+
+# =============================================================================
+# -- Stipend Disposition Update (GDD s4.3.9) ----------------------------------
+# =============================================================================
+
+func _make_lord_retainer_pair(
+	lord_id: int, retainer_id: int,
+	bushido: Enums.BushidoVirtue = Enums.BushidoVirtue.NONE,
+	shourido: Enums.ShouridoVirtue = Enums.ShouridoVirtue.NONE,
+) -> Array[L5RCharacterData]:
+	var lord := L5RCharacterData.new()
+	lord.character_id = lord_id
+	lord.lord_id = -1
+	lord.bushido_virtue = bushido
+	lord.shourido_virtue = shourido
+
+	var retainer := L5RCharacterData.new()
+	retainer.character_id = retainer_id
+	retainer.lord_id = lord_id
+
+	return [lord, retainer]
+
+
+func test_stipend_jin_lord_adds_two_disposition_to_retainer() -> void:
+	# Jin lord: +10% stipend → +2 disposition per season (GDD s4.3.9)
+	var pair: Array[L5RCharacterData] = _make_lord_retainer_pair(
+		1, 2, Enums.BushidoVirtue.JIN, Enums.ShouridoVirtue.NONE,
+	)
+	var lord: L5RCharacterData = pair[0]
+	var retainer: L5RCharacterData = pair[1]
+	var by_id: Dictionary = {1: lord, 2: retainer}
+	var chars: Array[L5RCharacterData] = [lord, retainer]
+
+	DayOrchestrator._process_seasonal_stipend_disposition(chars, by_id)
+	assert_eq(retainer.disposition_values.get(1, 0), 2)
+
+
+func test_stipend_kyoryoku_lord_subtracts_two_disposition() -> void:
+	# Kyōryōku lord: -10% stipend → -2 disposition per season (GDD s4.3.9)
+	var pair: Array[L5RCharacterData] = _make_lord_retainer_pair(
+		1, 2, Enums.BushidoVirtue.NONE, Enums.ShouridoVirtue.KYORYOKU,
+	)
+	var retainer: L5RCharacterData = pair[1]
+	var by_id: Dictionary = {1: pair[0], 2: retainer}
+	var chars: Array[L5RCharacterData] = pair
+
+	DayOrchestrator._process_seasonal_stipend_disposition(chars, by_id)
+	assert_eq(retainer.disposition_values.get(1, 0), -2)
+
+
+func test_stipend_no_virtue_no_disposition_change() -> void:
+	# No virtue → 0 modifier → no disposition delta (GDD s4.3.9: 0% → no change)
+	var pair: Array[L5RCharacterData] = _make_lord_retainer_pair(1, 2)
+	var retainer: L5RCharacterData = pair[1]
+	var by_id: Dictionary = {1: pair[0], 2: retainer}
+	var chars: Array[L5RCharacterData] = pair
+
+	DayOrchestrator._process_seasonal_stipend_disposition(chars, by_id)
+	assert_eq(retainer.disposition_values.get(1, 0), 0)
+
+
+func test_stipend_meiyo_lord_adds_one_disposition() -> void:
+	# Meiyo lord: +5% stipend → +1 disposition per season
+	var pair: Array[L5RCharacterData] = _make_lord_retainer_pair(
+		1, 2, Enums.BushidoVirtue.MEIYO, Enums.ShouridoVirtue.NONE,
+	)
+	var retainer: L5RCharacterData = pair[1]
+	var by_id: Dictionary = {1: pair[0], 2: retainer}
+	var chars: Array[L5RCharacterData] = pair
+
+	DayOrchestrator._process_seasonal_stipend_disposition(chars, by_id)
+	assert_eq(retainer.disposition_values.get(1, 0), 1)
+
+
+func test_stipend_disposition_clamps_at_100() -> void:
+	var pair: Array[L5RCharacterData] = _make_lord_retainer_pair(
+		1, 2, Enums.BushidoVirtue.JIN, Enums.ShouridoVirtue.NONE,
+	)
+	var retainer: L5RCharacterData = pair[1]
+	retainer.disposition_values[1] = 99
+	var by_id: Dictionary = {1: pair[0], 2: retainer}
+	var chars: Array[L5RCharacterData] = pair
+
+	DayOrchestrator._process_seasonal_stipend_disposition(chars, by_id)
+	assert_eq(retainer.disposition_values.get(1, 0), 100)
+
+
+func test_stipend_disposition_clamps_at_minus_100() -> void:
+	var pair: Array[L5RCharacterData] = _make_lord_retainer_pair(
+		1, 2, Enums.BushidoVirtue.NONE, Enums.ShouridoVirtue.KYORYOKU,
+	)
+	var retainer: L5RCharacterData = pair[1]
+	retainer.disposition_values[1] = -99
+	var by_id: Dictionary = {1: pair[0], 2: retainer}
+	var chars: Array[L5RCharacterData] = pair
+
+	DayOrchestrator._process_seasonal_stipend_disposition(chars, by_id)
+	assert_eq(retainer.disposition_values.get(1, 0), -100)
+
+
+func test_stipend_no_lord_id_skipped() -> void:
+	# Characters without a lord (lord_id == -1) should be unaffected
+	var standalone := L5RCharacterData.new()
+	standalone.character_id = 5
+	standalone.lord_id = -1
+	standalone.bushido_virtue = Enums.BushidoVirtue.JIN
+	var by_id: Dictionary = {5: standalone}
+	var chars: Array[L5RCharacterData] = [standalone]
+
+	DayOrchestrator._process_seasonal_stipend_disposition(chars, by_id)
+	assert_eq(standalone.disposition_values.get(5, 0), 0)
+
+
+func test_stipend_missing_lord_skipped() -> void:
+	# Retainer whose lord is not in characters_by_id — should not crash
+	var retainer := L5RCharacterData.new()
+	retainer.character_id = 99
+	retainer.lord_id = 77  # lord 77 is not in by_id
+	var by_id: Dictionary = {99: retainer}
+	var chars: Array[L5RCharacterData] = [retainer]
+
+	DayOrchestrator._process_seasonal_stipend_disposition(chars, by_id)
+	assert_eq(retainer.disposition_values.get(77, 0), 0)

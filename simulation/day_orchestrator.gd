@@ -612,6 +612,7 @@ static func advance_day(
 			active_topics, next_topic_id,
 		)
 		_increment_vacancy_seasons(season_meta)
+		_process_seasonal_stipend_disposition(characters, characters_by_id)
 		pregnancy_results = _process_pregnancy_checks(
 			marriages, characters_by_id, children, dice_engine, ic_day,
 			next_character_id,
@@ -877,6 +878,35 @@ static func _process_season_transition(
 # -- Wall Seasonal Pressure (s2.4.3, s2.4.10) ----------------------------------
 # Applies SI decay, adjacent bleed, and PTL accumulation to wall tower settlements
 # once per season. Mutates settlement.wall_si and province.province_taint_level.
+
+
+# -- Stipend Disposition Update (s4.3.9) ---------------------------------------
+# Once per season, each retainer's disposition toward their immediate lord
+# is adjusted by the lord's stipend personality modifier.
+# Generous lords (Jin +10%, Meiyo +5%) build loyalty; hoarding lords lose it.
+
+static func _process_seasonal_stipend_disposition(
+	characters: Array[L5RCharacterData],
+	characters_by_id: Dictionary,
+) -> int:
+	var updates_applied: int = 0
+	for retainer: L5RCharacterData in characters:
+		if retainer.lord_id < 0:
+			continue
+		var lord: L5RCharacterData = characters_by_id.get(retainer.lord_id)
+		if lord == null:
+			continue
+		var modifier: float = ResourceTick.compute_stipend_modifier(
+			lord.bushido_virtue, lord.shourido_virtue,
+		)
+		var delta: int = ResourceTick.compute_stipend_disposition_delta(modifier)
+		if delta == 0:
+			continue
+		var old_disp: int = retainer.disposition_values.get(lord.character_id, 0)
+		retainer.disposition_values[lord.character_id] = clampi(old_disp + delta, -100, 100)
+		updates_applied += 1
+	return updates_applied
+
 
 static func _process_wall_seasonal_pressure(
 	settlements: Array[SettlementData],
