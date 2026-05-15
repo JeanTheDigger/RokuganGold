@@ -516,6 +516,15 @@ static func advance_day(
 			active_topics, next_topic_id, ic_day, season_meta,
 			companies, active_edicts,
 		)
+		# Apply post-resolution governance flags from clan-specific schism victories.
+		# Dragon FC rebel victory → dragon_autonomous_rule suspends Oversight (s55.10.2.8).
+		# Phoenix Champion rebel victory → phoenix_champion_authority suspends Council gate (s55.10.3.7).
+		for _cwr: Dictionary in civil_war_results_seasonal.get("resolutions", []):
+			var vflags: Dictionary = _cwr.get("victory_flags", {})
+			if vflags.get("dragon_autonomous_rule", false) and not togashi_state.is_empty():
+				togashi_state["dragon_autonomous_rule"] = true
+			if vflags.get("phoenix_champion_authority", false) and not phoenix_council_state.is_empty():
+				PhoenixCouncil.grant_champion_authority(phoenix_council_state)
 		insurgency_results = _process_insurgencies(
 			insurgencies, provinces, dice_engine, current_season,
 			next_insurgency_id, world_states, worship_maluses,
@@ -7080,6 +7089,10 @@ static func _process_togashi_oversight(
 	objectives_map: Dictionary = {},
 	current_season: int = 0,
 ) -> Dictionary:
+	# Dragon FC won autonomous rule — Oversight System suspended for his lifetime (s55.10.2.8).
+	if togashi_state.get("dragon_autonomous_rule", false):
+		return {"skipped": true, "reason": "dragon_autonomous_rule_active"}
+
 	var mirumoto_fc: L5RCharacterData = _find_mirumoto_fc(characters)
 	if mirumoto_fc == null:
 		return {"skipped": true, "reason": "no_mirumoto_fc"}
@@ -7140,6 +7153,7 @@ static func _process_togashi_oversight(
 				characters, characters_by_id, objectives_map,
 				active_civil_wars, active_topics, next_topic_id,
 				ic_day, current_season,
+				false, "dragon_schism",
 			)
 			result["civil_war_triggered"] = cw_result
 
@@ -7376,14 +7390,32 @@ static func _process_phoenix_council_gating(
 	if PhoenixCouncil.is_overreach_schism_imminent(phoenix_state):
 		var senior_master_id: int = _find_senior_elemental_master_id(living_masters, characters_by_id)
 		if senior_master_id >= 0:
+			# Council Overreach: no automatic honor hemorrhage on either side (s55.10.3.7).
 			var cw_result: Dictionary = _trigger_civil_war(
 				senior_master_id, shiba_champion.character_id,
 				"Phoenix", "council overreach",
 				characters, characters_by_id, objectives_map,
 				active_civil_wars, active_topics, next_topic_id,
 				ic_day, current_season,
+				true, "overreach",
 			)
 			result_dict["civil_war_triggered"] = cw_result
+
+	# Champion Defiance Path schism: Champion refuses Stage 4 removal (s55.10.3.5, s55.10.3.7).
+	# Rebel = Champion (defied Council 4 times), Authority = Senior Master (Council representative).
+	# Standard −0.3 Honor/season hemorrhage applies to the Champion (suppress_hemorrhage = false).
+	if PhoenixCouncil.is_unfit_declaration_active(phoenix_state):
+		var senior_master_id: int = _find_senior_elemental_master_id(living_masters, characters_by_id)
+		if senior_master_id >= 0:
+			var cw_result: Dictionary = _trigger_civil_war(
+				shiba_champion.character_id, senior_master_id,
+				"Phoenix", "champion defiance",
+				characters, characters_by_id, objectives_map,
+				active_civil_wars, active_topics, next_topic_id,
+				ic_day, current_season,
+				false, "defiance",
+			)
+			result_dict["champion_defiance_civil_war_triggered"] = cw_result
 
 	return result_dict
 
@@ -9467,9 +9499,15 @@ static func _process_civil_war_seasonal(
 			if prov is ProvinceData and (prov as ProvinceData).clan == clan:
 				clan_provinces.append(prov as ProvinceData)
 
+		var suppress_hem: bool = state.get("suppress_honor_hemorrhage", false)
 		var consequence_result: Dictionary = IntraClanCivilWar.apply_seasonal_consequences(
-			state, rebel_lord, clan_provinces, current_season,
+			state, rebel_lord, clan_provinces, current_season, suppress_hem,
 		)
+
+		# Phoenix schism: each dead Master costs the Champion −0.5 Honor (s55.10.3.7).
+		var master_deaths: int = _apply_phoenix_master_death_honor_penalty(state, characters_by_id)
+		if master_deaths > 0:
+			consequence_result["phoenix_master_deaths_penalized"] = master_deaths
 
 		_apply_civil_war_edict_shifts(state, rebel_lord_id, authority_lord_id, active_edicts)
 
@@ -9713,6 +9751,17 @@ static func _resolve_civil_war(
 	topic.ic_day_created = ic_day
 	active_topics.append(topic)
 
+	# Clan-specific victory flags to be applied by the caller to the
+	# appropriate governance state dict (s55.10.2.8, s55.10.3.7).
+	var victory_flags: Dictionary = {}
+	if not legitimacy_won:
+		if clan == "Dragon":
+			# FC wins autonomous rule; Oversight System suspends for FC's lifetime.
+			victory_flags["dragon_autonomous_rule"] = true
+		elif clan == "Phoenix":
+			# Champion wins sole authority; Council vote requirement suspended.
+			victory_flags["phoenix_champion_authority"] = true
+
 	return {
 		"clan": clan,
 		"legitimacy_won": legitimacy_won,
@@ -9721,7 +9770,50 @@ static func _resolve_civil_war(
 		"rebel_consequences": rebel_consequences,
 		"topic_id": topic_id,
 		"reconstitution": reconstitution,
+		"victory_flags": victory_flags,
 	}
+
+
+## For an active Phoenix civil war, scans all Masters assigned LEGITIMACY.
+## For each dead Master not yet penalized, applies −0.5 Honor to the Champion
+## (per s55.10.3.7: "Each Master killed generates −0.5 Honor for the Champion").
+## The Champion is the rebel_lord in the Defiance path and authority_lord in
+## the Overreach path. Uses schism_path to determine which.
+## Returns the count of newly penalized Masters this tick.
+static func _apply_phoenix_master_death_honor_penalty(
+	state: Dictionary,
+	characters_by_id: Dictionary,
+) -> int:
+	if state.get("clan", "") != "Phoenix":
+		return 0
+	var assignments: Dictionary = state.get("faction_assignments", {})
+	var penalized: Array = state.get("master_death_penalized_ids", [])
+	var schism_path: String = state.get("schism_path", "")
+	var champion_id: int = (
+		int(state.get("rebel_lord_id", -1)) if schism_path == "defiance"
+		else int(state.get("authority_lord_id", -1))
+	)
+	var champion: L5RCharacterData = characters_by_id.get(champion_id)
+	if champion == null:
+		return 0
+	var penalty_count: int = 0
+	for cid_var: Variant in assignments.keys():
+		var cid: int = int(cid_var)
+		if cid in penalized:
+			continue
+		if int(assignments[cid]) != IntraClanCivilWar.Faction.LEGITIMACY:
+			continue
+		var master: L5RCharacterData = characters_by_id.get(cid)
+		if master == null:
+			continue
+		if not master.role_position.begins_with("Master of "):
+			continue
+		if CharacterStats.is_dead(master):
+			HonorGlorySystem.apply_honor_change(champion, -0.5)
+			penalized.append(cid)
+			penalty_count += 1
+	state["master_death_penalized_ids"] = penalized
+	return penalty_count
 
 
 static func _get_rebel_completion_rate(
@@ -9886,6 +9978,8 @@ static func _trigger_civil_war(
 	next_topic_id: Array[int],
 	ic_day: int,
 	current_season: int,
+	suppress_honor_hemorrhage: bool = false,
+	schism_path: String = "",
 ) -> Dictionary:
 	## Triggers an intra-clan civil war per GDD s53.2.1. Creates initial state,
 	## generates the Tier 2 crisis topic, evaluates loyalty for all named clan
@@ -9919,6 +10013,13 @@ static func _trigger_civil_war(
 	var state: Dictionary = IntraClanCivilWar.make_initial_state(
 		rebel_lord_id, authority_lord_id, clan, topic_id, current_season,
 	)
+	if suppress_honor_hemorrhage:
+		state["suppress_honor_hemorrhage"] = true
+	if not schism_path.is_empty():
+		state["schism_path"] = schism_path
+	# Dragon schism: treaty credibility reduced during crisis (s55.10.2.8).
+	if clan == "Dragon":
+		state["dragon_treaty_penalty"] = -15
 
 	var rebel_completion: float = _get_rebel_completion_rate(rebel_lord_id, objectives_map)
 	var rebel_was_failing: bool = rebel_completion < 0.50
@@ -9952,9 +10053,28 @@ static func _trigger_civil_war(
 		IntraClanCivilWar.Faction.RONIN: 0,
 	}
 
+	# Dragon: Togashi Order monks side with Togashi unconditionally (s55.10.2.8).
+	# Phoenix: All Isawa (including Masters) side with the Council unconditionally (s55.10.3.7).
+	# Removed from the general evaluation pool — they do not evaluate loyalty.
+	var auto_legitimacy_families: Array[String] = []
+	if clan == "Dragon":
+		auto_legitimacy_families = ["Togashi"]
+	elif clan == "Phoenix":
+		auto_legitimacy_families = ["Isawa"]
+
 	var all_to_evaluate: Array[L5RCharacterData] = []
-	all_to_evaluate.append_array(family_daimyo)
-	all_to_evaluate.append_array(others)
+	for npc: L5RCharacterData in family_daimyo:
+		if npc.family in auto_legitimacy_families:
+			IntraClanCivilWar.assign_faction(state, npc.character_id, IntraClanCivilWar.Faction.LEGITIMACY)
+			faction_counts[IntraClanCivilWar.Faction.LEGITIMACY] = int(faction_counts.get(IntraClanCivilWar.Faction.LEGITIMACY, 0)) + 1
+		else:
+			all_to_evaluate.append(npc)
+	for npc: L5RCharacterData in others:
+		if npc.family in auto_legitimacy_families:
+			IntraClanCivilWar.assign_faction(state, npc.character_id, IntraClanCivilWar.Faction.LEGITIMACY)
+			faction_counts[IntraClanCivilWar.Faction.LEGITIMACY] = int(faction_counts.get(IntraClanCivilWar.Faction.LEGITIMACY, 0)) + 1
+		else:
+			all_to_evaluate.append(npc)
 
 	for npc: L5RCharacterData in all_to_evaluate:
 		var grievance_visible: bool = topic_id in npc.topic_pool

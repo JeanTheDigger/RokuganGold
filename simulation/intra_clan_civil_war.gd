@@ -271,10 +271,13 @@ static func apply_seasonal_consequences(
 	rebel_lord: L5RCharacterData,
 	provinces_in_clan: Array,
 	current_season: int,
+	suppress_hemorrhage: bool = false,
 ) -> Dictionary:
 	## Applies stability penalty to all clan provinces and the rebel lord's
 	## per-season Honor hemorrhage. Returns a result dict describing what
 	## changed.
+	## suppress_hemorrhage: when true, skip honor loss (Phoenix Council Overreach
+	## path — neither side carries automatic ongoing penalty per s55.10.3.7).
 	var seasons_active: int = current_season - int(state.get("season_started", current_season))
 	var penalty: int = get_stability_penalty(seasons_active)
 	var stability_changes: Array[Dictionary] = []
@@ -288,7 +291,7 @@ static func apply_seasonal_consequences(
 			"before": before,
 			"after": prov.stability,
 		})
-	if rebel_lord != null:
+	if rebel_lord != null and not suppress_hemorrhage:
 		rebel_lord.honor = clampf(
 			rebel_lord.honor + HONOR_HEMORRHAGE_REBEL_PER_SEASON, 0.0, 10.0
 		)
@@ -296,6 +299,7 @@ static func apply_seasonal_consequences(
 		"penalty_applied": penalty,
 		"seasons_active": seasons_active,
 		"stability_changes": stability_changes,
+		"hemorrhage_suppressed": suppress_hemorrhage,
 	}
 
 
@@ -339,6 +343,16 @@ static func record_imperial_edict(state: Dictionary, supports_legitimacy: bool) 
 static func record_foreign_intervention(state: Dictionary, supports_legitimacy: bool) -> int:
 	var delta: int = WS_FOREIGN_INTERVENTION if supports_legitimacy else -WS_FOREIGN_INTERVENTION
 	return shift_war_score(state, delta)
+
+
+## Returns the Dragon treaty credibility penalty active during a schism
+## (s55.10.2.8: −15 to all Dragon diplomatic rolls while the war is active).
+## Returns 0 if no active Dragon civil war with a treaty penalty exists.
+static func get_dragon_treaty_penalty(active_civil_wars: Array[Dictionary]) -> int:
+	for state: Dictionary in active_civil_wars:
+		if state.get("active", false) and state.get("clan", "") == "Dragon":
+			return int(state.get("dragon_treaty_penalty", 0))
+	return 0
 
 
 # -- Resolution (s53.2.7) ---------------------------------------------------

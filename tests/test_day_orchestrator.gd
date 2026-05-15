@@ -2246,3 +2246,261 @@ func test_inactive_edict_skipped() -> void:
 	edict.is_active = false
 	DayOrchestrator._apply_civil_war_edict_shifts(state, 101, 1, [edict])
 	assert_eq(state["war_score"], 50)
+
+
+# =============================================================================
+# s55.10.2.8 / s55.10.3.7 — Schism Crisis clan-specific faction rules
+# =============================================================================
+
+func _make_clan_char(cid: int, clan: String, family: String, lord_id: int = -1,
+		status: float = 3.0) -> L5RCharacterData:
+	var c := L5RCharacterData.new()
+	c.character_id = cid
+	c.clan = clan
+	c.family = family
+	c.lord_id = lord_id
+	c.status = status
+	c.honor = 5.0
+	return c
+
+
+func _make_trigger_cw_setup(clan: String, rebel_id: int, auth_id: int,
+		extra_npcs: Array[L5RCharacterData] = []) -> Dictionary:
+	var rebel := _make_clan_char(rebel_id, clan, "Mirumoto" if clan == "Dragon" else "Shiba",
+		-1, 7.0)
+	var authority := _make_clan_char(auth_id, clan,
+		"Togashi" if clan == "Dragon" else "Isawa", -1, 7.0)
+	var characters: Array[L5RCharacterData] = [rebel, authority]
+	characters.append_array(extra_npcs)
+	var by_id: Dictionary = {}
+	for c: L5RCharacterData in characters:
+		by_id[c.character_id] = c
+	return {
+		"rebel": rebel,
+		"authority": authority,
+		"characters": characters,
+		"by_id": by_id,
+	}
+
+
+func test_dragon_trigger_auto_assigns_togashi_family_to_legitimacy() -> void:
+	# Togashi Order monks must side with Togashi unconditionally (s55.10.2.8).
+	var monk := _make_clan_char(99, "Dragon", "Togashi", -1, 2.0)
+	var kitsuki := _make_clan_char(98, "Dragon", "Kitsuki", -1, 2.0)
+	var setup: Dictionary = _make_trigger_cw_setup("Dragon", 10, 20, [monk, kitsuki])
+	var wars: Array[Dictionary] = []
+	var topics: Array[TopicData] = []
+	var next_id: Array[int] = [1]
+	DayOrchestrator._trigger_civil_war(
+		10, 20, "Dragon", "removal order",
+		setup["characters"], setup["by_id"], {},
+		wars, topics, next_id, 100, 5,
+		false, "dragon_schism",
+	)
+	var state: Dictionary = wars[0]
+	assert_eq(int(state["faction_assignments"].get(99, -1)), IntraClanCivilWar.Faction.LEGITIMACY)
+	# Kitsuki evaluated normally (went LEGITIMACY by default with no rebel pull)
+	assert_ne(int(state["faction_assignments"].get(98, -1)), -1)
+
+
+func test_dragon_trigger_stores_treaty_penalty() -> void:
+	var setup: Dictionary = _make_trigger_cw_setup("Dragon", 10, 20)
+	var wars: Array[Dictionary] = []
+	var topics: Array[TopicData] = []
+	var next_id: Array[int] = [1]
+	DayOrchestrator._trigger_civil_war(
+		10, 20, "Dragon", "removal order",
+		setup["characters"], setup["by_id"], {},
+		wars, topics, next_id, 100, 5,
+	)
+	assert_eq(int(wars[0].get("dragon_treaty_penalty", 0)), -15)
+
+
+func test_phoenix_trigger_auto_assigns_isawa_to_legitimacy() -> void:
+	# All Isawa side with Council unconditionally (s55.10.3.7).
+	var isawa_monk := _make_clan_char(99, "Phoenix", "Isawa", -1, 2.0)
+	var shiba_soldier := _make_clan_char(98, "Phoenix", "Shiba", -1, 2.0)
+	var champion := _make_clan_char(10, "Phoenix", "Shiba", -1, 7.0)
+	var master := _make_clan_char(20, "Phoenix", "Isawa", -1, 7.0)
+	master.role_position = "Master of Fire"
+	var characters: Array[L5RCharacterData] = [champion, master, isawa_monk, shiba_soldier]
+	var by_id: Dictionary = {}
+	for c: L5RCharacterData in characters:
+		by_id[c.character_id] = c
+	var wars: Array[Dictionary] = []
+	var topics: Array[TopicData] = []
+	var next_id: Array[int] = [1]
+	# Defiance Path: rebel = champion, authority = master
+	DayOrchestrator._trigger_civil_war(
+		10, 20, "Phoenix", "champion defiance",
+		characters, by_id, {},
+		wars, topics, next_id, 100, 5,
+		false, "defiance",
+	)
+	var state: Dictionary = wars[0]
+	assert_eq(int(state["faction_assignments"].get(99, -1)), IntraClanCivilWar.Faction.LEGITIMACY)
+	# Shiba soldier evaluated normally
+	assert_ne(int(state["faction_assignments"].get(98, -1)), -1)
+
+
+func test_phoenix_overreach_trigger_suppresses_hemorrhage() -> void:
+	# Council Overreach Path: suppress_honor_hemorrhage must be true (s55.10.3.7).
+	var setup: Dictionary = _make_trigger_cw_setup("Phoenix", 20, 10)
+	var wars: Array[Dictionary] = []
+	var topics: Array[TopicData] = []
+	var next_id: Array[int] = [1]
+	DayOrchestrator._trigger_civil_war(
+		20, 10, "Phoenix", "council overreach",
+		setup["characters"], setup["by_id"], {},
+		wars, topics, next_id, 100, 5,
+		true, "overreach",
+	)
+	assert_true(wars[0].get("suppress_honor_hemorrhage", false))
+	assert_eq(wars[0].get("schism_path", ""), "overreach")
+
+
+func test_phoenix_defiance_trigger_no_hemorrhage_suppression() -> void:
+	# Defiance Path: standard −0.3/season applies (s55.10.3.7).
+	var setup: Dictionary = _make_trigger_cw_setup("Phoenix", 10, 20)
+	var wars: Array[Dictionary] = []
+	var topics: Array[TopicData] = []
+	var next_id: Array[int] = [1]
+	DayOrchestrator._trigger_civil_war(
+		10, 20, "Phoenix", "champion defiance",
+		setup["characters"], setup["by_id"], {},
+		wars, topics, next_id, 100, 5,
+		false, "defiance",
+	)
+	assert_false(wars[0].get("suppress_honor_hemorrhage", false))
+	assert_eq(wars[0].get("schism_path", ""), "defiance")
+
+
+# =============================================================================
+# _apply_phoenix_master_death_honor_penalty (s55.10.3.7)
+# =============================================================================
+
+func _make_phoenix_schism_state(schism_path: String, rebel_id: int,
+		auth_id: int) -> Dictionary:
+	var s: Dictionary = IntraClanCivilWar.make_initial_state(rebel_id, auth_id, "Phoenix", 1, 0)
+	s["schism_path"] = schism_path
+	return s
+
+
+func test_dead_master_penalizes_defiance_path_champion() -> void:
+	# Defiance: rebel = champion → champion takes −0.5 for each dead Master.
+	var state: Dictionary = _make_phoenix_schism_state("defiance", 10, 20)
+	var champion := _make_clan_char(10, "Phoenix", "Shiba", -1, 7.0)
+	champion.honor = 5.0
+	var master := _make_clan_char(20, "Phoenix", "Isawa", -1, 7.0)
+	master.role_position = "Master of Fire"
+	master.wounds_taken = 999  # dead
+	IntraClanCivilWar.assign_faction(state, 20, IntraClanCivilWar.Faction.LEGITIMACY)
+	var by_id: Dictionary = {10: champion, 20: master}
+	var count: int = DayOrchestrator._apply_phoenix_master_death_honor_penalty(state, by_id)
+	assert_eq(count, 1)
+	assert_almost_eq(champion.honor, 4.5, 0.001)
+
+
+func test_dead_master_not_double_penalized() -> void:
+	var state: Dictionary = _make_phoenix_schism_state("defiance", 10, 20)
+	var champion := _make_clan_char(10, "Phoenix", "Shiba", -1, 7.0)
+	champion.honor = 5.0
+	var master := _make_clan_char(20, "Phoenix", "Isawa", -1, 7.0)
+	master.role_position = "Master of Water"
+	master.wounds_taken = 999
+	IntraClanCivilWar.assign_faction(state, 20, IntraClanCivilWar.Faction.LEGITIMACY)
+	var by_id: Dictionary = {10: champion, 20: master}
+	DayOrchestrator._apply_phoenix_master_death_honor_penalty(state, by_id)
+	var second_pass: int = DayOrchestrator._apply_phoenix_master_death_honor_penalty(state, by_id)
+	assert_eq(second_pass, 0)
+	assert_almost_eq(champion.honor, 4.5, 0.001)
+
+
+func test_living_master_not_penalized() -> void:
+	var state: Dictionary = _make_phoenix_schism_state("defiance", 10, 20)
+	var champion := _make_clan_char(10, "Phoenix", "Shiba", -1, 7.0)
+	champion.honor = 5.0
+	var master := _make_clan_char(20, "Phoenix", "Isawa", -1, 7.0)
+	master.role_position = "Master of Earth"
+	master.wounds_taken = 0  # alive
+	IntraClanCivilWar.assign_faction(state, 20, IntraClanCivilWar.Faction.LEGITIMACY)
+	var by_id: Dictionary = {10: champion, 20: master}
+	var count: int = DayOrchestrator._apply_phoenix_master_death_honor_penalty(state, by_id)
+	assert_eq(count, 0)
+	assert_almost_eq(champion.honor, 5.0, 0.001)
+
+
+func test_non_phoenix_civil_war_skips_master_penalty() -> void:
+	var state: Dictionary = IntraClanCivilWar.make_initial_state(10, 20, "Dragon", 1, 0)
+	var by_id: Dictionary = {}
+	var count: int = DayOrchestrator._apply_phoenix_master_death_honor_penalty(state, by_id)
+	assert_eq(count, 0)
+
+
+func test_overreach_path_champion_is_authority_lord() -> void:
+	# Overreach: authority = champion → champion takes −0.5 for each dead Master.
+	var state: Dictionary = _make_phoenix_schism_state("overreach", 20, 10)
+	var champion := _make_clan_char(10, "Phoenix", "Shiba", -1, 7.0)
+	champion.honor = 5.0
+	var master := _make_clan_char(20, "Phoenix", "Isawa", -1, 7.0)
+	master.role_position = "Master of Air"
+	master.wounds_taken = 999
+	IntraClanCivilWar.assign_faction(state, 20, IntraClanCivilWar.Faction.LEGITIMACY)
+	var by_id: Dictionary = {10: champion, 20: master}
+	var count: int = DayOrchestrator._apply_phoenix_master_death_honor_penalty(state, by_id)
+	assert_eq(count, 1)
+	assert_almost_eq(champion.honor, 4.5, 0.001)
+
+
+# =============================================================================
+# _resolve_civil_war — victory_flags (s55.10.2.8 / s55.10.3.7)
+# =============================================================================
+
+func test_dragon_rebel_victory_returns_autonomous_rule_flag() -> void:
+	var state: Dictionary = IntraClanCivilWar.make_initial_state(10, 20, "Dragon", 1, 0)
+	state["schism_path"] = "dragon_schism"
+	IntraClanCivilWar.assign_faction(state, 10, IntraClanCivilWar.Faction.REBEL)
+	IntraClanCivilWar.assign_faction(state, 20, IntraClanCivilWar.Faction.LEGITIMACY)
+	var topics: Array[TopicData] = []
+	var next_id: Array[int] = [100]
+	var result: Dictionary = DayOrchestrator._resolve_civil_war(
+		state, false, {}, {}, 5, topics, next_id, 100, {}, "Dragon",
+	)
+	assert_true(result["victory_flags"].get("dragon_autonomous_rule", false))
+
+
+func test_dragon_legitimacy_victory_no_autonomous_rule_flag() -> void:
+	var state: Dictionary = IntraClanCivilWar.make_initial_state(10, 20, "Dragon", 1, 0)
+	IntraClanCivilWar.assign_faction(state, 10, IntraClanCivilWar.Faction.REBEL)
+	IntraClanCivilWar.assign_faction(state, 20, IntraClanCivilWar.Faction.LEGITIMACY)
+	var topics: Array[TopicData] = []
+	var next_id: Array[int] = [100]
+	var result: Dictionary = DayOrchestrator._resolve_civil_war(
+		state, true, {}, {}, 5, topics, next_id, 100, {}, "Dragon",
+	)
+	assert_false(result["victory_flags"].get("dragon_autonomous_rule", false))
+
+
+func test_phoenix_rebel_victory_returns_champion_authority_flag() -> void:
+	var state: Dictionary = IntraClanCivilWar.make_initial_state(10, 20, "Phoenix", 1, 0)
+	state["schism_path"] = "defiance"
+	IntraClanCivilWar.assign_faction(state, 10, IntraClanCivilWar.Faction.REBEL)
+	IntraClanCivilWar.assign_faction(state, 20, IntraClanCivilWar.Faction.LEGITIMACY)
+	var topics: Array[TopicData] = []
+	var next_id: Array[int] = [100]
+	var result: Dictionary = DayOrchestrator._resolve_civil_war(
+		state, false, {}, {}, 5, topics, next_id, 100, {}, "Phoenix",
+	)
+	assert_true(result["victory_flags"].get("phoenix_champion_authority", false))
+
+
+func test_non_clan_specific_war_no_victory_flags() -> void:
+	var state: Dictionary = IntraClanCivilWar.make_initial_state(10, 20, "Lion", 1, 0)
+	IntraClanCivilWar.assign_faction(state, 10, IntraClanCivilWar.Faction.REBEL)
+	IntraClanCivilWar.assign_faction(state, 20, IntraClanCivilWar.Faction.LEGITIMACY)
+	var topics: Array[TopicData] = []
+	var next_id: Array[int] = [100]
+	var result: Dictionary = DayOrchestrator._resolve_civil_war(
+		state, false, {}, {}, 5, topics, next_id, 100, {}, "Lion",
+	)
+	assert_true(result["victory_flags"].is_empty())

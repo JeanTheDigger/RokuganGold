@@ -220,6 +220,43 @@ func test_seasonal_consequences_honor_floors_at_zero() -> void:
 	assert_eq(_rebel.honor, 0.0)
 
 
+func test_seasonal_consequences_suppress_hemorrhage_skips_honor_loss() -> void:
+	# Council Overreach Path: no automatic honor hemorrhage (s55.10.3.7).
+	_rebel.honor = 5.0
+	var result: Dictionary = IntraClanCivilWar.apply_seasonal_consequences(
+		_state, _rebel, [], 101, true
+	)
+	assert_almost_eq(_rebel.honor, 5.0, 0.001)
+	assert_true(result["hemorrhage_suppressed"])
+
+
+func test_seasonal_consequences_suppress_false_still_bleeds() -> void:
+	_rebel.honor = 5.0
+	var result: Dictionary = IntraClanCivilWar.apply_seasonal_consequences(
+		_state, _rebel, [], 101, false
+	)
+	assert_almost_eq(_rebel.honor, 4.7, 0.001)
+	assert_false(result["hemorrhage_suppressed"])
+
+
+func test_get_dragon_treaty_penalty_active_war() -> void:
+	var dragon_state: Dictionary = IntraClanCivilWar.make_initial_state(10, 20, "Dragon", 1, 0)
+	dragon_state["dragon_treaty_penalty"] = -15
+	assert_eq(IntraClanCivilWar.get_dragon_treaty_penalty([dragon_state]), -15)
+
+
+func test_get_dragon_treaty_penalty_no_dragon_war() -> void:
+	var lion_state: Dictionary = IntraClanCivilWar.make_initial_state(10, 20, "Lion", 1, 0)
+	assert_eq(IntraClanCivilWar.get_dragon_treaty_penalty([lion_state]), 0)
+
+
+func test_get_dragon_treaty_penalty_inactive_war_ignored() -> void:
+	var dragon_state: Dictionary = IntraClanCivilWar.make_initial_state(10, 20, "Dragon", 1, 0)
+	dragon_state["dragon_treaty_penalty"] = -15
+	dragon_state["active"] = false
+	assert_eq(IntraClanCivilWar.get_dragon_treaty_penalty([dragon_state]), 0)
+
+
 func test_seasonal_consequences_uses_correct_escalation() -> void:
 	var p1: ProvinceData = ProvinceData.new()
 	p1.province_id = 10
