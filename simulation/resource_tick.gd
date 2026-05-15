@@ -314,7 +314,12 @@ static func process_seasonal_tick(
 		)
 		results["emperor_income"] = emperor_income
 		settlement_meta["last_autumn_emperor_tax_income"] = emperor_income.get("rice", 0.0)
-		settlement_meta["last_autumn_arms_redirect"] = emperor_income.get("arms_redirect", 0.0)
+		var arms_redirect: float = emperor_income.get("arms_redirect", 0.0)
+		if arms_redirect > 0.0:
+			var applied: Dictionary = apply_warlike_arms_redirect(
+				arms_redirect, settlement_meta
+			)
+			results["arms_redirect"] = applied
 
 	var pop_changes: Dictionary = _process_population_adjustment(provinces, settlements, settlement_meta)
 	results["population_changes"] = pop_changes
@@ -530,6 +535,21 @@ static func _compute_emperor_income_from_cascade(
 		"rice": total_rice,
 		"arms_redirect": total_arms_redirect,
 	}
+
+
+static func apply_warlike_arms_redirect(
+	arms_redirect: float,
+	settlement_meta: Dictionary,
+) -> Dictionary:
+	var clan_data: Dictionary = settlement_meta.get("_clan_data", {})
+	if clan_data.has("Imperial"):
+		var cd: ClanData = clan_data["Imperial"]
+		cd.arms_stockpile += arms_redirect
+		return {"applied_to": "Imperial", "amount": arms_redirect}
+	settlement_meta["_imperial_arms_pending"] = (
+		float(settlement_meta.get("_imperial_arms_pending", 0.0)) + arms_redirect
+	)
+	return {"applied_to": "pending", "amount": arms_redirect}
 
 
 # ==============================================================================

@@ -660,3 +660,63 @@ func test_emperor_income_empty_config_uses_baseline() -> void:
 	var result: Dictionary = ResourceTick._compute_emperor_income_from_cascade(taxes)
 	# Legacy path: 6.0 * 0.42 * 0.15 = 0.378
 	assert_almost_eq(result["rice"], 0.378, 0.001)
+
+
+# -- Warlike Arms Redirect Consumer (GDD s55.10) -------------------------------
+
+func test_arms_redirect_applied_to_imperial_clan() -> void:
+	var imperial_clan := ClanData.new()
+	imperial_clan.clan_name = "Imperial"
+	imperial_clan.arms_stockpile = 5.0
+	var meta: Dictionary = {"_clan_data": {"Imperial": imperial_clan}}
+	var result: Dictionary = ResourceTick.apply_warlike_arms_redirect(2.5, meta)
+	assert_eq(result["applied_to"], "Imperial")
+	assert_almost_eq(result["amount"], 2.5, 0.001)
+	assert_almost_eq(imperial_clan.arms_stockpile, 7.5, 0.001)
+
+
+func test_arms_redirect_accumulates_on_imperial_clan() -> void:
+	var imperial_clan := ClanData.new()
+	imperial_clan.clan_name = "Imperial"
+	imperial_clan.arms_stockpile = 0.0
+	var meta: Dictionary = {"_clan_data": {"Imperial": imperial_clan}}
+	ResourceTick.apply_warlike_arms_redirect(1.0, meta)
+	ResourceTick.apply_warlike_arms_redirect(1.5, meta)
+	assert_almost_eq(imperial_clan.arms_stockpile, 2.5, 0.001)
+
+
+func test_arms_redirect_pending_when_no_imperial_clan() -> void:
+	var meta: Dictionary = {"_clan_data": {}}
+	var result: Dictionary = ResourceTick.apply_warlike_arms_redirect(3.0, meta)
+	assert_eq(result["applied_to"], "pending")
+	assert_almost_eq(result["amount"], 3.0, 0.001)
+	assert_almost_eq(float(meta["_imperial_arms_pending"]), 3.0, 0.001)
+
+
+func test_arms_redirect_pending_accumulates() -> void:
+	var meta: Dictionary = {"_clan_data": {}}
+	ResourceTick.apply_warlike_arms_redirect(1.0, meta)
+	ResourceTick.apply_warlike_arms_redirect(2.0, meta)
+	assert_almost_eq(float(meta["_imperial_arms_pending"]), 3.0, 0.001)
+
+
+func test_arms_redirect_zero_amount_no_change() -> void:
+	var imperial_clan := ClanData.new()
+	imperial_clan.clan_name = "Imperial"
+	imperial_clan.arms_stockpile = 5.0
+	var meta: Dictionary = {"_clan_data": {"Imperial": imperial_clan}}
+	ResourceTick.apply_warlike_arms_redirect(0.0, meta)
+	assert_almost_eq(imperial_clan.arms_stockpile, 5.0, 0.001)
+
+
+func test_arms_redirect_does_not_touch_other_clans() -> void:
+	var crab_clan := ClanData.new()
+	crab_clan.clan_name = "Crab"
+	crab_clan.arms_stockpile = 10.0
+	var imperial_clan := ClanData.new()
+	imperial_clan.clan_name = "Imperial"
+	imperial_clan.arms_stockpile = 0.0
+	var meta: Dictionary = {"_clan_data": {"Crab": crab_clan, "Imperial": imperial_clan}}
+	ResourceTick.apply_warlike_arms_redirect(5.0, meta)
+	assert_almost_eq(crab_clan.arms_stockpile, 10.0, 0.001)
+	assert_almost_eq(imperial_clan.arms_stockpile, 5.0, 0.001)
