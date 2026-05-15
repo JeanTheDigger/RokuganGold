@@ -37,6 +37,7 @@ const DISPOSITION_REDUCED: int = -2
 const DISPOSITION_SEVERELY_REDUCED: int = -5
 const DISPOSITION_NO_STIPEND: int = -10
 const MONTHS_WITHOUT_PAY_CRISIS: int = 3
+const MAX_LORD_CHAIN_DEPTH: int = 10
 
 
 static func get_tier_for_lord_rank(rank: Enums.LordRank) -> String:
@@ -183,7 +184,8 @@ static func _pay_individual_stipends(
 	characters: Array[L5RCharacterData],
 	characters_by_id: Dictionary,
 ) -> Dictionary:
-	var results: Dictionary = {}
+	var assignments: Dictionary = {}
+	var pool_demands: Dictionary = {}
 	for c: L5RCharacterData in characters:
 		if CharacterStats.is_dead(c):
 			continue
@@ -192,16 +194,41 @@ static func _pay_individual_stipends(
 		var rank: Enums.LordRank = CivilianOrderBudget.lord_rank_from_status(c.status)
 		if rank >= Enums.LordRank.CITY_DAIMYO:
 			continue
-		var lord: L5RCharacterData = characters_by_id.get(c.lord_id) as L5RCharacterData
-		if lord == null:
+		var is_indirect: bool = false
+		var funding_lord_id: int = -1
+		var base_stipend: float = 0.0
+		if lord_pools.has(c.lord_id):
+			funding_lord_id = c.lord_id
+			var lord: L5RCharacterData = characters_by_id.get(c.lord_id) as L5RCharacterData
+			if lord == null:
+				continue
+			var lord_rank: Enums.LordRank = CivilianOrderBudget.lord_rank_from_status(lord.status)
+			var lord_tier: String = get_tier_for_lord_rank(lord_rank)
+			base_stipend = STIPEND_BY_LORD_TIER.get(lord_tier, 1.0)
+		else:
+			funding_lord_id = _find_funding_lord_id(
+				c.character_id, characters_by_id, lord_pools,
+			)
+			if funding_lord_id < 0:
+				continue
+			is_indirect = true
+			base_stipend = STIPEND_BY_LORD_TIER["indirect"]
+		assignments[c.character_id] = {
+			"funding_lord_id": funding_lord_id,
+			"base_stipend": base_stipend,
+			"is_indirect": is_indirect,
+		}
+		pool_demands[funding_lord_id] = pool_demands.get(funding_lord_id, 0.0) + base_stipend
+	var results: Dictionary = {}
+	for c: L5RCharacterData in characters:
+		if not assignments.has(c.character_id):
 			continue
-		var lord_rank: Enums.LordRank = CivilianOrderBudget.lord_rank_from_status(lord.status)
-		var lord_tier: String = get_tier_for_lord_rank(lord_rank)
-		var base_stipend: float = STIPEND_BY_LORD_TIER.get(lord_tier, 1.0)
-		var lord_pool_data: Dictionary = lord_pools.get(c.lord_id, {})
+		var asgn: Dictionary = assignments[c.character_id]
+		var funding_lord_id: int = asgn["funding_lord_id"]
+		var base_stipend: float = asgn["base_stipend"]
+		var lord_pool_data: Dictionary = lord_pools.get(funding_lord_id, {})
 		var pool_koku: float = lord_pool_data.get("passed_down", 0.0) * INDIVIDUAL_KOKU_PER_UNIT
-		var retainer_count: int = _count_retainers(c.lord_id, characters)
-		var total_needed: float = base_stipend * float(retainer_count)
+		var total_needed: float = pool_demands.get(funding_lord_id, 0.0)
 		var ratio: float = 1.0
 		if total_needed > 0.0 and pool_koku < total_needed:
 			ratio = pool_koku / total_needed
@@ -216,22 +243,27 @@ static func _pay_individual_stipends(
 			"actual_payment": actual_payment,
 			"ratio": ratio,
 			"consequence": consequence,
+			"is_indirect": asgn["is_indirect"],
 		}
 	return results
 
 
-static func _count_retainers(lord_id: int, characters: Array[L5RCharacterData]) -> int:
-	var count: int = 0
-	for c: L5RCharacterData in characters:
-		if CharacterStats.is_dead(c):
-			continue
-		if c.lord_id != lord_id:
-			continue
-		var rank: Enums.LordRank = CivilianOrderBudget.lord_rank_from_status(c.status)
-		if rank >= Enums.LordRank.CITY_DAIMYO:
-			continue
-		count += 1
-	return count
+static func _find_funding_lord_id(
+	character_id: int,
+	characters_by_id: Dictionary,
+	lord_pools: Dictionary,
+) -> int:
+	var current_id: int = character_id
+	for _i: int in range(MAX_LORD_CHAIN_DEPTH):
+		var c: L5RCharacterData = characters_by_id.get(current_id) as L5RCharacterData
+		if c == null:
+			return -1
+		if c.lord_id < 0:
+			return -1
+		if lord_pools.has(c.lord_id):
+			return c.lord_id
+		current_id = c.lord_id
+	return -1
 
 
 static func _stipend_consequence(ratio: float) -> int:

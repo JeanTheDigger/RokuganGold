@@ -281,6 +281,151 @@ func test_full_flow_single_clan() -> void:
 	assert_true(retainer.koku > 0.0)
 
 
+# -- Indirect Retainer Stipends ------------------------------------------------
+
+func test_indirect_retainer_gets_point_six_koku() -> void:
+	var local := _make_character(1, "Crane", 4.0)
+	var samurai := _make_character(2, "Crane", 2.0, 1)
+	var yojimbo := _make_character(3, "Crane", 2.0, 2)
+	var chars: Array[L5RCharacterData] = [local, samurai, yojimbo]
+	var by_id: Dictionary = {1: local, 2: samurai, 3: yojimbo}
+	var lord_pools: Dictionary = {
+		1: {"tier": "local_daimyo", "retained": 0.5, "passed_down": 3.0},
+	}
+	var result: Dictionary = KokuCascadeSystem._pay_individual_stipends(
+		lord_pools, chars, by_id,
+	)
+	assert_almost_eq(result[2]["actual_payment"], 1.0, 0.01)
+	assert_false(result[2]["is_indirect"])
+	assert_almost_eq(result[3]["actual_payment"], 0.6, 0.01)
+	assert_true(result[3]["is_indirect"])
+	assert_almost_eq(yojimbo.koku, 0.6, 0.01)
+
+
+func test_indirect_retainer_disposition_targets_direct_lord() -> void:
+	var local := _make_character(1, "Crane", 4.0)
+	var samurai := _make_character(2, "Crane", 2.0, 1)
+	var yojimbo := _make_character(3, "Crane", 2.0, 2)
+	var chars: Array[L5RCharacterData] = [local, samurai, yojimbo]
+	var by_id: Dictionary = {1: local, 2: samurai, 3: yojimbo}
+	var lord_pools: Dictionary = {
+		1: {"tier": "local_daimyo", "retained": 0.0, "passed_down": 0.0},
+	}
+	var result: Dictionary = KokuCascadeSystem._pay_individual_stipends(
+		lord_pools, chars, by_id,
+	)
+	assert_eq(result[3]["consequence"], KokuCascadeSystem.DISPOSITION_NO_STIPEND)
+	assert_eq(yojimbo.disposition_values.get(2, 0), KokuCascadeSystem.DISPOSITION_NO_STIPEND)
+	assert_false(yojimbo.disposition_values.has(1))
+
+
+func test_indirect_retainer_shares_pool_with_direct() -> void:
+	var champ := _make_character(1, "Crane", 7.0)
+	var samurai := _make_character(2, "Crane", 2.0, 1)
+	var yojimbo := _make_character(3, "Crane", 2.0, 2)
+	var chars: Array[L5RCharacterData] = [champ, samurai, yojimbo]
+	var by_id: Dictionary = {1: champ, 2: samurai, 3: yojimbo}
+	# Pool = 0.02 koku units * 500 = 10.0 individual koku
+	# Demand: samurai direct (5.0) + yojimbo indirect (0.6) = 5.6
+	# Pool 10.0 > 5.6 → ratio = 1.0
+	var lord_pools: Dictionary = {
+		1: {"tier": "clan_champion", "retained": 4.0, "passed_down": 0.02},
+	}
+	var result: Dictionary = KokuCascadeSystem._pay_individual_stipends(
+		lord_pools, chars, by_id,
+	)
+	assert_almost_eq(result[2]["actual_payment"], 5.0, 0.01)
+	assert_almost_eq(result[3]["actual_payment"], 0.6, 0.01)
+
+
+func test_indirect_retainer_insufficient_pool_proportional() -> void:
+	var champ := _make_character(1, "Crane", 7.0)
+	var samurai := _make_character(2, "Crane", 2.0, 1)
+	var yojimbo := _make_character(3, "Crane", 2.0, 2)
+	var chars: Array[L5RCharacterData] = [champ, samurai, yojimbo]
+	var by_id: Dictionary = {1: champ, 2: samurai, 3: yojimbo}
+	# Pool = 0.0056 koku units * 500 = 2.8 individual koku
+	# Demand: 5.0 + 0.6 = 5.6. Ratio = 2.8 / 5.6 = 0.5
+	var lord_pools: Dictionary = {
+		1: {"tier": "clan_champion", "retained": 4.0, "passed_down": 0.0056},
+	}
+	var result: Dictionary = KokuCascadeSystem._pay_individual_stipends(
+		lord_pools, chars, by_id,
+	)
+	assert_almost_eq(result[2]["ratio"], 0.5, 0.01)
+	assert_almost_eq(result[3]["ratio"], 0.5, 0.01)
+	assert_almost_eq(result[2]["actual_payment"], 2.5, 0.01)
+	assert_almost_eq(result[3]["actual_payment"], 0.3, 0.01)
+
+
+func test_deep_chain_indirect_retainer() -> void:
+	var local := _make_character(1, "Crane", 4.0)
+	var a := _make_character(2, "Crane", 2.0, 1)
+	var b := _make_character(3, "Crane", 2.0, 2)
+	var c := _make_character(4, "Crane", 2.0, 3)
+	var chars: Array[L5RCharacterData] = [local, a, b, c]
+	var by_id: Dictionary = {1: local, 2: a, 3: b, 4: c}
+	var lord_pools: Dictionary = {
+		1: {"tier": "local_daimyo", "retained": 0.5, "passed_down": 3.0},
+	}
+	var result: Dictionary = KokuCascadeSystem._pay_individual_stipends(
+		lord_pools, chars, by_id,
+	)
+	assert_false(result[2]["is_indirect"])
+	assert_true(result[3]["is_indirect"])
+	assert_true(result[4]["is_indirect"])
+	assert_almost_eq(result[2]["base_stipend"], 1.0, 0.01)
+	assert_almost_eq(result[3]["base_stipend"], 0.6, 0.01)
+	assert_almost_eq(result[4]["base_stipend"], 0.6, 0.01)
+
+
+func test_no_funding_lord_no_stipend() -> void:
+	var ronin := _make_character(1, "Crane", 2.0)
+	var retainer := _make_character(2, "Crane", 2.0, 1)
+	var chars: Array[L5RCharacterData] = [ronin, retainer]
+	var by_id: Dictionary = {1: ronin, 2: retainer}
+	var lord_pools: Dictionary = {}
+	var result: Dictionary = KokuCascadeSystem._pay_individual_stipends(
+		lord_pools, chars, by_id,
+	)
+	assert_false(result.has(2))
+
+
+func test_find_funding_lord_direct() -> void:
+	var lord_pools: Dictionary = {10: {"passed_down": 1.0}}
+	var c := _make_character(1, "Crane", 2.0, 10)
+	var by_id: Dictionary = {1: c}
+	var fid: int = KokuCascadeSystem._find_funding_lord_id(1, by_id, lord_pools)
+	assert_eq(fid, 10)
+
+
+func test_find_funding_lord_two_hops() -> void:
+	var lord_pools: Dictionary = {10: {"passed_down": 1.0}}
+	var a := _make_character(1, "Crane", 2.0, 5)
+	var b := _make_character(5, "Crane", 2.0, 10)
+	var by_id: Dictionary = {1: a, 5: b}
+	var fid: int = KokuCascadeSystem._find_funding_lord_id(1, by_id, lord_pools)
+	assert_eq(fid, 10)
+
+
+func test_find_funding_lord_no_chain() -> void:
+	var lord_pools: Dictionary = {10: {"passed_down": 1.0}}
+	var a := _make_character(1, "Crane", 2.0, 5)
+	var by_id: Dictionary = {1: a}
+	var fid: int = KokuCascadeSystem._find_funding_lord_id(1, by_id, lord_pools)
+	assert_eq(fid, -1)
+
+
+func test_find_funding_lord_lordless() -> void:
+	var lord_pools: Dictionary = {10: {"passed_down": 1.0}}
+	var a := _make_character(1, "Crane", 2.0, -1)
+	var by_id: Dictionary = {1: a}
+	var fid: int = KokuCascadeSystem._find_funding_lord_id(1, by_id, lord_pools)
+	assert_eq(fid, -1)
+
+
+# -- Full Flow Integration -----------------------------------------------------
+
 func test_no_champion_no_cascade() -> void:
 	var local := _make_character(2, "Crane", 4.0)
 	var settlement := _make_settlement(100, 10, 12.0)
