@@ -24,15 +24,6 @@ const TAX_RATES: Dictionary = {
 	"emperor": 0.15,
 }
 
-# -- Stipend Cascade Rates per GDD s4.3.9 -------------------------------------
-
-const STIPEND_RETENTION: Dictionary = {
-	"clan_champion": 0.40,
-	"family_daimyo": 0.25,
-	"provincial_daimyo": 0.20,
-	"local_daimyo": 0.15,
-}
-
 # -- Population Growth per GDD s4.3.6 -----------------------------------------
 
 const BASELINE_GROWTH_ANNUAL: float = 0.05

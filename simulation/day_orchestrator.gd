@@ -651,6 +651,14 @@ static func advance_day(
 			next_character_id,
 		)
 
+	var koku_flow_results: Dictionary = {}
+	if time_system.get_ic_day_of_month() == 1:
+		var season_name: String = time_system.get_season_name().to_lower()
+		var months_in_season: int = ResourceTick.MONTHS_PER_SEASON.get(season_name, 3)
+		koku_flow_results = KokuCascadeSystem.process_monthly_koku_flow(
+			characters, characters_by_id, settlements, clans, months_in_season,
+		)
+
 	var horde_results: Dictionary = _process_horde_rolls(
 		current_season, prev_season,
 		active_hordes, horde_strength_counters, last_targeted_province_id,
@@ -733,6 +741,7 @@ static func advance_day(
 		"dragon_schism_siege_event": dragon_schism_siege_event,
 		"phoenix_council_results": phoenix_council_results,
 		"civil_war_results": civil_war_results_seasonal,
+		"koku_flow_results": koku_flow_results,
 	}
 
 
