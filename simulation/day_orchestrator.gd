@@ -514,7 +514,7 @@ static func advance_day(
 			active_civil_wars, precedent_modifiers, characters_by_id,
 			provinces, season_count_for_cw, objectives_map,
 			active_topics, next_topic_id, ic_day, season_meta,
-			companies, active_edicts,
+			companies, active_edicts, togashi_state,
 		)
 		# Apply post-resolution governance flags from clan-specific schism victories.
 		# Dragon FC rebel victory → dragon_autonomous_rule suspends Oversight (s55.10.2.8).
@@ -7148,12 +7148,14 @@ static func _process_togashi_oversight(
 		var togashi_id: int = _find_togashi_id(characters)
 		var fc_id: int = mirumoto_fc.character_id
 		if togashi_id >= 0:
+			# Snapshot dissatisfaction so seasonal re-evaluation can detect worsening (s55.10.2.8).
+			var snapshot: Dictionary = togashi_state.get("dissatisfaction", {}).duplicate()
 			var cw_result: Dictionary = _trigger_civil_war(
 				fc_id, togashi_id, "Dragon", "removal order",
 				characters, characters_by_id, objectives_map,
 				active_civil_wars, active_topics, next_topic_id,
 				ic_day, current_season,
-				false, "dragon_schism",
+				false, "dragon_schism", snapshot,
 			)
 			result["civil_war_triggered"] = cw_result
 
@@ -9477,6 +9479,7 @@ static func _process_civil_war_seasonal(
 	season_meta: Dictionary,
 	companies: Array[Dictionary] = [],
 	active_edicts: Array[EdictData] = [],
+	togashi_state: Dictionary = {},
 ) -> Dictionary:
 	var precedent_decay_count: int = IntraClanCivilWar.tick_precedent_decay(
 		precedent_modifiers, current_season,
@@ -9508,6 +9511,14 @@ static func _process_civil_war_seasonal(
 		var master_deaths: int = _apply_phoenix_master_death_honor_penalty(state, characters_by_id)
 		if master_deaths > 0:
 			consequence_result["phoenix_master_deaths_penalized"] = master_deaths
+
+		# Dragon schism: re-evaluate loyalty when spiritual concern worsens (s55.10.2.8).
+		var spiritual_defections: Array[Dictionary] = _apply_dragon_spiritual_reeval(
+			state, togashi_state, characters_by_id, objectives_map,
+		)
+		if not spiritual_defections.is_empty():
+			consequence_result["spiritual_reeval_defections"] = spiritual_defections
+			defections.append_array(spiritual_defections)
 
 		_apply_civil_war_edict_shifts(state, rebel_lord_id, authority_lord_id, active_edicts)
 
@@ -9774,6 +9785,70 @@ static func _resolve_civil_war(
 	}
 
 
+## Dragon schism seasonal spiritual re-evaluation (s55.10.2.8).
+## When dissatisfaction on any concern axis has risen since the schism began,
+## Togashi is being proved right — loyalty re-evaluates for all non-auto-assigned
+## Dragon NPCs still on the REBEL faction. Those who flip are moved to LEGITIMACY
+## and the war score shifts accordingly (provincial-daimyo weight by status).
+## Returns an array of defection records compatible with the main defection list.
+static func _apply_dragon_spiritual_reeval(
+	state: Dictionary,
+	togashi_state: Dictionary,
+	characters_by_id: Dictionary,
+	objectives_map: Dictionary,
+) -> Array[Dictionary]:
+	if state.get("clan", "") != "Dragon":
+		return []
+	if togashi_state.is_empty():
+		return []
+	var snapshot: Dictionary = state.get("concern_snapshot", {})
+	if snapshot.is_empty():
+		return []
+	var current_dissat: Dictionary = togashi_state.get("dissatisfaction", {})
+	# Check whether any axis has worsened (higher dissatisfaction than at trigger).
+	var worsened: bool = false
+	for axis_var: Variant in current_dissat.keys():
+		var current_val: float = float(current_dissat[axis_var])
+		var snap_val: float = float(snapshot.get(axis_var, 0.0))
+		if current_val > snap_val:
+			worsened = true
+			break
+	if not worsened:
+		return []
+	# Re-evaluate all REBEL-faction Dragon NPCs (Togashi monks are already auto-LEGITIMACY).
+	var assignments: Dictionary = state.get("faction_assignments", {})
+	var rebel_lord_id: int = int(state.get("rebel_lord_id", -1))
+	var rebel_completion: float = _get_rebel_completion_rate(rebel_lord_id, objectives_map)
+	var topic_id: int = int(state.get("trigger_topic_id", -1))
+	var defections: Array[Dictionary] = []
+	for cid_var: Variant in assignments.keys():
+		var cid: int = int(cid_var)
+		if int(assignments[cid]) != IntraClanCivilWar.Faction.REBEL:
+			continue
+		if cid == rebel_lord_id:
+			continue
+		var npc: L5RCharacterData = characters_by_id.get(cid)
+		if npc == null or CharacterStats.is_dead(npc):
+			continue
+		if npc.family == "Togashi":
+			continue  # auto-assigned, never re-evaluate
+		# Re-evaluate with strong grievance: concern proved Togashi right (rebel_was_failing = false).
+		var loyalty: Dictionary = IntraClanCivilWar.evaluate_loyalty(
+			npc, rebel_lord_id, rebel_completion, topic_id in npc.topic_pool, false,
+		)
+		var new_faction: int = int(loyalty.get("faction", IntraClanCivilWar.Faction.LEGITIMACY))
+		if new_faction == IntraClanCivilWar.Faction.LEGITIMACY:
+			var was_fd: bool = npc.status >= 5.0
+			IntraClanCivilWar.record_defection(state, cid, was_fd, true)
+			defections.append({
+				"character_id": cid,
+				"from_faction": IntraClanCivilWar.Faction.REBEL,
+				"to_faction": IntraClanCivilWar.Faction.LEGITIMACY,
+				"reason": "spiritual_reeval",
+			})
+	return defections
+
+
 ## For an active Phoenix civil war, scans all Masters assigned LEGITIMACY.
 ## For each dead Master not yet penalized, applies −0.5 Honor to the Champion
 ## (per s55.10.3.7: "Each Master killed generates −0.5 Honor for the Champion").
@@ -9980,6 +10055,7 @@ static func _trigger_civil_war(
 	current_season: int,
 	suppress_honor_hemorrhage: bool = false,
 	schism_path: String = "",
+	concern_snapshot: Dictionary = {},
 ) -> Dictionary:
 	## Triggers an intra-clan civil war per GDD s53.2.1. Creates initial state,
 	## generates the Tier 2 crisis topic, evaluates loyalty for all named clan
@@ -10020,6 +10096,9 @@ static func _trigger_civil_war(
 	# Dragon schism: treaty credibility reduced during crisis (s55.10.2.8).
 	if clan == "Dragon":
 		state["dragon_treaty_penalty"] = -15
+	# Snapshot concern axis dissatisfaction at trigger for seasonal re-evaluation.
+	if not concern_snapshot.is_empty():
+		state["concern_snapshot"] = concern_snapshot.duplicate()
 
 	var rebel_completion: float = _get_rebel_completion_rate(rebel_lord_id, objectives_map)
 	var rebel_was_failing: bool = rebel_completion < 0.50

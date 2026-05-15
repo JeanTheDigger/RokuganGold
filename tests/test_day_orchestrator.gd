@@ -2504,3 +2504,97 @@ func test_non_clan_specific_war_no_victory_flags() -> void:
 		state, false, {}, {}, 5, topics, next_id, 100, {}, "Lion",
 	)
 	assert_true(result["victory_flags"].is_empty())
+
+
+# =============================================================================
+# _apply_dragon_spiritual_reeval (s55.10.2.8 — spiritual concern re-evaluation)
+# =============================================================================
+
+func _make_dragon_schism_state(rebel_id: int, auth_id: int,
+		snap_dissat: float = 0.0) -> Dictionary:
+	var s: Dictionary = IntraClanCivilWar.make_initial_state(rebel_id, auth_id, "Dragon", 1, 0)
+	s["schism_path"] = "dragon_schism"
+	# Snapshot: some initial dissatisfaction
+	var axis_key: int = TogashiOversight.Axis.SPIRITUAL_HEALTH
+	s["concern_snapshot"] = {axis_key: snap_dissat}
+	IntraClanCivilWar.assign_faction(s, rebel_id, IntraClanCivilWar.Faction.REBEL)
+	IntraClanCivilWar.assign_faction(s, auth_id, IntraClanCivilWar.Faction.LEGITIMACY)
+	return s
+
+
+func test_spiritual_reeval_worsened_flips_rebel_npc_to_legitimacy() -> void:
+	var state: Dictionary = _make_dragon_schism_state(10, 20, 1.0)
+	# Rebel NPC with Chugi virtue → strong Legitimacy pull, will flip when grievance is strong
+	var npc := _make_clan_char(99, "Dragon", "Mirumoto", -1, 2.0)
+	npc.bushido_virtue = Enums.BushidoVirtue.CHUGI
+	IntraClanCivilWar.assign_faction(state, 99, IntraClanCivilWar.Faction.REBEL)
+	var by_id: Dictionary = {10: _make_clan_char(10, "Dragon", "Mirumoto"), 20: _make_clan_char(20, "Dragon", "Togashi"), 99: npc}
+	# Togashi state with worsened concern
+	var axis_key: int = TogashiOversight.Axis.SPIRITUAL_HEALTH
+	var togashi_st: Dictionary = {"dissatisfaction": {axis_key: 5.0}}  # higher than snapshot 1.0
+	var result: Array[Dictionary] = DayOrchestrator._apply_dragon_spiritual_reeval(
+		state, togashi_st, by_id, {}
+	)
+	assert_eq(result.size(), 1)
+	assert_eq(result[0]["character_id"], 99)
+	assert_eq(result[0]["reason"], "spiritual_reeval")
+	assert_eq(int(state["faction_assignments"][99]), IntraClanCivilWar.Faction.LEGITIMACY)
+
+
+func test_spiritual_reeval_no_change_when_concern_same() -> void:
+	var state: Dictionary = _make_dragon_schism_state(10, 20, 3.0)
+	var npc := _make_clan_char(99, "Dragon", "Mirumoto")
+	npc.bushido_virtue = Enums.BushidoVirtue.CHUGI
+	IntraClanCivilWar.assign_faction(state, 99, IntraClanCivilWar.Faction.REBEL)
+	var by_id: Dictionary = {99: npc}
+	var axis_key: int = TogashiOversight.Axis.SPIRITUAL_HEALTH
+	# Current same as snapshot — no worsening
+	var togashi_st: Dictionary = {"dissatisfaction": {axis_key: 3.0}}
+	var result: Array[Dictionary] = DayOrchestrator._apply_dragon_spiritual_reeval(
+		state, togashi_st, by_id, {}
+	)
+	assert_eq(result.size(), 0)
+
+
+func test_spiritual_reeval_togashi_monks_never_reeval() -> void:
+	# Togashi Order monks are auto-assigned — spiritual re-eval skips them.
+	var state: Dictionary = _make_dragon_schism_state(10, 20, 0.0)
+	var monk := _make_clan_char(99, "Dragon", "Togashi")
+	monk.bushido_virtue = Enums.BushidoVirtue.NONE  # would be ronin-candidate otherwise
+	IntraClanCivilWar.assign_faction(state, 99, IntraClanCivilWar.Faction.REBEL)
+	var by_id: Dictionary = {99: monk}
+	var axis_key: int = TogashiOversight.Axis.SPIRITUAL_HEALTH
+	var togashi_st: Dictionary = {"dissatisfaction": {axis_key: 99.0}}
+	var result: Array[Dictionary] = DayOrchestrator._apply_dragon_spiritual_reeval(
+		state, togashi_st, by_id, {}
+	)
+	assert_eq(result.size(), 0)
+
+
+func test_spiritual_reeval_no_snapshot_skips_reeval() -> void:
+	var state: Dictionary = IntraClanCivilWar.make_initial_state(10, 20, "Dragon", 1, 0)
+	state["schism_path"] = "dragon_schism"
+	# No concern_snapshot stored
+	var npc := _make_clan_char(99, "Dragon", "Mirumoto")
+	IntraClanCivilWar.assign_faction(state, 99, IntraClanCivilWar.Faction.REBEL)
+	var by_id: Dictionary = {99: npc}
+	var axis_key: int = TogashiOversight.Axis.SPIRITUAL_HEALTH
+	var togashi_st: Dictionary = {"dissatisfaction": {axis_key: 99.0}}
+	var result: Array[Dictionary] = DayOrchestrator._apply_dragon_spiritual_reeval(
+		state, togashi_st, by_id, {}
+	)
+	assert_eq(result.size(), 0)
+
+
+func test_spiritual_reeval_skips_non_dragon_civil_war() -> void:
+	var state: Dictionary = IntraClanCivilWar.make_initial_state(10, 20, "Lion", 1, 0)
+	var axis_key: int = TogashiOversight.Axis.SPIRITUAL_HEALTH
+	state["concern_snapshot"] = {axis_key: 0.0}
+	var npc := _make_clan_char(99, "Lion", "Matsu")
+	IntraClanCivilWar.assign_faction(state, 99, IntraClanCivilWar.Faction.REBEL)
+	var by_id: Dictionary = {99: npc}
+	var togashi_st: Dictionary = {"dissatisfaction": {axis_key: 99.0}}
+	var result: Array[Dictionary] = DayOrchestrator._apply_dragon_spiritual_reeval(
+		state, togashi_st, by_id, {}
+	)
+	assert_eq(result.size(), 0)
