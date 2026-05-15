@@ -613,7 +613,7 @@ Key: **DONE** = simulation code written and tested | **PARTIAL** = code exists, 
 | s12.11 Inventory System | **DONE** | InventorySystem |
 | s13 Time System | **DONE** | TimeSystem |
 | s14 Action Point System | **DONE** | ActionPointSystem |
-| s15.1–15.8 Court System | **PARTIAL** | CourtSystem, CourtActionSystem, CourtPrioritySystem, CourtAvailability, ImperialEdictSystem done. ASK_FOR_INTRODUCTION done (s55.7.3 spec — Courtier/Etiquette roll, kuge gate, intermediary status gate, Bureaucracy emphasis). Per-type compliance effects for TAX_REFORM, AUTHORIZE_WAR, APPOINT_POSITION, STRIP_AUTONOMY, GENERAL_DECREE need additional GDD specification. |
+| s15.1–15.8 Court System | **DONE** | CourtSystem, CourtActionSystem, CourtPrioritySystem, CourtAvailability, ImperialEdictSystem done. ASK_FOR_INTRODUCTION done. All edict compliance effects implemented: CEASE_HOSTILITIES (war termination), CONDEMN_CLAN (+10 war score vs. clan), AUTHORIZE_WAR (+10 war score for authorized clan), TAX_REFORM (season_meta flag for future ResourceTick), APPOINT_POSITION (+1.0 status to target character), STRIP_AUTONOMY (−5 Honor to Champion, −10 Emperor disposition to status-5+ clan), GENERAL_DECREE (season_meta record). |
 | s16 Topic & Momentum System | **DONE** | TopicMomentumSystem |
 | s17 Personal Visits | **DONE** | PersonalVisitSystem |
 | s18 NPC Objective System | **DONE** | Wired into NPCDecisionEngine |
