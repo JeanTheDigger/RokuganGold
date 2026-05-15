@@ -162,7 +162,7 @@ class ContextSnapshot:
 	var border_province_ids_without_fort: Array[int] = []
 	var surplus_pu_province_ids: Array[int] = []
 	var is_coastal: bool = false
-	var has_ships: bool = false
+	var has_naval_assets: bool = false
 	var has_naval_threat: bool = false
 
 	# Festival state (s11.5)
@@ -198,6 +198,7 @@ class ProvinceStatus:
 	var has_alliance_protection: bool = false
 	var active_crisis_id: int = -1
 	var active_insurgency_id: int = -1
+	var insurgency_type: String = ""
 	var rice_stockpile: float = 0.0
 	var starvation_stage: int = 0
 	var last_report_ic_day: int = -1

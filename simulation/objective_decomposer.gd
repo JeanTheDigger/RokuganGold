@@ -563,6 +563,18 @@ static func _decompose_protect_dependents(
 
 		var unstable: int = _find_unstable_province(ctx, 75)
 		if unstable >= 0:
+			if _province_has_pirate_fleet_insurgency(unstable, ctx):
+				# s57.18.1: naval gate — deploy fleet or escalate diplomatically
+				if ctx.has_naval_assets:
+					return _make_need("DEPLOY_ARMY", 2, {
+						"target_province_id": unstable,
+						"target_intent": "SUPPRESS_PIRACY",
+					})
+				else:
+					return _make_need("REQUEST_AID", 2, {
+						"target_intent": "naval_suppression",
+						"target_province_id": unstable,
+					})
 			return _make_need("PATROL_PROVINCE", 2, {"target_province_id": unstable})
 
 		var rice_per_pu: float = _get_rice_per_pu(ctx)
@@ -729,6 +741,18 @@ static func _decompose_defend_territory(
 		ctx.province_statuses
 	)
 	if triage_mil.score > 0.0 and triage_mil.province_id >= 0:
+		if triage_mil.recommended_need == "PATROL_PROVINCE" \
+				and _province_has_pirate_fleet_insurgency(triage_mil.province_id, ctx):
+			# s57.18.2: naval gate — patrol needs ships
+			if ctx.has_naval_assets:
+				return _make_need("PATROL_PROVINCE", triage_mil.priority, {
+					"target_province_id": triage_mil.province_id,
+				})
+			else:
+				return _make_need("WRITE_LETTER", triage_mil.priority, {
+					"target_intent": "report_piracy",
+					"target_province_id": triage_mil.province_id,
+				})
 		return _make_need(triage_mil.recommended_need, triage_mil.priority, {
 			"target_province_id": triage_mil.province_id,
 		})
@@ -1200,6 +1224,18 @@ static func _find_unstable_province(
 	return -1
 
 
+static func _province_has_pirate_fleet_insurgency(
+	province_id: int,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> bool:
+	for ps: Variant in ctx.province_statuses:
+		if ps is NPCDataStructures.ProvinceStatus:
+			var status: NPCDataStructures.ProvinceStatus = ps
+			if status.province_id == province_id:
+				return status.insurgency_type == "PIRATE_FLEET"
+	return false
+
+
 static func _find_weak_neighbor_province(ctx: NPCDataStructures.ContextSnapshot) -> int:
 	for ps: Variant in ctx.province_statuses:
 		if ps is NPCDataStructures.ProvinceStatus:
@@ -1431,7 +1467,7 @@ static func _decompose_infrastructure(
 		})
 
 	# 4. Coastal with naval threats and no ships → COMMISSION_SHIP (priority 3)
-	if ctx.is_coastal and ctx.has_naval_threat and not ctx.has_ships:
+	if ctx.is_coastal and ctx.has_naval_threat and not ctx.has_naval_assets:
 		return _make_need("BUILD_INFRASTRUCTURE", 3, {
 			"target_intent": "COMMISSION_SHIP",
 		})

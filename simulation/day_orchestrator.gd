@@ -8577,7 +8577,7 @@ static func _populate_infrastructure_intelligence(
 	var border_no_fort: Dictionary = {}  # province_id → clan
 	var surplus_pu: Dictionary = {}  # province_id → clan
 	var coastal: bool = false
-	var has_ships_flag: bool = false
+	var has_naval_assets_flag: bool = false
 	var naval_threat: bool = false
 
 	var province_settlements: Dictionary = {}
@@ -8634,7 +8634,7 @@ static func _populate_infrastructure_intelligence(
 	# Coastal / naval detection
 	for s: ShipData in ships:
 		if not s.is_destroyed:
-			has_ships_flag = true
+			has_naval_assets_flag = true
 			break
 
 	# Naval threat: at war AND enemy clan has ships
@@ -8653,7 +8653,7 @@ static func _populate_infrastructure_intelligence(
 	world_states["border_province_ids_without_fort"] = border_no_fort
 	world_states["surplus_pu_province_ids"] = surplus_pu
 	world_states["is_coastal"] = coastal
-	world_states["has_ships"] = has_ships_flag
+	world_states["has_naval_assets"] = has_naval_assets_flag
 	world_states["has_naval_threat"] = naval_threat
 
 

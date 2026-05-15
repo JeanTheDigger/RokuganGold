@@ -99,9 +99,10 @@ static func build_context(
 			var prov_data: Array = world_state.get("province_data", [])
 			var settlements_arr: Array = world_state.get("settlements", [])
 			var armies_arr: Array = world_state.get("active_armies", [])
+			var insurgencies_arr: Array = world_state.get("active_insurgencies", [])
 			if not prov_data.is_empty():
 				ctx.province_statuses = build_province_statuses_from_data(
-					prov_data, settlements_arr, armies_arr,
+					prov_data, settlements_arr, armies_arr, insurgencies_arr,
 				)
 		ctx.feasibility_data = _build_feasibility_data(character, world_state)
 
@@ -165,7 +166,7 @@ static func build_context(
 		world_state.get("surplus_pu_province_ids", {}), character.clan,
 	)
 	ctx.is_coastal = world_state.get("is_coastal", false)
-	ctx.has_ships = world_state.get("has_ships", false)
+	ctx.has_naval_assets = world_state.get("has_naval_assets", false)
 	ctx.has_naval_threat = world_state.get("has_naval_threat", false)
 
 	# Festival state (s11.5)
@@ -1465,6 +1466,7 @@ static func build_province_statuses_from_data(
 	province_data: Array,
 	settlements: Array = [],
 	active_armies: Array = [],
+	active_insurgencies: Array = [],
 ) -> Array:
 	var result: Array = []
 	var settlement_garrison: Dictionary = {}
@@ -1503,6 +1505,10 @@ static func build_province_statuses_from_data(
 		ps.stability = pd.stability
 		ps.active_crisis_id = pd.active_crisis_id
 		ps.active_insurgency_id = pd.active_insurgency_id
+		for ins: Variant in active_insurgencies:
+			if ins is InsurgencyData and ins.province_id == pd.province_id:
+				ps.insurgency_type = Enums.InsurgencyType.keys()[ins.insurgency_type]
+				break
 		ps.last_report_ic_day = pd.last_report_ic_day
 		ps.garrison_pu = settlement_garrison.get(pd.province_id, 0)
 		ps.total_settlement_pu = settlement_total_pu.get(pd.province_id, 0)

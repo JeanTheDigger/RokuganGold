@@ -622,7 +622,7 @@ func test_infra_coastal_naval_threat_commissions_ship() -> void:
 	var ctx := _make_ctx()
 	ctx.is_coastal = true
 	ctx.has_naval_threat = true
-	ctx.has_ships = false
+	ctx.has_naval_assets =false
 	var obj := {"need_type": "BUILD_INFRASTRUCTURE", "priority": 2}
 	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, ctx)
 	assert_eq(need.need_type, "BUILD_INFRASTRUCTURE")
@@ -634,7 +634,7 @@ func test_infra_coastal_with_ships_no_commission() -> void:
 	var ctx := _make_ctx()
 	ctx.is_coastal = true
 	ctx.has_naval_threat = true
-	ctx.has_ships = true
+	ctx.has_naval_assets =true
 	var obj := {"need_type": "BUILD_INFRASTRUCTURE", "priority": 2}
 	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, ctx)
 	assert_eq(need.need_type, "REST")
@@ -670,7 +670,7 @@ func test_infra_village_takes_priority_over_ship() -> void:
 	ctx.surplus_pu_province_ids = [30]
 	ctx.is_coastal = true
 	ctx.has_naval_threat = true
-	ctx.has_ships = false
+	ctx.has_naval_assets =false
 	var obj := {"need_type": "BUILD_INFRASTRUCTURE", "priority": 2}
 	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, ctx)
 	assert_eq(need.target_intent, "FOUND_VILLAGE")
