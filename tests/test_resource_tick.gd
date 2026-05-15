@@ -709,6 +709,36 @@ func test_arms_redirect_zero_amount_no_change() -> void:
 	assert_almost_eq(imperial_clan.arms_stockpile, 5.0, 0.001)
 
 
+func test_arms_redirect_drains_pending_on_imperial_clan_arrival() -> void:
+	var meta: Dictionary = {"_clan_data": {}}
+	ResourceTick.apply_warlike_arms_redirect(2.0, meta)
+	ResourceTick.apply_warlike_arms_redirect(3.0, meta)
+	assert_almost_eq(float(meta["_imperial_arms_pending"]), 5.0, 0.001)
+	# Now Imperial ClanData appears
+	var imperial_clan := ClanData.new()
+	imperial_clan.clan_name = "Imperial"
+	imperial_clan.arms_stockpile = 0.0
+	meta["_clan_data"] = {"Imperial": imperial_clan}
+	var result: Dictionary = ResourceTick.apply_warlike_arms_redirect(1.0, meta)
+	# Should drain 5.0 pending + 1.0 new = 6.0 total
+	assert_eq(result["applied_to"], "Imperial")
+	assert_almost_eq(result["amount"], 6.0, 0.001)
+	assert_almost_eq(result["drained_pending"], 5.0, 0.001)
+	assert_almost_eq(imperial_clan.arms_stockpile, 6.0, 0.001)
+	assert_false(meta.has("_imperial_arms_pending"))
+
+
+func test_arms_redirect_no_pending_drain_key_absent() -> void:
+	var imperial_clan := ClanData.new()
+	imperial_clan.clan_name = "Imperial"
+	imperial_clan.arms_stockpile = 0.0
+	var meta: Dictionary = {"_clan_data": {"Imperial": imperial_clan}}
+	var result: Dictionary = ResourceTick.apply_warlike_arms_redirect(2.0, meta)
+	assert_almost_eq(result["drained_pending"], 0.0, 0.001)
+	assert_almost_eq(imperial_clan.arms_stockpile, 2.0, 0.001)
+	assert_false(meta.has("_imperial_arms_pending"))
+
+
 func test_arms_redirect_does_not_touch_other_clans() -> void:
 	var crab_clan := ClanData.new()
 	crab_clan.clan_name = "Crab"

@@ -544,8 +544,12 @@ static func apply_warlike_arms_redirect(
 	var clan_data: Dictionary = settlement_meta.get("_clan_data", {})
 	if clan_data.has("Imperial"):
 		var cd: ClanData = clan_data["Imperial"]
-		cd.arms_stockpile += arms_redirect
-		return {"applied_to": "Imperial", "amount": arms_redirect}
+		var pending: float = float(settlement_meta.get("_imperial_arms_pending", 0.0))
+		var total: float = arms_redirect + pending
+		cd.arms_stockpile += total
+		if pending > 0.0:
+			settlement_meta.erase("_imperial_arms_pending")
+		return {"applied_to": "Imperial", "amount": total, "drained_pending": pending}
 	settlement_meta["_imperial_arms_pending"] = (
 		float(settlement_meta.get("_imperial_arms_pending", 0.0)) + arms_redirect
 	)
