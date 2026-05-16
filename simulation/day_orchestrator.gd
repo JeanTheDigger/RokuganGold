@@ -441,6 +441,11 @@ static func advance_day(
 		next_topic_id, active_topics, lord_map,
 	)
 
+	var seppuku_results: Array[Dictionary] = _process_seppuku_responses(
+		conviction_results, crime_records, characters_by_id,
+		ic_day, next_topic_id, active_topics,
+	)
+
 	var info_results: Array[Dictionary] = _process_info_events(
 		day_result.get("applied", []),
 		characters_by_id,
@@ -694,6 +699,7 @@ static func advance_day(
 		"commitment_results": commitment_results,
 		"uphold_law_results": uphold_law_results,
 		"conviction_results": conviction_results,
+		"seppuku_results": seppuku_results,
 		"orphan_results": orphan_results,
 		"strategic_results": strategic_results,
 		"festival_results": festival_results,
@@ -2769,6 +2775,43 @@ static func _build_lord_map(characters: Array[L5RCharacterData]) -> Dictionary:
 		if c.lord_id >= 0:
 			result[c.character_id] = c.lord_id
 	return result
+
+
+static func _process_seppuku_responses(
+	conviction_results: Array[Dictionary],
+	crime_records: Array[CrimeRecord],
+	characters_by_id: Dictionary,
+	ic_day: int,
+	next_topic_id: Array[int],
+	active_topics: Array[TopicData],
+) -> Array[Dictionary]:
+	var results: Array[Dictionary] = []
+	for conviction: Dictionary in conviction_results:
+		if conviction.get("outcome", "") != "convicted":
+			continue
+		if not conviction.get("seppuku_offered", false):
+			continue
+		var char_id: int = conviction.get("accused_id", -1)
+		var character: L5RCharacterData = characters_by_id.get(char_id)
+		if character == null:
+			continue
+		var case_id: int = conviction.get("case_id", -1)
+		var record: CrimeRecord = null
+		for r: CrimeRecord in crime_records:
+			if r.case_id == case_id:
+				record = r
+				break
+		if record == null:
+			continue
+		var decision := SeppukuDecision.will_accept_seppuku(character)
+		var accepted: bool = decision.get("accepts", false)
+		var resolution := ConvictionProcessor.resolve_seppuku(
+			record, character, accepted, ic_day, next_topic_id
+		)
+		if resolution.get("applicable", false):
+			resolution["decision_reason"] = decision.get("reason", "")
+			results.append(resolution)
+	return results
 
 
 static func _season_to_name(season: int) -> String:
