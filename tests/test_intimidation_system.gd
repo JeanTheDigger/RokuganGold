@@ -138,8 +138,8 @@ func test_pushback_tn():
 
 
 func test_compliance_ends_at_friend_disposition():
-	assert_true(IntimidationSystem.can_compliance_end(51))
-	assert_false(IntimidationSystem.can_compliance_end(50))
+	assert_true(IntimidationSystem.can_compliance_end(31))
+	assert_false(IntimidationSystem.can_compliance_end(30))
 
 
 # -- Disposition defense modifier tests ---------------------------------------
