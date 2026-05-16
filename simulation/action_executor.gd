@@ -287,7 +287,7 @@ static func execute(
 	if primary_skill.is_empty() or primary_skill.begins_with("_"):
 		return _execute_no_roll(action, character, ctx)
 
-	var tn: int = _get_tn_for_action(action_id, action, ctx, worship_province_malus)
+	var tn: int = _get_tn_for_action(action_id, action, ctx, worship_province_malus, character)
 	var wc_bonus: int = _get_winter_court_skill_bonus(character, primary_skill, ctx)
 	var roll_result: Dictionary = SkillResolver.resolve_skill_check(
 		character, dice_engine, primary_skill, tn, 0, "", Enums.Trait.NONE, 0, 0, wc_bonus
@@ -762,7 +762,7 @@ static func _execute_broadcast_social(
 	var action_id: String = action.action_id
 	var skill_entry: Dictionary = action_skill_map.get(action_id, {})
 	var primary_skill: String = skill_entry.get("primary", "Courtier")
-	var tn: int = _get_social_tn(action, ctx)
+	var tn: int = _get_social_tn(action, ctx, character)
 	var roll_result: Dictionary = SkillResolver.resolve_skill_check(
 		character, dice_engine, primary_skill, tn
 	)
@@ -1101,9 +1101,10 @@ static func _get_tn_for_action(
 	action: NPCDataStructures.ScoredAction,
 	ctx: NPCDataStructures.ContextSnapshot,
 	worship_province_malus: Dictionary = {},
+	character: L5RCharacterData = null,
 ) -> int:
 	if action_id in SOCIAL_ACTIONS:
-		return _get_social_tn(action, ctx)
+		return _get_social_tn(action, ctx, character)
 	if action_id in COVERT_ACTIONS:
 		return COVERT_BASE_TN
 	if action_id in MILITARY_ORDERS:
@@ -1119,6 +1120,7 @@ static func _get_tn_for_action(
 static func _get_social_tn(
 	action: NPCDataStructures.ScoredAction,
 	ctx: NPCDataStructures.ContextSnapshot,
+	character: L5RCharacterData = null,
 ) -> int:
 	var tn: int = SOCIAL_BASE_TN
 	var target_disp: int = ctx.dispositions.get(action.target_npc_id, 0)
@@ -1135,6 +1137,10 @@ static func _get_social_tn(
 		tn -= 10  # Trusted Ally: 2 Free Raises
 	elif target_disp >= 31:
 		tn -= 5   # Friend: 1 Free Raise
+
+	if character != null and action.action_id in ["PUBLIC_DECLARATION", "OFFER_FAVOR"]:
+		var honor_mod: int = HonorGlorySystem.get_court_honor_modifier(character)
+		tn -= honor_mod * 5
 
 	return maxi(tn, 5)
 
@@ -2426,6 +2432,10 @@ static func _execute_contested_court_action(
 		defender_roll = dice_engine.roll_skill_check(
 			d_trait_val, d_skill_rank, 0
 		).get("total", 0)
+
+	if action_id == "OFFER_FAVOR":
+		var honor_mod: int = HonorGlorySystem.get_court_honor_modifier(character)
+		attacker_roll += honor_mod * 5
 
 	var margin: int = attacker_roll - defender_roll
 	var raises: int = maxi(int(margin / 5.0), 0)

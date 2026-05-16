@@ -132,3 +132,55 @@ func test_event_table_constants_defined() -> void:
 	assert_eq(HonorGlorySystem.HONOR_RENEGE_DECLARATION, -1.0)
 	assert_eq(HonorGlorySystem.ATONEMENT_HONOR_BY_TIER[1], 1.0)
 	assert_eq(HonorGlorySystem.ATONEMENT_TN_BY_TIER[4], 15)
+
+
+# -- Court Honor Modifier Wiring (s4.6 into action_executor) -------------------
+
+func _make_action(action_id: String, target_id: int = 0) -> NPCDataStructures.ScoredAction:
+	var a: NPCDataStructures.ScoredAction = NPCDataStructures.ScoredAction.new()
+	a.action_id = action_id
+	a.target_npc_id = target_id
+	a.metadata = {}
+	return a
+
+
+func _make_ctx(target_disp: int = 0) -> NPCDataStructures.ContextSnapshot:
+	var ctx: NPCDataStructures.ContextSnapshot = NPCDataStructures.ContextSnapshot.new()
+	ctx.dispositions = {0: target_disp}
+	return ctx
+
+
+func test_social_tn_public_declaration_honor_7_lowers_tn() -> void:
+	_char.honor = 7.5
+	var action: NPCDataStructures.ScoredAction = _make_action("PUBLIC_DECLARATION")
+	var ctx: NPCDataStructures.ContextSnapshot = _make_ctx(0)
+	var tn: int = ActionExecutor._get_social_tn(action, ctx, _char)
+	var base_tn: int = ActionExecutor._get_social_tn(action, ctx, null)
+	assert_eq(base_tn - tn, 10)
+
+
+func test_social_tn_public_declaration_honor_1_raises_tn() -> void:
+	_char.honor = 1.0
+	var action: NPCDataStructures.ScoredAction = _make_action("PUBLIC_DECLARATION")
+	var ctx: NPCDataStructures.ContextSnapshot = _make_ctx(0)
+	var tn: int = ActionExecutor._get_social_tn(action, ctx, _char)
+	var base_tn: int = ActionExecutor._get_social_tn(action, ctx, null)
+	assert_eq(tn - base_tn, 10)
+
+
+func test_social_tn_charm_unaffected_by_honor() -> void:
+	_char.honor = 7.5
+	var action: NPCDataStructures.ScoredAction = _make_action("CHARM")
+	var ctx: NPCDataStructures.ContextSnapshot = _make_ctx(0)
+	var tn_with: int = ActionExecutor._get_social_tn(action, ctx, _char)
+	var tn_without: int = ActionExecutor._get_social_tn(action, ctx, null)
+	assert_eq(tn_with, tn_without)
+
+
+func test_social_tn_honor_3_no_modifier() -> void:
+	_char.honor = 3.5
+	var action: NPCDataStructures.ScoredAction = _make_action("PUBLIC_DECLARATION")
+	var ctx: NPCDataStructures.ContextSnapshot = _make_ctx(0)
+	var tn: int = ActionExecutor._get_social_tn(action, ctx, _char)
+	var base_tn: int = ActionExecutor._get_social_tn(action, ctx, null)
+	assert_eq(tn, base_tn)
