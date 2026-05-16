@@ -91,6 +91,7 @@ static func advance_day(
 	_populate_infrastructure_intelligence(world_states, provinces, settlements, ships, worship_state)
 	_populate_vacancy_intelligence(world_states, characters, characters_by_id, companies, settlements, provinces, season_meta)
 	_populate_resource_stockpiles(world_states, characters, provinces, settlements, clans, companies)
+	_populate_crime_suppression_data(world_states, settlements, provinces, current_season)
 
 	var festival_results: Dictionary = _process_festivals(ic_day, world_states)
 
@@ -412,6 +413,10 @@ static func advance_day(
 		active_topics, next_topic_id,
 	)
 
+	var hierarchy_cascade_results: Array[int] = _process_operational_death_cascade(
+		death_events, characters,
+	)
+
 	var succession_results: Array[Dictionary] = _process_successions(
 		active_successions, characters_by_id
 	)
@@ -574,6 +579,7 @@ static func advance_day(
 			next_insurgency_id, world_states, worship_maluses,
 			season_meta,
 		)
+		_process_doshin_seasonal_recovery(world_states)
 		_tick_kuni_wards(season_meta)
 		season_meta.erase("patrolled_provinces")
 		_process_construction_completions(
@@ -703,6 +709,7 @@ static func advance_day(
 		"conviction_results": conviction_results,
 		"seppuku_results": seppuku_results,
 		"orphan_results": orphan_results,
+		"hierarchy_cascade_results": hierarchy_cascade_results,
 		"strategic_results": strategic_results,
 		"festival_results": festival_results,
 		"favor_results": favor_results,
@@ -2644,6 +2651,24 @@ static func _process_lord_deaths(
 						SuccessionSystem.apply_successor_inheritance(chosen, deceased)
 
 	return all_results
+
+
+static func _process_operational_death_cascade(
+	death_events: Array[Dictionary],
+	characters: Array[L5RCharacterData],
+) -> Array[int]:
+	if death_events.is_empty():
+		return []
+	var all_cleared: Array[int] = []
+	for event: Dictionary in death_events:
+		var dead_id: int = event.get("character_id", -1)
+		if dead_id < 0:
+			continue
+		var cleared: Array[int] = OperationalHierarchySystem.clear_subordinates_on_death(
+			dead_id, characters
+		)
+		all_cleared.append_array(cleared)
+	return all_cleared
 
 
 static func _process_successions(
@@ -10256,6 +10281,80 @@ static func _populate_resource_stockpiles(
 			"military_upkeep": maxf(clan_military_upkeep.get(c.clan, 0.0), 0.01),
 		}
 		ws["available_levy_pu"] = total_military_pu
+
+
+# -- Crime Suppression Data (s11.3.19) -----------------------------------------
+
+static func _populate_crime_suppression_data(
+	world_states: Dictionary,
+	settlements: Array[SettlementData],
+	provinces: Dictionary,
+	current_season: int,
+) -> void:
+	var is_planting_or_harvest: bool = (
+		current_season == TimeSystem.Season.SPRING
+		or current_season == TimeSystem.Season.AUTUMN
+	)
+
+	var doshin_losses_map: Dictionary = world_states.get("_doshin_losses", {})
+
+	var per_settlement: Dictionary = {}
+	for s: SettlementData in settlements:
+		var prov: Variant = provinces.get(s.province_id)
+		var stability: int = 50
+		if prov is ProvinceData:
+			stability = int((prov as ProvinceData).stability)
+
+		var size: CrimeSuppressionSystem.SettlementSize = _classify_settlement_size(s)
+		var losses: int = int(doshin_losses_map.get(s.settlement_id, 0))
+
+		var available: int = CrimeSuppressionSystem.get_available_doshin(
+			size, losses, is_planting_or_harvest, stability
+		)
+		var bonus: int = CrimeSuppressionSystem.get_doshin_investigation_bonus(available)
+		var suppression_bonus: int = CrimeSuppressionSystem.get_doshin_suppression_bonus(available)
+
+		per_settlement[s.settlement_id] = {
+			"doshin_available": available,
+			"doshin_investigation_bonus": bonus,
+			"doshin_suppression_bonus": suppression_bonus,
+			"max_recruitable": CrimeSuppressionSystem.get_max_recruitable(available),
+		}
+
+	world_states["_crime_suppression_data"] = per_settlement
+
+
+static func _process_doshin_seasonal_recovery(world_states: Dictionary) -> void:
+	var losses_map: Dictionary = world_states.get("_doshin_losses", {})
+	if losses_map.is_empty():
+		return
+	var keys_to_erase: Array = []
+	for settlement_id: Variant in losses_map:
+		var current_losses: int = int(losses_map[settlement_id])
+		var new_losses: int = CrimeSuppressionSystem.process_doshin_recovery(current_losses)
+		if new_losses <= 0:
+			keys_to_erase.append(settlement_id)
+		else:
+			losses_map[settlement_id] = new_losses
+	for k: Variant in keys_to_erase:
+		losses_map.erase(k)
+
+
+static func _classify_settlement_size(s: SettlementData) -> CrimeSuppressionSystem.SettlementSize:
+	var pu: int = s.population_pu
+	if pu >= 20:
+		return CrimeSuppressionSystem.SettlementSize.MAJOR_CITY
+	if pu >= 10:
+		return CrimeSuppressionSystem.SettlementSize.CITY
+	if pu >= 5:
+		return CrimeSuppressionSystem.SettlementSize.TOWN
+	if pu >= 2:
+		return CrimeSuppressionSystem.SettlementSize.CASTLE_TOWN
+	if pu >= 1:
+		return CrimeSuppressionSystem.SettlementSize.LARGE_VILLAGE
+	if pu > 0:
+		return CrimeSuppressionSystem.SettlementSize.VILLAGE
+	return CrimeSuppressionSystem.SettlementSize.REMOTE
 
 
 # -- Civil War Seasonal Processing (s53.2) ------------------------------------
