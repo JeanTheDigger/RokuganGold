@@ -69,7 +69,7 @@ func test_examine_scene_high_raises_identifies_suspect() -> void:
 		assert_true(5 in cr.known_suspects)
 
 
-func test_examine_scene_elapsed_time_reduces_evidence() -> void:
+func test_examine_scene_elapsed_time_increases_difficulty() -> void:
 	var mag := _make_magistrate(5)
 	var cr_fresh := _make_crime_record(10, 10)
 	var cr_old := _make_crime_record(10, 0)
@@ -78,7 +78,8 @@ func test_examine_scene_elapsed_time_reduces_evidence() -> void:
 	_dice.set_seed(42)
 	var result_old: Dictionary = InvestigationSystem.examine_scene(mag, cr_old, _dice, 10)
 	if result_fresh["success"] and result_old["success"]:
-		assert_true(result_fresh["evidence_gained"] >= result_old["evidence_gained"])
+		assert_true(result_fresh["evidence_gained"] >= result_old["evidence_gained"],
+			"Fresh scene should yield same or more evidence than old scene")
 
 
 func test_examine_scene_uses_concealment_tn() -> void:
@@ -492,3 +493,205 @@ func test_find_crime_record_wrong_type() -> void:
 	var records: Array[CrimeRecord] = [cr]
 	var found: CrimeRecord = InvestigationSystem.find_crime_record_for_topic(topic, records)
 	assert_null(found)
+
+
+# -- Evidence Thresholds (s11.3.13f) -------------------------------------------
+
+func test_accusation_threshold_transitions_status() -> void:
+	var cr := _make_crime_record()
+	cr.evidence_total = 39
+	var result: String = InvestigationSystem.add_evidence(cr, 5)
+	assert_eq(result, "accusation")
+	assert_eq(cr.legal_status, Enums.LegalStatus.ACCUSED)
+	assert_eq(cr.evidence_total, 44)
+
+
+func test_bribery_eval_trigger() -> void:
+	var cr := _make_crime_record()
+	cr.evidence_total = 20
+	var result: String = InvestigationSystem.add_evidence(cr, 6)
+	assert_eq(result, "bribery_eval")
+	assert_eq(cr.evidence_total, 26)
+
+
+func test_below_bribery_trigger_returns_empty() -> void:
+	var cr := _make_crime_record()
+	cr.evidence_total = 10
+	var result: String = InvestigationSystem.add_evidence(cr, 5)
+	assert_eq(result, "")
+
+
+func test_accusation_does_not_re_trigger_if_already_accused() -> void:
+	var cr := _make_crime_record()
+	cr.evidence_total = 45
+	cr.legal_status = Enums.LegalStatus.ACCUSED
+	var result: String = InvestigationSystem.check_thresholds(cr)
+	assert_eq(result, "")
+
+
+func test_accusation_does_not_re_trigger_if_convicted() -> void:
+	var cr := _make_crime_record()
+	cr.evidence_total = 50
+	cr.legal_status = Enums.LegalStatus.CONVICTED
+	var result: String = InvestigationSystem.check_thresholds(cr)
+	assert_eq(result, "")
+
+
+# -- Scene Time Penalty (s11.3.13d) --------------------------------------------
+
+func test_scene_penalty_same_day() -> void:
+	assert_eq(InvestigationSystem.get_scene_time_penalty(0), 0)
+
+
+func test_scene_penalty_same_week() -> void:
+	assert_eq(InvestigationSystem.get_scene_time_penalty(5), 2)
+
+
+func test_scene_penalty_same_month() -> void:
+	assert_eq(InvestigationSystem.get_scene_time_penalty(20), 5)
+
+
+func test_scene_penalty_previous_month() -> void:
+	assert_eq(InvestigationSystem.get_scene_time_penalty(45), 10)
+
+
+func test_scene_penalty_approaching_season() -> void:
+	assert_eq(InvestigationSystem.get_scene_time_penalty(80), 15)
+
+
+func test_scene_penalty_beyond_season() -> void:
+	assert_eq(InvestigationSystem.get_scene_time_penalty(100), 99)
+
+
+func test_scene_too_old() -> void:
+	assert_false(InvestigationSystem.is_scene_too_old(89))
+	assert_true(InvestigationSystem.is_scene_too_old(91))
+
+
+# -- Witness Recall TN (s11.3.13b) ---------------------------------------------
+
+func test_recall_tn_same_day() -> void:
+	assert_eq(InvestigationSystem.get_witness_recall_tn(0), 10)
+
+
+func test_recall_tn_same_month() -> void:
+	assert_eq(InvestigationSystem.get_witness_recall_tn(15), 15)
+
+
+func test_recall_tn_previous_month() -> void:
+	assert_eq(InvestigationSystem.get_witness_recall_tn(45), 20)
+
+
+func test_recall_tn_two_months() -> void:
+	assert_eq(InvestigationSystem.get_witness_recall_tn(75), 25)
+
+
+func test_recall_tn_approaching_season() -> void:
+	assert_eq(InvestigationSystem.get_witness_recall_tn(88), 30)
+
+
+func test_recall_too_old_returns_negative() -> void:
+	assert_eq(InvestigationSystem.get_witness_recall_tn(100), -1)
+
+
+func test_recall_too_old_check() -> void:
+	assert_false(InvestigationSystem.is_recall_too_old(89))
+	assert_true(InvestigationSystem.is_recall_too_old(91))
+
+
+# -- Additional Evidence Sources (s11.3.13f) -----------------------------------
+
+func test_failed_bribe_evidence() -> void:
+	var cr := _make_crime_record()
+	InvestigationSystem.add_failed_bribe_evidence(cr)
+	assert_eq(cr.evidence_total, 15)
+
+
+func test_false_alibi_evidence() -> void:
+	var cr := _make_crime_record()
+	InvestigationSystem.add_false_alibi_evidence(cr)
+	assert_eq(cr.evidence_total, 10)
+
+
+func test_kitsuki_eye_evidence() -> void:
+	var cr := _make_crime_record()
+	InvestigationSystem.add_kitsuki_eye_evidence(cr)
+	assert_eq(cr.evidence_total, 15)
+
+
+func test_confession_evidence_reaches_accusation() -> void:
+	var cr := _make_crime_record()
+	var result: String = InvestigationSystem.add_confession_evidence(cr)
+	assert_eq(cr.evidence_total, 50)
+	assert_eq(result, "accusation")
+	assert_eq(cr.legal_status, Enums.LegalStatus.ACCUSED)
+
+
+func test_murder_weapon_evidence_reaches_accusation() -> void:
+	var cr := _make_crime_record()
+	var result: String = InvestigationSystem.add_murder_weapon_evidence(cr)
+	assert_eq(cr.evidence_total, 40)
+	assert_eq(result, "accusation")
+
+
+func test_co_conspirator_evidence_clamped() -> void:
+	var cr := _make_crime_record()
+	InvestigationSystem.add_co_conspirator_evidence(cr, 0)
+	assert_eq(cr.evidence_total, InvestigationSystem.EVIDENCE_CO_CONSPIRATOR_MIN)
+
+
+func test_co_conspirator_evidence_high_quality() -> void:
+	var cr := _make_crime_record()
+	InvestigationSystem.add_co_conspirator_evidence(cr, 10)
+	assert_eq(cr.evidence_total, InvestigationSystem.EVIDENCE_CO_CONSPIRATOR_MAX)
+
+
+func test_intercepted_letter_evidence_scales() -> void:
+	var cr := _make_crime_record()
+	InvestigationSystem.add_intercepted_letter_evidence(cr, 2)
+	assert_eq(cr.evidence_total, 40)
+
+
+func test_intercepted_letter_evidence_clamped_max() -> void:
+	var cr := _make_crime_record()
+	InvestigationSystem.add_intercepted_letter_evidence(cr, 10)
+	assert_eq(cr.evidence_total, InvestigationSystem.EVIDENCE_INTERCEPTED_LETTER_MAX)
+
+
+# -- Scene Evidence by Margin (s11.3.13d) --------------------------------------
+
+func test_scene_evidence_minor_traces() -> void:
+	var evidence: int = InvestigationSystem._scene_evidence_by_margin(3)
+	assert_eq(evidence, InvestigationSystem.SCENE_EVIDENCE_MINOR)
+
+
+func test_scene_evidence_significant() -> void:
+	var evidence: int = InvestigationSystem._scene_evidence_by_margin(7)
+	assert_eq(evidence, InvestigationSystem.SCENE_EVIDENCE_SIGNIFICANT)
+
+
+func test_scene_evidence_major() -> void:
+	var evidence: int = InvestigationSystem._scene_evidence_by_margin(12)
+	assert_eq(evidence, InvestigationSystem.SCENE_EVIDENCE_MAJOR)
+
+
+# -- Examine Scene with New Evidence Values ------------------------------------
+
+func test_examine_scene_returns_threshold_crossed() -> void:
+	var mag := _make_magistrate(5)
+	mag.perception = 5
+	var cr := _make_crime_record(5, 0)
+	cr.evidence_total = 35
+	_dice.set_seed(7)
+	var result: Dictionary = InvestigationSystem.examine_scene(mag, cr, _dice, 0)
+	if result["success"]:
+		assert_true(result.has("threshold_crossed"))
+
+
+func test_examine_scene_open_killing_concealment_zero() -> void:
+	var mag := _make_magistrate(3)
+	var cr := _make_crime_record(0, 0)
+	_dice.set_seed(42)
+	var result: Dictionary = InvestigationSystem.examine_scene(mag, cr, _dice, 0)
+	assert_true(result["success"])
+	assert_true(result["evidence_gained"] >= InvestigationSystem.SCENE_EVIDENCE_MINOR)
