@@ -153,12 +153,23 @@ func test_duel_trigger_low_iaijutsu_no_champion_fails() -> void:
 func test_duel_trigger_champion_present_passes_capability() -> void:
 	var c := _make_character(1, Enums.BushidoVirtue.GI)
 	c.skills = {"Iaijutsu": 1}
-	c.disposition_values = {10: 30.0}
+	c.disposition_values = {10: 31.0}
 	var ctx := _make_ctx()
 	ctx.characters_present = [10]
 	var trigger: Dictionary = {"target_npc_id": 5, "trigger_type": "public_insult"}
 	var result: Dictionary = ReactiveDecisions.evaluate_duel_trigger(c, trigger, ctx)
 	assert_eq(result.get("action", ""), "ISSUE_DUEL_CHALLENGE")
+
+
+func test_duel_trigger_champion_acquaintance_not_enough() -> void:
+	var c := _make_character(1, Enums.BushidoVirtue.GI)
+	c.skills = {"Iaijutsu": 1}
+	c.disposition_values = {10: 30.0}
+	var ctx := _make_ctx()
+	ctx.characters_present = [10]
+	var trigger: Dictionary = {"target_npc_id": 5, "trigger_type": "public_insult"}
+	var result: Dictionary = ReactiveDecisions.evaluate_duel_trigger(c, trigger, ctx)
+	assert_true(result.is_empty())
 
 
 func test_duel_trigger_dosatsu_needs_intel() -> void:

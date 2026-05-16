@@ -118,7 +118,7 @@ static func _passes_capability_check(
 		if cid == character.character_id:
 			continue
 		var disp: float = character.disposition_values.get(cid, 0.0)
-		if disp >= 25.0:
+		if disp >= 31.0:
 			return true
 
 	return false
