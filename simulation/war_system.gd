@@ -313,8 +313,11 @@ static func process_seasonal_attrition(war: WarData) -> void:
 	apply_score_shift(war, "seasonal_attrition", war.initiator_clan)
 
 
+# GDD s53 specifies this penalty exists but does not give a value. -2/season is a placeholder.
+const WAR_DISPOSITION_PENALTY_PER_SEASON: int = -2
+
 static func get_active_war_disposition_penalty(seasons_active: int) -> int:
-	return -2 * seasons_active
+	return WAR_DISPOSITION_PENALTY_PER_SEASON * seasons_active
 
 
 # -- Province Capture Tracking ---------------------------------------------------
