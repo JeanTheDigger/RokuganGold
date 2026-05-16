@@ -758,7 +758,7 @@ func test_generate_replies_skips_undeliverable():
 	)
 	assert_eq(replies.size(), 0)
 
-func test_generate_replies_applies_exchange_bonus():
+func test_generate_replies_does_not_apply_exchange_bonus():
 	var dice := DiceEngine.new()
 	dice.set_seed(42)
 	var sender := _make_char(1, 3)
@@ -785,8 +785,32 @@ func test_generate_replies_applies_exchange_bonus():
 		delivery_results, pending, chars, 0, dice, next_id
 	)
 	if replies.size() > 0:
-		assert_eq(sender.disposition_values[2], 31)
-		assert_eq(recipient.disposition_values[1], 81)
+		# Exchange bonus deferred until reply arrives (per GDD s12.7)
+		assert_eq(sender.disposition_values[2], 30)
+		assert_eq(recipient.disposition_values[1], 80)
+
+
+func test_exchange_bonus_applied_when_reply_delivered():
+	var dice := DiceEngine.new()
+	dice.set_seed(42)
+	var sender := _make_char(1, 3)
+	sender.disposition_values[2] = 30
+	var recipient := _make_char(2, 3)
+	recipient.disposition_values[1] = 50
+	var chars: Dictionary = {1: sender, 2: recipient}
+	var log: Array[Dictionary] = []
+
+	# Create a reply letter from recipient(2) to sender(1), same province (arrives immediately)
+	var reply: LetterData = LetterSystem.write_letter(
+		100, recipient, 1, 10, 0, dice, 0,
+		0, 0, 0, false, Enums.Trait.AWARENESS, true
+	)
+	var pending: Array = [reply]
+	LetterSystem.process_pending_letters(pending, chars, 0, 1, log)
+
+	# Exchange bonus: both get +1
+	assert_eq(sender.disposition_values[2], 31)
+	assert_eq(recipient.disposition_values[1], 51)
 
 func test_generate_replies_uses_original_route():
 	var dice := DiceEngine.new()

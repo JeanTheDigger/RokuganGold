@@ -390,6 +390,11 @@ static func process_pending_letters(
 						delivery["is_forged"] = true
 						delivery["forged_sender_id"] = item.forged_sender_id
 						delivery["forgery_detected"] = item.forgery_detected
+					if item.is_reply:
+						var sender_char: L5RCharacterData = characters_by_id.get(item.sender_id)
+						if sender_char != null:
+							apply_exchange_bonus(sender_char, recipient)
+							delivery["exchange_bonus_applied"] = true
 					results.append(delivery)
 
 	return results
@@ -450,8 +455,6 @@ static func generate_replies(
 			Enums.Trait.AWARENESS, true,
 		)
 		replies.append(reply)
-
-		apply_exchange_bonus(sender, recipient)
 
 	return replies
 
