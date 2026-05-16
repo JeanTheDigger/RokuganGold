@@ -327,14 +327,11 @@ static func get_storm_defense_bonus(has_fortification: bool = true) -> int:
 
 static func compute_garrison_effective_defense(
 	base_defense: int,
-	is_home_settlement: bool,
 	has_fortification: bool = true,
 ) -> int:
 	var total: int = base_defense + STORM_URBAN_DEFENSE_BONUS
 	if has_fortification:
 		total += FORTIFICATION_DEFENSE_BONUS
-	if is_home_settlement:
-		total += 2
 	return total
 
 
