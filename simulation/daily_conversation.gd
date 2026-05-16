@@ -146,6 +146,16 @@ static func apply_disposition_bonus(char_a: L5RCharacterData, char_b: L5RCharact
 	char_b.disposition_values[char_a.character_id] = clampi(current_b + DISPOSITION_BONUS, -100, 100)
 
 
+# -- Momentum Refresh (s12.6 / s16.5) -----------------------------------------
+
+static func _refresh_topic_momentum(topic_id: int, topics_by_id: Dictionary) -> void:
+	if topic_id < 0:
+		return
+	var topic: TopicData = topics_by_id.get(topic_id)
+	if topic != null:
+		topic.discussion_count_this_day += 1
+
+
 # -- Full Conversation Resolution ----------------------------------------------
 
 static func resolve_conversation(
@@ -186,6 +196,10 @@ static func resolve_conversation(
 			{"topic": topic_b, "from_character_id": char_b.character_id},
 			current_season,
 		))
+
+	if not topics_by_id.is_empty():
+		_refresh_topic_momentum(topic_a, topics_by_id)
+		_refresh_topic_momentum(topic_b, topics_by_id)
 
 	apply_disposition_bonus(char_a, char_b)
 

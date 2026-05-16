@@ -436,3 +436,34 @@ func test_resolve_conversation_shares_sensitive_at_high_disposition():
 	var result: Dictionary = DailyConversation.resolve_conversation(a, b, 0, 0, 5, topics_by_id)
 	assert_eq(result["topic_shared_by_a"], 1)
 	assert_true(result["transferred_to_b"])
+
+
+# -- Topic Momentum Refresh (s12.6 / s16.5) -----------------------------------
+
+func test_conversation_refreshes_topic_momentum():
+	var topics_a: Array[int] = [1]
+	var topics_b: Array[int] = [1]
+	var a := _make_char(1, topics_a, "Crab", "Hida")
+	var b := _make_char(2, topics_b, "Crane", "Doji")
+	_set_mutual_disposition(a, b, 50)
+
+	var t1 := _make_topic(1, "Crab", "Hida", 20.0)
+	assert_eq(t1.discussion_count_this_day, 0)
+	var topics_by_id: Dictionary = {1: t1}
+
+	DailyConversation.resolve_conversation(a, b, 0, 0, 5, topics_by_id)
+	# Both characters shared topic 1 → discussed twice (once by each sharer)
+	assert_eq(t1.discussion_count_this_day, 2)
+
+func test_conversation_refreshes_new_topic_momentum():
+	var topics_a: Array[int] = [1]
+	var a := _make_char(1, topics_a, "Crab", "Hida")
+	var b := _make_char(2, [], "Crane", "Doji")
+	_set_mutual_disposition(a, b, 50)
+
+	var t1 := _make_topic(1, "Crab", "Hida", 20.0)
+	var topics_by_id: Dictionary = {1: t1}
+
+	DailyConversation.resolve_conversation(a, b, 0, 0, 5, topics_by_id)
+	# Topic 1 was shared by A → increment once (B has no topics to share)
+	assert_eq(t1.discussion_count_this_day, 1)
