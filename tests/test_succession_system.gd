@@ -251,6 +251,18 @@ func test_rival_disposition_forces_dispute() -> void:
 	assert_false(SuccessionSystem.is_clean_succession(data, candidates, -11))
 
 
+func test_stranger_disposition_not_clean() -> void:
+	var data := SuccessionData.new()
+	var candidates: Array[Dictionary] = [{"priority": SuccessionSystem.CandidatePriority.DESIGNATED_HEIR, "id": 10}]
+	assert_false(SuccessionSystem.is_clean_succession(data, candidates, 0))
+
+
+func test_acquaintance_boundary_is_clean() -> void:
+	var data := SuccessionData.new()
+	var candidates: Array[Dictionary] = [{"priority": SuccessionSystem.CandidatePriority.DESIGNATED_HEIR, "id": 10}]
+	assert_true(SuccessionSystem.is_clean_succession(data, candidates, 11))
+
+
 func test_clean_transition_duration_friend() -> void:
 	assert_eq(SuccessionSystem.get_transition_duration(true, 31), 7)
 

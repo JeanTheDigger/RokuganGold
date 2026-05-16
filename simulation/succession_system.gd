@@ -234,7 +234,7 @@ static func is_clean_succession(
 	if same_priority_count > 1 and top_priority != CandidatePriority.DESIGNATED_HEIR:
 		return false
 
-	if confirming_disp_toward_top < -10:
+	if confirming_disp_toward_top < 11:
 		return false
 
 	return true
