@@ -72,11 +72,15 @@ const AGGRESSION_SHOURIDO: Array[String] = ["Kyoryoku", "Ketsui"]
 # -- Personality Gates (s53.1) ---------------------------------------------------
 
 const JIN_EXHAUST_GATE: Array[String] = [
-	"EXPAND_TERRITORY", "SEEK_VENGEANCE",
+	"EXPAND_TERRITORY",
+]
+
+const JIN_TOTAL_WAR_BLOCK: Array[String] = [
+	"SEEK_VENGEANCE",
 ]
 
 const GI_MAKOTO_COVERT_BLOCK: Array[String] = [
-	"UNDERMINE_CLAN", "SABOTAGE_ECONOMY",
+	"UNDERMINE_CLAN", "SABOTAGE_ECONOMY", "ELIMINATE_CHARACTER",
 ]
 
 const PREVENT_SHORTAGE_BLOCKED_VIRTUES: Array[String] = [
@@ -200,6 +204,13 @@ static func check_personality_gate(
 	var reason: String = ""
 
 	if primary_virtue == "Jin":
+		if standing_objective in JIN_TOTAL_WAR_BLOCK:
+			if tier == MilitaryTier.TOTAL_WAR:
+				blocked = true
+				reason = "jin_blocks_total_war"
+		# GDD: Jin + EXPAND_TERRITORY blocks all tiers unless non-military options
+		# exhausted or target gave provocation. Approximated as TOTAL_WAR block
+		# since the exhaustion check requires runtime data not available here.
 		if standing_objective in JIN_EXHAUST_GATE:
 			if tier == MilitaryTier.TOTAL_WAR:
 				blocked = true
@@ -264,13 +275,13 @@ static func select_intended_tier(
 					return candidate
 		return supported[0] as MilitaryTier
 
-	if primary_virtue == "Jin":
-		for tier_val: Variant in supported:
-			var t: MilitaryTier = tier_val as MilitaryTier
-			if t != MilitaryTier.TOTAL_WAR:
-				return t
-		return MilitaryTier.RAID
-
+	for tier_val: Variant in supported:
+		var t: MilitaryTier = tier_val as MilitaryTier
+		var gate: Dictionary = check_personality_gate(
+			t, standing_objective, primary_objective, primary_virtue,
+		)
+		if not gate["blocked"]:
+			return t
 	return supported[0] as MilitaryTier
 
 
