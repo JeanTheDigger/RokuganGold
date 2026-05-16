@@ -58,6 +58,8 @@ static func can_attempt_escape(
 	stealth_rank: int,
 	committed_to_endure: bool = false,
 ) -> bool:
+	if bushido_virtue == Enums.BushidoVirtue.YU:
+		return false
 	if shourido_virtue == Enums.ShouridoVirtue.ISHI and committed_to_endure:
 		return false
 	if school_type != Enums.SchoolType.BUSHI:
@@ -94,6 +96,7 @@ static func resolve_escape(roll_total: int, tn: int) -> Dictionary:
 			"executed": false,
 			"critical_failure": false,
 			"family_honor_loss": ESCAPE_FAMILY_HONOR_LOSS,
+			"historical_modifier": "hostage_escape",
 		}
 	elif (tn - roll_total) >= ESCAPE_CRITICAL_MARGIN:
 		return {
