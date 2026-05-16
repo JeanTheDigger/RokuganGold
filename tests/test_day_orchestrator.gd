@@ -2724,6 +2724,108 @@ func test_stipend_missing_lord_skipped() -> void:
 	assert_eq(retainer.disposition_values.get(77, 0), 0)
 
 
+# -- Stipend Failure Topic Creation (s4.3.9 T4-81) ----------------------------
+
+func test_stipend_topic_created_for_reduced_payment() -> void:
+	var stipends: Dictionary = {
+		2: {"generates_topic": true, "lord_id": 1, "ratio": 0.6, "in_crisis": false},
+	}
+	var lord := L5RCharacterData.new()
+	lord.character_id = 1
+	lord.physical_location = "Castle_A"
+	var retainer := L5RCharacterData.new()
+	retainer.character_id = 2
+	retainer.lord_id = 1
+	retainer.physical_location = "Castle_A"
+	var by_id: Dictionary = {1: lord, 2: retainer}
+	var topics: Array[TopicData] = []
+	var next_id: Array[int] = [500]
+	var results: Array[Dictionary] = DayOrchestrator._create_stipend_failure_topics(
+		stipends, by_id, topics, next_id, 30,
+	)
+	assert_eq(results.size(), 1)
+	assert_eq(topics.size(), 1)
+	assert_eq(topics[0].topic_type, "stipend_failure")
+	assert_eq(topics[0].variant, "STIPEND_FAILURE")
+	assert_eq(topics[0].tier, TopicData.Tier.TIER_4)
+	assert_eq(topics[0].category, TopicData.Category.ECONOMIC)
+	assert_eq(topics[0].subject_character_id, 1)
+	assert_eq(topics[0].subject_role, "NEGATIVE")
+	assert_true(500 in lord.topic_pool)
+	assert_true(500 in retainer.topic_pool)
+	assert_eq(next_id[0], 501)
+
+
+func test_stipend_topic_not_created_when_flag_false() -> void:
+	var stipends: Dictionary = {
+		2: {"generates_topic": false, "lord_id": 1, "ratio": 1.0, "in_crisis": false},
+	}
+	var lord := L5RCharacterData.new()
+	lord.character_id = 1
+	var retainer := L5RCharacterData.new()
+	retainer.character_id = 2
+	retainer.lord_id = 1
+	var by_id: Dictionary = {1: lord, 2: retainer}
+	var topics: Array[TopicData] = []
+	var next_id: Array[int] = [500]
+	var results: Array[Dictionary] = DayOrchestrator._create_stipend_failure_topics(
+		stipends, by_id, topics, next_id, 30,
+	)
+	assert_eq(results.size(), 0)
+	assert_eq(topics.size(), 0)
+	assert_eq(next_id[0], 500)
+
+
+func test_stipend_topic_co_located_vassals_receive_topic() -> void:
+	var lord := L5RCharacterData.new()
+	lord.character_id = 1
+	lord.physical_location = "Castle_A"
+	var retainer := L5RCharacterData.new()
+	retainer.character_id = 2
+	retainer.lord_id = 1
+	retainer.physical_location = "Castle_A"
+	var bystander := L5RCharacterData.new()
+	bystander.character_id = 3
+	bystander.lord_id = 1
+	bystander.physical_location = "Castle_A"
+	var outsider := L5RCharacterData.new()
+	outsider.character_id = 4
+	outsider.lord_id = 1
+	outsider.physical_location = "Castle_B"
+	var by_id: Dictionary = {1: lord, 2: retainer, 3: bystander, 4: outsider}
+	var stipends: Dictionary = {
+		2: {"generates_topic": true, "lord_id": 1, "ratio": 0.6, "in_crisis": false},
+	}
+	var topics: Array[TopicData] = []
+	var next_id: Array[int] = [600]
+	DayOrchestrator._create_stipend_failure_topics(
+		stipends, by_id, topics, next_id, 30,
+	)
+	assert_true(600 in bystander.topic_pool)
+	assert_false(600 in outsider.topic_pool)
+
+
+func test_stipend_crisis_topic_includes_crisis_flag() -> void:
+	var stipends: Dictionary = {
+		2: {"generates_topic": true, "lord_id": 1, "ratio": 0.0, "in_crisis": true},
+	}
+	var lord := L5RCharacterData.new()
+	lord.character_id = 1
+	var retainer := L5RCharacterData.new()
+	retainer.character_id = 2
+	retainer.lord_id = 1
+	var by_id: Dictionary = {1: lord, 2: retainer}
+	var topics: Array[TopicData] = []
+	var next_id: Array[int] = [700]
+	var results: Array[Dictionary] = DayOrchestrator._create_stipend_failure_topics(
+		stipends, by_id, topics, next_id, 30,
+	)
+	assert_eq(results.size(), 1)
+	assert_true(results[0]["in_crisis"])
+	assert_eq(results[0]["lord_id"], 1)
+	assert_eq(results[0]["character_id"], 2)
+
+
 # -- Tax Modifier Population (s4.3.7) -----------------------------------------
 
 func _make_province_with_lord(

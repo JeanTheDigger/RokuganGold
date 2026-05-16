@@ -652,11 +652,16 @@ static func advance_day(
 		)
 
 	var koku_flow_results: Dictionary = {}
+	var stipend_topic_results: Array[Dictionary] = []
 	if time_system.get_ic_day_of_month() == 1:
 		var season_name: String = time_system.get_season_name().to_lower()
 		var months_in_season: int = ResourceTick.MONTHS_PER_SEASON.get(season_name, 3)
 		koku_flow_results = KokuCascadeSystem.process_monthly_koku_flow(
 			characters, characters_by_id, settlements, clans, months_in_season,
+		)
+		var stipends: Dictionary = koku_flow_results.get("stipends", {})
+		stipend_topic_results = _create_stipend_failure_topics(
+			stipends, characters_by_id, active_topics, next_topic_id, ic_day,
 		)
 
 	var horde_results: Dictionary = _process_horde_rolls(
@@ -742,6 +747,7 @@ static func advance_day(
 		"phoenix_council_results": phoenix_council_results,
 		"civil_war_results": civil_war_results_seasonal,
 		"koku_flow_results": koku_flow_results,
+		"stipend_topic_results": stipend_topic_results,
 	}
 
 
@@ -950,6 +956,64 @@ static func _process_seasonal_stipend_disposition(
 		retainer.disposition_values[lord.character_id] = clampi(old_disp + delta, -100, 100)
 		updates_applied += 1
 	return updates_applied
+
+
+static func _create_stipend_failure_topics(
+	stipends: Dictionary,
+	characters_by_id: Dictionary,
+	active_topics: Array[TopicData],
+	next_topic_id: Array[int],
+	ic_day: int,
+) -> Array[Dictionary]:
+	var created: Array[Dictionary] = []
+	for char_id: Variant in stipends:
+		var entry: Dictionary = stipends[char_id]
+		if not entry.get("generates_topic", false):
+			continue
+		var lord_id: int = entry.get("lord_id", -1)
+		var cid: int = char_id as int
+		var topic := TopicData.new()
+		topic.topic_id = next_topic_id[0]
+		next_topic_id[0] += 1
+		topic.slug = "stipend_failure_lord%d_char%d_d%d" % [lord_id, cid, ic_day]
+		topic.title = "Stipend Failure by Lord %d" % lord_id
+		topic.topic_type = "stipend_failure"
+		topic.variant = "STIPEND_FAILURE"
+		topic.tier = TopicData.Tier.TIER_4
+		topic.category = TopicData.Category.ECONOMIC
+		topic.subject_character_id = lord_id
+		topic.subject_role = "NEGATIVE"
+		topic.ic_day_created = ic_day
+		topic.momentum = 0.0
+		active_topics.append(topic)
+		var holder_ids: Array[int] = []
+		if lord_id >= 0:
+			var lord: L5RCharacterData = characters_by_id.get(lord_id)
+			if lord != null and topic.topic_id not in lord.topic_pool:
+				lord.topic_pool.append(topic.topic_id)
+				holder_ids.append(lord_id)
+		var affected: L5RCharacterData = characters_by_id.get(cid)
+		if affected != null and topic.topic_id not in affected.topic_pool:
+			affected.topic_pool.append(topic.topic_id)
+			holder_ids.append(cid)
+		for other_id: Variant in characters_by_id:
+			var oid: int = other_id as int
+			if oid == lord_id or oid == cid:
+				continue
+			var other: L5RCharacterData = characters_by_id[oid]
+			if other.lord_id == lord_id and affected != null and other.physical_location == affected.physical_location and other.physical_location != "":
+				if topic.topic_id not in other.topic_pool:
+					other.topic_pool.append(topic.topic_id)
+					holder_ids.append(oid)
+		created.append({
+			"topic_id": topic.topic_id,
+			"lord_id": lord_id,
+			"character_id": cid,
+			"ratio": entry.get("ratio", 0.0),
+			"in_crisis": entry.get("in_crisis", false),
+			"holder_ids": holder_ids,
+		})
+	return created
 
 
 static func _populate_tax_modifiers(
