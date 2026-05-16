@@ -121,8 +121,8 @@ func test_evaluate_proposal_with_military_objective():
 # -- Benten festival tests ----------------------------------------------------
 
 func test_benten_festival_day():
-	# Month 12, day 9 → day of year = (12-1)*30 + (9-1) = 338
-	assert_true(MarriageSystem.is_benten_festival(338))
+	# Month 11, day 9 → day of year = (11-1)*30 + (9-1) = 308
+	assert_true(MarriageSystem.is_benten_festival(308))
 
 
 func test_not_benten_festival():
