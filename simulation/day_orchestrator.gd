@@ -192,6 +192,8 @@ static func advance_day(
 		active_topics,
 		next_topic_id,
 		world_states,
+		active_wars,
+		action_log,
 	)
 
 	var current_season_count: int = int(season_meta.get("horde_season_count", 0))
@@ -2221,6 +2223,8 @@ static func _process_crime_detection(
 	active_topics: Array[TopicData] = [],
 	next_topic_id: Array[int] = [1000],
 	world_states: Dictionary = {},
+	active_wars: Array[WarData] = [],
+	action_log: Array[Dictionary] = [],
 ) -> Array[Dictionary]:
 	var crime_results: Array[Dictionary] = []
 
@@ -2263,9 +2267,23 @@ static func _process_crime_detection(
 		if is_killing:
 			var victim: L5RCharacterData = characters_by_id.get(target_id)
 			if victim != null:
+				var clans_at_war: bool = WarSystem.are_clans_at_war(
+					active_wars, character.clan, victim.clan
+				)
+				var is_battlefield: bool = _is_character_in_battle(
+					char_id, world_states
+				)
+				var is_prisoner: bool = victim.captive_status != ""
+				var attacker_acted_first: bool = _did_victim_act_first(
+					effects, action_id
+				)
+				var has_zone_log: bool = _has_zone_log_evidence(
+					char_id, target_id, location, action_log
+				)
 				var killing_result := CrimeWiring.process_killing_crime(
 					effects, character, victim, case_id, ic_day, witnesses,
-					false, false, false, false, false,
+					clans_at_war, is_battlefield, is_prisoner,
+					attacker_acted_first, has_zone_log,
 				)
 				if not killing_result.get("crime_created", false):
 					crime_results.append({
@@ -2329,6 +2347,36 @@ static func _process_crime_detection(
 		})
 
 	return crime_results
+
+
+static func _is_character_in_battle(
+	_char_id: int,
+	_world_states: Dictionary,
+) -> bool:
+	# Sub-tile military system blocked on world map data (s11.7).
+	# When implemented, check active battle engagements at this location.
+	return false
+
+
+static func _did_victim_act_first(
+	effects: Dictionary,
+	action_id: String,
+) -> bool:
+	if action_id == "ISSUE_DUEL_CHALLENGE":
+		return false
+	return effects.get("victim_initiated", false)
+
+
+static func _has_zone_log_evidence(
+	_attacker_id: int,
+	_victim_id: int,
+	_location: String,
+	_action_log: Array[Dictionary],
+) -> bool:
+	# Zone event log (s29.15.24) is not yet built.
+	# When implemented, this will search action_log for entries at the
+	# same location showing who acted first.
+	return false
 
 
 static func _action_to_crime_type(action_id: String) -> int:
