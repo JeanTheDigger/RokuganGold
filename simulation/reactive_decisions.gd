@@ -47,7 +47,7 @@ static func _evaluate_duel_response(
 		accept = true
 	elif character.shourido_virtue == Enums.ShouridoVirtue.KYORYOKU:
 		accept = true
-	elif disposition <= -16.0:
+	elif disposition <= -11.0:
 		accept = true
 	elif character.bushido_virtue == Enums.BushidoVirtue.MEIYO and is_public:
 		accept = true
@@ -187,9 +187,7 @@ static func _evaluate_favor_response(
 		honor = true
 	elif character.bushido_virtue == Enums.BushidoVirtue.MAKOTO:
 		honor = true
-	elif disposition >= 25.0:
-		honor = true
-	elif character.bushido_virtue == Enums.BushidoVirtue.JIN and disposition >= 0.0:
+	elif disposition >= 31.0:
 		honor = true
 
 	if honor:

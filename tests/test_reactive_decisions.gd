@@ -52,6 +52,15 @@ func test_rival_disposition_accepts_duel() -> void:
 	assert_eq(result["action"], "ACCEPT_DUEL")
 
 
+func test_rival_boundary_disposition_accepts_duel() -> void:
+	var c := _make_character(1, Enums.BushidoVirtue.NONE, Enums.ShouridoVirtue.NONE)
+	c.disposition_values = {5: -11.0}
+	var ctx := _make_ctx()
+	var event: Dictionary = {"reactive_type": "DUEL_CHALLENGE_RECEIVED", "challenger_id": 5, "is_public": false}
+	var result: Dictionary = ReactiveDecisions.evaluate_reactive_event(event, c, ctx)
+	assert_eq(result["action"], "ACCEPT_DUEL")
+
+
 func test_meiyo_accepts_public_duel() -> void:
 	var c := _make_character(1, Enums.BushidoVirtue.MEIYO)
 	var ctx := _make_ctx()
@@ -196,20 +205,20 @@ func test_makoto_always_honors_favor() -> void:
 
 func test_friend_disposition_honors_favor() -> void:
 	var c := _make_character(1, Enums.BushidoVirtue.GI)
+	c.disposition_values = {5: 31.0}
+	var ctx := _make_ctx()
+	var event: Dictionary = {"reactive_type": "FAVOR_REQUESTED", "requester_id": 5}
+	var result: Dictionary = ReactiveDecisions.evaluate_reactive_event(event, c, ctx)
+	assert_eq(result["action"], "HONOR_FAVOR")
+
+
+func test_acquaintance_disposition_declines_favor() -> void:
+	var c := _make_character(1, Enums.BushidoVirtue.GI)
 	c.disposition_values = {5: 30.0}
 	var ctx := _make_ctx()
 	var event: Dictionary = {"reactive_type": "FAVOR_REQUESTED", "requester_id": 5}
 	var result: Dictionary = ReactiveDecisions.evaluate_reactive_event(event, c, ctx)
-	assert_eq(result["action"], "HONOR_FAVOR")
-
-
-func test_jin_honors_neutral_disposition() -> void:
-	var c := _make_character(1, Enums.BushidoVirtue.JIN)
-	c.disposition_values = {5: 0.0}
-	var ctx := _make_ctx()
-	var event: Dictionary = {"reactive_type": "FAVOR_REQUESTED", "requester_id": 5}
-	var result: Dictionary = ReactiveDecisions.evaluate_reactive_event(event, c, ctx)
-	assert_eq(result["action"], "HONOR_FAVOR")
+	assert_eq(result["action"], "DECLINE_FAVOR")
 
 
 func test_low_disposition_declines_favor() -> void:
