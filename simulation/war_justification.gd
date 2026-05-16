@@ -52,9 +52,14 @@ const PEACE_OBJECTIVES: Array[String] = [
 const PRIMARY_OBJECTIVE_TIERS: Dictionary = {
 	"CONQUER_PROVINCE": [MilitaryTier.FORMAL_WAR],
 	"DEFEND_PROVINCE": [MilitaryTier.RAID, MilitaryTier.FORMAL_WAR, MilitaryTier.TOTAL_WAR],
-	"RESOLVE_CLAN_WAR": [MilitaryTier.RAID, MilitaryTier.FORMAL_WAR, MilitaryTier.TOTAL_WAR],
+	"RESOLVE_SHADOWLANDS_INCURSION": [MilitaryTier.RAID, MilitaryTier.FORMAL_WAR, MilitaryTier.TOTAL_WAR],
+	"DESTROY_ARMY": [MilitaryTier.FORMAL_WAR],
+	"RELIEVE_SIEGE": [MilitaryTier.RAID, MilitaryTier.FORMAL_WAR, MilitaryTier.TOTAL_WAR],
+	"RESTORE_ORDER": [MilitaryTier.RAID],
+	"SECURE_TRADE_ROUTE": [MilitaryTier.RAID],
 	"SABOTAGE_ECONOMY": [MilitaryTier.RAID],
 	"AVENGE": [MilitaryTier.RAID, MilitaryTier.FORMAL_WAR, MilitaryTier.TOTAL_WAR],
+	"ELIMINATE_CHARACTER": [MilitaryTier.RAID],
 }
 
 
@@ -419,7 +424,8 @@ static func _run_alternative_ladder(
 
 	var has_critical: bool = standing_objective in [
 		"DEFEND_PROVINCE", "DEFEND_TERRITORY",
-		"RESOLVE_CLAN_WAR", "SEEK_VENGEANCE", "AVENGE",
+		"RESOLVE_CLAN_WAR", "RESOLVE_SHADOWLANDS_INCURSION",
+		"SEEK_VENGEANCE", "AVENGE",
 	]
 
 	return FeasibilityLedger.walk_alternative_ladder(

@@ -62,6 +62,40 @@ func test_primary_sabotage_raid_only() -> void:
 	assert_true(WarJustification.MilitaryTier.RAID in tiers)
 
 
+func test_primary_destroy_army_formal_war() -> void:
+	var tiers: Array = WarJustification.get_objective_tiers("", "DESTROY_ARMY")
+	assert_true(WarJustification.MilitaryTier.FORMAL_WAR in tiers)
+	assert_false(WarJustification.MilitaryTier.RAID in tiers)
+
+
+func test_primary_relieve_siege_all_tiers() -> void:
+	var tiers: Array = WarJustification.get_objective_tiers("", "RELIEVE_SIEGE")
+	assert_eq(tiers.size(), 3)
+
+
+func test_primary_restore_order_raid_only() -> void:
+	var tiers: Array = WarJustification.get_objective_tiers("", "RESTORE_ORDER")
+	assert_eq(tiers.size(), 1)
+	assert_true(WarJustification.MilitaryTier.RAID in tiers)
+
+
+func test_primary_secure_trade_raid_only() -> void:
+	var tiers: Array = WarJustification.get_objective_tiers("", "SECURE_TRADE_ROUTE")
+	assert_eq(tiers.size(), 1)
+	assert_true(WarJustification.MilitaryTier.RAID in tiers)
+
+
+func test_primary_eliminate_character_raid_only() -> void:
+	var tiers: Array = WarJustification.get_objective_tiers("", "ELIMINATE_CHARACTER")
+	assert_eq(tiers.size(), 1)
+	assert_true(WarJustification.MilitaryTier.RAID in tiers)
+
+
+func test_primary_resolve_shadowlands_all_tiers() -> void:
+	var tiers: Array = WarJustification.get_objective_tiers("", "RESOLVE_SHADOWLANDS_INCURSION")
+	assert_eq(tiers.size(), 3)
+
+
 func test_unknown_objective_no_tiers() -> void:
 	var tiers: Array = WarJustification.get_objective_tiers("UNKNOWN", "UNKNOWN")
 	assert_eq(tiers.size(), 0)
