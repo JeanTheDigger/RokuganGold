@@ -202,8 +202,8 @@ static func generate_betrayal_topic(actor_id: int) -> Dictionary:
 
 static func _disposition_defense_bonus(tier: String) -> int:
 	match tier:
-		"friend", "ally", "sworn":
+		"friend", "trusted_ally", "devoted":
 			return DISPOSITION_FRIEND_BONUS
-		"enemy", "bitter_enemy":
+		"enemy", "blood_enemy":
 			return DISPOSITION_ENEMY_PENALTY
 	return 0

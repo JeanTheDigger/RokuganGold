@@ -552,8 +552,8 @@ static func _execute_intimidation(
 	var attacker_roll: int = attacker_result.get("total", 0)
 	var defender_roll: int = defender_result.get("total", 0)
 
-	var disp_toward_target: int = ctx.dispositions.get(action.target_npc_id, 0)
-	var disp_tier: String = _get_disposition_tier_name(disp_toward_target)
+	var target_disp_toward_actor: int = target.disposition_values.get(character.character_id, 0)
+	var disp_tier: String = _get_disposition_tier_name(target_disp_toward_actor)
 
 	var has_secret: bool = action.metadata.get("secret_ref") != null
 	var by_letter: bool = action.metadata.get("by_letter", false)
@@ -609,13 +609,13 @@ static func _get_disposition_tier_name(disp: int) -> String:
 	if disp >= 91:
 		return "devoted"
 	if disp >= 61:
-		return "sworn"
+		return "trusted_ally"
 	if disp >= 31:
-		return "ally"
-	if disp >= 11:
 		return "friend"
+	if disp >= 11:
+		return "acquaintance"
 	if disp >= -10:
-		return "neutral"
+		return "stranger"
 	if disp >= -30:
 		return "rival"
 	if disp >= -60:
