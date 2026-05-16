@@ -769,6 +769,9 @@ static func _is_action_blocked(
 		if action_id in always_blocked:
 			return true
 
+	if _is_conditional_blocked(action_id, ctx, filter_data):
+		return true
+
 	if action_id == "RAID_HARVEST":
 		return _is_harvest_blocked_by_virtue(ctx)
 
@@ -783,19 +786,142 @@ static func _is_action_blocked(
 	return false
 
 
+static func _is_conditional_blocked(
+	action_id: String,
+	ctx: NPCDataStructures.ContextSnapshot,
+	filter_data: Dictionary,
+) -> bool:
+	if action_id == "RAID_HARVEST":
+		return false
+
+	if ctx.bushido_virtue != Enums.BushidoVirtue.NONE:
+		var virtue_name: String = Enums.bushido_virtue_name(ctx.bushido_virtue)
+		var conditionals: Array = filter_data.get("bushido", {}).get(virtue_name, {}).get("conditional", [])
+		for entry: Variant in conditionals:
+			if entry is Dictionary:
+				var target_action: String = entry.get("action", "")
+				if target_action == action_id or target_action == "_ANY_ACTION":
+					var condition: String = entry.get("blocked_when", "")
+					if _evaluate_condition(condition, action_id, ctx):
+						return true
+
+	if ctx.shourido_virtue != Enums.ShouridoVirtue.NONE:
+		var virtue_name: String = Enums.shourido_virtue_name(ctx.shourido_virtue)
+		var conditionals: Array = filter_data.get("shourido", {}).get(virtue_name, {}).get("conditional", [])
+		for entry: Variant in conditionals:
+			if entry is Dictionary:
+				var target_action: String = entry.get("action", "")
+				if target_action == action_id or target_action == "_ANY_ACTION":
+					var condition: String = entry.get("blocked_when", "")
+					if _evaluate_condition(condition, action_id, ctx):
+						return true
+				if target_action == "_CHANGE_COURSE" and action_id in _CHANGE_COURSE_ACTIONS:
+					var condition: String = entry.get("blocked_when", "")
+					if _evaluate_condition(condition, action_id, ctx):
+						return true
+				if target_action == "_COMMIT_ACTION" and action_id not in _OBSERVATION_ACTIONS:
+					var condition: String = entry.get("blocked_when", "")
+					if _evaluate_condition(condition, action_id, ctx):
+						return true
+
+	return false
+
+
+const _CHANGE_COURSE_ACTIONS: Array[String] = [
+	"ABORT_RAID", "SEEK_PEACE", "NEGOTIATE_PEACE", "CHANGE_OBJECTIVE",
+]
+
+const _OBSERVATION_ACTIONS: Array[String] = [
+	"OBSERVE", "EAVESDROP", "SHADOW_TARGET", "GATHER_INTELLIGENCE",
+	"INVESTIGATE_PROVINCE", "EXAMINE_CRIME_SCENE",
+]
+
+
+static func _evaluate_condition(
+	condition: String,
+	_action_id: String,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> bool:
+	match condition:
+		"war_score_above_25_and_army_capable":
+			for w: Variant in ctx.active_wars:
+				if w is Dictionary and w.get("war_score", 50) > 25:
+					return true
+			return false
+
+		"any_vassal_at_shortage_or_worse":
+			for key: Variant in ctx.resource_stockpiles:
+				var val: Variant = ctx.resource_stockpiles[key]
+				if val is Dictionary and val.get("rice_months", 12.0) < 3.0:
+					return true
+			return false
+
+		"levy_would_exceed_65pct_and_no_crisis":
+			if not ctx.active_wars.is_empty():
+				return false
+			if not ctx.starvation_province_ids.is_empty():
+				return false
+			if ctx.available_levy_pu <= 0.0:
+				return false
+			return true
+
+		"direct_confrontation_available":
+			return not ctx.characters_present.is_empty()
+
+		"already_committed_to_action":
+			return not ctx.action_log.is_empty()
+
+		"no_intelligence_gathered_this_session":
+			for entry: Dictionary in ctx.action_log:
+				var aid: String = entry.get("action_id", "")
+				if aid in _OBSERVATION_ACTIONS:
+					return false
+			return true
+
+		"creates_obligation":
+			return true
+
+		"public_declaration_already_made":
+			for entry: Dictionary in ctx.action_log:
+				if entry.get("action_id", "") == "PUBLIC_DECLARATION":
+					return true
+			return false
+
+		"intent_publicly_declared":
+			for entry: Dictionary in ctx.action_log:
+				if entry.get("action_id", "") == "PUBLIC_DECLARATION":
+					return true
+			return false
+
+		"zero_motivations_known_and_urgency_below_50":
+			if not ctx.known_objectives.is_empty():
+				return false
+			var has_urgency: bool = (
+				not ctx.active_wars.is_empty()
+				or not ctx.starvation_province_ids.is_empty()
+				or not ctx.cut_supply_army_ids.is_empty()
+				or not ctx.expiring_favor_ids.is_empty()
+			)
+			return not has_urgency
+
+	return false
+
+
 static func _is_harvest_blocked_by_virtue(ctx: NPCDataStructures.ContextSnapshot) -> bool:
 	var virtue: String = _get_virtue_string(ctx)
-	if virtue in StarvationWarfare.HARVEST_NEVER_VIRTUES:
+	if virtue == "JIN" or virtue == "GI":
 		return true
 	var hc: Dictionary = _evaluate_harvest_conditions(ctx)
-	if virtue == "Yu":
+	if virtue == "YU":
 		return not hc.get("no_other_path", false)
-	if virtue == "Meiyo":
+	if virtue == "MEIYO":
 		return not hc.get("hated_enemy", false)
-	if virtue == "Chugi":
+	if virtue == "CHUGI":
 		return not hc.get("lord_commands", false)
-	if virtue == "Makoto":
+	if virtue == "MAKOTO":
 		return not hc.get("publicly_declared", false)
+	if virtue == "REI":
+		return not hc.get("prior_formal_demand", false)
 	return false
 
 
@@ -822,16 +948,20 @@ static func _evaluate_harvest_conditions(ctx: NPCDataStructures.ContextSnapshot)
 			break
 
 	var publicly_declared: bool = false
+	var prior_formal_demand: bool = false
 	for entry: Dictionary in ctx.action_log:
-		if entry.get("action_id", "") == "PUBLIC_DECLARATION":
+		var aid: String = entry.get("action_id", "")
+		if aid == "PUBLIC_DECLARATION":
 			publicly_declared = true
-			break
+		if aid == "DEMAND_TRIBUTE":
+			prior_formal_demand = true
 
 	return {
 		"no_other_path": no_other_path,
 		"hated_enemy": hated_enemy,
 		"lord_commands": lord_commands,
 		"publicly_declared": publicly_declared,
+		"prior_formal_demand": prior_formal_demand,
 	}
 
 
