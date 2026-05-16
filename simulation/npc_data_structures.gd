@@ -225,24 +225,3 @@ class WallStatus:
 	var garrison_shortage_letter_season: int = -1  # -1 = no letter campaign started
 	var garrison_shortage_courtier_dispatched: bool = false
 	var garrison_shortage_courtier_refused: bool = false
-
-
-# -- Competence Modifier Table (s55.5) -----------------------------------------
-
-const COMPETENCE_TABLE: Dictionary = {
-	0: -20,
-	1: -10,
-	2: -5,
-	3: 0,
-	4: 5,
-	5: 10,
-	6: 15,
-	7: 20,
-}
-
-static func get_competence_modifier(skill_rank: int) -> int:
-	if skill_rank >= 7:
-		return 20
-	if COMPETENCE_TABLE.has(skill_rank):
-		return COMPETENCE_TABLE[skill_rank]
-	return -20
