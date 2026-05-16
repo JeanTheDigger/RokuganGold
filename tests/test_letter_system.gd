@@ -1000,3 +1000,55 @@ func test_examine_letter_orchestrator_skips_without_dice():
 		day_results, [], {}, null,
 	)
 	assert_eq(results.size(), 0)
+
+
+func test_deliver_refreshes_topic_momentum_for_known_topic():
+	var dice := DiceEngine.new()
+	dice.set_seed(42)
+	var sender := _make_char(1, 3)
+	var recipient := _make_char(2)
+	recipient.topic_pool = [5]
+	var log: Array[Dictionary] = []
+
+	var topic := TopicData.new()
+	topic.topic_id = 5
+	topic.discussion_count_this_day = 0
+	var topics_by_id: Dictionary = {5: topic}
+
+	var letter: LetterData = LetterSystem.write_letter(1, sender, 2, 5, 0, dice, 0)
+	LetterSystem.deliver_letter(letter, recipient, 1, log, topics_by_id)
+
+	assert_eq(topic.discussion_count_this_day, 1)
+	assert_eq(recipient.topic_pool.size(), 1)
+
+
+func test_deliver_refreshes_momentum_for_new_topic_too():
+	var dice := DiceEngine.new()
+	dice.set_seed(42)
+	var sender := _make_char(1, 3)
+	var recipient := _make_char(2)
+	recipient.topic_pool = []
+	var log: Array[Dictionary] = []
+
+	var topic := TopicData.new()
+	topic.topic_id = 7
+	topic.discussion_count_this_day = 0
+	var topics_by_id: Dictionary = {7: topic}
+
+	var letter: LetterData = LetterSystem.write_letter(1, sender, 2, 7, 0, dice, 0)
+	LetterSystem.deliver_letter(letter, recipient, 1, log, topics_by_id)
+
+	assert_eq(topic.discussion_count_this_day, 1)
+	assert_true(7 in recipient.topic_pool)
+
+
+func test_exchange_bonus_clamps_at_100():
+	var sender := _make_char(1)
+	var recipient := _make_char(2)
+	sender.disposition_values = {2: 100}
+	recipient.disposition_values = {1: 99}
+
+	LetterSystem.apply_exchange_bonus(sender, recipient)
+
+	assert_eq(sender.disposition_values[2], 100)
+	assert_eq(recipient.disposition_values[1], 100)
