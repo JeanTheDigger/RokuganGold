@@ -209,7 +209,7 @@ static func apply_performance_effects(
 	result: Dictionary,
 	characters_by_id: Dictionary = {},
 ) -> void:
-	performer.glory = clampf(performer.glory + result.get("glory_change", 0.0), 0.0, 10.0)
+	HonorGlorySystem.apply_glory_change(performer, result.get("glory_change", 0.0))
 
 	if result.has("witness_effects"):
 		for effect in result["witness_effects"]:

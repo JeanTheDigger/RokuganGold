@@ -37,7 +37,7 @@ static func make_ronin(character: L5RCharacterData, cause: RoninCause) -> Dictio
 	character.status = maxf(character.status - 1.0, 0.0)
 
 	var honor_loss: float = HONOR_LOSS_VOLUNTARY if cause == RoninCause.VOLUNTARY_DEPARTURE else HONOR_LOSS_ON_RONIN
-	character.honor = maxf(character.honor - honor_loss, 0.0)
+	HonorGlorySystem.apply_honor_change(character, -honor_loss)
 
 	return {
 		"character_id": character.character_id,

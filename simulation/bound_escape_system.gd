@@ -155,7 +155,7 @@ static func resolve_escape_attempt(
 	var margin: int = result.total - tn
 
 	var honor_cost: float = LOW_SKILL_HONOR_COST
-	character.honor = clampf(character.honor + honor_cost, 0.0, 10.0)
+	HonorGlorySystem.apply_honor_change(character, honor_cost)
 
 	var noise: NoiseLevel = NoiseLevel.QUIET
 

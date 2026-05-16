@@ -159,9 +159,9 @@ static func reveal_privately(
 
 	secret.exposed = true
 
-	subject.honor = clampf(subject.honor + honor_loss, 0.0, 10.0)
-	subject.glory = clampf(subject.glory + glory_loss, 0.0, 10.0)
-	subject.infamy = clampf(subject.infamy + infamy_gain, 0.0, 10.0)
+	HonorGlorySystem.apply_honor_change(subject, honor_loss)
+	HonorGlorySystem.apply_glory_change(subject, glory_loss)
+	HonorGlorySystem.apply_infamy_change(subject, infamy_gain)
 
 	var current_disp: int = recipient.disposition_values.get(subject.character_id, 0)
 	recipient.disposition_values[subject.character_id] = clampi(
@@ -204,9 +204,9 @@ static func expose_publicly(
 	secret.exposed = true
 	secret.exposed_publicly = true
 
-	subject.honor = clampf(subject.honor + honor_loss, 0.0, 10.0)
-	subject.glory = clampf(subject.glory + glory_loss, 0.0, 10.0)
-	subject.infamy = clampf(subject.infamy + infamy_gain, 0.0, 10.0)
+	HonorGlorySystem.apply_honor_change(subject, honor_loss)
+	HonorGlorySystem.apply_glory_change(subject, glory_loss)
+	HonorGlorySystem.apply_infamy_change(subject, infamy_gain)
 
 	var witness_effects: Array[Dictionary] = []
 	for wid in witness_ids:
@@ -265,8 +265,8 @@ static func fabricate_secret(
 	var success: bool = total >= needed
 
 	var honor_cost: float = FABRICATION_HONOR_COST.get(severity, -0.5)
-	fabricator.honor = clampf(fabricator.honor + honor_cost, 0.0, 10.0)
-	fabricator.infamy = clampf(fabricator.infamy + FABRICATION_INFAMY, 0.0, 10.0)
+	HonorGlorySystem.apply_honor_change(fabricator, honor_cost)
+	HonorGlorySystem.apply_infamy_change(fabricator, FABRICATION_INFAMY)
 
 	if not success:
 		return {"success": false, "roll_total": total, "tn": needed, "honor_cost": honor_cost}
@@ -319,23 +319,23 @@ static func detect_fabrication(
 # ==============================================================================
 
 static func apply_bribe_costs(actor: L5RCharacterData) -> void:
-	actor.honor = clampf(actor.honor + BRIBE_HONOR_COST, 0.0, 10.0)
-	actor.infamy = clampf(actor.infamy + BRIBE_INFAMY, 0.0, 10.0)
+	HonorGlorySystem.apply_honor_change(actor, BRIBE_HONOR_COST)
+	HonorGlorySystem.apply_infamy_change(actor, BRIBE_INFAMY)
 
 
 static func apply_eavesdrop_costs(actor: L5RCharacterData) -> void:
-	actor.honor = clampf(actor.honor + EAVESDROP_HONOR_COST, 0.0, 10.0)
-	actor.infamy = clampf(actor.infamy + EAVESDROP_INFAMY, 0.0, 10.0)
+	HonorGlorySystem.apply_honor_change(actor, EAVESDROP_HONOR_COST)
+	HonorGlorySystem.apply_infamy_change(actor, EAVESDROP_INFAMY)
 
 
 static func apply_intercept_costs(actor: L5RCharacterData) -> void:
-	actor.honor = clampf(actor.honor + INTERCEPT_HONOR_COST, 0.0, 10.0)
-	actor.infamy = clampf(actor.infamy + INTERCEPT_INFAMY, 0.0, 10.0)
+	HonorGlorySystem.apply_honor_change(actor, INTERCEPT_HONOR_COST)
+	HonorGlorySystem.apply_infamy_change(actor, INTERCEPT_INFAMY)
 
 
 static func apply_search_costs(actor: L5RCharacterData) -> void:
-	actor.honor = clampf(actor.honor + SEARCH_HONOR_COST, 0.0, 10.0)
-	actor.infamy = clampf(actor.infamy + SEARCH_INFAMY, 0.0, 10.0)
+	HonorGlorySystem.apply_honor_change(actor, SEARCH_HONOR_COST)
+	HonorGlorySystem.apply_infamy_change(actor, SEARCH_INFAMY)
 
 
 # ==============================================================================
@@ -644,7 +644,7 @@ static func resolve_search_person(
 	var glory_cost: float = 0.0
 	if not has_magistrate_authority and not success:
 		glory_cost = SEARCH_PERSON_GLORY_COST
-		searcher.glory = clampf(searcher.glory + glory_cost, 0.0, 10.0)
+		HonorGlorySystem.apply_glory_change(searcher, glory_cost)
 
 	return {
 		"success": success,
@@ -682,8 +682,8 @@ static func resolve_forge_impersonation_letter(
 
 	var detection_tn: int = result.total if success else 0
 
-	forger.honor = clampf(forger.honor - 0.3, 0.0, 10.0)
-	forger.infamy = clampf(forger.infamy + 0.1, 0.0, 10.0)
+	HonorGlorySystem.apply_honor_change(forger, -0.3)
+	HonorGlorySystem.apply_infamy_change(forger, 0.1)
 
 	return {
 		"success": success,
@@ -722,8 +722,8 @@ static func resolve_forge_order(
 
 	var detection_tn: int = result.total if success else 0
 
-	forger.honor = clampf(forger.honor - 0.5, 0.0, 10.0)
-	forger.infamy = clampf(forger.infamy + 0.2, 0.0, 10.0)
+	HonorGlorySystem.apply_honor_change(forger, -0.5)
+	HonorGlorySystem.apply_infamy_change(forger, 0.2)
 
 	return {
 		"success": success,

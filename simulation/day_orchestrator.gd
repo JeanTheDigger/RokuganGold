@@ -5876,7 +5876,7 @@ static func _process_ladder_side_effects(
 		}
 
 		if side.get("glory_cost", 0.0) != 0.0 and lord != null:
-			lord.glory = maxf(lord.glory + side["glory_cost"], 0.0)
+			HonorGlorySystem.apply_glory_change(lord, side["glory_cost"])
 			result["glory_applied"] = side["glory_cost"]
 
 		if side.has("disposition_cost") and lord != null:
@@ -6272,7 +6272,7 @@ static func _process_active_courts(
 					var rid: int = reward.get("character_id", -1)
 					var rchar: L5RCharacterData = characters_by_id.get(rid) as L5RCharacterData
 					if rchar != null:
-						rchar.glory = clampf(rchar.glory + reward.get("glory_change", 0.0), 0.0, 10.0)
+						HonorGlorySystem.apply_glory_change(rchar, reward.get("glory_change", 0.0))
 				close_result["glory_rewards"] = glory_rewards
 				if court.announcement_topic_id >= 0:
 					for topic: TopicData in active_topics:
@@ -9863,9 +9863,7 @@ static func _process_court_action_effects(
 			if triggers_penalty:
 				var actor: L5RCharacterData = characters_by_id.get(actor_id)
 				if actor != null:
-					actor.honor = clampf(
-						actor.honor + StrategicReview.TYRANT_COURT_HONOR_PENALTY, 0.0, 10.0
-					)
+					HonorGlorySystem.apply_honor_change(actor, StrategicReview.TYRANT_COURT_HONOR_PENALTY)
 
 		# Topic position shift from Negotiate/Persuade
 		if effects.has("target_position_shift") and target != null:
@@ -9878,9 +9876,9 @@ static func _process_court_action_effects(
 		# Provoke Emotion target effects
 		if target != null:
 			if effects.has("target_honor_change"):
-				target.honor = clampf(target.honor + effects["target_honor_change"], 0.0, 10.0)
+				HonorGlorySystem.apply_honor_change(target, effects["target_honor_change"])
 			if effects.has("target_glory_change"):
-				target.glory = clampf(target.glory + effects["target_glory_change"], 0.0, 10.0)
+				HonorGlorySystem.apply_glory_change(target, effects["target_glory_change"])
 
 		# Provoke Emotion witness disposition loss against target
 		if effects.has("target_witness_disposition"):

@@ -194,7 +194,7 @@ static func share_rice(
 	receiver_settlement.rice_stockpile += amount
 
 	var honor: float = compute_sharing_honor(amount, recipient_starvation_stage, resolves)
-	giver.honor = minf(giver.honor + honor, 10.0)
+	HonorGlorySystem.apply_honor_change(giver, honor)
 
 	return {
 		"result": "success",

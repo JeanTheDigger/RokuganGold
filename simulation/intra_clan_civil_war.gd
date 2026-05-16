@@ -323,9 +323,7 @@ static func apply_seasonal_consequences(
 			"after": prov.stability,
 		})
 	if rebel_lord != null and not suppress_hemorrhage:
-		rebel_lord.honor = clampf(
-			rebel_lord.honor + HONOR_HEMORRHAGE_REBEL_PER_SEASON, 0.0, 10.0
-		)
+		HonorGlorySystem.apply_honor_change(rebel_lord, HONOR_HEMORRHAGE_REBEL_PER_SEASON)
 	return {
 		"penalty_applied": penalty,
 		"seasons_active": seasons_active,
@@ -487,7 +485,7 @@ static func apply_defection_consequences(
 	## and -15 disposition on every former faction member toward them.
 	if defector == null:
 		return
-	defector.honor = clampf(defector.honor + DEFECTION_HONOR_PENALTY, 0.0, 10.0)
+	HonorGlorySystem.apply_honor_change(defector, DEFECTION_HONOR_PENALTY)
 	for c in former_faction_members:
 		if c == null or c == defector:
 			continue
@@ -547,7 +545,7 @@ static func get_active_precedent_bonus(precedent_modifiers: Dictionary) -> int:
 static func apply_ronin_departure(npc: L5RCharacterData) -> void:
 	if npc == null:
 		return
-	npc.honor = clampf(npc.honor + RONIN_DEPARTURE_HONOR_PENALTY, 0.0, 10.0)
+	HonorGlorySystem.apply_honor_change(npc, RONIN_DEPARTURE_HONOR_PENALTY)
 
 
 # -- Post-resolution consequences (s53.2.7) ---------------------------------
@@ -636,12 +634,12 @@ static func apply_rebel_consequences_on_legitimacy_victory(
 		if c == null:
 			continue
 		if c.character_id in family_daimyo_ids:
-			c.honor = clampf(c.honor + REBEL_FAMILY_DAIMYO_HONOR_PENALTY, 0.0, 10.0)
+			HonorGlorySystem.apply_honor_change(c, REBEL_FAMILY_DAIMYO_HONOR_PENALTY)
 			results.append({
 				"id": c.character_id, "consequence": "removal", "honor_loss": -1.0
 			})
 		elif c.status >= 4.0:
-			c.honor = clampf(c.honor + REBEL_PROVINCIAL_DAIMYO_HONOR_PENALTY, 0.0, 10.0)
+			HonorGlorySystem.apply_honor_change(c, REBEL_PROVINCIAL_DAIMYO_HONOR_PENALTY)
 			results.append({
 				"id": c.character_id, "consequence": "reassignment", "honor_loss": -0.5
 			})

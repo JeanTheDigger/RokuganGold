@@ -68,8 +68,8 @@ static func resolve_seduction(
 	var success: bool = result.total >= needed
 	var margin: int = result.total - needed
 
-	seducer.honor = clampf(seducer.honor + HONOR_COST, 0.0, 10.0)
-	seducer.infamy = clampf(seducer.infamy + INFAMY_GAIN, 0.0, 10.0)
+	HonorGlorySystem.apply_honor_change(seducer, HONOR_COST)
+	HonorGlorySystem.apply_infamy_change(seducer, INFAMY_GAIN)
 
 	if not success:
 		return {
