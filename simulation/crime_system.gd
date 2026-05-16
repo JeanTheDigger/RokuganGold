@@ -157,7 +157,7 @@ static func apply_at_conviction_consequences(character: L5RCharacterData, record
 	else:
 		status_delta = HonorGlorySystem.apply_status_change(character, consequences[2])
 
-	record.legal_status = Enums.LegalStatus.CONVICTED
+	record.legal_status = Enums.LegalStatus.DECREED_GUILTY
 
 	var topic_tier: int = int(consequences[3])
 	if crime_type == Enums.CrimeType.UNSANCTIONED_COVERT_KILLING:

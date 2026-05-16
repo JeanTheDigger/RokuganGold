@@ -1252,7 +1252,7 @@ func test_end_to_end_crime_loop_through_conviction() -> void:
 	var conviction: Dictionary = CrimeSystem.apply_at_conviction_consequences(
 		criminal, record
 	)
-	assert_eq(record.legal_status, Enums.LegalStatus.CONVICTED)
+	assert_eq(record.legal_status, Enums.LegalStatus.DECREED_GUILTY)
 	assert_eq(conviction["topic_tier"], 3, "Skimming -> Tier 3 topic")
 	assert_true(criminal.glory < 2.0, "Glory should decrease on conviction")
 	assert_true(criminal.infamy > 0.0, "Infamy should increase on conviction")

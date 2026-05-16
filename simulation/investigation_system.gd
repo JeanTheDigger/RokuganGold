@@ -148,7 +148,7 @@ static func get_witness_recall_tn(days_elapsed: int) -> int:
 
 static func check_thresholds(crime_record: CrimeRecord) -> String:
 	if crime_record.evidence_total >= ACCUSATION_THRESHOLD:
-		if crime_record.legal_status != Enums.LegalStatus.ACCUSED and crime_record.legal_status != Enums.LegalStatus.CONVICTED:
+		if crime_record.legal_status != Enums.LegalStatus.ACCUSED and crime_record.legal_status != Enums.LegalStatus.DECREED_GUILTY:
 			crime_record.legal_status = Enums.LegalStatus.ACCUSED
 			return "accusation"
 		return ""

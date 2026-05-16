@@ -125,7 +125,7 @@ extends Resource
 
 # -- Legal System (Section 11.3.14) --------------------------------------------
 
-@export var legal_cases: Array[Dictionary] = []
+@export var legal_cases: Array[LegalCaseEntry] = []
 
 # -- Courtier Framework Fields -------------------------------------------------
 

@@ -532,7 +532,7 @@ func test_accusation_does_not_re_trigger_if_already_accused() -> void:
 func test_accusation_does_not_re_trigger_if_convicted() -> void:
 	var cr := _make_crime_record()
 	cr.evidence_total = 50
-	cr.legal_status = Enums.LegalStatus.CONVICTED
+	cr.legal_status = Enums.LegalStatus.DECREED_GUILTY
 	var result: String = InvestigationSystem.check_thresholds(cr)
 	assert_eq(result, "")
 
