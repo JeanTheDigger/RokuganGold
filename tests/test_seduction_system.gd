@@ -89,6 +89,7 @@ func test_seduce_for_info_variant() -> void:
 	)
 	if r["success"]:
 		assert_true(r["effects"]["info_gained"])
+		assert_eq(r["effects"]["disposition_change"], 3)
 	else:
 		pass_test("Roll may fail with RNG")
 
@@ -138,20 +139,14 @@ func test_maintain_resets_missed_windows() -> void:
 func test_break_entanglement_high_attachment() -> void:
 	var ent: Dictionary = SeductionSystem.create_entanglement(1, 2, 100)
 	var r: Dictionary = SeductionSystem.break_entanglement(ent, 50)
-	assert_eq(r["disposition_loss"], -30)
+	assert_eq(r["disposition_loss"], -15)
 	assert_eq(r["attachment_level"], "high")
 	assert_eq(ent["state"], SeductionSystem.EntanglementState.BROKEN)
 
 
-func test_break_entanglement_moderate_attachment() -> void:
-	var ent: Dictionary = SeductionSystem.create_entanglement(1, 2, 100)
-	var r: Dictionary = SeductionSystem.break_entanglement(ent, 15)
-	assert_eq(r["disposition_loss"], -15)
-
-
 func test_break_entanglement_low_attachment() -> void:
 	var ent: Dictionary = SeductionSystem.create_entanglement(1, 2, 100)
-	var r: Dictionary = SeductionSystem.break_entanglement(ent, -10)
+	var r: Dictionary = SeductionSystem.break_entanglement(ent, 15)
 	assert_eq(r["disposition_loss"], -5)
 
 
@@ -169,16 +164,11 @@ func test_married_affair_tier_3() -> void:
 	assert_eq(s, SecretData.Severity.TIER_3)
 
 
-func test_political_marriage_affair_tier_2() -> void:
-	var s: SecretData.Severity = SeductionSystem.get_affair_severity(true, true, true, false)
+func test_cross_clan_political_tension_tier_2() -> void:
+	var s: SecretData.Severity = SeductionSystem.get_affair_severity(false, false, true, true)
 	assert_eq(s, SecretData.Severity.TIER_2)
 
 
-func test_cross_clan_affair_tier_1() -> void:
-	var s: SecretData.Severity = SeductionSystem.get_affair_severity(false, false, false, true)
-	assert_eq(s, SecretData.Severity.TIER_1)
-
-
-func test_cross_clan_overrides_political() -> void:
-	var s: SecretData.Severity = SeductionSystem.get_affair_severity(true, true, true, true)
-	assert_eq(s, SecretData.Severity.TIER_1)
+func test_cross_clan_without_tension_uses_marriage_status() -> void:
+	var s: SecretData.Severity = SeductionSystem.get_affair_severity(true, false, false, true)
+	assert_eq(s, SecretData.Severity.TIER_3)

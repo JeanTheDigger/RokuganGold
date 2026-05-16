@@ -30,12 +30,10 @@ const MISSED_WINDOWS_TO_BREAK: int = 3
 const AFFAIR_SEVERITY_UNMARRIED: SecretData.Severity = SecretData.Severity.TIER_4
 const AFFAIR_SEVERITY_MARRIED: SecretData.Severity = SecretData.Severity.TIER_3
 const AFFAIR_SEVERITY_POLITICAL: SecretData.Severity = SecretData.Severity.TIER_2
-const AFFAIR_SEVERITY_CROSS_CLAN: SecretData.Severity = SecretData.Severity.TIER_1
 
 const BREAKUP_DISPOSITION_LOSS: Dictionary = {
 	"low": -5,
-	"moderate": -15,
-	"high": -30,
+	"high": -15,
 }
 
 const HONOR_COST: float = -0.3
@@ -94,12 +92,14 @@ static func resolve_seduction(
 	}
 
 
+const SEDUCE_FOR_INFO_DISPOSITION: int = 3
+
 static func _get_variant_effects(variant: SeductionVariant, margin: int) -> Dictionary:
 	match variant:
 		SeductionVariant.SEDUCE:
 			return {"disposition_change": SEDUCE_DISPOSITION_BONUS}
 		SeductionVariant.SEDUCE_FOR_INFO:
-			return {"info_gained": true, "raises_for_detail": int(margin / 5)}
+			return {"info_gained": true, "disposition_change": SEDUCE_FOR_INFO_DISPOSITION, "raises_for_detail": int(margin / 5)}
 		SeductionVariant.SEDUCE_FOR_ACCESS:
 			return {"access_granted": true}
 		SeductionVariant.SEDUCE_FOR_LEVERAGE:
@@ -185,8 +185,6 @@ static func break_entanglement(
 static func _get_attachment_level(disposition: int) -> String:
 	if disposition >= 31:
 		return "high"
-	elif disposition >= 0:
-		return "moderate"
 	return "low"
 
 
@@ -197,12 +195,10 @@ static func _get_attachment_level(disposition: int) -> String:
 static func get_affair_severity(
 	seducer_married: bool,
 	target_married: bool,
-	is_political_marriage: bool,
+	is_political_tension: bool,
 	is_cross_clan: bool,
 ) -> SecretData.Severity:
-	if is_cross_clan:
-		return AFFAIR_SEVERITY_CROSS_CLAN
-	if is_political_marriage:
+	if is_cross_clan and is_political_tension:
 		return AFFAIR_SEVERITY_POLITICAL
 	if seducer_married or target_married:
 		return AFFAIR_SEVERITY_MARRIED

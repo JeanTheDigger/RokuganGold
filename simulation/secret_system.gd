@@ -496,8 +496,8 @@ static func resolve_intercept_letter(
 		}
 
 	var forgery_rank: int = interceptor.skills.get("Forgery", 0)
-	var forgery_rolled: int = interceptor.intelligence + forgery_rank
-	var forgery_kept: int = interceptor.intelligence
+	var forgery_rolled: int = interceptor.agility + forgery_rank
+	var forgery_kept: int = interceptor.agility
 	var forgery_result: DiceResult = dice_engine.roll_and_keep(forgery_rolled, forgery_kept, forgery_rank > 0)
 	var forgery_success: bool = forgery_result.total >= INTERCEPT_FORGERY_TN
 
@@ -528,10 +528,10 @@ static func resolve_search_quarters(
 	var inv_rank: int = target.skills.get("Investigation", 0)
 	var tn: int = SEARCH_BASE_TN + inv_rank
 
-	var stealth_rank: int = searcher.skills.get("Stealth", 0)
-	var rolled: int = searcher.agility + stealth_rank
+	var soh_rank: int = searcher.skills.get("Sleight of Hand", 0)
+	var rolled: int = searcher.agility + soh_rank
 	var kept: int = searcher.agility
-	var result: DiceResult = dice_engine.roll_and_keep(rolled, kept, stealth_rank > 0)
+	var result: DiceResult = dice_engine.roll_and_keep(rolled, kept, soh_rank > 0)
 	var success: bool = result.total >= tn
 	var margin: int = result.total - tn
 
@@ -668,6 +668,7 @@ static func resolve_forge_impersonation_letter(
 	forger: L5RCharacterData,
 	authority_level: String,
 	dice_engine: DiceEngine,
+	raises_called: int = 0,
 ) -> Dictionary:
 	var tn: int = FORGE_LETTER_TN.get(authority_level, 20)
 
@@ -675,12 +676,13 @@ static func resolve_forge_impersonation_letter(
 	if forgery_rank == 0:
 		return {"success": false, "reason": "no_forgery_skill"}
 
-	var rolled: int = forger.intelligence + forgery_rank
-	var kept: int = forger.intelligence
+	var rolled: int = forger.agility + forgery_rank
+	var kept: int = forger.agility
 	var result: DiceResult = dice_engine.roll_and_keep(rolled, kept)
-	var success: bool = result.total >= tn
+	var needed: int = tn + (raises_called * 5)
+	var success: bool = result.total >= needed
 
-	var detection_tn: int = result.total if success else 0
+	var detection_tn: int = (tn + (raises_called * 5)) if success else 0
 
 	HonorGlorySystem.apply_honor_change(forger, -0.3)
 	HonorGlorySystem.apply_infamy_change(forger, 0.1)
@@ -688,7 +690,7 @@ static func resolve_forge_impersonation_letter(
 	return {
 		"success": success,
 		"roll_total": result.total,
-		"tn": tn,
+		"tn": needed,
 		"detection_tn": detection_tn,
 		"detection_risk": not success,
 	}
@@ -708,6 +710,7 @@ static func resolve_forge_order(
 	forger: L5RCharacterData,
 	authority_level: String,
 	dice_engine: DiceEngine,
+	raises_called: int = 0,
 ) -> Dictionary:
 	var tn: int = FORGE_ORDER_TN.get(authority_level, 25)
 
@@ -715,20 +718,21 @@ static func resolve_forge_order(
 	if forgery_rank == 0:
 		return {"success": false, "reason": "no_forgery_skill"}
 
-	var rolled: int = forger.intelligence + forgery_rank
-	var kept: int = forger.intelligence
+	var rolled: int = forger.agility + forgery_rank
+	var kept: int = forger.agility
 	var result: DiceResult = dice_engine.roll_and_keep(rolled, kept)
-	var success: bool = result.total >= tn
+	var needed: int = tn + (raises_called * 5)
+	var success: bool = result.total >= needed
 
-	var detection_tn: int = result.total if success else 0
+	var detection_tn: int = (tn + (raises_called * 5)) if success else 0
 
-	HonorGlorySystem.apply_honor_change(forger, -0.5)
-	HonorGlorySystem.apply_infamy_change(forger, 0.2)
+	HonorGlorySystem.apply_honor_change(forger, -0.3)
+	HonorGlorySystem.apply_infamy_change(forger, 0.1)
 
 	return {
 		"success": success,
 		"roll_total": result.total,
-		"tn": tn,
+		"tn": needed,
 		"detection_tn": detection_tn,
 		"detection_risk": not success,
 	}
