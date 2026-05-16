@@ -2216,16 +2216,19 @@ static func _process_crime_detection(
 			continue
 		var r: Dictionary = result as Dictionary
 		var effects: Dictionary = r.get("effects", {})
-		if not effects.get("detection_risk", false):
-			continue
 
 		var char_id: int = r.get("character_id", -1)
 		var character: L5RCharacterData = characters_by_id.get(char_id)
 		if character == null:
 			continue
 
+		var crime_type: int = -1
 		var action_id: String = r.get("action_id", "")
-		var crime_type: int = _action_to_crime_type(action_id)
+
+		if effects.get("requires_crime_creation", false):
+			crime_type = effects.get("crime_type", -1)
+		elif effects.get("detection_risk", false):
+			crime_type = _action_to_crime_type(action_id)
 		if crime_type < 0:
 			continue
 
@@ -2237,6 +2240,53 @@ static func _process_crime_detection(
 		var witnesses: Array[int] = _get_witnesses_at_location(
 			char_id, location, characters_by_id, world_states
 		)
+
+		var is_killing: bool = crime_type in [
+			Enums.CrimeType.UNSANCTIONED_DUEL_DEATH,
+			Enums.CrimeType.UNSANCTIONED_OPEN_KILLING,
+			Enums.CrimeType.UNSANCTIONED_COVERT_KILLING,
+		]
+
+		if is_killing:
+			var victim: L5RCharacterData = characters_by_id.get(target_id)
+			if victim != null:
+				var killing_result := CrimeWiring.process_killing_crime(
+					effects, character, victim, case_id, ic_day, witnesses,
+					false, false, false, false, false,
+				)
+				if not killing_result.get("crime_created", false):
+					crime_results.append({
+						"case_id": -1,
+						"character_id": char_id,
+						"crime_type": crime_type,
+						"action_id": action_id,
+						"no_crime": true,
+						"reason": killing_result.get("reason", ""),
+					})
+					continue
+				var record: CrimeRecord = killing_result["record"]
+				crime_records.append(record)
+				var at_act: Dictionary = CrimeSystem.apply_at_act_consequences(
+					character, record.crime_type
+				)
+				var crime_topic: TopicData = _create_crime_topic(
+					record, character, ic_day, next_topic_id
+				)
+				if crime_topic != null:
+					active_topics.append(crime_topic)
+					_seed_crime_topic_to_knowers(crime_topic, record, characters_by_id)
+				crime_results.append({
+					"case_id": case_id,
+					"character_id": char_id,
+					"crime_type": record.crime_type,
+					"action_id": action_id,
+					"honor_delta": at_act.get("honor_delta", 0.0),
+					"topic_id": crime_topic.topic_id if crime_topic != null else -1,
+					"witness_count": witnesses.size(),
+					"classification": killing_result.get("classification", {}),
+					"jurisdiction": killing_result.get("jurisdiction", {}),
+				})
+				continue
 
 		var record: CrimeRecord = CrimeSystem.create_crime_record(
 			case_id, crime_type, char_id, location, ic_day, target_id,
