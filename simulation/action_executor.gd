@@ -94,6 +94,7 @@ static func execute(
 	military_data: Dictionary = {},
 	characters_by_id: Dictionary = {},
 	worship_province_malus: Dictionary = {},
+	doshin_bonus: int = 0,
 ) -> Dictionary:
 	var action_id: String = action.action_id
 
@@ -304,8 +305,9 @@ static func execute(
 
 	var tn: int = _get_tn_for_action(action_id, action, ctx, worship_province_malus, character)
 	var wc_bonus: int = _get_winter_court_skill_bonus(character, primary_skill, ctx)
+	var doshin_flat: int = _get_doshin_bonus(action_id, doshin_bonus)
 	var roll_result: Dictionary = SkillResolver.resolve_skill_check(
-		character, dice_engine, primary_skill, tn, 0, "", Enums.Trait.NONE, 0, 0, wc_bonus
+		character, dice_engine, primary_skill, tn, 0, "", Enums.Trait.NONE, 0, 0, wc_bonus + doshin_flat
 	)
 
 	var result: Dictionary = {
@@ -2394,6 +2396,19 @@ static func _get_winter_court_skill_bonus(
 	if character.clan != court_dict.get("host_clan", ""):
 		return 0
 	return WinterCourtSystem.HOST_SKILL_BONUS
+
+
+static func _get_doshin_bonus(action_id: String, bonus_value: int) -> int:
+	if bonus_value <= 0:
+		return 0
+	if action_id in _DOSHIN_ELIGIBLE_ACTIONS:
+		return bonus_value
+	return 0
+
+
+const _DOSHIN_ELIGIBLE_ACTIONS: Array[String] = [
+	"EXAMINE_CRIME_SCENE", "INVESTIGATE_PROVINCE", "PROBE",
+]
 
 
 # -- Construction Intercepts ---------------------------------------------------
