@@ -184,3 +184,60 @@ func test_social_tn_honor_3_no_modifier() -> void:
 	var tn: int = ActionExecutor._get_social_tn(action, ctx, _char)
 	var base_tn: int = ActionExecutor._get_social_tn(action, ctx, null)
 	assert_eq(tn, base_tn)
+
+
+# -- PUBLIC_ATONEMENT (s4.6 Court Event Table) ---------------------------------
+
+func test_atonement_tn_tier_4() -> void:
+	var action: NPCDataStructures.ScoredAction = _make_action("PUBLIC_ATONEMENT")
+	action.metadata = {"offense_tier": 4}
+	var ctx: NPCDataStructures.ContextSnapshot = _make_ctx()
+	var tn: int = ActionExecutor._get_tn_for_action("PUBLIC_ATONEMENT", action, ctx)
+	assert_eq(tn, 15)
+
+
+func test_atonement_tn_tier_1() -> void:
+	var action: NPCDataStructures.ScoredAction = _make_action("PUBLIC_ATONEMENT")
+	action.metadata = {"offense_tier": 1}
+	var ctx: NPCDataStructures.ContextSnapshot = _make_ctx()
+	var tn: int = ActionExecutor._get_tn_for_action("PUBLIC_ATONEMENT", action, ctx)
+	assert_eq(tn, 30)
+
+
+func test_atonement_success_tier_3_honor_and_glory() -> void:
+	var action: NPCDataStructures.ScoredAction = _make_action("PUBLIC_ATONEMENT")
+	action.metadata = {"offense_tier": 3}
+	var result: Dictionary = {"success": true, "margin": 7}
+	var effects: Dictionary = ActionExecutor._compute_atonement_effects(action, result)
+	assert_eq(effects["effect"], "atonement_performed")
+	assert_almost_eq(effects["honor_change"], 0.6, 0.001)
+	assert_almost_eq(effects["glory_change"], -0.3, 0.001)
+
+
+func test_atonement_success_tier_1_with_raises() -> void:
+	var action: NPCDataStructures.ScoredAction = _make_action("PUBLIC_ATONEMENT")
+	action.metadata = {"offense_tier": 1}
+	var result: Dictionary = {"success": true, "margin": 15}
+	var effects: Dictionary = ActionExecutor._compute_atonement_effects(action, result)
+	assert_almost_eq(effects["honor_change"], 1.3, 0.001)
+
+
+func test_atonement_failure_glory_loss_only() -> void:
+	var action: NPCDataStructures.ScoredAction = _make_action("PUBLIC_ATONEMENT")
+	action.metadata = {"offense_tier": 3}
+	var result: Dictionary = {"success": false, "margin": -3}
+	var effects: Dictionary = ActionExecutor._compute_atonement_effects(action, result)
+	assert_eq(effects["effect"], "atonement_failed")
+	assert_true(effects["failed"])
+	assert_false(effects.has("honor_change"))
+	assert_almost_eq(effects["glory_change"], -0.3, 0.001)
+
+
+func test_atonement_critical_failure_honor_loss() -> void:
+	var action: NPCDataStructures.ScoredAction = _make_action("PUBLIC_ATONEMENT")
+	action.metadata = {"offense_tier": 2}
+	var result: Dictionary = {"success": false, "margin": -12}
+	var effects: Dictionary = ActionExecutor._compute_atonement_effects(action, result)
+	assert_eq(effects["effect"], "atonement_critical_failure")
+	assert_almost_eq(effects["honor_change"], -0.3, 0.001)
+	assert_almost_eq(effects["glory_change"], -0.5, 0.001)

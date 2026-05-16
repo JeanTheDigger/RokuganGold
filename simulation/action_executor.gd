@@ -1114,6 +1114,9 @@ static func _get_tn_for_action(
 	if action_id in INTELLIGENCE_ACTIONS:
 		var intel_modifier: int = absi(int(worship_province_malus.get("intelligence_roll_modifier", 0)))
 		return SOCIAL_BASE_TN + intel_modifier
+	if action_id == "PUBLIC_ATONEMENT":
+		var tier: int = action.metadata.get("offense_tier", 3)
+		return HonorGlorySystem.ATONEMENT_TN_BY_TIER.get(tier, 20)
 	return SOCIAL_BASE_TN
 
 
@@ -1156,7 +1159,9 @@ static func _apply_effects(
 	var effects: Dictionary = {}
 	var action_id: String = action.action_id
 
-	if result["success"]:
+	if action_id == "PUBLIC_ATONEMENT":
+		effects = _compute_atonement_effects(action, result)
+	elif result["success"]:
 		if action_id in SOCIAL_ACTIONS:
 			effects = _compute_social_effects(action_id, result["margin"])
 		elif action_id in COVERT_ACTIONS:
@@ -1885,14 +1890,44 @@ static func _compute_self_effects(action_id: String) -> Dictionary:
 			return {"effect": "letter_sent"}
 		"PERFORM_RITUAL", "PERFORM_WORSHIP":
 			return {"effect": "ritual_completed", "honor_change": 0.1}
-		"PUBLIC_ATONEMENT":
-			# GDD s4.6: Tier 4=+0.3, Tier 3=+0.5, Tier 2=+0.8, Tier 1=+1.0
-			return {"effect": "atonement_performed", "honor_change": 0.5, "honor_tier_dependent": true}
 		"MENTOR":
 			return {"effect": "student_trained"}
 		"OBSERVE_COURT_ATTENDEES":
 			return {"effect": "court_observed", "info_gained": true}  # fallback — should not reach here
 	return {"effect": "self_action_completed"}
+
+
+static func _compute_atonement_effects(
+	action: NPCDataStructures.ScoredAction,
+	result: Dictionary,
+) -> Dictionary:
+	var tier: int = action.metadata.get("offense_tier", 3)
+	var margin: int = result.get("margin", 0)
+	var success: bool = result.get("success", false)
+	if success:
+		var raises: int = maxi(int(margin / 5.0), 0)
+		var honor_gain: float = HonorGlorySystem.ATONEMENT_HONOR_BY_TIER.get(tier, 0.5)
+		honor_gain += float(raises) * HonorGlorySystem.ATONEMENT_HONOR_PER_RAISE
+		return {
+			"effect": "atonement_performed",
+			"honor_change": honor_gain,
+			"glory_change": HonorGlorySystem.ATONEMENT_GLORY_LOSS,
+			"offense_tier": tier,
+		}
+	if margin <= -10:
+		return {
+			"effect": "atonement_critical_failure",
+			"failed": true,
+			"honor_change": HonorGlorySystem.ATONEMENT_CRITICAL_FAIL_HONOR_LOSS,
+			"glory_change": HonorGlorySystem.ATONEMENT_CRITICAL_FAIL_GLORY_LOSS,
+			"offense_tier": tier,
+		}
+	return {
+		"effect": "atonement_failed",
+		"failed": true,
+		"glory_change": HonorGlorySystem.ATONEMENT_GLORY_LOSS,
+		"offense_tier": tier,
+	}
 
 
 static func _compute_failure_effects(action_id: String, margin: int = 0) -> Dictionary:
