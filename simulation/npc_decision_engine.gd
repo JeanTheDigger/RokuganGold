@@ -920,14 +920,15 @@ static func _compute_competence_modifier(
 	if primary_skill == "":
 		return 0.0
 
+	var competence_table: Dictionary = scoring_tables.get("competence_table", {})
 	var rank: int = int(skill_ranks.get(primary_skill, 0))
-	var modifier: float = float(NPCDataStructures.get_competence_modifier(rank))
+	var modifier: float = float(competence_table.get(str(rank), competence_table.get(rank, -20)))
 
 	var secondary_raw: Variant = action_skills.get("secondary", "")
 	var secondary_skill: String = str(secondary_raw) if secondary_raw != null else ""
 	if secondary_skill != "":
 		var sec_rank: int = int(skill_ranks.get(secondary_skill, 0))
-		modifier += float(NPCDataStructures.get_competence_modifier(sec_rank)) * 0.5
+		modifier += float(competence_table.get(str(sec_rank), competence_table.get(sec_rank, -20))) * 0.5
 
 	return clampf(modifier, -20.0, 20.0)
 

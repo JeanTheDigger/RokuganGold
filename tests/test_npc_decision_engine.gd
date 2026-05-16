@@ -1330,6 +1330,7 @@ func test_competence_modifier_with_primary_skill() -> void:
 		"action_skill_map": {
 			"CHARM": {"primary": "Etiquette", "secondary": "Courtier"},
 		},
+		"competence_table": {"0": -20, "1": -10, "2": -5, "3": 0, "4": 5, "5": 10, "6": 15, "7": 20},
 	}
 	var skills: Dictionary = {"Etiquette": 5, "Courtier": 3}
 	var result: float = NPCDecisionEngine._compute_competence_modifier(
@@ -1343,6 +1344,7 @@ func test_competence_modifier_with_secondary_half_value() -> void:
 		"action_skill_map": {
 			"TEST": {"primary": "Battle", "secondary": "Etiquette"},
 		},
+		"competence_table": {"0": -20, "1": -10, "2": -5, "3": 0, "4": 5, "5": 10, "6": 15, "7": 20},
 	}
 	var skills: Dictionary = {"Battle": 3, "Etiquette": 5}
 	var result: float = NPCDecisionEngine._compute_competence_modifier(
@@ -1356,6 +1358,7 @@ func test_competence_modifier_null_secondary_no_penalty() -> void:
 		"action_skill_map": {
 			"INTIMIDATE": {"primary": "Intimidation", "secondary": null},
 		},
+		"competence_table": {"0": -20, "1": -10, "2": -5, "3": 0, "4": 5, "5": 10, "6": 15, "7": 20},
 	}
 	var skills: Dictionary = {"Intimidation": 4}
 	var result: float = NPCDecisionEngine._compute_competence_modifier(
@@ -1369,6 +1372,7 @@ func test_competence_modifier_null_primary_returns_zero() -> void:
 		"action_skill_map": {
 			"DO_NOTHING": {"primary": null, "secondary": null},
 		},
+		"competence_table": {"0": -20, "1": -10, "2": -5, "3": 0, "4": 5, "5": 10, "6": 15, "7": 20},
 	}
 	var result: float = NPCDecisionEngine._compute_competence_modifier(
 		"DO_NOTHING", {}, tables,
