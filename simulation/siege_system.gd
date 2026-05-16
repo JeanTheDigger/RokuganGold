@@ -88,7 +88,7 @@ const EVENT_DEFINITIONS: Dictionary = {
 		"skill": "Engineering", "trait": "Intelligence", "tn": 30,
 		"success_ticks": -20, "failure_ticks": 0,
 		"honor_cost": -0.5,
-		"personality_block": ["Jin", "Gi"],
+		"personality_block": ["JIN", "GI"],
 		"side": "attacker",
 	},
 	"D1_MIDNIGHT_RESUPPLY": {

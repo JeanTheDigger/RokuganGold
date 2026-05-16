@@ -162,10 +162,10 @@ static func check_auto_escalation(
 # -- Peace Willingness -----------------------------------------------------------
 
 const PEACE_POSITIVE_VIRTUES: Array[String] = [
-	"Seigyo", "Chishiki", "Gi", "Makoto",
+	"SEIGYO", "CHISHIKI", "GI", "MAKOTO",
 ]
 const PEACE_NEGATIVE_VIRTUES: Array[String] = [
-	"Yu", "Ketsui", "Ishi",
+	"YU", "KETSUI", "ISHI",
 ]
 
 
@@ -198,9 +198,9 @@ static func compute_peace_willingness(
 	if superior_pressuring:
 		willingness += 15
 
-	if primary_virtue in PEACE_POSITIVE_VIRTUES:
+	if primary_virtue.to_upper() in PEACE_POSITIVE_VIRTUES:
 		willingness += 10
-	elif primary_virtue in PEACE_NEGATIVE_VIRTUES:
+	elif primary_virtue.to_upper() in PEACE_NEGATIVE_VIRTUES:
 		willingness -= 15
 
 	if tier == WarData.WarScoreTier.WINNING or tier == WarData.WarScoreTier.DOMINANT:

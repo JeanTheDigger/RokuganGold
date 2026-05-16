@@ -65,8 +65,8 @@ const PRIMARY_OBJECTIVE_TIERS: Dictionary = {
 
 # -- Personality-Driven Aggression Virtues (s53.1) -------------------------------
 
-const AGGRESSION_BUSHIDO: Array[String] = ["Yu"]
-const AGGRESSION_SHOURIDO: Array[String] = ["Kyoryoku", "Ketsui"]
+const AGGRESSION_BUSHIDO: Array[String] = ["YU"]
+const AGGRESSION_SHOURIDO: Array[String] = ["KYORYOKU", "KETSUI"]
 
 
 # -- Personality Gates (s53.1) ---------------------------------------------------
@@ -84,7 +84,7 @@ const GI_MAKOTO_COVERT_BLOCK: Array[String] = [
 ]
 
 const PREVENT_SHORTAGE_BLOCKED_VIRTUES: Array[String] = [
-	"Jin", "Gi",
+	"JIN", "GI",
 ]
 
 
@@ -123,9 +123,10 @@ static func qualifies_for_personality_aggression(
 	primary_virtue: String,
 	standing_objective: String,
 ) -> bool:
+	var virtue_upper: String = primary_virtue.to_upper()
 	var has_virtue: bool = (
-		primary_virtue in AGGRESSION_BUSHIDO
-		or primary_virtue in AGGRESSION_SHOURIDO
+		virtue_upper in AGGRESSION_BUSHIDO
+		or virtue_upper in AGGRESSION_SHOURIDO
 	)
 	if not has_virtue:
 		return false
@@ -202,15 +203,13 @@ static func check_personality_gate(
 ) -> Dictionary:
 	var blocked: bool = false
 	var reason: String = ""
+	var virtue_upper: String = primary_virtue.to_upper()
 
-	if primary_virtue == "Jin":
+	if virtue_upper == "JIN":
 		if standing_objective in JIN_TOTAL_WAR_BLOCK:
 			if tier == MilitaryTier.TOTAL_WAR:
 				blocked = true
 				reason = "jin_blocks_total_war"
-		# GDD: Jin + EXPAND_TERRITORY blocks all tiers unless non-military options
-		# exhausted or target gave provocation. Approximated as TOTAL_WAR block
-		# since the exhaustion check requires runtime data not available here.
 		if standing_objective in JIN_EXHAUST_GATE:
 			if tier == MilitaryTier.TOTAL_WAR:
 				blocked = true
@@ -219,7 +218,7 @@ static func check_personality_gate(
 			blocked = true
 			reason = "jin_blocks_resource_raid"
 
-	if primary_virtue == "Gi" or primary_virtue == "Makoto":
+	if virtue_upper == "GI" or virtue_upper == "MAKOTO":
 		if standing_objective in GI_MAKOTO_COVERT_BLOCK:
 			blocked = true
 			reason = "gi_makoto_blocks_covert_warfare"
@@ -227,10 +226,10 @@ static func check_personality_gate(
 			blocked = true
 			reason = "gi_makoto_blocks_covert_warfare"
 
-	if primary_virtue in PREVENT_SHORTAGE_BLOCKED_VIRTUES:
+	if virtue_upper in PREVENT_SHORTAGE_BLOCKED_VIRTUES:
 		if standing_objective == "PREVENT_SHORTAGE":
 			blocked = true
-			reason = "%s_blocks_resource_raid" % primary_virtue.to_lower()
+			reason = "%s_blocks_resource_raid" % virtue_upper.to_lower()
 
 	return {"blocked": blocked, "reason": reason}
 
@@ -259,9 +258,10 @@ static func select_intended_tier(
 	if supported.is_empty():
 		return MilitaryTier.RAID
 
+	var virtue_upper: String = primary_virtue.to_upper()
 	var is_aggressive: bool = (
-		primary_virtue in AGGRESSION_BUSHIDO
-		or primary_virtue in AGGRESSION_SHOURIDO
+		virtue_upper in AGGRESSION_BUSHIDO
+		or virtue_upper in AGGRESSION_SHOURIDO
 	)
 
 	if is_aggressive:

@@ -359,12 +359,12 @@ static func compute_capture_prize_value(ship_class: int) -> float:
 
 
 static func evaluate_signature_capture_decision(virtue: String) -> String:
-	match virtue:
-		"Yu", "Chugi", "Meiyo":
+	match virtue.to_upper():
+		"YU", "CHUGI", "MEIYO":
 			return "destroy"
-		"Seigyo", "Kanpeki", "Kyoryoku":
+		"SEIGYO", "KANPEKI", "KYORYOKU":
 			return "keep"
-		"Makoto", "Jin":
+		"MAKOTO", "JIN":
 			return "return"
 	return "destroy"
 
