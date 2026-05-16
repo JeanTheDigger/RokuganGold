@@ -477,6 +477,92 @@ func test_forge_one_to_one_conversion_rate() -> void:
 	assert_almost_eq(r["arms_produced"], r["iron_consumed"], 0.001)
 
 
+# -- Garrison Check (GDD s4.3.11) -----------------------------------------------
+
+func test_garrison_required_rounds_up() -> void:
+	assert_almost_eq(ResourceTick.compute_garrison_required(1), 0.1, 0.01)
+	assert_almost_eq(ResourceTick.compute_garrison_required(8), 0.4, 0.01)
+	assert_almost_eq(ResourceTick.compute_garrison_required(10), 0.5, 0.01)
+	assert_almost_eq(ResourceTick.compute_garrison_required(100), 5.0, 0.01)
+
+
+func test_not_under_garrisoned_when_sufficient() -> void:
+	assert_false(ResourceTick.is_under_garrisoned(_province, _settlements()))
+
+
+func test_under_garrisoned_when_zero() -> void:
+	_settlement.garrison_pu = 0
+	assert_true(ResourceTick.is_under_garrisoned(_province, _settlements()))
+
+
+func test_garrison_check_increments_under_seasons() -> void:
+	_settlement.garrison_pu = 0
+	var meta: Dictionary = {}
+	var r1: Dictionary = ResourceTick._process_garrison_check(
+		[_province] as Array[ProvinceData], _settlements(), meta
+	)
+	assert_eq(r1[1]["seasons"], 1)
+	var r2: Dictionary = ResourceTick._process_garrison_check(
+		[_province] as Array[ProvinceData], _settlements(), meta
+	)
+	assert_eq(r2[1]["seasons"], 2)
+
+
+func test_garrison_check_resets_when_garrisoned() -> void:
+	_settlement.garrison_pu = 0
+	var meta: Dictionary = {}
+	ResourceTick._process_garrison_check(
+		[_province] as Array[ProvinceData], _settlements(), meta
+	)
+	_settlement.garrison_pu = 1
+	var r2: Dictionary = ResourceTick._process_garrison_check(
+		[_province] as Array[ProvinceData], _settlements(), meta
+	)
+	assert_eq(r2[1]["seasons"], 0)
+
+
+func test_garrison_check_drains_rice() -> void:
+	_settlement.garrison_pu = 0
+	_settlement.rice_stockpile = 5.0
+	var meta: Dictionary = {}
+	ResourceTick._process_garrison_check(
+		[_province] as Array[ProvinceData], _settlements(), meta
+	)
+	assert_almost_eq(_settlement.rice_stockpile, 4.95, 0.001)
+
+
+func test_garrison_check_reduces_stability() -> void:
+	_settlement.garrison_pu = 0
+	_province.stability = 100.0
+	var meta: Dictionary = {}
+	ResourceTick._process_garrison_check(
+		[_province] as Array[ProvinceData], _settlements(), meta
+	)
+	assert_almost_eq(_province.stability, 98.0, 0.01)
+
+
+func test_garrison_trade_drain_caps() -> void:
+	_settlement.garrison_pu = 0
+	var meta: Dictionary = {"_under_garrison_seasons": {1: 10}}
+	var r: Dictionary = ResourceTick._process_garrison_check(
+		[_province] as Array[ProvinceData], _settlements(), meta
+	)
+	assert_almost_eq(r[1]["trade_drain"], 0.3, 0.001)
+
+
+func test_garrison_koku_malus_applied() -> void:
+	_settlement.garrison_pu = 0
+	_settlement.town_pu = 2
+	_settlement.koku_stockpile = 0.0
+	var meta: Dictionary = {"_koku_modifiers": {1: 1.0}}
+	ResourceTick._process_garrison_check(
+		[_province] as Array[ProvinceData], _settlements(), meta
+	)
+	ResourceTick._process_koku_generation(_settlements(), meta)
+	var expected: float = float(_settlement.town_pu) * ResourceTick.KOKU_PER_TOWN_PU_PER_SEASON * 0.8
+	assert_almost_eq(_settlement.koku_stockpile, expected, 0.01)
+
+
 # -- Stipend Personality Modifier (GDD s4.3.9) ---------------------------------
 
 func test_stipend_modifier_jin_gives_ten_percent() -> void:

@@ -45,6 +45,15 @@ const STARVATION_PU_LOSS: Dictionary = {
 	StarvationStage.FAMINE: 0.20,
 }
 
+# -- Garrison per GDD s4.3.11 -------------------------------------------------
+
+const GARRISON_RATIO: float = 0.05
+const GARRISON_KOKU_MALUS: float = 0.8
+const GARRISON_TRADE_DRAIN_PER_SEASON: float = 0.05
+const GARRISON_TRADE_DRAIN_CAP: float = 0.3
+const GARRISON_RICE_DRAIN_PER_SEASON: float = 0.05
+const GARRISON_STABILITY_PENALTY_PER_SEASON: float = 2.0
+
 # -- Personality Tax Modifiers per GDD s4.3.7 ---------------------------------
 
 const BUSHIDO_TAX_MODIFIERS: Dictionary = {
@@ -217,6 +226,52 @@ static func get_province_rice(
 	return total
 
 
+static func compute_garrison_required(total_pop_pu: int) -> float:
+	return ceilf(float(total_pop_pu) * GARRISON_RATIO * 10.0) / 10.0
+
+
+static func is_under_garrisoned(
+	province: ProvinceData,
+	settlements: Array[SettlementData],
+) -> bool:
+	var pop: int = sum_population_pu(province, settlements)
+	var garrison: int = sum_garrison_pu(province, settlements)
+	return float(garrison) < compute_garrison_required(pop)
+
+
+static func _process_garrison_check(
+	provinces: Array[ProvinceData],
+	settlements: Array[SettlementData],
+	settlement_meta: Dictionary,
+) -> Dictionary:
+	var results: Dictionary = {}
+	var under_seasons: Dictionary = settlement_meta.get("_under_garrison_seasons", {})
+	for prov: ProvinceData in provinces:
+		var pid: int = prov.province_id
+		if is_under_garrisoned(prov, settlements):
+			var seasons: int = under_seasons.get(pid, 0) + 1
+			under_seasons[pid] = seasons
+			var trade_drain: float = minf(
+				float(seasons) * GARRISON_TRADE_DRAIN_PER_SEASON,
+				GARRISON_TRADE_DRAIN_CAP,
+			)
+			for s: SettlementData in settlements:
+				if s.province_id == pid:
+					s.rice_stockpile = maxf(0.0, s.rice_stockpile - GARRISON_RICE_DRAIN_PER_SEASON)
+			prov.stability = maxf(0.0, prov.stability - GARRISON_STABILITY_PENALTY_PER_SEASON)
+			results[pid] = {
+				"under_garrisoned": true,
+				"seasons": seasons,
+				"trade_drain": trade_drain,
+				"koku_malus": GARRISON_KOKU_MALUS,
+			}
+		else:
+			under_seasons[pid] = 0
+			results[pid] = {"under_garrisoned": false, "seasons": 0}
+	settlement_meta["_under_garrison_seasons"] = under_seasons
+	return results
+
+
 # ==============================================================================
 # Seasonal Tick Entry Point
 # ==============================================================================
@@ -320,6 +375,10 @@ static func process_seasonal_tick(
 
 	var arms: Dictionary = _process_forge_conversion(settlements, settlement_meta)
 	results["arms_produced"] = arms
+
+	var garrison: Dictionary = _process_garrison_check(provinces, settlements, settlement_meta)
+	results["garrison_check"] = garrison
+	settlement_meta["_garrison"] = garrison
 
 	var koku: Dictionary = _process_koku_generation(settlements, settlement_meta)
 	results["koku_generated"] = koku
@@ -1082,11 +1141,15 @@ static func _process_koku_generation(
 	var results: Dictionary = {}
 	var location_mods: Dictionary = settlement_meta.get("_koku_modifiers", {})
 	var worship_m: Dictionary = settlement_meta.get("_worship_maluses", {})
+	var garrison_data: Dictionary = settlement_meta.get("_garrison", {})
 	for s: SettlementData in settlements:
 		if s.town_pu <= 0:
 			continue
 		var loc_mod: float = location_mods.get(s.settlement_id, location_mods.get(s.province_id, 1.0))
 		var koku: float = float(s.town_pu) * KOKU_PER_TOWN_PU_PER_SEASON * loc_mod
+		var g: Dictionary = garrison_data.get(s.province_id, {})
+		if g.get("under_garrisoned", false):
+			koku *= g.get("koku_malus", 1.0)
 		var koku_mod: float = (worship_m.get(s.province_id, {}) as Dictionary).get("koku_modifier", 0.0)
 		if koku_mod < 0.0:
 			koku = maxf(0.0, koku * (1.0 + koku_mod))
