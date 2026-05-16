@@ -241,3 +241,25 @@ func test_atonement_critical_failure_honor_loss() -> void:
 	assert_eq(effects["effect"], "atonement_critical_failure")
 	assert_almost_eq(effects["honor_change"], -0.3, 0.001)
 	assert_almost_eq(effects["glory_change"], -0.5, 0.001)
+
+
+# -- Atonement Repeat Blocking (s4.6) ------------------------------------------
+
+func test_can_atone_first_time() -> void:
+	assert_true(HonorGlorySystem.can_atone(_char, "scandal_y3m7"))
+
+
+func test_cannot_atone_same_offense_twice() -> void:
+	HonorGlorySystem.record_atonement(_char, "scandal_y3m7")
+	assert_false(HonorGlorySystem.can_atone(_char, "scandal_y3m7"))
+
+
+func test_can_atone_different_offense() -> void:
+	HonorGlorySystem.record_atonement(_char, "scandal_y3m7")
+	assert_true(HonorGlorySystem.can_atone(_char, "theft_y4m2"))
+
+
+func test_record_atonement_idempotent() -> void:
+	HonorGlorySystem.record_atonement(_char, "scandal_y3m7")
+	HonorGlorySystem.record_atonement(_char, "scandal_y3m7")
+	assert_eq(_char.atoned_offenses.size(), 1)

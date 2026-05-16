@@ -278,6 +278,21 @@ static func execute(
 				"effects": {},
 			}
 
+	if action_id == "PUBLIC_ATONEMENT":
+		var offense_key: String = action.metadata.get("offense_key", "")
+		if not offense_key.is_empty() and not HonorGlorySystem.can_atone(character, offense_key):
+			return {
+				"success": false,
+				"action_id": action_id,
+				"character_id": ctx.character_id,
+				"target_npc_id": -1,
+				"target_province_id": -1,
+				"ic_day": ctx.ic_day,
+				"season": ctx.season,
+				"reason": "already_atoned",
+				"effects": {},
+			}
+
 	if action_id in NO_ROLL_ACTIONS:
 		return _execute_no_roll(action, character, ctx)
 
@@ -1161,6 +1176,9 @@ static func _apply_effects(
 
 	if action_id == "PUBLIC_ATONEMENT":
 		effects = _compute_atonement_effects(action, result)
+		var offense_key: String = action.metadata.get("offense_key", "")
+		if not offense_key.is_empty():
+			HonorGlorySystem.record_atonement(_character, offense_key)
 	elif result["success"]:
 		if action_id in SOCIAL_ACTIONS:
 			effects = _compute_social_effects(action_id, result["margin"])

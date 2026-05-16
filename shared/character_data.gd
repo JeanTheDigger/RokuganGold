@@ -238,6 +238,7 @@ extends Resource
 @export var xp_fractional: float = 0.0
 @export var progress_bars: Dictionary = {}
 @export var training_relationships: Dictionary = {}
+@export var atoned_offenses: Array[String] = []
 
 
 # -- Trait Access Helpers (used by CharacterStats) -----------------------------
