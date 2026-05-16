@@ -2513,11 +2513,11 @@ static func _execute_contested_court_action(
 			)
 		"IMPRESS":
 			resolution = CourtActionSystem.resolve_impress(
-				attacker_roll, defender_roll, raises
+				attacker_roll, defender_roll, raises, has_topic
 			)
 		"LISTEN_REFLECT":
 			resolution = CourtActionSystem.resolve_listen_reflect(
-				attacker_roll, defender_roll, raises
+				attacker_roll, defender_roll, raises, has_topic
 			)
 		"OFFER_FAVOR":
 			resolution = CourtActionSystem.resolve_offer_favor(
