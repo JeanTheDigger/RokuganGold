@@ -495,7 +495,7 @@ static func advance_day(
 		seasonal_result = _process_season_transition(
 			characters, provinces, current_season, season_meta,
 			approach_penalties, settlements, spring_inputs, worship_maluses,
-			emperor_tax_cfg,
+			emperor_tax_cfg, trade_routes,
 		)
 		_apply_worship_stability_maluses(worship_maluses, provinces)
 		_apply_tyrant_stability_penalty(
@@ -889,6 +889,7 @@ static func _process_season_transition(
 	miya_inputs: Dictionary = {},
 	worship_maluses: Dictionary = {},
 	emperor_tax_config: Dictionary = {},
+	trade_routes: Array = [],
 ) -> Dictionary:
 	_decay_all_knowledge(characters, current_season)
 
@@ -914,7 +915,7 @@ static func _process_season_transition(
 
 	var tick_result: Dictionary = ResourceTick.process_seasonal_tick(
 		province_array, settlements, season_name, season_meta, resolved_inputs,
-		worship_maluses, emperor_tax_config,
+		worship_maluses, emperor_tax_config, trade_routes,
 	)
 
 	return {

@@ -931,3 +931,67 @@ func test_arms_redirect_does_not_touch_other_clans() -> void:
 	ResourceTick.apply_warlike_arms_redirect(5.0, meta)
 	assert_almost_eq(crab_clan.arms_stockpile, 10.0, 0.001)
 	assert_almost_eq(imperial_clan.arms_stockpile, 5.0, 0.001)
+
+
+# -- Trade Route Koku Bonus (GDD s4.3.18 + s4.3.11) ----------------------------
+
+func _make_route(pid_a: int, pid_b: int, koku: float = 0.1) -> TradeRouteData:
+	var r: TradeRouteData = TradeRouteData.new()
+	r.route_id = 1
+	r.province_a_id = pid_a
+	r.province_b_id = pid_b
+	r.koku_bonus_per_season = koku
+	return r
+
+
+func test_trade_route_koku_added_to_settlement() -> void:
+	var route: TradeRouteData = _make_route(1, 2, 0.2)
+	var meta: Dictionary = {}
+	_settlement.koku_stockpile = 0.0
+	var result: Dictionary = ResourceTick._process_trade_route_koku(
+		[_province] as Array[ProvinceData], _settlements(),
+		[route], meta,
+	)
+	assert_almost_eq(result[1]["trade_koku"], 0.2, 0.001)
+	assert_almost_eq(_settlement.koku_stockpile, 0.2, 0.001)
+
+
+func test_trade_route_koku_zero_when_disrupted() -> void:
+	var route: TradeRouteData = _make_route(1, 2, 0.2)
+	route.is_disrupted = true
+	var meta: Dictionary = {}
+	_settlement.koku_stockpile = 0.0
+	var result: Dictionary = ResourceTick._process_trade_route_koku(
+		[_province] as Array[ProvinceData], _settlements(),
+		[route], meta,
+	)
+	assert_almost_eq(result[1]["trade_koku"], 0.0, 0.001)
+	assert_almost_eq(_settlement.koku_stockpile, 0.0, 0.001)
+
+
+func test_trade_route_koku_reduced_by_garrison_drain() -> void:
+	var route: TradeRouteData = _make_route(1, 2, 0.2)
+	var meta: Dictionary = {
+		"_garrison": {1: {"under_garrisoned": true, "trade_drain": 0.15}},
+	}
+	_settlement.koku_stockpile = 0.0
+	var result: Dictionary = ResourceTick._process_trade_route_koku(
+		[_province] as Array[ProvinceData], _settlements(),
+		[route], meta,
+	)
+	assert_almost_eq(result[1]["trade_koku"], 0.05, 0.001)
+	assert_almost_eq(result[1]["garrison_drain"], 0.15, 0.001)
+
+
+func test_trade_route_koku_drain_does_not_go_negative() -> void:
+	var route: TradeRouteData = _make_route(1, 2, 0.1)
+	var meta: Dictionary = {
+		"_garrison": {1: {"under_garrisoned": true, "trade_drain": 0.3}},
+	}
+	_settlement.koku_stockpile = 0.0
+	var result: Dictionary = ResourceTick._process_trade_route_koku(
+		[_province] as Array[ProvinceData], _settlements(),
+		[route], meta,
+	)
+	assert_almost_eq(result[1]["trade_koku"], 0.0, 0.001)
+	assert_almost_eq(_settlement.koku_stockpile, 0.0, 0.001)

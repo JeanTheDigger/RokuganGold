@@ -313,6 +313,7 @@ static func process_seasonal_tick(
 	miya_inputs: Dictionary = {},
 	worship_maluses: Dictionary = {},
 	emperor_tax_config: Dictionary = {},
+	trade_routes: Array = [],
 ) -> Dictionary:
 	var results: Dictionary = {
 		"rice_consumed": {},
@@ -382,6 +383,11 @@ static func process_seasonal_tick(
 
 	var koku: Dictionary = _process_koku_generation(settlements, settlement_meta)
 	results["koku_generated"] = koku
+
+	var trade_koku: Dictionary = _process_trade_route_koku(
+		provinces, settlements, trade_routes, settlement_meta,
+	)
+	results["trade_route_koku"] = trade_koku
 
 	return results
 
@@ -1159,3 +1165,56 @@ static func _process_koku_generation(
 			results[pid] = {"koku_generated": 0.0}
 		results[pid]["koku_generated"] += koku
 	return results
+
+
+# ==============================================================================
+# Trade Route Koku Bonus — s4.3.18 + garrison drain s4.3.11
+# ==============================================================================
+
+static func _process_trade_route_koku(
+	provinces: Array[ProvinceData],
+	settlements: Array[SettlementData],
+	trade_routes: Array,
+	settlement_meta: Dictionary,
+) -> Dictionary:
+	var results: Dictionary = {}
+	if trade_routes.is_empty():
+		return results
+	var typed_routes: Array[TradeRouteData] = []
+	for r: Variant in trade_routes:
+		if r is TradeRouteData:
+			typed_routes.append(r)
+	var worship_m: Dictionary = settlement_meta.get("_worship_maluses", {})
+	var garrison_data: Dictionary = settlement_meta.get("_garrison", {})
+	for prov: ProvinceData in provinces:
+		var pid: int = prov.province_id
+		var bonus: float = RiceMarketSystem.compute_trade_route_koku(
+			prov, typed_routes, worship_m,
+		)
+		if bonus <= 0.0:
+			results[pid] = {"trade_koku": 0.0, "garrison_drain": 0.0}
+			continue
+		var drain: float = 0.0
+		var g: Dictionary = garrison_data.get(pid, {})
+		if g.get("under_garrisoned", false):
+			drain = g.get("trade_drain", 0.0)
+		bonus = maxf(0.0, bonus - drain)
+		_distribute_koku_to_settlements(prov, settlements, bonus)
+		results[pid] = {"trade_koku": bonus, "garrison_drain": drain}
+	return results
+
+
+static func _distribute_koku_to_settlements(
+	province: ProvinceData,
+	settlements: Array[SettlementData],
+	amount: float,
+) -> void:
+	var prov_settlements: Array[SettlementData] = []
+	for s: SettlementData in settlements:
+		if s.province_id == province.province_id:
+			prov_settlements.append(s)
+	if prov_settlements.is_empty():
+		return
+	var share: float = amount / float(prov_settlements.size())
+	for s: SettlementData in prov_settlements:
+		s.koku_stockpile += share
