@@ -435,6 +435,12 @@ static func advance_day(
 		characters, objectives_map, crime_records, active_topics
 	)
 
+	var lord_map: Dictionary = _build_lord_map(characters)
+	var conviction_results: Array[Dictionary] = ConvictionProcessor.process_accused_cases(
+		crime_records, characters_by_id, dice_engine, ic_day,
+		next_topic_id, active_topics, lord_map,
+	)
+
 	var info_results: Array[Dictionary] = _process_info_events(
 		day_result.get("applied", []),
 		characters_by_id,
@@ -687,6 +693,7 @@ static func advance_day(
 		"crime_results": crime_results,
 		"commitment_results": commitment_results,
 		"uphold_law_results": uphold_law_results,
+		"conviction_results": conviction_results,
 		"orphan_results": orphan_results,
 		"strategic_results": strategic_results,
 		"festival_results": festival_results,
@@ -2753,6 +2760,14 @@ static func _build_province_clan_map(provinces: Dictionary) -> Dictionary:
 		var prov: ProvinceData = provinces[pid]
 		if prov != null:
 			result[pid] = prov.clan
+	return result
+
+
+static func _build_lord_map(characters: Array[L5RCharacterData]) -> Dictionary:
+	var result: Dictionary = {}
+	for c: L5RCharacterData in characters:
+		if c.lord_id >= 0:
+			result[c.character_id] = c.lord_id
 	return result
 
 
