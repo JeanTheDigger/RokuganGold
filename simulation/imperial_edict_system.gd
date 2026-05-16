@@ -716,7 +716,7 @@ static func apply_appoint_position(
 	for c: L5RCharacterData in characters:
 		if c.character_id == edict.target_character_id:
 			var old_status: float = c.status
-			c.status = minf(c.status + APPOINTMENT_STATUS_GAIN, 10.0)
+			HonorGlorySystem.apply_status_change(c, APPOINTMENT_STATUS_GAIN)
 			return {
 				"applied": true,
 				"edict_id": edict.edict_id,
