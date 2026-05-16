@@ -662,7 +662,12 @@ static func consume_rice_province(
 
 # ==============================================================================
 # Starvation Check — Deficit triggers escalation per s4.3.6
+# De-escalation requires consecutive adequate-food seasons (s4.3.6 LOCKED).
 # ==============================================================================
+
+const RELIEF_THRESHOLD_SHORTAGE: int = 2
+const RELIEF_THRESHOLD_OTHER: int = 1
+
 
 static func _process_starvation_check(
 	provinces: Array[ProvinceData],
@@ -671,16 +676,90 @@ static func _process_starvation_check(
 ) -> Dictionary:
 	var results: Dictionary = {}
 	var consumption: Dictionary = settlement_meta.get("_consumption", {})
+	var deficit_seasons: Dictionary = settlement_meta.get("_deficit_seasons", {})
+	var relief_seasons: Dictionary = settlement_meta.get("_relief_seasons", {})
+	var prev_starvation: Dictionary = settlement_meta.get("_starvation", {})
 	for prov: ProvinceData in provinces:
-		var cons: Dictionary = consumption.get(prov.province_id, {})
+		var pid: int = prov.province_id
+		var cons: Dictionary = consumption.get(pid, {})
 		var deficit: float = cons.get("deficit", 0.0)
-		var consecutive: int = settlement_meta.get("_deficit_seasons", {}).get(prov.province_id, 0)
+		var prev_stage_int: int = (prev_starvation.get(pid, {}) as Dictionary).get(
+			"stage", StarvationStage.CLEAR,
+		)
+		var prev_stage: StarvationStage = prev_stage_int as StarvationStage
+		var consecutive: int = deficit_seasons.get(pid, 0)
+		var relief: int = relief_seasons.get(pid, 0)
 		var prov_rice: float = get_province_rice(prov, settlements)
-		var starv: Dictionary = check_starvation(deficit, consecutive, prov_rice)
-		if starv["stage"] != StarvationStage.CLEAR:
+		var starv: Dictionary = resolve_starvation_transition(
+			deficit, consecutive, relief, prev_stage, prov_rice,
+		)
+		deficit_seasons[pid] = starv["deficit_seasons"]
+		relief_seasons[pid] = starv["relief_seasons"]
+		if starv["apply_loss"]:
 			apply_starvation_loss_settlements(prov, settlements, starv["pu_loss_rate"])
-		results[prov.province_id] = starv
+		results[pid] = starv
+	settlement_meta["_deficit_seasons"] = deficit_seasons
+	settlement_meta["_relief_seasons"] = relief_seasons
 	return results
+
+
+static func resolve_starvation_transition(
+	deficit: float,
+	consecutive_deficit_seasons: int,
+	consecutive_relief_seasons: int,
+	previous_stage: StarvationStage,
+	province_rice: float = 0.0,
+) -> Dictionary:
+	if deficit > 0.0:
+		consecutive_relief_seasons = 0
+		consecutive_deficit_seasons += 1
+		var stage: StarvationStage
+		if province_rice <= 0.0:
+			stage = StarvationStage.FAMINE
+		elif previous_stage > StarvationStage.CLEAR and previous_stage < StarvationStage.FAMINE:
+			stage = (previous_stage + 1) as StarvationStage
+		elif consecutive_deficit_seasons >= 3:
+			stage = StarvationStage.FAMINE
+		elif consecutive_deficit_seasons >= 2:
+			stage = StarvationStage.HUNGER
+		else:
+			stage = StarvationStage.SHORTAGE
+		return {
+			"stage": stage,
+			"pu_loss_rate": STARVATION_PU_LOSS[stage],
+			"apply_loss": true,
+			"recovering": false,
+			"deficit_seasons": consecutive_deficit_seasons,
+			"relief_seasons": 0,
+		}
+
+	if previous_stage == StarvationStage.CLEAR:
+		return {
+			"stage": StarvationStage.CLEAR,
+			"pu_loss_rate": 0.0,
+			"apply_loss": false,
+			"recovering": false,
+			"deficit_seasons": 0,
+			"relief_seasons": 0,
+		}
+
+	consecutive_deficit_seasons = 0
+	consecutive_relief_seasons += 1
+	var threshold: int = RELIEF_THRESHOLD_SHORTAGE if previous_stage == StarvationStage.SHORTAGE else RELIEF_THRESHOLD_OTHER
+	var new_stage: StarvationStage
+	if consecutive_relief_seasons >= threshold:
+		new_stage = (previous_stage - 1) as StarvationStage
+		consecutive_relief_seasons = 0
+	else:
+		new_stage = previous_stage
+	return {
+		"stage": new_stage,
+		"pu_loss_rate": STARVATION_PU_LOSS.get(new_stage, 0.0),
+		"apply_loss": false,
+		"recovering": new_stage != StarvationStage.CLEAR,
+		"deficit_seasons": 0,
+		"relief_seasons": consecutive_relief_seasons,
+	}
 
 
 static func check_starvation(
@@ -688,21 +767,10 @@ static func check_starvation(
 	consecutive_deficit_seasons: int,
 	province_rice: float = 0.0,
 ) -> Dictionary:
-	if deficit <= 0.0:
-		return {"stage": StarvationStage.CLEAR, "pu_loss_rate": 0.0}
-
-	var stage: StarvationStage
-	if province_rice <= 0.0 and deficit > 0.0:
-		stage = StarvationStage.FAMINE
-	elif consecutive_deficit_seasons >= 3:
-		stage = StarvationStage.FAMINE
-	elif consecutive_deficit_seasons >= 2:
-		stage = StarvationStage.HUNGER
-	else:
-		stage = StarvationStage.SHORTAGE
-
-	var loss_rate: float = STARVATION_PU_LOSS[stage]
-	return {"stage": stage, "pu_loss_rate": loss_rate}
+	return resolve_starvation_transition(
+		deficit, consecutive_deficit_seasons, 0,
+		StarvationStage.CLEAR, province_rice,
+	)
 
 
 static func apply_starvation_loss_settlements(
@@ -847,14 +915,16 @@ static func _process_population_adjustment(
 	for prov: ProvinceData in provinces:
 		var starv: Dictionary = starvation_data.get(prov.province_id, {})
 		var stage: StarvationStage = starv.get("stage", StarvationStage.CLEAR)
+		var recovering: bool = starv.get("recovering", false)
 		var peace: int = peace_map.get(prov.province_id, 0)
 		var total_pop: int = sum_population_pu(prov, settlements)
 		var prov_rice: float = get_province_rice(prov, settlements)
 		var rate: float = compute_growth_rate(total_pop, stage, peace, prov_rice)
-		rate += float(miya_growth_bonus.get(prov.province_id, 0.0))
-		var pop_mod: float = (worship_m.get(prov.province_id, {}) as Dictionary).get("pop_growth_modifier", 0.0)
-		if pop_mod < 0.0:
-			rate = maxf(0.0, rate * (1.0 + pop_mod))
+		if not recovering:
+			rate += float(miya_growth_bonus.get(prov.province_id, 0.0))
+			var pop_mod: float = (worship_m.get(prov.province_id, {}) as Dictionary).get("pop_growth_modifier", 0.0)
+			if pop_mod < 0.0:
+				rate = maxf(0.0, rate * (1.0 + pop_mod))
 		var growth: Dictionary = apply_population_growth_settlements(prov, settlements, rate)
 		results[prov.province_id] = growth
 	return results

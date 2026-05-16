@@ -140,6 +140,101 @@ func test_starvation_instant_famine_on_zero_stockpile() -> void:
 	assert_eq(result["stage"], ResourceTick.StarvationStage.FAMINE)
 
 
+# -- Starvation Recovery (s4.3.6 LOCKED) ---------------------------------------
+
+func test_famine_to_hunger_after_one_relief() -> void:
+	var result: Dictionary = ResourceTick.resolve_starvation_transition(
+		0.0, 0, 0, ResourceTick.StarvationStage.FAMINE, 5.0,
+	)
+	assert_eq(result["stage"], ResourceTick.StarvationStage.HUNGER)
+	assert_false(result["apply_loss"])
+	assert_true(result["recovering"])
+
+
+func test_hunger_to_shortage_after_one_relief() -> void:
+	var result: Dictionary = ResourceTick.resolve_starvation_transition(
+		0.0, 0, 0, ResourceTick.StarvationStage.HUNGER, 5.0,
+	)
+	assert_eq(result["stage"], ResourceTick.StarvationStage.SHORTAGE)
+	assert_false(result["apply_loss"])
+	assert_true(result["recovering"])
+
+
+func test_shortage_needs_two_relief_seasons() -> void:
+	var r1: Dictionary = ResourceTick.resolve_starvation_transition(
+		0.0, 0, 0, ResourceTick.StarvationStage.SHORTAGE, 5.0,
+	)
+	assert_eq(r1["stage"], ResourceTick.StarvationStage.SHORTAGE)
+	assert_false(r1["apply_loss"])
+	assert_true(r1["recovering"])
+	assert_eq(r1["relief_seasons"], 1)
+
+	var r2: Dictionary = ResourceTick.resolve_starvation_transition(
+		0.0, 0, r1["relief_seasons"], ResourceTick.StarvationStage.SHORTAGE, 5.0,
+	)
+	assert_eq(r2["stage"], ResourceTick.StarvationStage.CLEAR)
+	assert_false(r2["recovering"])
+
+
+func test_full_famine_recovery_takes_four_seasons() -> void:
+	var stage: ResourceTick.StarvationStage = ResourceTick.StarvationStage.FAMINE
+	var relief: int = 0
+	for i: int in range(4):
+		var r: Dictionary = ResourceTick.resolve_starvation_transition(
+			0.0, 0, relief, stage, 5.0,
+		)
+		stage = r["stage"] as ResourceTick.StarvationStage
+		relief = r["relief_seasons"]
+		assert_false(r["apply_loss"])
+		if i < 3:
+			assert_true(r["recovering"])
+	assert_eq(stage, ResourceTick.StarvationStage.CLEAR)
+
+
+func test_re_escalation_on_relapse_during_recovery() -> void:
+	var r1: Dictionary = ResourceTick.resolve_starvation_transition(
+		0.0, 0, 0, ResourceTick.StarvationStage.HUNGER, 5.0,
+	)
+	assert_eq(r1["stage"], ResourceTick.StarvationStage.SHORTAGE)
+	var r2: Dictionary = ResourceTick.resolve_starvation_transition(
+		1.0, 0, r1["relief_seasons"], r1["stage"] as ResourceTick.StarvationStage, 3.0,
+	)
+	assert_eq(r2["stage"], ResourceTick.StarvationStage.HUNGER)
+	assert_true(r2["apply_loss"])
+
+
+func test_sudden_collapse_always_famine() -> void:
+	var result: Dictionary = ResourceTick.resolve_starvation_transition(
+		1.0, 0, 0, ResourceTick.StarvationStage.SHORTAGE, 0.0,
+	)
+	assert_eq(result["stage"], ResourceTick.StarvationStage.FAMINE)
+
+
+func test_deficit_seasons_increment() -> void:
+	var r: Dictionary = ResourceTick.resolve_starvation_transition(
+		1.0, 1, 0, ResourceTick.StarvationStage.CLEAR, 5.0,
+	)
+	assert_eq(r["deficit_seasons"], 2)
+	assert_eq(r["relief_seasons"], 0)
+
+
+func test_relief_resets_deficit_counter() -> void:
+	var r: Dictionary = ResourceTick.resolve_starvation_transition(
+		0.0, 3, 0, ResourceTick.StarvationStage.FAMINE, 5.0,
+	)
+	assert_eq(r["deficit_seasons"], 0)
+	assert_eq(r["relief_seasons"], 0)
+
+
+func test_no_pu_loss_during_relief() -> void:
+	var result: Dictionary = ResourceTick.resolve_starvation_transition(
+		0.0, 0, 0, ResourceTick.StarvationStage.FAMINE, 5.0,
+	)
+	assert_eq(result["stage"], ResourceTick.StarvationStage.HUNGER)
+	assert_false(result["apply_loss"])
+	assert_almost_eq(result["pu_loss_rate"], 0.08, 0.001)
+
+
 # -- Tax Cascade ---------------------------------------------------------------
 
 func test_taxable_surplus_basic() -> void:
