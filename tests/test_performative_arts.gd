@@ -234,17 +234,17 @@ func test_perform_for_masterful_gives_glory() -> void:
 func test_best_art_form_highest_effective() -> void:
 	var performer := _make_performer()
 	performer.skills = {"Tea Ceremony": 7, "Artisan": 2}
-	performer.void_ring = 5
+	performer.awareness = 4
 
 	var best := PerformativeArtsSystem.get_best_art_form(performer)
 	assert_eq(best, PerformativeArtsSystem.ArtForm.TEA_CEREMONY)
 
 
-func test_best_art_form_with_high_agility() -> void:
+func test_best_art_form_all_use_awareness() -> void:
 	var performer := _make_performer()
 	performer.skills = {"Perform": 6, "Artisan": 2}
 	performer.agility = 5
-	performer.awareness = 2
+	performer.awareness = 4
 
 	var best := PerformativeArtsSystem.get_best_art_form(performer)
 	assert_true(best == PerformativeArtsSystem.ArtForm.DANCE or
@@ -354,3 +354,35 @@ func test_perform_for_success_disp_is_3() -> void:
 
 func test_perform_for_failure_disp_is_minus_1() -> void:
 	assert_eq(PerformativeArtsSystem.PERFORM_FOR_FAILURE_DISPOSITION, -1)
+
+
+# ==============================================================================
+# All Art Forms Use Awareness (GDD s12.4)
+# ==============================================================================
+
+func test_dance_uses_awareness_not_agility() -> void:
+	var performer := _make_performer("Perform", 3)
+	performer.awareness = 4
+	performer.agility = 6
+	var dice := _make_high_roller()
+	var witnesses: Array[int] = [10]
+
+	var result := PerformativeArtsSystem.resolve_public_performance(
+		performer, PerformativeArtsSystem.ArtForm.DANCE, witnesses, dice)
+
+	assert_eq(result["skill_used"], "Perform")
+	assert_true(result["roll_total"] > 0)
+
+
+func test_tea_ceremony_uses_awareness_not_void() -> void:
+	var performer := _make_performer("Tea Ceremony", 3)
+	performer.awareness = 4
+	performer.void_ring = 6
+	var dice := _make_high_roller()
+	var witnesses: Array[int] = [10]
+
+	var result := PerformativeArtsSystem.resolve_public_performance(
+		performer, PerformativeArtsSystem.ArtForm.TEA_CEREMONY, witnesses, dice)
+
+	assert_eq(result["skill_used"], "Tea Ceremony")
+	assert_true(result["roll_total"] > 0)
