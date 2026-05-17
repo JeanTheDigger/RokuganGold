@@ -497,7 +497,10 @@ static func run(
 	var chosen := select_action(options, ctx)
 
 	# Phase 7
-	return execute_action(chosen, character, ctx)
+	var result: Dictionary = execute_action(chosen, character, ctx)
+	result["need_source"] = need.source
+	result["need_type"] = need.need_type
+	return result
 
 
 # -- Comparison for Phase 6 tiebreakers ---------------------------------------

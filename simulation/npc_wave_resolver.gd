@@ -373,6 +373,7 @@ static func _resolve_character_wave_full(
 				military_data, characters_by_id, doshin_bonus, cr
 			)
 			decision.merge(exec_result, true)
+		_consume_reactive_event(decision, ws)
 		results.append(decision)
 
 	if is_lord and character.civilian_orders_remaining > 0:
@@ -476,6 +477,30 @@ static func _execute_decision(
 		military_data, characters_by_id, wpm, doshin_bonus_override,
 		crime_records,
 	)
+
+
+# -- Reactive Event Consumption ------------------------------------------------
+
+const REACTIVE_SOURCES: Array = [
+	"bribery_eval", "extortion_opportunity", "seppuku_offered",
+	"witness_report_motivated", "provocation_received",
+]
+
+
+static func _consume_reactive_event(
+	decision: Dictionary,
+	world_state: Dictionary,
+) -> void:
+	var events: Array = world_state.get("pending_events", [])
+	if events.is_empty():
+		return
+	var need_source: String = decision.get("need_source", "")
+	if need_source in REACTIVE_SOURCES:
+		if decision.get("success", false):
+			events.remove_at(0)
+		return
+	# Decompose returned null — discard unprocessable event to prevent infinite loop
+	events.remove_at(0)
 
 
 # -- Helpers -------------------------------------------------------------------
