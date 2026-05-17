@@ -454,6 +454,11 @@ static func advance_day(
 		next_topic_id, active_topics, lord_map,
 	)
 
+	var trial_results: Array[Dictionary] = _resolve_pending_trials(
+		conviction_results, crime_records, characters_by_id,
+		lord_map, dice_engine, ic_day,
+	)
+
 	var seppuku_results: Array[Dictionary] = _process_seppuku_responses(
 		conviction_results, crime_records, characters_by_id,
 		ic_day, next_topic_id, active_topics,
@@ -714,6 +719,7 @@ static func advance_day(
 		"commitment_results": commitment_results,
 		"uphold_law_results": uphold_law_results,
 		"conviction_results": conviction_results,
+		"trial_results": trial_results,
 		"seppuku_results": seppuku_results,
 		"orphan_results": orphan_results,
 		"hierarchy_cascade_results": hierarchy_cascade_results,
@@ -2947,6 +2953,48 @@ static func _build_lord_map(characters: Array[L5RCharacterData]) -> Dictionary:
 		if c.lord_id >= 0:
 			result[c.character_id] = c.lord_id
 	return result
+
+
+static func _resolve_pending_trials(
+	conviction_results: Array[Dictionary],
+	crime_records: Array[CrimeRecord],
+	characters_by_id: Dictionary,
+	lord_map: Dictionary,
+	dice_engine: DiceEngine,
+	ic_day: int,
+) -> Array[Dictionary]:
+	var results: Array[Dictionary] = []
+
+	for conv: Dictionary in conviction_results:
+		if conv.get("outcome", "") != "trial_by_combat_pending":
+			continue
+		var accused_id: int = conv.get("accused_id", -1)
+		var case_id: int = conv.get("case_id", -1)
+		var accused: L5RCharacterData = characters_by_id.get(accused_id)
+		if accused == null:
+			continue
+
+		var lord_id: int = lord_map.get(accused_id, -1)
+		var lord: L5RCharacterData = characters_by_id.get(lord_id)
+		if lord == null:
+			continue
+
+		var record: CrimeRecord = null
+		for r: CrimeRecord in crime_records:
+			if r.case_id == case_id:
+				record = r
+				break
+		if record == null:
+			continue
+
+		var trial: Dictionary = ConvictionProcessor.resolve_trial_by_combat(
+			record, accused, lord, dice_engine, ic_day, characters_by_id
+		)
+		trial["case_id"] = case_id
+		trial["accused_id"] = accused_id
+		results.append(trial)
+
+	return results
 
 
 static func _process_seppuku_responses(

@@ -200,3 +200,67 @@ func test_no_cross_clan_for_same_clan():
 		record, accused, victim, false
 	)
 	assert_false(r["applies"])
+
+
+# -- Trial by Combat (s11.3.9f) ----
+
+func test_trial_by_combat_resolves():
+	_dice.set_seed(42)
+	var accused := _make_char(1, "Lion", 3.0, 3.0, 10)
+	accused.school_type = Enums.SchoolType.BUSHI
+	accused.skills = {"Iaijutsu": 4, "Sincerity": 2}
+	accused.reflexes = 4
+	accused.awareness = 3
+	accused.void_ring = 3
+	accused.wounds_taken = 0
+	accused.stamina = 3
+
+	var lord := _make_char(10, "Lion", 6.0)
+	lord.school_type = Enums.SchoolType.BUSHI
+	lord.skills = {"Iaijutsu": 3}
+	lord.reflexes = 3
+	lord.awareness = 3
+	lord.void_ring = 2
+	lord.wounds_taken = 0
+	lord.stamina = 3
+
+	var victim := _make_char(5, "Crane", 4.0)
+	var record := _make_record(Enums.CrimeType.VIOLENCE)
+	record.victim_id = 5
+
+	var chars: Dictionary = {1: accused, 5: victim, 10: lord}
+
+	var result: Dictionary = ConvictionProcessor.resolve_trial_by_combat(
+		record, accused, lord, _dice, 200, chars
+	)
+	assert_true(result["resolved"])
+	assert_true(result.has("accused_won"))
+	assert_true(result.has("duel_result"))
+	if result["accused_won"]:
+		assert_eq(record.legal_status, Enums.LegalStatus.ACQUITTED)
+		assert_eq(record.evidence_total, 0)
+	else:
+		assert_eq(record.legal_status, Enums.LegalStatus.DECREED_GUILTY)
+
+
+func test_trial_champion_selection_bushi_fights_self():
+	var accused := _make_char(1, "Lion", 3.0)
+	accused.school_type = Enums.SchoolType.BUSHI
+	var chars: Dictionary = {1: accused}
+	var champion: L5RCharacterData = ConvictionProcessor._select_champion(accused, chars)
+	assert_eq(champion.character_id, 1)
+
+
+func test_trial_champion_selection_courtier_uses_yojimbo():
+	var courtier := _make_char(1, "Crane", 4.0)
+	courtier.school_type = Enums.SchoolType.COURTIER
+
+	var yojimbo := _make_char(2, "Crane", 3.0)
+	yojimbo.school_type = Enums.SchoolType.BUSHI
+	yojimbo.operational_superior_id = 1
+	yojimbo.wounds_taken = 0
+	yojimbo.stamina = 3
+
+	var chars: Dictionary = {1: courtier, 2: yojimbo}
+	var champion: L5RCharacterData = ConvictionProcessor._select_champion(courtier, chars)
+	assert_eq(champion.character_id, 2)

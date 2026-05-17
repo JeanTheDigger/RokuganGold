@@ -284,6 +284,77 @@ static func resolve_seppuku(
 	}
 
 
+# -- Trial by Combat Resolution (s11.3.9f) ---------
+
+static func resolve_trial_by_combat(
+	record: CrimeRecord,
+	accused: L5RCharacterData,
+	lord: L5RCharacterData,
+	dice_engine: DiceEngine,
+	ic_day: int,
+	characters_by_id: Dictionary,
+) -> Dictionary:
+	var accused_champion: L5RCharacterData = _select_champion(accused, characters_by_id)
+	var accuser_champion: L5RCharacterData = _select_champion(lord, characters_by_id)
+
+	var duel_result: Dictionary = IndividualCombat.resolve_full_duel(
+		accused_champion, accuser_champion, true, dice_engine
+	)
+
+	var winner_id: int = duel_result.get("winner_id", -1)
+	var simultaneous: bool = duel_result.get("simultaneous", false)
+
+	var outcome: DefenseHearingSystem.TrialByCombatOutcome
+	if simultaneous:
+		outcome = DefenseHearingSystem.TrialByCombatOutcome.ACCUSED_LOSES
+	elif winner_id == accused_champion.character_id:
+		outcome = DefenseHearingSystem.TrialByCombatOutcome.ACCUSED_WINS
+	else:
+		outcome = DefenseHearingSystem.TrialByCombatOutcome.ACCUSED_LOSES
+
+	var victim: L5RCharacterData = characters_by_id.get(record.victim_id)
+	var victim_status: float = victim.status if victim != null else 0.0
+
+	var trial_result: Dictionary = DefenseHearingSystem.get_trial_by_combat_result(
+		outcome, victim_status
+	)
+
+	if trial_result.get("case_cleared", false):
+		if outcome == DefenseHearingSystem.TrialByCombatOutcome.ACCUSED_WINS:
+			record.legal_status = Enums.LegalStatus.ACQUITTED
+			record.evidence_total = 0
+		else:
+			record.legal_status = Enums.LegalStatus.DECREED_GUILTY
+			record.ic_day_conviction = ic_day
+
+	return {
+		"resolved": true,
+		"outcome": outcome,
+		"duel_result": duel_result,
+		"trial_result": trial_result,
+		"accused_champion_id": accused_champion.character_id,
+		"accuser_champion_id": accuser_champion.character_id,
+		"accused_won": outcome == DefenseHearingSystem.TrialByCombatOutcome.ACCUSED_WINS,
+		"accused_dead": CharacterStats.is_dead(accused_champion),
+		"accuser_dead": CharacterStats.is_dead(accuser_champion),
+		"simultaneous": simultaneous,
+	}
+
+
+static func _select_champion(
+	principal: L5RCharacterData,
+	characters_by_id: Dictionary,
+) -> L5RCharacterData:
+	if principal.school_type == Enums.SchoolType.BUSHI:
+		return principal
+	for c: L5RCharacterData in characters_by_id.values():
+		if c.operational_superior_id == principal.character_id \
+				and c.school_type == Enums.SchoolType.BUSHI \
+				and not CharacterStats.is_dead(c):
+			return c
+	return principal
+
+
 # -- Cross-Clan Disposition (post-conviction) ---------
 
 static func apply_cross_clan_consequences(
