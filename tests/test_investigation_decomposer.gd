@@ -209,8 +209,8 @@ func test_phase7_accuse_when_threshold_met():
 		"known_suspects": [300],
 	})
 	var need: NPCDataStructures.ImmediateNeed = InvestigationDecomposer.decompose(obj, ctx)
-	assert_eq(need.need_type, "ASSIGN_OBJECTIVE")
-	assert_eq(need.target_intent, "FORMALLY_ACCUSE")
+	assert_eq(need.need_type, "REST")
+	assert_eq(need.source, "INVESTIGATE_CRIME_ACCUSATION_PENDING")
 	assert_eq(need.target_npc_id, 300)
 
 
@@ -222,8 +222,8 @@ func test_phase7_accuse_above_threshold():
 		"known_suspects": [300],
 	})
 	var need: NPCDataStructures.ImmediateNeed = InvestigationDecomposer.decompose(obj, ctx)
-	assert_eq(need.need_type, "ASSIGN_OBJECTIVE")
-	assert_eq(need.target_intent, "FORMALLY_ACCUSE")
+	assert_eq(need.need_type, "REST")
+	assert_eq(need.source, "INVESTIGATE_CRIME_ACCUSATION_PENDING")
 
 
 func test_phase7_close_case_insufficient_evidence():
@@ -490,8 +490,8 @@ func test_early_accusation_skips_scoring():
 		"npc_locations": {200: "zone_a"},
 	})
 	var need: NPCDataStructures.ImmediateNeed = InvestigationDecomposer.decompose(obj, ctx)
-	assert_eq(need.need_type, "ASSIGN_OBJECTIVE")
-	assert_eq(need.target_intent, "FORMALLY_ACCUSE")
+	assert_eq(need.need_type, "REST")
+	assert_eq(need.source, "INVESTIGATE_CRIME_ACCUSATION_PENDING")
 
 
 func test_ctx_known_npc_locations_used_for_travel():

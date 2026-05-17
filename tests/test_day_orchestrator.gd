@@ -5146,6 +5146,87 @@ func test_scene_exam_increments_scene_exam_count() -> void:
 	assert_eq(active_case["evidence_total"], 20)
 
 
+# MAGISTRATE RELEASE AFTER CONVICTION
+# ==============================================================================
+
+func test_release_magistrate_after_conviction() -> void:
+	var record := CrimeRecord.new()
+	record.case_id = 99
+	record.investigating_magistrate_id = 10
+	var crime_records: Array[CrimeRecord] = [record]
+
+	var standing: Dictionary = {
+		"need_type": "UPHOLD_LAW",
+		"active_case": {"case_id": 99, "evidence_total": 45},
+	}
+	var objectives_map: Dictionary = {10: {"standing": standing}}
+
+	var conviction_results: Array[Dictionary] = [{
+		"case_id": 99,
+		"accused_id": 5,
+		"outcome": "convicted",
+	}]
+
+	DayOrchestrator._release_magistrate_after_conviction(
+		conviction_results, crime_records, objectives_map,
+	)
+
+	assert_false(standing.has("active_case"))
+	assert_eq(record.investigating_magistrate_id, -1)
+
+
+func test_release_magistrate_after_acquittal() -> void:
+	var record := CrimeRecord.new()
+	record.case_id = 100
+	record.investigating_magistrate_id = 11
+	var crime_records: Array[CrimeRecord] = [record]
+
+	var standing: Dictionary = {
+		"need_type": "UPHOLD_LAW",
+		"active_case": {"case_id": 100, "evidence_total": 35},
+	}
+	var objectives_map: Dictionary = {11: {"standing": standing}}
+
+	var conviction_results: Array[Dictionary] = [{
+		"case_id": 100,
+		"accused_id": 6,
+		"outcome": "acquitted",
+	}]
+
+	DayOrchestrator._release_magistrate_after_conviction(
+		conviction_results, crime_records, objectives_map,
+	)
+
+	assert_false(standing.has("active_case"))
+	assert_eq(record.investigating_magistrate_id, -1)
+
+
+func test_no_release_on_trial_by_combat_pending() -> void:
+	var record := CrimeRecord.new()
+	record.case_id = 101
+	record.investigating_magistrate_id = 12
+	var crime_records: Array[CrimeRecord] = [record]
+
+	var standing: Dictionary = {
+		"need_type": "UPHOLD_LAW",
+		"active_case": {"case_id": 101},
+	}
+	var objectives_map: Dictionary = {12: {"standing": standing}}
+
+	var conviction_results: Array[Dictionary] = [{
+		"case_id": 101,
+		"accused_id": 7,
+		"outcome": "trial_by_combat_pending",
+	}]
+
+	DayOrchestrator._release_magistrate_after_conviction(
+		conviction_results, crime_records, objectives_map,
+	)
+
+	assert_true(standing.has("active_case"))
+	assert_eq(record.investigating_magistrate_id, 12)
+
+
 # MAGISTRATE PATROL TRACKING
 # ==============================================================================
 

@@ -545,6 +545,10 @@ static func advance_day(
 		conviction_results, crime_records, characters_by_id, active_topics,
 	)
 
+	_release_magistrate_after_conviction(
+		conviction_results, crime_records, objectives_map,
+	)
+
 	var info_results: Array[Dictionary] = _process_info_events(
 		day_result.get("applied", []),
 		characters_by_id,
@@ -4338,6 +4342,43 @@ static func _seed_conviction_topics_to_victim_lords(
 		if topic_id in victim_lord.topic_pool:
 			continue
 		victim_lord.topic_pool.append(topic_id)
+
+
+# -- Magistrate Release After Conviction/Acquittal ---------------------------
+
+static func _release_magistrate_after_conviction(
+	conviction_results: Array[Dictionary],
+	crime_records: Array[CrimeRecord],
+	objectives_map: Dictionary,
+) -> void:
+	for conv: Dictionary in conviction_results:
+		var outcome: String = conv.get("outcome", "")
+		if outcome != "convicted" and outcome != "acquitted":
+			continue
+		var case_id: int = conv.get("case_id", -1)
+		if case_id < 0:
+			continue
+
+		var record: CrimeRecord = null
+		for r: CrimeRecord in crime_records:
+			if r.case_id == case_id:
+				record = r
+				break
+		if record == null:
+			continue
+
+		var mag_id: int = record.investigating_magistrate_id
+		if mag_id < 0:
+			continue
+
+		var mag_objs: Dictionary = objectives_map.get(mag_id, {})
+		var standing: Dictionary = mag_objs.get("standing", {})
+		if standing.get("need_type", "") == "UPHOLD_LAW":
+			var active_case: Dictionary = standing.get("active_case", {})
+			if active_case.get("case_id", -1) == case_id:
+				standing.erase("active_case")
+
+		record.investigating_magistrate_id = -1
 
 
 static func _season_to_name(season: int) -> String:

@@ -220,9 +220,8 @@ static func _make_gather_intelligence_need(target_id: int) -> NPCDataStructures.
 
 static func _make_accuse_need(suspects: Array) -> NPCDataStructures.ImmediateNeed:
 	var need := NPCDataStructures.ImmediateNeed.new()
-	need.need_type = "ASSIGN_OBJECTIVE"
-	need.source = "INVESTIGATE_CRIME"
-	need.target_intent = "FORMALLY_ACCUSE"
+	need.need_type = "REST"
+	need.source = "INVESTIGATE_CRIME_ACCUSATION_PENDING"
 	if suspects.size() > 0 and suspects[0] is int:
 		need.target_npc_id = suspects[0]
 	return need
