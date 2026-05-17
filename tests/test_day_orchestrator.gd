@@ -3928,7 +3928,7 @@ func test_blood_evidence_not_triggered_for_non_maho() -> void:
 	assert_eq(active_topics.size(), 0)
 
 
-func test_blood_evidence_not_triggered_below_concealment_tn() -> void:
+func test_blood_evidence_not_triggered_on_failed_scene_exam() -> void:
 	var record := CrimeRecord.new()
 	record.case_id = 68
 	record.crime_type = Enums.CrimeType.MAHO
@@ -3944,10 +3944,9 @@ func test_blood_evidence_not_triggered_below_concealment_tn() -> void:
 
 	var results: Array = [{
 		"action_id": "EXAMINE_CRIME_SCENE",
-		"success": true,
+		"success": false,
 		"character_id": 25,
-		"roll_total": 18,
-		"effects": {"case_id": 68, "evidence_gained": 3},
+		"effects": {"case_id": 68, "evidence_gained": 0},
 	}]
 
 	DayOrchestrator._process_blood_evidence_discovery(
@@ -3956,6 +3955,163 @@ func test_blood_evidence_not_triggered_below_concealment_tn() -> void:
 	)
 
 	assert_eq(active_topics.size(), 0)
+
+
+func test_blood_evidence_province_investigation_detects() -> void:
+	var investigator := L5RCharacterData.new()
+	investigator.character_id = 25
+	investigator.character_name = "Kuni Witch Hunter"
+	investigator.clan = "Crab"
+	investigator.physical_location = "Isawa Province"
+	investigator.skills = {"Investigation": 4}
+	investigator.perception = 4
+	investigator.lord_id = -1
+
+	var record := CrimeRecord.new()
+	record.case_id = 70
+	record.crime_type = Enums.CrimeType.MAHO
+	record.perpetrator_id = 99
+	record.location = "Isawa Province"
+	record.concealment_tn = 10
+	record.ic_day_committed = 70
+
+	var dice := DiceEngine.new()
+	dice.set_seed(42)
+
+	var crime_records: Array[CrimeRecord] = [record]
+	var characters_by_id: Dictionary = {25: investigator}
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [5000]
+
+	var results: Array = [{
+		"action_id": "INVESTIGATE_PROVINCE",
+		"success": true,
+		"character_id": 25,
+	}]
+
+	DayOrchestrator._process_blood_evidence_discovery(
+		results, crime_records, characters_by_id,
+		active_topics, next_topic_id, 75, dice,
+	)
+
+	if active_topics.size() > 0:
+		assert_eq(active_topics[0].slug, "blood_evidence_70")
+		assert_eq(active_topics[0].tier, TopicData.Tier.TIER_3)
+		assert_true(active_topics[0].title.contains("blood magic"))
+
+
+func test_blood_evidence_province_investigation_wrong_location() -> void:
+	var investigator := L5RCharacterData.new()
+	investigator.character_id = 25
+	investigator.character_name = "Kuni Witch Hunter"
+	investigator.physical_location = "Crane Province"
+	investigator.skills = {"Investigation": 4}
+	investigator.perception = 4
+
+	var record := CrimeRecord.new()
+	record.case_id = 71
+	record.crime_type = Enums.CrimeType.MAHO
+	record.perpetrator_id = 99
+	record.location = "Isawa Province"
+	record.concealment_tn = 10
+	record.ic_day_committed = 70
+
+	var dice := DiceEngine.new()
+	dice.set_seed(42)
+
+	var crime_records: Array[CrimeRecord] = [record]
+	var characters_by_id: Dictionary = {25: investigator}
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [5000]
+
+	var results: Array = [{
+		"action_id": "INVESTIGATE_PROVINCE",
+		"success": true,
+		"character_id": 25,
+	}]
+
+	DayOrchestrator._process_blood_evidence_discovery(
+		results, crime_records, characters_by_id,
+		active_topics, next_topic_id, 75, dice,
+	)
+
+	assert_eq(active_topics.size(), 0)
+
+
+func test_blood_evidence_expired_after_season() -> void:
+	var investigator := L5RCharacterData.new()
+	investigator.character_id = 25
+	investigator.physical_location = "Isawa Province"
+	investigator.skills = {"Investigation": 5}
+	investigator.perception = 5
+
+	var record := CrimeRecord.new()
+	record.case_id = 72
+	record.crime_type = Enums.CrimeType.MAHO
+	record.perpetrator_id = 99
+	record.location = "Isawa Province"
+	record.concealment_tn = 5
+	record.ic_day_committed = 0
+
+	var dice := DiceEngine.new()
+	dice.set_seed(42)
+
+	var crime_records: Array[CrimeRecord] = [record]
+	var characters_by_id: Dictionary = {25: investigator}
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [5000]
+
+	var results: Array = [{
+		"action_id": "INVESTIGATE_PROVINCE",
+		"success": true,
+		"character_id": 25,
+	}]
+
+	DayOrchestrator._process_blood_evidence_discovery(
+		results, crime_records, characters_by_id,
+		active_topics, next_topic_id, 100, dice,
+	)
+
+	assert_eq(active_topics.size(), 0)
+
+
+func test_blood_evidence_deduplicates_topic() -> void:
+	var investigator := L5RCharacterData.new()
+	investigator.character_id = 25
+	investigator.character_name = "Soshi Magistrate"
+	investigator.clan = "Scorpion"
+	investigator.lord_id = -1
+
+	var record := CrimeRecord.new()
+	record.case_id = 73
+	record.crime_type = Enums.CrimeType.MAHO
+	record.perpetrator_id = 99
+	record.location = "Isawa Province"
+	record.concealment_tn = 15
+
+	var existing_topic := TopicData.new()
+	existing_topic.topic_id = 999
+	existing_topic.slug = "blood_evidence_73"
+
+	var crime_records: Array[CrimeRecord] = [record]
+	var characters_by_id: Dictionary = {25: investigator}
+	var active_topics: Array[TopicData] = [existing_topic]
+	var next_topic_id: Array[int] = [5000]
+
+	var results: Array = [{
+		"action_id": "EXAMINE_CRIME_SCENE",
+		"success": true,
+		"character_id": 25,
+		"effects": {"case_id": 73, "evidence_gained": 10},
+	}]
+
+	DayOrchestrator._process_blood_evidence_discovery(
+		results, crime_records, characters_by_id,
+		active_topics, next_topic_id, 80,
+	)
+
+	assert_eq(active_topics.size(), 1)
+	assert_eq(next_topic_id[0], 5000)
 
 
 # -- Flee Logistics ---

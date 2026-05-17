@@ -461,6 +461,36 @@ static func process_witness_interview(
 	return {"evidence_gained": evidence, "role": role, "threshold_crossed": threshold_crossed}
 
 
+# -- Blood Evidence Detection (Channel 2, s57.47.7) ---------------------------
+# Passive detection when investigating a province with maho blood evidence.
+# Roll: Investigation (Notice) / Perception vs concealment_tn + time penalty.
+
+static func detect_blood_evidence(
+	character: L5RCharacterData,
+	crime_record: CrimeRecord,
+	dice_engine: DiceEngine,
+	ic_day: int,
+) -> Dictionary:
+	var days_elapsed: int = ic_day - crime_record.ic_day_committed
+	if days_elapsed > DAYS_PER_SEASON:
+		return {"detected": false, "reason": "evidence_expired"}
+
+	var time_penalty: int = get_scene_time_penalty(days_elapsed)
+	var effective_tn: int = crime_record.concealment_tn + time_penalty
+
+	var investigation_rank: int = character.skills.get("Investigation", 0)
+	var perception: int = character.perception if character.perception > 0 else 2
+	var rolled: int = maxi(investigation_rank + perception, 1)
+	var kept: int = maxi(perception, 1)
+
+	var roll_result: Dictionary = dice_engine.roll_and_keep(rolled, kept)
+	var total: int = roll_result.get("total", 0)
+
+	if total >= effective_tn:
+		return {"detected": true, "total": total, "tn": effective_tn}
+	return {"detected": false, "total": total, "tn": effective_tn}
+
+
 # -- Alibi Checking (s11.3.13e CHECK_ALIBI, resolved as part of PROBE) --------
 
 const ALIBI_FALSE_EVIDENCE: int = 10

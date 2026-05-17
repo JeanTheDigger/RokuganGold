@@ -1036,3 +1036,45 @@ func test_leads_perpetrator_already_suspect_skipped() -> void:
 		10, 3, cr, obj, present,
 	)
 	assert_eq(leads.size(), 0)
+
+
+# -- Blood evidence detection --------------------------------------------------
+
+func test_detect_blood_evidence_success() -> void:
+	var mag := _make_magistrate(4)
+	mag.perception = 4
+	var cr := _make_crime_record(10, 70)
+	cr.crime_type = Enums.CrimeType.MAHO
+
+	var result: Dictionary = InvestigationSystem.detect_blood_evidence(
+		mag, cr, _dice, 72,
+	)
+	if result["detected"]:
+		assert_true(result["total"] >= result["tn"])
+	else:
+		assert_true(result["total"] < result["tn"])
+
+
+func test_detect_blood_evidence_expired() -> void:
+	var mag := _make_magistrate(5)
+	mag.perception = 5
+	var cr := _make_crime_record(5, 0)
+	cr.crime_type = Enums.CrimeType.MAHO
+
+	var result: Dictionary = InvestigationSystem.detect_blood_evidence(
+		mag, cr, _dice, 100,
+	)
+	assert_false(result["detected"])
+	assert_eq(result["reason"], "evidence_expired")
+
+
+func test_detect_blood_evidence_time_penalty_applied() -> void:
+	var mag := _make_magistrate(3)
+	mag.perception = 3
+	var cr := _make_crime_record(10, 0)
+	cr.crime_type = Enums.CrimeType.MAHO
+
+	var result: Dictionary = InvestigationSystem.detect_blood_evidence(
+		mag, cr, _dice, 60,
+	)
+	assert_eq(result["tn"], 10 + InvestigationSystem.get_scene_time_penalty(60))

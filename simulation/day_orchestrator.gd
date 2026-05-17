@@ -240,7 +240,7 @@ static func advance_day(
 	_process_blood_evidence_discovery(
 		day_result.get("results", []),
 		crime_records, characters_by_id,
-		active_topics, next_topic_id, ic_day,
+		active_topics, next_topic_id, ic_day, dice_engine,
 	)
 
 	_process_flee_logistics(
@@ -3184,60 +3184,132 @@ static func _process_blood_evidence_discovery(
 	active_topics: Array[TopicData],
 	next_topic_id: Array[int],
 	ic_day: int,
+	dice_engine: DiceEngine = null,
 ) -> void:
 	for result: Variant in results:
 		if not result is Dictionary:
 			continue
 		var r: Dictionary = result as Dictionary
-		if r.get("action_id", "") != "EXAMINE_CRIME_SCENE":
-			continue
+		var action_id: String = r.get("action_id", "")
 		if not r.get("success", false):
 			continue
-		var effects: Dictionary = r.get("effects", {})
-		var case_id: int = effects.get("case_id", -1)
-		if case_id < 0:
-			continue
 
-		var record: CrimeRecord = null
-		for cr: CrimeRecord in crime_records:
-			if cr.case_id == case_id:
-				record = cr
-				break
-		if record == null:
-			continue
+		if action_id == "EXAMINE_CRIME_SCENE":
+			_check_blood_evidence_from_scene_exam(
+				r, crime_records, characters_by_id,
+				active_topics, next_topic_id, ic_day,
+			)
+		elif action_id == "INVESTIGATE_PROVINCE" and dice_engine != null:
+			_check_blood_evidence_from_province_investigation(
+				r, crime_records, characters_by_id,
+				active_topics, next_topic_id, ic_day, dice_engine,
+			)
+
+
+static func _check_blood_evidence_from_scene_exam(
+	r: Dictionary,
+	crime_records: Array[CrimeRecord],
+	characters_by_id: Dictionary,
+	active_topics: Array[TopicData],
+	next_topic_id: Array[int],
+	ic_day: int,
+) -> void:
+	var effects: Dictionary = r.get("effects", {})
+	var case_id: int = effects.get("case_id", -1)
+	if case_id < 0:
+		return
+
+	var record: CrimeRecord = null
+	for cr: CrimeRecord in crime_records:
+		if cr.case_id == case_id:
+			record = cr
+			break
+	if record == null:
+		return
+	if record.crime_type != Enums.CrimeType.MAHO:
+		return
+	if record.concealment_tn <= 0:
+		return
+
+	_emit_blood_evidence_topic(
+		r.get("character_id", -1), record, characters_by_id,
+		active_topics, next_topic_id, ic_day,
+	)
+
+
+static func _check_blood_evidence_from_province_investigation(
+	r: Dictionary,
+	crime_records: Array[CrimeRecord],
+	characters_by_id: Dictionary,
+	active_topics: Array[TopicData],
+	next_topic_id: Array[int],
+	ic_day: int,
+	dice_engine: DiceEngine,
+) -> void:
+	var char_id: int = r.get("character_id", -1)
+	var character: L5RCharacterData = characters_by_id.get(char_id)
+	if character == null:
+		return
+
+	var char_location: String = character.physical_location
+
+	for record: CrimeRecord in crime_records:
 		if record.crime_type != Enums.CrimeType.MAHO:
 			continue
 		if record.concealment_tn <= 0:
 			continue
-
-		var roll_total: int = r.get("roll_total", 0)
-		if roll_total < record.concealment_tn:
+		if record.location != char_location:
+			continue
+		var days_elapsed: int = ic_day - record.ic_day_committed
+		if days_elapsed > InvestigationSystem.DAYS_PER_SEASON:
 			continue
 
-		var investigator_id: int = r.get("character_id", -1)
-		var investigator: L5RCharacterData = characters_by_id.get(investigator_id)
-		if investigator == null:
-			continue
-
-		var topic_id: int = next_topic_id[0]
-		next_topic_id[0] += 1
-		var title: String = "Evidence of blood magic discovered in %s" % record.location
-		var topic: TopicData = TopicMomentumSystem.create_topic(
-			topic_id, title,
-			TopicData.Tier.TIER_3,
-			TopicData.Category.SUPERNATURAL,
-			ic_day, 25.0,
-			[], "", "",
-			investigator_id,
-			"crisis", "blood_evidence",
+		var detection_result: Dictionary = InvestigationSystem.detect_blood_evidence(
+			character, record, dice_engine, ic_day,
 		)
-		topic.slug = "blood_evidence_%d" % case_id
-		active_topics.append(topic)
+		if detection_result.get("detected", false):
+			_emit_blood_evidence_topic(
+				char_id, record, characters_by_id,
+				active_topics, next_topic_id, ic_day,
+			)
+			return
 
-		if investigator.lord_id >= 0:
-			var lord: L5RCharacterData = characters_by_id.get(investigator.lord_id)
-			if lord != null and topic.topic_id not in lord.topic_pool:
-				lord.topic_pool.append(topic.topic_id)
+
+static func _emit_blood_evidence_topic(
+	investigator_id: int,
+	record: CrimeRecord,
+	characters_by_id: Dictionary,
+	active_topics: Array[TopicData],
+	next_topic_id: Array[int],
+	ic_day: int,
+) -> void:
+	for topic: TopicData in active_topics:
+		if topic.slug == "blood_evidence_%d" % record.case_id:
+			return
+
+	var investigator: L5RCharacterData = characters_by_id.get(investigator_id)
+	if investigator == null:
+		return
+
+	var topic_id: int = next_topic_id[0]
+	next_topic_id[0] += 1
+	var title: String = "Evidence of blood magic discovered in %s" % record.location
+	var topic: TopicData = TopicMomentumSystem.create_topic(
+		topic_id, title,
+		TopicData.Tier.TIER_3,
+		TopicData.Category.SUPERNATURAL,
+		ic_day, 25.0,
+		[], "", "",
+		investigator_id,
+		"crisis", "blood_evidence",
+	)
+	topic.slug = "blood_evidence_%d" % record.case_id
+	active_topics.append(topic)
+
+	if investigator.lord_id >= 0:
+		var lord: L5RCharacterData = characters_by_id.get(investigator.lord_id)
+		if lord != null and topic.topic_id not in lord.topic_pool:
+			lord.topic_pool.append(topic.topic_id)
 
 
 # -- Flee Logistics (s55.29 travel + court removal) ----------------------------

@@ -99,7 +99,7 @@ static func resolve_cast(
 	)
 	var blood_concealment_tn: int = maxi(5, concealment_result["total"])
 
-	# 6. Crime record — concealment_tn carried here until zone_event_log is built
+	# 6. Crime record — concealment_tn used by blood evidence detection (Channel 2)
 	var record: CrimeRecord = CrimeSystem.create_crime_record(
 		next_case_id,
 		Enums.CrimeType.MAHO,
