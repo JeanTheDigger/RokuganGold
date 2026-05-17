@@ -207,8 +207,20 @@ file, search `/simulation/` and `/shared/` to confirm the system doesn't already
 For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
 **Code Implementation Status** table at the bottom of `/gdd/00_INDEX.md`.
 
+### Known Code Issues (found 2026-05-17, not yet fixed)
+- **DefenseHearingSystem.can_appoint_champion() — tautology bug.** Line 75:
+  `return accused.school_type != Enums.SchoolType.BUSHI or accused.school_type == Enums.SchoolType.BUSHI`
+  This is `not X or X` — always `true`. Intent unclear; read GDD s11.3.9f before fixing.
+- **MagistrateAllocationSystem.is_emerald_jurisdiction() — dead parameter.**
+  Accepts `EmeraldJurisdictionTrigger` enum but ignores it, always returns `true`.
+  Possibly intentional (all four listed triggers qualify); if so, drop the parameter.
+  If different triggers should return different values, implement the match.
+- **MagistrateAllocationSystem.can_override_clan_magistrate() — unconditional stub.**
+  No parameters, always returns `true`. May be correct per imperial authority rules.
+  Verify against GDD s11.3.17c before adding guards.
+
 ### Blocked Sections — Do Not Re-Audit
-As of 2026-05-15, every remaining PARTIAL and NOT STARTED section is blocked.
+As of 2026-05-17, every remaining PARTIAL and NOT STARTED section is blocked.
 Do not re-audit this; the list is settled. Ask the user before investigating any of these.
 
 **Blocked on world map / adjacency data (not yet available):**
