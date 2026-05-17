@@ -3,6 +3,10 @@
     "primary": "Stealth",
     "secondary": null
   },
+  "ANNOUNCE_HUNT": {
+    "primary": "Hunting",
+    "secondary": null
+  },
   "APPLY_TATTOO": {
     "primary": "Artisan: Tattooing",
     "secondary": "Agility"
@@ -54,6 +58,10 @@
   "CALL_COURT": {
     "primary": "Courtier",
     "secondary": "Etiquette"
+  },
+  "CANCEL_HUNT": {
+    "primary": null,
+    "secondary": null
   },
   "CHANGE_DESTINATION": {
     "primary": null,
@@ -362,6 +370,10 @@
   "REQUEST_ART": {
     "primary": null,
     "secondary": null
+  },
+  "REQUEST_HUNT_INVITATION": {
+    "primary": "Etiquette",
+    "secondary": "Courtier"
   },
   "REQUEST_PERFORMANCE": {
     "primary": null,

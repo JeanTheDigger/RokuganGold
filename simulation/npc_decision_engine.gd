@@ -470,6 +470,16 @@ static func score_all(
 		elif ctx.clan == "Phoenix":
 			option.disposition_modifier += 5.0
 
+	# ANNOUNCE_HUNT school lean (Annex C, s57.38.2):
+	# Hiruma/Shinjo/Matsu/Usagi/Hida/Toritaka +15; Doji/Otomo/Soshi/Miya -15
+	for option: NPCDataStructures.ScoredAction in options:
+		if option.action_id != "ANNOUNCE_HUNT":
+			continue
+		if HuntSystem.has_hunt_positive_lean(ctx.school):
+			option.disposition_modifier += float(HuntSystem.HUNT_SCHOOL_LEAN)
+		elif HuntSystem.has_hunt_negative_lean(ctx.school):
+			option.disposition_modifier -= float(HuntSystem.HUNT_SCHOOL_LEAN)
+
 
 # -- Phase 6: Selection -------------------------------------------------------
 # Highest total wins. Tiebreakers: ObjAlign > disposition > lower AP > seed.
@@ -768,6 +778,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array[S
 				"CRAFT", "MENTOR",
 				"TREAT_WOUND",
 				"REQUEST_PERFORMANCE",
+				"ANNOUNCE_HUNT", "CANCEL_HUNT",
 				"DO_NOTHING", "REST",
 			]
 		Enums.ContextFlag.AT_COURT:
@@ -787,6 +798,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array[S
 				"EXAMINE_LETTER",
 				"TREAT_WOUND",
 				"REQUEST_PERFORMANCE",
+				"ANNOUNCE_HUNT", "REQUEST_HUNT_INVITATION", "CANCEL_HUNT",
 				"DO_NOTHING", "REST",
 			]
 		Enums.ContextFlag.VISITING:
@@ -797,12 +809,14 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array[S
 				"ASK_FOR_INTRODUCTION", "OBSERVE_COURT_ATTENDEES",
 				"TRAIN", "MEDITATE", "CONDUCT_TEA_CEREMONY",
 				"TREAT_WOUND",
+				"ANNOUNCE_HUNT", "REQUEST_HUNT_INVITATION", "CANCEL_HUNT",
 				"DO_NOTHING", "REST",
 			]
 		Enums.ContextFlag.TRAVELING:
 			return [
 				"CHANGE_DESTINATION",
 				"TRAIN", "MEDITATE",
+				"CANCEL_HUNT",
 				"DO_NOTHING", "REST",
 			]
 		Enums.ContextFlag.ON_CAMPAIGN:
@@ -930,6 +944,9 @@ static func _get_ap_cost(action_id: String) -> int:
 		"RESTORE_COUNCIL_COMPACT": 1,
 		"TREAT_WOUND": 1,
 		"REQUEST_PERFORMANCE": 0,
+		"ANNOUNCE_HUNT": 0,
+		"REQUEST_HUNT_INVITATION": 0,
+		"CANCEL_HUNT": 0,
 	}
 	return costs.get(action_id, 1)
 
@@ -2002,6 +2019,32 @@ static func _populate_action_metadata(
 			"fulfills_request_id": need.target_settlement_id,
 			"requesting_lord_id": need.target_npc_id,
 			"venue_mode": need.target_intent,
+		}
+	elif option.action_id == "ANNOUNCE_HUNT":
+		# Default: hunt at need's target province (if set), else host's known location
+		var province_id: int = need.target_province_id if need.target_province_id >= 0 else -1
+		var hunt_date: int = ctx.ic_day + 14  # midpoint of 7–21 day window
+		var priority_invitee_id: int = -1
+		if need.need_type == "RAISE_DISPOSITION" and need.target_npc_id >= 0:
+			priority_invitee_id = need.target_npc_id
+		option.target_province_id = province_id
+		option.metadata = {
+			"target_province_id": province_id,
+			"hunt_date_ic_day": hunt_date,
+			"priority_invitee_id": priority_invitee_id,
+		}
+	elif option.action_id == "REQUEST_HUNT_INVITATION":
+		# Hunt topic in known_topics — first active hunt topic found
+		var hunt_topic_id: int = ctx.known_objectives.get("hunt_topic_id", -1)
+		var host_id: int = need.target_npc_id if need.target_npc_id >= 0 else -1
+		option.target_npc_id = host_id
+		option.metadata = {
+			"hunt_topic_id": hunt_topic_id,
+			"host_id": host_id,
+		}
+	elif option.action_id == "CANCEL_HUNT":
+		option.metadata = {
+			"accepted_invitee_ids": [],
 		}
 	elif option.action_id == "ASK_FOR_INTRODUCTION":
 		# Intermediary: highest-disposition Friend+ contact who is not the target (s55.7.3).

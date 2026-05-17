@@ -299,6 +299,15 @@ static func execute(
 	if action_id == "CONDUCT_TEA_CEREMONY":
 		return _execute_conduct_tea_ceremony(action, character, ctx, dice_engine, characters_by_id)
 
+	if action_id == "ANNOUNCE_HUNT":
+		return _execute_announce_hunt(action, character, ctx)
+
+	if action_id == "REQUEST_HUNT_INVITATION":
+		return _execute_request_hunt_invitation(action, character, ctx)
+
+	if action_id == "CANCEL_HUNT":
+		return _execute_cancel_hunt(action, character, ctx)
+
 	if action_id in COVERT_ACTIONS:
 		var covert_result: Dictionary = _try_execute_covert(
 			action, character, ctx, dice_engine, characters_by_id
@@ -3848,5 +3857,112 @@ static func _execute_conduct_tea_ceremony(
 			"participant_gains": participant_gains,
 			"total_participants": total_count,
 			"recovery_per_participant": recovery,
+		},
+	}
+
+
+# -- ANNOUNCE_HUNT -------------------------------------------------------------
+
+static func _execute_announce_hunt(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> Dictionary:
+	var check: Dictionary = HuntSystem.can_announce(character, ctx)
+	if not check.get("valid", false):
+		return {
+			"success": false,
+			"action_id": "ANNOUNCE_HUNT",
+			"reason": check.get("reason", "precondition_failed"),
+		}
+
+	var target_province_id: int = action.metadata.get("target_province_id", -1)
+	var hunt_date_ic_day: int = action.metadata.get("hunt_date_ic_day", -1)
+	if hunt_date_ic_day < 0:
+		hunt_date_ic_day = ctx.ic_day + HuntSystem.MIN_HUNT_DAYS_AHEAD
+	var priority_invitee_id: int = action.metadata.get("priority_invitee_id", -1)
+
+	return {
+		"success": true,
+		"action_id": "ANNOUNCE_HUNT",
+		"character_id": character.character_id,
+		"target_npc_id": -1,
+		"target_province_id": target_province_id,
+		"ic_day": ctx.ic_day,
+		"season": ctx.season,
+		"effects": {
+			"hunt_date_ic_day": hunt_date_ic_day,
+			"priority_invitee_id": priority_invitee_id,
+			"topic_tier": 4,
+			"topic_type": "hunt_announcement",
+		},
+	}
+
+
+# -- REQUEST_HUNT_INVITATION ---------------------------------------------------
+
+static func _execute_request_hunt_invitation(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> Dictionary:
+	var host_id: int = action.metadata.get("host_id", action.target_npc_id)
+	var hunt_topic_id: int = action.metadata.get("hunt_topic_id", -1)
+
+	if hunt_topic_id < 0:
+		return {
+			"success": false,
+			"action_id": "REQUEST_HUNT_INVITATION",
+			"reason": "no_hunt_topic",
+		}
+
+	return {
+		"success": true,
+		"action_id": "REQUEST_HUNT_INVITATION",
+		"character_id": character.character_id,
+		"target_npc_id": host_id,
+		"target_province_id": -1,
+		"ic_day": ctx.ic_day,
+		"season": ctx.season,
+		"effects": {
+			"hunt_topic_id": hunt_topic_id,
+			"requester_id": character.character_id,
+			"requester_status": character.status,
+		},
+	}
+
+
+# -- CANCEL_HUNT ---------------------------------------------------------------
+
+static func _execute_cancel_hunt(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> Dictionary:
+	var check: Dictionary = HuntSystem.can_cancel(character, ctx)
+	if not check.get("valid", false):
+		return {
+			"success": false,
+			"action_id": "CANCEL_HUNT",
+			"reason": check.get("reason", "precondition_failed"),
+		}
+
+	var active_hunt_id: int = ctx.known_objectives.get("active_hunt_id", -1)
+	var accepted_invitee_ids: Array = action.metadata.get("accepted_invitee_ids", [])
+
+	return {
+		"success": true,
+		"action_id": "CANCEL_HUNT",
+		"character_id": character.character_id,
+		"target_npc_id": -1,
+		"target_province_id": -1,
+		"ic_day": ctx.ic_day,
+		"season": ctx.season,
+		"effects": {
+			"hunt_id": active_hunt_id,
+			"glory_change": HuntSystem.GLORY_HOST_CANCEL,
+			"accepted_invitee_ids": accepted_invitee_ids,
+			"disposition_change_per_invitee": HuntSystem.DISP_CANCEL_PER_INVITEE,
+			"topic_type": "hunt_cancellation",
 		},
 	}
