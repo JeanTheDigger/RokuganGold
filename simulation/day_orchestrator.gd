@@ -3446,6 +3446,8 @@ static func _process_witness_tampering_writebacks(
 					)
 					next_case_id[0] += 1
 					crime_records.append(murder_record)
+					if victim != null:
+						_apply_victim_death(victim, active_topics, next_topic_id, ic_day, kill_location)
 					var criminal: L5RCharacterData = characters_by_id.get(criminal_id)
 					if criminal != null:
 						var murder_topic: TopicData = _create_crime_topic(
@@ -3518,6 +3520,36 @@ static func _inject_witness_report_event(
 	})
 	witness_ws["pending_events"] = events
 	world_states[witness_id] = witness_ws
+
+
+static func _apply_victim_death(
+	victim: L5RCharacterData,
+	active_topics: Array[TopicData],
+	next_topic_id: Array[int],
+	ic_day: int,
+	kill_location: String,
+) -> void:
+	var earth: int = CharacterStats.get_ring_value(victim, Enums.Ring.EARTH)
+	victim.wounds_taken = earth * 5 * 5
+	var death_topic_id: int = next_topic_id[0]
+	next_topic_id[0] = death_topic_id + 1
+	var title: String = "Death of %s at %s" % [victim.character_name, kill_location]
+	var topic: TopicData = TopicMomentumSystem.create_topic(
+		death_topic_id,
+		title,
+		TopicData.Tier.TIER_3,
+		TopicData.Category.LEGAL,
+		ic_day,
+		0.0,
+		[],
+		victim.clan,
+		"",
+		victim.character_id,
+		"death",
+		"murder",
+	)
+	topic.slug = "murder_death_%d" % victim.character_id
+	active_topics.append(topic)
 
 
 # -- Witness Report Letter Writebacks ------------------------------------------

@@ -4666,11 +4666,24 @@ func test_kill_witness_generates_murder_topic_and_seeds_witnesses() -> void:
 	var murder: CrimeRecord = crime_records[1]
 	assert_eq(murder.location, "bayushi_city")
 	assert_eq(murder.witnesses, [30] as Array[int])
-	assert_eq(active_topics.size(), 1)
-	assert_eq(active_topics[0].slug, "crime_case_500")
-	assert_eq(active_topics[0].topic_type, "crime")
-	assert_true(bystander.topic_pool.has(active_topics[0].topic_id))
-	assert_eq(next_topic_id[0], 7001)
+
+	# Death topic (murder variant) + crime topic
+	assert_eq(active_topics.size(), 2)
+	var death_topic: TopicData = active_topics[0]
+	assert_eq(death_topic.topic_type, "death")
+	assert_eq(death_topic.variant, "murder")
+	assert_eq(death_topic.slug, "murder_death_20")
+	assert_eq(death_topic.subject_character_id, 20)
+	assert_eq(death_topic.tier, TopicData.Tier.TIER_3)
+
+	var crime_topic: TopicData = active_topics[1]
+	assert_eq(crime_topic.slug, "crime_case_500")
+	assert_eq(crime_topic.topic_type, "crime")
+	assert_true(bystander.topic_pool.has(crime_topic.topic_id))
+	assert_eq(next_topic_id[0], 7002)
+
+	# Victim is dead
+	assert_true(CharacterStats.is_dead(victim))
 
 
 func test_intimidate_witness_success_applies_disposition_penalty() -> void:
@@ -6349,3 +6362,33 @@ func test_find_crime_topic_for_case_matches_correct_slug() -> void:
 
 	var no_match: int = DayOrchestrator._find_crime_topic_for_case(character, 100, active_topics)
 	assert_eq(no_match, -1)
+
+
+# -- Victim Death Application --------------------------------------------------
+
+func test_apply_victim_death_sets_lethal_wounds_and_creates_topic() -> void:
+	var victim := L5RCharacterData.new()
+	victim.character_id = 910
+	victim.character_name = "Murdered Samurai"
+	victim.clan = "Crane"
+	victim.stamina = 3
+	victim.willpower = 2
+	victim.wounds_taken = 0
+
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [8000]
+
+	DayOrchestrator._apply_victim_death(victim, active_topics, next_topic_id, 50, "bayushi_city")
+
+	assert_true(CharacterStats.is_dead(victim))
+	assert_eq(active_topics.size(), 1)
+	var topic: TopicData = active_topics[0]
+	assert_eq(topic.topic_id, 8000)
+	assert_eq(topic.topic_type, "death")
+	assert_eq(topic.variant, "murder")
+	assert_eq(topic.slug, "murder_death_910")
+	assert_eq(topic.subject_character_id, 910)
+	assert_eq(topic.tier, TopicData.Tier.TIER_3)
+	assert_eq(topic.category, TopicData.Category.LEGAL)
+	assert_eq(topic.clan_involved, "Crane")
+	assert_eq(next_topic_id[0], 8001)
