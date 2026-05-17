@@ -3411,3 +3411,141 @@ func test_investigation_opened_topic_generated() -> void:
 	assert_eq(active_topics[0].tier, TopicData.Tier.TIER_4)
 	assert_eq(active_topics[0].category, TopicData.Category.LEGAL)
 	assert_eq(active_topics[0].slug, "investigation_60")
+
+
+# -- Bribery Attempt Topic (T3-15) ---
+
+func test_failed_bribe_generates_bribery_attempt_topic() -> void:
+	var briber := L5RCharacterData.new()
+	briber.character_id = 5
+	briber.character_name = "Shosuro Hametsu"
+	briber.clan = "Scorpion"
+	briber.family = "Shosuro"
+	briber.lord_id = 10
+	briber.legal_cases = []
+
+	var magistrate := L5RCharacterData.new()
+	magistrate.character_id = 20
+	magistrate.character_name = "Kitsuki Kaagi"
+
+	var lord := L5RCharacterData.new()
+	lord.character_id = 10
+	lord.topic_pool = [] as Array[int]
+
+	var record := CrimeRecord.new()
+	record.case_id = 77
+	record.crime_type = Enums.CrimeType.SKIMMING
+	record.perpetrator_id = 5
+	record.evidence_total = 18
+	record.legal_status = Enums.LegalStatus.UNDER_INVESTIGATION
+
+	var crime_records: Array[CrimeRecord] = [record]
+	var characters_by_id: Dictionary = {5: briber, 10: lord, 20: magistrate}
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [900]
+	var world_states: Dictionary = {}
+
+	DayOrchestrator._apply_failed_bribe_evidence(
+		crime_records, 5, characters_by_id,
+		active_topics, next_topic_id, 100, world_states, 20,
+	)
+
+	assert_eq(record.evidence_total, 33)
+	assert_eq(active_topics.size(), 1)
+	assert_eq(active_topics[0].tier, TopicData.Tier.TIER_3)
+	assert_eq(active_topics[0].category, TopicData.Category.POLITICAL)
+	assert_true(active_topics[0].title.contains("Shosuro Hametsu"))
+	assert_true(active_topics[0].title.contains("Kitsuki Kaagi"))
+	assert_eq(active_topics[0].slug, "bribery_attempt_77")
+
+
+# -- Successful Bribe (s11.3.11f Step 7b) ---
+
+func test_successful_bribe_buries_case() -> void:
+	var briber := L5RCharacterData.new()
+	briber.character_id = 5
+	briber.character_name = "Bayushi Koro"
+	briber.clan = "Scorpion"
+	briber.lord_id = 10
+	var entry := LegalCaseEntry.new()
+	entry.crime_record_id = 88
+	entry.state = Enums.LegalStatus.UNDER_INVESTIGATION
+	briber.legal_cases = [entry]
+
+	var magistrate := L5RCharacterData.new()
+	magistrate.character_id = 20
+	magistrate.character_name = "Corrupt Magistrate"
+	magistrate.honor = 3.0
+
+	var record := CrimeRecord.new()
+	record.case_id = 88
+	record.crime_type = Enums.CrimeType.SKIMMING
+	record.perpetrator_id = 5
+	record.evidence_total = 28
+	record.legal_status = Enums.LegalStatus.UNDER_INVESTIGATION
+
+	var crime_records: Array[CrimeRecord] = [record]
+	var characters_by_id: Dictionary = {5: briber, 20: magistrate}
+
+	var results: Array = [{
+		"action_id": "BRIBE_FOR_INFO",
+		"success": true,
+		"character_id": 5,
+		"target_npc_id": 20,
+		"effects": {
+			"suppress_case": true,
+			"magistrate_id": 20,
+			"detection_risk": false,
+		},
+	}]
+
+	DayOrchestrator._process_successful_bribe_writebacks(
+		results, crime_records, characters_by_id, 100,
+	)
+
+	assert_eq(record.legal_status, Enums.LegalStatus.CLEAR)
+	assert_eq(entry.state, Enums.LegalStatus.CLEAR)
+	assert_lt(magistrate.honor, 3.0)
+
+
+# -- Fugitive Declaration (T3-12) ---
+
+func test_fugitive_declaration_generates_topic() -> void:
+	var fugitive := L5RCharacterData.new()
+	fugitive.character_id = 5
+	fugitive.character_name = "Ikoma Tsuko"
+	fugitive.clan = "Lion"
+	fugitive.family = "Ikoma"
+	fugitive.lord_id = 10
+	var entry := LegalCaseEntry.new()
+	entry.crime_record_id = 99
+	entry.state = Enums.LegalStatus.ACCUSED
+	fugitive.legal_cases = [entry]
+
+	var lord := L5RCharacterData.new()
+	lord.character_id = 10
+	lord.topic_pool = [] as Array[int]
+
+	var record := CrimeRecord.new()
+	record.case_id = 99
+	record.crime_type = Enums.CrimeType.VIOLENCE
+	record.perpetrator_id = 5
+	record.legal_status = Enums.LegalStatus.ACCUSED
+
+	var characters_by_id: Dictionary = {5: fugitive, 10: lord}
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [1100]
+
+	var result: Dictionary = DayOrchestrator.process_fugitive_declaration(
+		record, fugitive, characters_by_id,
+		active_topics, next_topic_id, 200,
+	)
+
+	assert_true(result["declared"])
+	assert_eq(record.legal_status, Enums.LegalStatus.FUGITIVE)
+	assert_eq(entry.state, Enums.LegalStatus.FUGITIVE)
+	assert_eq(active_topics.size(), 1)
+	assert_eq(active_topics[0].topic_id, 1100)
+	assert_true(active_topics[0].title.contains("Ikoma Tsuko"))
+	assert_eq(active_topics[0].slug, "fugitive_5")
+	assert_true(lord.topic_pool.has(1100))

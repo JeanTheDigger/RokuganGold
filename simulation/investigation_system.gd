@@ -623,3 +623,66 @@ static func generate_investigation_opened_topic(
 	)
 	topic.slug = "investigation_%d" % record.case_id
 	return topic
+
+
+static func generate_bribery_attempt_topic(
+	suspect: L5RCharacterData,
+	magistrate: L5RCharacterData,
+	record: CrimeRecord,
+	next_topic_id: Array[int],
+	ic_day: int,
+) -> TopicData:
+	var crime_name: String = CRIME_TYPE_NAMES.get(record.crime_type, "Crime")
+	var title: String = "%s attempted to bribe %s during %s investigation" % [
+		suspect.character_name, magistrate.character_name, crime_name
+	]
+
+	var topic_id: int = next_topic_id[0]
+	next_topic_id[0] = topic_id + 1
+
+	var topic: TopicData = TopicMomentumSystem.create_topic(
+		topic_id,
+		title,
+		TopicData.Tier.TIER_3,
+		TopicData.Category.POLITICAL,
+		ic_day,
+		20.0,
+		[],
+		suspect.clan,
+		suspect.family,
+		suspect.character_id,
+		"crime",
+		"bribery_attempt",
+	)
+	topic.slug = "bribery_attempt_%d" % record.case_id
+	topic.subject_role = "PERPETRATOR"
+	return topic
+
+
+static func generate_fugitive_topic(
+	fugitive: L5RCharacterData,
+	next_topic_id: Array[int],
+	ic_day: int,
+) -> TopicData:
+	var title: String = "%s is a fugitive from justice" % fugitive.character_name
+
+	var topic_id: int = next_topic_id[0]
+	next_topic_id[0] = topic_id + 1
+
+	var topic: TopicData = TopicMomentumSystem.create_topic(
+		topic_id,
+		title,
+		TopicData.Tier.TIER_3,
+		TopicData.Category.POLITICAL,
+		ic_day,
+		30.0,
+		[],
+		fugitive.clan,
+		fugitive.family,
+		fugitive.character_id,
+		"crime",
+		"fugitive_declaration",
+	)
+	topic.slug = "fugitive_%d" % fugitive.character_id
+	topic.subject_role = "PERPETRATOR"
+	return topic

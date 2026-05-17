@@ -204,6 +204,11 @@ static func advance_day(
 		characters_by_id, active_topics, next_topic_id, ic_day,
 	)
 
+	_process_successful_bribe_writebacks(
+		day_result.get("results", []),
+		crime_records, characters_by_id, ic_day,
+	)
+
 	var current_season_count: int = int(season_meta.get("horde_season_count", 0))
 	var military_effects: Array[Dictionary] = _process_military_effects(
 		day_result.get("results", []),
@@ -2613,12 +2618,88 @@ static func _process_crime_detection(
 		})
 
 		if action_id == "BRIBE_FOR_INFO" and effects.get("suppress_case", false):
+			var bribe_magistrate_id: int = effects.get("magistrate_id", -1)
 			_apply_failed_bribe_evidence(
 				crime_records, char_id, characters_by_id,
-				active_topics, next_topic_id, ic_day, world_states
+				active_topics, next_topic_id, ic_day, world_states,
+				bribe_magistrate_id
 			)
 
 	return crime_results
+
+
+static func process_fugitive_declaration(
+	record: CrimeRecord,
+	fugitive: L5RCharacterData,
+	characters_by_id: Dictionary,
+	active_topics: Array[TopicData],
+	next_topic_id: Array[int],
+	ic_day: int,
+) -> Dictionary:
+	if fugitive == null:
+		return {"declared": false}
+
+	record.legal_status = Enums.LegalStatus.FUGITIVE
+	var entry: LegalCaseEntry = LegalStatusSystem.get_case(fugitive, record.case_id)
+	if entry != null:
+		LegalStatusSystem.transition(entry, Enums.LegalStatus.FUGITIVE, ic_day)
+
+	var topic: TopicData = InvestigationSystem.generate_fugitive_topic(
+		fugitive, next_topic_id, ic_day
+	)
+	if topic != null:
+		active_topics.append(topic)
+		var lord_id: int = fugitive.lord_id
+		var lord: L5RCharacterData = characters_by_id.get(lord_id)
+		if lord != null and topic.topic_id not in lord.topic_pool:
+			lord.topic_pool.append(topic.topic_id)
+
+	return {
+		"declared": true,
+		"fugitive_id": fugitive.character_id,
+		"topic_id": topic.topic_id if topic != null else -1,
+	}
+
+
+static func _process_successful_bribe_writebacks(
+	results: Array,
+	crime_records: Array[CrimeRecord],
+	characters_by_id: Dictionary,
+	ic_day: int,
+) -> void:
+	for result: Variant in results:
+		if not result is Dictionary:
+			continue
+		var r: Dictionary = result as Dictionary
+		if r.get("action_id", "") != "BRIBE_FOR_INFO":
+			continue
+		if not r.get("success", false):
+			continue
+		var effects: Dictionary = r.get("effects", {})
+		if not effects.get("suppress_case", false):
+			continue
+
+		var briber_id: int = r.get("character_id", -1)
+		var magistrate_id: int = effects.get("magistrate_id", -1)
+		var magistrate: L5RCharacterData = characters_by_id.get(magistrate_id)
+		if magistrate == null:
+			continue
+
+		for record: CrimeRecord in crime_records:
+			if record.perpetrator_id != briber_id:
+				continue
+			if record.legal_status == Enums.LegalStatus.DECREED_GUILTY:
+				continue
+			if record.legal_status == Enums.LegalStatus.ACQUITTED:
+				continue
+			record.legal_status = Enums.LegalStatus.CLEAR
+			var accused: L5RCharacterData = characters_by_id.get(briber_id)
+			if accused != null:
+				var entry: LegalCaseEntry = LegalStatusSystem.get_case(accused, record.case_id)
+				if entry != null:
+					LegalStatusSystem.transition(entry, Enums.LegalStatus.CLEAR, ic_day)
+			HonorGlorySystem.apply_honor_change(magistrate, -0.5)
+			break
 
 
 static func _apply_failed_bribe_evidence(
@@ -2629,6 +2710,7 @@ static func _apply_failed_bribe_evidence(
 	next_topic_id: Array[int],
 	ic_day: int,
 	world_states: Dictionary,
+	magistrate_id: int = -1,
 ) -> void:
 	for record: CrimeRecord in crime_records:
 		if record.perpetrator_id != briber_id:
@@ -2643,6 +2725,14 @@ static func _apply_failed_bribe_evidence(
 				threshold, record, characters_by_id,
 				active_topics, next_topic_id, ic_day, world_states
 			)
+		var briber: L5RCharacterData = characters_by_id.get(briber_id)
+		var magistrate: L5RCharacterData = characters_by_id.get(magistrate_id)
+		if briber != null and magistrate != null:
+			var bribery_topic: TopicData = InvestigationSystem.generate_bribery_attempt_topic(
+				briber, magistrate, record, next_topic_id, ic_day
+			)
+			if bribery_topic != null:
+				active_topics.append(bribery_topic)
 		return
 
 

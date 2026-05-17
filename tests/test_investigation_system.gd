@@ -757,3 +757,56 @@ func test_accusation_threshold_not_re_triggered_if_already_accused() -> void:
 	var threshold: String = InvestigationSystem.add_evidence(cr, 5)
 	assert_eq(threshold, "")
 	assert_eq(cr.legal_status, Enums.LegalStatus.ACCUSED)
+
+
+# -- Bribery Attempt Topic (T3-15) ------------------------------------------------
+
+func test_generate_bribery_attempt_topic() -> void:
+	var suspect := L5RCharacterData.new()
+	suspect.character_id = 5
+	suspect.character_name = "Shosuro Hametsu"
+	suspect.clan = "Scorpion"
+	suspect.family = "Shosuro"
+
+	var magistrate := L5RCharacterData.new()
+	magistrate.character_id = 20
+	magistrate.character_name = "Kitsuki Kaagi"
+
+	var cr := _make_crime_record(15, 0)
+	cr.crime_type = Enums.CrimeType.SKIMMING
+	var next_id: Array[int] = [300]
+
+	var topic: TopicData = InvestigationSystem.generate_bribery_attempt_topic(
+		suspect, magistrate, cr, next_id, 100
+	)
+	assert_not_null(topic)
+	assert_eq(topic.topic_id, 300)
+	assert_eq(next_id[0], 301)
+	assert_eq(topic.tier, TopicData.Tier.TIER_3)
+	assert_eq(topic.category, TopicData.Category.POLITICAL)
+	assert_true(topic.title.contains("Shosuro Hametsu"))
+	assert_true(topic.title.contains("Kitsuki Kaagi"))
+	assert_eq(topic.slug, "bribery_attempt_1")
+
+
+# -- Fugitive Topic (T3-12) -------------------------------------------------------
+
+func test_generate_fugitive_topic() -> void:
+	var fugitive := L5RCharacterData.new()
+	fugitive.character_id = 7
+	fugitive.character_name = "Ikoma Tsuko"
+	fugitive.clan = "Lion"
+	fugitive.family = "Ikoma"
+
+	var next_id: Array[int] = [400]
+
+	var topic: TopicData = InvestigationSystem.generate_fugitive_topic(
+		fugitive, next_id, 200
+	)
+	assert_not_null(topic)
+	assert_eq(topic.topic_id, 400)
+	assert_eq(next_id[0], 401)
+	assert_eq(topic.tier, TopicData.Tier.TIER_3)
+	assert_eq(topic.category, TopicData.Category.POLITICAL)
+	assert_true(topic.title.contains("Ikoma Tsuko"))
+	assert_eq(topic.slug, "fugitive_7")
