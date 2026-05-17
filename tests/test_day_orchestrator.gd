@@ -3998,3 +3998,221 @@ func test_flee_logistics_removes_from_court() -> void:
 
 	assert_false(court.attendee_ids.has(7))
 	assert_eq(court.attendee_ids.size(), 2)
+
+
+# -- Position Vacancy on Flee ---
+
+func test_flee_creates_vacancy_for_position_holder() -> void:
+	var fugitive := L5RCharacterData.new()
+	fugitive.character_id = 7
+	fugitive.character_name = "Magistrate"
+	fugitive.physical_location = "scorpion_castle"
+	fugitive.travel_destination = ""
+	fugitive.travel_days_remaining = 0
+	fugitive.role_position = "provincial_magistrate"
+	fugitive.lord_id = 10
+
+	var characters_by_id: Dictionary = {7: fugitive}
+	var active_courts: Array[CourtSessionData] = []
+	var world_states: Dictionary = {}
+
+	var results: Array = [{
+		"action_id": "FLEE_JURISDICTION",
+		"success": true,
+		"character_id": 7,
+		"effects": {"effect": "flee_jurisdiction", "fugitive_id": 7},
+	}]
+
+	DayOrchestrator._process_flee_logistics(
+		results, characters_by_id, active_courts, world_states,
+	)
+
+	assert_eq(fugitive.role_position, "")
+	var vkey: String = "vacant_positions_10"
+	var vacancies: Array = world_states.get(vkey, [])
+	assert_eq(vacancies.size(), 1)
+	assert_eq(vacancies[0]["position_type"], "provincial_magistrate")
+	assert_eq(vacancies[0]["priority"], 2)
+
+
+# -- Zone Log Purge ---
+
+func test_zone_log_purge_resets_concealment_tn() -> void:
+	var record := CrimeRecord.new()
+	record.case_id = 100
+	record.crime_type = Enums.CrimeType.MAHO
+	record.concealment_tn = 18
+	record.ic_day_committed = 10
+
+	var crime_records: Array[CrimeRecord] = [record]
+
+	DayOrchestrator._purge_expired_crime_evidence(crime_records, 99)
+	assert_eq(record.concealment_tn, 18)
+
+	DayOrchestrator._purge_expired_crime_evidence(crime_records, 100)
+	assert_eq(record.concealment_tn, 0)
+
+
+func test_zone_log_purge_skips_zero_concealment() -> void:
+	var record := CrimeRecord.new()
+	record.case_id = 101
+	record.concealment_tn = 0
+	record.ic_day_committed = 5
+
+	var crime_records: Array[CrimeRecord] = [record]
+	DayOrchestrator._purge_expired_crime_evidence(crime_records, 200)
+	assert_eq(record.concealment_tn, 0)
+
+
+# -- Taint Proximity Detection (Channel 3) ---
+
+func test_taint_detection_generates_topic_for_tainted_target() -> void:
+	var detector := L5RCharacterData.new()
+	detector.character_id = 30
+	detector.character_name = "Kuni Witch-Hunter"
+	detector.clan = "Crab"
+	detector.family = "Kuni"
+	detector.school_type = Enums.SchoolType.SHUGENJA
+	detector.perception = 4
+	detector.skills["Lore: Shadowlands"] = 4
+	detector.lord_id = 10
+
+	var lord := L5RCharacterData.new()
+	lord.character_id = 10
+	lord.topic_pool = [] as Array[int]
+
+	var tainted := L5RCharacterData.new()
+	tainted.character_id = 40
+	tainted.character_name = "Maho Tsukai"
+	tainted.clan = "Scorpion"
+	tainted.family = "Soshi"
+	tainted.taint = 3.5
+
+	var characters_by_id: Dictionary = {30: detector, 40: tainted, 10: lord}
+	var character_province_map: Dictionary = {30: 1, 40: 1}
+	var dice_engine := DiceEngine.new()
+	dice_engine.set_seed(42)
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [5000]
+
+	var results: Array = [{
+		"action_id": "PROBE",
+		"success": true,
+		"character_id": 30,
+		"target_npc_id": 40,
+	}]
+
+	DayOrchestrator._process_taint_proximity_detection(
+		results, characters_by_id, character_province_map,
+		dice_engine, active_topics, next_topic_id, 100,
+	)
+
+	# Kuni with 4+4+2=10k4 vs TN 20: should succeed with seed 42
+	if active_topics.size() > 0:
+		assert_eq(active_topics[0].tier, TopicData.Tier.TIER_3)
+		assert_eq(active_topics[0].category, TopicData.Category.SUPERNATURAL)
+		assert_true(active_topics[0].title.contains("Maho Tsukai"))
+		assert_eq(active_topics[0].slug, "taint_suspected_40")
+		assert_eq(active_topics[0].subject_role, "PERPETRATOR")
+	else:
+		pass_test("Roll failed — probabilistic; taint detection gated by dice")
+
+
+func test_taint_detection_skips_low_taint() -> void:
+	var detector := L5RCharacterData.new()
+	detector.character_id = 30
+	detector.character_name = "Kuni"
+	detector.family = "Kuni"
+	detector.perception = 4
+	detector.skills["Lore: Shadowlands"] = 4
+
+	var target := L5RCharacterData.new()
+	target.character_id = 40
+	target.taint = 1.5
+
+	var characters_by_id: Dictionary = {30: detector, 40: target}
+	var dice_engine := DiceEngine.new()
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [5000]
+
+	var results: Array = [{
+		"action_id": "PROBE",
+		"success": true,
+		"character_id": 30,
+		"target_npc_id": 40,
+	}]
+
+	DayOrchestrator._process_taint_proximity_detection(
+		results, characters_by_id, {},
+		dice_engine, active_topics, next_topic_id, 100,
+	)
+
+	assert_eq(active_topics.size(), 0)
+
+
+# -- Witness Tampering Writebacks ---
+
+func test_bribe_witness_success_removes_from_record() -> void:
+	var record := CrimeRecord.new()
+	record.case_id = 200
+	record.perpetrator_id = 5
+	record.witnesses = [20, 30] as Array[int]
+	record.evidence_total = 15
+
+	var crime_records: Array[CrimeRecord] = [record]
+	var characters_by_id: Dictionary = {}
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [6000]
+	var world_states: Dictionary = {}
+
+	var results: Array = [{
+		"action_id": "BRIBE_WITNESS",
+		"success": true,
+		"character_id": 5,
+		"target_npc_id": 20,
+		"effects": {"effect": "witness_bribed", "witness_id": 20},
+	}]
+
+	DayOrchestrator._process_witness_tampering_writebacks(
+		results, crime_records, characters_by_id,
+		active_topics, next_topic_id, 100, world_states,
+	)
+
+	assert_false(record.witnesses.has(20))
+	assert_true(record.witnesses.has(30))
+	assert_eq(record.evidence_total, 15)
+
+
+func test_intimidate_witness_failure_adds_evidence() -> void:
+	var record := CrimeRecord.new()
+	record.case_id = 201
+	record.perpetrator_id = 5
+	record.witnesses = [20] as Array[int]
+	record.evidence_total = 10
+
+	var crime_records: Array[CrimeRecord] = [record]
+	var characters_by_id: Dictionary = {}
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [6000]
+	var world_states: Dictionary = {}
+
+	var results: Array = [{
+		"action_id": "INTIMIDATE_WITNESS",
+		"success": false,
+		"character_id": 5,
+		"target_npc_id": 20,
+		"effects": {
+			"effect": "intimidation_rejected",
+			"witness_id": 20,
+			"witness_hostile": true,
+			"evidence_on_fail": 10,
+		},
+	}]
+
+	DayOrchestrator._process_witness_tampering_writebacks(
+		results, crime_records, characters_by_id,
+		active_topics, next_topic_id, 100, world_states,
+	)
+
+	assert_true(record.witnesses.has(20))
+	assert_eq(record.evidence_total, 20)

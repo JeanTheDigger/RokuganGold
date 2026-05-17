@@ -1,7 +1,7 @@
 {
   "bushido": {
     "JIN": {
-      "always_blocked": ["RAID_HARVEST", "CONDUCT_RAID", "CONDUCT_CONDITIONING", "ACTIVATE_SLEEPER"],
+      "always_blocked": ["RAID_HARVEST", "CONDUCT_RAID", "CONDUCT_CONDITIONING", "ACTIVATE_SLEEPER", "INTIMIDATE_WITNESS"],
       "conditional": [
         {"action": "GOSSIP", "blocked_when": "target_is_innocent_third_party"},
         {"action": "DISCLOSE", "blocked_when": "target_is_innocent_third_party"},
@@ -33,7 +33,7 @@
       ]
     },
     "GI": {
-      "always_blocked": ["GOSSIP", "FABRICATE_SECRET", "BRIBE_FOR_INFO", "EAVESDROP", "INTERCEPT_LETTER", "SEARCH_QUARTERS", "CONDUCT_CONDITIONING", "ACTIVATE_SLEEPER", "UNDERREPORT_KOKU", "LAUNDER_KOKU", "ESTABLISH_DEAD_DROP", "TRANSMIT_VIA_TEAR", "RAID_HARVEST", "EXTORT_ACCUSED", "FLEE_JURISDICTION"],
+      "always_blocked": ["GOSSIP", "FABRICATE_SECRET", "BRIBE_FOR_INFO", "BRIBE_WITNESS", "EAVESDROP", "INTERCEPT_LETTER", "SEARCH_QUARTERS", "CONDUCT_CONDITIONING", "ACTIVATE_SLEEPER", "UNDERREPORT_KOKU", "LAUNDER_KOKU", "ESTABLISH_DEAD_DROP", "TRANSMIT_VIA_TEAR", "RAID_HARVEST", "EXTORT_ACCUSED", "FLEE_JURISDICTION", "INTIMIDATE_WITNESS"],
       "conditional": [
         {"action": "DISCLOSE", "blocked_when": "information_is_false"},
         {"action": "PUBLIC_DECLARATION", "blocked_when": "npc_knows_declaration_is_false"}

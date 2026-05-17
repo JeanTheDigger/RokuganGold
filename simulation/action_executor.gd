@@ -24,6 +24,7 @@ const COVERT_ACTIONS: Array[String] = [
 	"SEDUCE", "SEDUCE_FOR_INFO", "SEDUCE_FOR_ACCESS",
 	"SEDUCE_FOR_LEVERAGE", "SEDUCE_TO_COMPROMISE",
 	"EXPOSE_SECRET_PRIVATELY", "EXPOSE_SECRET_PUBLICLY",
+	"BRIBE_WITNESS", "INTIMIDATE_WITNESS",
 ]
 
 const MILITARY_ORDERS: Array[String] = [
@@ -992,6 +993,18 @@ static func _try_execute_covert(
 		"EXPOSE_SECRET_PUBLICLY":
 			return _execute_expose_publicly(action, character, ctx, dice_engine, characters_by_id)
 
+		"BRIBE_WITNESS":
+			if target == null:
+				return {}
+			var r: Dictionary = _resolve_bribe_witness(character, target, action, dice_engine)
+			return _build_covert_result(action, ctx, "Temptation", r)
+
+		"INTIMIDATE_WITNESS":
+			if target == null:
+				return {}
+			var r: Dictionary = _resolve_intimidate_witness(character, target, action, dice_engine)
+			return _build_covert_result(action, ctx, "Intimidation", r)
+
 	return {}
 
 
@@ -1053,6 +1066,77 @@ static func _resolve_bribe_attempt(
 		"detection_risk": not success,
 		"suppress_case": suppress_case,
 		"magistrate_id": magistrate.character_id,
+	}
+
+
+# -- Witness Tampering (s11.3.13c) --------------------------------------------
+
+static func _resolve_bribe_witness(
+	criminal: L5RCharacterData,
+	witness: L5RCharacterData,
+	_action: NPCDataStructures.ScoredAction,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	var temptation: int = criminal.skills.get("Temptation", 0)
+	var awareness: int = criminal.awareness if criminal.awareness > 0 else 2
+	var rolled: int = maxi(temptation + awareness, 1)
+	var kept: int = maxi(awareness, 1)
+	var attack_result: Dictionary = dice_engine.roll_and_keep(rolled, kept)
+	var attack_total: int = attack_result.get("total", 0)
+
+	var etiquette: int = witness.skills.get("Etiquette", 0)
+	var willpower: int = witness.willpower if witness.willpower > 0 else 2
+	var honor_bonus: int = HonorGlorySystem.get_honor_rank(witness) * 5
+	var def_rolled: int = maxi(etiquette + willpower, 1)
+	var def_kept: int = maxi(willpower, 1)
+	var defense_result: Dictionary = dice_engine.roll_and_keep(def_rolled, def_kept)
+	var defense_total: int = defense_result.get("total", 0) + honor_bonus
+
+	var success: bool = attack_total > defense_total
+	return {
+		"success": success,
+		"roll_total": attack_total,
+		"tn": defense_total,
+		"margin": attack_total - defense_total,
+		"detection_risk": not success,
+		"effect": "witness_bribed" if success else "bribe_rejected",
+		"witness_id": witness.character_id,
+		"evidence_on_fail": InvestigationLoopSystem.WITNESS_BRIBE_EVIDENCE_ON_FAIL,
+	}
+
+
+static func _resolve_intimidate_witness(
+	criminal: L5RCharacterData,
+	witness: L5RCharacterData,
+	_action: NPCDataStructures.ScoredAction,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	var intimidation: int = criminal.skills.get("Intimidation", 0)
+	var willpower_c: int = criminal.willpower if criminal.willpower > 0 else 2
+	var rolled: int = maxi(intimidation + willpower_c, 1)
+	var kept: int = maxi(willpower_c, 1)
+	var attack_result: Dictionary = dice_engine.roll_and_keep(rolled, kept)
+	var attack_total: int = attack_result.get("total", 0)
+
+	var etiquette: int = witness.skills.get("Etiquette", 0)
+	var willpower_w: int = witness.willpower if witness.willpower > 0 else 2
+	var honor_bonus: int = HonorGlorySystem.get_honor_rank(witness) * 5
+	var def_rolled: int = maxi(etiquette + willpower_w, 1)
+	var def_kept: int = maxi(willpower_w, 1)
+	var defense_result: Dictionary = dice_engine.roll_and_keep(def_rolled, def_kept)
+	var defense_total: int = defense_result.get("total", 0) + honor_bonus
+
+	var success: bool = attack_total > defense_total
+	return {
+		"success": success,
+		"roll_total": attack_total,
+		"tn": defense_total,
+		"margin": attack_total - defense_total,
+		"detection_risk": true,
+		"effect": "witness_intimidated" if success else "intimidation_rejected",
+		"witness_id": witness.character_id,
+		"witness_hostile": not success,
+		"evidence_on_fail": InvestigationLoopSystem.WITNESS_INTIMIDATE_EVIDENCE_ON_FAIL,
 	}
 
 

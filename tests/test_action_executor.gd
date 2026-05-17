@@ -1218,3 +1218,55 @@ func test_extort_accused_no_target_fails() -> void:
 	assert_eq(result["action_id"], "EXTORT_ACCUSED")
 	assert_false(result["success"])
 	assert_eq(result.get("reason", ""), "no_target")
+
+
+# -- BRIBE_WITNESS -------------------------------------------------------------
+
+func test_bribe_witness_resolves() -> void:
+	var witness := L5RCharacterData.new()
+	witness.character_id = 60
+	witness.character_name = "Witness"
+	witness.skills["Etiquette"] = 2
+	witness.willpower = 2
+	witness.honor = 2.0
+	witness.wounds_taken = 0
+
+	_character.skills["Temptation"] = 4
+	_character.awareness = 4
+	_dice_engine.set_seed(42)
+
+	var chars: Dictionary = {_character.character_id: _character, 60: witness}
+	var action := _make_action("BRIBE_WITNESS", 60)
+
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map, {}, chars
+	)
+	assert_eq(result["action_id"], "BRIBE_WITNESS")
+	assert_eq(result["effects"]["witness_id"], 60)
+	assert_true(result["effects"].has("evidence_on_fail"))
+
+
+# -- INTIMIDATE_WITNESS --------------------------------------------------------
+
+func test_intimidate_witness_resolves() -> void:
+	var witness := L5RCharacterData.new()
+	witness.character_id = 61
+	witness.character_name = "Witness"
+	witness.skills["Etiquette"] = 2
+	witness.willpower = 2
+	witness.honor = 2.0
+	witness.wounds_taken = 0
+
+	_character.skills["Intimidation"] = 4
+	_character.willpower = 4
+	_dice_engine.set_seed(42)
+
+	var chars: Dictionary = {_character.character_id: _character, 61: witness}
+	var action := _make_action("INTIMIDATE_WITNESS", 61)
+
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map, {}, chars
+	)
+	assert_eq(result["action_id"], "INTIMIDATE_WITNESS")
+	assert_eq(result["effects"]["witness_id"], 61)
+	assert_true(result["effects"].get("detection_risk", false))

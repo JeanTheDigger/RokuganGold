@@ -551,6 +551,7 @@ static func _decompose_reactive_event(
 		need.priority = 2
 		need.source = "bribery_eval"
 		need.target_npc_id = ev.get("magistrate_id", -1)
+		need.target_npc_id_secondary = ev.get("witness_id", -1)
 		need.threshold = float(ev.get("evidence_total", 0))
 		return need
 
@@ -1760,6 +1761,10 @@ static func _populate_action_metadata(
 		option.target_npc_id = need.target_npc_id
 	elif option.action_id == "FLEE_JURISDICTION" and need.source == "bribery_eval":
 		option.metadata = {"flee_from_magistrate_id": need.target_npc_id}
+	elif option.action_id in ["BRIBE_WITNESS", "INTIMIDATE_WITNESS"] and need.source == "bribery_eval":
+		if need.target_npc_id_secondary >= 0:
+			option.target_npc_id = need.target_npc_id_secondary
+			option.metadata = {"witness_id": need.target_npc_id_secondary}
 	elif option.action_id == "EXTORT_ACCUSED" and need.source == "extortion_opportunity":
 		option.target_npc_id = need.target_npc_id
 		option.metadata = {"extort_suspect_id": need.target_npc_id}

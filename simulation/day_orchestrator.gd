@@ -238,7 +238,21 @@ static func advance_day(
 
 	_process_flee_logistics(
 		day_result.get("results", []),
-		characters_by_id, active_courts,
+		characters_by_id, active_courts, world_states,
+	)
+
+	_purge_expired_crime_evidence(crime_records, ic_day)
+
+	_process_witness_tampering_writebacks(
+		day_result.get("results", []),
+		crime_records, characters_by_id,
+		active_topics, next_topic_id, ic_day, world_states,
+	)
+
+	_process_taint_proximity_detection(
+		day_result.get("results", []),
+		characters_by_id, character_province_map, dice_engine,
+		active_topics, next_topic_id, ic_day,
 	)
 
 	var current_season_count: int = int(season_meta.get("horde_season_count", 0))
@@ -2491,11 +2505,13 @@ static func handle_evidence_threshold(
 		for ev: Dictionary in pending:
 			if ev.get("type", "") == "bribery_eval" and ev.get("case_id", -1) == record.case_id:
 				return
+		var first_witness_id: int = record.witnesses[0] if not record.witnesses.is_empty() else -1
 		pending.append({
 			"type": "bribery_eval",
 			"case_id": record.case_id,
 			"evidence_total": record.evidence_total,
 			"magistrate_id": record.investigating_magistrate_id,
+			"witness_id": first_witness_id,
 		})
 		ws["pending_events"] = pending
 		world_states[perp_id] = ws
@@ -3084,6 +3100,7 @@ static func _process_flee_logistics(
 	results: Array,
 	characters_by_id: Dictionary,
 	active_courts: Array[CourtSessionData],
+	world_states: Dictionary = {},
 ) -> void:
 	for result: Variant in results:
 		if not result is Dictionary:
@@ -3104,6 +3121,159 @@ static func _process_flee_logistics(
 		for court: CourtSessionData in active_courts:
 			if fugitive_id in court.attendee_ids:
 				court.attendee_ids.erase(fugitive_id)
+
+		if not fugitive.role_position.is_empty() and fugitive.lord_id >= 0:
+			var vkey: String = "vacant_positions_%d" % fugitive.lord_id
+			var vacancies: Array = world_states.get(vkey, []) as Array
+			vacancies.append({
+				"position_type": fugitive.role_position,
+				"priority": 2,
+				"candidate_id": -1,
+				"seasons_vacant": 0,
+			})
+			world_states[vkey] = vacancies
+			fugitive.role_position = ""
+
+
+# -- Witness Tampering Writebacks (s11.3.13c) ----------------------------------
+
+static func _process_witness_tampering_writebacks(
+	results: Array,
+	crime_records: Array[CrimeRecord],
+	characters_by_id: Dictionary,
+	active_topics: Array[TopicData],
+	next_topic_id: Array[int],
+	ic_day: int,
+	world_states: Dictionary,
+) -> void:
+	for result: Variant in results:
+		if not result is Dictionary:
+			continue
+		var r: Dictionary = result as Dictionary
+		var action_id: String = r.get("action_id", "")
+		if action_id != "BRIBE_WITNESS" and action_id != "INTIMIDATE_WITNESS":
+			continue
+
+		var criminal_id: int = r.get("character_id", -1)
+		var witness_id: int = r.get("target_npc_id", -1)
+		var effects: Dictionary = r.get("effects", {})
+		var success: bool = r.get("success", false)
+
+		for record: CrimeRecord in crime_records:
+			if record.perpetrator_id != criminal_id:
+				continue
+			if witness_id not in record.witnesses:
+				continue
+
+			if success:
+				record.witnesses.erase(witness_id)
+			else:
+				var evidence_add: int = effects.get("evidence_on_fail", 10)
+				record.evidence_total += evidence_add
+				var threshold: String = InvestigationSystem.check_thresholds(record)
+				if not threshold.is_empty():
+					handle_evidence_threshold(
+						threshold, record, characters_by_id,
+						active_topics, next_topic_id, ic_day, world_states,
+					)
+			break
+
+
+# -- Zone Log Purge (s11.3.13g) -----------------------------------------------
+# After 1 IC season (90 days), physical evidence at crime scenes expires.
+# Reset concealment_tn to 0 so it can no longer be discovered.
+
+const ZONE_LOG_PURGE_DAYS: int = 90
+
+static func _purge_expired_crime_evidence(
+	crime_records: Array[CrimeRecord],
+	ic_day: int,
+) -> void:
+	for record: CrimeRecord in crime_records:
+		if record.concealment_tn <= 0:
+			continue
+		if ic_day - record.ic_day_committed >= ZONE_LOG_PURGE_DAYS:
+			record.concealment_tn = 0
+
+
+# -- Taint Proximity Detection (Channel 3, s57.47.7) --------------------------
+# When a character with Lore: Shadowlands >= 3 (or Kuni/Asako with any rank)
+# performs a social action in proximity to a character with Taint Rank >= 2,
+# they automatically attempt detection. Success generates a named accusation topic.
+# TN for the check is deferred to Section 31/42 — using placeholder TN 20.
+
+const TAINT_DETECTION_PLACEHOLDER_TN: int = 20
+const TAINT_RANK_THRESHOLD: float = 2.0
+
+static func _process_taint_proximity_detection(
+	results: Array,
+	characters_by_id: Dictionary,
+	character_province_map: Dictionary,
+	dice_engine: DiceEngine,
+	active_topics: Array[TopicData],
+	next_topic_id: Array[int],
+	ic_day: int,
+) -> void:
+	var checked_pairs: Dictionary = {}
+	for result: Variant in results:
+		if not result is Dictionary:
+			continue
+		var r: Dictionary = result as Dictionary
+		if not r.get("success", false):
+			continue
+		var detector_id: int = r.get("character_id", -1)
+		var target_id: int = r.get("target_npc_id", -1)
+		if detector_id < 0 or target_id < 0:
+			continue
+
+		var pair_key: String = "%d_%d" % [detector_id, target_id]
+		if checked_pairs.has(pair_key):
+			continue
+		checked_pairs[pair_key] = true
+
+		var detector: L5RCharacterData = characters_by_id.get(detector_id)
+		var target: L5RCharacterData = characters_by_id.get(target_id)
+		if detector == null or target == null:
+			continue
+		if target.taint < TAINT_RANK_THRESHOLD:
+			continue
+
+		var lore_rank: int = detector.skills.get("Lore: Shadowlands", 0)
+		var is_specialist: bool = detector.family in ["Kuni", "Asako"]
+		if lore_rank < 3 and not is_specialist:
+			continue
+
+		var perception: int = detector.perception if detector.perception > 0 else 2
+		var rolled: int = perception + lore_rank
+		var kept: int = perception
+		if is_specialist:
+			rolled += 2
+
+		var roll_result: Dictionary = dice_engine.roll_and_keep(rolled, kept)
+		var total: int = roll_result.get("total", 0)
+		if total < TAINT_DETECTION_PLACEHOLDER_TN:
+			continue
+
+		var topic_id: int = next_topic_id[0]
+		next_topic_id[0] += 1
+		var title: String = "%s suspected of Taint corruption" % target.character_name
+		var topic: TopicData = TopicMomentumSystem.create_topic(
+			topic_id, title,
+			TopicData.Tier.TIER_3,
+			TopicData.Category.SUPERNATURAL,
+			ic_day, 30.0,
+			[], target.clan, target.family,
+			target.character_id,
+			"accusation", "taint_suspected",
+		)
+		topic.slug = "taint_suspected_%d" % target.character_id
+		topic.subject_role = "PERPETRATOR"
+		active_topics.append(topic)
+
+		if detector.lord_id >= 0:
+			var lord: L5RCharacterData = characters_by_id.get(detector.lord_id)
+			if lord != null and topic.topic_id not in lord.topic_pool:
+				lord.topic_pool.append(topic.topic_id)
 
 
 static func _is_character_in_battle(
