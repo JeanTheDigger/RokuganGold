@@ -21,6 +21,7 @@ static func build_context(
 	ctx.school = character.school
 	ctx.school_type = character.school_type
 	ctx.is_lord = world_state.get("is_lord", false)
+	ctx.is_hostage = character.captive_status != ""
 	ctx.lord_rank = CivilianOrderBudget.lord_rank_from_status(character.status)
 	ctx.civilian_orders_remaining = character.civilian_orders_remaining
 

@@ -75,6 +75,7 @@ static func advance_day(
 	next_company_id: Array[int] = [1],
 	active_secrets: Array[SecretData] = [],
 	next_secret_id: Array[int] = [1],
+	active_hostages: Array[Dictionary] = [],
 ) -> Dictionary:
 	var prev_season: int = time_system.get_season()
 
@@ -114,6 +115,9 @@ static func advance_day(
 	var entanglement_results: Array[Dictionary] = _process_entanglements(entanglements, ic_day)
 	var bound_escape_results: Array[Dictionary] = _process_bound_states(
 		bound_states, characters_by_id, dice_engine, ic_day
+	)
+	var hostage_escape_results: Array[Dictionary] = _process_hostage_escapes(
+		active_hostages, characters_by_id, settlements, dice_engine, ic_day, death_events,
 	)
 
 	var crisis_courts: Array[Dictionary] = _process_crisis_court_calls(
@@ -464,6 +468,8 @@ static func advance_day(
 		next_topic_id,
 		ic_day,
 	)
+
+	_release_war_hostages(war_termination_results, active_hostages, characters_by_id, ic_day)
 
 	var peace_route_results: Array[Dictionary] = _process_peace_trade_routes(
 		war_termination_results, trade_routes,
@@ -846,6 +852,7 @@ static func advance_day(
 		"succession_results": succession_results,
 		"entanglement_results": entanglement_results,
 		"bound_escape_results": bound_escape_results,
+		"hostage_escape_results": hostage_escape_results,
 		"military_daily": military_daily,
 		"military_seasonal": military_seasonal_result,
 		"military_effects": military_effects,
@@ -5462,6 +5469,110 @@ static func _process_entanglements(
 		entanglements.erase(ent)
 
 	return results
+
+
+# -- Hostage System Processing (s22.9) ----------------------------------------
+
+const _ESCAPE_BASE_GARRISON: Dictionary = {
+	"town": 0.5,
+	"castle": 1.0,
+	"major_castle": 2.0,
+}
+
+static func _settlement_escape_key(stype: Enums.SettlementType) -> String:
+	if stype == Enums.SettlementType.FAMILY_CASTLE:
+		return "major_castle"
+	if stype in [Enums.SettlementType.CASTLE, Enums.SettlementType.KEEP, Enums.SettlementType.FORTIFICATION]:
+		return "castle"
+	return "town"
+
+
+static func _process_hostage_escapes(
+	active_hostages: Array[Dictionary],
+	characters_by_id: Dictionary,
+	settlements: Array[SettlementData],
+	dice_engine: DiceEngine,
+	ic_day: int,
+	death_events: Array[Dictionary],
+) -> Array[Dictionary]:
+	var results: Array[Dictionary] = []
+	for hostage: Dictionary in active_hostages:
+		if hostage.get("released", false) or hostage.get("escaped", false):
+			continue
+		var char_id: int = hostage.get("character_id", -1)
+		var character: L5RCharacterData = characters_by_id.get(char_id) as L5RCharacterData
+		if character == null or CharacterStats.is_dead(character):
+			continue
+		var stealth_rank: int = character.skills.get("Stealth", 0)
+		if not HostageSystem.can_attempt_escape(
+			character.bushido_virtue, character.shourido_virtue,
+			character.school_type, stealth_rank,
+		):
+			continue
+		var settlement_id_str: String = hostage.get("settlement_id", "")
+		var settlement: SettlementData = null
+		for s: SettlementData in settlements:
+			if str(s.settlement_id) == settlement_id_str:
+				settlement = s
+				break
+		if settlement == null:
+			continue
+		var escape_key: String = _settlement_escape_key(settlement.settlement_type)
+		var base_pu: float = _ESCAPE_BASE_GARRISON.get(escape_key, 1.0)
+		var tn: int = HostageSystem.get_escape_tn(escape_key, float(settlement.garrison_pu), base_pu)
+		var roll_result: Dictionary = SkillResolver.resolve_skill_check(character, dice_engine, "Stealth", tn)
+		var escape_result: Dictionary = HostageSystem.resolve_escape(roll_result.get("total", 0), tn)
+		if escape_result["success"]:
+			character.captive_status = ""
+			hostage["escaped"] = true
+		elif escape_result.get("executed", false):
+			var lethal: int = CharacterStats.get_ring_value(character, Enums.Ring.EARTH) * 5 * 5
+			character.wounds_taken = lethal
+			character.captive_status = ""
+			death_events.append({
+				"character_id": char_id,
+				"is_lord": character.role_position != "",
+				"cause": "hostage_execution",
+				"captor_id": hostage.get("captor_id", -1),
+				"critical_failure": escape_result.get("critical_failure", false),
+				"ic_day": ic_day,
+			})
+		results.append({
+			"character_id": char_id,
+			"success": escape_result["success"],
+			"executed": escape_result.get("executed", false),
+			"critical_failure": escape_result.get("critical_failure", false),
+			"family_honor_loss": escape_result.get("family_honor_loss", 0.0),
+			"settlement_id": settlement_id_str,
+		})
+	return results
+
+
+static func _release_war_hostages(
+	war_termination_results: Array[Dictionary],
+	active_hostages: Array[Dictionary],
+	characters_by_id: Dictionary,
+	ic_day: int,
+) -> void:
+	for resolution: Dictionary in war_termination_results:
+		if resolution.get("resolution", "").is_empty():
+			continue
+		var clan_a: String = resolution.get("winner_clan",
+			resolution.get("proposing_clan", resolution.get("clan_a", "")))
+		var clan_b: String = resolution.get("loser_clan",
+			resolution.get("receiving_clan", resolution.get("clan_b", "")))
+		if clan_a.is_empty() or clan_b.is_empty():
+			continue
+		for hostage: Dictionary in active_hostages:
+			if hostage.get("released", false) or hostage.get("escaped", false):
+				continue
+			var char_id: int = hostage.get("character_id", -1)
+			var character: L5RCharacterData = characters_by_id.get(char_id) as L5RCharacterData
+			if character == null:
+				continue
+			if character.clan == clan_a or character.clan == clan_b:
+				HostageSystem.release_hostage(hostage, ic_day)
+				character.captive_status = ""
 
 
 # -- Bound Character Processing (s12.8) ---------------------------------------

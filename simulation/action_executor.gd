@@ -98,6 +98,24 @@ static func execute(
 ) -> Dictionary:
 	var action_id: String = action.action_id
 
+	if character.captive_status != "":
+		var captor_id: int = int(character.captive_status) if character.captive_status.is_valid_int() else -1
+		var targets_captor: bool = captor_id >= 0 and (
+			action.target_npc_id == captor_id or action.target_npc_id_secondary == captor_id
+		)
+		if HostageSystem.is_action_blocked_for_hostage(action_id, targets_captor):
+			return {
+				"success": false,
+				"action_id": action_id,
+				"character_id": ctx.character_id,
+				"target_npc_id": action.target_npc_id,
+				"target_province_id": action.target_province_id,
+				"ic_day": ctx.ic_day,
+				"season": ctx.season,
+				"reason": "hostage_restricted",
+				"effects": {},
+			}
+
 	if action_id == "DELIVER_GIFT":
 		var gift_result: Dictionary = _try_execute_deliver_gift(
 			action, character, ctx, dice_engine, characters_by_id
