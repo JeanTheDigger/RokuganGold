@@ -272,6 +272,9 @@ static func execute(
 	if action_id == "EXAMINE_LETTER":
 		return _execute_examine_letter(action, character, ctx)
 
+	if action_id == "TREAT_WOUND":
+		return _execute_treat_wound(action, character, ctx, dice_engine, characters_by_id)
+
 	if action_id == "RESTORE_COUNCIL_COMPACT":
 		return {
 			"success": true,
@@ -2303,6 +2306,102 @@ static func _execute_flee_jurisdiction(
 		"effects": {
 			"effect": "flee_jurisdiction",
 			"fugitive_id": character.character_id,
+		},
+	}
+
+
+# -- Treat Wound --------------------------------------------------------------
+
+static func _execute_treat_wound(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	dice_engine: DiceEngine,
+	characters_by_id: Dictionary,
+) -> Dictionary:
+	var target_id: int = action.target_npc_id
+	if target_id < 0 or characters_by_id.is_empty():
+		return {
+			"success": false,
+			"action_id": "TREAT_WOUND",
+			"character_id": character.character_id,
+			"target_npc_id": target_id,
+			"target_province_id": action.target_province_id,
+			"ic_day": ctx.ic_day,
+			"season": ctx.season,
+			"reason": "no_target",
+			"effects": {},
+		}
+
+	var target: L5RCharacterData = characters_by_id.get(target_id)
+	if target == null:
+		return {
+			"success": false,
+			"action_id": "TREAT_WOUND",
+			"character_id": character.character_id,
+			"target_npc_id": target_id,
+			"target_province_id": action.target_province_id,
+			"ic_day": ctx.ic_day,
+			"season": ctx.season,
+			"reason": "target_not_found",
+			"effects": {},
+		}
+
+	var can_check: Dictionary = MedicineSystem.can_treat(character, target, ctx.ic_day)
+	if not can_check["valid"]:
+		return {
+			"success": false,
+			"action_id": "TREAT_WOUND",
+			"character_id": character.character_id,
+			"target_npc_id": target_id,
+			"target_province_id": action.target_province_id,
+			"ic_day": ctx.ic_day,
+			"season": ctx.season,
+			"reason": can_check["reason"],
+			"effects": {},
+		}
+
+	# Witnesses: all characters in zone except healer and target.
+	var witness_count: int = 0
+	for present_id: int in ctx.characters_present:
+		if present_id != character.character_id and present_id != target_id:
+			witness_count += 1
+
+	if MedicineSystem.evaluate_refusal(target, character, witness_count):
+		return {
+			"success": false,
+			"action_id": "TREAT_WOUND",
+			"character_id": character.character_id,
+			"target_npc_id": target_id,
+			"target_province_id": action.target_province_id,
+			"ic_day": ctx.ic_day,
+			"season": ctx.season,
+			"reason": "treatment_refused",
+			"effects": {},
+		}
+
+	var raises: int = action.metadata.get("raises", 0)
+	var treat_result: Dictionary = MedicineSystem.treat_wound(
+		character, target, dice_engine, ctx.ic_day, raises
+	)
+
+	return {
+		"success": treat_result["success"],
+		"action_id": "TREAT_WOUND",
+		"character_id": character.character_id,
+		"target_npc_id": target_id,
+		"target_province_id": action.target_province_id,
+		"ic_day": ctx.ic_day,
+		"season": ctx.season,
+		"skill_used": "Medicine",
+		"roll_total": treat_result.get("roll_total", 0),
+		"tn": treat_result.get("tn", MedicineSystem.BASE_TN),
+		"raises": raises,
+		"effects": {
+			"wounds_healed": treat_result["wounds_healed"],
+			"kit_charge_consumed": treat_result["kit_charge_consumed"],
+			"target_id": target_id,
+			"wound_level_after": treat_result.get("wound_level_after", -1),
 		},
 	}
 

@@ -185,6 +185,36 @@ static func build_context(
 	ctx.ap_remaining = character.action_points_current
 	ctx.action_log = world_state.get("action_log", [] as Array[Dictionary])
 
+	# TEND_WOUNDED_ALLY opportunity injection (s57.31.7).
+	# Fires when: healer has Medicine 1+, has kit, wounded ally present, not yet treated today.
+	if not chars_by_id.is_empty() \
+			and character.skills.get("Medicine", 0) >= 1 \
+			and MedicineSystem.has_medicine_kit(character):
+		var best_priority: int = 0
+		var best_target_id: int = -1
+		for present_id: int in ctx.characters_present:
+			if present_id == character.character_id:
+				continue
+			var candidate: L5RCharacterData = chars_by_id.get(present_id)
+			if candidate == null or CharacterStats.is_dead(candidate):
+				continue
+			if candidate.wounds_taken <= 0:
+				continue
+			if candidate.last_medicine_treatment_ic_day == ctx.ic_day:
+				continue
+			if ctx.disposition_values.get(present_id, 0) < 0:
+				continue
+			var pri: int = MedicineSystem.compute_tend_priority(character, candidate)
+			if pri > best_priority:
+				best_priority = pri
+				best_target_id = present_id
+		if best_target_id >= 0:
+			ctx.pending_events.append({
+				"type": "tend_wounded_ally_opportunity",
+				"target_npc_id": best_target_id,
+				"priority": best_priority,
+			})
+
 	# Personality
 	ctx.bushido_virtue = character.bushido_virtue
 	ctx.shourido_virtue = character.shourido_virtue
@@ -601,6 +631,14 @@ static func _decompose_reactive_event(
 		need.target_npc_id = ev.get("source_id", -1)
 		return need
 
+	if ev.get("type", "") == "tend_wounded_ally_opportunity":
+		var need := NPCDataStructures.ImmediateNeed.new()
+		need.need_type = "TEND_WOUNDED_ALLY"
+		need.priority = ev.get("priority", 1)
+		need.source = "tend_wounded_ally_opportunity"
+		need.target_npc_id = ev.get("target_npc_id", -1)
+		return need
+
 	return null
 
 
@@ -654,6 +692,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array[S
 				"RESTORE_COUNCIL_COMPACT",
 				"SHARE_SUPPLIES",
 				"CRAFT", "MENTOR",
+				"TREAT_WOUND",
 				"DO_NOTHING", "REST",
 			]
 		Enums.ContextFlag.AT_COURT:
@@ -671,6 +710,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array[S
 				"BRIBE_FOR_INFO", "EAVESDROP",
 				"INTERCEPT_LETTER", "SEARCH_QUARTERS",
 				"EXAMINE_LETTER",
+				"TREAT_WOUND",
 				"DO_NOTHING", "REST",
 			]
 		Enums.ContextFlag.VISITING:
@@ -680,6 +720,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array[S
 				"DELIVER_GIFT", "OFFER_FAVOR",
 				"ASK_FOR_INTRODUCTION", "OBSERVE_COURT_ATTENDEES",
 				"TRAIN", "MEDITATE",
+				"TREAT_WOUND",
 				"DO_NOTHING", "REST",
 			]
 		Enums.ContextFlag.TRAVELING:
@@ -694,6 +735,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array[S
 				"DRILL_TROOPS", "EVALUATE_WAR_READINESS",
 				"SCOUT_ENEMY",
 				"INTIMIDATE", "NEGOTIATE",
+				"TREAT_WOUND",
 				"TRAIN",
 				"DO_NOTHING", "REST",
 			]
@@ -701,6 +743,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array[S
 			return [
 				"CONDUCT_SORTIE", "CONDUCT_STORM_ASSAULT",
 				"NEGOTIATE_SURRENDER", "MAINTAIN_SIEGE",
+				"TREAT_WOUND",
 				"DO_NOTHING", "REST",
 			]
 		Enums.ContextFlag.IN_EXILE:
@@ -713,12 +756,14 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array[S
 				"PERFORM_RITUAL", "PERFORM_WORSHIP", "MEDITATE",
 				"PUBLIC_ATONEMENT", "TRAIN",
 				"CHARM", "PROBE", "READ_CHARACTER",
+				"TREAT_WOUND",
 				"DO_NOTHING", "REST",
 			]
 		Enums.ContextFlag.AT_DOJO:
 			return [
 				"TRAIN", "MENTOR", "DRILL_TROOPS",
 				"CHARM", "PROBE",
+				"TREAT_WOUND",
 				"DO_NOTHING", "REST",
 			]
 		Enums.ContextFlag.AT_WALL_TOWER:
@@ -728,6 +773,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array[S
 				"SCOUT_ENEMY",
 				"ASSESS_PROVINCE_STATUS",
 				"DISPATCH_COURTIER",
+				"TREAT_WOUND",
 				"TRAIN",
 				"DO_NOTHING", "REST",
 			]
@@ -805,6 +851,7 @@ static func _get_ap_cost(action_id: String) -> int:
 		"FOUND_MONASTERY": 1,
 		"COMMISSION_SHIP": 1,
 		"RESTORE_COUNCIL_COMPACT": 1,
+		"TREAT_WOUND": 1,
 	}
 	return costs.get(action_id, 1)
 
