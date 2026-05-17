@@ -1820,3 +1820,17 @@ func test_conditional_unevaluable_condition_does_not_block() -> void:
 	options.append(charm)
 	var filtered := NPCDecisionEngine.apply_personality_filter(options, ctx, filter)
 	assert_eq(filtered.size(), 1, "Unevaluable conditions should not block")
+
+
+# -- Extortion Opportunity Decomposition ---
+
+func test_extortion_opportunity_decomposes_to_extort_accused() -> void:
+	_world_state["pending_events"] = [
+		{"type": "extortion_opportunity", "case_id": 9, "suspect_id": 42, "evidence_total": 30}
+	]
+	var ctx := NPCDecisionEngine.build_context(_char, _world_state)
+	var need := NPCDecisionEngine.resolve_goal(_char, ctx, _objectives)
+	assert_eq(need.need_type, "EXTORT_ACCUSED")
+	assert_eq(need.target_npc_id, 42)
+	assert_eq(need.source, "extortion_opportunity")
+	assert_eq(int(need.threshold), 30)

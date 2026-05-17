@@ -554,6 +554,15 @@ static func _decompose_reactive_event(
 		need.threshold = float(ev.get("evidence_total", 0))
 		return need
 
+	if ev.get("type", "") == "extortion_opportunity":
+		var need := NPCDataStructures.ImmediateNeed.new()
+		need.need_type = "EXTORT_ACCUSED"
+		need.priority = 2
+		need.source = "extortion_opportunity"
+		need.target_npc_id = ev.get("suspect_id", -1)
+		need.threshold = float(ev.get("evidence_total", 0))
+		return need
+
 	return null
 
 
@@ -1749,6 +1758,11 @@ static func _populate_action_metadata(
 			"magistrate_id": need.target_npc_id,
 		}
 		option.target_npc_id = need.target_npc_id
+	elif option.action_id == "FLEE_JURISDICTION" and need.source == "bribery_eval":
+		option.metadata = {"flee_from_magistrate_id": need.target_npc_id}
+	elif option.action_id == "EXTORT_ACCUSED" and need.source == "extortion_opportunity":
+		option.target_npc_id = need.target_npc_id
+		option.metadata = {"extort_suspect_id": need.target_npc_id}
 	elif option.action_id == "EXAMINE_CRIME_SCENE":
 		var active_case: Dictionary = ctx.known_objectives.get("active_case", {})
 		option.metadata = {

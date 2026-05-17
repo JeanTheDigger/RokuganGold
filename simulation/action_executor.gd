@@ -238,6 +238,12 @@ static func execute(
 	if action_id == "PURIFY_TAINTED_GROUND":
 		return _execute_purify_tainted_ground(action, character, ctx, dice_engine)
 
+	if action_id == "FLEE_JURISDICTION":
+		return _execute_flee_jurisdiction(action, character, ctx)
+
+	if action_id == "EXTORT_ACCUSED":
+		return _execute_extort_accused(action, character, ctx, dice_engine, characters_by_id)
+
 	if action_id == "EXAMINE_CRIME_SCENE":
 		return _execute_examine_crime_scene(action, character, ctx, dice_engine, crime_records)
 
@@ -2136,6 +2142,91 @@ static func _find_crime_record(
 		if record.case_id == case_id:
 			return record
 	return null
+
+
+# -- Flee Jurisdiction ---------------------------------------------------------
+
+static func _execute_flee_jurisdiction(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> Dictionary:
+	return {
+		"success": true,
+		"action_id": "FLEE_JURISDICTION",
+		"character_id": character.character_id,
+		"target_npc_id": action.target_npc_id,
+		"target_province_id": action.target_province_id,
+		"ic_day": ctx.ic_day,
+		"season": ctx.season,
+		"effects": {
+			"effect": "flee_jurisdiction",
+			"fugitive_id": character.character_id,
+		},
+	}
+
+
+# -- Extort Accused (corrupt magistrate path) ---------------------------------
+
+static func _execute_extort_accused(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	dice_engine: DiceEngine,
+	characters_by_id: Dictionary,
+) -> Dictionary:
+	var suspect: L5RCharacterData = characters_by_id.get(action.target_npc_id)
+	if suspect == null:
+		return {
+			"success": false,
+			"action_id": "EXTORT_ACCUSED",
+			"character_id": character.character_id,
+			"target_npc_id": action.target_npc_id,
+			"target_province_id": action.target_province_id,
+			"ic_day": ctx.ic_day,
+			"season": ctx.season,
+			"reason": "no_target",
+			"effects": {},
+		}
+
+	var intimidation: int = character.skills.get("Intimidation", 0)
+	var willpower_mag: int = character.willpower if character.willpower > 0 else 2
+	var kept_mag: int = maxi(willpower_mag, 1)
+	var rolled_mag: int = maxi(intimidation + willpower_mag, 1)
+
+	var etiquette: int = suspect.skills.get("Etiquette", 0)
+	var willpower_sus: int = suspect.willpower if suspect.willpower > 0 else 2
+	var honor_bonus: int = HonorGlorySystem.get_honor_rank(suspect) * 5
+	var def_rolled: int = maxi(etiquette + willpower_sus, 1)
+	var def_kept: int = maxi(willpower_sus, 1)
+	var defense_result: Dictionary = dice_engine.roll_and_keep(def_rolled, def_kept)
+	var tn: int = defense_result.get("total", 0) + honor_bonus
+
+	var roll: Dictionary = dice_engine.roll_and_keep(rolled_mag, kept_mag)
+	var total: int = roll.get("total", 0)
+	var success: bool = total >= tn
+
+	var effects: Dictionary = {
+		"effect": "extortion_attempt",
+		"suspect_id": action.target_npc_id,
+		"magistrate_id": character.character_id,
+		"suppress_case": success,
+	}
+
+	return {
+		"success": success,
+		"action_id": "EXTORT_ACCUSED",
+		"character_id": character.character_id,
+		"target_npc_id": action.target_npc_id,
+		"target_province_id": action.target_province_id,
+		"ic_day": ctx.ic_day,
+		"season": ctx.season,
+		"skill_used": "Intimidation",
+		"roll_total": total,
+		"tn": tn,
+		"margin": total - tn,
+		"effects": effects,
+	}
 
 
 # -- Intelligence Effects (s57.15) --------------------------------------------

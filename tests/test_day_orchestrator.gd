@@ -3549,3 +3549,199 @@ func test_fugitive_declaration_generates_topic() -> void:
 	assert_true(active_topics[0].title.contains("Ikoma Tsuko"))
 	assert_eq(active_topics[0].slug, "fugitive_5")
 	assert_true(lord.topic_pool.has(1100))
+
+
+# -- Co-Conspirator Secrets ---
+
+func test_successful_bribe_creates_two_secrets() -> void:
+	var briber := L5RCharacterData.new()
+	briber.character_id = 5
+	briber.character_name = "Bayushi Koro"
+	briber.clan = "Scorpion"
+	briber.lord_id = 10
+	var entry := LegalCaseEntry.new()
+	entry.crime_record_id = 88
+	entry.state = Enums.LegalStatus.UNDER_INVESTIGATION
+	briber.legal_cases = [entry]
+
+	var magistrate := L5RCharacterData.new()
+	magistrate.character_id = 20
+	magistrate.character_name = "Corrupt Magistrate"
+	magistrate.honor = 3.0
+
+	var record := CrimeRecord.new()
+	record.case_id = 88
+	record.crime_type = Enums.CrimeType.SKIMMING
+	record.perpetrator_id = 5
+	record.evidence_total = 28
+	record.legal_status = Enums.LegalStatus.UNDER_INVESTIGATION
+
+	var crime_records: Array[CrimeRecord] = [record]
+	var characters_by_id: Dictionary = {5: briber, 20: magistrate}
+	var active_secrets: Array[SecretData] = []
+	var next_secret_id: Array[int] = [50]
+
+	var results: Array = [{
+		"action_id": "BRIBE_FOR_INFO",
+		"success": true,
+		"character_id": 5,
+		"target_npc_id": 20,
+		"effects": {
+			"suppress_case": true,
+			"magistrate_id": 20,
+			"detection_risk": false,
+		},
+	}]
+
+	DayOrchestrator._process_successful_bribe_writebacks(
+		results, crime_records, characters_by_id, 100,
+		active_secrets, next_secret_id,
+	)
+
+	assert_eq(active_secrets.size(), 2)
+	assert_eq(next_secret_id[0], 52)
+
+	var secret_mag: SecretData = active_secrets[0]
+	assert_eq(secret_mag.subject_id, 20)
+	assert_eq(secret_mag.severity, SecretData.Severity.TIER_1)
+	assert_true(secret_mag.slug.begins_with("bribe_accepted_"))
+	assert_true(secret_mag.description.contains("Corrupt Magistrate"))
+
+	var secret_briber: SecretData = active_secrets[1]
+	assert_eq(secret_briber.subject_id, 5)
+	assert_eq(secret_briber.severity, SecretData.Severity.TIER_1)
+	assert_true(secret_briber.slug.begins_with("bribe_offered_"))
+	assert_true(secret_briber.description.contains("Bayushi Koro"))
+
+
+# -- Flee Jurisdiction Writeback ---
+
+func test_flee_jurisdiction_triggers_fugitive_declaration() -> void:
+	var fugitive := L5RCharacterData.new()
+	fugitive.character_id = 7
+	fugitive.character_name = "Daidoji Ran"
+	fugitive.clan = "Crane"
+	fugitive.family = "Daidoji"
+	fugitive.lord_id = 10
+	var entry := LegalCaseEntry.new()
+	entry.crime_record_id = 77
+	entry.state = Enums.LegalStatus.UNDER_INVESTIGATION
+	fugitive.legal_cases = [entry]
+
+	var lord := L5RCharacterData.new()
+	lord.character_id = 10
+	lord.topic_pool = [] as Array[int]
+
+	var record := CrimeRecord.new()
+	record.case_id = 77
+	record.crime_type = Enums.CrimeType.VIOLENCE
+	record.perpetrator_id = 7
+	record.legal_status = Enums.LegalStatus.UNDER_INVESTIGATION
+
+	var crime_records: Array[CrimeRecord] = [record]
+	var characters_by_id: Dictionary = {7: fugitive, 10: lord}
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [2000]
+
+	var results: Array = [{
+		"action_id": "FLEE_JURISDICTION",
+		"success": true,
+		"character_id": 7,
+		"target_npc_id": -1,
+		"target_province_id": -1,
+		"effects": {
+			"effect": "flee_jurisdiction",
+			"fugitive_id": 7,
+		},
+	}]
+
+	DayOrchestrator._process_flee_jurisdiction_writebacks(
+		results, crime_records, characters_by_id,
+		active_topics, next_topic_id, 150,
+	)
+
+	assert_eq(record.legal_status, Enums.LegalStatus.FUGITIVE)
+	assert_eq(entry.state, Enums.LegalStatus.FUGITIVE)
+	assert_eq(active_topics.size(), 1)
+	assert_true(active_topics[0].title.contains("Daidoji Ran"))
+
+
+# -- Extortion Writeback ---
+
+func test_extortion_buries_case_and_creates_secret() -> void:
+	var magistrate := L5RCharacterData.new()
+	magistrate.character_id = 30
+	magistrate.character_name = "Soshi Ito"
+	magistrate.honor = 2.5
+
+	var suspect := L5RCharacterData.new()
+	suspect.character_id = 8
+	suspect.character_name = "Yasuki Tai"
+	var entry := LegalCaseEntry.new()
+	entry.crime_record_id = 44
+	entry.state = Enums.LegalStatus.UNDER_INVESTIGATION
+	suspect.legal_cases = [entry]
+
+	var record := CrimeRecord.new()
+	record.case_id = 44
+	record.crime_type = Enums.CrimeType.SKIMMING
+	record.perpetrator_id = 8
+	record.legal_status = Enums.LegalStatus.UNDER_INVESTIGATION
+
+	var crime_records: Array[CrimeRecord] = [record]
+	var characters_by_id: Dictionary = {30: magistrate, 8: suspect}
+	var active_secrets: Array[SecretData] = []
+	var next_secret_id: Array[int] = [100]
+
+	var results: Array = [{
+		"action_id": "EXTORT_ACCUSED",
+		"success": true,
+		"character_id": 30,
+		"target_npc_id": 8,
+		"effects": {
+			"effect": "extortion_attempt",
+			"suppress_case": true,
+			"magistrate_id": 30,
+			"suspect_id": 8,
+		},
+	}]
+
+	DayOrchestrator._process_extortion_writebacks(
+		results, crime_records, characters_by_id, 200,
+		active_secrets, next_secret_id,
+	)
+
+	assert_eq(record.legal_status, Enums.LegalStatus.CLEAR)
+	assert_eq(entry.state, Enums.LegalStatus.CLEAR)
+	assert_lt(magistrate.honor, 2.5)
+	assert_eq(active_secrets.size(), 1)
+	assert_eq(active_secrets[0].subject_id, 30)
+	assert_true(active_secrets[0].slug.begins_with("extortion_"))
+	assert_true(active_secrets[0].description.contains("Soshi Ito"))
+
+
+# -- Evidence Threshold Injects Extortion Opportunity ---
+
+func test_bribery_eval_threshold_injects_extortion_event() -> void:
+	var record := CrimeRecord.new()
+	record.case_id = 55
+	record.perpetrator_id = 3
+	record.investigating_magistrate_id = 12
+	record.evidence_total = 26
+
+	var characters_by_id: Dictionary = {}
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [500]
+	var world_states: Dictionary = {}
+
+	DayOrchestrator.handle_evidence_threshold(
+		"bribery_eval", record, characters_by_id,
+		active_topics, next_topic_id, 80, world_states,
+	)
+
+	var mag_ws: Dictionary = world_states.get(12, {})
+	var mag_pending: Array = mag_ws.get("pending_events", [])
+	assert_eq(mag_pending.size(), 1)
+	assert_eq(mag_pending[0]["type"], "extortion_opportunity")
+	assert_eq(mag_pending[0]["suspect_id"], 3)
+	assert_eq(mag_pending[0]["case_id"], 55)

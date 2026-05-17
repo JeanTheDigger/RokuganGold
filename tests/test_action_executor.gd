@@ -1165,3 +1165,56 @@ func test_bribe_attempt_high_honor_magistrate_resists():
 	assert_eq(result["action_id"], "BRIBE_FOR_INFO")
 	assert_false(result["success"])
 	assert_true(result["effects"].get("detection_risk", false))
+
+
+# -- FLEE_JURISDICTION ---------------------------------------------------------
+
+func test_flee_jurisdiction_returns_success() -> void:
+	var action := _make_action("FLEE_JURISDICTION", -1)
+	action.metadata = {"flee_from_magistrate_id": 20}
+
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map
+	)
+	assert_eq(result["action_id"], "FLEE_JURISDICTION")
+	assert_true(result["success"])
+	assert_eq(result["effects"]["effect"], "flee_jurisdiction")
+	assert_eq(result["effects"]["fugitive_id"], _character.character_id)
+
+
+# -- EXTORT_ACCUSED ------------------------------------------------------------
+
+func test_extort_accused_with_target() -> void:
+	var suspect := L5RCharacterData.new()
+	suspect.character_id = 50
+	suspect.character_name = "Suspect"
+	suspect.skills["Etiquette"] = 2
+	suspect.willpower = 2
+	suspect.honor = 1.0
+
+	_character.skills["Intimidation"] = 5
+	_character.willpower = 4
+	_dice_engine.set_seed(99)
+
+	var chars: Dictionary = {_character.character_id: _character, 50: suspect}
+	var action := _make_action("EXTORT_ACCUSED", 50)
+	action.metadata = {"extort_suspect_id": 50}
+
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map, {}, chars
+	)
+	assert_eq(result["action_id"], "EXTORT_ACCUSED")
+	assert_eq(result["effects"]["suspect_id"], 50)
+	assert_eq(result["effects"]["magistrate_id"], _character.character_id)
+
+
+func test_extort_accused_no_target_fails() -> void:
+	var action := _make_action("EXTORT_ACCUSED", 999)
+	action.metadata = {"extort_suspect_id": 999}
+
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map, {}, {}
+	)
+	assert_eq(result["action_id"], "EXTORT_ACCUSED")
+	assert_false(result["success"])
+	assert_eq(result.get("reason", ""), "no_target")

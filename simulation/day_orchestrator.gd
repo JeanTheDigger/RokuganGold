@@ -73,6 +73,8 @@ static func advance_day(
 	active_civil_wars: Array[Dictionary] = [],
 	precedent_modifiers: Dictionary = {},
 	next_company_id: Array[int] = [1],
+	active_secrets: Array[SecretData] = [],
+	next_secret_id: Array[int] = [1],
 ) -> Dictionary:
 	var prev_season: int = time_system.get_season()
 
@@ -207,6 +209,19 @@ static func advance_day(
 	_process_successful_bribe_writebacks(
 		day_result.get("results", []),
 		crime_records, characters_by_id, ic_day,
+		active_secrets, next_secret_id,
+	)
+
+	_process_flee_jurisdiction_writebacks(
+		day_result.get("results", []),
+		crime_records, characters_by_id,
+		active_topics, next_topic_id, ic_day,
+	)
+
+	_process_extortion_writebacks(
+		day_result.get("results", []),
+		crime_records, characters_by_id, ic_day,
+		active_secrets, next_secret_id,
 	)
 
 	var current_season_count: int = int(season_meta.get("horde_season_count", 0))
@@ -2467,6 +2482,22 @@ static func handle_evidence_threshold(
 		})
 		ws["pending_events"] = pending
 		world_states[perp_id] = ws
+
+		var mag_id: int = record.investigating_magistrate_id
+		if mag_id >= 0:
+			var mag_ws: Dictionary = world_states.get(mag_id, {})
+			var mag_pending: Array = mag_ws.get("pending_events", [])
+			for ev: Dictionary in mag_pending:
+				if ev.get("type", "") == "extortion_opportunity" and ev.get("case_id", -1) == record.case_id:
+					return
+			mag_pending.append({
+				"type": "extortion_opportunity",
+				"case_id": record.case_id,
+				"suspect_id": perp_id,
+				"evidence_total": record.evidence_total,
+			})
+			mag_ws["pending_events"] = mag_pending
+			world_states[mag_id] = mag_ws
 	elif threshold == "accusation":
 		var accused: L5RCharacterData = characters_by_id.get(record.perpetrator_id)
 		if accused == null:
@@ -2666,6 +2697,8 @@ static func _process_successful_bribe_writebacks(
 	crime_records: Array[CrimeRecord],
 	characters_by_id: Dictionary,
 	ic_day: int,
+	active_secrets: Array[SecretData] = [],
+	next_secret_id: Array[int] = [1],
 ) -> void:
 	for result: Variant in results:
 		if not result is Dictionary:
@@ -2685,6 +2718,8 @@ static func _process_successful_bribe_writebacks(
 		if magistrate == null:
 			continue
 
+		var briber: L5RCharacterData = characters_by_id.get(briber_id)
+
 		for record: CrimeRecord in crime_records:
 			if record.perpetrator_id != briber_id:
 				continue
@@ -2693,12 +2728,42 @@ static func _process_successful_bribe_writebacks(
 			if record.legal_status == Enums.LegalStatus.ACQUITTED:
 				continue
 			record.legal_status = Enums.LegalStatus.CLEAR
-			var accused: L5RCharacterData = characters_by_id.get(briber_id)
-			if accused != null:
-				var entry: LegalCaseEntry = LegalStatusSystem.get_case(accused, record.case_id)
+			if briber != null:
+				var entry: LegalCaseEntry = LegalStatusSystem.get_case(briber, record.case_id)
 				if entry != null:
 					LegalStatusSystem.transition(entry, Enums.LegalStatus.CLEAR, ic_day)
 			HonorGlorySystem.apply_honor_change(magistrate, -0.5)
+
+			var crime_name: String = InvestigationSystem.CRIME_TYPE_NAMES.get(
+				record.crime_type, "Crime"
+			)
+			var secret_about_magistrate: SecretData = SecretSystem.create_secret(
+				next_secret_id[0],
+				magistrate_id,
+				SecretData.Severity.TIER_1,
+				"bribe_accepted_%d" % record.case_id,
+				"%s accepted a bribe from %s to bury %s investigation" % [
+					magistrate.character_name,
+					briber.character_name if briber != null else "unknown",
+					crime_name,
+				],
+			)
+			next_secret_id[0] += 1
+			active_secrets.append(secret_about_magistrate)
+
+			var secret_about_briber: SecretData = SecretSystem.create_secret(
+				next_secret_id[0],
+				briber_id,
+				SecretData.Severity.TIER_1,
+				"bribe_offered_%d" % record.case_id,
+				"%s bribed %s to suppress %s investigation" % [
+					briber.character_name if briber != null else "unknown",
+					magistrate.character_name,
+					crime_name,
+				],
+			)
+			next_secret_id[0] += 1
+			active_secrets.append(secret_about_briber)
 			break
 
 
@@ -2734,6 +2799,107 @@ static func _apply_failed_bribe_evidence(
 			if bribery_topic != null:
 				active_topics.append(bribery_topic)
 		return
+
+
+static func _process_flee_jurisdiction_writebacks(
+	results: Array,
+	crime_records: Array[CrimeRecord],
+	characters_by_id: Dictionary,
+	active_topics: Array[TopicData],
+	next_topic_id: Array[int],
+	ic_day: int,
+) -> void:
+	for result: Variant in results:
+		if not result is Dictionary:
+			continue
+		var r: Dictionary = result as Dictionary
+		if r.get("action_id", "") != "FLEE_JURISDICTION":
+			continue
+		if not r.get("success", false):
+			continue
+		var effects: Dictionary = r.get("effects", {})
+		if effects.get("effect", "") != "flee_jurisdiction":
+			continue
+
+		var fugitive_id: int = effects.get("fugitive_id", -1)
+		var fugitive: L5RCharacterData = characters_by_id.get(fugitive_id)
+		if fugitive == null:
+			continue
+
+		for record: CrimeRecord in crime_records:
+			if record.perpetrator_id != fugitive_id:
+				continue
+			if record.legal_status == Enums.LegalStatus.DECREED_GUILTY:
+				continue
+			if record.legal_status == Enums.LegalStatus.ACQUITTED:
+				continue
+			if record.legal_status == Enums.LegalStatus.FUGITIVE:
+				continue
+			process_fugitive_declaration(
+				record, fugitive, characters_by_id,
+				active_topics, next_topic_id, ic_day,
+			)
+			break
+
+
+static func _process_extortion_writebacks(
+	results: Array,
+	crime_records: Array[CrimeRecord],
+	characters_by_id: Dictionary,
+	ic_day: int,
+	active_secrets: Array[SecretData] = [],
+	next_secret_id: Array[int] = [1],
+) -> void:
+	for result: Variant in results:
+		if not result is Dictionary:
+			continue
+		var r: Dictionary = result as Dictionary
+		if r.get("action_id", "") != "EXTORT_ACCUSED":
+			continue
+		if not r.get("success", false):
+			continue
+		var effects: Dictionary = r.get("effects", {})
+		if not effects.get("suppress_case", false):
+			continue
+
+		var magistrate_id: int = effects.get("magistrate_id", -1)
+		var suspect_id: int = effects.get("suspect_id", -1)
+		var magistrate: L5RCharacterData = characters_by_id.get(magistrate_id)
+		var suspect: L5RCharacterData = characters_by_id.get(suspect_id)
+		if magistrate == null:
+			continue
+
+		for record: CrimeRecord in crime_records:
+			if record.perpetrator_id != suspect_id:
+				continue
+			if record.legal_status == Enums.LegalStatus.DECREED_GUILTY:
+				continue
+			if record.legal_status == Enums.LegalStatus.ACQUITTED:
+				continue
+			record.legal_status = Enums.LegalStatus.CLEAR
+			if suspect != null:
+				var entry: LegalCaseEntry = LegalStatusSystem.get_case(suspect, record.case_id)
+				if entry != null:
+					LegalStatusSystem.transition(entry, Enums.LegalStatus.CLEAR, ic_day)
+			HonorGlorySystem.apply_honor_change(magistrate, -1.0)
+
+			var crime_name: String = InvestigationSystem.CRIME_TYPE_NAMES.get(
+				record.crime_type, "Crime"
+			)
+			var secret: SecretData = SecretSystem.create_secret(
+				next_secret_id[0],
+				magistrate_id,
+				SecretData.Severity.TIER_1,
+				"extortion_%d" % record.case_id,
+				"%s extorted %s to bury %s investigation" % [
+					magistrate.character_name,
+					suspect.character_name if suspect != null else "unknown",
+					crime_name,
+				],
+			)
+			next_secret_id[0] += 1
+			active_secrets.append(secret)
+			break
 
 
 static func _is_character_in_battle(
