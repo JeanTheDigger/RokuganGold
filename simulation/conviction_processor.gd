@@ -90,6 +90,13 @@ static func _process_single_case(
 			"reason": hearing.get("reason", ""),
 		}
 
+	if hearing.get("trial_by_combat_demanded", false):
+		return {
+			"case_id": record.case_id,
+			"accused_id": accused.character_id,
+			"outcome": "trial_by_combat_pending",
+		}
+
 	var victim: L5RCharacterData = characters_by_id.get(record.victim_id)
 	var victim_status: float = victim.status if victim != null else 0.0
 	var victim_clan: String = victim.clan if victim != null else ""
@@ -166,10 +173,21 @@ static func _run_defense_hearing(
 				"reason": "insufficient_authority",
 			}
 
-	var sincerity_roll: int = _roll_sincerity_defense(accused, dice_engine)
 	var evidence_total: int = record.evidence_total
 	if case_entry != null:
 		evidence_total = case_entry.evidence_total
+
+	var testimony_weight: int = RitsuyoSystem.get_testimony_weight(accused)
+
+	if DefenseHearingSystem.can_demand_trial_by_combat(accused, record.crime_type):
+		if DefenseHearingSystem.should_demand_trial(accused, testimony_weight, evidence_total):
+			return {
+				"trial_by_combat_demanded": true,
+				"defense_succeeded": false,
+				"proceed_to_judgment": false,
+			}
+
+	var sincerity_roll: int = _roll_sincerity_defense(accused, dice_engine)
 
 	if record.crime_type == Enums.CrimeType.TREASON:
 		var honor_rank: int = HonorGlorySystem.get_honor_rank(accused)
@@ -181,19 +199,10 @@ static func _run_defense_hearing(
 			hearing["lord_disposition_hit"] = TreasonSystem.FALSE_ACCUSATION_DISPOSITION_HIT
 		return hearing
 
-	var defense := RitsuyoSystem.get_defense_strength(accused, evidence_total)
-	var defense_succeeded: bool = defense.get("can_deny_effectively", false)
-
-	if defense_succeeded:
-		return {
-			"defense_succeeded": true,
-			"evidence_halved_to": evidence_total / 2,
-		}
-
-	return {
-		"defense_succeeded": false,
-		"proceed_to_judgment": true,
-	}
+	var hearing := DefenseHearingSystem.resolve_sincerity_defense(
+		sincerity_roll, testimony_weight, evidence_total
+	)
+	return hearing
 
 
 static func _roll_sincerity_defense(
@@ -225,6 +234,7 @@ static func _apply_acquittal(
 		LegalStatusSystem.acquit(case_entry, ic_day)
 
 	record.legal_status = Enums.LegalStatus.ACQUITTED
+	record.evidence_total = record.evidence_total / 2
 
 	HonorGlorySystem.apply_honor_change(
 		lord, TreasonSystem.FALSE_ACCUSATION_HONOR_LOSS
