@@ -82,6 +82,7 @@ extends Resource
 @export var armor_reduction: int = 0
 @export var outfit: Array[String] = []
 @export var koku: float = 0.0
+@export var months_without_stipend: int = 0
 
 # -- Inventory (Section 12.11) -------------------------------------------------
 # Item dicts as produced by InventorySystem.create_item / create_gift_item.
@@ -124,7 +125,7 @@ extends Resource
 
 # -- Legal System (Section 11.3.14) --------------------------------------------
 
-@export var legal_cases: Array[Dictionary] = []
+@export var legal_cases: Array[LegalCaseEntry] = []
 
 # -- Courtier Framework Fields -------------------------------------------------
 
@@ -237,6 +238,7 @@ extends Resource
 @export var xp_fractional: float = 0.0
 @export var progress_bars: Dictionary = {}
 @export var training_relationships: Dictionary = {}
+@export var atoned_offenses: Array[String] = []
 
 
 # -- Trait Access Helpers (used by CharacterStats) -----------------------------

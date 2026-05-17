@@ -251,6 +251,18 @@ func test_rival_disposition_forces_dispute() -> void:
 	assert_false(SuccessionSystem.is_clean_succession(data, candidates, -11))
 
 
+func test_stranger_disposition_not_clean() -> void:
+	var data := SuccessionData.new()
+	var candidates: Array[Dictionary] = [{"priority": SuccessionSystem.CandidatePriority.DESIGNATED_HEIR, "id": 10}]
+	assert_false(SuccessionSystem.is_clean_succession(data, candidates, 0))
+
+
+func test_acquaintance_boundary_is_clean() -> void:
+	var data := SuccessionData.new()
+	var candidates: Array[Dictionary] = [{"priority": SuccessionSystem.CandidatePriority.DESIGNATED_HEIR, "id": 10}]
+	assert_true(SuccessionSystem.is_clean_succession(data, candidates, 11))
+
+
 func test_clean_transition_duration_friend() -> void:
 	assert_eq(SuccessionSystem.get_transition_duration(true, 31), 7)
 
@@ -798,6 +810,66 @@ func test_birth_order_score_for_adopted_heir_is_4() -> void:
 		SuccessionSystem._score_birth_order(SuccessionSystem.CandidatePriority.ADOPTED_HEIR),
 		4
 	)
+
+
+func test_birth_order_score_second_child_is_8() -> void:
+	assert_eq(
+		SuccessionSystem._score_birth_order(SuccessionSystem.BIRTH_TYPE_SECOND_CHILD),
+		8
+	)
+
+
+func test_birth_order_score_third_child_plus_is_5() -> void:
+	assert_eq(
+		SuccessionSystem._score_birth_order(SuccessionSystem.BIRTH_TYPE_THIRD_CHILD_PLUS),
+		5
+	)
+
+
+func test_designated_heir_adopted_gets_adopted_birth_order_score() -> void:
+	var lord := _make_lord(1)
+	var candidate := _make_char(10)
+	var weights := SuccessionSystem.BASE_WEIGHTS.duplicate()
+	var result := SuccessionSystem.evaluate_candidate(
+		lord, candidate, SuccessionSystem.CandidatePriority.DESIGNATED_HEIR, weights,
+		"military", [], SuccessionSystem.CandidatePriority.ADOPTED_HEIR)
+	assert_eq(result["scores"]["birth_order"], 4)
+
+
+func test_designated_heir_eldest_child_gets_eldest_score() -> void:
+	var lord := _make_lord(1)
+	var candidate := _make_char(10)
+	var weights := SuccessionSystem.BASE_WEIGHTS.duplicate()
+	var result := SuccessionSystem.evaluate_candidate(
+		lord, candidate, SuccessionSystem.CandidatePriority.DESIGNATED_HEIR, weights,
+		"military", [], SuccessionSystem.CandidatePriority.ELDEST_CHILD)
+	assert_eq(result["scores"]["birth_order"], 12)
+
+
+func test_get_birth_order_type_for_adopted_designated_heir() -> void:
+	var deceased := _make_char(1)
+	var adopted_heir := _make_char(10)
+	deceased.designated_heir_id = 10
+	deceased.adopted_children_ids = [10]
+	var chars: Dictionary = {1: deceased, 10: adopted_heir}
+	var candidates := SuccessionSystem.get_candidates(deceased, chars)
+	assert_eq(candidates[0]["birth_order_type"], SuccessionSystem.CandidatePriority.ADOPTED_HEIR)
+
+
+func test_third_child_gets_lower_birth_order_score() -> void:
+	var deceased := _make_char(1)
+	var child_a := _make_char(10)
+	child_a.age = 30
+	var child_b := _make_char(11)
+	child_b.age = 25
+	var child_c := _make_char(12)
+	child_c.age = 20
+	deceased.children_ids = [10, 11, 12]
+	var chars: Dictionary = {1: deceased, 10: child_a, 11: child_b, 12: child_c}
+	var candidates := SuccessionSystem.get_candidates(deceased, chars)
+	assert_eq(candidates[0]["birth_order_type"], SuccessionSystem.CandidatePriority.ELDEST_CHILD)
+	assert_eq(candidates[1]["birth_order_type"], SuccessionSystem.BIRTH_TYPE_SECOND_CHILD)
+	assert_eq(candidates[2]["birth_order_type"], SuccessionSystem.BIRTH_TYPE_THIRD_CHILD_PLUS)
 
 
 # ==============================================================================

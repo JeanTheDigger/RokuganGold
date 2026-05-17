@@ -118,6 +118,9 @@ const TN_DELIVER_GIFT: int = 15
 # forbidden (a non-Legendary weapon, or any armor).
 const CRITICAL_FAILURE_MARGIN: int = -10
 
+# Disposition bonus per Raise achieved on the Etiquette roll (s12.2).
+const DISPOSITION_PER_RAISE: int = 3
+
 # Disposition loss when the gift itself is the offense (forbidden item, or
 # a presentation so botched the gesture undermines the object).
 const FORBIDDEN_GIFT_DISPOSITION_LOSS: int = -5
@@ -285,8 +288,9 @@ static func resolve_deliver_gift(
 	var margin: int = roll_result.get("margin", 0)
 
 	if success:
+		var raises_achieved: int = maxi(margin / 5, 0)
 		result["outcome"] = "success"
-		result["disposition_change"] = quality_disp
+		result["disposition_change"] = quality_disp + (raises_achieved * DISPOSITION_PER_RAISE)
 		result["obligation_created"] = true
 		var disp_mod: Dictionary = DispositionSystem.create_temporary_modifier(
 			get_disposition_event_key(tier), current_ic_day

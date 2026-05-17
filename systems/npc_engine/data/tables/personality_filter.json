@@ -1,7 +1,7 @@
 {
   "bushido": {
     "JIN": {
-      "always_blocked": ["RAID_HARVEST", "CONDUCT_RAID", "CONDUCT_CONDITIONING", "ACTIVATE_SLEEPER"],
+      "always_blocked": ["RAID_HARVEST", "CONDUCT_RAID", "CONDUCT_CONDITIONING", "ACTIVATE_SLEEPER", "INTIMIDATE_WITNESS", "KILL_WITNESS"],
       "conditional": [
         {"action": "GOSSIP", "blocked_when": "target_is_innocent_third_party"},
         {"action": "DISCLOSE", "blocked_when": "target_is_innocent_third_party"},
@@ -10,7 +10,7 @@
       ]
     },
     "YU": {
-      "always_blocked": ["DELAY_TO_POST_HARVEST"],
+      "always_blocked": ["DELAY_TO_POST_HARVEST", "FLEE_JURISDICTION", "REFUSE_SEPPUKU"],
       "conditional": [
         {"action": "SEEK_PEACE", "blocked_when": "war_score_above_25_and_army_capable"},
         {"action": "NEGOTIATE_PEACE", "blocked_when": "war_score_above_25_and_army_capable"},
@@ -25,7 +25,7 @@
       ]
     },
     "CHUGI": {
-      "always_blocked": ["BRIBE_FOR_INFO", "EAVESDROP", "INTERCEPT_LETTER", "SEARCH_QUARTERS", "APPROACH_FOR_RECRUITMENT"],
+      "always_blocked": ["BRIBE_FOR_INFO", "EAVESDROP", "INTERCEPT_LETTER", "SEARCH_QUARTERS", "APPROACH_FOR_RECRUITMENT", "EXTORT_ACCUSED"],
       "conditional": [
         {"action": "_ANY_ACTION", "blocked_when": "contradicts_lords_known_position"},
         {"action": "PUBLIC_DECLARATION", "blocked_when": "deviates_from_lord_directive"},
@@ -33,14 +33,14 @@
       ]
     },
     "GI": {
-      "always_blocked": ["GOSSIP", "FABRICATE_SECRET", "BRIBE_FOR_INFO", "EAVESDROP", "INTERCEPT_LETTER", "SEARCH_QUARTERS", "CONDUCT_CONDITIONING", "ACTIVATE_SLEEPER", "UNDERREPORT_KOKU", "LAUNDER_KOKU", "ESTABLISH_DEAD_DROP", "TRANSMIT_VIA_TEAR", "RAID_HARVEST"],
+      "always_blocked": ["GOSSIP", "FABRICATE_SECRET", "BRIBE_FOR_INFO", "BRIBE_WITNESS", "EAVESDROP", "INTERCEPT_LETTER", "SEARCH_QUARTERS", "CONDUCT_CONDITIONING", "ACTIVATE_SLEEPER", "UNDERREPORT_KOKU", "LAUNDER_KOKU", "ESTABLISH_DEAD_DROP", "TRANSMIT_VIA_TEAR", "RAID_HARVEST", "EXTORT_ACCUSED", "FLEE_JURISDICTION", "INTIMIDATE_WITNESS", "KILL_WITNESS", "REFUSE_SEPPUKU"],
       "conditional": [
         {"action": "DISCLOSE", "blocked_when": "information_is_false"},
         {"action": "PUBLIC_DECLARATION", "blocked_when": "npc_knows_declaration_is_false"}
       ]
     },
     "MEIYO": {
-      "always_blocked": [],
+      "always_blocked": ["REFUSE_SEPPUKU"],
       "conditional": [
         {"action": "_ANY_ACTION", "blocked_when": "violates_personal_code"},
         {"action": "COMPLY_WITH_LORD_ORDER", "blocked_when": "order_violates_personal_code"},
@@ -59,13 +59,13 @@
   },
   "shourido": {
     "SEIGYO": {
-      "always_blocked": ["REVEAL_TRUE_OBJECTIVE"],
+      "always_blocked": ["REVEAL_TRUE_OBJECTIVE", "ACCEPT_SEPPUKU"],
       "conditional": [
         {"action": "PUBLIC_DECLARATION", "blocked_when": "not_all_others_declared"}
       ]
     },
     "KETSUI": {
-      "always_blocked": ["REQUEST_ALLIED_AID"],
+      "always_blocked": ["REQUEST_ALLIED_AID", "ACCEPT_SEPPUKU"],
       "conditional": [
         {"action": "ACCEPT_RELIEF_ARMY", "blocked_when": "creates_obligation"},
         {"action": "_CHANGE_COURSE", "blocked_when": "already_committed_to_action"}
@@ -101,7 +101,7 @@
       ]
     },
     "ISHI": {
-      "always_blocked": ["SURRENDER"],
+      "always_blocked": ["SURRENDER", "ACCEPT_SEPPUKU"],
       "conditional": [
         {"action": "_CHANGE_COURSE", "blocked_when": "already_committed_to_action"},
         {"action": "NEGOTIATE", "blocked_when": "already_committed_to_action"},

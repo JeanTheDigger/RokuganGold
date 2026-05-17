@@ -288,16 +288,10 @@ func test_storm_defense_bonus() -> void:
 	assert_eq(SiegeSystem.get_storm_defense_bonus(), 8)
 
 
-func test_garrison_effective_defense_no_home() -> void:
+func test_garrison_effective_defense_with_fortification() -> void:
 	# Base 5 (garrison) + Urban 3 + Fort 5 = 13
-	var eff: int = SiegeSystem.compute_garrison_effective_defense(5, false)
+	var eff: int = SiegeSystem.compute_garrison_effective_defense(5)
 	assert_eq(eff, 13)
-
-
-func test_garrison_effective_defense_with_home() -> void:
-	# Base 5 + Urban 3 + Fort 5 + Home 2 = 15
-	var eff: int = SiegeSystem.compute_garrison_effective_defense(5, true)
-	assert_eq(eff, 15)
 
 
 func test_storm_defense_bonus_town_no_fortification() -> void:
@@ -307,14 +301,8 @@ func test_storm_defense_bonus_town_no_fortification() -> void:
 
 func test_garrison_effective_defense_town_no_fortification() -> void:
 	# Town: Base 5 + Urban 3 = 8 (no fortification +5)
-	var eff: int = SiegeSystem.compute_garrison_effective_defense(5, false, false)
+	var eff: int = SiegeSystem.compute_garrison_effective_defense(5, false)
 	assert_eq(eff, 8)
-
-
-func test_garrison_effective_defense_town_with_home() -> void:
-	# Town with home settlement: Base 5 + Urban 3 + Home 2 = 10
-	var eff: int = SiegeSystem.compute_garrison_effective_defense(5, true, false)
-	assert_eq(eff, 10)
 
 
 # -- Honor Cowardice Tests ------------------------------------------------------

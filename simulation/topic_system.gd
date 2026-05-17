@@ -22,6 +22,25 @@ const MOMENTUM_THRESHOLDS: Array[Array] = [
 	[76, 100],
 ]
 
+# Floor values for each momentum band (s16.1). Use these as initial momentum
+# when creating a topic that should enter a specific visibility bracket.
+const MOMENTUM_MINOR_FLOOR: float = 11.0
+const MOMENTUM_SECONDARY_FLOOR: float = 26.0
+const MOMENTUM_MAJOR_FLOOR: float = 51.0
+const MOMENTUM_UNAVOIDABLE_FLOOR: float = 76.0
+
+# Default initial momentum for a newly created topic based on its tier.
+# TIER_4 → Minor, TIER_3 → Secondary, TIER_2 → Major, TIER_1 → Unavoidable.
+const TIER_INITIAL_MOMENTUM: Dictionary = {
+	TopicData.Tier.TIER_4: 11.0,
+	TopicData.Tier.TIER_3: 26.0,
+	TopicData.Tier.TIER_2: 51.0,
+	TopicData.Tier.TIER_1: 80.0,
+}
+
+static func initial_momentum_for_tier(tier: TopicData.Tier) -> float:
+	return TIER_INITIAL_MOMENTUM.get(tier, MOMENTUM_MINOR_FLOOR)
+
 static func get_momentum_level(momentum: float) -> MomentumLevel:
 	if momentum <= 10:
 		return MomentumLevel.RUMOR
@@ -213,7 +232,7 @@ static func create_topic(
 	tier: TopicData.Tier,
 	category: TopicData.Category,
 	ic_day: int,
-	initial_momentum: float = 10.0,
+	initial_momentum: float = MOMENTUM_MINOR_FLOOR,
 	provinces_affected: Array[int] = [],
 	clan_involved: String = "",
 	family_involved: String = "",

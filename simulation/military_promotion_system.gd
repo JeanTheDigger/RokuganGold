@@ -60,23 +60,23 @@ const RIKUGUNSHOKAN_WEIGHTS: Dictionary = {
 # -- Personality Fit Scores -------------------------------------------------------
 
 const CHUI_PERSONALITY: Dictionary = {
-	"Yu": 10, "Chugi": 8, "Ketsui": 6, "Seigyo": 4,
+	"YU": 10, "CHUGI": 8, "KETSUI": 6, "SEIGYO": 4,
 }
 
 const TAISA_PERSONALITY: Dictionary = {
-	"Yu": 8, "Chugi": 8, "Seigyo": 7, "Dosatsu": 6,
+	"YU": 8, "CHUGI": 8, "SEIGYO": 7, "DOSATSU": 6,
 }
 
 const SHIREIKAN_PERSONALITY: Dictionary = {
-	"Dosatsu": 10, "Seigyo": 9, "Chugi": 8, "Yu": 5,
+	"DOSATSU": 10, "SEIGYO": 9, "CHUGI": 8, "YU": 5,
 }
 
 const RIKUGUNSHOKAN_PERSONALITY: Dictionary = {
-	"Dosatsu": 10, "Seigyo": 8, "Chugi": 7, "Yu": 6,
+	"DOSATSU": 10, "SEIGYO": 8, "CHUGI": 7, "YU": 6,
 }
 
 const GARRISON_PERSONALITY: Dictionary = {
-	"Seigyo": 10, "Chugi": 8, "Dosatsu": 6,
+	"SEIGYO": 10, "CHUGI": 8, "DOSATSU": 6,
 }
 
 
@@ -172,7 +172,7 @@ static func score_chui_candidate(
 ) -> float:
 	var w: Dictionary = CHUI_WEIGHTS
 	var personality_table: Dictionary = GARRISON_PERSONALITY if is_garrison else CHUI_PERSONALITY
-	var personality_score: float = float(personality_table.get(personality_virtue, 0))
+	var personality_score: float = float(personality_table.get(personality_virtue.to_upper(), 0))
 
 	return (
 		float(battle_skill) * w["battle_skill"]
@@ -193,7 +193,7 @@ static func score_taisa_candidate(
 	personality_virtue: String,
 ) -> float:
 	var w: Dictionary = TAISA_WEIGHTS
-	var personality_score: float = float(TAISA_PERSONALITY.get(personality_virtue, 0))
+	var personality_score: float = float(TAISA_PERSONALITY.get(personality_virtue.to_upper(), 0))
 
 	return (
 		float(battle_skill) * w["battle_skill"]
@@ -214,7 +214,7 @@ static func score_shireikan_candidate(
 	personality_virtue: String,
 ) -> float:
 	var w: Dictionary = SHIREIKAN_WEIGHTS
-	var personality_score: float = float(SHIREIKAN_PERSONALITY.get(personality_virtue, 0))
+	var personality_score: float = float(SHIREIKAN_PERSONALITY.get(personality_virtue.to_upper(), 0))
 
 	return (
 		float(battle_skill) * w["battle_skill"]
@@ -235,7 +235,7 @@ static func score_rikugunshokan_candidate(
 	personality_virtue: String,
 ) -> float:
 	var w: Dictionary = RIKUGUNSHOKAN_WEIGHTS
-	var personality_score: float = float(RIKUGUNSHOKAN_PERSONALITY.get(personality_virtue, 0))
+	var personality_score: float = float(RIKUGUNSHOKAN_PERSONALITY.get(personality_virtue.to_upper(), 0))
 
 	return (
 		float(battle_skill) * w["battle_skill"]

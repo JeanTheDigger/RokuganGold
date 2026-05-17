@@ -179,9 +179,11 @@ enum LegalStatus {
 	SUSPECTED,
 	UNDER_INVESTIGATION,
 	ACCUSED,
-	CONVICTED,
+	DECREED_GUILTY,
 	CLEAR,
 	PARDONED,
+	ACQUITTED,
+	FUGITIVE,
 }
 
 enum Sublocation {
@@ -366,6 +368,7 @@ enum KnowledgeSource {
 	LETTER,
 	INTELLIGENCE,
 	PUBLIC_KNOWLEDGE,
+	TESTIMONY,
 }
 
 enum KnowledgeConfidence {

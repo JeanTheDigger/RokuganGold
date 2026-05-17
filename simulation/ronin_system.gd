@@ -34,10 +34,10 @@ static func make_ronin(character: L5RCharacterData, cause: RoninCause) -> Dictio
 	character.assigned_company_id = -1
 	character.commanded_unit_id = -1
 	character.military_rank = Enums.MilitaryRank.NONE
-	character.status = maxf(character.status - 1.0, 0.0)
+	HonorGlorySystem.apply_status_change(character, -1.0)
 
 	var honor_loss: float = HONOR_LOSS_VOLUNTARY if cause == RoninCause.VOLUNTARY_DEPARTURE else HONOR_LOSS_ON_RONIN
-	character.honor = maxf(character.honor - honor_loss, 0.0)
+	HonorGlorySystem.apply_honor_change(character, -honor_loss)
 
 	return {
 		"character_id": character.character_id,
@@ -64,8 +64,9 @@ static func accept_into_service(
 	character.lord_id = new_lord_id
 	character.role_position = new_role
 	character.clan = new_clan
-	character.status = maxf(character.status, 1.0)
-	character.honor += HIRING_HONOR_RECOVERY
+	if character.status < 1.0:
+		HonorGlorySystem.apply_status_change(character, 1.0 - character.status)
+	HonorGlorySystem.apply_honor_change(character, HIRING_HONOR_RECOVERY)
 
 	return {
 		"character_id": character.character_id,

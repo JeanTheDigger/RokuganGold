@@ -52,30 +52,39 @@ const PEACE_OBJECTIVES: Array[String] = [
 const PRIMARY_OBJECTIVE_TIERS: Dictionary = {
 	"CONQUER_PROVINCE": [MilitaryTier.FORMAL_WAR],
 	"DEFEND_PROVINCE": [MilitaryTier.RAID, MilitaryTier.FORMAL_WAR, MilitaryTier.TOTAL_WAR],
-	"RESOLVE_CLAN_WAR": [MilitaryTier.RAID, MilitaryTier.FORMAL_WAR, MilitaryTier.TOTAL_WAR],
+	"RESOLVE_SHADOWLANDS_INCURSION": [MilitaryTier.RAID, MilitaryTier.FORMAL_WAR, MilitaryTier.TOTAL_WAR],
+	"DESTROY_ARMY": [MilitaryTier.FORMAL_WAR],
+	"RELIEVE_SIEGE": [MilitaryTier.RAID, MilitaryTier.FORMAL_WAR, MilitaryTier.TOTAL_WAR],
+	"RESTORE_ORDER": [MilitaryTier.RAID],
+	"SECURE_TRADE_ROUTE": [MilitaryTier.RAID],
 	"SABOTAGE_ECONOMY": [MilitaryTier.RAID],
 	"AVENGE": [MilitaryTier.RAID, MilitaryTier.FORMAL_WAR, MilitaryTier.TOTAL_WAR],
+	"ELIMINATE_CHARACTER": [MilitaryTier.RAID],
 }
 
 
 # -- Personality-Driven Aggression Virtues (s53.1) -------------------------------
 
-const AGGRESSION_BUSHIDO: Array[String] = ["Yu"]
-const AGGRESSION_SHOURIDO: Array[String] = ["Kyoryoku", "Ketsui"]
+const AGGRESSION_BUSHIDO: Array[String] = ["YU"]
+const AGGRESSION_SHOURIDO: Array[String] = ["KYORYOKU", "KETSUI"]
 
 
 # -- Personality Gates (s53.1) ---------------------------------------------------
 
 const JIN_EXHAUST_GATE: Array[String] = [
-	"EXPAND_TERRITORY", "SEEK_VENGEANCE",
+	"EXPAND_TERRITORY",
+]
+
+const JIN_TOTAL_WAR_BLOCK: Array[String] = [
+	"SEEK_VENGEANCE",
 ]
 
 const GI_MAKOTO_COVERT_BLOCK: Array[String] = [
-	"UNDERMINE_CLAN", "SABOTAGE_ECONOMY",
+	"UNDERMINE_CLAN", "SABOTAGE_ECONOMY", "ELIMINATE_CHARACTER",
 ]
 
 const PREVENT_SHORTAGE_BLOCKED_VIRTUES: Array[String] = [
-	"Jin", "Gi",
+	"JIN", "GI",
 ]
 
 
@@ -114,9 +123,10 @@ static func qualifies_for_personality_aggression(
 	primary_virtue: String,
 	standing_objective: String,
 ) -> bool:
+	var virtue_upper: String = primary_virtue.to_upper()
 	var has_virtue: bool = (
-		primary_virtue in AGGRESSION_BUSHIDO
-		or primary_virtue in AGGRESSION_SHOURIDO
+		virtue_upper in AGGRESSION_BUSHIDO
+		or virtue_upper in AGGRESSION_SHOURIDO
 	)
 	if not has_virtue:
 		return false
@@ -193,8 +203,13 @@ static func check_personality_gate(
 ) -> Dictionary:
 	var blocked: bool = false
 	var reason: String = ""
+	var virtue_upper: String = primary_virtue.to_upper()
 
-	if primary_virtue == "Jin":
+	if virtue_upper == "JIN":
+		if standing_objective in JIN_TOTAL_WAR_BLOCK:
+			if tier == MilitaryTier.TOTAL_WAR:
+				blocked = true
+				reason = "jin_blocks_total_war"
 		if standing_objective in JIN_EXHAUST_GATE:
 			if tier == MilitaryTier.TOTAL_WAR:
 				blocked = true
@@ -203,7 +218,7 @@ static func check_personality_gate(
 			blocked = true
 			reason = "jin_blocks_resource_raid"
 
-	if primary_virtue == "Gi" or primary_virtue == "Makoto":
+	if virtue_upper == "GI" or virtue_upper == "MAKOTO":
 		if standing_objective in GI_MAKOTO_COVERT_BLOCK:
 			blocked = true
 			reason = "gi_makoto_blocks_covert_warfare"
@@ -211,10 +226,10 @@ static func check_personality_gate(
 			blocked = true
 			reason = "gi_makoto_blocks_covert_warfare"
 
-	if primary_virtue in PREVENT_SHORTAGE_BLOCKED_VIRTUES:
+	if virtue_upper in PREVENT_SHORTAGE_BLOCKED_VIRTUES:
 		if standing_objective == "PREVENT_SHORTAGE":
 			blocked = true
-			reason = "%s_blocks_resource_raid" % primary_virtue.to_lower()
+			reason = "%s_blocks_resource_raid" % virtue_upper.to_lower()
 
 	return {"blocked": blocked, "reason": reason}
 
@@ -243,9 +258,10 @@ static func select_intended_tier(
 	if supported.is_empty():
 		return MilitaryTier.RAID
 
+	var virtue_upper: String = primary_virtue.to_upper()
 	var is_aggressive: bool = (
-		primary_virtue in AGGRESSION_BUSHIDO
-		or primary_virtue in AGGRESSION_SHOURIDO
+		virtue_upper in AGGRESSION_BUSHIDO
+		or virtue_upper in AGGRESSION_SHOURIDO
 	)
 
 	if is_aggressive:
@@ -259,13 +275,13 @@ static func select_intended_tier(
 					return candidate
 		return supported[0] as MilitaryTier
 
-	if primary_virtue == "Jin":
-		for tier_val: Variant in supported:
-			var t: MilitaryTier = tier_val as MilitaryTier
-			if t != MilitaryTier.TOTAL_WAR:
-				return t
-		return MilitaryTier.RAID
-
+	for tier_val: Variant in supported:
+		var t: MilitaryTier = tier_val as MilitaryTier
+		var gate: Dictionary = check_personality_gate(
+			t, standing_objective, primary_objective, primary_virtue,
+		)
+		if not gate["blocked"]:
+			return t
 	return supported[0] as MilitaryTier
 
 
@@ -419,7 +435,8 @@ static func _run_alternative_ladder(
 
 	var has_critical: bool = standing_objective in [
 		"DEFEND_PROVINCE", "DEFEND_TERRITORY",
-		"RESOLVE_CLAN_WAR", "SEEK_VENGEANCE", "AVENGE",
+		"RESOLVE_CLAN_WAR", "RESOLVE_SHADOWLANDS_INCURSION",
+		"SEEK_VENGEANCE", "AVENGE",
 	]
 
 	return FeasibilityLedger.walk_alternative_ladder(

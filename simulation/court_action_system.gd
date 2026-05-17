@@ -15,21 +15,24 @@ const CHARM_DIMINISHING_MINIMAL: int = 3
 
 const NEGOTIATE_BASE_DISP: int = 9
 const NEGOTIATE_RAISE_BONUS: int = 3
-const NEGOTIATE_POSITION_SHIFT: float = 5.0
-const NEGOTIATE_RAISE_POSITION_BONUS: float = 2.0
+const NEGOTIATE_POSITION_SHIFT: float = 8.0
+const NEGOTIATE_RAISE_POSITION_BONUS: float = 4.0
 const NEGOTIATE_SESSION_TN_REDUCTION: int = 5
 
 const PERSUADE_BASE_DISP: int = 11
 const PERSUADE_RAISE_BONUS: int = 3
-const PERSUADE_POSITION_SHIFT: float = 8.0
-const PERSUADE_RAISE_POSITION_BONUS: float = 4.0
+const PERSUADE_POSITION_SHIFT: float = 12.0
+const PERSUADE_RAISE_POSITION_BONUS: float = 5.0
 
 const IMPRESS_BASE_DISP: int = 9
 const IMPRESS_RAISE_BONUS: int = 3
+const IMPRESS_POSITION_SHIFT: float = 5.0
 const IMPRESS_SESSION_TN_REDUCTION: int = 5
 
 const LISTEN_REFLECT_BASE_DISP: int = 11
 const LISTEN_REFLECT_RAISE_BONUS: int = 3
+const LISTEN_REFLECT_POSITION_SHIFT: float = 10.0
+const LISTEN_REFLECT_RAISE_POSITION_BONUS: float = 4.0
 const LISTEN_REFLECT_SESSION_TN_REDUCTION: int = 5
 
 const PROVOKE_HONOR_LOSS: float = -0.2
@@ -177,6 +180,7 @@ static func resolve_impress(
 	attacker_roll: int,
 	defender_roll: int,
 	raises: int,
+	has_topic: bool = false,
 ) -> Dictionary:
 	var success: bool = attacker_roll >= defender_roll
 	var margin: int = attacker_roll - defender_roll
@@ -187,11 +191,16 @@ static func resolve_impress(
 			result["disposition_change"] = -6
 		return result
 
-	return {
+	var result: Dictionary = {
 		"success": true,
 		"disposition_change": IMPRESS_BASE_DISP + raises * IMPRESS_RAISE_BONUS,
 		"session_tn_reduction": IMPRESS_SESSION_TN_REDUCTION,
 	}
+
+	if has_topic:
+		result["target_position_shift"] = IMPRESS_POSITION_SHIFT
+
+	return result
 
 
 # -- Category 1: Listen and Reflect (Contested) -------------------------------
@@ -200,6 +209,7 @@ static func resolve_listen_reflect(
 	attacker_roll: int,
 	defender_roll: int,
 	raises: int,
+	has_topic: bool = false,
 ) -> Dictionary:
 	var success: bool = attacker_roll >= defender_roll
 	var margin: int = attacker_roll - defender_roll
@@ -210,11 +220,16 @@ static func resolve_listen_reflect(
 			result["disposition_change"] = -7
 		return result
 
-	return {
+	var result: Dictionary = {
 		"success": true,
 		"disposition_change": LISTEN_REFLECT_BASE_DISP + raises * LISTEN_REFLECT_RAISE_BONUS,
 		"persuade_negotiate_tn_reduction": LISTEN_REFLECT_SESSION_TN_REDUCTION,
 	}
+
+	if has_topic:
+		result["target_position_shift"] = LISTEN_REFLECT_POSITION_SHIFT + raises * LISTEN_REFLECT_RAISE_POSITION_BONUS
+
+	return result
 
 
 # -- Category 1: Offer Favor (Contested) -------------------------------------

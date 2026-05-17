@@ -140,6 +140,101 @@ func test_starvation_instant_famine_on_zero_stockpile() -> void:
 	assert_eq(result["stage"], ResourceTick.StarvationStage.FAMINE)
 
 
+# -- Starvation Recovery (s4.3.6 LOCKED) ---------------------------------------
+
+func test_famine_to_hunger_after_one_relief() -> void:
+	var result: Dictionary = ResourceTick.resolve_starvation_transition(
+		0.0, 0, 0, ResourceTick.StarvationStage.FAMINE, 5.0,
+	)
+	assert_eq(result["stage"], ResourceTick.StarvationStage.HUNGER)
+	assert_false(result["apply_loss"])
+	assert_true(result["recovering"])
+
+
+func test_hunger_to_shortage_after_one_relief() -> void:
+	var result: Dictionary = ResourceTick.resolve_starvation_transition(
+		0.0, 0, 0, ResourceTick.StarvationStage.HUNGER, 5.0,
+	)
+	assert_eq(result["stage"], ResourceTick.StarvationStage.SHORTAGE)
+	assert_false(result["apply_loss"])
+	assert_true(result["recovering"])
+
+
+func test_shortage_needs_two_relief_seasons() -> void:
+	var r1: Dictionary = ResourceTick.resolve_starvation_transition(
+		0.0, 0, 0, ResourceTick.StarvationStage.SHORTAGE, 5.0,
+	)
+	assert_eq(r1["stage"], ResourceTick.StarvationStage.SHORTAGE)
+	assert_false(r1["apply_loss"])
+	assert_true(r1["recovering"])
+	assert_eq(r1["relief_seasons"], 1)
+
+	var r2: Dictionary = ResourceTick.resolve_starvation_transition(
+		0.0, 0, r1["relief_seasons"], ResourceTick.StarvationStage.SHORTAGE, 5.0,
+	)
+	assert_eq(r2["stage"], ResourceTick.StarvationStage.CLEAR)
+	assert_false(r2["recovering"])
+
+
+func test_full_famine_recovery_takes_four_seasons() -> void:
+	var stage: ResourceTick.StarvationStage = ResourceTick.StarvationStage.FAMINE
+	var relief: int = 0
+	for i: int in range(4):
+		var r: Dictionary = ResourceTick.resolve_starvation_transition(
+			0.0, 0, relief, stage, 5.0,
+		)
+		stage = r["stage"] as ResourceTick.StarvationStage
+		relief = r["relief_seasons"]
+		assert_false(r["apply_loss"])
+		if i < 3:
+			assert_true(r["recovering"])
+	assert_eq(stage, ResourceTick.StarvationStage.CLEAR)
+
+
+func test_re_escalation_on_relapse_during_recovery() -> void:
+	var r1: Dictionary = ResourceTick.resolve_starvation_transition(
+		0.0, 0, 0, ResourceTick.StarvationStage.HUNGER, 5.0,
+	)
+	assert_eq(r1["stage"], ResourceTick.StarvationStage.SHORTAGE)
+	var r2: Dictionary = ResourceTick.resolve_starvation_transition(
+		1.0, 0, r1["relief_seasons"], r1["stage"] as ResourceTick.StarvationStage, 3.0,
+	)
+	assert_eq(r2["stage"], ResourceTick.StarvationStage.HUNGER)
+	assert_true(r2["apply_loss"])
+
+
+func test_sudden_collapse_always_famine() -> void:
+	var result: Dictionary = ResourceTick.resolve_starvation_transition(
+		1.0, 0, 0, ResourceTick.StarvationStage.SHORTAGE, 0.0,
+	)
+	assert_eq(result["stage"], ResourceTick.StarvationStage.FAMINE)
+
+
+func test_deficit_seasons_increment() -> void:
+	var r: Dictionary = ResourceTick.resolve_starvation_transition(
+		1.0, 1, 0, ResourceTick.StarvationStage.CLEAR, 5.0,
+	)
+	assert_eq(r["deficit_seasons"], 2)
+	assert_eq(r["relief_seasons"], 0)
+
+
+func test_relief_resets_deficit_counter() -> void:
+	var r: Dictionary = ResourceTick.resolve_starvation_transition(
+		0.0, 3, 0, ResourceTick.StarvationStage.FAMINE, 5.0,
+	)
+	assert_eq(r["deficit_seasons"], 0)
+	assert_eq(r["relief_seasons"], 0)
+
+
+func test_no_pu_loss_during_relief() -> void:
+	var result: Dictionary = ResourceTick.resolve_starvation_transition(
+		0.0, 0, 0, ResourceTick.StarvationStage.FAMINE, 5.0,
+	)
+	assert_eq(result["stage"], ResourceTick.StarvationStage.HUNGER)
+	assert_false(result["apply_loss"])
+	assert_almost_eq(result["pu_loss_rate"], 0.08, 0.001)
+
+
 # -- Tax Cascade ---------------------------------------------------------------
 
 func test_taxable_surplus_basic() -> void:
@@ -382,6 +477,92 @@ func test_forge_one_to_one_conversion_rate() -> void:
 	assert_almost_eq(r["arms_produced"], r["iron_consumed"], 0.001)
 
 
+# -- Garrison Check (GDD s4.3.11) -----------------------------------------------
+
+func test_garrison_required_rounds_up() -> void:
+	assert_almost_eq(ResourceTick.compute_garrison_required(1), 0.1, 0.01)
+	assert_almost_eq(ResourceTick.compute_garrison_required(8), 0.4, 0.01)
+	assert_almost_eq(ResourceTick.compute_garrison_required(10), 0.5, 0.01)
+	assert_almost_eq(ResourceTick.compute_garrison_required(100), 5.0, 0.01)
+
+
+func test_not_under_garrisoned_when_sufficient() -> void:
+	assert_false(ResourceTick.is_under_garrisoned(_province, _settlements()))
+
+
+func test_under_garrisoned_when_zero() -> void:
+	_settlement.garrison_pu = 0
+	assert_true(ResourceTick.is_under_garrisoned(_province, _settlements()))
+
+
+func test_garrison_check_increments_under_seasons() -> void:
+	_settlement.garrison_pu = 0
+	var meta: Dictionary = {}
+	var r1: Dictionary = ResourceTick._process_garrison_check(
+		[_province] as Array[ProvinceData], _settlements(), meta
+	)
+	assert_eq(r1[1]["seasons"], 1)
+	var r2: Dictionary = ResourceTick._process_garrison_check(
+		[_province] as Array[ProvinceData], _settlements(), meta
+	)
+	assert_eq(r2[1]["seasons"], 2)
+
+
+func test_garrison_check_resets_when_garrisoned() -> void:
+	_settlement.garrison_pu = 0
+	var meta: Dictionary = {}
+	ResourceTick._process_garrison_check(
+		[_province] as Array[ProvinceData], _settlements(), meta
+	)
+	_settlement.garrison_pu = 1
+	var r2: Dictionary = ResourceTick._process_garrison_check(
+		[_province] as Array[ProvinceData], _settlements(), meta
+	)
+	assert_eq(r2[1]["seasons"], 0)
+
+
+func test_garrison_check_drains_rice() -> void:
+	_settlement.garrison_pu = 0
+	_settlement.rice_stockpile = 5.0
+	var meta: Dictionary = {}
+	ResourceTick._process_garrison_check(
+		[_province] as Array[ProvinceData], _settlements(), meta
+	)
+	assert_almost_eq(_settlement.rice_stockpile, 4.95, 0.001)
+
+
+func test_garrison_check_reduces_stability() -> void:
+	_settlement.garrison_pu = 0
+	_province.stability = 100.0
+	var meta: Dictionary = {}
+	ResourceTick._process_garrison_check(
+		[_province] as Array[ProvinceData], _settlements(), meta
+	)
+	assert_almost_eq(_province.stability, 98.0, 0.01)
+
+
+func test_garrison_trade_drain_caps() -> void:
+	_settlement.garrison_pu = 0
+	var meta: Dictionary = {"_under_garrison_seasons": {1: 10}}
+	var r: Dictionary = ResourceTick._process_garrison_check(
+		[_province] as Array[ProvinceData], _settlements(), meta
+	)
+	assert_almost_eq(r[1]["trade_drain"], 0.3, 0.001)
+
+
+func test_garrison_koku_malus_applied() -> void:
+	_settlement.garrison_pu = 0
+	_settlement.town_pu = 2
+	_settlement.koku_stockpile = 0.0
+	var meta: Dictionary = {"_koku_modifiers": {1: 1.0}}
+	ResourceTick._process_garrison_check(
+		[_province] as Array[ProvinceData], _settlements(), meta
+	)
+	ResourceTick._process_koku_generation(_settlements(), meta)
+	var expected: float = float(_settlement.town_pu) * ResourceTick.KOKU_PER_TOWN_PU_PER_SEASON * 0.8
+	assert_almost_eq(_settlement.koku_stockpile, expected, 0.01)
+
+
 # -- Stipend Personality Modifier (GDD s4.3.9) ---------------------------------
 
 func test_stipend_modifier_jin_gives_ten_percent() -> void:
@@ -466,3 +647,351 @@ func test_stipend_disposition_delta_plus_fifteen_gives_plus_two() -> void:
 
 func test_stipend_disposition_delta_minus_fifteen_gives_minus_two() -> void:
 	assert_eq(ResourceTick.compute_stipend_disposition_delta(-0.15), -2)
+
+
+# -- Emperor Tax Rate (GDD s55.10) ---------------------------------------------
+
+func test_emperor_take_rate_iron_is_baseline() -> void:
+	var rate: float = ResourceTick.compute_emperor_take_rate(
+		{"archetype": StrategicReview.EmperorArchetype.IRON}
+	)
+	assert_almost_eq(rate, 0.15, 0.001)
+
+
+func test_emperor_take_rate_benevolent_minus_five() -> void:
+	var rate: float = ResourceTick.compute_emperor_take_rate(
+		{"archetype": StrategicReview.EmperorArchetype.BENEVOLENT}
+	)
+	assert_almost_eq(rate, 0.10, 0.001)
+
+
+func test_emperor_take_rate_warlike_plus_five() -> void:
+	var rate: float = ResourceTick.compute_emperor_take_rate(
+		{"archetype": StrategicReview.EmperorArchetype.WARLIKE}
+	)
+	assert_almost_eq(rate, 0.20, 0.001)
+
+
+func test_emperor_take_rate_tyrant_plus_ten() -> void:
+	var rate: float = ResourceTick.compute_emperor_take_rate(
+		{"archetype": StrategicReview.EmperorArchetype.TYRANT}
+	)
+	assert_almost_eq(rate, 0.25, 0.001)
+
+
+func test_emperor_take_rate_cunning_unchanged() -> void:
+	var rate: float = ResourceTick.compute_emperor_take_rate(
+		{"archetype": StrategicReview.EmperorArchetype.CUNNING}
+	)
+	assert_almost_eq(rate, 0.15, 0.001)
+
+
+func test_emperor_take_rate_empty_config_defaults_to_iron() -> void:
+	var rate: float = ResourceTick.compute_emperor_take_rate({})
+	assert_almost_eq(rate, 0.15, 0.001)
+
+
+# -- Cunning Clan Redistribution (GDD s55.10) ----------------------------------
+
+func test_cunning_modifier_friend_clan_gets_plus_ten() -> void:
+	var mod: float = ResourceTick.compute_cunning_clan_modifier(
+		"Crane", {"Crane": 40}
+	)
+	assert_almost_eq(mod, 0.10, 0.001)
+
+
+func test_cunning_modifier_rival_clan_gets_minus_ten() -> void:
+	var mod: float = ResourceTick.compute_cunning_clan_modifier(
+		"Lion", {"Lion": -15}
+	)
+	assert_almost_eq(mod, -0.10, 0.001)
+
+
+func test_cunning_modifier_stranger_clan_gets_zero() -> void:
+	var mod: float = ResourceTick.compute_cunning_clan_modifier(
+		"Dragon", {"Dragon": 5}
+	)
+	assert_almost_eq(mod, 0.0, 0.001)
+
+
+func test_cunning_modifier_unknown_clan_gets_zero() -> void:
+	var mod: float = ResourceTick.compute_cunning_clan_modifier("Mantis", {})
+	assert_almost_eq(mod, 0.0, 0.001)
+
+
+func test_cunning_modifier_devoted_gets_plus_ten() -> void:
+	var mod: float = ResourceTick.compute_cunning_clan_modifier(
+		"Scorpion", {"Scorpion": 95}
+	)
+	assert_almost_eq(mod, 0.10, 0.001)
+
+
+func test_cunning_modifier_blood_enemy_gets_minus_ten() -> void:
+	var mod: float = ResourceTick.compute_cunning_clan_modifier(
+		"Crab", {"Crab": -80}
+	)
+	assert_almost_eq(mod, -0.10, 0.001)
+
+
+# -- Emperor Income from Cascade (GDD s55.10) ----------------------------------
+
+func _make_tax_result(passed_up: float) -> Dictionary:
+	return {"surplus": 10.0, "total_collected": 4.0, "passed_up": passed_up}
+
+
+func test_emperor_income_iron_matches_legacy_constant() -> void:
+	var taxes: Dictionary = {1: _make_tax_result(6.0)}
+	var prov: ProvinceData = ProvinceData.new()
+	prov.province_id = 1
+	prov.clan = "Crane"
+	var result: Dictionary = ResourceTick._compute_emperor_income_from_cascade(
+		taxes, [prov], {"archetype": StrategicReview.EmperorArchetype.IRON}
+	)
+	# 6.0 * 0.42 * 0.15 = 0.378
+	assert_almost_eq(result["rice"], 0.378, 0.001)
+	assert_almost_eq(result["arms_redirect"], 0.0, 0.001)
+
+
+func test_emperor_income_tyrant_higher_rate() -> void:
+	var taxes: Dictionary = {1: _make_tax_result(6.0)}
+	var prov: ProvinceData = ProvinceData.new()
+	prov.province_id = 1
+	prov.clan = "Crane"
+	var result: Dictionary = ResourceTick._compute_emperor_income_from_cascade(
+		taxes, [prov], {"archetype": StrategicReview.EmperorArchetype.TYRANT}
+	)
+	# 6.0 * 0.42 * 0.25 = 0.63
+	assert_almost_eq(result["rice"], 0.63, 0.001)
+	assert_almost_eq(result["arms_redirect"], 0.0, 0.001)
+
+
+func test_emperor_income_warlike_splits_arms_redirect() -> void:
+	var taxes: Dictionary = {1: _make_tax_result(6.0)}
+	var prov: ProvinceData = ProvinceData.new()
+	prov.province_id = 1
+	prov.clan = "Lion"
+	var result: Dictionary = ResourceTick._compute_emperor_income_from_cascade(
+		taxes, [prov], {"archetype": StrategicReview.EmperorArchetype.WARLIKE}
+	)
+	# baseline: 6.0 * 0.42 * 0.15 = 0.378 (rice)
+	# warlike:  6.0 * 0.42 * 0.20 = 0.504 (total)
+	# arms_redirect = 0.504 - 0.378 = 0.126
+	assert_almost_eq(result["rice"], 0.378, 0.001)
+	assert_almost_eq(result["arms_redirect"], 0.126, 0.001)
+
+
+func test_emperor_income_cunning_friend_clan_gets_more() -> void:
+	var taxes: Dictionary = {1: _make_tax_result(6.0)}
+	var prov: ProvinceData = ProvinceData.new()
+	prov.province_id = 1
+	prov.clan = "Crane"
+	var config: Dictionary = {
+		"archetype": StrategicReview.EmperorArchetype.CUNNING,
+		"clan_dispositions": {"Crane": 40},
+	}
+	var result: Dictionary = ResourceTick._compute_emperor_income_from_cascade(
+		taxes, [prov], config
+	)
+	# 6.0 * 0.42 * (0.15 + 0.10) = 6.0 * 0.42 * 0.25 = 0.63
+	assert_almost_eq(result["rice"], 0.63, 0.001)
+
+
+func test_emperor_income_cunning_rival_clan_gets_less() -> void:
+	var taxes: Dictionary = {1: _make_tax_result(6.0)}
+	var prov: ProvinceData = ProvinceData.new()
+	prov.province_id = 1
+	prov.clan = "Lion"
+	var config: Dictionary = {
+		"archetype": StrategicReview.EmperorArchetype.CUNNING,
+		"clan_dispositions": {"Lion": -20},
+	}
+	var result: Dictionary = ResourceTick._compute_emperor_income_from_cascade(
+		taxes, [prov], config
+	)
+	# 6.0 * 0.42 * (0.15 - 0.10) = 6.0 * 0.42 * 0.05 = 0.126
+	assert_almost_eq(result["rice"], 0.126, 0.001)
+
+
+func test_emperor_income_cunning_mixed_clans() -> void:
+	var taxes: Dictionary = {
+		1: _make_tax_result(6.0),
+		2: _make_tax_result(6.0),
+	}
+	var prov1: ProvinceData = ProvinceData.new()
+	prov1.province_id = 1
+	prov1.clan = "Crane"
+	var prov2: ProvinceData = ProvinceData.new()
+	prov2.province_id = 2
+	prov2.clan = "Lion"
+	var config: Dictionary = {
+		"archetype": StrategicReview.EmperorArchetype.CUNNING,
+		"clan_dispositions": {"Crane": 40, "Lion": -20},
+	}
+	var result: Dictionary = ResourceTick._compute_emperor_income_from_cascade(
+		taxes, [prov1, prov2], config
+	)
+	# Crane (Friend): 6.0 * 0.42 * 0.25 = 0.63
+	# Lion (Rival):   6.0 * 0.42 * 0.05 = 0.126
+	# Total = 0.756
+	assert_almost_eq(result["rice"], 0.756, 0.001)
+
+
+func test_emperor_income_empty_config_uses_baseline() -> void:
+	var taxes: Dictionary = {1: _make_tax_result(6.0)}
+	var result: Dictionary = ResourceTick._compute_emperor_income_from_cascade(taxes)
+	# Legacy path: 6.0 * 0.42 * 0.15 = 0.378
+	assert_almost_eq(result["rice"], 0.378, 0.001)
+
+
+# -- Warlike Arms Redirect Consumer (GDD s55.10) -------------------------------
+
+func test_arms_redirect_applied_to_imperial_clan() -> void:
+	var imperial_clan := ClanData.new()
+	imperial_clan.clan_name = "Imperial"
+	imperial_clan.arms_stockpile = 5.0
+	var meta: Dictionary = {"_clan_data": {"Imperial": imperial_clan}}
+	var result: Dictionary = ResourceTick.apply_warlike_arms_redirect(2.5, meta)
+	assert_eq(result["applied_to"], "Imperial")
+	assert_almost_eq(result["amount"], 2.5, 0.001)
+	assert_almost_eq(imperial_clan.arms_stockpile, 7.5, 0.001)
+
+
+func test_arms_redirect_accumulates_on_imperial_clan() -> void:
+	var imperial_clan := ClanData.new()
+	imperial_clan.clan_name = "Imperial"
+	imperial_clan.arms_stockpile = 0.0
+	var meta: Dictionary = {"_clan_data": {"Imperial": imperial_clan}}
+	ResourceTick.apply_warlike_arms_redirect(1.0, meta)
+	ResourceTick.apply_warlike_arms_redirect(1.5, meta)
+	assert_almost_eq(imperial_clan.arms_stockpile, 2.5, 0.001)
+
+
+func test_arms_redirect_pending_when_no_imperial_clan() -> void:
+	var meta: Dictionary = {"_clan_data": {}}
+	var result: Dictionary = ResourceTick.apply_warlike_arms_redirect(3.0, meta)
+	assert_eq(result["applied_to"], "pending")
+	assert_almost_eq(result["amount"], 3.0, 0.001)
+	assert_almost_eq(float(meta["_imperial_arms_pending"]), 3.0, 0.001)
+
+
+func test_arms_redirect_pending_accumulates() -> void:
+	var meta: Dictionary = {"_clan_data": {}}
+	ResourceTick.apply_warlike_arms_redirect(1.0, meta)
+	ResourceTick.apply_warlike_arms_redirect(2.0, meta)
+	assert_almost_eq(float(meta["_imperial_arms_pending"]), 3.0, 0.001)
+
+
+func test_arms_redirect_zero_amount_no_change() -> void:
+	var imperial_clan := ClanData.new()
+	imperial_clan.clan_name = "Imperial"
+	imperial_clan.arms_stockpile = 5.0
+	var meta: Dictionary = {"_clan_data": {"Imperial": imperial_clan}}
+	ResourceTick.apply_warlike_arms_redirect(0.0, meta)
+	assert_almost_eq(imperial_clan.arms_stockpile, 5.0, 0.001)
+
+
+func test_arms_redirect_drains_pending_on_imperial_clan_arrival() -> void:
+	var meta: Dictionary = {"_clan_data": {}}
+	ResourceTick.apply_warlike_arms_redirect(2.0, meta)
+	ResourceTick.apply_warlike_arms_redirect(3.0, meta)
+	assert_almost_eq(float(meta["_imperial_arms_pending"]), 5.0, 0.001)
+	# Now Imperial ClanData appears
+	var imperial_clan := ClanData.new()
+	imperial_clan.clan_name = "Imperial"
+	imperial_clan.arms_stockpile = 0.0
+	meta["_clan_data"] = {"Imperial": imperial_clan}
+	var result: Dictionary = ResourceTick.apply_warlike_arms_redirect(1.0, meta)
+	# Should drain 5.0 pending + 1.0 new = 6.0 total
+	assert_eq(result["applied_to"], "Imperial")
+	assert_almost_eq(result["amount"], 6.0, 0.001)
+	assert_almost_eq(result["drained_pending"], 5.0, 0.001)
+	assert_almost_eq(imperial_clan.arms_stockpile, 6.0, 0.001)
+	assert_false(meta.has("_imperial_arms_pending"))
+
+
+func test_arms_redirect_no_pending_drain_key_absent() -> void:
+	var imperial_clan := ClanData.new()
+	imperial_clan.clan_name = "Imperial"
+	imperial_clan.arms_stockpile = 0.0
+	var meta: Dictionary = {"_clan_data": {"Imperial": imperial_clan}}
+	var result: Dictionary = ResourceTick.apply_warlike_arms_redirect(2.0, meta)
+	assert_almost_eq(result["drained_pending"], 0.0, 0.001)
+	assert_almost_eq(imperial_clan.arms_stockpile, 2.0, 0.001)
+	assert_false(meta.has("_imperial_arms_pending"))
+
+
+func test_arms_redirect_does_not_touch_other_clans() -> void:
+	var crab_clan := ClanData.new()
+	crab_clan.clan_name = "Crab"
+	crab_clan.arms_stockpile = 10.0
+	var imperial_clan := ClanData.new()
+	imperial_clan.clan_name = "Imperial"
+	imperial_clan.arms_stockpile = 0.0
+	var meta: Dictionary = {"_clan_data": {"Crab": crab_clan, "Imperial": imperial_clan}}
+	ResourceTick.apply_warlike_arms_redirect(5.0, meta)
+	assert_almost_eq(crab_clan.arms_stockpile, 10.0, 0.001)
+	assert_almost_eq(imperial_clan.arms_stockpile, 5.0, 0.001)
+
+
+# -- Trade Route Koku Bonus (GDD s4.3.18 + s4.3.11) ----------------------------
+
+func _make_route(pid_a: int, pid_b: int, koku: float = 0.1) -> TradeRouteData:
+	var r: TradeRouteData = TradeRouteData.new()
+	r.route_id = 1
+	r.province_a_id = pid_a
+	r.province_b_id = pid_b
+	r.koku_bonus_per_season = koku
+	return r
+
+
+func test_trade_route_koku_added_to_settlement() -> void:
+	var route: TradeRouteData = _make_route(1, 2, 0.2)
+	var meta: Dictionary = {}
+	_settlement.koku_stockpile = 0.0
+	var result: Dictionary = ResourceTick._process_trade_route_koku(
+		[_province] as Array[ProvinceData], _settlements(),
+		[route], meta,
+	)
+	assert_almost_eq(result[1]["trade_koku"], 0.2, 0.001)
+	assert_almost_eq(_settlement.koku_stockpile, 0.2, 0.001)
+
+
+func test_trade_route_koku_zero_when_disrupted() -> void:
+	var route: TradeRouteData = _make_route(1, 2, 0.2)
+	route.is_disrupted = true
+	var meta: Dictionary = {}
+	_settlement.koku_stockpile = 0.0
+	var result: Dictionary = ResourceTick._process_trade_route_koku(
+		[_province] as Array[ProvinceData], _settlements(),
+		[route], meta,
+	)
+	assert_almost_eq(result[1]["trade_koku"], 0.0, 0.001)
+	assert_almost_eq(_settlement.koku_stockpile, 0.0, 0.001)
+
+
+func test_trade_route_koku_reduced_by_garrison_drain() -> void:
+	var route: TradeRouteData = _make_route(1, 2, 0.2)
+	var meta: Dictionary = {
+		"_garrison": {1: {"under_garrisoned": true, "trade_drain": 0.15}},
+	}
+	_settlement.koku_stockpile = 0.0
+	var result: Dictionary = ResourceTick._process_trade_route_koku(
+		[_province] as Array[ProvinceData], _settlements(),
+		[route], meta,
+	)
+	assert_almost_eq(result[1]["trade_koku"], 0.05, 0.001)
+	assert_almost_eq(result[1]["garrison_drain"], 0.15, 0.001)
+
+
+func test_trade_route_koku_drain_does_not_go_negative() -> void:
+	var route: TradeRouteData = _make_route(1, 2, 0.1)
+	var meta: Dictionary = {
+		"_garrison": {1: {"under_garrisoned": true, "trade_drain": 0.3}},
+	}
+	_settlement.koku_stockpile = 0.0
+	var result: Dictionary = ResourceTick._process_trade_route_koku(
+		[_province] as Array[ProvinceData], _settlements(),
+		[route], meta,
+	)
+	assert_almost_eq(result[1]["trade_koku"], 0.0, 0.001)
+	assert_almost_eq(_settlement.koku_stockpile, 0.0, 0.001)

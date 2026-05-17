@@ -88,7 +88,7 @@ const EVENT_DEFINITIONS: Dictionary = {
 		"skill": "Engineering", "trait": "Intelligence", "tn": 30,
 		"success_ticks": -20, "failure_ticks": 0,
 		"honor_cost": -0.5,
-		"personality_block": ["Jin", "Gi"],
+		"personality_block": ["JIN", "GI"],
 		"side": "attacker",
 	},
 	"D1_MIDNIGHT_RESUPPLY": {
@@ -327,14 +327,11 @@ static func get_storm_defense_bonus(has_fortification: bool = true) -> int:
 
 static func compute_garrison_effective_defense(
 	base_defense: int,
-	is_home_settlement: bool,
 	has_fortification: bool = true,
 ) -> int:
 	var total: int = base_defense + STORM_URBAN_DEFENSE_BONUS
 	if has_fortification:
 		total += FORTIFICATION_DEFENSE_BONUS
-	if is_home_settlement:
-		total += 2
 	return total
 
 

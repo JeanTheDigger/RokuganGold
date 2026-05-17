@@ -158,7 +158,7 @@ func test_conviction_sets_legal_status():
 	var c := _make_character()
 	var record := _make_record(Enums.CrimeType.VIOLENCE)
 	CrimeSystem.apply_at_conviction_consequences(c, record)
-	assert_eq(record.legal_status, Enums.LegalStatus.CONVICTED)
+	assert_eq(record.legal_status, Enums.LegalStatus.DECREED_GUILTY)
 
 func test_conviction_seppuku_offered_for_eligible_crimes():
 	var c := _make_character()

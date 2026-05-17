@@ -118,16 +118,52 @@ func test_apply_raw_shift() -> void:
 	assert_eq(w.war_score_b, 40)
 
 
+func test_scores_are_independent_not_zero_sum() -> void:
+	var w: WarData = _make_war()
+	WarSystem.apply_score_shift(w, "allied_clan_joins", "Crab")
+	assert_eq(w.war_score_a, 58, "Winner should gain 8")
+	assert_eq(w.war_score_b, 50, "Loser unchanged for one-sided event")
+
+
+func test_siege_asymmetric_attacker_wins() -> void:
+	var w: WarData = _make_war()
+	WarSystem.apply_score_shift(w, "siege_won_attacker", "Crab")
+	assert_eq(w.war_score_a, 62, "Attacker gains 12")
+	assert_eq(w.war_score_b, 42, "Defender loses 8")
+
+
+func test_siege_asymmetric_defender_wins() -> void:
+	var w: WarData = _make_war()
+	WarSystem.apply_score_shift(w, "siege_won_defender", "Crane")
+	assert_eq(w.war_score_b, 58, "Defender gains 8")
+	assert_eq(w.war_score_a, 45, "Attacker loses 5")
+
+
+func test_one_sided_authority_event() -> void:
+	var w: WarData = _make_war()
+	WarSystem.apply_score_shift(w, "family_daimyo_commits", "Crane")
+	assert_eq(w.war_score_b, 55, "Receiving side gains 5")
+	assert_eq(w.war_score_a, 50, "Other side unchanged")
+
+
+func test_both_scores_can_be_above_50() -> void:
+	var w: WarData = _make_war()
+	WarSystem.apply_score_shift(w, "allied_clan_joins", "Crab")
+	WarSystem.apply_score_shift(w, "allied_clan_joins", "Crane")
+	assert_eq(w.war_score_a, 58)
+	assert_eq(w.war_score_b, 58)
+
+
 func test_all_score_shift_events_exist() -> void:
 	var expected: Array[String] = [
 		"minor_battle", "major_battle", "decisive_battle",
 		"province_captured", "castle_captured",
 		"siege_won_attacker", "siege_won_defender",
-		"siege_repelled_attacker_loss",
 		"gunso_chui_killed", "taisa_shireikan_killed", "rikugunshokan_killed",
 		"hostage_rank3", "hostage_rank5_champion",
 		"lord_assassinated", "supply_line_cut", "seasonal_attrition",
 		"family_daimyo_commits", "clan_champion_commits", "allied_clan_joins",
+		"condemn_clan", "authorize_war",
 	]
 	for e: String in expected:
 		assert_true(
@@ -137,16 +173,19 @@ func test_all_score_shift_events_exist() -> void:
 
 
 func test_score_shift_values_match_gdd() -> void:
-	assert_eq(WarSystem.SCORE_SHIFTS["minor_battle"], 3)
-	assert_eq(WarSystem.SCORE_SHIFTS["major_battle"], 8)
-	assert_eq(WarSystem.SCORE_SHIFTS["decisive_battle"], 15)
-	assert_eq(WarSystem.SCORE_SHIFTS["province_captured"], 5)
-	assert_eq(WarSystem.SCORE_SHIFTS["castle_captured"], 10)
-	assert_eq(WarSystem.SCORE_SHIFTS["siege_won_attacker"], 12)
-	assert_eq(WarSystem.SCORE_SHIFTS["siege_won_defender"], 8)
-	assert_eq(WarSystem.SCORE_SHIFTS["rikugunshokan_killed"], 10)
-	assert_eq(WarSystem.SCORE_SHIFTS["lord_assassinated"], 12)
-	assert_eq(WarSystem.SCORE_SHIFTS["allied_clan_joins"], 8)
+	assert_eq(WarSystem.SCORE_SHIFTS["minor_battle"], [3, 3])
+	assert_eq(WarSystem.SCORE_SHIFTS["major_battle"], [8, 8])
+	assert_eq(WarSystem.SCORE_SHIFTS["decisive_battle"], [15, 15])
+	assert_eq(WarSystem.SCORE_SHIFTS["province_captured"], [5, 5])
+	assert_eq(WarSystem.SCORE_SHIFTS["castle_captured"], [10, 10])
+	assert_eq(WarSystem.SCORE_SHIFTS["siege_won_attacker"], [12, 8])
+	assert_eq(WarSystem.SCORE_SHIFTS["siege_won_defender"], [8, 5])
+	assert_eq(WarSystem.SCORE_SHIFTS["rikugunshokan_killed"], [10, 10])
+	assert_eq(WarSystem.SCORE_SHIFTS["lord_assassinated"], [12, 12])
+	assert_eq(WarSystem.SCORE_SHIFTS["allied_clan_joins"], [8, 0])
+	assert_eq(WarSystem.SCORE_SHIFTS["family_daimyo_commits"], [5, 0])
+	assert_eq(WarSystem.SCORE_SHIFTS["condemn_clan"], [10, 0])
+	assert_eq(WarSystem.SCORE_SHIFTS["authorize_war"], [10, 0])
 
 
 # -- Escalation Tests ------------------------------------------------------------

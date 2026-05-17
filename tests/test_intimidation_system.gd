@@ -138,8 +138,8 @@ func test_pushback_tn():
 
 
 func test_compliance_ends_at_friend_disposition():
-	assert_true(IntimidationSystem.can_compliance_end(51))
-	assert_false(IntimidationSystem.can_compliance_end(50))
+	assert_true(IntimidationSystem.can_compliance_end(31))
+	assert_false(IntimidationSystem.can_compliance_end(30))
 
 
 # -- Disposition defense modifier tests ---------------------------------------
@@ -150,14 +150,14 @@ func test_neutral_no_bonus():
 	assert_true(result["success"])
 
 
-func test_ally_gives_defense_bonus():
-	var result := IntimidationSystem.resolve_blackmail(20, 15, 2.0, 3, "ally")
+func test_trusted_ally_gives_defense_bonus():
+	var result := IntimidationSystem.resolve_blackmail(20, 15, 2.0, 3, "trusted_ally")
 	# defender_total = 15 + 2 + 5 = 22, free_raises = 1, effective_roll = 20 + 5 = 25
 	assert_true(result["success"])
 
 
-func test_bitter_enemy_gives_penalty():
-	var result := IntimidationSystem.resolve_blackmail(15, 15, 2.0, 3, "bitter_enemy")
+func test_blood_enemy_gives_penalty():
+	var result := IntimidationSystem.resolve_blackmail(15, 15, 2.0, 3, "blood_enemy")
 	# defender_total = 15 + 2 - 5 = 12, free_raises = 1, effective_roll = 15 + 5 = 20
 	assert_true(result["success"])
 

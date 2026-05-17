@@ -132,3 +132,134 @@ func test_event_table_constants_defined() -> void:
 	assert_eq(HonorGlorySystem.HONOR_RENEGE_DECLARATION, -1.0)
 	assert_eq(HonorGlorySystem.ATONEMENT_HONOR_BY_TIER[1], 1.0)
 	assert_eq(HonorGlorySystem.ATONEMENT_TN_BY_TIER[4], 15)
+
+
+# -- Court Honor Modifier Wiring (s4.6 into action_executor) -------------------
+
+func _make_action(action_id: String, target_id: int = 0) -> NPCDataStructures.ScoredAction:
+	var a: NPCDataStructures.ScoredAction = NPCDataStructures.ScoredAction.new()
+	a.action_id = action_id
+	a.target_npc_id = target_id
+	a.metadata = {}
+	return a
+
+
+func _make_ctx(target_disp: int = 0) -> NPCDataStructures.ContextSnapshot:
+	var ctx: NPCDataStructures.ContextSnapshot = NPCDataStructures.ContextSnapshot.new()
+	ctx.dispositions = {0: target_disp}
+	return ctx
+
+
+func test_social_tn_public_declaration_honor_7_lowers_tn() -> void:
+	_char.honor = 7.5
+	var action: NPCDataStructures.ScoredAction = _make_action("PUBLIC_DECLARATION")
+	var ctx: NPCDataStructures.ContextSnapshot = _make_ctx(0)
+	var tn: int = ActionExecutor._get_social_tn(action, ctx, _char)
+	var base_tn: int = ActionExecutor._get_social_tn(action, ctx, null)
+	assert_eq(base_tn - tn, 10)
+
+
+func test_social_tn_public_declaration_honor_1_raises_tn() -> void:
+	_char.honor = 1.0
+	var action: NPCDataStructures.ScoredAction = _make_action("PUBLIC_DECLARATION")
+	var ctx: NPCDataStructures.ContextSnapshot = _make_ctx(0)
+	var tn: int = ActionExecutor._get_social_tn(action, ctx, _char)
+	var base_tn: int = ActionExecutor._get_social_tn(action, ctx, null)
+	assert_eq(tn - base_tn, 10)
+
+
+func test_social_tn_charm_unaffected_by_honor() -> void:
+	_char.honor = 7.5
+	var action: NPCDataStructures.ScoredAction = _make_action("CHARM")
+	var ctx: NPCDataStructures.ContextSnapshot = _make_ctx(0)
+	var tn_with: int = ActionExecutor._get_social_tn(action, ctx, _char)
+	var tn_without: int = ActionExecutor._get_social_tn(action, ctx, null)
+	assert_eq(tn_with, tn_without)
+
+
+func test_social_tn_honor_3_no_modifier() -> void:
+	_char.honor = 3.5
+	var action: NPCDataStructures.ScoredAction = _make_action("PUBLIC_DECLARATION")
+	var ctx: NPCDataStructures.ContextSnapshot = _make_ctx(0)
+	var tn: int = ActionExecutor._get_social_tn(action, ctx, _char)
+	var base_tn: int = ActionExecutor._get_social_tn(action, ctx, null)
+	assert_eq(tn, base_tn)
+
+
+# -- PUBLIC_ATONEMENT (s4.6 Court Event Table) ---------------------------------
+
+func test_atonement_tn_tier_4() -> void:
+	var action: NPCDataStructures.ScoredAction = _make_action("PUBLIC_ATONEMENT")
+	action.metadata = {"offense_tier": 4}
+	var ctx: NPCDataStructures.ContextSnapshot = _make_ctx()
+	var tn: int = ActionExecutor._get_tn_for_action("PUBLIC_ATONEMENT", action, ctx)
+	assert_eq(tn, 15)
+
+
+func test_atonement_tn_tier_1() -> void:
+	var action: NPCDataStructures.ScoredAction = _make_action("PUBLIC_ATONEMENT")
+	action.metadata = {"offense_tier": 1}
+	var ctx: NPCDataStructures.ContextSnapshot = _make_ctx()
+	var tn: int = ActionExecutor._get_tn_for_action("PUBLIC_ATONEMENT", action, ctx)
+	assert_eq(tn, 30)
+
+
+func test_atonement_success_tier_3_honor_and_glory() -> void:
+	var action: NPCDataStructures.ScoredAction = _make_action("PUBLIC_ATONEMENT")
+	action.metadata = {"offense_tier": 3}
+	var result: Dictionary = {"success": true, "margin": 7}
+	var effects: Dictionary = ActionExecutor._compute_atonement_effects(action, result)
+	assert_eq(effects["effect"], "atonement_performed")
+	assert_almost_eq(effects["honor_change"], 0.6, 0.001)
+	assert_almost_eq(effects["glory_change"], -0.3, 0.001)
+
+
+func test_atonement_success_tier_1_with_raises() -> void:
+	var action: NPCDataStructures.ScoredAction = _make_action("PUBLIC_ATONEMENT")
+	action.metadata = {"offense_tier": 1}
+	var result: Dictionary = {"success": true, "margin": 15}
+	var effects: Dictionary = ActionExecutor._compute_atonement_effects(action, result)
+	assert_almost_eq(effects["honor_change"], 1.3, 0.001)
+
+
+func test_atonement_failure_glory_loss_only() -> void:
+	var action: NPCDataStructures.ScoredAction = _make_action("PUBLIC_ATONEMENT")
+	action.metadata = {"offense_tier": 3}
+	var result: Dictionary = {"success": false, "margin": -3}
+	var effects: Dictionary = ActionExecutor._compute_atonement_effects(action, result)
+	assert_eq(effects["effect"], "atonement_failed")
+	assert_true(effects["failed"])
+	assert_false(effects.has("honor_change"))
+	assert_almost_eq(effects["glory_change"], -0.3, 0.001)
+
+
+func test_atonement_critical_failure_honor_loss() -> void:
+	var action: NPCDataStructures.ScoredAction = _make_action("PUBLIC_ATONEMENT")
+	action.metadata = {"offense_tier": 2}
+	var result: Dictionary = {"success": false, "margin": -12}
+	var effects: Dictionary = ActionExecutor._compute_atonement_effects(action, result)
+	assert_eq(effects["effect"], "atonement_critical_failure")
+	assert_almost_eq(effects["honor_change"], -0.3, 0.001)
+	assert_almost_eq(effects["glory_change"], -0.5, 0.001)
+
+
+# -- Atonement Repeat Blocking (s4.6) ------------------------------------------
+
+func test_can_atone_first_time() -> void:
+	assert_true(HonorGlorySystem.can_atone(_char, "scandal_y3m7"))
+
+
+func test_cannot_atone_same_offense_twice() -> void:
+	HonorGlorySystem.record_atonement(_char, "scandal_y3m7")
+	assert_false(HonorGlorySystem.can_atone(_char, "scandal_y3m7"))
+
+
+func test_can_atone_different_offense() -> void:
+	HonorGlorySystem.record_atonement(_char, "scandal_y3m7")
+	assert_true(HonorGlorySystem.can_atone(_char, "theft_y4m2"))
+
+
+func test_record_atonement_idempotent() -> void:
+	HonorGlorySystem.record_atonement(_char, "scandal_y3m7")
+	HonorGlorySystem.record_atonement(_char, "scandal_y3m7")
+	assert_eq(_char.atoned_offenses.size(), 1)

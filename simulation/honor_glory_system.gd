@@ -119,3 +119,12 @@ const ATONEMENT_TN_BY_TIER: Dictionary = {
 	2: 25,
 	1: 30,
 }
+
+
+static func can_atone(character: L5RCharacterData, offense_key: String) -> bool:
+	return offense_key not in character.atoned_offenses
+
+
+static func record_atonement(character: L5RCharacterData, offense_key: String) -> void:
+	if offense_key not in character.atoned_offenses:
+		character.atoned_offenses.append(offense_key)

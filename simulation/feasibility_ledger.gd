@@ -29,8 +29,8 @@ const BASE_CAMPAIGN_SEASONS: Dictionary = {
 	3: 4,  # CLAN_WAR
 }
 
-const REDUCE_ESTIMATE_VIRTUES: Array[String] = ["Yu", "Kyoryoku"]
-const INCREASE_ESTIMATE_VIRTUES: Array[String] = ["Seigyo", "Chishiki"]
+const REDUCE_ESTIMATE_VIRTUES: Array[String] = ["YU", "KYORYOKU"]
+const INCREASE_ESTIMATE_VIRTUES: Array[String] = ["SEIGYO", "CHISHIKI"]
 
 const RICE_CIVILIAN_RATE: float = 0.25
 const RICE_MILITARY_RATE: float = 0.35
@@ -40,7 +40,7 @@ const LEVY_PRODUCTION_LOSS_PER_PU: float = 1.50
 const RICE_GREEN_THRESHOLD: float = 1.00
 
 const PROCEED_ON_YELLOW_VIRTUES: Array[String] = [
-	"Yu", "Kyoryoku", "Ketsui", "Ishi",
+	"YU", "KYORYOKU", "KETSUI", "ISHI",
 ]
 
 
@@ -51,11 +51,12 @@ static func estimate_campaign_seasons(
 	primary_virtue: String,
 ) -> int:
 	var base: int = BASE_CAMPAIGN_SEASONS.get(authority_level, 2)
+	var virtue_upper: String = primary_virtue.to_upper()
 
-	if primary_virtue in REDUCE_ESTIMATE_VIRTUES:
+	if virtue_upper in REDUCE_ESTIMATE_VIRTUES:
 		return maxi(1, base - 1)
 
-	if primary_virtue in INCREASE_ESTIMATE_VIRTUES:
+	if virtue_upper in INCREASE_ESTIMATE_VIRTUES:
 		return base + 1
 
 	return base
@@ -235,14 +236,14 @@ static func should_proceed_on_risky(
 ) -> bool:
 	if is_high_priority_objective:
 		return true
-	return primary_virtue in PROCEED_ON_YELLOW_VIRTUES
+	return primary_virtue.to_upper() in PROCEED_ON_YELLOW_VIRTUES
 
 
 # -- Full Ledger Entry Point --------------------------------------------------
 
 static func evaluate_feasibility(inputs: Dictionary) -> Dictionary:
 	var authority_level: int = inputs.get("authority_level", 0)
-	var primary_virtue: String = inputs.get("primary_virtue", "")
+	var primary_virtue: String = (inputs.get("primary_virtue", "") as String).to_upper()
 	var controlled_settlements: Array = inputs.get("controlled_settlements", [])
 	var provinces: Array = inputs.get("provinces", [])
 	var clan_arms_stockpile: float = inputs.get("clan_arms_stockpile", 0.0)
@@ -351,7 +352,7 @@ enum LadderRung {
 const SCALE_DOWN_FACTOR: float = 0.5
 const SCALE_DOWN_EQUIP_RATIO: float = 0.5
 
-const DELAY_SKIP_VIRTUES: Array[String] = ["Yu", "Kyoryoku"]
+const DELAY_SKIP_VIRTUES: Array[String] = ["YU", "KYORYOKU"]
 const DELAYABLE_SEASONS: Array[String] = ["spring", "summer"]
 
 const TRIBUTE_MAX_FRACTION: float = 0.25
@@ -359,11 +360,11 @@ const TRIBUTE_DISPOSITION_COST: int = -5
 const TRIBUTE_FRIEND_THRESHOLD: int = 31
 const TRIBUTE_REFUSE_THRESHOLD: int = -11
 
-const ALLIED_AID_SKIP_VIRTUES: Array[String] = ["Ketsui", "Ishi"]
+const ALLIED_AID_SKIP_VIRTUES: Array[String] = ["KETSUI", "ISHI"]
 const ALLIED_AID_FRIEND_THRESHOLD: int = 31
 const ALLIED_AID_SIGNIFICANT_FRACTION: float = 0.30
 
-const RAID_BLOCK_VIRTUES: Array[String] = ["Jin", "Gi"]
+const RAID_BLOCK_VIRTUES: Array[String] = ["JIN", "GI"]
 const RAID_HONOR_COST: float = -1.0
 const RAID_GLORY_COST: float = -0.3
 const RAID_CLAN_DISPOSITION_COST: int = -15
@@ -373,7 +374,7 @@ const RAID_GARRISON_CAP: float = 1.0
 
 const DESPERATION_RICE_PER_PU: float = 0.50
 const DESPERATION_VIRTUES: Array[String] = [
-	"Yu", "Chugi", "Ketsui", "Kyoryoku", "Ishi",
+	"YU", "CHUGI", "KETSUI", "KYORYOKU", "ISHI",
 ]
 const CRITICAL_OBJECTIVES: Array[String] = [
 	"DEFEND_PROVINCE", "DEFEND_TERRITORY",
@@ -409,7 +410,7 @@ static func try_delay_to_harvest(
 	primary_virtue: String,
 	current_season: String,
 ) -> Dictionary:
-	if primary_virtue in DELAY_SKIP_VIRTUES:
+	if primary_virtue.to_upper() in DELAY_SKIP_VIRTUES:
 		return {"rung": LadderRung.DELAY_TO_HARVEST, "applied": false, "reason": "personality_skip"}
 
 	if current_season not in DELAYABLE_SEASONS:
@@ -470,6 +471,7 @@ static func try_demand_tribute(
 	if vassal_stockpiles.is_empty():
 		return {"rung": LadderRung.DEMAND_TRIBUTE, "applied": false, "reason": "no_vassals"}
 
+	var virtue_upper: String = primary_virtue.to_upper()
 	var total_tribute_rice: float = 0.0
 	var total_tribute_arms: float = 0.0
 	var compliant_vassals: int = 0
@@ -484,7 +486,7 @@ static func try_demand_tribute(
 		var arms: float = vd.get("arms_stockpile", 0.0)
 		var in_shortage: bool = vd.get("in_shortage", false)
 
-		if primary_virtue == "Jin" and in_shortage:
+		if virtue_upper == "JIN" and in_shortage:
 			continue
 
 		if disp < TRIBUTE_REFUSE_THRESHOLD:
@@ -525,7 +527,7 @@ static func try_request_allied_aid(
 	primary_virtue: String,
 	allied_surplus: Array,
 ) -> Dictionary:
-	if primary_virtue in ALLIED_AID_SKIP_VIRTUES:
+	if primary_virtue.to_upper() in ALLIED_AID_SKIP_VIRTUES:
 		return {"rung": LadderRung.REQUEST_ALLIED_AID, "applied": false, "reason": "personality_skip"}
 
 	if allied_surplus.is_empty():
@@ -585,13 +587,14 @@ static func try_raid_neighbor(
 	has_issued_demand: bool,
 	raidable_provinces: Array,
 ) -> Dictionary:
-	if primary_virtue in RAID_BLOCK_VIRTUES:
+	var virtue_upper: String = primary_virtue.to_upper()
+	if virtue_upper in RAID_BLOCK_VIRTUES:
 		return {"rung": LadderRung.RAID_NEIGHBOR, "applied": false, "reason": "personality_block"}
 
-	if primary_virtue == "Meiyo" and not has_grievance:
+	if virtue_upper == "MEIYO" and not has_grievance:
 		return {"rung": LadderRung.RAID_NEIGHBOR, "applied": false, "reason": "meiyo_no_grievance"}
 
-	if primary_virtue == "Rei" and not has_issued_demand:
+	if virtue_upper == "REI" and not has_issued_demand:
 		return {"rung": LadderRung.RAID_NEIGHBOR, "applied": false, "reason": "rei_no_prior_demand"}
 
 	if raidable_provinces.is_empty():
@@ -662,13 +665,14 @@ static func try_desperation_override(
 	if not has_critical_objective:
 		return {"rung": LadderRung.DESPERATION_OVERRIDE, "applied": false, "reason": "no_critical_objective"}
 
-	var personality_qualifies: bool = primary_virtue in DESPERATION_VIRTUES
+	var virtue_upper: String = primary_virtue.to_upper()
+	var personality_qualifies: bool = virtue_upper in DESPERATION_VIRTUES
 	var score_qualifies: bool = war_score < 25 and is_defending
 	if not personality_qualifies and not score_qualifies:
 		return {"rung": LadderRung.DESPERATION_OVERRIDE, "applied": false, "reason": "personality_and_score_block"}
 
 	var honor_cost: float = 0.0
-	if primary_virtue == "Jin":
+	if virtue_upper == "JIN":
 		honor_cost = DESPERATION_JIN_HONOR_COST
 
 	return {
@@ -893,11 +897,11 @@ const FAMINE_RICE_PER_PU: float = 0.0
 
 const WINNING_THRESHOLD: int = 65
 
-const SHORTAGE_IGNORE_VIRTUES: Array[String] = ["Yu", "Kyoryoku", "Ishi"]
-const HUNGER_CONTINUE_VIRTUES: Array[String] = ["Ishi"]
-const FAMINE_CONTINUE_VIRTUES: Array[String] = ["Ishi"]
+const SHORTAGE_IGNORE_VIRTUES: Array[String] = ["YU", "KYORYOKU", "ISHI"]
+const HUNGER_CONTINUE_VIRTUES: Array[String] = ["ISHI"]
+const FAMINE_CONTINUE_VIRTUES: Array[String] = ["ISHI"]
 
-const TETHER_HOLD_EXTRA_VIRTUES: Array[String] = ["Ketsui"]
+const TETHER_HOLD_EXTRA_VIRTUES: Array[String] = ["KETSUI"]
 const TETHER_HOLD_SEASONS_DEFAULT: int = 1
 const TETHER_HOLD_SEASONS_KETSUI: int = 2
 
@@ -971,9 +975,10 @@ static func determine_campaign_decision(
 	war_score: int,
 	seasons_tether_cut: int = 0,
 ) -> Dictionary:
+	var virtue_upper: String = primary_virtue.to_upper()
 	if army_supply == ArmySupplyStatus.UNSUPPLIED:
 		var hold_limit: int = TETHER_HOLD_SEASONS_DEFAULT
-		if primary_virtue in TETHER_HOLD_EXTRA_VIRTUES:
+		if virtue_upper in TETHER_HOLD_EXTRA_VIRTUES:
 			hold_limit = TETHER_HOLD_SEASONS_KETSUI
 		if seasons_tether_cut < hold_limit:
 			return {
@@ -994,7 +999,7 @@ static func determine_campaign_decision(
 			}
 
 		HomeFrontStatus.SHORTAGE:
-			if primary_virtue in SHORTAGE_IGNORE_VIRTUES:
+			if virtue_upper in SHORTAGE_IGNORE_VIRTUES:
 				return {
 					"decision": CampaignDecision.CONTINUE,
 					"reason": "personality_ignores_shortage",
@@ -1010,7 +1015,7 @@ static func determine_campaign_decision(
 			}
 
 		HomeFrontStatus.HUNGER:
-			if primary_virtue in HUNGER_CONTINUE_VIRTUES:
+			if virtue_upper in HUNGER_CONTINUE_VIRTUES:
 				return {
 					"decision": CampaignDecision.CONTINUE,
 					"reason": "personality_ignores_hunger",
@@ -1021,7 +1026,7 @@ static func determine_campaign_decision(
 			}
 
 		HomeFrontStatus.FAMINE:
-			if primary_virtue in FAMINE_CONTINUE_VIRTUES:
+			if virtue_upper in FAMINE_CONTINUE_VIRTUES:
 				return {
 					"decision": CampaignDecision.CONTINUE,
 					"reason": "personality_ignores_famine",
@@ -1076,7 +1081,7 @@ static func run_supply_status_check(inputs: Dictionary) -> Dictionary:
 	var source_has_rice: bool = inputs.get("source_has_rice", true)
 	var clan_iron: float = inputs.get("clan_iron_stockpile", 0.0)
 	var total_iron_upkeep: float = inputs.get("total_iron_upkeep", 0.0)
-	var primary_virtue: String = inputs.get("primary_virtue", "")
+	var primary_virtue: String = (inputs.get("primary_virtue", "") as String).to_upper()
 	var war_score: int = inputs.get("war_score", 50)
 	var seasons_tether_cut: int = inputs.get("seasons_tether_cut", 0)
 

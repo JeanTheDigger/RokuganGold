@@ -3,8 +3,16 @@ class_name InvestigationDecomposer
 ## Seven-phase investigation loop: travel → examine scene → interview witnesses →
 ## interview suspects → check alibis → follow leads → resolve (accuse or close).
 ## Stateless — evaluates objective state each AP and returns the next step.
+##
+## Enhanced with evidence-aware prioritization: the decomposer scores available
+## leads and selects the highest-value next action based on case state, elapsed
+## time, and proximity of targets.
 
 const ACCUSATION_THRESHOLD: int = 40
+const BRIBERY_EVAL_THRESHOLD: int = 25
+const SCENE_REEXAMINE_EVIDENCE_CAP: int = 15
+const SCENE_MAX_REEXAMINATIONS: int = 1
+const DAYS_SCENE_STILL_USEFUL: int = 30
 
 
 # -- Main Decomposition Entry --------------------------------------------------
@@ -27,47 +35,161 @@ static func decompose(
 	if ctx.location_id != crime_location and not scene_examined:
 		return _make_travel_need(crime_location)
 
-	# Phase 2: Examine the crime scene
+	# Phase 2: Examine the crime scene (first time)
 	if not scene_examined:
 		return _make_investigate_threat_need(crime_location)
 
-	# Phase 3: Interview uninterviewed witnesses
-	var uninterviewed: Array = _get_uninterviewed(witness_pool, interviewed_witnesses)
-	if uninterviewed.size() > 0:
-		var target_id: int = _prioritize_witness(uninterviewed, ctx)
-		var target_location: String = _get_npc_location(target_id, objective)
-		if ctx.location_id != target_location:
-			return _make_travel_need(target_location)
-		return _make_gather_intelligence_need(target_id)
-
-	# Phase 4: Interview suspects
-	for suspect_id: Variant in known_suspects:
-		if suspect_id is int and suspect_id not in interviewed_suspects:
-			var suspect_location: String = _get_npc_location(suspect_id, objective)
-			if ctx.location_id != suspect_location:
-				return _make_travel_need(suspect_location)
-			return _make_gather_intelligence_need(suspect_id)
-
-	# Phase 5: Check alibis
-	var unchecked: Array = _get_unchecked_alibis(objective, checked_alibis)
-	if unchecked.size() > 0:
-		var alibi_witness_id: int = unchecked[0].get("claimed_with", -1)
-		if alibi_witness_id > 0:
-			var alibi_location: String = _get_npc_location(alibi_witness_id, objective)
-			if ctx.location_id != alibi_location:
-				return _make_travel_need(alibi_location)
-			return _make_gather_intelligence_need(alibi_witness_id)
-
-	# Phase 6: Follow unresolved leads
-	if unresolved_leads.size() > 0:
-		var lead: Dictionary = unresolved_leads[0] if unresolved_leads[0] is Dictionary else {}
-		return _decompose_lead(lead, ctx, objective)
-
-	# Phase 7: Resolution
-	if evidence_total >= ACCUSATION_THRESHOLD:
+	# Phase 7 (early check): If evidence already sufficient, accuse immediately
+	if evidence_total >= ACCUSATION_THRESHOLD and known_suspects.size() > 0:
 		return _make_accuse_need(known_suspects)
-	else:
-		return _make_close_case_need()
+
+	# Score remaining leads and pick the best next action
+	var best_action: NPCDataStructures.ImmediateNeed = _select_best_next_action(
+		objective, ctx, crime_location, evidence_total,
+		known_suspects, witness_pool, interviewed_witnesses,
+		interviewed_suspects, checked_alibis, unresolved_leads,
+	)
+	if best_action != null:
+		return best_action
+
+	# Phase 7: Resolution — insufficient evidence, close case
+	return _make_close_case_need()
+
+
+# -- Evidence-Aware Action Selection -------------------------------------------
+# Scores all available investigative leads and picks the highest-value one.
+
+static func _select_best_next_action(
+	objective: Dictionary,
+	ctx: NPCDataStructures.ContextSnapshot,
+	crime_location: String,
+	evidence_total: int,
+	known_suspects: Array,
+	witness_pool: Array,
+	interviewed_witnesses: Array,
+	interviewed_suspects: Array,
+	checked_alibis: Array,
+	unresolved_leads: Array,
+) -> NPCDataStructures.ImmediateNeed:
+	var candidates: Array[Dictionary] = []
+	var evidence_gap: int = ACCUSATION_THRESHOLD - evidence_total
+	var days_elapsed: int = ctx.ic_day - objective.get("ic_day_committed", ctx.ic_day)
+
+	# Candidate: Interview uninterviewed witnesses (high value — direct testimony)
+	var uninterviewed: Array = _get_uninterviewed(witness_pool, interviewed_witnesses)
+	for witness_id: Variant in uninterviewed:
+		if not witness_id is int:
+			continue
+		var wid: int = witness_id as int
+		var is_present: bool = wid in ctx.characters_present
+		var score: int = 80
+		if is_present:
+			score += 15
+		if evidence_gap <= 20:
+			score += 10
+		candidates.append({
+			"score": score, "type": "witness", "target_id": wid,
+		})
+
+	# Candidate: Interview suspects (moderate value — may reveal alibis or confess)
+	for suspect_id: Variant in known_suspects:
+		if not suspect_id is int:
+			continue
+		var sid: int = suspect_id as int
+		if sid in interviewed_suspects:
+			continue
+		var is_present: bool = sid in ctx.characters_present
+		var score: int = 65
+		if is_present:
+			score += 15
+		if evidence_gap <= 15:
+			score += 10
+		candidates.append({
+			"score": score, "type": "suspect", "target_id": sid,
+		})
+
+	# Candidate: Re-examine scene (only if scene still useful and low evidence)
+	var reexam_count: int = objective.get("scene_exam_count", 1)
+	if reexam_count < SCENE_MAX_REEXAMINATIONS \
+			and evidence_total < SCENE_REEXAMINE_EVIDENCE_CAP \
+			and days_elapsed < DAYS_SCENE_STILL_USEFUL:
+		var at_scene: bool = ctx.location_id == crime_location
+		var score: int = 50
+		if at_scene:
+			score += 20
+		if evidence_total < 10:
+			score += 15
+		candidates.append({
+			"score": score, "type": "reexamine_scene",
+		})
+
+	# Candidate: Check alibis
+	var unchecked: Array = _get_unchecked_alibis(objective, checked_alibis)
+	for alibi: Variant in unchecked:
+		if not alibi is Dictionary:
+			continue
+		var a: Dictionary = alibi as Dictionary
+		var alibi_witness_id: int = a.get("claimed_with", -1)
+		if alibi_witness_id <= 0:
+			continue
+		var is_present: bool = alibi_witness_id in ctx.characters_present
+		var score: int = 55
+		if is_present:
+			score += 15
+		candidates.append({
+			"score": score, "type": "alibi", "target_id": alibi_witness_id,
+		})
+
+	# Candidate: Follow unresolved leads
+	for lead_idx: int in range(unresolved_leads.size()):
+		var lead: Variant = unresolved_leads[lead_idx]
+		if not lead is Dictionary:
+			continue
+		var l: Dictionary = lead as Dictionary
+		var score: int = 60 + l.get("priority", 0) * 5
+		candidates.append({
+			"score": score, "type": "lead", "lead_index": lead_idx,
+		})
+
+	if candidates.is_empty():
+		return null
+
+	# Sort by score descending
+	candidates.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return a["score"] > b["score"]
+	)
+
+	var best: Dictionary = candidates[0]
+	return _action_from_candidate(best, objective, ctx, crime_location, unresolved_leads)
+
+
+static func _action_from_candidate(
+	candidate: Dictionary,
+	objective: Dictionary,
+	ctx: NPCDataStructures.ContextSnapshot,
+	crime_location: String,
+	unresolved_leads: Array,
+) -> NPCDataStructures.ImmediateNeed:
+	var ctype: String = candidate.get("type", "")
+	var target_id: int = candidate.get("target_id", -1)
+
+	match ctype:
+		"witness", "suspect", "alibi":
+			var target_location: String = _get_npc_location(target_id, objective, ctx)
+			if ctx.location_id != target_location:
+				return _make_travel_need(target_location)
+			return _make_gather_intelligence_need(target_id)
+		"reexamine_scene":
+			if ctx.location_id != crime_location:
+				return _make_travel_need(crime_location)
+			return _make_investigate_threat_need(crime_location)
+		"lead":
+			var lead_idx: int = candidate.get("lead_index", 0)
+			if lead_idx < unresolved_leads.size() and unresolved_leads[lead_idx] is Dictionary:
+				return _decompose_lead(unresolved_leads[lead_idx], ctx, objective)
+			return _make_close_case_need()
+		_:
+			return null
 
 
 # -- Need Factories -----------------------------------------------------------
@@ -98,9 +220,8 @@ static func _make_gather_intelligence_need(target_id: int) -> NPCDataStructures.
 
 static func _make_accuse_need(suspects: Array) -> NPCDataStructures.ImmediateNeed:
 	var need := NPCDataStructures.ImmediateNeed.new()
-	need.need_type = "ASSIGN_OBJECTIVE"
-	need.source = "INVESTIGATE_CRIME"
-	need.target_intent = "FORMALLY_ACCUSE"
+	need.need_type = "REST"
+	need.source = "INVESTIGATE_CRIME_ACCUSATION_PENDING"
 	if suspects.size() > 0 and suspects[0] is int:
 		need.target_npc_id = suspects[0]
 	return need
@@ -160,7 +281,11 @@ static func _get_unchecked_alibis(objective: Dictionary, checked: Array) -> Arra
 	return result
 
 
-static func _get_npc_location(npc_id: int, objective: Dictionary) -> String:
+static func _get_npc_location(npc_id: int, objective: Dictionary, ctx: NPCDataStructures.ContextSnapshot = null) -> String:
+	if ctx != null and not ctx.known_npc_locations.is_empty():
+		var ctx_loc: Variant = ctx.known_npc_locations.get(npc_id, null)
+		if ctx_loc is String and not (ctx_loc as String).is_empty():
+			return ctx_loc as String
 	var locations: Dictionary = objective.get("npc_locations", {})
 	return locations.get(npc_id, objective.get("crime_location", ""))
 
@@ -174,7 +299,7 @@ static func _decompose_lead(
 	var lead_target: int = lead.get("target_npc_id", -1)
 
 	if lead_type == "witness" and lead_target > 0:
-		var loc: String = _get_npc_location(lead_target, objective)
+		var loc: String = _get_npc_location(lead_target, objective, ctx)
 		if ctx.location_id != loc:
 			return _make_travel_need(loc)
 		return _make_gather_intelligence_need(lead_target)

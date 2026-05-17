@@ -141,7 +141,7 @@ static func evaluate_proposal(
 # -- Benten Festival Bonus ----------------------------------------------------
 
 const BENTEN_FESTIVAL_DAY: int = 9
-const BENTEN_FESTIVAL_MONTH: int = 12
+const BENTEN_FESTIVAL_MONTH: int = 11
 
 const BENTEN_FESTIVAL_BONUS: int = 20
 

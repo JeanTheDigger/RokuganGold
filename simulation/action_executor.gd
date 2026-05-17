@@ -24,6 +24,7 @@ const COVERT_ACTIONS: Array[String] = [
 	"SEDUCE", "SEDUCE_FOR_INFO", "SEDUCE_FOR_ACCESS",
 	"SEDUCE_FOR_LEVERAGE", "SEDUCE_TO_COMPROMISE",
 	"EXPOSE_SECRET_PRIVATELY", "EXPOSE_SECRET_PUBLICLY",
+	"BRIBE_WITNESS", "INTIMIDATE_WITNESS", "KILL_WITNESS",
 ]
 
 const MILITARY_ORDERS: Array[String] = [
@@ -50,9 +51,7 @@ const ADMINISTRATIVE_ACTIONS: Array[String] = [
 	"RESTORE_COUNCIL_COMPACT",
 ]
 
-const INTELLIGENCE_ACTIONS: Array[String] = [
-	"EXAMINE_CRIME_SCENE",
-]
+const INTELLIGENCE_ACTIONS: Array[String] = []
 
 const SELF_ACTIONS: Array[String] = [
 	"TRAIN", "MEDITATE", "REST", "DO_NOTHING", "CRAFT",
@@ -94,6 +93,8 @@ static func execute(
 	military_data: Dictionary = {},
 	characters_by_id: Dictionary = {},
 	worship_province_malus: Dictionary = {},
+	doshin_bonus: int = 0,
+	crime_records: Array[CrimeRecord] = [],
 ) -> Dictionary:
 	var action_id: String = action.action_id
 
@@ -238,6 +239,18 @@ static func execute(
 	if action_id == "PURIFY_TAINTED_GROUND":
 		return _execute_purify_tainted_ground(action, character, ctx, dice_engine)
 
+	if action_id == "FLEE_JURISDICTION":
+		return _execute_flee_jurisdiction(action, character, ctx)
+
+	if action_id in ["ACCEPT_SEPPUKU", "REFUSE_SEPPUKU"]:
+		return _execute_seppuku_response(action, character)
+
+	if action_id == "EXTORT_ACCUSED":
+		return _execute_extort_accused(action, character, ctx, dice_engine, characters_by_id)
+
+	if action_id == "EXAMINE_CRIME_SCENE":
+		return _execute_examine_crime_scene(action, character, ctx, dice_engine, crime_records)
+
 	if action_id == "EXAMINE_LETTER":
 		return _execute_examine_letter(action, character, ctx)
 
@@ -278,6 +291,21 @@ static func execute(
 				"effects": {},
 			}
 
+	if action_id == "PUBLIC_ATONEMENT":
+		var offense_key: String = action.metadata.get("offense_key", "")
+		if not offense_key.is_empty() and not HonorGlorySystem.can_atone(character, offense_key):
+			return {
+				"success": false,
+				"action_id": action_id,
+				"character_id": ctx.character_id,
+				"target_npc_id": -1,
+				"target_province_id": -1,
+				"ic_day": ctx.ic_day,
+				"season": ctx.season,
+				"reason": "already_atoned",
+				"effects": {},
+			}
+
 	if action_id in NO_ROLL_ACTIONS:
 		return _execute_no_roll(action, character, ctx)
 
@@ -287,10 +315,11 @@ static func execute(
 	if primary_skill.is_empty() or primary_skill.begins_with("_"):
 		return _execute_no_roll(action, character, ctx)
 
-	var tn: int = _get_tn_for_action(action_id, action, ctx, worship_province_malus)
+	var tn: int = _get_tn_for_action(action_id, action, ctx, worship_province_malus, character)
 	var wc_bonus: int = _get_winter_court_skill_bonus(character, primary_skill, ctx)
+	var doshin_flat: int = _get_doshin_bonus(action_id, doshin_bonus)
 	var roll_result: Dictionary = SkillResolver.resolve_skill_check(
-		character, dice_engine, primary_skill, tn, 0, "", Enums.Trait.NONE, 0, 0, wc_bonus
+		character, dice_engine, primary_skill, tn, 0, "", Enums.Trait.NONE, 0, 0, wc_bonus + doshin_flat
 	)
 
 	var result: Dictionary = {
@@ -537,8 +566,8 @@ static func _execute_intimidation(
 	var attacker_roll: int = attacker_result.get("total", 0)
 	var defender_roll: int = defender_result.get("total", 0)
 
-	var disp_toward_target: int = ctx.dispositions.get(action.target_npc_id, 0)
-	var disp_tier: String = _get_disposition_tier_name(disp_toward_target)
+	var target_disp_toward_actor: int = target.disposition_values.get(character.character_id, 0)
+	var disp_tier: String = _get_disposition_tier_name(target_disp_toward_actor)
 
 	var has_secret: bool = action.metadata.get("secret_ref") != null
 	var by_letter: bool = action.metadata.get("by_letter", false)
@@ -594,13 +623,13 @@ static func _get_disposition_tier_name(disp: int) -> String:
 	if disp >= 91:
 		return "devoted"
 	if disp >= 61:
-		return "sworn"
+		return "trusted_ally"
 	if disp >= 31:
-		return "ally"
-	if disp >= 11:
 		return "friend"
+	if disp >= 11:
+		return "acquaintance"
 	if disp >= -10:
-		return "neutral"
+		return "stranger"
 	if disp >= -30:
 		return "rival"
 	if disp >= -60:
@@ -762,7 +791,7 @@ static func _execute_broadcast_social(
 	var action_id: String = action.action_id
 	var skill_entry: Dictionary = action_skill_map.get(action_id, {})
 	var primary_skill: String = skill_entry.get("primary", "Courtier")
-	var tn: int = _get_social_tn(action, ctx)
+	var tn: int = _get_social_tn(action, ctx, character)
 	var roll_result: Dictionary = SkillResolver.resolve_skill_check(
 		character, dice_engine, primary_skill, tn
 	)
@@ -941,6 +970,12 @@ static func _try_execute_covert(
 			var r: Dictionary = SecretSystem.resolve_forge_order(character, auth_level, dice_engine)
 			return _build_covert_result(action, ctx, "Forgery", r)
 
+		"BRIBE_FOR_INFO":
+			if target == null:
+				return {}
+			var r: Dictionary = _resolve_bribe_attempt(character, target, action, dice_engine)
+			return _build_covert_result(action, ctx, "Temptation", r)
+
 		"FABRICATE_SECRET":
 			var severity: SecretData.Severity = action.metadata.get("severity", SecretData.Severity.TIER_3)
 			var secret_id: int = action.metadata.get("secret_id", -1)
@@ -960,6 +995,24 @@ static func _try_execute_covert(
 
 		"EXPOSE_SECRET_PUBLICLY":
 			return _execute_expose_publicly(action, character, ctx, dice_engine, characters_by_id)
+
+		"BRIBE_WITNESS":
+			if target == null:
+				return {}
+			var r: Dictionary = _resolve_bribe_witness(character, target, action, dice_engine)
+			return _build_covert_result(action, ctx, "Temptation", r)
+
+		"INTIMIDATE_WITNESS":
+			if target == null:
+				return {}
+			var r: Dictionary = _resolve_intimidate_witness(character, target, action, dice_engine)
+			return _build_covert_result(action, ctx, "Intimidation", r)
+
+		"KILL_WITNESS":
+			if target == null:
+				return {}
+			var r: Dictionary = _resolve_kill_witness(character, target, dice_engine)
+			return _build_covert_result(action, ctx, "Stealth", r)
 
 	return {}
 
@@ -987,6 +1040,144 @@ static func _build_covert_result(
 		"tn": system_result.get("tn", 0),
 		"margin": system_result.get("margin", 0),
 		"effects": effects,
+	}
+
+
+static func _resolve_bribe_attempt(
+	briber: L5RCharacterData,
+	magistrate: L5RCharacterData,
+	action: NPCDataStructures.ScoredAction,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	var temptation: int = briber.skills.get("Temptation", 0)
+	var awareness: int = briber.awareness if briber.awareness > 0 else 2
+	var rolled: int = maxi(temptation + awareness, 1)
+	var kept: int = maxi(awareness, 1)
+	var attack_result: Dictionary = dice_engine.roll_and_keep(rolled, kept)
+	var attack_total: int = attack_result.get("total", 0)
+
+	var etiquette: int = magistrate.skills.get("Etiquette", 0)
+	var willpower: int = magistrate.willpower if magistrate.willpower > 0 else 2
+	var honor_bonus: int = HonorGlorySystem.get_honor_rank(magistrate) * 5
+	var def_rolled: int = maxi(etiquette + willpower, 1)
+	var def_kept: int = maxi(willpower, 1)
+	var defense_result: Dictionary = dice_engine.roll_and_keep(def_rolled, def_kept)
+	var defense_total: int = defense_result.get("total", 0) + honor_bonus
+
+	var success: bool = attack_total > defense_total
+	var suppress_case: bool = action.metadata.get("suppress_case", false)
+
+	return {
+		"success": success,
+		"roll_total": attack_total,
+		"tn": defense_total,
+		"margin": attack_total - defense_total,
+		"detection_risk": not success,
+		"suppress_case": suppress_case,
+		"magistrate_id": magistrate.character_id,
+	}
+
+
+# -- Witness Tampering (s11.3.13c) --------------------------------------------
+
+static func _resolve_bribe_witness(
+	criminal: L5RCharacterData,
+	witness: L5RCharacterData,
+	_action: NPCDataStructures.ScoredAction,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	var temptation: int = criminal.skills.get("Temptation", 0)
+	var awareness: int = criminal.awareness if criminal.awareness > 0 else 2
+	var rolled: int = maxi(temptation + awareness, 1)
+	var kept: int = maxi(awareness, 1)
+	var attack_result: Dictionary = dice_engine.roll_and_keep(rolled, kept)
+	var attack_total: int = attack_result.get("total", 0)
+
+	var etiquette: int = witness.skills.get("Etiquette", 0)
+	var willpower: int = witness.willpower if witness.willpower > 0 else 2
+	var honor_bonus: int = HonorGlorySystem.get_honor_rank(witness) * 5
+	var def_rolled: int = maxi(etiquette + willpower, 1)
+	var def_kept: int = maxi(willpower, 1)
+	var defense_result: Dictionary = dice_engine.roll_and_keep(def_rolled, def_kept)
+	var defense_total: int = defense_result.get("total", 0) + honor_bonus
+
+	var success: bool = attack_total > defense_total
+	return {
+		"success": success,
+		"roll_total": attack_total,
+		"tn": defense_total,
+		"margin": attack_total - defense_total,
+		"detection_risk": not success,
+		"effect": "witness_bribed" if success else "bribe_rejected",
+		"witness_id": witness.character_id,
+		"evidence_on_fail": InvestigationLoopSystem.WITNESS_BRIBE_EVIDENCE_ON_FAIL,
+	}
+
+
+static func _resolve_intimidate_witness(
+	criminal: L5RCharacterData,
+	witness: L5RCharacterData,
+	_action: NPCDataStructures.ScoredAction,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	var intimidation: int = criminal.skills.get("Intimidation", 0)
+	var willpower_c: int = criminal.willpower if criminal.willpower > 0 else 2
+	var rolled: int = maxi(intimidation + willpower_c, 1)
+	var kept: int = maxi(willpower_c, 1)
+	var attack_result: Dictionary = dice_engine.roll_and_keep(rolled, kept)
+	var attack_total: int = attack_result.get("total", 0)
+
+	var etiquette: int = witness.skills.get("Etiquette", 0)
+	var willpower_w: int = witness.willpower if witness.willpower > 0 else 2
+	var honor_bonus: int = HonorGlorySystem.get_honor_rank(witness) * 5
+	var def_rolled: int = maxi(etiquette + willpower_w, 1)
+	var def_kept: int = maxi(willpower_w, 1)
+	var defense_result: Dictionary = dice_engine.roll_and_keep(def_rolled, def_kept)
+	var defense_total: int = defense_result.get("total", 0) + honor_bonus
+
+	var success: bool = attack_total > defense_total
+	return {
+		"success": success,
+		"roll_total": attack_total,
+		"tn": defense_total,
+		"margin": attack_total - defense_total,
+		"detection_risk": true,
+		"effect": "witness_intimidated" if success else "intimidation_rejected",
+		"witness_id": witness.character_id,
+		"witness_hostile": not success,
+		"evidence_on_fail": InvestigationLoopSystem.WITNESS_INTIMIDATE_EVIDENCE_ON_FAIL,
+	}
+
+
+static func _resolve_kill_witness(
+	killer: L5RCharacterData,
+	victim: L5RCharacterData,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	var stealth: int = killer.skills.get("Stealth", 0)
+	var agility: int = killer.agility if killer.agility > 0 else 2
+	var rolled: int = maxi(stealth + agility, 1)
+	var kept: int = maxi(agility, 1)
+	var attack_result: Dictionary = dice_engine.roll_and_keep(rolled, kept)
+	var attack_total: int = attack_result.get("total", 0)
+
+	var perception: int = victim.perception if victim.perception > 0 else 2
+	var investigation: int = victim.skills.get("Investigation", 0)
+	var def_rolled: int = maxi(perception + investigation, 1)
+	var def_kept: int = maxi(perception, 1)
+	var defense_result: Dictionary = dice_engine.roll_and_keep(def_rolled, def_kept)
+	var defense_total: int = defense_result.get("total", 0)
+
+	var success: bool = attack_total > defense_total
+	return {
+		"success": success,
+		"roll_total": attack_total,
+		"tn": defense_total,
+		"margin": attack_total - defense_total,
+		"detection_risk": true,
+		"effect": "witness_killed" if success else "kill_attempt_failed",
+		"witness_id": victim.character_id,
+		"concealment_tn": attack_total if success else 0,
 	}
 
 
@@ -1101,9 +1292,10 @@ static func _get_tn_for_action(
 	action: NPCDataStructures.ScoredAction,
 	ctx: NPCDataStructures.ContextSnapshot,
 	worship_province_malus: Dictionary = {},
+	character: L5RCharacterData = null,
 ) -> int:
 	if action_id in SOCIAL_ACTIONS:
-		return _get_social_tn(action, ctx)
+		return _get_social_tn(action, ctx, character)
 	if action_id in COVERT_ACTIONS:
 		return COVERT_BASE_TN
 	if action_id in MILITARY_ORDERS:
@@ -1113,12 +1305,16 @@ static func _get_tn_for_action(
 	if action_id in INTELLIGENCE_ACTIONS:
 		var intel_modifier: int = absi(int(worship_province_malus.get("intelligence_roll_modifier", 0)))
 		return SOCIAL_BASE_TN + intel_modifier
+	if action_id == "PUBLIC_ATONEMENT":
+		var tier: int = action.metadata.get("offense_tier", 3)
+		return HonorGlorySystem.ATONEMENT_TN_BY_TIER.get(tier, 20)
 	return SOCIAL_BASE_TN
 
 
 static func _get_social_tn(
 	action: NPCDataStructures.ScoredAction,
 	ctx: NPCDataStructures.ContextSnapshot,
+	character: L5RCharacterData = null,
 ) -> int:
 	var tn: int = SOCIAL_BASE_TN
 	var target_disp: int = ctx.dispositions.get(action.target_npc_id, 0)
@@ -1136,6 +1332,10 @@ static func _get_social_tn(
 	elif target_disp >= 31:
 		tn -= 5   # Friend: 1 Free Raise
 
+	if character != null and action.action_id in ["PUBLIC_DECLARATION", "OFFER_FAVOR"]:
+		var honor_mod: int = HonorGlorySystem.get_court_honor_modifier(character)
+		tn -= honor_mod * 5
+
 	return maxi(tn, 5)
 
 
@@ -1150,7 +1350,12 @@ static func _apply_effects(
 	var effects: Dictionary = {}
 	var action_id: String = action.action_id
 
-	if result["success"]:
+	if action_id == "PUBLIC_ATONEMENT":
+		effects = _compute_atonement_effects(action, result)
+		var offense_key: String = action.metadata.get("offense_key", "")
+		if not offense_key.is_empty():
+			HonorGlorySystem.record_atonement(_character, offense_key)
+	elif result["success"]:
 		if action_id in SOCIAL_ACTIONS:
 			effects = _compute_social_effects(action_id, result["margin"])
 		elif action_id in COVERT_ACTIONS:
@@ -1879,14 +2084,44 @@ static func _compute_self_effects(action_id: String) -> Dictionary:
 			return {"effect": "letter_sent"}
 		"PERFORM_RITUAL", "PERFORM_WORSHIP":
 			return {"effect": "ritual_completed", "honor_change": 0.1}
-		"PUBLIC_ATONEMENT":
-			# GDD s4.6: Tier 4=+0.3, Tier 3=+0.5, Tier 2=+0.8, Tier 1=+1.0
-			return {"effect": "atonement_performed", "honor_change": 0.5, "honor_tier_dependent": true}
 		"MENTOR":
 			return {"effect": "student_trained"}
 		"OBSERVE_COURT_ATTENDEES":
 			return {"effect": "court_observed", "info_gained": true}  # fallback — should not reach here
 	return {"effect": "self_action_completed"}
+
+
+static func _compute_atonement_effects(
+	action: NPCDataStructures.ScoredAction,
+	result: Dictionary,
+) -> Dictionary:
+	var tier: int = action.metadata.get("offense_tier", 3)
+	var margin: int = result.get("margin", 0)
+	var success: bool = result.get("success", false)
+	if success:
+		var raises: int = maxi(int(margin / 5.0), 0)
+		var honor_gain: float = HonorGlorySystem.ATONEMENT_HONOR_BY_TIER.get(tier, 0.5)
+		honor_gain += float(raises) * HonorGlorySystem.ATONEMENT_HONOR_PER_RAISE
+		return {
+			"effect": "atonement_performed",
+			"honor_change": honor_gain,
+			"glory_change": HonorGlorySystem.ATONEMENT_GLORY_LOSS,
+			"offense_tier": tier,
+		}
+	if margin <= -10:
+		return {
+			"effect": "atonement_critical_failure",
+			"failed": true,
+			"honor_change": HonorGlorySystem.ATONEMENT_CRITICAL_FAIL_HONOR_LOSS,
+			"glory_change": HonorGlorySystem.ATONEMENT_CRITICAL_FAIL_GLORY_LOSS,
+			"offense_tier": tier,
+		}
+	return {
+		"effect": "atonement_failed",
+		"failed": true,
+		"glory_change": HonorGlorySystem.ATONEMENT_GLORY_LOSS,
+		"offense_tier": tier,
+	}
 
 
 static func _compute_failure_effects(action_id: String, margin: int = 0) -> Dictionary:
@@ -1974,20 +2209,170 @@ static func _validate_military_order(
 	return {"valid": true}
 
 
+# -- EXAMINE_CRIME_SCENE (s57.15, s11.3.13) ------------------------------------
+
+static func _execute_examine_crime_scene(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	dice_engine: DiceEngine,
+	crime_records: Array[CrimeRecord],
+) -> Dictionary:
+	var case_id: int = action.metadata.get("case_id", -1)
+	var record: CrimeRecord = _find_crime_record(case_id, crime_records)
+
+	if record == null:
+		return {
+			"success": false,
+			"action_id": "EXAMINE_CRIME_SCENE",
+			"character_id": character.character_id,
+			"target_npc_id": action.target_npc_id,
+			"target_province_id": action.target_province_id,
+			"ic_day": ctx.ic_day,
+			"season": ctx.season,
+			"reason": "no_crime_record",
+			"effects": {},
+		}
+
+	var exam_result: Dictionary = InvestigationSystem.examine_scene(
+		character, record, dice_engine, ctx.ic_day
+	)
+
+	return {
+		"success": exam_result.get("success", false),
+		"action_id": "EXAMINE_CRIME_SCENE",
+		"character_id": character.character_id,
+		"target_npc_id": action.target_npc_id,
+		"target_province_id": action.target_province_id,
+		"ic_day": ctx.ic_day,
+		"season": ctx.season,
+		"effects": {
+			"effect": "scene_examined",
+			"case_id": case_id,
+			"evidence_gained": exam_result.get("evidence_gained", 0),
+			"suspect_found": exam_result.get("suspect_found", -1),
+			"raises": exam_result.get("raises", 0),
+			"threshold_crossed": exam_result.get("threshold_crossed", ""),
+		},
+	}
+
+
+static func _find_crime_record(
+	case_id: int,
+	crime_records: Array[CrimeRecord],
+) -> CrimeRecord:
+	if case_id < 0:
+		return null
+	for record: CrimeRecord in crime_records:
+		if record.case_id == case_id:
+			return record
+	return null
+
+
+# -- Flee Jurisdiction ---------------------------------------------------------
+
+static func _execute_flee_jurisdiction(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> Dictionary:
+	return {
+		"success": true,
+		"action_id": "FLEE_JURISDICTION",
+		"character_id": character.character_id,
+		"target_npc_id": action.target_npc_id,
+		"target_province_id": action.target_province_id,
+		"ic_day": ctx.ic_day,
+		"season": ctx.season,
+		"effects": {
+			"effect": "flee_jurisdiction",
+			"fugitive_id": character.character_id,
+		},
+	}
+
+
+static func _execute_seppuku_response(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+) -> Dictionary:
+	var case_id: int = action.metadata.get("case_id", -1)
+	return {
+		"success": true,
+		"action_id": action.action_id,
+		"character_id": character.character_id,
+		"effects": {
+			"case_id": case_id,
+			"accepted": action.action_id == "ACCEPT_SEPPUKU",
+		},
+	}
+
+
+# -- Extort Accused (corrupt magistrate path) ---------------------------------
+
+static func _execute_extort_accused(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	dice_engine: DiceEngine,
+	characters_by_id: Dictionary,
+) -> Dictionary:
+	var suspect: L5RCharacterData = characters_by_id.get(action.target_npc_id)
+	if suspect == null:
+		return {
+			"success": false,
+			"action_id": "EXTORT_ACCUSED",
+			"character_id": character.character_id,
+			"target_npc_id": action.target_npc_id,
+			"target_province_id": action.target_province_id,
+			"ic_day": ctx.ic_day,
+			"season": ctx.season,
+			"reason": "no_target",
+			"effects": {},
+		}
+
+	var intimidation: int = character.skills.get("Intimidation", 0)
+	var willpower_mag: int = character.willpower if character.willpower > 0 else 2
+	var kept_mag: int = maxi(willpower_mag, 1)
+	var rolled_mag: int = maxi(intimidation + willpower_mag, 1)
+
+	var etiquette: int = suspect.skills.get("Etiquette", 0)
+	var willpower_sus: int = suspect.willpower if suspect.willpower > 0 else 2
+	var honor_bonus: int = HonorGlorySystem.get_honor_rank(suspect) * 5
+	var def_rolled: int = maxi(etiquette + willpower_sus, 1)
+	var def_kept: int = maxi(willpower_sus, 1)
+	var defense_result: Dictionary = dice_engine.roll_and_keep(def_rolled, def_kept)
+	var tn: int = defense_result.get("total", 0) + honor_bonus
+
+	var roll: Dictionary = dice_engine.roll_and_keep(rolled_mag, kept_mag)
+	var total: int = roll.get("total", 0)
+	var success: bool = total >= tn
+
+	var effects: Dictionary = {
+		"effect": "extortion_attempt",
+		"suspect_id": action.target_npc_id,
+		"magistrate_id": character.character_id,
+		"suppress_case": success,
+	}
+
+	return {
+		"success": success,
+		"action_id": "EXTORT_ACCUSED",
+		"character_id": character.character_id,
+		"target_npc_id": action.target_npc_id,
+		"target_province_id": action.target_province_id,
+		"ic_day": ctx.ic_day,
+		"season": ctx.season,
+		"skill_used": "Intimidation",
+		"roll_total": total,
+		"tn": tn,
+		"margin": total - tn,
+		"effects": effects,
+	}
+
+
 # -- Intelligence Effects (s57.15) --------------------------------------------
 
-static func _compute_intelligence_effects(action_id: String, margin: int) -> Dictionary:
-	match action_id:
-		"EXAMINE_CRIME_SCENE":
-			var raises: int = int(margin / 5.0)
-			var evidence: int = InvestigationSystem.EVIDENCE_BASE_WEIGHT \
-				+ (raises * InvestigationSystem.EVIDENCE_PER_RAISE)
-			return {
-				"effect": "scene_examined",
-				"info_gained": true,
-				"evidence_gained": evidence,
-				"raises": raises,
-			}
+static func _compute_intelligence_effects(action_id: String, _margin: int) -> Dictionary:
 	return {"effect": "intelligence_action"}
 
 
@@ -2337,6 +2722,19 @@ static func _get_winter_court_skill_bonus(
 	return WinterCourtSystem.HOST_SKILL_BONUS
 
 
+static func _get_doshin_bonus(action_id: String, bonus_value: int) -> int:
+	if bonus_value <= 0:
+		return 0
+	if action_id in _DOSHIN_ELIGIBLE_ACTIONS:
+		return bonus_value
+	return 0
+
+
+const _DOSHIN_ELIGIBLE_ACTIONS: Array[String] = [
+	"EXAMINE_CRIME_SCENE", "INVESTIGATE_PROVINCE", "PROBE",
+]
+
+
 # -- Construction Intercepts ---------------------------------------------------
 
 const _CONSTRUCTION_ACTIONS: Array[String] = [
@@ -2427,6 +2825,10 @@ static func _execute_contested_court_action(
 			d_trait_val, d_skill_rank, 0
 		).get("total", 0)
 
+	if action_id == "OFFER_FAVOR":
+		var honor_mod: int = HonorGlorySystem.get_court_honor_modifier(character)
+		attacker_roll += honor_mod * 5
+
 	var margin: int = attacker_roll - defender_roll
 	var raises: int = maxi(int(margin / 5.0), 0)
 	var has_topic: bool = action.metadata.get("has_topic", false)
@@ -2450,11 +2852,11 @@ static func _execute_contested_court_action(
 			)
 		"IMPRESS":
 			resolution = CourtActionSystem.resolve_impress(
-				attacker_roll, defender_roll, raises
+				attacker_roll, defender_roll, raises, has_topic
 			)
 		"LISTEN_REFLECT":
 			resolution = CourtActionSystem.resolve_listen_reflect(
-				attacker_roll, defender_roll, raises
+				attacker_roll, defender_roll, raises, has_topic
 			)
 		"OFFER_FAVOR":
 			resolution = CourtActionSystem.resolve_offer_favor(
@@ -2843,11 +3245,15 @@ static func _execute_probe(
 		attacker_roll, defender_roll, dice_engine
 	)
 
+	var margin: int = attacker_roll - defender_roll
+	var quality: int = maxi(int(margin / 5.0), 1) if margin > 0 else 1
+
 	var effects: Dictionary = {}
 	if resolution.get("success", false):
 		effects["info_gained"] = true
 		effects["info_types"] = resolution.get("info_types", [])
 		effects["info_count"] = resolution.get("info_count", 0)
+		effects["quality"] = quality
 		if resolution.get("partial", false):
 			effects["partial"] = true
 		effects["detected"] = true
@@ -2868,7 +3274,7 @@ static func _execute_probe(
 		"skill_used": "Courtier",
 		"roll_total": attacker_roll,
 		"tn": defender_roll,
-		"margin": attacker_roll - defender_roll,
+		"margin": margin,
 		"effects": effects,
 	}
 

@@ -69,7 +69,7 @@ func test_examine_scene_high_raises_identifies_suspect() -> void:
 		assert_true(5 in cr.known_suspects)
 
 
-func test_examine_scene_elapsed_time_reduces_evidence() -> void:
+func test_examine_scene_elapsed_time_increases_difficulty() -> void:
 	var mag := _make_magistrate(5)
 	var cr_fresh := _make_crime_record(10, 10)
 	var cr_old := _make_crime_record(10, 0)
@@ -78,7 +78,8 @@ func test_examine_scene_elapsed_time_reduces_evidence() -> void:
 	_dice.set_seed(42)
 	var result_old: Dictionary = InvestigationSystem.examine_scene(mag, cr_old, _dice, 10)
 	if result_fresh["success"] and result_old["success"]:
-		assert_true(result_fresh["evidence_gained"] >= result_old["evidence_gained"])
+		assert_true(result_fresh["evidence_gained"] >= result_old["evidence_gained"],
+			"Fresh scene should yield same or more evidence than old scene")
 
 
 func test_examine_scene_uses_concealment_tn() -> void:
@@ -250,7 +251,7 @@ func _make_crime_topic(case_id: int, topic_id: int = 100) -> TopicData:
 func test_activate_uphold_law_sets_active_case() -> void:
 	var mag := _make_magistrate()
 	mag.physical_location = "castle_crane"
-	var cr := _make_crime_record()
+	var cr := _make_crime_record(15, 42)
 	cr.witnesses = [10, 20]
 	var standing: Dictionary = {"need_type": "UPHOLD_LAW"}
 	var result: Dictionary = InvestigationSystem.activate_uphold_law(mag, cr, standing)
@@ -258,6 +259,8 @@ func test_activate_uphold_law_sets_active_case() -> void:
 	assert_eq(result["crime_location"], "castle_crane")
 	assert_eq(result["witness_pool"].size(), 2)
 	assert_false(result["scene_examined"])
+	assert_eq(result["scene_exam_count"], 0)
+	assert_eq(result["ic_day_committed"], 42)
 	assert_eq(cr.investigating_magistrate_id, mag.character_id)
 	assert_eq(cr.legal_status, Enums.LegalStatus.UNDER_INVESTIGATION)
 	assert_true(standing.has("active_case"))
@@ -492,3 +495,586 @@ func test_find_crime_record_wrong_type() -> void:
 	var records: Array[CrimeRecord] = [cr]
 	var found: CrimeRecord = InvestigationSystem.find_crime_record_for_topic(topic, records)
 	assert_null(found)
+
+
+# -- Evidence Thresholds (s11.3.13f) -------------------------------------------
+
+func test_accusation_threshold_transitions_status() -> void:
+	var cr := _make_crime_record()
+	cr.evidence_total = 39
+	var result: String = InvestigationSystem.add_evidence(cr, 5)
+	assert_eq(result, "accusation")
+	assert_eq(cr.legal_status, Enums.LegalStatus.ACCUSED)
+	assert_eq(cr.evidence_total, 44)
+
+
+func test_bribery_eval_trigger() -> void:
+	var cr := _make_crime_record()
+	cr.evidence_total = 20
+	var result: String = InvestigationSystem.add_evidence(cr, 6)
+	assert_eq(result, "bribery_eval")
+	assert_eq(cr.evidence_total, 26)
+
+
+func test_below_bribery_trigger_returns_empty() -> void:
+	var cr := _make_crime_record()
+	cr.evidence_total = 10
+	var result: String = InvestigationSystem.add_evidence(cr, 5)
+	assert_eq(result, "")
+
+
+func test_accusation_does_not_re_trigger_if_already_accused() -> void:
+	var cr := _make_crime_record()
+	cr.evidence_total = 45
+	cr.legal_status = Enums.LegalStatus.ACCUSED
+	var result: String = InvestigationSystem.check_thresholds(cr)
+	assert_eq(result, "")
+
+
+func test_accusation_does_not_re_trigger_if_convicted() -> void:
+	var cr := _make_crime_record()
+	cr.evidence_total = 50
+	cr.legal_status = Enums.LegalStatus.DECREED_GUILTY
+	var result: String = InvestigationSystem.check_thresholds(cr)
+	assert_eq(result, "")
+
+
+# -- Scene Time Penalty (s11.3.13d) --------------------------------------------
+
+func test_scene_penalty_same_day() -> void:
+	assert_eq(InvestigationSystem.get_scene_time_penalty(0), 0)
+
+
+func test_scene_penalty_same_week() -> void:
+	assert_eq(InvestigationSystem.get_scene_time_penalty(5), 2)
+
+
+func test_scene_penalty_same_month() -> void:
+	assert_eq(InvestigationSystem.get_scene_time_penalty(20), 5)
+
+
+func test_scene_penalty_previous_month() -> void:
+	assert_eq(InvestigationSystem.get_scene_time_penalty(45), 10)
+
+
+func test_scene_penalty_approaching_season() -> void:
+	assert_eq(InvestigationSystem.get_scene_time_penalty(80), 15)
+
+
+func test_scene_penalty_beyond_season() -> void:
+	assert_eq(InvestigationSystem.get_scene_time_penalty(100), 99)
+
+
+func test_scene_too_old() -> void:
+	assert_false(InvestigationSystem.is_scene_too_old(89))
+	assert_true(InvestigationSystem.is_scene_too_old(91))
+
+
+# -- Witness Recall TN (s11.3.13b) ---------------------------------------------
+
+func test_recall_tn_same_day() -> void:
+	assert_eq(InvestigationSystem.get_witness_recall_tn(0), 10)
+
+
+func test_recall_tn_same_month() -> void:
+	assert_eq(InvestigationSystem.get_witness_recall_tn(15), 15)
+
+
+func test_recall_tn_previous_month() -> void:
+	assert_eq(InvestigationSystem.get_witness_recall_tn(45), 20)
+
+
+func test_recall_tn_two_months() -> void:
+	assert_eq(InvestigationSystem.get_witness_recall_tn(75), 25)
+
+
+func test_recall_tn_approaching_season() -> void:
+	assert_eq(InvestigationSystem.get_witness_recall_tn(88), 30)
+
+
+func test_recall_too_old_returns_negative() -> void:
+	assert_eq(InvestigationSystem.get_witness_recall_tn(100), -1)
+
+
+func test_recall_too_old_check() -> void:
+	assert_false(InvestigationSystem.is_recall_too_old(89))
+	assert_true(InvestigationSystem.is_recall_too_old(91))
+
+
+# -- Additional Evidence Sources (s11.3.13f) -----------------------------------
+
+func test_failed_bribe_evidence() -> void:
+	var cr := _make_crime_record()
+	InvestigationSystem.add_failed_bribe_evidence(cr)
+	assert_eq(cr.evidence_total, 15)
+
+
+func test_false_alibi_evidence() -> void:
+	var cr := _make_crime_record()
+	InvestigationSystem.add_false_alibi_evidence(cr)
+	assert_eq(cr.evidence_total, 10)
+
+
+func test_kitsuki_eye_evidence() -> void:
+	var cr := _make_crime_record()
+	InvestigationSystem.add_kitsuki_eye_evidence(cr)
+	assert_eq(cr.evidence_total, 15)
+
+
+func test_confession_evidence_reaches_accusation() -> void:
+	var cr := _make_crime_record()
+	var result: String = InvestigationSystem.add_confession_evidence(cr)
+	assert_eq(cr.evidence_total, 50)
+	assert_eq(result, "accusation")
+	assert_eq(cr.legal_status, Enums.LegalStatus.ACCUSED)
+
+
+func test_murder_weapon_evidence_reaches_accusation() -> void:
+	var cr := _make_crime_record()
+	var result: String = InvestigationSystem.add_murder_weapon_evidence(cr)
+	assert_eq(cr.evidence_total, 40)
+	assert_eq(result, "accusation")
+
+
+func test_co_conspirator_evidence_clamped() -> void:
+	var cr := _make_crime_record()
+	InvestigationSystem.add_co_conspirator_evidence(cr, 0)
+	assert_eq(cr.evidence_total, InvestigationSystem.EVIDENCE_CO_CONSPIRATOR_MIN)
+
+
+func test_co_conspirator_evidence_high_quality() -> void:
+	var cr := _make_crime_record()
+	InvestigationSystem.add_co_conspirator_evidence(cr, 10)
+	assert_eq(cr.evidence_total, InvestigationSystem.EVIDENCE_CO_CONSPIRATOR_MAX)
+
+
+func test_intercepted_letter_evidence_scales() -> void:
+	var cr := _make_crime_record()
+	InvestigationSystem.add_intercepted_letter_evidence(cr, 2)
+	assert_eq(cr.evidence_total, 40)
+
+
+func test_intercepted_letter_evidence_clamped_max() -> void:
+	var cr := _make_crime_record()
+	InvestigationSystem.add_intercepted_letter_evidence(cr, 10)
+	assert_eq(cr.evidence_total, InvestigationSystem.EVIDENCE_INTERCEPTED_LETTER_MAX)
+
+
+# -- Scene Evidence by Margin (s11.3.13d) --------------------------------------
+
+func test_scene_evidence_minor_traces() -> void:
+	var evidence: int = InvestigationSystem._scene_evidence_by_margin(3)
+	assert_eq(evidence, InvestigationSystem.SCENE_EVIDENCE_MINOR)
+
+
+func test_scene_evidence_significant() -> void:
+	var evidence: int = InvestigationSystem._scene_evidence_by_margin(7)
+	assert_eq(evidence, InvestigationSystem.SCENE_EVIDENCE_SIGNIFICANT)
+
+
+func test_scene_evidence_major() -> void:
+	var evidence: int = InvestigationSystem._scene_evidence_by_margin(12)
+	assert_eq(evidence, InvestigationSystem.SCENE_EVIDENCE_MAJOR)
+
+
+# -- Examine Scene with New Evidence Values ------------------------------------
+
+func test_examine_scene_returns_threshold_crossed() -> void:
+	var mag := _make_magistrate(5)
+	mag.perception = 5
+	var cr := _make_crime_record(5, 0)
+	cr.evidence_total = 35
+	_dice.set_seed(7)
+	var result: Dictionary = InvestigationSystem.examine_scene(mag, cr, _dice, 0)
+	if result["success"]:
+		assert_true(result.has("threshold_crossed"))
+
+
+func test_examine_scene_open_killing_concealment_zero() -> void:
+	var mag := _make_magistrate(3)
+	var cr := _make_crime_record(0, 0)
+	_dice.set_seed(42)
+	var result: Dictionary = InvestigationSystem.examine_scene(mag, cr, _dice, 0)
+	assert_true(result["success"])
+	assert_true(result["evidence_gained"] >= InvestigationSystem.SCENE_EVIDENCE_MINOR)
+
+
+# -- Accusation Topic Generation -----------------------------------------------
+
+func test_generate_accusation_topic_creates_valid_topic() -> void:
+	var cr := _make_crime_record(15, 0)
+	cr.crime_type = Enums.CrimeType.VIOLENCE
+	var accused := L5RCharacterData.new()
+	accused.character_id = 5
+	accused.character_name = "Bayushi Koro"
+	accused.clan = "Scorpion"
+	accused.family = "Bayushi"
+	var next_id: Array[int] = [100]
+
+	var topic: TopicData = InvestigationSystem.generate_accusation_topic(
+		cr, accused, next_id, 50
+	)
+	assert_not_null(topic)
+	assert_eq(topic.topic_id, 100)
+	assert_eq(next_id[0], 101)
+	assert_eq(topic.tier, TopicData.Tier.TIER_3)
+	assert_eq(topic.category, TopicData.Category.POLITICAL)
+	assert_true(topic.title.contains("Bayushi Koro"))
+	assert_true(topic.title.contains("Violence"))
+	assert_eq(topic.slug, "accusation_1")
+	assert_eq(topic.subject_role, "PERPETRATOR")
+
+
+func test_generate_accusation_topic_uses_crime_name() -> void:
+	var cr := _make_crime_record(15, 0)
+	cr.crime_type = Enums.CrimeType.TREASON
+	var accused := L5RCharacterData.new()
+	accused.character_id = 5
+	accused.character_name = "Shosuro Mei"
+	accused.clan = "Scorpion"
+	accused.family = "Shosuro"
+	var next_id: Array[int] = [200]
+
+	var topic: TopicData = InvestigationSystem.generate_accusation_topic(
+		cr, accused, next_id, 75
+	)
+	assert_not_null(topic)
+	assert_true(topic.title.contains("Treason"))
+
+
+func test_accusation_threshold_triggers_on_evidence_40() -> void:
+	var cr := _make_crime_record(15, 0)
+	cr.evidence_total = 39
+	cr.legal_status = Enums.LegalStatus.UNDER_INVESTIGATION
+	var threshold: String = InvestigationSystem.add_evidence(cr, 5)
+	assert_eq(threshold, "accusation")
+	assert_eq(cr.legal_status, Enums.LegalStatus.ACCUSED)
+	assert_eq(cr.evidence_total, 44)
+
+
+func test_accusation_threshold_not_re_triggered_if_already_accused() -> void:
+	var cr := _make_crime_record(15, 0)
+	cr.evidence_total = 45
+	cr.legal_status = Enums.LegalStatus.ACCUSED
+	var threshold: String = InvestigationSystem.add_evidence(cr, 5)
+	assert_eq(threshold, "")
+	assert_eq(cr.legal_status, Enums.LegalStatus.ACCUSED)
+
+
+# -- Bribery Attempt Topic (T3-15) ------------------------------------------------
+
+func test_generate_bribery_attempt_topic() -> void:
+	var suspect := L5RCharacterData.new()
+	suspect.character_id = 5
+	suspect.character_name = "Shosuro Hametsu"
+	suspect.clan = "Scorpion"
+	suspect.family = "Shosuro"
+
+	var magistrate := L5RCharacterData.new()
+	magistrate.character_id = 20
+	magistrate.character_name = "Kitsuki Kaagi"
+
+	var cr := _make_crime_record(15, 0)
+	cr.crime_type = Enums.CrimeType.SKIMMING
+	var next_id: Array[int] = [300]
+
+	var topic: TopicData = InvestigationSystem.generate_bribery_attempt_topic(
+		suspect, magistrate, cr, next_id, 100
+	)
+	assert_not_null(topic)
+	assert_eq(topic.topic_id, 300)
+	assert_eq(next_id[0], 301)
+	assert_eq(topic.tier, TopicData.Tier.TIER_3)
+	assert_eq(topic.category, TopicData.Category.POLITICAL)
+	assert_true(topic.title.contains("Shosuro Hametsu"))
+	assert_true(topic.title.contains("Kitsuki Kaagi"))
+	assert_eq(topic.slug, "bribery_attempt_1")
+
+
+# -- Fugitive Topic (T3-12) -------------------------------------------------------
+
+func test_generate_fugitive_topic() -> void:
+	var fugitive := L5RCharacterData.new()
+	fugitive.character_id = 7
+	fugitive.character_name = "Ikoma Tsuko"
+	fugitive.clan = "Lion"
+	fugitive.family = "Ikoma"
+
+	var next_id: Array[int] = [400]
+
+	var topic: TopicData = InvestigationSystem.generate_fugitive_topic(
+		fugitive, next_id, 200
+	)
+	assert_not_null(topic)
+	assert_eq(topic.topic_id, 400)
+	assert_eq(next_id[0], 401)
+	assert_eq(topic.tier, TopicData.Tier.TIER_3)
+	assert_eq(topic.category, TopicData.Category.POLITICAL)
+	assert_true(topic.title.contains("Ikoma Tsuko"))
+	assert_eq(topic.slug, "fugitive_7")
+
+
+# -- Alibi checking -----------------------------------------------------------
+
+func _make_alibi_witness(sid: int = 10, sincerity: int = 3, awa: int = 3) -> L5RCharacterData:
+	var c := L5RCharacterData.new()
+	c.character_id = sid
+	c.character_name = "Witness"
+	c.skills = {"Sincerity": sincerity}
+	c.emphases = {}
+	c.awareness = awa
+	c.perception = 2
+	return c
+
+
+func _make_alibi_objective(suspect_id: int = 5) -> Dictionary:
+	return {
+		"case_id": 1,
+		"crime_location": "castle_crane",
+		"evidence_total": 20,
+		"known_suspects": [suspect_id],
+		"alibis": [
+			{"id": 1, "suspect_id": suspect_id, "claimed_with": 10, "genuine": true},
+		],
+		"checked_alibis": [],
+		"unresolved_leads": [],
+	}
+
+
+func test_alibi_genuine_clears_suspect() -> void:
+	var mag := _make_magistrate()
+	var witness := _make_alibi_witness()
+	var cr := _make_crime_record()
+	cr.evidence_total = 20
+	var obj := _make_alibi_objective()
+	var alibi: Dictionary = obj["alibis"][0]
+
+	var result: Dictionary = InvestigationSystem.check_alibi(
+		alibi, witness, mag, cr, obj, _dice,
+	)
+	assert_true(result["genuine"])
+	assert_eq(result["evidence_change"], -InvestigationSystem.ALIBI_GENUINE_WEIGHT)
+	assert_eq(result["suspect_cleared"], 5)
+	assert_eq(cr.evidence_total, 20 - InvestigationSystem.ALIBI_GENUINE_WEIGHT)
+	assert_true(1 in obj["checked_alibis"])
+
+
+func test_alibi_false_adds_evidence() -> void:
+	var mag := _make_magistrate()
+	var witness := _make_alibi_witness()
+	var cr := _make_crime_record()
+	cr.evidence_total = 10
+	var obj := _make_alibi_objective()
+	obj["alibis"] = [{"id": 2, "suspect_id": 5, "claimed_with": 10, "genuine": false}]
+	var alibi: Dictionary = obj["alibis"][0]
+
+	var result: Dictionary = InvestigationSystem.check_alibi(
+		alibi, witness, mag, cr, obj, _dice,
+	)
+	assert_false(result["genuine"])
+	assert_eq(result["evidence_change"], InvestigationSystem.ALIBI_FALSE_EVIDENCE)
+	assert_eq(cr.evidence_total, 10 + InvestigationSystem.ALIBI_FALSE_EVIDENCE)
+	assert_true(2 in obj["checked_alibis"])
+
+
+func test_alibi_co_conspirator_detected() -> void:
+	var mag := _make_magistrate(5)
+	mag.perception = 5
+	var witness := _make_alibi_witness(10, 1, 1)
+	var cr := _make_crime_record()
+	cr.evidence_total = 10
+	var obj := _make_alibi_objective()
+	obj["alibis"] = [{"id": 3, "suspect_id": 5, "claimed_with": 10, "genuine": false, "co_conspirator": true}]
+	var alibi: Dictionary = obj["alibis"][0]
+
+	_dice.set_seed(42)
+	var result: Dictionary = InvestigationSystem.check_alibi(
+		alibi, witness, mag, cr, obj, _dice,
+	)
+	if result.get("co_conspirator_exposed", false):
+		assert_eq(result["co_conspirator_id"], 10)
+		assert_eq(result["evidence_change"], InvestigationSystem.ALIBI_FALSE_EVIDENCE)
+	elif result.get("co_conspirator_passed", false):
+		assert_eq(result["evidence_change"], 0)
+
+
+func test_alibi_co_conspirator_passes_deceit() -> void:
+	var mag := _make_magistrate(1)
+	mag.perception = 1
+	var witness := _make_alibi_witness(10, 5, 5)
+	var cr := _make_crime_record()
+	cr.evidence_total = 10
+	var obj := _make_alibi_objective()
+	obj["alibis"] = [{"id": 4, "suspect_id": 5, "claimed_with": 10, "genuine": false, "co_conspirator": true}]
+	var alibi: Dictionary = obj["alibis"][0]
+
+	_dice.set_seed(42)
+	var result: Dictionary = InvestigationSystem.check_alibi(
+		alibi, witness, mag, cr, obj, _dice,
+	)
+	if result.get("co_conspirator_passed", false):
+		assert_eq(result["evidence_change"], 0)
+		assert_eq(cr.evidence_total, 10)
+	elif result.get("co_conspirator_exposed", false):
+		assert_true(result["evidence_change"] > 0)
+
+
+func test_alibi_already_checked_skipped() -> void:
+	var mag := _make_magistrate()
+	var witness := _make_alibi_witness()
+	var cr := _make_crime_record()
+	var obj := _make_alibi_objective()
+	obj["checked_alibis"] = [1]
+	var alibi: Dictionary = obj["alibis"][0]
+
+	var result: Dictionary = InvestigationSystem.check_alibi(
+		alibi, witness, mag, cr, obj, _dice,
+	)
+	assert_true(result.get("already_checked", false))
+
+
+# -- Lead generation ----------------------------------------------------------
+
+func test_leads_quality_3_reveals_perpetrator() -> void:
+	var cr := _make_crime_record()
+	cr.perpetrator_id = 5
+	cr.known_suspects = []
+	var obj: Dictionary = {"unresolved_leads": []}
+	var present: Array[int] = []
+
+	var leads: Array[Dictionary] = InvestigationSystem.generate_leads_from_probe(
+		10, 3, cr, obj, present,
+	)
+	assert_eq(leads.size(), 1)
+	assert_eq(leads[0]["target_npc_id"], 5)
+	assert_eq(leads[0]["priority"], 3)
+	assert_eq(leads[0]["source"], "probe_testimony")
+	assert_eq(obj["unresolved_leads"].size(), 1)
+
+
+func test_leads_quality_2_no_perpetrator_reveal() -> void:
+	var cr := _make_crime_record()
+	cr.perpetrator_id = 5
+	cr.known_suspects = []
+	var obj: Dictionary = {"unresolved_leads": []}
+	var present: Array[int] = []
+
+	var leads: Array[Dictionary] = InvestigationSystem.generate_leads_from_probe(
+		10, 2, cr, obj, present,
+	)
+	assert_eq(leads.size(), 0)
+
+
+func test_leads_quality_2_reveals_present_characters() -> void:
+	var cr := _make_crime_record()
+	cr.perpetrator_id = 5
+	cr.known_suspects = [5]
+	cr.witnesses = [10]
+	var obj: Dictionary = {"unresolved_leads": []}
+	var present: Array[int] = [15, 20]
+
+	var leads: Array[Dictionary] = InvestigationSystem.generate_leads_from_probe(
+		10, 2, cr, obj, present,
+	)
+	assert_eq(leads.size(), 2)
+	assert_eq(leads[0]["target_npc_id"], 15)
+	assert_eq(leads[1]["target_npc_id"], 20)
+	assert_eq(leads[0]["source"], "mentioned_by_witness")
+
+
+func test_leads_skips_target_and_known() -> void:
+	var cr := _make_crime_record()
+	cr.perpetrator_id = 5
+	cr.known_suspects = [5]
+	cr.witnesses = [10]
+	var obj: Dictionary = {"unresolved_leads": []}
+	var present: Array[int] = [10, 5, 25]
+
+	var leads: Array[Dictionary] = InvestigationSystem.generate_leads_from_probe(
+		10, 2, cr, obj, present,
+	)
+	assert_eq(leads.size(), 1)
+	assert_eq(leads[0]["target_npc_id"], 25)
+
+
+func test_leads_deduplicates_existing() -> void:
+	var cr := _make_crime_record()
+	cr.perpetrator_id = 5
+	cr.known_suspects = []
+	var obj: Dictionary = {
+		"unresolved_leads": [{"type": "witness", "target_npc_id": 5, "priority": 3}],
+	}
+	var present: Array[int] = []
+
+	var leads: Array[Dictionary] = InvestigationSystem.generate_leads_from_probe(
+		10, 3, cr, obj, present,
+	)
+	assert_eq(leads.size(), 0)
+
+
+func test_leads_quality_1_generates_nothing() -> void:
+	var cr := _make_crime_record()
+	cr.perpetrator_id = 5
+	cr.known_suspects = []
+	var obj: Dictionary = {"unresolved_leads": []}
+	var present: Array[int] = [15, 20]
+
+	var leads: Array[Dictionary] = InvestigationSystem.generate_leads_from_probe(
+		10, 1, cr, obj, present,
+	)
+	assert_eq(leads.size(), 0)
+
+
+func test_leads_perpetrator_already_suspect_skipped() -> void:
+	var cr := _make_crime_record()
+	cr.perpetrator_id = 5
+	cr.known_suspects = [5]
+	var obj: Dictionary = {"unresolved_leads": []}
+	var present: Array[int] = []
+
+	var leads: Array[Dictionary] = InvestigationSystem.generate_leads_from_probe(
+		10, 3, cr, obj, present,
+	)
+	assert_eq(leads.size(), 0)
+
+
+# -- Blood evidence detection --------------------------------------------------
+
+func test_detect_blood_evidence_success() -> void:
+	var mag := _make_magistrate(4)
+	mag.perception = 4
+	var cr := _make_crime_record(10, 70)
+	cr.crime_type = Enums.CrimeType.MAHO
+
+	var result: Dictionary = InvestigationSystem.detect_blood_evidence(
+		mag, cr, _dice, 72,
+	)
+	if result["detected"]:
+		assert_true(result["total"] >= result["tn"])
+	else:
+		assert_true(result["total"] < result["tn"])
+
+
+func test_detect_blood_evidence_expired() -> void:
+	var mag := _make_magistrate(5)
+	mag.perception = 5
+	var cr := _make_crime_record(5, 0)
+	cr.crime_type = Enums.CrimeType.MAHO
+
+	var result: Dictionary = InvestigationSystem.detect_blood_evidence(
+		mag, cr, _dice, 100,
+	)
+	assert_false(result["detected"])
+	assert_eq(result["reason"], "evidence_expired")
+
+
+func test_detect_blood_evidence_time_penalty_applied() -> void:
+	var mag := _make_magistrate(3)
+	mag.perception = 3
+	var cr := _make_crime_record(10, 0)
+	cr.crime_type = Enums.CrimeType.MAHO
+
+	var result: Dictionary = InvestigationSystem.detect_blood_evidence(
+		mag, cr, _dice, 60,
+	)
+	assert_eq(result["tn"], 10 + InvestigationSystem.get_scene_time_penalty(60))

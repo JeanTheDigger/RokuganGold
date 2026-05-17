@@ -62,6 +62,40 @@ func test_primary_sabotage_raid_only() -> void:
 	assert_true(WarJustification.MilitaryTier.RAID in tiers)
 
 
+func test_primary_destroy_army_formal_war() -> void:
+	var tiers: Array = WarJustification.get_objective_tiers("", "DESTROY_ARMY")
+	assert_true(WarJustification.MilitaryTier.FORMAL_WAR in tiers)
+	assert_false(WarJustification.MilitaryTier.RAID in tiers)
+
+
+func test_primary_relieve_siege_all_tiers() -> void:
+	var tiers: Array = WarJustification.get_objective_tiers("", "RELIEVE_SIEGE")
+	assert_eq(tiers.size(), 3)
+
+
+func test_primary_restore_order_raid_only() -> void:
+	var tiers: Array = WarJustification.get_objective_tiers("", "RESTORE_ORDER")
+	assert_eq(tiers.size(), 1)
+	assert_true(WarJustification.MilitaryTier.RAID in tiers)
+
+
+func test_primary_secure_trade_raid_only() -> void:
+	var tiers: Array = WarJustification.get_objective_tiers("", "SECURE_TRADE_ROUTE")
+	assert_eq(tiers.size(), 1)
+	assert_true(WarJustification.MilitaryTier.RAID in tiers)
+
+
+func test_primary_eliminate_character_raid_only() -> void:
+	var tiers: Array = WarJustification.get_objective_tiers("", "ELIMINATE_CHARACTER")
+	assert_eq(tiers.size(), 1)
+	assert_true(WarJustification.MilitaryTier.RAID in tiers)
+
+
+func test_primary_resolve_shadowlands_all_tiers() -> void:
+	var tiers: Array = WarJustification.get_objective_tiers("", "RESOLVE_SHADOWLANDS_INCURSION")
+	assert_eq(tiers.size(), 3)
+
+
 func test_unknown_objective_no_tiers() -> void:
 	var tiers: Array = WarJustification.get_objective_tiers("UNKNOWN", "UNKNOWN")
 	assert_eq(tiers.size(), 0)
@@ -306,6 +340,45 @@ func test_full_sabotage_blocked_by_makoto() -> void:
 	)
 	assert_false(r["justified"])
 	assert_eq(r["step_failed"], 4)
+
+
+func test_gi_blocks_eliminate_character() -> void:
+	var gate: Dictionary = WarJustification.check_personality_gate(
+		WarJustification.MilitaryTier.RAID, "", "ELIMINATE_CHARACTER", "Gi",
+	)
+	assert_true(gate["blocked"])
+	assert_eq(gate["reason"], "gi_makoto_blocks_covert_warfare")
+
+
+func test_makoto_blocks_eliminate_character() -> void:
+	var gate: Dictionary = WarJustification.check_personality_gate(
+		WarJustification.MilitaryTier.RAID, "", "ELIMINATE_CHARACTER", "Makoto",
+	)
+	assert_true(gate["blocked"])
+	assert_eq(gate["reason"], "gi_makoto_blocks_covert_warfare")
+
+
+func test_full_eliminate_character_blocked_by_gi() -> void:
+	var r: Dictionary = WarJustification.evaluate_war_justification(
+		"EXPAND_TERRITORY", "ELIMINATE_CHARACTER", WarJustification.MilitaryTier.RAID, "Gi",
+	)
+	assert_false(r["justified"])
+	assert_eq(r["step_failed"], 4)
+
+
+func test_jin_does_not_block_defend_province() -> void:
+	var gate: Dictionary = WarJustification.check_personality_gate(
+		WarJustification.MilitaryTier.TOTAL_WAR, "", "DEFEND_PROVINCE", "Jin",
+	)
+	assert_false(gate["blocked"])
+
+
+func test_jin_blocks_total_war_seek_vengeance() -> void:
+	var gate: Dictionary = WarJustification.check_personality_gate(
+		WarJustification.MilitaryTier.TOTAL_WAR, "SEEK_VENGEANCE", "", "Jin",
+	)
+	assert_true(gate["blocked"])
+	assert_eq(gate["reason"], "jin_blocks_total_war")
 
 
 func test_eliminate_shadowlands_all_tiers() -> void:

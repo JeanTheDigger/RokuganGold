@@ -13,12 +13,13 @@ const HARVEST_DISP_OTHER_CLANS: int = -10
 const HARVEST_TOPIC_TIER: int = 2
 const HARVEST_TOPIC_MOMENTUM: float = 60.0
 
-const HARVEST_NEVER_VIRTUES: Array[String] = ["Jin", "Gi", "Rei"]
+const HARVEST_NEVER_VIRTUES: Array[String] = ["Jin", "Gi"]
 const HARVEST_CONDITIONAL_VIRTUES: Dictionary = {
 	"Yu": "no_other_path",
 	"Meiyo": "hated_enemy",
 	"Chugi": "lord_commands",
 	"Makoto": "publicly_declared",
+	"Rei": "prior_formal_demand",
 }
 
 const EDICT_HONOR_COST: float = -3.0
@@ -258,6 +259,7 @@ static func evaluate_ai_harvest_decision(
 	hated_enemy: bool = false,
 	lord_commands: bool = false,
 	publicly_declared: bool = false,
+	prior_formal_demand: bool = false,
 ) -> Dictionary:
 	var condition_met: bool = false
 	if is_shourido_virtue(virtue):
@@ -270,5 +272,7 @@ static func evaluate_ai_harvest_decision(
 		condition_met = lord_commands
 	elif virtue == "Makoto":
 		condition_met = publicly_declared
+	elif virtue == "Rei":
+		condition_met = prior_formal_demand
 
 	return can_destroy_harvest(virtue, season, has_army, condition_met)

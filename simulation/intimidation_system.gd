@@ -180,10 +180,10 @@ static func check_compliance_status(
 	return true
 
 
-const WITNESS_VIRTUE_REACTIONS: Array[String] = ["Rei", "Gi", "Meiyo"]
+const WITNESS_VIRTUE_REACTIONS: Array[String] = ["REI", "GI", "MEIYO"]
 
 static func get_witness_reaction(witness_virtue: String) -> int:
-	if witness_virtue in WITNESS_VIRTUE_REACTIONS:
+	if witness_virtue.to_upper() in WITNESS_VIRTUE_REACTIONS:
 		return PUBLIC_WITNESS_DISPOSITION_LOSS
 	return 0
 
@@ -202,8 +202,8 @@ static func generate_betrayal_topic(actor_id: int) -> Dictionary:
 
 static func _disposition_defense_bonus(tier: String) -> int:
 	match tier:
-		"friend", "ally", "sworn":
+		"friend", "trusted_ally", "devoted":
 			return DISPOSITION_FRIEND_BONUS
-		"enemy", "bitter_enemy":
+		"enemy", "blood_enemy":
 			return DISPOSITION_ENEMY_PENALTY
 	return 0

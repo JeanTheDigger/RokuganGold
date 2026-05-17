@@ -24,15 +24,6 @@ const TAX_RATES: Dictionary = {
 	"emperor": 0.15,
 }
 
-# -- Stipend Cascade Rates per GDD s4.3.9 -------------------------------------
-
-const STIPEND_RETENTION: Dictionary = {
-	"clan_champion": 0.40,
-	"family_daimyo": 0.25,
-	"provincial_daimyo": 0.20,
-	"local_daimyo": 0.15,
-}
-
 # -- Population Growth per GDD s4.3.6 -----------------------------------------
 
 const BASELINE_GROWTH_ANNUAL: float = 0.05
@@ -53,6 +44,15 @@ const STARVATION_PU_LOSS: Dictionary = {
 	StarvationStage.HUNGER: 0.08,
 	StarvationStage.FAMINE: 0.20,
 }
+
+# -- Garrison per GDD s4.3.11 -------------------------------------------------
+
+const GARRISON_RATIO: float = 0.05
+const GARRISON_KOKU_MALUS: float = 0.8
+const GARRISON_TRADE_DRAIN_PER_SEASON: float = 0.05
+const GARRISON_TRADE_DRAIN_CAP: float = 0.3
+const GARRISON_RICE_DRAIN_PER_SEASON: float = 0.05
+const GARRISON_STABILITY_PENALTY_PER_SEASON: float = 2.0
 
 # -- Personality Tax Modifiers per GDD s4.3.7 ---------------------------------
 
@@ -226,16 +226,83 @@ static func get_province_rice(
 	return total
 
 
+static func compute_garrison_required(total_pop_pu: int) -> float:
+	return ceilf(float(total_pop_pu) * GARRISON_RATIO * 10.0) / 10.0
+
+
+static func is_under_garrisoned(
+	province: ProvinceData,
+	settlements: Array[SettlementData],
+) -> bool:
+	var pop: int = sum_population_pu(province, settlements)
+	var garrison: int = sum_garrison_pu(province, settlements)
+	return float(garrison) < compute_garrison_required(pop)
+
+
+static func _process_garrison_check(
+	provinces: Array[ProvinceData],
+	settlements: Array[SettlementData],
+	settlement_meta: Dictionary,
+) -> Dictionary:
+	var results: Dictionary = {}
+	var under_seasons: Dictionary = settlement_meta.get("_under_garrison_seasons", {})
+	for prov: ProvinceData in provinces:
+		var pid: int = prov.province_id
+		if is_under_garrisoned(prov, settlements):
+			var seasons: int = under_seasons.get(pid, 0) + 1
+			under_seasons[pid] = seasons
+			var trade_drain: float = minf(
+				float(seasons) * GARRISON_TRADE_DRAIN_PER_SEASON,
+				GARRISON_TRADE_DRAIN_CAP,
+			)
+			for s: SettlementData in settlements:
+				if s.province_id == pid:
+					s.rice_stockpile = maxf(0.0, s.rice_stockpile - GARRISON_RICE_DRAIN_PER_SEASON)
+			prov.stability = maxf(0.0, prov.stability - GARRISON_STABILITY_PENALTY_PER_SEASON)
+			results[pid] = {
+				"under_garrisoned": true,
+				"seasons": seasons,
+				"trade_drain": trade_drain,
+				"koku_malus": GARRISON_KOKU_MALUS,
+			}
+		else:
+			under_seasons[pid] = 0
+			results[pid] = {"under_garrisoned": false, "seasons": 0}
+	settlement_meta["_under_garrison_seasons"] = under_seasons
+	return results
+
+
 # ==============================================================================
 # Seasonal Tick Entry Point
 # ==============================================================================
 
-## Effective fraction of each province's local-tier passed-up rice that
-## ultimately reaches the Emperor's stockpile through the four upper
-## tiers of the cascade per GDD s4.3.7. Approximation only — does not
-## yet account for per-tier personality modifiers (those need the full
-## hierarchy wired up). 0.70 (provincial passes 70%) × 0.75 × 0.80 × 0.15.
+## Product of the three intermediate tier pass-through fractions:
+## provincial (0.70) × family (0.75) × clan (0.80) per GDD s4.3.7.
+const UPPER_TIER_PASSTHROUGH: float = 0.42
+
+const EMPEROR_BASE_RATE: float = 0.15
+
+## Legacy constant kept for reference; new code uses compute_emperor_take_rate().
 const EMPEROR_TAKE_FROM_PASSED_UP: float = 0.063
+
+
+static func compute_emperor_take_rate(emperor_tax_config: Dictionary) -> float:
+	var archetype: int = int(emperor_tax_config.get("archetype", StrategicReview.EmperorArchetype.IRON))
+	var archetype_mod: float = float(StrategicReview.ARCHETYPE_TAX_MODIFIER.get(archetype, 0)) / 100.0
+	return clampf(EMPEROR_BASE_RATE + archetype_mod, 0.0, 1.0)
+
+
+static func compute_cunning_clan_modifier(
+	province_clan: String,
+	clan_dispositions: Dictionary,
+) -> float:
+	var disp: int = int(clan_dispositions.get(province_clan, 0))
+	var tier: int = DispositionSystem.get_tier(disp)
+	if tier >= DispositionSystem.Tier.FRIEND:
+		return 0.10
+	if tier <= DispositionSystem.Tier.RIVAL:
+		return -0.10
+	return 0.0
 
 
 static func process_seasonal_tick(
@@ -245,6 +312,8 @@ static func process_seasonal_tick(
 	settlement_meta: Dictionary,
 	miya_inputs: Dictionary = {},
 	worship_maluses: Dictionary = {},
+	emperor_tax_config: Dictionary = {},
+	trade_routes: Array = [],
 ) -> Dictionary:
 	var results: Dictionary = {
 		"rice_consumed": {},
@@ -287,11 +356,17 @@ static func process_seasonal_tick(
 	if season == "autumn":
 		var taxes: Dictionary = _process_tax_cascade(provinces, settlements, settlement_meta)
 		results["tax_collected"] = taxes
-		# Persist the Emperor's approximate income for next Spring's Blessing
-		# allocation (s11.5b §2.1).
-		settlement_meta["last_autumn_emperor_tax_income"] = (
-			_compute_emperor_income_from_cascade(taxes)
+		var emperor_income: Dictionary = _compute_emperor_income_from_cascade(
+			taxes, provinces, emperor_tax_config,
 		)
+		results["emperor_income"] = emperor_income
+		settlement_meta["last_autumn_emperor_tax_income"] = emperor_income.get("rice", 0.0)
+		var arms_redirect: float = emperor_income.get("arms_redirect", 0.0)
+		if arms_redirect > 0.0:
+			var applied: Dictionary = apply_warlike_arms_redirect(
+				arms_redirect, settlement_meta
+			)
+			results["arms_redirect"] = applied
 
 	var pop_changes: Dictionary = _process_population_adjustment(provinces, settlements, settlement_meta)
 	results["population_changes"] = pop_changes
@@ -302,8 +377,17 @@ static func process_seasonal_tick(
 	var arms: Dictionary = _process_forge_conversion(settlements, settlement_meta)
 	results["arms_produced"] = arms
 
+	var garrison: Dictionary = _process_garrison_check(provinces, settlements, settlement_meta)
+	results["garrison_check"] = garrison
+	settlement_meta["_garrison"] = garrison
+
 	var koku: Dictionary = _process_koku_generation(settlements, settlement_meta)
 	results["koku_generated"] = koku
+
+	var trade_koku: Dictionary = _process_trade_route_koku(
+		provinces, settlements, trade_routes, settlement_meta,
+	)
+	results["trade_route_koku"] = trade_koku
 
 	return results
 
@@ -464,15 +548,68 @@ static func _group_settlements_by_province(
 	return grouped
 
 
-static func _compute_emperor_income_from_cascade(taxes: Dictionary) -> float:
-	## Approximation of Emperor's Autumn income from the local-tier cascade
-	## results. Real cascade should sum each tier's retention; until the full
-	## hierarchy is wired, multiply total passed-up rice by the upper-tier
-	## product (0.70 × 0.75 × 0.80 × 0.15 = 0.063).
-	var total_passed_up: float = 0.0
-	for pid in taxes:
-		total_passed_up += float(taxes[pid].get("passed_up", 0.0))
-	return total_passed_up * EMPEROR_TAKE_FROM_PASSED_UP
+static func _compute_emperor_income_from_cascade(
+	taxes: Dictionary,
+	provinces: Array[ProvinceData] = [],
+	emperor_tax_config: Dictionary = {},
+) -> Dictionary:
+	var emperor_rate: float = compute_emperor_take_rate(emperor_tax_config)
+	var archetype: int = int(emperor_tax_config.get("archetype", StrategicReview.EmperorArchetype.IRON))
+	var clan_dispositions: Dictionary = emperor_tax_config.get("clan_dispositions", {})
+	var is_cunning: bool = archetype == StrategicReview.EmperorArchetype.CUNNING
+	var is_warlike: bool = archetype == StrategicReview.EmperorArchetype.WARLIKE
+
+	var clan_by_pid: Dictionary = {}
+	for prov: ProvinceData in provinces:
+		clan_by_pid[prov.province_id] = prov.clan
+
+	var total_rice: float = 0.0
+	var total_arms_redirect: float = 0.0
+	var baseline_take: float = UPPER_TIER_PASSTHROUGH * EMPEROR_BASE_RATE
+
+	for pid: int in taxes:
+		var passed_up: float = float(taxes[pid].get("passed_up", 0.0))
+		var effective_rate: float = emperor_rate
+
+		if is_cunning and clan_by_pid.has(pid):
+			effective_rate += compute_cunning_clan_modifier(
+				clan_by_pid[pid], clan_dispositions,
+			)
+			effective_rate = clampf(effective_rate, 0.0, 1.0)
+
+		var income: float = passed_up * UPPER_TIER_PASSTHROUGH * effective_rate
+
+		if is_warlike:
+			var baseline_income: float = passed_up * baseline_take
+			var extra: float = maxf(0.0, income - baseline_income)
+			total_arms_redirect += extra
+			total_rice += baseline_income
+		else:
+			total_rice += income
+
+	return {
+		"rice": total_rice,
+		"arms_redirect": total_arms_redirect,
+	}
+
+
+static func apply_warlike_arms_redirect(
+	arms_redirect: float,
+	settlement_meta: Dictionary,
+) -> Dictionary:
+	var clan_data: Dictionary = settlement_meta.get("_clan_data", {})
+	if clan_data.has("Imperial"):
+		var cd: ClanData = clan_data["Imperial"]
+		var pending: float = float(settlement_meta.get("_imperial_arms_pending", 0.0))
+		var total: float = arms_redirect + pending
+		cd.arms_stockpile += total
+		if pending > 0.0:
+			settlement_meta.erase("_imperial_arms_pending")
+		return {"applied_to": "Imperial", "amount": total, "drained_pending": pending}
+	settlement_meta["_imperial_arms_pending"] = (
+		float(settlement_meta.get("_imperial_arms_pending", 0.0)) + arms_redirect
+	)
+	return {"applied_to": "pending", "amount": arms_redirect}
 
 
 # ==============================================================================
@@ -590,7 +727,12 @@ static func consume_rice_province(
 
 # ==============================================================================
 # Starvation Check — Deficit triggers escalation per s4.3.6
+# De-escalation requires consecutive adequate-food seasons (s4.3.6 LOCKED).
 # ==============================================================================
+
+const RELIEF_THRESHOLD_SHORTAGE: int = 2
+const RELIEF_THRESHOLD_OTHER: int = 1
+
 
 static func _process_starvation_check(
 	provinces: Array[ProvinceData],
@@ -599,16 +741,90 @@ static func _process_starvation_check(
 ) -> Dictionary:
 	var results: Dictionary = {}
 	var consumption: Dictionary = settlement_meta.get("_consumption", {})
+	var deficit_seasons: Dictionary = settlement_meta.get("_deficit_seasons", {})
+	var relief_seasons: Dictionary = settlement_meta.get("_relief_seasons", {})
+	var prev_starvation: Dictionary = settlement_meta.get("_starvation", {})
 	for prov: ProvinceData in provinces:
-		var cons: Dictionary = consumption.get(prov.province_id, {})
+		var pid: int = prov.province_id
+		var cons: Dictionary = consumption.get(pid, {})
 		var deficit: float = cons.get("deficit", 0.0)
-		var consecutive: int = settlement_meta.get("_deficit_seasons", {}).get(prov.province_id, 0)
+		var prev_stage_int: int = (prev_starvation.get(pid, {}) as Dictionary).get(
+			"stage", StarvationStage.CLEAR,
+		)
+		var prev_stage: StarvationStage = prev_stage_int as StarvationStage
+		var consecutive: int = deficit_seasons.get(pid, 0)
+		var relief: int = relief_seasons.get(pid, 0)
 		var prov_rice: float = get_province_rice(prov, settlements)
-		var starv: Dictionary = check_starvation(deficit, consecutive, prov_rice)
-		if starv["stage"] != StarvationStage.CLEAR:
+		var starv: Dictionary = resolve_starvation_transition(
+			deficit, consecutive, relief, prev_stage, prov_rice,
+		)
+		deficit_seasons[pid] = starv["deficit_seasons"]
+		relief_seasons[pid] = starv["relief_seasons"]
+		if starv["apply_loss"]:
 			apply_starvation_loss_settlements(prov, settlements, starv["pu_loss_rate"])
-		results[prov.province_id] = starv
+		results[pid] = starv
+	settlement_meta["_deficit_seasons"] = deficit_seasons
+	settlement_meta["_relief_seasons"] = relief_seasons
 	return results
+
+
+static func resolve_starvation_transition(
+	deficit: float,
+	consecutive_deficit_seasons: int,
+	consecutive_relief_seasons: int,
+	previous_stage: StarvationStage,
+	province_rice: float = 0.0,
+) -> Dictionary:
+	if deficit > 0.0:
+		consecutive_relief_seasons = 0
+		consecutive_deficit_seasons += 1
+		var stage: StarvationStage
+		if province_rice <= 0.0:
+			stage = StarvationStage.FAMINE
+		elif previous_stage > StarvationStage.CLEAR and previous_stage < StarvationStage.FAMINE:
+			stage = (previous_stage + 1) as StarvationStage
+		elif consecutive_deficit_seasons >= 3:
+			stage = StarvationStage.FAMINE
+		elif consecutive_deficit_seasons >= 2:
+			stage = StarvationStage.HUNGER
+		else:
+			stage = StarvationStage.SHORTAGE
+		return {
+			"stage": stage,
+			"pu_loss_rate": STARVATION_PU_LOSS[stage],
+			"apply_loss": true,
+			"recovering": false,
+			"deficit_seasons": consecutive_deficit_seasons,
+			"relief_seasons": 0,
+		}
+
+	if previous_stage == StarvationStage.CLEAR:
+		return {
+			"stage": StarvationStage.CLEAR,
+			"pu_loss_rate": 0.0,
+			"apply_loss": false,
+			"recovering": false,
+			"deficit_seasons": 0,
+			"relief_seasons": 0,
+		}
+
+	consecutive_deficit_seasons = 0
+	consecutive_relief_seasons += 1
+	var threshold: int = RELIEF_THRESHOLD_SHORTAGE if previous_stage == StarvationStage.SHORTAGE else RELIEF_THRESHOLD_OTHER
+	var new_stage: StarvationStage
+	if consecutive_relief_seasons >= threshold:
+		new_stage = (previous_stage - 1) as StarvationStage
+		consecutive_relief_seasons = 0
+	else:
+		new_stage = previous_stage
+	return {
+		"stage": new_stage,
+		"pu_loss_rate": STARVATION_PU_LOSS.get(new_stage, 0.0),
+		"apply_loss": false,
+		"recovering": new_stage != StarvationStage.CLEAR,
+		"deficit_seasons": 0,
+		"relief_seasons": consecutive_relief_seasons,
+	}
 
 
 static func check_starvation(
@@ -616,21 +832,10 @@ static func check_starvation(
 	consecutive_deficit_seasons: int,
 	province_rice: float = 0.0,
 ) -> Dictionary:
-	if deficit <= 0.0:
-		return {"stage": StarvationStage.CLEAR, "pu_loss_rate": 0.0}
-
-	var stage: StarvationStage
-	if province_rice <= 0.0 and deficit > 0.0:
-		stage = StarvationStage.FAMINE
-	elif consecutive_deficit_seasons >= 3:
-		stage = StarvationStage.FAMINE
-	elif consecutive_deficit_seasons >= 2:
-		stage = StarvationStage.HUNGER
-	else:
-		stage = StarvationStage.SHORTAGE
-
-	var loss_rate: float = STARVATION_PU_LOSS[stage]
-	return {"stage": stage, "pu_loss_rate": loss_rate}
+	return resolve_starvation_transition(
+		deficit, consecutive_deficit_seasons, 0,
+		StarvationStage.CLEAR, province_rice,
+	)
 
 
 static func apply_starvation_loss_settlements(
@@ -775,14 +980,16 @@ static func _process_population_adjustment(
 	for prov: ProvinceData in provinces:
 		var starv: Dictionary = starvation_data.get(prov.province_id, {})
 		var stage: StarvationStage = starv.get("stage", StarvationStage.CLEAR)
+		var recovering: bool = starv.get("recovering", false)
 		var peace: int = peace_map.get(prov.province_id, 0)
 		var total_pop: int = sum_population_pu(prov, settlements)
 		var prov_rice: float = get_province_rice(prov, settlements)
 		var rate: float = compute_growth_rate(total_pop, stage, peace, prov_rice)
-		rate += float(miya_growth_bonus.get(prov.province_id, 0.0))
-		var pop_mod: float = (worship_m.get(prov.province_id, {}) as Dictionary).get("pop_growth_modifier", 0.0)
-		if pop_mod < 0.0:
-			rate = maxf(0.0, rate * (1.0 + pop_mod))
+		if not recovering:
+			rate += float(miya_growth_bonus.get(prov.province_id, 0.0))
+			var pop_mod: float = (worship_m.get(prov.province_id, {}) as Dictionary).get("pop_growth_modifier", 0.0)
+			if pop_mod < 0.0:
+				rate = maxf(0.0, rate * (1.0 + pop_mod))
 		var growth: Dictionary = apply_population_growth_settlements(prov, settlements, rate)
 		results[prov.province_id] = growth
 	return results
@@ -940,11 +1147,15 @@ static func _process_koku_generation(
 	var results: Dictionary = {}
 	var location_mods: Dictionary = settlement_meta.get("_koku_modifiers", {})
 	var worship_m: Dictionary = settlement_meta.get("_worship_maluses", {})
+	var garrison_data: Dictionary = settlement_meta.get("_garrison", {})
 	for s: SettlementData in settlements:
 		if s.town_pu <= 0:
 			continue
 		var loc_mod: float = location_mods.get(s.settlement_id, location_mods.get(s.province_id, 1.0))
 		var koku: float = float(s.town_pu) * KOKU_PER_TOWN_PU_PER_SEASON * loc_mod
+		var g: Dictionary = garrison_data.get(s.province_id, {})
+		if g.get("under_garrisoned", false):
+			koku *= g.get("koku_malus", 1.0)
 		var koku_mod: float = (worship_m.get(s.province_id, {}) as Dictionary).get("koku_modifier", 0.0)
 		if koku_mod < 0.0:
 			koku = maxf(0.0, koku * (1.0 + koku_mod))
@@ -954,3 +1165,56 @@ static func _process_koku_generation(
 			results[pid] = {"koku_generated": 0.0}
 		results[pid]["koku_generated"] += koku
 	return results
+
+
+# ==============================================================================
+# Trade Route Koku Bonus — s4.3.18 + garrison drain s4.3.11
+# ==============================================================================
+
+static func _process_trade_route_koku(
+	provinces: Array[ProvinceData],
+	settlements: Array[SettlementData],
+	trade_routes: Array,
+	settlement_meta: Dictionary,
+) -> Dictionary:
+	var results: Dictionary = {}
+	if trade_routes.is_empty():
+		return results
+	var typed_routes: Array[TradeRouteData] = []
+	for r: Variant in trade_routes:
+		if r is TradeRouteData:
+			typed_routes.append(r)
+	var worship_m: Dictionary = settlement_meta.get("_worship_maluses", {})
+	var garrison_data: Dictionary = settlement_meta.get("_garrison", {})
+	for prov: ProvinceData in provinces:
+		var pid: int = prov.province_id
+		var bonus: float = RiceMarketSystem.compute_trade_route_koku(
+			prov, typed_routes, worship_m,
+		)
+		if bonus <= 0.0:
+			results[pid] = {"trade_koku": 0.0, "garrison_drain": 0.0}
+			continue
+		var drain: float = 0.0
+		var g: Dictionary = garrison_data.get(pid, {})
+		if g.get("under_garrisoned", false):
+			drain = g.get("trade_drain", 0.0)
+		bonus = maxf(0.0, bonus - drain)
+		_distribute_koku_to_settlements(prov, settlements, bonus)
+		results[pid] = {"trade_koku": bonus, "garrison_drain": drain}
+	return results
+
+
+static func _distribute_koku_to_settlements(
+	province: ProvinceData,
+	settlements: Array[SettlementData],
+	amount: float,
+) -> void:
+	var prov_settlements: Array[SettlementData] = []
+	for s: SettlementData in settlements:
+		if s.province_id == province.province_id:
+			prov_settlements.append(s)
+	if prov_settlements.is_empty():
+		return
+	var share: float = amount / float(prov_settlements.size())
+	for s: SettlementData in prov_settlements:
+		s.koku_stockpile += share

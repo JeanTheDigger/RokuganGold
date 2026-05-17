@@ -298,7 +298,10 @@ func test_set_assigned_company():
 	assert_eq(_char.assigned_company_id, 1001)
 
 func test_set_legal_cases():
-	_char.legal_cases.append({"case_id": 1, "crime_type": "VIOLENCE", "state": "SUSPECTED"})
+	var entry := LegalCaseEntry.new()
+	entry.crime_record_id = 1
+	entry.state = Enums.LegalStatus.SUSPECTED
+	_char.legal_cases.append(entry)
 	assert_eq(_char.legal_cases.size(), 1)
 
 func test_set_kolat_sect():

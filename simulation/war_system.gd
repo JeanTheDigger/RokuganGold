@@ -5,28 +5,28 @@ class_name WarSystem
 
 # -- War Score Shift Values (s53) -----------------------------------------------
 
+# Each entry: [winner_gain, loser_loss]. Scores are independent per GDD s53.
 const SCORE_SHIFTS: Dictionary = {
-	"minor_battle": 3,
-	"major_battle": 8,
-	"decisive_battle": 15,
-	"province_captured": 5,
-	"castle_captured": 10,
-	"siege_won_attacker": 12,
-	"siege_won_defender": 8,
-	"siege_repelled_attacker_loss": 5,
-	"gunso_chui_killed": 2,
-	"taisa_shireikan_killed": 5,
-	"rikugunshokan_killed": 10,
-	"hostage_rank3": 3,
-	"hostage_rank5_champion": 8,
-	"lord_assassinated": 12,
-	"supply_line_cut": 3,
-	"seasonal_attrition": 1,
-	"family_daimyo_commits": 5,
-	"clan_champion_commits": 10,
-	"allied_clan_joins": 8,
-	"condemn_clan": 10,
-	"authorize_war": 10,
+	"minor_battle": [3, 3],
+	"major_battle": [8, 8],
+	"decisive_battle": [15, 15],
+	"province_captured": [5, 5],
+	"castle_captured": [10, 10],
+	"siege_won_attacker": [12, 8],
+	"siege_won_defender": [8, 5],
+	"gunso_chui_killed": [2, 2],
+	"taisa_shireikan_killed": [5, 5],
+	"rikugunshokan_killed": [10, 10],
+	"hostage_rank3": [3, 3],
+	"hostage_rank5_champion": [8, 8],
+	"lord_assassinated": [12, 12],
+	"supply_line_cut": [3, 3],
+	"seasonal_attrition": [1, 1],
+	"family_daimyo_commits": [5, 0],
+	"clan_champion_commits": [10, 0],
+	"allied_clan_joins": [8, 0],
+	"condemn_clan": [10, 0],
+	"authorize_war": [10, 0],
 }
 
 
@@ -79,19 +79,23 @@ static func apply_score_shift(
 	event_type: String,
 	winning_clan: String,
 ) -> Dictionary:
-	var shift: int = SCORE_SHIFTS.get(event_type, 0)
-	if shift == 0:
+	var pair: Variant = SCORE_SHIFTS.get(event_type, null)
+	if pair == null:
 		return {"shift": 0, "score_a": war.war_score_a, "score_b": war.war_score_b}
+	var gain: int = pair[0]
+	var loss: int = pair[1]
 
 	if winning_clan == war.clan_a:
-		war.war_score_a = clampi(war.war_score_a + shift, 0, 100)
-		war.war_score_b = 100 - war.war_score_a
+		war.war_score_a = clampi(war.war_score_a + gain, 0, 100)
+		if loss > 0:
+			war.war_score_b = clampi(war.war_score_b - loss, 0, 100)
 	elif winning_clan == war.clan_b:
-		war.war_score_b = clampi(war.war_score_b + shift, 0, 100)
-		war.war_score_a = 100 - war.war_score_b
+		war.war_score_b = clampi(war.war_score_b + gain, 0, 100)
+		if loss > 0:
+			war.war_score_a = clampi(war.war_score_a - loss, 0, 100)
 
 	return {
-		"shift": shift,
+		"shift": gain,
 		"score_a": war.war_score_a,
 		"score_b": war.war_score_b,
 	}
@@ -158,10 +162,10 @@ static func check_auto_escalation(
 # -- Peace Willingness -----------------------------------------------------------
 
 const PEACE_POSITIVE_VIRTUES: Array[String] = [
-	"Seigyo", "Chishiki", "Gi", "Makoto",
+	"SEIGYO", "CHISHIKI", "GI", "MAKOTO",
 ]
 const PEACE_NEGATIVE_VIRTUES: Array[String] = [
-	"Yu", "Ketsui", "Ishi",
+	"YU", "KETSUI", "ISHI",
 ]
 
 
@@ -194,9 +198,9 @@ static func compute_peace_willingness(
 	if superior_pressuring:
 		willingness += 15
 
-	if primary_virtue in PEACE_POSITIVE_VIRTUES:
+	if primary_virtue.to_upper() in PEACE_POSITIVE_VIRTUES:
 		willingness += 10
-	elif primary_virtue in PEACE_NEGATIVE_VIRTUES:
+	elif primary_virtue.to_upper() in PEACE_NEGATIVE_VIRTUES:
 		willingness -= 15
 
 	if tier == WarData.WarScoreTier.WINNING or tier == WarData.WarScoreTier.DOMINANT:
@@ -313,8 +317,11 @@ static func process_seasonal_attrition(war: WarData) -> void:
 	apply_score_shift(war, "seasonal_attrition", war.initiator_clan)
 
 
+# GDD s53 specifies this penalty exists but does not give a value. -2/season is a placeholder.
+const WAR_DISPOSITION_PENALTY_PER_SEASON: int = -2
+
 static func get_active_war_disposition_penalty(seasons_active: int) -> int:
-	return -2 * seasons_active
+	return WAR_DISPOSITION_PENALTY_PER_SEASON * seasons_active
 
 
 # -- Province Capture Tracking ---------------------------------------------------

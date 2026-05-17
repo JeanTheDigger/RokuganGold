@@ -931,7 +931,7 @@ func test_integration_temple_completion_creates_settlement() -> void:
 	assert_eq(topics.size(), 1)
 	assert_eq(topics[0].variant, "temple_completed")
 	assert_eq(topics[0].tier, TopicData.Tier.TIER_3)
-	assert_eq(topics[0].momentum, 25.0)
+	assert_eq(topics[0].momentum, TopicMomentumSystem.MOMENTUM_SECONDARY_FLOOR)
 
 
 # -- Monastery queue → new SettlementData --------------------------------------

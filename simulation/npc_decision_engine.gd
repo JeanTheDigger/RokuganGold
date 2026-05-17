@@ -251,6 +251,9 @@ static func generate_options(
 	var available_actions: Array[String] = _get_actions_for_context(ctx.context_flag)
 	var has_mil_rank: bool = ctx.military_rank > Enums.MilitaryRank.NONE
 
+	if need.need_type == "RESPOND_TO_SEPPUKU":
+		available_actions = ["ACCEPT_SEPPUKU", "REFUSE_SEPPUKU"]
+
 	for action_id: String in available_actions:
 		if _is_zone_blocked(action_id, ctx.zone_flags):
 			continue
@@ -494,7 +497,10 @@ static func run(
 	var chosen := select_action(options, ctx)
 
 	# Phase 7
-	return execute_action(chosen, character, ctx)
+	var result: Dictionary = execute_action(chosen, character, ctx)
+	result["need_source"] = need.source
+	result["need_type"] = need.need_type
+	return result
 
 
 # -- Comparison for Phase 6 tiebreakers ---------------------------------------
@@ -529,17 +535,67 @@ static func _decompose_reactive_event(
 	event: Variant,
 	_ctx: NPCDataStructures.ContextSnapshot,
 ) -> NPCDataStructures.ImmediateNeed:
-	if event is Dictionary and event.has("need_type"):
+	if not event is Dictionary:
+		return null
+	var ev: Dictionary = event as Dictionary
+
+	if ev.has("need_type"):
 		var need := NPCDataStructures.ImmediateNeed.new()
-		need.need_type = event["need_type"]
-		need.priority = event.get("priority", 1)
-		need.target_npc_id = event.get("target_npc_id", -1)
-		need.target_npc_id_secondary = event.get("target_npc_id_secondary", -1)
-		need.target_settlement_id = event.get("target_settlement_id", -1)
-		need.target_province_id = event.get("target_province_id", -1)
-		need.target_clan_id = event.get("target_clan_id", "")
-		need.source = event.get("source", "reactive")
+		need.need_type = ev["need_type"]
+		need.priority = ev.get("priority", 1)
+		need.target_npc_id = ev.get("target_npc_id", -1)
+		need.target_npc_id_secondary = ev.get("target_npc_id_secondary", -1)
+		need.target_settlement_id = ev.get("target_settlement_id", -1)
+		need.target_province_id = ev.get("target_province_id", -1)
+		need.target_clan_id = ev.get("target_clan_id", "")
+		need.source = ev.get("source", "reactive")
 		return need
+
+	if ev.get("type", "") == "bribery_eval":
+		var need := NPCDataStructures.ImmediateNeed.new()
+		need.need_type = "SUPPRESS_INVESTIGATION"
+		need.priority = 2
+		need.source = "bribery_eval"
+		need.target_npc_id = ev.get("magistrate_id", -1)
+		need.target_npc_id_secondary = ev.get("witness_id", -1)
+		need.threshold = float(ev.get("evidence_total", 0))
+		return need
+
+	if ev.get("type", "") == "extortion_opportunity":
+		var need := NPCDataStructures.ImmediateNeed.new()
+		need.need_type = "EXTORT_ACCUSED"
+		need.priority = 2
+		need.source = "extortion_opportunity"
+		need.target_npc_id = ev.get("suspect_id", -1)
+		need.threshold = float(ev.get("evidence_total", 0))
+		return need
+
+	if ev.get("type", "") == "seppuku_offered":
+		var need := NPCDataStructures.ImmediateNeed.new()
+		need.need_type = "RESPOND_TO_SEPPUKU"
+		need.priority = 1
+		need.source = "seppuku_offered"
+		need.target_intent = "case_%d" % ev.get("case_id", -1)
+		return need
+
+	if ev.get("type", "") == "witness_report_motivated":
+		var need := NPCDataStructures.ImmediateNeed.new()
+		need.need_type = "SEEK_MAGISTRATE"
+		need.priority = 2
+		need.source = "witness_report_motivated"
+		need.target_npc_id = ev.get("magistrate_id", -1)
+		need.target_npc_id_secondary = ev.get("criminal_id", -1)
+		need.target_intent = "case_%d" % ev.get("case_id", -1)
+		return need
+
+	if ev.get("type", "") == "provocation":
+		var need := NPCDataStructures.ImmediateNeed.new()
+		need.need_type = "REST"
+		need.priority = 3
+		need.source = "provocation_received"
+		need.target_npc_id = ev.get("source_id", -1)
+		return need
+
 	return null
 
 
@@ -769,6 +825,9 @@ static func _is_action_blocked(
 		if action_id in always_blocked:
 			return true
 
+	if _is_conditional_blocked(action_id, ctx, filter_data):
+		return true
+
 	if action_id == "RAID_HARVEST":
 		return _is_harvest_blocked_by_virtue(ctx)
 
@@ -783,19 +842,142 @@ static func _is_action_blocked(
 	return false
 
 
+static func _is_conditional_blocked(
+	action_id: String,
+	ctx: NPCDataStructures.ContextSnapshot,
+	filter_data: Dictionary,
+) -> bool:
+	if action_id == "RAID_HARVEST":
+		return false
+
+	if ctx.bushido_virtue != Enums.BushidoVirtue.NONE:
+		var virtue_name: String = Enums.bushido_virtue_name(ctx.bushido_virtue)
+		var conditionals: Array = filter_data.get("bushido", {}).get(virtue_name, {}).get("conditional", [])
+		for entry: Variant in conditionals:
+			if entry is Dictionary:
+				var target_action: String = entry.get("action", "")
+				if target_action == action_id or target_action == "_ANY_ACTION":
+					var condition: String = entry.get("blocked_when", "")
+					if _evaluate_condition(condition, action_id, ctx):
+						return true
+
+	if ctx.shourido_virtue != Enums.ShouridoVirtue.NONE:
+		var virtue_name: String = Enums.shourido_virtue_name(ctx.shourido_virtue)
+		var conditionals: Array = filter_data.get("shourido", {}).get(virtue_name, {}).get("conditional", [])
+		for entry: Variant in conditionals:
+			if entry is Dictionary:
+				var target_action: String = entry.get("action", "")
+				if target_action == action_id or target_action == "_ANY_ACTION":
+					var condition: String = entry.get("blocked_when", "")
+					if _evaluate_condition(condition, action_id, ctx):
+						return true
+				if target_action == "_CHANGE_COURSE" and action_id in _CHANGE_COURSE_ACTIONS:
+					var condition: String = entry.get("blocked_when", "")
+					if _evaluate_condition(condition, action_id, ctx):
+						return true
+				if target_action == "_COMMIT_ACTION" and action_id not in _OBSERVATION_ACTIONS:
+					var condition: String = entry.get("blocked_when", "")
+					if _evaluate_condition(condition, action_id, ctx):
+						return true
+
+	return false
+
+
+const _CHANGE_COURSE_ACTIONS: Array[String] = [
+	"ABORT_RAID", "SEEK_PEACE", "NEGOTIATE_PEACE", "CHANGE_OBJECTIVE",
+]
+
+const _OBSERVATION_ACTIONS: Array[String] = [
+	"OBSERVE", "EAVESDROP", "SHADOW_TARGET", "GATHER_INTELLIGENCE",
+	"INVESTIGATE_PROVINCE", "EXAMINE_CRIME_SCENE",
+]
+
+
+static func _evaluate_condition(
+	condition: String,
+	_action_id: String,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> bool:
+	match condition:
+		"war_score_above_25_and_army_capable":
+			for w: Variant in ctx.active_wars:
+				if w is Dictionary and w.get("war_score", 50) > 25:
+					return true
+			return false
+
+		"any_vassal_at_shortage_or_worse":
+			for key: Variant in ctx.resource_stockpiles:
+				var val: Variant = ctx.resource_stockpiles[key]
+				if val is Dictionary and val.get("rice_months", 12.0) < 3.0:
+					return true
+			return false
+
+		"levy_would_exceed_65pct_and_no_crisis":
+			if not ctx.active_wars.is_empty():
+				return false
+			if not ctx.starvation_province_ids.is_empty():
+				return false
+			if ctx.available_levy_pu <= 0.0:
+				return false
+			return true
+
+		"direct_confrontation_available":
+			return not ctx.characters_present.is_empty()
+
+		"already_committed_to_action":
+			return not ctx.action_log.is_empty()
+
+		"no_intelligence_gathered_this_session":
+			for entry: Dictionary in ctx.action_log:
+				var aid: String = entry.get("action_id", "")
+				if aid in _OBSERVATION_ACTIONS:
+					return false
+			return true
+
+		"creates_obligation":
+			return true
+
+		"public_declaration_already_made":
+			for entry: Dictionary in ctx.action_log:
+				if entry.get("action_id", "") == "PUBLIC_DECLARATION":
+					return true
+			return false
+
+		"intent_publicly_declared":
+			for entry: Dictionary in ctx.action_log:
+				if entry.get("action_id", "") == "PUBLIC_DECLARATION":
+					return true
+			return false
+
+		"zero_motivations_known_and_urgency_below_50":
+			if not ctx.known_objectives.is_empty():
+				return false
+			var has_urgency: bool = (
+				not ctx.active_wars.is_empty()
+				or not ctx.starvation_province_ids.is_empty()
+				or not ctx.cut_supply_army_ids.is_empty()
+				or not ctx.expiring_favor_ids.is_empty()
+			)
+			return not has_urgency
+
+	return false
+
+
 static func _is_harvest_blocked_by_virtue(ctx: NPCDataStructures.ContextSnapshot) -> bool:
 	var virtue: String = _get_virtue_string(ctx)
-	if virtue in StarvationWarfare.HARVEST_NEVER_VIRTUES:
+	if virtue == "JIN" or virtue == "GI":
 		return true
 	var hc: Dictionary = _evaluate_harvest_conditions(ctx)
-	if virtue == "Yu":
+	if virtue == "YU":
 		return not hc.get("no_other_path", false)
-	if virtue == "Meiyo":
+	if virtue == "MEIYO":
 		return not hc.get("hated_enemy", false)
-	if virtue == "Chugi":
+	if virtue == "CHUGI":
 		return not hc.get("lord_commands", false)
-	if virtue == "Makoto":
+	if virtue == "MAKOTO":
 		return not hc.get("publicly_declared", false)
+	if virtue == "REI":
+		return not hc.get("prior_formal_demand", false)
 	return false
 
 
@@ -822,16 +1004,20 @@ static func _evaluate_harvest_conditions(ctx: NPCDataStructures.ContextSnapshot)
 			break
 
 	var publicly_declared: bool = false
+	var prior_formal_demand: bool = false
 	for entry: Dictionary in ctx.action_log:
-		if entry.get("action_id", "") == "PUBLIC_DECLARATION":
+		var aid: String = entry.get("action_id", "")
+		if aid == "PUBLIC_DECLARATION":
 			publicly_declared = true
-			break
+		if aid == "DEMAND_TRIBUTE":
+			prior_formal_demand = true
 
 	return {
 		"no_other_path": no_other_path,
 		"hated_enemy": hated_enemy,
 		"lord_commands": lord_commands,
 		"publicly_declared": publicly_declared,
+		"prior_formal_demand": prior_formal_demand,
 	}
 
 
@@ -920,14 +1106,15 @@ static func _compute_competence_modifier(
 	if primary_skill == "":
 		return 0.0
 
+	var competence_table: Dictionary = scoring_tables.get("competence_table", {})
 	var rank: int = int(skill_ranks.get(primary_skill, 0))
-	var modifier: float = float(NPCDataStructures.get_competence_modifier(rank))
+	var modifier: float = float(competence_table.get(str(rank), competence_table.get(rank, -20)))
 
 	var secondary_raw: Variant = action_skills.get("secondary", "")
 	var secondary_skill: String = str(secondary_raw) if secondary_raw != null else ""
 	if secondary_skill != "":
 		var sec_rank: int = int(skill_ranks.get(secondary_skill, 0))
-		modifier += float(NPCDataStructures.get_competence_modifier(sec_rank)) * 0.5
+		modifier += float(competence_table.get(str(sec_rank), competence_table.get(sec_rank, -20))) * 0.5
 
 	return clampf(modifier, -20.0, 20.0)
 
@@ -1597,6 +1784,43 @@ static func _populate_action_metadata(
 		option.metadata = {
 			"disclose_about_id": about_id,
 			"disclosed_opinion": opinion,
+		}
+	elif option.action_id == "BRIBE_FOR_INFO" and need.source == "bribery_eval":
+		option.metadata = {
+			"suppress_case": true,
+			"magistrate_id": need.target_npc_id,
+		}
+		option.target_npc_id = need.target_npc_id
+	elif option.action_id == "FLEE_JURISDICTION" and need.source == "bribery_eval":
+		option.metadata = {"flee_from_magistrate_id": need.target_npc_id}
+	elif option.action_id in ["BRIBE_WITNESS", "INTIMIDATE_WITNESS", "KILL_WITNESS"] and need.source == "bribery_eval":
+		if need.target_npc_id_secondary >= 0:
+			option.target_npc_id = need.target_npc_id_secondary
+			option.metadata = {"witness_id": need.target_npc_id_secondary}
+	elif option.action_id == "EXTORT_ACCUSED" and need.source == "extortion_opportunity":
+		option.target_npc_id = need.target_npc_id
+		option.metadata = {"extort_suspect_id": need.target_npc_id}
+	elif option.action_id in ["ACCEPT_SEPPUKU", "REFUSE_SEPPUKU"] and need.source == "seppuku_offered":
+		var case_id_str: String = need.target_intent.replace("case_", "")
+		option.metadata = {"case_id": case_id_str.to_int()}
+	elif option.action_id == "BEGIN_TRAVEL" and need.source == "witness_report_motivated":
+		var mag_id: int = need.target_npc_id
+		var mag_loc: Variant = ctx.known_npc_locations.get(mag_id, "")
+		if mag_loc is String and not (mag_loc as String).is_empty():
+			option.target_settlement_id = (mag_loc as String).to_int() if (mag_loc as String).is_valid_int() else -1
+			option.metadata = {"destination": mag_loc, "seek_magistrate_id": mag_id}
+		else:
+			option.objective_alignment = 0.0
+	elif option.action_id == "WRITE_LETTER" and need.source == "witness_report_motivated":
+		option.target_npc_id = need.target_npc_id
+		option.metadata = {
+			"report_case_id": need.target_intent.replace("case_", "").to_int(),
+			"report_criminal_id": need.target_npc_id_secondary,
+		}
+	elif option.action_id == "EXAMINE_CRIME_SCENE":
+		var active_case: Dictionary = ctx.known_objectives.get("active_case", {})
+		option.metadata = {
+			"case_id": active_case.get("case_id", -1),
 		}
 	elif option.action_id == "EXAMINE_LETTER":
 		option.metadata = {

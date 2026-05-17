@@ -40,10 +40,10 @@ const COMMITMENT_SCORES: Dictionary = {
 }
 
 const PERSONALITY_MODIFIERS: Dictionary = {
-	"Jin": {"yojimbo_multiplier": 2.0, "penalty_modifier": 0},
-	"Yu": {"yojimbo_multiplier": 1.0, "penalty_modifier": 0, "halve_penalties": true},
-	"Seigyo": {"yojimbo_multiplier": 1.0, "penalty_modifier": 0, "keep_political": true},
-	"Chugi": {"yojimbo_multiplier": 1.0, "penalty_modifier": -10},
+	"JIN": {"yojimbo_multiplier": 2.0, "penalty_modifier": 0},
+	"YU": {"yojimbo_multiplier": 1.0, "penalty_modifier": 0, "halve_penalties": true},
+	"SEIGYO": {"yojimbo_multiplier": 1.0, "penalty_modifier": 0, "keep_political": true},
+	"CHUGI": {"yojimbo_multiplier": 1.0, "penalty_modifier": -10},
 }
 
 
@@ -153,7 +153,7 @@ static func evaluate_candidate(
 	personality_virtue: String,
 ) -> int:
 	var base_score: int = get_commitment_score(candidate_role)
-	var mods: Dictionary = PERSONALITY_MODIFIERS.get(personality_virtue, {})
+	var mods: Dictionary = PERSONALITY_MODIFIERS.get(personality_virtue.to_upper(), {})
 
 	if mods.is_empty():
 		return base_score

@@ -292,6 +292,18 @@ func test_resolve_goal_reactive_takes_priority() -> void:
 	assert_eq(need.priority, 1)
 
 
+func test_resolve_goal_bribery_eval_decomposes_to_suppress() -> void:
+	_world_state["pending_events"] = [
+		{"type": "bribery_eval", "case_id": 5, "evidence_total": 28, "magistrate_id": 99}
+	]
+	var ctx := NPCDecisionEngine.build_context(_char, _world_state)
+	var need := NPCDecisionEngine.resolve_goal(_char, ctx, _objectives)
+	assert_eq(need.need_type, "SUPPRESS_INVESTIGATION")
+	assert_eq(need.target_npc_id, 99)
+	assert_eq(need.source, "bribery_eval")
+	assert_eq(int(need.threshold), 28)
+
+
 func test_resolve_goal_standing_fallback() -> void:
 	var objectives_no_primary: Dictionary = {
 		"standing": {"need_type": "SEEK_GLORY", "priority": 3},
@@ -1330,6 +1342,7 @@ func test_competence_modifier_with_primary_skill() -> void:
 		"action_skill_map": {
 			"CHARM": {"primary": "Etiquette", "secondary": "Courtier"},
 		},
+		"competence_table": {"0": -20, "1": -10, "2": -5, "3": 0, "4": 5, "5": 10, "6": 15, "7": 20},
 	}
 	var skills: Dictionary = {"Etiquette": 5, "Courtier": 3}
 	var result: float = NPCDecisionEngine._compute_competence_modifier(
@@ -1343,6 +1356,7 @@ func test_competence_modifier_with_secondary_half_value() -> void:
 		"action_skill_map": {
 			"TEST": {"primary": "Battle", "secondary": "Etiquette"},
 		},
+		"competence_table": {"0": -20, "1": -10, "2": -5, "3": 0, "4": 5, "5": 10, "6": 15, "7": 20},
 	}
 	var skills: Dictionary = {"Battle": 3, "Etiquette": 5}
 	var result: float = NPCDecisionEngine._compute_competence_modifier(
@@ -1356,6 +1370,7 @@ func test_competence_modifier_null_secondary_no_penalty() -> void:
 		"action_skill_map": {
 			"INTIMIDATE": {"primary": "Intimidation", "secondary": null},
 		},
+		"competence_table": {"0": -20, "1": -10, "2": -5, "3": 0, "4": 5, "5": 10, "6": 15, "7": 20},
 	}
 	var skills: Dictionary = {"Intimidation": 4}
 	var result: float = NPCDecisionEngine._compute_competence_modifier(
@@ -1369,6 +1384,7 @@ func test_competence_modifier_null_primary_returns_zero() -> void:
 		"action_skill_map": {
 			"DO_NOTHING": {"primary": null, "secondary": null},
 		},
+		"competence_table": {"0": -20, "1": -10, "2": -5, "3": 0, "4": 5, "5": 10, "6": 15, "7": 20},
 	}
 	var result: float = NPCDecisionEngine._compute_competence_modifier(
 		"DO_NOTHING", {}, tables,
@@ -1482,3 +1498,395 @@ func test_select_letter_target_explicit_npc_id_still_overrides_garrison_scores()
 	var objectives: Dictionary = {"primary": {"need_type": "STRENGTHEN_WALL", "target_npc_id": 99}}
 	var target: int = NPCDecisionEngine._select_letter_target(objectives, ctx)
 	assert_eq(target, 99)
+
+
+# -- Conditional Personality Filter Tests -----------------------------------------
+
+func test_conditional_yu_blocks_seek_peace_when_war_score_high() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.bushido_virtue = Enums.BushidoVirtue.YU
+	ctx.shourido_virtue = Enums.ShouridoVirtue.NONE
+	ctx.active_wars = [{"war_score": 30}]
+	var filter: Dictionary = {
+		"bushido": {
+			"YU": {
+				"always_blocked": ["DELAY_TO_POST_HARVEST"],
+				"conditional": [
+					{"action": "SEEK_PEACE", "blocked_when": "war_score_above_25_and_army_capable"},
+				],
+			},
+		},
+		"shourido": {},
+	}
+	var options: Array[NPCDataStructures.ScoredAction] = []
+	var seek := NPCDataStructures.ScoredAction.new()
+	seek.action_id = "SEEK_PEACE"
+	options.append(seek)
+	var charm := NPCDataStructures.ScoredAction.new()
+	charm.action_id = "CHARM"
+	options.append(charm)
+	var filtered := NPCDecisionEngine.apply_personality_filter(options, ctx, filter)
+	assert_eq(filtered.size(), 1)
+	assert_eq(filtered[0].action_id, "CHARM")
+
+
+func test_conditional_yu_allows_seek_peace_when_war_score_low() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.bushido_virtue = Enums.BushidoVirtue.YU
+	ctx.shourido_virtue = Enums.ShouridoVirtue.NONE
+	ctx.active_wars = [{"war_score": 20}]
+	var filter: Dictionary = {
+		"bushido": {
+			"YU": {
+				"always_blocked": [],
+				"conditional": [
+					{"action": "SEEK_PEACE", "blocked_when": "war_score_above_25_and_army_capable"},
+				],
+			},
+		},
+		"shourido": {},
+	}
+	var options: Array[NPCDataStructures.ScoredAction] = []
+	var seek := NPCDataStructures.ScoredAction.new()
+	seek.action_id = "SEEK_PEACE"
+	options.append(seek)
+	var filtered := NPCDecisionEngine.apply_personality_filter(options, ctx, filter)
+	assert_eq(filtered.size(), 1)
+	assert_eq(filtered[0].action_id, "SEEK_PEACE")
+
+
+func test_conditional_jin_blocks_demand_tribute_at_shortage() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.bushido_virtue = Enums.BushidoVirtue.JIN
+	ctx.shourido_virtue = Enums.ShouridoVirtue.NONE
+	ctx.resource_stockpiles = {"province_1": {"rice_months": 2.0}}
+	var filter: Dictionary = {
+		"bushido": {
+			"JIN": {
+				"always_blocked": ["RAID_HARVEST"],
+				"conditional": [
+					{"action": "DEMAND_TRIBUTE", "blocked_when": "any_vassal_at_shortage_or_worse"},
+				],
+			},
+		},
+		"shourido": {},
+	}
+	var options: Array[NPCDataStructures.ScoredAction] = []
+	var demand := NPCDataStructures.ScoredAction.new()
+	demand.action_id = "DEMAND_TRIBUTE"
+	options.append(demand)
+	var filtered := NPCDecisionEngine.apply_personality_filter(options, ctx, filter)
+	assert_eq(filtered.size(), 0)
+
+
+func test_conditional_jin_allows_demand_tribute_no_shortage() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.bushido_virtue = Enums.BushidoVirtue.JIN
+	ctx.shourido_virtue = Enums.ShouridoVirtue.NONE
+	ctx.resource_stockpiles = {"province_1": {"rice_months": 6.0}}
+	var filter: Dictionary = {
+		"bushido": {
+			"JIN": {
+				"always_blocked": ["RAID_HARVEST"],
+				"conditional": [
+					{"action": "DEMAND_TRIBUTE", "blocked_when": "any_vassal_at_shortage_or_worse"},
+				],
+			},
+		},
+		"shourido": {},
+	}
+	var options: Array[NPCDataStructures.ScoredAction] = []
+	var demand := NPCDataStructures.ScoredAction.new()
+	demand.action_id = "DEMAND_TRIBUTE"
+	options.append(demand)
+	var filtered := NPCDecisionEngine.apply_personality_filter(options, ctx, filter)
+	assert_eq(filtered.size(), 1)
+
+
+func test_conditional_kyoryoku_blocks_negotiate_when_confrontation_available() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.bushido_virtue = Enums.BushidoVirtue.NONE
+	ctx.shourido_virtue = Enums.ShouridoVirtue.KYORYOKU
+	ctx.characters_present = [5, 6] as Array[int]
+	var filter: Dictionary = {
+		"bushido": {},
+		"shourido": {
+			"KYORYOKU": {
+				"always_blocked": [],
+				"conditional": [
+					{"action": "NEGOTIATE", "blocked_when": "direct_confrontation_available"},
+					{"action": "CHARM", "blocked_when": "direct_confrontation_available"},
+					{"action": "WRITE_LETTER", "blocked_when": "direct_confrontation_available"},
+				],
+			},
+		},
+	}
+	var options: Array[NPCDataStructures.ScoredAction] = []
+	var neg := NPCDataStructures.ScoredAction.new()
+	neg.action_id = "NEGOTIATE"
+	options.append(neg)
+	var letter := NPCDataStructures.ScoredAction.new()
+	letter.action_id = "WRITE_LETTER"
+	options.append(letter)
+	var duel := NPCDataStructures.ScoredAction.new()
+	duel.action_id = "ISSUE_DUEL_CHALLENGE"
+	options.append(duel)
+	var filtered := NPCDecisionEngine.apply_personality_filter(options, ctx, filter)
+	assert_eq(filtered.size(), 1)
+	assert_eq(filtered[0].action_id, "ISSUE_DUEL_CHALLENGE")
+
+
+func test_conditional_ishi_blocks_change_course_when_committed() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.bushido_virtue = Enums.BushidoVirtue.NONE
+	ctx.shourido_virtue = Enums.ShouridoVirtue.ISHI
+	ctx.action_log = [{"action_id": "ORDER_DEPLOY"}] as Array[Dictionary]
+	var filter: Dictionary = {
+		"bushido": {},
+		"shourido": {
+			"ISHI": {
+				"always_blocked": ["SURRENDER"],
+				"conditional": [
+					{"action": "_CHANGE_COURSE", "blocked_when": "already_committed_to_action"},
+					{"action": "NEGOTIATE", "blocked_when": "already_committed_to_action"},
+					{"action": "SEEK_PEACE", "blocked_when": "already_committed_to_action"},
+				],
+			},
+		},
+	}
+	var options: Array[NPCDataStructures.ScoredAction] = []
+	var peace := NPCDataStructures.ScoredAction.new()
+	peace.action_id = "SEEK_PEACE"
+	options.append(peace)
+	var abort := NPCDataStructures.ScoredAction.new()
+	abort.action_id = "ABORT_RAID"
+	options.append(abort)
+	var attack := NPCDataStructures.ScoredAction.new()
+	attack.action_id = "ORDER_BATTLE"
+	options.append(attack)
+	var filtered := NPCDecisionEngine.apply_personality_filter(options, ctx, filter)
+	assert_eq(filtered.size(), 1)
+	assert_eq(filtered[0].action_id, "ORDER_BATTLE")
+
+
+func test_conditional_chishiki_blocks_commit_without_intel() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.bushido_virtue = Enums.BushidoVirtue.NONE
+	ctx.shourido_virtue = Enums.ShouridoVirtue.CHISHIKI
+	ctx.action_log = [] as Array[Dictionary]
+	var filter: Dictionary = {
+		"bushido": {},
+		"shourido": {
+			"CHISHIKI": {
+				"always_blocked": [],
+				"conditional": [
+					{"action": "_COMMIT_ACTION", "blocked_when": "no_intelligence_gathered_this_session"},
+				],
+			},
+		},
+	}
+	var options: Array[NPCDataStructures.ScoredAction] = []
+	var deploy := NPCDataStructures.ScoredAction.new()
+	deploy.action_id = "ORDER_DEPLOY"
+	options.append(deploy)
+	var observe := NPCDataStructures.ScoredAction.new()
+	observe.action_id = "GATHER_INTELLIGENCE"
+	options.append(observe)
+	var filtered := NPCDecisionEngine.apply_personality_filter(options, ctx, filter)
+	assert_eq(filtered.size(), 1)
+	assert_eq(filtered[0].action_id, "GATHER_INTELLIGENCE")
+
+
+func test_conditional_chishiki_allows_commit_after_intel() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.bushido_virtue = Enums.BushidoVirtue.NONE
+	ctx.shourido_virtue = Enums.ShouridoVirtue.CHISHIKI
+	ctx.action_log = [{"action_id": "GATHER_INTELLIGENCE"}] as Array[Dictionary]
+	var filter: Dictionary = {
+		"bushido": {},
+		"shourido": {
+			"CHISHIKI": {
+				"always_blocked": [],
+				"conditional": [
+					{"action": "_COMMIT_ACTION", "blocked_when": "no_intelligence_gathered_this_session"},
+				],
+			},
+		},
+	}
+	var options: Array[NPCDataStructures.ScoredAction] = []
+	var deploy := NPCDataStructures.ScoredAction.new()
+	deploy.action_id = "ORDER_DEPLOY"
+	options.append(deploy)
+	var filtered := NPCDecisionEngine.apply_personality_filter(options, ctx, filter)
+	assert_eq(filtered.size(), 1)
+	assert_eq(filtered[0].action_id, "ORDER_DEPLOY")
+
+
+func test_conditional_ketsui_blocks_relief_army() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.bushido_virtue = Enums.BushidoVirtue.NONE
+	ctx.shourido_virtue = Enums.ShouridoVirtue.KETSUI
+	var filter: Dictionary = {
+		"bushido": {},
+		"shourido": {
+			"KETSUI": {
+				"always_blocked": ["REQUEST_ALLIED_AID"],
+				"conditional": [
+					{"action": "ACCEPT_RELIEF_ARMY", "blocked_when": "creates_obligation"},
+				],
+			},
+		},
+	}
+	var options: Array[NPCDataStructures.ScoredAction] = []
+	var accept := NPCDataStructures.ScoredAction.new()
+	accept.action_id = "ACCEPT_RELIEF_ARMY"
+	options.append(accept)
+	var filtered := NPCDecisionEngine.apply_personality_filter(options, ctx, filter)
+	assert_eq(filtered.size(), 0)
+
+
+func test_conditional_harvest_rei_blocked_without_demand() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.bushido_virtue = Enums.BushidoVirtue.REI
+	ctx.shourido_virtue = Enums.ShouridoVirtue.NONE
+	ctx.action_log = [] as Array[Dictionary]
+	ctx.active_wars = []
+	ctx.disposition_values = {}
+	ctx.pending_events = []
+	var filter: Dictionary = {
+		"bushido": {
+			"REI": {
+				"always_blocked": ["GOSSIP"],
+				"conditional": [
+					{"action": "RAID_HARVEST", "blocked_when": "no_prior_formal_demand"},
+				],
+			},
+		},
+		"shourido": {},
+	}
+	var options: Array[NPCDataStructures.ScoredAction] = []
+	var harvest := NPCDataStructures.ScoredAction.new()
+	harvest.action_id = "RAID_HARVEST"
+	options.append(harvest)
+	var filtered := NPCDecisionEngine.apply_personality_filter(options, ctx, filter)
+	assert_eq(filtered.size(), 0)
+
+
+func test_conditional_harvest_rei_allowed_after_demand() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.bushido_virtue = Enums.BushidoVirtue.REI
+	ctx.shourido_virtue = Enums.ShouridoVirtue.NONE
+	ctx.action_log = [{"action_id": "DEMAND_TRIBUTE"}] as Array[Dictionary]
+	ctx.active_wars = []
+	ctx.disposition_values = {}
+	ctx.pending_events = []
+	var filter: Dictionary = {
+		"bushido": {
+			"REI": {
+				"always_blocked": ["GOSSIP"],
+				"conditional": [
+					{"action": "RAID_HARVEST", "blocked_when": "no_prior_formal_demand"},
+				],
+			},
+		},
+		"shourido": {},
+	}
+	var options: Array[NPCDataStructures.ScoredAction] = []
+	var harvest := NPCDataStructures.ScoredAction.new()
+	harvest.action_id = "RAID_HARVEST"
+	options.append(harvest)
+	var filtered := NPCDecisionEngine.apply_personality_filter(options, ctx, filter)
+	assert_eq(filtered.size(), 1)
+
+
+func test_conditional_unevaluable_condition_does_not_block() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.bushido_virtue = Enums.BushidoVirtue.MEIYO
+	ctx.shourido_virtue = Enums.ShouridoVirtue.NONE
+	var filter: Dictionary = {
+		"bushido": {
+			"MEIYO": {
+				"always_blocked": [],
+				"conditional": [
+					{"action": "_ANY_ACTION", "blocked_when": "violates_personal_code"},
+				],
+			},
+		},
+		"shourido": {},
+	}
+	var options: Array[NPCDataStructures.ScoredAction] = []
+	var charm := NPCDataStructures.ScoredAction.new()
+	charm.action_id = "CHARM"
+	options.append(charm)
+	var filtered := NPCDecisionEngine.apply_personality_filter(options, ctx, filter)
+	assert_eq(filtered.size(), 1, "Unevaluable conditions should not block")
+
+
+# -- Extortion Opportunity Decomposition ---
+
+func test_extortion_opportunity_decomposes_to_extort_accused() -> void:
+	_world_state["pending_events"] = [
+		{"type": "extortion_opportunity", "case_id": 9, "suspect_id": 42, "evidence_total": 30}
+	]
+	var ctx := NPCDecisionEngine.build_context(_char, _world_state)
+	var need := NPCDecisionEngine.resolve_goal(_char, ctx, _objectives)
+	assert_eq(need.need_type, "EXTORT_ACCUSED")
+	assert_eq(need.target_npc_id, 42)
+	assert_eq(need.source, "extortion_opportunity")
+	assert_eq(int(need.threshold), 30)
+
+
+func test_seppuku_offered_reactive_event_decomposition() -> void:
+	_world_state["pending_events"] = [
+		{"type": "seppuku_offered", "case_id": 15, "crime_type": 5, "ic_day_offered": 50}
+	]
+	var ctx := NPCDecisionEngine.build_context(_char, _world_state)
+	var need := NPCDecisionEngine.resolve_goal(_char, ctx, _objectives)
+	assert_eq(need.need_type, "RESPOND_TO_SEPPUKU")
+	assert_eq(need.priority, 1)
+	assert_eq(need.source, "seppuku_offered")
+	assert_eq(need.target_intent, "case_15")
+
+
+func test_seppuku_generates_accept_refuse_options() -> void:
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "RESPOND_TO_SEPPUKU"
+	need.priority = 1
+	need.source = "seppuku_offered"
+	need.target_intent = "case_15"
+
+	var ctx := NPCDecisionEngine.build_context(_char, _world_state)
+	var options: Array[NPCDataStructures.ScoredAction] = NPCDecisionEngine.generate_options(ctx, need)
+
+	var action_ids: Array[String] = []
+	for opt: NPCDataStructures.ScoredAction in options:
+		action_ids.append(opt.action_id)
+	assert_true("ACCEPT_SEPPUKU" in action_ids)
+	assert_true("REFUSE_SEPPUKU" in action_ids)
+	assert_eq(action_ids.size(), 2)
+
+
+func test_witness_report_motivated_reactive_event() -> void:
+	_world_state["pending_events"] = [
+		{"type": "witness_report_motivated", "criminal_id": 99, "case_id": 42, "magistrate_id": 30}
+	]
+	var ctx := NPCDecisionEngine.build_context(_char, _world_state)
+	var need := NPCDecisionEngine.resolve_goal(_char, ctx, _objectives)
+	assert_eq(need.need_type, "SEEK_MAGISTRATE")
+	assert_eq(need.priority, 2)
+	assert_eq(need.source, "witness_report_motivated")
+	assert_eq(need.target_npc_id, 30)
+	assert_eq(need.target_npc_id_secondary, 99)
+	assert_eq(need.target_intent, "case_42")
+
+
+func test_provocation_reactive_event() -> void:
+	_world_state["pending_events"] = [
+		{"type": "provocation", "source_id": 5, "case_id": 10, "action": "INTIMIDATE_WITNESS"}
+	]
+	var ctx := NPCDecisionEngine.build_context(_char, _world_state)
+	var need := NPCDecisionEngine.resolve_goal(_char, ctx, _objectives)
+	assert_eq(need.need_type, "REST")
+	assert_eq(need.priority, 3)
+	assert_eq(need.source, "provocation_received")
+	assert_eq(need.target_npc_id, 5)

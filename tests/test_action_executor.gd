@@ -1020,3 +1020,277 @@ func test_duel_challenge_sanctioned_death_no_crime_record() -> void:
 	var effects: Dictionary = result["effects"]
 	if effects.get("death_occurred", false):
 		assert_false(effects.get("requires_crime_creation", false))
+
+
+# -- EXAMINE_CRIME_SCENE -------------------------------------------------------
+
+func test_examine_crime_scene_calls_investigation_system() -> void:
+	var cr := CrimeRecord.new()
+	cr.case_id = 7
+	cr.concealment_tn = 10
+	cr.ic_day_committed = 5
+	cr.evidence_total = 0
+	cr.perpetrator_id = 99
+	cr.known_suspects = [] as Array[int]
+	var records: Array[CrimeRecord] = [cr]
+
+	_character.skills["Investigation"] = 4
+	_character.perception = 4
+	_ctx.ic_day = 6
+
+	var action := _make_action("EXAMINE_CRIME_SCENE")
+	action.metadata = {"case_id": 7}
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map,
+		{}, {}, {}, 0, records
+	)
+	assert_eq(result["action_id"], "EXAMINE_CRIME_SCENE")
+	var effects: Dictionary = result["effects"]
+	assert_eq(effects["effect"], "scene_examined")
+	assert_eq(effects["case_id"], 7)
+	if result["success"]:
+		assert_true(effects["evidence_gained"] > 0)
+		assert_true(cr.evidence_total > 0)
+
+
+func test_examine_crime_scene_no_record_fails() -> void:
+	var records: Array[CrimeRecord] = []
+	var action := _make_action("EXAMINE_CRIME_SCENE")
+	action.metadata = {"case_id": 99}
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map,
+		{}, {}, {}, 0, records
+	)
+	assert_false(result["success"])
+	assert_eq(result.get("reason", ""), "no_crime_record")
+
+
+func test_examine_crime_scene_too_old_fails() -> void:
+	var cr := CrimeRecord.new()
+	cr.case_id = 8
+	cr.concealment_tn = 10
+	cr.ic_day_committed = 0
+	cr.evidence_total = 0
+	cr.perpetrator_id = 99
+	cr.known_suspects = [] as Array[int]
+	var records: Array[CrimeRecord] = [cr]
+
+	_ctx.ic_day = 200
+
+	var action := _make_action("EXAMINE_CRIME_SCENE")
+	action.metadata = {"case_id": 8}
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map,
+		{}, {}, {}, 0, records
+	)
+	assert_false(result["success"])
+	assert_eq(result["effects"]["evidence_gained"], 0)
+
+
+# -- PROBE Quality for Witness Evidence ----------------------------------------
+
+func test_probe_success_includes_quality() -> void:
+	var target := L5RCharacterData.new()
+	target.character_id = 10
+	target.character_name = "Target"
+	target.skills = {"Sincerity": 1}
+	target.emphases = {}
+	target.awareness = 2
+	target.wounds_taken = 0
+	var chars: Dictionary = {1: _character, 10: target}
+
+	_character.skills["Courtier"] = 5
+	_character.perception = 4
+	_dice_engine.set_seed(7)
+
+	var action := _make_action("PROBE", 10)
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map, {}, chars
+	)
+	if result["success"]:
+		assert_true(result["effects"].has("quality"))
+		assert_true(result["effects"]["quality"] >= 1)
+
+
+# -- Bribe Attempt Resolution --------------------------------------------------
+
+func test_bribe_attempt_resolves_with_target():
+	var magistrate := L5RCharacterData.new()
+	magistrate.character_id = 20
+	magistrate.character_name = "Magistrate Kitsuki"
+	magistrate.skills = {"Etiquette": 4}
+	magistrate.emphases = {}
+	magistrate.willpower = 4
+	magistrate.honor = 7.0
+	magistrate.wounds_taken = 0
+	var chars: Dictionary = {1: _character, 20: magistrate}
+
+	_character.skills["Temptation"] = 3
+	_character.awareness = 3
+	_dice_engine.set_seed(42)
+
+	var action := _make_action("BRIBE_FOR_INFO", 20)
+	action.metadata = {"suppress_case": true, "magistrate_id": 20}
+
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map, {}, chars
+	)
+	assert_eq(result["action_id"], "BRIBE_FOR_INFO")
+	assert_true(result.has("success"))
+	assert_true(result["effects"].has("suppress_case"))
+	assert_eq(result["effects"]["magistrate_id"], 20)
+
+
+func test_bribe_attempt_high_honor_magistrate_resists():
+	var magistrate := L5RCharacterData.new()
+	magistrate.character_id = 20
+	magistrate.character_name = "Honest Magistrate"
+	magistrate.skills = {"Etiquette": 5}
+	magistrate.emphases = {}
+	magistrate.willpower = 5
+	magistrate.honor = 9.0
+	magistrate.wounds_taken = 0
+	var chars: Dictionary = {1: _character, 20: magistrate}
+
+	_character.skills["Temptation"] = 1
+	_character.awareness = 2
+	_dice_engine.set_seed(1)
+
+	var action := _make_action("BRIBE_FOR_INFO", 20)
+	action.metadata = {"suppress_case": true}
+
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map, {}, chars
+	)
+	assert_eq(result["action_id"], "BRIBE_FOR_INFO")
+	assert_false(result["success"])
+	assert_true(result["effects"].get("detection_risk", false))
+
+
+# -- FLEE_JURISDICTION ---------------------------------------------------------
+
+func test_flee_jurisdiction_returns_success() -> void:
+	var action := _make_action("FLEE_JURISDICTION", -1)
+	action.metadata = {"flee_from_magistrate_id": 20}
+
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map
+	)
+	assert_eq(result["action_id"], "FLEE_JURISDICTION")
+	assert_true(result["success"])
+	assert_eq(result["effects"]["effect"], "flee_jurisdiction")
+	assert_eq(result["effects"]["fugitive_id"], _character.character_id)
+
+
+# -- EXTORT_ACCUSED ------------------------------------------------------------
+
+func test_extort_accused_with_target() -> void:
+	var suspect := L5RCharacterData.new()
+	suspect.character_id = 50
+	suspect.character_name = "Suspect"
+	suspect.skills["Etiquette"] = 2
+	suspect.willpower = 2
+	suspect.honor = 1.0
+
+	_character.skills["Intimidation"] = 5
+	_character.willpower = 4
+	_dice_engine.set_seed(99)
+
+	var chars: Dictionary = {_character.character_id: _character, 50: suspect}
+	var action := _make_action("EXTORT_ACCUSED", 50)
+	action.metadata = {"extort_suspect_id": 50}
+
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map, {}, chars
+	)
+	assert_eq(result["action_id"], "EXTORT_ACCUSED")
+	assert_eq(result["effects"]["suspect_id"], 50)
+	assert_eq(result["effects"]["magistrate_id"], _character.character_id)
+
+
+func test_extort_accused_no_target_fails() -> void:
+	var action := _make_action("EXTORT_ACCUSED", 999)
+	action.metadata = {"extort_suspect_id": 999}
+
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map, {}, {}
+	)
+	assert_eq(result["action_id"], "EXTORT_ACCUSED")
+	assert_false(result["success"])
+	assert_eq(result.get("reason", ""), "no_target")
+
+
+# -- BRIBE_WITNESS -------------------------------------------------------------
+
+func test_bribe_witness_resolves() -> void:
+	var witness := L5RCharacterData.new()
+	witness.character_id = 60
+	witness.character_name = "Witness"
+	witness.skills["Etiquette"] = 2
+	witness.willpower = 2
+	witness.honor = 2.0
+	witness.wounds_taken = 0
+
+	_character.skills["Temptation"] = 4
+	_character.awareness = 4
+	_dice_engine.set_seed(42)
+
+	var chars: Dictionary = {_character.character_id: _character, 60: witness}
+	var action := _make_action("BRIBE_WITNESS", 60)
+
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map, {}, chars
+	)
+	assert_eq(result["action_id"], "BRIBE_WITNESS")
+	assert_eq(result["effects"]["witness_id"], 60)
+	assert_true(result["effects"].has("evidence_on_fail"))
+
+
+# -- INTIMIDATE_WITNESS --------------------------------------------------------
+
+func test_intimidate_witness_resolves() -> void:
+	var witness := L5RCharacterData.new()
+	witness.character_id = 61
+	witness.character_name = "Witness"
+	witness.skills["Etiquette"] = 2
+	witness.willpower = 2
+	witness.honor = 2.0
+	witness.wounds_taken = 0
+
+	_character.skills["Intimidation"] = 4
+	_character.willpower = 4
+	_dice_engine.set_seed(42)
+
+	var chars: Dictionary = {_character.character_id: _character, 61: witness}
+	var action := _make_action("INTIMIDATE_WITNESS", 61)
+
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map, {}, chars
+	)
+	assert_eq(result["action_id"], "INTIMIDATE_WITNESS")
+	assert_eq(result["effects"]["witness_id"], 61)
+	assert_true(result["effects"].get("detection_risk", false))
+
+
+func test_kill_witness_resolves() -> void:
+	var witness := L5RCharacterData.new()
+	witness.character_id = 62
+	witness.character_name = "Victim"
+	witness.skills["Investigation"] = 3
+	witness.perception = 3
+	witness.wounds_taken = 0
+
+	_character.skills["Stealth"] = 4
+	_character.agility = 4
+	_dice_engine.set_seed(99)
+
+	var chars: Dictionary = {_character.character_id: _character, 62: witness}
+	var action := _make_action("KILL_WITNESS", 62)
+
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map, {}, chars
+	)
+	assert_eq(result["action_id"], "KILL_WITNESS")
+	assert_eq(result["effects"]["witness_id"], 62)
+	assert_true(result["effects"].has("concealment_tn"))
+	assert_typeof(result["effects"]["concealment_tn"], TYPE_INT)

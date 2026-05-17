@@ -142,6 +142,8 @@ static func _resolve_reactive_events_full(
 	var results: Array[Dictionary] = []
 	var reactive_npcs: Array[L5RCharacterData] = _gather_reactive_npcs(characters, world_states)
 
+	var csd: Dictionary = world_states.get("_crime_suppression_data", {})
+	var cr: Array[CrimeRecord] = world_states.get("_crime_records", [] as Array[CrimeRecord])
 	for c: L5RCharacterData in reactive_npcs:
 		var ws: Dictionary = world_states.get(c.character_id, {})
 		var objs: Dictionary = objectives_map.get(c.character_id, {})
@@ -151,9 +153,11 @@ static func _resolve_reactive_events_full(
 			approach_penalties, commitments, redirects, characters_by_id
 		)
 		if decision.get("success", false):
+			var c_loc: int = int(c.physical_location) if c.physical_location.is_valid_int() else -1
+			var c_doshin: int = int(csd.get(c_loc, {}).get("doshin_investigation_bonus", 0))
 			var exec_result: Dictionary = _execute_decision(
 				decision, c, ws, dice_engine, action_skill_map, military_data,
-				characters_by_id
+				characters_by_id, c_doshin, cr
 			)
 			decision.merge(exec_result, true)
 		results.append(decision)
@@ -352,6 +356,12 @@ static func _resolve_character_wave_full(
 	var is_lord: bool = ws.get("is_lord", false)
 	var redirects: int = _get_travel_redirects(objs)
 
+	var char_loc: int = int(character.physical_location) if character.physical_location.is_valid_int() else -1
+	var csd: Dictionary = world_states.get("_crime_suppression_data", {})
+	var doshin_entry: Dictionary = csd.get(char_loc, {})
+	var doshin_bonus: int = int(doshin_entry.get("doshin_investigation_bonus", 0))
+	var cr: Array[CrimeRecord] = world_states.get("_crime_records", [] as Array[CrimeRecord])
+
 	if character.action_points_current > 0:
 		var decision: Dictionary = NPCDecisionEngine.run(
 			character, ws, objs, scoring_tables, filter_data,
@@ -360,9 +370,10 @@ static func _resolve_character_wave_full(
 		if decision.get("success", false):
 			var exec_result: Dictionary = _execute_decision(
 				decision, character, ws, dice_engine, action_skill_map,
-				military_data, characters_by_id
+				military_data, characters_by_id, doshin_bonus, cr
 			)
 			decision.merge(exec_result, true)
+		_consume_reactive_event(decision, ws)
 		results.append(decision)
 
 	if is_lord and character.civilian_orders_remaining > 0:
@@ -373,7 +384,7 @@ static func _resolve_character_wave_full(
 		if not order_decision.is_empty():
 			var exec_result: Dictionary = _execute_decision(
 				order_decision, character, ws, dice_engine, action_skill_map,
-				military_data, characters_by_id
+				military_data, characters_by_id, doshin_bonus, cr
 			)
 			order_decision.merge(exec_result, true)
 			results.append(order_decision)
@@ -440,6 +451,8 @@ static func _execute_decision(
 	action_skill_map: Dictionary,
 	military_data: Dictionary = {},
 	characters_by_id: Dictionary = {},
+	doshin_bonus_override: int = 0,
+	crime_records: Array[CrimeRecord] = [],
 ) -> Dictionary:
 	var action := NPCDataStructures.ScoredAction.new()
 	action.action_id = decision.get("action_id", "DO_NOTHING")
@@ -461,8 +474,33 @@ static func _execute_decision(
 
 	return ActionExecutor.execute(
 		action, character, ctx, dice_engine, action_skill_map,
-		military_data, characters_by_id, wpm,
+		military_data, characters_by_id, wpm, doshin_bonus_override,
+		crime_records,
 	)
+
+
+# -- Reactive Event Consumption ------------------------------------------------
+
+const REACTIVE_SOURCES: Array = [
+	"bribery_eval", "extortion_opportunity", "seppuku_offered",
+	"witness_report_motivated", "provocation_received",
+]
+
+
+static func _consume_reactive_event(
+	decision: Dictionary,
+	world_state: Dictionary,
+) -> void:
+	var events: Array = world_state.get("pending_events", [])
+	if events.is_empty():
+		return
+	var need_source: String = decision.get("need_source", "")
+	if need_source in REACTIVE_SOURCES:
+		if decision.get("success", false):
+			events.remove_at(0)
+		return
+	# Decompose returned null — discard unprocessable event to prevent infinite loop
+	events.remove_at(0)
 
 
 # -- Helpers -------------------------------------------------------------------

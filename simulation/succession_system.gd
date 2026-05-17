@@ -12,6 +12,9 @@ enum CandidatePriority {
 	GENERATED = 7,
 }
 
+const BIRTH_TYPE_SECOND_CHILD: int = 30
+const BIRTH_TYPE_THIRD_CHILD_PLUS: int = 31
+
 # -- Transition Timing ---------------------------------------------------------
 
 const CLEAN_SUCCESSION_MIN_TICKS: int = 7
@@ -124,7 +127,8 @@ static func get_candidates(
 	if deceased.designated_heir_id >= 0:
 		var heir: L5RCharacterData = chars_by_id.get(deceased.designated_heir_id)
 		if heir != null and not _is_dead(heir):
-			candidates.append({"id": heir.character_id, "priority": CandidatePriority.DESIGNATED_HEIR, "character": heir})
+			var birth_type: int = _get_birth_order_type(deceased, heir, chars_by_id)
+			candidates.append({"id": heir.character_id, "priority": CandidatePriority.DESIGNATED_HEIR, "birth_order_type": birth_type, "character": heir})
 
 	# Priority 2 & 3 — Biological Children (eldest first)
 	var children: Array[Dictionary] = []
@@ -137,13 +141,20 @@ static func get_candidates(
 
 	for i in range(children.size()):
 		var pri: int = CandidatePriority.ELDEST_CHILD if i == 0 else CandidatePriority.OTHER_CHILD
+		var bot: int
+		if i == 0:
+			bot = CandidatePriority.ELDEST_CHILD
+		elif i == 1:
+			bot = BIRTH_TYPE_SECOND_CHILD
+		else:
+			bot = BIRTH_TYPE_THIRD_CHILD_PLUS
 		var already: bool = false
 		for c in candidates:
 			if c["id"] == children[i]["id"]:
 				already = true
 				break
 		if not already:
-			candidates.append({"id": children[i]["id"], "priority": pri, "character": children[i]["character"]})
+			candidates.append({"id": children[i]["id"], "priority": pri, "birth_order_type": bot, "character": children[i]["character"]})
 
 	# Priority 4 — Adopted Heirs
 	for aid in deceased.adopted_children_ids:
@@ -156,7 +167,7 @@ static func get_candidates(
 				already = true
 				break
 		if not already:
-			candidates.append({"id": adopted.character_id, "priority": CandidatePriority.ADOPTED_HEIR, "character": adopted})
+			candidates.append({"id": adopted.character_id, "priority": CandidatePriority.ADOPTED_HEIR, "birth_order_type": CandidatePriority.ADOPTED_HEIR, "character": adopted})
 
 	# Priority 5 — Siblings
 	for sid in deceased.sibling_ids:
@@ -168,7 +179,7 @@ static func get_candidates(
 					already = true
 					break
 			if not already:
-				candidates.append({"id": sib.character_id, "priority": CandidatePriority.SIBLING, "character": sib})
+				candidates.append({"id": sib.character_id, "priority": CandidatePriority.SIBLING, "birth_order_type": CandidatePriority.SIBLING, "character": sib})
 
 	return candidates
 
@@ -234,7 +245,7 @@ static func is_clean_succession(
 	if same_priority_count > 1 and top_priority != CandidatePriority.DESIGNATED_HEIR:
 		return false
 
-	if confirming_disp_toward_top < -10:
+	if confirming_disp_toward_top < 11:
 		return false
 
 	return true
@@ -284,6 +295,7 @@ static func evaluate_candidate(
 	weights: Dictionary,
 	position_demand: String = "military",
 	topics_about_candidate: Array[Dictionary] = [],
+	birth_order_type: int = -1,
 ) -> Dictionary:
 	var scores: Dictionary = {}
 
@@ -291,8 +303,9 @@ static func evaluate_candidate(
 	var disp: int = lord.disposition_values.get(candidate.character_id, 0)
 	scores["disposition"] = _score_disposition(disp)
 
-	# Factor 2 — Birth Order
-	scores["birth_order"] = _score_birth_order(priority)
+	# Factor 2 — Birth Order (uses actual relationship, not priority)
+	var bot: int = birth_order_type if birth_order_type >= 0 else priority
+	scores["birth_order"] = _score_birth_order(bot)
 
 	# Factor 3 — Honor Rank
 	scores["honor"] = _score_honor(candidate.honor)
@@ -338,7 +351,8 @@ static func evaluate_all_candidates(
 		if candidate_char == null:
 			continue
 		var topics: Array[Dictionary] = topics_by_character.get(c["id"], [])
-		var result: Dictionary = evaluate_candidate(lord, candidate_char, c["priority"], weights, position_demand, topics)
+		var bot: int = c.get("birth_order_type", c["priority"])
+		var result: Dictionary = evaluate_candidate(lord, candidate_char, c["priority"], weights, position_demand, topics, bot)
 		results.append(result)
 
 	results.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a["total"] > b["total"])
@@ -699,11 +713,12 @@ static func _score_disposition(disp: int) -> int:
 	return 0
 
 
-static func _score_birth_order(priority: int) -> int:
-	match priority:
-		CandidatePriority.DESIGNATED_HEIR: return 12
+static func _score_birth_order(birth_order_type: int) -> int:
+	match birth_order_type:
 		CandidatePriority.ELDEST_CHILD: return 12
 		CandidatePriority.OTHER_CHILD: return 8
+		BIRTH_TYPE_SECOND_CHILD: return 8
+		BIRTH_TYPE_THIRD_CHILD_PLUS: return 5
 		CandidatePriority.ADOPTED_HEIR: return 4
 		CandidatePriority.SIBLING: return 3
 		CandidatePriority.LORD_SELECTS: return 0
@@ -829,3 +844,31 @@ static func _score_titles(status_val: float) -> int:
 	if status_val >= 1.0:
 		return 1
 	return 0
+
+
+static func _get_birth_order_type(
+	deceased: L5RCharacterData,
+	candidate: L5RCharacterData,
+	chars_by_id: Dictionary,
+) -> int:
+	if candidate.character_id in deceased.children_ids:
+		var sorted_ages: Array[Dictionary] = []
+		for cid in deceased.children_ids:
+			var c: L5RCharacterData = chars_by_id.get(cid)
+			if c != null and not _is_dead(c):
+				sorted_ages.append({"id": c.character_id, "age": c.age})
+		sorted_ages.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a["age"] > b["age"])
+		for i in range(sorted_ages.size()):
+			if sorted_ages[i]["id"] == candidate.character_id:
+				if i == 0:
+					return CandidatePriority.ELDEST_CHILD
+				elif i == 1:
+					return BIRTH_TYPE_SECOND_CHILD
+				else:
+					return BIRTH_TYPE_THIRD_CHILD_PLUS
+		return BIRTH_TYPE_THIRD_CHILD_PLUS
+	if candidate.character_id in deceased.adopted_children_ids:
+		return CandidatePriority.ADOPTED_HEIR
+	if candidate.character_id in deceased.sibling_ids:
+		return CandidatePriority.SIBLING
+	return CandidatePriority.LORD_SELECTS

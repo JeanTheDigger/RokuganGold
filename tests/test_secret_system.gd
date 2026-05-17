@@ -686,7 +686,7 @@ func test_search_quarters_tn_includes_target_investigation() -> void:
 	var searcher: L5RCharacterData = L5RCharacterData.new()
 	searcher.character_id = 70
 	searcher.agility = 4
-	searcher.skills = {"Stealth": 3}
+	searcher.skills = {"Sleight of Hand": 3}
 	searcher.honor = 5.0
 	searcher.infamy = 0.0
 	var tgt: L5RCharacterData = L5RCharacterData.new()
@@ -699,7 +699,7 @@ func test_search_quarters_applies_costs() -> void:
 	var searcher: L5RCharacterData = L5RCharacterData.new()
 	searcher.character_id = 71
 	searcher.agility = 3
-	searcher.skills = {"Stealth": 2}
+	searcher.skills = {"Sleight of Hand": 2}
 	searcher.honor = 5.0
 	searcher.infamy = 0.0
 	var tgt: L5RCharacterData = L5RCharacterData.new()
@@ -841,9 +841,9 @@ func test_forge_order_tn_by_authority() -> void:
 	assert_eq(SecretSystem.FORGE_ORDER_TN["major"], 30)
 
 
-func test_forge_order_higher_honor_cost_than_letter() -> void:
+func test_forge_order_applies_honor_and_infamy() -> void:
 	_fabricator.honor = 5.0
 	_fabricator.infamy = 0.0
 	SecretSystem.resolve_forge_order(_fabricator, "minor", _engine)
-	assert_almost_eq(_fabricator.honor, 4.5, 0.01)
-	assert_almost_eq(_fabricator.infamy, 0.2, 0.01)
+	assert_almost_eq(_fabricator.honor, 4.7, 0.01)
+	assert_almost_eq(_fabricator.infamy, 0.1, 0.01)

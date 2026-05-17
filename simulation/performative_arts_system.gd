@@ -56,15 +56,10 @@ static func resolve_public_performance(
 	var skill_rank: int = performer.skills.get(skill_name, 0)
 	var trait_val: int = performer.awareness
 
-	if art_form == ArtForm.DANCE or art_form == ArtForm.MUSIC:
-		trait_val = performer.agility
-	if art_form == ArtForm.TEA_CEREMONY:
-		trait_val = performer.void_ring
+	var rolled: int = trait_val + maxi(skill_rank, 1)
+	var kept: int = trait_val
 
-	var roll_k: int = trait_val
-	var roll_r: int = skill_rank if skill_rank > 0 else 1
-
-	var dice_result: DiceResult = dice_engine.roll_and_keep(roll_k, roll_r)
+	var dice_result: DiceResult = dice_engine.roll_and_keep(rolled, kept)
 	var total: int = dice_result.total
 	var margin: int = total - PERFORMANCE_TN
 
@@ -129,15 +124,10 @@ static func resolve_perform_for(
 	var skill_rank: int = performer.skills.get(skill_name, 0)
 	var trait_val: int = performer.awareness
 
-	if art_form == ArtForm.DANCE or art_form == ArtForm.MUSIC:
-		trait_val = performer.agility
-	if art_form == ArtForm.TEA_CEREMONY:
-		trait_val = performer.void_ring
+	var rolled: int = trait_val + maxi(skill_rank, 1)
+	var kept: int = trait_val
 
-	var roll_k: int = trait_val
-	var roll_r: int = skill_rank if skill_rank > 0 else 1
-
-	var dice_result: DiceResult = dice_engine.roll_and_keep(roll_k, roll_r)
+	var dice_result: DiceResult = dice_engine.roll_and_keep(rolled, kept)
 	var total: int = dice_result.total
 	var margin: int = total - PERFORMANCE_TN
 
@@ -189,14 +179,7 @@ static func get_best_art_form(performer: L5RCharacterData) -> ArtForm:
 	for form in ArtForm.values():
 		var skill_name: String = get_performance_skill(form)
 		var rank: int = performer.skills.get(skill_name, 0)
-
-		var trait_val: int = performer.awareness
-		if form == ArtForm.DANCE or form == ArtForm.MUSIC:
-			trait_val = performer.agility
-		if form == ArtForm.TEA_CEREMONY:
-			trait_val = performer.void_ring
-
-		var effective: int = rank + trait_val
+		var effective: int = rank + performer.awareness
 		if effective > best_rank:
 			best_rank = effective
 			best_form = form
@@ -209,7 +192,7 @@ static func apply_performance_effects(
 	result: Dictionary,
 	characters_by_id: Dictionary = {},
 ) -> void:
-	performer.glory = clampf(performer.glory + result.get("glory_change", 0.0), 0.0, 10.0)
+	HonorGlorySystem.apply_glory_change(performer, result.get("glory_change", 0.0))
 
 	if result.has("witness_effects"):
 		for effect in result["witness_effects"]:

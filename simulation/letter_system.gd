@@ -60,7 +60,7 @@ static func can_send_free_letter(
 	letters_sent_today: int,
 ) -> bool:
 	if is_lord:
-		return true
+		return false
 	return letters_sent_today < FREE_LETTERS_PER_DAY
 
 
@@ -143,27 +143,30 @@ static func deliver_letter(
 	recipient: L5RCharacterData,
 	current_season: int,
 	action_log: Array[Dictionary],
+	topics_by_id: Dictionary = {},
 ) -> Dictionary:
 	if letter.delivered:
 		return {}
 
 	letter.delivered = true
 
-	# Transfer topic to recipient
+	# Transfer topic to recipient or refresh momentum if already known
 	var topic_transferred: bool = false
-	if letter.topic >= 0 and letter.topic not in recipient.topic_pool:
-		recipient.topic_pool.append(letter.topic)
-		topic_transferred = true
-		InformationSystem.add_knowledge(recipient, InformationSystem.make_entry(
-			Enums.KnowledgeSource.LETTER,
-			"topic_learned",
-			{
-				"topic": letter.topic,
-				"from_character_id": letter.sender_id,
-				"letter_id": letter.letter_id,
-			},
-			current_season,
-		))
+	if letter.topic >= 0:
+		if letter.topic not in recipient.topic_pool:
+			recipient.topic_pool.append(letter.topic)
+			topic_transferred = true
+			InformationSystem.add_knowledge(recipient, InformationSystem.make_entry(
+				Enums.KnowledgeSource.LETTER,
+				"topic_learned",
+				{
+					"topic": letter.topic,
+					"from_character_id": letter.sender_id,
+					"letter_id": letter.letter_id,
+				},
+				current_season,
+			))
+		_refresh_topic_momentum(letter.topic, topics_by_id)
 
 	# Apply disposition bonus from calligraphy quality
 	if letter.disposition_bonus > 0:
@@ -229,9 +232,9 @@ static func apply_exchange_bonus(
 	recipient: L5RCharacterData,
 ) -> void:
 	var s_val: int = sender.disposition_values.get(recipient.character_id, 0)
-	sender.disposition_values[recipient.character_id] = s_val + 1
+	sender.disposition_values[recipient.character_id] = clampi(s_val + 1, -100, 100)
 	var r_val: int = recipient.disposition_values.get(sender.character_id, 0)
-	recipient.disposition_values[sender.character_id] = r_val + 1
+	recipient.disposition_values[sender.character_id] = clampi(r_val + 1, -100, 100)
 
 
 # -- Forgery Auto-Detection on Receipt -----------------------------------------
@@ -345,6 +348,7 @@ static func process_pending_letters(
 	action_log: Array[Dictionary],
 	active_wars: Array = [],
 	dice_engine: DiceEngine = null,
+	topics_by_id: Dictionary = {},
 ) -> Array[Dictionary]:
 	var results: Array[Dictionary] = []
 
@@ -375,7 +379,7 @@ static func process_pending_letters(
 					if detected:
 						item.forgery_detected = true
 				var delivery: Dictionary = deliver_letter(
-					item, recipient, current_season, action_log
+					item, recipient, current_season, action_log, topics_by_id
 				)
 				if not delivery.is_empty():
 					delivery["letter_id"] = item.letter_id
@@ -386,6 +390,11 @@ static func process_pending_letters(
 						delivery["is_forged"] = true
 						delivery["forged_sender_id"] = item.forged_sender_id
 						delivery["forgery_detected"] = item.forgery_detected
+					if item.is_reply:
+						var sender_char: L5RCharacterData = characters_by_id.get(item.sender_id)
+						if sender_char != null:
+							apply_exchange_bonus(sender_char, recipient)
+							delivery["exchange_bonus_applied"] = true
 					results.append(delivery)
 
 	return results
@@ -447,8 +456,6 @@ static func generate_replies(
 		)
 		replies.append(reply)
 
-		apply_exchange_bonus(sender, recipient)
-
 	return replies
 
 
@@ -468,6 +475,14 @@ static func _find_letter_by_id(pending_letters: Array, letter_id: int) -> Letter
 		if item is LetterData and item.letter_id == letter_id:
 			return item
 	return null
+
+
+static func _refresh_topic_momentum(topic_id: int, topics_by_id: Dictionary) -> void:
+	if topic_id < 0 or topics_by_id.is_empty():
+		return
+	var topic: TopicData = topics_by_id.get(topic_id)
+	if topic != null:
+		topic.discussion_count_this_day += 1
 
 
 # -- Unblock Letters on Blockade Lift ------------------------------------------

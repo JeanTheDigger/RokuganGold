@@ -29,6 +29,10 @@ extends Resource
 @export var forgery_tn: int = 0
 @export var forgery_detected: bool = false
 
+# Witness report (populated by reactive WRITE_LETTER for witness_report_motivated)
+@export var report_case_id: int = -1
+@export var report_criminal_id: int = -1
+
 # Blockade state
 @export var blocked_by_blockade: bool = false
 

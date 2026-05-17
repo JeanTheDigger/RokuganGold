@@ -265,8 +265,8 @@ func test_success_creates_obligation_and_two_modifiers() -> void:
 	assert_eq(result["outcome"], "success")
 	assert_true(result["obligation_created"])
 	assert_eq(result["modifiers_to_apply"].size(), 2)
-	# Disposition change equals full quality value.
-	assert_eq(result["disposition_change"], 12)
+	# Disposition change includes quality base (12) plus +3 per raise achieved.
+	assert_true(result["disposition_change"] >= 12)
 
 
 func test_success_obligation_modifier_uses_correct_event_key() -> void:
@@ -492,3 +492,27 @@ func test_quality_free_raises_actually_help_the_roll() -> void:
 		if r2["outcome"] == "success":
 			legendary_successes += 1
 	assert_gt(legendary_successes, mundane_successes)
+
+
+func test_success_adds_three_disposition_per_raise() -> void:
+	# With high skill and quality bonus, ensure raises grant +3 each.
+	_giver.awareness = 5
+	_giver.skills = {"Etiquette": 5}
+	var found_raises: bool = false
+	for seed in range(1, 50):
+		var eng: DiceEngine = DiceEngine.new(seed)
+		var result: Dictionary = GiftGivingSystem.resolve_deliver_gift(
+			_giver, _recipient,
+			GiftGivingSystem.QualityTier.NORMAL,
+			GiftGivingSystem.GiftCategory.TEA_IMPLEMENTS,
+			GiftGivingSystem.RecipientArchetype.BUSHI,
+			eng, 1,
+		)
+		if result["outcome"] == "success":
+			var margin: int = result["roll"].get("margin", 0)
+			var expected_raises: int = maxi(margin / 5, 0)
+			var expected_disp: int = 3 + (expected_raises * 3)
+			assert_eq(result["disposition_change"], expected_disp)
+			if expected_raises > 0:
+				found_raises = true
+	assert_true(found_raises)

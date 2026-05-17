@@ -4,6 +4,10 @@ class_name DayOrchestrator
 ## info events → letter delivery → topic tick →
 ## (season boundary) resource tick + confidence decay.
 
+const _COMBAT_EVENT_MOMENTUM: float = 30.0
+const _CIVIL_WAR_MOMENTUM: float = 60.0
+const _CONSTRUCTION_TIER2_MOMENTUM: float = 40.0
+
 
 static func advance_day(
 	time_system: TimeSystem,
@@ -69,6 +73,8 @@ static func advance_day(
 	active_civil_wars: Array[Dictionary] = [],
 	precedent_modifiers: Dictionary = {},
 	next_company_id: Array[int] = [1],
+	active_secrets: Array[SecretData] = [],
+	next_secret_id: Array[int] = [1],
 ) -> Dictionary:
 	var prev_season: int = time_system.get_season()
 
@@ -87,11 +93,16 @@ static func advance_day(
 	_populate_infrastructure_intelligence(world_states, provinces, settlements, ships, worship_state)
 	_populate_vacancy_intelligence(world_states, characters, characters_by_id, companies, settlements, provinces, season_meta)
 	_populate_resource_stockpiles(world_states, characters, provinces, settlements, clans, companies)
+	_populate_crime_suppression_data(world_states, settlements, provinces, current_season)
+	_assign_magistrate_standing_objectives(characters, objectives_map)
 
 	var festival_results: Dictionary = _process_festivals(ic_day, world_states)
 
 	var travel_arrivals: Array[Dictionary] = _process_travel(characters)
 	_process_arrival_observation(travel_arrivals, characters_by_id, current_season)
+	_process_witness_testimony_on_arrival(
+		travel_arrivals, characters_by_id, world_states, active_topics, current_season,
+	)
 
 	var musha_season_count: int = int(season_meta.get("horde_season_count", 0))
 	var musha_shugyo_results: Array[Dictionary] = _process_musha_shugyo(characters, characters_by_id, ic_day, objectives_map, dice_engine, musha_season_count)
@@ -163,6 +174,8 @@ static func advance_day(
 		objectives_map, active_topics,
 	)
 
+	world_states["_crime_records"] = crime_records
+
 	var day_result: Dictionary = NPCWaveResolver.resolve_day_applied(
 		characters, world_states, objectives_map, scoring_tables, filter_data,
 		dice_engine, action_skill_map, characters_by_id, provinces, action_log,
@@ -188,6 +201,82 @@ static func advance_day(
 		active_topics,
 		next_topic_id,
 		world_states,
+		active_wars,
+		action_log,
+		dice_engine,
+	)
+
+	_process_scene_examination_writebacks(
+		day_result.get("results", []), objectives_map, world_states,
+		characters_by_id, active_topics, next_topic_id, ic_day,
+	)
+
+	_update_patrol_tracking(
+		day_result.get("results", []), objectives_map, ic_day,
+	)
+
+	_process_successful_bribe_writebacks(
+		day_result.get("results", []),
+		crime_records, characters_by_id, ic_day,
+		active_secrets, next_secret_id,
+		next_case_id, objectives_map,
+	)
+
+	_process_flee_jurisdiction_writebacks(
+		day_result.get("results", []),
+		crime_records, characters_by_id,
+		active_topics, next_topic_id, ic_day,
+	)
+
+	_process_extortion_writebacks(
+		day_result.get("results", []),
+		crime_records, characters_by_id, ic_day,
+		active_secrets, next_secret_id,
+	)
+
+	_process_ptl_detection(
+		day_result.get("results", []),
+		characters_by_id, provinces, character_province_map,
+		dice_engine, active_topics, next_topic_id, ic_day,
+	)
+
+	_process_blood_evidence_discovery(
+		day_result.get("results", []),
+		crime_records, characters_by_id,
+		active_topics, next_topic_id, ic_day, dice_engine,
+	)
+
+	_process_flee_logistics(
+		day_result.get("results", []),
+		characters_by_id, active_courts, world_states,
+	)
+
+	_purge_expired_crime_evidence(crime_records, ic_day)
+	var cold_case_results: Array[Dictionary] = _apply_evidence_decay(
+		crime_records, objectives_map, ic_day,
+	)
+
+	_process_witness_tampering_writebacks(
+		day_result.get("results", []),
+		crime_records, characters_by_id,
+		active_topics, next_topic_id, ic_day, world_states,
+		active_secrets, next_secret_id, next_case_id, dice_engine,
+	)
+
+	_process_witness_report_letter_writebacks(
+		day_result.get("results", []),
+		characters_by_id, active_topics, pending_letters,
+		ic_day, dice_engine, next_letter_id,
+	)
+
+	_process_taint_proximity_detection(
+		day_result.get("results", []),
+		characters_by_id, character_province_map, dice_engine,
+		active_topics, next_topic_id, ic_day,
+	)
+
+	_capture_witness_travel_intent(
+		day_result.get("results", []), world_states,
 	)
 
 	var current_season_count: int = int(season_meta.get("horde_season_count", 0))
@@ -318,6 +407,8 @@ static func advance_day(
 		characters_by_id,
 		favors,
 		ic_day,
+		int(world_states.get("emperor_id", -1)),
+		int(world_states.get("emperor_archetype", StrategicReview.EmperorArchetype.IRON)),
 	)
 
 	var governance_results: Dictionary = _process_governance_effects(
@@ -404,6 +495,10 @@ static func advance_day(
 		active_topics, next_topic_id,
 	)
 
+	var hierarchy_cascade_results: Array[int] = _process_operational_death_cascade(
+		death_events, characters,
+	)
+
 	var succession_results: Array[Dictionary] = _process_successions(
 		active_successions, characters_by_id
 	)
@@ -428,6 +523,44 @@ static func advance_day(
 	var uphold_law_results: Array[Dictionary] = _process_uphold_law_scan(
 		characters, objectives_map, crime_records, active_topics
 	)
+	_generate_investigation_opened_topics(
+		uphold_law_results, crime_records, characters_by_id,
+		active_topics, next_topic_id, ic_day,
+	)
+
+	var lord_map: Dictionary = _build_lord_map(characters)
+	var conviction_results: Array[Dictionary] = ConvictionProcessor.process_accused_cases(
+		crime_records, characters_by_id, dice_engine, ic_day,
+		next_topic_id, active_topics, lord_map,
+	)
+
+	var trial_results: Array[Dictionary] = _resolve_pending_trials(
+		conviction_results, crime_records, characters_by_id,
+		lord_map, dice_engine, ic_day,
+	)
+
+	var seppuku_results: Array[Dictionary] = _process_seppuku_responses(
+		conviction_results, crime_records, characters_by_id,
+		ic_day, next_topic_id, active_topics, world_states,
+	)
+
+	var seppuku_action_results: Array[Dictionary] = _process_seppuku_action_writebacks(
+		day_result.get("results", []),
+		crime_records, characters_by_id,
+		ic_day, next_topic_id, active_topics,
+	)
+
+	_apply_cross_clan_conviction_consequences(
+		conviction_results, crime_records, characters_by_id,
+	)
+
+	_seed_conviction_topics_to_victim_lords(
+		conviction_results, crime_records, characters_by_id, active_topics,
+	)
+
+	_release_magistrate_after_conviction(
+		conviction_results, crime_records, objectives_map,
+	)
 
 	var info_results: Array[Dictionary] = _process_info_events(
 		day_result.get("applied", []),
@@ -436,6 +569,11 @@ static func advance_day(
 		current_season,
 		crime_records,
 		objectives_map,
+		world_states,
+		active_topics,
+		next_topic_id,
+		ic_day,
+		dice_engine,
 	)
 
 	var letter_results: Array[Dictionary] = LetterSystem.process_pending_letters(
@@ -482,11 +620,20 @@ static func advance_day(
 			worship_state, provinces,
 		)
 		world_states["_worship_maluses"] = worship_maluses
+		var emperor_tax_cfg: Dictionary = _build_emperor_tax_config(
+			world_states, characters_by_id,
+		)
+		_populate_tax_modifiers(characters, characters_by_id, provinces, season_meta)
 		seasonal_result = _process_season_transition(
 			characters, provinces, current_season, season_meta,
 			approach_penalties, settlements, spring_inputs, worship_maluses,
+			emperor_tax_cfg, trade_routes,
 		)
 		_apply_worship_stability_maluses(worship_maluses, provinces)
+		_apply_tyrant_stability_penalty(
+			world_states.get("emperor_archetype", StrategicReview.EmperorArchetype.IRON),
+			provinces,
+		)
 		wall_seasonal_result = _process_wall_seasonal_pressure(
 			settlements, provinces, current_season, season_meta
 		)
@@ -546,6 +693,7 @@ static func advance_day(
 			next_insurgency_id, world_states, worship_maluses,
 			season_meta,
 		)
+		_process_doshin_seasonal_recovery(world_states)
 		_tick_kuni_wards(season_meta)
 		season_meta.erase("patrolled_provinces")
 		_process_construction_completions(
@@ -613,6 +761,10 @@ static func advance_day(
 		_process_vassal_reassignments(
 			strategic_results, objectives_map, characters_by_id,
 		)
+		_process_tyrant_directives(
+			strategic_results, active_topics, next_topic_id, ic_day,
+			characters_by_id,
+		)
 		if not seiyaku_state.is_empty():
 			seiyaku_results = _process_seiyaku_review(
 				seiyaku_state, characters, characters_by_id,
@@ -630,6 +782,19 @@ static func advance_day(
 		pregnancy_results = _process_pregnancy_checks(
 			marriages, characters_by_id, children, dice_engine, ic_day,
 			next_character_id,
+		)
+
+	var koku_flow_results: Dictionary = {}
+	var stipend_topic_results: Array[Dictionary] = []
+	if time_system.get_ic_day_of_month() == 1:
+		var season_name: String = time_system.get_season_name().to_lower()
+		var months_in_season: int = ResourceTick.MONTHS_PER_SEASON.get(season_name, 3)
+		koku_flow_results = KokuCascadeSystem.process_monthly_koku_flow(
+			characters, characters_by_id, settlements, clans, months_in_season,
+		)
+		var stipends: Dictionary = koku_flow_results.get("stipends", {})
+		stipend_topic_results = _create_stipend_failure_topics(
+			stipends, characters_by_id, active_topics, next_topic_id, ic_day,
 		)
 
 	var horde_results: Dictionary = _process_horde_rolls(
@@ -655,7 +820,13 @@ static func advance_day(
 		"crime_results": crime_results,
 		"commitment_results": commitment_results,
 		"uphold_law_results": uphold_law_results,
+		"cold_case_results": cold_case_results,
+		"conviction_results": conviction_results,
+		"trial_results": trial_results,
+		"seppuku_results": seppuku_results,
+		"seppuku_action_results": seppuku_action_results,
 		"orphan_results": orphan_results,
+		"hierarchy_cascade_results": hierarchy_cascade_results,
 		"strategic_results": strategic_results,
 		"festival_results": festival_results,
 		"favor_results": favor_results,
@@ -714,6 +885,8 @@ static func advance_day(
 		"dragon_schism_siege_event": dragon_schism_siege_event,
 		"phoenix_council_results": phoenix_council_results,
 		"civil_war_results": civil_war_results_seasonal,
+		"koku_flow_results": koku_flow_results,
+		"stipend_topic_results": stipend_topic_results,
 	}
 
 
@@ -736,8 +909,14 @@ static func _process_info_events(
 	current_season: int,
 	crime_records: Array[CrimeRecord] = [],
 	objectives_map: Dictionary = {},
+	world_states: Dictionary = {},
+	active_topics: Array[TopicData] = [],
+	next_topic_id: Array[int] = [1000],
+	ic_day: int = 0,
+	dice_engine: DiceEngine = null,
 ) -> Array[Dictionary]:
 	var results: Array[Dictionary] = []
+	var location_characters: Dictionary = world_states.get("_location_characters", {})
 
 	for applied: Dictionary in applied_list:
 		var info_events: Array = applied.get("info_events", [])
@@ -755,9 +934,31 @@ static func _process_info_events(
 					character, target_id, action_log, current_season, quality
 				)
 
+				var char_loc: String = character.physical_location
+				var present_all: Array[int] = location_characters.get(char_loc, [] as Array[int])
+				var characters_present: Array[int] = []
+				for pid: int in present_all:
+					if pid != char_id:
+						characters_present.append(pid)
+
 				var witness_result: Dictionary = _check_witness_evidence(
-					char_id, target_id, quality, crime_records, objectives_map
+					char_id, target_id, quality, crime_records, objectives_map,
+					characters_by_id, dice_engine, characters_present,
 				)
+
+				var w_threshold: String = witness_result.get("threshold_crossed", "")
+				if w_threshold == "bribery_eval":
+					_inject_bribery_eval_event(
+						crime_records, target_id, world_states
+					)
+					_inject_extortion_opportunity_from_probe(
+						crime_records, target_id, world_states
+					)
+				elif w_threshold == "accusation":
+					_generate_accusation_topic_from_witness(
+						char_id, crime_records, objectives_map,
+						characters_by_id, active_topics, next_topic_id, ic_day
+					)
 
 				results.append({
 					"character_id": char_id,
@@ -767,6 +968,32 @@ static func _process_info_events(
 				})
 
 	return results
+
+
+static func _inject_bribery_eval_event(
+	crime_records: Array[CrimeRecord],
+	target_id: int,
+	world_states: Dictionary,
+) -> void:
+	for record: CrimeRecord in crime_records:
+		if record.perpetrator_id < 0:
+			continue
+		if target_id not in record.known_suspects:
+			continue
+		var perp_ws: Dictionary = world_states.get(record.perpetrator_id, {})
+		var events: Array = perp_ws.get("pending_events", [])
+		for ev: Dictionary in events:
+			if ev.get("type", "") == "bribery_eval" and ev.get("case_id", -1) == record.case_id:
+				return
+		events.append({
+			"type": "bribery_eval",
+			"case_id": record.case_id,
+			"evidence_total": record.evidence_total,
+			"magistrate_id": record.investigating_magistrate_id,
+		})
+		perp_ws["pending_events"] = events
+		world_states[record.perpetrator_id] = perp_ws
+		return
 
 
 # -- Daily Conversations -------------------------------------------------------
@@ -854,6 +1081,8 @@ static func _process_season_transition(
 	settlements: Array[SettlementData] = [],
 	miya_inputs: Dictionary = {},
 	worship_maluses: Dictionary = {},
+	emperor_tax_config: Dictionary = {},
+	trade_routes: Array = [],
 ) -> Dictionary:
 	_decay_all_knowledge(characters, current_season)
 
@@ -879,7 +1108,7 @@ static func _process_season_transition(
 
 	var tick_result: Dictionary = ResourceTick.process_seasonal_tick(
 		province_array, settlements, season_name, season_meta, resolved_inputs,
-		worship_maluses,
+		worship_maluses, emperor_tax_config, trade_routes,
 	)
 
 	return {
@@ -921,6 +1150,102 @@ static func _process_seasonal_stipend_disposition(
 		retainer.disposition_values[lord.character_id] = clampi(old_disp + delta, -100, 100)
 		updates_applied += 1
 	return updates_applied
+
+
+static func _create_stipend_failure_topics(
+	stipends: Dictionary,
+	characters_by_id: Dictionary,
+	active_topics: Array[TopicData],
+	next_topic_id: Array[int],
+	ic_day: int,
+) -> Array[Dictionary]:
+	var created: Array[Dictionary] = []
+	for char_id: Variant in stipends:
+		var entry: Dictionary = stipends[char_id]
+		if not entry.get("generates_topic", false):
+			continue
+		var lord_id: int = entry.get("lord_id", -1)
+		var cid: int = char_id as int
+		var topic := TopicData.new()
+		topic.topic_id = next_topic_id[0]
+		next_topic_id[0] += 1
+		topic.slug = "stipend_failure_lord%d_char%d_d%d" % [lord_id, cid, ic_day]
+		topic.title = "Stipend Failure by Lord %d" % lord_id
+		topic.topic_type = "stipend_failure"
+		topic.variant = "STIPEND_FAILURE"
+		topic.tier = TopicData.Tier.TIER_4
+		topic.category = TopicData.Category.ECONOMIC
+		topic.subject_character_id = lord_id
+		topic.subject_role = "NEGATIVE"
+		topic.ic_day_created = ic_day
+		topic.momentum = 0.0
+		active_topics.append(topic)
+		var holder_ids: Array[int] = []
+		if lord_id >= 0:
+			var lord: L5RCharacterData = characters_by_id.get(lord_id)
+			if lord != null and topic.topic_id not in lord.topic_pool:
+				lord.topic_pool.append(topic.topic_id)
+				holder_ids.append(lord_id)
+		var affected: L5RCharacterData = characters_by_id.get(cid)
+		if affected != null and topic.topic_id not in affected.topic_pool:
+			affected.topic_pool.append(topic.topic_id)
+			holder_ids.append(cid)
+		for other_id: Variant in characters_by_id:
+			var oid: int = other_id as int
+			if oid == lord_id or oid == cid:
+				continue
+			var other: L5RCharacterData = characters_by_id[oid]
+			if other.lord_id == lord_id and affected != null and other.physical_location == affected.physical_location and other.physical_location != "":
+				if topic.topic_id not in other.topic_pool:
+					other.topic_pool.append(topic.topic_id)
+					holder_ids.append(oid)
+		created.append({
+			"topic_id": topic.topic_id,
+			"lord_id": lord_id,
+			"character_id": cid,
+			"ratio": entry.get("ratio", 0.0),
+			"in_crisis": entry.get("in_crisis", false),
+			"holder_ids": holder_ids,
+		})
+	return created
+
+
+static func _populate_tax_modifiers(
+	characters: Array[L5RCharacterData],
+	characters_by_id: Dictionary,
+	provinces: Dictionary,
+	season_meta: Dictionary,
+) -> void:
+	var tax_mod: Dictionary = {}
+	for pid: Variant in provinces:
+		var prov: ProvinceData = provinces[pid] as ProvinceData
+		if prov == null:
+			continue
+		var best_id: int = -1
+		var best_status: float = -1.0
+		for c: L5RCharacterData in characters:
+			if CharacterStats.is_dead(c):
+				continue
+			if c.clan != prov.clan:
+				continue
+			if c.lord_id >= 0 and c.status < 5.0:
+				continue
+			if c.status < 3.0:
+				continue
+			if c.status > best_status:
+				best_status = c.status
+				best_id = c.character_id
+		if best_id < 0:
+			continue
+		var lord: L5RCharacterData = characters_by_id.get(best_id) as L5RCharacterData
+		if lord == null:
+			continue
+		var mod: float = ResourceTick.compute_tax_modifier(
+			lord.bushido_virtue, lord.shourido_virtue,
+		)
+		if mod != 0.0:
+			tax_mod[int(pid)] = mod
+	season_meta["_tax_modifier"] = tax_mod
 
 
 static func _process_wall_seasonal_pressure(
@@ -1522,7 +1847,7 @@ static func _process_horde_assaults(
 			topic.variant = "shadowlands_incursion"
 			topic.category = TopicData.Category.MILITARY
 			topic.tier = TopicData.Tier.TIER_1
-			topic.momentum = 80.0  # Tier 1 crisis starts with high momentum.
+			topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)
 			topic.clan_involved = clan_str
 			topic.ic_day_created = ic_day
 			topic.provinces_affected = [horde.target_province_id]
@@ -1609,7 +1934,7 @@ static func _process_horde_rolls(
 		topic.topic_type = "military"
 		topic.category = TopicData.Category.POLITICAL
 		topic.tier = TopicData.Tier.TIER_3
-		topic.momentum = 30.0
+		topic.momentum = _COMBAT_EVENT_MOMENTUM
 		topic.ic_day_created = ic_day
 		var province: Variant = provinces.get(horde.target_province_id, null)
 		if province is ProvinceData:
@@ -1762,7 +2087,7 @@ static func _create_blessing_topic(
 	topic.variant = variant
 	topic.tier = TopicData.Tier.TIER_4
 	topic.category = TopicData.Category.POLITICAL
-	topic.momentum = 11.0  # Minor topic — broadcasts to affected province.
+	topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)
 	topic.provinces_affected = [prov.province_id]
 	topic.clan_involved = prov.clan
 	topic.subject_role = "BENEFICIARY"
@@ -1790,7 +2115,7 @@ static func _create_suspension_topic(
 	topic.variant = variant
 	topic.tier = tier
 	topic.category = TopicData.Category.POLITICAL
-	topic.momentum = 26.0 if tier == TopicData.Tier.TIER_3 else 11.0
+	topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(tier)
 	topic.subject_role = "PERPETRATOR"   # Emperor / Imperial decision
 	topic.ic_day_created = ic_day
 	active_topics.append(topic)
@@ -2065,6 +2390,302 @@ static func _create_famine_topic_multi(
 	return topic
 
 
+# -- Scene Examination Writebacks (s11.3.13) -----------------------------------
+
+static func _process_scene_examination_writebacks(
+	results: Array,
+	objectives_map: Dictionary,
+	world_states: Dictionary,
+	characters_by_id: Dictionary = {},
+	active_topics: Array[TopicData] = [],
+	next_topic_id: Array[int] = [1000],
+	ic_day: int = 0,
+) -> void:
+	for result: Variant in results:
+		if not result is Dictionary:
+			continue
+		var r: Dictionary = result as Dictionary
+		if r.get("action_id", "") != "EXAMINE_CRIME_SCENE":
+			continue
+		var effects: Dictionary = r.get("effects", {})
+		if effects.get("effect", "") != "scene_examined":
+			continue
+		if not r.get("success", false):
+			continue
+
+		var char_id: int = r.get("character_id", -1)
+		var case_id: int = effects.get("case_id", -1)
+		if char_id < 0 or case_id < 0:
+			continue
+
+		var objs: Dictionary = objectives_map.get(char_id, {})
+		for obj_key: Variant in objs:
+			var obj: Variant = objs[obj_key]
+			if obj is Dictionary:
+				var active_case: Dictionary = (obj as Dictionary).get("active_case", {})
+				if active_case.get("case_id", -1) == case_id:
+					active_case["scene_examined"] = true
+					active_case["scene_exam_count"] = active_case.get("scene_exam_count", 0) + 1
+					active_case["evidence_total"] = effects.get("evidence_gained", 0) + active_case.get("evidence_total", 0)
+					break
+
+		var threshold: String = effects.get("threshold_crossed", "")
+		if threshold == "bribery_eval":
+			_inject_bribery_eval_event_by_case(case_id, world_states)
+			_inject_extortion_opportunity_by_case(case_id, world_states)
+		elif threshold == "accusation":
+			_generate_accusation_topic_for_case(
+				case_id, world_states, characters_by_id,
+				active_topics, next_topic_id, ic_day
+			)
+
+
+static func _update_patrol_tracking(
+	results: Array,
+	objectives_map: Dictionary,
+	ic_day: int,
+) -> void:
+	for result: Variant in results:
+		if not result is Dictionary:
+			continue
+		var r: Dictionary = result as Dictionary
+		var action_id: String = r.get("action_id", "")
+		if action_id != "EXAMINE_CRIME_SCENE" and action_id != "INVESTIGATE_PROVINCE":
+			continue
+		if not r.get("success", false):
+			continue
+		var char_id: int = r.get("character_id", -1)
+		if char_id < 0:
+			continue
+		var objs: Dictionary = objectives_map.get(char_id, {})
+		var standing: Dictionary = objs.get("standing", {})
+		if standing.get("need_type", "") == "UPHOLD_LAW":
+			standing["last_patrol_ic_day"] = ic_day
+
+
+static func _inject_bribery_eval_event_by_case(
+	case_id: int,
+	world_states: Dictionary,
+) -> void:
+	var cr: Array[CrimeRecord] = world_states.get("_crime_records", [] as Array[CrimeRecord])
+	for record: CrimeRecord in cr:
+		if record.case_id == case_id:
+			var perp_id: int = record.perpetrator_id
+			if perp_id < 0:
+				return
+			var ws: Dictionary = world_states.get(perp_id, {})
+			var pending: Array = ws.get("pending_events", [])
+			pending.append({
+				"type": "bribery_eval",
+				"case_id": case_id,
+				"evidence_total": record.evidence_total,
+				"magistrate_id": record.investigating_magistrate_id,
+			})
+			ws["pending_events"] = pending
+			world_states[perp_id] = ws
+			return
+
+
+static func _inject_extortion_opportunity_by_case(
+	case_id: int,
+	world_states: Dictionary,
+) -> void:
+	var cr: Array[CrimeRecord] = world_states.get("_crime_records", [] as Array[CrimeRecord])
+	for record: CrimeRecord in cr:
+		if record.case_id != case_id:
+			continue
+		var mag_id: int = record.investigating_magistrate_id
+		if mag_id < 0:
+			return
+		var mag_ws: Dictionary = world_states.get(mag_id, {})
+		var mag_pending: Array = mag_ws.get("pending_events", [])
+		for ev: Dictionary in mag_pending:
+			if ev.get("type", "") == "extortion_opportunity" and ev.get("case_id", -1) == case_id:
+				return
+		mag_pending.append({
+			"type": "extortion_opportunity",
+			"case_id": case_id,
+			"suspect_id": record.perpetrator_id,
+			"evidence_total": record.evidence_total,
+		})
+		mag_ws["pending_events"] = mag_pending
+		world_states[mag_id] = mag_ws
+		return
+
+
+static func _inject_extortion_opportunity_from_probe(
+	crime_records: Array[CrimeRecord],
+	target_id: int,
+	world_states: Dictionary,
+) -> void:
+	for record: CrimeRecord in crime_records:
+		if record.perpetrator_id < 0:
+			continue
+		if target_id not in record.known_suspects:
+			continue
+		var mag_id: int = record.investigating_magistrate_id
+		if mag_id < 0:
+			return
+		var mag_ws: Dictionary = world_states.get(mag_id, {})
+		var mag_pending: Array = mag_ws.get("pending_events", [])
+		for ev: Dictionary in mag_pending:
+			if ev.get("type", "") == "extortion_opportunity" and ev.get("case_id", -1) == record.case_id:
+				return
+		mag_pending.append({
+			"type": "extortion_opportunity",
+			"case_id": record.case_id,
+			"suspect_id": record.perpetrator_id,
+			"evidence_total": record.evidence_total,
+		})
+		mag_ws["pending_events"] = mag_pending
+		world_states[mag_id] = mag_ws
+		return
+
+
+static func _generate_accusation_topic_for_case(
+	case_id: int,
+	world_states: Dictionary,
+	characters_by_id: Dictionary,
+	active_topics: Array[TopicData],
+	next_topic_id: Array[int],
+	ic_day: int,
+) -> void:
+	var cr: Array[CrimeRecord] = world_states.get("_crime_records", [] as Array[CrimeRecord])
+	for record: CrimeRecord in cr:
+		if record.case_id == case_id:
+			var accused: L5RCharacterData = characters_by_id.get(record.perpetrator_id)
+			if accused == null:
+				return
+			_transition_case_entry_to_accused(accused, case_id, ic_day)
+			var topic: TopicData = InvestigationSystem.generate_accusation_topic(
+				record, accused, next_topic_id, ic_day
+			)
+			if topic != null:
+				active_topics.append(topic)
+				var lord_id: int = accused.lord_id
+				var lord: L5RCharacterData = characters_by_id.get(lord_id)
+				if lord != null and topic.topic_id not in lord.topic_pool:
+					lord.topic_pool.append(topic.topic_id)
+			return
+
+
+static func _generate_accusation_topic_from_witness(
+	prober_id: int,
+	crime_records: Array[CrimeRecord],
+	objectives_map: Dictionary,
+	characters_by_id: Dictionary,
+	active_topics: Array[TopicData],
+	next_topic_id: Array[int],
+	ic_day: int,
+) -> void:
+	var objectives: Dictionary = objectives_map.get(prober_id, {})
+	var standing: Dictionary = objectives.get("standing", {})
+	var active_case: Dictionary = standing.get("active_case", {})
+	if active_case.is_empty():
+		var primary: Dictionary = objectives.get("primary", {})
+		active_case = primary if primary.get("need_type", "") == "INVESTIGATE_CRIME" else {}
+	if active_case.is_empty():
+		return
+
+	var case_id: int = active_case.get("case_id", -1)
+	if case_id < 0:
+		return
+
+	for record: CrimeRecord in crime_records:
+		if record.case_id == case_id:
+			var accused: L5RCharacterData = characters_by_id.get(record.perpetrator_id)
+			if accused == null:
+				return
+			_transition_case_entry_to_accused(accused, case_id, ic_day)
+			var topic: TopicData = InvestigationSystem.generate_accusation_topic(
+				record, accused, next_topic_id, ic_day
+			)
+			if topic != null:
+				active_topics.append(topic)
+				var lord_id: int = accused.lord_id
+				var lord: L5RCharacterData = characters_by_id.get(lord_id)
+				if lord != null and topic.topic_id not in lord.topic_pool:
+					lord.topic_pool.append(topic.topic_id)
+			return
+
+
+static func _transition_case_entry_to_accused(
+	accused: L5RCharacterData,
+	case_id: int,
+	ic_day: int,
+) -> void:
+	var entry: LegalCaseEntry = LegalStatusSystem.get_case(accused, case_id)
+	if entry != null:
+		LegalStatusSystem.transition(entry, Enums.LegalStatus.ACCUSED, ic_day)
+	else:
+		var new_entry := LegalCaseEntry.new()
+		new_entry.crime_record_id = case_id
+		new_entry.state = Enums.LegalStatus.ACCUSED
+		new_entry.evidence_total = InvestigationSystem.ACCUSATION_THRESHOLD
+		new_entry.accusation_timestamp = ic_day
+		accused.legal_cases.append(new_entry)
+
+
+static func handle_evidence_threshold(
+	threshold: String,
+	record: CrimeRecord,
+	characters_by_id: Dictionary,
+	active_topics: Array[TopicData],
+	next_topic_id: Array[int],
+	ic_day: int,
+	world_states: Dictionary = {},
+) -> void:
+	if threshold == "bribery_eval":
+		var perp_id: int = record.perpetrator_id
+		if perp_id < 0:
+			return
+		var ws: Dictionary = world_states.get(perp_id, {})
+		var pending: Array = ws.get("pending_events", [])
+		for ev: Dictionary in pending:
+			if ev.get("type", "") == "bribery_eval" and ev.get("case_id", -1) == record.case_id:
+				return
+		var first_witness_id: int = record.witnesses[0] if not record.witnesses.is_empty() else -1
+		pending.append({
+			"type": "bribery_eval",
+			"case_id": record.case_id,
+			"evidence_total": record.evidence_total,
+			"magistrate_id": record.investigating_magistrate_id,
+			"witness_id": first_witness_id,
+		})
+		ws["pending_events"] = pending
+		world_states[perp_id] = ws
+
+		var mag_id: int = record.investigating_magistrate_id
+		if mag_id >= 0:
+			var mag_ws: Dictionary = world_states.get(mag_id, {})
+			var mag_pending: Array = mag_ws.get("pending_events", [])
+			for ev: Dictionary in mag_pending:
+				if ev.get("type", "") == "extortion_opportunity" and ev.get("case_id", -1) == record.case_id:
+					return
+			mag_pending.append({
+				"type": "extortion_opportunity",
+				"case_id": record.case_id,
+				"suspect_id": perp_id,
+				"evidence_total": record.evidence_total,
+			})
+			mag_ws["pending_events"] = mag_pending
+			world_states[mag_id] = mag_ws
+	elif threshold == "accusation":
+		var accused: L5RCharacterData = characters_by_id.get(record.perpetrator_id)
+		if accused == null:
+			return
+		_transition_case_entry_to_accused(accused, record.case_id, ic_day)
+		var topic: TopicData = InvestigationSystem.generate_accusation_topic(
+			record, accused, next_topic_id, ic_day
+		)
+		if topic != null:
+			active_topics.append(topic)
+			var lord_id: int = accused.lord_id
+			var lord: L5RCharacterData = characters_by_id.get(lord_id)
+			if lord != null and topic.topic_id not in lord.topic_pool:
+				lord.topic_pool.append(topic.topic_id)
+
+
 # -- Crime Detection (s57.47) --------------------------------------------------
 
 static func _process_crime_detection(
@@ -2076,6 +2697,9 @@ static func _process_crime_detection(
 	active_topics: Array[TopicData] = [],
 	next_topic_id: Array[int] = [1000],
 	world_states: Dictionary = {},
+	active_wars: Array[WarData] = [],
+	action_log: Array[Dictionary] = [],
+	dice_engine: DiceEngine = null,
 ) -> Array[Dictionary]:
 	var crime_results: Array[Dictionary] = []
 
@@ -2084,16 +2708,19 @@ static func _process_crime_detection(
 			continue
 		var r: Dictionary = result as Dictionary
 		var effects: Dictionary = r.get("effects", {})
-		if not effects.get("detection_risk", false):
-			continue
 
 		var char_id: int = r.get("character_id", -1)
 		var character: L5RCharacterData = characters_by_id.get(char_id)
 		if character == null:
 			continue
 
+		var crime_type: int = -1
 		var action_id: String = r.get("action_id", "")
-		var crime_type: int = _action_to_crime_type(action_id)
+
+		if effects.get("requires_crime_creation", false):
+			crime_type = effects.get("crime_type", -1)
+		elif effects.get("detection_risk", false):
+			crime_type = _action_to_crime_type(action_id)
 		if crime_type < 0:
 			continue
 
@@ -2106,11 +2733,76 @@ static func _process_crime_detection(
 			char_id, location, characters_by_id, world_states
 		)
 
+		var is_killing: bool = crime_type in [
+			Enums.CrimeType.UNSANCTIONED_DUEL_DEATH,
+			Enums.CrimeType.UNSANCTIONED_OPEN_KILLING,
+			Enums.CrimeType.UNSANCTIONED_COVERT_KILLING,
+		]
+
+		if is_killing:
+			var victim: L5RCharacterData = characters_by_id.get(target_id)
+			if victim != null:
+				var clans_at_war: bool = WarSystem.are_clans_at_war(
+					active_wars, character.clan, victim.clan
+				)
+				var is_battlefield: bool = _is_character_in_battle(
+					char_id, world_states
+				)
+				var is_prisoner: bool = victim.captive_status != ""
+				var attacker_acted_first: bool = _did_victim_act_first(
+					effects, action_id
+				)
+				var has_zone_log: bool = _has_zone_log_evidence(
+					char_id, target_id, location, action_log
+				)
+				var killing_result := CrimeWiring.process_killing_crime(
+					effects, character, victim, case_id, ic_day, witnesses,
+					clans_at_war, is_battlefield, is_prisoner,
+					attacker_acted_first, has_zone_log,
+				)
+				if not killing_result.get("crime_created", false):
+					crime_results.append({
+						"case_id": -1,
+						"character_id": char_id,
+						"crime_type": crime_type,
+						"action_id": action_id,
+						"no_crime": true,
+						"reason": killing_result.get("reason", ""),
+					})
+					continue
+				var record: CrimeRecord = killing_result["record"]
+				crime_records.append(record)
+				var at_act: Dictionary = CrimeSystem.apply_at_act_consequences(
+					character, record.crime_type
+				)
+				var crime_topic: TopicData = _create_crime_topic(
+					record, character, ic_day, next_topic_id
+				)
+				if crime_topic != null:
+					active_topics.append(crime_topic)
+					_seed_crime_topic_to_knowers(crime_topic, record, characters_by_id)
+				crime_results.append({
+					"case_id": case_id,
+					"character_id": char_id,
+					"crime_type": record.crime_type,
+					"action_id": action_id,
+					"honor_delta": at_act.get("honor_delta", 0.0),
+					"topic_id": crime_topic.topic_id if crime_topic != null else -1,
+					"witness_count": witnesses.size(),
+					"classification": killing_result.get("classification", {}),
+					"jurisdiction": killing_result.get("jurisdiction", {}),
+				})
+				continue
+
 		var record: CrimeRecord = CrimeSystem.create_crime_record(
 			case_id, crime_type, char_id, location, ic_day, target_id,
 			0, witnesses
 		)
 		crime_records.append(record)
+
+		var crime_type_str: String = _crime_type_to_string(crime_type)
+		var discovery: InvestigationLoopSystem.DiscoveryType = InvestigationLoopSystem.get_discovery_type(crime_type_str)
+		record.legal_status = InvestigationLoopSystem.get_initial_legal_status(discovery)
 
 		var at_act: Dictionary = CrimeSystem.apply_at_act_consequences(character, crime_type)
 
@@ -2133,7 +2825,980 @@ static func _process_crime_detection(
 			"witness_count": witnesses.size(),
 		})
 
+		if dice_engine != null:
+			_apply_criminal_recall(character, record, witnesses, dice_engine, world_states)
+
+		if action_id == "BRIBE_FOR_INFO" and effects.get("suppress_case", false):
+			var bribe_magistrate_id: int = effects.get("magistrate_id", -1)
+			_apply_failed_bribe_evidence(
+				crime_records, char_id, characters_by_id,
+				active_topics, next_topic_id, ic_day, world_states,
+				bribe_magistrate_id
+			)
+
 	return crime_results
+
+
+static func process_fugitive_declaration(
+	record: CrimeRecord,
+	fugitive: L5RCharacterData,
+	characters_by_id: Dictionary,
+	active_topics: Array[TopicData],
+	next_topic_id: Array[int],
+	ic_day: int,
+) -> Dictionary:
+	if fugitive == null:
+		return {"declared": false}
+
+	record.legal_status = Enums.LegalStatus.FUGITIVE
+	var entry: LegalCaseEntry = LegalStatusSystem.get_case(fugitive, record.case_id)
+	if entry != null:
+		LegalStatusSystem.transition(entry, Enums.LegalStatus.FUGITIVE, ic_day)
+
+	var topic: TopicData = InvestigationSystem.generate_fugitive_topic(
+		fugitive, next_topic_id, ic_day
+	)
+	if topic != null:
+		active_topics.append(topic)
+		var lord_id: int = fugitive.lord_id
+		var lord: L5RCharacterData = characters_by_id.get(lord_id)
+		if lord != null and topic.topic_id not in lord.topic_pool:
+			lord.topic_pool.append(topic.topic_id)
+
+	return {
+		"declared": true,
+		"fugitive_id": fugitive.character_id,
+		"topic_id": topic.topic_id if topic != null else -1,
+	}
+
+
+static func _process_successful_bribe_writebacks(
+	results: Array,
+	crime_records: Array[CrimeRecord],
+	characters_by_id: Dictionary,
+	ic_day: int,
+	active_secrets: Array[SecretData] = [],
+	next_secret_id: Array[int] = [1],
+	next_case_id: Array[int] = [1],
+	objectives_map: Dictionary = {},
+) -> void:
+	for result: Variant in results:
+		if not result is Dictionary:
+			continue
+		var r: Dictionary = result as Dictionary
+		if r.get("action_id", "") != "BRIBE_FOR_INFO":
+			continue
+		if not r.get("success", false):
+			continue
+		var effects: Dictionary = r.get("effects", {})
+		if not effects.get("suppress_case", false):
+			continue
+
+		var briber_id: int = r.get("character_id", -1)
+		var magistrate_id: int = effects.get("magistrate_id", -1)
+		var magistrate: L5RCharacterData = characters_by_id.get(magistrate_id)
+		if magistrate == null:
+			continue
+
+		var briber: L5RCharacterData = characters_by_id.get(briber_id)
+
+		for record: CrimeRecord in crime_records:
+			if record.perpetrator_id != briber_id:
+				continue
+			if record.legal_status == Enums.LegalStatus.DECREED_GUILTY:
+				continue
+			if record.legal_status == Enums.LegalStatus.ACQUITTED:
+				continue
+			record.legal_status = Enums.LegalStatus.CLEAR
+			if briber != null:
+				var entry: LegalCaseEntry = LegalStatusSystem.get_case(briber, record.case_id)
+				if entry != null:
+					LegalStatusSystem.transition(entry, Enums.LegalStatus.CLEAR, ic_day)
+			HonorGlorySystem.apply_honor_change(magistrate, -0.5)
+
+			# Release magistrate's active case
+			var mag_objs: Dictionary = objectives_map.get(magistrate_id, {})
+			var standing: Dictionary = mag_objs.get("standing", {})
+			if standing.get("need_type", "") == "UPHOLD_LAW":
+				var active_case: Dictionary = standing.get("active_case", {})
+				if active_case.get("case_id", -1) == record.case_id:
+					standing.erase("active_case")
+			record.investigating_magistrate_id = -1
+
+			# Create MAGISTRATE_CORRUPTION CrimeRecord for the corrupt magistrate
+			var corruption_record: CrimeRecord = CrimeSystem.create_crime_record(
+				next_case_id[0],
+				Enums.CrimeType.MAGISTRATE_CORRUPTION,
+				magistrate_id,
+				record.location,
+				ic_day,
+			)
+			next_case_id[0] += 1
+			crime_records.append(corruption_record)
+
+			var crime_name: String = InvestigationSystem.CRIME_TYPE_NAMES.get(
+				record.crime_type, "Crime"
+			)
+			var secret_about_magistrate: SecretData = SecretSystem.create_secret(
+				next_secret_id[0],
+				magistrate_id,
+				SecretData.Severity.TIER_1,
+				"bribe_accepted_%d" % record.case_id,
+				"%s accepted a bribe from %s to bury %s investigation" % [
+					magistrate.character_name,
+					briber.character_name if briber != null else "unknown",
+					crime_name,
+				],
+			)
+			next_secret_id[0] += 1
+			active_secrets.append(secret_about_magistrate)
+
+			var secret_about_briber: SecretData = SecretSystem.create_secret(
+				next_secret_id[0],
+				briber_id,
+				SecretData.Severity.TIER_1,
+				"bribe_offered_%d" % record.case_id,
+				"%s bribed %s to suppress %s investigation" % [
+					briber.character_name if briber != null else "unknown",
+					magistrate.character_name,
+					crime_name,
+				],
+			)
+			next_secret_id[0] += 1
+			active_secrets.append(secret_about_briber)
+			break
+
+
+static func _apply_failed_bribe_evidence(
+	crime_records: Array[CrimeRecord],
+	briber_id: int,
+	characters_by_id: Dictionary,
+	active_topics: Array[TopicData],
+	next_topic_id: Array[int],
+	ic_day: int,
+	world_states: Dictionary,
+	magistrate_id: int = -1,
+) -> void:
+	for record: CrimeRecord in crime_records:
+		if record.perpetrator_id != briber_id:
+			continue
+		if record.legal_status == Enums.LegalStatus.DECREED_GUILTY:
+			continue
+		if record.legal_status == Enums.LegalStatus.ACQUITTED:
+			continue
+		var threshold: String = InvestigationSystem.add_failed_bribe_evidence(record)
+		if not threshold.is_empty():
+			handle_evidence_threshold(
+				threshold, record, characters_by_id,
+				active_topics, next_topic_id, ic_day, world_states
+			)
+		var briber: L5RCharacterData = characters_by_id.get(briber_id)
+		var magistrate: L5RCharacterData = characters_by_id.get(magistrate_id)
+		if briber != null and magistrate != null:
+			var bribery_topic: TopicData = InvestigationSystem.generate_bribery_attempt_topic(
+				briber, magistrate, record, next_topic_id, ic_day
+			)
+			if bribery_topic != null:
+				active_topics.append(bribery_topic)
+		return
+
+
+static func _process_flee_jurisdiction_writebacks(
+	results: Array,
+	crime_records: Array[CrimeRecord],
+	characters_by_id: Dictionary,
+	active_topics: Array[TopicData],
+	next_topic_id: Array[int],
+	ic_day: int,
+) -> void:
+	for result: Variant in results:
+		if not result is Dictionary:
+			continue
+		var r: Dictionary = result as Dictionary
+		if r.get("action_id", "") != "FLEE_JURISDICTION":
+			continue
+		if not r.get("success", false):
+			continue
+		var effects: Dictionary = r.get("effects", {})
+		if effects.get("effect", "") != "flee_jurisdiction":
+			continue
+
+		var fugitive_id: int = effects.get("fugitive_id", -1)
+		var fugitive: L5RCharacterData = characters_by_id.get(fugitive_id)
+		if fugitive == null:
+			continue
+
+		for record: CrimeRecord in crime_records:
+			if record.perpetrator_id != fugitive_id:
+				continue
+			if record.legal_status == Enums.LegalStatus.DECREED_GUILTY:
+				continue
+			if record.legal_status == Enums.LegalStatus.ACQUITTED:
+				continue
+			if record.legal_status == Enums.LegalStatus.FUGITIVE:
+				continue
+			process_fugitive_declaration(
+				record, fugitive, characters_by_id,
+				active_topics, next_topic_id, ic_day,
+			)
+			break
+
+
+static func _process_extortion_writebacks(
+	results: Array,
+	crime_records: Array[CrimeRecord],
+	characters_by_id: Dictionary,
+	ic_day: int,
+	active_secrets: Array[SecretData] = [],
+	next_secret_id: Array[int] = [1],
+) -> void:
+	for result: Variant in results:
+		if not result is Dictionary:
+			continue
+		var r: Dictionary = result as Dictionary
+		if r.get("action_id", "") != "EXTORT_ACCUSED":
+			continue
+		if not r.get("success", false):
+			continue
+		var effects: Dictionary = r.get("effects", {})
+		if not effects.get("suppress_case", false):
+			continue
+
+		var magistrate_id: int = effects.get("magistrate_id", -1)
+		var suspect_id: int = effects.get("suspect_id", -1)
+		var magistrate: L5RCharacterData = characters_by_id.get(magistrate_id)
+		var suspect: L5RCharacterData = characters_by_id.get(suspect_id)
+		if magistrate == null:
+			continue
+
+		for record: CrimeRecord in crime_records:
+			if record.perpetrator_id != suspect_id:
+				continue
+			if record.legal_status == Enums.LegalStatus.DECREED_GUILTY:
+				continue
+			if record.legal_status == Enums.LegalStatus.ACQUITTED:
+				continue
+			record.legal_status = Enums.LegalStatus.CLEAR
+			if suspect != null:
+				var entry: LegalCaseEntry = LegalStatusSystem.get_case(suspect, record.case_id)
+				if entry != null:
+					LegalStatusSystem.transition(entry, Enums.LegalStatus.CLEAR, ic_day)
+			HonorGlorySystem.apply_honor_change(magistrate, -1.0)
+
+			var crime_name: String = InvestigationSystem.CRIME_TYPE_NAMES.get(
+				record.crime_type, "Crime"
+			)
+			var secret: SecretData = SecretSystem.create_secret(
+				next_secret_id[0],
+				magistrate_id,
+				SecretData.Severity.TIER_1,
+				"extortion_%d" % record.case_id,
+				"%s extorted %s to bury %s investigation" % [
+					magistrate.character_name,
+					suspect.character_name if suspect != null else "unknown",
+					crime_name,
+				],
+			)
+			next_secret_id[0] += 1
+			active_secrets.append(secret)
+			break
+
+
+# -- PTL Detection (Channel 1, s11.11) -----------------------------------------
+# Shugenja investigating a tainted province automatically attempt
+# Perception + Lore: Shadowlands vs TN (PTL × 5). Kuni and Asako get +2k0.
+
+static func _process_ptl_detection(
+	results: Array,
+	characters_by_id: Dictionary,
+	provinces: Dictionary,
+	character_province_map: Dictionary,
+	dice_engine: DiceEngine,
+	active_topics: Array[TopicData],
+	next_topic_id: Array[int],
+	ic_day: int,
+) -> void:
+	for result: Variant in results:
+		if not result is Dictionary:
+			continue
+		var r: Dictionary = result as Dictionary
+		if r.get("action_id", "") != "INVESTIGATE_PROVINCE":
+			continue
+		if not r.get("success", false):
+			continue
+
+		var char_id: int = r.get("character_id", -1)
+		var character: L5RCharacterData = characters_by_id.get(char_id)
+		if character == null:
+			continue
+		if character.school_type != Enums.SchoolType.SHUGENJA:
+			continue
+
+		var province_id: int = character_province_map.get(char_id, -1)
+		if province_id < 0:
+			province_id = r.get("target_province_id", -1)
+		var province: ProvinceData = provinces.get(province_id)
+		if province == null:
+			continue
+		if province.province_taint_level <= 0.0:
+			continue
+
+		var ptl_tn: int = int(province.province_taint_level * 5.0)
+		var perception: int = character.perception if character.perception > 0 else 2
+		var lore_rank: int = character.skills.get("Lore: Shadowlands", 0)
+		if lore_rank <= 0:
+			continue
+
+		var rolled: int = perception + lore_rank
+		var kept: int = perception
+		if character.family in ["Kuni", "Asako"]:
+			rolled += 2
+
+		var roll_result: Dictionary = dice_engine.roll_and_keep(rolled, kept)
+		var total: int = roll_result.get("total", 0)
+		if total < ptl_tn:
+			continue
+
+		var topic: TopicData = _create_ptl_detection_topic(
+			character, province, province_id, next_topic_id, ic_day
+		)
+		if topic != null:
+			active_topics.append(topic)
+			if character.lord_id >= 0:
+				var lord: L5RCharacterData = characters_by_id.get(character.lord_id)
+				if lord != null and topic.topic_id not in lord.topic_pool:
+					lord.topic_pool.append(topic.topic_id)
+
+
+static func _create_ptl_detection_topic(
+	detector: L5RCharacterData,
+	province: ProvinceData,
+	province_id: int,
+	next_topic_id: Array[int],
+	ic_day: int,
+) -> TopicData:
+	var topic_id: int = next_topic_id[0]
+	next_topic_id[0] += 1
+	var title: String = "Spiritual corruption detected in %s" % province.province_name
+	var topic: TopicData = TopicMomentumSystem.create_topic(
+		topic_id, title,
+		TopicData.Tier.TIER_3,
+		TopicData.Category.SUPERNATURAL,
+		ic_day, 20.0,
+		[province_id],
+		detector.clan, detector.family,
+		detector.character_id,
+		"crisis", "ptl_detection",
+	)
+	topic.slug = "ptl_detection_%d_day%d" % [province_id, ic_day]
+	return topic
+
+
+# -- Blood Evidence Discovery (Channel 2, s57.47.7) ---------------------------
+# EXAMINE_CRIME_SCENE on a maho case uses blood_concealment_tn from the
+# CrimeRecord. Discovery generates a T3 topic about blood magic evidence.
+
+static func _process_blood_evidence_discovery(
+	results: Array,
+	crime_records: Array[CrimeRecord],
+	characters_by_id: Dictionary,
+	active_topics: Array[TopicData],
+	next_topic_id: Array[int],
+	ic_day: int,
+	dice_engine: DiceEngine = null,
+) -> void:
+	for result: Variant in results:
+		if not result is Dictionary:
+			continue
+		var r: Dictionary = result as Dictionary
+		var action_id: String = r.get("action_id", "")
+		if not r.get("success", false):
+			continue
+
+		if action_id == "EXAMINE_CRIME_SCENE":
+			_check_blood_evidence_from_scene_exam(
+				r, crime_records, characters_by_id,
+				active_topics, next_topic_id, ic_day,
+			)
+		elif action_id == "INVESTIGATE_PROVINCE" and dice_engine != null:
+			_check_blood_evidence_from_province_investigation(
+				r, crime_records, characters_by_id,
+				active_topics, next_topic_id, ic_day, dice_engine,
+			)
+
+
+static func _check_blood_evidence_from_scene_exam(
+	r: Dictionary,
+	crime_records: Array[CrimeRecord],
+	characters_by_id: Dictionary,
+	active_topics: Array[TopicData],
+	next_topic_id: Array[int],
+	ic_day: int,
+) -> void:
+	var effects: Dictionary = r.get("effects", {})
+	var case_id: int = effects.get("case_id", -1)
+	if case_id < 0:
+		return
+
+	var record: CrimeRecord = null
+	for cr: CrimeRecord in crime_records:
+		if cr.case_id == case_id:
+			record = cr
+			break
+	if record == null:
+		return
+	if record.crime_type != Enums.CrimeType.MAHO:
+		return
+	if record.concealment_tn <= 0:
+		return
+
+	_emit_blood_evidence_topic(
+		r.get("character_id", -1), record, characters_by_id,
+		active_topics, next_topic_id, ic_day,
+	)
+
+
+static func _check_blood_evidence_from_province_investigation(
+	r: Dictionary,
+	crime_records: Array[CrimeRecord],
+	characters_by_id: Dictionary,
+	active_topics: Array[TopicData],
+	next_topic_id: Array[int],
+	ic_day: int,
+	dice_engine: DiceEngine,
+) -> void:
+	var char_id: int = r.get("character_id", -1)
+	var character: L5RCharacterData = characters_by_id.get(char_id)
+	if character == null:
+		return
+
+	var char_location: String = character.physical_location
+
+	for record: CrimeRecord in crime_records:
+		if record.crime_type != Enums.CrimeType.MAHO:
+			continue
+		if record.concealment_tn <= 0:
+			continue
+		if record.location != char_location:
+			continue
+		var days_elapsed: int = ic_day - record.ic_day_committed
+		if days_elapsed > InvestigationSystem.DAYS_PER_SEASON:
+			continue
+
+		var detection_result: Dictionary = InvestigationSystem.detect_blood_evidence(
+			character, record, dice_engine, ic_day,
+		)
+		if detection_result.get("detected", false):
+			_emit_blood_evidence_topic(
+				char_id, record, characters_by_id,
+				active_topics, next_topic_id, ic_day,
+			)
+			return
+
+
+static func _emit_blood_evidence_topic(
+	investigator_id: int,
+	record: CrimeRecord,
+	characters_by_id: Dictionary,
+	active_topics: Array[TopicData],
+	next_topic_id: Array[int],
+	ic_day: int,
+) -> void:
+	for topic: TopicData in active_topics:
+		if topic.slug == "blood_evidence_%d" % record.case_id:
+			return
+
+	var investigator: L5RCharacterData = characters_by_id.get(investigator_id)
+	if investigator == null:
+		return
+
+	var topic_id: int = next_topic_id[0]
+	next_topic_id[0] += 1
+	var title: String = "Evidence of blood magic discovered in %s" % record.location
+	var topic: TopicData = TopicMomentumSystem.create_topic(
+		topic_id, title,
+		TopicData.Tier.TIER_3,
+		TopicData.Category.SUPERNATURAL,
+		ic_day, 25.0,
+		[], "", "",
+		investigator_id,
+		"crisis", "blood_evidence",
+	)
+	topic.slug = "blood_evidence_%d" % record.case_id
+	active_topics.append(topic)
+
+	if investigator.lord_id >= 0:
+		var lord: L5RCharacterData = characters_by_id.get(investigator.lord_id)
+		if lord != null and topic.topic_id not in lord.topic_pool:
+			lord.topic_pool.append(topic.topic_id)
+
+
+# -- Flee Logistics (s55.29 travel + court removal) ----------------------------
+# When FLEE_JURISDICTION fires, the NPC begins travel to a safe location
+# and is removed from any active court commitment.
+
+static func _process_flee_logistics(
+	results: Array,
+	characters_by_id: Dictionary,
+	active_courts: Array[CourtSessionData],
+	world_states: Dictionary = {},
+) -> void:
+	for result: Variant in results:
+		if not result is Dictionary:
+			continue
+		var r: Dictionary = result as Dictionary
+		if r.get("action_id", "") != "FLEE_JURISDICTION":
+			continue
+		if not r.get("success", false):
+			continue
+		var effects: Dictionary = r.get("effects", {})
+		var fugitive_id: int = effects.get("fugitive_id", -1)
+		var fugitive: L5RCharacterData = characters_by_id.get(fugitive_id)
+		if fugitive == null:
+			continue
+
+		TravelSystem.begin_travel(fugitive, "ronin_haven")
+
+		for court: CourtSessionData in active_courts:
+			if fugitive_id in court.attendee_ids:
+				court.attendee_ids.erase(fugitive_id)
+
+		if not fugitive.role_position.is_empty() and fugitive.lord_id >= 0:
+			var vkey: String = "vacant_positions_%d" % fugitive.lord_id
+			var vacancies: Array = world_states.get(vkey, []) as Array
+			vacancies.append({
+				"position_type": fugitive.role_position,
+				"priority": 2,
+				"candidate_id": -1,
+				"seasons_vacant": 0,
+			})
+			world_states[vkey] = vacancies
+			fugitive.role_position = ""
+
+
+# -- Witness Tampering Writebacks (s11.3.13c) ----------------------------------
+
+static func _process_witness_tampering_writebacks(
+	results: Array,
+	crime_records: Array[CrimeRecord],
+	characters_by_id: Dictionary,
+	active_topics: Array[TopicData],
+	next_topic_id: Array[int],
+	ic_day: int,
+	world_states: Dictionary,
+	active_secrets: Array[SecretData] = [],
+	next_secret_id: Array[int] = [1],
+	next_case_id: Array[int] = [1],
+	dice_engine: DiceEngine = null,
+) -> void:
+	for result: Variant in results:
+		if not result is Dictionary:
+			continue
+		var r: Dictionary = result as Dictionary
+		var action_id: String = r.get("action_id", "")
+		if action_id not in ["BRIBE_WITNESS", "INTIMIDATE_WITNESS", "KILL_WITNESS"]:
+			continue
+
+		var criminal_id: int = r.get("character_id", -1)
+		var witness_id: int = r.get("target_npc_id", -1)
+		var effects: Dictionary = r.get("effects", {})
+		var success: bool = r.get("success", false)
+
+		for record: CrimeRecord in crime_records:
+			if record.perpetrator_id != criminal_id:
+				continue
+			if witness_id not in record.witnesses:
+				continue
+
+			if success:
+				record.witnesses.erase(witness_id)
+				if action_id == "BRIBE_WITNESS":
+					var witness: L5RCharacterData = characters_by_id.get(witness_id)
+					var criminal: L5RCharacterData = characters_by_id.get(criminal_id)
+					var witness_name: String = witness.character_name if witness != null else "unknown"
+					var criminal_name: String = criminal.character_name if criminal != null else "unknown"
+					var secret: SecretData = SecretSystem.create_secret(
+						next_secret_id[0],
+						witness_id,
+						SecretData.Severity.TIER_2,
+						"bribed_witness_%d" % record.case_id,
+						"%s accepted a bribe from %s to stay silent about case %d" % [
+							witness_name, criminal_name, record.case_id,
+						],
+					)
+					next_secret_id[0] += 1
+					active_secrets.append(secret)
+				elif action_id == "INTIMIDATE_WITNESS":
+					_apply_intimidation_consequences(
+						criminal_id, witness_id, characters_by_id, world_states, record,
+					)
+				elif action_id == "KILL_WITNESS":
+					var kill_concealment: int = effects.get("concealment_tn", 0)
+					var victim: L5RCharacterData = characters_by_id.get(witness_id)
+					var victim_loc: String = victim.physical_location if victim != null else ""
+					var kill_location: String = victim_loc if not victim_loc.is_empty() else record.location
+					var kill_witnesses: Array[int] = _get_witnesses_at_location(
+						criminal_id, kill_location, characters_by_id, world_states,
+					)
+					kill_witnesses.erase(witness_id)
+					var murder_record: CrimeRecord = CrimeSystem.create_crime_record(
+						next_case_id[0],
+						Enums.CrimeType.UNSANCTIONED_COVERT_KILLING,
+						criminal_id,
+						kill_location,
+						ic_day,
+						witness_id,
+						kill_concealment,
+						kill_witnesses,
+					)
+					next_case_id[0] += 1
+					crime_records.append(murder_record)
+					if victim != null:
+						_apply_victim_death(victim, active_topics, next_topic_id, ic_day, kill_location)
+					var criminal: L5RCharacterData = characters_by_id.get(criminal_id)
+					if criminal != null:
+						var murder_topic: TopicData = _create_crime_topic(
+							murder_record, criminal, ic_day, next_topic_id,
+						)
+						if murder_topic != null:
+							active_topics.append(murder_topic)
+							_seed_crime_topic_to_knowers(murder_topic, murder_record, characters_by_id)
+						if dice_engine != null:
+							_apply_criminal_recall(
+								criminal, murder_record, kill_witnesses, dice_engine, world_states,
+							)
+			else:
+				var evidence_add: int = effects.get("evidence_on_fail", 10)
+				record.evidence_total += evidence_add
+				var threshold: String = InvestigationSystem.check_thresholds(record)
+				if not threshold.is_empty():
+					handle_evidence_threshold(
+						threshold, record, characters_by_id,
+						active_topics, next_topic_id, ic_day, world_states,
+					)
+				if action_id == "INTIMIDATE_WITNESS":
+					_inject_witness_report_event(
+						witness_id, criminal_id, record.case_id,
+						record.investigating_magistrate_id, world_states,
+					)
+			break
+
+
+const INTIMIDATION_DISPOSITION_PENALTY: int = -30
+
+static func _apply_intimidation_consequences(
+	criminal_id: int,
+	witness_id: int,
+	characters_by_id: Dictionary,
+	world_states: Dictionary,
+	record: CrimeRecord,
+) -> void:
+	var witness: L5RCharacterData = characters_by_id.get(witness_id)
+	if witness != null:
+		var old_disp: int = witness.disposition_values.get(criminal_id, 0)
+		var new_disp: int = clampi(old_disp + INTIMIDATION_DISPOSITION_PENALTY, -100, 100)
+		witness.disposition_values[criminal_id] = new_disp
+	var witness_ws: Dictionary = world_states.get(witness_id, {})
+	var events: Array = witness_ws.get("pending_events", [])
+	events.append({
+		"type": "provocation",
+		"source_id": criminal_id,
+		"case_id": record.case_id,
+		"action": "INTIMIDATE_WITNESS",
+	})
+	witness_ws["pending_events"] = events
+	world_states[witness_id] = witness_ws
+
+
+static func _inject_witness_report_event(
+	witness_id: int,
+	criminal_id: int,
+	case_id: int,
+	magistrate_id: int,
+	world_states: Dictionary,
+) -> void:
+	var witness_ws: Dictionary = world_states.get(witness_id, {})
+	var events: Array = witness_ws.get("pending_events", [])
+	events.append({
+		"type": "witness_report_motivated",
+		"criminal_id": criminal_id,
+		"case_id": case_id,
+		"magistrate_id": magistrate_id,
+	})
+	witness_ws["pending_events"] = events
+	world_states[witness_id] = witness_ws
+
+
+static func _apply_victim_death(
+	victim: L5RCharacterData,
+	active_topics: Array[TopicData],
+	next_topic_id: Array[int],
+	ic_day: int,
+	kill_location: String,
+) -> void:
+	var earth: int = CharacterStats.get_ring_value(victim, Enums.Ring.EARTH)
+	victim.wounds_taken = earth * 5 * 5
+	var death_topic_id: int = next_topic_id[0]
+	next_topic_id[0] = death_topic_id + 1
+	var title: String = "Death of %s at %s" % [victim.character_name, kill_location]
+	var topic: TopicData = TopicMomentumSystem.create_topic(
+		death_topic_id,
+		title,
+		TopicData.Tier.TIER_3,
+		TopicData.Category.LEGAL,
+		ic_day,
+		0.0,
+		[],
+		victim.clan,
+		"",
+		victim.character_id,
+		"death",
+		"murder",
+	)
+	topic.slug = "murder_death_%d" % victim.character_id
+	active_topics.append(topic)
+
+
+# -- Witness Report Letter Writebacks ------------------------------------------
+# When a witness chooses WRITE_LETTER via witness_report_motivated reactive need,
+# create the actual LetterData object carrying the crime topic to the magistrate.
+
+static func _process_witness_report_letter_writebacks(
+	results: Array,
+	characters_by_id: Dictionary,
+	active_topics: Array[TopicData],
+	pending_letters: Array,
+	ic_day: int,
+	dice_engine: DiceEngine,
+	next_letter_id: Array[int],
+) -> void:
+	if dice_engine == null:
+		return
+	for r: Dictionary in results:
+		if r.get("action_id", "") != "WRITE_LETTER":
+			continue
+		var metadata: Dictionary = r.get("metadata", {})
+		var case_id: int = metadata.get("report_case_id", -1)
+		if case_id < 0:
+			continue
+		var sender_id: int = r.get("character_id", -1)
+		var recipient_id: int = r.get("target_npc_id", -1)
+		if sender_id < 0 or recipient_id < 0:
+			continue
+		var sender: L5RCharacterData = characters_by_id.get(sender_id)
+		if sender == null:
+			continue
+
+		var crime_topic_id: int = _find_crime_topic_for_case(sender, case_id, active_topics)
+		if crime_topic_id < 0:
+			continue
+
+		var lid: int = next_letter_id[0]
+		next_letter_id[0] = lid + 1
+		var letter: LetterData = LetterSystem.write_letter(
+			lid, sender, recipient_id, crime_topic_id, ic_day, dice_engine, 3,
+		)
+		letter.report_case_id = case_id
+		letter.report_criminal_id = metadata.get("report_criminal_id", -1)
+		pending_letters.append(letter)
+
+
+static func _find_crime_topic_for_case(
+	character: L5RCharacterData,
+	case_id: int,
+	active_topics: Array[TopicData],
+) -> int:
+	for topic_id: int in character.topic_pool:
+		for topic: TopicData in active_topics:
+			if topic.topic_id != topic_id:
+				continue
+			if topic.topic_type != "crime":
+				continue
+			if topic.slug == "crime_case_%d" % case_id:
+				return topic_id
+	return -1
+
+
+# -- Zone Log Purge (s11.3.13g) -----------------------------------------------
+# After 1 IC season (90 days), physical evidence at crime scenes expires.
+# Reset concealment_tn to 0 so it can no longer be discovered.
+
+const ZONE_LOG_PURGE_DAYS: int = 90
+
+static func _purge_expired_crime_evidence(
+	crime_records: Array[CrimeRecord],
+	ic_day: int,
+) -> void:
+	for record: CrimeRecord in crime_records:
+		if record.concealment_tn <= 0:
+			continue
+		if ic_day - record.ic_day_committed >= ZONE_LOG_PURGE_DAYS:
+			record.concealment_tn = 0
+
+
+# -- Evidence Decay / Cold Cases (s11.3.13g) -----------------------------------
+# Cases that stall without new evidence lose weight over time.
+# After EVIDENCE_DECAY_START_DAYS with no progress, 1 evidence point decays
+# per EVIDENCE_DECAY_INTERVAL_DAYS. Cases below COLD_CASE_THRESHOLD become
+# cold cases (investigating magistrate released). Only affects UNDER_INVESTIGATION
+# and SUSPECTED cases — ACCUSED and above are in the sentencing pipeline.
+
+const EVIDENCE_DECAY_START_DAYS: int = 30
+const EVIDENCE_DECAY_INTERVAL_DAYS: int = 10
+const COLD_CASE_THRESHOLD: int = 5
+
+
+static func _apply_evidence_decay(
+	crime_records: Array[CrimeRecord],
+	objectives_map: Dictionary,
+	ic_day: int,
+) -> Array[Dictionary]:
+	var cold_cases: Array[Dictionary] = []
+
+	for record: CrimeRecord in crime_records:
+		if record.legal_status != Enums.LegalStatus.UNDER_INVESTIGATION \
+				and record.legal_status != Enums.LegalStatus.SUSPECTED:
+			continue
+		if record.evidence_total <= 0:
+			continue
+
+		var days_since: int = ic_day - record.ic_day_committed
+		if days_since < EVIDENCE_DECAY_START_DAYS:
+			continue
+
+		var decay_days: int = days_since - EVIDENCE_DECAY_START_DAYS
+		if decay_days % EVIDENCE_DECAY_INTERVAL_DAYS != 0:
+			continue
+
+		record.evidence_total = maxi(0, record.evidence_total - 1)
+
+		if record.evidence_total <= COLD_CASE_THRESHOLD and record.investigating_magistrate_id >= 0:
+			var mag_id: int = record.investigating_magistrate_id
+			var mag_objs: Dictionary = objectives_map.get(mag_id, {})
+			var standing: Dictionary = mag_objs.get("standing", {})
+			if standing.get("need_type", "") == "UPHOLD_LAW":
+				var active_case: Dictionary = standing.get("active_case", {})
+				if active_case.get("case_id", -1) == record.case_id:
+					standing.erase("active_case")
+
+			record.investigating_magistrate_id = -1
+			cold_cases.append({
+				"case_id": record.case_id,
+				"magistrate_released": mag_id,
+				"remaining_evidence": record.evidence_total,
+			})
+
+	return cold_cases
+
+
+# -- Taint Proximity Detection (Channel 3, s57.47.7) --------------------------
+# When a character with Lore: Shadowlands >= 3 (or Kuni/Asako with any rank)
+# performs a social action in proximity to a character with Taint Rank >= 2,
+# they automatically attempt detection. Success generates a named accusation topic.
+# TN for the check is deferred to Section 31/42 — using placeholder TN 20.
+
+const TAINT_DETECTION_PLACEHOLDER_TN: int = 20
+const TAINT_RANK_THRESHOLD: float = 2.0
+
+static func _process_taint_proximity_detection(
+	results: Array,
+	characters_by_id: Dictionary,
+	character_province_map: Dictionary,
+	dice_engine: DiceEngine,
+	active_topics: Array[TopicData],
+	next_topic_id: Array[int],
+	ic_day: int,
+) -> void:
+	var checked_pairs: Dictionary = {}
+	for result: Variant in results:
+		if not result is Dictionary:
+			continue
+		var r: Dictionary = result as Dictionary
+		if not r.get("success", false):
+			continue
+		var detector_id: int = r.get("character_id", -1)
+		var target_id: int = r.get("target_npc_id", -1)
+		if detector_id < 0 or target_id < 0:
+			continue
+
+		var pair_key: String = "%d_%d" % [detector_id, target_id]
+		if checked_pairs.has(pair_key):
+			continue
+		checked_pairs[pair_key] = true
+
+		var detector: L5RCharacterData = characters_by_id.get(detector_id)
+		var target: L5RCharacterData = characters_by_id.get(target_id)
+		if detector == null or target == null:
+			continue
+		if target.taint < TAINT_RANK_THRESHOLD:
+			continue
+
+		var lore_rank: int = detector.skills.get("Lore: Shadowlands", 0)
+		var is_specialist: bool = detector.family in ["Kuni", "Asako"]
+		if lore_rank < 3 and not is_specialist:
+			continue
+
+		var perception: int = detector.perception if detector.perception > 0 else 2
+		var rolled: int = perception + lore_rank
+		var kept: int = perception
+		if is_specialist:
+			rolled += 2
+
+		var roll_result: Dictionary = dice_engine.roll_and_keep(rolled, kept)
+		var total: int = roll_result.get("total", 0)
+		if total < TAINT_DETECTION_PLACEHOLDER_TN:
+			continue
+
+		var topic_id: int = next_topic_id[0]
+		next_topic_id[0] += 1
+		var title: String = "%s suspected of Taint corruption" % target.character_name
+		var topic: TopicData = TopicMomentumSystem.create_topic(
+			topic_id, title,
+			TopicData.Tier.TIER_3,
+			TopicData.Category.SUPERNATURAL,
+			ic_day, 30.0,
+			[], target.clan, target.family,
+			target.character_id,
+			"accusation", "taint_suspected",
+		)
+		topic.slug = "taint_suspected_%d" % target.character_id
+		topic.subject_role = "PERPETRATOR"
+		active_topics.append(topic)
+
+		if detector.lord_id >= 0:
+			var lord: L5RCharacterData = characters_by_id.get(detector.lord_id)
+			if lord != null and topic.topic_id not in lord.topic_pool:
+				lord.topic_pool.append(topic.topic_id)
+
+
+static func _is_character_in_battle(
+	_char_id: int,
+	_world_states: Dictionary,
+) -> bool:
+	# Sub-tile military system blocked on world map data (s11.7).
+	# When implemented, check active battle engagements at this location.
+	return false
+
+
+static func _did_victim_act_first(
+	effects: Dictionary,
+	action_id: String,
+) -> bool:
+	if action_id == "ISSUE_DUEL_CHALLENGE":
+		return false
+	return effects.get("victim_initiated", false)
+
+
+static func _has_zone_log_evidence(
+	_attacker_id: int,
+	_victim_id: int,
+	_location: String,
+	_action_log: Array[Dictionary],
+) -> bool:
+	# Zone event log (s29.15.24) is not yet built.
+	# When implemented, this will search action_log for entries at the
+	# same location showing who acted first.
+	return false
 
 
 static func _action_to_crime_type(action_id: String) -> int:
@@ -2199,6 +3864,51 @@ static func _get_witnesses_at_location(
 	return witnesses
 
 
+# -- Crime Type String Mapping -------------------------------------------------
+
+static func _crime_type_to_string(crime_type: int) -> String:
+	match crime_type:
+		Enums.CrimeType.VIOLENCE:
+			return "violence"
+		Enums.CrimeType.UNSANCTIONED_OPEN_KILLING, Enums.CrimeType.UNSANCTIONED_COVERT_KILLING:
+			return "murder"
+		Enums.CrimeType.TREASON:
+			return "treason"
+		Enums.CrimeType.SKIMMING:
+			return "skimming"
+		Enums.CrimeType.MAHO:
+			return "maho"
+		_:
+			return "other"
+
+
+# -- Criminal Recall (s11.3.13c Step 1) ----------------------------------------
+# At crime time, the criminal rolls Intelligence vs TN 10 to assess their
+# exposure. On success, they become aware of witnesses and evidence risk,
+# allowing the NPC engine to prioritize SUPPRESS_INVESTIGATION earlier.
+
+static func _apply_criminal_recall(
+	criminal: L5RCharacterData,
+	record: CrimeRecord,
+	witnesses: Array[int],
+	dice_engine: DiceEngine,
+	world_states: Dictionary,
+) -> void:
+	var intelligence: int = criminal.intelligence if criminal.intelligence > 0 else 2
+	var recall_result: Dictionary = dice_engine.roll_and_keep(intelligence, intelligence)
+	var total: int = recall_result.get("total", 0)
+	if total < InvestigationLoopSystem.CRIMINAL_RECALL_TN:
+		return
+
+	var ws: Dictionary = world_states.get(criminal.character_id, {})
+	ws["criminal_recall"] = {
+		"case_id": record.case_id,
+		"witness_count": witnesses.size(),
+		"aware_of_evidence": true,
+	}
+	world_states[criminal.character_id] = ws
+
+
 static func _seed_crime_topic_to_knowers(
 	topic: TopicData,
 	record: CrimeRecord,
@@ -2212,6 +3922,48 @@ static func _seed_crime_topic_to_knowers(
 		var victim: L5RCharacterData = characters_by_id.get(record.victim_id)
 		if victim != null and topic.topic_id not in victim.topic_pool:
 			victim.topic_pool.append(topic.topic_id)
+
+
+# -- UPHOLD_LAW Standing Objective Assignment (s57.16.9) ----------------------
+# Magistrate-role NPCs automatically receive UPHOLD_LAW as their standing
+# objective if they don't already have one. This ensures they participate in
+# the crime topic scan each tick without requiring explicit lord directives.
+
+const MAGISTRATE_ROLE_POSITIONS: Array = [
+	"Clan Magistrate",
+	"Emerald Magistrate",
+	"Clan Magistrate Commander",
+]
+
+
+static func _assign_magistrate_standing_objectives(
+	characters: Array[L5RCharacterData],
+	objectives_map: Dictionary,
+) -> void:
+	for character: L5RCharacterData in characters:
+		if character.role_position not in MAGISTRATE_ROLE_POSITIONS:
+			continue
+		if CharacterStats.is_dead(character):
+			continue
+
+		var char_id: int = character.character_id
+		if not objectives_map.has(char_id):
+			objectives_map[char_id] = {}
+
+		var objectives: Dictionary = objectives_map[char_id]
+		var standing: Dictionary = objectives.get("standing", {})
+
+		if standing.get("need_type", "") == "UPHOLD_LAW":
+			continue
+
+		if not standing.is_empty():
+			continue
+
+		objectives["standing"] = {
+			"need_type": "UPHOLD_LAW",
+			"priority": 4,
+			"auto_assigned": true,
+		}
 
 
 # -- UPHOLD_LAW Magistrate Scan (s57.16.9) ------------------------------------
@@ -2244,6 +3996,36 @@ static func _process_uphold_law_scan(
 	return results
 
 
+static func _generate_investigation_opened_topics(
+	uphold_law_results: Array[Dictionary],
+	crime_records: Array[CrimeRecord],
+	characters_by_id: Dictionary,
+	active_topics: Array[TopicData],
+	next_topic_id: Array[int],
+	ic_day: int,
+) -> void:
+	for result: Dictionary in uphold_law_results:
+		var magistrate_id: int = result.get("magistrate_id", -1)
+		var case_id: int = result.get("case_id", -1)
+		if magistrate_id < 0 or case_id < 0:
+			continue
+		var magistrate: L5RCharacterData = characters_by_id.get(magistrate_id)
+		if magistrate == null:
+			continue
+		var record: CrimeRecord = null
+		for r: CrimeRecord in crime_records:
+			if r.case_id == case_id:
+				record = r
+				break
+		if record == null:
+			continue
+		var topic: TopicData = InvestigationSystem.generate_investigation_opened_topic(
+			record, magistrate, next_topic_id, ic_day
+		)
+		if topic != null:
+			active_topics.append(topic)
+
+
 # -- Witness PROBE Evidence (s11.3.13e) ----------------------------------------
 
 static func _check_witness_evidence(
@@ -2252,6 +4034,9 @@ static func _check_witness_evidence(
 	quality: int,
 	crime_records: Array[CrimeRecord],
 	objectives_map: Dictionary,
+	characters_by_id: Dictionary = {},
+	dice_engine: DiceEngine = null,
+	characters_present: Array[int] = [] as Array[int],
 ) -> Dictionary:
 	var objectives: Dictionary = objectives_map.get(prober_id, {})
 	var standing: Dictionary = objectives.get("standing", {})
@@ -2269,8 +4054,53 @@ static func _check_witness_evidence(
 	for record: CrimeRecord in crime_records:
 		if record.case_id != case_id:
 			continue
-		return InvestigationSystem.process_witness_interview(
+
+		var result: Dictionary = InvestigationSystem.process_witness_interview(
 			record, target_id, quality, active_case
+		)
+
+		var alibi_result: Dictionary = _check_alibi_for_target(
+			target_id, active_case, record,
+			characters_by_id.get(prober_id),
+			characters_by_id.get(target_id),
+			dice_engine,
+		)
+		if not alibi_result.is_empty():
+			result["alibi_result"] = alibi_result
+			var alibi_threshold: String = alibi_result.get("threshold_crossed", "")
+			if not alibi_threshold.is_empty() and result.get("threshold_crossed", "").is_empty():
+				result["threshold_crossed"] = alibi_threshold
+
+		var leads: Array[Dictionary] = InvestigationSystem.generate_leads_from_probe(
+			target_id, quality, record, active_case, characters_present,
+		)
+		if not leads.is_empty():
+			result["leads_generated"] = leads.size()
+
+		return result
+	return {}
+
+
+static func _check_alibi_for_target(
+	target_id: int,
+	active_case: Dictionary,
+	crime_record: CrimeRecord,
+	magistrate: L5RCharacterData,
+	alibi_witness: L5RCharacterData,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	var alibis: Array = active_case.get("alibis", [])
+	for alibi: Variant in alibis:
+		if not alibi is Dictionary:
+			continue
+		var a: Dictionary = alibi as Dictionary
+		if a.get("claimed_with", -1) != target_id:
+			continue
+		var checked: Array = active_case.get("checked_alibis", [])
+		if a.get("id", -1) in checked:
+			continue
+		return InvestigationSystem.check_alibi(
+			a, alibi_witness, magistrate, crime_record, active_case, dice_engine,
 		)
 	return {}
 
@@ -2401,6 +4231,24 @@ static func _process_lord_deaths(
 						SuccessionSystem.apply_successor_inheritance(chosen, deceased)
 
 	return all_results
+
+
+static func _process_operational_death_cascade(
+	death_events: Array[Dictionary],
+	characters: Array[L5RCharacterData],
+) -> Array[int]:
+	if death_events.is_empty():
+		return []
+	var all_cleared: Array[int] = []
+	for event: Dictionary in death_events:
+		var dead_id: int = event.get("character_id", -1)
+		if dead_id < 0:
+			continue
+		var cleared: Array[int] = OperationalHierarchySystem.clear_subordinates_on_death(
+			dead_id, characters
+		)
+		all_cleared.append_array(cleared)
+	return all_cleared
 
 
 static func _process_successions(
@@ -2572,6 +4420,276 @@ static func _build_province_clan_map(provinces: Dictionary) -> Dictionary:
 		if prov != null:
 			result[pid] = prov.clan
 	return result
+
+
+static func _build_lord_map(characters: Array[L5RCharacterData]) -> Dictionary:
+	var result: Dictionary = {}
+	for c: L5RCharacterData in characters:
+		if c.lord_id >= 0:
+			result[c.character_id] = c.lord_id
+	return result
+
+
+static func _resolve_pending_trials(
+	conviction_results: Array[Dictionary],
+	crime_records: Array[CrimeRecord],
+	characters_by_id: Dictionary,
+	lord_map: Dictionary,
+	dice_engine: DiceEngine,
+	ic_day: int,
+) -> Array[Dictionary]:
+	var results: Array[Dictionary] = []
+
+	for conv: Dictionary in conviction_results:
+		if conv.get("outcome", "") != "trial_by_combat_pending":
+			continue
+		var accused_id: int = conv.get("accused_id", -1)
+		var case_id: int = conv.get("case_id", -1)
+		var accused: L5RCharacterData = characters_by_id.get(accused_id)
+		if accused == null:
+			continue
+
+		var lord_id: int = lord_map.get(accused_id, -1)
+		var lord: L5RCharacterData = characters_by_id.get(lord_id)
+		if lord == null:
+			continue
+
+		var record: CrimeRecord = null
+		for r: CrimeRecord in crime_records:
+			if r.case_id == case_id:
+				record = r
+				break
+		if record == null:
+			continue
+
+		var trial: Dictionary = ConvictionProcessor.resolve_trial_by_combat(
+			record, accused, lord, dice_engine, ic_day, characters_by_id
+		)
+		trial["case_id"] = case_id
+		trial["accused_id"] = accused_id
+		results.append(trial)
+
+	return results
+
+
+static func _process_seppuku_responses(
+	conviction_results: Array[Dictionary],
+	crime_records: Array[CrimeRecord],
+	characters_by_id: Dictionary,
+	ic_day: int,
+	next_topic_id: Array[int],
+	active_topics: Array[TopicData],
+	world_states: Dictionary = {},
+) -> Array[Dictionary]:
+	var results: Array[Dictionary] = []
+	for conviction: Dictionary in conviction_results:
+		if conviction.get("outcome", "") != "convicted":
+			continue
+		if not conviction.get("seppuku_offered", false):
+			continue
+		var char_id: int = conviction.get("accused_id", -1)
+		var character: L5RCharacterData = characters_by_id.get(char_id)
+		if character == null:
+			continue
+		var case_id: int = conviction.get("case_id", -1)
+		var record: CrimeRecord = null
+		for r: CrimeRecord in crime_records:
+			if r.case_id == case_id:
+				record = r
+				break
+		if record == null:
+			continue
+
+		# Inject seppuku_offered as a reactive event for next tick
+		var ws: Dictionary = world_states.get(char_id, {})
+		var pending: Array = ws.get("pending_events", [])
+		for ev: Dictionary in pending:
+			if ev.get("type", "") == "seppuku_offered" and ev.get("case_id", -1) == case_id:
+				break
+		else:
+			pending.append({
+				"type": "seppuku_offered",
+				"case_id": case_id,
+				"crime_type": record.crime_type,
+				"ic_day_offered": ic_day,
+			})
+			ws["pending_events"] = pending
+			world_states[char_id] = ws
+
+		results.append({
+			"case_id": case_id,
+			"accused_id": char_id,
+			"event_injected": true,
+		})
+	return results
+
+
+# -- Seppuku Response Writeback (processes ACCEPT/REFUSE_SEPPUKU action results)
+
+static func _process_seppuku_action_writebacks(
+	results: Array,
+	crime_records: Array[CrimeRecord],
+	characters_by_id: Dictionary,
+	ic_day: int,
+	next_topic_id: Array[int],
+	active_topics: Array[TopicData],
+) -> Array[Dictionary]:
+	var seppuku_results: Array[Dictionary] = []
+
+	for result: Variant in results:
+		if not result is Dictionary:
+			continue
+		var r: Dictionary = result as Dictionary
+		var action_id: String = r.get("action_id", "")
+		if action_id not in ["ACCEPT_SEPPUKU", "REFUSE_SEPPUKU"]:
+			continue
+
+		var char_id: int = r.get("character_id", -1)
+		var character: L5RCharacterData = characters_by_id.get(char_id)
+		if character == null:
+			continue
+
+		var case_id: int = r.get("effects", {}).get("case_id", -1)
+		var record: CrimeRecord = null
+		for cr: CrimeRecord in crime_records:
+			if cr.case_id == case_id:
+				record = cr
+				break
+		if record == null:
+			continue
+
+		var accepted: bool = action_id == "ACCEPT_SEPPUKU"
+		var resolution: Dictionary = ConvictionProcessor.resolve_seppuku(
+			record, character, accepted, ic_day, next_topic_id
+		)
+
+		if resolution.get("applicable", false):
+			if not accepted:
+				var refusal_topic_id: int = resolution.get("refusal_topic_id", -1)
+				if refusal_topic_id >= 0:
+					for t: TopicData in active_topics:
+						if t.topic_id == refusal_topic_id:
+							break
+					var lord: L5RCharacterData = characters_by_id.get(character.lord_id)
+					if lord != null and refusal_topic_id not in lord.topic_pool:
+						lord.topic_pool.append(refusal_topic_id)
+			resolution["action_id"] = action_id
+			resolution["character_id"] = char_id
+			seppuku_results.append(resolution)
+
+	return seppuku_results
+
+
+# -- Cross-Clan Conviction Consequences (s57.47) ------------------------------
+# When a conviction is cross-clan, apply disposition changes between the
+# clans involved. Cooperation during investigation may mitigate the hit.
+
+static func _apply_cross_clan_conviction_consequences(
+	conviction_results: Array[Dictionary],
+	crime_records: Array[CrimeRecord],
+	characters_by_id: Dictionary,
+) -> void:
+	for conv: Dictionary in conviction_results:
+		if conv.get("outcome", "") != "convicted":
+			continue
+		if not conv.get("is_cross_clan", false):
+			continue
+
+		var case_id: int = conv.get("case_id", -1)
+		var accused_id: int = conv.get("accused_id", -1)
+		var accused: L5RCharacterData = characters_by_id.get(accused_id)
+		if accused == null:
+			continue
+
+		var record: CrimeRecord = null
+		for r: CrimeRecord in crime_records:
+			if r.case_id == case_id:
+				record = r
+				break
+		if record == null:
+			continue
+
+		var victim: L5RCharacterData = characters_by_id.get(record.victim_id)
+		if victim == null:
+			continue
+
+		ConvictionProcessor.apply_cross_clan_consequences(
+			record, accused, victim, true
+		)
+
+
+# -- Conviction Topic Seeding to Victim's Lord --------------------------------
+# Ensure the victim's lord learns about the conviction for diplomatic follow-up.
+
+static func _seed_conviction_topics_to_victim_lords(
+	conviction_results: Array[Dictionary],
+	crime_records: Array[CrimeRecord],
+	characters_by_id: Dictionary,
+	active_topics: Array[TopicData],
+) -> void:
+	for conv: Dictionary in conviction_results:
+		if conv.get("outcome", "") != "convicted":
+			continue
+		var topic_id: int = conv.get("topic_id", -1)
+		if topic_id < 0:
+			continue
+
+		var case_id: int = conv.get("case_id", -1)
+		var record: CrimeRecord = null
+		for r: CrimeRecord in crime_records:
+			if r.case_id == case_id:
+				record = r
+				break
+		if record == null or record.victim_id < 0:
+			continue
+
+		var victim: L5RCharacterData = characters_by_id.get(record.victim_id)
+		if victim == null:
+			continue
+
+		var victim_lord: L5RCharacterData = characters_by_id.get(victim.lord_id)
+		if victim_lord == null:
+			continue
+		if topic_id in victim_lord.topic_pool:
+			continue
+		victim_lord.topic_pool.append(topic_id)
+
+
+# -- Magistrate Release After Conviction/Acquittal ---------------------------
+
+static func _release_magistrate_after_conviction(
+	conviction_results: Array[Dictionary],
+	crime_records: Array[CrimeRecord],
+	objectives_map: Dictionary,
+) -> void:
+	for conv: Dictionary in conviction_results:
+		var outcome: String = conv.get("outcome", "")
+		if outcome != "convicted" and outcome != "acquitted":
+			continue
+		var case_id: int = conv.get("case_id", -1)
+		if case_id < 0:
+			continue
+
+		var record: CrimeRecord = null
+		for r: CrimeRecord in crime_records:
+			if r.case_id == case_id:
+				record = r
+				break
+		if record == null:
+			continue
+
+		var mag_id: int = record.investigating_magistrate_id
+		if mag_id < 0:
+			continue
+
+		var mag_objs: Dictionary = objectives_map.get(mag_id, {})
+		var standing: Dictionary = mag_objs.get("standing", {})
+		if standing.get("need_type", "") == "UPHOLD_LAW":
+			var active_case: Dictionary = standing.get("active_case", {})
+			if active_case.get("case_id", -1) == case_id:
+				standing.erase("active_case")
+
+		record.investigating_magistrate_id = -1
 
 
 static func _season_to_name(season: int) -> String:
@@ -2847,6 +4965,81 @@ static func _process_arrival_observation(
 			InformationSystem.record_location_observation(
 				other, char_id, dest, current_season
 			)
+
+
+# -- Witness Testimony on Arrival (s57.16 — witness reaches magistrate) --------
+# When a witness who traveled via BEGIN_TRAVEL (witness_report_motivated) arrives
+# at the magistrate's location, directly transfer the crime topic.
+
+static func _capture_witness_travel_intent(
+	results: Array,
+	world_states: Dictionary,
+) -> void:
+	for r: Dictionary in results:
+		if r.get("action_id", "") != "BEGIN_TRAVEL":
+			continue
+		var metadata: Dictionary = r.get("metadata", {})
+		var mag_id: int = metadata.get("seek_magistrate_id", -1)
+		if mag_id < 0:
+			continue
+		var char_id: int = r.get("character_id", -1)
+		if char_id < 0:
+			continue
+		var ws: Dictionary = world_states.get(char_id, {})
+		ws["witness_travel_intent"] = {
+			"magistrate_id": mag_id,
+			"destination": metadata.get("destination", ""),
+		}
+		world_states[char_id] = ws
+
+
+static func _process_witness_testimony_on_arrival(
+	arrivals: Array[Dictionary],
+	characters_by_id: Dictionary,
+	world_states: Dictionary,
+	active_topics: Array[TopicData],
+	current_season: int,
+) -> void:
+	for arrival: Dictionary in arrivals:
+		var char_id: int = arrival.get("character_id", -1)
+		var dest: String = arrival.get("destination", "")
+		if char_id < 0 or dest.is_empty():
+			continue
+
+		var ws: Dictionary = world_states.get(char_id, {})
+		var intent: Dictionary = ws.get("witness_travel_intent", {})
+		if intent.is_empty():
+			continue
+
+		var mag_id: int = intent.get("magistrate_id", -1)
+		var magistrate: L5RCharacterData = characters_by_id.get(mag_id)
+		if magistrate == null or magistrate.physical_location != dest:
+			continue
+
+		var witness: L5RCharacterData = characters_by_id.get(char_id)
+		if witness == null:
+			continue
+
+		for topic_id: int in witness.topic_pool:
+			for topic: TopicData in active_topics:
+				if topic.topic_id != topic_id:
+					continue
+				if topic.topic_type != "crime":
+					continue
+				if topic_id not in magistrate.topic_pool:
+					magistrate.topic_pool.append(topic_id)
+					InformationSystem.add_knowledge(magistrate, InformationSystem.make_entry(
+						Enums.KnowledgeSource.TESTIMONY,
+						"topic_learned",
+						{
+							"topic": topic_id,
+							"from_character_id": char_id,
+						},
+						current_season,
+					))
+
+		ws.erase("witness_travel_intent")
+		world_states[char_id] = ws
 
 
 # -- Objective Progress Evaluation (s55.29.3) ----------------------------------
@@ -3754,7 +5947,7 @@ static func _process_levy_suspicion(
 		next_topic_id[0] += 1
 		var tier_val: int = check["topic_tier"]
 		var tier: TopicData.Tier = TopicData.Tier.TIER_4 if tier_val == 4 else TopicData.Tier.TIER_3
-		var momentum: float = 11.0 if tier_val == 4 else 26.0
+		var momentum: float = TopicMomentumSystem.initial_momentum_for_tier(tier)
 		var topic: TopicData = TopicMomentumSystem.create_topic(
 			tid,
 			"Private Army Suspicion — %s" % lord.family,
@@ -4920,6 +7113,7 @@ static func _inject_urgency_data(
 		if not location_characters.has(loc):
 			location_characters[loc] = [] as Array[int]
 		location_characters[loc].append(c.character_id)
+	world_states["_location_characters"] = location_characters
 
 	for c: L5RCharacterData in characters:
 		var ws: Dictionary = world_states.get(c.character_id, {})
@@ -4936,6 +7130,9 @@ static func _inject_urgency_data(
 		var known_objs: Dictionary = ws.get("known_objectives", {})
 		if not standing.is_empty():
 			known_objs["standing_need_type"] = standing.get("need_type", "")
+		var active_case: Dictionary = standing.get("active_case", primary.get("active_case", {}))
+		if not active_case.is_empty():
+			known_objs["active_case"] = active_case
 		ws["known_objectives"] = known_objs
 		var loc: int = int(c.physical_location) if c.physical_location.is_valid_int() else -1
 		if besieged_settlements.has(loc):
@@ -5073,7 +7270,7 @@ static func _create_disband_topic(
 	topic.category = TopicData.Category.POLITICAL
 	topic.clan_involved = clan
 	topic.ic_day_created = ic_day
-	topic.momentum = 11.0
+	topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)
 	active_topics.append(topic)
 
 
@@ -5143,7 +7340,7 @@ static func _create_battle_topic(
 
 	var variant: String = "victory_clean"
 	var tier: TopicData.Tier = TopicData.Tier.TIER_3
-	var momentum: float = 30.0
+	var momentum: float = _COMBAT_EVENT_MOMENTUM
 
 	var title: String = "Battle at province %d" % province_id
 
@@ -5176,7 +7373,7 @@ static func _create_heavy_casualties_topic(
 
 	var topic: TopicData = TopicMomentumSystem.create_topic(
 		topic_id, title, TopicData.Tier.TIER_3, TopicData.Category.MILITARY,
-		ic_day, 25.0, provinces, "", "", -1,
+		ic_day, TopicMomentumSystem.initial_momentum_for_tier(TopicData.Tier.TIER_3), provinces, "", "", -1,
 		"battle_outcome", "heavy_casualties",
 	)
 	topic.slug = "casualties_day_%d" % ic_day
@@ -5201,7 +7398,7 @@ static func _create_siege_event_topic(
 
 	var topic: TopicData = TopicMomentumSystem.create_topic(
 		topic_id, title, TopicData.Tier.TIER_4, TopicData.Category.MILITARY,
-		ic_day, 11.0, [], "", "", -1,
+		ic_day, TopicMomentumSystem.initial_momentum_for_tier(TopicData.Tier.TIER_4), [], "", "", -1,
 		"siege", event_type,
 	)
 	topic.slug = "siege_%d_event_%s_day_%d" % [siege_id, event_type, ic_day]
@@ -5744,7 +7941,7 @@ static func _process_ladder_side_effects(
 		}
 
 		if side.get("glory_cost", 0.0) != 0.0 and lord != null:
-			lord.glory = maxf(lord.glory + side["glory_cost"], 0.0)
+			HonorGlorySystem.apply_glory_change(lord, side["glory_cost"])
 			result["glory_applied"] = side["glory_cost"]
 
 		if side.has("disposition_cost") and lord != null:
@@ -5923,9 +8120,7 @@ static func _create_ladder_topic(
 	topic.clan_involved = declaring_clan
 	topic.ic_day_created = ic_day
 
-	match topic.tier:
-		TopicData.Tier.TIER_3: topic.momentum = 26.0
-		_: topic.momentum = 11.0
+	topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)
 
 	active_topics.append(topic)
 	return topic
@@ -6142,7 +8337,7 @@ static func _process_active_courts(
 					var rid: int = reward.get("character_id", -1)
 					var rchar: L5RCharacterData = characters_by_id.get(rid) as L5RCharacterData
 					if rchar != null:
-						rchar.glory = clampf(rchar.glory + reward.get("glory_change", 0.0), 0.0, 10.0)
+						HonorGlorySystem.apply_glory_change(rchar, reward.get("glory_change", 0.0))
 				close_result["glory_rewards"] = glory_rewards
 				if court.announcement_topic_id >= 0:
 					for topic: TopicData in active_topics:
@@ -6173,7 +8368,7 @@ static func _topic_from_dict(
 	t.slug = topic_dict.get("slug", "")
 	t.tier = topic_dict.get("tier", TopicData.Tier.TIER_4)
 	t.category = topic_dict.get("category", TopicData.Category.POLITICAL)
-	t.momentum = topic_dict.get("momentum", 11.0)
+	t.momentum = topic_dict.get("momentum", TopicMomentumSystem.MOMENTUM_MINOR_FLOOR)
 	t.clan_involved = topic_dict.get("clan_involved", "")
 	t.subject_character_id = topic_dict.get("subject_character_id", -1)
 	t.subject_role = topic_dict.get("subject_role", "NEUTRAL")
@@ -7127,7 +9322,7 @@ static func _generate_naval_battle_topics(
 		topic.variant = "naval_battle"
 		topic.slug = "naval_battle_%s_vs_%s_d%d" % [atk_clan.to_lower(), def_clan.to_lower(), ic_day]
 		topic.tier = TopicData.Tier.TIER_3
-		topic.momentum = 30.0
+		topic.momentum = _COMBAT_EVENT_MOMENTUM
 		topic.category = TopicData.Category.MILITARY
 		topic.ic_day_created = ic_day
 		topic.resolved = false
@@ -7203,7 +9398,7 @@ static func _process_seiyaku_review(
 		topic.topic_type = "political"
 		topic.variant = "otomo_exhaustion"
 		topic.tier = TopicData.Tier.TIER_4
-		topic.momentum = 11.0
+		topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)
 		topic.category = TopicData.Category.POLITICAL
 		active_topics.append(topic)
 		result["exhaustion_topic_id"] = topic.topic_id
@@ -7353,7 +9548,7 @@ static func _process_togashi_oversight(
 				HonorGlorySystem.apply_honor_change(mirumoto_fc, -0.3)
 			topic.topic_type = "political"
 			topic.tier = TopicData.Tier.TIER_4 if stage <= 2 else TopicData.Tier.TIER_3
-			topic.momentum = 11.0 if stage <= 2 else 26.0
+			topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)
 			topic.category = TopicData.Category.POLITICAL
 			active_topics.append(topic)
 			result["topic_id"] = topic.topic_id
@@ -7638,7 +9833,7 @@ static func _process_phoenix_council_gating(
 		topic.variant = "phoenix_council_veto"
 		topic.topic_type = "political"
 		topic.tier = TopicData.Tier.TIER_4 if overreach_stage <= 1 else TopicData.Tier.TIER_3
-		topic.momentum = 11.0 if overreach_stage <= 1 else 26.0
+		topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)
 		topic.category = TopicData.Category.POLITICAL
 		active_topics.append(topic)
 
@@ -7881,7 +10076,7 @@ static func _process_gempukku(
 			topic.topic_type = "death"
 			topic.variant = "natural"
 			topic.tier = TopicData.Tier.TIER_4
-			topic.momentum = 11.0
+			topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)
 			topic.category = TopicData.Category.PERSONAL
 			active_topics.append(topic)
 
@@ -8114,7 +10309,7 @@ static func _apply_marriage(
 		topic.variant = _marriage_type_to_variant(marriage_type)
 		topic.category = TopicData.Category.POLITICAL
 		topic.tier = TopicData.Tier.TIER_4
-		topic.momentum = 11.0
+		topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)
 		topic.ic_day_created = ic_day
 		if char_a.clan != char_b.clan:
 			topic.clan_involved = char_a.clan + "," + char_b.clan
@@ -8302,6 +10497,94 @@ static func _process_vassal_reassignments(
 			OrphanedObjectives.resolve_orphaned_objective(objectives, "CANCEL")
 
 
+# -- Tyrant Directive Consumers (s55.10) ----------------------------------------
+
+static func _process_tyrant_directives(
+	strategic_results: Array[Dictionary],
+	active_topics: Array[TopicData],
+	next_topic_id: Array[int],
+	ic_day: int,
+	characters_by_id: Dictionary,
+) -> void:
+	for directive: Dictionary in strategic_results:
+		var dtype: String = str(directive.get("directive", ""))
+		if dtype == "FABRICATE_DISGRACE":
+			_create_disgrace_topic(
+				directive, active_topics, next_topic_id, ic_day, characters_by_id
+			)
+		elif dtype == "IMPERIAL_CIVIL_WAR":
+			_create_imperial_civil_war_topic(
+				directive, active_topics, next_topic_id, ic_day
+			)
+
+
+static func _create_disgrace_topic(
+	directive: Dictionary,
+	active_topics: Array[TopicData],
+	next_topic_id: Array[int],
+	ic_day: int,
+	characters_by_id: Dictionary,
+) -> void:
+	var target_id: int = directive.get("target_id", -1)
+
+	for existing: TopicData in active_topics:
+		if existing.topic_type == "disgrace" and existing.subject_character_id == target_id and not existing.resolved:
+			return
+
+	var target_clan: String = directive.get("target_clan", "")
+	var target: L5RCharacterData = characters_by_id.get(target_id) as L5RCharacterData
+	var target_name: String = target.character_name if target != null and target.character_name != "" else "Champion"
+
+	var topic_id: int = next_topic_id[0]
+	next_topic_id[0] += 1
+
+	var topic: TopicData = TopicMomentumSystem.create_topic(
+		topic_id,
+		"Disgrace of %s (%s)" % [target_name, target_clan],
+		TopicData.Tier.TIER_3,
+		TopicData.Category.PERSONAL,
+		ic_day,
+		TopicMomentumSystem.initial_momentum_for_tier(TopicData.Tier.TIER_3),
+		[],
+		target_clan,
+		"",
+		target_id,
+		"disgrace",
+		"fabricated",
+	)
+	topic.slug = "tyrant_disgrace_%d_d%d" % [target_id, ic_day]
+	active_topics.append(topic)
+
+
+static func _create_imperial_civil_war_topic(
+	directive: Dictionary,
+	active_topics: Array[TopicData],
+	next_topic_id: Array[int],
+	ic_day: int,
+) -> void:
+	for existing: TopicData in active_topics:
+		if existing.variant == "imperial_civil_war" and not existing.resolved:
+			return
+
+	var topic_id: int = next_topic_id[0]
+	next_topic_id[0] += 1
+
+	var hostile_count: int = directive.get("hostile_clan_count", 3)
+
+	var topic: TopicData = TopicMomentumSystem.create_topic(
+		topic_id,
+		"Imperial Civil War — %d Great Clans in Revolt" % hostile_count,
+		TopicData.Tier.TIER_1,
+		TopicData.Category.MILITARY,
+		ic_day,
+		TopicMomentumSystem.initial_momentum_for_tier(TopicData.Tier.TIER_1),
+	)
+	topic.slug = "imperial_civil_war_d%d" % ic_day
+	topic.topic_type = "crisis"
+	topic.variant = "imperial_civil_war"
+	active_topics.append(topic)
+
+
 # -- Helpers -------------------------------------------------------------------
 
 static func _dict_values_to_province_array(provinces: Dictionary) -> Array[ProvinceData]:
@@ -8452,6 +10735,48 @@ static func _apply_worship_stability_maluses(
 		if prov == null:
 			continue
 		prov.stability = clampf(prov.stability + stability_delta, 0.0, 100.0)
+
+
+static func _apply_tyrant_stability_penalty(
+	emperor_archetype: int,
+	provinces: Dictionary,
+) -> void:
+	if emperor_archetype != StrategicReview.EmperorArchetype.TYRANT:
+		return
+	for pid: Variant in provinces:
+		var prov: ProvinceData = provinces[pid] as ProvinceData
+		if prov == null:
+			continue
+		prov.stability = clampf(
+			prov.stability + StrategicReview.TYRANT_STABILITY_PENALTY, 0.0, 100.0
+		)
+
+
+static func _build_emperor_tax_config(
+	world_states: Dictionary,
+	characters_by_id: Dictionary,
+) -> Dictionary:
+	var archetype: int = int(world_states.get(
+		"emperor_archetype", StrategicReview.EmperorArchetype.IRON
+	))
+	var config: Dictionary = {"archetype": archetype}
+	if archetype != StrategicReview.EmperorArchetype.CUNNING:
+		return config
+	var emperor_id: int = int(world_states.get("emperor_id", -1))
+	if emperor_id < 0:
+		return config
+	var emperor: L5RCharacterData = characters_by_id.get(emperor_id) as L5RCharacterData
+	if emperor == null:
+		return config
+	var clan_disps: Dictionary = {}
+	for cid: Variant in characters_by_id:
+		var c: L5RCharacterData = characters_by_id[cid] as L5RCharacterData
+		if c == null or c.clan == "" or c.status < 7.0 or c.lord_id != -1:
+			continue
+		var disp: int = int(emperor.disposition_values.get(c.character_id, 0))
+		clan_disps[c.clan] = disp
+	config["clan_dispositions"] = clan_disps
+	return config
 
 
 static func _inject_worship_battle_maluses(
@@ -8831,7 +11156,7 @@ static func _process_organic_villages(
 			topic.variant = "organic_formation"
 			topic.ic_day_created = ic_day
 			topic.tier = TopicData.Tier.TIER_4
-			topic.momentum = 11.0
+			topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)
 			active_topics.append(topic)
 
 
@@ -8846,7 +11171,6 @@ static func _generate_construction_topic(
 	next_topic_id[0] += 1
 	topic.ic_day_created = ic_day
 	topic.tier = TopicData.Tier.TIER_4
-	topic.momentum = 11.0
 	topic.topic_type = "construction"
 
 	match cd.construction_type:
@@ -8854,23 +11178,24 @@ static func _generate_construction_topic(
 			topic.slug = "temple_completed_%d" % cd.construction_id
 			topic.variant = "temple_completed"
 			topic.tier = TopicData.Tier.TIER_3
-			topic.momentum = 25.0
 		ConstructionData.ConstructionType.SHINDEN:
 			topic.slug = "shinden_completed_%d" % cd.construction_id
 			topic.variant = "shinden_completed"
 			topic.tier = TopicData.Tier.TIER_2
-			topic.momentum = 40.0
+			topic.momentum = _CONSTRUCTION_TIER2_MOMENTUM
 		ConstructionData.ConstructionType.MONASTERY:
 			topic.slug = "monastery_completed_%d" % cd.construction_id
 			topic.variant = "monastery_completed"
 			topic.tier = TopicData.Tier.TIER_3
-			topic.momentum = 25.0
 		ConstructionData.ConstructionType.SHIP:
 			topic.slug = "ship_launched_%d" % cd.construction_id
 			topic.variant = "ship_launched"
 		_:
 			topic.slug = "construction_%d" % cd.construction_id
 			topic.variant = "shrine_completed"
+
+	if topic.momentum == 0.0:
+		topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)
 
 	active_topics.append(topic)
 
@@ -9012,6 +11337,16 @@ static func _populate_vacancy_intelligence(
 ) -> void:
 	var lord_vacancies: Dictionary = {}
 
+	var emperor_id: int = int(world_states.get("emperor_id", -1))
+	var emperor_archetype: int = int(world_states.get(
+		"emperor_archetype", StrategicReview.EmperorArchetype.IRON
+	))
+	var cunning_balance_weight: float = 0.0
+	var emperor_clan_counts: Dictionary = {}
+	if emperor_id >= 0 and emperor_archetype == StrategicReview.EmperorArchetype.CUNNING:
+		cunning_balance_weight = float(StrategicReview.CUNNING_CLAN_BALANCE_WEIGHT)
+		emperor_clan_counts = _compute_clan_position_counts(emperor_id, characters)
+
 	# Military vacancies: units with no commander
 	for company_data: Variant in companies:
 		if company_data is Dictionary:
@@ -9080,8 +11415,11 @@ static func _populate_vacancy_intelligence(
 		var lord_positions: Array = filled_positions.get(lord_id, [])
 
 		if not _has_position(lord_positions, "Magistrate"):
+			var bal_w: float = cunning_balance_weight if lord_id == emperor_id else 0.0
+			var bal_c: Dictionary = emperor_clan_counts if lord_id == emperor_id else {}
 			var candidate: int = _find_vacancy_candidate(
 				lord_id, "Magistrate", characters, characters_by_id,
+				bal_w, bal_c,
 			)
 			if not lord_vacancies.has(lord_id):
 				lord_vacancies[lord_id] = []
@@ -9101,8 +11439,11 @@ static func _populate_vacancy_intelligence(
 		var lord_positions: Array = filled_positions.get(lord_id, [])
 
 		if s.is_military() and not _has_position(lord_positions, "Garrison Commander"):
+			var bal_w2: float = cunning_balance_weight if lord_id == emperor_id else 0.0
+			var bal_c2: Dictionary = emperor_clan_counts if lord_id == emperor_id else {}
 			var candidate: int = _find_vacancy_candidate(
 				lord_id, "Garrison Commander", characters, characters_by_id,
+				bal_w2, bal_c2,
 			)
 			if not lord_vacancies.has(lord_id):
 				lord_vacancies[lord_id] = []
@@ -9120,8 +11461,11 @@ static func _populate_vacancy_intelligence(
 			filled_positions[lord_id].append("Garrison Commander (pending)")
 
 		if s.settlement_type == Enums.SettlementType.TEMPLE and not _has_position(lord_positions, "Temple Head"):
+			var bal_w3: float = cunning_balance_weight if lord_id == emperor_id else 0.0
+			var bal_c3: Dictionary = emperor_clan_counts if lord_id == emperor_id else {}
 			var candidate: int = _find_vacancy_candidate(
 				lord_id, "Temple Head", characters, characters_by_id,
+				bal_w3, bal_c3,
 			)
 			if not lord_vacancies.has(lord_id):
 				lord_vacancies[lord_id] = []
@@ -9138,8 +11482,11 @@ static func _populate_vacancy_intelligence(
 			filled_positions[lord_id].append("Temple Head (pending)")
 
 		if s.settlement_type == Enums.SettlementType.MONASTERY and not _has_position(lord_positions, "Monastery Abbot"):
+			var bal_w4: float = cunning_balance_weight if lord_id == emperor_id else 0.0
+			var bal_c4: Dictionary = emperor_clan_counts if lord_id == emperor_id else {}
 			var candidate: int = _find_vacancy_candidate(
 				lord_id, "Monastery Abbot", characters, characters_by_id,
+				bal_w4, bal_c4,
 			)
 			if not lord_vacancies.has(lord_id):
 				lord_vacancies[lord_id] = []
@@ -9193,8 +11540,11 @@ static func _populate_vacancy_intelligence(
 		var family_key: String = "School Master (%s)" % fam
 		if _has_position(lord_positions, family_key):
 			continue
+		var bal_w5: float = cunning_balance_weight if lord_id == emperor_id else 0.0
+		var bal_c5: Dictionary = emperor_clan_counts if lord_id == emperor_id else {}
 		var candidate: int = _find_vacancy_candidate(
 			lord_id, "School Master", characters, characters_by_id,
+			bal_w5, bal_c5,
 		)
 		if not lord_vacancies.has(lord_id):
 			lord_vacancies[lord_id] = []
@@ -9297,12 +11647,20 @@ static func _find_vacancy_candidate(
 	position_type: String,
 	characters: Array[L5RCharacterData],
 	_characters_by_id: Dictionary,
+	clan_balance_weight: float = 0.0,
+	clan_position_counts: Dictionary = {},
 ) -> int:
 	var best_id: int = -1
 	var best_score: float = -999.0
 	var skill_keys: Array = POSITION_SKILL_WEIGHTS.get(position_type, [])
 	var virtue_list: Array = POSITION_VIRTUE_BONUSES.get(position_type, [])
 	var school_types: Array = POSITION_SCHOOL_TYPE_BONUS.get(position_type, [])
+	var avg_positions: float = 0.0
+	if clan_balance_weight > 0.0 and not clan_position_counts.is_empty():
+		var total: float = 0.0
+		for clan_name: String in clan_position_counts:
+			total += float(clan_position_counts[clan_name])
+		avg_positions = total / float(clan_position_counts.size())
 	for c: L5RCharacterData in characters:
 		if CharacterStats.is_dead(c):
 			continue
@@ -9326,10 +11684,29 @@ static func _find_vacancy_candidate(
 		# School type fit: bonus for matching school type (+2)
 		if not school_types.is_empty() and c.school_type in school_types:
 			score += 2.0
+		if clan_balance_weight > 0.0 and not clan_position_counts.is_empty():
+			var clan_count: float = float(clan_position_counts.get(c.clan, 0))
+			score += (avg_positions - clan_count) * clan_balance_weight / 100.0
 		if score > best_score:
 			best_score = score
 			best_id = c.character_id
 	return best_id
+
+
+static func _compute_clan_position_counts(
+	lord_id: int,
+	characters: Array[L5RCharacterData],
+) -> Dictionary:
+	var counts: Dictionary = {}
+	for c: L5RCharacterData in characters:
+		if CharacterStats.is_dead(c):
+			continue
+		if c.lord_id != lord_id:
+			continue
+		if c.role_position.is_empty():
+			continue
+		counts[c.clan] = counts.get(c.clan, 0) + 1
+	return counts
 
 
 # -- Court Commitment Wiring ---------------------------------------------------
@@ -9430,7 +11807,7 @@ static func _process_commitment_seasonal(
 		topic.tier = topic_tier
 		topic.topic_type = topic_type
 		topic.variant = topic_variant
-		topic.momentum = 11.0 if topic_tier >= 3 else 30.0
+		topic.momentum = TopicMomentumSystem.MOMENTUM_MINOR_FLOOR if topic_tier >= 3 else _COMBAT_EVENT_MOMENTUM
 		topic.category = TopicData.Category.POLITICAL
 		topic.ic_day_created = ic_day
 		active_topics.append(topic)
@@ -9527,6 +11904,8 @@ static func _process_court_action_effects(
 	characters_by_id: Dictionary,
 	favors: Array = [],
 	ic_day: int = 0,
+	emperor_id: int = -1,
+	emperor_archetype: int = StrategicReview.EmperorArchetype.IRON,
 ) -> void:
 	for entry: Dictionary in day_results:
 		var effects: Dictionary = entry.get("effects", {})
@@ -9534,9 +11913,22 @@ static func _process_court_action_effects(
 			continue
 
 		var action_id: String = entry.get("action_id", "")
+		var actor_id: int = entry.get("character_id", -1)
 		var target_id: int = entry.get("target_npc_id", -1)
 		var target: L5RCharacterData = characters_by_id.get(target_id)
 		var action_meta: Dictionary = effects.get("_action_metadata", {})
+
+		# Tyrant court honor penalty: opposing the Emperor costs -0.5 Honor
+		if emperor_archetype == StrategicReview.EmperorArchetype.TYRANT and emperor_id >= 0:
+			var triggers_penalty: bool = false
+			if target_id == emperor_id and effects.has("target_position_shift"):
+				triggers_penalty = true
+			if action_id == "PUBLIC_DEBATE" and target_id == emperor_id:
+				triggers_penalty = true
+			if triggers_penalty:
+				var actor: L5RCharacterData = characters_by_id.get(actor_id)
+				if actor != null:
+					HonorGlorySystem.apply_honor_change(actor, StrategicReview.TYRANT_COURT_HONOR_PENALTY)
 
 		# Topic position shift from Negotiate/Persuade
 		if effects.has("target_position_shift") and target != null:
@@ -9549,9 +11941,9 @@ static func _process_court_action_effects(
 		# Provoke Emotion target effects
 		if target != null:
 			if effects.has("target_honor_change"):
-				target.honor = clampf(target.honor + effects["target_honor_change"], 0.0, 10.0)
+				HonorGlorySystem.apply_honor_change(target, effects["target_honor_change"])
 			if effects.has("target_glory_change"):
-				target.glory = clampf(target.glory + effects["target_glory_change"], 0.0, 10.0)
+				HonorGlorySystem.apply_glory_change(target, effects["target_glory_change"])
 
 		# Provoke Emotion witness disposition loss against target
 		if effects.has("target_witness_disposition"):
@@ -9773,6 +12165,80 @@ static func _populate_resource_stockpiles(
 			"military_upkeep": maxf(clan_military_upkeep.get(c.clan, 0.0), 0.01),
 		}
 		ws["available_levy_pu"] = total_military_pu
+
+
+# -- Crime Suppression Data (s11.3.19) -----------------------------------------
+
+static func _populate_crime_suppression_data(
+	world_states: Dictionary,
+	settlements: Array[SettlementData],
+	provinces: Dictionary,
+	current_season: int,
+) -> void:
+	var is_planting_or_harvest: bool = (
+		current_season == TimeSystem.Season.SPRING
+		or current_season == TimeSystem.Season.AUTUMN
+	)
+
+	var doshin_losses_map: Dictionary = world_states.get("_doshin_losses", {})
+
+	var per_settlement: Dictionary = {}
+	for s: SettlementData in settlements:
+		var prov: Variant = provinces.get(s.province_id)
+		var stability: int = 50
+		if prov is ProvinceData:
+			stability = int((prov as ProvinceData).stability)
+
+		var size: CrimeSuppressionSystem.SettlementSize = _classify_settlement_size(s)
+		var losses: int = int(doshin_losses_map.get(s.settlement_id, 0))
+
+		var available: int = CrimeSuppressionSystem.get_available_doshin(
+			size, losses, is_planting_or_harvest, stability
+		)
+		var bonus: int = CrimeSuppressionSystem.get_doshin_investigation_bonus(available)
+		var suppression_bonus: int = CrimeSuppressionSystem.get_doshin_suppression_bonus(available)
+
+		per_settlement[s.settlement_id] = {
+			"doshin_available": available,
+			"doshin_investigation_bonus": bonus,
+			"doshin_suppression_bonus": suppression_bonus,
+			"max_recruitable": CrimeSuppressionSystem.get_max_recruitable(available),
+		}
+
+	world_states["_crime_suppression_data"] = per_settlement
+
+
+static func _process_doshin_seasonal_recovery(world_states: Dictionary) -> void:
+	var losses_map: Dictionary = world_states.get("_doshin_losses", {})
+	if losses_map.is_empty():
+		return
+	var keys_to_erase: Array = []
+	for settlement_id: Variant in losses_map:
+		var current_losses: int = int(losses_map[settlement_id])
+		var new_losses: int = CrimeSuppressionSystem.process_doshin_recovery(current_losses)
+		if new_losses <= 0:
+			keys_to_erase.append(settlement_id)
+		else:
+			losses_map[settlement_id] = new_losses
+	for k: Variant in keys_to_erase:
+		losses_map.erase(k)
+
+
+static func _classify_settlement_size(s: SettlementData) -> CrimeSuppressionSystem.SettlementSize:
+	var pu: int = s.population_pu
+	if pu >= 20:
+		return CrimeSuppressionSystem.SettlementSize.MAJOR_CITY
+	if pu >= 10:
+		return CrimeSuppressionSystem.SettlementSize.CITY
+	if pu >= 5:
+		return CrimeSuppressionSystem.SettlementSize.TOWN
+	if pu >= 2:
+		return CrimeSuppressionSystem.SettlementSize.CASTLE_TOWN
+	if pu >= 1:
+		return CrimeSuppressionSystem.SettlementSize.LARGE_VILLAGE
+	if pu > 0:
+		return CrimeSuppressionSystem.SettlementSize.VILLAGE
+	return CrimeSuppressionSystem.SettlementSize.REMOTE
 
 
 # -- Civil War Seasonal Processing (s53.2) ------------------------------------
@@ -10092,7 +12558,7 @@ static func _resolve_civil_war(
 	topic.tier = 2
 	topic.topic_type = "civil_war"
 	topic.variant = "legitimacy_victory" if legitimacy_won else ("championship_seizure" if from_seizure else "rebel_victory")
-	topic.momentum = 60.0
+	topic.momentum = _CIVIL_WAR_MOMENTUM
 	topic.category = TopicData.Category.POLITICAL
 	topic.ic_day_created = ic_day
 	active_topics.append(topic)
@@ -10438,7 +12904,7 @@ static func _trigger_civil_war(
 	topic.tier = TopicData.Tier.TIER_2
 	topic.topic_type = "civil_war"
 	topic.variant = "civil_war_triggered"
-	topic.momentum = 60.0
+	topic.momentum = _CIVIL_WAR_MOMENTUM
 	topic.category = TopicData.Category.POLITICAL
 	topic.ic_day_created = ic_day
 	active_topics.append(topic)

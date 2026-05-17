@@ -159,9 +159,9 @@ static func reveal_privately(
 
 	secret.exposed = true
 
-	subject.honor = clampf(subject.honor + honor_loss, 0.0, 10.0)
-	subject.glory = clampf(subject.glory + glory_loss, 0.0, 10.0)
-	subject.infamy = clampf(subject.infamy + infamy_gain, 0.0, 10.0)
+	HonorGlorySystem.apply_honor_change(subject, honor_loss)
+	HonorGlorySystem.apply_glory_change(subject, glory_loss)
+	HonorGlorySystem.apply_infamy_change(subject, infamy_gain)
 
 	var current_disp: int = recipient.disposition_values.get(subject.character_id, 0)
 	recipient.disposition_values[subject.character_id] = clampi(
@@ -204,9 +204,9 @@ static func expose_publicly(
 	secret.exposed = true
 	secret.exposed_publicly = true
 
-	subject.honor = clampf(subject.honor + honor_loss, 0.0, 10.0)
-	subject.glory = clampf(subject.glory + glory_loss, 0.0, 10.0)
-	subject.infamy = clampf(subject.infamy + infamy_gain, 0.0, 10.0)
+	HonorGlorySystem.apply_honor_change(subject, honor_loss)
+	HonorGlorySystem.apply_glory_change(subject, glory_loss)
+	HonorGlorySystem.apply_infamy_change(subject, infamy_gain)
 
 	var witness_effects: Array[Dictionary] = []
 	for wid in witness_ids:
@@ -265,8 +265,8 @@ static func fabricate_secret(
 	var success: bool = total >= needed
 
 	var honor_cost: float = FABRICATION_HONOR_COST.get(severity, -0.5)
-	fabricator.honor = clampf(fabricator.honor + honor_cost, 0.0, 10.0)
-	fabricator.infamy = clampf(fabricator.infamy + FABRICATION_INFAMY, 0.0, 10.0)
+	HonorGlorySystem.apply_honor_change(fabricator, honor_cost)
+	HonorGlorySystem.apply_infamy_change(fabricator, FABRICATION_INFAMY)
 
 	if not success:
 		return {"success": false, "roll_total": total, "tn": needed, "honor_cost": honor_cost}
@@ -319,23 +319,23 @@ static func detect_fabrication(
 # ==============================================================================
 
 static func apply_bribe_costs(actor: L5RCharacterData) -> void:
-	actor.honor = clampf(actor.honor + BRIBE_HONOR_COST, 0.0, 10.0)
-	actor.infamy = clampf(actor.infamy + BRIBE_INFAMY, 0.0, 10.0)
+	HonorGlorySystem.apply_honor_change(actor, BRIBE_HONOR_COST)
+	HonorGlorySystem.apply_infamy_change(actor, BRIBE_INFAMY)
 
 
 static func apply_eavesdrop_costs(actor: L5RCharacterData) -> void:
-	actor.honor = clampf(actor.honor + EAVESDROP_HONOR_COST, 0.0, 10.0)
-	actor.infamy = clampf(actor.infamy + EAVESDROP_INFAMY, 0.0, 10.0)
+	HonorGlorySystem.apply_honor_change(actor, EAVESDROP_HONOR_COST)
+	HonorGlorySystem.apply_infamy_change(actor, EAVESDROP_INFAMY)
 
 
 static func apply_intercept_costs(actor: L5RCharacterData) -> void:
-	actor.honor = clampf(actor.honor + INTERCEPT_HONOR_COST, 0.0, 10.0)
-	actor.infamy = clampf(actor.infamy + INTERCEPT_INFAMY, 0.0, 10.0)
+	HonorGlorySystem.apply_honor_change(actor, INTERCEPT_HONOR_COST)
+	HonorGlorySystem.apply_infamy_change(actor, INTERCEPT_INFAMY)
 
 
 static func apply_search_costs(actor: L5RCharacterData) -> void:
-	actor.honor = clampf(actor.honor + SEARCH_HONOR_COST, 0.0, 10.0)
-	actor.infamy = clampf(actor.infamy + SEARCH_INFAMY, 0.0, 10.0)
+	HonorGlorySystem.apply_honor_change(actor, SEARCH_HONOR_COST)
+	HonorGlorySystem.apply_infamy_change(actor, SEARCH_INFAMY)
 
 
 # ==============================================================================
@@ -496,8 +496,8 @@ static func resolve_intercept_letter(
 		}
 
 	var forgery_rank: int = interceptor.skills.get("Forgery", 0)
-	var forgery_rolled: int = interceptor.intelligence + forgery_rank
-	var forgery_kept: int = interceptor.intelligence
+	var forgery_rolled: int = interceptor.agility + forgery_rank
+	var forgery_kept: int = interceptor.agility
 	var forgery_result: DiceResult = dice_engine.roll_and_keep(forgery_rolled, forgery_kept, forgery_rank > 0)
 	var forgery_success: bool = forgery_result.total >= INTERCEPT_FORGERY_TN
 
@@ -528,10 +528,10 @@ static func resolve_search_quarters(
 	var inv_rank: int = target.skills.get("Investigation", 0)
 	var tn: int = SEARCH_BASE_TN + inv_rank
 
-	var stealth_rank: int = searcher.skills.get("Stealth", 0)
-	var rolled: int = searcher.agility + stealth_rank
+	var soh_rank: int = searcher.skills.get("Sleight of Hand", 0)
+	var rolled: int = searcher.agility + soh_rank
 	var kept: int = searcher.agility
-	var result: DiceResult = dice_engine.roll_and_keep(rolled, kept, stealth_rank > 0)
+	var result: DiceResult = dice_engine.roll_and_keep(rolled, kept, soh_rank > 0)
 	var success: bool = result.total >= tn
 	var margin: int = result.total - tn
 
@@ -644,7 +644,7 @@ static func resolve_search_person(
 	var glory_cost: float = 0.0
 	if not has_magistrate_authority and not success:
 		glory_cost = SEARCH_PERSON_GLORY_COST
-		searcher.glory = clampf(searcher.glory + glory_cost, 0.0, 10.0)
+		HonorGlorySystem.apply_glory_change(searcher, glory_cost)
 
 	return {
 		"success": success,
@@ -668,6 +668,7 @@ static func resolve_forge_impersonation_letter(
 	forger: L5RCharacterData,
 	authority_level: String,
 	dice_engine: DiceEngine,
+	raises_called: int = 0,
 ) -> Dictionary:
 	var tn: int = FORGE_LETTER_TN.get(authority_level, 20)
 
@@ -675,20 +676,21 @@ static func resolve_forge_impersonation_letter(
 	if forgery_rank == 0:
 		return {"success": false, "reason": "no_forgery_skill"}
 
-	var rolled: int = forger.intelligence + forgery_rank
-	var kept: int = forger.intelligence
+	var rolled: int = forger.agility + forgery_rank
+	var kept: int = forger.agility
 	var result: DiceResult = dice_engine.roll_and_keep(rolled, kept)
-	var success: bool = result.total >= tn
+	var needed: int = tn + (raises_called * 5)
+	var success: bool = result.total >= needed
 
-	var detection_tn: int = result.total if success else 0
+	var detection_tn: int = (tn + (raises_called * 5)) if success else 0
 
-	forger.honor = clampf(forger.honor - 0.3, 0.0, 10.0)
-	forger.infamy = clampf(forger.infamy + 0.1, 0.0, 10.0)
+	HonorGlorySystem.apply_honor_change(forger, -0.3)
+	HonorGlorySystem.apply_infamy_change(forger, 0.1)
 
 	return {
 		"success": success,
 		"roll_total": result.total,
-		"tn": tn,
+		"tn": needed,
 		"detection_tn": detection_tn,
 		"detection_risk": not success,
 	}
@@ -708,6 +710,7 @@ static func resolve_forge_order(
 	forger: L5RCharacterData,
 	authority_level: String,
 	dice_engine: DiceEngine,
+	raises_called: int = 0,
 ) -> Dictionary:
 	var tn: int = FORGE_ORDER_TN.get(authority_level, 25)
 
@@ -715,20 +718,21 @@ static func resolve_forge_order(
 	if forgery_rank == 0:
 		return {"success": false, "reason": "no_forgery_skill"}
 
-	var rolled: int = forger.intelligence + forgery_rank
-	var kept: int = forger.intelligence
+	var rolled: int = forger.agility + forgery_rank
+	var kept: int = forger.agility
 	var result: DiceResult = dice_engine.roll_and_keep(rolled, kept)
-	var success: bool = result.total >= tn
+	var needed: int = tn + (raises_called * 5)
+	var success: bool = result.total >= needed
 
-	var detection_tn: int = result.total if success else 0
+	var detection_tn: int = (tn + (raises_called * 5)) if success else 0
 
-	forger.honor = clampf(forger.honor - 0.5, 0.0, 10.0)
-	forger.infamy = clampf(forger.infamy + 0.2, 0.0, 10.0)
+	HonorGlorySystem.apply_honor_change(forger, -0.3)
+	HonorGlorySystem.apply_infamy_change(forger, 0.1)
 
 	return {
 		"success": success,
 		"roll_total": result.total,
-		"tn": tn,
+		"tn": needed,
 		"detection_tn": detection_tn,
 		"detection_risk": not success,
 	}

@@ -38,6 +38,21 @@ const ARCHETYPE_VACANCY_DELAY: Dictionary = {
 	EmperorArchetype.TYRANT: 14,
 }
 
+const WARLIKE_POLITICAL_VACANCY_DELAY: int = 45
+
+const ARCHETYPE_VACANCY_MIN_SEASONS: Dictionary = {
+	EmperorArchetype.BENEVOLENT: {"military": 0, "political": 0},
+	EmperorArchetype.IRON: {"military": 0, "political": 0},
+	EmperorArchetype.CUNNING: {"military": 1, "political": 1},
+	EmperorArchetype.WARLIKE: {"military": 0, "political": 1},
+	EmperorArchetype.TYRANT: {"military": 0, "political": 0},
+}
+
+const WARLIKE_BUSHI_CHAMPION_BASELINE: int = 15
+const WARLIKE_COURTIER_CHAMPION_BASELINE: int = 0
+
+const CUNNING_CLAN_BALANCE_WEIGHT: int = 25
+
 const ARCHETYPE_DISPOSITION_WEIGHT: Dictionary = {
 	EmperorArchetype.BENEVOLENT: 15,
 	EmperorArchetype.IRON: 10,
@@ -63,6 +78,14 @@ const ORPHAN_RESOLUTION_BY_VIRTUE: Dictionary = {
 	Enums.BushidoVirtue.REI: "MODIFY",
 	Enums.BushidoVirtue.YU: "CONFIRM",
 }
+
+const TYRANT_STABILITY_PENALTY: float = -2.0
+const TYRANT_COURT_HONOR_PENALTY: float = -0.5
+const BREAKING_POINT_CLAN_COUNT: int = 3
+
+const GREAT_CLANS: Array[String] = [
+	"Crab", "Crane", "Dragon", "Lion", "Mantis", "Phoenix", "Scorpion", "Unicorn",
+]
 
 
 static func run_seasonal_review(
@@ -366,6 +389,8 @@ static func run_emperor_review(
 	world_state: Dictionary,
 	objectives_map: Dictionary,
 ) -> Array[Dictionary]:
+	_seed_archetype_champion_baselines(emperor, archetype, clan_champions)
+
 	var directives: Array[Dictionary] = []
 
 	var vassals: Array[L5RCharacterData] = clan_champions
@@ -391,6 +416,17 @@ static func run_emperor_review(
 	)
 	if not shogun.is_empty():
 		directives.append(shogun)
+
+	var disgrace_directives: Array[Dictionary] = _evaluate_disgrace_fabrication(
+		emperor, archetype, clan_champions
+	)
+	directives.append_array(disgrace_directives)
+
+	var breaking_point: Dictionary = _evaluate_breaking_point(
+		emperor, archetype, clan_champions
+	)
+	if not breaking_point.is_empty():
+		directives.append(breaking_point)
 
 	return directives
 
@@ -470,19 +506,43 @@ static func _evaluate_vacancy_fill(
 	if vacancies.is_empty():
 		return {}
 
-	var delay: int = ARCHETYPE_VACANCY_DELAY.get(archetype, 30)
-	var ticks_since_vacancy: int = world_state.get("ticks_since_oldest_vacancy", 0)
+	var min_seasons_map: Dictionary = ARCHETYPE_VACANCY_MIN_SEASONS.get(
+		archetype, {"military": 0, "political": 0}
+	)
 
-	if ticks_since_vacancy < delay:
+	var best_vacancy: Dictionary = {}
+	var best_priority: int = -1
+
+	for v: Variant in vacancies:
+		if not v is Dictionary:
+			continue
+		var vacancy: Dictionary = v as Dictionary
+		var is_military: bool = vacancy.get("position_type", "") == "military_commander"
+		var category: String = "military" if is_military else "political"
+		var min_seasons: int = int(min_seasons_map.get(category, 0))
+		var seasons_vacant: int = vacancy.get("seasons_vacant", 0)
+		if seasons_vacant < min_seasons:
+			continue
+		var priority: int = vacancy.get("priority", 0)
+		if priority > best_priority:
+			best_priority = priority
+			best_vacancy = vacancy
+
+	if best_vacancy.is_empty():
 		return {}
 
-	return {
+	var disp_weight: int = ARCHETYPE_DISPOSITION_WEIGHT.get(archetype, 15)
+	var skill_weight: int = ARCHETYPE_SKILL_WEIGHT.get(archetype, 20)
+	var result: Dictionary = {
 		"directive": "FILL_VACANCY",
 		"lord_id": emperor.character_id,
-		"vacancy": vacancies[0],
-		"disposition_weight": ARCHETYPE_DISPOSITION_WEIGHT.get(archetype, 15),
-		"skill_weight": ARCHETYPE_SKILL_WEIGHT.get(archetype, 20),
+		"vacancy": best_vacancy,
+		"disposition_weight": disp_weight,
+		"skill_weight": skill_weight,
 	}
+	if archetype == EmperorArchetype.CUNNING:
+		result["clan_balance_weight"] = CUNNING_CLAN_BALANCE_WEIGHT
+	return result
 
 
 static func _evaluate_shogun_creation(
@@ -527,6 +587,84 @@ static func _evaluate_shogun_creation(
 		}
 
 	return {}
+
+
+# -- Tyrant Emperor Effects (s55.10) -------------------------------------------
+
+static func _evaluate_disgrace_fabrication(
+	emperor: L5RCharacterData,
+	archetype: int,
+	clan_champions: Array[L5RCharacterData],
+) -> Array[Dictionary]:
+	if archetype != EmperorArchetype.TYRANT:
+		return []
+
+	var results: Array[Dictionary] = []
+	for champion: L5RCharacterData in clan_champions:
+		var disp: int = emperor.disposition_values.get(champion.character_id, 0)
+		var tier: int = DispositionSystem.get_tier(disp)
+		if tier <= DispositionSystem.Tier.RIVAL:
+			results.append({
+				"directive": "FABRICATE_DISGRACE",
+				"lord_id": emperor.character_id,
+				"target_id": champion.character_id,
+				"target_clan": champion.clan,
+				"disposition": disp,
+			})
+	return results
+
+
+static func _evaluate_breaking_point(
+	emperor: L5RCharacterData,
+	archetype: int,
+	clan_champions: Array[L5RCharacterData],
+) -> Dictionary:
+	if archetype != EmperorArchetype.TYRANT:
+		return {}
+
+	var hostile_clan_count: int = 0
+	for champion: L5RCharacterData in clan_champions:
+		if champion.clan not in GREAT_CLANS:
+			continue
+		var disp: int = champion.disposition_values.get(emperor.character_id, 0)
+		if disp <= -31:
+			hostile_clan_count += 1
+
+	if hostile_clan_count >= BREAKING_POINT_CLAN_COUNT:
+		return {
+			"directive": "IMPERIAL_CIVIL_WAR",
+			"lord_id": emperor.character_id,
+			"hostile_clan_count": hostile_clan_count,
+		}
+	return {}
+
+
+static func _seed_archetype_champion_baselines(
+	emperor: L5RCharacterData,
+	archetype: int,
+	clan_champions: Array[L5RCharacterData],
+) -> void:
+	for champion: L5RCharacterData in clan_champions:
+		if emperor.disposition_values.has(champion.character_id):
+			continue
+		var baseline: int = get_archetype_champion_baseline(archetype, champion.school_type)
+		if baseline != 0:
+			emperor.disposition_values[champion.character_id] = baseline
+
+
+static func get_archetype_champion_baseline(
+	archetype: int,
+	school_type: int,
+) -> int:
+	if archetype == EmperorArchetype.WARLIKE:
+		if school_type == Enums.SchoolType.BUSHI:
+			return WARLIKE_BUSHI_CHAMPION_BASELINE
+		return WARLIKE_COURTIER_CHAMPION_BASELINE
+	if archetype == EmperorArchetype.BENEVOLENT:
+		return 15
+	if archetype == EmperorArchetype.TYRANT:
+		return 0
+	return 0
 
 
 # -- Self-Selection (s55.26.1) -------------------------------------------------

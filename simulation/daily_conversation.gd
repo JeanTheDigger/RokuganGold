@@ -83,10 +83,15 @@ static func _compute_topic_relevance(
 	)
 
 
+static func is_topic_sensitive(topic: TopicData) -> bool:
+	return topic.category == TopicData.Category.MILITARY
+
+
 static func select_topic_to_share_weighted(
 	character: L5RCharacterData,
 	rng_value: int,
 	topics_by_id: Dictionary,
+	sharer_disposition: int = 100,
 ) -> int:
 	if character.topic_pool.is_empty():
 		return -1
@@ -97,12 +102,17 @@ static func select_topic_to_share_weighted(
 		var topic: TopicData = topics_by_id.get(tid)
 		var w: float = 1.0
 		if topic != null:
+			if not DispositionSystem.will_share_topic(
+				sharer_disposition, is_topic_sensitive(topic),
+			):
+				weights.append(0.0)
+				continue
 			w = maxf(_compute_topic_relevance(topic, character), 1.0)
 		weights.append(w)
 		total_weight += w
 
 	if total_weight <= 0.0:
-		return character.topic_pool[0]
+		return -1
 
 	var pick: float = float(rng_value % 100) / 100.0 * total_weight
 	var cumulative: float = 0.0
@@ -136,6 +146,16 @@ static func apply_disposition_bonus(char_a: L5RCharacterData, char_b: L5RCharact
 	char_b.disposition_values[char_a.character_id] = clampi(current_b + DISPOSITION_BONUS, -100, 100)
 
 
+# -- Momentum Refresh (s12.6 / s16.5) -----------------------------------------
+
+static func _refresh_topic_momentum(topic_id: int, topics_by_id: Dictionary) -> void:
+	if topic_id < 0:
+		return
+	var topic: TopicData = topics_by_id.get(topic_id)
+	if topic != null:
+		topic.discussion_count_this_day += 1
+
+
 # -- Full Conversation Resolution ----------------------------------------------
 
 static func resolve_conversation(
@@ -146,14 +166,17 @@ static func resolve_conversation(
 	current_season: int,
 	topics_by_id: Dictionary = {},
 ) -> Dictionary:
+	var disp_a_toward_b: int = char_a.disposition_values.get(char_b.character_id, 0)
+	var disp_b_toward_a: int = char_b.disposition_values.get(char_a.character_id, 0)
+
 	var topic_a: int
 	var topic_b: int
 	if topics_by_id.is_empty():
 		topic_a = select_topic_to_share(char_a, rng_a)
 		topic_b = select_topic_to_share(char_b, rng_b)
 	else:
-		topic_a = select_topic_to_share_weighted(char_a, rng_a, topics_by_id)
-		topic_b = select_topic_to_share_weighted(char_b, rng_b, topics_by_id)
+		topic_a = select_topic_to_share_weighted(char_a, rng_a, topics_by_id, disp_a_toward_b)
+		topic_b = select_topic_to_share_weighted(char_b, rng_b, topics_by_id, disp_b_toward_a)
 
 	var transferred_to_b: bool = transfer_topic(char_a, char_b, topic_a)
 	var transferred_to_a: bool = transfer_topic(char_b, char_a, topic_b)
@@ -173,6 +196,10 @@ static func resolve_conversation(
 			{"topic": topic_b, "from_character_id": char_b.character_id},
 			current_season,
 		))
+
+	if not topics_by_id.is_empty():
+		_refresh_topic_momentum(topic_a, topics_by_id)
+		_refresh_topic_momentum(topic_b, topics_by_id)
 
 	apply_disposition_bonus(char_a, char_b)
 

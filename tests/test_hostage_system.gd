@@ -36,6 +36,13 @@ func test_low_stealth_cannot_escape():
 	))
 
 
+func test_yu_cannot_escape():
+	assert_false(HostageSystem.can_attempt_escape(
+		Enums.BushidoVirtue.YU, Enums.ShouridoVirtue.NONE,
+		Enums.SchoolType.BUSHI, 5
+	))
+
+
 func test_ishi_committed_cannot_escape():
 	assert_false(HostageSystem.can_attempt_escape(
 		Enums.BushidoVirtue.NONE, Enums.ShouridoVirtue.ISHI,
@@ -93,6 +100,7 @@ func test_escape_success():
 	assert_true(result["success"])
 	assert_false(result["executed"])
 	assert_eq(result["family_honor_loss"], -1.0)
+	assert_eq(result["historical_modifier"], "hostage_escape")
 
 
 func test_escape_failure():

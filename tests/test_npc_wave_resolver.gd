@@ -312,3 +312,97 @@ func test_resolve_day_applied_mutates_character_state() -> void:
 	)
 	# Even if action fails, it gets logged — that's the key mutation
 	assert_true(action_log[0].has("success"))
+
+
+# -- Reactive Event Consumption ------------------------------------------------
+
+func test_consume_reactive_event_removes_on_success() -> void:
+	var ws: Dictionary = {
+		"pending_events": [
+			{"type": "bribery_eval", "magistrate_id": 2},
+		],
+	}
+	var decision: Dictionary = {
+		"success": true,
+		"need_source": "bribery_eval",
+	}
+	NPCWaveResolver._consume_reactive_event(decision, ws)
+	assert_eq(ws["pending_events"].size(), 0)
+
+
+func test_consume_reactive_event_keeps_on_failure() -> void:
+	var ws: Dictionary = {
+		"pending_events": [
+			{"type": "witness_report_motivated", "magistrate_id": 5},
+		],
+	}
+	var decision: Dictionary = {
+		"success": false,
+		"need_source": "witness_report_motivated",
+	}
+	NPCWaveResolver._consume_reactive_event(decision, ws)
+	assert_eq(ws["pending_events"].size(), 1)
+
+
+func test_consume_reactive_event_all_source_types() -> void:
+	for source: String in NPCWaveResolver.REACTIVE_SOURCES:
+		var ws: Dictionary = {
+			"pending_events": [{"type": source}],
+		}
+		var decision: Dictionary = {
+			"success": true,
+			"need_source": source,
+		}
+		NPCWaveResolver._consume_reactive_event(decision, ws)
+		assert_eq(ws["pending_events"].size(), 0, "Should consume for source: " + source)
+
+
+func test_consume_reactive_event_discards_malformed() -> void:
+	var ws: Dictionary = {
+		"pending_events": [
+			{"garbage_key": "bad_data"},
+		],
+	}
+	var decision: Dictionary = {
+		"success": true,
+		"need_source": "",
+		"need_type": "REST",
+	}
+	NPCWaveResolver._consume_reactive_event(decision, ws)
+	assert_eq(ws["pending_events"].size(), 0)
+
+
+func test_consume_reactive_event_noop_when_empty() -> void:
+	var ws: Dictionary = {"pending_events": []}
+	var decision: Dictionary = {
+		"success": true,
+		"need_source": "bribery_eval",
+	}
+	NPCWaveResolver._consume_reactive_event(decision, ws)
+	assert_eq(ws["pending_events"].size(), 0)
+
+
+func test_consume_reactive_event_preserves_remaining_events() -> void:
+	var ws: Dictionary = {
+		"pending_events": [
+			{"type": "extortion_opportunity", "suspect_id": 3},
+			{"type": "provocation", "source_id": 7},
+		],
+	}
+	var decision: Dictionary = {
+		"success": true,
+		"need_source": "extortion_opportunity",
+	}
+	NPCWaveResolver._consume_reactive_event(decision, ws)
+	assert_eq(ws["pending_events"].size(), 1)
+	assert_eq(ws["pending_events"][0]["type"], "provocation")
+
+
+func test_consume_non_reactive_source_no_events_is_noop() -> void:
+	var ws: Dictionary = {"pending_events": []}
+	var decision: Dictionary = {
+		"success": true,
+		"need_source": "crisis_override",
+	}
+	NPCWaveResolver._consume_reactive_event(decision, ws)
+	assert_eq(ws["pending_events"].size(), 0)
