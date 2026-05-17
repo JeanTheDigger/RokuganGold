@@ -71,8 +71,9 @@ static func _get_acquittal_disposition_hit(victim_status: float) -> int:
 
 # -- Champion Substitution (s11.3.9f) -----
 
-static func can_appoint_champion(accused: L5RCharacterData) -> bool:
-	return accused.school_type != Enums.SchoolType.BUSHI or accused.school_type == Enums.SchoolType.BUSHI
+static func can_appoint_champion(_accused: L5RCharacterData) -> bool:
+	# s11.3.9f: either side may appoint a champion regardless of school type.
+	return true
 
 
 static func get_champion_political_cost() -> Dictionary:

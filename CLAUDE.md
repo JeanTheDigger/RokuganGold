@@ -207,17 +207,19 @@ file, search `/simulation/` and `/shared/` to confirm the system doesn't already
 For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
 **Code Implementation Status** table at the bottom of `/gdd/00_INDEX.md`.
 
-### Known Code Issues (found 2026-05-17, not yet fixed)
-- **DefenseHearingSystem.can_appoint_champion() — tautology bug.** Line 75:
-  `return accused.school_type != Enums.SchoolType.BUSHI or accused.school_type == Enums.SchoolType.BUSHI`
-  This is `not X or X` — always `true`. Intent unclear; read GDD s11.3.9f before fixing.
-- **MagistrateAllocationSystem.is_emerald_jurisdiction() — dead parameter.**
-  Accepts `EmeraldJurisdictionTrigger` enum but ignores it, always returns `true`.
-  Possibly intentional (all four listed triggers qualify); if so, drop the parameter.
-  If different triggers should return different values, implement the match.
-- **MagistrateAllocationSystem.can_override_clan_magistrate() — unconditional stub.**
-  No parameters, always returns `true`. May be correct per imperial authority rules.
-  Verify against GDD s11.3.17c before adding guards.
+### Known Code Issues (found and fixed 2026-05-17)
+- **DefenseHearingSystem.can_appoint_champion() — tautology bug. FIXED.**
+  Was `return X != Y or X == Y`. GDD s11.3.9f confirms either side may appoint a
+  champion regardless of school type. Changed to explicit `return true`, renamed param
+  to `_accused` to suppress unused-parameter warning.
+- **MagistrateAllocationSystem.is_emerald_jurisdiction() — dead parameter. FIXED.**
+  Was `return true` ignoring its `EmeraldJurisdictionTrigger` parameter. GDD s11.3.17c
+  confirms all four triggers (CROSS_CLAN_CRIME, TREASON, MAHO, LOCAL_JUSTICE_FAILED)
+  qualify. Replaced with explicit match so future enum additions require a deliberate
+  decision rather than silently returning true.
+- **MagistrateAllocationSystem.can_override_clan_magistrate() — stub clarified. FIXED.**
+  GDD s11.3.6 states Emerald Magistrates have Empire-wide authority over any clan
+  magistrate — unconditional. Added reference comment to distinguish intent from stub.
 
 ### Blocked Sections — Do Not Re-Audit
 As of 2026-05-17, every remaining PARTIAL and NOT STARTED section is blocked.

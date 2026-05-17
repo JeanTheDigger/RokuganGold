@@ -211,10 +211,19 @@ enum EmeraldJurisdictionTrigger {
 
 
 static func is_emerald_jurisdiction(trigger: EmeraldJurisdictionTrigger) -> bool:
-	return true
+	# s11.3.17c: Imperial intervention is reserved for these four trigger categories.
+	# Explicit match so future enum additions require a deliberate decision.
+	match trigger:
+		EmeraldJurisdictionTrigger.CROSS_CLAN_CRIME, \
+		EmeraldJurisdictionTrigger.TREASON, \
+		EmeraldJurisdictionTrigger.MAHO, \
+		EmeraldJurisdictionTrigger.LOCAL_JUSTICE_FAILED:
+			return true
+	return false
 
 
 static func can_override_clan_magistrate() -> bool:
+	# s11.3.6: Emerald Magistrates have Empire-wide authority over any clan magistrate.
 	return true
 
 
