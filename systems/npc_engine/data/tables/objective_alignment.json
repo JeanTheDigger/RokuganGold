@@ -754,5 +754,10 @@
     "TREAT_WOUND": 100,
     "BEGIN_TRAVEL": 40,
     "DO_NOTHING": 0
+  },
+  "RECOVER_VOID_POINTS": {
+    "MEDITATE": 100,
+    "PERFORM_WORSHIP": 30,
+    "DO_NOTHING": 0
   }
 }

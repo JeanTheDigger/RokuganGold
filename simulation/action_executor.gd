@@ -275,6 +275,9 @@ static func execute(
 	if action_id == "TREAT_WOUND":
 		return _execute_treat_wound(action, character, ctx, dice_engine, characters_by_id)
 
+	if action_id == "MEDITATE":
+		return _execute_meditate(action, character, ctx, dice_engine)
+
 	if action_id == "RESTORE_COUNCIL_COMPACT":
 		return {
 			"success": true,
@@ -2404,6 +2407,72 @@ static func _execute_treat_wound(
 			"wound_level_after": treat_result.get("wound_level_after", -1),
 		},
 	}
+
+
+# -- Meditate -----------------------------------------------------------------
+# Meditation (Void Recovery) / Void vs TN 20. Recovers VP per rank mastery.
+# Rank 1–2: 1 VP. Rank 3–6: up to 2 VP. Rank 7+: up to 3 VP (s57.32.3).
+
+static func _execute_meditate(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	const MEDITATE_TN: int = 20
+	const MASTERY_RANK3: int = 3
+	const MASTERY_RANK7: int = 7
+
+	if character.current_void_points >= character.max_void_points:
+		return {
+			"success": false,
+			"action_id": "MEDITATE",
+			"character_id": character.character_id,
+			"target_npc_id": -1,
+			"target_province_id": action.target_province_id,
+			"ic_day": ctx.ic_day,
+			"season": ctx.season,
+			"reason": "pool_full",
+			"effects": {},
+		}
+
+	var check: Dictionary = SkillResolver.resolve_skill_check(
+		character, dice_engine, "Meditation", MEDITATE_TN, 0,
+		"Void Recovery", Enums.Trait.VOID,
+	)
+
+	var result: Dictionary = {
+		"success": check["success"],
+		"action_id": "MEDITATE",
+		"character_id": character.character_id,
+		"target_npc_id": -1,
+		"target_province_id": action.target_province_id,
+		"ic_day": ctx.ic_day,
+		"season": ctx.season,
+		"skill_used": "Meditation",
+		"roll_total": check.get("total", 0),
+		"tn": MEDITATE_TN,
+		"effects": {
+			"void_recovered": 0,
+		},
+	}
+
+	if not check["success"]:
+		return result
+
+	var med_rank: int = SkillResolver.get_skill_rank(character, "Meditation")
+	var recovery_cap: int = 1
+	if med_rank >= MASTERY_RANK7:
+		recovery_cap = 3
+	elif med_rank >= MASTERY_RANK3:
+		recovery_cap = 2
+
+	var recoverable: int = character.max_void_points - character.current_void_points
+	var recovered: int = mini(recovery_cap, recoverable)
+	character.current_void_points += recovered
+	result["effects"]["void_recovered"] = recovered
+
+	return result
 
 
 static func _execute_seppuku_response(

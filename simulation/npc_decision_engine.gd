@@ -239,7 +239,7 @@ static func build_context(
 # Standing Objective. Winner decomposes into an ImmediateNeed.
 
 static func resolve_goal(
-	_character: L5RCharacterData,
+	character: L5RCharacterData,
 	ctx: NPCDataStructures.ContextSnapshot,
 	objectives: Dictionary,
 ) -> NPCDataStructures.ImmediateNeed:
@@ -267,6 +267,13 @@ static func resolve_goal(
 		var standing_need := _decompose_objective(standing, ctx)
 		if standing_need != null:
 			return standing_need
+
+	# Void recovery — fires as fallback when pool is fully depleted and no other
+	# need pressed. Full anticipation escalation (high-stakes upcoming actions)
+	# is deferred: that requires queued-need inspection not yet implemented.
+	var void_need := _check_void_recovery_need(character, ctx)
+	if void_need != null:
+		return void_need
 
 	# Absolute fallback — maintenance
 	var fallback := NPCDataStructures.ImmediateNeed.new()
@@ -640,6 +647,23 @@ static func _decompose_reactive_event(
 		return need
 
 	return null
+
+
+static func _check_void_recovery_need(
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> NPCDataStructures.ImmediateNeed:
+	# Fires only when pool is depleted and MEDITATE is available in context (s57.32.5).
+	# Priority 3 (urgent) when pool is empty — only then overrides primary objectives.
+	if character.max_void_points <= 0 or character.current_void_points > 0:
+		return null
+	if "MEDITATE" not in _get_actions_for_context(ctx.context_flag):
+		return null
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "RECOVER_VOID_POINTS"
+	need.priority = 3
+	need.source = "void_depleted"
+	return need
 
 
 static func _check_crisis_override(

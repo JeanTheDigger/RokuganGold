@@ -828,7 +828,7 @@ static func advance_day(
 	var ooc_tick_results: Array[Dictionary] = []
 	if ic_day % TimeSystem.TICKS_PER_REAL_DAY == 0:
 		ooc_tick_results = _process_ooc_day_tick(
-			characters, characters_by_id, settlements, dice_engine, worship_state,
+			characters, characters_by_id, settlements, dice_engine, worship_state, ic_day,
 		)
 
 	return {
@@ -938,6 +938,7 @@ static func _process_ooc_day_tick(
 	settlements: Array[SettlementData],
 	dice_engine: DiceEngine,
 	worship_state: Dictionary,
+	ic_day: int = 0,
 ) -> Array[Dictionary]:
 	## Runs Wind-Down selection and Void Point refresh once per OOC day (every
 	## 4 IC days) per GDD s57.44.2 and s57.32.2.
@@ -1014,8 +1015,11 @@ static func _process_ooc_day_tick(
 			c, method, dice_engine, present_ids, companion_id, go_opponent, fortune_id,
 		)
 
-		# Void Point refresh per s57.32.2 — gated on rested_last_night.
-		if c.rested_last_night:
+		# Void Point refresh per s57.32.2 — gated on rested_last_night and
+		# void_refresh_blocked_until (supernatural spell block, s57.32.8).
+		var ooc_day: int = ic_day / TimeSystem.TICKS_PER_REAL_DAY
+		if c.rested_last_night \
+				and (c.void_refresh_blocked_until == -1 or ooc_day >= c.void_refresh_blocked_until):
 			c.current_void_points = ceili(c.max_void_points * c.wind_down_void_modifier)
 
 		# Natural healing per s57.31.7a — gated on rested_last_night; blocked at Out.

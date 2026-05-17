@@ -6581,3 +6581,51 @@ func test_ooc_result_contains_wounds_healed_key() -> void:
 	assert_eq(ooc.size(), 1)
 	assert_true(ooc[0].has("wounds_healed"))
 	assert_eq(ooc[0]["wounds_healed"], 7)
+
+
+# -- Void Refresh Block (s57.32.2 / s57.32.8) -----------------------------------
+
+func test_void_refresh_blocked_by_supernatural_block() -> void:
+	# void_refresh_blocked_until = ooc_day 1 → ic_day 4 = ooc_day 1 → STILL blocked.
+	_time.current_tick = 3  # → ic_day 4 = ooc_day 1.
+	_characters[0].current_void_points = 0
+	_characters[0].max_void_points = 2
+	_characters[0].void_refresh_blocked_until = 2  # Blocked until ooc_day 2.
+	_characters[0].rested_last_night = true
+	DayOrchestrator.advance_day(
+		_time, _characters, _characters_by_id, _make_world_states(),
+		_make_objectives(), _scoring_tables, _filter_data, _dice,
+		_action_skill_map, _provinces, _action_log, _season_meta,
+	)
+	assert_eq(_characters[0].current_void_points, 0)  # Block prevented refresh.
+
+
+func test_void_refresh_allowed_after_block_expires() -> void:
+	# void_refresh_blocked_until = ooc_day 1 → ic_day 8 = ooc_day 2 → block expired.
+	_time.current_tick = 7  # → ic_day 8 = ooc_day 2.
+	_characters[0].current_void_points = 0
+	_characters[0].max_void_points = 2
+	_characters[0].void_refresh_blocked_until = 2  # Expires at ooc_day 2 (>= check).
+	_characters[0].rested_last_night = true
+	DayOrchestrator.advance_day(
+		_time, _characters, _characters_by_id, _make_world_states(),
+		_make_objectives(), _scoring_tables, _filter_data, _dice,
+		_action_skill_map, _provinces, _action_log, _season_meta,
+	)
+	# ooc_day 2 >= void_refresh_blocked_until 2 → refresh fires.
+	assert_true(_characters[0].current_void_points > 0)
+
+
+func test_void_refresh_not_blocked_when_sentinel_minus_one() -> void:
+	# void_refresh_blocked_until == -1 means never blocked.
+	_time.current_tick = 3
+	_characters[0].current_void_points = 0
+	_characters[0].max_void_points = 2
+	_characters[0].void_refresh_blocked_until = -1
+	_characters[0].rested_last_night = true
+	DayOrchestrator.advance_day(
+		_time, _characters, _characters_by_id, _make_world_states(),
+		_make_objectives(), _scoring_tables, _filter_data, _dice,
+		_action_skill_map, _provinces, _action_log, _season_meta,
+	)
+	assert_true(_characters[0].current_void_points > 0)
