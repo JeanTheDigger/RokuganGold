@@ -812,3 +812,227 @@ func test_generate_fugitive_topic() -> void:
 	assert_eq(topic.category, TopicData.Category.POLITICAL)
 	assert_true(topic.title.contains("Ikoma Tsuko"))
 	assert_eq(topic.slug, "fugitive_7")
+
+
+# -- Alibi checking -----------------------------------------------------------
+
+func _make_alibi_witness(sid: int = 10, sincerity: int = 3, awa: int = 3) -> L5RCharacterData:
+	var c := L5RCharacterData.new()
+	c.character_id = sid
+	c.character_name = "Witness"
+	c.skills = {"Sincerity": sincerity}
+	c.emphases = {}
+	c.awareness = awa
+	c.perception = 2
+	return c
+
+
+func _make_alibi_objective(suspect_id: int = 5) -> Dictionary:
+	return {
+		"case_id": 1,
+		"crime_location": "castle_crane",
+		"evidence_total": 20,
+		"known_suspects": [suspect_id],
+		"alibis": [
+			{"id": 1, "suspect_id": suspect_id, "claimed_with": 10, "genuine": true},
+		],
+		"checked_alibis": [],
+		"unresolved_leads": [],
+	}
+
+
+func test_alibi_genuine_clears_suspect() -> void:
+	var mag := _make_magistrate()
+	var witness := _make_alibi_witness()
+	var cr := _make_crime_record()
+	cr.evidence_total = 20
+	var obj := _make_alibi_objective()
+	var alibi: Dictionary = obj["alibis"][0]
+
+	var result: Dictionary = InvestigationSystem.check_alibi(
+		alibi, witness, mag, cr, obj, _dice,
+	)
+	assert_true(result["genuine"])
+	assert_eq(result["evidence_change"], -InvestigationSystem.ALIBI_GENUINE_WEIGHT)
+	assert_eq(result["suspect_cleared"], 5)
+	assert_eq(cr.evidence_total, 20 - InvestigationSystem.ALIBI_GENUINE_WEIGHT)
+	assert_true(1 in obj["checked_alibis"])
+
+
+func test_alibi_false_adds_evidence() -> void:
+	var mag := _make_magistrate()
+	var witness := _make_alibi_witness()
+	var cr := _make_crime_record()
+	cr.evidence_total = 10
+	var obj := _make_alibi_objective()
+	obj["alibis"] = [{"id": 2, "suspect_id": 5, "claimed_with": 10, "genuine": false}]
+	var alibi: Dictionary = obj["alibis"][0]
+
+	var result: Dictionary = InvestigationSystem.check_alibi(
+		alibi, witness, mag, cr, obj, _dice,
+	)
+	assert_false(result["genuine"])
+	assert_eq(result["evidence_change"], InvestigationSystem.ALIBI_FALSE_EVIDENCE)
+	assert_eq(cr.evidence_total, 10 + InvestigationSystem.ALIBI_FALSE_EVIDENCE)
+	assert_true(2 in obj["checked_alibis"])
+
+
+func test_alibi_co_conspirator_detected() -> void:
+	var mag := _make_magistrate(5)
+	mag.perception = 5
+	var witness := _make_alibi_witness(10, 1, 1)
+	var cr := _make_crime_record()
+	cr.evidence_total = 10
+	var obj := _make_alibi_objective()
+	obj["alibis"] = [{"id": 3, "suspect_id": 5, "claimed_with": 10, "genuine": false, "co_conspirator": true}]
+	var alibi: Dictionary = obj["alibis"][0]
+
+	_dice.set_seed(42)
+	var result: Dictionary = InvestigationSystem.check_alibi(
+		alibi, witness, mag, cr, obj, _dice,
+	)
+	if result.get("co_conspirator_exposed", false):
+		assert_eq(result["co_conspirator_id"], 10)
+		assert_eq(result["evidence_change"], InvestigationSystem.ALIBI_FALSE_EVIDENCE)
+	elif result.get("co_conspirator_passed", false):
+		assert_eq(result["evidence_change"], 0)
+
+
+func test_alibi_co_conspirator_passes_deceit() -> void:
+	var mag := _make_magistrate(1)
+	mag.perception = 1
+	var witness := _make_alibi_witness(10, 5, 5)
+	var cr := _make_crime_record()
+	cr.evidence_total = 10
+	var obj := _make_alibi_objective()
+	obj["alibis"] = [{"id": 4, "suspect_id": 5, "claimed_with": 10, "genuine": false, "co_conspirator": true}]
+	var alibi: Dictionary = obj["alibis"][0]
+
+	_dice.set_seed(42)
+	var result: Dictionary = InvestigationSystem.check_alibi(
+		alibi, witness, mag, cr, obj, _dice,
+	)
+	if result.get("co_conspirator_passed", false):
+		assert_eq(result["evidence_change"], 0)
+		assert_eq(cr.evidence_total, 10)
+	elif result.get("co_conspirator_exposed", false):
+		assert_true(result["evidence_change"] > 0)
+
+
+func test_alibi_already_checked_skipped() -> void:
+	var mag := _make_magistrate()
+	var witness := _make_alibi_witness()
+	var cr := _make_crime_record()
+	var obj := _make_alibi_objective()
+	obj["checked_alibis"] = [1]
+	var alibi: Dictionary = obj["alibis"][0]
+
+	var result: Dictionary = InvestigationSystem.check_alibi(
+		alibi, witness, mag, cr, obj, _dice,
+	)
+	assert_true(result.get("already_checked", false))
+
+
+# -- Lead generation ----------------------------------------------------------
+
+func test_leads_quality_3_reveals_perpetrator() -> void:
+	var cr := _make_crime_record()
+	cr.perpetrator_id = 5
+	cr.known_suspects = []
+	var obj: Dictionary = {"unresolved_leads": []}
+	var present: Array[int] = []
+
+	var leads: Array[Dictionary] = InvestigationSystem.generate_leads_from_probe(
+		10, 3, cr, obj, present,
+	)
+	assert_eq(leads.size(), 1)
+	assert_eq(leads[0]["target_npc_id"], 5)
+	assert_eq(leads[0]["priority"], 3)
+	assert_eq(leads[0]["source"], "probe_testimony")
+	assert_eq(obj["unresolved_leads"].size(), 1)
+
+
+func test_leads_quality_2_no_perpetrator_reveal() -> void:
+	var cr := _make_crime_record()
+	cr.perpetrator_id = 5
+	cr.known_suspects = []
+	var obj: Dictionary = {"unresolved_leads": []}
+	var present: Array[int] = []
+
+	var leads: Array[Dictionary] = InvestigationSystem.generate_leads_from_probe(
+		10, 2, cr, obj, present,
+	)
+	assert_eq(leads.size(), 0)
+
+
+func test_leads_quality_2_reveals_present_characters() -> void:
+	var cr := _make_crime_record()
+	cr.perpetrator_id = 5
+	cr.known_suspects = [5]
+	cr.witnesses = [10]
+	var obj: Dictionary = {"unresolved_leads": []}
+	var present: Array[int] = [15, 20]
+
+	var leads: Array[Dictionary] = InvestigationSystem.generate_leads_from_probe(
+		10, 2, cr, obj, present,
+	)
+	assert_eq(leads.size(), 2)
+	assert_eq(leads[0]["target_npc_id"], 15)
+	assert_eq(leads[1]["target_npc_id"], 20)
+	assert_eq(leads[0]["source"], "mentioned_by_witness")
+
+
+func test_leads_skips_target_and_known() -> void:
+	var cr := _make_crime_record()
+	cr.perpetrator_id = 5
+	cr.known_suspects = [5]
+	cr.witnesses = [10]
+	var obj: Dictionary = {"unresolved_leads": []}
+	var present: Array[int] = [10, 5, 25]
+
+	var leads: Array[Dictionary] = InvestigationSystem.generate_leads_from_probe(
+		10, 2, cr, obj, present,
+	)
+	assert_eq(leads.size(), 1)
+	assert_eq(leads[0]["target_npc_id"], 25)
+
+
+func test_leads_deduplicates_existing() -> void:
+	var cr := _make_crime_record()
+	cr.perpetrator_id = 5
+	cr.known_suspects = []
+	var obj: Dictionary = {
+		"unresolved_leads": [{"type": "witness", "target_npc_id": 5, "priority": 3}],
+	}
+	var present: Array[int] = []
+
+	var leads: Array[Dictionary] = InvestigationSystem.generate_leads_from_probe(
+		10, 3, cr, obj, present,
+	)
+	assert_eq(leads.size(), 0)
+
+
+func test_leads_quality_1_generates_nothing() -> void:
+	var cr := _make_crime_record()
+	cr.perpetrator_id = 5
+	cr.known_suspects = []
+	var obj: Dictionary = {"unresolved_leads": []}
+	var present: Array[int] = [15, 20]
+
+	var leads: Array[Dictionary] = InvestigationSystem.generate_leads_from_probe(
+		10, 1, cr, obj, present,
+	)
+	assert_eq(leads.size(), 0)
+
+
+func test_leads_perpetrator_already_suspect_skipped() -> void:
+	var cr := _make_crime_record()
+	cr.perpetrator_id = 5
+	cr.known_suspects = [5]
+	var obj: Dictionary = {"unresolved_leads": []}
+	var present: Array[int] = []
+
+	var leads: Array[Dictionary] = InvestigationSystem.generate_leads_from_probe(
+		10, 3, cr, obj, present,
+	)
+	assert_eq(leads.size(), 0)

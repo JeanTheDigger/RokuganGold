@@ -461,6 +461,150 @@ static func process_witness_interview(
 	return {"evidence_gained": evidence, "role": role, "threshold_crossed": threshold_crossed}
 
 
+# -- Alibi Checking (s11.3.13e CHECK_ALIBI, resolved as part of PROBE) --------
+
+const ALIBI_FALSE_EVIDENCE: int = 10
+const ALIBI_GENUINE_WEIGHT: int = 15
+
+static func check_alibi(
+	alibi: Dictionary,
+	alibi_witness: L5RCharacterData,
+	magistrate: L5RCharacterData,
+	crime_record: CrimeRecord,
+	objective: Dictionary,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	var alibi_id: Variant = alibi.get("id", -1)
+	var is_genuine: bool = alibi.get("genuine", false)
+	var suspect_id: int = alibi.get("suspect_id", -1)
+
+	var checked: Array = objective.get("checked_alibis", [])
+	if alibi_id in checked:
+		return {"already_checked": true}
+	checked.append(alibi_id)
+	objective["checked_alibis"] = checked
+
+	if is_genuine:
+		crime_record.evidence_total = maxi(0, crime_record.evidence_total - ALIBI_GENUINE_WEIGHT)
+		objective["evidence_total"] = crime_record.evidence_total
+		return {
+			"genuine": true,
+			"evidence_change": -ALIBI_GENUINE_WEIGHT,
+			"suspect_cleared": suspect_id,
+		}
+
+	var is_co_conspirator: bool = alibi.get("co_conspirator", false)
+	if is_co_conspirator and alibi_witness != null and dice_engine != null:
+		var deceit_roll: int = _roll_sincerity_deceit(alibi_witness, dice_engine)
+		var detect_roll: int = _roll_investigation_perception(magistrate, dice_engine)
+
+		if deceit_roll >= detect_roll:
+			return {
+				"genuine": false,
+				"co_conspirator_passed": true,
+				"evidence_change": 0,
+			}
+
+		crime_record.evidence_total += ALIBI_FALSE_EVIDENCE
+		objective["evidence_total"] = crime_record.evidence_total
+		var threshold_crossed: String = check_thresholds(crime_record)
+		return {
+			"genuine": false,
+			"co_conspirator_exposed": true,
+			"co_conspirator_id": alibi_witness.character_id,
+			"evidence_change": ALIBI_FALSE_EVIDENCE,
+			"threshold_crossed": threshold_crossed,
+		}
+
+	crime_record.evidence_total += ALIBI_FALSE_EVIDENCE
+	objective["evidence_total"] = crime_record.evidence_total
+	var threshold_crossed: String = check_thresholds(crime_record)
+	return {
+		"genuine": false,
+		"evidence_change": ALIBI_FALSE_EVIDENCE,
+		"threshold_crossed": threshold_crossed,
+	}
+
+
+static func _roll_sincerity_deceit(
+	character: L5RCharacterData,
+	dice_engine: DiceEngine,
+) -> int:
+	var sincerity: int = character.skills.get("Sincerity", 0)
+	var awareness: int = character.awareness if character.awareness > 0 else 2
+	var rolled: int = maxi(sincerity + awareness, 1)
+	var kept: int = maxi(awareness, 1)
+	return dice_engine.roll_and_keep(rolled, kept).get("total", 0)
+
+
+static func _roll_investigation_perception(
+	character: L5RCharacterData,
+	dice_engine: DiceEngine,
+) -> int:
+	var investigation: int = character.skills.get("Investigation", 0)
+	var perception: int = character.perception if character.perception > 0 else 2
+	var rolled: int = maxi(investigation + perception, 1)
+	var kept: int = maxi(perception, 1)
+	return dice_engine.roll_and_keep(rolled, kept).get("total", 0)
+
+
+# -- Lead Generation (s57.16.5) -----------------------------------------------
+
+static func generate_leads_from_probe(
+	target_id: int,
+	probe_quality: int,
+	crime_record: CrimeRecord,
+	objective: Dictionary,
+	characters_present: Array[int],
+) -> Array[Dictionary]:
+	var leads: Array[Dictionary] = []
+	var unresolved: Array = objective.get("unresolved_leads", [])
+
+	if probe_quality >= 3 and crime_record.perpetrator_id >= 0:
+		if crime_record.perpetrator_id not in crime_record.known_suspects:
+			var already_lead: bool = false
+			for lead: Variant in unresolved:
+				if lead is Dictionary and (lead as Dictionary).get("target_npc_id", -1) == crime_record.perpetrator_id:
+					already_lead = true
+					break
+			if not already_lead:
+				var lead: Dictionary = {
+					"type": "witness",
+					"target_npc_id": crime_record.perpetrator_id,
+					"priority": 3,
+					"source": "probe_testimony",
+				}
+				leads.append(lead)
+
+	if probe_quality >= 2:
+		for present_id: int in characters_present:
+			if present_id == target_id:
+				continue
+			if present_id in crime_record.witnesses:
+				continue
+			if present_id in crime_record.known_suspects:
+				continue
+			var already_known: bool = false
+			for lead: Variant in unresolved:
+				if lead is Dictionary and (lead as Dictionary).get("target_npc_id", -1) == present_id:
+					already_known = true
+					break
+			if not already_known:
+				var lead: Dictionary = {
+					"type": "witness",
+					"target_npc_id": present_id,
+					"priority": 1,
+					"source": "mentioned_by_witness",
+				}
+				leads.append(lead)
+
+	for lead: Dictionary in leads:
+		unresolved.append(lead)
+	objective["unresolved_leads"] = unresolved
+
+	return leads
+
+
 # -- Conviction Topic Generation (s57.47) --------------------------------------
 
 const CRIME_TYPE_NAMES: Dictionary = {

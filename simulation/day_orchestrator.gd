@@ -560,6 +560,7 @@ static func advance_day(
 		active_topics,
 		next_topic_id,
 		ic_day,
+		dice_engine,
 	)
 
 	var letter_results: Array[Dictionary] = LetterSystem.process_pending_letters(
@@ -899,6 +900,7 @@ static func _process_info_events(
 	active_topics: Array[TopicData] = [],
 	next_topic_id: Array[int] = [1000],
 	ic_day: int = 0,
+	dice_engine: DiceEngine = null,
 ) -> Array[Dictionary]:
 	var results: Array[Dictionary] = []
 
@@ -919,7 +921,8 @@ static func _process_info_events(
 				)
 
 				var witness_result: Dictionary = _check_witness_evidence(
-					char_id, target_id, quality, crime_records, objectives_map
+					char_id, target_id, quality, crime_records, objectives_map,
+					characters_by_id, dice_engine,
 				)
 
 				var w_threshold: String = witness_result.get("threshold_crossed", "")
@@ -3771,6 +3774,9 @@ static func _check_witness_evidence(
 	quality: int,
 	crime_records: Array[CrimeRecord],
 	objectives_map: Dictionary,
+	characters_by_id: Dictionary = {},
+	dice_engine: DiceEngine = null,
+	characters_present: Array[int] = [] as Array[int],
 ) -> Dictionary:
 	var objectives: Dictionary = objectives_map.get(prober_id, {})
 	var standing: Dictionary = objectives.get("standing", {})
@@ -3788,8 +3794,53 @@ static func _check_witness_evidence(
 	for record: CrimeRecord in crime_records:
 		if record.case_id != case_id:
 			continue
-		return InvestigationSystem.process_witness_interview(
+
+		var result: Dictionary = InvestigationSystem.process_witness_interview(
 			record, target_id, quality, active_case
+		)
+
+		var alibi_result: Dictionary = _check_alibi_for_target(
+			target_id, active_case, record,
+			characters_by_id.get(prober_id),
+			characters_by_id.get(target_id),
+			dice_engine,
+		)
+		if not alibi_result.is_empty():
+			result["alibi_result"] = alibi_result
+			var alibi_threshold: String = alibi_result.get("threshold_crossed", "")
+			if not alibi_threshold.is_empty() and result.get("threshold_crossed", "").is_empty():
+				result["threshold_crossed"] = alibi_threshold
+
+		var leads: Array[Dictionary] = InvestigationSystem.generate_leads_from_probe(
+			target_id, quality, record, active_case, characters_present,
+		)
+		if not leads.is_empty():
+			result["leads_generated"] = leads.size()
+
+		return result
+	return {}
+
+
+static func _check_alibi_for_target(
+	target_id: int,
+	active_case: Dictionary,
+	crime_record: CrimeRecord,
+	magistrate: L5RCharacterData,
+	alibi_witness: L5RCharacterData,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	var alibis: Array = active_case.get("alibis", [])
+	for alibi: Variant in alibis:
+		if not alibi is Dictionary:
+			continue
+		var a: Dictionary = alibi as Dictionary
+		if a.get("claimed_with", -1) != target_id:
+			continue
+		var checked: Array = active_case.get("checked_alibis", [])
+		if a.get("id", -1) in checked:
+			continue
+		return InvestigationSystem.check_alibi(
+			a, alibi_witness, magistrate, crime_record, active_case, dice_engine,
 		)
 	return {}
 
