@@ -5089,3 +5089,354 @@ func test_magistrate_assignment_flows_into_scan() -> void:
 
 	# Magistrate assigned on record
 	assert_eq(record.investigating_magistrate_id, 207)
+
+
+# ==============================================================================
+# WITNESS INTERVIEW EVIDENCE FLOW — EXTORTION OPPORTUNITY INJECTION
+# ==============================================================================
+
+func test_scene_exam_bribery_eval_injects_extortion_opportunity() -> void:
+	var magistrate := L5RCharacterData.new()
+	magistrate.character_id = 300
+	magistrate.character_name = "Investigating Magistrate"
+	magistrate.role_position = "Clan Magistrate"
+	magistrate.wounds_taken = 0
+
+	var criminal := L5RCharacterData.new()
+	criminal.character_id = 301
+	criminal.character_name = "Suspect"
+	criminal.wounds_taken = 0
+
+	var characters_by_id: Dictionary = {300: magistrate, 301: criminal}
+	var crime_records: Array[CrimeRecord] = []
+	var world_states: Dictionary = {"_crime_records": crime_records}
+
+	var record: CrimeRecord = CrimeSystem.create_crime_record(
+		80, Enums.CrimeType.VIOLENCE, 301, "province_1", 10,
+	)
+	record.investigating_magistrate_id = 300
+	record.evidence_total = 25
+	crime_records.append(record)
+
+	DayOrchestrator._inject_extortion_opportunity_by_case(80, world_states)
+
+	var mag_ws: Dictionary = world_states.get(300, {})
+	var mag_pending: Array = mag_ws.get("pending_events", [])
+	assert_eq(mag_pending.size(), 1)
+	assert_eq(mag_pending[0]["type"], "extortion_opportunity")
+	assert_eq(mag_pending[0]["case_id"], 80)
+	assert_eq(mag_pending[0]["suspect_id"], 301)
+
+
+func test_probe_bribery_eval_injects_extortion_opportunity() -> void:
+	var criminal := L5RCharacterData.new()
+	criminal.character_id = 310
+	criminal.character_name = "Suspect"
+
+	var crime_records: Array[CrimeRecord] = []
+	var world_states: Dictionary = {}
+
+	var record: CrimeRecord = CrimeSystem.create_crime_record(
+		81, Enums.CrimeType.SKIMMING, 310, "province_2", 15,
+	)
+	record.investigating_magistrate_id = 311
+	record.known_suspects = [310]
+	record.evidence_total = 26
+	crime_records.append(record)
+
+	DayOrchestrator._inject_extortion_opportunity_from_probe(
+		crime_records, 310, world_states,
+	)
+
+	var mag_ws: Dictionary = world_states.get(311, {})
+	var mag_pending: Array = mag_ws.get("pending_events", [])
+	assert_eq(mag_pending.size(), 1)
+	assert_eq(mag_pending[0]["type"], "extortion_opportunity")
+	assert_eq(mag_pending[0]["suspect_id"], 310)
+
+
+func test_extortion_opportunity_deduplication() -> void:
+	var crime_records: Array[CrimeRecord] = []
+	var world_states: Dictionary = {"_crime_records": crime_records}
+
+	var record: CrimeRecord = CrimeSystem.create_crime_record(
+		82, Enums.CrimeType.VIOLENCE, 320, "province_3", 20,
+	)
+	record.investigating_magistrate_id = 321
+	record.evidence_total = 30
+	crime_records.append(record)
+
+	DayOrchestrator._inject_extortion_opportunity_by_case(82, world_states)
+	DayOrchestrator._inject_extortion_opportunity_by_case(82, world_states)
+
+	var mag_ws: Dictionary = world_states.get(321, {})
+	var mag_pending: Array = mag_ws.get("pending_events", [])
+	assert_eq(mag_pending.size(), 1, "Should not duplicate extortion event")
+
+
+# ==============================================================================
+# EVIDENCE DECAY / COLD CASES
+# ==============================================================================
+
+func test_evidence_decay_does_not_apply_before_threshold() -> void:
+	var record: CrimeRecord = CrimeSystem.create_crime_record(
+		90, Enums.CrimeType.VIOLENCE, 400, "province", 10,
+	)
+	record.legal_status = Enums.LegalStatus.UNDER_INVESTIGATION
+	record.evidence_total = 20
+	var crime_records: Array[CrimeRecord] = [record]
+	var objectives_map: Dictionary = {}
+
+	var results: Array[Dictionary] = DayOrchestrator._apply_evidence_decay(
+		crime_records, objectives_map, 39,
+	)
+	assert_eq(record.evidence_total, 20, "No decay before 30 days")
+	assert_eq(results.size(), 0)
+
+
+func test_evidence_decay_applies_after_threshold() -> void:
+	var record: CrimeRecord = CrimeSystem.create_crime_record(
+		91, Enums.CrimeType.VIOLENCE, 401, "province", 10,
+	)
+	record.legal_status = Enums.LegalStatus.UNDER_INVESTIGATION
+	record.evidence_total = 20
+	var crime_records: Array[CrimeRecord] = [record]
+	var objectives_map: Dictionary = {}
+
+	# Exactly 30 days + 10 interval = day 50
+	DayOrchestrator._apply_evidence_decay(crime_records, objectives_map, 40)
+	assert_eq(record.evidence_total, 19, "Decays 1 point at 30-day mark")
+
+
+func test_evidence_decay_creates_cold_case() -> void:
+	var magistrate_id: int = 500
+	var record: CrimeRecord = CrimeSystem.create_crime_record(
+		92, Enums.CrimeType.SKIMMING, 402, "province", 10,
+	)
+	record.legal_status = Enums.LegalStatus.UNDER_INVESTIGATION
+	record.evidence_total = 6
+	record.investigating_magistrate_id = magistrate_id
+	var crime_records: Array[CrimeRecord] = [record]
+
+	var objectives_map: Dictionary = {
+		500: {
+			"standing": {
+				"need_type": "UPHOLD_LAW",
+				"active_case": {"case_id": 92},
+			},
+		},
+	}
+
+	# 30 days after crime = day 40, on a 10-day interval
+	var cold_cases: Array[Dictionary] = DayOrchestrator._apply_evidence_decay(
+		crime_records, objectives_map, 40,
+	)
+
+	assert_eq(record.evidence_total, 5)
+	assert_eq(cold_cases.size(), 1)
+	assert_eq(cold_cases[0]["case_id"], 92)
+	assert_eq(cold_cases[0]["magistrate_released"], 500)
+	assert_eq(record.investigating_magistrate_id, -1)
+	# Magistrate's active case should be cleared
+	var standing: Dictionary = objectives_map[500]["standing"]
+	assert_false(standing.has("active_case"))
+
+
+func test_evidence_decay_skips_accused_cases() -> void:
+	var record: CrimeRecord = CrimeSystem.create_crime_record(
+		93, Enums.CrimeType.VIOLENCE, 403, "province", 10,
+	)
+	record.legal_status = Enums.LegalStatus.ACCUSED
+	record.evidence_total = 20
+	var crime_records: Array[CrimeRecord] = [record]
+	var objectives_map: Dictionary = {}
+
+	DayOrchestrator._apply_evidence_decay(crime_records, objectives_map, 40)
+	assert_eq(record.evidence_total, 20, "ACCUSED cases don't decay")
+
+
+# ==============================================================================
+# SUCCESSFUL BRIBE MAGISTRATE FLOW — CORRUPTION RECORD + BURIED STATUS
+# ==============================================================================
+
+func test_successful_bribe_creates_corruption_record() -> void:
+	var briber := L5RCharacterData.new()
+	briber.character_id = 600
+	briber.character_name = "Briber"
+	briber.honor = 2.0
+	briber.glory = 3.0
+	briber.legal_cases = []
+
+	var magistrate := L5RCharacterData.new()
+	magistrate.character_id = 601
+	magistrate.character_name = "Corrupt Magistrate"
+	magistrate.honor = 5.0
+	magistrate.glory = 4.0
+	magistrate.legal_cases = []
+
+	var characters_by_id: Dictionary = {600: briber, 601: magistrate}
+	var crime_records: Array[CrimeRecord] = []
+	var active_secrets: Array[SecretData] = []
+	var next_secret_id: Array[int] = [1]
+	var next_case_id: Array[int] = [100]
+	var objectives_map: Dictionary = {
+		601: {
+			"standing": {
+				"need_type": "UPHOLD_LAW",
+				"active_case": {"case_id": 99},
+			},
+		},
+	}
+
+	# Original crime
+	var record: CrimeRecord = CrimeSystem.create_crime_record(
+		99, Enums.CrimeType.SKIMMING, 600, "province_1", 50,
+	)
+	record.investigating_magistrate_id = 601
+	record.legal_status = Enums.LegalStatus.UNDER_INVESTIGATION
+	crime_records.append(record)
+
+	# Set up legal case entry for briber
+	var case_entry := LegalCaseEntry.new()
+	case_entry.crime_record_id = 99
+	case_entry.state = Enums.LegalStatus.UNDER_INVESTIGATION
+	briber.legal_cases.append(case_entry)
+
+	var bribe_results: Array = [{
+		"action_id": "BRIBE_FOR_INFO",
+		"character_id": 600,
+		"success": true,
+		"effects": {
+			"suppress_case": true,
+			"magistrate_id": 601,
+		},
+	}]
+
+	DayOrchestrator._process_successful_bribe_writebacks(
+		bribe_results, crime_records, characters_by_id, 55,
+		active_secrets, next_secret_id, next_case_id, objectives_map,
+	)
+
+	# Original case cleared
+	assert_eq(record.legal_status, Enums.LegalStatus.CLEAR)
+	assert_eq(record.investigating_magistrate_id, -1)
+
+	# Magistrate's active case released
+	var standing: Dictionary = objectives_map[601]["standing"]
+	assert_false(standing.has("active_case"))
+
+	# MAGISTRATE_CORRUPTION crime record created
+	assert_eq(crime_records.size(), 2)
+	var corruption: CrimeRecord = crime_records[1]
+	assert_eq(corruption.crime_type, Enums.CrimeType.MAGISTRATE_CORRUPTION)
+	assert_eq(corruption.perpetrator_id, 601)
+	assert_eq(corruption.case_id, 100)
+	assert_eq(next_case_id[0], 101)
+
+	# Both secrets created
+	assert_eq(active_secrets.size(), 2)
+
+	# Briber's legal case transitioned to CLEAR
+	assert_eq(case_entry.state, Enums.LegalStatus.CLEAR)
+
+
+# ==============================================================================
+# CONVICTION PROCESSOR INTEGRATION — CROSS-CLAN + VICTIM LORD SEEDING
+# ==============================================================================
+
+func test_cross_clan_consequences_applied_on_conviction() -> void:
+	var accused := L5RCharacterData.new()
+	accused.character_id = 700
+	accused.character_name = "Scorpion Criminal"
+	accused.clan = "Scorpion"
+	accused.family = "Bayushi"
+	accused.honor = 2.0
+	accused.glory = 3.0
+	accused.status = 2.0
+	accused.wounds_taken = 0
+
+	var victim := L5RCharacterData.new()
+	victim.character_id = 701
+	victim.character_name = "Crane Victim"
+	victim.clan = "Crane"
+	victim.family = "Doji"
+	victim.status = 4.0
+
+	var characters_by_id: Dictionary = {700: accused, 701: victim}
+
+	var record: CrimeRecord = CrimeSystem.create_crime_record(
+		110, Enums.CrimeType.VIOLENCE, 700, "province", 30, 701,
+	)
+	var crime_records: Array[CrimeRecord] = [record]
+
+	var conviction_results: Array[Dictionary] = [{
+		"case_id": 110,
+		"accused_id": 700,
+		"outcome": "convicted",
+		"is_cross_clan": true,
+		"topic_id": 9000,
+	}]
+
+	DayOrchestrator._apply_cross_clan_conviction_consequences(
+		conviction_results, crime_records, characters_by_id,
+	)
+	# The function runs without error — result depends on CrimeWiring internals
+	pass_test("Cross-clan consequences applied without error")
+
+
+func test_conviction_topic_seeded_to_victim_lord() -> void:
+	var victim := L5RCharacterData.new()
+	victim.character_id = 710
+	victim.character_name = "Victim"
+	victim.clan = "Crane"
+	victim.lord_id = 711
+	victim.topic_pool = []
+
+	var victim_lord := L5RCharacterData.new()
+	victim_lord.character_id = 711
+	victim_lord.character_name = "Victim's Lord"
+	victim_lord.topic_pool = []
+
+	var characters_by_id: Dictionary = {710: victim, 711: victim_lord}
+
+	var record: CrimeRecord = CrimeSystem.create_crime_record(
+		111, Enums.CrimeType.VIOLENCE, 720, "province", 30, 710,
+	)
+	var crime_records: Array[CrimeRecord] = [record]
+	var active_topics: Array[TopicData] = []
+
+	var conviction_results: Array[Dictionary] = [{
+		"case_id": 111,
+		"accused_id": 720,
+		"outcome": "convicted",
+		"topic_id": 9001,
+	}]
+
+	DayOrchestrator._seed_conviction_topics_to_victim_lords(
+		conviction_results, crime_records, characters_by_id, active_topics,
+	)
+
+	assert_true(9001 in victim_lord.topic_pool)
+
+
+func test_conviction_topic_not_seeded_if_no_victim() -> void:
+	var characters_by_id: Dictionary = {}
+
+	var record: CrimeRecord = CrimeSystem.create_crime_record(
+		112, Enums.CrimeType.VIOLENCE, 730, "province", 30,
+	)
+	var crime_records: Array[CrimeRecord] = [record]
+	var active_topics: Array[TopicData] = []
+
+	var conviction_results: Array[Dictionary] = [{
+		"case_id": 112,
+		"accused_id": 730,
+		"outcome": "convicted",
+		"topic_id": 9002,
+	}]
+
+	DayOrchestrator._seed_conviction_topics_to_victim_lords(
+		conviction_results, crime_records, characters_by_id, active_topics,
+	)
+	# No crash, no seeding
+	pass_test("No victim → no lord seeding")

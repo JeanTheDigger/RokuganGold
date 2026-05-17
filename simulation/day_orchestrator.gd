@@ -212,6 +212,7 @@ static func advance_day(
 		day_result.get("results", []),
 		crime_records, characters_by_id, ic_day,
 		active_secrets, next_secret_id,
+		next_case_id, objectives_map,
 	)
 
 	_process_flee_jurisdiction_writebacks(
@@ -244,6 +245,9 @@ static func advance_day(
 	)
 
 	_purge_expired_crime_evidence(crime_records, ic_day)
+	var cold_case_results: Array[Dictionary] = _apply_evidence_decay(
+		crime_records, objectives_map, ic_day,
+	)
 
 	_process_witness_tampering_writebacks(
 		day_result.get("results", []),
@@ -523,6 +527,14 @@ static func advance_day(
 		ic_day, next_topic_id, active_topics,
 	)
 
+	_apply_cross_clan_conviction_consequences(
+		conviction_results, crime_records, characters_by_id,
+	)
+
+	_seed_conviction_topics_to_victim_lords(
+		conviction_results, crime_records, characters_by_id, active_topics,
+	)
+
 	var info_results: Array[Dictionary] = _process_info_events(
 		day_result.get("applied", []),
 		characters_by_id,
@@ -780,6 +792,7 @@ static func advance_day(
 		"crime_results": crime_results,
 		"commitment_results": commitment_results,
 		"uphold_law_results": uphold_law_results,
+		"cold_case_results": cold_case_results,
 		"conviction_results": conviction_results,
 		"trial_results": trial_results,
 		"seppuku_results": seppuku_results,
@@ -897,6 +910,9 @@ static func _process_info_events(
 				var w_threshold: String = witness_result.get("threshold_crossed", "")
 				if w_threshold == "bribery_eval":
 					_inject_bribery_eval_event(
+						crime_records, target_id, world_states
+					)
+					_inject_extortion_opportunity_from_probe(
 						crime_records, target_id, world_states
 					)
 				elif w_threshold == "accusation":
@@ -2376,6 +2392,7 @@ static func _process_scene_examination_writebacks(
 		var threshold: String = effects.get("threshold_crossed", "")
 		if threshold == "bribery_eval":
 			_inject_bribery_eval_event_by_case(case_id, world_states)
+			_inject_extortion_opportunity_by_case(case_id, world_states)
 		elif threshold == "accusation":
 			_generate_accusation_topic_for_case(
 				case_id, world_states, characters_by_id,
@@ -2404,6 +2421,62 @@ static func _inject_bribery_eval_event_by_case(
 			ws["pending_events"] = pending
 			world_states[perp_id] = ws
 			return
+
+
+static func _inject_extortion_opportunity_by_case(
+	case_id: int,
+	world_states: Dictionary,
+) -> void:
+	var cr: Array[CrimeRecord] = world_states.get("_crime_records", [] as Array[CrimeRecord])
+	for record: CrimeRecord in cr:
+		if record.case_id != case_id:
+			continue
+		var mag_id: int = record.investigating_magistrate_id
+		if mag_id < 0:
+			return
+		var mag_ws: Dictionary = world_states.get(mag_id, {})
+		var mag_pending: Array = mag_ws.get("pending_events", [])
+		for ev: Dictionary in mag_pending:
+			if ev.get("type", "") == "extortion_opportunity" and ev.get("case_id", -1) == case_id:
+				return
+		mag_pending.append({
+			"type": "extortion_opportunity",
+			"case_id": case_id,
+			"suspect_id": record.perpetrator_id,
+			"evidence_total": record.evidence_total,
+		})
+		mag_ws["pending_events"] = mag_pending
+		world_states[mag_id] = mag_ws
+		return
+
+
+static func _inject_extortion_opportunity_from_probe(
+	crime_records: Array[CrimeRecord],
+	target_id: int,
+	world_states: Dictionary,
+) -> void:
+	for record: CrimeRecord in crime_records:
+		if record.perpetrator_id < 0:
+			continue
+		if target_id not in record.known_suspects:
+			continue
+		var mag_id: int = record.investigating_magistrate_id
+		if mag_id < 0:
+			return
+		var mag_ws: Dictionary = world_states.get(mag_id, {})
+		var mag_pending: Array = mag_ws.get("pending_events", [])
+		for ev: Dictionary in mag_pending:
+			if ev.get("type", "") == "extortion_opportunity" and ev.get("case_id", -1) == record.case_id:
+				return
+		mag_pending.append({
+			"type": "extortion_opportunity",
+			"case_id": record.case_id,
+			"suspect_id": record.perpetrator_id,
+			"evidence_total": record.evidence_total,
+		})
+		mag_ws["pending_events"] = mag_pending
+		world_states[mag_id] = mag_ws
+		return
 
 
 static func _generate_accusation_topic_for_case(
@@ -2743,6 +2816,8 @@ static func _process_successful_bribe_writebacks(
 	ic_day: int,
 	active_secrets: Array[SecretData] = [],
 	next_secret_id: Array[int] = [1],
+	next_case_id: Array[int] = [1],
+	objectives_map: Dictionary = {},
 ) -> void:
 	for result: Variant in results:
 		if not result is Dictionary:
@@ -2777,6 +2852,26 @@ static func _process_successful_bribe_writebacks(
 				if entry != null:
 					LegalStatusSystem.transition(entry, Enums.LegalStatus.CLEAR, ic_day)
 			HonorGlorySystem.apply_honor_change(magistrate, -0.5)
+
+			# Release magistrate's active case
+			var mag_objs: Dictionary = objectives_map.get(magistrate_id, {})
+			var standing: Dictionary = mag_objs.get("standing", {})
+			if standing.get("need_type", "") == "UPHOLD_LAW":
+				var active_case: Dictionary = standing.get("active_case", {})
+				if active_case.get("case_id", -1) == record.case_id:
+					standing.erase("active_case")
+			record.investigating_magistrate_id = -1
+
+			# Create MAGISTRATE_CORRUPTION CrimeRecord for the corrupt magistrate
+			var corruption_record: CrimeRecord = CrimeSystem.create_crime_record(
+				next_case_id[0],
+				Enums.CrimeType.MAGISTRATE_CORRUPTION,
+				magistrate_id,
+				record.location,
+				ic_day,
+			)
+			next_case_id[0] += 1
+			crime_records.append(corruption_record)
 
 			var crime_name: String = InvestigationSystem.CRIME_TYPE_NAMES.get(
 				record.crime_type, "Crime"
@@ -3237,6 +3332,61 @@ static func _purge_expired_crime_evidence(
 			continue
 		if ic_day - record.ic_day_committed >= ZONE_LOG_PURGE_DAYS:
 			record.concealment_tn = 0
+
+
+# -- Evidence Decay / Cold Cases (s11.3.13g) -----------------------------------
+# Cases that stall without new evidence lose weight over time.
+# After EVIDENCE_DECAY_START_DAYS with no progress, 1 evidence point decays
+# per EVIDENCE_DECAY_INTERVAL_DAYS. Cases below COLD_CASE_THRESHOLD become
+# cold cases (investigating magistrate released). Only affects UNDER_INVESTIGATION
+# and SUSPECTED cases — ACCUSED and above are in the sentencing pipeline.
+
+const EVIDENCE_DECAY_START_DAYS: int = 30
+const EVIDENCE_DECAY_INTERVAL_DAYS: int = 10
+const COLD_CASE_THRESHOLD: int = 5
+
+
+static func _apply_evidence_decay(
+	crime_records: Array[CrimeRecord],
+	objectives_map: Dictionary,
+	ic_day: int,
+) -> Array[Dictionary]:
+	var cold_cases: Array[Dictionary] = []
+
+	for record: CrimeRecord in crime_records:
+		if record.legal_status != Enums.LegalStatus.UNDER_INVESTIGATION \
+				and record.legal_status != Enums.LegalStatus.SUSPECTED:
+			continue
+		if record.evidence_total <= 0:
+			continue
+
+		var days_since: int = ic_day - record.ic_day_committed
+		if days_since < EVIDENCE_DECAY_START_DAYS:
+			continue
+
+		var decay_days: int = days_since - EVIDENCE_DECAY_START_DAYS
+		if decay_days % EVIDENCE_DECAY_INTERVAL_DAYS != 0:
+			continue
+
+		record.evidence_total = maxi(0, record.evidence_total - 1)
+
+		if record.evidence_total <= COLD_CASE_THRESHOLD and record.investigating_magistrate_id >= 0:
+			var mag_id: int = record.investigating_magistrate_id
+			var mag_objs: Dictionary = objectives_map.get(mag_id, {})
+			var standing: Dictionary = mag_objs.get("standing", {})
+			if standing.get("need_type", "") == "UPHOLD_LAW":
+				var active_case: Dictionary = standing.get("active_case", {})
+				if active_case.get("case_id", -1) == record.case_id:
+					standing.erase("active_case")
+
+			record.investigating_magistrate_id = -1
+			cold_cases.append({
+				"case_id": record.case_id,
+				"magistrate_released": mag_id,
+				"remaining_evidence": record.evidence_total,
+			})
+
+	return cold_cases
 
 
 # -- Taint Proximity Detection (Channel 3, s57.47.7) --------------------------
@@ -4007,6 +4157,81 @@ static func _process_seppuku_responses(
 			resolution["decision_reason"] = decision.get("reason", "")
 			results.append(resolution)
 	return results
+
+
+# -- Cross-Clan Conviction Consequences (s57.47) ------------------------------
+# When a conviction is cross-clan, apply disposition changes between the
+# clans involved. Cooperation during investigation may mitigate the hit.
+
+static func _apply_cross_clan_conviction_consequences(
+	conviction_results: Array[Dictionary],
+	crime_records: Array[CrimeRecord],
+	characters_by_id: Dictionary,
+) -> void:
+	for conv: Dictionary in conviction_results:
+		if conv.get("outcome", "") != "convicted":
+			continue
+		if not conv.get("is_cross_clan", false):
+			continue
+
+		var case_id: int = conv.get("case_id", -1)
+		var accused_id: int = conv.get("accused_id", -1)
+		var accused: L5RCharacterData = characters_by_id.get(accused_id)
+		if accused == null:
+			continue
+
+		var record: CrimeRecord = null
+		for r: CrimeRecord in crime_records:
+			if r.case_id == case_id:
+				record = r
+				break
+		if record == null:
+			continue
+
+		var victim: L5RCharacterData = characters_by_id.get(record.victim_id)
+		if victim == null:
+			continue
+
+		ConvictionProcessor.apply_cross_clan_consequences(
+			record, accused, victim, true
+		)
+
+
+# -- Conviction Topic Seeding to Victim's Lord --------------------------------
+# Ensure the victim's lord learns about the conviction for diplomatic follow-up.
+
+static func _seed_conviction_topics_to_victim_lords(
+	conviction_results: Array[Dictionary],
+	crime_records: Array[CrimeRecord],
+	characters_by_id: Dictionary,
+	active_topics: Array[TopicData],
+) -> void:
+	for conv: Dictionary in conviction_results:
+		if conv.get("outcome", "") != "convicted":
+			continue
+		var topic_id: int = conv.get("topic_id", -1)
+		if topic_id < 0:
+			continue
+
+		var case_id: int = conv.get("case_id", -1)
+		var record: CrimeRecord = null
+		for r: CrimeRecord in crime_records:
+			if r.case_id == case_id:
+				record = r
+				break
+		if record == null or record.victim_id < 0:
+			continue
+
+		var victim: L5RCharacterData = characters_by_id.get(record.victim_id)
+		if victim == null:
+			continue
+
+		var victim_lord: L5RCharacterData = characters_by_id.get(victim.lord_id)
+		if victim_lord == null:
+			continue
+		if topic_id in victim_lord.topic_pool:
+			continue
+		victim_lord.topic_pool.append(topic_id)
 
 
 static func _season_to_name(season: int) -> String:
