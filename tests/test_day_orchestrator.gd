@@ -4889,3 +4889,203 @@ func test_investigation_pipeline_kill_witness_creates_new_crime() -> void:
 	assert_eq(murder_record.location, "crab_province")
 	# Next case id incremented
 	assert_eq(next_case_id[0], 22)
+
+
+# ==============================================================================
+# MAGISTRATE STANDING OBJECTIVE AUTO-ASSIGNMENT
+# ==============================================================================
+
+func test_magistrate_assigned_uphold_law_standing() -> void:
+	var magistrate := L5RCharacterData.new()
+	magistrate.character_id = 200
+	magistrate.character_name = "Soshi Magistrate"
+	magistrate.role_position = "Clan Magistrate"
+	magistrate.wounds_taken = 0
+
+	var characters: Array[L5RCharacterData] = [magistrate]
+	var objectives_map: Dictionary = {}
+
+	DayOrchestrator._assign_magistrate_standing_objectives(characters, objectives_map)
+
+	assert_true(objectives_map.has(200))
+	var standing: Dictionary = objectives_map[200].get("standing", {})
+	assert_eq(standing["need_type"], "UPHOLD_LAW")
+	assert_eq(standing["priority"], 4)
+	assert_true(standing["auto_assigned"])
+
+
+func test_emerald_magistrate_assigned_uphold_law() -> void:
+	var magistrate := L5RCharacterData.new()
+	magistrate.character_id = 201
+	magistrate.character_name = "Emerald Champion's Agent"
+	magistrate.role_position = "Emerald Magistrate"
+	magistrate.wounds_taken = 0
+
+	var characters: Array[L5RCharacterData] = [magistrate]
+	var objectives_map: Dictionary = {}
+
+	DayOrchestrator._assign_magistrate_standing_objectives(characters, objectives_map)
+
+	var standing: Dictionary = objectives_map[201].get("standing", {})
+	assert_eq(standing["need_type"], "UPHOLD_LAW")
+
+
+func test_magistrate_commander_assigned_uphold_law() -> void:
+	var magistrate := L5RCharacterData.new()
+	magistrate.character_id = 202
+	magistrate.character_name = "Magistrate Commander"
+	magistrate.role_position = "Clan Magistrate Commander"
+	magistrate.wounds_taken = 0
+
+	var characters: Array[L5RCharacterData] = [magistrate]
+	var objectives_map: Dictionary = {}
+
+	DayOrchestrator._assign_magistrate_standing_objectives(characters, objectives_map)
+
+	var standing: Dictionary = objectives_map[202].get("standing", {})
+	assert_eq(standing["need_type"], "UPHOLD_LAW")
+
+
+func test_magistrate_does_not_overwrite_existing_standing() -> void:
+	var magistrate := L5RCharacterData.new()
+	magistrate.character_id = 203
+	magistrate.character_name = "Busy Magistrate"
+	magistrate.role_position = "Clan Magistrate"
+	magistrate.wounds_taken = 0
+
+	var characters: Array[L5RCharacterData] = [magistrate]
+	var objectives_map: Dictionary = {
+		203: {
+			"standing": {
+				"need_type": "PROTECT_TERRITORY",
+				"priority": 5,
+				"assigned_by": 1,
+			},
+		},
+	}
+
+	DayOrchestrator._assign_magistrate_standing_objectives(characters, objectives_map)
+
+	# Should NOT overwrite existing standing objective
+	var standing: Dictionary = objectives_map[203]["standing"]
+	assert_eq(standing["need_type"], "PROTECT_TERRITORY")
+
+
+func test_magistrate_preserves_existing_uphold_law_with_active_case() -> void:
+	var magistrate := L5RCharacterData.new()
+	magistrate.character_id = 204
+	magistrate.character_name = "Working Magistrate"
+	magistrate.role_position = "Emerald Magistrate"
+	magistrate.wounds_taken = 0
+
+	var characters: Array[L5RCharacterData] = [magistrate]
+	var objectives_map: Dictionary = {
+		204: {
+			"standing": {
+				"need_type": "UPHOLD_LAW",
+				"priority": 4,
+				"auto_assigned": true,
+				"active_case": {"case_id": 5, "crime_type": 2},
+			},
+		},
+	}
+
+	DayOrchestrator._assign_magistrate_standing_objectives(characters, objectives_map)
+
+	# Active case should be preserved — not reset
+	var standing: Dictionary = objectives_map[204]["standing"]
+	assert_eq(standing["need_type"], "UPHOLD_LAW")
+	assert_true(standing.has("active_case"))
+	assert_eq(standing["active_case"]["case_id"], 5)
+
+
+func test_non_magistrate_not_assigned_uphold_law() -> void:
+	var samurai := L5RCharacterData.new()
+	samurai.character_id = 205
+	samurai.character_name = "Regular Samurai"
+	samurai.role_position = "Garrison Commander"
+	samurai.wounds_taken = 0
+
+	var characters: Array[L5RCharacterData] = [samurai]
+	var objectives_map: Dictionary = {}
+
+	DayOrchestrator._assign_magistrate_standing_objectives(characters, objectives_map)
+
+	assert_false(objectives_map.has(205))
+
+
+func test_dead_magistrate_not_assigned_uphold_law() -> void:
+	var dead_magistrate := L5RCharacterData.new()
+	dead_magistrate.character_id = 206
+	dead_magistrate.character_name = "Dead Magistrate"
+	dead_magistrate.role_position = "Clan Magistrate"
+	dead_magistrate.wounds_taken = 999
+
+	var characters: Array[L5RCharacterData] = [dead_magistrate]
+	var objectives_map: Dictionary = {}
+
+	DayOrchestrator._assign_magistrate_standing_objectives(characters, objectives_map)
+
+	assert_false(objectives_map.has(206))
+
+
+func test_magistrate_assignment_flows_into_scan() -> void:
+	# Integration: auto-assignment → UPHOLD_LAW scan → case activation
+	var magistrate := L5RCharacterData.new()
+	magistrate.character_id = 207
+	magistrate.character_name = "Kitsuki Inspector"
+	magistrate.clan = "Dragon"
+	magistrate.family = "Kitsuki"
+	magistrate.role_position = "Clan Magistrate"
+	magistrate.physical_location = "dragon_province_1"
+	magistrate.wounds_taken = 0
+	magistrate.topic_pool = []
+	magistrate.legal_cases = []
+	magistrate.skills = {"Investigation": 4}
+	magistrate.emphases = {}
+	magistrate.knowledge_pool = []
+	magistrate.known_contacts_by_clan = {}
+	magistrate.met_characters = []
+
+	var characters: Array[L5RCharacterData] = [magistrate]
+	var objectives_map: Dictionary = {}
+	var crime_records: Array[CrimeRecord] = []
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [5000]
+
+	# Create a crime in the magistrate's province
+	var record: CrimeRecord = CrimeSystem.create_crime_record(
+		50, Enums.CrimeType.VIOLENCE, 999,
+		"dragon_province_1", 30, -1, 0,
+	)
+	crime_records.append(record)
+
+	# Create crime topic and give magistrate knowledge of it
+	var topic := TopicData.new()
+	topic.topic_id = 5000
+	topic.topic_type = "crime"
+	topic.slug = "crime_case_50"
+	active_topics.append(topic)
+	next_topic_id[0] = 5001
+	magistrate.topic_pool.append(5000)
+
+	# Phase 1: Auto-assign UPHOLD_LAW standing objective
+	DayOrchestrator._assign_magistrate_standing_objectives(characters, objectives_map)
+	assert_eq(objectives_map[207]["standing"]["need_type"], "UPHOLD_LAW")
+
+	# Phase 2: Scan picks up the crime and activates the case
+	var scan_results: Array[Dictionary] = DayOrchestrator._process_uphold_law_scan(
+		characters, objectives_map, crime_records, active_topics,
+	)
+
+	assert_eq(scan_results.size(), 1)
+	assert_eq(scan_results[0]["magistrate_id"], 207)
+	assert_eq(scan_results[0]["case_id"], 50)
+
+	# Case is now active on the standing objective
+	var standing: Dictionary = objectives_map[207]["standing"]
+	assert_true(standing.has("active_case"))
+	assert_eq(standing["active_case"]["case_id"], 50)
+
+	# Magistrate assigned on record
+	assert_eq(record.investigating_magistrate_id, 207)

@@ -94,6 +94,7 @@ static func advance_day(
 	_populate_vacancy_intelligence(world_states, characters, characters_by_id, companies, settlements, provinces, season_meta)
 	_populate_resource_stockpiles(world_states, characters, provinces, settlements, clans, companies)
 	_populate_crime_suppression_data(world_states, settlements, provinces, current_season)
+	_assign_magistrate_standing_objectives(characters, objectives_map)
 
 	var festival_results: Dictionary = _process_festivals(ic_day, world_states)
 
@@ -3469,6 +3470,48 @@ static func _seed_crime_topic_to_knowers(
 		var victim: L5RCharacterData = characters_by_id.get(record.victim_id)
 		if victim != null and topic.topic_id not in victim.topic_pool:
 			victim.topic_pool.append(topic.topic_id)
+
+
+# -- UPHOLD_LAW Standing Objective Assignment (s57.16.9) ----------------------
+# Magistrate-role NPCs automatically receive UPHOLD_LAW as their standing
+# objective if they don't already have one. This ensures they participate in
+# the crime topic scan each tick without requiring explicit lord directives.
+
+const MAGISTRATE_ROLE_POSITIONS: Array = [
+	"Clan Magistrate",
+	"Emerald Magistrate",
+	"Clan Magistrate Commander",
+]
+
+
+static func _assign_magistrate_standing_objectives(
+	characters: Array[L5RCharacterData],
+	objectives_map: Dictionary,
+) -> void:
+	for character: L5RCharacterData in characters:
+		if character.role_position not in MAGISTRATE_ROLE_POSITIONS:
+			continue
+		if CharacterStats.is_dead(character):
+			continue
+
+		var char_id: int = character.character_id
+		if not objectives_map.has(char_id):
+			objectives_map[char_id] = {}
+
+		var objectives: Dictionary = objectives_map[char_id]
+		var standing: Dictionary = objectives.get("standing", {})
+
+		if standing.get("need_type", "") == "UPHOLD_LAW":
+			continue
+
+		if not standing.is_empty():
+			continue
+
+		objectives["standing"] = {
+			"need_type": "UPHOLD_LAW",
+			"priority": 4,
+			"auto_assigned": true,
+		}
 
 
 # -- UPHOLD_LAW Magistrate Scan (s57.16.9) ------------------------------------
