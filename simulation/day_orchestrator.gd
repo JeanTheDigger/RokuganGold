@@ -3414,6 +3414,10 @@ static func _process_witness_tampering_writebacks(
 					)
 					next_secret_id[0] += 1
 					active_secrets.append(secret)
+				elif action_id == "INTIMIDATE_WITNESS":
+					_apply_intimidation_consequences(
+						criminal_id, witness_id, characters_by_id, world_states, record,
+					)
 				elif action_id == "KILL_WITNESS":
 					var kill_concealment: int = effects.get("concealment_tn", 0)
 					var murder_record: CrimeRecord = CrimeSystem.create_crime_record(
@@ -3436,7 +3440,54 @@ static func _process_witness_tampering_writebacks(
 						threshold, record, characters_by_id,
 						active_topics, next_topic_id, ic_day, world_states,
 					)
+				if action_id == "INTIMIDATE_WITNESS":
+					_inject_witness_report_event(
+						witness_id, criminal_id, record.case_id, world_states,
+					)
 			break
+
+
+const INTIMIDATION_DISPOSITION_PENALTY: int = -30
+
+static func _apply_intimidation_consequences(
+	criminal_id: int,
+	witness_id: int,
+	characters_by_id: Dictionary,
+	world_states: Dictionary,
+	record: CrimeRecord,
+) -> void:
+	var witness: L5RCharacterData = characters_by_id.get(witness_id)
+	if witness != null:
+		var old_disp: int = witness.disposition_values.get(criminal_id, 0)
+		var new_disp: int = clampi(old_disp + INTIMIDATION_DISPOSITION_PENALTY, -100, 100)
+		witness.disposition_values[criminal_id] = new_disp
+	var witness_ws: Dictionary = world_states.get(witness_id, {})
+	var events: Array = witness_ws.get("pending_events", [])
+	events.append({
+		"type": "provocation",
+		"source_id": criminal_id,
+		"case_id": record.case_id,
+		"action": "INTIMIDATE_WITNESS",
+	})
+	witness_ws["pending_events"] = events
+	world_states[witness_id] = witness_ws
+
+
+static func _inject_witness_report_event(
+	witness_id: int,
+	criminal_id: int,
+	case_id: int,
+	world_states: Dictionary,
+) -> void:
+	var witness_ws: Dictionary = world_states.get(witness_id, {})
+	var events: Array = witness_ws.get("pending_events", [])
+	events.append({
+		"type": "witness_report_motivated",
+		"criminal_id": criminal_id,
+		"case_id": case_id,
+	})
+	witness_ws["pending_events"] = events
+	world_states[witness_id] = witness_ws
 
 
 # -- Zone Log Purge (s11.3.13g) -----------------------------------------------

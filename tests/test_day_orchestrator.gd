@@ -4614,6 +4614,97 @@ func test_kill_witness_removes_and_creates_murder_record() -> void:
 	assert_eq(murder.location, "scorpion_province")
 
 
+func test_intimidate_witness_success_applies_disposition_penalty() -> void:
+	var criminal := L5RCharacterData.new()
+	criminal.character_id = 5
+	criminal.character_name = "Criminal"
+	var witness := L5RCharacterData.new()
+	witness.character_id = 20
+	witness.character_name = "Witness"
+	witness.disposition_values = {5: 10}
+
+	var record := CrimeRecord.new()
+	record.case_id = 350
+	record.perpetrator_id = 5
+	record.witnesses = [20] as Array[int]
+	record.evidence_total = 10
+
+	var crime_records: Array[CrimeRecord] = [record]
+	var characters_by_id: Dictionary = {5: criminal, 20: witness}
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [7000]
+	var world_states: Dictionary = {}
+
+	var results: Array = [{
+		"action_id": "INTIMIDATE_WITNESS",
+		"success": true,
+		"character_id": 5,
+		"target_npc_id": 20,
+		"effects": {
+			"effect": "witness_intimidated",
+			"witness_id": 20,
+		},
+	}]
+
+	DayOrchestrator._process_witness_tampering_writebacks(
+		results, crime_records, characters_by_id,
+		active_topics, next_topic_id, 100, world_states,
+	)
+
+	assert_false(record.witnesses.has(20))
+	assert_eq(witness.disposition_values[5], 10 + DayOrchestrator.INTIMIDATION_DISPOSITION_PENALTY)
+	var ws: Dictionary = world_states.get(20, {})
+	var events: Array = ws.get("pending_events", [])
+	assert_eq(events.size(), 1)
+	assert_eq(events[0]["type"], "provocation")
+	assert_eq(events[0]["source_id"], 5)
+	assert_eq(events[0]["case_id"], 350)
+
+
+func test_intimidate_witness_failure_injects_report_event() -> void:
+	var witness := L5RCharacterData.new()
+	witness.character_id = 20
+
+	var record := CrimeRecord.new()
+	record.case_id = 351
+	record.perpetrator_id = 5
+	record.witnesses = [20] as Array[int]
+	record.evidence_total = 10
+
+	var crime_records: Array[CrimeRecord] = [record]
+	var characters_by_id: Dictionary = {20: witness}
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [7000]
+	var world_states: Dictionary = {}
+
+	var results: Array = [{
+		"action_id": "INTIMIDATE_WITNESS",
+		"success": false,
+		"character_id": 5,
+		"target_npc_id": 20,
+		"effects": {
+			"effect": "intimidation_rejected",
+			"witness_id": 20,
+			"witness_hostile": true,
+			"evidence_on_fail": 10,
+		},
+	}]
+
+	DayOrchestrator._process_witness_tampering_writebacks(
+		results, crime_records, characters_by_id,
+		active_topics, next_topic_id, 100, world_states,
+	)
+
+	assert_true(record.witnesses.has(20))
+	assert_eq(record.evidence_total, 20)
+	var ws: Dictionary = world_states.get(20, {})
+	var events: Array = ws.get("pending_events", [])
+	assert_eq(events.size(), 1)
+	assert_eq(events[0]["type"], "witness_report_motivated")
+	assert_eq(events[0]["criminal_id"], 5)
+	assert_eq(events[0]["case_id"], 351)
+
+
 # -- Criminal Recall ---
 
 func test_criminal_recall_success_stores_awareness() -> void:
