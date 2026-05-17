@@ -172,6 +172,8 @@ class ContextSnapshot:
 	var is_inauspicious_for_social: bool = false
 	var festival_honor_gain: float = 0.0
 	var festival_has_lion_honor: bool = false
+	var festival_glory_poetry: float = 0.0
+	var festival_glory_martial: float = 0.0
 
 	# Urgency evaluation fields
 	var expiring_favor_ids: Array[int] = []

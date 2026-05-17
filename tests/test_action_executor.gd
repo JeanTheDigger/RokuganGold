@@ -1294,3 +1294,45 @@ func test_kill_witness_resolves() -> void:
 	assert_eq(result["effects"]["witness_id"], 62)
 	assert_true(result["effects"].has("concealment_tn"))
 	assert_typeof(result["effects"]["concealment_tn"], TYPE_INT)
+
+
+# -- Festival Glory Wiring (s11.5) -------------------------------------------
+
+func test_train_on_martial_glory_festival_adds_glory() -> void:
+	_ctx.festival_glory_martial = 0.1
+	var action := _make_action("TRAIN")
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map
+	)
+	assert_true(result["success"])
+	assert_almost_eq(result["effects"].get("glory_change", 0.0), 0.1, 0.001)
+
+
+func test_train_no_festival_no_glory() -> void:
+	var action := _make_action("TRAIN")
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map
+	)
+	assert_true(result["success"])
+	assert_false(result["effects"].has("glory_change"))
+
+
+func test_write_letter_on_poetry_festival_adds_glory() -> void:
+	_ctx.festival_glory_poetry = 0.1
+	_character.skills["Calligraphy"] = 3
+	var action := _make_action("WRITE_LETTER")
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map
+	)
+	assert_true(result["success"])
+	assert_almost_eq(result["effects"].get("glory_change", 0.0), 0.1, 0.001)
+
+
+func test_write_letter_no_festival_no_glory() -> void:
+	_character.skills["Calligraphy"] = 3
+	var action := _make_action("WRITE_LETTER")
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map
+	)
+	assert_true(result["success"])
+	assert_almost_eq(result["effects"].get("glory_change", 0.0), 0.0, 0.001)

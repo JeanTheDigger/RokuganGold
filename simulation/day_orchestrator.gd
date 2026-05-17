@@ -5026,6 +5026,8 @@ static func _process_festivals(ic_day: int, world_states: Dictionary) -> Diction
 	var is_labor_halt: bool = FestivalSystem.is_labor_halt_day(ic_day)
 	var festival_honor: float = FestivalSystem.get_honor_gain_festivals(ic_day)
 	var festival_has_lion_honor: bool = "lion_honor" in effects
+	var festival_glory_poetry: float = 0.1 if "poetry_exchange" in effects else 0.0
+	var festival_glory_martial: float = 0.1 if "martial_glory" in effects else 0.0
 
 	for char_id in world_states:
 		if char_id is not int:
@@ -5038,6 +5040,8 @@ static func _process_festivals(ic_day: int, world_states: Dictionary) -> Diction
 		ws["rokuyo"] = rokuyo_name
 		ws["festival_honor_gain"] = festival_honor
 		ws["festival_has_lion_honor"] = festival_has_lion_honor
+		ws["festival_glory_poetry"] = festival_glory_poetry
+		ws["festival_glory_martial"] = festival_glory_martial
 
 	return {
 		"active_festivals": active_festivals,
@@ -5048,7 +5052,8 @@ static func _process_festivals(ic_day: int, world_states: Dictionary) -> Diction
 		"is_ceasefire": is_ceasefire,
 		"is_labor_halt": is_labor_halt,
 		"honor_gain": festival_honor,
-		"glory_gain": FestivalSystem.get_glory_gain_festivals(ic_day),
+		"glory_gain_poetry": festival_glory_poetry,
+		"glory_gain_martial": festival_glory_martial,
 	}
 
 

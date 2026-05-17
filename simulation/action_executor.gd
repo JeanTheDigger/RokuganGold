@@ -423,6 +423,9 @@ static func _execute_no_roll(
 ) -> Dictionary:
 	var effects: Dictionary = _get_no_roll_effects(action.action_id)
 
+	if action.action_id == "TRAIN" and ctx.festival_glory_martial > 0.001:
+		effects["glory_change"] = ctx.festival_glory_martial
+
 	if action.action_id == "BEGIN_TRAVEL":
 		var destination: String = _resolve_travel_destination(action)
 		var travel_result: Dictionary = TravelSystem.begin_travel(character, destination)
@@ -1332,7 +1335,7 @@ static func _apply_effects(
 	result: Dictionary,
 	action: NPCDataStructures.ScoredAction,
 	_character: L5RCharacterData,
-	_ctx: NPCDataStructures.ContextSnapshot,
+	ctx: NPCDataStructures.ContextSnapshot,
 ) -> void:
 	var effects: Dictionary = {}
 	var action_id: String = action.action_id
@@ -1357,6 +1360,9 @@ static func _apply_effects(
 			effects = _compute_self_effects(action_id)
 	else:
 		effects = _compute_failure_effects(action_id, result.get("margin", 0))
+
+	if action_id == "WRITE_LETTER" and result.get("success", false) and ctx.festival_glory_poetry > 0.001:
+		effects["glory_change"] = effects.get("glory_change", 0.0) + ctx.festival_glory_poetry
 
 	result["effects"] = effects
 
