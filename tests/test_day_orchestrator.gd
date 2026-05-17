@@ -718,6 +718,137 @@ func test_check_witness_evidence_no_active_case() -> void:
 	assert_true(result.is_empty())
 
 
+func test_check_witness_evidence_generates_leads_with_characters_present() -> void:
+	var cr := CrimeRecord.new()
+	cr.case_id = 1
+	cr.perpetrator_id = 99
+	cr.witnesses = [50]
+	cr.known_suspects = []
+	cr.evidence_total = 0
+	var crime_records: Array[CrimeRecord] = [cr]
+
+	var objectives: Dictionary = {
+		1: {
+			"standing": {
+				"need_type": "UPHOLD_LAW",
+				"active_case": {
+					"case_id": 1,
+					"interviewed_witnesses": [],
+					"evidence_total": 0,
+					"unresolved_leads": [],
+				},
+			},
+		},
+	}
+
+	var mag := L5RCharacterData.new()
+	mag.character_id = 1
+	mag.skills = {"Investigation": 3}
+	mag.perception = 3
+	mag.awareness = 3
+	mag.emphases = {}
+	var target := L5RCharacterData.new()
+	target.character_id = 50
+	target.skills = {}
+	target.awareness = 2
+	target.perception = 2
+	target.emphases = {}
+	var characters_by_id: Dictionary = {1: mag, 50: target}
+	var characters_present: Array[int] = [50, 75, 80]
+
+	var result: Dictionary = DayOrchestrator._check_witness_evidence(
+		1, 50, 3, crime_records, objectives,
+		characters_by_id, null, characters_present,
+	)
+
+	assert_true(result.get("leads_generated", 0) > 0)
+	var active_case: Dictionary = objectives[1]["standing"]["active_case"]
+	var leads: Array = active_case.get("unresolved_leads", [])
+	assert_true(leads.size() > 0)
+	var has_perpetrator_lead: bool = false
+	for lead: Variant in leads:
+		if lead is Dictionary and (lead as Dictionary).get("target_npc_id", -1) == 99:
+			has_perpetrator_lead = true
+	assert_true(has_perpetrator_lead)
+
+
+func test_process_info_events_threads_characters_present() -> void:
+	var cr := CrimeRecord.new()
+	cr.case_id = 1
+	cr.perpetrator_id = 99
+	cr.witnesses = [50]
+	cr.known_suspects = []
+	cr.evidence_total = 0
+	var crime_records: Array[CrimeRecord] = [cr]
+
+	var objectives: Dictionary = {
+		1: {
+			"standing": {
+				"need_type": "UPHOLD_LAW",
+				"active_case": {
+					"case_id": 1,
+					"interviewed_witnesses": [],
+					"evidence_total": 0,
+					"unresolved_leads": [],
+				},
+			},
+		},
+	}
+
+	var mag := L5RCharacterData.new()
+	mag.character_id = 1
+	mag.physical_location = "castle_crane"
+	mag.skills = {"Investigation": 3}
+	mag.perception = 3
+	mag.awareness = 3
+	mag.emphases = {}
+	var target := L5RCharacterData.new()
+	target.character_id = 50
+	target.physical_location = "castle_crane"
+	target.skills = {}
+	target.awareness = 2
+	target.perception = 2
+	target.emphases = {}
+	var bystander := L5RCharacterData.new()
+	bystander.character_id = 75
+	bystander.physical_location = "castle_crane"
+	var characters_by_id: Dictionary = {1: mag, 50: target, 75: bystander}
+
+	var world_states: Dictionary = {
+		"_location_characters": {"castle_crane": [1, 50, 75] as Array[int]},
+	}
+
+	var applied_list: Array = [{
+		"info_events": [{
+			"character_id": 1,
+			"action_id": "PROBE",
+			"target_npc_id": 50,
+			"quality": 3,
+			"ic_day": 10,
+		}],
+	}]
+
+	var action_log: Array[Dictionary] = []
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [1000]
+
+	var results: Array[Dictionary] = DayOrchestrator._process_info_events(
+		applied_list, characters_by_id, action_log, 1,
+		crime_records, objectives, world_states,
+		active_topics, next_topic_id, 10, null,
+	)
+
+	var active_case: Dictionary = objectives[1]["standing"]["active_case"]
+	var leads: Array = active_case.get("unresolved_leads", [])
+	var has_mentioned_lead: bool = false
+	for lead: Variant in leads:
+		if lead is Dictionary:
+			var l: Dictionary = lead as Dictionary
+			if l.get("target_npc_id", -1) == 75 and l.get("source", "") == "mentioned_by_witness":
+				has_mentioned_lead = true
+	assert_true(has_mentioned_lead)
+
+
 # -- Festival Wiring ----------------------------------------------------------
 
 func test_advance_day_returns_festival_results() -> void:

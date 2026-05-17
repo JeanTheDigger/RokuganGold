@@ -903,6 +903,7 @@ static func _process_info_events(
 	dice_engine: DiceEngine = null,
 ) -> Array[Dictionary]:
 	var results: Array[Dictionary] = []
+	var location_characters: Dictionary = world_states.get("_location_characters", {})
 
 	for applied: Dictionary in applied_list:
 		var info_events: Array = applied.get("info_events", [])
@@ -920,9 +921,16 @@ static func _process_info_events(
 					character, target_id, action_log, current_season, quality
 				)
 
+				var char_loc: String = character.physical_location
+				var present_all: Array[int] = location_characters.get(char_loc, [] as Array[int])
+				var characters_present: Array[int] = []
+				for pid: int in present_all:
+					if pid != char_id:
+						characters_present.append(pid)
+
 				var witness_result: Dictionary = _check_witness_evidence(
 					char_id, target_id, quality, crime_records, objectives_map,
-					characters_by_id, dice_engine,
+					characters_by_id, dice_engine, characters_present,
 				)
 
 				var w_threshold: String = witness_result.get("threshold_crossed", "")
@@ -6850,6 +6858,7 @@ static func _inject_urgency_data(
 		if not location_characters.has(loc):
 			location_characters[loc] = [] as Array[int]
 		location_characters[loc].append(c.character_id)
+	world_states["_location_characters"] = location_characters
 
 	for c: L5RCharacterData in characters:
 		var ws: Dictionary = world_states.get(c.character_id, {})
