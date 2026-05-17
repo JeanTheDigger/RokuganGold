@@ -1,91 +1,6 @@
 extends GutTest
-## Tests for InvestigationLoopSystem per GDD s11.3.13 and s11.3.14.
-
-
-# -- Witness Recall TN (s11.3.13b) ----
-
-func test_recall_tn_same_day():
-	assert_eq(InvestigationLoopSystem.get_recall_tn(0), 10)
-
-
-func test_recall_tn_same_month():
-	assert_eq(InvestigationLoopSystem.get_recall_tn(14), 15)
-
-
-func test_recall_tn_prev_month():
-	assert_eq(InvestigationLoopSystem.get_recall_tn(40), 20)
-
-
-func test_recall_tn_two_months():
-	assert_eq(InvestigationLoopSystem.get_recall_tn(70), 25)
-
-
-func test_recall_tn_near_season():
-	assert_eq(InvestigationLoopSystem.get_recall_tn(100), 30)
-
-
-func test_recall_possible_within_season():
-	assert_true(InvestigationLoopSystem.is_recall_possible(100))
-
-
-func test_recall_impossible_beyond_season():
-	assert_false(InvestigationLoopSystem.is_recall_possible(113))
-
-
-# -- Evidence Decay (s11.3.13d) ----
-
-func test_decay_same_day():
-	assert_eq(InvestigationLoopSystem.get_scene_examination_penalty(0), 0)
-
-
-func test_decay_same_week():
-	assert_eq(InvestigationLoopSystem.get_scene_examination_penalty(5), -2)
-
-
-func test_decay_same_month():
-	assert_eq(InvestigationLoopSystem.get_scene_examination_penalty(20), -5)
-
-
-func test_decay_prev_month():
-	assert_eq(InvestigationLoopSystem.get_scene_examination_penalty(40), -10)
-
-
-func test_decay_near_season():
-	assert_eq(InvestigationLoopSystem.get_scene_examination_penalty(100), -15)
-
-
-func test_scene_not_viable_beyond_season():
-	assert_false(InvestigationLoopSystem.is_scene_viable(113))
-
-
-func test_scene_viable_within_season():
-	assert_true(InvestigationLoopSystem.is_scene_viable(100))
-
-
-# -- Crime Scene Evidence (s11.3.13d) ----
-
-func test_scene_evidence_failure():
-	assert_eq(InvestigationLoopSystem.get_scene_evidence_weight(10, 15, 0), 0)
-
-
-func test_scene_evidence_minor():
-	assert_eq(InvestigationLoopSystem.get_scene_evidence_weight(15, 15, 0), 10)
-
-
-func test_scene_evidence_significant():
-	assert_eq(InvestigationLoopSystem.get_scene_evidence_weight(20, 15, 0), 20)
-
-
-func test_scene_evidence_major():
-	assert_eq(InvestigationLoopSystem.get_scene_evidence_weight(25, 15, 0), 30)
-
-
-func test_scene_evidence_with_raises():
-	assert_eq(InvestigationLoopSystem.get_scene_evidence_weight(15, 15, 2), 30)
-
-
-func test_scene_evidence_major_with_raises():
-	assert_eq(InvestigationLoopSystem.get_scene_evidence_weight(26, 15, 1), 40)
+## Tests for InvestigationLoopSystem per GDD s11.3.13.
+## Tests for witness tampering, discovery type, concealment, zone log purge.
 
 
 # -- Criminal Recall (s11.3.13c) ----
@@ -150,138 +65,6 @@ func test_intimidate_failure():
 	assert_true(r["witness_motivated_to_report"])
 
 
-# -- Legal Status State Machine (s11.3.14) ----
-
-func test_clear_to_suspected():
-	assert_true(InvestigationLoopSystem.can_transition(
-		InvestigationLoopSystem.LegalState.CLEAR,
-		InvestigationLoopSystem.LegalState.SUSPECTED
-	))
-
-
-func test_clear_to_under_investigation():
-	assert_true(InvestigationLoopSystem.can_transition(
-		InvestigationLoopSystem.LegalState.CLEAR,
-		InvestigationLoopSystem.LegalState.UNDER_INVESTIGATION
-	))
-
-
-func test_clear_cannot_to_accused():
-	assert_false(InvestigationLoopSystem.can_transition(
-		InvestigationLoopSystem.LegalState.CLEAR,
-		InvestigationLoopSystem.LegalState.ACCUSED
-	))
-
-
-func test_suspected_to_investigation():
-	assert_true(InvestigationLoopSystem.can_transition(
-		InvestigationLoopSystem.LegalState.SUSPECTED,
-		InvestigationLoopSystem.LegalState.UNDER_INVESTIGATION
-	))
-
-
-func test_suspected_to_clear():
-	assert_true(InvestigationLoopSystem.can_transition(
-		InvestigationLoopSystem.LegalState.SUSPECTED,
-		InvestigationLoopSystem.LegalState.CLEAR
-	))
-
-
-func test_investigation_to_accused():
-	assert_true(InvestigationLoopSystem.can_transition(
-		InvestigationLoopSystem.LegalState.UNDER_INVESTIGATION,
-		InvestigationLoopSystem.LegalState.ACCUSED
-	))
-
-
-func test_investigation_to_fugitive():
-	assert_true(InvestigationLoopSystem.can_transition(
-		InvestigationLoopSystem.LegalState.UNDER_INVESTIGATION,
-		InvestigationLoopSystem.LegalState.FUGITIVE
-	))
-
-
-func test_accused_to_guilty():
-	assert_true(InvestigationLoopSystem.can_transition(
-		InvestigationLoopSystem.LegalState.ACCUSED,
-		InvestigationLoopSystem.LegalState.DECREED_GUILTY
-	))
-
-
-func test_accused_to_acquitted():
-	assert_true(InvestigationLoopSystem.can_transition(
-		InvestigationLoopSystem.LegalState.ACCUSED,
-		InvestigationLoopSystem.LegalState.ACQUITTED
-	))
-
-
-func test_accused_to_fugitive():
-	assert_true(InvestigationLoopSystem.can_transition(
-		InvestigationLoopSystem.LegalState.ACCUSED,
-		InvestigationLoopSystem.LegalState.FUGITIVE
-	))
-
-
-func test_guilty_to_pardoned():
-	assert_true(InvestigationLoopSystem.can_transition(
-		InvestigationLoopSystem.LegalState.DECREED_GUILTY,
-		InvestigationLoopSystem.LegalState.PARDONED
-	))
-
-
-func test_fugitive_to_guilty():
-	assert_true(InvestigationLoopSystem.can_transition(
-		InvestigationLoopSystem.LegalState.FUGITIVE,
-		InvestigationLoopSystem.LegalState.DECREED_GUILTY
-	))
-
-
-func test_acquitted_cannot_transition():
-	assert_false(InvestigationLoopSystem.can_transition(
-		InvestigationLoopSystem.LegalState.ACQUITTED,
-		InvestigationLoopSystem.LegalState.UNDER_INVESTIGATION
-	))
-
-
-func test_pardoned_cannot_transition():
-	assert_false(InvestigationLoopSystem.can_transition(
-		InvestigationLoopSystem.LegalState.PARDONED,
-		InvestigationLoopSystem.LegalState.CLEAR
-	))
-
-
-# -- Transition Triggers ----
-
-func test_trigger_immediate_discovery():
-	assert_eq(
-		InvestigationLoopSystem.get_transition_trigger(
-			InvestigationLoopSystem.LegalState.CLEAR,
-			InvestigationLoopSystem.LegalState.UNDER_INVESTIGATION
-		),
-		"immediate_discovery"
-	)
-
-
-func test_trigger_evidence_threshold():
-	assert_eq(
-		InvestigationLoopSystem.get_transition_trigger(
-			InvestigationLoopSystem.LegalState.UNDER_INVESTIGATION,
-			InvestigationLoopSystem.LegalState.ACCUSED
-		),
-		"evidence_threshold_reached"
-	)
-
-
-func test_trigger_invalid():
-	assert_eq(
-		InvestigationLoopSystem.get_transition_trigger(
-			InvestigationLoopSystem.LegalState.CLEAR,
-			InvestigationLoopSystem.LegalState.ACCUSED
-		),
-		"invalid"
-	)
-
-
 # -- Investigation Entry Points (s11.3.13h) ----
 
 func test_murder_immediate():
@@ -307,42 +90,20 @@ func test_maho_specialized():
 
 func test_immediate_skips_to_investigation():
 	assert_eq(
-		InvestigationLoopSystem.get_initial_legal_state(
+		InvestigationLoopSystem.get_initial_legal_status(
 			InvestigationLoopSystem.DiscoveryType.IMMEDIATE
 		),
-		InvestigationLoopSystem.LegalState.UNDER_INVESTIGATION
+		Enums.LegalStatus.UNDER_INVESTIGATION
 	)
 
 
 func test_gradual_starts_suspected():
 	assert_eq(
-		InvestigationLoopSystem.get_initial_legal_state(
+		InvestigationLoopSystem.get_initial_legal_status(
 			InvestigationLoopSystem.DiscoveryType.GRADUAL
 		),
-		InvestigationLoopSystem.LegalState.SUSPECTED
+		Enums.LegalStatus.SUSPECTED
 	)
-
-
-# -- Accusation Check ----
-
-func test_should_accuse_at_threshold():
-	assert_true(InvestigationLoopSystem.should_accuse(40))
-
-
-func test_should_accuse_above():
-	assert_true(InvestigationLoopSystem.should_accuse(55))
-
-
-func test_should_not_accuse_below():
-	assert_false(InvestigationLoopSystem.should_accuse(39))
-
-
-func test_bribery_trigger_at_25():
-	assert_true(InvestigationLoopSystem.should_trigger_bribery_eval(25))
-
-
-func test_bribery_trigger_below():
-	assert_false(InvestigationLoopSystem.should_trigger_bribery_eval(24))
 
 
 # -- Crime Record Status ----

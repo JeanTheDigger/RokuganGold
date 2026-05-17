@@ -460,6 +460,7 @@ static func advance_day(
 		current_season,
 		crime_records,
 		objectives_map,
+		world_states,
 	)
 
 	var letter_results: Array[Dictionary] = LetterSystem.process_pending_letters(
@@ -792,6 +793,7 @@ static func _process_info_events(
 	current_season: int,
 	crime_records: Array[CrimeRecord] = [],
 	objectives_map: Dictionary = {},
+	world_states: Dictionary = {},
 ) -> Array[Dictionary]:
 	var results: Array[Dictionary] = []
 
@@ -815,6 +817,11 @@ static func _process_info_events(
 					char_id, target_id, quality, crime_records, objectives_map
 				)
 
+				if witness_result.get("threshold_crossed", "") == "bribery_eval":
+					_inject_bribery_eval_event(
+						crime_records, target_id, world_states
+					)
+
 				results.append({
 					"character_id": char_id,
 					"target_id": target_id,
@@ -823,6 +830,31 @@ static func _process_info_events(
 				})
 
 	return results
+
+
+static func _inject_bribery_eval_event(
+	crime_records: Array[CrimeRecord],
+	target_id: int,
+	world_states: Dictionary,
+) -> void:
+	for record: CrimeRecord in crime_records:
+		if record.perpetrator_id < 0:
+			continue
+		if target_id not in record.known_suspects:
+			continue
+		var perp_ws: Dictionary = world_states.get(record.perpetrator_id, {})
+		var events: Array = perp_ws.get("pending_events", [])
+		for ev: Dictionary in events:
+			if ev.get("type", "") == "bribery_eval" and ev.get("case_id", -1) == record.case_id:
+				return
+		events.append({
+			"type": "bribery_eval",
+			"case_id": record.case_id,
+			"evidence_total": record.evidence_total,
+		})
+		perp_ws["pending_events"] = events
+		world_states[record.perpetrator_id] = perp_ws
+		return
 
 
 # -- Daily Conversations -------------------------------------------------------
