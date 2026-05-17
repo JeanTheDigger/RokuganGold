@@ -148,7 +148,7 @@ static func advance_day(
 	var military_daily: Dictionary = _process_military_daily(
 		active_armies, active_sieges, active_tethers, order_states,
 		dice_engine, settlements, companies, wm_for_military,
-		active_wars, characters_by_id, provinces,
+		active_wars, characters_by_id, provinces, active_hostages, ic_day,
 	)
 
 	var dragon_schism_siege_event: Dictionary = {}
@@ -318,7 +318,10 @@ static func advance_day(
 		dice_engine,
 		settlements,
 		characters_by_id,
+		active_hostages,
+		ic_day,
 	)
+	_capture_siege_hostages(active_sieges, characters_by_id, companies, active_hostages, ic_day)
 
 	var purification_results: Array[Dictionary] = _process_purification_effects(
 		day_result.get("results", []),
@@ -1579,6 +1582,8 @@ static func _process_storm_assault_results(
 	dice_engine: DiceEngine,
 	settlements: Array[SettlementData],
 	characters_by_id: Dictionary,
+	active_hostages: Array[Dictionary] = [],
+	ic_day: int = 0,
 ) -> Array[Dictionary]:
 	var results: Array[Dictionary] = []
 
@@ -1624,9 +1629,14 @@ static func _process_storm_assault_results(
 			dice_engine, settlements, false, fort_bonus,
 		)
 
+		var captor_lord_id: int = atk_dicts[0].get("lord_id", -1) if not atk_dicts.is_empty() else -1
+		var victor: String = battle_result.get("victor", "draw")
+		_capture_dead_commanders(
+			battle_result, victor, captor_lord_id,
+			str(siege_settlement_id), characters_by_id, active_hostages, ic_day, dice_engine,
+		)
 		_write_battle_results_to_companies(battle_result, companies)
 
-		var victor: String = battle_result.get("victor", "draw")
 		if victor == "attacker":
 			siege["siege_ended"] = true
 			siege["end_reason"] = "storm_assault_success"
@@ -5575,6 +5585,95 @@ static func _release_war_hostages(
 				character.captive_status = ""
 
 
+static func _capture_dead_commanders(
+	battle_result: Dictionary,
+	victor: String,
+	captor_lord_id: int,
+	location_str: String,
+	characters_by_id: Dictionary,
+	active_hostages: Array[Dictionary],
+	ic_day: int,
+	dice_engine: DiceEngine,
+) -> void:
+	if victor == "draw" or captor_lord_id < 0:
+		return
+	var losing_side: String = "defender" if victor == "attacker" else "attacker"
+	var losing_states: Array = battle_result.get(losing_side + "_states", [])
+	for bs: Variant in losing_states:
+		if not (bs is Dictionary):
+			continue
+		var bsd: Dictionary = bs
+		if not bsd.get("commander_dead", false):
+			continue
+		var cmd_id: int = bsd.get("commander_id", -1)
+		if cmd_id < 0:
+			continue
+		var commander: L5RCharacterData = characters_by_id.get(cmd_id) as L5RCharacterData
+		if commander == null or commander.captive_status != "":
+			continue
+		var likelihood: float = HostageSystem.get_capture_likelihood_modifier(
+			commander.bushido_virtue, commander.shourido_virtue,
+		)
+		var captured: bool = (
+			likelihood >= 1.0
+			or dice_engine.rand_int_range(1, 100) <= int(likelihood * 100.0)
+		)
+		if captured:
+			bsd["commander_dead"] = false
+			commander.captive_status = str(captor_lord_id)
+			active_hostages.append(HostageSystem.capture_hostage(
+				cmd_id, captor_lord_id, HostageSystem.CaptureSource.BATTLE_CAPTURE,
+				location_str, ic_day,
+			))
+
+
+static func _capture_siege_hostages(
+	active_sieges: Array[Dictionary],
+	characters_by_id: Dictionary,
+	companies: Array[Dictionary],
+	active_hostages: Array[Dictionary],
+	ic_day: int,
+) -> void:
+	var end_reasons: Array[String] = ["storm_assault_success", "starvation"]
+	for siege: Dictionary in active_sieges:
+		if not siege.get("siege_ended", false):
+			continue
+		if siege.get("end_reason", "") not in end_reasons:
+			continue
+		if siege.get("hostages_captured", false):
+			continue
+		siege["hostages_captured"] = true
+		var settlement_id: int = siege.get("settlement_id", -1)
+		var atk_army_id: int = siege.get("attacker_army_id", -1)
+		var captor_lord_id: int = -1
+		for cd: Dictionary in companies:
+			if cd.get("army_id", -1) == atk_army_id:
+				captor_lord_id = cd.get("lord_id", -1)
+				break
+		if captor_lord_id < 0:
+			continue
+		var loc_str: String = str(settlement_id)
+		for char_val: Variant in characters_by_id.values():
+			var character: L5RCharacterData = char_val as L5RCharacterData
+			if character == null:
+				continue
+			if CharacterStats.is_dead(character):
+				continue
+			if TravelSystem.is_traveling(character):
+				continue
+			if character.captive_status != "":
+				continue
+			if character.physical_location != loc_str:
+				continue
+			if character.military_rank == Enums.MilitaryRank.NONE:
+				continue
+			character.captive_status = str(captor_lord_id)
+			active_hostages.append(HostageSystem.capture_hostage(
+				character.character_id, captor_lord_id,
+				HostageSystem.CaptureSource.SIEGE_SURRENDER, loc_str, ic_day,
+			))
+
+
 # -- Bound Character Processing (s12.8) ---------------------------------------
 
 static func _process_bound_states(
@@ -5633,6 +5732,8 @@ static func _process_military_daily(
 	active_wars: Array[WarData] = [],
 	characters_by_id: Dictionary = {},
 	provinces: Dictionary = {},
+	active_hostages: Array[Dictionary] = [],
+	ic_day: int = 0,
 ) -> Dictionary:
 	var disband_results: Array[Dictionary] = _process_disbands(
 		active_armies, companies, settlements,
@@ -5641,7 +5742,7 @@ static func _process_military_daily(
 	var battle_results: Array[Dictionary] = _resolve_army_battles(
 		movement_results, active_armies, companies, active_wars,
 		dice_engine, settlements, characters_by_id, worship_maluses,
-		provinces,
+		provinces, active_hostages, ic_day,
 	)
 	var retreat_arrival_results: Array[Dictionary] = _process_retreat_arrivals(
 		movement_results, active_armies, active_tethers,
@@ -5707,6 +5808,8 @@ static func _resolve_army_battles(
 	characters_by_id: Dictionary,
 	worship_maluses: Dictionary,
 	provinces: Dictionary = {},
+	active_hostages: Array[Dictionary] = [],
+	ic_day: int = 0,
 ) -> Array[Dictionary]:
 	var results: Array[Dictionary] = []
 
@@ -5772,6 +5875,17 @@ static func _resolve_army_battles(
 		var battle_result: Dictionary = resolve_and_reconcile_battle(
 			atk_states, def_states, battle_terrain,
 			dice_engine, settlements, false, fort_bonus, worship_maluses,
+		)
+
+		var field_victor: String = battle_result.get("victor", "draw")
+		var field_captor_lord_id: int = -1
+		if field_victor == "attacker" and not atk_company_dicts.is_empty():
+			field_captor_lord_id = atk_company_dicts[0].get("lord_id", -1)
+		elif field_victor == "defender" and not def_company_dicts.is_empty():
+			field_captor_lord_id = def_company_dicts[0].get("lord_id", -1)
+		_capture_dead_commanders(
+			battle_result, field_victor, field_captor_lord_id,
+			str(battle_province_id), characters_by_id, active_hostages, ic_day, dice_engine,
 		)
 
 		_write_battle_results_to_companies(battle_result, companies)

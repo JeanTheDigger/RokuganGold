@@ -246,3 +246,115 @@ func test_war_end_third_clan_hostage_not_released() -> void:
 	DayOrchestrator._release_war_hostages(war_results, active_hostages, chars_by_id, 200)
 	assert_false(hostage.get("released", false))
 	assert_eq(character.captive_status, "99")
+
+
+# -- Battle commander capture --------------------------------------------------
+
+func test_battle_capture_converts_dead_commander_to_hostage() -> void:
+	var commander := _make_character(1)
+	commander.military_rank = Enums.MilitaryRank.GUNSO
+	commander.captive_status = ""
+	var chars_by_id: Dictionary = {1: commander}
+	var battle_result: Dictionary = {
+		"victor": "attacker",
+		"attacker_states": [],
+		"defender_states": [
+			{
+				"commander_id": 1,
+				"commander_dead": true,
+				"company_id": 10,
+			}
+		],
+	}
+	var active_hostages: Array[Dictionary] = []
+	var dice := DiceEngine.new()
+	dice.set_seed(42)
+	DayOrchestrator._capture_dead_commanders(
+		battle_result, "attacker", 99, "5", chars_by_id, active_hostages, 1, dice
+	)
+	assert_eq(commander.captive_status, "99")
+	assert_eq(active_hostages.size(), 1)
+	assert_eq(active_hostages[0].get("character_id", -1), 1)
+	assert_eq(active_hostages[0].get("source", -1), HostageSystem.CaptureSource.BATTLE_CAPTURE)
+	assert_false(battle_result["defender_states"][0].get("commander_dead", true))
+
+
+func test_battle_capture_draw_does_nothing() -> void:
+	var commander := _make_character(1)
+	commander.captive_status = ""
+	var chars_by_id: Dictionary = {1: commander}
+	var battle_result: Dictionary = {
+		"victor": "draw",
+		"attacker_states": [],
+		"defender_states": [{"commander_id": 1, "commander_dead": true}],
+	}
+	var active_hostages: Array[Dictionary] = []
+	var dice := DiceEngine.new()
+	DayOrchestrator._capture_dead_commanders(
+		battle_result, "draw", 99, "5", chars_by_id, active_hostages, 1, dice
+	)
+	assert_eq(active_hostages.size(), 0)
+	assert_eq(commander.captive_status, "")
+
+
+# -- Siege surrender capture --------------------------------------------------
+
+func test_siege_hostage_captures_military_ranked_character() -> void:
+	var character := _make_character(1)
+	character.military_rank = Enums.MilitaryRank.GUNSO
+	character.physical_location = "10"
+	character.captive_status = ""
+	var chars_by_id: Dictionary = {1: character}
+	var siege: Dictionary = {
+		"siege_ended": true,
+		"end_reason": "storm_assault_success",
+		"settlement_id": 10,
+		"attacker_army_id": 5,
+	}
+	var active_sieges: Array[Dictionary] = [siege]
+	var company: Dictionary = {"army_id": 5, "lord_id": 99, "company_id": 1}
+	var active_hostages: Array[Dictionary] = []
+	DayOrchestrator._capture_siege_hostages(active_sieges, chars_by_id, [company], active_hostages, 1)
+	assert_eq(character.captive_status, "99")
+	assert_eq(active_hostages.size(), 1)
+	assert_eq(active_hostages[0].get("source", -1), HostageSystem.CaptureSource.SIEGE_SURRENDER)
+	assert_true(siege.get("hostages_captured", false))
+
+
+func test_siege_hostage_skips_no_military_rank() -> void:
+	var character := _make_character(1)
+	character.military_rank = Enums.MilitaryRank.NONE
+	character.physical_location = "10"
+	character.captive_status = ""
+	var chars_by_id: Dictionary = {1: character}
+	var siege: Dictionary = {
+		"siege_ended": true,
+		"end_reason": "starvation",
+		"settlement_id": 10,
+		"attacker_army_id": 5,
+	}
+	var company: Dictionary = {"army_id": 5, "lord_id": 99, "company_id": 1}
+	var active_hostages: Array[Dictionary] = []
+	DayOrchestrator._capture_siege_hostages([siege], chars_by_id, [company], active_hostages, 1)
+	assert_eq(active_hostages.size(), 0)
+	assert_eq(character.captive_status, "")
+
+
+func test_siege_hostage_not_processed_twice() -> void:
+	var character := _make_character(1)
+	character.military_rank = Enums.MilitaryRank.TAISA
+	character.physical_location = "10"
+	character.captive_status = ""
+	var chars_by_id: Dictionary = {1: character}
+	var siege: Dictionary = {
+		"siege_ended": true,
+		"end_reason": "storm_assault_success",
+		"settlement_id": 10,
+		"attacker_army_id": 5,
+		"hostages_captured": true,
+	}
+	var company: Dictionary = {"army_id": 5, "lord_id": 99, "company_id": 1}
+	var active_hostages: Array[Dictionary] = []
+	DayOrchestrator._capture_siege_hostages([siege], chars_by_id, [company], active_hostages, 1)
+	assert_eq(active_hostages.size(), 0)
+	assert_eq(character.captive_status, "")
