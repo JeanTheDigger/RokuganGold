@@ -611,6 +611,7 @@ static func advance_day(
 	var commitment_seasonal_result: Dictionary = {}
 	var worship_seasonal_results: Dictionary = {}
 	var civil_war_results_seasonal: Dictionary = {}
+	var extradition_results: Array[Dictionary] = []
 	if current_season != prev_season:
 		# Add the IC year to miya_inputs so per-province blessed-year tracking
 		# stays consistent. Year is computed from the time system's tick count.
@@ -783,6 +784,10 @@ static func advance_day(
 		)
 		_increment_vacancy_seasons(season_meta)
 		_process_seasonal_stipend_disposition(characters, characters_by_id)
+		extradition_results = _process_fugitive_extradition_seasonal(
+			crime_records, characters, characters_by_id, provinces, settlements,
+			active_topics, next_topic_id, ic_day,
+		)
 		pregnancy_results = _process_pregnancy_checks(
 			marriages, characters_by_id, children, dice_engine, ic_day,
 			next_character_id,
@@ -875,6 +880,7 @@ static func advance_day(
 		"gempukku_results": gempukku_results,
 		"advancement_results": advancement_results,
 		"ronin_results": ronin_results,
+		"extradition_results": extradition_results,
 		"pregnancy_results": pregnancy_results,
 		"seiyaku_results": seiyaku_results,
 		"worship_accumulation_results": worship_accumulation_results,
@@ -2874,6 +2880,201 @@ static func process_fugitive_declaration(
 		"fugitive_id": fugitive.character_id,
 		"topic_id": topic.topic_id if topic != null else -1,
 	}
+
+
+# -- Fugitive Extradition Seasonal Pass (s11.3.16) ------------------------------
+# For every FUGITIVE CrimeRecord where the fugitive is from a different clan
+# than the crime province, evaluate the harboring lord's extradition decision
+# and apply consequences (cooperation/refusal/imperial warrant).
+
+static func _process_fugitive_extradition_seasonal(
+	crime_records: Array[CrimeRecord],
+	characters: Array[L5RCharacterData],
+	characters_by_id: Dictionary,
+	provinces: Dictionary,
+	settlements: Array[SettlementData],
+	active_topics: Array[TopicData],
+	next_topic_id: Array[int],
+	ic_day: int,
+) -> Array[Dictionary]:
+	var results: Array[Dictionary] = []
+
+	var sett_prov_map: Dictionary = {}
+	for s: SettlementData in settlements:
+		sett_prov_map[s.settlement_id] = s.province_id
+
+	for record: CrimeRecord in crime_records:
+		if record.legal_status != Enums.LegalStatus.FUGITIVE:
+			continue
+
+		var fugitive: L5RCharacterData = characters_by_id.get(record.perpetrator_id)
+		if fugitive == null or CharacterStats.is_dead(fugitive):
+			continue
+
+		# Map crime location (settlement_id string) to clan
+		if not record.location.is_valid_int():
+			continue
+		var crime_settlement_id: int = int(record.location)
+		var crime_province_id: int = sett_prov_map.get(crime_settlement_id, -1)
+		if crime_province_id < 0:
+			continue
+		var crime_province: ProvinceData = provinces.get(crime_province_id) as ProvinceData
+		if crime_province == null:
+			continue
+		var crime_clan: String = crime_province.clan
+
+		# Only cross-clan cases
+		if fugitive.clan.is_empty() or fugitive.clan == crime_clan:
+			continue
+
+		# Sighting topic for notable fugitives (s11.3.16a)
+		if FugitiveExtraditionSystem.generates_sighting_topic(fugitive.status):
+			var sighting: TopicData = TopicData.new()
+			sighting.topic_id = next_topic_id[0]
+			next_topic_id[0] += 1
+			sighting.slug = "fugitive_sighting_%d_d%d" % [fugitive.character_id, ic_day]
+			sighting.title = "A stranger matching %s was seen in foreign territory" % fugitive.character_name
+			sighting.topic_type = "fugitive_sighting"
+			sighting.tier = TopicData.Tier.TIER_4
+			sighting.category = TopicData.Category.POLITICAL
+			sighting.momentum = TopicMomentumSystem.initial_momentum_for_tier(sighting.tier)
+			sighting.subject_character_id = fugitive.character_id
+			sighting.clan_involved = fugitive.clan
+			sighting.ic_day_created = ic_day
+			active_topics.append(sighting)
+
+		# Harboring lord: fugitive's direct lord (still in fugitive.lord_id after flee)
+		var harboring_lord: L5RCharacterData = _extrad_find_harboring_lord(
+			fugitive, characters, characters_by_id
+		)
+		if harboring_lord == null:
+			continue
+
+		# Requesting clan: find clan champion for disposition lookup
+		var requesting_champ_id: int = _extrad_find_clan_champion_id(crime_clan, characters)
+		var requesting_disp: int = 0
+		if requesting_champ_id >= 0:
+			requesting_disp = harboring_lord.disposition_values.get(requesting_champ_id, 0)
+
+		# Crime tier from CONVICTION_CONSEQUENCES (index 3); clamp to 1-4 range
+		var crime_tier: int = _extrad_crime_tier(record.crime_type)
+
+		# Evaluate harboring lord decision (s11.3.16c)
+		# Conservative defaults: no usefulness or leverage assumed (structural wiring)
+		var eval: Dictionary = ExtraditionSystem.evaluate_extradition(
+			harboring_lord,
+			requesting_disp,
+			fugitive.status,
+			crime_tier,
+			not fugitive.role_position.is_empty(),
+			false,
+			false,
+		)
+		var response: ExtraditionSystem.Response = eval.get(
+			"response", ExtraditionSystem.Response.REFUSE
+		)
+
+		# Extradition request topic (s11.3.16b, Tier 4)
+		var req_topic: TopicData = TopicData.new()
+		req_topic.topic_id = next_topic_id[0]
+		next_topic_id[0] += 1
+		req_topic.slug = "extradition_%d_d%d" % [fugitive.character_id, ic_day]
+		req_topic.title = "%s requests extradition of %s from %s" % [
+			crime_clan, fugitive.character_name, fugitive.clan
+		]
+		req_topic.topic_type = "extradition_request"
+		req_topic.tier = TopicData.Tier.TIER_4
+		req_topic.category = TopicData.Category.POLITICAL
+		req_topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(req_topic.tier)
+		req_topic.subject_character_id = fugitive.character_id
+		req_topic.clan_involved = fugitive.clan
+		req_topic.ic_day_created = ic_day
+		active_topics.append(req_topic)
+
+		var result: Dictionary = {
+			"fugitive_id": fugitive.character_id,
+			"requesting_clan": crime_clan,
+			"harboring_clan": fugitive.clan,
+			"response": response,
+			"crime_tier": crime_tier,
+			"extradition_topic_id": req_topic.topic_id,
+		}
+
+		match response:
+			ExtraditionSystem.Response.COOPERATE:
+				var consequences: Dictionary = ExtraditionSystem.apply_cooperation(
+					harboring_lord, requesting_champ_id, crime_tier
+				)
+				result["consequences"] = consequences
+				# Fugitive returned: revert to ACCUSED for trial
+				record.legal_status = Enums.LegalStatus.ACCUSED
+				var case_entry: LegalCaseEntry = LegalStatusSystem.get_case(
+					fugitive, record.case_id
+				)
+				if case_entry != null:
+					LegalStatusSystem.transition(case_entry, Enums.LegalStatus.ACCUSED, ic_day)
+				result["fugitive_returned"] = true
+
+			ExtraditionSystem.Response.REFUSE, ExtraditionSystem.Response.DENY_KNOWLEDGE:
+				var is_denial: bool = response == ExtraditionSystem.Response.DENY_KNOWLEDGE
+				var consequences: Dictionary = ExtraditionSystem.apply_refusal(
+					harboring_lord, requesting_champ_id, crime_tier, is_denial
+				)
+				result["consequences"] = consequences
+				# Escalation for Tier 2+ crimes (s11.3.16e)
+				if FugitiveExtraditionSystem.can_request_imperial_warrant(crime_tier):
+					var compliance: Dictionary = FugitiveExtraditionSystem.evaluate_imperial_warrant_compliance(
+						harboring_lord
+					)
+					result["imperial_warrant"] = compliance
+					if compliance.get("complies", false):
+						record.legal_status = Enums.LegalStatus.ACCUSED
+						var case_entry: LegalCaseEntry = LegalStatusSystem.get_case(
+							fugitive, record.case_id
+						)
+						if case_entry != null:
+							LegalStatusSystem.transition(case_entry, Enums.LegalStatus.ACCUSED, ic_day)
+						result["fugitive_returned"] = true
+				else:
+					result["standing_warrant"] = FugitiveExtraditionSystem.get_standing_warrant_consequences()
+
+			_:  # NEGOTIATE
+				result["negotiating"] = true
+
+		results.append(result)
+
+	return results
+
+
+static func _extrad_find_harboring_lord(
+	fugitive: L5RCharacterData,
+	characters: Array[L5RCharacterData],
+	characters_by_id: Dictionary,
+) -> L5RCharacterData:
+	if fugitive.lord_id >= 0:
+		var lord: L5RCharacterData = characters_by_id.get(fugitive.lord_id)
+		if lord != null and not CharacterStats.is_dead(lord) and lord.clan == fugitive.clan:
+			return lord
+	for c: L5RCharacterData in characters:
+		if c.clan == fugitive.clan and c.role_position == "Clan Champion" and not CharacterStats.is_dead(c):
+			return c
+	return null
+
+
+static func _extrad_find_clan_champion_id(clan: String, characters: Array[L5RCharacterData]) -> int:
+	for c: L5RCharacterData in characters:
+		if c.clan == clan and c.role_position == "Clan Champion" and not CharacterStats.is_dead(c):
+			return c.character_id
+	return -1
+
+
+static func _extrad_crime_tier(crime_type: Enums.CrimeType) -> int:
+	var consequences: Array = CrimeSystem.CONVICTION_CONSEQUENCES.get(crime_type, [-0.1, 0.0, 0.0, 4])
+	var tier: int = int(consequences[3])
+	# tier 0 in the table means "no formal standalone topic" — treat as minor (4) for scoring
+	if tier <= 0:
+		return 4
+	return clampi(tier, 1, 4)
 
 
 static func _process_successful_bribe_writebacks(
