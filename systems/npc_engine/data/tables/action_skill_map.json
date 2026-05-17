@@ -427,6 +427,10 @@
     "primary": "_trained_skill",
     "secondary": null
   },
+  "TRAIN_ANIMAL": {
+    "primary": "Animal Handling",
+    "secondary": "Awareness"
+  },
   "TREAT_WOUND": {
     "primary": "Medicine",
     "secondary": null

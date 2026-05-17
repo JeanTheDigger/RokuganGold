@@ -480,6 +480,16 @@ static func score_all(
 		elif HuntSystem.has_hunt_negative_lean(ctx.school):
 			option.disposition_modifier -= float(HuntSystem.HUNT_SCHOOL_LEAN)
 
+	# TRAIN_ANIMAL school lean (Annex C, s57.39.11):
+	# Wilderness-adjacent schools +10; courtier schools -10
+	for option: NPCDataStructures.ScoredAction in options:
+		if option.action_id != "TRAIN_ANIMAL":
+			continue
+		if AnimalHandlingSystem.has_positive_school_lean(ctx.school):
+			option.disposition_modifier += float(AnimalHandlingSystem.SCHOOL_LEAN_POSITIVE)
+		elif AnimalHandlingSystem.has_negative_school_lean(ctx.school):
+			option.disposition_modifier += float(AnimalHandlingSystem.SCHOOL_LEAN_NEGATIVE)
+
 
 # -- Phase 6: Selection -------------------------------------------------------
 # Highest total wins. Tiebreakers: ObjAlign > disposition > lower AP > seed.
@@ -779,6 +789,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array[S
 				"TREAT_WOUND",
 				"REQUEST_PERFORMANCE",
 				"ANNOUNCE_HUNT", "CANCEL_HUNT",
+				"TRAIN_ANIMAL",
 				"DO_NOTHING", "REST",
 			]
 		Enums.ContextFlag.AT_COURT:
@@ -799,6 +810,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array[S
 				"TREAT_WOUND",
 				"REQUEST_PERFORMANCE",
 				"ANNOUNCE_HUNT", "REQUEST_HUNT_INVITATION", "CANCEL_HUNT",
+				"TRAIN_ANIMAL",
 				"DO_NOTHING", "REST",
 			]
 		Enums.ContextFlag.VISITING:
@@ -810,6 +822,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array[S
 				"TRAIN", "MEDITATE", "CONDUCT_TEA_CEREMONY",
 				"TREAT_WOUND",
 				"ANNOUNCE_HUNT", "REQUEST_HUNT_INVITATION", "CANCEL_HUNT",
+				"TRAIN_ANIMAL",
 				"DO_NOTHING", "REST",
 			]
 		Enums.ContextFlag.TRAVELING:
@@ -947,6 +960,7 @@ static func _get_ap_cost(action_id: String) -> int:
 		"ANNOUNCE_HUNT": 0,
 		"REQUEST_HUNT_INVITATION": 0,
 		"CANCEL_HUNT": 0,
+		"TRAIN_ANIMAL": 1,
 	}
 	return costs.get(action_id, 1)
 
@@ -2046,6 +2060,28 @@ static func _populate_action_metadata(
 		option.metadata = {
 			"accepted_invitee_ids": [],
 		}
+	elif option.action_id == "TRAIN_ANIMAL":
+		# Prefer a companion already in progress; otherwise first session with DOG default
+		var in_progress_id: int = -1
+		if character != null:
+			for c_var: Variant in character.trained_companions:
+				var comp: Dictionary = c_var as Dictionary
+				if comp.get("is_alive", false) and not comp.get("fully_trained", false):
+					in_progress_id = comp.get("companion_id", -1)
+					break
+		if in_progress_id >= 0:
+			option.metadata = {
+				"is_first_session": false,
+				"companion_id": in_progress_id,
+				"species": "",
+			}
+		else:
+			option.metadata = {
+				"is_first_session": true,
+				"companion_id": -1,
+				"species": "DOG",
+				"companion_name": "companion",
+			}
 	elif option.action_id == "ASK_FOR_INTRODUCTION":
 		# Intermediary: highest-disposition Friend+ contact who is not the target (s55.7.3).
 		var target_id: int = option.target_npc_id

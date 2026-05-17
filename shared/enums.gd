@@ -631,3 +631,14 @@ enum MinorBlessingTier {
 	FAVORED,
 	BELOVED,
 }
+
+# -- Companion Species (s57.39.6 — LOCKED) -------------------------------------
+enum CompanionSpecies {
+	DOG,
+	PIGEON,
+	RIDING_HORSE,
+	FALCON,
+	WAR_DOG,
+	WARHORSE,
+	WARCAT,
+}

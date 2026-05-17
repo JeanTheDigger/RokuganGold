@@ -299,6 +299,9 @@ static func execute(
 	if action_id == "CONDUCT_TEA_CEREMONY":
 		return _execute_conduct_tea_ceremony(action, character, ctx, dice_engine, characters_by_id)
 
+	if action_id == "TRAIN_ANIMAL":
+		return _execute_train_animal(action, character, ctx, dice_engine)
+
 	if action_id == "ANNOUNCE_HUNT":
 		return _execute_announce_hunt(action, character, ctx)
 
@@ -3966,3 +3969,122 @@ static func _execute_cancel_hunt(
 			"topic_type": "hunt_cancellation",
 		},
 	}
+
+
+# -- TRAIN_ANIMAL --------------------------------------------------------------
+
+static func _execute_train_animal(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	var is_first_session: bool = action.metadata.get("is_first_session", false)
+	var species_str: String = action.metadata.get("species", "")
+	var companion_id: int = action.metadata.get("companion_id", -1)
+
+	if is_first_session:
+		# First session — acquire a new companion
+		var check: Dictionary = AnimalHandlingSystem.can_train_first_session(
+			character, ctx, species_str
+		)
+		if not check.get("valid", false):
+			return {
+				"success": false,
+				"action_id": "TRAIN_ANIMAL",
+				"reason": check.get("reason", "precondition_failed"),
+			}
+
+		var roll_result: Dictionary = AnimalHandlingSystem.make_training_roll(
+			character, species_str, dice_engine
+		)
+		# Assign a new companion_id (caller is responsible for generating unique ids;
+		# here we use a transient id from metadata or compute one)
+		var new_id: int = action.metadata.get("new_companion_id", -1)
+		if new_id < 0:
+			new_id = character.character_id * 1000 + character.trained_companions.size()
+		var companion_name: String = action.metadata.get("companion_name", species_str.to_lower())
+		var new_companion: Dictionary = AnimalHandlingSystem.create_companion(
+			character.character_id,
+			species_str,
+			new_id,
+			companion_name,
+			ctx.ic_day,
+			action.target_province_id,
+			roll_result.get("progress_gained", 0),
+		)
+		character.trained_companions.append(new_companion)
+
+		return {
+			"success": true,
+			"action_id": "TRAIN_ANIMAL",
+			"character_id": character.character_id,
+			"target_npc_id": -1,
+			"target_province_id": action.target_province_id,
+			"ic_day": ctx.ic_day,
+			"season": ctx.season,
+			"skill_used": "Animal Handling",
+			"roll_total": roll_result.get("roll_total", 0),
+			"tn": roll_result.get("tn", 15),
+			"effects": {
+				"is_first_session": true,
+				"companion_id": new_id,
+				"species": species_str,
+				"progress_gained": roll_result.get("progress_gained", 0),
+				"roll_success": roll_result.get("success", false),
+				"fully_trained": new_companion.get("fully_trained", false),
+			},
+		}
+
+	else:
+		# Subsequent session — advance existing companion
+		var companion: Dictionary = {}
+		for c: Variant in character.trained_companions:
+			var comp: Dictionary = c as Dictionary
+			if comp.get("companion_id", -1) == companion_id:
+				companion = comp
+				break
+
+		if companion.is_empty():
+			return {
+				"success": false,
+				"action_id": "TRAIN_ANIMAL",
+				"reason": "companion_not_found",
+			}
+
+		var check: Dictionary = AnimalHandlingSystem.can_train_subsequent_session(
+			character, ctx, companion
+		)
+		if not check.get("valid", false):
+			return {
+				"success": false,
+				"action_id": "TRAIN_ANIMAL",
+				"reason": check.get("reason", "precondition_failed"),
+			}
+
+		var roll_result: Dictionary = AnimalHandlingSystem.make_training_roll(
+			character, companion.get("species", "DOG"), dice_engine
+		)
+		AnimalHandlingSystem.apply_training_progress(companion, roll_result.get("progress_gained", 0))
+
+		return {
+			"success": true,
+			"action_id": "TRAIN_ANIMAL",
+			"character_id": character.character_id,
+			"target_npc_id": -1,
+			"target_province_id": -1,
+			"ic_day": ctx.ic_day,
+			"season": ctx.season,
+			"skill_used": "Animal Handling",
+			"roll_total": roll_result.get("roll_total", 0),
+			"tn": roll_result.get("tn", 15),
+			"effects": {
+				"is_first_session": false,
+				"companion_id": companion_id,
+				"species": companion.get("species", ""),
+				"progress_gained": roll_result.get("progress_gained", 0),
+				"roll_success": roll_result.get("success", false),
+				"fully_trained": companion.get("fully_trained", false),
+				"sessions_completed": companion.get("sessions_completed", 0),
+			},
+		}
