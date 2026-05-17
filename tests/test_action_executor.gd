@@ -1020,3 +1020,68 @@ func test_duel_challenge_sanctioned_death_no_crime_record() -> void:
 	var effects: Dictionary = result["effects"]
 	if effects.get("death_occurred", false):
 		assert_false(effects.get("requires_crime_creation", false))
+
+
+# -- EXAMINE_CRIME_SCENE -------------------------------------------------------
+
+func test_examine_crime_scene_calls_investigation_system() -> void:
+	var cr := CrimeRecord.new()
+	cr.case_id = 7
+	cr.concealment_tn = 10
+	cr.ic_day_committed = 5
+	cr.evidence_total = 0
+	cr.perpetrator_id = 99
+	cr.known_suspects = [] as Array[int]
+	var records: Array[CrimeRecord] = [cr]
+
+	_character.skills["Investigation"] = 4
+	_character.perception = 4
+	_ctx.ic_day = 6
+
+	var action := _make_action("EXAMINE_CRIME_SCENE")
+	action.metadata = {"case_id": 7}
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map,
+		{}, {}, {}, 0, records
+	)
+	assert_eq(result["action_id"], "EXAMINE_CRIME_SCENE")
+	var effects: Dictionary = result["effects"]
+	assert_eq(effects["effect"], "scene_examined")
+	assert_eq(effects["case_id"], 7)
+	if result["success"]:
+		assert_true(effects["evidence_gained"] > 0)
+		assert_true(cr.evidence_total > 0)
+
+
+func test_examine_crime_scene_no_record_fails() -> void:
+	var records: Array[CrimeRecord] = []
+	var action := _make_action("EXAMINE_CRIME_SCENE")
+	action.metadata = {"case_id": 99}
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map,
+		{}, {}, {}, 0, records
+	)
+	assert_false(result["success"])
+	assert_eq(result.get("reason", ""), "no_crime_record")
+
+
+func test_examine_crime_scene_too_old_fails() -> void:
+	var cr := CrimeRecord.new()
+	cr.case_id = 8
+	cr.concealment_tn = 10
+	cr.ic_day_committed = 0
+	cr.evidence_total = 0
+	cr.perpetrator_id = 99
+	cr.known_suspects = [] as Array[int]
+	var records: Array[CrimeRecord] = [cr]
+
+	_ctx.ic_day = 200
+
+	var action := _make_action("EXAMINE_CRIME_SCENE")
+	action.metadata = {"case_id": 8}
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map,
+		{}, {}, {}, 0, records
+	)
+	assert_false(result["success"])
+	assert_eq(result["effects"]["evidence_gained"], 0)

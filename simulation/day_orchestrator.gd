@@ -168,6 +168,8 @@ static func advance_day(
 		objectives_map, active_topics,
 	)
 
+	world_states["_crime_records"] = crime_records
+
 	var day_result: Dictionary = NPCWaveResolver.resolve_day_applied(
 		characters, world_states, objectives_map, scoring_tables, filter_data,
 		dice_engine, action_skill_map, characters_by_id, provinces, action_log,
@@ -195,6 +197,10 @@ static func advance_day(
 		world_states,
 		active_wars,
 		action_log,
+	)
+
+	_process_scene_examination_writebacks(
+		day_result.get("results", []), objectives_map, world_states
 	)
 
 	var current_season_count: int = int(season_meta.get("horde_season_count", 0))
@@ -2249,6 +2255,67 @@ static func _create_famine_topic_multi(
 	topic.ic_day_created = ic_day
 	topic.momentum = _FAMINE_FAMINE_MOMENTUM
 	return topic
+
+
+# -- Scene Examination Writebacks (s11.3.13) -----------------------------------
+
+static func _process_scene_examination_writebacks(
+	results: Array,
+	objectives_map: Dictionary,
+	world_states: Dictionary,
+) -> void:
+	for result: Variant in results:
+		if not result is Dictionary:
+			continue
+		var r: Dictionary = result as Dictionary
+		if r.get("action_id", "") != "EXAMINE_CRIME_SCENE":
+			continue
+		var effects: Dictionary = r.get("effects", {})
+		if effects.get("effect", "") != "scene_examined":
+			continue
+		if not r.get("success", false):
+			continue
+
+		var char_id: int = r.get("character_id", -1)
+		var case_id: int = effects.get("case_id", -1)
+		if char_id < 0 or case_id < 0:
+			continue
+
+		var objs: Dictionary = objectives_map.get(char_id, {})
+		for obj_key: Variant in objs:
+			var obj: Variant = objs[obj_key]
+			if obj is Dictionary:
+				var active_case: Dictionary = (obj as Dictionary).get("active_case", {})
+				if active_case.get("case_id", -1) == case_id:
+					active_case["scene_examined"] = true
+					active_case["evidence_total"] = effects.get("evidence_gained", 0) + active_case.get("evidence_total", 0)
+					break
+
+		var threshold: String = effects.get("threshold_crossed", "")
+		if threshold == "bribery_eval":
+			_inject_bribery_eval_event_by_case(case_id, world_states)
+
+
+static func _inject_bribery_eval_event_by_case(
+	case_id: int,
+	world_states: Dictionary,
+) -> void:
+	var cr: Array[CrimeRecord] = world_states.get("_crime_records", [] as Array[CrimeRecord])
+	for record: CrimeRecord in cr:
+		if record.case_id == case_id:
+			var perp_id: int = record.perpetrator_id
+			if perp_id < 0:
+				return
+			var ws: Dictionary = world_states.get(perp_id, {})
+			var pending: Array = ws.get("pending_events", [])
+			pending.append({
+				"type": "bribery_eval",
+				"case_id": case_id,
+				"evidence_total": record.evidence_total,
+			})
+			ws["pending_events"] = pending
+			world_states[perp_id] = ws
+			return
 
 
 # -- Crime Detection (s57.47) --------------------------------------------------
@@ -5281,6 +5348,9 @@ static func _inject_urgency_data(
 		var known_objs: Dictionary = ws.get("known_objectives", {})
 		if not standing.is_empty():
 			known_objs["standing_need_type"] = standing.get("need_type", "")
+		var active_case: Dictionary = char_objs.get("active_case", primary.get("active_case", {}))
+		if not active_case.is_empty():
+			known_objs["active_case"] = active_case
 		ws["known_objectives"] = known_objs
 		var loc: int = int(c.physical_location) if c.physical_location.is_valid_int() else -1
 		if besieged_settlements.has(loc):

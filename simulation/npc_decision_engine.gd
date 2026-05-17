@@ -1729,6 +1729,11 @@ static func _populate_action_metadata(
 			"disclose_about_id": about_id,
 			"disclosed_opinion": opinion,
 		}
+	elif option.action_id == "EXAMINE_CRIME_SCENE":
+		var active_case: Dictionary = ctx.known_objectives.get("active_case", {})
+		option.metadata = {
+			"case_id": active_case.get("case_id", -1),
+		}
 	elif option.action_id == "EXAMINE_LETTER":
 		option.metadata = {
 			"letter_id": need.target_settlement_id if need.target_settlement_id >= 0 else -1,

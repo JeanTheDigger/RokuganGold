@@ -50,9 +50,7 @@ const ADMINISTRATIVE_ACTIONS: Array[String] = [
 	"RESTORE_COUNCIL_COMPACT",
 ]
 
-const INTELLIGENCE_ACTIONS: Array[String] = [
-	"EXAMINE_CRIME_SCENE",
-]
+const INTELLIGENCE_ACTIONS: Array[String] = []
 
 const SELF_ACTIONS: Array[String] = [
 	"TRAIN", "MEDITATE", "REST", "DO_NOTHING", "CRAFT",
@@ -95,6 +93,7 @@ static func execute(
 	characters_by_id: Dictionary = {},
 	worship_province_malus: Dictionary = {},
 	doshin_bonus: int = 0,
+	crime_records: Array[CrimeRecord] = [],
 ) -> Dictionary:
 	var action_id: String = action.action_id
 
@@ -238,6 +237,9 @@ static func execute(
 
 	if action_id == "PURIFY_TAINTED_GROUND":
 		return _execute_purify_tainted_ground(action, character, ctx, dice_engine)
+
+	if action_id == "EXAMINE_CRIME_SCENE":
+		return _execute_examine_crime_scene(action, character, ctx, dice_engine, crime_records)
 
 	if action_id == "EXAMINE_LETTER":
 		return _execute_examine_letter(action, character, ctx)
@@ -2035,20 +2037,69 @@ static func _validate_military_order(
 	return {"valid": true}
 
 
+# -- EXAMINE_CRIME_SCENE (s57.15, s11.3.13) ------------------------------------
+
+static func _execute_examine_crime_scene(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	dice_engine: DiceEngine,
+	crime_records: Array[CrimeRecord],
+) -> Dictionary:
+	var case_id: int = action.metadata.get("case_id", -1)
+	var record: CrimeRecord = _find_crime_record(case_id, crime_records)
+
+	if record == null:
+		return {
+			"success": false,
+			"action_id": "EXAMINE_CRIME_SCENE",
+			"character_id": character.character_id,
+			"target_npc_id": action.target_npc_id,
+			"target_province_id": action.target_province_id,
+			"ic_day": ctx.ic_day,
+			"season": ctx.season,
+			"reason": "no_crime_record",
+			"effects": {},
+		}
+
+	var exam_result: Dictionary = InvestigationSystem.examine_scene(
+		character, record, dice_engine, ctx.ic_day
+	)
+
+	return {
+		"success": exam_result.get("success", false),
+		"action_id": "EXAMINE_CRIME_SCENE",
+		"character_id": character.character_id,
+		"target_npc_id": action.target_npc_id,
+		"target_province_id": action.target_province_id,
+		"ic_day": ctx.ic_day,
+		"season": ctx.season,
+		"effects": {
+			"effect": "scene_examined",
+			"case_id": case_id,
+			"evidence_gained": exam_result.get("evidence_gained", 0),
+			"suspect_found": exam_result.get("suspect_found", -1),
+			"raises": exam_result.get("raises", 0),
+			"threshold_crossed": exam_result.get("threshold_crossed", ""),
+		},
+	}
+
+
+static func _find_crime_record(
+	case_id: int,
+	crime_records: Array[CrimeRecord],
+) -> CrimeRecord:
+	if case_id < 0:
+		return null
+	for record: CrimeRecord in crime_records:
+		if record.case_id == case_id:
+			return record
+	return null
+
+
 # -- Intelligence Effects (s57.15) --------------------------------------------
 
-static func _compute_intelligence_effects(action_id: String, margin: int) -> Dictionary:
-	match action_id:
-		"EXAMINE_CRIME_SCENE":
-			var raises: int = int(margin / 5.0)
-			var evidence: int = InvestigationSystem.EVIDENCE_BASE_WEIGHT \
-				+ (raises * InvestigationSystem.EVIDENCE_PER_RAISE)
-			return {
-				"effect": "scene_examined",
-				"info_gained": true,
-				"evidence_gained": evidence,
-				"raises": raises,
-			}
+static func _compute_intelligence_effects(action_id: String, _margin: int) -> Dictionary:
 	return {"effect": "intelligence_action"}
 
 
