@@ -593,3 +593,33 @@ static func generate_accusation_topic(
 	topic.slug = "accusation_%d" % record.case_id
 	topic.subject_role = "PERPETRATOR"
 	return topic
+
+
+static func generate_investigation_opened_topic(
+	record: CrimeRecord,
+	magistrate: L5RCharacterData,
+	next_topic_id: Array[int],
+	ic_day: int,
+) -> TopicData:
+	var crime_name: String = CRIME_TYPE_NAMES.get(record.crime_type, "Crime")
+	var title: String = "Investigation opened: %s at %s" % [crime_name, record.location]
+
+	var topic_id: int = next_topic_id[0]
+	next_topic_id[0] = topic_id + 1
+
+	var topic: TopicData = TopicMomentumSystem.create_topic(
+		topic_id,
+		title,
+		TopicData.Tier.TIER_4,
+		TopicData.Category.LEGAL,
+		ic_day,
+		10.0,
+		[],
+		magistrate.clan,
+		"",
+		-1,
+		"crime",
+		"investigation_opened",
+	)
+	topic.slug = "investigation_%d" % record.case_id
+	return topic

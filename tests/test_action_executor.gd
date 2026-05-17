@@ -1110,3 +1110,58 @@ func test_probe_success_includes_quality() -> void:
 	if result["success"]:
 		assert_true(result["effects"].has("quality"))
 		assert_true(result["effects"]["quality"] >= 1)
+
+
+# -- Bribe Attempt Resolution --------------------------------------------------
+
+func test_bribe_attempt_resolves_with_target():
+	var magistrate := L5RCharacterData.new()
+	magistrate.character_id = 20
+	magistrate.character_name = "Magistrate Kitsuki"
+	magistrate.skills = {"Etiquette": 4}
+	magistrate.emphases = {}
+	magistrate.willpower = 4
+	magistrate.honor = 7.0
+	magistrate.wounds_taken = 0
+	var chars: Dictionary = {1: _character, 20: magistrate}
+
+	_character.skills["Temptation"] = 3
+	_character.awareness = 3
+	_dice_engine.set_seed(42)
+
+	var action := _make_action("BRIBE_FOR_INFO", 20)
+	action.metadata = {"suppress_case": true, "magistrate_id": 20}
+
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map, {}, chars
+	)
+	assert_eq(result["action_id"], "BRIBE_FOR_INFO")
+	assert_true(result.has("success"))
+	assert_true(result["effects"].has("suppress_case"))
+	assert_eq(result["effects"]["magistrate_id"], 20)
+
+
+func test_bribe_attempt_high_honor_magistrate_resists():
+	var magistrate := L5RCharacterData.new()
+	magistrate.character_id = 20
+	magistrate.character_name = "Honest Magistrate"
+	magistrate.skills = {"Etiquette": 5}
+	magistrate.emphases = {}
+	magistrate.willpower = 5
+	magistrate.honor = 9.0
+	magistrate.wounds_taken = 0
+	var chars: Dictionary = {1: _character, 20: magistrate}
+
+	_character.skills["Temptation"] = 1
+	_character.awareness = 2
+	_dice_engine.set_seed(1)
+
+	var action := _make_action("BRIBE_FOR_INFO", 20)
+	action.metadata = {"suppress_case": true}
+
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map, {}, chars
+	)
+	assert_eq(result["action_id"], "BRIBE_FOR_INFO")
+	assert_false(result["success"])
+	assert_true(result["effects"].get("detection_risk", false))

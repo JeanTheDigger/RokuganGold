@@ -292,6 +292,18 @@ func test_resolve_goal_reactive_takes_priority() -> void:
 	assert_eq(need.priority, 1)
 
 
+func test_resolve_goal_bribery_eval_decomposes_to_suppress() -> void:
+	_world_state["pending_events"] = [
+		{"type": "bribery_eval", "case_id": 5, "evidence_total": 28, "magistrate_id": 99}
+	]
+	var ctx := NPCDecisionEngine.build_context(_char, _world_state)
+	var need := NPCDecisionEngine.resolve_goal(_char, ctx, _objectives)
+	assert_eq(need.need_type, "SUPPRESS_INVESTIGATION")
+	assert_eq(need.target_npc_id, 99)
+	assert_eq(need.source, "bribery_eval")
+	assert_eq(int(need.threshold), 28)
+
+
 func test_resolve_goal_standing_fallback() -> void:
 	var objectives_no_primary: Dictionary = {
 		"standing": {"need_type": "SEEK_GLORY", "priority": 3},

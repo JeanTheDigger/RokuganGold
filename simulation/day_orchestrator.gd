@@ -448,6 +448,10 @@ static func advance_day(
 	var uphold_law_results: Array[Dictionary] = _process_uphold_law_scan(
 		characters, objectives_map, crime_records, active_topics
 	)
+	_generate_investigation_opened_topics(
+		uphold_law_results, crime_records, characters_by_id,
+		active_topics, next_topic_id, ic_day,
+	)
 
 	var lord_map: Dictionary = _build_lord_map(characters)
 	var conviction_results: Array[Dictionary] = ConvictionProcessor.process_accused_cases(
@@ -876,6 +880,7 @@ static func _inject_bribery_eval_event(
 			"type": "bribery_eval",
 			"case_id": record.case_id,
 			"evidence_total": record.evidence_total,
+			"magistrate_id": record.investigating_magistrate_id,
 		})
 		perp_ws["pending_events"] = events
 		world_states[record.perpetrator_id] = perp_ws
@@ -2340,6 +2345,7 @@ static func _inject_bribery_eval_event_by_case(
 				"type": "bribery_eval",
 				"case_id": case_id,
 				"evidence_total": record.evidence_total,
+				"magistrate_id": record.investigating_magistrate_id,
 			})
 			ws["pending_events"] = pending
 			world_states[perp_id] = ws
@@ -2452,6 +2458,7 @@ static func handle_evidence_threshold(
 			"type": "bribery_eval",
 			"case_id": record.case_id,
 			"evidence_total": record.evidence_total,
+			"magistrate_id": record.investigating_magistrate_id,
 		})
 		ws["pending_events"] = pending
 		world_states[perp_id] = ws
@@ -2605,7 +2612,38 @@ static func _process_crime_detection(
 			"witness_count": witnesses.size(),
 		})
 
+		if action_id == "BRIBE_FOR_INFO" and effects.get("suppress_case", false):
+			_apply_failed_bribe_evidence(
+				crime_records, char_id, characters_by_id,
+				active_topics, next_topic_id, ic_day, world_states
+			)
+
 	return crime_results
+
+
+static func _apply_failed_bribe_evidence(
+	crime_records: Array[CrimeRecord],
+	briber_id: int,
+	characters_by_id: Dictionary,
+	active_topics: Array[TopicData],
+	next_topic_id: Array[int],
+	ic_day: int,
+	world_states: Dictionary,
+) -> void:
+	for record: CrimeRecord in crime_records:
+		if record.perpetrator_id != briber_id:
+			continue
+		if record.legal_status == Enums.LegalStatus.DECREED_GUILTY:
+			continue
+		if record.legal_status == Enums.LegalStatus.ACQUITTED:
+			continue
+		var threshold: String = InvestigationSystem.add_failed_bribe_evidence(record)
+		if not threshold.is_empty():
+			handle_evidence_threshold(
+				threshold, record, characters_by_id,
+				active_topics, next_topic_id, ic_day, world_states
+			)
+		return
 
 
 static func _is_character_in_battle(
@@ -2744,6 +2782,36 @@ static func _process_uphold_law_scan(
 			})
 
 	return results
+
+
+static func _generate_investigation_opened_topics(
+	uphold_law_results: Array[Dictionary],
+	crime_records: Array[CrimeRecord],
+	characters_by_id: Dictionary,
+	active_topics: Array[TopicData],
+	next_topic_id: Array[int],
+	ic_day: int,
+) -> void:
+	for result: Dictionary in uphold_law_results:
+		var magistrate_id: int = result.get("magistrate_id", -1)
+		var case_id: int = result.get("case_id", -1)
+		if magistrate_id < 0 or case_id < 0:
+			continue
+		var magistrate: L5RCharacterData = characters_by_id.get(magistrate_id)
+		if magistrate == null:
+			continue
+		var record: CrimeRecord = null
+		for r: CrimeRecord in crime_records:
+			if r.case_id == case_id:
+				record = r
+				break
+		if record == null:
+			continue
+		var topic: TopicData = InvestigationSystem.generate_investigation_opened_topic(
+			record, magistrate, next_topic_id, ic_day
+		)
+		if topic != null:
+			active_topics.append(topic)
 
 
 # -- Witness PROBE Evidence (s11.3.13e) ----------------------------------------

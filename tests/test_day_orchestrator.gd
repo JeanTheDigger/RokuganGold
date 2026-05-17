@@ -3306,3 +3306,108 @@ func test_handle_evidence_threshold_bribery_eval() -> void:
 	assert_eq(pending.size(), 1)
 	assert_eq(pending[0]["type"], "bribery_eval")
 	assert_eq(pending[0]["case_id"], 33)
+
+
+func test_failed_bribe_adds_evidence_to_existing_case() -> void:
+	var briber := L5RCharacterData.new()
+	briber.character_id = 5
+	briber.character_name = "Guilty Briber"
+	briber.clan = "Scorpion"
+	briber.family = "Bayushi"
+	briber.lord_id = 10
+	briber.legal_cases = []
+
+	var lord := L5RCharacterData.new()
+	lord.character_id = 10
+	lord.topic_pool = [] as Array[int]
+
+	var record := CrimeRecord.new()
+	record.case_id = 50
+	record.crime_type = Enums.CrimeType.SKIMMING
+	record.perpetrator_id = 5
+	record.evidence_total = 20
+	record.legal_status = Enums.LegalStatus.UNDER_INVESTIGATION
+
+	var crime_records: Array[CrimeRecord] = [record]
+	var characters_by_id: Dictionary = {5: briber, 10: lord}
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [1000]
+	var world_states: Dictionary = {}
+
+	DayOrchestrator._apply_failed_bribe_evidence(
+		crime_records, 5, characters_by_id,
+		active_topics, next_topic_id, 100, world_states,
+	)
+
+	assert_eq(record.evidence_total, 35)
+
+
+func test_failed_bribe_triggers_accusation_if_threshold_crossed() -> void:
+	var briber := L5RCharacterData.new()
+	briber.character_id = 5
+	briber.character_name = "Caught Briber"
+	briber.clan = "Scorpion"
+	briber.family = "Bayushi"
+	briber.lord_id = 10
+	briber.legal_cases = []
+
+	var lord := L5RCharacterData.new()
+	lord.character_id = 10
+	lord.topic_pool = [] as Array[int]
+
+	var record := CrimeRecord.new()
+	record.case_id = 51
+	record.crime_type = Enums.CrimeType.SKIMMING
+	record.perpetrator_id = 5
+	record.evidence_total = 30
+	record.legal_status = Enums.LegalStatus.UNDER_INVESTIGATION
+
+	var crime_records: Array[CrimeRecord] = [record]
+	var characters_by_id: Dictionary = {5: briber, 10: lord}
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [1000]
+	var world_states: Dictionary = {}
+
+	DayOrchestrator._apply_failed_bribe_evidence(
+		crime_records, 5, characters_by_id,
+		active_topics, next_topic_id, 100, world_states,
+	)
+
+	assert_eq(record.evidence_total, 45)
+	assert_eq(record.legal_status, Enums.LegalStatus.ACCUSED)
+	assert_eq(active_topics.size(), 1)
+	assert_eq(active_topics[0].topic_id, 1000)
+
+
+func test_investigation_opened_topic_generated() -> void:
+	var magistrate := L5RCharacterData.new()
+	magistrate.character_id = 7
+	magistrate.character_name = "Kitsuki Shin"
+	magistrate.clan = "Dragon"
+	magistrate.family = "Kitsuki"
+
+	var record := CrimeRecord.new()
+	record.case_id = 60
+	record.crime_type = Enums.CrimeType.VIOLENCE
+	record.perpetrator_id = 3
+	record.location = "castle_lion"
+
+	var crime_records: Array[CrimeRecord] = [record]
+	var characters_by_id: Dictionary = {7: magistrate}
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [500]
+
+	var uphold_law_results: Array[Dictionary] = [
+		{"magistrate_id": 7, "case_id": 60}
+	]
+
+	DayOrchestrator._generate_investigation_opened_topics(
+		uphold_law_results, crime_records, characters_by_id,
+		active_topics, next_topic_id, 50,
+	)
+
+	assert_eq(active_topics.size(), 1)
+	assert_eq(active_topics[0].topic_id, 500)
+	assert_eq(active_topics[0].tier, TopicData.Tier.TIER_4)
+	assert_eq(active_topics[0].category, TopicData.Category.LEGAL)
+	assert_eq(active_topics[0].slug, "investigation_60")

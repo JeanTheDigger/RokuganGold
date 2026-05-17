@@ -529,17 +529,31 @@ static func _decompose_reactive_event(
 	event: Variant,
 	_ctx: NPCDataStructures.ContextSnapshot,
 ) -> NPCDataStructures.ImmediateNeed:
-	if event is Dictionary and event.has("need_type"):
+	if not event is Dictionary:
+		return null
+	var ev: Dictionary = event as Dictionary
+
+	if ev.has("need_type"):
 		var need := NPCDataStructures.ImmediateNeed.new()
-		need.need_type = event["need_type"]
-		need.priority = event.get("priority", 1)
-		need.target_npc_id = event.get("target_npc_id", -1)
-		need.target_npc_id_secondary = event.get("target_npc_id_secondary", -1)
-		need.target_settlement_id = event.get("target_settlement_id", -1)
-		need.target_province_id = event.get("target_province_id", -1)
-		need.target_clan_id = event.get("target_clan_id", "")
-		need.source = event.get("source", "reactive")
+		need.need_type = ev["need_type"]
+		need.priority = ev.get("priority", 1)
+		need.target_npc_id = ev.get("target_npc_id", -1)
+		need.target_npc_id_secondary = ev.get("target_npc_id_secondary", -1)
+		need.target_settlement_id = ev.get("target_settlement_id", -1)
+		need.target_province_id = ev.get("target_province_id", -1)
+		need.target_clan_id = ev.get("target_clan_id", "")
+		need.source = ev.get("source", "reactive")
 		return need
+
+	if ev.get("type", "") == "bribery_eval":
+		var need := NPCDataStructures.ImmediateNeed.new()
+		need.need_type = "SUPPRESS_INVESTIGATION"
+		need.priority = 2
+		need.source = "bribery_eval"
+		need.target_npc_id = ev.get("magistrate_id", -1)
+		need.threshold = float(ev.get("evidence_total", 0))
+		return need
+
 	return null
 
 
@@ -1729,6 +1743,12 @@ static func _populate_action_metadata(
 			"disclose_about_id": about_id,
 			"disclosed_opinion": opinion,
 		}
+	elif option.action_id == "BRIBE_FOR_INFO" and need.source == "bribery_eval":
+		option.metadata = {
+			"suppress_case": true,
+			"magistrate_id": need.target_npc_id,
+		}
+		option.target_npc_id = need.target_npc_id
 	elif option.action_id == "EXAMINE_CRIME_SCENE":
 		var active_case: Dictionary = ctx.known_objectives.get("active_case", {})
 		option.metadata = {

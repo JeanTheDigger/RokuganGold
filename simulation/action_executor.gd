@@ -960,6 +960,12 @@ static func _try_execute_covert(
 			var r: Dictionary = SecretSystem.resolve_forge_order(character, auth_level, dice_engine)
 			return _build_covert_result(action, ctx, "Forgery", r)
 
+		"BRIBE_FOR_INFO":
+			if target == null:
+				return {}
+			var r: Dictionary = _resolve_bribe_attempt(character, target, action, dice_engine)
+			return _build_covert_result(action, ctx, "Temptation", r)
+
 		"FABRICATE_SECRET":
 			var severity: SecretData.Severity = action.metadata.get("severity", SecretData.Severity.TIER_3)
 			var secret_id: int = action.metadata.get("secret_id", -1)
@@ -1006,6 +1012,41 @@ static func _build_covert_result(
 		"tn": system_result.get("tn", 0),
 		"margin": system_result.get("margin", 0),
 		"effects": effects,
+	}
+
+
+static func _resolve_bribe_attempt(
+	briber: L5RCharacterData,
+	magistrate: L5RCharacterData,
+	action: NPCDataStructures.ScoredAction,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	var temptation: int = briber.skills.get("Temptation", 0)
+	var awareness: int = briber.awareness if briber.awareness > 0 else 2
+	var rolled: int = maxi(temptation + awareness, 1)
+	var kept: int = maxi(awareness, 1)
+	var attack_result: Dictionary = dice_engine.roll_and_keep(rolled, kept)
+	var attack_total: int = attack_result.get("total", 0)
+
+	var etiquette: int = magistrate.skills.get("Etiquette", 0)
+	var willpower: int = magistrate.willpower if magistrate.willpower > 0 else 2
+	var honor_bonus: int = HonorGlorySystem.get_honor_rank(magistrate) * 5
+	var def_rolled: int = maxi(etiquette + willpower, 1)
+	var def_kept: int = maxi(willpower, 1)
+	var defense_result: Dictionary = dice_engine.roll_and_keep(def_rolled, def_kept)
+	var defense_total: int = defense_result.get("total", 0) + honor_bonus
+
+	var success: bool = attack_total > defense_total
+	var suppress_case: bool = action.metadata.get("suppress_case", false)
+
+	return {
+		"success": success,
+		"roll_total": attack_total,
+		"tn": defense_total,
+		"margin": attack_total - defense_total,
+		"detection_risk": not success,
+		"suppress_case": suppress_case,
+		"magistrate_id": magistrate.character_id,
 	}
 
 
