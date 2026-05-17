@@ -650,6 +650,11 @@
     "TRAIN": 45,
     "WRITE_LETTER": 40
   },
+  "SEEK_MAGISTRATE": {
+    "BEGIN_TRAVEL": 90,
+    "DO_NOTHING": 0,
+    "WRITE_LETTER": 80
+  },
   "SEEK_PEACE": {
     "ARRANGE_MARRIAGE": 80,
     "CALL_COURT": 65,

@@ -4670,6 +4670,7 @@ func test_intimidate_witness_failure_injects_report_event() -> void:
 	record.perpetrator_id = 5
 	record.witnesses = [20] as Array[int]
 	record.evidence_total = 10
+	record.investigating_magistrate_id = 30
 
 	var crime_records: Array[CrimeRecord] = [record]
 	var characters_by_id: Dictionary = {20: witness}
@@ -4703,6 +4704,7 @@ func test_intimidate_witness_failure_injects_report_event() -> void:
 	assert_eq(events[0]["type"], "witness_report_motivated")
 	assert_eq(events[0]["criminal_id"], 5)
 	assert_eq(events[0]["case_id"], 351)
+	assert_eq(events[0]["magistrate_id"], 30)
 
 
 # -- Criminal Recall ---

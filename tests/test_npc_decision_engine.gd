@@ -1864,3 +1864,29 @@ func test_seppuku_generates_accept_refuse_options() -> void:
 	assert_true("ACCEPT_SEPPUKU" in action_ids)
 	assert_true("REFUSE_SEPPUKU" in action_ids)
 	assert_eq(action_ids.size(), 2)
+
+
+func test_witness_report_motivated_reactive_event() -> void:
+	_world_state["pending_events"] = [
+		{"type": "witness_report_motivated", "criminal_id": 99, "case_id": 42, "magistrate_id": 30}
+	]
+	var ctx := NPCDecisionEngine.build_context(_char, _world_state)
+	var need := NPCDecisionEngine.resolve_goal(_char, ctx, _objectives)
+	assert_eq(need.need_type, "SEEK_MAGISTRATE")
+	assert_eq(need.priority, 2)
+	assert_eq(need.source, "witness_report_motivated")
+	assert_eq(need.target_npc_id, 30)
+	assert_eq(need.target_npc_id_secondary, 99)
+	assert_eq(need.target_intent, "case_42")
+
+
+func test_provocation_reactive_event() -> void:
+	_world_state["pending_events"] = [
+		{"type": "provocation", "source_id": 5, "case_id": 10, "action": "INTIMIDATE_WITNESS"}
+	]
+	var ctx := NPCDecisionEngine.build_context(_char, _world_state)
+	var need := NPCDecisionEngine.resolve_goal(_char, ctx, _objectives)
+	assert_eq(need.need_type, "REST")
+	assert_eq(need.priority, 3)
+	assert_eq(need.source, "provocation_received")
+	assert_eq(need.target_npc_id, 5)

@@ -575,6 +575,24 @@ static func _decompose_reactive_event(
 		need.target_intent = "case_%d" % ev.get("case_id", -1)
 		return need
 
+	if ev.get("type", "") == "witness_report_motivated":
+		var need := NPCDataStructures.ImmediateNeed.new()
+		need.need_type = "SEEK_MAGISTRATE"
+		need.priority = 2
+		need.source = "witness_report_motivated"
+		need.target_npc_id = ev.get("magistrate_id", -1)
+		need.target_npc_id_secondary = ev.get("criminal_id", -1)
+		need.target_intent = "case_%d" % ev.get("case_id", -1)
+		return need
+
+	if ev.get("type", "") == "provocation":
+		var need := NPCDataStructures.ImmediateNeed.new()
+		need.need_type = "REST"
+		need.priority = 3
+		need.source = "provocation_received"
+		need.target_npc_id = ev.get("source_id", -1)
+		return need
+
 	return null
 
 
@@ -1782,6 +1800,20 @@ static func _populate_action_metadata(
 	elif option.action_id in ["ACCEPT_SEPPUKU", "REFUSE_SEPPUKU"] and need.source == "seppuku_offered":
 		var case_id_str: String = need.target_intent.replace("case_", "")
 		option.metadata = {"case_id": case_id_str.to_int()}
+	elif option.action_id == "BEGIN_TRAVEL" and need.source == "witness_report_motivated":
+		var mag_id: int = need.target_npc_id
+		var mag_loc: Variant = ctx.known_npc_locations.get(mag_id, "")
+		if mag_loc is String and not (mag_loc as String).is_empty():
+			option.target_settlement_id = (mag_loc as String).to_int() if (mag_loc as String).is_valid_int() else -1
+			option.metadata = {"destination": mag_loc, "seek_magistrate_id": mag_id}
+		else:
+			option.objective_alignment = 0.0
+	elif option.action_id == "WRITE_LETTER" and need.source == "witness_report_motivated":
+		option.target_npc_id = need.target_npc_id
+		option.metadata = {
+			"report_case_id": need.target_intent.replace("case_", "").to_int(),
+			"report_criminal_id": need.target_npc_id_secondary,
+		}
 	elif option.action_id == "EXAMINE_CRIME_SCENE":
 		var active_case: Dictionary = ctx.known_objectives.get("active_case", {})
 		option.metadata = {

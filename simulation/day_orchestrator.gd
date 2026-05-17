@@ -3442,7 +3442,8 @@ static func _process_witness_tampering_writebacks(
 					)
 				if action_id == "INTIMIDATE_WITNESS":
 					_inject_witness_report_event(
-						witness_id, criminal_id, record.case_id, world_states,
+						witness_id, criminal_id, record.case_id,
+						record.investigating_magistrate_id, world_states,
 					)
 			break
 
@@ -3477,6 +3478,7 @@ static func _inject_witness_report_event(
 	witness_id: int,
 	criminal_id: int,
 	case_id: int,
+	magistrate_id: int,
 	world_states: Dictionary,
 ) -> void:
 	var witness_ws: Dictionary = world_states.get(witness_id, {})
@@ -3485,6 +3487,7 @@ static func _inject_witness_report_event(
 		"type": "witness_report_motivated",
 		"criminal_id": criminal_id,
 		"case_id": case_id,
+		"magistrate_id": magistrate_id,
 	})
 	witness_ws["pending_events"] = events
 	world_states[witness_id] = witness_ws
