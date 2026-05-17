@@ -257,7 +257,7 @@ static func advance_day(
 		day_result.get("results", []),
 		crime_records, characters_by_id,
 		active_topics, next_topic_id, ic_day, world_states,
-		active_secrets, next_secret_id, next_case_id,
+		active_secrets, next_secret_id, next_case_id, dice_engine,
 	)
 
 	_process_witness_report_letter_writebacks(
@@ -3382,6 +3382,7 @@ static func _process_witness_tampering_writebacks(
 	active_secrets: Array[SecretData] = [],
 	next_secret_id: Array[int] = [1],
 	next_case_id: Array[int] = [1],
+	dice_engine: DiceEngine = null,
 ) -> void:
 	for result: Variant in results:
 		if not result is Dictionary:
@@ -3426,17 +3427,37 @@ static func _process_witness_tampering_writebacks(
 					)
 				elif action_id == "KILL_WITNESS":
 					var kill_concealment: int = effects.get("concealment_tn", 0)
+					var victim: L5RCharacterData = characters_by_id.get(witness_id)
+					var victim_loc: String = victim.physical_location if victim != null else ""
+					var kill_location: String = victim_loc if not victim_loc.is_empty() else record.location
+					var kill_witnesses: Array[int] = _get_witnesses_at_location(
+						criminal_id, kill_location, characters_by_id, world_states,
+					)
+					kill_witnesses.erase(witness_id)
 					var murder_record: CrimeRecord = CrimeSystem.create_crime_record(
 						next_case_id[0],
 						Enums.CrimeType.UNSANCTIONED_COVERT_KILLING,
 						criminal_id,
-						record.location,
+						kill_location,
 						ic_day,
 						witness_id,
 						kill_concealment,
+						kill_witnesses,
 					)
 					next_case_id[0] += 1
 					crime_records.append(murder_record)
+					var criminal: L5RCharacterData = characters_by_id.get(criminal_id)
+					if criminal != null:
+						var murder_topic: TopicData = _create_crime_topic(
+							murder_record, criminal, ic_day, next_topic_id,
+						)
+						if murder_topic != null:
+							active_topics.append(murder_topic)
+							_seed_crime_topic_to_knowers(murder_topic, murder_record, characters_by_id)
+						if dice_engine != null:
+							_apply_criminal_recall(
+								criminal, murder_record, kill_witnesses, dice_engine, world_states,
+							)
 			else:
 				var evidence_add: int = effects.get("evidence_on_fail", 10)
 				record.evidence_total += evidence_add

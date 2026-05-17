@@ -4614,6 +4614,65 @@ func test_kill_witness_removes_and_creates_murder_record() -> void:
 	assert_eq(murder.location, "scorpion_province")
 
 
+func test_kill_witness_generates_murder_topic_and_seeds_witnesses() -> void:
+	var criminal := L5RCharacterData.new()
+	criminal.character_id = 5
+	criminal.character_name = "Killer"
+	criminal.clan = "Scorpion"
+	criminal.intelligence = 3
+	criminal.physical_location = "bayushi_city"
+
+	var victim := L5RCharacterData.new()
+	victim.character_id = 20
+	victim.character_name = "Victim Witness"
+	victim.physical_location = "bayushi_city"
+
+	var bystander := L5RCharacterData.new()
+	bystander.character_id = 30
+	bystander.character_name = "Bystander"
+	bystander.physical_location = "bayushi_city"
+
+	var record := CrimeRecord.new()
+	record.case_id = 310
+	record.perpetrator_id = 5
+	record.witnesses = [20] as Array[int]
+	record.evidence_total = 10
+	record.location = "scorpion_province"
+
+	var crime_records: Array[CrimeRecord] = [record]
+	var characters_by_id: Dictionary = {5: criminal, 20: victim, 30: bystander}
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [7000]
+	var world_states: Dictionary = {}
+	var active_secrets: Array[SecretData] = []
+	var next_secret_id: Array[int] = [200]
+	var next_case_id: Array[int] = [500]
+
+	var results: Array = [{
+		"action_id": "KILL_WITNESS",
+		"success": true,
+		"character_id": 5,
+		"target_npc_id": 20,
+		"effects": {"effect": "witness_killed", "witness_id": 20, "concealment_tn": 22},
+	}]
+
+	DayOrchestrator._process_witness_tampering_writebacks(
+		results, crime_records, characters_by_id,
+		active_topics, next_topic_id, 100, world_states,
+		active_secrets, next_secret_id, next_case_id, _dice,
+	)
+
+	assert_eq(crime_records.size(), 2)
+	var murder: CrimeRecord = crime_records[1]
+	assert_eq(murder.location, "bayushi_city")
+	assert_eq(murder.witnesses, [30] as Array[int])
+	assert_eq(active_topics.size(), 1)
+	assert_eq(active_topics[0].slug, "crime_case_500")
+	assert_eq(active_topics[0].topic_type, "crime")
+	assert_true(bystander.topic_pool.has(active_topics[0].topic_id))
+	assert_eq(next_topic_id[0], 7001)
+
+
 func test_intimidate_witness_success_applies_disposition_penalty() -> void:
 	var criminal := L5RCharacterData.new()
 	criminal.character_id = 5
