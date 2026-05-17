@@ -822,6 +822,15 @@ static func advance_day(
 		active_topics, next_topic_id,
 	)
 
+	# OOC Day Tick — fires every 4 IC days (one real-world day, per GDD s13 /
+	# s57.44.2). Runs Wind-Down selection and Void Point refresh for all
+	# living characters.
+	var ooc_tick_results: Array[Dictionary] = []
+	if ic_day % TimeSystem.TICKS_PER_REAL_DAY == 0:
+		ooc_tick_results = _process_ooc_day_tick(
+			characters, characters_by_id, settlements, dice_engine, worship_state,
+		)
+
 	return {
 		"ic_day": ic_day,
 		"season": current_season,
@@ -907,6 +916,7 @@ static func advance_day(
 		"civil_war_results": civil_war_results_seasonal,
 		"koku_flow_results": koku_flow_results,
 		"stipend_topic_results": stipend_topic_results,
+		"ooc_tick_results": ooc_tick_results,
 	}
 
 
@@ -918,6 +928,157 @@ static func _reset_all_ap(characters: Array[L5RCharacterData]) -> void:
 		c.civilian_orders_remaining = c.civilian_order_budget_max
 		c.passage_request_count_today = 0
 		c.pieces_seen.erase("_performance_count_today")
+
+
+# -- OOC Day Tick --------------------------------------------------------------
+
+static func _process_ooc_day_tick(
+	characters: Array[L5RCharacterData],
+	characters_by_id: Dictionary,
+	settlements: Array[SettlementData],
+	dice_engine: DiceEngine,
+	worship_state: Dictionary,
+) -> Array[Dictionary]:
+	## Runs Wind-Down selection and Void Point refresh once per OOC day (every
+	## 4 IC days) per GDD s57.44.2 and s57.32.2.
+
+	var results: Array[Dictionary] = []
+
+	# Build fast settlement lookup and location → character IDs map.
+	var settlements_by_id: Dictionary = {}
+	for s: SettlementData in settlements:
+		settlements_by_id[s.settlement_id] = s
+	var empty_settlement: SettlementData = SettlementData.new()
+
+	var loc_to_chars: Dictionary = {}
+	for c: L5RCharacterData in characters:
+		if CharacterStats.is_dead(c):
+			continue
+		var loc: String = c.physical_location
+		if not loc_to_chars.has(loc):
+			loc_to_chars[loc] = []
+		(loc_to_chars[loc] as Array).append(c.character_id)
+
+	for c: L5RCharacterData in characters:
+		if CharacterStats.is_dead(c):
+			continue
+
+		# Resolve settlement for this character.
+		var settlement: SettlementData = empty_settlement
+		if c.physical_location.is_valid_int():
+			var sid: int = int(c.physical_location)
+			if settlements_by_id.has(sid):
+				settlement = settlements_by_id[sid] as SettlementData
+
+		# Characters at the same location (excluding self).
+		var loc_ids: Array = loc_to_chars.get(c.physical_location, [])
+		var present_ids: Array[int] = []
+		for pid: int in loc_ids:
+			if pid != c.character_id:
+				present_ids.append(pid)
+
+		var companion_present: bool = not present_ids.is_empty()
+
+		# NPC wind-down selection (auto). PC UI override is a future feature.
+		var available: Array[WindDownSystem.Method] = \
+			WindDownSystem.get_available_methods(c, settlement, companion_present)
+		var method: WindDownSystem.Method = \
+			WindDownSystem.select_npc_method(c, available, dice_engine)
+
+		# Fortune for shrine/temple WP contribution — prefer dedicated fortune.
+		var fortune_id: int = -1
+		for wl: Dictionary in settlement.worship_locations:
+			if wl.get("type", "") in ["shrine", "temple", "shinden", "local_shrine", "village_shrine"]:
+				fortune_id = wl.get("fortune", -1)
+				if fortune_id != -1:
+					break
+
+		# Go parlor opponent — pick a random present character.
+		var go_opponent: Dictionary = {}
+		if method == WindDownSystem.Method.GO_PARLOR and not present_ids.is_empty():
+			var opp_id: int = present_ids[dice_engine.rand_int_range(0, present_ids.size() - 1)]
+			if characters_by_id.has(opp_id):
+				var opp: L5RCharacterData = characters_by_id[opp_id] as L5RCharacterData
+				go_opponent = {
+					"id": opp_id,
+					"intelligence": opp.intelligence,
+					"games_rank": SkillResolver.get_skill_rank(opp, "Games: Go"),
+				}
+
+		# Tea house companion — pick a random present character.
+		var companion_id: int = -1
+		if method == WindDownSystem.Method.TEA_HOUSE and not present_ids.is_empty():
+			companion_id = present_ids[dice_engine.rand_int_range(0, present_ids.size() - 1)]
+
+		var wind_result: Dictionary = WindDownSystem.apply_wind_down(
+			c, method, dice_engine, present_ids, companion_id, go_opponent, fortune_id,
+		)
+
+		# Void Point refresh per s57.32.2 — gated on rested_last_night.
+		if c.rested_last_night:
+			c.current_void_points = ceili(c.max_void_points * c.wind_down_void_modifier)
+
+		# Honor and Glory changes.
+		if wind_result["honor_change"] != 0.0:
+			HonorGlorySystem.apply_honor_change(c, wind_result["honor_change"])
+		if wind_result["glory_change"] != 0.0:
+			HonorGlorySystem.apply_glory_change(c, wind_result["glory_change"])
+
+		# Disposition changes — mutual gain, clamped to [-100, 100].
+		for change: Dictionary in wind_result["disposition_changes"]:
+			var target_id: int = change["target_id"]
+			var delta: int = change["delta"]
+			var self_old: int = c.disposition_values.get(target_id, 0)
+			c.disposition_values[target_id] = clampi(self_old + delta, -100, 100)
+			if characters_by_id.has(target_id):
+				var target: L5RCharacterData = characters_by_id[target_id] as L5RCharacterData
+				var other_old: int = target.disposition_values.get(c.character_id, 0)
+				target.disposition_values[c.character_id] = clampi(other_old + delta, -100, 100)
+
+		# met_characters — add newly met characters.
+		for met_id: int in wind_result["met_character_ids"]:
+			if not c.met_characters.has(met_id):
+				c.met_characters.append(met_id)
+			if characters_by_id.has(met_id):
+				var met_char: L5RCharacterData = characters_by_id[met_id] as L5RCharacterData
+				if not met_char.met_characters.has(c.character_id):
+					met_char.met_characters.append(c.character_id)
+
+		# Topic leak — copy topic to target character's pool.
+		var leaked_topic: int = wind_result["topic_leaked"]
+		if leaked_topic != -1:
+			var routing: String = wind_result["leak_routing"]
+			if routing == WindDownSystem.ROUTING_RANDOM_PRESENT:
+				var target_id: int = wind_result["leak_target_id"]
+				if target_id != -1 and characters_by_id.has(target_id):
+					var target: L5RCharacterData = characters_by_id[target_id] as L5RCharacterData
+					if not target.topic_pool.has(leaked_topic):
+						target.topic_pool.append(leaked_topic)
+			# ROUTING_HANDLER_PIPELINE and ROUTING_BROTHERHOOD are handled by
+			# their respective systems (Geisha Intelligence, Brotherhood network)
+			# when those systems are implemented. The topic ID is available in
+			# wind_result for forwarding.
+
+		# WP contribution — add to worship state for the character's province.
+		if wind_result["wp_contribution"] > 0.0 and settlement.province_id != -1:
+			var wp_dist: Dictionary = {}
+			var f_id: int = wind_result["fortune_id"]
+			if f_id != -1:
+				wp_dist[f_id] = wind_result["wp_contribution"]
+			else:
+				# Undirected offering — split equally across all Great Fortunes.
+				var all_fortunes: int = WorshipSystem.GREAT_FORTUNE_COUNT
+				var per_fortune: float = wind_result["wp_contribution"] / float(all_fortunes)
+				for fi: int in range(all_fortunes):
+					wp_dist[fi] = per_fortune
+			WorshipSystem.add_active_worship_to_province(
+				worship_state, settlement.province_id, wp_dist,
+			)
+
+		wind_result["character_id"] = c.character_id
+		results.append(wind_result)
+
+	return results
 
 
 # -- Information Processing ----------------------------------------------------
