@@ -17,7 +17,7 @@ func _make_perpetrator(id: int = 10) -> L5RCharacterData:
 	c.glory = 3.0
 	c.status = 3.0
 	c.infamy = 0.0
-	c.school_type = Enums.SchoolType.COURTIER
+	c.school_type = Enums.SchoolType.COURTIER  # should_demand_trial returns false for non-BUSHI/non-YU
 	c.awareness = 2
 	c.skills = {}
 	return c
