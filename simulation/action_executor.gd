@@ -1406,6 +1406,15 @@ static func _apply_effects(
 	if action_id == "WRITE_LETTER" and result.get("success", false) and ctx.festival_glory_poetry > 0.001:
 		effects["glory_change"] = effects.get("glory_change", 0.0) + ctx.festival_glory_poetry
 
+	# Commerce stigma (s57.40): fires on public Commerce rolls regardless of success
+	if CommerceStigmaSystem.is_public_commerce(action_id, ctx):
+		var stigma: Dictionary = CommerceStigmaSystem.apply_stigma(_character, ctx)
+		if stigma["stigma_fired"]:
+			effects["honor_change"] = effects.get("honor_change", 0.0) + stigma["stigma_honor_change"]
+			effects["glory_change"] = effects.get("glory_change", 0.0) + stigma["stigma_glory_change"]
+		if stigma["public_commerce_topic"]:
+			effects["public_commerce_topic"] = true
+
 	result["effects"] = effects
 
 

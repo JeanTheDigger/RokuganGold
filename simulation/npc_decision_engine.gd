@@ -490,6 +490,22 @@ static func score_all(
 		elif AnimalHandlingSystem.has_negative_school_lean(ctx.school):
 			option.disposition_modifier += float(AnimalHandlingSystem.SCHOOL_LEAN_NEGATIVE)
 
+	# Public Commerce school lean + honor self-regulation (Annex C, s57.40.7):
+	# Mercantile schools +5 or +10 (Ide Trader); high-caste ritual schools -10; Miya -5.
+	# Honor 5–6 → -3 avoid lean; Honor 7+ → -5 avoid lean. Applies only to public rolls.
+	for option: NPCDataStructures.ScoredAction in options:
+		if option.action_id not in ["PURCHASE_MARKET", "CONDUCT_COMMERCE"]:
+			continue
+		if not CommerceStigmaSystem.is_public_commerce(option.action_id, ctx):
+			continue
+		var school_lean: int = CommerceStigmaSystem.get_school_lean(ctx.school)
+		if school_lean != 0:
+			option.disposition_modifier += float(school_lean)
+		if ctx.honor >= 7.0:
+			option.disposition_modifier += float(CommerceStigmaSystem.HONOR_SELF_REG_7_PLUS)
+		elif ctx.honor >= 5.0:
+			option.disposition_modifier += float(CommerceStigmaSystem.HONOR_SELF_REG_5_6)
+
 
 # -- Phase 6: Selection -------------------------------------------------------
 # Highest total wins. Tiebreakers: ObjAlign > disposition > lower AP > seed.
