@@ -208,6 +208,10 @@ static func advance_day(
 		characters_by_id, active_topics, next_topic_id, ic_day,
 	)
 
+	_update_patrol_tracking(
+		day_result.get("results", []), objectives_map, ic_day,
+	)
+
 	_process_successful_bribe_writebacks(
 		day_result.get("results", []),
 		crime_records, characters_by_id, ic_day,
@@ -2406,6 +2410,29 @@ static func _process_scene_examination_writebacks(
 				case_id, world_states, characters_by_id,
 				active_topics, next_topic_id, ic_day
 			)
+
+
+static func _update_patrol_tracking(
+	results: Array,
+	objectives_map: Dictionary,
+	ic_day: int,
+) -> void:
+	for result: Variant in results:
+		if not result is Dictionary:
+			continue
+		var r: Dictionary = result as Dictionary
+		var action_id: String = r.get("action_id", "")
+		if action_id != "EXAMINE_CRIME_SCENE" and action_id != "INVESTIGATE_PROVINCE":
+			continue
+		if not r.get("success", false):
+			continue
+		var char_id: int = r.get("character_id", -1)
+		if char_id < 0:
+			continue
+		var objs: Dictionary = objectives_map.get(char_id, {})
+		var standing: Dictionary = objs.get("standing", {})
+		if standing.get("need_type", "") == "UPHOLD_LAW":
+			standing["last_patrol_ic_day"] = ic_day
 
 
 static func _inject_bribery_eval_event_by_case(

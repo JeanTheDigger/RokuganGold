@@ -199,9 +199,48 @@ static func _decompose_investigation(
 	if need_type == "UPHOLD_LAW":
 		var case_data: Dictionary = objective.get("active_case", {})
 		if case_data.is_empty():
-			return _passthrough(objective)
+			return _decompose_uphold_law_idle(objective, ctx)
 		return InvestigationDecomposer.decompose(case_data, ctx)
 	return InvestigationDecomposer.decompose(objective, ctx)
+
+
+# -- UPHOLD_LAW Idle Patrol (s55.8, s57.16.9) ----------------------------------
+# When a magistrate has UPHOLD_LAW but no active case, they patrol their
+# jurisdiction: INVESTIGATE_PROVINCE to scan for crimes/insurgency, then
+# PATROL_PROVINCE for preventive presence.
+
+const PATROL_INTERVAL_DAYS: int = 7
+
+static func _decompose_uphold_law_idle(
+	objective: Dictionary,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> NPCDataStructures.ImmediateNeed:
+	var jurisdiction_province: String = objective.get("jurisdiction_province", "")
+	if jurisdiction_province.is_empty():
+		var loc: String = ctx.location_id
+		if "_" in loc:
+			jurisdiction_province = loc.split("_")[0]
+		else:
+			jurisdiction_province = loc
+
+	var at_jurisdiction: bool = ctx.location_id.begins_with(jurisdiction_province)
+
+	if not at_jurisdiction and not jurisdiction_province.is_empty():
+		return _make_need("TRAVEL_TO", 2, {
+			"target_intent": jurisdiction_province,
+		})
+
+	var last_patrol: int = objective.get("last_patrol_ic_day", -1)
+	var days_since_patrol: int = ctx.ic_day - last_patrol if last_patrol >= 0 else PATROL_INTERVAL_DAYS
+
+	if days_since_patrol >= PATROL_INTERVAL_DAYS:
+		return _make_need("INVESTIGATE_THREAT", 2, {
+			"target_intent": jurisdiction_province,
+		})
+
+	return _make_need("PATROL_PROVINCE", 3, {
+		"target_intent": jurisdiction_province,
+	})
 
 
 # =============================================================================

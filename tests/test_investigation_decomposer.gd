@@ -299,14 +299,50 @@ func test_objective_decomposer_routes_uphold_law():
 	assert_eq(need.source, "INVESTIGATE_CRIME")
 
 
-func test_uphold_law_no_active_case_passthrough():
+func test_uphold_law_no_active_case_patrols():
 	var ctx := _make_ctx("zone_a")
 	var obj: Dictionary = {
 		"need_type": "UPHOLD_LAW",
 		"active_case": {},
 	}
 	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, ctx)
-	assert_eq(need.need_type, "UPHOLD_LAW")
+	assert_eq(need.need_type, "INVESTIGATE_THREAT")
+
+
+func test_uphold_law_idle_travels_to_jurisdiction():
+	var ctx := _make_ctx("crane_castle")
+	var obj: Dictionary = {
+		"need_type": "UPHOLD_LAW",
+		"active_case": {},
+		"jurisdiction_province": "lion",
+	}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, ctx)
+	assert_eq(need.need_type, "TRAVEL_TO")
+	assert_eq(need.target_intent, "lion")
+
+
+func test_uphold_law_idle_patrols_after_recent_investigation():
+	var ctx := _make_ctx("zone_a")
+	ctx.ic_day = 50
+	var obj: Dictionary = {
+		"need_type": "UPHOLD_LAW",
+		"active_case": {},
+		"last_patrol_ic_day": 48,
+	}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, ctx)
+	assert_eq(need.need_type, "PATROL_PROVINCE")
+
+
+func test_uphold_law_idle_investigates_after_interval():
+	var ctx := _make_ctx("zone_a")
+	ctx.ic_day = 50
+	var obj: Dictionary = {
+		"need_type": "UPHOLD_LAW",
+		"active_case": {},
+		"last_patrol_ic_day": 40,
+	}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, ctx)
+	assert_eq(need.need_type, "INVESTIGATE_THREAT")
 
 
 # -- Evidence-Aware Scoring Tests ----------------------------------------------

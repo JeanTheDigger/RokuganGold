@@ -5146,6 +5146,60 @@ func test_scene_exam_increments_scene_exam_count() -> void:
 	assert_eq(active_case["evidence_total"], 20)
 
 
+# MAGISTRATE PATROL TRACKING
+# ==============================================================================
+
+func test_patrol_tracking_updates_on_examine_crime_scene() -> void:
+	var standing: Dictionary = {"need_type": "UPHOLD_LAW", "last_patrol_ic_day": -1}
+	var objectives_map: Dictionary = {
+		1: {"standing": standing},
+	}
+
+	var results: Array = [{
+		"action_id": "EXAMINE_CRIME_SCENE",
+		"success": true,
+		"character_id": 1,
+		"effects": {"effect": "scene_examined", "case_id": 5},
+	}]
+
+	DayOrchestrator._update_patrol_tracking(results, objectives_map, 42)
+	assert_eq(standing["last_patrol_ic_day"], 42)
+
+
+func test_patrol_tracking_updates_on_investigate_province() -> void:
+	var standing: Dictionary = {"need_type": "UPHOLD_LAW", "last_patrol_ic_day": -1}
+	var objectives_map: Dictionary = {
+		2: {"standing": standing},
+	}
+
+	var results: Array = [{
+		"action_id": "INVESTIGATE_PROVINCE",
+		"success": true,
+		"character_id": 2,
+		"effects": {},
+	}]
+
+	DayOrchestrator._update_patrol_tracking(results, objectives_map, 55)
+	assert_eq(standing["last_patrol_ic_day"], 55)
+
+
+func test_patrol_tracking_skips_non_uphold_law() -> void:
+	var standing: Dictionary = {"need_type": "SEEK_GLORY"}
+	var objectives_map: Dictionary = {
+		3: {"standing": standing},
+	}
+
+	var results: Array = [{
+		"action_id": "INVESTIGATE_PROVINCE",
+		"success": true,
+		"character_id": 3,
+		"effects": {},
+	}]
+
+	DayOrchestrator._update_patrol_tracking(results, objectives_map, 60)
+	assert_false(standing.has("last_patrol_ic_day"))
+
+
 # WITNESS INTERVIEW EVIDENCE FLOW — EXTORTION OPPORTUNITY INJECTION
 # ==============================================================================
 
