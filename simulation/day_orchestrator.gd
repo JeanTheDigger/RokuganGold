@@ -224,6 +224,23 @@ static func advance_day(
 		active_secrets, next_secret_id,
 	)
 
+	_process_ptl_detection(
+		day_result.get("results", []),
+		characters_by_id, provinces, character_province_map,
+		dice_engine, active_topics, next_topic_id, ic_day,
+	)
+
+	_process_blood_evidence_discovery(
+		day_result.get("results", []),
+		crime_records, characters_by_id,
+		active_topics, next_topic_id, ic_day,
+	)
+
+	_process_flee_logistics(
+		day_result.get("results", []),
+		characters_by_id, active_courts,
+	)
+
 	var current_season_count: int = int(season_meta.get("horde_season_count", 0))
 	var military_effects: Array[Dictionary] = _process_military_effects(
 		day_result.get("results", []),
@@ -2900,6 +2917,193 @@ static func _process_extortion_writebacks(
 			next_secret_id[0] += 1
 			active_secrets.append(secret)
 			break
+
+
+# -- PTL Detection (Channel 1, s11.11) -----------------------------------------
+# Shugenja investigating a tainted province automatically attempt
+# Perception + Lore: Shadowlands vs TN (PTL × 5). Kuni and Asako get +2k0.
+
+static func _process_ptl_detection(
+	results: Array,
+	characters_by_id: Dictionary,
+	provinces: Dictionary,
+	character_province_map: Dictionary,
+	dice_engine: DiceEngine,
+	active_topics: Array[TopicData],
+	next_topic_id: Array[int],
+	ic_day: int,
+) -> void:
+	for result: Variant in results:
+		if not result is Dictionary:
+			continue
+		var r: Dictionary = result as Dictionary
+		if r.get("action_id", "") != "INVESTIGATE_PROVINCE":
+			continue
+		if not r.get("success", false):
+			continue
+
+		var char_id: int = r.get("character_id", -1)
+		var character: L5RCharacterData = characters_by_id.get(char_id)
+		if character == null:
+			continue
+		if character.school_type != Enums.SchoolType.SHUGENJA:
+			continue
+
+		var province_id: int = character_province_map.get(char_id, -1)
+		if province_id < 0:
+			province_id = r.get("target_province_id", -1)
+		var province: ProvinceData = provinces.get(province_id)
+		if province == null:
+			continue
+		if province.province_taint_level <= 0.0:
+			continue
+
+		var ptl_tn: int = int(province.province_taint_level * 5.0)
+		var perception: int = character.perception if character.perception > 0 else 2
+		var lore_rank: int = character.skills.get("Lore: Shadowlands", 0)
+		if lore_rank <= 0:
+			continue
+
+		var rolled: int = perception + lore_rank
+		var kept: int = perception
+		if character.family in ["Kuni", "Asako"]:
+			rolled += 2
+
+		var roll_result: Dictionary = dice_engine.roll_and_keep(rolled, kept)
+		var total: int = roll_result.get("total", 0)
+		if total < ptl_tn:
+			continue
+
+		var topic: TopicData = _create_ptl_detection_topic(
+			character, province, province_id, next_topic_id, ic_day
+		)
+		if topic != null:
+			active_topics.append(topic)
+			if character.lord_id >= 0:
+				var lord: L5RCharacterData = characters_by_id.get(character.lord_id)
+				if lord != null and topic.topic_id not in lord.topic_pool:
+					lord.topic_pool.append(topic.topic_id)
+
+
+static func _create_ptl_detection_topic(
+	detector: L5RCharacterData,
+	province: ProvinceData,
+	province_id: int,
+	next_topic_id: Array[int],
+	ic_day: int,
+) -> TopicData:
+	var topic_id: int = next_topic_id[0]
+	next_topic_id[0] += 1
+	var title: String = "Spiritual corruption detected in %s" % province.province_name
+	var topic: TopicData = TopicMomentumSystem.create_topic(
+		topic_id, title,
+		TopicData.Tier.TIER_3,
+		TopicData.Category.SUPERNATURAL,
+		ic_day, 20.0,
+		[province_id],
+		detector.clan, detector.family,
+		detector.character_id,
+		"crisis", "ptl_detection",
+	)
+	topic.slug = "ptl_detection_%d_day%d" % [province_id, ic_day]
+	return topic
+
+
+# -- Blood Evidence Discovery (Channel 2, s57.47.7) ---------------------------
+# EXAMINE_CRIME_SCENE on a maho case uses blood_concealment_tn from the
+# CrimeRecord. Discovery generates a T3 topic about blood magic evidence.
+
+static func _process_blood_evidence_discovery(
+	results: Array,
+	crime_records: Array[CrimeRecord],
+	characters_by_id: Dictionary,
+	active_topics: Array[TopicData],
+	next_topic_id: Array[int],
+	ic_day: int,
+) -> void:
+	for result: Variant in results:
+		if not result is Dictionary:
+			continue
+		var r: Dictionary = result as Dictionary
+		if r.get("action_id", "") != "EXAMINE_CRIME_SCENE":
+			continue
+		if not r.get("success", false):
+			continue
+		var effects: Dictionary = r.get("effects", {})
+		var case_id: int = effects.get("case_id", -1)
+		if case_id < 0:
+			continue
+
+		var record: CrimeRecord = null
+		for cr: CrimeRecord in crime_records:
+			if cr.case_id == case_id:
+				record = cr
+				break
+		if record == null:
+			continue
+		if record.crime_type != Enums.CrimeType.MAHO:
+			continue
+		if record.concealment_tn <= 0:
+			continue
+
+		var roll_total: int = r.get("roll_total", 0)
+		if roll_total < record.concealment_tn:
+			continue
+
+		var investigator_id: int = r.get("character_id", -1)
+		var investigator: L5RCharacterData = characters_by_id.get(investigator_id)
+		if investigator == null:
+			continue
+
+		var topic_id: int = next_topic_id[0]
+		next_topic_id[0] += 1
+		var title: String = "Evidence of blood magic discovered in %s" % record.location
+		var topic: TopicData = TopicMomentumSystem.create_topic(
+			topic_id, title,
+			TopicData.Tier.TIER_3,
+			TopicData.Category.SUPERNATURAL,
+			ic_day, 25.0,
+			[], "", "",
+			investigator_id,
+			"crisis", "blood_evidence",
+		)
+		topic.slug = "blood_evidence_%d" % case_id
+		active_topics.append(topic)
+
+		if investigator.lord_id >= 0:
+			var lord: L5RCharacterData = characters_by_id.get(investigator.lord_id)
+			if lord != null and topic.topic_id not in lord.topic_pool:
+				lord.topic_pool.append(topic.topic_id)
+
+
+# -- Flee Logistics (s55.29 travel + court removal) ----------------------------
+# When FLEE_JURISDICTION fires, the NPC begins travel to a safe location
+# and is removed from any active court commitment.
+
+static func _process_flee_logistics(
+	results: Array,
+	characters_by_id: Dictionary,
+	active_courts: Array[CourtSessionData],
+) -> void:
+	for result: Variant in results:
+		if not result is Dictionary:
+			continue
+		var r: Dictionary = result as Dictionary
+		if r.get("action_id", "") != "FLEE_JURISDICTION":
+			continue
+		if not r.get("success", false):
+			continue
+		var effects: Dictionary = r.get("effects", {})
+		var fugitive_id: int = effects.get("fugitive_id", -1)
+		var fugitive: L5RCharacterData = characters_by_id.get(fugitive_id)
+		if fugitive == null:
+			continue
+
+		TravelSystem.begin_travel(fugitive, "ronin_haven")
+
+		for court: CourtSessionData in active_courts:
+			if fugitive_id in court.attendee_ids:
+				court.attendee_ids.erase(fugitive_id)
 
 
 static func _is_character_in_battle(

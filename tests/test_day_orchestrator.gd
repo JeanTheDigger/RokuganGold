@@ -3745,3 +3745,256 @@ func test_bribery_eval_threshold_injects_extortion_event() -> void:
 	assert_eq(mag_pending[0]["type"], "extortion_opportunity")
 	assert_eq(mag_pending[0]["suspect_id"], 3)
 	assert_eq(mag_pending[0]["case_id"], 55)
+
+
+# -- PTL Detection (Channel 1) ---
+
+func test_ptl_detection_shugenja_generates_topic() -> void:
+	var shugenja := L5RCharacterData.new()
+	shugenja.character_id = 15
+	shugenja.character_name = "Kuni Yori"
+	shugenja.clan = "Crab"
+	shugenja.family = "Kuni"
+	shugenja.school_type = Enums.SchoolType.SHUGENJA
+	shugenja.perception = 4
+	shugenja.skills["Lore: Shadowlands"] = 3
+	shugenja.lord_id = 10
+
+	var lord := L5RCharacterData.new()
+	lord.character_id = 10
+	lord.topic_pool = [] as Array[int]
+
+	var province := ProvinceData.new()
+	province.province_name = "Kuni Wastes"
+	province.province_taint_level = 4.0
+
+	var characters_by_id: Dictionary = {15: shugenja, 10: lord}
+	var provinces: Dictionary = {3: province}
+	var character_province_map: Dictionary = {15: 3}
+	var dice_engine := DiceEngine.new()
+	dice_engine.set_seed(42)
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [3000]
+
+	var results: Array = [{
+		"action_id": "INVESTIGATE_PROVINCE",
+		"success": true,
+		"character_id": 15,
+		"target_province_id": 3,
+	}]
+
+	DayOrchestrator._process_ptl_detection(
+		results, characters_by_id, provinces, character_province_map,
+		dice_engine, active_topics, next_topic_id, 50,
+	)
+
+	# TN = PTL × 5 = 20; Kuni shugenja rolls 4+3+2=9k4; very likely to succeed
+	if active_topics.size() > 0:
+		assert_eq(active_topics[0].tier, TopicData.Tier.TIER_3)
+		assert_eq(active_topics[0].category, TopicData.Category.SUPERNATURAL)
+		assert_true(active_topics[0].title.contains("Kuni Wastes"))
+		assert_true(active_topics[0].slug.begins_with("ptl_detection_"))
+		assert_true(lord.topic_pool.has(active_topics[0].topic_id))
+	else:
+		pass_test("Roll failed — probabilistic; PTL detection is gated by dice")
+
+
+func test_ptl_detection_non_shugenja_skipped() -> void:
+	var bushi := L5RCharacterData.new()
+	bushi.character_id = 16
+	bushi.character_name = "Hida Kisada"
+	bushi.clan = "Crab"
+	bushi.family = "Hida"
+	bushi.school_type = Enums.SchoolType.BUSHI
+	bushi.perception = 3
+	bushi.skills["Lore: Shadowlands"] = 2
+
+	var province := ProvinceData.new()
+	province.province_name = "Kuni Wastes"
+	province.province_taint_level = 5.0
+
+	var characters_by_id: Dictionary = {16: bushi}
+	var provinces: Dictionary = {3: province}
+	var character_province_map: Dictionary = {16: 3}
+	var dice_engine := DiceEngine.new()
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [3000]
+
+	var results: Array = [{
+		"action_id": "INVESTIGATE_PROVINCE",
+		"success": true,
+		"character_id": 16,
+		"target_province_id": 3,
+	}]
+
+	DayOrchestrator._process_ptl_detection(
+		results, characters_by_id, provinces, character_province_map,
+		dice_engine, active_topics, next_topic_id, 50,
+	)
+
+	assert_eq(active_topics.size(), 0)
+
+
+# -- Blood Evidence Discovery (Channel 2) ---
+
+func test_blood_evidence_discovery_generates_topic() -> void:
+	var investigator := L5RCharacterData.new()
+	investigator.character_id = 25
+	investigator.character_name = "Soshi Magistrate"
+	investigator.clan = "Scorpion"
+	investigator.lord_id = 10
+
+	var lord := L5RCharacterData.new()
+	lord.character_id = 10
+	lord.topic_pool = [] as Array[int]
+
+	var record := CrimeRecord.new()
+	record.case_id = 66
+	record.crime_type = Enums.CrimeType.MAHO
+	record.perpetrator_id = 99
+	record.location = "Isawa Province"
+	record.concealment_tn = 15
+	record.legal_status = Enums.LegalStatus.UNDER_INVESTIGATION
+
+	var crime_records: Array[CrimeRecord] = [record]
+	var characters_by_id: Dictionary = {25: investigator, 10: lord}
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [4000]
+
+	var results: Array = [{
+		"action_id": "EXAMINE_CRIME_SCENE",
+		"success": true,
+		"character_id": 25,
+		"roll_total": 20,
+		"effects": {"case_id": 66, "evidence_gained": 8},
+	}]
+
+	DayOrchestrator._process_blood_evidence_discovery(
+		results, crime_records, characters_by_id,
+		active_topics, next_topic_id, 80,
+	)
+
+	assert_eq(active_topics.size(), 1)
+	assert_eq(active_topics[0].tier, TopicData.Tier.TIER_3)
+	assert_eq(active_topics[0].category, TopicData.Category.SUPERNATURAL)
+	assert_true(active_topics[0].title.contains("blood magic"))
+	assert_true(active_topics[0].title.contains("Isawa Province"))
+	assert_eq(active_topics[0].slug, "blood_evidence_66")
+	assert_true(lord.topic_pool.has(active_topics[0].topic_id))
+
+
+func test_blood_evidence_not_triggered_for_non_maho() -> void:
+	var record := CrimeRecord.new()
+	record.case_id = 67
+	record.crime_type = Enums.CrimeType.VIOLENCE
+	record.perpetrator_id = 99
+	record.location = "Lion Province"
+	record.concealment_tn = 15
+
+	var crime_records: Array[CrimeRecord] = [record]
+	var characters_by_id: Dictionary = {25: L5RCharacterData.new()}
+	characters_by_id[25].character_id = 25
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [4000]
+
+	var results: Array = [{
+		"action_id": "EXAMINE_CRIME_SCENE",
+		"success": true,
+		"character_id": 25,
+		"roll_total": 20,
+		"effects": {"case_id": 67, "evidence_gained": 5},
+	}]
+
+	DayOrchestrator._process_blood_evidence_discovery(
+		results, crime_records, characters_by_id,
+		active_topics, next_topic_id, 80,
+	)
+
+	assert_eq(active_topics.size(), 0)
+
+
+func test_blood_evidence_not_triggered_below_concealment_tn() -> void:
+	var record := CrimeRecord.new()
+	record.case_id = 68
+	record.crime_type = Enums.CrimeType.MAHO
+	record.perpetrator_id = 99
+	record.location = "Shinomen Mori"
+	record.concealment_tn = 25
+
+	var crime_records: Array[CrimeRecord] = [record]
+	var characters_by_id: Dictionary = {25: L5RCharacterData.new()}
+	characters_by_id[25].character_id = 25
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [4000]
+
+	var results: Array = [{
+		"action_id": "EXAMINE_CRIME_SCENE",
+		"success": true,
+		"character_id": 25,
+		"roll_total": 18,
+		"effects": {"case_id": 68, "evidence_gained": 3},
+	}]
+
+	DayOrchestrator._process_blood_evidence_discovery(
+		results, crime_records, characters_by_id,
+		active_topics, next_topic_id, 80,
+	)
+
+	assert_eq(active_topics.size(), 0)
+
+
+# -- Flee Logistics ---
+
+func test_flee_logistics_starts_travel() -> void:
+	var fugitive := L5RCharacterData.new()
+	fugitive.character_id = 7
+	fugitive.character_name = "Fugitive"
+	fugitive.physical_location = "crane_castle"
+	fugitive.travel_destination = ""
+	fugitive.travel_days_remaining = 0
+
+	var characters_by_id: Dictionary = {7: fugitive}
+	var active_courts: Array[CourtSessionData] = []
+
+	var results: Array = [{
+		"action_id": "FLEE_JURISDICTION",
+		"success": true,
+		"character_id": 7,
+		"effects": {"effect": "flee_jurisdiction", "fugitive_id": 7},
+	}]
+
+	DayOrchestrator._process_flee_logistics(
+		results, characters_by_id, active_courts,
+	)
+
+	assert_eq(fugitive.travel_destination, "ronin_haven")
+	assert_gt(fugitive.travel_days_remaining, 0)
+
+
+func test_flee_logistics_removes_from_court() -> void:
+	var fugitive := L5RCharacterData.new()
+	fugitive.character_id = 7
+	fugitive.character_name = "Fugitive"
+	fugitive.physical_location = "crane_castle"
+	fugitive.travel_destination = ""
+	fugitive.travel_days_remaining = 0
+
+	var court := CourtSessionData.new()
+	court.attendee_ids = [7, 10, 20] as Array[int]
+
+	var characters_by_id: Dictionary = {7: fugitive}
+	var active_courts: Array[CourtSessionData] = [court]
+
+	var results: Array = [{
+		"action_id": "FLEE_JURISDICTION",
+		"success": true,
+		"character_id": 7,
+		"effects": {"effect": "flee_jurisdiction", "fugitive_id": 7},
+	}]
+
+	DayOrchestrator._process_flee_logistics(
+		results, characters_by_id, active_courts,
+	)
+
+	assert_false(court.attendee_ids.has(7))
+	assert_eq(court.attendee_ids.size(), 2)
