@@ -6497,3 +6497,87 @@ func test_witness_testimony_skipped_if_magistrate_not_at_destination() -> void:
 	)
 
 	assert_false(magistrate.topic_pool.has(901))
+
+
+# -- Natural Healing (s57.31.7a) -----------------------------------------------
+# OOC day tick fires at ic_day % 4 == 0. Starting from tick 3, after one advance
+# ic_day = 4, triggering the tick. c1 has stamina=3, traits all 3, skills={Etiquette:3}
+# → insight=143 → rank 1 → heal_amount = 3*2 + 1 = 7.
+
+func test_natural_healing_reduces_wounds_on_ooc_day() -> void:
+	_time.current_tick = 3  # Next advance → ic_day 4 → OOC tick fires.
+	_characters[0].wounds_taken = 10
+	_characters[0].rested_last_night = true
+	DayOrchestrator.advance_day(
+		_time, _characters, _characters_by_id, _make_world_states(),
+		_make_objectives(), _scoring_tables, _filter_data, _dice,
+		_action_skill_map, _provinces, _action_log, _season_meta,
+	)
+	assert_eq(_characters[0].wounds_taken, 3)  # 10 - 7 = 3
+
+
+func test_natural_healing_blocked_at_out_wound_level() -> void:
+	# Earth 3 → threshold 6 → OUT starts at wounds_taken 43 (index 7).
+	_time.current_tick = 3
+	_characters[0].wounds_taken = 43  # OUT level.
+	_characters[0].rested_last_night = true
+	DayOrchestrator.advance_day(
+		_time, _characters, _characters_by_id, _make_world_states(),
+		_make_objectives(), _scoring_tables, _filter_data, _dice,
+		_action_skill_map, _provinces, _action_log, _season_meta,
+	)
+	assert_eq(_characters[0].wounds_taken, 43)  # Unchanged — OUT blocks healing.
+
+
+func test_natural_healing_fires_at_down_wound_level() -> void:
+	# DOWN = index 6 → wounds 37–42 for Earth 3. s57.31.7a: Down heals if rested.
+	_time.current_tick = 3
+	_characters[0].wounds_taken = 37  # DOWN level.
+	_characters[0].rested_last_night = true
+	DayOrchestrator.advance_day(
+		_time, _characters, _characters_by_id, _make_world_states(),
+		_make_objectives(), _scoring_tables, _filter_data, _dice,
+		_action_skill_map, _provinces, _action_log, _season_meta,
+	)
+	assert_eq(_characters[0].wounds_taken, 30)  # 37 - 7 = 30
+
+
+func test_natural_healing_requires_rested_last_night() -> void:
+	_time.current_tick = 3
+	_characters[0].wounds_taken = 10
+	_characters[0].rested_last_night = false
+	DayOrchestrator.advance_day(
+		_time, _characters, _characters_by_id, _make_world_states(),
+		_make_objectives(), _scoring_tables, _filter_data, _dice,
+		_action_skill_map, _provinces, _action_log, _season_meta,
+	)
+	assert_eq(_characters[0].wounds_taken, 10)  # No healing without rest.
+
+
+func test_natural_healing_does_not_fire_on_non_ooc_day() -> void:
+	# ic_day 1 (tick 0→1) — not a multiple of 4, OOC tick does not fire.
+	_time.current_tick = 0
+	_characters[0].wounds_taken = 10
+	_characters[0].rested_last_night = true
+	DayOrchestrator.advance_day(
+		_time, _characters, _characters_by_id, _make_world_states(),
+		_make_objectives(), _scoring_tables, _filter_data, _dice,
+		_action_skill_map, _provinces, _action_log, _season_meta,
+	)
+	assert_eq(_characters[0].wounds_taken, 10)  # No healing — OOC tick did not fire.
+
+
+func test_ooc_result_contains_wounds_healed_key() -> void:
+	_time.current_tick = 3
+	_characters[0].wounds_taken = 10
+	_characters[0].rested_last_night = true
+	var result: Dictionary = DayOrchestrator.advance_day(
+		_time, _characters, _characters_by_id, _make_world_states(),
+		_make_objectives(), _scoring_tables, _filter_data, _dice,
+		_action_skill_map, _provinces, _action_log, _season_meta,
+	)
+	assert_true(result.has("ooc_tick_results"))
+	var ooc: Array = result["ooc_tick_results"]
+	assert_eq(ooc.size(), 1)
+	assert_true(ooc[0].has("wounds_healed"))
+	assert_eq(ooc[0]["wounds_healed"], 7)

@@ -1018,6 +1018,12 @@ static func _process_ooc_day_tick(
 		if c.rested_last_night:
 			c.current_void_points = ceili(c.max_void_points * c.wind_down_void_modifier)
 
+		# Natural healing per s57.31.7a — gated on rested_last_night; blocked at Out.
+		var wounds_healed: int = 0
+		if c.rested_last_night and CharacterStats.get_wound_level(c) != Enums.WoundLevel.OUT:
+			var heal_amount: int = (c.stamina * 2) + CharacterStats.get_insight_rank(c)
+			wounds_healed = WoundSystem.heal_wounds(c, heal_amount)["healed"]
+
 		# Honor and Glory changes.
 		if wind_result["honor_change"] != 0.0:
 			HonorGlorySystem.apply_honor_change(c, wind_result["honor_change"])
@@ -1076,6 +1082,7 @@ static func _process_ooc_day_tick(
 			)
 
 		wind_result["character_id"] = c.character_id
+		wind_result["wounds_healed"] = wounds_healed
 		results.append(wind_result)
 
 	return results
