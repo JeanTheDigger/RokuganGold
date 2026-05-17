@@ -352,7 +352,7 @@ func test_scoring_reexamine_scene_low_evidence():
 	var ctx := _make_ctx("zone_a")
 	var obj := _make_objective({
 		"scene_examined": true,
-		"scene_exam_count": 1,
+		"scene_exam_count": 0,
 		"evidence_total": 5,
 		"ic_day_committed": 1,
 	})
@@ -366,7 +366,7 @@ func test_scoring_no_reexamine_at_max_count():
 	var ctx := _make_ctx("zone_a")
 	var obj := _make_objective({
 		"scene_examined": true,
-		"scene_exam_count": 2,
+		"scene_exam_count": 1,
 		"evidence_total": 5,
 		"ic_day_committed": 1,
 	})
@@ -456,3 +456,16 @@ func test_early_accusation_skips_scoring():
 	var need: NPCDataStructures.ImmediateNeed = InvestigationDecomposer.decompose(obj, ctx)
 	assert_eq(need.need_type, "ASSIGN_OBJECTIVE")
 	assert_eq(need.target_intent, "FORMALLY_ACCUSE")
+
+
+func test_ctx_known_npc_locations_used_for_travel():
+	var ctx := _make_ctx("zone_a")
+	ctx.known_npc_locations = {200: "zone_d"}
+	var obj := _make_objective({
+		"scene_examined": true,
+		"witness_pool": [200],
+		"npc_locations": {200: "zone_b"},
+	})
+	var need: NPCDataStructures.ImmediateNeed = InvestigationDecomposer.decompose(obj, ctx)
+	assert_eq(need.need_type, "TRAVEL_TO")
+	assert_eq(need.target_intent, "zone_d")

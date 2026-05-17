@@ -358,6 +358,8 @@ static func activate_uphold_law(
 		"known_suspects": crime_record.known_suspects.duplicate(),
 		"witness_pool": crime_record.witnesses.duplicate(),
 		"scene_examined": false,
+		"scene_exam_count": 0,
+		"ic_day_committed": crime_record.ic_day_committed,
 		"interviewed_witnesses": [],
 		"interviewed_suspects": [],
 		"checked_alibis": [],

@@ -1641,6 +1641,21 @@ func test_inject_urgency_data_no_standing_objective() -> void:
 	assert_eq(known_objs.get("standing_need_type", ""), "", "No standing obj = empty string")
 
 
+func test_inject_urgency_data_propagates_active_case_from_standing() -> void:
+	var ws: Dictionary = {1: {}}
+	var c := L5RCharacterData.new()
+	c.character_id = 1
+	var active_case: Dictionary = {"case_id": 55, "crime_location": "zone_x"}
+	var objectives_map: Dictionary = {
+		1: {"standing": {"need_type": "UPHOLD_LAW", "active_case": active_case}},
+	}
+	DayOrchestrator._inject_urgency_data(
+		ws, [c], [], [], [], objectives_map, [],
+	)
+	var known_objs: Dictionary = ws[1].get("known_objectives", {})
+	assert_eq(known_objs.get("active_case", {}).get("case_id", -1), 55)
+
+
 # -- Characters present injection tests ----------------------------------------
 
 func test_inject_characters_present_co_located() -> void:
@@ -5092,6 +5107,45 @@ func test_magistrate_assignment_flows_into_scan() -> void:
 
 
 # ==============================================================================
+# SCENE EXAMINATION — EXAM COUNT INCREMENT
+# ==============================================================================
+
+func test_scene_exam_increments_scene_exam_count() -> void:
+	var world_states: Dictionary = {}
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [600]
+
+	var active_case: Dictionary = {
+		"case_id": 90,
+		"scene_examined": false,
+		"scene_exam_count": 0,
+		"evidence_total": 0,
+	}
+	var objectives_map: Dictionary = {
+		1: {"standing": {"active_case": active_case}},
+	}
+
+	var results: Array = [{
+		"action_id": "EXAMINE_CRIME_SCENE",
+		"success": true,
+		"character_id": 1,
+		"effects": {
+			"effect": "scene_examined",
+			"case_id": 90,
+			"evidence_gained": 20,
+			"threshold_crossed": "",
+		},
+	}]
+
+	DayOrchestrator._process_scene_examination_writebacks(
+		results, objectives_map, world_states, {}, active_topics, next_topic_id, 50,
+	)
+
+	assert_true(active_case["scene_examined"])
+	assert_eq(active_case["scene_exam_count"], 1)
+	assert_eq(active_case["evidence_total"], 20)
+
+
 # WITNESS INTERVIEW EVIDENCE FLOW — EXTORTION OPPORTUNITY INJECTION
 # ==============================================================================
 

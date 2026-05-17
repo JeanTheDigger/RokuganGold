@@ -11,7 +11,7 @@ class_name InvestigationDecomposer
 const ACCUSATION_THRESHOLD: int = 40
 const BRIBERY_EVAL_THRESHOLD: int = 25
 const SCENE_REEXAMINE_EVIDENCE_CAP: int = 15
-const SCENE_MAX_REEXAMINATIONS: int = 2
+const SCENE_MAX_REEXAMINATIONS: int = 1
 const DAYS_SCENE_STILL_USEFUL: int = 30
 
 
@@ -175,7 +175,7 @@ static func _action_from_candidate(
 
 	match ctype:
 		"witness", "suspect", "alibi":
-			var target_location: String = _get_npc_location(target_id, objective)
+			var target_location: String = _get_npc_location(target_id, objective, ctx)
 			if ctx.location_id != target_location:
 				return _make_travel_need(target_location)
 			return _make_gather_intelligence_need(target_id)
@@ -282,7 +282,11 @@ static func _get_unchecked_alibis(objective: Dictionary, checked: Array) -> Arra
 	return result
 
 
-static func _get_npc_location(npc_id: int, objective: Dictionary) -> String:
+static func _get_npc_location(npc_id: int, objective: Dictionary, ctx: NPCDataStructures.ContextSnapshot = null) -> String:
+	if ctx != null and not ctx.known_npc_locations.is_empty():
+		var ctx_loc: Variant = ctx.known_npc_locations.get(npc_id, null)
+		if ctx_loc is String and not (ctx_loc as String).is_empty():
+			return ctx_loc as String
 	var locations: Dictionary = objective.get("npc_locations", {})
 	return locations.get(npc_id, objective.get("crime_location", ""))
 
@@ -296,7 +300,7 @@ static func _decompose_lead(
 	var lead_target: int = lead.get("target_npc_id", -1)
 
 	if lead_type == "witness" and lead_target > 0:
-		var loc: String = _get_npc_location(lead_target, objective)
+		var loc: String = _get_npc_location(lead_target, objective, ctx)
 		if ctx.location_id != loc:
 			return _make_travel_need(loc)
 		return _make_gather_intelligence_need(lead_target)

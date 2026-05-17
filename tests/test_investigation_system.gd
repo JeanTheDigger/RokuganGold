@@ -251,7 +251,7 @@ func _make_crime_topic(case_id: int, topic_id: int = 100) -> TopicData:
 func test_activate_uphold_law_sets_active_case() -> void:
 	var mag := _make_magistrate()
 	mag.physical_location = "castle_crane"
-	var cr := _make_crime_record()
+	var cr := _make_crime_record(15, 42)
 	cr.witnesses = [10, 20]
 	var standing: Dictionary = {"need_type": "UPHOLD_LAW"}
 	var result: Dictionary = InvestigationSystem.activate_uphold_law(mag, cr, standing)
@@ -259,6 +259,8 @@ func test_activate_uphold_law_sets_active_case() -> void:
 	assert_eq(result["crime_location"], "castle_crane")
 	assert_eq(result["witness_pool"].size(), 2)
 	assert_false(result["scene_examined"])
+	assert_eq(result["scene_exam_count"], 0)
+	assert_eq(result["ic_day_committed"], 42)
 	assert_eq(cr.investigating_magistrate_id, mag.character_id)
 	assert_eq(cr.legal_status, Enums.LegalStatus.UNDER_INVESTIGATION)
 	assert_true(standing.has("active_case"))

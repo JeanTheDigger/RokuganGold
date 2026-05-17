@@ -2393,6 +2393,7 @@ static func _process_scene_examination_writebacks(
 				var active_case: Dictionary = (obj as Dictionary).get("active_case", {})
 				if active_case.get("case_id", -1) == case_id:
 					active_case["scene_examined"] = true
+					active_case["scene_exam_count"] = active_case.get("scene_exam_count", 0) + 1
 					active_case["evidence_total"] = effects.get("evidence_gained", 0) + active_case.get("evidence_total", 0)
 					break
 
@@ -6674,7 +6675,7 @@ static func _inject_urgency_data(
 		var known_objs: Dictionary = ws.get("known_objectives", {})
 		if not standing.is_empty():
 			known_objs["standing_need_type"] = standing.get("need_type", "")
-		var active_case: Dictionary = char_objs.get("active_case", primary.get("active_case", {}))
+		var active_case: Dictionary = standing.get("active_case", primary.get("active_case", {}))
 		if not active_case.is_empty():
 			known_objs["active_case"] = active_case
 		ws["known_objectives"] = known_objs
