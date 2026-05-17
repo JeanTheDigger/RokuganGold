@@ -50,6 +50,8 @@ static func build_context(
 
 	# Stats
 	ctx.skill_ranks = character.skills.duplicate()
+	# Store void ring alongside skills so subsystems (tea ceremony) can read it.
+	ctx.skill_ranks["_void_ring"] = character.void_ring
 	ctx.honor = character.honor
 	ctx.glory = character.glory
 	ctx.status = character.status
@@ -456,6 +458,18 @@ static func score_all(
 
 		option.festival_modifier = _compute_festival_modifier(option.action_id, ctx)
 
+	# Tea ceremony: +10 per eligible guest (s57.37.4 social multiplier).
+	# Clan affinity bonuses (Crane +10, Phoenix +5) applied via disposition_modifier.
+	for option: NPCDataStructures.ScoredAction in options:
+		if option.action_id != "CONDUCT_TEA_CEREMONY":
+			continue
+		var guest_count: int = option.metadata.get("participant_count", 1) - 1
+		option.disposition_modifier += float(guest_count * 10)
+		if ctx.clan == "Crane":
+			option.disposition_modifier += 10.0
+		elif ctx.clan == "Phoenix":
+			option.disposition_modifier += 5.0
+
 
 # -- Phase 6: Selection -------------------------------------------------------
 # Highest total wins. Tiebreakers: ObjAlign > disposition > lower AP > seed.
@@ -737,7 +751,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array[S
 				"CHARM", "INTIMIDATE", "GOSSIP", "PERSUADE", "NEGOTIATE",
 				"PROBE", "READ_CHARACTER", "PUBLIC_DEBATE",
 				"ASK_FOR_INTRODUCTION", "OBSERVE_COURT_ATTENDEES",
-				"TRAIN", "MEDITATE",
+				"TRAIN", "MEDITATE", "CONDUCT_TEA_CEREMONY",
 				"ASSESS_PROVINCE_STATUS", "INVESTIGATE_PROVINCE",
 				"INVESTIGATE_RUMOR", "ORDER_PATROL",
 				"EXAMINE_LETTER",
@@ -767,7 +781,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array[S
 				"ASK_FOR_INTRODUCTION", "OBSERVE_COURT_ATTENDEES",
 				"ARRANGE_MARRIAGE", "APPOINT_TO_POSITION",
 				"COMPLY_WITH_EDICT", "DEFY_EDICT",
-				"TRAIN", "MEDITATE",
+				"TRAIN", "MEDITATE", "CONDUCT_TEA_CEREMONY",
 				"BRIBE_FOR_INFO", "EAVESDROP",
 				"INTERCEPT_LETTER", "SEARCH_QUARTERS",
 				"EXAMINE_LETTER",
@@ -781,7 +795,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array[S
 				"PROBE", "READ_CHARACTER", "LISTEN_REFLECT",
 				"DELIVER_GIFT", "OFFER_FAVOR",
 				"ASK_FOR_INTRODUCTION", "OBSERVE_COURT_ATTENDEES",
-				"TRAIN", "MEDITATE",
+				"TRAIN", "MEDITATE", "CONDUCT_TEA_CEREMONY",
 				"TREAT_WOUND",
 				"DO_NOTHING", "REST",
 			]
@@ -815,7 +829,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array[S
 			]
 		Enums.ContextFlag.AT_TEMPLE:
 			return [
-				"PERFORM_RITUAL", "PERFORM_WORSHIP", "MEDITATE",
+				"PERFORM_RITUAL", "PERFORM_WORSHIP", "MEDITATE", "CONDUCT_TEA_CEREMONY",
 				"PUBLIC_ATONEMENT", "TRAIN",
 				"CHARM", "PROBE", "READ_CHARACTER",
 				"TREAT_WOUND",
@@ -884,6 +898,7 @@ static func _get_ap_cost(action_id: String) -> int:
 		"PUBLIC_ATONEMENT": 1,
 		"MENTOR": 1,
 		"MEDITATE": 1,
+		"CONDUCT_TEA_CEREMONY": 1,
 		"CRAFT": 1,
 		"DRILL_TROOPS": 1,
 		"EVALUATE_WAR_READINESS": 1,
@@ -1575,6 +1590,9 @@ const SEAL_WALL_BREACH_MIN_RANK: int = 3
 static func _is_zone_blocked(action_id: String, zone_flags: Dictionary) -> bool:
 	if zone_flags.is_empty():
 		return false
+	# Tea ceremony requires tokonoma OR shrine_eligible (s57.37.2)
+	if action_id == "CONDUCT_TEA_CEREMONY":
+		return not TeaCeremonySystem.zone_allows_ceremony(zone_flags)
 	var required_flag: String = ZONE_GATED_ACTIONS.get(action_id, "")
 	if required_flag.is_empty():
 		return false
@@ -1950,6 +1968,23 @@ static func _populate_action_metadata(
 	elif option.action_id in ["CONDUCT_STORM_ASSAULT", "MAINTAIN_SIEGE"]:
 		option.metadata = {
 			"siege_settlement_id": ctx.location_id,
+		}
+	elif option.action_id == "CONDUCT_TEA_CEREMONY":
+		# Select up to (max_viable_count - 1) guests with disp >= Acquaintance.
+		var void_ring: int = ctx.skill_ranks.get("_void_ring", 2)
+		var tea_rank: int = ctx.skill_ranks.get("Tea Ceremony", 0)
+		var max_total: int = TeaCeremonySystem.max_viable_count(void_ring, tea_rank)
+		var eligible: Array[int] = TeaCeremonySystem.select_eligible_ids(
+			ctx.character_id, ctx.characters_present, ctx.dispositions
+		)
+		var guests: Array[int] = []
+		for eid: int in eligible:
+			if guests.size() >= max_total - 1:
+				break
+			guests.append(eid)
+		option.metadata = {
+			"participant_ids": guests,
+			"participant_count": 1 + guests.size(),
 		}
 	elif option.action_id == "OBSERVE_COURT_ATTENDEES":
 		# Populate the list of attendees this NPC hasn't met yet (s55.7.3).

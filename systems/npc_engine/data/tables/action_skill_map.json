@@ -95,6 +95,10 @@
     "primary": "Battle",
     "secondary": null
   },
+  "CONDUCT_TEA_CEREMONY": {
+    "primary": "Tea Ceremony",
+    "secondary": null
+  },
   "CRAFT": {
     "primary": "_craft_skill",
     "secondary": null

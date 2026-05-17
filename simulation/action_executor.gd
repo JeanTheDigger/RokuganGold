@@ -296,6 +296,9 @@ static func execute(
 	if action_id == "REQUEST_PERFORMANCE":
 		return _execute_request_performance(action, character, ctx)
 
+	if action_id == "CONDUCT_TEA_CEREMONY":
+		return _execute_conduct_tea_ceremony(action, character, ctx, dice_engine, characters_by_id)
+
 	if action_id in COVERT_ACTIONS:
 		var covert_result: Dictionary = _try_execute_covert(
 			action, character, ctx, dice_engine, characters_by_id
@@ -3753,5 +3756,97 @@ static func _execute_request_performance(
 			"target_performer_id": target_performer_id,
 			"venue_mode": venue_mode,
 			"invitation_letter": letter_dict,
+		},
+	}
+
+
+# -- CONDUCT_TEA_CEREMONY ------------------------------------------------------
+
+static func _execute_conduct_tea_ceremony(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	dice_engine: DiceEngine,
+	characters_by_id: Dictionary,
+) -> Dictionary:
+	if not TeaCeremonySystem.zone_allows_ceremony(ctx.zone_flags):
+		return {
+			"success": false,
+			"action_id": "CONDUCT_TEA_CEREMONY",
+			"character_id": character.character_id,
+			"target_npc_id": -1,
+			"target_province_id": -1,
+			"ic_day": ctx.ic_day,
+			"season": ctx.season,
+			"reason": "zone_not_eligible",
+			"effects": {},
+		}
+
+	var candidate_ids: Array = action.metadata.get("participant_ids", [])
+	var actual_participants: Array[int] = []
+	for pid: Variant in candidate_ids:
+		var pid_int: int = int(pid)
+		var c: L5RCharacterData = characters_by_id.get(pid_int)
+		if c != null and c.current_void_points < c.max_void_points:
+			actual_participants.append(pid_int)
+
+	var total_count: int = 1 + actual_participants.size()
+	var tn: int = TeaCeremonySystem.get_tn(total_count)
+
+	var check: Dictionary = SkillResolver.resolve_skill_check(
+		character, dice_engine, "Tea Ceremony", tn, 0,
+		"Void Recovery", Enums.Trait.VOID,
+	)
+
+	if not check.get("success", false):
+		return {
+			"success": false,
+			"action_id": "CONDUCT_TEA_CEREMONY",
+			"character_id": character.character_id,
+			"target_npc_id": -1,
+			"target_province_id": -1,
+			"ic_day": ctx.ic_day,
+			"season": ctx.season,
+			"skill_used": "Tea Ceremony",
+			"roll_total": check.get("total", 0),
+			"tn": tn,
+			"reason": "roll_failed",
+			"effects": {},
+		}
+
+	var tea_rank: int = SkillResolver.get_skill_rank(character, "Tea Ceremony")
+	var recovery: int = (
+		TeaCeremonySystem.VP_MASTERY_RECOVERY
+		if tea_rank >= TeaCeremonySystem.MASTERY_RANK5
+		else TeaCeremonySystem.VP_BASE_RECOVERY
+	)
+
+	var host_gain: int = mini(recovery, character.max_void_points - character.current_void_points)
+	character.current_void_points += host_gain
+
+	var participant_gains: Dictionary = {}
+	for pid: int in actual_participants:
+		var c: L5RCharacterData = characters_by_id.get(pid)
+		if c != null:
+			var gain: int = mini(recovery, c.max_void_points - c.current_void_points)
+			c.current_void_points += gain
+			participant_gains[pid] = gain
+
+	return {
+		"success": true,
+		"action_id": "CONDUCT_TEA_CEREMONY",
+		"character_id": character.character_id,
+		"target_npc_id": -1,
+		"target_province_id": -1,
+		"ic_day": ctx.ic_day,
+		"season": ctx.season,
+		"skill_used": "Tea Ceremony",
+		"roll_total": check.get("total", 0),
+		"tn": tn,
+		"effects": {
+			"host_vp_recovered": host_gain,
+			"participant_gains": participant_gains,
+			"total_participants": total_count,
+			"recovery_per_participant": recovery,
 		},
 	}
