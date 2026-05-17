@@ -1761,7 +1761,7 @@ static func _populate_action_metadata(
 		option.target_npc_id = need.target_npc_id
 	elif option.action_id == "FLEE_JURISDICTION" and need.source == "bribery_eval":
 		option.metadata = {"flee_from_magistrate_id": need.target_npc_id}
-	elif option.action_id in ["BRIBE_WITNESS", "INTIMIDATE_WITNESS"] and need.source == "bribery_eval":
+	elif option.action_id in ["BRIBE_WITNESS", "INTIMIDATE_WITNESS", "KILL_WITNESS"] and need.source == "bribery_eval":
 		if need.target_npc_id_secondary >= 0:
 			option.target_npc_id = need.target_npc_id_secondary
 			option.metadata = {"witness_id": need.target_npc_id_secondary}

@@ -1270,3 +1270,27 @@ func test_intimidate_witness_resolves() -> void:
 	assert_eq(result["action_id"], "INTIMIDATE_WITNESS")
 	assert_eq(result["effects"]["witness_id"], 61)
 	assert_true(result["effects"].get("detection_risk", false))
+
+
+func test_kill_witness_resolves() -> void:
+	var witness := L5RCharacterData.new()
+	witness.character_id = 62
+	witness.character_name = "Victim"
+	witness.skills["Investigation"] = 3
+	witness.perception = 3
+	witness.wounds_taken = 0
+
+	_character.skills["Stealth"] = 4
+	_character.agility = 4
+	_dice_engine.set_seed(99)
+
+	var chars: Dictionary = {_character.character_id: _character, 62: witness}
+	var action := _make_action("KILL_WITNESS", 62)
+
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map, {}, chars
+	)
+	assert_eq(result["action_id"], "KILL_WITNESS")
+	assert_eq(result["effects"]["witness_id"], 62)
+	assert_true(result["effects"].has("concealment_tn"))
+	assert_typeof(result["effects"]["concealment_tn"], TYPE_INT)

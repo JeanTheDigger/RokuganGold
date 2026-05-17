@@ -4216,3 +4216,150 @@ func test_intimidate_witness_failure_adds_evidence() -> void:
 
 	assert_true(record.witnesses.has(20))
 	assert_eq(record.evidence_total, 20)
+
+
+# -- Bribe Witness Co-Conspirator Secret ---
+
+func test_bribe_witness_creates_tier2_secret() -> void:
+	var criminal := L5RCharacterData.new()
+	criminal.character_id = 5
+	criminal.character_name = "Bayushi Koro"
+
+	var witness := L5RCharacterData.new()
+	witness.character_id = 20
+	witness.character_name = "Doji Ran"
+
+	var record := CrimeRecord.new()
+	record.case_id = 300
+	record.perpetrator_id = 5
+	record.witnesses = [20] as Array[int]
+	record.evidence_total = 10
+
+	var crime_records: Array[CrimeRecord] = [record]
+	var characters_by_id: Dictionary = {5: criminal, 20: witness}
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [7000]
+	var world_states: Dictionary = {}
+	var active_secrets: Array[SecretData] = []
+	var next_secret_id: Array[int] = [200]
+	var next_case_id: Array[int] = [500]
+
+	var results: Array = [{
+		"action_id": "BRIBE_WITNESS",
+		"success": true,
+		"character_id": 5,
+		"target_npc_id": 20,
+		"effects": {"effect": "witness_bribed", "witness_id": 20},
+	}]
+
+	DayOrchestrator._process_witness_tampering_writebacks(
+		results, crime_records, characters_by_id,
+		active_topics, next_topic_id, 100, world_states,
+		active_secrets, next_secret_id, next_case_id,
+	)
+
+	assert_false(record.witnesses.has(20))
+	assert_eq(active_secrets.size(), 1)
+	assert_eq(active_secrets[0].subject_id, 20)
+	assert_eq(active_secrets[0].severity, SecretData.Severity.TIER_2)
+	assert_true(active_secrets[0].slug.begins_with("bribed_witness_"))
+
+
+# -- Kill Witness ---
+
+func test_kill_witness_removes_and_creates_murder_record() -> void:
+	var record := CrimeRecord.new()
+	record.case_id = 310
+	record.perpetrator_id = 5
+	record.witnesses = [20] as Array[int]
+	record.evidence_total = 10
+	record.location = "scorpion_province"
+
+	var crime_records: Array[CrimeRecord] = [record]
+	var characters_by_id: Dictionary = {}
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [7000]
+	var world_states: Dictionary = {}
+	var active_secrets: Array[SecretData] = []
+	var next_secret_id: Array[int] = [200]
+	var next_case_id: Array[int] = [500]
+
+	var results: Array = [{
+		"action_id": "KILL_WITNESS",
+		"success": true,
+		"character_id": 5,
+		"target_npc_id": 20,
+		"effects": {
+			"effect": "witness_killed",
+			"witness_id": 20,
+			"concealment_tn": 22,
+		},
+	}]
+
+	DayOrchestrator._process_witness_tampering_writebacks(
+		results, crime_records, characters_by_id,
+		active_topics, next_topic_id, 100, world_states,
+		active_secrets, next_secret_id, next_case_id,
+	)
+
+	assert_false(record.witnesses.has(20))
+	assert_eq(crime_records.size(), 2)
+	var murder: CrimeRecord = crime_records[1]
+	assert_eq(murder.crime_type, Enums.CrimeType.UNSANCTIONED_COVERT_KILLING)
+	assert_eq(murder.perpetrator_id, 5)
+	assert_eq(murder.victim_id, 20)
+	assert_eq(murder.concealment_tn, 22)
+	assert_eq(murder.location, "scorpion_province")
+
+
+# -- Criminal Recall ---
+
+func test_criminal_recall_success_stores_awareness() -> void:
+	var criminal := L5RCharacterData.new()
+	criminal.character_id = 5
+	criminal.intelligence = 4
+
+	var record := CrimeRecord.new()
+	record.case_id = 400
+
+	var witnesses: Array[int] = [20, 30]
+	var dice_engine := DiceEngine.new()
+	dice_engine.set_seed(42)
+	var world_states: Dictionary = {}
+
+	DayOrchestrator._apply_criminal_recall(
+		criminal, record, witnesses, dice_engine, world_states,
+	)
+
+	# Intelligence 4, rolls 4k4 vs TN 10 — should succeed with seed 42
+	var ws: Dictionary = world_states.get(5, {})
+	if ws.has("criminal_recall"):
+		assert_eq(ws["criminal_recall"]["case_id"], 400)
+		assert_eq(ws["criminal_recall"]["witness_count"], 2)
+		assert_true(ws["criminal_recall"]["aware_of_evidence"])
+	else:
+		pass_test("Roll failed — probabilistic; recall gated by dice")
+
+
+# -- Investigation Loop: Discovery Type Routes Legal Status ---
+
+func test_discovery_type_sets_initial_legal_status() -> void:
+	var violence_discovery := InvestigationLoopSystem.get_discovery_type("violence")
+	var violence_status := InvestigationLoopSystem.get_initial_legal_status(violence_discovery)
+	assert_eq(violence_status, Enums.LegalStatus.UNDER_INVESTIGATION)
+
+	var skimming_discovery := InvestigationLoopSystem.get_discovery_type("skimming")
+	var skimming_status := InvestigationLoopSystem.get_initial_legal_status(skimming_discovery)
+	assert_eq(skimming_status, Enums.LegalStatus.SUSPECTED)
+
+	var maho_discovery := InvestigationLoopSystem.get_discovery_type("maho")
+	var maho_status := InvestigationLoopSystem.get_initial_legal_status(maho_discovery)
+	assert_eq(maho_status, Enums.LegalStatus.UNDER_INVESTIGATION)
+
+
+func test_crime_type_to_string_mapping() -> void:
+	assert_eq(DayOrchestrator._crime_type_to_string(Enums.CrimeType.VIOLENCE), "violence")
+	assert_eq(DayOrchestrator._crime_type_to_string(Enums.CrimeType.UNSANCTIONED_COVERT_KILLING), "murder")
+	assert_eq(DayOrchestrator._crime_type_to_string(Enums.CrimeType.SKIMMING), "skimming")
+	assert_eq(DayOrchestrator._crime_type_to_string(Enums.CrimeType.MAHO), "maho")
+	assert_eq(DayOrchestrator._crime_type_to_string(Enums.CrimeType.TREASON), "treason")

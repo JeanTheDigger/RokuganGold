@@ -24,7 +24,7 @@ const COVERT_ACTIONS: Array[String] = [
 	"SEDUCE", "SEDUCE_FOR_INFO", "SEDUCE_FOR_ACCESS",
 	"SEDUCE_FOR_LEVERAGE", "SEDUCE_TO_COMPROMISE",
 	"EXPOSE_SECRET_PRIVATELY", "EXPOSE_SECRET_PUBLICLY",
-	"BRIBE_WITNESS", "INTIMIDATE_WITNESS",
+	"BRIBE_WITNESS", "INTIMIDATE_WITNESS", "KILL_WITNESS",
 ]
 
 const MILITARY_ORDERS: Array[String] = [
@@ -1005,6 +1005,12 @@ static func _try_execute_covert(
 			var r: Dictionary = _resolve_intimidate_witness(character, target, action, dice_engine)
 			return _build_covert_result(action, ctx, "Intimidation", r)
 
+		"KILL_WITNESS":
+			if target == null:
+				return {}
+			var r: Dictionary = _resolve_kill_witness(character, target, dice_engine)
+			return _build_covert_result(action, ctx, "Stealth", r)
+
 	return {}
 
 
@@ -1137,6 +1143,38 @@ static func _resolve_intimidate_witness(
 		"witness_id": witness.character_id,
 		"witness_hostile": not success,
 		"evidence_on_fail": InvestigationLoopSystem.WITNESS_INTIMIDATE_EVIDENCE_ON_FAIL,
+	}
+
+
+static func _resolve_kill_witness(
+	killer: L5RCharacterData,
+	victim: L5RCharacterData,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	var stealth: int = killer.skills.get("Stealth", 0)
+	var agility: int = killer.agility if killer.agility > 0 else 2
+	var rolled: int = maxi(stealth + agility, 1)
+	var kept: int = maxi(agility, 1)
+	var attack_result: Dictionary = dice_engine.roll_and_keep(rolled, kept)
+	var attack_total: int = attack_result.get("total", 0)
+
+	var perception: int = victim.perception if victim.perception > 0 else 2
+	var investigation: int = victim.skills.get("Investigation", 0)
+	var def_rolled: int = maxi(perception + investigation, 1)
+	var def_kept: int = maxi(perception, 1)
+	var defense_result: Dictionary = dice_engine.roll_and_keep(def_rolled, def_kept)
+	var defense_total: int = defense_result.get("total", 0)
+
+	var success: bool = attack_total > defense_total
+	return {
+		"success": success,
+		"roll_total": attack_total,
+		"tn": defense_total,
+		"margin": attack_total - defense_total,
+		"detection_risk": true,
+		"effect": "witness_killed" if success else "kill_attempt_failed",
+		"witness_id": victim.character_id,
+		"concealment_tn": attack_total if success else 0,
 	}
 
 

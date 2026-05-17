@@ -199,6 +199,7 @@ static func advance_day(
 		world_states,
 		active_wars,
 		action_log,
+		dice_engine,
 	)
 
 	_process_scene_examination_writebacks(
@@ -247,6 +248,7 @@ static func advance_day(
 		day_result.get("results", []),
 		crime_records, characters_by_id,
 		active_topics, next_topic_id, ic_day, world_states,
+		active_secrets, next_secret_id, next_case_id,
 	)
 
 	_process_taint_proximity_detection(
@@ -2560,6 +2562,7 @@ static func _process_crime_detection(
 	world_states: Dictionary = {},
 	active_wars: Array[WarData] = [],
 	action_log: Array[Dictionary] = [],
+	dice_engine: DiceEngine = null,
 ) -> Array[Dictionary]:
 	var crime_results: Array[Dictionary] = []
 
@@ -2660,6 +2663,10 @@ static func _process_crime_detection(
 		)
 		crime_records.append(record)
 
+		var crime_type_str: String = _crime_type_to_string(crime_type)
+		var discovery: InvestigationLoopSystem.DiscoveryType = InvestigationLoopSystem.get_discovery_type(crime_type_str)
+		record.legal_status = InvestigationLoopSystem.get_initial_legal_status(discovery)
+
 		var at_act: Dictionary = CrimeSystem.apply_at_act_consequences(character, crime_type)
 
 		var crime_topic: TopicData = _create_crime_topic(
@@ -2680,6 +2687,9 @@ static func _process_crime_detection(
 			"topic_id": crime_topic.topic_id if crime_topic != null else -1,
 			"witness_count": witnesses.size(),
 		})
+
+		if dice_engine != null:
+			_apply_criminal_recall(character, record, witnesses, dice_engine, world_states)
 
 		if action_id == "BRIBE_FOR_INFO" and effects.get("suppress_case", false):
 			var bribe_magistrate_id: int = effects.get("magistrate_id", -1)
@@ -3145,13 +3155,16 @@ static func _process_witness_tampering_writebacks(
 	next_topic_id: Array[int],
 	ic_day: int,
 	world_states: Dictionary,
+	active_secrets: Array[SecretData] = [],
+	next_secret_id: Array[int] = [1],
+	next_case_id: Array[int] = [1],
 ) -> void:
 	for result: Variant in results:
 		if not result is Dictionary:
 			continue
 		var r: Dictionary = result as Dictionary
 		var action_id: String = r.get("action_id", "")
-		if action_id != "BRIBE_WITNESS" and action_id != "INTIMIDATE_WITNESS":
+		if action_id not in ["BRIBE_WITNESS", "INTIMIDATE_WITNESS", "KILL_WITNESS"]:
 			continue
 
 		var criminal_id: int = r.get("character_id", -1)
@@ -3167,6 +3180,35 @@ static func _process_witness_tampering_writebacks(
 
 			if success:
 				record.witnesses.erase(witness_id)
+				if action_id == "BRIBE_WITNESS":
+					var witness: L5RCharacterData = characters_by_id.get(witness_id)
+					var criminal: L5RCharacterData = characters_by_id.get(criminal_id)
+					var witness_name: String = witness.character_name if witness != null else "unknown"
+					var criminal_name: String = criminal.character_name if criminal != null else "unknown"
+					var secret: SecretData = SecretSystem.create_secret(
+						next_secret_id[0],
+						witness_id,
+						SecretData.Severity.TIER_2,
+						"bribed_witness_%d" % record.case_id,
+						"%s accepted a bribe from %s to stay silent about case %d" % [
+							witness_name, criminal_name, record.case_id,
+						],
+					)
+					next_secret_id[0] += 1
+					active_secrets.append(secret)
+				elif action_id == "KILL_WITNESS":
+					var kill_concealment: int = effects.get("concealment_tn", 0)
+					var murder_record: CrimeRecord = CrimeSystem.create_crime_record(
+						next_case_id[0],
+						Enums.CrimeType.UNSANCTIONED_COVERT_KILLING,
+						criminal_id,
+						record.location,
+						ic_day,
+						witness_id,
+						kill_concealment,
+					)
+					next_case_id[0] += 1
+					crime_records.append(murder_record)
 			else:
 				var evidence_add: int = effects.get("evidence_on_fail", 10)
 				record.evidence_total += evidence_add
@@ -3367,6 +3409,51 @@ static func _get_witnesses_at_location(
 		if c.physical_location == location:
 			witnesses.append(cid)
 	return witnesses
+
+
+# -- Crime Type String Mapping -------------------------------------------------
+
+static func _crime_type_to_string(crime_type: int) -> String:
+	match crime_type:
+		Enums.CrimeType.VIOLENCE:
+			return "violence"
+		Enums.CrimeType.UNSANCTIONED_OPEN_KILLING, Enums.CrimeType.UNSANCTIONED_COVERT_KILLING:
+			return "murder"
+		Enums.CrimeType.TREASON:
+			return "treason"
+		Enums.CrimeType.SKIMMING:
+			return "skimming"
+		Enums.CrimeType.MAHO:
+			return "maho"
+		_:
+			return "other"
+
+
+# -- Criminal Recall (s11.3.13c Step 1) ----------------------------------------
+# At crime time, the criminal rolls Intelligence vs TN 10 to assess their
+# exposure. On success, they become aware of witnesses and evidence risk,
+# allowing the NPC engine to prioritize SUPPRESS_INVESTIGATION earlier.
+
+static func _apply_criminal_recall(
+	criminal: L5RCharacterData,
+	record: CrimeRecord,
+	witnesses: Array[int],
+	dice_engine: DiceEngine,
+	world_states: Dictionary,
+) -> void:
+	var intelligence: int = criminal.intelligence if criminal.intelligence > 0 else 2
+	var recall_result: Dictionary = dice_engine.roll_and_keep(intelligence, intelligence)
+	var total: int = recall_result.get("total", 0)
+	if total < InvestigationLoopSystem.CRIMINAL_RECALL_TN:
+		return
+
+	var ws: Dictionary = world_states.get(criminal.character_id, {})
+	ws["criminal_recall"] = {
+		"case_id": record.case_id,
+		"witness_count": witnesses.size(),
+		"aware_of_evidence": true,
+	}
+	world_states[criminal.character_id] = ws
 
 
 static func _seed_crime_topic_to_knowers(
