@@ -100,6 +100,9 @@ static func advance_day(
 
 	var travel_arrivals: Array[Dictionary] = _process_travel(characters)
 	_process_arrival_observation(travel_arrivals, characters_by_id, current_season)
+	_process_witness_testimony_on_arrival(
+		travel_arrivals, characters_by_id, world_states, active_topics, current_season,
+	)
 
 	var musha_season_count: int = int(season_meta.get("horde_season_count", 0))
 	var musha_shugyo_results: Array[Dictionary] = _process_musha_shugyo(characters, characters_by_id, ic_day, objectives_map, dice_engine, musha_season_count)
@@ -270,6 +273,10 @@ static func advance_day(
 		day_result.get("results", []),
 		characters_by_id, character_province_map, dice_engine,
 		active_topics, next_topic_id, ic_day,
+	)
+
+	_capture_witness_travel_intent(
+		day_result.get("results", []), world_states,
 	)
 
 	var current_season_count: int = int(season_meta.get("horde_season_count", 0))
@@ -4958,6 +4965,81 @@ static func _process_arrival_observation(
 			InformationSystem.record_location_observation(
 				other, char_id, dest, current_season
 			)
+
+
+# -- Witness Testimony on Arrival (s57.16 — witness reaches magistrate) --------
+# When a witness who traveled via BEGIN_TRAVEL (witness_report_motivated) arrives
+# at the magistrate's location, directly transfer the crime topic.
+
+static func _capture_witness_travel_intent(
+	results: Array,
+	world_states: Dictionary,
+) -> void:
+	for r: Dictionary in results:
+		if r.get("action_id", "") != "BEGIN_TRAVEL":
+			continue
+		var metadata: Dictionary = r.get("metadata", {})
+		var mag_id: int = metadata.get("seek_magistrate_id", -1)
+		if mag_id < 0:
+			continue
+		var char_id: int = r.get("character_id", -1)
+		if char_id < 0:
+			continue
+		var ws: Dictionary = world_states.get(char_id, {})
+		ws["witness_travel_intent"] = {
+			"magistrate_id": mag_id,
+			"destination": metadata.get("destination", ""),
+		}
+		world_states[char_id] = ws
+
+
+static func _process_witness_testimony_on_arrival(
+	arrivals: Array[Dictionary],
+	characters_by_id: Dictionary,
+	world_states: Dictionary,
+	active_topics: Array[TopicData],
+	current_season: int,
+) -> void:
+	for arrival: Dictionary in arrivals:
+		var char_id: int = arrival.get("character_id", -1)
+		var dest: String = arrival.get("destination", "")
+		if char_id < 0 or dest.is_empty():
+			continue
+
+		var ws: Dictionary = world_states.get(char_id, {})
+		var intent: Dictionary = ws.get("witness_travel_intent", {})
+		if intent.is_empty():
+			continue
+
+		var mag_id: int = intent.get("magistrate_id", -1)
+		var magistrate: L5RCharacterData = characters_by_id.get(mag_id)
+		if magistrate == null or magistrate.physical_location != dest:
+			continue
+
+		var witness: L5RCharacterData = characters_by_id.get(char_id)
+		if witness == null:
+			continue
+
+		for topic_id: int in witness.topic_pool:
+			for topic: TopicData in active_topics:
+				if topic.topic_id != topic_id:
+					continue
+				if topic.topic_type != "crime":
+					continue
+				if topic_id not in magistrate.topic_pool:
+					magistrate.topic_pool.append(topic_id)
+					InformationSystem.add_knowledge(magistrate, InformationSystem.make_entry(
+						Enums.KnowledgeSource.TESTIMONY,
+						"topic_learned",
+						{
+							"topic": topic_id,
+							"from_character_id": char_id,
+						},
+						current_season,
+					))
+
+		ws.erase("witness_travel_intent")
+		world_states[char_id] = ws
 
 
 # -- Objective Progress Evaluation (s55.29.3) ----------------------------------

@@ -368,6 +368,7 @@ enum KnowledgeSource {
 	LETTER,
 	INTELLIGENCE,
 	PUBLIC_KNOWLEDGE,
+	TESTIMONY,
 }
 
 enum KnowledgeConfidence {

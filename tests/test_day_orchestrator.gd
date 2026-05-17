@@ -6392,3 +6392,108 @@ func test_apply_victim_death_sets_lethal_wounds_and_creates_topic() -> void:
 	assert_eq(topic.category, TopicData.Category.LEGAL)
 	assert_eq(topic.clan_involved, "Crane")
 	assert_eq(next_topic_id[0], 8001)
+
+
+# -- Witness Testimony on Arrival ----------------------------------------------
+
+func test_capture_witness_travel_intent_stores_in_world_states() -> void:
+	var world_states: Dictionary = {}
+	var results: Array = [{
+		"action_id": "BEGIN_TRAVEL",
+		"character_id": 50,
+		"success": true,
+		"metadata": {"seek_magistrate_id": 100, "destination": "crane_city"},
+	}]
+
+	DayOrchestrator._capture_witness_travel_intent(results, world_states)
+
+	var ws: Dictionary = world_states.get(50, {})
+	var intent: Dictionary = ws.get("witness_travel_intent", {})
+	assert_eq(intent.get("magistrate_id", -1), 100)
+	assert_eq(intent.get("destination", ""), "crane_city")
+
+
+func test_capture_witness_travel_intent_ignores_normal_travel() -> void:
+	var world_states: Dictionary = {}
+	var results: Array = [{
+		"action_id": "BEGIN_TRAVEL",
+		"character_id": 51,
+		"success": true,
+		"metadata": {"destination": "crane_city"},
+	}]
+
+	DayOrchestrator._capture_witness_travel_intent(results, world_states)
+
+	var ws: Dictionary = world_states.get(51, {})
+	assert_true(ws.get("witness_travel_intent", {}).is_empty())
+
+
+func test_witness_testimony_transfers_crime_topic_on_arrival() -> void:
+	var witness := L5RCharacterData.new()
+	witness.character_id = 50
+	witness.character_name = "Witness Traveler"
+
+	var magistrate := L5RCharacterData.new()
+	magistrate.character_id = 100
+	magistrate.character_name = "Magistrate"
+	magistrate.physical_location = "crane_city"
+	magistrate.knowledge_pool = [] as Array[KnowledgeEntry]
+
+	var crime_topic := TopicData.new()
+	crime_topic.topic_id = 900
+	crime_topic.topic_type = "crime"
+	crime_topic.slug = "crime_case_42"
+	witness.topic_pool = [900]
+	magistrate.topic_pool = []
+
+	var active_topics: Array[TopicData] = [crime_topic]
+	var characters_by_id: Dictionary = {50: witness, 100: magistrate}
+	var world_states: Dictionary = {
+		50: {"witness_travel_intent": {"magistrate_id": 100, "destination": "crane_city"}},
+	}
+
+	var arrivals: Array[Dictionary] = [
+		{"character_id": 50, "destination": "crane_city", "arrived": true},
+	]
+
+	DayOrchestrator._process_witness_testimony_on_arrival(
+		arrivals, characters_by_id, world_states, active_topics, 1,
+	)
+
+	assert_true(magistrate.topic_pool.has(900))
+	assert_eq(magistrate.knowledge_pool.size(), 1)
+	assert_eq(magistrate.knowledge_pool[0].source, Enums.KnowledgeSource.TESTIMONY)
+	var ws: Dictionary = world_states.get(50, {})
+	assert_true(ws.get("witness_travel_intent", {}).is_empty())
+
+
+func test_witness_testimony_skipped_if_magistrate_not_at_destination() -> void:
+	var witness := L5RCharacterData.new()
+	witness.character_id = 52
+	witness.topic_pool = [901]
+
+	var magistrate := L5RCharacterData.new()
+	magistrate.character_id = 101
+	magistrate.physical_location = "scorpion_city"
+	magistrate.topic_pool = []
+
+	var crime_topic := TopicData.new()
+	crime_topic.topic_id = 901
+	crime_topic.topic_type = "crime"
+	crime_topic.slug = "crime_case_43"
+
+	var active_topics: Array[TopicData] = [crime_topic]
+	var characters_by_id: Dictionary = {52: witness, 101: magistrate}
+	var world_states: Dictionary = {
+		52: {"witness_travel_intent": {"magistrate_id": 101, "destination": "crane_city"}},
+	}
+
+	var arrivals: Array[Dictionary] = [
+		{"character_id": 52, "destination": "crane_city", "arrived": true},
+	]
+
+	DayOrchestrator._process_witness_testimony_on_arrival(
+		arrivals, characters_by_id, world_states, active_topics, 1,
+	)
+
+	assert_false(magistrate.topic_pool.has(901))
