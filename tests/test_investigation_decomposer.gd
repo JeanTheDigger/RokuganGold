@@ -307,3 +307,152 @@ func test_uphold_law_no_active_case_passthrough():
 	}
 	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, ctx)
 	assert_eq(need.need_type, "UPHOLD_LAW")
+
+
+# -- Evidence-Aware Scoring Tests ----------------------------------------------
+
+func test_scoring_witness_prioritized_over_suspect():
+	var ctx := _make_ctx("zone_a", [200, 300])
+	var obj := _make_objective({
+		"scene_examined": true,
+		"witness_pool": [200],
+		"known_suspects": [300],
+		"npc_locations": {200: "zone_a", 300: "zone_a"},
+	})
+	var need: NPCDataStructures.ImmediateNeed = InvestigationDecomposer.decompose(obj, ctx)
+	assert_eq(need.need_type, "GATHER_INTELLIGENCE")
+	assert_eq(need.target_npc_id, 200)
+
+
+func test_scoring_present_witness_beats_absent_witness():
+	var ctx := _make_ctx("zone_a", [201])
+	var obj := _make_objective({
+		"scene_examined": true,
+		"witness_pool": [200, 201],
+		"npc_locations": {200: "zone_b", 201: "zone_a"},
+	})
+	var need: NPCDataStructures.ImmediateNeed = InvestigationDecomposer.decompose(obj, ctx)
+	assert_eq(need.need_type, "GATHER_INTELLIGENCE")
+	assert_eq(need.target_npc_id, 201)
+
+
+func test_scoring_suspect_chosen_when_no_witnesses():
+	var ctx := _make_ctx("zone_a", [300])
+	var obj := _make_objective({
+		"scene_examined": true,
+		"known_suspects": [300],
+		"npc_locations": {300: "zone_a"},
+	})
+	var need: NPCDataStructures.ImmediateNeed = InvestigationDecomposer.decompose(obj, ctx)
+	assert_eq(need.need_type, "GATHER_INTELLIGENCE")
+	assert_eq(need.target_npc_id, 300)
+
+
+func test_scoring_reexamine_scene_low_evidence():
+	var ctx := _make_ctx("zone_a")
+	var obj := _make_objective({
+		"scene_examined": true,
+		"scene_exam_count": 1,
+		"evidence_total": 5,
+		"ic_day_committed": 1,
+	})
+	ctx.ic_day = 10
+	var need: NPCDataStructures.ImmediateNeed = InvestigationDecomposer.decompose(obj, ctx)
+	assert_eq(need.need_type, "INVESTIGATE_THREAT")
+	assert_eq(need.target_intent, "zone_a")
+
+
+func test_scoring_no_reexamine_at_max_count():
+	var ctx := _make_ctx("zone_a")
+	var obj := _make_objective({
+		"scene_examined": true,
+		"scene_exam_count": 2,
+		"evidence_total": 5,
+		"ic_day_committed": 1,
+	})
+	ctx.ic_day = 10
+	var need: NPCDataStructures.ImmediateNeed = InvestigationDecomposer.decompose(obj, ctx)
+	assert_eq(need.need_type, "REST")
+	assert_eq(need.source, "INVESTIGATE_CRIME_CLOSED")
+
+
+func test_scoring_no_reexamine_above_evidence_cap():
+	var ctx := _make_ctx("zone_a")
+	var obj := _make_objective({
+		"scene_examined": true,
+		"scene_exam_count": 1,
+		"evidence_total": 16,
+		"ic_day_committed": 1,
+	})
+	ctx.ic_day = 10
+	var need: NPCDataStructures.ImmediateNeed = InvestigationDecomposer.decompose(obj, ctx)
+	assert_eq(need.need_type, "REST")
+	assert_eq(need.source, "INVESTIGATE_CRIME_CLOSED")
+
+
+func test_scoring_no_reexamine_scene_too_old():
+	var ctx := _make_ctx("zone_a")
+	var obj := _make_objective({
+		"scene_examined": true,
+		"scene_exam_count": 1,
+		"evidence_total": 5,
+		"ic_day_committed": 1,
+	})
+	ctx.ic_day = 35
+	var need: NPCDataStructures.ImmediateNeed = InvestigationDecomposer.decompose(obj, ctx)
+	assert_eq(need.need_type, "REST")
+	assert_eq(need.source, "INVESTIGATE_CRIME_CLOSED")
+
+
+func test_scoring_lead_with_high_priority_beats_alibi():
+	var ctx := _make_ctx("zone_a")
+	var obj := _make_objective({
+		"scene_examined": true,
+		"known_suspects": [300],
+		"interviewed_suspects": [300],
+		"alibis": [{"id": 1, "claimed_with": 400}],
+		"unresolved_leads": [{"type": "witness", "target_npc_id": 500, "priority": 5}],
+		"npc_locations": {400: "zone_b", 500: "zone_a"},
+	})
+	var need: NPCDataStructures.ImmediateNeed = InvestigationDecomposer.decompose(obj, ctx)
+	assert_eq(need.need_type, "GATHER_INTELLIGENCE")
+	assert_eq(need.target_npc_id, 500)
+
+
+func test_scoring_evidence_gap_bonus_for_witnesses():
+	var ctx := _make_ctx("zone_a", [200])
+	var obj := _make_objective({
+		"scene_examined": true,
+		"evidence_total": 25,
+		"witness_pool": [200],
+		"npc_locations": {200: "zone_a"},
+	})
+	var need: NPCDataStructures.ImmediateNeed = InvestigationDecomposer.decompose(obj, ctx)
+	assert_eq(need.need_type, "GATHER_INTELLIGENCE")
+	assert_eq(need.target_npc_id, 200)
+
+
+func test_scoring_travels_to_best_candidate_location():
+	var ctx := _make_ctx("zone_a")
+	var obj := _make_objective({
+		"scene_examined": true,
+		"witness_pool": [200],
+		"npc_locations": {200: "zone_c"},
+	})
+	var need: NPCDataStructures.ImmediateNeed = InvestigationDecomposer.decompose(obj, ctx)
+	assert_eq(need.need_type, "TRAVEL_TO")
+	assert_eq(need.target_intent, "zone_c")
+
+
+func test_early_accusation_skips_scoring():
+	var ctx := _make_ctx("zone_a", [200])
+	var obj := _make_objective({
+		"scene_examined": true,
+		"evidence_total": 40,
+		"known_suspects": [300],
+		"witness_pool": [200],
+		"npc_locations": {200: "zone_a"},
+	})
+	var need: NPCDataStructures.ImmediateNeed = InvestigationDecomposer.decompose(obj, ctx)
+	assert_eq(need.need_type, "ASSIGN_OBJECTIVE")
+	assert_eq(need.target_intent, "FORMALLY_ACCUSE")
