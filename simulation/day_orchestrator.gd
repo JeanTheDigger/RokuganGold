@@ -200,7 +200,8 @@ static func advance_day(
 	)
 
 	_process_scene_examination_writebacks(
-		day_result.get("results", []), objectives_map, world_states
+		day_result.get("results", []), objectives_map, world_states,
+		characters_by_id, active_topics, next_topic_id, ic_day,
 	)
 
 	var current_season_count: int = int(season_meta.get("horde_season_count", 0))
@@ -472,6 +473,9 @@ static func advance_day(
 		crime_records,
 		objectives_map,
 		world_states,
+		active_topics,
+		next_topic_id,
+		ic_day,
 	)
 
 	var letter_results: Array[Dictionary] = LetterSystem.process_pending_letters(
@@ -806,6 +810,9 @@ static func _process_info_events(
 	crime_records: Array[CrimeRecord] = [],
 	objectives_map: Dictionary = {},
 	world_states: Dictionary = {},
+	active_topics: Array[TopicData] = [],
+	next_topic_id: Array[int] = [1000],
+	ic_day: int = 0,
 ) -> Array[Dictionary]:
 	var results: Array[Dictionary] = []
 
@@ -829,9 +836,15 @@ static func _process_info_events(
 					char_id, target_id, quality, crime_records, objectives_map
 				)
 
-				if witness_result.get("threshold_crossed", "") == "bribery_eval":
+				var w_threshold: String = witness_result.get("threshold_crossed", "")
+				if w_threshold == "bribery_eval":
 					_inject_bribery_eval_event(
 						crime_records, target_id, world_states
+					)
+				elif w_threshold == "accusation":
+					_generate_accusation_topic_from_witness(
+						char_id, crime_records, objectives_map,
+						characters_by_id, active_topics, next_topic_id, ic_day
 					)
 
 				results.append({
@@ -2269,6 +2282,10 @@ static func _process_scene_examination_writebacks(
 	results: Array,
 	objectives_map: Dictionary,
 	world_states: Dictionary,
+	characters_by_id: Dictionary = {},
+	active_topics: Array[TopicData] = [],
+	next_topic_id: Array[int] = [1000],
+	ic_day: int = 0,
 ) -> void:
 	for result: Variant in results:
 		if not result is Dictionary:
@@ -2300,6 +2317,11 @@ static func _process_scene_examination_writebacks(
 		var threshold: String = effects.get("threshold_crossed", "")
 		if threshold == "bribery_eval":
 			_inject_bribery_eval_event_by_case(case_id, world_states)
+		elif threshold == "accusation":
+			_generate_accusation_topic_for_case(
+				case_id, world_states, characters_by_id,
+				active_topics, next_topic_id, ic_day
+			)
 
 
 static func _inject_bribery_eval_event_by_case(
@@ -2322,6 +2344,89 @@ static func _inject_bribery_eval_event_by_case(
 			ws["pending_events"] = pending
 			world_states[perp_id] = ws
 			return
+
+
+static func _generate_accusation_topic_for_case(
+	case_id: int,
+	world_states: Dictionary,
+	characters_by_id: Dictionary,
+	active_topics: Array[TopicData],
+	next_topic_id: Array[int],
+	ic_day: int,
+) -> void:
+	var cr: Array[CrimeRecord] = world_states.get("_crime_records", [] as Array[CrimeRecord])
+	for record: CrimeRecord in cr:
+		if record.case_id == case_id:
+			var accused: L5RCharacterData = characters_by_id.get(record.perpetrator_id)
+			if accused == null:
+				return
+			_transition_case_entry_to_accused(accused, case_id, ic_day)
+			var topic: TopicData = InvestigationSystem.generate_accusation_topic(
+				record, accused, next_topic_id, ic_day
+			)
+			if topic != null:
+				active_topics.append(topic)
+				var lord_id: int = accused.lord_id
+				var lord: L5RCharacterData = characters_by_id.get(lord_id)
+				if lord != null and topic.topic_id not in lord.topic_pool:
+					lord.topic_pool.append(topic.topic_id)
+			return
+
+
+static func _generate_accusation_topic_from_witness(
+	prober_id: int,
+	crime_records: Array[CrimeRecord],
+	objectives_map: Dictionary,
+	characters_by_id: Dictionary,
+	active_topics: Array[TopicData],
+	next_topic_id: Array[int],
+	ic_day: int,
+) -> void:
+	var objectives: Dictionary = objectives_map.get(prober_id, {})
+	var standing: Dictionary = objectives.get("standing", {})
+	var active_case: Dictionary = standing.get("active_case", {})
+	if active_case.is_empty():
+		var primary: Dictionary = objectives.get("primary", {})
+		active_case = primary if primary.get("need_type", "") == "INVESTIGATE_CRIME" else {}
+	if active_case.is_empty():
+		return
+
+	var case_id: int = active_case.get("case_id", -1)
+	if case_id < 0:
+		return
+
+	for record: CrimeRecord in crime_records:
+		if record.case_id == case_id:
+			var accused: L5RCharacterData = characters_by_id.get(record.perpetrator_id)
+			if accused == null:
+				return
+			_transition_case_entry_to_accused(accused, case_id, ic_day)
+			var topic: TopicData = InvestigationSystem.generate_accusation_topic(
+				record, accused, next_topic_id, ic_day
+			)
+			if topic != null:
+				active_topics.append(topic)
+				var lord_id: int = accused.lord_id
+				var lord: L5RCharacterData = characters_by_id.get(lord_id)
+				if lord != null and topic.topic_id not in lord.topic_pool:
+					lord.topic_pool.append(topic.topic_id)
+			return
+
+
+static func _transition_case_entry_to_accused(
+	accused: L5RCharacterData,
+	case_id: int,
+	ic_day: int,
+) -> void:
+	var entry: LegalCaseEntry = LegalStatusSystem.get_case(accused, case_id)
+	if entry != null:
+		LegalStatusSystem.transition(entry, Enums.LegalStatus.ACCUSED, ic_day)
+	else:
+		var new_entry := LegalCaseEntry.new()
+		new_entry.crime_record_id = case_id
+		new_entry.state = Enums.LegalStatus.ACCUSED
+		new_entry.evidence_total = InvestigationSystem.ACCUSATION_THRESHOLD
+		accused.legal_cases.append(new_entry)
 
 
 # -- Crime Detection (s57.47) --------------------------------------------------

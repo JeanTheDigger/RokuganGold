@@ -560,3 +560,36 @@ static func generate_seppuku_refusal_topic(
 	topic.slug = "seppuku_refusal_%d" % convicted.character_id
 	topic.subject_role = "PERPETRATOR"
 	return topic
+
+
+# -- Accusation Topic Generation (T3-20 BETRAYAL_ACCUSATION) -------------------
+
+static func generate_accusation_topic(
+	record: CrimeRecord,
+	accused: L5RCharacterData,
+	next_topic_id: Array[int],
+	ic_day: int,
+) -> TopicData:
+	var crime_name: String = CRIME_TYPE_NAMES.get(record.crime_type, "Crime")
+	var title: String = "%s accused of %s" % [accused.character_name, crime_name]
+
+	var topic_id: int = next_topic_id[0]
+	next_topic_id[0] = topic_id + 1
+
+	var topic: TopicData = TopicMomentumSystem.create_topic(
+		topic_id,
+		title,
+		TopicData.Tier.TIER_3,
+		TopicData.Category.POLITICAL,
+		ic_day,
+		25.0,
+		[],
+		accused.clan,
+		accused.family,
+		accused.character_id,
+		"accusation",
+		crime_name.to_lower().replace(" ", "_"),
+	)
+	topic.slug = "accusation_%d" % record.case_id
+	topic.subject_role = "PERPETRATOR"
+	return topic

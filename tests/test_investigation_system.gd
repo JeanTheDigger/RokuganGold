@@ -695,3 +695,65 @@ func test_examine_scene_open_killing_concealment_zero() -> void:
 	var result: Dictionary = InvestigationSystem.examine_scene(mag, cr, _dice, 0)
 	assert_true(result["success"])
 	assert_true(result["evidence_gained"] >= InvestigationSystem.SCENE_EVIDENCE_MINOR)
+
+
+# -- Accusation Topic Generation -----------------------------------------------
+
+func test_generate_accusation_topic_creates_valid_topic() -> void:
+	var cr := _make_crime_record(15, 0)
+	cr.crime_type = Enums.CrimeType.VIOLENCE
+	var accused := L5RCharacterData.new()
+	accused.character_id = 5
+	accused.character_name = "Bayushi Koro"
+	accused.clan = "Scorpion"
+	accused.family = "Bayushi"
+	var next_id: Array[int] = [100]
+
+	var topic: TopicData = InvestigationSystem.generate_accusation_topic(
+		cr, accused, next_id, 50
+	)
+	assert_not_null(topic)
+	assert_eq(topic.topic_id, 100)
+	assert_eq(next_id[0], 101)
+	assert_eq(topic.tier, TopicData.Tier.TIER_3)
+	assert_eq(topic.category, TopicData.Category.POLITICAL)
+	assert_true(topic.title.contains("Bayushi Koro"))
+	assert_true(topic.title.contains("Violence"))
+	assert_eq(topic.slug, "accusation_1")
+	assert_eq(topic.subject_role, "PERPETRATOR")
+
+
+func test_generate_accusation_topic_uses_crime_name() -> void:
+	var cr := _make_crime_record(15, 0)
+	cr.crime_type = Enums.CrimeType.TREASON
+	var accused := L5RCharacterData.new()
+	accused.character_id = 5
+	accused.character_name = "Shosuro Mei"
+	accused.clan = "Scorpion"
+	accused.family = "Shosuro"
+	var next_id: Array[int] = [200]
+
+	var topic: TopicData = InvestigationSystem.generate_accusation_topic(
+		cr, accused, next_id, 75
+	)
+	assert_not_null(topic)
+	assert_true(topic.title.contains("Treason"))
+
+
+func test_accusation_threshold_triggers_on_evidence_40() -> void:
+	var cr := _make_crime_record(15, 0)
+	cr.evidence_total = 39
+	cr.legal_status = Enums.LegalStatus.UNDER_INVESTIGATION
+	var threshold: String = InvestigationSystem.add_evidence(cr, 5)
+	assert_eq(threshold, "accusation")
+	assert_eq(cr.legal_status, Enums.LegalStatus.ACCUSED)
+	assert_eq(cr.evidence_total, 44)
+
+
+func test_accusation_threshold_not_re_triggered_if_already_accused() -> void:
+	var cr := _make_crime_record(15, 0)
+	cr.evidence_total = 45
+	cr.legal_status = Enums.LegalStatus.ACCUSED
+	var threshold: String = InvestigationSystem.add_evidence(cr, 5)
+	assert_eq(threshold, "")
+	assert_eq(cr.legal_status, Enums.LegalStatus.ACCUSED)

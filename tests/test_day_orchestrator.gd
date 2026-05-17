@@ -3056,3 +3056,193 @@ func test_clan_balance_skill_still_matters() -> void:
 		emperor_id, "Magistrate", chars, by_id, 25.0, clan_counts,
 	)
 	assert_eq(result, 10)
+
+
+# -- Accusation Threshold Wiring -----------------------------------------------
+
+func test_scene_exam_accusation_generates_topic() -> void:
+	var accused := L5RCharacterData.new()
+	accused.character_id = 5
+	accused.character_name = "Bayushi Koro"
+	accused.clan = "Scorpion"
+	accused.family = "Bayushi"
+	accused.lord_id = 10
+	accused.legal_cases = []
+
+	var lord := L5RCharacterData.new()
+	lord.character_id = 10
+	lord.character_name = "Bayushi Shoju"
+	lord.topic_pool = [] as Array[int]
+
+	var record := CrimeRecord.new()
+	record.case_id = 7
+	record.crime_type = Enums.CrimeType.VIOLENCE
+	record.perpetrator_id = 5
+	record.evidence_total = 45
+	record.legal_status = Enums.LegalStatus.ACCUSED
+
+	var characters_by_id: Dictionary = {5: accused, 10: lord}
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [500]
+	var world_states: Dictionary = {"_crime_records": [record] as Array[CrimeRecord]}
+
+	var results: Array = [{
+		"action_id": "EXAMINE_CRIME_SCENE",
+		"success": true,
+		"character_id": 1,
+		"effects": {
+			"effect": "scene_examined",
+			"case_id": 7,
+			"evidence_gained": 10,
+			"threshold_crossed": "accusation",
+		},
+	}]
+	var objectives_map: Dictionary = {}
+
+	DayOrchestrator._process_scene_examination_writebacks(
+		results, objectives_map, world_states,
+		characters_by_id, active_topics, next_topic_id, 100,
+	)
+
+	assert_eq(active_topics.size(), 1)
+	assert_eq(active_topics[0].topic_id, 500)
+	assert_eq(next_topic_id[0], 501)
+	assert_true(active_topics[0].title.contains("Bayushi Koro"))
+	assert_true(lord.topic_pool.has(500))
+
+
+func test_scene_exam_accusation_transitions_case_entry() -> void:
+	var accused := L5RCharacterData.new()
+	accused.character_id = 5
+	accused.character_name = "Akodo Ryu"
+	accused.clan = "Lion"
+	accused.family = "Akodo"
+	accused.lord_id = 10
+
+	var existing_entry := LegalCaseEntry.new()
+	existing_entry.crime_record_id = 3
+	existing_entry.state = Enums.LegalStatus.UNDER_INVESTIGATION
+	accused.legal_cases = [existing_entry]
+
+	var lord := L5RCharacterData.new()
+	lord.character_id = 10
+	lord.topic_pool = [] as Array[int]
+
+	var record := CrimeRecord.new()
+	record.case_id = 3
+	record.crime_type = Enums.CrimeType.SKIMMING
+	record.perpetrator_id = 5
+	record.evidence_total = 42
+	record.legal_status = Enums.LegalStatus.ACCUSED
+
+	var characters_by_id: Dictionary = {5: accused, 10: lord}
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [600]
+	var world_states: Dictionary = {"_crime_records": [record] as Array[CrimeRecord]}
+
+	var results: Array = [{
+		"action_id": "EXAMINE_CRIME_SCENE",
+		"success": true,
+		"character_id": 1,
+		"effects": {
+			"effect": "scene_examined",
+			"case_id": 3,
+			"evidence_gained": 8,
+			"threshold_crossed": "accusation",
+		},
+	}]
+
+	DayOrchestrator._process_scene_examination_writebacks(
+		results, {}, world_states,
+		characters_by_id, active_topics, next_topic_id, 150,
+	)
+
+	assert_eq(existing_entry.state, Enums.LegalStatus.ACCUSED)
+
+
+func test_scene_exam_accusation_creates_case_entry_if_missing() -> void:
+	var accused := L5RCharacterData.new()
+	accused.character_id = 5
+	accused.character_name = "Shosuro Mei"
+	accused.clan = "Scorpion"
+	accused.family = "Shosuro"
+	accused.lord_id = 10
+	accused.legal_cases = []
+
+	var lord := L5RCharacterData.new()
+	lord.character_id = 10
+	lord.topic_pool = [] as Array[int]
+
+	var record := CrimeRecord.new()
+	record.case_id = 9
+	record.crime_type = Enums.CrimeType.VIOLENCE
+	record.perpetrator_id = 5
+	record.evidence_total = 40
+	record.legal_status = Enums.LegalStatus.ACCUSED
+
+	var characters_by_id: Dictionary = {5: accused, 10: lord}
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [700]
+	var world_states: Dictionary = {"_crime_records": [record] as Array[CrimeRecord]}
+
+	var results: Array = [{
+		"action_id": "EXAMINE_CRIME_SCENE",
+		"success": true,
+		"character_id": 1,
+		"effects": {
+			"effect": "scene_examined",
+			"case_id": 9,
+			"evidence_gained": 5,
+			"threshold_crossed": "accusation",
+		},
+	}]
+
+	DayOrchestrator._process_scene_examination_writebacks(
+		results, {}, world_states,
+		characters_by_id, active_topics, next_topic_id, 200,
+	)
+
+	assert_eq(accused.legal_cases.size(), 1)
+	assert_eq(accused.legal_cases[0].state, Enums.LegalStatus.ACCUSED)
+	assert_eq(accused.legal_cases[0].crime_record_id, 9)
+
+
+func test_witness_accusation_generates_topic() -> void:
+	var accused := L5RCharacterData.new()
+	accused.character_id = 5
+	accused.character_name = "Doji Sato"
+	accused.clan = "Crane"
+	accused.family = "Doji"
+	accused.lord_id = 20
+	accused.legal_cases = []
+
+	var lord := L5RCharacterData.new()
+	lord.character_id = 20
+	lord.topic_pool = [] as Array[int]
+
+	var record := CrimeRecord.new()
+	record.case_id = 12
+	record.crime_type = Enums.CrimeType.UNSANCTIONED_OPEN_KILLING
+	record.perpetrator_id = 5
+	record.evidence_total = 42
+	record.legal_status = Enums.LegalStatus.ACCUSED
+	record.known_suspects = [5]
+
+	var crime_records: Array[CrimeRecord] = [record]
+	var characters_by_id: Dictionary = {5: accused, 20: lord}
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [800]
+
+	var objectives_map: Dictionary = {
+		1: {"standing": {"active_case": {"case_id": 12, "need_type": "INVESTIGATE_CRIME"}}}
+	}
+
+	DayOrchestrator._generate_accusation_topic_from_witness(
+		1, crime_records, objectives_map,
+		characters_by_id, active_topics, next_topic_id, 250,
+	)
+
+	assert_eq(active_topics.size(), 1)
+	assert_eq(active_topics[0].topic_id, 800)
+	assert_true(active_topics[0].title.contains("Doji Sato"))
+	assert_true(lord.topic_pool.has(800))
