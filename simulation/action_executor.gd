@@ -2972,11 +2972,15 @@ static func _execute_probe(
 		attacker_roll, defender_roll, dice_engine
 	)
 
+	var margin: int = attacker_roll - defender_roll
+	var quality: int = maxi(int(margin / 5.0), 1) if margin > 0 else 1
+
 	var effects: Dictionary = {}
 	if resolution.get("success", false):
 		effects["info_gained"] = true
 		effects["info_types"] = resolution.get("info_types", [])
 		effects["info_count"] = resolution.get("info_count", 0)
+		effects["quality"] = quality
 		if resolution.get("partial", false):
 			effects["partial"] = true
 		effects["detected"] = true
@@ -2997,7 +3001,7 @@ static func _execute_probe(
 		"skill_used": "Courtier",
 		"roll_total": attacker_roll,
 		"tn": defender_roll,
-		"margin": attacker_roll - defender_roll,
+		"margin": margin,
 		"effects": effects,
 	}
 

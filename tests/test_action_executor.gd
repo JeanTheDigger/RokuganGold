@@ -1085,3 +1085,28 @@ func test_examine_crime_scene_too_old_fails() -> void:
 	)
 	assert_false(result["success"])
 	assert_eq(result["effects"]["evidence_gained"], 0)
+
+
+# -- PROBE Quality for Witness Evidence ----------------------------------------
+
+func test_probe_success_includes_quality() -> void:
+	var target := L5RCharacterData.new()
+	target.character_id = 10
+	target.character_name = "Target"
+	target.skills = {"Sincerity": 1}
+	target.emphases = {}
+	target.awareness = 2
+	target.wounds_taken = 0
+	var chars: Dictionary = {1: _character, 10: target}
+
+	_character.skills["Courtier"] = 5
+	_character.perception = 4
+	_dice_engine.set_seed(7)
+
+	var action := _make_action("PROBE", 10)
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map, {}, chars
+	)
+	if result["success"]:
+		assert_true(result["effects"].has("quality"))
+		assert_true(result["effects"]["quality"] >= 1)
