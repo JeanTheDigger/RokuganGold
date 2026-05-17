@@ -3246,3 +3246,63 @@ func test_witness_accusation_generates_topic() -> void:
 	assert_eq(active_topics[0].topic_id, 800)
 	assert_true(active_topics[0].title.contains("Doji Sato"))
 	assert_true(lord.topic_pool.has(800))
+
+
+func test_handle_evidence_threshold_accusation() -> void:
+	var accused := L5RCharacterData.new()
+	accused.character_id = 3
+	accused.character_name = "Hida Goro"
+	accused.clan = "Crab"
+	accused.family = "Hida"
+	accused.lord_id = 15
+	accused.legal_cases = []
+
+	var lord := L5RCharacterData.new()
+	lord.character_id = 15
+	lord.topic_pool = [] as Array[int]
+
+	var record := CrimeRecord.new()
+	record.case_id = 22
+	record.crime_type = Enums.CrimeType.VIOLENCE
+	record.perpetrator_id = 3
+	record.evidence_total = 42
+	record.legal_status = Enums.LegalStatus.ACCUSED
+
+	var characters_by_id: Dictionary = {3: accused, 15: lord}
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [900]
+
+	DayOrchestrator.handle_evidence_threshold(
+		"accusation", record, characters_by_id,
+		active_topics, next_topic_id, 300,
+	)
+
+	assert_eq(active_topics.size(), 1)
+	assert_eq(active_topics[0].topic_id, 900)
+	assert_true(lord.topic_pool.has(900))
+	assert_eq(accused.legal_cases.size(), 1)
+	assert_eq(accused.legal_cases[0].state, Enums.LegalStatus.ACCUSED)
+	assert_eq(accused.legal_cases[0].accusation_timestamp, 300)
+
+
+func test_handle_evidence_threshold_bribery_eval() -> void:
+	var record := CrimeRecord.new()
+	record.case_id = 33
+	record.perpetrator_id = 7
+	record.evidence_total = 28
+
+	var world_states: Dictionary = {}
+	var characters_by_id: Dictionary = {}
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [100]
+
+	DayOrchestrator.handle_evidence_threshold(
+		"bribery_eval", record, characters_by_id,
+		active_topics, next_topic_id, 50, world_states,
+	)
+
+	var perp_ws: Dictionary = world_states.get(7, {})
+	var pending: Array = perp_ws.get("pending_events", [])
+	assert_eq(pending.size(), 1)
+	assert_eq(pending[0]["type"], "bribery_eval")
+	assert_eq(pending[0]["case_id"], 33)

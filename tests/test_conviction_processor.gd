@@ -109,6 +109,48 @@ func test_skips_already_convicted():
 	assert_eq(results.size(), 0)
 
 
+func test_skips_case_within_3_day_delay():
+	var accused := _make_char(1, "Lion", 3.0, 2.0, 10)
+	var lord := _make_char(10, "Lion", 6.0)
+	var record := _make_record(Enums.CrimeType.VIOLENCE)
+
+	var case_entry := _make_case_entry(1)
+	case_entry.accusation_timestamp = 198
+	accused.legal_cases = [case_entry]
+
+	var characters_by_id: Dictionary = {1: accused, 10: lord}
+	var lord_map: Dictionary = {1: 10}
+	var topics: Array[TopicData] = []
+	var next_id: Array[int] = [100]
+	var records: Array[CrimeRecord] = [record]
+
+	var results := ConvictionProcessor.process_accused_cases(
+		records, characters_by_id, _dice, 200, next_id, topics, lord_map
+	)
+	assert_eq(results.size(), 0)
+
+
+func test_proceeds_after_3_day_delay():
+	var accused := _make_char(1, "Lion", 3.0, 2.0, 10)
+	var lord := _make_char(10, "Lion", 6.0)
+	var record := _make_record(Enums.CrimeType.VIOLENCE)
+
+	var case_entry := _make_case_entry(1)
+	case_entry.accusation_timestamp = 196
+	accused.legal_cases = [case_entry]
+
+	var characters_by_id: Dictionary = {1: accused, 10: lord}
+	var lord_map: Dictionary = {1: 10}
+	var topics: Array[TopicData] = []
+	var next_id: Array[int] = [100]
+	var records: Array[CrimeRecord] = [record]
+
+	var results := ConvictionProcessor.process_accused_cases(
+		records, characters_by_id, _dice, 200, next_id, topics, lord_map
+	)
+	assert_gt(results.size(), 0)
+
+
 # -- Seppuku resolution ----
 
 func test_seppuku_accepted():

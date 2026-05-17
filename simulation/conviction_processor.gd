@@ -45,6 +45,10 @@ static func process_accused_cases(
 			accused, record.case_id
 		)
 
+		if case_entry != null and case_entry.accusation_timestamp >= 0:
+			if ic_day - case_entry.accusation_timestamp < DEFENSE_HEARING_DAYS_AFTER_ACCUSATION:
+				continue
+
 		var result := _process_single_case(
 			record, case_entry, accused, lord, dice_engine, ic_day,
 			next_topic_id, active_topics, characters_by_id
