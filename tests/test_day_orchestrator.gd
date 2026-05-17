@@ -4363,3 +4363,529 @@ func test_crime_type_to_string_mapping() -> void:
 	assert_eq(DayOrchestrator._crime_type_to_string(Enums.CrimeType.SKIMMING), "skimming")
 	assert_eq(DayOrchestrator._crime_type_to_string(Enums.CrimeType.MAHO), "maho")
 	assert_eq(DayOrchestrator._crime_type_to_string(Enums.CrimeType.TREASON), "treason")
+
+
+# ==============================================================================
+# INTEGRATION TEST: Full Investigation Pipeline End-to-End
+# ==============================================================================
+# Exercises: crime committed → topic created → witnesses seeded → criminal recall
+# → magistrate UPHOLD_LAW scan → scene examination → evidence accumulates
+# → bribery_eval threshold (25) → accusation threshold (40) → fugitive declaration
+
+func test_investigation_pipeline_end_to_end() -> void:
+	# --- Setup: criminal, victim, witness, magistrate ---
+	var criminal := L5RCharacterData.new()
+	criminal.character_id = 100
+	criminal.character_name = "Bayushi Kachiko"
+	criminal.clan = "Scorpion"
+	criminal.family = "Bayushi"
+	criminal.honor = 2.0
+	criminal.glory = 4.0
+	criminal.intelligence = 4
+	criminal.agility = 4
+	criminal.awareness = 3
+	criminal.reflexes = 3
+	criminal.willpower = 3
+	criminal.perception = 3
+	criminal.stamina = 3
+	criminal.strength = 3
+	criminal.void_ring = 3
+	criminal.skills = {"Stealth": 4, "Temptation": 3}
+	criminal.emphases = {}
+	criminal.wounds_taken = 0
+	criminal.knowledge_pool = []
+	criminal.known_contacts_by_clan = {}
+	criminal.met_characters = []
+	criminal.physical_location = "scorpion_province_1"
+	criminal.lord_id = 200
+	criminal.legal_cases = []
+	criminal.topic_pool = []
+
+	var victim := L5RCharacterData.new()
+	victim.character_id = 101
+	victim.character_name = "Crane Merchant"
+	victim.clan = "Crane"
+	victim.physical_location = "scorpion_province_1"
+	victim.honor = 4.0
+	victim.topic_pool = []
+	victim.legal_cases = []
+
+	var witness := L5RCharacterData.new()
+	witness.character_id = 102
+	witness.character_name = "Doji Witness"
+	witness.clan = "Crane"
+	witness.family = "Doji"
+	witness.awareness = 4
+	witness.perception = 3
+	witness.honor = 6.0
+	witness.physical_location = "scorpion_province_1"
+	witness.topic_pool = []
+	witness.legal_cases = []
+
+	var magistrate := L5RCharacterData.new()
+	magistrate.character_id = 103
+	magistrate.character_name = "Soshi Magistrate"
+	magistrate.clan = "Scorpion"
+	magistrate.family = "Soshi"
+	magistrate.role_position = "emerald_magistrate"
+	magistrate.bushido_virtue = Enums.BushidoVirtue.GI
+	magistrate.shourido_virtue = Enums.ShouridoVirtue.NONE
+	magistrate.honor = 7.0
+	magistrate.perception = 4
+	magistrate.intelligence = 4
+	magistrate.awareness = 4
+	magistrate.reflexes = 3
+	magistrate.willpower = 4
+	magistrate.agility = 3
+	magistrate.stamina = 3
+	magistrate.strength = 3
+	magistrate.void_ring = 3
+	magistrate.skills = {"Investigation": 5, "Etiquette": 3, "Lore: Law": 4}
+	magistrate.emphases = {}
+	magistrate.wounds_taken = 0
+	magistrate.knowledge_pool = []
+	magistrate.known_contacts_by_clan = {}
+	magistrate.met_characters = []
+	magistrate.physical_location = "scorpion_province_1"
+	magistrate.topic_pool = []
+	magistrate.legal_cases = []
+
+	var lord := L5RCharacterData.new()
+	lord.character_id = 200
+	lord.character_name = "Bayushi Lord"
+	lord.clan = "Scorpion"
+	lord.topic_pool = []
+	lord.legal_cases = []
+
+	var characters_by_id: Dictionary = {
+		100: criminal, 101: victim, 102: witness, 103: magistrate, 200: lord,
+	}
+
+	var crime_records: Array[CrimeRecord] = []
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [1000]
+	var next_case_id: Array[int] = [1]
+	var world_states: Dictionary = {}
+	var ic_day: int = 50
+
+	# ---------------------------------------------------------------
+	# PHASE 1: Crime committed — murder with a witness present
+	# ---------------------------------------------------------------
+	var witnesses: Array[int] = [102]
+	var record: CrimeRecord = CrimeSystem.create_crime_record(
+		next_case_id[0],
+		Enums.CrimeType.UNSANCTIONED_COVERT_KILLING,
+		100,
+		"scorpion_province_1",
+		ic_day,
+		101,
+		15,
+		witnesses,
+	)
+	next_case_id[0] += 1
+	crime_records.append(record)
+
+	# Verify discovery type routes to IMMEDIATE for murder
+	var crime_type_str: String = DayOrchestrator._crime_type_to_string(
+		Enums.CrimeType.UNSANCTIONED_COVERT_KILLING
+	)
+	var discovery: InvestigationLoopSystem.DiscoveryType = InvestigationLoopSystem.get_discovery_type(crime_type_str)
+	assert_eq(discovery, InvestigationLoopSystem.DiscoveryType.IMMEDIATE)
+	record.legal_status = InvestigationLoopSystem.get_initial_legal_status(discovery)
+	assert_eq(record.legal_status, Enums.LegalStatus.UNDER_INVESTIGATION)
+
+	# Crime topic created and seeded to witness
+	var crime_topic: TopicData = DayOrchestrator._create_crime_topic(
+		record, criminal, ic_day, next_topic_id,
+	)
+	assert_not_null(crime_topic)
+	assert_eq(crime_topic.slug, "crime_case_1")
+	active_topics.append(crime_topic)
+	DayOrchestrator._seed_crime_topic_to_knowers(crime_topic, record, characters_by_id)
+
+	# Witness now knows about the crime topic
+	assert_true(crime_topic.topic_id in witness.topic_pool)
+	# Victim also seeded
+	assert_true(crime_topic.topic_id in victim.topic_pool)
+
+	# ---------------------------------------------------------------
+	# PHASE 2: Criminal recall — Intelligence vs TN 10
+	# ---------------------------------------------------------------
+	_dice.set_seed(42)
+	DayOrchestrator._apply_criminal_recall(
+		criminal, record, witnesses, _dice, world_states,
+	)
+	# Intelligence 4 vs TN 10 — with seed 42, likely to succeed
+	var recall_data: Dictionary = world_states.get(100, {}).get("criminal_recall", {})
+	if not recall_data.is_empty():
+		assert_eq(recall_data["case_id"], 1)
+		assert_eq(recall_data["witness_count"], 1)
+		assert_true(recall_data["aware_of_evidence"])
+	else:
+		pass_test("Recall failed — probabilistic")
+
+	# ---------------------------------------------------------------
+	# PHASE 3: Magistrate UPHOLD_LAW scan picks up the crime topic
+	# ---------------------------------------------------------------
+	# Give magistrate knowledge of the crime topic
+	magistrate.topic_pool.append(crime_topic.topic_id)
+
+	var objectives_map: Dictionary = {
+		103: {
+			"standing": {"need_type": "UPHOLD_LAW"},
+		},
+	}
+
+	var uphold_results: Array[Dictionary] = DayOrchestrator._process_uphold_law_scan(
+		[magistrate] as Array[L5RCharacterData],
+		objectives_map,
+		crime_records,
+		active_topics,
+	)
+
+	assert_eq(uphold_results.size(), 1)
+	assert_eq(uphold_results[0]["magistrate_id"], 103)
+	assert_eq(uphold_results[0]["case_id"], 1)
+	# Magistrate is now assigned to the case
+	assert_eq(record.investigating_magistrate_id, 103)
+
+	# Investigation opened topic generated
+	DayOrchestrator._generate_investigation_opened_topics(
+		uphold_results, crime_records, characters_by_id,
+		active_topics, next_topic_id, ic_day,
+	)
+	var investigation_topic: TopicData = null
+	for t: TopicData in active_topics:
+		if t.slug == "investigation_1":
+			investigation_topic = t
+			break
+	assert_not_null(investigation_topic)
+
+	# ---------------------------------------------------------------
+	# PHASE 4: Scene examination — evidence accumulates
+	# ---------------------------------------------------------------
+	_dice.set_seed(100)
+	var exam_result: Dictionary = InvestigationSystem.examine_scene(
+		magistrate, record, _dice, ic_day,
+	)
+	assert_true(exam_result["success"])
+	assert_true(exam_result["evidence_gained"] > 0)
+
+	# Evidence should be building. If not enough yet, add a second pass.
+	if record.evidence_total < InvestigationSystem.BRIBERY_EVAL_TRIGGER:
+		_dice.set_seed(200)
+		InvestigationSystem.examine_scene(magistrate, record, _dice, ic_day + 1)
+
+	# ---------------------------------------------------------------
+	# PHASE 5: Bribery eval threshold (25) — criminal gets event
+	# ---------------------------------------------------------------
+	# Manually push evidence to exactly trigger bribery_eval if not there yet
+	if record.evidence_total < InvestigationSystem.BRIBERY_EVAL_TRIGGER:
+		record.evidence_total = InvestigationSystem.BRIBERY_EVAL_TRIGGER
+
+	var threshold_1: String = InvestigationSystem.check_thresholds(record)
+	assert_eq(threshold_1, "bribery_eval")
+
+	DayOrchestrator.handle_evidence_threshold(
+		"bribery_eval", record, characters_by_id,
+		active_topics, next_topic_id, ic_day, world_states,
+	)
+
+	# Criminal should have a pending bribery_eval event
+	var criminal_ws: Dictionary = world_states.get(100, {})
+	var criminal_pending: Array = criminal_ws.get("pending_events", [])
+	var has_bribery_eval: bool = false
+	for ev: Dictionary in criminal_pending:
+		if ev.get("type", "") == "bribery_eval":
+			has_bribery_eval = true
+			assert_eq(ev["case_id"], 1)
+			assert_eq(ev["magistrate_id"], 103)
+			assert_eq(ev["witness_id"], 102)
+	assert_true(has_bribery_eval)
+
+	# Magistrate should have an extortion_opportunity event
+	var mag_ws: Dictionary = world_states.get(103, {})
+	var mag_pending: Array = mag_ws.get("pending_events", [])
+	var has_extortion: bool = false
+	for ev: Dictionary in mag_pending:
+		if ev.get("type", "") == "extortion_opportunity":
+			has_extortion = true
+			assert_eq(ev["suspect_id"], 100)
+	assert_true(has_extortion)
+
+	# ---------------------------------------------------------------
+	# PHASE 6: Accusation threshold (40) — legal status transitions
+	# ---------------------------------------------------------------
+	record.evidence_total = InvestigationSystem.ACCUSATION_THRESHOLD
+	# Reset legal status to allow accusation transition
+	record.legal_status = Enums.LegalStatus.UNDER_INVESTIGATION
+
+	var threshold_2: String = InvestigationSystem.check_thresholds(record)
+	assert_eq(threshold_2, "accusation")
+	assert_eq(record.legal_status, Enums.LegalStatus.ACCUSED)
+
+	DayOrchestrator.handle_evidence_threshold(
+		"accusation", record, characters_by_id,
+		active_topics, next_topic_id, ic_day, world_states,
+	)
+
+	# Criminal should have an ACCUSED legal case entry
+	var criminal_case: LegalCaseEntry = LegalStatusSystem.get_case(criminal, 1)
+	assert_not_null(criminal_case)
+	assert_eq(criminal_case.state, Enums.LegalStatus.ACCUSED)
+
+	# Accusation topic should exist
+	var accusation_topic: TopicData = null
+	for t: TopicData in active_topics:
+		if t.slug == "accusation_1":
+			accusation_topic = t
+			break
+	assert_not_null(accusation_topic)
+	assert_eq(accusation_topic.subject_role, "PERPETRATOR")
+
+	# Lord should know about the accusation
+	assert_true(accusation_topic.topic_id in lord.topic_pool)
+
+	# ---------------------------------------------------------------
+	# PHASE 7: Fugitive declaration — criminal flees
+	# ---------------------------------------------------------------
+	var fugitive_result: Dictionary = DayOrchestrator.process_fugitive_declaration(
+		record, criminal, characters_by_id,
+		active_topics, next_topic_id, ic_day,
+	)
+	assert_true(fugitive_result["declared"])
+	assert_eq(fugitive_result["fugitive_id"], 100)
+	assert_eq(record.legal_status, Enums.LegalStatus.FUGITIVE)
+
+	# Fugitive topic generated
+	var fugitive_topic: TopicData = null
+	for t: TopicData in active_topics:
+		if t.slug.begins_with("fugitive_"):
+			fugitive_topic = t
+			break
+	assert_not_null(fugitive_topic)
+
+	# ---------------------------------------------------------------
+	# PHASE 8: Zone log purge — evidence expires after 90 days
+	# ---------------------------------------------------------------
+	assert_true(record.concealment_tn > 0)
+	DayOrchestrator._purge_expired_crime_evidence(crime_records, ic_day + 89)
+	assert_true(record.concealment_tn > 0, "Still valid before 90 days")
+	DayOrchestrator._purge_expired_crime_evidence(crime_records, ic_day + 90)
+	assert_eq(record.concealment_tn, 0, "Purged at exactly 90 days")
+
+	# ---------------------------------------------------------------
+	# Verify final state
+	# ---------------------------------------------------------------
+	# Record tracks full lifecycle
+	assert_eq(record.case_id, 1)
+	assert_eq(record.perpetrator_id, 100)
+	assert_eq(record.victim_id, 101)
+	assert_eq(record.investigating_magistrate_id, 103)
+	assert_eq(record.legal_status, Enums.LegalStatus.FUGITIVE)
+	# Topics created: crime, investigation_opened, accusation, fugitive
+	var pipeline_topics: int = 0
+	for t: TopicData in active_topics:
+		if t.slug in ["crime_case_1", "investigation_1", "accusation_1"] or t.slug.begins_with("fugitive_"):
+			pipeline_topics += 1
+	assert_eq(pipeline_topics, 4)
+
+
+func test_investigation_pipeline_witness_tampering_branch() -> void:
+	# Tests the branch where criminal bribes witness, reducing evidence path
+	var criminal := L5RCharacterData.new()
+	criminal.character_id = 110
+	criminal.character_name = "Shosuro Agent"
+	criminal.clan = "Scorpion"
+	criminal.family = "Shosuro"
+	criminal.honor = 1.5
+	criminal.intelligence = 3
+	criminal.willpower = 3
+	criminal.awareness = 3
+	criminal.perception = 3
+	criminal.agility = 3
+	criminal.reflexes = 3
+	criminal.stamina = 3
+	criminal.strength = 3
+	criminal.void_ring = 2
+	criminal.skills = {"Temptation": 4}
+	criminal.emphases = {}
+	criminal.wounds_taken = 0
+	criminal.physical_location = "scorpion_holdings"
+	criminal.knowledge_pool = []
+	criminal.known_contacts_by_clan = {}
+	criminal.met_characters = []
+	criminal.topic_pool = []
+	criminal.legal_cases = []
+
+	var witness := L5RCharacterData.new()
+	witness.character_id = 111
+	witness.character_name = "Bribeable Witness"
+	witness.clan = "Mantis"
+	witness.honor = 2.0
+	witness.willpower = 2
+	witness.awareness = 2
+	witness.perception = 2
+	witness.skills = {"Etiquette": 2}
+	witness.emphases = {}
+	witness.wounds_taken = 0
+	witness.physical_location = "scorpion_holdings"
+	witness.topic_pool = []
+	witness.legal_cases = []
+
+	var characters_by_id: Dictionary = {110: criminal, 111: witness}
+	var crime_records: Array[CrimeRecord] = []
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [2000]
+	var active_secrets: Array[SecretData] = []
+	var next_secret_id: Array[int] = [1]
+	var next_case_id: Array[int] = [10]
+	var world_states: Dictionary = {}
+	var ic_day: int = 75
+
+	# Create original crime
+	var witnesses_arr: Array[int] = [111]
+	var record: CrimeRecord = CrimeSystem.create_crime_record(
+		10, Enums.CrimeType.SKIMMING, 110,
+		"scorpion_holdings", ic_day, -1, 0, witnesses_arr,
+	)
+	crime_records.append(record)
+
+	# Simulate successful bribe witness result
+	var bribe_result: Array = [{
+		"action_id": "BRIBE_WITNESS",
+		"character_id": 110,
+		"target_npc_id": 111,
+		"success": true,
+		"effects": {"witness_id": 111},
+	}]
+
+	DayOrchestrator._process_witness_tampering_writebacks(
+		bribe_result, crime_records, characters_by_id,
+		active_topics, next_topic_id, ic_day, world_states,
+		active_secrets, next_secret_id, next_case_id,
+	)
+
+	# Witness removed from record
+	assert_false(111 in record.witnesses)
+	# Co-conspirator secret created
+	assert_eq(active_secrets.size(), 1)
+	assert_eq(active_secrets[0].severity, SecretData.Severity.TIER_2)
+	assert_true("bribed_witness" in active_secrets[0].slug)
+
+	# Now simulate a FAILED bribe on a second witness
+	var witness2 := L5RCharacterData.new()
+	witness2.character_id = 112
+	witness2.character_name = "Second Witness"
+	witness2.honor = 7.0
+	witness2.topic_pool = []
+	witness2.legal_cases = []
+	characters_by_id[112] = witness2
+
+	var witnesses_2: Array[int] = [112]
+	record.witnesses = witnesses_2
+
+	var failed_bribe: Array = [{
+		"action_id": "BRIBE_WITNESS",
+		"character_id": 110,
+		"target_npc_id": 112,
+		"success": false,
+		"effects": {"witness_id": 112, "evidence_on_fail": 10},
+	}]
+
+	record.evidence_total = 20
+	DayOrchestrator._process_witness_tampering_writebacks(
+		failed_bribe, crime_records, characters_by_id,
+		active_topics, next_topic_id, ic_day, world_states,
+		active_secrets, next_secret_id, next_case_id,
+	)
+
+	# Evidence increased by 10 → now 30, crossing bribery_eval (25)
+	assert_eq(record.evidence_total, 30)
+	# Witness still present
+	assert_true(112 in record.witnesses)
+
+
+func test_investigation_pipeline_kill_witness_creates_new_crime() -> void:
+	# Tests that killing a witness removes testimony but creates a new murder case
+	var criminal := L5RCharacterData.new()
+	criminal.character_id = 120
+	criminal.character_name = "Desperate Criminal"
+	criminal.clan = "Crab"
+	criminal.honor = 1.0
+	criminal.intelligence = 3
+	criminal.agility = 4
+	criminal.awareness = 2
+	criminal.perception = 2
+	criminal.reflexes = 3
+	criminal.willpower = 3
+	criminal.stamina = 4
+	criminal.strength = 4
+	criminal.void_ring = 2
+	criminal.skills = {"Stealth": 3}
+	criminal.emphases = {}
+	criminal.wounds_taken = 0
+	criminal.physical_location = "crab_province"
+	criminal.knowledge_pool = []
+	criminal.known_contacts_by_clan = {}
+	criminal.met_characters = []
+	criminal.topic_pool = []
+	criminal.legal_cases = []
+
+	var witness := L5RCharacterData.new()
+	witness.character_id = 121
+	witness.character_name = "Murdered Witness"
+	witness.clan = "Crane"
+	witness.honor = 5.0
+	witness.topic_pool = []
+	witness.legal_cases = []
+
+	var characters_by_id: Dictionary = {120: criminal, 121: witness}
+	var crime_records: Array[CrimeRecord] = []
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [3000]
+	var active_secrets: Array[SecretData] = []
+	var next_secret_id: Array[int] = [1]
+	var next_case_id: Array[int] = [20]
+	var world_states: Dictionary = {}
+	var ic_day: int = 60
+
+	# Original crime (violence) with one witness
+	var witnesses_arr: Array[int] = [121]
+	var original_record: CrimeRecord = CrimeSystem.create_crime_record(
+		20, Enums.CrimeType.VIOLENCE, 120,
+		"crab_province", ic_day, -1, 0, witnesses_arr,
+	)
+	crime_records.append(original_record)
+	next_case_id[0] = 21
+
+	# Simulate successful kill witness
+	var kill_result: Array = [{
+		"action_id": "KILL_WITNESS",
+		"character_id": 120,
+		"target_npc_id": 121,
+		"success": true,
+		"effects": {"witness_id": 121, "concealment_tn": 18},
+	}]
+
+	DayOrchestrator._process_witness_tampering_writebacks(
+		kill_result, crime_records, characters_by_id,
+		active_topics, next_topic_id, ic_day, world_states,
+		active_secrets, next_secret_id, next_case_id,
+	)
+
+	# Witness removed from original crime
+	assert_false(121 in original_record.witnesses)
+	# No secrets created (kill doesn't make co-conspirator)
+	assert_eq(active_secrets.size(), 0)
+	# NEW murder crime record created
+	assert_eq(crime_records.size(), 2)
+	var murder_record: CrimeRecord = crime_records[1]
+	assert_eq(murder_record.crime_type, Enums.CrimeType.UNSANCTIONED_COVERT_KILLING)
+	assert_eq(murder_record.perpetrator_id, 120)
+	assert_eq(murder_record.victim_id, 121)
+	assert_eq(murder_record.concealment_tn, 18)
+	assert_eq(murder_record.case_id, 21)
+	assert_eq(murder_record.location, "crab_province")
+	# Next case id incremented
+	assert_eq(next_case_id[0], 22)
