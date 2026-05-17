@@ -749,5 +749,10 @@
   "RESPOND_TO_SEPPUKU": {
     "ACCEPT_SEPPUKU": 70,
     "REFUSE_SEPPUKU": 30
+  },
+  "TEND_WOUNDED_ALLY": {
+    "TREAT_WOUND": 100,
+    "BEGIN_TRAVEL": 40,
+    "DO_NOTHING": 0
   }
 }

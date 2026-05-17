@@ -410,5 +410,9 @@
 	"DISCERN_NEED": {
 		"primary": "Investigation",
 		"secondary": "Awareness"
+	},
+	"TREAT_WOUND": {
+		"primary": "Medicine",
+		"secondary": null
 	}
 }

@@ -147,16 +147,19 @@ static func _compute_refusal_pressure(
 ) -> int:
 	var pressure: int = 0
 
-	# Pride factors (increase pressure).
-	var yu: int = target.get_trait_value(Enums.Trait.YU)
+	# Yū proxy: Willpower — mental endurance and stoicism under pressure.
+	# Chūgi proxy: dominant CHUGI virtue → score 4, otherwise 2.
+	var yu: int = target.willpower
+	var chugi: int = 4 if target.bushido_virtue == Enums.BushidoVirtue.CHUGI else 2
 	var honour_rank: int = int(target.honor)
 	var capped_witnesses: int = mini(witness_count, MAX_WITNESS_COUNT)
+
+	# Pride factors (increase pressure).
 	pressure += yu * YU_FACTOR
 	pressure += honour_rank * HONOUR_RANK_FACTOR
 	pressure += capped_witnesses * WITNESS_PRESSURE
 
 	# Acceptance factors (decrease pressure).
-	var chugi: int = target.get_trait_value(Enums.Trait.CHUGI)
 	pressure -= chugi * CHUGI_FACTOR
 	pressure += SEVERITY_BY_LEVEL.get(wound_level, 0)
 	pressure += _disposition_modifier(target, healer.character_id)

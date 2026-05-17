@@ -658,7 +658,7 @@ Key: **DONE** = simulation code written and tested | **PARTIAL** = code exists, 
 | s57.28 Sculpture System | **REFERENCE** | Not yet LOCKED |
 | s57.29 Ikebana System | **REFERENCE** | Not yet LOCKED |
 | s57.30 Calligraphy System | **REFERENCE** | Letter quality uses Calligraphy skill; full artisan system not implemented |
-| s57.31 Medicine System | **REFERENCE** | Not yet LOCKED |
+| s57.31 Medicine System | **DONE** | `simulation/medicine_system.gd`. TREAT_WOUND ActionID (Medicine/Intelligence TN 15, 1k1 healed on success, +1 die per Raise keep 1, Rank 5 mastery 2k1 base). Treatment refusal pride evaluation (Willpower proxy for Yū, dominant CHUGI virtue proxy for Chūgi, honour rank, witnesses, wound severity, disposition). Daily treatment limit via `last_medicine_treatment_ic_day`. Medicine Kit 10-charge inventory item. Non-human +10 TN penalty without race emphasis. TEND_WOUNDED_ALLY NeedType scoring (priority 0–4 by disposition + wound severity, personality modifiers). Natural healing baseline (s57.31.7a) already wired in OOC Day Tick. |
 | s57.32 Meditation System | **REFERENCE** | Not yet LOCKED |
 | s57.33 REQUEST_PERFORMANCE System | **REFERENCE** | Not yet LOCKED |
 | s57.34 Civilian Order Budget | **DONE** | CivilianOrderBudget, character fields, NPC engine integration, day orchestrator refresh, letter system wiring |
