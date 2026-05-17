@@ -1065,6 +1065,14 @@ static func _process_ooc_day_tick(
 			# when those systems are implemented. The topic ID is available in
 			# wind_result for forwarding.
 
+		# Koku cost — deduct from character's personal purse.
+		if wind_result["koku_cost"] > 0.0:
+			c.koku = maxf(0.0, c.koku - wind_result["koku_cost"])
+
+		# Temple info — Brotherhood network delivers one local rumor per s57.44.7.
+		# Blocked on Brotherhood network implementation. Topic ID will be injected
+		# here when that system exists.
+
 		# WP contribution — add to worship state for the character's province.
 		if wind_result["wp_contribution"] > 0.0 and settlement.province_id != -1:
 			var wp_dist: Dictionary = {}
