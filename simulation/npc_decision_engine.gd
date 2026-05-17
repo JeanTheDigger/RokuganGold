@@ -174,6 +174,8 @@ static func build_context(
 	ctx.is_labor_halt_day = world_state.get("is_labor_halt_day", false)
 	ctx.is_taian = world_state.get("is_taian", false)
 	ctx.is_inauspicious_for_social = world_state.get("is_inauspicious_for_social", false)
+	ctx.festival_honor_gain = world_state.get("festival_honor_gain", 0.0)
+	ctx.festival_has_lion_honor = world_state.get("festival_has_lion_honor", false)
 
 	# State
 	ctx.pending_events = world_state.get("pending_events", [])

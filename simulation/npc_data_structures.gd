@@ -170,6 +170,8 @@ class ContextSnapshot:
 	var is_labor_halt_day: bool = false
 	var is_taian: bool = false
 	var is_inauspicious_for_social: bool = false
+	var festival_honor_gain: float = 0.0
+	var festival_has_lion_honor: bool = false
 
 	# Urgency evaluation fields
 	var expiring_favor_ids: Array[int] = []

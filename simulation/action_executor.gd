@@ -1670,6 +1670,10 @@ static func _execute_perform_worship(
 
 	var province_id: int = action.target_province_id
 
+	var honor_bonus: float = ctx.festival_honor_gain
+	if ctx.festival_has_lion_honor and character.clan == "lion":
+		honor_bonus += 0.1
+
 	return {
 		"success": true,
 		"action_id": "PERFORM_WORSHIP",
@@ -1685,6 +1689,7 @@ static func _execute_perform_worship(
 			"total_wp": worship_result.get("total_wp", 0.0),
 			"bonus_wp": worship_result.get("bonus_wp", 0.0),
 			"directed": worship_result.get("directed", false),
+			"honor_change": honor_bonus,
 		},
 	}
 
