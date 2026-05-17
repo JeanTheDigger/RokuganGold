@@ -215,6 +215,22 @@ static func build_context(
 				"priority": best_priority,
 			})
 
+	# Open performance request check (s57.33.3).
+	if not ctx.active_court_at_location.is_empty():
+		var open_requests: Array = world_state.get("pending_performance_requests", [])
+		for req: Dictionary in open_requests:
+			if req.get("target_performer_id", -1) >= 0:
+				continue
+			if RequestPerformanceSystem.can_fulfill(character, req):
+				ctx.pending_events.append({
+					"type": "open_performance_request",
+					"request_id": req.get("request_id", -1),
+					"requesting_lord_id": req.get("requesting_lord_id", -1),
+					"performance_type": req.get("performance_type", ""),
+					"venue_mode": req.get("venue_mode", "public"),
+				})
+				break
+
 	# Personality
 	ctx.bushido_virtue = character.bushido_virtue
 	ctx.shourido_virtue = character.shourido_virtue
@@ -646,6 +662,26 @@ static func _decompose_reactive_event(
 		need.target_npc_id = ev.get("target_npc_id", -1)
 		return need
 
+	if ev.get("type", "") == "performance_invitation_received":
+		var need := NPCDataStructures.ImmediateNeed.new()
+		need.need_type = "FULFILL_PERFORMANCE_REQUEST"
+		need.priority = 2
+		need.source = "performance_invitation_received"
+		need.target_npc_id = ev.get("requesting_lord_id", -1)
+		need.target_settlement_id = ev.get("request_id", -1)
+		need.target_intent = ev.get("venue_mode", "public")
+		return need
+
+	if ev.get("type", "") == "open_performance_request":
+		var need := NPCDataStructures.ImmediateNeed.new()
+		need.need_type = "FULFILL_PERFORMANCE_REQUEST"
+		need.priority = 1
+		need.source = "open_performance_request"
+		need.target_npc_id = ev.get("requesting_lord_id", -1)
+		need.target_settlement_id = ev.get("request_id", -1)
+		need.target_intent = ev.get("venue_mode", "public")
+		return need
+
 	return null
 
 
@@ -717,6 +753,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array[S
 				"SHARE_SUPPLIES",
 				"CRAFT", "MENTOR",
 				"TREAT_WOUND",
+				"REQUEST_PERFORMANCE",
 				"DO_NOTHING", "REST",
 			]
 		Enums.ContextFlag.AT_COURT:
@@ -735,6 +772,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array[S
 				"INTERCEPT_LETTER", "SEARCH_QUARTERS",
 				"EXAMINE_LETTER",
 				"TREAT_WOUND",
+				"REQUEST_PERFORMANCE",
 				"DO_NOTHING", "REST",
 			]
 		Enums.ContextFlag.VISITING:
@@ -876,6 +914,7 @@ static func _get_ap_cost(action_id: String) -> int:
 		"COMMISSION_SHIP": 1,
 		"RESTORE_COUNCIL_COMPACT": 1,
 		"TREAT_WOUND": 1,
+		"REQUEST_PERFORMANCE": 0,
 	}
 	return costs.get(action_id, 1)
 
@@ -1922,6 +1961,13 @@ static func _populate_action_metadata(
 			if aid_int != ctx.character_id and aid_int not in ctx.met_characters:
 				observable.append(aid_int)
 		option.metadata = {"observable_attendee_ids": observable}
+	elif option.action_id in ["PUBLIC_PERFORMANCE", "PERFORM_FOR"] \
+			and need.need_type == "FULFILL_PERFORMANCE_REQUEST":
+		option.metadata = {
+			"fulfills_request_id": need.target_settlement_id,
+			"requesting_lord_id": need.target_npc_id,
+			"venue_mode": need.target_intent,
+		}
 	elif option.action_id == "ASK_FOR_INTRODUCTION":
 		# Intermediary: highest-disposition Friend+ contact who is not the target (s55.7.3).
 		var target_id: int = option.target_npc_id

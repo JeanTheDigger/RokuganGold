@@ -414,5 +414,9 @@
 	"TREAT_WOUND": {
 		"primary": "Medicine",
 		"secondary": null
+	},
+	"REQUEST_PERFORMANCE": {
+		"primary": null,
+		"secondary": null
 	}
 }

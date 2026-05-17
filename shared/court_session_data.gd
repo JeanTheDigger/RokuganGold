@@ -44,3 +44,5 @@ enum CourtPhase {
 @export var peace_court_war_id: int = -1
 @export var willingness_modifier_clan_a: int = 0
 @export var willingness_modifier_clan_b: int = 0
+@export var pending_performance_requests: Array[Dictionary] = []
+@export var next_request_id: int = 0

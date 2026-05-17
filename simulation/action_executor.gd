@@ -293,6 +293,9 @@ static func execute(
 			},
 		}
 
+	if action_id == "REQUEST_PERFORMANCE":
+		return _execute_request_performance(action, character, ctx)
+
 	if action_id in COVERT_ACTIONS:
 		var covert_result: Dictionary = _try_execute_covert(
 			action, character, ctx, dice_engine, characters_by_id
@@ -3670,4 +3673,85 @@ static func _execute_observe_court_attendees(
 		"tn": CourtActionSystem.OBSERVE_COURT_TN,
 		"margin": roll_total - CourtActionSystem.OBSERVE_COURT_TN,
 		"effects": effects,
+	}
+
+
+# -- REQUEST_PERFORMANCE -------------------------------------------------------
+
+static func _execute_request_performance(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> Dictionary:
+	if not ctx.is_lord:
+		return {
+			"success": false,
+			"action_id": "REQUEST_PERFORMANCE",
+			"character_id": ctx.character_id,
+			"target_npc_id": action.target_npc_id,
+			"target_province_id": action.target_province_id,
+			"ic_day": ctx.ic_day,
+			"season": ctx.season,
+			"reason": "not_a_lord",
+			"effects": {},
+		}
+
+	if character.civilian_orders_remaining <= 0:
+		return {
+			"success": false,
+			"action_id": "REQUEST_PERFORMANCE",
+			"character_id": ctx.character_id,
+			"target_npc_id": action.target_npc_id,
+			"target_province_id": action.target_province_id,
+			"ic_day": ctx.ic_day,
+			"season": ctx.season,
+			"reason": "no_civilian_orders",
+			"effects": {},
+		}
+
+	var flag: Enums.ContextFlag = ctx.context_flag
+	if flag != Enums.ContextFlag.AT_OWN_HOLDINGS and flag != Enums.ContextFlag.AT_COURT:
+		return {
+			"success": false,
+			"action_id": "REQUEST_PERFORMANCE",
+			"character_id": ctx.character_id,
+			"target_npc_id": action.target_npc_id,
+			"target_province_id": action.target_province_id,
+			"ic_day": ctx.ic_day,
+			"season": ctx.season,
+			"reason": "wrong_context",
+			"effects": {},
+		}
+
+	character.civilian_orders_remaining -= 1
+
+	var performance_type: String = action.metadata.get("performance_type", "song")
+	var target_performer_id: int = action.metadata.get("target_performer_id", -1)
+	var venue_mode: String = action.metadata.get("venue_mode", "public")
+
+	var letter_dict: Dictionary = {}
+	if target_performer_id >= 0:
+		letter_dict = {
+			"to_character_id": target_performer_id,
+			"from_character_id": character.character_id,
+			"content": "performance_invitation",
+			"performance_type": performance_type,
+			"venue_mode": venue_mode,
+		}
+
+	return {
+		"success": true,
+		"action_id": "REQUEST_PERFORMANCE",
+		"character_id": character.character_id,
+		"target_npc_id": action.target_npc_id,
+		"target_province_id": action.target_province_id,
+		"ic_day": ctx.ic_day,
+		"season": ctx.season,
+		"effects": {
+			"civilian_order_consumed": true,
+			"performance_type": performance_type,
+			"target_performer_id": target_performer_id,
+			"venue_mode": venue_mode,
+			"invitation_letter": letter_dict,
+		},
 	}
