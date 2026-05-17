@@ -216,7 +216,7 @@ static func _roll_sincerity_defense(
 	if dice_engine == null:
 		return 0
 	var sincerity: int = accused.skills.get("Sincerity", 0)
-	var awareness: int = accused.rings.get("awareness", 2)
+	var awareness: int = accused.awareness if accused.awareness > 0 else 2
 	var rolled: int = sincerity + awareness
 	var kept: int = awareness
 	if rolled < 1:
