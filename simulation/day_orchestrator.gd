@@ -562,6 +562,10 @@ static func advance_day(
 		conviction_results, crime_records, objectives_map,
 	)
 
+	_process_magistrate_conviction_cascade(
+		conviction_results, crime_records, characters_by_id, objectives_map,
+	)
+
 	var info_results: Array[Dictionary] = _process_info_events(
 		day_result.get("applied", []),
 		characters_by_id,
@@ -3981,7 +3985,8 @@ static func _process_uphold_law_scan(
 		var standing: Dictionary = objectives.get("standing", {})
 		if standing.get("need_type", "") != "UPHOLD_LAW":
 			continue
-		if standing.has("active_case") and not standing["active_case"].is_empty():
+		var active_case_count: int = 1 if (standing.has("active_case") and not standing["active_case"].is_empty()) else 0
+		if not MagistrateAllocationSystem.is_magistrate_available(active_case_count):
 			continue
 
 		var activated: Dictionary = InvestigationSystem.scan_for_crime_topics(
@@ -4690,6 +4695,51 @@ static func _release_magistrate_after_conviction(
 				standing.erase("active_case")
 
 		record.investigating_magistrate_id = -1
+
+
+# -- Magistrate Conviction Cascade (s11.3.17e) --------------------------------
+# When a magistrate is convicted, suspend all cases they were investigating
+# and clear their standing objective's active case.
+
+static func _process_magistrate_conviction_cascade(
+	conviction_results: Array[Dictionary],
+	crime_records: Array[CrimeRecord],
+	characters_by_id: Dictionary,
+	objectives_map: Dictionary,
+) -> void:
+	for conv: Dictionary in conviction_results:
+		if conv.get("outcome", "") != "convicted":
+			continue
+		var case_id: int = conv.get("case_id", -1)
+		if case_id < 0:
+			continue
+
+		var record: CrimeRecord = null
+		for r: CrimeRecord in crime_records:
+			if r.case_id == case_id:
+				record = r
+				break
+		if record == null:
+			continue
+
+		var perpetrator: L5RCharacterData = characters_by_id.get(record.perpetrator_id)
+		if perpetrator == null:
+			continue
+		if perpetrator.role_position not in MAGISTRATE_ROLE_POSITIONS:
+			continue
+
+		var cascade: Dictionary = MagistrateAllocationSystem.resolve_magistrate_conviction(
+			perpetrator.character_id, crime_records
+		)
+		var suspended: Array = cascade.get("suspended_case_ids", [])
+		for cr: CrimeRecord in crime_records:
+			if cr.case_id in suspended:
+				cr.investigating_magistrate_id = -1
+
+		var mag_objs: Dictionary = objectives_map.get(perpetrator.character_id, {})
+		var standing: Dictionary = mag_objs.get("standing", {})
+		if standing.get("need_type", "") == "UPHOLD_LAW":
+			standing.erase("active_case")
 
 
 static func _season_to_name(season: int) -> String:

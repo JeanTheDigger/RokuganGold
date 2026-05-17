@@ -1049,29 +1049,16 @@ static func _resolve_bribe_attempt(
 	action: NPCDataStructures.ScoredAction,
 	dice_engine: DiceEngine,
 ) -> Dictionary:
-	var temptation: int = briber.skills.get("Temptation", 0)
-	var awareness: int = briber.awareness if briber.awareness > 0 else 2
-	var rolled: int = maxi(temptation + awareness, 1)
-	var kept: int = maxi(awareness, 1)
-	var attack_result: Dictionary = dice_engine.roll_and_keep(rolled, kept)
-	var attack_total: int = attack_result.get("total", 0)
-
-	var etiquette: int = magistrate.skills.get("Etiquette", 0)
-	var willpower: int = magistrate.willpower if magistrate.willpower > 0 else 2
-	var honor_bonus: int = HonorGlorySystem.get_honor_rank(magistrate) * 5
-	var def_rolled: int = maxi(etiquette + willpower, 1)
-	var def_kept: int = maxi(willpower, 1)
-	var defense_result: Dictionary = dice_engine.roll_and_keep(def_rolled, def_kept)
-	var defense_total: int = defense_result.get("total", 0) + honor_bonus
-
-	var success: bool = attack_total > defense_total
+	var bribe_result: Dictionary = BriberySystem.attempt_bribe(briber, magistrate, dice_engine)
+	var result: int = bribe_result.get("result", BriberySystem.BribeResult.REFUSED)
+	var success: bool = result == BriberySystem.BribeResult.ACCEPTED
 	var suppress_case: bool = action.metadata.get("suppress_case", false)
-
 	return {
 		"success": success,
-		"roll_total": attack_total,
-		"tn": defense_total,
-		"margin": attack_total - defense_total,
+		"blocked_by_personality": result == BriberySystem.BribeResult.BLOCKED_BY_PERSONALITY,
+		"roll_total": bribe_result.get("briber_total", 0),
+		"tn": bribe_result.get("magistrate_total", 0),
+		"margin": bribe_result.get("briber_total", 0) - bribe_result.get("magistrate_total", 0),
 		"detection_risk": not success,
 		"suppress_case": suppress_case,
 		"magistrate_id": magistrate.character_id,
