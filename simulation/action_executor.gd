@@ -242,6 +242,9 @@ static func execute(
 	if action_id == "FLEE_JURISDICTION":
 		return _execute_flee_jurisdiction(action, character, ctx)
 
+	if action_id in ["ACCEPT_SEPPUKU", "REFUSE_SEPPUKU"]:
+		return _execute_seppuku_response(action, character)
+
 	if action_id == "EXTORT_ACCUSED":
 		return _execute_extort_accused(action, character, ctx, dice_engine, characters_by_id)
 
@@ -2284,6 +2287,22 @@ static func _execute_flee_jurisdiction(
 		"effects": {
 			"effect": "flee_jurisdiction",
 			"fugitive_id": character.character_id,
+		},
+	}
+
+
+static func _execute_seppuku_response(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+) -> Dictionary:
+	var case_id: int = action.metadata.get("case_id", -1)
+	return {
+		"success": true,
+		"action_id": action.action_id,
+		"character_id": character.character_id,
+		"effects": {
+			"case_id": case_id,
+			"accepted": action.action_id == "ACCEPT_SEPPUKU",
 		},
 	}
 

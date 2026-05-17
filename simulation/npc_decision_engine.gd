@@ -251,6 +251,9 @@ static func generate_options(
 	var available_actions: Array[String] = _get_actions_for_context(ctx.context_flag)
 	var has_mil_rank: bool = ctx.military_rank > Enums.MilitaryRank.NONE
 
+	if need.need_type == "RESPOND_TO_SEPPUKU":
+		available_actions = ["ACCEPT_SEPPUKU", "REFUSE_SEPPUKU"]
+
 	for action_id: String in available_actions:
 		if _is_zone_blocked(action_id, ctx.zone_flags):
 			continue
@@ -562,6 +565,14 @@ static func _decompose_reactive_event(
 		need.source = "extortion_opportunity"
 		need.target_npc_id = ev.get("suspect_id", -1)
 		need.threshold = float(ev.get("evidence_total", 0))
+		return need
+
+	if ev.get("type", "") == "seppuku_offered":
+		var need := NPCDataStructures.ImmediateNeed.new()
+		need.need_type = "RESPOND_TO_SEPPUKU"
+		need.priority = 1
+		need.source = "seppuku_offered"
+		need.target_intent = "case_%d" % ev.get("case_id", -1)
 		return need
 
 	return null
@@ -1768,6 +1779,9 @@ static func _populate_action_metadata(
 	elif option.action_id == "EXTORT_ACCUSED" and need.source == "extortion_opportunity":
 		option.target_npc_id = need.target_npc_id
 		option.metadata = {"extort_suspect_id": need.target_npc_id}
+	elif option.action_id in ["ACCEPT_SEPPUKU", "REFUSE_SEPPUKU"] and need.source == "seppuku_offered":
+		var case_id_str: String = need.target_intent.replace("case_", "")
+		option.metadata = {"case_id": case_id_str.to_int()}
 	elif option.action_id == "EXAMINE_CRIME_SCENE":
 		var active_case: Dictionary = ctx.known_objectives.get("active_case", {})
 		option.metadata = {

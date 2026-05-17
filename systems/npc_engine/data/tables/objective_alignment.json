@@ -740,5 +740,9 @@
   "EXTORT_ACCUSED": {
     "EXTORT_ACCUSED": 90,
     "DO_NOTHING": 40
+  },
+  "RESPOND_TO_SEPPUKU": {
+    "ACCEPT_SEPPUKU": 70,
+    "REFUSE_SEPPUKU": 30
   }
 }

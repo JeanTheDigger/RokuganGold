@@ -524,6 +524,12 @@ static func advance_day(
 
 	var seppuku_results: Array[Dictionary] = _process_seppuku_responses(
 		conviction_results, crime_records, characters_by_id,
+		ic_day, next_topic_id, active_topics, world_states,
+	)
+
+	var seppuku_action_results: Array[Dictionary] = _process_seppuku_action_writebacks(
+		day_result.get("results", []),
+		crime_records, characters_by_id,
 		ic_day, next_topic_id, active_topics,
 	)
 
@@ -796,6 +802,7 @@ static func advance_day(
 		"conviction_results": conviction_results,
 		"trial_results": trial_results,
 		"seppuku_results": seppuku_results,
+		"seppuku_action_results": seppuku_action_results,
 		"orphan_results": orphan_results,
 		"hierarchy_cascade_results": hierarchy_cascade_results,
 		"strategic_results": strategic_results,
@@ -4129,6 +4136,7 @@ static func _process_seppuku_responses(
 	ic_day: int,
 	next_topic_id: Array[int],
 	active_topics: Array[TopicData],
+	world_states: Dictionary = {},
 ) -> Array[Dictionary]:
 	var results: Array[Dictionary] = []
 	for conviction: Dictionary in conviction_results:
@@ -4148,15 +4156,85 @@ static func _process_seppuku_responses(
 				break
 		if record == null:
 			continue
-		var decision := SeppukuDecision.will_accept_seppuku(character)
-		var accepted: bool = decision.get("accepts", false)
-		var resolution := ConvictionProcessor.resolve_seppuku(
+
+		# Inject seppuku_offered as a reactive event for next tick
+		var ws: Dictionary = world_states.get(char_id, {})
+		var pending: Array = ws.get("pending_events", [])
+		for ev: Dictionary in pending:
+			if ev.get("type", "") == "seppuku_offered" and ev.get("case_id", -1) == case_id:
+				break
+		else:
+			pending.append({
+				"type": "seppuku_offered",
+				"case_id": case_id,
+				"crime_type": record.crime_type,
+				"ic_day_offered": ic_day,
+			})
+			ws["pending_events"] = pending
+			world_states[char_id] = ws
+
+		results.append({
+			"case_id": case_id,
+			"accused_id": char_id,
+			"event_injected": true,
+		})
+	return results
+
+
+# -- Seppuku Response Writeback (processes ACCEPT/REFUSE_SEPPUKU action results)
+
+static func _process_seppuku_action_writebacks(
+	results: Array,
+	crime_records: Array[CrimeRecord],
+	characters_by_id: Dictionary,
+	ic_day: int,
+	next_topic_id: Array[int],
+	active_topics: Array[TopicData],
+) -> Array[Dictionary]:
+	var seppuku_results: Array[Dictionary] = []
+
+	for result: Variant in results:
+		if not result is Dictionary:
+			continue
+		var r: Dictionary = result as Dictionary
+		var action_id: String = r.get("action_id", "")
+		if action_id not in ["ACCEPT_SEPPUKU", "REFUSE_SEPPUKU"]:
+			continue
+
+		var char_id: int = r.get("character_id", -1)
+		var character: L5RCharacterData = characters_by_id.get(char_id)
+		if character == null:
+			continue
+
+		var case_id: int = r.get("effects", {}).get("case_id", -1)
+		var record: CrimeRecord = null
+		for cr: CrimeRecord in crime_records:
+			if cr.case_id == case_id:
+				record = cr
+				break
+		if record == null:
+			continue
+
+		var accepted: bool = action_id == "ACCEPT_SEPPUKU"
+		var resolution: Dictionary = ConvictionProcessor.resolve_seppuku(
 			record, character, accepted, ic_day, next_topic_id
 		)
+
 		if resolution.get("applicable", false):
-			resolution["decision_reason"] = decision.get("reason", "")
-			results.append(resolution)
-	return results
+			if not accepted:
+				var refusal_topic_id: int = resolution.get("refusal_topic_id", -1)
+				if refusal_topic_id >= 0:
+					for t: TopicData in active_topics:
+						if t.topic_id == refusal_topic_id:
+							break
+					var lord: L5RCharacterData = characters_by_id.get(character.lord_id)
+					if lord != null and refusal_topic_id not in lord.topic_pool:
+						lord.topic_pool.append(refusal_topic_id)
+			resolution["action_id"] = action_id
+			resolution["character_id"] = char_id
+			seppuku_results.append(resolution)
+
+	return seppuku_results
 
 
 # -- Cross-Clan Conviction Consequences (s57.47) ------------------------------

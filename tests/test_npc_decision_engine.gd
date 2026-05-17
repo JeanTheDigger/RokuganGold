@@ -1834,3 +1834,33 @@ func test_extortion_opportunity_decomposes_to_extort_accused() -> void:
 	assert_eq(need.target_npc_id, 42)
 	assert_eq(need.source, "extortion_opportunity")
 	assert_eq(int(need.threshold), 30)
+
+
+func test_seppuku_offered_reactive_event_decomposition() -> void:
+	_world_state["pending_events"] = [
+		{"type": "seppuku_offered", "case_id": 15, "crime_type": 5, "ic_day_offered": 50}
+	]
+	var ctx := NPCDecisionEngine.build_context(_char, _world_state)
+	var need := NPCDecisionEngine.resolve_goal(_char, ctx, _objectives)
+	assert_eq(need.need_type, "RESPOND_TO_SEPPUKU")
+	assert_eq(need.priority, 1)
+	assert_eq(need.source, "seppuku_offered")
+	assert_eq(need.target_intent, "case_15")
+
+
+func test_seppuku_generates_accept_refuse_options() -> void:
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "RESPOND_TO_SEPPUKU"
+	need.priority = 1
+	need.source = "seppuku_offered"
+	need.target_intent = "case_15"
+
+	var ctx := NPCDecisionEngine.build_context(_char, _world_state)
+	var options: Array[NPCDataStructures.ScoredAction] = NPCDecisionEngine.generate_options(ctx, need)
+
+	var action_ids: Array[String] = []
+	for opt: NPCDataStructures.ScoredAction in options:
+		action_ids.append(opt.action_id)
+	assert_true("ACCEPT_SEPPUKU" in action_ids)
+	assert_true("REFUSE_SEPPUKU" in action_ids)
+	assert_eq(action_ids.size(), 2)

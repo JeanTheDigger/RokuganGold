@@ -5440,3 +5440,157 @@ func test_conviction_topic_not_seeded_if_no_victim() -> void:
 	)
 	# No crash, no seeding
 	pass_test("No victim → no lord seeding")
+
+
+# ==============================================================================
+# SEPPUKU AS REACTIVE EVENT
+# ==============================================================================
+
+func test_seppuku_offered_injects_pending_event() -> void:
+	var criminal := L5RCharacterData.new()
+	criminal.character_id = 800
+	criminal.character_name = "Convicted Samurai"
+	criminal.honor = 5.0
+	criminal.bushido_virtue = Enums.BushidoVirtue.MEIYO
+	criminal.wounds_taken = 0
+
+	var characters_by_id: Dictionary = {800: criminal}
+	var crime_records: Array[CrimeRecord] = []
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [6000]
+	var world_states: Dictionary = {}
+
+	var record: CrimeRecord = CrimeSystem.create_crime_record(
+		120, Enums.CrimeType.UNSANCTIONED_COVERT_KILLING, 800, "province", 40,
+	)
+	record.seppuku_offered = true
+	crime_records.append(record)
+
+	var conviction_results: Array[Dictionary] = [{
+		"case_id": 120,
+		"accused_id": 800,
+		"outcome": "convicted",
+		"seppuku_offered": true,
+	}]
+
+	var results: Array[Dictionary] = DayOrchestrator._process_seppuku_responses(
+		conviction_results, crime_records, characters_by_id,
+		45, next_topic_id, active_topics, world_states,
+	)
+
+	# Event injected, not resolved immediately
+	assert_eq(results.size(), 1)
+	assert_true(results[0]["event_injected"])
+
+	# Pending event exists in world_states
+	var ws: Dictionary = world_states.get(800, {})
+	var pending: Array = ws.get("pending_events", [])
+	assert_eq(pending.size(), 1)
+	assert_eq(pending[0]["type"], "seppuku_offered")
+	assert_eq(pending[0]["case_id"], 120)
+	assert_eq(pending[0]["ic_day_offered"], 45)
+
+
+func test_seppuku_event_decomposes_to_respond_need() -> void:
+	var event: Dictionary = {
+		"type": "seppuku_offered",
+		"case_id": 120,
+		"crime_type": Enums.CrimeType.UNSANCTIONED_COVERT_KILLING,
+		"ic_day_offered": 45,
+	}
+
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	var need: NPCDataStructures.ImmediateNeed = NPCDecisionEngine._decompose_reactive_event(event, ctx)
+
+	assert_not_null(need)
+	assert_eq(need.need_type, "RESPOND_TO_SEPPUKU")
+	assert_eq(need.priority, 1)
+	assert_eq(need.source, "seppuku_offered")
+	assert_eq(need.target_intent, "case_120")
+
+
+func test_seppuku_writeback_accept() -> void:
+	var criminal := L5RCharacterData.new()
+	criminal.character_id = 810
+	criminal.character_name = "Honorable Samurai"
+	criminal.honor = 7.0
+	criminal.glory = 4.0
+	criminal.bushido_virtue = Enums.BushidoVirtue.GI
+	criminal.wounds_taken = 0
+	criminal.lord_id = 811
+
+	var lord := L5RCharacterData.new()
+	lord.character_id = 811
+	lord.character_name = "Lord"
+	lord.topic_pool = []
+
+	var characters_by_id: Dictionary = {810: criminal, 811: lord}
+	var crime_records: Array[CrimeRecord] = []
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [7000]
+
+	var record: CrimeRecord = CrimeSystem.create_crime_record(
+		130, Enums.CrimeType.UNSANCTIONED_COVERT_KILLING, 810, "province", 40,
+	)
+	record.seppuku_offered = true
+	crime_records.append(record)
+
+	var action_results: Array = [{
+		"action_id": "ACCEPT_SEPPUKU",
+		"character_id": 810,
+		"success": true,
+		"effects": {"case_id": 130, "accepted": true},
+	}]
+
+	var results: Array[Dictionary] = DayOrchestrator._process_seppuku_action_writebacks(
+		action_results, crime_records, characters_by_id,
+		50, next_topic_id, active_topics,
+	)
+
+	assert_eq(results.size(), 1)
+	assert_true(results[0].get("accepted", false))
+	assert_eq(results[0]["action_id"], "ACCEPT_SEPPUKU")
+	assert_eq(results[0]["character_id"], 810)
+
+
+func test_seppuku_writeback_refuse() -> void:
+	var criminal := L5RCharacterData.new()
+	criminal.character_id = 820
+	criminal.character_name = "Defiant Samurai"
+	criminal.honor = 2.0
+	criminal.glory = 3.0
+	criminal.shourido_virtue = Enums.ShouridoVirtue.ISHI
+	criminal.wounds_taken = 0
+	criminal.lord_id = 821
+
+	var lord := L5RCharacterData.new()
+	lord.character_id = 821
+	lord.character_name = "Lord"
+	lord.topic_pool = []
+
+	var characters_by_id: Dictionary = {820: criminal, 821: lord}
+	var crime_records: Array[CrimeRecord] = []
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [7100]
+
+	var record: CrimeRecord = CrimeSystem.create_crime_record(
+		131, Enums.CrimeType.UNSANCTIONED_COVERT_KILLING, 820, "province", 40,
+	)
+	record.seppuku_offered = true
+	crime_records.append(record)
+
+	var action_results: Array = [{
+		"action_id": "REFUSE_SEPPUKU",
+		"character_id": 820,
+		"success": true,
+		"effects": {"case_id": 131, "accepted": false},
+	}]
+
+	var results: Array[Dictionary] = DayOrchestrator._process_seppuku_action_writebacks(
+		action_results, crime_records, characters_by_id,
+		50, next_topic_id, active_topics,
+	)
+
+	assert_eq(results.size(), 1)
+	assert_false(results[0].get("accepted", true))
+	assert_eq(results[0]["action_id"], "REFUSE_SEPPUKU")
