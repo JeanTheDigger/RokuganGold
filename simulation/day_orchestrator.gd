@@ -260,6 +260,12 @@ static func advance_day(
 		active_secrets, next_secret_id, next_case_id,
 	)
 
+	_process_witness_report_letter_writebacks(
+		day_result.get("results", []),
+		characters_by_id, active_topics, pending_letters,
+		ic_day, dice_engine, next_letter_id,
+	)
+
 	_process_taint_proximity_detection(
 		day_result.get("results", []),
 		characters_by_id, character_province_map, dice_engine,
@@ -3491,6 +3497,66 @@ static func _inject_witness_report_event(
 	})
 	witness_ws["pending_events"] = events
 	world_states[witness_id] = witness_ws
+
+
+# -- Witness Report Letter Writebacks ------------------------------------------
+# When a witness chooses WRITE_LETTER via witness_report_motivated reactive need,
+# create the actual LetterData object carrying the crime topic to the magistrate.
+
+static func _process_witness_report_letter_writebacks(
+	results: Array,
+	characters_by_id: Dictionary,
+	active_topics: Array[TopicData],
+	pending_letters: Array,
+	ic_day: int,
+	dice_engine: DiceEngine,
+	next_letter_id: Array[int],
+) -> void:
+	if dice_engine == null:
+		return
+	for r: Dictionary in results:
+		if r.get("action_id", "") != "WRITE_LETTER":
+			continue
+		var metadata: Dictionary = r.get("metadata", {})
+		var case_id: int = metadata.get("report_case_id", -1)
+		if case_id < 0:
+			continue
+		var sender_id: int = r.get("character_id", -1)
+		var recipient_id: int = r.get("target_npc_id", -1)
+		if sender_id < 0 or recipient_id < 0:
+			continue
+		var sender: L5RCharacterData = characters_by_id.get(sender_id)
+		if sender == null:
+			continue
+
+		var crime_topic_id: int = _find_crime_topic_for_case(sender, case_id, active_topics)
+		if crime_topic_id < 0:
+			continue
+
+		var lid: int = next_letter_id[0]
+		next_letter_id[0] = lid + 1
+		var letter: LetterData = LetterSystem.write_letter(
+			lid, sender, recipient_id, crime_topic_id, ic_day, dice_engine, 3,
+		)
+		letter.report_case_id = case_id
+		letter.report_criminal_id = metadata.get("report_criminal_id", -1)
+		pending_letters.append(letter)
+
+
+static func _find_crime_topic_for_case(
+	character: L5RCharacterData,
+	case_id: int,
+	active_topics: Array[TopicData],
+) -> int:
+	for topic_id: int in character.topic_pool:
+		for topic: TopicData in active_topics:
+			if topic.topic_id != topic_id:
+				continue
+			if topic.topic_type != "crime":
+				continue
+			if topic.slug == "crime_case_%d" % case_id:
+				return topic_id
+	return -1
 
 
 # -- Zone Log Purge (s11.3.13g) -----------------------------------------------

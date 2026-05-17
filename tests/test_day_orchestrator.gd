@@ -6163,3 +6163,130 @@ func test_seppuku_writeback_refuse() -> void:
 	assert_eq(results.size(), 1)
 	assert_false(results[0].get("accepted", true))
 	assert_eq(results[0]["action_id"], "REFUSE_SEPPUKU")
+
+
+# -- Witness Report Letter Writebacks ------------------------------------------
+
+func test_witness_report_letter_created_from_reactive_write_letter() -> void:
+	var witness := L5RCharacterData.new()
+	witness.character_id = 900
+	witness.character_name = "Witness"
+	witness.skills = {"Calligraphy": 2}
+	witness.awareness = 3
+
+	var topic := TopicData.new()
+	topic.topic_id = 500
+	topic.topic_type = "crime"
+	topic.slug = "crime_case_77"
+	witness.topic_pool = [500]
+
+	var active_topics: Array[TopicData] = [topic]
+	var characters_by_id: Dictionary = {900: witness}
+	var pending_letters: Array = []
+	var next_letter_id: Array[int] = [1]
+
+	var results: Array = [{
+		"action_id": "WRITE_LETTER",
+		"character_id": 900,
+		"target_npc_id": 200,
+		"success": true,
+		"metadata": {"report_case_id": 77, "report_criminal_id": 50},
+	}]
+
+	DayOrchestrator._process_witness_report_letter_writebacks(
+		results, characters_by_id, active_topics, pending_letters,
+		10, _dice, next_letter_id,
+	)
+
+	assert_eq(pending_letters.size(), 1)
+	var letter: LetterData = pending_letters[0]
+	assert_eq(letter.sender_id, 900)
+	assert_eq(letter.recipient_id, 200)
+	assert_eq(letter.topic, 500)
+	assert_eq(letter.report_case_id, 77)
+	assert_eq(letter.report_criminal_id, 50)
+	assert_eq(next_letter_id[0], 2)
+
+
+func test_witness_report_letter_skipped_without_crime_topic() -> void:
+	var witness := L5RCharacterData.new()
+	witness.character_id = 901
+	witness.character_name = "Witness No Topic"
+	witness.topic_pool = []
+
+	var active_topics: Array[TopicData] = []
+	var characters_by_id: Dictionary = {901: witness}
+	var pending_letters: Array = []
+	var next_letter_id: Array[int] = [1]
+
+	var results: Array = [{
+		"action_id": "WRITE_LETTER",
+		"character_id": 901,
+		"target_npc_id": 200,
+		"success": true,
+		"metadata": {"report_case_id": 88, "report_criminal_id": 60},
+	}]
+
+	DayOrchestrator._process_witness_report_letter_writebacks(
+		results, characters_by_id, active_topics, pending_letters,
+		10, _dice, next_letter_id,
+	)
+
+	assert_eq(pending_letters.size(), 0)
+	assert_eq(next_letter_id[0], 1)
+
+
+func test_witness_report_letter_ignores_non_report_write_letter() -> void:
+	var sender := L5RCharacterData.new()
+	sender.character_id = 902
+	sender.character_name = "Normal Writer"
+	sender.topic_pool = [100]
+
+	var active_topics: Array[TopicData] = []
+	var characters_by_id: Dictionary = {902: sender}
+	var pending_letters: Array = []
+	var next_letter_id: Array[int] = [1]
+
+	var results: Array = [{
+		"action_id": "WRITE_LETTER",
+		"character_id": 902,
+		"target_npc_id": 300,
+		"success": true,
+		"metadata": {},
+	}]
+
+	DayOrchestrator._process_witness_report_letter_writebacks(
+		results, characters_by_id, active_topics, pending_letters,
+		10, _dice, next_letter_id,
+	)
+
+	assert_eq(pending_letters.size(), 0)
+
+
+func test_find_crime_topic_for_case_matches_correct_slug() -> void:
+	var character := L5RCharacterData.new()
+	character.character_id = 903
+	character.topic_pool = [10, 20, 30]
+
+	var topic_other := TopicData.new()
+	topic_other.topic_id = 10
+	topic_other.topic_type = "political"
+	topic_other.slug = "some_event"
+
+	var topic_crime_wrong := TopicData.new()
+	topic_crime_wrong.topic_id = 20
+	topic_crime_wrong.topic_type = "crime"
+	topic_crime_wrong.slug = "crime_case_99"
+
+	var topic_crime_match := TopicData.new()
+	topic_crime_match.topic_id = 30
+	topic_crime_match.topic_type = "crime"
+	topic_crime_match.slug = "crime_case_55"
+
+	var active_topics: Array[TopicData] = [topic_other, topic_crime_wrong, topic_crime_match]
+
+	var result: int = DayOrchestrator._find_crime_topic_for_case(character, 55, active_topics)
+	assert_eq(result, 30)
+
+	var no_match: int = DayOrchestrator._find_crime_topic_for_case(character, 100, active_topics)
+	assert_eq(no_match, -1)
