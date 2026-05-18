@@ -91,6 +91,10 @@
     "primary": "Courtier",
     "secondary": "Sincerity"
   },
+  "CONCEAL_ITEM": {
+    "primary": "Sleight_of_Hand",
+    "secondary": "Agility"
+  },
   "CONDUCT_COMMERCE": {
     "primary": "Commerce",
     "secondary": "Investigation"
@@ -399,9 +403,33 @@
     "primary": "Engineering",
     "secondary": "Intelligence"
   },
+  "SEARCH_PERSON": {
+    "primary": "Investigation",
+    "secondary": "Perception"
+  },
   "SEARCH_QUARTERS": {
     "primary": "Sleight of Hand",
     "secondary": "Investigation"
+  },
+  "SEDUCE": {
+    "primary": "Temptation",
+    "secondary": "Awareness"
+  },
+  "SEDUCE_FOR_ACCESS": {
+    "primary": "Temptation",
+    "secondary": "Awareness"
+  },
+  "SEDUCE_FOR_INFO": {
+    "primary": "Temptation",
+    "secondary": "Awareness"
+  },
+  "SEDUCE_FOR_LEVERAGE": {
+    "primary": "Temptation",
+    "secondary": "Awareness"
+  },
+  "SEDUCE_TO_COMPROMISE": {
+    "primary": "Temptation",
+    "secondary": "Awareness"
   },
   "SEEK_PRETEXT": {
     "primary": "Courtier",
@@ -418,6 +446,10 @@
   "SET_TAX_RATE": {
     "primary": "Commerce",
     "secondary": null
+  },
+  "SHADOW_TARGET": {
+    "primary": "Stealth",
+    "secondary": "Agility"
   },
   "SHARE_SUPPLIES": {
     "primary": "Commerce",

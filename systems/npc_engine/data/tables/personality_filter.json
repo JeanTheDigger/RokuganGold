@@ -1,111 +1,350 @@
 {
   "bushido": {
     "JIN": {
-      "always_blocked": ["RAID_HARVEST", "CONDUCT_RAID", "CONDUCT_CONDITIONING", "ACTIVATE_SLEEPER", "INTIMIDATE_WITNESS", "KILL_WITNESS"],
+      "always_blocked": [
+        "RAID_HARVEST",
+        "CONDUCT_RAID",
+        "CONDUCT_CONDITIONING",
+        "ACTIVATE_SLEEPER",
+        "INTIMIDATE_WITNESS",
+        "KILL_WITNESS",
+        "FABRICATE_SECRET"
+      ],
       "conditional": [
-        {"action": "GOSSIP", "blocked_when": "target_is_innocent_third_party"},
-        {"action": "DISCLOSE", "blocked_when": "target_is_innocent_third_party"},
-        {"action": "DEMAND_TRIBUTE", "blocked_when": "any_vassal_at_shortage_or_worse"},
-        {"action": "ORDER_LEVY", "blocked_when": "levy_would_exceed_65pct_and_no_crisis"}
+        {
+          "action": "GOSSIP",
+          "blocked_when": "target_is_innocent_third_party"
+        },
+        {
+          "action": "DISCLOSE",
+          "blocked_when": "target_is_innocent_third_party"
+        },
+        {
+          "action": "DEMAND_TRIBUTE",
+          "blocked_when": "any_vassal_at_shortage_or_worse"
+        },
+        {
+          "action": "ORDER_LEVY",
+          "blocked_when": "levy_would_exceed_65pct_and_no_crisis"
+        },
+        {
+          "action": "SHADOW_TARGET",
+          "blocked_when": "target_is_innocent_third_party"
+        },
+        {
+          "action": "SEARCH_PERSON",
+          "blocked_when": "target_is_innocent_third_party"
+        },
+        {
+          "action": "CONCEAL_ITEM",
+          "blocked_when": "target_is_innocent_third_party"
+        },
+        {
+          "action": "EXPOSE_SECRET_PRIVATELY",
+          "blocked_when": "target_is_innocent_third_party"
+        },
+        {
+          "action": "EXPOSE_SECRET_PUBLICLY",
+          "blocked_when": "target_is_innocent_third_party"
+        },
+        {
+          "action": "SEDUCE",
+          "blocked_when": "target_is_innocent_third_party"
+        },
+        {
+          "action": "SEDUCE_FOR_INFO",
+          "blocked_when": "target_is_innocent_third_party"
+        },
+        {
+          "action": "SEDUCE_FOR_ACCESS",
+          "blocked_when": "target_is_innocent_third_party"
+        },
+        {
+          "action": "SEDUCE_FOR_LEVERAGE",
+          "blocked_when": "target_is_innocent_third_party"
+        },
+        {
+          "action": "SEDUCE_TO_COMPROMISE",
+          "blocked_when": "target_is_innocent_third_party"
+        }
       ]
     },
     "YU": {
-      "always_blocked": ["DELAY_TO_POST_HARVEST", "FLEE_JURISDICTION", "REFUSE_SEPPUKU"],
+      "always_blocked": [
+        "DELAY_TO_POST_HARVEST",
+        "FLEE_JURISDICTION",
+        "REFUSE_SEPPUKU"
+      ],
       "conditional": [
-        {"action": "SEEK_PEACE", "blocked_when": "war_score_above_25_and_army_capable"},
-        {"action": "NEGOTIATE_PEACE", "blocked_when": "war_score_above_25_and_army_capable"},
-        {"action": "RAID_HARVEST", "blocked_when": "other_paths_available"}
+        {
+          "action": "SEEK_PEACE",
+          "blocked_when": "war_score_above_25_and_army_capable"
+        },
+        {
+          "action": "NEGOTIATE_PEACE",
+          "blocked_when": "war_score_above_25_and_army_capable"
+        },
+        {
+          "action": "RAID_HARVEST",
+          "blocked_when": "other_paths_available"
+        }
       ]
     },
     "REI": {
-      "always_blocked": ["GOSSIP", "PUBLIC_INSULT", "CONDUCT_CONDITIONING", "ACTIVATE_SLEEPER", "INTIMIDATE"],
+      "always_blocked": [
+        "GOSSIP",
+        "PUBLIC_INSULT",
+        "CONDUCT_CONDITIONING",
+        "ACTIVATE_SLEEPER",
+        "INTIMIDATE",
+        "SHADOW_TARGET",
+        "SEARCH_PERSON",
+        "CONCEAL_ITEM",
+        "FABRICATE_SECRET",
+        "EXPOSE_SECRET_PRIVATELY",
+        "EXPOSE_SECRET_PUBLICLY",
+        "SEDUCE",
+        "SEDUCE_FOR_INFO",
+        "SEDUCE_FOR_ACCESS",
+        "SEDUCE_FOR_LEVERAGE",
+        "SEDUCE_TO_COMPROMISE",
+        "BRIBE_FOR_INFO",
+        "EAVESDROP",
+        "INTERCEPT_LETTER",
+        "SEARCH_QUARTERS"
+      ],
       "conditional": [
-        {"action": "RAID_HARVEST", "blocked_when": "no_prior_formal_demand"},
-        {"action": "PUBLIC_DECLARATION", "blocked_when": "would_cause_public_scene"}
+        {
+          "action": "RAID_HARVEST",
+          "blocked_when": "no_prior_formal_demand"
+        },
+        {
+          "action": "PUBLIC_DECLARATION",
+          "blocked_when": "would_cause_public_scene"
+        }
       ]
     },
     "CHUGI": {
-      "always_blocked": ["BRIBE_FOR_INFO", "EAVESDROP", "INTERCEPT_LETTER", "SEARCH_QUARTERS", "APPROACH_FOR_RECRUITMENT", "EXTORT_ACCUSED"],
+      "always_blocked": [
+        "BRIBE_FOR_INFO",
+        "EAVESDROP",
+        "INTERCEPT_LETTER",
+        "SEARCH_QUARTERS",
+        "APPROACH_FOR_RECRUITMENT",
+        "EXTORT_ACCUSED"
+      ],
       "conditional": [
-        {"action": "_ANY_ACTION", "blocked_when": "contradicts_lords_known_position"},
-        {"action": "PUBLIC_DECLARATION", "blocked_when": "deviates_from_lord_directive"},
-        {"action": "RAID_HARVEST", "blocked_when": "not_lord_commanded"}
+        {
+          "action": "_ANY_ACTION",
+          "blocked_when": "contradicts_lords_known_position"
+        },
+        {
+          "action": "PUBLIC_DECLARATION",
+          "blocked_when": "deviates_from_lord_directive"
+        },
+        {
+          "action": "RAID_HARVEST",
+          "blocked_when": "not_lord_commanded"
+        }
       ]
     },
     "GI": {
-      "always_blocked": ["GOSSIP", "FABRICATE_SECRET", "BRIBE_FOR_INFO", "BRIBE_WITNESS", "EAVESDROP", "INTERCEPT_LETTER", "SEARCH_QUARTERS", "CONDUCT_CONDITIONING", "ACTIVATE_SLEEPER", "UNDERREPORT_KOKU", "LAUNDER_KOKU", "ESTABLISH_DEAD_DROP", "TRANSMIT_VIA_TEAR", "RAID_HARVEST", "EXTORT_ACCUSED", "FLEE_JURISDICTION", "INTIMIDATE_WITNESS", "KILL_WITNESS", "REFUSE_SEPPUKU"],
+      "always_blocked": [
+        "GOSSIP",
+        "FABRICATE_SECRET",
+        "BRIBE_FOR_INFO",
+        "BRIBE_WITNESS",
+        "EAVESDROP",
+        "INTERCEPT_LETTER",
+        "SEARCH_QUARTERS",
+        "CONDUCT_CONDITIONING",
+        "ACTIVATE_SLEEPER",
+        "UNDERREPORT_KOKU",
+        "LAUNDER_KOKU",
+        "ESTABLISH_DEAD_DROP",
+        "TRANSMIT_VIA_TEAR",
+        "RAID_HARVEST",
+        "EXTORT_ACCUSED",
+        "FLEE_JURISDICTION",
+        "INTIMIDATE_WITNESS",
+        "KILL_WITNESS",
+        "REFUSE_SEPPUKU",
+        "EXPOSE_SECRET_PRIVATELY",
+        "EXPOSE_SECRET_PUBLICLY",
+        "SEDUCE",
+        "SEDUCE_FOR_INFO",
+        "SEDUCE_FOR_ACCESS",
+        "SEDUCE_FOR_LEVERAGE",
+        "SEDUCE_TO_COMPROMISE"
+      ],
       "conditional": [
-        {"action": "DISCLOSE", "blocked_when": "information_is_false"},
-        {"action": "PUBLIC_DECLARATION", "blocked_when": "npc_knows_declaration_is_false"}
+        {
+          "action": "DISCLOSE",
+          "blocked_when": "information_is_false"
+        },
+        {
+          "action": "PUBLIC_DECLARATION",
+          "blocked_when": "npc_knows_declaration_is_false"
+        }
       ]
     },
     "MEIYO": {
-      "always_blocked": ["REFUSE_SEPPUKU"],
+      "always_blocked": [
+        "REFUSE_SEPPUKU"
+      ],
       "conditional": [
-        {"action": "_ANY_ACTION", "blocked_when": "violates_personal_code"},
-        {"action": "COMPLY_WITH_LORD_ORDER", "blocked_when": "order_violates_personal_code"},
-        {"action": "CONDUCT_RAID", "blocked_when": "no_prior_grievance_or_lord_directive"},
-        {"action": "RAID_HARVEST", "blocked_when": "target_not_hated_enemy"}
+        {
+          "action": "_ANY_ACTION",
+          "blocked_when": "violates_personal_code"
+        },
+        {
+          "action": "COMPLY_WITH_LORD_ORDER",
+          "blocked_when": "order_violates_personal_code"
+        },
+        {
+          "action": "CONDUCT_RAID",
+          "blocked_when": "no_prior_grievance_or_lord_directive"
+        },
+        {
+          "action": "RAID_HARVEST",
+          "blocked_when": "target_not_hated_enemy"
+        }
       ]
     },
     "MAKOTO": {
-      "always_blocked": ["ACTIVATE_SLEEPER", "ESTABLISH_DEAD_DROP", "RENEGE_COMMITMENT", "CONDUCT_CONDITIONING"],
+      "always_blocked": [
+        "ACTIVATE_SLEEPER",
+        "ESTABLISH_DEAD_DROP",
+        "RENEGE_COMMITMENT",
+        "CONDUCT_CONDITIONING",
+        "FABRICATE_SECRET",
+        "EXPOSE_SECRET_PRIVATELY",
+        "EXPOSE_SECRET_PUBLICLY",
+        "SEDUCE",
+        "SEDUCE_FOR_INFO",
+        "SEDUCE_FOR_ACCESS",
+        "SEDUCE_FOR_LEVERAGE",
+        "SEDUCE_TO_COMPROMISE"
+      ],
       "conditional": [
-        {"action": "CHANGE_OBJECTIVE_MID_SESSION", "blocked_when": "public_declaration_already_made"},
-        {"action": "ABORT_RAID", "blocked_when": "intent_publicly_declared"},
-        {"action": "RAID_HARVEST", "blocked_when": "not_publicly_declared"}
+        {
+          "action": "CHANGE_OBJECTIVE_MID_SESSION",
+          "blocked_when": "public_declaration_already_made"
+        },
+        {
+          "action": "ABORT_RAID",
+          "blocked_when": "intent_publicly_declared"
+        },
+        {
+          "action": "RAID_HARVEST",
+          "blocked_when": "not_publicly_declared"
+        }
       ]
     }
   },
   "shourido": {
     "SEIGYO": {
-      "always_blocked": ["REVEAL_TRUE_OBJECTIVE", "ACCEPT_SEPPUKU"],
+      "always_blocked": [
+        "REVEAL_TRUE_OBJECTIVE",
+        "ACCEPT_SEPPUKU"
+      ],
       "conditional": [
-        {"action": "PUBLIC_DECLARATION", "blocked_when": "not_all_others_declared"}
+        {
+          "action": "PUBLIC_DECLARATION",
+          "blocked_when": "not_all_others_declared"
+        }
       ]
     },
     "KETSUI": {
-      "always_blocked": ["REQUEST_ALLIED_AID", "ACCEPT_SEPPUKU"],
+      "always_blocked": [
+        "REQUEST_ALLIED_AID",
+        "ACCEPT_SEPPUKU"
+      ],
       "conditional": [
-        {"action": "ACCEPT_RELIEF_ARMY", "blocked_when": "creates_obligation"},
-        {"action": "_CHANGE_COURSE", "blocked_when": "already_committed_to_action"}
+        {
+          "action": "ACCEPT_RELIEF_ARMY",
+          "blocked_when": "creates_obligation"
+        },
+        {
+          "action": "_CHANGE_COURSE",
+          "blocked_when": "already_committed_to_action"
+        }
       ]
     },
     "DOSATSU": {
       "always_blocked": [],
       "conditional": [
-        {"action": "PUBLIC_DECLARATION", "blocked_when": "zero_motivations_known_and_urgency_below_50"},
-        {"action": "_COMMIT_ACTION", "blocked_when": "zero_motivations_known_and_urgency_below_50"}
+        {
+          "action": "PUBLIC_DECLARATION",
+          "blocked_when": "zero_motivations_known_and_urgency_below_50"
+        },
+        {
+          "action": "_COMMIT_ACTION",
+          "blocked_when": "zero_motivations_known_and_urgency_below_50"
+        }
       ]
     },
     "CHISHIKI": {
       "always_blocked": [],
       "conditional": [
-        {"action": "_COMMIT_ACTION", "blocked_when": "no_intelligence_gathered_this_session"}
+        {
+          "action": "_COMMIT_ACTION",
+          "blocked_when": "no_intelligence_gathered_this_session"
+        }
       ]
     },
     "KANPEKI": {
       "always_blocked": [],
       "conditional": [
-        {"action": "ORDER_DEPLOY", "blocked_when": "battle_assessed_unwinnable"},
-        {"action": "PUBLIC_DECLARATION", "blocked_when": "position_not_certain"},
-        {"action": "_ANY_ACTION", "blocked_when": "would_execute_below_standard"}
+        {
+          "action": "ORDER_DEPLOY",
+          "blocked_when": "battle_assessed_unwinnable"
+        },
+        {
+          "action": "PUBLIC_DECLARATION",
+          "blocked_when": "position_not_certain"
+        },
+        {
+          "action": "_ANY_ACTION",
+          "blocked_when": "would_execute_below_standard"
+        }
       ]
     },
     "KYORYOKU": {
       "always_blocked": [],
       "conditional": [
-        {"action": "NEGOTIATE", "blocked_when": "direct_confrontation_available"},
-        {"action": "CHARM", "blocked_when": "direct_confrontation_available"},
-        {"action": "WRITE_LETTER", "blocked_when": "direct_confrontation_available"}
+        {
+          "action": "NEGOTIATE",
+          "blocked_when": "direct_confrontation_available"
+        },
+        {
+          "action": "CHARM",
+          "blocked_when": "direct_confrontation_available"
+        },
+        {
+          "action": "WRITE_LETTER",
+          "blocked_when": "direct_confrontation_available"
+        }
       ]
     },
     "ISHI": {
-      "always_blocked": ["SURRENDER", "ACCEPT_SEPPUKU"],
+      "always_blocked": [
+        "SURRENDER",
+        "ACCEPT_SEPPUKU"
+      ],
       "conditional": [
-        {"action": "_CHANGE_COURSE", "blocked_when": "already_committed_to_action"},
-        {"action": "NEGOTIATE", "blocked_when": "already_committed_to_action"},
-        {"action": "SEEK_PEACE", "blocked_when": "already_committed_to_action"}
+        {
+          "action": "_CHANGE_COURSE",
+          "blocked_when": "already_committed_to_action"
+        },
+        {
+          "action": "NEGOTIATE",
+          "blocked_when": "already_committed_to_action"
+        },
+        {
+          "action": "SEEK_PEACE",
+          "blocked_when": "already_committed_to_action"
+        }
       ]
     }
   }
