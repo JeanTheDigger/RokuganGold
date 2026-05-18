@@ -7,6 +7,7 @@ class_name PrimaryObjectiveDecomposer
 
 const PRIMARY_OBJECTIVES: Array[String] = [
 	"BREAK_ALLIANCE",
+	"SECURE_ALLIANCE",
 	"ISOLATE_CHARACTER",
 	"GAIN_WINTER_COURT_INVITATION",
 	"APPOINT_TO_POSITION",
@@ -33,6 +34,8 @@ static func decompose(
 	match need_type:
 		"BREAK_ALLIANCE":
 			return _decompose_break_alliance(objective, ctx)
+		"SECURE_ALLIANCE":
+			return _decompose_secure_alliance(objective, ctx)
 		"ISOLATE_CHARACTER":
 			return _decompose_isolate_character(objective, ctx)
 		"GAIN_WINTER_COURT_INVITATION":
@@ -115,6 +118,42 @@ static func _decompose_break_alliance(
 			return _court_or_alternative(ctx, vulnerable, 2)
 		_:
 			return _court_or_alternative(ctx, vulnerable, 1)
+
+
+static func _decompose_secure_alliance(
+	objective: Dictionary,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> NPCDataStructures.ImmediateNeed:
+	var target_clan: String = objective.get("target_clan_id", "")
+	var contacts: Array = ctx.known_contacts_by_clan.get(target_clan, [])
+
+	if contacts.is_empty():
+		return _make_need("IDENTIFY_CONTACT", 2, {"target_clan_id": target_clan})
+
+	var anchor: int = _get_anchor(contacts)
+	if anchor < 0:
+		return _make_need("IDENTIFY_CONTACT", 2, {"target_clan_id": target_clan})
+
+	var my_disp: float = ctx.disposition_values.get(anchor, 0.0)
+
+	match ctx.context_flag:
+		Enums.ContextFlag.AT_COURT:
+			if anchor in ctx.characters_present:
+				if my_disp >= 50.0:
+					return _make_need("ARRANGE_MARRIAGE", 3, {
+						"target_npc_id": anchor,
+						"target_clan_id": target_clan,
+					})
+				return _make_need("RAISE_DISPOSITION", 2, {"target_npc_id": anchor})
+			return _make_need("SEND_LETTER", 2, {"target_npc_id": anchor})
+		Enums.ContextFlag.AT_OWN_HOLDINGS:
+			if my_disp >= 50.0:
+				return _court_or_alternative(ctx, anchor, 2)
+			return _make_need("SEND_LETTER", 2, {"target_npc_id": anchor})
+		_:
+			if anchor in ctx.characters_present:
+				return _make_need("RAISE_DISPOSITION", 2, {"target_npc_id": anchor})
+			return _court_or_alternative(ctx, anchor, 1)
 
 
 static func _decompose_isolate_character(

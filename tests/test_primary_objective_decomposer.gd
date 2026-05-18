@@ -79,6 +79,70 @@ func test_break_alliance_at_court_no_leverage_acquires() -> void:
 
 
 # =============================================================================
+# SECURE_ALLIANCE
+# =============================================================================
+
+func test_secure_alliance_no_contacts_identifies() -> void:
+	var obj: Dictionary = {"need_type": "SECURE_ALLIANCE", "target_clan_id": "Crane"}
+	_ctx.known_contacts_by_clan = {}
+	var need: NPCDataStructures.ImmediateNeed = PrimaryObjectiveDecomposer.decompose(obj, _ctx)
+	assert_eq(need.need_type, "IDENTIFY_CONTACT")
+	assert_eq(need.target_clan_id, "Crane")
+
+
+func test_secure_alliance_at_court_with_contact_raises_disposition() -> void:
+	var obj: Dictionary = {"need_type": "SECURE_ALLIANCE", "target_clan_id": "Crane"}
+	_ctx.known_contacts_by_clan = {"Crane": [10]}
+	_ctx.characters_present = [10]
+	_ctx.disposition_values = {10: 20.0}
+	_ctx.context_flag = Enums.ContextFlag.AT_COURT
+	var need: NPCDataStructures.ImmediateNeed = PrimaryObjectiveDecomposer.decompose(obj, _ctx)
+	assert_eq(need.need_type, "RAISE_DISPOSITION")
+	assert_eq(need.target_npc_id, 10)
+
+
+func test_secure_alliance_high_disposition_arranges_marriage() -> void:
+	var obj: Dictionary = {"need_type": "SECURE_ALLIANCE", "target_clan_id": "Crane"}
+	_ctx.known_contacts_by_clan = {"Crane": [10]}
+	_ctx.characters_present = [10]
+	_ctx.disposition_values = {10: 55.0}
+	_ctx.context_flag = Enums.ContextFlag.AT_COURT
+	var need: NPCDataStructures.ImmediateNeed = PrimaryObjectiveDecomposer.decompose(obj, _ctx)
+	assert_eq(need.need_type, "ARRANGE_MARRIAGE")
+	assert_eq(need.priority, 3)
+
+
+func test_secure_alliance_at_court_contact_absent_sends_letter() -> void:
+	var obj: Dictionary = {"need_type": "SECURE_ALLIANCE", "target_clan_id": "Crane"}
+	_ctx.known_contacts_by_clan = {"Crane": [10]}
+	_ctx.characters_present = []
+	_ctx.context_flag = Enums.ContextFlag.AT_COURT
+	var need: NPCDataStructures.ImmediateNeed = PrimaryObjectiveDecomposer.decompose(obj, _ctx)
+	assert_eq(need.need_type, "SEND_LETTER")
+	assert_eq(need.target_npc_id, 10)
+
+
+func test_secure_alliance_at_holdings_low_disposition_sends_letter() -> void:
+	var obj: Dictionary = {"need_type": "SECURE_ALLIANCE", "target_clan_id": "Crane"}
+	_ctx.known_contacts_by_clan = {"Crane": [10]}
+	_ctx.disposition_values = {10: 20.0}
+	_ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
+	var need: NPCDataStructures.ImmediateNeed = PrimaryObjectiveDecomposer.decompose(obj, _ctx)
+	assert_eq(need.need_type, "SEND_LETTER")
+
+
+func test_secure_alliance_visiting_with_contact_raises_disposition() -> void:
+	var obj: Dictionary = {"need_type": "SECURE_ALLIANCE", "target_clan_id": "Crane"}
+	_ctx.known_contacts_by_clan = {"Crane": [10]}
+	_ctx.characters_present = [10]
+	_ctx.disposition_values = {10: 20.0}
+	_ctx.context_flag = Enums.ContextFlag.VISITING
+	var need: NPCDataStructures.ImmediateNeed = PrimaryObjectiveDecomposer.decompose(obj, _ctx)
+	assert_eq(need.need_type, "RAISE_DISPOSITION")
+	assert_eq(need.target_npc_id, 10)
+
+
+# =============================================================================
 # ISOLATE_CHARACTER
 # =============================================================================
 
