@@ -245,9 +245,9 @@ static func apply_exchange_bonus(
 static func has_prior_correspondence(
 	recipient: L5RCharacterData,
 	apparent_sender_id: int,
-	pending_letters: Array,
+	pending_letters: Array[LetterData],
 ) -> bool:
-	for item: Variant in pending_letters:
+	for item: LetterData in pending_letters:
 		if item is LetterData and item.delivered and not item.is_forged:
 			if item.recipient_id == recipient.character_id \
 				and item.sender_id == apparent_sender_id:
@@ -259,7 +259,7 @@ static func auto_detect_forgery(
 	letter: LetterData,
 	recipient: L5RCharacterData,
 	dice_engine: DiceEngine,
-	pending_letters: Array,
+	pending_letters: Array[LetterData],
 ) -> bool:
 	if not letter.is_forged:
 		return false
@@ -275,7 +275,7 @@ static func deliberate_examine_letter(
 	letter: LetterData,
 	examiner: L5RCharacterData,
 	dice_engine: DiceEngine,
-	pending_letters: Array,
+	pending_letters: Array[LetterData],
 ) -> Dictionary:
 	if not has_prior_correspondence(examiner, letter.sender_id, pending_letters):
 		return {"detected": false, "no_reference": true}
@@ -303,7 +303,7 @@ static func deliberate_examine_letter(
 
 static func is_blocked_by_blockade(
 	letter: LetterData,
-	active_wars: Array = [],
+	active_wars: Array[Variant] = [],
 ) -> bool:
 	if letter.ocean_segments <= 0:
 		return false
@@ -331,18 +331,18 @@ static func is_recipient_dead(
 # Returns list of delivery result dicts.
 
 static func process_pending_letters(
-	pending_letters: Array,
+	pending_letters: Array[LetterData],
 	characters_by_id: Dictionary,
 	current_ic_day: int,
 	current_season: int,
 	action_log: Array[Dictionary],
-	active_wars: Array = [],
+	active_wars: Array[Variant] = [],
 	dice_engine: DiceEngine = null,
 	topics_by_id: Dictionary = {},
 ) -> Array[Dictionary]:
 	var results: Array[Dictionary] = []
 
-	for item: Variant in pending_letters:
+	for item: LetterData in pending_letters:
 		if item is LetterData and not item.delivered:
 			if item.ic_day_arrival <= current_ic_day:
 				var recipient: L5RCharacterData = characters_by_id.get(item.recipient_id)
@@ -395,7 +395,7 @@ static func process_pending_letters(
 
 static func generate_replies(
 	delivery_results: Array[Dictionary],
-	pending_letters: Array,
+	pending_letters: Array[LetterData],
 	characters_by_id: Dictionary,
 	ic_day: int,
 	dice_engine: DiceEngine,
@@ -460,8 +460,8 @@ static func _pick_reply_topic(
 	return recipient.topic_pool[0]
 
 
-static func _find_letter_by_id(pending_letters: Array, letter_id: int) -> LetterData:
-	for item: Variant in pending_letters:
+static func _find_letter_by_id(pending_letters: Array[LetterData], letter_id: int) -> LetterData:
+	for item: LetterData in pending_letters:
 		if item is LetterData and item.letter_id == letter_id:
 			return item
 	return null
@@ -477,9 +477,9 @@ static func _refresh_topic_momentum(topic_id: int, topics_by_id: Dictionary) -> 
 
 # -- Unblock Letters on Blockade Lift ------------------------------------------
 
-static func unblock_letters(pending_letters: Array) -> int:
+static func unblock_letters(pending_letters: Array[LetterData]) -> int:
 	var count: int = 0
-	for item: Variant in pending_letters:
+	for item: LetterData in pending_letters:
 		if item is LetterData and item.blocked_by_blockade and not item.delivered:
 			item.blocked_by_blockade = false
 			count += 1

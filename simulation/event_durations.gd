@@ -43,7 +43,7 @@ static func is_variable_duration(event_type: EventType) -> bool:
 
 static func get_all_durations() -> Dictionary:
 	var result: Dictionary = {}
-	for event_type in EventType.values():
+	for event_type: int in EventType.values():
 		var entry: Dictionary = DURATIONS_OOC.get(event_type, {"min": 1, "max": 1})
 		result[event_type] = {
 			"ooc_min": entry["min"],

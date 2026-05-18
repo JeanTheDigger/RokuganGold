@@ -49,7 +49,7 @@ const SHOURIDO_LENIENCY: Dictionary = {
 	Enums.ShouridoVirtue.ISHI: -20,
 }
 
-const DISPOSITION_LENIENCY_THRESHOLDS: Array = [
+const DISPOSITION_LENIENCY_THRESHOLDS: Array[Array] = [
 	[50, 100, 20],
 	[20, 49, 10],
 	[-10, 19, 0],

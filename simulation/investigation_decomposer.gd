@@ -23,13 +23,13 @@ static func decompose(
 ) -> NPCDataStructures.ImmediateNeed:
 	var crime_location: String = objective.get("crime_location", "")
 	var scene_examined: bool = objective.get("scene_examined", false)
-	var known_suspects: Array = objective.get("known_suspects", [])
+	var known_suspects: Array[int] = objective.get("known_suspects", [])
 	var evidence_total: int = objective.get("evidence_total", 0)
-	var interviewed_witnesses: Array = objective.get("interviewed_witnesses", [])
-	var interviewed_suspects: Array = objective.get("interviewed_suspects", [])
-	var checked_alibis: Array = objective.get("checked_alibis", [])
-	var unresolved_leads: Array = objective.get("unresolved_leads", [])
-	var witness_pool: Array = objective.get("witness_pool", [])
+	var interviewed_witnesses: Array[int] = objective.get("interviewed_witnesses", [])
+	var interviewed_suspects: Array[int] = objective.get("interviewed_suspects", [])
+	var checked_alibis: Array[Variant] = objective.get("checked_alibis", [])
+	var unresolved_leads: Array[Dictionary] = objective.get("unresolved_leads", [])
+	var witness_pool: Array[int] = objective.get("witness_pool", [])
 
 	# Phase 1: Travel to crime scene if not present
 	if ctx.location_id != crime_location and not scene_examined:
@@ -64,19 +64,19 @@ static func _select_best_next_action(
 	ctx: NPCDataStructures.ContextSnapshot,
 	crime_location: String,
 	evidence_total: int,
-	known_suspects: Array,
-	witness_pool: Array,
-	interviewed_witnesses: Array,
-	interviewed_suspects: Array,
-	checked_alibis: Array,
-	unresolved_leads: Array,
+	known_suspects: Array[int],
+	witness_pool: Array[int],
+	interviewed_witnesses: Array[int],
+	interviewed_suspects: Array[int],
+	checked_alibis: Array[Variant],
+	unresolved_leads: Array[Dictionary],
 ) -> NPCDataStructures.ImmediateNeed:
 	var candidates: Array[Dictionary] = []
 	var evidence_gap: int = ACCUSATION_THRESHOLD - evidence_total
 	var days_elapsed: int = ctx.ic_day - objective.get("ic_day_committed", ctx.ic_day)
 
 	# Candidate: Interview uninterviewed witnesses (high value — direct testimony)
-	var uninterviewed: Array = _get_uninterviewed(witness_pool, interviewed_witnesses)
+	var uninterviewed: Array[int] = _get_uninterviewed(witness_pool, interviewed_witnesses)
 	for witness_id: Variant in uninterviewed:
 		if not witness_id is int:
 			continue
@@ -124,7 +124,7 @@ static func _select_best_next_action(
 		})
 
 	# Candidate: Check alibis
-	var unchecked: Array = _get_unchecked_alibis(objective, checked_alibis)
+	var unchecked: Array[Dictionary] = _get_unchecked_alibis(objective, checked_alibis)
 	for alibi: Variant in unchecked:
 		if not alibi is Dictionary:
 			continue
@@ -168,7 +168,7 @@ static func _action_from_candidate(
 	objective: Dictionary,
 	ctx: NPCDataStructures.ContextSnapshot,
 	crime_location: String,
-	unresolved_leads: Array,
+	unresolved_leads: Array[Dictionary],
 ) -> NPCDataStructures.ImmediateNeed:
 	var ctype: String = candidate.get("type", "")
 	var target_id: int = candidate.get("target_id", -1)
@@ -218,7 +218,7 @@ static func _make_gather_intelligence_need(target_id: int) -> NPCDataStructures.
 	return need
 
 
-static func _make_accuse_need(suspects: Array) -> NPCDataStructures.ImmediateNeed:
+static func _make_accuse_need(suspects: Array[int]) -> NPCDataStructures.ImmediateNeed:
 	var need := NPCDataStructures.ImmediateNeed.new()
 	need.need_type = "REST"
 	need.source = "INVESTIGATE_CRIME_ACCUSATION_PENDING"
@@ -238,7 +238,7 @@ static func _make_close_case_need() -> NPCDataStructures.ImmediateNeed:
 # Full GDD priority: awareness estimate, then lowest honor, then proximity.
 # Current implementation uses proximity only (present witnesses first).
 
-static func _prioritize_witness(candidates: Array, ctx: NPCDataStructures.ContextSnapshot) -> int:
+static func _prioritize_witness(candidates: Array[int], ctx: NPCDataStructures.ContextSnapshot) -> int:
 	if candidates.size() == 0:
 		return -1
 	if candidates.size() == 1:
@@ -262,17 +262,17 @@ static func _prioritize_witness(candidates: Array, ctx: NPCDataStructures.Contex
 
 # -- Helpers -------------------------------------------------------------------
 
-static func _get_uninterviewed(pool: Array, interviewed: Array) -> Array:
-	var result: Array = []
+static func _get_uninterviewed(pool: Array[int], interviewed: Array[int]) -> Array[int]:
+	var result: Array[int] = []
 	for npc_id: Variant in pool:
 		if npc_id is int and npc_id not in interviewed:
 			result.append(npc_id)
 	return result
 
 
-static func _get_unchecked_alibis(objective: Dictionary, checked: Array) -> Array:
-	var alibis: Array = objective.get("alibis", [])
-	var result: Array = []
+static func _get_unchecked_alibis(objective: Dictionary, checked: Array[Variant]) -> Array[Dictionary]:
+	var alibis: Array[Dictionary] = objective.get("alibis", [])
+	var result: Array[Dictionary] = []
 	for alibi: Variant in alibis:
 		if alibi is Dictionary:
 			var alibi_id: Variant = alibi.get("id", -1)

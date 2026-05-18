@@ -71,7 +71,7 @@ const DOMINANT_RING_FRACTION_MIN: float = 0.35
 const DOMINANT_RING_FRACTION_MAX: float = 0.45
 
 ## Available dominant rings (no Void per s2.4.8 — LOCKED).
-const DOMINANT_RINGS: Array = [
+const DOMINANT_RINGS: Array[int] = [
 	Enums.Ring.EARTH,
 	Enums.Ring.WATER,
 	Enums.Ring.FIRE,
@@ -82,7 +82,7 @@ const DOMINANT_RINGS: Array = [
 # -- Step 5: Special Ability Pools (s2.4.8 — LOCKED) --------------------------
 
 ## Pool 2 — Invulnerability (one rolled randomly from 5 options).
-const POOL_2_OPTIONS: Array = [
+const POOL_2_OPTIONS: Array[int] = [
 	Enums.OniInvulnerability.ARROW_IMMUNITY,
 	Enums.OniInvulnerability.BLADE_IMMUNITY,
 	Enums.OniInvulnerability.FIRE_IMMUNITY,
@@ -92,7 +92,7 @@ const POOL_2_OPTIONS: Array = [
 
 ## Pool 3 — Special Attack (rarity weighted: Common=40%, Uncommon=20%, Rare=7%).
 ## 6 entries with cumulative d100 thresholds.
-const POOL_3_THRESHOLDS: Array = [
+const POOL_3_THRESHOLDS: Array[Dictionary] = [
 	{"max": 40, "ability": Enums.OniSpecialAttack.BREATH_WEAPON},    # Common 40%
 	{"max": 80, "ability": Enums.OniSpecialAttack.CRUSHING_GRIP},    # Common 40%
 	{"max": 90, "ability": Enums.OniSpecialAttack.TAINT_SPIT},       # Uncommon 10%
