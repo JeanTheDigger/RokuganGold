@@ -14046,19 +14046,20 @@ static func _process_assassination_daily_tick(
 
 		match phase:
 			AssassinationSystem.AssassinationPhase.ACCESS:
-				var access_methods: Array[String] = ["stealth", "forge_credentials", "bribe", "seduction"]
-				var best_method: String = _pick_access_method(assassin)
-				var access_result: Dictionary = AssassinationSystem.resolve_access_day(
-					assassin, op, best_method, dice_engine,
-				)
-				tick_result["access"] = access_result
-				if AssassinationSystem.can_advance_to_execution(op):
-					var total_successes: int = 0
-					for j: int in range(op.get("days_in_access", 0)):
-						total_successes += 1
-					if access_result.get("success", false):
-						AssassinationSystem.advance_to_execution(op)
-						tick_result["advanced_to_execution"] = true
+				var is_co_located: bool = assassin.physical_location == target.physical_location and assassin.physical_location != ""
+				if is_co_located:
+					var best_method: String = _pick_access_method(assassin)
+					var access_result: Dictionary = AssassinationSystem.resolve_access_day(
+						assassin, op, best_method, dice_engine,
+					)
+					tick_result["access"] = access_result
+					if AssassinationSystem.can_advance_to_execution(op):
+						if access_result.get("success", false):
+							AssassinationSystem.advance_to_execution(op)
+							tick_result["advanced_to_execution"] = true
+				else:
+					AssassinationSystem.decay_suspicion(op, false, ic_day)
+					tick_result["absent_decay"] = true
 
 			AssassinationSystem.AssassinationPhase.EXECUTION:
 				var has_bodyguard: bool = _target_has_bodyguard(target, characters_by_id)
@@ -14090,6 +14091,9 @@ static func _process_assassination_daily_tick(
 					death_events, crime_records, next_case_id,
 					active_topics, next_topic_id, characters_by_id,
 				)
+
+		if float(op.get("suspicion", 0)) > 0.0 and int(op.get("suspicion_raised_ic_day", -1)) < 0:
+			op["suspicion_raised_ic_day"] = ic_day
 
 		results.append(tick_result)
 

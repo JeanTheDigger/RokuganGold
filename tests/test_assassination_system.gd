@@ -53,7 +53,8 @@ func test_create_state() -> void:
 	assert_eq(s["target_id"], 2)
 	assert_eq(s["method"], AssassinationSystem.ExecutionMethod.POISON)
 	assert_eq(s["phase"], AssassinationSystem.AssassinationPhase.ACCESS)
-	assert_eq(s["suspicion"], 0)
+	assert_eq(s["suspicion"], 0.0)
+	assert_eq(s["suspicion_raised_ic_day"], -1)
 	assert_eq(s["days_in_access"], 0)
 
 
@@ -87,11 +88,11 @@ func test_suspicion_decay_absent() -> void:
 	assert_eq(s["suspicion"], 9)
 
 
-func test_suspicion_decay_present_no_change() -> void:
+func test_suspicion_decay_present_inactive() -> void:
 	var s: Dictionary = AssassinationSystem.create_assassination_state(1, 2, AssassinationSystem.ExecutionMethod.POISON, 0)
-	s["suspicion"] = 10
+	s["suspicion"] = 10.0
 	AssassinationSystem.decay_suspicion(s, true)
-	assert_eq(s["suspicion"], 10)
+	assert_eq(s["suspicion"], 9.5, "Present but inactive: -0.5 per tick")
 
 
 func test_failure_margin_gives_5_suspicion() -> void:
@@ -418,3 +419,64 @@ func test_doji_courtier_bribe_access_gets_free_raise() -> void:
 		doji_total > generic_total,
 		"Doji Courtier should average higher on bribe access due to Courtier free raise"
 	)
+
+
+# ==============================================================================
+# Suspicion Baseline Restoration (s12.8 — 14-tick minimum)
+# ==============================================================================
+
+func test_14_tick_minimum_blocks_early_restore() -> void:
+	var s: Dictionary = AssassinationSystem.create_assassination_state(1, 2, AssassinationSystem.ExecutionMethod.POISON, 100)
+	s["suspicion"] = 1.0
+	s["suspicion_raised_ic_day"] = 105
+	AssassinationSystem.decay_suspicion(s, false, 110)
+	assert_true(s["suspicion"] > 0.0, "Suspicion should not reach 0 before 14 ticks")
+
+
+func test_14_tick_minimum_allows_restore_after_14_days() -> void:
+	var s: Dictionary = AssassinationSystem.create_assassination_state(1, 2, AssassinationSystem.ExecutionMethod.POISON, 100)
+	s["suspicion"] = 1.0
+	s["suspicion_raised_ic_day"] = 105
+	AssassinationSystem.decay_suspicion(s, false, 120)
+	assert_eq(s["suspicion"], 0.0, "Suspicion should reach 0 after 14+ ticks")
+
+
+func test_14_tick_minimum_resets_raised_day_on_clear() -> void:
+	var s: Dictionary = AssassinationSystem.create_assassination_state(1, 2, AssassinationSystem.ExecutionMethod.POISON, 100)
+	s["suspicion"] = 1.0
+	s["suspicion_raised_ic_day"] = 105
+	AssassinationSystem.decay_suspicion(s, false, 120)
+	assert_eq(s["suspicion_raised_ic_day"], -1, "raised_ic_day should reset to -1 on clear")
+
+
+func test_14_tick_minimum_clamps_to_half() -> void:
+	var s: Dictionary = AssassinationSystem.create_assassination_state(1, 2, AssassinationSystem.ExecutionMethod.POISON, 100)
+	s["suspicion"] = 0.5
+	s["suspicion_raised_ic_day"] = 108
+	AssassinationSystem.decay_suspicion(s, false, 112)
+	assert_eq(s["suspicion"], 0.5, "Suspicion clamped to 0.5 within 14-tick window")
+
+
+func test_decay_absent_multiple_ticks() -> void:
+	var s: Dictionary = AssassinationSystem.create_assassination_state(1, 2, AssassinationSystem.ExecutionMethod.POISON, 0)
+	s["suspicion"] = 5.0
+	s["suspicion_raised_ic_day"] = 0
+	for tick: int in range(5):
+		AssassinationSystem.decay_suspicion(s, false, tick + 1)
+	assert_eq(s["suspicion"], 0.5, "5 absent ticks from 5.0 should clamp at 0.5 within 14-tick window")
+
+
+func test_decay_present_inactive_rate() -> void:
+	var s: Dictionary = AssassinationSystem.create_assassination_state(1, 2, AssassinationSystem.ExecutionMethod.POISON, 0)
+	s["suspicion"] = 5.0
+	s["suspicion_raised_ic_day"] = 0
+	for tick: int in range(4):
+		AssassinationSystem.decay_suspicion(s, true, tick + 1)
+	assert_eq(s["suspicion"], 3.0, "4 present-inactive ticks at -0.5 should reduce 5.0 to 3.0")
+
+
+func test_no_decay_when_suspicion_zero() -> void:
+	var s: Dictionary = AssassinationSystem.create_assassination_state(1, 2, AssassinationSystem.ExecutionMethod.POISON, 0)
+	s["suspicion"] = 0.0
+	AssassinationSystem.decay_suspicion(s, false, 50)
+	assert_eq(s["suspicion"], 0.0, "Zero suspicion should remain zero")

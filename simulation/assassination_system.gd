@@ -33,10 +33,11 @@ enum BodyguardResponse {
 const SUSPICION_FAILURE: int = 5
 const SUSPICION_NOTABLE_FAILURE: int = 10
 const SUSPICION_CRITICAL_FAILURE: int = 15
-const SUSPICION_DECAY_ABSENT: int = -1
-const SUSPICION_DECAY_PRESENT: int = 0
-const SUSPICION_ALERT_THRESHOLD: int = 20
-const SUSPICION_LOCKDOWN_THRESHOLD: int = 40
+const SUSPICION_DECAY_ABSENT: float = -1.0
+const SUSPICION_DECAY_PRESENT_INACTIVE: float = -0.5
+const SUSPICION_ALERT_THRESHOLD: float = 20.0
+const SUSPICION_LOCKDOWN_THRESHOLD: float = 40.0
+const SUSPICION_MINIMUM_RESTORE_TICKS: int = 14
 
 # -- Access Phase Constants ----------------------------------------------------
 
@@ -82,7 +83,8 @@ static func create_assassination_state(
 		"target_id": target_id,
 		"method": method,
 		"phase": AssassinationPhase.ACCESS,
-		"suspicion": 0,
+		"suspicion": 0.0,
+		"suspicion_raised_ic_day": -1,
 		"days_in_access": 0,
 		"start_ic_day": current_ic_day,
 		"bodyguard_encountered": false,
@@ -96,7 +98,7 @@ static func create_assassination_state(
 # ==============================================================================
 
 static func add_suspicion(state: Dictionary, amount: int) -> void:
-	state["suspicion"] = clampi(state.get("suspicion", 0) + amount, 0, 100)
+	state["suspicion"] = clampf(float(state.get("suspicion", 0)) + float(amount), 0.0, 100.0)
 
 
 static func get_suspicion_from_failure(margin: int) -> int:
@@ -107,26 +109,36 @@ static func get_suspicion_from_failure(margin: int) -> int:
 	return SUSPICION_FAILURE
 
 
-static func decay_suspicion(state: Dictionary, is_present: bool) -> void:
-	var decay: int = SUSPICION_DECAY_PRESENT if is_present else SUSPICION_DECAY_ABSENT
-	state["suspicion"] = clampi(state.get("suspicion", 0) + decay, 0, 100)
+static func decay_suspicion(state: Dictionary, is_present: bool, ic_day: int = -1) -> void:
+	var susp: float = float(state.get("suspicion", 0))
+	if susp <= 0.0:
+		return
+	var decay: float = SUSPICION_DECAY_PRESENT_INACTIVE if is_present else SUSPICION_DECAY_ABSENT
+	var new_susp: float = clampf(susp + decay, 0.0, 100.0)
+	if new_susp <= 0.0:
+		var raised_day: int = int(state.get("suspicion_raised_ic_day", -1))
+		if raised_day >= 0 and ic_day >= 0 and (ic_day - raised_day) < SUSPICION_MINIMUM_RESTORE_TICKS:
+			new_susp = 0.5
+	state["suspicion"] = new_susp
+	if new_susp <= 0.0:
+		state["suspicion_raised_ic_day"] = -1
 
 
 static func is_alert(state: Dictionary) -> bool:
-	return state.get("suspicion", 0) >= SUSPICION_ALERT_THRESHOLD
+	return float(state.get("suspicion", 0)) >= SUSPICION_ALERT_THRESHOLD
 
 
 static func is_lockdown(state: Dictionary) -> bool:
-	return state.get("suspicion", 0) >= SUSPICION_LOCKDOWN_THRESHOLD
+	return float(state.get("suspicion", 0)) >= SUSPICION_LOCKDOWN_THRESHOLD
 
 
 static func get_suspicion_tn_modifier(state: Dictionary) -> int:
-	var susp: int = state.get("suspicion", 0)
+	var susp: float = float(state.get("suspicion", 0))
 	if susp >= SUSPICION_LOCKDOWN_THRESHOLD:
 		return 15
 	if susp >= SUSPICION_ALERT_THRESHOLD:
 		return 10
-	if susp >= 10:
+	if susp >= 10.0:
 		return 5
 	return 0
 
