@@ -2114,3 +2114,115 @@ func test_honor_covert_penalty_not_applied_to_non_covert() -> void:
 	need.need_type = "RAISE_DISPOSITION"
 	NPCDecisionEngine.score_all([option], need, ctx, _scoring_tables)
 	assert_eq(option.honor_covert_penalty, 0.0, "Non-covert CHARM should have no honor penalty")
+
+
+# -- Virtue Covert Modifier (s12.8 Filter 3) ----------------------------------
+
+func _make_ctx_with_virtue(
+	virtue: Enums.BushidoVirtue,
+	threat: bool = false,
+	lord_assigned: bool = false,
+) -> NPCDataStructures.ContextSnapshot:
+	_char.bushido_virtue = virtue
+	if threat:
+		_world_state["active_wars"] = [{"war_id": 1}]
+	else:
+		_world_state["active_wars"] = []
+	if lord_assigned:
+		_world_state["known_objectives"] = {"lord_assigned": true, "primary": {}}
+	else:
+		_world_state["known_objectives"] = {}
+	return NPCDecisionEngine.build_context(_char, _world_state)
+
+
+func test_virtue_meiyo_no_threat_amplifies_reluctance() -> void:
+	var ctx := _make_ctx_with_virtue(Enums.BushidoVirtue.MEIYO)
+	var mod: float = NPCDecisionEngine._compute_virtue_covert_modifier(ctx)
+	assert_eq(mod, -15.0, "Meiyo without threat should amplify reluctance")
+
+
+func test_virtue_meiyo_with_threat_reduces_reluctance() -> void:
+	var ctx := _make_ctx_with_virtue(Enums.BushidoVirtue.MEIYO, true)
+	var mod: float = NPCDecisionEngine._compute_virtue_covert_modifier(ctx)
+	assert_eq(mod, 15.0, "Meiyo under existential threat should reduce reluctance")
+
+
+func test_virtue_chugi_no_lord_directive_heavy_penalty() -> void:
+	var ctx := _make_ctx_with_virtue(Enums.BushidoVirtue.CHUGI)
+	var mod: float = NPCDecisionEngine._compute_virtue_covert_modifier(ctx)
+	assert_eq(mod, -25.0, "Chugi without lord directive should block covert actions")
+
+
+func test_virtue_chugi_lord_assigned_enables() -> void:
+	var ctx := _make_ctx_with_virtue(Enums.BushidoVirtue.CHUGI, false, true)
+	var mod: float = NPCDecisionEngine._compute_virtue_covert_modifier(ctx)
+	assert_eq(mod, 10.0, "Chugi with lord directive should enable covert actions")
+
+
+func test_virtue_yu_no_threat_amplifies_reluctance() -> void:
+	var ctx := _make_ctx_with_virtue(Enums.BushidoVirtue.YU)
+	var mod: float = NPCDecisionEngine._compute_virtue_covert_modifier(ctx)
+	assert_eq(mod, -15.0, "Yu without threat should amplify reluctance")
+
+
+func test_virtue_yu_with_threat_reduces_reluctance() -> void:
+	var ctx := _make_ctx_with_virtue(Enums.BushidoVirtue.YU, true)
+	var mod: float = NPCDecisionEngine._compute_virtue_covert_modifier(ctx)
+	assert_eq(mod, 10.0, "Yu under existential threat should reduce reluctance")
+
+
+func test_virtue_seigyo_no_modifier() -> void:
+	_char.bushido_virtue = Enums.BushidoVirtue.NONE
+	_char.shourido_virtue = Enums.ShouridoVirtue.SEIGYO
+	var ctx := NPCDecisionEngine.build_context(_char, _world_state)
+	var mod: float = NPCDecisionEngine._compute_virtue_covert_modifier(ctx)
+	assert_eq(mod, 0.0, "Seigyo should have no extra modifier (handled by personality_lean)")
+
+
+func test_virtue_jin_no_modifier() -> void:
+	var ctx := _make_ctx_with_virtue(Enums.BushidoVirtue.JIN)
+	var mod: float = NPCDecisionEngine._compute_virtue_covert_modifier(ctx)
+	assert_eq(mod, 0.0, "Jin flat reluctance is in personality_lean, no conditional modifier")
+
+
+func test_existential_threat_starvation() -> void:
+	_char.bushido_virtue = Enums.BushidoVirtue.MEIYO
+	_world_state["is_lord"] = true
+	_world_state["resource_stockpiles"] = {"rice": 0}
+	var ps := NPCDataStructures.ProvinceStatus.new()
+	ps.province_id = 1
+	ps.starvation_stage = 2
+	_world_state["province_statuses"] = [ps]
+	var ctx := NPCDecisionEngine.build_context(_char, _world_state)
+	var has_threat: bool = NPCDecisionEngine._has_existential_threat(ctx)
+	assert_true(has_threat, "Starvation in own province is existential threat")
+
+
+func test_existential_threat_siege() -> void:
+	_world_state["besieged_settlement_health_pct"] = 0.5
+	var ctx := NPCDecisionEngine.build_context(_char, _world_state)
+	var has_threat: bool = NPCDecisionEngine._has_existential_threat(ctx)
+	assert_true(has_threat, "Being under siege is existential threat")
+
+
+func test_no_existential_threat_peacetime() -> void:
+	var ctx := NPCDecisionEngine.build_context(_char, _world_state)
+	var has_threat: bool = NPCDecisionEngine._has_existential_threat(ctx)
+	assert_false(has_threat, "Peacetime should have no existential threat")
+
+
+func test_virtue_modifier_applied_in_scoring() -> void:
+	_char.honor = 1.5
+	_char.clan = "Crane"
+	_char.school = "Doji Courtier"
+	_char.bushido_virtue = Enums.BushidoVirtue.CHUGI
+	_scoring_tables["objective_alignment"]["RAISE_DISPOSITION"]["SHADOW_TARGET"] = 70
+	_scoring_tables["action_skill_map"]["SHADOW_TARGET"] = {"primary": "Stealth", "secondary": "Agility"}
+	var ctx := NPCDecisionEngine.build_context(_char, _world_state)
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "SHADOW_TARGET"
+	option.target_npc_id = 2
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "RAISE_DISPOSITION"
+	NPCDecisionEngine.score_all([option], need, ctx, _scoring_tables)
+	assert_eq(option.virtue_covert_modifier, -25.0, "Chugi without lord directive should penalize covert")

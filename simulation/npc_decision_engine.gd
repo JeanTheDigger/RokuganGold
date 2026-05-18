@@ -468,6 +468,7 @@ static func score_all(
 			option.honor_covert_penalty = _compute_honor_covert_penalty(
 				ctx.honor, ctx.school, ctx.clan
 			)
+			option.virtue_covert_modifier = _compute_virtue_covert_modifier(ctx)
 
 	# Tea ceremony: +10 per eligible guest (s57.37.4 social multiplier).
 	# Clan affinity bonuses (Crane +10, Phoenix +5) applied via disposition_modifier.
@@ -1426,6 +1427,36 @@ static func _compute_honor_covert_penalty(
 		return base_penalty * 0.5
 
 	return base_penalty
+
+
+static func _compute_virtue_covert_modifier(
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> float:
+	var threat: bool = _has_existential_threat(ctx)
+
+	match ctx.bushido_virtue:
+		Enums.BushidoVirtue.MEIYO:
+			return 15.0 if threat else -15.0
+		Enums.BushidoVirtue.CHUGI:
+			if ctx.known_objectives.get("lord_assigned", false):
+				return 10.0
+			return -25.0
+		Enums.BushidoVirtue.YU:
+			return 10.0 if threat else -15.0
+
+	return 0.0
+
+
+static func _has_existential_threat(
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> bool:
+	if not ctx.active_wars.is_empty():
+		return true
+	if not ctx.starvation_province_ids.is_empty():
+		return true
+	if ctx.besieged_settlement_health_pct < 1.0:
+		return true
+	return false
 
 
 static func _lookup_disposition_modifier(
