@@ -33,19 +33,37 @@ const PERSONALITY_DOMAIN_PREFERENCE: Dictionary = {
 
 const STANDING_OBJECTIVE_DOMAIN: Dictionary = {
 	"EXPAND_TERRITORY": DOMAIN_MILITARY,
+	"MAINTAIN_BALANCE": DOMAIN_POLITICAL,
 	"MAINTAIN_PEACE": DOMAIN_POLITICAL,
 	"MAXIMIZE_PROSPERITY": DOMAIN_ECONOMIC,
 	"ADVANCE_FAMILY": DOMAIN_POLITICAL,
-	"SEEK_GLORY": DOMAIN_PERSONAL,
-	"SEEK_VENGEANCE": DOMAIN_PERSONAL,
+	"UNDERMINE_CLAN": DOMAIN_POLITICAL,
+	"STRENGTHEN_IMPERIAL": DOMAIN_POLITICAL,
 	"ACCUMULATE_LEVERAGE": DOMAIN_POLITICAL,
-	"PROTECT_TERRITORY": DOMAIN_MILITARY,
-	"BUILD_STRONGEST_FORCE": DOMAIN_MILITARY,
-	"CONTROL_TRADE": DOMAIN_ECONOMIC,
 	"UPHOLD_LAW": DOMAIN_POLITICAL,
+	"DEFEND_TERRITORY": DOMAIN_MILITARY,
+	"STRENGTHEN_FORTIFICATION": DOMAIN_MILITARY,
 	"STRENGTHEN_WALL": DOMAIN_MILITARY,
 	"MILITARY_DOMINANCE": DOMAIN_MILITARY,
 	"ELIMINATE_SHADOWLANDS": DOMAIN_MILITARY,
+	"BUILD_STRONGEST_FORCE": DOMAIN_MILITARY,
+	"PROTECT_TERRITORY": DOMAIN_MILITARY,
+	"CONTROL_TRADE": DOMAIN_ECONOMIC,
+	"PREVENT_SHORTAGE": DOMAIN_ECONOMIC,
+	"ACCUMULATE_WEALTH": DOMAIN_ECONOMIC,
+	"GROW_COMMERCE": DOMAIN_ECONOMIC,
+	"HONOR_ANCESTORS": DOMAIN_PERSONAL,
+	"PROTECT_DEPENDENTS": DOMAIN_PERSONAL,
+	"ACCUMULATE_KNOWLEDGE": DOMAIN_PERSONAL,
+	"PERSONAL_EXCELLENCE": DOMAIN_PERSONAL,
+	"ELEVATE_FAMILY": DOMAIN_PERSONAL,
+	"LIVE_BY_BUSHIDO": DOMAIN_PERSONAL,
+	"ADVANCE_GLORY": DOMAIN_PERSONAL,
+	"SEEK_GLORY": DOMAIN_PERSONAL,
+	"SEEK_VENGEANCE": DOMAIN_PERSONAL,
+	"INVESTIGATE_CRIME": DOMAIN_POLITICAL,
+	"BUILD_INFRASTRUCTURE": DOMAIN_ECONOMIC,
+	"FILL_VACANCY": DOMAIN_POLITICAL,
 }
 
 const SELF_SELECTION_DELAY_BUSHIDO: Dictionary = {
@@ -187,6 +205,16 @@ static func _scan_political(
 		opp.urgency = 30.0
 		results.append(opp)
 
+	var unmarried_family: Array = world_state.get("unmarried_family_members", [])
+	for member: Dictionary in unmarried_family:
+		var opp := Opportunity.new()
+		opp.objective_type = "ARRANGE_MARRIAGE"
+		opp.target_fields = {"target_npc_id": member.get("character_id", -1)}
+		opp.standing_alignment = 80.0 if standing_type == "ADVANCE_FAMILY" else 45.0
+		opp.feasibility = 70.0
+		opp.urgency = member.get("urgency", 30.0)
+		results.append(opp)
+
 	return results
 
 
@@ -244,6 +272,55 @@ static func _scan_military(
 		opp.urgency = 90.0
 		results.append(opp)
 
+	var threatened_provinces: Array = world_state.get("threatened_provinces", [])
+	for threat: Dictionary in threatened_provinces:
+		var opp := Opportunity.new()
+		opp.objective_type = "DEFEND_PROVINCE"
+		opp.target_fields = {"target_province_id": threat.get("province_id", -1)}
+		opp.standing_alignment = 90.0 if standing_type in ["EXPAND_TERRITORY", "MILITARY_DOMINANCE"] else 60.0
+		opp.feasibility = threat.get("feasibility", 60.0)
+		opp.urgency = threat.get("urgency", 70.0)
+		results.append(opp)
+
+	var sieged_allies: Array = world_state.get("sieged_allies", [])
+	for siege: Dictionary in sieged_allies:
+		var opp := Opportunity.new()
+		opp.objective_type = "RELIEVE_SIEGE"
+		opp.target_fields = {"target_province_id": siege.get("province_id", -1)}
+		opp.standing_alignment = 85.0 if standing_type == "MAINTAIN_PEACE" else 60.0
+		opp.feasibility = siege.get("feasibility", 50.0)
+		opp.urgency = 80.0
+		results.append(opp)
+
+	var tainted_provinces: Array = world_state.get("tainted_provinces", [])
+	for prov: Dictionary in tainted_provinces:
+		var opp := Opportunity.new()
+		opp.objective_type = "MANAGE_TAINT"
+		opp.target_fields = {"target_province_id": prov.get("province_id", -1)}
+		opp.standing_alignment = 90.0 if standing_type == "ELIMINATE_SHADOWLANDS" else 65.0
+		opp.feasibility = 60.0
+		opp.urgency = prov.get("urgency", 75.0)
+		results.append(opp)
+
+	var insurgent_provinces: Array = world_state.get("insurgent_provinces", [])
+	for prov: Dictionary in insurgent_provinces:
+		var opp := Opportunity.new()
+		opp.objective_type = "PATROL_PROVINCE"
+		opp.target_fields = {"target_province_id": prov.get("province_id", -1)}
+		opp.standing_alignment = 80.0 if standing_type == "UPHOLD_LAW" else 50.0
+		opp.feasibility = 75.0
+		opp.urgency = prov.get("urgency", 60.0)
+		results.append(opp)
+
+	if strongest_rival > my_strength * 1.1 and strongest_rival <= my_strength * 1.3:
+		var opp := Opportunity.new()
+		opp.objective_type = "LEVY_TROOPS"
+		opp.target_fields = {}
+		opp.standing_alignment = 75.0 if standing_type == "BUILD_STRONGEST_FORCE" else 50.0
+		opp.feasibility = 80.0
+		opp.urgency = 45.0
+		results.append(opp)
+
 	return results
 
 
@@ -284,6 +361,29 @@ static func _scan_economic(
 		opp.standing_alignment = 75.0 if standing_type == "CONTROL_TRADE" else 60.0
 		opp.feasibility = 75.0
 		opp.urgency = 40.0
+		results.append(opp)
+
+	var critical_needs: Array = world_state.get("critical_resource_needs", [])
+	for need: Dictionary in critical_needs:
+		var opp := Opportunity.new()
+		opp.objective_type = "ACQUIRE_RESOURCE"
+		opp.target_fields = {
+			"target_resource": need.get("resource", ""),
+			"threshold": need.get("threshold", 0.0),
+		}
+		opp.standing_alignment = 80.0 if standing_type == "MAXIMIZE_PROSPERITY" else 55.0
+		opp.feasibility = 65.0
+		opp.urgency = need.get("urgency", 70.0)
+		results.append(opp)
+
+	var threatened_routes: Array = world_state.get("threatened_trade_routes", [])
+	for route: Dictionary in threatened_routes:
+		var opp := Opportunity.new()
+		opp.objective_type = "SECURE_TRADE_ROUTE"
+		opp.target_fields = {"target_province_id": route.get("province_id", -1)}
+		opp.standing_alignment = 90.0 if standing_type == "CONTROL_TRADE" else 55.0
+		opp.feasibility = 70.0
+		opp.urgency = route.get("urgency", 55.0)
 		results.append(opp)
 
 	return results
@@ -336,6 +436,16 @@ static func _scan_personal(
 		opp.urgency = 20.0
 		results.append(opp)
 
+	var bitter_rivals: Array = world_state.get("bitter_rivals", [])
+	for rival: Dictionary in bitter_rivals:
+		var opp := Opportunity.new()
+		opp.objective_type = "ELIMINATE_CHARACTER"
+		opp.target_fields = {"target_npc_id": rival.get("target_id", -1)}
+		opp.standing_alignment = 70.0 if standing_type == "SEEK_VENGEANCE" else 30.0
+		opp.feasibility = rival.get("feasibility", 40.0)
+		opp.urgency = rival.get("urgency", 50.0)
+		results.append(opp)
+
 	return results
 
 
@@ -353,21 +463,34 @@ static func _compute_personality_fit(
 		return 80.0
 
 	match opp.objective_type:
-		"CONQUER_PROVINCE", "BUILD_STRONGEST_FORCE", "MILITARY_DOMINANCE":
+		"CONQUER_PROVINCE", "BUILD_STRONGEST_FORCE", "MILITARY_DOMINANCE", "LEVY_TROOPS":
 			if character.bushido_virtue == Enums.BushidoVirtue.YU:
 				return 90.0
 			if character.bushido_virtue == Enums.BushidoVirtue.JIN:
 				return 20.0
-		"MAINTAIN_PEACE", "SECURE_ALLIANCE":
+		"MAINTAIN_PEACE", "SECURE_ALLIANCE", "ARRANGE_MARRIAGE":
 			if character.bushido_virtue == Enums.BushidoVirtue.JIN:
 				return 85.0
 			if character.bushido_virtue == Enums.BushidoVirtue.REI:
 				return 80.0
-		"SEEK_VENGEANCE", "AVENGE":
+		"SEEK_VENGEANCE", "AVENGE", "ELIMINATE_CHARACTER":
 			if character.bushido_virtue == Enums.BushidoVirtue.YU:
 				return 90.0
 			if character.bushido_virtue == Enums.BushidoVirtue.REI:
 				return 30.0
+		"DEFEND_PROVINCE", "RELIEVE_SIEGE", "PATROL_PROVINCE":
+			if character.bushido_virtue == Enums.BushidoVirtue.CHUGI:
+				return 85.0
+			if character.bushido_virtue == Enums.BushidoVirtue.YU:
+				return 80.0
+		"MANAGE_TAINT":
+			if character.bushido_virtue == Enums.BushidoVirtue.GI:
+				return 85.0
+			if character.bushido_virtue == Enums.BushidoVirtue.JIN:
+				return 80.0
+		"ACQUIRE_RESOURCE", "SECURE_TRADE_ROUTE":
+			if character.bushido_virtue == Enums.BushidoVirtue.JIN:
+				return 75.0
 
 	return 50.0
 
