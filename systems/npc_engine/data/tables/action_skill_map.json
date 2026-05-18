@@ -31,6 +31,10 @@
     "primary": "Battle",
     "secondary": null
   },
+  "ASSIGN_TO_MILITARY_SERVICE": {
+    "primary": "Battle",
+    "secondary": "Courtier"
+  },
   "ASSIGN_VASSAL_OBJECTIVE": {
     "primary": "Courtier",
     "secondary": "Battle"
@@ -178,6 +182,10 @@
   "EXECUTE_ASSASSINATION": {
     "primary": "Stealth",
     "secondary": "Acting"
+  },
+  "EXPOSE_SECRET_PRIVATELY": {
+    "primary": "Courtier",
+    "secondary": "Awareness"
   },
   "EXPOSE_SECRET_PUBLICLY": {
     "primary": "Courtier",
@@ -382,10 +390,6 @@
   "REST": {
     "primary": null,
     "secondary": null
-  },
-  "EXPOSE_SECRET_PRIVATELY": {
-    "primary": "Courtier",
-    "secondary": "Awareness"
   },
   "SCOUT_ENEMY": {
     "primary": "Battle",
