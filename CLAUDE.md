@@ -207,8 +207,37 @@ file, search `/simulation/` and `/shared/` to confirm the system doesn't already
 For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
 **Code Implementation Status** table at the bottom of `/gdd/00_INDEX.md`.
 
+### Known Code Issues (found and fixed 2026-05-17)
+- **DefenseHearingSystem.can_appoint_champion() — tautology bug. FIXED.**
+  Was `return X != Y or X == Y`. GDD s11.3.9f confirms either side may appoint a
+  champion regardless of school type. Changed to explicit `return true`, renamed param
+  to `_accused` to suppress unused-parameter warning.
+- **MagistrateAllocationSystem.is_emerald_jurisdiction() — dead parameter. FIXED.**
+  Was `return true` ignoring its `EmeraldJurisdictionTrigger` parameter. GDD s11.3.17c
+  confirms all four triggers (CROSS_CLAN_CRIME, TREASON, MAHO, LOCAL_JUSTICE_FAILED)
+  qualify. Replaced with explicit match so future enum additions require a deliberate
+  decision rather than silently returning true.
+- **MagistrateAllocationSystem.can_override_clan_magistrate() — stub clarified. FIXED.**
+  GDD s11.3.6 states Emerald Magistrates have Empire-wide authority over any clan
+  magistrate — unconditional. Added reference comment to distinguish intent from stub.
+
+### Systems Added 2026-05-17
+- **s57.38 Hunting Party System** — `simulation/hunt_system.gd`. Three ActionIDs:
+  ANNOUNCE_HUNT, REQUEST_HUNT_INVITATION, CANCEL_HUNT. NPC-only resolution (tracking +
+  kill + casualty rolls), glory distribution, school leans. Player ASCII mission deferred
+  (blocked on s56 coordinate system).
+- **s57.39 Animal Handling** — `simulation/animal_handling_system.gd`. TRAIN_ANIMAL (1 AP),
+  7-species table (DOG through WARCAT), companion cap by rank, training tiers ("wild" /
+  "following" / "trained"), mastery gates at Rank 5 and 7, school leans. ASCII combat layer
+  deferred (blocked on s40/s56).
+- **s57.40 Commerce & Caste Stigma** — `simulation/commerce_stigma_system.gd`. Rank-scaled
+  honor penalty + flat glory penalty on public Commerce rolls. Once-per-IC-day sentinel.
+  Ide Trader exception. Wired in action_executor.gd `_apply_effects()`. Rank 5 mastery and
+  Appraisal emphasis deferred per s57.40.8–9 (GDD marks these deferred — do not implement
+  until s57.40.8–9 are unlocked).
+
 ### Blocked Sections — Do Not Re-Audit
-As of 2026-05-15, every remaining PARTIAL and NOT STARTED section is blocked.
+As of 2026-05-17, every remaining PARTIAL and NOT STARTED section is blocked.
 Do not re-audit this; the list is settled. Ask the user before investigating any of these.
 
 **Blocked on world map / adjacency data (not yet available):**
@@ -224,9 +253,11 @@ Do not re-audit this; the list is settled. Ask the user before investigating any
   (AP cost, agenda topic format, compliance enforcement all unspecified)
 - s43 — Maho spell cast roll TN: GDD s43 does not specify it
 - s49 — Artisan progression beyond gift/tattoo quality tiers: GDD s49 not LOCKED
+- s57.40.8 — Commerce rank 5 mastery (price ±20%): GDD section not yet unlocked
+- s57.40.9 — Appraisal skill emphasis modifier: GDD section not yet unlocked
 
 **REFERENCE sections** (source material only, design not started): s31–s37, s38,
-s44, s45, s54.7, s57.22–s57.33, s57.37–s57.46.
+s44, s45, s54.7, s57.22–s57.33, s57.41–s57.43, s57.45–s57.46.
 
 ### Pending Redesign
 (None currently pending.)

@@ -1294,3 +1294,206 @@ func test_kill_witness_resolves() -> void:
 	assert_eq(result["effects"]["witness_id"], 62)
 	assert_true(result["effects"].has("concealment_tn"))
 	assert_typeof(result["effects"]["concealment_tn"], TYPE_INT)
+
+
+# -- Festival Glory Wiring (s11.5) -------------------------------------------
+
+func test_train_on_martial_glory_festival_adds_glory() -> void:
+	_ctx.festival_glory_martial = 0.1
+	var action := _make_action("TRAIN")
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map
+	)
+	assert_true(result["success"])
+	assert_almost_eq(result["effects"].get("glory_change", 0.0), 0.1, 0.001)
+
+
+func test_train_no_festival_no_glory() -> void:
+	var action := _make_action("TRAIN")
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map
+	)
+	assert_true(result["success"])
+	assert_false(result["effects"].has("glory_change"))
+
+
+func test_write_letter_on_poetry_festival_adds_glory() -> void:
+	_ctx.festival_glory_poetry = 0.1
+	_character.skills["Calligraphy"] = 3
+	var action := _make_action("WRITE_LETTER")
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map
+	)
+	assert_true(result["success"])
+	assert_almost_eq(result["effects"].get("glory_change", 0.0), 0.1, 0.001)
+
+
+func test_write_letter_no_festival_no_glory() -> void:
+	_character.skills["Calligraphy"] = 3
+	var action := _make_action("WRITE_LETTER")
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map
+	)
+	assert_true(result["success"])
+	assert_almost_eq(result["effects"].get("glory_change", 0.0), 0.0, 0.001)
+
+
+# =============================================================================
+# TREAT_WOUND
+# =============================================================================
+
+func test_treat_wound_rejects_missing_target() -> void:
+	var action := _make_action("TREAT_WOUND", -1)
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map
+	)
+	assert_false(result["success"])
+	assert_eq(result["reason"], "no_target")
+
+
+func test_treat_wound_rejects_unknown_target() -> void:
+	var action := _make_action("TREAT_WOUND", 99)
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map,
+		{}, {}  # empty chars_by_id
+	)
+	assert_false(result["success"])
+	assert_eq(result["reason"], "no_target")
+
+
+func test_treat_wound_rejects_unwounded_target() -> void:
+	var target := L5RCharacterData.new()
+	target.character_id = 10
+	target.stamina = 3
+	target.willpower = 2
+	target.honor = 3.0
+	target.wounds_taken = 0
+	target.last_medicine_treatment_ic_day = -1
+	target.disposition_values = {}
+
+	_character.skills["Medicine"] = 3
+	_character.emphases = {"Medicine": ["Wound Treatment"]}
+	_character.items = [{"item_type": "medicine_kit", "remaining_uses": 5, "acquired_ic_day": 1}]
+
+	var chars_by_id: Dictionary = {10: target}
+	var action := _make_action("TREAT_WOUND", 10)
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map, {}, chars_by_id
+	)
+	assert_false(result["success"])
+	assert_eq(result["reason"], "target_unwounded")
+
+
+func test_treat_wound_success_heals_and_consumes_kit() -> void:
+	var target := L5RCharacterData.new()
+	target.character_id = 10
+	target.stamina = 3
+	target.willpower = 2
+	target.honor = 3.0
+	target.wounds_taken = 15
+	target.last_medicine_treatment_ic_day = -1
+	target.disposition_values = {1: 25}  # Friend of healer.
+
+	_character.skills["Medicine"] = 3
+	_character.emphases = {"Medicine": ["Wound Treatment"]}
+	_character.items = [{"item_type": "medicine_kit", "remaining_uses": 5, "acquired_ic_day": 1}]
+	_ctx.characters_present = [10]
+
+	var chars_by_id: Dictionary = {1: _character, 10: target}
+	var action := _make_action("TREAT_WOUND", 10)
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map, {}, chars_by_id
+	)
+	assert_eq(result["action_id"], "TREAT_WOUND")
+	assert_eq(result["skill_used"], "Medicine")
+	assert_true(result["effects"].has("wounds_healed"))
+	assert_true(result["effects"]["kit_charge_consumed"])
+	assert_eq(_character.items[0]["remaining_uses"], 4)
+
+
+func test_treat_wound_refused_by_strong_enemy() -> void:
+	var target := L5RCharacterData.new()
+	target.character_id = 10
+	target.stamina = 3
+	target.willpower = 2
+	target.honor = 3.0
+	target.wounds_taken = 15
+	target.last_medicine_treatment_ic_day = -1
+	target.disposition_values = {1: -50}  # Strong Enemy.
+	target.bushido_virtue = Enums.BushidoVirtue.NONE
+
+	_character.skills["Medicine"] = 3
+	_character.emphases = {"Medicine": ["Wound Treatment"]}
+	_character.items = [{"item_type": "medicine_kit", "remaining_uses": 5, "acquired_ic_day": 1}]
+
+	var chars_by_id: Dictionary = {1: _character, 10: target}
+	var action := _make_action("TREAT_WOUND", 10)
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map, {}, chars_by_id
+	)
+	assert_false(result["success"])
+	assert_eq(result["reason"], "treatment_refused")
+
+
+# =============================================================================
+# MEDITATE
+# =============================================================================
+
+func test_meditate_fails_when_pool_full() -> void:
+	_character.current_void_points = 2
+	_character.max_void_points = 2
+	_character.skills["Meditation"] = 3
+	var action := _make_action("MEDITATE")
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map
+	)
+	assert_false(result["success"])
+	assert_eq(result["reason"], "pool_full")
+
+
+func test_meditate_recovers_void_on_success() -> void:
+	# seed 42 with Meditation 3 / Void 2 → likely to succeed vs TN 20.
+	_character.current_void_points = 0
+	_character.max_void_points = 3
+	_character.void_ring = 2
+	_character.skills["Meditation"] = 3
+	_character.emphases = {"Meditation": ["Void Recovery"]}
+	var action := _make_action("MEDITATE")
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map
+	)
+	assert_eq(result["action_id"], "MEDITATE")
+	if result["success"]:
+		assert_true(result["effects"]["void_recovered"] >= 1)
+		assert_true(_character.current_void_points >= 1)
+
+
+func test_meditate_rank3_mastery_recovers_up_to_2() -> void:
+	_character.current_void_points = 0
+	_character.max_void_points = 3
+	_character.void_ring = 3
+	_character.skills["Meditation"] = 4  # rank 3+ mastery
+	_character.emphases = {"Meditation": ["Void Recovery"]}
+	var dice_always_succeed := DiceEngine.new(1)  # seed 1 for high rolls
+	var action := _make_action("MEDITATE")
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, dice_always_succeed, _action_skill_map
+	)
+	if result["success"]:
+		assert_true(result["effects"]["void_recovered"] <= 2)
+
+
+func test_meditate_cannot_exceed_max_pool() -> void:
+	_character.current_void_points = 2
+	_character.max_void_points = 3
+	_character.void_ring = 3
+	_character.skills["Meditation"] = 7  # rank 7 mastery (up to 3 VP)
+	_character.emphases = {"Meditation": ["Void Recovery"]}
+	var dice_always_succeed := DiceEngine.new(1)
+	var action := _make_action("MEDITATE")
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, dice_always_succeed, _action_skill_map
+	)
+	if result["success"]:
+		assert_true(_character.current_void_points <= _character.max_void_points)
+		assert_eq(result["effects"]["void_recovered"], 1)  # capped at 3-2=1

@@ -75,6 +75,7 @@ static func advance_day(
 	next_company_id: Array[int] = [1],
 	active_secrets: Array[SecretData] = [],
 	next_secret_id: Array[int] = [1],
+	active_hostages: Array[Dictionary] = [],
 ) -> Dictionary:
 	var prev_season: int = time_system.get_season()
 
@@ -115,6 +116,9 @@ static func advance_day(
 	var bound_escape_results: Array[Dictionary] = _process_bound_states(
 		bound_states, characters_by_id, dice_engine, ic_day
 	)
+	var hostage_escape_results: Array[Dictionary] = _process_hostage_escapes(
+		active_hostages, characters_by_id, settlements, dice_engine, ic_day, death_events,
+	)
 
 	var crisis_courts: Array[Dictionary] = _process_crisis_court_calls(
 		characters, active_courts, active_topics, world_states, next_court_id, ic_day,
@@ -144,7 +148,7 @@ static func advance_day(
 	var military_daily: Dictionary = _process_military_daily(
 		active_armies, active_sieges, active_tethers, order_states,
 		dice_engine, settlements, companies, wm_for_military,
-		active_wars, characters_by_id, provinces,
+		active_wars, characters_by_id, provinces, active_hostages, ic_day,
 	)
 
 	var dragon_schism_siege_event: Dictionary = {}
@@ -314,7 +318,10 @@ static func advance_day(
 		dice_engine,
 		settlements,
 		characters_by_id,
+		active_hostages,
+		ic_day,
 	)
+	_capture_siege_hostages(active_sieges, characters_by_id, companies, active_hostages, ic_day)
 
 	var purification_results: Array[Dictionary] = _process_purification_effects(
 		day_result.get("results", []),
@@ -465,6 +472,8 @@ static func advance_day(
 		ic_day,
 	)
 
+	_release_war_hostages(war_termination_results, active_hostages, characters_by_id, ic_day)
+
 	var peace_route_results: Array[Dictionary] = _process_peace_trade_routes(
 		war_termination_results, trade_routes,
 	)
@@ -562,6 +571,10 @@ static func advance_day(
 		conviction_results, crime_records, objectives_map,
 	)
 
+	_process_magistrate_conviction_cascade(
+		conviction_results, crime_records, characters_by_id, objectives_map,
+	)
+
 	var info_results: Array[Dictionary] = _process_info_events(
 		day_result.get("applied", []),
 		characters_by_id,
@@ -607,6 +620,7 @@ static func advance_day(
 	var commitment_seasonal_result: Dictionary = {}
 	var worship_seasonal_results: Dictionary = {}
 	var civil_war_results_seasonal: Dictionary = {}
+	var extradition_results: Array[Dictionary] = []
 	if current_season != prev_season:
 		# Add the IC year to miya_inputs so per-province blessed-year tracking
 		# stays consistent. Year is computed from the time system's tick count.
@@ -779,6 +793,10 @@ static func advance_day(
 		)
 		_increment_vacancy_seasons(season_meta)
 		_process_seasonal_stipend_disposition(characters, characters_by_id)
+		extradition_results = _process_fugitive_extradition_seasonal(
+			crime_records, characters, characters_by_id, provinces, settlements,
+			active_topics, next_topic_id, ic_day,
+		)
 		pregnancy_results = _process_pregnancy_checks(
 			marriages, characters_by_id, children, dice_engine, ic_day,
 			next_character_id,
@@ -803,6 +821,15 @@ static func advance_day(
 		settlements, provinces, dice_engine, ic_day, season_meta,
 		active_topics, next_topic_id,
 	)
+
+	# OOC Day Tick — fires every 4 IC days (one real-world day, per GDD s13 /
+	# s57.44.2). Runs Wind-Down selection and Void Point refresh for all
+	# living characters.
+	var ooc_tick_results: Array[Dictionary] = []
+	if ic_day % TimeSystem.TICKS_PER_REAL_DAY == 0:
+		ooc_tick_results = _process_ooc_day_tick(
+			characters, characters_by_id, settlements, dice_engine, worship_state, ic_day,
+		)
 
 	return {
 		"ic_day": ic_day,
@@ -837,6 +864,7 @@ static func advance_day(
 		"succession_results": succession_results,
 		"entanglement_results": entanglement_results,
 		"bound_escape_results": bound_escape_results,
+		"hostage_escape_results": hostage_escape_results,
 		"military_daily": military_daily,
 		"military_seasonal": military_seasonal_result,
 		"military_effects": military_effects,
@@ -871,6 +899,7 @@ static func advance_day(
 		"gempukku_results": gempukku_results,
 		"advancement_results": advancement_results,
 		"ronin_results": ronin_results,
+		"extradition_results": extradition_results,
 		"pregnancy_results": pregnancy_results,
 		"seiyaku_results": seiyaku_results,
 		"worship_accumulation_results": worship_accumulation_results,
@@ -887,6 +916,7 @@ static func advance_day(
 		"civil_war_results": civil_war_results_seasonal,
 		"koku_flow_results": koku_flow_results,
 		"stipend_topic_results": stipend_topic_results,
+		"ooc_tick_results": ooc_tick_results,
 	}
 
 
@@ -898,6 +928,176 @@ static func _reset_all_ap(characters: Array[L5RCharacterData]) -> void:
 		c.civilian_orders_remaining = c.civilian_order_budget_max
 		c.passage_request_count_today = 0
 		c.pieces_seen.erase("_performance_count_today")
+
+
+# -- OOC Day Tick --------------------------------------------------------------
+
+static func _process_ooc_day_tick(
+	characters: Array[L5RCharacterData],
+	characters_by_id: Dictionary,
+	settlements: Array[SettlementData],
+	dice_engine: DiceEngine,
+	worship_state: Dictionary,
+	ic_day: int = 0,
+) -> Array[Dictionary]:
+	## Runs Wind-Down selection and Void Point refresh once per OOC day (every
+	## 4 IC days) per GDD s57.44.2 and s57.32.2.
+
+	var results: Array[Dictionary] = []
+
+	# Build fast settlement lookup and location → character IDs map.
+	var settlements_by_id: Dictionary = {}
+	for s: SettlementData in settlements:
+		settlements_by_id[s.settlement_id] = s
+	var empty_settlement: SettlementData = SettlementData.new()
+
+	var loc_to_chars: Dictionary = {}
+	for c: L5RCharacterData in characters:
+		if CharacterStats.is_dead(c):
+			continue
+		var loc: String = c.physical_location
+		if not loc_to_chars.has(loc):
+			loc_to_chars[loc] = []
+		(loc_to_chars[loc] as Array).append(c.character_id)
+
+	for c: L5RCharacterData in characters:
+		if CharacterStats.is_dead(c):
+			continue
+
+		# Resolve settlement for this character.
+		var settlement: SettlementData = empty_settlement
+		if c.physical_location.is_valid_int():
+			var sid: int = int(c.physical_location)
+			if settlements_by_id.has(sid):
+				settlement = settlements_by_id[sid] as SettlementData
+
+		# Characters at the same location (excluding self).
+		var loc_ids: Array = loc_to_chars.get(c.physical_location, [])
+		var present_ids: Array[int] = []
+		for pid: int in loc_ids:
+			if pid != c.character_id:
+				present_ids.append(pid)
+
+		var companion_present: bool = not present_ids.is_empty()
+
+		# NPC wind-down selection (auto). PC UI override is a future feature.
+		var available: Array[WindDownSystem.Method] = \
+			WindDownSystem.get_available_methods(c, settlement, companion_present)
+		var method: WindDownSystem.Method = \
+			WindDownSystem.select_npc_method(c, available, dice_engine)
+
+		# Fortune for shrine/temple WP contribution — prefer dedicated fortune.
+		var fortune_id: int = -1
+		for wl: Dictionary in settlement.worship_locations:
+			if wl.get("type", "") in ["shrine", "temple", "shinden", "local_shrine", "village_shrine"]:
+				fortune_id = wl.get("fortune", -1)
+				if fortune_id != -1:
+					break
+
+		# Go parlor opponent — pick a random present character.
+		var go_opponent: Dictionary = {}
+		if method == WindDownSystem.Method.GO_PARLOR and not present_ids.is_empty():
+			var opp_id: int = present_ids[dice_engine.rand_int_range(0, present_ids.size() - 1)]
+			if characters_by_id.has(opp_id):
+				var opp: L5RCharacterData = characters_by_id[opp_id] as L5RCharacterData
+				go_opponent = {
+					"id": opp_id,
+					"intelligence": opp.intelligence,
+					"games_rank": SkillResolver.get_skill_rank(opp, "Games: Go"),
+				}
+
+		# Tea house companion — pick a random present character.
+		var companion_id: int = -1
+		if method == WindDownSystem.Method.TEA_HOUSE and not present_ids.is_empty():
+			companion_id = present_ids[dice_engine.rand_int_range(0, present_ids.size() - 1)]
+
+		var wind_result: Dictionary = WindDownSystem.apply_wind_down(
+			c, method, dice_engine, present_ids, companion_id, go_opponent, fortune_id,
+		)
+
+		# Void Point refresh per s57.32.2 — gated on rested_last_night and
+		# void_refresh_blocked_until (supernatural spell block, s57.32.8).
+		var ooc_day: int = ic_day / TimeSystem.TICKS_PER_REAL_DAY
+		if c.rested_last_night \
+				and (c.void_refresh_blocked_until == -1 or ooc_day >= c.void_refresh_blocked_until):
+			c.current_void_points = ceili(c.max_void_points * c.wind_down_void_modifier)
+
+		# Natural healing per s57.31.7a — gated on rested_last_night; blocked at Out.
+		var wounds_healed: int = 0
+		if c.rested_last_night and CharacterStats.get_wound_level(c) != Enums.WoundLevel.OUT:
+			var heal_amount: int = (c.stamina * 2) + CharacterStats.get_insight_rank(c)
+			wounds_healed = WoundSystem.heal_wounds(c, heal_amount)["healed"]
+
+		# Honor and Glory changes.
+		if wind_result["honor_change"] != 0.0:
+			HonorGlorySystem.apply_honor_change(c, wind_result["honor_change"])
+		if wind_result["glory_change"] != 0.0:
+			HonorGlorySystem.apply_glory_change(c, wind_result["glory_change"])
+
+		# Disposition changes — mutual gain, clamped to [-100, 100].
+		for change: Dictionary in wind_result["disposition_changes"]:
+			var target_id: int = change["target_id"]
+			var delta: int = change["delta"]
+			var self_old: int = c.disposition_values.get(target_id, 0)
+			c.disposition_values[target_id] = clampi(self_old + delta, -100, 100)
+			if characters_by_id.has(target_id):
+				var target: L5RCharacterData = characters_by_id[target_id] as L5RCharacterData
+				var other_old: int = target.disposition_values.get(c.character_id, 0)
+				target.disposition_values[c.character_id] = clampi(other_old + delta, -100, 100)
+
+		# met_characters — add newly met characters.
+		for met_id: int in wind_result["met_character_ids"]:
+			if not c.met_characters.has(met_id):
+				c.met_characters.append(met_id)
+			if characters_by_id.has(met_id):
+				var met_char: L5RCharacterData = characters_by_id[met_id] as L5RCharacterData
+				if not met_char.met_characters.has(c.character_id):
+					met_char.met_characters.append(c.character_id)
+
+		# Topic leak — copy topic to target character's pool.
+		var leaked_topic: int = wind_result["topic_leaked"]
+		if leaked_topic != -1:
+			var routing: String = wind_result["leak_routing"]
+			if routing == WindDownSystem.ROUTING_RANDOM_PRESENT:
+				var target_id: int = wind_result["leak_target_id"]
+				if target_id != -1 and characters_by_id.has(target_id):
+					var target: L5RCharacterData = characters_by_id[target_id] as L5RCharacterData
+					if not target.topic_pool.has(leaked_topic):
+						target.topic_pool.append(leaked_topic)
+			# ROUTING_HANDLER_PIPELINE and ROUTING_BROTHERHOOD are handled by
+			# their respective systems (Geisha Intelligence, Brotherhood network)
+			# when those systems are implemented. The topic ID is available in
+			# wind_result for forwarding.
+
+		# Koku cost — deduct from character's personal purse.
+		if wind_result["koku_cost"] > 0.0:
+			c.koku = maxf(0.0, c.koku - wind_result["koku_cost"])
+
+		# Temple info — Brotherhood network delivers one local rumor per s57.44.7.
+		# Blocked on Brotherhood network implementation. Topic ID will be injected
+		# here when that system exists.
+
+		# WP contribution — add to worship state for the character's province.
+		if wind_result["wp_contribution"] > 0.0 and settlement.province_id != -1:
+			var wp_dist: Dictionary = {}
+			var f_id: int = wind_result["fortune_id"]
+			if f_id != -1:
+				wp_dist[f_id] = wind_result["wp_contribution"]
+			else:
+				# Undirected offering — split equally across all Great Fortunes.
+				var all_fortunes: int = WorshipSystem.GREAT_FORTUNE_COUNT
+				var per_fortune: float = wind_result["wp_contribution"] / float(all_fortunes)
+				for fi: int in range(all_fortunes):
+					wp_dist[fi] = per_fortune
+			WorshipSystem.add_active_worship_to_province(
+				worship_state, settlement.province_id, wp_dist,
+			)
+
+		wind_result["character_id"] = c.character_id
+		wind_result["wounds_healed"] = wounds_healed
+		results.append(wind_result)
+
+	return results
 
 
 # -- Information Processing ----------------------------------------------------
@@ -1562,6 +1762,8 @@ static func _process_storm_assault_results(
 	dice_engine: DiceEngine,
 	settlements: Array[SettlementData],
 	characters_by_id: Dictionary,
+	active_hostages: Array[Dictionary] = [],
+	ic_day: int = 0,
 ) -> Array[Dictionary]:
 	var results: Array[Dictionary] = []
 
@@ -1607,9 +1809,14 @@ static func _process_storm_assault_results(
 			dice_engine, settlements, false, fort_bonus,
 		)
 
+		var captor_lord_id: int = atk_dicts[0].get("lord_id", -1) if not atk_dicts.is_empty() else -1
+		var victor: String = battle_result.get("victor", "draw")
+		_capture_dead_commanders(
+			battle_result, victor, captor_lord_id,
+			str(siege_settlement_id), characters_by_id, active_hostages, ic_day, dice_engine,
+		)
 		_write_battle_results_to_companies(battle_result, companies)
 
-		var victor: String = battle_result.get("victor", "draw")
 		if victor == "attacker":
 			siege["siege_ended"] = true
 			siege["end_reason"] = "storm_assault_success"
@@ -2872,6 +3079,201 @@ static func process_fugitive_declaration(
 	}
 
 
+# -- Fugitive Extradition Seasonal Pass (s11.3.16) ------------------------------
+# For every FUGITIVE CrimeRecord where the fugitive is from a different clan
+# than the crime province, evaluate the harboring lord's extradition decision
+# and apply consequences (cooperation/refusal/imperial warrant).
+
+static func _process_fugitive_extradition_seasonal(
+	crime_records: Array[CrimeRecord],
+	characters: Array[L5RCharacterData],
+	characters_by_id: Dictionary,
+	provinces: Dictionary,
+	settlements: Array[SettlementData],
+	active_topics: Array[TopicData],
+	next_topic_id: Array[int],
+	ic_day: int,
+) -> Array[Dictionary]:
+	var results: Array[Dictionary] = []
+
+	var sett_prov_map: Dictionary = {}
+	for s: SettlementData in settlements:
+		sett_prov_map[s.settlement_id] = s.province_id
+
+	for record: CrimeRecord in crime_records:
+		if record.legal_status != Enums.LegalStatus.FUGITIVE:
+			continue
+
+		var fugitive: L5RCharacterData = characters_by_id.get(record.perpetrator_id)
+		if fugitive == null or CharacterStats.is_dead(fugitive):
+			continue
+
+		# Map crime location (settlement_id string) to clan
+		if not record.location.is_valid_int():
+			continue
+		var crime_settlement_id: int = int(record.location)
+		var crime_province_id: int = sett_prov_map.get(crime_settlement_id, -1)
+		if crime_province_id < 0:
+			continue
+		var crime_province: ProvinceData = provinces.get(crime_province_id) as ProvinceData
+		if crime_province == null:
+			continue
+		var crime_clan: String = crime_province.clan
+
+		# Only cross-clan cases
+		if fugitive.clan.is_empty() or fugitive.clan == crime_clan:
+			continue
+
+		# Sighting topic for notable fugitives (s11.3.16a)
+		if FugitiveExtraditionSystem.generates_sighting_topic(fugitive.status):
+			var sighting: TopicData = TopicData.new()
+			sighting.topic_id = next_topic_id[0]
+			next_topic_id[0] += 1
+			sighting.slug = "fugitive_sighting_%d_d%d" % [fugitive.character_id, ic_day]
+			sighting.title = "A stranger matching %s was seen in foreign territory" % fugitive.character_name
+			sighting.topic_type = "fugitive_sighting"
+			sighting.tier = TopicData.Tier.TIER_4
+			sighting.category = TopicData.Category.POLITICAL
+			sighting.momentum = TopicMomentumSystem.initial_momentum_for_tier(sighting.tier)
+			sighting.subject_character_id = fugitive.character_id
+			sighting.clan_involved = fugitive.clan
+			sighting.ic_day_created = ic_day
+			active_topics.append(sighting)
+
+		# Harboring lord: fugitive's direct lord (still in fugitive.lord_id after flee)
+		var harboring_lord: L5RCharacterData = _extrad_find_harboring_lord(
+			fugitive, characters, characters_by_id
+		)
+		if harboring_lord == null:
+			continue
+
+		# Requesting clan: find clan champion for disposition lookup
+		var requesting_champ_id: int = _extrad_find_clan_champion_id(crime_clan, characters)
+		var requesting_disp: int = 0
+		if requesting_champ_id >= 0:
+			requesting_disp = harboring_lord.disposition_values.get(requesting_champ_id, 0)
+
+		# Crime tier from CONVICTION_CONSEQUENCES (index 3); clamp to 1-4 range
+		var crime_tier: int = _extrad_crime_tier(record.crime_type)
+
+		# Evaluate harboring lord decision (s11.3.16c)
+		# Conservative defaults: no usefulness or leverage assumed (structural wiring)
+		var eval: Dictionary = ExtraditionSystem.evaluate_extradition(
+			harboring_lord,
+			requesting_disp,
+			fugitive.status,
+			crime_tier,
+			not fugitive.role_position.is_empty(),
+			false,
+			false,
+		)
+		var response: ExtraditionSystem.Response = eval.get(
+			"response", ExtraditionSystem.Response.REFUSE
+		)
+
+		# Extradition request topic (s11.3.16b, Tier 4)
+		var req_topic: TopicData = TopicData.new()
+		req_topic.topic_id = next_topic_id[0]
+		next_topic_id[0] += 1
+		req_topic.slug = "extradition_%d_d%d" % [fugitive.character_id, ic_day]
+		req_topic.title = "%s requests extradition of %s from %s" % [
+			crime_clan, fugitive.character_name, fugitive.clan
+		]
+		req_topic.topic_type = "extradition_request"
+		req_topic.tier = TopicData.Tier.TIER_4
+		req_topic.category = TopicData.Category.POLITICAL
+		req_topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(req_topic.tier)
+		req_topic.subject_character_id = fugitive.character_id
+		req_topic.clan_involved = fugitive.clan
+		req_topic.ic_day_created = ic_day
+		active_topics.append(req_topic)
+
+		var result: Dictionary = {
+			"fugitive_id": fugitive.character_id,
+			"requesting_clan": crime_clan,
+			"harboring_clan": fugitive.clan,
+			"response": response,
+			"crime_tier": crime_tier,
+			"extradition_topic_id": req_topic.topic_id,
+		}
+
+		match response:
+			ExtraditionSystem.Response.COOPERATE:
+				var consequences: Dictionary = ExtraditionSystem.apply_cooperation(
+					harboring_lord, requesting_champ_id, crime_tier
+				)
+				result["consequences"] = consequences
+				# Fugitive returned: revert to ACCUSED for trial
+				record.legal_status = Enums.LegalStatus.ACCUSED
+				var case_entry: LegalCaseEntry = LegalStatusSystem.get_case(
+					fugitive, record.case_id
+				)
+				if case_entry != null:
+					LegalStatusSystem.transition(case_entry, Enums.LegalStatus.ACCUSED, ic_day)
+				result["fugitive_returned"] = true
+
+			ExtraditionSystem.Response.REFUSE, ExtraditionSystem.Response.DENY_KNOWLEDGE:
+				var is_denial: bool = response == ExtraditionSystem.Response.DENY_KNOWLEDGE
+				var consequences: Dictionary = ExtraditionSystem.apply_refusal(
+					harboring_lord, requesting_champ_id, crime_tier, is_denial
+				)
+				result["consequences"] = consequences
+				# Escalation for Tier 2+ crimes (s11.3.16e)
+				if FugitiveExtraditionSystem.can_request_imperial_warrant(crime_tier):
+					var compliance: Dictionary = FugitiveExtraditionSystem.evaluate_imperial_warrant_compliance(
+						harboring_lord
+					)
+					result["imperial_warrant"] = compliance
+					if compliance.get("complies", false):
+						record.legal_status = Enums.LegalStatus.ACCUSED
+						var case_entry: LegalCaseEntry = LegalStatusSystem.get_case(
+							fugitive, record.case_id
+						)
+						if case_entry != null:
+							LegalStatusSystem.transition(case_entry, Enums.LegalStatus.ACCUSED, ic_day)
+						result["fugitive_returned"] = true
+				else:
+					result["standing_warrant"] = FugitiveExtraditionSystem.get_standing_warrant_consequences()
+
+			_:  # NEGOTIATE
+				result["negotiating"] = true
+
+		results.append(result)
+
+	return results
+
+
+static func _extrad_find_harboring_lord(
+	fugitive: L5RCharacterData,
+	characters: Array[L5RCharacterData],
+	characters_by_id: Dictionary,
+) -> L5RCharacterData:
+	if fugitive.lord_id >= 0:
+		var lord: L5RCharacterData = characters_by_id.get(fugitive.lord_id)
+		if lord != null and not CharacterStats.is_dead(lord) and lord.clan == fugitive.clan:
+			return lord
+	for c: L5RCharacterData in characters:
+		if c.clan == fugitive.clan and c.role_position == "Clan Champion" and not CharacterStats.is_dead(c):
+			return c
+	return null
+
+
+static func _extrad_find_clan_champion_id(clan: String, characters: Array[L5RCharacterData]) -> int:
+	for c: L5RCharacterData in characters:
+		if c.clan == clan and c.role_position == "Clan Champion" and not CharacterStats.is_dead(c):
+			return c.character_id
+	return -1
+
+
+static func _extrad_crime_tier(crime_type: Enums.CrimeType) -> int:
+	var consequences: Array = CrimeSystem.CONVICTION_CONSEQUENCES.get(crime_type, [-0.1, 0.0, 0.0, 4])
+	var tier: int = int(consequences[3])
+	# tier 0 in the table means "no formal standalone topic" — treat as minor (4) for scoring
+	if tier <= 0:
+		return 4
+	return clampi(tier, 1, 4)
+
+
 static func _process_successful_bribe_writebacks(
 	results: Array,
 	crime_records: Array[CrimeRecord],
@@ -3981,7 +4383,8 @@ static func _process_uphold_law_scan(
 		var standing: Dictionary = objectives.get("standing", {})
 		if standing.get("need_type", "") != "UPHOLD_LAW":
 			continue
-		if standing.has("active_case") and not standing["active_case"].is_empty():
+		var active_case_count: int = 1 if (standing.has("active_case") and not standing["active_case"].is_empty()) else 0
+		if not MagistrateAllocationSystem.is_magistrate_available(active_case_count):
 			continue
 
 		var activated: Dictionary = InvestigationSystem.scan_for_crime_topics(
@@ -4692,6 +5095,51 @@ static func _release_magistrate_after_conviction(
 		record.investigating_magistrate_id = -1
 
 
+# -- Magistrate Conviction Cascade (s11.3.17e) --------------------------------
+# When a magistrate is convicted, suspend all cases they were investigating
+# and clear their standing objective's active case.
+
+static func _process_magistrate_conviction_cascade(
+	conviction_results: Array[Dictionary],
+	crime_records: Array[CrimeRecord],
+	characters_by_id: Dictionary,
+	objectives_map: Dictionary,
+) -> void:
+	for conv: Dictionary in conviction_results:
+		if conv.get("outcome", "") != "convicted":
+			continue
+		var case_id: int = conv.get("case_id", -1)
+		if case_id < 0:
+			continue
+
+		var record: CrimeRecord = null
+		for r: CrimeRecord in crime_records:
+			if r.case_id == case_id:
+				record = r
+				break
+		if record == null:
+			continue
+
+		var perpetrator: L5RCharacterData = characters_by_id.get(record.perpetrator_id)
+		if perpetrator == null:
+			continue
+		if perpetrator.role_position not in MAGISTRATE_ROLE_POSITIONS:
+			continue
+
+		var cascade: Dictionary = MagistrateAllocationSystem.resolve_magistrate_conviction(
+			perpetrator.character_id, crime_records
+		)
+		var suspended: Array = cascade.get("suspended_case_ids", [])
+		for cr: CrimeRecord in crime_records:
+			if cr.case_id in suspended:
+				cr.investigating_magistrate_id = -1
+
+		var mag_objs: Dictionary = objectives_map.get(perpetrator.character_id, {})
+		var standing: Dictionary = mag_objs.get("standing", {})
+		if standing.get("need_type", "") == "UPHOLD_LAW":
+			standing.erase("active_case")
+
+
 static func _season_to_name(season: int) -> String:
 	match season:
 		TimeSystem.Season.SPRING: return "spring"
@@ -4773,6 +5221,10 @@ static func _process_festivals(ic_day: int, world_states: Dictionary) -> Diction
 	var is_inauspicious: bool = FestivalSystem.is_inauspicious_for_social(ic_day)
 	var is_ceasefire: bool = FestivalSystem.is_ceasefire_day(ic_day)
 	var is_labor_halt: bool = FestivalSystem.is_labor_halt_day(ic_day)
+	var festival_honor: float = FestivalSystem.get_honor_gain_festivals(ic_day)
+	var festival_has_lion_honor: bool = "lion_honor" in effects
+	var festival_glory_poetry: float = 0.1 if "poetry_exchange" in effects else 0.0
+	var festival_glory_martial: float = 0.1 if "martial_glory" in effects else 0.0
 
 	for char_id in world_states:
 		if char_id is not int:
@@ -4783,6 +5235,10 @@ static func _process_festivals(ic_day: int, world_states: Dictionary) -> Diction
 		ws["is_taian"] = is_taian
 		ws["is_inauspicious_for_social"] = is_inauspicious
 		ws["rokuyo"] = rokuyo_name
+		ws["festival_honor_gain"] = festival_honor
+		ws["festival_has_lion_honor"] = festival_has_lion_honor
+		ws["festival_glory_poetry"] = festival_glory_poetry
+		ws["festival_glory_martial"] = festival_glory_martial
 
 	return {
 		"active_festivals": active_festivals,
@@ -4792,8 +5248,9 @@ static func _process_festivals(ic_day: int, world_states: Dictionary) -> Diction
 		"is_inauspicious": is_inauspicious,
 		"is_ceasefire": is_ceasefire,
 		"is_labor_halt": is_labor_halt,
-		"honor_gain": FestivalSystem.get_honor_gain_festivals(ic_day),
-		"glory_gain": FestivalSystem.get_glory_gain_festivals(ic_day),
+		"honor_gain": festival_honor,
+		"glory_gain_poetry": festival_glory_poetry,
+		"glory_gain_martial": festival_glory_martial,
 	}
 
 
@@ -5204,6 +5661,199 @@ static func _process_entanglements(
 	return results
 
 
+# -- Hostage System Processing (s22.9) ----------------------------------------
+
+const _ESCAPE_BASE_GARRISON: Dictionary = {
+	"town": 0.5,
+	"castle": 1.0,
+	"major_castle": 2.0,
+}
+
+static func _settlement_escape_key(stype: Enums.SettlementType) -> String:
+	if stype == Enums.SettlementType.FAMILY_CASTLE:
+		return "major_castle"
+	if stype in [Enums.SettlementType.CASTLE, Enums.SettlementType.KEEP, Enums.SettlementType.FORTIFICATION]:
+		return "castle"
+	return "town"
+
+
+static func _process_hostage_escapes(
+	active_hostages: Array[Dictionary],
+	characters_by_id: Dictionary,
+	settlements: Array[SettlementData],
+	dice_engine: DiceEngine,
+	ic_day: int,
+	death_events: Array[Dictionary],
+) -> Array[Dictionary]:
+	var results: Array[Dictionary] = []
+	for hostage: Dictionary in active_hostages:
+		if hostage.get("released", false) or hostage.get("escaped", false):
+			continue
+		var char_id: int = hostage.get("character_id", -1)
+		var character: L5RCharacterData = characters_by_id.get(char_id) as L5RCharacterData
+		if character == null or CharacterStats.is_dead(character):
+			continue
+		var stealth_rank: int = character.skills.get("Stealth", 0)
+		if not HostageSystem.can_attempt_escape(
+			character.bushido_virtue, character.shourido_virtue,
+			character.school_type, stealth_rank,
+		):
+			continue
+		var settlement_id_str: String = hostage.get("settlement_id", "")
+		var settlement: SettlementData = null
+		for s: SettlementData in settlements:
+			if str(s.settlement_id) == settlement_id_str:
+				settlement = s
+				break
+		if settlement == null:
+			continue
+		var escape_key: String = _settlement_escape_key(settlement.settlement_type)
+		var base_pu: float = _ESCAPE_BASE_GARRISON.get(escape_key, 1.0)
+		var tn: int = HostageSystem.get_escape_tn(escape_key, float(settlement.garrison_pu), base_pu)
+		var roll_result: Dictionary = SkillResolver.resolve_skill_check(character, dice_engine, "Stealth", tn)
+		var escape_result: Dictionary = HostageSystem.resolve_escape(roll_result.get("total", 0), tn)
+		if escape_result["success"]:
+			character.captive_status = ""
+			hostage["escaped"] = true
+		elif escape_result.get("executed", false):
+			var lethal: int = CharacterStats.get_ring_value(character, Enums.Ring.EARTH) * 5 * 5
+			character.wounds_taken = lethal
+			character.captive_status = ""
+			death_events.append({
+				"character_id": char_id,
+				"is_lord": character.role_position != "",
+				"cause": "hostage_execution",
+				"captor_id": hostage.get("captor_id", -1),
+				"critical_failure": escape_result.get("critical_failure", false),
+				"ic_day": ic_day,
+			})
+		results.append({
+			"character_id": char_id,
+			"success": escape_result["success"],
+			"executed": escape_result.get("executed", false),
+			"critical_failure": escape_result.get("critical_failure", false),
+			"family_honor_loss": escape_result.get("family_honor_loss", 0.0),
+			"settlement_id": settlement_id_str,
+		})
+	return results
+
+
+static func _release_war_hostages(
+	war_termination_results: Array[Dictionary],
+	active_hostages: Array[Dictionary],
+	characters_by_id: Dictionary,
+	ic_day: int,
+) -> void:
+	for resolution: Dictionary in war_termination_results:
+		if resolution.get("resolution", "").is_empty():
+			continue
+		var clan_a: String = resolution.get("winner_clan",
+			resolution.get("proposing_clan", resolution.get("clan_a", "")))
+		var clan_b: String = resolution.get("loser_clan",
+			resolution.get("receiving_clan", resolution.get("clan_b", "")))
+		if clan_a.is_empty() or clan_b.is_empty():
+			continue
+		for hostage: Dictionary in active_hostages:
+			if hostage.get("released", false) or hostage.get("escaped", false):
+				continue
+			var char_id: int = hostage.get("character_id", -1)
+			var character: L5RCharacterData = characters_by_id.get(char_id) as L5RCharacterData
+			if character == null:
+				continue
+			if character.clan == clan_a or character.clan == clan_b:
+				HostageSystem.release_hostage(hostage, ic_day)
+				character.captive_status = ""
+
+
+static func _capture_dead_commanders(
+	battle_result: Dictionary,
+	victor: String,
+	captor_lord_id: int,
+	location_str: String,
+	characters_by_id: Dictionary,
+	active_hostages: Array[Dictionary],
+	ic_day: int,
+	dice_engine: DiceEngine,
+) -> void:
+	if victor == "draw" or captor_lord_id < 0:
+		return
+	var losing_side: String = "defender" if victor == "attacker" else "attacker"
+	var losing_states: Array = battle_result.get(losing_side + "_states", [])
+	for bs: Variant in losing_states:
+		if not (bs is Dictionary):
+			continue
+		var bsd: Dictionary = bs
+		if not bsd.get("commander_dead", false):
+			continue
+		var cmd_id: int = bsd.get("commander_id", -1)
+		if cmd_id < 0:
+			continue
+		var commander: L5RCharacterData = characters_by_id.get(cmd_id) as L5RCharacterData
+		if commander == null or commander.captive_status != "":
+			continue
+		var likelihood: float = HostageSystem.get_capture_likelihood_modifier(
+			commander.bushido_virtue, commander.shourido_virtue,
+		)
+		var captured: bool = (
+			likelihood >= 1.0
+			or dice_engine.rand_int_range(1, 100) <= int(likelihood * 100.0)
+		)
+		if captured:
+			bsd["commander_dead"] = false
+			commander.captive_status = str(captor_lord_id)
+			active_hostages.append(HostageSystem.capture_hostage(
+				cmd_id, captor_lord_id, HostageSystem.CaptureSource.BATTLE_CAPTURE,
+				location_str, ic_day,
+			))
+
+
+static func _capture_siege_hostages(
+	active_sieges: Array[Dictionary],
+	characters_by_id: Dictionary,
+	companies: Array[Dictionary],
+	active_hostages: Array[Dictionary],
+	ic_day: int,
+) -> void:
+	var end_reasons: Array[String] = ["storm_assault_success", "starvation"]
+	for siege: Dictionary in active_sieges:
+		if not siege.get("siege_ended", false):
+			continue
+		if siege.get("end_reason", "") not in end_reasons:
+			continue
+		if siege.get("hostages_captured", false):
+			continue
+		siege["hostages_captured"] = true
+		var settlement_id: int = siege.get("settlement_id", -1)
+		var atk_army_id: int = siege.get("attacker_army_id", -1)
+		var captor_lord_id: int = -1
+		for cd: Dictionary in companies:
+			if cd.get("army_id", -1) == atk_army_id:
+				captor_lord_id = cd.get("lord_id", -1)
+				break
+		if captor_lord_id < 0:
+			continue
+		var loc_str: String = str(settlement_id)
+		for char_val: Variant in characters_by_id.values():
+			var character: L5RCharacterData = char_val as L5RCharacterData
+			if character == null:
+				continue
+			if CharacterStats.is_dead(character):
+				continue
+			if TravelSystem.is_traveling(character):
+				continue
+			if character.captive_status != "":
+				continue
+			if character.physical_location != loc_str:
+				continue
+			if character.military_rank == Enums.MilitaryRank.NONE:
+				continue
+			character.captive_status = str(captor_lord_id)
+			active_hostages.append(HostageSystem.capture_hostage(
+				character.character_id, captor_lord_id,
+				HostageSystem.CaptureSource.SIEGE_SURRENDER, loc_str, ic_day,
+			))
+
+
 # -- Bound Character Processing (s12.8) ---------------------------------------
 
 static func _process_bound_states(
@@ -5262,6 +5912,8 @@ static func _process_military_daily(
 	active_wars: Array[WarData] = [],
 	characters_by_id: Dictionary = {},
 	provinces: Dictionary = {},
+	active_hostages: Array[Dictionary] = [],
+	ic_day: int = 0,
 ) -> Dictionary:
 	var disband_results: Array[Dictionary] = _process_disbands(
 		active_armies, companies, settlements,
@@ -5270,7 +5922,7 @@ static func _process_military_daily(
 	var battle_results: Array[Dictionary] = _resolve_army_battles(
 		movement_results, active_armies, companies, active_wars,
 		dice_engine, settlements, characters_by_id, worship_maluses,
-		provinces,
+		provinces, active_hostages, ic_day,
 	)
 	var retreat_arrival_results: Array[Dictionary] = _process_retreat_arrivals(
 		movement_results, active_armies, active_tethers,
@@ -5336,6 +5988,8 @@ static func _resolve_army_battles(
 	characters_by_id: Dictionary,
 	worship_maluses: Dictionary,
 	provinces: Dictionary = {},
+	active_hostages: Array[Dictionary] = [],
+	ic_day: int = 0,
 ) -> Array[Dictionary]:
 	var results: Array[Dictionary] = []
 
@@ -5401,6 +6055,17 @@ static func _resolve_army_battles(
 		var battle_result: Dictionary = resolve_and_reconcile_battle(
 			atk_states, def_states, battle_terrain,
 			dice_engine, settlements, false, fort_bonus, worship_maluses,
+		)
+
+		var field_victor: String = battle_result.get("victor", "draw")
+		var field_captor_lord_id: int = -1
+		if field_victor == "attacker" and not atk_company_dicts.is_empty():
+			field_captor_lord_id = atk_company_dicts[0].get("lord_id", -1)
+		elif field_victor == "defender" and not def_company_dicts.is_empty():
+			field_captor_lord_id = def_company_dicts[0].get("lord_id", -1)
+		_capture_dead_commanders(
+			battle_result, field_victor, field_captor_lord_id,
+			str(battle_province_id), characters_by_id, active_hostages, ic_day, dice_engine,
 		)
 
 		_write_battle_results_to_companies(battle_result, companies)

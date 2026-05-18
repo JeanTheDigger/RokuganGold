@@ -187,6 +187,18 @@ func test_honor_gain_no_festival():
 	assert_eq(gain, 0.0)
 
 
+func test_lion_honor_effect_present_on_akodo_festival():
+	# Festival of Akodo: month 1, day 20 → IC day 20
+	var effects := FestivalSystem.get_festival_effects(20)
+	assert_true("lion_honor" in effects)
+
+
+func test_lion_honor_not_counted_as_generic_honor_gain():
+	# lion_honor is clan-gated; get_honor_gain_festivals must not count it
+	var gain := FestivalSystem.get_honor_gain_festivals(20)
+	assert_eq(gain, 0.0)
+
+
 func test_glory_gain_ning_panchiman():
 	# Ning Panchiman: month 4, day 15 → IC day (3*30)+15 = 105
 	var gain := FestivalSystem.get_glory_gain_festivals(105)

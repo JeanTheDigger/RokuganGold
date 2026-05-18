@@ -202,6 +202,11 @@ extends Resource
 
 @export var trained_companions: Array[Dictionary] = []
 
+# -- Commerce Stigma (Section 57.40) -------------------------------------------
+
+@export var school_paths: Array[String] = []
+@export var commerce_stigma_applied_ic_day: int = -1
+
 # -- Sailing (Section 57.42) ---------------------------------------------------
 
 @export var aboard_ship_id: int = -1

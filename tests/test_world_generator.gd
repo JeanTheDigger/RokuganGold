@@ -633,3 +633,181 @@ func test_mantis_schools_in_school_data() -> void:
 	assert_eq(WorldGenerator.SCHOOL_DATA["Yoritomo Bushi"]["clan"], "Mantis")
 	assert_eq(WorldGenerator.SCHOOL_DATA["Moshi Shugenja"]["type"], Enums.SchoolType.SHUGENJA)
 	assert_eq(WorldGenerator.SCHOOL_DATA["Tsuruchi Archer"]["type"], Enums.SchoolType.BUSHI)
+
+
+# =============================================================================
+# Settlement Infrastructure Seeding
+# =============================================================================
+
+func _make_province() -> ProvinceData:
+	var p := ProvinceData.new()
+	p.province_id = 1
+	p.terrain_type = Enums.TerrainType.PLAINS
+	return p
+
+
+func test_village_infrastructure() -> void:
+	var inf: Array[String] = WorldGenerator._default_infrastructure(
+		Enums.SettlementType.VILLAGE, false,
+	)
+	assert_true(inf.has("shrine"))
+	assert_true(inf.has("sake_house"))
+	assert_false(inf.has("market"))
+	assert_false(inf.has("garrison"))
+
+
+func test_town_infrastructure() -> void:
+	var inf: Array[String] = WorldGenerator._default_infrastructure(
+		Enums.SettlementType.TOWN, false,
+	)
+	assert_true(inf.has("shrine"))
+	assert_true(inf.has("sake_house"))
+	assert_true(inf.has("inn"))
+	assert_true(inf.has("tea_house"))
+	assert_true(inf.has("market"))
+	assert_true(inf.has("garrison"))
+	assert_true(inf.has("game_house"))
+	assert_true(inf.has("bathhouse"))
+	assert_false(inf.has("okiya"))
+	assert_false(inf.has("pleasure_quarter"))
+
+
+func test_city_infrastructure() -> void:
+	var inf: Array[String] = WorldGenerator._default_infrastructure(
+		Enums.SettlementType.CITY, false,
+	)
+	assert_true(inf.has("theater"))
+	assert_true(inf.has("okiya"))
+	assert_true(inf.has("pleasure_quarter"))
+	assert_true(inf.has("forge"))
+	assert_false(inf.has("temple"))
+
+
+func test_fortification_infrastructure() -> void:
+	var inf: Array[String] = WorldGenerator._default_infrastructure(
+		Enums.SettlementType.FORTIFICATION, false,
+	)
+	assert_eq(inf.size(), 1)
+	assert_true(inf.has("garrison"))
+
+
+func test_keep_infrastructure() -> void:
+	var inf: Array[String] = WorldGenerator._default_infrastructure(
+		Enums.SettlementType.KEEP, false,
+	)
+	assert_true(inf.has("garrison"))
+	assert_true(inf.has("shrine"))
+	assert_true(inf.has("sake_house"))
+	assert_true(inf.has("inn"))
+	assert_false(inf.has("tea_house"))
+	assert_false(inf.has("market"))
+
+
+func test_castle_without_town_infrastructure() -> void:
+	var inf: Array[String] = WorldGenerator._default_infrastructure(
+		Enums.SettlementType.CASTLE, false,
+	)
+	assert_true(inf.has("garrison"))
+	assert_true(inf.has("shrine"))
+	assert_true(inf.has("forge"))
+	assert_false(inf.has("sake_house"))
+	assert_false(inf.has("market"))
+	assert_false(inf.has("bathhouse"))
+
+
+func test_castle_with_town_infrastructure() -> void:
+	var inf: Array[String] = WorldGenerator._default_infrastructure(
+		Enums.SettlementType.CASTLE, true,
+	)
+	assert_true(inf.has("garrison"))
+	assert_true(inf.has("shrine"))
+	assert_true(inf.has("forge"))
+	assert_true(inf.has("sake_house"))
+	assert_true(inf.has("inn"))
+	assert_true(inf.has("tea_house"))
+	assert_true(inf.has("market"))
+	assert_true(inf.has("game_house"))
+	assert_true(inf.has("bathhouse"))
+	assert_false(inf.has("okiya"))
+
+
+func test_family_castle_always_has_full_town() -> void:
+	var inf: Array[String] = WorldGenerator._default_infrastructure(
+		Enums.SettlementType.FAMILY_CASTLE, false,
+	)
+	assert_true(inf.has("garrison"))
+	assert_true(inf.has("shrine"))
+	assert_true(inf.has("forge"))
+	assert_true(inf.has("library"))
+	assert_true(inf.has("sake_house"))
+	assert_true(inf.has("inn"))
+	assert_true(inf.has("tea_house"))
+	assert_true(inf.has("market"))
+	assert_true(inf.has("game_house"))
+	assert_true(inf.has("bathhouse"))
+	assert_true(inf.has("okiya"))
+	assert_true(inf.has("theater"))
+
+
+func test_temple_infrastructure() -> void:
+	var inf: Array[String] = WorldGenerator._default_infrastructure(
+		Enums.SettlementType.TEMPLE, false,
+	)
+	assert_true(inf.has("temple"))
+	assert_true(inf.has("shrine"))
+	assert_eq(inf.size(), 2)
+
+
+func test_shinden_infrastructure() -> void:
+	var inf: Array[String] = WorldGenerator._default_infrastructure(
+		Enums.SettlementType.SHINDEN, false,
+	)
+	assert_true(inf.has("temple"))
+	assert_true(inf.has("shrine"))
+
+
+func test_monastery_infrastructure() -> void:
+	var inf: Array[String] = WorldGenerator._default_infrastructure(
+		Enums.SettlementType.MONASTERY, false,
+	)
+	assert_true(inf.has("temple"))
+	assert_true(inf.has("shrine"))
+	assert_false(inf.has("sake_house"))
+
+
+func test_wall_tower_infrastructure() -> void:
+	var inf: Array[String] = WorldGenerator._default_infrastructure(
+		Enums.SettlementType.WALL_TOWER, false,
+	)
+	assert_eq(inf.size(), 2)
+	assert_true(inf.has("garrison"))
+	assert_true(inf.has("sake_house"))
+
+
+func test_generate_settlement_seeds_infrastructure() -> void:
+	var p: ProvinceData = _make_province()
+	var s: SettlementData = WorldGenerator.generate_settlement(
+		1, "Test Town", p, Enums.SettlementType.TOWN, 5,
+	)
+	assert_false(s.infrastructure.is_empty())
+	assert_true(s.has_infrastructure("sake_house"))
+	assert_true(s.has_infrastructure("garrison"))
+
+
+func test_generate_settlement_castle_with_town_flag() -> void:
+	var p: ProvinceData = _make_province()
+	var s: SettlementData = WorldGenerator.generate_settlement(
+		2, "Test Castle", p, Enums.SettlementType.CASTLE, 8,
+		Enums.TerrainType.PLAINS, true,
+	)
+	assert_true(s.has_infrastructure("forge"))
+	assert_true(s.has_infrastructure("market"))
+
+
+func test_generate_settlement_castle_no_town_flag() -> void:
+	var p: ProvinceData = _make_province()
+	var s: SettlementData = WorldGenerator.generate_settlement(
+		3, "Test Fortress", p, Enums.SettlementType.CASTLE, 4,
+	)
+	assert_true(s.has_infrastructure("forge"))
+	assert_false(s.has_infrastructure("market"))

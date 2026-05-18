@@ -98,6 +98,24 @@ static func execute(
 ) -> Dictionary:
 	var action_id: String = action.action_id
 
+	if character.captive_status != "":
+		var captor_id: int = int(character.captive_status) if character.captive_status.is_valid_int() else -1
+		var targets_captor: bool = captor_id >= 0 and (
+			action.target_npc_id == captor_id or action.target_npc_id_secondary == captor_id
+		)
+		if HostageSystem.is_action_blocked_for_hostage(action_id, targets_captor):
+			return {
+				"success": false,
+				"action_id": action_id,
+				"character_id": ctx.character_id,
+				"target_npc_id": action.target_npc_id,
+				"target_province_id": action.target_province_id,
+				"ic_day": ctx.ic_day,
+				"season": ctx.season,
+				"reason": "hostage_restricted",
+				"effects": {},
+			}
+
 	if action_id == "DELIVER_GIFT":
 		var gift_result: Dictionary = _try_execute_deliver_gift(
 			action, character, ctx, dice_engine, characters_by_id
@@ -254,6 +272,12 @@ static func execute(
 	if action_id == "EXAMINE_LETTER":
 		return _execute_examine_letter(action, character, ctx)
 
+	if action_id == "TREAT_WOUND":
+		return _execute_treat_wound(action, character, ctx, dice_engine, characters_by_id)
+
+	if action_id == "MEDITATE":
+		return _execute_meditate(action, character, ctx, dice_engine)
+
 	if action_id == "RESTORE_COUNCIL_COMPACT":
 		return {
 			"success": true,
@@ -268,6 +292,24 @@ static func execute(
 				"restoring_champion_id": character.character_id,
 			},
 		}
+
+	if action_id == "REQUEST_PERFORMANCE":
+		return _execute_request_performance(action, character, ctx)
+
+	if action_id == "CONDUCT_TEA_CEREMONY":
+		return _execute_conduct_tea_ceremony(action, character, ctx, dice_engine, characters_by_id)
+
+	if action_id == "TRAIN_ANIMAL":
+		return _execute_train_animal(action, character, ctx, dice_engine)
+
+	if action_id == "ANNOUNCE_HUNT":
+		return _execute_announce_hunt(action, character, ctx)
+
+	if action_id == "REQUEST_HUNT_INVITATION":
+		return _execute_request_hunt_invitation(action, character, ctx)
+
+	if action_id == "CANCEL_HUNT":
+		return _execute_cancel_hunt(action, character, ctx)
 
 	if action_id in COVERT_ACTIONS:
 		var covert_result: Dictionary = _try_execute_covert(
@@ -422,6 +464,9 @@ static func _execute_no_roll(
 	ctx: NPCDataStructures.ContextSnapshot,
 ) -> Dictionary:
 	var effects: Dictionary = _get_no_roll_effects(action.action_id)
+
+	if action.action_id == "TRAIN" and ctx.festival_glory_martial > 0.001:
+		effects["glory_change"] = ctx.festival_glory_martial
 
 	if action.action_id == "BEGIN_TRAVEL":
 		var destination: String = _resolve_travel_destination(action)
@@ -1049,29 +1094,16 @@ static func _resolve_bribe_attempt(
 	action: NPCDataStructures.ScoredAction,
 	dice_engine: DiceEngine,
 ) -> Dictionary:
-	var temptation: int = briber.skills.get("Temptation", 0)
-	var awareness: int = briber.awareness if briber.awareness > 0 else 2
-	var rolled: int = maxi(temptation + awareness, 1)
-	var kept: int = maxi(awareness, 1)
-	var attack_result: Dictionary = dice_engine.roll_and_keep(rolled, kept)
-	var attack_total: int = attack_result.get("total", 0)
-
-	var etiquette: int = magistrate.skills.get("Etiquette", 0)
-	var willpower: int = magistrate.willpower if magistrate.willpower > 0 else 2
-	var honor_bonus: int = HonorGlorySystem.get_honor_rank(magistrate) * 5
-	var def_rolled: int = maxi(etiquette + willpower, 1)
-	var def_kept: int = maxi(willpower, 1)
-	var defense_result: Dictionary = dice_engine.roll_and_keep(def_rolled, def_kept)
-	var defense_total: int = defense_result.get("total", 0) + honor_bonus
-
-	var success: bool = attack_total > defense_total
+	var bribe_result: Dictionary = BriberySystem.attempt_bribe(briber, magistrate, dice_engine)
+	var result: int = bribe_result.get("result", BriberySystem.BribeResult.REFUSED)
+	var success: bool = result == BriberySystem.BribeResult.ACCEPTED
 	var suppress_case: bool = action.metadata.get("suppress_case", false)
-
 	return {
 		"success": success,
-		"roll_total": attack_total,
-		"tn": defense_total,
-		"margin": attack_total - defense_total,
+		"blocked_by_personality": result == BriberySystem.BribeResult.BLOCKED_BY_PERSONALITY,
+		"roll_total": bribe_result.get("briber_total", 0),
+		"tn": bribe_result.get("magistrate_total", 0),
+		"margin": bribe_result.get("briber_total", 0) - bribe_result.get("magistrate_total", 0),
 		"detection_risk": not success,
 		"suppress_case": suppress_case,
 		"magistrate_id": magistrate.character_id,
@@ -1345,7 +1377,7 @@ static func _apply_effects(
 	result: Dictionary,
 	action: NPCDataStructures.ScoredAction,
 	_character: L5RCharacterData,
-	_ctx: NPCDataStructures.ContextSnapshot,
+	ctx: NPCDataStructures.ContextSnapshot,
 ) -> void:
 	var effects: Dictionary = {}
 	var action_id: String = action.action_id
@@ -1370,6 +1402,18 @@ static func _apply_effects(
 			effects = _compute_self_effects(action_id)
 	else:
 		effects = _compute_failure_effects(action_id, result.get("margin", 0))
+
+	if action_id == "WRITE_LETTER" and result.get("success", false) and ctx.festival_glory_poetry > 0.001:
+		effects["glory_change"] = effects.get("glory_change", 0.0) + ctx.festival_glory_poetry
+
+	# Commerce stigma (s57.40): fires on public Commerce rolls regardless of success
+	if CommerceStigmaSystem.is_public_commerce(action_id, ctx):
+		var stigma: Dictionary = CommerceStigmaSystem.apply_stigma(_character, ctx)
+		if stigma["stigma_fired"]:
+			effects["honor_change"] = effects.get("honor_change", 0.0) + stigma["stigma_honor_change"]
+			effects["glory_change"] = effects.get("glory_change", 0.0) + stigma["stigma_glory_change"]
+		if stigma["public_commerce_topic"]:
+			effects["public_commerce_topic"] = true
 
 	result["effects"] = effects
 
@@ -1683,6 +1727,10 @@ static func _execute_perform_worship(
 
 	var province_id: int = action.target_province_id
 
+	var honor_bonus: float = ctx.festival_honor_gain
+	if ctx.festival_has_lion_honor and character.clan == "lion":
+		honor_bonus += 0.1
+
 	return {
 		"success": true,
 		"action_id": "PERFORM_WORSHIP",
@@ -1698,6 +1746,7 @@ static func _execute_perform_worship(
 			"total_wp": worship_result.get("total_wp", 0.0),
 			"bonus_wp": worship_result.get("bonus_wp", 0.0),
 			"directed": worship_result.get("directed", false),
+			"honor_change": honor_bonus,
 		},
 	}
 
@@ -2289,6 +2338,168 @@ static func _execute_flee_jurisdiction(
 			"fugitive_id": character.character_id,
 		},
 	}
+
+
+# -- Treat Wound --------------------------------------------------------------
+
+static func _execute_treat_wound(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	dice_engine: DiceEngine,
+	characters_by_id: Dictionary,
+) -> Dictionary:
+	var target_id: int = action.target_npc_id
+	if target_id < 0 or characters_by_id.is_empty():
+		return {
+			"success": false,
+			"action_id": "TREAT_WOUND",
+			"character_id": character.character_id,
+			"target_npc_id": target_id,
+			"target_province_id": action.target_province_id,
+			"ic_day": ctx.ic_day,
+			"season": ctx.season,
+			"reason": "no_target",
+			"effects": {},
+		}
+
+	var target: L5RCharacterData = characters_by_id.get(target_id)
+	if target == null:
+		return {
+			"success": false,
+			"action_id": "TREAT_WOUND",
+			"character_id": character.character_id,
+			"target_npc_id": target_id,
+			"target_province_id": action.target_province_id,
+			"ic_day": ctx.ic_day,
+			"season": ctx.season,
+			"reason": "target_not_found",
+			"effects": {},
+		}
+
+	var can_check: Dictionary = MedicineSystem.can_treat(character, target, ctx.ic_day)
+	if not can_check["valid"]:
+		return {
+			"success": false,
+			"action_id": "TREAT_WOUND",
+			"character_id": character.character_id,
+			"target_npc_id": target_id,
+			"target_province_id": action.target_province_id,
+			"ic_day": ctx.ic_day,
+			"season": ctx.season,
+			"reason": can_check["reason"],
+			"effects": {},
+		}
+
+	# Witnesses: all characters in zone except healer and target.
+	var witness_count: int = 0
+	for present_id: int in ctx.characters_present:
+		if present_id != character.character_id and present_id != target_id:
+			witness_count += 1
+
+	if MedicineSystem.evaluate_refusal(target, character, witness_count):
+		return {
+			"success": false,
+			"action_id": "TREAT_WOUND",
+			"character_id": character.character_id,
+			"target_npc_id": target_id,
+			"target_province_id": action.target_province_id,
+			"ic_day": ctx.ic_day,
+			"season": ctx.season,
+			"reason": "treatment_refused",
+			"effects": {},
+		}
+
+	var raises: int = action.metadata.get("raises", 0)
+	var treat_result: Dictionary = MedicineSystem.treat_wound(
+		character, target, dice_engine, ctx.ic_day, raises
+	)
+
+	return {
+		"success": treat_result["success"],
+		"action_id": "TREAT_WOUND",
+		"character_id": character.character_id,
+		"target_npc_id": target_id,
+		"target_province_id": action.target_province_id,
+		"ic_day": ctx.ic_day,
+		"season": ctx.season,
+		"skill_used": "Medicine",
+		"roll_total": treat_result.get("roll_total", 0),
+		"tn": treat_result.get("tn", MedicineSystem.BASE_TN),
+		"raises": raises,
+		"effects": {
+			"wounds_healed": treat_result["wounds_healed"],
+			"kit_charge_consumed": treat_result["kit_charge_consumed"],
+			"target_id": target_id,
+			"wound_level_after": treat_result.get("wound_level_after", -1),
+		},
+	}
+
+
+# -- Meditate -----------------------------------------------------------------
+# Meditation (Void Recovery) / Void vs TN 20. Recovers VP per rank mastery.
+# Rank 1–2: 1 VP. Rank 3–6: up to 2 VP. Rank 7+: up to 3 VP (s57.32.3).
+
+static func _execute_meditate(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	const MEDITATE_TN: int = 20
+	const MASTERY_RANK3: int = 3
+	const MASTERY_RANK7: int = 7
+
+	if character.current_void_points >= character.max_void_points:
+		return {
+			"success": false,
+			"action_id": "MEDITATE",
+			"character_id": character.character_id,
+			"target_npc_id": -1,
+			"target_province_id": action.target_province_id,
+			"ic_day": ctx.ic_day,
+			"season": ctx.season,
+			"reason": "pool_full",
+			"effects": {},
+		}
+
+	var check: Dictionary = SkillResolver.resolve_skill_check(
+		character, dice_engine, "Meditation", MEDITATE_TN, 0,
+		"Void Recovery", Enums.Trait.VOID,
+	)
+
+	var result: Dictionary = {
+		"success": check["success"],
+		"action_id": "MEDITATE",
+		"character_id": character.character_id,
+		"target_npc_id": -1,
+		"target_province_id": action.target_province_id,
+		"ic_day": ctx.ic_day,
+		"season": ctx.season,
+		"skill_used": "Meditation",
+		"roll_total": check.get("total", 0),
+		"tn": MEDITATE_TN,
+		"effects": {
+			"void_recovered": 0,
+		},
+	}
+
+	if not check["success"]:
+		return result
+
+	var med_rank: int = SkillResolver.get_skill_rank(character, "Meditation")
+	var recovery_cap: int = 1
+	if med_rank >= MASTERY_RANK7:
+		recovery_cap = 3
+	elif med_rank >= MASTERY_RANK3:
+		recovery_cap = 2
+
+	var recoverable: int = character.max_void_points - character.current_void_points
+	var recovered: int = mini(recovery_cap, recoverable)
+	character.current_void_points += recovered
+	result["effects"]["void_recovered"] = recovered
+
+	return result
 
 
 static func _execute_seppuku_response(
@@ -3487,3 +3698,402 @@ static func _execute_observe_court_attendees(
 		"margin": roll_total - CourtActionSystem.OBSERVE_COURT_TN,
 		"effects": effects,
 	}
+
+
+# -- REQUEST_PERFORMANCE -------------------------------------------------------
+
+static func _execute_request_performance(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> Dictionary:
+	if not ctx.is_lord:
+		return {
+			"success": false,
+			"action_id": "REQUEST_PERFORMANCE",
+			"character_id": ctx.character_id,
+			"target_npc_id": action.target_npc_id,
+			"target_province_id": action.target_province_id,
+			"ic_day": ctx.ic_day,
+			"season": ctx.season,
+			"reason": "not_a_lord",
+			"effects": {},
+		}
+
+	if character.civilian_orders_remaining <= 0:
+		return {
+			"success": false,
+			"action_id": "REQUEST_PERFORMANCE",
+			"character_id": ctx.character_id,
+			"target_npc_id": action.target_npc_id,
+			"target_province_id": action.target_province_id,
+			"ic_day": ctx.ic_day,
+			"season": ctx.season,
+			"reason": "no_civilian_orders",
+			"effects": {},
+		}
+
+	var flag: Enums.ContextFlag = ctx.context_flag
+	if flag != Enums.ContextFlag.AT_OWN_HOLDINGS and flag != Enums.ContextFlag.AT_COURT:
+		return {
+			"success": false,
+			"action_id": "REQUEST_PERFORMANCE",
+			"character_id": ctx.character_id,
+			"target_npc_id": action.target_npc_id,
+			"target_province_id": action.target_province_id,
+			"ic_day": ctx.ic_day,
+			"season": ctx.season,
+			"reason": "wrong_context",
+			"effects": {},
+		}
+
+	character.civilian_orders_remaining -= 1
+
+	var performance_type: String = action.metadata.get("performance_type", "song")
+	var target_performer_id: int = action.metadata.get("target_performer_id", -1)
+	var venue_mode: String = action.metadata.get("venue_mode", "public")
+
+	var letter_dict: Dictionary = {}
+	if target_performer_id >= 0:
+		letter_dict = {
+			"to_character_id": target_performer_id,
+			"from_character_id": character.character_id,
+			"content": "performance_invitation",
+			"performance_type": performance_type,
+			"venue_mode": venue_mode,
+		}
+
+	return {
+		"success": true,
+		"action_id": "REQUEST_PERFORMANCE",
+		"character_id": character.character_id,
+		"target_npc_id": action.target_npc_id,
+		"target_province_id": action.target_province_id,
+		"ic_day": ctx.ic_day,
+		"season": ctx.season,
+		"effects": {
+			"civilian_order_consumed": true,
+			"performance_type": performance_type,
+			"target_performer_id": target_performer_id,
+			"venue_mode": venue_mode,
+			"invitation_letter": letter_dict,
+		},
+	}
+
+
+# -- CONDUCT_TEA_CEREMONY ------------------------------------------------------
+
+static func _execute_conduct_tea_ceremony(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	dice_engine: DiceEngine,
+	characters_by_id: Dictionary,
+) -> Dictionary:
+	if not TeaCeremonySystem.zone_allows_ceremony(ctx.zone_flags):
+		return {
+			"success": false,
+			"action_id": "CONDUCT_TEA_CEREMONY",
+			"character_id": character.character_id,
+			"target_npc_id": -1,
+			"target_province_id": -1,
+			"ic_day": ctx.ic_day,
+			"season": ctx.season,
+			"reason": "zone_not_eligible",
+			"effects": {},
+		}
+
+	var candidate_ids: Array = action.metadata.get("participant_ids", [])
+	var actual_participants: Array[int] = []
+	for pid: Variant in candidate_ids:
+		var pid_int: int = int(pid)
+		var c: L5RCharacterData = characters_by_id.get(pid_int)
+		if c != null and c.current_void_points < c.max_void_points:
+			actual_participants.append(pid_int)
+
+	var total_count: int = 1 + actual_participants.size()
+	var tn: int = TeaCeremonySystem.get_tn(total_count)
+
+	var check: Dictionary = SkillResolver.resolve_skill_check(
+		character, dice_engine, "Tea Ceremony", tn, 0,
+		"Void Recovery", Enums.Trait.VOID,
+	)
+
+	if not check.get("success", false):
+		return {
+			"success": false,
+			"action_id": "CONDUCT_TEA_CEREMONY",
+			"character_id": character.character_id,
+			"target_npc_id": -1,
+			"target_province_id": -1,
+			"ic_day": ctx.ic_day,
+			"season": ctx.season,
+			"skill_used": "Tea Ceremony",
+			"roll_total": check.get("total", 0),
+			"tn": tn,
+			"reason": "roll_failed",
+			"effects": {},
+		}
+
+	var tea_rank: int = SkillResolver.get_skill_rank(character, "Tea Ceremony")
+	var recovery: int = (
+		TeaCeremonySystem.VP_MASTERY_RECOVERY
+		if tea_rank >= TeaCeremonySystem.MASTERY_RANK5
+		else TeaCeremonySystem.VP_BASE_RECOVERY
+	)
+
+	var host_gain: int = mini(recovery, character.max_void_points - character.current_void_points)
+	character.current_void_points += host_gain
+
+	var participant_gains: Dictionary = {}
+	for pid: int in actual_participants:
+		var c: L5RCharacterData = characters_by_id.get(pid)
+		if c != null:
+			var gain: int = mini(recovery, c.max_void_points - c.current_void_points)
+			c.current_void_points += gain
+			participant_gains[pid] = gain
+
+	return {
+		"success": true,
+		"action_id": "CONDUCT_TEA_CEREMONY",
+		"character_id": character.character_id,
+		"target_npc_id": -1,
+		"target_province_id": -1,
+		"ic_day": ctx.ic_day,
+		"season": ctx.season,
+		"skill_used": "Tea Ceremony",
+		"roll_total": check.get("total", 0),
+		"tn": tn,
+		"effects": {
+			"host_vp_recovered": host_gain,
+			"participant_gains": participant_gains,
+			"total_participants": total_count,
+			"recovery_per_participant": recovery,
+		},
+	}
+
+
+# -- ANNOUNCE_HUNT -------------------------------------------------------------
+
+static func _execute_announce_hunt(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> Dictionary:
+	var check: Dictionary = HuntSystem.can_announce(character, ctx)
+	if not check.get("valid", false):
+		return {
+			"success": false,
+			"action_id": "ANNOUNCE_HUNT",
+			"reason": check.get("reason", "precondition_failed"),
+		}
+
+	var target_province_id: int = action.metadata.get("target_province_id", -1)
+	var hunt_date_ic_day: int = action.metadata.get("hunt_date_ic_day", -1)
+	if hunt_date_ic_day < 0:
+		hunt_date_ic_day = ctx.ic_day + HuntSystem.MIN_HUNT_DAYS_AHEAD
+	var priority_invitee_id: int = action.metadata.get("priority_invitee_id", -1)
+
+	return {
+		"success": true,
+		"action_id": "ANNOUNCE_HUNT",
+		"character_id": character.character_id,
+		"target_npc_id": -1,
+		"target_province_id": target_province_id,
+		"ic_day": ctx.ic_day,
+		"season": ctx.season,
+		"effects": {
+			"hunt_date_ic_day": hunt_date_ic_day,
+			"priority_invitee_id": priority_invitee_id,
+			"topic_tier": 4,
+			"topic_type": "hunt_announcement",
+		},
+	}
+
+
+# -- REQUEST_HUNT_INVITATION ---------------------------------------------------
+
+static func _execute_request_hunt_invitation(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> Dictionary:
+	var host_id: int = action.metadata.get("host_id", action.target_npc_id)
+	var hunt_topic_id: int = action.metadata.get("hunt_topic_id", -1)
+
+	if hunt_topic_id < 0:
+		return {
+			"success": false,
+			"action_id": "REQUEST_HUNT_INVITATION",
+			"reason": "no_hunt_topic",
+		}
+
+	return {
+		"success": true,
+		"action_id": "REQUEST_HUNT_INVITATION",
+		"character_id": character.character_id,
+		"target_npc_id": host_id,
+		"target_province_id": -1,
+		"ic_day": ctx.ic_day,
+		"season": ctx.season,
+		"effects": {
+			"hunt_topic_id": hunt_topic_id,
+			"requester_id": character.character_id,
+			"requester_status": character.status,
+		},
+	}
+
+
+# -- CANCEL_HUNT ---------------------------------------------------------------
+
+static func _execute_cancel_hunt(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> Dictionary:
+	var check: Dictionary = HuntSystem.can_cancel(character, ctx)
+	if not check.get("valid", false):
+		return {
+			"success": false,
+			"action_id": "CANCEL_HUNT",
+			"reason": check.get("reason", "precondition_failed"),
+		}
+
+	var active_hunt_id: int = ctx.known_objectives.get("active_hunt_id", -1)
+	var accepted_invitee_ids: Array = action.metadata.get("accepted_invitee_ids", [])
+
+	return {
+		"success": true,
+		"action_id": "CANCEL_HUNT",
+		"character_id": character.character_id,
+		"target_npc_id": -1,
+		"target_province_id": -1,
+		"ic_day": ctx.ic_day,
+		"season": ctx.season,
+		"effects": {
+			"hunt_id": active_hunt_id,
+			"glory_change": HuntSystem.GLORY_HOST_CANCEL,
+			"accepted_invitee_ids": accepted_invitee_ids,
+			"disposition_change_per_invitee": HuntSystem.DISP_CANCEL_PER_INVITEE,
+			"topic_type": "hunt_cancellation",
+		},
+	}
+
+
+# -- TRAIN_ANIMAL --------------------------------------------------------------
+
+static func _execute_train_animal(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	var is_first_session: bool = action.metadata.get("is_first_session", false)
+	var species_str: String = action.metadata.get("species", "")
+	var companion_id: int = action.metadata.get("companion_id", -1)
+
+	if is_first_session:
+		# First session — acquire a new companion
+		var check: Dictionary = AnimalHandlingSystem.can_train_first_session(
+			character, ctx, species_str
+		)
+		if not check.get("valid", false):
+			return {
+				"success": false,
+				"action_id": "TRAIN_ANIMAL",
+				"reason": check.get("reason", "precondition_failed"),
+			}
+
+		var roll_result: Dictionary = AnimalHandlingSystem.make_training_roll(
+			character, species_str, dice_engine
+		)
+		# Assign a new companion_id (caller is responsible for generating unique ids;
+		# here we use a transient id from metadata or compute one)
+		var new_id: int = action.metadata.get("new_companion_id", -1)
+		if new_id < 0:
+			new_id = character.character_id * 1000 + character.trained_companions.size()
+		var companion_name: String = action.metadata.get("companion_name", species_str.to_lower())
+		var new_companion: Dictionary = AnimalHandlingSystem.create_companion(
+			character.character_id,
+			species_str,
+			new_id,
+			companion_name,
+			ctx.ic_day,
+			action.target_province_id,
+			roll_result.get("progress_gained", 0),
+		)
+		character.trained_companions.append(new_companion)
+
+		return {
+			"success": true,
+			"action_id": "TRAIN_ANIMAL",
+			"character_id": character.character_id,
+			"target_npc_id": -1,
+			"target_province_id": action.target_province_id,
+			"ic_day": ctx.ic_day,
+			"season": ctx.season,
+			"skill_used": "Animal Handling",
+			"roll_total": roll_result.get("roll_total", 0),
+			"tn": roll_result.get("tn", 15),
+			"effects": {
+				"is_first_session": true,
+				"companion_id": new_id,
+				"species": species_str,
+				"progress_gained": roll_result.get("progress_gained", 0),
+				"roll_success": roll_result.get("success", false),
+				"fully_trained": new_companion.get("fully_trained", false),
+			},
+		}
+
+	else:
+		# Subsequent session — advance existing companion
+		var companion: Dictionary = {}
+		for c: Variant in character.trained_companions:
+			var comp: Dictionary = c as Dictionary
+			if comp.get("companion_id", -1) == companion_id:
+				companion = comp
+				break
+
+		if companion.is_empty():
+			return {
+				"success": false,
+				"action_id": "TRAIN_ANIMAL",
+				"reason": "companion_not_found",
+			}
+
+		var check: Dictionary = AnimalHandlingSystem.can_train_subsequent_session(
+			character, ctx, companion
+		)
+		if not check.get("valid", false):
+			return {
+				"success": false,
+				"action_id": "TRAIN_ANIMAL",
+				"reason": check.get("reason", "precondition_failed"),
+			}
+
+		var roll_result: Dictionary = AnimalHandlingSystem.make_training_roll(
+			character, companion.get("species", "DOG"), dice_engine
+		)
+		AnimalHandlingSystem.apply_training_progress(companion, roll_result.get("progress_gained", 0))
+
+		return {
+			"success": true,
+			"action_id": "TRAIN_ANIMAL",
+			"character_id": character.character_id,
+			"target_npc_id": -1,
+			"target_province_id": -1,
+			"ic_day": ctx.ic_day,
+			"season": ctx.season,
+			"skill_used": "Animal Handling",
+			"roll_total": roll_result.get("roll_total", 0),
+			"tn": roll_result.get("tn", 15),
+			"effects": {
+				"is_first_session": false,
+				"companion_id": companion_id,
+				"species": companion.get("species", ""),
+				"progress_gained": roll_result.get("progress_gained", 0),
+				"roll_success": roll_result.get("success", false),
+				"fully_trained": companion.get("fully_trained", false),
+				"sessions_completed": companion.get("sessions_completed", 0),
+			},
+		}

@@ -567,6 +567,7 @@ static func generate_settlement(
 	settlement_type: Enums.SettlementType,
 	population_pu: int,
 	terrain_type: Enums.TerrainType = Enums.TerrainType.PLAINS,
+	has_castle_town: bool = false,
 ) -> SettlementData:
 	var s := SettlementData.new()
 	s.settlement_id = settlement_id
@@ -586,7 +587,70 @@ static func generate_settlement(
 	s.rice_stockpile = rice_per_season * 2.0
 	s.koku_stockpile = float(s.town_pu) * 0.5
 
+	s.infrastructure = _default_infrastructure(settlement_type, has_castle_town)
+
 	return s
+
+
+static func _default_infrastructure(
+	settlement_type: Enums.SettlementType,
+	has_castle_town: bool,
+) -> Array[String]:
+	# "shrine" and "temple" are the wind-down vocabulary (s57.44). Shrine tier
+	# (village/local/roadside) is tracked separately in worship_locations.
+	match settlement_type:
+		Enums.SettlementType.VILLAGE:
+			return ["shrine", "sake_house"]
+
+		Enums.SettlementType.TOWN:
+			return [
+				"shrine", "sake_house", "inn", "tea_house",
+				"market", "garrison", "game_house", "bathhouse",
+			]
+
+		Enums.SettlementType.CITY:
+			return [
+				"shrine", "sake_house", "inn", "tea_house",
+				"market", "garrison", "game_house", "bathhouse",
+				"theater", "okiya", "pleasure_quarter", "forge",
+			]
+
+		Enums.SettlementType.FORTIFICATION:
+			return ["garrison"]
+
+		Enums.SettlementType.KEEP:
+			return ["garrison", "shrine", "sake_house", "inn"]
+
+		Enums.SettlementType.CASTLE:
+			var inf: Array[String] = ["garrison", "shrine", "forge"]
+			if has_castle_town:
+				inf.append_array([
+					"sake_house", "inn", "tea_house",
+					"market", "game_house", "bathhouse",
+				])
+			return inf
+
+		Enums.SettlementType.FAMILY_CASTLE:
+			# Castle town is always present for a kyuden.
+			return [
+				"garrison", "shrine", "forge", "library",
+				"sake_house", "inn", "tea_house", "market",
+				"game_house", "bathhouse", "okiya", "theater",
+			]
+
+		Enums.SettlementType.TEMPLE:
+			return ["temple", "shrine"]
+
+		Enums.SettlementType.SHINDEN:
+			return ["temple", "shrine"]
+
+		Enums.SettlementType.MONASTERY:
+			return ["temple", "shrine"]
+
+		Enums.SettlementType.WALL_TOWER:
+			return ["garrison", "sake_house"]
+
+	return []
 
 
 # =============================================================================

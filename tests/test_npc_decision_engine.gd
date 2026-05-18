@@ -1890,3 +1890,125 @@ func test_provocation_reactive_event() -> void:
 	assert_eq(need.priority, 3)
 	assert_eq(need.source, "provocation_received")
 	assert_eq(need.target_npc_id, 5)
+
+
+# =============================================================================
+# RECOVER_VOID_POINTS (s57.32.5)
+# =============================================================================
+
+func test_recover_void_fallback_when_pool_empty_no_objectives() -> void:
+	# No primary or standing objectives → void recovery fires as fallback.
+	_char.current_void_points = 0
+	_char.max_void_points = 2
+	_char.void_ring = 2
+	_char.skills["Meditation"] = 2
+	_world_state["context_flag"] = Enums.ContextFlag.AT_OWN_HOLDINGS
+	var ctx := NPCDecisionEngine.build_context(_char, _world_state)
+	var need := NPCDecisionEngine.resolve_goal(_char, ctx, {})
+	assert_eq(need.need_type, "RECOVER_VOID_POINTS")
+	assert_eq(need.source, "void_depleted")
+
+
+func test_recover_void_does_not_override_primary_objective() -> void:
+	# Primary objective still wins even when pool is empty.
+	_char.current_void_points = 0
+	_char.max_void_points = 2
+	_char.void_ring = 2
+	_char.skills["Meditation"] = 2
+	_world_state["context_flag"] = Enums.ContextFlag.AT_OWN_HOLDINGS
+	var ctx := NPCDecisionEngine.build_context(_char, _world_state)
+	var need := NPCDecisionEngine.resolve_goal(_char, ctx, _objectives)
+	# Primary RAISE_DISPOSITION objective should still win.
+	assert_eq(need.need_type, "RAISE_DISPOSITION")
+
+
+func test_recover_void_silent_when_pool_not_empty() -> void:
+	_char.current_void_points = 1
+	_char.max_void_points = 2
+	_char.void_ring = 2
+	_char.skills["Meditation"] = 2
+	_world_state["context_flag"] = Enums.ContextFlag.AT_OWN_HOLDINGS
+	var ctx := NPCDecisionEngine.build_context(_char, _world_state)
+	var need := NPCDecisionEngine.resolve_goal(_char, ctx, {})
+	# Fallback should be REST, not RECOVER_VOID_POINTS.
+	assert_eq(need.need_type, "REST")
+
+
+func test_recover_void_silent_when_meditate_not_in_context() -> void:
+	# ON_CAMPAIGN blocks MEDITATE — RECOVER_VOID_POINTS should not fire.
+	_char.current_void_points = 0
+	_char.max_void_points = 2
+	_char.void_ring = 2
+	_char.skills["Meditation"] = 2
+	_world_state["context_flag"] = Enums.ContextFlag.ON_CAMPAIGN
+	var ctx := NPCDecisionEngine.build_context(_char, _world_state)
+	var need := NPCDecisionEngine.resolve_goal(_char, ctx, {})
+	assert_eq(need.need_type, "REST")
+
+
+# =============================================================================
+# TEND_WOUNDED_ALLY opportunity injection (s57.31.7)
+# =============================================================================
+
+func test_tend_wounded_ally_injected_when_conditions_met() -> void:
+	var healer := _char
+	healer.skills["Medicine"] = 2
+	healer.items = [{"item_type": "medicine_kit", "remaining_uses": 5, "acquired_ic_day": 1}]
+	healer.disposition_values = {10: 30}  # Friend.
+
+	var wounded := L5RCharacterData.new()
+	wounded.character_id = 10
+	wounded.stamina = 3
+	wounded.wounds_taken = 15
+	wounded.last_medicine_treatment_ic_day = -1
+
+	_world_state["characters_present"] = [10] as Array[int]
+	_world_state["context_flag"] = Enums.ContextFlag.AT_OWN_HOLDINGS
+
+	var chars_by_id: Dictionary = {1: healer, 10: wounded}
+	var ctx := NPCDecisionEngine.build_context(healer, _world_state, chars_by_id)
+	var need := NPCDecisionEngine.resolve_goal(healer, ctx, {})
+	assert_eq(need.need_type, "TEND_WOUNDED_ALLY")
+	assert_eq(need.target_npc_id, 10)
+
+
+func test_tend_wounded_ally_not_injected_without_kit() -> void:
+	var healer := _char
+	healer.skills["Medicine"] = 2
+	healer.items = []  # No kit.
+	healer.disposition_values = {10: 30}
+
+	var wounded := L5RCharacterData.new()
+	wounded.character_id = 10
+	wounded.wounds_taken = 15
+	wounded.last_medicine_treatment_ic_day = -1
+
+	_world_state["characters_present"] = [10] as Array[int]
+	var chars_by_id: Dictionary = {1: healer, 10: wounded}
+	var ctx := NPCDecisionEngine.build_context(healer, _world_state, chars_by_id)
+	# Without kit, no TEND_WOUNDED_ALLY — falls through to objectives.
+	var pending: Array = ctx.pending_events
+	for ev: Variant in pending:
+		if ev is Dictionary and (ev as Dictionary).get("type", "") == "tend_wounded_ally_opportunity":
+			fail_test("Should not inject tend_wounded_ally_opportunity without kit")
+			return
+
+
+func test_tend_wounded_ally_not_injected_for_hostile() -> void:
+	var healer := _char
+	healer.skills["Medicine"] = 2
+	healer.items = [{"item_type": "medicine_kit", "remaining_uses": 5, "acquired_ic_day": 1}]
+	healer.disposition_values = {10: -20}  # Rival — hostile.
+
+	var wounded := L5RCharacterData.new()
+	wounded.character_id = 10
+	wounded.wounds_taken = 15
+	wounded.last_medicine_treatment_ic_day = -1
+
+	_world_state["characters_present"] = [10] as Array[int]
+	var chars_by_id: Dictionary = {1: healer, 10: wounded}
+	var ctx := NPCDecisionEngine.build_context(healer, _world_state, chars_by_id)
+	for ev: Variant in ctx.pending_events:
+		if ev is Dictionary and (ev as Dictionary).get("type", "") == "tend_wounded_ally_opportunity":
+			fail_test("Should not inject tend_wounded_ally_opportunity for hostile target")
+			return

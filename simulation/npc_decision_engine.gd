@@ -21,6 +21,7 @@ static func build_context(
 	ctx.school = character.school
 	ctx.school_type = character.school_type
 	ctx.is_lord = world_state.get("is_lord", false)
+	ctx.is_hostage = character.captive_status != ""
 	ctx.lord_rank = CivilianOrderBudget.lord_rank_from_status(character.status)
 	ctx.civilian_orders_remaining = character.civilian_orders_remaining
 
@@ -49,6 +50,8 @@ static func build_context(
 
 	# Stats
 	ctx.skill_ranks = character.skills.duplicate()
+	# Store void ring alongside skills so subsystems (tea ceremony) can read it.
+	ctx.skill_ranks["_void_ring"] = character.void_ring
 	ctx.honor = character.honor
 	ctx.glory = character.glory
 	ctx.status = character.status
@@ -174,11 +177,61 @@ static func build_context(
 	ctx.is_labor_halt_day = world_state.get("is_labor_halt_day", false)
 	ctx.is_taian = world_state.get("is_taian", false)
 	ctx.is_inauspicious_for_social = world_state.get("is_inauspicious_for_social", false)
+	ctx.festival_honor_gain = world_state.get("festival_honor_gain", 0.0)
+	ctx.festival_has_lion_honor = world_state.get("festival_has_lion_honor", false)
+	ctx.festival_glory_poetry = world_state.get("festival_glory_poetry", 0.0)
+	ctx.festival_glory_martial = world_state.get("festival_glory_martial", 0.0)
 
 	# State
 	ctx.pending_events = world_state.get("pending_events", [])
 	ctx.ap_remaining = character.action_points_current
 	ctx.action_log = world_state.get("action_log", [] as Array[Dictionary])
+
+	# TEND_WOUNDED_ALLY opportunity injection (s57.31.7).
+	# Fires when: healer has Medicine 1+, has kit, wounded ally present, not yet treated today.
+	if not chars_by_id.is_empty() \
+			and character.skills.get("Medicine", 0) >= 1 \
+			and MedicineSystem.has_medicine_kit(character):
+		var best_priority: int = 0
+		var best_target_id: int = -1
+		for present_id: int in ctx.characters_present:
+			if present_id == character.character_id:
+				continue
+			var candidate: L5RCharacterData = chars_by_id.get(present_id)
+			if candidate == null or CharacterStats.is_dead(candidate):
+				continue
+			if candidate.wounds_taken <= 0:
+				continue
+			if candidate.last_medicine_treatment_ic_day == ctx.ic_day:
+				continue
+			if ctx.disposition_values.get(present_id, 0) < 0:
+				continue
+			var pri: int = MedicineSystem.compute_tend_priority(character, candidate)
+			if pri > best_priority:
+				best_priority = pri
+				best_target_id = present_id
+		if best_target_id >= 0:
+			ctx.pending_events.append({
+				"type": "tend_wounded_ally_opportunity",
+				"target_npc_id": best_target_id,
+				"priority": best_priority,
+			})
+
+	# Open performance request check (s57.33.3).
+	if not ctx.active_court_at_location.is_empty():
+		var open_requests: Array = world_state.get("pending_performance_requests", [])
+		for req: Dictionary in open_requests:
+			if req.get("target_performer_id", -1) >= 0:
+				continue
+			if RequestPerformanceSystem.can_fulfill(character, req):
+				ctx.pending_events.append({
+					"type": "open_performance_request",
+					"request_id": req.get("request_id", -1),
+					"requesting_lord_id": req.get("requesting_lord_id", -1),
+					"performance_type": req.get("performance_type", ""),
+					"venue_mode": req.get("venue_mode", "public"),
+				})
+				break
 
 	# Personality
 	ctx.bushido_virtue = character.bushido_virtue
@@ -204,7 +257,7 @@ static func build_context(
 # Standing Objective. Winner decomposes into an ImmediateNeed.
 
 static func resolve_goal(
-	_character: L5RCharacterData,
+	character: L5RCharacterData,
 	ctx: NPCDataStructures.ContextSnapshot,
 	objectives: Dictionary,
 ) -> NPCDataStructures.ImmediateNeed:
@@ -232,6 +285,13 @@ static func resolve_goal(
 		var standing_need := _decompose_objective(standing, ctx)
 		if standing_need != null:
 			return standing_need
+
+	# Void recovery — fires as fallback when pool is fully depleted and no other
+	# need pressed. Full anticipation escalation (high-stakes upcoming actions)
+	# is deferred: that requires queued-need inspection not yet implemented.
+	var void_need := _check_void_recovery_need(character, ctx)
+	if void_need != null:
+		return void_need
 
 	# Absolute fallback — maintenance
 	var fallback := NPCDataStructures.ImmediateNeed.new()
@@ -397,6 +457,54 @@ static func score_all(
 			option.stale_intel_bonus = 0.0
 
 		option.festival_modifier = _compute_festival_modifier(option.action_id, ctx)
+
+	# Tea ceremony: +10 per eligible guest (s57.37.4 social multiplier).
+	# Clan affinity bonuses (Crane +10, Phoenix +5) applied via disposition_modifier.
+	for option: NPCDataStructures.ScoredAction in options:
+		if option.action_id != "CONDUCT_TEA_CEREMONY":
+			continue
+		var guest_count: int = option.metadata.get("participant_count", 1) - 1
+		option.disposition_modifier += float(guest_count * 10)
+		if ctx.clan == "Crane":
+			option.disposition_modifier += 10.0
+		elif ctx.clan == "Phoenix":
+			option.disposition_modifier += 5.0
+
+	# ANNOUNCE_HUNT school lean (Annex C, s57.38.2):
+	# Hiruma/Shinjo/Matsu/Usagi/Hida/Toritaka +15; Doji/Otomo/Soshi/Miya -15
+	for option: NPCDataStructures.ScoredAction in options:
+		if option.action_id != "ANNOUNCE_HUNT":
+			continue
+		if HuntSystem.has_hunt_positive_lean(ctx.school):
+			option.disposition_modifier += float(HuntSystem.HUNT_SCHOOL_LEAN)
+		elif HuntSystem.has_hunt_negative_lean(ctx.school):
+			option.disposition_modifier -= float(HuntSystem.HUNT_SCHOOL_LEAN)
+
+	# TRAIN_ANIMAL school lean (Annex C, s57.39.11):
+	# Wilderness-adjacent schools +10; courtier schools -10
+	for option: NPCDataStructures.ScoredAction in options:
+		if option.action_id != "TRAIN_ANIMAL":
+			continue
+		if AnimalHandlingSystem.has_positive_school_lean(ctx.school):
+			option.disposition_modifier += float(AnimalHandlingSystem.SCHOOL_LEAN_POSITIVE)
+		elif AnimalHandlingSystem.has_negative_school_lean(ctx.school):
+			option.disposition_modifier += float(AnimalHandlingSystem.SCHOOL_LEAN_NEGATIVE)
+
+	# Public Commerce school lean + honor self-regulation (Annex C, s57.40.7):
+	# Mercantile schools +5 or +10 (Ide Trader); high-caste ritual schools -10; Miya -5.
+	# Honor 5–6 → -3 avoid lean; Honor 7+ → -5 avoid lean. Applies only to public rolls.
+	for option: NPCDataStructures.ScoredAction in options:
+		if option.action_id not in ["PURCHASE_MARKET", "CONDUCT_COMMERCE"]:
+			continue
+		if not CommerceStigmaSystem.is_public_commerce(option.action_id, ctx):
+			continue
+		var school_lean: int = CommerceStigmaSystem.get_school_lean(ctx.school)
+		if school_lean != 0:
+			option.disposition_modifier += float(school_lean)
+		if ctx.honor >= 7.0:
+			option.disposition_modifier += float(CommerceStigmaSystem.HONOR_SELF_REG_7_PLUS)
+		elif ctx.honor >= 5.0:
+			option.disposition_modifier += float(CommerceStigmaSystem.HONOR_SELF_REG_5_6)
 
 
 # -- Phase 6: Selection -------------------------------------------------------
@@ -596,7 +704,52 @@ static func _decompose_reactive_event(
 		need.target_npc_id = ev.get("source_id", -1)
 		return need
 
+	if ev.get("type", "") == "tend_wounded_ally_opportunity":
+		var need := NPCDataStructures.ImmediateNeed.new()
+		need.need_type = "TEND_WOUNDED_ALLY"
+		need.priority = ev.get("priority", 1)
+		need.source = "tend_wounded_ally_opportunity"
+		need.target_npc_id = ev.get("target_npc_id", -1)
+		return need
+
+	if ev.get("type", "") == "performance_invitation_received":
+		var need := NPCDataStructures.ImmediateNeed.new()
+		need.need_type = "FULFILL_PERFORMANCE_REQUEST"
+		need.priority = 2
+		need.source = "performance_invitation_received"
+		need.target_npc_id = ev.get("requesting_lord_id", -1)
+		need.target_settlement_id = ev.get("request_id", -1)
+		need.target_intent = ev.get("venue_mode", "public")
+		return need
+
+	if ev.get("type", "") == "open_performance_request":
+		var need := NPCDataStructures.ImmediateNeed.new()
+		need.need_type = "FULFILL_PERFORMANCE_REQUEST"
+		need.priority = 1
+		need.source = "open_performance_request"
+		need.target_npc_id = ev.get("requesting_lord_id", -1)
+		need.target_settlement_id = ev.get("request_id", -1)
+		need.target_intent = ev.get("venue_mode", "public")
+		return need
+
 	return null
+
+
+static func _check_void_recovery_need(
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> NPCDataStructures.ImmediateNeed:
+	# Fires only when pool is depleted and MEDITATE is available in context (s57.32.5).
+	# Priority 3 (urgent) when pool is empty — only then overrides primary objectives.
+	if character.max_void_points <= 0 or character.current_void_points > 0:
+		return null
+	if "MEDITATE" not in _get_actions_for_context(ctx.context_flag):
+		return null
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "RECOVER_VOID_POINTS"
+	need.priority = 3
+	need.source = "void_depleted"
+	return need
 
 
 static func _check_crisis_override(
@@ -634,7 +787,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array[S
 				"CHARM", "INTIMIDATE", "GOSSIP", "PERSUADE", "NEGOTIATE",
 				"PROBE", "READ_CHARACTER", "PUBLIC_DEBATE",
 				"ASK_FOR_INTRODUCTION", "OBSERVE_COURT_ATTENDEES",
-				"TRAIN", "MEDITATE",
+				"TRAIN", "MEDITATE", "CONDUCT_TEA_CEREMONY",
 				"ASSESS_PROVINCE_STATUS", "INVESTIGATE_PROVINCE",
 				"INVESTIGATE_RUMOR", "ORDER_PATROL",
 				"EXAMINE_LETTER",
@@ -649,6 +802,10 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array[S
 				"RESTORE_COUNCIL_COMPACT",
 				"SHARE_SUPPLIES",
 				"CRAFT", "MENTOR",
+				"TREAT_WOUND",
+				"REQUEST_PERFORMANCE",
+				"ANNOUNCE_HUNT", "CANCEL_HUNT",
+				"TRAIN_ANIMAL",
 				"DO_NOTHING", "REST",
 			]
 		Enums.ContextFlag.AT_COURT:
@@ -662,10 +819,14 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array[S
 				"ASK_FOR_INTRODUCTION", "OBSERVE_COURT_ATTENDEES",
 				"ARRANGE_MARRIAGE", "APPOINT_TO_POSITION",
 				"COMPLY_WITH_EDICT", "DEFY_EDICT",
-				"TRAIN", "MEDITATE",
+				"TRAIN", "MEDITATE", "CONDUCT_TEA_CEREMONY",
 				"BRIBE_FOR_INFO", "EAVESDROP",
 				"INTERCEPT_LETTER", "SEARCH_QUARTERS",
 				"EXAMINE_LETTER",
+				"TREAT_WOUND",
+				"REQUEST_PERFORMANCE",
+				"ANNOUNCE_HUNT", "REQUEST_HUNT_INVITATION", "CANCEL_HUNT",
+				"TRAIN_ANIMAL",
 				"DO_NOTHING", "REST",
 			]
 		Enums.ContextFlag.VISITING:
@@ -674,13 +835,17 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array[S
 				"PROBE", "READ_CHARACTER", "LISTEN_REFLECT",
 				"DELIVER_GIFT", "OFFER_FAVOR",
 				"ASK_FOR_INTRODUCTION", "OBSERVE_COURT_ATTENDEES",
-				"TRAIN", "MEDITATE",
+				"TRAIN", "MEDITATE", "CONDUCT_TEA_CEREMONY",
+				"TREAT_WOUND",
+				"ANNOUNCE_HUNT", "REQUEST_HUNT_INVITATION", "CANCEL_HUNT",
+				"TRAIN_ANIMAL",
 				"DO_NOTHING", "REST",
 			]
 		Enums.ContextFlag.TRAVELING:
 			return [
 				"CHANGE_DESTINATION",
 				"TRAIN", "MEDITATE",
+				"CANCEL_HUNT",
 				"DO_NOTHING", "REST",
 			]
 		Enums.ContextFlag.ON_CAMPAIGN:
@@ -689,6 +854,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array[S
 				"DRILL_TROOPS", "EVALUATE_WAR_READINESS",
 				"SCOUT_ENEMY",
 				"INTIMIDATE", "NEGOTIATE",
+				"TREAT_WOUND",
 				"TRAIN",
 				"DO_NOTHING", "REST",
 			]
@@ -696,6 +862,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array[S
 			return [
 				"CONDUCT_SORTIE", "CONDUCT_STORM_ASSAULT",
 				"NEGOTIATE_SURRENDER", "MAINTAIN_SIEGE",
+				"TREAT_WOUND",
 				"DO_NOTHING", "REST",
 			]
 		Enums.ContextFlag.IN_EXILE:
@@ -705,15 +872,17 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array[S
 			]
 		Enums.ContextFlag.AT_TEMPLE:
 			return [
-				"PERFORM_RITUAL", "PERFORM_WORSHIP", "MEDITATE",
+				"PERFORM_RITUAL", "PERFORM_WORSHIP", "MEDITATE", "CONDUCT_TEA_CEREMONY",
 				"PUBLIC_ATONEMENT", "TRAIN",
 				"CHARM", "PROBE", "READ_CHARACTER",
+				"TREAT_WOUND",
 				"DO_NOTHING", "REST",
 			]
 		Enums.ContextFlag.AT_DOJO:
 			return [
 				"TRAIN", "MENTOR", "DRILL_TROOPS",
 				"CHARM", "PROBE",
+				"TREAT_WOUND",
 				"DO_NOTHING", "REST",
 			]
 		Enums.ContextFlag.AT_WALL_TOWER:
@@ -723,6 +892,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array[S
 				"SCOUT_ENEMY",
 				"ASSESS_PROVINCE_STATUS",
 				"DISPATCH_COURTIER",
+				"TREAT_WOUND",
 				"TRAIN",
 				"DO_NOTHING", "REST",
 			]
@@ -771,6 +941,7 @@ static func _get_ap_cost(action_id: String) -> int:
 		"PUBLIC_ATONEMENT": 1,
 		"MENTOR": 1,
 		"MEDITATE": 1,
+		"CONDUCT_TEA_CEREMONY": 1,
 		"CRAFT": 1,
 		"DRILL_TROOPS": 1,
 		"EVALUATE_WAR_READINESS": 1,
@@ -800,6 +971,12 @@ static func _get_ap_cost(action_id: String) -> int:
 		"FOUND_MONASTERY": 1,
 		"COMMISSION_SHIP": 1,
 		"RESTORE_COUNCIL_COMPACT": 1,
+		"TREAT_WOUND": 1,
+		"REQUEST_PERFORMANCE": 0,
+		"ANNOUNCE_HUNT": 0,
+		"REQUEST_HUNT_INVITATION": 0,
+		"CANCEL_HUNT": 0,
+		"TRAIN_ANIMAL": 1,
 	}
 	return costs.get(action_id, 1)
 
@@ -1460,6 +1637,9 @@ const SEAL_WALL_BREACH_MIN_RANK: int = 3
 static func _is_zone_blocked(action_id: String, zone_flags: Dictionary) -> bool:
 	if zone_flags.is_empty():
 		return false
+	# Tea ceremony requires tokonoma OR shrine_eligible (s57.37.2)
+	if action_id == "CONDUCT_TEA_CEREMONY":
+		return not TeaCeremonySystem.zone_allows_ceremony(zone_flags)
 	var required_flag: String = ZONE_GATED_ACTIONS.get(action_id, "")
 	if required_flag.is_empty():
 		return false
@@ -1836,6 +2016,23 @@ static func _populate_action_metadata(
 		option.metadata = {
 			"siege_settlement_id": ctx.location_id,
 		}
+	elif option.action_id == "CONDUCT_TEA_CEREMONY":
+		# Select up to (max_viable_count - 1) guests with disp >= Acquaintance.
+		var void_ring: int = ctx.skill_ranks.get("_void_ring", 2)
+		var tea_rank: int = ctx.skill_ranks.get("Tea Ceremony", 0)
+		var max_total: int = TeaCeremonySystem.max_viable_count(void_ring, tea_rank)
+		var eligible: Array[int] = TeaCeremonySystem.select_eligible_ids(
+			ctx.character_id, ctx.characters_present, ctx.dispositions
+		)
+		var guests: Array[int] = []
+		for eid: int in eligible:
+			if guests.size() >= max_total - 1:
+				break
+			guests.append(eid)
+		option.metadata = {
+			"participant_ids": guests,
+			"participant_count": 1 + guests.size(),
+		}
 	elif option.action_id == "OBSERVE_COURT_ATTENDEES":
 		# Populate the list of attendees this NPC hasn't met yet (s55.7.3).
 		var court: Dictionary = ctx.active_court_at_location
@@ -1846,6 +2043,61 @@ static func _populate_action_metadata(
 			if aid_int != ctx.character_id and aid_int not in ctx.met_characters:
 				observable.append(aid_int)
 		option.metadata = {"observable_attendee_ids": observable}
+	elif option.action_id in ["PUBLIC_PERFORMANCE", "PERFORM_FOR"] \
+			and need.need_type == "FULFILL_PERFORMANCE_REQUEST":
+		option.metadata = {
+			"fulfills_request_id": need.target_settlement_id,
+			"requesting_lord_id": need.target_npc_id,
+			"venue_mode": need.target_intent,
+		}
+	elif option.action_id == "ANNOUNCE_HUNT":
+		# Default: hunt at need's target province (if set), else host's known location
+		var province_id: int = need.target_province_id if need.target_province_id >= 0 else -1
+		var hunt_date: int = ctx.ic_day + 14  # midpoint of 7–21 day window
+		var priority_invitee_id: int = -1
+		if need.need_type == "RAISE_DISPOSITION" and need.target_npc_id >= 0:
+			priority_invitee_id = need.target_npc_id
+		option.target_province_id = province_id
+		option.metadata = {
+			"target_province_id": province_id,
+			"hunt_date_ic_day": hunt_date,
+			"priority_invitee_id": priority_invitee_id,
+		}
+	elif option.action_id == "REQUEST_HUNT_INVITATION":
+		# Hunt topic in known_topics — first active hunt topic found
+		var hunt_topic_id: int = ctx.known_objectives.get("hunt_topic_id", -1)
+		var host_id: int = need.target_npc_id if need.target_npc_id >= 0 else -1
+		option.target_npc_id = host_id
+		option.metadata = {
+			"hunt_topic_id": hunt_topic_id,
+			"host_id": host_id,
+		}
+	elif option.action_id == "CANCEL_HUNT":
+		option.metadata = {
+			"accepted_invitee_ids": [],
+		}
+	elif option.action_id == "TRAIN_ANIMAL":
+		# Prefer a companion already in progress; otherwise first session with DOG default
+		var in_progress_id: int = -1
+		if character != null:
+			for c_var: Variant in character.trained_companions:
+				var comp: Dictionary = c_var as Dictionary
+				if comp.get("is_alive", false) and not comp.get("fully_trained", false):
+					in_progress_id = comp.get("companion_id", -1)
+					break
+		if in_progress_id >= 0:
+			option.metadata = {
+				"is_first_session": false,
+				"companion_id": in_progress_id,
+				"species": "",
+			}
+		else:
+			option.metadata = {
+				"is_first_session": true,
+				"companion_id": -1,
+				"species": "DOG",
+				"companion_name": "companion",
+			}
 	elif option.action_id == "ASK_FOR_INTRODUCTION":
 		# Intermediary: highest-disposition Friend+ contact who is not the target (s55.7.3).
 		var target_id: int = option.target_npc_id
