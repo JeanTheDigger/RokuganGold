@@ -401,15 +401,15 @@ func test_doji_courtier_bribe_access_gets_free_raise() -> void:
 	var generic_total: int = 0
 	var trials: int = 200
 	for i: int in range(trials):
-		var state_a: Dictionary = AssassinationSystem.create_state(
-			doji.character_id, 99, AssassinationSystem.ExecutionMethod.POISON,
+		var state_a: Dictionary = AssassinationSystem.create_assassination_state(
+			doji.character_id, 99, AssassinationSystem.ExecutionMethod.POISON, 0,
 		)
 		var d1: DiceEngine = DiceEngine.new(i * 13)
 		var r1: Dictionary = AssassinationSystem.resolve_access_day(doji, state_a, "bribe", d1)
 		doji_total += r1.get("roll_total", 0)
 
-		var state_b: Dictionary = AssassinationSystem.create_state(
-			generic.character_id, 99, AssassinationSystem.ExecutionMethod.POISON,
+		var state_b: Dictionary = AssassinationSystem.create_assassination_state(
+			generic.character_id, 99, AssassinationSystem.ExecutionMethod.POISON, 0,
 		)
 		var d2: DiceEngine = DiceEngine.new(i * 13)
 		var r2: Dictionary = AssassinationSystem.resolve_access_day(generic, state_b, "bribe", d2)

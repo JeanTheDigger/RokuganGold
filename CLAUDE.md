@@ -320,10 +320,8 @@ For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
 
 ### Known Code Issues (found 2026-05-18, pre-existing)
 - **test_assassination_system.gd test_doji_courtier_bribe_access_gets_free_raise
-  — wrong method name.** Lines 404/411 call `AssassinationSystem.create_state()`
-  but the method is `create_assassination_state()`. Pre-existing in the Doji
-  Courtier technique test, not from this session. Will cause runtime error
-  if that specific test runs.
+  — wrong method name. FIXED.** Called `create_state()` instead of
+  `create_assassination_state()` and was missing the `current_ic_day` parameter.
 
 ### Known Code Issues — Deferred (require design input)
 - **NPCDecisionEngine HOSTILE_ACTIONS — phantom ASSASSINATE entry. FIXED.**
