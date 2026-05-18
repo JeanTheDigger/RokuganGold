@@ -2206,6 +2206,11 @@ static func _validate_military_order(
 	military_data: Dictionary,
 ) -> Dictionary:
 	if ctx.commanded_unit_id < 0:
+		if ctx.is_lord and (
+			action_id in CivilianOrderBudget.MILITARY_OR_CIVILIAN_ACTIONS
+			or action_id in CivilianOrderBudget.PURE_ORDER_ACTIONS
+		):
+			return {"valid": true}
 		return {"valid": false, "reason": "no_commanded_unit"}
 
 	if military_data.is_empty():
