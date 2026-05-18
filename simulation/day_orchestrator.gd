@@ -137,6 +137,9 @@ static func advance_day(
 		active_courts, characters, characters_by_id, world_states, favors,
 	)
 
+	_refresh_from_the_ashes(characters, world_states, dice_engine, ic_day)
+	_process_cadence_sync(characters, active_courts, dice_engine)
+
 	var edict_results: Array[Dictionary] = _process_edict_compliance(
 		active_edicts, active_wars, characters, active_topics, next_topic_id, ic_day, season_meta,
 	)
@@ -1128,6 +1131,30 @@ static func _process_info_events(
 
 			var target_id: int = event.get("target_npc_id", -1)
 			var quality: int = event.get("quality", 1)
+			var info_type: String = event.get("info_type", "")
+
+			if target_id >= 0 and info_type == "priority_objective":
+				var target_obj: Dictionary = objectives_map.get(target_id, {})
+				var standing: Dictionary = target_obj.get("standing", {})
+				var need_type: String = standing.get("need_type", "")
+				if not need_type.is_empty():
+					var entry: KnowledgeEntry = InformationSystem.make_entry(
+						Enums.KnowledgeSource.INTELLIGENCE,
+						"priority_objective",
+						{
+							"target_character_id": target_id,
+							"need_type": need_type,
+						},
+						current_season,
+					)
+					InformationSystem.add_knowledge(character, entry)
+				results.append({
+					"character_id": char_id,
+					"target_id": target_id,
+					"entries_discovered": 1 if not need_type.is_empty() else 0,
+					"info_type": "priority_objective",
+				})
+				continue
 
 			if target_id >= 0:
 				var discovered: Array[KnowledgeEntry] = InformationSystem.process_probe_result(
@@ -2167,11 +2194,45 @@ static func _process_horde_rolls(
 		}
 
 
+static func _refresh_from_the_ashes(
+	characters: Array[L5RCharacterData],
+	world_states: Dictionary,
+	dice_engine: DiceEngine,
+	ic_day: int,
+) -> void:
+	for c: L5RCharacterData in characters:
+		if not c.school.begins_with("Asako Loremaster"):
+			continue
+		var ws: Dictionary = world_states.get(c.character_id, {})
+		var ctx_flag: int = int(ws.get("context_flag", -1))
+		if ctx_flag != Enums.ContextFlag.AT_COURT:
+			if not c.from_the_ashes.is_empty():
+				c.from_the_ashes = {}
+			continue
+		SkillResolver.check_from_the_ashes_expiry(
+			c, dice_engine, c.physical_location, ic_day,
+		)
+
+
+static func _process_cadence_sync(
+	characters: Array[L5RCharacterData],
+	active_courts: Array[CourtSessionData],
+	dice_engine: DiceEngine,
+) -> void:
+	for court: CourtSessionData in active_courts:
+		if not CourtSystem.is_active(court):
+			continue
+		var court_ids: Array[int] = court.attendee_ids.duplicate()
+		SkillResolver.resolve_cadence_sync(characters, court_ids, dice_engine)
+
+
 static func _decay_all_knowledge(
 	characters: Array[L5RCharacterData],
 	current_season: int,
 ) -> void:
 	for c: L5RCharacterData in characters:
+		if c.precise_memory:
+			continue
 		InformationSystem.decay_confidence(c, current_season)
 
 
@@ -3551,14 +3612,12 @@ static func _process_ptl_detection(
 		if lore_rank <= 0:
 			continue
 
-		var rolled: int = perception + lore_rank
-		var kept: int = perception
-		if character.family in ["Kuni", "Asako"]:
-			rolled += 2
-
-		var roll_result: Dictionary = dice_engine.roll_and_keep(rolled, kept)
-		var total: int = roll_result.get("total", 0)
-		if total < ptl_tn:
+		var family_bonus: int = 2 if character.family in ["Kuni", "Asako"] else 0
+		var check: Dictionary = SkillResolver.resolve_skill_check(
+			character, dice_engine, "Lore: Shadowlands", ptl_tn,
+			0, "", Enums.Trait.PERCEPTION, family_bonus,
+		)
+		if not check.get("success", false):
 			continue
 
 		var topic: TopicData = _create_ptl_detection_topic(
@@ -4140,15 +4199,12 @@ static func _process_taint_proximity_detection(
 		if lore_rank < 3 and not is_specialist:
 			continue
 
-		var perception: int = detector.perception if detector.perception > 0 else 2
-		var rolled: int = perception + lore_rank
-		var kept: int = perception
-		if is_specialist:
-			rolled += 2
-
-		var roll_result: Dictionary = dice_engine.roll_and_keep(rolled, kept)
-		var total: int = roll_result.get("total", 0)
-		if total < TAINT_DETECTION_PLACEHOLDER_TN:
+		var family_bonus: int = 2 if is_specialist else 0
+		var taint_check: Dictionary = SkillResolver.resolve_skill_check(
+			detector, dice_engine, "Lore: Shadowlands", TAINT_DETECTION_PLACEHOLDER_TN,
+			0, "", Enums.Trait.PERCEPTION, family_bonus,
+		)
+		if not taint_check.get("success", false):
 			continue
 
 		var topic_id: int = next_topic_id[0]
@@ -11150,6 +11206,11 @@ static func _process_vassal_reassignments(
 				new_obj["assigned_by"] = lord_id
 				new_obj["status"] = "ACTIVE"
 				objectives_map[vassal_id]["standing"] = new_obj
+		elif decision == "SELF_SELECT":
+			var new_obj: Dictionary = directive.get("new_objective", {})
+			if not new_obj.is_empty():
+				new_obj["status"] = "ACTIVE"
+				objectives_map[vassal_id]["primary"] = new_obj
 		elif decision == "CONFIRM":
 			var objectives: Dictionary = objectives_map.get(vassal_id, {})
 			OrphanedObjectives.resolve_orphaned_objective(objectives, "CONFIRM")

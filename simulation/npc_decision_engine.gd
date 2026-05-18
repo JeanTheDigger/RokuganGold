@@ -402,6 +402,7 @@ static func score_all(
 	commitments: Array[CommitmentData] = [],
 	character: L5RCharacterData = null,
 	travel_redirects: int = 0,
+	chars_by_id: Dictionary = {},
 ) -> void:
 	for option: NPCDataStructures.ScoredAction in options:
 		option.objective_alignment = _lookup_objective_alignment(
@@ -456,6 +457,11 @@ static func score_all(
 			option.confidence_penalty = 0.0
 			option.stale_intel_bonus = 0.0
 
+		if option.action_id in SkillResolver.DECEPTIVE_ACTION_IDS and option.target_npc_id > 0:
+			var target: L5RCharacterData = chars_by_id.get(option.target_npc_id)
+			if target != null:
+				option.deception_defense_penalty = float(-SkillResolver.get_deception_defense_bonus(target))
+
 		option.festival_modifier = _compute_festival_modifier(option.action_id, ctx)
 
 	# Tea ceremony: +10 per eligible guest (s57.37.4 social multiplier).
@@ -489,6 +495,16 @@ static func score_all(
 			option.disposition_modifier += float(AnimalHandlingSystem.SCHOOL_LEAN_POSITIVE)
 		elif AnimalHandlingSystem.has_negative_school_lean(ctx.school):
 			option.disposition_modifier += float(AnimalHandlingSystem.SCHOOL_LEAN_NEGATIVE)
+
+	# DISCERN_NEED school lean (s29.15.24): Yasuki and Doji courtiers have
+	# DISCERN_NEED as a core Rank 1 technique — strong preference.
+	for option: NPCDataStructures.ScoredAction in options:
+		if option.action_id != "DISCERN_NEED":
+			continue
+		if ctx.school.begins_with("Yasuki") or ctx.school.begins_with("Doji Courtier"):
+			option.disposition_modifier += 20.0
+		elif ctx.school.begins_with("Kitsuki"):
+			option.disposition_modifier += 10.0
 
 	# Public Commerce school lean + honor self-regulation (Annex C, s57.40.7):
 	# Mercantile schools +5 or +10 (Ide Trader); high-caste ritual schools -10; Miya -5.
@@ -599,7 +615,7 @@ static func run(
 
 	# Phase 5
 	score_all(options, need, ctx, scoring_tables,
-		approach_penalties, commitments, character, travel_redirects)
+		approach_penalties, commitments, character, travel_redirects, chars_by_id)
 
 	# Phase 6
 	var chosen := select_action(options, ctx)
@@ -833,7 +849,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array[S
 			return [
 				"CHARM", "INTIMIDATE", "GOSSIP", "PERSUADE", "NEGOTIATE",
 				"PROBE", "READ_CHARACTER", "LISTEN_REFLECT",
-				"DELIVER_GIFT", "OFFER_FAVOR",
+				"DELIVER_GIFT", "OFFER_FAVOR", "DISCERN_NEED",
 				"ASK_FOR_INTRODUCTION", "OBSERVE_COURT_ATTENDEES",
 				"TRAIN", "MEDITATE", "CONDUCT_TEA_CEREMONY",
 				"TREAT_WOUND",
@@ -1598,7 +1614,7 @@ const STALE_INTEL_GATHER_BONUS: float = 15.0
 
 const GATHER_INTELLIGENCE_ACTIONS: Array = [
 	"PROBE", "READ_CHARACTER", "BRIBE_FOR_INFO", "EAVESDROP",
-	"INTERCEPT_LETTER", "SEARCH_QUARTERS",
+	"INTERCEPT_LETTER", "SEARCH_QUARTERS", "DISCERN_NEED",
 ]
 
 static func _compute_stale_intel_bonus(

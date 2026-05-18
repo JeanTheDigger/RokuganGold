@@ -361,3 +361,60 @@ func test_pc_crisis_window_accident() -> void:
 func test_target_offline_detection() -> void:
 	assert_true(AssassinationSystem.is_target_pc_offline(5, [1, 2, 3] as Array[int]))
 	assert_false(AssassinationSystem.is_target_pc_offline(2, [1, 2, 3] as Array[int]))
+
+
+# -- Technique bonus integration (SkillResolver routing) -----------------------
+
+func test_doji_courtier_bribe_access_gets_free_raise() -> void:
+	var doji: L5RCharacterData = L5RCharacterData.new()
+	doji.character_id = 70
+	doji.school = "Doji Courtier"
+	doji.awareness = 4
+	doji.perception = 3
+	doji.intelligence = 3
+	doji.willpower = 2
+	doji.stamina = 2
+	doji.strength = 2
+	doji.agility = 3
+	doji.reflexes = 3
+	doji.void_ring = 2
+	doji.honor = 7.0
+	doji.skills = {"Courtier": 3, "Sincerity": 2, "Etiquette": 2, "Stealth": 1}
+
+	var generic: L5RCharacterData = L5RCharacterData.new()
+	generic.character_id = 71
+	generic.school = "Bayushi Bushi"
+	generic.awareness = 4
+	generic.perception = 3
+	generic.intelligence = 3
+	generic.willpower = 2
+	generic.stamina = 2
+	generic.strength = 2
+	generic.agility = 3
+	generic.reflexes = 3
+	generic.void_ring = 2
+	generic.honor = 7.0
+	generic.skills = {"Courtier": 3, "Sincerity": 2, "Etiquette": 2, "Stealth": 1}
+
+	var doji_total: int = 0
+	var generic_total: int = 0
+	var trials: int = 200
+	for i: int in range(trials):
+		var state_a: Dictionary = AssassinationSystem.create_state(
+			doji.character_id, 99, AssassinationSystem.ExecutionMethod.POISON,
+		)
+		var d1: DiceEngine = DiceEngine.new(i * 13)
+		var r1: Dictionary = AssassinationSystem.resolve_access_day(doji, state_a, "bribe", d1)
+		doji_total += r1.get("roll_total", 0)
+
+		var state_b: Dictionary = AssassinationSystem.create_state(
+			generic.character_id, 99, AssassinationSystem.ExecutionMethod.POISON,
+		)
+		var d2: DiceEngine = DiceEngine.new(i * 13)
+		var r2: Dictionary = AssassinationSystem.resolve_access_day(generic, state_b, "bribe", d2)
+		generic_total += r2.get("roll_total", 0)
+
+	assert_true(
+		doji_total > generic_total,
+		"Doji Courtier should average higher on bribe access due to Courtier free raise"
+	)

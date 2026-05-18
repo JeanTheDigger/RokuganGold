@@ -89,12 +89,11 @@ static func resolve_knotwork_binding(
 	dice_engine: DiceEngine,
 	current_ic_day: int,
 ) -> Dictionary:
-	var knot_rank: int = binder.skills.get("Sailing", 0)
-	var rolled: int = binder.intelligence + knot_rank
-	var kept: int = binder.intelligence
-	var result: DiceResult = dice_engine.roll_and_keep(rolled, kept, knot_rank > 0)
-
-	var binding_tn: int = maxi(result.total, 15)
+	var check: Dictionary = SkillResolver.resolve_skill_check(
+		binder, dice_engine, "Sailing", 0, 0, "",
+		Enums.Trait.INTELLIGENCE,
+	)
+	var binding_tn: int = maxi(check.get("total", 0), 15)
 
 	var state: Dictionary = {
 		"character_id": target_id,
@@ -110,7 +109,7 @@ static func resolve_knotwork_binding(
 
 	return {
 		"binding_tn": binding_tn,
-		"roll_total": result.total,
+		"roll_total": check.get("total", 0),
 		"state": state,
 	}
 
@@ -147,12 +146,11 @@ static func resolve_escape_attempt(
 	bound_state["last_attempt_ic_day"] = current_ic_day
 
 	var tn: int = bound_state.get("escape_tn", 20)
-	var soh_rank: int = character.skills.get("Sleight of Hand", 0)
-	var rolled: int = character.agility + soh_rank
-	var kept: int = character.agility
-	var result: DiceResult = dice_engine.roll_and_keep(rolled, kept, soh_rank > 0)
-	var success: bool = result.total >= tn
-	var margin: int = result.total - tn
+	var result: Dictionary = SkillResolver.resolve_skill_check(
+		character, dice_engine, "Sleight of Hand", tn,
+	)
+	var success: bool = result.get("success", false)
+	var margin: int = result.get("margin", 0)
 
 	var honor_cost: float = LOW_SKILL_HONOR_COST
 	HonorGlorySystem.apply_honor_change(character, honor_cost)
@@ -164,7 +162,7 @@ static func resolve_escape_attempt(
 
 	return {
 		"success": success,
-		"roll_total": result.total,
+		"roll_total": result.get("total", 0),
 		"tn": tn,
 		"margin": margin,
 		"honor_cost": honor_cost,
@@ -195,16 +193,14 @@ static func resolve_guard_detection(
 	if distance_tiles > noise_range:
 		return {"detected": false, "reason": "out_of_range"}
 
-	var inv_rank: int = guard.skills.get("Investigation", 0)
-	var rolled: int = guard.perception + inv_rank
-	var kept: int = guard.perception
 	var tn: int = 15 + (distance_tiles * 2)
-	var result: DiceResult = dice_engine.roll_and_keep(rolled, kept, inv_rank > 0)
-	var detected: bool = result.total >= tn
+	var result: Dictionary = SkillResolver.resolve_skill_check(
+		guard, dice_engine, "Investigation", tn,
+	)
 
 	return {
-		"detected": detected,
-		"roll_total": result.total,
+		"detected": result.get("success", false),
+		"roll_total": result.get("total", 0),
 		"tn": tn,
 		"distance": distance_tiles,
 	}
@@ -229,28 +225,17 @@ static func resolve_location_escape(
 	location_tn: int,
 	dice_engine: DiceEngine,
 ) -> Dictionary:
-	var stealth_rank: int = character.skills.get("Stealth", 0)
-	var rolled: int = character.agility + stealth_rank
-	var kept: int = character.agility
-	var result: DiceResult = dice_engine.roll_and_keep(rolled, kept, stealth_rank > 0)
-	var success: bool = result.total >= location_tn
-	var margin: int = result.total - location_tn
-
-	if success:
-		return {
-			"success": true,
-			"roll_total": result.total,
-			"tn": location_tn,
-			"margin": margin,
-			"fully_free": true,
-		}
+	var result: Dictionary = SkillResolver.resolve_skill_check(
+		character, dice_engine, "Stealth", location_tn,
+	)
+	var success: bool = result.get("success", false)
 
 	return {
-		"success": false,
-		"roll_total": result.total,
+		"success": success,
+		"roll_total": result.get("total", 0),
 		"tn": location_tn,
-		"margin": margin,
-		"fully_free": false,
+		"margin": result.get("margin", 0),
+		"fully_free": success,
 	}
 
 

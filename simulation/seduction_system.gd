@@ -59,12 +59,12 @@ static func resolve_seduction(
 	var honor_rank: int = int(target.honor)
 	var defense_tn: int = BASE_TN + etiquette_rank + target.willpower + honor_rank
 
-	var rolled: int = seducer.awareness + tempt_rank
-	var kept: int = seducer.awareness
-	var result: DiceResult = dice_engine.roll_and_keep(rolled, kept)
 	var needed: int = defense_tn + (raises_called * 5)
-	var success: bool = result.total >= needed
-	var margin: int = result.total - needed
+	var result: Dictionary = SkillResolver.resolve_skill_check(
+		seducer, dice_engine, "Temptation", needed,
+	)
+	var success: bool = result.get("success", false)
+	var margin: int = result.get("margin", 0)
 
 	HonorGlorySystem.apply_honor_change(seducer, HONOR_COST)
 	HonorGlorySystem.apply_infamy_change(seducer, INFAMY_GAIN)
@@ -72,7 +72,7 @@ static func resolve_seduction(
 	if not success:
 		return {
 			"success": false,
-			"roll_total": result.total,
+			"roll_total": result.get("total", 0),
 			"tn": needed,
 			"margin": margin,
 			"honor_cost": HONOR_COST,
@@ -82,7 +82,7 @@ static func resolve_seduction(
 
 	return {
 		"success": true,
-		"roll_total": result.total,
+		"roll_total": result.get("total", 0),
 		"tn": needed,
 		"margin": margin,
 		"honor_cost": HONOR_COST,

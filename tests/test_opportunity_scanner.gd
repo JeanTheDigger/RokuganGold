@@ -378,6 +378,203 @@ func test_personality_fit_jin_dislikes_military() -> void:
 	assert_eq(opps[0].personality_fit, 20.0)
 
 
+# =============================================================================
+# New Opportunity Types
+# =============================================================================
+
+func test_scan_political_unmarried_family() -> void:
+	var c := _make_character()
+	var world_state: Dictionary = {
+		"weak_neighbor_provinces": [],
+		"rising_clans": [],
+		"upcoming_courts": [],
+		"secrets_held": [],
+		"unmarried_family_members": [{"character_id": 5, "urgency": 40.0}],
+	}
+	var opps: Array[OpportunityScanner.Opportunity] = OpportunityScanner.scan_opportunities(
+		c, OpportunityScanner.DOMAIN_POLITICAL, "ADVANCE_FAMILY", world_state
+	)
+	var marriage_found: bool = false
+	for opp: OpportunityScanner.Opportunity in opps:
+		if opp.objective_type == "ARRANGE_MARRIAGE":
+			marriage_found = true
+			assert_eq(opp.standing_alignment, 80.0)
+	assert_true(marriage_found)
+
+
+func test_scan_military_threatened_province() -> void:
+	var c := _make_character(1, "Crab", Enums.BushidoVirtue.CHUGI)
+	var world_state: Dictionary = {
+		"border_weaknesses": [],
+		"active_insurgencies": [],
+		"known_clan_strengths": {},
+		"taint_topic_province_ids": [],
+		"threatened_provinces": [{"province_id": 3, "feasibility": 55.0, "urgency": 80.0}],
+	}
+	var opps: Array[OpportunityScanner.Opportunity] = OpportunityScanner.scan_opportunities(
+		c, OpportunityScanner.DOMAIN_MILITARY, "EXPAND_TERRITORY", world_state
+	)
+	var defend_found: bool = false
+	for opp: OpportunityScanner.Opportunity in opps:
+		if opp.objective_type == "DEFEND_PROVINCE":
+			defend_found = true
+			assert_eq(opp.standing_alignment, 90.0)
+			assert_eq(opp.urgency, 80.0)
+	assert_true(defend_found)
+
+
+func test_scan_military_sieged_ally() -> void:
+	var c := _make_character(1, "Lion", Enums.BushidoVirtue.YU)
+	var world_state: Dictionary = {
+		"border_weaknesses": [],
+		"active_insurgencies": [],
+		"known_clan_strengths": {},
+		"taint_topic_province_ids": [],
+		"sieged_allies": [{"province_id": 8, "feasibility": 45.0}],
+	}
+	var opps: Array[OpportunityScanner.Opportunity] = OpportunityScanner.scan_opportunities(
+		c, OpportunityScanner.DOMAIN_MILITARY, "MAINTAIN_PEACE", world_state
+	)
+	var siege_found: bool = false
+	for opp: OpportunityScanner.Opportunity in opps:
+		if opp.objective_type == "RELIEVE_SIEGE":
+			siege_found = true
+			assert_eq(opp.standing_alignment, 85.0)
+			assert_eq(opp.urgency, 80.0)
+	assert_true(siege_found)
+
+
+func test_scan_military_tainted_province() -> void:
+	var c := _make_character(1, "Crab")
+	var world_state: Dictionary = {
+		"border_weaknesses": [],
+		"active_insurgencies": [],
+		"known_clan_strengths": {},
+		"taint_topic_province_ids": [],
+		"tainted_provinces": [{"province_id": 12, "urgency": 85.0}],
+	}
+	var opps: Array[OpportunityScanner.Opportunity] = OpportunityScanner.scan_opportunities(
+		c, OpportunityScanner.DOMAIN_MILITARY, "ELIMINATE_SHADOWLANDS", world_state
+	)
+	var taint_found: bool = false
+	for opp: OpportunityScanner.Opportunity in opps:
+		if opp.objective_type == "MANAGE_TAINT":
+			taint_found = true
+			assert_eq(opp.standing_alignment, 90.0)
+	assert_true(taint_found)
+
+
+func test_scan_military_insurgent_province() -> void:
+	var c := _make_character(1, "Lion")
+	var world_state: Dictionary = {
+		"border_weaknesses": [],
+		"active_insurgencies": [],
+		"known_clan_strengths": {},
+		"taint_topic_province_ids": [],
+		"insurgent_provinces": [{"province_id": 6, "urgency": 65.0}],
+	}
+	var opps: Array[OpportunityScanner.Opportunity] = OpportunityScanner.scan_opportunities(
+		c, OpportunityScanner.DOMAIN_MILITARY, "UPHOLD_LAW", world_state
+	)
+	var patrol_found: bool = false
+	for opp: OpportunityScanner.Opportunity in opps:
+		if opp.objective_type == "PATROL_PROVINCE":
+			patrol_found = true
+			assert_eq(opp.standing_alignment, 80.0)
+	assert_true(patrol_found)
+
+
+func test_scan_military_levy_at_moderate_imbalance() -> void:
+	var c := _make_character(1, "Crane")
+	var world_state: Dictionary = {
+		"border_weaknesses": [],
+		"active_insurgencies": [],
+		"known_clan_strengths": {"Crane": 20.0, "Lion": 24.0},
+		"taint_topic_province_ids": [],
+	}
+	var opps: Array[OpportunityScanner.Opportunity] = OpportunityScanner.scan_opportunities(
+		c, OpportunityScanner.DOMAIN_MILITARY, "BUILD_STRONGEST_FORCE", world_state
+	)
+	var levy_found: bool = false
+	for opp: OpportunityScanner.Opportunity in opps:
+		if opp.objective_type == "LEVY_TROOPS":
+			levy_found = true
+			assert_eq(opp.standing_alignment, 75.0)
+	assert_true(levy_found)
+
+
+func test_scan_economic_critical_resource_need() -> void:
+	var c := _make_character()
+	var world_state: Dictionary = {
+		"resource_deficits": [],
+		"famine_provinces": [],
+		"low_koku_provinces": [],
+		"critical_resource_needs": [{"resource": "iron", "threshold": 100.0, "urgency": 75.0}],
+	}
+	var opps: Array[OpportunityScanner.Opportunity] = OpportunityScanner.scan_opportunities(
+		c, OpportunityScanner.DOMAIN_ECONOMIC, "MAXIMIZE_PROSPERITY", world_state
+	)
+	var acquire_found: bool = false
+	for opp: OpportunityScanner.Opportunity in opps:
+		if opp.objective_type == "ACQUIRE_RESOURCE":
+			acquire_found = true
+			assert_eq(opp.standing_alignment, 80.0)
+	assert_true(acquire_found)
+
+
+func test_scan_economic_threatened_trade_route() -> void:
+	var c := _make_character()
+	var world_state: Dictionary = {
+		"resource_deficits": [],
+		"famine_provinces": [],
+		"low_koku_provinces": [],
+		"threatened_trade_routes": [{"province_id": 15, "urgency": 60.0}],
+	}
+	var opps: Array[OpportunityScanner.Opportunity] = OpportunityScanner.scan_opportunities(
+		c, OpportunityScanner.DOMAIN_ECONOMIC, "CONTROL_TRADE", world_state
+	)
+	var route_found: bool = false
+	for opp: OpportunityScanner.Opportunity in opps:
+		if opp.objective_type == "SECURE_TRADE_ROUTE":
+			route_found = true
+			assert_eq(opp.standing_alignment, 90.0)
+	assert_true(route_found)
+
+
+func test_scan_personal_bitter_rival() -> void:
+	var c := _make_character(1, "Scorpion", Enums.BushidoVirtue.YU)
+	var world_state: Dictionary = {
+		"vengeance_targets": [],
+		"trainable_vassals": [],
+		"bitter_rivals": [{"target_id": 42, "feasibility": 35.0, "urgency": 55.0}],
+	}
+	var opps: Array[OpportunityScanner.Opportunity] = OpportunityScanner.scan_opportunities(
+		c, OpportunityScanner.DOMAIN_PERSONAL, "SEEK_VENGEANCE", world_state
+	)
+	var elim_found: bool = false
+	for opp: OpportunityScanner.Opportunity in opps:
+		if opp.objective_type == "ELIMINATE_CHARACTER":
+			elim_found = true
+			assert_eq(opp.standing_alignment, 70.0)
+	assert_true(elim_found)
+
+
+func test_standing_domain_maps_all_objectives() -> void:
+	var all_standing: Array[String] = []
+	all_standing.append_array(ObjectiveDecomposer.POLITICAL_OBJECTIVES)
+	all_standing.append_array(ObjectiveDecomposer.ECONOMIC_OBJECTIVES)
+	all_standing.append_array(ObjectiveDecomposer.PERSONAL_OBJECTIVES)
+	all_standing.append_array(ObjectiveDecomposer.MILITARY_OBJECTIVES)
+	all_standing.append_array(ObjectiveDecomposer.INVESTIGATION_OBJECTIVES)
+	all_standing.append_array(ObjectiveDecomposer.INFRASTRUCTURE_OBJECTIVES)
+	all_standing.append_array(ObjectiveDecomposer.GOVERNANCE_OBJECTIVES)
+	for obj: String in all_standing:
+		assert_true(
+			OpportunityScanner.STANDING_OBJECTIVE_DOMAIN.has(obj),
+			obj + " should be in STANDING_OBJECTIVE_DOMAIN"
+		)
+
+
 func test_tiebreak_urgency_first() -> void:
 	var c := _make_character()
 	var world_state: Dictionary = {

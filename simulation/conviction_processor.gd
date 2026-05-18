@@ -215,16 +215,10 @@ static func _roll_sincerity_defense(
 ) -> int:
 	if dice_engine == null:
 		return 0
-	var sincerity: int = accused.skills.get("Sincerity", 0)
-	var awareness: int = accused.awareness if accused.awareness > 0 else 2
-	var rolled: int = sincerity + awareness
-	var kept: int = awareness
-	if rolled < 1:
-		rolled = 1
-	if kept < 1:
-		kept = 1
-	var result: Dictionary = dice_engine.roll_and_keep(rolled, kept)
-	return result.get("total", 0)
+	var check: Dictionary = SkillResolver.resolve_skill_check(
+		accused, dice_engine, "Sincerity", 0,
+	)
+	return check.get("total", 0)
 
 
 static func _apply_acquittal(

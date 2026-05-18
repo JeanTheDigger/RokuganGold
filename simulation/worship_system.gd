@@ -189,6 +189,7 @@ static func resolve_active_worship(
 		var free_raises: int = SHUGENJA_LOCATION_FREE_RAISES.get(location_type, 0)
 		var kept: int = max(1, ring_value)
 		var rolled: int = max(1, theology_rank + ring_value)
+		# Ring+Skill roll (spellcasting pattern) — not routable through SkillResolver
 		var result: DiceResult = dice_engine.roll_and_keep(rolled, kept)
 		roll_total = result.total + free_raises * 5
 		roll_tn = SHUGENJA_WORSHIP_TN

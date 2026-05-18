@@ -54,13 +54,13 @@ static func resolve_public_performance(
 ) -> Dictionary:
 	var skill_name: String = get_performance_skill(art_form)
 	var skill_rank: int = performer.skills.get(skill_name, 0)
-	var trait_val: int = performer.awareness
+	var unskilled_bonus: int = 1 if skill_rank == 0 else 0
 
-	var rolled: int = trait_val + maxi(skill_rank, 1)
-	var kept: int = trait_val
-
-	var dice_result: DiceResult = dice_engine.roll_and_keep(rolled, kept)
-	var total: int = dice_result.total
+	var check: Dictionary = SkillResolver.resolve_skill_check(
+		performer, dice_engine, skill_name, PERFORMANCE_TN,
+		0, "", Enums.Trait.AWARENESS, unskilled_bonus,
+	)
+	var total: int = check.get("total", 0)
 	var margin: int = total - PERFORMANCE_TN
 
 	var outcome: PerformanceOutcome
@@ -122,13 +122,13 @@ static func resolve_perform_for(
 ) -> Dictionary:
 	var skill_name: String = get_performance_skill(art_form)
 	var skill_rank: int = performer.skills.get(skill_name, 0)
-	var trait_val: int = performer.awareness
+	var unskilled_bonus: int = 1 if skill_rank == 0 else 0
 
-	var rolled: int = trait_val + maxi(skill_rank, 1)
-	var kept: int = trait_val
-
-	var dice_result: DiceResult = dice_engine.roll_and_keep(rolled, kept)
-	var total: int = dice_result.total
+	var check: Dictionary = SkillResolver.resolve_skill_check(
+		performer, dice_engine, skill_name, PERFORMANCE_TN,
+		0, "", Enums.Trait.AWARENESS, unskilled_bonus,
+	)
+	var total: int = check.get("total", 0)
 	var margin: int = total - PERFORMANCE_TN
 
 	var outcome: PerformanceOutcome

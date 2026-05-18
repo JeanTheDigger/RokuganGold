@@ -526,6 +526,7 @@ static func generate_character(
 	c.age = _generate_age(insight_rank, dice_engine)
 	c.koku = float(insight_rank) * float(dice_engine.rand_int_range(1, 10))
 
+	SkillResolver.apply_technique_flags(c)
 	return c
 
 

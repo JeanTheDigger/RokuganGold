@@ -698,10 +698,14 @@ static func _execute_gossip(
 	var subject: L5RCharacterData = characters_by_id.get(subject_id)
 	var subject_glory: float = subject.glory if subject != null else 0.0
 
-	var tn: int = clampi(
+	var base_tn: int = clampi(
 		10 + int(subject_glory) * 5 - int(character.glory) * 5,
 		5, 60
 	)
+
+	var listener: L5RCharacterData = characters_by_id.get(listener_id)
+	var deception_tn: int = SkillResolver.get_deception_defense_bonus(listener) if listener != null else 0
+	var tn: int = base_tn + deception_tn
 
 	var skill_entry: Dictionary = action_skill_map.get("GOSSIP", {})
 	var primary_skill: String = skill_entry.get("primary", "Courtier")
@@ -1118,22 +1122,16 @@ static func _resolve_bribe_witness(
 	_action: NPCDataStructures.ScoredAction,
 	dice_engine: DiceEngine,
 ) -> Dictionary:
-	var temptation: int = criminal.skills.get("Temptation", 0)
-	var awareness: int = criminal.awareness if criminal.awareness > 0 else 2
-	var rolled: int = maxi(temptation + awareness, 1)
-	var kept: int = maxi(awareness, 1)
-	var attack_result: Dictionary = dice_engine.roll_and_keep(rolled, kept)
-	var attack_total: int = attack_result.get("total", 0)
-
-	var etiquette: int = witness.skills.get("Etiquette", 0)
-	var willpower: int = witness.willpower if witness.willpower > 0 else 2
 	var honor_bonus: int = HonorGlorySystem.get_honor_rank(witness) * 5
-	var def_rolled: int = maxi(etiquette + willpower, 1)
-	var def_kept: int = maxi(willpower, 1)
-	var defense_result: Dictionary = dice_engine.roll_and_keep(def_rolled, def_kept)
-	var defense_total: int = defense_result.get("total", 0) + honor_bonus
-
-	var success: bool = attack_total > defense_total
+	var contested: Dictionary = SkillResolver.resolve_contested_check(
+		criminal, witness, dice_engine,
+		"Temptation", "Etiquette",
+		"", "", Enums.Trait.NONE, Enums.Trait.WILLPOWER,
+		0, 0, 0, honor_bonus,
+	)
+	var attack_total: int = contested.get("total_a", 0)
+	var defense_total: int = contested.get("total_b", 0)
+	var success: bool = contested.get("winner") == "a"
 	return {
 		"success": success,
 		"roll_total": attack_total,
@@ -1152,22 +1150,16 @@ static func _resolve_intimidate_witness(
 	_action: NPCDataStructures.ScoredAction,
 	dice_engine: DiceEngine,
 ) -> Dictionary:
-	var intimidation: int = criminal.skills.get("Intimidation", 0)
-	var willpower_c: int = criminal.willpower if criminal.willpower > 0 else 2
-	var rolled: int = maxi(intimidation + willpower_c, 1)
-	var kept: int = maxi(willpower_c, 1)
-	var attack_result: Dictionary = dice_engine.roll_and_keep(rolled, kept)
-	var attack_total: int = attack_result.get("total", 0)
-
-	var etiquette: int = witness.skills.get("Etiquette", 0)
-	var willpower_w: int = witness.willpower if witness.willpower > 0 else 2
 	var honor_bonus: int = HonorGlorySystem.get_honor_rank(witness) * 5
-	var def_rolled: int = maxi(etiquette + willpower_w, 1)
-	var def_kept: int = maxi(willpower_w, 1)
-	var defense_result: Dictionary = dice_engine.roll_and_keep(def_rolled, def_kept)
-	var defense_total: int = defense_result.get("total", 0) + honor_bonus
-
-	var success: bool = attack_total > defense_total
+	var contested: Dictionary = SkillResolver.resolve_contested_check(
+		criminal, witness, dice_engine,
+		"Intimidation", "Etiquette",
+		"", "", Enums.Trait.NONE, Enums.Trait.WILLPOWER,
+		0, 0, 0, honor_bonus,
+	)
+	var attack_total: int = contested.get("total_a", 0)
+	var defense_total: int = contested.get("total_b", 0)
+	var success: bool = contested.get("winner") == "a"
 	return {
 		"success": success,
 		"roll_total": attack_total,
@@ -1186,21 +1178,13 @@ static func _resolve_kill_witness(
 	victim: L5RCharacterData,
 	dice_engine: DiceEngine,
 ) -> Dictionary:
-	var stealth: int = killer.skills.get("Stealth", 0)
-	var agility: int = killer.agility if killer.agility > 0 else 2
-	var rolled: int = maxi(stealth + agility, 1)
-	var kept: int = maxi(agility, 1)
-	var attack_result: Dictionary = dice_engine.roll_and_keep(rolled, kept)
-	var attack_total: int = attack_result.get("total", 0)
-
-	var perception: int = victim.perception if victim.perception > 0 else 2
-	var investigation: int = victim.skills.get("Investigation", 0)
-	var def_rolled: int = maxi(perception + investigation, 1)
-	var def_kept: int = maxi(perception, 1)
-	var defense_result: Dictionary = dice_engine.roll_and_keep(def_rolled, def_kept)
-	var defense_total: int = defense_result.get("total", 0)
-
-	var success: bool = attack_total > defense_total
+	var contested: Dictionary = SkillResolver.resolve_contested_check(
+		killer, victim, dice_engine,
+		"Stealth", "Investigation",
+	)
+	var attack_total: int = contested.get("total_a", 0)
+	var defense_total: int = contested.get("total_b", 0)
+	var success: bool = contested.get("winner") == "a"
 	return {
 		"success": success,
 		"roll_total": attack_total,
@@ -2541,22 +2525,16 @@ static func _execute_extort_accused(
 			"effects": {},
 		}
 
-	var intimidation: int = character.skills.get("Intimidation", 0)
-	var willpower_mag: int = character.willpower if character.willpower > 0 else 2
-	var kept_mag: int = maxi(willpower_mag, 1)
-	var rolled_mag: int = maxi(intimidation + willpower_mag, 1)
-
-	var etiquette: int = suspect.skills.get("Etiquette", 0)
-	var willpower_sus: int = suspect.willpower if suspect.willpower > 0 else 2
 	var honor_bonus: int = HonorGlorySystem.get_honor_rank(suspect) * 5
-	var def_rolled: int = maxi(etiquette + willpower_sus, 1)
-	var def_kept: int = maxi(willpower_sus, 1)
-	var defense_result: Dictionary = dice_engine.roll_and_keep(def_rolled, def_kept)
-	var tn: int = defense_result.get("total", 0) + honor_bonus
-
-	var roll: Dictionary = dice_engine.roll_and_keep(rolled_mag, kept_mag)
-	var total: int = roll.get("total", 0)
-	var success: bool = total >= tn
+	var contested: Dictionary = SkillResolver.resolve_contested_check(
+		character, suspect, dice_engine,
+		"Intimidation", "Etiquette",
+		"", "", Enums.Trait.NONE, Enums.Trait.WILLPOWER,
+		0, 0, 0, honor_bonus,
+	)
+	var total: int = contested.get("total_a", 0)
+	var tn: int = contested.get("total_b", 0)
+	var success: bool = contested.get("winner") == "a"
 
 	var effects: Dictionary = {
 		"effect": "extortion_attempt",

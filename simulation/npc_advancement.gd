@@ -386,6 +386,7 @@ static func process_seasonal_advancement(characters: Array, world_state: Diction
 				entry["old_rank"] = old_rank
 				entry["new_rank"] = new_rank
 				total_rank_advancements += 1
+				SkillResolver.apply_technique_flags(character)
 			results.append(entry)
 
 	return {"results": results, "total_rank_advancements": total_rank_advancements}

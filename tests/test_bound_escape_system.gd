@@ -361,3 +361,55 @@ func test_filter_actions_removes_forbidden() -> void:
 	assert_true("NEGOTIATE" in filtered)
 	assert_true("CAST_SPELL" in filtered)
 	assert_false("ATTACK" in filtered)
+
+
+# -- Technique bonus integration (SkillResolver routing) -----------------------
+
+func test_kitsuki_guard_gets_free_raise_on_detection() -> void:
+	var kitsuki_guard: L5RCharacterData = L5RCharacterData.new()
+	kitsuki_guard.character_id = 80
+	kitsuki_guard.school = "Kitsuki Investigator"
+	kitsuki_guard.perception = 3
+	kitsuki_guard.awareness = 3
+	kitsuki_guard.intelligence = 3
+	kitsuki_guard.willpower = 2
+	kitsuki_guard.stamina = 2
+	kitsuki_guard.strength = 2
+	kitsuki_guard.agility = 2
+	kitsuki_guard.reflexes = 2
+	kitsuki_guard.void_ring = 2
+	kitsuki_guard.skills = {"Investigation": 2}
+
+	var generic_guard: L5RCharacterData = L5RCharacterData.new()
+	generic_guard.character_id = 81
+	generic_guard.school = "Bayushi Bushi"
+	generic_guard.perception = 3
+	generic_guard.awareness = 3
+	generic_guard.intelligence = 3
+	generic_guard.willpower = 2
+	generic_guard.stamina = 2
+	generic_guard.strength = 2
+	generic_guard.agility = 2
+	generic_guard.reflexes = 2
+	generic_guard.void_ring = 2
+	generic_guard.skills = {"Investigation": 2}
+
+	var kitsuki_total: int = 0
+	var generic_total: int = 0
+	var trials: int = 200
+	for i: int in range(trials):
+		var d1: DiceEngine = DiceEngine.new(i * 11)
+		var r1: Dictionary = BoundEscapeSystem.resolve_guard_detection(
+			kitsuki_guard, BoundEscapeSystem.NoiseLevel.QUIET, 1, d1,
+		)
+		kitsuki_total += r1.get("roll_total", 0)
+		var d2: DiceEngine = DiceEngine.new(i * 11)
+		var r2: Dictionary = BoundEscapeSystem.resolve_guard_detection(
+			generic_guard, BoundEscapeSystem.NoiseLevel.QUIET, 1, d2,
+		)
+		generic_total += r2.get("roll_total", 0)
+
+	assert_true(
+		kitsuki_total > generic_total,
+		"Kitsuki guard should average higher due to Investigation free raise"
+	)

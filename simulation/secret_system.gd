@@ -257,12 +257,12 @@ static func fabricate_secret(
 	if skill_rank == 0:
 		return {"success": false, "reason": "no_forgery_skill"}
 
-	var trait_val: int = fabricator.agility
-	var rolled: int = trait_val + skill_rank
-	var roll_result: DiceResult = dice_engine.roll_and_keep(rolled, trait_val, skill_rank > 0)
-	var total: int = roll_result.total
 	var needed: int = tn + (raises_called * 5)
-	var success: bool = total >= needed
+	var roll: Dictionary = SkillResolver.resolve_skill_check(
+		fabricator, dice_engine, "Forgery", needed,
+	)
+	var total: int = roll.get("total", 0)
+	var success: bool = roll.get("success", false)
 
 	var honor_cost: float = FABRICATION_HONOR_COST.get(severity, -0.5)
 	HonorGlorySystem.apply_honor_change(fabricator, honor_cost)
@@ -299,17 +299,14 @@ static func detect_fabrication(
 	if not secret.fabricated:
 		return {"checked": false, "reason": "not_fabricated"}
 
-	var skill_rank: int = investigator.skills.get("Investigation", 0)
-	var trait_val: int = investigator.perception
-	var rolled: int = trait_val + skill_rank
-	var roll_result: DiceResult = dice_engine.roll_and_keep(rolled, trait_val, skill_rank > 0)
-	var total: int = roll_result.total
-	var success: bool = total >= secret.detection_tn
+	var result: Dictionary = SkillResolver.resolve_skill_check(
+		investigator, dice_engine, "Investigation", secret.detection_tn,
+	)
 
 	return {
 		"checked": true,
-		"detected": success,
-		"roll_total": total,
+		"detected": result.get("success", false),
+		"roll_total": result.get("total", 0),
 		"detection_tn": secret.detection_tn,
 	}
 
@@ -435,29 +432,21 @@ static func resolve_eavesdrop(
 ) -> Dictionary:
 	apply_eavesdrop_costs(eavesdropper)
 
-	var stealth_rank: int = eavesdropper.skills.get(EAVESDROP_SKILL, 0)
-	var rolled_a: int = eavesdropper.agility + stealth_rank
-	var kept_a: int = eavesdropper.agility
-	var explodes_a: bool = stealth_rank > 0
+	var contested: Dictionary = SkillResolver.resolve_contested_check(
+		eavesdropper, target, dice_engine,
+		EAVESDROP_SKILL, EAVESDROP_DETECT_SKILL,
+	)
 
-	var inv_rank: int = target.skills.get(EAVESDROP_DETECT_SKILL, 0)
-	var rolled_b: int = target.perception + inv_rank
-	var kept_b: int = target.perception
-	var explodes_b: bool = inv_rank > 0
-
-	var result_a: DiceResult = dice_engine.roll_and_keep(rolled_a, kept_a, explodes_a)
-	var result_b: DiceResult = dice_engine.roll_and_keep(rolled_b, kept_b, explodes_b)
-
-	var success: bool = result_a.total >= result_b.total
+	var success: bool = contested.get("winner") == "a"
 	var detected: bool = not success
-	var margin: int = result_a.total - result_b.total
+	var margin: int = contested.get("total_a", 0) - contested.get("total_b", 0)
 
 	return {
 		"success": success,
 		"detected": detected,
 		"margin": margin,
-		"eavesdropper_total": result_a.total,
-		"target_total": result_b.total,
+		"eavesdropper_total": contested.get("total_a", 0),
+		"target_total": contested.get("total_b", 0),
 		"detection_risk": detected,
 	}
 
@@ -478,35 +467,31 @@ static func resolve_intercept_letter(
 	apply_intercept_costs(interceptor)
 
 	var geographic_mod: int = -INTERCEPT_GEOGRAPHIC_BONUS if is_same_location else 0
-
-	var stealth_rank: int = interceptor.skills.get("Stealth", 0)
-	var stealth_rolled: int = interceptor.agility + stealth_rank
-	var stealth_kept: int = interceptor.agility
-	var stealth_result: DiceResult = dice_engine.roll_and_keep(stealth_rolled, stealth_kept, stealth_rank > 0)
 	var stealth_tn: int = INTERCEPT_STEALTH_TN + geographic_mod
-	var stealth_success: bool = stealth_result.total >= stealth_tn
 
-	if not stealth_success:
+	var stealth_check: Dictionary = SkillResolver.resolve_skill_check(
+		interceptor, dice_engine, "Stealth", stealth_tn,
+	)
+	if not stealth_check.get("success", false):
 		return {
 			"success": false,
 			"phase_failed": "stealth",
-			"stealth_total": stealth_result.total,
+			"stealth_total": stealth_check.get("total", 0),
 			"stealth_tn": stealth_tn,
 			"detection_risk": true,
 		}
 
-	var forgery_rank: int = interceptor.skills.get("Forgery", 0)
-	var forgery_rolled: int = interceptor.agility + forgery_rank
-	var forgery_kept: int = interceptor.agility
-	var forgery_result: DiceResult = dice_engine.roll_and_keep(forgery_rolled, forgery_kept, forgery_rank > 0)
-	var forgery_success: bool = forgery_result.total >= INTERCEPT_FORGERY_TN
+	var forgery_check: Dictionary = SkillResolver.resolve_skill_check(
+		interceptor, dice_engine, "Forgery", INTERCEPT_FORGERY_TN,
+	)
+	var forgery_success: bool = forgery_check.get("success", false)
 
 	return {
 		"success": forgery_success,
 		"phase_failed": "" if forgery_success else "forgery",
-		"stealth_total": stealth_result.total,
+		"stealth_total": stealth_check.get("total", 0),
 		"stealth_tn": stealth_tn,
-		"forgery_total": forgery_result.total,
+		"forgery_total": forgery_check.get("total", 0),
 		"forgery_tn": INTERCEPT_FORGERY_TN,
 		"detection_risk": not forgery_success,
 	}
@@ -528,19 +513,16 @@ static func resolve_search_quarters(
 	var inv_rank: int = target.skills.get("Investigation", 0)
 	var tn: int = SEARCH_BASE_TN + inv_rank
 
-	var soh_rank: int = searcher.skills.get("Sleight of Hand", 0)
-	var rolled: int = searcher.agility + soh_rank
-	var kept: int = searcher.agility
-	var result: DiceResult = dice_engine.roll_and_keep(rolled, kept, soh_rank > 0)
-	var success: bool = result.total >= tn
-	var margin: int = result.total - tn
+	var result: Dictionary = SkillResolver.resolve_skill_check(
+		searcher, dice_engine, "Sleight of Hand", tn,
+	)
 
 	return {
-		"success": success,
-		"roll_total": result.total,
+		"success": result.get("success", false),
+		"roll_total": result.get("total", 0),
 		"tn": tn,
-		"margin": margin,
-		"detection_risk": not success,
+		"margin": result.get("margin", 0),
+		"detection_risk": not result.get("success", false),
 	}
 
 
@@ -553,27 +535,19 @@ static func resolve_shadow_target(
 	target: L5RCharacterData,
 	dice_engine: DiceEngine,
 ) -> Dictionary:
-	var stealth_rank: int = shadow.skills.get("Stealth", 0)
-	var rolled_a: int = shadow.agility + stealth_rank
-	var kept_a: int = shadow.agility
-	var explodes_a: bool = stealth_rank > 0
+	var contested: Dictionary = SkillResolver.resolve_contested_check(
+		shadow, target, dice_engine,
+		"Stealth", "Investigation",
+	)
 
-	var inv_rank: int = target.skills.get("Investigation", 0)
-	var rolled_b: int = target.perception + inv_rank
-	var kept_b: int = target.perception
-	var explodes_b: bool = inv_rank > 0
-
-	var result_a: DiceResult = dice_engine.roll_and_keep(rolled_a, kept_a, explodes_a)
-	var result_b: DiceResult = dice_engine.roll_and_keep(rolled_b, kept_b, explodes_b)
-
-	var success: bool = result_a.total >= result_b.total
-	var margin: int = result_a.total - result_b.total
+	var success: bool = contested.get("winner") == "a"
+	var margin: int = contested.get("total_a", 0) - contested.get("total_b", 0)
 
 	return {
 		"success": success,
 		"detected": not success,
-		"shadow_total": result_a.total,
-		"target_total": result_b.total,
+		"shadow_total": contested.get("total_a", 0),
+		"target_total": contested.get("total_b", 0),
 		"margin": margin,
 	}
 
@@ -609,16 +583,17 @@ static func resolve_conceal_item(
 	var soh_rank: int = actor.skills.get("Sleight of Hand", 0)
 	if is_weapon and soh_rank < CONCEAL_WEAPON_SKILL_GATE:
 		return {"success": false, "reason": "weapon_skill_gate", "required_rank": CONCEAL_WEAPON_SKILL_GATE}
-	var rolled: int = actor.agility + soh_rank
-	var kept: int = actor.agility
-	var result: DiceResult = dice_engine.roll_and_keep(rolled, kept, soh_rank > 0)
-	var success: bool = result.total >= tn
+
+	var result: Dictionary = SkillResolver.resolve_skill_check(
+		actor, dice_engine, "Sleight of Hand", tn,
+	)
+	var success: bool = result.get("success", false)
 
 	return {
 		"success": success,
-		"roll_total": result.total,
+		"roll_total": result.get("total", 0),
 		"tn": tn,
-		"concealment_tn": result.total if success else 0,
+		"concealment_tn": result.get("total", 0) if success else 0,
 	}
 
 
@@ -635,11 +610,10 @@ static func resolve_search_person(
 	dice_engine: DiceEngine,
 	has_magistrate_authority: bool = false,
 ) -> Dictionary:
-	var inv_rank: int = searcher.skills.get("Investigation", 0)
-	var rolled: int = searcher.perception + inv_rank
-	var kept: int = searcher.perception
-	var result: DiceResult = dice_engine.roll_and_keep(rolled, kept, inv_rank > 0)
-	var success: bool = result.total >= concealment_tn
+	var result: Dictionary = SkillResolver.resolve_skill_check(
+		searcher, dice_engine, "Investigation", concealment_tn,
+	)
+	var success: bool = result.get("success", false)
 
 	var glory_cost: float = 0.0
 	if not has_magistrate_authority and not success:
@@ -648,7 +622,7 @@ static func resolve_search_person(
 
 	return {
 		"success": success,
-		"roll_total": result.total,
+		"roll_total": result.get("total", 0),
 		"concealment_tn": concealment_tn,
 		"glory_cost": glory_cost,
 	}
@@ -676,20 +650,19 @@ static func resolve_forge_impersonation_letter(
 	if forgery_rank == 0:
 		return {"success": false, "reason": "no_forgery_skill"}
 
-	var rolled: int = forger.agility + forgery_rank
-	var kept: int = forger.agility
-	var result: DiceResult = dice_engine.roll_and_keep(rolled, kept)
 	var needed: int = tn + (raises_called * 5)
-	var success: bool = result.total >= needed
-
-	var detection_tn: int = (tn + (raises_called * 5)) if success else 0
+	var result: Dictionary = SkillResolver.resolve_skill_check(
+		forger, dice_engine, "Forgery", needed,
+	)
+	var success: bool = result.get("success", false)
+	var detection_tn: int = needed if success else 0
 
 	HonorGlorySystem.apply_honor_change(forger, -0.3)
 	HonorGlorySystem.apply_infamy_change(forger, 0.1)
 
 	return {
 		"success": success,
-		"roll_total": result.total,
+		"roll_total": result.get("total", 0),
 		"tn": needed,
 		"detection_tn": detection_tn,
 		"detection_risk": not success,
@@ -718,20 +691,19 @@ static func resolve_forge_order(
 	if forgery_rank == 0:
 		return {"success": false, "reason": "no_forgery_skill"}
 
-	var rolled: int = forger.agility + forgery_rank
-	var kept: int = forger.agility
-	var result: DiceResult = dice_engine.roll_and_keep(rolled, kept)
 	var needed: int = tn + (raises_called * 5)
-	var success: bool = result.total >= needed
-
-	var detection_tn: int = (tn + (raises_called * 5)) if success else 0
+	var result: Dictionary = SkillResolver.resolve_skill_check(
+		forger, dice_engine, "Forgery", needed,
+	)
+	var success: bool = result.get("success", false)
+	var detection_tn: int = needed if success else 0
 
 	HonorGlorySystem.apply_honor_change(forger, -0.3)
 	HonorGlorySystem.apply_infamy_change(forger, 0.1)
 
 	return {
 		"success": success,
-		"roll_total": result.total,
+		"roll_total": result.get("total", 0),
 		"tn": needed,
 		"detection_tn": detection_tn,
 		"detection_risk": not success,

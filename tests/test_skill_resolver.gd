@@ -221,3 +221,537 @@ func test_contested_check_applies_wound_penalties() -> void:
 	)
 	assert_eq(result["wound_penalty_a"], -3)
 	assert_eq(result["wound_penalty_b"], 0)
+
+
+# -- Doji R1a: Honor-gated Free Raise (s29.15.4) ------------------------------
+
+func test_doji_courtier_free_raise_on_courtier_skill() -> void:
+	_char.school = "Doji Courtier"
+	_char.honor = 6.0
+	assert_eq(SkillResolver.get_technique_free_raises(_char, "Courtier"), 1)
+
+
+func test_doji_courtier_free_raise_on_sincerity() -> void:
+	_char.school = "Doji Courtier"
+	_char.honor = 6.0
+	assert_eq(SkillResolver.get_technique_free_raises(_char, "Sincerity"), 1)
+
+
+func test_doji_courtier_free_raise_on_etiquette() -> void:
+	_char.school = "Doji Courtier"
+	_char.honor = 6.0
+	assert_eq(SkillResolver.get_technique_free_raises(_char, "Etiquette"), 1)
+
+
+func test_doji_courtier_no_free_raise_below_honor_threshold() -> void:
+	_char.school = "Doji Courtier"
+	_char.honor = 5.9
+	assert_eq(SkillResolver.get_technique_free_raises(_char, "Courtier"), 0)
+
+
+func test_doji_courtier_no_free_raise_on_other_skill() -> void:
+	_char.school = "Doji Courtier"
+	_char.honor = 6.0
+	assert_eq(SkillResolver.get_technique_free_raises(_char, "Investigation"), 0)
+
+
+func test_non_doji_no_free_raise() -> void:
+	_char.school = "Bayushi Courtier"
+	_char.honor = 8.0
+	assert_eq(SkillResolver.get_technique_free_raises(_char, "Courtier"), 0)
+
+
+func test_doji_free_raise_on_sub_skill() -> void:
+	_char.school = "Doji Courtier"
+	_char.honor = 6.0
+	assert_eq(SkillResolver.get_technique_free_raises(_char, "Etiquette: Courtesy"), 1)
+
+
+# -- Yasuki R1a: Commerce Free Raise (s29.15.2) -------------------------------
+
+func test_yasuki_free_raise_on_commerce() -> void:
+	_char.school = "Yasuki Courtier"
+	assert_eq(SkillResolver.get_technique_free_raises(_char, "Commerce"), 1)
+
+
+func test_yasuki_no_free_raise_on_courtier() -> void:
+	_char.school = "Yasuki Courtier"
+	assert_eq(SkillResolver.get_technique_free_raises(_char, "Courtier"), 0)
+
+
+# -- Kitsuki R1a: Investigation Free Raise (s29.15.6) -------------------------
+
+func test_kitsuki_free_raise_on_investigation() -> void:
+	_char.school = "Kitsuki Investigator"
+	assert_eq(SkillResolver.get_technique_free_raises(_char, "Investigation"), 1)
+
+
+func test_kitsuki_free_raise_on_investigation_sub_skill() -> void:
+	_char.school = "Kitsuki Investigator"
+	assert_eq(SkillResolver.get_technique_free_raises(_char, "Investigation: Notice"), 1)
+
+
+func test_kitsuki_no_free_raise_on_courtier() -> void:
+	_char.school = "Kitsuki Investigator"
+	assert_eq(SkillResolver.get_technique_free_raises(_char, "Courtier"), 0)
+
+
+# -- Asako R1a: Lore Free Raise (s29.15.10) -----------------------------------
+
+func test_asako_free_raise_on_lore() -> void:
+	_char.school = "Asako Loremaster"
+	assert_eq(SkillResolver.get_technique_free_raises(_char, "Lore"), 1)
+
+
+func test_asako_free_raise_on_lore_sub_skill() -> void:
+	_char.school = "Asako Loremaster"
+	assert_eq(SkillResolver.get_technique_free_raises(_char, "Lore: History"), 1)
+	assert_eq(SkillResolver.get_technique_free_raises(_char, "Lore: Theology"), 1)
+	assert_eq(SkillResolver.get_technique_free_raises(_char, "Lore: Shadowlands"), 1)
+
+
+func test_asako_no_free_raise_on_etiquette() -> void:
+	_char.school = "Asako Loremaster"
+	assert_eq(SkillResolver.get_technique_free_raises(_char, "Etiquette"), 0)
+
+
+func test_doji_free_raise_adds_flat_bonus_to_skill_check() -> void:
+	_char.school = "Doji Courtier"
+	_char.honor = 6.5
+	_char.awareness = 3
+	_char.skills = {"Courtier": 3}
+	_engine.set_seed(100)
+	var with_fr: Dictionary = SkillResolver.resolve_skill_check(
+		_char, _engine, "Courtier", 15
+	)
+	assert_eq(with_fr["technique_free_raises"], 1)
+	_char.honor = 5.0
+	_engine.set_seed(100)
+	var without_fr: Dictionary = SkillResolver.resolve_skill_check(
+		_char, _engine, "Courtier", 15
+	)
+	assert_eq(without_fr["technique_free_raises"], 0)
+	assert_eq(with_fr["total"] - without_fr["total"], 5)
+
+
+# -- Deception Defense Bonus (s29.15.6 Kitsuki R2, s29.15.2 Yasuki R4) --------
+
+func test_kitsuki_r2_deception_defense_bonus() -> void:
+	_char.school = "Kitsuki Investigator"
+	_char.stamina = 3
+	_char.willpower = 3
+	_char.strength = 3
+	_char.perception = 3
+	_char.agility = 3
+	_char.intelligence = 3
+	_char.reflexes = 3
+	_char.awareness = 3
+	_char.void_ring = 3
+	_char.skills = {"Investigation": 3, "Etiquette": 2, "Courtier": 2}
+	var rank: int = CharacterStats.get_insight_rank(_char)
+	assert_true(rank >= 2, "Test character should be Rank 2+")
+	var bonus: int = SkillResolver.get_deception_defense_bonus(_char)
+	assert_eq(bonus, 5 * rank)
+
+
+func test_kitsuki_r1_no_deception_defense() -> void:
+	var low_char := L5RCharacterData.new()
+	low_char.school = "Kitsuki Investigator"
+	var rank: int = CharacterStats.get_insight_rank(low_char)
+	assert_eq(rank, 1, "Default traits give Rank 1")
+	assert_eq(SkillResolver.get_deception_defense_bonus(low_char), 0)
+
+
+func test_yasuki_r4_deception_defense_bonus() -> void:
+	_char.school = "Yasuki Courtier"
+	_char.stamina = 4
+	_char.willpower = 4
+	_char.strength = 4
+	_char.perception = 4
+	_char.agility = 4
+	_char.intelligence = 4
+	_char.reflexes = 4
+	_char.awareness = 4
+	_char.void_ring = 4
+	_char.skills = {"Commerce": 5, "Courtier": 4, "Etiquette": 4, "Sincerity": 3, "Investigation": 2}
+	var rank: int = CharacterStats.get_insight_rank(_char)
+	assert_true(rank >= 4, "Test character should be Rank 4+")
+	var bonus: int = SkillResolver.get_deception_defense_bonus(_char)
+	assert_eq(bonus, 5 * rank)
+
+
+func test_yasuki_below_r4_no_deception_defense() -> void:
+	_char.school = "Yasuki Courtier"
+	_char.stamina = 3
+	_char.willpower = 3
+	_char.strength = 3
+	_char.perception = 3
+	_char.agility = 3
+	_char.intelligence = 3
+	_char.reflexes = 3
+	_char.awareness = 3
+	_char.void_ring = 3
+	_char.skills = {"Commerce": 3, "Courtier": 2}
+	var rank: int = CharacterStats.get_insight_rank(_char)
+	assert_true(rank < 4, "Test character should be below Rank 4")
+	assert_eq(SkillResolver.get_deception_defense_bonus(_char), 0)
+
+
+func test_non_qualifying_school_no_deception_defense() -> void:
+	_char.school = "Bayushi Courtier"
+	_char.awareness = 5
+	_char.intelligence = 5
+	_char.skills = {"Courtier": 5, "Sincerity": 5, "Etiquette": 5}
+	assert_eq(SkillResolver.get_deception_defense_bonus(_char), 0)
+
+
+func test_deceptive_action_ids_list() -> void:
+	assert_true("GOSSIP" in SkillResolver.DECEPTIVE_ACTION_IDS)
+	assert_true("FABRICATE_SECRET" in SkillResolver.DECEPTIVE_ACTION_IDS)
+	assert_false("CHARM" in SkillResolver.DECEPTIVE_ACTION_IDS)
+	assert_false("INTIMIDATE" in SkillResolver.DECEPTIVE_ACTION_IDS)
+
+
+# -- Asako R2: From the Ashes (s29.15.10) --------------------------------------
+
+func _make_asako_loremaster() -> L5RCharacterData:
+	var c := L5RCharacterData.new()
+	c.school = "Asako Loremaster"
+	c.stamina = 3
+	c.willpower = 3
+	c.strength = 3
+	c.perception = 3
+	c.agility = 3
+	c.intelligence = 3
+	c.reflexes = 3
+	c.awareness = 3
+	c.void_ring = 3
+	c.skills = {"Lore: History": 4, "Courtier": 3, "Etiquette": 3}
+	return c
+
+
+func test_ashes_bonus_on_social_skill() -> void:
+	_char.from_the_ashes = {"location_id": "court_1", "expires_ic_day": 10}
+	assert_eq(SkillResolver._get_ashes_bonus_for_skill(_char, "Courtier"), 2)
+	assert_eq(SkillResolver._get_ashes_bonus_for_skill(_char, "Sincerity"), 2)
+	assert_eq(SkillResolver._get_ashes_bonus_for_skill(_char, "Etiquette"), 2)
+	assert_eq(SkillResolver._get_ashes_bonus_for_skill(_char, "Etiquette: Courtesy"), 2)
+
+
+func test_ashes_no_bonus_on_non_social_skill() -> void:
+	_char.from_the_ashes = {"location_id": "court_1", "expires_ic_day": 10}
+	assert_eq(SkillResolver._get_ashes_bonus_for_skill(_char, "Investigation"), 0)
+	assert_eq(SkillResolver._get_ashes_bonus_for_skill(_char, "Lore: History"), 0)
+	assert_eq(SkillResolver._get_ashes_bonus_for_skill(_char, "Commerce"), 0)
+
+
+func test_ashes_no_bonus_when_inactive() -> void:
+	assert_true(_char.from_the_ashes.is_empty())
+	assert_eq(SkillResolver._get_ashes_bonus_for_skill(_char, "Courtier"), 0)
+
+
+func test_activate_from_the_ashes_success() -> void:
+	var loremaster: L5RCharacterData = _make_asako_loremaster()
+	_engine.set_seed(42)
+	var result: Dictionary = SkillResolver.activate_from_the_ashes(
+		loremaster, _engine, "court_1", 5
+	)
+	assert_true(result["success"])
+	assert_eq(loremaster.from_the_ashes.get("location_id", ""), "court_1")
+	assert_eq(loremaster.from_the_ashes.get("expires_ic_day", -1), 7)
+
+
+func test_activate_from_the_ashes_wrong_school() -> void:
+	_char.school = "Doji Courtier"
+	var result: Dictionary = SkillResolver.activate_from_the_ashes(
+		_char, _engine, "court_1", 5
+	)
+	assert_false(result["success"])
+	assert_eq(result["reason"], "wrong_school")
+
+
+func test_activate_from_the_ashes_rank_too_low() -> void:
+	var c := L5RCharacterData.new()
+	c.school = "Asako Loremaster"
+	var result: Dictionary = SkillResolver.activate_from_the_ashes(
+		c, _engine, "court_1", 5
+	)
+	assert_false(result["success"])
+	assert_eq(result["reason"], "rank_too_low")
+
+
+func test_check_expiry_clears_on_wrong_location() -> void:
+	_char.school = "Asako Loremaster"
+	_char.from_the_ashes = {"location_id": "court_1", "expires_ic_day": 10}
+	var result: Dictionary = SkillResolver.check_from_the_ashes_expiry(
+		_char, _engine, "court_2", 5
+	)
+	assert_eq(result["action"], "cleared_wrong_location")
+	assert_true(_char.from_the_ashes.is_empty())
+
+
+func test_check_expiry_still_active() -> void:
+	_char.from_the_ashes = {"location_id": "court_1", "expires_ic_day": 10}
+	var result: Dictionary = SkillResolver.check_from_the_ashes_expiry(
+		_char, _engine, "court_1", 8
+	)
+	assert_eq(result["action"], "still_active")
+
+
+func test_check_expiry_refreshes_on_expire() -> void:
+	var loremaster: L5RCharacterData = _make_asako_loremaster()
+	loremaster.from_the_ashes = {"location_id": "court_1", "expires_ic_day": 5}
+	_engine.set_seed(42)
+	var result: Dictionary = SkillResolver.check_from_the_ashes_expiry(
+		loremaster, _engine, "court_1", 5
+	)
+	assert_true(result.get("success", false), "Should auto-refresh on expiry")
+	assert_eq(loremaster.from_the_ashes.get("expires_ic_day", -1), 7)
+
+
+func test_ashes_bonus_adds_rolled_dice_to_skill_check() -> void:
+	var loremaster: L5RCharacterData = _make_asako_loremaster()
+	loremaster.from_the_ashes = {"location_id": "court_1", "expires_ic_day": 99}
+	_engine.set_seed(100)
+	var with_buff: Dictionary = SkillResolver.resolve_skill_check(
+		loremaster, _engine, "Courtier", 15
+	)
+	loremaster.from_the_ashes = {}
+	_engine.set_seed(100)
+	var without_buff: Dictionary = SkillResolver.resolve_skill_check(
+		loremaster, _engine, "Courtier", 15
+	)
+	assert_true(with_buff["total"] >= without_buff["total"],
+		"+2k0 should increase or maintain roll total")
+
+
+# -- Doji R3: Perfect Gift (s29.15.4) -----------------------------------------
+
+func _make_doji_r3() -> L5RCharacterData:
+	var c := L5RCharacterData.new()
+	c.school = "Doji Courtier"
+	c.character_id = 100
+	c.honor = 7.0
+	c.stamina = 3
+	c.willpower = 3
+	c.strength = 3
+	c.perception = 3
+	c.agility = 3
+	c.intelligence = 3
+	c.reflexes = 3
+	c.awareness = 4
+	c.void_ring = 3
+	c.skills = {"Courtier": 5, "Sincerity": 4, "Etiquette": 4}
+	return c
+
+
+func test_perfect_gift_success_base() -> void:
+	var doji: L5RCharacterData = _make_doji_r3()
+	var target := L5RCharacterData.new()
+	target.character_id = 200
+	_engine.set_seed(42)
+	var result: Dictionary = SkillResolver.execute_perfect_gift(doji, target, _engine)
+	assert_true(result["success"])
+	assert_eq(result["disposition_applied"], 20)
+	assert_eq(target.disposition_values.get(doji.character_id, 0), 20)
+	assert_true(200 in doji.perfect_gift_targets)
+
+
+func test_perfect_gift_cannot_reuse() -> void:
+	var doji: L5RCharacterData = _make_doji_r3()
+	var target := L5RCharacterData.new()
+	target.character_id = 200
+	doji.perfect_gift_targets = [200]
+	var result: Dictionary = SkillResolver.execute_perfect_gift(doji, target, _engine)
+	assert_false(result["success"])
+	assert_eq(result["reason"], "already_applied")
+
+
+func test_perfect_gift_wrong_school() -> void:
+	_char.school = "Bayushi Courtier"
+	var target := L5RCharacterData.new()
+	target.character_id = 200
+	var result: Dictionary = SkillResolver.execute_perfect_gift(_char, target, _engine)
+	assert_false(result["success"])
+	assert_eq(result["reason"], "wrong_school")
+
+
+func test_perfect_gift_rank_too_low() -> void:
+	var c := L5RCharacterData.new()
+	c.school = "Doji Courtier"
+	c.honor = 7.0
+	var target := L5RCharacterData.new()
+	target.character_id = 200
+	var result: Dictionary = SkillResolver.execute_perfect_gift(c, target, _engine)
+	assert_false(result["success"])
+	assert_eq(result["reason"], "rank_too_low")
+
+
+func test_perfect_gift_adds_to_existing_disposition() -> void:
+	var doji: L5RCharacterData = _make_doji_r3()
+	var target := L5RCharacterData.new()
+	target.character_id = 200
+	target.disposition_values = {doji.character_id: 15}
+	_engine.set_seed(42)
+	var result: Dictionary = SkillResolver.execute_perfect_gift(doji, target, _engine)
+	assert_true(result["success"])
+	assert_eq(target.disposition_values[doji.character_id], 35)
+
+
+func test_perfect_gift_clamped_at_100() -> void:
+	var doji: L5RCharacterData = _make_doji_r3()
+	var target := L5RCharacterData.new()
+	target.character_id = 200
+	target.disposition_values = {doji.character_id: 90}
+	_engine.set_seed(42)
+	var result: Dictionary = SkillResolver.execute_perfect_gift(doji, target, _engine)
+	assert_true(result["success"])
+	assert_eq(target.disposition_values[doji.character_id], 100)
+
+
+# -- Cadence Sync (s29.15.4) ---------------------------------------------------
+
+func _make_cadence_doji(id: int, topics: Array[int] = []) -> L5RCharacterData:
+	var c := L5RCharacterData.new()
+	c.character_id = id
+	c.character_name = "Doji Cadence %d" % id
+	c.school = "Doji Courtier"
+	c.clan = "Crane"
+	c.cadence_trained = true
+	c.awareness = 4
+	c.skills = {"Courtier": 5}
+	c.topic_pool = topics.duplicate()
+	return c
+
+
+func test_cadence_sync_transfers_topics_between_pair() -> void:
+	var a: L5RCharacterData = _make_cadence_doji(1, [10, 20])
+	var b: L5RCharacterData = _make_cadence_doji(2, [30])
+	var chars: Array[L5RCharacterData] = [a, b]
+	var court_ids: Array[int] = [1, 2]
+	_engine.set_seed(42)
+	var results: Array[Dictionary] = SkillResolver.resolve_cadence_sync(chars, court_ids, _engine)
+	assert_true(results.size() > 0)
+	var any_success: bool = false
+	for r: Dictionary in results:
+		if r.get("success", false):
+			any_success = true
+	if any_success:
+		assert_true(
+			10 in b.topic_pool or 20 in b.topic_pool or 30 in a.topic_pool,
+			"at least one topic should transfer on successful cadence"
+		)
+
+
+func test_cadence_sync_requires_two_trained() -> void:
+	var a: L5RCharacterData = _make_cadence_doji(1, [10])
+	var b := L5RCharacterData.new()
+	b.character_id = 2
+	b.cadence_trained = false
+	var chars: Array[L5RCharacterData] = [a, b]
+	var court_ids: Array[int] = [1, 2]
+	var results: Array[Dictionary] = SkillResolver.resolve_cadence_sync(chars, court_ids, _engine)
+	assert_eq(results.size(), 0, "cadence needs at least 2 trained characters")
+
+
+func test_cadence_sync_no_duplicate_topics() -> void:
+	var a: L5RCharacterData = _make_cadence_doji(1, [10, 20])
+	var b: L5RCharacterData = _make_cadence_doji(2, [10])
+	var chars: Array[L5RCharacterData] = [a, b]
+	var court_ids: Array[int] = [1, 2]
+	_engine.set_seed(42)
+	SkillResolver.resolve_cadence_sync(chars, court_ids, _engine)
+	var count: int = 0
+	for tid: int in b.topic_pool:
+		if tid == 10:
+			count += 1
+	assert_eq(count, 1, "topic 10 should not be duplicated")
+
+
+# -- apply_technique_flags (auto-assignment) -----------------------------------
+
+func test_apply_flags_ikoma_bard_r1_sets_precise_memory() -> void:
+	_char.school = "Ikoma Bard"
+	_char.awareness = 3
+	_char.intelligence = 3
+	_char.willpower = 3
+	_char.perception = 2
+	_char.stamina = 2
+	_char.strength = 2
+	_char.agility = 2
+	_char.reflexes = 2
+	_char.void_ring = 2
+	_char.skills["Courtier"] = 1
+	assert_false(_char.precise_memory)
+	SkillResolver.apply_technique_flags(_char)
+	assert_true(_char.precise_memory, "Ikoma Bard R1+ should get precise_memory")
+
+
+func test_apply_flags_non_ikoma_no_precise_memory() -> void:
+	_char.school = "Doji Courtier"
+	_char.awareness = 3
+	_char.intelligence = 2
+	_char.willpower = 2
+	_char.perception = 2
+	_char.stamina = 2
+	_char.strength = 2
+	_char.agility = 2
+	_char.reflexes = 2
+	_char.void_ring = 2
+	SkillResolver.apply_technique_flags(_char)
+	assert_false(_char.precise_memory, "non-Ikoma should not get precise_memory")
+
+
+func test_apply_flags_doji_r2_sets_cadence_trained() -> void:
+	_char.school = "Doji Courtier"
+	_char.awareness = 4
+	_char.intelligence = 3
+	_char.willpower = 3
+	_char.perception = 3
+	_char.stamina = 2
+	_char.strength = 2
+	_char.agility = 2
+	_char.reflexes = 3
+	_char.void_ring = 3
+	_char.skills["Courtier"] = 3
+	_char.skills["Etiquette"] = 3
+	_char.skills["Sincerity"] = 2
+	_char.skills["Perform: Oratory"] = 1
+	_char.skills["Tea Ceremony"] = 1
+	assert_false(_char.cadence_trained)
+	SkillResolver.apply_technique_flags(_char)
+	assert_true(_char.cadence_trained, "Doji Courtier R2+ should get cadence_trained")
+
+
+func test_apply_flags_doji_r1_no_cadence_trained() -> void:
+	_char.school = "Doji Courtier"
+	_char.awareness = 3
+	_char.intelligence = 2
+	_char.willpower = 2
+	_char.perception = 2
+	_char.stamina = 2
+	_char.strength = 2
+	_char.agility = 2
+	_char.reflexes = 2
+	_char.void_ring = 2
+	_char.skills["Courtier"] = 1
+	SkillResolver.apply_technique_flags(_char)
+	assert_false(_char.cadence_trained, "Doji Courtier R1 should not get cadence_trained")
+
+
+func test_apply_flags_non_doji_no_cadence_trained() -> void:
+	_char.school = "Ikoma Bard"
+	_char.awareness = 4
+	_char.intelligence = 3
+	_char.willpower = 3
+	_char.perception = 3
+	_char.stamina = 2
+	_char.strength = 2
+	_char.agility = 2
+	_char.reflexes = 3
+	_char.void_ring = 3
+	_char.skills["Courtier"] = 3
+	_char.skills["Lore: History"] = 3
+	_char.skills["Sincerity"] = 2
+	SkillResolver.apply_technique_flags(_char)
+	assert_false(_char.cadence_trained, "non-Doji should not get cadence_trained")

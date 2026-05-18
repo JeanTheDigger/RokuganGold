@@ -1131,3 +1131,146 @@ func test_agenda_order_null_champion_uses_momentum_only() -> void:
 	)
 	# No champion → can't check disposition; own-clan check still applies but no own clan topic.
 	assert_eq(result[0], 2)  # highest momentum first
+
+
+# -- Emperor's Peace Violation Crime (s57.47 v624) ----------------------------
+
+
+func _make_active_winter_court(settlement_id: int) -> CourtSessionData:
+	var court := CourtSessionData.new()
+	court.court_id = 1
+	court.court_type = CourtSessionData.CourtType.IMPERIAL_WINTER_COURT
+	court.phase = CourtSessionData.CourtPhase.ACTIVE
+	court.host_settlement_id = settlement_id
+	court.host_lord_id = 50
+	court.host_clan = "Crane"
+	court.attendee_ids = [10, 20, 30, 50]
+	return court
+
+
+func test_peace_violation_creates_crime_record() -> void:
+	var offender := _make_character(10, "Akodo Toturi", "Lion", "Akodo", 6.0)
+	offender.honor = 5.0
+	var witness1 := _make_character(20, "Doji Satsume", "Crane", "Doji", 7.0)
+	var witness2 := _make_character(30, "Bayushi Shoju", "Scorpion", "Bayushi", 6.0)
+	var chars: Dictionary = {10: offender, 20: witness1, 30: witness2, 50: _emperor}
+	var court := _make_active_winter_court(100)
+	var next_case: Array[int] = [1]
+	var next_topic: Array[int] = [500]
+
+	var result: Dictionary = WinterCourtSystem.record_emperors_peace_violation(
+		offender, "ATTACK", court, 250, next_case, next_topic, chars
+	)
+
+	assert_not_null(result.get("crime_record"))
+	var record: CrimeRecord = result["crime_record"]
+	assert_eq(record.crime_type, Enums.CrimeType.VIOLATION_EMPERORS_PEACE)
+	assert_eq(record.perpetrator_id, 10)
+	assert_eq(record.legal_status, Enums.LegalStatus.ACCUSED)
+	assert_eq(record.evidence_total, 100)
+	assert_eq(CrimeSystem.get_severity(record.crime_type), Enums.CrimeSeverity.CAPITAL)
+
+
+func test_peace_violation_witnesses_are_all_other_attendees() -> void:
+	var offender := _make_character(10, "Akodo Toturi", "Lion", "Akodo", 6.0)
+	var chars: Dictionary = {10: offender, 20: _make_character(20, "W1", "Crane", "Doji", 5.0), 30: _make_character(30, "W2", "Scorpion", "Bayushi", 5.0), 50: _emperor}
+	var court := _make_active_winter_court(100)
+	var result: Dictionary = WinterCourtSystem.record_emperors_peace_violation(
+		offender, "ATTACK", court, 250, [1], [500], chars
+	)
+	var record: CrimeRecord = result["crime_record"]
+	assert_eq(record.witnesses.size(), 3)
+	assert_false(offender.character_id in record.witnesses)
+
+
+func test_peace_violation_at_act_honor_loss() -> void:
+	var offender := _make_character(10, "Akodo Toturi", "Lion", "Akodo", 6.0)
+	offender.honor = 5.5
+	var chars: Dictionary = {10: offender}
+	var court := _make_active_winter_court(100)
+	court.attendee_ids = [10]
+	var honor_before: float = offender.honor
+
+	WinterCourtSystem.record_emperors_peace_violation(
+		offender, "ATTACK", court, 250, [1], [500], chars
+	)
+
+	assert_lt(offender.honor, honor_before)
+
+
+func test_peace_violation_generates_tier_1_topic() -> void:
+	var offender := _make_character(10, "Akodo Toturi", "Lion", "Akodo", 6.0)
+	var chars: Dictionary = {10: offender}
+	var court := _make_active_winter_court(100)
+	court.attendee_ids = [10]
+
+	var result: Dictionary = WinterCourtSystem.record_emperors_peace_violation(
+		offender, "ATTACK", court, 250, [1], [500], chars
+	)
+
+	var topic: TopicData = result["topic"]
+	assert_not_null(topic)
+	assert_eq(topic.tier, TopicData.Tier.TIER_1)
+	assert_eq(topic.category, TopicData.Category.LEGAL)
+	assert_eq(topic.subject_character_id, 10)
+	assert_true(topic.title.contains("Emperor's Peace"))
+
+
+func test_peace_violation_conviction_consequences_match_maho() -> void:
+	var consequences: Array = CrimeSystem.CONVICTION_CONSEQUENCES[Enums.CrimeType.VIOLATION_EMPERORS_PEACE]
+	var maho: Array = CrimeSystem.CONVICTION_CONSEQUENCES[Enums.CrimeType.MAHO]
+	assert_eq(consequences[0], maho[0])  # glory -3.0
+	assert_eq(consequences[1], maho[1])  # infamy +5.0
+	assert_eq(consequences[2], maho[2])  # status -> 0.0 (-99.0 sentinel)
+	assert_eq(consequences[3], maho[3])  # topic tier 1
+
+
+func test_peace_violation_no_seppuku_offered() -> void:
+	assert_false(CrimeSystem.is_seppuku_eligible(Enums.CrimeType.VIOLATION_EMPERORS_PEACE))
+
+
+func test_peace_violation_emperor_disposition_hit() -> void:
+	var offender := _make_character(10, "Akodo Toturi", "Lion", "Akodo", 6.0)
+	var chars: Dictionary = {10: offender}
+	var court := _make_active_winter_court(100)
+	court.attendee_ids = [10]
+
+	var result: Dictionary = WinterCourtSystem.record_emperors_peace_violation(
+		offender, "ATTACK", court, 250, [1], [500], chars
+	)
+
+	assert_eq(result["emperor_disposition_hit"], -15)
+	assert_eq(result["offender_clan"], "Lion")
+
+
+func test_peace_violation_family_daimyo_glory_loss() -> void:
+	var offender := _make_character(10, "Akodo Toturi", "Lion", "Akodo", 6.0)
+	var daimyo := _make_character(40, "Akodo Arasou", "Lion", "Akodo", 7.0)
+	daimyo.role_position = "family_daimyo"
+	daimyo.glory = 5.0
+	var chars: Dictionary = {10: offender, 40: daimyo}
+	var court := _make_active_winter_court(100)
+	court.attendee_ids = [10]
+
+	WinterCourtSystem.record_emperors_peace_violation(
+		offender, "ATTACK", court, 250, [1], [500], chars
+	)
+
+	assert_lt(daimyo.glory, 5.0)
+	assert_almost_eq(daimyo.glory, 4.0, 0.01)
+
+
+func test_peace_violation_increments_case_and_topic_ids() -> void:
+	var offender := _make_character(10, "Akodo Toturi", "Lion", "Akodo", 6.0)
+	var chars: Dictionary = {10: offender}
+	var court := _make_active_winter_court(100)
+	court.attendee_ids = [10]
+	var next_case: Array[int] = [5]
+	var next_topic: Array[int] = [100]
+
+	WinterCourtSystem.record_emperors_peace_violation(
+		offender, "ATTACK", court, 250, next_case, next_topic, chars
+	)
+
+	assert_eq(next_case[0], 6)
+	assert_eq(next_topic[0], 101)

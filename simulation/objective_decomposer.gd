@@ -738,7 +738,7 @@ static func _decompose_seek_vengeance(
 		return _make_need("GATHER_INTELLIGENCE", 1)
 
 	if target_npc in ctx.characters_present:
-		return _make_need("ISSUE_DUEL_CHALLENGE", 3, {"target_npc_id": target_npc})
+		return _make_need("CHALLENGE_TO_DUEL", 3, {"target_npc_id": target_npc})
 
 	if ctx.is_lord and not target_clan.is_empty() and target_clan != ctx.clan:
 		if ctx.context_flag == Enums.ContextFlag.AT_OWN_HOLDINGS:
@@ -788,7 +788,7 @@ static func _decompose_defend_territory(
 					"target_province_id": triage_mil.province_id,
 				})
 			else:
-				return _make_need("WRITE_LETTER", triage_mil.priority, {
+				return _make_need("SEND_LETTER", triage_mil.priority, {
 					"target_intent": "report_piracy",
 					"target_province_id": triage_mil.province_id,
 				})
@@ -796,7 +796,7 @@ static func _decompose_defend_territory(
 			"target_province_id": triage_mil.province_id,
 		})
 
-	return _make_need("EVALUATE_WAR_READINESS", 1)
+	return _make_need("INITIATE_WAR_CHECK", 1)
 
 
 static func _decompose_strengthen_fortification(
@@ -850,7 +850,7 @@ static func _decompose_strengthen_wall(
 					return _make_need("SEND_LETTER", 3, {"target_province_id": w.province_id})
 				if ctx.season - w.garrison_shortage_letter_season >= 1 \
 						and not w.garrison_shortage_courtier_dispatched:
-					return _make_need("DISPATCH_COURTIER", 3, {"target_province_id": w.province_id})
+					return _make_need("MAINTAIN_FORTIFICATION", 3, {"target_province_id": w.province_id})
 				# Step 3: courtier refused + critical SI → Wall-wide emergency.
 				# TODO: replace DEFEND_PROVINCE with DECLARE_WALL_EMERGENCY once
 				# the ActionID is specced in GDD s2.4.14 Decision 6.

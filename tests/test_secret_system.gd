@@ -847,3 +847,63 @@ func test_forge_order_applies_honor_and_infamy() -> void:
 	SecretSystem.resolve_forge_order(_fabricator, "minor", _engine)
 	assert_almost_eq(_fabricator.honor, 4.7, 0.01)
 	assert_almost_eq(_fabricator.infamy, 0.1, 0.01)
+
+
+# -- Technique bonus integration (SkillResolver routing) -----------------------
+
+func _make_kitsuki_investigator(rank: int) -> L5RCharacterData:
+	var c: L5RCharacterData = L5RCharacterData.new()
+	c.character_id = 90
+	c.school = "Kitsuki Investigator"
+	c.perception = 4
+	c.awareness = 3
+	c.intelligence = 3
+	c.willpower = 2
+	c.stamina = 2
+	c.strength = 2
+	c.agility = 3
+	c.reflexes = 3
+	c.void_ring = 2
+	c.skills = {"Investigation": 3, "Courtier": 2, "Etiquette": 2, "Kenjutsu": 1}
+	if rank >= 2:
+		c.skills["Investigation"] = 4
+		c.skills["Lore: Law"] = 2
+		c.perception = 5
+	return c
+
+
+func test_detect_fabrication_kitsuki_gets_free_raise() -> void:
+	var kitsuki: L5RCharacterData = _make_kitsuki_investigator(1)
+	var generic: L5RCharacterData = L5RCharacterData.new()
+	generic.character_id = 91
+	generic.school = "Bayushi Bushi"
+	generic.perception = 4
+	generic.skills = {"Investigation": 3}
+	generic.awareness = 2
+	generic.intelligence = 2
+	generic.willpower = 2
+	generic.stamina = 2
+	generic.strength = 2
+	generic.agility = 2
+	generic.reflexes = 2
+	generic.void_ring = 2
+
+	var secret := SecretData.new()
+	secret.fabricated = true
+	secret.detection_tn = 20
+
+	var kitsuki_total: int = 0
+	var generic_total: int = 0
+	var trials: int = 200
+	for i: int in range(trials):
+		var d1: DiceEngine = DiceEngine.new(i * 7)
+		var r1: Dictionary = SecretSystem.detect_fabrication(kitsuki, secret, d1)
+		kitsuki_total += r1.get("roll_total", 0)
+		var d2: DiceEngine = DiceEngine.new(i * 7)
+		var r2: Dictionary = SecretSystem.detect_fabrication(generic, secret, d2)
+		generic_total += r2.get("roll_total", 0)
+
+	assert_true(
+		kitsuki_total > generic_total,
+		"Kitsuki should average higher due to free raise (+5 flat bonus)"
+	)

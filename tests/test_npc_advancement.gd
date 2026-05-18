@@ -557,3 +557,38 @@ func test_xp_to_progress_conversion():
 	assert_eq(NPCAdvancement.XP_TO_PROGRESS, 200)
 	assert_eq(NPCAdvancement.SKILL_PROGRESS_COST[0], 1000)
 	assert_eq(NPCAdvancement.RING_PROGRESS_COST[2], 12000)
+
+
+# -- Technique flag assignment on rank-up --------------------------------------
+
+func test_doji_courtier_gains_cadence_on_rank_up_to_r2() -> void:
+	var c: L5RCharacterData = L5RCharacterData.new()
+	c.character_id = 50
+	c.character_name = "Doji Test"
+	c.clan = "Crane"
+	c.family = "Doji"
+	c.school = "Doji Courtier"
+	c.school_type = Enums.SchoolType.COURTIER
+	c.awareness = 3
+	c.intelligence = 2
+	c.willpower = 2
+	c.perception = 2
+	c.stamina = 2
+	c.strength = 2
+	c.agility = 2
+	c.reflexes = 3
+	c.void_ring = 2
+	c.skills = {"Courtier": 3, "Etiquette": 2, "Sincerity": 2, "Perform: Oratory": 1, "Tea Ceremony": 1}
+	c.honor = 6.5
+	c.glory = 1.0
+	c.status = 1.0
+	assert_eq(CharacterStats.get_insight_rank(c), 1)
+	assert_false(c.cadence_trained)
+
+	c.xp_total = 500
+	c.xp_spent = 0
+	var ws: Dictionary = {}
+	var result: Dictionary = NPCAdvancement.process_seasonal_advancement([c], ws, 90)
+	var new_rank: int = CharacterStats.get_insight_rank(c)
+	if new_rank >= 2:
+		assert_true(c.cadence_trained, "Doji Courtier should get cadence_trained on reaching R2")

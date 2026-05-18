@@ -79,6 +79,70 @@ func test_break_alliance_at_court_no_leverage_acquires() -> void:
 
 
 # =============================================================================
+# SECURE_ALLIANCE
+# =============================================================================
+
+func test_secure_alliance_no_contacts_identifies() -> void:
+	var obj: Dictionary = {"need_type": "SECURE_ALLIANCE", "target_clan_id": "Crane"}
+	_ctx.known_contacts_by_clan = {}
+	var need: NPCDataStructures.ImmediateNeed = PrimaryObjectiveDecomposer.decompose(obj, _ctx)
+	assert_eq(need.need_type, "IDENTIFY_CONTACT")
+	assert_eq(need.target_clan_id, "Crane")
+
+
+func test_secure_alliance_at_court_with_contact_raises_disposition() -> void:
+	var obj: Dictionary = {"need_type": "SECURE_ALLIANCE", "target_clan_id": "Crane"}
+	_ctx.known_contacts_by_clan = {"Crane": [10]}
+	_ctx.characters_present = [10]
+	_ctx.disposition_values = {10: 20.0}
+	_ctx.context_flag = Enums.ContextFlag.AT_COURT
+	var need: NPCDataStructures.ImmediateNeed = PrimaryObjectiveDecomposer.decompose(obj, _ctx)
+	assert_eq(need.need_type, "RAISE_DISPOSITION")
+	assert_eq(need.target_npc_id, 10)
+
+
+func test_secure_alliance_high_disposition_arranges_marriage() -> void:
+	var obj: Dictionary = {"need_type": "SECURE_ALLIANCE", "target_clan_id": "Crane"}
+	_ctx.known_contacts_by_clan = {"Crane": [10]}
+	_ctx.characters_present = [10]
+	_ctx.disposition_values = {10: 55.0}
+	_ctx.context_flag = Enums.ContextFlag.AT_COURT
+	var need: NPCDataStructures.ImmediateNeed = PrimaryObjectiveDecomposer.decompose(obj, _ctx)
+	assert_eq(need.need_type, "ARRANGE_MARRIAGE")
+	assert_eq(need.priority, 3)
+
+
+func test_secure_alliance_at_court_contact_absent_sends_letter() -> void:
+	var obj: Dictionary = {"need_type": "SECURE_ALLIANCE", "target_clan_id": "Crane"}
+	_ctx.known_contacts_by_clan = {"Crane": [10]}
+	_ctx.characters_present = []
+	_ctx.context_flag = Enums.ContextFlag.AT_COURT
+	var need: NPCDataStructures.ImmediateNeed = PrimaryObjectiveDecomposer.decompose(obj, _ctx)
+	assert_eq(need.need_type, "SEND_LETTER")
+	assert_eq(need.target_npc_id, 10)
+
+
+func test_secure_alliance_at_holdings_low_disposition_sends_letter() -> void:
+	var obj: Dictionary = {"need_type": "SECURE_ALLIANCE", "target_clan_id": "Crane"}
+	_ctx.known_contacts_by_clan = {"Crane": [10]}
+	_ctx.disposition_values = {10: 20.0}
+	_ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
+	var need: NPCDataStructures.ImmediateNeed = PrimaryObjectiveDecomposer.decompose(obj, _ctx)
+	assert_eq(need.need_type, "SEND_LETTER")
+
+
+func test_secure_alliance_visiting_with_contact_raises_disposition() -> void:
+	var obj: Dictionary = {"need_type": "SECURE_ALLIANCE", "target_clan_id": "Crane"}
+	_ctx.known_contacts_by_clan = {"Crane": [10]}
+	_ctx.characters_present = [10]
+	_ctx.disposition_values = {10: 20.0}
+	_ctx.context_flag = Enums.ContextFlag.VISITING
+	var need: NPCDataStructures.ImmediateNeed = PrimaryObjectiveDecomposer.decompose(obj, _ctx)
+	assert_eq(need.need_type, "RAISE_DISPOSITION")
+	assert_eq(need.target_npc_id, 10)
+
+
+# =============================================================================
 # ISOLATE_CHARACTER
 # =============================================================================
 
@@ -111,7 +175,7 @@ func test_isolate_with_allies_at_court_gossips() -> void:
 	_ctx.context_flag = Enums.ContextFlag.AT_COURT
 	_ctx.characters_present = []
 	var need: NPCDataStructures.ImmediateNeed = PrimaryObjectiveDecomposer.decompose(obj, _ctx)
-	assert_eq(need.need_type, "GOSSIP")
+	assert_eq(need.need_type, "DAMAGE_RELATIONSHIP")
 
 
 func test_isolate_weakest_ally_present_persuades() -> void:
@@ -124,7 +188,7 @@ func test_isolate_weakest_ally_present_persuades() -> void:
 	_ctx.context_flag = Enums.ContextFlag.AT_COURT
 	_ctx.characters_present = [60]
 	var need: NPCDataStructures.ImmediateNeed = PrimaryObjectiveDecomposer.decompose(obj, _ctx)
-	assert_eq(need.need_type, "PERSUADE")
+	assert_eq(need.need_type, "MOVE_TOPIC_POSITION")
 	assert_eq(need.target_npc_id, 60)
 
 
@@ -160,7 +224,7 @@ func test_appoint_at_court_persuades_authority() -> void:
 	_ctx.context_flag = Enums.ContextFlag.AT_COURT
 	_ctx.characters_present = [200]
 	var need: NPCDataStructures.ImmediateNeed = PrimaryObjectiveDecomposer.decompose(obj, _ctx)
-	assert_eq(need.need_type, "PERSUADE")
+	assert_eq(need.need_type, "MOVE_TOPIC_POSITION")
 	assert_eq(need.target_npc_id, 200)
 	assert_eq(need.priority, 3)
 
@@ -182,7 +246,7 @@ func test_remove_with_leverage_at_court_exposes() -> void:
 	_ctx.held_leverage = [{"target_id": 50}]
 	_ctx.context_flag = Enums.ContextFlag.AT_COURT
 	var need: NPCDataStructures.ImmediateNeed = PrimaryObjectiveDecomposer.decompose(obj, _ctx)
-	assert_eq(need.need_type, "EXPOSE_SECRET_PUBLIC")
+	assert_eq(need.need_type, "DAMAGE_RELATIONSHIP")
 	assert_eq(need.target_npc_id, 50)
 
 
@@ -214,7 +278,7 @@ func test_resolve_war_contact_present_negotiates() -> void:
 	_ctx.context_flag = Enums.ContextFlag.AT_COURT
 	_ctx.characters_present = [30]
 	var need: NPCDataStructures.ImmediateNeed = PrimaryObjectiveDecomposer.decompose(obj, _ctx)
-	assert_eq(need.need_type, "NEGOTIATE")
+	assert_eq(need.need_type, "SEEK_PEACE")
 	assert_eq(need.priority, 3)
 
 
@@ -227,7 +291,7 @@ func test_expose_with_leverage_at_court() -> void:
 	_ctx.held_leverage = [{"target_id": 50}]
 	_ctx.context_flag = Enums.ContextFlag.AT_COURT
 	var need: NPCDataStructures.ImmediateNeed = PrimaryObjectiveDecomposer.decompose(obj, _ctx)
-	assert_eq(need.need_type, "EXPOSE_SECRET_PUBLIC")
+	assert_eq(need.need_type, "DAMAGE_RELATIONSHIP")
 	assert_eq(need.priority, 3)
 
 
@@ -248,7 +312,7 @@ func test_conquer_non_lord_on_campaign_fights() -> void:
 	_ctx.is_lord = false
 	_ctx.context_flag = Enums.ContextFlag.ON_CAMPAIGN
 	var need: NPCDataStructures.ImmediateNeed = PrimaryObjectiveDecomposer.decompose(obj, _ctx)
-	assert_eq(need.need_type, "FIGHT")
+	assert_eq(need.need_type, "TRAIN_TROOPS")
 	assert_eq(need.priority, 3)
 
 
@@ -275,7 +339,7 @@ func test_conquer_lord_war_active_high_readiness_orders_battle() -> void:
 	_ctx.active_wars = [{"id": 1}]
 	_ctx.unit_training_counts = {3: 5, 4: 3, 5: 2}
 	var need: NPCDataStructures.ImmediateNeed = PrimaryObjectiveDecomposer.decompose(obj, _ctx)
-	assert_eq(need.need_type, "ORDER_BATTLE")
+	assert_eq(need.need_type, "DEPLOY_ARMY")
 	assert_eq(need.target_province_id, 5)
 
 
@@ -321,7 +385,7 @@ func test_avenge_target_present_duels() -> void:
 	var obj: Dictionary = {"need_type": "AVENGE", "target_npc_id": 50, "variant": "death"}
 	_ctx.characters_present = [50]
 	var need: NPCDataStructures.ImmediateNeed = PrimaryObjectiveDecomposer.decompose(obj, _ctx)
-	assert_eq(need.need_type, "ISSUE_DUEL_CHALLENGE")
+	assert_eq(need.need_type, "CHALLENGE_TO_DUEL")
 	assert_eq(need.target_npc_id, 50)
 	assert_eq(need.priority, 3)
 
@@ -330,7 +394,7 @@ func test_avenge_disgrace_variant_exposes() -> void:
 	var obj: Dictionary = {"need_type": "AVENGE", "target_npc_id": 50, "variant": "disgrace"}
 	_ctx.characters_present = [50]
 	var need: NPCDataStructures.ImmediateNeed = PrimaryObjectiveDecomposer.decompose(obj, _ctx)
-	assert_eq(need.need_type, "EXPOSE_SECRET_PUBLIC")
+	assert_eq(need.need_type, "DAMAGE_RELATIONSHIP")
 
 
 func test_avenge_target_absent_gathers() -> void:
@@ -351,7 +415,7 @@ func test_routes_through_main_decomposer() -> void:
 	_ctx.held_leverage = [{"target_id": 50}]
 	_ctx.context_flag = Enums.ContextFlag.AT_COURT
 	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
-	assert_eq(need.need_type, "EXPOSE_SECRET_PUBLIC")
+	assert_eq(need.need_type, "DAMAGE_RELATIONSHIP")
 
 
 func test_standing_still_routes_correctly() -> void:

@@ -438,6 +438,7 @@ static func _apply_info_events(
 		"target_province_id": result.get("target_province_id", -1),
 		"ic_day": result.get("ic_day", -1),
 		"quality": effects.get("quality", 1),
+		"info_type": effects.get("info_type", ""),
 	})
 
 
