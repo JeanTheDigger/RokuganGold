@@ -137,6 +137,8 @@ static func advance_day(
 		active_courts, characters, characters_by_id, world_states, favors,
 	)
 
+	_refresh_from_the_ashes(characters, world_states, dice_engine, ic_day)
+
 	var edict_results: Array[Dictionary] = _process_edict_compliance(
 		active_edicts, active_wars, characters, active_topics, next_topic_id, ic_day, season_meta,
 	)
@@ -2189,6 +2191,26 @@ static func _process_horde_rolls(
 			"horde_formed": false,
 			"strength_counter": HordeSystem.get_strength_counter(horde_strength_counters),
 		}
+
+
+static func _refresh_from_the_ashes(
+	characters: Array[L5RCharacterData],
+	world_states: Dictionary,
+	dice_engine: DiceEngine,
+	ic_day: int,
+) -> void:
+	for c: L5RCharacterData in characters:
+		if not c.school.begins_with("Asako Loremaster"):
+			continue
+		var ws: Dictionary = world_states.get(c.character_id, {})
+		var ctx_flag: int = int(ws.get("context_flag", -1))
+		if ctx_flag != Enums.ContextFlag.AT_COURT:
+			if not c.from_the_ashes.is_empty():
+				c.from_the_ashes = {}
+			continue
+		SkillResolver.check_from_the_ashes_expiry(
+			c, dice_engine, c.physical_location, ic_day,
+		)
 
 
 static func _decay_all_knowledge(

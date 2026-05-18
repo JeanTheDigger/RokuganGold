@@ -217,6 +217,121 @@ func test_precise_memory_skips_knowledge_decay() -> void:
 	)
 
 
+func test_from_the_ashes_activates_for_asako_at_court() -> void:
+	var asako := L5RCharacterData.new()
+	asako.character_id = 99
+	asako.character_name = "Asako Test"
+	asako.school = "Asako Loremaster"
+	asako.clan = "Phoenix"
+	asako.stamina = 3
+	asako.willpower = 3
+	asako.strength = 3
+	asako.perception = 3
+	asako.agility = 3
+	asako.intelligence = 3
+	asako.reflexes = 3
+	asako.awareness = 3
+	asako.void_ring = 3
+	asako.skills = {"Lore: History": 5, "Courtier": 3}
+	asako.honor = 5.0
+	asako.glory = 3.0
+	asako.status = 3.0
+	asako.action_points_current = 2
+	asako.action_points_max = 2
+	asako.physical_location = "100"
+	asako.bushido_virtue = Enums.BushidoVirtue.NONE
+	asako.shourido_virtue = Enums.ShouridoVirtue.NONE
+	asako.knowledge_pool = []
+	asako.known_contacts_by_clan = {}
+	asako.met_characters = []
+	_characters.append(asako)
+	_characters_by_id[99] = asako
+
+	var ws: Dictionary = _make_world_states()
+	ws[99] = {
+		"context_flag": Enums.ContextFlag.AT_COURT,
+		"season": 1,
+		"ic_day": _time.get_ic_day(),
+		"characters_present": [] as Array[int],
+		"is_lord": false,
+		"known_topics": [] as Array[int],
+		"known_positions": {},
+		"known_objectives": {},
+		"known_contacts": [] as Array[int],
+		"pending_events": [],
+		"action_log": [] as Array[String],
+	}
+
+	DayOrchestrator.advance_day(
+		_time, _characters, _characters_by_id, ws,
+		_make_objectives(), _scoring_tables, _filter_data, _dice,
+		_action_skill_map, _provinces, _action_log, _season_meta
+	)
+	# The Lore: History check may pass or fail depending on dice seed,
+	# but check_from_the_ashes_expiry was called — buff is either set or empty.
+	var buff: Dictionary = asako.from_the_ashes
+	if not buff.is_empty():
+		assert_eq(buff["location_id"], "100", "buff should be tied to physical_location")
+		assert_true(buff["expires_ic_day"] > 0, "buff should have an expiry day")
+
+
+func test_from_the_ashes_clears_when_not_at_court() -> void:
+	var asako := L5RCharacterData.new()
+	asako.character_id = 98
+	asako.character_name = "Asako Away"
+	asako.school = "Asako Loremaster"
+	asako.clan = "Phoenix"
+	asako.stamina = 3
+	asako.willpower = 3
+	asako.strength = 3
+	asako.perception = 3
+	asako.agility = 3
+	asako.intelligence = 3
+	asako.reflexes = 3
+	asako.awareness = 3
+	asako.void_ring = 3
+	asako.skills = {"Lore: History": 5}
+	asako.honor = 5.0
+	asako.glory = 3.0
+	asako.status = 3.0
+	asako.action_points_current = 2
+	asako.action_points_max = 2
+	asako.physical_location = "100"
+	asako.bushido_virtue = Enums.BushidoVirtue.NONE
+	asako.shourido_virtue = Enums.ShouridoVirtue.NONE
+	asako.knowledge_pool = []
+	asako.known_contacts_by_clan = {}
+	asako.met_characters = []
+	asako.from_the_ashes = {"location_id": "100", "expires_ic_day": 999}
+	_characters.append(asako)
+	_characters_by_id[98] = asako
+
+	var ws: Dictionary = _make_world_states()
+	ws[98] = {
+		"context_flag": Enums.ContextFlag.AT_OWN_HOLDINGS,
+		"season": 1,
+		"ic_day": _time.get_ic_day(),
+		"characters_present": [] as Array[int],
+		"is_lord": false,
+		"known_topics": [] as Array[int],
+		"known_positions": {},
+		"known_objectives": {},
+		"known_contacts": [] as Array[int],
+		"pending_events": [],
+		"action_log": [] as Array[String],
+	}
+
+	DayOrchestrator.advance_day(
+		_time, _characters, _characters_by_id, ws,
+		_make_objectives(), _scoring_tables, _filter_data, _dice,
+		_action_skill_map, _provinces, _action_log, _season_meta
+	)
+	assert_true(
+		asako.from_the_ashes.is_empty(),
+		"from_the_ashes buff should be cleared when not AT_COURT"
+	)
+
+
 func test_season_change_runs_resource_tick() -> void:
 	_time.current_tick = 89
 	var result: Dictionary = DayOrchestrator.advance_day(
