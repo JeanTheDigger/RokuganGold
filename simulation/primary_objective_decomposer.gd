@@ -181,11 +181,11 @@ static func _decompose_isolate_character(
 						"target_npc_id": weakest_ally,
 						"target_npc_id_secondary": target_id,
 					})
-				return _make_need("PERSUADE", 2, {
+				return _make_need("MOVE_TOPIC_POSITION", 2, {
 					"target_npc_id": weakest_ally,
 					"target_intent": "against_" + str(target_id),
 				})
-			return _make_need("GOSSIP", 2, {
+			return _make_need("DAMAGE_RELATIONSHIP", 2, {
 				"target_npc_id": target_id,
 			})
 		Enums.ContextFlag.AT_OWN_HOLDINGS:
@@ -227,7 +227,7 @@ static func _decompose_appoint_to_position(
 	match ctx.context_flag:
 		Enums.ContextFlag.AT_COURT:
 			if appointing_authority in ctx.characters_present:
-				return _make_need("PERSUADE", 3, {
+				return _make_need("MOVE_TOPIC_POSITION", 3, {
 					"target_npc_id": appointing_authority,
 					"target_intent": "appoint_" + str(candidate_id),
 				})
@@ -247,7 +247,7 @@ static func _decompose_remove_from_position(
 	if _has_leverage_on(ctx, target_id):
 		match ctx.context_flag:
 			Enums.ContextFlag.AT_COURT:
-				return _make_need("EXPOSE_SECRET_PUBLIC", 3, {"target_npc_id": target_id})
+				return _make_need("DAMAGE_RELATIONSHIP", 3, {"target_npc_id": target_id})
 			_:
 				return _court_or_alternative(ctx, target_id, 2)
 
@@ -277,7 +277,7 @@ static func _decompose_resolve_clan_war(
 	match ctx.context_flag:
 		Enums.ContextFlag.AT_COURT:
 			if negotiation_target in ctx.characters_present:
-				return _make_need("NEGOTIATE", 3, {"target_npc_id": negotiation_target})
+				return _make_need("SEEK_PEACE", 3, {"target_npc_id": negotiation_target})
 			return _make_need("MOVE_TOPIC_POSITION", 2)
 		_:
 			return _court_or_alternative(ctx, negotiation_target, 2)
@@ -295,7 +295,7 @@ static func _decompose_obtain_imperial_edict(
 	match ctx.context_flag:
 		Enums.ContextFlag.AT_COURT:
 			if emperor_id in ctx.characters_present:
-				return _make_need("PETITION", 3, {"target_npc_id": emperor_id})
+				return _make_need("MOVE_TOPIC_POSITION", 3, {"target_npc_id": emperor_id})
 			return _make_need("RAISE_DISPOSITION", 2, {"target_npc_id": emperor_id})
 		_:
 			return _court_or_alternative(ctx, emperor_id, 2)
@@ -312,7 +312,7 @@ static func _decompose_expose_secret(
 	if _has_leverage_on(ctx, target_id):
 		match ctx.context_flag:
 			Enums.ContextFlag.AT_COURT:
-				return _make_need("EXPOSE_SECRET_PUBLIC", 3, {"target_npc_id": target_id})
+				return _make_need("DAMAGE_RELATIONSHIP", 3, {"target_npc_id": target_id})
 			_:
 				return _court_or_alternative(ctx, target_id, 3)
 
@@ -339,7 +339,7 @@ static func _decompose_conquer_province(
 	if not ctx.is_lord:
 		match ctx.context_flag:
 			Enums.ContextFlag.ON_CAMPAIGN:
-				return _make_need("FIGHT", 3)
+				return _make_need("TRAIN_TROOPS", 3)
 			_:
 				return _make_need("TRAIN_SKILL", 1)
 
@@ -347,13 +347,13 @@ static func _decompose_conquer_province(
 	if war_active:
 		var war_readiness: float = _assess_military_readiness(ctx)
 		if war_readiness >= 0.7:
-			return _make_need("ORDER_BATTLE", 3, {"target_province_id": target_province})
+			return _make_need("DEPLOY_ARMY", 3, {"target_province_id": target_province})
 		return _make_need("LEVY_TROOPS", 3)
 
 	var readiness: float = _assess_military_readiness(ctx)
 	if readiness < 0.5:
 		return _make_need("LEVY_TROOPS", 2)
-	return _make_need("DECLARE_WAR", 3, {"target_province_id": target_province})
+	return _make_need("INITIATE_WAR_CHECK", 3, {"target_province_id": target_province})
 
 
 static func _decompose_increase_koku(
@@ -395,7 +395,7 @@ static func _decompose_sabotage_economy(
 		Enums.ContextFlag.AT_COURT:
 			return _make_need("ACQUIRE_LEVERAGE", 2, {"target_npc_id": target_id})
 		Enums.ContextFlag.AT_OWN_HOLDINGS:
-			return _make_need("INTERCEPT_LETTER", 2, {"target_npc_id": target_id})
+			return _make_need("ACQUIRE_LEVERAGE", 2, {"target_npc_id": target_id})
 		_:
 			return _court_or_alternative(ctx, target_id, 1)
 
@@ -417,8 +417,8 @@ static func _decompose_avenge(
 
 	if target_id in ctx.characters_present:
 		if variant == "death":
-			return _make_need("ISSUE_DUEL_CHALLENGE", 3, {"target_npc_id": target_id})
-		return _make_need("EXPOSE_SECRET_PUBLIC", 3, {"target_npc_id": target_id})
+			return _make_need("CHALLENGE_TO_DUEL", 3, {"target_npc_id": target_id})
+		return _make_need("DAMAGE_RELATIONSHIP", 3, {"target_npc_id": target_id})
 
 	match ctx.context_flag:
 		Enums.ContextFlag.AT_COURT:

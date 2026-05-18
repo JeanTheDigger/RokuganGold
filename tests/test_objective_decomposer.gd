@@ -427,7 +427,7 @@ func test_seek_vengeance_target_present() -> void:
 	_ctx.context_flag = Enums.ContextFlag.AT_COURT
 	var obj: Dictionary = {"need_type": "SEEK_VENGEANCE", "target_npc_id": 10}
 	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
-	assert_eq(need.need_type, "ISSUE_DUEL_CHALLENGE")
+	assert_eq(need.need_type, "CHALLENGE_TO_DUEL")
 	assert_eq(need.target_npc_id, 10)
 	assert_eq(need.priority, 3)
 
@@ -507,7 +507,7 @@ func test_defend_territory_lord_no_issues() -> void:
 	_ctx.province_statuses = [ps]
 	var obj: Dictionary = {"need_type": "DEFEND_TERRITORY"}
 	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
-	assert_eq(need.need_type, "EVALUATE_WAR_READINESS")
+	assert_eq(need.need_type, "INITIATE_WAR_CHECK")
 
 
 func test_defend_territory_non_lord() -> void:
@@ -830,7 +830,7 @@ func test_strengthen_wall_champion_one_season_later_dispatches_courtier() -> voi
 	_ctx.season = 3
 	var obj: Dictionary = {"need_type": "STRENGTHEN_WALL"}
 	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
-	assert_eq(need.need_type, "DISPATCH_COURTIER")
+	assert_eq(need.need_type, "MAINTAIN_FORTIFICATION")
 	assert_eq(need.target_province_id, 5)
 	assert_eq(need.priority, 3)
 
