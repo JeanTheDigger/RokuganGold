@@ -311,6 +311,9 @@ static func execute(
 	if action_id == "CANCEL_HUNT":
 		return _execute_cancel_hunt(action, character, ctx)
 
+	if action_id == "COMMISSION_ASSASSINATION":
+		return _execute_commission_assassination(action, character, ctx, characters_by_id)
+
 	if action_id in COVERT_ACTIONS:
 		var covert_result: Dictionary = _try_execute_covert(
 			action, character, ctx, dice_engine, characters_by_id
@@ -4006,6 +4009,98 @@ static func _execute_cancel_hunt(
 			"topic_type": "hunt_cancellation",
 		},
 	}
+
+
+# -- COMMISSION_ASSASSINATION --------------------------------------------------
+
+static func _execute_commission_assassination(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	characters_by_id: Dictionary,
+) -> Dictionary:
+	var target_id: int = action.target_npc_id
+	if target_id < 0:
+		return {
+			"success": false,
+			"action_id": "COMMISSION_ASSASSINATION",
+			"reason": "no_target",
+		}
+
+	var target: L5RCharacterData = characters_by_id.get(target_id)
+	if target == null:
+		return {
+			"success": false,
+			"action_id": "COMMISSION_ASSASSINATION",
+			"reason": "target_not_found",
+		}
+
+	var assassin: L5RCharacterData = _select_best_assassin(
+		character, characters_by_id, ctx
+	)
+	if assassin == null:
+		return {
+			"success": false,
+			"action_id": "COMMISSION_ASSASSINATION",
+			"reason": "no_eligible_assassin",
+		}
+
+	var method: int = _select_assassination_method(assassin)
+	var honor_cost: float = SecretSystem.get_assassination_order_honor_cost(target.status)
+	character.honor = maxf(character.honor + honor_cost, 0.0)
+
+	return {
+		"success": true,
+		"action_id": "COMMISSION_ASSASSINATION",
+		"character_id": character.character_id,
+		"target_npc_id": target_id,
+		"target_province_id": -1,
+		"ic_day": ctx.ic_day,
+		"season": ctx.season,
+		"effects": {
+			"assassin_id": assassin.character_id,
+			"target_id": target_id,
+			"method": method,
+			"commissioner_id": character.character_id,
+			"subject_honor_loss": honor_cost,
+		},
+	}
+
+
+static func _select_best_assassin(
+	lord: L5RCharacterData,
+	characters_by_id: Dictionary,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> L5RCharacterData:
+	var best: L5RCharacterData = null
+	var best_score: int = -1
+	for char_id: Variant in characters_by_id:
+		var c: L5RCharacterData = characters_by_id[char_id]
+		if c.character_id == lord.character_id:
+			continue
+		if c.lord_id != lord.character_id:
+			continue
+		if CharacterStats.is_dead(c):
+			continue
+		var stealth: int = c.skills.get("Stealth", 0)
+		if stealth < 3:
+			continue
+		var score: int = stealth + c.skills.get("Temptation", 0) + c.skills.get("Ninjutsu", 0)
+		if score > best_score:
+			best_score = score
+			best = c
+	return best
+
+
+static func _select_assassination_method(assassin: L5RCharacterData) -> int:
+	var poison_score: int = assassin.skills.get("Sleight of Hand", 0) + assassin.skills.get("Medicine", 0)
+	var blade_score: int = maxi(assassin.skills.get("Kenjutsu", 0), assassin.skills.get("Ninjutsu", 0))
+	var accident_score: int = assassin.skills.get("Engineering", 0) + assassin.skills.get("Investigation", 0)
+	if poison_score >= blade_score and poison_score >= accident_score:
+		return AssassinationSystem.ExecutionMethod.POISON
+	if blade_score >= accident_score:
+		return AssassinationSystem.ExecutionMethod.BLADE
+	return AssassinationSystem.ExecutionMethod.ARRANGED_ACCIDENT
 
 
 # -- TRAIN_ANIMAL --------------------------------------------------------------

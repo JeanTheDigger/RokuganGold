@@ -76,6 +76,7 @@ static func advance_day(
 	active_secrets: Array[SecretData] = [],
 	next_secret_id: Array[int] = [1],
 	active_hostages: Array[Dictionary] = [],
+	active_assassination_ops: Array[Dictionary] = [],
 ) -> Dictionary:
 	var prev_season: int = time_system.get_season()
 
@@ -434,6 +435,24 @@ static func advance_day(
 		ic_day,
 		world_states,
 		favors,
+		active_topics,
+		next_topic_id,
+	)
+
+	_process_assassination_commissions(
+		day_result.get("results", []),
+		active_assassination_ops,
+		ic_day,
+	)
+
+	var assassination_results: Array[Dictionary] = _process_assassination_daily_tick(
+		active_assassination_ops,
+		characters_by_id,
+		dice_engine,
+		ic_day,
+		death_events,
+		crime_records,
+		next_case_id,
 		active_topics,
 		next_topic_id,
 	)
@@ -888,6 +907,7 @@ static func advance_day(
 		"starvation_results": starvation_results,
 		"supply_sharing_results": supply_sharing_results,
 		"governance_results": governance_results,
+		"assassination_results": assassination_results,
 		"court_results": court_results,
 		"court_openings": court_openings,
 		"court_attendance": court_attendance,
@@ -13952,3 +13972,225 @@ static func _reassign_broken_feudal_chains(
 				best_status = other.status
 				best_lord_id = other_id
 		npc.lord_id = best_lord_id
+
+
+# ==============================================================================
+# Assassination Operations (s12.8)
+# ==============================================================================
+
+static func _process_assassination_commissions(
+	day_results: Array[Dictionary],
+	active_assassination_ops: Array[Dictionary],
+	ic_day: int,
+) -> void:
+	for r: Dictionary in day_results:
+		if r.get("action_id", "") != "COMMISSION_ASSASSINATION":
+			continue
+		if not r.get("success", false):
+			continue
+		var effects: Dictionary = r.get("effects", {})
+		var assassin_id: int = int(effects.get("assassin_id", -1))
+		var target_id: int = int(effects.get("target_id", -1))
+		var method: int = int(effects.get("method", AssassinationSystem.ExecutionMethod.POISON))
+		if assassin_id < 0 or target_id < 0:
+			continue
+		var state: Dictionary = AssassinationSystem.create_assassination_state(
+			assassin_id, target_id, method, ic_day,
+		)
+		state["commissioner_id"] = int(effects.get("commissioner_id", -1))
+		active_assassination_ops.append(state)
+
+
+static func _process_assassination_daily_tick(
+	active_assassination_ops: Array[Dictionary],
+	characters_by_id: Dictionary,
+	dice_engine: DiceEngine,
+	ic_day: int,
+	death_events: Array[Dictionary],
+	crime_records: Array[CrimeRecord],
+	next_case_id: Array[int],
+	active_topics: Array[TopicData],
+	next_topic_id: Array[int],
+) -> Array[Dictionary]:
+	var results: Array[Dictionary] = []
+	var to_remove: Array[int] = []
+
+	for i: int in range(active_assassination_ops.size()):
+		var op: Dictionary = active_assassination_ops[i]
+		var phase: int = int(op.get("phase", AssassinationSystem.AssassinationPhase.ACCESS))
+
+		if phase == AssassinationSystem.AssassinationPhase.COMPLETE:
+			to_remove.append(i)
+			continue
+		if phase == AssassinationSystem.AssassinationPhase.FAILED:
+			to_remove.append(i)
+			continue
+		if phase == AssassinationSystem.AssassinationPhase.ABORTED:
+			to_remove.append(i)
+			continue
+
+		var assassin_id: int = int(op.get("assassin_id", -1))
+		var target_id: int = int(op.get("target_id", -1))
+		var assassin: L5RCharacterData = characters_by_id.get(assassin_id)
+		var target: L5RCharacterData = characters_by_id.get(target_id)
+		if assassin == null or target == null:
+			op["phase"] = AssassinationSystem.AssassinationPhase.FAILED
+			to_remove.append(i)
+			continue
+		if CharacterStats.is_dead(assassin) or CharacterStats.is_dead(target):
+			op["phase"] = AssassinationSystem.AssassinationPhase.ABORTED
+			to_remove.append(i)
+			continue
+
+		var tick_result: Dictionary = {"op_index": i, "phase": phase}
+
+		match phase:
+			AssassinationSystem.AssassinationPhase.ACCESS:
+				var access_methods: Array[String] = ["stealth", "forge_credentials", "bribe", "seduction"]
+				var best_method: String = _pick_access_method(assassin)
+				var access_result: Dictionary = AssassinationSystem.resolve_access_day(
+					assassin, op, best_method, dice_engine,
+				)
+				tick_result["access"] = access_result
+				if AssassinationSystem.can_advance_to_execution(op):
+					var total_successes: int = 0
+					for j: int in range(op.get("days_in_access", 0)):
+						total_successes += 1
+					if access_result.get("success", false):
+						AssassinationSystem.advance_to_execution(op)
+						tick_result["advanced_to_execution"] = true
+
+			AssassinationSystem.AssassinationPhase.EXECUTION:
+				var has_bodyguard: bool = _target_has_bodyguard(target, characters_by_id)
+				var exec_result: Dictionary = AssassinationSystem.resolve_execution(
+					assassin, target, op, dice_engine, has_bodyguard,
+				)
+				tick_result["execution"] = exec_result
+				if exec_result.get("bodyguard_encountered", false):
+					var response: int = _npc_bodyguard_decision(assassin, op)
+					var guard: L5RCharacterData = _find_bodyguard(target, characters_by_id)
+					if guard != null:
+						var bg_result: Dictionary = AssassinationSystem.resolve_bodyguard_encounter(
+							assassin, guard, response, op, dice_engine,
+						)
+						tick_result["bodyguard"] = bg_result
+						if not bg_result.get("aborted", false):
+							exec_result = AssassinationSystem.resolve_execution(
+								assassin, target, op, dice_engine, false,
+							)
+							tick_result["execution_retry"] = exec_result
+
+			AssassinationSystem.AssassinationPhase.CONCEALMENT:
+				var conceal_result: Dictionary = AssassinationSystem.resolve_concealment(
+					assassin, op, dice_engine,
+				)
+				tick_result["concealment"] = conceal_result
+				_apply_assassination_outcome(
+					op, target, assassin, conceal_result, ic_day,
+					death_events, crime_records, next_case_id,
+					active_topics, next_topic_id, characters_by_id,
+				)
+
+		results.append(tick_result)
+
+	for j: int in range(to_remove.size() - 1, -1, -1):
+		active_assassination_ops.remove_at(to_remove[j])
+
+	return results
+
+
+static func _pick_access_method(assassin: L5RCharacterData) -> String:
+	var scores: Dictionary = {
+		"stealth": assassin.skills.get("Stealth", 0),
+		"forge_credentials": assassin.skills.get("Forgery", 0),
+		"bribe": assassin.skills.get("Courtier", 0),
+		"seduction": assassin.skills.get("Temptation", 0),
+	}
+	var best: String = "stealth"
+	var best_val: int = 0
+	for method: String in scores:
+		if int(scores[method]) > best_val:
+			best_val = int(scores[method])
+			best = method
+	return best
+
+
+static func _target_has_bodyguard(
+	_target: L5RCharacterData,
+	_characters_by_id: Dictionary,
+) -> bool:
+	# Deferred: yojimbo assignment system not yet built.
+	# Returns false until assigned_protection_target_id field exists.
+	return false
+
+
+static func _find_bodyguard(
+	_target: L5RCharacterData,
+	_characters_by_id: Dictionary,
+) -> L5RCharacterData:
+	return null
+
+
+static func _npc_bodyguard_decision(
+	assassin: L5RCharacterData,
+	op: Dictionary,
+) -> int:
+	if AssassinationSystem.is_lockdown(op):
+		return AssassinationSystem.BodyguardResponse.ABORT
+	var stealth: int = assassin.skills.get("Stealth", 0)
+	if stealth >= 5:
+		return AssassinationSystem.BodyguardResponse.GO_FOR_TARGET
+	return AssassinationSystem.BodyguardResponse.FIGHT_FIRST
+
+
+static func _apply_assassination_outcome(
+	op: Dictionary,
+	target: L5RCharacterData,
+	assassin: L5RCharacterData,
+	conceal_result: Dictionary,
+	ic_day: int,
+	death_events: Array[Dictionary],
+	crime_records: Array[CrimeRecord],
+	next_case_id: Array[int],
+	active_topics: Array[TopicData],
+	next_topic_id: Array[int],
+	characters_by_id: Dictionary,
+) -> void:
+	var earth: int = CharacterStats.get_ring_value(target, Enums.Ring.EARTH)
+	target.wounds_taken = earth * 5 * 5
+	death_events.append({
+		"character_id": target.character_id,
+		"ic_day": ic_day,
+		"cause": "assassination",
+		"assassin_id": assassin.character_id,
+		"commissioner_id": op.get("commissioner_id", -1),
+	})
+
+	var concealed: bool = conceal_result.get("concealed", false)
+	var concealment_tn: int = int(conceal_result.get("concealment_tn", 0))
+
+	if not concealed:
+		var record: CrimeRecord = CrimeRecord.new()
+		record.case_id = next_case_id[0]
+		next_case_id[0] += 1
+		record.crime_type = "murder"
+		record.perpetrator_id = assassin.character_id
+		record.victim_id = target.character_id
+		record.ic_day_committed = ic_day
+		record.discovered = true
+		record.concealment_tn = concealment_tn
+		record.province_id = -1
+		crime_records.append(record)
+
+	var topic: TopicData = TopicData.new()
+	topic.topic_id = next_topic_id[0]
+	next_topic_id[0] += 1
+	topic.ic_day_created = ic_day
+	if concealed:
+		topic.topic_type = "death_natural"
+		topic.tier = 4
+	else:
+		topic.topic_type = "death_murder"
+		topic.tier = 2
+	topic.subject_character_id = target.character_id
+	active_topics.append(topic)

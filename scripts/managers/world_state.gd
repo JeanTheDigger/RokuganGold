@@ -103,6 +103,9 @@ var togashi_state: Dictionary = TogashiOversight.make_initial_state()
 # -- Phoenix Clan Governance (s55.10.3) ---------------------------------------
 var phoenix_council_state: Dictionary = PhoenixCouncil.make_initial_state()
 
+# -- Assassination Operations (s12.8) -----------------------------------------
+var active_assassination_ops: Array[Dictionary] = []
+
 # -- Intra-Clan Civil War (s53.2) ---------------------------------------------
 var active_civil_wars: Array[Dictionary] = []
 var precedent_modifiers: Dictionary = {}
@@ -217,6 +220,7 @@ func advance_one_day() -> Dictionary:
 		active_civil_wars,
 		precedent_modifiers,
 		next_company_id,
+		active_assassination_ops,
 	)
 
 

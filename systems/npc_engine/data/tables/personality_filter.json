@@ -66,6 +66,10 @@
         {
           "action": "SEDUCE_TO_COMPROMISE",
           "blocked_when": "target_is_innocent_third_party"
+        },
+        {
+          "action": "COMMISSION_ASSASSINATION",
+          "blocked_when": "target_is_innocent_third_party"
         }
       ]
     },
@@ -111,7 +115,8 @@
         "BRIBE_FOR_INFO",
         "EAVESDROP",
         "INTERCEPT_LETTER",
-        "SEARCH_QUARTERS"
+        "SEARCH_QUARTERS",
+        "COMMISSION_ASSASSINATION"
       ],
       "conditional": [
         {
@@ -145,6 +150,10 @@
         {
           "action": "RAID_HARVEST",
           "blocked_when": "not_lord_commanded"
+        },
+        {
+          "action": "COMMISSION_ASSASSINATION",
+          "blocked_when": "not_lord_commanded"
         }
       ]
     },
@@ -175,7 +184,8 @@
         "SEDUCE_FOR_INFO",
         "SEDUCE_FOR_ACCESS",
         "SEDUCE_FOR_LEVERAGE",
-        "SEDUCE_TO_COMPROMISE"
+        "SEDUCE_TO_COMPROMISE",
+        "COMMISSION_ASSASSINATION"
       ],
       "conditional": [
         {
@@ -208,6 +218,10 @@
         {
           "action": "RAID_HARVEST",
           "blocked_when": "target_not_hated_enemy"
+        },
+        {
+          "action": "COMMISSION_ASSASSINATION",
+          "blocked_when": "no_prior_grievance_or_lord_directive"
         }
       ]
     },
@@ -224,7 +238,8 @@
         "SEDUCE_FOR_INFO",
         "SEDUCE_FOR_ACCESS",
         "SEDUCE_FOR_LEVERAGE",
-        "SEDUCE_TO_COMPROMISE"
+        "SEDUCE_TO_COMPROMISE",
+        "COMMISSION_ASSASSINATION"
       ],
       "conditional": [
         {
