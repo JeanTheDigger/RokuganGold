@@ -326,12 +326,17 @@ For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
   if that specific test runs.
 
 ### Known Code Issues — Deferred (require design input)
-- **NPCDecisionEngine HOSTILE_ACTIONS — 11 context-unreachable entries.**
-  SHADOW_TARGET, SEARCH_PERSON, CONCEAL_ITEM, FABRICATE_SECRET,
-  EXPOSE_SECRET_PRIVATELY, EXPOSE_SECRET_PUBLICLY, SEDUCE (5 variants),
-  ASSASSINATE have executor handlers but are never added to any context
-  action list. They need a covert action injection path or context list
-  entries. ASSASSINATE is completely unwired (no executor handler either).
+- **NPCDecisionEngine HOSTILE_ACTIONS — phantom ASSASSINATE entry. FIXED.**
+  `ASSASSINATE` was a phantom ActionID in HOSTILE_ACTIONS — no executor, no
+  context list, no objective_alignment mapping. Assassination is initiated via
+  `COMMISSION_ASSASSINATION` (which IS fully wired: context lists, executor,
+  objective_alignment, personality_filter). The multi-day assassination process
+  (ACCESS → EXECUTION → CONCEALMENT) runs via daily tick in DayOrchestrator.
+  Removed phantom entry. All 11 covert actions (SHADOW_TARGET, SEARCH_PERSON,
+  CONCEAL_ITEM, FABRICATE_SECRET, EXPOSE_SECRET_PRIVATELY/PUBLICLY, 5 SEDUCE
+  variants, COMMISSION_ASSASSINATION) are reachable: context lists
+  (AT_OWN_HOLDINGS, AT_COURT, VISITING), objective_alignment mappings,
+  executor handlers, personality_filter blocks, honor/virtue scoring.
 - **SkillResolver from_the_ashes expiry gap.** Buff applies even if
   `expires_ic_day` has passed but the daily cleanup hasn't run yet.
   Theoretical gap (cleanup runs at day start, buff lasts 2 full IC days).
