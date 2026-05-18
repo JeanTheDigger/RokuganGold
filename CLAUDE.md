@@ -276,6 +276,20 @@ For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
   order path hardcoded `ap_spent: 0` for all actions. Now deducts 1 AP for
   DUAL_COST_ACTIONS and skips dual-cost actions when AP is 0.
 
+### Systems Added 2026-05-18 (continued)
+- **ASSIGN_VASSAL_OBJECTIVE executor** — Deferred effect handler in
+  DayOrchestrator. Validates lord-vassal relationship, writes new primary
+  objective to objectives_map. Skill-gated: Courtier vs TN 10.
+- **SEND_INVITATION executor** — Deferred effect handler in DayOrchestrator.
+  Finds matching court session (by settlement, fallback to any court hosted
+  by inviter). Appends invitee to personal_invitation_ids. Duplicate-safe.
+  +5 recipient disposition. Skill-gated: Calligraphy vs TN 10.
+- **CALL_COURT executor** — Deferred effect handler in DayOrchestrator.
+  Creates CourtSessionData via CourtSystem.create_court(). Determines court
+  type from lord status (CLAN_CHAMPION_COURT at 7.0+). Validates no active
+  duplicate. Selects agenda topics, adds lord as attendee. +0.1 glory.
+  Added to AT_OWN_HOLDINGS context list and LORD_ONLY_ACTIONS. 1 AP cost.
+
 ### Known Code Issues — Deferred (require design input)
 - **NPCDecisionEngine HOSTILE_ACTIONS — 11 context-unreachable entries.**
   SHADOW_TARGET, SEARCH_PERSON, CONCEAL_ITEM, FABRICATE_SECRET,
