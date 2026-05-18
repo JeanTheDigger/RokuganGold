@@ -1113,7 +1113,7 @@ const _OBSERVATION_ACTIONS: Array[String] = [
 
 static func _evaluate_condition(
 	condition: String,
-	_action_id: String,
+	action_id: String,
 	ctx: NPCDataStructures.ContextSnapshot,
 ) -> bool:
 	match condition:
@@ -1178,7 +1178,119 @@ static func _evaluate_condition(
 			)
 			return not has_urgency
 
+		"target_is_innocent_third_party":
+			for npc_id: Variant in ctx.characters_present:
+				var disp: float = float(ctx.disposition_values.get(npc_id, 0))
+				if disp <= -31.0:
+					return false
+			return true
+
+		"target_not_hated_enemy":
+			for npc_id: Variant in ctx.characters_present:
+				var disp: float = float(ctx.disposition_values.get(npc_id, 0))
+				if disp <= -31.0:
+					return false
+			return true
+
+		"not_lord_commanded":
+			return not ctx.known_objectives.get("lord_assigned", false)
+
+		"not_publicly_declared":
+			for entry: Dictionary in ctx.action_log:
+				if entry.get("action_id", "") == "PUBLIC_DECLARATION":
+					return false
+			return true
+
+		"no_prior_formal_demand":
+			for entry: Dictionary in ctx.action_log:
+				var aid: String = entry.get("action_id", "")
+				if aid == "DEMAND_TRIBUTE" or aid == "NEGOTIATE":
+					return false
+			return true
+
+		"no_prior_grievance_or_lord_directive":
+			if ctx.known_objectives.get("lord_assigned", false):
+				return false
+			for npc_id: Variant in ctx.characters_present:
+				var disp: float = float(ctx.disposition_values.get(npc_id, 0))
+				if disp <= -31.0:
+					return false
+			return true
+
+		"other_paths_available":
+			if not ctx.active_wars.is_empty():
+				return false
+			if not ctx.starvation_province_ids.is_empty():
+				return false
+			return true
+
+		"would_cause_public_scene":
+			return ctx.sublocation == Enums.Sublocation.PUBLIC
+
+		"would_execute_below_standard":
+			if not ctx.skill_ranks.is_empty():
+				var primary: String = _get_primary_skill_for_action(action_id)
+				if not primary.is_empty():
+					return int(ctx.skill_ranks.get(primary, 0)) < 4
+			return false
+
+		"battle_assessed_unwinnable":
+			if ctx.commanded_unit_id < 0:
+				return true
+			return false
+
+		"position_not_certain":
+			var observation_count: int = 0
+			for entry: Dictionary in ctx.action_log:
+				if entry.get("action_id", "") in _OBSERVATION_ACTIONS:
+					observation_count += 1
+			return observation_count < 2
+
+		"not_all_others_declared":
+			var court: Dictionary = ctx.active_court_at_location
+			if court.is_empty():
+				return true
+			var declared_count: int = int(court.get("declarations_made", 0))
+			var attendee_count: int = int(court.get("attendee_count", 1))
+			return declared_count < (attendee_count - 1)
+
+		"contradicts_lords_known_position":
+			return false
+
+		"deviates_from_lord_directive":
+			return false
+
+		"information_is_false":
+			return false
+
+		"npc_knows_declaration_is_false":
+			return false
+
+		"violates_personal_code":
+			return false
+
+		"order_violates_personal_code":
+			return false
+
 	return false
+
+
+static func _get_primary_skill_for_action(action_id: String) -> String:
+	var skill_map: Dictionary = {
+		"ORDER_DEPLOY": "Battle",
+		"PUBLIC_DECLARATION": "Courtier",
+		"COMMISSION_ASSASSINATION": "Courtier",
+		"SHADOW_TARGET": "Stealth",
+		"SEARCH_PERSON": "Investigation",
+		"CONCEAL_ITEM": "Sleight of Hand",
+		"FABRICATE_SECRET": "Forgery",
+		"SEDUCE": "Temptation",
+		"SEDUCE_FOR_INFO": "Temptation",
+		"SEDUCE_FOR_ACCESS": "Temptation",
+		"SEDUCE_FOR_LEVERAGE": "Temptation",
+		"SEDUCE_TO_COMPROMISE": "Temptation",
+	}
+	return skill_map.get(action_id, "")
 
 
 static func _is_harvest_blocked_by_virtue(ctx: NPCDataStructures.ContextSnapshot) -> bool:
