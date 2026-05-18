@@ -62,6 +62,7 @@ func before_each() -> void:
 		"PUBLIC_INSULT": {"primary": "Courtier", "secondary": "Awareness"},
 		"ASSIGN_VASSAL_OBJECTIVE": {"primary": "Courtier", "secondary": "Battle"},
 		"SEND_INVITATION": {"primary": "Calligraphy", "secondary": "Etiquette"},
+		"CALL_COURT": {"primary": "Courtier", "secondary": "Etiquette"},
 	}
 
 
@@ -1560,3 +1561,32 @@ func test_send_invitation_grants_disposition() -> void:
 	)
 	var effects: Dictionary = result.get("effects", {})
 	assert_eq(effects["recipient_disposition_change"], 5)
+
+
+# -- CALL_COURT (s15.1, s57.34) ------------------------------------------------
+
+func test_call_court_returns_deferred_flag() -> void:
+	_ctx.is_lord = true
+	_ctx.lord_rank = Enums.LordRank.PROVINCIAL_DAIMYO
+	var action := _make_action("CALL_COURT")
+	action.target_settlement_id = 7
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map
+	)
+	assert_true(result["success"])
+	var effects: Dictionary = result.get("effects", {})
+	assert_eq(effects["effect"], "court_called")
+	assert_true(effects["requires_court_creation"])
+	assert_eq(effects["court_settlement_id"], 7)
+
+
+func test_call_court_grants_glory() -> void:
+	_ctx.is_lord = true
+	var action := _make_action("CALL_COURT")
+	action.target_settlement_id = 7
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map
+	)
+	if result["success"]:
+		var effects: Dictionary = result.get("effects", {})
+		assert_almost_eq(effects.get("glory_change", 0.0), 0.1, 0.001)

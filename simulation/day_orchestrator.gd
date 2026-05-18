@@ -298,6 +298,10 @@ static func advance_day(
 		current_season_count,
 		objectives_map,
 		active_courts,
+		active_topics,
+		next_court_id,
+		ic_day,
+		world_states,
 	)
 
 	_apply_garrison_courtier_refusal_writebacks(
@@ -6889,6 +6893,10 @@ static func _process_military_effects(
 	season_count: int = 0,
 	objectives_map: Dictionary = {},
 	courts: Array[CourtSessionData] = [],
+	active_topics: Array[TopicData] = [],
+	next_court_id: Array[int] = [1],
+	ic_day: int = 0,
+	world_states: Dictionary = {},
 ) -> Array[Dictionary]:
 	var results: Array[Dictionary] = []
 	var settlements_by_province: Dictionary = _build_settlements_by_province(settlements)
@@ -6935,6 +6943,14 @@ static func _process_military_effects(
 		if effects.get("requires_court_invitation", false):
 			var r: Dictionary = _apply_court_invitation(
 				applied, characters_by_id, courts,
+			)
+			if not r.is_empty():
+				results.append(r)
+
+		if effects.get("requires_court_creation", false):
+			var r: Dictionary = _apply_court_creation(
+				applied, characters_by_id, courts,
+				active_topics, next_court_id, ic_day, world_states,
 			)
 			if not r.is_empty():
 				results.append(r)
@@ -8360,6 +8376,58 @@ static func _apply_court_invitation(
 		"invitee_id": invitee_id,
 		"court_id": target_court.court_id,
 		"settlement_id": target_court.host_settlement_id,
+	}
+
+
+static func _apply_court_creation(
+	applied: Dictionary,
+	characters_by_id: Dictionary,
+	courts: Array[CourtSessionData],
+	active_topics: Array[TopicData],
+	next_court_id: Array[int],
+	ic_day: int,
+	world_states: Dictionary,
+) -> Dictionary:
+	var lord_id: int = applied.get("character_id", -1)
+	if lord_id < 0:
+		return {}
+
+	var lord: L5RCharacterData = characters_by_id.get(lord_id)
+	if lord == null:
+		return {}
+
+	for c: CourtSessionData in courts:
+		if c.host_lord_id == lord_id and CourtSystem.is_active(c):
+			return {"type": "court_creation_failed", "reason": "already_hosting"}
+
+	var settlement_id: int = int(lord.physical_location) if lord.physical_location.is_valid_int() else -1
+	if settlement_id < 0:
+		return {"type": "court_creation_failed", "reason": "no_settlement"}
+
+	var court_type: CourtSessionData.CourtType = CourtSessionData.CourtType.PROVINCIAL_FAMILY_COURT
+	if lord.status >= 7.0:
+		court_type = CourtSessionData.CourtType.CLAN_CHAMPION_COURT
+
+	var agenda: Array[int] = CourtSystem.select_agenda_topics(
+		active_topics, court_type,
+	)
+	var court := CourtSystem.create_court(
+		next_court_id[0], court_type, lord_id,
+		settlement_id, lord.clan, ic_day + 1,
+	)
+	next_court_id[0] += 1
+	CourtSystem.set_agenda(court, agenda)
+	CourtSystem.add_attendee(court, lord_id)
+	courts.append(court)
+
+	_track_court_called(world_states, lord_id, ic_day)
+
+	return {
+		"type": "court_created",
+		"lord_id": lord_id,
+		"court_id": court.court_id,
+		"court_type": court_type,
+		"settlement_id": settlement_id,
 	}
 
 

@@ -7020,3 +7020,80 @@ func test_apply_court_invitation_falls_back_to_lord_court() -> void:
 	assert_eq(r["type"], "invitation_sent")
 	assert_eq(r["court_id"], 10)
 	assert_true(30 in court.personal_invitation_ids)
+
+
+# -- CALL_COURT Deferred Effect ------------------------------------------------
+
+func test_apply_court_creation_creates_court() -> void:
+	var lord := _characters[0]
+	lord.character_id = 1
+	lord.physical_location = "5"
+	lord.clan = "Crane"
+	lord.status = 5.0
+	var chars: Dictionary = {1: lord}
+	var courts: Array[CourtSessionData] = []
+	var topics: Array[TopicData] = []
+	var next_id: Array[int] = [100]
+	var ws: Dictionary = {}
+	var applied: Dictionary = {
+		"character_id": 1,
+		"effects": {"requires_court_creation": true, "court_settlement_id": 5},
+	}
+	var r: Dictionary = DayOrchestrator._apply_court_creation(
+		applied, chars, courts, topics, next_id, 10, ws,
+	)
+	assert_eq(r["type"], "court_created")
+	assert_eq(r["lord_id"], 1)
+	assert_eq(r["court_id"], 100)
+	assert_eq(r["settlement_id"], 5)
+	assert_eq(courts.size(), 1)
+	assert_eq(courts[0].host_lord_id, 1)
+	assert_eq(courts[0].host_clan, "Crane")
+	assert_eq(next_id[0], 101)
+
+
+func test_apply_court_creation_blocks_duplicate() -> void:
+	var lord := _characters[0]
+	lord.character_id = 1
+	lord.physical_location = "5"
+	lord.status = 5.0
+	var existing := CourtSessionData.new()
+	existing.host_lord_id = 1
+	existing.phase = CourtSessionData.CourtPhase.ACTIVE
+	var chars: Dictionary = {1: lord}
+	var courts: Array[CourtSessionData] = [existing]
+	var topics: Array[TopicData] = []
+	var next_id: Array[int] = [100]
+	var ws: Dictionary = {}
+	var applied: Dictionary = {
+		"character_id": 1,
+		"effects": {"requires_court_creation": true},
+	}
+	var r: Dictionary = DayOrchestrator._apply_court_creation(
+		applied, chars, courts, topics, next_id, 10, ws,
+	)
+	assert_eq(r["type"], "court_creation_failed")
+	assert_eq(r["reason"], "already_hosting")
+	assert_eq(courts.size(), 1)
+
+
+func test_apply_court_creation_clan_champion_type() -> void:
+	var lord := _characters[0]
+	lord.character_id = 1
+	lord.physical_location = "5"
+	lord.clan = "Crane"
+	lord.status = 7.5
+	var chars: Dictionary = {1: lord}
+	var courts: Array[CourtSessionData] = []
+	var topics: Array[TopicData] = []
+	var next_id: Array[int] = [200]
+	var ws: Dictionary = {}
+	var applied: Dictionary = {
+		"character_id": 1,
+		"effects": {"requires_court_creation": true, "court_settlement_id": 5},
+	}
+	var r: Dictionary = DayOrchestrator._apply_court_creation(
+		applied, chars, courts, topics, next_id, 10, ws,
+	)
+	assert_eq(r["type"], "court_created")
+	assert_eq(r["court_type"], CourtSessionData.CourtType.CLAN_CHAMPION_COURT)

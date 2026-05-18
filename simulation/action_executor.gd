@@ -1562,6 +1562,8 @@ static func _compute_admin_effects(action_id: String, action: NPCDataStructures.
 			return _compute_assign_vassal_objective_effects(action)
 		"SEND_INVITATION":
 			return _compute_send_invitation_effects(action)
+		"CALL_COURT":
+			return _compute_call_court_effects(action)
 	return {"effect": "administrative_action"}
 
 
@@ -1589,6 +1591,18 @@ static func _compute_send_invitation_effects(
 		"invitee_id": invitee_id,
 		"invitation_settlement_id": settlement_id,
 		"recipient_disposition_change": 5,
+	}
+
+
+static func _compute_call_court_effects(
+	action: NPCDataStructures.ScoredAction,
+) -> Dictionary:
+	var settlement_id: int = action.target_settlement_id if action != null else -1
+	return {
+		"effect": "court_called",
+		"requires_court_creation": true,
+		"court_settlement_id": settlement_id,
+		"glory_change": 0.1,
 	}
 
 
