@@ -138,6 +138,7 @@ extends Resource
 @export var combat_modifiers_pending: Array[String] = []
 @export var supply_ledger: Dictionary = {}
 @export var from_the_ashes: Dictionary = {}
+@export var perfect_gift_targets: Array[int] = []
 
 # -- Theater & Art Tracking ----------------------------------------------------
 

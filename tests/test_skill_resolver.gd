@@ -523,3 +523,87 @@ func test_ashes_bonus_adds_rolled_dice_to_skill_check() -> void:
 	)
 	assert_true(with_buff["total"] >= without_buff["total"],
 		"+2k0 should increase or maintain roll total")
+
+
+# -- Doji R3: Perfect Gift (s29.15.4) -----------------------------------------
+
+func _make_doji_r3() -> L5RCharacterData:
+	var c := L5RCharacterData.new()
+	c.school = "Doji Courtier"
+	c.character_id = 100
+	c.honor = 7.0
+	c.stamina = 3
+	c.willpower = 3
+	c.strength = 3
+	c.perception = 3
+	c.agility = 3
+	c.intelligence = 3
+	c.reflexes = 3
+	c.awareness = 4
+	c.void_ring = 3
+	c.skills = {"Courtier": 5, "Sincerity": 4, "Etiquette": 4}
+	return c
+
+
+func test_perfect_gift_success_base() -> void:
+	var doji: L5RCharacterData = _make_doji_r3()
+	var target := L5RCharacterData.new()
+	target.character_id = 200
+	_engine.set_seed(42)
+	var result: Dictionary = SkillResolver.execute_perfect_gift(doji, target, _engine)
+	assert_true(result["success"])
+	assert_eq(result["disposition_applied"], 20)
+	assert_eq(target.disposition_values.get(doji.character_id, 0), 20)
+	assert_true(200 in doji.perfect_gift_targets)
+
+
+func test_perfect_gift_cannot_reuse() -> void:
+	var doji: L5RCharacterData = _make_doji_r3()
+	var target := L5RCharacterData.new()
+	target.character_id = 200
+	doji.perfect_gift_targets = [200]
+	var result: Dictionary = SkillResolver.execute_perfect_gift(doji, target, _engine)
+	assert_false(result["success"])
+	assert_eq(result["reason"], "already_applied")
+
+
+func test_perfect_gift_wrong_school() -> void:
+	_char.school = "Bayushi Courtier"
+	var target := L5RCharacterData.new()
+	target.character_id = 200
+	var result: Dictionary = SkillResolver.execute_perfect_gift(_char, target, _engine)
+	assert_false(result["success"])
+	assert_eq(result["reason"], "wrong_school")
+
+
+func test_perfect_gift_rank_too_low() -> void:
+	var c := L5RCharacterData.new()
+	c.school = "Doji Courtier"
+	c.honor = 7.0
+	var target := L5RCharacterData.new()
+	target.character_id = 200
+	var result: Dictionary = SkillResolver.execute_perfect_gift(c, target, _engine)
+	assert_false(result["success"])
+	assert_eq(result["reason"], "rank_too_low")
+
+
+func test_perfect_gift_adds_to_existing_disposition() -> void:
+	var doji: L5RCharacterData = _make_doji_r3()
+	var target := L5RCharacterData.new()
+	target.character_id = 200
+	target.disposition_values = {doji.character_id: 15}
+	_engine.set_seed(42)
+	var result: Dictionary = SkillResolver.execute_perfect_gift(doji, target, _engine)
+	assert_true(result["success"])
+	assert_eq(target.disposition_values[doji.character_id], 35)
+
+
+func test_perfect_gift_clamped_at_100() -> void:
+	var doji: L5RCharacterData = _make_doji_r3()
+	var target := L5RCharacterData.new()
+	target.character_id = 200
+	target.disposition_values = {doji.character_id: 90}
+	_engine.set_seed(42)
+	var result: Dictionary = SkillResolver.execute_perfect_gift(doji, target, _engine)
+	assert_true(result["success"])
+	assert_eq(target.disposition_values[doji.character_id], 100)

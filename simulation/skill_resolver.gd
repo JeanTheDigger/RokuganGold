@@ -215,6 +215,52 @@ static func check_from_the_ashes_expiry(
 	return activate_from_the_ashes(character, dice_engine, location_id, ic_day)
 
 
+# -- Doji R3: The Perfect Gift (s29.15.4) — one-shot disposition modifier ------
+
+const PERFECT_GIFT_TN: int = 20
+const PERFECT_GIFT_BASE_DISP: int = 20
+const PERFECT_GIFT_RAISE_VALUES: Array[int] = [20, 35, 50]
+
+static func execute_perfect_gift(
+	doji: L5RCharacterData,
+	target: L5RCharacterData,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	if not doji.school.begins_with("Doji Courtier"):
+		return {"success": false, "reason": "wrong_school"}
+	var school_rank: int = CharacterStats.get_insight_rank(doji)
+	if school_rank < 3:
+		return {"success": false, "reason": "rank_too_low"}
+	if target.character_id in doji.perfect_gift_targets:
+		return {"success": false, "reason": "already_applied"}
+
+	var result: Dictionary = resolve_skill_check(
+		doji, dice_engine, "Courtier", PERFECT_GIFT_TN
+	)
+	if not result.get("success", false):
+		return {"success": false, "roll_total": result.get("total", 0)}
+
+	var margin: int = result.get("margin", 0)
+	var raises: int = maxi(int(margin / 5), 0)
+	var disp_value: int = PERFECT_GIFT_BASE_DISP
+	if raises >= 2:
+		disp_value = PERFECT_GIFT_RAISE_VALUES[2]
+	elif raises >= 1:
+		disp_value = PERFECT_GIFT_RAISE_VALUES[1]
+
+	var old_disp: int = target.disposition_values.get(doji.character_id, 0)
+	target.disposition_values[doji.character_id] = clampi(old_disp + disp_value, -100, 100)
+	doji.perfect_gift_targets.append(target.character_id)
+
+	return {
+		"success": true,
+		"roll_total": result.get("total", 0),
+		"raises": raises,
+		"disposition_applied": disp_value,
+		"new_disposition": target.disposition_values[doji.character_id],
+	}
+
+
 # -- Deception Defense TN Modifier (s29.15.6 Kitsuki R2, s29.15.2 Yasuki R4) --
 
 const DECEPTION_TN_PER_RANK: int = 5
