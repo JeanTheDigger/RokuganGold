@@ -126,6 +126,16 @@ static func has_emphasis(character: L5RCharacterData, skill_name: String, emphas
 	return false
 
 
+# -- Technique Flag Assignment (s29.15) — called on creation and rank-up ------
+
+static func apply_technique_flags(character: L5RCharacterData) -> void:
+	var rank: int = CharacterStats.get_insight_rank(character)
+	if character.school.begins_with("Ikoma Bard") and rank >= 1:
+		character.precise_memory = true
+	if character.school.begins_with("Doji Courtier") and rank >= 2:
+		character.cadence_trained = true
+
+
 # -- School Technique Free Raises (s29.15) -------------------------------------
 
 const DOJI_HONOR_THRESHOLD: float = 6.0

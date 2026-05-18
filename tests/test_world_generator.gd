@@ -811,3 +811,34 @@ func test_generate_settlement_castle_no_town_flag() -> void:
 	)
 	assert_true(s.has_infrastructure("forge"))
 	assert_false(s.has_infrastructure("market"))
+
+
+# -- Technique flag auto-assignment at creation --------------------------------
+
+func test_ikoma_bard_r1_gets_precise_memory() -> void:
+	var c: L5RCharacterData = WorldGenerator.generate_character(
+		99, "Ikoma Taro", "Lion", "Ikoma", "Ikoma Bard", 1, _dice, "male"
+	)
+	assert_true(c.precise_memory, "Ikoma Bard created at R1 should have precise_memory")
+
+
+func test_doji_courtier_r2_gets_cadence_trained() -> void:
+	var c: L5RCharacterData = WorldGenerator.generate_character(
+		99, "Doji Sato", "Crane", "Doji", "Doji Courtier", 2, _dice, "male"
+	)
+	assert_true(c.cadence_trained, "Doji Courtier created at R2 should have cadence_trained")
+
+
+func test_doji_courtier_r1_no_cadence_trained() -> void:
+	var c: L5RCharacterData = WorldGenerator.generate_character(
+		99, "Doji Yuri", "Crane", "Doji", "Doji Courtier", 1, _dice, "female"
+	)
+	assert_false(c.cadence_trained, "Doji Courtier created at R1 should not have cadence_trained")
+
+
+func test_hida_bushi_no_technique_flags() -> void:
+	var c: L5RCharacterData = WorldGenerator.generate_character(
+		99, "Hida Ryu", "Crab", "Hida", "Hida Bushi", 3, _dice, "male"
+	)
+	assert_false(c.precise_memory)
+	assert_false(c.cadence_trained)

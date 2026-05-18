@@ -666,3 +666,92 @@ func test_cadence_sync_no_duplicate_topics() -> void:
 		if tid == 10:
 			count += 1
 	assert_eq(count, 1, "topic 10 should not be duplicated")
+
+
+# -- apply_technique_flags (auto-assignment) -----------------------------------
+
+func test_apply_flags_ikoma_bard_r1_sets_precise_memory() -> void:
+	_char.school = "Ikoma Bard"
+	_char.awareness = 3
+	_char.intelligence = 3
+	_char.willpower = 3
+	_char.perception = 2
+	_char.stamina = 2
+	_char.strength = 2
+	_char.agility = 2
+	_char.reflexes = 2
+	_char.void_ring = 2
+	_char.skills["Courtier"] = 1
+	assert_false(_char.precise_memory)
+	SkillResolver.apply_technique_flags(_char)
+	assert_true(_char.precise_memory, "Ikoma Bard R1+ should get precise_memory")
+
+
+func test_apply_flags_non_ikoma_no_precise_memory() -> void:
+	_char.school = "Doji Courtier"
+	_char.awareness = 3
+	_char.intelligence = 2
+	_char.willpower = 2
+	_char.perception = 2
+	_char.stamina = 2
+	_char.strength = 2
+	_char.agility = 2
+	_char.reflexes = 2
+	_char.void_ring = 2
+	SkillResolver.apply_technique_flags(_char)
+	assert_false(_char.precise_memory, "non-Ikoma should not get precise_memory")
+
+
+func test_apply_flags_doji_r2_sets_cadence_trained() -> void:
+	_char.school = "Doji Courtier"
+	_char.awareness = 4
+	_char.intelligence = 3
+	_char.willpower = 3
+	_char.perception = 3
+	_char.stamina = 2
+	_char.strength = 2
+	_char.agility = 2
+	_char.reflexes = 3
+	_char.void_ring = 3
+	_char.skills["Courtier"] = 3
+	_char.skills["Etiquette"] = 3
+	_char.skills["Sincerity"] = 2
+	_char.skills["Perform: Oratory"] = 1
+	_char.skills["Tea Ceremony"] = 1
+	assert_false(_char.cadence_trained)
+	SkillResolver.apply_technique_flags(_char)
+	assert_true(_char.cadence_trained, "Doji Courtier R2+ should get cadence_trained")
+
+
+func test_apply_flags_doji_r1_no_cadence_trained() -> void:
+	_char.school = "Doji Courtier"
+	_char.awareness = 3
+	_char.intelligence = 2
+	_char.willpower = 2
+	_char.perception = 2
+	_char.stamina = 2
+	_char.strength = 2
+	_char.agility = 2
+	_char.reflexes = 2
+	_char.void_ring = 2
+	_char.skills["Courtier"] = 1
+	SkillResolver.apply_technique_flags(_char)
+	assert_false(_char.cadence_trained, "Doji Courtier R1 should not get cadence_trained")
+
+
+func test_apply_flags_non_doji_no_cadence_trained() -> void:
+	_char.school = "Ikoma Bard"
+	_char.awareness = 4
+	_char.intelligence = 3
+	_char.willpower = 3
+	_char.perception = 3
+	_char.stamina = 2
+	_char.strength = 2
+	_char.agility = 2
+	_char.reflexes = 3
+	_char.void_ring = 3
+	_char.skills["Courtier"] = 3
+	_char.skills["Lore: History"] = 3
+	_char.skills["Sincerity"] = 2
+	SkillResolver.apply_technique_flags(_char)
+	assert_false(_char.cadence_trained, "non-Doji should not get cadence_trained")
