@@ -138,6 +138,7 @@ static func advance_day(
 	)
 
 	_refresh_from_the_ashes(characters, world_states, dice_engine, ic_day)
+	_process_cadence_sync(characters, active_courts, dice_engine)
 
 	var edict_results: Array[Dictionary] = _process_edict_compliance(
 		active_edicts, active_wars, characters, active_topics, next_topic_id, ic_day, season_meta,
@@ -2211,6 +2212,18 @@ static func _refresh_from_the_ashes(
 		SkillResolver.check_from_the_ashes_expiry(
 			c, dice_engine, c.physical_location, ic_day,
 		)
+
+
+static func _process_cadence_sync(
+	characters: Array[L5RCharacterData],
+	active_courts: Array[CourtSessionData],
+	dice_engine: DiceEngine,
+) -> void:
+	for court: CourtSessionData in active_courts:
+		if not CourtSystem.is_active(court):
+			continue
+		var court_ids: Array[int] = court.attendee_ids.duplicate()
+		SkillResolver.resolve_cadence_sync(characters, court_ids, dice_engine)
 
 
 static func _decay_all_knowledge(

@@ -332,6 +332,134 @@ func test_from_the_ashes_clears_when_not_at_court() -> void:
 	)
 
 
+func test_cadence_sync_runs_for_active_court() -> void:
+	var doji_a := L5RCharacterData.new()
+	doji_a.character_id = 70
+	doji_a.character_name = "Doji A"
+	doji_a.school = "Doji Courtier"
+	doji_a.clan = "Crane"
+	doji_a.cadence_trained = true
+	doji_a.awareness = 4
+	doji_a.skills = {"Courtier": 5, "Etiquette": 3}
+	doji_a.honor = 5.0
+	doji_a.glory = 3.0
+	doji_a.status = 3.0
+	doji_a.action_points_current = 2
+	doji_a.action_points_max = 2
+	doji_a.stamina = 3
+	doji_a.willpower = 3
+	doji_a.strength = 3
+	doji_a.perception = 3
+	doji_a.agility = 3
+	doji_a.intelligence = 3
+	doji_a.reflexes = 3
+	doji_a.void_ring = 2
+	doji_a.physical_location = "200"
+	doji_a.bushido_virtue = Enums.BushidoVirtue.NONE
+	doji_a.shourido_virtue = Enums.ShouridoVirtue.NONE
+	doji_a.knowledge_pool = []
+	doji_a.known_contacts_by_clan = {}
+	doji_a.met_characters = []
+	doji_a.topic_pool = [100, 200]
+
+	var doji_b := L5RCharacterData.new()
+	doji_b.character_id = 71
+	doji_b.character_name = "Doji B"
+	doji_b.school = "Doji Courtier"
+	doji_b.clan = "Crane"
+	doji_b.cadence_trained = true
+	doji_b.awareness = 4
+	doji_b.skills = {"Courtier": 5, "Etiquette": 3}
+	doji_b.honor = 5.0
+	doji_b.glory = 3.0
+	doji_b.status = 3.0
+	doji_b.action_points_current = 2
+	doji_b.action_points_max = 2
+	doji_b.stamina = 3
+	doji_b.willpower = 3
+	doji_b.strength = 3
+	doji_b.perception = 3
+	doji_b.agility = 3
+	doji_b.intelligence = 3
+	doji_b.reflexes = 3
+	doji_b.void_ring = 2
+	doji_b.physical_location = "200"
+	doji_b.bushido_virtue = Enums.BushidoVirtue.NONE
+	doji_b.shourido_virtue = Enums.ShouridoVirtue.NONE
+	doji_b.knowledge_pool = []
+	doji_b.known_contacts_by_clan = {}
+	doji_b.met_characters = []
+	doji_b.topic_pool = [300]
+
+	_characters.append(doji_a)
+	_characters.append(doji_b)
+	_characters_by_id[70] = doji_a
+	_characters_by_id[71] = doji_b
+
+	var court := CourtSessionData.new()
+	court.court_id = 1
+	court.phase = CourtSessionData.CourtPhase.ACTIVE
+	court.host_settlement_id = 200
+	court.attendee_ids = [70, 71]
+	court.start_ic_day = 0
+	court.duration_ticks = 10
+
+	var ws: Dictionary = _make_world_states()
+	ws[70] = {
+		"context_flag": Enums.ContextFlag.AT_COURT,
+		"season": 1,
+		"ic_day": _time.get_ic_day(),
+		"characters_present": [71] as Array[int],
+		"is_lord": false,
+		"known_topics": [] as Array[int],
+		"known_positions": {},
+		"known_objectives": {},
+		"known_contacts": [] as Array[int],
+		"pending_events": [],
+		"action_log": [] as Array[String],
+	}
+	ws[71] = {
+		"context_flag": Enums.ContextFlag.AT_COURT,
+		"season": 1,
+		"ic_day": _time.get_ic_day(),
+		"characters_present": [70] as Array[int],
+		"is_lord": false,
+		"known_topics": [] as Array[int],
+		"known_positions": {},
+		"known_objectives": {},
+		"known_contacts": [] as Array[int],
+		"pending_events": [],
+		"action_log": [] as Array[String],
+	}
+
+	var objectives: Dictionary = _make_objectives()
+	objectives[70] = {"primary": {"need_type": "REST", "priority": 3}}
+	objectives[71] = {"primary": {"need_type": "REST", "priority": 3}}
+
+	DayOrchestrator.advance_day(
+		_time, _characters, _characters_by_id, ws,
+		objectives, _scoring_tables, _filter_data, _dice,
+		_action_skill_map, _provinces, _action_log, _season_meta,
+		[], [], [], [],                  # active_topics, pending_letters, approach_penalties, commitments
+		[], [], {}, {},                  # crime_records, next_case_id, military_data, character_province_map
+		[], [], {}, [],                  # next_topic_id, death_events, successor_map, favors
+		[], [], [], {},                  # insurgencies, next_insurgency_id, settlements, miya_inputs
+		[], [], [], [],                  # active_successions, next_succession_id, entanglements, bound_states
+		[], [], [], [],                  # active_armies, active_sieges, active_tethers, order_states
+		[], {},                          # companies, clans
+		[], [], [],                      # active_wars, trade_routes, next_war_id
+		[court],                         # active_courts
+	)
+	# With Courtier 5 + Awareness 4 = 9k4 vs TN 15, success is very likely.
+	# If either succeeds, topics should be shared.
+	var b_has_a_topic: bool = 100 in doji_b.topic_pool or 200 in doji_b.topic_pool
+	var a_has_b_topic: bool = 300 in doji_a.topic_pool
+	assert_true(
+		b_has_a_topic or a_has_b_topic,
+		"cadence sync should transfer topics between trained Doji at the same court"
+	)
+
+
 func test_season_change_runs_resource_tick() -> void:
 	_time.current_tick = 89
 	var result: Dictionary = DayOrchestrator.advance_day(

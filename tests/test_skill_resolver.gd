@@ -607,3 +607,62 @@ func test_perfect_gift_clamped_at_100() -> void:
 	var result: Dictionary = SkillResolver.execute_perfect_gift(doji, target, _engine)
 	assert_true(result["success"])
 	assert_eq(target.disposition_values[doji.character_id], 100)
+
+
+# -- Cadence Sync (s29.15.4) ---------------------------------------------------
+
+func _make_cadence_doji(id: int, topics: Array[int] = []) -> L5RCharacterData:
+	var c := L5RCharacterData.new()
+	c.character_id = id
+	c.character_name = "Doji Cadence %d" % id
+	c.school = "Doji Courtier"
+	c.clan = "Crane"
+	c.cadence_trained = true
+	c.awareness = 4
+	c.skills = {"Courtier": 5}
+	c.topic_pool = topics.duplicate()
+	return c
+
+
+func test_cadence_sync_transfers_topics_between_pair() -> void:
+	var a: L5RCharacterData = _make_cadence_doji(1, [10, 20])
+	var b: L5RCharacterData = _make_cadence_doji(2, [30])
+	var chars: Array[L5RCharacterData] = [a, b]
+	var court_ids: Array[int] = [1, 2]
+	_engine.set_seed(42)
+	var results: Array[Dictionary] = SkillResolver.resolve_cadence_sync(chars, court_ids, _engine)
+	assert_true(results.size() > 0)
+	var any_success: bool = false
+	for r: Dictionary in results:
+		if r.get("success", false):
+			any_success = true
+	if any_success:
+		assert_true(
+			10 in b.topic_pool or 20 in b.topic_pool or 30 in a.topic_pool,
+			"at least one topic should transfer on successful cadence"
+		)
+
+
+func test_cadence_sync_requires_two_trained() -> void:
+	var a: L5RCharacterData = _make_cadence_doji(1, [10])
+	var b := L5RCharacterData.new()
+	b.character_id = 2
+	b.cadence_trained = false
+	var chars: Array[L5RCharacterData] = [a, b]
+	var court_ids: Array[int] = [1, 2]
+	var results: Array[Dictionary] = SkillResolver.resolve_cadence_sync(chars, court_ids, _engine)
+	assert_eq(results.size(), 0, "cadence needs at least 2 trained characters")
+
+
+func test_cadence_sync_no_duplicate_topics() -> void:
+	var a: L5RCharacterData = _make_cadence_doji(1, [10, 20])
+	var b: L5RCharacterData = _make_cadence_doji(2, [10])
+	var chars: Array[L5RCharacterData] = [a, b]
+	var court_ids: Array[int] = [1, 2]
+	_engine.set_seed(42)
+	SkillResolver.resolve_cadence_sync(chars, court_ids, _engine)
+	var count: int = 0
+	for tid: int in b.topic_pool:
+		if tid == 10:
+			count += 1
+	assert_eq(count, 1, "topic 10 should not be duplicated")

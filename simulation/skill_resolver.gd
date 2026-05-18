@@ -278,6 +278,56 @@ static func get_deception_defense_bonus(defender: L5RCharacterData) -> int:
 	return 0
 
 
+# -- Cadence Sync (s29.15.4 Doji Courtier R2) — silent topic transfer ----------
+
+const CADENCE_TN: int = 15
+
+static func resolve_cadence_sync(
+	characters: Array[L5RCharacterData],
+	court_char_ids: Array[int],
+	dice_engine: DiceEngine,
+) -> Array[Dictionary]:
+	var results: Array[Dictionary] = []
+	var cadence_ids: Array[int] = []
+	var char_map: Dictionary = {}
+	for cid: int in court_char_ids:
+		for c: L5RCharacterData in characters:
+			if c.character_id == cid and c.cadence_trained:
+				cadence_ids.append(cid)
+				char_map[cid] = c
+				break
+	if cadence_ids.size() < 2:
+		return results
+	for i: int in range(cadence_ids.size()):
+		var sender: L5RCharacterData = char_map[cadence_ids[i]]
+		var roll: Dictionary = resolve_skill_check(
+			sender, dice_engine, "Courtier", CADENCE_TN, 0, "",
+			Enums.Trait.AWARENESS,
+		)
+		if not roll.get("success", false):
+			results.append({
+				"sender_id": sender.character_id,
+				"success": false,
+			})
+			continue
+		var transferred: Array[int] = []
+		for j: int in range(cadence_ids.size()):
+			if i == j:
+				continue
+			var receiver: L5RCharacterData = char_map[cadence_ids[j]]
+			for tid: int in sender.topic_pool:
+				if tid not in receiver.topic_pool:
+					receiver.topic_pool.append(tid)
+					if tid not in transferred:
+						transferred.append(tid)
+		results.append({
+			"sender_id": sender.character_id,
+			"success": true,
+			"topics_shared": transferred.size(),
+		})
+	return results
+
+
 # -- The main entry point: resolve a full skill check --------------------------
 
 static func resolve_skill_check(
