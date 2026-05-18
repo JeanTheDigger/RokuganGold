@@ -464,6 +464,11 @@ static func score_all(
 
 		option.festival_modifier = _compute_festival_modifier(option.action_id, ctx)
 
+		if option.action_id in COVERT_ACTION_IDS:
+			option.honor_covert_penalty = _compute_honor_covert_penalty(
+				ctx.honor, ctx.school, ctx.clan
+			)
+
 	# Tea ceremony: +10 per eligible guest (s57.37.4 social multiplier).
 	# Clan affinity bonuses (Crane +10, Phoenix +5) applied via disposition_modifier.
 	for option: NPCDataStructures.ScoredAction in options:
@@ -1375,6 +1380,52 @@ const HOSTILE_ACTIONS: Array[String] = [
 	"SEDUCE_FOR_LEVERAGE", "SEDUCE_TO_COMPROMISE",
 	"ASSASSINATE", "COMMISSION_ASSASSINATION", "ISSUE_DUEL_CHALLENGE",
 ]
+
+# Covert actions subject to the honor threshold filter (s12.8 Filter 2).
+const COVERT_ACTION_IDS: Array[String] = [
+	"SHADOW_TARGET", "SEARCH_PERSON", "CONCEAL_ITEM", "FABRICATE_SECRET",
+	"EXPOSE_SECRET_PRIVATELY", "EXPOSE_SECRET_PUBLICLY",
+	"SEDUCE", "SEDUCE_FOR_INFO", "SEDUCE_FOR_ACCESS",
+	"SEDUCE_FOR_LEVERAGE", "SEDUCE_TO_COMPROMISE",
+	"COMMISSION_ASSASSINATION",
+]
+
+# Schools with full covert honor exemption (s12.8, s46).
+const _FULL_COVERT_EXEMPT_SCHOOLS: Array[String] = [
+	"Shosuro Infiltrator",
+	"Bitter Lies",
+	"Kasuga Smuggler",
+]
+
+# Schools with half covert honor exemption (s12.8, s46).
+const _HALF_COVERT_EXEMPT_SCHOOLS: Array[String] = [
+	"Daidoji Harrier",
+	"Daidoji Spymaster",
+	"Ikoma Lion's Shadow",
+]
+
+
+static func _compute_honor_covert_penalty(
+	honor: float, school: String, clan: String,
+) -> float:
+	if honor < 2.0:
+		return 0.0
+
+	var base_penalty: float = -50.0 if honor > 3.5 else -25.0
+
+	for s: String in _FULL_COVERT_EXEMPT_SCHOOLS:
+		if school.begins_with(s):
+			return 0.0
+
+	for s: String in _HALF_COVERT_EXEMPT_SCHOOLS:
+		if school.begins_with(s):
+			return base_penalty * 0.5
+
+	# Scorpion Reduced Honour Bleed — clan-wide half exemption (s46).
+	if clan == "Scorpion":
+		return base_penalty * 0.5
+
+	return base_penalty
 
 
 static func _lookup_disposition_modifier(

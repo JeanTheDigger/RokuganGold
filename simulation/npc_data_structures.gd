@@ -48,6 +48,7 @@ class ScoredAction:
 	var stale_intel_bonus: float = 0.0
 	var festival_modifier: float = 0.0
 	var deception_defense_penalty: float = 0.0
+	var honor_covert_penalty: float = 0.0
 
 	func get_total_score() -> float:
 		return (
@@ -66,6 +67,7 @@ class ScoredAction:
 			+ stale_intel_bonus
 			+ festival_modifier
 			+ deception_defense_penalty
+			+ honor_covert_penalty
 		)
 
 

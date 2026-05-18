@@ -2012,3 +2012,105 @@ func test_tend_wounded_ally_not_injected_for_hostile() -> void:
 		if ev is Dictionary and (ev as Dictionary).get("type", "") == "tend_wounded_ally_opportunity":
 			fail_test("Should not inject tend_wounded_ally_opportunity for hostile target")
 			return
+
+
+# -- Honor Covert Penalty (s12.8 Filter 2) ------------------------------------
+
+func test_honor_covert_penalty_low_honor_no_penalty() -> void:
+	var penalty: float = NPCDecisionEngine._compute_honor_covert_penalty(1.5, "Bayushi Bushi", "Scorpion")
+	assert_eq(penalty, 0.0, "Honor < 2.0 should produce no penalty")
+
+
+func test_honor_covert_penalty_mid_honor_moderate() -> void:
+	var penalty: float = NPCDecisionEngine._compute_honor_covert_penalty(3.0, "Doji Courtier", "Crane")
+	assert_eq(penalty, -25.0, "Honor 2.0-3.5 should produce -25 penalty")
+
+
+func test_honor_covert_penalty_high_honor_severe() -> void:
+	var penalty: float = NPCDecisionEngine._compute_honor_covert_penalty(5.0, "Akodo Bushi", "Lion")
+	assert_eq(penalty, -50.0, "Honor > 3.5 should produce -50 penalty")
+
+
+func test_honor_covert_penalty_boundary_2_0() -> void:
+	var penalty: float = NPCDecisionEngine._compute_honor_covert_penalty(2.0, "Doji Courtier", "Crane")
+	assert_eq(penalty, -25.0, "Honor exactly 2.0 should hit moderate tier")
+
+
+func test_honor_covert_penalty_boundary_3_5() -> void:
+	var penalty: float = NPCDecisionEngine._compute_honor_covert_penalty(3.5, "Doji Courtier", "Crane")
+	assert_eq(penalty, -25.0, "Honor exactly 3.5 should still be moderate tier")
+
+
+func test_honor_covert_penalty_boundary_3_6() -> void:
+	var penalty: float = NPCDecisionEngine._compute_honor_covert_penalty(3.6, "Doji Courtier", "Crane")
+	assert_eq(penalty, -50.0, "Honor 3.6 should hit severe tier")
+
+
+func test_honor_covert_full_exempt_shosuro_infiltrator() -> void:
+	var penalty: float = NPCDecisionEngine._compute_honor_covert_penalty(5.0, "Shosuro Infiltrator", "Scorpion")
+	assert_eq(penalty, 0.0, "Shosuro Infiltrator gets full exemption")
+
+
+func test_honor_covert_full_exempt_bitter_lies() -> void:
+	var penalty: float = NPCDecisionEngine._compute_honor_covert_penalty(4.0, "Bitter Lies Swordsman", "Scorpion")
+	assert_eq(penalty, 0.0, "Bitter Lies gets full exemption")
+
+
+func test_honor_covert_full_exempt_kasuga_smuggler() -> void:
+	var penalty: float = NPCDecisionEngine._compute_honor_covert_penalty(4.0, "Kasuga Smuggler", "Tortoise")
+	assert_eq(penalty, 0.0, "Kasuga Smuggler gets full exemption")
+
+
+func test_honor_covert_half_exempt_daidoji_harrier() -> void:
+	var penalty: float = NPCDecisionEngine._compute_honor_covert_penalty(5.0, "Daidoji Harrier", "Crane")
+	assert_eq(penalty, -25.0, "Daidoji Harrier gets half of -50")
+
+
+func test_honor_covert_half_exempt_ikoma_lions_shadow() -> void:
+	var penalty: float = NPCDecisionEngine._compute_honor_covert_penalty(5.0, "Ikoma Lion's Shadow", "Lion")
+	assert_eq(penalty, -25.0, "Ikoma Lion's Shadow gets half of -50")
+
+
+func test_honor_covert_half_exempt_daidoji_spymaster() -> void:
+	var penalty: float = NPCDecisionEngine._compute_honor_covert_penalty(3.0, "Daidoji Spymaster", "Crane")
+	assert_eq(penalty, -12.5, "Daidoji Spymaster gets half of -25 at mid honor")
+
+
+func test_honor_covert_scorpion_clan_half_exempt() -> void:
+	var penalty: float = NPCDecisionEngine._compute_honor_covert_penalty(5.0, "Bayushi Bushi", "Scorpion")
+	assert_eq(penalty, -25.0, "Scorpion clan gets half of -50 via Reduced Honour Bleed")
+
+
+func test_honor_covert_scorpion_mid_honor() -> void:
+	var penalty: float = NPCDecisionEngine._compute_honor_covert_penalty(3.0, "Soshi Shugenja", "Scorpion")
+	assert_eq(penalty, -12.5, "Scorpion at mid honor gets half of -25")
+
+
+func test_honor_covert_penalty_applied_to_covert_action_in_scoring() -> void:
+	_char.honor = 5.0
+	_char.clan = "Lion"
+	_char.school = "Akodo Bushi"
+	_scoring_tables["objective_alignment"]["RAISE_DISPOSITION"]["SHADOW_TARGET"] = 70
+	_scoring_tables["action_skill_map"]["SHADOW_TARGET"] = {"primary": "Stealth", "secondary": "Agility"}
+	var ctx := NPCDecisionEngine.build_context(_char, _world_state)
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "SHADOW_TARGET"
+	option.target_npc_id = 2
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "RAISE_DISPOSITION"
+	NPCDecisionEngine.score_all([option], need, ctx, _scoring_tables)
+	assert_eq(option.honor_covert_penalty, -50.0, "High-honor Lion should get -50 on covert action")
+
+
+func test_honor_covert_penalty_not_applied_to_non_covert() -> void:
+	_char.honor = 5.0
+	_char.clan = "Lion"
+	_char.school = "Akodo Bushi"
+	var ctx := NPCDecisionEngine.build_context(_char, _world_state)
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "CHARM"
+	option.target_npc_id = 2
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "RAISE_DISPOSITION"
+	NPCDecisionEngine.score_all([option], need, ctx, _scoring_tables)
+	assert_eq(option.honor_covert_penalty, 0.0, "Non-covert CHARM should have no honor penalty")
