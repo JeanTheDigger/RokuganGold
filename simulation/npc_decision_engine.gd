@@ -822,6 +822,12 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array[S
 				"REQUEST_PERFORMANCE",
 				"ANNOUNCE_HUNT", "CANCEL_HUNT",
 				"TRAIN_ANIMAL",
+				"SET_TAX_RATE", "SET_STIPEND_RATE",
+				"REQUEST_ART", "ASSIGN_VASSAL_OBJECTIVE",
+				"ASSIGN_TO_MILITARY_SERVICE",
+				"ASSIGN_GARRISON", "ORDER_LEVY",
+				"ORDER_DEPLOY", "ORDER_FORTIFY",
+				"SEND_INVITATION",
 				"DO_NOTHING", "REST",
 			]
 		Enums.ContextFlag.AT_COURT:
@@ -843,6 +849,9 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array[S
 				"REQUEST_PERFORMANCE",
 				"ANNOUNCE_HUNT", "REQUEST_HUNT_INVITATION", "CANCEL_HUNT",
 				"TRAIN_ANIMAL",
+				"SET_TAX_RATE", "SET_STIPEND_RATE",
+				"REQUEST_ART", "ASSIGN_VASSAL_OBJECTIVE",
+				"SEND_INVITATION",
 				"DO_NOTHING", "REST",
 			]
 		Enums.ContextFlag.VISITING:
@@ -855,6 +864,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array[S
 				"TREAT_WOUND",
 				"ANNOUNCE_HUNT", "REQUEST_HUNT_INVITATION", "CANCEL_HUNT",
 				"TRAIN_ANIMAL",
+				"SET_TAX_RATE", "SET_STIPEND_RATE",
 				"DO_NOTHING", "REST",
 			]
 		Enums.ContextFlag.TRAVELING:
@@ -872,6 +882,8 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array[S
 				"INTIMIDATE", "NEGOTIATE",
 				"TREAT_WOUND",
 				"TRAIN",
+				"ORDER_DEPLOY", "ORDER_FORTIFY", "ORDER_RETREAT",
+				"ASSIGN_GARRISON",
 				"DO_NOTHING", "REST",
 			]
 		Enums.ContextFlag.UNDER_SIEGE:
@@ -1668,6 +1680,8 @@ const MILITARY_ORDER_ACTIONS: Array[String] = [
 	"DRILL_TROOPS", "EVALUATE_WAR_READINESS",
 	"ORDER_PATROL", "CONDUCT_SORTIE", "CONDUCT_STORM_ASSAULT",
 	"MAINTAIN_SIEGE", "NEGOTIATE_SURRENDER",
+	"ASSIGN_GARRISON", "ORDER_LEVY", "ORDER_DEPLOY",
+	"ORDER_FORTIFY", "ORDER_RETREAT",
 ]
 
 const COMMANDER_RANK_ACTIONS: Dictionary = {
@@ -1707,6 +1721,8 @@ static func _is_military_blocked(
 			return false
 		return ctx.commanded_unit_id < 0
 	if COMMANDER_RANK_ACTIONS.has(action_id):
+		if ctx.is_lord and action_id in CivilianOrderBudget.MILITARY_OR_CIVILIAN_ACTIONS:
+			return false
 		var min_rank: int = COMMANDER_RANK_ACTIONS[action_id]
 		return ctx.military_rank < min_rank
 	return false

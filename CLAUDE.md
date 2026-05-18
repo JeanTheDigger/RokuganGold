@@ -255,6 +255,17 @@ For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
   `EXPOSE_SECRET_PUBLIC` → `EXPOSE_SECRET_PUBLICLY` and
   `REVEAL_SECRET_PRIVATE` → `EXPOSE_SECRET_PRIVATELY` in
   action_skill_map.json and objective_alignment.json.
+- **Civilian/military order context list wiring. FIXED.**
+  11 lord order actions were unreachable because they weren't in any
+  `_get_actions_for_context()` list. Added per GDD s57.34: AT_OWN_HOLDINGS
+  gets all 10 governance/military actions + SEND_INVITATION. AT_COURT gets
+  policy-from-anywhere actions (SET_TAX_RATE, SET_STIPEND_RATE) plus
+  REQUEST_ART, ASSIGN_VASSAL_OBJECTIVE, SEND_INVITATION. VISITING gets
+  policy-only (SET_TAX_RATE, SET_STIPEND_RATE). ON_CAMPAIGN gets field
+  military orders (ORDER_DEPLOY, ORDER_FORTIFY, ORDER_RETREAT,
+  ASSIGN_GARRISON). Military/civilian overlap actions added to
+  MILITARY_ORDER_ACTIONS for proper non-lord/non-military filtering with
+  lord carve-out via CivilianOrderBudget.MILITARY_OR_CIVILIAN_ACTIONS.
 
 ### Known Code Issues — Deferred (require design input)
 - **NPCDecisionEngine HOSTILE_ACTIONS — 11 context-unreachable entries.**
@@ -263,16 +274,6 @@ For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
   ASSASSINATE have executor handlers but are never added to any context
   action list. They need a covert action injection path or context list
   entries. ASSASSINATE is completely unwired (no executor handler either).
-- **NPCDecisionEngine — 11 civilian/military order actions unreachable.**
-  SET_TAX_RATE, SET_STIPEND_RATE, REQUEST_ART, ASSIGN_VASSAL_OBJECTIVE,
-  ASSIGN_TO_MILITARY_SERVICE, ASSIGN_GARRISON, ORDER_LEVY, ORDER_DEPLOY,
-  ORDER_FORTIFY, ORDER_RETREAT, SEND_INVITATION are never added to any
-  context's action list in `_get_actions_for_context()`. The civilian order
-  path (`_resolve_civilian_order`) filters `generate_options()` output, but
-  those options are sourced from context lists that don't include these
-  actions. Currently only ASSESS_PROVINCE_STATUS, INVESTIGATE_PROVINCE,
-  ORDER_PATROL, REQUEST_PERFORMANCE, and ARRANGE_MARRIAGE can be selected
-  as civilian orders because they happen to be in context lists already.
 - **SkillResolver from_the_ashes expiry gap.** Buff applies even if
   `expires_ic_day` has passed but the daily cleanup hasn't run yet.
   Theoretical gap (cleanup runs at day start, buff lasts 2 full IC days).
