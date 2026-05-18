@@ -28,6 +28,7 @@ const CRIME_HONOR_TABLE: Dictionary = {
 	Enums.CrimeType.DUEL_DEFILEMENT: "ACCOMPLICE_MINOR",
 	Enums.CrimeType.TREASON: "DISLOYALTY",
 	Enums.CrimeType.MAHO: "BREACH_BLASPHEMOUS",
+	Enums.CrimeType.VIOLATION_EMPERORS_PEACE: "BREACH_BLASPHEMOUS",
 	Enums.CrimeType.OTHER: "BREACH_MINOR",
 }
 
@@ -46,6 +47,7 @@ const CONVICTION_CONSEQUENCES: Dictionary = {
 	Enums.CrimeType.DUEL_DEFILEMENT: [-0.5, 0.5, 0.0, 3],
 	Enums.CrimeType.TREASON: [-2.0, 3.0, -99.0, 2],
 	Enums.CrimeType.MAHO: [-3.0, 5.0, -99.0, 1],
+	Enums.CrimeType.VIOLATION_EMPERORS_PEACE: [-3.0, 5.0, -99.0, 1],
 	Enums.CrimeType.OTHER: [-0.1, 0.0, 0.0, 4],
 }
 
@@ -92,6 +94,8 @@ static func get_severity(crime_type: Enums.CrimeType) -> Enums.CrimeSeverity:
 		Enums.CrimeType.TREASON:
 			return Enums.CrimeSeverity.CAPITAL
 		Enums.CrimeType.MAHO:
+			return Enums.CrimeSeverity.CAPITAL
+		Enums.CrimeType.VIOLATION_EMPERORS_PEACE:
 			return Enums.CrimeSeverity.CAPITAL
 		_:
 			return Enums.CrimeSeverity.MINOR

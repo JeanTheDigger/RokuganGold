@@ -437,6 +437,86 @@ static func is_action_blocked_by_emperors_peace(
 	return false
 
 
+# -- Emperor's Peace Violation Crime (s57.47 v624) ----------------------------
+
+const PEACE_VIOLATION_EMPEROR_DISP_HIT: int = -15
+const PEACE_VIOLATION_FAMILY_DAIMYO_GLORY: float = -1.0
+
+
+static func record_emperors_peace_violation(
+	offender: L5RCharacterData,
+	action_id: String,
+	court: CourtSessionData,
+	ic_day: int,
+	next_case_id: Array[int],
+	next_topic_id: Array[int],
+	characters_by_id: Dictionary,
+) -> Dictionary:
+	var witnesses: Array[int] = []
+	for aid: int in court.attendee_ids:
+		if aid != offender.character_id:
+			witnesses.append(aid)
+
+	var case_id: int = next_case_id[0]
+	next_case_id[0] = case_id + 1
+
+	var record: CrimeRecord = CrimeSystem.create_crime_record(
+		case_id,
+		Enums.CrimeType.VIOLATION_EMPERORS_PEACE,
+		offender.character_id,
+		"winter_court_%d" % court.host_settlement_id,
+		ic_day,
+		-1,
+		0,
+		witnesses,
+	)
+	record.legal_status = Enums.LegalStatus.ACCUSED
+	record.evidence_total = 100
+
+	var honor_loss: float = CrimeSystem.get_at_act_honor_loss(
+		Enums.CrimeType.VIOLATION_EMPERORS_PEACE,
+		HonorGlorySystem.get_honor_rank(offender),
+	)
+	HonorGlorySystem.apply_honor_change(offender, honor_loss)
+
+	var topic_id: int = next_topic_id[0]
+	next_topic_id[0] = topic_id + 1
+	var title: String = "%s violated the Emperor's Peace at Winter Court" % offender.character_name
+	var topic: TopicData = TopicMomentumSystem.create_topic(
+		topic_id, title,
+		TopicData.Tier.TIER_1, TopicData.Category.LEGAL,
+		ic_day, 80.0, [],
+		offender.clan, offender.family,
+		offender.character_id,
+		"crime", "violation_emperors_peace",
+	)
+	topic.slug = "emperors_peace_%d" % case_id
+	topic.subject_role = "PERPETRATOR"
+
+	var family_daimyo_glory_applied: float = 0.0
+	for cid: int in characters_by_id:
+		var c: L5RCharacterData = characters_by_id[cid] as L5RCharacterData
+		if c == null:
+			continue
+		if c.family == offender.family and c.role_position == "family_daimyo":
+			family_daimyo_glory_applied = HonorGlorySystem.apply_glory_change(
+				c, PEACE_VIOLATION_FAMILY_DAIMYO_GLORY
+			)
+			break
+
+	return {
+		"crime_record": record,
+		"topic": topic,
+		"honor_loss": honor_loss,
+		"offender_id": offender.character_id,
+		"action_id": action_id,
+		"case_id": case_id,
+		"emperor_disposition_hit": PEACE_VIOLATION_EMPEROR_DISP_HIT,
+		"offender_clan": offender.clan,
+		"family_daimyo_glory_change": family_daimyo_glory_applied,
+	}
+
+
 # -- Host Prestige & Advantages -----------------------------------------------
 
 static func compute_glory_rewards(

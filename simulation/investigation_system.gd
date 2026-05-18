@@ -648,6 +648,7 @@ const CRIME_TYPE_NAMES: Dictionary = {
 	Enums.CrimeType.DUEL_DEFILEMENT: "Duel Defilement",
 	Enums.CrimeType.TREASON: "Treason",
 	Enums.CrimeType.MAHO: "Maho",
+	Enums.CrimeType.VIOLATION_EMPERORS_PEACE: "Violation of the Emperor's Peace",
 	Enums.CrimeType.OTHER: "Crime",
 }
 
