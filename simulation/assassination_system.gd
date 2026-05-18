@@ -246,35 +246,33 @@ static func _execute_poison(
 	susp_mod: int,
 	dice_engine: DiceEngine,
 ) -> Dictionary:
-	var stealth_rank: int = assassin.skills.get("Stealth", 0)
-	var stealth_result: DiceResult = dice_engine.roll_and_keep(
-		assassin.agility + stealth_rank, assassin.agility, stealth_rank > 0
-	)
 	var stealth_tn: int = POISON_STEALTH_TN + susp_mod
-	if stealth_result.total < stealth_tn:
+	var stealth_check: Dictionary = SkillResolver.resolve_skill_check(
+		assassin, dice_engine, "Stealth", stealth_tn,
+	)
+	if not stealth_check.get("success", false):
 		return {
 			"success": false,
 			"phase_failed": "stealth",
-			"roll_total": stealth_result.total,
+			"roll_total": stealth_check.get("total", 0),
 			"tn": stealth_tn,
-			"margin": stealth_result.total - stealth_tn,
+			"margin": stealth_check.get("margin", 0),
 			"method": ExecutionMethod.POISON,
 		}
 
-	var soh_rank: int = assassin.skills.get("Sleight of Hand", 0)
-	var soh_result: DiceResult = dice_engine.roll_and_keep(
-		assassin.agility + soh_rank, assassin.agility, soh_rank > 0
-	)
 	var soh_tn: int = POISON_SLEIGHT_TN + susp_mod
-	var success: bool = soh_result.total >= soh_tn
+	var soh_check: Dictionary = SkillResolver.resolve_skill_check(
+		assassin, dice_engine, "Sleight of Hand", soh_tn,
+	)
+	var success: bool = soh_check.get("success", false)
 
 	return {
 		"success": success,
 		"phase_failed": "" if success else "sleight_of_hand",
-		"stealth_total": stealth_result.total,
-		"sleight_total": soh_result.total,
+		"stealth_total": stealth_check.get("total", 0),
+		"sleight_total": soh_check.get("total", 0),
 		"tn": soh_tn,
-		"margin": soh_result.total - soh_tn,
+		"margin": soh_check.get("margin", 0),
 		"method": ExecutionMethod.POISON,
 	}
 
@@ -286,37 +284,37 @@ static func _execute_blade(
 	susp_mod: int,
 	dice_engine: DiceEngine,
 ) -> Dictionary:
-	var stealth_rank: int = assassin.skills.get("Stealth", 0)
-	var stealth_result: DiceResult = dice_engine.roll_and_keep(
-		assassin.agility + stealth_rank, assassin.agility, stealth_rank > 0
-	)
 	var stealth_tn: int = BLADE_STEALTH_TN + susp_mod
-	if stealth_result.total < stealth_tn:
+	var stealth_check: Dictionary = SkillResolver.resolve_skill_check(
+		assassin, dice_engine, "Stealth", stealth_tn,
+	)
+	if not stealth_check.get("success", false):
 		return {
 			"success": false,
 			"phase_failed": "stealth",
-			"roll_total": stealth_result.total,
+			"roll_total": stealth_check.get("total", 0),
 			"tn": stealth_tn,
-			"margin": stealth_result.total - stealth_tn,
+			"margin": stealth_check.get("margin", 0),
 			"method": ExecutionMethod.BLADE,
 		}
 
-	var kenjutsu_rank: int = assassin.skills.get("Kenjutsu", 0)
-	var ninjutsu_rank: int = assassin.skills.get("Ninjutsu", 0)
-	var attack_skill_rank: int = maxi(kenjutsu_rank, ninjutsu_rank)
-	var attack_result: DiceResult = dice_engine.roll_and_keep(
-		assassin.agility + attack_skill_rank, assassin.agility, attack_skill_rank > 0
-	)
+	var attack_skill: String = "Kenjutsu"
+	if assassin.skills.get("Ninjutsu", 0) > assassin.skills.get("Kenjutsu", 0):
+		attack_skill = "Ninjutsu"
 	var target_tn: int = (target.reflexes * 5 + 5) + target.armor_tn_bonus
-	var success: bool = (attack_result.total + BLADE_ATTACK_BONUS) >= target_tn
+	var attack_check: Dictionary = SkillResolver.resolve_skill_check(
+		assassin, dice_engine, attack_skill, target_tn, 0, "",
+		Enums.Trait.NONE, 0, 0, BLADE_ATTACK_BONUS,
+	)
+	var success: bool = attack_check.get("success", false)
 
 	return {
 		"success": success,
 		"phase_failed": "" if success else "attack",
-		"stealth_total": stealth_result.total,
-		"attack_total": attack_result.total + BLADE_ATTACK_BONUS,
+		"stealth_total": stealth_check.get("total", 0),
+		"attack_total": attack_check.get("total", 0),
 		"target_tn": target_tn,
-		"margin": (attack_result.total + BLADE_ATTACK_BONUS) - target_tn,
+		"margin": attack_check.get("margin", 0),
 		"method": ExecutionMethod.BLADE,
 	}
 
@@ -327,35 +325,34 @@ static func _execute_accident(
 	susp_mod: int,
 	dice_engine: DiceEngine,
 ) -> Dictionary:
-	var eng_rank: int = assassin.skills.get("Engineering", 0)
-	var eng_result: DiceResult = dice_engine.roll_and_keep(
-		assassin.intelligence + eng_rank, assassin.intelligence, eng_rank > 0
-	)
 	var eng_tn: int = ACCIDENT_ENGINEERING_TN + susp_mod
-	if eng_result.total < eng_tn:
+	var eng_check: Dictionary = SkillResolver.resolve_skill_check(
+		assassin, dice_engine, "Engineering", eng_tn,
+		0, "", Enums.Trait.INTELLIGENCE,
+	)
+	if not eng_check.get("success", false):
 		return {
 			"success": false,
 			"phase_failed": "engineering",
-			"roll_total": eng_result.total,
+			"roll_total": eng_check.get("total", 0),
 			"tn": eng_tn,
-			"margin": eng_result.total - eng_tn,
+			"margin": eng_check.get("margin", 0),
 			"method": ExecutionMethod.ARRANGED_ACCIDENT,
 		}
 
-	var stealth_rank: int = assassin.skills.get("Stealth", 0)
-	var stealth_result: DiceResult = dice_engine.roll_and_keep(
-		assassin.agility + stealth_rank, assassin.agility, stealth_rank > 0
-	)
 	var stealth_tn: int = ACCIDENT_STEALTH_TN + susp_mod
-	var success: bool = stealth_result.total >= stealth_tn
+	var stealth_check: Dictionary = SkillResolver.resolve_skill_check(
+		assassin, dice_engine, "Stealth", stealth_tn,
+	)
+	var success: bool = stealth_check.get("success", false)
 
 	return {
 		"success": success,
 		"phase_failed": "" if success else "stealth",
-		"engineering_total": eng_result.total,
-		"stealth_total": stealth_result.total,
+		"engineering_total": eng_check.get("total", 0),
+		"stealth_total": stealth_check.get("total", 0),
 		"tn": stealth_tn,
-		"margin": stealth_result.total - stealth_tn,
+		"margin": stealth_check.get("margin", 0),
 		"method": ExecutionMethod.ARRANGED_ACCIDENT,
 	}
 
@@ -385,33 +382,30 @@ static func resolve_concealment(
 	var tn: int = get_concealment_tn(method)
 
 	var skill: String = ""
-	var trait_val: int = 0
+	var trait_override: Enums.Trait = Enums.Trait.NONE
 	match method:
 		ExecutionMethod.POISON:
 			skill = "Medicine"
-			trait_val = assassin.intelligence
+			trait_override = Enums.Trait.INTELLIGENCE
 		ExecutionMethod.BLADE:
 			skill = "Stealth"
-			trait_val = assassin.agility
 		ExecutionMethod.ARRANGED_ACCIDENT:
 			skill = "Engineering"
-			trait_val = assassin.intelligence
+			trait_override = Enums.Trait.INTELLIGENCE
 
-	var skill_rank: int = assassin.skills.get(skill, 0)
-	var rolled: int = trait_val + skill_rank
-	var kept: int = trait_val
-	var result: DiceResult = dice_engine.roll_and_keep(rolled, kept, skill_rank > 0)
-	var success: bool = result.total >= tn
-	var margin: int = result.total - tn
-
-	var concealment_tn_for_investigators: int = result.total if success else 0
+	var result: Dictionary = SkillResolver.resolve_skill_check(
+		assassin, dice_engine, skill, tn, 0, "", trait_override,
+	)
+	var success: bool = result.get("success", false)
+	var roll_total: int = result.get("total", 0)
+	var concealment_tn_for_investigators: int = roll_total if success else 0
 
 	state["concealment_result"] = {
 		"success": success,
 		"concealed": success,
-		"roll_total": result.total,
+		"roll_total": roll_total,
 		"tn": tn,
-		"margin": margin,
+		"margin": result.get("margin", 0),
 		"skill": skill,
 		"concealment_tn": concealment_tn_for_investigators,
 		"method": method,
@@ -457,22 +451,17 @@ static func resolve_bodyguard_encounter(
 			}
 
 		BodyguardResponse.GO_FOR_TARGET:
-			var stealth_rank: int = assassin.skills.get("Stealth", 0)
-			var stealth_result: DiceResult = dice_engine.roll_and_keep(
-				assassin.agility + stealth_rank, assassin.agility, stealth_rank > 0
+			var contested: Dictionary = SkillResolver.resolve_contested_check(
+				assassin, bodyguard, dice_engine,
+				"Stealth", "Investigation",
 			)
-			var guard_perception: int = bodyguard.perception
-			var guard_inv: int = bodyguard.skills.get("Investigation", 0)
-			var guard_result: DiceResult = dice_engine.roll_and_keep(
-				guard_perception + guard_inv, guard_perception, guard_inv > 0
-			)
-			var evaded: bool = stealth_result.total >= guard_result.total
+			var evaded: bool = contested.get("winner") == "a"
 			if not evaded:
 				add_suspicion(state, SUSPICION_CRITICAL_FAILURE)
 			return {
 				"evaded_guard": evaded,
-				"assassin_stealth": stealth_result.total,
-				"guard_detection": guard_result.total,
+				"assassin_stealth": contested.get("total_a", 0),
+				"guard_detection": contested.get("total_b", 0),
 				"suspicion": state["suspicion"],
 			}
 

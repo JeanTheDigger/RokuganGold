@@ -128,19 +128,16 @@ static func resolve_petition(
 ) -> Dictionary:
 	if character.permanent_ronin:
 		return {"success": false, "rejected": true, "reason": "permanent_ronin", "character_id": character.character_id, "lord_id": target_lord.character_id}
-	var rolled: int = dice_engine.roll_and_keep(
-		character.awareness + character.skills.get("Etiquette", 0),
-		character.awareness
-	).total
 	var tn: int = PETITION_TN
-
 	if target_lord.disposition_values.get(character.character_id, 0) < -10:
 		tn += 10
 
-	var success: bool = rolled >= tn
+	var check: Dictionary = SkillResolver.resolve_skill_check(
+		character, dice_engine, "Etiquette", tn,
+	)
 	return {
-		"success": success,
-		"rolled": rolled,
+		"success": check.get("success", false),
+		"rolled": check.get("total", 0),
 		"tn": tn,
 		"character_id": character.character_id,
 		"lord_id": target_lord.character_id,

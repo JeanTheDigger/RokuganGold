@@ -3612,14 +3612,12 @@ static func _process_ptl_detection(
 		if lore_rank <= 0:
 			continue
 
-		var rolled: int = perception + lore_rank
-		var kept: int = perception
-		if character.family in ["Kuni", "Asako"]:
-			rolled += 2
-
-		var roll_result: Dictionary = dice_engine.roll_and_keep(rolled, kept)
-		var total: int = roll_result.get("total", 0)
-		if total < ptl_tn:
+		var family_bonus: int = 2 if character.family in ["Kuni", "Asako"] else 0
+		var check: Dictionary = SkillResolver.resolve_skill_check(
+			character, dice_engine, "Lore: Shadowlands", ptl_tn,
+			0, "", Enums.Trait.PERCEPTION, family_bonus,
+		)
+		if not check.get("success", false):
 			continue
 
 		var topic: TopicData = _create_ptl_detection_topic(
@@ -4201,15 +4199,12 @@ static func _process_taint_proximity_detection(
 		if lore_rank < 3 and not is_specialist:
 			continue
 
-		var perception: int = detector.perception if detector.perception > 0 else 2
-		var rolled: int = perception + lore_rank
-		var kept: int = perception
-		if is_specialist:
-			rolled += 2
-
-		var roll_result: Dictionary = dice_engine.roll_and_keep(rolled, kept)
-		var total: int = roll_result.get("total", 0)
-		if total < TAINT_DETECTION_PLACEHOLDER_TN:
+		var family_bonus: int = 2 if is_specialist else 0
+		var taint_check: Dictionary = SkillResolver.resolve_skill_check(
+			detector, dice_engine, "Lore: Shadowlands", TAINT_DETECTION_PLACEHOLDER_TN,
+			0, "", Enums.Trait.PERCEPTION, family_bonus,
+		)
+		if not taint_check.get("success", false):
 			continue
 
 		var topic_id: int = next_topic_id[0]

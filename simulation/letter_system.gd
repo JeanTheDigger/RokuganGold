@@ -265,18 +265,10 @@ static func auto_detect_forgery(
 		return false
 	if not has_prior_correspondence(recipient, letter.sender_id, pending_letters):
 		return false
-	var rolled: int = 0
-	var kept: int = 0
-	var perception: int = recipient.get_trait_value(Enums.Trait.PERCEPTION)
-	var investigation_rank: int = recipient.skills.get("Investigation", 0)
-	if investigation_rank > 0:
-		rolled = investigation_rank + perception
-		kept = perception
-	else:
-		rolled = perception
-		kept = perception
-	var result: DiceResult = dice_engine.roll_and_keep(rolled, kept, false)
-	return result.total >= letter.forgery_tn
+	var check: Dictionary = SkillResolver.resolve_skill_check(
+		recipient, dice_engine, "Investigation", letter.forgery_tn,
+	)
+	return check.get("success", false)
 
 
 static func deliberate_examine_letter(
@@ -289,20 +281,18 @@ static func deliberate_examine_letter(
 		return {"detected": false, "no_reference": true}
 	if not letter.is_forged:
 		return {"detected": false, "authentic": true}
-	var perception: int = examiner.get_trait_value(Enums.Trait.PERCEPTION)
-	var investigation_rank: int = examiner.skills.get("Investigation", 0)
-	var rolled: int = investigation_rank + perception if investigation_rank > 0 else perception
-	var kept: int = perception
 	var forgery_rank: int = examiner.skills.get("Forgery", 0)
-	if forgery_rank >= 5:
-		rolled += FORGERY_RANK5_DETECT_BONUS
-	var result: DiceResult = dice_engine.roll_and_keep(rolled, kept, false)
-	var detected: bool = result.total >= letter.forgery_tn
+	var extra_rolled: int = FORGERY_RANK5_DETECT_BONUS if forgery_rank >= 5 else 0
+	var check: Dictionary = SkillResolver.resolve_skill_check(
+		examiner, dice_engine, "Investigation", letter.forgery_tn,
+		0, "", Enums.Trait.NONE, extra_rolled,
+	)
+	var detected: bool = check.get("success", false)
 	if detected:
 		letter.forgery_detected = true
 	return {
 		"detected": detected,
-		"roll_total": result.total,
+		"roll_total": check.get("total", 0),
 		"forgery_tn": letter.forgery_tn,
 	}
 

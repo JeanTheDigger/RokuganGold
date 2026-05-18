@@ -478,15 +478,12 @@ static func detect_blood_evidence(
 	var time_penalty: int = get_scene_time_penalty(days_elapsed)
 	var effective_tn: int = crime_record.concealment_tn + time_penalty
 
-	var investigation_rank: int = character.skills.get("Investigation", 0)
-	var perception: int = character.perception if character.perception > 0 else 2
-	var rolled: int = maxi(investigation_rank + perception, 1)
-	var kept: int = maxi(perception, 1)
+	var check: Dictionary = SkillResolver.resolve_skill_check(
+		character, dice_engine, "Investigation", effective_tn,
+	)
+	var total: int = check.get("total", 0)
 
-	var roll_result: Dictionary = dice_engine.roll_and_keep(rolled, kept)
-	var total: int = roll_result.get("total", 0)
-
-	if total >= effective_tn:
+	if check.get("success", false):
 		return {"detected": true, "total": total, "tn": effective_tn}
 	return {"detected": false, "total": total, "tn": effective_tn}
 
@@ -560,22 +557,20 @@ static func _roll_sincerity_deceit(
 	character: L5RCharacterData,
 	dice_engine: DiceEngine,
 ) -> int:
-	var sincerity: int = character.skills.get("Sincerity", 0)
-	var awareness: int = character.awareness if character.awareness > 0 else 2
-	var rolled: int = maxi(sincerity + awareness, 1)
-	var kept: int = maxi(awareness, 1)
-	return dice_engine.roll_and_keep(rolled, kept).get("total", 0)
+	var check: Dictionary = SkillResolver.resolve_skill_check(
+		character, dice_engine, "Sincerity", 0,
+	)
+	return check.get("total", 0)
 
 
 static func _roll_investigation_perception(
 	character: L5RCharacterData,
 	dice_engine: DiceEngine,
 ) -> int:
-	var investigation: int = character.skills.get("Investigation", 0)
-	var perception: int = character.perception if character.perception > 0 else 2
-	var rolled: int = maxi(investigation + perception, 1)
-	var kept: int = maxi(perception, 1)
-	return dice_engine.roll_and_keep(rolled, kept).get("total", 0)
+	var check: Dictionary = SkillResolver.resolve_skill_check(
+		character, dice_engine, "Investigation", 0,
+	)
+	return check.get("total", 0)
 
 
 # -- Lead Generation (s57.16.5) -----------------------------------------------

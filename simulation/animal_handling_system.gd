@@ -188,7 +188,8 @@ static func make_training_roll(
 	var species_data: Dictionary = SPECIES_TABLE.get(species_str, {})
 	var tn: int = species_data.get("tn", 15)
 
-	# Roll: Animal Handling + Awareness, keeping Animal Handling (s57.39.5)
+	# Animal Handling + Awareness, keeping Animal Handling rank (s57.39.5)
+	# Reversed keep pattern (keeps skill, not trait) — not routable through SkillResolver
 	var skill_rank: int = SkillResolver.get_skill_rank(character, "Animal Handling")
 	var trait_value: int = character.awareness
 	var rolled: int = skill_rank + trait_value
