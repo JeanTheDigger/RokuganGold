@@ -26,7 +26,7 @@ static func get_tn(participant_count: int) -> int:
 	return BASE_TN + TN_PER_EXTRA_PARTICIPANT * maxi(0, participant_count - 2)
 
 
-static func max_viable_count(void_ring: int, tea_rank: int) -> int:
+static func max_viable_count(void_ring: int, _tea_rank: int) -> int:
 	## Returns max total participant count (including host) the host can attempt
 	## at roughly >= 50% success probability.
 	var avg: float = float(void_ring) * L5R_DIE_AVG

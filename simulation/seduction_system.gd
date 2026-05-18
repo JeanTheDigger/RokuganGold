@@ -133,7 +133,7 @@ static func check_maintenance(
 	entanglement: Dictionary,
 	current_ic_day: int,
 ) -> Dictionary:
-	var last: int = entanglement.get("last_maintained_ic_day", 0)
+	var last: int = entanglement.get("last_maintained_ic_day", -1)
 	var days_since: int = current_ic_day - last
 	var windows_missed: int = days_since / MAINTENANCE_WINDOW_IC_DAYS
 

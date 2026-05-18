@@ -16,8 +16,8 @@ extends Resource
 @export var disposition_bonus: int = 0
 
 # Timing
-@export var ic_day_sent: int = 0
-@export var ic_day_arrival: int = 0
+@export var ic_day_sent: int = -1
+@export var ic_day_arrival: int = -1
 
 # State
 @export var delivered: bool = false

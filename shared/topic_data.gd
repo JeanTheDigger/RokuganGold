@@ -28,6 +28,6 @@ enum Category {
 @export var family_involved: String = ""
 @export var subject_character_id: int = -1
 @export var subject_role: String = "NEUTRAL"
-@export var ic_day_created: int = 0
+@export var ic_day_created: int = -1
 @export var resolved: bool = false
 @export var discussion_count_this_day: int = 0

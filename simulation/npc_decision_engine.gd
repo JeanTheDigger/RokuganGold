@@ -2695,7 +2695,7 @@ static func _extract_expiring_favor_ids(
 			continue
 		if favor.invoked:
 			var deadline: int = favor.response_deadline_ic_day
-			if deadline > 0 and (deadline - ic_day) <= threshold:
+			if deadline >= 0 and (deadline - ic_day) <= threshold:
 				result.append(favor.favor_id)
 	return result
 

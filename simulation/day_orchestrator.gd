@@ -5578,7 +5578,10 @@ static func _decay_all_historical_modifiers(
 			var mods: Array = c.historical_modifiers[target_id]
 			for mod: Variant in mods:
 				if mod is Dictionary:
-					var days_elapsed: int = ic_day - mod.get("created_ic_day", 0)
+					var created_day: int = mod.get("created_ic_day", -1)
+					if created_day < 0:
+						continue
+					var days_elapsed: int = ic_day - created_day
 					DispositionSystem.decay_historical_modifier(mod, days_elapsed)
 
 
@@ -11435,8 +11438,8 @@ static func _process_seasonal_worship(
 
 
 static func _is_benten_marriage_blocked(
-	effects: Dictionary,
-	characters_by_id: Dictionary,
+	_effects: Dictionary,
+	_characters_by_id: Dictionary,
 	worship_maluses: Dictionary,
 ) -> bool:
 	if worship_maluses.is_empty():
@@ -13582,7 +13585,7 @@ static func _decay_civil_war_scars(
 	IntraClanCivilWar.decay_post_war_scars(chars_array, typed_scars)
 	var remaining: Array = []
 	for entry: Dictionary in typed_scars:
-		if int(entry.get("base_remaining", 0)) < 0:
+		if int(entry.get("base_remaining", 0)) > 0:
 			remaining.append(entry)
 	season_meta["civil_war_scars"] = remaining
 

@@ -210,22 +210,29 @@ static func resolve_npc_hunt(
 	var threat_excess: int = beast_threat - party_defence
 	var wounded_id: int = -1
 	var killed_id: int = -1
+	var casualty_level: String = ""
 	if threat_excess >= 1:
 		var victim: L5RCharacterData = _select_casualty_victim(combatants)
 		if victim != null:
 			if threat_excess >= CASUALTY_KILLED_MIN:
 				killed_id = victim.character_id
+				casualty_level = "killed"
+			elif threat_excess >= CASUALTY_DOWN_MIN:
+				wounded_id = victim.character_id
+				casualty_level = "down"
 			else:
 				wounded_id = victim.character_id
+				casualty_level = "hurt"
 
 	# Determine outcome
 	var outcome: String
 	if killed_id >= 0:
 		outcome = OUTCOME_DISASTROUS
+	elif casualty_level == "down" and not beast_killed:
+		outcome = OUTCOME_DISASTROUS
 	elif wounded_id >= 0 and beast_killed:
 		outcome = OUTCOME_COSTLY
 	elif wounded_id >= 0 and not beast_killed:
-		# Beast escaped after serious casualties
 		outcome = OUTCOME_DISASTROUS
 	elif beast_killed:
 		outcome = OUTCOME_SUCCESS
@@ -238,6 +245,7 @@ static func resolve_npc_hunt(
 		"second_id": second_id,
 		"wounded_id": wounded_id,
 		"killed_id": killed_id,
+		"casualty_level": casualty_level,
 		"hunt_type": hunt_type,
 	}
 

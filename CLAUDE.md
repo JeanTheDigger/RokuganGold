@@ -241,7 +241,7 @@ For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
 ### Systems Added 2026-05-18
 - **s29.15 Courtier School Techniques** — School technique bonuses wired into
   SkillResolver and ActionExecutor. Doji Courtier R1a (honor-gated Free Raise on
-  social skills when Honor ≥ 6.5), R2 Cadence (silent topic sync between
+  social skills when Honor ≥ 6.0), R2 Cadence (silent topic sync between
   cadence-trained courtiers at the same court), R3 Perfect Gift (one-shot +15
   disposition modifier on gift delivery, once per target). Yasuki R1 / Kitsuki R1 /
   Asako R1 Free Raises extended (Commerce, Investigation, Lore respectively). Kitsuki

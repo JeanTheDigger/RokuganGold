@@ -1813,7 +1813,7 @@ static func _execute_conduct_sortie(
 
 	# Read SS from metadata (populated by NPC engine from world_state) or
 	# fall back to the WallStatus context for the target province.
-	var ss: int = action.metadata.get("ss", 0)
+	var ss: int = action.metadata.get("ss", -1)
 	var si: int = 10
 	var garrison_above_minimum: bool = true
 	var jade_stockpile_critical: bool = false
@@ -1823,7 +1823,7 @@ static func _execute_conduct_sortie(
 			continue
 		var ws: NPCDataStructures.WallStatus = ws_variant as NPCDataStructures.WallStatus
 		if ws.province_id == target_province_id or target_province_id < 0:
-			ss = ws.ss if ss == 0 else ss
+			ss = ws.ss if ss < 0 else ss
 			si = ws.si
 			garrison_above_minimum = ws.garrison_above_minimum
 			jade_stockpile_critical = ws.jade_stockpile_critical
@@ -1879,7 +1879,7 @@ static func _execute_conduct_storm_assault(
 	ctx: NPCDataStructures.ContextSnapshot,
 ) -> Dictionary:
 	var settlement_id: int = action.metadata.get(
-		"siege_settlement_id", character.physical_location,
+		"siege_settlement_id", -1,
 	)
 	return {
 		"success": true,
