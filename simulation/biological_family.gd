@@ -87,11 +87,11 @@ static func compute_all_family_bonds(
 		return bonds
 
 	# Close blood relations — direct id lookups, fast.
-	for sib_id in get_sibling_ids(actor):
+	for sib_id: int in get_sibling_ids(actor):
 		_record_bond(bonds, sib_id, Relationship.SIBLING)
-	for parent_id in get_parent_ids(actor):
+	for parent_id: int in get_parent_ids(actor):
 		_record_bond(bonds, parent_id, Relationship.PARENT)
-	for child_id in get_child_ids(actor):
+	for child_id: int in get_child_ids(actor):
 		_record_bond(bonds, child_id, Relationship.CHILD)
 
 	# Half-siblings via shared parent — scan chars_by_id for other entries
@@ -109,13 +109,13 @@ static func compute_all_family_bonds(
 				_record_bond(bonds, other_id, Relationship.SIBLING)
 
 	# Two-hop relations.
-	for gp_id in get_grandparent_ids(actor, chars_by_id):
+	for gp_id: int in get_grandparent_ids(actor, chars_by_id):
 		if not bonds.has(gp_id):
 			_record_bond(bonds, gp_id, Relationship.GRANDPARENT)
-	for gc_id in get_grandchild_ids(actor, chars_by_id):
+	for gc_id: int in get_grandchild_ids(actor, chars_by_id):
 		if not bonds.has(gc_id):
 			_record_bond(bonds, gc_id, Relationship.GRANDCHILD)
-	for cousin_id in get_first_cousin_ids(actor, chars_by_id):
+	for cousin_id: int in get_first_cousin_ids(actor, chars_by_id):
 		if not bonds.has(cousin_id):
 			_record_bond(bonds, cousin_id, Relationship.FIRST_COUSIN)
 
@@ -182,11 +182,11 @@ static func get_grandparent_ids(
 	chars_by_id: Dictionary,
 ) -> Array[int]:
 	var out: Array[int] = []
-	for parent_id in get_parent_ids(character):
+	for parent_id: int in get_parent_ids(character):
 		var parent: L5RCharacterData = chars_by_id.get(parent_id)
 		if parent == null:
 			continue
-		for gp_id in get_parent_ids(parent):
+		for gp_id: int in get_parent_ids(parent):
 			if not out.has(gp_id):
 				out.append(gp_id)
 	return out
@@ -197,11 +197,11 @@ static func get_grandchild_ids(
 	chars_by_id: Dictionary,
 ) -> Array[int]:
 	var out: Array[int] = []
-	for child_id in get_child_ids(character):
+	for child_id: int in get_child_ids(character):
 		var child: L5RCharacterData = chars_by_id.get(child_id)
 		if child == null:
 			continue
-		for gc_id in get_child_ids(child):
+		for gc_id: int in get_child_ids(child):
 			if not out.has(gc_id):
 				out.append(gc_id)
 	return out
@@ -214,19 +214,19 @@ static func get_aunt_uncle_ids(
 	## Aunts and uncles = parents' siblings, including half-siblings detected
 	## via shared grandparent.
 	var out: Array[int] = []
-	for parent_id in get_parent_ids(character):
+	for parent_id: int in get_parent_ids(character):
 		var parent: L5RCharacterData = chars_by_id.get(parent_id)
 		if parent == null:
 			continue
-		for sib_id in get_sibling_ids(parent):
+		for sib_id: int in get_sibling_ids(parent):
 			if sib_id != parent_id and not out.has(sib_id):
 				out.append(sib_id)
 		# Half-aunts/uncles: parent's grandparents' other children.
-		for gp_id in get_parent_ids(parent):
+		for gp_id: int in get_parent_ids(parent):
 			var gp: L5RCharacterData = chars_by_id.get(gp_id)
 			if gp == null:
 				continue
-			for cid in gp.children_ids:
+			for cid: int in gp.children_ids:
 				if cid != parent_id and not out.has(cid):
 					out.append(cid)
 	return out
@@ -237,11 +237,11 @@ static func get_first_cousin_ids(
 	chars_by_id: Dictionary,
 ) -> Array[int]:
 	var out: Array[int] = []
-	for au_id in get_aunt_uncle_ids(character, chars_by_id):
+	for au_id: int in get_aunt_uncle_ids(character, chars_by_id):
 		var au: L5RCharacterData = chars_by_id.get(au_id)
 		if au == null:
 			continue
-		for cid in au.children_ids:
+		for cid: int in au.children_ids:
 			if cid != character.character_id and not out.has(cid):
 				out.append(cid)
 	return out
@@ -335,15 +335,15 @@ static func get_generation_lineage(
 	# AncestorRecord ancestor_ids rather than character_ids since G4 is
 	# almost certainly deceased.
 	var g4_records: Array[AncestorRecord] = []
-	for parent_id in get_parent_ids(character):
+	for parent_id: int in get_parent_ids(character):
 		var parent: L5RCharacterData = chars_by_id.get(parent_id)
 		if parent == null:
 			continue
-		for record in parent.grandparent_records:
+		for record: AncestorRecord in parent.grandparent_records:
 			if not g4_records.has(record):
 				g4_records.append(record)
 	# Self's own great-grandparent records take precedence if explicitly set.
-	for record in character.great_grandparent_records:
+	for record: AncestorRecord in character.great_grandparent_records:
 		if not g4_records.has(record):
 			g4_records.append(record)
 	lineage["g4_records"] = g4_records

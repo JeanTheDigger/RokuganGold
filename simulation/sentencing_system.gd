@@ -203,7 +203,7 @@ static func _get_personality_base(daimyo: L5RCharacterData, seigyo_usefulness: i
 
 static func _get_disposition_modifier(daimyo: L5RCharacterData, convicted_id: int) -> int:
 	var disposition: int = daimyo.disposition_values.get(convicted_id, 0)
-	for threshold in DISPOSITION_LENIENCY_THRESHOLDS:
+	for threshold: Array[int] in DISPOSITION_LENIENCY_THRESHOLDS:
 		if disposition >= threshold[0] and disposition <= threshold[1]:
 			return threshold[2]
 	return 0

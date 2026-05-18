@@ -775,7 +775,7 @@ static func _check_crisis_override(
 	if not ctx.is_lord:
 		return null
 
-	for ps in ctx.province_statuses:
+	for ps: Variant in ctx.province_statuses:
 		if ps is NPCDataStructures.ProvinceStatus and ps.active_crisis_id >= 0:
 			var need := NPCDataStructures.ImmediateNeed.new()
 			need.need_type = "DEFEND_PROVINCE"
@@ -1254,7 +1254,7 @@ static func _lookup_disposition_modifier(
 	var tiers: Array = scoring_tables.get("disposition_tiers", [])
 	var column: String = "hostile" if action_id in HOSTILE_ACTIONS else "cooperative"
 
-	for tier in tiers:
+	for tier: Variant in tiers:
 		if tier is Dictionary:
 			var min_val: float = float(tier.get("min", -100))
 			var max_val: float = float(tier.get("max", 100))
@@ -1321,7 +1321,7 @@ static func _compute_urgency_bonus(
 	var urgency_rules: Array = scoring_tables.get("urgency_rules", [])
 	var bonus: float = 0.0
 
-	for rule in urgency_rules:
+	for rule: Variant in urgency_rules:
 		if not (rule is Dictionary):
 			continue
 		var condition: String = rule.get("condition", "")
@@ -1329,7 +1329,7 @@ static func _compute_urgency_bonus(
 		var applies_to: Variant = rule.get("applies_to", "")
 		var stacks: bool = rule.get("stacks_per_crisis", false)
 
-		var instances: Array = _evaluate_urgency_condition(condition, ctx, scoring_tables)
+		var instances: Array[Dictionary] = _evaluate_urgency_condition(condition, ctx, scoring_tables)
 		if instances.is_empty():
 			continue
 		if not _action_matches_urgency_category(action_id, applies_to, need.need_type, scoring_tables):
@@ -1351,10 +1351,10 @@ static func _evaluate_urgency_condition(
 	condition: String,
 	ctx: NPCDataStructures.ContextSnapshot,
 	_scoring_tables: Dictionary,
-) -> Array:
+) -> Array[Dictionary]:
 	match condition:
 		"active_crisis_in_relevance_range":
-			var instances: Array = []
+			var instances: Array[Dictionary] = []
 			for ps: Variant in ctx.province_statuses:
 				if ps is NPCDataStructures.ProvinceStatus:
 					var status: NPCDataStructures.ProvinceStatus = ps
@@ -1369,21 +1369,21 @@ static func _evaluate_urgency_condition(
 						return [{"relevance": 1.0}]
 			return []
 		"home_front_famine":
-			var instances: Array = []
+			var instances: Array[Dictionary] = []
 			for pid: int in ctx.famine_crisis_province_ids:
 				instances.append({"relevance": 1.0, "province_id": pid})
 			return instances
 		"vassal_disposition_below_rival":
 			if not ctx.is_lord:
 				return []
-			var instances: Array = []
+			var instances: Array[Dictionary] = []
 			for cid: Variant in ctx.disposition_values:
 				var disp: int = ctx.disposition_values[cid]
 				if disp <= -11:
 					instances.append({"relevance": 1.0, "npc_id": cid})
 			return instances
 		"favor_expiring_within_7_ooc_days":
-			var instances: Array = []
+			var instances: Array[Dictionary] = []
 			for fid: int in ctx.expiring_favor_ids:
 				instances.append({"relevance": 1.0, "favor_id": fid})
 			return instances
@@ -1397,12 +1397,12 @@ static func _evaluate_urgency_condition(
 				return [{"relevance": 1.0}]
 			return []
 		"home_front_hunger":
-			var instances: Array = []
+			var instances: Array[Dictionary] = []
 			for pid: int in ctx.starvation_province_ids:
 				instances.append({"relevance": 1.0, "province_id": pid})
 			return instances
 		"army_supply_cut":
-			var instances: Array = []
+			var instances: Array[Dictionary] = []
 			for aid: int in ctx.cut_supply_army_ids:
 				instances.append({"relevance": 1.0, "army_id": aid})
 			return instances
@@ -1530,7 +1530,7 @@ static func _compute_topic_position_modifier(
 	var invert: bool = need.need_type == "SEEK_PEACE"
 	var type_filter: Array = need_entry.get("topic_types", [])
 	var best_modifier: float = 0.0
-	for topic_id in ctx.known_topics:
+	for topic_id: int in ctx.known_topics:
 		if not type_filter.is_empty():
 			var tt: String = ctx.known_topic_types.get(topic_id, "")
 			if not tt.is_empty() and tt not in type_filter:
@@ -2340,16 +2340,16 @@ static func _build_feasibility_data(
 	var levy_before_planting: bool = current_season == "spring"
 	var spans_autumn: bool = true
 
-	var vassal_stockpiles: Array = _collect_vassal_stockpiles(
+	var vassal_stockpiles: Array[Dictionary] = _collect_vassal_stockpiles(
 		character, world_state, settlements, provinces,
 	)
 	var active_wars: Array = world_state.get("active_wars", [])
-	var raidable: Array = _collect_raidable_provinces(
+	var raidable: Array[Dictionary] = _collect_raidable_provinces(
 		character.clan, provinces, settlements, active_wars,
 	)
 	var trade_routes: Array = world_state.get("trade_routes", [])
 	var has_routes: bool = _has_active_trade_routes(trade_routes, character.clan)
-	var allied: Array = _collect_allied_surplus(
+	var allied: Array[Dictionary] = _collect_allied_surplus(
 		character, world_state, settlements, provinces,
 	)
 	var war_info: Dictionary = _get_war_context(character.clan, active_wars)
@@ -2386,9 +2386,9 @@ static func _collect_vassal_stockpiles(
 	world_state: Dictionary,
 	settlements: Array,
 	provinces: Array,
-) -> Array:
+) -> Array[Dictionary]:
 	var chars: Dictionary = world_state.get("characters_by_id", {})
-	var result: Array = []
+	var result: Array[Dictionary] = []
 	for cid: Variant in chars:
 		var c: Variant = chars[cid]
 		if not (c is L5RCharacterData):
@@ -2426,7 +2426,7 @@ static func _collect_raidable_provinces(
 	provinces: Array,
 	settlements: Array,
 	active_wars: Array,
-) -> Array:
+) -> Array[Dictionary]:
 	var at_war_clans: Dictionary = {}
 	for w: Variant in active_wars:
 		if w is Dictionary:
@@ -2444,7 +2444,7 @@ static func _collect_raidable_provinces(
 			province_rice[sd.province_id] = province_rice.get(sd.province_id, 0.0) + sd.rice_stockpile
 			province_garrison[sd.province_id] = province_garrison.get(sd.province_id, 0.0) + float(sd.garrison_pu)
 
-	var result: Array = []
+	var result: Array[Dictionary] = []
 	for p: Variant in provinces:
 		if not (p is ProvinceData):
 			continue
@@ -2479,9 +2479,9 @@ static func _collect_allied_surplus(
 	world_state: Dictionary,
 	settlements: Array,
 	provinces: Array,
-) -> Array:
+) -> Array[Dictionary]:
 	var chars: Dictionary = world_state.get("characters_by_id", {})
-	var result: Array = []
+	var result: Array[Dictionary] = []
 	for cid: Variant in chars:
 		var c: Variant = chars[cid]
 		if not (c is L5RCharacterData):

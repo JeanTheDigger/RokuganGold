@@ -119,7 +119,7 @@ static func roll_horde_fires(dice: DiceEngine) -> bool:
 ## Returns an InvasionType enum value based on weighted d100 roll.
 static func roll_invasion_type(dice: DiceEngine) -> int:
 	var roll: int = (dice.roll_and_keep(1, 1, 0).total % 100) + 1
-	var sorted_keys: Array = INVASION_TYPE_WEIGHTS.keys()
+	var sorted_keys: Array[int] = INVASION_TYPE_WEIGHTS.keys()
 	sorted_keys.sort()
 	for threshold: int in sorted_keys:
 		if roll <= threshold:

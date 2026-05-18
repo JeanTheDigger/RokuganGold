@@ -209,7 +209,7 @@ static func expose_publicly(
 	HonorGlorySystem.apply_infamy_change(subject, infamy_gain)
 
 	var witness_effects: Array[Dictionary] = []
-	for wid in witness_ids:
+	for wid: int in witness_ids:
 		var w: L5RCharacterData = characters_by_id.get(wid)
 		if w != null:
 			var current: int = w.disposition_values.get(subject.character_id, 0)

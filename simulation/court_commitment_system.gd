@@ -303,7 +303,7 @@ const VOLUNTARY_POSITION_THRESHOLD: float = 50.0
 
 static func find_declarable_topics(
 	lord: L5RCharacterData,
-	agenda_topic_ids: Array,
+	agenda_topic_ids: Array[int],
 	active_topics: Array[TopicData],
 	commitments: Array[CourtCommitmentData],
 ) -> Array[TopicData]:

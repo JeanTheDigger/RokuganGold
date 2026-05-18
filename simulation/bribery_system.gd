@@ -25,13 +25,13 @@ enum BribeCurrency {
 }
 
 # Personality gates (s11.3.11g)
-const ALWAYS_BLOCKED_BUSHIDO: Array = [
+const ALWAYS_BLOCKED_BUSHIDO: Array[int] = [
 	Enums.BushidoVirtue.GI,
 	Enums.BushidoVirtue.MAKOTO,
 	Enums.BushidoVirtue.MEIYO,
 ]
 
-const CONDITIONAL_BUSHIDO: Array = [
+const CONDITIONAL_BUSHIDO: Array[int] = [
 	Enums.BushidoVirtue.JIN,
 	Enums.BushidoVirtue.YU,
 	Enums.BushidoVirtue.REI,

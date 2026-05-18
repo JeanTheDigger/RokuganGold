@@ -24,7 +24,7 @@ const CONVERSATION_PROBABILITY: Array[Array] = [
 static func get_conversation_chance(disposition: int) -> int:
 	if disposition < MIN_DISPOSITION_THRESHOLD:
 		return 0
-	for bracket: Array in CONVERSATION_PROBABILITY:
+	for bracket: Array[int] in CONVERSATION_PROBABILITY:
 		if disposition >= bracket[0] and disposition <= bracket[1]:
 			return bracket[2]
 	return 0

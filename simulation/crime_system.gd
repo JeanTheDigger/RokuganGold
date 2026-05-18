@@ -8,13 +8,13 @@ class_name CrimeSystem
 # -- Table 2.3 Honor Loss by Rank (values are points, 10 pts = 1.0 rank) ------
 # Each entry: [Rank0, Rank1-2, Rank3-4, Rank5-6, Rank7-8, Rank9-10]
 
-const HONOR_TABLE_BREACH_MINOR: Array = [0, 0, -1, -2, -2, -2]
-const HONOR_TABLE_BREACH_MAJOR: Array = [0, -2, -2, -2, -6, -6]
-const HONOR_TABLE_BREACH_BLASPHEMOUS: Array = [-1, -6, -10, -10, -16, -20]
-const HONOR_TABLE_ACCEPTING_BRIBE: Array = [0, 0, -3, -4, -7, -8]
-const HONOR_TABLE_DISLOYALTY: Array = [0, -2, -6, -10, -14, -18]
-const HONOR_TABLE_ACCOMPLICE_HEINOUS: Array = [-1, -4, -8, -12, -16, -20]
-const HONOR_TABLE_ACCOMPLICE_MINOR: Array = [0, -1, -4, -4, -8, -8]
+const HONOR_TABLE_BREACH_MINOR: Array[int] = [0, 0, -1, -2, -2, -2]
+const HONOR_TABLE_BREACH_MAJOR: Array[int] = [0, -2, -2, -2, -6, -6]
+const HONOR_TABLE_BREACH_BLASPHEMOUS: Array[int] = [-1, -6, -10, -10, -16, -20]
+const HONOR_TABLE_ACCEPTING_BRIBE: Array[int] = [0, 0, -3, -4, -7, -8]
+const HONOR_TABLE_DISLOYALTY: Array[int] = [0, -2, -6, -10, -14, -18]
+const HONOR_TABLE_ACCOMPLICE_HEINOUS: Array[int] = [-1, -4, -8, -12, -16, -20]
+const HONOR_TABLE_ACCOMPLICE_MINOR: Array[int] = [0, -1, -4, -4, -8, -8]
 
 # Maps CrimeType to the Table 2.3 row used for at-act honor loss.
 const CRIME_HONOR_TABLE: Dictionary = {
@@ -56,7 +56,7 @@ const SEPPUKU_REFUSED_HONOR_PENALTY: float = -1.0
 const SEPPUKU_REFUSED_INFAMY_PENALTY: float = 1.0
 
 # Crime types where seppuku is offered per GDD s57.47.
-const SEPPUKU_OFFERED_CRIMES: Array = [
+const SEPPUKU_OFFERED_CRIMES: Array[int] = [
 	Enums.CrimeType.UNSANCTIONED_OPEN_KILLING,
 	Enums.CrimeType.UNSANCTIONED_COVERT_KILLING,
 	Enums.CrimeType.MAGISTRATE_CORRUPTION,
@@ -103,7 +103,7 @@ static func get_severity(crime_type: Enums.CrimeType) -> Enums.CrimeSeverity:
 
 # -- Table 2.3 Lookup ---------------------------------------------------------
 
-static func _get_honor_table(table_name: String) -> Array:
+static func _get_honor_table(table_name: String) -> Array[int]:
 	match table_name:
 		"BREACH_MINOR": return HONOR_TABLE_BREACH_MINOR
 		"BREACH_MAJOR": return HONOR_TABLE_BREACH_MAJOR
@@ -131,7 +131,7 @@ static func _get_rank_bracket(honor_rank: int) -> int:
 
 static func get_at_act_honor_loss(crime_type: Enums.CrimeType, honor_rank: int) -> float:
 	var table_name: String = CRIME_HONOR_TABLE.get(crime_type, "BREACH_MINOR")
-	var table: Array = _get_honor_table(table_name)
+	var table: Array[int] = _get_honor_table(table_name)
 	var bracket: int = _get_rank_bracket(honor_rank)
 	var points: int = table[bracket]
 	return points / 10.0
@@ -150,7 +150,7 @@ static func apply_at_act_consequences(character: L5RCharacterData, crime_type: E
 
 static func apply_at_conviction_consequences(character: L5RCharacterData, record: CrimeRecord, victim_status: float = 0.0) -> Dictionary:
 	var crime_type: Enums.CrimeType = record.crime_type
-	var consequences: Array = CONVICTION_CONSEQUENCES.get(crime_type, [-0.1, 0.0, 0.0, 4])
+	var consequences: Array[float] = CONVICTION_CONSEQUENCES.get(crime_type, [-0.1, 0.0, 0.0, 4])
 
 	var glory_delta: float = HonorGlorySystem.apply_glory_change(character, consequences[0])
 	var infamy_delta: float = HonorGlorySystem.apply_infamy_change(character, consequences[1])
@@ -252,10 +252,10 @@ static func is_seppuku_eligible(crime_type: Enums.CrimeType, skimming_amount: fl
 
 # -- Escalation Check (dishonorable conduct) -----------------------------------
 
-static func check_escalation(records: Array, current_ic_day: int, days_per_season: int) -> bool:
+static func check_escalation(records: Array[CrimeRecord], current_ic_day: int, days_per_season: int) -> bool:
 	var window_days: int = ESCALATION_WINDOW_SEASONS * days_per_season
 	var count: int = 0
-	for record in records:
+	for record: CrimeRecord in records:
 		if record is CrimeRecord:
 			if record.crime_type == Enums.CrimeType.DISHONORABLE_CONDUCT:
 				if current_ic_day - record.ic_day_committed <= window_days:

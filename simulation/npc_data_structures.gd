@@ -120,7 +120,7 @@ class ContextSnapshot:
 
 	# Lord-tier fields
 	var resource_stockpiles: Dictionary = {}
-	var province_statuses: Array = []
+	var province_statuses: Array[ProvinceStatus] = []
 	var feasibility_data: Dictionary = {}
 
 	# Vacancy detection (s57.20.3)
@@ -137,7 +137,7 @@ class ContextSnapshot:
 	var assigned_company_id: int = -1
 
 	# Wall management (s55.23)
-	var wall_statuses: Array = []
+	var wall_statuses: Array[WallStatus] = []
 	# Precomputed garrison shortage personality modifier per known contact
 	# (character_id → float from WallSystem personality table, s2.4.12–13).
 	# Populated only for characters with wall_statuses; empty otherwise.

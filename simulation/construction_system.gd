@@ -134,7 +134,7 @@ static func has_authority(
 	character: L5RCharacterData,
 ) -> bool:
 	var level: AuthorityLevel = get_authority_level(character)
-	var allowed: Array = CONSTRUCTION_AUTHORITY.get(construction_type, [])
+	var allowed: Array[int] = CONSTRUCTION_AUTHORITY.get(construction_type, [])
 	return level in allowed
 
 

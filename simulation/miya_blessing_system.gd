@@ -174,7 +174,7 @@ static func apply_cunning_modifier(
 ) -> void:
 	## Cunning emperors add +10 Need Score to favored clan's provinces
 	## and -10 to disfavored clan's provinces.
-	for entry in scored:
+	for entry: Dictionary in scored:
 		var clan: String = entry.get("clan", "")
 		if clan == favored_clan:
 			entry["score"] = int(entry.get("score", 0)) + CUNNING_NEED_SCORE_BONUS
@@ -208,7 +208,7 @@ static func select_provinces(
 	## Returns up to PROVINCES_SELECTED province_ids ordered by score desc,
 	## tiebroken by lowest stability, then by smaller population PU.
 	var eligible: Array[Dictionary] = []
-	for entry in scored:
+	for entry: Dictionary in scored:
 		if entry.get("excluded", false):
 			continue
 		eligible.append(entry)
@@ -220,7 +220,7 @@ static func select_provinces(
 		return a["population_pu"] < b["population_pu"]
 	)
 	var selected: Array[int] = []
-	for entry in eligible:
+	for entry: Dictionary in eligible:
 		if selected.size() >= PROVINCES_SELECTED:
 			break
 		selected.append(int(entry["province_id"]))
@@ -250,11 +250,11 @@ static func distribute_to_settlements(
 	if rice_for_province <= 0.0 or settlements.is_empty():
 		return shares
 	var total_pu: float = 0.0
-	for s in settlements:
+	for s: Variant in settlements:
 		total_pu += float(s.population_pu)
 	if total_pu <= 0.0:
 		return shares
-	for s in settlements:
+	for s: Variant in settlements:
 		var pu: float = float(s.population_pu)
 		if pu <= 0.0:
 			continue
@@ -329,7 +329,7 @@ static func process_annual_blessing(inputs: Dictionary) -> Dictionary:
 	var per_province: float = allocation / float(PROVINCES_SELECTED)
 
 	var scored_array: Array[Dictionary] = []
-	for entry in inputs.get("scored_provinces", []):
+	for entry: Dictionary in inputs.get("scored_provinces", []):
 		scored_array.append(entry)
 	var selected_ids: Array[int] = select_provinces(scored_array)
 	if selected_ids.is_empty():
@@ -345,10 +345,10 @@ static func process_annual_blessing(inputs: Dictionary) -> Dictionary:
 
 	var settlement_grants: Dictionary = {}
 	var province_settlements: Dictionary = inputs.get("province_settlements", {})
-	for pid in selected_ids:
+	for pid: int in selected_ids:
 		var settlements: Array = province_settlements.get(pid, [])
 		var shares: Dictionary = distribute_to_settlements(settlements, per_province_actual)
-		for sid in shares:
+		for sid: int in shares:
 			settlement_grants[sid] = settlement_grants.get(sid, 0.0) + shares[sid]
 
 	result["fired"] = true

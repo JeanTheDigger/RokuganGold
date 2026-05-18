@@ -191,7 +191,7 @@ static func transfer_objective_knowledge(
 	recipient: L5RCharacterData,
 	objective: Dictionary,
 	current_season: int,
-	province_statuses: Array = [],
+	province_statuses: Array[Variant] = [],
 	chars_by_id: Dictionary = {},
 	clan_baselines: Dictionary = {},
 	family_baselines: Dictionary = {},
@@ -343,7 +343,7 @@ static func get_known_contacts_for_clan(
 	character: L5RCharacterData,
 	clan_id: String,
 ) -> Array[int]:
-	var contacts: Array = character.known_contacts_by_clan.get(clan_id, [])
+	var contacts: Array[int] = character.known_contacts_by_clan.get(clan_id, [])
 	var result: Array[int] = []
 	for c: int in contacts:
 		result.append(c)

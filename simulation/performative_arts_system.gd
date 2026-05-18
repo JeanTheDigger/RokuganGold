@@ -94,7 +94,7 @@ static func resolve_public_performance(
 	glory_change = glory_change * fatigue_mult
 
 	var witness_effects: Array[Dictionary] = []
-	for wid in witness_ids:
+	for wid: int in witness_ids:
 		witness_effects.append({
 			"character_id": wid,
 			"disposition_change": disp_per_witness,
@@ -176,7 +176,7 @@ static func get_best_art_form(performer: L5RCharacterData) -> ArtForm:
 	var best_form: ArtForm = ArtForm.POETRY
 	var best_rank: int = -1
 
-	for form in ArtForm.values():
+	for form: int in ArtForm.values():
 		var skill_name: String = get_performance_skill(form)
 		var rank: int = performer.skills.get(skill_name, 0)
 		var effective: int = rank + performer.awareness
@@ -195,7 +195,7 @@ static func apply_performance_effects(
 	HonorGlorySystem.apply_glory_change(performer, result.get("glory_change", 0.0))
 
 	if result.has("witness_effects"):
-		for effect in result["witness_effects"]:
+		for effect: Dictionary in result["witness_effects"]:
 			var wid: int = effect.get("character_id", -1)
 			var disp_delta: int = effect.get("disposition_change", 0)
 			if wid >= 0 and disp_delta != 0:

@@ -251,9 +251,9 @@ static func weather_from_roll(roll: int, season: String,
 		is_inland: bool = false) -> int:
 	var table: Dictionary = WEATHER_TABLE.get(season, WEATHER_TABLE["spring"])
 	var result: int = Enums.NavalWeather.CLEAR
-	var thresholds: Array = table.keys()
+	var thresholds: Array[int] = table.keys()
 	thresholds.sort()
-	for threshold in thresholds:
+	for threshold: int in thresholds:
 		if roll > threshold:
 			result = table[threshold]
 	if is_inland and result == Enums.NavalWeather.TYPHOON:
@@ -421,11 +421,11 @@ static func get_tortoise_recognition_tn(access_level: String) -> int:
 
 # -- Naval Trade Route Rules (s11.9) --------------------------------------------
 
-static func can_establish_naval_route(ship_classes_available: Array,
+static func can_establish_naval_route(ship_classes_available: Array[int],
 		crosses_ocean: bool) -> bool:
 	if not crosses_ocean:
 		return true
-	for sc in ship_classes_available:
+	for sc: int in ship_classes_available:
 		if sc in OCEAN_CAPABLE_CLASSES:
 			return true
 	return false

@@ -55,7 +55,7 @@ const PERSONALITY_AT_RISK_MODIFIERS: Dictionary = {
 
 const CHUGI_EXTERNAL_REDUCTION: int = 3
 
-const REDUCED_PENALTY_VIRTUES: Array = [
+const REDUCED_PENALTY_VIRTUES: Array[int] = [
 	Enums.ShouridoVirtue.SEIGYO,
 	Enums.ShouridoVirtue.KYORYOKU,
 ]

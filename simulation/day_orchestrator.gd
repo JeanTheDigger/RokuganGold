@@ -2273,7 +2273,7 @@ static func _process_miya_blessing_followup(
 		# topics, apply disposition deltas.
 		season_meta["consecutive_blessing_suspensions"] = 0
 		var selected_ids: Array = blessing.get("selected_province_ids", [])
-		for pid in selected_ids:
+		for pid: Variant in selected_ids:
 			var prov: ProvinceData = provinces.get(pid)
 			if prov == null:
 				continue
@@ -2305,7 +2305,7 @@ static func _process_miya_blessing_followup(
 	var stab_penalty: int = -1
 	if suspended_count >= 2:
 		stab_penalty = -2
-	for pid in provinces:
+	for pid: Variant in provinces:
 		var p: ProvinceData = provinces[pid]
 		# Quick proxy for "Need Score > 0": stability below stable threshold
 		# OR active insurgency. Avoids requiring caller to pass full need scores.
@@ -4640,7 +4640,7 @@ static func _process_lord_deaths(
 		next_succession_id[0] += 1
 
 		var candidates := SuccessionSystem.get_candidates(deceased, characters_by_id)
-		for cand in candidates:
+		for cand: Dictionary in candidates:
 			succession.candidate_ids.append(cand["id"])
 
 		succession.confirming_authority_id = SuccessionSystem.find_confirming_authority(
@@ -4715,7 +4715,7 @@ static func _process_successions(
 	characters_by_id: Dictionary,
 ) -> Array[Dictionary]:
 	var results: Array[Dictionary] = []
-	for succ in active_successions:
+	for succ: SuccessionData in active_successions:
 		if succ.state == SuccessionData.SuccessionState.CONFIRMED:
 			continue
 		if succ.state == SuccessionData.SuccessionState.RESOLVED:
@@ -4747,7 +4747,7 @@ static func _rebuild_candidates(
 	characters_by_id: Dictionary,
 ) -> Array[Dictionary]:
 	var candidates: Array[Dictionary] = []
-	for cid in succ.candidate_ids:
+	for cid: int in succ.candidate_ids:
 		var c: L5RCharacterData = characters_by_id.get(cid)
 		if c != null and not CharacterStats.is_dead(c):
 			candidates.append({"id": cid, "priority": SuccessionSystem.CandidatePriority.LORD_SELECTS, "character": c})
@@ -5282,7 +5282,7 @@ static func _process_festivals(ic_day: int, world_states: Dictionary) -> Diction
 	var festival_glory_poetry: float = 0.1 if "poetry_exchange" in effects else 0.0
 	var festival_glory_martial: float = 0.1 if "martial_glory" in effects else 0.0
 
-	for char_id in world_states:
+	for char_id: Variant in world_states:
 		if char_id is not int:
 			continue
 		var ws: Dictionary = world_states[char_id]
@@ -5391,7 +5391,7 @@ static func _apply_favor_breach(
 	var witness_loss: int = breach.get("witness_disposition_loss", 0)
 	var witness_ids: Array = breach.get("witnesses", [])
 	if witness_loss != 0:
-		for wid in witness_ids:
+		for wid: Variant in witness_ids:
 			var witness: L5RCharacterData = characters_by_id.get(wid)
 			if witness == null or witness.character_id == debtor_id:
 				continue
@@ -5643,7 +5643,7 @@ static func _evaluate_heir_designations(
 	characters_by_id: Dictionary,
 	active_topics: Array[TopicData],
 ) -> void:
-	for lord in characters:
+	for lord: L5RCharacterData in characters:
 		if CharacterStats.is_dead(lord):
 			continue
 		if not _is_lord_tier(lord):
@@ -5665,11 +5665,11 @@ static func _evaluate_heir_designations(
 			continue
 
 		var topics_by_char: Dictionary = {}
-		for cand in candidates:
+		for cand: Dictionary in candidates:
 			var cand_id: int = cand["id"]
 			var cand_topics: Array[Dictionary] = []
-			for t in lord.topic_pool:
-				for topic in active_topics:
+			for t: int in lord.topic_pool:
+				for topic: TopicData in active_topics:
 					if topic.topic_id == t:
 						cand_topics.append({"topic_type": topic.topic_type})
 						break
@@ -5691,7 +5691,7 @@ static func _process_entanglements(
 	var results: Array[Dictionary] = []
 	var broken: Array[Dictionary] = []
 
-	for ent in entanglements:
+	for ent: Dictionary in entanglements:
 		if ent.get("state") == SeductionSystem.EntanglementState.BROKEN:
 			continue
 
@@ -5714,7 +5714,7 @@ static func _process_entanglements(
 				"missed_windows": check.get("missed_windows", 0),
 			})
 
-	for ent in broken:
+	for ent: Dictionary in broken:
 		entanglements.erase(ent)
 
 	return results
@@ -5924,7 +5924,7 @@ static func _process_bound_states(
 	var results: Array[Dictionary] = []
 	var freed: Array[Dictionary] = []
 
-	for bs in bound_states:
+	for bs: Dictionary in bound_states:
 		var char_id: int = bs.get("character_id", -1)
 		var character: L5RCharacterData = characters_by_id.get(char_id)
 		if character == null:
@@ -5951,7 +5951,7 @@ static func _process_bound_states(
 			"new_state": bs.get("state"),
 		})
 
-	for bs in freed:
+	for bs: Dictionary in freed:
 		bound_states.erase(bs)
 
 	return results
@@ -10350,7 +10350,7 @@ static func _build_togashi_world_state(
 
 	var active_wars: Array = world_states.get("active_wars", [])
 	var inter_clan_wars: int = 0
-	for w in active_wars:
+	for w: Variant in active_wars:
 		if w is Dictionary:
 			inter_clan_wars += 1
 
@@ -10359,7 +10359,7 @@ static func _build_togashi_world_state(
 	var max_non_sl_ptl: float = 0.0
 	var wall_breach: bool = false
 	var failing_worship: int = 0
-	for p in provinces_data:
+	for p: Variant in provinces_data:
 		if p is ProvinceData:
 			if p.active_insurgency_id >= 0:
 				rebellion_count += 1
@@ -10369,11 +10369,11 @@ static func _build_togashi_world_state(
 				wall_breach = true
 
 	var worship_maluses: Dictionary = world_states.get("_worship_maluses", {})
-	for prov_id in worship_maluses:
+	for prov_id: Variant in worship_maluses:
 		var pm: Dictionary = worship_maluses[prov_id]
 		if pm.is_empty():
 			continue
-		for fortune_key in pm:
+		for fortune_key: Variant in pm:
 			var malus: Dictionary = pm[fortune_key]
 			if malus.get("tier", 0) >= 2:
 				failing_worship += 1
@@ -10658,7 +10658,7 @@ static func _find_living_elemental_masters(characters: Array[L5RCharacterData]) 
 			var master_enum: int = _element_string_to_master(element)
 			if master_enum >= 0 and not found_by_role.has(master_enum):
 				found_by_role[master_enum] = c
-	for m in found_by_role:
+	for m: Variant in found_by_role:
 		masters.append(m)
 	return masters
 
@@ -10697,7 +10697,7 @@ static func _build_master_virtues(
 	characters_by_id: Dictionary,
 ) -> Dictionary:
 	var virtues: Dictionary = {}
-	for m in living_masters:
+	for m: Variant in living_masters:
 		var master_char: L5RCharacterData = _find_master_character(m, characters_by_id)
 		if master_char != null:
 			virtues[m] = {
@@ -10713,7 +10713,7 @@ static func _build_master_dispositions(
 	champion_id: int,
 ) -> Dictionary:
 	var dispositions: Dictionary = {}
-	for m in living_masters:
+	for m: Variant in living_masters:
 		var master_char: L5RCharacterData = _find_master_character(m, characters_by_id)
 		if master_char != null:
 			dispositions[m] = int(master_char.disposition_values.get(champion_id, 0))
@@ -10734,7 +10734,7 @@ static func _find_master_character(
 		PhoenixCouncil.Master.EARTH: element_name = "Earth"
 		PhoenixCouncil.Master.VOID: element_name = "Void"
 	var target_role: String = "Master of " + element_name
-	for id in characters_by_id:
+	for id: Variant in characters_by_id:
 		var c: L5RCharacterData = characters_by_id[id]
 		if c.clan == "Phoenix" and c.role_position == target_role:
 			if not CharacterStats.is_dead(c.wounds_taken, CharacterStats.get_ring_value(c, Enums.Ring.EARTH)):
@@ -12678,7 +12678,7 @@ static func _process_court_action_effects(
 		if effects.has("target_witness_disposition"):
 			var per_witness: int = effects["target_witness_disposition"]
 			var witnesses: Array = effects.get("witnesses", [])
-			for wid in witnesses:
+			for wid: Variant in witnesses:
 				var w: L5RCharacterData = characters_by_id.get(wid)
 				if w != null and target_id >= 0:
 					var current: int = w.disposition_values.get(target_id, 0)

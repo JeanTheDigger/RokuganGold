@@ -90,15 +90,15 @@ static func get_on_person_capacity(outfit: Outfit) -> int:
 	return OUTFIT_CAPACITY.get(outfit, 5)
 
 
-static func get_used_slots(items: Array, storage_tier: StorageTier) -> int:
+static func get_used_slots(items: Array[Dictionary], storage_tier: StorageTier) -> int:
 	var total: int = 0
-	for item in items:
+	for item: Dictionary in items:
 		if item is Dictionary and item.get("storage_tier") == storage_tier and not item.get("in_transit", false):
 			total += item.get("size", 1)
 	return total
 
 
-static func can_add_item(items: Array, item: Dictionary, storage_tier: StorageTier, outfit: Outfit = Outfit.CASUAL) -> bool:
+static func can_add_item(items: Array[Dictionary], item: Dictionary, storage_tier: StorageTier, outfit: Outfit = Outfit.CASUAL) -> bool:
 	if storage_tier == StorageTier.HOME_STORAGE:
 		return true
 	var capacity: int = QUARTERS_CAPACITY if storage_tier == StorageTier.CURRENT_QUARTERS else get_on_person_capacity(outfit)
@@ -108,7 +108,7 @@ static func can_add_item(items: Array, item: Dictionary, storage_tier: StorageTi
 
 # -- Transfer Operations ------------------------------------------------------
 
-static func give_directly(items_from: Array, items_to: Array, item_id: int) -> bool:
+static func give_directly(items_from: Array[Dictionary], items_to: Array[Dictionary], item_id: int) -> bool:
 	var item: Dictionary = _find_item(items_from, item_id)
 	if item.is_empty():
 		return false
@@ -120,7 +120,7 @@ static func give_directly(items_from: Array, items_to: Array, item_id: int) -> b
 	return true
 
 
-static func send_by_messenger(items: Array, item_id: int, destination_id: int) -> bool:
+static func send_by_messenger(items: Array[Dictionary], item_id: int, destination_id: int) -> bool:
 	var item: Dictionary = _find_item(items, item_id)
 	if item.is_empty():
 		return false
@@ -129,7 +129,7 @@ static func send_by_messenger(items: Array, item_id: int, destination_id: int) -
 	return true
 
 
-static func receive_from_transit(items: Array, item_id: int) -> bool:
+static func receive_from_transit(items: Array[Dictionary], item_id: int) -> bool:
 	var item: Dictionary = _find_item(items, item_id)
 	if item.is_empty():
 		return false
@@ -139,7 +139,7 @@ static func receive_from_transit(items: Array, item_id: int) -> bool:
 	return true
 
 
-static func move_to_storage(items: Array, item_id: int, target_tier: StorageTier, outfit: Outfit = Outfit.CASUAL) -> bool:
+static func move_to_storage(items: Array[Dictionary], item_id: int, target_tier: StorageTier, outfit: Outfit = Outfit.CASUAL) -> bool:
 	var item: Dictionary = _find_item(items, item_id)
 	if item.is_empty():
 		return false
@@ -154,7 +154,7 @@ static func move_to_storage(items: Array, item_id: int, target_tier: StorageTier
 
 # -- Destruction --------------------------------------------------------------
 
-static func destroy_item(items: Array, item_id: int) -> bool:
+static func destroy_item(items: Array[Dictionary], item_id: int) -> bool:
 	var item: Dictionary = _find_item(items, item_id)
 	if item.is_empty():
 		return false
@@ -164,7 +164,7 @@ static func destroy_item(items: Array, item_id: int) -> bool:
 
 # -- Covert Acquisition -------------------------------------------------------
 
-static func pickpocket(items_from: Array, items_to: Array, item_id: int) -> bool:
+static func pickpocket(items_from: Array[Dictionary], items_to: Array[Dictionary], item_id: int) -> bool:
 	var item: Dictionary = _find_item(items_from, item_id)
 	if item.is_empty():
 		return false
@@ -176,7 +176,7 @@ static func pickpocket(items_from: Array, items_to: Array, item_id: int) -> bool
 	return true
 
 
-static func search_quarters(items_from: Array, items_to: Array, item_id: int) -> bool:
+static func search_quarters(items_from: Array[Dictionary], items_to: Array[Dictionary], item_id: int) -> bool:
 	var item: Dictionary = _find_item(items_from, item_id)
 	if item.is_empty():
 		return false
@@ -190,16 +190,16 @@ static func search_quarters(items_from: Array, items_to: Array, item_id: int) ->
 
 # -- Evidence -----------------------------------------------------------------
 
-static func has_evidence(items: Array) -> bool:
-	for item in items:
+static func has_evidence(items: Array[Dictionary]) -> bool:
+	for item: Dictionary in items:
 		if item is Dictionary and item.get("is_evidence", false):
 			return true
 	return false
 
 
-static func get_evidence_items(items: Array) -> Array:
-	var evidence: Array = []
-	for item in items:
+static func get_evidence_items(items: Array[Dictionary]) -> Array[Dictionary]:
+	var evidence: Array[Dictionary] = []
+	for item: Dictionary in items:
 		if item is Dictionary and item.get("is_evidence", false):
 			evidence.append(item)
 	return evidence
@@ -207,7 +207,7 @@ static func get_evidence_items(items: Array) -> Array:
 
 # -- Concealment (court formal overflow) --------------------------------------
 
-static func needs_concealment(items: Array, outfit: Outfit) -> bool:
+static func needs_concealment(items: Array[Dictionary], outfit: Outfit) -> bool:
 	if outfit != Outfit.COURT_FORMAL:
 		return false
 	return get_used_slots(items, StorageTier.ON_PERSON) > get_on_person_capacity(outfit)
@@ -215,16 +215,16 @@ static func needs_concealment(items: Array, outfit: Outfit) -> bool:
 
 # -- Helpers ------------------------------------------------------------------
 
-static func _find_item(items: Array, item_id: int) -> Dictionary:
-	for item in items:
+static func _find_item(items: Array[Dictionary], item_id: int) -> Dictionary:
+	for item: Dictionary in items:
 		if item is Dictionary and item.get("item_id") == item_id:
 			return item
 	return {}
 
 
-static func get_items_in_tier(items: Array, storage_tier: StorageTier) -> Array:
-	var result: Array = []
-	for item in items:
+static func get_items_in_tier(items: Array[Dictionary], storage_tier: StorageTier) -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	for item: Dictionary in items:
 		if item is Dictionary and item.get("storage_tier") == storage_tier and not item.get("in_transit", false):
 			result.append(item)
 	return result
