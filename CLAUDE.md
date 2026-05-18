@@ -209,6 +209,55 @@ file, search `/simulation/` and `/shared/` to confirm the system doesn't already
 For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
 **Code Implementation Status** table at the bottom of `/gdd/00_INDEX.md`.
 
+### Known Code Issues (found and fixed 2026-05-18)
+- **DayOrchestrator._decay_civil_war_scars() — inverted filter. FIXED.**
+  Was `if base_remaining < 0: remaining.append(entry)` — kept only negative
+  (over-decayed) entries and purged all active scars every season. Changed to
+  `> 0`. All civil war scars were being silently discarded.
+- **DayOrchestrator._decay_all_historical_modifiers() — sentinel default. FIXED.**
+  `created_ic_day` fallback was `0` (valid IC day), causing silent over-decay
+  for any modifier dict missing the key. Changed to `-1` with guard.
+- **HuntSystem.resolve_hunt() — missing CASUALTY_DOWN_MIN tier. FIXED.**
+  GDD s57.38 specifies three casualty tiers: Hurt (1–14), Down (15–29),
+  Killed (30+). Code only had two (wound/kill), `CASUALTY_DOWN_MIN` was
+  declared but never used. Now wired with `casualty_level` in result dict.
+- **ActionExecutor._execute_conduct_storm_assault() — type mismatch. FIXED.**
+  `settlement_id: int` had `character.physical_location` (String) as fallback.
+  Changed to `-1` sentinel.
+- **ActionExecutor wall sortie SS sentinel — valid zero treated as unset. FIXED.**
+  SS=0 is a valid game state but was being overwritten by WallStatus value.
+  Changed sentinel from `0` to `-1`, comparison from `== 0` to `< 0`.
+- **NPCDecisionEngine favor deadline — day 0 excluded. FIXED.**
+  `deadline > 0` skipped favors due on IC day 0. Changed to `>= 0`.
+- **Sentinel defaults (5 shared data fields) — 0 → -1. FIXED.**
+  `crime_record.ic_day_committed`, `topic_data.ic_day_created`,
+  `letter_data.ic_day_sent`, `letter_data.ic_day_arrival`,
+  `insurgency_data.season_spawned`. All always set on creation; defaults
+  made consistent with design decision #2.
+- **SeductionSystem.check_maintenance_state() — fallback sentinel. FIXED.**
+  `last_maintained_ic_day` fallback was `0`; changed to `-1`.
+
+### Known Code Issues — Deferred (require design input)
+- **NPCDecisionEngine HOSTILE_ACTIONS — phantom ActionIDs.** 12 entries in
+  the HOSTILE_ACTIONS const (SHADOW_TARGET, SEARCH_PERSON, CONCEAL_ITEM,
+  SEDUCE variants, ASSASSINATE, DAMAGE_RELATIONSHIP) do not match any
+  ActionID in context action lists or scoring tables. The hostile disposition
+  column is never applied for these actions. Needs NPC engine ActionID
+  reconciliation pass.
+- **NPCDecisionEngine — 11 civilian/military order actions unreachable.**
+  SET_TAX_RATE, SET_STIPEND_RATE, REQUEST_ART, ASSIGN_VASSAL_OBJECTIVE,
+  ASSIGN_TO_MILITARY_SERVICE, ASSIGN_GARRISON, ORDER_LEVY, ORDER_DEPLOY,
+  ORDER_FORTIFY, ORDER_RETREAT, SEND_INVITATION are never added to any
+  context's action list in `_get_actions_for_context()`. They have scoring
+  table entries but can never be selected. May be intentional (civilian order
+  budget runs separately) or a wiring gap.
+- **NPCDecisionEngine LABOR_HALT_BLOCKED_ACTIONS — phantom entries.** All
+  three entries (COMMISSION_CONSTRUCTION, COMMISSION_REPAIR, LEVY_TROOPS)
+  are non-existent ActionIDs. Labor halt blocking is non-functional.
+- **SkillResolver from_the_ashes expiry gap.** Buff applies even if
+  `expires_ic_day` has passed but the daily cleanup hasn't run yet.
+  Theoretical gap (cleanup runs at day start, buff lasts 2 full IC days).
+
 ### Known Code Issues (found and fixed 2026-05-17)
 - **DefenseHearingSystem.can_appoint_champion() — tautology bug. FIXED.**
   Was `return X != Y or X == Y`. GDD s11.3.9f confirms either side may appoint a
