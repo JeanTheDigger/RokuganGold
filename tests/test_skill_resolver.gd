@@ -410,3 +410,116 @@ func test_deceptive_action_ids_list() -> void:
 	assert_true("FABRICATE_SECRET" in SkillResolver.DECEPTIVE_ACTION_IDS)
 	assert_false("CHARM" in SkillResolver.DECEPTIVE_ACTION_IDS)
 	assert_false("INTIMIDATE" in SkillResolver.DECEPTIVE_ACTION_IDS)
+
+
+# -- Asako R2: From the Ashes (s29.15.10) --------------------------------------
+
+func _make_asako_loremaster() -> L5RCharacterData:
+	var c := L5RCharacterData.new()
+	c.school = "Asako Loremaster"
+	c.stamina = 3
+	c.willpower = 3
+	c.strength = 3
+	c.perception = 3
+	c.agility = 3
+	c.intelligence = 3
+	c.reflexes = 3
+	c.awareness = 3
+	c.void_ring = 3
+	c.skills = {"Lore: History": 4, "Courtier": 3, "Etiquette": 3}
+	return c
+
+
+func test_ashes_bonus_on_social_skill() -> void:
+	_char.from_the_ashes = {"location_id": "court_1", "expires_ic_day": 10}
+	assert_eq(SkillResolver._get_ashes_bonus_for_skill(_char, "Courtier"), 2)
+	assert_eq(SkillResolver._get_ashes_bonus_for_skill(_char, "Sincerity"), 2)
+	assert_eq(SkillResolver._get_ashes_bonus_for_skill(_char, "Etiquette"), 2)
+	assert_eq(SkillResolver._get_ashes_bonus_for_skill(_char, "Etiquette: Courtesy"), 2)
+
+
+func test_ashes_no_bonus_on_non_social_skill() -> void:
+	_char.from_the_ashes = {"location_id": "court_1", "expires_ic_day": 10}
+	assert_eq(SkillResolver._get_ashes_bonus_for_skill(_char, "Investigation"), 0)
+	assert_eq(SkillResolver._get_ashes_bonus_for_skill(_char, "Lore: History"), 0)
+	assert_eq(SkillResolver._get_ashes_bonus_for_skill(_char, "Commerce"), 0)
+
+
+func test_ashes_no_bonus_when_inactive() -> void:
+	assert_true(_char.from_the_ashes.is_empty())
+	assert_eq(SkillResolver._get_ashes_bonus_for_skill(_char, "Courtier"), 0)
+
+
+func test_activate_from_the_ashes_success() -> void:
+	var loremaster: L5RCharacterData = _make_asako_loremaster()
+	_engine.set_seed(42)
+	var result: Dictionary = SkillResolver.activate_from_the_ashes(
+		loremaster, _engine, "court_1", 5
+	)
+	assert_true(result["success"])
+	assert_eq(loremaster.from_the_ashes.get("location_id", ""), "court_1")
+	assert_eq(loremaster.from_the_ashes.get("expires_ic_day", -1), 7)
+
+
+func test_activate_from_the_ashes_wrong_school() -> void:
+	_char.school = "Doji Courtier"
+	var result: Dictionary = SkillResolver.activate_from_the_ashes(
+		_char, _engine, "court_1", 5
+	)
+	assert_false(result["success"])
+	assert_eq(result["reason"], "wrong_school")
+
+
+func test_activate_from_the_ashes_rank_too_low() -> void:
+	var c := L5RCharacterData.new()
+	c.school = "Asako Loremaster"
+	var result: Dictionary = SkillResolver.activate_from_the_ashes(
+		c, _engine, "court_1", 5
+	)
+	assert_false(result["success"])
+	assert_eq(result["reason"], "rank_too_low")
+
+
+func test_check_expiry_clears_on_wrong_location() -> void:
+	_char.school = "Asako Loremaster"
+	_char.from_the_ashes = {"location_id": "court_1", "expires_ic_day": 10}
+	var result: Dictionary = SkillResolver.check_from_the_ashes_expiry(
+		_char, _engine, "court_2", 5
+	)
+	assert_eq(result["action"], "cleared_wrong_location")
+	assert_true(_char.from_the_ashes.is_empty())
+
+
+func test_check_expiry_still_active() -> void:
+	_char.from_the_ashes = {"location_id": "court_1", "expires_ic_day": 10}
+	var result: Dictionary = SkillResolver.check_from_the_ashes_expiry(
+		_char, _engine, "court_1", 8
+	)
+	assert_eq(result["action"], "still_active")
+
+
+func test_check_expiry_refreshes_on_expire() -> void:
+	var loremaster: L5RCharacterData = _make_asako_loremaster()
+	loremaster.from_the_ashes = {"location_id": "court_1", "expires_ic_day": 5}
+	_engine.set_seed(42)
+	var result: Dictionary = SkillResolver.check_from_the_ashes_expiry(
+		loremaster, _engine, "court_1", 5
+	)
+	assert_true(result.get("success", false), "Should auto-refresh on expiry")
+	assert_eq(loremaster.from_the_ashes.get("expires_ic_day", -1), 7)
+
+
+func test_ashes_bonus_adds_rolled_dice_to_skill_check() -> void:
+	var loremaster: L5RCharacterData = _make_asako_loremaster()
+	loremaster.from_the_ashes = {"location_id": "court_1", "expires_ic_day": 99}
+	_engine.set_seed(100)
+	var with_buff: Dictionary = SkillResolver.resolve_skill_check(
+		loremaster, _engine, "Courtier", 15
+	)
+	loremaster.from_the_ashes = {}
+	_engine.set_seed(100)
+	var without_buff: Dictionary = SkillResolver.resolve_skill_check(
+		loremaster, _engine, "Courtier", 15
+	)
+	assert_true(with_buff["total"] >= without_buff["total"],
+		"+2k0 should increase or maintain roll total")

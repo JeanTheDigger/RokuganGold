@@ -137,6 +137,7 @@ extends Resource
 @export var action_blocks: Array[String] = []
 @export var combat_modifiers_pending: Array[String] = []
 @export var supply_ledger: Dictionary = {}
+@export var from_the_ashes: Dictionary = {}
 
 # -- Theater & Art Tracking ----------------------------------------------------
 
