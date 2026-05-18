@@ -299,17 +299,14 @@ static func detect_fabrication(
 	if not secret.fabricated:
 		return {"checked": false, "reason": "not_fabricated"}
 
-	var skill_rank: int = investigator.skills.get("Investigation", 0)
-	var trait_val: int = investigator.perception
-	var rolled: int = trait_val + skill_rank
-	var roll_result: DiceResult = dice_engine.roll_and_keep(rolled, trait_val, skill_rank > 0)
-	var total: int = roll_result.total
-	var success: bool = total >= secret.detection_tn
+	var result: Dictionary = SkillResolver.resolve_skill_check(
+		investigator, dice_engine, "Investigation", secret.detection_tn,
+	)
 
 	return {
 		"checked": true,
-		"detected": success,
-		"roll_total": total,
+		"detected": result.get("success", false),
+		"roll_total": result.get("total", 0),
 		"detection_tn": secret.detection_tn,
 	}
 
@@ -435,29 +432,21 @@ static func resolve_eavesdrop(
 ) -> Dictionary:
 	apply_eavesdrop_costs(eavesdropper)
 
-	var stealth_rank: int = eavesdropper.skills.get(EAVESDROP_SKILL, 0)
-	var rolled_a: int = eavesdropper.agility + stealth_rank
-	var kept_a: int = eavesdropper.agility
-	var explodes_a: bool = stealth_rank > 0
+	var contested: Dictionary = SkillResolver.resolve_contested_check(
+		eavesdropper, target, dice_engine,
+		EAVESDROP_SKILL, EAVESDROP_DETECT_SKILL,
+	)
 
-	var inv_rank: int = target.skills.get(EAVESDROP_DETECT_SKILL, 0)
-	var rolled_b: int = target.perception + inv_rank
-	var kept_b: int = target.perception
-	var explodes_b: bool = inv_rank > 0
-
-	var result_a: DiceResult = dice_engine.roll_and_keep(rolled_a, kept_a, explodes_a)
-	var result_b: DiceResult = dice_engine.roll_and_keep(rolled_b, kept_b, explodes_b)
-
-	var success: bool = result_a.total >= result_b.total
+	var success: bool = contested.get("winner") == "a"
 	var detected: bool = not success
-	var margin: int = result_a.total - result_b.total
+	var margin: int = contested.get("total_a", 0) - contested.get("total_b", 0)
 
 	return {
 		"success": success,
 		"detected": detected,
 		"margin": margin,
-		"eavesdropper_total": result_a.total,
-		"target_total": result_b.total,
+		"eavesdropper_total": contested.get("total_a", 0),
+		"target_total": contested.get("total_b", 0),
 		"detection_risk": detected,
 	}
 
@@ -553,27 +542,19 @@ static func resolve_shadow_target(
 	target: L5RCharacterData,
 	dice_engine: DiceEngine,
 ) -> Dictionary:
-	var stealth_rank: int = shadow.skills.get("Stealth", 0)
-	var rolled_a: int = shadow.agility + stealth_rank
-	var kept_a: int = shadow.agility
-	var explodes_a: bool = stealth_rank > 0
+	var contested: Dictionary = SkillResolver.resolve_contested_check(
+		shadow, target, dice_engine,
+		"Stealth", "Investigation",
+	)
 
-	var inv_rank: int = target.skills.get("Investigation", 0)
-	var rolled_b: int = target.perception + inv_rank
-	var kept_b: int = target.perception
-	var explodes_b: bool = inv_rank > 0
-
-	var result_a: DiceResult = dice_engine.roll_and_keep(rolled_a, kept_a, explodes_a)
-	var result_b: DiceResult = dice_engine.roll_and_keep(rolled_b, kept_b, explodes_b)
-
-	var success: bool = result_a.total >= result_b.total
-	var margin: int = result_a.total - result_b.total
+	var success: bool = contested.get("winner") == "a"
+	var margin: int = contested.get("total_a", 0) - contested.get("total_b", 0)
 
 	return {
 		"success": success,
 		"detected": not success,
-		"shadow_total": result_a.total,
-		"target_total": result_b.total,
+		"shadow_total": contested.get("total_a", 0),
+		"target_total": contested.get("total_b", 0),
 		"margin": margin,
 	}
 
@@ -635,11 +616,10 @@ static func resolve_search_person(
 	dice_engine: DiceEngine,
 	has_magistrate_authority: bool = false,
 ) -> Dictionary:
-	var inv_rank: int = searcher.skills.get("Investigation", 0)
-	var rolled: int = searcher.perception + inv_rank
-	var kept: int = searcher.perception
-	var result: DiceResult = dice_engine.roll_and_keep(rolled, kept, inv_rank > 0)
-	var success: bool = result.total >= concealment_tn
+	var result: Dictionary = SkillResolver.resolve_skill_check(
+		searcher, dice_engine, "Investigation", concealment_tn,
+	)
+	var success: bool = result.get("success", false)
 
 	var glory_cost: float = 0.0
 	if not has_magistrate_authority and not success:
@@ -648,7 +628,7 @@ static func resolve_search_person(
 
 	return {
 		"success": success,
-		"roll_total": result.total,
+		"roll_total": result.get("total", 0),
 		"concealment_tn": concealment_tn,
 		"glory_cost": glory_cost,
 	}

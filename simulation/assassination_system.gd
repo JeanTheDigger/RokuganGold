@@ -146,41 +146,36 @@ static func resolve_access_day(
 
 	var tn: int = 0
 	var skill: String = ""
-	var trait_val: int = 0
-
+	var trait_override: Enums.Trait = Enums.Trait.NONE
 	match access_method:
 		"forge_credentials":
 			tn = ACCESS_FORGE_CREDENTIALS_TN + susp_mod
 			skill = "Forgery"
-			trait_val = assassin.intelligence
+			trait_override = Enums.Trait.INTELLIGENCE
 		"bribe":
 			tn = ACCESS_BRIBE_TN + susp_mod
 			skill = "Courtier"
-			trait_val = assassin.awareness
 		"stealth":
 			tn = ACCESS_STEALTH_INFILTRATE_TN + susp_mod
 			skill = "Stealth"
-			trait_val = assassin.agility
 		"seduction":
 			tn = 15 + susp_mod
 			skill = "Temptation"
-			trait_val = assassin.awareness
 		_:
 			return {"success": false, "reason": "invalid_method"}
 
-	var skill_rank: int = assassin.skills.get(skill, 0)
-	var rolled: int = trait_val + skill_rank
-	var kept: int = trait_val
-	var result: DiceResult = dice_engine.roll_and_keep(rolled, kept, skill_rank > 0)
-	var success: bool = result.total >= tn
-	var margin: int = result.total - tn
+	var result: Dictionary = SkillResolver.resolve_skill_check(
+		assassin, dice_engine, skill, tn, 0, "", trait_override,
+	)
+	var success: bool = result.get("success", false)
+	var margin: int = result.get("margin", 0)
 
 	if not success:
 		add_suspicion(state, get_suspicion_from_failure(margin))
 
 	return {
 		"success": success,
-		"roll_total": result.total,
+		"roll_total": result.get("total", 0),
 		"tn": tn,
 		"margin": margin,
 		"skill": skill,

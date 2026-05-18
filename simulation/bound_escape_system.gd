@@ -195,16 +195,14 @@ static func resolve_guard_detection(
 	if distance_tiles > noise_range:
 		return {"detected": false, "reason": "out_of_range"}
 
-	var inv_rank: int = guard.skills.get("Investigation", 0)
-	var rolled: int = guard.perception + inv_rank
-	var kept: int = guard.perception
 	var tn: int = 15 + (distance_tiles * 2)
-	var result: DiceResult = dice_engine.roll_and_keep(rolled, kept, inv_rank > 0)
-	var detected: bool = result.total >= tn
+	var result: Dictionary = SkillResolver.resolve_skill_check(
+		guard, dice_engine, "Investigation", tn,
+	)
 
 	return {
-		"detected": detected,
-		"roll_total": result.total,
+		"detected": result.get("success", false),
+		"roll_total": result.get("total", 0),
 		"tn": tn,
 		"distance": distance_tiles,
 	}
