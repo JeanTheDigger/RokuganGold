@@ -221,3 +221,66 @@ func test_contested_check_applies_wound_penalties() -> void:
 	)
 	assert_eq(result["wound_penalty_a"], -3)
 	assert_eq(result["wound_penalty_b"], 0)
+
+
+# -- Doji R1a: Honor-gated Free Raise (s29.15.4) ------------------------------
+
+func test_doji_courtier_free_raise_on_courtier_skill() -> void:
+	_char.school = "Doji Courtier"
+	_char.honor = 6.0
+	assert_eq(SkillResolver.get_technique_free_raises(_char, "Courtier"), 1)
+
+
+func test_doji_courtier_free_raise_on_sincerity() -> void:
+	_char.school = "Doji Courtier"
+	_char.honor = 6.0
+	assert_eq(SkillResolver.get_technique_free_raises(_char, "Sincerity"), 1)
+
+
+func test_doji_courtier_free_raise_on_etiquette() -> void:
+	_char.school = "Doji Courtier"
+	_char.honor = 6.0
+	assert_eq(SkillResolver.get_technique_free_raises(_char, "Etiquette"), 1)
+
+
+func test_doji_courtier_no_free_raise_below_honor_threshold() -> void:
+	_char.school = "Doji Courtier"
+	_char.honor = 5.9
+	assert_eq(SkillResolver.get_technique_free_raises(_char, "Courtier"), 0)
+
+
+func test_doji_courtier_no_free_raise_on_other_skill() -> void:
+	_char.school = "Doji Courtier"
+	_char.honor = 6.0
+	assert_eq(SkillResolver.get_technique_free_raises(_char, "Investigation"), 0)
+
+
+func test_non_doji_no_free_raise() -> void:
+	_char.school = "Bayushi Courtier"
+	_char.honor = 8.0
+	assert_eq(SkillResolver.get_technique_free_raises(_char, "Courtier"), 0)
+
+
+func test_doji_free_raise_on_sub_skill() -> void:
+	_char.school = "Doji Courtier"
+	_char.honor = 6.0
+	assert_eq(SkillResolver.get_technique_free_raises(_char, "Etiquette: Courtesy"), 1)
+
+
+func test_doji_free_raise_adds_flat_bonus_to_skill_check() -> void:
+	_char.school = "Doji Courtier"
+	_char.honor = 6.5
+	_char.awareness = 3
+	_char.skills = {"Courtier": 3}
+	_engine.set_seed(100)
+	var with_fr: Dictionary = SkillResolver.resolve_skill_check(
+		_char, _engine, "Courtier", 15
+	)
+	assert_eq(with_fr["technique_free_raises"], 1)
+	_char.honor = 5.0
+	_engine.set_seed(100)
+	var without_fr: Dictionary = SkillResolver.resolve_skill_check(
+		_char, _engine, "Courtier", 15
+	)
+	assert_eq(without_fr["technique_free_raises"], 0)
+	assert_eq(with_fr["total"] - without_fr["total"], 5)

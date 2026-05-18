@@ -126,6 +126,24 @@ static func has_emphasis(character: L5RCharacterData, skill_name: String, emphas
 	return false
 
 
+# -- School Technique Free Raises (s29.15) -------------------------------------
+
+const DOJI_HONOR_THRESHOLD: float = 6.0
+const DOJI_FREE_RAISE_SKILLS: Array[String] = ["Courtier", "Sincerity", "Etiquette"]
+const FREE_RAISE_VALUE: int = 5
+
+static func get_technique_free_raises(character: L5RCharacterData, skill_name: String) -> int:
+	var free_raises: int = 0
+	if character.school.begins_with("Doji Courtier") and character.honor >= DOJI_HONOR_THRESHOLD:
+		var base_skill: String = skill_name
+		var colon_pos: int = skill_name.find(":")
+		if colon_pos >= 0:
+			base_skill = skill_name.substr(0, colon_pos).strip_edges()
+		if base_skill in DOJI_FREE_RAISE_SKILLS:
+			free_raises += 1
+	return free_raises
+
+
 # -- The main entry point: resolve a full skill check --------------------------
 
 static func resolve_skill_check(
@@ -158,10 +176,13 @@ static func resolve_skill_check(
 	# Wound penalty applies to all Trait rolls
 	var wound_penalty: int = CharacterStats.get_wound_penalty(character)
 
+	# School technique free raises (s29.15)
+	var technique_fr: int = get_technique_free_raises(character, skill_name)
+
 	# Build the pool: (trait + skill + bonus_rolled) k (trait + bonus_kept)
 	var rolled: int = trait_value + skill_rank + bonus_rolled
 	var kept: int = trait_value + bonus_kept
-	var total_bonus: int = flat_bonus + wound_penalty
+	var total_bonus: int = flat_bonus + wound_penalty + (technique_fr * FREE_RAISE_VALUE)
 
 	# Unskilled: no explosions
 	var explodes: bool = skill_rank > 0
@@ -175,6 +196,7 @@ static func resolve_skill_check(
 	result["skill_rank"] = skill_rank
 	result["wound_penalty"] = wound_penalty
 	result["emphasis_applied"] = has_emph
+	result["technique_free_raises"] = technique_fr
 
 	return result
 
@@ -202,6 +224,7 @@ static func resolve_contested_check(
 	var sr_a: int = get_skill_rank(char_a, skill_a)
 	var emph_a: bool = has_emphasis(char_a, skill_a, emphasis_a) if emphasis_a != "" else false
 	var wp_a: int = CharacterStats.get_wound_penalty(char_a)
+	var tfr_a: int = get_technique_free_raises(char_a, skill_a)
 
 	# Character B
 	var trait_b: Enums.Trait = trait_override_b if trait_override_b != Enums.Trait.NONE else get_trait_for_skill(skill_b)
@@ -209,6 +232,7 @@ static func resolve_contested_check(
 	var sr_b: int = get_skill_rank(char_b, skill_b)
 	var emph_b: bool = has_emphasis(char_b, skill_b, emphasis_b) if emphasis_b != "" else false
 	var wp_b: int = CharacterStats.get_wound_penalty(char_b)
+	var tfr_b: int = get_technique_free_raises(char_b, skill_b)
 
 	var roll_a: DiceResult = dice_engine.roll_and_keep(
 		tv_a + sr_a + bonus_rolled_a, tv_a, sr_a > 0, emph_a
@@ -217,8 +241,8 @@ static func resolve_contested_check(
 		tv_b + sr_b + bonus_rolled_b, tv_b, sr_b > 0, emph_b
 	)
 
-	var total_a: int = roll_a.total + flat_bonus_a + wp_a
-	var total_b: int = roll_b.total + flat_bonus_b + wp_b
+	var total_a: int = roll_a.total + flat_bonus_a + wp_a + (tfr_a * FREE_RAISE_VALUE)
+	var total_b: int = roll_b.total + flat_bonus_b + wp_b + (tfr_b * FREE_RAISE_VALUE)
 
 	var winner: String = "a"
 	if total_b > total_a:
