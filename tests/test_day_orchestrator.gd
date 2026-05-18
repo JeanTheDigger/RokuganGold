@@ -199,6 +199,24 @@ func test_season_change_decays_knowledge() -> void:
 	)
 
 
+func test_precise_memory_skips_knowledge_decay() -> void:
+	_characters[0].precise_memory = true
+	InformationSystem.add_knowledge(_characters[0], InformationSystem.make_entry(
+		Enums.KnowledgeSource.INTELLIGENCE, "test", {}, 0
+	))
+	_time.current_tick = 89
+	DayOrchestrator.advance_day(
+		_time, _characters, _characters_by_id, _make_world_states(),
+		_make_objectives(), _scoring_tables, _filter_data, _dice,
+		_action_skill_map, _provinces, _action_log, _season_meta
+	)
+	assert_eq(
+		_characters[0].knowledge_pool[0].confidence,
+		Enums.KnowledgeConfidence.FRESH,
+		"precise_memory characters should not have knowledge decay"
+	)
+
+
 func test_season_change_runs_resource_tick() -> void:
 	_time.current_tick = 89
 	var result: Dictionary = DayOrchestrator.advance_day(

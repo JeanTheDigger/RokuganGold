@@ -132,6 +132,7 @@ extends Resource
 @export var self_reroll: Array[Dictionary] = []
 @export var granted_reroll: Array[Dictionary] = []
 @export var enhanced_void: bool = false
+@export var precise_memory: bool = false
 @export var timed_advantages: Array[String] = []
 @export var action_blocks: Array[String] = []
 @export var combat_modifiers_pending: Array[String] = []
