@@ -129,8 +129,8 @@ extends Resource
 
 # -- Courtier Framework Fields -------------------------------------------------
 
-@export var self_reroll: bool = false
-@export var granted_reroll: bool = false
+@export var self_reroll: Array[Dictionary] = []
+@export var granted_reroll: Array[Dictionary] = []
 @export var enhanced_void: bool = false
 @export var timed_advantages: Array[String] = []
 @export var action_blocks: Array[String] = []
