@@ -266,6 +266,15 @@ For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
   ASSIGN_GARRISON). Military/civilian overlap actions added to
   MILITARY_ORDER_ACTIONS for proper non-lord/non-military filtering with
   lord carve-out via CivilianOrderBudget.MILITARY_OR_CIVILIAN_ACTIONS.
+- **ActionExecutor._validate_military_order() — lord carve-out missing. FIXED.**
+  Lords without military rank issuing MILITARY_OR_CIVILIAN or PURE_ORDER
+  actions (ASSIGN_GARRISON, ORDER_LEVY, ASSIGN_TO_MILITARY_SERVICE, etc.)
+  via civilian orders were blocked by the `commanded_unit_id < 0` check.
+  Added bypass for lords issuing civilian-classified orders per s57.34.4.
+- **NPCWaveResolver._resolve_civilian_order() — dual-cost AP not deducted. FIXED.**
+  SEND_INVITATION costs 1 AP + 1 Civilian Order (s57.34.7). The civilian
+  order path hardcoded `ap_spent: 0` for all actions. Now deducts 1 AP for
+  DUAL_COST_ACTIONS and skips dual-cost actions when AP is 0.
 
 ### Known Code Issues — Deferred (require design input)
 - **NPCDecisionEngine HOSTILE_ACTIONS — 11 context-unreachable entries.**
