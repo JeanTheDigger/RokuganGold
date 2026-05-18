@@ -351,3 +351,57 @@ func test_probe_info_event_still_uses_action_log_path() -> void:
 
 	assert_gt(_char.knowledge_pool.size(), 0,
 		"PROBE should still write observed_action entries via action log path")
+
+
+# -- Primary Objective Self-Selection Write-Back --------------------------------
+
+func test_self_select_directive_writes_primary_objective() -> void:
+	var objectives_map: Dictionary = {1: {"standing": {"need_type": "SEEK_GLORY"}}}
+	var characters_by_id: Dictionary = {1: _char}
+	var strategic_results: Array[Dictionary] = [{
+		"directive": StrategicReview.Directive.REASSIGN_VASSAL_OBJECTIVE,
+		"lord_id": 1,
+		"vassal_id": 1,
+		"decision": "SELF_SELECT",
+		"new_objective": {
+			"need_type": "BREAK_ALLIANCE",
+			"objective_type": "BREAK_ALLIANCE",
+			"target_fields": {"target_clan": "Lion"},
+			"source": "SELF_SELECTED",
+		},
+	}]
+
+	DayOrchestrator._process_vassal_reassignments(
+		strategic_results, objectives_map, characters_by_id,
+	)
+
+	var primary: Dictionary = objectives_map[1].get("primary", {})
+	assert_false(primary.is_empty(), "SELF_SELECT should write primary objective")
+	assert_eq(primary.get("need_type", ""), "BREAK_ALLIANCE")
+	assert_eq(primary.get("status", ""), "ACTIVE")
+	assert_eq(primary.get("source", ""), "SELF_SELECTED")
+
+
+func test_self_select_does_not_overwrite_standing() -> void:
+	var objectives_map: Dictionary = {1: {"standing": {"need_type": "SEEK_GLORY"}}}
+	var characters_by_id: Dictionary = {1: _char}
+	var strategic_results: Array[Dictionary] = [{
+		"directive": StrategicReview.Directive.REASSIGN_VASSAL_OBJECTIVE,
+		"lord_id": 1,
+		"vassal_id": 1,
+		"decision": "SELF_SELECT",
+		"new_objective": {
+			"need_type": "CONQUER_PROVINCE",
+			"objective_type": "CONQUER_PROVINCE",
+			"target_fields": {},
+			"source": "SELF_SELECTED",
+		},
+	}]
+
+	DayOrchestrator._process_vassal_reassignments(
+		strategic_results, objectives_map, characters_by_id,
+	)
+
+	var standing: Dictionary = objectives_map[1].get("standing", {})
+	assert_eq(standing.get("need_type", ""), "SEEK_GLORY",
+		"SELF_SELECT should not touch standing objective")

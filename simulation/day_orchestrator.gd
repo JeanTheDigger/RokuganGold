@@ -11174,6 +11174,11 @@ static func _process_vassal_reassignments(
 				new_obj["assigned_by"] = lord_id
 				new_obj["status"] = "ACTIVE"
 				objectives_map[vassal_id]["standing"] = new_obj
+		elif decision == "SELF_SELECT":
+			var new_obj: Dictionary = directive.get("new_objective", {})
+			if not new_obj.is_empty():
+				new_obj["status"] = "ACTIVE"
+				objectives_map[vassal_id]["primary"] = new_obj
 		elif decision == "CONFIRM":
 			var objectives: Dictionary = objectives_map.get(vassal_id, {})
 			OrphanedObjectives.resolve_orphaned_objective(objectives, "CONFIRM")
