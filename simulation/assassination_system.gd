@@ -46,6 +46,17 @@ const ACCESS_FORGE_CREDENTIALS_TN: int = 20
 const ACCESS_BRIBE_TN: int = 15
 const ACCESS_STEALTH_INFILTRATE_TN: int = 20
 
+# Non-shinobi TN increase — characters without shinobi school training
+# get a flat TN increase on all Phase 1 rolls (s12.8 NON-SCORPION ASSASSINS).
+# Value PROVISIONAL pending playtest — GDD specifies "severe disadvantage" and
+# "significantly higher suspicion" but does not give a numeric value.
+const NON_SHINOBI_ACCESS_TN_INCREASE: int = 10
+
+const _SHINOBI_SCHOOLS: Array[String] = [
+	"Shosuro Infiltrator",
+	"Shosuro Actor",
+]
+
 # -- Execution Phase Constants -------------------------------------------------
 
 const POISON_STEALTH_TN: int = 15
@@ -143,6 +154,23 @@ static func get_suspicion_tn_modifier(state: Dictionary) -> int:
 	return 0
 
 
+static func has_shinobi_training(character: L5RCharacterData) -> bool:
+	for s: String in _SHINOBI_SCHOOLS:
+		if character.school.begins_with(s):
+			return true
+	for path: String in character.school_paths:
+		for s: String in _SHINOBI_SCHOOLS:
+			if path.begins_with(s):
+				return true
+	return false
+
+
+static func get_non_shinobi_tn_modifier(character: L5RCharacterData) -> int:
+	if has_shinobi_training(character):
+		return 0
+	return NON_SHINOBI_ACCESS_TN_INCREASE
+
+
 # ==============================================================================
 # Phase 1 — Access
 # ==============================================================================
@@ -155,23 +183,24 @@ static func resolve_access_day(
 ) -> Dictionary:
 	state["days_in_access"] = state.get("days_in_access", 0) + 1
 	var susp_mod: int = get_suspicion_tn_modifier(state)
+	var shinobi_mod: int = get_non_shinobi_tn_modifier(assassin)
 
 	var tn: int = 0
 	var skill: String = ""
 	var trait_override: Enums.Trait = Enums.Trait.NONE
 	match access_method:
 		"forge_credentials":
-			tn = ACCESS_FORGE_CREDENTIALS_TN + susp_mod
+			tn = ACCESS_FORGE_CREDENTIALS_TN + susp_mod + shinobi_mod
 			skill = "Forgery"
 			trait_override = Enums.Trait.INTELLIGENCE
 		"bribe":
-			tn = ACCESS_BRIBE_TN + susp_mod
+			tn = ACCESS_BRIBE_TN + susp_mod + shinobi_mod
 			skill = "Courtier"
 		"stealth":
-			tn = ACCESS_STEALTH_INFILTRATE_TN + susp_mod
+			tn = ACCESS_STEALTH_INFILTRATE_TN + susp_mod + shinobi_mod
 			skill = "Stealth"
 		"seduction":
-			tn = 15 + susp_mod
+			tn = 15 + susp_mod + shinobi_mod
 			skill = "Temptation"
 		_:
 			return {"success": false, "reason": "invalid_method"}

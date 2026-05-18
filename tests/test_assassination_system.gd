@@ -480,3 +480,61 @@ func test_no_decay_when_suspicion_zero() -> void:
 	s["suspicion"] = 0.0
 	AssassinationSystem.decay_suspicion(s, false, 50)
 	assert_eq(s["suspicion"], 0.0, "Zero suspicion should remain zero")
+
+
+# ==============================================================================
+# Non-Shinobi TN Modifier (s12.8 NON-SCORPION ASSASSINS)
+# ==============================================================================
+
+func test_shinobi_training_shosuro_infiltrator() -> void:
+	_assassin.school = "Shosuro Infiltrator"
+	assert_true(AssassinationSystem.has_shinobi_training(_assassin))
+
+
+func test_shinobi_training_shosuro_actor() -> void:
+	_assassin.school = "Shosuro Actor"
+	assert_true(AssassinationSystem.has_shinobi_training(_assassin))
+
+
+func test_no_shinobi_training_bayushi_bushi() -> void:
+	_assassin.school = "Bayushi Bushi"
+	assert_false(AssassinationSystem.has_shinobi_training(_assassin))
+
+
+func test_no_shinobi_training_akodo_bushi() -> void:
+	_assassin.school = "Akodo Bushi"
+	assert_false(AssassinationSystem.has_shinobi_training(_assassin))
+
+
+func test_shinobi_via_school_paths() -> void:
+	_assassin.school = "Bayushi Bushi"
+	_assassin.school_paths = ["Bayushi Bushi", "Shosuro Actor"]
+	assert_true(AssassinationSystem.has_shinobi_training(_assassin))
+
+
+func test_non_shinobi_tn_modifier_applied() -> void:
+	_assassin.school = "Akodo Bushi"
+	var mod: int = AssassinationSystem.get_non_shinobi_tn_modifier(_assassin)
+	assert_eq(mod, AssassinationSystem.NON_SHINOBI_ACCESS_TN_INCREASE)
+
+
+func test_shinobi_tn_modifier_zero() -> void:
+	_assassin.school = "Shosuro Infiltrator"
+	var mod: int = AssassinationSystem.get_non_shinobi_tn_modifier(_assassin)
+	assert_eq(mod, 0)
+
+
+func test_access_tn_includes_non_shinobi_modifier() -> void:
+	_assassin.school = "Akodo Bushi"
+	var s: Dictionary = AssassinationSystem.create_assassination_state(1, 2, AssassinationSystem.ExecutionMethod.BLADE, 0)
+	var result: Dictionary = AssassinationSystem.resolve_access_day(_assassin, s, "stealth", _engine)
+	assert_eq(result["tn"], AssassinationSystem.ACCESS_STEALTH_INFILTRATE_TN + AssassinationSystem.NON_SHINOBI_ACCESS_TN_INCREASE,
+		"Non-shinobi should face higher TN")
+
+
+func test_access_tn_no_modifier_for_shinobi() -> void:
+	_assassin.school = "Shosuro Infiltrator"
+	var s: Dictionary = AssassinationSystem.create_assassination_state(1, 2, AssassinationSystem.ExecutionMethod.BLADE, 0)
+	var result: Dictionary = AssassinationSystem.resolve_access_day(_assassin, s, "stealth", _engine)
+	assert_eq(result["tn"], AssassinationSystem.ACCESS_STEALTH_INFILTRATE_TN,
+		"Shinobi should face base TN only")
