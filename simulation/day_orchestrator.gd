@@ -1128,6 +1128,30 @@ static func _process_info_events(
 
 			var target_id: int = event.get("target_npc_id", -1)
 			var quality: int = event.get("quality", 1)
+			var info_type: String = event.get("info_type", "")
+
+			if target_id >= 0 and info_type == "priority_objective":
+				var target_obj: Dictionary = objectives_map.get(target_id, {})
+				var standing: Dictionary = target_obj.get("standing", {})
+				var need_type: String = standing.get("need_type", "")
+				if not need_type.is_empty():
+					var entry: KnowledgeEntry = InformationSystem.make_entry(
+						Enums.KnowledgeSource.INTELLIGENCE,
+						"priority_objective",
+						{
+							"target_character_id": target_id,
+							"need_type": need_type,
+						},
+						current_season,
+					)
+					InformationSystem.add_knowledge(character, entry)
+				results.append({
+					"character_id": char_id,
+					"target_id": target_id,
+					"entries_discovered": 1 if not need_type.is_empty() else 0,
+					"info_type": "priority_objective",
+				})
+				continue
 
 			if target_id >= 0:
 				var discovered: Array[KnowledgeEntry] = InformationSystem.process_probe_result(
