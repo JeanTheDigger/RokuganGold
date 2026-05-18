@@ -402,6 +402,7 @@ static func score_all(
 	commitments: Array[CommitmentData] = [],
 	character: L5RCharacterData = null,
 	travel_redirects: int = 0,
+	chars_by_id: Dictionary = {},
 ) -> void:
 	for option: NPCDataStructures.ScoredAction in options:
 		option.objective_alignment = _lookup_objective_alignment(
@@ -455,6 +456,11 @@ static func score_all(
 		else:
 			option.confidence_penalty = 0.0
 			option.stale_intel_bonus = 0.0
+
+		if option.action_id in SkillResolver.DECEPTIVE_ACTION_IDS and option.target_npc_id > 0:
+			var target: L5RCharacterData = chars_by_id.get(option.target_npc_id)
+			if target != null:
+				option.deception_defense_penalty = float(-SkillResolver.get_deception_defense_bonus(target))
 
 		option.festival_modifier = _compute_festival_modifier(option.action_id, ctx)
 
@@ -609,7 +615,7 @@ static func run(
 
 	# Phase 5
 	score_all(options, need, ctx, scoring_tables,
-		approach_penalties, commitments, character, travel_redirects)
+		approach_penalties, commitments, character, travel_redirects, chars_by_id)
 
 	# Phase 6
 	var chosen := select_action(options, ctx)

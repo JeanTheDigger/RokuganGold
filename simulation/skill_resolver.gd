@@ -144,6 +144,23 @@ static func get_technique_free_raises(character: L5RCharacterData, skill_name: S
 	return free_raises
 
 
+# -- Deception Defense TN Modifier (s29.15.6 Kitsuki R2, s29.15.2 Yasuki R4) --
+
+const DECEPTION_TN_PER_RANK: int = 5
+
+const DECEPTIVE_ACTION_IDS: Array[String] = [
+	"GOSSIP", "FABRICATE_SECRET", "FORGE_IMPERSONATION_LETTER", "FORGE_ORDER",
+]
+
+static func get_deception_defense_bonus(defender: L5RCharacterData) -> int:
+	var school_rank: int = CharacterStats.get_insight_rank(defender)
+	if defender.school.begins_with("Kitsuki Investigator") and school_rank >= 2:
+		return DECEPTION_TN_PER_RANK * school_rank
+	if defender.school.begins_with("Yasuki Courtier") and school_rank >= 4:
+		return DECEPTION_TN_PER_RANK * school_rank
+	return 0
+
+
 # -- The main entry point: resolve a full skill check --------------------------
 
 static func resolve_skill_check(

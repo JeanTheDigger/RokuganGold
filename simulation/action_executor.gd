@@ -698,10 +698,14 @@ static func _execute_gossip(
 	var subject: L5RCharacterData = characters_by_id.get(subject_id)
 	var subject_glory: float = subject.glory if subject != null else 0.0
 
-	var tn: int = clampi(
+	var base_tn: int = clampi(
 		10 + int(subject_glory) * 5 - int(character.glory) * 5,
 		5, 60
 	)
+
+	var listener: L5RCharacterData = characters_by_id.get(listener_id)
+	var deception_tn: int = SkillResolver.get_deception_defense_bonus(listener) if listener != null else 0
+	var tn: int = base_tn + deception_tn
 
 	var skill_entry: Dictionary = action_skill_map.get("GOSSIP", {})
 	var primary_skill: String = skill_entry.get("primary", "Courtier")

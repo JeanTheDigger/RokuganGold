@@ -284,3 +284,81 @@ func test_doji_free_raise_adds_flat_bonus_to_skill_check() -> void:
 	)
 	assert_eq(without_fr["technique_free_raises"], 0)
 	assert_eq(with_fr["total"] - without_fr["total"], 5)
+
+
+# -- Deception Defense Bonus (s29.15.6 Kitsuki R2, s29.15.2 Yasuki R4) --------
+
+func test_kitsuki_r2_deception_defense_bonus() -> void:
+	_char.school = "Kitsuki Investigator"
+	_char.stamina = 3
+	_char.willpower = 3
+	_char.strength = 3
+	_char.perception = 3
+	_char.agility = 3
+	_char.intelligence = 3
+	_char.reflexes = 3
+	_char.awareness = 3
+	_char.void_ring = 3
+	_char.skills = {"Investigation": 3, "Etiquette": 2, "Courtier": 2}
+	var rank: int = CharacterStats.get_insight_rank(_char)
+	assert_true(rank >= 2, "Test character should be Rank 2+")
+	var bonus: int = SkillResolver.get_deception_defense_bonus(_char)
+	assert_eq(bonus, 5 * rank)
+
+
+func test_kitsuki_r1_no_deception_defense() -> void:
+	var low_char := L5RCharacterData.new()
+	low_char.school = "Kitsuki Investigator"
+	var rank: int = CharacterStats.get_insight_rank(low_char)
+	assert_eq(rank, 1, "Default traits give Rank 1")
+	assert_eq(SkillResolver.get_deception_defense_bonus(low_char), 0)
+
+
+func test_yasuki_r4_deception_defense_bonus() -> void:
+	_char.school = "Yasuki Courtier"
+	_char.stamina = 4
+	_char.willpower = 4
+	_char.strength = 4
+	_char.perception = 4
+	_char.agility = 4
+	_char.intelligence = 4
+	_char.reflexes = 4
+	_char.awareness = 4
+	_char.void_ring = 4
+	_char.skills = {"Commerce": 5, "Courtier": 4, "Etiquette": 4, "Sincerity": 3, "Investigation": 2}
+	var rank: int = CharacterStats.get_insight_rank(_char)
+	assert_true(rank >= 4, "Test character should be Rank 4+")
+	var bonus: int = SkillResolver.get_deception_defense_bonus(_char)
+	assert_eq(bonus, 5 * rank)
+
+
+func test_yasuki_below_r4_no_deception_defense() -> void:
+	_char.school = "Yasuki Courtier"
+	_char.stamina = 3
+	_char.willpower = 3
+	_char.strength = 3
+	_char.perception = 3
+	_char.agility = 3
+	_char.intelligence = 3
+	_char.reflexes = 3
+	_char.awareness = 3
+	_char.void_ring = 3
+	_char.skills = {"Commerce": 3, "Courtier": 2}
+	var rank: int = CharacterStats.get_insight_rank(_char)
+	assert_true(rank < 4, "Test character should be below Rank 4")
+	assert_eq(SkillResolver.get_deception_defense_bonus(_char), 0)
+
+
+func test_non_qualifying_school_no_deception_defense() -> void:
+	_char.school = "Bayushi Courtier"
+	_char.awareness = 5
+	_char.intelligence = 5
+	_char.skills = {"Courtier": 5, "Sincerity": 5, "Etiquette": 5}
+	assert_eq(SkillResolver.get_deception_defense_bonus(_char), 0)
+
+
+func test_deceptive_action_ids_list() -> void:
+	assert_true("GOSSIP" in SkillResolver.DECEPTIVE_ACTION_IDS)
+	assert_true("FABRICATE_SECRET" in SkillResolver.DECEPTIVE_ACTION_IDS)
+	assert_false("CHARM" in SkillResolver.DECEPTIVE_ACTION_IDS)
+	assert_false("INTIMIDATE" in SkillResolver.DECEPTIVE_ACTION_IDS)
