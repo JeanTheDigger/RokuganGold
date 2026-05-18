@@ -1294,8 +1294,8 @@ static func _get_co_located_ids(
 	var loc: String = character.physical_location
 	if loc.is_empty():
 		return ids
-	for id in characters_by_id:
-		var c: L5RCharacterData = characters_by_id[id]
+	for cid: int in characters_by_id:
+		var c: L5RCharacterData = characters_by_id[cid]
 		if c.character_id != character.character_id and c.physical_location == loc:
 			ids.append(c.character_id)
 	return ids
@@ -3627,7 +3627,7 @@ static func _execute_observe_court_attendees(
 	var roll_result: Dictionary = dice_engine.roll_skill_check(trait_val, skill_rank, 0)
 	var roll_total: int = roll_result.get("total", 0)
 
-	var observable_ids: Array = action.metadata.get("observable_attendee_ids", [])
+	var observable_ids: Array[int] = action.metadata.get("observable_attendee_ids", [] as Array[int])
 	var resolution: Dictionary = CourtActionSystem.resolve_observe_court_attendees(
 		roll_total, observable_ids.size()
 	)
@@ -3636,7 +3636,7 @@ static func _execute_observe_court_attendees(
 	if resolution.get("success", false):
 		var learn_count: int = resolution.get("learn_count", 0)
 		# Pick learn_count random IDs from the observable pool.
-		var pool: Array = observable_ids.duplicate()
+		var pool: Array[int] = observable_ids.duplicate()
 		var learned_ids: Array[int] = []
 		for _i: int in range(learn_count):
 			if pool.is_empty():
@@ -3781,7 +3781,7 @@ static func _execute_conduct_tea_ceremony(
 			"effects": {},
 		}
 
-	var candidate_ids: Array = action.metadata.get("participant_ids", [])
+	var candidate_ids: Array[int] = action.metadata.get("participant_ids", [] as Array[int])
 	var actual_participants: Array[int] = []
 	for pid: Variant in candidate_ids:
 		var pid_int: int = int(pid)
@@ -3938,7 +3938,7 @@ static func _execute_cancel_hunt(
 		}
 
 	var active_hunt_id: int = ctx.known_objectives.get("active_hunt_id", -1)
-	var accepted_invitee_ids: Array = action.metadata.get("accepted_invitee_ids", [])
+	var accepted_invitee_ids: Array[int] = action.metadata.get("accepted_invitee_ids", [] as Array[int])
 
 	return {
 		"success": true,

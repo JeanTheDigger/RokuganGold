@@ -69,7 +69,7 @@ static func can_announce(
 ) -> Dictionary:
 	if SkillResolver.get_skill_rank(character, "Hunting") < MIN_HUNTING_SKILL:
 		return {"valid": false, "reason": "insufficient_hunting_skill"}
-	var valid_contexts: Array = [
+	var valid_contexts: Array[Enums.ContextFlag] = [
 		Enums.ContextFlag.AT_OWN_HOLDINGS,
 		Enums.ContextFlag.VISITING,
 		Enums.ContextFlag.AT_COURT,
@@ -90,7 +90,7 @@ static func can_cancel(
 	var hunt_date: int = ctx.known_objectives.get("hunt_date_ic_day", -1)
 	if hunt_date >= 0 and ctx.ic_day >= hunt_date:
 		return {"valid": false, "reason": "hunt_date_passed"}
-	var valid_contexts: Array = [
+	var valid_contexts: Array[Enums.ContextFlag] = [
 		Enums.ContextFlag.AT_OWN_HOLDINGS,
 		Enums.ContextFlag.AT_COURT,
 		Enums.ContextFlag.VISITING,
@@ -161,7 +161,7 @@ static func evaluate_invitation_response(
 ## Returns outcome dict: {outcome, killer_id, second_id, wounded_id, killed_id, hunt_type}
 static func resolve_npc_hunt(
 	host: L5RCharacterData,
-	participants: Array,
+	participants: Array[L5RCharacterData],
 	beast: Dictionary,
 	dice_engine: DiceEngine,
 ) -> Dictionary:
@@ -257,7 +257,7 @@ static func resolve_npc_hunt(
 ## Returns: Dictionary {character_id(int): float glory_delta}
 static func compute_glory_distribution(
 	outcome: String,
-	participants: Array,
+	participants: Array[Dictionary],
 	killer_id: int,
 	second_id: int,
 	host_id: int,
@@ -325,7 +325,7 @@ static func has_hunt_negative_lean(school: String) -> bool:
 
 ## Compute party defence TN: mean Armor TN + party-size bonus (capped).
 ## participants: Array[L5RCharacterData]
-static func compute_party_defence_tn(participants: Array) -> int:
+static func compute_party_defence_tn(participants: Array[L5RCharacterData]) -> int:
 	if participants.is_empty():
 		return 10
 	var sum: int = 0
@@ -347,7 +347,7 @@ static func compute_party_defence_tn(participants: Array) -> int:
 
 # -- Private helpers -----------------------------------------------------------
 
-static func _find_hunt_leader(participants: Array) -> L5RCharacterData:
+static func _find_hunt_leader(participants: Array[L5RCharacterData]) -> L5RCharacterData:
 	var best: L5RCharacterData = null
 	var best_rank: int = -1
 	for p_var: Variant in participants:
@@ -361,8 +361,8 @@ static func _find_hunt_leader(participants: Array) -> L5RCharacterData:
 	return best
 
 
-static func _get_combatants(participants: Array) -> Array:
-	var result: Array = []
+static func _get_combatants(participants: Array[L5RCharacterData]) -> Array[L5RCharacterData]:
+	var result: Array[L5RCharacterData] = []
 	for p_var: Variant in participants:
 		var c: L5RCharacterData = p_var as L5RCharacterData
 		if c == null:
@@ -373,7 +373,7 @@ static func _get_combatants(participants: Array) -> Array:
 	return result
 
 
-static func _find_best_hunter(combatants: Array) -> L5RCharacterData:
+static func _find_best_hunter(combatants: Array[L5RCharacterData]) -> L5RCharacterData:
 	var best: L5RCharacterData = null
 	var best_rank: int = -1
 	for c_var: Variant in combatants:
@@ -390,7 +390,7 @@ static func _find_best_hunter(combatants: Array) -> L5RCharacterData:
 	return best
 
 
-static func _find_second_hunter_id(combatants: Array, exclude_id: int) -> int:
+static func _find_second_hunter_id(combatants: Array[L5RCharacterData], exclude_id: int) -> int:
 	var best: L5RCharacterData = null
 	var best_rank: int = -1
 	for c_var: Variant in combatants:
@@ -422,7 +422,7 @@ static func _roll_beast_threat(beast: Dictionary, dice_engine: DiceEngine) -> in
 	return dr.total
 
 
-static func _select_casualty_victim(combatants: Array) -> L5RCharacterData:
+static func _select_casualty_victim(combatants: Array[L5RCharacterData]) -> L5RCharacterData:
 	# Lowest hunting-weapon rank is most likely to be caught (s57.38.6)
 	var worst: L5RCharacterData = null
 	var worst_rank: int = 999

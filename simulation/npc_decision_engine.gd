@@ -1612,7 +1612,7 @@ static func _compute_confidence_penalty(
 
 const STALE_INTEL_GATHER_BONUS: float = 15.0
 
-const GATHER_INTELLIGENCE_ACTIONS: Array = [
+const GATHER_INTELLIGENCE_ACTIONS: Array[String] = [
 	"PROBE", "READ_CHARACTER", "BRIBE_FOR_INFO", "EAVESDROP",
 	"INTERCEPT_LETTER", "SEARCH_QUARTERS", "DISCERN_NEED",
 ]

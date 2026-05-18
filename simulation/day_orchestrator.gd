@@ -23,7 +23,7 @@ static func advance_day(
 	action_log: Array[Dictionary],
 	season_meta: Dictionary,
 	active_topics: Array[TopicData] = [],
-	pending_letters: Array = [],
+	pending_letters: Array[LetterData] = [],
 	approach_penalties: Array[Dictionary] = [],
 	commitments: Array[CommitmentData] = [],
 	crime_records: Array[CrimeRecord] = [],
@@ -33,7 +33,7 @@ static func advance_day(
 	next_topic_id: Array[int] = [1000],
 	death_events: Array[Dictionary] = [],
 	successor_map: Dictionary = {},
-	favors: Array = [],
+	favors: Array[FavorData] = [],
 	insurgencies: Array[InsurgencyData] = [],
 	next_insurgency_id: Array[int] = [1],
 	settlements: Array[SettlementData] = [],
@@ -49,7 +49,7 @@ static func advance_day(
 	companies: Array[Dictionary] = [],
 	clans: Dictionary = {},
 	active_wars: Array[WarData] = [],
-	trade_routes: Array = [],
+	trade_routes: Array[TradeRouteData] = [],
 	next_war_id: Array[int] = [1],
 	active_courts: Array[CourtSessionData] = [],
 	next_court_id: Array[int] = [1],
@@ -1106,7 +1106,7 @@ static func _process_ooc_day_tick(
 # -- Information Processing ----------------------------------------------------
 
 static func _process_info_events(
-	applied_list: Array,
+	applied_list: Array[Dictionary],
 	characters_by_id: Dictionary,
 	action_log: Array[Dictionary],
 	current_season: int,
@@ -1309,7 +1309,7 @@ static func _process_season_transition(
 	miya_inputs: Dictionary = {},
 	worship_maluses: Dictionary = {},
 	emperor_tax_config: Dictionary = {},
-	trade_routes: Array = [],
+	trade_routes: Array[TradeRouteData] = [],
 ) -> Dictionary:
 	_decay_all_knowledge(characters, current_season)
 
@@ -1593,7 +1593,7 @@ static func _process_wall_seasonal_pressure(
 # -- Wall Engineering Effects (s2.4.16) ----------------------------------------
 
 static func _process_wall_engineering_effects(
-	applied_list: Array,
+	applied_list: Array[Dictionary],
 	settlements: Array[SettlementData],
 ) -> Array[Dictionary]:
 	var results: Array[Dictionary] = []
@@ -1662,7 +1662,7 @@ static func _process_wall_engineering_effects(
 # -- Sortie Results (s2.4.10, s2.4.11, s2.4.15) --------------------------------
 
 static func _process_sortie_results(
-	applied_list: Array,
+	applied_list: Array[Dictionary],
 	settlements: Array[SettlementData],
 	provinces: Dictionary,
 	dice_engine: DiceEngine,
@@ -1783,7 +1783,7 @@ static func _build_garrison_sortie_states(garrison_pu: int) -> Array[Dictionary]
 # -- Storm Assault Processing (s11.7) ------------------------------------------
 
 static func _process_storm_assault_results(
-	applied_list: Array,
+	applied_list: Array[Dictionary],
 	active_sieges: Array[Dictionary],
 	companies: Array[Dictionary],
 	dice_engine: DiceEngine,
@@ -1872,7 +1872,7 @@ static func _find_siege_by_settlement(
 
 
 static func _process_drill_effects(
-	applied_list: Array,
+	applied_list: Array[Dictionary],
 	companies: Array[Dictionary],
 	characters_by_id: Dictionary,
 	dice_engine: DiceEngine,
@@ -1949,7 +1949,7 @@ static func _tick_kuni_wards(season_meta: Dictionary) -> void:
 
 
 static func _process_purification_effects(
-	applied_list: Array,
+	applied_list: Array[Dictionary],
 	provinces: Dictionary,
 	season_meta: Dictionary,
 ) -> Array[Dictionary]:
@@ -1991,7 +1991,7 @@ static func _process_purification_effects(
 
 
 static func _process_patrol_effects(
-	applied_list: Array,
+	applied_list: Array[Dictionary],
 	season_meta: Dictionary,
 ) -> Array[Dictionary]:
 	var results: Array[Dictionary] = []
@@ -2010,7 +2010,7 @@ static func _process_patrol_effects(
 
 
 static func _process_siege_maintenance(
-	applied_list: Array,
+	applied_list: Array[Dictionary],
 	active_sieges: Array[Dictionary],
 	ic_day: int,
 ) -> void:
@@ -4028,7 +4028,7 @@ static func _process_witness_report_letter_writebacks(
 	results: Array,
 	characters_by_id: Dictionary,
 	active_topics: Array[TopicData],
-	pending_letters: Array,
+	pending_letters: Array[LetterData],
 	ic_day: int,
 	dice_engine: DiceEngine,
 	next_letter_id: Array[int],
@@ -5344,7 +5344,7 @@ static func _apply_cohabitation(
 # -- Favor Processing (s12.10) ------------------------------------------------
 
 static func _process_favors(
-	favors: Array,
+	favors: Array[FavorData],
 	ic_day: int,
 	characters_by_id: Dictionary = {},
 ) -> Dictionary:
@@ -5416,7 +5416,7 @@ static func _process_daily_letter_pass(
 	objectives_map: Dictionary,
 	scoring_tables: Dictionary,
 	world_states: Dictionary,
-	pending_letters: Array = [],
+	pending_letters: Array[LetterData] = [],
 	ic_day: int = 0,
 	dice_engine: DiceEngine = null,
 	next_letter_id: Array[int] = [1],
@@ -6877,7 +6877,7 @@ static func _gather_promotion_candidates(
 # -- Military Effect Post-Processing -------------------------------------------
 
 static func _process_military_effects(
-	applied_list: Array,
+	applied_list: Array[Dictionary],
 	settlements: Array[SettlementData],
 	characters_by_id: Dictionary,
 	companies: Array[Dictionary],
@@ -6927,9 +6927,9 @@ static func _process_military_effects(
 # -- Starvation Warfare Effects ---------------------------------------------------
 
 static func _process_starvation_warfare_effects(
-	applied_list: Array,
+	applied_list: Array[Dictionary],
 	characters_by_id: Dictionary,
-	trade_routes: Array,
+	trade_routes: Array[TradeRouteData],
 	active_topics: Array[TopicData],
 	next_topic_id: Array[int],
 	ic_day: int,
@@ -7009,7 +7009,7 @@ static func _apply_harvest_destruction(
 
 static func _apply_blockade(
 	effects: Dictionary,
-	trade_routes: Array,
+	trade_routes: Array[TradeRouteData],
 	active_wars: Array[WarData],
 	next_war_id: Array[int],
 	ic_day: int,
@@ -7057,7 +7057,7 @@ static func _apply_blockade(
 # -- Supply Sharing Effects --------------------------------------------------------
 
 static func _process_supply_sharing(
-	applied_list: Array,
+	applied_list: Array[Dictionary],
 	characters_by_id: Dictionary,
 	settlements: Array[SettlementData],
 	provinces: Dictionary,
@@ -7805,7 +7805,7 @@ static func _consume_supply_status_results(
 static func _inject_urgency_data(
 	world_states: Dictionary,
 	characters: Array[L5RCharacterData],
-	favors: Array,
+	favors: Array[FavorData],
 	active_tethers: Array[Dictionary],
 	active_sieges: Array[Dictionary],
 	objectives_map: Dictionary,
@@ -8554,7 +8554,7 @@ static func _build_settlements_by_province(
 # -- War Declaration Processing ------------------------------------------------
 
 static func _process_compact_restorations(
-	applied_list: Array,
+	applied_list: Array[Dictionary],
 	phoenix_council_state: Dictionary,
 ) -> Array[Dictionary]:
 	## Intercepts RESTORE_COUNCIL_COMPACT action results and applies the
@@ -8578,7 +8578,7 @@ static func _process_compact_restorations(
 
 
 static func _process_war_declarations(
-	applied_list: Array,
+	applied_list: Array[Dictionary],
 	active_wars: Array[WarData],
 	ic_day: int,
 	next_war_id: Array[int] = [1],
@@ -8636,12 +8636,12 @@ static func _process_war_declarations(
 # -- Ladder Side Effects Processing -------------------------------------------
 
 static func _process_ladder_side_effects(
-	applied_list: Array,
+	applied_list: Array[Dictionary],
 	characters_by_id: Dictionary,
 	active_topics: Array[TopicData],
 	next_topic_id: Array[int],
 	ic_day: int,
-	favors: Array,
+	favors: Array[FavorData],
 	active_wars: Array[WarData],
 	next_war_id: Array[int],
 ) -> Array[Dictionary]:
@@ -8855,7 +8855,7 @@ static func _create_allied_aid_favor(
 	debtor_id: int,
 	favor_tier: int,
 	ic_day: int,
-	favors: Array,
+	favors: Array[FavorData],
 ) -> FavorData:
 	var tier: FavorData.FavorTier = FavorData.FavorTier.MINOR
 	match favor_tier:
@@ -8893,7 +8893,7 @@ static func _ladder_rung_name(rung: int) -> String:
 # -- War Termination Processing ------------------------------------------------
 
 static func _process_war_terminations(
-	applied_list: Array,
+	applied_list: Array[Dictionary],
 	active_wars: Array[WarData],
 	active_topics: Array[TopicData],
 	next_topic_id: Array[int],
@@ -8978,7 +8978,7 @@ static func _apply_war_territory_transfers(
 
 static func _process_war_trade_routes(
 	war_declarations: Array[Dictionary],
-	trade_routes: Array,
+	trade_routes: Array[TradeRouteData],
 	provinces: Dictionary,
 ) -> Array[Dictionary]:
 	var results: Array[Dictionary] = []
@@ -8998,7 +8998,7 @@ static func _process_war_trade_routes(
 
 static func _process_peace_trade_routes(
 	war_termination_results: Array[Dictionary],
-	trade_routes: Array,
+	trade_routes: Array[TradeRouteData],
 ) -> Array[Dictionary]:
 	var results: Array[Dictionary] = []
 	for resolution: Dictionary in war_termination_results:
@@ -9506,12 +9506,12 @@ static func _process_strategic_court_calls(
 	settlements: Array[SettlementData] = [],
 	archetype: int = StrategicReview.EmperorArchetype.IRON,
 	next_topic_id: Array[int] = [1],
-	pending_letters: Array = [],
+	pending_letters: Array[LetterData] = [],
 	dice_engine: DiceEngine = null,
 	next_letter_id: Array[int] = [1],
 ) -> void:
 	for directive: Dictionary in strategic_results:
-		var directive_type = directive.get("directive", "")
+		var directive_type: String = directive.get("directive", "")
 		if directive_type == "WINTER_COURT_HOST":
 			_create_winter_court_from_directive(
 				directive, active_courts, active_topics,
@@ -9573,7 +9573,7 @@ static func _create_winter_court_from_directive(
 	world_state: Dictionary = {},
 	archetype: int = StrategicReview.EmperorArchetype.IRON,
 	next_topic_id: Array[int] = [1],
-	pending_letters: Array = [],
+	pending_letters: Array[LetterData] = [],
 	dice_engine: DiceEngine = null,
 	next_letter_id: Array[int] = [1],
 ) -> Dictionary:
@@ -9711,7 +9711,7 @@ static func _dispatch_winter_court_summons(
 	announcement_topic_id: int,
 	ic_day: int,
 	characters_by_id: Dictionary,
-	pending_letters: Array,
+	pending_letters: Array[LetterData],
 	dice_engine: DiceEngine,
 	next_letter_id: Array[int],
 ) -> int:
@@ -10645,8 +10645,8 @@ static func _find_shiba_champion(characters: Array[L5RCharacterData]) -> L5RChar
 	return best
 
 
-static func _find_living_elemental_masters(characters: Array[L5RCharacterData]) -> Array:
-	var masters: Array = []
+static func _find_living_elemental_masters(characters: Array[L5RCharacterData]) -> Array[int]:
+	var masters: Array[int] = []
 	var found_by_role: Dictionary = {}
 	for c: L5RCharacterData in characters:
 		if c.clan != "Phoenix":
@@ -10879,10 +10879,10 @@ static func _build_advancement_world_state(
 static func _process_governance_effects(
 	results: Array,
 	characters_by_id: Dictionary,
-	marriages: Array,
+	marriages: Array[Dictionary],
 	ic_day: int,
 	world_states: Dictionary = {},
-	favors: Array = [],
+	favors: Array[FavorData] = [],
 	active_topics: Array[TopicData] = [],
 	next_topic_id: Array[int] = [1000],
 ) -> Dictionary:
@@ -10953,11 +10953,11 @@ static func _apply_appointment(
 static func _apply_marriage(
 	effects: Dictionary,
 	characters_by_id: Dictionary,
-	marriages: Array,
+	marriages: Array[Dictionary],
 	ic_day: int,
 	clan_baselines: Dictionary = {},
 	family_baselines: Dictionary = {},
-	favors: Array = [],
+	favors: Array[FavorData] = [],
 	active_topics: Array[TopicData] = [],
 	next_topic_id: Array[int] = [1000],
 ) -> Dictionary:
@@ -11115,7 +11115,7 @@ static func _apply_marriage_rejection(
 # -- Pregnancy Processing (s22.7) -----------------------------------------------
 
 static func _process_pregnancy_checks(
-	marriages: Array,
+	marriages: Array[Dictionary],
 	characters_by_id: Dictionary,
 	children: Array[ChildRecord],
 	dice_engine: DiceEngine,
@@ -11357,7 +11357,7 @@ static func _process_worship_accumulation(
 
 static func _process_letter_examinations(
 	day_results: Array,
-	pending_letters: Array,
+	pending_letters: Array[LetterData],
 	characters_by_id: Dictionary,
 	dice_engine: DiceEngine,
 ) -> Array[Dictionary]:
@@ -12059,7 +12059,7 @@ static func _populate_vacancy_intelligence(
 	world_states: Dictionary,
 	characters: Array[L5RCharacterData],
 	characters_by_id: Dictionary,
-	companies: Array,
+	companies: Array[Dictionary],
 	settlements: Array[SettlementData] = [],
 	provinces: Dictionary = {},
 	season_meta: Dictionary = {},
@@ -12631,7 +12631,7 @@ static func _compute_next_season_end_ic_day(time_system: TimeSystem) -> int:
 static func _process_court_action_effects(
 	day_results: Array,
 	characters_by_id: Dictionary,
-	favors: Array = [],
+	favors: Array[FavorData] = [],
 	ic_day: int = 0,
 	emperor_id: int = -1,
 	emperor_archetype: int = StrategicReview.EmperorArchetype.IRON,
@@ -12768,7 +12768,7 @@ static func _populate_court_availability_data(
 	characters: Array[L5RCharacterData],
 	characters_by_id: Dictionary,
 	world_states: Dictionary,
-	favors: Array,
+	favors: Array[FavorData],
 ) -> void:
 	var upcoming: Array[Dictionary] = []
 	for court: CourtSessionData in active_courts:
