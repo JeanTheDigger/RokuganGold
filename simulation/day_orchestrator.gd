@@ -296,6 +296,8 @@ static func advance_day(
 		next_company_id,
 		clans,
 		current_season_count,
+		objectives_map,
+		active_courts,
 	)
 
 	_apply_garrison_courtier_refusal_writebacks(
@@ -6885,6 +6887,8 @@ static func _process_military_effects(
 	next_company_id: Array[int] = [1],
 	clans: Dictionary = {},
 	season_count: int = 0,
+	objectives_map: Dictionary = {},
+	courts: Array[CourtSessionData] = [],
 ) -> Array[Dictionary]:
 	var results: Array[Dictionary] = []
 	var settlements_by_province: Dictionary = _build_settlements_by_province(settlements)
@@ -6917,6 +6921,20 @@ static func _process_military_effects(
 		if effects.get("requires_garrison_assignment", false):
 			var r: Dictionary = _apply_garrison_assignment(
 				applied, characters_by_id, settlements, provinces,
+			)
+			if not r.is_empty():
+				results.append(r)
+
+		if effects.get("requires_vassal_objective_assignment", false):
+			var r: Dictionary = _apply_vassal_objective_assignment(
+				applied, characters_by_id, objectives_map,
+			)
+			if not r.is_empty():
+				results.append(r)
+
+		if effects.get("requires_court_invitation", false):
+			var r: Dictionary = _apply_court_invitation(
+				applied, characters_by_id, courts,
 			)
 			if not r.is_empty():
 				results.append(r)
@@ -8258,6 +8276,90 @@ static func _apply_service_assignment_effect(
 		"character_id": target.character_id,
 		"new_commander_id": commander_id,
 		"assigned_unit_id": unit_id,
+	}
+
+
+static func _apply_vassal_objective_assignment(
+	applied: Dictionary,
+	characters_by_id: Dictionary,
+	objectives_map: Dictionary,
+) -> Dictionary:
+	var effects: Dictionary = applied.get("effects", {})
+	var lord_id: int = applied.get("character_id", -1)
+	var vassal_id: int = effects.get("vassal_id", -1)
+	var need_type: String = effects.get("assigned_need_type", "")
+
+	if vassal_id < 0 or lord_id < 0:
+		return {}
+
+	var vassal: L5RCharacterData = characters_by_id.get(vassal_id)
+	if vassal == null:
+		return {}
+	if vassal.lord_id != lord_id:
+		return {"type": "assignment_failed", "reason": "not_vassal"}
+
+	var new_obj: Dictionary = {
+		"need_type": need_type,
+		"assigned_by": lord_id,
+		"status": "ACTIVE",
+	}
+
+	if not objectives_map.has(vassal_id):
+		objectives_map[vassal_id] = {}
+	objectives_map[vassal_id]["primary"] = new_obj
+
+	return {
+		"type": "vassal_objective_assigned",
+		"lord_id": lord_id,
+		"vassal_id": vassal_id,
+		"need_type": need_type,
+	}
+
+
+static func _apply_court_invitation(
+	applied: Dictionary,
+	characters_by_id: Dictionary,
+	courts: Array[CourtSessionData],
+) -> Dictionary:
+	var effects: Dictionary = applied.get("effects", {})
+	var inviter_id: int = applied.get("character_id", -1)
+	var invitee_id: int = effects.get("invitee_id", -1)
+	var settlement_id: int = effects.get("invitation_settlement_id", -1)
+
+	if invitee_id < 0 or inviter_id < 0:
+		return {}
+
+	var invitee: L5RCharacterData = characters_by_id.get(invitee_id)
+	if invitee == null:
+		return {}
+
+	var target_court: CourtSessionData = null
+	for c: CourtSessionData in courts:
+		if c.host_settlement_id == settlement_id and c.phase != CourtSessionData.CourtPhase.CLOSED:
+			target_court = c
+			break
+
+	if target_court == null:
+		if settlement_id >= 0:
+			for c: CourtSessionData in courts:
+				if c.host_lord_id == inviter_id and c.phase != CourtSessionData.CourtPhase.CLOSED:
+					target_court = c
+					break
+
+	if target_court == null:
+		return {"type": "invitation_failed", "reason": "no_active_court"}
+
+	if invitee_id in target_court.personal_invitation_ids:
+		return {"type": "invitation_redundant", "invitee_id": invitee_id}
+
+	target_court.personal_invitation_ids.append(invitee_id)
+
+	return {
+		"type": "invitation_sent",
+		"inviter_id": inviter_id,
+		"invitee_id": invitee_id,
+		"court_id": target_court.court_id,
+		"settlement_id": target_court.host_settlement_id,
 	}
 
 

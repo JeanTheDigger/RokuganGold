@@ -6890,3 +6890,133 @@ func test_void_refresh_not_blocked_when_sentinel_minus_one() -> void:
 		_action_skill_map, _provinces, _action_log, _season_meta,
 	)
 	assert_true(_characters[0].current_void_points > 0)
+
+
+# -- ASSIGN_VASSAL_OBJECTIVE Deferred Effect -----------------------------------
+
+func test_apply_vassal_objective_assignment_sets_primary() -> void:
+	var vassal := L5RCharacterData.new()
+	vassal.character_id = 99
+	vassal.lord_id = 1
+	var chars: Dictionary = {1: _characters[0], 99: vassal}
+	var objs: Dictionary = {}
+	var applied: Dictionary = {
+		"character_id": 1,
+		"effects": {
+			"requires_vassal_objective_assignment": true,
+			"vassal_id": 99,
+			"assigned_need_type": "SECURE_ALLIANCE",
+		},
+	}
+	var r: Dictionary = DayOrchestrator._apply_vassal_objective_assignment(
+		applied, chars, objs,
+	)
+	assert_eq(r["type"], "vassal_objective_assigned")
+	assert_eq(r["vassal_id"], 99)
+	assert_eq(r["need_type"], "SECURE_ALLIANCE")
+	assert_true(objs.has(99))
+	assert_eq(objs[99]["primary"]["need_type"], "SECURE_ALLIANCE")
+	assert_eq(objs[99]["primary"]["assigned_by"], 1)
+	assert_eq(objs[99]["primary"]["status"], "ACTIVE")
+
+
+func test_apply_vassal_objective_rejects_non_vassal() -> void:
+	var stranger := L5RCharacterData.new()
+	stranger.character_id = 99
+	stranger.lord_id = 50
+	var chars: Dictionary = {1: _characters[0], 99: stranger}
+	var objs: Dictionary = {}
+	var applied: Dictionary = {
+		"character_id": 1,
+		"effects": {
+			"requires_vassal_objective_assignment": true,
+			"vassal_id": 99,
+			"assigned_need_type": "SECURE_ALLIANCE",
+		},
+	}
+	var r: Dictionary = DayOrchestrator._apply_vassal_objective_assignment(
+		applied, chars, objs,
+	)
+	assert_eq(r.get("type", ""), "assignment_failed")
+	assert_false(objs.has(99))
+
+
+# -- SEND_INVITATION Deferred Effect -------------------------------------------
+
+func test_apply_court_invitation_adds_to_personal_list() -> void:
+	var court := CourtSessionData.new()
+	court.court_id = 10
+	court.host_settlement_id = 5
+	court.host_lord_id = 1
+	court.phase = CourtSessionData.CourtPhase.ACTIVE
+	var invitee := L5RCharacterData.new()
+	invitee.character_id = 30
+	var chars: Dictionary = {1: _characters[0], 30: invitee}
+	var courts: Array[CourtSessionData] = [court]
+	var applied: Dictionary = {
+		"character_id": 1,
+		"effects": {
+			"requires_court_invitation": true,
+			"invitee_id": 30,
+			"invitation_settlement_id": 5,
+		},
+	}
+	var r: Dictionary = DayOrchestrator._apply_court_invitation(
+		applied, chars, courts,
+	)
+	assert_eq(r["type"], "invitation_sent")
+	assert_eq(r["invitee_id"], 30)
+	assert_eq(r["court_id"], 10)
+	assert_true(30 in court.personal_invitation_ids)
+
+
+func test_apply_court_invitation_no_duplicate() -> void:
+	var court := CourtSessionData.new()
+	court.court_id = 10
+	court.host_settlement_id = 5
+	court.host_lord_id = 1
+	court.phase = CourtSessionData.CourtPhase.ACTIVE
+	court.personal_invitation_ids = [30]
+	var invitee := L5RCharacterData.new()
+	invitee.character_id = 30
+	var chars: Dictionary = {1: _characters[0], 30: invitee}
+	var courts: Array[CourtSessionData] = [court]
+	var applied: Dictionary = {
+		"character_id": 1,
+		"effects": {
+			"requires_court_invitation": true,
+			"invitee_id": 30,
+			"invitation_settlement_id": 5,
+		},
+	}
+	var r: Dictionary = DayOrchestrator._apply_court_invitation(
+		applied, chars, courts,
+	)
+	assert_eq(r["type"], "invitation_redundant")
+	assert_eq(court.personal_invitation_ids.size(), 1)
+
+
+func test_apply_court_invitation_falls_back_to_lord_court() -> void:
+	var court := CourtSessionData.new()
+	court.court_id = 10
+	court.host_settlement_id = 99
+	court.host_lord_id = 1
+	court.phase = CourtSessionData.CourtPhase.SCHEDULED
+	var invitee := L5RCharacterData.new()
+	invitee.character_id = 30
+	var chars: Dictionary = {1: _characters[0], 30: invitee}
+	var courts: Array[CourtSessionData] = [court]
+	var applied: Dictionary = {
+		"character_id": 1,
+		"effects": {
+			"requires_court_invitation": true,
+			"invitee_id": 30,
+			"invitation_settlement_id": 5,
+		},
+	}
+	var r: Dictionary = DayOrchestrator._apply_court_invitation(
+		applied, chars, courts,
+	)
+	assert_eq(r["type"], "invitation_sent")
+	assert_eq(r["court_id"], 10)
+	assert_true(30 in court.personal_invitation_ids)

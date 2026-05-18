@@ -60,6 +60,8 @@ func before_each() -> void:
 		"TRAIN": {"primary": "_trained_skill", "secondary": null},
 		"PUBLIC_DEBATE": {"primary": "Courtier", "secondary": "Awareness"},
 		"PUBLIC_INSULT": {"primary": "Courtier", "secondary": "Awareness"},
+		"ASSIGN_VASSAL_OBJECTIVE": {"primary": "Courtier", "secondary": "Battle"},
+		"SEND_INVITATION": {"primary": "Calligraphy", "secondary": "Etiquette"},
 	}
 
 
@@ -1497,3 +1499,64 @@ func test_meditate_cannot_exceed_max_pool() -> void:
 	if result["success"]:
 		assert_true(_character.current_void_points <= _character.max_void_points)
 		assert_eq(result["effects"]["void_recovered"], 1)  # capped at 3-2=1
+
+
+# -- ASSIGN_VASSAL_OBJECTIVE (s57.34) ------------------------------------------
+
+func test_assign_vassal_objective_returns_deferred_flag() -> void:
+	_ctx.is_lord = true
+	_ctx.lord_rank = Enums.LordRank.PROVINCIAL_DAIMYO
+	var action := _make_action("ASSIGN_VASSAL_OBJECTIVE", 20)
+	action.metadata = {"need_type": "SECURE_ALLIANCE"}
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map
+	)
+	assert_true(result["success"])
+	var effects: Dictionary = result.get("effects", {})
+	assert_eq(effects["effect"], "vassal_objective_assigned")
+	assert_true(effects["requires_vassal_objective_assignment"])
+	assert_eq(effects["vassal_id"], 20)
+	assert_eq(effects["assigned_need_type"], "SECURE_ALLIANCE")
+
+
+func test_assign_vassal_objective_uses_courtier_roll() -> void:
+	_ctx.is_lord = true
+	_ctx.lord_rank = Enums.LordRank.PROVINCIAL_DAIMYO
+	var action := _make_action("ASSIGN_VASSAL_OBJECTIVE", 20)
+	action.metadata = {"need_type": "ACQUIRE_RESOURCE"}
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map
+	)
+	assert_eq(result.get("skill_used", ""), "Courtier")
+	assert_eq(result.get("tn", 0), 10)
+
+
+# -- SEND_INVITATION (s57.34.7) ------------------------------------------------
+
+func test_send_invitation_returns_deferred_flag() -> void:
+	_ctx.is_lord = true
+	_ctx.lord_rank = Enums.LordRank.PROVINCIAL_DAIMYO
+	_character.skills["Calligraphy"] = 3
+	var action := _make_action("SEND_INVITATION", 30)
+	action.target_settlement_id = 5
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map
+	)
+	assert_true(result["success"])
+	var effects: Dictionary = result.get("effects", {})
+	assert_eq(effects["effect"], "invitation_sent")
+	assert_true(effects["requires_court_invitation"])
+	assert_eq(effects["invitee_id"], 30)
+	assert_eq(effects["invitation_settlement_id"], 5)
+
+
+func test_send_invitation_grants_disposition() -> void:
+	_ctx.is_lord = true
+	_character.skills["Calligraphy"] = 3
+	var action := _make_action("SEND_INVITATION", 30)
+	action.target_settlement_id = 5
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map
+	)
+	var effects: Dictionary = result.get("effects", {})
+	assert_eq(effects["recipient_disposition_change"], 5)

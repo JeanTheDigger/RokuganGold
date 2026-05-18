@@ -1379,7 +1379,7 @@ static func _apply_effects(
 		elif action_id in MILITARY_ORDERS:
 			effects = _compute_military_effects(action_id, action)
 		elif action_id in ADMINISTRATIVE_ACTIONS:
-			effects = _compute_admin_effects(action_id)
+			effects = _compute_admin_effects(action_id, action)
 		elif action_id in INTELLIGENCE_ACTIONS:
 			effects = _compute_intelligence_effects(action_id, result.get("margin", 0))
 		else:
@@ -1515,7 +1515,7 @@ static func _compute_military_effects(action_id: String, action: NPCDataStructur
 	return {"effect": "military_order_issued"}
 
 
-static func _compute_admin_effects(action_id: String) -> Dictionary:
+static func _compute_admin_effects(action_id: String, action: NPCDataStructures.ScoredAction = null) -> Dictionary:
 	match action_id:
 		"SET_TAX_RATE", "SET_STIPEND_RATE":
 			return {"effect": "rate_adjusted"}
@@ -1558,7 +1558,38 @@ static func _compute_admin_effects(action_id: String) -> Dictionary:
 			return {"effect": "wall_fortified"}
 		"SEAL_WALL_BREACH":
 			return {"effect": "breach_sealed"}
+		"ASSIGN_VASSAL_OBJECTIVE":
+			return _compute_assign_vassal_objective_effects(action)
+		"SEND_INVITATION":
+			return _compute_send_invitation_effects(action)
 	return {"effect": "administrative_action"}
+
+
+static func _compute_assign_vassal_objective_effects(
+	action: NPCDataStructures.ScoredAction,
+) -> Dictionary:
+	var vassal_id: int = action.target_npc_id if action != null else -1
+	var need_type: String = action.metadata.get("need_type", "") if action != null else ""
+	return {
+		"effect": "vassal_objective_assigned",
+		"requires_vassal_objective_assignment": true,
+		"vassal_id": vassal_id,
+		"assigned_need_type": need_type,
+	}
+
+
+static func _compute_send_invitation_effects(
+	action: NPCDataStructures.ScoredAction,
+) -> Dictionary:
+	var invitee_id: int = action.target_npc_id if action != null else -1
+	var settlement_id: int = action.target_settlement_id if action != null else -1
+	return {
+		"effect": "invitation_sent",
+		"requires_court_invitation": true,
+		"invitee_id": invitee_id,
+		"invitation_settlement_id": settlement_id,
+		"recipient_disposition_change": 5,
+	}
 
 
 static func _execute_dispatch_courtier(
