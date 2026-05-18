@@ -92,6 +92,8 @@ When implementing or auditing a system, go here first:
 | War justification / casus belli               | 53.1                 |
 | War termination                               | 53                   |
 | Intra-clan civil war                          | 53.2                 |
+| Courtier school techniques & rerolls          | 29.15                |
+| Skill resolver (technique/wound/emphasis)     | 29.15, 4.5           |
 | Individual combat                             | 40 (not yet built)   |
 | ASCII map mission generation                  | 56 (not yet built)   |
 | Quest seeds                                   | 56.1 (not yet built) |
@@ -112,7 +114,7 @@ When implementing or auditing a system, go here first:
 | Orphaned objectives (lord death)              | 55.33                |
 | Court availability helper                     | 55.34                |
 | Opportunity scanner / objective self-selection| 55.26.1              |
-| Primary objective decomposer (12 trees)       | 55.28                |
+| Primary objective decomposer (13 trees)       | 55.28                |
 | Travel commitment and oscillation prevention  | 55.29                |
 | Objective progress functions                  | 55.29.3              |
 | NeedType enum reconciliation                  | 57.11                |
@@ -236,8 +238,43 @@ For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
   Appraisal emphasis deferred per s57.40.8–9 (GDD marks these deferred — do not implement
   until s57.40.8–9 are unlocked).
 
+### Systems Added 2026-05-18
+- **s29.15 Courtier School Techniques** — School technique bonuses wired into
+  SkillResolver and ActionExecutor. Doji Courtier R1a (honor-gated Free Raise on
+  social skills when Honor ≥ 6.5), R2 Cadence (silent topic sync between
+  cadence-trained courtiers at the same court), R3 Perfect Gift (one-shot +15
+  disposition modifier on gift delivery, once per target). Yasuki R1 / Kitsuki R1 /
+  Asako R1 Free Raises extended (Commerce, Investigation, Lore respectively). Kitsuki
+  R2 + Yasuki R4 deception defense TN modifiers (+5 / +10 to resist Sincerity-Deceit
+  contested rolls). Ikoma Bard R1a precise_memory flag (perfect topic recall). Asako
+  Loremaster R2 from_the_ashes social buff (daily activation: +1k0 on social rolls
+  at current location for 1 IC day, refreshed daily in day orchestrator). Auto-assign
+  technique flags on character creation and rank-up via
+  `SkillResolver.apply_technique_flags()`.
+- **s29.15.24 Reroll System** — `simulation/reroll_system.gd`. Generic reroll charge
+  system covering self-rerolls (Yasuki R2, Yoritomo R3, Kasuga R5) and granted rerolls
+  (Ikoma R4, Shiba Advisor). Self-reroll: technique charges with skill eligibility
+  filtering. Granted reroll: ally-granted entry with optional bonus dice. Weekly
+  refresh cycle. DISCERN_NEED ActionID routed into NPC decision loop with school leans
+  (Yasuki/Doji courtiers +15), accessible in AT_COURT and VISITING contexts.
+- **SkillResolver Centralization** — All skill rolls now route through
+  `SkillResolver.resolve_skill_check()` and `resolve_contested_check()` for uniform
+  technique bonus, wound penalty, emphasis, and from_the_ashes handling. Replaces
+  scattered per-system technique lookups (commits ea15c21 + dba8490). Bypass audit
+  confirmed no regressions.
+- **OpportunityScanner Additions** — 9 passthrough-ready primary objectives added for
+  NPC self-selection (MAINTAIN_PEACE, SECURE_ALLIANCE, ARRANGE_MARRIAGE, etc.).
+  SELF_SELECT directive fix: primary objectives now correctly written to objectives_map.
+- **PrimaryObjectiveDecomposer SECURE_ALLIANCE** — New decomposition tree for
+  alliance-securing objectives, routing through diplomatic and marriage actions.
+- **Decomposer Bug Fixes** — 13 decomposer outputs corrected where ActionIDs were
+  incorrectly used as NeedTypes. Now use proper NeedType enum values.
+- **s57.47 Violation of Emperor's Peace** — CAPITAL crime type added (execution without
+  seppuku option, Imperial jurisdiction). Wired into full crime/investigation pipeline
+  and Winter Court Emperor's Peace enforcement (v624).
+
 ### Blocked Sections — Do Not Re-Audit
-As of 2026-05-17, every remaining PARTIAL and NOT STARTED section is blocked.
+As of 2026-05-18, every remaining PARTIAL and NOT STARTED section is blocked.
 Do not re-audit this; the list is settled. Ask the user before investigating any of these.
 
 **Blocked on world map / adjacency data (not yet available):**
@@ -257,7 +294,7 @@ Do not re-audit this; the list is settled. Ask the user before investigating any
 - s57.40.9 — Appraisal skill emphasis modifier: GDD section not yet unlocked
 
 **REFERENCE sections** (source material only, design not started): s31–s37, s38,
-s44, s45, s54.7, s57.22–s57.33, s57.41–s57.43, s57.45–s57.46.
+s44, s45, s54.7, s57.22–s57.24, s57.26–s57.30, s57.41–s57.43, s57.45–s57.46.
 
 ### Pending Redesign
 (None currently pending.)
