@@ -267,6 +267,54 @@ func test_doji_free_raise_on_sub_skill() -> void:
 	assert_eq(SkillResolver.get_technique_free_raises(_char, "Etiquette: Courtesy"), 1)
 
 
+# -- Yasuki R1a: Commerce Free Raise (s29.15.2) -------------------------------
+
+func test_yasuki_free_raise_on_commerce() -> void:
+	_char.school = "Yasuki Courtier"
+	assert_eq(SkillResolver.get_technique_free_raises(_char, "Commerce"), 1)
+
+
+func test_yasuki_no_free_raise_on_courtier() -> void:
+	_char.school = "Yasuki Courtier"
+	assert_eq(SkillResolver.get_technique_free_raises(_char, "Courtier"), 0)
+
+
+# -- Kitsuki R1a: Investigation Free Raise (s29.15.6) -------------------------
+
+func test_kitsuki_free_raise_on_investigation() -> void:
+	_char.school = "Kitsuki Investigator"
+	assert_eq(SkillResolver.get_technique_free_raises(_char, "Investigation"), 1)
+
+
+func test_kitsuki_free_raise_on_investigation_sub_skill() -> void:
+	_char.school = "Kitsuki Investigator"
+	assert_eq(SkillResolver.get_technique_free_raises(_char, "Investigation: Notice"), 1)
+
+
+func test_kitsuki_no_free_raise_on_courtier() -> void:
+	_char.school = "Kitsuki Investigator"
+	assert_eq(SkillResolver.get_technique_free_raises(_char, "Courtier"), 0)
+
+
+# -- Asako R1a: Lore Free Raise (s29.15.10) -----------------------------------
+
+func test_asako_free_raise_on_lore() -> void:
+	_char.school = "Asako Loremaster"
+	assert_eq(SkillResolver.get_technique_free_raises(_char, "Lore"), 1)
+
+
+func test_asako_free_raise_on_lore_sub_skill() -> void:
+	_char.school = "Asako Loremaster"
+	assert_eq(SkillResolver.get_technique_free_raises(_char, "Lore: History"), 1)
+	assert_eq(SkillResolver.get_technique_free_raises(_char, "Lore: Theology"), 1)
+	assert_eq(SkillResolver.get_technique_free_raises(_char, "Lore: Shadowlands"), 1)
+
+
+func test_asako_no_free_raise_on_etiquette() -> void:
+	_char.school = "Asako Loremaster"
+	assert_eq(SkillResolver.get_technique_free_raises(_char, "Etiquette"), 0)
+
+
 func test_doji_free_raise_adds_flat_bonus_to_skill_check() -> void:
 	_char.school = "Doji Courtier"
 	_char.honor = 6.5

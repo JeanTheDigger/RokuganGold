@@ -134,13 +134,20 @@ const FREE_RAISE_VALUE: int = 5
 
 static func get_technique_free_raises(character: L5RCharacterData, skill_name: String) -> int:
 	var free_raises: int = 0
+	var base_skill: String = skill_name
+	var colon_pos: int = skill_name.find(":")
+	if colon_pos >= 0:
+		base_skill = skill_name.substr(0, colon_pos).strip_edges()
+
 	if character.school.begins_with("Doji Courtier") and character.honor >= DOJI_HONOR_THRESHOLD:
-		var base_skill: String = skill_name
-		var colon_pos: int = skill_name.find(":")
-		if colon_pos >= 0:
-			base_skill = skill_name.substr(0, colon_pos).strip_edges()
 		if base_skill in DOJI_FREE_RAISE_SKILLS:
 			free_raises += 1
+	if character.school.begins_with("Yasuki Courtier") and base_skill == "Commerce":
+		free_raises += 1
+	if character.school.begins_with("Kitsuki Investigator") and base_skill == "Investigation":
+		free_raises += 1
+	if character.school.begins_with("Asako Loremaster") and base_skill == "Lore":
+		free_raises += 1
 	return free_raises
 
 
