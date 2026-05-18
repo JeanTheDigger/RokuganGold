@@ -506,12 +506,12 @@ static func _consume_reactive_event(
 # -- Helpers -------------------------------------------------------------------
 
 static func _is_order_action(action_id: String) -> bool:
-	return action_id in [
-		"ASSESS_PROVINCE_STATUS", "INVESTIGATE_PROVINCE", "ORDER_PATROL",
-		"ADJUST_TAX", "BUILD_INFRASTRUCTURE", "LEVY_TROOPS",
-		"DEPLOY_ARMY", "TRAIN_TROOPS", "ASSIGN_OBJECTIVE",
-		"FILL_VACANCY", "ARRANGE_MARRIAGE",
-	]
+	return (
+		action_id in CivilianOrderBudget.PURE_ORDER_ACTIONS
+		or action_id in CivilianOrderBudget.MILITARY_OR_CIVILIAN_ACTIONS
+		or action_id in CivilianOrderBudget.DUAL_COST_ACTIONS
+		or action_id == CivilianOrderBudget.WRITE_LETTER
+	)
 
 
 static func _sort_by_resolution_order(

@@ -179,7 +179,7 @@
     "primary": "Stealth",
     "secondary": "Acting"
   },
-  "EXPOSE_SECRET_PUBLIC": {
+  "EXPOSE_SECRET_PUBLICLY": {
     "primary": "Courtier",
     "secondary": "Awareness"
   },
@@ -383,7 +383,7 @@
     "primary": null,
     "secondary": null
   },
-  "REVEAL_SECRET_PRIVATE": {
+  "EXPOSE_SECRET_PRIVATELY": {
     "primary": "Courtier",
     "secondary": "Awareness"
   },

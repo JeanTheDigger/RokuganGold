@@ -236,24 +236,43 @@ For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
   made consistent with design decision #2.
 - **SeductionSystem.check_maintenance_state() — fallback sentinel. FIXED.**
   `last_maintained_ic_day` fallback was `0`; changed to `-1`.
+- **LABOR_HALT_BLOCKED_ACTIONS — phantom ActionIDs. FIXED.**
+  `COMMISSION_CONSTRUCTION` and `COMMISSION_REPAIR` were non-existent
+  ActionIDs. Replaced with actual construction ActionIDs (FOUND_VILLAGE,
+  BUILD_FORTIFICATION, BUILD_SHRINE, FOUND_TEMPLE, FOUND_MONASTERY,
+  COMMISSION_SHIP). `LEVY_TROOPS` renamed to `ORDER_LEVY`. Labor halt
+  blocking now functional.
+- **HOSTILE_ACTIONS — DAMAGE_RELATIONSHIP miscategorized. FIXED.**
+  `DAMAGE_RELATIONSHIP` is a NeedType (appears as outer key in
+  objective_alignment.json), not an ActionID. Removed from HOSTILE_ACTIONS.
+- **COMMANDER_RANK_ACTIONS — LEVY_TROOPS naming mismatch. FIXED.**
+  Was `LEVY_TROOPS` (NeedType name); changed to `ORDER_LEVY` (ActionID).
+- **NPCWaveResolver._is_order_action() — wrong ActionID names. FIXED.**
+  Used placeholder names (ADJUST_TAX, BUILD_INFRASTRUCTURE, DEPLOY_ARMY,
+  TRAIN_TROOPS, ASSIGN_OBJECTIVE, FILL_VACANCY) that matched no real
+  ActionIDs. Replaced with delegation to CivilianOrderBudget constants.
+- **JSON scoring tables — secret action name mismatches. FIXED.**
+  `EXPOSE_SECRET_PUBLIC` → `EXPOSE_SECRET_PUBLICLY` and
+  `REVEAL_SECRET_PRIVATE` → `EXPOSE_SECRET_PRIVATELY` in
+  action_skill_map.json and objective_alignment.json.
 
 ### Known Code Issues — Deferred (require design input)
-- **NPCDecisionEngine HOSTILE_ACTIONS — phantom ActionIDs.** 12 entries in
-  the HOSTILE_ACTIONS const (SHADOW_TARGET, SEARCH_PERSON, CONCEAL_ITEM,
-  SEDUCE variants, ASSASSINATE, DAMAGE_RELATIONSHIP) do not match any
-  ActionID in context action lists or scoring tables. The hostile disposition
-  column is never applied for these actions. Needs NPC engine ActionID
-  reconciliation pass.
+- **NPCDecisionEngine HOSTILE_ACTIONS — 11 context-unreachable entries.**
+  SHADOW_TARGET, SEARCH_PERSON, CONCEAL_ITEM, FABRICATE_SECRET,
+  EXPOSE_SECRET_PRIVATELY, EXPOSE_SECRET_PUBLICLY, SEDUCE (5 variants),
+  ASSASSINATE have executor handlers but are never added to any context
+  action list. They need a covert action injection path or context list
+  entries. ASSASSINATE is completely unwired (no executor handler either).
 - **NPCDecisionEngine — 11 civilian/military order actions unreachable.**
   SET_TAX_RATE, SET_STIPEND_RATE, REQUEST_ART, ASSIGN_VASSAL_OBJECTIVE,
   ASSIGN_TO_MILITARY_SERVICE, ASSIGN_GARRISON, ORDER_LEVY, ORDER_DEPLOY,
   ORDER_FORTIFY, ORDER_RETREAT, SEND_INVITATION are never added to any
-  context's action list in `_get_actions_for_context()`. They have scoring
-  table entries but can never be selected. May be intentional (civilian order
-  budget runs separately) or a wiring gap.
-- **NPCDecisionEngine LABOR_HALT_BLOCKED_ACTIONS — phantom entries.** All
-  three entries (COMMISSION_CONSTRUCTION, COMMISSION_REPAIR, LEVY_TROOPS)
-  are non-existent ActionIDs. Labor halt blocking is non-functional.
+  context's action list in `_get_actions_for_context()`. The civilian order
+  path (`_resolve_civilian_order`) filters `generate_options()` output, but
+  those options are sourced from context lists that don't include these
+  actions. Currently only ASSESS_PROVINCE_STATUS, INVESTIGATE_PROVINCE,
+  ORDER_PATROL, REQUEST_PERFORMANCE, and ARRANGE_MARRIAGE can be selected
+  as civilian orders because they happen to be in context lists already.
 - **SkillResolver from_the_ashes expiry gap.** Buff applies even if
   `expires_ic_day` has passed but the daily cleanup hasn't run yet.
   Theoretical gap (cleanup runs at day start, buff lasts 2 full IC days).
