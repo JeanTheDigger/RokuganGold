@@ -10462,7 +10462,7 @@ static func _process_phoenix_council_gating(
 			phoenix_state["known_champion_id"] = current_champ_id
 		return {"skipped": true, "reason": "champion_has_authority"}
 
-	var living_masters: Array = _find_living_elemental_masters(characters)
+	var living_masters: Array[int] = _find_living_elemental_masters(characters)
 	if not PhoenixCouncil.can_council_self_govern(living_masters):
 		return {"skipped": true, "reason": "council_below_quorum"}
 
