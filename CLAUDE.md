@@ -289,6 +289,41 @@ For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
   type from lord status (CLAN_CHAMPION_COURT at 7.0+). Validates no active
   duplicate. Selects agenda topics, adds lord as attendee. +0.1 glory.
   Added to AT_OWN_HOLDINGS context list and LORD_ONLY_ACTIONS. 1 AP cost.
+- **s12.8 Honor Threshold Filter (Filter 2)** — Covert action scoring penalty
+  based on Honor rank. Three tiers: Honor < 2.0 → no penalty, 2.0–3.5 → -25,
+  >3.5 → -50. School exemptions: full exempt (Shosuro Infiltrator, Bitter Lies,
+  Kasuga Smuggler → penalty 0), half exempt (Daidoji Harrier, Daidoji Spymaster,
+  Ikoma Lion's Shadow → penalty halved), Scorpion clan → penalty halved. Wired
+  into `score_all()` as `honor_covert_penalty` on ScoredAction.
+- **s12.8 Virtue Profile Conditional Modifiers (Filter 3)** — Three virtues
+  get conditional scoring modifiers beyond flat personality_lean: Meiyo
+  (-15 default, +15 if existential threat), Chugi (-25 default, +10 if
+  lord-assigned objective), Yu (-15 default, +10 if existential threat).
+  Existential threat check: active wars, starvation provinces, besieged
+  settlements. Wired as `virtue_covert_modifier` on ScoredAction.
+- **Dosatsu/Chishiki personality_lean gather-deploy split** — Refined
+  personality_lean.json entries to make information gathering vs covert
+  deployment differential more pronounced. Dosatsu: gathering +12 (was +10),
+  deployment +2-5 (was +5-8), COMMISSION_ASSASSINATION 3 (was 8). Chishiki:
+  acquisition +10-12 (was +8), deployment 0-3 (was 3-5), FABRICATE_SECRET 0
+  (was 3), COMMISSION_ASSASSINATION 0 (was 3).
+- **s12.8 Suspicion Decay and 14-Tick Baseline** — Wired suspicion decay into
+  `_process_assassination_daily_tick()` with co-location check. Absent decay
+  -1.0/tick, present-inactive decay -0.5/tick. 14-tick minimum before any
+  settlement returns to baseline (clamps to 0.5 within window). Added
+  `suspicion_raised_ic_day` tracking to state factory (sentinel -1).
+- **s12.8 Non-Shinobi TN Increase** — Characters without Shosuro Infiltrator
+  or Shosuro Actor school backgrounds get +10 TN on all Phase 1 (Access)
+  rolls. Value PROVISIONAL — GDD specifies "severe disadvantage" without a
+  numeric value. Checks both primary school and school_paths for multi-school
+  characters. 10 tests.
+
+### Known Code Issues (found 2026-05-18, pre-existing)
+- **test_assassination_system.gd test_doji_courtier_bribe_access_gets_free_raise
+  — wrong method name.** Lines 404/411 call `AssassinationSystem.create_state()`
+  but the method is `create_assassination_state()`. Pre-existing in the Doji
+  Courtier technique test, not from this session. Will cause runtime error
+  if that specific test runs.
 
 ### Known Code Issues — Deferred (require design input)
 - **NPCDecisionEngine HOSTILE_ACTIONS — 11 context-unreachable entries.**
