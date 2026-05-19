@@ -591,12 +591,12 @@ For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
   making the EFFECTIVE branch unreachable. APPROACH_CAPPED works
   correctly. Needs a per-(character, target, season) snapshot dict
   populated at first social action of each season.
-- **Koku deduction missing for BRIBE_FOR_INFO and PURCHASE_MARKET.**
-  ResourceAvailability (s55.32) correctly steers NPCs away from these
-  actions when broke (-40 penalty), but the koku is never actually
-  deducted on execution. EffectApplicator has no "koku_cost" handler.
-  DELIVER_GIFT correctly consumes items (consume_item_id), SHARE_SUPPLIES
-  correctly deducts rice (rice_market_system). Koku path is unbuilt.
+- **Koku deduction for BRIBE_FOR_INFO and PURCHASE_MARKET. FIXED.**
+  EffectApplicator._apply_koku_cost() handles "koku_cost" effect key.
+  ActionExecutor emits koku_cost=5.0 on non-blocked bribes (including
+  refused — koku spent on attempt) and koku_cost=3.0 on PURCHASE_MARKET.
+  Blocked-by-personality bribes emit no koku_cost (never attempted).
+  9 tests.
 - **Phase 7 resource validation missing.**
   GDD s55.32.5 specifies a Phase 7 safety net: validate resources
   before executing, refund AP on failure. Not implemented. The -40
