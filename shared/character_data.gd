@@ -249,6 +249,9 @@ extends Resource
 @export var training_relationships: Dictionary = {}
 @export var atoned_offenses: Array[String] = []
 
+# -- Bodyguard / Yojimbo Assignment -------------------------------------------
+@export var assigned_protection_target_id: int = -1
+
 
 # -- Trait Access Helpers (used by CharacterStats) -----------------------------
 

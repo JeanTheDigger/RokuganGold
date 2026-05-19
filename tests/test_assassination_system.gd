@@ -939,6 +939,94 @@ func test_target_offline_detection() -> void:
 	assert_false(AssassinationSystem.is_target_pc_offline(2, [1, 2, 3] as Array[int]))
 
 
+func test_pc_crisis_event_poison() -> void:
+	var ev: Dictionary = AssassinationSystem.create_pc_crisis_event(2, 1, AssassinationSystem.ExecutionMethod.POISON, 100)
+	assert_eq(ev["event_type"], "assassination_crisis")
+	assert_eq(ev["target_id"], 2)
+	assert_eq(ev["grace_period_days"], 12)
+	assert_eq(ev["deadline_ic_day"], 100 + 12 * 4)
+	assert_false(ev["resolved"])
+
+
+func test_pc_crisis_event_blade() -> void:
+	var ev: Dictionary = AssassinationSystem.create_pc_crisis_event(2, 1, AssassinationSystem.ExecutionMethod.BLADE, 50)
+	assert_eq(ev["grace_period_days"], 4)
+	assert_eq(ev["deadline_ic_day"], 50 + 4 * 4)
+
+
+func test_pc_crisis_event_accident() -> void:
+	var ev: Dictionary = AssassinationSystem.create_pc_crisis_event(2, 1, AssassinationSystem.ExecutionMethod.ARRANGED_ACCIDENT, 200)
+	assert_eq(ev["grace_period_days"], 8)
+	assert_eq(ev["deadline_ic_day"], 200 + 8 * 4)
+
+
+# -- Access Method Selection ---------------------------------------------------
+
+func test_pick_method_stealth_preferred() -> void:
+	_assassin.skills = {"Stealth": 5, "Forgery": 1, "Courtier": 1, "Temptation": 1}
+	_assassin.agility = 4
+	_assassin.intelligence = 2
+	_assassin.awareness = 2
+	assert_eq(AssassinationSystem.pick_best_access_method(_assassin), "stealth")
+
+
+func test_pick_method_forgery_preferred() -> void:
+	_assassin.skills = {"Stealth": 1, "Forgery": 5, "Courtier": 1, "Temptation": 1}
+	_assassin.agility = 2
+	_assassin.intelligence = 4
+	_assassin.awareness = 2
+	assert_eq(AssassinationSystem.pick_best_access_method(_assassin), "forge_credentials")
+
+
+func test_pick_method_bribe_preferred() -> void:
+	_assassin.skills = {"Stealth": 1, "Forgery": 1, "Courtier": 5, "Temptation": 1}
+	_assassin.agility = 2
+	_assassin.intelligence = 2
+	_assassin.awareness = 4
+	assert_eq(AssassinationSystem.pick_best_access_method(_assassin), "bribe")
+
+
+func test_pick_method_includes_trait() -> void:
+	_assassin.skills = {"Stealth": 3, "Forgery": 3, "Courtier": 3, "Temptation": 3}
+	_assassin.agility = 5
+	_assassin.intelligence = 2
+	_assassin.awareness = 2
+	assert_eq(AssassinationSystem.pick_best_access_method(_assassin), "stealth")
+
+
+# -- Abort & Restart -----------------------------------------------------------
+
+func test_abort_sets_phase() -> void:
+	var s: Dictionary = AssassinationSystem.create_assassination_state(1, 2, AssassinationSystem.ExecutionMethod.POISON, 0)
+	AssassinationSystem.abort_operation(s)
+	assert_eq(s["phase"], AssassinationSystem.AssassinationPhase.ABORTED)
+
+
+func test_restart_resets_access_state() -> void:
+	var s: Dictionary = AssassinationSystem.create_assassination_state(1, 2, AssassinationSystem.ExecutionMethod.POISON, 0)
+	s["phase"] = AssassinationSystem.AssassinationPhase.ABORTED
+	s["days_in_access"] = 5
+	s["access_tn_penalty"] = 15
+	s["equipment_prepared"] = true
+	s["equipment_concealment_tn"] = 20
+	s["suspicion"] = 25.0
+	AssassinationSystem.restart_access(s)
+	assert_eq(s["phase"], AssassinationSystem.AssassinationPhase.ACCESS)
+	assert_eq(s["days_in_access"], 0)
+	assert_eq(s["access_tn_penalty"], 0)
+	assert_false(s["equipment_prepared"])
+	assert_eq(s["equipment_concealment_tn"], 0)
+
+
+func test_restart_preserves_suspicion() -> void:
+	var s: Dictionary = AssassinationSystem.create_assassination_state(1, 2, AssassinationSystem.ExecutionMethod.POISON, 0)
+	s["suspicion"] = 15.0
+	s["access_tn_penalty"] = 10
+	AssassinationSystem.restart_access(s)
+	assert_eq(s["suspicion"], 15.0, "Settlement suspicion persists across restarts")
+	assert_eq(s["access_tn_penalty"], 0, "Per-roll penalty resets on restart")
+
+
 # -- Technique bonus integration (SkillResolver routing) -----------------------
 
 func test_doji_courtier_bribe_access_gets_free_raise() -> void:

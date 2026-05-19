@@ -14223,35 +14223,38 @@ static func _process_assassination_daily_tick(
 
 
 static func _pick_access_method(assassin: L5RCharacterData) -> String:
-	var scores: Dictionary = {
-		"stealth": assassin.skills.get("Stealth", 0),
-		"forge_credentials": assassin.skills.get("Forgery", 0),
-		"bribe": assassin.skills.get("Courtier", 0),
-		"seduction": assassin.skills.get("Temptation", 0),
-	}
-	var best: String = "stealth"
-	var best_val: int = 0
-	for method: String in scores:
-		if int(scores[method]) > best_val:
-			best_val = int(scores[method])
-			best = method
-	return best
+	return AssassinationSystem.pick_best_access_method(assassin)
 
 
 static func _target_has_bodyguard(
-	_target: L5RCharacterData,
-	_characters_by_id: Dictionary,
+	target: L5RCharacterData,
+	characters_by_id: Dictionary,
 ) -> bool:
-	# Deferred: yojimbo assignment system not yet built.
-	# Returns false until assigned_protection_target_id field exists.
-	return false
+	return _find_bodyguard(target, characters_by_id) != null
 
 
 static func _find_bodyguard(
-	_target: L5RCharacterData,
-	_characters_by_id: Dictionary,
+	target: L5RCharacterData,
+	characters_by_id: Dictionary,
 ) -> L5RCharacterData:
-	return null
+	var best: L5RCharacterData = null
+	var best_combat: int = -1
+	for char_id: int in characters_by_id:
+		var c: L5RCharacterData = characters_by_id[char_id]
+		if c.assigned_protection_target_id != target.character_id:
+			continue
+		if c.physical_location != target.physical_location:
+			continue
+		if c.physical_location == "":
+			continue
+		var combat: int = maxi(
+			c.skills.get("Kenjutsu", 0),
+			c.skills.get("Iaijutsu", 0),
+		)
+		if combat > best_combat:
+			best_combat = combat
+			best = c
+	return best
 
 
 static func _npc_bodyguard_decision(

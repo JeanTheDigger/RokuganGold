@@ -567,6 +567,19 @@ static func advance_to_execution(state: Dictionary) -> void:
 	state["phase"] = AssassinationPhase.EXECUTION
 
 
+static func abort_operation(state: Dictionary) -> void:
+	state["phase"] = AssassinationPhase.ABORTED
+
+
+static func restart_access(state: Dictionary) -> void:
+	state["phase"] = AssassinationPhase.ACCESS
+	state["days_in_access"] = 0
+	state["access_tn_penalty"] = 0
+	state["equipment_prepared"] = false
+	state["equipment_concealment_tn"] = 0
+	state["bodyguard_encountered"] = false
+
+
 # ==============================================================================
 # Phase 2 — Execution
 # ==============================================================================
@@ -894,6 +907,40 @@ static func get_pc_crisis_window(method: ExecutionMethod) -> int:
 			return PC_CRISIS_ACCIDENT_DAYS
 		_:
 			return PC_CRISIS_BLADE_DAYS
+
+
+static func pick_best_access_method(assassin: L5RCharacterData) -> String:
+	var scores: Dictionary = {
+		"stealth": assassin.skills.get("Stealth", 0) + assassin.agility,
+		"forge_credentials": assassin.skills.get("Forgery", 0) + assassin.intelligence,
+		"bribe": assassin.skills.get("Courtier", 0) + assassin.awareness,
+		"seduction": assassin.skills.get("Temptation", 0) + assassin.awareness,
+	}
+	var best: String = "stealth"
+	var best_val: int = 0
+	for method: String in scores:
+		if int(scores[method]) > best_val:
+			best_val = int(scores[method])
+			best = method
+	return best
+
+
+static func create_pc_crisis_event(
+	target_id: int,
+	assassin_id: int,
+	method: ExecutionMethod,
+	ic_day: int,
+) -> Dictionary:
+	return {
+		"event_type": "assassination_crisis",
+		"target_id": target_id,
+		"assassin_id": assassin_id,
+		"method": method,
+		"ic_day_created": ic_day,
+		"grace_period_days": get_pc_crisis_window(method),
+		"deadline_ic_day": ic_day + get_pc_crisis_window(method) * 4,
+		"resolved": false,
+	}
 
 
 static func is_target_pc_offline(
