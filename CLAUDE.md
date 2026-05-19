@@ -855,13 +855,14 @@ For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
   the intimidation target from known_secrets. Populates secret_ref,
   secret_tier, by_letter. Without a matching secret, falls through to
   standard intimidation. 4 tests.
-- **FABRICATE_SECRET — writeback missing, fabricated secrets lost. FIXED.**
-  SecretSystem.fabricate_secret() returned SecretData in effects but no
-  writeback stored it in active_secrets. Now `_process_fabricate_secret_writebacks()`
-  assigns secret_id from next_secret_id, adds fabricator to known_by_ids,
-  and appends to active_secrets. Fabricated secrets now usable by EXPOSE_SECRET
-  and INTIMIDATE blackmail. Metadata severity/target still defaults (TIER_3,
-  no strategic targeting) — separate issue. 4 tests.
+- **FABRICATE_SECRET — writeback missing + metadata defaults. FIXED.**
+  Two fixes: (1) `_process_fabricate_secret_writebacks()` assigns secret_id
+  from next_secret_id, adds fabricator to known_by_ids, appends to
+  active_secrets. Fabricated secrets now usable by EXPOSE_SECRET and
+  INTIMIDATE blackmail. 4 orchestrator tests. (2) `_pick_fabrication_severity()`
+  selects severity by Forgery rank: 7+→TIER_1, 5-6→TIER_2, 3-4→TIER_3,
+  1-2→TIER_4 (maps to TNs 30/25/20/15). need.target_npc_id flows through
+  so fabricated secrets target the objective target. 4 engine tests.
 - **PLAY_GAME — always Games: Go.** Executor reads `game_skill` (default
   "Games: Go"). No metadata population. NPCs never play Shogi, Sadane, etc.
   Low impact — Go is the default noble game.
