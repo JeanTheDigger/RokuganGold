@@ -494,6 +494,24 @@ For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
   `court_settlement_id` for all 6 contested court actions (was only topic_id
   for 3). Position resistance now computes target relevance inline from
   TopicData/character clan instead of reading unset metadata values.
+- **s55.6 information transfer not wired into vassal objective assignment. FIXED.**
+  `InformationSystem.transfer_objective_knowledge()` existed but was never
+  called when lords assigned objectives to vassals via ASSIGN_VASSAL_OBJECTIVE.
+  Now fires in `_apply_vassal_objective_assignment()`. Target fields
+  (province_id, clan, npc_id) flow from ScoredAction through executor effects
+  into the objective record and knowledge transfer.
+- **Public knowledge broadcasts missing knowledge entries (s55.12). FIXED.**
+  `broadcast_public_knowledge()` added topics to `topic_pool` but never
+  created `knowledge_pool` entries. Public knowledge is one of the five
+  GDD-specified sources but had no FRESH confidence entry, breaking NPC
+  confidence scoring for publicly learned information. Now creates
+  PUBLIC_KNOWLEDGE entries with FRESH confidence per season.
+- **met_characters direct mutation bypassing add_contact(). FIXED.**
+  Two places in DayOrchestrator (WindDown met_character_ids processing and
+  travel arrival observation) mutated `met_characters` directly instead of
+  routing through `InformationSystem.add_contact()`. This skipped
+  `known_contacts_by_clan` updates, breaking the contact discovery system
+  (s55.7). Both now route through `add_contact()`.
 
 ### Known Code Issues (found 2026-05-18, pre-existing)
 - **test_assassination_system.gd test_doji_courtier_bribe_access_gets_free_raise
