@@ -563,8 +563,10 @@ static func advance_day(
 
 	_process_commitment_advance_notices(
 		commitments, characters_by_id, ic_day, pending_letters,
-		next_letter_id, dice_engine,
+		next_letter_id, dice_engine, characters, objectives_map,
 	)
+
+	_process_proxy_arrivals(commitments, characters_by_id)
 
 	_process_crisis_commitment_linking(
 		day_result.get("results", []), commitments, objectives_map,
@@ -14933,6 +14935,8 @@ static func _process_commitment_advance_notices(
 	pending_letters: Array[LetterData],
 	next_letter_id: Array[int],
 	dice_engine: DiceEngine,
+	characters: Array[L5RCharacterData] = [],
+	objectives_map: Dictionary = {},
 ) -> void:
 	for c: CommitmentData in commitments:
 		if c.status != Enums.CommitmentStatus.PENDING:
@@ -14968,6 +14972,12 @@ static func _process_commitment_advance_notices(
 			pending_letters.append(letter)
 			next_letter_id[0] += 1
 
+		if debtor.civilian_order_budget_max > 0 and not c.proxy_sent:
+			_attempt_proxy_dispatch(
+				c, debtor, characters, characters_by_id,
+				objectives_map, days_remaining,
+			)
+
 
 static func _is_commitment_unfulfillable(
 	c: CommitmentData,
@@ -14999,6 +15009,85 @@ static func _is_commitment_unfulfillable(
 		Enums.CommitmentType.RESOURCE_PROMISE:
 			return false
 	return false
+
+
+static func _attempt_proxy_dispatch(
+	c: CommitmentData,
+	lord: L5RCharacterData,
+	characters: Array[L5RCharacterData],
+	characters_by_id: Dictionary,
+	objectives_map: Dictionary,
+	days_remaining: int,
+) -> void:
+	if c.commitment_type == Enums.CommitmentType.SUPPORT_PLEDGE:
+		return
+	var target_str: String = _get_commitment_destination(c, characters_by_id)
+	if target_str.is_empty():
+		return
+	var best_vassal: L5RCharacterData = null
+	var best_travel: int = days_remaining + 1
+	for ch: L5RCharacterData in characters:
+		if ch.lord_id != lord.character_id:
+			continue
+		if TravelSystem.is_traveling(ch):
+			continue
+		var travel: int = TravelSystem.get_travel_time(ch.physical_location, target_str)
+		if travel < best_travel:
+			best_travel = travel
+			best_vassal = ch
+	if best_vassal == null:
+		return
+	var need_type: String = "ATTEND_COURT"
+	if c.commitment_type == Enums.CommitmentType.VISIT_PROMISE:
+		need_type = "VISIT_NPC"
+	elif c.commitment_type == Enums.CommitmentType.MEETING_ARRANGEMENT:
+		need_type = "ATTEND_MEETING"
+	var proxy_obj: Dictionary = {
+		"need_type": need_type,
+		"assigned_by": lord.character_id,
+		"status": "ACTIVE",
+		"target_settlement_id": c.fulfillment_target,
+		"proxy_for_commitment_id": c.commitment_id,
+	}
+	if not objectives_map.has(best_vassal.character_id):
+		objectives_map[best_vassal.character_id] = {}
+	objectives_map[best_vassal.character_id]["primary"] = proxy_obj
+	c.proxy_npc_id = best_vassal.character_id
+
+
+static func _get_commitment_destination(
+	c: CommitmentData,
+	characters_by_id: Dictionary,
+) -> String:
+	match c.commitment_type:
+		Enums.CommitmentType.COURT_ATTENDANCE, Enums.CommitmentType.MEETING_ARRANGEMENT, Enums.CommitmentType.SUPPORT_PLEDGE:
+			return str(c.fulfillment_target)
+		Enums.CommitmentType.VISIT_PROMISE:
+			var creditor: L5RCharacterData = characters_by_id.get(c.creditor_npc_id)
+			if creditor != null:
+				return creditor.physical_location
+	return ""
+
+
+static func _process_proxy_arrivals(
+	commitments: Array[CommitmentData],
+	characters_by_id: Dictionary,
+) -> void:
+	for c: CommitmentData in commitments:
+		if c.status != Enums.CommitmentStatus.PENDING:
+			continue
+		if c.proxy_sent:
+			continue
+		if c.proxy_npc_id < 0:
+			continue
+		var proxy: L5RCharacterData = characters_by_id.get(c.proxy_npc_id)
+		if proxy == null:
+			continue
+		if TravelSystem.is_traveling(proxy):
+			continue
+		var target_str: String = _get_commitment_destination(c, characters_by_id)
+		if proxy.physical_location == target_str:
+			CommitmentRegistry.register_proxy(c)
 
 
 static func _should_skip_advance_notice(debtor: L5RCharacterData) -> bool:

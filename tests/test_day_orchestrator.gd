@@ -9050,3 +9050,157 @@ func test_advance_notice_visit_promise_unfulfillable() -> void:
 	)
 	TravelSystem.clear_distances()
 	assert_true(c.advance_notice_sent, "Should send notice for unreachable visit")
+
+
+# -- Proxy Dispatch (s55.31.6) ------------------------------------------------
+
+func test_proxy_dispatch_assigns_vassal_to_target() -> void:
+	var lord := L5RCharacterData.new()
+	lord.character_id = 10
+	lord.physical_location = "200"
+	lord.bushido_virtue = Enums.BushidoVirtue.REI
+	lord.civilian_order_budget_max = 3
+	var vassal := L5RCharacterData.new()
+	vassal.character_id = 30
+	vassal.lord_id = 10
+	vassal.physical_location = "150"
+	var chars: Array[L5RCharacterData] = [lord, vassal]
+	var chars_by_id: Dictionary = {10: lord, 30: vassal}
+	var objectives_map: Dictionary = {}
+	var c: CommitmentData = _make_commitment_for_notice(10, 20, 55)
+	c.commitment_id = 1
+	var commitments: Array[CommitmentData] = [c]
+	var letters: Array[LetterData] = []
+	var next_lid: Array[int] = [1]
+	TravelSystem.set_distance("200", "100", 10)
+	TravelSystem.set_distance("150", "100", 2)
+	DayOrchestrator._process_commitment_advance_notices(
+		commitments, chars_by_id, 50, letters, next_lid, DiceEngine.new(),
+		chars, objectives_map,
+	)
+	TravelSystem.clear_distances()
+	assert_eq(c.proxy_npc_id, 30, "Should assign vassal as proxy")
+	assert_true(objectives_map.has(30), "Should set vassal objective")
+	var obj: Dictionary = objectives_map[30].get("primary", {})
+	assert_eq(obj.get("need_type"), "ATTEND_COURT")
+	assert_eq(obj.get("assigned_by"), 10)
+	assert_eq(obj.get("proxy_for_commitment_id"), 1)
+
+
+func test_proxy_dispatch_picks_closest_vassal() -> void:
+	var lord := L5RCharacterData.new()
+	lord.character_id = 10
+	lord.physical_location = "200"
+	lord.bushido_virtue = Enums.BushidoVirtue.GI
+	lord.civilian_order_budget_max = 3
+	var far_vassal := L5RCharacterData.new()
+	far_vassal.character_id = 30
+	far_vassal.lord_id = 10
+	far_vassal.physical_location = "300"
+	var near_vassal := L5RCharacterData.new()
+	near_vassal.character_id = 40
+	near_vassal.lord_id = 10
+	near_vassal.physical_location = "110"
+	var chars: Array[L5RCharacterData] = [lord, far_vassal, near_vassal]
+	var chars_by_id: Dictionary = {10: lord, 30: far_vassal, 40: near_vassal}
+	var objectives_map: Dictionary = {}
+	var c: CommitmentData = _make_commitment_for_notice(10, 20, 55)
+	c.commitment_id = 2
+	var commitments: Array[CommitmentData] = [c]
+	var letters: Array[LetterData] = []
+	var next_lid: Array[int] = [1]
+	TravelSystem.set_distance("200", "100", 10)
+	TravelSystem.set_distance("300", "100", 4)
+	TravelSystem.set_distance("110", "100", 1)
+	DayOrchestrator._process_commitment_advance_notices(
+		commitments, chars_by_id, 50, letters, next_lid, DiceEngine.new(),
+		chars, objectives_map,
+	)
+	TravelSystem.clear_distances()
+	assert_eq(c.proxy_npc_id, 40, "Should pick closest vassal")
+
+
+func test_proxy_dispatch_skipped_for_non_lords() -> void:
+	var debtor := L5RCharacterData.new()
+	debtor.character_id = 10
+	debtor.physical_location = "200"
+	debtor.bushido_virtue = Enums.BushidoVirtue.REI
+	debtor.civilian_order_budget_max = 0
+	var vassal := L5RCharacterData.new()
+	vassal.character_id = 30
+	vassal.lord_id = 10
+	vassal.physical_location = "100"
+	var chars: Array[L5RCharacterData] = [debtor, vassal]
+	var chars_by_id: Dictionary = {10: debtor, 30: vassal}
+	var objectives_map: Dictionary = {}
+	var c: CommitmentData = _make_commitment_for_notice(10, 20, 55)
+	var commitments: Array[CommitmentData] = [c]
+	var letters: Array[LetterData] = []
+	var next_lid: Array[int] = [1]
+	TravelSystem.set_distance("200", "100", 10)
+	DayOrchestrator._process_commitment_advance_notices(
+		commitments, chars_by_id, 50, letters, next_lid, DiceEngine.new(),
+		chars, objectives_map,
+	)
+	TravelSystem.clear_distances()
+	assert_eq(c.proxy_npc_id, -1, "Non-lords should not dispatch proxies")
+
+
+func test_proxy_dispatch_skipped_for_support_pledge() -> void:
+	var lord := L5RCharacterData.new()
+	lord.character_id = 10
+	lord.physical_location = "200"
+	lord.bushido_virtue = Enums.BushidoVirtue.REI
+	lord.civilian_order_budget_max = 3
+	var vassal := L5RCharacterData.new()
+	vassal.character_id = 30
+	vassal.lord_id = 10
+	vassal.physical_location = "100"
+	var chars: Array[L5RCharacterData] = [lord, vassal]
+	var chars_by_id: Dictionary = {10: lord, 30: vassal}
+	var objectives_map: Dictionary = {}
+	var c: CommitmentData = _make_commitment_for_notice(
+		10, 20, 55, Enums.CommitmentType.SUPPORT_PLEDGE, 100,
+	)
+	var commitments: Array[CommitmentData] = [c]
+	var letters: Array[LetterData] = []
+	var next_lid: Array[int] = [1]
+	TravelSystem.set_distance("200", "100", 10)
+	DayOrchestrator._process_commitment_advance_notices(
+		commitments, chars_by_id, 50, letters, next_lid, DiceEngine.new(),
+		chars, objectives_map,
+	)
+	TravelSystem.clear_distances()
+	assert_eq(c.proxy_npc_id, -1, "SUPPORT_PLEDGE should not allow proxy per register_proxy()")
+
+
+func test_proxy_arrival_marks_proxy_sent() -> void:
+	var proxy := L5RCharacterData.new()
+	proxy.character_id = 30
+	proxy.physical_location = "100"
+	var chars_by_id: Dictionary = {30: proxy}
+	var c := CommitmentData.new()
+	c.commitment_type = Enums.CommitmentType.COURT_ATTENDANCE
+	c.status = Enums.CommitmentStatus.PENDING
+	c.proxy_npc_id = 30
+	c.fulfillment_target = 100
+	var commitments: Array[CommitmentData] = [c]
+	DayOrchestrator._process_proxy_arrivals(commitments, chars_by_id)
+	assert_true(c.proxy_sent, "Should mark proxy_sent when proxy arrives at target")
+
+
+func test_proxy_arrival_not_marked_while_traveling() -> void:
+	var proxy := L5RCharacterData.new()
+	proxy.character_id = 30
+	proxy.physical_location = "100"
+	proxy.travel_destination = "100"
+	proxy.travel_days_remaining = 1
+	var chars_by_id: Dictionary = {30: proxy}
+	var c := CommitmentData.new()
+	c.commitment_type = Enums.CommitmentType.COURT_ATTENDANCE
+	c.status = Enums.CommitmentStatus.PENDING
+	c.proxy_npc_id = 30
+	c.fulfillment_target = 100
+	var commitments: Array[CommitmentData] = [c]
+	DayOrchestrator._process_proxy_arrivals(commitments, chars_by_id)
+	assert_false(c.proxy_sent, "Should not mark proxy_sent while proxy is still traveling")
