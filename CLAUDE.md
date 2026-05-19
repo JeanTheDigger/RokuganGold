@@ -578,7 +578,9 @@ For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
   for provincial. Winter Court skips emperor and host. 9 tests.
   VISIT_PROMISE wired (LetterData gains visit_intent + visit_deadline_ic_day;
   handler fires on delivered letters with intent set). NPC engine trigger
-  logic to SET visit_intent deferred — handler inert until populated. 4 tests.
+  wired: `_should_set_visit_intent()` checks AT_OWN_HOLDINGS context,
+  visit-eligible need_type (RAISE_DISPOSITION, SECURE_ALLIANCE, etc.),
+  and matching objective target. 90-day deadline PROVISIONAL. 9 tests.
   MEETING_ARRANGEMENT wired (LetterData gains meeting_proposal +
   meeting_settlement_id + meeting_deadline_ic_day; handler fires on matching
   bilateral proposals at same settlement). NPC engine trigger deferred. 4 tests.
