@@ -584,13 +584,12 @@ For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
   broken commitment. Requires wiring into the topic propagation flow
   when NPCs learn about crises. Deferred — depends on commitment creation
   being wired first (no forgiveness without commitments to break).
-- **Approach evaluation disposition_at_start tracking not implemented.**
-  `ApproachEvaluation.evaluate_approach()` takes `disposition_at_start`
-  to distinguish EFFECTIVE (sub-tier progress) from INEFFECTIVE (no
-  progress). Current wiring passes `current_disposition` for both,
-  making the EFFECTIVE branch unreachable. APPROACH_CAPPED works
-  correctly. Needs a per-(character, target, season) snapshot dict
-  populated at first social action of each season.
+- **Approach evaluation disposition_at_start tracking. FIXED.**
+  `_populate_disposition_snapshots()` captures all disposition pairs at
+  season start. `_process_approach_evaluation_writebacks()` looks up
+  snapshot value as `disposition_at_start`, making EFFECTIVE branch
+  reachable. Persisted in WorldStateData between advance_day calls.
+  5 tests.
 - **Koku deduction for BRIBE_FOR_INFO and PURCHASE_MARKET. FIXED.**
   EffectApplicator._apply_koku_cost() handles "koku_cost" effect key.
   ActionExecutor emits koku_cost=5.0 on non-blocked bribes (including
