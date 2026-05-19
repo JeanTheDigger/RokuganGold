@@ -512,6 +512,12 @@ For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
   routing through `InformationSystem.add_contact()`. This skipped
   `known_contacts_by_clan` updates, breaking the contact discovery system
   (s55.7). Both now route through `add_contact()`.
+- **Military promotion results not written back to character data. FIXED.**
+  `_process_military_promotions()` selected best candidates for vacant
+  command positions but only returned metadata — `character.military_rank`,
+  `character.commanded_unit_id`, and `company["commander_id"]` were never
+  updated. Added `_apply_promotion_results()` to apply promotions after
+  seasonal military processing.
 
 ### Known Code Issues (found 2026-05-18, pre-existing)
 - **test_assassination_system.gd test_doji_courtier_bribe_access_gets_free_raise
