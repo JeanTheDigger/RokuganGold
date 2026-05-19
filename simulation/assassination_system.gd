@@ -35,9 +35,16 @@ const SUSPICION_NOTABLE_FAILURE: int = 10
 const SUSPICION_CRITICAL_FAILURE: int = 15
 const SUSPICION_DECAY_ABSENT: float = -1.0
 const SUSPICION_DECAY_PRESENT_INACTIVE: float = -0.5
-const SUSPICION_ALERT_THRESHOLD: float = 20.0
-const SUSPICION_LOCKDOWN_THRESHOLD: float = 40.0
 const SUSPICION_MINIMUM_RESTORE_TICKS: int = 14
+
+# Household response thresholds (s12.8):
+# 0-9: no response. 10-19: watchful (+5 passive Investigation).
+# 20-29: bodyguard assigned. 30+: target warned, +10 all Phase 1 TNs.
+const SUSPICION_WATCHFUL_THRESHOLD: float = 10.0
+const SUSPICION_BODYGUARD_THRESHOLD: float = 20.0
+const SUSPICION_LOCKDOWN_THRESHOLD: float = 30.0
+const SUSPICION_LOCKDOWN_TN_INCREASE: int = 10
+const SUSPICION_WATCHFUL_INVESTIGATION_BONUS: int = 5
 
 # -- Access Phase Constants ----------------------------------------------------
 
@@ -162,22 +169,33 @@ static func decay_suspicion(state: Dictionary, is_present: bool, ic_day: int = -
 		state["suspicion_raised_ic_day"] = -1
 
 
+static func is_watchful(state: Dictionary) -> bool:
+	return float(state.get("suspicion", 0)) >= SUSPICION_WATCHFUL_THRESHOLD
+
+
 static func is_alert(state: Dictionary) -> bool:
-	return float(state.get("suspicion", 0)) >= SUSPICION_ALERT_THRESHOLD
+	return float(state.get("suspicion", 0)) >= SUSPICION_BODYGUARD_THRESHOLD
 
 
 static func is_lockdown(state: Dictionary) -> bool:
 	return float(state.get("suspicion", 0)) >= SUSPICION_LOCKDOWN_THRESHOLD
 
 
+static func should_assign_bodyguard(state: Dictionary) -> bool:
+	return float(state.get("suspicion", 0)) >= SUSPICION_BODYGUARD_THRESHOLD
+
+
+static func get_household_investigation_bonus(state: Dictionary) -> int:
+	var susp: float = float(state.get("suspicion", 0))
+	if susp >= SUSPICION_WATCHFUL_THRESHOLD and susp < SUSPICION_BODYGUARD_THRESHOLD:
+		return SUSPICION_WATCHFUL_INVESTIGATION_BONUS
+	return 0
+
+
 static func get_suspicion_tn_modifier(state: Dictionary) -> int:
 	var susp: float = float(state.get("suspicion", 0))
 	if susp >= SUSPICION_LOCKDOWN_THRESHOLD:
-		return 15
-	if susp >= SUSPICION_ALERT_THRESHOLD:
-		return 10
-	if susp >= 10.0:
-		return 5
+		return SUSPICION_LOCKDOWN_TN_INCREASE
 	return 0
 
 

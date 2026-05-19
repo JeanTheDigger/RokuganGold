@@ -109,25 +109,48 @@ func test_critical_failure_gives_15() -> void:
 	assert_eq(AssassinationSystem.get_suspicion_from_failure(-12), 15)
 
 
+func test_watchful_threshold() -> void:
+	var s: Dictionary = {"suspicion": 10.0}
+	assert_true(AssassinationSystem.is_watchful(s))
+	s["suspicion"] = 9.0
+	assert_false(AssassinationSystem.is_watchful(s))
+
+
 func test_alert_threshold() -> void:
-	var s: Dictionary = {"suspicion": 20}
+	var s: Dictionary = {"suspicion": 20.0}
 	assert_true(AssassinationSystem.is_alert(s))
-	s["suspicion"] = 19
+	s["suspicion"] = 19.0
 	assert_false(AssassinationSystem.is_alert(s))
 
 
 func test_lockdown_threshold() -> void:
-	var s: Dictionary = {"suspicion": 40}
+	var s: Dictionary = {"suspicion": 30.0}
 	assert_true(AssassinationSystem.is_lockdown(s))
-	s["suspicion"] = 39
+	s["suspicion"] = 29.0
 	assert_false(AssassinationSystem.is_lockdown(s))
 
 
-func test_suspicion_tn_modifier_tiers() -> void:
-	assert_eq(AssassinationSystem.get_suspicion_tn_modifier({"suspicion": 0}), 0)
-	assert_eq(AssassinationSystem.get_suspicion_tn_modifier({"suspicion": 10}), 5)
-	assert_eq(AssassinationSystem.get_suspicion_tn_modifier({"suspicion": 25}), 10)
-	assert_eq(AssassinationSystem.get_suspicion_tn_modifier({"suspicion": 50}), 15)
+func test_should_assign_bodyguard() -> void:
+	assert_true(AssassinationSystem.should_assign_bodyguard({"suspicion": 20.0}))
+	assert_true(AssassinationSystem.should_assign_bodyguard({"suspicion": 25.0}))
+	assert_false(AssassinationSystem.should_assign_bodyguard({"suspicion": 19.0}))
+
+
+func test_household_investigation_bonus() -> void:
+	assert_eq(AssassinationSystem.get_household_investigation_bonus({"suspicion": 5.0}), 0)
+	assert_eq(AssassinationSystem.get_household_investigation_bonus({"suspicion": 10.0}), 5)
+	assert_eq(AssassinationSystem.get_household_investigation_bonus({"suspicion": 15.0}), 5)
+	assert_eq(AssassinationSystem.get_household_investigation_bonus({"suspicion": 20.0}), 0,
+		"At bodyguard threshold, watchful bonus no longer applies")
+	assert_eq(AssassinationSystem.get_household_investigation_bonus({"suspicion": 35.0}), 0)
+
+
+func test_suspicion_tn_modifier_lockdown_only() -> void:
+	assert_eq(AssassinationSystem.get_suspicion_tn_modifier({"suspicion": 0.0}), 0)
+	assert_eq(AssassinationSystem.get_suspicion_tn_modifier({"suspicion": 10.0}), 0)
+	assert_eq(AssassinationSystem.get_suspicion_tn_modifier({"suspicion": 25.0}), 0)
+	assert_eq(AssassinationSystem.get_suspicion_tn_modifier({"suspicion": 30.0}), 10)
+	assert_eq(AssassinationSystem.get_suspicion_tn_modifier({"suspicion": 50.0}), 10)
 
 
 # ==============================================================================
@@ -162,7 +185,7 @@ func test_can_advance_at_3_days() -> void:
 func test_cannot_advance_during_lockdown() -> void:
 	var s: Dictionary = AssassinationSystem.create_assassination_state(1, 2, AssassinationSystem.ExecutionMethod.POISON, 0)
 	s["days_in_access"] = 5
-	s["suspicion"] = 40
+	s["suspicion"] = 30.0
 	assert_false(AssassinationSystem.can_advance_to_execution(s))
 
 
