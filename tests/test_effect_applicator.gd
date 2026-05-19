@@ -1125,3 +1125,99 @@ func test_koku_cost_skipped_when_blocked() -> void:
 	}
 	EffectApplicator.apply(result, _characters, _provinces, _action_log)
 	assert_almost_eq(_actor.koku, 10.0, 0.01)
+
+
+# -- Gossip Source Concealment -------------------------------------------------
+
+func test_gossip_unconcealed_creates_knowledge_with_gossiper_id() -> void:
+	_target.knowledge_pool = []
+	var subject := L5RCharacterData.new()
+	subject.character_id = 3
+	_characters[3] = subject
+	var result: Dictionary = {
+		"success": true,
+		"character_id": 1,
+		"target_npc_id": 2,
+		"action_id": "GOSSIP",
+		"ic_day": 5,
+		"season": 2,
+		"effects": {
+			"gossip_subject_id": 3,
+			"gossip_subject_disposition": -5,
+			"source_concealed": false,
+			"concealment_depth": 0,
+		},
+	}
+	EffectApplicator.apply(result, _characters, _provinces, _action_log)
+	assert_eq(_target.knowledge_pool.size(), 1)
+	var entry: KnowledgeEntry = _target.knowledge_pool[0]
+	assert_eq(entry.entry_type, "gossip_received")
+	assert_eq(entry.data["gossiper_id"], 1, "Unconcealed gossip should attribute the gossiper")
+	assert_eq(entry.data["subject_id"], 3)
+
+
+func test_gossip_concealed_hides_gossiper_id() -> void:
+	_target.knowledge_pool = []
+	var subject := L5RCharacterData.new()
+	subject.character_id = 3
+	_characters[3] = subject
+	var result: Dictionary = {
+		"success": true,
+		"character_id": 1,
+		"target_npc_id": 2,
+		"action_id": "GOSSIP",
+		"ic_day": 5,
+		"season": 2,
+		"effects": {
+			"gossip_subject_id": 3,
+			"gossip_subject_disposition": -5,
+			"source_concealed": true,
+			"concealment_depth": 2,
+		},
+	}
+	EffectApplicator.apply(result, _characters, _provinces, _action_log)
+	assert_eq(_target.knowledge_pool.size(), 1)
+	var entry: KnowledgeEntry = _target.knowledge_pool[0]
+	assert_eq(entry.entry_type, "gossip_received")
+	assert_eq(entry.data["gossiper_id"], -1, "Concealed gossip should hide the gossiper")
+	assert_eq(entry.data["subject_id"], 3)
+
+
+func test_gossip_action_log_includes_source_concealed() -> void:
+	var subject := L5RCharacterData.new()
+	subject.character_id = 3
+	_characters[3] = subject
+	_target.knowledge_pool = []
+	var result: Dictionary = {
+		"success": true,
+		"character_id": 1,
+		"target_npc_id": 2,
+		"action_id": "GOSSIP",
+		"ic_day": 5,
+		"season": 2,
+		"effects": {
+			"gossip_subject_id": 3,
+			"gossip_subject_disposition": -5,
+			"source_concealed": true,
+			"concealment_depth": 2,
+		},
+	}
+	EffectApplicator.apply(result, _characters, _provinces, _action_log)
+	assert_eq(_action_log.size(), 1)
+	assert_true(_action_log[0].has("source_concealed"), "Action log should include source_concealed")
+	assert_true(_action_log[0]["source_concealed"])
+	assert_eq(_action_log[0]["concealment_depth"], 2)
+
+
+func test_non_gossip_action_log_omits_source_concealed() -> void:
+	var result: Dictionary = {
+		"success": true,
+		"character_id": 1,
+		"target_npc_id": 2,
+		"action_id": "CHARM",
+		"ic_day": 5,
+		"effects": {"disposition_change": 5},
+	}
+	EffectApplicator.apply(result, _characters, _provinces, _action_log)
+	assert_eq(_action_log.size(), 1)
+	assert_false(_action_log[0].has("source_concealed"), "Non-gossip actions should not have source_concealed")

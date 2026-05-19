@@ -42,7 +42,8 @@ static func apply(
 	_apply_koku_cost(effects, actor)
 	_apply_witness_effects(effects, actor, characters, applied)
 	_apply_witness_gain(effects, actor, characters, applied)
-	_apply_gossip_effects(effects, target_id, characters, applied)
+	_apply_gossip_effects(effects, actor_id, target_id, characters, applied,
+		result.get("season", 0))
 	_apply_target_witness_effects(effects, target_id, characters, applied)
 	_apply_disposition_ripple(effects, actor, target_id, characters, applied)
 	_apply_honor(effects, actor, applied)
@@ -209,9 +210,11 @@ static func _apply_witness_gain(
 
 static func _apply_gossip_effects(
 	effects: Dictionary,
+	gossiper_id: int,
 	listener_id: int,
 	characters: Dictionary,
 	applied: Dictionary,
+	season: int = 0,
 ) -> void:
 	var subject_id: int = effects.get("gossip_subject_id", -1)
 	var disp_change: int = effects.get("gossip_subject_disposition", 0)
@@ -230,6 +233,14 @@ static func _apply_gossip_effects(
 		"new": new_val,
 		"delta": disp_change,
 	})
+	var concealed: bool = effects.get("source_concealed", false)
+	var source_id: int = -1 if concealed else gossiper_id
+	InformationSystem.add_knowledge(listener, InformationSystem.make_entry(
+		Enums.KnowledgeSource.DAILY_CONVERSATION,
+		"gossip_received",
+		{"subject_id": subject_id, "gossiper_id": source_id},
+		season,
+	))
 
 
 # -- Per-witness disposition toward target (PUBLIC_INSULT) ---------------------
@@ -457,7 +468,7 @@ static func _log_action(
 	result: Dictionary,
 	action_log: Array[Dictionary],
 ) -> void:
-	action_log.append({
+	var entry: Dictionary = {
 		"character_id": result.get("character_id", -1),
 		"action_id": result.get("action_id", ""),
 		"target_npc_id": result.get("target_npc_id", -1),
@@ -470,7 +481,12 @@ static func _log_action(
 		"roll_result": result.get("roll_total", 0),
 		"tn": result.get("tn", 0),
 		"observable_effect": result.get("observable_effect", false),
-	})
+	}
+	var effects: Dictionary = result.get("effects", {})
+	if effects.has("source_concealed"):
+		entry["source_concealed"] = effects["source_concealed"]
+		entry["concealment_depth"] = effects.get("concealment_depth", 0)
+	action_log.append(entry)
 
 
 # -- Observable Effect Detection -----------------------------------------------

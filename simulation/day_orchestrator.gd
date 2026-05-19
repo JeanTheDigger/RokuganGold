@@ -13450,14 +13450,6 @@ static func _process_court_action_effects(
 				var cur_b: int = target.disposition_values.get(actor_id, 0)
 				target.disposition_values[actor_id] = clampi(cur_b + b_disp, -100, 100)
 
-		# Gossip subject disposition on listener
-		if effects.has("gossip_subject_disposition") and target != null:
-			var subject_id: int = effects.get("gossip_subject_id", -1)
-			var disp_change: int = effects["gossip_subject_disposition"]
-			if subject_id >= 0:
-				var cur: int = target.disposition_values.get(subject_id, 0)
-				target.disposition_values[subject_id] = clampi(cur + disp_change, -100, 100)
-
 		# Disclose downstream opinion transfer
 		if effects.has("disclosed_opinion") and target != null:
 			var about_id: int = effects.get("disclose_about_id", -1)
