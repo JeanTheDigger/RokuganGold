@@ -3102,3 +3102,41 @@ func test_seek_pretext_not_in_context_lists() -> void:
 		var actions: Array[String] = NPCDecisionEngine._get_actions_for_context(flag)
 		assert_false("SEEK_PRETEXT" in actions,
 			"SEEK_PRETEXT is a NeedType, not an ActionID — should not be in any context list")
+
+
+# =============================================================================
+# PUBLIC_ATONEMENT metadata population (s4.6)
+# =============================================================================
+
+
+func test_pick_best_offense_selects_highest_tier() -> void:
+	var ctx := _make_metadata_ctx()
+	ctx.self_offenses = [
+		{"offense_key": "topic_5", "offense_tier": 3},
+		{"offense_key": "topic_2", "offense_tier": 1},
+		{"offense_key": "topic_8", "offense_tier": 4},
+	]
+	var best: Dictionary = NPCDecisionEngine._pick_best_offense(ctx)
+	assert_eq(best.get("offense_key", ""), "topic_2")
+	assert_eq(best.get("offense_tier", 0), 1)
+
+
+func test_pick_best_offense_empty_returns_defaults() -> void:
+	var ctx := _make_metadata_ctx()
+	ctx.self_offenses = []
+	var best: Dictionary = NPCDecisionEngine._pick_best_offense(ctx)
+	assert_eq(best.get("offense_key", "x"), "")
+	assert_eq(best.get("offense_tier", 0), 3)
+
+
+func test_public_atonement_metadata_populated() -> void:
+	var ctx := _make_metadata_ctx()
+	ctx.self_offenses = [
+		{"offense_key": "topic_10", "offense_tier": 2},
+	]
+	var need := _make_metadata_need()
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "PUBLIC_ATONEMENT"
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_eq(option.metadata.get("offense_key", ""), "topic_10")
+	assert_eq(option.metadata.get("offense_tier", 0), 2)

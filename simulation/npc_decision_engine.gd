@@ -252,6 +252,13 @@ static func build_context(
 	# Phoenix governance (s55.10.3.7) — set when the Champion holds autonomous authority.
 	ctx.phoenix_champion_authority = world_state.get("phoenix_champion_authority", false)
 
+	# Atonement (s4.6)
+	var raw_offenses: Variant = world_state.get("self_offenses", [])
+	if raw_offenses is Array:
+		for off: Variant in raw_offenses:
+			if off is Dictionary:
+				ctx.self_offenses.append(off as Dictionary)
+
 	return ctx
 
 
@@ -2643,6 +2650,9 @@ static func _populate_action_metadata(
 		option.metadata = {"severity": sev}
 		if need.target_npc_id >= 0:
 			option.target_npc_id = need.target_npc_id
+	elif option.action_id == "PUBLIC_ATONEMENT":
+		var best: Dictionary = _pick_best_offense(ctx)
+		option.metadata = best
 
 
 static func _pick_fabrication_severity(
@@ -2656,6 +2666,19 @@ static func _pick_fabrication_severity(
 	elif forgery >= 3:
 		return SecretData.Severity.TIER_3
 	return SecretData.Severity.TIER_4
+
+
+static func _pick_best_offense(
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> Dictionary:
+	var best_tier: int = 5
+	var best: Dictionary = {"offense_key": "", "offense_tier": 3}
+	for off: Dictionary in ctx.self_offenses:
+		var tier: int = off.get("offense_tier", 4)
+		if tier < best_tier:
+			best_tier = tier
+			best = off
+	return best
 
 
 static func _pick_best_secret(

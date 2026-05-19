@@ -9851,3 +9851,71 @@ func test_performance_request_expiry_in_court_tick() -> void:
 	DayOrchestrator._process_active_courts(courts, topics, nti, 200)
 	assert_eq(court.pending_performance_requests.size(), 1)
 	assert_eq(court.pending_performance_requests[0].get("request_id", -1), 1)
+
+
+# -- Self-offense injection (s4.6 PUBLIC_ATONEMENT) ----------------------------
+
+
+func test_inject_self_offenses_creates_offense_from_topic() -> void:
+	var c := L5RCharacterData.new()
+	c.character_id = 1
+	var chars: Array[L5RCharacterData] = [c]
+
+	var topic := TopicData.new()
+	topic.topic_id = 100
+	topic.subject_character_id = 1
+	topic.tier = TopicData.Tier.TIER_2
+	var topics: Array[TopicData] = [topic]
+	var world_states: Dictionary = {}
+
+	DayOrchestrator._inject_self_offenses(chars, topics, world_states)
+	var ws: Dictionary = world_states.get(1, {})
+	var offenses: Array = ws.get("self_offenses", [])
+	assert_eq(offenses.size(), 1)
+	assert_eq(offenses[0].get("offense_key", ""), "topic_100")
+	assert_eq(offenses[0].get("offense_tier", 0), 2)
+
+
+func test_inject_self_offenses_skips_atoned() -> void:
+	var c := L5RCharacterData.new()
+	c.character_id = 1
+	c.atoned_offenses = ["topic_100"]
+	var chars: Array[L5RCharacterData] = [c]
+
+	var topic := TopicData.new()
+	topic.topic_id = 100
+	topic.subject_character_id = 1
+	topic.tier = TopicData.Tier.TIER_3
+	var topics: Array[TopicData] = [topic]
+	var world_states: Dictionary = {}
+
+	DayOrchestrator._inject_self_offenses(chars, topics, world_states)
+	var ws: Dictionary = world_states.get(1, {})
+	assert_true(ws.get("self_offenses", []).is_empty())
+
+
+func test_inject_self_offenses_skips_resolved_topics() -> void:
+	var c := L5RCharacterData.new()
+	c.character_id = 1
+	var chars: Array[L5RCharacterData] = [c]
+
+	var topic := TopicData.new()
+	topic.topic_id = 100
+	topic.subject_character_id = 1
+	topic.tier = TopicData.Tier.TIER_2
+	topic.resolved = true
+	var topics: Array[TopicData] = [topic]
+	var world_states: Dictionary = {}
+
+	DayOrchestrator._inject_self_offenses(chars, topics, world_states)
+	var ws: Dictionary = world_states.get(1, {})
+	assert_true(ws.get("self_offenses", []).is_empty())
+
+
+func test_offense_tier_maps_from_topic_tier() -> void:
+	var t1 := TopicData.new()
+	t1.tier = TopicData.Tier.TIER_1
+	assert_eq(DayOrchestrator._offense_tier_from_topic(t1), 1)
+	var t4 := TopicData.new()
+	t4.tier = TopicData.Tier.TIER_4
+	assert_eq(DayOrchestrator._offense_tier_from_topic(t4), 4)

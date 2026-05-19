@@ -852,11 +852,16 @@ For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
   in `build_province_statuses_from_data()`. Metadata case in
   `_populate_action_metadata()` looks up PTL from ctx.province_statuses.
   2 tests.
-- **PUBLIC_ATONEMENT — offense_key/offense_tier not populated.** Executor reads
-  `offense_key` (default "") and `offense_tier` (default 3). No metadata
-  population. Empty offense_key passes the guard check (is_empty → skip check),
-  then `record_atonement(character, "")` records nothing. TN always tier 3.
-  Needs: selection logic to pick which past offense to atone for.
+- **PUBLIC_ATONEMENT — offense_key/offense_tier not populated. FIXED.**
+  `_inject_self_offenses()` in DayOrchestrator scans active_topics for
+  unresolved topics where `subject_character_id` matches the NPC. Creates
+  offense entries with `offense_key = "topic_%d"` and tier matching topic
+  tier. Flows through world_state → ContextSnapshot.self_offenses →
+  `_pick_best_offense()` (selects highest-severity unatoned offense) →
+  metadata. Skips already-atoned and resolved topics.
+  LIMITATION: Only topic-sourced offenses. Crime-sourced offenses (from
+  CrimeRecord convictions) not yet integrated — requires offense
+  registration pipeline from legal system. 7 tests.
 - **SCOUT_ENEMY — target_clan_id not populated. FIXED.** Metadata case
   extracts enemy clan from first active war via
   `WarSystem.get_enemy_clan_from_war()`. Empty string if no active wars.

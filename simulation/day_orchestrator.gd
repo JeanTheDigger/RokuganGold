@@ -158,6 +158,7 @@ static func advance_day(
 
 	_inject_edict_reactive_events(active_edicts, characters, world_states, ic_day)
 	_inject_commitment_needs(court_commitments, characters, world_states)
+	_inject_self_offenses(characters, active_topics, world_states)
 
 	var wm_for_military: Dictionary = world_states.get("_worship_maluses", {})
 	var military_daily: Dictionary = _process_military_daily(
@@ -13260,6 +13261,54 @@ static func _inject_commitment_needs(
 			"commitment_type": cc.commitment_type,
 			"source": "commitment_honor",
 		})
+
+
+static func _inject_self_offenses(
+	characters: Array[L5RCharacterData],
+	active_topics: Array[TopicData],
+	world_states: Dictionary,
+) -> void:
+	var subject_topics: Dictionary = {}
+	for topic: TopicData in active_topics:
+		if topic.subject_character_id < 0:
+			continue
+		if topic.resolved:
+			continue
+		if not subject_topics.has(topic.subject_character_id):
+			subject_topics[topic.subject_character_id] = []
+		subject_topics[topic.subject_character_id].append(topic)
+
+	for character: L5RCharacterData in characters:
+		var cid: int = character.character_id
+		var topics: Array = subject_topics.get(cid, [])
+		if topics.is_empty():
+			continue
+		var offenses: Array[Dictionary] = []
+		for topic: TopicData in topics:
+			var offense_key: String = "topic_%d" % topic.topic_id
+			if offense_key in character.atoned_offenses:
+				continue
+			var tier: int = _offense_tier_from_topic(topic)
+			offenses.append({"offense_key": offense_key, "offense_tier": tier})
+		if offenses.is_empty():
+			continue
+		var ws: Dictionary = world_states.get(cid, {})
+		if ws.is_empty():
+			ws = {}
+			world_states[cid] = ws
+		ws["self_offenses"] = offenses
+
+
+static func _offense_tier_from_topic(topic: TopicData) -> int:
+	match topic.tier:
+		TopicData.Tier.TIER_1:
+			return 1
+		TopicData.Tier.TIER_2:
+			return 2
+		TopicData.Tier.TIER_3:
+			return 3
+		_:
+			return 4
 
 
 static func _process_commitment_seasonal(

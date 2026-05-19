@@ -192,6 +192,9 @@ class ContextSnapshot:
 	var besieged_settlement_health_pct: float = 1.0
 	var objective_stalled_seasons: int = 0
 
+	# Atonement (s4.6)
+	var self_offenses: Array[Dictionary] = []
+
 	# State
 	var pending_events: Array = []
 	var ap_remaining: int = 0
