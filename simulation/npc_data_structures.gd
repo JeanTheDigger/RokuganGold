@@ -100,6 +100,8 @@ class ContextSnapshot:
 	var upcoming_courts: Array[Dictionary] = []
 	var held_leverage: Array[Dictionary] = []
 	var known_npc_locations: Dictionary = {}
+	var court_session_state: Dictionary = {}
+	var court_settlement_id: int = -1
 
 	# Stats
 	var skill_ranks: Dictionary = {}

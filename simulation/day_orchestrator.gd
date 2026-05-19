@@ -9483,6 +9483,28 @@ static func _find_topic_by_id(
 	return null
 
 
+static func _compute_topic_relevance(topic: TopicData, character: L5RCharacterData) -> float:
+	if topic == null or character == null:
+		return 0.0
+	var clan_relation: TopicMomentumSystem.ClanRelation = (
+		TopicMomentumSystem.ClanRelation.OWN
+		if topic.clan_involved == character.clan and not topic.clan_involved.is_empty()
+		else TopicMomentumSystem.ClanRelation.DISTANT
+	)
+	var is_own_family: bool = (
+		topic.family_involved == character.family
+		and not topic.family_involved.is_empty()
+	)
+	var is_same_clan_family: bool = (
+		not is_own_family
+		and topic.clan_involved == character.clan
+		and not topic.family_involved.is_empty()
+	)
+	return TopicMomentumSystem.calculate_personal_relevance(
+		topic, clan_relation, is_own_family, is_same_clan_family
+	)
+
+
 static func _set_court_context_flags(
 	active_courts: Array[CourtSessionData],
 	world_states: Dictionary,
@@ -9498,6 +9520,8 @@ static func _set_court_context_flags(
 				world_states[char_id] = ws
 			ws["context_flag"] = Enums.ContextFlag.AT_COURT
 			ws["active_court_at_location"] = ctx_dict
+			ws["court_settlement_id"] = court.host_settlement_id
+			ws["court_session_state"] = CourtSystem.get_session_state(court, char_id)
 
 
 static func _set_wall_tower_context_flags(
@@ -12958,7 +12982,7 @@ static func _process_court_action_effects(
 			var shift: float = effects["target_position_shift"]
 			var topic_id: int = action_meta.get("topic_id", -1)
 			if topic_id >= 0:
-				var relevance: float = action_meta.get("target_relevance", 0.0)
+				var relevance: float = _compute_topic_relevance(topic_map.get(topic_id), target)
 				var effective_shift: float = TopicMomentumSystem.calculate_position_resistance(shift, relevance)
 				var current_pos: float = target.topic_positions.get(topic_id, 0.0)
 				target.topic_positions[topic_id] = clampf(current_pos + effective_shift, -100.0, 100.0)
@@ -13052,7 +13076,7 @@ static func _process_court_action_effects(
 				if topic_id >= 0:
 					var pos_shift: float = pw.get("position_shift_toward_a", 0.0)
 					if pos_shift != 0.0:
-						var w_relevance: float = pw.get("witness_relevance", 0.0)
+						var w_relevance: float = _compute_topic_relevance(topic_map.get(topic_id), w)
 						var eff_shift: float = TopicMomentumSystem.calculate_position_resistance(pos_shift, w_relevance)
 						var cur_pos: float = w.topic_positions.get(topic_id, 0.0)
 						w.topic_positions[topic_id] = clampf(cur_pos + eff_shift, -100.0, 100.0)

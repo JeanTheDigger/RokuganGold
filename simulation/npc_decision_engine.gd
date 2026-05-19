@@ -47,6 +47,8 @@ static func build_context(
 	ctx.upcoming_courts = world_state.get("upcoming_courts", [] as Array[Dictionary])
 	ctx.held_leverage = world_state.get("held_leverage", [] as Array[Dictionary])
 	ctx.known_npc_locations = world_state.get("known_npc_locations", {})
+	ctx.court_session_state = world_state.get("court_session_state", {})
+	ctx.court_settlement_id = world_state.get("court_settlement_id", -1)
 
 	# Stats
 	ctx.skill_ranks = character.skills.duplicate()
@@ -2192,10 +2194,19 @@ static func _populate_action_metadata(
 			"damage_raises": split["damage"],
 			"concealment_raises": split["concealment"],
 		}
-	elif option.action_id in ["NEGOTIATE", "PERSUADE", "PUBLIC_DEBATE"]:
-		option.metadata = {
-			"topic_id": _pick_court_agenda_topic(ctx),
+	elif option.action_id in ["NEGOTIATE", "PERSUADE", "PUBLIC_DEBATE",
+			"CHARM", "IMPRESS", "LISTEN_REFLECT"]:
+		var court_meta: Dictionary = {
+			"court_settlement_id": ctx.court_settlement_id,
+			"has_topic": _has_known_agenda_topic(ctx),
 		}
+		if option.action_id in ["NEGOTIATE", "PERSUADE", "PUBLIC_DEBATE"]:
+			court_meta["topic_id"] = _pick_court_agenda_topic(ctx)
+		if option.action_id == "NEGOTIATE":
+			court_meta["session_negotiate_count"] = ctx.court_session_state.get("negotiate_count", 0)
+		elif option.action_id == "CHARM":
+			court_meta["session_charm_count"] = ctx.court_session_state.get("charm_count", 0)
+		option.metadata = court_meta
 	elif option.action_id == "DISCLOSE":
 		var about_id: int = need.target_npc_id if need.target_npc_id >= 0 else -1
 		var opinion: int = 0
@@ -2354,6 +2365,17 @@ static func _populate_action_metadata(
 				best_disp = disp
 				best_intermediary = cid_int
 		option.metadata = {"intermediary_id": best_intermediary}
+
+
+static func _has_known_agenda_topic(ctx: NPCDataStructures.ContextSnapshot) -> bool:
+	var court: Dictionary = ctx.active_court_at_location
+	if court.is_empty():
+		return false
+	var topics: Array = court.get("topics", [])
+	for t: Variant in topics:
+		if int(t) in ctx.known_topics:
+			return true
+	return false
 
 
 static func _pick_court_agenda_topic(ctx: NPCDataStructures.ContextSnapshot) -> int:
