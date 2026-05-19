@@ -344,6 +344,13 @@ For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
   rolls Investigation/Perception vs equipment_concealment_tn. Auto-finds if
   concealment_tn <= 0. On discovery: operation immediately fails. Wired in
   DayOrchestrator ACCESS phase after access roll. 6 tests.
+- **s12.8 Per-Roll Permanent TN Penalty** — Each failed Phase 1 access roll
+  permanently increases TNs for subsequent rolls in the same operation. Two
+  parallel tracks: settlement suspicion (decays) and access_tn_penalty
+  (permanent, only resets on abort). Values PROVISIONAL (+5/+10/+15 matching
+  suspicion scale). Stacks with lockdown +10 and all other modifiers. Also
+  fixed get_suspicion_from_failure thresholds to match GDD (notable at -10,
+  critical at -20; was -5/-10). 10 tests.
 
 ### Known Code Issues (found 2026-05-18, pre-existing)
 - **test_assassination_system.gd test_doji_courtier_bribe_access_gets_free_raise
