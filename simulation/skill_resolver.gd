@@ -171,7 +171,13 @@ const FROM_THE_ASHES_BONUS_ROLLED: int = 2
 const FROM_THE_ASHES_DURATION_DAYS: int = 2
 const FROM_THE_ASHES_TN: int = 20
 
-static func _get_ashes_bonus_for_skill(character: L5RCharacterData, skill_name: String) -> int:
+static func _get_ashes_bonus_for_skill(character: L5RCharacterData, skill_name: String, ic_day: int = -1) -> int:
+	var buff: Dictionary = character.from_the_ashes
+	if ic_day >= 0:
+		var expires: int = buff.get("expires_ic_day", -1)
+		if expires >= 0 and expires <= ic_day:
+			character.from_the_ashes = {}
+			return 0
 	var base_skill: String = skill_name
 	var colon_pos: int = skill_name.find(":")
 	if colon_pos >= 0:
@@ -351,6 +357,7 @@ static func resolve_skill_check(
 	bonus_rolled: int = 0,
 	bonus_kept: int = 0,
 	flat_bonus: int = 0,
+	ic_day: int = -1,
 ) -> Dictionary:
 	# Determine trait
 	var trait_used: Enums.Trait
@@ -376,7 +383,7 @@ static func resolve_skill_check(
 	# Asako R2: From the Ashes social buff (s29.15.10)
 	var ashes_bonus: int = 0
 	if not character.from_the_ashes.is_empty():
-		ashes_bonus = _get_ashes_bonus_for_skill(character, skill_name)
+		ashes_bonus = _get_ashes_bonus_for_skill(character, skill_name, ic_day)
 
 	# Build the pool: (trait + skill + bonus_rolled) k (trait + bonus_kept)
 	var rolled: int = trait_value + skill_rank + bonus_rolled + ashes_bonus
@@ -416,6 +423,7 @@ static func resolve_contested_check(
 	bonus_rolled_b: int = 0,
 	flat_bonus_a: int = 0,
 	flat_bonus_b: int = 0,
+	ic_day: int = -1,
 ) -> Dictionary:
 	# Character A
 	var trait_a: Enums.Trait = trait_override_a if trait_override_a != Enums.Trait.NONE else get_trait_for_skill(skill_a)
@@ -424,7 +432,7 @@ static func resolve_contested_check(
 	var emph_a: bool = has_emphasis(char_a, skill_a, emphasis_a) if emphasis_a != "" else false
 	var wp_a: int = CharacterStats.get_wound_penalty(char_a)
 	var tfr_a: int = get_technique_free_raises(char_a, skill_a)
-	var ashes_a: int = _get_ashes_bonus_for_skill(char_a, skill_a) if not char_a.from_the_ashes.is_empty() else 0
+	var ashes_a: int = _get_ashes_bonus_for_skill(char_a, skill_a, ic_day) if not char_a.from_the_ashes.is_empty() else 0
 
 	# Character B
 	var trait_b: Enums.Trait = trait_override_b if trait_override_b != Enums.Trait.NONE else get_trait_for_skill(skill_b)
@@ -433,7 +441,7 @@ static func resolve_contested_check(
 	var emph_b: bool = has_emphasis(char_b, skill_b, emphasis_b) if emphasis_b != "" else false
 	var wp_b: int = CharacterStats.get_wound_penalty(char_b)
 	var tfr_b: int = get_technique_free_raises(char_b, skill_b)
-	var ashes_b: int = _get_ashes_bonus_for_skill(char_b, skill_b) if not char_b.from_the_ashes.is_empty() else 0
+	var ashes_b: int = _get_ashes_bonus_for_skill(char_b, skill_b, ic_day) if not char_b.from_the_ashes.is_empty() else 0
 
 	var roll_a: DiceResult = dice_engine.roll_and_keep(
 		tv_a + sr_a + bonus_rolled_a + ashes_a, tv_a, sr_a > 0, emph_a

@@ -696,9 +696,12 @@ For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
   variants, COMMISSION_ASSASSINATION) are reachable: context lists
   (AT_OWN_HOLDINGS, AT_COURT, VISITING), objective_alignment mappings,
   executor handlers, personality_filter blocks, honor/virtue scoring.
-- **SkillResolver from_the_ashes expiry gap.** Buff applies even if
-  `expires_ic_day` has passed but the daily cleanup hasn't run yet.
-  Theoretical gap (cleanup runs at day start, buff lasts 2 full IC days).
+- **SkillResolver from_the_ashes expiry gap. FIXED.**
+  Buff applied even if `expires_ic_day` had passed but daily cleanup hadn't
+  run yet. Added optional `ic_day: int = -1` parameter to
+  `_get_ashes_bonus_for_skill()`, `resolve_skill_check()`, and
+  `resolve_contested_check()`. When ic_day >= 0 and buff is expired, clears
+  buff and returns 0. Backward compatible (default -1 skips check). 6 tests.
 
 ### Known Code Issues (found and fixed 2026-05-17)
 - **DefenseHearingSystem.can_appoint_champion() — tautology bug. FIXED.**
