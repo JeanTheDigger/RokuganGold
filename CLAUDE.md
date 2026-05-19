@@ -660,6 +660,11 @@ For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
   and pledge_position_shift. Fulfillment verifies debtor's current topic
   position aligns with pledged direction. Backward compatible (topic_id=-1
   skips check). 5 tests.
+- **Commitment-aware decomposition — ATTEND_COURT NeedType fix. FIXED.**
+  `COMMITMENT_FULFILLING_ACTIONS` had `ATTEND_COURT` (a NeedType, never
+  used as an action_id). Any action at a committed settlement now receives
+  the fulfillment bonus per s55.31 line 127: CHARM, PERSUADE, NEGOTIATE
+  etc. at the committed court get the commitment_at_risk bonus. 4 tests.
 - **RESOURCE_PROMISE creation — all three paths wired. FIXED.**
   Now created via REQUEST_ALLIED_AID (original), NEGOTIATE with resource
   need_types (ACQUIRE_RESOURCE, REQUEST_AID, CONDUCT_COMMERCE), and
