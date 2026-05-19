@@ -351,6 +351,12 @@ For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
   suspicion scale). Stacks with lockdown +10 and all other modifiers. Also
   fixed get_suspicion_from_failure thresholds to match GDD (notable at -10,
   critical at -20; was -5/-10). 10 tests.
+- **s12.8 Critical Failure Detection Check** — When Phase 1 access roll
+  misses TN by 20+, immediate detection check fires from nearest household
+  member (reuses find_best_searcher). Detection TN is the assassin's roll
+  total (PROVISIONAL). Cascades with SEARCH_PERSON in orchestrator flow:
+  critical failure → detection check → equipment search → advance check.
+  Includes household investigation bonus at watchful suspicion. 4 tests.
 
 ### Known Code Issues (found 2026-05-18, pre-existing)
 - **test_assassination_system.gd test_doji_courtier_bribe_access_gets_free_raise
