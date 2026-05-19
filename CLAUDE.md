@@ -420,6 +420,20 @@ For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
   SEARCH_PERSON and critical failure detection do not (active security
   responses vs passive observation). `_is_household_member()` helper and
   `LOYALTY_DISPOSITION_MINIMUM = 0` constant. 11 tests.
+- **s12.8 Vengeance Consequences** — `apply_vengeance_consequences()` fires
+  when commissioner is traced through investigation pipeline. -50 permanent
+  historical disposition from all victim's biological family (mother, father,
+  siblings, children, spouse) toward commissioner. Designated heir gets
+  AVENGE_DEATH crisis-override primary objective targeting commissioner;
+  falls back to eldest living child if no heir designated. If victim survived,
+  victim gets the objective directly. Pure function — called from investigation
+  pipeline when tracing completes. 8 tests.
+- **s12.8 PvP Blade Edge Case** — `can_pvp_blade_resolve_via_engine()` checks
+  blade-method + EXECUTION phase. `pvp_blade_wait_tick()` tracks wait days
+  and applies present-inactive suspicion decay. Player assassin can choose
+  engine resolution (NPC quality, forfeits ASCII map advantage) or wait
+  (accumulates suspicion, daily detection fires against them). Orchestrator
+  wiring deferred until player identification system exists. 4 tests.
 
 ### Known Code Issues (found 2026-05-18, pre-existing)
 - **test_assassination_system.gd test_doji_courtier_bribe_access_gets_free_raise
