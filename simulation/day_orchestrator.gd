@@ -465,6 +465,13 @@ static func advance_day(
 		active_courts,
 	)
 
+	_process_performance_request_writebacks(
+		day_result.get("results", []),
+		active_courts,
+		characters_by_id,
+		ic_day,
+	)
+
 	_process_commitment_creation_writebacks(
 		day_result.get("results", []),
 		commitments,
@@ -9755,6 +9762,9 @@ static func _process_active_courts(
 	for court: CourtSessionData in active_courts:
 		if not CourtSystem.is_active(court):
 			continue
+		court.pending_performance_requests = RequestPerformanceSystem.expire_requests(
+			court.pending_performance_requests, ic_day,
+		)
 		var advance_result: Dictionary = CourtSystem.advance_court_day(court)
 		if advance_result.get("should_close", false):
 			var close_result: Dictionary = CourtSystem.close_court(court)
@@ -9944,6 +9954,7 @@ static func _set_court_context_flags(
 			ws["active_court_at_location"] = ctx_dict
 			ws["court_settlement_id"] = court.host_settlement_id
 			ws["court_session_state"] = CourtSystem.get_session_state(court, char_id)
+			ws["pending_performance_requests"] = court.pending_performance_requests
 
 
 static func _set_wall_tower_context_flags(
@@ -13568,6 +13579,51 @@ static func _process_court_action_effects(
 				elif action_id == "LISTEN_REFLECT":
 					if effects.has("persuade_negotiate_tn_reduction"):
 						CourtSystem.record_persuade_tn_reduction(court, actor_id, target_id, effects["persuade_negotiate_tn_reduction"])
+
+
+# -- Performance Request Writebacks (s57.33) -----------------------------------
+
+
+static func _process_performance_request_writebacks(
+	day_results: Array,
+	active_courts: Array[CourtSessionData],
+	characters_by_id: Dictionary,
+	ic_day: int,
+) -> void:
+	for entry: Dictionary in day_results:
+		if entry.get("action_id", "") != "REQUEST_PERFORMANCE":
+			continue
+		if not entry.get("success", false):
+			continue
+		var effects: Dictionary = entry.get("effects", {})
+		var lord_id: int = entry.get("character_id", -1)
+		if lord_id < 0:
+			continue
+		var lord: L5RCharacterData = characters_by_id.get(lord_id)
+		if lord == null:
+			continue
+
+		var court: CourtSessionData = null
+		for c: CourtSessionData in active_courts:
+			if not CourtSystem.is_active(c):
+				continue
+			if lord_id in c.attendee_ids:
+				court = c
+				break
+		if court == null:
+			continue
+
+		var request_id: int = court.next_request_id
+		court.next_request_id += 1
+		var request: Dictionary = RequestPerformanceSystem.create_request(
+			request_id,
+			lord_id,
+			effects.get("performance_type", "song"),
+			effects.get("target_performer_id", -1),
+			effects.get("venue_mode", "public"),
+			ic_day,
+		)
+		court.pending_performance_requests.append(request)
 
 
 # -- Court Availability Data Population ----------------------------------------

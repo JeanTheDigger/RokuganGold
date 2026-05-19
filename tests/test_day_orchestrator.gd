@@ -9738,3 +9738,116 @@ func test_scout_detection_generic_title_without_clan() -> void:
 	)
 	assert_eq(active_topics.size(), 1)
 	assert_true(active_topics[0].title.contains("Enemy scouts"))
+
+
+# -- REQUEST_PERFORMANCE writeback (s57.33) ------------------------------------
+
+
+func test_performance_request_writeback_creates_request_on_court() -> void:
+	var court := CourtSessionData.new()
+	court.court_id = 1
+	court.phase = CourtSessionData.CourtPhase.ACTIVE
+	court.host_settlement_id = 10
+	court.attendee_ids = [1]
+	court.next_request_id = 0
+	var courts: Array[CourtSessionData] = [court]
+
+	var lord := L5RCharacterData.new()
+	lord.character_id = 1
+	var chars_by_id: Dictionary = {1: lord}
+
+	var results: Array = [{
+		"action_id": "REQUEST_PERFORMANCE",
+		"success": true,
+		"character_id": 1,
+		"effects": {
+			"performance_type": "biwa",
+			"target_performer_id": -1,
+			"venue_mode": "public",
+		},
+	}]
+	DayOrchestrator._process_performance_request_writebacks(results, courts, chars_by_id, 5)
+	assert_eq(court.pending_performance_requests.size(), 1)
+	var req: Dictionary = court.pending_performance_requests[0]
+	assert_eq(req.get("request_id", -1), 0)
+	assert_eq(req.get("requesting_lord_id", -1), 1)
+	assert_eq(req.get("performance_type", ""), "biwa")
+	assert_eq(court.next_request_id, 1)
+
+
+func test_performance_request_writeback_skips_failed() -> void:
+	var court := CourtSessionData.new()
+	court.court_id = 1
+	court.phase = CourtSessionData.CourtPhase.ACTIVE
+	court.attendee_ids = [1]
+	var courts: Array[CourtSessionData] = [court]
+
+	var lord := L5RCharacterData.new()
+	lord.character_id = 1
+	var chars_by_id: Dictionary = {1: lord}
+
+	var results: Array = [{
+		"action_id": "REQUEST_PERFORMANCE",
+		"success": false,
+		"character_id": 1,
+		"effects": {},
+	}]
+	DayOrchestrator._process_performance_request_writebacks(results, courts, chars_by_id, 5)
+	assert_eq(court.pending_performance_requests.size(), 0)
+
+
+func test_performance_request_writeback_skips_non_attendee() -> void:
+	var court := CourtSessionData.new()
+	court.court_id = 1
+	court.phase = CourtSessionData.CourtPhase.ACTIVE
+	court.attendee_ids = [2]
+	var courts: Array[CourtSessionData] = [court]
+
+	var lord := L5RCharacterData.new()
+	lord.character_id = 1
+	var chars_by_id: Dictionary = {1: lord}
+
+	var results: Array = [{
+		"action_id": "REQUEST_PERFORMANCE",
+		"success": true,
+		"character_id": 1,
+		"effects": {"performance_type": "song", "target_performer_id": -1, "venue_mode": "public"},
+	}]
+	DayOrchestrator._process_performance_request_writebacks(results, courts, chars_by_id, 5)
+	assert_eq(court.pending_performance_requests.size(), 0)
+
+
+func test_performance_requests_injected_into_world_state() -> void:
+	var court := CourtSessionData.new()
+	court.court_id = 1
+	court.phase = CourtSessionData.CourtPhase.ACTIVE
+	court.host_settlement_id = 10
+	court.attendee_ids = [1]
+	court.pending_performance_requests = [
+		{"request_id": 0, "requesting_lord_id": 1, "performance_type": "song"},
+	]
+	var courts: Array[CourtSessionData] = [court]
+	var world_states: Dictionary = {}
+	DayOrchestrator._set_court_context_flags(courts, world_states)
+	var ws: Dictionary = world_states.get(1, {})
+	var reqs: Array = ws.get("pending_performance_requests", [])
+	assert_eq(reqs.size(), 1)
+	assert_eq(reqs[0].get("performance_type", ""), "song")
+
+
+func test_performance_request_expiry_in_court_tick() -> void:
+	var expired_req: Dictionary = RequestPerformanceSystem.create_request(0, 1, "song", -1, "public", 1)
+	var valid_req: Dictionary = RequestPerformanceSystem.create_request(1, 1, "biwa", -1, "public", 100)
+	var court := CourtSessionData.new()
+	court.court_id = 1
+	court.phase = CourtSessionData.CourtPhase.ACTIVE
+	court.start_ic_day = 1
+	court.duration_ticks = 999
+	court.elapsed_ticks = 0
+	court.pending_performance_requests = [expired_req, valid_req]
+	var courts: Array[CourtSessionData] = [court]
+	var topics: Array[TopicData] = []
+	var nti: Array[int] = [1]
+	DayOrchestrator._process_active_courts(courts, topics, nti, 200)
+	assert_eq(court.pending_performance_requests.size(), 1)
+	assert_eq(court.pending_performance_requests[0].get("request_id", -1), 1)

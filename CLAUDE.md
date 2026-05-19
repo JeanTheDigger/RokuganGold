@@ -776,16 +776,24 @@ For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
   ProvinceData have no producer or consumer. Likely intended for the
   world map / adjacency system (blocked). Do not remove until map
   data format is decided.
-- **Military hierarchy constituent arrays never populated.**
+- **Military hierarchy constituent arrays — intentionally unpopulated.**
   `LegionData.constituent_companies`, `SectionData.constituent_legions`,
   and `ArmyData.constituent_sections` in MilitaryUnitData are declared
-  but never written or read. The hierarchy is navigated bottom-up via
-  `parent_*_id` fields only. These top-down index arrays would improve
-  lookup performance but are currently dead. Populate them during army
-  creation or remove if bottom-up-only navigation is intentional.
-- **CourtSessionData.next_request_id never referenced.** Declared at
-  line 48 but no code increments, reads, or assigns it. Likely intended
-  for performance request tracking but never wired.
+  but never written or read. All top-down queries (get_legion_companies,
+  get_section_legions, get_army_sections) scan via `parent_*_id` fields.
+  At current scale (~252 companies for the largest clan) linear scanning
+  is fine. Populating constituent arrays would create sync burden on
+  every creation, destruction, and reassignment for no measurable gain.
+  Leave unpopulated until profiling shows a bottleneck.
+- **CourtSessionData.next_request_id + REQUEST_PERFORMANCE writeback. FIXED.**
+  Full pipeline was broken: executor returned effects but no writeback created
+  the request dict on the court session, and `pending_performance_requests`
+  was never injected into per-character world_states for the NPC engine.
+  `_process_performance_request_writebacks()` scans results, finds the
+  attendee's active court, creates request via `create_request()`, increments
+  `next_request_id`. `_set_court_context_flags()` now injects
+  `pending_performance_requests` into world_states. Request expiry wired
+  into `_process_active_courts()` via `expire_requests()`. 5 tests.
 
 ### Known Code Issues — Deferred (2026-05-19, ActionID pipeline audit)
 - **APPLY_TATTOO wiring gap. FIXED.** Added to AT_OWN_HOLDINGS and VISITING
