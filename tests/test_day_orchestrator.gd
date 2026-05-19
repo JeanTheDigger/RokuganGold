@@ -8294,6 +8294,107 @@ func test_support_pledge_not_fulfilled_if_absent() -> void:
 	assert_false(result, "Absent debtor should not fulfill")
 
 
+func test_support_pledge_stores_topic_and_shift() -> void:
+	var effects: Dictionary = {
+		"requires_support_pledge": true,
+		"pledge_creditor_id": 10,
+		"pledge_debtor_id": 20,
+		"pledge_court_settlement_id": 100,
+		"pledge_topic_id": 42,
+		"pledge_position_shift": 15.0,
+	}
+	var court := _make_court_at(100)
+	court.phase = CourtSessionData.CourtPhase.OPEN
+	court.start_ic_day = 1
+	court.duration_ticks = 30
+	var commitments: Array[CommitmentData] = []
+	var next_id: Array[int] = [1]
+	DayOrchestrator._create_support_pledge_commitment(
+		effects, commitments, [court], 5, next_id,
+	)
+	assert_eq(commitments.size(), 1)
+	assert_eq(commitments[0].pledge_topic_id, 42)
+	assert_almost_eq(commitments[0].pledge_position_shift, 15.0, 0.01)
+
+
+func test_support_pledge_fulfilled_with_aligned_position() -> void:
+	var court := _make_court_at(100)
+	court.session_state[20] = {"persuade_count": 1}
+	var debtor := L5RCharacterData.new()
+	debtor.character_id = 20
+	debtor.physical_location = "100"
+	debtor.topic_positions = {42: 10.0}
+	var chars_by_id: Dictionary = {20: debtor}
+	var c := CommitmentData.new()
+	c.commitment_type = Enums.CommitmentType.SUPPORT_PLEDGE
+	c.debtor_npc_id = 20
+	c.fulfillment_target = 100
+	c.pledge_topic_id = 42
+	c.pledge_position_shift = 5.0
+	var result: bool = DayOrchestrator._check_commitment_fulfilled(
+		c, chars_by_id, [court],
+	)
+	assert_true(result, "Positive pledge + positive position = fulfilled")
+
+
+func test_support_pledge_not_fulfilled_with_opposing_position() -> void:
+	var court := _make_court_at(100)
+	court.session_state[20] = {"persuade_count": 1}
+	var debtor := L5RCharacterData.new()
+	debtor.character_id = 20
+	debtor.physical_location = "100"
+	debtor.topic_positions = {42: -5.0}
+	var chars_by_id: Dictionary = {20: debtor}
+	var c := CommitmentData.new()
+	c.commitment_type = Enums.CommitmentType.SUPPORT_PLEDGE
+	c.debtor_npc_id = 20
+	c.fulfillment_target = 100
+	c.pledge_topic_id = 42
+	c.pledge_position_shift = 10.0
+	var result: bool = DayOrchestrator._check_commitment_fulfilled(
+		c, chars_by_id, [court],
+	)
+	assert_false(result, "Positive pledge but negative position = not fulfilled")
+
+
+func test_support_pledge_no_topic_still_works() -> void:
+	var court := _make_court_at(100)
+	court.session_state[20] = {"negotiate_count": 2}
+	var debtor := L5RCharacterData.new()
+	debtor.character_id = 20
+	debtor.physical_location = "100"
+	var chars_by_id: Dictionary = {20: debtor}
+	var c := CommitmentData.new()
+	c.commitment_type = Enums.CommitmentType.SUPPORT_PLEDGE
+	c.debtor_npc_id = 20
+	c.fulfillment_target = 100
+	c.pledge_topic_id = -1
+	var result: bool = DayOrchestrator._check_commitment_fulfilled(
+		c, chars_by_id, [court],
+	)
+	assert_true(result, "No topic constraint = fulfilled by any position action")
+
+
+func test_support_pledge_negative_shift_negative_position_fulfilled() -> void:
+	var court := _make_court_at(100)
+	court.session_state[20] = {"public_debate_count": 1}
+	var debtor := L5RCharacterData.new()
+	debtor.character_id = 20
+	debtor.physical_location = "100"
+	debtor.topic_positions = {42: -8.0}
+	var chars_by_id: Dictionary = {20: debtor}
+	var c := CommitmentData.new()
+	c.commitment_type = Enums.CommitmentType.SUPPORT_PLEDGE
+	c.debtor_npc_id = 20
+	c.fulfillment_target = 100
+	c.pledge_topic_id = 42
+	c.pledge_position_shift = -10.0
+	var result: bool = DayOrchestrator._check_commitment_fulfilled(
+		c, chars_by_id, [court],
+	)
+	assert_true(result, "Negative pledge + negative position = fulfilled")
+
+
 # -- Retroactive Forgiveness (s55.31.11.2) ------------------------------------
 
 func test_forgiveness_fires_when_npc_learns_crisis_topic() -> void:

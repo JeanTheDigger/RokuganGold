@@ -18,4 +18,6 @@ extends Resource
 @export var proxy_sent: bool = false
 @export var proxy_npc_id: int = -1
 @export var crisis_id: int = -1
+@export var pledge_topic_id: int = -1
+@export var pledge_position_shift: float = 0.0
 @export var penalty_records: Array[Dictionary] = []

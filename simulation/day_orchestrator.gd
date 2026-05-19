@@ -4938,7 +4938,17 @@ static func _check_commitment_fulfilled(
 					var position_actions: int = (state.get("persuade_count", 0)
 						+ state.get("public_debate_count", 0)
 						+ state.get("negotiate_count", 0))
-					return position_actions > 0
+					if position_actions <= 0:
+						return false
+					if c.pledge_topic_id >= 0:
+						var debtor_ch: Variant = characters_by_id.get(c.debtor_npc_id)
+						if debtor_ch is L5RCharacterData:
+							var pos: float = (debtor_ch as L5RCharacterData).topic_positions.get(c.pledge_topic_id, 0.0)
+							if c.pledge_position_shift > 0.0 and pos <= 0.0:
+								return false
+							if c.pledge_position_shift < 0.0 and pos >= 0.0:
+								return false
+					return true
 			return false
 		Enums.CommitmentType.FAVOR_OBLIGATION:
 			return false
@@ -13307,6 +13317,8 @@ static func _process_court_action_effects(
 					effects["pledge_creditor_id"] = actor_id
 					effects["pledge_debtor_id"] = target_id
 					effects["pledge_court_settlement_id"] = court_sid
+					effects["pledge_topic_id"] = topic_id
+					effects["pledge_position_shift"] = shift
 
 		# Provoke Emotion target effects
 		if target != null:
@@ -15362,6 +15374,7 @@ static func _create_support_pledge_commitment(
 	for aid: int in target_court.attendee_ids:
 		witnesses.append(aid)
 
+	var source_action: String = effects.get("source_action_id", "PERSUADE")
 	var commitment: CommitmentData = CommitmentRegistry.create_commitment(
 		next_commitment_id[0],
 		Enums.CommitmentType.SUPPORT_PLEDGE,
@@ -15370,10 +15383,12 @@ static func _create_support_pledge_commitment(
 		deadline,
 		tier,
 		ic_day,
-		"PERSUADE",
+		source_action,
 		court_sid,
 		witnesses,
 	)
+	commitment.pledge_topic_id = effects.get("pledge_topic_id", -1)
+	commitment.pledge_position_shift = effects.get("pledge_position_shift", 0.0)
 	commitments.append(commitment)
 	next_commitment_id[0] += 1
 
