@@ -401,6 +401,25 @@ For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
   access_tn_penalty, access_days, equipment state but preserves settlement
   suspicion (household memory persists). Enables strategic retreat when
   penalty accumulates too high. 3 tests.
+- **s12.8 Entanglement Creation Wiring** — Successful seduction actions
+  (SEDUCE, SEDUCE_FOR_INFO, SEDUCE_FOR_ACCESS, SEDUCE_FOR_LEVERAGE,
+  SEDUCE_TO_COMPROMISE) now create entanglement dicts via
+  `_process_seduction_entanglements()` in DayOrchestrator. Scans day results
+  for `creates_entanglement: true`, prevents duplicates (skips if active
+  entanglement exists between same pair), allows re-seduction after broken
+  entanglement. Variant passed through from action_id. 5 tests.
+- **s12.8 Target Status TN Modifier** — Phase 1 access TNs now include
+  `int(target.status)` as a direct TN adder per GDD s12.8 ("target's Status
+  (higher Status = higher base TN)"). Formula PROVISIONAL — GDD specifies
+  the factor without a numeric formula. `ACCESS_SEDUCTION_TN` constant
+  replaces hardcoded 15. 4 tests.
+- **s12.8 Loyalty-Gated Daily Detection** — `find_best_searcher()` gains
+  optional `require_loyalty: bool = false` parameter. When true, filters
+  to household members (same lord, direct vassal, assigned bodyguard) with
+  non-negative disposition toward target. Daily detection uses loyalty gate;
+  SEARCH_PERSON and critical failure detection do not (active security
+  responses vs passive observation). `_is_household_member()` helper and
+  `LOYALTY_DISPOSITION_MINIMUM = 0` constant. 11 tests.
 
 ### Known Code Issues (found 2026-05-18, pre-existing)
 - **test_assassination_system.gd test_doji_courtier_bribe_access_gets_free_raise
