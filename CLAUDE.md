@@ -317,6 +317,33 @@ For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
   rolls. Value PROVISIONAL — GDD specifies "severe disadvantage" without a
   numeric value. Checks both primary school and school_paths for multi-school
   characters. 10 tests.
+- **s12.8 Imperial Assassination TNs (Seppun Protection)** — Seppun guards
+  modify all three assassination phases. Full protection (co-located Seppun):
+  +15/+20/+10 (Access/Execution/Concealment). Half protection (Imperial
+  dynasty target, no co-located Seppun): +8/+10/+5. Stacks with other TN
+  modifiers. 15 tests.
+- **s12.8 Equipment Preparation Gate** — Pre-Phase 1 CONCEAL_ITEM check.
+  Assassins must conceal tools before entering the settlement. Poison TN 10,
+  blade TN 20. Blade method hard-gated at Sleight of Hand Rank 5. Arranged
+  accident skips equipment entirely. School lean (+1k0) for Shosuro
+  Infiltrator and Kasuga Smuggler. Result stored as `equipment_concealment_tn`
+  on assassination state. 11 tests.
+- **s12.8 CONCEAL_ITEM Auto-Bypass** — NPCs carrying contraband automatically
+  fire CONCEAL_ITEM when arriving at a settlement. Fires in DayOrchestrator
+  after travel arrivals. Uses SecretSystem.resolve_conceal_item() directly.
+  Skips already-concealed items and respects blade Rank 5 gate. 4 tests.
+- **s12.8 Household Response Thresholds** — Four-tier suspicion response:
+  0-9 none, 10-19 watchful (+5 Investigation bonus), 20-29 bodyguard
+  assigned, 30+ lockdown (+10 TN to access). Previous gradual curve (5/10/15)
+  replaced with binary lockdown-only modifier per GDD. Threshold constants:
+  WATCHFUL=10, BODYGUARD=20, LOCKDOWN=30. 6 tests.
+- **s12.8 SEARCH_PERSON Suspicion Trigger** — At bodyguard threshold (20+),
+  household security fires SEARCH_PERSON against assassin's concealed
+  equipment. `find_best_searcher()` selects highest Investigation+Perception
+  co-located character (excludes assassin/target). `resolve_suspicion_search()`
+  rolls Investigation/Perception vs equipment_concealment_tn. Auto-finds if
+  concealment_tn <= 0. On discovery: operation immediately fails. Wired in
+  DayOrchestrator ACCESS phase after access roll. 6 tests.
 
 ### Known Code Issues (found 2026-05-18, pre-existing)
 - **test_assassination_system.gd test_doji_courtier_bribe_access_gets_free_raise
