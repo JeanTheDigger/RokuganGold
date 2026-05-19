@@ -446,6 +446,7 @@ static func advance_day(
 		day_result.get("results", []),
 		active_assassination_ops,
 		ic_day,
+		characters_by_id,
 	)
 
 	var assassination_results: Array[Dictionary] = _process_assassination_daily_tick(
@@ -14026,6 +14027,7 @@ static func _process_assassination_commissions(
 	day_results: Array[Dictionary],
 	active_assassination_ops: Array[Dictionary],
 	ic_day: int,
+	characters_by_id: Dictionary = {},
 ) -> void:
 	for r: Dictionary in day_results:
 		if r.get("action_id", "") != "COMMISSION_ASSASSINATION":
@@ -14041,7 +14043,12 @@ static func _process_assassination_commissions(
 		var state: Dictionary = AssassinationSystem.create_assassination_state(
 			assassin_id, target_id, method, ic_day,
 		)
-		state["commissioner_id"] = int(effects.get("commissioner_id", -1))
+		var commissioner_id: int = int(effects.get("commissioner_id", -1))
+		state["commissioner_id"] = commissioner_id
+		var commissioner: L5RCharacterData = characters_by_id.get(commissioner_id) as L5RCharacterData
+		var target_char: L5RCharacterData = characters_by_id.get(target_id) as L5RCharacterData
+		if commissioner != null and target_char != null:
+			commissioner.honor += AssassinationSystem.get_ordering_honor_loss(target_char.status)
 		active_assassination_ops.append(state)
 
 

@@ -389,6 +389,73 @@ func test_critical_detection_includes_investigation_bonus() -> void:
 		"Watchful bonus should improve detection rolls")
 
 
+# -- Honor / Infamy Consequences -----------------------------------------------
+
+func test_ordering_honor_loss_status_low() -> void:
+	assert_eq(AssassinationSystem.get_ordering_honor_loss(1.0), -2.0)
+	assert_eq(AssassinationSystem.get_ordering_honor_loss(2.0), -2.0)
+
+
+func test_ordering_honor_loss_status_mid() -> void:
+	assert_eq(AssassinationSystem.get_ordering_honor_loss(3.0), -3.0)
+	assert_eq(AssassinationSystem.get_ordering_honor_loss(5.0), -3.0)
+
+
+func test_ordering_honor_loss_status_high() -> void:
+	assert_eq(AssassinationSystem.get_ordering_honor_loss(6.0), -4.0)
+	assert_eq(AssassinationSystem.get_ordering_honor_loss(7.0), -4.0)
+
+
+func test_ordering_honor_loss_status_elite() -> void:
+	assert_eq(AssassinationSystem.get_ordering_honor_loss(8.0), -5.0)
+	assert_eq(AssassinationSystem.get_ordering_honor_loss(10.0), -5.0)
+
+
+func test_ordering_honor_loss_boundary() -> void:
+	assert_eq(AssassinationSystem.get_ordering_honor_loss(2.9), -2.0)
+	assert_eq(AssassinationSystem.get_ordering_honor_loss(5.9), -3.0)
+	assert_eq(AssassinationSystem.get_ordering_honor_loss(7.9), -4.0)
+
+
+func test_execution_honor_loss_scorpion() -> void:
+	var scorpion: L5RCharacterData = L5RCharacterData.new()
+	scorpion.clan = "Scorpion"
+	assert_eq(AssassinationSystem.get_execution_honor_loss(scorpion), -0.5)
+
+
+func test_execution_honor_loss_non_scorpion() -> void:
+	var crane: L5RCharacterData = L5RCharacterData.new()
+	crane.clan = "Crane"
+	assert_eq(AssassinationSystem.get_execution_honor_loss(crane), -3.0)
+	var lion: L5RCharacterData = L5RCharacterData.new()
+	lion.clan = "Lion"
+	assert_eq(AssassinationSystem.get_execution_honor_loss(lion), -3.0)
+
+
+func test_execution_applies_honor_cost_on_success() -> void:
+	_assassin.clan = "Crane"
+	_assassin.honor = 5.0
+	_assassin.skills["Stealth"] = 8
+	_assassin.agility = 5
+	_assassin.school = "Shosuro Infiltrator"
+	_target.physical_location = "Kyuden Bayushi"
+	_assassin.physical_location = "Kyuden Bayushi"
+	var s: Dictionary = AssassinationSystem.create_assassination_state(1, 2, AssassinationSystem.ExecutionMethod.POISON, 0)
+	s["phase"] = AssassinationSystem.AssassinationPhase.EXECUTION
+	var successes: int = 0
+	for i: int in range(50):
+		_assassin.honor = 5.0
+		var e: DiceEngine = DiceEngine.new(i * 17)
+		var r: Dictionary = AssassinationSystem.resolve_execution(_assassin, _target, s, e)
+		if r.get("success", false):
+			successes += 1
+			assert_eq(_assassin.honor, 5.0 + AssassinationSystem.EXECUTE_HONOR_LOSS_DEFAULT)
+			assert_eq(r.get("honor_cost"), AssassinationSystem.EXECUTE_HONOR_LOSS_DEFAULT)
+			break
+		s["phase"] = AssassinationSystem.AssassinationPhase.EXECUTION
+	assert_true(successes > 0, "Should have at least one successful execution")
+
+
 # ==============================================================================
 # Phase 1 — Access
 # ==============================================================================
