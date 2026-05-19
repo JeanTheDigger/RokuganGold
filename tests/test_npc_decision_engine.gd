@@ -2947,3 +2947,83 @@ func test_fabricate_secret_tier_1_for_master_forger() -> void:
 	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
 	assert_eq(option.metadata.get("severity"), SecretData.Severity.TIER_1,
 		"Forgery 7+ should target TIER_1 (most severe)")
+
+
+# -- ARRANGE_MARRIAGE metadata --------------------------------------------------
+
+func test_arrange_marriage_metadata_includes_favor_tier() -> void:
+	var ctx := _make_metadata_ctx()
+	ctx.held_leverage = [
+		{"debtor_id": 10, "target_lord_id": 10, "tier": 2},
+	]
+	var need := _make_metadata_need()
+	need.target_npc_id = 5
+	need.target_npc_id_secondary = 10
+	need.target_settlement_id = 20
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "ARRANGE_MARRIAGE"
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_eq(option.metadata.get("favor_tier", 0), 2,
+		"Should populate favor_tier from held leverage against target lord")
+	assert_eq(option.metadata.get("candidate_id", -1), 5)
+	assert_eq(option.metadata.get("target_lord_id", -1), 10)
+
+
+func test_arrange_marriage_no_favor_defaults_to_zero() -> void:
+	var ctx := _make_metadata_ctx()
+	ctx.held_leverage = []
+	var need := _make_metadata_need()
+	need.target_npc_id_secondary = 10
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "ARRANGE_MARRIAGE"
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_eq(option.metadata.get("favor_tier", -1), 0,
+		"Should default to 0 when no favor held against target lord")
+
+
+func test_arrange_marriage_military_objective_detected() -> void:
+	var ctx := _make_metadata_ctx()
+	var need := _make_metadata_need()
+	need.need_type = "SECURE_ALLIANCE"
+	need.target_npc_id_secondary = 10
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "ARRANGE_MARRIAGE"
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_true(option.metadata.get("has_military_objective", false),
+		"SECURE_ALLIANCE should set has_military_objective")
+
+
+func test_arrange_marriage_non_military_objective() -> void:
+	var ctx := _make_metadata_ctx()
+	var need := _make_metadata_need()
+	need.need_type = "RAISE_DISPOSITION"
+	need.target_npc_id_secondary = 10
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "ARRANGE_MARRIAGE"
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_false(option.metadata.get("has_military_objective", true),
+		"RAISE_DISPOSITION should not set has_military_objective")
+
+
+# -- PLAY_GAME metadata --------------------------------------------------------
+
+func test_play_game_picks_best_skill() -> void:
+	var ctx := _make_metadata_ctx()
+	ctx.skill_ranks = {"Games: Go": 2, "Games: Shogi": 5, "Games: Kemari": 1}
+	var need := _make_metadata_need()
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "PLAY_GAME"
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_eq(option.metadata.get("game_skill", ""), "Games: Shogi",
+		"Should pick game with highest skill rank")
+
+
+func test_play_game_defaults_to_go() -> void:
+	var ctx := _make_metadata_ctx()
+	ctx.skill_ranks = {}
+	var need := _make_metadata_need()
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "PLAY_GAME"
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_eq(option.metadata.get("game_skill", ""), "Games: Go",
+		"Should default to Games: Go when NPC has no game skills")

@@ -2347,10 +2347,17 @@ static func _populate_action_metadata(
 	elif option.action_id == "COMPLY_WITH_EDICT" or option.action_id == "DEFY_EDICT":
 		option.metadata = _build_edict_response_metadata(need, ctx)
 	elif option.action_id == "ARRANGE_MARRIAGE":
+		var target_lord_id: int = need.target_npc_id_secondary
+		var favor: int = _get_favor_tier_held_against(ctx, target_lord_id)
+		var mil_need: bool = need.need_type in [
+			"SECURE_ALLIANCE", "RAISE_ARMY", "DEFEND_PROVINCE",
+		]
 		option.metadata = {
 			"candidate_id": need.target_npc_id,
-			"target_lord_id": need.target_npc_id_secondary,
+			"target_lord_id": target_lord_id,
 			"target_candidate_id": need.target_settlement_id,
+			"favor_tier": favor,
+			"has_military_objective": mil_need,
 		}
 	elif option.action_id == "APPOINT_TO_POSITION":
 		option.metadata = {
@@ -2383,6 +2390,8 @@ static func _populate_action_metadata(
 		var target_id: int = need.target_npc_id if need.target_npc_id >= 0 else option.target_npc_id
 		var secret_meta: Dictionary = _pick_secret_about_target(ctx, target_id)
 		option.metadata = secret_meta
+	elif option.action_id == "PLAY_GAME":
+		option.metadata = {"game_skill": _pick_best_game_skill(ctx)}
 	elif option.action_id in ["NEGOTIATE", "PERSUADE", "PUBLIC_DEBATE",
 			"CHARM", "IMPRESS", "LISTEN_REFLECT", "OFFER_FAVOR"]:
 		var court_meta: Dictionary = {
@@ -2682,6 +2691,43 @@ static func _pick_private_recipient(
 		if pid != ctx.character_id and pid != subject_id:
 			return pid
 	return -1
+
+
+const _GAME_SKILLS: Array[String] = [
+	"Games: Go", "Games: Shogi", "Games: Kemari",
+	"Games: Fortunes & Winds", "Games: Letters", "Games: Sadane",
+]
+
+
+static func _pick_best_game_skill(
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> String:
+	var best_skill: String = "Games: Go"
+	var best_rank: int = 0
+	for gs: String in _GAME_SKILLS:
+		var rank: int = ctx.skill_ranks.get(gs, 0)
+		if rank > best_rank:
+			best_rank = rank
+			best_skill = gs
+	return best_skill
+
+
+static func _get_favor_tier_held_against(
+	ctx: NPCDataStructures.ContextSnapshot,
+	target_lord_id: int,
+) -> int:
+	var best_tier: int = 0
+	for lev: Variant in ctx.held_leverage:
+		if not lev is Dictionary:
+			continue
+		var d: Dictionary = lev as Dictionary
+		var debtor: int = d.get("debtor_id", -1)
+		var lord: int = d.get("target_lord_id", -1)
+		if debtor == target_lord_id or lord == target_lord_id:
+			var tier: int = d.get("tier", 0)
+			if tier > best_tier:
+				best_tier = tier
+	return best_tier
 
 
 static func _pick_secret_about_target(
