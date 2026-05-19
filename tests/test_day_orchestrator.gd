@@ -9528,3 +9528,80 @@ func test_secret_known_by_ids_populated_on_bribe_accepted() -> void:
 	var s := SecretData.new()
 	s.known_by_ids = [10, 20]
 	assert_eq(s.known_by_ids.size(), 2, "known_by_ids should hold both parties")
+
+
+# -- FABRICATE_SECRET Writebacks ------------------------------------------------
+
+func test_fabricate_secret_writeback_adds_to_active_secrets() -> void:
+	var fabricated := SecretData.new()
+	fabricated.secret_id = -1
+	fabricated.subject_id = 5
+	fabricated.severity = SecretData.Severity.TIER_3
+	fabricated.fabricated = true
+	fabricated.fabricator_id = 1
+	var secrets: Array[SecretData] = []
+	var next_id: Array[int] = [100]
+	var results: Array = [{
+		"action_id": "FABRICATE_SECRET",
+		"success": true,
+		"character_id": 1,
+		"effects": {"secret": fabricated, "success": true},
+	}]
+	DayOrchestrator._process_fabricate_secret_writebacks(results, secrets, next_id)
+	assert_eq(secrets.size(), 1, "Fabricated secret should be added to active_secrets")
+	assert_eq(secrets[0].secret_id, 100, "Should assign secret_id from next_secret_id")
+	assert_eq(next_id[0], 101, "next_secret_id should be incremented")
+	assert_true(1 in secrets[0].known_by_ids, "Fabricator should be in known_by_ids")
+
+
+func test_fabricate_secret_writeback_preserves_existing_id() -> void:
+	var fabricated := SecretData.new()
+	fabricated.secret_id = 42
+	fabricated.subject_id = 5
+	fabricated.fabricated = true
+	var secrets: Array[SecretData] = []
+	var next_id: Array[int] = [100]
+	var results: Array = [{
+		"action_id": "FABRICATE_SECRET",
+		"success": true,
+		"character_id": 1,
+		"effects": {"secret": fabricated, "success": true},
+	}]
+	DayOrchestrator._process_fabricate_secret_writebacks(results, secrets, next_id)
+	assert_eq(secrets[0].secret_id, 42, "Should not overwrite existing valid secret_id")
+	assert_eq(next_id[0], 100, "next_secret_id should not be incremented")
+
+
+func test_fabricate_secret_writeback_skips_failures() -> void:
+	var secrets: Array[SecretData] = []
+	var next_id: Array[int] = [100]
+	var results: Array = [{
+		"action_id": "FABRICATE_SECRET",
+		"success": false,
+		"character_id": 1,
+		"effects": {"success": false},
+	}]
+	DayOrchestrator._process_fabricate_secret_writebacks(results, secrets, next_id)
+	assert_eq(secrets.size(), 0, "Failed fabrication should not add to active_secrets")
+
+
+func test_fabricate_secret_writeback_no_duplicate_fabricator() -> void:
+	var fabricated := SecretData.new()
+	fabricated.secret_id = -1
+	fabricated.subject_id = 5
+	fabricated.fabricated = true
+	fabricated.known_by_ids = [1]
+	var secrets: Array[SecretData] = []
+	var next_id: Array[int] = [100]
+	var results: Array = [{
+		"action_id": "FABRICATE_SECRET",
+		"success": true,
+		"character_id": 1,
+		"effects": {"secret": fabricated, "success": true},
+	}]
+	DayOrchestrator._process_fabricate_secret_writebacks(results, secrets, next_id)
+	var count: int = 0
+	for kid: int in secrets[0].known_by_ids:
+		if kid == 1:
+			count += 1
+	assert_eq(count, 1, "Should not duplicate fabricator in known_by_ids")

@@ -293,6 +293,11 @@ static func advance_day(
 		active_secrets, characters_by_id,
 	)
 
+	_process_fabricate_secret_writebacks(
+		day_result.get("results", []),
+		active_secrets, next_secret_id,
+	)
+
 	_process_taint_proximity_detection(
 		day_result.get("results", []),
 		characters_by_id, character_province_map, dice_engine,
@@ -4324,6 +4329,33 @@ static func _process_expose_secret_writebacks(
 					if target_id not in s.known_by_ids:
 						s.known_by_ids.append(target_id)
 					break
+
+
+static func _process_fabricate_secret_writebacks(
+	results: Array,
+	active_secrets: Array[SecretData],
+	next_secret_id: Array[int],
+) -> void:
+	for r: Variant in results:
+		if not r is Dictionary:
+			continue
+		var d: Dictionary = r as Dictionary
+		if d.get("action_id", "") != "FABRICATE_SECRET":
+			continue
+		if not d.get("success", false):
+			continue
+		var effects: Dictionary = d.get("effects", {})
+		var secret: Variant = effects.get("secret")
+		if secret == null or not secret is SecretData:
+			continue
+		var sd: SecretData = secret as SecretData
+		if sd.secret_id < 0:
+			sd.secret_id = next_secret_id[0]
+			next_secret_id[0] += 1
+		var fabricator_id: int = d.get("character_id", -1)
+		if fabricator_id >= 0 and fabricator_id not in sd.known_by_ids:
+			sd.known_by_ids.append(fabricator_id)
+		active_secrets.append(sd)
 
 
 # TN for the check is deferred to Section 31/42 — using placeholder TN 20.
