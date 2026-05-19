@@ -731,9 +731,11 @@ s44, s45, s54.7, s57.22–s57.24, s57.26–s57.30, s57.41–s57.43, s57.45–s57
   Section 57.47 (CAPITAL — Violation of the Emperor's Peace). Section 15.1
   updated to reflect castle-level selection. **CODE REWRITTEN** — 
   `simulation/winter_court_system.gd` implements the full specification.
+  +5 skill bonus now wired to all 7 early-return court action paths
+  (GOSSIP, PUBLIC_INSULT, PUBLIC_DEBATE, BROADCAST_SOCIAL, PROVOKE_EMOTION,
+  PROBE, DISCERN_NEED, ASK_FOR_INTRODUCTION). 3 tests.
   Remaining deferred: travel logistics letter dispatching, late arrival
-  handling, +5 skill bonus SkillResolver integration, Champion agenda
-  ordering AI.
+  handling, Champion agenda ordering AI.
 
 
 ## Resolved Design Decisions
