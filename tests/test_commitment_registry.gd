@@ -484,6 +484,108 @@ func test_at_risk_ignores_other_debtor():
 
 
 # =============================================================================
+# Phase 5 — Per-Action Commitment Modifier (s55.31.7)
+# =============================================================================
+
+func test_action_modifier_penalty_on_travel_away() -> void:
+	var c := _make_char(1)
+	var commitment: CommitmentData = _make_commitment({"tier": 2, "debtor": 1})
+	commitment.fulfillment_target = 100
+	var all: Array[CommitmentData] = [commitment]
+	var result: int = CommitmentRegistry.get_action_commitment_modifier(
+		"BEGIN_TRAVEL", 200, all, 1, c,
+	)
+	assert_eq(result, -15, "BEGIN_TRAVEL away from target should apply penalty")
+
+
+func test_action_modifier_bonus_on_travel_toward() -> void:
+	var c := _make_char(1)
+	var commitment: CommitmentData = _make_commitment({"tier": 2, "debtor": 1})
+	commitment.fulfillment_target = 100
+	var all: Array[CommitmentData] = [commitment]
+	var result: int = CommitmentRegistry.get_action_commitment_modifier(
+		"BEGIN_TRAVEL", 100, all, 1, c,
+	)
+	assert_eq(result, 15, "BEGIN_TRAVEL toward target should give bonus")
+
+
+func test_action_modifier_penalty_change_destination_away() -> void:
+	var c := _make_char(1)
+	var commitment: CommitmentData = _make_commitment({"tier": 1, "debtor": 1})
+	commitment.fulfillment_target = 100
+	var all: Array[CommitmentData] = [commitment]
+	var result: int = CommitmentRegistry.get_action_commitment_modifier(
+		"CHANGE_DESTINATION", 200, all, 1, c,
+	)
+	assert_eq(result, -25, "CHANGE_DESTINATION away should apply penalty")
+
+
+func test_action_modifier_no_penalty_change_destination_toward() -> void:
+	var c := _make_char(1)
+	var commitment: CommitmentData = _make_commitment({"tier": 1, "debtor": 1})
+	commitment.fulfillment_target = 100
+	var all: Array[CommitmentData] = [commitment]
+	var result: int = CommitmentRegistry.get_action_commitment_modifier(
+		"CHANGE_DESTINATION", 100, all, 1, c,
+	)
+	assert_eq(result, 0, "CHANGE_DESTINATION toward target should be neutral")
+
+
+func test_action_modifier_bonus_attend_court_at_target() -> void:
+	var c := _make_char(1)
+	var commitment: CommitmentData = _make_commitment({"tier": 3, "debtor": 1})
+	commitment.fulfillment_target = 100
+	var all: Array[CommitmentData] = [commitment]
+	var result: int = CommitmentRegistry.get_action_commitment_modifier(
+		"ATTEND_COURT", 100, all, 1, c,
+	)
+	assert_eq(result, 5, "ATTEND_COURT at committed settlement should give bonus")
+
+
+func test_action_modifier_zero_for_neutral_action() -> void:
+	var c := _make_char(1)
+	var commitment: CommitmentData = _make_commitment({"tier": 2, "debtor": 1})
+	commitment.fulfillment_target = 100
+	var all: Array[CommitmentData] = [commitment]
+	var result: int = CommitmentRegistry.get_action_commitment_modifier(
+		"CHARM", 100, all, 1, c,
+	)
+	assert_eq(result, 0, "Non-travel/non-attend actions should get no modifier")
+
+
+func test_action_modifier_personality_stacks() -> void:
+	var c := _make_char(1, Enums.BushidoVirtue.GI)
+	var commitment: CommitmentData = _make_commitment({"tier": 2, "debtor": 1})
+	commitment.fulfillment_target = 100
+	var all: Array[CommitmentData] = [commitment]
+	var result: int = CommitmentRegistry.get_action_commitment_modifier(
+		"BEGIN_TRAVEL", 200, all, 1, c,
+	)
+	assert_eq(result, -23, "Gi modifier should stack with base penalty")
+
+
+func test_action_modifier_no_commitments() -> void:
+	var c := _make_char(1)
+	var all: Array[CommitmentData] = []
+	var result: int = CommitmentRegistry.get_action_commitment_modifier(
+		"BEGIN_TRAVEL", 200, all, 1, c,
+	)
+	assert_eq(result, 0, "No commitments should give zero modifier")
+
+
+func test_action_modifier_favor_obligation_ignored() -> void:
+	var c := _make_char(1)
+	var commitment: CommitmentData = _make_commitment({"tier": 1, "debtor": 1})
+	commitment.commitment_type = Enums.CommitmentType.FAVOR_OBLIGATION
+	commitment.fulfillment_target = 100
+	var all: Array[CommitmentData] = [commitment]
+	var result: int = CommitmentRegistry.get_action_commitment_modifier(
+		"BEGIN_TRAVEL", 200, all, 1, c,
+	)
+	assert_eq(result, 0, "FAVOR_OBLIGATION should not contribute to modifier")
+
+
+# =============================================================================
 # Batch Processing
 # =============================================================================
 

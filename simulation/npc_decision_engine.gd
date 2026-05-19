@@ -438,7 +438,8 @@ static func score_all(
 		))
 
 		if character != null and not commitments.is_empty():
-			option.commitment_at_risk = float(CommitmentRegistry.get_at_risk_penalty(
+			option.commitment_at_risk = float(CommitmentRegistry.get_action_commitment_modifier(
+				option.action_id, option.target_settlement_id,
 				commitments, ctx.character_id, character
 			))
 		else:

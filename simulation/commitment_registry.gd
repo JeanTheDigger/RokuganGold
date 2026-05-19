@@ -443,3 +443,46 @@ static func get_at_risk_penalty(
 		total += base
 
 	return maxi(total, MAX_AT_RISK_PENALTY)
+
+
+const COMMITMENT_BREAKING_ACTIONS: Array[String] = [
+	"CHANGE_DESTINATION", "BEGIN_TRAVEL",
+]
+
+const COMMITMENT_FULFILLING_ACTIONS: Array[String] = [
+	"ATTEND_COURT", "BEGIN_TRAVEL",
+]
+
+
+static func get_action_commitment_modifier(
+	action_id: String,
+	action_settlement_id: int,
+	commitments: Array[CommitmentData],
+	debtor_id: int,
+	character: L5RCharacterData,
+	creditor_in_loyalty_chain: Callable = Callable(),
+) -> int:
+	var pending: Array[CommitmentData] = get_pending(commitments, debtor_id)
+	if pending.is_empty():
+		return 0
+	var commitment_targets: Array[int] = []
+	for c: CommitmentData in pending:
+		if c.commitment_type == Enums.CommitmentType.FAVOR_OBLIGATION:
+			continue
+		if c.fulfillment_target >= 0 and c.fulfillment_target not in commitment_targets:
+			commitment_targets.append(c.fulfillment_target)
+	if commitment_targets.is_empty():
+		return 0
+	var raw_penalty: int = get_at_risk_penalty(commitments, debtor_id, character, creditor_in_loyalty_chain)
+	if raw_penalty == 0:
+		return 0
+	var targets_committed: bool = action_settlement_id in commitment_targets
+	if action_id in COMMITMENT_BREAKING_ACTIONS:
+		if targets_committed:
+			if action_id == "BEGIN_TRAVEL":
+				return -raw_penalty
+			return 0
+		return raw_penalty
+	if action_id in COMMITMENT_FULFILLING_ACTIONS and targets_committed:
+		return -raw_penalty
+	return 0
