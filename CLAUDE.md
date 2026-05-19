@@ -646,8 +646,12 @@ For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
 - **send_advance_notice() — wired. FIXED.** Daily pass detects unfulfillable
   PENDING commitments within 7-day window. Checks travel time for location-
   based commitments. Personality-driven: Rei/Gi/Meiyo send, Yu/Kyoryoku
-  skip. Sends apology letter at 0 AP. register_proxy() still unwired
-  (requires lord + vassal + ASSIGN_VASSAL_OBJECTIVE delegation logic).
+  skip. Sends apology letter at 0 AP. 7 tests.
+- **register_proxy() — wired. FIXED.** Lords with unfulfillable commitments
+  dispatch closest reachable vassal as proxy. Assigns primary objective to
+  vassal with target settlement. Daily arrival pass marks proxy_sent when
+  vassal reaches the target. SUPPORT_PLEDGE excluded. proxy_npc_id field
+  added to CommitmentData for arrival tracking. 6 tests.
 - **SUPPORT_PLEDGE fulfillment — action types fixed. FIXED (partial).**
   Now checks persuade_count + public_debate_count + negotiate_count (was
   charm_count + negotiate_count). CHARM alone no longer fulfills. Added
