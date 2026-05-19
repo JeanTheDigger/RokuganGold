@@ -585,12 +585,16 @@ For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
   court creates Tier 2 pledge. Fulfillment: debtor present + ≥1 court
   action. Witnesses = court attendees. Deadline = court end date). 5 tests.
   RESOURCE_PROMISE still blocked (REQUEST_ALLIED_AID executor is a stub).
-- **CommitmentRegistry.apply_forgiveness() never called.**
-  Retroactive forgiveness (s55.31.11.2) should fire when a crisis topic
-  reaches an NPC who suffered a disposition penalty from a crisis-linked
-  broken commitment. Requires wiring into the topic propagation flow
-  when NPCs learn about crises. Deferred — depends on commitment creation
-  being wired first (no forgiveness without commitments to break).
+- **CommitmentRegistry.apply_forgiveness() — retroactive forgiveness wired. FIXED.**
+  `_process_retroactive_forgiveness()` batch scans BROKEN_FORCE_MAJEURE
+  commitments after deadline processing. Bridges crisis topics to
+  commitments via `crisis_id` field added to TopicData. Checks if
+  penalized NPCs know matching crisis topics in their topic_pool.
+  Same-clan loyalty chain gives Chugi 75% rate vs 25% cross-clan.
+  Crisis topic generation tagged: Shadowlands incursion, famine (single
+  + multi), and _topic_from_dict all set crisis_id from
+  ProvinceData.active_crisis_id. DORMANT until crisis system populates
+  active_crisis_id on provinces. 9 tests.
 - **Approach evaluation disposition_at_start tracking. FIXED.**
   `_populate_disposition_snapshots()` captures all disposition pairs at
   season start. `_process_approach_evaluation_writebacks()` looks up
