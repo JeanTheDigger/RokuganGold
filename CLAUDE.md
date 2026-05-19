@@ -736,8 +736,9 @@ s44, s45, s54.7, s57.22–s57.24, s57.26–s57.30, s57.41–s57.43, s57.45–s57
   PROBE, DISCERN_NEED, ASK_FOR_INTRODUCTION). 3 tests.
   Champion agenda ordering AI already implemented and wired
   (order_agenda_for_host called in day_orchestrator, 5 tests).
-  Remaining deferred: travel logistics letter dispatching, late arrival
-  handling.
+  Travel logistics letter dispatching already implemented
+  (_dispatch_winter_court_summons, 7 tests). Late arrival handling already
+  implemented (_process_court_attendance, 2 tests).
 
 
 ## Resolved Design Decisions
