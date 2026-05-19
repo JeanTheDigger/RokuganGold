@@ -78,6 +78,7 @@ static func advance_day(
 	active_hostages: Array[Dictionary] = [],
 	active_assassination_ops: Array[Dictionary] = [],
 	next_commitment_id: Array[int] = [1],
+	next_crisis_id: Array[int] = [1],
 	disposition_snapshots: Dictionary = {},
 ) -> Dictionary:
 	var prev_season: int = time_system.get_season()
@@ -367,6 +368,7 @@ static func advance_day(
 
 	var horde_assault_results: Array[Dictionary] = _process_horde_assaults(
 		active_hordes, settlements, active_topics, next_topic_id, ic_day, provinces,
+		next_crisis_id,
 	)
 
 	var starvation_results: Array[Dictionary] = _process_starvation_warfare_effects(
@@ -742,7 +744,7 @@ static func advance_day(
 			)
 		_process_famine_crises(
 			seasonal_result, provinces, active_topics,
-			next_topic_id, ic_day, season_meta,
+			next_topic_id, ic_day, season_meta, next_crisis_id,
 		)
 		_decay_all_historical_modifiers(characters, ic_day)
 		military_seasonal_result = _process_military_seasonal(
@@ -790,7 +792,7 @@ static func advance_day(
 		insurgency_results = _process_insurgencies(
 			insurgencies, provinces, dice_engine, current_season,
 			next_insurgency_id, world_states, worship_maluses,
-			season_meta,
+			season_meta, next_crisis_id,
 		)
 		_process_doshin_seasonal_recovery(world_states)
 		_tick_kuni_wards(season_meta)
@@ -2123,6 +2125,7 @@ static func _process_horde_assaults(
 	next_topic_id: Array[int],
 	ic_day: int,
 	provinces: Dictionary,
+	next_crisis_id: Array[int] = [1],
 ) -> Array[Dictionary]:
 	var results: Array[Dictionary] = []
 
@@ -2152,11 +2155,14 @@ static func _process_horde_assaults(
 
 		var breach: bool = bool(si_result.get("breach", false))
 		if breach:
-			# Generate Tier 1 Shadowlands Incursion crisis topic (s2.4.5, s16.3).
 			var province: Variant = provinces.get(horde.target_province_id, null)
 			var clan_str: String = ""
 			if province is ProvinceData:
-				clan_str = (province as ProvinceData).clan
+				var prov: ProvinceData = province as ProvinceData
+				clan_str = prov.clan
+				if prov.active_crisis_id < 0:
+					prov.active_crisis_id = next_crisis_id[0]
+					next_crisis_id[0] += 1
 			var topic := TopicData.new()
 			topic.topic_id = next_topic_id[0]
 			next_topic_id[0] += 1
@@ -2539,6 +2545,7 @@ static func _process_famine_crises(
 	next_topic_id: Array[int],
 	ic_day: int,
 	season_meta: Dictionary,
+	next_crisis_id: Array[int] = [1],
 ) -> Array[Dictionary]:
 	var results: Array[Dictionary] = []
 	var tick: Dictionary = seasonal_result.get("resource_tick", {})
@@ -2564,7 +2571,11 @@ static func _process_famine_crises(
 			var prov_data: Variant = provinces.get(province_id, null)
 			var clan: String = ""
 			if prov_data is ProvinceData:
-				clan = prov_data.clan
+				var pd: ProvinceData = prov_data as ProvinceData
+				clan = pd.clan
+				if pd.active_crisis_id < 0:
+					pd.active_crisis_id = next_crisis_id[0]
+					next_crisis_id[0] += 1
 			if not starving_by_clan.has(clan):
 				starving_by_clan[clan] = []
 			starving_by_clan[clan].append({"province_id": province_id, "stage": stage})
@@ -2643,6 +2654,9 @@ static func _process_famine_crises(
 		tracking[province_id] = count
 		if count >= _FAMINE_RECOVERY_THRESHOLD:
 			tracking.erase(province_id)
+			var recovered_prov: Variant = provinces.get(province_id, null)
+			if recovered_prov is ProvinceData:
+				(recovered_prov as ProvinceData).active_crisis_id = -1
 			if topic.provinces_affected.size() > 1:
 				topic.provinces_affected.erase(province_id)
 				results.append({
@@ -5896,6 +5910,7 @@ static func _process_insurgencies(
 	world_states: Dictionary,
 	worship_maluses: Dictionary = {},
 	season_meta: Dictionary = {},
+	next_crisis_id: Array[int] = [1],
 ) -> Dictionary:
 	var ptls: Dictionary = {}
 	for pid: int in provinces:
@@ -5917,6 +5932,12 @@ static func _process_insurgencies(
 
 	for new_ins: InsurgencyData in result.get("new_insurgencies", []):
 		insurgencies.append(new_ins)
+		var ins_prov: Variant = provinces.get(new_ins.province_id, null)
+		if ins_prov is ProvinceData:
+			var ipd: ProvinceData = ins_prov as ProvinceData
+			if ipd.active_crisis_id < 0:
+				ipd.active_crisis_id = next_crisis_id[0]
+				next_crisis_id[0] += 1
 
 	next_insurgency_id[0] = result.get("next_id", next_insurgency_id[0])
 
@@ -5932,6 +5953,9 @@ static func _process_insurgencies(
 			removed.append(ins)
 	for ins: InsurgencyData in removed:
 		insurgencies.erase(ins)
+		var rem_prov: Variant = provinces.get(ins.province_id, null)
+		if rem_prov is ProvinceData:
+			(rem_prov as ProvinceData).active_crisis_id = -1
 
 	return result
 

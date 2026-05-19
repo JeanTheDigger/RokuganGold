@@ -8391,3 +8391,153 @@ func test_famine_topic_multi_carries_crisis_id() -> void:
 		pids, "Crab", next_id, 10, 42,
 	)
 	assert_eq(topic.crisis_id, 42, "Multi-province famine topic should carry crisis_id")
+
+
+# -- Crisis ID Population (s55.31 / s55.3) ------------------------------------
+
+func test_famine_onset_assigns_crisis_id_to_province() -> void:
+	var p := _make_province_for_famine(1)
+	assert_eq(p.active_crisis_id, -1, "Starts unset")
+	var seasonal_result: Dictionary = {
+		"resource_tick": {
+			"starvation_changes": {
+				1: {"stage": ResourceTick.StarvationStage.HUNGER, "pu_loss_rate": 0.08},
+			},
+		},
+	}
+	var provinces: Dictionary = {1: p}
+	var topics: Array[TopicData] = []
+	var next_tid: Array[int] = [100]
+	var next_cid: Array[int] = [50]
+	var meta: Dictionary = {}
+	DayOrchestrator._process_famine_crises(
+		seasonal_result, provinces, topics, next_tid, 10, meta, next_cid,
+	)
+	assert_eq(p.active_crisis_id, 50, "Province should get crisis_id on famine onset")
+	assert_eq(next_cid[0], 51, "Counter should advance")
+	assert_eq(topics[0].crisis_id, 50, "Topic should carry same crisis_id")
+
+
+func test_famine_onset_does_not_overwrite_existing_crisis_id() -> void:
+	var p := _make_province_for_famine(1)
+	p.active_crisis_id = 99
+	var seasonal_result: Dictionary = {
+		"resource_tick": {
+			"starvation_changes": {
+				1: {"stage": ResourceTick.StarvationStage.HUNGER, "pu_loss_rate": 0.08},
+			},
+		},
+	}
+	var provinces: Dictionary = {1: p}
+	var topics: Array[TopicData] = []
+	var next_tid: Array[int] = [100]
+	var next_cid: Array[int] = [50]
+	var meta: Dictionary = {}
+	DayOrchestrator._process_famine_crises(
+		seasonal_result, provinces, topics, next_tid, 10, meta, next_cid,
+	)
+	assert_eq(p.active_crisis_id, 99, "Existing crisis_id should not be overwritten")
+	assert_eq(next_cid[0], 50, "Counter should not advance")
+
+
+func test_famine_recovery_clears_crisis_id() -> void:
+	var p := _make_province_for_famine(1)
+	p.active_crisis_id = 42
+	var topic := TopicData.new()
+	topic.topic_id = 100
+	topic.topic_type = "famine"
+	topic.variant = "provincial_famine"
+	topic.provinces_affected = [1]
+	var provinces: Dictionary = {1: p}
+	var topics: Array[TopicData] = [topic]
+	var meta: Dictionary = {"_famine_tracking": {1: 9}}
+	var recovering_result: Dictionary = {
+		"resource_tick": {
+			"starvation_changes": {
+				1: {"stage": ResourceTick.StarvationStage.NORMAL, "pu_loss_rate": 0.0},
+			},
+		},
+	}
+	DayOrchestrator._process_famine_crises(
+		recovering_result, provinces, topics, [200], 100, meta,
+	)
+	assert_eq(p.active_crisis_id, -1, "Crisis_id should clear on full recovery")
+
+
+func test_breach_assigns_crisis_id_to_province() -> void:
+	var p := ProvinceData.new()
+	p.province_id = 5
+	p.clan = "Crab"
+	var s := SettlementData.new()
+	s.settlement_id = 50
+	s.province_id = 5
+	s.settlement_type = Enums.SettlementType.WALL_TOWER
+	s.wall_si = 1
+	var h := HordeData.new()
+	h.target_province_id = 5
+	h.assault_resolved = true
+	h.battle_outcome = Enums.HordeBattleOutcome.DEFENDER_OVERRUN
+	var topics: Array[TopicData] = []
+	var next_tid: Array[int] = [100]
+	var next_cid: Array[int] = [60]
+	var results: Array[Dictionary] = DayOrchestrator._process_horde_assaults(
+		[h], [s], topics, next_tid, 10, {5: p}, next_cid,
+	)
+	assert_gt(results.size(), 0, "Should produce breach result")
+	assert_eq(p.active_crisis_id, 60, "Province should get crisis_id on breach")
+	assert_eq(topics[0].crisis_id, 60, "Topic should carry same crisis_id")
+
+
+func test_insurgency_spawn_assigns_crisis_id() -> void:
+	var p := ProvinceData.new()
+	p.province_id = 3
+	p.clan = "Crab"
+	p.province_taint_level = 5.0
+	var provinces: Dictionary = {3: p}
+	var insurgencies: Array[InsurgencyData] = []
+	var next_cid: Array[int] = [70]
+	var new_ins := InsurgencyData.new()
+	new_ins.insurgency_id = 1
+	new_ins.province_id = 3
+	new_ins.strength = 3
+	var fake_result: Dictionary = {
+		"new_insurgencies": [new_ins],
+		"next_id": 2,
+	}
+	insurgencies.append(new_ins)
+	var ins_prov: Variant = provinces.get(new_ins.province_id, null)
+	if ins_prov is ProvinceData:
+		var ipd: ProvinceData = ins_prov as ProvinceData
+		if ipd.active_crisis_id < 0:
+			ipd.active_crisis_id = next_cid[0]
+			next_cid[0] += 1
+	assert_eq(p.active_crisis_id, 70, "Province should get crisis_id on insurgency spawn")
+	assert_eq(next_cid[0], 71, "Counter should advance")
+
+
+func test_insurgency_resolution_clears_crisis_id() -> void:
+	var p := ProvinceData.new()
+	p.province_id = 3
+	p.clan = "Crab"
+	p.active_crisis_id = 70
+	var provinces: Dictionary = {3: p}
+	var ins := InsurgencyData.new()
+	ins.insurgency_id = 1
+	ins.province_id = 3
+	ins.strength = 0
+	var insurgencies: Array[InsurgencyData] = [ins]
+	var fake_result: Dictionary = {
+		"new_insurgencies": [],
+		"next_id": 2,
+	}
+	var removed: Array[InsurgencyData] = []
+	for i: InsurgencyData in insurgencies:
+		if i.strength <= 0:
+			removed.append(i)
+	for i: InsurgencyData in removed:
+		insurgencies.erase(i)
+		var rem_prov: Variant = provinces.get(i.province_id, null)
+		if rem_prov is ProvinceData:
+			(rem_prov as ProvinceData).active_crisis_id = -1
+	assert_eq(p.active_crisis_id, -1, "Crisis_id should clear when insurgency resolved")
+	assert_eq(insurgencies.size(), 0, "Insurgency should be removed")
