@@ -658,13 +658,12 @@ For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
   persuade_count and public_debate_count to court session_state tracking.
   Position alignment checking still missing (CommitmentData has no topic
   field to compare pledged position against action position).
-- **RESOURCE_PROMISE creation limited to REQUEST_ALLIED_AID.**
-  GDD also specifies creation during NEGOTIATE and ASSIGN_VASSAL_OBJECTIVE
-  "with resource transfer parameters." Those paths not yet wired.
-- **RESOURCE_PROMISE tier always defaults to 2.**
-  GDD specifies tier scaling by quantity (<10 koku/<5 PU = T3, 10-50 koku/
-  5-20 PU = T2, >50 koku/>20 PU = T1). Needs resource data at executor
-  level to calculate.
+- **RESOURCE_PROMISE creation — all three paths wired. FIXED.**
+  Now created via REQUEST_ALLIED_AID (original), NEGOTIATE with resource
+  need_types (ACQUIRE_RESOURCE, REQUEST_AID, CONDUCT_COMMERCE), and
+  ASSIGN_VASSAL_OBJECTIVE with resource need_types. Tier scaling by
+  quantity: <10 koku/<5 PU = T3, 10-50/5-20 = T2, >50/>20 = T1.
+  source_action_id flows from executor into commitment. 13 tests.
 
 ### Known Code Issues (found 2026-05-18, pre-existing)
 - **test_assassination_system.gd test_doji_courtier_bribe_access_gets_free_raise
