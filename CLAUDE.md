@@ -597,10 +597,10 @@ For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
   refused — koku spent on attempt) and koku_cost=3.0 on PURCHASE_MARKET.
   Blocked-by-personality bribes emit no koku_cost (never attempted).
   9 tests.
-- **Phase 7 resource validation missing.**
-  GDD s55.32.5 specifies a Phase 7 safety net: validate resources
-  before executing, refund AP on failure. Not implemented. The -40
-  scoring penalty makes this near-impossible to trigger in practice.
+- **Phase 7 resource validation. FIXED.**
+  ResourceAvailability.can_afford() validates resources before executing.
+  NPCDecisionEngine.execute_action() checks after AP/civilian order
+  spending, refunds both on failure (insufficient_resources). 11 tests.
 
 ### Known Code Issues (found 2026-05-18, pre-existing)
 - **test_assassination_system.gd test_doji_courtier_bribe_access_gets_free_raise
