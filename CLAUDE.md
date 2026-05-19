@@ -855,10 +855,13 @@ For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
   the intimidation target from known_secrets. Populates secret_ref,
   secret_tier, by_letter. Without a matching secret, falls through to
   standard intimidation. 4 tests.
-- **FABRICATE_SECRET — always TIER_3, no target secret.** Executor reads
-  `severity` (TIER_3), `secret_id` (-1). No metadata population. Always
-  fabricates a TIER_3 secret with no reference. Functional but lacks
-  strategic targeting (e.g., fabricating higher-tier secrets against enemies).
+- **FABRICATE_SECRET — writeback missing, fabricated secrets lost. FIXED.**
+  SecretSystem.fabricate_secret() returned SecretData in effects but no
+  writeback stored it in active_secrets. Now `_process_fabricate_secret_writebacks()`
+  assigns secret_id from next_secret_id, adds fabricator to known_by_ids,
+  and appends to active_secrets. Fabricated secrets now usable by EXPOSE_SECRET
+  and INTIMIDATE blackmail. Metadata severity/target still defaults (TIER_3,
+  no strategic targeting) — separate issue. 4 tests.
 - **PLAY_GAME — always Games: Go.** Executor reads `game_skill` (default
   "Games: Go"). No metadata population. NPCs never play Shogi, Sadane, etc.
   Low impact — Go is the default noble game.
