@@ -583,7 +583,11 @@ For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
   and matching objective target. 90-day deadline PROVISIONAL. 9 tests.
   MEETING_ARRANGEMENT wired (LetterData gains meeting_proposal +
   meeting_settlement_id + meeting_deadline_ic_day; handler fires on matching
-  bilateral proposals at same settlement). NPC engine trigger deferred. 4 tests.
+  bilateral proposals at same settlement). NPC engine trigger wired:
+  `_should_set_meeting_proposal()` checks AT_OWN_HOLDINGS, bilateral
+  need_types (SECURE_ALLIANCE, ARRANGE_MARRIAGE), matching target. Reply
+  generation propagates proposal when disposition >= 0 (PROVISIONAL).
+  90-day deadline PROVISIONAL. 9 tests.
   SUPPORT_PLEDGE wired (PERSUADE/NEGOTIATE with target_position_shift at
   court creates Tier 2 pledge. Fulfillment: debtor present + ≥1 court
   action. Witnesses = court attendees. Deadline = court end date). 5 tests.
