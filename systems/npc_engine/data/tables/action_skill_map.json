@@ -431,10 +431,6 @@
     "primary": "Temptation",
     "secondary": "Awareness"
   },
-  "SEEK_PRETEXT": {
-    "primary": "Courtier",
-    "secondary": "Awareness"
-  },
   "SEND_INVITATION": {
     "primary": "Calligraphy",
     "secondary": "Etiquette"

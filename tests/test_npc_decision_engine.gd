@@ -3051,3 +3051,54 @@ func test_search_person_no_authority_by_default() -> void:
 	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
 	assert_false(option.metadata.get("magistrate_authority", true),
 		"Should not have magistrate authority without UPHOLD_LAW objective")
+
+
+# =============================================================================
+# ISSUE_DUEL_CHALLENGE context wiring (s14 Category 13)
+# =============================================================================
+
+
+func test_duel_challenge_in_at_own_holdings() -> void:
+	var actions: Array[String] = NPCDecisionEngine._get_actions_for_context(
+		Enums.ContextFlag.AT_OWN_HOLDINGS
+	)
+	assert_true("ISSUE_DUEL_CHALLENGE" in actions,
+		"ISSUE_DUEL_CHALLENGE available at own holdings per s14 Category 13")
+
+
+func test_duel_challenge_in_at_court() -> void:
+	var actions: Array[String] = NPCDecisionEngine._get_actions_for_context(
+		Enums.ContextFlag.AT_COURT
+	)
+	assert_true("ISSUE_DUEL_CHALLENGE" in actions,
+		"ISSUE_DUEL_CHALLENGE available at court per s14 Category 13")
+
+
+func test_duel_challenge_in_visiting() -> void:
+	var actions: Array[String] = NPCDecisionEngine._get_actions_for_context(
+		Enums.ContextFlag.VISITING
+	)
+	assert_true("ISSUE_DUEL_CHALLENGE" in actions,
+		"ISSUE_DUEL_CHALLENGE available when visiting per s14 Category 13")
+
+
+func test_duel_challenge_not_in_traveling() -> void:
+	var actions: Array[String] = NPCDecisionEngine._get_actions_for_context(
+		Enums.ContextFlag.TRAVELING
+	)
+	assert_false("ISSUE_DUEL_CHALLENGE" in actions,
+		"ISSUE_DUEL_CHALLENGE not available while traveling")
+
+
+func test_seek_pretext_not_in_context_lists() -> void:
+	var all_flags: Array = [
+		Enums.ContextFlag.AT_OWN_HOLDINGS, Enums.ContextFlag.AT_COURT,
+		Enums.ContextFlag.VISITING, Enums.ContextFlag.TRAVELING,
+		Enums.ContextFlag.ON_CAMPAIGN, Enums.ContextFlag.UNDER_SIEGE,
+		Enums.ContextFlag.IN_EXILE, Enums.ContextFlag.AT_TEMPLE,
+		Enums.ContextFlag.AT_DOJO, Enums.ContextFlag.AT_WALL_TOWER,
+	]
+	for flag: Enums.ContextFlag in all_flags:
+		var actions: Array[String] = NPCDecisionEngine._get_actions_for_context(flag)
+		assert_false("SEEK_PRETEXT" in actions,
+			"SEEK_PRETEXT is a NeedType, not an ActionID — should not be in any context list")

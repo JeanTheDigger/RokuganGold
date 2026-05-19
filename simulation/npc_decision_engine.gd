@@ -936,6 +936,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array[S
 				"ORDER_DEPLOY", "ORDER_FORTIFY",
 				"SEND_INVITATION", "CALL_COURT",
 				"COMMISSION_ASSASSINATION",
+				"ISSUE_DUEL_CHALLENGE",
 				"SHADOW_TARGET", "SEARCH_PERSON", "CONCEAL_ITEM",
 				"FABRICATE_SECRET", "EXPOSE_SECRET_PRIVATELY", "EXPOSE_SECRET_PUBLICLY",
 				"SEDUCE", "SEDUCE_FOR_INFO", "SEDUCE_FOR_ACCESS",
@@ -969,6 +970,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array[S
 				"REQUEST_ART", "ASSIGN_VASSAL_OBJECTIVE",
 				"SEND_INVITATION",
 				"CONDUCT_COMMERCE", "PURCHASE_MARKET",
+				"ISSUE_DUEL_CHALLENGE",
 				"DO_NOTHING", "REST",
 			]
 		Enums.ContextFlag.VISITING:
@@ -989,6 +991,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array[S
 				"SEDUCE_FOR_LEVERAGE", "SEDUCE_TO_COMPROMISE",
 				"CONDUCT_COMMERCE", "PURCHASE_MARKET",
 				"EXAMINE_CRIME_SCENE",
+				"ISSUE_DUEL_CHALLENGE",
 				"DO_NOTHING", "REST",
 			]
 		Enums.ContextFlag.TRAVELING:
@@ -1108,7 +1111,6 @@ static func _get_ap_cost(action_id: String) -> int:
 		"PURCHASE_MARKET": 1,
 		"EXAMINE_CRIME_SCENE": 1,
 		"ISSUE_DUEL_CHALLENGE": 1,
-		"SEEK_PRETEXT": 1,
 		"SHARE_SUPPLIES": 1,
 		"PURIFY_TAINTED_GROUND": 1,
 		"FORTIFY_WALL_SECTION": 1,

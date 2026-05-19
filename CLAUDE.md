@@ -822,12 +822,17 @@ For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
   for future implementation. These are NOT bugs — they are pre-wired
   scoring entries for blocked sections. Phase 4b filters them out because
   they don't appear in any context list.
-- **SEEK_PRETEXT in action_skill_map.json — NeedType, not ActionID.**
-  SEEK_PRETEXT is an outer key in objective_alignment.json (a NeedType)
-  but also has an entry in action_skill_map.json (keyed by ActionID).
-  Harmless — the skill map is only looked up by ActionID during scoring,
-  and SEEK_PRETEXT as a NeedType is never used as an ActionID. But the
-  entry is misleading.
+- **SEEK_PRETEXT stale entries cleaned. FIXED.**
+  SEEK_PRETEXT is a NeedType (outer key in objective_alignment.json) not an
+  ActionID. Had stale entries in action_skill_map.json and AP cost dictionary.
+  GDD s14 Category 13 lists it as both NeedType and ActionID, but no executor
+  mechanics are specified — blocked on GDD design. Removed from
+  action_skill_map.json and AP cost dict. Not in any context list (correct).
+- **ISSUE_DUEL_CHALLENGE missing from context lists. FIXED.**
+  Had full executor (IndividualCombat.resolve_full_duel), AP cost, and
+  HOSTILE_ACTIONS entry, but was unreachable because it wasn't in any
+  `_get_actions_for_context()` list. Added to AT_OWN_HOLDINGS, AT_COURT,
+  VISITING per GDD s14 Category 13 (Honor and Dueling). 5 tests.
 
 ### Known Code Issues — Deferred (2026-05-19, metadata population audit)
 - **EXPOSE_SECRET_PRIVATELY — metadata unpopulated, always fails. FIXED.**
