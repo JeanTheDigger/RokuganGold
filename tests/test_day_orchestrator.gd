@@ -7260,6 +7260,91 @@ func test_approach_evaluation_records_ineffective_penalty() -> void:
 	assert_eq(penalties[0]["tag"], ApproachEvaluation.AssessmentTag.APPROACH_INEFFECTIVE)
 
 
+# -- Disposition Snapshots (s55.30.3) ------------------------------------------
+
+
+func test_populate_disposition_snapshots() -> void:
+	var c1 := L5RCharacterData.new()
+	c1.character_id = 1
+	c1.disposition_values = {2: 15, 3: -10}
+	var c2 := L5RCharacterData.new()
+	c2.character_id = 2
+	c2.disposition_values = {1: 25}
+	var chars: Array[L5RCharacterData] = [c1, c2]
+	var snapshots: Dictionary = {}
+	DayOrchestrator._populate_disposition_snapshots(chars, snapshots)
+	assert_eq(snapshots["1:2"], 15)
+	assert_eq(snapshots["1:3"], -10)
+	assert_eq(snapshots["2:1"], 25)
+
+
+func test_get_disposition_at_start_returns_snapshot() -> void:
+	var snapshots: Dictionary = {"2:1": 8}
+	var result: int = DayOrchestrator._get_disposition_at_start(snapshots, 2, 1, 25)
+	assert_eq(result, 8)
+
+
+func test_get_disposition_at_start_falls_back_to_current() -> void:
+	var snapshots: Dictionary = {}
+	var result: int = DayOrchestrator._get_disposition_at_start(snapshots, 2, 1, 25)
+	assert_eq(result, 25)
+
+
+func test_approach_evaluation_effective_with_snapshot() -> void:
+	var action_log: Array[Dictionary] = []
+	for i: int in range(3):
+		action_log.append({
+			"character_id": 1, "target_npc_id": 2,
+			"action_id": "CHARM", "season": 5,
+			"roll_result": 30, "tn": 20,
+			"observable_effect": false,
+		})
+	var target := L5RCharacterData.new()
+	target.character_id = 2
+	target.disposition_values = {1: 15}
+	var chars_by_id: Dictionary = {2: target}
+	var penalties: Array[Dictionary] = []
+	var snapshots: Dictionary = {"2:1": 8}
+	var results: Array[Dictionary] = [{
+		"action_id": "PROBE",
+		"character_id": 1,
+		"target_npc_id": 2,
+		"success": true,
+	}]
+	DayOrchestrator._process_approach_evaluation_writebacks(
+		results, action_log, penalties, chars_by_id, 5, snapshots
+	)
+	assert_eq(penalties.size(), 0)
+
+
+func test_approach_evaluation_ineffective_with_snapshot() -> void:
+	var action_log: Array[Dictionary] = []
+	for i: int in range(3):
+		action_log.append({
+			"character_id": 1, "target_npc_id": 2,
+			"action_id": "CHARM", "season": 5,
+			"roll_result": 30, "tn": 20,
+			"observable_effect": false,
+		})
+	var target := L5RCharacterData.new()
+	target.character_id = 2
+	target.disposition_values = {1: 10}
+	var chars_by_id: Dictionary = {2: target}
+	var penalties: Array[Dictionary] = []
+	var snapshots: Dictionary = {"2:1": 9}
+	var results: Array[Dictionary] = [{
+		"action_id": "PROBE",
+		"character_id": 1,
+		"target_npc_id": 2,
+		"success": true,
+	}]
+	DayOrchestrator._process_approach_evaluation_writebacks(
+		results, action_log, penalties, chars_by_id, 5, snapshots
+	)
+	assert_eq(penalties.size(), 1)
+	assert_eq(penalties[0]["tag"], ApproachEvaluation.AssessmentTag.APPROACH_INEFFECTIVE)
+
+
 # -- Crisis Commitment Linking (s55.31.11) -------------------------------------
 
 

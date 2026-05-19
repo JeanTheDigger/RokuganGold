@@ -78,6 +78,7 @@ static func advance_day(
 	active_hostages: Array[Dictionary] = [],
 	active_assassination_ops: Array[Dictionary] = [],
 	next_commitment_id: Array[int] = [1],
+	disposition_snapshots: Dictionary = {},
 ) -> Dictionary:
 	var prev_season: int = time_system.get_season()
 
@@ -85,6 +86,9 @@ static func advance_day(
 
 	var ic_day: int = time_system.get_ic_day()
 	var current_season: int = time_system.get_season()
+
+	if current_season != prev_season or disposition_snapshots.is_empty():
+		_populate_disposition_snapshots(characters, disposition_snapshots)
 
 	_reset_all_ap(characters)
 
@@ -551,6 +555,7 @@ static func advance_day(
 	_process_approach_evaluation_writebacks(
 		day_result.get("results", []),
 		action_log, approach_penalties, characters_by_id, current_season,
+		disposition_snapshots,
 	)
 
 	_process_crisis_commitment_linking(
@@ -14604,6 +14609,7 @@ static func _process_approach_evaluation_writebacks(
 	approach_penalties: Array[Dictionary],
 	characters_by_id: Dictionary,
 	current_season: int,
+	disposition_snapshots: Dictionary = {},
 ) -> void:
 	for result: Dictionary in results:
 		var action_id: String = result.get("action_id", "")
@@ -14624,9 +14630,12 @@ static func _process_approach_evaluation_writebacks(
 		if target == null:
 			continue
 		var current_disp: int = target.disposition_values.get(char_id, 0)
+		var start_disp: int = _get_disposition_at_start(
+			disposition_snapshots, target_id, char_id, current_disp
+		)
 		for penalized_action: String in penalizable:
 			var tag: ApproachEvaluation.AssessmentTag = ApproachEvaluation.evaluate_approach(
-				penalized_action, target_id, current_disp, current_disp
+				penalized_action, target_id, current_disp, start_disp
 			)
 			if tag == ApproachEvaluation.AssessmentTag.APPROACH_EFFECTIVE:
 				continue
@@ -14653,6 +14662,29 @@ static func _find_measurement_triggered_actions(
 		):
 			result.append(covert_action)
 	return result
+
+
+# -- Disposition Snapshots (s55.30.3) ------------------------------------------
+
+static func _populate_disposition_snapshots(
+	characters: Array[L5RCharacterData],
+	snapshots: Dictionary,
+) -> void:
+	snapshots.clear()
+	for c: L5RCharacterData in characters:
+		for target_id: Variant in c.disposition_values:
+			var key: String = "%d:%d" % [c.character_id, int(target_id)]
+			snapshots[key] = int(c.disposition_values[target_id])
+
+
+static func _get_disposition_at_start(
+	snapshots: Dictionary,
+	character_id: int,
+	target_id: int,
+	current_disposition: int,
+) -> int:
+	var key: String = "%d:%d" % [character_id, target_id]
+	return int(snapshots.get(key, current_disposition))
 
 
 # -- Crisis Commitment Linking (s55.31.11) -------------------------------------

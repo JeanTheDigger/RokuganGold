@@ -106,6 +106,9 @@ var phoenix_council_state: Dictionary = PhoenixCouncil.make_initial_state()
 # -- Assassination Operations (s12.8) -----------------------------------------
 var active_assassination_ops: Array[Dictionary] = []
 
+# -- Approach Evaluation Snapshots (s55.30.3) ---------------------------------
+var disposition_snapshots: Dictionary = {}
+
 # -- Intra-Clan Civil War (s53.2) ---------------------------------------------
 var active_civil_wars: Array[Dictionary] = []
 var precedent_modifiers: Dictionary = {}
@@ -221,6 +224,11 @@ func advance_one_day() -> Dictionary:
 		precedent_modifiers,
 		next_company_id,
 		active_assassination_ops,
+		[],  # active_secrets
+		[1],  # next_secret_id
+		[],  # active_hostages
+		[1],  # next_commitment_id
+		disposition_snapshots,
 	)
 
 
