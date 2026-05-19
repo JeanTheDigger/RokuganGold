@@ -63,6 +63,7 @@ func before_each() -> void:
 		"ASSIGN_VASSAL_OBJECTIVE": {"primary": "Courtier", "secondary": "Battle"},
 		"SEND_INVITATION": {"primary": "Calligraphy", "secondary": "Etiquette"},
 		"CALL_COURT": {"primary": "Courtier", "secondary": "Etiquette"},
+		"PURCHASE_MARKET": {"primary": "Commerce", "secondary": null},
 	}
 
 
@@ -1168,6 +1169,92 @@ func test_bribe_attempt_high_honor_magistrate_resists():
 	assert_eq(result["action_id"], "BRIBE_FOR_INFO")
 	assert_false(result["success"])
 	assert_true(result["effects"].get("detection_risk", false))
+
+
+func test_bribe_accepted_has_koku_cost() -> void:
+	var target := L5RCharacterData.new()
+	target.character_id = 20
+	target.character_name = "Corrupt Magistrate"
+	target.skills = {"Etiquette": 1}
+	target.emphases = {}
+	target.willpower = 1
+	target.honor = 1.0
+	target.wounds_taken = 0
+	var chars: Dictionary = {1: _character, 20: target}
+
+	_character.skills["Temptation"] = 5
+	_character.awareness = 5
+	_dice_engine.set_seed(42)
+
+	var action := _make_action("BRIBE_FOR_INFO", 20)
+	action.metadata = {"suppress_case": true, "magistrate_id": 20}
+
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map, {}, chars
+	)
+	assert_eq(result["effects"].get("koku_cost", 0.0), ActionExecutor.BRIBE_KOKU_COST)
+
+
+func test_bribe_refused_has_koku_cost_and_failed() -> void:
+	var magistrate := L5RCharacterData.new()
+	magistrate.character_id = 20
+	magistrate.character_name = "Honest Magistrate"
+	magistrate.skills = {"Etiquette": 5}
+	magistrate.emphases = {}
+	magistrate.willpower = 5
+	magistrate.honor = 9.0
+	magistrate.wounds_taken = 0
+	var chars: Dictionary = {1: _character, 20: magistrate}
+
+	_character.skills["Temptation"] = 1
+	_character.awareness = 2
+	_dice_engine.set_seed(1)
+
+	var action := _make_action("BRIBE_FOR_INFO", 20)
+	action.metadata = {"suppress_case": true, "magistrate_id": 20}
+
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map, {}, chars
+	)
+	assert_false(result["success"])
+	assert_eq(result["effects"].get("koku_cost", 0.0), ActionExecutor.BRIBE_KOKU_COST)
+	assert_true(result["effects"].has("failed"))
+
+
+func test_bribe_blocked_by_personality_no_koku_cost() -> void:
+	var magistrate := L5RCharacterData.new()
+	magistrate.character_id = 20
+	magistrate.character_name = "Honorable Magistrate"
+	magistrate.skills = {"Etiquette": 5}
+	magistrate.emphases = {}
+	magistrate.willpower = 5
+	magistrate.honor = 10.0
+	magistrate.wounds_taken = 0
+	var chars: Dictionary = {1: _character, 20: magistrate}
+
+	_character.bushido_virtue = Enums.BushidoVirtue.MEIYO
+	_character.skills["Temptation"] = 1
+	_character.awareness = 2
+	_dice_engine.set_seed(1)
+
+	var action := _make_action("BRIBE_FOR_INFO", 20)
+	action.metadata = {"suppress_case": true, "magistrate_id": 20}
+
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map, {}, chars
+	)
+	assert_false(result["effects"].has("koku_cost"))
+
+
+func test_purchase_market_has_koku_cost() -> void:
+	_character.skills["Commerce"] = 5
+	_dice_engine.set_seed(42)
+	var action := _make_action("PURCHASE_MARKET", -1)
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map
+	)
+	assert_true(result["success"])
+	assert_eq(result["effects"].get("koku_cost", 0.0), ActionExecutor.PURCHASE_KOKU_COST)
 
 
 # -- FLEE_JURISDICTION ---------------------------------------------------------

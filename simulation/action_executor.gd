@@ -81,6 +81,9 @@ const COVERT_BASE_TN: int = 20
 const MILITARY_BASE_TN: int = 15
 const ADMIN_BASE_TN: int = 10
 
+const BRIBE_KOKU_COST: float = 5.0
+const PURCHASE_KOKU_COST: float = 3.0
+
 
 # -- Main Entry Point ---------------------------------------------------------
 
@@ -1104,10 +1107,11 @@ static func _resolve_bribe_attempt(
 	var bribe_result: Dictionary = BriberySystem.attempt_bribe(briber, magistrate, dice_engine)
 	var result: int = bribe_result.get("result", BriberySystem.BribeResult.REFUSED)
 	var success: bool = result == BriberySystem.BribeResult.ACCEPTED
+	var blocked: bool = result == BriberySystem.BribeResult.BLOCKED_BY_PERSONALITY
 	var suppress_case: bool = action.metadata.get("suppress_case", false)
-	return {
+	var r: Dictionary = {
 		"success": success,
-		"blocked_by_personality": result == BriberySystem.BribeResult.BLOCKED_BY_PERSONALITY,
+		"blocked_by_personality": blocked,
 		"roll_total": bribe_result.get("briber_total", 0),
 		"tn": bribe_result.get("magistrate_total", 0),
 		"margin": bribe_result.get("briber_total", 0) - bribe_result.get("magistrate_total", 0),
@@ -1115,6 +1119,11 @@ static func _resolve_bribe_attempt(
 		"suppress_case": suppress_case,
 		"magistrate_id": magistrate.character_id,
 	}
+	if not blocked:
+		r["koku_cost"] = BRIBE_KOKU_COST
+	if not success and not blocked:
+		r["failed"] = true
+	return r
 
 
 # -- Witness Tampering (s11.3.13c) --------------------------------------------
@@ -1523,7 +1532,7 @@ static func _compute_admin_effects(action_id: String, action: NPCDataStructures.
 		"SET_TAX_RATE", "SET_STIPEND_RATE":
 			return {"effect": "rate_adjusted"}
 		"PURCHASE_MARKET":
-			return {"effect": "transaction_completed"}
+			return {"effect": "transaction_completed", "koku_cost": PURCHASE_KOKU_COST}
 		"SHARE_SUPPLIES":
 			return {
 				"effect": "supplies_shared",

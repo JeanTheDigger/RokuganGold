@@ -39,6 +39,7 @@ static func apply(
 
 	_apply_disposition(effects, actor, target_id, applied)
 	_apply_recipient_effects(effects, actor, target_id, characters, applied)
+	_apply_koku_cost(effects, actor)
 	_apply_witness_effects(effects, actor, characters, applied)
 	_apply_witness_gain(effects, actor, characters, applied)
 	_apply_gossip_effects(effects, target_id, characters, applied)
@@ -132,6 +133,14 @@ static func _remove_item_by_id(actor: L5RCharacterData, item_id: int) -> void:
 		if item.get("item_id", -1) == item_id:
 			actor.items.remove_at(i)
 			return
+
+
+# -- Koku cost deduction -------------------------------------------------------
+
+static func _apply_koku_cost(effects: Dictionary, actor: L5RCharacterData) -> void:
+	var cost: float = effects.get("koku_cost", 0.0)
+	if cost > 0.0:
+		actor.koku = maxf(0.0, actor.koku - cost)
 
 
 # -- Witness disposition loss ---------------------------------------------------

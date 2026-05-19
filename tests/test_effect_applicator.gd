@@ -1051,3 +1051,77 @@ func test_ripple_no_op_when_at_cap() -> void:
 		if change.get("target_id", -1) == 60:
 			ripple_found = true
 	assert_false(ripple_found)
+
+
+# =============================================================================
+# Koku Cost Deduction (s55.32)
+# =============================================================================
+
+func test_koku_cost_deducted_on_success() -> void:
+	_actor.koku = 20.0
+	var result: Dictionary = {
+		"success": true,
+		"character_id": 1,
+		"target_npc_id": 2,
+		"action_id": "BRIBE_FOR_INFO",
+		"ic_day": 5,
+		"effects": {"koku_cost": 5.0},
+	}
+	EffectApplicator.apply(result, _characters, _provinces, _action_log)
+	assert_almost_eq(_actor.koku, 15.0, 0.01)
+
+
+func test_koku_cost_deducted_on_failed_with_marker() -> void:
+	_actor.koku = 10.0
+	var result: Dictionary = {
+		"success": false,
+		"character_id": 1,
+		"target_npc_id": 2,
+		"action_id": "BRIBE_FOR_INFO",
+		"ic_day": 5,
+		"effects": {"failed": true, "koku_cost": 5.0},
+	}
+	EffectApplicator.apply(result, _characters, _provinces, _action_log)
+	assert_almost_eq(_actor.koku, 5.0, 0.01)
+
+
+func test_koku_cost_clamps_to_zero() -> void:
+	_actor.koku = 2.0
+	var result: Dictionary = {
+		"success": true,
+		"character_id": 1,
+		"target_npc_id": 2,
+		"action_id": "PURCHASE_MARKET",
+		"ic_day": 5,
+		"effects": {"koku_cost": 3.0},
+	}
+	EffectApplicator.apply(result, _characters, _provinces, _action_log)
+	assert_almost_eq(_actor.koku, 0.0, 0.01)
+
+
+func test_no_koku_cost_when_absent() -> void:
+	_actor.koku = 10.0
+	var result: Dictionary = {
+		"success": true,
+		"character_id": 1,
+		"target_npc_id": 2,
+		"action_id": "CHARM",
+		"ic_day": 5,
+		"effects": {"disposition_change": 5},
+	}
+	EffectApplicator.apply(result, _characters, _provinces, _action_log)
+	assert_almost_eq(_actor.koku, 10.0, 0.01)
+
+
+func test_koku_cost_skipped_when_blocked() -> void:
+	_actor.koku = 10.0
+	var result: Dictionary = {
+		"success": false,
+		"character_id": 1,
+		"target_npc_id": 2,
+		"action_id": "BRIBE_FOR_INFO",
+		"ic_day": 5,
+		"effects": {},
+	}
+	EffectApplicator.apply(result, _characters, _provinces, _action_log)
+	assert_almost_eq(_actor.koku, 10.0, 0.01)
