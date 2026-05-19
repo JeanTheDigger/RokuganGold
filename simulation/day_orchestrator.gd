@@ -14211,7 +14211,7 @@ static func _process_assassination_daily_tick(
 					)
 					if daily_observer != null:
 						var daily_detect: Dictionary = AssassinationSystem.resolve_daily_detection(
-							daily_observer, access_result.get("roll_total", 0), op, dice_engine,
+							daily_observer, access_result.get("roll_total", 0), op, dice_engine, assassin,
 						)
 						tick_result["daily_detection"] = daily_detect
 

@@ -2009,3 +2009,119 @@ func test_entanglement_integration_broken_revokes_bypass() -> void:
 		1, "Castle", entanglements, chars,
 	)
 	assert_false(has_bypass, "Broken entanglement should not grant access bypass")
+
+
+# ==============================================================================
+# Betrayal Topic on Trace (s12.8)
+# ==============================================================================
+
+func test_vengeance_creates_betrayal_topic() -> void:
+	var victim: L5RCharacterData = L5RCharacterData.new()
+	victim.character_id = 100
+
+	var chars: Dictionary = {100: victim}
+	var objectives: Dictionary = {100: {"primary": "MAINTAIN_POSITION"}}
+	var topics: Array[TopicData] = []
+	var next_id: Array[int] = [500]
+
+	var result: Dictionary = AssassinationSystem.apply_vengeance_consequences(
+		50, victim, false, chars, objectives, topics, next_id, 30,
+	)
+	assert_eq(topics.size(), 1)
+	assert_eq(topics[0].topic_type, "betrayal")
+	assert_eq(topics[0].tier, TopicData.Tier.TIER_2)
+	assert_eq(topics[0].category, TopicData.Category.POLITICAL)
+	assert_eq(topics[0].subject_character_id, 50)
+	assert_eq(topics[0].ic_day_created, 30)
+	assert_eq(result["betrayal_topic_id"], 500)
+	assert_eq(next_id[0], 501)
+
+
+func test_vengeance_no_topic_without_topic_params() -> void:
+	var victim: L5RCharacterData = L5RCharacterData.new()
+	victim.character_id = 100
+	var chars: Dictionary = {100: victim}
+	var objectives: Dictionary = {}
+	var result: Dictionary = AssassinationSystem.apply_vengeance_consequences(
+		50, victim, true, chars, objectives,
+	)
+	assert_eq(result["betrayal_topic_id"], -1,
+		"No topic generated when topic params not provided")
+
+
+func test_vengeance_topic_subject_role_neutral() -> void:
+	var victim: L5RCharacterData = L5RCharacterData.new()
+	victim.character_id = 100
+	var chars: Dictionary = {100: victim}
+	var topics: Array[TopicData] = []
+	var next_id: Array[int] = [1]
+	AssassinationSystem.apply_vengeance_consequences(
+		50, victim, true, chars, {}, topics, next_id, 10,
+	)
+	assert_eq(topics[0].subject_role, "NEUTRAL",
+		"Dead characters always carry NEUTRAL subject_role valence")
+
+
+# ==============================================================================
+# Non-Shinobi Detection Severity (s12.8)
+# ==============================================================================
+
+func test_daily_detection_non_shinobi_bonus() -> void:
+	var observer: L5RCharacterData = L5RCharacterData.new()
+	observer.character_id = 30
+	observer.perception = 3
+	observer.skills = {"Investigation": 3}
+
+	var non_shinobi: L5RCharacterData = L5RCharacterData.new()
+	non_shinobi.character_id = 40
+	non_shinobi.school = "Akodo Bushi"
+
+	var shinobi: L5RCharacterData = L5RCharacterData.new()
+	shinobi.character_id = 41
+	shinobi.school = "Shosuro Infiltrator"
+
+	var total_noticed_non_shinobi: int = 0
+	var total_noticed_shinobi: int = 0
+	var trials: int = 100
+
+	for i: int in range(trials):
+		var s1: Dictionary = AssassinationSystem.create_assassination_state(40, 2, AssassinationSystem.ExecutionMethod.POISON, 0)
+		var d1: DiceEngine = DiceEngine.new(i)
+		var r1: Dictionary = AssassinationSystem.resolve_daily_detection(observer, 20, s1, d1, non_shinobi)
+		if r1.get("noticed", false):
+			total_noticed_non_shinobi += 1
+
+		var s2: Dictionary = AssassinationSystem.create_assassination_state(41, 2, AssassinationSystem.ExecutionMethod.POISON, 0)
+		var d2: DiceEngine = DiceEngine.new(i)
+		var r2: Dictionary = AssassinationSystem.resolve_daily_detection(observer, 20, s2, d2, shinobi)
+		if r2.get("noticed", false):
+			total_noticed_shinobi += 1
+
+	assert_true(total_noticed_non_shinobi > total_noticed_shinobi,
+		"Non-shinobi assassins should be detected more often due to +%d bonus" % AssassinationSystem.NON_SHINOBI_DETECTION_BONUS)
+
+
+func test_daily_detection_no_bonus_for_shinobi() -> void:
+	var observer: L5RCharacterData = L5RCharacterData.new()
+	observer.character_id = 30
+	observer.perception = 3
+	observer.skills = {"Investigation": 3}
+
+	var shinobi: L5RCharacterData = L5RCharacterData.new()
+	shinobi.character_id = 41
+	shinobi.school = "Shosuro Infiltrator"
+
+	var state: Dictionary = AssassinationSystem.create_assassination_state(41, 2, AssassinationSystem.ExecutionMethod.POISON, 0)
+	var result: Dictionary = AssassinationSystem.resolve_daily_detection(observer, 30, state, _engine, shinobi)
+	assert_true(result.has("noticed"), "Should return noticed field regardless of shinobi status")
+
+
+func test_daily_detection_null_assassin_no_bonus() -> void:
+	var observer: L5RCharacterData = L5RCharacterData.new()
+	observer.character_id = 30
+	observer.perception = 3
+	observer.skills = {"Investigation": 3}
+
+	var state: Dictionary = AssassinationSystem.create_assassination_state(1, 2, AssassinationSystem.ExecutionMethod.POISON, 0)
+	var result: Dictionary = AssassinationSystem.resolve_daily_detection(observer, 30, state, _engine, null)
+	assert_true(result.has("noticed"), "Should work with null assassin (backward compatible)")

@@ -64,6 +64,11 @@ const ACCESS_SEDUCTION_TN: int = 15
 # "significantly higher suspicion" but does not give a numeric value.
 const NON_SHINOBI_ACCESS_TN_INCREASE: int = 10
 
+# Non-shinobi detection ease — observers get a bonus when detecting non-shinobi
+# assassins (GDD: "chance of generating detectable suspicion each day is
+# significantly higher"). Reduces the detection TN for observers. PROVISIONAL.
+const NON_SHINOBI_DETECTION_BONUS: int = 5
+
 const _SHINOBI_SCHOOLS: Array[String] = [
 	"Shosuro Infiltrator",
 	"Shosuro Actor",
@@ -378,8 +383,11 @@ static func resolve_daily_detection(
 	assassin_roll_total: int,
 	state: Dictionary,
 	dice_engine: DiceEngine,
+	assassin: L5RCharacterData = null,
 ) -> Dictionary:
 	var inv_bonus: int = get_household_investigation_bonus(state)
+	if assassin != null and not has_shinobi_training(assassin):
+		inv_bonus += NON_SHINOBI_DETECTION_BONUS
 	var result: Dictionary = SkillResolver.resolve_skill_check(
 		observer, dice_engine, "Investigation", assassin_roll_total,
 		0, "", Enums.Trait.PERCEPTION, inv_bonus,
@@ -995,6 +1003,9 @@ static func apply_vengeance_consequences(
 	victim_is_dead: bool,
 	characters_by_id: Dictionary,
 	objectives_map: Dictionary,
+	active_topics: Array[TopicData] = [],
+	next_topic_id: Array[int] = [],
+	ic_day: int = -1,
 ) -> Dictionary:
 	var family_ids: Array[int] = _get_biological_family(victim)
 	for fam_id: int in family_ids:
@@ -1007,7 +1018,7 @@ static func apply_vengeance_consequences(
 		fam.historical_modifiers[key] = {
 			"target_id": commissioner_id,
 			"modifier": FAMILY_VENGEANCE_DISPOSITION,
-			"created_ic_day": -1,
+			"created_ic_day": ic_day,
 			"permanent": true,
 		}
 
@@ -1025,12 +1036,27 @@ static func apply_vengeance_consequences(
 		objectives_map[avenger_id]["avenge_victim_id"] = victim.character_id
 		objectives_map[avenger_id]["crisis_override"] = true
 
+	var betrayal_topic_id: int = -1
+	if next_topic_id.size() > 0:
+		var topic: TopicData = TopicData.new()
+		topic.topic_id = next_topic_id[0]
+		next_topic_id[0] += 1
+		topic.topic_type = "betrayal"
+		topic.tier = TopicData.Tier.TIER_2
+		topic.category = TopicData.Category.POLITICAL
+		topic.subject_character_id = commissioner_id
+		topic.subject_role = "NEUTRAL"
+		topic.ic_day_created = ic_day
+		active_topics.append(topic)
+		betrayal_topic_id = topic.topic_id
+
 	return {
 		"commissioner_id": commissioner_id,
 		"victim_id": victim.character_id,
 		"family_affected": family_ids.size(),
 		"avenger_id": avenger_id,
 		"disposition_modifier": FAMILY_VENGEANCE_DISPOSITION,
+		"betrayal_topic_id": betrayal_topic_id,
 	}
 
 
