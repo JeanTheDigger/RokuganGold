@@ -743,6 +743,55 @@ func test_bodyguard_go_for_target_contested() -> void:
 	assert_has(r, "guard_detection")
 
 
+# -- Bodyguard NPC Decision Logic -----------------------------------------------
+
+func test_bodyguard_decision_seigyo_always_aborts() -> void:
+	_assassin.shourido_virtue = Enums.ShouridoVirtue.SEIGYO
+	_assassin.skills["Kenjutsu"] = 7
+	var s: Dictionary = AssassinationSystem.create_assassination_state(1, 2, AssassinationSystem.ExecutionMethod.BLADE, 0)
+	assert_eq(AssassinationSystem.evaluate_bodyguard_response(_assassin, s), AssassinationSystem.BodyguardResponse.ABORT)
+
+
+func test_bodyguard_decision_ketsui_pushes_through() -> void:
+	_assassin.shourido_virtue = Enums.ShouridoVirtue.KETSUI
+	_assassin.skills["Kenjutsu"] = 1
+	var s: Dictionary = AssassinationSystem.create_assassination_state(1, 2, AssassinationSystem.ExecutionMethod.BLADE, 0)
+	assert_eq(AssassinationSystem.evaluate_bodyguard_response(_assassin, s), AssassinationSystem.BodyguardResponse.GO_FOR_TARGET)
+
+
+func test_bodyguard_decision_yu_pushes_through() -> void:
+	_assassin.bushido_virtue = Enums.BushidoVirtue.YU
+	var s: Dictionary = AssassinationSystem.create_assassination_state(1, 2, AssassinationSystem.ExecutionMethod.BLADE, 0)
+	assert_eq(AssassinationSystem.evaluate_bodyguard_response(_assassin, s), AssassinationSystem.BodyguardResponse.GO_FOR_TARGET)
+
+
+func test_bodyguard_decision_lockdown_forces_abort() -> void:
+	_assassin.skills["Kenjutsu"] = 7
+	var s: Dictionary = AssassinationSystem.create_assassination_state(1, 2, AssassinationSystem.ExecutionMethod.BLADE, 0)
+	s["suspicion"] = 35.0
+	assert_eq(AssassinationSystem.evaluate_bodyguard_response(_assassin, s), AssassinationSystem.BodyguardResponse.ABORT)
+
+
+func test_bodyguard_decision_high_combat_fights() -> void:
+	_assassin.skills["Kenjutsu"] = 5
+	var s: Dictionary = AssassinationSystem.create_assassination_state(1, 2, AssassinationSystem.ExecutionMethod.BLADE, 0)
+	assert_eq(AssassinationSystem.evaluate_bodyguard_response(_assassin, s), AssassinationSystem.BodyguardResponse.FIGHT_FIRST)
+
+
+func test_bodyguard_decision_stealthy_goes_for_target() -> void:
+	_assassin.skills["Stealth"] = 6
+	_assassin.skills["Kenjutsu"] = 2
+	var s: Dictionary = AssassinationSystem.create_assassination_state(1, 2, AssassinationSystem.ExecutionMethod.BLADE, 0)
+	assert_eq(AssassinationSystem.evaluate_bodyguard_response(_assassin, s), AssassinationSystem.BodyguardResponse.GO_FOR_TARGET)
+
+
+func test_bodyguard_decision_low_skill_aborts() -> void:
+	_assassin.skills["Stealth"] = 2
+	_assassin.skills["Kenjutsu"] = 2
+	var s: Dictionary = AssassinationSystem.create_assassination_state(1, 2, AssassinationSystem.ExecutionMethod.BLADE, 0)
+	assert_eq(AssassinationSystem.evaluate_bodyguard_response(_assassin, s), AssassinationSystem.BodyguardResponse.ABORT)
+
+
 # ==============================================================================
 # PC Safeguard
 # ==============================================================================

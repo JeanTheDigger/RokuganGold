@@ -14233,12 +14233,7 @@ static func _npc_bodyguard_decision(
 	assassin: L5RCharacterData,
 	op: Dictionary,
 ) -> int:
-	if AssassinationSystem.is_lockdown(op):
-		return AssassinationSystem.BodyguardResponse.ABORT
-	var stealth: int = assassin.skills.get("Stealth", 0)
-	if stealth >= 5:
-		return AssassinationSystem.BodyguardResponse.GO_FOR_TARGET
-	return AssassinationSystem.BodyguardResponse.FIGHT_FIRST
+	return AssassinationSystem.evaluate_bodyguard_response(assassin, op)
 
 
 static func _apply_assassination_outcome(

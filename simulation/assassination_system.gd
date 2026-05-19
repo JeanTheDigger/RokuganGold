@@ -808,6 +808,30 @@ static func resolve_bodyguard_encounter(
 			return {"error": "invalid_response"}
 
 
+static func evaluate_bodyguard_response(
+	assassin: L5RCharacterData,
+	state: Dictionary,
+) -> BodyguardResponse:
+	if assassin.shourido_virtue == Enums.ShouridoVirtue.SEIGYO:
+		return BodyguardResponse.ABORT
+	if is_lockdown(state):
+		return BodyguardResponse.ABORT
+	if assassin.shourido_virtue == Enums.ShouridoVirtue.KETSUI:
+		return BodyguardResponse.GO_FOR_TARGET
+	if assassin.bushido_virtue == Enums.BushidoVirtue.YU:
+		return BodyguardResponse.GO_FOR_TARGET
+	var stealth: int = assassin.skills.get("Stealth", 0)
+	var combat: int = maxi(
+		assassin.skills.get("Kenjutsu", 0),
+		assassin.skills.get("Ninjutsu", 0),
+	)
+	if stealth >= 5 and combat < 3:
+		return BodyguardResponse.GO_FOR_TARGET
+	if combat >= 4:
+		return BodyguardResponse.FIGHT_FIRST
+	return BodyguardResponse.ABORT
+
+
 # ==============================================================================
 # PC Safeguard — Crisis Window
 # ==============================================================================
