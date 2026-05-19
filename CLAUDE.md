@@ -723,6 +723,29 @@ For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
   allowlist filter ensures it only appears when NeedType includes it.
   Explicit AP cost entry added. 10 tests.
 
+### Known Code Issues — Deferred (2026-05-19, writeback audit)
+- **Gossip source concealment (`source_concealed`, `concealment_depth`) —
+  emitted but never consumed.** CourtActionSystem.resolve_gossip() returns
+  concealment flags for Bayushi Courtier technique, but no code prevents the
+  gossip target from learning the gossiper's identity. Gossip concealment
+  is functionally dead. Requires design decision on attribution mechanism
+  (topic subject_role? disposition change source tracking?).
+- **Position hardened/durable (`position_hardened`, `position_durable`) —
+  emitted but never consumed.** NEGOTIATE/PERSUADE/PUBLIC_DEBATE emit these
+  flags to distinguish position shift quality, but no position decay or
+  resistance system reads them. Position shifts from all court actions decay
+  identically. No GDD spec found for the mechanic — may be forward-wiring.
+- **False info on critical failure (`false_info`) — emitted but never
+  consumed.** READ_CHARACTER/PROBE critical failures return false information
+  in the result, but no code delivers it to the probing NPC's knowledge_pool.
+  The NPC gets no info rather than wrong info on critical failure.
+- **Scouts detected on critical failure (`scouts_detected`) — emitted but
+  never consumed.** SCOUT_ENEMY critical failure sets this flag but no code
+  alerts the enemy. The scout suffers no consequence beyond the failed roll.
+- **Charm ceiling active (`charm_ceiling_active`) — informational only,
+  not a bug.** The ceiling IS enforced inside resolve_charm() (clamps
+  disposition change). The flag is metadata for callers; harmless.
+
 ### Known Code Issues (found and fixed 2026-05-17)
 - **DefenseHearingSystem.can_appoint_champion() — tautology bug. FIXED.**
   Was `return X != Y or X == Y`. GDD s11.3.9f confirms either side may appoint a
