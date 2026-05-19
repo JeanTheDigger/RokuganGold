@@ -14353,13 +14353,14 @@ static func _apply_assassination_outcome(
 		var record: CrimeRecord = CrimeRecord.new()
 		record.case_id = next_case_id[0]
 		next_case_id[0] += 1
-		record.crime_type = "murder"
+		record.crime_type = Enums.CrimeType.UNSANCTIONED_COVERT_KILLING
+		record.severity = Enums.CrimeSeverity.CAPITAL
 		record.perpetrator_id = assassin.character_id
 		record.victim_id = target.character_id
 		record.ic_day_committed = ic_day
-		record.discovered = true
+		record.legal_status = Enums.LegalStatus.UNDER_INVESTIGATION
 		record.concealment_tn = concealment_tn
-		record.province_id = -1
+		record.location = target.physical_location
 		crime_records.append(record)
 
 	var topic: TopicData = TopicData.new()
@@ -14369,12 +14370,12 @@ static func _apply_assassination_outcome(
 	match outcome:
 		"full":
 			topic.topic_type = "death_natural"
-			topic.tier = 4
+			topic.tier = TopicData.Tier.TIER_4
 		"partial":
 			topic.topic_type = "death_suspicious"
-			topic.tier = 3
+			topic.tier = TopicData.Tier.TIER_3
 		_:
 			topic.topic_type = "death_murder"
-			topic.tier = 2
+			topic.tier = TopicData.Tier.TIER_2
 	topic.subject_character_id = target.character_id
 	active_topics.append(topic)
