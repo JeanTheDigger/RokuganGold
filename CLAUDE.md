@@ -584,7 +584,11 @@ For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
   SUPPORT_PLEDGE wired (PERSUADE/NEGOTIATE with target_position_shift at
   court creates Tier 2 pledge. Fulfillment: debtor present + ≥1 court
   action. Witnesses = court attendees. Deadline = court end date). 5 tests.
-  RESOURCE_PROMISE still blocked (REQUEST_ALLIED_AID executor is a stub).
+  RESOURCE_PROMISE wired (REQUEST_ALLIED_AID executor routes to
+  disposition-gated acceptance at threshold 31 PROVISIONAL. Creates
+  RESOURCE_PROMISE commitment with 90-day deadline PROVISIONAL, witnesses
+  = two lords + direct vassals, default Tier 2. Fulfillment returns false
+  pending SHARE_SUPPLIES executor wiring). 9 tests.
 - **CommitmentRegistry.apply_forgiveness() — retroactive forgiveness wired. FIXED.**
   `_process_retroactive_forgiveness()` batch scans BROKEN_FORCE_MAJEURE
   commitments after deadline processing. Bridges crisis topics to
