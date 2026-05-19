@@ -718,11 +718,12 @@ static func _execute_gossip(
 	var primary_trait: String = skill_entry.get("secondary", "Awareness")
 	var skill_rank: int = character.skills.get(primary_skill, 0)
 	var trait_val: int = character.traits.get(primary_trait, 2)
+	var gossip_wc: int = _get_winter_court_skill_bonus(character, primary_skill, ctx)
 	var roll_result: Dictionary = dice_engine.roll_skill_check(
 		trait_val, skill_rank, tn
 	)
 
-	var roll_total: int = roll_result.get("total", 0)
+	var roll_total: int = roll_result.get("total", 0) + gossip_wc
 	var margin: int = roll_total - tn
 	var total_raises: int = maxi(int(margin / 5.0), 0)
 	var damage_raises: int = action.metadata.get("damage_raises", total_raises)
@@ -783,9 +784,10 @@ static func _execute_public_insult(
 	var skill_rank: int = character.skills.get(primary_skill, 0)
 	var trait_val: int = character.traits.get(primary_trait, 2)
 
+	var insult_wc: int = _get_winter_court_skill_bonus(character, primary_skill, ctx)
 	var attacker_total: int = dice_engine.roll_skill_check(
 		trait_val, skill_rank, 0
-	).get("total", 0)
+	).get("total", 0) + insult_wc
 
 	var defender_total: int = 0
 	if target != null:
@@ -847,8 +849,9 @@ static func _execute_broadcast_social(
 	var skill_entry: Dictionary = action_skill_map.get(action_id, {})
 	var primary_skill: String = skill_entry.get("primary", "Courtier")
 	var tn: int = _get_social_tn(action, ctx, character)
+	var broadcast_wc: int = _get_winter_court_skill_bonus(character, primary_skill, ctx)
 	var roll_result: Dictionary = SkillResolver.resolve_skill_check(
-		character, dice_engine, primary_skill, tn
+		character, dice_engine, primary_skill, tn, 0, "", Enums.Trait.NONE, 0, 0, broadcast_wc
 	)
 
 	var success: bool = roll_result.get("success", false)
@@ -909,9 +912,10 @@ static func _execute_public_debate(
 	var a_trait_name: String = skill_entry.get("secondary", "Awareness")
 	var a_skill_rank: int = character.skills.get(primary_skill, 0)
 	var a_trait_val: int = character.traits.get(a_trait_name, 2)
+	var debate_wc: int = _get_winter_court_skill_bonus(character, primary_skill, ctx)
 	var a_roll: int = dice_engine.roll_skill_check(
 		a_trait_val, a_skill_rank, 0
-	).get("total", 0)
+	).get("total", 0) + debate_wc
 
 	var b_roll: int = 0
 	if target != null:
@@ -3239,9 +3243,10 @@ static func _execute_provoke_emotion(
 
 	var a_skill_rank: int = character.skills.get("Courtier", 0)
 	var a_trait_val: int = character.traits.get("Awareness", 2)
+	var provoke_wc: int = _get_winter_court_skill_bonus(character, "Courtier", ctx)
 	var attacker_roll: int = dice_engine.roll_skill_check(
 		a_trait_val, a_skill_rank, 0
-	).get("total", 0)
+	).get("total", 0) + provoke_wc
 
 	var defender_roll: int = 0
 	if target != null:
@@ -3376,9 +3381,10 @@ static func _execute_discern_need(
 
 	var a_skill_rank: int = character.skills.get(a_skill, 0)
 	var a_trait_val: int = character.traits.get(a_trait_name, 2)
+	var discern_wc: int = _get_winter_court_skill_bonus(character, a_skill, ctx)
 	var attacker_roll: int = dice_engine.roll_skill_check(
 		a_trait_val, a_skill_rank, 0
-	).get("total", 0)
+	).get("total", 0) + discern_wc
 
 	var defender_roll: int = 0
 	if target != null:
@@ -3490,9 +3496,10 @@ static func _execute_probe(
 
 	var a_skill_rank: int = character.skills.get("Courtier", 0)
 	var a_trait_val: int = character.traits.get("Perception", 2)
+	var probe_wc: int = _get_winter_court_skill_bonus(character, "Courtier", ctx)
 	var attacker_roll: int = dice_engine.roll_skill_check(
 		a_trait_val, a_skill_rank, 0
-	).get("total", 0)
+	).get("total", 0) + probe_wc
 
 	var defender_roll: int = 0
 	if target != null:
@@ -3648,10 +3655,11 @@ static func _execute_ask_for_introduction(
 
 	# Bureaucracy emphasis grants +1k0 on kuge rolls per s55.7.3.
 	var has_emphasis: bool = target_is_kuge and character.skills.has("Bureaucracy")
+	var intro_wc: int = _get_winter_court_skill_bonus(character, skill, ctx)
 	var roll_result: Dictionary = dice_engine.roll_skill_check(
 		trait_val, skill_rank, 0, 0, 0, has_emphasis
 	)
-	var roll_total: int = roll_result.get("total", 0)
+	var roll_total: int = roll_result.get("total", 0) + intro_wc
 
 	var resolution: Dictionary = CourtActionSystem.resolve_ask_for_introduction(
 		roll_total, target_is_kuge, intermediary_status

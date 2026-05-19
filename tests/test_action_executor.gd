@@ -1677,3 +1677,65 @@ func test_call_court_grants_glory() -> void:
 	if result["success"]:
 		var effects: Dictionary = result.get("effects", {})
 		assert_almost_eq(effects.get("glory_change", 0.0), 0.1, 0.001)
+
+
+# -- Winter Court Skill Bonus --------------------------------------------------
+
+func test_wc_bonus_applies_to_gossip() -> void:
+	_ctx.active_court_at_location = {
+		"court_type": CourtSessionData.CourtType.IMPERIAL_WINTER_COURT,
+		"host_clan": "Crane",
+	}
+	_character.clan = "Crane"
+	_character.skills["Courtier"] = 3
+	_character.awareness = 3
+
+	var target := L5RCharacterData.new()
+	target.character_id = 10
+	target.character_name = "Gossip Subject"
+	target.glory = 2.0
+	var chars: Dictionary = {1: _character, 10: target}
+	_action_skill_map["GOSSIP"] = {"primary": "Courtier", "secondary": "Awareness"}
+
+	_dice_engine.set_seed(7)
+	var action_wc := _make_action("GOSSIP", 10)
+	action_wc.metadata = {"gossip_subject_id": 10}
+	var result_wc: Dictionary = ActionExecutor.execute(
+		action_wc, _character, _ctx, _dice_engine, _action_skill_map, {}, chars
+	)
+
+	_ctx.active_court_at_location = {}
+	_dice_engine.set_seed(7)
+	var action_no := _make_action("GOSSIP", 10)
+	action_no.metadata = {"gossip_subject_id": 10}
+	var result_no: Dictionary = ActionExecutor.execute(
+		action_no, _character, _ctx, _dice_engine, _action_skill_map, {}, chars
+	)
+
+	var wc_roll: int = result_wc.get("roll_total", 0)
+	var no_roll: int = result_no.get("roll_total", 0)
+	assert_eq(wc_roll - no_roll, WinterCourtSystem.HOST_SKILL_BONUS)
+
+
+func test_wc_bonus_not_applied_to_non_host_clan() -> void:
+	_ctx.active_court_at_location = {
+		"court_type": CourtSessionData.CourtType.IMPERIAL_WINTER_COURT,
+		"host_clan": "Scorpion",
+	}
+	_character.clan = "Crane"
+	var bonus: int = ActionExecutor._get_winter_court_skill_bonus(
+		_character, "Courtier", _ctx
+	)
+	assert_eq(bonus, 0)
+
+
+func test_wc_bonus_not_applied_to_non_wc_court() -> void:
+	_ctx.active_court_at_location = {
+		"court_type": CourtSessionData.CourtType.CLAN_CHAMPION_COURT,
+		"host_clan": "Crane",
+	}
+	_character.clan = "Crane"
+	var bonus: int = ActionExecutor._get_winter_court_skill_bonus(
+		_character, "Courtier", _ctx
+	)
+	assert_eq(bonus, 0)
