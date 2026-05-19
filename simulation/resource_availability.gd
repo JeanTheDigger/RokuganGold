@@ -84,3 +84,20 @@ static func get_resource_cost(action_id: String) -> Dictionary:
 
 static func has_resource_cost(action_id: String) -> bool:
 	return ACTION_RESOURCE_COSTS.has(action_id)
+
+
+static func can_afford(
+	action_id: String,
+	character: L5RCharacterData,
+	province_data: Dictionary = {},
+) -> bool:
+	var cost: Dictionary = ACTION_RESOURCE_COSTS.get(action_id, {})
+	if cost.is_empty():
+		return true
+	var amount: int = cost["amount"]
+	if amount <= 0:
+		return true
+	var available: float = _get_available_resource(
+		character, cost["resource_type"], province_data
+	)
+	return available >= float(amount)

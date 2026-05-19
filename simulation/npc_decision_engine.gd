@@ -576,6 +576,18 @@ static func execute_action(
 				}
 			orders_spent = 1
 
+	if ResourceAvailability.has_resource_cost(chosen.action_id):
+		var prov_data: Dictionary = _build_province_data_for_resource_check(ctx)
+		if not ResourceAvailability.can_afford(chosen.action_id, character, prov_data):
+			character.action_points_current += chosen.ap_cost
+			if orders_spent > 0:
+				character.civilian_orders_remaining += 1
+			return {
+				"success": false,
+				"reason": "insufficient_resources",
+				"action_id": chosen.action_id,
+			}
+
 	var decision: Dictionary = {
 		"success": true,
 		"action_id": chosen.action_id,

@@ -718,6 +718,58 @@ func test_execute_records_character_and_day() -> void:
 	assert_eq(result["ic_day"], 10)
 
 
+func test_execute_insufficient_resources_refunds_ap() -> void:
+	_char.koku = 0.0
+	var chosen := NPCDataStructures.ScoredAction.new()
+	chosen.action_id = "BRIBE_FOR_INFO"
+	chosen.ap_cost = 1
+	var ap_before: int = _char.action_points_current
+	var ctx := NPCDecisionEngine.build_context(_char, _world_state)
+	var result := NPCDecisionEngine.execute_action(chosen, _char, ctx)
+	assert_false(result["success"])
+	assert_eq(result["reason"], "insufficient_resources")
+	assert_eq(_char.action_points_current, ap_before)
+
+
+func test_execute_sufficient_resources_succeeds() -> void:
+	_char.koku = 10.0
+	var chosen := NPCDataStructures.ScoredAction.new()
+	chosen.action_id = "BRIBE_FOR_INFO"
+	chosen.ap_cost = 1
+	var ctx := NPCDecisionEngine.build_context(_char, _world_state)
+	var result := NPCDecisionEngine.execute_action(chosen, _char, ctx)
+	assert_true(result["success"])
+
+
+func test_execute_free_action_skips_resource_check() -> void:
+	_char.koku = 0.0
+	var chosen := NPCDataStructures.ScoredAction.new()
+	chosen.action_id = "CHARM"
+	chosen.ap_cost = 1
+	var ctx := NPCDecisionEngine.build_context(_char, _world_state)
+	var result := NPCDecisionEngine.execute_action(chosen, _char, ctx)
+	assert_true(result["success"])
+
+
+func test_execute_insufficient_resources_refunds_civilian_order() -> void:
+	_char.lord_rank = Enums.LordRank.PROVINCIAL_DAIMYO
+	_char.military_rank = Enums.MilitaryRank.NONE
+	_char.civilian_orders_remaining = 3
+	_world_state["available_levy_pu"] = 0.0
+	var orders_before: int = _char.civilian_orders_remaining
+	var ap_before: int = _char.action_points_current
+	var chosen := NPCDataStructures.ScoredAction.new()
+	chosen.action_id = "ORDER_LEVY"
+	chosen.ap_cost = 0
+	chosen.is_order = true
+	var ctx := NPCDecisionEngine.build_context(_char, _world_state)
+	var result := NPCDecisionEngine.execute_action(chosen, _char, ctx)
+	assert_false(result["success"])
+	assert_eq(result["reason"], "insufficient_resources")
+	assert_eq(_char.civilian_orders_remaining, orders_before)
+	assert_eq(_char.action_points_current, ap_before)
+
+
 # -- Full Loop -----------------------------------------------------------------
 
 func test_full_loop_runs() -> void:
