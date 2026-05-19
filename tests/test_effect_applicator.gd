@@ -1221,3 +1221,93 @@ func test_non_gossip_action_log_omits_source_concealed() -> void:
 	EffectApplicator.apply(result, _characters, _provinces, _action_log)
 	assert_eq(_action_log.size(), 1)
 	assert_false(_action_log[0].has("source_concealed"), "Non-gossip actions should not have source_concealed")
+
+
+# -- False Info on Critical Failure --------------------------------------------
+
+func test_false_info_personality_creates_wrong_virtue() -> void:
+	_actor.knowledge_pool = []
+	_target.bushido_virtue = Enums.BushidoVirtue.GI
+	var result: Dictionary = {
+		"success": false,
+		"character_id": 1,
+		"target_npc_id": 2,
+		"action_id": "READ_CHARACTER",
+		"ic_day": 5,
+		"season": 2,
+		"effects": {
+			"failed": true,
+			"false_info": ["personality_insight"],
+		},
+	}
+	EffectApplicator.apply(result, _characters, _provinces, _action_log)
+	assert_eq(_actor.knowledge_pool.size(), 1)
+	var entry: KnowledgeEntry = _actor.knowledge_pool[0]
+	assert_eq(entry.entry_type, "personality_insight")
+	assert_eq(entry.source, Enums.KnowledgeSource.INTELLIGENCE)
+	assert_eq(entry.confidence, Enums.KnowledgeConfidence.FRESH)
+	assert_ne(entry.data["bushido_virtue"], Enums.BushidoVirtue.GI, "False virtue should differ from actual")
+	assert_true(entry.data["is_false"])
+
+
+func test_false_info_disposition_inverts_sign() -> void:
+	_actor.knowledge_pool = []
+	_target.disposition_values = {1: 30}
+	var result: Dictionary = {
+		"success": false,
+		"character_id": 1,
+		"target_npc_id": 2,
+		"action_id": "READ_CHARACTER",
+		"ic_day": 5,
+		"season": 2,
+		"effects": {
+			"failed": true,
+			"false_info": ["disposition_toward"],
+		},
+	}
+	EffectApplicator.apply(result, _characters, _provinces, _action_log)
+	assert_eq(_actor.knowledge_pool.size(), 1)
+	var entry: KnowledgeEntry = _actor.knowledge_pool[0]
+	assert_eq(entry.data["disposition"], -30, "False disposition should invert actual")
+	assert_true(entry.data["is_false"])
+
+
+func test_false_info_topic_position_inverted() -> void:
+	_actor.knowledge_pool = []
+	_target.topic_positions = {100: 25.0}
+	var result: Dictionary = {
+		"success": false,
+		"character_id": 1,
+		"target_npc_id": 2,
+		"action_id": "PROBE",
+		"ic_day": 5,
+		"season": 2,
+		"effects": {
+			"failed": true,
+			"false_info": ["topic_position"],
+		},
+	}
+	EffectApplicator.apply(result, _characters, _provinces, _action_log)
+	assert_eq(_actor.knowledge_pool.size(), 1)
+	var entry: KnowledgeEntry = _actor.knowledge_pool[0]
+	assert_eq(entry.data["topic_id"], 100)
+	assert_almost_eq(entry.data["position"], -25.0, 0.01, "False position should invert actual")
+	assert_true(entry.data["is_false"])
+
+
+func test_false_info_no_entry_without_target() -> void:
+	_actor.knowledge_pool = []
+	var result: Dictionary = {
+		"success": false,
+		"character_id": 1,
+		"target_npc_id": -1,
+		"action_id": "READ_CHARACTER",
+		"ic_day": 5,
+		"season": 2,
+		"effects": {
+			"failed": true,
+			"false_info": ["personality_insight"],
+		},
+	}
+	EffectApplicator.apply(result, _characters, _provinces, _action_log)
+	assert_eq(_actor.knowledge_pool.size(), 0, "No false info without valid target")

@@ -51,6 +51,7 @@ static func apply(
 	_apply_infamy(effects, actor, applied)
 	_apply_province_effects(effects, result, provinces, applied, settlements)
 	_apply_info_events(effects, result, applied)
+	_apply_false_info(effects, actor, target_id, characters, result.get("season", 0))
 	result["observable_effect"] = _detect_observable_effect(result, effects, applied)
 	_log_action(result, action_log)
 	applied["logged"] = true
@@ -460,6 +461,74 @@ static func _apply_info_events(
 		"quality": effects.get("quality", 1),
 		"info_type": effects.get("info_type", ""),
 	})
+
+
+# -- False Info on Critical Failure (s15.4) ------------------------------------
+
+static func _apply_false_info(
+	effects: Dictionary,
+	actor: L5RCharacterData,
+	target_id: int,
+	characters: Dictionary,
+	season: int,
+) -> void:
+	var false_info: Array = effects.get("false_info", [])
+	if false_info.is_empty() or target_id < 0:
+		return
+	var target: L5RCharacterData = characters.get(target_id)
+	if target == null:
+		return
+	for info_type: String in false_info:
+		var data: Dictionary = _generate_false_data(info_type, actor, target)
+		data["target_character_id"] = target_id
+		InformationSystem.add_knowledge(actor, InformationSystem.make_entry(
+			Enums.KnowledgeSource.INTELLIGENCE,
+			info_type,
+			data,
+			season,
+		))
+
+
+static func _generate_false_data(
+	info_type: String,
+	actor: L5RCharacterData,
+	target: L5RCharacterData,
+) -> Dictionary:
+	match info_type:
+		"personality_insight":
+			var actual: int = target.bushido_virtue
+			var false_virtue: int = _pick_different_virtue(actual)
+			return {"bushido_virtue": false_virtue, "is_false": true}
+		"disposition_toward":
+			var actual_disp: int = target.disposition_values.get(actor.character_id, 0)
+			var inverted: int = clampi(-actual_disp, -100, 100)
+			if inverted == 0:
+				inverted = 15
+			return {"toward_id": actor.character_id, "disposition": inverted, "is_false": true}
+		"topic_attitude", "topic_position":
+			if target.topic_positions.is_empty():
+				return {"is_false": true}
+			var tid: int = target.topic_positions.keys()[0]
+			var actual_pos: float = target.topic_positions[tid]
+			return {"topic_id": tid, "position": -actual_pos, "is_false": true}
+		"court_objective":
+			return {"need_type": "unknown", "is_false": true}
+	return {"is_false": true}
+
+
+const _BUSHIDO_VALUES: Array[int] = [
+	Enums.BushidoVirtue.JIN, Enums.BushidoVirtue.YU,
+	Enums.BushidoVirtue.REI, Enums.BushidoVirtue.CHUGI,
+	Enums.BushidoVirtue.GI, Enums.BushidoVirtue.MEIYO,
+	Enums.BushidoVirtue.MAKOTO,
+]
+
+
+static func _pick_different_virtue(actual: int) -> int:
+	for v: int in _BUSHIDO_VALUES:
+		if v != actual:
+			return v
+	return Enums.BushidoVirtue.JIN
 
 
 # -- Action Log ----------------------------------------------------------------
