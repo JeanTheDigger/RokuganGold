@@ -4933,8 +4933,10 @@ static func _check_commitment_fulfilled(
 			for court: CourtSessionData in active_courts:
 				if court.host_settlement_id == c.fulfillment_target:
 					var state: Dictionary = court.session_state.get(c.debtor_npc_id, {})
-					var actions_taken: int = state.get("charm_count", 0) + state.get("negotiate_count", 0)
-					return actions_taken > 0
+					var position_actions: int = (state.get("persuade_count", 0)
+						+ state.get("public_debate_count", 0)
+						+ state.get("negotiate_count", 0))
+					return position_actions > 0
 			return false
 		Enums.CommitmentType.FAVOR_OBLIGATION:
 			return false
@@ -13398,8 +13400,8 @@ static func _process_court_action_effects(
 						var cur_pos: float = w.topic_positions.get(topic_id, 0.0)
 						w.topic_positions[topic_id] = clampf(cur_pos + eff_shift, -100.0, 100.0)
 
-		# Session state accumulation (s15.4) — track charm/negotiate counts and TN reductions
-		if action_id in ["CHARM", "NEGOTIATE", "IMPRESS", "LISTEN_REFLECT"] and not effects.get("failed", false):
+		# Session state accumulation (s15.4) — track court action counts and TN reductions
+		if action_id in ["CHARM", "NEGOTIATE", "PERSUADE", "PUBLIC_DEBATE", "IMPRESS", "LISTEN_REFLECT"] and not effects.get("failed", false):
 			var court_settlement: int = action_meta.get("court_settlement_id", -1)
 			var court: CourtSessionData = null
 			for c: CourtSessionData in active_courts:
@@ -13413,6 +13415,10 @@ static func _process_court_action_effects(
 					CourtSystem.increment_negotiate_count(court, actor_id)
 					if effects.has("session_tn_reduction"):
 						CourtSystem.record_tn_reduction(court, actor_id, target_id, effects["session_tn_reduction"])
+				elif action_id == "PERSUADE":
+					CourtSystem.increment_persuade_count(court, actor_id)
+				elif action_id == "PUBLIC_DEBATE":
+					CourtSystem.increment_public_debate_count(court, actor_id)
 				elif action_id == "IMPRESS":
 					if effects.has("session_tn_reduction"):
 						CourtSystem.record_tn_reduction(court, actor_id, target_id, effects["session_tn_reduction"])

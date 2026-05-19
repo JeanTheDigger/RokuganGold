@@ -355,6 +355,8 @@ static func get_session_state(court: CourtSessionData, character_id: int) -> Dic
 		court.session_state[character_id] = {
 			"charm_count": 0,
 			"negotiate_count": 0,
+			"persuade_count": 0,
+			"public_debate_count": 0,
 			"tn_reductions": {},
 			"persuade_tn_reductions": {},
 		}
@@ -371,6 +373,18 @@ static func increment_negotiate_count(court: CourtSessionData, character_id: int
 	var state: Dictionary = get_session_state(court, character_id)
 	state["negotiate_count"] += 1
 	return state["negotiate_count"]
+
+
+static func increment_persuade_count(court: CourtSessionData, character_id: int) -> int:
+	var state: Dictionary = get_session_state(court, character_id)
+	state["persuade_count"] += 1
+	return state["persuade_count"]
+
+
+static func increment_public_debate_count(court: CourtSessionData, character_id: int) -> int:
+	var state: Dictionary = get_session_state(court, character_id)
+	state["public_debate_count"] += 1
+	return state["public_debate_count"]
 
 
 static func record_tn_reduction(

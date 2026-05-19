@@ -8205,7 +8205,7 @@ func test_support_pledge_skips_duplicate() -> void:
 	assert_eq(commitments.size(), 1, "Should not duplicate")
 
 
-func test_support_pledge_fulfillment_requires_court_action() -> void:
+func test_support_pledge_fulfillment_requires_position_action() -> void:
 	var court := _make_court_at(100)
 	var debtor := L5RCharacterData.new()
 	debtor.character_id = 20
@@ -8218,17 +8218,68 @@ func test_support_pledge_fulfillment_requires_court_action() -> void:
 	var result: bool = DayOrchestrator._check_commitment_fulfilled(
 		c, chars_by_id, [court],
 	)
-	assert_false(result, "Present but no court action should not fulfill")
-	court.session_state[20] = {"charm_count": 0, "negotiate_count": 1}
+	assert_false(result, "Present but no position action should not fulfill")
+	court.session_state[20] = {"negotiate_count": 1}
 	result = DayOrchestrator._check_commitment_fulfilled(
 		c, chars_by_id, [court],
 	)
-	assert_true(result, "Present with court action should fulfill")
+	assert_true(result, "Present with NEGOTIATE should fulfill")
+
+
+func test_support_pledge_fulfilled_by_persuade() -> void:
+	var court := _make_court_at(100)
+	var debtor := L5RCharacterData.new()
+	debtor.character_id = 20
+	debtor.physical_location = "100"
+	var chars_by_id: Dictionary = {20: debtor}
+	var c := CommitmentData.new()
+	c.commitment_type = Enums.CommitmentType.SUPPORT_PLEDGE
+	c.debtor_npc_id = 20
+	c.fulfillment_target = 100
+	court.session_state[20] = {"persuade_count": 1}
+	var result: bool = DayOrchestrator._check_commitment_fulfilled(
+		c, chars_by_id, [court],
+	)
+	assert_true(result, "Present with PERSUADE should fulfill")
+
+
+func test_support_pledge_fulfilled_by_public_debate() -> void:
+	var court := _make_court_at(100)
+	var debtor := L5RCharacterData.new()
+	debtor.character_id = 20
+	debtor.physical_location = "100"
+	var chars_by_id: Dictionary = {20: debtor}
+	var c := CommitmentData.new()
+	c.commitment_type = Enums.CommitmentType.SUPPORT_PLEDGE
+	c.debtor_npc_id = 20
+	c.fulfillment_target = 100
+	court.session_state[20] = {"public_debate_count": 1}
+	var result: bool = DayOrchestrator._check_commitment_fulfilled(
+		c, chars_by_id, [court],
+	)
+	assert_true(result, "Present with PUBLIC_DEBATE should fulfill")
+
+
+func test_support_pledge_not_fulfilled_by_charm_only() -> void:
+	var court := _make_court_at(100)
+	var debtor := L5RCharacterData.new()
+	debtor.character_id = 20
+	debtor.physical_location = "100"
+	var chars_by_id: Dictionary = {20: debtor}
+	var c := CommitmentData.new()
+	c.commitment_type = Enums.CommitmentType.SUPPORT_PLEDGE
+	c.debtor_npc_id = 20
+	c.fulfillment_target = 100
+	court.session_state[20] = {"charm_count": 3}
+	var result: bool = DayOrchestrator._check_commitment_fulfilled(
+		c, chars_by_id, [court],
+	)
+	assert_false(result, "CHARM alone should not fulfill — not a position action")
 
 
 func test_support_pledge_not_fulfilled_if_absent() -> void:
 	var court := _make_court_at(100)
-	court.session_state[20] = {"charm_count": 1, "negotiate_count": 0}
+	court.session_state[20] = {"persuade_count": 1}
 	var debtor := L5RCharacterData.new()
 	debtor.character_id = 20
 	debtor.physical_location = "200"
