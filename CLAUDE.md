@@ -643,11 +643,11 @@ For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
   1 new test.
 
 ### Known Code Issues — Deferred (commitment audit 2026-05-19)
-- **send_advance_notice() / register_proxy() — defined but never called.**
-  All broken commitments resolve as BROKEN_NO_NOTICE (worst consequences).
-  GDD s55.31.6 specifies advance notice via SEND_LETTER and proxy via
-  ASSIGN_VASSAL_OBJECTIVE. Requires NPC engine decision logic to detect
-  "I won't make this commitment" and decide to mitigate.
+- **send_advance_notice() — wired. FIXED.** Daily pass detects unfulfillable
+  PENDING commitments within 7-day window. Checks travel time for location-
+  based commitments. Personality-driven: Rei/Gi/Meiyo send, Yu/Kyoryoku
+  skip. Sends apology letter at 0 AP. register_proxy() still unwired
+  (requires lord + vassal + ASSIGN_VASSAL_OBJECTIVE delegation logic).
 - **SUPPORT_PLEDGE fulfillment simplified from GDD spec.**
   Code checks any charm/negotiate action at court. GDD specifies PERSUADE,
   PUBLIC_DEBATE, or MOVE_TOPIC_POSITION aligned with pledged position.
