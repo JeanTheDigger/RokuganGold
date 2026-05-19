@@ -734,8 +734,10 @@ s44, s45, s54.7, s57.22–s57.24, s57.26–s57.30, s57.41–s57.43, s57.45–s57
   +5 skill bonus now wired to all 7 early-return court action paths
   (GOSSIP, PUBLIC_INSULT, PUBLIC_DEBATE, BROADCAST_SOCIAL, PROVOKE_EMOTION,
   PROBE, DISCERN_NEED, ASK_FOR_INTRODUCTION). 3 tests.
+  Champion agenda ordering AI already implemented and wired
+  (order_agenda_for_host called in day_orchestrator, 5 tests).
   Remaining deferred: travel logistics letter dispatching, late arrival
-  handling, Champion agenda ordering AI.
+  handling.
 
 
 ## Resolved Design Decisions
