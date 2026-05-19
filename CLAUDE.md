@@ -648,10 +648,12 @@ For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
   based commitments. Personality-driven: Rei/Gi/Meiyo send, Yu/Kyoryoku
   skip. Sends apology letter at 0 AP. register_proxy() still unwired
   (requires lord + vassal + ASSIGN_VASSAL_OBJECTIVE delegation logic).
-- **SUPPORT_PLEDGE fulfillment simplified from GDD spec.**
-  Code checks any charm/negotiate action at court. GDD specifies PERSUADE,
-  PUBLIC_DEBATE, or MOVE_TOPIC_POSITION aligned with pledged position.
-  Missing: specific action type checking, position alignment checking.
+- **SUPPORT_PLEDGE fulfillment — action types fixed. FIXED (partial).**
+  Now checks persuade_count + public_debate_count + negotiate_count (was
+  charm_count + negotiate_count). CHARM alone no longer fulfills. Added
+  persuade_count and public_debate_count to court session_state tracking.
+  Position alignment checking still missing (CommitmentData has no topic
+  field to compare pledged position against action position).
 - **RESOURCE_PROMISE creation limited to REQUEST_ALLIED_AID.**
   GDD also specifies creation during NEGOTIATE and ASSIGN_VASSAL_OBJECTIVE
   "with resource transfer parameters." Those paths not yet wired.
