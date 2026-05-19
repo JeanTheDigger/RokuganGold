@@ -806,6 +806,77 @@ For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
   and SEEK_PRETEXT as a NeedType is never used as an ActionID. But the
   entry is misleading.
 
+### Known Code Issues — Deferred (2026-05-19, metadata population audit)
+- **EXPOSE_SECRET_PRIVATELY — metadata unpopulated, always fails.** Executor
+  reads `secret_ref` (null), `subject_id` (-1), `has_proof` (false) from
+  metadata. No metadata population in `_populate_action_metadata()`.
+  `secret_ref == null` → executor returns `{}` → action silently fails every
+  time. NPC spends AP on an action that produces no result. In context lists:
+  AT_OWN_HOLDINGS, AT_COURT, VISITING. Needs: secret selection logic to pick
+  which known secret to expose and to whom, populate `secret_ref`,
+  `subject_id`, `has_proof` from NPC's knowledge_pool/secret awareness.
+- **EXPOSE_SECRET_PUBLICLY — same pattern as EXPOSE_SECRET_PRIVATELY.**
+  Executor reads same three metadata keys, all unpopulated. Always returns
+  `{}`. In same three context lists.
+- **PURIFY_TAINTED_GROUND — ptl not populated, TN always base 15.** Executor
+  reads `ptl` (default 0.0) from metadata. No metadata population. TN formula
+  is `15 + int(ptl * 5.0)` → always 15 regardless of actual province PTL.
+  `province_id` has fallback to `action.target_province_id` (from ImmediateNeed),
+  so province targeting works. Needs: PTL lookup from world_state in metadata
+  population.
+- **PUBLIC_ATONEMENT — offense_key/offense_tier not populated.** Executor reads
+  `offense_key` (default "") and `offense_tier` (default 3). No metadata
+  population. Empty offense_key passes the guard check (is_empty → skip check),
+  then `record_atonement(character, "")` records nothing. TN always tier 3.
+  Needs: selection logic to pick which past offense to atone for.
+- **SCOUT_ENEMY — target_clan_id not populated.** Executor reads
+  `target_clan_id` (default ""). No metadata population. Scouting executes
+  against no specific enemy clan. In: AT_OWN_HOLDINGS, ON_CAMPAIGN,
+  AT_WALL_TOWER. Needs: enemy clan selection from active wars or border threats.
+- **REQUEST_PERFORMANCE — target_performer_id not populated.** Executor reads
+  `target_performer_id` (-1), `performance_type` ("song"), `venue_mode`
+  ("public"). No metadata population (only PUBLIC_PERFORMANCE/PERFORM_FOR have
+  a conditional branch for FULFILL_PERFORMANCE_REQUEST). target_performer_id=-1
+  → no invitation letter sent. In: AT_OWN_HOLDINGS, AT_COURT. Needs: performer
+  selection from co-located characters with artisan skills.
+- **DRILL_TROOPS — target_company_id not populated.** Executor reads
+  `target_company_id` (-1) from metadata via `_compute_military_effects()`.
+  No metadata population. Drilling targets no specific company. In: AT_DOJO,
+  ON_CAMPAIGN. Needs: company selection from character's commanded/nearby units.
+- **OFFER_FAVOR — metadata empty, court_settlement_id missing for witnesses.**
+  OFFER_FAVOR is in `_CONTESTED_COURT_ACTIONS` but NOT in the 6-action metadata
+  population block (NEGOTIATE, PERSUADE, PUBLIC_DEBATE, CHARM, IMPRESS,
+  LISTEN_REFLECT). Empty metadata → `action.metadata.is_empty()` is true →
+  `_action_metadata` not set in effects → DayOrchestrator's
+  `_create_favor_obligation_commitment()` gets `court_settlement_id = -1` →
+  favor commitments created at court have no court attendee witnesses (only
+  creditor + debtor). Needs: court_settlement_id in metadata for OFFER_FAVOR.
+- **INTIMIDATE — blackmail path unreachable via NPC daily loop.** Executor
+  branches on `secret_ref` (null) → `has_secret = false` → blackmail branch
+  never fires. Plain public/private intimidation works correctly. Blackmail
+  requires `secret_ref`, `by_letter`, `secret_tier` in metadata, none
+  populated. Needs: secret selection logic similar to EXPOSE_SECRET.
+- **FABRICATE_SECRET — always TIER_3, no target secret.** Executor reads
+  `severity` (TIER_3), `secret_id` (-1). No metadata population. Always
+  fabricates a TIER_3 secret with no reference. Functional but lacks
+  strategic targeting (e.g., fabricating higher-tier secrets against enemies).
+- **PLAY_GAME — always Games: Go.** Executor reads `game_skill` (default
+  "Games: Go"). No metadata population. NPCs never play Shogi, Sadane, etc.
+  Low impact — Go is the default noble game.
+- **ARRANGE_MARRIAGE — favor_tier/has_military_objective not populated.**
+  Main fields (candidate_id, target_lord_id, target_candidate_id) ARE
+  populated from ImmediateNeed. But `favor_tier` (0) and
+  `has_military_objective` (false) are not populated. Marriage proposals
+  never receive favor leverage or military alliance scoring bonuses.
+- **CONCEAL_ITEM — defaults to MEDIUM non-weapon.** Executor reads
+  `item_size` ("MEDIUM"), `is_weapon` (false). No metadata population for
+  NPC-initiated concealment. DayOrchestrator auto-bypass for contraband
+  arrivals DOES set proper metadata. Only affects voluntary CONCEAL_ITEM.
+- **SEARCH_PERSON — defaults to TN 15, no authority.** Executor reads
+  `concealment_tn` (15), `magistrate_authority` (false). No metadata
+  population. Always searches against generic TN without magistrate bonus.
+  DayOrchestrator assassination pipeline DOES set proper metadata.
+
 ### Known Code Issues (found and fixed 2026-05-17)
 - **DefenseHearingSystem.can_appoint_champion() — tautology bug. FIXED.**
   Was `return X != Y or X == Y`. GDD s11.3.9f confirms either side may appoint a
