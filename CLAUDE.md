@@ -379,6 +379,28 @@ For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
   at target's location auto-succeeds Phase 1 access rolls. Added variant
   field to SeductionSystem.create_entanglement(). Checks seducer, variant,
   state, and location. Revokes on entanglement break. 5 tests.
+- **s12.8 Access Method Selection** — Trait-weighted scoring for NPC access
+  method choice. `pick_best_access_method()` scores each method by (skill_rank
+  + associated_trait) where trait maps are: bribe→Awareness, stealth→Agility,
+  disguise→Intelligence, service→Awareness. Ties broken by method priority
+  order. Orchestrator delegates via `_pick_access_method()`. 4 tests.
+- **s12.8 PC Crisis Event Generation** — `create_pc_crisis_event()` produces
+  a structured event dict for player-facing assassination encounters. Method-
+  specific grace periods: blade 1 round, poison 1 IC day, accident 4 hours.
+  Includes deadline, phase, method, location. Orchestrator wiring deferred
+  until player identification system exists (no `is_pc` field yet). 3 tests.
+- **s12.8 Bodyguard/Yojimbo Detection Wiring** — `_target_has_bodyguard()`
+  and `_find_bodyguard()` now functional in DayOrchestrator. Scans co-located
+  characters for `assigned_protection_target_id` matching target. Picks best
+  by max(Kenjutsu, Iaijutsu). Added `assigned_protection_target_id: int = -1`
+  to L5RCharacterData. `_npc_bodyguard_decision()` delegates to
+  AssassinationSystem.evaluate_bodyguard_response(). 3 tests (bodyguard
+  decision suite covers this).
+- **s12.8 Abort and Restart Mechanics** — `abort_operation()` terminates
+  assassination cleanly (state→"aborted"). `restart_access()` resets
+  access_tn_penalty, access_days, equipment state but preserves settlement
+  suspicion (household memory persists). Enables strategic retreat when
+  penalty accumulates too high. 3 tests.
 
 ### Known Code Issues (found 2026-05-18, pre-existing)
 - **test_assassination_system.gd test_doji_courtier_bribe_access_gets_free_raise
