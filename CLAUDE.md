@@ -778,7 +778,11 @@ For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
   context lists, ActionExecutor dispatch (skill gate, AP check, body location
   validation, ability tattoo gate, SkillResolver roll), AP cost dictionary
   (2 base, variable via ap_cost_override), DayOrchestrator writeback
-  (TattooData creation, extra AP deduction). 11 tests.
+  (TattooData creation, extra AP deduction). Phase 4c precondition filter
+  checks cultural reluctance consent (s57.25.3 disposition thresholds) and
+  Togashi decorative gate (unfilled ability slots block decorative tattoos).
+  Metadata population selects quality tier by skill rank. advance_day()
+  gains tattoos and next_tattoo_id parameters. 18 tests.
 - **FORCE_MARCH, EVALUATE_CLAN_STRENGTH — no executor, no context list.**
   Both appear in objective_alignment.json and action_skill_map.json with
   scores and skill mappings, but have no executor handler or context list
