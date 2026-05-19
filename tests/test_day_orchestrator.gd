@@ -7097,3 +7097,39 @@ func test_apply_court_creation_clan_champion_type() -> void:
 	)
 	assert_eq(r["type"], "court_created")
 	assert_eq(r["court_type"], CourtSessionData.CourtType.CLAN_CHAMPION_COURT)
+
+
+# -- Military Promotion Writeback -----------------------------------------------
+
+
+func test_apply_promotion_results_updates_character_rank() -> void:
+	var char := L5RCharacterData.new()
+	char.character_id = 50
+	char.military_rank = Enums.MilitaryRank.NONE
+	char.commanded_unit_id = -1
+	var chars_by_id: Dictionary = {50: char}
+	var companies: Array[Dictionary] = [
+		{"company_id": 7, "commander_id": -1},
+	]
+	var results: Array = [{
+		"promoted_character_id": 50,
+		"unit_id": 7,
+		"rank_needed": Enums.MilitaryRank.CHUI,
+		"score": 85.0,
+	}]
+	DayOrchestrator._apply_promotion_results(results, chars_by_id, companies)
+	assert_eq(char.military_rank, Enums.MilitaryRank.CHUI)
+	assert_eq(char.commanded_unit_id, 7)
+	assert_eq(companies[0]["commander_id"], 50)
+
+
+func test_apply_promotion_results_skips_invalid_character() -> void:
+	var chars_by_id: Dictionary = {}
+	var companies: Array[Dictionary] = [{"company_id": 7, "commander_id": -1}]
+	var results: Array = [{
+		"promoted_character_id": 99,
+		"unit_id": 7,
+		"rank_needed": Enums.MilitaryRank.CHUI,
+	}]
+	DayOrchestrator._apply_promotion_results(results, chars_by_id, companies)
+	assert_eq(companies[0]["commander_id"], -1)

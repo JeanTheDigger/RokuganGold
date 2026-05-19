@@ -715,6 +715,10 @@ static func advance_day(
 			companies, settlements, clans, characters_by_id,
 			dice_engine, _season_to_name(current_season),
 		)
+		_apply_promotion_results(
+			military_seasonal_result.get("promotions", []),
+			characters_by_id, companies,
+		)
 		military_seasonal_result["levy_suspicion"] = _process_levy_suspicion(
 			companies, active_wars, characters_by_id,
 			active_topics, next_topic_id, ic_day,
@@ -6960,6 +6964,28 @@ static func _process_military_promotions(
 		})
 
 	return results
+
+
+static func _apply_promotion_results(
+	promotion_results: Array,
+	characters_by_id: Dictionary,
+	companies: Array[Dictionary],
+) -> void:
+	for promo: Dictionary in promotion_results:
+		var char_id: int = promo.get("promoted_character_id", -1)
+		var unit_id: int = promo.get("unit_id", -1)
+		var rank: int = promo.get("rank_needed", Enums.MilitaryRank.NONE)
+		if char_id < 0:
+			continue
+		var character: L5RCharacterData = characters_by_id.get(char_id)
+		if character == null:
+			continue
+		character.military_rank = rank
+		character.commanded_unit_id = unit_id
+		for company: Dictionary in companies:
+			if company.get("company_id", -1) == unit_id:
+				company["commander_id"] = char_id
+				break
 
 
 static func _gather_promotion_candidates(
