@@ -2544,3 +2544,141 @@ func test_examine_crime_scene_generates_for_investigate_threat() -> void:
 		action_ids.append(o.action_id)
 	assert_has(action_ids, "EXAMINE_CRIME_SCENE",
 		"EXAMINE_CRIME_SCENE should survive allowlist filter for INVESTIGATE_THREAT")
+
+
+# -- Phase 4b metadata population tests ----------------------------------------
+
+func _make_metadata_ctx() -> NPCDataStructures.ContextSnapshot:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.character_id = 1
+	ctx.clan = "Crab"
+	ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
+	ctx.court_settlement_id = 42
+	return ctx
+
+
+func _make_metadata_need() -> NPCDataStructures.ImmediateNeed:
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "REST"
+	need.priority = 5
+	return need
+
+
+func test_purify_metadata_populates_ptl() -> void:
+	var ctx := _make_metadata_ctx()
+	var ps := NPCDataStructures.ProvinceStatus.new()
+	ps.province_id = 7
+	ps.province_taint_level = 4.5
+	ctx.province_statuses = [ps]
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "PURIFY_TAINTED_GROUND"
+	option.target_province_id = 7
+	var need := _make_metadata_need()
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_almost_eq(option.metadata.get("ptl", 0.0), 4.5, 0.01,
+		"PURIFY_TAINTED_GROUND metadata should contain province PTL")
+
+
+func test_purify_metadata_zero_when_no_matching_province() -> void:
+	var ctx := _make_metadata_ctx()
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "PURIFY_TAINTED_GROUND"
+	option.target_province_id = 99
+	var need := _make_metadata_need()
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_almost_eq(option.metadata.get("ptl", -1.0), 0.0, 0.01,
+		"PURIFY_TAINTED_GROUND metadata ptl should default to 0.0")
+
+
+func test_scout_enemy_metadata_extracts_enemy_clan() -> void:
+	var ctx := _make_metadata_ctx()
+	ctx.clan = "Crab"
+	ctx.active_wars = [{"clan_a": "Crab", "clan_b": "Shadowlands"}]
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "SCOUT_ENEMY"
+	var need := _make_metadata_need()
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_ne(option.metadata.get("target_clan_id", ""), "",
+		"SCOUT_ENEMY metadata should extract enemy clan from active wars")
+
+
+func test_scout_enemy_metadata_empty_when_no_wars() -> void:
+	var ctx := _make_metadata_ctx()
+	ctx.active_wars = []
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "SCOUT_ENEMY"
+	var need := _make_metadata_need()
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_eq(option.metadata.get("target_clan_id", ""), "",
+		"SCOUT_ENEMY metadata target_clan_id should be empty with no wars")
+
+
+func test_drill_troops_metadata_uses_assigned_company() -> void:
+	var ctx := _make_metadata_ctx()
+	ctx.assigned_company_id = 5
+	ctx.commanded_unit_id = 10
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "DRILL_TROOPS"
+	var need := _make_metadata_need()
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_eq(option.metadata.get("target_company_id", -1), 5,
+		"DRILL_TROOPS should prefer assigned_company_id")
+
+
+func test_drill_troops_metadata_falls_back_to_commanded_unit() -> void:
+	var ctx := _make_metadata_ctx()
+	ctx.assigned_company_id = -1
+	ctx.commanded_unit_id = 10
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "DRILL_TROOPS"
+	var need := _make_metadata_need()
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_eq(option.metadata.get("target_company_id", -1), 10,
+		"DRILL_TROOPS should fall back to commanded_unit_id")
+
+
+func test_request_performance_metadata_uses_need_target() -> void:
+	var ctx := _make_metadata_ctx()
+	var need := _make_metadata_need()
+	need.target_npc_id = 42
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "REQUEST_PERFORMANCE"
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_eq(option.metadata.get("target_performer_id", -1), 42,
+		"REQUEST_PERFORMANCE should use need.target_npc_id as performer")
+
+
+func test_request_performance_metadata_defaults_without_target() -> void:
+	var ctx := _make_metadata_ctx()
+	var need := _make_metadata_need()
+	need.target_npc_id = -1
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "REQUEST_PERFORMANCE"
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_eq(option.metadata.get("target_performer_id", 0), -1,
+		"REQUEST_PERFORMANCE should default to -1 without target")
+
+
+func test_offer_favor_metadata_includes_court_settlement() -> void:
+	var ctx := _make_metadata_ctx()
+	ctx.court_settlement_id = 42
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "OFFER_FAVOR"
+	var need := _make_metadata_need()
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_eq(option.metadata.get("court_settlement_id", -1), 42,
+		"OFFER_FAVOR should get court_settlement_id for witness tracking")
+
+
+func test_province_status_carries_ptl() -> void:
+	var provinces: Array = []
+	var pd := ProvinceData.new()
+	pd.province_id = 3
+	pd.province_taint_level = 6.0
+	pd.clan = "Crab"
+	provinces.append(pd)
+	var statuses: Array = NPCDecisionEngine.build_province_statuses_from_data(provinces)
+	assert_eq(statuses.size(), 1)
+	var ps: NPCDataStructures.ProvinceStatus = statuses[0]
+	assert_almost_eq(ps.province_taint_level, 6.0, 0.01,
+		"ProvinceStatus should carry province_taint_level from ProvinceData")

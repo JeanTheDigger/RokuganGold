@@ -818,39 +818,37 @@ For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
 - **EXPOSE_SECRET_PUBLICLY — same pattern as EXPOSE_SECRET_PRIVATELY.**
   Executor reads same three metadata keys, all unpopulated. Always returns
   `{}`. In same three context lists.
-- **PURIFY_TAINTED_GROUND — ptl not populated, TN always base 15.** Executor
-  reads `ptl` (default 0.0) from metadata. No metadata population. TN formula
-  is `15 + int(ptl * 5.0)` → always 15 regardless of actual province PTL.
-  `province_id` has fallback to `action.target_province_id` (from ImmediateNeed),
-  so province targeting works. Needs: PTL lookup from world_state in metadata
-  population.
+- **PURIFY_TAINTED_GROUND — ptl not populated, TN always base 15. FIXED.**
+  Added `province_taint_level` to ProvinceStatus, populated from ProvinceData
+  in `build_province_statuses_from_data()`. Metadata case in
+  `_populate_action_metadata()` looks up PTL from ctx.province_statuses.
+  2 tests.
 - **PUBLIC_ATONEMENT — offense_key/offense_tier not populated.** Executor reads
   `offense_key` (default "") and `offense_tier` (default 3). No metadata
   population. Empty offense_key passes the guard check (is_empty → skip check),
   then `record_atonement(character, "")` records nothing. TN always tier 3.
   Needs: selection logic to pick which past offense to atone for.
-- **SCOUT_ENEMY — target_clan_id not populated.** Executor reads
-  `target_clan_id` (default ""). No metadata population. Scouting executes
-  against no specific enemy clan. In: AT_OWN_HOLDINGS, ON_CAMPAIGN,
-  AT_WALL_TOWER. Needs: enemy clan selection from active wars or border threats.
-- **REQUEST_PERFORMANCE — target_performer_id not populated.** Executor reads
-  `target_performer_id` (-1), `performance_type` ("song"), `venue_mode`
-  ("public"). No metadata population (only PUBLIC_PERFORMANCE/PERFORM_FOR have
-  a conditional branch for FULFILL_PERFORMANCE_REQUEST). target_performer_id=-1
-  → no invitation letter sent. In: AT_OWN_HOLDINGS, AT_COURT. Needs: performer
-  selection from co-located characters with artisan skills.
-- **DRILL_TROOPS — target_company_id not populated.** Executor reads
-  `target_company_id` (-1) from metadata via `_compute_military_effects()`.
-  No metadata population. Drilling targets no specific company. In: AT_DOJO,
-  ON_CAMPAIGN. Needs: company selection from character's commanded/nearby units.
-- **OFFER_FAVOR — metadata empty, court_settlement_id missing for witnesses.**
-  OFFER_FAVOR is in `_CONTESTED_COURT_ACTIONS` but NOT in the 6-action metadata
-  population block (NEGOTIATE, PERSUADE, PUBLIC_DEBATE, CHARM, IMPRESS,
-  LISTEN_REFLECT). Empty metadata → `action.metadata.is_empty()` is true →
-  `_action_metadata` not set in effects → DayOrchestrator's
-  `_create_favor_obligation_commitment()` gets `court_settlement_id = -1` →
-  favor commitments created at court have no court attendee witnesses (only
-  creditor + debtor). Needs: court_settlement_id in metadata for OFFER_FAVOR.
+- **SCOUT_ENEMY — target_clan_id not populated. FIXED.** Metadata case
+  extracts enemy clan from first active war via
+  `WarSystem.get_enemy_clan_from_war()`. Empty string if no active wars.
+  2 tests.
+- **REQUEST_PERFORMANCE — target_performer_id not populated. FIXED.** Metadata
+  case uses `need.target_npc_id` as target performer (set by decomposer when
+  NPC has a specific performer objective). Defaults to -1 (generic request) if
+  no target. Also sets performance_type="song", venue_mode="public". 2 tests.
+- **DRILL_TROOPS — target_company_id not populated. FIXED.** Metadata case
+  uses `ctx.assigned_company_id` (preferred) or `ctx.commanded_unit_id`
+  (fallback). 2 tests.
+- **OFFER_FAVOR — metadata empty, court_settlement_id missing. FIXED.** Added
+  OFFER_FAVOR to the 7-action court metadata population block (was 6-action).
+  Now gets `court_settlement_id`, `has_topic`, `need_type`. Favor obligation
+  commitments now include court attendee witnesses. 1 test.
+- **TRAIN_ANIMAL — `character` undefined in _populate_action_metadata. FIXED.**
+  TRAIN_ANIMAL metadata case referenced `character` variable but function
+  signature was `(option, need, ctx)` — would cause GDScript parse error.
+  Added optional `character: L5RCharacterData = null` parameter to both
+  `_populate_action_metadata()` and `generate_options()`. Call sites updated.
+  Backward-compatible (existing 2-arg and 3-arg callers unchanged).
 - **INTIMIDATE — blackmail path unreachable via NPC daily loop.** Executor
   branches on `secret_ref` (null) → `has_secret = false` → blackmail branch
   never fires. Plain public/private intimidation works correctly. Blackmail

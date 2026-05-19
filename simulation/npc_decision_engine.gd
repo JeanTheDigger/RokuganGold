@@ -308,6 +308,7 @@ static func resolve_goal(
 static func generate_options(
 	ctx: NPCDataStructures.ContextSnapshot,
 	need: NPCDataStructures.ImmediateNeed,
+	character: L5RCharacterData = null,
 ) -> Array[NPCDataStructures.ScoredAction]:
 	var options: Array[NPCDataStructures.ScoredAction] = []
 	var available_actions: Array[String] = _get_actions_for_context(ctx.context_flag)
@@ -347,7 +348,7 @@ static func generate_options(
 			if ctx.civilian_orders_remaining <= 0:
 				if not CivilianOrderBudget.draws_from_military_pool(action_id, has_mil_rank):
 					continue
-		_populate_action_metadata(option, need, ctx)
+		_populate_action_metadata(option, need, ctx, character)
 		options.append(option)
 
 	return options
@@ -708,7 +709,7 @@ static func run(
 	var need := resolve_goal(character, ctx, objectives)
 
 	# Phase 3
-	var options := generate_options(ctx, need)
+	var options := generate_options(ctx, need, character)
 
 	# Phase 4
 	options = apply_personality_filter(options, ctx, filter_data)
@@ -2309,6 +2310,7 @@ static func build_province_statuses_from_data(
 				ps.insurgency_type = Enums.InsurgencyType.keys()[ins.insurgency_type]
 				break
 		ps.last_report_ic_day = pd.last_report_ic_day
+		ps.province_taint_level = pd.province_taint_level
 		ps.garrison_pu = settlement_garrison.get(pd.province_id, 0)
 		ps.total_settlement_pu = settlement_total_pu.get(pd.province_id, 0)
 		ps.rice_stockpile = settlement_rice.get(pd.province_id, 0.0)
@@ -2331,6 +2333,7 @@ static func _populate_action_metadata(
 	option: NPCDataStructures.ScoredAction,
 	need: NPCDataStructures.ImmediateNeed,
 	ctx: NPCDataStructures.ContextSnapshot,
+	character: L5RCharacterData = null,
 ) -> void:
 	if option.action_id == "DECLARE_WAR":
 		option.metadata = _build_declare_war_metadata(need, ctx)
@@ -2376,7 +2379,7 @@ static func _populate_action_metadata(
 			"concealment_raises": split["concealment"],
 		}
 	elif option.action_id in ["NEGOTIATE", "PERSUADE", "PUBLIC_DEBATE",
-			"CHARM", "IMPRESS", "LISTEN_REFLECT"]:
+			"CHARM", "IMPRESS", "LISTEN_REFLECT", "OFFER_FAVOR"]:
 		var court_meta: Dictionary = {
 			"court_settlement_id": ctx.court_settlement_id,
 			"has_topic": _has_known_agenda_topic(ctx),
@@ -2575,6 +2578,36 @@ static func _populate_action_metadata(
 			"subject_type": Enums.TattooSubjectType.IMAGE,
 			"subject_description": "",
 			"subject_topic_id": -1,
+		}
+	elif option.action_id == "PURIFY_TAINTED_GROUND":
+		var ptl: float = 0.0
+		var target_prov_id: int = option.target_province_id
+		for ps_var: Variant in ctx.province_statuses:
+			if ps_var is NPCDataStructures.ProvinceStatus:
+				var ps: NPCDataStructures.ProvinceStatus = ps_var
+				if ps.province_id == target_prov_id:
+					ptl = ps.province_taint_level
+					break
+		option.metadata = {"ptl": ptl}
+	elif option.action_id == "SCOUT_ENEMY":
+		var target_clan_id: String = ""
+		for w: Variant in ctx.active_wars:
+			if w is Dictionary:
+				target_clan_id = WarSystem.get_enemy_clan_from_war(w, ctx.clan)
+				if not target_clan_id.is_empty():
+					break
+		option.metadata = {"target_clan_id": target_clan_id}
+	elif option.action_id == "DRILL_TROOPS":
+		var target_company_id: int = ctx.assigned_company_id
+		if target_company_id < 0:
+			target_company_id = ctx.commanded_unit_id
+		option.metadata = {"target_company_id": target_company_id}
+	elif option.action_id == "REQUEST_PERFORMANCE":
+		var target_performer_id: int = need.target_npc_id if need.target_npc_id >= 0 else -1
+		option.metadata = {
+			"target_performer_id": target_performer_id,
+			"performance_type": "song",
+			"venue_mode": "public",
 		}
 
 

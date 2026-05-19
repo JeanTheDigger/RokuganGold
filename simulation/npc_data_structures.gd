@@ -221,6 +221,7 @@ class ProvinceStatus:
 	var confidence: int = 0  # 0=stale, 1=recent, 2=fresh
 	var is_wall_province: bool = false
 	var crisis_type: String = ""
+	var province_taint_level: float = 0.0
 
 
 class WallStatus:
