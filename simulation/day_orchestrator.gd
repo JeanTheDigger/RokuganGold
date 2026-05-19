@@ -429,6 +429,8 @@ static func advance_day(
 		ic_day,
 		int(world_states.get("emperor_id", -1)),
 		int(world_states.get("emperor_archetype", StrategicReview.EmperorArchetype.IRON)),
+		active_topics,
+		active_courts,
 	)
 
 	var governance_results: Dictionary = _process_governance_effects(
@@ -12922,7 +12924,12 @@ static func _process_court_action_effects(
 	ic_day: int = 0,
 	emperor_id: int = -1,
 	emperor_archetype: int = StrategicReview.EmperorArchetype.IRON,
+	active_topics: Array[TopicData] = [],
+	active_courts: Array[CourtSessionData] = [],
 ) -> void:
+	var topic_map: Dictionary = {}
+	for t: TopicData in active_topics:
+		topic_map[t.topic_id] = t
 	for entry: Dictionary in day_results:
 		var effects: Dictionary = entry.get("effects", {})
 		if effects.is_empty():
@@ -12946,13 +12953,15 @@ static func _process_court_action_effects(
 				if actor != null:
 					HonorGlorySystem.apply_honor_change(actor, StrategicReview.TYRANT_COURT_HONOR_PENALTY)
 
-		# Topic position shift from Negotiate/Persuade
+		# Topic position shift from Negotiate/Persuade — apply relevance resistance (s16.4)
 		if effects.has("target_position_shift") and target != null:
 			var shift: float = effects["target_position_shift"]
 			var topic_id: int = action_meta.get("topic_id", -1)
 			if topic_id >= 0:
+				var relevance: float = action_meta.get("target_relevance", 0.0)
+				var effective_shift: float = TopicMomentumSystem.calculate_position_resistance(shift, relevance)
 				var current_pos: float = target.topic_positions.get(topic_id, 0.0)
-				target.topic_positions[topic_id] = clampf(current_pos + shift, -100.0, 100.0)
+				target.topic_positions[topic_id] = clampf(current_pos + effective_shift, -100.0, 100.0)
 
 		# Provoke Emotion target effects
 		if target != null:
@@ -13043,8 +13052,32 @@ static func _process_court_action_effects(
 				if topic_id >= 0:
 					var pos_shift: float = pw.get("position_shift_toward_a", 0.0)
 					if pos_shift != 0.0:
+						var w_relevance: float = pw.get("witness_relevance", 0.0)
+						var eff_shift: float = TopicMomentumSystem.calculate_position_resistance(pos_shift, w_relevance)
 						var cur_pos: float = w.topic_positions.get(topic_id, 0.0)
-						w.topic_positions[topic_id] = clampf(cur_pos + pos_shift, -100.0, 100.0)
+						w.topic_positions[topic_id] = clampf(cur_pos + eff_shift, -100.0, 100.0)
+
+		# Session state accumulation (s15.4) — track charm/negotiate counts and TN reductions
+		if action_id in ["CHARM", "NEGOTIATE", "IMPRESS", "LISTEN_REFLECT"] and not effects.get("failed", false):
+			var court_settlement: int = action_meta.get("court_settlement_id", -1)
+			var court: CourtSessionData = null
+			for c: CourtSessionData in active_courts:
+				if c.phase == CourtSessionData.CourtPhase.ACTIVE and c.host_settlement_id == court_settlement:
+					court = c
+					break
+			if court != null:
+				if action_id == "CHARM":
+					CourtSystem.increment_charm_count(court, actor_id)
+				elif action_id == "NEGOTIATE":
+					CourtSystem.increment_negotiate_count(court, actor_id)
+					if effects.has("session_tn_reduction"):
+						CourtSystem.record_tn_reduction(court, actor_id, target_id, effects["session_tn_reduction"])
+				elif action_id == "IMPRESS":
+					if effects.has("session_tn_reduction"):
+						CourtSystem.record_tn_reduction(court, actor_id, target_id, effects["session_tn_reduction"])
+				elif action_id == "LISTEN_REFLECT":
+					if effects.has("persuade_negotiate_tn_reduction"):
+						CourtSystem.record_persuade_tn_reduction(court, actor_id, target_id, effects["persuade_negotiate_tn_reduction"])
 
 
 # -- Court Availability Data Population ----------------------------------------
