@@ -2461,6 +2461,11 @@ static func _populate_action_metadata(
 		option.metadata = {
 			"case_id": active_case.get("case_id", -1),
 		}
+	elif option.action_id == "SEARCH_PERSON":
+		var is_magistrate: bool = ctx.known_objectives.get("standing_need_type", "") == "UPHOLD_LAW"
+		option.metadata = {
+			"magistrate_authority": is_magistrate,
+		}
 	elif option.action_id == "EXAMINE_LETTER":
 		option.metadata = {
 			"letter_id": need.target_settlement_id if need.target_settlement_id >= 0 else -1,

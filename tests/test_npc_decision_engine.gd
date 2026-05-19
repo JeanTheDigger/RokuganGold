@@ -3027,3 +3027,27 @@ func test_play_game_defaults_to_go() -> void:
 	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
 	assert_eq(option.metadata.get("game_skill", ""), "Games: Go",
 		"Should default to Games: Go when NPC has no game skills")
+
+
+# -- SEARCH_PERSON metadata ----------------------------------------------------
+
+func test_search_person_magistrate_authority_when_uphold_law() -> void:
+	var ctx := _make_metadata_ctx()
+	ctx.known_objectives = {"standing_need_type": "UPHOLD_LAW"}
+	var need := _make_metadata_need()
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "SEARCH_PERSON"
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_true(option.metadata.get("magistrate_authority", false),
+		"UPHOLD_LAW standing objective should grant magistrate authority")
+
+
+func test_search_person_no_authority_by_default() -> void:
+	var ctx := _make_metadata_ctx()
+	ctx.known_objectives = {}
+	var need := _make_metadata_need()
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "SEARCH_PERSON"
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_false(option.metadata.get("magistrate_authority", true),
+		"Should not have magistrate authority without UPHOLD_LAW objective")
