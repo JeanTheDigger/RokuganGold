@@ -987,6 +987,110 @@ func test_summons_has_miya_route() -> void:
 	assert_true(letter.has_miya_route)
 
 
+# -- Winter Court COURT_ATTENDANCE Commitment Tests ----------------------------
+
+func test_winter_court_creates_attendance_commitments_for_invitees() -> void:
+	_setup_basic_castle()
+	var lion_champ := _make_character(30, "Lion Champion", "Lion", "Akodo", 8.0)
+	lion_champ.lord_id = -1
+	_characters_by_id[30] = lion_champ
+	var scorpion_champ := _make_character(31, "Scorpion Champion", "Scorpion", "Bayushi", 8.0)
+	scorpion_champ.lord_id = -1
+	_characters_by_id[31] = scorpion_champ
+
+	var commitments: Array[CommitmentData] = []
+	var next_commitment_id: Array[int] = [1]
+	var directive: Dictionary = {"lord_id": _emperor.character_id, "host_clan": "Crane"}
+	var courts: Array[CourtSessionData] = []
+	var topics: Array[TopicData] = []
+	var next_court_id: Array[int] = [1]
+	var next_topic_id: Array[int] = [100]
+	var dice := DiceEngine.new()
+	var pending_letters: Array[LetterData] = []
+	var next_letter_id: Array[int] = [1]
+
+	var result: Dictionary = DayOrchestrator._create_winter_court_from_directive(
+		directive, courts, topics, _characters_by_id, next_court_id, 200,
+		[], [], {}, StrategicReview.EmperorArchetype.IRON, next_topic_id,
+		pending_letters, dice, next_letter_id,
+		commitments, next_commitment_id,
+	)
+	assert_gt(commitments.size(), 0)
+	var debtor_ids: Array[int] = []
+	for c: CommitmentData in commitments:
+		assert_eq(c.commitment_type, Enums.CommitmentType.COURT_ATTENDANCE)
+		assert_eq(c.creditor_npc_id, _emperor.character_id)
+		assert_eq(c.tier, 2)
+		assert_eq(c.source_action_id, "WINTER_COURT_SUMMONS")
+		debtor_ids.append(c.debtor_npc_id)
+	assert_true(30 in debtor_ids, "Lion Champion should have commitment")
+	assert_true(31 in debtor_ids, "Scorpion Champion should have commitment")
+
+
+func test_winter_court_commitments_have_correct_deadline() -> void:
+	_setup_basic_castle()
+	var lion_champ := _make_character(30, "Lion Champion", "Lion", "Akodo", 8.0)
+	lion_champ.lord_id = -1
+	_characters_by_id[30] = lion_champ
+
+	var commitments: Array[CommitmentData] = []
+	var next_commitment_id: Array[int] = [1]
+	var directive: Dictionary = {"lord_id": _emperor.character_id, "host_clan": "Crane"}
+	var courts: Array[CourtSessionData] = []
+	var topics: Array[TopicData] = []
+	var next_court_id: Array[int] = [1]
+	var next_topic_id: Array[int] = [100]
+	var dice := DiceEngine.new()
+	var pending_letters: Array[LetterData] = []
+	var next_letter_id: Array[int] = [1]
+
+	DayOrchestrator._create_winter_court_from_directive(
+		directive, courts, topics, _characters_by_id, next_court_id, 200,
+		[], [], {}, StrategicReview.EmperorArchetype.IRON, next_topic_id,
+		pending_letters, dice, next_letter_id,
+		commitments, next_commitment_id,
+	)
+	assert_eq(commitments.size(), 1)
+	assert_eq(commitments[0].deadline_ic_day, courts[0].start_ic_day)
+	assert_eq(commitments[0].fulfillment_target, courts[0].host_settlement_id)
+
+
+func test_winter_court_commitment_skips_duplicates() -> void:
+	_setup_basic_castle()
+	var lion_champ := _make_character(30, "Lion Champion", "Lion", "Akodo", 8.0)
+	lion_champ.lord_id = -1
+	_characters_by_id[30] = lion_champ
+
+	var existing := CommitmentData.new()
+	existing.commitment_type = Enums.CommitmentType.COURT_ATTENDANCE
+	existing.debtor_npc_id = 30
+	existing.fulfillment_target = int(lion_champ.physical_location) if lion_champ.physical_location.is_valid_int() else -1
+	existing.status = Enums.CommitmentStatus.PENDING
+
+	var commitments: Array[CommitmentData] = [existing]
+	var next_commitment_id: Array[int] = [1]
+	var directive: Dictionary = {"lord_id": _emperor.character_id, "host_clan": "Crane"}
+	var courts: Array[CourtSessionData] = []
+	var topics: Array[TopicData] = []
+	var next_court_id: Array[int] = [1]
+	var next_topic_id: Array[int] = [100]
+	var dice := DiceEngine.new()
+	var pending_letters: Array[LetterData] = []
+	var next_letter_id: Array[int] = [1]
+
+	DayOrchestrator._create_winter_court_from_directive(
+		directive, courts, topics, _characters_by_id, next_court_id, 200,
+		[], [], {}, StrategicReview.EmperorArchetype.IRON, next_topic_id,
+		pending_letters, dice, next_letter_id,
+		commitments, next_commitment_id,
+	)
+	var attendance_count: int = 0
+	for c: CommitmentData in commitments:
+		if c.debtor_npc_id == 30 and c.commitment_type == Enums.CommitmentType.COURT_ATTENDANCE:
+			attendance_count += 1
+	assert_eq(attendance_count, 1, "Should not duplicate existing commitment")
+
+
 # -- Late Arrival Tests --------------------------------------------------------
 
 func test_late_arrival_adds_delegate_to_winter_court() -> void:

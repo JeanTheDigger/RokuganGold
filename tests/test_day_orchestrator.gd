@@ -7658,3 +7658,191 @@ func test_favor_obligation_skipped_in_at_risk_penalty() -> void:
 		commitments, 2, char,
 	)
 	assert_eq(penalty, 0)
+
+
+# -- COURT_ATTENDANCE Commitment Creation (s55.31) ----------------------------
+
+func test_court_attendance_commitment_created_on_invitation() -> void:
+	var court := CourtSessionData.new()
+	court.court_id = 1
+	court.court_type = CourtSessionData.CourtType.PROVINCIAL_FAMILY_COURT
+	court.host_settlement_id = 100
+	court.start_ic_day = 50
+	court.phase = CourtSessionData.CourtPhase.ACTIVE
+	court.personal_invitation_ids = [20]
+	var results: Array = [
+		{
+			"character_id": 10,
+			"action_id": "SEND_INVITATION",
+			"effects": {
+				"requires_court_invitation": true,
+				"invitee_id": 20,
+				"invitation_settlement_id": 100,
+			},
+		},
+	]
+	var commitments: Array[CommitmentData] = []
+	var courts: Array[CourtSessionData] = [court]
+	var next_id: Array[int] = [1]
+	DayOrchestrator._process_commitment_creation_writebacks(
+		results, commitments, courts, 40, next_id,
+	)
+	assert_eq(commitments.size(), 1)
+	var c: CommitmentData = commitments[0]
+	assert_eq(c.commitment_type, Enums.CommitmentType.COURT_ATTENDANCE)
+	assert_eq(c.creditor_npc_id, 10)
+	assert_eq(c.debtor_npc_id, 20)
+	assert_eq(c.deadline_ic_day, 50)
+	assert_eq(c.fulfillment_target, 100)
+	assert_eq(c.source_action_id, "SEND_INVITATION")
+	assert_eq(c.tier, 3)
+	assert_eq(next_id[0], 2)
+
+
+func test_court_attendance_tier2_for_winter_court() -> void:
+	var court := CourtSessionData.new()
+	court.court_id = 1
+	court.court_type = CourtSessionData.CourtType.IMPERIAL_WINTER_COURT
+	court.host_settlement_id = 100
+	court.start_ic_day = 270
+	court.phase = CourtSessionData.CourtPhase.ACTIVE
+	court.personal_invitation_ids = [20]
+	var results: Array = [
+		{
+			"character_id": 10,
+			"action_id": "SEND_INVITATION",
+			"effects": {
+				"requires_court_invitation": true,
+				"invitee_id": 20,
+				"invitation_settlement_id": 100,
+			},
+		},
+	]
+	var commitments: Array[CommitmentData] = []
+	var courts: Array[CourtSessionData] = [court]
+	var next_id: Array[int] = [1]
+	DayOrchestrator._process_commitment_creation_writebacks(
+		results, commitments, courts, 200, next_id,
+	)
+	assert_eq(commitments.size(), 1)
+	assert_eq(commitments[0].tier, 2)
+
+
+func test_court_attendance_tier2_for_clan_champion_court() -> void:
+	var court := CourtSessionData.new()
+	court.court_id = 1
+	court.court_type = CourtSessionData.CourtType.CLAN_CHAMPION_COURT
+	court.host_settlement_id = 100
+	court.start_ic_day = 50
+	court.phase = CourtSessionData.CourtPhase.ACTIVE
+	court.personal_invitation_ids = [20]
+	var results: Array = [
+		{
+			"character_id": 10,
+			"action_id": "SEND_INVITATION",
+			"effects": {
+				"requires_court_invitation": true,
+				"invitee_id": 20,
+				"invitation_settlement_id": 100,
+			},
+		},
+	]
+	var commitments: Array[CommitmentData] = []
+	var courts: Array[CourtSessionData] = [court]
+	var next_id: Array[int] = [1]
+	DayOrchestrator._process_commitment_creation_writebacks(
+		results, commitments, courts, 40, next_id,
+	)
+	assert_eq(commitments.size(), 1)
+	assert_eq(commitments[0].tier, 2)
+
+
+func test_court_attendance_skips_if_invitee_not_added() -> void:
+	var court := CourtSessionData.new()
+	court.court_id = 1
+	court.court_type = CourtSessionData.CourtType.PROVINCIAL_FAMILY_COURT
+	court.host_settlement_id = 100
+	court.start_ic_day = 50
+	court.phase = CourtSessionData.CourtPhase.ACTIVE
+	court.personal_invitation_ids = []
+	var results: Array = [
+		{
+			"character_id": 10,
+			"action_id": "SEND_INVITATION",
+			"effects": {
+				"requires_court_invitation": true,
+				"invitee_id": 20,
+				"invitation_settlement_id": 100,
+			},
+		},
+	]
+	var commitments: Array[CommitmentData] = []
+	var courts: Array[CourtSessionData] = [court]
+	var next_id: Array[int] = [1]
+	DayOrchestrator._process_commitment_creation_writebacks(
+		results, commitments, courts, 40, next_id,
+	)
+	assert_eq(commitments.size(), 0)
+
+
+func test_court_attendance_skips_duplicate() -> void:
+	var court := CourtSessionData.new()
+	court.court_id = 1
+	court.court_type = CourtSessionData.CourtType.PROVINCIAL_FAMILY_COURT
+	court.host_settlement_id = 100
+	court.start_ic_day = 50
+	court.phase = CourtSessionData.CourtPhase.ACTIVE
+	court.personal_invitation_ids = [20]
+	var existing := CommitmentData.new()
+	existing.commitment_type = Enums.CommitmentType.COURT_ATTENDANCE
+	existing.debtor_npc_id = 20
+	existing.fulfillment_target = 100
+	existing.status = Enums.CommitmentStatus.PENDING
+	var results: Array = [
+		{
+			"character_id": 10,
+			"action_id": "SEND_INVITATION",
+			"effects": {
+				"requires_court_invitation": true,
+				"invitee_id": 20,
+				"invitation_settlement_id": 100,
+			},
+		},
+	]
+	var commitments: Array[CommitmentData] = [existing]
+	var courts: Array[CourtSessionData] = [court]
+	var next_id: Array[int] = [1]
+	DayOrchestrator._process_commitment_creation_writebacks(
+		results, commitments, courts, 40, next_id,
+	)
+	assert_eq(commitments.size(), 1, "Should not add duplicate")
+
+
+func test_court_attendance_witnesses_are_inviter_and_invitee() -> void:
+	var court := CourtSessionData.new()
+	court.court_id = 1
+	court.court_type = CourtSessionData.CourtType.PROVINCIAL_FAMILY_COURT
+	court.host_settlement_id = 100
+	court.start_ic_day = 50
+	court.phase = CourtSessionData.CourtPhase.ACTIVE
+	court.personal_invitation_ids = [20]
+	var results: Array = [
+		{
+			"character_id": 10,
+			"action_id": "SEND_INVITATION",
+			"effects": {
+				"requires_court_invitation": true,
+				"invitee_id": 20,
+				"invitation_settlement_id": 100,
+			},
+		},
+	]
+	var commitments: Array[CommitmentData] = []
+	var courts: Array[CourtSessionData] = [court]
+	var next_id: Array[int] = [1]
+	DayOrchestrator._process_commitment_creation_writebacks(
+		results, commitments, courts, 40, next_id,
+	)
+	assert_eq(commitments[0].witnesses.size(), 2)
+	assert_true(10 in commitments[0].witnesses)
+	assert_true(20 in commitments[0].witnesses)

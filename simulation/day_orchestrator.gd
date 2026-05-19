@@ -849,6 +849,7 @@ static func advance_day(
 			current_season, provinces_array, settlements,
 			emperor_archetype, next_topic_id,
 			pending_letters, dice_engine, wc_letter_id,
+			commitments, next_commitment_id,
 		)
 		_process_vassal_reassignments(
 			strategic_results, objectives_map, characters_by_id,
@@ -9917,6 +9918,8 @@ static func _process_strategic_court_calls(
 	pending_letters: Array[LetterData] = [],
 	dice_engine: DiceEngine = null,
 	next_letter_id: Array[int] = [1],
+	commitments: Array[CommitmentData] = [],
+	next_commitment_id: Array[int] = [1],
 ) -> void:
 	for directive: Dictionary in strategic_results:
 		var directive_type: String = directive.get("directive", "")
@@ -9927,6 +9930,7 @@ static func _process_strategic_court_calls(
 				provinces, settlements, world_states,
 				archetype, next_topic_id,
 				pending_letters, dice_engine, next_letter_id,
+				commitments, next_commitment_id,
 			)
 			continue
 		if directive_type != StrategicReview.Directive.CALL_COURT:
@@ -9984,6 +9988,8 @@ static func _create_winter_court_from_directive(
 	pending_letters: Array[LetterData] = [],
 	dice_engine: DiceEngine = null,
 	next_letter_id: Array[int] = [1],
+	commitments: Array[CommitmentData] = [],
+	next_commitment_id: Array[int] = [1],
 ) -> Dictionary:
 	var emperor_id: int = directive.get("lord_id", -1)
 	if emperor_id < 0:
@@ -10076,6 +10082,38 @@ static func _create_winter_court_from_directive(
 		pending_letters, dice_engine, next_letter_id,
 	)
 
+	var commitments_created: int = 0
+	for inv_id: Variant in all_invited:
+		var iid: int = int(inv_id)
+		if iid == emperor_id or iid == host_daimyo_id or iid == host_champion_id:
+			continue
+		var already_exists: bool = false
+		for cm: CommitmentData in commitments:
+			if (cm.commitment_type == Enums.CommitmentType.COURT_ATTENDANCE
+				and cm.debtor_npc_id == iid
+				and cm.fulfillment_target == host_settlement_id
+				and cm.status == Enums.CommitmentStatus.PENDING):
+				already_exists = true
+				break
+		if already_exists:
+			continue
+		var witnesses: Array[int] = [emperor_id, iid]
+		var cm: CommitmentData = CommitmentRegistry.create_commitment(
+			next_commitment_id[0],
+			Enums.CommitmentType.COURT_ATTENDANCE,
+			emperor_id,
+			iid,
+			court.start_ic_day,
+			2,
+			ic_day,
+			"WINTER_COURT_SUMMONS",
+			host_settlement_id,
+			witnesses,
+		)
+		commitments.append(cm)
+		next_commitment_id[0] += 1
+		commitments_created += 1
+
 	return {
 		"court_id": court.court_id,
 		"host_clan": host_clan,
@@ -10085,6 +10123,7 @@ static func _create_winter_court_from_directive(
 		"invitation_count": all_invited.size(),
 		"announcement_topic_id": topic.topic_id,
 		"summons_letters_sent": letters_sent,
+		"commitments_created": commitments_created,
 	}
 
 
@@ -14733,6 +14772,10 @@ static func _process_commitment_creation_writebacks(
 			_create_favor_obligation_commitment(
 				effects, commitments, active_courts, ic_day, next_commitment_id,
 			)
+		if effects.get("requires_court_invitation", false):
+			_create_court_attendance_commitment(
+				entry, commitments, active_courts, ic_day, next_commitment_id,
+			)
 
 
 static func _create_favor_obligation_commitment(
@@ -14775,6 +14818,59 @@ static func _create_favor_obligation_commitment(
 		ic_day,
 		"OFFER_FAVOR",
 		-1,
+		witnesses,
+	)
+	commitments.append(commitment)
+	next_commitment_id[0] += 1
+
+
+static func _create_court_attendance_commitment(
+	entry: Dictionary,
+	commitments: Array[CommitmentData],
+	active_courts: Array[CourtSessionData],
+	ic_day: int,
+	next_commitment_id: Array[int],
+) -> void:
+	var effects: Dictionary = entry.get("effects", {})
+	var inviter_id: int = entry.get("character_id", -1)
+	var invitee_id: int = effects.get("invitee_id", -1)
+	var settlement_id: int = effects.get("invitation_settlement_id", -1)
+	if inviter_id < 0 or invitee_id < 0:
+		return
+
+	var target_court: CourtSessionData = null
+	for c: CourtSessionData in active_courts:
+		if c.host_settlement_id == settlement_id and c.phase != CourtSessionData.CourtPhase.CLOSED:
+			target_court = c
+			break
+	if target_court == null:
+		return
+	if invitee_id not in target_court.personal_invitation_ids:
+		return
+
+	for c: CommitmentData in commitments:
+		if (c.commitment_type == Enums.CommitmentType.COURT_ATTENDANCE
+			and c.debtor_npc_id == invitee_id
+			and c.fulfillment_target == target_court.host_settlement_id
+			and c.status == Enums.CommitmentStatus.PENDING):
+			return
+
+	var tier: int = 3
+	if (target_court.court_type == CourtSessionData.CourtType.IMPERIAL_WINTER_COURT
+		or target_court.court_type == CourtSessionData.CourtType.CLAN_CHAMPION_COURT):
+		tier = 2
+
+	var witnesses: Array[int] = [inviter_id, invitee_id]
+	var commitment: CommitmentData = CommitmentRegistry.create_commitment(
+		next_commitment_id[0],
+		Enums.CommitmentType.COURT_ATTENDANCE,
+		inviter_id,
+		invitee_id,
+		target_court.start_ic_day,
+		tier,
+		ic_day,
+		"SEND_INVITATION",
+		target_court.host_settlement_id,
 		witnesses,
 	)
 	commitments.append(commitment)
