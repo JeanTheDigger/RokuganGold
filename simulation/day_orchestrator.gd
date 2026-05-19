@@ -225,6 +225,11 @@ static func advance_day(
 		dice_engine,
 	)
 
+	_process_scout_detection_topics(
+		day_result.get("results", []), characters_by_id,
+		active_topics, next_topic_id, ic_day,
+	)
+
 	_process_scene_examination_writebacks(
 		day_result.get("results", []), objectives_map, world_states,
 		characters_by_id, active_topics, next_topic_id, ic_day,
@@ -2803,6 +2808,37 @@ static func _create_famine_topic_multi(
 	topic.momentum = _FAMINE_FAMINE_MOMENTUM
 	topic.crisis_id = p_crisis_id
 	return topic
+
+
+# -- Scout Detection Topic (s55.23a) -------------------------------------------
+
+static func _process_scout_detection_topics(
+	results: Array,
+	characters_by_id: Dictionary,
+	active_topics: Array[TopicData],
+	next_topic_id: Array[int],
+	ic_day: int,
+) -> void:
+	for r: Dictionary in results:
+		var effects: Dictionary = r.get("effects", {})
+		if not effects.get("scouts_detected", false):
+			continue
+		var char_id: int = r.get("character_id", -1)
+		var scout: L5RCharacterData = characters_by_id.get(char_id)
+		if scout == null:
+			continue
+		var target_clan: String = effects.get("target_clan_id", "")
+		var location: String = scout.physical_location
+		var title: String = "Enemy scouts detected near %s" % location
+		if not target_clan.is_empty():
+			title = "%s scouts detected near %s" % [target_clan, location]
+		var tid: int = next_topic_id[0]
+		next_topic_id[0] = tid + 1
+		var topic: TopicData = TopicMomentumSystem.create_topic(
+			tid, title, TopicData.Tier.TIER_4, TopicData.Category.MILITARY,
+			ic_day, 15.0, [], target_clan, "", -1, "military", "scout_detected",
+		)
+		active_topics.append(topic)
 
 
 # -- Scene Examination Writebacks (s11.3.13) -----------------------------------

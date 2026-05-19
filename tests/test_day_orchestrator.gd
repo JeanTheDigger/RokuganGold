@@ -9671,3 +9671,70 @@ func test_letter_delivery_without_topics_by_id_skips_momentum() -> void:
 		pending, chars_by_id, 1, 0, [], [], null
 	)
 	assert_eq(topic.discussion_count_this_day, 0, "Without topics_by_id, discussion count stays 0")
+
+
+# -- Scout Detection Topic Generation -----------------------------------------
+
+func test_scout_detection_creates_topic() -> void:
+	var scout := L5RCharacterData.new()
+	scout.character_id = 50
+	scout.physical_location = "border_province"
+	var chars_by_id: Dictionary = {50: scout}
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [500]
+
+	var results: Array = [{
+		"character_id": 50,
+		"action_id": "SCOUT_ENEMY",
+		"effects": {
+			"scouts_detected": true,
+			"target_clan_id": "Lion",
+		},
+	}]
+	DayOrchestrator._process_scout_detection_topics(
+		results, chars_by_id, active_topics, next_topic_id, 10,
+	)
+	assert_eq(active_topics.size(), 1)
+	assert_eq(active_topics[0].topic_id, 500)
+	assert_eq(active_topics[0].tier, TopicData.Tier.TIER_4)
+	assert_eq(active_topics[0].category, TopicData.Category.MILITARY)
+	assert_true(active_topics[0].title.contains("Lion"))
+	assert_eq(active_topics[0].variant, "scout_detected")
+	assert_eq(next_topic_id[0], 501)
+
+
+func test_scout_detection_skips_without_flag() -> void:
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [500]
+	var results: Array = [{
+		"character_id": 50,
+		"action_id": "SCOUT_ENEMY",
+		"effects": {"info_gained": true},
+	}]
+	DayOrchestrator._process_scout_detection_topics(
+		results, _characters_by_id, active_topics, next_topic_id, 10,
+	)
+	assert_eq(active_topics.size(), 0, "No topic when scouts not detected")
+
+
+func test_scout_detection_generic_title_without_clan() -> void:
+	var scout := L5RCharacterData.new()
+	scout.character_id = 50
+	scout.physical_location = "frontier"
+	var chars_by_id: Dictionary = {50: scout}
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [600]
+
+	var results: Array = [{
+		"character_id": 50,
+		"action_id": "SCOUT_ENEMY",
+		"effects": {
+			"scouts_detected": true,
+			"target_clan_id": "",
+		},
+	}]
+	DayOrchestrator._process_scout_detection_topics(
+		results, chars_by_id, active_topics, next_topic_id, 10,
+	)
+	assert_eq(active_topics.size(), 1)
+	assert_true(active_topics[0].title.contains("Enemy scouts"))
