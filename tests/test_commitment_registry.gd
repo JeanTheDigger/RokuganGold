@@ -542,7 +542,7 @@ func test_action_modifier_bonus_attend_court_at_target() -> void:
 	assert_eq(result, 5, "ATTEND_COURT at committed settlement should give bonus")
 
 
-func test_action_modifier_zero_for_neutral_action() -> void:
+func test_action_modifier_bonus_for_action_at_committed_settlement() -> void:
 	var c := _make_char(1)
 	var commitment: CommitmentData = _make_commitment({"tier": 2, "debtor": 1})
 	commitment.fulfillment_target = 100
@@ -550,7 +550,18 @@ func test_action_modifier_zero_for_neutral_action() -> void:
 	var result: int = CommitmentRegistry.get_action_commitment_modifier(
 		"CHARM", 100, all, 1, c,
 	)
-	assert_eq(result, 0, "Non-travel/non-attend actions should get no modifier")
+	assert_eq(result, 15, "Any action at committed settlement should get bonus")
+
+
+func test_action_modifier_zero_for_action_elsewhere() -> void:
+	var c := _make_char(1)
+	var commitment: CommitmentData = _make_commitment({"tier": 2, "debtor": 1})
+	commitment.fulfillment_target = 100
+	var all: Array[CommitmentData] = [commitment]
+	var result: int = CommitmentRegistry.get_action_commitment_modifier(
+		"CHARM", 200, all, 1, c,
+	)
+	assert_eq(result, 0, "Action at non-committed settlement gets no modifier")
 
 
 func test_action_modifier_personality_stacks() -> void:
@@ -583,6 +594,31 @@ func test_action_modifier_favor_obligation_ignored() -> void:
 		"BEGIN_TRAVEL", 200, all, 1, c,
 	)
 	assert_eq(result, 0, "FAVOR_OBLIGATION should not contribute to modifier")
+
+
+func test_action_modifier_persuade_at_committed_court() -> void:
+	var c := _make_char(1)
+	var commitment: CommitmentData = _make_commitment({"tier": 2, "debtor": 1})
+	commitment.commitment_type = Enums.CommitmentType.SUPPORT_PLEDGE
+	commitment.fulfillment_target = 100
+	var all: Array[CommitmentData] = [commitment]
+	var result: int = CommitmentRegistry.get_action_commitment_modifier(
+		"PERSUADE", 100, all, 1, c,
+	)
+	assert_eq(result, 15, "PERSUADE at pledged court should get bonus")
+
+
+func test_action_modifier_negotiate_at_committed_court() -> void:
+	var c := _make_char(1)
+	var commitment: CommitmentData = _make_commitment({"tier": 1, "debtor": 1})
+	commitment.commitment_type = Enums.CommitmentType.SUPPORT_PLEDGE
+	commitment.fulfillment_target = 100
+	var all: Array[CommitmentData] = [commitment]
+	var result: int = CommitmentRegistry.get_action_commitment_modifier(
+		"NEGOTIATE", 100, all, 1, c,
+	)
+	assert_eq(result, 25, "NEGOTIATE at T1 pledged court should get T1 bonus")
+
 
 
 # =============================================================================

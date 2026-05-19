@@ -445,12 +445,8 @@ static func get_at_risk_penalty(
 	return maxi(total, MAX_AT_RISK_PENALTY)
 
 
-const COMMITMENT_BREAKING_ACTIONS: Array[String] = [
+const COMMITMENT_REDIRECTING_ACTIONS: Array[String] = [
 	"CHANGE_DESTINATION", "BEGIN_TRAVEL",
-]
-
-const COMMITMENT_FULFILLING_ACTIONS: Array[String] = [
-	"ATTEND_COURT", "BEGIN_TRAVEL",
 ]
 
 
@@ -477,12 +473,12 @@ static func get_action_commitment_modifier(
 	if raw_penalty == 0:
 		return 0
 	var targets_committed: bool = action_settlement_id in commitment_targets
-	if action_id in COMMITMENT_BREAKING_ACTIONS:
+	if action_id in COMMITMENT_REDIRECTING_ACTIONS:
 		if targets_committed:
 			if action_id == "BEGIN_TRAVEL":
 				return -raw_penalty
 			return 0
 		return raw_penalty
-	if action_id in COMMITMENT_FULFILLING_ACTIONS and targets_committed:
+	if targets_committed:
 		return -raw_penalty
 	return 0
