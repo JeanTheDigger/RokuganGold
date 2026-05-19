@@ -434,6 +434,26 @@ For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
   engine resolution (NPC quality, forfeits ASCII map advantage) or wait
   (accumulates suspicion, daily detection fires against them). Orchestrator
   wiring deferred until player identification system exists. 4 tests.
+- **s12.8 Betrayal Topic on Trace** — `apply_vengeance_consequences()` now
+  accepts optional `active_topics`, `next_topic_id`, `ic_day` params and
+  generates a Betrayal Tier 2 topic (category: POLITICAL) about the
+  commissioning lord when tracing completes. Subject role NEUTRAL per
+  dead-character rule. Backward compatible (optional params). 3 tests.
+- **s12.8 Non-Shinobi Detection Severity** — `resolve_daily_detection()`
+  gains optional `assassin` param. Non-shinobi assassins give observers
+  +5 Investigation bonus (`NON_SHINOBI_DETECTION_BONUS`, PROVISIONAL).
+  Wired in orchestrator daily detection call. Stacks with household
+  watchful bonus. 3 tests.
+
+### Known Code Issues (found 2026-05-19)
+- **DayOrchestrator._apply_assassination_outcome() — CrimeRecord bugs. FIXED.**
+  Three bugs: (1) `crime_type = "murder"` (string) should be
+  `Enums.CrimeType.UNSANCTIONED_COVERT_KILLING` (enum). (2) Assigned
+  nonexistent field `discovered` — changed to `legal_status =
+  Enums.LegalStatus.UNDER_INVESTIGATION`. (3) Assigned nonexistent field
+  `province_id: int` — changed to `location: String`. Also added
+  `severity = Enums.CrimeSeverity.CAPITAL` and fixed topic tier to use
+  `TopicData.Tier` enum instead of raw int.
 
 ### Known Code Issues (found 2026-05-18, pre-existing)
 - **test_assassination_system.gd test_doji_courtier_bribe_access_gets_free_raise
