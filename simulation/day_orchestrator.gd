@@ -442,6 +442,12 @@ static func advance_day(
 		next_topic_id,
 	)
 
+	_process_seduction_entanglements(
+		day_result.get("results", []),
+		entanglements,
+		ic_day,
+	)
+
 	_process_assassination_commissions(
 		day_result.get("results", []),
 		active_assassination_ops,
@@ -14023,6 +14029,59 @@ static func _reassign_broken_feudal_chains(
 # ==============================================================================
 # Assassination Operations (s12.8)
 # ==============================================================================
+# Seduction Entanglement Creation (s12.8)
+# ==============================================================================
+
+const _SEDUCTION_ACTION_IDS: Array[String] = [
+	"SEDUCE", "SEDUCE_FOR_INFO", "SEDUCE_FOR_ACCESS",
+	"SEDUCE_FOR_LEVERAGE", "SEDUCE_TO_COMPROMISE",
+]
+
+static func _get_seduction_variant_from_action_id(action_id: String) -> SeductionSystem.SeductionVariant:
+	match action_id:
+		"SEDUCE_FOR_INFO":
+			return SeductionSystem.SeductionVariant.SEDUCE_FOR_INFO
+		"SEDUCE_FOR_ACCESS":
+			return SeductionSystem.SeductionVariant.SEDUCE_FOR_ACCESS
+		"SEDUCE_FOR_LEVERAGE":
+			return SeductionSystem.SeductionVariant.SEDUCE_FOR_LEVERAGE
+		"SEDUCE_TO_COMPROMISE":
+			return SeductionSystem.SeductionVariant.SEDUCE_TO_COMPROMISE
+		_:
+			return SeductionSystem.SeductionVariant.SEDUCE
+
+
+static func _process_seduction_entanglements(
+	day_results: Array[Dictionary],
+	entanglements: Array[Dictionary],
+	ic_day: int,
+) -> void:
+	for r: Dictionary in day_results:
+		var action_id: String = r.get("action_id", "")
+		if action_id not in _SEDUCTION_ACTION_IDS:
+			continue
+		if not r.get("success", false):
+			continue
+		var effects: Dictionary = r.get("effects", {})
+		if not effects.get("creates_entanglement", false):
+			continue
+		var seducer_id: int = int(r.get("character_id", -1))
+		var target_id: int = int(r.get("target_npc_id", -1))
+		if seducer_id < 0 or target_id < 0:
+			continue
+		var duplicate: bool = false
+		for existing: Dictionary in entanglements:
+			if int(existing.get("seducer_id", -1)) == seducer_id and int(existing.get("target_id", -1)) == target_id:
+				if int(existing.get("state", -1)) != SeductionSystem.EntanglementState.BROKEN:
+					duplicate = true
+					break
+		if duplicate:
+			continue
+		var variant: SeductionSystem.SeductionVariant = _get_seduction_variant_from_action_id(action_id)
+		entanglements.append(SeductionSystem.create_entanglement(seducer_id, target_id, ic_day, variant))
+
+
+# ==============================================================================
 
 static func _process_assassination_commissions(
 	day_results: Array[Dictionary],
@@ -14148,7 +14207,7 @@ static func _process_assassination_daily_tick(
 								continue
 
 					var daily_observer: L5RCharacterData = AssassinationSystem.find_best_searcher(
-						target, assassin.character_id, characters_by_id,
+						target, assassin.character_id, characters_by_id, true,
 					)
 					if daily_observer != null:
 						var daily_detect: Dictionary = AssassinationSystem.resolve_daily_detection(

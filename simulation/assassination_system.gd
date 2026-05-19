@@ -56,6 +56,7 @@ const ACCESS_MIN_DAYS: int = 3
 const ACCESS_FORGE_CREDENTIALS_TN: int = 20
 const ACCESS_BRIBE_TN: int = 15
 const ACCESS_STEALTH_INFILTRATE_TN: int = 20
+const ACCESS_SEDUCTION_TN: int = 15
 
 # Non-shinobi TN increase — characters without shinobi school training
 # get a flat TN increase on all Phase 1 rolls (s12.8 NON-SCORPION ASSASSINS).
@@ -282,10 +283,27 @@ static func get_suspicion_tn_modifier(state: Dictionary) -> int:
 	return 0
 
 
+static func _is_household_member(
+	candidate: L5RCharacterData,
+	target: L5RCharacterData,
+) -> bool:
+	if candidate.lord_id == target.character_id:
+		return true
+	if target.lord_id >= 0 and candidate.lord_id == target.lord_id:
+		return true
+	if candidate.assigned_protection_target_id == target.character_id:
+		return true
+	return false
+
+
+const LOYALTY_DISPOSITION_MINIMUM: int = 0
+
+
 static func find_best_searcher(
 	target: L5RCharacterData,
 	assassin_id: int,
 	characters_by_id: Dictionary,
+	require_loyalty: bool = false,
 ) -> L5RCharacterData:
 	var best: L5RCharacterData = null
 	var best_score: int = -1
@@ -297,6 +315,12 @@ static func find_best_searcher(
 			continue
 		if c.physical_location == "":
 			continue
+		if require_loyalty:
+			if not _is_household_member(c, target):
+				continue
+			var disp: int = int(c.disposition_values.get(target.character_id, 0))
+			if disp < LOYALTY_DISPOSITION_MINIMUM:
+				continue
 		var score: int = c.skills.get("Investigation", 0) + c.perception
 		if score > best_score:
 			best_score = score
@@ -386,6 +410,12 @@ static func get_non_shinobi_tn_modifier(character: L5RCharacterData) -> int:
 	if has_shinobi_training(character):
 		return 0
 	return NON_SHINOBI_ACCESS_TN_INCREASE
+
+
+# PROVISIONAL — GDD s12.8 specifies "target's Status (higher Status = higher
+# base TN)" without giving a formula. Using int(status) as a direct TN adder.
+static func get_target_status_tn_modifier(target: L5RCharacterData) -> int:
+	return int(target.status)
 
 
 static func is_imperial_dynasty(character: L5RCharacterData) -> bool:
@@ -510,25 +540,28 @@ static func resolve_access_day(
 	var shinobi_mod: int = get_non_shinobi_tn_modifier(assassin)
 	var penalty: int = int(state.get("access_tn_penalty", 0))
 	var seppun_mod: int = 0
+	var status_mod: int = 0
 	if target != null:
 		seppun_mod = get_seppun_tn_modifier(target, AssassinationPhase.ACCESS, characters_by_id)
+		status_mod = get_target_status_tn_modifier(target)
 
+	var extra: int = susp_mod + shinobi_mod + seppun_mod + status_mod + penalty
 	var tn: int = 0
 	var skill: String = ""
 	var trait_override: Enums.Trait = Enums.Trait.NONE
 	match access_method:
 		"forge_credentials":
-			tn = ACCESS_FORGE_CREDENTIALS_TN + susp_mod + shinobi_mod + seppun_mod + penalty
+			tn = ACCESS_FORGE_CREDENTIALS_TN + extra
 			skill = "Forgery"
 			trait_override = Enums.Trait.INTELLIGENCE
 		"bribe":
-			tn = ACCESS_BRIBE_TN + susp_mod + shinobi_mod + seppun_mod + penalty
+			tn = ACCESS_BRIBE_TN + extra
 			skill = "Courtier"
 		"stealth":
-			tn = ACCESS_STEALTH_INFILTRATE_TN + susp_mod + shinobi_mod + seppun_mod + penalty
+			tn = ACCESS_STEALTH_INFILTRATE_TN + extra
 			skill = "Stealth"
 		"seduction":
-			tn = 15 + susp_mod + shinobi_mod + seppun_mod + penalty
+			tn = ACCESS_SEDUCTION_TN + extra
 			skill = "Temptation"
 		_:
 			return {"success": false, "reason": "invalid_method"}

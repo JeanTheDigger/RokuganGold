@@ -1206,11 +1206,13 @@ func test_access_tn_no_modifier_for_shinobi() -> void:
 func test_non_shinobi_access_passes_target_and_chars() -> void:
 	_assassin.school = "Akodo Bushi"
 	_target.clan = "Crab"
+	_target.status = 0.0
 	var s: Dictionary = AssassinationSystem.create_assassination_state(1, 2, AssassinationSystem.ExecutionMethod.BLADE, 0)
 	var chars: Dictionary = {1: _assassin, 2: _target}
 	var result: Dictionary = AssassinationSystem.resolve_access_day(_assassin, s, "stealth", _engine, _target, chars)
 	assert_eq(result["tn"], AssassinationSystem.ACCESS_STEALTH_INFILTRATE_TN + AssassinationSystem.NON_SHINOBI_ACCESS_TN_INCREASE,
-		"Non-Imperial target should have no Seppun modifier")
+		"Non-Imperial target at Status 0 should have no Seppun or Status modifier")
+	_target.status = 1.0
 
 
 # ==============================================================================
@@ -1326,6 +1328,7 @@ func test_seppun_half_protection_phase3() -> void:
 func test_access_tn_includes_seppun_full_protection() -> void:
 	_assassin.school = "Shosuro Infiltrator"
 	_target.clan = "Imperial"
+	_target.status = 0.0
 	_target.physical_location = "Otosan Uchi"
 	var guard: L5RCharacterData = L5RCharacterData.new()
 	guard.character_id = 50
@@ -1336,22 +1339,26 @@ func test_access_tn_includes_seppun_full_protection() -> void:
 	var result: Dictionary = AssassinationSystem.resolve_access_day(
 		_assassin, s, "stealth", _engine, _target, chars)
 	assert_eq(result["tn"], AssassinationSystem.ACCESS_STEALTH_INFILTRATE_TN + AssassinationSystem.SEPPUN_FULL_PHASE1_TN)
+	_target.status = 1.0
 
 
 func test_access_tn_includes_seppun_half_protection() -> void:
 	_assassin.school = "Shosuro Infiltrator"
 	_target.clan = "Imperial"
+	_target.status = 0.0
 	_target.physical_location = "Kyuden Doji"
 	var chars: Dictionary = {1: _assassin, 2: _target}
 	var s: Dictionary = AssassinationSystem.create_assassination_state(1, 2, AssassinationSystem.ExecutionMethod.POISON, 0)
 	var result: Dictionary = AssassinationSystem.resolve_access_day(
 		_assassin, s, "stealth", _engine, _target, chars)
 	assert_eq(result["tn"], AssassinationSystem.ACCESS_STEALTH_INFILTRATE_TN + AssassinationSystem.SEPPUN_HALF_PHASE1_TN)
+	_target.status = 1.0
 
 
 func test_access_tn_stacks_seppun_and_non_shinobi() -> void:
 	_assassin.school = "Akodo Bushi"
 	_target.clan = "Imperial"
+	_target.status = 0.0
 	_target.physical_location = "Otosan Uchi"
 	var guard: L5RCharacterData = L5RCharacterData.new()
 	guard.character_id = 50
@@ -1364,6 +1371,7 @@ func test_access_tn_stacks_seppun_and_non_shinobi() -> void:
 	var expected_tn: int = AssassinationSystem.ACCESS_STEALTH_INFILTRATE_TN + AssassinationSystem.NON_SHINOBI_ACCESS_TN_INCREASE + AssassinationSystem.SEPPUN_FULL_PHASE1_TN
 	assert_eq(result["tn"], expected_tn,
 		"Non-shinobi + Seppun full protection should stack")
+	_target.status = 1.0
 
 
 # ==============================================================================
@@ -1469,3 +1477,288 @@ func test_equipment_prep_failure_weak_assassin() -> void:
 	var result: Dictionary = AssassinationSystem.resolve_equipment_preparation(weak, s, _engine)
 	assert_false(result["success"], "Rank 1 cannot attempt blade — rank gate blocks it")
 	assert_eq(result["reason"], "rank_gate")
+
+
+# ==============================================================================
+# Target Status TN Modifier
+# ==============================================================================
+
+func test_status_tn_modifier_scales_with_status() -> void:
+	var low_status: L5RCharacterData = L5RCharacterData.new()
+	low_status.status = 1.0
+	var high_status: L5RCharacterData = L5RCharacterData.new()
+	high_status.status = 7.0
+	assert_eq(AssassinationSystem.get_target_status_tn_modifier(low_status), 1)
+	assert_eq(AssassinationSystem.get_target_status_tn_modifier(high_status), 7)
+
+
+func test_status_tn_modifier_zero_status() -> void:
+	var nobody: L5RCharacterData = L5RCharacterData.new()
+	nobody.status = 0.0
+	assert_eq(AssassinationSystem.get_target_status_tn_modifier(nobody), 0)
+
+
+func test_access_day_includes_status_modifier() -> void:
+	_target.status = 5.0
+	_target.physical_location = "Castle"
+	_assassin.physical_location = "Castle"
+	_assassin.school = "Shosuro Infiltrator"
+	var state: Dictionary = AssassinationSystem.create_assassination_state(1, 2, AssassinationSystem.ExecutionMethod.POISON, 0)
+	var result: Dictionary = AssassinationSystem.resolve_access_day(
+		_assassin, state, "stealth", _engine, _target, {},
+	)
+	assert_eq(result["tn"], AssassinationSystem.ACCESS_STEALTH_INFILTRATE_TN + 5,
+		"TN should include +5 for Status 5.0 target (shinobi, no other modifiers)")
+	_assassin.school = ""
+
+
+func test_access_day_no_status_modifier_without_target() -> void:
+	_assassin.school = "Shosuro Infiltrator"
+	var state: Dictionary = AssassinationSystem.create_assassination_state(1, 2, AssassinationSystem.ExecutionMethod.POISON, 0)
+	var result: Dictionary = AssassinationSystem.resolve_access_day(
+		_assassin, state, "stealth", _engine, null, {},
+	)
+	assert_eq(result["tn"], AssassinationSystem.ACCESS_STEALTH_INFILTRATE_TN,
+		"TN should be base only when no target passed")
+	_assassin.school = ""
+
+
+func test_access_day_status_stacks_with_non_shinobi() -> void:
+	_target.status = 3.0
+	_assassin.school = "Akodo Bushi"
+	var state: Dictionary = AssassinationSystem.create_assassination_state(1, 2, AssassinationSystem.ExecutionMethod.POISON, 0)
+	var result: Dictionary = AssassinationSystem.resolve_access_day(
+		_assassin, state, "stealth", _engine, _target, {},
+	)
+	var expected: int = AssassinationSystem.ACCESS_STEALTH_INFILTRATE_TN + 3 + AssassinationSystem.NON_SHINOBI_ACCESS_TN_INCREASE
+	assert_eq(result["tn"], expected,
+		"Status +3 and non-shinobi +10 should both apply")
+	_assassin.school = ""
+
+
+# ==============================================================================
+# Loyalty Gate on Daily Detection
+# ==============================================================================
+
+func test_find_best_searcher_loyalty_filters_non_household() -> void:
+	var bystander: L5RCharacterData = L5RCharacterData.new()
+	bystander.character_id = 50
+	bystander.physical_location = "Castle"
+	bystander.perception = 5
+	bystander.skills = {"Investigation": 5}
+	bystander.lord_id = 999
+
+	_target.physical_location = "Castle"
+	_target.lord_id = 10
+
+	var chars: Dictionary = {50: bystander}
+	var found: L5RCharacterData = AssassinationSystem.find_best_searcher(
+		_target, _assassin.character_id, chars, true,
+	)
+	assert_null(found, "Bystander with different lord should be excluded with loyalty gate")
+
+
+func test_find_best_searcher_loyalty_includes_same_lord() -> void:
+	var retainer: L5RCharacterData = L5RCharacterData.new()
+	retainer.character_id = 51
+	retainer.physical_location = "Castle"
+	retainer.perception = 3
+	retainer.skills = {"Investigation": 3}
+	retainer.lord_id = 10
+
+	_target.physical_location = "Castle"
+	_target.lord_id = 10
+
+	var chars: Dictionary = {51: retainer}
+	var found: L5RCharacterData = AssassinationSystem.find_best_searcher(
+		_target, _assassin.character_id, chars, true,
+	)
+	assert_eq(found.character_id, 51, "Same-lord retainer should pass loyalty gate")
+
+
+func test_find_best_searcher_loyalty_includes_direct_vassal() -> void:
+	var vassal: L5RCharacterData = L5RCharacterData.new()
+	vassal.character_id = 52
+	vassal.physical_location = "Castle"
+	vassal.perception = 3
+	vassal.skills = {"Investigation": 3}
+	vassal.lord_id = _target.character_id
+
+	_target.physical_location = "Castle"
+
+	var chars: Dictionary = {52: vassal}
+	var found: L5RCharacterData = AssassinationSystem.find_best_searcher(
+		_target, _assassin.character_id, chars, true,
+	)
+	assert_eq(found.character_id, 52, "Direct vassal should pass loyalty gate")
+
+
+func test_find_best_searcher_loyalty_includes_bodyguard() -> void:
+	var guard: L5RCharacterData = L5RCharacterData.new()
+	guard.character_id = 53
+	guard.physical_location = "Castle"
+	guard.perception = 4
+	guard.skills = {"Investigation": 4}
+	guard.lord_id = 999
+	guard.assigned_protection_target_id = _target.character_id
+
+	_target.physical_location = "Castle"
+
+	var chars: Dictionary = {53: guard}
+	var found: L5RCharacterData = AssassinationSystem.find_best_searcher(
+		_target, _assassin.character_id, chars, true,
+	)
+	assert_eq(found.character_id, 53, "Assigned bodyguard should pass loyalty gate regardless of lord")
+
+
+func test_find_best_searcher_loyalty_excludes_disgruntled_household() -> void:
+	var disgruntled: L5RCharacterData = L5RCharacterData.new()
+	disgruntled.character_id = 54
+	disgruntled.physical_location = "Castle"
+	disgruntled.perception = 5
+	disgruntled.skills = {"Investigation": 5}
+	disgruntled.lord_id = 10
+	disgruntled.disposition_values = {_target.character_id: -5}
+
+	_target.physical_location = "Castle"
+	_target.lord_id = 10
+
+	var chars: Dictionary = {54: disgruntled}
+	var found: L5RCharacterData = AssassinationSystem.find_best_searcher(
+		_target, _assassin.character_id, chars, true,
+	)
+	assert_null(found, "Household member with negative disposition toward target should be excluded")
+
+
+func test_find_best_searcher_no_loyalty_gate_includes_all() -> void:
+	var bystander: L5RCharacterData = L5RCharacterData.new()
+	bystander.character_id = 55
+	bystander.physical_location = "Castle"
+	bystander.perception = 5
+	bystander.skills = {"Investigation": 5}
+	bystander.lord_id = 999
+
+	_target.physical_location = "Castle"
+	_target.lord_id = 10
+
+	var chars: Dictionary = {55: bystander}
+	var found: L5RCharacterData = AssassinationSystem.find_best_searcher(
+		_target, _assassin.character_id, chars, false,
+	)
+	assert_eq(found.character_id, 55, "Without loyalty gate, any co-located character qualifies")
+
+
+# ==============================================================================
+# Household Member Detection
+# ==============================================================================
+
+func test_is_household_member_same_lord() -> void:
+	var retainer: L5RCharacterData = L5RCharacterData.new()
+	retainer.lord_id = 10
+	_target.lord_id = 10
+	assert_true(AssassinationSystem._is_household_member(retainer, _target))
+
+
+func test_is_household_member_direct_vassal() -> void:
+	var vassal: L5RCharacterData = L5RCharacterData.new()
+	vassal.lord_id = _target.character_id
+	assert_true(AssassinationSystem._is_household_member(vassal, _target))
+
+
+func test_is_household_member_bodyguard() -> void:
+	var guard: L5RCharacterData = L5RCharacterData.new()
+	guard.lord_id = 999
+	guard.assigned_protection_target_id = _target.character_id
+	assert_true(AssassinationSystem._is_household_member(guard, _target))
+
+
+func test_is_household_member_unrelated() -> void:
+	var stranger: L5RCharacterData = L5RCharacterData.new()
+	stranger.lord_id = 999
+	_target.lord_id = 10
+	assert_false(AssassinationSystem._is_household_member(stranger, _target))
+
+
+# ==============================================================================
+# Entanglement Creation Wiring
+# ==============================================================================
+
+func test_process_seduction_entanglements_creates_on_success() -> void:
+	var day_results: Array[Dictionary] = [{
+		"action_id": "SEDUCE_FOR_ACCESS",
+		"success": true,
+		"character_id": 1,
+		"target_npc_id": 2,
+		"effects": {"creates_entanglement": true},
+	}]
+	var entanglements: Array[Dictionary] = []
+	DayOrchestrator._process_seduction_entanglements(day_results, entanglements, 10)
+	assert_eq(entanglements.size(), 1)
+	assert_eq(entanglements[0]["seducer_id"], 1)
+	assert_eq(entanglements[0]["target_id"], 2)
+	assert_eq(entanglements[0]["variant"], SeductionSystem.SeductionVariant.SEDUCE_FOR_ACCESS)
+	assert_eq(entanglements[0]["state"], SeductionSystem.EntanglementState.ACTIVE)
+
+
+func test_process_seduction_entanglements_skips_failure() -> void:
+	var day_results: Array[Dictionary] = [{
+		"action_id": "SEDUCE",
+		"success": false,
+		"character_id": 1,
+		"target_npc_id": 2,
+		"effects": {},
+	}]
+	var entanglements: Array[Dictionary] = []
+	DayOrchestrator._process_seduction_entanglements(day_results, entanglements, 10)
+	assert_eq(entanglements.size(), 0, "Failed seduction should not create entanglement")
+
+
+func test_process_seduction_entanglements_no_duplicate() -> void:
+	var existing: Dictionary = SeductionSystem.create_entanglement(1, 2, 5, SeductionSystem.SeductionVariant.SEDUCE)
+	var entanglements: Array[Dictionary] = [existing]
+	var day_results: Array[Dictionary] = [{
+		"action_id": "SEDUCE",
+		"success": true,
+		"character_id": 1,
+		"target_npc_id": 2,
+		"effects": {"creates_entanglement": true},
+	}]
+	DayOrchestrator._process_seduction_entanglements(day_results, entanglements, 10)
+	assert_eq(entanglements.size(), 1, "Should not create duplicate entanglement")
+
+
+func test_process_seduction_entanglements_allows_after_broken() -> void:
+	var broken: Dictionary = SeductionSystem.create_entanglement(1, 2, 5)
+	broken["state"] = SeductionSystem.EntanglementState.BROKEN
+	var entanglements: Array[Dictionary] = [broken]
+	var day_results: Array[Dictionary] = [{
+		"action_id": "SEDUCE",
+		"success": true,
+		"character_id": 1,
+		"target_npc_id": 2,
+		"effects": {"creates_entanglement": true},
+	}]
+	DayOrchestrator._process_seduction_entanglements(day_results, entanglements, 10)
+	assert_eq(entanglements.size(), 2, "Should allow new entanglement after previous one broke")
+
+
+func test_process_seduction_entanglements_variant_mapping() -> void:
+	var variants: Dictionary = {
+		"SEDUCE": SeductionSystem.SeductionVariant.SEDUCE,
+		"SEDUCE_FOR_INFO": SeductionSystem.SeductionVariant.SEDUCE_FOR_INFO,
+		"SEDUCE_FOR_LEVERAGE": SeductionSystem.SeductionVariant.SEDUCE_FOR_LEVERAGE,
+		"SEDUCE_TO_COMPROMISE": SeductionSystem.SeductionVariant.SEDUCE_TO_COMPROMISE,
+	}
+	for action_id: String in variants:
+		var entanglements: Array[Dictionary] = []
+		var day_results: Array[Dictionary] = [{
+			"action_id": action_id,
+			"success": true,
+			"character_id": 100 + variants[action_id],
+			"target_npc_id": 200 + variants[action_id],
+			"effects": {"creates_entanglement": true},
+		}]
+		DayOrchestrator._process_seduction_entanglements(day_results, entanglements, 10)
+		assert_eq(entanglements.size(), 1, "Should create entanglement for " + action_id)
+		assert_eq(entanglements[0]["variant"], variants[action_id],
+			"Variant should match action_id " + action_id)
