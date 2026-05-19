@@ -685,3 +685,60 @@ func test_starting_position_unknown_subject_id():
 		t, dispositions, Enums.BushidoVirtue.NONE, Enums.ShouridoVirtue.NONE
 	)
 	assert_almost_eq(pos, 0.0, 0.001)
+
+
+# =============================================================================
+# Public Knowledge — Knowledge Entry Creation (s55.12)
+# =============================================================================
+
+
+func test_broadcast_creates_knowledge_entry():
+	var t := _make_crisis(TopicData.Tier.TIER_2, 15.0)
+	t.topic_id = 1
+	t.provinces_affected = [10]
+	var c := _make_char(1)
+	c.knowledge_pool = []
+	var chars: Array[L5RCharacterData] = [c]
+	var char_prov: Dictionary = {1: 10}
+	var prov_clan: Dictionary = {10: "Crane"}
+	TopicMomentumSystem.broadcast_public_knowledge(
+		[t] as Array[TopicData], chars, char_prov, prov_clan, {}, 3
+	)
+	assert_eq(c.knowledge_pool.size(), 1)
+	assert_eq(c.knowledge_pool[0].source, Enums.KnowledgeSource.PUBLIC_KNOWLEDGE)
+	assert_eq(c.knowledge_pool[0].entry_type, "topic_learned")
+	assert_eq(c.knowledge_pool[0].data.get("topic", -1), 1)
+	assert_eq(c.knowledge_pool[0].confidence, Enums.KnowledgeConfidence.FRESH)
+	assert_eq(c.knowledge_pool[0].season_acquired, 3)
+
+
+func test_broadcast_no_knowledge_entry_for_excluded_character():
+	var t := _make_crisis(TopicData.Tier.TIER_2, 5.0)
+	t.topic_id = 1
+	t.provinces_affected = [10]
+	var c := _make_char(1)
+	c.knowledge_pool = []
+	var chars: Array[L5RCharacterData] = [c]
+	var char_prov: Dictionary = {1: 10}
+	var prov_clan: Dictionary = {10: "Crane"}
+	TopicMomentumSystem.broadcast_public_knowledge(
+		[t] as Array[TopicData], chars, char_prov, prov_clan, {}, 3
+	)
+	assert_eq(c.knowledge_pool.size(), 0)
+
+
+func test_broadcast_no_duplicate_knowledge_entry():
+	var t := _make_crisis(TopicData.Tier.TIER_2, 15.0)
+	t.topic_id = 1
+	t.provinces_affected = [10]
+	var c := _make_char(1)
+	c.topic_pool = [1]
+	c.knowledge_pool = []
+	var chars: Array[L5RCharacterData] = [c]
+	var char_prov: Dictionary = {1: 10}
+	var prov_clan: Dictionary = {10: "Crane"}
+	TopicMomentumSystem.broadcast_public_knowledge(
+		[t] as Array[TopicData], chars, char_prov, prov_clan, {}, 3
+	)
+	# Already in topic_pool → skipped, no knowledge entry either
+	assert_eq(c.knowledge_pool.size(), 0)

@@ -714,3 +714,39 @@ func test_transfer_objective_knowledge_seeds_contacts() -> void:
 		[], chars_by_id, baselines["clan"], baselines["family"],
 	)
 	assert_eq(_char_b.disposition_values.get(_char_c.character_id, 999), -4)
+
+
+# =============================================================================
+# met_characters wiring — arrival observation uses add_contact
+# =============================================================================
+
+
+func test_arrival_observation_updates_contacts_by_clan() -> void:
+	var arriving := L5RCharacterData.new()
+	arriving.character_id = 1
+	arriving.clan = "Lion"
+	arriving.physical_location = "10"
+	arriving.met_characters = []
+	arriving.known_contacts_by_clan = {}
+	arriving.knowledge_pool = []
+
+	var resident := L5RCharacterData.new()
+	resident.character_id = 2
+	resident.clan = "Crane"
+	resident.physical_location = "10"
+	resident.met_characters = []
+	resident.known_contacts_by_clan = {}
+	resident.knowledge_pool = []
+
+	var chars_by_id: Dictionary = {1: arriving, 2: resident}
+	var arrivals: Array[Dictionary] = [{"character_id": 1, "destination": "10"}]
+
+	DayOrchestrator._process_arrival_observation(arrivals, chars_by_id, 0)
+	# Both should be in each other's met_characters
+	assert_true(2 in arriving.met_characters)
+	assert_true(1 in resident.met_characters)
+	# known_contacts_by_clan should be updated
+	var lion_contacts: Array = resident.known_contacts_by_clan.get("Lion", [])
+	assert_true(1 in lion_contacts)
+	var crane_contacts: Array = arriving.known_contacts_by_clan.get("Crane", [])
+	assert_true(2 in crane_contacts)

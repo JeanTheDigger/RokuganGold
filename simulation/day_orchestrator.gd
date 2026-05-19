@@ -566,7 +566,8 @@ static func advance_day(
 
 	var province_clan_map: Dictionary = _build_province_clan_map(provinces)
 	var broadcast_results: Array[Dictionary] = TopicMomentumSystem.broadcast_public_knowledge(
-		active_topics, characters, character_province_map, province_clan_map, provinces
+		active_topics, characters, character_province_map, province_clan_map, provinces,
+		current_season,
 	)
 	_compute_positions_from_broadcast(broadcast_results, active_topics, characters_by_id)
 
@@ -1093,14 +1094,12 @@ static func _process_ooc_day_tick(
 				var other_old: int = target.disposition_values.get(c.character_id, 0)
 				target.disposition_values[c.character_id] = clampi(other_old + delta, -100, 100)
 
-		# met_characters — add newly met characters.
+		# met_characters — add newly met characters via add_contact (s55.7).
 		for met_id: int in wind_result["met_character_ids"]:
-			if not c.met_characters.has(met_id):
-				c.met_characters.append(met_id)
 			if characters_by_id.has(met_id):
 				var met_char: L5RCharacterData = characters_by_id[met_id] as L5RCharacterData
-				if not met_char.met_characters.has(c.character_id):
-					met_char.met_characters.append(c.character_id)
+				InformationSystem.add_contact(c, met_id, met_char.clan, met_char)
+				InformationSystem.add_contact(met_char, c.character_id, c.clan, c)
 
 		# Topic leak — copy topic to target character's pool.
 		var leaked_topic: int = wind_result["topic_leaked"]
@@ -5592,14 +5591,12 @@ static func _process_arrival_observation(
 			if other.physical_location != dest:
 				continue
 			# Arriving character observes residents
-			if other_id not in character.met_characters:
-				character.met_characters.append(other_id)
+			InformationSystem.add_contact(character, other_id, other.clan, other)
 			InformationSystem.record_location_observation(
 				character, other_id, dest, current_season
 			)
 			# Residents observe the arriving character
-			if char_id not in other.met_characters:
-				other.met_characters.append(char_id)
+			InformationSystem.add_contact(other, char_id, character.clan, character)
 			InformationSystem.record_location_observation(
 				other, char_id, dest, current_season
 			)

@@ -289,6 +289,7 @@ static func broadcast_public_knowledge(
 	character_province_map: Dictionary,
 	province_clan_map: Dictionary,
 	provinces: Dictionary = {},
+	current_season: int = 0,
 ) -> Array[Dictionary]:
 	var results: Array[Dictionary] = []
 
@@ -304,6 +305,12 @@ static func broadcast_public_knowledge(
 			if topic.topic_id in c.topic_pool:
 				continue
 			c.topic_pool.append(topic.topic_id)
+			InformationSystem.add_knowledge(c, InformationSystem.make_entry(
+				Enums.KnowledgeSource.PUBLIC_KNOWLEDGE,
+				"topic_learned",
+				{"topic": topic.topic_id, "momentum": topic.momentum},
+				current_season,
+			))
 			results.append({
 				"character_id": c.character_id,
 				"topic_id": topic.topic_id,
