@@ -2212,6 +2212,7 @@ static func _populate_action_metadata(
 		var court_meta: Dictionary = {
 			"court_settlement_id": ctx.court_settlement_id,
 			"has_topic": _has_known_agenda_topic(ctx),
+			"need_type": need.need_type,
 		}
 		if option.action_id in ["NEGOTIATE", "PERSUADE", "PUBLIC_DEBATE"]:
 			court_meta["topic_id"] = _pick_court_agenda_topic(ctx)
@@ -2220,6 +2221,15 @@ static func _populate_action_metadata(
 		elif option.action_id == "CHARM":
 			court_meta["session_charm_count"] = ctx.court_session_state.get("charm_count", 0)
 		option.metadata = court_meta
+	elif option.action_id == "ASSIGN_VASSAL_OBJECTIVE":
+		option.metadata = {
+			"need_type": need.need_type,
+			"lord_id": ctx.character_id,
+		}
+		if need.target_npc_id >= 0:
+			option.metadata["target_npc_id"] = need.target_npc_id
+		if not need.target_intent.is_empty():
+			option.metadata["target_clan"] = need.target_intent
 	elif option.action_id == "DISCLOSE":
 		var about_id: int = need.target_npc_id if need.target_npc_id >= 0 else -1
 		var opinion: int = 0

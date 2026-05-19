@@ -1392,6 +1392,14 @@ static func _apply_effects(
 	elif result["success"]:
 		if action_id in SOCIAL_ACTIONS:
 			effects = _compute_social_effects(action_id, result["margin"])
+			if action_id == "NEGOTIATE" and action != null:
+				var nt: String = action.metadata.get("need_type", "")
+				if nt in RESOURCE_PROMISE_NEED_TYPES and action.target_npc_id >= 0:
+					effects["requires_resource_promise"] = true
+					effects["promise_creditor_id"] = ctx.character_id
+					effects["promise_debtor_id"] = action.target_npc_id
+					effects["promise_tier"] = _resource_tier_from_metadata(action.metadata)
+					effects["source_action_id"] = "NEGOTIATE"
 		elif action_id in COVERT_ACTIONS:
 			effects = _compute_covert_effects(action_id, result["margin"])
 		elif action_id in MILITARY_ORDERS:
@@ -1536,6 +1544,23 @@ static func _compute_military_effects(action_id: String, action: NPCDataStructur
 # PROVISIONAL: Disposition threshold reuses feasibility ledger constant (31).
 const ALLIED_AID_ACCEPT_THRESHOLD: int = 31
 
+const RESOURCE_PROMISE_NEED_TYPES: Array[String] = [
+	"ACQUIRE_RESOURCE", "REQUEST_AID", "CONDUCT_COMMERCE",
+]
+
+const RESOURCE_TIER_KOKU_THRESHOLDS: Array[int] = [10, 50]
+const RESOURCE_TIER_PU_THRESHOLDS: Array[int] = [5, 20]
+
+
+static func _resource_tier_from_metadata(metadata: Dictionary) -> int:
+	var koku: float = metadata.get("koku_amount", 0.0)
+	var pu: int = metadata.get("pu_amount", 0)
+	if koku > RESOURCE_TIER_KOKU_THRESHOLDS[1] or pu > RESOURCE_TIER_PU_THRESHOLDS[1]:
+		return 1
+	if koku >= RESOURCE_TIER_KOKU_THRESHOLDS[0] or pu >= RESOURCE_TIER_PU_THRESHOLDS[0]:
+		return 2
+	return 3
+
 static func _compute_allied_aid_effects(
 	action: NPCDataStructures.ScoredAction,
 	ctx: NPCDataStructures.ContextSnapshot,
@@ -1632,6 +1657,14 @@ static func _compute_assign_vassal_objective_effects(
 		var target_npc: int = action.metadata.get("target_npc_id", -1)
 		if target_npc >= 0:
 			result["objective_target_npc_id"] = target_npc
+		if need_type in RESOURCE_PROMISE_NEED_TYPES and vassal_id >= 0:
+			var lord_id: int = action.metadata.get("lord_id", -1) if action != null else -1
+			if lord_id >= 0:
+				result["requires_resource_promise"] = true
+				result["promise_creditor_id"] = lord_id
+				result["promise_debtor_id"] = vassal_id
+				result["promise_tier"] = _resource_tier_from_metadata(action.metadata)
+				result["source_action_id"] = "ASSIGN_VASSAL_OBJECTIVE"
 	return result
 
 

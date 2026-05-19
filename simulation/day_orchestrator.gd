@@ -15402,6 +15402,7 @@ static func _create_resource_promise_commitment(
 
 	var tier: int = effects.get("promise_tier", 2)
 	var deadline: int = ic_day + RESOURCE_PROMISE_DEADLINE_OFFSET
+	var source_action: String = effects.get("source_action_id", "REQUEST_ALLIED_AID")
 
 	var witnesses: Array[int] = [creditor_id, debtor_id]
 	for cid: Variant in characters_by_id:
@@ -15421,7 +15422,7 @@ static func _create_resource_promise_commitment(
 		deadline,
 		tier,
 		ic_day,
-		"REQUEST_ALLIED_AID",
+		source_action,
 		-1,
 		witnesses,
 	)

@@ -8901,6 +8901,42 @@ func test_resource_promise_skips_non_pending() -> void:
 		"Should not change status of non-PENDING commitment")
 
 
+func test_resource_promise_from_negotiate_with_resource_need() -> void:
+	var effects: Dictionary = {
+		"requires_resource_promise": true,
+		"promise_creditor_id": 10,
+		"promise_debtor_id": 20,
+		"promise_tier": 3,
+		"source_action_id": "NEGOTIATE",
+	}
+	var commitments: Array[CommitmentData] = []
+	var next_id: Array[int] = [1]
+	DayOrchestrator._create_resource_promise_commitment(
+		effects, commitments, 50, next_id, {},
+	)
+	assert_eq(commitments.size(), 1)
+	assert_eq(commitments[0].source_action_id, "NEGOTIATE")
+	assert_eq(commitments[0].tier, 3)
+
+
+func test_resource_promise_from_vassal_objective_with_resource_need() -> void:
+	var effects: Dictionary = {
+		"requires_resource_promise": true,
+		"promise_creditor_id": 10,
+		"promise_debtor_id": 30,
+		"promise_tier": 1,
+		"source_action_id": "ASSIGN_VASSAL_OBJECTIVE",
+	}
+	var commitments: Array[CommitmentData] = []
+	var next_id: Array[int] = [1]
+	DayOrchestrator._create_resource_promise_commitment(
+		effects, commitments, 50, next_id, {},
+	)
+	assert_eq(commitments.size(), 1)
+	assert_eq(commitments[0].source_action_id, "ASSIGN_VASSAL_OBJECTIVE")
+	assert_eq(commitments[0].tier, 1)
+
+
 # -- Commitment Advance Notice (s55.31.6) ------------------------------------
 
 func _make_commitment_for_notice(

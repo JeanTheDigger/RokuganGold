@@ -1794,3 +1794,94 @@ func test_allied_aid_threshold_boundary() -> void:
 	_ctx.dispositions[30] = 30
 	effects = ActionExecutor._compute_allied_aid_effects(action, _ctx, true)
 	assert_eq(effects["effect"], "aid_refused", "Below threshold should refuse")
+
+
+# -- Resource Tier Scaling (s55.31) -------------------------------------------
+
+func test_resource_tier_small_amounts() -> void:
+	var meta: Dictionary = {"koku_amount": 5.0, "pu_amount": 2}
+	assert_eq(ActionExecutor._resource_tier_from_metadata(meta), 3)
+
+
+func test_resource_tier_medium_koku() -> void:
+	var meta: Dictionary = {"koku_amount": 25.0}
+	assert_eq(ActionExecutor._resource_tier_from_metadata(meta), 2)
+
+
+func test_resource_tier_medium_pu() -> void:
+	var meta: Dictionary = {"pu_amount": 10}
+	assert_eq(ActionExecutor._resource_tier_from_metadata(meta), 2)
+
+
+func test_resource_tier_large_koku() -> void:
+	var meta: Dictionary = {"koku_amount": 60.0}
+	assert_eq(ActionExecutor._resource_tier_from_metadata(meta), 1)
+
+
+func test_resource_tier_large_pu() -> void:
+	var meta: Dictionary = {"pu_amount": 25}
+	assert_eq(ActionExecutor._resource_tier_from_metadata(meta), 1)
+
+
+func test_resource_tier_empty_metadata() -> void:
+	assert_eq(ActionExecutor._resource_tier_from_metadata({}), 3)
+
+
+func test_negotiate_emits_resource_promise_for_acquire_resource() -> void:
+	var action := NPCDataStructures.ScoredAction.new()
+	action.action_id = "NEGOTIATE"
+	action.target_npc_id = 20
+	action.metadata = {"need_type": "ACQUIRE_RESOURCE", "koku_amount": 30.0}
+	_ctx.character_id = 10
+	var result: Dictionary = ActionExecutor.execute_action(
+		action, _character, _ctx, _dice, {}, {},
+	)
+	var effects: Dictionary = result.get("effects", result)
+	if effects.get("requires_resource_promise", false):
+		assert_eq(effects["promise_creditor_id"], 10)
+		assert_eq(effects["promise_debtor_id"], 20)
+		assert_eq(effects["promise_tier"], 2)
+		assert_eq(effects["source_action_id"], "NEGOTIATE")
+	else:
+		assert_true(result.get("success", false) == false,
+			"If roll failed, no resource promise expected")
+
+
+func test_negotiate_no_resource_promise_for_non_resource_need() -> void:
+	var action := NPCDataStructures.ScoredAction.new()
+	action.action_id = "NEGOTIATE"
+	action.target_npc_id = 20
+	action.metadata = {"need_type": "RAISE_DISPOSITION"}
+	_ctx.character_id = 10
+	var result: Dictionary = ActionExecutor.execute_action(
+		action, _character, _ctx, _dice, {}, {},
+	)
+	var effects: Dictionary = result.get("effects", result)
+	assert_false(effects.get("requires_resource_promise", false),
+		"Non-resource need_type should not create resource promise")
+
+
+func test_assign_vassal_objective_emits_resource_promise() -> void:
+	var action := NPCDataStructures.ScoredAction.new()
+	action.action_id = "ASSIGN_VASSAL_OBJECTIVE"
+	action.target_npc_id = 30
+	action.metadata = {
+		"need_type": "REQUEST_AID",
+		"lord_id": 10,
+		"pu_amount": 25,
+	}
+	var effects: Dictionary = ActionExecutor._compute_assign_vassal_objective_effects(action)
+	assert_true(effects.get("requires_resource_promise", false))
+	assert_eq(effects["promise_creditor_id"], 10)
+	assert_eq(effects["promise_debtor_id"], 30)
+	assert_eq(effects["promise_tier"], 1)
+	assert_eq(effects["source_action_id"], "ASSIGN_VASSAL_OBJECTIVE")
+
+
+func test_assign_vassal_objective_no_resource_promise_for_non_resource() -> void:
+	var action := NPCDataStructures.ScoredAction.new()
+	action.action_id = "ASSIGN_VASSAL_OBJECTIVE"
+	action.target_npc_id = 30
+	action.metadata = {"need_type": "ASSIGN_OBJECTIVE", "lord_id": 10}
+	var effects: Dictionary = ActionExecutor._compute_assign_vassal_objective_effects(action)
+	assert_false(effects.get("requires_resource_promise", false))
