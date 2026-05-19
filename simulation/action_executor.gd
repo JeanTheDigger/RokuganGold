@@ -1575,12 +1575,22 @@ static func _compute_assign_vassal_objective_effects(
 ) -> Dictionary:
 	var vassal_id: int = action.target_npc_id if action != null else -1
 	var need_type: String = action.metadata.get("need_type", "") if action != null else ""
-	return {
+	var result: Dictionary = {
 		"effect": "vassal_objective_assigned",
 		"requires_vassal_objective_assignment": true,
 		"vassal_id": vassal_id,
 		"assigned_need_type": need_type,
 	}
+	if action != null:
+		if action.target_province_id >= 0:
+			result["target_province_id"] = action.target_province_id
+		var target_clan: String = action.metadata.get("target_clan", "")
+		if not target_clan.is_empty():
+			result["target_clan"] = target_clan
+		var target_npc: int = action.metadata.get("target_npc_id", -1)
+		if target_npc >= 0:
+			result["objective_target_npc_id"] = target_npc
+	return result
 
 
 static func _compute_send_invitation_effects(

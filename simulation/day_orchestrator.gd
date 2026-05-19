@@ -7054,7 +7054,7 @@ static func _process_military_effects(
 
 		if effects.get("requires_vassal_objective_assignment", false):
 			var r: Dictionary = _apply_vassal_objective_assignment(
-				applied, characters_by_id, objectives_map,
+				applied, characters_by_id, objectives_map, season_count,
 			)
 			if not r.is_empty():
 				results.append(r)
@@ -8418,6 +8418,7 @@ static func _apply_vassal_objective_assignment(
 	applied: Dictionary,
 	characters_by_id: Dictionary,
 	objectives_map: Dictionary,
+	current_season: int = 0,
 ) -> Dictionary:
 	var effects: Dictionary = applied.get("effects", {})
 	var lord_id: int = applied.get("character_id", -1)
@@ -8427,6 +8428,7 @@ static func _apply_vassal_objective_assignment(
 	if vassal_id < 0 or lord_id < 0:
 		return {}
 
+	var lord: L5RCharacterData = characters_by_id.get(lord_id)
 	var vassal: L5RCharacterData = characters_by_id.get(vassal_id)
 	if vassal == null:
 		return {}
@@ -8438,10 +8440,22 @@ static func _apply_vassal_objective_assignment(
 		"assigned_by": lord_id,
 		"status": "ACTIVE",
 	}
+	if effects.has("target_province_id"):
+		new_obj["target_province_id"] = effects["target_province_id"]
+	if effects.has("target_clan"):
+		new_obj["target_clan"] = effects["target_clan"]
+	if effects.has("objective_target_npc_id"):
+		new_obj["target_npc_id"] = effects["objective_target_npc_id"]
 
 	if not objectives_map.has(vassal_id):
 		objectives_map[vassal_id] = {}
 	objectives_map[vassal_id]["primary"] = new_obj
+
+	# s55.6: Transfer lord's relevant knowledge to vassal on assignment
+	if lord != null and vassal != null:
+		InformationSystem.transfer_objective_knowledge(
+			lord, vassal, new_obj, current_season, [], characters_by_id
+		)
 
 	return {
 		"type": "vassal_objective_assigned",

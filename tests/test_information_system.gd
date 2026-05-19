@@ -580,6 +580,128 @@ func test_introduction_skips_bonus_when_already_met() -> void:
 	assert_eq(_char_a.disposition_values[_char_b.character_id], 25)
 
 
+# =============================================================================
+# s55.6 — Information Transfer on Vassal Objective Assignment
+# =============================================================================
+
+
+func test_vassal_assignment_transfers_knowledge() -> void:
+	# Lord has knowledge about province 5; vassal should receive it
+	var lord := L5RCharacterData.new()
+	lord.character_id = 10
+	lord.character_name = "Lord"
+	lord.clan = "Lion"
+	lord.knowledge_pool = []
+	var province_entry := InformationSystem.make_entry(
+		Enums.KnowledgeSource.DIRECT_OBSERVATION, "province_status",
+		{"target_province_id": 5, "stability": 80.0}, 0
+	)
+	InformationSystem.add_knowledge(lord, province_entry)
+
+	var vassal := L5RCharacterData.new()
+	vassal.character_id = 20
+	vassal.character_name = "Vassal"
+	vassal.clan = "Lion"
+	vassal.lord_id = 10
+	vassal.knowledge_pool = []
+
+	var characters_by_id: Dictionary = {10: lord, 20: vassal}
+	var objectives_map: Dictionary = {}
+
+	var applied: Dictionary = {
+		"character_id": 10,
+		"effects": {
+			"requires_vassal_objective_assignment": true,
+			"vassal_id": 20,
+			"assigned_need_type": "STABILIZE_PROVINCE",
+			"target_province_id": 5,
+		},
+	}
+
+	var result: Dictionary = DayOrchestrator._apply_vassal_objective_assignment(
+		applied, characters_by_id, objectives_map, 0
+	)
+	assert_eq(result.get("type", ""), "vassal_objective_assigned")
+	assert_eq(vassal.knowledge_pool.size(), 1)
+	assert_eq(vassal.knowledge_pool[0].entry_type, "province_status")
+	assert_eq(vassal.knowledge_pool[0].data.get("target_province_id", -1), 5)
+
+
+func test_vassal_assignment_transfers_clan_contacts() -> void:
+	var lord := L5RCharacterData.new()
+	lord.character_id = 10
+	lord.character_name = "Lord"
+	lord.clan = "Lion"
+	lord.knowledge_pool = []
+	lord.known_contacts_by_clan = {"Crane": [30]}
+
+	var vassal := L5RCharacterData.new()
+	vassal.character_id = 20
+	vassal.character_name = "Vassal"
+	vassal.clan = "Lion"
+	vassal.lord_id = 10
+	vassal.knowledge_pool = []
+	vassal.met_characters = []
+	vassal.known_contacts_by_clan = {}
+
+	var contact := L5RCharacterData.new()
+	contact.character_id = 30
+	contact.character_name = "Crane Contact"
+	contact.clan = "Crane"
+
+	var characters_by_id: Dictionary = {10: lord, 20: vassal, 30: contact}
+	var objectives_map: Dictionary = {}
+
+	var applied: Dictionary = {
+		"character_id": 10,
+		"effects": {
+			"requires_vassal_objective_assignment": true,
+			"vassal_id": 20,
+			"assigned_need_type": "IMPROVE_RELATIONS",
+			"target_clan": "Crane",
+		},
+	}
+
+	DayOrchestrator._apply_vassal_objective_assignment(
+		applied, characters_by_id, objectives_map, 0
+	)
+	assert_true(30 in vassal.met_characters)
+	var crane_contacts: Array = vassal.known_contacts_by_clan.get("Crane", [])
+	assert_true(30 in crane_contacts)
+
+
+func test_vassal_assignment_objective_has_target_fields() -> void:
+	var lord := L5RCharacterData.new()
+	lord.character_id = 10
+	lord.knowledge_pool = []
+
+	var vassal := L5RCharacterData.new()
+	vassal.character_id = 20
+	vassal.lord_id = 10
+	vassal.knowledge_pool = []
+
+	var characters_by_id: Dictionary = {10: lord, 20: vassal}
+	var objectives_map: Dictionary = {}
+
+	var applied: Dictionary = {
+		"character_id": 10,
+		"effects": {
+			"requires_vassal_objective_assignment": true,
+			"vassal_id": 20,
+			"assigned_need_type": "DEFEND_PROVINCE",
+			"target_province_id": 7,
+			"target_clan": "Crab",
+		},
+	}
+
+	DayOrchestrator._apply_vassal_objective_assignment(
+		applied, characters_by_id, objectives_map, 0
+	)
+	var obj: Dictionary = objectives_map[20]["primary"]
+	assert_eq(obj.get("target_province_id", -1), 7)
+	assert_eq(obj.get("target_clan", ""), "Crab")
+
+
 func test_transfer_objective_knowledge_seeds_contacts() -> void:
 	var baselines: Dictionary = CollectiveDisposition.make_starting_baselines()
 	_char_a.known_contacts_by_clan = {"Crab": [_char_c.character_id]}
