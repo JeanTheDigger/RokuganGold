@@ -5807,6 +5807,9 @@ static func _process_daily_letter_pass(
 					topic_id, ic_day, dice_engine,
 					3,
 				)
+				if letter_result.get("visit_intent", false):
+					letter.visit_intent = true
+					letter.visit_deadline_ic_day = ic_day + VISIT_DEADLINE_OFFSET
 				pending_letters.append(letter)
 	return results
 
@@ -15392,6 +15395,9 @@ static func _create_support_pledge_commitment(
 	commitments.append(commitment)
 	next_commitment_id[0] += 1
 
+
+# PROVISIONAL: 90 IC days for visit (one full season from announcement).
+const VISIT_DEADLINE_OFFSET: int = 90
 
 # PROVISIONAL: 90 IC days for resource delivery (one full season).
 const RESOURCE_PROMISE_DEADLINE_OFFSET: int = 90

@@ -1109,6 +1109,106 @@ func test_resolve_daily_letter_includes_topic_id() -> void:
 	assert_eq(result.get("topic_id", -1), 42, "Should include strongest position topic")
 
 
+# --- Visit Intent on Daily Letter (s17 / s55.31) ---
+
+func test_visit_intent_set_when_at_own_holdings_with_visit_need() -> void:
+	var char := L5RCharacterData.new()
+	char.character_id = 1
+	char.skills = {"Courtier": 3}
+	char.traits = {"Awareness": 3}
+	var objectives: Dictionary = {
+		"primary": {"need_type": "RAISE_DISPOSITION", "target_npc_id": 5},
+	}
+	var scoring_tables: Dictionary = {
+		"objective_alignment": {
+			"RAISE_DISPOSITION": {"WRITE_LETTER": 60},
+		},
+	}
+	var ws: Dictionary = {
+		"is_lord": false,
+		"context_flag": Enums.ContextFlag.AT_OWN_HOLDINGS,
+	}
+	var ctx := NPCDecisionEngine.build_context(char, ws)
+	ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
+	var result: Dictionary = NPCDecisionEngine.resolve_daily_letter(
+		char, objectives, scoring_tables, ctx,
+	)
+	assert_true(result.get("visit_intent", false),
+		"Should set visit_intent when at own holdings targeting someone")
+
+
+func test_visit_intent_not_set_when_at_court() -> void:
+	var char := L5RCharacterData.new()
+	char.character_id = 1
+	char.skills = {"Courtier": 3}
+	char.traits = {"Awareness": 3}
+	var objectives: Dictionary = {
+		"primary": {"need_type": "RAISE_DISPOSITION", "target_npc_id": 5},
+	}
+	var scoring_tables: Dictionary = {
+		"objective_alignment": {
+			"RAISE_DISPOSITION": {"WRITE_LETTER": 60},
+		},
+	}
+	var ws: Dictionary = {"is_lord": false}
+	var ctx := NPCDecisionEngine.build_context(char, ws)
+	ctx.context_flag = Enums.ContextFlag.AT_COURT
+	var result: Dictionary = NPCDecisionEngine.resolve_daily_letter(
+		char, objectives, scoring_tables, ctx,
+	)
+	assert_false(result.get("visit_intent", false),
+		"Should not set visit_intent when at court")
+
+
+func test_visit_intent_not_set_for_non_visit_need() -> void:
+	var char := L5RCharacterData.new()
+	char.character_id = 1
+	char.skills = {"Courtier": 3}
+	char.traits = {"Awareness": 3}
+	var objectives: Dictionary = {
+		"primary": {"need_type": "DEFEND_PROVINCE", "target_npc_id": 5},
+	}
+	var scoring_tables: Dictionary = {
+		"objective_alignment": {
+			"DEFEND_PROVINCE": {"WRITE_LETTER": 25},
+		},
+	}
+	var ws: Dictionary = {"is_lord": false}
+	var ctx := NPCDecisionEngine.build_context(char, ws)
+	ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
+	var result: Dictionary = NPCDecisionEngine.resolve_daily_letter(
+		char, objectives, scoring_tables, ctx,
+	)
+	assert_false(result.get("visit_intent", false),
+		"DEFEND_PROVINCE should not trigger visit intent")
+
+
+func test_visit_intent_not_set_when_target_differs_from_objective() -> void:
+	var char := L5RCharacterData.new()
+	char.character_id = 1
+	char.skills = {"Courtier": 3}
+	char.traits = {"Awareness": 3}
+	var objectives: Dictionary = {
+		"primary": {"need_type": "RAISE_DISPOSITION", "target_npc_id": 5},
+	}
+	var scoring_tables: Dictionary = {
+		"objective_alignment": {
+			"RAISE_DISPOSITION": {"WRITE_LETTER": 60},
+		},
+	}
+	var ws: Dictionary = {"is_lord": false}
+	var ctx := NPCDecisionEngine.build_context(char, ws)
+	ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
+	# Force letter target to differ from objective target — this
+	# is hard to trigger since _select_letter_target returns the
+	# primary objective's target_npc_id. Test via the helper directly.
+	var result: bool = NPCDecisionEngine._should_set_visit_intent(
+		char, objectives, 99, ctx,
+	)
+	assert_false(result,
+		"Mismatched target should not trigger visit intent")
+
+
 # --- SEEK_PEACE position inversion (s55.26 Annex H) ---
 
 func test_seek_peace_inverts_position_pro_war_penalized() -> void:

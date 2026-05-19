@@ -2026,13 +2026,20 @@ static func resolve_daily_letter(
 
 	var topic_id: int = _pick_letter_topic(ctx)
 
-	return {
+	var visit: bool = _should_set_visit_intent(
+		character, objectives, target_id, ctx
+	)
+
+	var result: Dictionary = {
 		"character_id": character.character_id,
 		"action_id": "WRITE_LETTER",
 		"target_npc_id": target_id,
 		"need_type": need_type,
 		"topic_id": topic_id,
 	}
+	if visit:
+		result["visit_intent"] = true
+	return result
 
 
 static func _get_letter_need_type(objectives: Dictionary) -> String:
@@ -2043,6 +2050,32 @@ static func _get_letter_need_type(objectives: Dictionary) -> String:
 	if not standing.is_empty():
 		return standing.get("need_type", "")
 	return ""
+
+
+const VISIT_INTENT_NEED_TYPES: Array[String] = [
+	"RAISE_DISPOSITION", "SECURE_ALLIANCE", "ARRANGE_MARRIAGE",
+	"ACQUIRE_LEVERAGE", "GATHER_INTELLIGENCE",
+]
+
+
+static func _should_set_visit_intent(
+	character: L5RCharacterData,
+	objectives: Dictionary,
+	letter_target_id: int,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> bool:
+	if ctx.context_flag != Enums.ContextFlag.AT_OWN_HOLDINGS:
+		return false
+	var primary: Dictionary = objectives.get("primary", {})
+	if primary.is_empty():
+		return false
+	var need_type: String = primary.get("need_type", "")
+	if need_type not in VISIT_INTENT_NEED_TYPES:
+		return false
+	var obj_target: int = primary.get("target_npc_id", -1)
+	if obj_target < 0 or obj_target != letter_target_id:
+		return false
+	return true
 
 
 static func _select_letter_target(

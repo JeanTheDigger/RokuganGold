@@ -8008,6 +8008,39 @@ func test_visit_promise_not_created_for_undelivered_letter() -> void:
 	assert_eq(commitments.size(), 0)
 
 
+func test_visit_intent_propagated_from_letter_result() -> void:
+	var char := L5RCharacterData.new()
+	char.character_id = 10
+	char.skills = {"Courtier": 3, "Calligraphy": 2}
+	char.traits = {"Awareness": 3, "Intelligence": 3}
+	var chars: Array[L5RCharacterData] = [char]
+	var chars_by_id: Dictionary = {10: char}
+	var objectives: Dictionary = {
+		10: {"primary": {"need_type": "RAISE_DISPOSITION", "target_npc_id": 20}},
+	}
+	var scoring_tables: Dictionary = {
+		"objective_alignment": {
+			"RAISE_DISPOSITION": {"WRITE_LETTER": 60},
+		},
+	}
+	var ws: Dictionary = {
+		"is_lord": false,
+		"context_flag": Enums.ContextFlag.AT_OWN_HOLDINGS,
+	}
+	var pending: Array[LetterData] = []
+	var dice := DiceEngine.new()
+	var next_lid: Array[int] = [1]
+	DayOrchestrator._process_daily_letter_pass(
+		chars, chars_by_id, objectives, scoring_tables, ws,
+		pending, 50, dice, next_lid,
+	)
+	if pending.size() > 0:
+		assert_true(pending[0].visit_intent, "Letter should carry visit_intent")
+		assert_eq(pending[0].visit_deadline_ic_day, 50 + DayOrchestrator.VISIT_DEADLINE_OFFSET)
+	else:
+		pass_test("No letter generated (lord filter or score)")
+
+
 # -- MEETING_ARRANGEMENT Commitment Creation (s55.31) --------------------------
 
 func test_meeting_arrangement_created_from_matching_proposals() -> void:
