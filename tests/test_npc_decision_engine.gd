@@ -2900,3 +2900,50 @@ func test_intimidate_metadata_skips_exposed_secrets() -> void:
 	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
 	assert_null(option.metadata.get("secret_ref"),
 		"Should not use already-exposed secret for blackmail")
+
+
+func test_fabricate_secret_metadata_picks_severity_by_forgery() -> void:
+	var ctx := _make_metadata_ctx()
+	ctx.skill_ranks = {"Forgery": 5}
+	var need := _make_metadata_need()
+	need.target_npc_id = 7
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "FABRICATE_SECRET"
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_eq(option.metadata.get("severity"), SecretData.Severity.TIER_2,
+		"Forgery 5 should target TIER_2")
+	assert_eq(option.target_npc_id, 7,
+		"target_npc_id should flow from need")
+
+
+func test_fabricate_secret_tier_4_for_low_forgery() -> void:
+	var ctx := _make_metadata_ctx()
+	ctx.skill_ranks = {"Forgery": 1}
+	var need := _make_metadata_need()
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "FABRICATE_SECRET"
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_eq(option.metadata.get("severity"), SecretData.Severity.TIER_4,
+		"Forgery 1 should target TIER_4 (lowest difficulty)")
+
+
+func test_fabricate_secret_tier_3_for_mid_forgery() -> void:
+	var ctx := _make_metadata_ctx()
+	ctx.skill_ranks = {"Forgery": 3}
+	var need := _make_metadata_need()
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "FABRICATE_SECRET"
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_eq(option.metadata.get("severity"), SecretData.Severity.TIER_3,
+		"Forgery 3 should target TIER_3")
+
+
+func test_fabricate_secret_tier_1_for_master_forger() -> void:
+	var ctx := _make_metadata_ctx()
+	ctx.skill_ranks = {"Forgery": 7}
+	var need := _make_metadata_need()
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "FABRICATE_SECRET"
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_eq(option.metadata.get("severity"), SecretData.Severity.TIER_1,
+		"Forgery 7+ should target TIER_1 (most severe)")

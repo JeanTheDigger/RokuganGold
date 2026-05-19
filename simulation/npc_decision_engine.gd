@@ -2622,6 +2622,24 @@ static func _populate_action_metadata(
 	elif option.action_id == "EXPOSE_SECRET_PUBLICLY":
 		var best: Dictionary = _pick_best_secret(ctx, need, true)
 		option.metadata = best
+	elif option.action_id == "FABRICATE_SECRET":
+		var sev: SecretData.Severity = _pick_fabrication_severity(ctx)
+		option.metadata = {"severity": sev}
+		if need.target_npc_id >= 0:
+			option.target_npc_id = need.target_npc_id
+
+
+static func _pick_fabrication_severity(
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> SecretData.Severity:
+	var forgery: int = ctx.skill_ranks.get("Forgery", 0)
+	if forgery >= 7:
+		return SecretData.Severity.TIER_1
+	elif forgery >= 5:
+		return SecretData.Severity.TIER_2
+	elif forgery >= 3:
+		return SecretData.Severity.TIER_3
+	return SecretData.Severity.TIER_4
 
 
 static func _pick_best_secret(
