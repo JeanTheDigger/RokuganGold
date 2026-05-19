@@ -587,8 +587,11 @@ For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
   RESOURCE_PROMISE wired (REQUEST_ALLIED_AID executor routes to
   disposition-gated acceptance at threshold 31 PROVISIONAL. Creates
   RESOURCE_PROMISE commitment with 90-day deadline PROVISIONAL, witnesses
-  = two lords + direct vassals, default Tier 2. Fulfillment returns false
-  pending SHARE_SUPPLIES executor wiring). 9 tests.
+  = two lords + direct vassals, default Tier 2. Fulfillment: writeback pass
+  cross-references successful supply_sharing_results with SHARE_SUPPLIES
+  action targets to mark matching commitments FULFILLED before deadline
+  processing. Troop transfer and koku payment fulfillment paths not yet
+  wired). 13 tests.
 - **CommitmentRegistry.apply_forgiveness() — retroactive forgiveness wired. FIXED.**
   `_process_retroactive_forgiveness()` batch scans BROKEN_FORCE_MAJEURE
   commitments after deadline processing. Bridges crisis topics to
