@@ -7463,6 +7463,86 @@ func test_commitment_fulfillment_meeting_one_absent() -> void:
 	assert_false(DayOrchestrator._check_commitment_fulfilled(c1, chars_by_id))
 
 
+func test_visit_promise_fulfilled_when_co_located() -> void:
+	var debtor := L5RCharacterData.new()
+	debtor.character_id = 10
+	debtor.physical_location = "50"
+	debtor.travel_destination = ""
+	debtor.travel_days_remaining = 0
+	var creditor := L5RCharacterData.new()
+	creditor.character_id = 20
+	creditor.physical_location = "50"
+	creditor.travel_destination = ""
+	creditor.travel_days_remaining = 0
+	var chars_by_id: Dictionary = {10: debtor, 20: creditor}
+	var c1 := CommitmentData.new()
+	c1.debtor_npc_id = 10
+	c1.creditor_npc_id = 20
+	c1.commitment_type = Enums.CommitmentType.VISIT_PROMISE
+	c1.fulfillment_target = -1
+	assert_true(DayOrchestrator._check_commitment_fulfilled(c1, chars_by_id),
+		"Visit fulfilled when both at same location")
+
+
+func test_visit_promise_not_fulfilled_when_apart() -> void:
+	var debtor := L5RCharacterData.new()
+	debtor.character_id = 10
+	debtor.physical_location = "50"
+	debtor.travel_destination = ""
+	debtor.travel_days_remaining = 0
+	var creditor := L5RCharacterData.new()
+	creditor.character_id = 20
+	creditor.physical_location = "200"
+	var chars_by_id: Dictionary = {10: debtor, 20: creditor}
+	var c1 := CommitmentData.new()
+	c1.debtor_npc_id = 10
+	c1.creditor_npc_id = 20
+	c1.commitment_type = Enums.CommitmentType.VISIT_PROMISE
+	assert_false(DayOrchestrator._check_commitment_fulfilled(c1, chars_by_id),
+		"Visit not fulfilled when at different locations")
+
+
+func test_visit_promise_not_fulfilled_when_creditor_traveling() -> void:
+	var debtor := L5RCharacterData.new()
+	debtor.character_id = 10
+	debtor.physical_location = "50"
+	debtor.travel_destination = ""
+	debtor.travel_days_remaining = 0
+	var creditor := L5RCharacterData.new()
+	creditor.character_id = 20
+	creditor.physical_location = "50"
+	creditor.travel_destination = "100"
+	creditor.travel_days_remaining = 3
+	var chars_by_id: Dictionary = {10: debtor, 20: creditor}
+	var c1 := CommitmentData.new()
+	c1.debtor_npc_id = 10
+	c1.creditor_npc_id = 20
+	c1.commitment_type = Enums.CommitmentType.VISIT_PROMISE
+	assert_false(DayOrchestrator._check_commitment_fulfilled(c1, chars_by_id),
+		"Visit not fulfilled when creditor is traveling")
+
+
+func test_meeting_not_fulfilled_when_creditor_traveling() -> void:
+	var debtor := L5RCharacterData.new()
+	debtor.character_id = 10
+	debtor.physical_location = "50"
+	debtor.travel_destination = ""
+	debtor.travel_days_remaining = 0
+	var creditor := L5RCharacterData.new()
+	creditor.character_id = 20
+	creditor.physical_location = "50"
+	creditor.travel_destination = "100"
+	creditor.travel_days_remaining = 3
+	var chars_by_id: Dictionary = {10: debtor, 20: creditor}
+	var c1 := CommitmentData.new()
+	c1.debtor_npc_id = 10
+	c1.creditor_npc_id = 20
+	c1.commitment_type = Enums.CommitmentType.MEETING_ARRANGEMENT
+	c1.fulfillment_target = 50
+	assert_false(DayOrchestrator._check_commitment_fulfilled(c1, chars_by_id),
+		"Meeting not fulfilled when creditor is traveling through")
+
+
 # -- Commitment Creation Writebacks (s55.31.3) --------------------------------
 
 func test_favor_obligation_commitment_created_on_offer_favor() -> void:
@@ -7945,12 +8025,15 @@ func test_meeting_arrangement_created_from_matching_proposals() -> void:
 	DayOrchestrator._process_letter_commitment_creation(
 		pending, commitments, next_id, 50,
 	)
-	assert_eq(commitments.size(), 1, "Matching pair should create exactly one commitment")
-	var c: CommitmentData = commitments[0]
-	assert_eq(c.commitment_type, Enums.CommitmentType.MEETING_ARRANGEMENT)
-	assert_eq(c.fulfillment_target, 100)
-	assert_eq(c.deadline_ic_day, 150)
-	assert_eq(c.tier, 3)
+	assert_eq(commitments.size(), 2, "Matching pair should create two commitments (both parties)")
+	var debtors: Array[int] = [commitments[0].debtor_npc_id, commitments[1].debtor_npc_id]
+	debtors.sort()
+	assert_eq(debtors, [10, 20], "Both parties should be debtors")
+	for c: CommitmentData in commitments:
+		assert_eq(c.commitment_type, Enums.CommitmentType.MEETING_ARRANGEMENT)
+		assert_eq(c.fulfillment_target, 100)
+		assert_eq(c.deadline_ic_day, 150)
+		assert_eq(c.tier, 3)
 
 
 func test_meeting_arrangement_not_created_without_match() -> void:
@@ -7994,19 +8077,25 @@ func test_meeting_arrangement_skips_duplicate() -> void:
 	letter_b.meeting_proposal = true
 	letter_b.meeting_settlement_id = 100
 	letter_b.meeting_deadline_ic_day = 150
-	var existing := CommitmentData.new()
-	existing.commitment_type = Enums.CommitmentType.MEETING_ARRANGEMENT
-	existing.creditor_npc_id = 10
-	existing.debtor_npc_id = 20
-	existing.fulfillment_target = 100
-	existing.status = Enums.CommitmentStatus.PENDING
+	var existing_a := CommitmentData.new()
+	existing_a.commitment_type = Enums.CommitmentType.MEETING_ARRANGEMENT
+	existing_a.creditor_npc_id = 10
+	existing_a.debtor_npc_id = 20
+	existing_a.fulfillment_target = 100
+	existing_a.status = Enums.CommitmentStatus.PENDING
+	var existing_b := CommitmentData.new()
+	existing_b.commitment_type = Enums.CommitmentType.MEETING_ARRANGEMENT
+	existing_b.creditor_npc_id = 20
+	existing_b.debtor_npc_id = 10
+	existing_b.fulfillment_target = 100
+	existing_b.status = Enums.CommitmentStatus.PENDING
 	var pending: Array[LetterData] = [letter_a, letter_b]
-	var commitments: Array[CommitmentData] = [existing]
+	var commitments: Array[CommitmentData] = [existing_a, existing_b]
 	var next_id: Array[int] = [1]
 	DayOrchestrator._process_letter_commitment_creation(
 		pending, commitments, next_id, 50,
 	)
-	assert_eq(commitments.size(), 1, "Should not add duplicate meeting")
+	assert_eq(commitments.size(), 2, "Should not add duplicate meetings")
 
 
 # -- SUPPORT_PLEDGE Commitment Creation (s55.31) --------------------------------

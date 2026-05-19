@@ -4907,14 +4907,21 @@ static func _check_commitment_fulfilled(
 		Enums.CommitmentType.COURT_ATTENDANCE:
 			return is_present
 		Enums.CommitmentType.VISIT_PROMISE:
-			return is_present
+			var visit_creditor: L5RCharacterData = characters_by_id.get(c.creditor_npc_id)
+			if visit_creditor == null:
+				return false
+			return (debtor.physical_location == visit_creditor.physical_location
+				and not debtor.physical_location.is_empty()
+				and not TravelSystem.is_traveling(debtor)
+				and not TravelSystem.is_traveling(visit_creditor))
 		Enums.CommitmentType.MEETING_ARRANGEMENT:
 			if not is_present:
 				return false
-			var creditor: L5RCharacterData = characters_by_id.get(c.creditor_npc_id)
-			if creditor == null:
+			var meeting_creditor: L5RCharacterData = characters_by_id.get(c.creditor_npc_id)
+			if meeting_creditor == null:
 				return false
-			return creditor.physical_location == target_settlement
+			return (meeting_creditor.physical_location == target_settlement
+				and not TravelSystem.is_traveling(meeting_creditor))
 		Enums.CommitmentType.SUPPORT_PLEDGE:
 			if not is_present:
 				return false
@@ -5060,24 +5067,25 @@ static func _process_letter_commitment_creation(
 					break
 			if not has_matching:
 				continue
-			var pair_a: int = mini(letter.sender_id, letter.recipient_id)
-			var pair_b: int = maxi(letter.sender_id, letter.recipient_id)
-			var already_exists: bool = false
+			var sid: int = letter.sender_id
+			var rid: int = letter.recipient_id
+			var already_has_sender: bool = false
+			var already_has_recipient: bool = false
 			for c: CommitmentData in commitments:
 				if (c.commitment_type == Enums.CommitmentType.MEETING_ARRANGEMENT
-					and mini(c.creditor_npc_id, c.debtor_npc_id) == pair_a
-					and maxi(c.creditor_npc_id, c.debtor_npc_id) == pair_b
 					and c.fulfillment_target == letter.meeting_settlement_id
 					and c.status == Enums.CommitmentStatus.PENDING):
-					already_exists = true
-					break
-			if not already_exists:
-				var witnesses: Array[int] = [letter.sender_id, letter.recipient_id]
-				var cm: CommitmentData = CommitmentRegistry.create_commitment(
+					if c.debtor_npc_id == sid and c.creditor_npc_id == rid:
+						already_has_sender = true
+					if c.debtor_npc_id == rid and c.creditor_npc_id == sid:
+						already_has_recipient = true
+			var witnesses: Array[int] = [sid, rid]
+			if not already_has_sender:
+				var cm_sender: CommitmentData = CommitmentRegistry.create_commitment(
 					next_commitment_id[0],
 					Enums.CommitmentType.MEETING_ARRANGEMENT,
-					letter.recipient_id,
-					letter.sender_id,
+					rid,
+					sid,
 					letter.meeting_deadline_ic_day,
 					3,
 					ic_day,
@@ -5085,7 +5093,22 @@ static func _process_letter_commitment_creation(
 					letter.meeting_settlement_id,
 					witnesses,
 				)
-				commitments.append(cm)
+				commitments.append(cm_sender)
+				next_commitment_id[0] += 1
+			if not already_has_recipient:
+				var cm_recipient: CommitmentData = CommitmentRegistry.create_commitment(
+					next_commitment_id[0],
+					Enums.CommitmentType.MEETING_ARRANGEMENT,
+					sid,
+					rid,
+					letter.meeting_deadline_ic_day,
+					3,
+					ic_day,
+					"WRITE_LETTER",
+					letter.meeting_settlement_id,
+					witnesses,
+				)
+				commitments.append(cm_recipient)
 				next_commitment_id[0] += 1
 
 
