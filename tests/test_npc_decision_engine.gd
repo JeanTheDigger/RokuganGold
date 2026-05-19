@@ -2682,3 +2682,138 @@ func test_province_status_carries_ptl() -> void:
 	var ps: NPCDataStructures.ProvinceStatus = statuses[0]
 	assert_almost_eq(ps.province_taint_level, 6.0, 0.01,
 		"ProvinceStatus should carry province_taint_level from ProvinceData")
+
+
+func test_expose_privately_metadata_picks_best_secret() -> void:
+	var ctx := _make_metadata_ctx()
+	ctx.characters_present = [2, 3] as Array[int]
+	var s1 := SecretData.new()
+	s1.secret_id = 10
+	s1.subject_id = 3
+	s1.severity = SecretData.Severity.TIER_4
+	var s2 := SecretData.new()
+	s2.secret_id = 11
+	s2.subject_id = 3
+	s2.severity = SecretData.Severity.TIER_2
+	ctx.known_secrets = [
+		{"_secret_ref": s1, "secret_id": 10, "subject_id": 3, "has_proof": false, "severity": SecretData.Severity.TIER_4},
+		{"_secret_ref": s2, "secret_id": 11, "subject_id": 3, "has_proof": true, "severity": SecretData.Severity.TIER_2},
+	]
+	var need := _make_metadata_need()
+	need.target_npc_id = 3
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "EXPOSE_SECRET_PRIVATELY"
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_eq(option.metadata.get("subject_id", -1), 3,
+		"Should select secret about need target")
+	assert_true(option.metadata.get("has_proof", false),
+		"Should pick most severe secret (TIER_2 beats TIER_4)")
+
+
+func test_expose_privately_metadata_skips_exposed_secrets() -> void:
+	var ctx := _make_metadata_ctx()
+	ctx.characters_present = [2, 3] as Array[int]
+	var s1 := SecretData.new()
+	s1.secret_id = 10
+	s1.subject_id = 3
+	s1.severity = SecretData.Severity.TIER_1
+	s1.exposed = true
+	var s2 := SecretData.new()
+	s2.secret_id = 11
+	s2.subject_id = 3
+	s2.severity = SecretData.Severity.TIER_4
+	ctx.known_secrets = [
+		{"_secret_ref": s1, "secret_id": 10, "subject_id": 3, "has_proof": false, "severity": SecretData.Severity.TIER_1},
+		{"_secret_ref": s2, "secret_id": 11, "subject_id": 3, "has_proof": false, "severity": SecretData.Severity.TIER_4},
+	]
+	var need := _make_metadata_need()
+	need.target_npc_id = 3
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "EXPOSE_SECRET_PRIVATELY"
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	var ref: Variant = option.metadata.get("secret_ref")
+	assert_eq(ref, s2, "Should skip already-exposed secret and pick the unexposed one")
+
+
+func test_expose_privately_metadata_skips_own_secrets() -> void:
+	var ctx := _make_metadata_ctx()
+	ctx.character_id = 1
+	ctx.characters_present = [2, 3] as Array[int]
+	var s1 := SecretData.new()
+	s1.secret_id = 10
+	s1.subject_id = 1
+	s1.severity = SecretData.Severity.TIER_1
+	ctx.known_secrets = [
+		{"_secret_ref": s1, "secret_id": 10, "subject_id": 1, "has_proof": false, "severity": SecretData.Severity.TIER_1},
+	]
+	var need := _make_metadata_need()
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "EXPOSE_SECRET_PRIVATELY"
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_null(option.metadata.get("secret_ref"),
+		"Should not pick a secret about the character themselves")
+
+
+func test_expose_privately_picks_recipient_from_present() -> void:
+	var ctx := _make_metadata_ctx()
+	ctx.character_id = 1
+	ctx.characters_present = [5, 7] as Array[int]
+	var s1 := SecretData.new()
+	s1.secret_id = 10
+	s1.subject_id = 7
+	s1.severity = SecretData.Severity.TIER_3
+	ctx.known_secrets = [
+		{"_secret_ref": s1, "secret_id": 10, "subject_id": 7, "has_proof": false, "severity": SecretData.Severity.TIER_3},
+	]
+	var need := _make_metadata_need()
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "EXPOSE_SECRET_PRIVATELY"
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_eq(option.target_npc_id, 5,
+		"Should pick a present character who is not the subject as recipient")
+
+
+func test_expose_publicly_metadata_picks_secret() -> void:
+	var ctx := _make_metadata_ctx()
+	var s1 := SecretData.new()
+	s1.secret_id = 20
+	s1.subject_id = 5
+	s1.severity = SecretData.Severity.TIER_2
+	ctx.known_secrets = [
+		{"_secret_ref": s1, "secret_id": 20, "subject_id": 5, "has_proof": true, "severity": SecretData.Severity.TIER_2},
+	]
+	var need := _make_metadata_need()
+	need.target_npc_id = 5
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "EXPOSE_SECRET_PUBLICLY"
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_eq(option.metadata.get("subject_id", -1), 5)
+	assert_true(option.metadata.get("has_proof", false))
+	assert_eq(option.metadata.get("secret_ref"), s1)
+
+
+func test_expose_metadata_empty_when_no_secrets() -> void:
+	var ctx := _make_metadata_ctx()
+	ctx.known_secrets = []
+	var need := _make_metadata_need()
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "EXPOSE_SECRET_PRIVATELY"
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_null(option.metadata.get("secret_ref"),
+		"Should have null secret_ref when NPC knows no secrets")
+	assert_eq(option.metadata.get("subject_id", -1), -1)
+
+
+func test_known_secrets_flows_through_build_context() -> void:
+	var secret_dicts: Array[Dictionary] = [
+		{"_secret_ref": SecretData.new(), "secret_id": 1, "subject_id": 2, "has_proof": false, "severity": 4},
+	]
+	_world_state["known_secrets"] = secret_dicts
+	var ctx := NPCDecisionEngine.build_context(_char, _world_state)
+	assert_eq(ctx.known_secrets.size(), 1, "known_secrets should flow from world_state")
+
+
+func test_known_secrets_defaults_empty() -> void:
+	_world_state.erase("known_secrets")
+	var ctx := NPCDecisionEngine.build_context(_char, _world_state)
+	assert_eq(ctx.known_secrets.size(), 0, "known_secrets should default to empty")

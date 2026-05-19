@@ -95,6 +95,7 @@ static func build_context(
 	ctx.contact_clans = clan_lookup
 	ctx.met_characters = character.met_characters.duplicate()
 	ctx.knowledge_pool = character.knowledge_pool
+	ctx.known_secrets = world_state.get("known_secrets", [])
 
 	# Lord-tier fields
 	if ctx.is_lord:
@@ -2609,6 +2610,56 @@ static func _populate_action_metadata(
 			"performance_type": "song",
 			"venue_mode": "public",
 		}
+	elif option.action_id == "EXPOSE_SECRET_PRIVATELY":
+		var best: Dictionary = _pick_best_secret(ctx, need, false)
+		option.metadata = best
+		if best.get("subject_id", -1) >= 0:
+			option.target_npc_id = need.target_npc_id if need.target_npc_id >= 0 else _pick_private_recipient(ctx, best.get("subject_id", -1))
+	elif option.action_id == "EXPOSE_SECRET_PUBLICLY":
+		var best: Dictionary = _pick_best_secret(ctx, need, true)
+		option.metadata = best
+
+
+static func _pick_best_secret(
+	ctx: NPCDataStructures.ContextSnapshot,
+	need: NPCDataStructures.ImmediateNeed,
+	_public: bool,
+) -> Dictionary:
+	var best_sev: int = 999
+	var best: Dictionary = {"secret_ref": null, "subject_id": -1, "has_proof": false}
+	for sd: Variant in ctx.known_secrets:
+		if not sd is Dictionary:
+			continue
+		var d: Dictionary = sd as Dictionary
+		var ref: Variant = d.get("_secret_ref")
+		if ref == null:
+			continue
+		if ref is SecretData and (ref as SecretData).exposed:
+			continue
+		var subj: int = d.get("subject_id", -1)
+		if subj < 0 or subj == ctx.character_id:
+			continue
+		if need.target_npc_id >= 0 and subj != need.target_npc_id:
+			continue
+		var sev: int = d.get("severity", 0)
+		if sev < best_sev:
+			best_sev = sev
+			best = {
+				"secret_ref": ref,
+				"subject_id": subj,
+				"has_proof": d.get("has_proof", false),
+			}
+	return best
+
+
+static func _pick_private_recipient(
+	ctx: NPCDataStructures.ContextSnapshot,
+	subject_id: int,
+) -> int:
+	for pid: int in ctx.characters_present:
+		if pid != ctx.character_id and pid != subject_id:
+			return pid
+	return -1
 
 
 static func _has_known_agenda_topic(ctx: NPCDataStructures.ContextSnapshot) -> bool:

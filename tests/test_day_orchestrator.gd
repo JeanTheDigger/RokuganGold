@@ -9446,3 +9446,85 @@ func test_proxy_arrival_not_marked_while_traveling() -> void:
 	var commitments: Array[CommitmentData] = [c]
 	DayOrchestrator._process_proxy_arrivals(commitments, chars_by_id)
 	assert_false(c.proxy_sent, "Should not mark proxy_sent while proxy is still traveling")
+
+
+# -- Expose Secret Writebacks ---------------------------------------------------
+
+func test_expose_privately_writeback_adds_recipient_to_known_by() -> void:
+	var s := SecretData.new()
+	s.secret_id = 50
+	s.subject_id = 3
+	s.known_by_ids = [1]
+	var secrets: Array[SecretData] = [s]
+	var results: Array = [{
+		"action_id": "EXPOSE_SECRET_PRIVATELY",
+		"success": true,
+		"character_id": 1,
+		"target_npc_id": 7,
+		"effects": {"secret_id": 50, "subject_id": 3},
+	}]
+	DayOrchestrator._process_expose_secret_writebacks(results, secrets, {})
+	assert_true(7 in s.known_by_ids, "Recipient should be added to known_by_ids")
+
+
+func test_expose_privately_writeback_no_duplicate() -> void:
+	var s := SecretData.new()
+	s.secret_id = 50
+	s.subject_id = 3
+	s.known_by_ids = [1, 7]
+	var secrets: Array[SecretData] = [s]
+	var results: Array = [{
+		"action_id": "EXPOSE_SECRET_PRIVATELY",
+		"success": true,
+		"character_id": 1,
+		"target_npc_id": 7,
+		"effects": {"secret_id": 50, "subject_id": 3},
+	}]
+	DayOrchestrator._process_expose_secret_writebacks(results, secrets, {})
+	var count: int = 0
+	for kid: int in s.known_by_ids:
+		if kid == 7:
+			count += 1
+	assert_eq(count, 1, "Should not duplicate recipient in known_by_ids")
+
+
+func test_expose_publicly_writeback_does_not_add_known_by() -> void:
+	var s := SecretData.new()
+	s.secret_id = 60
+	s.subject_id = 3
+	s.known_by_ids = [1]
+	var secrets: Array[SecretData] = [s]
+	var results: Array = [{
+		"action_id": "EXPOSE_SECRET_PUBLICLY",
+		"success": true,
+		"character_id": 1,
+		"target_npc_id": 3,
+		"effects": {"secret_id": 60, "subject_id": 3},
+	}]
+	DayOrchestrator._process_expose_secret_writebacks(results, secrets, {})
+	assert_eq(s.known_by_ids.size(), 1, "Public exposure should not modify known_by_ids")
+
+
+func test_expose_writeback_skips_failed_results() -> void:
+	var s := SecretData.new()
+	s.secret_id = 50
+	s.subject_id = 3
+	s.known_by_ids = [1]
+	var secrets: Array[SecretData] = [s]
+	var results: Array = [{
+		"action_id": "EXPOSE_SECRET_PRIVATELY",
+		"success": false,
+		"character_id": 1,
+		"target_npc_id": 7,
+		"effects": {"secret_id": 50, "subject_id": 3},
+	}]
+	DayOrchestrator._process_expose_secret_writebacks(results, secrets, {})
+	assert_false(7 in s.known_by_ids, "Failed exposure should not modify known_by_ids")
+
+
+# -- Secret known_by_ids population at creation ---------------------------------
+
+func test_secret_known_by_ids_populated_on_bribe_accepted() -> void:
+	var s := SecretData.new()
+	s.known_by_ids = [10, 20]
+	assert_eq(s.known_by_ids.size(), 2, "known_by_ids should hold both parties")

@@ -20,3 +20,4 @@ enum Severity {
 @export var description: String = ""
 @export var topic_id: int = -1
 @export var physical_proof_item_id: int = -1
+@export var known_by_ids: Array[int] = []

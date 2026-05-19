@@ -123,6 +123,7 @@ class ContextSnapshot:
 	var known_contacts_by_clan: Dictionary = {}
 	var met_characters: Array[int] = []
 	var knowledge_pool: Array[KnowledgeEntry] = []
+	var known_secrets: Array[Dictionary] = []
 
 	# Lord-tier fields
 	var resource_stockpiles: Dictionary = {}

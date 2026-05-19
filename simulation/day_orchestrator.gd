@@ -190,7 +190,7 @@ static func advance_day(
 
 	_inject_urgency_data(
 		world_states, characters, favors, active_tethers, active_sieges,
-		objectives_map, active_topics,
+		objectives_map, active_topics, active_secrets,
 	)
 
 	world_states["_crime_records"] = crime_records
@@ -286,6 +286,11 @@ static func advance_day(
 		day_result.get("results", []),
 		characters_by_id, active_topics, pending_letters,
 		ic_day, dice_engine, next_letter_id,
+	)
+
+	_process_expose_secret_writebacks(
+		day_result.get("results", []),
+		active_secrets, characters_by_id,
 	)
 
 	_process_taint_proximity_detection(
@@ -3547,6 +3552,7 @@ static func _process_successful_bribe_writebacks(
 					crime_name,
 				],
 			)
+			secret_about_magistrate.known_by_ids = [magistrate_id, briber_id]
 			next_secret_id[0] += 1
 			active_secrets.append(secret_about_magistrate)
 
@@ -3561,6 +3567,7 @@ static func _process_successful_bribe_writebacks(
 					crime_name,
 				],
 			)
+			secret_about_briber.known_by_ids = [magistrate_id, briber_id]
 			next_secret_id[0] += 1
 			active_secrets.append(secret_about_briber)
 			break
@@ -3696,6 +3703,7 @@ static func _process_extortion_writebacks(
 					crime_name,
 				],
 			)
+			secret.known_by_ids = [magistrate_id, suspect_id]
 			next_secret_id[0] += 1
 			active_secrets.append(secret)
 			break
@@ -4021,6 +4029,7 @@ static func _process_witness_tampering_writebacks(
 							witness_name, criminal_name, record.case_id,
 						],
 					)
+					secret.known_by_ids = [criminal_id, witness_id]
 					next_secret_id[0] += 1
 					active_secrets.append(secret)
 				elif action_id == "INTIMIDATE_WITNESS":
@@ -4290,6 +4299,33 @@ static func _apply_evidence_decay(
 # When a character with Lore: Shadowlands >= 3 (or Kuni/Asako with any rank)
 # performs a social action in proximity to a character with Taint Rank >= 2,
 # they automatically attempt detection. Success generates a named accusation topic.
+static func _process_expose_secret_writebacks(
+	results: Array,
+	active_secrets: Array[SecretData],
+	_characters_by_id: Dictionary,
+) -> void:
+	for r: Variant in results:
+		if not r is Dictionary:
+			continue
+		var d: Dictionary = r as Dictionary
+		var aid: String = d.get("action_id", "")
+		if aid != "EXPOSE_SECRET_PRIVATELY" and aid != "EXPOSE_SECRET_PUBLICLY":
+			continue
+		if not d.get("success", false):
+			continue
+		var effects: Dictionary = d.get("effects", {})
+		if effects.is_empty():
+			continue
+		var secret_id: int = effects.get("secret_id", -1)
+		var target_id: int = d.get("target_npc_id", -1)
+		if aid == "EXPOSE_SECRET_PRIVATELY" and target_id >= 0 and secret_id >= 0:
+			for s: SecretData in active_secrets:
+				if s.secret_id == secret_id:
+					if target_id not in s.known_by_ids:
+						s.known_by_ids.append(target_id)
+					break
+
+
 # TN for the check is deferred to Section 31/42 — using placeholder TN 20.
 
 const TAINT_DETECTION_PLACEHOLDER_TN: int = 20
@@ -8250,6 +8286,7 @@ static func _inject_urgency_data(
 	active_sieges: Array[Dictionary],
 	objectives_map: Dictionary,
 	active_topics: Array[TopicData],
+	active_secrets: Array[SecretData] = [],
 ) -> void:
 	var besieged_settlements: Dictionary = {}
 	for siege: Dictionary in active_sieges:
@@ -8310,6 +8347,18 @@ static func _inject_urgency_data(
 			if pid != c.character_id:
 				others.append(pid)
 		ws["characters_present"] = others
+
+		var char_secrets: Array[Dictionary] = []
+		for s: SecretData in active_secrets:
+			if c.character_id in s.known_by_ids and not s.exposed_publicly:
+				char_secrets.append({
+					"_secret_ref": s,
+					"secret_id": s.secret_id,
+					"subject_id": s.subject_id,
+					"has_proof": s.physical_proof_item_id >= 0,
+					"severity": s.severity,
+				})
+		ws["known_secrets"] = char_secrets
 
 
 static func _inject_edict_reactive_events(
