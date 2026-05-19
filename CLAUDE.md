@@ -765,10 +765,13 @@ For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
   `combat_modifiers_pending`. All are schema placeholders for blocked
   sections (s40 individual combat, s31–s37 spells, s56 quest system).
   Do not remove — they will be consumed when those sections unlock.
-- **Orphaned character_data fields (not blocked).** `timed_advantages`
-  and `action_blocks` on L5RCharacterData have no producer or consumer.
-  Not tied to any known blocked section. May be leftover from early
-  design; safe to remove if confirmed unnecessary.
+- **Orphaned character_data fields (not blocked) — RECLASSIFIED: blocked.**
+  `timed_advantages` and `action_blocks` on L5RCharacterData ARE specified
+  in s29.15.24 (LOCKED). timed_advantages: Ikoma Orator Paragon/Failure of
+  Bushido. action_blocks: Ide R5 peace_locked, Miya R3 herald_immunity,
+  Otomo R3 obiesaseru, Miya R4 blessing_ceasefire, ship captain
+  INTERVENE_CAPTAIN (s55.11). Blocked on individual school technique
+  implementation. Do not remove.
 - **Orphaned province_data fields.** `rivers` and `roads` on
   ProvinceData have no producer or consumer. Likely intended for the
   world map / adjacency system (blocked). Do not remove until map
