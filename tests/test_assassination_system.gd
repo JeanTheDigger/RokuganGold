@@ -637,6 +637,78 @@ func test_concealment_accident_uses_engineering() -> void:
 	assert_eq(r["skill"], "Engineering")
 
 
+func test_concealment_outcome_has_field() -> void:
+	var s: Dictionary = AssassinationSystem.create_assassination_state(1, 2, AssassinationSystem.ExecutionMethod.POISON, 0)
+	s["phase"] = AssassinationSystem.AssassinationPhase.CONCEALMENT
+	var r: Dictionary = AssassinationSystem.resolve_concealment(_assassin, s, _engine)
+	assert_has(r, "outcome")
+	assert_true(r["outcome"] in ["full", "partial", "failure"])
+
+
+func test_concealment_full_success() -> void:
+	_assassin.skills["Medicine"] = 8
+	_assassin.intelligence = 5
+	var full_count: int = 0
+	for i: int in range(50):
+		var s: Dictionary = AssassinationSystem.create_assassination_state(1, 2, AssassinationSystem.ExecutionMethod.POISON, 0)
+		s["phase"] = AssassinationSystem.AssassinationPhase.CONCEALMENT
+		var e: DiceEngine = DiceEngine.new(i * 13)
+		var r: Dictionary = AssassinationSystem.resolve_concealment(_assassin, s, e)
+		if r["outcome"] == "full":
+			full_count += 1
+			assert_true(r["concealed"])
+	assert_true(full_count > 0, "Skilled assassin should get full concealment sometimes")
+
+
+func test_concealment_failure_not_concealed() -> void:
+	_assassin.skills["Medicine"] = 0
+	_assassin.intelligence = 1
+	var failure_count: int = 0
+	for i: int in range(50):
+		var s: Dictionary = AssassinationSystem.create_assassination_state(1, 2, AssassinationSystem.ExecutionMethod.POISON, 0)
+		s["phase"] = AssassinationSystem.AssassinationPhase.CONCEALMENT
+		var e: DiceEngine = DiceEngine.new(i * 7)
+		var r: Dictionary = AssassinationSystem.resolve_concealment(_assassin, s, e)
+		if r["outcome"] == "failure":
+			failure_count += 1
+			assert_false(r["concealed"])
+			assert_eq(r["concealment_tn"], 0)
+	assert_true(failure_count > 0, "Weak assassin should fail concealment sometimes")
+
+
+func test_concealment_partial_not_concealed() -> void:
+	var partial_found: bool = false
+	for i: int in range(200):
+		_assassin.skills["Medicine"] = 2
+		_assassin.intelligence = 2
+		var s: Dictionary = AssassinationSystem.create_assassination_state(1, 2, AssassinationSystem.ExecutionMethod.POISON, 0)
+		s["phase"] = AssassinationSystem.AssassinationPhase.CONCEALMENT
+		var e: DiceEngine = DiceEngine.new(i * 3)
+		var r: Dictionary = AssassinationSystem.resolve_concealment(_assassin, s, e)
+		if r["outcome"] == "partial":
+			partial_found = true
+			assert_false(r["concealed"])
+			assert_true(r["concealment_tn"] > 0, "Partial keeps investigator TN")
+			break
+	assert_true(partial_found, "Should find at least one partial outcome in 200 trials")
+
+
+func test_concealment_partial_preserves_investigator_tn() -> void:
+	var partial_found: bool = false
+	for i: int in range(200):
+		_assassin.skills["Medicine"] = 2
+		_assassin.intelligence = 2
+		var s: Dictionary = AssassinationSystem.create_assassination_state(1, 2, AssassinationSystem.ExecutionMethod.POISON, 0)
+		s["phase"] = AssassinationSystem.AssassinationPhase.CONCEALMENT
+		var e: DiceEngine = DiceEngine.new(i * 3)
+		var r: Dictionary = AssassinationSystem.resolve_concealment(_assassin, s, e)
+		if r["outcome"] == "partial":
+			partial_found = true
+			assert_eq(r["concealment_tn"], r["roll_total"])
+			break
+	assert_true(partial_found, "Should find partial outcome")
+
+
 # ==============================================================================
 # Bodyguard Response
 # ==============================================================================

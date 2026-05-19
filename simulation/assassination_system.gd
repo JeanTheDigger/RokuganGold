@@ -114,6 +114,11 @@ const CONCEAL_POISON_TN: int = 15
 const CONCEAL_BLADE_TN: int = 25
 const CONCEAL_ACCIDENT_TN: int = 20
 
+# Concealment outcome thresholds — PROVISIONAL.
+# Full: beat TN. Partial: missed by < 10 (suspicious but no evidence).
+# Failure: missed by 10+.
+const CONCEALMENT_PARTIAL_THRESHOLD: int = -10
+
 # -- PC Safeguard Windows (real days for offline players) ----------------------
 
 const PC_CRISIS_POISON_DAYS: int = 12
@@ -725,14 +730,21 @@ static func resolve_concealment(
 	)
 	var success: bool = result.get("success", false)
 	var roll_total: int = result.get("total", 0)
-	var concealment_tn_for_investigators: int = roll_total if success else 0
+	var margin: int = result.get("margin", 0)
+
+	var outcome: String = "full"
+	if not success:
+		outcome = "partial" if margin >= CONCEALMENT_PARTIAL_THRESHOLD else "failure"
+
+	var concealment_tn_for_investigators: int = roll_total if outcome != "failure" else 0
 
 	state["concealment_result"] = {
 		"success": success,
-		"concealed": success,
+		"concealed": outcome == "full",
+		"outcome": outcome,
 		"roll_total": roll_total,
 		"tn": tn,
-		"margin": result.get("margin", 0),
+		"margin": margin,
 		"skill": skill,
 		"concealment_tn": concealment_tn_for_investigators,
 		"method": method,

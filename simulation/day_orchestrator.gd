@@ -14264,10 +14264,10 @@ static func _apply_assassination_outcome(
 		"commissioner_id": op.get("commissioner_id", -1),
 	})
 
-	var concealed: bool = conceal_result.get("concealed", false)
+	var outcome: String = conceal_result.get("outcome", "failure")
 	var concealment_tn: int = int(conceal_result.get("concealment_tn", 0))
 
-	if not concealed:
+	if outcome == "failure":
 		var record: CrimeRecord = CrimeRecord.new()
 		record.case_id = next_case_id[0]
 		next_case_id[0] += 1
@@ -14284,11 +14284,15 @@ static func _apply_assassination_outcome(
 	topic.topic_id = next_topic_id[0]
 	next_topic_id[0] += 1
 	topic.ic_day_created = ic_day
-	if concealed:
-		topic.topic_type = "death_natural"
-		topic.tier = 4
-	else:
-		topic.topic_type = "death_murder"
-		topic.tier = 2
+	match outcome:
+		"full":
+			topic.topic_type = "death_natural"
+			topic.tier = 4
+		"partial":
+			topic.topic_type = "death_suspicious"
+			topic.tier = 3
+		_:
+			topic.topic_type = "death_murder"
+			topic.tier = 2
 	topic.subject_character_id = target.character_id
 	active_topics.append(topic)
