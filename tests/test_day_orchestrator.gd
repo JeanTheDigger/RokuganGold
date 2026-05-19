@@ -7846,3 +7846,164 @@ func test_court_attendance_witnesses_are_inviter_and_invitee() -> void:
 	assert_eq(commitments[0].witnesses.size(), 2)
 	assert_true(10 in commitments[0].witnesses)
 	assert_true(20 in commitments[0].witnesses)
+
+
+# -- VISIT_PROMISE Commitment Creation (s55.31) --------------------------------
+
+func _make_delivered_letter(lid: int, sender_id: int, recipient_id: int) -> LetterData:
+	var letter := LetterData.new()
+	letter.letter_id = lid
+	letter.sender_id = sender_id
+	letter.recipient_id = recipient_id
+	letter.delivered = true
+	return letter
+
+
+func test_visit_promise_created_from_letter_with_intent() -> void:
+	var letter := _make_delivered_letter(1, 10, 20)
+	letter.visit_intent = true
+	letter.visit_deadline_ic_day = 100
+	var pending: Array[LetterData] = [letter]
+	var commitments: Array[CommitmentData] = []
+	var next_id: Array[int] = [1]
+	DayOrchestrator._process_letter_commitment_creation(
+		pending, commitments, next_id, 50,
+	)
+	assert_eq(commitments.size(), 1)
+	var c: CommitmentData = commitments[0]
+	assert_eq(c.commitment_type, Enums.CommitmentType.VISIT_PROMISE)
+	assert_eq(c.creditor_npc_id, 20)
+	assert_eq(c.debtor_npc_id, 10)
+	assert_eq(c.deadline_ic_day, 100)
+	assert_eq(c.tier, 3)
+	assert_eq(c.source_action_id, "WRITE_LETTER")
+	assert_eq(next_id[0], 2)
+
+
+func test_visit_promise_not_created_without_deadline() -> void:
+	var letter := _make_delivered_letter(1, 10, 20)
+	letter.visit_intent = true
+	letter.visit_deadline_ic_day = -1
+	var pending: Array[LetterData] = [letter]
+	var commitments: Array[CommitmentData] = []
+	var next_id: Array[int] = [1]
+	DayOrchestrator._process_letter_commitment_creation(
+		pending, commitments, next_id, 50,
+	)
+	assert_eq(commitments.size(), 0)
+
+
+func test_visit_promise_skips_duplicate() -> void:
+	var letter := _make_delivered_letter(1, 10, 20)
+	letter.visit_intent = true
+	letter.visit_deadline_ic_day = 100
+	var existing := CommitmentData.new()
+	existing.commitment_type = Enums.CommitmentType.VISIT_PROMISE
+	existing.debtor_npc_id = 10
+	existing.creditor_npc_id = 20
+	existing.status = Enums.CommitmentStatus.PENDING
+	var pending: Array[LetterData] = [letter]
+	var commitments: Array[CommitmentData] = [existing]
+	var next_id: Array[int] = [1]
+	DayOrchestrator._process_letter_commitment_creation(
+		pending, commitments, next_id, 50,
+	)
+	assert_eq(commitments.size(), 1, "Should not add duplicate")
+
+
+func test_visit_promise_not_created_for_undelivered_letter() -> void:
+	var letter := LetterData.new()
+	letter.letter_id = 1
+	letter.sender_id = 10
+	letter.recipient_id = 20
+	letter.delivered = false
+	letter.visit_intent = true
+	letter.visit_deadline_ic_day = 100
+	var pending: Array[LetterData] = [letter]
+	var commitments: Array[CommitmentData] = []
+	var next_id: Array[int] = [1]
+	DayOrchestrator._process_letter_commitment_creation(
+		pending, commitments, next_id, 50,
+	)
+	assert_eq(commitments.size(), 0)
+
+
+# -- MEETING_ARRANGEMENT Commitment Creation (s55.31) --------------------------
+
+func test_meeting_arrangement_created_from_matching_proposals() -> void:
+	var letter_a := _make_delivered_letter(1, 10, 20)
+	letter_a.meeting_proposal = true
+	letter_a.meeting_settlement_id = 100
+	letter_a.meeting_deadline_ic_day = 150
+	var letter_b := _make_delivered_letter(2, 20, 10)
+	letter_b.meeting_proposal = true
+	letter_b.meeting_settlement_id = 100
+	letter_b.meeting_deadline_ic_day = 150
+	var pending: Array[LetterData] = [letter_a, letter_b]
+	var commitments: Array[CommitmentData] = []
+	var next_id: Array[int] = [1]
+	DayOrchestrator._process_letter_commitment_creation(
+		pending, commitments, next_id, 50,
+	)
+	assert_eq(commitments.size(), 1, "Matching pair should create exactly one commitment")
+	var c: CommitmentData = commitments[0]
+	assert_eq(c.commitment_type, Enums.CommitmentType.MEETING_ARRANGEMENT)
+	assert_eq(c.fulfillment_target, 100)
+	assert_eq(c.deadline_ic_day, 150)
+	assert_eq(c.tier, 3)
+
+
+func test_meeting_arrangement_not_created_without_match() -> void:
+	var letter_a := _make_delivered_letter(1, 10, 20)
+	letter_a.meeting_proposal = true
+	letter_a.meeting_settlement_id = 100
+	letter_a.meeting_deadline_ic_day = 150
+	var pending: Array[LetterData] = [letter_a]
+	var commitments: Array[CommitmentData] = []
+	var next_id: Array[int] = [1]
+	DayOrchestrator._process_letter_commitment_creation(
+		pending, commitments, next_id, 50,
+	)
+	assert_eq(commitments.size(), 0, "Single proposal should not create commitment")
+
+
+func test_meeting_arrangement_not_created_for_different_settlements() -> void:
+	var letter_a := _make_delivered_letter(1, 10, 20)
+	letter_a.meeting_proposal = true
+	letter_a.meeting_settlement_id = 100
+	letter_a.meeting_deadline_ic_day = 150
+	var letter_b := _make_delivered_letter(2, 20, 10)
+	letter_b.meeting_proposal = true
+	letter_b.meeting_settlement_id = 200
+	letter_b.meeting_deadline_ic_day = 150
+	var pending: Array[LetterData] = [letter_a, letter_b]
+	var commitments: Array[CommitmentData] = []
+	var next_id: Array[int] = [1]
+	DayOrchestrator._process_letter_commitment_creation(
+		pending, commitments, next_id, 50,
+	)
+	assert_eq(commitments.size(), 0, "Mismatched settlements should not create commitment")
+
+
+func test_meeting_arrangement_skips_duplicate() -> void:
+	var letter_a := _make_delivered_letter(1, 10, 20)
+	letter_a.meeting_proposal = true
+	letter_a.meeting_settlement_id = 100
+	letter_a.meeting_deadline_ic_day = 150
+	var letter_b := _make_delivered_letter(2, 20, 10)
+	letter_b.meeting_proposal = true
+	letter_b.meeting_settlement_id = 100
+	letter_b.meeting_deadline_ic_day = 150
+	var existing := CommitmentData.new()
+	existing.commitment_type = Enums.CommitmentType.MEETING_ARRANGEMENT
+	existing.creditor_npc_id = 10
+	existing.debtor_npc_id = 20
+	existing.fulfillment_target = 100
+	existing.status = Enums.CommitmentStatus.PENDING
+	var pending: Array[LetterData] = [letter_a, letter_b]
+	var commitments: Array[CommitmentData] = [existing]
+	var next_id: Array[int] = [1]
+	DayOrchestrator._process_letter_commitment_creation(
+		pending, commitments, next_id, 50,
+	)
+	assert_eq(commitments.size(), 1, "Should not add duplicate")

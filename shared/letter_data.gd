@@ -33,6 +33,13 @@ extends Resource
 @export var report_case_id: int = -1
 @export var report_criminal_id: int = -1
 
+# Commitment intent flags (s55.31 — commitment creation triggers)
+@export var visit_intent: bool = false
+@export var visit_deadline_ic_day: int = -1
+@export var meeting_proposal: bool = false
+@export var meeting_settlement_id: int = -1
+@export var meeting_deadline_ic_day: int = -1
+
 # Blockade state
 @export var blocked_by_blockade: bool = false
 

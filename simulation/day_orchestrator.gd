@@ -668,6 +668,9 @@ static func advance_day(
 		active_wars if active_wars != null else [], dice_engine,
 	)
 	_compute_positions_from_letters(letter_results, active_topics, characters_by_id)
+	_process_letter_commitment_creation(
+		pending_letters, commitments, next_commitment_id, ic_day,
+	)
 
 	var reply_letters: Array[LetterData] = []
 	if dice_engine != null:
@@ -4951,6 +4954,87 @@ static func _compute_positions_from_broadcast(
 				character.bushido_virtue, character.shourido_virtue
 			)
 			character.topic_positions[topic_id] = pos
+
+
+static func _process_letter_commitment_creation(
+	pending_letters: Array[LetterData],
+	commitments: Array[CommitmentData],
+	next_commitment_id: Array[int],
+	ic_day: int,
+) -> void:
+	for letter: LetterData in pending_letters:
+		if not letter.delivered:
+			continue
+
+		if letter.visit_intent and letter.visit_deadline_ic_day >= 0:
+			var already_exists: bool = false
+			for c: CommitmentData in commitments:
+				if (c.commitment_type == Enums.CommitmentType.VISIT_PROMISE
+					and c.debtor_npc_id == letter.sender_id
+					and c.creditor_npc_id == letter.recipient_id
+					and c.status == Enums.CommitmentStatus.PENDING):
+					already_exists = true
+					break
+			if not already_exists:
+				var witnesses: Array[int] = [letter.sender_id, letter.recipient_id]
+				var target_settlement: int = -1
+				var recipient_loc: String = ""
+				# fulfillment_target populated by caller if available
+				var cm: CommitmentData = CommitmentRegistry.create_commitment(
+					next_commitment_id[0],
+					Enums.CommitmentType.VISIT_PROMISE,
+					letter.recipient_id,
+					letter.sender_id,
+					letter.visit_deadline_ic_day,
+					3,
+					ic_day,
+					"WRITE_LETTER",
+					target_settlement,
+					witnesses,
+				)
+				commitments.append(cm)
+				next_commitment_id[0] += 1
+
+		if letter.meeting_proposal and letter.meeting_deadline_ic_day >= 0 and letter.meeting_settlement_id >= 0:
+			var has_matching: bool = false
+			for other: LetterData in pending_letters:
+				if not other.delivered or other.letter_id == letter.letter_id:
+					continue
+				if (other.meeting_proposal
+					and other.sender_id == letter.recipient_id
+					and other.recipient_id == letter.sender_id
+					and other.meeting_settlement_id == letter.meeting_settlement_id):
+					has_matching = true
+					break
+			if not has_matching:
+				continue
+			var pair_a: int = mini(letter.sender_id, letter.recipient_id)
+			var pair_b: int = maxi(letter.sender_id, letter.recipient_id)
+			var already_exists: bool = false
+			for c: CommitmentData in commitments:
+				if (c.commitment_type == Enums.CommitmentType.MEETING_ARRANGEMENT
+					and mini(c.creditor_npc_id, c.debtor_npc_id) == pair_a
+					and maxi(c.creditor_npc_id, c.debtor_npc_id) == pair_b
+					and c.fulfillment_target == letter.meeting_settlement_id
+					and c.status == Enums.CommitmentStatus.PENDING):
+					already_exists = true
+					break
+			if not already_exists:
+				var witnesses: Array[int] = [letter.sender_id, letter.recipient_id]
+				var cm: CommitmentData = CommitmentRegistry.create_commitment(
+					next_commitment_id[0],
+					Enums.CommitmentType.MEETING_ARRANGEMENT,
+					letter.recipient_id,
+					letter.sender_id,
+					letter.meeting_deadline_ic_day,
+					3,
+					ic_day,
+					"WRITE_LETTER",
+					letter.meeting_settlement_id,
+					witnesses,
+				)
+				commitments.append(cm)
+				next_commitment_id[0] += 1
 
 
 static func _compute_positions_from_letters(
