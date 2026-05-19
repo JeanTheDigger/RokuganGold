@@ -1209,6 +1209,84 @@ func test_visit_intent_not_set_when_target_differs_from_objective() -> void:
 		"Mismatched target should not trigger visit intent")
 
 
+# --- Meeting Proposal on Daily Letter (s55.31) ---
+
+func test_meeting_proposal_set_for_secure_alliance() -> void:
+	var char := L5RCharacterData.new()
+	char.character_id = 1
+	char.physical_location = "100"
+	char.skills = {"Courtier": 3}
+	char.traits = {"Awareness": 3}
+	var objectives: Dictionary = {
+		"primary": {"need_type": "SECURE_ALLIANCE", "target_npc_id": 5},
+	}
+	var scoring_tables: Dictionary = {
+		"objective_alignment": {
+			"SECURE_ALLIANCE": {"WRITE_LETTER": 60},
+		},
+	}
+	var ws: Dictionary = {"is_lord": false}
+	var ctx := NPCDecisionEngine.build_context(char, ws)
+	ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
+	var result: Dictionary = NPCDecisionEngine.resolve_daily_letter(
+		char, objectives, scoring_tables, ctx,
+	)
+	assert_true(result.get("meeting_proposal", false),
+		"SECURE_ALLIANCE should trigger meeting proposal")
+	assert_eq(result.get("meeting_settlement_id", -1), 100,
+		"Meeting should be at character's location")
+
+
+func test_meeting_proposal_not_set_for_raise_disposition() -> void:
+	var char := L5RCharacterData.new()
+	char.character_id = 1
+	char.physical_location = "100"
+	char.skills = {"Courtier": 3}
+	char.traits = {"Awareness": 3}
+	var objectives: Dictionary = {
+		"primary": {"need_type": "RAISE_DISPOSITION", "target_npc_id": 5},
+	}
+	var scoring_tables: Dictionary = {
+		"objective_alignment": {
+			"RAISE_DISPOSITION": {"WRITE_LETTER": 60},
+		},
+	}
+	var ws: Dictionary = {"is_lord": false}
+	var ctx := NPCDecisionEngine.build_context(char, ws)
+	ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
+	var result: Dictionary = NPCDecisionEngine.resolve_daily_letter(
+		char, objectives, scoring_tables, ctx,
+	)
+	assert_false(result.get("meeting_proposal", false),
+		"RAISE_DISPOSITION should use visit_intent, not meeting_proposal")
+	assert_true(result.get("visit_intent", false),
+		"RAISE_DISPOSITION should set visit_intent instead")
+
+
+func test_meeting_proposal_not_set_when_at_court() -> void:
+	var char := L5RCharacterData.new()
+	char.character_id = 1
+	char.physical_location = "100"
+	char.skills = {"Courtier": 3}
+	char.traits = {"Awareness": 3}
+	var objectives: Dictionary = {
+		"primary": {"need_type": "SECURE_ALLIANCE", "target_npc_id": 5},
+	}
+	var scoring_tables: Dictionary = {
+		"objective_alignment": {
+			"SECURE_ALLIANCE": {"WRITE_LETTER": 60},
+		},
+	}
+	var ws: Dictionary = {"is_lord": false}
+	var ctx := NPCDecisionEngine.build_context(char, ws)
+	ctx.context_flag = Enums.ContextFlag.AT_COURT
+	var result: Dictionary = NPCDecisionEngine.resolve_daily_letter(
+		char, objectives, scoring_tables, ctx,
+	)
+	assert_false(result.get("meeting_proposal", false),
+		"Should not propose meeting when at court")
+
+
 # --- SEEK_PEACE position inversion (s55.26 Annex H) ---
 
 func test_seek_peace_inverts_position_pro_war_penalized() -> void:

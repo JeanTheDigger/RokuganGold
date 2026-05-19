@@ -15,6 +15,7 @@ const BASE_REPLY_CHANCE: float = 0.20
 const DISPOSITION_REPLY_BONUS: float = 0.008   # per disposition point above 0
 const COURTESY_REPLY_BONUS: float = 0.15       # for Courtesy bushido virtue
 const HOSTILE_REPLY_THRESHOLD: int = -30       # won't reply below this
+const MEETING_ACCEPT_DISPOSITION: int = 0      # PROVISIONAL: non-hostile disposition needed
 
 # Delivery rate: provinces per IC day
 const PROVINCES_PER_DAY: int = 3
@@ -444,6 +445,11 @@ static func generate_replies(
 			prov_dist, mtn, wz, ocean, miya,
 			Enums.Trait.AWARENESS, true,
 		)
+		if original_letter != null and original_letter.meeting_proposal:
+			if disposition >= MEETING_ACCEPT_DISPOSITION:
+				reply.meeting_proposal = true
+				reply.meeting_settlement_id = original_letter.meeting_settlement_id
+				reply.meeting_deadline_ic_day = original_letter.meeting_deadline_ic_day
 		replies.append(reply)
 
 	return replies

@@ -1076,3 +1076,73 @@ func test_exchange_bonus_clamps_at_100():
 
 	assert_eq(sender.disposition_values[2], 100)
 	assert_eq(recipient.disposition_values[1], 100)
+
+
+# --- Meeting Proposal Reply Propagation (s55.31) ---
+
+func test_reply_propagates_meeting_proposal_when_disposition_ok():
+	var dice := DiceEngine.new()
+	dice.set_seed(42)
+	var sender := _make_char(1, 3)
+	var recipient := _make_char(2, 3)
+	recipient.disposition_values[1] = 10
+	recipient.topic_pool = [10]
+	recipient.bushido_virtue = Enums.BushidoVirtue.REI
+	var chars: Dictionary = {1: sender, 2: recipient}
+
+	var letter: LetterData = LetterSystem.write_letter(
+		1, sender, 2, 10, 0, dice, 3
+	)
+	letter.meeting_proposal = true
+	letter.meeting_settlement_id = 100
+	letter.meeting_deadline_ic_day = 90
+	var pending: Array = [letter]
+
+	var delivery_results: Array[Dictionary] = [{
+		"letter_id": 1,
+		"sender_id": 1,
+		"recipient_id": 2,
+		"topic": 10,
+	}]
+	var next_id: Array[int] = [100]
+	var replies: Array[LetterData] = LetterSystem.generate_replies(
+		delivery_results, pending, chars, 0, dice, next_id
+	)
+	if replies.size() > 0:
+		assert_true(replies[0].meeting_proposal,
+			"Reply should carry meeting_proposal")
+		assert_eq(replies[0].meeting_settlement_id, 100)
+		assert_eq(replies[0].meeting_deadline_ic_day, 90)
+
+
+func test_reply_does_not_propagate_meeting_when_hostile():
+	var dice := DiceEngine.new()
+	dice.set_seed(42)
+	var sender := _make_char(1, 3)
+	var recipient := _make_char(2, 3)
+	recipient.disposition_values[1] = -5
+	recipient.topic_pool = [10]
+	recipient.bushido_virtue = Enums.BushidoVirtue.REI
+	var chars: Dictionary = {1: sender, 2: recipient}
+
+	var letter: LetterData = LetterSystem.write_letter(
+		1, sender, 2, 10, 0, dice, 3
+	)
+	letter.meeting_proposal = true
+	letter.meeting_settlement_id = 100
+	letter.meeting_deadline_ic_day = 90
+	var pending: Array = [letter]
+
+	var delivery_results: Array[Dictionary] = [{
+		"letter_id": 1,
+		"sender_id": 1,
+		"recipient_id": 2,
+		"topic": 10,
+	}]
+	var next_id: Array[int] = [100]
+	var replies: Array[LetterData] = LetterSystem.generate_replies(
+		delivery_results, pending, chars, 0, dice, next_id
+	)
+	for reply: LetterData in replies:
+		assert_false(reply.meeting_proposal,
+			"Hostile recipient should not confirm meeting")

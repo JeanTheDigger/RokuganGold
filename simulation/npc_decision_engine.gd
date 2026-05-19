@@ -2029,6 +2029,9 @@ static func resolve_daily_letter(
 	var visit: bool = _should_set_visit_intent(
 		character, objectives, target_id, ctx
 	)
+	var meeting: Dictionary = _should_set_meeting_proposal(
+		character, objectives, target_id, ctx
+	)
 
 	var result: Dictionary = {
 		"character_id": character.character_id,
@@ -2037,7 +2040,10 @@ static func resolve_daily_letter(
 		"need_type": need_type,
 		"topic_id": topic_id,
 	}
-	if visit:
+	if not meeting.is_empty():
+		result["meeting_proposal"] = true
+		result["meeting_settlement_id"] = meeting["settlement_id"]
+	elif visit:
 		result["visit_intent"] = true
 	return result
 
@@ -2076,6 +2082,44 @@ static func _should_set_visit_intent(
 	if obj_target < 0 or obj_target != letter_target_id:
 		return false
 	return true
+
+
+const MEETING_PROPOSAL_NEED_TYPES: Array[String] = [
+	"SECURE_ALLIANCE", "ARRANGE_MARRIAGE",
+]
+
+
+static func _should_set_meeting_proposal(
+	character: L5RCharacterData,
+	objectives: Dictionary,
+	letter_target_id: int,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> Dictionary:
+	if ctx.context_flag != Enums.ContextFlag.AT_OWN_HOLDINGS:
+		return {}
+	var primary: Dictionary = objectives.get("primary", {})
+	if primary.is_empty():
+		return {}
+	var need_type: String = primary.get("need_type", "")
+	if need_type not in MEETING_PROPOSAL_NEED_TYPES:
+		return {}
+	var obj_target: int = primary.get("target_npc_id", -1)
+	if obj_target < 0 or obj_target != letter_target_id:
+		return {}
+	var settlement_id: int = _pick_meeting_settlement(character, ctx)
+	if settlement_id < 0:
+		return {}
+	return {"settlement_id": settlement_id}
+
+
+static func _pick_meeting_settlement(
+	character: L5RCharacterData,
+	_ctx: NPCDataStructures.ContextSnapshot,
+) -> int:
+	var loc: String = character.physical_location
+	if loc.is_valid_int():
+		return loc.to_int()
+	return -1
 
 
 static func _select_letter_target(

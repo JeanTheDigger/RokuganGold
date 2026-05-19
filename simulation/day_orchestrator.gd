@@ -5807,7 +5807,11 @@ static func _process_daily_letter_pass(
 					topic_id, ic_day, dice_engine,
 					3,
 				)
-				if letter_result.get("visit_intent", false):
+				if letter_result.get("meeting_proposal", false):
+					letter.meeting_proposal = true
+					letter.meeting_settlement_id = letter_result.get("meeting_settlement_id", -1)
+					letter.meeting_deadline_ic_day = ic_day + MEETING_DEADLINE_OFFSET
+				elif letter_result.get("visit_intent", false):
 					letter.visit_intent = true
 					letter.visit_deadline_ic_day = ic_day + VISIT_DEADLINE_OFFSET
 				pending_letters.append(letter)
@@ -15398,6 +15402,9 @@ static func _create_support_pledge_commitment(
 
 # PROVISIONAL: 90 IC days for visit (one full season from announcement).
 const VISIT_DEADLINE_OFFSET: int = 90
+
+# PROVISIONAL: 90 IC days for meeting arrangement.
+const MEETING_DEADLINE_OFFSET: int = 90
 
 # PROVISIONAL: 90 IC days for resource delivery (one full season).
 const RESOURCE_PROMISE_DEADLINE_OFFSET: int = 90
