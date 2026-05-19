@@ -570,14 +570,21 @@ For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
   8 tests.
 
 ### Known Code Issues — Deferred (2026-05-19)
-- **CommitmentRegistry.create_commitment() — 5 of 6 types still unwired.**
-  FAVOR_OBLIGATION is now wired (created alongside FavorData on OFFER_FAVOR).
-  Remaining 5 types blocked on missing upstream infrastructure:
-  COURT_ATTENDANCE (ACCEPT_INVITATION ActionID doesn't exist; COURT_INVITATION
-  reactive events not injected), VISIT_PROMISE (no visit_intent flag on
-  letters), SUPPORT_PLEDGE (no pledge outcome in NEGOTIATE/PERSUADE),
-  RESOURCE_PROMISE (REQUEST_ALLIED_AID executor is a stub),
-  MEETING_ARRANGEMENT (no meeting_coordination flag on letters).
+- **CommitmentRegistry.create_commitment() — 5 of 6 types wired. FIXED (partial).**
+  FAVOR_OBLIGATION wired (created alongside FavorData on OFFER_FAVOR).
+  COURT_ATTENDANCE wired (created on SEND_INVITATION success and Winter
+  Court invitation pipeline). Tier 2 for Winter/Champion courts, Tier 3
+  for provincial. Winter Court skips emperor and host. 9 tests.
+  VISIT_PROMISE wired (LetterData gains visit_intent + visit_deadline_ic_day;
+  handler fires on delivered letters with intent set). NPC engine trigger
+  logic to SET visit_intent deferred — handler inert until populated. 4 tests.
+  MEETING_ARRANGEMENT wired (LetterData gains meeting_proposal +
+  meeting_settlement_id + meeting_deadline_ic_day; handler fires on matching
+  bilateral proposals at same settlement). NPC engine trigger deferred. 4 tests.
+  SUPPORT_PLEDGE wired (PERSUADE/NEGOTIATE with target_position_shift at
+  court creates Tier 2 pledge. Fulfillment: debtor present + ≥1 court
+  action. Witnesses = court attendees. Deadline = court end date). 5 tests.
+  RESOURCE_PROMISE still blocked (REQUEST_ALLIED_AID executor is a stub).
 - **CommitmentRegistry.apply_forgiveness() never called.**
   Retroactive forgiveness (s55.31.11.2) should fire when a crisis topic
   reaches an NPC who suffered a disposition penalty from a crisis-linked
