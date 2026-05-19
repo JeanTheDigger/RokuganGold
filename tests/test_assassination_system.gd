@@ -1762,3 +1762,250 @@ func test_process_seduction_entanglements_variant_mapping() -> void:
 		assert_eq(entanglements.size(), 1, "Should create entanglement for " + action_id)
 		assert_eq(entanglements[0]["variant"], variants[action_id],
 			"Variant should match action_id " + action_id)
+
+
+# ==============================================================================
+# Vengeance Consequences (s12.8)
+# ==============================================================================
+
+func test_vengeance_applies_disposition_to_family() -> void:
+	var victim: L5RCharacterData = L5RCharacterData.new()
+	victim.character_id = 100
+	victim.mother_id = 101
+	victim.father_id = 102
+	victim.sibling_ids = [103]
+	victim.children_ids = [104]
+	victim.spouse_id = 105
+
+	var mother: L5RCharacterData = L5RCharacterData.new()
+	mother.character_id = 101
+	var father: L5RCharacterData = L5RCharacterData.new()
+	father.character_id = 102
+	var sibling: L5RCharacterData = L5RCharacterData.new()
+	sibling.character_id = 103
+	var child: L5RCharacterData = L5RCharacterData.new()
+	child.character_id = 104
+	var spouse: L5RCharacterData = L5RCharacterData.new()
+	spouse.character_id = 105
+
+	var chars: Dictionary = {100: victim, 101: mother, 102: father, 103: sibling, 104: child, 105: spouse}
+	var objectives: Dictionary = {}
+
+	var result: Dictionary = AssassinationSystem.apply_vengeance_consequences(
+		50, victim, true, chars, objectives,
+	)
+	assert_eq(result["family_affected"], 5)
+	assert_eq(result["disposition_modifier"], AssassinationSystem.FAMILY_VENGEANCE_DISPOSITION)
+	var key: String = "killed_family_100"
+	assert_true(mother.historical_modifiers.has(key))
+	assert_eq(mother.historical_modifiers[key]["target_id"], 50)
+	assert_eq(mother.historical_modifiers[key]["modifier"], -50)
+	assert_true(father.historical_modifiers.has(key))
+	assert_true(sibling.historical_modifiers.has(key))
+	assert_true(child.historical_modifiers.has(key))
+	assert_true(spouse.historical_modifiers.has(key))
+
+
+func test_vengeance_assigns_objective_to_heir() -> void:
+	var victim: L5RCharacterData = L5RCharacterData.new()
+	victim.character_id = 100
+	victim.designated_heir_id = 104
+
+	var heir: L5RCharacterData = L5RCharacterData.new()
+	heir.character_id = 104
+
+	var chars: Dictionary = {100: victim, 104: heir}
+	var objectives: Dictionary = {104: {"primary": "MAINTAIN_POSITION"}}
+
+	var result: Dictionary = AssassinationSystem.apply_vengeance_consequences(
+		50, victim, true, chars, objectives,
+	)
+	assert_eq(result["avenger_id"], 104)
+	assert_eq(objectives[104]["primary"], "AVENGE_DEATH")
+	assert_eq(objectives[104]["avenge_target_id"], 50)
+	assert_eq(objectives[104]["avenge_victim_id"], 100)
+	assert_true(objectives[104]["crisis_override"])
+
+
+func test_vengeance_assigns_to_victim_if_alive() -> void:
+	var victim: L5RCharacterData = L5RCharacterData.new()
+	victim.character_id = 100
+
+	var chars: Dictionary = {100: victim}
+	var objectives: Dictionary = {100: {"primary": "MAINTAIN_POSITION"}}
+
+	var result: Dictionary = AssassinationSystem.apply_vengeance_consequences(
+		50, victim, false, chars, objectives,
+	)
+	assert_eq(result["avenger_id"], 100)
+	assert_eq(objectives[100]["primary"], "AVENGE_DEATH")
+
+
+func test_vengeance_falls_back_to_eldest_child() -> void:
+	var victim: L5RCharacterData = L5RCharacterData.new()
+	victim.character_id = 100
+	victim.designated_heir_id = -1
+	victim.children_ids = [201, 202]
+
+	var young: L5RCharacterData = L5RCharacterData.new()
+	young.character_id = 201
+	young.age = 14
+
+	var elder: L5RCharacterData = L5RCharacterData.new()
+	elder.character_id = 202
+	elder.age = 22
+
+	var chars: Dictionary = {100: victim, 201: young, 202: elder}
+	var objectives: Dictionary = {202: {"primary": "MAINTAIN_POSITION"}}
+
+	var result: Dictionary = AssassinationSystem.apply_vengeance_consequences(
+		50, victim, true, chars, objectives,
+	)
+	assert_eq(result["avenger_id"], 202, "Should select eldest child as avenger")
+
+
+func test_vengeance_skips_dead_family_members() -> void:
+	var victim: L5RCharacterData = L5RCharacterData.new()
+	victim.character_id = 100
+	victim.sibling_ids = [103]
+
+	var dead_sibling: L5RCharacterData = L5RCharacterData.new()
+	dead_sibling.character_id = 103
+	var earth: int = CharacterStats.get_ring_value(dead_sibling, Enums.Ring.EARTH)
+	dead_sibling.wounds_taken = earth * 5 * 5
+
+	var chars: Dictionary = {100: victim, 103: dead_sibling}
+	var objectives: Dictionary = {}
+
+	var result: Dictionary = AssassinationSystem.apply_vengeance_consequences(
+		50, victim, true, chars, objectives,
+	)
+	var key: String = "killed_family_100"
+	assert_false(dead_sibling.historical_modifiers.has(key),
+		"Dead family members should not receive disposition modifier")
+
+
+func test_vengeance_no_avenger_if_no_heir_or_children() -> void:
+	var victim: L5RCharacterData = L5RCharacterData.new()
+	victim.character_id = 100
+	victim.designated_heir_id = -1
+
+	var chars: Dictionary = {100: victim}
+	var objectives: Dictionary = {}
+
+	var result: Dictionary = AssassinationSystem.apply_vengeance_consequences(
+		50, victim, true, chars, objectives,
+	)
+	assert_eq(result["avenger_id"], -1, "No avenger when no heir or children")
+
+
+func test_get_biological_family_comprehensive() -> void:
+	var c: L5RCharacterData = L5RCharacterData.new()
+	c.mother_id = 10
+	c.father_id = 11
+	c.sibling_ids = [12, 13]
+	c.children_ids = [14]
+	c.spouse_id = 15
+	var family: Array[int] = AssassinationSystem._get_biological_family(c)
+	assert_eq(family.size(), 6)
+	assert_true(10 in family)
+	assert_true(11 in family)
+	assert_true(12 in family)
+	assert_true(13 in family)
+	assert_true(14 in family)
+	assert_true(15 in family)
+
+
+func test_get_biological_family_skips_unset_ids() -> void:
+	var c: L5RCharacterData = L5RCharacterData.new()
+	c.mother_id = -1
+	c.father_id = -1
+	c.spouse_id = -1
+	var family: Array[int] = AssassinationSystem._get_biological_family(c)
+	assert_eq(family.size(), 0)
+
+
+# ==============================================================================
+# PvP Blade Edge Case (s12.8)
+# ==============================================================================
+
+func test_pvp_blade_can_engine_resolve() -> void:
+	var s: Dictionary = AssassinationSystem.create_assassination_state(1, 2, AssassinationSystem.ExecutionMethod.BLADE, 0)
+	s["phase"] = AssassinationSystem.AssassinationPhase.EXECUTION
+	assert_true(AssassinationSystem.can_pvp_blade_resolve_via_engine(s))
+
+
+func test_pvp_blade_cannot_engine_resolve_poison() -> void:
+	var s: Dictionary = AssassinationSystem.create_assassination_state(1, 2, AssassinationSystem.ExecutionMethod.POISON, 0)
+	s["phase"] = AssassinationSystem.AssassinationPhase.EXECUTION
+	assert_false(AssassinationSystem.can_pvp_blade_resolve_via_engine(s),
+		"Only blade method has the PvP edge case")
+
+
+func test_pvp_blade_cannot_engine_resolve_access_phase() -> void:
+	var s: Dictionary = AssassinationSystem.create_assassination_state(1, 2, AssassinationSystem.ExecutionMethod.BLADE, 0)
+	assert_false(AssassinationSystem.can_pvp_blade_resolve_via_engine(s),
+		"Must be in EXECUTION phase")
+
+
+func test_pvp_blade_wait_tick_increments_days() -> void:
+	var s: Dictionary = AssassinationSystem.create_assassination_state(1, 2, AssassinationSystem.ExecutionMethod.BLADE, 0)
+	s["phase"] = AssassinationSystem.AssassinationPhase.EXECUTION
+	var r1: Dictionary = AssassinationSystem.pvp_blade_wait_tick(s, 10)
+	assert_eq(r1["pvp_wait_days"], 1)
+	var r2: Dictionary = AssassinationSystem.pvp_blade_wait_tick(s, 11)
+	assert_eq(r2["pvp_wait_days"], 2)
+
+
+func test_pvp_blade_wait_decays_suspicion() -> void:
+	var s: Dictionary = AssassinationSystem.create_assassination_state(1, 2, AssassinationSystem.ExecutionMethod.BLADE, 0)
+	s["phase"] = AssassinationSystem.AssassinationPhase.EXECUTION
+	AssassinationSystem.add_suspicion(s, 20)
+	s["suspicion_raised_ic_day"] = 0
+	AssassinationSystem.pvp_blade_wait_tick(s, 20)
+	assert_true(float(s["suspicion"]) < 20.0, "Suspicion should decay while waiting (present-inactive)")
+
+
+# ==============================================================================
+# Entanglement Integration Test
+# ==============================================================================
+
+func test_entanglement_integration_seduce_for_access_to_bypass() -> void:
+	var day_results: Array[Dictionary] = [{
+		"action_id": "SEDUCE_FOR_ACCESS",
+		"success": true,
+		"character_id": 1,
+		"target_npc_id": 5,
+		"effects": {"creates_entanglement": true},
+	}]
+	var entanglements: Array[Dictionary] = []
+	DayOrchestrator._process_seduction_entanglements(day_results, entanglements, 10)
+	assert_eq(entanglements.size(), 1)
+
+	var seduced: L5RCharacterData = L5RCharacterData.new()
+	seduced.character_id = 5
+	seduced.physical_location = "Castle"
+	var chars: Dictionary = {1: _assassin, 2: _target, 5: seduced}
+	_target.physical_location = "Castle"
+
+	var has_bypass: bool = AssassinationSystem.has_seduce_for_access(
+		1, "Castle", entanglements, chars,
+	)
+	assert_true(has_bypass, "Should detect active SEDUCE_FOR_ACCESS entanglement at target location")
+
+
+func test_entanglement_integration_broken_revokes_bypass() -> void:
+	var entanglements: Array[Dictionary] = [
+		SeductionSystem.create_entanglement(1, 5, 5, SeductionSystem.SeductionVariant.SEDUCE_FOR_ACCESS),
+	]
+	entanglements[0]["state"] = SeductionSystem.EntanglementState.BROKEN
+
+	var seduced: L5RCharacterData = L5RCharacterData.new()
+	seduced.character_id = 5
+	seduced.physical_location = "Castle"
+	var chars: Dictionary = {1: _assassin, 5: seduced}
+
+	var has_bypass: bool = AssassinationSystem.has_seduce_for_access(
+		1, "Castle", entanglements, chars,
+	)
+	assert_false(has_bypass, "Broken entanglement should not grant access bypass")

@@ -981,3 +981,112 @@ static func is_target_pc_offline(
 	online_player_ids: Array[int],
 ) -> bool:
 	return target_id not in online_player_ids
+
+
+# ==============================================================================
+# Vengeance Consequences (s12.8 — fires when commissioner is traced)
+# ==============================================================================
+
+const FAMILY_VENGEANCE_DISPOSITION: int = -50
+
+static func apply_vengeance_consequences(
+	commissioner_id: int,
+	victim: L5RCharacterData,
+	victim_is_dead: bool,
+	characters_by_id: Dictionary,
+	objectives_map: Dictionary,
+) -> Dictionary:
+	var family_ids: Array[int] = _get_biological_family(victim)
+	for fam_id: int in family_ids:
+		var fam: L5RCharacterData = characters_by_id.get(fam_id) as L5RCharacterData
+		if fam == null:
+			continue
+		if CharacterStats.is_dead(fam):
+			continue
+		var key: String = "killed_family_%d" % victim.character_id
+		fam.historical_modifiers[key] = {
+			"target_id": commissioner_id,
+			"modifier": FAMILY_VENGEANCE_DISPOSITION,
+			"created_ic_day": -1,
+			"permanent": true,
+		}
+
+	var avenger_id: int = -1
+	if victim_is_dead:
+		avenger_id = victim.designated_heir_id
+		if avenger_id < 0:
+			avenger_id = _find_eldest_child(victim, characters_by_id)
+	else:
+		avenger_id = victim.character_id
+
+	if avenger_id >= 0 and objectives_map.has(avenger_id):
+		objectives_map[avenger_id]["primary"] = "AVENGE_DEATH"
+		objectives_map[avenger_id]["avenge_target_id"] = commissioner_id
+		objectives_map[avenger_id]["avenge_victim_id"] = victim.character_id
+		objectives_map[avenger_id]["crisis_override"] = true
+
+	return {
+		"commissioner_id": commissioner_id,
+		"victim_id": victim.character_id,
+		"family_affected": family_ids.size(),
+		"avenger_id": avenger_id,
+		"disposition_modifier": FAMILY_VENGEANCE_DISPOSITION,
+	}
+
+
+static func _get_biological_family(character: L5RCharacterData) -> Array[int]:
+	var ids: Array[int] = []
+	if character.mother_id >= 0:
+		ids.append(character.mother_id)
+	if character.father_id >= 0:
+		ids.append(character.father_id)
+	for sib: int in character.sibling_ids:
+		ids.append(sib)
+	for child: int in character.children_ids:
+		ids.append(child)
+	if character.spouse_id >= 0:
+		ids.append(character.spouse_id)
+	return ids
+
+
+static func _find_eldest_child(
+	victim: L5RCharacterData,
+	characters_by_id: Dictionary,
+) -> int:
+	var eldest_id: int = -1
+	var eldest_age: int = -1
+	for child_id: int in victim.children_ids:
+		var child: L5RCharacterData = characters_by_id.get(child_id) as L5RCharacterData
+		if child == null or CharacterStats.is_dead(child):
+			continue
+		if child.age > eldest_age:
+			eldest_age = child.age
+			eldest_id = child_id
+	return eldest_id
+
+
+# ==============================================================================
+# PvP Blade Edge Case (s12.8 — player assassin vs offline target)
+# ==============================================================================
+
+enum PvPBladeChoice {
+	ENGINE_RESOLVE,
+	WAIT,
+}
+
+static func can_pvp_blade_resolve_via_engine(state: Dictionary) -> bool:
+	var method: int = int(state.get("method", ExecutionMethod.POISON))
+	return (
+		method == ExecutionMethod.BLADE
+		and int(state.get("phase", -1)) == AssassinationPhase.EXECUTION
+	)
+
+
+static func pvp_blade_wait_tick(state: Dictionary, ic_day: int) -> Dictionary:
+	decay_suspicion(state, true, ic_day)
+	state["pvp_wait_days"] = int(state.get("pvp_wait_days", 0)) + 1
+	return {
+		"waiting": true,
+		"pvp_wait_days": state["pvp_wait_days"],
+		"suspicion": state.get("suspicion", 0.0),
+	}
