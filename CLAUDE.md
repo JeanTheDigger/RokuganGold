@@ -744,10 +744,11 @@ For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
   flags to distinguish position shift quality, but no position decay or
   resistance system reads them. Position shifts from all court actions decay
   identically. No GDD spec found for the mechanic — may be forward-wiring.
-- **False info on critical failure (`false_info`) — emitted but never
-  consumed.** READ_CHARACTER/PROBE critical failures return false information
-  in the result, but no code delivers it to the probing NPC's knowledge_pool.
-  The NPC gets no info rather than wrong info on critical failure.
+- **False info on critical failure (`false_info`) — FIXED.**
+  EffectApplicator._apply_false_info() creates knowledge entries on the
+  actor with FRESH confidence and inverted data (wrong virtue, inverted
+  disposition sign, inverted topic position). Entry types match false_info
+  categories. is_false flag for debugging. 4 tests.
 - **Scouts detected on critical failure (`scouts_detected`) — emitted but
   never consumed.** SCOUT_ENEMY critical failure sets this flag but no code
   alerts the enemy. The scout suffers no consequence beyond the failed roll.
