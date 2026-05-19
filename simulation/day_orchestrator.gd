@@ -80,6 +80,8 @@ static func advance_day(
 	next_commitment_id: Array[int] = [1],
 	next_crisis_id: Array[int] = [1],
 	disposition_snapshots: Dictionary = {},
+	tattoos: Array[TattooData] = [],
+	next_tattoo_id: Array[int] = [1],
 ) -> Dictionary:
 	var prev_season: int = time_system.get_season()
 
@@ -417,6 +419,14 @@ static func advance_day(
 	# Refresh vacancy intelligence after daily construction creates new settlements
 	if not construction_results.is_empty():
 		_populate_vacancy_intelligence(world_states, characters, characters_by_id, companies, settlements, provinces, season_meta)
+
+	_process_tattoo_creation(
+		day_result.get("results", []),
+		characters_by_id,
+		tattoos,
+		next_tattoo_id,
+		ic_day,
+	)
 
 	_process_edict_compliance_actions(
 		day_result.get("results", []),
@@ -15493,3 +15503,62 @@ static func _process_resource_promise_fulfillment(
 		var deploy_target: int = deploy_targets.get(c.debtor_npc_id, -1)
 		if deploy_target == c.creditor_npc_id:
 			c.status = Enums.CommitmentStatus.FULFILLED
+
+
+# -- s57.25.3 APPLY_TATTOO writeback ------------------------------------------
+
+static func _process_tattoo_creation(
+	results: Array[Dictionary],
+	characters_by_id: Dictionary,
+	tattoos: Array[TattooData],
+	next_tattoo_id: Array[int],
+	ic_day: int,
+) -> void:
+	for result: Dictionary in results:
+		if not result.get("success", false):
+			var effects: Dictionary = result.get("effects", {})
+			var ap_override: int = effects.get("ap_cost_override", 0)
+			if result.get("action_id", "") == "APPLY_TATTOO" and ap_override > 2:
+				var char: L5RCharacterData = characters_by_id.get(result.get("character_id", -1))
+				if char != null:
+					var extra_ap: int = ap_override - 2
+					char.action_points_current = maxi(char.action_points_current - extra_ap, 0)
+			continue
+
+		var effects: Dictionary = result.get("effects", {})
+		if not effects.get("requires_tattoo_creation", false):
+			continue
+
+		var artist_id: int = result.get("character_id", -1)
+		var recipient_id: int = result.get("target_npc_id", -1)
+		var quality: Enums.TattooQualityTier = effects.get(
+			"result_quality", Enums.TattooQualityTier.NORMAL
+		) as Enums.TattooQualityTier
+		var body_loc: Enums.TattooBodyLocation = effects.get(
+			"body_location", Enums.TattooBodyLocation.LEFT_WRIST_FOREARM
+		) as Enums.TattooBodyLocation
+		var subject_type: Enums.TattooSubjectType = effects.get(
+			"subject_type", Enums.TattooSubjectType.IMAGE
+		) as Enums.TattooSubjectType
+		var subject_desc: String = effects.get("subject_description", "")
+		var topic_id: int = effects.get("topic_id", -1)
+		var is_ability: bool = effects.get("is_ability_tattoo", false)
+		var ability: Enums.TattooAbility = effects.get(
+			"ability", Enums.TattooAbility.NONE
+		) as Enums.TattooAbility
+
+		var tattoo: TattooData = TattooSystem.create_tattoo(
+			next_tattoo_id[0], recipient_id, artist_id,
+			quality, body_loc, subject_type, subject_desc,
+			topic_id, is_ability, ability, ic_day,
+		)
+		if tattoo != null:
+			tattoos.append(tattoo)
+			next_tattoo_id[0] += 1
+
+		var ap_override: int = effects.get("ap_cost_override", 0)
+		if ap_override > 2:
+			var artist: L5RCharacterData = characters_by_id.get(artist_id)
+			if artist != null:
+				var extra_ap: int = ap_override - 2
+				artist.action_points_current = maxi(artist.action_points_current - extra_ap, 0)

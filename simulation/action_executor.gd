@@ -305,6 +305,9 @@ static func execute(
 	if action_id == "TRAIN_ANIMAL":
 		return _execute_train_animal(action, character, ctx, dice_engine)
 
+	if action_id == "APPLY_TATTOO":
+		return _execute_apply_tattoo(action, character, ctx, dice_engine, characters_by_id)
+
 	if action_id == "ANNOUNCE_HUNT":
 		return _execute_announce_hunt(action, character, ctx)
 
@@ -4309,3 +4312,139 @@ static func _execute_train_animal(
 				"sessions_completed": companion.get("sessions_completed", 0),
 			},
 		}
+
+
+# -- s57.25.3 APPLY_TATTOO ---------------------------------------------------
+
+static func _execute_apply_tattoo(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	dice_engine: DiceEngine,
+	characters_by_id: Dictionary,
+) -> Dictionary:
+	var recipient_id: int = action.target_npc_id
+	var recipient: L5RCharacterData = characters_by_id.get(recipient_id)
+	if recipient == null:
+		return {
+			"success": false, "action_id": "APPLY_TATTOO",
+			"character_id": character.character_id,
+			"target_npc_id": recipient_id,
+			"target_province_id": -1,
+			"ic_day": ctx.ic_day, "season": ctx.season,
+			"reason": "no_recipient", "effects": {},
+		}
+
+	var target_tier: Enums.TattooQualityTier = action.metadata.get(
+		"target_tier", Enums.TattooQualityTier.NORMAL
+	) as Enums.TattooQualityTier
+	var body_location: Enums.TattooBodyLocation = action.metadata.get(
+		"body_location", Enums.TattooBodyLocation.LEFT_WRIST_FOREARM
+	) as Enums.TattooBodyLocation
+	var is_ability: bool = action.metadata.get("is_ability_tattoo", false)
+	var ability: Enums.TattooAbility = action.metadata.get(
+		"ability", Enums.TattooAbility.NONE
+	) as Enums.TattooAbility
+
+	var tattooing_rank: int = character.skills.get("Artisan: Tattooing", 0)
+	if not TattooSystem.meets_skill_gate(tattooing_rank, target_tier):
+		return {
+			"success": false, "action_id": "APPLY_TATTOO",
+			"character_id": character.character_id,
+			"target_npc_id": recipient_id,
+			"target_province_id": -1,
+			"ic_day": ctx.ic_day, "season": ctx.season,
+			"reason": "skill_gate_failed", "effects": {},
+		}
+
+	var ap_required: int = TattooSystem.get_ap_cost(target_tier)
+	if character.action_points_current < ap_required:
+		return {
+			"success": false, "action_id": "APPLY_TATTOO",
+			"character_id": character.character_id,
+			"target_npc_id": recipient_id,
+			"target_province_id": -1,
+			"ic_day": ctx.ic_day, "season": ctx.season,
+			"reason": "insufficient_ap", "effects": {},
+		}
+
+	var world_tattoos: Array[TattooData] = action.metadata.get("world_tattoos", [] as Array[TattooData])
+	var is_bald: bool = action.metadata.get("recipient_is_bald", false)
+	if not TattooSystem.is_location_available(world_tattoos, recipient_id, body_location, is_bald):
+		return {
+			"success": false, "action_id": "APPLY_TATTOO",
+			"character_id": character.character_id,
+			"target_npc_id": recipient_id,
+			"target_province_id": -1,
+			"ic_day": ctx.ic_day, "season": ctx.season,
+			"reason": "location_occupied", "effects": {},
+		}
+
+	if is_ability:
+		var in_togashi_territory: bool = action.metadata.get("in_togashi_territory", false)
+		if not TattooSystem.can_apply_ability_tattoo(
+			character.school_name, character.school_rank, in_togashi_territory
+		):
+			return {
+				"success": false, "action_id": "APPLY_TATTOO",
+				"character_id": character.character_id,
+				"target_npc_id": recipient_id,
+				"target_province_id": -1,
+				"ic_day": ctx.ic_day, "season": ctx.season,
+				"reason": "ability_tattoo_gate_failed", "effects": {},
+			}
+
+	var tn: int = TattooSystem.get_apply_tn(target_tier)
+	var roll_result: Dictionary = SkillResolver.resolve_skill_check(
+		character, dice_engine, "Artisan: Tattooing", tn, 0, "",
+		Enums.Trait.AGILITY, 0, 0, 0, ctx.ic_day
+	)
+
+	var roll_total: int = roll_result.get("total", 0)
+	var raises: int = maxi((roll_total - tn) / 5, 0) if roll_result.get("success", false) else 0
+	var final_quality: Enums.TattooQualityTier = TattooSystem.resolve_quality(
+		target_tier, roll_total, raises
+	)
+
+	if final_quality == Enums.TattooQualityTier.MUNDANE:
+		return {
+			"success": false, "action_id": "APPLY_TATTOO",
+			"character_id": character.character_id,
+			"target_npc_id": recipient_id,
+			"target_province_id": -1,
+			"ic_day": ctx.ic_day, "season": ctx.season,
+			"skill_used": "Artisan: Tattooing",
+			"roll_total": roll_total, "tn": tn,
+			"margin": roll_total - tn,
+			"effects": {
+				"ap_cost_override": ap_required,
+				"result_quality": Enums.TattooQualityTier.MUNDANE,
+			},
+		}
+
+	var disp_bond: int = TattooSystem.get_disposition_bond(final_quality)
+	return {
+		"success": true, "action_id": "APPLY_TATTOO",
+		"character_id": character.character_id,
+		"target_npc_id": recipient_id,
+		"target_province_id": -1,
+		"ic_day": ctx.ic_day, "season": ctx.season,
+		"skill_used": "Artisan: Tattooing",
+		"roll_total": roll_total, "tn": tn,
+		"margin": roll_total - tn,
+		"effects": {
+			"requires_tattoo_creation": true,
+			"ap_cost_override": ap_required,
+			"result_quality": final_quality,
+			"body_location": body_location,
+			"is_ability_tattoo": is_ability,
+			"ability": ability,
+			"target_tier": target_tier,
+			"raises": raises,
+			"disposition_change": disp_bond,
+			"recipient_disposition_change": disp_bond,
+			"subject_type": action.metadata.get("subject_type", Enums.TattooSubjectType.IMAGE),
+			"subject_description": action.metadata.get("subject_description", ""),
+			"topic_id": action.metadata.get("subject_topic_id", -1),
+		},
+	}

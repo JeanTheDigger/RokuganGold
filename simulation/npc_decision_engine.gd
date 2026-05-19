@@ -845,6 +845,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array[S
 				"REQUEST_PERFORMANCE",
 				"ANNOUNCE_HUNT", "CANCEL_HUNT",
 				"TRAIN_ANIMAL",
+				"APPLY_TATTOO",
 				"SET_TAX_RATE", "SET_STIPEND_RATE",
 				"REQUEST_ART", "ASSIGN_VASSAL_OBJECTIVE",
 				"ASSIGN_TO_MILITARY_SERVICE",
@@ -897,6 +898,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array[S
 				"TREAT_WOUND",
 				"ANNOUNCE_HUNT", "REQUEST_HUNT_INVITATION", "CANCEL_HUNT",
 				"TRAIN_ANIMAL",
+				"APPLY_TATTOO",
 				"SET_TAX_RATE", "SET_STIPEND_RATE",
 				"SHADOW_TARGET", "SEARCH_PERSON", "CONCEAL_ITEM",
 				"FABRICATE_SECRET", "EXPOSE_SECRET_PRIVATELY", "EXPOSE_SECRET_PUBLICLY",
@@ -1046,6 +1048,7 @@ static func _get_ap_cost(action_id: String) -> int:
 		"REQUEST_HUNT_INVITATION": 0,
 		"CANCEL_HUNT": 0,
 		"TRAIN_ANIMAL": 1,
+		"APPLY_TATTOO": 2,
 	}
 	return costs.get(action_id, 1)
 
