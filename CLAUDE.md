@@ -652,12 +652,14 @@ For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
   vassal with target settlement. Daily arrival pass marks proxy_sent when
   vassal reaches the target. SUPPORT_PLEDGE excluded. proxy_npc_id field
   added to CommitmentData for arrival tracking. 6 tests.
-- **SUPPORT_PLEDGE fulfillment — action types fixed. FIXED (partial).**
+- **SUPPORT_PLEDGE fulfillment — fully wired. FIXED.**
   Now checks persuade_count + public_debate_count + negotiate_count (was
   charm_count + negotiate_count). CHARM alone no longer fulfills. Added
   persuade_count and public_debate_count to court session_state tracking.
-  Position alignment checking still missing (CommitmentData has no topic
-  field to compare pledged position against action position).
+  Position alignment checking added: CommitmentData gains pledge_topic_id
+  and pledge_position_shift. Fulfillment verifies debtor's current topic
+  position aligns with pledged direction. Backward compatible (topic_id=-1
+  skips check). 5 tests.
 - **RESOURCE_PROMISE creation — all three paths wired. FIXED.**
   Now created via REQUEST_ALLIED_AID (original), NEGOTIATE with resource
   need_types (ACQUIRE_RESOURCE, REQUEST_AID, CONDUCT_COMMERCE), and
