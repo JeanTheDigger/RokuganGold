@@ -8657,3 +8657,105 @@ func test_resource_promise_fulfillment_returns_false() -> void:
 	c.debtor_npc_id = 20
 	var result: bool = DayOrchestrator._check_commitment_fulfilled(c, chars_by_id)
 	assert_false(result, "RESOURCE_PROMISE fulfillment needs SHARE_SUPPLIES wiring")
+
+
+# -- RESOURCE_PROMISE Fulfillment via SHARE_SUPPLIES --------------------------
+
+func test_resource_promise_fulfilled_on_successful_share() -> void:
+	var commitment := CommitmentData.new()
+	commitment.commitment_type = Enums.CommitmentType.RESOURCE_PROMISE
+	commitment.creditor_npc_id = 10
+	commitment.debtor_npc_id = 20
+	commitment.status = Enums.CommitmentStatus.PENDING
+	var commitments: Array[CommitmentData] = [commitment]
+
+	var day_results: Array[Dictionary] = [{
+		"action_id": "SHARE_SUPPLIES",
+		"character_id": 20,
+		"target_npc_id": 10,
+	}]
+	var supply_results: Array[Dictionary] = [{
+		"type": "supply_sharing",
+		"character_id": 20,
+		"target_province_id": 1,
+		"amount": 5.0,
+	}]
+
+	DayOrchestrator._process_resource_promise_fulfillment(
+		day_results, supply_results, commitments,
+	)
+	assert_eq(commitment.status, Enums.CommitmentStatus.FULFILLED)
+
+
+func test_resource_promise_not_fulfilled_when_share_fails() -> void:
+	var commitment := CommitmentData.new()
+	commitment.commitment_type = Enums.CommitmentType.RESOURCE_PROMISE
+	commitment.creditor_npc_id = 10
+	commitment.debtor_npc_id = 20
+	commitment.status = Enums.CommitmentStatus.PENDING
+	var commitments: Array[CommitmentData] = [commitment]
+
+	var day_results: Array[Dictionary] = [{
+		"action_id": "SHARE_SUPPLIES",
+		"character_id": 20,
+		"target_npc_id": 10,
+	}]
+	var supply_results: Array[Dictionary] = []
+
+	DayOrchestrator._process_resource_promise_fulfillment(
+		day_results, supply_results, commitments,
+	)
+	assert_eq(commitment.status, Enums.CommitmentStatus.PENDING,
+		"Should not fulfill when supply sharing did not succeed")
+
+
+func test_resource_promise_not_fulfilled_for_wrong_target() -> void:
+	var commitment := CommitmentData.new()
+	commitment.commitment_type = Enums.CommitmentType.RESOURCE_PROMISE
+	commitment.creditor_npc_id = 10
+	commitment.debtor_npc_id = 20
+	commitment.status = Enums.CommitmentStatus.PENDING
+	var commitments: Array[CommitmentData] = [commitment]
+
+	var day_results: Array[Dictionary] = [{
+		"action_id": "SHARE_SUPPLIES",
+		"character_id": 20,
+		"target_npc_id": 99,
+	}]
+	var supply_results: Array[Dictionary] = [{
+		"type": "supply_sharing",
+		"character_id": 20,
+		"amount": 5.0,
+	}]
+
+	DayOrchestrator._process_resource_promise_fulfillment(
+		day_results, supply_results, commitments,
+	)
+	assert_eq(commitment.status, Enums.CommitmentStatus.PENDING,
+		"Should not fulfill when supplies sent to different target")
+
+
+func test_resource_promise_skips_non_pending() -> void:
+	var commitment := CommitmentData.new()
+	commitment.commitment_type = Enums.CommitmentType.RESOURCE_PROMISE
+	commitment.creditor_npc_id = 10
+	commitment.debtor_npc_id = 20
+	commitment.status = Enums.CommitmentStatus.BROKEN_NO_NOTICE
+	var commitments: Array[CommitmentData] = [commitment]
+
+	var day_results: Array[Dictionary] = [{
+		"action_id": "SHARE_SUPPLIES",
+		"character_id": 20,
+		"target_npc_id": 10,
+	}]
+	var supply_results: Array[Dictionary] = [{
+		"type": "supply_sharing",
+		"character_id": 20,
+		"amount": 5.0,
+	}]
+
+	DayOrchestrator._process_resource_promise_fulfillment(
+		day_results, supply_results, commitments,
+	)
+	assert_eq(commitment.status, Enums.CommitmentStatus.BROKEN_NO_NOTICE,
+		"Should not change status of non-PENDING commitment")

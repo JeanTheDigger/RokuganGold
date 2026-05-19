@@ -565,6 +565,10 @@ static func advance_day(
 		day_result.get("results", []), commitments, objectives_map,
 	)
 
+	_process_resource_promise_fulfillment(
+		day_result.get("results", []), supply_sharing_results, commitments,
+	)
+
 	var commitment_results: Array[Dictionary] = _process_commitment_deadlines(
 		commitments, ic_day, characters_by_id, active_courts
 	)
@@ -15207,3 +15211,36 @@ static func _create_resource_promise_commitment(
 	)
 	commitments.append(commitment)
 	next_commitment_id[0] += 1
+
+
+static func _process_resource_promise_fulfillment(
+	day_results: Array[Dictionary],
+	supply_sharing_results: Array[Dictionary],
+	commitments: Array[CommitmentData],
+) -> void:
+	if supply_sharing_results.is_empty():
+		return
+
+	var successful_suppliers: Dictionary = {}
+	for sr: Dictionary in supply_sharing_results:
+		successful_suppliers[sr.get("character_id", -1)] = true
+
+	var supplier_targets: Dictionary = {}
+	for entry: Dictionary in day_results:
+		if entry.get("action_id", "") != "SHARE_SUPPLIES":
+			continue
+		var cid: int = entry.get("character_id", -1)
+		if cid in successful_suppliers:
+			supplier_targets[cid] = entry.get("target_npc_id", -1)
+
+	if supplier_targets.is_empty():
+		return
+
+	for c: CommitmentData in commitments:
+		if c.commitment_type != Enums.CommitmentType.RESOURCE_PROMISE:
+			continue
+		if c.status != Enums.CommitmentStatus.PENDING:
+			continue
+		var target: int = supplier_targets.get(c.debtor_npc_id, -1)
+		if target == c.creditor_npc_id:
+			c.status = Enums.CommitmentStatus.FULFILLED
