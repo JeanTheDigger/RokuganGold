@@ -70,6 +70,7 @@ static func create_item(
 	size: ItemSize,
 	quality_tier: int = 1,
 	is_evidence: bool = false,
+	contraband: bool = false,
 ) -> Dictionary:
 	return {
 		"item_id": item_id,
@@ -78,10 +79,34 @@ static func create_item(
 		"size": size,
 		"quality_tier": quality_tier,
 		"is_evidence": is_evidence,
+		"contraband": contraband,
+		"concealed": false,
+		"concealment_tn": 0,
 		"storage_tier": StorageTier.ON_PERSON,
 		"in_transit": false,
 		"transit_destination_id": -1,
 	}
+
+
+static func get_contraband_on_person(character: L5RCharacterData) -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	for item: Dictionary in character.items:
+		if item.get("contraband", false) and item.get("storage_tier") == StorageTier.ON_PERSON:
+			result.append(item)
+	return result
+
+
+static func get_item_size_string(item: Dictionary) -> String:
+	var size: int = item.get("size", ItemSize.SMALL)
+	match size:
+		ItemSize.SMALL:
+			return "SMALL"
+		ItemSize.MEDIUM:
+			return "MEDIUM"
+		ItemSize.LARGE:
+			return "LARGE"
+		_:
+			return "MEDIUM"
 
 
 # -- Capacity Queries ---------------------------------------------------------

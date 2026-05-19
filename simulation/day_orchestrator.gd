@@ -105,6 +105,9 @@ static func advance_day(
 	_process_witness_testimony_on_arrival(
 		travel_arrivals, characters_by_id, world_states, active_topics, current_season,
 	)
+	var auto_conceal_results: Array[Dictionary] = _process_auto_conceal_on_arrival(
+		travel_arrivals, characters_by_id, dice_engine,
+	)
 
 	var musha_season_count: int = int(season_meta.get("horde_season_count", 0))
 	var musha_shugyo_results: Array[Dictionary] = _process_musha_shugyo(characters, characters_by_id, ic_day, objectives_map, dice_engine, musha_season_count)
@@ -886,6 +889,7 @@ static func advance_day(
 		"festival_results": festival_results,
 		"favor_results": favor_results,
 		"travel_arrivals": travel_arrivals,
+		"auto_conceal_results": auto_conceal_results,
 		"progress_results": progress_results,
 		"letter_pass_results": letter_pass_results,
 		"insurgency_results": insurgency_results,
@@ -5432,6 +5436,46 @@ static func _process_travel(
 	characters: Array[L5RCharacterData],
 ) -> Array[Dictionary]:
 	return TravelSystem.process_travel_tick(characters)
+
+
+# -- Auto-Conceal on Arrival (s12.8 CONCEAL_ITEM NPC Behavior) ----------------
+# NPCs carrying contraband automatically fire CONCEAL_ITEM before entering a
+# settlement. Bypasses the normal NPC Decision Engine — no AP cost, no
+# personality filter, no honor threshold.
+
+static func _process_auto_conceal_on_arrival(
+	arrivals: Array[Dictionary],
+	characters_by_id: Dictionary,
+	dice_engine: DiceEngine,
+) -> Array[Dictionary]:
+	var results: Array[Dictionary] = []
+	for arrival: Dictionary in arrivals:
+		var char_id: int = arrival.get("character_id", -1)
+		var character: L5RCharacterData = characters_by_id.get(char_id)
+		if character == null:
+			continue
+		var contraband_items: Array[Dictionary] = InventorySystem.get_contraband_on_person(character)
+		if contraband_items.is_empty():
+			continue
+		for item: Dictionary in contraband_items:
+			if item.get("concealed", false):
+				continue
+			var size_str: String = InventorySystem.get_item_size_string(item)
+			var is_weapon: bool = item.get("category") == InventorySystem.ItemCategory.WEAPON
+			var conceal_result: Dictionary = SecretSystem.resolve_conceal_item(
+				character, size_str, is_weapon, dice_engine,
+			)
+			if conceal_result.get("success", false):
+				item["concealed"] = true
+				item["concealment_tn"] = conceal_result.get("concealment_tn", 0)
+			results.append({
+				"character_id": char_id,
+				"item_id": item.get("item_id", -1),
+				"success": conceal_result.get("success", false),
+				"concealment_tn": conceal_result.get("concealment_tn", 0),
+				"reason": conceal_result.get("reason", ""),
+			})
+	return results
 
 
 # -- Daily Letter Pass (s57.5) -------------------------------------------------

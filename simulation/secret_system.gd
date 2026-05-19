@@ -573,6 +573,21 @@ static func get_conceal_tn(item_size: String) -> int:
 			return CONCEAL_TN_MEDIUM
 
 
+const _CONCEAL_SCHOOL_LEAN: Array[String] = [
+	"Shosuro Infiltrator",
+	"Kasuga Smuggler",
+]
+
+
+static func _has_conceal_lean(actor: L5RCharacterData) -> bool:
+	for s: String in _CONCEAL_SCHOOL_LEAN:
+		if actor.school.begins_with(s):
+			return true
+	if actor.kolat_sect != Enums.KolatSect.NONE:
+		return true
+	return false
+
+
 static func resolve_conceal_item(
 	actor: L5RCharacterData,
 	item_size: String,
@@ -584,8 +599,10 @@ static func resolve_conceal_item(
 	if is_weapon and soh_rank < CONCEAL_WEAPON_SKILL_GATE:
 		return {"success": false, "reason": "weapon_skill_gate", "required_rank": CONCEAL_WEAPON_SKILL_GATE}
 
+	var bonus_kept: int = 1 if _has_conceal_lean(actor) else 0
 	var result: Dictionary = SkillResolver.resolve_skill_check(
 		actor, dice_engine, "Sleight of Hand", tn,
+		0, "Conceal", Enums.Trait.NONE, 0, bonus_kept,
 	)
 	var success: bool = result.get("success", false)
 
