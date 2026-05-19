@@ -740,10 +740,11 @@ For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
   lookups. Also fixed duplicate gossip disposition application in
   _process_court_action_effects (was double-applying). 4 tests.
 - **Position hardened/durable (`position_hardened`, `position_durable`) —
-  emitted but never consumed.** NEGOTIATE/PERSUADE/PUBLIC_DEBATE emit these
-  flags to distinguish position shift quality, but no position decay or
-  resistance system reads them. Position shifts from all court actions decay
-  identically. No GDD spec found for the mechanic — may be forward-wiring.
+  emitted but never consumed.** NEGOTIATE (hardened on failure) and PERSUADE
+  (durable on success, hardened on critical failure) emit these flags to
+  distinguish position shift quality per GDD s15.4 ("hardens" / "durably"),
+  but no position decay system reads them. Position shifts don't decay at
+  all currently — no GDD spec for position decay exists. Forward-wiring.
 - **False info on critical failure (`false_info`) — FIXED.**
   EffectApplicator._apply_false_info() creates knowledge entries on the
   actor with FRESH confidence and inverted data (wrong virtue, inverted
