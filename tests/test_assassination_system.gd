@@ -389,6 +389,75 @@ func test_critical_detection_includes_investigation_bonus() -> void:
 		"Watchful bonus should improve detection rolls")
 
 
+# -- Daily Detection Signals ---------------------------------------------------
+
+func test_daily_detection_adds_suspicion_on_notice() -> void:
+	var guard: L5RCharacterData = L5RCharacterData.new()
+	guard.character_id = 85
+	guard.perception = 5
+	guard.skills = {"Investigation": 5}
+	var s: Dictionary = AssassinationSystem.create_assassination_state(1, 2, AssassinationSystem.ExecutionMethod.POISON, 0)
+	var noticed_count: int = 0
+	for i: int in range(50):
+		s["suspicion"] = 0.0
+		var e: DiceEngine = DiceEngine.new(i * 11)
+		var r: Dictionary = AssassinationSystem.resolve_daily_detection(guard, 10, s, e)
+		if r["noticed"]:
+			noticed_count += 1
+			assert_true(s["suspicion"] > 0, "Suspicion should increase on notice")
+	assert_true(noticed_count > 0, "Guard with high skills should notice sometimes")
+
+
+func test_daily_detection_no_suspicion_on_miss() -> void:
+	var guard: L5RCharacterData = L5RCharacterData.new()
+	guard.character_id = 86
+	guard.perception = 1
+	guard.skills = {"Investigation": 0}
+	var s: Dictionary = AssassinationSystem.create_assassination_state(1, 2, AssassinationSystem.ExecutionMethod.POISON, 0)
+	var missed_count: int = 0
+	for i: int in range(50):
+		s["suspicion"] = 0.0
+		var e: DiceEngine = DiceEngine.new(i * 13)
+		var r: Dictionary = AssassinationSystem.resolve_daily_detection(guard, 30, s, e)
+		if not r["noticed"]:
+			missed_count += 1
+			assert_eq(s["suspicion"], 0.0, "Suspicion should not change on miss")
+	assert_true(missed_count > 0, "Weak guard vs high TN should miss sometimes")
+
+
+func test_daily_detection_uses_roll_total_as_tn() -> void:
+	var guard: L5RCharacterData = L5RCharacterData.new()
+	guard.character_id = 87
+	guard.perception = 3
+	guard.skills = {"Investigation": 2}
+	var easy_count: int = 0
+	var hard_count: int = 0
+	for i: int in range(100):
+		var s1: Dictionary = {"suspicion": 0.0}
+		var e1: DiceEngine = DiceEngine.new(i * 7)
+		var r1: Dictionary = AssassinationSystem.resolve_daily_detection(guard, 5, s1, e1)
+		if r1["noticed"]:
+			easy_count += 1
+		var s2: Dictionary = {"suspicion": 0.0}
+		var e2: DiceEngine = DiceEngine.new(i * 7)
+		var r2: Dictionary = AssassinationSystem.resolve_daily_detection(guard, 30, s2, e2)
+		if r2["noticed"]:
+			hard_count += 1
+	assert_true(easy_count > hard_count, "Lower TN should be easier to notice")
+
+
+func test_daily_detection_suspicion_increment() -> void:
+	var guard: L5RCharacterData = L5RCharacterData.new()
+	guard.character_id = 88
+	guard.perception = 5
+	guard.skills = {"Investigation": 5}
+	var s: Dictionary = AssassinationSystem.create_assassination_state(1, 2, AssassinationSystem.ExecutionMethod.POISON, 0)
+	var e: DiceEngine = DiceEngine.new(1)
+	var r: Dictionary = AssassinationSystem.resolve_daily_detection(guard, 0, s, e)
+	assert_true(r["noticed"])
+	assert_eq(s["suspicion"], float(AssassinationSystem.SUSPICION_DAILY_DETECTION))
+
+
 # -- Honor / Infamy Consequences -----------------------------------------------
 
 func test_ordering_honor_loss_status_low() -> void:

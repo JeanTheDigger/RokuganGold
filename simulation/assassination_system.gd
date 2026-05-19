@@ -40,6 +40,10 @@ const SUSPICION_MINIMUM_RESTORE_TICKS: int = 14
 # Household response thresholds (s12.8):
 # 0-9: no response. 10-19: watchful (+5 passive Investigation).
 # 20-29: bodyguard assigned. 30+: target warned, +10 all Phase 1 TNs.
+# Daily passive detection suspicion (PROVISIONAL — GDD specifies household
+# members detect activity each day but does not give a suspicion increment).
+const SUSPICION_DAILY_DETECTION: int = 3
+
 const SUSPICION_WATCHFUL_THRESHOLD: float = 10.0
 const SUSPICION_BODYGUARD_THRESHOLD: float = 20.0
 const SUSPICION_LOCKDOWN_THRESHOLD: float = 30.0
@@ -320,6 +324,28 @@ static func resolve_suspicion_search(
 		"searcher_id": searcher.character_id,
 		"roll_total": result.get("total", 0),
 		"concealment_tn": concealment_tn,
+	}
+
+
+static func resolve_daily_detection(
+	observer: L5RCharacterData,
+	assassin_roll_total: int,
+	state: Dictionary,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	var inv_bonus: int = get_household_investigation_bonus(state)
+	var result: Dictionary = SkillResolver.resolve_skill_check(
+		observer, dice_engine, "Investigation", assassin_roll_total,
+		0, "", Enums.Trait.PERCEPTION, inv_bonus,
+	)
+	var noticed: bool = result.get("success", false)
+	if noticed:
+		add_suspicion(state, SUSPICION_DAILY_DETECTION)
+	return {
+		"noticed": noticed,
+		"observer_id": observer.character_id,
+		"roll_total": result.get("total", 0),
+		"detection_tn": assassin_roll_total,
 	}
 
 

@@ -14131,6 +14131,15 @@ static func _process_assassination_daily_tick(
 								results.append(tick_result)
 								continue
 
+					var daily_observer: L5RCharacterData = AssassinationSystem.find_best_searcher(
+						target, assassin.character_id, characters_by_id,
+					)
+					if daily_observer != null:
+						var daily_detect: Dictionary = AssassinationSystem.resolve_daily_detection(
+							daily_observer, access_result.get("roll_total", 0), op, dice_engine,
+						)
+						tick_result["daily_detection"] = daily_detect
+
 					if AssassinationSystem.should_assign_bodyguard(op):
 						var searcher: L5RCharacterData = AssassinationSystem.find_best_searcher(
 							target, assassin.character_id, characters_by_id,
