@@ -593,8 +593,14 @@ For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
   Same-clan loyalty chain gives Chugi 75% rate vs 25% cross-clan.
   Crisis topic generation tagged: Shadowlands incursion, famine (single
   + multi), and _topic_from_dict all set crisis_id from
-  ProvinceData.active_crisis_id. DORMANT until crisis system populates
-  active_crisis_id on provinces. 9 tests.
+  ProvinceData.active_crisis_id. 9 tests.
+- **ProvinceData.active_crisis_id population — crisis lifecycle wired. FIXED.**
+  `active_crisis_id` now assigned from `next_crisis_id` counter on three
+  crisis triggers: famine onset (starvation HUNGER+), Shadowlands breach
+  (SI=0 + DEFENDER_OVERRUN), insurgency spawn (new InsurgencyData). Cleared
+  on resolution: famine after 10-season recovery, insurgency when strength
+  reaches 0. Existing crisis_id not overwritten by new events. Activates
+  the full crisis→commitment→forgiveness pipeline. 7 tests.
 - **Approach evaluation disposition_at_start tracking. FIXED.**
   `_populate_disposition_snapshots()` captures all disposition pairs at
   season start. `_process_approach_evaluation_writebacks()` looks up
