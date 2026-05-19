@@ -873,10 +873,11 @@ For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
   `item_size` ("MEDIUM"), `is_weapon` (false). No metadata population for
   NPC-initiated concealment. DayOrchestrator auto-bypass for contraband
   arrivals DOES set proper metadata. Only affects voluntary CONCEAL_ITEM.
-- **SEARCH_PERSON — defaults to TN 15, no authority.** Executor reads
-  `concealment_tn` (15), `magistrate_authority` (false). No metadata
-  population. Always searches against generic TN without magistrate bonus.
-  DayOrchestrator assassination pipeline DOES set proper metadata.
+- **SEARCH_PERSON — magistrate_authority not populated. FIXED (partial).**
+  `magistrate_authority` now set from UPHOLD_LAW standing objective.
+  `concealment_tn` still defaults to 15 (requires item concealment tracking
+  not available in NPC context). Assassination pipeline sets proper metadata
+  for both fields. 2 tests.
 
 ### Known Code Issues (found and fixed 2026-05-17)
 - **DefenseHearingSystem.can_appoint_champion() — tautology bug. FIXED.**
