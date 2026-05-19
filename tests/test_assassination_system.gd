@@ -153,6 +153,94 @@ func test_suspicion_tn_modifier_lockdown_only() -> void:
 	assert_eq(AssassinationSystem.get_suspicion_tn_modifier({"suspicion": 50.0}), 10)
 
 
+# -- SEARCH_PERSON Suspicion Trigger -------------------------------------------
+
+func test_find_best_searcher_co_located() -> void:
+	_target.physical_location = "Kyuden Bayushi"
+	var guard: L5RCharacterData = L5RCharacterData.new()
+	guard.character_id = 60
+	guard.physical_location = "Kyuden Bayushi"
+	guard.perception = 4
+	guard.skills = {"Investigation": 3}
+	var chars: Dictionary = {1: _assassin, 2: _target, 60: guard}
+	var best: L5RCharacterData = AssassinationSystem.find_best_searcher(_target, 1, chars)
+	assert_not_null(best)
+	assert_eq(best.character_id, 60)
+
+
+func test_find_best_searcher_excludes_assassin() -> void:
+	_target.physical_location = "Kyuden Bayushi"
+	_assassin.physical_location = "Kyuden Bayushi"
+	_assassin.perception = 5
+	_assassin.skills["Investigation"] = 5
+	var chars: Dictionary = {1: _assassin, 2: _target}
+	var best: L5RCharacterData = AssassinationSystem.find_best_searcher(_target, 1, chars)
+	assert_null(best, "Assassin should not search themselves")
+
+
+func test_find_best_searcher_picks_highest_score() -> void:
+	_target.physical_location = "Kyuden Doji"
+	var weak: L5RCharacterData = L5RCharacterData.new()
+	weak.character_id = 61
+	weak.physical_location = "Kyuden Doji"
+	weak.perception = 2
+	weak.skills = {"Investigation": 1}
+	var strong: L5RCharacterData = L5RCharacterData.new()
+	strong.character_id = 62
+	strong.physical_location = "Kyuden Doji"
+	strong.perception = 4
+	strong.skills = {"Investigation": 4}
+	var chars: Dictionary = {1: _assassin, 2: _target, 61: weak, 62: strong}
+	var best: L5RCharacterData = AssassinationSystem.find_best_searcher(_target, 1, chars)
+	assert_eq(best.character_id, 62)
+
+
+func test_find_best_searcher_none_at_location() -> void:
+	_target.physical_location = "Kyuden Bayushi"
+	var away: L5RCharacterData = L5RCharacterData.new()
+	away.character_id = 63
+	away.physical_location = "Otosan Uchi"
+	away.perception = 5
+	away.skills = {"Investigation": 5}
+	var chars: Dictionary = {1: _assassin, 2: _target, 63: away}
+	var best: L5RCharacterData = AssassinationSystem.find_best_searcher(_target, 1, chars)
+	assert_null(best)
+
+
+func test_suspicion_search_finds_unconcealed() -> void:
+	var searcher: L5RCharacterData = L5RCharacterData.new()
+	searcher.character_id = 70
+	searcher.perception = 3
+	searcher.skills = {"Investigation": 2}
+	var s: Dictionary = AssassinationSystem.create_assassination_state(1, 2, AssassinationSystem.ExecutionMethod.POISON, 0)
+	s["equipment_concealment_tn"] = 0
+	var result: Dictionary = AssassinationSystem.resolve_suspicion_search(searcher, s, _engine)
+	assert_true(result["found"], "Zero concealment_tn means equipment is visible")
+
+
+func test_suspicion_search_applies_investigation_bonus() -> void:
+	var searcher: L5RCharacterData = L5RCharacterData.new()
+	searcher.character_id = 71
+	searcher.perception = 3
+	searcher.skills = {"Investigation": 2}
+
+	var total_with_bonus: int = 0
+	var total_without_bonus: int = 0
+	for i: int in range(100):
+		var s1: Dictionary = {"suspicion": 15.0, "equipment_concealment_tn": 25}
+		var e1: DiceEngine = DiceEngine.new(i * 7)
+		var r1: Dictionary = AssassinationSystem.resolve_suspicion_search(searcher, s1, e1)
+		total_with_bonus += r1.get("roll_total", 0)
+
+		var s2: Dictionary = {"suspicion": 5.0, "equipment_concealment_tn": 25}
+		var e2: DiceEngine = DiceEngine.new(i * 7)
+		var r2: Dictionary = AssassinationSystem.resolve_suspicion_search(searcher, s2, e2)
+		total_without_bonus += r2.get("roll_total", 0)
+
+	assert_true(total_with_bonus > total_without_bonus,
+		"Watchful bonus (+5 Investigation) should improve search rolls")
+
+
 # ==============================================================================
 # Phase 1 — Access
 # ==============================================================================

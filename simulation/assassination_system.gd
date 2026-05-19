@@ -199,6 +199,51 @@ static func get_suspicion_tn_modifier(state: Dictionary) -> int:
 	return 0
 
 
+static func find_best_searcher(
+	target: L5RCharacterData,
+	assassin_id: int,
+	characters_by_id: Dictionary,
+) -> L5RCharacterData:
+	var best: L5RCharacterData = null
+	var best_score: int = -1
+	for char_id: int in characters_by_id:
+		if char_id == assassin_id or char_id == target.character_id:
+			continue
+		var c: L5RCharacterData = characters_by_id[char_id]
+		if c.physical_location != target.physical_location:
+			continue
+		if c.physical_location == "":
+			continue
+		var score: int = c.skills.get("Investigation", 0) + c.perception
+		if score > best_score:
+			best_score = score
+			best = c
+	return best
+
+
+static func resolve_suspicion_search(
+	searcher: L5RCharacterData,
+	state: Dictionary,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	var concealment_tn: int = int(state.get("equipment_concealment_tn", 0))
+	if concealment_tn <= 0:
+		return {"searched": true, "found": true, "concealment_tn": 0}
+
+	var inv_bonus: int = get_household_investigation_bonus(state)
+	var result: Dictionary = SkillResolver.resolve_skill_check(
+		searcher, dice_engine, "Investigation", concealment_tn,
+		0, "", Enums.Trait.PERCEPTION, inv_bonus,
+	)
+	return {
+		"searched": true,
+		"found": result.get("success", false),
+		"searcher_id": searcher.character_id,
+		"roll_total": result.get("total", 0),
+		"concealment_tn": concealment_tn,
+	}
+
+
 static func has_shinobi_training(character: L5RCharacterData) -> bool:
 	for s: String in _SHINOBI_SCHOOLS:
 		if character.school.begins_with(s):

@@ -14107,6 +14107,23 @@ static func _process_assassination_daily_tick(
 						assassin, op, best_method, dice_engine, target, characters_by_id,
 					)
 					tick_result["access"] = access_result
+
+					if AssassinationSystem.should_assign_bodyguard(op):
+						var searcher: L5RCharacterData = AssassinationSystem.find_best_searcher(
+							target, assassin.character_id, characters_by_id,
+						)
+						if searcher != null:
+							var search_result: Dictionary = AssassinationSystem.resolve_suspicion_search(
+								searcher, op, dice_engine,
+							)
+							tick_result["suspicion_search"] = search_result
+							if search_result.get("found", false):
+								op["phase"] = AssassinationSystem.AssassinationPhase.FAILED
+								tick_result["exposed_by_search"] = true
+								to_remove.append(i)
+								results.append(tick_result)
+								continue
+
 					if AssassinationSystem.can_advance_to_execution(op):
 						if access_result.get("success", false):
 							AssassinationSystem.advance_to_execution(op)
