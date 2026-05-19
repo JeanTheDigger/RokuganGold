@@ -8006,4 +8006,149 @@ func test_meeting_arrangement_skips_duplicate() -> void:
 	DayOrchestrator._process_letter_commitment_creation(
 		pending, commitments, next_id, 50,
 	)
-	assert_eq(commitments.size(), 1, "Should not add duplicate")
+	assert_eq(commitments.size(), 1, "Should not add duplicate meeting")
+
+
+# -- SUPPORT_PLEDGE Commitment Creation (s55.31) --------------------------------
+
+func _make_court_at(settlement_id: int, court_type: CourtSessionData.CourtType = CourtSessionData.CourtType.PROVINCIAL_FAMILY_COURT) -> CourtSessionData:
+	var court := CourtSessionData.new()
+	court.court_id = 1
+	court.court_type = court_type
+	court.host_settlement_id = settlement_id
+	court.start_ic_day = 30
+	court.duration_ticks = 20
+	court.phase = CourtSessionData.CourtPhase.ACTIVE
+	court.attendee_ids = [10, 20, 30]
+	return court
+
+
+func test_support_pledge_created_on_persuade_with_position_shift() -> void:
+	var court := _make_court_at(100)
+	var results: Array = [
+		{
+			"character_id": 10,
+			"action_id": "PERSUADE",
+			"target_npc_id": 20,
+			"effects": {
+				"target_position_shift": 15.0,
+				"requires_support_pledge": true,
+				"pledge_creditor_id": 10,
+				"pledge_debtor_id": 20,
+				"pledge_court_settlement_id": 100,
+				"_action_metadata": {"topic_id": 5, "court_settlement_id": 100},
+			},
+		},
+	]
+	var commitments: Array[CommitmentData] = []
+	var courts: Array[CourtSessionData] = [court]
+	var next_id: Array[int] = [1]
+	DayOrchestrator._process_commitment_creation_writebacks(
+		results, commitments, courts, 35, next_id,
+	)
+	assert_eq(commitments.size(), 1)
+	var c: CommitmentData = commitments[0]
+	assert_eq(c.commitment_type, Enums.CommitmentType.SUPPORT_PLEDGE)
+	assert_eq(c.creditor_npc_id, 10)
+	assert_eq(c.debtor_npc_id, 20)
+	assert_eq(c.fulfillment_target, 100)
+	assert_eq(c.deadline_ic_day, 50)
+	assert_eq(c.tier, 2)
+	assert_eq(c.source_action_id, "PERSUADE")
+
+
+func test_support_pledge_witnesses_are_court_attendees() -> void:
+	var court := _make_court_at(100)
+	var results: Array = [
+		{
+			"character_id": 10,
+			"action_id": "NEGOTIATE",
+			"target_npc_id": 20,
+			"effects": {
+				"target_position_shift": 10.0,
+				"requires_support_pledge": true,
+				"pledge_creditor_id": 10,
+				"pledge_debtor_id": 20,
+				"pledge_court_settlement_id": 100,
+				"_action_metadata": {"topic_id": 5, "court_settlement_id": 100},
+			},
+		},
+	]
+	var commitments: Array[CommitmentData] = []
+	var courts: Array[CourtSessionData] = [court]
+	var next_id: Array[int] = [1]
+	DayOrchestrator._process_commitment_creation_writebacks(
+		results, commitments, courts, 35, next_id,
+	)
+	assert_eq(commitments[0].witnesses.size(), 3)
+	assert_true(10 in commitments[0].witnesses)
+	assert_true(20 in commitments[0].witnesses)
+	assert_true(30 in commitments[0].witnesses)
+
+
+func test_support_pledge_skips_duplicate() -> void:
+	var court := _make_court_at(100)
+	var existing := CommitmentData.new()
+	existing.commitment_type = Enums.CommitmentType.SUPPORT_PLEDGE
+	existing.creditor_npc_id = 10
+	existing.debtor_npc_id = 20
+	existing.fulfillment_target = 100
+	existing.status = Enums.CommitmentStatus.PENDING
+	var results: Array = [
+		{
+			"character_id": 10,
+			"action_id": "PERSUADE",
+			"effects": {
+				"requires_support_pledge": true,
+				"pledge_creditor_id": 10,
+				"pledge_debtor_id": 20,
+				"pledge_court_settlement_id": 100,
+				"_action_metadata": {},
+			},
+		},
+	]
+	var commitments: Array[CommitmentData] = [existing]
+	var courts: Array[CourtSessionData] = [court]
+	var next_id: Array[int] = [1]
+	DayOrchestrator._process_commitment_creation_writebacks(
+		results, commitments, courts, 35, next_id,
+	)
+	assert_eq(commitments.size(), 1, "Should not duplicate")
+
+
+func test_support_pledge_fulfillment_requires_court_action() -> void:
+	var court := _make_court_at(100)
+	var debtor := L5RCharacterData.new()
+	debtor.character_id = 20
+	debtor.physical_location = "100"
+	var chars_by_id: Dictionary = {20: debtor}
+	var c := CommitmentData.new()
+	c.commitment_type = Enums.CommitmentType.SUPPORT_PLEDGE
+	c.debtor_npc_id = 20
+	c.fulfillment_target = 100
+	var result: bool = DayOrchestrator._check_commitment_fulfilled(
+		c, chars_by_id, [court],
+	)
+	assert_false(result, "Present but no court action should not fulfill")
+	court.session_state[20] = {"charm_count": 0, "negotiate_count": 1}
+	result = DayOrchestrator._check_commitment_fulfilled(
+		c, chars_by_id, [court],
+	)
+	assert_true(result, "Present with court action should fulfill")
+
+
+func test_support_pledge_not_fulfilled_if_absent() -> void:
+	var court := _make_court_at(100)
+	court.session_state[20] = {"charm_count": 1, "negotiate_count": 0}
+	var debtor := L5RCharacterData.new()
+	debtor.character_id = 20
+	debtor.physical_location = "200"
+	var chars_by_id: Dictionary = {20: debtor}
+	var c := CommitmentData.new()
+	c.commitment_type = Enums.CommitmentType.SUPPORT_PLEDGE
+	c.debtor_npc_id = 20
+	c.fulfillment_target = 100
+	var result: bool = DayOrchestrator._check_commitment_fulfilled(
+		c, chars_by_id, [court],
+	)
+	assert_false(result, "Absent debtor should not fulfill")

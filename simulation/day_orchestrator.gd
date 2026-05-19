@@ -563,7 +563,7 @@ static func advance_day(
 	)
 
 	var commitment_results: Array[Dictionary] = _process_commitment_deadlines(
-		commitments, ic_day, characters_by_id
+		commitments, ic_day, characters_by_id, active_courts
 	)
 
 	var orphan_results: Array[Dictionary] = _process_lord_deaths(
@@ -4839,12 +4839,14 @@ static func _process_commitment_deadlines(
 	commitments: Array[CommitmentData],
 	ic_day: int,
 	characters_by_id: Dictionary,
+	active_courts: Array[CourtSessionData] = [],
 ) -> Array[Dictionary]:
 	if commitments.is_empty():
 		return []
 	var chars: Dictionary = characters_by_id
+	var courts: Array[CourtSessionData] = active_courts
 	var checker: Callable = func(c: CommitmentData) -> bool:
-		return DayOrchestrator._check_commitment_fulfilled(c, chars)
+		return DayOrchestrator._check_commitment_fulfilled(c, chars, courts)
 	return CommitmentRegistry.process_deadlines(
 		commitments, ic_day, checker, characters_by_id, characters_by_id
 	)
@@ -4853,6 +4855,7 @@ static func _process_commitment_deadlines(
 static func _check_commitment_fulfilled(
 	c: CommitmentData,
 	characters_by_id: Dictionary,
+	active_courts: Array[CourtSessionData] = [],
 ) -> bool:
 	var debtor: L5RCharacterData = characters_by_id.get(c.debtor_npc_id)
 	if debtor == null:
@@ -4874,6 +4877,15 @@ static func _check_commitment_fulfilled(
 			if creditor == null:
 				return false
 			return creditor.physical_location == target_settlement
+		Enums.CommitmentType.SUPPORT_PLEDGE:
+			if not is_present:
+				return false
+			for court: CourtSessionData in active_courts:
+				if court.host_settlement_id == c.fulfillment_target:
+					var state: Dictionary = court.session_state.get(c.debtor_npc_id, {})
+					var actions_taken: int = state.get("charm_count", 0) + state.get("negotiate_count", 0)
+					return actions_taken > 0
+			return false
 		Enums.CommitmentType.FAVOR_OBLIGATION:
 			return false
 	return false
@@ -13205,6 +13217,14 @@ static func _process_court_action_effects(
 				var current_pos: float = target.topic_positions.get(topic_id, 0.0)
 				target.topic_positions[topic_id] = clampf(current_pos + effective_shift, -100.0, 100.0)
 
+			if (action_id == "PERSUADE" or action_id == "NEGOTIATE") and not effects.get("failed", false):
+				var court_sid: int = action_meta.get("court_settlement_id", -1)
+				if court_sid >= 0:
+					effects["requires_support_pledge"] = true
+					effects["pledge_creditor_id"] = actor_id
+					effects["pledge_debtor_id"] = target_id
+					effects["pledge_court_settlement_id"] = court_sid
+
 		# Provoke Emotion target effects
 		if target != null:
 			if effects.has("target_honor_change"):
@@ -14860,6 +14880,10 @@ static func _process_commitment_creation_writebacks(
 			_create_court_attendance_commitment(
 				entry, commitments, active_courts, ic_day, next_commitment_id,
 			)
+		if effects.get("requires_support_pledge", false):
+			_create_support_pledge_commitment(
+				effects, commitments, active_courts, ic_day, next_commitment_id,
+			)
 
 
 static func _create_favor_obligation_commitment(
@@ -14955,6 +14979,58 @@ static func _create_court_attendance_commitment(
 		ic_day,
 		"SEND_INVITATION",
 		target_court.host_settlement_id,
+		witnesses,
+	)
+	commitments.append(commitment)
+	next_commitment_id[0] += 1
+
+
+static func _create_support_pledge_commitment(
+	effects: Dictionary,
+	commitments: Array[CommitmentData],
+	active_courts: Array[CourtSessionData],
+	ic_day: int,
+	next_commitment_id: Array[int],
+) -> void:
+	var creditor_id: int = effects.get("pledge_creditor_id", -1)
+	var debtor_id: int = effects.get("pledge_debtor_id", -1)
+	var court_sid: int = effects.get("pledge_court_settlement_id", -1)
+	if creditor_id < 0 or debtor_id < 0 or court_sid < 0:
+		return
+
+	for c: CommitmentData in commitments:
+		if (c.commitment_type == Enums.CommitmentType.SUPPORT_PLEDGE
+			and c.creditor_npc_id == creditor_id
+			and c.debtor_npc_id == debtor_id
+			and c.fulfillment_target == court_sid
+			and c.status == Enums.CommitmentStatus.PENDING):
+			return
+
+	var target_court: CourtSessionData = null
+	for c: CourtSessionData in active_courts:
+		if c.host_settlement_id == court_sid and c.phase != CourtSessionData.CourtPhase.CLOSED:
+			target_court = c
+			break
+	if target_court == null:
+		return
+
+	var deadline: int = target_court.start_ic_day + target_court.duration_ticks
+	var tier: int = 2
+
+	var witnesses: Array[int] = []
+	for aid: int in target_court.attendee_ids:
+		witnesses.append(aid)
+
+	var commitment: CommitmentData = CommitmentRegistry.create_commitment(
+		next_commitment_id[0],
+		Enums.CommitmentType.SUPPORT_PLEDGE,
+		creditor_id,
+		debtor_id,
+		deadline,
+		tier,
+		ic_day,
+		"PERSUADE",
+		court_sid,
 		witnesses,
 	)
 	commitments.append(commitment)
