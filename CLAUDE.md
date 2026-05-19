@@ -591,8 +591,9 @@ For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
   = two lords + direct vassals, default Tier 2. Fulfillment: writeback pass
   cross-references successful supply_sharing_results with SHARE_SUPPLIES
   action targets to mark matching commitments FULFILLED before deadline
-  processing. Troop transfer and koku payment fulfillment paths not yet
-  wired). 13 tests.
+  processing. ORDER_DEPLOY also fulfills when target_npc_id matches
+  creditor (troop deployment). Koku payment fulfillment blocked on
+  ActionID design — no dedicated koku transfer action exists). 16 tests.
 - **CommitmentRegistry.apply_forgiveness() — retroactive forgiveness wired. FIXED.**
   `_process_retroactive_forgiveness()` batch scans BROKEN_FORCE_MAJEURE
   commitments after deadline processing. Bridges crisis topics to
