@@ -850,11 +850,11 @@ For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
   Added optional `character: L5RCharacterData = null` parameter to both
   `_populate_action_metadata()` and `generate_options()`. Call sites updated.
   Backward-compatible (existing 2-arg and 3-arg callers unchanged).
-- **INTIMIDATE — blackmail path unreachable via NPC daily loop.** Executor
-  branches on `secret_ref` (null) → `has_secret = false` → blackmail branch
-  never fires. Plain public/private intimidation works correctly. Blackmail
-  requires `secret_ref`, `by_letter`, `secret_tier` in metadata, none
-  populated. Needs: secret selection logic similar to EXPOSE_SECRET.
+- **INTIMIDATE — blackmail path unreachable via NPC daily loop. FIXED.**
+  `_pick_secret_about_target()` selects most severe unexposed secret about
+  the intimidation target from known_secrets. Populates secret_ref,
+  secret_tier, by_letter. Without a matching secret, falls through to
+  standard intimidation. 4 tests.
 - **FABRICATE_SECRET — always TIER_3, no target secret.** Executor reads
   `severity` (TIER_3), `secret_id` (-1). No metadata population. Always
   fabricates a TIER_3 secret with no reference. Functional but lacks
