@@ -14050,7 +14050,7 @@ static func _process_assassination_daily_tick(
 				if is_co_located:
 					var best_method: String = _pick_access_method(assassin)
 					var access_result: Dictionary = AssassinationSystem.resolve_access_day(
-						assassin, op, best_method, dice_engine,
+						assassin, op, best_method, dice_engine, target, characters_by_id,
 					)
 					tick_result["access"] = access_result
 					if AssassinationSystem.can_advance_to_execution(op):
@@ -14064,7 +14064,7 @@ static func _process_assassination_daily_tick(
 			AssassinationSystem.AssassinationPhase.EXECUTION:
 				var has_bodyguard: bool = _target_has_bodyguard(target, characters_by_id)
 				var exec_result: Dictionary = AssassinationSystem.resolve_execution(
-					assassin, target, op, dice_engine, has_bodyguard,
+					assassin, target, op, dice_engine, has_bodyguard, characters_by_id,
 				)
 				tick_result["execution"] = exec_result
 				if exec_result.get("bodyguard_encountered", false):
@@ -14077,13 +14077,13 @@ static func _process_assassination_daily_tick(
 						tick_result["bodyguard"] = bg_result
 						if not bg_result.get("aborted", false):
 							exec_result = AssassinationSystem.resolve_execution(
-								assassin, target, op, dice_engine, false,
+								assassin, target, op, dice_engine, false, characters_by_id,
 							)
 							tick_result["execution_retry"] = exec_result
 
 			AssassinationSystem.AssassinationPhase.CONCEALMENT:
 				var conceal_result: Dictionary = AssassinationSystem.resolve_concealment(
-					assassin, op, dice_engine,
+					assassin, op, dice_engine, target, characters_by_id,
 				)
 				tick_result["concealment"] = conceal_result
 				_apply_assassination_outcome(

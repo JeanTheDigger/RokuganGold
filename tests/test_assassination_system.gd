@@ -538,3 +538,166 @@ func test_access_tn_no_modifier_for_shinobi() -> void:
 	var result: Dictionary = AssassinationSystem.resolve_access_day(_assassin, s, "stealth", _engine)
 	assert_eq(result["tn"], AssassinationSystem.ACCESS_STEALTH_INFILTRATE_TN,
 		"Shinobi should face base TN only")
+
+
+func test_non_shinobi_access_passes_target_and_chars() -> void:
+	_assassin.school = "Akodo Bushi"
+	_target.clan = "Crab"
+	var s: Dictionary = AssassinationSystem.create_assassination_state(1, 2, AssassinationSystem.ExecutionMethod.BLADE, 0)
+	var chars: Dictionary = {1: _assassin, 2: _target}
+	var result: Dictionary = AssassinationSystem.resolve_access_day(_assassin, s, "stealth", _engine, _target, chars)
+	assert_eq(result["tn"], AssassinationSystem.ACCESS_STEALTH_INFILTRATE_TN + AssassinationSystem.NON_SHINOBI_ACCESS_TN_INCREASE,
+		"Non-Imperial target should have no Seppun modifier")
+
+
+# ==============================================================================
+# Seppun Protection (s12.8 Imperial Assassination)
+# ==============================================================================
+
+func test_is_imperial_dynasty_true() -> void:
+	_target.clan = "Imperial"
+	assert_true(AssassinationSystem.is_imperial_dynasty(_target))
+
+
+func test_is_imperial_dynasty_false() -> void:
+	_target.clan = "Crane"
+	assert_false(AssassinationSystem.is_imperial_dynasty(_target))
+
+
+func test_seppun_guard_present_detects_seppun() -> void:
+	_target.clan = "Imperial"
+	_target.physical_location = "Otosan Uchi"
+	var seppun_guard: L5RCharacterData = L5RCharacterData.new()
+	seppun_guard.character_id = 50
+	seppun_guard.family = "Seppun"
+	seppun_guard.physical_location = "Otosan Uchi"
+	var chars: Dictionary = {2: _target, 50: seppun_guard}
+	assert_true(AssassinationSystem.has_seppun_guard_present(_target, chars))
+
+
+func test_seppun_guard_absent_no_seppun_at_location() -> void:
+	_target.clan = "Imperial"
+	_target.physical_location = "Kyuden Doji"
+	var seppun_guard: L5RCharacterData = L5RCharacterData.new()
+	seppun_guard.character_id = 50
+	seppun_guard.family = "Seppun"
+	seppun_guard.physical_location = "Otosan Uchi"
+	var chars: Dictionary = {2: _target, 50: seppun_guard}
+	assert_false(AssassinationSystem.has_seppun_guard_present(_target, chars))
+
+
+func test_seppun_tn_modifier_non_imperial_zero() -> void:
+	_target.clan = "Crane"
+	var chars: Dictionary = {2: _target}
+	var mod: int = AssassinationSystem.get_seppun_tn_modifier(
+		_target, AssassinationSystem.AssassinationPhase.ACCESS, chars)
+	assert_eq(mod, 0)
+
+
+func test_seppun_full_protection_phase1() -> void:
+	_target.clan = "Imperial"
+	_target.physical_location = "Otosan Uchi"
+	var guard: L5RCharacterData = L5RCharacterData.new()
+	guard.character_id = 50
+	guard.family = "Seppun"
+	guard.physical_location = "Otosan Uchi"
+	var chars: Dictionary = {2: _target, 50: guard}
+	var mod: int = AssassinationSystem.get_seppun_tn_modifier(
+		_target, AssassinationSystem.AssassinationPhase.ACCESS, chars)
+	assert_eq(mod, AssassinationSystem.SEPPUN_FULL_PHASE1_TN)
+
+
+func test_seppun_full_protection_phase2() -> void:
+	_target.clan = "Imperial"
+	_target.physical_location = "Otosan Uchi"
+	var guard: L5RCharacterData = L5RCharacterData.new()
+	guard.character_id = 50
+	guard.family = "Seppun"
+	guard.physical_location = "Otosan Uchi"
+	var chars: Dictionary = {2: _target, 50: guard}
+	var mod: int = AssassinationSystem.get_seppun_tn_modifier(
+		_target, AssassinationSystem.AssassinationPhase.EXECUTION, chars)
+	assert_eq(mod, AssassinationSystem.SEPPUN_FULL_PHASE2_TN)
+
+
+func test_seppun_full_protection_phase3() -> void:
+	_target.clan = "Imperial"
+	_target.physical_location = "Otosan Uchi"
+	var guard: L5RCharacterData = L5RCharacterData.new()
+	guard.character_id = 50
+	guard.family = "Seppun"
+	guard.physical_location = "Otosan Uchi"
+	var chars: Dictionary = {2: _target, 50: guard}
+	var mod: int = AssassinationSystem.get_seppun_tn_modifier(
+		_target, AssassinationSystem.AssassinationPhase.CONCEALMENT, chars)
+	assert_eq(mod, AssassinationSystem.SEPPUN_FULL_PHASE3_TN)
+
+
+func test_seppun_half_protection_phase1() -> void:
+	_target.clan = "Imperial"
+	_target.physical_location = "Kyuden Doji"
+	var chars: Dictionary = {2: _target}
+	var mod: int = AssassinationSystem.get_seppun_tn_modifier(
+		_target, AssassinationSystem.AssassinationPhase.ACCESS, chars)
+	assert_eq(mod, AssassinationSystem.SEPPUN_HALF_PHASE1_TN)
+
+
+func test_seppun_half_protection_phase2() -> void:
+	_target.clan = "Imperial"
+	_target.physical_location = "Kyuden Doji"
+	var chars: Dictionary = {2: _target}
+	var mod: int = AssassinationSystem.get_seppun_tn_modifier(
+		_target, AssassinationSystem.AssassinationPhase.EXECUTION, chars)
+	assert_eq(mod, AssassinationSystem.SEPPUN_HALF_PHASE2_TN)
+
+
+func test_seppun_half_protection_phase3() -> void:
+	_target.clan = "Imperial"
+	_target.physical_location = "Kyuden Doji"
+	var chars: Dictionary = {2: _target}
+	var mod: int = AssassinationSystem.get_seppun_tn_modifier(
+		_target, AssassinationSystem.AssassinationPhase.CONCEALMENT, chars)
+	assert_eq(mod, AssassinationSystem.SEPPUN_HALF_PHASE3_TN)
+
+
+func test_access_tn_includes_seppun_full_protection() -> void:
+	_assassin.school = "Shosuro Infiltrator"
+	_target.clan = "Imperial"
+	_target.physical_location = "Otosan Uchi"
+	var guard: L5RCharacterData = L5RCharacterData.new()
+	guard.character_id = 50
+	guard.family = "Seppun"
+	guard.physical_location = "Otosan Uchi"
+	var chars: Dictionary = {1: _assassin, 2: _target, 50: guard}
+	var s: Dictionary = AssassinationSystem.create_assassination_state(1, 2, AssassinationSystem.ExecutionMethod.POISON, 0)
+	var result: Dictionary = AssassinationSystem.resolve_access_day(
+		_assassin, s, "stealth", _engine, _target, chars)
+	assert_eq(result["tn"], AssassinationSystem.ACCESS_STEALTH_INFILTRATE_TN + AssassinationSystem.SEPPUN_FULL_PHASE1_TN)
+
+
+func test_access_tn_includes_seppun_half_protection() -> void:
+	_assassin.school = "Shosuro Infiltrator"
+	_target.clan = "Imperial"
+	_target.physical_location = "Kyuden Doji"
+	var chars: Dictionary = {1: _assassin, 2: _target}
+	var s: Dictionary = AssassinationSystem.create_assassination_state(1, 2, AssassinationSystem.ExecutionMethod.POISON, 0)
+	var result: Dictionary = AssassinationSystem.resolve_access_day(
+		_assassin, s, "stealth", _engine, _target, chars)
+	assert_eq(result["tn"], AssassinationSystem.ACCESS_STEALTH_INFILTRATE_TN + AssassinationSystem.SEPPUN_HALF_PHASE1_TN)
+
+
+func test_access_tn_stacks_seppun_and_non_shinobi() -> void:
+	_assassin.school = "Akodo Bushi"
+	_target.clan = "Imperial"
+	_target.physical_location = "Otosan Uchi"
+	var guard: L5RCharacterData = L5RCharacterData.new()
+	guard.character_id = 50
+	guard.family = "Seppun"
+	guard.physical_location = "Otosan Uchi"
+	var chars: Dictionary = {1: _assassin, 2: _target, 50: guard}
+	var s: Dictionary = AssassinationSystem.create_assassination_state(1, 2, AssassinationSystem.ExecutionMethod.POISON, 0)
+	var result: Dictionary = AssassinationSystem.resolve_access_day(
+		_assassin, s, "stealth", _engine, _target, chars)
+	var expected_tn: int = AssassinationSystem.ACCESS_STEALTH_INFILTRATE_TN + AssassinationSystem.NON_SHINOBI_ACCESS_TN_INCREASE + AssassinationSystem.SEPPUN_FULL_PHASE1_TN
+	assert_eq(result["tn"], expected_tn,
+		"Non-shinobi + Seppun full protection should stack")

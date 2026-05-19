@@ -57,6 +57,18 @@ const _SHINOBI_SCHOOLS: Array[String] = [
 	"Shosuro Actor",
 ]
 
+# -- Seppun Protection Constants (s12.8 Imperial Assassination) ----------------
+# Full protection: target under direct Seppun guard (co-located Seppun present).
+# Half protection: Imperial dynasty target without co-located Seppun guard.
+
+const SEPPUN_FULL_PHASE1_TN: int = 15
+const SEPPUN_FULL_PHASE2_TN: int = 20
+const SEPPUN_FULL_PHASE3_TN: int = 10
+
+const SEPPUN_HALF_PHASE1_TN: int = 8
+const SEPPUN_HALF_PHASE2_TN: int = 10
+const SEPPUN_HALF_PHASE3_TN: int = 5
+
 # -- Execution Phase Constants -------------------------------------------------
 
 const POISON_STEALTH_TN: int = 15
@@ -171,6 +183,40 @@ static func get_non_shinobi_tn_modifier(character: L5RCharacterData) -> int:
 	return NON_SHINOBI_ACCESS_TN_INCREASE
 
 
+static func is_imperial_dynasty(character: L5RCharacterData) -> bool:
+	return character.clan == "Imperial"
+
+
+static func has_seppun_guard_present(
+	target: L5RCharacterData,
+	characters_by_id: Dictionary,
+) -> bool:
+	if target.physical_location == "":
+		return false
+	for char_id: int in characters_by_id:
+		var c: L5RCharacterData = characters_by_id[char_id]
+		if c.character_id == target.character_id:
+			continue
+		if c.family == "Seppun" and c.physical_location == target.physical_location:
+			return true
+	return false
+
+
+static func get_seppun_tn_modifier(target: L5RCharacterData, phase: AssassinationPhase, characters_by_id: Dictionary) -> int:
+	if not is_imperial_dynasty(target):
+		return 0
+	var guarded: bool = has_seppun_guard_present(target, characters_by_id)
+	match phase:
+		AssassinationPhase.ACCESS:
+			return SEPPUN_FULL_PHASE1_TN if guarded else SEPPUN_HALF_PHASE1_TN
+		AssassinationPhase.EXECUTION:
+			return SEPPUN_FULL_PHASE2_TN if guarded else SEPPUN_HALF_PHASE2_TN
+		AssassinationPhase.CONCEALMENT:
+			return SEPPUN_FULL_PHASE3_TN if guarded else SEPPUN_HALF_PHASE3_TN
+		_:
+			return 0
+
+
 # ==============================================================================
 # Phase 1 — Access
 # ==============================================================================
@@ -180,27 +226,32 @@ static func resolve_access_day(
 	state: Dictionary,
 	access_method: String,
 	dice_engine: DiceEngine,
+	target: L5RCharacterData = null,
+	characters_by_id: Dictionary = {},
 ) -> Dictionary:
 	state["days_in_access"] = state.get("days_in_access", 0) + 1
 	var susp_mod: int = get_suspicion_tn_modifier(state)
 	var shinobi_mod: int = get_non_shinobi_tn_modifier(assassin)
+	var seppun_mod: int = 0
+	if target != null:
+		seppun_mod = get_seppun_tn_modifier(target, AssassinationPhase.ACCESS, characters_by_id)
 
 	var tn: int = 0
 	var skill: String = ""
 	var trait_override: Enums.Trait = Enums.Trait.NONE
 	match access_method:
 		"forge_credentials":
-			tn = ACCESS_FORGE_CREDENTIALS_TN + susp_mod + shinobi_mod
+			tn = ACCESS_FORGE_CREDENTIALS_TN + susp_mod + shinobi_mod + seppun_mod
 			skill = "Forgery"
 			trait_override = Enums.Trait.INTELLIGENCE
 		"bribe":
-			tn = ACCESS_BRIBE_TN + susp_mod + shinobi_mod
+			tn = ACCESS_BRIBE_TN + susp_mod + shinobi_mod + seppun_mod
 			skill = "Courtier"
 		"stealth":
-			tn = ACCESS_STEALTH_INFILTRATE_TN + susp_mod + shinobi_mod
+			tn = ACCESS_STEALTH_INFILTRATE_TN + susp_mod + shinobi_mod + seppun_mod
 			skill = "Stealth"
 		"seduction":
-			tn = 15 + susp_mod + shinobi_mod
+			tn = 15 + susp_mod + shinobi_mod + seppun_mod
 			skill = "Temptation"
 		_:
 			return {"success": false, "reason": "invalid_method"}
@@ -247,9 +298,11 @@ static func resolve_execution(
 	state: Dictionary,
 	dice_engine: DiceEngine,
 	has_bodyguard: bool = false,
+	characters_by_id: Dictionary = {},
 ) -> Dictionary:
 	var method: ExecutionMethod = state.get("method", ExecutionMethod.POISON)
 	var susp_mod: int = get_suspicion_tn_modifier(state)
+	var seppun_mod: int = get_seppun_tn_modifier(target, AssassinationPhase.EXECUTION, characters_by_id)
 
 	if has_bodyguard:
 		state["bodyguard_encountered"] = true
@@ -264,11 +317,11 @@ static func resolve_execution(
 
 	match method:
 		ExecutionMethod.POISON:
-			result = _execute_poison(assassin, state, susp_mod, dice_engine)
+			result = _execute_poison(assassin, state, susp_mod + seppun_mod, dice_engine)
 		ExecutionMethod.BLADE:
-			result = _execute_blade(assassin, target, state, susp_mod, dice_engine)
+			result = _execute_blade(assassin, target, state, susp_mod + seppun_mod, dice_engine)
 		ExecutionMethod.ARRANGED_ACCIDENT:
-			result = _execute_accident(assassin, state, susp_mod, dice_engine)
+			result = _execute_accident(assassin, state, susp_mod + seppun_mod, dice_engine)
 
 	state["execution_result"] = result
 
@@ -418,9 +471,13 @@ static func resolve_concealment(
 	assassin: L5RCharacterData,
 	state: Dictionary,
 	dice_engine: DiceEngine,
+	target: L5RCharacterData = null,
+	characters_by_id: Dictionary = {},
 ) -> Dictionary:
 	var method: ExecutionMethod = state.get("method", ExecutionMethod.POISON)
 	var tn: int = get_concealment_tn(method)
+	if target != null:
+		tn += get_seppun_tn_modifier(target, AssassinationPhase.CONCEALMENT, characters_by_id)
 
 	var skill: String = ""
 	var trait_override: Enums.Trait = Enums.Trait.NONE
