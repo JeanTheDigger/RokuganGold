@@ -807,17 +807,18 @@ For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
   entry is misleading.
 
 ### Known Code Issues — Deferred (2026-05-19, metadata population audit)
-- **EXPOSE_SECRET_PRIVATELY — metadata unpopulated, always fails.** Executor
-  reads `secret_ref` (null), `subject_id` (-1), `has_proof` (false) from
-  metadata. No metadata population in `_populate_action_metadata()`.
-  `secret_ref == null` → executor returns `{}` → action silently fails every
-  time. NPC spends AP on an action that produces no result. In context lists:
-  AT_OWN_HOLDINGS, AT_COURT, VISITING. Needs: secret selection logic to pick
-  which known secret to expose and to whom, populate `secret_ref`,
-  `subject_id`, `has_proof` from NPC's knowledge_pool/secret awareness.
-- **EXPOSE_SECRET_PUBLICLY — same pattern as EXPOSE_SECRET_PRIVATELY.**
-  Executor reads same three metadata keys, all unpopulated. Always returns
-  `{}`. In same three context lists.
+- **EXPOSE_SECRET_PRIVATELY — metadata unpopulated, always fails. FIXED.**
+  Full pipeline wired: SecretData.known_by_ids tracks who knows each secret.
+  4 creation points (bribe/extortion/witness) populate known_by_ids.
+  DayOrchestrator injects per-character known_secrets into world state.
+  ContextSnapshot.known_secrets flows through build_context.
+  `_pick_best_secret()` selects most severe unexposed secret matching need
+  target. `_pick_private_recipient()` finds a present non-subject character.
+  Executor emits subject_id/secret_id for writeback. Writeback adds recipient
+  to known_by_ids. 8 NPC engine tests, 5 orchestrator tests.
+- **EXPOSE_SECRET_PUBLICLY — same pipeline as EXPOSE_SECRET_PRIVATELY. FIXED.**
+  Shares `_pick_best_secret()`. No recipient needed (public). Writeback skips
+  known_by_ids update for public exposure.
 - **PURIFY_TAINTED_GROUND — ptl not populated, TN always base 15. FIXED.**
   Added `province_taint_level` to ProvinceStatus, populated from ProvinceData
   in `build_province_statuses_from_data()`. Metadata case in
