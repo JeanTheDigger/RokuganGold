@@ -455,7 +455,7 @@ For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
   honor loss at commission time (private), betrayal topic at tracing
   (public). 4 tests.
 
-### Known Code Issues (found 2026-05-19)
+### Known Code Issues (found and fixed 2026-05-19)
 - **DayOrchestrator._apply_assassination_outcome() — CrimeRecord bugs. FIXED.**
   Three bugs: (1) `crime_type = "murder"` (string) should be
   `Enums.CrimeType.UNSANCTIONED_COVERT_KILLING` (enum). (2) Assigned
@@ -464,6 +464,27 @@ For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
   `province_id: int` — changed to `location: String`. Also added
   `severity = Enums.CrimeSeverity.CAPITAL` and fixed topic tier to use
   `TopicData.Tier` enum instead of raw int.
+- **Position resistance not applied to court action position shifts. FIXED.**
+  `TopicMomentumSystem.calculate_position_resistance()` existed but was never
+  called. Court actions (Negotiate, Persuade, etc.) applied raw position shifts
+  to targets regardless of their personal relevance. High-relevance characters
+  (whose lands are burning) were just as easy to move as disinterested observers.
+  Now applied in `_process_court_action_effects()` for both targeted actions and
+  per-witness debate shifts. Formula: `shift / (1 + relevance/100)`.
+- **Court session state not tracked between actions. FIXED.**
+  Court actions return session state flags (session_tn_reduction,
+  persuade_negotiate_tn_reduction, charm count) but no session-level state
+  persisted between actions. Added `session_state: Dictionary` to
+  CourtSessionData with per-character tracking of charm_count,
+  negotiate_count, tn_reductions, persuade_tn_reductions. Wired accumulation
+  in orchestrator for Charm, Negotiate, Impress, Listen/Reflect actions.
+  Failed actions not tracked.
+- **Proxy mandate data model missing. FIXED.**
+  GDD s16.2 specifies ProxyMandate with mandate_topic, decision_authority,
+  depth_limit, out_of_mandate_flag. Created `shared/proxy_mandate_data.gd`
+  (ProxyMandateData Resource). Added `proxy_mandates: Array[ProxyMandateData]`
+  to CourtSessionData. CourtSystem gains assign_proxy_mandate(),
+  get_proxy_mandate(), is_within_mandate(), flag_out_of_mandate().
 
 ### Known Code Issues (found 2026-05-18, pre-existing)
 - **test_assassination_system.gd test_doji_courtier_bribe_access_gets_free_raise
