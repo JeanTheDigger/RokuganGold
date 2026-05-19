@@ -363,6 +363,22 @@ For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
   (PROVISIONAL). Pre-applied on Phase 2 success. Betrayal Tier 2 topic
   deferred to investigation pipeline (requires tracing through CrimeRecord
   to commissioner). 8 tests.
+- **s12.8 Concealment Outcome Tiers** — Phase 3 now returns full/partial/
+  failure based on margin. Full: death_natural tier 4. Partial (missed <10):
+  death_suspicious tier 3, preserves investigator TN. Failure (missed 10+):
+  death_murder tier 2, CrimeRecord. Partial threshold PROVISIONAL. 5 tests.
+- **s12.8 Bodyguard NPC Decision Logic** — Personality-driven bodyguard
+  response: Seigyo aborts, Ketsui/Yu push through, lockdown forces abort.
+  Competence fallback: combat 4+ fights, stealth 5+ goes for target. Moved
+  to AssassinationSystem.evaluate_bodyguard_response(). 7 tests.
+- **s12.8 Phase 1 Daily Detection Signals** — Household members roll
+  Investigation/Perception vs assassin's access roll total each day during
+  ACCESS. On success: +3 suspicion (PROVISIONAL). Passive observation that
+  builds cumulative risk. 4 tests.
+- **s12.8 SEDUCE_FOR_ACCESS Bypass** — Active SEDUCE_FOR_ACCESS entanglement
+  at target's location auto-succeeds Phase 1 access rolls. Added variant
+  field to SeductionSystem.create_entanglement(). Checks seducer, variant,
+  state, and location. Revokes on entanglement break. 5 tests.
 
 ### Known Code Issues (found 2026-05-18, pre-existing)
 - **test_assassination_system.gd test_doji_courtier_bribe_access_gets_free_raise
