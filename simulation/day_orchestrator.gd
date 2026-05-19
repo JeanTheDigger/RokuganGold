@@ -459,6 +459,7 @@ static func advance_day(
 		next_case_id,
 		active_topics,
 		next_topic_id,
+		entanglements,
 	)
 
 	var war_declarations: Array[Dictionary] = _process_war_declarations(
@@ -14062,6 +14063,7 @@ static func _process_assassination_daily_tick(
 	next_case_id: Array[int],
 	active_topics: Array[TopicData],
 	next_topic_id: Array[int],
+	entanglements: Array[Dictionary] = [],
 ) -> Array[Dictionary]:
 	var results: Array[Dictionary] = []
 	var to_remove: Array[int] = []
@@ -14109,10 +14111,24 @@ static func _process_assassination_daily_tick(
 							to_remove.append(i)
 							results.append(tick_result)
 							continue
-					var best_method: String = _pick_access_method(assassin)
-					var access_result: Dictionary = AssassinationSystem.resolve_access_day(
-						assassin, op, best_method, dice_engine, target, characters_by_id,
+					var has_access_entanglement: bool = AssassinationSystem.has_seduce_for_access(
+						assassin.character_id, target.physical_location, entanglements, characters_by_id,
 					)
+					var access_result: Dictionary
+					if has_access_entanglement:
+						op["days_in_access"] = op.get("days_in_access", 0) + 1
+						access_result = {
+							"success": true, "seduce_bypass": true,
+							"roll_total": 0, "tn": 0, "margin": 0,
+							"skill": "", "days_in_access": op["days_in_access"],
+							"suspicion": op.get("suspicion", 0.0),
+							"access_tn_penalty": op.get("access_tn_penalty", 0),
+						}
+					else:
+						var best_method: String = _pick_access_method(assassin)
+						access_result = AssassinationSystem.resolve_access_day(
+							assassin, op, best_method, dice_engine, target, characters_by_id,
+						)
 					tick_result["access"] = access_result
 
 					if not access_result.get("success", false) and AssassinationSystem.is_critical_failure(access_result.get("margin", 0)):

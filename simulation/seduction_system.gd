@@ -118,6 +118,7 @@ static func create_entanglement(
 	seducer_id: int,
 	target_id: int,
 	current_ic_day: int,
+	variant: SeductionVariant = SeductionVariant.SEDUCE,
 ) -> Dictionary:
 	return {
 		"seducer_id": seducer_id,
@@ -126,6 +127,7 @@ static func create_entanglement(
 		"created_ic_day": current_ic_day,
 		"last_maintained_ic_day": current_ic_day,
 		"missed_windows": 0,
+		"variant": variant,
 	}
 
 

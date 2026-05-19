@@ -242,6 +242,63 @@ func test_suspicion_search_applies_investigation_bonus() -> void:
 		"Watchful bonus (+5 Investigation) should improve search rolls")
 
 
+# -- SEDUCE_FOR_ACCESS Bypass --------------------------------------------------
+
+func test_seduce_for_access_found() -> void:
+	var household: L5RCharacterData = L5RCharacterData.new()
+	household.character_id = 90
+	household.physical_location = "Kyuden Bayushi"
+	_target.physical_location = "Kyuden Bayushi"
+	var chars: Dictionary = {1: _assassin, 2: _target, 90: household}
+	var ent: Array[Dictionary] = [SeductionSystem.create_entanglement(
+		1, 90, 10, SeductionSystem.SeductionVariant.SEDUCE_FOR_ACCESS,
+	)]
+	assert_true(AssassinationSystem.has_seduce_for_access(1, "Kyuden Bayushi", ent, chars))
+
+
+func test_seduce_for_access_wrong_variant() -> void:
+	var household: L5RCharacterData = L5RCharacterData.new()
+	household.character_id = 91
+	household.physical_location = "Kyuden Bayushi"
+	var chars: Dictionary = {91: household}
+	var ent: Array[Dictionary] = [SeductionSystem.create_entanglement(1, 91, 10)]
+	assert_false(AssassinationSystem.has_seduce_for_access(1, "Kyuden Bayushi", ent, chars))
+
+
+func test_seduce_for_access_broken_entanglement() -> void:
+	var household: L5RCharacterData = L5RCharacterData.new()
+	household.character_id = 92
+	household.physical_location = "Kyuden Bayushi"
+	var chars: Dictionary = {92: household}
+	var ent: Array[Dictionary] = [SeductionSystem.create_entanglement(
+		1, 92, 10, SeductionSystem.SeductionVariant.SEDUCE_FOR_ACCESS,
+	)]
+	ent[0]["state"] = SeductionSystem.EntanglementState.BROKEN
+	assert_false(AssassinationSystem.has_seduce_for_access(1, "Kyuden Bayushi", ent, chars))
+
+
+func test_seduce_for_access_wrong_location() -> void:
+	var household: L5RCharacterData = L5RCharacterData.new()
+	household.character_id = 93
+	household.physical_location = "Otosan Uchi"
+	var chars: Dictionary = {93: household}
+	var ent: Array[Dictionary] = [SeductionSystem.create_entanglement(
+		1, 93, 10, SeductionSystem.SeductionVariant.SEDUCE_FOR_ACCESS,
+	)]
+	assert_false(AssassinationSystem.has_seduce_for_access(1, "Kyuden Bayushi", ent, chars))
+
+
+func test_seduce_for_access_wrong_seducer() -> void:
+	var household: L5RCharacterData = L5RCharacterData.new()
+	household.character_id = 94
+	household.physical_location = "Kyuden Bayushi"
+	var chars: Dictionary = {94: household}
+	var ent: Array[Dictionary] = [SeductionSystem.create_entanglement(
+		99, 94, 10, SeductionSystem.SeductionVariant.SEDUCE_FOR_ACCESS,
+	)]
+	assert_false(AssassinationSystem.has_seduce_for_access(1, "Kyuden Bayushi", ent, chars))
+
+
 # -- Per-Roll Permanent TN Penalty ---------------------------------------------
 
 func test_access_penalty_standard_failure() -> void:

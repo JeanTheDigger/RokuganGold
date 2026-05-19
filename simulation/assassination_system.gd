@@ -304,6 +304,28 @@ static func find_best_searcher(
 	return best
 
 
+static func has_seduce_for_access(
+	assassin_id: int,
+	target_location: String,
+	entanglements: Array[Dictionary],
+	characters_by_id: Dictionary,
+) -> bool:
+	if target_location == "":
+		return false
+	for ent: Dictionary in entanglements:
+		if int(ent.get("seducer_id", -1)) != assassin_id:
+			continue
+		if int(ent.get("variant", -1)) != SeductionSystem.SeductionVariant.SEDUCE_FOR_ACCESS:
+			continue
+		if int(ent.get("state", -1)) != SeductionSystem.EntanglementState.ACTIVE:
+			continue
+		var seduced_id: int = int(ent.get("target_id", -1))
+		var seduced: L5RCharacterData = characters_by_id.get(seduced_id) as L5RCharacterData
+		if seduced != null and seduced.physical_location == target_location:
+			return true
+	return false
+
+
 static func resolve_suspicion_search(
 	searcher: L5RCharacterData,
 	state: Dictionary,
