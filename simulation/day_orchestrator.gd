@@ -15450,22 +15450,22 @@ static func _process_resource_promise_fulfillment(
 	supply_sharing_results: Array[Dictionary],
 	commitments: Array[CommitmentData],
 ) -> void:
-	if supply_sharing_results.is_empty():
-		return
+	var supplier_targets: Dictionary = {}
+	var deploy_targets: Dictionary = {}
 
 	var successful_suppliers: Dictionary = {}
 	for sr: Dictionary in supply_sharing_results:
 		successful_suppliers[sr.get("character_id", -1)] = true
 
-	var supplier_targets: Dictionary = {}
 	for entry: Dictionary in day_results:
-		if entry.get("action_id", "") != "SHARE_SUPPLIES":
-			continue
+		var aid: String = entry.get("action_id", "")
 		var cid: int = entry.get("character_id", -1)
-		if cid in successful_suppliers:
+		if aid == "SHARE_SUPPLIES" and cid in successful_suppliers:
 			supplier_targets[cid] = entry.get("target_npc_id", -1)
+		elif aid == "ORDER_DEPLOY" and entry.get("target_npc_id", -1) >= 0:
+			deploy_targets[cid] = entry.get("target_npc_id", -1)
 
-	if supplier_targets.is_empty():
+	if supplier_targets.is_empty() and deploy_targets.is_empty():
 		return
 
 	for c: CommitmentData in commitments:
@@ -15473,6 +15473,10 @@ static func _process_resource_promise_fulfillment(
 			continue
 		if c.status != Enums.CommitmentStatus.PENDING:
 			continue
-		var target: int = supplier_targets.get(c.debtor_npc_id, -1)
-		if target == c.creditor_npc_id:
+		var supply_target: int = supplier_targets.get(c.debtor_npc_id, -1)
+		if supply_target == c.creditor_npc_id:
+			c.status = Enums.CommitmentStatus.FULFILLED
+			continue
+		var deploy_target: int = deploy_targets.get(c.debtor_npc_id, -1)
+		if deploy_target == c.creditor_npc_id:
 			c.status = Enums.CommitmentStatus.FULFILLED

@@ -9002,6 +9002,78 @@ func test_resource_promise_skips_non_pending() -> void:
 		"Should not change status of non-PENDING commitment")
 
 
+func test_resource_promise_fulfilled_by_order_deploy() -> void:
+	var commitment := CommitmentData.new()
+	commitment.commitment_type = Enums.CommitmentType.RESOURCE_PROMISE
+	commitment.creditor_npc_id = 10
+	commitment.debtor_npc_id = 20
+	commitment.status = Enums.CommitmentStatus.PENDING
+	var commitments: Array[CommitmentData] = [commitment]
+
+	var day_results: Array[Dictionary] = [{
+		"action_id": "ORDER_DEPLOY",
+		"character_id": 20,
+		"target_npc_id": 10,
+	}]
+	var supply_results: Array[Dictionary] = []
+	DayOrchestrator._process_resource_promise_fulfillment(
+		day_results, supply_results, commitments,
+	)
+	assert_eq(commitment.status, Enums.CommitmentStatus.FULFILLED,
+		"ORDER_DEPLOY to creditor should fulfill resource promise")
+
+
+func test_resource_promise_not_fulfilled_by_deploy_to_other() -> void:
+	var commitment := CommitmentData.new()
+	commitment.commitment_type = Enums.CommitmentType.RESOURCE_PROMISE
+	commitment.creditor_npc_id = 10
+	commitment.debtor_npc_id = 20
+	commitment.status = Enums.CommitmentStatus.PENDING
+	var commitments: Array[CommitmentData] = [commitment]
+
+	var day_results: Array[Dictionary] = [{
+		"action_id": "ORDER_DEPLOY",
+		"character_id": 20,
+		"target_npc_id": 30,
+	}]
+	var supply_results: Array[Dictionary] = []
+	DayOrchestrator._process_resource_promise_fulfillment(
+		day_results, supply_results, commitments,
+	)
+	assert_eq(commitment.status, Enums.CommitmentStatus.PENDING,
+		"ORDER_DEPLOY to non-creditor should not fulfill")
+
+
+func test_resource_promise_fulfilled_by_either_path() -> void:
+	var commitment_a := CommitmentData.new()
+	commitment_a.commitment_type = Enums.CommitmentType.RESOURCE_PROMISE
+	commitment_a.creditor_npc_id = 10
+	commitment_a.debtor_npc_id = 20
+	commitment_a.status = Enums.CommitmentStatus.PENDING
+
+	var commitment_b := CommitmentData.new()
+	commitment_b.commitment_type = Enums.CommitmentType.RESOURCE_PROMISE
+	commitment_b.creditor_npc_id = 30
+	commitment_b.debtor_npc_id = 40
+	commitment_b.status = Enums.CommitmentStatus.PENDING
+	var commitments: Array[CommitmentData] = [commitment_a, commitment_b]
+
+	var day_results: Array[Dictionary] = [
+		{"action_id": "SHARE_SUPPLIES", "character_id": 20, "target_npc_id": 10},
+		{"action_id": "ORDER_DEPLOY", "character_id": 40, "target_npc_id": 30},
+	]
+	var supply_results: Array[Dictionary] = [
+		{"type": "supply_sharing", "character_id": 20, "amount": 5.0},
+	]
+	DayOrchestrator._process_resource_promise_fulfillment(
+		day_results, supply_results, commitments,
+	)
+	assert_eq(commitment_a.status, Enums.CommitmentStatus.FULFILLED,
+		"SHARE_SUPPLIES path should fulfill first promise")
+	assert_eq(commitment_b.status, Enums.CommitmentStatus.FULFILLED,
+		"ORDER_DEPLOY path should fulfill second promise")
+
+
 func test_resource_promise_from_negotiate_with_resource_need() -> void:
 	var effects: Dictionary = {
 		"requires_resource_promise": true,
