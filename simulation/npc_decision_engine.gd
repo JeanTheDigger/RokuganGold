@@ -2379,6 +2379,10 @@ static func _populate_action_metadata(
 			"damage_raises": split["damage"],
 			"concealment_raises": split["concealment"],
 		}
+	elif option.action_id == "INTIMIDATE":
+		var target_id: int = need.target_npc_id if need.target_npc_id >= 0 else option.target_npc_id
+		var secret_meta: Dictionary = _pick_secret_about_target(ctx, target_id)
+		option.metadata = secret_meta
 	elif option.action_id in ["NEGOTIATE", "PERSUADE", "PUBLIC_DEBATE",
 			"CHARM", "IMPRESS", "LISTEN_REFLECT", "OFFER_FAVOR"]:
 		var court_meta: Dictionary = {
@@ -2660,6 +2664,37 @@ static func _pick_private_recipient(
 		if pid != ctx.character_id and pid != subject_id:
 			return pid
 	return -1
+
+
+static func _pick_secret_about_target(
+	ctx: NPCDataStructures.ContextSnapshot,
+	target_id: int,
+) -> Dictionary:
+	var best_sev: int = 999
+	var best_ref: Variant = null
+	for sd: Variant in ctx.known_secrets:
+		if not sd is Dictionary:
+			continue
+		var d: Dictionary = sd as Dictionary
+		var ref: Variant = d.get("_secret_ref")
+		if ref == null:
+			continue
+		if ref is SecretData and (ref as SecretData).exposed:
+			continue
+		var subj: int = d.get("subject_id", -1)
+		if subj != target_id:
+			continue
+		var sev: int = d.get("severity", 0)
+		if sev < best_sev:
+			best_sev = sev
+			best_ref = ref
+	if best_ref != null:
+		return {
+			"secret_ref": best_ref,
+			"secret_tier": best_sev,
+			"by_letter": false,
+		}
+	return {}
 
 
 static func _has_known_agenda_topic(ctx: NPCDataStructures.ContextSnapshot) -> bool:

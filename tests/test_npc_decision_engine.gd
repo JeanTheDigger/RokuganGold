@@ -2817,3 +2817,86 @@ func test_known_secrets_defaults_empty() -> void:
 	_world_state.erase("known_secrets")
 	var ctx := NPCDecisionEngine.build_context(_char, _world_state)
 	assert_eq(ctx.known_secrets.size(), 0, "known_secrets should default to empty")
+
+
+func test_intimidate_metadata_populates_blackmail_when_secret_exists() -> void:
+	var ctx := _make_metadata_ctx()
+	var s1 := SecretData.new()
+	s1.secret_id = 30
+	s1.subject_id = 5
+	s1.severity = SecretData.Severity.TIER_2
+	ctx.known_secrets = [
+		{"_secret_ref": s1, "secret_id": 30, "subject_id": 5, "has_proof": false, "severity": SecretData.Severity.TIER_2},
+	]
+	var need := _make_metadata_need()
+	need.target_npc_id = 5
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "INTIMIDATE"
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_eq(option.metadata.get("secret_ref"), s1,
+		"Should populate secret_ref for blackmail branch")
+	assert_eq(option.metadata.get("secret_tier", -1), SecretData.Severity.TIER_2,
+		"Should set secret_tier from severity")
+	assert_false(option.metadata.get("by_letter", true),
+		"Should default to in-person intimidation")
+
+
+func test_intimidate_metadata_empty_when_no_secret_about_target() -> void:
+	var ctx := _make_metadata_ctx()
+	var s1 := SecretData.new()
+	s1.secret_id = 30
+	s1.subject_id = 99
+	s1.severity = SecretData.Severity.TIER_1
+	ctx.known_secrets = [
+		{"_secret_ref": s1, "secret_id": 30, "subject_id": 99, "has_proof": false, "severity": SecretData.Severity.TIER_1},
+	]
+	var need := _make_metadata_need()
+	need.target_npc_id = 5
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "INTIMIDATE"
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_null(option.metadata.get("secret_ref"),
+		"Should not populate blackmail when no secret about target")
+
+
+func test_intimidate_metadata_picks_most_severe_secret() -> void:
+	var ctx := _make_metadata_ctx()
+	var s1 := SecretData.new()
+	s1.secret_id = 30
+	s1.subject_id = 5
+	s1.severity = SecretData.Severity.TIER_4
+	var s2 := SecretData.new()
+	s2.secret_id = 31
+	s2.subject_id = 5
+	s2.severity = SecretData.Severity.TIER_1
+	ctx.known_secrets = [
+		{"_secret_ref": s1, "secret_id": 30, "subject_id": 5, "has_proof": false, "severity": SecretData.Severity.TIER_4},
+		{"_secret_ref": s2, "secret_id": 31, "subject_id": 5, "has_proof": false, "severity": SecretData.Severity.TIER_1},
+	]
+	var need := _make_metadata_need()
+	need.target_npc_id = 5
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "INTIMIDATE"
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_eq(option.metadata.get("secret_ref"), s2,
+		"Should pick TIER_1 (most severe) over TIER_4")
+	assert_eq(option.metadata.get("secret_tier", -1), SecretData.Severity.TIER_1)
+
+
+func test_intimidate_metadata_skips_exposed_secrets() -> void:
+	var ctx := _make_metadata_ctx()
+	var s1 := SecretData.new()
+	s1.secret_id = 30
+	s1.subject_id = 5
+	s1.severity = SecretData.Severity.TIER_1
+	s1.exposed = true
+	ctx.known_secrets = [
+		{"_secret_ref": s1, "secret_id": 30, "subject_id": 5, "has_proof": false, "severity": SecretData.Severity.TIER_1},
+	]
+	var need := _make_metadata_need()
+	need.target_npc_id = 5
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "INTIMIDATE"
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_null(option.metadata.get("secret_ref"),
+		"Should not use already-exposed secret for blackmail")
