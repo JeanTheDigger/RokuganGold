@@ -485,6 +485,15 @@ For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
   (ProxyMandateData Resource). Added `proxy_mandates: Array[ProxyMandateData]`
   to CourtSessionData. CourtSystem gains assign_proxy_mandate(),
   get_proxy_mandate(), is_within_mandate(), flag_out_of_mandate().
+- **NPC engine court session state not wired into decision pipeline. FIXED.**
+  Court session counts (charm_count, negotiate_count) and settlement ID
+  were not flowing from CourtSessionData through world_state into NPC engine
+  context. `_set_court_context_flags()` now writes `court_session_state` and
+  `court_settlement_id`. `build_context()` reads them into ContextSnapshot.
+  `_populate_action_metadata()` populates session counts, `has_topic`, and
+  `court_settlement_id` for all 6 contested court actions (was only topic_id
+  for 3). Position resistance now computes target relevance inline from
+  TopicData/character clan instead of reading unset metadata values.
 
 ### Known Code Issues (found 2026-05-18, pre-existing)
 - **test_assassination_system.gd test_doji_courtier_bribe_access_gets_free_raise
