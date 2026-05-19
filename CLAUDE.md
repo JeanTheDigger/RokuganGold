@@ -444,6 +444,16 @@ For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
   +5 Investigation bonus (`NON_SHINOBI_DETECTION_BONUS`, PROVISIONAL).
   Wired in orchestrator daily detection call. Stacks with household
   watchful bonus. 3 tests.
+- **s12.8 Vengeance Conviction Pipeline Wiring** — `_apply_assassination_vengeance()`
+  in DayOrchestrator fires post-conviction for `UNSANCTIONED_COVERT_KILLING`
+  crimes with `commissioner_id >= 0`. Delegates to
+  `AssassinationSystem.apply_vengeance_consequences()` for -50 family
+  disposition, AVENGE_DEATH objective, and Betrayal Tier 2 topic.
+  `CrimeRecord.commissioner_id` field added to propagate from assassination
+  op state through concealment failure to investigation pipeline.
+  Honor public/private: handled via existing topic flow — commissioner
+  honor loss at commission time (private), betrayal topic at tracing
+  (public). 4 tests.
 
 ### Known Code Issues (found 2026-05-19)
 - **DayOrchestrator._apply_assassination_outcome() — CrimeRecord bugs. FIXED.**
