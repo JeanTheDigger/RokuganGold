@@ -746,6 +746,33 @@ For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
   not a bug.** The ceiling IS enforced inside resolve_charm() (clamps
   disposition change). The flag is metadata for callers; harmless.
 
+### Known Code Issues — Deferred (2026-05-19, data model audit)
+- **Orphaned character_data fields (blocked sections).** The following
+  fields exist on L5RCharacterData but are never referenced by any
+  simulation code: `techniques`, `kiho`, `katas`, `spells_known`,
+  `weapons`, `armor_worn`, `active_quest`, `active_poisons`,
+  `combat_modifiers_pending`. All are schema placeholders for blocked
+  sections (s40 individual combat, s31–s37 spells, s56 quest system).
+  Do not remove — they will be consumed when those sections unlock.
+- **Orphaned character_data fields (not blocked).** `timed_advantages`
+  and `action_blocks` on L5RCharacterData have no producer or consumer.
+  Not tied to any known blocked section. May be leftover from early
+  design; safe to remove if confirmed unnecessary.
+- **Orphaned province_data fields.** `rivers` and `roads` on
+  ProvinceData have no producer or consumer. Likely intended for the
+  world map / adjacency system (blocked). Do not remove until map
+  data format is decided.
+- **Military hierarchy constituent arrays never populated.**
+  `LegionData.constituent_companies`, `SectionData.constituent_legions`,
+  and `ArmyData.constituent_sections` in MilitaryUnitData are declared
+  but never written or read. The hierarchy is navigated bottom-up via
+  `parent_*_id` fields only. These top-down index arrays would improve
+  lookup performance but are currently dead. Populate them during army
+  creation or remove if bottom-up-only navigation is intentional.
+- **CourtSessionData.next_request_id never referenced.** Declared at
+  line 48 but no code increments, reads, or assigns it. Likely intended
+  for performance request tracking but never wired.
+
 ### Known Code Issues (found and fixed 2026-05-17)
 - **DefenseHearingSystem.can_appoint_champion() — tautology bug. FIXED.**
   Was `return X != Y or X == Y`. GDD s11.3.9f confirms either side may appoint a
