@@ -773,6 +773,36 @@ For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
   line 48 but no code increments, reads, or assigns it. Likely intended
   for performance request tracking but never wired.
 
+### Known Code Issues — Deferred (2026-05-19, ActionID pipeline audit)
+- **APPLY_TATTOO wiring gap.** TattooSystem (s57.25) has pure functions
+  (get_ap_cost, resolve_quality, meets_skill_gate, etc.) but APPLY_TATTOO
+  is missing from: (1) all context action lists, (2) ActionExecutor dispatch,
+  (3) AP cost dictionary. The system is implemented but the ActionID is
+  unreachable through the NPC decision pipeline. Needs executor handler
+  and context list entry (AT_OWN_HOLDINGS + VISITING per GDD s57.25.3).
+- **FORCE_MARCH, EVALUATE_CLAN_STRENGTH — no executor, no context list.**
+  Both appear in objective_alignment.json and action_skill_map.json with
+  scores and skill mappings, but have no executor handler or context list
+  entry. GDD s57.12 lists them as "new ActionIDs needing addition." Both
+  blocked on sub-tile army movement system (s11.7a, map data dependency).
+- **BRIBE_GARRISON_COMMANDER — Kolat-only, no executor.** Appears in
+  objective_alignment.json under DESTROY_ECONOMY (score 90). Part of
+  Kolat Coin sect architecture (s54.7d). Blocked on Kolat system (s56.14).
+- **37 Kolat/artisan/theater ActionIDs — scored but no executor.** 23
+  Kolat spy network actions (s54.7d, s56.14), 4 bonsai/garden actions
+  (s49), 3 theater composition actions (s49), 4 reactive/non-AP-loop
+  actions (ABORT_OPERATION, EXECUTE_ASSASSINATION, MOVE_TOPIC_POSITION,
+  RAISE_DISPOSITION). All are forward-scored in objective_alignment.json
+  for future implementation. These are NOT bugs — they are pre-wired
+  scoring entries for blocked sections. Phase 4b filters them out because
+  they don't appear in any context list.
+- **SEEK_PRETEXT in action_skill_map.json — NeedType, not ActionID.**
+  SEEK_PRETEXT is an outer key in objective_alignment.json (a NeedType)
+  but also has an entry in action_skill_map.json (keyed by ActionID).
+  Harmless — the skill map is only looked up by ActionID during scoring,
+  and SEEK_PRETEXT as a NeedType is never used as an ActionID. But the
+  entry is misleading.
+
 ### Known Code Issues (found and fixed 2026-05-17)
 - **DefenseHearingSystem.can_appoint_champion() — tautology bug. FIXED.**
   Was `return X != Y or X == Y`. GDD s11.3.9f confirms either side may appoint a
