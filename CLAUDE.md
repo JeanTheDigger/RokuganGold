@@ -733,11 +733,12 @@ For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
 
 ### Known Code Issues — Deferred (2026-05-19, writeback audit)
 - **Gossip source concealment (`source_concealed`, `concealment_depth`) —
-  emitted but never consumed.** CourtActionSystem.resolve_gossip() returns
-  concealment flags for Bayushi Courtier technique, but no code prevents the
-  gossip target from learning the gossiper's identity. Gossip concealment
-  is functionally dead. Requires design decision on attribution mechanism
-  (topic subject_role? disposition change source tracking?).
+  FIXED.** EffectApplicator creates "gossip_received" knowledge entry for
+  the listener: gossiper_id is the actor when unconcealed, -1 when
+  source_concealed (Bayushi Courtier / concealment raises). Action log
+  includes source_concealed + concealment_depth for investigation TN
+  lookups. Also fixed duplicate gossip disposition application in
+  _process_court_action_effects (was double-applying). 4 tests.
 - **Position hardened/durable (`position_hardened`, `position_durable`) —
   emitted but never consumed.** NEGOTIATE/PERSUADE/PUBLIC_DEBATE emit these
   flags to distinguish position shift quality, but no position decay or
