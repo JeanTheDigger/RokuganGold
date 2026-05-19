@@ -69,6 +69,19 @@ const SEPPUN_HALF_PHASE1_TN: int = 8
 const SEPPUN_HALF_PHASE2_TN: int = 10
 const SEPPUN_HALF_PHASE3_TN: int = 5
 
+# -- Equipment Preparation Constants (pre-Phase 1) ----------------------------
+# Assassin must CONCEAL_ITEM tools before entering target's settlement.
+# s12.8: Sleight of Hand (Conceal) / Agility vs TN by item size.
+
+const EQUIPMENT_POISON_TN: int = 10
+const EQUIPMENT_BLADE_TN: int = 20
+const EQUIPMENT_BLADE_RANK_REQUIREMENT: int = 5
+
+const _CONCEAL_SCHOOL_LEAN: Array[String] = [
+	"Shosuro Infiltrator",
+	"Kasuga Smuggler",
+]
+
 # -- Execution Phase Constants -------------------------------------------------
 
 const POISON_STEALTH_TN: int = 15
@@ -111,6 +124,8 @@ static func create_assassination_state(
 		"days_in_access": 0,
 		"start_ic_day": current_ic_day,
 		"bodyguard_encountered": false,
+		"equipment_prepared": false,
+		"equipment_concealment_tn": 0,
 		"execution_result": {},
 		"concealment_result": {},
 	}
@@ -215,6 +230,77 @@ static func get_seppun_tn_modifier(target: L5RCharacterData, phase: Assassinatio
 			return SEPPUN_FULL_PHASE3_TN if guarded else SEPPUN_HALF_PHASE3_TN
 		_:
 			return 0
+
+
+# ==============================================================================
+# Equipment Preparation (pre-Phase 1)
+# ==============================================================================
+
+static func can_use_blade_method(assassin: L5RCharacterData) -> bool:
+	return assassin.skills.get("Sleight of Hand", 0) >= EQUIPMENT_BLADE_RANK_REQUIREMENT
+
+
+static func get_equipment_tn(method: ExecutionMethod) -> int:
+	match method:
+		ExecutionMethod.POISON:
+			return EQUIPMENT_POISON_TN
+		ExecutionMethod.BLADE:
+			return EQUIPMENT_BLADE_TN
+		ExecutionMethod.ARRANGED_ACCIDENT:
+			return -1
+		_:
+			return -1
+
+
+static func _has_conceal_school_lean(assassin: L5RCharacterData) -> bool:
+	for s: String in _CONCEAL_SCHOOL_LEAN:
+		if assassin.school.begins_with(s):
+			return true
+	if assassin.kolat_sect != Enums.KolatSect.NONE:
+		return true
+	return false
+
+
+static func resolve_equipment_preparation(
+	assassin: L5RCharacterData,
+	state: Dictionary,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	var method: ExecutionMethod = state.get("method", ExecutionMethod.POISON)
+
+	if method == ExecutionMethod.ARRANGED_ACCIDENT:
+		state["equipment_prepared"] = true
+		return {"success": true, "method": method, "skipped": true}
+
+	if method == ExecutionMethod.BLADE and not can_use_blade_method(assassin):
+		return {
+			"success": false,
+			"method": method,
+			"reason": "rank_gate",
+			"required_rank": EQUIPMENT_BLADE_RANK_REQUIREMENT,
+		}
+
+	var tn: int = get_equipment_tn(method)
+	var bonus_kept: int = 1 if _has_conceal_school_lean(assassin) else 0
+
+	var result: Dictionary = SkillResolver.resolve_skill_check(
+		assassin, dice_engine, "Sleight of Hand", tn,
+		0, "Conceal", Enums.Trait.NONE, 0, bonus_kept,
+	)
+	var success: bool = result.get("success", false)
+
+	if success:
+		state["equipment_prepared"] = true
+		state["equipment_concealment_tn"] = result.get("total", 0)
+
+	return {
+		"success": success,
+		"method": method,
+		"roll_total": result.get("total", 0),
+		"tn": tn,
+		"margin": result.get("margin", 0),
+		"equipment_concealment_tn": state["equipment_concealment_tn"],
+	}
 
 
 # ==============================================================================

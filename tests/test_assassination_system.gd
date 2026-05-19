@@ -56,6 +56,8 @@ func test_create_state() -> void:
 	assert_eq(s["suspicion"], 0.0)
 	assert_eq(s["suspicion_raised_ic_day"], -1)
 	assert_eq(s["days_in_access"], 0)
+	assert_eq(s["equipment_prepared"], false)
+	assert_eq(s["equipment_concealment_tn"], 0)
 
 
 # ==============================================================================
@@ -701,3 +703,108 @@ func test_access_tn_stacks_seppun_and_non_shinobi() -> void:
 	var expected_tn: int = AssassinationSystem.ACCESS_STEALTH_INFILTRATE_TN + AssassinationSystem.NON_SHINOBI_ACCESS_TN_INCREASE + AssassinationSystem.SEPPUN_FULL_PHASE1_TN
 	assert_eq(result["tn"], expected_tn,
 		"Non-shinobi + Seppun full protection should stack")
+
+
+# ==============================================================================
+# Equipment Preparation (s12.8 pre-Phase 1)
+# ==============================================================================
+
+func test_can_use_blade_rank_5() -> void:
+	_assassin.skills["Sleight of Hand"] = 5
+	assert_true(AssassinationSystem.can_use_blade_method(_assassin))
+
+
+func test_cannot_use_blade_rank_4() -> void:
+	_assassin.skills["Sleight of Hand"] = 4
+	assert_false(AssassinationSystem.can_use_blade_method(_assassin))
+
+
+func test_cannot_use_blade_no_skill() -> void:
+	_assassin.skills.erase("Sleight of Hand")
+	assert_false(AssassinationSystem.can_use_blade_method(_assassin))
+
+
+func test_equipment_tn_poison() -> void:
+	assert_eq(AssassinationSystem.get_equipment_tn(AssassinationSystem.ExecutionMethod.POISON), 10)
+
+
+func test_equipment_tn_blade() -> void:
+	assert_eq(AssassinationSystem.get_equipment_tn(AssassinationSystem.ExecutionMethod.BLADE), 20)
+
+
+func test_equipment_tn_accident_skipped() -> void:
+	assert_eq(AssassinationSystem.get_equipment_tn(AssassinationSystem.ExecutionMethod.ARRANGED_ACCIDENT), -1)
+
+
+func test_equipment_prep_accident_auto_success() -> void:
+	var s: Dictionary = AssassinationSystem.create_assassination_state(1, 2, AssassinationSystem.ExecutionMethod.ARRANGED_ACCIDENT, 0)
+	var result: Dictionary = AssassinationSystem.resolve_equipment_preparation(_assassin, s, _engine)
+	assert_true(result["success"])
+	assert_true(result.get("skipped", false))
+	assert_true(s["equipment_prepared"])
+
+
+func test_equipment_prep_blade_blocked_without_rank_5() -> void:
+	_assassin.skills["Sleight of Hand"] = 3
+	var s: Dictionary = AssassinationSystem.create_assassination_state(1, 2, AssassinationSystem.ExecutionMethod.BLADE, 0)
+	var result: Dictionary = AssassinationSystem.resolve_equipment_preparation(_assassin, s, _engine)
+	assert_false(result["success"])
+	assert_eq(result["reason"], "rank_gate")
+	assert_false(s["equipment_prepared"])
+
+
+func test_equipment_prep_poison_success() -> void:
+	_assassin.skills["Sleight of Hand"] = 4
+	_assassin.agility = 5
+	var s: Dictionary = AssassinationSystem.create_assassination_state(1, 2, AssassinationSystem.ExecutionMethod.POISON, 0)
+	var e: DiceEngine = DiceEngine.new(7)
+	var result: Dictionary = AssassinationSystem.resolve_equipment_preparation(_assassin, s, e)
+	assert_true(result["success"], "Skilled assassin should conceal poison (TN 10)")
+	assert_true(s["equipment_prepared"])
+	assert_true(s["equipment_concealment_tn"] > 0)
+
+
+func test_equipment_prep_blade_success_rank_5() -> void:
+	_assassin.skills["Sleight of Hand"] = 5
+	_assassin.agility = 5
+	var s: Dictionary = AssassinationSystem.create_assassination_state(1, 2, AssassinationSystem.ExecutionMethod.BLADE, 0)
+	var e: DiceEngine = DiceEngine.new(7)
+	var result: Dictionary = AssassinationSystem.resolve_equipment_preparation(_assassin, s, e)
+	if result["success"]:
+		assert_true(s["equipment_prepared"])
+		assert_true(s["equipment_concealment_tn"] >= AssassinationSystem.EQUIPMENT_BLADE_TN)
+
+
+func test_equipment_prep_school_lean_shosuro() -> void:
+	_assassin.school = "Shosuro Infiltrator"
+	_assassin.skills["Sleight of Hand"] = 3
+	_assassin.agility = 3
+	var total_with_lean: int = 0
+	var total_without_lean: int = 0
+	var trials: int = 100
+	for i: int in range(trials):
+		var s1: Dictionary = AssassinationSystem.create_assassination_state(1, 2, AssassinationSystem.ExecutionMethod.POISON, 0)
+		var e1: DiceEngine = DiceEngine.new(i * 7)
+		var r1: Dictionary = AssassinationSystem.resolve_equipment_preparation(_assassin, s1, e1)
+		total_with_lean += r1.get("roll_total", 0)
+
+	_assassin.school = "Akodo Bushi"
+	for i: int in range(trials):
+		var s2: Dictionary = AssassinationSystem.create_assassination_state(1, 2, AssassinationSystem.ExecutionMethod.POISON, 0)
+		var e2: DiceEngine = DiceEngine.new(i * 7)
+		var r2: Dictionary = AssassinationSystem.resolve_equipment_preparation(_assassin, s2, e2)
+		total_without_lean += r2.get("roll_total", 0)
+
+	assert_true(total_with_lean > total_without_lean,
+		"Shosuro Infiltrator should average higher due to +1k0 school lean")
+
+
+func test_equipment_prep_failure_weak_assassin() -> void:
+	var weak: L5RCharacterData = L5RCharacterData.new()
+	weak.character_id = 99
+	weak.agility = 1
+	weak.skills = {"Sleight of Hand": 1}
+	var s: Dictionary = AssassinationSystem.create_assassination_state(99, 2, AssassinationSystem.ExecutionMethod.BLADE, 0)
+	var result: Dictionary = AssassinationSystem.resolve_equipment_preparation(weak, s, _engine)
+	assert_false(result["success"], "Rank 1 cannot attempt blade — rank gate blocks it")
+	assert_eq(result["reason"], "rank_gate")

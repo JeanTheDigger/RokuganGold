@@ -14048,6 +14048,16 @@ static func _process_assassination_daily_tick(
 			AssassinationSystem.AssassinationPhase.ACCESS:
 				var is_co_located: bool = assassin.physical_location == target.physical_location and assassin.physical_location != ""
 				if is_co_located:
+					if not op.get("equipment_prepared", false):
+						var equip_result: Dictionary = AssassinationSystem.resolve_equipment_preparation(
+							assassin, op, dice_engine,
+						)
+						tick_result["equipment"] = equip_result
+						if not equip_result.get("success", false):
+							op["phase"] = AssassinationSystem.AssassinationPhase.FAILED
+							to_remove.append(i)
+							results.append(tick_result)
+							continue
 					var best_method: String = _pick_access_method(assassin)
 					var access_result: Dictionary = AssassinationSystem.resolve_access_day(
 						assassin, op, best_method, dice_engine, target, characters_by_id,
