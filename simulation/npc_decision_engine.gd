@@ -392,6 +392,86 @@ static func apply_allowlist_filter(
 	return filtered
 
 
+# -- Phase 4c: APPLY_TATTOO Precondition Filter (s57.25.3) --------------------
+# Removes APPLY_TATTOO if cultural reluctance blocks consent or if the
+# target is a Togashi monk with unfilled ability slots (decorative gate).
+
+static func _apply_tattoo_precondition_filter(
+	options: Array[NPCDataStructures.ScoredAction],
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	chars_by_id: Dictionary,
+	world_state: Dictionary,
+) -> Array[NPCDataStructures.ScoredAction]:
+	var has_tattoo_action: bool = false
+	for option: NPCDataStructures.ScoredAction in options:
+		if option.action_id == "APPLY_TATTOO":
+			has_tattoo_action = true
+			break
+	if not has_tattoo_action:
+		return options
+
+	var tattooing_rank: int = character.skills.get("Artisan: Tattooing", 0)
+	if tattooing_rank < 1:
+		return _remove_action(options, "APPLY_TATTOO")
+
+	var world_tattoos: Array[TattooData] = world_state.get("tattoos", [] as Array[TattooData])
+	var recipient_id: int = -1
+	for option: NPCDataStructures.ScoredAction in options:
+		if option.action_id == "APPLY_TATTOO":
+			recipient_id = option.target_npc_id
+			break
+
+	var recipient: L5RCharacterData = chars_by_id.get(recipient_id)
+	if recipient == null:
+		return _remove_action(options, "APPLY_TATTOO")
+
+	var available_locs: Array[Enums.TattooBodyLocation] = TattooSystem.get_available_locations(
+		world_tattoos, recipient_id, false
+	)
+	if available_locs.is_empty():
+		return _remove_action(options, "APPLY_TATTOO")
+
+	var is_ability: bool = false
+	for option: NPCDataStructures.ScoredAction in options:
+		if option.action_id == "APPLY_TATTOO":
+			is_ability = option.metadata.get("is_ability_tattoo", false)
+			break
+
+	if not is_ability:
+		if not TattooSystem.can_receive_decorative(
+			world_tattoos, recipient_id,
+			recipient.school_name, recipient.school_rank,
+		):
+			return _remove_action(options, "APPLY_TATTOO")
+
+	var disp: int = ctx.dispositions.get(recipient_id, 0)
+	var body_loc: Enums.TattooBodyLocation = available_locs[0]
+	if not TattooSystem.check_consent(
+		recipient.clan, recipient.family, body_loc, disp, false, false,
+	):
+		return _remove_action(options, "APPLY_TATTOO")
+
+	for option: NPCDataStructures.ScoredAction in options:
+		if option.action_id == "APPLY_TATTOO":
+			option.metadata["body_location"] = body_loc
+			option.metadata["world_tattoos"] = world_tattoos
+			break
+
+	return options
+
+
+static func _remove_action(
+	options: Array[NPCDataStructures.ScoredAction],
+	action_id: String,
+) -> Array[NPCDataStructures.ScoredAction]:
+	var filtered: Array[NPCDataStructures.ScoredAction] = []
+	for option: NPCDataStructures.ScoredAction in options:
+		if option.action_id != action_id:
+			filtered.append(option)
+	return filtered
+
+
 # -- Phase 5: Score All Options ------------------------------------------------
 # Eight components per s55.4.5 / s55.3.3.
 
@@ -633,6 +713,7 @@ static func run(
 	# Phase 4
 	options = apply_personality_filter(options, ctx, filter_data)
 	options = apply_allowlist_filter(options, need.need_type, scoring_tables)
+	options = _apply_tattoo_precondition_filter(options, character, ctx, chars_by_id, world_state)
 
 	# Phase 5
 	score_all(options, need, ctx, scoring_tables,
@@ -2475,6 +2556,26 @@ static func _populate_action_metadata(
 				best_disp = disp
 				best_intermediary = cid_int
 		option.metadata = {"intermediary_id": best_intermediary}
+	elif option.action_id == "APPLY_TATTOO":
+		var tattooing_rank: int = ctx.skill_ranks.get("Artisan: Tattooing", 0)
+		var best_tier: Enums.TattooQualityTier = Enums.TattooQualityTier.NORMAL
+		if tattooing_rank >= 5:
+			best_tier = Enums.TattooQualityTier.LEGENDARY
+		elif tattooing_rank >= 4:
+			best_tier = Enums.TattooQualityTier.MASTERWORK
+		elif tattooing_rank >= 3:
+			best_tier = Enums.TattooQualityTier.EXCEPTIONAL
+		elif tattooing_rank >= 2:
+			best_tier = Enums.TattooQualityTier.FINE
+		option.metadata = {
+			"target_tier": best_tier,
+			"body_location": Enums.TattooBodyLocation.LEFT_WRIST_FOREARM,
+			"is_ability_tattoo": false,
+			"ability": Enums.TattooAbility.NONE,
+			"subject_type": Enums.TattooSubjectType.IMAGE,
+			"subject_description": "",
+			"subject_topic_id": -1,
+		}
 
 
 static func _has_known_agenda_topic(ctx: NPCDataStructures.ContextSnapshot) -> bool:

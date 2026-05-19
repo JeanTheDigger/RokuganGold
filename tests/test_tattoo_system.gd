@@ -795,3 +795,121 @@ func test_apply_tattoo_context_list_includes_action():
 
 func test_apply_tattoo_ap_cost_entry():
 	assert_eq(NPCDecisionEngine._get_ap_cost("APPLY_TATTOO"), 2)
+
+
+# =============================================================================
+# APPLY_TATTOO Precondition Filter — Consent & Decorative Gate
+# =============================================================================
+
+func _make_options_with_tattoo(target_id: int = 200) -> Array[NPCDataStructures.ScoredAction]:
+	var tattoo_opt := NPCDataStructures.ScoredAction.new()
+	tattoo_opt.action_id = "APPLY_TATTOO"
+	tattoo_opt.target_npc_id = target_id
+	tattoo_opt.metadata = {
+		"target_tier": Enums.TattooQualityTier.NORMAL,
+		"body_location": Enums.TattooBodyLocation.LEFT_WRIST_FOREARM,
+		"is_ability_tattoo": false,
+		"ability": Enums.TattooAbility.NONE,
+	}
+	var rest_opt := NPCDataStructures.ScoredAction.new()
+	rest_opt.action_id = "REST"
+	return [tattoo_opt, rest_opt] as Array[NPCDataStructures.ScoredAction]
+
+func test_tattoo_filter_removes_when_no_skill():
+	var artist := _make_artist(0)
+	var ctx := _make_tattoo_ctx()
+	var options := _make_options_with_tattoo()
+	var result := NPCDecisionEngine._apply_tattoo_precondition_filter(
+		options, artist, ctx, {100: artist, 200: _make_recipient()}, {}
+	)
+	for opt: NPCDataStructures.ScoredAction in result:
+		assert_ne(opt.action_id, "APPLY_TATTOO", "Should remove APPLY_TATTOO with no skill")
+	assert_eq(result.size(), 1)
+
+func test_tattoo_filter_removes_when_no_recipient():
+	var artist := _make_artist()
+	var ctx := _make_tattoo_ctx()
+	var options := _make_options_with_tattoo(999)
+	var result := NPCDecisionEngine._apply_tattoo_precondition_filter(
+		options, artist, ctx, {100: artist}, {}
+	)
+	for opt: NPCDataStructures.ScoredAction in result:
+		assert_ne(opt.action_id, "APPLY_TATTOO", "Should remove when recipient not in chars_by_id")
+
+func test_tattoo_filter_removes_when_consent_fails():
+	var artist := _make_artist()
+	var recipient := _make_recipient()
+	recipient.clan = "Phoenix"
+	recipient.family = "Isawa"
+	var ctx := _make_tattoo_ctx()
+	ctx.dispositions = {200: 10}
+	var options := _make_options_with_tattoo()
+	var result := NPCDecisionEngine._apply_tattoo_precondition_filter(
+		options, artist, ctx, {100: artist, 200: recipient}, {}
+	)
+	for opt: NPCDataStructures.ScoredAction in result:
+		assert_ne(opt.action_id, "APPLY_TATTOO", "Reluctant clan with low disposition should block")
+
+func test_tattoo_filter_passes_when_consent_ok():
+	var artist := _make_artist()
+	var recipient := _make_recipient()
+	var ctx := _make_tattoo_ctx()
+	ctx.dispositions = {200: 5}
+	var options := _make_options_with_tattoo()
+	var result := NPCDecisionEngine._apply_tattoo_precondition_filter(
+		options, artist, ctx, {100: artist, 200: recipient}, {}
+	)
+	var found: bool = false
+	for opt: NPCDataStructures.ScoredAction in result:
+		if opt.action_id == "APPLY_TATTOO":
+			found = true
+	assert_true(found, "Dragon clan recipient at Neutral should consent")
+
+func test_tattoo_filter_decorative_gate_blocks():
+	var artist := _make_artist()
+	var recipient := _make_recipient()
+	recipient.school_name = "Togashi Tattooed Order"
+	recipient.school_rank = 1
+	var ctx := _make_tattoo_ctx()
+	ctx.dispositions = {200: 50}
+	var options := _make_options_with_tattoo()
+	var result := NPCDecisionEngine._apply_tattoo_precondition_filter(
+		options, artist, ctx, {100: artist, 200: recipient}, {}
+	)
+	for opt: NPCDataStructures.ScoredAction in result:
+		assert_ne(opt.action_id, "APPLY_TATTOO",
+			"Togashi R1 with unfilled ability slots should block decorative")
+
+func test_tattoo_filter_decorative_gate_passes_non_togashi():
+	var artist := _make_artist()
+	var recipient := _make_recipient()
+	recipient.school_name = "Mirumoto Bushi"
+	recipient.school_rank = 3
+	var ctx := _make_tattoo_ctx()
+	ctx.dispositions = {200: 5}
+	var options := _make_options_with_tattoo()
+	var result := NPCDecisionEngine._apply_tattoo_precondition_filter(
+		options, artist, ctx, {100: artist, 200: recipient}, {}
+	)
+	var found: bool = false
+	for opt: NPCDataStructures.ScoredAction in result:
+		if opt.action_id == "APPLY_TATTOO":
+			found = true
+	assert_true(found, "Non-Togashi recipient should pass decorative gate")
+
+func test_tattoo_filter_all_locations_occupied():
+	var artist := _make_artist()
+	var recipient := _make_recipient()
+	var ctx := _make_tattoo_ctx()
+	ctx.dispositions = {200: 5}
+	var full_tattoos: Array[TattooData] = []
+	for loc: Enums.TattooBodyLocation in TattooSystem.ALL_BODY_LOCATIONS:
+		full_tattoos.append(_make_tattoo(full_tattoos.size(), 200, 100,
+			Enums.TattooQualityTier.NORMAL, loc))
+	var options := _make_options_with_tattoo()
+	var ws: Dictionary = {"tattoos": full_tattoos}
+	var result := NPCDecisionEngine._apply_tattoo_precondition_filter(
+		options, artist, ctx, {100: artist, 200: recipient}, ws
+	)
+	for opt: NPCDataStructures.ScoredAction in result:
+		assert_ne(opt.action_id, "APPLY_TATTOO", "All locations full should block")
