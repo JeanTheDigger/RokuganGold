@@ -2125,3 +2125,91 @@ func test_daily_detection_null_assassin_no_bonus() -> void:
 	var state: Dictionary = AssassinationSystem.create_assassination_state(1, 2, AssassinationSystem.ExecutionMethod.POISON, 0)
 	var result: Dictionary = AssassinationSystem.resolve_daily_detection(observer, 30, state, _engine, null)
 	assert_true(result.has("noticed"), "Should work with null assassin (backward compatible)")
+
+
+# ==============================================================================
+# Vengeance Wiring in Conviction Pipeline
+# ==============================================================================
+
+func test_apply_assassination_vengeance_fires_on_covert_killing() -> void:
+	var victim: L5RCharacterData = L5RCharacterData.new()
+	victim.character_id = 100
+	victim.sibling_ids = [103]
+	var sibling: L5RCharacterData = L5RCharacterData.new()
+	sibling.character_id = 103
+
+	var record: CrimeRecord = CrimeRecord.new()
+	record.case_id = 1
+	record.crime_type = Enums.CrimeType.UNSANCTIONED_COVERT_KILLING
+	record.victim_id = 100
+	record.perpetrator_id = 1
+	record.commissioner_id = 50
+
+	var conviction_results: Array[Dictionary] = [{
+		"case_id": 1,
+		"outcome": "convicted",
+		"crime_type": Enums.CrimeType.UNSANCTIONED_COVERT_KILLING,
+	}]
+	var chars: Dictionary = {100: victim, 103: sibling}
+	var objectives: Dictionary = {}
+	var topics: Array[TopicData] = []
+	var next_id: Array[int] = [500]
+
+	DayOrchestrator._apply_assassination_vengeance(
+		conviction_results, [record], chars, objectives, topics, next_id, 30,
+	)
+	var key: String = "killed_family_100"
+	assert_true(sibling.historical_modifiers.has(key),
+		"Sibling should receive vengeance disposition modifier")
+	assert_eq(sibling.historical_modifiers[key]["target_id"], 50)
+	assert_eq(topics.size(), 1, "Betrayal topic should be generated")
+
+
+func test_apply_assassination_vengeance_skips_non_assassination() -> void:
+	var record: CrimeRecord = CrimeRecord.new()
+	record.case_id = 2
+	record.crime_type = Enums.CrimeType.VIOLENCE
+	record.commissioner_id = 50
+
+	var conviction_results: Array[Dictionary] = [{
+		"case_id": 2,
+		"outcome": "convicted",
+		"crime_type": Enums.CrimeType.VIOLENCE,
+	}]
+	var topics: Array[TopicData] = []
+	DayOrchestrator._apply_assassination_vengeance(
+		conviction_results, [record], {}, {}, topics, [1], 10,
+	)
+	assert_eq(topics.size(), 0, "No vengeance for non-assassination crimes")
+
+
+func test_apply_assassination_vengeance_skips_no_commissioner() -> void:
+	var victim: L5RCharacterData = L5RCharacterData.new()
+	victim.character_id = 100
+
+	var record: CrimeRecord = CrimeRecord.new()
+	record.case_id = 3
+	record.crime_type = Enums.CrimeType.UNSANCTIONED_COVERT_KILLING
+	record.victim_id = 100
+	record.commissioner_id = -1
+
+	var conviction_results: Array[Dictionary] = [{
+		"case_id": 3,
+		"outcome": "convicted",
+		"crime_type": Enums.CrimeType.UNSANCTIONED_COVERT_KILLING,
+	}]
+	var topics: Array[TopicData] = []
+	DayOrchestrator._apply_assassination_vengeance(
+		conviction_results, [record], {100: victim}, {}, topics, [1], 10,
+	)
+	assert_eq(topics.size(), 0,
+		"No vengeance when no commissioner is identified")
+
+
+# ==============================================================================
+# CrimeRecord Commissioner ID Propagation
+# ==============================================================================
+
+func test_crime_record_has_commissioner_field() -> void:
+	var record: CrimeRecord = CrimeRecord.new()
+	assert_eq(record.commissioner_id, -1, "Default should be -1 sentinel")

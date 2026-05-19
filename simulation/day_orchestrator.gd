@@ -602,6 +602,11 @@ static func advance_day(
 		conviction_results, crime_records, characters_by_id,
 	)
 
+	_apply_assassination_vengeance(
+		conviction_results, crime_records, characters_by_id,
+		objectives_map, active_topics, next_topic_id, ic_day,
+	)
+
 	_seed_conviction_topics_to_victim_lords(
 		conviction_results, crime_records, characters_by_id, active_topics,
 	)
@@ -5112,6 +5117,46 @@ static func _apply_cross_clan_conviction_consequences(
 
 		ConvictionProcessor.apply_cross_clan_consequences(
 			record, accused, victim, true
+		)
+
+
+# -- Assassination Vengeance on Conviction (s12.8) ----------------------------
+
+static func _apply_assassination_vengeance(
+	conviction_results: Array[Dictionary],
+	crime_records: Array[CrimeRecord],
+	characters_by_id: Dictionary,
+	objectives_map: Dictionary,
+	active_topics: Array[TopicData],
+	next_topic_id: Array[int],
+	ic_day: int,
+) -> void:
+	for conv: Dictionary in conviction_results:
+		if conv.get("outcome", "") != "convicted":
+			continue
+		if conv.get("crime_type", -1) != Enums.CrimeType.UNSANCTIONED_COVERT_KILLING:
+			continue
+
+		var case_id: int = conv.get("case_id", -1)
+		var record: CrimeRecord = null
+		for r: CrimeRecord in crime_records:
+			if r.case_id == case_id:
+				record = r
+				break
+		if record == null:
+			continue
+		if record.commissioner_id < 0:
+			continue
+
+		var victim: L5RCharacterData = characters_by_id.get(record.victim_id)
+		if victim == null:
+			continue
+
+		var victim_is_dead: bool = CharacterStats.is_dead(victim)
+		AssassinationSystem.apply_vengeance_consequences(
+			record.commissioner_id, victim, victim_is_dead,
+			characters_by_id, objectives_map,
+			active_topics, next_topic_id, ic_day,
 		)
 
 
@@ -14361,6 +14406,7 @@ static func _apply_assassination_outcome(
 		record.legal_status = Enums.LegalStatus.UNDER_INVESTIGATION
 		record.concealment_tn = concealment_tn
 		record.location = target.physical_location
+		record.commissioner_id = int(op.get("commissioner_id", -1))
 		crime_records.append(record)
 
 	var topic: TopicData = TopicData.new()
