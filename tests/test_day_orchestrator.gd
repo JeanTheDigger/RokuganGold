@@ -9605,3 +9605,69 @@ func test_fabricate_secret_writeback_no_duplicate_fabricator() -> void:
 		if kid == 1:
 			count += 1
 	assert_eq(count, 1, "Should not duplicate fabricator in known_by_ids")
+
+
+# -- Letter Delivery Topic Momentum -------------------------------------------
+
+func test_letter_delivery_increments_topic_discussion_count() -> void:
+	var recipient := L5RCharacterData.new()
+	recipient.character_id = 10
+	recipient.topic_pool = []
+	recipient.knowledge_pool = []
+	recipient.met_characters = []
+	recipient.known_contacts_by_clan = {}
+	recipient.disposition_values = {}
+	var chars_by_id: Dictionary = {10: recipient}
+
+	var topic := TopicMomentumSystem.create_topic(
+		300, "Scandal", TopicData.Tier.TIER_4, TopicData.Category.POLITICAL,
+		0, 15.0
+	)
+	var topics_by_id: Dictionary = {300: topic}
+	assert_eq(topic.discussion_count_this_day, 0)
+
+	var letter := LetterData.new()
+	letter.letter_id = 1
+	letter.sender_id = 99
+	letter.recipient_id = 10
+	letter.topic = 300
+	letter.ic_day_sent = 0
+	letter.ic_day_arrival = 0
+	var pending: Array[LetterData] = [letter]
+
+	LetterSystem.process_pending_letters(
+		pending, chars_by_id, 1, 0, [], [], null, topics_by_id
+	)
+	assert_eq(topic.discussion_count_this_day, 1, "Letter delivery should increment discussion count")
+	assert_true(letter.delivered, "Letter should be delivered")
+
+
+func test_letter_delivery_without_topics_by_id_skips_momentum() -> void:
+	var recipient := L5RCharacterData.new()
+	recipient.character_id = 10
+	recipient.topic_pool = []
+	recipient.knowledge_pool = []
+	recipient.met_characters = []
+	recipient.known_contacts_by_clan = {}
+	recipient.disposition_values = {}
+	var chars_by_id: Dictionary = {10: recipient}
+
+	var topic := TopicMomentumSystem.create_topic(
+		301, "Rumor", TopicData.Tier.TIER_4, TopicData.Category.POLITICAL,
+		0, 15.0
+	)
+	assert_eq(topic.discussion_count_this_day, 0)
+
+	var letter := LetterData.new()
+	letter.letter_id = 2
+	letter.sender_id = 99
+	letter.recipient_id = 10
+	letter.topic = 301
+	letter.ic_day_sent = 0
+	letter.ic_day_arrival = 0
+	var pending: Array[LetterData] = [letter]
+
+	LetterSystem.process_pending_letters(
+		pending, chars_by_id, 1, 0, [], [], null
+	)
+	assert_eq(topic.discussion_count_this_day, 0, "Without topics_by_id, discussion count stays 0")

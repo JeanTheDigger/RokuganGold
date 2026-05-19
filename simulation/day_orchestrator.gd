@@ -701,9 +701,12 @@ static func advance_day(
 		dice_engine,
 	)
 
+	var letter_topics_by_id: Dictionary = {}
+	for _lt: TopicData in active_topics:
+		letter_topics_by_id[_lt.topic_id] = _lt
 	var letter_results: Array[Dictionary] = LetterSystem.process_pending_letters(
 		pending_letters, characters_by_id, ic_day, current_season, action_log,
-		active_wars if active_wars != null else [], dice_engine,
+		active_wars if active_wars != null else [], dice_engine, letter_topics_by_id,
 	)
 	_compute_positions_from_letters(letter_results, active_topics, characters_by_id)
 	_process_letter_commitment_creation(
