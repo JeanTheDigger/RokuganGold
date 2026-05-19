@@ -14108,6 +14108,22 @@ static func _process_assassination_daily_tick(
 					)
 					tick_result["access"] = access_result
 
+					if not access_result.get("success", false) and AssassinationSystem.is_critical_failure(access_result.get("margin", 0)):
+						var detector: L5RCharacterData = AssassinationSystem.find_best_searcher(
+							target, assassin.character_id, characters_by_id,
+						)
+						if detector != null:
+							var detect_result: Dictionary = AssassinationSystem.resolve_critical_failure_detection(
+								detector, access_result.get("roll_total", 0), op, dice_engine,
+							)
+							tick_result["critical_failure_detection"] = detect_result
+							if detect_result.get("detected", false):
+								op["phase"] = AssassinationSystem.AssassinationPhase.FAILED
+								tick_result["detected_by_critical_failure"] = true
+								to_remove.append(i)
+								results.append(tick_result)
+								continue
+
 					if AssassinationSystem.should_assign_bodyguard(op):
 						var searcher: L5RCharacterData = AssassinationSystem.find_best_searcher(
 							target, assassin.character_id, characters_by_id,

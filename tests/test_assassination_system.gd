@@ -326,6 +326,69 @@ func test_access_penalty_not_added_on_success() -> void:
 	assert_true(success_count > 0, "At least some rolls should succeed without adding penalty")
 
 
+# -- Critical Failure Detection Check ------------------------------------------
+
+func test_is_critical_failure() -> void:
+	assert_true(AssassinationSystem.is_critical_failure(-20))
+	assert_true(AssassinationSystem.is_critical_failure(-25))
+	assert_false(AssassinationSystem.is_critical_failure(-19))
+	assert_false(AssassinationSystem.is_critical_failure(-5))
+
+
+func test_critical_detection_auto_detects_zero_roll() -> void:
+	var guard: L5RCharacterData = L5RCharacterData.new()
+	guard.character_id = 80
+	guard.perception = 3
+	guard.skills = {"Investigation": 2}
+	var s: Dictionary = {"suspicion": 5.0}
+	var e: DiceEngine = DiceEngine.new(1)
+	var r: Dictionary = AssassinationSystem.resolve_critical_failure_detection(guard, 0, s, e)
+	assert_true(r["detected"], "Roll total of 0 means TN 0 — always detected")
+
+
+func test_critical_detection_uses_roll_total_as_tn() -> void:
+	var guard: L5RCharacterData = L5RCharacterData.new()
+	guard.character_id = 81
+	guard.perception = 2
+	guard.skills = {"Investigation": 1}
+	var s: Dictionary = {"suspicion": 0.0}
+	var detected_count: int = 0
+	for i: int in range(50):
+		var e: DiceEngine = DiceEngine.new(i * 11)
+		var r: Dictionary = AssassinationSystem.resolve_critical_failure_detection(guard, 25, s, e)
+		if r.get("detected", false):
+			detected_count += 1
+	assert_true(detected_count < 50, "High detection TN should sometimes prevent detection")
+	var detected_easy: int = 0
+	for i: int in range(50):
+		var e2: DiceEngine = DiceEngine.new(i * 11)
+		var r2: Dictionary = AssassinationSystem.resolve_critical_failure_detection(guard, 5, s, e2)
+		if r2.get("detected", false):
+			detected_easy += 1
+	assert_true(detected_easy > detected_count, "Lower TN should be easier to detect")
+
+
+func test_critical_detection_includes_investigation_bonus() -> void:
+	var guard: L5RCharacterData = L5RCharacterData.new()
+	guard.character_id = 82
+	guard.perception = 3
+	guard.skills = {"Investigation": 2}
+	var total_with: int = 0
+	var total_without: int = 0
+	for i: int in range(100):
+		var s1: Dictionary = {"suspicion": 15.0}
+		var e1: DiceEngine = DiceEngine.new(i * 7)
+		var r1: Dictionary = AssassinationSystem.resolve_critical_failure_detection(guard, 20, s1, e1)
+		total_with += r1.get("roll_total", 0)
+
+		var s2: Dictionary = {"suspicion": 5.0}
+		var e2: DiceEngine = DiceEngine.new(i * 7)
+		var r2: Dictionary = AssassinationSystem.resolve_critical_failure_detection(guard, 20, s2, e2)
+		total_without += r2.get("roll_total", 0)
+	assert_true(total_with > total_without,
+		"Watchful bonus should improve detection rolls")
+
+
 # ==============================================================================
 # Phase 1 — Access
 # ==============================================================================

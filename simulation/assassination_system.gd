@@ -173,6 +173,29 @@ static func get_access_penalty_from_failure(margin: int) -> int:
 	return ACCESS_PENALTY_STANDARD
 
 
+static func is_critical_failure(margin: int) -> bool:
+	return margin <= -20
+
+
+static func resolve_critical_failure_detection(
+	searcher: L5RCharacterData,
+	assassin_roll_total: int,
+	state: Dictionary,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	var inv_bonus: int = get_household_investigation_bonus(state)
+	var result: Dictionary = SkillResolver.resolve_skill_check(
+		searcher, dice_engine, "Investigation", assassin_roll_total,
+		0, "", Enums.Trait.PERCEPTION, inv_bonus,
+	)
+	return {
+		"detected": result.get("success", false),
+		"searcher_id": searcher.character_id,
+		"roll_total": result.get("total", 0),
+		"detection_tn": assassin_roll_total,
+	}
+
+
 static func decay_suspicion(state: Dictionary, is_present: bool, ic_day: int = -1) -> void:
 	var susp: float = float(state.get("suspicion", 0))
 	if susp <= 0.0:
