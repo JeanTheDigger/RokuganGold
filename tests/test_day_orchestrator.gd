@@ -7376,3 +7376,200 @@ func test_commitment_fulfillment_meeting_one_absent() -> void:
 	c1.commitment_type = Enums.CommitmentType.MEETING_ARRANGEMENT
 	c1.fulfillment_target = 50
 	assert_false(DayOrchestrator._check_commitment_fulfilled(c1, chars_by_id))
+
+
+# -- Commitment Creation Writebacks (s55.31.3) --------------------------------
+
+func test_favor_obligation_commitment_created_on_offer_favor() -> void:
+	var results: Array = [
+		{
+			"character_id": 1,
+			"action_id": "OFFER_FAVOR",
+			"effects": {
+				"requires_favor_creation": true,
+				"favor_creditor_id": 1,
+				"favor_debtor_id": 2,
+				"_action_metadata": {},
+			},
+		},
+	]
+	var commitments: Array[CommitmentData] = []
+	var courts: Array[CourtSessionData] = []
+	var next_id: Array[int] = [1]
+	DayOrchestrator._process_commitment_creation_writebacks(
+		results, commitments, courts, 10, next_id,
+	)
+	assert_eq(commitments.size(), 1)
+	var c: CommitmentData = commitments[0]
+	assert_eq(c.commitment_id, 1)
+	assert_eq(c.commitment_type, Enums.CommitmentType.FAVOR_OBLIGATION)
+	assert_eq(c.creditor_npc_id, 1)
+	assert_eq(c.debtor_npc_id, 2)
+	assert_eq(c.deadline_ic_day, -1)
+	assert_eq(c.tier, int(FavorData.FavorTier.MINOR))
+	assert_eq(c.source_action_id, "OFFER_FAVOR")
+	assert_eq(c.created_ic_day, 10)
+	assert_eq(next_id[0], 2)
+
+
+func test_favor_obligation_witnesses_private() -> void:
+	var results: Array = [
+		{
+			"character_id": 5,
+			"action_id": "OFFER_FAVOR",
+			"effects": {
+				"requires_favor_creation": true,
+				"favor_creditor_id": 5,
+				"favor_debtor_id": 6,
+				"_action_metadata": {},
+			},
+		},
+	]
+	var commitments: Array[CommitmentData] = []
+	var courts: Array[CourtSessionData] = []
+	var next_id: Array[int] = [1]
+	DayOrchestrator._process_commitment_creation_writebacks(
+		results, commitments, courts, 10, next_id,
+	)
+	assert_eq(commitments.size(), 1)
+	assert_eq(commitments[0].witnesses.size(), 2)
+	assert_true(5 in commitments[0].witnesses)
+	assert_true(6 in commitments[0].witnesses)
+
+
+func test_favor_obligation_witnesses_at_court() -> void:
+	var court := CourtSessionData.new()
+	court.host_settlement_id = 100
+	court.attendee_ids = [5, 6, 7, 8, 9]
+	var results: Array = [
+		{
+			"character_id": 5,
+			"action_id": "OFFER_FAVOR",
+			"effects": {
+				"requires_favor_creation": true,
+				"favor_creditor_id": 5,
+				"favor_debtor_id": 6,
+				"_action_metadata": {"court_settlement_id": 100},
+			},
+		},
+	]
+	var commitments: Array[CommitmentData] = []
+	var courts: Array[CourtSessionData] = [court]
+	var next_id: Array[int] = [1]
+	DayOrchestrator._process_commitment_creation_writebacks(
+		results, commitments, courts, 10, next_id,
+	)
+	assert_eq(commitments.size(), 1)
+	assert_eq(commitments[0].witnesses.size(), 5)
+	assert_true(7 in commitments[0].witnesses)
+	assert_true(9 in commitments[0].witnesses)
+
+
+func test_favor_obligation_skips_duplicate() -> void:
+	var existing := CommitmentData.new()
+	existing.commitment_type = Enums.CommitmentType.FAVOR_OBLIGATION
+	existing.creditor_npc_id = 1
+	existing.debtor_npc_id = 2
+	existing.status = Enums.CommitmentStatus.PENDING
+	var results: Array = [
+		{
+			"character_id": 1,
+			"action_id": "OFFER_FAVOR",
+			"effects": {
+				"requires_favor_creation": true,
+				"favor_creditor_id": 1,
+				"favor_debtor_id": 2,
+				"_action_metadata": {},
+			},
+		},
+	]
+	var commitments: Array[CommitmentData] = [existing]
+	var courts: Array[CourtSessionData] = []
+	var next_id: Array[int] = [5]
+	DayOrchestrator._process_commitment_creation_writebacks(
+		results, commitments, courts, 10, next_id,
+	)
+	assert_eq(commitments.size(), 1)
+	assert_eq(next_id[0], 5)
+
+
+func test_favor_obligation_skips_missing_ids() -> void:
+	var results: Array = [
+		{
+			"character_id": 1,
+			"action_id": "OFFER_FAVOR",
+			"effects": {
+				"requires_favor_creation": true,
+				"favor_creditor_id": -1,
+				"favor_debtor_id": 2,
+				"_action_metadata": {},
+			},
+		},
+	]
+	var commitments: Array[CommitmentData] = []
+	var courts: Array[CourtSessionData] = []
+	var next_id: Array[int] = [1]
+	DayOrchestrator._process_commitment_creation_writebacks(
+		results, commitments, courts, 10, next_id,
+	)
+	assert_eq(commitments.size(), 0)
+
+
+func test_favor_obligation_not_created_on_failed_offer() -> void:
+	var results: Array = [
+		{
+			"character_id": 1,
+			"action_id": "OFFER_FAVOR",
+			"effects": {
+				"failed": true,
+				"disposition_change": -2,
+			},
+		},
+	]
+	var commitments: Array[CommitmentData] = []
+	var courts: Array[CourtSessionData] = []
+	var next_id: Array[int] = [1]
+	DayOrchestrator._process_commitment_creation_writebacks(
+		results, commitments, courts, 10, next_id,
+	)
+	assert_eq(commitments.size(), 0)
+
+
+# -- FAVOR_OBLIGATION Registry Behavior (s55.31 visibility only) ---------------
+
+func test_favor_obligation_skipped_in_deadline_processing() -> void:
+	var favor_c := CommitmentData.new()
+	favor_c.commitment_id = 1
+	favor_c.commitment_type = Enums.CommitmentType.FAVOR_OBLIGATION
+	favor_c.creditor_npc_id = 1
+	favor_c.debtor_npc_id = 2
+	favor_c.deadline_ic_day = -1
+	favor_c.status = Enums.CommitmentStatus.PENDING
+	favor_c.tier = 3
+	var debtor := L5RCharacterData.new()
+	debtor.character_id = 2
+	var chars_by_id: Dictionary = {2: debtor}
+	var commitments: Array[CommitmentData] = [favor_c]
+	var checker: Callable = func(_c: CommitmentData) -> bool: return false
+	var results: Array[Dictionary] = CommitmentRegistry.process_deadlines(
+		commitments, 100, checker, chars_by_id, chars_by_id,
+	)
+	assert_eq(results.size(), 0)
+	assert_eq(favor_c.status, Enums.CommitmentStatus.PENDING)
+
+
+func test_favor_obligation_skipped_in_at_risk_penalty() -> void:
+	var favor_c := CommitmentData.new()
+	favor_c.commitment_type = Enums.CommitmentType.FAVOR_OBLIGATION
+	favor_c.creditor_npc_id = 1
+	favor_c.debtor_npc_id = 2
+	favor_c.status = Enums.CommitmentStatus.PENDING
+	favor_c.tier = 1
+	var char := L5RCharacterData.new()
+	char.character_id = 2
+	char.bushido_virtue = Enums.BushidoVirtue.GI
+	var commitments: Array[CommitmentData] = [favor_c]
+	var penalty: int = CommitmentRegistry.get_at_risk_penalty(
+		commitments, 2, char,
+	)
+	assert_eq(penalty, 0)

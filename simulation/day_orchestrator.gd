@@ -77,6 +77,7 @@ static func advance_day(
 	next_secret_id: Array[int] = [1],
 	active_hostages: Array[Dictionary] = [],
 	active_assassination_ops: Array[Dictionary] = [],
+	next_commitment_id: Array[int] = [1],
 ) -> Dictionary:
 	var prev_season: int = time_system.get_season()
 
@@ -431,6 +432,14 @@ static func advance_day(
 		int(world_states.get("emperor_archetype", StrategicReview.EmperorArchetype.IRON)),
 		active_topics,
 		active_courts,
+	)
+
+	_process_commitment_creation_writebacks(
+		day_result.get("results", []),
+		commitments,
+		active_courts,
+		ic_day,
+		next_commitment_id,
 	)
 
 	var governance_results: Dictionary = _process_governance_effects(
@@ -14673,3 +14682,68 @@ static func _process_crisis_commitment_linking(
 		if crisis_id < 0:
 			continue
 		CommitmentRegistry.link_crisis(commitments, char_id, crisis_id)
+
+
+# -- Commitment Creation Writebacks (s55.31.3) --------------------------------
+
+static func _process_commitment_creation_writebacks(
+	day_results: Array,
+	commitments: Array[CommitmentData],
+	active_courts: Array[CourtSessionData],
+	ic_day: int,
+	next_commitment_id: Array[int],
+) -> void:
+	for entry: Dictionary in day_results:
+		var effects: Dictionary = entry.get("effects", {})
+		if effects.is_empty():
+			continue
+		if effects.get("requires_favor_creation", false):
+			_create_favor_obligation_commitment(
+				effects, commitments, active_courts, ic_day, next_commitment_id,
+			)
+
+
+static func _create_favor_obligation_commitment(
+	effects: Dictionary,
+	commitments: Array[CommitmentData],
+	active_courts: Array[CourtSessionData],
+	ic_day: int,
+	next_commitment_id: Array[int],
+) -> void:
+	var creditor_id: int = effects.get("favor_creditor_id", -1)
+	var debtor_id: int = effects.get("favor_debtor_id", -1)
+	if creditor_id < 0 or debtor_id < 0:
+		return
+
+	for c: CommitmentData in commitments:
+		if (c.commitment_type == Enums.CommitmentType.FAVOR_OBLIGATION
+			and c.creditor_npc_id == creditor_id
+			and c.debtor_npc_id == debtor_id
+			and c.status == Enums.CommitmentStatus.PENDING):
+			return
+
+	var witnesses: Array[int] = [creditor_id, debtor_id]
+	var action_meta: Dictionary = effects.get("_action_metadata", {})
+	var court_settlement_id: int = action_meta.get("court_settlement_id", -1)
+	if court_settlement_id >= 0:
+		for court: CourtSessionData in active_courts:
+			if court.host_settlement_id == court_settlement_id:
+				for attendee_id: int in court.attendee_ids:
+					if attendee_id not in witnesses:
+						witnesses.append(attendee_id)
+				break
+
+	var commitment: CommitmentData = CommitmentRegistry.create_commitment(
+		next_commitment_id[0],
+		Enums.CommitmentType.FAVOR_OBLIGATION,
+		creditor_id,
+		debtor_id,
+		-1,
+		int(FavorData.FavorTier.MINOR),
+		ic_day,
+		"OFFER_FAVOR",
+		-1,
+		witnesses,
+	)
+	commitments.append(commitment)
+	next_commitment_id[0] += 1

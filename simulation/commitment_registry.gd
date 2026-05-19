@@ -311,6 +311,8 @@ static func process_deadlines(
 	for c: CommitmentData in commitments:
 		if c.status != Enums.CommitmentStatus.PENDING:
 			continue
+		if c.commitment_type == Enums.CommitmentType.FAVOR_OBLIGATION:
+			continue
 		if c.deadline_ic_day > current_ic_day:
 			continue
 		var is_fulfilled: bool = fulfillment_checker.call(c)
@@ -415,6 +417,8 @@ static func get_at_risk_penalty(
 	var uses_reduced: bool = character.shourido_virtue in REDUCED_PENALTY_VIRTUES
 
 	for c: CommitmentData in pending:
+		if c.commitment_type == Enums.CommitmentType.FAVOR_OBLIGATION:
+			continue
 		var tier: int = clampi(c.tier, 1, 3)
 		var base: int = 0
 		if uses_reduced:
