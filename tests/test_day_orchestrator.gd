@@ -8541,3 +8541,119 @@ func test_insurgency_resolution_clears_crisis_id() -> void:
 			(rem_prov as ProvinceData).active_crisis_id = -1
 	assert_eq(p.active_crisis_id, -1, "Crisis_id should clear when insurgency resolved")
 	assert_eq(insurgencies.size(), 0, "Insurgency should be removed")
+
+
+# -- RESOURCE_PROMISE Commitment (s55.31) -------------------------------------
+
+func test_resource_promise_created_on_aid_accepted() -> void:
+	var lord := L5RCharacterData.new()
+	lord.character_id = 10
+	var vassal_of_lord := L5RCharacterData.new()
+	vassal_of_lord.character_id = 11
+	vassal_of_lord.lord_id = 10
+	var ally := L5RCharacterData.new()
+	ally.character_id = 20
+	var vassal_of_ally := L5RCharacterData.new()
+	vassal_of_ally.character_id = 21
+	vassal_of_ally.lord_id = 20
+	var chars_by_id: Dictionary = {10: lord, 11: vassal_of_lord, 20: ally, 21: vassal_of_ally}
+
+	var effects: Dictionary = {
+		"requires_resource_promise": true,
+		"promise_creditor_id": 10,
+		"promise_debtor_id": 20,
+		"promise_tier": 2,
+	}
+	var commitments: Array[CommitmentData] = []
+	var next_id: Array[int] = [1]
+	DayOrchestrator._create_resource_promise_commitment(
+		effects, commitments, 50, next_id, chars_by_id,
+	)
+	assert_eq(commitments.size(), 1, "Should create one commitment")
+	var c: CommitmentData = commitments[0]
+	assert_eq(c.commitment_type, Enums.CommitmentType.RESOURCE_PROMISE)
+	assert_eq(c.creditor_npc_id, 10)
+	assert_eq(c.debtor_npc_id, 20)
+	assert_eq(c.tier, 2)
+	assert_eq(c.deadline_ic_day, 50 + DayOrchestrator.RESOURCE_PROMISE_DEADLINE_OFFSET)
+	assert_eq(c.source_action_id, "REQUEST_ALLIED_AID")
+
+
+func test_resource_promise_witnesses_include_vassals() -> void:
+	var lord := L5RCharacterData.new()
+	lord.character_id = 10
+	var vassal_a := L5RCharacterData.new()
+	vassal_a.character_id = 11
+	vassal_a.lord_id = 10
+	var ally := L5RCharacterData.new()
+	ally.character_id = 20
+	var vassal_b := L5RCharacterData.new()
+	vassal_b.character_id = 21
+	vassal_b.lord_id = 20
+	var unrelated := L5RCharacterData.new()
+	unrelated.character_id = 30
+	unrelated.lord_id = 99
+	var chars_by_id: Dictionary = {10: lord, 11: vassal_a, 20: ally, 21: vassal_b, 30: unrelated}
+
+	var effects: Dictionary = {
+		"requires_resource_promise": true,
+		"promise_creditor_id": 10,
+		"promise_debtor_id": 20,
+	}
+	var commitments: Array[CommitmentData] = []
+	var next_id: Array[int] = [1]
+	DayOrchestrator._create_resource_promise_commitment(
+		effects, commitments, 50, next_id, chars_by_id,
+	)
+	var c: CommitmentData = commitments[0]
+	assert_true(10 in c.witnesses, "Creditor should be witness")
+	assert_true(20 in c.witnesses, "Debtor should be witness")
+	assert_true(11 in c.witnesses, "Creditor's vassal should be witness")
+	assert_true(21 in c.witnesses, "Debtor's vassal should be witness")
+	assert_false(30 in c.witnesses, "Unrelated character should not be witness")
+
+
+func test_resource_promise_skips_duplicate() -> void:
+	var effects: Dictionary = {
+		"requires_resource_promise": true,
+		"promise_creditor_id": 10,
+		"promise_debtor_id": 20,
+	}
+	var existing := CommitmentData.new()
+	existing.commitment_type = Enums.CommitmentType.RESOURCE_PROMISE
+	existing.creditor_npc_id = 10
+	existing.debtor_npc_id = 20
+	existing.status = Enums.CommitmentStatus.PENDING
+	var commitments: Array[CommitmentData] = [existing]
+	var next_id: Array[int] = [5]
+	DayOrchestrator._create_resource_promise_commitment(
+		effects, commitments, 50, next_id, {},
+	)
+	assert_eq(commitments.size(), 1, "Should not add duplicate")
+	assert_eq(next_id[0], 5, "Counter should not advance")
+
+
+func test_resource_promise_tier_from_effects() -> void:
+	var effects: Dictionary = {
+		"requires_resource_promise": true,
+		"promise_creditor_id": 10,
+		"promise_debtor_id": 20,
+		"promise_tier": 1,
+	}
+	var commitments: Array[CommitmentData] = []
+	var next_id: Array[int] = [1]
+	DayOrchestrator._create_resource_promise_commitment(
+		effects, commitments, 50, next_id, {},
+	)
+	assert_eq(commitments[0].tier, 1, "Should use tier from effects")
+
+
+func test_resource_promise_fulfillment_returns_false() -> void:
+	var debtor := L5RCharacterData.new()
+	debtor.character_id = 20
+	var chars_by_id: Dictionary = {20: debtor}
+	var c := CommitmentData.new()
+	c.commitment_type = Enums.CommitmentType.RESOURCE_PROMISE
+	c.debtor_npc_id = 20
+	var result: bool = DayOrchestrator._check_commitment_fulfilled(c, chars_by_id)
+	assert_false(result, "RESOURCE_PROMISE fulfillment needs SHARE_SUPPLIES wiring")

@@ -446,6 +446,7 @@ static func advance_day(
 		active_courts,
 		ic_day,
 		next_commitment_id,
+		characters_by_id,
 	)
 
 	var governance_results: Dictionary = _process_governance_effects(
@@ -4920,6 +4921,8 @@ static func _check_commitment_fulfilled(
 					return actions_taken > 0
 			return false
 		Enums.CommitmentType.FAVOR_OBLIGATION:
+			return false
+		Enums.CommitmentType.RESOURCE_PROMISE:
 			return false
 	return false
 
@@ -14980,6 +14983,7 @@ static func _process_commitment_creation_writebacks(
 	active_courts: Array[CourtSessionData],
 	ic_day: int,
 	next_commitment_id: Array[int],
+	characters_by_id: Dictionary = {},
 ) -> void:
 	for entry: Dictionary in day_results:
 		var effects: Dictionary = entry.get("effects", {})
@@ -14996,6 +15000,10 @@ static func _process_commitment_creation_writebacks(
 		if effects.get("requires_support_pledge", false):
 			_create_support_pledge_commitment(
 				effects, commitments, active_courts, ic_day, next_commitment_id,
+			)
+		if effects.get("requires_resource_promise", false):
+			_create_resource_promise_commitment(
+				effects, commitments, ic_day, next_commitment_id, characters_by_id,
 			)
 
 
@@ -15144,6 +15152,57 @@ static func _create_support_pledge_commitment(
 		ic_day,
 		"PERSUADE",
 		court_sid,
+		witnesses,
+	)
+	commitments.append(commitment)
+	next_commitment_id[0] += 1
+
+
+# PROVISIONAL: 90 IC days for resource delivery (one full season).
+const RESOURCE_PROMISE_DEADLINE_OFFSET: int = 90
+
+static func _create_resource_promise_commitment(
+	effects: Dictionary,
+	commitments: Array[CommitmentData],
+	ic_day: int,
+	next_commitment_id: Array[int],
+	characters_by_id: Dictionary,
+) -> void:
+	var creditor_id: int = effects.get("promise_creditor_id", -1)
+	var debtor_id: int = effects.get("promise_debtor_id", -1)
+	if creditor_id < 0 or debtor_id < 0:
+		return
+
+	for c: CommitmentData in commitments:
+		if (c.commitment_type == Enums.CommitmentType.RESOURCE_PROMISE
+			and c.creditor_npc_id == creditor_id
+			and c.debtor_npc_id == debtor_id
+			and c.status == Enums.CommitmentStatus.PENDING):
+			return
+
+	var tier: int = effects.get("promise_tier", 2)
+	var deadline: int = ic_day + RESOURCE_PROMISE_DEADLINE_OFFSET
+
+	var witnesses: Array[int] = [creditor_id, debtor_id]
+	for cid: Variant in characters_by_id:
+		var c_var: Variant = characters_by_id[cid]
+		if not (c_var is L5RCharacterData):
+			continue
+		var ch: L5RCharacterData = c_var as L5RCharacterData
+		if ch.lord_id == creditor_id or ch.lord_id == debtor_id:
+			if ch.character_id not in witnesses:
+				witnesses.append(ch.character_id)
+
+	var commitment: CommitmentData = CommitmentRegistry.create_commitment(
+		next_commitment_id[0],
+		Enums.CommitmentType.RESOURCE_PROMISE,
+		creditor_id,
+		debtor_id,
+		deadline,
+		tier,
+		ic_day,
+		"REQUEST_ALLIED_AID",
+		-1,
 		witnesses,
 	)
 	commitments.append(commitment)

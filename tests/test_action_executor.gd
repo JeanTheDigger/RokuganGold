@@ -64,6 +64,7 @@ func before_each() -> void:
 		"SEND_INVITATION": {"primary": "Calligraphy", "secondary": "Etiquette"},
 		"CALL_COURT": {"primary": "Courtier", "secondary": "Etiquette"},
 		"PURCHASE_MARKET": {"primary": "Commerce", "secondary": null},
+		"REQUEST_ALLIED_AID": {"primary": "Courtier", "secondary": "Sincerity"},
 	}
 
 
@@ -1739,3 +1740,57 @@ func test_wc_bonus_not_applied_to_non_wc_court() -> void:
 		_character, "Courtier", _ctx
 	)
 	assert_eq(bonus, 0)
+
+
+# -- REQUEST_ALLIED_AID (s55.31 RESOURCE_PROMISE) ----------------------------
+
+func test_allied_aid_accepted_when_disposition_high() -> void:
+	var action := NPCDataStructures.ScoredAction.new()
+	action.action_id = "REQUEST_ALLIED_AID"
+	action.target_npc_id = 30
+	_ctx.dispositions[30] = 50
+	var effects: Dictionary = ActionExecutor._compute_allied_aid_effects(
+		action, _ctx, true,
+	)
+	assert_eq(effects["effect"], "aid_accepted")
+	assert_true(effects.get("requires_resource_promise", false))
+	assert_eq(effects["promise_creditor_id"], _ctx.character_id)
+	assert_eq(effects["promise_debtor_id"], 30)
+
+
+func test_allied_aid_refused_when_disposition_low() -> void:
+	var action := NPCDataStructures.ScoredAction.new()
+	action.action_id = "REQUEST_ALLIED_AID"
+	action.target_npc_id = 20
+	_ctx.dispositions[20] = 10
+	var effects: Dictionary = ActionExecutor._compute_allied_aid_effects(
+		action, _ctx, true,
+	)
+	assert_eq(effects["effect"], "aid_refused")
+	assert_true(effects.get("failed", false))
+
+
+func test_allied_aid_fails_on_roll_failure() -> void:
+	var action := NPCDataStructures.ScoredAction.new()
+	action.action_id = "REQUEST_ALLIED_AID"
+	action.target_npc_id = 30
+	_ctx.dispositions[30] = 50
+	var effects: Dictionary = ActionExecutor._compute_allied_aid_effects(
+		action, _ctx, false,
+	)
+	assert_eq(effects["effect"], "aid_request_failed")
+	assert_true(effects.get("failed", false))
+
+
+func test_allied_aid_threshold_boundary() -> void:
+	var action := NPCDataStructures.ScoredAction.new()
+	action.action_id = "REQUEST_ALLIED_AID"
+	action.target_npc_id = 30
+	_ctx.dispositions[30] = 31
+	var effects: Dictionary = ActionExecutor._compute_allied_aid_effects(
+		action, _ctx, true,
+	)
+	assert_eq(effects["effect"], "aid_accepted", "Exactly at threshold should accept")
+	_ctx.dispositions[30] = 30
+	effects = ActionExecutor._compute_allied_aid_effects(action, _ctx, true)
+	assert_eq(effects["effect"], "aid_refused", "Below threshold should refuse")

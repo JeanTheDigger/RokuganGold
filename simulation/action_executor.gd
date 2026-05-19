@@ -1387,6 +1387,8 @@ static func _apply_effects(
 		var offense_key: String = action.metadata.get("offense_key", "")
 		if not offense_key.is_empty():
 			HonorGlorySystem.record_atonement(_character, offense_key)
+	elif action_id == "REQUEST_ALLIED_AID":
+		effects = _compute_allied_aid_effects(action, ctx, result["success"])
 	elif result["success"]:
 		if action_id in SOCIAL_ACTIONS:
 			effects = _compute_social_effects(action_id, result["margin"])
@@ -1531,6 +1533,33 @@ static func _compute_military_effects(action_id: String, action: NPCDataStructur
 	return {"effect": "military_order_issued"}
 
 
+# PROVISIONAL: Disposition threshold reuses feasibility ledger constant (31).
+const ALLIED_AID_ACCEPT_THRESHOLD: int = 31
+
+static func _compute_allied_aid_effects(
+	action: NPCDataStructures.ScoredAction,
+	ctx: NPCDataStructures.ContextSnapshot,
+	roll_success: bool,
+) -> Dictionary:
+	if not roll_success:
+		return {"effect": "aid_request_failed", "failed": true}
+
+	var target_id: int = action.target_npc_id
+	if target_id < 0:
+		return {"effect": "aid_request_failed", "failed": true, "reason": "no_target"}
+
+	var target_disp: int = ctx.dispositions.get(target_id, 0)
+	if target_disp < ALLIED_AID_ACCEPT_THRESHOLD:
+		return {"effect": "aid_refused", "failed": true, "reason": "disposition_too_low"}
+
+	return {
+		"effect": "aid_accepted",
+		"requires_resource_promise": true,
+		"promise_creditor_id": ctx.character_id,
+		"promise_debtor_id": target_id,
+	}
+
+
 static func _compute_admin_effects(action_id: String, action: NPCDataStructures.ScoredAction = null) -> Dictionary:
 	match action_id:
 		"SET_TAX_RATE", "SET_STIPEND_RATE":
@@ -1553,7 +1582,7 @@ static func _compute_admin_effects(action_id: String, action: NPCDataStructures.
 		"DEMAND_TRIBUTE":
 			return {"effect": "tribute_demanded"}
 		"REQUEST_ALLIED_AID":
-			return {"effect": "aid_requested"}
+			return {"effect": "aid_requested", "failed": true}
 		"FOUND_VILLAGE":
 			return {"effect": "village_founded"}
 		"BUILD_FORTIFICATION":
