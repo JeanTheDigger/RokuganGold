@@ -552,9 +552,10 @@ For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
   `func(_c) -> bool: return false` as the fulfillment checker, meaning
   no commitment could ever be fulfilled — all would break at deadline.
   Replaced with `_check_commitment_fulfilled()` which evaluates actual
-  fulfillment conditions by commitment type: COURT_ATTENDANCE and
-  VISIT_PROMISE check debtor is present at target settlement and not
-  traveling. MEETING_ARRANGEMENT checks both parties present.
+  fulfillment conditions by commitment type: COURT_ATTENDANCE checks
+  debtor present at target settlement. VISIT_PROMISE checks co-location
+  with creditor (neither traveling). MEETING_ARRANGEMENT checks both
+  parties present at target (neither traveling).
   FAVOR_OBLIGATION delegates to s12.10 (always returns false here).
 - **FAVOR_OBLIGATION commitment creation wired. ADDED.**
   `_process_commitment_creation_writebacks()` scans day results for
@@ -624,6 +625,40 @@ For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
   ResourceAvailability.can_afford() validates resources before executing.
   NPCDecisionEngine.execute_action() checks after AP/civilian order
   spending, refunds both on failure (insufficient_resources). 11 tests.
+
+### Known Code Issues (found and fixed 2026-05-19, commitment audit)
+- **MEETING_ARRANGEMENT — only one commitment created per pair. FIXED.**
+  GDD s55.31 specifies "both parties are simultaneously debtor and creditor."
+  Code created only one commitment (sender=debtor). Creditor faced no
+  consequences for not attending. Now creates two commitments with swapped
+  debtor/creditor roles. Dedup checks per-direction. 2 tests updated.
+- **VISIT_PROMISE fulfillment — always failed (fulfillment_target=-1). FIXED.**
+  `target_settlement = -1` in creation, `str(-1)` never matched any
+  physical_location. Changed fulfillment to co-location check: debtor at
+  creditor's physical_location, both non-empty, neither traveling. No longer
+  depends on fulfillment_target. 3 new tests.
+- **MEETING_ARRANGEMENT fulfillment — creditor travel not checked. FIXED.**
+  Creditor could be traveling through the settlement and still count as
+  present. Added `not TravelSystem.is_traveling(meeting_creditor)` check.
+  1 new test.
+
+### Known Code Issues — Deferred (commitment audit 2026-05-19)
+- **send_advance_notice() / register_proxy() — defined but never called.**
+  All broken commitments resolve as BROKEN_NO_NOTICE (worst consequences).
+  GDD s55.31.6 specifies advance notice via SEND_LETTER and proxy via
+  ASSIGN_VASSAL_OBJECTIVE. Requires NPC engine decision logic to detect
+  "I won't make this commitment" and decide to mitigate.
+- **SUPPORT_PLEDGE fulfillment simplified from GDD spec.**
+  Code checks any charm/negotiate action at court. GDD specifies PERSUADE,
+  PUBLIC_DEBATE, or MOVE_TOPIC_POSITION aligned with pledged position.
+  Missing: specific action type checking, position alignment checking.
+- **RESOURCE_PROMISE creation limited to REQUEST_ALLIED_AID.**
+  GDD also specifies creation during NEGOTIATE and ASSIGN_VASSAL_OBJECTIVE
+  "with resource transfer parameters." Those paths not yet wired.
+- **RESOURCE_PROMISE tier always defaults to 2.**
+  GDD specifies tier scaling by quantity (<10 koku/<5 PU = T3, 10-50 koku/
+  5-20 PU = T2, >50 koku/>20 PU = T1). Needs resource data at executor
+  level to calculate.
 
 ### Known Code Issues (found 2026-05-18, pre-existing)
 - **test_assassination_system.gd test_doji_courtier_bribe_access_gets_free_raise
