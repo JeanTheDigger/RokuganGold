@@ -456,6 +456,14 @@ For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
   (public). 4 tests.
 
 ### Known Code Issues (found and fixed 2026-05-19)
+- **Letter delivery not wiring topics_by_id into process_pending_letters. FIXED.**
+  `process_pending_letters()` call in advance_day omitted the `topics_by_id`
+  parameter (defaulted to `{}`). `_refresh_topic_momentum()` inside
+  `deliver_letter()` always received an empty dict and returned early. Tier 4
+  topics carried by letters never got `discussion_count_this_day` incremented,
+  so `decay_tier4_topic()` never applied the discussion-hold boost. Letters
+  were invisible to the topic momentum system. Built `letter_topics_by_id`
+  from `active_topics` and passed it through. 2 tests.
 - **DayOrchestrator._apply_assassination_outcome() — CrimeRecord bugs. FIXED.**
   Three bugs: (1) `crime_type = "murder"` (string) should be
   `Enums.CrimeType.UNSANCTIONED_COVERT_KILLING` (enum). (2) Assigned
