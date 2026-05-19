@@ -2456,3 +2456,91 @@ func test_virtue_modifier_applied_in_scoring() -> void:
 	need.need_type = "RAISE_DISPOSITION"
 	NPCDecisionEngine.score_all([option], need, ctx, _scoring_tables)
 	assert_eq(option.virtue_covert_modifier, -25.0, "Chugi without lord directive should penalize covert")
+
+
+# -- Context list coverage: commerce and investigation actions -----------------
+
+func test_purchase_market_in_holdings_context() -> void:
+	var actions: Array[String] = NPCDecisionEngine._get_actions_for_context(
+		Enums.ContextFlag.AT_OWN_HOLDINGS)
+	assert_has(actions, "PURCHASE_MARKET", "PURCHASE_MARKET should be available at own holdings")
+
+
+func test_purchase_market_in_court_context() -> void:
+	var actions: Array[String] = NPCDecisionEngine._get_actions_for_context(
+		Enums.ContextFlag.AT_COURT)
+	assert_has(actions, "PURCHASE_MARKET", "PURCHASE_MARKET should be available at court")
+
+
+func test_purchase_market_in_visiting_context() -> void:
+	var actions: Array[String] = NPCDecisionEngine._get_actions_for_context(
+		Enums.ContextFlag.VISITING)
+	assert_has(actions, "PURCHASE_MARKET", "PURCHASE_MARKET should be available when visiting")
+
+
+func test_conduct_commerce_in_holdings_context() -> void:
+	var actions: Array[String] = NPCDecisionEngine._get_actions_for_context(
+		Enums.ContextFlag.AT_OWN_HOLDINGS)
+	assert_has(actions, "CONDUCT_COMMERCE", "CONDUCT_COMMERCE should be available at own holdings")
+
+
+func test_conduct_commerce_in_court_context() -> void:
+	var actions: Array[String] = NPCDecisionEngine._get_actions_for_context(
+		Enums.ContextFlag.AT_COURT)
+	assert_has(actions, "CONDUCT_COMMERCE", "CONDUCT_COMMERCE should be available at court")
+
+
+func test_conduct_commerce_in_visiting_context() -> void:
+	var actions: Array[String] = NPCDecisionEngine._get_actions_for_context(
+		Enums.ContextFlag.VISITING)
+	assert_has(actions, "CONDUCT_COMMERCE", "CONDUCT_COMMERCE should be available when visiting")
+
+
+func test_examine_crime_scene_in_holdings_context() -> void:
+	var actions: Array[String] = NPCDecisionEngine._get_actions_for_context(
+		Enums.ContextFlag.AT_OWN_HOLDINGS)
+	assert_has(actions, "EXAMINE_CRIME_SCENE",
+		"EXAMINE_CRIME_SCENE should be available at own holdings")
+
+
+func test_examine_crime_scene_in_visiting_context() -> void:
+	var actions: Array[String] = NPCDecisionEngine._get_actions_for_context(
+		Enums.ContextFlag.VISITING)
+	assert_has(actions, "EXAMINE_CRIME_SCENE",
+		"EXAMINE_CRIME_SCENE should be available when visiting")
+
+
+func test_purchase_market_generates_as_option() -> void:
+	_world_state["context_flag"] = Enums.ContextFlag.AT_OWN_HOLDINGS
+	var ctx := NPCDecisionEngine.build_context(_char, _world_state)
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "ACQUIRE_RESOURCE"
+	_scoring_tables["objective_alignment"]["ACQUIRE_RESOURCE"] = {
+		"PURCHASE_MARKET": 90, "DO_NOTHING": 0, "REST": 0,
+	}
+	var options := NPCDecisionEngine.generate_options(ctx, need)
+	var filtered := NPCDecisionEngine.apply_allowlist_filter(
+		options, need.need_type, _scoring_tables)
+	var action_ids: Array[String] = []
+	for o in filtered:
+		action_ids.append(o.action_id)
+	assert_has(action_ids, "PURCHASE_MARKET",
+		"PURCHASE_MARKET should survive allowlist filter for ACQUIRE_RESOURCE")
+
+
+func test_examine_crime_scene_generates_for_investigate_threat() -> void:
+	_world_state["context_flag"] = Enums.ContextFlag.AT_OWN_HOLDINGS
+	var ctx := NPCDecisionEngine.build_context(_char, _world_state)
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "INVESTIGATE_THREAT"
+	_scoring_tables["objective_alignment"]["INVESTIGATE_THREAT"] = {
+		"EXAMINE_CRIME_SCENE": 90, "DO_NOTHING": 0,
+	}
+	var options := NPCDecisionEngine.generate_options(ctx, need)
+	var filtered := NPCDecisionEngine.apply_allowlist_filter(
+		options, need.need_type, _scoring_tables)
+	var action_ids: Array[String] = []
+	for o in filtered:
+		action_ids.append(o.action_id)
+	assert_has(action_ids, "EXAMINE_CRIME_SCENE",
+		"EXAMINE_CRIME_SCENE should survive allowlist filter for INVESTIGATE_THREAT")

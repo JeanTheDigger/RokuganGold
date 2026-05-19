@@ -703,6 +703,26 @@ For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
   `resolve_contested_check()`. When ic_day >= 0 and buff is expired, clears
   buff and returns 0. Backward compatible (default -1 skips check). 6 tests.
 
+### Known Code Issues (found and fixed 2026-05-19, scoring audit)
+- **PURCHASE_MARKET missing from all context lists. FIXED.**
+  Had full executor, resource cost (3 koku), commerce stigma handling,
+  feasibility ledger rung, and objective_alignment entries in 11 NeedTypes
+  (up to score 90 in ACQUIRE_RESOURCE), but was unreachable because it
+  wasn't in any `_get_actions_for_context()` list. Added to AT_OWN_HOLDINGS,
+  AT_COURT, VISITING per GDD s57.34 (Category 9, 1 AP) and s57.40
+  ("any context"). Explicit AP cost entry added.
+- **CONDUCT_COMMERCE missing from all context lists. FIXED.**
+  Same pattern as PURCHASE_MARKET — had executor, AP cost, commerce stigma
+  handling, but wasn't in any context list. Added to AT_OWN_HOLDINGS,
+  AT_COURT, VISITING per GDD s57.34 (Category 9, 1 AP).
+- **EXAMINE_CRIME_SCENE missing from all context lists. FIXED.**
+  Had executor, metadata population (active_case), and objective_alignment
+  entry in INVESTIGATE_THREAT (score 90), but was unreachable. GDD s14
+  specifies "AT_CRIME_SCENE context" — interpreted as AT_OWN_HOLDINGS
+  and VISITING (magistrate investigating at any settlement). Phase 4b
+  allowlist filter ensures it only appears when NeedType includes it.
+  Explicit AP cost entry added. 10 tests.
+
 ### Known Code Issues (found and fixed 2026-05-17)
 - **DefenseHearingSystem.can_appoint_champion() — tautology bug. FIXED.**
   Was `return X != Y or X == Y`. GDD s11.3.9f confirms either side may appoint a

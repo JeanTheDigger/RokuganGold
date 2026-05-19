@@ -840,6 +840,8 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array[S
 				"SHARE_SUPPLIES",
 				"CRAFT", "MENTOR",
 				"TREAT_WOUND",
+				"CONDUCT_COMMERCE", "PURCHASE_MARKET",
+				"EXAMINE_CRIME_SCENE",
 				"REQUEST_PERFORMANCE",
 				"ANNOUNCE_HUNT", "CANCEL_HUNT",
 				"TRAIN_ANIMAL",
@@ -882,6 +884,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array[S
 				"SET_TAX_RATE", "SET_STIPEND_RATE",
 				"REQUEST_ART", "ASSIGN_VASSAL_OBJECTIVE",
 				"SEND_INVITATION",
+				"CONDUCT_COMMERCE", "PURCHASE_MARKET",
 				"DO_NOTHING", "REST",
 			]
 		Enums.ContextFlag.VISITING:
@@ -899,6 +902,8 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array[S
 				"FABRICATE_SECRET", "EXPOSE_SECRET_PRIVATELY", "EXPOSE_SECRET_PUBLICLY",
 				"SEDUCE", "SEDUCE_FOR_INFO", "SEDUCE_FOR_ACCESS",
 				"SEDUCE_FOR_LEVERAGE", "SEDUCE_TO_COMPROMISE",
+				"CONDUCT_COMMERCE", "PURCHASE_MARKET",
+				"EXAMINE_CRIME_SCENE",
 				"DO_NOTHING", "REST",
 			]
 		Enums.ContextFlag.TRAVELING:
@@ -1015,6 +1020,8 @@ static func _get_ap_cost(action_id: String) -> int:
 		"DISPATCH_COURTIER": 1,
 		"SCOUT_ENEMY": 1,
 		"CONDUCT_COMMERCE": 1,
+		"PURCHASE_MARKET": 1,
+		"EXAMINE_CRIME_SCENE": 1,
 		"ISSUE_DUEL_CHALLENGE": 1,
 		"SEEK_PRETEXT": 1,
 		"SHARE_SUPPLIES": 1,
