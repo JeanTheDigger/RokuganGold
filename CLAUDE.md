@@ -749,9 +749,10 @@ For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
   actor with FRESH confidence and inverted data (wrong virtue, inverted
   disposition sign, inverted topic position). Entry types match false_info
   categories. is_false flag for debugging. 4 tests.
-- **Scouts detected on critical failure (`scouts_detected`) — emitted but
-  never consumed.** SCOUT_ENEMY critical failure sets this flag but no code
-  alerts the enemy. The scout suffers no consequence beyond the failed roll.
+- **Scouts detected on critical failure (`scouts_detected`) — FIXED.**
+  _process_scout_detection_topics() creates Tier 4 MILITARY topic on
+  SCOUT_ENEMY critical failure. Title includes target clan if available.
+  3 tests.
 - **Charm ceiling active (`charm_ceiling_active`) — informational only,
   not a bug.** The ceiling IS enforced inside resolve_charm() (clamps
   disposition change). The flag is metadata for callers; harmless.
