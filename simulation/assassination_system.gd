@@ -84,6 +84,16 @@ const EQUIPMENT_POISON_TN: int = 10
 const EQUIPMENT_BLADE_TN: int = 20
 const EQUIPMENT_BLADE_RANK_REQUIREMENT: int = 5
 
+# -- Per-Roll Permanent TN Penalty (s12.8) ------------------------------------
+# Each failed access roll permanently increases subsequent Phase 1 TNs.
+# Cannot be reduced except by aborting and restarting Phase 1 from scratch.
+# Stacks with lockdown +10 and all other TN modifiers.
+# Values PROVISIONAL — GDD specifies the mechanic exists but does not give
+# numeric penalty amounts. Using suspicion scale pending playtest.
+const ACCESS_PENALTY_STANDARD: int = 5
+const ACCESS_PENALTY_NOTABLE: int = 10
+const ACCESS_PENALTY_CRITICAL: int = 15
+
 const _CONCEAL_SCHOOL_LEAN: Array[String] = [
 	"Shosuro Infiltrator",
 	"Kasuga Smuggler",
@@ -131,6 +141,7 @@ static func create_assassination_state(
 		"days_in_access": 0,
 		"start_ic_day": current_ic_day,
 		"bodyguard_encountered": false,
+		"access_tn_penalty": 0,
 		"equipment_prepared": false,
 		"equipment_concealment_tn": 0,
 		"execution_result": {},
@@ -147,11 +158,19 @@ static func add_suspicion(state: Dictionary, amount: int) -> void:
 
 
 static func get_suspicion_from_failure(margin: int) -> int:
-	if margin <= -10:
+	if margin <= -20:
 		return SUSPICION_CRITICAL_FAILURE
-	elif margin <= -5:
+	if margin <= -10:
 		return SUSPICION_NOTABLE_FAILURE
 	return SUSPICION_FAILURE
+
+
+static func get_access_penalty_from_failure(margin: int) -> int:
+	if margin <= -20:
+		return ACCESS_PENALTY_CRITICAL
+	if margin <= -10:
+		return ACCESS_PENALTY_NOTABLE
+	return ACCESS_PENALTY_STANDARD
 
 
 static func decay_suspicion(state: Dictionary, is_present: bool, ic_day: int = -1) -> void:
@@ -381,6 +400,7 @@ static func resolve_access_day(
 	state["days_in_access"] = state.get("days_in_access", 0) + 1
 	var susp_mod: int = get_suspicion_tn_modifier(state)
 	var shinobi_mod: int = get_non_shinobi_tn_modifier(assassin)
+	var penalty: int = int(state.get("access_tn_penalty", 0))
 	var seppun_mod: int = 0
 	if target != null:
 		seppun_mod = get_seppun_tn_modifier(target, AssassinationPhase.ACCESS, characters_by_id)
@@ -390,17 +410,17 @@ static func resolve_access_day(
 	var trait_override: Enums.Trait = Enums.Trait.NONE
 	match access_method:
 		"forge_credentials":
-			tn = ACCESS_FORGE_CREDENTIALS_TN + susp_mod + shinobi_mod + seppun_mod
+			tn = ACCESS_FORGE_CREDENTIALS_TN + susp_mod + shinobi_mod + seppun_mod + penalty
 			skill = "Forgery"
 			trait_override = Enums.Trait.INTELLIGENCE
 		"bribe":
-			tn = ACCESS_BRIBE_TN + susp_mod + shinobi_mod + seppun_mod
+			tn = ACCESS_BRIBE_TN + susp_mod + shinobi_mod + seppun_mod + penalty
 			skill = "Courtier"
 		"stealth":
-			tn = ACCESS_STEALTH_INFILTRATE_TN + susp_mod + shinobi_mod + seppun_mod
+			tn = ACCESS_STEALTH_INFILTRATE_TN + susp_mod + shinobi_mod + seppun_mod + penalty
 			skill = "Stealth"
 		"seduction":
-			tn = 15 + susp_mod + shinobi_mod + seppun_mod
+			tn = 15 + susp_mod + shinobi_mod + seppun_mod + penalty
 			skill = "Temptation"
 		_:
 			return {"success": false, "reason": "invalid_method"}
@@ -413,6 +433,7 @@ static func resolve_access_day(
 
 	if not success:
 		add_suspicion(state, get_suspicion_from_failure(margin))
+		state["access_tn_penalty"] = penalty + get_access_penalty_from_failure(margin)
 
 	return {
 		"success": success,
@@ -422,6 +443,7 @@ static func resolve_access_day(
 		"skill": skill,
 		"days_in_access": state["days_in_access"],
 		"suspicion": state["suspicion"],
+		"access_tn_penalty": state["access_tn_penalty"],
 	}
 
 

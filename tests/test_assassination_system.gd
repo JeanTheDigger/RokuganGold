@@ -56,6 +56,7 @@ func test_create_state() -> void:
 	assert_eq(s["suspicion"], 0.0)
 	assert_eq(s["suspicion_raised_ic_day"], -1)
 	assert_eq(s["days_in_access"], 0)
+	assert_eq(s["access_tn_penalty"], 0)
 	assert_eq(s["equipment_prepared"], false)
 	assert_eq(s["equipment_concealment_tn"], 0)
 
@@ -102,11 +103,11 @@ func test_failure_margin_gives_5_suspicion() -> void:
 
 
 func test_notable_failure_gives_10() -> void:
-	assert_eq(AssassinationSystem.get_suspicion_from_failure(-7), 10)
+	assert_eq(AssassinationSystem.get_suspicion_from_failure(-15), 10)
 
 
 func test_critical_failure_gives_15() -> void:
-	assert_eq(AssassinationSystem.get_suspicion_from_failure(-12), 15)
+	assert_eq(AssassinationSystem.get_suspicion_from_failure(-25), 15)
 
 
 func test_watchful_threshold() -> void:
@@ -239,6 +240,90 @@ func test_suspicion_search_applies_investigation_bonus() -> void:
 
 	assert_true(total_with_bonus > total_without_bonus,
 		"Watchful bonus (+5 Investigation) should improve search rolls")
+
+
+# -- Per-Roll Permanent TN Penalty ---------------------------------------------
+
+func test_access_penalty_standard_failure() -> void:
+	assert_eq(AssassinationSystem.get_access_penalty_from_failure(-5), 5)
+
+
+func test_access_penalty_notable_failure() -> void:
+	assert_eq(AssassinationSystem.get_access_penalty_from_failure(-15), 10)
+
+
+func test_access_penalty_critical_failure() -> void:
+	assert_eq(AssassinationSystem.get_access_penalty_from_failure(-25), 15)
+
+
+func test_access_penalty_boundary_notable() -> void:
+	assert_eq(AssassinationSystem.get_access_penalty_from_failure(-10), 10)
+	assert_eq(AssassinationSystem.get_access_penalty_from_failure(-9), 5)
+
+
+func test_access_penalty_boundary_critical() -> void:
+	assert_eq(AssassinationSystem.get_access_penalty_from_failure(-20), 15)
+	assert_eq(AssassinationSystem.get_access_penalty_from_failure(-19), 10)
+
+
+func test_access_penalty_accumulates_on_failure() -> void:
+	var weak: L5RCharacterData = L5RCharacterData.new()
+	weak.character_id = 99
+	weak.agility = 1
+	weak.intelligence = 1
+	weak.awareness = 1
+	weak.skills = {"Stealth": 0}
+	weak.school = "Shosuro Infiltrator"
+	var s: Dictionary = AssassinationSystem.create_assassination_state(99, 2, AssassinationSystem.ExecutionMethod.POISON, 0)
+	var e: DiceEngine = DiceEngine.new(1)
+	AssassinationSystem.resolve_access_day(weak, s, "stealth", e)
+	assert_true(s["access_tn_penalty"] > 0, "Penalty should increase after failure")
+	var first_penalty: int = s["access_tn_penalty"]
+	var e2: DiceEngine = DiceEngine.new(2)
+	AssassinationSystem.resolve_access_day(weak, s, "stealth", e2)
+	assert_true(s["access_tn_penalty"] >= first_penalty, "Penalty should not decrease")
+
+
+func test_access_penalty_applied_to_tn() -> void:
+	_assassin.skills["Stealth"] = 5
+	_assassin.agility = 4
+	_assassin.school = "Shosuro Infiltrator"
+	var s: Dictionary = AssassinationSystem.create_assassination_state(1, 2, AssassinationSystem.ExecutionMethod.POISON, 0)
+	var e1: DiceEngine = DiceEngine.new(42)
+	var r1: Dictionary = AssassinationSystem.resolve_access_day(_assassin, s, "stealth", e1)
+	var base_tn: int = r1["tn"]
+	s["access_tn_penalty"] = 10
+	var e2: DiceEngine = DiceEngine.new(42)
+	var r2: Dictionary = AssassinationSystem.resolve_access_day(_assassin, s, "stealth", e2)
+	assert_eq(r2["tn"], base_tn + 10)
+
+
+func test_access_penalty_stacks_with_lockdown() -> void:
+	_assassin.skills["Stealth"] = 5
+	_assassin.agility = 4
+	_assassin.school = "Shosuro Infiltrator"
+	var s: Dictionary = AssassinationSystem.create_assassination_state(1, 2, AssassinationSystem.ExecutionMethod.POISON, 0)
+	s["suspicion"] = 35.0
+	s["access_tn_penalty"] = 15
+	var e: DiceEngine = DiceEngine.new(42)
+	var r: Dictionary = AssassinationSystem.resolve_access_day(_assassin, s, "stealth", e)
+	assert_eq(r["tn"], AssassinationSystem.ACCESS_STEALTH_INFILTRATE_TN + 10 + 15)
+
+
+func test_access_penalty_not_added_on_success() -> void:
+	_assassin.skills["Stealth"] = 10
+	_assassin.agility = 5
+	_assassin.school = "Shosuro Infiltrator"
+	var s: Dictionary = AssassinationSystem.create_assassination_state(1, 2, AssassinationSystem.ExecutionMethod.POISON, 0)
+	var success_count: int = 0
+	for i: int in range(50):
+		var e: DiceEngine = DiceEngine.new(i * 13)
+		s["access_tn_penalty"] = 0
+		s["suspicion"] = 0.0
+		AssassinationSystem.resolve_access_day(_assassin, s, "stealth", e)
+		if s["access_tn_penalty"] == 0:
+			success_count += 1
+	assert_true(success_count > 0, "At least some rolls should succeed without adding penalty")
 
 
 # ==============================================================================
