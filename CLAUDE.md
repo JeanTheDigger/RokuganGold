@@ -556,18 +556,28 @@ For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
   VISIT_PROMISE check debtor is present at target settlement and not
   traveling. MEETING_ARRANGEMENT checks both parties present.
   FAVOR_OBLIGATION delegates to s12.10 (always returns false here).
+- **FAVOR_OBLIGATION commitment creation wired. ADDED.**
+  `_process_commitment_creation_writebacks()` scans day results for
+  `requires_favor_creation` and creates FAVOR_OBLIGATION CommitmentData
+  alongside the FavorData. Witnesses: court attendees if at court,
+  creditor+debtor only if private. Duplicate-safe. Added
+  `next_commitment_id: Array[int]` parameter to advance_day.
+- **FAVOR_OBLIGATION skipped in deadline and at-risk processing. FIXED.**
+  `process_deadlines()` and `get_at_risk_penalty()` now skip
+  FAVOR_OBLIGATION entries per GDD s55.31.2: "visibility only, consequences
+  delegated to Section 12.10." Without skip, FAVOR_OBLIGATION with
+  deadline_ic_day=-1 would immediately trigger BROKEN status on first tick.
+  8 tests.
 
 ### Known Code Issues — Deferred (2026-05-19)
-- **CommitmentRegistry.create_commitment() never called from action executors.**
-  Social commitments (COURT_ATTENDANCE, VISIT_PROMISE, SUPPORT_PLEDGE,
-  RESOURCE_PROMISE, MEETING_ARRANGEMENT) are never created at action
-  execution time. The commitment processing machinery (deadlines,
-  consequences, forgiveness, Phase 5 at-risk penalties) all works correctly
-  but operates on an empty array. Requires wiring into 6+ action executor
-  paths: ACCEPT_INVITATION→COURT_ATTENDANCE, SEND_LETTER with visit_intent→
-  VISIT_PROMISE, NEGOTIATE/PERSUADE with pledge→SUPPORT_PLEDGE,
-  REQUEST_ALLIED_AID→RESOURCE_PROMISE, SEND_LETTER with meeting→
-  MEETING_ARRANGEMENT. Deferred — needs session-length work.
+- **CommitmentRegistry.create_commitment() — 5 of 6 types still unwired.**
+  FAVOR_OBLIGATION is now wired (created alongside FavorData on OFFER_FAVOR).
+  Remaining 5 types blocked on missing upstream infrastructure:
+  COURT_ATTENDANCE (ACCEPT_INVITATION ActionID doesn't exist; COURT_INVITATION
+  reactive events not injected), VISIT_PROMISE (no visit_intent flag on
+  letters), SUPPORT_PLEDGE (no pledge outcome in NEGOTIATE/PERSUADE),
+  RESOURCE_PROMISE (REQUEST_ALLIED_AID executor is a stub),
+  MEETING_ARRANGEMENT (no meeting_coordination flag on letters).
 - **CommitmentRegistry.apply_forgiveness() never called.**
   Retroactive forgiveness (s55.31.11.2) should fire when a crisis topic
   reaches an NPC who suffered a disposition penalty from a crisis-linked
