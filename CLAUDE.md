@@ -774,12 +774,11 @@ For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
   for performance request tracking but never wired.
 
 ### Known Code Issues — Deferred (2026-05-19, ActionID pipeline audit)
-- **APPLY_TATTOO wiring gap.** TattooSystem (s57.25) has pure functions
-  (get_ap_cost, resolve_quality, meets_skill_gate, etc.) but APPLY_TATTOO
-  is missing from: (1) all context action lists, (2) ActionExecutor dispatch,
-  (3) AP cost dictionary. The system is implemented but the ActionID is
-  unreachable through the NPC decision pipeline. Needs executor handler
-  and context list entry (AT_OWN_HOLDINGS + VISITING per GDD s57.25.3).
+- **APPLY_TATTOO wiring gap. FIXED.** Added to AT_OWN_HOLDINGS and VISITING
+  context lists, ActionExecutor dispatch (skill gate, AP check, body location
+  validation, ability tattoo gate, SkillResolver roll), AP cost dictionary
+  (2 base, variable via ap_cost_override), DayOrchestrator writeback
+  (TattooData creation, extra AP deduction). 11 tests.
 - **FORCE_MARCH, EVALUATE_CLAN_STRENGTH — no executor, no context list.**
   Both appear in objective_alignment.json and action_skill_map.json with
   scores and skill mappings, but have no executor handler or context list
