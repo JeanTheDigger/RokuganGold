@@ -518,6 +518,69 @@ For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
   `character.commanded_unit_id`, and `company["commander_id"]` were never
   updated. Added `_apply_promotion_results()` to apply promotions after
   seasonal military processing.
+- **TravelCommitment.increment_redirects() never called. FIXED.**
+  CHANGE_DESTINATION action executor returned results but never incremented
+  the objective's `travel_redirects` counter. The redirect penalty existed
+  in Phase 5 scoring (get_redirect_penalty wired at NPC engine line 447)
+  but never accumulated because increment_redirects was never called.
+  Added `_process_travel_redirect_writebacks()` to scan wave results for
+  successful CHANGE_DESTINATION actions and increment the primary objective's
+  redirect counter.
+- **ApproachEvaluation.evaluate_approach() / record_penalty() never called. FIXED.**
+  The measurement bonus (+15 for READ_CHARACTER/PROBE) was correctly wired
+  into Phase 5 scoring, but after measurement actions fired, the approach
+  evaluation step was missing. NPCs would get the bonus to measure but
+  the measurement result was never assessed. Added
+  `_process_approach_evaluation_writebacks()` to detect successful
+  READ_CHARACTER/PROBE results, check which social/covert actions triggered
+  measurement_needed, evaluate the approach (CAPPED or INEFFECTIVE), and
+  record penalties. LIMITATION: disposition_at_start tracking not yet
+  implemented — approach effective/ineffective distinction uses current
+  disposition for both, which conservatively classifies sub-tier progress
+  as INEFFECTIVE. APPROACH_CAPPED detection works correctly.
+- **CommitmentRegistry.link_crisis() never called. FIXED.**
+  When a crisis override fired and an NPC executed crisis actions
+  (ORDER_DEPLOY, etc.) while holding PENDING commitments, the commitments
+  were never stamped with crisis_id. This meant all broken commitments
+  resolved as BROKEN_NO_NOTICE instead of BROKEN_FORCE_MAJEURE, causing
+  full consequence cascades for legitimate crisis responses. Added
+  `_process_crisis_commitment_linking()` to detect crisis actions where
+  the NPC's primary objective carries a crisis_id, and stamp all their
+  PENDING commitments accordingly.
+- **Commitment fulfillment checker always returned false. FIXED.**
+  `_process_commitment_deadlines()` passed a dummy callable
+  `func(_c) -> bool: return false` as the fulfillment checker, meaning
+  no commitment could ever be fulfilled — all would break at deadline.
+  Replaced with `_check_commitment_fulfilled()` which evaluates actual
+  fulfillment conditions by commitment type: COURT_ATTENDANCE and
+  VISIT_PROMISE check debtor is present at target settlement and not
+  traveling. MEETING_ARRANGEMENT checks both parties present.
+  FAVOR_OBLIGATION delegates to s12.10 (always returns false here).
+
+### Known Code Issues — Deferred (2026-05-19)
+- **CommitmentRegistry.create_commitment() never called from action executors.**
+  Social commitments (COURT_ATTENDANCE, VISIT_PROMISE, SUPPORT_PLEDGE,
+  RESOURCE_PROMISE, MEETING_ARRANGEMENT) are never created at action
+  execution time. The commitment processing machinery (deadlines,
+  consequences, forgiveness, Phase 5 at-risk penalties) all works correctly
+  but operates on an empty array. Requires wiring into 6+ action executor
+  paths: ACCEPT_INVITATION→COURT_ATTENDANCE, SEND_LETTER with visit_intent→
+  VISIT_PROMISE, NEGOTIATE/PERSUADE with pledge→SUPPORT_PLEDGE,
+  REQUEST_ALLIED_AID→RESOURCE_PROMISE, SEND_LETTER with meeting→
+  MEETING_ARRANGEMENT. Deferred — needs session-length work.
+- **CommitmentRegistry.apply_forgiveness() never called.**
+  Retroactive forgiveness (s55.31.11.2) should fire when a crisis topic
+  reaches an NPC who suffered a disposition penalty from a crisis-linked
+  broken commitment. Requires wiring into the topic propagation flow
+  when NPCs learn about crises. Deferred — depends on commitment creation
+  being wired first (no forgiveness without commitments to break).
+- **Approach evaluation disposition_at_start tracking not implemented.**
+  `ApproachEvaluation.evaluate_approach()` takes `disposition_at_start`
+  to distinguish EFFECTIVE (sub-tier progress) from INEFFECTIVE (no
+  progress). Current wiring passes `current_disposition` for both,
+  making the EFFECTIVE branch unreachable. APPROACH_CAPPED works
+  correctly. Needs a per-(character, target, season) snapshot dict
+  populated at first social action of each season.
 
 ### Known Code Issues (found 2026-05-18, pre-existing)
 - **test_assassination_system.gd test_doji_courtier_bribe_access_gets_free_raise

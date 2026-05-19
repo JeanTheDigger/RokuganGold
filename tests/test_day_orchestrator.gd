@@ -7133,3 +7133,246 @@ func test_apply_promotion_results_skips_invalid_character() -> void:
 	}]
 	DayOrchestrator._apply_promotion_results(results, chars_by_id, companies)
 	assert_eq(companies[0]["commander_id"], -1)
+
+
+# -- Travel Redirect Writeback (s55.29.1) --------------------------------------
+
+
+func test_travel_redirect_increments_on_change_destination() -> void:
+	var objectives_map: Dictionary = {
+		1: {"primary": {"need_type": "AVENGE", "travel_redirects": 0}},
+	}
+	var results: Array[Dictionary] = [{
+		"action_id": "CHANGE_DESTINATION",
+		"character_id": 1,
+		"effects": {"travel": {"changed": true}},
+	}]
+	DayOrchestrator._process_travel_redirect_writebacks(results, objectives_map)
+	assert_eq(objectives_map[1]["primary"]["travel_redirects"], 1)
+
+
+func test_travel_redirect_skips_failed_change() -> void:
+	var objectives_map: Dictionary = {
+		1: {"primary": {"need_type": "AVENGE", "travel_redirects": 0}},
+	}
+	var results: Array[Dictionary] = [{
+		"action_id": "CHANGE_DESTINATION",
+		"character_id": 1,
+		"effects": {"travel": {"changed": false}},
+	}]
+	DayOrchestrator._process_travel_redirect_writebacks(results, objectives_map)
+	assert_eq(objectives_map[1]["primary"]["travel_redirects"], 0)
+
+
+func test_travel_redirect_skips_non_redirect_actions() -> void:
+	var objectives_map: Dictionary = {
+		1: {"primary": {"need_type": "AVENGE", "travel_redirects": 0}},
+	}
+	var results: Array[Dictionary] = [{
+		"action_id": "BEGIN_TRAVEL",
+		"character_id": 1,
+		"effects": {"travel": {"changed": true}},
+	}]
+	DayOrchestrator._process_travel_redirect_writebacks(results, objectives_map)
+	assert_eq(objectives_map[1]["primary"]["travel_redirects"], 0)
+
+
+# -- Approach Evaluation Writebacks (s55.30) -----------------------------------
+
+
+func test_approach_evaluation_records_capped_penalty() -> void:
+	var action_log: Array[Dictionary] = []
+	for i: int in range(3):
+		action_log.append({
+			"character_id": 1, "target_npc_id": 2,
+			"action_id": "CHARM", "season": 5,
+			"roll_result": 30, "tn": 20,
+			"observable_effect": false,
+		})
+	var target := L5RCharacterData.new()
+	target.character_id = 2
+	target.disposition_values = {1: 42}
+	var chars_by_id: Dictionary = {2: target}
+	var penalties: Array[Dictionary] = []
+	var results: Array[Dictionary] = [{
+		"action_id": "READ_CHARACTER",
+		"character_id": 1,
+		"target_npc_id": 2,
+		"success": true,
+	}]
+	DayOrchestrator._process_approach_evaluation_writebacks(
+		results, action_log, penalties, chars_by_id, 5
+	)
+	assert_eq(penalties.size(), 1)
+	assert_eq(penalties[0]["tag"], ApproachEvaluation.AssessmentTag.APPROACH_CAPPED)
+
+
+func test_approach_evaluation_skips_failed_measurement() -> void:
+	var action_log: Array[Dictionary] = []
+	for i: int in range(3):
+		action_log.append({
+			"character_id": 1, "target_npc_id": 2,
+			"action_id": "CHARM", "season": 5,
+			"roll_result": 30, "tn": 20,
+			"observable_effect": false,
+		})
+	var target := L5RCharacterData.new()
+	target.character_id = 2
+	target.disposition_values = {1: 42}
+	var chars_by_id: Dictionary = {2: target}
+	var penalties: Array[Dictionary] = []
+	var results: Array[Dictionary] = [{
+		"action_id": "READ_CHARACTER",
+		"character_id": 1,
+		"target_npc_id": 2,
+		"success": false,
+	}]
+	DayOrchestrator._process_approach_evaluation_writebacks(
+		results, action_log, penalties, chars_by_id, 5
+	)
+	assert_eq(penalties.size(), 0)
+
+
+func test_approach_evaluation_records_ineffective_penalty() -> void:
+	var action_log: Array[Dictionary] = []
+	for i: int in range(3):
+		action_log.append({
+			"character_id": 1, "target_npc_id": 2,
+			"action_id": "CHARM", "season": 5,
+			"roll_result": 30, "tn": 20,
+			"observable_effect": false,
+		})
+	var target := L5RCharacterData.new()
+	target.character_id = 2
+	target.disposition_values = {1: 10}
+	var chars_by_id: Dictionary = {2: target}
+	var penalties: Array[Dictionary] = []
+	var results: Array[Dictionary] = [{
+		"action_id": "PROBE",
+		"character_id": 1,
+		"target_npc_id": 2,
+		"success": true,
+	}]
+	DayOrchestrator._process_approach_evaluation_writebacks(
+		results, action_log, penalties, chars_by_id, 5
+	)
+	assert_eq(penalties.size(), 1)
+	assert_eq(penalties[0]["tag"], ApproachEvaluation.AssessmentTag.APPROACH_INEFFECTIVE)
+
+
+# -- Crisis Commitment Linking (s55.31.11) -------------------------------------
+
+
+func test_crisis_commitment_linking_stamps_crisis_id() -> void:
+	var c1 := CommitmentData.new()
+	c1.commitment_id = 1
+	c1.debtor_npc_id = 10
+	c1.status = Enums.CommitmentStatus.PENDING
+	var commitments: Array[CommitmentData] = [c1]
+	var objectives_map: Dictionary = {
+		10: {"primary": {"need_type": "DEFEND_PROVINCE", "crisis_id": 77}},
+	}
+	var results: Array[Dictionary] = [{
+		"action_id": "ORDER_DEPLOY",
+		"character_id": 10,
+	}]
+	DayOrchestrator._process_crisis_commitment_linking(results, commitments, objectives_map)
+	assert_eq(c1.crisis_id, 77)
+
+
+func test_crisis_commitment_linking_skips_non_crisis() -> void:
+	var c1 := CommitmentData.new()
+	c1.commitment_id = 1
+	c1.debtor_npc_id = 10
+	c1.status = Enums.CommitmentStatus.PENDING
+	var commitments: Array[CommitmentData] = [c1]
+	var objectives_map: Dictionary = {
+		10: {"primary": {"need_type": "CONQUER_PROVINCE", "crisis_id": -1}},
+	}
+	var results: Array[Dictionary] = [{
+		"action_id": "ORDER_DEPLOY",
+		"character_id": 10,
+	}]
+	DayOrchestrator._process_crisis_commitment_linking(results, commitments, objectives_map)
+	assert_eq(c1.crisis_id, -1)
+
+
+# -- Commitment Fulfillment Checker (s55.31.4) ---------------------------------
+
+
+func test_commitment_fulfillment_court_attendance() -> void:
+	var debtor := L5RCharacterData.new()
+	debtor.character_id = 10
+	debtor.physical_location = "100"
+	debtor.travel_destination = ""
+	debtor.travel_days_remaining = 0
+	var chars_by_id: Dictionary = {10: debtor}
+	var c1 := CommitmentData.new()
+	c1.debtor_npc_id = 10
+	c1.commitment_type = Enums.CommitmentType.COURT_ATTENDANCE
+	c1.fulfillment_target = 100
+	assert_true(DayOrchestrator._check_commitment_fulfilled(c1, chars_by_id))
+
+
+func test_commitment_fulfillment_court_attendance_wrong_location() -> void:
+	var debtor := L5RCharacterData.new()
+	debtor.character_id = 10
+	debtor.physical_location = "200"
+	debtor.travel_destination = ""
+	debtor.travel_days_remaining = 0
+	var chars_by_id: Dictionary = {10: debtor}
+	var c1 := CommitmentData.new()
+	c1.debtor_npc_id = 10
+	c1.commitment_type = Enums.CommitmentType.COURT_ATTENDANCE
+	c1.fulfillment_target = 100
+	assert_false(DayOrchestrator._check_commitment_fulfilled(c1, chars_by_id))
+
+
+func test_commitment_fulfillment_meeting_both_present() -> void:
+	var debtor := L5RCharacterData.new()
+	debtor.character_id = 10
+	debtor.physical_location = "50"
+	debtor.travel_destination = ""
+	debtor.travel_days_remaining = 0
+	var creditor := L5RCharacterData.new()
+	creditor.character_id = 20
+	creditor.physical_location = "50"
+	var chars_by_id: Dictionary = {10: debtor, 20: creditor}
+	var c1 := CommitmentData.new()
+	c1.debtor_npc_id = 10
+	c1.creditor_npc_id = 20
+	c1.commitment_type = Enums.CommitmentType.MEETING_ARRANGEMENT
+	c1.fulfillment_target = 50
+	assert_true(DayOrchestrator._check_commitment_fulfilled(c1, chars_by_id))
+
+
+func test_commitment_fulfillment_court_attendance_while_traveling() -> void:
+	var debtor := L5RCharacterData.new()
+	debtor.character_id = 10
+	debtor.physical_location = "100"
+	debtor.travel_destination = "200"
+	debtor.travel_days_remaining = 3
+	var chars_by_id: Dictionary = {10: debtor}
+	var c1 := CommitmentData.new()
+	c1.debtor_npc_id = 10
+	c1.commitment_type = Enums.CommitmentType.COURT_ATTENDANCE
+	c1.fulfillment_target = 100
+	assert_false(DayOrchestrator._check_commitment_fulfilled(c1, chars_by_id))
+
+
+func test_commitment_fulfillment_meeting_one_absent() -> void:
+	var debtor := L5RCharacterData.new()
+	debtor.character_id = 10
+	debtor.physical_location = "50"
+	debtor.travel_destination = ""
+	debtor.travel_days_remaining = 0
+	var creditor := L5RCharacterData.new()
+	creditor.character_id = 20
+	creditor.physical_location = "300"
+	var chars_by_id: Dictionary = {10: debtor, 20: creditor}
+	var c1 := CommitmentData.new()
+	c1.debtor_npc_id = 10
+	c1.creditor_npc_id = 20
+	c1.commitment_type = Enums.CommitmentType.MEETING_ARRANGEMENT
+	c1.fulfillment_target = 50
+	assert_false(DayOrchestrator._check_commitment_fulfilled(c1, chars_by_id))

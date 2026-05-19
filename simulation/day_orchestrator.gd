@@ -535,6 +535,19 @@ static func advance_day(
 		phoenix_council_state,
 	)
 
+	_process_travel_redirect_writebacks(
+		day_result.get("results", []), objectives_map,
+	)
+
+	_process_approach_evaluation_writebacks(
+		day_result.get("results", []),
+		action_log, approach_penalties, characters_by_id, current_season,
+	)
+
+	_process_crisis_commitment_linking(
+		day_result.get("results", []), commitments, objectives_map,
+	)
+
 	var commitment_results: Array[Dictionary] = _process_commitment_deadlines(
 		commitments, ic_day, characters_by_id
 	)
@@ -4811,10 +4824,41 @@ static func _process_commitment_deadlines(
 ) -> Array[Dictionary]:
 	if commitments.is_empty():
 		return []
-	var checker: Callable = func(_c: CommitmentData) -> bool: return false
+	var chars: Dictionary = characters_by_id
+	var checker: Callable = func(c: CommitmentData) -> bool:
+		return DayOrchestrator._check_commitment_fulfilled(c, chars)
 	return CommitmentRegistry.process_deadlines(
 		commitments, ic_day, checker, characters_by_id, characters_by_id
 	)
+
+
+static func _check_commitment_fulfilled(
+	c: CommitmentData,
+	characters_by_id: Dictionary,
+) -> bool:
+	var debtor: L5RCharacterData = characters_by_id.get(c.debtor_npc_id)
+	if debtor == null:
+		return false
+	var target_settlement: String = str(c.fulfillment_target)
+	var is_present: bool = (
+		debtor.physical_location == target_settlement
+		and not TravelSystem.is_traveling(debtor)
+	)
+	match c.commitment_type:
+		Enums.CommitmentType.COURT_ATTENDANCE:
+			return is_present
+		Enums.CommitmentType.VISIT_PROMISE:
+			return is_present
+		Enums.CommitmentType.MEETING_ARRANGEMENT:
+			if not is_present:
+				return false
+			var creditor: L5RCharacterData = characters_by_id.get(c.creditor_npc_id)
+			if creditor == null:
+				return false
+			return creditor.physical_location == target_settlement
+		Enums.CommitmentType.FAVOR_OBLIGATION:
+			return false
+	return false
 
 
 # -- Topic Propagation Wiring --------------------------------------------------
@@ -14519,3 +14563,113 @@ static func _apply_assassination_outcome(
 			topic.tier = TopicData.Tier.TIER_2
 	topic.subject_character_id = target.character_id
 	active_topics.append(topic)
+
+
+# -- Travel Redirect Tracking (s55.29.1) --------------------------------------
+
+static func _process_travel_redirect_writebacks(
+	results: Array[Dictionary],
+	objectives_map: Dictionary,
+) -> void:
+	for result: Dictionary in results:
+		if result.get("action_id", "") != "CHANGE_DESTINATION":
+			continue
+		var effects: Dictionary = result.get("effects", {})
+		if not effects.get("travel", {}).get("changed", false):
+			continue
+		var char_id: int = result.get("character_id", -1)
+		if char_id < 0:
+			continue
+		var objectives: Dictionary = objectives_map.get(char_id, {})
+		var primary: Dictionary = objectives.get("primary", {})
+		if primary.is_empty():
+			continue
+		TravelCommitment.increment_redirects(primary)
+
+
+# -- Approach Evaluation Writebacks (s55.30) -----------------------------------
+
+static func _process_approach_evaluation_writebacks(
+	results: Array[Dictionary],
+	action_log: Array[Dictionary],
+	approach_penalties: Array[Dictionary],
+	characters_by_id: Dictionary,
+	current_season: int,
+) -> void:
+	for result: Dictionary in results:
+		var action_id: String = result.get("action_id", "")
+		if action_id not in ApproachEvaluation.MEASUREMENT_ACTIONS:
+			continue
+		if not result.get("success", false):
+			continue
+		var char_id: int = result.get("character_id", -1)
+		var target_id: int = result.get("target_npc_id", -1)
+		if char_id < 0 or target_id < 0:
+			continue
+		var penalizable: Array[String] = _find_measurement_triggered_actions(
+			action_log, char_id, target_id, current_season
+		)
+		if penalizable.is_empty():
+			continue
+		var target: L5RCharacterData = characters_by_id.get(target_id)
+		if target == null:
+			continue
+		var current_disp: int = target.disposition_values.get(char_id, 0)
+		for penalized_action: String in penalizable:
+			var tag: ApproachEvaluation.AssessmentTag = ApproachEvaluation.evaluate_approach(
+				penalized_action, target_id, current_disp, current_disp
+			)
+			if tag == ApproachEvaluation.AssessmentTag.APPROACH_EFFECTIVE:
+				continue
+			ApproachEvaluation.record_penalty(
+				approach_penalties, char_id, target_id, penalized_action, tag, current_season
+			)
+
+
+static func _find_measurement_triggered_actions(
+	action_log: Array[Dictionary],
+	character_id: int,
+	target_npc_id: int,
+	current_season: int,
+) -> Array[String]:
+	var result: Array[String] = []
+	for social_action: String in ApproachEvaluation.SOCIAL_ACTIONS:
+		if ApproachEvaluation.check_measurement_needed(
+			action_log, character_id, target_npc_id, social_action, current_season
+		):
+			result.append(social_action)
+	for covert_action: String in ApproachEvaluation.COVERT_ACTIONS:
+		if ApproachEvaluation.check_measurement_needed(
+			action_log, character_id, target_npc_id, covert_action, current_season
+		):
+			result.append(covert_action)
+	return result
+
+
+# -- Crisis Commitment Linking (s55.31.11) -------------------------------------
+
+const CRISIS_ACTION_IDS: Array[String] = [
+	"ORDER_DEPLOY", "ORDER_RETREAT", "CONDUCT_STORM_ASSAULT",
+	"ORDER_FORTIFY", "ASSIGN_GARRISON",
+]
+
+static func _process_crisis_commitment_linking(
+	results: Array[Dictionary],
+	commitments: Array[CommitmentData],
+	objectives_map: Dictionary,
+) -> void:
+	if commitments.is_empty():
+		return
+	for result: Dictionary in results:
+		var action_id: String = result.get("action_id", "")
+		if action_id not in CRISIS_ACTION_IDS:
+			continue
+		var char_id: int = result.get("character_id", -1)
+		if char_id < 0:
+			continue
+		var objectives: Dictionary = objectives_map.get(char_id, {})
+		var primary: Dictionary = objectives.get("primary", {})
+		var crisis_id: int = primary.get("crisis_id", -1)
+		if crisis_id < 0:
+			continue
+		CommitmentRegistry.link_crisis(commitments, char_id, crisis_id)
