@@ -31,3 +31,6 @@ enum Category {
 @export var ic_day_created: int = -1
 @export var resolved: bool = false
 @export var discussion_count_this_day: int = 0
+
+# Crisis linkage — matches ProvinceData.active_crisis_id for forgiveness wiring (s55.31.11.2)
+@export var crisis_id: int = -1

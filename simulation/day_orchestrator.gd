@@ -566,6 +566,10 @@ static func advance_day(
 		commitments, ic_day, characters_by_id, active_courts
 	)
 
+	var forgiveness_results: Array[Dictionary] = _process_retroactive_forgiveness(
+		commitments, characters_by_id, active_topics
+	)
+
 	var orphan_results: Array[Dictionary] = _process_lord_deaths(
 		death_events, characters, objectives_map, successor_map,
 		active_successions, next_succession_id, characters_by_id, ic_day,
@@ -928,6 +932,7 @@ static func advance_day(
 		"seasonal_result": seasonal_result,
 		"crime_results": crime_results,
 		"commitment_results": commitment_results,
+		"forgiveness_results": forgiveness_results,
 		"uphold_law_results": uphold_law_results,
 		"cold_case_results": cold_case_results,
 		"conviction_results": conviction_results,
@@ -2164,6 +2169,8 @@ static func _process_horde_assaults(
 			topic.clan_involved = clan_str
 			topic.ic_day_created = ic_day
 			topic.provinces_affected = [horde.target_province_id]
+			if province is ProvinceData:
+				topic.crisis_id = (province as ProvinceData).active_crisis_id
 			active_topics.append(topic)
 			results.append({
 				"province_id": horde.target_province_id,
@@ -2574,8 +2581,12 @@ static func _process_famine_crises(
 				for e: Dictionary in entries:
 					all_pids.append(int(e["province_id"]))
 				_absorb_provincial_famine_topics(clan, active_topics)
+				var first_cid: int = -1
+				var first_prov: Variant = provinces.get(all_pids[0], null)
+				if first_prov is ProvinceData:
+					first_cid = (first_prov as ProvinceData).active_crisis_id
 				var topic: TopicData = _create_famine_topic_multi(
-					all_pids, clan, next_topic_id, ic_day,
+					all_pids, clan, next_topic_id, ic_day, first_cid,
 				)
 				active_topics.append(topic)
 				results.append({
@@ -2606,9 +2617,13 @@ static func _process_famine_crises(
 				if stage >= ResourceTick.StarvationStage.FAMINE:
 					tier = TopicData.Tier.TIER_2
 					momentum = _FAMINE_FAMINE_MOMENTUM
+				var single_cid: int = -1
+				var single_prov: Variant = provinces.get(province_id, null)
+				if single_prov is ProvinceData:
+					single_cid = (single_prov as ProvinceData).active_crisis_id
 				var topic: TopicData = _create_famine_topic(
 					province_id, clan, tier, momentum,
-					next_topic_id, ic_day,
+					next_topic_id, ic_day, single_cid,
 				)
 				active_topics.append(topic)
 				results.append({
@@ -2698,6 +2713,7 @@ static func _create_famine_topic(
 	momentum: float,
 	next_topic_id: Array[int],
 	ic_day: int,
+	p_crisis_id: int = -1,
 ) -> TopicData:
 	var topic: TopicData = TopicData.new()
 	topic.topic_id = next_topic_id[0]
@@ -2712,6 +2728,7 @@ static func _create_famine_topic(
 	topic.provinces_affected = [province_id]
 	topic.ic_day_created = ic_day
 	topic.momentum = momentum
+	topic.crisis_id = p_crisis_id
 	return topic
 
 
@@ -2720,6 +2737,7 @@ static func _create_famine_topic_multi(
 	clan: String,
 	next_topic_id: Array[int],
 	ic_day: int,
+	p_crisis_id: int = -1,
 ) -> TopicData:
 	var topic: TopicData = TopicData.new()
 	topic.topic_id = next_topic_id[0]
@@ -2734,6 +2752,7 @@ static func _create_famine_topic_multi(
 	topic.provinces_affected = province_ids.duplicate()
 	topic.ic_day_created = ic_day
 	topic.momentum = _FAMINE_FAMINE_MOMENTUM
+	topic.crisis_id = p_crisis_id
 	return topic
 
 
@@ -9578,6 +9597,7 @@ static func _topic_from_dict(
 	t.subject_character_id = topic_dict.get("subject_character_id", -1)
 	t.subject_role = topic_dict.get("subject_role", "NEUTRAL")
 	t.provinces_affected = topic_dict.get("provinces_affected", [])
+	t.crisis_id = topic_dict.get("crisis_id", -1)
 	t.ic_day_created = ic_day
 	return t
 
@@ -14857,6 +14877,75 @@ static func _process_crisis_commitment_linking(
 		if crisis_id < 0:
 			continue
 		CommitmentRegistry.link_crisis(commitments, char_id, crisis_id)
+
+
+# -- Retroactive Forgiveness (s55.31.11.2) ------------------------------------
+
+static func _process_retroactive_forgiveness(
+	commitments: Array[CommitmentData],
+	characters_by_id: Dictionary,
+	active_topics: Array[TopicData],
+) -> Array[Dictionary]:
+	var results: Array[Dictionary] = []
+
+	var crisis_commitments: Array[CommitmentData] = []
+	for c: CommitmentData in commitments:
+		if c.status == Enums.CommitmentStatus.BROKEN_FORCE_MAJEURE and c.crisis_id >= 0:
+			crisis_commitments.append(c)
+	if crisis_commitments.is_empty():
+		return results
+
+	var crisis_topic_ids: Dictionary = {}
+	for t: TopicData in active_topics:
+		if t.crisis_id >= 0:
+			if not crisis_topic_ids.has(t.crisis_id):
+				crisis_topic_ids[t.crisis_id] = []
+			crisis_topic_ids[t.crisis_id].append(t.topic_id)
+
+	for c: CommitmentData in crisis_commitments:
+		var matching_topics: Array = crisis_topic_ids.get(c.crisis_id, [])
+		if matching_topics.is_empty():
+			continue
+
+		var debtor: Variant = characters_by_id.get(c.debtor_npc_id, null)
+		if not (debtor is L5RCharacterData):
+			continue
+		var debtor_char: L5RCharacterData = debtor as L5RCharacterData
+
+		for record: Dictionary in c.penalty_records:
+			if record.get("forgiveness_applied", false):
+				continue
+			var npc_id: int = record.get("npc_id", -1)
+			if npc_id < 0:
+				continue
+			var receiving: Variant = characters_by_id.get(npc_id, null)
+			if not (receiving is L5RCharacterData):
+				continue
+			var receiving_npc: L5RCharacterData = receiving as L5RCharacterData
+
+			var knows_crisis: bool = false
+			for tid: Variant in matching_topics:
+				if int(tid) in receiving_npc.topic_pool:
+					knows_crisis = true
+					break
+			if not knows_crisis:
+				continue
+
+			var same_chain: bool = receiving_npc.clan == debtor_char.clan
+			var recovery: float = CommitmentRegistry.apply_forgiveness(
+				c, receiving_npc, c.debtor_npc_id, same_chain
+			)
+			if recovery > 0.0:
+				results.append({
+					"commitment_id": c.commitment_id,
+					"debtor_id": c.debtor_npc_id,
+					"receiving_npc_id": npc_id,
+					"recovery": recovery,
+					"same_loyalty_chain": same_chain,
+					"crisis_id": c.crisis_id,
+				})
+
+	return results
 
 
 # -- Commitment Creation Writebacks (s55.31.3) --------------------------------

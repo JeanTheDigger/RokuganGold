@@ -8152,3 +8152,242 @@ func test_support_pledge_not_fulfilled_if_absent() -> void:
 		c, chars_by_id, [court],
 	)
 	assert_false(result, "Absent debtor should not fulfill")
+
+
+# -- Retroactive Forgiveness (s55.31.11.2) ------------------------------------
+
+func test_forgiveness_fires_when_npc_learns_crisis_topic() -> void:
+	var debtor := L5RCharacterData.new()
+	debtor.character_id = 10
+	debtor.clan = "Crane"
+	var receiver := L5RCharacterData.new()
+	receiver.character_id = 20
+	receiver.clan = "Lion"
+	receiver.bushido_virtue = Enums.BushidoVirtue.JIN
+	receiver.disposition_values = {10: -20}
+	var chars_by_id: Dictionary = {10: debtor, 20: receiver}
+
+	var c := CommitmentData.new()
+	c.commitment_id = 1
+	c.commitment_type = Enums.CommitmentType.COURT_ATTENDANCE
+	c.debtor_npc_id = 10
+	c.creditor_npc_id = 20
+	c.crisis_id = 42
+	c.status = Enums.CommitmentStatus.BROKEN_FORCE_MAJEURE
+	c.penalty_records = [{"npc_id": 20, "disposition_change": -10, "forgiveness_applied": false}]
+
+	var topic := TopicData.new()
+	topic.topic_id = 100
+	topic.crisis_id = 42
+	topic.topic_type = "famine"
+	receiver.topic_pool = [100]
+
+	var commitments: Array[CommitmentData] = [c]
+	var topics: Array[TopicData] = [topic]
+	var results: Array[Dictionary] = DayOrchestrator._process_retroactive_forgiveness(
+		commitments, chars_by_id, topics,
+	)
+	assert_eq(results.size(), 1, "Should produce one forgiveness result")
+	assert_eq(results[0]["receiving_npc_id"], 20)
+	assert_gt(results[0]["recovery"], 0.0, "Jin virtue should give 100% recovery")
+	assert_true(c.penalty_records[0]["forgiveness_applied"], "Should mark applied")
+
+
+func test_forgiveness_skips_when_npc_does_not_know_topic() -> void:
+	var debtor := L5RCharacterData.new()
+	debtor.character_id = 10
+	debtor.clan = "Crane"
+	var receiver := L5RCharacterData.new()
+	receiver.character_id = 20
+	receiver.clan = "Lion"
+	receiver.topic_pool = []
+	var chars_by_id: Dictionary = {10: debtor, 20: receiver}
+
+	var c := CommitmentData.new()
+	c.commitment_id = 1
+	c.crisis_id = 42
+	c.status = Enums.CommitmentStatus.BROKEN_FORCE_MAJEURE
+	c.debtor_npc_id = 10
+	c.penalty_records = [{"npc_id": 20, "disposition_change": -10, "forgiveness_applied": false}]
+
+	var topic := TopicData.new()
+	topic.topic_id = 100
+	topic.crisis_id = 42
+
+	var commitments: Array[CommitmentData] = [c]
+	var topics: Array[TopicData] = [topic]
+	var results: Array[Dictionary] = DayOrchestrator._process_retroactive_forgiveness(
+		commitments, chars_by_id, topics,
+	)
+	assert_eq(results.size(), 0, "No forgiveness when NPC doesn't know crisis topic")
+	assert_false(c.penalty_records[0]["forgiveness_applied"])
+
+
+func test_forgiveness_skips_already_applied() -> void:
+	var debtor := L5RCharacterData.new()
+	debtor.character_id = 10
+	debtor.clan = "Crane"
+	var receiver := L5RCharacterData.new()
+	receiver.character_id = 20
+	receiver.clan = "Crane"
+	receiver.topic_pool = [100]
+	var chars_by_id: Dictionary = {10: debtor, 20: receiver}
+
+	var c := CommitmentData.new()
+	c.commitment_id = 1
+	c.crisis_id = 42
+	c.status = Enums.CommitmentStatus.BROKEN_FORCE_MAJEURE
+	c.debtor_npc_id = 10
+	c.penalty_records = [{"npc_id": 20, "disposition_change": -10, "forgiveness_applied": true}]
+
+	var topic := TopicData.new()
+	topic.topic_id = 100
+	topic.crisis_id = 42
+
+	var commitments: Array[CommitmentData] = [c]
+	var topics: Array[TopicData] = [topic]
+	var results: Array[Dictionary] = DayOrchestrator._process_retroactive_forgiveness(
+		commitments, chars_by_id, topics,
+	)
+	assert_eq(results.size(), 0, "Should skip already-applied forgiveness")
+
+
+func test_forgiveness_same_clan_gives_higher_chugi_rate() -> void:
+	var debtor := L5RCharacterData.new()
+	debtor.character_id = 10
+	debtor.clan = "Crane"
+	var receiver := L5RCharacterData.new()
+	receiver.character_id = 20
+	receiver.clan = "Crane"
+	receiver.bushido_virtue = Enums.BushidoVirtue.CHUGI
+	receiver.disposition_values = {10: -20}
+	receiver.topic_pool = [100]
+	var chars_by_id: Dictionary = {10: debtor, 20: receiver}
+
+	var c := CommitmentData.new()
+	c.commitment_id = 1
+	c.crisis_id = 42
+	c.status = Enums.CommitmentStatus.BROKEN_FORCE_MAJEURE
+	c.debtor_npc_id = 10
+	c.penalty_records = [{"npc_id": 20, "disposition_change": -10, "forgiveness_applied": false}]
+
+	var topic := TopicData.new()
+	topic.topic_id = 100
+	topic.crisis_id = 42
+
+	var commitments: Array[CommitmentData] = [c]
+	var topics: Array[TopicData] = [topic]
+	var results: Array[Dictionary] = DayOrchestrator._process_retroactive_forgiveness(
+		commitments, chars_by_id, topics,
+	)
+	assert_eq(results.size(), 1)
+	assert_true(results[0]["same_loyalty_chain"], "Same clan = same loyalty chain")
+	assert_almost_eq(results[0]["recovery"], 7.5, 0.01, "Chugi same-clan = 75% of 10")
+
+
+func test_forgiveness_cross_clan_chugi_gets_lower_rate() -> void:
+	var debtor := L5RCharacterData.new()
+	debtor.character_id = 10
+	debtor.clan = "Crane"
+	var receiver := L5RCharacterData.new()
+	receiver.character_id = 20
+	receiver.clan = "Lion"
+	receiver.bushido_virtue = Enums.BushidoVirtue.CHUGI
+	receiver.disposition_values = {10: -20}
+	receiver.topic_pool = [100]
+	var chars_by_id: Dictionary = {10: debtor, 20: receiver}
+
+	var c := CommitmentData.new()
+	c.commitment_id = 1
+	c.crisis_id = 42
+	c.status = Enums.CommitmentStatus.BROKEN_FORCE_MAJEURE
+	c.debtor_npc_id = 10
+	c.penalty_records = [{"npc_id": 20, "disposition_change": -10, "forgiveness_applied": false}]
+
+	var topic := TopicData.new()
+	topic.topic_id = 100
+	topic.crisis_id = 42
+
+	var commitments: Array[CommitmentData] = [c]
+	var topics: Array[TopicData] = [topic]
+	var results: Array[Dictionary] = DayOrchestrator._process_retroactive_forgiveness(
+		commitments, chars_by_id, topics,
+	)
+	assert_eq(results.size(), 1)
+	assert_false(results[0]["same_loyalty_chain"], "Different clan = cross-chain")
+	assert_almost_eq(results[0]["recovery"], 2.5, 0.01, "Chugi cross-clan = 25% of 10")
+
+
+func test_forgiveness_skips_non_force_majeure() -> void:
+	var debtor := L5RCharacterData.new()
+	debtor.character_id = 10
+	debtor.clan = "Crane"
+	var receiver := L5RCharacterData.new()
+	receiver.character_id = 20
+	receiver.clan = "Lion"
+	receiver.topic_pool = [100]
+	var chars_by_id: Dictionary = {10: debtor, 20: receiver}
+
+	var c := CommitmentData.new()
+	c.commitment_id = 1
+	c.crisis_id = 42
+	c.status = Enums.CommitmentStatus.BROKEN_NO_NOTICE
+	c.debtor_npc_id = 10
+	c.penalty_records = [{"npc_id": 20, "disposition_change": -10, "forgiveness_applied": false}]
+
+	var topic := TopicData.new()
+	topic.topic_id = 100
+	topic.crisis_id = 42
+
+	var commitments: Array[CommitmentData] = [c]
+	var topics: Array[TopicData] = [topic]
+	var results: Array[Dictionary] = DayOrchestrator._process_retroactive_forgiveness(
+		commitments, chars_by_id, topics,
+	)
+	assert_eq(results.size(), 0, "Non-BROKEN_FORCE_MAJEURE should be skipped")
+
+
+func test_forgiveness_disposition_recovery_applied() -> void:
+	var debtor := L5RCharacterData.new()
+	debtor.character_id = 10
+	debtor.clan = "Scorpion"
+	var receiver := L5RCharacterData.new()
+	receiver.character_id = 20
+	receiver.clan = "Scorpion"
+	receiver.bushido_virtue = Enums.BushidoVirtue.JIN
+	receiver.disposition_values = {10: -30}
+	receiver.topic_pool = [100]
+	var chars_by_id: Dictionary = {10: debtor, 20: receiver}
+
+	var c := CommitmentData.new()
+	c.commitment_id = 1
+	c.crisis_id = 42
+	c.status = Enums.CommitmentStatus.BROKEN_FORCE_MAJEURE
+	c.debtor_npc_id = 10
+	c.penalty_records = [{"npc_id": 20, "disposition_change": -10, "forgiveness_applied": false}]
+
+	var topic := TopicData.new()
+	topic.topic_id = 100
+	topic.crisis_id = 42
+
+	var commitments: Array[CommitmentData] = [c]
+	var topics: Array[TopicData] = [topic]
+	DayOrchestrator._process_retroactive_forgiveness(commitments, chars_by_id, topics)
+	assert_eq(receiver.disposition_values[10], -20, "Jin 100% recovery: -30 + 10 = -20")
+
+
+func test_famine_topic_carries_crisis_id() -> void:
+	var next_id: Array[int] = [1]
+	var topic: TopicData = DayOrchestrator._create_famine_topic(
+		5, "Crab", TopicData.Tier.TIER_3, 25.0, next_id, 10, 42,
+	)
+	assert_eq(topic.crisis_id, 42, "Famine topic should carry province crisis_id")
+
+
+func test_famine_topic_multi_carries_crisis_id() -> void:
+	var next_id: Array[int] = [1]
+	var pids: Array[int] = [5, 6, 7]
+	var topic: TopicData = DayOrchestrator._create_famine_topic_multi(
+		pids, "Crab", next_id, 10, 42,
+	)
+	assert_eq(topic.crisis_id, 42, "Multi-province famine topic should carry crisis_id")
