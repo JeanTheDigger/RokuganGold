@@ -8848,3 +8848,154 @@ func test_resource_promise_skips_non_pending() -> void:
 	)
 	assert_eq(commitment.status, Enums.CommitmentStatus.BROKEN_NO_NOTICE,
 		"Should not change status of non-PENDING commitment")
+
+
+# -- Commitment Advance Notice (s55.31.6) ------------------------------------
+
+func _make_commitment_for_notice(
+	debtor_id: int, creditor_id: int, deadline: int,
+	c_type: Enums.CommitmentType = Enums.CommitmentType.COURT_ATTENDANCE,
+	target: int = 100,
+) -> CommitmentData:
+	var c := CommitmentData.new()
+	c.commitment_type = c_type
+	c.debtor_npc_id = debtor_id
+	c.creditor_npc_id = creditor_id
+	c.deadline_ic_day = deadline
+	c.fulfillment_target = target
+	c.status = Enums.CommitmentStatus.PENDING
+	return c
+
+
+func test_advance_notice_sent_when_unfulfillable() -> void:
+	var debtor := L5RCharacterData.new()
+	debtor.character_id = 10
+	debtor.physical_location = "200"
+	debtor.bushido_virtue = Enums.BushidoVirtue.REI
+	var chars_by_id: Dictionary = {10: debtor}
+	var c: CommitmentData = _make_commitment_for_notice(10, 20, 55)
+	var commitments: Array[CommitmentData] = [c]
+	var letters: Array[LetterData] = []
+	var next_lid: Array[int] = [1]
+	TravelSystem.set_distance("200", "100", 10)
+	DayOrchestrator._process_commitment_advance_notices(
+		commitments, chars_by_id, 50, letters, next_lid, DiceEngine.new(),
+	)
+	TravelSystem.clear_distances()
+	assert_true(c.advance_notice_sent, "Should send notice when can't arrive in time")
+	assert_eq(c.notice_ic_day, 50)
+	assert_eq(letters.size(), 1, "Should create apology letter")
+	assert_eq(letters[0].sender_id, 10)
+	assert_eq(letters[0].recipient_id, 20)
+
+
+func test_advance_notice_not_sent_when_already_present() -> void:
+	var debtor := L5RCharacterData.new()
+	debtor.character_id = 10
+	debtor.physical_location = "100"
+	debtor.bushido_virtue = Enums.BushidoVirtue.REI
+	var chars_by_id: Dictionary = {10: debtor}
+	var c: CommitmentData = _make_commitment_for_notice(10, 20, 55)
+	var commitments: Array[CommitmentData] = [c]
+	var letters: Array[LetterData] = []
+	var next_lid: Array[int] = [1]
+	DayOrchestrator._process_commitment_advance_notices(
+		commitments, chars_by_id, 50, letters, next_lid, DiceEngine.new(),
+	)
+	assert_false(c.advance_notice_sent, "Should not notify when already at target")
+	assert_eq(letters.size(), 0)
+
+
+func test_advance_notice_not_sent_when_traveling_toward() -> void:
+	var debtor := L5RCharacterData.new()
+	debtor.character_id = 10
+	debtor.physical_location = "200"
+	debtor.travel_destination = "100"
+	debtor.travel_days_remaining = 3
+	debtor.bushido_virtue = Enums.BushidoVirtue.REI
+	var chars_by_id: Dictionary = {10: debtor}
+	var c: CommitmentData = _make_commitment_for_notice(10, 20, 55)
+	var commitments: Array[CommitmentData] = [c]
+	var letters: Array[LetterData] = []
+	var next_lid: Array[int] = [1]
+	DayOrchestrator._process_commitment_advance_notices(
+		commitments, chars_by_id, 50, letters, next_lid, DiceEngine.new(),
+	)
+	assert_false(c.advance_notice_sent, "Should not notify when traveling toward target in time")
+
+
+func test_advance_notice_skipped_by_yu_personality() -> void:
+	var debtor := L5RCharacterData.new()
+	debtor.character_id = 10
+	debtor.physical_location = "200"
+	debtor.bushido_virtue = Enums.BushidoVirtue.YU
+	var chars_by_id: Dictionary = {10: debtor}
+	var c: CommitmentData = _make_commitment_for_notice(10, 20, 55)
+	var commitments: Array[CommitmentData] = [c]
+	var letters: Array[LetterData] = []
+	var next_lid: Array[int] = [1]
+	TravelSystem.set_distance("200", "100", 10)
+	DayOrchestrator._process_commitment_advance_notices(
+		commitments, chars_by_id, 50, letters, next_lid, DiceEngine.new(),
+	)
+	TravelSystem.clear_distances()
+	assert_false(c.advance_notice_sent, "Yu characters skip advance notice")
+	assert_eq(letters.size(), 0)
+
+
+func test_advance_notice_outside_window() -> void:
+	var debtor := L5RCharacterData.new()
+	debtor.character_id = 10
+	debtor.physical_location = "200"
+	debtor.bushido_virtue = Enums.BushidoVirtue.REI
+	var chars_by_id: Dictionary = {10: debtor}
+	var c: CommitmentData = _make_commitment_for_notice(10, 20, 100)
+	var commitments: Array[CommitmentData] = [c]
+	var letters: Array[LetterData] = []
+	var next_lid: Array[int] = [1]
+	DayOrchestrator._process_commitment_advance_notices(
+		commitments, chars_by_id, 50, letters, next_lid, DiceEngine.new(),
+	)
+	assert_false(c.advance_notice_sent, "Should not notify when deadline is far away")
+
+
+func test_advance_notice_not_sent_twice() -> void:
+	var debtor := L5RCharacterData.new()
+	debtor.character_id = 10
+	debtor.physical_location = "200"
+	debtor.bushido_virtue = Enums.BushidoVirtue.REI
+	var chars_by_id: Dictionary = {10: debtor}
+	var c: CommitmentData = _make_commitment_for_notice(10, 20, 55)
+	c.advance_notice_sent = true
+	c.notice_ic_day = 49
+	var commitments: Array[CommitmentData] = [c]
+	var letters: Array[LetterData] = []
+	var next_lid: Array[int] = [1]
+	DayOrchestrator._process_commitment_advance_notices(
+		commitments, chars_by_id, 50, letters, next_lid, DiceEngine.new(),
+	)
+	assert_eq(letters.size(), 0, "Should not send notice twice")
+	assert_eq(c.notice_ic_day, 49, "Should preserve original notice day")
+
+
+func test_advance_notice_visit_promise_unfulfillable() -> void:
+	var debtor := L5RCharacterData.new()
+	debtor.character_id = 10
+	debtor.physical_location = "200"
+	debtor.bushido_virtue = Enums.BushidoVirtue.GI
+	var creditor := L5RCharacterData.new()
+	creditor.character_id = 20
+	creditor.physical_location = "300"
+	var chars_by_id: Dictionary = {10: debtor, 20: creditor}
+	var c: CommitmentData = _make_commitment_for_notice(
+		10, 20, 55, Enums.CommitmentType.VISIT_PROMISE, -1,
+	)
+	var commitments: Array[CommitmentData] = [c]
+	var letters: Array[LetterData] = []
+	var next_lid: Array[int] = [1]
+	TravelSystem.set_distance("200", "300", 10)
+	DayOrchestrator._process_commitment_advance_notices(
+		commitments, chars_by_id, 50, letters, next_lid, DiceEngine.new(),
+	)
+	TravelSystem.clear_distances()
+	assert_true(c.advance_notice_sent, "Should send notice for unreachable visit")

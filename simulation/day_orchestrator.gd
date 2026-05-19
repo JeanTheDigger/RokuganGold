@@ -561,6 +561,11 @@ static func advance_day(
 		disposition_snapshots,
 	)
 
+	_process_commitment_advance_notices(
+		commitments, characters_by_id, ic_day, pending_letters,
+		next_letter_id, dice_engine,
+	)
+
 	_process_crisis_commitment_linking(
 		day_result.get("results", []), commitments, objectives_map,
 	)
@@ -14910,6 +14915,99 @@ const CRISIS_ACTION_IDS: Array[String] = [
 	"ORDER_DEPLOY", "ORDER_RETREAT", "CONDUCT_STORM_ASSAULT",
 	"ORDER_FORTIFY", "ASSIGN_GARRISON",
 ]
+
+# -- Commitment Advance Notice (s55.31.6) --------------------------------------
+
+const ADVANCE_NOTICE_WINDOW: int = 7
+
+static func _process_commitment_advance_notices(
+	commitments: Array[CommitmentData],
+	characters_by_id: Dictionary,
+	ic_day: int,
+	pending_letters: Array[LetterData],
+	next_letter_id: Array[int],
+	dice_engine: DiceEngine,
+) -> void:
+	for c: CommitmentData in commitments:
+		if c.status != Enums.CommitmentStatus.PENDING:
+			continue
+		if c.advance_notice_sent:
+			continue
+		if c.commitment_type == Enums.CommitmentType.FAVOR_OBLIGATION:
+			continue
+		if c.deadline_ic_day < 0:
+			continue
+
+		var days_remaining: int = c.deadline_ic_day - ic_day
+		if days_remaining > ADVANCE_NOTICE_WINDOW or days_remaining < 1:
+			continue
+
+		var debtor: L5RCharacterData = characters_by_id.get(c.debtor_npc_id)
+		if debtor == null:
+			continue
+
+		if not _is_commitment_unfulfillable(c, debtor, characters_by_id, days_remaining):
+			continue
+
+		if _should_skip_advance_notice(debtor):
+			continue
+
+		CommitmentRegistry.send_advance_notice(c, ic_day)
+
+		if dice_engine != null:
+			var letter: LetterData = LetterSystem.write_letter(
+				next_letter_id[0], debtor, c.creditor_npc_id,
+				-1, ic_day, dice_engine, 3,
+			)
+			pending_letters.append(letter)
+			next_letter_id[0] += 1
+
+
+static func _is_commitment_unfulfillable(
+	c: CommitmentData,
+	debtor: L5RCharacterData,
+	characters_by_id: Dictionary,
+	days_remaining: int,
+) -> bool:
+	match c.commitment_type:
+		Enums.CommitmentType.COURT_ATTENDANCE, Enums.CommitmentType.MEETING_ARRANGEMENT, Enums.CommitmentType.SUPPORT_PLEDGE:
+			var target_str: String = str(c.fulfillment_target)
+			if debtor.physical_location == target_str and not TravelSystem.is_traveling(debtor):
+				return false
+			if TravelSystem.is_traveling(debtor) and debtor.travel_destination == target_str:
+				if debtor.travel_days_remaining <= days_remaining:
+					return false
+			var travel_time: int = TravelSystem.get_travel_time(debtor.physical_location, target_str)
+			return travel_time > days_remaining
+		Enums.CommitmentType.VISIT_PROMISE:
+			var creditor: L5RCharacterData = characters_by_id.get(c.creditor_npc_id)
+			if creditor == null:
+				return true
+			if debtor.physical_location == creditor.physical_location and not TravelSystem.is_traveling(debtor):
+				return false
+			if TravelSystem.is_traveling(debtor) and debtor.travel_destination == creditor.physical_location:
+				if debtor.travel_days_remaining <= days_remaining:
+					return false
+			var travel_time: int = TravelSystem.get_travel_time(debtor.physical_location, creditor.physical_location)
+			return travel_time > days_remaining
+		Enums.CommitmentType.RESOURCE_PROMISE:
+			return false
+	return false
+
+
+static func _should_skip_advance_notice(debtor: L5RCharacterData) -> bool:
+	if debtor.bushido_virtue == Enums.BushidoVirtue.REI:
+		return false
+	if debtor.bushido_virtue == Enums.BushidoVirtue.GI:
+		return false
+	if debtor.bushido_virtue == Enums.BushidoVirtue.MEIYO:
+		return false
+	if debtor.shourido_virtue == Enums.ShouridoVirtue.KYORYOKU:
+		return true
+	if debtor.bushido_virtue == Enums.BushidoVirtue.YU:
+		return true
+	return false
+
 
 static func _process_crisis_commitment_linking(
 	results: Array[Dictionary],
