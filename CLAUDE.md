@@ -863,14 +863,12 @@ For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
   selects severity by Forgery rank: 7+→TIER_1, 5-6→TIER_2, 3-4→TIER_3,
   1-2→TIER_4 (maps to TNs 30/25/20/15). need.target_npc_id flows through
   so fabricated secrets target the objective target. 4 engine tests.
-- **PLAY_GAME — always Games: Go.** Executor reads `game_skill` (default
-  "Games: Go"). No metadata population. NPCs never play Shogi, Sadane, etc.
-  Low impact — Go is the default noble game.
-- **ARRANGE_MARRIAGE — favor_tier/has_military_objective not populated.**
-  Main fields (candidate_id, target_lord_id, target_candidate_id) ARE
-  populated from ImmediateNeed. But `favor_tier` (0) and
-  `has_military_objective` (false) are not populated. Marriage proposals
-  never receive favor leverage or military alliance scoring bonuses.
+- **PLAY_GAME — always Games: Go. FIXED.** `_pick_best_game_skill()` selects
+  game with highest skill rank from 6 types. Falls back to Games: Go. 2 tests.
+- **ARRANGE_MARRIAGE — favor_tier/has_military_objective not populated. FIXED.**
+  `_get_favor_tier_held_against()` finds best favor tier from held_leverage.
+  Military NeedTypes (SECURE_ALLIANCE, RAISE_ARMY, DEFEND_PROVINCE) set
+  has_military_objective. Both feed MarriageSystem.evaluate_proposal. 4 tests.
 - **CONCEAL_ITEM — defaults to MEDIUM non-weapon.** Executor reads
   `item_size` ("MEDIUM"), `is_weapon` (false). No metadata population for
   NPC-initiated concealment. DayOrchestrator auto-bypass for contraband
