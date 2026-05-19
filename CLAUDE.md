@@ -357,6 +357,12 @@ For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
   total (PROVISIONAL). Cascades with SEARCH_PERSON in orchestrator flow:
   critical failure → detection check → equipment search → advance check.
   Includes household investigation bonus at watchful suspicion. 4 tests.
+- **s12.8 Honor/Infamy Consequences** — Ordering costs -2.0 to -5.0 Honor
+  scaled by target Status (4 tiers per GDD), applied at commission time
+  (Pattern B). Execution costs -0.5 Scorpion / -3.0 other clans
+  (PROVISIONAL). Pre-applied on Phase 2 success. Betrayal Tier 2 topic
+  deferred to investigation pipeline (requires tracing through CrimeRecord
+  to commissioner). 8 tests.
 
 ### Known Code Issues (found 2026-05-18, pre-existing)
 - **test_assassination_system.gd test_doji_courtier_bribe_access_gets_free_raise
