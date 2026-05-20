@@ -604,6 +604,12 @@ static func advance_day(
 		day_result.get("results", []), characters_by_id,
 	)
 
+	_process_duel_death_writebacks(
+		day_result.get("results", []),
+		death_events, characters_by_id,
+		active_topics, next_topic_id, ic_day,
+	)
+
 	_process_kindness_honor_writebacks(
 		day_result.get("results", []), characters_by_id,
 	)
@@ -15944,6 +15950,64 @@ static func _process_duel_honor_writebacks(
 			HonorGlorySystem.apply_honor_change(
 				actor, CrimeSystem.get_facing_superior_foe_honor(actor)
 			)
+
+
+static func _process_duel_death_writebacks(
+	results: Array,
+	death_events: Array[Dictionary],
+	characters_by_id: Dictionary,
+	active_topics: Array[TopicData],
+	next_topic_id: Array[int],
+	ic_day: int,
+) -> void:
+	for result: Dictionary in results:
+		if result.get("action_id", "") != "ISSUE_DUEL_CHALLENGE":
+			continue
+		var effects: Dictionary = result.get("effects", {})
+		if not effects.get("death_occurred", false):
+			continue
+
+		var challenger_id: int = result.get("character_id", -1)
+		var defender_id: int = result.get("target_npc_id", -1)
+		var is_unsanctioned: bool = effects.get("crime_type", -1) == Enums.CrimeType.UNSANCTIONED_DUEL_DEATH
+
+		var dead_ids: Array[int] = []
+		if effects.get("challenger_dead", false) and challenger_id >= 0:
+			dead_ids.append(challenger_id)
+		if effects.get("defender_dead", false) and defender_id >= 0:
+			dead_ids.append(defender_id)
+
+		for dead_id: int in dead_ids:
+			var dead_char: L5RCharacterData = characters_by_id.get(dead_id)
+			if dead_char == null:
+				continue
+
+			var killer_id: int = defender_id if dead_id == challenger_id else challenger_id
+			var is_lord: bool = dead_char.role_position != ""
+
+			death_events.append({
+				"character_id": dead_id,
+				"ic_day": ic_day,
+				"cause": "unsanctioned_duel" if is_unsanctioned else "duel",
+				"is_lord": is_lord,
+				"killer_id": killer_id,
+				"suspicious_death": is_unsanctioned,
+			})
+
+			var tier: TopicData.Tier = TopicData.Tier.TIER_2 if is_unsanctioned else (TopicData.Tier.TIER_3 if is_lord else TopicData.Tier.TIER_4)
+			var topic := TopicData.new()
+			topic.topic_id = next_topic_id[0]
+			next_topic_id[0] += 1
+			topic.slug = "duel_death_%d_day%d" % [dead_id, ic_day]
+			topic.topic_type = "death"
+			topic.variant = "unsanctioned_duel" if is_unsanctioned else "duel"
+			topic.tier = tier
+			topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(tier)
+			topic.category = TopicData.Category.POLITICAL if is_lord else TopicData.Category.PERSONAL
+			topic.subject_character_id = dead_id
+			topic.subject_role = "NEUTRAL"
+			topic.ic_day_created = ic_day
+			active_topics.append(topic)
 
 
 static func _process_kindness_honor_writebacks(

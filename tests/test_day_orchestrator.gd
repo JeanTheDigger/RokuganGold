@@ -12696,3 +12696,198 @@ func test_inject_hunt_context_sets_known_objectives() -> void:
 	var other_objs: Dictionary = world_states[20]["known_objectives"]
 	assert_eq(other_objs.get("hunt_topic_id", -1), 500,
 		"Other NPCs should see hunt topic ID for invitation requests")
+
+
+# -- Duel Death Writeback Tests (s40) -----------------------------------------
+
+func test_duel_death_creates_death_event_and_topic() -> void:
+	var dead := L5RCharacterData.new()
+	dead.character_id = 100
+	dead.role_position = ""
+	dead.wounds_taken = 999
+	var winner := L5RCharacterData.new()
+	winner.character_id = 200
+	var characters_by_id: Dictionary = {100: dead, 200: winner}
+	var death_events: Array[Dictionary] = []
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [700]
+	var results: Array = [{
+		"action_id": "ISSUE_DUEL_CHALLENGE",
+		"character_id": 100,
+		"target_npc_id": 200,
+		"success": true,
+		"actor_won": false,
+		"effects": {
+			"death_occurred": true,
+			"challenger_dead": true,
+			"defender_dead": false,
+			"winner_id": 200,
+			"loser_id": 100,
+		},
+	}]
+	DayOrchestrator._process_duel_death_writebacks(
+		results, death_events, characters_by_id,
+		active_topics, next_topic_id, 10,
+	)
+	assert_eq(death_events.size(), 1, "Should create one death event")
+	assert_eq(death_events[0]["character_id"], 100, "Dead character ID")
+	assert_eq(death_events[0]["cause"], "duel", "Sanctioned duel cause")
+	assert_eq(death_events[0]["killer_id"], 200, "Killer is the defender")
+	assert_false(death_events[0]["is_lord"], "Non-lord death")
+	assert_false(death_events[0]["suspicious_death"], "Sanctioned duel not suspicious")
+	assert_eq(active_topics.size(), 1, "Should create death topic")
+	assert_eq(active_topics[0].topic_type, "death")
+	assert_eq(active_topics[0].variant, "duel")
+	assert_eq(active_topics[0].tier, TopicData.Tier.TIER_4,
+		"Non-lord sanctioned duel = Tier 4")
+	assert_eq(active_topics[0].subject_role, "NEUTRAL",
+		"Dead characters carry NEUTRAL subject_role")
+
+
+func test_duel_death_lord_creates_lord_death_event() -> void:
+	var dead := L5RCharacterData.new()
+	dead.character_id = 100
+	dead.role_position = "Provincial Daimyo"
+	dead.wounds_taken = 999
+	var winner := L5RCharacterData.new()
+	winner.character_id = 200
+	var characters_by_id: Dictionary = {100: dead, 200: winner}
+	var death_events: Array[Dictionary] = []
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [700]
+	var results: Array = [{
+		"action_id": "ISSUE_DUEL_CHALLENGE",
+		"character_id": 200,
+		"target_npc_id": 100,
+		"success": true,
+		"actor_won": true,
+		"effects": {
+			"death_occurred": true,
+			"challenger_dead": false,
+			"defender_dead": true,
+			"winner_id": 200,
+			"loser_id": 100,
+		},
+	}]
+	DayOrchestrator._process_duel_death_writebacks(
+		results, death_events, characters_by_id,
+		active_topics, next_topic_id, 10,
+	)
+	assert_eq(death_events.size(), 1)
+	assert_true(death_events[0]["is_lord"],
+		"Lord death should set is_lord for succession")
+	assert_eq(death_events[0]["killer_id"], 200, "Challenger killed the defender")
+	assert_eq(active_topics[0].tier, TopicData.Tier.TIER_3,
+		"Lord sanctioned duel death = Tier 3")
+	assert_eq(active_topics[0].category, TopicData.Category.POLITICAL,
+		"Lord death is political")
+
+
+func test_unsanctioned_duel_death_suspicious_and_tier2() -> void:
+	var dead := L5RCharacterData.new()
+	dead.character_id = 100
+	dead.role_position = ""
+	dead.wounds_taken = 999
+	var winner := L5RCharacterData.new()
+	winner.character_id = 200
+	var characters_by_id: Dictionary = {100: dead, 200: winner}
+	var death_events: Array[Dictionary] = []
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [700]
+	var results: Array = [{
+		"action_id": "ISSUE_DUEL_CHALLENGE",
+		"character_id": 200,
+		"target_npc_id": 100,
+		"success": true,
+		"effects": {
+			"death_occurred": true,
+			"challenger_dead": false,
+			"defender_dead": true,
+			"winner_id": 200,
+			"loser_id": 100,
+			"requires_crime_creation": true,
+			"crime_type": Enums.CrimeType.UNSANCTIONED_DUEL_DEATH,
+			"crime_perpetrator_id": 200,
+			"crime_victim_id": 100,
+		},
+	}]
+	DayOrchestrator._process_duel_death_writebacks(
+		results, death_events, characters_by_id,
+		active_topics, next_topic_id, 10,
+	)
+	assert_eq(death_events[0]["cause"], "unsanctioned_duel")
+	assert_true(death_events[0]["suspicious_death"],
+		"Unsanctioned duel should be suspicious")
+	assert_eq(active_topics[0].variant, "unsanctioned_duel")
+	assert_eq(active_topics[0].tier, TopicData.Tier.TIER_2,
+		"Unsanctioned duel death = Tier 2")
+
+
+func test_simultaneous_duel_death_creates_two_events() -> void:
+	var c1 := L5RCharacterData.new()
+	c1.character_id = 100
+	c1.role_position = ""
+	c1.wounds_taken = 999
+	var c2 := L5RCharacterData.new()
+	c2.character_id = 200
+	c2.role_position = ""
+	c2.wounds_taken = 999
+	var characters_by_id: Dictionary = {100: c1, 200: c2}
+	var death_events: Array[Dictionary] = []
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [700]
+	var results: Array = [{
+		"action_id": "ISSUE_DUEL_CHALLENGE",
+		"character_id": 100,
+		"target_npc_id": 200,
+		"success": false,
+		"effects": {
+			"death_occurred": true,
+			"challenger_dead": true,
+			"defender_dead": true,
+			"simultaneous": true,
+			"winner_id": -1,
+			"loser_id": -1,
+		},
+	}]
+	DayOrchestrator._process_duel_death_writebacks(
+		results, death_events, characters_by_id,
+		active_topics, next_topic_id, 10,
+	)
+	assert_eq(death_events.size(), 2,
+		"Simultaneous death should create two death events")
+	assert_eq(active_topics.size(), 2,
+		"Should create two death topics")
+	var ids: Array[int] = [death_events[0]["character_id"], death_events[1]["character_id"]]
+	assert_true(100 in ids and 200 in ids,
+		"Both characters should have death events")
+
+
+func test_no_death_no_event() -> void:
+	var c1 := L5RCharacterData.new()
+	c1.character_id = 100
+	var c2 := L5RCharacterData.new()
+	c2.character_id = 200
+	var characters_by_id: Dictionary = {100: c1, 200: c2}
+	var death_events: Array[Dictionary] = []
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [700]
+	var results: Array = [{
+		"action_id": "ISSUE_DUEL_CHALLENGE",
+		"character_id": 100,
+		"target_npc_id": 200,
+		"success": true,
+		"effects": {
+			"death_occurred": false,
+			"challenger_dead": false,
+			"defender_dead": false,
+			"winner_id": 100,
+			"loser_id": 200,
+		},
+	}]
+	DayOrchestrator._process_duel_death_writebacks(
+		results, death_events, characters_by_id,
+		active_topics, next_topic_id, 10,
+	)
+	assert_eq(death_events.size(), 0, "Non-lethal duel creates no death events")
+	assert_eq(active_topics.size(), 0, "Non-lethal duel creates no death topics")

@@ -1198,12 +1198,16 @@ All 10 constant arrays and 10 helper functions added. 28 constant/integration te
   accepted invitee. `glory_change` was consumed by EffectApplicator. Added
   `_process_cancel_hunt_writebacks()` which marks hunt as cancelled and
   applies disposition penalties. 2 tests.
-- **Duel death writeback missing — succession never triggers for duel deaths.**
+- **Duel death writeback missing — succession never triggers for duel deaths. FIXED.**
   `death_occurred`, `challenger_dead`, `defender_dead` from ISSUE_DUEL_CHALLENGE
-  are set but no handler creates death_events, death topics, or triggers
-  succession. If a lord dies in a duel, no succession fires. DEFERRED — requires
-  confirming GDD intent for duel death handling (sanctioned vs unsanctioned,
-  topic tier, honor consequences).
+  set but no handler created death_events, death topics, or triggered succession.
+  `_process_duel_death_writebacks()` scans results for ISSUE_DUEL_CHALLENGE with
+  death_occurred=true. Creates death_event per dead character (is_lord from
+  role_position, killer_id from survivor, suspicious_death for unsanctioned).
+  Creates death topic: sanctioned non-lord = Tier 4 PERSONAL, sanctioned lord =
+  Tier 3 POLITICAL, unsanctioned = Tier 2 (always). subject_role = "NEUTRAL"
+  per dead-character rule. Simultaneous deaths create two events/topics. Wired
+  before _process_lord_deaths so succession fires same tick. 5 tests.
 
 ### Effect Key Audit Dead Keys — Informational / Not Bugs (2026-05-20)
 The following effect keys are set but intentionally unconsumed by the
@@ -1228,11 +1232,10 @@ costs, or forward-wiring. Do not treat as bugs.
 - `is_first_session` / `progress_gained` / `fully_trained` /
   `sessions_completed` — Pattern B: pre-applied in executor
   (TRAIN_ANIMAL lines 4249, 4301).
-- `death_occurred` / `challenger_dead` / `defender_dead` —
-  Pattern B: deaths pre-applied via HP mutation in IndividualCombat.
-  Writeback for succession/topics deferred (see above).
 - `duel_result` / `winner_id` / `loser_id` / `simultaneous` —
-  Pattern B: duel outcome pre-applied by IndividualCombat.
+  Pattern B: duel outcome pre-applied by IndividualCombat. `death_occurred`,
+  `challenger_dead`, `defender_dead` now consumed by
+  `_process_duel_death_writebacks()` for death events and topics.
 
 ### Known Code Issues — Deferred (2026-05-19, metadata population audit)
 - **EXPOSE_SECRET_PRIVATELY — metadata unpopulated, always fails. FIXED.**
