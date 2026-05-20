@@ -16,6 +16,7 @@ const HONOR_TABLE_DISLOYALTY: Array[int] = [0, -2, -6, -10, -14, -18]
 const HONOR_TABLE_ACCOMPLICE_HEINOUS: Array[int] = [-1, -4, -8, -12, -16, -20]
 const HONOR_TABLE_ACCOMPLICE_MINOR: Array[int] = [0, -1, -4, -4, -8, -8]
 const HONOR_TABLE_USING_LOW_SKILL: Array[int] = [0, -1, -2, -3, -6, -9]
+const LOW_SKILL_DISCOVERY_GLORY: float = -0.3
 const HONOR_TABLE_DISOBEYING_LORD: Array[int] = [0, -2, -2, -6, -6, -10]
 const HONOR_TABLE_FLEEING_BATTLE: Array[int] = [0, -2, -4, -6, -8, -10]
 const HONOR_TABLE_FOLLOWING_ORDERS: Array[int] = [6, 4, 0, 0, -2, -4]

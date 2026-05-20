@@ -750,7 +750,7 @@ static func advance_day(
 		next_topic_id, ic_day, objectives_map,
 	)
 	_escalate_detected_forgery_crimes(
-		pending_letters, crime_records,
+		pending_letters, crime_records, characters_by_id,
 	)
 	_process_letter_commitment_creation(
 		pending_letters, commitments, next_commitment_id, ic_day,
@@ -4531,6 +4531,7 @@ static func _process_shadow_target_writebacks(
 			if target != null:
 				var disp: int = target.disposition_values.get(shadow_id, 0)
 				target.disposition_values[shadow_id] = clampi(disp - 5, -100, 100)
+			HonorGlorySystem.apply_glory_change(shadow, CrimeSystem.LOW_SKILL_DISCOVERY_GLORY)
 			continue
 
 		if not success:
@@ -4775,6 +4776,7 @@ static func _process_forged_order_delivery(
 static func _escalate_detected_forgery_crimes(
 	pending_letters: Array[LetterData],
 	crime_records: Array[CrimeRecord],
+	characters_by_id: Dictionary = {},
 ) -> void:
 	for letter: LetterData in pending_letters:
 		if not letter.delivered:
@@ -4797,6 +4799,9 @@ static func _escalate_detected_forgery_crimes(
 				continue
 			record.legal_status = Enums.LegalStatus.UNDER_INVESTIGATION
 			record.known_suspects.append(forger_id)
+			var forger: L5RCharacterData = characters_by_id.get(forger_id)
+			if forger != null:
+				HonorGlorySystem.apply_glory_change(forger, CrimeSystem.LOW_SKILL_DISCOVERY_GLORY)
 			break
 
 
@@ -15337,6 +15342,7 @@ static func _process_assassination_daily_tick(
 							if detect_result.get("detected", false):
 								op["phase"] = AssassinationSystem.AssassinationPhase.FAILED
 								tick_result["detected_by_critical_failure"] = true
+								HonorGlorySystem.apply_glory_change(assassin, CrimeSystem.LOW_SKILL_DISCOVERY_GLORY)
 								to_remove.append(i)
 								results.append(tick_result)
 								continue
@@ -15362,6 +15368,7 @@ static func _process_assassination_daily_tick(
 							if search_result.get("found", false):
 								op["phase"] = AssassinationSystem.AssassinationPhase.FAILED
 								tick_result["exposed_by_search"] = true
+								HonorGlorySystem.apply_glory_change(assassin, CrimeSystem.LOW_SKILL_DISCOVERY_GLORY)
 								to_remove.append(i)
 								results.append(tick_result)
 								continue
@@ -15498,6 +15505,7 @@ static func _apply_assassination_outcome(
 		record.location = target.physical_location
 		record.commissioner_id = int(op.get("commissioner_id", -1))
 		crime_records.append(record)
+		HonorGlorySystem.apply_glory_change(assassin, CrimeSystem.LOW_SKILL_DISCOVERY_GLORY)
 
 	var topic: TopicData = TopicData.new()
 	topic.topic_id = next_topic_id[0]

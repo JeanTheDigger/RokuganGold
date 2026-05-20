@@ -10732,3 +10732,64 @@ func test_shadow_target_no_duplicate_contacts() -> void:
 	var entry: KnowledgeEntry = shadow.knowledge_pool[0]
 	var contacts: Array = entry.data.get("contacts_observed", [])
 	assert_eq(contacts.size(), 1, "Contact 20 should appear only once")
+
+
+# =============================================================================
+# Low Skill glory on discovery tests
+# =============================================================================
+
+
+func test_shadow_target_critical_failure_applies_glory_penalty() -> void:
+	var shadow := L5RCharacterData.new()
+	shadow.character_id = 1
+	shadow.physical_location = "crane_castle"
+	shadow.glory = 3.0
+	var target := L5RCharacterData.new()
+	target.character_id = 10
+	target.physical_location = "crane_castle"
+	target.disposition_values = {}
+	var chars: Dictionary = {1: shadow, 10: target}
+
+	var results: Array = [{
+		"action_id": "SHADOW_TARGET",
+		"success": false,
+		"character_id": 1,
+		"target_npc_id": 10,
+		"margin": -12,
+		"effects": {},
+	}]
+	var convos: Array[Dictionary] = []
+	DayOrchestrator._process_shadow_target_writebacks(
+		results, convos, chars, 1,
+	)
+	assert_almost_eq(shadow.glory, 2.7, 0.001,
+		"Shadow identified on critical failure loses 0.3 glory")
+
+
+func test_forgery_detection_applies_glory_penalty() -> void:
+	var forger := L5RCharacterData.new()
+	forger.character_id = 1
+	forger.glory = 4.0
+	var victim := L5RCharacterData.new()
+	victim.character_id = 10
+	var chars: Dictionary = {1: forger, 10: victim}
+
+	var letter := LetterData.new()
+	letter.delivered = true
+	letter.is_forged = true
+	letter.forgery_detected = true
+	letter.forged_sender_id = 1
+	letter.sender_id = 10
+	letter.recipient_id = 20
+
+	var record := CrimeRecord.new()
+	record.perpetrator_id = 1
+	record.victim_id = 10
+	record.crime_type = Enums.CrimeType.DISHONORABLE_CONDUCT
+	record.legal_status = Enums.LegalStatus.NONE
+
+	var letters: Array[LetterData] = [letter]
+	var records: Array[CrimeRecord] = [record]
+	DayOrchestrator._escalate_detected_forgery_crimes(letters, records, chars)
+	assert_almost_eq(forger.glory, 3.7, 0.001,
+		"Forger identified on detection loses 0.3 glory")

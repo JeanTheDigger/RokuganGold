@@ -12,7 +12,7 @@ const HONOR_THRESHOLD_LOW: float = 3.0
 const HONOR_PENALTY_HIGH: float = -0.3
 const HONOR_PENALTY_MID: float = -0.2
 const HONOR_PENALTY_LOW: float = -0.1
-const GLORY_PENALTY: float = -0.1
+const GLORY_PENALTY: float = CrimeSystem.LOW_SKILL_DISCOVERY_GLORY
 
 const LEAN_PLUS_10_SCORE: int = 10
 const LEAN_PLUS_5_SCORE: int = 5

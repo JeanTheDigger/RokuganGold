@@ -2962,6 +2962,11 @@ func test_accepting_bribe_honor_scales() -> void:
 	assert_almost_eq(cost_high, -0.8, 0.001, "Rank 9-10 accepting bribe = -0.8")
 
 
+func test_low_skill_discovery_glory_constant() -> void:
+	assert_almost_eq(CrimeSystem.LOW_SKILL_DISCOVERY_GLORY, -0.3, 0.001,
+		"Caught using Low Skill = -0.3 Glory per GDD s46")
+
+
 func test_following_orders_honor_positive_at_low_rank() -> void:
 	var low := L5RCharacterData.new()
 	low.honor = 0.5
