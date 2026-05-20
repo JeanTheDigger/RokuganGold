@@ -35,7 +35,7 @@ func test_no_change_when_nothing_to_do() -> void:
 	)
 
 	assert_eq(results.size(), 1)
-	assert_eq(results[0]["directive"], StrategicReview.Directive.NO_CHANGE)
+	assert_eq(str(results[0]["directive"]), StrategicReview.Directive.NO_CHANGE)
 
 
 func test_returns_multiple_directives() -> void:
@@ -635,7 +635,7 @@ func test_emperor_winter_court_selection_autumn_only() -> void:
 	)
 
 	for r: Dictionary in results:
-		assert_ne(r.get("directive", ""), "WINTER_COURT_HOST")
+		assert_ne(str(r.get("directive", "")), "WINTER_COURT_HOST")
 
 
 func test_emperor_winter_court_host_selected_in_autumn() -> void:
@@ -671,7 +671,7 @@ func test_emperor_winter_court_host_selected_in_autumn() -> void:
 
 	var host_found: Dictionary = {}
 	for r: Dictionary in results:
-		if r.get("directive", "") == "WINTER_COURT_HOST":
+		if str(r.get("directive", "")) == "WINTER_COURT_HOST":
 			host_found = r
 			break
 	assert_false(host_found.is_empty())
@@ -706,7 +706,7 @@ func test_emperor_vacancy_fill_iron_immediate() -> void:
 
 	var vacancy_found: bool = false
 	for r: Dictionary in results:
-		if r.get("directive", "") == "FILL_VACANCY":
+		if str(r.get("directive", "")) == "FILL_VACANCY":
 			vacancy_found = true
 			assert_eq(r["skill_weight"], 25)
 			assert_eq(r["disposition_weight"], 10)
@@ -741,7 +741,7 @@ func test_cunning_emperor_delays_vacancy_season_zero() -> void:
 	)
 
 	for r: Dictionary in results:
-		assert_ne(r.get("directive", ""), "FILL_VACANCY")
+		assert_ne(str(r.get("directive", "")), "FILL_VACANCY")
 
 
 func test_cunning_emperor_fills_after_one_season() -> void:
@@ -772,7 +772,7 @@ func test_cunning_emperor_fills_after_one_season() -> void:
 
 	var vacancy_found: bool = false
 	for r: Dictionary in results:
-		if r.get("directive", "") == "FILL_VACANCY":
+		if str(r.get("directive", "")) == "FILL_VACANCY":
 			vacancy_found = true
 			assert_true(r.has("clan_balance_weight"), "Cunning should include clan_balance_weight")
 			assert_eq(r["clan_balance_weight"], 25)
@@ -810,7 +810,7 @@ func test_warlike_fills_military_vacancy_immediately() -> void:
 
 	var vacancy_found: bool = false
 	for r: Dictionary in results:
-		if r.get("directive", "") == "FILL_VACANCY":
+		if str(r.get("directive", "")) == "FILL_VACANCY":
 			vacancy_found = true
 			break
 	assert_true(vacancy_found, "Warlike should fill military vacancy immediately")
@@ -843,7 +843,7 @@ func test_warlike_delays_political_vacancy() -> void:
 	)
 
 	for r: Dictionary in results:
-		assert_ne(r.get("directive", ""), "FILL_VACANCY", "Warlike should delay political vacancy")
+		assert_ne(str(r.get("directive", "")), "FILL_VACANCY", "Warlike should delay political vacancy")
 
 
 func test_warlike_fills_political_after_season() -> void:
@@ -874,7 +874,7 @@ func test_warlike_fills_political_after_season() -> void:
 
 	var vacancy_found: bool = false
 	for r: Dictionary in results:
-		if r.get("directive", "") == "FILL_VACANCY":
+		if str(r.get("directive", "")) == "FILL_VACANCY":
 			vacancy_found = true
 			break
 	assert_true(vacancy_found, "Warlike should fill political vacancy after 1 season")
@@ -910,7 +910,7 @@ func test_warlike_prefers_military_over_political() -> void:
 	)
 
 	for r: Dictionary in results:
-		if r.get("directive", "") == "FILL_VACANCY":
+		if str(r.get("directive", "")) == "FILL_VACANCY":
 			assert_eq(r["vacancy"]["position_type"], "military_commander",
 				"Warlike should pick military vacancy (higher priority)")
 			break
@@ -1056,7 +1056,7 @@ func test_shogun_never_for_cunning() -> void:
 	)
 
 	for r: Dictionary in results:
-		assert_ne(r.get("directive", ""), "CREATE_SHOGUN")
+		assert_ne(str(r.get("directive", "")), "CREATE_SHOGUN")
 
 
 func test_shogun_never_for_warlike() -> void:
@@ -1087,7 +1087,7 @@ func test_shogun_never_for_warlike() -> void:
 	)
 
 	for r: Dictionary in results:
-		assert_ne(r.get("directive", ""), "CREATE_SHOGUN")
+		assert_ne(str(r.get("directive", "")), "CREATE_SHOGUN")
 
 
 func test_shogun_benevolent_after_prolonged_crisis() -> void:
@@ -1120,7 +1120,7 @@ func test_shogun_benevolent_after_prolonged_crisis() -> void:
 
 	var shogun_found: bool = false
 	for r: Dictionary in results:
-		if r.get("directive", "") == "CREATE_SHOGUN":
+		if str(r.get("directive", "")) == "CREATE_SHOGUN":
 			shogun_found = true
 			assert_eq(r["reason"], "prolonged_crisis_after_diplomacy")
 			break
@@ -1156,7 +1156,7 @@ func test_shogun_iron_on_tier1_crisis() -> void:
 
 	var shogun_found: bool = false
 	for r: Dictionary in results:
-		if r.get("directive", "") == "CREATE_SHOGUN":
+		if str(r.get("directive", "")) == "CREATE_SHOGUN":
 			shogun_found = true
 			assert_eq(r["reason"], "duty_military_demand")
 			break
@@ -1191,7 +1191,7 @@ func test_shogun_tyrant_needs_loyal_candidate() -> void:
 	)
 
 	for r: Dictionary in results:
-		assert_ne(r.get("directive", ""), "CREATE_SHOGUN")
+		assert_ne(str(r.get("directive", "")), "CREATE_SHOGUN")
 
 
 func test_shogun_tyrant_with_loyal_candidate() -> void:
@@ -1223,7 +1223,7 @@ func test_shogun_tyrant_with_loyal_candidate() -> void:
 
 	var shogun_found: bool = false
 	for r: Dictionary in results:
-		if r.get("directive", "") == "CREATE_SHOGUN":
+		if str(r.get("directive", "")) == "CREATE_SHOGUN":
 			shogun_found = true
 			assert_eq(r["reason"], "personal_enforcer")
 			break
@@ -1258,7 +1258,7 @@ func test_no_shogun_if_already_exists() -> void:
 	)
 
 	for r: Dictionary in results:
-		assert_ne(r.get("directive", ""), "CREATE_SHOGUN")
+		assert_ne(str(r.get("directive", "")), "CREATE_SHOGUN")
 
 
 # -- DayOrchestrator Integration -----------------------------------------------
@@ -1396,7 +1396,7 @@ func test_tyrant_fabricates_disgrace_for_rival_champions() -> void:
 	)
 
 	assert_eq(results.size(), 1)
-	assert_eq(results[0]["directive"], "FABRICATE_DISGRACE")
+	assert_eq(str(results[0]["directive"]), "FABRICATE_DISGRACE")
 	assert_eq(results[0]["target_id"], 10)
 	assert_eq(results[0]["target_clan"], "Crab")
 
@@ -1550,9 +1550,9 @@ func test_emperor_review_includes_tyrant_directives() -> void:
 	var disgrace_found: bool = false
 	var civil_war_found: bool = false
 	for r: Dictionary in results:
-		if r.get("directive", "") == "FABRICATE_DISGRACE":
+		if str(r.get("directive", "")) == "FABRICATE_DISGRACE":
 			disgrace_found = true
-		if r.get("directive", "") == "IMPERIAL_CIVIL_WAR":
+		if str(r.get("directive", "")) == "IMPERIAL_CIVIL_WAR":
 			civil_war_found = true
 
 	assert_true(disgrace_found, "Tyrant should fabricate disgrace for Rival champion")

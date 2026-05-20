@@ -819,7 +819,7 @@ func test_emperor_review_runs_for_emperor():
 	)
 	var has_winter_court: bool = false
 	for d: Dictionary in results:
-		if d.get("directive", "") == "WINTER_COURT_HOST":
+		if str(d.get("directive", "")) == "WINTER_COURT_HOST":
 			has_winter_court = true
 	assert_true(has_winter_court, "Emperor review should produce WINTER_COURT_HOST in Autumn")
 

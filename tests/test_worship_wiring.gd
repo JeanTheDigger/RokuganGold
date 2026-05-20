@@ -383,11 +383,11 @@ func test_advance_day_includes_worship_results() -> void:
 		{}, {}, [1000], [], {},
 		[], [], [], [],
 		{}, [], [], [],
-		[], [], [], {},
-		[], [], [1], [], [1],
+		[], [], [], [],
+		[], [], {}, [], [1],
 		[], [1], [], [1],
-		[], {}, [-1], [], [], [10000],
-		{}, [], ws,
+		[], [], {}, [-1], [], [],
+		[10000], {}, [], ws,
 	)
 	assert_true(result.has("worship_accumulation_results"))
 	assert_true(result.has("worship_seasonal_results"))

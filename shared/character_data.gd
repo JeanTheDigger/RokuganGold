@@ -64,6 +64,7 @@ extends Resource
 @export var glory: float = 1.0
 @export var status: float = 1.0
 @export var infamy: float = 0.0
+@export var insight_rank: int = 1
 
 # -- Wounds --------------------------------------------------------------------
 # Total wounds taken. Wound levels derived from Earth ring at query time.

@@ -160,6 +160,9 @@ class ContextSnapshot:
 	var active_wars: Array = []
 	var escalating_conflicts: Array = []
 
+	# Insurgency context (convenience field populated from ProvinceStatus)
+	var active_insurgency_id: int = -1
+
 	# Shadowlands intelligence (s55.23)
 	var taint_topic_province_ids: Array = []
 

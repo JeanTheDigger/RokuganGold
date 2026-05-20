@@ -690,7 +690,7 @@ func test_sortie_reduces_ss() -> void:
 	var p := _make_wall_province_data(10, 8)
 	var s := _make_wall_tower_settlement(10, 10, 50.0)
 	var applied: Array = [_make_sortie_applied(10, 2, 0.40, 2)]
-	var results: Array = DayOrchestrator._process_sortie_results(applied, [s], {10: p})
+	var results: Array = DayOrchestrator._process_sortie_results(applied, [s], {10: p}, DiceEngine.new())
 	assert_eq(p.shadowlands_strength, 6)
 	assert_eq(results.size(), 1)
 	assert_eq(results[0]["ss_reduction_applied"], 2)
@@ -701,7 +701,7 @@ func test_sortie_ss_clamped_at_zero() -> void:
 	var p := _make_wall_province_data(10, 1)
 	var s := _make_wall_tower_settlement(10, 10, 20.0)
 	var applied: Array = [_make_sortie_applied(10, 3, 0.20, 1)]
-	DayOrchestrator._process_sortie_results(applied, [s], {10: p})
+	DayOrchestrator._process_sortie_results(applied, [s], {10: p}, DiceEngine.new())
 	assert_eq(p.shadowlands_strength, 0)
 
 
@@ -710,7 +710,7 @@ func test_sortie_consumes_jade_from_settlement() -> void:
 	var p := _make_wall_province_data(10, 6)
 	var s := _make_wall_tower_settlement(10, 10, 20.0)
 	var applied: Array = [_make_sortie_applied(10, 1, 0.20, 1)]
-	DayOrchestrator._process_sortie_results(applied, [s], {10: p})
+	DayOrchestrator._process_sortie_results(applied, [s], {10: p}, DiceEngine.new())
 	assert_almost_eq(s.jade_stockpile, 18.0, 0.001)
 
 
@@ -719,7 +719,7 @@ func test_sortie_medium_consumes_2_jade_per_warrior() -> void:
 	var p := _make_wall_province_data(10, 8)
 	var s := _make_wall_tower_settlement(10, 10, 30.0)
 	var applied: Array = [_make_sortie_applied(10, 2, 0.40, 2)]
-	DayOrchestrator._process_sortie_results(applied, [s], {10: p})
+	DayOrchestrator._process_sortie_results(applied, [s], {10: p}, DiceEngine.new())
 	assert_almost_eq(s.jade_stockpile, 22.0, 0.001)
 
 
@@ -728,7 +728,7 @@ func test_sortie_large_consumes_3_jade_per_warrior() -> void:
 	var p := _make_wall_province_data(10, 9)
 	var s := _make_wall_tower_settlement(10, 10, 30.0)
 	var applied: Array = [_make_sortie_applied(10, 3, 0.60, 3)]
-	DayOrchestrator._process_sortie_results(applied, [s], {10: p})
+	DayOrchestrator._process_sortie_results(applied, [s], {10: p}, DiceEngine.new())
 	assert_almost_eq(s.jade_stockpile, 12.0, 0.001)
 
 
@@ -737,7 +737,7 @@ func test_sortie_jade_clamped_at_zero_if_insufficient() -> void:
 	var p := _make_wall_province_data(10, 8)
 	var s := _make_wall_tower_settlement(10, 10, 3.0)
 	var applied: Array = [_make_sortie_applied(10, 2, 0.40, 2)]
-	DayOrchestrator._process_sortie_results(applied, [s], {10: p})
+	DayOrchestrator._process_sortie_results(applied, [s], {10: p}, DiceEngine.new())
 	assert_almost_eq(s.jade_stockpile, 0.0, 0.001)
 
 
@@ -748,7 +748,7 @@ func test_sortie_no_mutation_when_flag_false() -> void:
 		"action_id": "CONDUCT_SORTIE",
 		"effects": {"requires_sortie_combat": false, "target_province_id": 10}
 	}]
-	DayOrchestrator._process_sortie_results(applied, [s], {10: p})
+	DayOrchestrator._process_sortie_results(applied, [s], {10: p}, DiceEngine.new())
 	assert_eq(p.shadowlands_strength, 8, "No SS change without flag")
 	assert_almost_eq(s.jade_stockpile, 20.0, 0.001, "No jade change without flag")
 
@@ -757,7 +757,7 @@ func test_sortie_result_in_return_array() -> void:
 	var p := _make_wall_province_data(10, 5)
 	var s := _make_wall_tower_settlement(10, 8, 15.0)
 	var applied: Array = [_make_sortie_applied(10, 1, 0.20, 1)]
-	var results: Array = DayOrchestrator._process_sortie_results(applied, [s], {10: p})
+	var results: Array = DayOrchestrator._process_sortie_results(applied, [s], {10: p}, DiceEngine.new())
 	assert_eq(results.size(), 1)
 	assert_eq(results[0]["province_id"], 10)
 
@@ -771,7 +771,7 @@ func test_sortie_two_independent_sorties() -> void:
 		_make_sortie_applied(10, 1, 0.20, 1),   # small → ss 6-1=5, jade 10*0.2=2 warriors ×1=2
 		_make_sortie_applied(20, 2, 0.40, 2),   # medium → ss 9-2=7, jade 8*0.4=3 warriors ×2=6
 	]
-	DayOrchestrator._process_sortie_results(applied, [s1, s2], {10: p1, 20: p2})
+	DayOrchestrator._process_sortie_results(applied, [s1, s2], {10: p1, 20: p2}, DiceEngine.new())
 	assert_eq(p1.shadowlands_strength, 5)
 	assert_eq(p2.shadowlands_strength, 7)
 	assert_almost_eq(s1.jade_stockpile, 18.0, 0.001)

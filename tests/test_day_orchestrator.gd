@@ -12913,7 +12913,7 @@ func test_assassination_death_event_includes_is_lord() -> void:
 	target.wounds_taken = 0
 	var assassin := L5RCharacterData.new()
 	assassin.character_id = 60
-	assassin.school_type = "Shosuro Infiltrator"
+	assassin.school = "Shosuro Infiltrator"
 	var characters_by_id: Dictionary = {50: target, 60: assassin}
 	var op: Dictionary = {
 		"commissioner_id": 70,

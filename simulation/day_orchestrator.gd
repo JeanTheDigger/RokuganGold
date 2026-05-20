@@ -11073,7 +11073,7 @@ static func _process_strategic_court_calls(
 ) -> void:
 	for directive: Dictionary in strategic_results:
 		var directive_type: Variant = directive.get("directive", "")
-		if directive_type == "WINTER_COURT_HOST":
+		if directive_type is String and directive_type == "WINTER_COURT_HOST":
 			_create_winter_court_from_directive(
 				directive, active_courts, active_topics,
 				characters_by_id, next_court_id, ic_day,

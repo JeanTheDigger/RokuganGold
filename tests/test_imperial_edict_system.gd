@@ -845,7 +845,7 @@ func test_orchestrator_creates_defiance_topic_data():
 	var next_topic_id: Array = [500]
 
 	var results := DayOrchestrator._process_edict_compliance(
-		edicts, wars, chars, active_topics, next_topic_id, 40,
+		edicts, wars, chars, active_topics, next_topic_id, 40, {},
 	)
 	assert_eq(results.size(), 1)
 	var defiance_topics: Array = []

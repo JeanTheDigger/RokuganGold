@@ -580,10 +580,10 @@ func test_orchestrator_accepts_children_param() -> void:
 		{}, {}, [1000], [], {},
 		[], [], [1], [], {},
 		[], [1], [], [], [], [],
-		[], [], {}, [], [], [1],
+		[], [], [], {}, [], [1],
 		[], [1], [], [1],
-		[], {}, [-1], [],
-		children, [10000],
+		[], [], {}, [-1],
+		[], children, [10000],
 	)
 	assert_true(result.has("gempukku_results"))
 
@@ -600,10 +600,10 @@ func test_orchestrator_gempukku_on_season_change() -> void:
 		{}, {}, [1000], [], {},
 		[], [], [1], [], {},
 		[], [1], [], [], [], [],
-		[], [], {}, [], [], [1],
+		[], [], [], {}, [], [1],
 		[], [1], [], [1],
-		[], {}, [-1], [],
-		children, [10000],
+		[], [], {}, [-1],
+		[], children, [10000],
 	)
 	var gempukku: Dictionary = result.get("gempukku_results", {})
 	assert_true(gempukku.is_empty(), "Should not fire gempukku on non-season boundary")
@@ -618,10 +618,10 @@ func test_orchestrator_gempukku_result_in_return() -> void:
 		{}, {}, [1000], [], {},
 		[], [], [1], [], {},
 		[], [1], [], [], [], [],
-		[], [], {}, [], [], [1],
+		[], [], [], {}, [], [1],
 		[], [1], [], [1],
-		[], {}, [-1], [],
-		[], [10000],
+		[], [], {}, [-1],
+		[], [], [10000],
 	)
 	assert_true(result.has("gempukku_results"))
 

@@ -5031,7 +5031,7 @@ func _make_siege_state(
 	return SiegeSystem.create_siege_state(settlement_id, atk_army_id, def_army_id, 10.0, 5.0, 2.0)
 
 
-func _make_army_company(
+func _make_army_company_siege(
 	company_id: int,
 	army_id: int,
 	unit_type: int = Enums.CompanyUnitType.BUSHI_RETAINER,
@@ -5071,9 +5071,9 @@ func test_storm_assault_no_siege_returns_empty() -> void:
 func test_storm_assault_finds_siege_and_resolves() -> void:
 	var siege: Dictionary = _make_siege_state(10, 1, 2)
 	var companies: Array = [
-		_make_army_company(1, 1, Enums.CompanyUnitType.BUSHI_RETAINER),
-		_make_army_company(2, 1, Enums.CompanyUnitType.BUSHI_RETAINER),
-		_make_army_company(3, 2, Enums.CompanyUnitType.GARRISON),
+		_make_army_company_siege(1, 1, Enums.CompanyUnitType.BUSHI_RETAINER),
+		_make_army_company_siege(2, 1, Enums.CompanyUnitType.BUSHI_RETAINER),
+		_make_army_company_siege(3, 2, Enums.CompanyUnitType.GARRISON),
 	]
 	var applied: Array = [{
 		"effects": {"requires_storm_assault": true, "siege_settlement_id": 10},
@@ -5097,10 +5097,10 @@ func test_storm_assault_attacker_victory_ends_siege() -> void:
 	var siege: Dictionary = _make_siege_state(10, 1, 2)
 	# Strong attacker vs weak defender
 	var companies: Array = [
-		_make_army_company(1, 1, Enums.CompanyUnitType.BUSHI_RETAINER),
-		_make_army_company(2, 1, Enums.CompanyUnitType.BUSHI_RETAINER),
-		_make_army_company(3, 1, Enums.CompanyUnitType.BUSHI_RETAINER),
-		_make_army_company(4, 2, Enums.CompanyUnitType.PEASANT_LEVY),
+		_make_army_company_siege(1, 1, Enums.CompanyUnitType.BUSHI_RETAINER),
+		_make_army_company_siege(2, 1, Enums.CompanyUnitType.BUSHI_RETAINER),
+		_make_army_company_siege(3, 1, Enums.CompanyUnitType.BUSHI_RETAINER),
+		_make_army_company_siege(4, 2, Enums.CompanyUnitType.PEASANT_LEVY),
 	]
 	var applied: Array = [{
 		"effects": {"requires_storm_assault": true, "siege_settlement_id": 10},
@@ -5159,7 +5159,7 @@ func test_storm_assault_metadata_sets_settlement_id() -> void:
 
 # -- Battle Integration Tests: Terrain + Fort + War Score End-to-End --------
 
-func _make_province(id: int, clan: String, terrain: Enums.TerrainType) -> ProvinceData:
+func _make_province_battle(id: int, clan: String, terrain: Enums.TerrainType) -> ProvinceData:
 	var p: ProvinceData = ProvinceData.new()
 	p.province_id = id
 	p.clan = clan
@@ -5188,7 +5188,7 @@ func _setup_battle_scenario(
 ) -> Dictionary:
 	var dice: DiceEngine = DiceEngine.new(99)
 	var province_id: int = 5
-	var prov: ProvinceData = _make_province(province_id, province_clan, terrain)
+	var prov: ProvinceData = _make_province_battle(province_id, province_clan, terrain)
 	var provinces: Dictionary = {province_id: prov}
 
 	var army_a: Dictionary = ArmyMovementSystem.create_army_state(1, province_id, "Crab")
@@ -5433,7 +5433,7 @@ func test_e2e_executor_produces_storm_assault_effect() -> void:
 	var ctx: NPCDataStructures.ContextSnapshot = NPCDataStructures.ContextSnapshot.new()
 	ctx.character_id = 1
 	ctx.ic_day = 10
-	ctx.season = "spring"
+	ctx.season = 0  # SPRING
 	var result: Dictionary = ActionExecutor.execute(
 		action, char, ctx, DiceEngine.new(),
 	)
@@ -5450,7 +5450,7 @@ func test_e2e_executor_uses_physical_location_fallback() -> void:
 	var ctx: NPCDataStructures.ContextSnapshot = NPCDataStructures.ContextSnapshot.new()
 	ctx.character_id = 1
 	ctx.ic_day = 10
-	ctx.season = "spring"
+	ctx.season = 0  # SPRING
 	var result: Dictionary = ActionExecutor.execute(
 		action, char, ctx, DiceEngine.new(),
 	)
@@ -5465,7 +5465,7 @@ func test_e2e_metadata_to_executor_to_orchestrator() -> void:
 	ctx.location_id = 10
 	ctx.character_id = 1
 	ctx.ic_day = 10
-	ctx.season = "spring"
+	ctx.season = 0  # SPRING
 	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
 	assert_eq(option.metadata["siege_settlement_id"], 10)
 
@@ -5479,9 +5479,9 @@ func test_e2e_metadata_to_executor_to_orchestrator() -> void:
 
 	var siege: Dictionary = _make_siege_state(10, 1, 2)
 	var companies: Array = [
-		_make_army_company(1, 1, Enums.CompanyUnitType.BUSHI_RETAINER),
-		_make_army_company(2, 1, Enums.CompanyUnitType.BUSHI_RETAINER),
-		_make_army_company(3, 2, Enums.CompanyUnitType.GARRISON),
+		_make_army_company_siege(1, 1, Enums.CompanyUnitType.BUSHI_RETAINER),
+		_make_army_company_siege(2, 1, Enums.CompanyUnitType.BUSHI_RETAINER),
+		_make_army_company_siege(3, 2, Enums.CompanyUnitType.GARRISON),
 	]
 	var applied: Array = [exec_result]
 	var dice: DiceEngine = DiceEngine.new(42)
@@ -5499,10 +5499,10 @@ func test_e2e_storm_assault_defender_victory_resets_sortie_counter() -> void:
 	var siege: Dictionary = _make_siege_state(10, 1, 2)
 	siege["ticks_since_sortie"] = 15
 	var companies: Array = [
-		_make_army_company(1, 1, Enums.CompanyUnitType.PEASANT_LEVY),
-		_make_army_company(2, 2, Enums.CompanyUnitType.BUSHI_RETAINER),
-		_make_army_company(3, 2, Enums.CompanyUnitType.BUSHI_RETAINER),
-		_make_army_company(4, 2, Enums.CompanyUnitType.BUSHI_RETAINER),
+		_make_army_company_siege(1, 1, Enums.CompanyUnitType.PEASANT_LEVY),
+		_make_army_company_siege(2, 2, Enums.CompanyUnitType.BUSHI_RETAINER),
+		_make_army_company_siege(3, 2, Enums.CompanyUnitType.BUSHI_RETAINER),
+		_make_army_company_siege(4, 2, Enums.CompanyUnitType.BUSHI_RETAINER),
 	]
 	var applied: Array = [{
 		"effects": {"requires_storm_assault": true, "siege_settlement_id": 10},
@@ -5520,8 +5520,8 @@ func test_e2e_storm_assault_defender_victory_resets_sortie_counter() -> void:
 
 func test_e2e_storm_assault_company_health_mutated() -> void:
 	var siege: Dictionary = _make_siege_state(10, 1, 2)
-	var c_atk: Dictionary = _make_army_company(1, 1, Enums.CompanyUnitType.BUSHI_RETAINER)
-	var c_def: Dictionary = _make_army_company(2, 2, Enums.CompanyUnitType.BUSHI_RETAINER)
+	var c_atk: Dictionary = _make_army_company_siege(1, 1, Enums.CompanyUnitType.BUSHI_RETAINER)
+	var c_def: Dictionary = _make_army_company_siege(2, 2, Enums.CompanyUnitType.BUSHI_RETAINER)
 	var h_atk_before: int = c_atk["current_health"]
 	var h_def_before: int = c_def["current_health"]
 	var companies: Array = [c_atk, c_def]
@@ -5544,10 +5544,10 @@ func test_e2e_storm_assault_only_targets_matching_siege() -> void:
 	var siege_a: Dictionary = _make_siege_state(10, 1, 2)
 	var siege_b: Dictionary = _make_siege_state(20, 3, 4)
 	var companies: Array = [
-		_make_army_company(1, 1, Enums.CompanyUnitType.BUSHI_RETAINER),
-		_make_army_company(2, 2, Enums.CompanyUnitType.GARRISON),
-		_make_army_company(3, 3, Enums.CompanyUnitType.BUSHI_RETAINER),
-		_make_army_company(4, 4, Enums.CompanyUnitType.GARRISON),
+		_make_army_company_siege(1, 1, Enums.CompanyUnitType.BUSHI_RETAINER),
+		_make_army_company_siege(2, 2, Enums.CompanyUnitType.GARRISON),
+		_make_army_company_siege(3, 3, Enums.CompanyUnitType.BUSHI_RETAINER),
+		_make_army_company_siege(4, 4, Enums.CompanyUnitType.GARRISON),
 	]
 	var applied: Array = [{
 		"effects": {"requires_storm_assault": true, "siege_settlement_id": 10},
@@ -5565,8 +5565,8 @@ func test_e2e_storm_assault_only_targets_matching_siege() -> void:
 func test_e2e_storm_assault_uses_urban_terrain_and_fort_bonus() -> void:
 	var siege: Dictionary = _make_siege_state(10, 1, 2)
 	var companies: Array = [
-		_make_army_company(1, 1, Enums.CompanyUnitType.BUSHI_RETAINER),
-		_make_army_company(2, 2, Enums.CompanyUnitType.GARRISON),
+		_make_army_company_siege(1, 1, Enums.CompanyUnitType.BUSHI_RETAINER),
+		_make_army_company_siege(2, 2, Enums.CompanyUnitType.GARRISON),
 	]
 	var applied: Array = [{
 		"effects": {"requires_storm_assault": true, "siege_settlement_id": 10},
@@ -5761,7 +5761,7 @@ func test_purify_executor_success_returns_flag() -> void:
 	var ctx: ContextSnapshot = ContextSnapshot.new()
 	ctx.character_id = 1
 	ctx.ic_day = 10
-	ctx.season = "spring"
+	ctx.season = 0  # SPRING
 	var dice: DiceEngine = DiceEngine.new(99)
 	var result: Dictionary = ActionExecutor._execute_purify_tainted_ground(
 		action, ctx, c, dice, 1.0,

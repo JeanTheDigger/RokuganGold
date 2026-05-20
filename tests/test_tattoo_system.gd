@@ -616,7 +616,7 @@ func _make_tattoo_ctx() -> NPCDataStructures.ContextSnapshot:
 	ctx.character_id = 100
 	ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
 	ctx.ic_day = 50
-	ctx.season = "Spring"
+	ctx.season = 0  # SPRING
 	return ctx
 
 func test_apply_tattoo_success():
