@@ -418,6 +418,8 @@ static func generate_replies(
 	for result: Dictionary in delivery_results:
 		if result.get("undeliverable", false):
 			continue
+		if result.get("forgery_detected", false):
+			continue
 		var recipient_id: int = result.get("recipient_id", -1)
 		var sender_id: int = result.get("sender_id", -1)
 		var recipient: L5RCharacterData = characters_by_id.get(recipient_id)
@@ -456,11 +458,15 @@ static func generate_replies(
 			prov_dist, mtn, wz, ocean, miya,
 			Enums.Trait.AWARENESS, true,
 		)
-		if original_letter != null and original_letter.meeting_proposal:
-			if disposition >= MEETING_ACCEPT_DISPOSITION:
-				reply.meeting_proposal = true
-				reply.meeting_settlement_id = original_letter.meeting_settlement_id
-				reply.meeting_deadline_ic_day = original_letter.meeting_deadline_ic_day
+		if original_letter != null:
+			if original_letter.is_forged and not original_letter.forgery_detected:
+				reply.reply_to_forged = true
+				reply.original_forger_id = original_letter.forged_sender_id
+			if original_letter.meeting_proposal:
+				if disposition >= MEETING_ACCEPT_DISPOSITION:
+					reply.meeting_proposal = true
+					reply.meeting_settlement_id = original_letter.meeting_settlement_id
+					reply.meeting_deadline_ic_day = original_letter.meeting_deadline_ic_day
 		replies.append(reply)
 
 	return replies

@@ -899,6 +899,18 @@ For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
   `_build_covert_result()` in action_executor now includes
   `action.metadata` in the result dict. Without this, forge writeback
   handlers had no access to impersonated_id, recipient_id, or topic_id.
+- **Reply confusion pipeline — impersonation detection wired. FIXED.**
+  When a reply to an undetected forged letter is delivered to Person A
+  (the impersonated victim), `_process_impersonation_detection()` fires:
+  (1) creates "impersonation_detected" KnowledgeEntry on victim with
+  forger_id and reply_from_id, (2) creates Tier 3 POLITICAL topic about
+  the impersonation, (3) assigns INVESTIGATE_THREAT objective targeting
+  the forger. Duplicate-safe (checks existing knowledge_pool entries).
+  LetterData gains reply_to_forged and original_forger_id fields. Reply
+  generation tags replies to undetected forgeries automatically.
+  `generate_replies()` now skips detected forgeries entirely (recipient
+  who detects a forgery does not reply). 5 orchestrator tests +
+  3 letter system tests.
 
 ### Known Code Issues — Deferred (2026-05-19, metadata population audit)
 - **EXPOSE_SECRET_PRIVATELY — metadata unpopulated, always fails. FIXED.**

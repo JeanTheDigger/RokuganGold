@@ -733,6 +733,10 @@ static func advance_day(
 		active_wars if active_wars != null else [], dice_engine, letter_topics_by_id,
 	)
 	_compute_positions_from_letters(letter_results, active_topics, characters_by_id)
+	_process_impersonation_detection(
+		pending_letters, characters_by_id, active_topics,
+		next_topic_id, ic_day, objectives_map,
+	)
 	_process_letter_commitment_creation(
 		pending_letters, commitments, next_commitment_id, ic_day,
 	)
@@ -4539,6 +4543,73 @@ static func _process_forged_order_delivery(
 		else:
 			objectives_map[letter.recipient_id] = [forged_objective]
 		letter.order_applied = true
+
+
+static func _process_impersonation_detection(
+	pending_letters: Array[LetterData],
+	characters_by_id: Dictionary,
+	active_topics: Array[TopicData],
+	next_topic_id: Array[int],
+	ic_day: int,
+	objectives_map: Dictionary,
+) -> void:
+	for letter: LetterData in pending_letters:
+		if not letter.delivered:
+			continue
+		if not letter.reply_to_forged:
+			continue
+		if not letter.is_reply:
+			continue
+		var victim_id: int = letter.recipient_id
+		var victim: L5RCharacterData = characters_by_id.get(victim_id)
+		if victim == null:
+			continue
+
+		var already_aware: bool = false
+		for entry: KnowledgeEntry in victim.knowledge_pool:
+			if entry.entry_type == "impersonation_detected" \
+				and entry.data.get("forger_id", -1) == letter.original_forger_id:
+				already_aware = true
+				break
+		if already_aware:
+			continue
+
+		InformationSystem.add_knowledge(victim, InformationSystem.make_entry(
+			Enums.KnowledgeSource.LETTER,
+			"impersonation_detected",
+			{
+				"forger_id": letter.original_forger_id,
+				"reply_from_id": letter.sender_id,
+				"detected_ic_day": ic_day,
+			},
+			0,
+		))
+
+		var topic := TopicData.new()
+		topic.topic_id = next_topic_id[0]
+		next_topic_id[0] += 1
+		topic.tier = TopicData.Tier.TIER_3
+		topic.category = TopicData.Category.POLITICAL
+		topic.subject_character_id = victim_id
+		topic.ic_day_created = ic_day
+		topic.slug = "impersonation_victim_%d" % victim_id
+		active_topics.append(topic)
+
+		if not objectives_map.has(victim_id):
+			objectives_map[victim_id] = []
+		var current_objs: Array = objectives_map[victim_id]
+		var already_investigating: bool = false
+		for obj: Variant in current_objs:
+			if obj is Dictionary and obj.get("source", "") == "impersonation_detected":
+				already_investigating = true
+				break
+		if not already_investigating:
+			current_objs.append({
+				"need_type": "INVESTIGATE_THREAT",
+				"priority": 6,
+				"target_npc_id": letter.original_forger_id,
+				"source": "impersonation_detected",
+			})
 
 
 # TN for the check is deferred to Section 31/42 — using placeholder TN 20.

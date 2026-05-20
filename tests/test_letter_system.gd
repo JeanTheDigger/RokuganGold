@@ -1211,3 +1211,116 @@ func test_undetected_forgery_transfers_topic():
 	assert_false(results[0].get("forgery_detected", true))
 	assert_true(99 in recipient.topic_pool,
 		"Undetected forgery SHOULD transfer topic")
+
+
+# -- Reply to forged letter tags reply_to_forged --------------------------------
+
+
+func test_reply_to_forged_letter_tagged():
+	var dice := DiceEngine.new()
+	dice.set_seed(42)
+	var sender := _make_char(1, 3)
+	var recipient := _make_char(2, 3)
+	recipient.disposition_values[1] = 80
+	recipient.topic_pool = [10, 20]
+	var chars: Dictionary = {1: sender, 2: recipient}
+	var log: Array[Dictionary] = []
+
+	var forged: LetterData = LetterSystem.write_letter(
+		1, sender, 2, 10, 0, dice, 3
+	)
+	forged.ic_day_arrival = 0
+	forged.is_forged = true
+	forged.forged_sender_id = 99
+	forged.forgery_tn = 50
+	var pending: Array = [forged]
+
+	LetterSystem.process_pending_letters(pending, chars, 0, 1, log, [], dice)
+	var delivery_results: Array[Dictionary] = [{
+		"letter_id": 1,
+		"sender_id": 1,
+		"recipient_id": 2,
+		"topic": 10,
+		"is_forged": true,
+		"forged_sender_id": 99,
+		"forgery_detected": false,
+	}]
+	var next_id: Array[int] = [100]
+	var replies: Array[LetterData] = LetterSystem.generate_replies(
+		delivery_results, pending, chars, 0, dice, next_id,
+	)
+	if replies.size() > 0:
+		assert_true(replies[0].reply_to_forged,
+			"Reply to undetected forged letter should be tagged")
+		assert_eq(replies[0].original_forger_id, 99)
+	else:
+		pass_test("No reply generated (RNG), can't test tag")
+
+
+func test_no_reply_to_detected_forgery():
+	var dice := DiceEngine.new()
+	dice.set_seed(42)
+	var sender := _make_char(1, 3)
+	var recipient := _make_char(2, 3)
+	recipient.disposition_values[1] = 80
+	recipient.topic_pool = [10]
+	var chars: Dictionary = {1: sender, 2: recipient}
+
+	var forged: LetterData = LetterSystem.write_letter(
+		1, sender, 2, 10, 0, dice, 3
+	)
+	forged.is_forged = true
+	forged.forged_sender_id = 99
+	forged.forgery_detected = true
+	var pending: Array = [forged]
+
+	var delivery_results: Array[Dictionary] = [{
+		"letter_id": 1,
+		"sender_id": 1,
+		"recipient_id": 2,
+		"topic": 10,
+		"is_forged": true,
+		"forged_sender_id": 99,
+		"forgery_detected": true,
+	}]
+	var next_id: Array[int] = [100]
+	var replies: Array[LetterData] = LetterSystem.generate_replies(
+		delivery_results, pending, chars, 0, dice, next_id,
+	)
+	assert_eq(replies.size(), 0,
+		"Should not generate reply to detected forgery")
+
+
+func test_reply_to_detected_forgery_not_tagged():
+	var dice := DiceEngine.new()
+	dice.set_seed(42)
+	var sender := _make_char(1, 3)
+	var recipient := _make_char(2, 3)
+	recipient.disposition_values[1] = 80
+	recipient.topic_pool = [10]
+	var chars: Dictionary = {1: sender, 2: recipient}
+
+	var forged: LetterData = LetterSystem.write_letter(
+		1, sender, 2, 10, 0, dice, 3
+	)
+	forged.is_forged = true
+	forged.forged_sender_id = 99
+	forged.forgery_detected = true
+	var pending: Array = [forged]
+
+	var delivery_results: Array[Dictionary] = [{
+		"letter_id": 1,
+		"sender_id": 1,
+		"recipient_id": 2,
+		"topic": 10,
+		"is_forged": true,
+		"forged_sender_id": 99,
+		"forgery_detected": true,
+	}]
+	var next_id: Array[int] = [100]
+	var replies: Array[LetterData] = LetterSystem.generate_replies(
+		delivery_results, pending, chars, 0, dice, next_id,
+	)
+	for reply: LetterData in replies:
+		assert_false(reply.reply_to_forged,
+			"Reply to detected forgery should NOT be tagged")

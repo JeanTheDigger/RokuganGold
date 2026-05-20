@@ -10086,3 +10086,125 @@ func test_forged_order_delivery_skips_detected() -> void:
 		pending, objectives_map, chars,
 	)
 	assert_false(objectives_map.has(20))
+
+
+# =============================================================================
+# Impersonation detection tests
+# =============================================================================
+
+
+func test_impersonation_detection_creates_knowledge_and_topic() -> void:
+	var victim := L5RCharacterData.new()
+	victim.character_id = 5
+	victim.knowledge_pool = []
+	var chars: Dictionary = {5: victim}
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [500]
+	var objectives_map: Dictionary = {}
+
+	var reply := LetterData.new()
+	reply.letter_id = 1
+	reply.sender_id = 20
+	reply.recipient_id = 5
+	reply.delivered = true
+	reply.is_reply = true
+	reply.reply_to_forged = true
+	reply.original_forger_id = 99
+	var pending: Array[LetterData] = [reply]
+
+	DayOrchestrator._process_impersonation_detection(
+		pending, chars, active_topics, next_topic_id, 50, objectives_map,
+	)
+	assert_eq(victim.knowledge_pool.size(), 1)
+	assert_eq(victim.knowledge_pool[0].entry_type, "impersonation_detected")
+	assert_eq(victim.knowledge_pool[0].data.get("forger_id", -1), 99)
+	assert_eq(active_topics.size(), 1)
+	assert_eq(active_topics[0].tier, TopicData.Tier.TIER_3)
+	assert_eq(active_topics[0].subject_character_id, 5)
+	assert_eq(next_topic_id[0], 501)
+
+
+func test_impersonation_detection_creates_investigate_objective() -> void:
+	var victim := L5RCharacterData.new()
+	victim.character_id = 5
+	victim.knowledge_pool = []
+	var chars: Dictionary = {5: victim}
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [500]
+	var objectives_map: Dictionary = {}
+
+	var reply := LetterData.new()
+	reply.letter_id = 1
+	reply.sender_id = 20
+	reply.recipient_id = 5
+	reply.delivered = true
+	reply.is_reply = true
+	reply.reply_to_forged = true
+	reply.original_forger_id = 99
+	var pending: Array[LetterData] = [reply]
+
+	DayOrchestrator._process_impersonation_detection(
+		pending, chars, active_topics, next_topic_id, 50, objectives_map,
+	)
+	assert_true(objectives_map.has(5))
+	var objs: Array = objectives_map[5]
+	assert_eq(objs.size(), 1)
+	assert_eq(objs[0]["need_type"], "INVESTIGATE_THREAT")
+	assert_eq(objs[0]["target_npc_id"], 99)
+	assert_eq(objs[0]["source"], "impersonation_detected")
+
+
+func test_impersonation_detection_skips_non_reply() -> void:
+	var victim := L5RCharacterData.new()
+	victim.character_id = 5
+	victim.knowledge_pool = []
+	var chars: Dictionary = {5: victim}
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [500]
+	var objectives_map: Dictionary = {}
+
+	var letter := LetterData.new()
+	letter.letter_id = 1
+	letter.sender_id = 20
+	letter.recipient_id = 5
+	letter.delivered = true
+	letter.is_reply = false
+	letter.reply_to_forged = true
+	letter.original_forger_id = 99
+	var pending: Array[LetterData] = [letter]
+
+	DayOrchestrator._process_impersonation_detection(
+		pending, chars, active_topics, next_topic_id, 50, objectives_map,
+	)
+	assert_eq(victim.knowledge_pool.size(), 0)
+	assert_eq(active_topics.size(), 0)
+
+
+func test_impersonation_detection_deduplicates() -> void:
+	var victim := L5RCharacterData.new()
+	victim.character_id = 5
+	var existing := KnowledgeEntry.new()
+	existing.entry_type = "impersonation_detected"
+	existing.data = {"forger_id": 99}
+	victim.knowledge_pool = [existing]
+	var chars: Dictionary = {5: victim}
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [500]
+	var objectives_map: Dictionary = {}
+
+	var reply := LetterData.new()
+	reply.letter_id = 1
+	reply.sender_id = 20
+	reply.recipient_id = 5
+	reply.delivered = true
+	reply.is_reply = true
+	reply.reply_to_forged = true
+	reply.original_forger_id = 99
+	var pending: Array[LetterData] = [reply]
+
+	DayOrchestrator._process_impersonation_detection(
+		pending, chars, active_topics, next_topic_id, 50, objectives_map,
+	)
+	assert_eq(victim.knowledge_pool.size(), 1,
+		"Should not add duplicate impersonation knowledge")
+	assert_eq(active_topics.size(), 0)
