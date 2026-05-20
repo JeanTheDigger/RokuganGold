@@ -1214,6 +1214,19 @@ All 10 constant arrays and 10 helper functions added. 28 constant/integration te
   events without it. Assassinated lords never triggered succession or orphaned
   objectives. Added `is_lord: target.role_position != ""` and
   `suspicious_death: true` to the death event dict. 1 test.
+- **Hunt resolution never fires — no daily trigger. FIXED.**
+  `resolve_npc_hunt()` existed but nothing checked when ic_day reached the hunt
+  date. `_resolve_scheduled_hunts()` fires daily: checks all active hunts for
+  matching date, gathers host + accepted invitees (filters dead/traveling),
+  generates beast from terrain pool via `HuntSystem.generate_beast()`, calls
+  `resolve_npc_hunt()`, distributes glory via `compute_glory_distribution()`,
+  applies disposition changes between co-participants (new relationships +3,
+  existing acquaintances +1), handles casualties (wounded get wound_per_rank
+  wounds, killed get lethal + death_event), creates hunt result topic (Tier 3
+  if death, Tier 4 otherwise). Beast stat blocks and terrain pools added to
+  hunt_system.gd (10 species, 5 terrain types). Values PROVISIONAL — GDD
+  confirms bear=10 and ozaru=20 wound_threshold; others derived from s54.1
+  bestiary stats. 6 tests.
 
 ### Effect Key Audit Dead Keys — Informational / Not Bugs (2026-05-20)
 The following effect keys are set but intentionally unconsumed by the

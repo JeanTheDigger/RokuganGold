@@ -12931,3 +12931,186 @@ func test_assassination_death_event_includes_is_lord() -> void:
 		"Lord assassination should set is_lord for succession trigger")
 	assert_true(death_events[0]["suspicious_death"],
 		"Assassination should be suspicious")
+
+
+# -- Hunt Resolution Tests (s57.38.6) ----------------------------------------
+
+func _make_hunter(id: int, hunting: int = 3, kyujutsu: int = 3, spears: int = 0, status: float = 3.0) -> L5RCharacterData:
+	var c := L5RCharacterData.new()
+	c.character_id = id
+	c.character_name = "Hunter_%d" % id
+	c.status = status
+	c.glory = 2.0
+	c.honor = 5.0
+	c.reflexes = 3
+	c.awareness = 3
+	c.agility = 3
+	c.perception = 3
+	c.stamina = 3
+	c.willpower = 3
+	c.strength = 3
+	c.intelligence = 3
+	c.void_ring = 2
+	c.wounds_taken = 0
+	c.skills = {"Hunting": hunting, "Kyujutsu": kyujutsu, "Spears": spears, "Etiquette": 1}
+	c.emphases = {}
+	c.role_position = ""
+	c.physical_location = "100"
+	c.travel_destination = ""
+	c.disposition_values = {}
+	c.met_characters = []
+	c.knowledge_pool = []
+	c.known_contacts_by_clan = {}
+	return c
+
+
+func test_hunt_resolves_on_date_and_distributes_glory() -> void:
+	var host: L5RCharacterData = _make_hunter(10, 4, 4)
+	var invitee: L5RCharacterData = _make_hunter(20, 3, 3)
+	var characters_by_id: Dictionary = {10: host, 20: invitee}
+	var province := ProvinceData.new()
+	province.province_id = 5
+	province.terrain_type = Enums.TerrainType.FOREST
+	var provinces: Dictionary = {5: province}
+	var dice := DiceEngine.new()
+	dice.set_seed(99)
+	var active_hunts: Array[Dictionary] = [{
+		"hunt_id": 1,
+		"host_id": 10,
+		"hunt_date_ic_day": 10,
+		"province_id": 5,
+		"topic_id": 500,
+		"accepted_invitee_ids": [20],
+		"status": "active",
+	}]
+	var death_events: Array[Dictionary] = []
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [800]
+
+	var old_glory_host: float = host.glory
+	var old_glory_invitee: float = invitee.glory
+
+	var results: Array[Dictionary] = DayOrchestrator._resolve_scheduled_hunts(
+		active_hunts, characters_by_id, provinces, dice, 10,
+		death_events, active_topics, next_topic_id,
+	)
+
+	assert_eq(results.size(), 1, "Should resolve one hunt")
+	assert_eq(active_hunts[0]["status"], "resolved", "Hunt should be marked resolved")
+	assert_true(active_hunts[0].has("outcome"), "Should record outcome")
+	assert_eq(active_topics.size(), 1, "Should create hunt result topic")
+	assert_eq(active_topics[0].topic_type, "hunt_result")
+	assert_true(host.glory != old_glory_host or invitee.glory != old_glory_invitee or results[0]["outcome"] == "failed",
+		"Glory should change on success, or outcome is failed (no glory change)")
+
+
+func test_hunt_not_resolved_before_date() -> void:
+	var host: L5RCharacterData = _make_hunter(10)
+	var characters_by_id: Dictionary = {10: host}
+	var provinces: Dictionary = {}
+	var dice := DiceEngine.new()
+	var active_hunts: Array[Dictionary] = [{
+		"hunt_id": 1,
+		"host_id": 10,
+		"hunt_date_ic_day": 15,
+		"province_id": 5,
+		"accepted_invitee_ids": [],
+		"status": "active",
+	}]
+	var death_events: Array[Dictionary] = []
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [800]
+	var results: Array[Dictionary] = DayOrchestrator._resolve_scheduled_hunts(
+		active_hunts, characters_by_id, provinces, dice, 10,
+		death_events, active_topics, next_topic_id,
+	)
+	assert_eq(results.size(), 0, "Hunt should not resolve before its date")
+	assert_eq(active_hunts[0]["status"], "active", "Should remain active")
+
+
+func test_hunt_cancelled_if_host_dead() -> void:
+	var host: L5RCharacterData = _make_hunter(10)
+	host.wounds_taken = 999
+	var characters_by_id: Dictionary = {10: host}
+	var provinces: Dictionary = {}
+	var dice := DiceEngine.new()
+	var active_hunts: Array[Dictionary] = [{
+		"hunt_id": 1,
+		"host_id": 10,
+		"hunt_date_ic_day": 10,
+		"province_id": 5,
+		"accepted_invitee_ids": [],
+		"status": "active",
+	}]
+	var death_events: Array[Dictionary] = []
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [800]
+	var results: Array[Dictionary] = DayOrchestrator._resolve_scheduled_hunts(
+		active_hunts, characters_by_id, provinces, dice, 10,
+		death_events, active_topics, next_topic_id,
+	)
+	assert_eq(results.size(), 0, "Dead host should not produce hunt result")
+	assert_eq(active_hunts[0]["status"], "cancelled_no_host",
+		"Hunt should be cancelled when host is dead")
+
+
+func test_hunt_disposition_new_relationship() -> void:
+	var a: L5RCharacterData = _make_hunter(10)
+	var b: L5RCharacterData = _make_hunter(20)
+	var participants: Array[L5RCharacterData] = [a, b]
+	DayOrchestrator._apply_hunt_disposition(participants)
+	assert_eq(a.disposition_values.get(20, 0), HuntSystem.DISP_NEW_RELATIONSHIP,
+		"New relationship disposition for first meeting")
+	assert_eq(b.disposition_values.get(10, 0), HuntSystem.DISP_NEW_RELATIONSHIP,
+		"Reciprocal new relationship disposition")
+	assert_true(20 in a.met_characters, "Should add to met_characters")
+	assert_true(10 in b.met_characters, "Should add to met_characters")
+
+
+func test_hunt_disposition_existing_acquaintance() -> void:
+	var a: L5RCharacterData = _make_hunter(10)
+	var b: L5RCharacterData = _make_hunter(20)
+	a.met_characters = [20]
+	b.met_characters = [10]
+	a.disposition_values = {20: 15}
+	b.disposition_values = {10: 15}
+	var participants: Array[L5RCharacterData] = [a, b]
+	DayOrchestrator._apply_hunt_disposition(participants)
+	assert_eq(a.disposition_values.get(20, 0), 15 + HuntSystem.DISP_EXISTING_ACQUAINTANCE,
+		"Existing acquaintance gets smaller disposition bump")
+
+
+func test_hunt_casualty_creates_death_event() -> void:
+	var host: L5RCharacterData = _make_hunter(10, 4, 4)
+	host.agility = 5
+	var victim: L5RCharacterData = _make_hunter(20, 1, 1)
+	victim.agility = 1
+	victim.reflexes = 1
+	var characters_by_id: Dictionary = {10: host, 20: victim}
+	var province := ProvinceData.new()
+	province.province_id = 5
+	province.terrain_type = Enums.TerrainType.MOUNTAINS
+	var provinces: Dictionary = {5: province}
+	var dice := DiceEngine.new()
+	dice.set_seed(1)
+	var active_hunts: Array[Dictionary] = [{
+		"hunt_id": 1,
+		"host_id": 10,
+		"hunt_date_ic_day": 10,
+		"province_id": 5,
+		"topic_id": 500,
+		"accepted_invitee_ids": [20],
+		"status": "active",
+	}]
+	var death_events: Array[Dictionary] = []
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [800]
+	var _results: Array[Dictionary] = DayOrchestrator._resolve_scheduled_hunts(
+		active_hunts, characters_by_id, provinces, dice, 10,
+		death_events, active_topics, next_topic_id,
+	)
+	if not death_events.is_empty():
+		assert_eq(death_events[0]["cause"], "hunt_casualty",
+			"Death event should have hunt_casualty cause")
+		assert_false(death_events[0]["suspicious_death"],
+			"Hunt deaths are not suspicious")

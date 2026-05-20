@@ -61,6 +61,54 @@ const HUNT_NEGATIVE_SCHOOL_PREFIXES: Array[String] = [
 const HUNT_SCHOOL_LEAN: int = 15
 
 
+# -- Beast stat blocks (derived from s54.1 bestiary, values PROVISIONAL) -------
+# wound_threshold is a hunt-specific abstraction per s57.38: "a rough proxy for
+# how hard it is to land a mortal blow." GDD specifies bear=10, ozaru=20.
+
+const BEAST_STATS: Dictionary = {
+	"wolf": {"armor_tn": 20, "wound_threshold": 6, "initiative": 3, "attack_skill": 3},
+	"boar": {"armor_tn": 20, "wound_threshold": 10, "initiative": 3, "attack_skill": 3},
+	"stag": {"armor_tn": 30, "wound_threshold": 6, "initiative": 5, "attack_skill": 3},
+	"fox": {"armor_tn": 25, "wound_threshold": 3, "initiative": 4, "attack_skill": 3},
+	"ox": {"armor_tn": 10, "wound_threshold": 8, "initiative": 2, "attack_skill": 3},
+	"bear": {"armor_tn": 20, "wound_threshold": 10, "initiative": 3, "attack_skill": 4},
+	"mountain_bear": {"armor_tn": 25, "wound_threshold": 15, "initiative": 3, "attack_skill": 4},
+	"goat": {"armor_tn": 15, "wound_threshold": 4, "initiative": 2, "attack_skill": 3},
+	"tiger": {"armor_tn": 25, "wound_threshold": 8, "initiative": 4, "attack_skill": 4},
+	"ozaru": {"armor_tn": 30, "wound_threshold": 20, "initiative": 3, "attack_skill": 4},
+}
+
+# Terrain → beast pool (s57.38 "Beast generation — terrain pools")
+# Last entry is the rare beast (lower probability).
+const TERRAIN_BEAST_POOLS: Dictionary = {
+	Enums.TerrainType.PLAINS: ["wolf", "boar", "stag", "fox", "ox"],
+	Enums.TerrainType.RIVER_DELTA: ["wolf", "boar", "stag", "fox"],
+	Enums.TerrainType.FOREST: ["bear", "boar", "stag", "wolf", "tiger"],
+	Enums.TerrainType.HILLS: ["boar", "wolf", "stag", "fox", "bear"],
+	Enums.TerrainType.MOUNTAINS: ["mountain_bear", "wolf", "goat", "ozaru"],
+}
+
+const RARE_BEAST_CHANCE: float = 0.1
+
+
+static func generate_beast(terrain: Enums.TerrainType, dice_engine: DiceEngine) -> Dictionary:
+	var pool: Array = TERRAIN_BEAST_POOLS.get(terrain, TERRAIN_BEAST_POOLS[Enums.TerrainType.PLAINS])
+	if pool.is_empty():
+		return BEAST_STATS["boar"].duplicate()
+	var beast_name: String
+	var rare_roll: DiceResult = dice_engine.roll_and_keep(1, 1, false, false)
+	if pool.size() > 1 and rare_roll.total <= int(RARE_BEAST_CHANCE * 10):
+		beast_name = pool[pool.size() - 1]
+	else:
+		var common_pool: Array = pool.slice(0, pool.size() - 1) if pool.size() > 1 else pool
+		var pick_roll: DiceResult = dice_engine.roll_and_keep(1, 1, false, false)
+		var idx: int = (pick_roll.total - 1) % common_pool.size()
+		beast_name = common_pool[idx]
+	var stats: Dictionary = BEAST_STATS.get(beast_name, BEAST_STATS["boar"]).duplicate()
+	stats["beast_name"] = beast_name
+	return stats
+
+
 # -- Precondition checks -------------------------------------------------------
 
 static func can_announce(

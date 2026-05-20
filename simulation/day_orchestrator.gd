@@ -464,6 +464,11 @@ static func advance_day(
 		active_edicts,
 	)
 
+	var hunt_resolution_results: Array[Dictionary] = _resolve_scheduled_hunts(
+		active_hunts, characters_by_id, provinces, dice_engine, ic_day,
+		death_events, active_topics, next_topic_id,
+	)
+
 	_process_voluntary_declarations(
 		day_result.get("results", []),
 		active_courts, active_topics, court_commitments,
@@ -1158,6 +1163,7 @@ static func advance_day(
 		"koku_flow_results": koku_flow_results,
 		"stipend_topic_results": stipend_topic_results,
 		"ooc_tick_results": ooc_tick_results,
+		"hunt_resolution_results": hunt_resolution_results,
 	}
 
 
@@ -16986,3 +16992,144 @@ static func _process_cancel_hunt_writebacks(
 				continue
 			var old_val: int = invitee.disposition_values.get(host_id, 0)
 			invitee.disposition_values[host_id] = clampi(old_val + penalty, -100, 100)
+
+
+# -- Hunt Resolution (s57.38.6) -----------------------------------------------
+
+static func _resolve_scheduled_hunts(
+	active_hunts: Array[Dictionary],
+	characters_by_id: Dictionary,
+	provinces: Dictionary,
+	dice_engine: DiceEngine,
+	ic_day: int,
+	death_events: Array[Dictionary],
+	active_topics: Array[TopicData],
+	next_topic_id: Array[int],
+) -> Array[Dictionary]:
+	var results: Array[Dictionary] = []
+	for hunt: Dictionary in active_hunts:
+		if hunt.get("status", "") != "active":
+			continue
+		if hunt.get("hunt_date_ic_day", -1) != ic_day:
+			continue
+
+		var host_id: int = hunt.get("host_id", -1)
+		var host: L5RCharacterData = characters_by_id.get(host_id)
+		if host == null or CharacterStats.is_dead(host) or TravelSystem.is_traveling(host):
+			hunt["status"] = "cancelled_no_host"
+			continue
+
+		var participants: Array[L5RCharacterData] = [host]
+		var participant_dicts: Array[Dictionary] = [{"character_id": host_id, "is_noncombatant": false}]
+		for invitee_id: Variant in hunt.get("accepted_invitee_ids", []):
+			var iid: int = int(invitee_id)
+			var invitee: L5RCharacterData = characters_by_id.get(iid)
+			if invitee == null or CharacterStats.is_dead(invitee) or TravelSystem.is_traveling(invitee):
+				continue
+			participants.append(invitee)
+			var is_noncombatant: bool = SkillResolver.get_skill_rank(invitee, "Kyujutsu") == 0 \
+				and SkillResolver.get_skill_rank(invitee, "Spears") == 0
+			participant_dicts.append({"character_id": iid, "is_noncombatant": is_noncombatant})
+
+		var province_id: int = hunt.get("province_id", -1)
+		var terrain: Enums.TerrainType = Enums.TerrainType.PLAINS
+		if provinces.has(province_id):
+			terrain = provinces[province_id].terrain_type
+
+		var beast: Dictionary = HuntSystem.generate_beast(terrain, dice_engine)
+		var outcome: Dictionary = HuntSystem.resolve_npc_hunt(host, participants, beast, dice_engine)
+
+		var killed_id: int = outcome.get("killed_id", -1)
+		var wounded_id: int = outcome.get("wounded_id", -1)
+		var is_noncombatant_killed: bool = false
+		if killed_id >= 0:
+			for pd: Dictionary in participant_dicts:
+				if pd.get("character_id", -1) == killed_id and pd.get("is_noncombatant", false):
+					is_noncombatant_killed = true
+					break
+
+		var glory_map: Dictionary = HuntSystem.compute_glory_distribution(
+			outcome.get("outcome", "failed"),
+			participant_dicts,
+			outcome.get("killer_id", -1),
+			outcome.get("second_id", -1),
+			host_id,
+			is_noncombatant_killed,
+			false,
+			outcome.get("hunt_type", "party") == "solo",
+		)
+		for cid: Variant in glory_map:
+			var c: L5RCharacterData = characters_by_id.get(int(cid))
+			if c != null:
+				HonorGlorySystem.apply_glory_change(c, glory_map[cid])
+
+		_apply_hunt_disposition(participants)
+
+		if killed_id >= 0:
+			var killed: L5RCharacterData = characters_by_id.get(killed_id)
+			if killed != null:
+				var earth: int = CharacterStats.get_ring_value(killed, Enums.Ring.EARTH)
+				killed.wounds_taken = earth * 5 * 5
+				death_events.append({
+					"character_id": killed_id,
+					"ic_day": ic_day,
+					"cause": "hunt_casualty",
+					"is_lord": killed.role_position != "",
+					"suspicious_death": false,
+				})
+
+		if wounded_id >= 0 and wounded_id != killed_id:
+			var wounded: L5RCharacterData = characters_by_id.get(wounded_id)
+			if wounded != null:
+				var casualty_level: String = outcome.get("casualty_level", "hurt")
+				var earth: int = CharacterStats.get_ring_value(wounded, Enums.Ring.EARTH)
+				var wound_per_rank: int = earth * 5
+				if casualty_level == "down":
+					wounded.wounds_taken = maxi(wounded.wounds_taken, wound_per_rank * 3)
+				else:
+					wounded.wounds_taken = maxi(wounded.wounds_taken, wound_per_rank)
+
+		var topic := TopicData.new()
+		topic.topic_id = next_topic_id[0]
+		next_topic_id[0] += 1
+		var outcome_str: String = outcome.get("outcome", "failed")
+		topic.slug = "hunt_result_%d_day%d_%s" % [host_id, ic_day, outcome_str]
+		topic.topic_type = "hunt_result"
+		topic.variant = outcome_str
+		topic.tier = TopicData.Tier.TIER_3 if killed_id >= 0 else TopicData.Tier.TIER_4
+		topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)
+		topic.category = TopicData.Category.PERSONAL
+		topic.subject_character_id = host_id
+		topic.ic_day_created = ic_day
+		active_topics.append(topic)
+
+		hunt["status"] = "resolved"
+		hunt["outcome"] = outcome_str
+		hunt["beast"] = beast.get("beast_name", "unknown")
+
+		results.append({
+			"hunt_id": hunt.get("hunt_id", -1),
+			"outcome": outcome_str,
+			"beast": beast.get("beast_name", "unknown"),
+			"participants": participant_dicts.size(),
+			"killed_id": killed_id,
+			"wounded_id": wounded_id,
+		})
+	return results
+
+
+static func _apply_hunt_disposition(participants: Array[L5RCharacterData]) -> void:
+	for i: int in range(participants.size()):
+		for j: int in range(i + 1, participants.size()):
+			var a: L5RCharacterData = participants[i]
+			var b: L5RCharacterData = participants[j]
+			var disp_ab: int = a.disposition_values.get(b.character_id, 0)
+			var disp_ba: int = b.disposition_values.get(a.character_id, 0)
+			if a.character_id not in b.met_characters:
+				b.met_characters.append(a.character_id)
+				a.met_characters.append(b.character_id)
+				a.disposition_values[b.character_id] = clampi(disp_ab + HuntSystem.DISP_NEW_RELATIONSHIP, -100, 100)
+				b.disposition_values[a.character_id] = clampi(disp_ba + HuntSystem.DISP_NEW_RELATIONSHIP, -100, 100)
+			else:
+				a.disposition_values[b.character_id] = clampi(disp_ab + HuntSystem.DISP_EXISTING_ACQUAINTANCE, -100, 100)
+				b.disposition_values[a.character_id] = clampi(disp_ba + HuntSystem.DISP_EXISTING_ACQUAINTANCE, -100, 100)
