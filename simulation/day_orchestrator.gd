@@ -15859,8 +15859,10 @@ static func _apply_assassination_outcome(
 		"character_id": target.character_id,
 		"ic_day": ic_day,
 		"cause": "assassination",
+		"is_lord": target.role_position != "",
 		"assassin_id": assassin.character_id,
 		"commissioner_id": op.get("commissioner_id", -1),
+		"suspicious_death": true,
 	})
 
 	var outcome: String = conceal_result.get("outcome", "failure")

@@ -1208,6 +1208,12 @@ All 10 constant arrays and 10 helper functions added. 28 constant/integration te
   Tier 3 POLITICAL, unsanctioned = Tier 2 (always). subject_role = "NEUTRAL"
   per dead-character rule. Simultaneous deaths create two events/topics. Wired
   before _process_lord_deaths so succession fires same tick. 5 tests.
+- **Assassination death_events missing is_lord — lord assassinations skip succession. FIXED.**
+  `_apply_assassination_outcome()` appended death_events without `is_lord` or
+  `suspicious_death` fields. `_process_lord_deaths()` checks `is_lord` and skips
+  events without it. Assassinated lords never triggered succession or orphaned
+  objectives. Added `is_lord: target.role_position != ""` and
+  `suspicious_death: true` to the death event dict. 1 test.
 
 ### Effect Key Audit Dead Keys — Informational / Not Bugs (2026-05-20)
 The following effect keys are set but intentionally unconsumed by the

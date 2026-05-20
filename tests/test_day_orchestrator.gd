@@ -12891,3 +12891,43 @@ func test_no_death_no_event() -> void:
 	)
 	assert_eq(death_events.size(), 0, "Non-lethal duel creates no death events")
 	assert_eq(active_topics.size(), 0, "Non-lethal duel creates no death topics")
+
+
+# -- Assassination Death Event is_lord Fix -----------------------------------
+
+func test_assassination_death_event_includes_is_lord() -> void:
+	var target := L5RCharacterData.new()
+	target.character_id = 50
+	target.role_position = "Family Daimyo"
+	target.stamina = 2
+	target.willpower = 2
+	target.wounds_taken = 0
+	var assassin := L5RCharacterData.new()
+	assassin.character_id = 60
+	assassin.school_type = "Shosuro Infiltrator"
+	var characters_by_id: Dictionary = {50: target, 60: assassin}
+	var op: Dictionary = {
+		"commissioner_id": 70,
+		"target_id": 50,
+		"assassin_id": 60,
+		"method": "poison",
+	}
+	var conceal_result: Dictionary = {
+		"outcome": "full",
+		"concealment_tn": 25,
+	}
+	var death_events: Array[Dictionary] = []
+	var crime_records: Array[CrimeRecord] = []
+	var next_case_id: Array[int] = [1]
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [900]
+	DayOrchestrator._apply_assassination_outcome(
+		op, target, assassin, conceal_result, 10,
+		death_events, crime_records, next_case_id,
+		active_topics, next_topic_id, characters_by_id,
+	)
+	assert_eq(death_events.size(), 1, "Should create death event")
+	assert_true(death_events[0]["is_lord"],
+		"Lord assassination should set is_lord for succession trigger")
+	assert_true(death_events[0]["suspicious_death"],
+		"Assassination should be suspicious")
