@@ -1175,6 +1175,36 @@ All 10 constant arrays and 10 helper functions added. 28 constant/integration te
   False info now correctly replaces true info (character is deceived) and
   subsequent true reads restore correct knowledge. 6 tests.
 
+### Known Code Issues (found and fixed 2026-05-20, writeback coverage scan)
+- **ANNOUNCE_HUNT writeback missing — topic and hunt state never created. FIXED.**
+  Executor returned `hunt_date_ic_day`, `priority_invitee_id`, `topic_type`,
+  `topic_tier` but no handler created the hunt announcement topic or stored
+  hunt scheduling data. NPC engine read `active_hunt_id` and `hunt_topic_id`
+  from `known_objectives` but nothing populated them. Added
+  `_process_announce_hunt_writebacks()` (creates hunt dict + Tier 4 topic),
+  `_inject_hunt_context()` (populates known_objectives for all characters),
+  `active_hunts` and `next_hunt_id` parameters to advance_day. 2 tests.
+- **REQUEST_HUNT_INVITATION writeback missing — invitations never processed. FIXED.**
+  Executor returned `hunt_topic_id`, `requester_id`, `requester_status` but
+  no handler evaluated whether the host accepts the request. Added
+  `_process_request_hunt_invitation_writebacks()` which finds matching active
+  hunt by topic_id, evaluates via HuntSystem.evaluate_invitation_response()
+  (disposition/status/rival checks), adds accepted requesters to hunt's
+  accepted_invitee_ids, applies glory/disposition changes from acceptance.
+  Duplicate-safe. 3 tests.
+- **CANCEL_HUNT writeback missing — disposition penalty never applied. FIXED.**
+  Executor returned `accepted_invitee_ids`, `disposition_change_per_invitee`
+  but no handler applied the DISP_CANCEL_PER_INVITEE (-1) penalty to each
+  accepted invitee. `glory_change` was consumed by EffectApplicator. Added
+  `_process_cancel_hunt_writebacks()` which marks hunt as cancelled and
+  applies disposition penalties. 2 tests.
+- **Duel death writeback missing — succession never triggers for duel deaths.**
+  `death_occurred`, `challenger_dead`, `defender_dead` from ISSUE_DUEL_CHALLENGE
+  are set but no handler creates death_events, death topics, or triggers
+  succession. If a lord dies in a duel, no succession fires. DEFERRED — requires
+  confirming GDD intent for duel death handling (sanctioned vs unsanctioned,
+  topic tier, honor consequences).
+
 ### Effect Key Audit Dead Keys — Informational / Not Bugs (2026-05-20)
 The following effect keys are set but intentionally unconsumed by the
 effect applicator or orchestrator. They are metadata, Pattern B pre-applied
@@ -1190,6 +1220,19 @@ costs, or forward-wiring. Do not treat as bugs.
 - `target_is_kuge` — Informational: ASK_FOR_INTRODUCTION metadata.
 - `info_count` — Intermediate: consumed by executor internally.
 - `compliance_active` — Informational: intimidation compliance state.
+- `void_recovered` / `host_vp_recovered` / `participant_gains` /
+  `recovery_per_participant` — Pattern B: pre-applied in executor
+  (MEDITATE line 2633, TEA_CEREMONY lines 3977-3985).
+- `wounds_healed` / `kit_charge_consumed` / `wound_level_after` —
+  Pattern B: pre-applied in MedicineSystem.resolve_treatment().
+- `is_first_session` / `progress_gained` / `fully_trained` /
+  `sessions_completed` — Pattern B: pre-applied in executor
+  (TRAIN_ANIMAL lines 4249, 4301).
+- `death_occurred` / `challenger_dead` / `defender_dead` —
+  Pattern B: deaths pre-applied via HP mutation in IndividualCombat.
+  Writeback for succession/topics deferred (see above).
+- `duel_result` / `winner_id` / `loser_id` / `simultaneous` —
+  Pattern B: duel outcome pre-applied by IndividualCombat.
 
 ### Known Code Issues — Deferred (2026-05-19, metadata population audit)
 - **EXPOSE_SECRET_PRIVATELY — metadata unpopulated, always fails. FIXED.**

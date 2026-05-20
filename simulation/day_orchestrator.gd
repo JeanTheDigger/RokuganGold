@@ -82,6 +82,8 @@ static func advance_day(
 	disposition_snapshots: Dictionary = {},
 	tattoos: Array[TattooData] = [],
 	next_tattoo_id: Array[int] = [1],
+	active_hunts: Array[Dictionary] = [],
+	next_hunt_id: Array[int] = [1],
 ) -> Dictionary:
 	var prev_season: int = time_system.get_season()
 
@@ -144,6 +146,7 @@ static func advance_day(
 		court_commitments, characters,
 	)
 	_set_court_context_flags(active_courts, world_states)
+	_inject_hunt_context(active_hunts, world_states, active_topics)
 	_set_wall_tower_context_flags(characters, settlements, provinces, world_states)
 	_populate_court_availability_data(
 		active_courts, characters, characters_by_id, world_states, favors,
@@ -633,6 +636,21 @@ static func advance_day(
 	_process_intelligence_info_writebacks(
 		day_result.get("results", []),
 		characters_by_id, objectives_map, active_topics, current_season,
+	)
+
+	_process_announce_hunt_writebacks(
+		day_result.get("results", []),
+		active_hunts, next_hunt_id, active_topics, next_topic_id, ic_day,
+	)
+
+	_process_request_hunt_invitation_writebacks(
+		day_result.get("results", []),
+		active_hunts, characters_by_id,
+	)
+
+	_process_cancel_hunt_writebacks(
+		day_result.get("results", []),
+		active_hunts, characters_by_id,
 	)
 
 	_process_travel_redirect_writebacks(
@@ -16729,3 +16747,176 @@ static func _process_tattoo_creation(
 			if artist != null:
 				var extra_ap: int = ap_override - 2
 				artist.action_points_current = maxi(artist.action_points_current - extra_ap, 0)
+
+
+# -- Hunt Writebacks (s57.38) -------------------------------------------------
+
+static func _inject_hunt_context(
+	active_hunts: Array[Dictionary],
+	world_states: Dictionary,
+	active_topics: Array[TopicData],
+) -> void:
+	var hunt_topics: Dictionary = {}
+	for hunt: Dictionary in active_hunts:
+		if hunt.get("status", "") != "active":
+			continue
+		var topic_id: int = hunt.get("topic_id", -1)
+		if topic_id >= 0:
+			hunt_topics[topic_id] = hunt
+
+	for char_id: Variant in world_states:
+		if char_id is not int:
+			continue
+		var ws: Dictionary = world_states[char_id]
+		var known_objs: Dictionary = ws.get("known_objectives", {})
+
+		for hunt: Dictionary in active_hunts:
+			if hunt.get("status", "") != "active":
+				continue
+			if hunt.get("host_id", -1) == int(char_id):
+				known_objs["active_hunt_id"] = hunt.get("hunt_id", -1)
+				known_objs["hunt_date_ic_day"] = hunt.get("hunt_date_ic_day", -1)
+				break
+
+		for topic: TopicData in active_topics:
+			if topic.topic_type == "hunt_announcement" and not topic.resolved:
+				var tid: int = topic.topic_id
+				if hunt_topics.has(tid):
+					known_objs["hunt_topic_id"] = tid
+					break
+
+		ws["known_objectives"] = known_objs
+
+
+static func _process_announce_hunt_writebacks(
+	results: Array,
+	active_hunts: Array[Dictionary],
+	next_hunt_id: Array[int],
+	active_topics: Array[TopicData],
+	next_topic_id: Array[int],
+	ic_day: int,
+) -> void:
+	for result: Dictionary in results:
+		if result.get("action_id", "") != "ANNOUNCE_HUNT":
+			continue
+		if not result.get("success", false):
+			continue
+		var effects: Dictionary = result.get("effects", {})
+		var host_id: int = result.get("character_id", -1)
+		if host_id < 0:
+			continue
+
+		var hunt_id: int = next_hunt_id[0]
+		next_hunt_id[0] = hunt_id + 1
+
+		var topic_id: int = next_topic_id[0]
+		next_topic_id[0] = topic_id + 1
+
+		var topic := TopicData.new()
+		topic.topic_id = topic_id
+		topic.slug = "hunt_announcement_%d_day%d" % [host_id, ic_day]
+		topic.topic_type = "hunt_announcement"
+		topic.tier = TopicData.Tier.TIER_4
+		topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)
+		topic.category = TopicData.Category.PERSONAL
+		topic.subject_character_id = host_id
+		topic.ic_day_created = ic_day
+		active_topics.append(topic)
+
+		var hunt: Dictionary = {
+			"hunt_id": hunt_id,
+			"host_id": host_id,
+			"hunt_date_ic_day": effects.get("hunt_date_ic_day", ic_day + HuntSystem.MIN_HUNT_DAYS_AHEAD),
+			"province_id": result.get("target_province_id", -1),
+			"topic_id": topic_id,
+			"accepted_invitee_ids": [],
+			"status": "active",
+			"announced_ic_day": ic_day,
+		}
+		var priority: int = effects.get("priority_invitee_id", -1)
+		if priority >= 0:
+			hunt["priority_invitee_id"] = priority
+		active_hunts.append(hunt)
+
+
+static func _process_request_hunt_invitation_writebacks(
+	results: Array,
+	active_hunts: Array[Dictionary],
+	characters_by_id: Dictionary,
+) -> void:
+	for result: Dictionary in results:
+		if result.get("action_id", "") != "REQUEST_HUNT_INVITATION":
+			continue
+		if not result.get("success", false):
+			continue
+		var effects: Dictionary = result.get("effects", {})
+		var requester_id: int = effects.get("requester_id", result.get("character_id", -1))
+		var host_id: int = result.get("target_npc_id", -1)
+		var hunt_topic_id: int = effects.get("hunt_topic_id", -1)
+		if requester_id < 0 or host_id < 0 or hunt_topic_id < 0:
+			continue
+
+		var target_hunt: Dictionary = {}
+		for hunt: Dictionary in active_hunts:
+			if hunt.get("topic_id", -1) == hunt_topic_id and hunt.get("status", "") == "active":
+				target_hunt = hunt
+				break
+		if target_hunt.is_empty():
+			continue
+
+		var accepted: Array = target_hunt.get("accepted_invitee_ids", [])
+		if requester_id in accepted:
+			continue
+
+		var host: L5RCharacterData = characters_by_id.get(host_id)
+		var requester: L5RCharacterData = characters_by_id.get(requester_id)
+		if host == null or requester == null:
+			continue
+
+		var host_disp: int = host.disposition_values.get(requester_id, 0)
+		var tier: DispositionSystem.Tier = DispositionSystem.get_tier(host_disp)
+		var is_rival: bool = tier <= DispositionSystem.Tier.RIVAL
+		var response: Dictionary = HuntSystem.evaluate_invitation_response(
+			host.status, requester.status, host_disp, is_rival,
+		)
+
+		if response.get("should_accept", false):
+			accepted.append(requester_id)
+			target_hunt["accepted_invitee_ids"] = accepted
+			var glory_delta: float = response.get("glory_change", 0.0)
+			if glory_delta != 0.0:
+				HonorGlorySystem.apply_glory_change(requester, glory_delta)
+			var disp_delta: int = response.get("disposition_change", 0)
+			if disp_delta != 0:
+				var old_disp: int = requester.disposition_values.get(host_id, 0)
+				requester.disposition_values[host_id] = clampi(old_disp + disp_delta, -100, 100)
+
+
+static func _process_cancel_hunt_writebacks(
+	results: Array,
+	active_hunts: Array[Dictionary],
+	characters_by_id: Dictionary,
+) -> void:
+	for result: Dictionary in results:
+		if result.get("action_id", "") != "CANCEL_HUNT":
+			continue
+		if not result.get("success", false):
+			continue
+		var effects: Dictionary = result.get("effects", {})
+		var host_id: int = result.get("character_id", -1)
+		var hunt_id: int = effects.get("hunt_id", -1)
+
+		for hunt: Dictionary in active_hunts:
+			if hunt.get("hunt_id", -1) == hunt_id and hunt.get("status", "") == "active":
+				hunt["status"] = "cancelled"
+				break
+
+		var invitee_ids: Array = effects.get("accepted_invitee_ids", [])
+		var penalty: int = effects.get("disposition_change_per_invitee", HuntSystem.DISP_CANCEL_PER_INVITEE)
+		for invitee_id: Variant in invitee_ids:
+			var iid: int = int(invitee_id)
+			var invitee: L5RCharacterData = characters_by_id.get(iid)
+			if invitee == null:
+				continue
+			var old_val: int = invitee.disposition_values.get(host_id, 0)
+			invitee.disposition_values[host_id] = clampi(old_val + penalty, -100, 100)

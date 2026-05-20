@@ -12449,3 +12449,250 @@ func test_read_character_failure_no_knowledge() -> void:
 	)
 	assert_eq(actor.knowledge_pool.size(), 0,
 		"Failed READ_CHARACTER should not create knowledge")
+
+
+# -- Hunt Writeback Tests (s57.38) -------------------------------------------
+
+func test_announce_hunt_creates_topic_and_hunt() -> void:
+	var active_hunts: Array[Dictionary] = []
+	var next_hunt_id: Array[int] = [1]
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [500]
+	var results: Array = [{
+		"action_id": "ANNOUNCE_HUNT",
+		"character_id": 1,
+		"target_province_id": 10,
+		"success": true,
+		"ic_day": 5,
+		"season": 0,
+		"effects": {
+			"hunt_date_ic_day": 12,
+			"priority_invitee_id": 2,
+			"topic_tier": 4,
+			"topic_type": "hunt_announcement",
+		},
+	}]
+	DayOrchestrator._process_announce_hunt_writebacks(
+		results, active_hunts, next_hunt_id, active_topics, next_topic_id, 5,
+	)
+	assert_eq(active_hunts.size(), 1, "Should create one hunt")
+	assert_eq(active_hunts[0]["hunt_id"], 1, "Should assign hunt_id from counter")
+	assert_eq(active_hunts[0]["host_id"], 1, "Host should be the announcing character")
+	assert_eq(active_hunts[0]["hunt_date_ic_day"], 12, "Should carry hunt date")
+	assert_eq(active_hunts[0]["status"], "active", "Should start as active")
+	assert_eq(active_hunts[0]["priority_invitee_id"], 2, "Should carry priority invitee")
+	assert_eq(active_topics.size(), 1, "Should create hunt announcement topic")
+	assert_eq(active_topics[0].topic_type, "hunt_announcement")
+	assert_eq(active_topics[0].tier, TopicData.Tier.TIER_4)
+	assert_eq(next_hunt_id[0], 2, "Should increment hunt ID counter")
+	assert_eq(next_topic_id[0], 501, "Should increment topic ID counter")
+
+
+func test_announce_hunt_skips_failure() -> void:
+	var active_hunts: Array[Dictionary] = []
+	var next_hunt_id: Array[int] = [1]
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [500]
+	var results: Array = [{
+		"action_id": "ANNOUNCE_HUNT",
+		"success": false,
+		"reason": "precondition_failed",
+	}]
+	DayOrchestrator._process_announce_hunt_writebacks(
+		results, active_hunts, next_hunt_id, active_topics, next_topic_id, 5,
+	)
+	assert_eq(active_hunts.size(), 0, "Failed announce should not create hunt")
+	assert_eq(active_topics.size(), 0, "Failed announce should not create topic")
+
+
+func test_request_hunt_invitation_accepted() -> void:
+	var host := L5RCharacterData.new()
+	host.character_id = 10
+	host.status = 5.0
+	host.disposition_values = {20: 15}
+	var requester := L5RCharacterData.new()
+	requester.character_id = 20
+	requester.status = 3.0
+	requester.glory = 2.0
+	requester.disposition_values = {}
+	var characters_by_id: Dictionary = {10: host, 20: requester}
+	var active_hunts: Array[Dictionary] = [{
+		"hunt_id": 1,
+		"host_id": 10,
+		"hunt_date_ic_day": 20,
+		"topic_id": 500,
+		"accepted_invitee_ids": [],
+		"status": "active",
+	}]
+	var results: Array = [{
+		"action_id": "REQUEST_HUNT_INVITATION",
+		"character_id": 20,
+		"target_npc_id": 10,
+		"success": true,
+		"effects": {
+			"hunt_topic_id": 500,
+			"requester_id": 20,
+			"requester_status": 3.0,
+		},
+	}]
+	DayOrchestrator._process_request_hunt_invitation_writebacks(
+		results, active_hunts, characters_by_id,
+	)
+	var accepted: Array = active_hunts[0]["accepted_invitee_ids"]
+	assert_eq(accepted.size(), 1, "Should add requester to accepted list")
+	assert_eq(accepted[0], 20, "Should be the requester")
+
+
+func test_request_hunt_invitation_rejected_rival() -> void:
+	var host := L5RCharacterData.new()
+	host.character_id = 10
+	host.status = 3.0
+	host.disposition_values = {20: -15}
+	var requester := L5RCharacterData.new()
+	requester.character_id = 20
+	requester.status = 3.0
+	requester.glory = 2.0
+	requester.disposition_values = {}
+	var characters_by_id: Dictionary = {10: host, 20: requester}
+	var active_hunts: Array[Dictionary] = [{
+		"hunt_id": 1,
+		"host_id": 10,
+		"topic_id": 500,
+		"accepted_invitee_ids": [],
+		"status": "active",
+	}]
+	var results: Array = [{
+		"action_id": "REQUEST_HUNT_INVITATION",
+		"character_id": 20,
+		"target_npc_id": 10,
+		"success": true,
+		"effects": {
+			"hunt_topic_id": 500,
+			"requester_id": 20,
+			"requester_status": 3.0,
+		},
+	}]
+	DayOrchestrator._process_request_hunt_invitation_writebacks(
+		results, active_hunts, characters_by_id,
+	)
+	var accepted: Array = active_hunts[0]["accepted_invitee_ids"]
+	assert_eq(accepted.size(), 0, "Rival host should reject invitation request")
+
+
+func test_request_hunt_invitation_no_duplicate() -> void:
+	var host := L5RCharacterData.new()
+	host.character_id = 10
+	host.status = 5.0
+	host.disposition_values = {20: 15}
+	var requester := L5RCharacterData.new()
+	requester.character_id = 20
+	requester.status = 3.0
+	requester.glory = 2.0
+	requester.disposition_values = {}
+	var characters_by_id: Dictionary = {10: host, 20: requester}
+	var active_hunts: Array[Dictionary] = [{
+		"hunt_id": 1,
+		"host_id": 10,
+		"topic_id": 500,
+		"accepted_invitee_ids": [20],
+		"status": "active",
+	}]
+	var results: Array = [{
+		"action_id": "REQUEST_HUNT_INVITATION",
+		"character_id": 20,
+		"target_npc_id": 10,
+		"success": true,
+		"effects": {
+			"hunt_topic_id": 500,
+			"requester_id": 20,
+			"requester_status": 3.0,
+		},
+	}]
+	DayOrchestrator._process_request_hunt_invitation_writebacks(
+		results, active_hunts, characters_by_id,
+	)
+	var accepted: Array = active_hunts[0]["accepted_invitee_ids"]
+	assert_eq(accepted.size(), 1, "Should not duplicate already-accepted invitee")
+
+
+func test_cancel_hunt_marks_cancelled_and_penalizes_invitees() -> void:
+	var host := L5RCharacterData.new()
+	host.character_id = 10
+	host.glory = 3.0
+	var invitee := L5RCharacterData.new()
+	invitee.character_id = 20
+	invitee.disposition_values = {10: 25}
+	var characters_by_id: Dictionary = {10: host, 20: invitee}
+	var active_hunts: Array[Dictionary] = [{
+		"hunt_id": 1,
+		"host_id": 10,
+		"accepted_invitee_ids": [20],
+		"status": "active",
+	}]
+	var results: Array = [{
+		"action_id": "CANCEL_HUNT",
+		"character_id": 10,
+		"success": true,
+		"effects": {
+			"hunt_id": 1,
+			"glory_change": HuntSystem.GLORY_HOST_CANCEL,
+			"accepted_invitee_ids": [20],
+			"disposition_change_per_invitee": HuntSystem.DISP_CANCEL_PER_INVITEE,
+			"topic_type": "hunt_cancellation",
+		},
+	}]
+	DayOrchestrator._process_cancel_hunt_writebacks(
+		results, active_hunts, characters_by_id,
+	)
+	assert_eq(active_hunts[0]["status"], "cancelled", "Hunt should be marked cancelled")
+	assert_eq(invitee.disposition_values[10], 24,
+		"Invitee disposition toward host should decrease by DISP_CANCEL_PER_INVITEE")
+
+
+func test_cancel_hunt_skips_failure() -> void:
+	var active_hunts: Array[Dictionary] = [{
+		"hunt_id": 1,
+		"host_id": 10,
+		"accepted_invitee_ids": [20],
+		"status": "active",
+	}]
+	var results: Array = [{
+		"action_id": "CANCEL_HUNT",
+		"success": false,
+		"reason": "no_active_hunt",
+	}]
+	DayOrchestrator._process_cancel_hunt_writebacks(
+		results, active_hunts, {},
+	)
+	assert_eq(active_hunts[0]["status"], "active",
+		"Failed cancel should not change hunt status")
+
+
+func test_inject_hunt_context_sets_known_objectives() -> void:
+	var host := L5RCharacterData.new()
+	host.character_id = 10
+	var world_states: Dictionary = {10: {"known_objectives": {}}, 20: {"known_objectives": {}}}
+	var active_hunts: Array[Dictionary] = [{
+		"hunt_id": 1,
+		"host_id": 10,
+		"hunt_date_ic_day": 15,
+		"topic_id": 500,
+		"accepted_invitee_ids": [],
+		"status": "active",
+	}]
+	var topic := TopicData.new()
+	topic.topic_id = 500
+	topic.topic_type = "hunt_announcement"
+	topic.resolved = false
+	var active_topics: Array[TopicData] = [topic]
+	DayOrchestrator._inject_hunt_context(
+		active_hunts, world_states, active_topics,
+	)
+	var host_objs: Dictionary = world_states[10]["known_objectives"]
+	assert_eq(host_objs.get("active_hunt_id", -1), 1,
+		"Host should see their active hunt ID")
+	assert_eq(host_objs.get("hunt_date_ic_day", -1), 15,
+		"Host should see hunt date")
+	var other_objs: Dictionary = world_states[20]["known_objectives"]
+	assert_eq(other_objs.get("hunt_topic_id", -1), 500,
+		"Other NPCs should see hunt topic ID for invitation requests")
