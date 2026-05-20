@@ -10593,3 +10593,142 @@ func test_impersonation_detection_deduplicates() -> void:
 	assert_eq(victim.knowledge_pool.size(), 1,
 		"Should not add duplicate impersonation knowledge")
 	assert_eq(active_topics.size(), 0)
+
+
+# =============================================================================
+# Shadow Target writeback tests
+# =============================================================================
+
+
+func test_shadow_target_records_contacts_and_actions() -> void:
+	var shadow := L5RCharacterData.new()
+	shadow.character_id = 1
+	shadow.physical_location = "crane_castle"
+	var target := L5RCharacterData.new()
+	target.character_id = 10
+	target.physical_location = "crane_castle"
+	var contact := L5RCharacterData.new()
+	contact.character_id = 20
+	contact.physical_location = "crane_castle"
+	var chars: Dictionary = {1: shadow, 10: target, 20: contact}
+
+	var results: Array = [
+		{
+			"action_id": "SHADOW_TARGET",
+			"success": true,
+			"character_id": 1,
+			"target_npc_id": 10,
+			"margin": 8,
+			"effects": {},
+		},
+		{
+			"action_id": "CHARM",
+			"success": true,
+			"character_id": 10,
+			"target_npc_id": 20,
+		},
+	]
+	var convos: Array[Dictionary] = [{
+		"char_a_id": 10,
+		"char_b_id": 20,
+		"topic_shared_by_a": 42,
+		"topic_shared_by_b": 55,
+	}]
+	DayOrchestrator._process_shadow_target_writebacks(
+		results, convos, chars, 1,
+	)
+	assert_eq(shadow.knowledge_pool.size(), 1)
+	var entry: KnowledgeEntry = shadow.knowledge_pool[0]
+	assert_eq(entry.entry_type, "shadow_surveillance")
+	assert_eq(entry.data.get("target_id"), 10)
+	var contacts: Array = entry.data.get("contacts_observed", [])
+	assert_true(20 in contacts, "Should observe target's conversation partner")
+	var actions: Array = entry.data.get("actions_observed", [])
+	assert_true("CHARM" in actions, "Should observe target's CHARM action")
+
+
+func test_shadow_target_critical_failure_reveals_shadow() -> void:
+	var shadow := L5RCharacterData.new()
+	shadow.character_id = 1
+	shadow.physical_location = "crane_castle"
+	var target := L5RCharacterData.new()
+	target.character_id = 10
+	target.physical_location = "crane_castle"
+	target.disposition_values = {1: 20}
+	var chars: Dictionary = {1: shadow, 10: target}
+
+	var results: Array = [{
+		"action_id": "SHADOW_TARGET",
+		"success": false,
+		"character_id": 1,
+		"target_npc_id": 10,
+		"margin": -12,
+		"effects": {},
+	}]
+	var convos: Array[Dictionary] = []
+	DayOrchestrator._process_shadow_target_writebacks(
+		results, convos, chars, 1,
+	)
+	assert_eq(target.disposition_values[1], 15,
+		"Target disposition should drop by 5 on critical failure")
+	assert_eq(shadow.knowledge_pool.size(), 0,
+		"No intelligence on failure")
+
+
+func test_shadow_target_normal_failure_no_effect() -> void:
+	var shadow := L5RCharacterData.new()
+	shadow.character_id = 1
+	shadow.physical_location = "crane_castle"
+	var target := L5RCharacterData.new()
+	target.character_id = 10
+	target.physical_location = "crane_castle"
+	target.disposition_values = {1: 20}
+	var chars: Dictionary = {1: shadow, 10: target}
+
+	var results: Array = [{
+		"action_id": "SHADOW_TARGET",
+		"success": false,
+		"character_id": 1,
+		"target_npc_id": 10,
+		"margin": -5,
+		"effects": {},
+	}]
+	var convos: Array[Dictionary] = []
+	DayOrchestrator._process_shadow_target_writebacks(
+		results, convos, chars, 1,
+	)
+	assert_eq(target.disposition_values[1], 20,
+		"Normal failure: target knows they're being tailed but not by whom")
+	assert_eq(shadow.knowledge_pool.size(), 0)
+
+
+func test_shadow_target_no_duplicate_contacts() -> void:
+	var shadow := L5RCharacterData.new()
+	shadow.character_id = 1
+	shadow.physical_location = "crane_castle"
+	var target := L5RCharacterData.new()
+	target.character_id = 10
+	target.physical_location = "crane_castle"
+	var contact := L5RCharacterData.new()
+	contact.character_id = 20
+	contact.physical_location = "crane_castle"
+	var chars: Dictionary = {1: shadow, 10: target, 20: contact}
+
+	var results: Array = [{
+		"action_id": "SHADOW_TARGET",
+		"success": true,
+		"character_id": 1,
+		"target_npc_id": 10,
+		"margin": 5,
+		"effects": {},
+	}]
+	var convos: Array[Dictionary] = [
+		{"char_a_id": 10, "char_b_id": 20, "topic_shared_by_a": 1, "topic_shared_by_b": 2},
+		{"char_a_id": 20, "char_b_id": 10, "topic_shared_by_a": 3, "topic_shared_by_b": 4},
+	]
+	DayOrchestrator._process_shadow_target_writebacks(
+		results, convos, chars, 1,
+	)
+	var entry: KnowledgeEntry = shadow.knowledge_pool[0]
+	var contacts: Array = entry.data.get("contacts_observed", [])
+	assert_eq(contacts.size(), 1, "Contact 20 should appear only once")

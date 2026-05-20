@@ -977,9 +977,15 @@ Remaining gaps (not critical, documented for future work):
   Critical failure (margin <= -10): generates Spy Uncovered Tier 4 topic
   with subject_character_id = -1 (spy identity NOT revealed per GDD).
   5 tests.
-- SHADOW_TARGET: no writeback for surveillance data. Successful shadowing
-  produces no persistent state. Blocked on deciding what observation data
-  to store (contacts observed, locations visited).
+- **SHADOW_TARGET writeback — surveillance data wired. FIXED.**
+  `_process_shadow_target_writebacks()` fires after daily conversations.
+  On success: creates INTELLIGENCE KnowledgeEntry with `shadow_surveillance`
+  type containing target_id, contacts_observed (from conversation_results),
+  and actions_observed (from NPC wave results). Per GDD s12.8: shadow
+  learns who the target spoke with and what ActionIDs they fired, but not
+  conversation content. Critical failure (margin <= -10): target identifies
+  shadow, -5 disposition. Normal failure: target knows they're tailed but
+  not by whom. 4 tests.
 - CONCEAL_ITEM: NPC voluntary concealment has default metadata ("MEDIUM",
   non-weapon). Auto-conceal on NPC arrival handles assassination weapons
   correctly. No gap for current gameplay.

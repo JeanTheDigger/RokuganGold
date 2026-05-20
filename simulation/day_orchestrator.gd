@@ -653,6 +653,11 @@ static func advance_day(
 		active_topics, next_topic_id, ic_day,
 	)
 
+	_process_shadow_target_writebacks(
+		day_result.get("results", []),
+		conversation_results, characters_by_id, current_season,
+	)
+
 	_wire_discussion_counts(conversation_results, active_topics)
 	_compute_positions_from_conversations(
 		conversation_results, active_topics, characters_by_id
@@ -4498,6 +4503,69 @@ static func _create_spy_uncovered_topic(
 	topic.subject_character_id = -1
 	topic.subject_role_valence = "NEUTRAL"
 	active_topics.append(topic)
+
+
+static func _process_shadow_target_writebacks(
+	results: Array,
+	conversation_results: Array[Dictionary],
+	characters_by_id: Dictionary,
+	current_season: int,
+) -> void:
+	for r: Variant in results:
+		if not r is Dictionary:
+			continue
+		var d: Dictionary = r as Dictionary
+		if d.get("action_id", "") != "SHADOW_TARGET":
+			continue
+		var success: bool = d.get("success", false)
+		var shadow_id: int = d.get("character_id", -1)
+		var target_id: int = d.get("target_npc_id", -1)
+		var shadow: L5RCharacterData = characters_by_id.get(shadow_id)
+		if shadow == null:
+			continue
+
+		var margin: int = d.get("margin", d.get("effects", {}).get("margin", 0))
+
+		if not success and margin <= -10:
+			var target: L5RCharacterData = characters_by_id.get(target_id)
+			if target != null:
+				var disp: int = target.disposition_values.get(shadow_id, 0)
+				target.disposition_values[shadow_id] = clampi(disp - 5, -100, 100)
+			continue
+
+		if not success:
+			continue
+
+		var observed_contacts: Array[int] = []
+		for conv: Dictionary in conversation_results:
+			var a_id: int = conv.get("char_a_id", -1)
+			var b_id: int = conv.get("char_b_id", -1)
+			if a_id == target_id and b_id not in observed_contacts:
+				observed_contacts.append(b_id)
+			elif b_id == target_id and a_id not in observed_contacts:
+				observed_contacts.append(a_id)
+
+		var observed_actions: Array[String] = []
+		for other: Variant in results:
+			if not other is Dictionary:
+				continue
+			var od: Dictionary = other as Dictionary
+			if od.get("character_id", -1) != target_id:
+				continue
+			var aid: String = od.get("action_id", "")
+			if aid != "" and aid not in observed_actions:
+				observed_actions.append(aid)
+
+		InformationSystem.add_knowledge(shadow, InformationSystem.make_entry(
+			Enums.KnowledgeSource.INTELLIGENCE,
+			"shadow_surveillance",
+			{
+				"target_id": target_id,
+				"contacts_observed": observed_contacts,
+				"actions_observed": observed_actions,
+			},
+			current_season,
+		))
 
 
 static func _process_fabricate_secret_writebacks(
