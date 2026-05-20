@@ -2995,3 +2995,61 @@ func test_following_orders_honor_positive_at_low_rank() -> void:
 	assert_almost_eq(cost_high, -0.4, 0.001, "Rank 9-10 following orders = -0.4 (honor loss)")
 
 
+func test_lying_honor_rank_scaled() -> void:
+	var low := L5RCharacterData.new()
+	low.honor = 0.5
+	low.school = "Doji Courtier"
+	low.clan = "Crane"
+	var high := L5RCharacterData.new()
+	high.honor = 10.0
+	high.school = "Doji Courtier"
+	high.clan = "Crane"
+	assert_almost_eq(CrimeSystem.get_lying_honor(low), 0.0, 0.001, "Rank 0 lying = 0")
+	assert_almost_eq(CrimeSystem.get_lying_honor(high), -1.0, 0.001, "Rank 9-10 lying = -1.0")
+
+
+func test_manipulating_honor_rank_scaled() -> void:
+	var mid := L5RCharacterData.new()
+	mid.honor = 5.0
+	mid.school = "Shosuro Actor"
+	mid.clan = "Scorpion"
+	assert_almost_eq(CrimeSystem.get_manipulating_honor(mid), -0.6, 0.001, "Rank 5 manipulating = -0.6")
+
+
+func test_false_courtesy_honor_rank_scaled() -> void:
+	var low := L5RCharacterData.new()
+	low.honor = 1.5
+	low.school = "Bayushi Courtier"
+	low.clan = "Scorpion"
+	var high := L5RCharacterData.new()
+	high.honor = 9.0
+	high.school = "Doji Courtier"
+	high.clan = "Crane"
+	assert_almost_eq(CrimeSystem.get_false_courtesy_honor(low), 0.0, 0.001, "Rank 1 false courtesy = 0")
+	assert_almost_eq(CrimeSystem.get_false_courtesy_honor(high), -1.0, 0.001, "Rank 9 false courtesy = -1.0")
+
+
+func test_duped_criminal_honor_rank_scaled() -> void:
+	var mid := L5RCharacterData.new()
+	mid.honor = 4.0
+	mid.school = "Hida Bushi"
+	mid.clan = "Crab"
+	assert_almost_eq(CrimeSystem.get_duped_criminal_honor(mid), -0.8, 0.001, "Rank 3-4 duped criminal = -0.8")
+
+
+func test_duped_disloyal_honor_rank_scaled() -> void:
+	var mid := L5RCharacterData.new()
+	mid.honor = 4.0
+	mid.school = "Hida Bushi"
+	mid.clan = "Crab"
+	assert_almost_eq(CrimeSystem.get_duped_disloyal_honor(mid), -0.4, 0.001, "Rank 3-4 duped disloyal = -0.4")
+
+
+func test_duped_foolish_honor_rank_scaled() -> void:
+	var mid := L5RCharacterData.new()
+	mid.honor = 4.0
+	mid.school = "Hida Bushi"
+	mid.clan = "Crab"
+	assert_almost_eq(CrimeSystem.get_duped_foolish_honor(mid), -0.4, 0.001, "Rank 3-4 duped foolish = -0.4")
+
+

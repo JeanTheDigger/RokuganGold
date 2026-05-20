@@ -25,6 +25,7 @@ const HONOR_TABLE_MANIPULATING: Array[int] = [0, -2, -4, -6, -8, -10]
 const HONOR_TABLE_FALSE_COURTESY: Array[int] = [0, 0, -2, -6, -10, -10]
 const HONOR_TABLE_DUPED_CRIMINAL: Array[int] = [-1, -4, -8, -12, -16, -18]
 const HONOR_TABLE_DUPED_DISLOYAL: Array[int] = [0, -2, -4, -6, -10, -14]
+const HONOR_TABLE_DUPED_FOOLISH: Array[int] = [0, -2, -4, -4, -6, -8]
 
 const FULL_LOW_SKILL_EXEMPT_SCHOOLS: Array[String] = [
 	"Shosuro Infiltrator",
@@ -94,6 +95,30 @@ static func get_fleeing_battle_honor(character: L5RCharacterData) -> float:
 
 static func get_following_orders_honor(character: L5RCharacterData) -> float:
 	return get_table_honor_cost(HONOR_TABLE_FOLLOWING_ORDERS, HonorGlorySystem.get_honor_rank(character))
+
+
+static func get_lying_honor(character: L5RCharacterData) -> float:
+	return get_table_honor_cost(HONOR_TABLE_LYING, HonorGlorySystem.get_honor_rank(character))
+
+
+static func get_manipulating_honor(character: L5RCharacterData) -> float:
+	return get_table_honor_cost(HONOR_TABLE_MANIPULATING, HonorGlorySystem.get_honor_rank(character))
+
+
+static func get_false_courtesy_honor(character: L5RCharacterData) -> float:
+	return get_table_honor_cost(HONOR_TABLE_FALSE_COURTESY, HonorGlorySystem.get_honor_rank(character))
+
+
+static func get_duped_criminal_honor(character: L5RCharacterData) -> float:
+	return get_table_honor_cost(HONOR_TABLE_DUPED_CRIMINAL, HonorGlorySystem.get_honor_rank(character))
+
+
+static func get_duped_disloyal_honor(character: L5RCharacterData) -> float:
+	return get_table_honor_cost(HONOR_TABLE_DUPED_DISLOYAL, HonorGlorySystem.get_honor_rank(character))
+
+
+static func get_duped_foolish_honor(character: L5RCharacterData) -> float:
+	return get_table_honor_cost(HONOR_TABLE_DUPED_FOOLISH, HonorGlorySystem.get_honor_rank(character))
 
 
 # Maps CrimeType to the Table 2.3 row used for at-act honor loss.

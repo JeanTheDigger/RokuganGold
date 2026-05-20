@@ -5979,6 +5979,315 @@ func test_scene_exam_no_suspect_no_glory_penalty() -> void:
 	assert_almost_eq(suspect.glory, 3.0, 0.01)
 
 
+# TABLE 2.3 — MANIPULATING (FORGE ORDER DELIVERY)
+# ==============================================================================
+
+func test_forge_order_delivery_applies_manipulating_honor_to_forger() -> void:
+	var forger := L5RCharacterData.new()
+	forger.character_id = 60
+	forger.character_name = "Forger"
+	forger.honor = 5.0
+	forger.school = "Shosuro Infiltrator"
+	forger.clan = "Scorpion"
+	forger.wounds_taken = 0
+	var victim := L5RCharacterData.new()
+	victim.character_id = 61
+	victim.character_name = "Victim"
+	victim.lord_id = 99
+	victim.wounds_taken = 0
+	var characters_by_id: Dictionary = {60: forger, 61: victim}
+
+	var forged_letter := LetterData.new()
+	forged_letter.sender_id = 99
+	forged_letter.recipient_id = 61
+	forged_letter.delivered = true
+	forged_letter.is_forged = true
+	forged_letter.forged_sender_id = 60
+	forged_letter.is_order = true
+	forged_letter.order_applied = false
+	forged_letter.order_need_type = "TRAVEL_TO"
+	forged_letter.forgery_detected = false
+	var pending_letters: Array[LetterData] = [forged_letter]
+
+	var objectives_map: Dictionary = {}
+	var initial_honor: float = forger.honor
+
+	DayOrchestrator._process_forged_order_delivery(
+		pending_letters, objectives_map, characters_by_id,
+	)
+
+	assert_true(forged_letter.order_applied)
+	var expected_cost: float = CrimeSystem.get_manipulating_honor(forger)
+	assert_true(forger.honor < initial_honor, "Forger should lose honor for manipulating")
+
+
+func test_forge_order_delivery_no_manipulating_when_detected() -> void:
+	var forger := L5RCharacterData.new()
+	forger.character_id = 62
+	forger.character_name = "Forger"
+	forger.honor = 5.0
+	forger.school = "Bayushi Courtier"
+	forger.clan = "Scorpion"
+	forger.wounds_taken = 0
+	var characters_by_id: Dictionary = {62: forger}
+
+	var forged_letter := LetterData.new()
+	forged_letter.sender_id = 99
+	forged_letter.recipient_id = 63
+	forged_letter.delivered = true
+	forged_letter.is_forged = true
+	forged_letter.forged_sender_id = 62
+	forged_letter.is_order = true
+	forged_letter.forgery_detected = true
+	var pending_letters: Array[LetterData] = [forged_letter]
+
+	var initial_honor: float = forger.honor
+	DayOrchestrator._process_forged_order_delivery(
+		pending_letters, {}, characters_by_id,
+	)
+
+	assert_almost_eq(forger.honor, initial_honor, 0.01,
+		"Detected forgery should not apply manipulating honor cost")
+
+
+# TABLE 2.3 — MANIPULATING (SEDUCE_TO_COMPROMISE)
+# ==============================================================================
+
+func test_seduce_to_compromise_applies_manipulating_honor() -> void:
+	var seducer := L5RCharacterData.new()
+	seducer.character_id = 70
+	seducer.character_name = "Seducer"
+	seducer.honor = 5.0
+	seducer.school = "Bayushi Courtier"
+	seducer.clan = "Scorpion"
+	seducer.wounds_taken = 0
+	var characters_by_id: Dictionary = {70: seducer}
+
+	var day_results: Array[Dictionary] = [{
+		"action_id": "SEDUCE_TO_COMPROMISE",
+		"success": true,
+		"character_id": 70,
+		"target_npc_id": 71,
+		"effects": {"creates_entanglement": true},
+	}]
+
+	var entanglements: Array[Dictionary] = []
+	var initial_honor: float = seducer.honor
+
+	DayOrchestrator._process_seduction_entanglements(
+		day_results, entanglements, 10, characters_by_id,
+	)
+
+	assert_eq(entanglements.size(), 1)
+	assert_true(seducer.honor < initial_honor, "Seducer should lose honor for manipulating")
+
+
+func test_seduce_non_compromise_no_manipulating_honor() -> void:
+	var seducer := L5RCharacterData.new()
+	seducer.character_id = 72
+	seducer.character_name = "Seducer"
+	seducer.honor = 5.0
+	seducer.school = "Bayushi Courtier"
+	seducer.clan = "Scorpion"
+	seducer.wounds_taken = 0
+	var characters_by_id: Dictionary = {72: seducer}
+
+	var day_results: Array[Dictionary] = [{
+		"action_id": "SEDUCE",
+		"success": true,
+		"character_id": 72,
+		"target_npc_id": 73,
+		"effects": {"creates_entanglement": true},
+	}]
+
+	var entanglements: Array[Dictionary] = []
+	var initial_honor: float = seducer.honor
+
+	DayOrchestrator._process_seduction_entanglements(
+		day_results, entanglements, 10, characters_by_id,
+	)
+
+	assert_eq(entanglements.size(), 1)
+	assert_almost_eq(seducer.honor, initial_honor, 0.01,
+		"Regular SEDUCE should not trigger manipulating honor cost")
+
+
+# TABLE 2.3 — FALSE COURTESY (CHARM AGAINST RIVAL/ENEMY)
+# ==============================================================================
+
+func test_charm_against_rival_applies_false_courtesy_honor() -> void:
+	var charmer := L5RCharacterData.new()
+	charmer.character_id = 80
+	charmer.character_name = "False Courtier"
+	charmer.honor = 7.0
+	charmer.school = "Doji Courtier"
+	charmer.clan = "Crane"
+	charmer.wounds_taken = 0
+	charmer.disposition_values = {81: -15}
+	var target := L5RCharacterData.new()
+	target.character_id = 81
+	target.character_name = "Enemy"
+	target.wounds_taken = 0
+	var characters_by_id: Dictionary = {80: charmer, 81: target}
+
+	var court := CourtSessionData.new()
+	court.phase = CourtSessionData.CourtPhase.ACTIVE
+	court.host_settlement_id = 1
+	court.session_state = {}
+	var active_courts: Array[CourtSessionData] = [court]
+
+	var day_results: Array = [{
+		"action_id": "CHARM",
+		"character_id": 80,
+		"target_npc_id": 81,
+		"effects": {
+			"_action_metadata": {"court_settlement_id": 1},
+			"disposition_change": 5,
+		},
+	}]
+
+	var initial_honor: float = charmer.honor
+
+	DayOrchestrator._process_court_action_effects(
+		day_results, characters_by_id, [], 10, -1,
+		StrategicReview.EmperorArchetype.IRON, [], active_courts,
+	)
+
+	assert_true(charmer.honor < initial_honor,
+		"Charming a rival should trigger false courtesy honor cost")
+
+
+func test_charm_against_friend_no_false_courtesy() -> void:
+	var charmer := L5RCharacterData.new()
+	charmer.character_id = 82
+	charmer.character_name = "Sincere Courtier"
+	charmer.honor = 7.0
+	charmer.school = "Doji Courtier"
+	charmer.clan = "Crane"
+	charmer.wounds_taken = 0
+	charmer.disposition_values = {83: 25}
+	var target := L5RCharacterData.new()
+	target.character_id = 83
+	target.character_name = "Friend"
+	target.wounds_taken = 0
+	var characters_by_id: Dictionary = {82: charmer, 83: target}
+
+	var court := CourtSessionData.new()
+	court.phase = CourtSessionData.CourtPhase.ACTIVE
+	court.host_settlement_id = 2
+	court.session_state = {}
+	var active_courts: Array[CourtSessionData] = [court]
+
+	var day_results: Array = [{
+		"action_id": "CHARM",
+		"character_id": 82,
+		"target_npc_id": 83,
+		"effects": {
+			"_action_metadata": {"court_settlement_id": 2},
+			"disposition_change": 5,
+		},
+	}]
+
+	var initial_honor: float = charmer.honor
+
+	DayOrchestrator._process_court_action_effects(
+		day_results, characters_by_id, [], 10, -1,
+		StrategicReview.EmperorArchetype.IRON, [], active_courts,
+	)
+
+	assert_almost_eq(charmer.honor, initial_honor, 0.01,
+		"Charming a friend should not trigger false courtesy")
+
+
+# TABLE 2.3 — DUPED DISLOYAL (FORGED ORDER VICTIM DISCOVERY)
+# ==============================================================================
+
+func test_impersonation_detection_applies_duped_disloyal_when_order_applied() -> void:
+	var victim := L5RCharacterData.new()
+	victim.character_id = 90
+	victim.character_name = "Duped Vassal"
+	victim.honor = 5.0
+	victim.school = "Hida Bushi"
+	victim.clan = "Crab"
+	victim.wounds_taken = 0
+	victim.knowledge_pool = [] as Array[KnowledgeEntry]
+	var characters_by_id: Dictionary = {90: victim}
+
+	var forged_order := LetterData.new()
+	forged_order.sender_id = 99
+	forged_order.recipient_id = 90
+	forged_order.delivered = true
+	forged_order.is_forged = true
+	forged_order.forged_sender_id = 60
+	forged_order.is_order = true
+	forged_order.order_applied = true
+
+	var reply := LetterData.new()
+	reply.recipient_id = 90
+	reply.sender_id = 99
+	reply.delivered = true
+	reply.is_reply = true
+	reply.reply_to_forged = true
+	reply.original_forger_id = 60
+	var pending_letters: Array[LetterData] = [forged_order, reply]
+
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [500]
+	var objectives_map: Dictionary = {}
+	var initial_honor: float = victim.honor
+
+	DayOrchestrator._process_impersonation_detection(
+		pending_letters, characters_by_id, active_topics,
+		next_topic_id, 10, objectives_map,
+	)
+
+	assert_true(victim.honor < initial_honor,
+		"Victim should lose honor for being duped into disloyalty")
+
+
+func test_impersonation_detection_no_duped_when_order_not_applied() -> void:
+	var victim := L5RCharacterData.new()
+	victim.character_id = 91
+	victim.character_name = "Unduped Vassal"
+	victim.honor = 5.0
+	victim.school = "Hida Bushi"
+	victim.clan = "Crab"
+	victim.wounds_taken = 0
+	victim.knowledge_pool = [] as Array[KnowledgeEntry]
+	var characters_by_id: Dictionary = {91: victim}
+
+	var forged_order := LetterData.new()
+	forged_order.sender_id = 99
+	forged_order.recipient_id = 91
+	forged_order.delivered = true
+	forged_order.is_forged = true
+	forged_order.forged_sender_id = 60
+	forged_order.is_order = true
+	forged_order.order_applied = false
+
+	var reply := LetterData.new()
+	reply.recipient_id = 91
+	reply.sender_id = 99
+	reply.delivered = true
+	reply.is_reply = true
+	reply.reply_to_forged = true
+	reply.original_forger_id = 60
+	var pending_letters: Array[LetterData] = [forged_order, reply]
+
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [500]
+	var objectives_map: Dictionary = {}
+	var initial_honor: float = victim.honor
+
+	DayOrchestrator._process_impersonation_detection(
+		pending_letters, characters_by_id, active_topics,
+		next_topic_id, 10, objectives_map,
+	)
+
+	assert_almost_eq(victim.honor, initial_honor, 0.01,
+		"Victim should not lose honor if forged order was never applied")
+
+
 # MAGISTRATE RELEASE AFTER CONVICTION
 # ==============================================================================
 

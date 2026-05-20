@@ -509,6 +509,7 @@ static func advance_day(
 		day_result.get("results", []),
 		entanglements,
 		ic_day,
+		characters_by_id,
 	)
 
 	_process_assassination_commissions(
@@ -4787,6 +4788,12 @@ static func _process_forged_order_delivery(
 		objectives_map[letter.recipient_id]["primary"] = forged_objective
 		letter.order_applied = true
 
+		var forger: L5RCharacterData = characters_by_id.get(forger_id)
+		if forger != null:
+			HonorGlorySystem.apply_honor_change(
+				forger, CrimeSystem.get_manipulating_honor(forger)
+			)
+
 
 static func _escalate_detected_forgery_crimes(
 	pending_letters: Array[LetterData],
@@ -4869,6 +4876,19 @@ static func _process_impersonation_detection(
 		topic.ic_day_created = ic_day
 		topic.slug = "impersonation_victim_%d" % victim_id
 		active_topics.append(topic)
+
+		var was_duped_by_order: bool = false
+		for other_letter: LetterData in pending_letters:
+			if other_letter.is_forged and other_letter.is_order \
+				and other_letter.order_applied \
+				and other_letter.forged_sender_id == letter.original_forger_id \
+				and other_letter.recipient_id == victim_id:
+				was_duped_by_order = true
+				break
+		if was_duped_by_order:
+			HonorGlorySystem.apply_honor_change(
+				victim, CrimeSystem.get_duped_disloyal_honor(victim)
+			)
 
 		if not objectives_map.has(victim_id):
 			objectives_map[victim_id] = []
@@ -14096,6 +14116,13 @@ static func _process_court_action_effects(
 			if court != null:
 				if action_id == "CHARM":
 					CourtSystem.increment_charm_count(court, actor_id)
+					var charmer: L5RCharacterData = characters_by_id.get(actor_id)
+					if charmer != null and target_id >= 0:
+						var actor_disp: int = charmer.disposition_values.get(target_id, 0)
+						if DispositionSystem.get_tier(actor_disp) <= DispositionSystem.Tier.RIVAL:
+							HonorGlorySystem.apply_honor_change(
+								charmer, CrimeSystem.get_false_courtesy_honor(charmer)
+							)
 				elif action_id == "NEGOTIATE":
 					CourtSystem.increment_negotiate_count(court, actor_id)
 					if effects.has("session_tn_reduction"):
@@ -15210,6 +15237,7 @@ static func _process_seduction_entanglements(
 	day_results: Array[Dictionary],
 	entanglements: Array[Dictionary],
 	ic_day: int,
+	characters_by_id: Dictionary = {},
 ) -> void:
 	for r: Dictionary in day_results:
 		var action_id: String = r.get("action_id", "")
@@ -15234,6 +15262,13 @@ static func _process_seduction_entanglements(
 			continue
 		var variant: SeductionSystem.SeductionVariant = _get_seduction_variant_from_action_id(action_id)
 		entanglements.append(SeductionSystem.create_entanglement(seducer_id, target_id, ic_day, variant))
+
+		if action_id == "SEDUCE_TO_COMPROMISE":
+			var seducer: L5RCharacterData = characters_by_id.get(seducer_id)
+			if seducer != null:
+				HonorGlorySystem.apply_honor_change(
+					seducer, CrimeSystem.get_manipulating_honor(seducer)
+				)
 
 
 # ==============================================================================

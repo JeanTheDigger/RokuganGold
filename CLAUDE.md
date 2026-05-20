@@ -1031,6 +1031,23 @@ Remaining gaps (not critical, documented for future work):
   updated from -0.1 to -0.3 (commerce is inherently public, so discovery
   is automatic). `is_low_skill_crime_type()` returns true for
   DISHONORABLE_CONDUCT and SKIMMING. 7 tests.
+- **Table 2.3 remaining rows — helpers and wiring. FIXED.**
+  Added helper functions for all remaining Table 2.3 rows: `get_lying_honor()`,
+  `get_manipulating_honor()`, `get_false_courtesy_honor()`,
+  `get_duped_criminal_honor()`, `get_duped_disloyal_honor()`,
+  `get_duped_foolish_honor()`. Added missing `HONOR_TABLE_DUPED_FOOLISH`
+  constant per GDD s46. Three rows wired to mechanical triggers:
+  (1) MANIPULATING fires on FORGE_ORDER delivery success (forger loses honor)
+  and SEDUCE_TO_COMPROMISE entanglement creation (seducer loses honor).
+  (2) FALSE_COURTESY fires on successful CHARM against RIVAL or worse
+  disposition (actor disposition ≤ -11 toward target). Uses
+  `DispositionSystem.get_tier()` check. (3) DUPED_DISLOYAL fires on
+  impersonation detection when forged order was applied (victim discovers
+  they followed a fake order from their lord). Three rows remain unwired:
+  LYING (FABRICATE_SECRET already has its own explicit per-tier costs per
+  GDD s12.8, no other mechanical "lying" trigger exists), DUPED_CRIMINAL
+  (forge orders produce misdirections not criminal acts), DUPED_FOOLISH
+  (no clear mechanical trigger). 14 tests.
 
 ### Known Code Issues — Deferred (2026-05-19, metadata population audit)
 - **EXPOSE_SECRET_PRIVATELY — metadata unpopulated, always fails. FIXED.**
