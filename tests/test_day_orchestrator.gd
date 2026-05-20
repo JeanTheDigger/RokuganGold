@@ -12305,3 +12305,147 @@ func test_commerce_topic_writeback_skips_non_public() -> void:
 		results, characters_by_id, active_topics, next_topic_id, 15,
 	)
 	assert_eq(active_topics.size(), 0, "Non-public commerce should not create topic")
+
+
+# -- READ_CHARACTER / PROBE info_types writeback ------------------------------
+
+func test_read_character_personality_insight_creates_knowledge() -> void:
+	var actor := L5RCharacterData.new()
+	actor.character_id = 350
+	actor.knowledge_pool = [] as Array[KnowledgeEntry]
+	var target := L5RCharacterData.new()
+	target.character_id = 351
+	target.bushido_virtue = Enums.BushidoVirtue.GI
+	target.shourido_virtue = Enums.ShouridoVirtue.NONE
+	var characters_by_id: Dictionary = {350: actor, 351: target}
+	var results: Array = [{
+		"action_id": "READ_CHARACTER",
+		"character_id": 350,
+		"target_npc_id": 351,
+		"success": true,
+		"effects": {
+			"info_gained": true,
+			"info_types": ["personality_insight"],
+			"info_count": 1,
+		},
+	}]
+	DayOrchestrator._process_intelligence_info_writebacks(
+		results, characters_by_id, {}, [], 0,
+	)
+	assert_eq(actor.knowledge_pool.size(), 1,
+		"Should create knowledge entry for personality_insight")
+	assert_eq(actor.knowledge_pool[0].entry_type, "personality_insight",
+		"Knowledge type should be personality_insight")
+	assert_eq(actor.knowledge_pool[0].data.get("bushido_virtue"),
+		Enums.BushidoVirtue.GI,
+		"Should contain target's bushido virtue")
+
+
+func test_read_character_disposition_creates_knowledge() -> void:
+	var actor := L5RCharacterData.new()
+	actor.character_id = 352
+	actor.knowledge_pool = [] as Array[KnowledgeEntry]
+	var target := L5RCharacterData.new()
+	target.character_id = 353
+	target.disposition_values = {352: 25}
+	var characters_by_id: Dictionary = {352: actor, 353: target}
+	var results: Array = [{
+		"action_id": "READ_CHARACTER",
+		"character_id": 352,
+		"target_npc_id": 353,
+		"success": true,
+		"effects": {
+			"info_gained": true,
+			"info_types": ["disposition_toward"],
+			"info_count": 1,
+		},
+	}]
+	DayOrchestrator._process_intelligence_info_writebacks(
+		results, characters_by_id, {}, [], 0,
+	)
+	assert_eq(actor.knowledge_pool.size(), 1,
+		"Should create knowledge entry for disposition")
+	assert_eq(actor.knowledge_pool[0].data.get("disposition"), 25,
+		"Should contain target's disposition toward actor")
+
+
+func test_probe_court_objective_creates_knowledge() -> void:
+	var actor := L5RCharacterData.new()
+	actor.character_id = 354
+	actor.knowledge_pool = [] as Array[KnowledgeEntry]
+	var target := L5RCharacterData.new()
+	target.character_id = 355
+	var characters_by_id: Dictionary = {354: actor, 355: target}
+	var objectives_map: Dictionary = {
+		355: {"standing": {"need_type": "SECURE_ALLIANCE"}},
+	}
+	var results: Array = [{
+		"action_id": "PROBE",
+		"character_id": 354,
+		"target_npc_id": 355,
+		"success": true,
+		"effects": {
+			"info_gained": true,
+			"info_types": ["court_objective"],
+			"info_count": 1,
+		},
+	}]
+	DayOrchestrator._process_intelligence_info_writebacks(
+		results, characters_by_id, objectives_map, [], 0,
+	)
+	assert_eq(actor.knowledge_pool.size(), 1,
+		"Should create knowledge entry for court objective")
+	assert_eq(actor.knowledge_pool[0].entry_type, "court_objective",
+		"Knowledge type should be court_objective")
+	assert_eq(actor.knowledge_pool[0].data.get("need_type"), "SECURE_ALLIANCE",
+		"Should contain target's objective need_type")
+
+
+func test_probe_topic_position_creates_knowledge() -> void:
+	var actor := L5RCharacterData.new()
+	actor.character_id = 356
+	actor.knowledge_pool = [] as Array[KnowledgeEntry]
+	var target := L5RCharacterData.new()
+	target.character_id = 357
+	target.topic_pool = [42] as Array[int]
+	target.topic_positions = {42: 3}
+	var characters_by_id: Dictionary = {356: actor, 357: target}
+	var results: Array = [{
+		"action_id": "PROBE",
+		"character_id": 356,
+		"target_npc_id": 357,
+		"success": true,
+		"effects": {
+			"info_gained": true,
+			"info_types": ["topic_position"],
+			"info_count": 1,
+		},
+	}]
+	DayOrchestrator._process_intelligence_info_writebacks(
+		results, characters_by_id, {}, [], 0,
+	)
+	assert_eq(actor.knowledge_pool.size(), 1,
+		"Should create knowledge entry for topic position")
+	assert_eq(actor.knowledge_pool[0].data.get("topic_id"), 42,
+		"Should reference the correct topic")
+	assert_eq(actor.knowledge_pool[0].data.get("position"), 3,
+		"Should contain target's position on the topic")
+
+
+func test_read_character_failure_no_knowledge() -> void:
+	var actor := L5RCharacterData.new()
+	actor.character_id = 358
+	actor.knowledge_pool = [] as Array[KnowledgeEntry]
+	var characters_by_id: Dictionary = {358: actor}
+	var results: Array = [{
+		"action_id": "READ_CHARACTER",
+		"character_id": 358,
+		"target_npc_id": 359,
+		"success": false,
+		"effects": {"failed": true},
+	}]
+	DayOrchestrator._process_intelligence_info_writebacks(
+		results, characters_by_id, {}, [], 0,
+	)
+	assert_eq(actor.knowledge_pool.size(), 0,
+		"Failed READ_CHARACTER should not create knowledge")

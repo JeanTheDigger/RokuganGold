@@ -1153,6 +1153,17 @@ All 10 constant arrays and 10 helper functions added. 28 constant/integration te
   `_process_commerce_topic_writebacks()` creates a Tier 4 POLITICAL
   `commerce_stigma` topic with the merchant as subject. 2 tests.
 
+- **READ_CHARACTER / PROBE — info_types never turned into knowledge. FIXED.**
+  Executors set `info_types` (plural array: "personality_insight",
+  "disposition_toward", "topic_attitude", "topic_position",
+  "court_objective") but effect_applicator reads `info_type` (singular,
+  only set by DISCERN_NEED). The specific info types were never processed
+  into knowledge entries. `_process_intelligence_info_writebacks()` now
+  creates type-specific KnowledgeEntry for each info_type: personality_insight
+  stores bushido/shourido virtue, disposition_toward stores target's
+  disposition value, topic_attitude/topic_position stores topic position,
+  court_objective stores standing need_type from objectives_map. 5 tests.
+
 ### Effect Key Audit Dead Keys — Informational / Not Bugs (2026-05-20)
 The following effect keys are set but intentionally unconsumed by the
 effect applicator or orchestrator. They are metadata, Pattern B pre-applied
@@ -1166,8 +1177,7 @@ costs, or forward-wiring. Do not treat as bugs.
 - `position_durable` / `position_hardened` — Forward-wiring: no position
   decay system exists. Will be consumed when position decay is implemented.
 - `target_is_kuge` — Informational: ASK_FOR_INTRODUCTION metadata.
-- `info_count` / `info_types` — Intermediate: consumed by executor
-  internally (READ_CHARACTER, PROBE).
+- `info_count` — Intermediate: consumed by executor internally.
 - `compliance_active` — Informational: intimidation compliance state.
 
 ### Known Code Issues — Deferred (2026-05-19, metadata population audit)

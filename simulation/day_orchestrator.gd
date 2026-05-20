@@ -630,6 +630,11 @@ static func advance_day(
 		active_topics, next_topic_id, ic_day,
 	)
 
+	_process_intelligence_info_writebacks(
+		day_result.get("results", []),
+		characters_by_id, objectives_map, active_topics, current_season,
+	)
+
 	_process_travel_redirect_writebacks(
 		day_result.get("results", []), objectives_map,
 	)
@@ -4774,6 +4779,68 @@ static func _process_commerce_topic_writebacks(
 		topic.subject_character_id = char_id
 		topic.ic_day_created = ic_day
 		active_topics.append(topic)
+
+
+static func _process_intelligence_info_writebacks(
+	results: Array,
+	characters_by_id: Dictionary,
+	objectives_map: Dictionary,
+	active_topics: Array[TopicData],
+	current_season: int,
+) -> void:
+	for r: Variant in results:
+		if not r is Dictionary:
+			continue
+		var d: Dictionary = r as Dictionary
+		var action_id: String = d.get("action_id", "")
+		if action_id != "READ_CHARACTER" and action_id != "PROBE":
+			continue
+		if not d.get("success", false):
+			continue
+		var effects: Dictionary = d.get("effects", {})
+		var info_types: Array = effects.get("info_types", [])
+		if info_types.is_empty():
+			continue
+		var actor_id: int = d.get("character_id", -1)
+		var target_id: int = d.get("target_npc_id", -1)
+		var actor: L5RCharacterData = characters_by_id.get(actor_id)
+		var target: L5RCharacterData = characters_by_id.get(target_id)
+		if actor == null or target == null:
+			continue
+		for info_type: Variant in info_types:
+			var type_str: String = str(info_type)
+			var data: Dictionary = {"target_character_id": target_id}
+			match type_str:
+				"personality_insight":
+					data["bushido_virtue"] = target.bushido_virtue
+					data["shourido_virtue"] = target.shourido_virtue
+				"disposition_toward":
+					data["disposition"] = target.disposition_values.get(actor_id, 0)
+					data["toward_character_id"] = actor_id
+				"topic_attitude", "topic_position":
+					var picked_topic_id: int = -1
+					for tid: int in target.topic_pool:
+						picked_topic_id = tid
+						break
+					if picked_topic_id < 0:
+						continue
+					data["topic_id"] = picked_topic_id
+					data["position"] = target.topic_positions.get(picked_topic_id, 0)
+				"court_objective":
+					var target_obj: Dictionary = objectives_map.get(target_id, {})
+					var standing: Dictionary = target_obj.get("standing", {})
+					var need_type: String = standing.get("need_type", "")
+					if need_type.is_empty():
+						continue
+					data["need_type"] = need_type
+				_:
+					continue
+			InformationSystem.add_knowledge(actor, InformationSystem.make_entry(
+				Enums.KnowledgeSource.INTELLIGENCE,
+				type_str,
+				data,
+				current_season,
+			))
 
 
 static func _process_fabricate_secret_writebacks(
