@@ -1060,6 +1060,17 @@ Remaining gaps (not critical, documented for future work):
   CrimeRecords, so no double-application risk. Point 6 (assassination
   concealment failure) creates UNSANCTIONED_COVERT_KILLING which is not a
   Low Skill crime type, so point 1's type gate blocks it. 1 test.
+- **Trial-by-combat conviction consequences not applied. FIXED.**
+  `ConvictionProcessor.resolve_trial_by_combat()` set `DECREED_GUILTY`
+  on the CrimeRecord when the accused lost, but
+  `_resolve_pending_trials()` in DayOrchestrator never called
+  `CrimeSystem.apply_at_conviction_consequences()`. Glory, infamy, and
+  status penalties from CONVICTION_CONSEQUENCES table were skipped for
+  trial-by-combat losses. Now calls `apply_at_conviction_consequences()`
+  when `accused_won == false`, adds consequence deltas and seppuku_offered
+  to the trial result dict. `CrimeWiring.process_treason_conviction()` and
+  `CrimeWiring.process_trial_by_combat()` have the same gap but are
+  dead code (only called from tests, not the orchestrator). 1 test.
 
 ### Known Code Issues — Deferred (2026-05-19, metadata population audit)
 - **EXPOSE_SECRET_PRIVATELY — metadata unpopulated, always fails. FIXED.**

@@ -6329,6 +6329,73 @@ func test_impersonation_detection_no_duped_when_order_not_applied() -> void:
 		"Victim should not lose honor if forged order was never applied")
 
 
+# CONVICTION CONSEQUENCES — TRIAL BY COMBAT LOSS
+# ==============================================================================
+
+func test_trial_by_combat_loss_applies_conviction_consequences() -> void:
+	var accused := L5RCharacterData.new()
+	accused.character_id = 95
+	accused.character_name = "Weak Accused"
+	accused.honor = 3.0
+	accused.glory = 3.0
+	accused.infamy = 0.0
+	accused.status = 2.0
+	accused.school_type = Enums.SchoolType.COURTIER
+	accused.school = "Doji Courtier"
+	accused.clan = "Crane"
+	accused.wounds_taken = 0
+	accused.earth = 2
+	accused.water = 2
+	accused.fire = 2
+	accused.air = 2
+	accused.void_ring = 2
+	accused.skills = {"Kenjutsu": 1, "Iaijutsu": 1}
+
+	var lord := L5RCharacterData.new()
+	lord.character_id = 96
+	lord.character_name = "Strong Lord"
+	lord.school_type = Enums.SchoolType.BUSHI
+	lord.school = "Hida Bushi"
+	lord.clan = "Crab"
+	lord.wounds_taken = 0
+	lord.earth = 5
+	lord.water = 5
+	lord.fire = 5
+	lord.air = 5
+	lord.void_ring = 5
+	lord.skills = {"Kenjutsu": 7, "Iaijutsu": 7}
+
+	var characters_by_id: Dictionary = {95: accused, 96: lord}
+	var lord_map: Dictionary = {95: 96}
+
+	var record: CrimeRecord = CrimeSystem.create_crime_record(
+		200, Enums.CrimeType.VIOLENCE, 95, "province_1", 10, 97,
+	)
+	record.legal_status = Enums.LegalStatus.ACCUSED
+	var crime_records: Array[CrimeRecord] = [record]
+
+	var conviction_results: Array[Dictionary] = [{
+		"case_id": 200,
+		"accused_id": 95,
+		"outcome": "trial_by_combat_pending",
+	}]
+
+	var dice := DiceEngine.new(42)
+	var initial_glory: float = accused.glory
+
+	var results: Array[Dictionary] = DayOrchestrator._resolve_pending_trials(
+		conviction_results, crime_records, characters_by_id, lord_map, dice, 20,
+	)
+
+	assert_eq(results.size(), 1)
+	var trial: Dictionary = results[0]
+	if not trial.get("accused_won", false):
+		assert_true(trial.has("glory_delta"), "Lost trial should have glory_delta")
+		assert_true(trial.has("infamy_delta"), "Lost trial should have infamy_delta")
+		assert_true(trial.has("status_delta"), "Lost trial should have status_delta")
+		assert_eq(record.legal_status, Enums.LegalStatus.DECREED_GUILTY)
+
+
 # MAGISTRATE RELEASE AFTER CONVICTION
 # ==============================================================================
 

@@ -5847,6 +5847,20 @@ static func _resolve_pending_trials(
 		)
 		trial["case_id"] = case_id
 		trial["accused_id"] = accused_id
+
+		if not trial.get("accused_won", false) and trial.get("resolved", false):
+			var victim: L5RCharacterData = characters_by_id.get(record.victim_id)
+			var victim_status: float = victim.status if victim != null else 0.0
+			var conviction: Dictionary = CrimeSystem.apply_at_conviction_consequences(
+				accused, record, victim_status
+			)
+			trial["glory_delta"] = conviction.get("glory_delta", 0.0)
+			trial["infamy_delta"] = conviction.get("infamy_delta", 0.0)
+			trial["status_delta"] = conviction.get("status_delta", 0.0)
+			trial["seppuku_offered"] = conviction.get("seppuku_offered", false)
+			if conviction.get("seppuku_offered", false):
+				record.seppuku_offered = true
+
 		results.append(trial)
 
 	return results
