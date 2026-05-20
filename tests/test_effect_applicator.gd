@@ -1365,7 +1365,7 @@ func test_winner_glory_not_applied_without_key() -> void:
 # -- False Info Dedup ----------------------------------------------------------
 
 func test_false_info_replaces_existing_true_entry() -> void:
-	_actor.knowledge_pool = [] as Array[KnowledgeEntry]
+	_actor.knowledge_pool = []
 	var true_entry := InformationSystem.make_entry(
 		Enums.KnowledgeSource.INTELLIGENCE,
 		"personality_insight",

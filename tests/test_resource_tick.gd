@@ -499,11 +499,11 @@ func test_garrison_check_increments_under_seasons() -> void:
 	_settlement.garrison_pu = 0
 	var meta: Dictionary = {}
 	var r1: Dictionary = ResourceTick._process_garrison_check(
-		[_province] as Array[ProvinceData], _settlements(), meta
+		[_province], _settlements(), meta
 	)
 	assert_eq(r1[1]["seasons"], 1)
 	var r2: Dictionary = ResourceTick._process_garrison_check(
-		[_province] as Array[ProvinceData], _settlements(), meta
+		[_province], _settlements(), meta
 	)
 	assert_eq(r2[1]["seasons"], 2)
 
@@ -512,11 +512,11 @@ func test_garrison_check_resets_when_garrisoned() -> void:
 	_settlement.garrison_pu = 0
 	var meta: Dictionary = {}
 	ResourceTick._process_garrison_check(
-		[_province] as Array[ProvinceData], _settlements(), meta
+		[_province], _settlements(), meta
 	)
 	_settlement.garrison_pu = 1
 	var r2: Dictionary = ResourceTick._process_garrison_check(
-		[_province] as Array[ProvinceData], _settlements(), meta
+		[_province], _settlements(), meta
 	)
 	assert_eq(r2[1]["seasons"], 0)
 
@@ -526,7 +526,7 @@ func test_garrison_check_drains_rice() -> void:
 	_settlement.rice_stockpile = 5.0
 	var meta: Dictionary = {}
 	ResourceTick._process_garrison_check(
-		[_province] as Array[ProvinceData], _settlements(), meta
+		[_province], _settlements(), meta
 	)
 	assert_almost_eq(_settlement.rice_stockpile, 4.95, 0.001)
 
@@ -536,7 +536,7 @@ func test_garrison_check_reduces_stability() -> void:
 	_province.stability = 100.0
 	var meta: Dictionary = {}
 	ResourceTick._process_garrison_check(
-		[_province] as Array[ProvinceData], _settlements(), meta
+		[_province], _settlements(), meta
 	)
 	assert_almost_eq(_province.stability, 98.0, 0.01)
 
@@ -545,7 +545,7 @@ func test_garrison_trade_drain_caps() -> void:
 	_settlement.garrison_pu = 0
 	var meta: Dictionary = {"_under_garrison_seasons": {1: 10}}
 	var r: Dictionary = ResourceTick._process_garrison_check(
-		[_province] as Array[ProvinceData], _settlements(), meta
+		[_province], _settlements(), meta
 	)
 	assert_almost_eq(r[1]["trade_drain"], 0.3, 0.001)
 
@@ -556,7 +556,7 @@ func test_garrison_koku_malus_applied() -> void:
 	_settlement.koku_stockpile = 0.0
 	var meta: Dictionary = {"_koku_modifiers": {1: 1.0}}
 	ResourceTick._process_garrison_check(
-		[_province] as Array[ProvinceData], _settlements(), meta
+		[_province], _settlements(), meta
 	)
 	ResourceTick._process_koku_generation(_settlements(), meta)
 	var expected: float = float(_settlement.town_pu) * ResourceTick.KOKU_PER_TOWN_PU_PER_SEASON * 0.8
@@ -949,7 +949,7 @@ func test_trade_route_koku_added_to_settlement() -> void:
 	var meta: Dictionary = {}
 	_settlement.koku_stockpile = 0.0
 	var result: Dictionary = ResourceTick._process_trade_route_koku(
-		[_province] as Array[ProvinceData], _settlements(),
+		[_province], _settlements(),
 		[route], meta,
 	)
 	assert_almost_eq(result[1]["trade_koku"], 0.2, 0.001)
@@ -962,7 +962,7 @@ func test_trade_route_koku_zero_when_disrupted() -> void:
 	var meta: Dictionary = {}
 	_settlement.koku_stockpile = 0.0
 	var result: Dictionary = ResourceTick._process_trade_route_koku(
-		[_province] as Array[ProvinceData], _settlements(),
+		[_province], _settlements(),
 		[route], meta,
 	)
 	assert_almost_eq(result[1]["trade_koku"], 0.0, 0.001)
@@ -976,7 +976,7 @@ func test_trade_route_koku_reduced_by_garrison_drain() -> void:
 	}
 	_settlement.koku_stockpile = 0.0
 	var result: Dictionary = ResourceTick._process_trade_route_koku(
-		[_province] as Array[ProvinceData], _settlements(),
+		[_province], _settlements(),
 		[route], meta,
 	)
 	assert_almost_eq(result[1]["trade_koku"], 0.05, 0.001)
@@ -990,7 +990,7 @@ func test_trade_route_koku_drain_does_not_go_negative() -> void:
 	}
 	_settlement.koku_stockpile = 0.0
 	var result: Dictionary = ResourceTick._process_trade_route_koku(
-		[_province] as Array[ProvinceData], _settlements(),
+		[_province], _settlements(),
 		[route], meta,
 	)
 	assert_almost_eq(result[1]["trade_koku"], 0.0, 0.001)

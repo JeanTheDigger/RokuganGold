@@ -788,7 +788,7 @@ func test_army_recovery_healing_halved_by_worship() -> void:
 	}
 	var maluses: Dictionary = {5: {"healing_slower": true}}
 	var results: Array[Dictionary] = DayOrchestrator._process_army_recovery(
-		[army] as Array[Dictionary], {}, [company] as Array[Dictionary], maluses,
+		[army], {}, [company], maluses,
 	)
 	if results.size() > 0:
 		var per_company: Array = results[0].get("per_company", [])

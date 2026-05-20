@@ -23,7 +23,7 @@ static func process_accused_cases(
 	next_topic_id: Array[int],
 	active_topics: Array[TopicData],
 	lord_map: Dictionary,
-) -> Array[Dictionary]:
+) -> Array:
 	var results: Array[Dictionary] = []
 
 	for record: CrimeRecord in crime_records:

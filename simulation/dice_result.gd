@@ -8,7 +8,7 @@ var explosions: int = 0
 var overflow_bonus: int = 0
 
 
-func _init(p_kept: Array[int] = [], p_dropped: Array[int] = [], p_explosions: int = 0, p_overflow: int = 0) -> void:
+func _init(p_kept: Array = [], p_dropped: Array = [], p_explosions: int = 0, p_overflow: int = 0) -> void:
 	kept_dice = p_kept
 	dropped_dice = p_dropped
 	explosions = p_explosions

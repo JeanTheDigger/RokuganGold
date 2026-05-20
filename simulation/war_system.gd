@@ -264,7 +264,7 @@ static func remove_ally(
 	war.allied_clans_b.erase(clan)
 
 
-static func get_all_combatant_clans(war: WarData) -> Array[String]:
+static func get_all_combatant_clans(war: WarData) -> Array:
 	var clans: Array[String] = [war.clan_a, war.clan_b]
 	for c: String in war.allied_clans_a:
 		if c not in clans:
@@ -376,7 +376,7 @@ static func get_war_between(
 static func get_active_wars_for_clan(
 	wars: Array[WarData],
 	clan: String,
-) -> Array[WarData]:
+) -> Array:
 	var result: Array[WarData] = []
 	for war: WarData in wars:
 		if war.is_active and is_clan_involved(war, clan):
@@ -409,7 +409,7 @@ static func get_enemy_clan_from_war(war: Dictionary, own_clan: String) -> String
 	return ""
 
 
-static func wars_to_context_array(wars: Array[WarData]) -> Array:
+static func wars_to_context_array(wars: Array) -> Array:
 	var result: Array = []
 	for war: WarData in wars:
 		if war.is_active:

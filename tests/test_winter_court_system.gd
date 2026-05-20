@@ -279,7 +279,7 @@ func test_family_prestige_score() -> void:
 
 func test_crisis_relevance_with_topic() -> void:
 	var p := _make_province(10, "Crane", "Doji", 80.0)
-	var t := _make_topic(1, [10] as Array[int], 60.0, "war")
+	var t := _make_topic(1, [10], 60.0, "war")
 	_topics.append(t)
 	var score: float = WinterCourtSystem._score_crisis_relevance(
 		p, _topics, StrategicReview.EmperorArchetype.CUNNING
@@ -289,7 +289,7 @@ func test_crisis_relevance_with_topic() -> void:
 
 func test_crisis_relevance_benevolent_filters_military() -> void:
 	var p := _make_province(10, "Crane", "Doji", 80.0)
-	var t := _make_topic(1, [10] as Array[int], 60.0, "war")
+	var t := _make_topic(1, [10], 60.0, "war")
 	_topics.append(t)
 	var score: float = WinterCourtSystem._score_crisis_relevance(
 		p, _topics, StrategicReview.EmperorArchetype.BENEVOLENT
@@ -299,7 +299,7 @@ func test_crisis_relevance_benevolent_filters_military() -> void:
 
 func test_crisis_relevance_benevolent_accepts_famine() -> void:
 	var p := _make_province(10, "Crane", "Doji", 80.0)
-	var t := _make_topic(1, [10] as Array[int], 60.0, "famine")
+	var t := _make_topic(1, [10], 60.0, "famine")
 	_topics.append(t)
 	var score: float = WinterCourtSystem._score_crisis_relevance(
 		p, _topics, StrategicReview.EmperorArchetype.BENEVOLENT
@@ -309,7 +309,7 @@ func test_crisis_relevance_benevolent_accepts_famine() -> void:
 
 func test_crisis_relevance_warlike_accepts_military() -> void:
 	var p := _make_province(10, "Crane", "Doji", 80.0)
-	var t := _make_topic(1, [10] as Array[int], 80.0, "war")
+	var t := _make_topic(1, [10], 80.0, "war")
 	_topics.append(t)
 	var score: float = WinterCourtSystem._score_crisis_relevance(
 		p, _topics, StrategicReview.EmperorArchetype.WARLIKE
@@ -378,7 +378,7 @@ func test_select_clan_delegation_respects_slots() -> void:
 		vassals.append(v)
 
 	var delegation: Array[int] = WinterCourtSystem.select_clan_delegation(
-		champion, vassals, 3, [] as Array[int], {}
+		champion, vassals, 3, [], {}
 	)
 	assert_eq(delegation.size(), 3)
 
@@ -395,7 +395,7 @@ func test_delegation_scores_courtiers_higher() -> void:
 	bushi.skills = {"Etiquette": 1, "Sincerity": 0, "Courtier": 0, "Perform": 0}
 
 	var delegation: Array[int] = WinterCourtSystem.select_clan_delegation(
-		champion, [courtier, bushi], 1, [] as Array[int], {}
+		champion, [courtier, bushi], 1, [], {}
 	)
 	assert_eq(delegation[0], 100)
 
@@ -412,7 +412,7 @@ func test_yojimbo_pull_in() -> void:
 	yojimbo.operational_superior_id = 100
 
 	var delegation: Array[int] = WinterCourtSystem.select_clan_delegation(
-		champion, [courtier, yojimbo], 1, [] as Array[int], {}
+		champion, [courtier, yojimbo], 1, [], {}
 	)
 	assert_true(100 in delegation)
 	assert_true(101 in delegation)
@@ -429,7 +429,7 @@ func test_personal_invitation_respects_pool_size() -> void:
 
 	var invites: Array[int] = WinterCourtSystem.select_personal_invitations(
 		_emperor, StrategicReview.EmperorArchetype.IRON, 3, candidates,
-		[] as Array[int], {}, []
+		[], {}, []
 	)
 	assert_eq(invites.size(), 3)
 
@@ -440,7 +440,7 @@ func test_personal_invitation_excludes_already_invited() -> void:
 
 	var invites: Array[int] = WinterCourtSystem.select_personal_invitations(
 		_emperor, StrategicReview.EmperorArchetype.IRON, 3, [c],
-		[] as Array[int], {}, [200]
+		[], {}, [200]
 	)
 	assert_eq(invites.size(), 0)
 
@@ -455,7 +455,7 @@ func test_warlike_personal_invitation_favors_bushi() -> void:
 
 	var invites: Array[int] = WinterCourtSystem.select_personal_invitations(
 		_emperor, StrategicReview.EmperorArchetype.WARLIKE, 1, [bushi, courtier],
-		[] as Array[int], {}, []
+		[], {}, []
 	)
 	assert_eq(invites.size(), 1)
 	assert_eq(invites[0], 200)
@@ -1110,7 +1110,7 @@ func test_late_arrival_adds_delegate_to_winter_court() -> void:
 
 	var active_courts: Array[CourtSessionData] = [court]
 	var results: Array[Dictionary] = DayOrchestrator._process_court_attendance(
-		active_courts, [_emperor, late_delegate] as Array[L5RCharacterData], _characters_by_id
+		active_courts, [_emperor, late_delegate], _characters_by_id
 	)
 
 	assert_true(50 in court.attendee_ids, "Late delegate should be added to attendee list")
@@ -1137,7 +1137,7 @@ func test_late_arrival_not_added_if_at_different_settlement() -> void:
 
 	var active_courts: Array[CourtSessionData] = [court]
 	DayOrchestrator._process_court_attendance(
-		active_courts, [_emperor, distant] as Array[L5RCharacterData], _characters_by_id
+		active_courts, [_emperor, distant], _characters_by_id
 	)
 	assert_false(51 in court.attendee_ids)
 

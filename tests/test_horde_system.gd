@@ -161,7 +161,7 @@ func test_select_target_single_tower_always_selected() -> void:
 func test_select_target_empty_returns_minus_one() -> void:
 	var dice := DiceEngine.new()
 	dice.set_seed(1)
-	var result: int = HordeSystem.select_target_tower([] as Array[int], -1, dice)
+	var result: int = HordeSystem.select_target_tower([], -1, dice)
 	assert_eq(result, -1)
 
 
@@ -333,14 +333,14 @@ func test_strength_counter_starts_at_zero() -> void:
 
 func test_increment_strength_counter_adds_one() -> void:
 	var counters: Dictionary = {}
-	HordeSystem.increment_strength_counter(counters, [] as Array[int])
+	HordeSystem.increment_strength_counter(counters, [])
 	assert_eq(HordeSystem.get_strength_counter(counters), 1)
 
 
 func test_increment_strength_counter_accumulates() -> void:
 	var counters: Dictionary = {}
 	for _i: int in range(5):
-		HordeSystem.increment_strength_counter(counters, [] as Array[int])
+		HordeSystem.increment_strength_counter(counters, [])
 	assert_eq(HordeSystem.get_strength_counter(counters), 5)
 
 

@@ -326,8 +326,8 @@ static func get_supply_source_provinces(
 	lord_province_ids: Array[int],
 	compelled_province_ids: Array[int],
 	shared_province_ids: Array[int],
-) -> Array[int]:
-	var sources: Array[int] = lord_province_ids.duplicate()
+) -> Array:
+	var sources: Array = lord_province_ids.duplicate()
 	for pid: int in compelled_province_ids:
 		if pid not in sources:
 			sources.append(pid)

@@ -392,7 +392,7 @@ func test_broadcast_rumor_no_spread():
 	var char_prov: Dictionary = {1: 10}
 	var prov_clan: Dictionary = {10: "Crane"}
 	var results: Array[Dictionary] = TopicMomentumSystem.broadcast_public_knowledge(
-		[t] as Array[TopicData], chars, char_prov, prov_clan
+		[t], chars, char_prov, prov_clan
 	)
 	assert_eq(results.size(), 0)
 	assert_eq(c.topic_pool.size(), 0)
@@ -407,7 +407,7 @@ func test_broadcast_minor_affected_province():
 	var char_prov: Dictionary = {1: 10}
 	var prov_clan: Dictionary = {10: "Crane"}
 	var results: Array[Dictionary] = TopicMomentumSystem.broadcast_public_knowledge(
-		[t] as Array[TopicData], chars, char_prov, prov_clan
+		[t], chars, char_prov, prov_clan
 	)
 	assert_eq(results.size(), 1)
 	assert_true(1 in c.topic_pool)
@@ -422,7 +422,7 @@ func test_broadcast_minor_non_affected_province_excluded():
 	var char_prov: Dictionary = {1: 20}
 	var prov_clan: Dictionary = {10: "Crane", 20: "Lion"}
 	var results: Array[Dictionary] = TopicMomentumSystem.broadcast_public_knowledge(
-		[t] as Array[TopicData], chars, char_prov, prov_clan
+		[t], chars, char_prov, prov_clan
 	)
 	assert_eq(results.size(), 0)
 
@@ -439,7 +439,7 @@ func test_broadcast_secondary_adjacent_province():
 	var prov_clan: Dictionary = {10: "Crane", 20: "Lion"}
 	var provinces: Dictionary = {10: p10, 20: p20}
 	var results: Array[Dictionary] = TopicMomentumSystem.broadcast_public_knowledge(
-		[t] as Array[TopicData], chars, char_prov, prov_clan, provinces
+		[t], chars, char_prov, prov_clan, provinces
 	)
 	assert_eq(results.size(), 1)
 	assert_true(1 in c.topic_pool)
@@ -457,7 +457,7 @@ func test_broadcast_secondary_non_adjacent_excluded():
 	var prov_clan: Dictionary = {10: "Crane", 20: "Lion"}
 	var provinces: Dictionary = {10: p10, 20: p20}
 	var results: Array[Dictionary] = TopicMomentumSystem.broadcast_public_knowledge(
-		[t] as Array[TopicData], chars, char_prov, prov_clan, provinces
+		[t], chars, char_prov, prov_clan, provinces
 	)
 	assert_eq(results.size(), 0)
 
@@ -472,7 +472,7 @@ func test_broadcast_major_same_clan():
 	var char_prov: Dictionary = {1: 20}
 	var prov_clan: Dictionary = {10: "Crane", 20: "Crane"}
 	var results: Array[Dictionary] = TopicMomentumSystem.broadcast_public_knowledge(
-		[t] as Array[TopicData], chars, char_prov, prov_clan
+		[t], chars, char_prov, prov_clan
 	)
 	assert_eq(results.size(), 1)
 
@@ -487,7 +487,7 @@ func test_broadcast_major_different_clan_excluded():
 	var char_prov: Dictionary = {1: 30}
 	var prov_clan: Dictionary = {10: "Crane", 30: "Dragon"}
 	var results: Array[Dictionary] = TopicMomentumSystem.broadcast_public_knowledge(
-		[t] as Array[TopicData], chars, char_prov, prov_clan
+		[t], chars, char_prov, prov_clan
 	)
 	assert_eq(results.size(), 0)
 
@@ -501,7 +501,7 @@ func test_broadcast_unavoidable_all_characters():
 	var char_prov: Dictionary = {1: 10, 2: 99}
 	var prov_clan: Dictionary = {}
 	var results: Array[Dictionary] = TopicMomentumSystem.broadcast_public_knowledge(
-		[t] as Array[TopicData], chars, char_prov, prov_clan
+		[t], chars, char_prov, prov_clan
 	)
 	assert_eq(results.size(), 2)
 	assert_true(1 in c1.topic_pool)
@@ -517,7 +517,7 @@ func test_broadcast_skips_already_known():
 	var char_prov: Dictionary = {1: 10}
 	var prov_clan: Dictionary = {}
 	var results: Array[Dictionary] = TopicMomentumSystem.broadcast_public_knowledge(
-		[t] as Array[TopicData], chars, char_prov, prov_clan
+		[t], chars, char_prov, prov_clan
 	)
 	assert_eq(results.size(), 0)
 
@@ -529,7 +529,7 @@ func test_broadcast_skips_resolved():
 	var c := _make_char(1)
 	var chars: Array[L5RCharacterData] = [c]
 	var results: Array[Dictionary] = TopicMomentumSystem.broadcast_public_knowledge(
-		[t] as Array[TopicData], chars, {1: 10}, {}
+		[t], chars, {1: 10}, {}
 	)
 	assert_eq(results.size(), 0)
 
@@ -702,7 +702,7 @@ func test_broadcast_creates_knowledge_entry():
 	var char_prov: Dictionary = {1: 10}
 	var prov_clan: Dictionary = {10: "Crane"}
 	TopicMomentumSystem.broadcast_public_knowledge(
-		[t] as Array[TopicData], chars, char_prov, prov_clan, {}, 3
+		[t], chars, char_prov, prov_clan, {}, 3
 	)
 	assert_eq(c.knowledge_pool.size(), 1)
 	assert_eq(c.knowledge_pool[0].source, Enums.KnowledgeSource.PUBLIC_KNOWLEDGE)
@@ -722,7 +722,7 @@ func test_broadcast_no_knowledge_entry_for_excluded_character():
 	var char_prov: Dictionary = {1: 10}
 	var prov_clan: Dictionary = {10: "Crane"}
 	TopicMomentumSystem.broadcast_public_knowledge(
-		[t] as Array[TopicData], chars, char_prov, prov_clan, {}, 3
+		[t], chars, char_prov, prov_clan, {}, 3
 	)
 	assert_eq(c.knowledge_pool.size(), 0)
 
@@ -738,7 +738,7 @@ func test_broadcast_no_duplicate_knowledge_entry():
 	var char_prov: Dictionary = {1: 10}
 	var prov_clan: Dictionary = {10: "Crane"}
 	TopicMomentumSystem.broadcast_public_knowledge(
-		[t] as Array[TopicData], chars, char_prov, prov_clan, {}, 3
+		[t], chars, char_prov, prov_clan, {}, 3
 	)
 	# Already in topic_pool → skipped, no knowledge entry either
 	assert_eq(c.knowledge_pool.size(), 0)

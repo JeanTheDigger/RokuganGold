@@ -56,7 +56,7 @@ static func _score_court(
 static func _court_serves_standing(court: Dictionary, standing_objective: String) -> bool:
 	if standing_objective == "":
 		return false
-	var topics: Array[Dictionary] = court.get("topics", [])
+	var topics: Array = court.get("topics", [])
 	for topic: Dictionary in topics:
 		if topic is Dictionary and topic.get("related_objective", "") == standing_objective:
 			return true

@@ -46,14 +46,14 @@ func before_each() -> void:
 		"context_flag": Enums.ContextFlag.AT_COURT,
 		"season": 1,
 		"ic_day": 10,
-		"characters_present": [] as Array[int],
+		"characters_present": [],
 		"is_lord": false,
-		"known_topics": [] as Array[int],
+		"known_topics": [],
 		"known_positions": {},
 		"known_objectives": {},
-		"known_contacts": [] as Array[int],
+		"known_contacts": [],
 		"pending_events": [],
-		"action_log": [] as Array[Dictionary],
+		"action_log": [],
 	}
 
 	_objectives = {
@@ -624,14 +624,14 @@ func _make_day_world_state() -> Dictionary:
 		"context_flag": Enums.ContextFlag.AT_OWN_HOLDINGS,
 		"season": 1,
 		"ic_day": 1,
-		"characters_present": [] as Array[int],
+		"characters_present": [],
 		"is_lord": false,
-		"known_topics": [] as Array[int],
+		"known_topics": [],
 		"known_positions": {},
 		"known_objectives": {},
-		"known_contacts": [] as Array[int],
+		"known_contacts": [],
 		"pending_events": [],
-		"action_log": [] as Array[Dictionary],
+		"action_log": [],
 	}
 
 
@@ -1646,7 +1646,7 @@ func test_s11_11_insurgency_wired_into_orchestrator() -> void:
 
 	var result: Dictionary = DayOrchestrator.advance_day(
 		time, chars, chars_by_id, {}, {}, _scoring_tables, _filter_data,
-		dice, _action_skill_map, provinces, [] as Array[Dictionary],
+		dice, _action_skill_map, provinces, [],
 		{}, [], [], [], [], [], [1], {}, {}, [1000], [],
 		{}, [], insurgencies, next_ins_id,
 	)
@@ -1737,14 +1737,14 @@ func test_advance_day_sets_at_wall_tower_for_character_at_tower() -> void:
 		"wall_statuses": [],
 		"season": 1,
 		"ic_day": 1,
-		"characters_present": [] as Array[int],
+		"characters_present": [],
 		"is_lord": false,
-		"known_topics": [] as Array[int],
+		"known_topics": [],
 		"known_positions": {},
 		"known_objectives": {},
-		"known_contacts": [] as Array[int],
+		"known_contacts": [],
 		"pending_events": [],
-		"action_log": [] as Array[Dictionary],
+		"action_log": [],
 	}
 
 	var time := TimeSystem.new(1120, 0)
@@ -1761,7 +1761,7 @@ func test_advance_day_sets_at_wall_tower_for_character_at_tower() -> void:
 		time, characters, characters_by_id, world_states,
 		{99: {"primary": {"need_type": "REST", "priority": 3}}},
 		_scoring_tables, _filter_data, dice, _action_skill_map, provinces,
-		[] as Array[Dictionary], season_meta,
+		[], season_meta,
 		[], [], [], [], [], [1], {}, {}, [1000], [], {},
 		[], [], [1],
 		settlements,
@@ -1799,7 +1799,7 @@ func test_wall_engineering_fortify_increases_si_on_settlement() -> void:
 	}]
 
 	var results := DayOrchestrator._process_wall_engineering_effects(
-		applied_list, [tower] as Array[SettlementData]
+		applied_list, [tower]
 	)
 
 	assert_eq(tower.wall_si, 7, "SI should increase from 5 to 7 with si_gain=2")
@@ -1821,7 +1821,7 @@ func test_wall_engineering_fortify_clamps_si_at_10() -> void:
 	}]
 
 	DayOrchestrator._process_wall_engineering_effects(
-		applied_list, [tower] as Array[SettlementData]
+		applied_list, [tower]
 	)
 
 	assert_eq(tower.wall_si, 10, "SI clamped at 10")
@@ -1843,7 +1843,7 @@ func test_wall_engineering_fortify_applies_kaiu_modifier() -> void:
 	}]
 
 	DayOrchestrator._process_wall_engineering_effects(
-		applied_list, [tower] as Array[SettlementData]
+		applied_list, [tower]
 	)
 
 	assert_almost_eq(tower.kaiu_decay_reduction, 0.50, 0.001)
@@ -1867,7 +1867,7 @@ func test_wall_engineering_kaiu_overwrite_rule_keeps_higher() -> void:
 	}]
 
 	DayOrchestrator._process_wall_engineering_effects(
-		applied_list, [tower] as Array[SettlementData]
+		applied_list, [tower]
 	)
 
 	assert_almost_eq(tower.kaiu_decay_reduction, 0.75, 0.001,
@@ -1887,7 +1887,7 @@ func test_wall_engineering_seal_sets_si_to_2() -> void:
 	}]
 
 	DayOrchestrator._process_wall_engineering_effects(
-		applied_list, [tower] as Array[SettlementData]
+		applied_list, [tower]
 	)
 
 	assert_eq(tower.wall_si, 2, "Successful breach seal sets SI to 2")
@@ -1905,7 +1905,7 @@ func test_wall_engineering_seal_deducts_koku() -> void:
 	}]
 
 	DayOrchestrator._process_wall_engineering_effects(
-		applied_list, [tower] as Array[SettlementData]
+		applied_list, [tower]
 	)
 
 	assert_almost_eq(tower.koku_stockpile, 5.0, 0.001, "5 koku deducted for seal")
@@ -1923,7 +1923,7 @@ func test_wall_engineering_seal_failed_does_not_change_si() -> void:
 	}]
 
 	DayOrchestrator._process_wall_engineering_effects(
-		applied_list, [tower] as Array[SettlementData]
+		applied_list, [tower]
 	)
 
 	assert_eq(tower.wall_si, 0, "Failed breach seal leaves SI at 0")
@@ -1951,7 +1951,7 @@ func test_sortie_results_reduces_ss_on_province() -> void:
 	}]
 
 	var results := DayOrchestrator._process_sortie_results(
-		applied_list, [tower] as Array[SettlementData], {10: province}
+		applied_list, [tower], {10: province}
 	)
 
 	assert_eq(province.shadowlands_strength, 5, "SS reduced by 1 for small sortie")
@@ -1977,7 +1977,7 @@ func test_sortie_results_ss_clamped_at_zero() -> void:
 	}]
 
 	DayOrchestrator._process_sortie_results(
-		applied_list, [tower] as Array[SettlementData], {10: province}
+		applied_list, [tower], {10: province}
 	)
 
 	assert_eq(province.shadowlands_strength, 0, "SS cannot go below 0")
@@ -2007,7 +2007,7 @@ func test_sortie_results_deducts_jade_from_settlement() -> void:
 	}]
 
 	DayOrchestrator._process_sortie_results(
-		applied_list, [tower] as Array[SettlementData], {10: province}
+		applied_list, [tower], {10: province}
 	)
 
 	assert_almost_eq(tower.jade_stockpile, 48.0, 0.001, "2 jade consumed for 2 warriors")
@@ -2035,7 +2035,7 @@ func test_sortie_results_jade_clamped_at_zero() -> void:
 	}]
 
 	DayOrchestrator._process_sortie_results(
-		applied_list, [tower] as Array[SettlementData], {10: province}
+		applied_list, [tower], {10: province}
 	)
 
 	assert_almost_eq(tower.jade_stockpile, 0.0, 0.001, "Jade never goes negative")
@@ -2056,7 +2056,7 @@ func test_kaiu_modifier_ticks_down_each_season() -> void:
 	var season_meta: Dictionary = {}
 
 	DayOrchestrator._process_wall_seasonal_pressure(
-		[tower] as Array[SettlementData], {10: province}, 1, season_meta
+		[tower], {10: province}, 1, season_meta
 	)
 
 	assert_eq(tower.kaiu_reinforce_seasons_remaining, 2,
@@ -2078,7 +2078,7 @@ func test_kaiu_modifier_cleared_when_seasons_reach_zero() -> void:
 	var season_meta: Dictionary = {}
 
 	DayOrchestrator._process_wall_seasonal_pressure(
-		[tower] as Array[SettlementData], {10: province}, 1, season_meta
+		[tower], {10: province}, 1, season_meta
 	)
 
 	assert_eq(tower.kaiu_reinforce_seasons_remaining, 0)
@@ -2122,7 +2122,7 @@ func test_horde_no_roll_on_same_season() -> void:
 	var result := DayOrchestrator._process_horde_rolls(
 		TimeSystem.Season.SPRING, TimeSystem.Season.SPRING,
 		hordes, counters, last_pid,
-		[tower] as Array[SettlementData], {1: province},
+		[tower], {1: province},
 		dice, 1, season_meta, active_topics, next_topic_id,
 	)
 
@@ -2145,7 +2145,7 @@ func test_horde_season_count_increments_on_season_change() -> void:
 	DayOrchestrator._process_horde_rolls(
 		TimeSystem.Season.SUMMER, TimeSystem.Season.SPRING,
 		hordes, counters, last_pid,
-		[tower] as Array[SettlementData], {1: province},
+		[tower], {1: province},
 		dice, 1, season_meta, active_topics, next_topic_id,
 	)
 
@@ -2168,7 +2168,7 @@ func test_horde_no_fire_on_first_season_change() -> void:
 	var result := DayOrchestrator._process_horde_rolls(
 		TimeSystem.Season.SUMMER, TimeSystem.Season.SPRING,
 		hordes, counters, last_pid,
-		[tower] as Array[SettlementData], {1: province},
+		[tower], {1: province},
 		dice, 1, season_meta, active_topics, next_topic_id,
 	)
 
@@ -2190,7 +2190,7 @@ func test_horde_roll_fires_at_season_count_2() -> void:
 	var result := DayOrchestrator._process_horde_rolls(
 		TimeSystem.Season.AUTUMN, TimeSystem.Season.SUMMER,
 		hordes, counters, last_pid,
-		[tower] as Array[SettlementData], {1: province},
+		[tower], {1: province},
 		dice, 1, season_meta, active_topics, next_topic_id,
 	)
 
@@ -2210,7 +2210,7 @@ func test_horde_no_towers_returns_no_formation() -> void:
 	var result := DayOrchestrator._process_horde_rolls(
 		TimeSystem.Season.AUTUMN, TimeSystem.Season.SUMMER,
 		hordes, counters, last_pid,
-		[] as Array[SettlementData], {},
+		[], {},
 		dice, 1, season_meta, active_topics, next_topic_id,
 	)
 
@@ -2240,7 +2240,7 @@ func test_horde_formed_appended_to_active_hordes() -> void:
 		var result := DayOrchestrator._process_horde_rolls(
 			TimeSystem.Season.AUTUMN, TimeSystem.Season.SUMMER,
 			hordes, counters, last_pid,
-			[tower] as Array[SettlementData], {1: province},
+			[tower], {1: province},
 			dice, 50, season_meta, active_topics, next_topic_id,
 		)
 
@@ -2274,7 +2274,7 @@ func test_horde_failed_roll_increments_strength_counter() -> void:
 		var result := DayOrchestrator._process_horde_rolls(
 			TimeSystem.Season.AUTUMN, TimeSystem.Season.SUMMER,
 			hordes, counters, last_pid,
-			[tower] as Array[SettlementData], {1: province},
+			[tower], {1: province},
 			dice, 1, season_meta, active_topics, next_topic_id,
 		)
 
@@ -2305,7 +2305,7 @@ func test_horde_formed_generates_topic() -> void:
 		var result := DayOrchestrator._process_horde_rolls(
 			TimeSystem.Season.AUTUMN, TimeSystem.Season.SUMMER,
 			hordes, counters, last_pid,
-			[tower] as Array[SettlementData], {1: province},
+			[tower], {1: province},
 			dice, 1, season_meta, active_topics, next_topic_id,
 		)
 
@@ -2341,7 +2341,7 @@ func test_horde_oni_generated_when_has_oni() -> void:
 		DayOrchestrator._process_horde_rolls(
 			TimeSystem.Season.AUTUMN, TimeSystem.Season.SUMMER,
 			hordes, counters, last_pid,
-			[tower] as Array[SettlementData], {1: province},
+			[tower], {1: province},
 			dice, 1, season_meta, active_topics, next_topic_id,
 		)
 
@@ -2374,7 +2374,7 @@ func test_last_targeted_province_updated_after_formation() -> void:
 		var result := DayOrchestrator._process_horde_rolls(
 			TimeSystem.Season.AUTUMN, TimeSystem.Season.SUMMER,
 			hordes, counters, last_pid,
-			[tower] as Array[SettlementData], {1: province},
+			[tower], {1: province},
 			dice, 1, season_meta, active_topics, next_topic_id,
 		)
 
@@ -2403,7 +2403,7 @@ func test_horde_strength_used_from_counter_and_reset_on_formation() -> void:
 		var result := DayOrchestrator._process_horde_rolls(
 			TimeSystem.Season.AUTUMN, TimeSystem.Season.SUMMER,
 			hordes, counters, last_pid,
-			[tower] as Array[SettlementData], {1: province},
+			[tower], {1: province},
 			dice, 1, season_meta, active_topics, next_topic_id,
 		)
 
@@ -2457,7 +2457,7 @@ func test_wall_seasonal_returns_garrison_shortage_towers() -> void:
 	var season_meta: Dictionary = {}
 
 	var result := DayOrchestrator._process_wall_seasonal_pressure(
-		[tower] as Array[SettlementData], {10: province}, 1, season_meta
+		[tower], {10: province}, 1, season_meta
 	)
 
 	var shortage_list: Array = result.get("garrison_shortage_towers", [])
@@ -2478,7 +2478,7 @@ func test_wall_seasonal_no_shortage_above_minimum() -> void:
 	var season_meta: Dictionary = {}
 
 	var result := DayOrchestrator._process_wall_seasonal_pressure(
-		[tower] as Array[SettlementData], {10: province}, 1, season_meta
+		[tower], {10: province}, 1, season_meta
 	)
 
 	var shortage_list: Array = result.get("garrison_shortage_towers", [])
@@ -2513,7 +2513,7 @@ func test_wall_seasonal_multiple_shortage_towers() -> void:
 	var season_meta: Dictionary = {}
 
 	var result := DayOrchestrator._process_wall_seasonal_pressure(
-		[tower_a, tower_b, tower_c] as Array[SettlementData],
+		[tower_a, tower_b, tower_c],
 		{10: province_a, 11: province_b, 12: province_c},
 		1, season_meta
 	)
@@ -2544,8 +2544,8 @@ func test_horde_assault_applies_si_hit_contested() -> void:
 	var next_topic_id: Array[int] = [1000]
 
 	var results := DayOrchestrator._process_horde_assaults(
-		[horde] as Array[HordeData],
-		[tower] as Array[SettlementData],
+		[horde],
+		[tower],
 		active_topics, next_topic_id, 100, {10: province},
 	)
 
@@ -2566,8 +2566,8 @@ func test_horde_assault_applies_si_hit_pushed_back() -> void:
 	var next_topic_id: Array[int] = [1000]
 
 	DayOrchestrator._process_horde_assaults(
-		[horde] as Array[HordeData],
-		[tower] as Array[SettlementData],
+		[horde],
+		[tower],
 		active_topics, next_topic_id, 100, {10: province},
 	)
 
@@ -2584,8 +2584,8 @@ func test_horde_assault_si_hit_decisive_defender_victory() -> void:
 	var next_topic_id: Array[int] = [1000]
 
 	DayOrchestrator._process_horde_assaults(
-		[horde] as Array[HordeData],
-		[tower] as Array[SettlementData],
+		[horde],
+		[tower],
 		active_topics, next_topic_id, 100, {10: province},
 	)
 
@@ -2602,8 +2602,8 @@ func test_horde_assault_breach_generates_incursion_topic() -> void:
 	var next_topic_id: Array[int] = [1000]
 
 	var results := DayOrchestrator._process_horde_assaults(
-		[horde] as Array[HordeData],
-		[tower] as Array[SettlementData],
+		[horde],
+		[tower],
 		active_topics, next_topic_id, 100, {10: province},
 	)
 
@@ -2630,8 +2630,8 @@ func test_horde_assault_no_breach_when_si_still_above_zero() -> void:
 	var next_topic_id: Array[int] = [1000]
 
 	var results := DayOrchestrator._process_horde_assaults(
-		[horde] as Array[HordeData],
-		[tower] as Array[SettlementData],
+		[horde],
+		[tower],
 		active_topics, next_topic_id, 100, {10: province},
 	)
 
@@ -2653,8 +2653,8 @@ func test_horde_assault_skips_unresolved_hordes() -> void:
 	var next_topic_id: Array[int] = [1000]
 
 	var results := DayOrchestrator._process_horde_assaults(
-		[horde] as Array[HordeData],
-		[tower] as Array[SettlementData],
+		[horde],
+		[tower],
 		active_topics, next_topic_id, 100, {10: province},
 	)
 
@@ -2674,8 +2674,8 @@ func test_horde_assault_skips_already_processed() -> void:
 	var next_topic_id: Array[int] = [1000]
 
 	var results := DayOrchestrator._process_horde_assaults(
-		[horde] as Array[HordeData],
-		[tower] as Array[SettlementData],
+		[horde],
+		[tower],
 		active_topics, next_topic_id, 100, {10: province},
 	)
 
@@ -2694,8 +2694,8 @@ func test_horde_assault_si_clamped_at_zero() -> void:
 	var next_topic_id: Array[int] = [1000]
 
 	DayOrchestrator._process_horde_assaults(
-		[horde] as Array[HordeData],
-		[tower] as Array[SettlementData],
+		[horde],
+		[tower],
 		active_topics, next_topic_id, 100, {10: province},
 	)
 
@@ -2712,8 +2712,8 @@ func test_horde_assault_stores_si_hit_on_horde() -> void:
 	var next_topic_id: Array[int] = [1000]
 
 	DayOrchestrator._process_horde_assaults(
-		[horde] as Array[HordeData],
-		[tower] as Array[SettlementData],
+		[horde],
+		[tower],
 		active_topics, next_topic_id, 100, {10: province},
 	)
 

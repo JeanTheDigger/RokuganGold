@@ -147,7 +147,7 @@ static func can_fulfill(performer: L5RCharacterData, request: Dictionary) -> boo
 	return SkillResolver.get_skill_rank(performer, _skill_for_type(perf_type)) >= 1
 
 
-static func expire_requests(pending_requests: Array[Dictionary], current_ic_day: int) -> Array[Dictionary]:
+static func expire_requests(pending_requests: Array, current_ic_day: int) -> Array:
 	var result: Array[Dictionary] = []
 	for req: Variant in pending_requests:
 		if req is Dictionary:

@@ -196,7 +196,7 @@ static func is_excluded(conditions: Dictionary) -> bool:
 
 static func select_provinces(
 	scored: Array[Dictionary],
-) -> Array[int]:
+) -> Array:
 	## scored is an array of dicts shaped:
 	##   {
 	##     "province_id": int,
@@ -294,7 +294,7 @@ static func process_annual_blessing(inputs: Dictionary) -> Dictionary:
 		"suspension_reason": "",
 		"allocation_total": 0.0,
 		"allocation_per_province": 0.0,
-		"selected_province_ids": [] as Array[int],
+		"selected_province_ids": [],
 		"settlement_rice_grants": {},
 		"stability_bonus": STABILITY_BONUS,
 		"pop_growth_bonus": POP_GROWTH_BONUS,
@@ -331,7 +331,7 @@ static func process_annual_blessing(inputs: Dictionary) -> Dictionary:
 	var scored_array: Array[Dictionary] = []
 	for entry: Dictionary in inputs.get("scored_provinces", []):
 		scored_array.append(entry)
-	var selected_ids: Array[int] = select_provinces(scored_array)
+	var selected_ids: Array = select_provinces(scored_array)
 	if selected_ids.is_empty():
 		# No eligible recipient — the allocation stays in the Emperor's stockpile.
 		result["allocation_total"] = allocation

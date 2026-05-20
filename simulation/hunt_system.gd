@@ -373,7 +373,7 @@ static func has_hunt_negative_lean(school: String) -> bool:
 
 ## Compute party defence TN: mean Armor TN + party-size bonus (capped).
 ## participants: Array[L5RCharacterData]
-static func compute_party_defence_tn(participants: Array[L5RCharacterData]) -> int:
+static func compute_party_defence_tn(participants: Array) -> int:
 	if participants.is_empty():
 		return 10
 	var sum: int = 0
@@ -395,7 +395,7 @@ static func compute_party_defence_tn(participants: Array[L5RCharacterData]) -> i
 
 # -- Private helpers -----------------------------------------------------------
 
-static func _find_hunt_leader(participants: Array[L5RCharacterData]) -> L5RCharacterData:
+static func _find_hunt_leader(participants: Array) -> L5RCharacterData:
 	var best: L5RCharacterData = null
 	var best_rank: int = -1
 	for p_var: Variant in participants:
@@ -409,7 +409,7 @@ static func _find_hunt_leader(participants: Array[L5RCharacterData]) -> L5RChara
 	return best
 
 
-static func _get_combatants(participants: Array[L5RCharacterData]) -> Array[L5RCharacterData]:
+static func _get_combatants(participants: Array) -> Array:
 	var result: Array[L5RCharacterData] = []
 	for p_var: Variant in participants:
 		var c: L5RCharacterData = p_var as L5RCharacterData
@@ -421,7 +421,7 @@ static func _get_combatants(participants: Array[L5RCharacterData]) -> Array[L5RC
 	return result
 
 
-static func _find_best_hunter(combatants: Array[L5RCharacterData]) -> L5RCharacterData:
+static func _find_best_hunter(combatants: Array) -> L5RCharacterData:
 	var best: L5RCharacterData = null
 	var best_rank: int = -1
 	for c_var: Variant in combatants:
@@ -438,7 +438,7 @@ static func _find_best_hunter(combatants: Array[L5RCharacterData]) -> L5RCharact
 	return best
 
 
-static func _find_second_hunter_id(combatants: Array[L5RCharacterData], exclude_id: int) -> int:
+static func _find_second_hunter_id(combatants: Array, exclude_id: int) -> int:
 	var best: L5RCharacterData = null
 	var best_rank: int = -1
 	for c_var: Variant in combatants:
@@ -470,7 +470,7 @@ static func _roll_beast_threat(beast: Dictionary, dice_engine: DiceEngine) -> in
 	return dr.total
 
 
-static func _select_casualty_victim(combatants: Array[L5RCharacterData]) -> L5RCharacterData:
+static func _select_casualty_victim(combatants: Array) -> L5RCharacterData:
 	# Lowest hunting-weapon rank is most likely to be caught (s57.38.6)
 	var worst: L5RCharacterData = null
 	var worst_rank: int = 999

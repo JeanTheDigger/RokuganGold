@@ -77,13 +77,13 @@ static func generate_winter_court_edicts(
 	next_edict_id: Array[int],
 	ic_day: int,
 	court_id: int = -1,
-) -> Array[EdictData]:
+) -> Array:
 	var max_edicts: int = mini(
 		ARCHETYPE_EDICT_FREQUENCY.get(archetype, 1),
 		MAX_EDICTS_PER_WINTER_COURT
 	)
 
-	var agenda_topics: Array[TopicData] = _resolve_topic_ids(agenda_topic_ids, active_topics)
+	var agenda_topics: Array = _resolve_topic_ids(agenda_topic_ids, active_topics)
 	var edicts: Array[EdictData] = []
 
 	for topic: TopicData in agenda_topics:
@@ -144,7 +144,7 @@ static func generate_edicts_from_aggregate(
 		MAX_EDICTS_PER_WINTER_COURT
 	)
 
-	var agenda_topics: Array[TopicData] = _resolve_topic_ids(
+	var agenda_topics: Array = _resolve_topic_ids(
 		court.agenda_topic_ids, active_topics
 	)
 	agenda_topics.sort_custom(func(a: TopicData, b: TopicData) -> bool:
@@ -263,7 +263,7 @@ static func generate_edict_commitments(
 	lords: Array[L5RCharacterData],
 	ic_day: int,
 	deadline_ic_day: int,
-) -> Array[CourtCommitmentData]:
+) -> Array:
 	var commitment_type: String = get_commitment_type_for_topic(topic)
 	if commitment_type.is_empty():
 		return []
@@ -280,7 +280,7 @@ static func generate_edict_commitments(
 static func _resolve_topic_ids(
 	ids: Array[int],
 	active_topics: Array[TopicData],
-) -> Array[TopicData]:
+) -> Array:
 	var result: Array[TopicData] = []
 	for tid: int in ids:
 		for t: TopicData in active_topics:
@@ -432,7 +432,7 @@ static func is_clan_defiant(edict: EdictData, clan: String) -> bool:
 	return edict.compliance_by_clan.get(clan, EdictData.ComplianceStatus.PENDING) == EdictData.ComplianceStatus.DEFIANT
 
 
-static func get_defiant_clans(edict: EdictData) -> Array[String]:
+static func get_defiant_clans(edict: EdictData) -> Array:
 	var result: Array[String] = []
 	for clan: String in edict.compliance_by_clan:
 		if edict.compliance_by_clan[clan] == EdictData.ComplianceStatus.DEFIANT:
@@ -558,7 +558,7 @@ static func process_daily_compliance(
 	active_wars: Array[WarData],
 	characters: Array[L5RCharacterData],
 	ic_day: int,
-) -> Array[Dictionary]:
+) -> Array:
 	var results: Array[Dictionary] = []
 	for edict: EdictData in active_edicts:
 		if not edict.is_active:
@@ -571,7 +571,7 @@ static func process_daily_compliance(
 
 		var deadline_passed: bool = edict.compliance_deadline_ic_day >= 0 and ic_day >= edict.compliance_deadline_ic_day
 		if deadline_passed:
-			var newly_defiant: Array[String] = _mark_pending_as_defiant(edict)
+			var newly_defiant: Array = _mark_pending_as_defiant(edict)
 			for clan: String in newly_defiant:
 				var consequence: Dictionary = compute_defiance_consequences(edict, clan)
 				_apply_defiance_to_characters(consequence, characters, edict.emperor_id)
@@ -602,7 +602,7 @@ static func _check_ceasefire_auto_compliance(
 				edict.compliance_by_clan[clan] = EdictData.ComplianceStatus.COMPLIANT
 
 
-static func _mark_pending_as_defiant(edict: EdictData) -> Array[String]:
+static func _mark_pending_as_defiant(edict: EdictData) -> Array:
 	var newly_defiant: Array[String] = []
 	for clan: String in edict.compliance_by_clan:
 		if edict.compliance_by_clan[clan] == EdictData.ComplianceStatus.PENDING:

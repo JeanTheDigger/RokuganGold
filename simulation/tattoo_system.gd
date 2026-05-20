@@ -141,7 +141,7 @@ const ALL_BODY_LOCATIONS: Array[Enums.TattooBodyLocation] = [
 ]
 
 
-static func get_occupied_locations(tattoos: Array[TattooData], character_id: int) -> Array[Enums.TattooBodyLocation]:
+static func get_occupied_locations(tattoos: Array, character_id: int) -> Array[Enums.TattooBodyLocation]:
 	var result: Array[Enums.TattooBodyLocation] = []
 	for t: TattooData in tattoos:
 		if t.recipient_id == character_id:
@@ -149,7 +149,7 @@ static func get_occupied_locations(tattoos: Array[TattooData], character_id: int
 	return result
 
 
-static func get_available_locations(tattoos: Array[TattooData], character_id: int, is_bald: bool) -> Array[Enums.TattooBodyLocation]:
+static func get_available_locations(tattoos: Array, character_id: int, is_bald: bool) -> Array[Enums.TattooBodyLocation]:
 	var occupied: Array[Enums.TattooBodyLocation] = get_occupied_locations(tattoos, character_id)
 	var result: Array[Enums.TattooBodyLocation] = []
 	for loc: Enums.TattooBodyLocation in ALL_BODY_LOCATIONS:
@@ -161,7 +161,7 @@ static func get_available_locations(tattoos: Array[TattooData], character_id: in
 	return result
 
 
-static func is_location_available(tattoos: Array[TattooData], character_id: int, location: Enums.TattooBodyLocation, is_bald: bool) -> bool:
+static func is_location_available(tattoos: Array, character_id: int, location: Enums.TattooBodyLocation, is_bald: bool) -> bool:
 	if location == Enums.TattooBodyLocation.HEAD and not is_bald:
 		return false
 	for t: TattooData in tattoos:
@@ -170,7 +170,7 @@ static func is_location_available(tattoos: Array[TattooData], character_id: int,
 	return true
 
 
-static func get_character_tattoos(tattoos: Array[TattooData], character_id: int) -> Array[TattooData]:
+static func get_character_tattoos(tattoos: Array, character_id: int) -> Array:
 	var result: Array[TattooData] = []
 	for t: TattooData in tattoos:
 		if t.recipient_id == character_id:
@@ -363,7 +363,7 @@ static func get_current_rank_allotment(school: String, school_rank: int) -> int:
 	return allotments.get(school_rank, 0)
 
 
-static func count_ability_tattoos(tattoos: Array[TattooData], character_id: int) -> int:
+static func count_ability_tattoos(tattoos: Array, character_id: int) -> int:
 	var count: int = 0
 	for t: TattooData in tattoos:
 		if t.recipient_id == character_id and t.is_ability_tattoo:
@@ -526,21 +526,21 @@ static func get_dragon_decorative_count(rng_value: float) -> int:
 # Permanent Passive Tattoo Checks
 # =============================================================================
 
-static func has_mantis_tattoo(tattoos: Array[TattooData], character_id: int) -> bool:
+static func has_mantis_tattoo(tattoos: Array, character_id: int) -> bool:
 	for t: TattooData in tattoos:
 		if t.recipient_id == character_id and t.is_ability_tattoo and t.ability_granted == Enums.TattooAbility.MANTIS:
 			return true
 	return false
 
 
-static func has_ocean_tattoo(tattoos: Array[TattooData], character_id: int) -> bool:
+static func has_ocean_tattoo(tattoos: Array, character_id: int) -> bool:
 	for t: TattooData in tattoos:
 		if t.recipient_id == character_id and t.is_ability_tattoo and t.ability_granted == Enums.TattooAbility.OCEAN:
 			return true
 	return false
 
 
-static func get_active_ability_tattoo(tattoos: Array[TattooData], character_id: int, active_tattoo_ability: Enums.TattooAbility) -> TattooData:
+static func get_active_ability_tattoo(tattoos: Array, character_id: int, active_tattoo_ability: Enums.TattooAbility) -> TattooData:
 	if active_tattoo_ability == Enums.TattooAbility.NONE:
 		return null
 	for t: TattooData in tattoos:

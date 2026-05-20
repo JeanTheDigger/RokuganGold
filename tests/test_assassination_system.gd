@@ -935,8 +935,8 @@ func test_pc_crisis_window_accident() -> void:
 
 
 func test_target_offline_detection() -> void:
-	assert_true(AssassinationSystem.is_target_pc_offline(5, [1, 2, 3] as Array[int]))
-	assert_false(AssassinationSystem.is_target_pc_offline(2, [1, 2, 3] as Array[int]))
+	assert_true(AssassinationSystem.is_target_pc_offline(5, [1, 2, 3]))
+	assert_false(AssassinationSystem.is_target_pc_offline(2, [1, 2, 3]))
 
 
 func test_pc_crisis_event_poison() -> void:

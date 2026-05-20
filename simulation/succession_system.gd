@@ -119,7 +119,7 @@ static func get_candidates(
 	deceased: L5RCharacterData,
 	chars_by_id: Dictionary,
 	position_clan: String = "",
-) -> Array[Dictionary]:
+) -> Array:
 	var clan: String = position_clan if position_clan != "" else deceased.clan
 	var candidates: Array[Dictionary] = []
 
@@ -342,7 +342,7 @@ static func evaluate_all_candidates(
 	candidates: Array[Dictionary],
 	position_demand: String = "military",
 	topics_by_character: Dictionary = {},
-) -> Array[Dictionary]:
+) -> Array:
 	var weights: Dictionary = compute_personality_weights(lord.bushido_virtue, lord.shourido_virtue)
 	var results: Array[Dictionary] = []
 
@@ -350,7 +350,7 @@ static func evaluate_all_candidates(
 		var candidate_char: L5RCharacterData = c.get("character")
 		if candidate_char == null:
 			continue
-		var topics: Array[Dictionary] = topics_by_character.get(c["id"], [])
+		var topics: Array = topics_by_character.get(c["id"], [])
 		var bot: int = c.get("birth_order_type", c["priority"])
 		var result: Dictionary = evaluate_candidate(lord, candidate_char, c["priority"], weights, position_demand, topics, bot)
 		results.append(result)
@@ -784,7 +784,7 @@ static func _score_school_type(school_type: Enums.SchoolType, demand: String) ->
 
 
 static func _score_skills(candidate: L5RCharacterData, demand: String) -> int:
-	var relevant_skills: Array[String] = _get_relevant_skills(demand)
+	var relevant_skills: Array = _get_relevant_skills(demand)
 	var total: int = 0
 	var count: int = 0
 	for skill_name: String in relevant_skills:
@@ -803,7 +803,7 @@ static func _score_skills(candidate: L5RCharacterData, demand: String) -> int:
 	return 1
 
 
-static func _get_relevant_skills(demand: String) -> Array[String]:
+static func _get_relevant_skills(demand: String) -> Array:
 	match demand:
 		"military":
 			return ["Kenjutsu", "Battle", "Defense"]
@@ -815,7 +815,7 @@ static func _get_relevant_skills(demand: String) -> Array[String]:
 			return ["Etiquette", "Kenjutsu", "Courtier"]
 
 
-static func _score_achievements(topics: Array[Dictionary]) -> int:
+static func _score_achievements(topics: Array) -> int:
 	var score: int = 0
 	for topic: Dictionary in topics:
 		var t_type: String = topic.get("topic_type", "")

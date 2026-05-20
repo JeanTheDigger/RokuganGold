@@ -514,7 +514,7 @@ static func _execute_public_performance(
 	characters_by_id: Dictionary,
 ) -> Dictionary:
 	var art_form: PerformativeArtsSystem.ArtForm = PerformativeArtsSystem.get_best_art_form(character)
-	var witness_ids: Array[int] = _get_co_located_ids(character, characters_by_id)
+	var witness_ids: Array = _get_co_located_ids(character, characters_by_id)
 	var fatigue_count: int = character.pieces_seen.get("_performance_count_today", 0)
 
 	var perf_result: Dictionary = PerformativeArtsSystem.resolve_public_performance(
@@ -634,7 +634,7 @@ static func _execute_intimidation(
 			attacker_roll, defender_roll, target.honor, secret_tier, disp_tier
 		)
 	elif is_public:
-		var witness_ids: Array[int] = _get_co_located_ids(character, characters_by_id)
+		var witness_ids: Array = _get_co_located_ids(character, characters_by_id)
 		r = IntimidationSystem.resolve_public_intimidation(
 			attacker_roll, defender_roll, target.honor, 0, witness_ids, disp_tier
 		)
@@ -803,7 +803,7 @@ static func _execute_public_insult(
 	var success: bool = attacker_total >= defender_total
 	var margin: int = attacker_total - defender_total
 	var raises: int = maxi(int(margin / 5.0), 0)
-	var witness_ids: Array[int] = _get_co_located_ids(character, characters_by_id)
+	var witness_ids: Array = _get_co_located_ids(character, characters_by_id)
 
 	var insult_type: String = action.metadata.get("insult_type", "self")
 
@@ -864,7 +864,7 @@ static func _execute_broadcast_social(
 	var success: bool = roll_result.get("success", false)
 	var margin: int = roll_result.get("total", 0) - tn
 	var raises: int = maxi(int(margin / 5.0), 0)
-	var witness_ids: Array[int] = _get_co_located_ids(character, characters_by_id)
+	var witness_ids: Array = _get_co_located_ids(character, characters_by_id)
 
 	var effects: Dictionary = {}
 	if success:
@@ -934,7 +934,7 @@ static func _execute_public_debate(
 
 	var margin: int = a_roll - b_roll
 	var raises: int = maxi(int(margin / 5.0), 0) if margin > 0 else 0
-	var witness_ids: Array[int] = _get_co_located_ids(character, characters_by_id)
+	var witness_ids: Array = _get_co_located_ids(character, characters_by_id)
 
 	var witness_disp_a: Dictionary = {}
 	var witness_disp_b: Dictionary = {}
@@ -1293,7 +1293,7 @@ static func _execute_expose_publicly(
 		return {}
 
 	var has_proof: bool = action.metadata.get("has_proof", false)
-	var witness_ids: Array[int] = _get_co_located_ids(character, characters_by_id)
+	var witness_ids: Array = _get_co_located_ids(character, characters_by_id)
 	var r: Dictionary = SecretSystem.expose_publicly(secret, character, subject, witness_ids, characters_by_id, has_proof)
 	r["subject_id"] = subject_id
 	r["secret_id"] = secret.secret_id
@@ -1317,7 +1317,7 @@ static func _execute_expose_publicly(
 static func _get_co_located_ids(
 	character: L5RCharacterData,
 	characters_by_id: Dictionary,
-) -> Array[int]:
+) -> Array:
 	var ids: Array[int] = []
 	var loc: String = character.physical_location
 	if loc.is_empty():
@@ -3330,7 +3330,7 @@ static func _execute_provoke_emotion(
 			d_willpower, d_etiquette, 0
 		).get("total", 0)
 
-	var witness_ids: Array[int] = _get_co_located_ids(character, characters_by_id)
+	var witness_ids: Array = _get_co_located_ids(character, characters_by_id)
 	var resolution: Dictionary = CourtActionSystem.resolve_provoke_emotion(
 		attacker_roll, defender_roll, witness_ids
 	)
@@ -3781,7 +3781,7 @@ static func _execute_observe_court_attendees(
 	var roll_result: Dictionary = dice_engine.roll_skill_check(trait_val, skill_rank, 0)
 	var roll_total: int = roll_result.get("total", 0)
 
-	var observable_ids: Array[int] = action.metadata.get("observable_attendee_ids", [] as Array[int])
+	var observable_ids: Array = action.metadata.get("observable_attendee_ids", [])
 	var resolution: Dictionary = CourtActionSystem.resolve_observe_court_attendees(
 		roll_total, observable_ids.size()
 	)
@@ -3790,7 +3790,7 @@ static func _execute_observe_court_attendees(
 	if resolution.get("success", false):
 		var learn_count: int = resolution.get("learn_count", 0)
 		# Pick learn_count random IDs from the observable pool.
-		var pool: Array[int] = observable_ids.duplicate()
+		var pool: Array = observable_ids.duplicate()
 		var learned_ids: Array[int] = []
 		for _i: int in range(learn_count):
 			if pool.is_empty():
@@ -3935,7 +3935,7 @@ static func _execute_conduct_tea_ceremony(
 			"effects": {},
 		}
 
-	var candidate_ids: Array[int] = action.metadata.get("participant_ids", [] as Array[int])
+	var candidate_ids: Array = action.metadata.get("participant_ids", [])
 	var actual_participants: Array[int] = []
 	for pid: Variant in candidate_ids:
 		var pid_int: int = int(pid)
@@ -4092,7 +4092,7 @@ static func _execute_cancel_hunt(
 		}
 
 	var active_hunt_id: int = ctx.known_objectives.get("active_hunt_id", -1)
-	var accepted_invitee_ids: Array[int] = action.metadata.get("accepted_invitee_ids", [] as Array[int])
+	var accepted_invitee_ids: Array = action.metadata.get("accepted_invitee_ids", [])
 
 	return {
 		"success": true,
@@ -4377,7 +4377,7 @@ static func _execute_apply_tattoo(
 			"reason": "insufficient_ap", "effects": {},
 		}
 
-	var world_tattoos: Array[TattooData] = action.metadata.get("world_tattoos", [] as Array[TattooData])
+	var world_tattoos: Array = action.metadata.get("world_tattoos", [])
 	var is_bald: bool = action.metadata.get("recipient_is_bald", false)
 	if not TattooSystem.is_location_available(world_tattoos, recipient_id, body_location, is_bald):
 		return {

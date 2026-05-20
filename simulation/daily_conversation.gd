@@ -218,7 +218,7 @@ static func resolve_settlement_conversations(
 	rng: Array[int],
 	current_season: int,
 	topics_by_id: Dictionary = {},
-) -> Array[Dictionary]:
+) -> Array:
 	var results: Array[Dictionary] = []
 	var conversation_counts: Dictionary = {}
 	var rng_index: int = 0

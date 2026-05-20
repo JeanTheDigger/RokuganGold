@@ -78,14 +78,14 @@ func _build_world_state(context_flag: Enums.ContextFlag) -> Dictionary:
 		"context_flag": context_flag,
 		"season": 1,
 		"ic_day": 10,
-		"characters_present": [2] as Array[int],
+		"characters_present": [2],
 		"is_lord": false,
-		"known_topics": [] as Array[int],
+		"known_topics": [],
 		"known_positions": {},
 		"known_objectives": {},
-		"known_contacts": [] as Array[int],
+		"known_contacts": [],
 		"pending_events": [],
-		"action_log": [] as Array[String],
+		"action_log": [],
 	}
 
 

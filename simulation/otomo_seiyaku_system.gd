@@ -57,7 +57,7 @@ static func make_pair_key(clan_a: String, clan_b: String) -> String:
 	return clan_b + "||" + clan_a
 
 
-static func get_all_clan_pairs() -> Array[String]:
+static func get_all_clan_pairs() -> Array:
 	var pairs: Array[String] = []
 	for i: int in range(GREAT_CLANS.size()):
 		for j: int in range(i + 1, GREAT_CLANS.size()):
@@ -72,9 +72,9 @@ static func scan_champion_dispositions(
 	threshold: int,
 	active_wars: Array = [],
 	emperor_war_exemptions: bool = false,
-) -> Array[Dictionary]:
+) -> Array:
 	var alarms: Array[Dictionary] = []
-	var pairs: Array[String] = get_all_clan_pairs()
+	var pairs: Array = get_all_clan_pairs()
 	for pair_key: String in pairs:
 		var disp: int = champion_dispositions.get(pair_key, 0)
 		if disp < threshold:
@@ -150,7 +150,7 @@ static func assign_directives(
 	alarms: Array[Dictionary],
 	available_operative_ids: Array[int],
 	pool_size: int,
-) -> Array[Dictionary]:
+) -> Array:
 	var new_directives: Array[Dictionary] = []
 	var directives: Dictionary = state["active_directives"]
 	var assigned: Dictionary = state["assigned_operatives"]
@@ -201,7 +201,7 @@ static func update_escalation(
 	state: Dictionary,
 	champion_dispositions: Dictionary,
 	threshold: int,
-) -> Array[String]:
+) -> Array:
 	var escalated_pairs: Array[String] = []
 	var seasons: Dictionary = state["seasons_above_threshold"]
 	var directives: Dictionary = state["active_directives"]
@@ -227,7 +227,7 @@ static func check_cancellations(
 	state: Dictionary,
 	champion_dispositions: Dictionary,
 	threshold: int,
-) -> Array[String]:
+) -> Array:
 	var cancelled: Array[String] = []
 	var cancel_threshold: int = threshold - CANCEL_BUFFER
 	var directives: Dictionary = state["active_directives"]
@@ -384,17 +384,17 @@ static func process_seasonal_review(
 	var pool_size: int = get_operative_pool_size(archetype, otomo_courtier_count)
 	var emperor_war_exemptions: bool = (archetype == StrategicReview.EmperorArchetype.WARLIKE)
 
-	var cancelled: Array[String] = check_cancellations(state, champion_dispositions, threshold)
+	var cancelled: Array = check_cancellations(state, champion_dispositions, threshold)
 
-	var alarms: Array[Dictionary] = scan_champion_dispositions(
+	var alarms: Array = scan_champion_dispositions(
 		champion_dispositions, threshold, active_wars, emperor_war_exemptions,
 	)
 
-	var new_directives: Array[Dictionary] = assign_directives(
+	var new_directives: Array = assign_directives(
 		state, alarms, available_operative_ids, pool_size,
 	)
 
-	var escalated: Array[String] = update_escalation(
+	var escalated: Array = update_escalation(
 		state, champion_dispositions, threshold,
 	)
 

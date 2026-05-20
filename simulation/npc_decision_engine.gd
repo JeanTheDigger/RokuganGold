@@ -44,8 +44,8 @@ static func build_context(
 	# Lord & court (s55.34)
 	ctx.lord_id = character.lord_id
 	ctx.active_court_at_location = world_state.get("active_court_at_location", {})
-	ctx.upcoming_courts = world_state.get("upcoming_courts", [] as Array[Dictionary])
-	ctx.held_leverage = world_state.get("held_leverage", [] as Array[Dictionary])
+	ctx.upcoming_courts = world_state.get("upcoming_courts", [])
+	ctx.held_leverage = world_state.get("held_leverage", [])
 	ctx.known_npc_locations = world_state.get("known_npc_locations", {})
 	ctx.court_session_state = world_state.get("court_session_state", {})
 	ctx.court_settlement_id = world_state.get("court_settlement_id", -1)
@@ -60,7 +60,7 @@ static func build_context(
 	ctx.insight_rank = CharacterStats.get_insight_rank(character)
 
 	# Social knowledge — read through legitimate channels only (GDD s20)
-	ctx.characters_present = world_state.get("characters_present", [] as Array[int])
+	ctx.characters_present = world_state.get("characters_present", [])
 	ctx.dispositions = character.disposition_values.duplicate()
 	ctx.disposition_values = character.disposition_values.duplicate()
 
@@ -156,7 +156,7 @@ static func build_context(
 	ctx.can_sustain_iron_upkeep = world_state.get("can_sustain_iron_upkeep", true)
 	ctx.active_wars = world_state.get("active_wars", [])
 	ctx.escalating_conflicts = world_state.get("escalating_conflicts", [])
-	ctx.taint_topic_province_ids = world_state.get("taint_topic_province_ids", [] as Array[int])
+	ctx.taint_topic_province_ids = world_state.get("taint_topic_province_ids", [])
 	ctx.famine_crisis_province_ids = _extract_famine_province_ids(
 		character, world_state.get("active_topics", [])
 	)
@@ -188,7 +188,7 @@ static func build_context(
 	# State
 	ctx.pending_events = world_state.get("pending_events", [])
 	ctx.ap_remaining = character.action_points_current
-	ctx.action_log = world_state.get("action_log", [] as Array[Dictionary])
+	ctx.action_log = world_state.get("action_log", [])
 
 	# TEND_WOUNDED_ALLY opportunity injection (s57.31.7).
 	# Fires when: healer has Medicine 1+, has kit, wounded ally present, not yet treated today.
@@ -319,7 +319,7 @@ static func generate_options(
 	character: L5RCharacterData = null,
 ) -> Array[NPCDataStructures.ScoredAction]:
 	var options: Array[NPCDataStructures.ScoredAction] = []
-	var available_actions: Array[String] = _get_actions_for_context(ctx.context_flag)
+	var available_actions: Array = _get_actions_for_context(ctx.context_flag)
 	var has_mil_rank: bool = ctx.military_rank > Enums.MilitaryRank.NONE
 
 	if need.need_type == "RESPOND_TO_SEPPUKU":
@@ -424,7 +424,7 @@ static func _apply_tattoo_precondition_filter(
 	if tattooing_rank < 1:
 		return _remove_action(options, "APPLY_TATTOO")
 
-	var world_tattoos: Array[TattooData] = world_state.get("tattoos", [] as Array[TattooData])
+	var world_tattoos: Array = world_state.get("tattoos", [])
 	var recipient_id: int = -1
 	for option: NPCDataStructures.ScoredAction in options:
 		if option.action_id == "APPLY_TATTOO":
@@ -907,7 +907,7 @@ static func _decompose_objective(
 	return ObjectiveDecomposer.decompose(objective, ctx)
 
 
-static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array[String]:
+static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 	match context_flag:
 		Enums.ContextFlag.AT_OWN_HOLDINGS:
 			return [
@@ -1673,7 +1673,7 @@ static func _compute_urgency_bonus(
 		var applies_to: Variant = rule.get("applies_to", "")
 		var stacks: bool = rule.get("stacks_per_crisis", false)
 
-		var instances: Array[Dictionary] = _evaluate_urgency_condition(condition, ctx, scoring_tables)
+		var instances: Array = _evaluate_urgency_condition(condition, ctx, scoring_tables)
 		if instances.is_empty():
 			continue
 		if not _action_matches_urgency_category(action_id, applies_to, need.need_type, scoring_tables):
@@ -1695,7 +1695,7 @@ static func _evaluate_urgency_condition(
 	condition: String,
 	ctx: NPCDataStructures.ContextSnapshot,
 	_scoring_tables: Dictionary,
-) -> Array[Dictionary]:
+) -> Array:
 	match condition:
 		"active_crisis_in_relevance_range":
 			var instances: Array[Dictionary] = []
@@ -2259,7 +2259,7 @@ static func _select_letter_target(
 
 	if ctx.lord_id >= 0:
 		return ctx.lord_id
-	var met: Array[int] = ctx.met_characters
+	var met: Array = ctx.met_characters
 	if not met.is_empty():
 		return met[0]
 	return -1
@@ -2511,7 +2511,7 @@ static func _populate_action_metadata(
 		var void_ring: int = ctx.skill_ranks.get("_void_ring", 2)
 		var tea_rank: int = ctx.skill_ranks.get("Tea Ceremony", 0)
 		var max_total: int = TeaCeremonySystem.max_viable_count(void_ring, tea_rank)
-		var eligible: Array[int] = TeaCeremonySystem.select_eligible_ids(
+		var eligible: Array = TeaCeremonySystem.select_eligible_ids(
 			ctx.character_id, ctx.characters_present, ctx.dispositions
 		)
 		var guests: Array[int] = []
@@ -3146,16 +3146,16 @@ static func _build_feasibility_data(
 	var levy_before_planting: bool = current_season == "spring"
 	var spans_autumn: bool = true
 
-	var vassal_stockpiles: Array[Dictionary] = _collect_vassal_stockpiles(
+	var vassal_stockpiles: Array = _collect_vassal_stockpiles(
 		character, world_state, settlements, provinces,
 	)
 	var active_wars: Array = world_state.get("active_wars", [])
-	var raidable: Array[Dictionary] = _collect_raidable_provinces(
+	var raidable: Array = _collect_raidable_provinces(
 		character.clan, provinces, settlements, active_wars,
 	)
 	var trade_routes: Array = world_state.get("trade_routes", [])
 	var has_routes: bool = _has_active_trade_routes(trade_routes, character.clan)
-	var allied: Array[Dictionary] = _collect_allied_surplus(
+	var allied: Array = _collect_allied_surplus(
 		character, world_state, settlements, provinces,
 	)
 	var war_info: Dictionary = _get_war_context(character.clan, active_wars)
@@ -3192,7 +3192,7 @@ static func _collect_vassal_stockpiles(
 	world_state: Dictionary,
 	settlements: Array,
 	provinces: Array,
-) -> Array[Dictionary]:
+) -> Array:
 	var chars: Dictionary = world_state.get("characters_by_id", {})
 	var result: Array[Dictionary] = []
 	for cid: Variant in chars:
@@ -3232,7 +3232,7 @@ static func _collect_raidable_provinces(
 	provinces: Array,
 	settlements: Array,
 	active_wars: Array,
-) -> Array[Dictionary]:
+) -> Array:
 	var at_war_clans: Dictionary = {}
 	for w: Variant in active_wars:
 		if w is Dictionary:
@@ -3285,7 +3285,7 @@ static func _collect_allied_surplus(
 	world_state: Dictionary,
 	settlements: Array,
 	provinces: Array,
-) -> Array[Dictionary]:
+) -> Array:
 	var chars: Dictionary = world_state.get("characters_by_id", {})
 	var result: Array[Dictionary] = []
 	for cid: Variant in chars:
@@ -3450,7 +3450,7 @@ static func _select_levy_unit_type(ctx: NPCDataStructures.ContextSnapshot) -> in
 static func _filter_province_ids_by_clan(
 	province_clan_map: Variant,
 	clan: String,
-) -> Array[int]:
+) -> Array:
 	var result: Array[int] = []
 	if province_clan_map is Dictionary:
 		for pid: Variant in province_clan_map:
@@ -3466,9 +3466,9 @@ static func _filter_province_ids_by_clan(
 static func _extract_famine_province_ids(
 	character: L5RCharacterData,
 	active_topics: Array,
-) -> Array[int]:
+) -> Array:
 	var result: Array[int] = []
-	var known: Array[int] = character.topic_pool
+	var known: Array = character.topic_pool
 	for t: Variant in active_topics:
 		if not (t is TopicData):
 			continue
@@ -3489,7 +3489,7 @@ static func _extract_expiring_favor_ids(
 	favors: Array,
 	character_id: int,
 	ic_day: int,
-) -> Array[int]:
+) -> Array:
 	var result: Array[int] = []
 	# 7 OOC days = 28 IC days (4 IC days per OOC day)
 	var threshold: int = 28
@@ -3508,7 +3508,7 @@ static func _extract_expiring_favor_ids(
 
 static func _extract_starvation_province_ids(
 	province_statuses: Array,
-) -> Array[int]:
+) -> Array:
 	var result: Array[int] = []
 	for ps: Variant in province_statuses:
 		if ps is NPCDataStructures.ProvinceStatus:
@@ -3520,7 +3520,7 @@ static func _extract_starvation_province_ids(
 
 static func _extract_cut_supply_army_ids(
 	world_state: Dictionary,
-) -> Array[int]:
+) -> Array:
 	var result: Array[int] = []
 	var tethers: Array = world_state.get("active_tethers", [])
 	for t: Variant in tethers:
@@ -3535,7 +3535,7 @@ static func _extract_cut_supply_army_ids(
 static func _find_marriageable_vassals(
 	lord: L5RCharacterData,
 	chars_by_id: Dictionary,
-) -> Array[int]:
+) -> Array:
 	var result: Array[int] = []
 	for cid: int in chars_by_id:
 		var c: L5RCharacterData = chars_by_id[cid] as L5RCharacterData

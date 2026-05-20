@@ -165,7 +165,7 @@ static func select_agenda_topics(
 	topics: Array[TopicData],
 	court_type: CourtSessionData.CourtType,
 	crisis_trigger_topic_id: int = -1,
-) -> Array[int]:
+) -> Array:
 	var max_topics: int = MAX_AGENDA_TOPICS
 	if court_type == CourtSessionData.CourtType.IMPERIAL_WINTER_COURT:
 		max_topics = MAX_AGENDA_TOPICS_WINTER_COURT
@@ -195,7 +195,7 @@ static func select_agenda_topics(
 	return result
 
 
-static func set_agenda(court: CourtSessionData, topic_ids: Array[int]) -> void:
+static func set_agenda(court: CourtSessionData, topic_ids: Array) -> void:
 	court.agenda_topic_ids = topic_ids.duplicate()
 
 
@@ -265,7 +265,7 @@ static func get_active_court_at_settlement(
 	return null
 
 
-static func get_active_courts(courts: Array[CourtSessionData]) -> Array[CourtSessionData]:
+static func get_active_courts(courts: Array) -> Array:
 	var result: Array[CourtSessionData] = []
 	for c: CourtSessionData in courts:
 		if c.phase == CourtSessionData.CourtPhase.ACTIVE:
@@ -276,7 +276,7 @@ static func get_active_courts(courts: Array[CourtSessionData]) -> Array[CourtSes
 static func get_upcoming_courts(
 	courts: Array[CourtSessionData],
 	current_ic_day: int,
-) -> Array[CourtSessionData]:
+) -> Array:
 	var result: Array[CourtSessionData] = []
 	for c: CourtSessionData in courts:
 		if c.phase == CourtSessionData.CourtPhase.SCHEDULED and c.start_ic_day > current_ic_day:

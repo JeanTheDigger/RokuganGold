@@ -23,7 +23,7 @@ enum Category {
 @export var tier: Tier = Tier.TIER_4
 @export var category: Category = Category.PERSONAL
 @export var momentum: float = 0.0
-@export var provinces_affected: Array[int] = []
+@export var provinces_affected: Array = []
 @export var clan_involved: String = ""
 @export var family_involved: String = ""
 @export var subject_character_id: int = -1

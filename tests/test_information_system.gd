@@ -757,7 +757,7 @@ func test_arrival_observation_updates_contacts_by_clan() -> void:
 func test_update_intelligence_replaces_same_type_same_target() -> void:
 	var c := L5RCharacterData.new()
 	c.character_id = 800
-	c.knowledge_pool = [] as Array[KnowledgeEntry]
+	c.knowledge_pool = []
 	var old_entry := InformationSystem.make_entry(
 		Enums.KnowledgeSource.INTELLIGENCE,
 		"personality_insight",
@@ -785,7 +785,7 @@ func test_update_intelligence_replaces_same_type_same_target() -> void:
 func test_update_intelligence_keeps_different_targets() -> void:
 	var c := L5RCharacterData.new()
 	c.character_id = 801
-	c.knowledge_pool = [] as Array[KnowledgeEntry]
+	c.knowledge_pool = []
 	var e1 := InformationSystem.make_entry(
 		Enums.KnowledgeSource.INTELLIGENCE,
 		"personality_insight",
@@ -807,7 +807,7 @@ func test_update_intelligence_keeps_different_targets() -> void:
 func test_update_intelligence_keeps_different_types() -> void:
 	var c := L5RCharacterData.new()
 	c.character_id = 802
-	c.knowledge_pool = [] as Array[KnowledgeEntry]
+	c.knowledge_pool = []
 	var e1 := InformationSystem.make_entry(
 		Enums.KnowledgeSource.INTELLIGENCE,
 		"personality_insight",
@@ -829,7 +829,7 @@ func test_update_intelligence_keeps_different_types() -> void:
 func test_update_intelligence_non_dedup_type_appends() -> void:
 	var c := L5RCharacterData.new()
 	c.character_id = 803
-	c.knowledge_pool = [] as Array[KnowledgeEntry]
+	c.knowledge_pool = []
 	var e1 := InformationSystem.make_entry(
 		Enums.KnowledgeSource.INTELLIGENCE,
 		"shadow_surveillance",
@@ -851,7 +851,7 @@ func test_update_intelligence_non_dedup_type_appends() -> void:
 func test_false_info_replaces_true_info() -> void:
 	var actor := L5RCharacterData.new()
 	actor.character_id = 804
-	actor.knowledge_pool = [] as Array[KnowledgeEntry]
+	actor.knowledge_pool = []
 	var true_entry := InformationSystem.make_entry(
 		Enums.KnowledgeSource.INTELLIGENCE,
 		"personality_insight",

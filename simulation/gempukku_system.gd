@@ -182,9 +182,9 @@ static func generate_name(clan: String, gender: String, dice_engine: DiceEngine)
 		return "Unknown"
 
 	var prefix: String = "male" if gender == "male" else "female"
-	var initials: Array[String] = tables.get(prefix + "_initial", [])
-	var middles: Array[String] = tables.get(prefix + "_middle", [])
-	var finals: Array[String] = tables.get(prefix + "_final", [])
+	var initials: Array = tables.get(prefix + "_initial", [])
+	var middles: Array = tables.get(prefix + "_middle", [])
+	var finals: Array = tables.get(prefix + "_final", [])
 
 	if initials.is_empty() or finals.is_empty():
 		return "Unknown"
@@ -352,7 +352,7 @@ static func generate_replenishment_character(
 	clan: String,
 	dice_engine: DiceEngine,
 ) -> L5RCharacterData:
-	var families: Array[String] = _get_clan_families(clan)
+	var families: Array = _get_clan_families(clan)
 	if families.is_empty():
 		return null
 
@@ -380,7 +380,7 @@ static func generate_replenishment_character(
 	return character
 
 
-static func _get_clan_families(clan: String) -> Array[String]:
+static func _get_clan_families(clan: String) -> Array:
 	match clan:
 		"Crab":
 			return ["Hida", "Hiruma", "Kaiu", "Kuni", "Yasuki"]
@@ -413,11 +413,11 @@ static func process_seasonal_gempukku(
 	settlement_province_map: Dictionary = {},
 ) -> Dictionary:
 	var results: Dictionary = {
-		"new_characters": [] as Array[L5RCharacterData],
-		"graduated_child_ids": [] as Array[int],
-		"replenishment_characters": [] as Array[L5RCharacterData],
-		"natural_deaths": [] as Array[int],
-		"musha_shugyo_triggered": [] as Array[int],
+		"new_characters": [],
+		"graduated_child_ids": [],
+		"replenishment_characters": [],
+		"natural_deaths": [],
+		"musha_shugyo_triggered": [],
 	}
 
 	for child: ChildRecord in children:
@@ -435,7 +435,7 @@ static func process_seasonal_gempukku(
 		if MushaShugyo.evaluate_at_gempukku(character, dice_engine, ic_day):
 			results["musha_shugyo_triggered"].append(character.character_id)
 
-	var all_characters: Array[L5RCharacterData] = characters.duplicate()
+	var all_characters: Array = characters.duplicate()
 	for nc: L5RCharacterData in results["new_characters"]:
 		all_characters.append(nc)
 

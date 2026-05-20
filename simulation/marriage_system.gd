@@ -51,7 +51,7 @@ static func create_marriage(
 		"marriage_type": marriage_type,
 		"moving_character_id": moving_character_id,
 		"created_ic_day": created_ic_day,
-		"children_ids": [] as Array[int],
+		"children_ids": [],
 		"active": true,
 	}
 

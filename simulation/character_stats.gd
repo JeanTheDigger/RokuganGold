@@ -6,7 +6,7 @@ class_name CharacterStats
 static func get_ring_value(character: L5RCharacterData, ring: Enums.Ring) -> int:
 	if ring == Enums.Ring.VOID:
 		return character.void_ring
-	var traits: Array[int] = Enums.RING_TRAITS[ring]
+	var traits: Array = Enums.RING_TRAITS[ring]
 	var t1: int = character.get_trait_value(traits[0])
 	var t2: int = character.get_trait_value(traits[1])
 	return mini(t1, t2)

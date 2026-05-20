@@ -19,7 +19,7 @@ func _make_ctx() -> NPCDataStructures.ContextSnapshot:
 	ctx.characters_present = []
 	ctx.known_contacts_by_clan = {}
 	ctx.known_npc_locations = {}
-	ctx.action_log = [] as Array[Dictionary]
+	ctx.action_log = []
 	ctx.province_statuses = []
 	return ctx
 
@@ -128,7 +128,7 @@ func test_isolate_all_severed_with_confidence() -> void:
 		{"target_npc_id": 10, "action_id": "PROBE"},
 		{"target_npc_id": 10, "action_id": "READ_CHARACTER"},
 		{"target_npc_id": 10, "action_id": "READ_CHARACTER"},
-	] as Array[Dictionary]
+	]
 	var obj: Dictionary = {
 		"need_type": "ISOLATE_CHARACTER",
 		"target_npc_id": 10,
@@ -493,7 +493,7 @@ func test_confidence_gate_thorough() -> void:
 		{"target_npc_id": 10, "action_id": "PROBE"},
 		{"target_npc_id": 10, "action_id": "READ_CHARACTER"},
 		{"target_npc_id": 10, "action_id": "READ_CHARACTER"},
-	] as Array[Dictionary]
+	]
 	var obj: Dictionary = {
 		"need_type": "ISOLATE_CHARACTER",
 		"target_npc_id": 10,
@@ -509,7 +509,7 @@ func test_confidence_gate_insufficient() -> void:
 	ctx.disposition_values = {5: 10}
 	ctx.action_log = [
 		{"target_npc_id": 10, "action_id": "PROBE"},
-	] as Array[Dictionary]
+	]
 	var obj: Dictionary = {
 		"need_type": "ISOLATE_CHARACTER",
 		"target_npc_id": 10,

@@ -814,14 +814,14 @@ const BUFF_ALLY_UNITS: Dictionary = {
 }
 
 
-static func _reset_ally_buffs(side: Array[Dictionary]) -> void:
+static func _reset_ally_buffs(side: Array) -> void:
 	for bc: Dictionary in side:
 		bc["ally_buff_attack"] = 0
 		bc["ally_buff_defense"] = 0
 		bc["ally_buff_morale_defense"] = 0
 
 
-static func _apply_ally_buffs(side: Array[Dictionary]) -> void:
+static func _apply_ally_buffs(side: Array) -> void:
 	for bc: Dictionary in side:
 		if not is_active(bc):
 			continue
@@ -872,7 +872,7 @@ static func _apply_ally_buffs(side: Array[Dictionary]) -> void:
 
 # -- Shadowlands Ally Buffs (s2.4.7 — LOCKED) -----------------------------------
 
-static func _apply_shadowlands_ally_buffs(side: Array[Dictionary]) -> void:
+static func _apply_shadowlands_ally_buffs(side: Array) -> void:
 	for bc: Dictionary in side:
 		if not is_active(bc):
 			continue
@@ -897,7 +897,7 @@ static func _apply_shadowlands_ally_buffs(side: Array[Dictionary]) -> void:
 
 
 # Detect maho-tsukai destruction and strip Undead Revenant tactical capability.
-static func _apply_maho_tsukai_death_effect(side: Array[Dictionary]) -> void:
+static func _apply_maho_tsukai_death_effect(side: Array) -> void:
 	var maho_type: int = SHADOWLANDS_UNIT_TYPE_OFFSET + Enums.ShadowlandsUnitType.MAHO_TSUKAI
 	var just_died: bool = false
 	for bc: Dictionary in side:
@@ -942,13 +942,13 @@ static func _resolve_combat_round(
 	var pending_direct_morale: Dictionary = {}  # Dark Spellcraft (s2.4.7) — bypasses Morale Defense.
 	var commander_deaths: Array[Dictionary] = []
 
-	var active_atk_r1: Array[Dictionary] = _get_active_row(attackers, 1)
-	var active_def_r1: Array[Dictionary] = _get_active_row(defenders, 1)
-	var active_atk_r2: Array[Dictionary] = _get_active_row(attackers, 2)
-	var active_def_r2: Array[Dictionary] = _get_active_row(defenders, 2)
+	var active_atk_r1: Array = _get_active_row(attackers, 1)
+	var active_def_r1: Array = _get_active_row(defenders, 1)
+	var active_atk_r2: Array = _get_active_row(attackers, 2)
+	var active_def_r2: Array = _get_active_row(defenders, 2)
 
-	var matchups: Array[Dictionary] = _build_matchups(active_atk_r1, active_def_r1)
-	var flanks: Array[Dictionary] = _find_flanking_opportunities(
+	var matchups: Array = _build_matchups(active_atk_r1, active_def_r1)
+	var flanks: Array = _find_flanking_opportunities(
 		active_atk_r1, active_def_r1, attackers, defenders, terrain,
 	)
 
@@ -981,8 +981,8 @@ static func _resolve_combat_round(
 	for f: Dictionary in flanks:
 		var flanker: Dictionary = f["flanker"]
 		var target: Dictionary = f["target"]
-		var flanker_side: Array[Dictionary] = attackers if flanker["side"] == "attacker" else defenders
-		var target_side: Array[Dictionary] = defenders if flanker["side"] == "attacker" else attackers
+		var flanker_side: Array = attackers if flanker["side"] == "attacker" else defenders
+		var target_side: Array = defenders if flanker["side"] == "attacker" else attackers
 		var flank_dmg: int = _compute_attack_damage(
 			flanker, target, dice_engine, true, false, flanker_side, target_side,
 		)
@@ -1052,8 +1052,8 @@ static func _resolve_combat_round(
 		if bc.get("no_morale", false):
 			continue
 		var triggers: Dictionary = pending_morale_triggers[bc_id]
-		var bc_allies: Array[Dictionary] = attackers if bc["side"] == "attacker" else defenders
-		var bc_enemies: Array[Dictionary] = defenders if bc["side"] == "attacker" else attackers
+		var bc_allies: Array = attackers if bc["side"] == "attacker" else defenders
+		var bc_enemies: Array = defenders if bc["side"] == "attacker" else attackers
 		_resolve_morale_check(bc, triggers, dice_engine, commander_deaths, bc_allies, bc_enemies)
 
 	# Maho-tsukai death strips Undead Revenant tactical capability (s2.4.7 Horde Command).
@@ -1084,7 +1084,7 @@ static func _resolve_combat_round(
 	}
 
 
-static func _get_active_row(states: Array[Dictionary], row: int) -> Array[Dictionary]:
+static func _get_active_row(states: Array, row: int) -> Array:
 	var result: Array[Dictionary] = []
 	for bc: Dictionary in states:
 		if is_active(bc) and bc["row"] == row:
@@ -1095,7 +1095,7 @@ static func _get_active_row(states: Array[Dictionary], row: int) -> Array[Dictio
 static func _build_matchups(
 	atk_r1: Array[Dictionary],
 	def_r1: Array[Dictionary],
-) -> Array[Dictionary]:
+) -> Array:
 	var matchups: Array[Dictionary] = []
 	var matched_def_ids: Array[int] = []
 
@@ -1120,7 +1120,7 @@ static func _find_flanking_opportunities(
 	_all_attackers: Array[Dictionary],
 	_all_defenders: Array[Dictionary],
 	_terrain: Enums.BattleTerrainType,
-) -> Array[Dictionary]:
+) -> Array:
 	var flanks: Array[Dictionary] = []
 	var engaged_atk_ids: Array[int] = []
 	for atk: Dictionary in atk_r1:
@@ -1437,7 +1437,7 @@ static func _roll_commander_survival(
 
 # -- Reserve Promotion -----------------------------------------------------------
 
-static func _promote_reserves(states: Array[Dictionary]) -> void:
+static func _promote_reserves(states: Array) -> void:
 	for bc: Dictionary in states:
 		if bc["row"] != 2:
 			continue
@@ -1457,7 +1457,7 @@ static func _promote_reserves(states: Array[Dictionary]) -> void:
 
 # -- Battle End ------------------------------------------------------------------
 
-static func _check_battle_end(states: Array[Dictionary]) -> bool:
+static func _check_battle_end(states: Array) -> bool:
 	for bc: Dictionary in states:
 		if is_active(bc):
 			return false

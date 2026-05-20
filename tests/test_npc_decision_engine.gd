@@ -27,14 +27,14 @@ func before_each() -> void:
 		"context_flag": Enums.ContextFlag.AT_COURT,
 		"season": 1,
 		"ic_day": 10,
-		"characters_present": [2, 3, 4] as Array[int],
+		"characters_present": [2, 3, 4],
 		"is_lord": false,
-		"known_topics": [] as Array[int],
+		"known_topics": [],
 		"known_positions": {},
 		"known_objectives": {},
-		"known_contacts": [] as Array[int],
+		"known_contacts": [],
 		"pending_events": [],
-		"action_log": [] as Array[String],
+		"action_log": [],
 	}
 
 	_objectives = {
@@ -1092,7 +1092,7 @@ func test_resolve_daily_letter_includes_topic_id() -> void:
 	char.topic_pool = [42, 55]
 	char.topic_positions = {42: 30.0, 55: -10.0}
 	char.skills = {"Courtier": 3}
-	char.traits = {"Awareness": 3}
+	char.awareness = 3
 	var objectives: Dictionary = {
 		"primary": {"need_type": "RAISE_DISPOSITION", "target_npc_id": 5},
 	}
@@ -1115,7 +1115,7 @@ func test_visit_intent_set_when_at_own_holdings_with_visit_need() -> void:
 	var char := L5RCharacterData.new()
 	char.character_id = 1
 	char.skills = {"Courtier": 3}
-	char.traits = {"Awareness": 3}
+	char.awareness = 3
 	var objectives: Dictionary = {
 		"primary": {"need_type": "RAISE_DISPOSITION", "target_npc_id": 5},
 	}
@@ -1141,7 +1141,7 @@ func test_visit_intent_not_set_when_at_court() -> void:
 	var char := L5RCharacterData.new()
 	char.character_id = 1
 	char.skills = {"Courtier": 3}
-	char.traits = {"Awareness": 3}
+	char.awareness = 3
 	var objectives: Dictionary = {
 		"primary": {"need_type": "RAISE_DISPOSITION", "target_npc_id": 5},
 	}
@@ -1164,7 +1164,7 @@ func test_visit_intent_not_set_for_non_visit_need() -> void:
 	var char := L5RCharacterData.new()
 	char.character_id = 1
 	char.skills = {"Courtier": 3}
-	char.traits = {"Awareness": 3}
+	char.awareness = 3
 	var objectives: Dictionary = {
 		"primary": {"need_type": "DEFEND_PROVINCE", "target_npc_id": 5},
 	}
@@ -1187,7 +1187,7 @@ func test_visit_intent_not_set_when_target_differs_from_objective() -> void:
 	var char := L5RCharacterData.new()
 	char.character_id = 1
 	char.skills = {"Courtier": 3}
-	char.traits = {"Awareness": 3}
+	char.awareness = 3
 	var objectives: Dictionary = {
 		"primary": {"need_type": "RAISE_DISPOSITION", "target_npc_id": 5},
 	}
@@ -1216,7 +1216,7 @@ func test_meeting_proposal_set_for_secure_alliance() -> void:
 	char.character_id = 1
 	char.physical_location = "100"
 	char.skills = {"Courtier": 3}
-	char.traits = {"Awareness": 3}
+	char.awareness = 3
 	var objectives: Dictionary = {
 		"primary": {"need_type": "SECURE_ALLIANCE", "target_npc_id": 5},
 	}
@@ -1242,7 +1242,7 @@ func test_meeting_proposal_not_set_for_raise_disposition() -> void:
 	char.character_id = 1
 	char.physical_location = "100"
 	char.skills = {"Courtier": 3}
-	char.traits = {"Awareness": 3}
+	char.awareness = 3
 	var objectives: Dictionary = {
 		"primary": {"need_type": "RAISE_DISPOSITION", "target_npc_id": 5},
 	}
@@ -1268,7 +1268,7 @@ func test_meeting_proposal_not_set_when_at_court() -> void:
 	char.character_id = 1
 	char.physical_location = "100"
 	char.skills = {"Courtier": 3}
-	char.traits = {"Awareness": 3}
+	char.awareness = 3
 	var objectives: Dictionary = {
 		"primary": {"need_type": "SECURE_ALLIANCE", "target_npc_id": 5},
 	}
@@ -1837,7 +1837,7 @@ func test_conditional_kyoryoku_blocks_negotiate_when_confrontation_available() -
 	var ctx := NPCDataStructures.ContextSnapshot.new()
 	ctx.bushido_virtue = Enums.BushidoVirtue.NONE
 	ctx.shourido_virtue = Enums.ShouridoVirtue.KYORYOKU
-	ctx.characters_present = [5, 6] as Array[int]
+	ctx.characters_present = [5, 6]
 	var filter: Dictionary = {
 		"bushido": {},
 		"shourido": {
@@ -1870,7 +1870,7 @@ func test_conditional_ishi_blocks_change_course_when_committed() -> void:
 	var ctx := NPCDataStructures.ContextSnapshot.new()
 	ctx.bushido_virtue = Enums.BushidoVirtue.NONE
 	ctx.shourido_virtue = Enums.ShouridoVirtue.ISHI
-	ctx.action_log = [{"action_id": "ORDER_DEPLOY"}] as Array[Dictionary]
+	ctx.action_log = [{"action_id": "ORDER_DEPLOY"}]
 	var filter: Dictionary = {
 		"bushido": {},
 		"shourido": {
@@ -1903,7 +1903,7 @@ func test_conditional_chishiki_blocks_commit_without_intel() -> void:
 	var ctx := NPCDataStructures.ContextSnapshot.new()
 	ctx.bushido_virtue = Enums.BushidoVirtue.NONE
 	ctx.shourido_virtue = Enums.ShouridoVirtue.CHISHIKI
-	ctx.action_log = [] as Array[Dictionary]
+	ctx.action_log = []
 	var filter: Dictionary = {
 		"bushido": {},
 		"shourido": {
@@ -1931,7 +1931,7 @@ func test_conditional_chishiki_allows_commit_after_intel() -> void:
 	var ctx := NPCDataStructures.ContextSnapshot.new()
 	ctx.bushido_virtue = Enums.BushidoVirtue.NONE
 	ctx.shourido_virtue = Enums.ShouridoVirtue.CHISHIKI
-	ctx.action_log = [{"action_id": "GATHER_INTELLIGENCE"}] as Array[Dictionary]
+	ctx.action_log = [{"action_id": "GATHER_INTELLIGENCE"}]
 	var filter: Dictionary = {
 		"bushido": {},
 		"shourido": {
@@ -1979,7 +1979,7 @@ func test_conditional_harvest_rei_blocked_without_demand() -> void:
 	var ctx := NPCDataStructures.ContextSnapshot.new()
 	ctx.bushido_virtue = Enums.BushidoVirtue.REI
 	ctx.shourido_virtue = Enums.ShouridoVirtue.NONE
-	ctx.action_log = [] as Array[Dictionary]
+	ctx.action_log = []
 	ctx.active_wars = []
 	ctx.disposition_values = {}
 	ctx.pending_events = []
@@ -2006,7 +2006,7 @@ func test_conditional_harvest_rei_allowed_after_demand() -> void:
 	var ctx := NPCDataStructures.ContextSnapshot.new()
 	ctx.bushido_virtue = Enums.BushidoVirtue.REI
 	ctx.shourido_virtue = Enums.ShouridoVirtue.NONE
-	ctx.action_log = [{"action_id": "DEMAND_TRIBUTE"}] as Array[Dictionary]
+	ctx.action_log = [{"action_id": "DEMAND_TRIBUTE"}]
 	ctx.active_wars = []
 	ctx.disposition_values = {}
 	ctx.pending_events = []
@@ -2192,7 +2192,7 @@ func test_tend_wounded_ally_injected_when_conditions_met() -> void:
 	wounded.wounds_taken = 15
 	wounded.last_medicine_treatment_ic_day = -1
 
-	_world_state["characters_present"] = [10] as Array[int]
+	_world_state["characters_present"] = [10]
 	_world_state["context_flag"] = Enums.ContextFlag.AT_OWN_HOLDINGS
 
 	var chars_by_id: Dictionary = {1: healer, 10: wounded}
@@ -2213,7 +2213,7 @@ func test_tend_wounded_ally_not_injected_without_kit() -> void:
 	wounded.wounds_taken = 15
 	wounded.last_medicine_treatment_ic_day = -1
 
-	_world_state["characters_present"] = [10] as Array[int]
+	_world_state["characters_present"] = [10]
 	var chars_by_id: Dictionary = {1: healer, 10: wounded}
 	var ctx := NPCDecisionEngine.build_context(healer, _world_state, chars_by_id)
 	# Without kit, no TEND_WOUNDED_ALLY — falls through to objectives.
@@ -2235,7 +2235,7 @@ func test_tend_wounded_ally_not_injected_for_hostile() -> void:
 	wounded.wounds_taken = 15
 	wounded.last_medicine_treatment_ic_day = -1
 
-	_world_state["characters_present"] = [10] as Array[int]
+	_world_state["characters_present"] = [10]
 	var chars_by_id: Dictionary = {1: healer, 10: wounded}
 	var ctx := NPCDecisionEngine.build_context(healer, _world_state, chars_by_id)
 	for ev: Variant in ctx.pending_events:
@@ -2701,7 +2701,7 @@ func test_province_status_carries_ptl() -> void:
 
 func test_expose_privately_metadata_picks_best_secret() -> void:
 	var ctx := _make_metadata_ctx()
-	ctx.characters_present = [2, 3] as Array[int]
+	ctx.characters_present = [2, 3]
 	var s1 := SecretData.new()
 	s1.secret_id = 10
 	s1.subject_id = 3
@@ -2727,7 +2727,7 @@ func test_expose_privately_metadata_picks_best_secret() -> void:
 
 func test_expose_privately_metadata_skips_exposed_secrets() -> void:
 	var ctx := _make_metadata_ctx()
-	ctx.characters_present = [2, 3] as Array[int]
+	ctx.characters_present = [2, 3]
 	var s1 := SecretData.new()
 	s1.secret_id = 10
 	s1.subject_id = 3
@@ -2753,7 +2753,7 @@ func test_expose_privately_metadata_skips_exposed_secrets() -> void:
 func test_expose_privately_metadata_skips_own_secrets() -> void:
 	var ctx := _make_metadata_ctx()
 	ctx.character_id = 1
-	ctx.characters_present = [2, 3] as Array[int]
+	ctx.characters_present = [2, 3]
 	var s1 := SecretData.new()
 	s1.secret_id = 10
 	s1.subject_id = 1
@@ -2772,7 +2772,7 @@ func test_expose_privately_metadata_skips_own_secrets() -> void:
 func test_expose_privately_picks_recipient_from_present() -> void:
 	var ctx := _make_metadata_ctx()
 	ctx.character_id = 1
-	ctx.characters_present = [5, 7] as Array[int]
+	ctx.characters_present = [5, 7]
 	var s1 := SecretData.new()
 	s1.secret_id = 10
 	s1.subject_id = 7

@@ -22,7 +22,7 @@ func _make_char(
 	c.character_name = "Char_%d" % id
 	c.physical_location = "zone_a"
 	c.skills = {"Sincerity": 3}
-	c.rings = {"awareness": 3}
+	c.awareness = 3
 	c.bushido_virtue = Enums.BushidoVirtue.GI
 	return c
 

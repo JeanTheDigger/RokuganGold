@@ -251,7 +251,7 @@ static func select_clan_delegation(
 	slots: int,
 	agenda_topic_ids: Array[int],
 	topic_pool_map: Dictionary,
-) -> Array[int]:
+) -> Array:
 	if vassals.is_empty() or slots <= 0:
 		return []
 
@@ -317,8 +317,8 @@ static func _score_delegate_candidate(
 static func _apply_yojimbo_pull_in(
 	selected_ids: Array[int],
 	all_vassals: Array[L5RCharacterData],
-) -> Array[int]:
-	var result: Array[int] = selected_ids.duplicate()
+) -> Array:
+	var result: Array = selected_ids.duplicate()
 	var vassal_map: Dictionary = {}
 	for v: L5RCharacterData in all_vassals:
 		vassal_map[v.character_id] = v
@@ -346,7 +346,7 @@ static func select_personal_invitations(
 	agenda_topic_ids: Array[int],
 	topic_pool_map: Dictionary,
 	already_invited: Array[int],
-) -> Array[int]:
+) -> Array:
 	if candidates.is_empty() or pool_size <= 0:
 		return []
 
@@ -522,7 +522,7 @@ static func record_emperors_peace_violation(
 static func compute_glory_rewards(
 	court: CourtSessionData,
 	characters_by_id: Dictionary,
-) -> Array[Dictionary]:
+) -> Array:
 	var rewards: Array[Dictionary] = []
 
 	var host_daimyo_id: int = court.host_lord_id
@@ -564,7 +564,7 @@ static func is_home_ground_skill(skill_name: String) -> bool:
 	return skill_name in HOST_SKILL_IDS
 
 
-static func get_agenda_day_allocation() -> Array[int]:
+static func get_agenda_day_allocation() -> Array:
 	return AGENDA_TOPIC_DAYS.duplicate()
 
 
@@ -584,7 +584,7 @@ static func order_agenda_for_host(
 	host_clan: String,
 	host_champion: L5RCharacterData,
 	characters_by_id: Dictionary,
-) -> Array[int]:
+) -> Array:
 	if topic_ids.size() <= 1:
 		return topic_ids.duplicate()
 	# Build a map of topic_id → TopicData for fast lookup.
@@ -748,8 +748,8 @@ static func run_invitation_pipeline(
 		var champion: L5RCharacterData = _find_clan_champion(clan, characters_by_id)
 		if champion == null:
 			continue
-		var vassals: Array[L5RCharacterData] = _get_clan_vassals(clan, characters_by_id)
-		var delegation: Array[int] = select_clan_delegation(
+		var vassals: Array = _get_clan_vassals(clan, characters_by_id)
+		var delegation: Array = select_clan_delegation(
 			champion, vassals, per_clan, agenda_topic_ids, topic_pool_map
 		)
 		clan_delegations[clan] = delegation
@@ -846,7 +846,7 @@ static func _find_clan_champion(clan: String, characters_by_id: Dictionary) -> L
 	return best
 
 
-static func _get_clan_vassals(clan: String, characters_by_id: Dictionary) -> Array[L5RCharacterData]:
+static func _get_clan_vassals(clan: String, characters_by_id: Dictionary) -> Array:
 	var result: Array[L5RCharacterData] = []
 	for char_id: int in characters_by_id:
 		var c: L5RCharacterData = characters_by_id[char_id] as L5RCharacterData

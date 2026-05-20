@@ -253,7 +253,7 @@ func _make_candidate(id: int, skills: Dictionary, traits: Dictionary, honor: flo
 
 
 func test_resolve_championship_empty():
-	var result := FestivalSystem.resolve_championship([] as Array[Dictionary], null)
+	var result := FestivalSystem.resolve_championship([], null)
 	assert_true(result.is_empty())
 
 

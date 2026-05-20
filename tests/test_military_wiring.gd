@@ -3618,7 +3618,7 @@ func test_retreat_arrived_flag_set_on_arrival() -> void:
 	army["retreat_target_province"] = 5
 	army["is_moving"] = true
 	army["days_remaining"] = 1
-	army["path"] = [5] as Array[int]
+	army["path"] = [5]
 	army["destination_sub_tile"] = 5
 	var results: Array[Dictionary] = DayOrchestrator._process_army_movements([army])
 	assert_eq(results.size(), 1)
@@ -3643,7 +3643,7 @@ func test_retreat_arrival_clears_retreat_flags() -> void:
 	army["retreat_target_province"] = 5
 	army["is_moving"] = true
 	army["days_remaining"] = 1
-	army["path"] = [5] as Array[int]
+	army["path"] = [5]
 	army["destination_sub_tile"] = 5
 	var movement_results: Array[Dictionary] = DayOrchestrator._process_army_movements([army])
 	var tethers: Array[Dictionary] = []
@@ -3661,7 +3661,7 @@ func test_retreat_arrival_detaches_tether() -> void:
 	army["retreat_target_province"] = 5
 	army["is_moving"] = true
 	army["days_remaining"] = 1
-	army["path"] = [5] as Array[int]
+	army["path"] = [5]
 	army["destination_sub_tile"] = 5
 	var typed_path: Array[int] = [10, 20]
 	var tether: Dictionary = SupplyTetherSystem.create_tether(1, 100, typed_path)
@@ -3680,7 +3680,7 @@ func test_retreat_arrival_frees_escorts_from_tether() -> void:
 	army["retreat_target_province"] = 5
 	army["is_moving"] = true
 	army["days_remaining"] = 1
-	army["path"] = [5] as Array[int]
+	army["path"] = [5]
 	army["destination_sub_tile"] = 5
 	var typed_path: Array[int] = [10, 20]
 	var tether: Dictionary = SupplyTetherSystem.create_tether(1, 100, typed_path)
@@ -3697,7 +3697,7 @@ func test_retreat_arrival_skips_non_retreat() -> void:
 	var army: Dictionary = ArmyMovementSystem.create_army_state(1, 10, "Crab")
 	army["is_moving"] = true
 	army["days_remaining"] = 1
-	army["path"] = [5] as Array[int]
+	army["path"] = [5]
 	army["destination_sub_tile"] = 5
 	var movement_results: Array[Dictionary] = DayOrchestrator._process_army_movements([army])
 	var results: Array[Dictionary] = DayOrchestrator._process_retreat_arrivals(
@@ -3712,7 +3712,7 @@ func test_retreat_arrival_no_tether_still_cleans_flags() -> void:
 	army["retreat_target_province"] = 5
 	army["is_moving"] = true
 	army["days_remaining"] = 1
-	army["path"] = [5] as Array[int]
+	army["path"] = [5]
 	army["destination_sub_tile"] = 5
 	var movement_results: Array[Dictionary] = DayOrchestrator._process_army_movements([army])
 	var results: Array[Dictionary] = DayOrchestrator._process_retreat_arrivals(
@@ -3729,17 +3729,17 @@ func test_retreat_arrival_in_military_daily() -> void:
 	army["retreat_target_province"] = 5
 	army["is_moving"] = true
 	army["days_remaining"] = 1
-	army["path"] = [5] as Array[int]
+	army["path"] = [5]
 	army["destination_sub_tile"] = 5
 	var dice: DiceEngine = DiceEngine.new(42)
 	var result: Dictionary = DayOrchestrator._process_military_daily(
-		[army] as Array[Dictionary],
-		[] as Array[Dictionary],
-		[] as Array[Dictionary],
-		[] as Array[Dictionary],
+		[army],
+		[],
+		[],
+		[],
 		dice,
-		[] as Array[SettlementData],
-		[] as Array[Dictionary],
+		[],
+		[],
 	)
 	assert_true(result.has("retreat_arrival_results"))
 	assert_eq(result["retreat_arrival_results"].size(), 1)
@@ -3752,7 +3752,7 @@ func test_retreat_arrival_skips_already_detached_tether() -> void:
 	army["retreat_target_province"] = 5
 	army["is_moving"] = true
 	army["days_remaining"] = 1
-	army["path"] = [5] as Array[int]
+	army["path"] = [5]
 	army["destination_sub_tile"] = 5
 	var typed_path: Array[int] = [10, 20]
 	var tether: Dictionary = SupplyTetherSystem.create_tether(1, 100, typed_path)
@@ -4134,7 +4134,7 @@ func test_letter_writeback_marks_tower_letter_season() -> void:
 		"action_id": "WRITE_LETTER",
 	}]
 	DayOrchestrator._apply_garrison_shortage_letter_writebacks(
-		letter_results, {5: char}, [tower] as Array[SettlementData], 4
+		letter_results, {5: char}, [tower], 4
 	)
 	assert_eq(tower.garrison_shortage_letter_season, 4)
 
@@ -4148,7 +4148,7 @@ func test_letter_writeback_ignores_non_strengthen_wall_need() -> void:
 		"action_id": "WRITE_LETTER",
 	}]
 	DayOrchestrator._apply_garrison_shortage_letter_writebacks(
-		letter_results, {5: char}, [tower] as Array[SettlementData], 4
+		letter_results, {5: char}, [tower], 4
 	)
 	assert_eq(tower.garrison_shortage_letter_season, -1)
 
@@ -4161,7 +4161,7 @@ func test_letter_writeback_ignores_unknown_character() -> void:
 		"action_id": "WRITE_LETTER",
 	}]
 	DayOrchestrator._apply_garrison_shortage_letter_writebacks(
-		letter_results, {}, [tower] as Array[SettlementData], 4
+		letter_results, {}, [tower], 4
 	)
 	assert_eq(tower.garrison_shortage_letter_season, -1)
 
@@ -4175,7 +4175,7 @@ func test_letter_writeback_ignores_non_tower_settlement() -> void:
 		"action_id": "WRITE_LETTER",
 	}]
 	DayOrchestrator._apply_garrison_shortage_letter_writebacks(
-		letter_results, {5: char}, [town] as Array[SettlementData], 4
+		letter_results, {5: char}, [town], 4
 	)
 	# Town should be unchanged (not a WALL_TOWER)
 	assert_eq(town.garrison_shortage_letter_season, -1)
@@ -4194,7 +4194,7 @@ func test_refusal_writeback_sets_courtier_refused_flag() -> void:
 		},
 	}]
 	DayOrchestrator._apply_garrison_courtier_refusal_writebacks(
-		results, [tower] as Array[SettlementData]
+		results, [tower]
 	)
 	assert_true(tower.garrison_shortage_courtier_refused)
 
@@ -4210,7 +4210,7 @@ func test_refusal_writeback_ignores_non_refused_effects() -> void:
 		},
 	}]
 	DayOrchestrator._apply_garrison_courtier_refusal_writebacks(
-		results, [tower] as Array[SettlementData]
+		results, [tower]
 	)
 	assert_false(tower.garrison_shortage_courtier_refused)
 
@@ -4226,7 +4226,7 @@ func test_refusal_writeback_ignores_mismatched_province() -> void:
 		},
 	}]
 	DayOrchestrator._apply_garrison_courtier_refusal_writebacks(
-		results, [tower] as Array[SettlementData]
+		results, [tower]
 	)
 	assert_false(tower.garrison_shortage_courtier_refused)
 
@@ -5210,10 +5210,10 @@ func _setup_battle_scenario(
 
 	return {
 		"dice": dice,
-		"armies": [army_a, army_b] as Array[Dictionary],
-		"companies": [c1, c2] as Array[Dictionary],
+		"armies": [army_a, army_b],
+		"companies": [c1, c2],
 		"settlements": settlements,
-		"wars": [war] as Array[WarData],
+		"wars": [war],
 		"provinces": provinces,
 		"province_id": province_id,
 	}
@@ -5354,7 +5354,7 @@ func test_integration_no_battle_when_not_at_war() -> void:
 	# Pass empty wars array — should not trigger battle
 	var result: Dictionary = DayOrchestrator._process_military_daily(
 		s["armies"], [], [], [], s["dice"], s["settlements"],
-		s["companies"], {}, [] as Array[WarData], {}, s["provinces"],
+		s["companies"], {}, [], {}, s["provinces"],
 	)
 	assert_eq(result["battle_results"].size(), 0)
 
@@ -5601,7 +5601,7 @@ func test_maintain_siege_stamps_last_maintained_ic_day() -> void:
 	var applied: Array = [{
 		"effects": {"requires_siege_maintenance": true, "siege_settlement_id": 10},
 	}]
-	DayOrchestrator._process_siege_maintenance(applied, [siege] as Array[Dictionary], 42)
+	DayOrchestrator._process_siege_maintenance(applied, [siege], 42)
 	assert_eq(siege.get("last_maintained_ic_day", -1), 42)
 
 
@@ -5610,14 +5610,14 @@ func test_maintain_siege_no_match_leaves_siege_untouched() -> void:
 	var applied: Array = [{
 		"effects": {"requires_siege_maintenance": true, "siege_settlement_id": 10},
 	}]
-	DayOrchestrator._process_siege_maintenance(applied, [siege] as Array[Dictionary], 42)
+	DayOrchestrator._process_siege_maintenance(applied, [siege], 42)
 	assert_false(siege.has("last_maintained_ic_day"))
 
 
 func test_maintain_siege_skips_non_siege_effects() -> void:
 	var siege: Dictionary = {"settlement_id": 10}
 	var applied: Array = [{"effects": {"effect": "something_else"}}]
-	DayOrchestrator._process_siege_maintenance(applied, [siege] as Array[Dictionary], 42)
+	DayOrchestrator._process_siege_maintenance(applied, [siege], 42)
 	assert_false(siege.has("last_maintained_ic_day"))
 
 
@@ -5958,7 +5958,7 @@ func test_drill_success_adds_training_points() -> void:
 	}]
 	var dice: DiceEngine = DiceEngine.new(99)
 	var r: Array[Dictionary] = DayOrchestrator._process_drill_effects(
-		applied, [company] as Array[Dictionary],
+		applied, [company],
 		{1: c}, dice,
 	)
 	assert_eq(r.size(), 1)
@@ -5978,7 +5978,7 @@ func test_drill_fallback_to_commander_id() -> void:
 	}]
 	var dice: DiceEngine = DiceEngine.new(99)
 	var r: Array[Dictionary] = DayOrchestrator._process_drill_effects(
-		applied, [company] as Array[Dictionary],
+		applied, [company],
 		{1: c}, dice,
 	)
 	assert_eq(r.size(), 1)
@@ -5998,7 +5998,7 @@ func test_drill_level_up_at_10_points() -> void:
 	}]
 	var dice: DiceEngine = DiceEngine.new(99)
 	var r: Array[Dictionary] = DayOrchestrator._process_drill_effects(
-		applied, [company] as Array[Dictionary],
+		applied, [company],
 		{1: c}, dice,
 	)
 	if r[0].get("success", false) and r[0].get("points_added", 0) >= 1:
@@ -6018,7 +6018,7 @@ func test_drill_max_level_cap() -> void:
 	}]
 	var dice: DiceEngine = DiceEngine.new(99)
 	DayOrchestrator._process_drill_effects(
-		applied, [company] as Array[Dictionary],
+		applied, [company],
 		{1: c}, dice,
 	)
 	assert_eq(company.get("training_level", 0), 3)
@@ -6032,7 +6032,7 @@ func test_drill_no_character_skips() -> void:
 	}]
 	var dice: DiceEngine = DiceEngine.new(1)
 	var r: Array[Dictionary] = DayOrchestrator._process_drill_effects(
-		applied, [company] as Array[Dictionary],
+		applied, [company],
 		{}, dice,
 	)
 	assert_eq(r.size(), 0)
@@ -6047,7 +6047,7 @@ func test_drill_no_company_skips() -> void:
 	}]
 	var dice: DiceEngine = DiceEngine.new(1)
 	var r: Array[Dictionary] = DayOrchestrator._process_drill_effects(
-		applied, [] as Array[Dictionary],
+		applied, [],
 		{1: c}, dice,
 	)
 	assert_eq(r.size(), 0)
@@ -6057,6 +6057,6 @@ func test_drill_results_in_advance_day_return() -> void:
 	var applied: Array = [{"effects": {"effect": "nothing"}}]
 	var dice: DiceEngine = DiceEngine.new(1)
 	var r: Array[Dictionary] = DayOrchestrator._process_drill_effects(
-		applied, [] as Array[Dictionary], {}, dice,
+		applied, [], {}, dice,
 	)
 	assert_eq(r.size(), 0)

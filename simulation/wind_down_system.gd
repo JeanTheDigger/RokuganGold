@@ -164,7 +164,7 @@ static func get_available_methods(
 	character: L5RCharacterData,
 	settlement: SettlementData,
 	companion_present: bool,
-) -> Array[Method]:
+) -> Array:
 	var available: Array[Method] = [Method.REST]
 
 	# Sake House: inn or sake house present.
@@ -327,7 +327,7 @@ static func _pick_topic(character: L5RCharacterData, dice: DiceEngine) -> int:
 	return character.topic_pool[idx]
 
 
-static func _pick_random_present(present_character_ids: Array[int], dice: DiceEngine) -> int:
+static func _pick_random_present(present_character_ids: Array, dice: DiceEngine) -> int:
 	if present_character_ids.is_empty():
 		return -1
 	return present_character_ids[dice.rand_int_range(0, present_character_ids.size() - 1)]

@@ -8,7 +8,8 @@ func _make_character(id: int, clan: String = "crane", school: Enums.SchoolType =
 	c.character_name = "Char_%d" % id
 	c.clan = clan
 	c.school_type = school
-	c.earth = 2
+	c.stamina = 2
+	c.willpower = 2
 	c.agility = 3
 	c.skills = {"Stealth": 4}
 	c.wounds_taken = 0

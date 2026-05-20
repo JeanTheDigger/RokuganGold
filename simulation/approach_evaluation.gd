@@ -50,7 +50,7 @@ static func get_recent_actions(
 	target_npc_id: int,
 	action_id: String,
 	current_season: int,
-) -> Array[Dictionary]:
+) -> Array:
 	var matches: Array[Dictionary] = []
 	for entry: Dictionary in action_log:
 		if entry.get("character_id", -1) != character_id:
@@ -76,7 +76,7 @@ static func check_measurement_needed(
 	if threshold < 0:
 		return false
 
-	var recent: Array[Dictionary] = get_recent_actions(
+	var recent: Array = get_recent_actions(
 		action_log, character_id, target_npc_id, action_id, current_season
 	)
 
@@ -282,7 +282,7 @@ static func _get_penalized_actions(
 	character_id: int,
 	target_npc_id: int,
 	current_season: int,
-) -> Array[String]:
+) -> Array:
 	var result: Array[String] = []
 	for p: Dictionary in penalties:
 		if (p.get("character_id", -1) != character_id

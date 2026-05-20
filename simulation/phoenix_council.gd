@@ -671,21 +671,21 @@ static func apply_grand_ritual_devastation(
 
 # -- Master vacancy / extinction (s55.10.3.9) -------------------------------
 
-static func count_living_masters(living_masters: Array[int]) -> int:
+static func count_living_masters(living_masters: Array) -> int:
 	return living_masters.size()
 
 
-static func can_council_self_govern(living_masters: Array[int]) -> bool:
+static func can_council_self_govern(living_masters: Array) -> bool:
 	return count_living_masters(living_masters) >= SOLE_CHAMPION_AUTHORITY_THRESHOLD
 
 
-static func champion_appoints_replacements(living_masters: Array[int]) -> bool:
+static func champion_appoints_replacements(living_masters: Array) -> bool:
 	## True when the Council is below quorum and the Champion gains
 	## temporary appointment authority for vacant seats.
 	return not can_council_self_govern(living_masters)
 
 
-static func is_council_extinct(living_masters: Array[int]) -> bool:
+static func is_council_extinct(living_masters: Array) -> bool:
 	return count_living_masters(living_masters) == 0
 
 

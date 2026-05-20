@@ -162,7 +162,7 @@ static func roll_initiative(
 	return score
 
 
-static func build_combat_state(participants_data: Array[Dictionary]) -> CombatState:
+static func build_combat_state(participants_data: Array) -> CombatState:
 	var state := CombatState.new()
 	for data: Dictionary in participants_data:
 		var p := Participant.new()
@@ -952,7 +952,7 @@ static func advance_round_reactions(
 	state: CombatState,
 	characters_by_id: Dictionary,
 	dice_engine: DiceEngine,
-) -> Array[Dictionary]:
+) -> Array:
 	var events: Array[Dictionary] = []
 	for cid: int in state.participants:
 		var p: Participant = state.participants[cid]

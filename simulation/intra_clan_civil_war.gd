@@ -377,7 +377,7 @@ static func record_foreign_intervention(state: Dictionary, supports_legitimacy: 
 ## Returns the Dragon treaty credibility penalty active during a schism
 ## (s55.10.2.8: −15 to all Dragon diplomatic rolls while the war is active).
 ## Returns 0 if no active Dragon civil war with a treaty penalty exists.
-static func get_dragon_treaty_penalty(active_civil_wars: Array[Dictionary]) -> int:
+static func get_dragon_treaty_penalty(active_civil_wars: Array) -> int:
 	for state: Dictionary in active_civil_wars:
 		if state.get("active", false) and state.get("clan", "") == "Dragon":
 			return int(state.get("dragon_treaty_penalty", 0))
@@ -524,7 +524,7 @@ static func tick_precedent_decay(
 ) -> int:
 	## Removes expired modifiers. Returns the count removed.
 	var removed: int = 0
-	var keys: Array[int] = precedent_modifiers.keys().duplicate()
+	var keys: Array = precedent_modifiers.keys().duplicate()
 	for k: int in keys:
 		var mod: Dictionary = precedent_modifiers[k]
 		if int(mod.get("expires", 0)) <= current_season:
@@ -578,10 +578,10 @@ static func apply_post_resolution_scars(
 				continue
 			var scar_a: int = POST_WAR_SCAR_BASE
 			var scar_b: int = POST_WAR_SCAR_BASE
-			var deaths_a: Array[int] = family_deaths.get(a.character_id, [])
+			var deaths_a: Array = family_deaths.get(a.character_id, [])
 			if b.character_id in deaths_a:
 				scar_a += POST_WAR_SCAR_FAMILY_DEATH
-			var deaths_b: Array[int] = family_deaths.get(b.character_id, [])
+			var deaths_b: Array = family_deaths.get(b.character_id, [])
 			if a.character_id in deaths_b:
 				scar_b += POST_WAR_SCAR_FAMILY_DEATH
 			var cur_ab: int = int(a.disposition_values.get(b.character_id, 0))

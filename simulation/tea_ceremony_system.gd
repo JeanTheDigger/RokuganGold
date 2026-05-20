@@ -40,7 +40,7 @@ static func select_eligible_ids(
 	host_id: int,
 	chars_present: Array[int],
 	dispositions: Dictionary,
-) -> Array[int]:
+) -> Array:
 	## Returns IDs of characters eligible to participate (disp >= Acquaintance,
 	## not the host). Does NOT check VP deficit — that check runs at execution.
 	var result: Array[int] = []

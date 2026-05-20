@@ -134,7 +134,7 @@ static func has_authority(
 	character: L5RCharacterData,
 ) -> bool:
 	var level: AuthorityLevel = get_authority_level(character)
-	var allowed: Array[int] = CONSTRUCTION_AUTHORITY.get(construction_type, [])
+	var allowed: Array = CONSTRUCTION_AUTHORITY.get(construction_type, [])
 	return level in allowed
 
 
@@ -343,7 +343,7 @@ static func _get_build_seasons(ct: ConstructionData.ConstructionType) -> int:
 
 static func tick_construction_queue(
 	constructions: Array[ConstructionData],
-) -> Array[ConstructionData]:
+) -> Array:
 	var completed: Array[ConstructionData] = []
 	for cd: ConstructionData in constructions:
 		if cd.is_complete:

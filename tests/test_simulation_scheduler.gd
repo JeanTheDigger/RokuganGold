@@ -178,14 +178,14 @@ func test_world_state_advance_one_day() -> void:
 			"context_flag": Enums.ContextFlag.AT_OWN_HOLDINGS,
 			"season": 0,
 			"ic_day": 0,
-			"characters_present": [] as Array[int],
+			"characters_present": [],
 			"is_lord": false,
-			"known_topics": [] as Array[int],
+			"known_topics": [],
 			"known_positions": {},
 			"known_objectives": {},
-			"known_contacts": [] as Array[int],
+			"known_contacts": [],
 			"pending_events": [],
-			"action_log": [] as Array[String],
+			"action_log": [],
 		},
 	}
 	ws.objectives_map = {1: {"primary": {"need_type": "REST", "priority": 3}}}

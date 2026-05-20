@@ -554,7 +554,7 @@ static func _get_opponent_clan(war: WarData, clan: String) -> String:
 static func apply_territory_transfers(
 	resolution: Dictionary,
 	provinces: Dictionary,
-) -> Array[Dictionary]:
+) -> Array:
 	var transferred: Array = resolution.get("territory_transferred", [])
 	if transferred.is_empty():
 		return []
@@ -600,7 +600,7 @@ static func suspend_trade_routes_for_war(
 	provinces: Dictionary,
 	clan_a: String,
 	clan_b: String,
-) -> Array[Dictionary]:
+) -> Array:
 	## Disrupt all trade routes connecting provinces of two warring clans.
 	## Per GDD s53: "Trade routes between the two clans are suspended."
 	var results: Array[Dictionary] = []
@@ -629,7 +629,7 @@ static func restore_trade_routes_for_peace(
 	trade_routes: Array,
 	clan_a: String,
 	clan_b: String,
-) -> Array[Dictionary]:
+) -> Array:
 	## Restore trade routes that were disrupted by a specific war.
 	var war_reason_1: String = "war_%s_%s" % [clan_a, clan_b]
 	var war_reason_2: String = "war_%s_%s" % [clan_b, clan_a]

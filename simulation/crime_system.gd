@@ -84,7 +84,7 @@ static func get_low_skill_honor_cost(character: L5RCharacterData, skill_name: St
 	return base_cost
 
 
-static func get_table_honor_cost(table: Array[int], honor_rank: int) -> float:
+static func get_table_honor_cost(table: Array, honor_rank: int) -> float:
 	var bracket: int = _get_rank_bracket(honor_rank)
 	return table[bracket] / 10.0
 
@@ -269,7 +269,7 @@ static func is_low_skill_crime_type(crime_type: Enums.CrimeType) -> bool:
 
 # -- Table 2.3 Lookup ---------------------------------------------------------
 
-static func _get_honor_table(table_name: String) -> Array[int]:
+static func _get_honor_table(table_name: String) -> Array:
 	match table_name:
 		"BREACH_MINOR": return HONOR_TABLE_BREACH_MINOR
 		"BREACH_MAJOR": return HONOR_TABLE_BREACH_MAJOR
@@ -297,7 +297,7 @@ static func _get_rank_bracket(honor_rank: int) -> int:
 
 static func get_at_act_honor_loss(crime_type: Enums.CrimeType, honor_rank: int) -> float:
 	var table_name: String = CRIME_HONOR_TABLE.get(crime_type, "BREACH_MINOR")
-	var table: Array[int] = _get_honor_table(table_name)
+	var table: Array = _get_honor_table(table_name)
 	var bracket: int = _get_rank_bracket(honor_rank)
 	var points: int = table[bracket]
 	return points / 10.0
@@ -316,7 +316,7 @@ static func apply_at_act_consequences(character: L5RCharacterData, crime_type: E
 
 static func apply_at_conviction_consequences(character: L5RCharacterData, record: CrimeRecord, victim_status: float = 0.0) -> Dictionary:
 	var crime_type: Enums.CrimeType = record.crime_type
-	var consequences: Array[float] = CONVICTION_CONSEQUENCES.get(crime_type, [-0.1, 0.0, 0.0, 4])
+	var consequences: Array = CONVICTION_CONSEQUENCES.get(crime_type, [-0.1, 0.0, 0.0, 4])
 
 	var glory_delta: float = HonorGlorySystem.apply_glory_change(character, consequences[0])
 	var infamy_delta: float = HonorGlorySystem.apply_infamy_change(character, consequences[1])
@@ -418,7 +418,7 @@ static func is_seppuku_eligible(crime_type: Enums.CrimeType, skimming_amount: fl
 
 # -- Escalation Check (dishonorable conduct) -----------------------------------
 
-static func check_escalation(records: Array[CrimeRecord], current_ic_day: int, days_per_season: int) -> bool:
+static func check_escalation(records: Array, current_ic_day: int, days_per_season: int) -> bool:
 	var window_days: int = ESCALATION_WINDOW_SEASONS * days_per_season
 	var count: int = 0
 	for record: CrimeRecord in records:

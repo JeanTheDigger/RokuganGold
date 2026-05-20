@@ -77,8 +77,8 @@ func test_character_at_wall_tower_gets_wall_tower_zone_subtype() -> void:
 	var world_states := _make_ws(1)
 
 	DayOrchestrator._set_wall_tower_context_flags(
-		[char] as Array[L5RCharacterData],
-		[tower] as Array[SettlementData],
+		[char],
+		[tower],
 		provinces, world_states
 	)
 
@@ -92,8 +92,8 @@ func test_wall_statuses_populated_with_si() -> void:
 	var world_states := _make_ws(1)
 
 	DayOrchestrator._set_wall_tower_context_flags(
-		[char] as Array[L5RCharacterData],
-		[tower] as Array[SettlementData],
+		[char],
+		[tower],
 		provinces, world_states
 	)
 
@@ -110,8 +110,8 @@ func test_wall_statuses_populated_with_ss_from_province() -> void:
 	var world_states := _make_ws(1)
 
 	DayOrchestrator._set_wall_tower_context_flags(
-		[char] as Array[L5RCharacterData],
-		[tower] as Array[SettlementData],
+		[char],
+		[tower],
 		provinces, world_states
 	)
 
@@ -127,8 +127,8 @@ func test_wall_statuses_province_id_matches() -> void:
 	var world_states := _make_ws(1)
 
 	DayOrchestrator._set_wall_tower_context_flags(
-		[char] as Array[L5RCharacterData],
-		[tower] as Array[SettlementData],
+		[char],
+		[tower],
 		provinces, world_states
 	)
 
@@ -145,8 +145,8 @@ func test_garrison_above_minimum_true_when_garrison_nonzero() -> void:
 	var world_states := _make_ws(1)
 
 	DayOrchestrator._set_wall_tower_context_flags(
-		[char] as Array[L5RCharacterData],
-		[tower] as Array[SettlementData],
+		[char],
+		[tower],
 		provinces, world_states
 	)
 
@@ -163,8 +163,8 @@ func test_garrison_above_minimum_false_when_garrison_zero() -> void:
 	var world_states := _make_ws(1)
 
 	DayOrchestrator._set_wall_tower_context_flags(
-		[char] as Array[L5RCharacterData],
-		[tower] as Array[SettlementData],
+		[char],
+		[tower],
 		provinces, world_states
 	)
 
@@ -184,8 +184,8 @@ func test_jade_stockpile_critical_false_when_above_minimum() -> void:
 	var world_states := _make_ws(1)
 
 	DayOrchestrator._set_wall_tower_context_flags(
-		[char] as Array[L5RCharacterData],
-		[tower] as Array[SettlementData],
+		[char],
+		[tower],
 		provinces, world_states
 	)
 
@@ -205,8 +205,8 @@ func test_jade_stockpile_critical_true_when_at_or_below_minimum() -> void:
 	var world_states := _make_ws(1)
 
 	DayOrchestrator._set_wall_tower_context_flags(
-		[char] as Array[L5RCharacterData],
-		[tower] as Array[SettlementData],
+		[char],
+		[tower],
 		provinces, world_states
 	)
 
@@ -226,8 +226,8 @@ func test_at_court_character_not_overridden() -> void:
 	var world_states: Dictionary = _make_ws(1, Enums.ContextFlag.AT_COURT)
 
 	DayOrchestrator._set_wall_tower_context_flags(
-		[char] as Array[L5RCharacterData],
-		[tower] as Array[SettlementData],
+		[char],
+		[tower],
 		provinces, world_states
 	)
 
@@ -242,8 +242,8 @@ func test_at_court_character_wall_statuses_unchanged() -> void:
 	world_states[1]["wall_statuses"] = []
 
 	DayOrchestrator._set_wall_tower_context_flags(
-		[char] as Array[L5RCharacterData],
-		[tower] as Array[SettlementData],
+		[char],
+		[tower],
 		provinces, world_states
 	)
 
@@ -263,8 +263,8 @@ func test_traveling_character_not_set_to_at_wall_tower() -> void:
 	var world_states := _make_ws(1)
 
 	DayOrchestrator._set_wall_tower_context_flags(
-		[char] as Array[L5RCharacterData],
-		[tower] as Array[SettlementData],
+		[char],
+		[tower],
 		provinces, world_states
 	)
 
@@ -282,8 +282,8 @@ func test_character_at_non_tower_settlement_unaffected() -> void:
 	var world_states := _make_ws(1)
 
 	DayOrchestrator._set_wall_tower_context_flags(
-		[char] as Array[L5RCharacterData],
-		[town] as Array[SettlementData],
+		[char],
+		[town],
 		provinces, world_states
 	)
 
@@ -298,8 +298,8 @@ func test_no_wall_towers_in_settlements_does_nothing() -> void:
 	var original_flag: int = world_states[1]["context_flag"]
 
 	DayOrchestrator._set_wall_tower_context_flags(
-		[char] as Array[L5RCharacterData],
-		[town] as Array[SettlementData],
+		[char],
+		[town],
 		provinces, world_states
 	)
 
@@ -317,8 +317,8 @@ func test_ss_defaults_to_zero_when_province_missing() -> void:
 	var world_states := _make_ws(1)
 
 	DayOrchestrator._set_wall_tower_context_flags(
-		[char] as Array[L5RCharacterData],
-		[tower] as Array[SettlementData],
+		[char],
+		[tower],
 		provinces, world_states
 	)
 
@@ -340,8 +340,8 @@ func test_character_without_world_state_entry_skipped() -> void:
 
 	# Should not crash
 	DayOrchestrator._set_wall_tower_context_flags(
-		[char] as Array[L5RCharacterData],
-		[tower] as Array[SettlementData],
+		[char],
+		[tower],
 		provinces, world_states
 	)
 
@@ -364,8 +364,8 @@ func test_two_characters_at_same_tower_both_flagged() -> void:
 	}
 
 	DayOrchestrator._set_wall_tower_context_flags(
-		[c1, c2] as Array[L5RCharacterData],
-		[tower] as Array[SettlementData],
+		[c1, c2],
+		[tower],
 		provinces, world_states
 	)
 
@@ -385,13 +385,13 @@ func test_existing_wall_status_for_province_not_duplicated() -> void:
 
 	# Call twice
 	DayOrchestrator._set_wall_tower_context_flags(
-		[char] as Array[L5RCharacterData],
-		[tower] as Array[SettlementData],
+		[char],
+		[tower],
 		provinces, world_states
 	)
 	DayOrchestrator._set_wall_tower_context_flags(
-		[char] as Array[L5RCharacterData],
-		[tower] as Array[SettlementData],
+		[char],
+		[tower],
 		provinces, world_states
 	)
 
@@ -424,8 +424,8 @@ func test_character_at_tower_with_preloaded_other_status_keeps_both() -> void:
 	}
 
 	DayOrchestrator._set_wall_tower_context_flags(
-		[char] as Array[L5RCharacterData],
-		[tower] as Array[SettlementData],
+		[char],
+		[tower],
 		provinces, world_states
 	)
 
@@ -444,8 +444,8 @@ func test_minimum_garrison_populated_from_wall_system_constant() -> void:
 	var world_states := _make_ws(1)
 
 	DayOrchestrator._set_wall_tower_context_flags(
-		[char] as Array[L5RCharacterData],
-		[tower] as Array[SettlementData],
+		[char],
+		[tower],
 		provinces, world_states
 	)
 
@@ -461,8 +461,8 @@ func test_garrison_shortage_letter_season_propagated() -> void:
 	var world_states := _make_ws(1)
 
 	DayOrchestrator._set_wall_tower_context_flags(
-		[char] as Array[L5RCharacterData],
-		[tower] as Array[SettlementData],
+		[char],
+		[tower],
 		provinces, world_states
 	)
 
@@ -477,8 +477,8 @@ func test_garrison_shortage_letter_season_default_is_sentinel() -> void:
 	var world_states := _make_ws(1)
 
 	DayOrchestrator._set_wall_tower_context_flags(
-		[char] as Array[L5RCharacterData],
-		[tower] as Array[SettlementData],
+		[char],
+		[tower],
 		provinces, world_states
 	)
 
@@ -494,8 +494,8 @@ func test_garrison_shortage_courtier_dispatched_propagated() -> void:
 	var world_states := _make_ws(1)
 
 	DayOrchestrator._set_wall_tower_context_flags(
-		[char] as Array[L5RCharacterData],
-		[tower] as Array[SettlementData],
+		[char],
+		[tower],
 		provinces, world_states
 	)
 
@@ -511,8 +511,8 @@ func test_garrison_shortage_courtier_refused_propagated() -> void:
 	var world_states := _make_ws(1)
 
 	DayOrchestrator._set_wall_tower_context_flags(
-		[char] as Array[L5RCharacterData],
-		[tower] as Array[SettlementData],
+		[char],
+		[tower],
 		provinces, world_states
 	)
 
@@ -527,8 +527,8 @@ func test_garrison_shortage_courtier_refused_default_is_false() -> void:
 	var world_states := _make_ws(1)
 
 	DayOrchestrator._set_wall_tower_context_flags(
-		[char] as Array[L5RCharacterData],
-		[tower] as Array[SettlementData],
+		[char],
+		[tower],
 		provinces, world_states
 	)
 

@@ -110,36 +110,36 @@ static func advance_day(
 
 	var festival_results: Dictionary = _process_festivals(ic_day, world_states)
 
-	var travel_arrivals: Array[Dictionary] = _process_travel(characters)
+	var travel_arrivals: Array = _process_travel(characters)
 	_process_arrival_observation(travel_arrivals, characters_by_id, current_season)
 	_process_witness_testimony_on_arrival(
 		travel_arrivals, characters_by_id, world_states, active_topics, current_season,
 	)
-	var auto_conceal_results: Array[Dictionary] = _process_auto_conceal_on_arrival(
+	var auto_conceal_results: Array = _process_auto_conceal_on_arrival(
 		travel_arrivals, characters_by_id, dice_engine,
 	)
 
 	var musha_season_count: int = int(season_meta.get("horde_season_count", 0))
-	var musha_shugyo_results: Array[Dictionary] = _process_musha_shugyo(characters, characters_by_id, ic_day, objectives_map, dice_engine, musha_season_count)
+	var musha_shugyo_results: Array = _process_musha_shugyo(characters, characters_by_id, ic_day, objectives_map, dice_engine, musha_season_count)
 
 	_apply_cohabitation(characters, characters_by_id)
 
 	var favor_results: Dictionary = _process_favors(favors, ic_day, characters_by_id)
 
-	var entanglement_results: Array[Dictionary] = _process_entanglements(entanglements, ic_day)
-	var bound_escape_results: Array[Dictionary] = _process_bound_states(
+	var entanglement_results: Array = _process_entanglements(entanglements, ic_day)
+	var bound_escape_results: Array = _process_bound_states(
 		bound_states, characters_by_id, dice_engine, ic_day
 	)
-	var hostage_escape_results: Array[Dictionary] = _process_hostage_escapes(
+	var hostage_escape_results: Array = _process_hostage_escapes(
 		active_hostages, characters_by_id, settlements, dice_engine, ic_day, death_events,
 	)
 
-	var crisis_courts: Array[Dictionary] = _process_crisis_court_calls(
+	var crisis_courts: Array = _process_crisis_court_calls(
 		characters, active_courts, active_topics, world_states, next_court_id, ic_day,
 	)
-	var court_openings: Array[Dictionary] = _process_court_openings(active_courts, ic_day)
-	var court_attendance: Array[Dictionary] = _process_court_attendance(active_courts, characters, characters_by_id)
-	var court_results: Array[Dictionary] = _process_active_courts(
+	var court_openings: Array = _process_court_openings(active_courts, ic_day)
+	var court_attendance: Array = _process_court_attendance(active_courts, characters, characters_by_id)
+	var court_results: Array = _process_active_courts(
 		active_courts, active_topics, next_topic_id, ic_day,
 		active_edicts, next_edict_id, active_wars,
 		characters_by_id, world_states,
@@ -155,7 +155,7 @@ static func advance_day(
 	_refresh_from_the_ashes(characters, world_states, dice_engine, ic_day)
 	_process_cadence_sync(characters, active_courts, dice_engine)
 
-	var edict_results: Array[Dictionary] = _process_edict_compliance(
+	var edict_results: Array = _process_edict_compliance(
 		active_edicts, active_wars, characters, active_topics, next_topic_id, ic_day, season_meta,
 	)
 
@@ -184,10 +184,10 @@ static func advance_day(
 	var naval_weather: int = _process_naval_weather(
 		dice_engine, _season_to_name(current_season), season_meta,
 	)
-	var naval_movement_results: Array[Dictionary] = _process_ship_movement(
+	var naval_movement_results: Array = _process_ship_movement(
 		ships, dice_engine,
 	)
-	var naval_battle_results: Array[Dictionary] = _process_naval_battle_triggers(
+	var naval_battle_results: Array = _process_naval_battle_triggers(
 		ships, characters_by_id, active_wars, naval_weather, dice_engine,
 	)
 	_apply_naval_battle_mutations(naval_battle_results, ships, characters_by_id)
@@ -206,7 +206,7 @@ static func advance_day(
 	)
 
 	var next_letter_id: Array[int] = [pending_letters.size() + 1]
-	var letter_pass_results: Array[Dictionary] = _process_daily_letter_pass(
+	var letter_pass_results: Array = _process_daily_letter_pass(
 		characters, characters_by_id, objectives_map, scoring_tables, world_states,
 		pending_letters, ic_day, dice_engine, next_letter_id,
 	)
@@ -215,7 +215,7 @@ static func advance_day(
 		letter_pass_results, characters_by_id, settlements, current_season
 	)
 
-	var crime_results: Array[Dictionary] = _process_crime_detection(
+	var crime_results: Array = _process_crime_detection(
 		day_result.get("results", []),
 		characters_by_id,
 		crime_records,
@@ -280,7 +280,7 @@ static func advance_day(
 	)
 
 	_purge_expired_crime_evidence(crime_records, ic_day)
-	var cold_case_results: Array[Dictionary] = _apply_evidence_decay(
+	var cold_case_results: Array = _apply_evidence_decay(
 		crime_records, objectives_map, ic_day,
 	)
 
@@ -330,7 +330,7 @@ static func advance_day(
 	)
 
 	var current_season_count: int = int(season_meta.get("horde_season_count", 0))
-	var military_effects: Array[Dictionary] = _process_military_effects(
+	var military_effects: Array = _process_military_effects(
 		day_result.get("results", []),
 		settlements,
 		characters_by_id,
@@ -351,19 +351,19 @@ static func advance_day(
 		day_result.get("results", []), settlements
 	)
 
-	var wall_engineering_results: Array[Dictionary] = _process_wall_engineering_effects(
+	var wall_engineering_results: Array = _process_wall_engineering_effects(
 		day_result.get("results", []),
 		settlements,
 	)
 
-	var sortie_results: Array[Dictionary] = _process_sortie_results(
+	var sortie_results: Array = _process_sortie_results(
 		day_result.get("results", []),
 		settlements,
 		provinces,
 		dice_engine,
 	)
 
-	var storm_assault_results: Array[Dictionary] = _process_storm_assault_results(
+	var storm_assault_results: Array = _process_storm_assault_results(
 		day_result.get("results", []),
 		active_sieges,
 		companies,
@@ -375,13 +375,13 @@ static func advance_day(
 	)
 	_capture_siege_hostages(active_sieges, characters_by_id, companies, active_hostages, ic_day)
 
-	var purification_results: Array[Dictionary] = _process_purification_effects(
+	var purification_results: Array = _process_purification_effects(
 		day_result.get("results", []),
 		provinces,
 		season_meta,
 	)
 
-	var patrol_results: Array[Dictionary] = _process_patrol_effects(
+	var patrol_results: Array = _process_patrol_effects(
 		day_result.get("results", []),
 		season_meta,
 	)
@@ -392,19 +392,19 @@ static func advance_day(
 		ic_day,
 	)
 
-	var drill_results: Array[Dictionary] = _process_drill_effects(
+	var drill_results: Array = _process_drill_effects(
 		day_result.get("results", []),
 		companies,
 		characters_by_id,
 		dice_engine,
 	)
 
-	var horde_assault_results: Array[Dictionary] = _process_horde_assaults(
+	var horde_assault_results: Array = _process_horde_assaults(
 		active_hordes, settlements, active_topics, next_topic_id, ic_day, provinces,
 		next_crisis_id,
 	)
 
-	var starvation_results: Array[Dictionary] = _process_starvation_warfare_effects(
+	var starvation_results: Array = _process_starvation_warfare_effects(
 		day_result.get("results", []),
 		characters_by_id,
 		trade_routes,
@@ -416,25 +416,25 @@ static func advance_day(
 		next_war_id,
 	)
 
-	var supply_sharing_results: Array[Dictionary] = _process_supply_sharing(
+	var supply_sharing_results: Array = _process_supply_sharing(
 		day_result.get("results", []),
 		characters_by_id,
 		settlements,
 		provinces,
 	)
 
-	var worship_accumulation_results: Array[Dictionary] = _process_worship_accumulation(
+	var worship_accumulation_results: Array = _process_worship_accumulation(
 		day_result.get("results", []), worship_state,
 	)
 
-	var letter_examination_results: Array[Dictionary] = _process_letter_examinations(
+	var letter_examination_results: Array = _process_letter_examinations(
 		day_result.get("results", []),
 		pending_letters,
 		characters_by_id,
 		dice_engine,
 	)
 
-	var construction_results: Array[Dictionary] = _process_construction_effects(
+	var construction_results: Array = _process_construction_effects(
 		day_result.get("results", []),
 		characters_by_id,
 		provinces,
@@ -464,7 +464,7 @@ static func advance_day(
 		active_edicts,
 	)
 
-	var hunt_resolution_results: Array[Dictionary] = _resolve_scheduled_hunts(
+	var hunt_resolution_results: Array = _resolve_scheduled_hunts(
 		active_hunts, characters_by_id, provinces, dice_engine, ic_day,
 		death_events, active_topics, next_topic_id,
 	)
@@ -527,7 +527,7 @@ static func advance_day(
 		characters_by_id,
 	)
 
-	var assassination_results: Array[Dictionary] = _process_assassination_daily_tick(
+	var assassination_results: Array = _process_assassination_daily_tick(
 		active_assassination_ops,
 		characters_by_id,
 		dice_engine,
@@ -540,14 +540,14 @@ static func advance_day(
 		entanglements,
 	)
 
-	var war_declarations: Array[Dictionary] = _process_war_declarations(
+	var war_declarations: Array = _process_war_declarations(
 		day_result.get("results", []),
 		active_wars,
 		ic_day,
 		next_war_id,
 	)
 
-	var ladder_effects_results: Array[Dictionary] = _process_ladder_side_effects(
+	var ladder_effects_results: Array = _process_ladder_side_effects(
 		day_result.get("results", []),
 		characters_by_id,
 		active_topics,
@@ -558,24 +558,24 @@ static func advance_day(
 		next_war_id,
 	)
 
-	var trade_route_results: Array[Dictionary] = _process_war_trade_routes(
+	var trade_route_results: Array = _process_war_trade_routes(
 		war_declarations, trade_routes, provinces,
 	)
 
-	var war_score_results: Array[Dictionary] = _process_war_score_shifts(
+	var war_score_results: Array = _process_war_score_shifts(
 		military_daily, military_effects, active_wars, companies,
 	)
 
-	var naval_war_score_results: Array[Dictionary] = _process_naval_war_scores(
+	var naval_war_score_results: Array = _process_naval_war_scores(
 		naval_battle_results, active_wars,
 	)
 	war_score_results.append_array(naval_war_score_results)
 
-	var naval_topics: Array[TopicData] = _generate_naval_battle_topics(
+	var naval_topics: Array = _generate_naval_battle_topics(
 		naval_battle_results, active_topics, next_topic_id, ic_day,
 	)
 
-	var war_termination_results: Array[Dictionary] = _process_war_terminations(
+	var war_termination_results: Array = _process_war_terminations(
 		day_result.get("results", []),
 		active_wars,
 		active_topics,
@@ -585,22 +585,22 @@ static func advance_day(
 
 	_release_war_hostages(war_termination_results, active_hostages, characters_by_id, ic_day)
 
-	var peace_route_results: Array[Dictionary] = _process_peace_trade_routes(
+	var peace_route_results: Array = _process_peace_trade_routes(
 		war_termination_results, trade_routes,
 	)
 	trade_route_results.append_array(peace_route_results)
 	if not peace_route_results.is_empty():
 		LetterSystem.unblock_letters(pending_letters)
 
-	var territory_transfer_results: Array[Dictionary] = _apply_war_territory_transfers(
+	var territory_transfer_results: Array = _apply_war_territory_transfers(
 		war_termination_results, provinces,
 	)
 
-	var military_topics: Array[TopicData] = _generate_military_event_topics(
+	var military_topics: Array = _generate_military_event_topics(
 		military_daily, military_effects, active_topics, next_topic_id, ic_day,
 	)
 
-	var compact_restoration_results: Array[Dictionary] = _process_compact_restorations(
+	var compact_restoration_results: Array = _process_compact_restorations(
 		day_result.get("results", []),
 		phoenix_council_state,
 	)
@@ -689,7 +689,7 @@ static func advance_day(
 		day_result.get("results", []), supply_sharing_results, commitments,
 	)
 
-	var commitment_results: Array[Dictionary] = _process_commitment_deadlines(
+	var commitment_results: Array = _process_commitment_deadlines(
 		commitments, ic_day, characters_by_id, active_courts
 	)
 
@@ -697,25 +697,25 @@ static func advance_day(
 		commitment_results, commitments, characters_by_id, objectives_map,
 	)
 
-	var forgiveness_results: Array[Dictionary] = _process_retroactive_forgiveness(
+	var forgiveness_results: Array = _process_retroactive_forgiveness(
 		commitments, characters_by_id, active_topics
 	)
 
-	var orphan_results: Array[Dictionary] = _process_lord_deaths(
+	var orphan_results: Array = _process_lord_deaths(
 		death_events, characters, objectives_map, successor_map,
 		active_successions, next_succession_id, characters_by_id, ic_day,
 		active_topics, next_topic_id,
 	)
 
-	var hierarchy_cascade_results: Array[int] = _process_operational_death_cascade(
+	var hierarchy_cascade_results: Array = _process_operational_death_cascade(
 		death_events, characters,
 	)
 
-	var succession_results: Array[Dictionary] = _process_successions(
+	var succession_results: Array = _process_successions(
 		active_successions, characters_by_id
 	)
 
-	var conversation_results: Array[Dictionary] = _process_daily_conversations(
+	var conversation_results: Array = _process_daily_conversations(
 		characters, dice_engine, current_season, active_topics
 	)
 
@@ -739,13 +739,13 @@ static func advance_day(
 	var topic_results: Dictionary = TopicMomentumSystem.process_daily_tick(active_topics)
 
 	var province_clan_map: Dictionary = _build_province_clan_map(provinces)
-	var broadcast_results: Array[Dictionary] = TopicMomentumSystem.broadcast_public_knowledge(
+	var broadcast_results: Array = TopicMomentumSystem.broadcast_public_knowledge(
 		active_topics, characters, character_province_map, province_clan_map, provinces,
 		current_season,
 	)
 	_compute_positions_from_broadcast(broadcast_results, active_topics, characters_by_id)
 
-	var uphold_law_results: Array[Dictionary] = _process_uphold_law_scan(
+	var uphold_law_results: Array = _process_uphold_law_scan(
 		characters, objectives_map, crime_records, active_topics
 	)
 	_generate_investigation_opened_topics(
@@ -754,22 +754,22 @@ static func advance_day(
 	)
 
 	var lord_map: Dictionary = _build_lord_map(characters)
-	var conviction_results: Array[Dictionary] = ConvictionProcessor.process_accused_cases(
+	var conviction_results: Array = ConvictionProcessor.process_accused_cases(
 		crime_records, characters_by_id, dice_engine, ic_day,
 		next_topic_id, active_topics, lord_map,
 	)
 
-	var trial_results: Array[Dictionary] = _resolve_pending_trials(
+	var trial_results: Array = _resolve_pending_trials(
 		conviction_results, crime_records, characters_by_id,
 		lord_map, dice_engine, ic_day,
 	)
 
-	var seppuku_results: Array[Dictionary] = _process_seppuku_responses(
+	var seppuku_results: Array = _process_seppuku_responses(
 		conviction_results, crime_records, characters_by_id,
 		ic_day, next_topic_id, active_topics, world_states,
 	)
 
-	var seppuku_action_results: Array[Dictionary] = _process_seppuku_action_writebacks(
+	var seppuku_action_results: Array = _process_seppuku_action_writebacks(
 		day_result.get("results", []),
 		crime_records, characters_by_id,
 		ic_day, next_topic_id, active_topics,
@@ -796,7 +796,7 @@ static func advance_day(
 		conviction_results, crime_records, characters_by_id, objectives_map,
 	)
 
-	var info_results: Array[Dictionary] = _process_info_events(
+	var info_results: Array = _process_info_events(
 		day_result.get("applied", []),
 		characters_by_id,
 		action_log,
@@ -813,7 +813,7 @@ static func advance_day(
 	var letter_topics_by_id: Dictionary = {}
 	for _lt: TopicData in active_topics:
 		letter_topics_by_id[_lt.topic_id] = _lt
-	var letter_results: Array[Dictionary] = LetterSystem.process_pending_letters(
+	var letter_results: Array = LetterSystem.process_pending_letters(
 		pending_letters, characters_by_id, ic_day, current_season, action_log,
 		active_wars if active_wars != null else [], dice_engine, letter_topics_by_id,
 	)
@@ -1004,7 +1004,7 @@ static func advance_day(
 		_evaluate_heir_designations(
 			characters, characters_by_id, active_topics
 		)
-		var provinces_array: Array[ProvinceData] = _dict_values_to_province_array(provinces)
+		var provinces_array: Array = _dict_values_to_province_array(provinces)
 		var emperor_archetype: int = world_states.get("emperor_archetype", StrategicReview.EmperorArchetype.IRON)
 		var wc_letter_id: Array[int] = [pending_letters.size() + 1000]
 		_process_strategic_court_calls(
@@ -1169,7 +1169,7 @@ static func advance_day(
 
 # -- AP Reset ------------------------------------------------------------------
 
-static func _reset_all_ap(characters: Array[L5RCharacterData]) -> void:
+static func _reset_all_ap(characters: Array) -> void:
 	for c: L5RCharacterData in characters:
 		ActionPointSystem.reset_daily_ap(c)
 		c.civilian_orders_remaining = c.civilian_order_budget_max
@@ -1186,7 +1186,7 @@ static func _process_ooc_day_tick(
 	dice_engine: DiceEngine,
 	worship_state: Dictionary,
 	ic_day: int = 0,
-) -> Array[Dictionary]:
+) -> Array:
 	## Runs Wind-Down selection and Void Point refresh once per OOC day (every
 	## 4 IC days) per GDD s57.44.2 and s57.32.2.
 
@@ -1359,7 +1359,7 @@ static func _process_info_events(
 	next_topic_id: Array[int] = [1000],
 	ic_day: int = 0,
 	dice_engine: DiceEngine = null,
-) -> Array[Dictionary]:
+) -> Array:
 	var results: Array[Dictionary] = []
 	var location_characters: Dictionary = world_states.get("_location_characters", {})
 
@@ -1399,12 +1399,12 @@ static func _process_info_events(
 				continue
 
 			if target_id >= 0:
-				var discovered: Array[KnowledgeEntry] = InformationSystem.process_probe_result(
+				var discovered: Array = InformationSystem.process_probe_result(
 					character, target_id, action_log, current_season, quality
 				)
 
 				var char_loc: String = character.physical_location
-				var present_all: Array[int] = location_characters.get(char_loc, [] as Array[int])
+				var present_all: Array = location_characters.get(char_loc, [])
 				var characters_present: Array[int] = []
 				for pid: int in present_all:
 					if pid != char_id:
@@ -1472,7 +1472,7 @@ static func _process_daily_conversations(
 	dice_engine: DiceEngine,
 	current_season: int,
 	active_topics: Array[TopicData] = [],
-) -> Array[Dictionary]:
+) -> Array:
 	var topics_by_id: Dictionary = {}
 	for t: TopicData in active_topics:
 		topics_by_id[t.topic_id] = t
@@ -1520,7 +1520,7 @@ static func _resolve_group_conversations(
 	dice_engine: DiceEngine,
 	current_season: int,
 	topics_by_id: Dictionary,
-) -> Array[Dictionary]:
+) -> Array:
 	var group: Array[L5RCharacterData] = []
 	for c: Variant in raw_group:
 		if c is L5RCharacterData:
@@ -1627,7 +1627,7 @@ static func _create_stipend_failure_topics(
 	active_topics: Array[TopicData],
 	next_topic_id: Array[int],
 	ic_day: int,
-) -> Array[Dictionary]:
+) -> Array:
 	var created: Array[Dictionary] = []
 	for char_id: Variant in stipends:
 		var entry: Dictionary = stipends[char_id]
@@ -1837,7 +1837,7 @@ static func _process_wall_seasonal_pressure(
 static func _process_wall_engineering_effects(
 	applied_list: Array[Dictionary],
 	settlements: Array[SettlementData],
-) -> Array[Dictionary]:
+) -> Array:
 	var results: Array[Dictionary] = []
 
 	# Build province_id → wall tower settlement map once.
@@ -1908,7 +1908,7 @@ static func _process_sortie_results(
 	settlements: Array[SettlementData],
 	provinces: Dictionary,
 	dice_engine: DiceEngine,
-) -> Array[Dictionary]:
+) -> Array:
 	var results: Array[Dictionary] = []
 
 	# Build province_id → wall tower settlement map.
@@ -1988,7 +1988,7 @@ static func _process_sortie_results(
 
 ## Build synthetic GARRISON-type battle company dicts for sortie_states.
 ## garrison_pu: number of companies committed (each = 153 health / 1 PU).
-static func _build_garrison_sortie_states(garrison_pu: int) -> Array[Dictionary]:
+static func _build_garrison_sortie_states(garrison_pu: int) -> Array:
 	var states: Array[Dictionary] = []
 	var stats: Dictionary = ArmyCombatSystem.UNIT_STATS.get(
 		Enums.CompanyUnitType.GARRISON, {}
@@ -2033,7 +2033,7 @@ static func _process_storm_assault_results(
 	characters_by_id: Dictionary,
 	active_hostages: Array[Dictionary] = [],
 	ic_day: int = 0,
-) -> Array[Dictionary]:
+) -> Array:
 	var results: Array[Dictionary] = []
 
 	for applied: Dictionary in applied_list:
@@ -2054,8 +2054,8 @@ static func _process_storm_assault_results(
 		var atk_army_id: int = siege.get("attacker_army_id", -1)
 		var def_army_id: int = siege.get("defender_army_id", -1)
 
-		var atk_dicts: Array[Dictionary] = _get_army_companies(atk_army_id, companies)
-		var def_dicts: Array[Dictionary] = _get_army_companies(def_army_id, companies)
+		var atk_dicts: Array = _get_army_companies(atk_army_id, companies)
+		var def_dicts: Array = _get_army_companies(def_army_id, companies)
 
 		if atk_dicts.is_empty() or def_dicts.is_empty():
 			push_warning(
@@ -2065,10 +2065,10 @@ static func _process_storm_assault_results(
 			)
 			continue
 
-		var atk_states: Array[Dictionary] = _build_battle_states(
+		var atk_states: Array = _build_battle_states(
 			atk_dicts, "attacker", characters_by_id,
 		)
-		var def_states: Array[Dictionary] = _build_battle_states(
+		var def_states: Array = _build_battle_states(
 			def_dicts, "defender", characters_by_id,
 		)
 
@@ -2118,7 +2118,7 @@ static func _process_drill_effects(
 	companies: Array[Dictionary],
 	characters_by_id: Dictionary,
 	dice_engine: DiceEngine,
-) -> Array[Dictionary]:
+) -> Array:
 	var results: Array[Dictionary] = []
 	for applied: Dictionary in applied_list:
 		var effects: Dictionary = applied.get("effects", {})
@@ -2194,7 +2194,7 @@ static func _process_purification_effects(
 	applied_list: Array[Dictionary],
 	provinces: Dictionary,
 	season_meta: Dictionary,
-) -> Array[Dictionary]:
+) -> Array:
 	var results: Array[Dictionary] = []
 	for applied: Dictionary in applied_list:
 		var effects: Dictionary = applied.get("effects", {})
@@ -2235,7 +2235,7 @@ static func _process_purification_effects(
 static func _process_patrol_effects(
 	applied_list: Array[Dictionary],
 	season_meta: Dictionary,
-) -> Array[Dictionary]:
+) -> Array:
 	var results: Array[Dictionary] = []
 	for applied: Dictionary in applied_list:
 		var effects: Dictionary = applied.get("effects", {})
@@ -2282,7 +2282,7 @@ static func _process_horde_assaults(
 	ic_day: int,
 	provinces: Dictionary,
 	next_crisis_id: Array[int] = [1],
-) -> Array[Dictionary]:
+) -> Array:
 	var results: Array[Dictionary] = []
 
 	# Build province_id → wall tower settlement map.
@@ -2470,7 +2470,7 @@ static func _process_cadence_sync(
 	for court: CourtSessionData in active_courts:
 		if not CourtSystem.is_active(court):
 			continue
-		var court_ids: Array[int] = court.attendee_ids.duplicate()
+		var court_ids: Array = court.attendee_ids.duplicate()
 		SkillResolver.resolve_cadence_sync(characters, court_ids, dice_engine)
 
 
@@ -2702,7 +2702,7 @@ static func _process_famine_crises(
 	ic_day: int,
 	season_meta: Dictionary,
 	next_crisis_id: Array[int] = [1],
-) -> Array[Dictionary]:
+) -> Array:
 	var results: Array[Dictionary] = []
 	var tick: Dictionary = seasonal_result.get("resource_tick", {})
 	var starvation: Dictionary = tick.get("starvation_changes", {})
@@ -2998,8 +2998,8 @@ static func _process_scene_examination_writebacks(
 
 		var suspect_id: int = effects.get("suspect_found", -1)
 		if suspect_id >= 0:
-			var crime_records: Array[CrimeRecord] = world_states.get(
-				"_crime_records", [] as Array[CrimeRecord]
+			var crime_records: Array = world_states.get(
+				"_crime_records", []
 			)
 			for record: CrimeRecord in crime_records:
 				if record.case_id == case_id:
@@ -3051,7 +3051,7 @@ static func _inject_bribery_eval_event_by_case(
 	case_id: int,
 	world_states: Dictionary,
 ) -> void:
-	var cr: Array[CrimeRecord] = world_states.get("_crime_records", [] as Array[CrimeRecord])
+	var cr: Array = world_states.get("_crime_records", [])
 	for record: CrimeRecord in cr:
 		if record.case_id == case_id:
 			var perp_id: int = record.perpetrator_id
@@ -3074,7 +3074,7 @@ static func _inject_extortion_opportunity_by_case(
 	case_id: int,
 	world_states: Dictionary,
 ) -> void:
-	var cr: Array[CrimeRecord] = world_states.get("_crime_records", [] as Array[CrimeRecord])
+	var cr: Array = world_states.get("_crime_records", [])
 	for record: CrimeRecord in cr:
 		if record.case_id != case_id:
 			continue
@@ -3134,7 +3134,7 @@ static func _generate_accusation_topic_for_case(
 	next_topic_id: Array[int],
 	ic_day: int,
 ) -> void:
-	var cr: Array[CrimeRecord] = world_states.get("_crime_records", [] as Array[CrimeRecord])
+	var cr: Array = world_states.get("_crime_records", [])
 	for record: CrimeRecord in cr:
 		if record.case_id == case_id:
 			var accused: L5RCharacterData = characters_by_id.get(record.perpetrator_id)
@@ -3284,7 +3284,7 @@ static func _process_crime_detection(
 	active_wars: Array[WarData] = [],
 	action_log: Array[Dictionary] = [],
 	dice_engine: DiceEngine = null,
-) -> Array[Dictionary]:
+) -> Array:
 	var crime_results: Array[Dictionary] = []
 
 	for result: Variant in results:
@@ -3313,7 +3313,7 @@ static func _process_crime_detection(
 		var location: String = character.physical_location
 		var target_id: int = r.get("target_npc_id", -1)
 
-		var witnesses: Array[int] = _get_witnesses_at_location(
+		var witnesses: Array = _get_witnesses_at_location(
 			char_id, location, characters_by_id, world_states
 		)
 
@@ -3473,7 +3473,7 @@ static func _process_fugitive_extradition_seasonal(
 	active_topics: Array[TopicData],
 	next_topic_id: Array[int],
 	ic_day: int,
-) -> Array[Dictionary]:
+) -> Array:
 	var results: Array[Dictionary] = []
 
 	var sett_prov_map: Dictionary = {}
@@ -3638,7 +3638,7 @@ static func _extrad_find_harboring_lord(
 	return null
 
 
-static func _extrad_find_clan_champion_id(clan: String, characters: Array[L5RCharacterData]) -> int:
+static func _extrad_find_clan_champion_id(clan: String, characters: Array) -> int:
 	for c: L5RCharacterData in characters:
 		if c.clan == clan and c.role_position == "Clan Champion" and not CharacterStats.is_dead(c):
 			return c.character_id
@@ -4221,7 +4221,7 @@ static func _process_witness_tampering_writebacks(
 					var victim: L5RCharacterData = characters_by_id.get(witness_id)
 					var victim_loc: String = victim.physical_location if victim != null else ""
 					var kill_location: String = victim_loc if not victim_loc.is_empty() else record.location
-					var kill_witnesses: Array[int] = _get_witnesses_at_location(
+					var kill_witnesses: Array = _get_witnesses_at_location(
 						criminal_id, kill_location, characters_by_id, world_states,
 					)
 					kill_witnesses.erase(witness_id)
@@ -4436,7 +4436,7 @@ static func _apply_evidence_decay(
 	crime_records: Array[CrimeRecord],
 	objectives_map: Dictionary,
 	ic_day: int,
-) -> Array[Dictionary]:
+) -> Array:
 	var cold_cases: Array[Dictionary] = []
 
 	for record: CrimeRecord in crime_records:
@@ -5351,7 +5351,7 @@ static func _get_witnesses_at_location(
 	location: String,
 	characters_by_id: Dictionary,
 	_world_states: Dictionary,
-) -> Array[int]:
+) -> Array:
 	var witnesses: Array[int] = []
 	for cid: int in characters_by_id:
 		if cid == perpetrator_id:
@@ -5476,7 +5476,7 @@ static func _process_uphold_law_scan(
 	objectives_map: Dictionary,
 	crime_records: Array[CrimeRecord],
 	active_topics: Array[TopicData],
-) -> Array[Dictionary]:
+) -> Array:
 	var results: Array[Dictionary] = []
 
 	for character: L5RCharacterData in characters:
@@ -5540,7 +5540,7 @@ static func _check_witness_evidence(
 	objectives_map: Dictionary,
 	characters_by_id: Dictionary = {},
 	dice_engine: DiceEngine = null,
-	characters_present: Array[int] = [] as Array[int],
+	characters_present: Array[int] = [],
 ) -> Dictionary:
 	var objectives: Dictionary = objectives_map.get(prober_id, {})
 	var standing: Dictionary = objectives.get("standing", {})
@@ -5575,7 +5575,7 @@ static func _check_witness_evidence(
 			if not alibi_threshold.is_empty() and result.get("threshold_crossed", "").is_empty():
 				result["threshold_crossed"] = alibi_threshold
 
-		var leads: Array[Dictionary] = InvestigationSystem.generate_leads_from_probe(
+		var leads: Array = InvestigationSystem.generate_leads_from_probe(
 			target_id, quality, record, active_case, characters_present,
 		)
 		if not leads.is_empty():
@@ -5622,7 +5622,7 @@ static func _process_lord_deaths(
 	current_tick: int = 0,
 	active_topics: Array[TopicData] = [],
 	next_topic_id: Array[int] = [1000],
-) -> Array[Dictionary]:
+) -> Array:
 	if death_events.is_empty():
 		return []
 
@@ -5636,7 +5636,7 @@ static func _process_lord_deaths(
 
 		var successor_id: int = successor_map.get(dead_lord_id, -1)
 
-		var orphan_results: Array[Dictionary] = OrphanedObjectives.process_lord_death(
+		var orphan_results: Array = OrphanedObjectives.process_lord_death(
 			characters, dead_lord_id, successor_id, objectives_map
 		)
 
@@ -5740,7 +5740,7 @@ static func _process_lord_deaths(
 static func _process_operational_death_cascade(
 	death_events: Array[Dictionary],
 	characters: Array[L5RCharacterData],
-) -> Array[int]:
+) -> Array:
 	if death_events.is_empty():
 		return []
 	var all_cleared: Array[int] = []
@@ -5748,7 +5748,7 @@ static func _process_operational_death_cascade(
 		var dead_id: int = event.get("character_id", -1)
 		if dead_id < 0:
 			continue
-		var cleared: Array[int] = OperationalHierarchySystem.clear_subordinates_on_death(
+		var cleared: Array = OperationalHierarchySystem.clear_subordinates_on_death(
 			dead_id, characters
 		)
 		all_cleared.append_array(cleared)
@@ -5758,7 +5758,7 @@ static func _process_operational_death_cascade(
 static func _process_successions(
 	active_successions: Array[SuccessionData],
 	characters_by_id: Dictionary,
-) -> Array[Dictionary]:
+) -> Array:
 	var results: Array[Dictionary] = []
 	for succ: SuccessionData in active_successions:
 		if succ.state == SuccessionData.SuccessionState.CONFIRMED:
@@ -5790,7 +5790,7 @@ static func _process_successions(
 static func _rebuild_candidates(
 	succ: SuccessionData,
 	characters_by_id: Dictionary,
-) -> Array[Dictionary]:
+) -> Array:
 	var candidates: Array[Dictionary] = []
 	for cid: int in succ.candidate_ids:
 		var c: L5RCharacterData = characters_by_id.get(cid)
@@ -5806,11 +5806,11 @@ static func _process_commitment_deadlines(
 	ic_day: int,
 	characters_by_id: Dictionary,
 	active_courts: Array[CourtSessionData] = [],
-) -> Array[Dictionary]:
+) -> Array:
 	if commitments.is_empty():
 		return []
 	var chars: Dictionary = characters_by_id
-	var courts: Array[CourtSessionData] = active_courts
+	var courts: Array = active_courts
 	var checker: Callable = func(c: CommitmentData) -> bool:
 		return DayOrchestrator._check_commitment_fulfilled(c, chars, courts)
 	return CommitmentRegistry.process_deadlines(
@@ -6087,7 +6087,7 @@ static func _build_province_clan_map(provinces: Dictionary) -> Dictionary:
 	return result
 
 
-static func _build_lord_map(characters: Array[L5RCharacterData]) -> Dictionary:
+static func _build_lord_map(characters: Array) -> Dictionary:
 	var result: Dictionary = {}
 	for c: L5RCharacterData in characters:
 		if c.lord_id >= 0:
@@ -6102,7 +6102,7 @@ static func _resolve_pending_trials(
 	lord_map: Dictionary,
 	dice_engine: DiceEngine,
 	ic_day: int,
-) -> Array[Dictionary]:
+) -> Array:
 	var results: Array[Dictionary] = []
 
 	for conv: Dictionary in conviction_results:
@@ -6159,7 +6159,7 @@ static func _process_seppuku_responses(
 	next_topic_id: Array[int],
 	active_topics: Array[TopicData],
 	world_states: Dictionary = {},
-) -> Array[Dictionary]:
+) -> Array:
 	var results: Array[Dictionary] = []
 	for conviction: Dictionary in conviction_results:
 		if conviction.get("outcome", "") != "convicted":
@@ -6214,7 +6214,7 @@ static func _process_seppuku_action_writebacks(
 	ic_day: int,
 	next_topic_id: Array[int],
 	active_topics: Array[TopicData],
-) -> Array[Dictionary]:
+) -> Array:
 	var seppuku_results: Array[Dictionary] = []
 
 	for result: Variant in results:
@@ -6482,7 +6482,7 @@ static func _run_strategic_reviews(
 	characters: Array[L5RCharacterData],
 	objectives_map: Dictionary,
 	world_states: Dictionary,
-) -> Array[Dictionary]:
+) -> Array:
 	var results: Array[Dictionary] = []
 	var emperor_id: int = int(world_states.get("emperor_id", -1))
 	var emperor_archetype: int = int(world_states.get("emperor_archetype", StrategicReview.EmperorArchetype.IRON))
@@ -6491,15 +6491,15 @@ static func _run_strategic_reviews(
 		if not _is_lord_tier(lord):
 			continue
 		if lord.character_id == emperor_id and emperor_id >= 0:
-			var clan_champions: Array[L5RCharacterData] = _get_clan_champions(characters)
-			var directives: Array[Dictionary] = StrategicReview.run_emperor_review(
+			var clan_champions: Array = _get_clan_champions(characters)
+			var directives: Array = StrategicReview.run_emperor_review(
 				lord, emperor_archetype, clan_champions, world_states, objectives_map
 			)
 			for d: Dictionary in directives:
 				results.append(d)
 		else:
-			var vassals: Array[L5RCharacterData] = _get_vassals(lord, characters)
-			var directives_2: Array[Dictionary] = StrategicReview.run_seasonal_review(
+			var vassals: Array = _get_vassals(lord, characters)
+			var directives_2: Array = StrategicReview.run_seasonal_review(
 				lord, vassals, objectives_map, world_states
 			)
 			for d: Dictionary in directives_2:
@@ -6510,7 +6510,7 @@ static func _run_strategic_reviews(
 
 static func _get_clan_champions(
 	characters: Array[L5RCharacterData],
-) -> Array[L5RCharacterData]:
+) -> Array:
 	var champions: Array[L5RCharacterData] = []
 	for c: L5RCharacterData in characters:
 		if c.status >= 7.0 and c.lord_id == -1:
@@ -6525,15 +6525,15 @@ static func _is_lord_tier(character: L5RCharacterData) -> bool:
 static func _get_vassals(
 	lord: L5RCharacterData,
 	characters: Array[L5RCharacterData],
-) -> Array[L5RCharacterData]:
+) -> Array:
 	return MilitaryHierarchy.get_direct_subordinates(lord.character_id, characters)
 
 
 # -- Festival Processing (s11.5) ----------------------------------------------
 
 static func _process_festivals(ic_day: int, world_states: Dictionary) -> Dictionary:
-	var active_festivals: Array[Dictionary] = FestivalSystem.get_active_festivals(ic_day)
-	var effects: Array[String] = FestivalSystem.get_festival_effects(ic_day)
+	var active_festivals: Array = FestivalSystem.get_active_festivals(ic_day)
+	var effects: Array = FestivalSystem.get_festival_effects(ic_day)
 	var rokuyo_name: String = FestivalSystem.get_rokuyo_name(ic_day)
 	var is_taian: bool = FestivalSystem.get_taian_bonus(ic_day) > 0
 	var is_inauspicious: bool = FestivalSystem.is_inauspicious_for_social(ic_day)
@@ -6610,9 +6610,9 @@ static func _process_favors(
 	ic_day: int,
 	characters_by_id: Dictionary = {},
 ) -> Dictionary:
-	var expired_ids: Array[int] = FavorSystem.process_expirations(favors, ic_day)
+	var expired_ids: Array = FavorSystem.process_expirations(favors, ic_day)
 
-	var breach_results: Array[Dictionary] = FavorSystem.process_deadline_breaches(favors, ic_day)
+	var breach_results: Array = FavorSystem.process_deadline_breaches(favors, ic_day)
 
 	for breach: Dictionary in breach_results:
 		_apply_favor_breach(breach, characters_by_id)
@@ -6666,7 +6666,7 @@ static func _apply_favor_breach(
 
 static func _process_travel(
 	characters: Array[L5RCharacterData],
-) -> Array[Dictionary]:
+) -> Array:
 	return TravelSystem.process_travel_tick(characters)
 
 
@@ -6679,14 +6679,14 @@ static func _process_auto_conceal_on_arrival(
 	arrivals: Array[Dictionary],
 	characters_by_id: Dictionary,
 	dice_engine: DiceEngine,
-) -> Array[Dictionary]:
+) -> Array:
 	var results: Array[Dictionary] = []
 	for arrival: Dictionary in arrivals:
 		var char_id: int = arrival.get("character_id", -1)
 		var character: L5RCharacterData = characters_by_id.get(char_id)
 		if character == null:
 			continue
-		var contraband_items: Array[Dictionary] = InventorySystem.get_contraband_on_person(character)
+		var contraband_items: Array = InventorySystem.get_contraband_on_person(character)
 		if contraband_items.is_empty():
 			continue
 		for item: Dictionary in contraband_items:
@@ -6722,7 +6722,7 @@ static func _process_daily_letter_pass(
 	ic_day: int = 0,
 	dice_engine: DiceEngine = null,
 	next_letter_id: Array[int] = [1],
-) -> Array[Dictionary]:
+) -> Array:
 	var results: Array[Dictionary] = []
 	for character: L5RCharacterData in characters:
 		var objectives: Dictionary = objectives_map.get(character.character_id, {})
@@ -6868,7 +6868,7 @@ static func _evaluate_objective_progress(
 	characters: Array[L5RCharacterData],
 	objectives_map: Dictionary,
 	world_states: Dictionary,
-) -> Array[Dictionary]:
+) -> Array:
 	return ObjectiveProgress.evaluate_all_objectives(
 		characters, objectives_map, world_states
 	)
@@ -7004,7 +7004,7 @@ static func _evaluate_heir_designations(
 static func _process_entanglements(
 	entanglements: Array[Dictionary],
 	ic_day: int,
-) -> Array[Dictionary]:
+) -> Array:
 	var results: Array[Dictionary] = []
 	var broken: Array[Dictionary] = []
 
@@ -7060,7 +7060,7 @@ static func _process_hostage_escapes(
 	dice_engine: DiceEngine,
 	ic_day: int,
 	death_events: Array[Dictionary],
-) -> Array[Dictionary]:
+) -> Array:
 	var results: Array[Dictionary] = []
 	for hostage: Dictionary in active_hostages:
 		if hostage.get("released", false) or hostage.get("escaped", false):
@@ -7237,7 +7237,7 @@ static func _process_bound_states(
 	characters_by_id: Dictionary,
 	dice_engine: DiceEngine,
 	ic_day: int,
-) -> Array[Dictionary]:
+) -> Array:
 	var results: Array[Dictionary] = []
 	var freed: Array[Dictionary] = []
 
@@ -7291,32 +7291,32 @@ static func _process_military_daily(
 	active_hostages: Array[Dictionary] = [],
 	ic_day: int = 0,
 ) -> Dictionary:
-	var disband_results: Array[Dictionary] = _process_disbands(
+	var disband_results: Array = _process_disbands(
 		active_armies, companies, settlements,
 	)
-	var movement_results: Array[Dictionary] = _process_army_movements(active_armies)
-	var battle_results: Array[Dictionary] = _resolve_army_battles(
+	var movement_results: Array = _process_army_movements(active_armies)
+	var battle_results: Array = _resolve_army_battles(
 		movement_results, active_armies, companies, active_wars,
 		dice_engine, settlements, characters_by_id, worship_maluses,
 		provinces, active_hostages, ic_day,
 	)
-	var retreat_arrival_results: Array[Dictionary] = _process_retreat_arrivals(
+	var retreat_arrival_results: Array = _process_retreat_arrivals(
 		movement_results, active_armies, active_tethers,
 	)
-	var siege_results: Array[Dictionary] = _process_siege_ticks(
+	var siege_results: Array = _process_siege_ticks(
 		active_sieges, dice_engine,
 	)
-	var tether_results: Array[Dictionary] = _process_tether_ticks(
+	var tether_results: Array = _process_tether_ticks(
 		active_tethers, dice_engine, companies,
 	)
 	var order_results: Dictionary = _process_order_ticks(order_states)
 	var tether_by_army: Dictionary = _build_tether_result_by_army(
 		active_tethers, tether_results,
 	)
-	var deprivation_results: Array[Dictionary] = _process_field_deprivation(
+	var deprivation_results: Array = _process_field_deprivation(
 		active_tethers, tether_results,
 	)
-	var recovery_results: Array[Dictionary] = _process_army_recovery(
+	var recovery_results: Array = _process_army_recovery(
 		active_armies, tether_by_army, companies, worship_maluses,
 	)
 
@@ -7335,7 +7335,7 @@ static func _process_military_daily(
 
 static func _process_army_movements(
 	active_armies: Array[Dictionary],
-) -> Array[Dictionary]:
+) -> Array:
 	var results: Array[Dictionary] = []
 	for army: Dictionary in active_armies:
 		_initiate_retreat_march(army)
@@ -7366,7 +7366,7 @@ static func _resolve_army_battles(
 	provinces: Dictionary = {},
 	active_hostages: Array[Dictionary] = [],
 	ic_day: int = 0,
-) -> Array[Dictionary]:
+) -> Array:
 	var results: Array[Dictionary] = []
 
 	for mr: Dictionary in movement_results:
@@ -7399,7 +7399,7 @@ static func _resolve_army_battles(
 		if not WarSystem.are_clans_at_war(active_wars, attacker_clan, defender_clan):
 			continue
 
-		var atk_company_dicts: Array[Dictionary] = _get_army_companies(
+		var atk_company_dicts: Array = _get_army_companies(
 			arriving_army_id, companies,
 		)
 		var def_company_dicts: Array[Dictionary] = []
@@ -7413,10 +7413,10 @@ static func _resolve_army_battles(
 			])
 			continue
 
-		var atk_states: Array[Dictionary] = _build_battle_states(
+		var atk_states: Array = _build_battle_states(
 			atk_company_dicts, "attacker", characters_by_id,
 		)
-		var def_states: Array[Dictionary] = _build_battle_states(
+		var def_states: Array = _build_battle_states(
 			def_company_dicts, "defender", characters_by_id,
 		)
 
@@ -7460,7 +7460,7 @@ static func _resolve_army_battles(
 static func _get_army_companies(
 	army_id: int,
 	companies: Array[Dictionary],
-) -> Array[Dictionary]:
+) -> Array:
 	var result: Array[Dictionary] = []
 	for c: Dictionary in companies:
 		if c.get("army_id", -1) == army_id:
@@ -7472,7 +7472,7 @@ static func _build_battle_states(
 	company_dicts: Array[Dictionary],
 	side: String,
 	characters_by_id: Dictionary,
-) -> Array[Dictionary]:
+) -> Array:
 	var states: Array[Dictionary] = []
 	var col: int = 0
 	for cd: Dictionary in company_dicts:
@@ -7593,7 +7593,7 @@ static func _process_retreat_arrivals(
 	movement_results: Array[Dictionary],
 	active_armies: Array[Dictionary],
 	active_tethers: Array[Dictionary],
-) -> Array[Dictionary]:
+) -> Array:
 	var results: Array[Dictionary] = []
 	for mr: Dictionary in movement_results:
 		if not mr.get("retreat_arrived", false):
@@ -7648,7 +7648,7 @@ static func _initiate_retreat_march(army: Dictionary) -> void:
 	if target < 0:
 		return
 	army["destination_sub_tile"] = target
-	army["path"] = [target] as Array[int]
+	army["path"] = [target]
 	army["days_remaining"] = _RETREAT_DEFAULT_DAYS
 	army["is_moving"] = true
 	army["forced_march"] = false
@@ -7658,7 +7658,7 @@ static func _process_disbands(
 	active_armies: Array[Dictionary],
 	companies: Array[Dictionary],
 	settlements: Array[SettlementData],
-) -> Array[Dictionary]:
+) -> Array:
 	var results: Array[Dictionary] = []
 	for army: Dictionary in active_armies:
 		if not army.get("disband_ordered", false):
@@ -7669,7 +7669,7 @@ static func _process_disbands(
 		var disband_result: Dictionary = {
 			"army_id": army_id,
 			"clan": army.get("clan_name", army.get("owning_clan", "")),
-			"pu_returned": [] as Array[Dictionary],
+			"pu_returned": [],
 		}
 		for comp: Dictionary in companies:
 			if comp.get("army_id", -1) != army_id:
@@ -7704,7 +7704,7 @@ static func _find_settlement_for_province(
 static func _process_siege_ticks(
 	active_sieges: Array[Dictionary],
 	dice_engine: DiceEngine,
-) -> Array[Dictionary]:
+) -> Array:
 	var results: Array[Dictionary] = []
 	for siege: Dictionary in active_sieges:
 		var personality: String = siege.get("personality_tag", "default")
@@ -7719,7 +7719,7 @@ static func _process_tether_ticks(
 	active_tethers: Array[Dictionary],
 	dice_engine: DiceEngine,
 	companies: Array[Dictionary],
-) -> Array[Dictionary]:
+) -> Array:
 	var companies_by_id: Dictionary = _build_companies_by_id(companies)
 	var results: Array[Dictionary] = []
 	for tether: Dictionary in active_tethers:
@@ -7769,7 +7769,7 @@ static func _process_army_recovery(
 	tether_state_by_army: Dictionary,
 	companies: Array[Dictionary],
 	worship_maluses: Dictionary = {},
-) -> Array[Dictionary]:
+) -> Array:
 	var companies_by_army: Dictionary = {}
 	for c: Dictionary in companies:
 		var aid: int = c.get("army_id", -1)
@@ -7859,7 +7859,7 @@ static func _process_army_recovery(
 static func _process_field_deprivation(
 	active_tethers: Array[Dictionary],
 	tether_results: Array[Dictionary],
-) -> Array[Dictionary]:
+) -> Array:
 	var non_detached: Array[Dictionary] = []
 	for t: Dictionary in active_tethers:
 		if not t.get("detached", false):
@@ -7906,7 +7906,7 @@ static func _process_order_ticks(
 	var per_commander: Array[Dictionary] = []
 	for os: Dictionary in order_states:
 		OrderSystem.reset_daily_orders(os)
-		var delivered: Array[Dictionary] = OrderSystem.process_pending_orders(os)
+		var delivered: Array = OrderSystem.process_pending_orders(os)
 		delivered_total += delivered.size()
 		if not delivered.is_empty():
 			per_commander.append({
@@ -7933,7 +7933,7 @@ static func _process_military_seasonal(
 	var upkeep_results: Dictionary = _process_army_upkeep(
 		companies, settlements, clans,
 	)
-	var promotion_results: Array[Dictionary] = _process_military_promotions(
+	var promotion_results: Array = _process_military_promotions(
 		companies, characters_by_id,
 	)
 	return {
@@ -7950,7 +7950,7 @@ static func _process_levy_suspicion(
 	next_topic_id: Array[int],
 	ic_day: int,
 	season_count: int,
-) -> Array[Dictionary]:
+) -> Array:
 	var results: Array[Dictionary] = []
 	var war_clans: Dictionary = {}
 	for w: WarData in active_wars:
@@ -8122,7 +8122,7 @@ static func _process_army_upkeep(
 static func _process_military_promotions(
 	companies: Array[Dictionary],
 	characters_by_id: Dictionary,
-) -> Array[Dictionary]:
+) -> Array:
 	var units: Array[Dictionary] = []
 	for company: Dictionary in companies:
 		units.append({
@@ -8131,11 +8131,11 @@ static func _process_military_promotions(
 			"rank_needed": Enums.MilitaryRank.CHUI,
 		})
 
-	var vacancies: Array[Dictionary] = MilitaryPromotionSystem.find_vacancies(units)
+	var vacancies: Array = MilitaryPromotionSystem.find_vacancies(units)
 	var results: Array[Dictionary] = []
 
 	for vacancy: Dictionary in vacancies:
-		var candidates: Array[Dictionary] = _gather_promotion_candidates(
+		var candidates: Array = _gather_promotion_candidates(
 			vacancy, characters_by_id,
 		)
 		if candidates.is_empty():
@@ -8182,7 +8182,7 @@ static func _apply_promotion_results(
 static func _gather_promotion_candidates(
 	vacancy: Dictionary,
 	characters_by_id: Dictionary,
-) -> Array[Dictionary]:
+) -> Array:
 	var candidates: Array[Dictionary] = []
 	var rank_needed: int = vacancy.get("rank_needed", Enums.MilitaryRank.CHUI)
 
@@ -8230,7 +8230,7 @@ static func _process_military_effects(
 	next_court_id: Array[int] = [1],
 	ic_day: int = 0,
 	world_states: Dictionary = {},
-) -> Array[Dictionary]:
+) -> Array:
 	var results: Array[Dictionary] = []
 	var settlements_by_province: Dictionary = _build_settlements_by_province(settlements)
 
@@ -8303,7 +8303,7 @@ static func _process_starvation_warfare_effects(
 	season_meta: Dictionary,
 	active_wars: Array[WarData],
 	next_war_id: Array[int],
-) -> Array[Dictionary]:
+) -> Array:
 	var results: Array[Dictionary] = []
 
 	for applied: Dictionary in applied_list:
@@ -8428,7 +8428,7 @@ static func _process_supply_sharing(
 	characters_by_id: Dictionary,
 	settlements: Array[SettlementData],
 	provinces: Dictionary,
-) -> Array[Dictionary]:
+) -> Array:
 	var results: Array[Dictionary] = []
 
 	for applied: Dictionary in applied_list:
@@ -8512,7 +8512,7 @@ static func _process_war_score_shifts(
 	military_effects: Array[Dictionary],
 	active_wars: Array[WarData],
 	companies: Array[Dictionary],
-) -> Array[Dictionary]:
+) -> Array:
 	var results: Array[Dictionary] = []
 	if active_wars.is_empty():
 		return results
@@ -8890,7 +8890,7 @@ static func _process_supply_status_checks(
 	companies: Array[Dictionary],
 	clans: Dictionary,
 	active_tethers: Array[Dictionary],
-) -> Array[Dictionary]:
+) -> Array:
 	if active_wars.is_empty():
 		return []
 
@@ -8903,11 +8903,11 @@ static func _process_supply_status_checks(
 		if war == null:
 			continue
 
-		var clan_companies: Array[Dictionary] = _get_clan_companies(lord.clan, companies)
+		var clan_companies: Array = _get_clan_companies(lord.clan, companies)
 		if clan_companies.is_empty():
 			continue
 
-		var controlled: Array[SettlementData] = _get_clan_settlements(
+		var controlled: Array = _get_clan_settlements(
 			lord.clan, settlements, provinces,
 		)
 
@@ -8962,7 +8962,7 @@ static func _process_supply_status_checks(
 			result["peace_urgency"] = decision
 
 		if decision == FeasibilityLedger.CampaignDecision.RETREAT:
-			var friendly: Array[Dictionary] = _build_friendly_province_list(
+			var friendly: Array = _build_friendly_province_list(
 				lord.clan, settlements, provinces,
 			)
 			var retreat_target: Dictionary = FeasibilityLedger.find_retreat_target(
@@ -8986,7 +8986,7 @@ static func _find_active_war_for_clan(
 
 static func _get_clan_companies(
 	clan: String, companies: Array[Dictionary],
-) -> Array[Dictionary]:
+) -> Array:
 	var result: Array[Dictionary] = []
 	for c: Dictionary in companies:
 		if c.get("clan_name", "") == clan:
@@ -8998,7 +8998,7 @@ static func _get_clan_settlements(
 	clan: String,
 	settlements: Array[SettlementData],
 	provinces: Dictionary,
-) -> Array[SettlementData]:
+) -> Array:
 	var clan_province_ids: Array[int] = []
 	for pid: Variant in provinces:
 		var p: Variant = provinces[pid]
@@ -9031,7 +9031,7 @@ static func _get_worst_tether_state(
 	return worst
 
 
-static func _source_has_rice(controlled: Array[SettlementData]) -> bool:
+static func _source_has_rice(controlled: Array) -> bool:
 	var total_rice: float = 0.0
 	var total_civ_pu: float = 0.0
 	for s: SettlementData in controlled:
@@ -9097,7 +9097,7 @@ static func _build_friendly_province_list(
 	clan: String,
 	settlements: Array[SettlementData],
 	provinces: Dictionary,
-) -> Array[Dictionary]:
+) -> Array:
 	var result: Array[Dictionary] = []
 	var by_province: Dictionary = {}
 	for s: SettlementData in settlements:
@@ -9203,7 +9203,7 @@ static func _inject_urgency_data(
 		if loc.is_empty():
 			continue
 		if not location_characters.has(loc):
-			location_characters[loc] = [] as Array[int]
+			location_characters[loc] = []
 		location_characters[loc].append(c.character_id)
 	world_states["_location_characters"] = location_characters
 
@@ -9232,7 +9232,7 @@ static func _inject_urgency_data(
 		else:
 			ws["besieged_settlement_health_pct"] = 1.0
 		var char_loc: String = c.physical_location
-		var present: Array[int] = location_characters.get(char_loc, [] as Array[int])
+		var present: Array = location_characters.get(char_loc, [])
 		var others: Array[int] = []
 		for pid: int in present:
 			if pid != c.character_id:
@@ -9384,7 +9384,7 @@ static func _generate_military_event_topics(
 	active_topics: Array[TopicData],
 	next_topic_id: Array[int],
 	ic_day: int,
-) -> Array[TopicData]:
+) -> Array:
 	var topics: Array[TopicData] = []
 
 	var movement_results: Array = military_daily.get("movement_results", [])
@@ -9768,7 +9768,7 @@ static func _apply_court_creation(
 	if lord.status >= 7.0:
 		court_type = CourtSessionData.CourtType.CLAN_CHAMPION_COURT
 
-	var agenda: Array[int] = CourtSystem.select_agenda_topics(
+	var agenda: Array = CourtSystem.select_agenda_topics(
 		active_topics, court_type,
 	)
 	var court := CourtSystem.create_court(
@@ -9993,7 +9993,7 @@ static func resolve_and_reconcile_battle(
 
 		if rout_result.get("dissolved", false):
 			var pursuit_total: int = rout_result.get("pursuit_casualties", 0)
-			var dissolution_companies: Array[Dictionary] = _build_dissolution_companies(
+			var dissolution_companies: Array = _build_dissolution_companies(
 				loser_states, pursuit_total,
 			)
 			var dissolution: Dictionary = PUReconciliation.process_army_dissolution(
@@ -10050,7 +10050,7 @@ static func _deduct_clan_upkeep(
 static func _build_dissolution_companies(
 	loser_states: Array[Dictionary],
 	pursuit_casualties: int,
-) -> Array[Dictionary]:
+) -> Array:
 	var result: Array[Dictionary] = []
 	var remaining_pursuit: int = pursuit_casualties
 	for bc: Dictionary in loser_states:
@@ -10086,7 +10086,7 @@ static func _build_settlements_by_province(
 static func _process_compact_restorations(
 	applied_list: Array[Dictionary],
 	phoenix_council_state: Dictionary,
-) -> Array[Dictionary]:
+) -> Array:
 	## Intercepts RESTORE_COUNCIL_COMPACT action results and applies the
 	## restoration to phoenix_council_state (s55.10.3.7).
 	var results: Array[Dictionary] = []
@@ -10112,7 +10112,7 @@ static func _process_war_declarations(
 	active_wars: Array[WarData],
 	ic_day: int,
 	next_war_id: Array[int] = [1],
-) -> Array[Dictionary]:
+) -> Array:
 	var results: Array[Dictionary] = []
 	for applied: Variant in applied_list:
 		if not (applied is Dictionary):
@@ -10174,7 +10174,7 @@ static func _process_ladder_side_effects(
 	favors: Array[FavorData],
 	active_wars: Array[WarData],
 	next_war_id: Array[int],
-) -> Array[Dictionary]:
+) -> Array:
 	var results: Array[Dictionary] = []
 
 	for applied: Variant in applied_list:
@@ -10428,7 +10428,7 @@ static func _process_war_terminations(
 	active_topics: Array[TopicData],
 	next_topic_id: Array[int],
 	ic_day: int,
-) -> Array[Dictionary]:
+) -> Array:
 	var results: Array[Dictionary] = []
 
 	# 1. Check for annihilation on any active war.
@@ -10494,10 +10494,10 @@ static func _find_war_by_id(
 static func _apply_war_territory_transfers(
 	war_termination_results: Array[Dictionary],
 	provinces: Dictionary,
-) -> Array[Dictionary]:
+) -> Array:
 	var all_transfers: Array[Dictionary] = []
 	for resolution: Dictionary in war_termination_results:
-		var transfers: Array[Dictionary] = WarTermination.apply_territory_transfers(
+		var transfers: Array = WarTermination.apply_territory_transfers(
 			resolution, provinces,
 		)
 		all_transfers.append_array(transfers)
@@ -10510,7 +10510,7 @@ static func _process_war_trade_routes(
 	war_declarations: Array[Dictionary],
 	trade_routes: Array[TradeRouteData],
 	provinces: Dictionary,
-) -> Array[Dictionary]:
+) -> Array:
 	var results: Array[Dictionary] = []
 	for decl: Dictionary in war_declarations:
 		if decl.get("event", "") != "war_declared":
@@ -10519,7 +10519,7 @@ static func _process_war_trade_routes(
 		var clan_b: String = decl.get("target_clan", "")
 		if clan_a.is_empty() or clan_b.is_empty():
 			continue
-		var suspended: Array[Dictionary] = WarTermination.suspend_trade_routes_for_war(
+		var suspended: Array = WarTermination.suspend_trade_routes_for_war(
 			trade_routes, provinces, clan_a, clan_b,
 		)
 		results.append_array(suspended)
@@ -10529,7 +10529,7 @@ static func _process_war_trade_routes(
 static func _process_peace_trade_routes(
 	war_termination_results: Array[Dictionary],
 	trade_routes: Array[TradeRouteData],
-) -> Array[Dictionary]:
+) -> Array:
 	var results: Array[Dictionary] = []
 	for resolution: Dictionary in war_termination_results:
 		var res_type: String = resolution.get("resolution", "")
@@ -10549,7 +10549,7 @@ static func _process_peace_trade_routes(
 				clan_b = resolution.get("clan_b", "")
 		if clan_a.is_empty() or clan_b.is_empty():
 			continue
-		var restored: Array[Dictionary] = WarTermination.restore_trade_routes_for_peace(
+		var restored: Array = WarTermination.restore_trade_routes_for_peace(
 			trade_routes, clan_a, clan_b,
 		)
 		results.append_array(restored)
@@ -10570,7 +10570,7 @@ static func _process_active_courts(
 	world_states: Dictionary = {},
 	court_commitments: Array[CourtCommitmentData] = [],
 	characters: Array[L5RCharacterData] = [],
-) -> Array[Dictionary]:
+) -> Array:
 	var results: Array[Dictionary] = []
 	for court: CourtSessionData in active_courts:
 		if not CourtSystem.is_active(court):
@@ -10581,7 +10581,7 @@ static func _process_active_courts(
 		var advance_result: Dictionary = CourtSystem.advance_court_day(court)
 		if advance_result.get("should_close", false):
 			var close_result: Dictionary = CourtSystem.close_court(court)
-			var edicts_issued: Array[EdictData] = _generate_court_edicts(
+			var edicts_issued: Array = _generate_court_edicts(
 				court, active_edicts, next_edict_id, active_wars,
 				active_topics, next_topic_id, characters_by_id, world_states, ic_day,
 				court_commitments, characters,
@@ -10589,7 +10589,7 @@ static func _process_active_courts(
 			if not edicts_issued.is_empty():
 				close_result["edicts_issued"] = edicts_issued.size()
 			if court.court_type == CourtSessionData.CourtType.IMPERIAL_WINTER_COURT:
-				var glory_rewards: Array[Dictionary] = WinterCourtSystem.compute_glory_rewards(court, characters_by_id)
+				var glory_rewards: Array = WinterCourtSystem.compute_glory_rewards(court, characters_by_id)
 				for reward: Dictionary in glory_rewards:
 					var rid: int = reward.get("character_id", -1)
 					var rchar: L5RCharacterData = characters_by_id.get(rid) as L5RCharacterData
@@ -10647,7 +10647,7 @@ static func _generate_court_edicts(
 	ic_day: int,
 	court_commitments: Array[CourtCommitmentData] = [],
 	characters: Array[L5RCharacterData] = [],
-) -> Array[EdictData]:
+) -> Array:
 	if not court.emperor_present:
 		return []
 	var emperor_id: int = -1
@@ -10666,7 +10666,7 @@ static func _generate_court_edicts(
 		return []
 	archetype = world_states.get("emperor_archetype", StrategicReview.EmperorArchetype.IRON)
 
-	var attendees: Array[L5RCharacterData] = _gather_attendees(court, characters_by_id)
+	var attendees: Array = _gather_attendees(court, characters_by_id)
 	var agg_result: Dictionary = ImperialEdictSystem.generate_edicts_from_aggregate(
 		emperor, archetype, court, attendees,
 		active_topics, active_wars, next_edict_id, ic_day,
@@ -10676,7 +10676,7 @@ static func _generate_court_edicts(
 		edicts.append(e)
 
 	var deadline_ic_day: int = ic_day + 90
-	var lords: Array[L5RCharacterData] = _gather_lord_tier_characters(characters)
+	var lords: Array = _gather_lord_tier_characters(characters)
 
 	for edict: EdictData in edicts:
 		active_edicts.append(edict)
@@ -10686,7 +10686,7 @@ static func _generate_court_edicts(
 			active_topics.append(t)
 		var edict_topic: TopicData = _find_topic_by_id(edict.target_topic_id, active_topics)
 		if edict_topic != null:
-			var new_commitments: Array[CourtCommitmentData] = ImperialEdictSystem.generate_edict_commitments(
+			var new_commitments: Array = ImperialEdictSystem.generate_edict_commitments(
 				edict, edict_topic, lords, ic_day, deadline_ic_day,
 			)
 			for cc: CourtCommitmentData in new_commitments:
@@ -10697,7 +10697,7 @@ static func _generate_court_edicts(
 static func _gather_attendees(
 	court: CourtSessionData,
 	characters_by_id: Dictionary,
-) -> Array[L5RCharacterData]:
+) -> Array:
 	var result: Array[L5RCharacterData] = []
 	for char_id: int in court.attendee_ids:
 		var c: L5RCharacterData = characters_by_id.get(char_id) as L5RCharacterData
@@ -10708,7 +10708,7 @@ static func _gather_attendees(
 
 static func _gather_lord_tier_characters(
 	characters: Array[L5RCharacterData],
-) -> Array[L5RCharacterData]:
+) -> Array:
 	var result: Array[L5RCharacterData] = []
 	for c: L5RCharacterData in characters:
 		if CharacterStats.is_dead(c):
@@ -10846,7 +10846,7 @@ static func _process_crisis_court_calls(
 	world_states: Dictionary,
 	next_court_id: Array[int],
 	ic_day: int,
-) -> Array[Dictionary]:
+) -> Array:
 	var results: Array[Dictionary] = []
 	for lord: L5RCharacterData in characters:
 		if not _is_lord_tier(lord):
@@ -10877,7 +10877,7 @@ static func _process_crisis_court_calls(
 		next_court_id[0] += 1
 		var trigger_id: int = eval_result.get("trigger_topic_id", -1)
 		court.crisis_trigger_topic_id = trigger_id
-		var agenda: Array[int] = CourtSystem.select_agenda_topics(
+		var agenda: Array = CourtSystem.select_agenda_topics(
 			active_topics, court_type, trigger_id
 		)
 		CourtSystem.set_agenda(court, agenda)
@@ -10929,7 +10929,7 @@ static func _status_to_lord_rank(status: float) -> Enums.LordRank:
 static func _process_court_openings(
 	active_courts: Array[CourtSessionData],
 	ic_day: int,
-) -> Array[Dictionary]:
+) -> Array:
 	var results: Array[Dictionary] = []
 	for court: CourtSessionData in active_courts:
 		if court.phase != CourtSessionData.CourtPhase.SCHEDULED:
@@ -10948,7 +10948,7 @@ static func _process_court_attendance(
 	active_courts: Array[CourtSessionData],
 	characters: Array[L5RCharacterData],
 	characters_by_id: Dictionary = {},
-) -> Array[Dictionary]:
+) -> Array:
 	var results: Array[Dictionary] = []
 	for court: CourtSessionData in active_courts:
 		if not CourtSystem.is_active(court):
@@ -11014,8 +11014,8 @@ static func _process_edict_compliance(
 	next_topic_id: Array[int],
 	ic_day: int,
 	season_meta: Dictionary,
-) -> Array[Dictionary]:
-	var results: Array[Dictionary] = ImperialEdictSystem.process_daily_compliance(
+) -> Array:
+	var results: Array = ImperialEdictSystem.process_daily_compliance(
 		active_edicts, active_wars, characters, ic_day,
 	)
 	for r: Dictionary in results:
@@ -11107,7 +11107,7 @@ static func _process_strategic_court_calls(
 		var settlement_id: int = int(lord.physical_location) if lord.physical_location.is_valid_int() else -1
 		if settlement_id < 0:
 			continue
-		var agenda: Array[int] = CourtSystem.select_agenda_topics(
+		var agenda: Array = CourtSystem.select_agenda_topics(
 			active_topics, court_type
 		)
 
@@ -11173,7 +11173,7 @@ static func _create_winter_court_from_directive(
 	if host_settlement_id < 0:
 		return {}
 
-	var agenda: Array[int] = CourtSystem.select_agenda_topics(
+	var agenda: Array = CourtSystem.select_agenda_topics(
 		active_topics, CourtSessionData.CourtType.IMPERIAL_WINTER_COURT
 	)
 	var host_champion: L5RCharacterData = characters_by_id.get(host_champion_id) as L5RCharacterData
@@ -11310,9 +11310,9 @@ static func _dispatch_winter_court_summons(
 	announcement_topic_id: int,
 	ic_day: int,
 	characters_by_id: Dictionary,
-	pending_letters: Array[LetterData],
+	pending_letters: Array,
 	dice_engine: DiceEngine,
-	next_letter_id: Array[int],
+	next_letter_id: Array,
 ) -> int:
 	if emperor == null or dice_engine == null:
 		return 0
@@ -11356,7 +11356,7 @@ static func _process_naval_weather(
 static func _process_ship_movement(
 	ships: Array[ShipData],
 	dice_engine: DiceEngine,
-) -> Array[Dictionary]:
+) -> Array:
 	var results: Array[Dictionary] = []
 	for ship: ShipData in ships:
 		if ship.is_destroyed or ship.is_captured:
@@ -11404,7 +11404,7 @@ static func _process_naval_battle_triggers(
 	active_wars: Array[WarData],
 	weather: int,
 	dice_engine: DiceEngine,
-) -> Array[Dictionary]:
+) -> Array:
 	var ships_by_subtile: Dictionary = {}
 	for ship: ShipData in ships:
 		if ship.is_destroyed or ship.is_captured or ship.is_moving:
@@ -11434,7 +11434,7 @@ static func _process_naval_battle_triggers(
 		if clans_at.size() < 2:
 			continue
 
-		var hostile_pairs: Array[Array] = _find_hostile_naval_pairs(
+		var hostile_pairs: Array = _find_hostile_naval_pairs(
 			clans_at, active_wars,
 		)
 		if hostile_pairs.is_empty():
@@ -11466,7 +11466,7 @@ static func _process_naval_battle_triggers(
 static func _find_hostile_naval_pairs(
 	clans_at: Dictionary,
 	active_wars: Array[WarData],
-) -> Array[Array]:
+) -> Array:
 	var pairs: Array[Array] = []
 	var clan_list: Array = clans_at.keys()
 	for i: int in range(clan_list.size()):
@@ -11591,7 +11591,7 @@ static func _apply_naval_battle_mutations(
 static func _process_naval_war_scores(
 	naval_battle_results: Array[Dictionary],
 	active_wars: Array[WarData],
-) -> Array[Dictionary]:
+) -> Array:
 	var results: Array[Dictionary] = []
 	for battle: Dictionary in naval_battle_results:
 		var atk_clan: String = battle.get("attacker_clan", "")
@@ -11631,7 +11631,7 @@ static func _generate_naval_battle_topics(
 	active_topics: Array[TopicData],
 	next_topic_id: Array[int],
 	ic_day: int,
-) -> Array[TopicData]:
+) -> Array:
 	var topics: Array[TopicData] = []
 	for battle: Dictionary in naval_battle_results:
 		var victor: String = battle.get("victor", "draw")
@@ -11665,7 +11665,7 @@ static func _process_musha_shugyo(
 	objectives_map: Dictionary,
 	dice_engine: DiceEngine = null,
 	current_season_count: int = 0,
-) -> Array[Dictionary]:
+) -> Array:
 	var results: Array[Dictionary] = []
 	for character: L5RCharacterData in characters:
 		if not MushaShugyo.should_end_pilgrimage(character, ic_day):
@@ -11699,7 +11699,7 @@ static func _process_seiyaku_review(
 	ic_day: int,
 ) -> Dictionary:
 	var champion_dispositions: Dictionary = _build_champion_dispositions(characters, characters_by_id)
-	var otomo_courtiers: Array[int] = _get_otomo_courtier_ids(characters)
+	var otomo_courtiers: Array = _get_otomo_courtier_ids(characters)
 	var war_context: Array = []
 	for w: WarData in active_wars:
 		war_context.append(WarSystem.to_context_dict(w))
@@ -11761,7 +11761,7 @@ static func _build_champion_dispositions(
 	return dispositions
 
 
-static func _get_otomo_courtier_ids(characters: Array[L5RCharacterData]) -> Array[int]:
+static func _get_otomo_courtier_ids(characters: Array) -> Array:
 	var ids: Array[int] = []
 	for c: L5RCharacterData in characters:
 		if c.family != "Otomo":
@@ -11896,14 +11896,14 @@ static func _process_togashi_oversight(
 	return result
 
 
-static func _has_active_dragon_schism(active_civil_wars: Array[Dictionary]) -> bool:
+static func _has_active_dragon_schism(active_civil_wars: Array) -> bool:
 	for cw: Dictionary in active_civil_wars:
 		if cw.get("clan", "") == "Dragon" and cw.get("active", false):
 			return true
 	return false
 
 
-static func _find_mirumoto_fc(characters: Array[L5RCharacterData]) -> L5RCharacterData:
+static func _find_mirumoto_fc(characters: Array) -> L5RCharacterData:
 	var best: L5RCharacterData = null
 	for c: L5RCharacterData in characters:
 		if c.clan != "Dragon" or c.family != "Mirumoto":
@@ -11919,7 +11919,7 @@ static func _find_mirumoto_fc(characters: Array[L5RCharacterData]) -> L5RCharact
 	return best
 
 
-static func _find_togashi_id(characters: Array[L5RCharacterData]) -> int:
+static func _find_togashi_id(characters: Array) -> int:
 	for c: L5RCharacterData in characters:
 		if c.clan != "Dragon" or c.family != "Togashi":
 			continue
@@ -12057,7 +12057,7 @@ static func _process_phoenix_council_gating(
 			phoenix_state["known_champion_id"] = current_champ_id
 		return {"skipped": true, "reason": "champion_has_authority"}
 
-	var living_masters: Array[int] = _find_living_elemental_masters(characters)
+	var living_masters: Array = _find_living_elemental_masters(characters)
 	if not PhoenixCouncil.can_council_self_govern(living_masters):
 		return {"skipped": true, "reason": "council_below_quorum"}
 
@@ -12167,7 +12167,7 @@ static func _process_phoenix_council_gating(
 		var target_province: ProvinceData = provinces.get(target_province_id) as ProvinceData
 		if target_province == null:
 			continue
-		var all_reps: Array[L5RCharacterData] = characters.filter(
+		var all_reps: Array = characters.filter(
 			func(c: L5RCharacterData) -> bool: return c.status >= 5.0
 		)
 		var master_chars: Array[L5RCharacterData] = []
@@ -12229,7 +12229,7 @@ static func _process_phoenix_council_gating(
 	return result_dict
 
 
-static func _find_shiba_champion(characters: Array[L5RCharacterData]) -> L5RCharacterData:
+static func _find_shiba_champion(characters: Array) -> L5RCharacterData:
 	var best: L5RCharacterData = null
 	for c: L5RCharacterData in characters:
 		if c.clan != "Phoenix":
@@ -12245,7 +12245,7 @@ static func _find_shiba_champion(characters: Array[L5RCharacterData]) -> L5RChar
 	return best
 
 
-static func _find_living_elemental_masters(characters: Array[L5RCharacterData]) -> Array[int]:
+static func _find_living_elemental_masters(characters: Array) -> Array:
 	var masters: Array[int] = []
 	var found_by_role: Dictionary = {}
 	for c: L5RCharacterData in characters:
@@ -12721,7 +12721,7 @@ static func _process_pregnancy_checks(
 	dice_engine: DiceEngine,
 	ic_day: int,
 	next_character_id: Array[int] = [100000],
-) -> Array[Dictionary]:
+) -> Array:
 	var results: Array[Dictionary] = []
 
 	for m: Variant in marriages:
@@ -12766,8 +12766,8 @@ static func _process_pregnancy_checks(
 		father.children_ids.append(child_id)
 		mother.children_ids.append(child_id)
 		if not marriage.has("children_ids"):
-			marriage["children_ids"] = [] as Array[int]
-		(marriage["children_ids"] as Array[int]).append(child_id)
+			marriage["children_ids"] = []
+		(marriage["children_ids"]).append(child_id)
 
 		results.append({
 			"child_id": child_id,
@@ -12916,7 +12916,7 @@ static func _create_imperial_civil_war_topic(
 
 # -- Helpers -------------------------------------------------------------------
 
-static func _dict_values_to_province_array(provinces: Dictionary) -> Array[ProvinceData]:
+static func _dict_values_to_province_array(provinces: Dictionary) -> Array:
 	var result: Array[ProvinceData] = []
 	for pid: Variant in provinces:
 		var p: ProvinceData = provinces[pid] as ProvinceData
@@ -12930,7 +12930,7 @@ static func _dict_values_to_province_array(provinces: Dictionary) -> Array[Provi
 static func _process_worship_accumulation(
 	day_results: Array,
 	worship_state: Dictionary,
-) -> Array[Dictionary]:
+) -> Array:
 	var results: Array[Dictionary] = []
 	if worship_state.is_empty():
 		return results
@@ -12960,7 +12960,7 @@ static func _process_letter_examinations(
 	pending_letters: Array[LetterData],
 	characters_by_id: Dictionary,
 	dice_engine: DiceEngine,
-) -> Array[Dictionary]:
+) -> Array:
 	var results: Array[Dictionary] = []
 	if dice_engine == null:
 		return results
@@ -13149,7 +13149,7 @@ static func _process_construction_effects(
 	ic_day: int,
 	ships: Array[ShipData],
 	dice_engine: DiceEngine,
-) -> Array[Dictionary]:
+) -> Array:
 	var results: Array[Dictionary] = []
 
 	for r: Dictionary in day_results:
@@ -13374,7 +13374,7 @@ static func _process_construction_completions(
 	next_topic_id: Array[int],
 	ic_day: int,
 ) -> void:
-	var completed: Array[ConstructionData] = ConstructionSystem.tick_construction_queue(constructions)
+	var completed: Array = ConstructionSystem.tick_construction_queue(constructions)
 
 	for cd: ConstructionData in completed:
 		match cd.construction_type:
@@ -14199,7 +14199,7 @@ static func _process_voluntary_declarations(
 	characters_by_id: Dictionary,
 	ic_day: int,
 	time_system: TimeSystem,
-) -> Array[CourtCommitmentData]:
+) -> Array:
 	## Scans day results for successful PUBLIC_DECLARATION actions. When the
 	## declaring lord's position exceeds +50 on an agenda action topic at their
 	## current court, creates a voluntary CourtCommitmentData per GDD s16.4.
@@ -14224,7 +14224,7 @@ static func _process_voluntary_declarations(
 		)
 		if court == null:
 			continue
-		var declarable: Array[TopicData] = CourtCommitmentSystem.find_declarable_topics(
+		var declarable: Array = CourtCommitmentSystem.find_declarable_topics(
 			lord, court.agenda_topic_ids, active_topics, court_commitments,
 		)
 		if declarable.is_empty():
@@ -14564,7 +14564,7 @@ static func _populate_court_availability_data(
 			world_states[c.character_id] = ws
 
 		ws["upcoming_courts"] = upcoming
-		ws["held_leverage"] = creditor_favors.get(c.character_id, [] as Array[Dictionary])
+		ws["held_leverage"] = creditor_favors.get(c.character_id, [])
 
 		var locations: Dictionary = {}
 		for entry: KnowledgeEntry in c.knowledge_pool:
@@ -14779,7 +14779,7 @@ static func _process_civil_war_seasonal(
 			consequence_result["phoenix_master_deaths_penalized"] = master_deaths
 
 		# Dragon schism: re-evaluate loyalty when spiritual concern worsens (s55.10.2.8).
-		var spiritual_defections: Array[Dictionary] = _apply_dragon_spiritual_reeval(
+		var spiritual_defections: Array = _apply_dragon_spiritual_reeval(
 			state, togashi_state, characters_by_id, objectives_map,
 		)
 		if not spiritual_defections.is_empty():
@@ -14788,7 +14788,7 @@ static func _process_civil_war_seasonal(
 
 		_apply_civil_war_edict_shifts(state, rebel_lord_id, authority_lord_id, active_edicts)
 
-		var war_defections: Array[Dictionary] = _check_civil_war_defections(
+		var war_defections: Array = _check_civil_war_defections(
 			state, characters_by_id, objectives_map, current_season,
 		)
 		defections.append_array(war_defections)
@@ -14823,7 +14823,7 @@ static func _check_civil_war_defections(
 	characters_by_id: Dictionary,
 	objectives_map: Dictionary,
 	current_season: int,
-) -> Array[Dictionary]:
+) -> Array:
 	var results: Array[Dictionary] = []
 	var assignments: Dictionary = state.get("faction_assignments", {})
 	var rebel_lord_id: int = int(state.get("rebel_lord_id", -1))
@@ -15086,7 +15086,7 @@ static func _apply_dragon_spiritual_reeval(
 	togashi_state: Dictionary,
 	characters_by_id: Dictionary,
 	objectives_map: Dictionary,
-) -> Array[Dictionary]:
+) -> Array:
 	if state.get("clan", "") != "Dragon":
 		return []
 	if togashi_state.is_empty():
@@ -15649,7 +15649,7 @@ static func _process_assassination_daily_tick(
 	active_topics: Array[TopicData],
 	next_topic_id: Array[int],
 	entanglements: Array[Dictionary] = [],
-) -> Array[Dictionary]:
+) -> Array:
 	var results: Array[Dictionary] = []
 	var to_remove: Array[int] = []
 
@@ -16142,7 +16142,7 @@ static func _process_approach_evaluation_writebacks(
 		var target_id: int = result.get("target_npc_id", -1)
 		if char_id < 0 or target_id < 0:
 			continue
-		var penalizable: Array[String] = _find_measurement_triggered_actions(
+		var penalizable: Array = _find_measurement_triggered_actions(
 			action_log, char_id, target_id, current_season
 		)
 		if penalizable.is_empty():
@@ -16170,7 +16170,7 @@ static func _find_measurement_triggered_actions(
 	character_id: int,
 	target_npc_id: int,
 	current_season: int,
-) -> Array[String]:
+) -> Array:
 	var result: Array[String] = []
 	for social_action: String in ApproachEvaluation.SOCIAL_ACTIONS:
 		if ApproachEvaluation.check_measurement_needed(
@@ -16423,7 +16423,7 @@ static func _process_retroactive_forgiveness(
 	commitments: Array[CommitmentData],
 	characters_by_id: Dictionary,
 	active_topics: Array[TopicData],
-) -> Array[Dictionary]:
+) -> Array:
 	var results: Array[Dictionary] = []
 
 	var crisis_commitments: Array[CommitmentData] = []
@@ -17010,7 +17010,7 @@ static func _resolve_scheduled_hunts(
 	death_events: Array[Dictionary],
 	active_topics: Array[TopicData],
 	next_topic_id: Array[int],
-) -> Array[Dictionary]:
+) -> Array:
 	var results: Array[Dictionary] = []
 	for hunt: Dictionary in active_hunts:
 		if hunt.get("status", "") != "active":
@@ -17123,7 +17123,7 @@ static func _resolve_scheduled_hunts(
 	return results
 
 
-static func _apply_hunt_disposition(participants: Array[L5RCharacterData]) -> void:
+static func _apply_hunt_disposition(participants: Array) -> void:
 	for i: int in range(participants.size()):
 		for j: int in range(i + 1, participants.size()):
 			var a: L5RCharacterData = participants[i]

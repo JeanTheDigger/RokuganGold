@@ -29,7 +29,7 @@ static func cascade_request_to_vassals(
 	family_daimyo_id: int,
 	vassal_ids: Array[int],
 	total_needed: int,
-) -> Array[Dictionary]:
+) -> Array:
 	if vassal_ids.is_empty():
 		return []
 
@@ -56,7 +56,7 @@ static func cascade_request_to_vassals(
 static func evaluate_candidates(
 	candidates: Array[Dictionary],
 	selecting_lord_personality: String,
-) -> Array[Dictionary]:
+) -> Array:
 	return LevySystem.rank_candidates(candidates, selecting_lord_personality)
 
 
@@ -131,7 +131,7 @@ static func select_candidates_for_service(
 	count_needed: int,
 	selecting_lord_personality: String,
 ) -> Dictionary:
-	var ranked: Array[Dictionary] = evaluate_candidates(
+	var ranked: Array = evaluate_candidates(
 		available_retainers, selecting_lord_personality,
 	)
 
@@ -158,7 +158,7 @@ static func apply_service_assignments(
 	characters_by_id: Dictionary,
 	military_commander_id: int,
 	unit_id: int,
-) -> Array[Dictionary]:
+) -> Array:
 	var results: Array[Dictionary] = []
 	for candidate: Dictionary in selected:
 		var char_id: int = candidate.get("character_id", -1)

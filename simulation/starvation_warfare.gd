@@ -143,7 +143,7 @@ static func lift_blockade(
 static func get_blockaded_routes(
 	trade_routes: Array,
 	blocking_clan: String,
-) -> Array[TradeRouteData]:
+) -> Array:
 	var result: Array[TradeRouteData] = []
 	var reason: String = "blockade_%s" % blocking_clan
 	for r: Variant in trade_routes:
@@ -155,7 +155,7 @@ static func get_blockaded_routes(
 static func process_seasonal_blockade_honor(
 	trade_routes: Array,
 	characters_by_id: Dictionary,
-) -> Array[Dictionary]:
+) -> Array:
 	var results: Array[Dictionary] = []
 	var clans_with_blockades: Dictionary = {}
 

@@ -44,14 +44,14 @@ func _make_world_state(context_flag: Enums.ContextFlag, is_lord: bool = false) -
 		"context_flag": context_flag,
 		"season": 1,
 		"ic_day": 10,
-		"characters_present": [] as Array[int],
+		"characters_present": [],
 		"is_lord": is_lord,
-		"known_topics": [] as Array[int],
+		"known_topics": [],
 		"known_positions": {},
 		"known_objectives": {},
-		"known_contacts": [] as Array[int],
+		"known_contacts": [],
 		"pending_events": [],
-		"action_log": [] as Array[String],
+		"action_log": [],
 	}
 
 
@@ -62,7 +62,7 @@ func test_sort_by_status_descending() -> void:
 	var c2 := _make_char(2, 5.0, 2)
 	var c3 := _make_char(3, 1.0, 2)
 	var sorted: Array[L5RCharacterData] = NPCWaveResolver._sort_by_resolution_order(
-		[c1, c2, c3] as Array[L5RCharacterData], {}
+		[c1, c2, c3], {}
 	)
 	assert_eq(sorted[0].character_id, 2)
 	assert_eq(sorted[1].character_id, 1)
@@ -73,7 +73,7 @@ func test_sort_tiebreaker_awareness() -> void:
 	var c1 := _make_char(1, 3.0, 2)
 	var c2 := _make_char(2, 3.0, 5)
 	var sorted: Array[L5RCharacterData] = NPCWaveResolver._sort_by_resolution_order(
-		[c1, c2] as Array[L5RCharacterData], {}
+		[c1, c2], {}
 	)
 	assert_eq(sorted[0].character_id, 2)
 
@@ -122,7 +122,7 @@ func test_reactive_events_resolve_first() -> void:
 	]
 	var objs: Dictionary = {1: {"primary": {"need_type": "REST", "priority": 3}}}
 	var results: Array[Dictionary] = NPCWaveResolver.resolve_day(
-		[c1] as Array[L5RCharacterData], ws, objs, _scoring_tables, _filter_data
+		[c1], ws, objs, _scoring_tables, _filter_data
 	)
 	assert_true(results.size() > 0)
 	assert_true(results[0]["success"])
@@ -291,8 +291,8 @@ func test_resolve_day_applied_mutates_character_state() -> void:
 	var ws: Dictionary = {
 		1: _make_world_state(Enums.ContextFlag.AT_COURT),
 	}
-	ws[1]["characters_present"] = [2] as Array[int]
-	ws[1]["known_contacts"] = [2] as Array[int]
+	ws[1]["characters_present"] = [2]
+	ws[1]["known_contacts"] = [2]
 	var objs: Dictionary = {
 		1: {"primary": {"need_type": "RAISE_DISPOSITION", "priority": 2, "target_npc_id": 2}},
 	}

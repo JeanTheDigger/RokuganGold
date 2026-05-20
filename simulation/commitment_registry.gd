@@ -105,7 +105,7 @@ const CHUGI_EXTERNAL_FORGIVENESS: float = 0.25
 static func get_pending(
 	commitments: Array[CommitmentData],
 	npc_id: int,
-) -> Array[CommitmentData]:
+) -> Array:
 	var result: Array[CommitmentData] = []
 	for c: CommitmentData in commitments:
 		if c.debtor_npc_id == npc_id and c.status == Enums.CommitmentStatus.PENDING:
@@ -116,7 +116,7 @@ static func get_pending(
 static func get_by_crisis(
 	commitments: Array[CommitmentData],
 	crisis_id: int,
-) -> Array[CommitmentData]:
+) -> Array:
 	var result: Array[CommitmentData] = []
 	for c: CommitmentData in commitments:
 		if c.crisis_id == crisis_id:
@@ -306,7 +306,7 @@ static func process_deadlines(
 	fulfillment_checker: Callable,
 	debtor_lookup: Dictionary,
 	characters_by_id: Dictionary,
-) -> Array[Dictionary]:
+) -> Array:
 	var results: Array[Dictionary] = []
 	for c: CommitmentData in commitments:
 		if c.status != Enums.CommitmentStatus.PENDING:
@@ -413,7 +413,7 @@ static func get_at_risk_penalty(
 	creditor_in_loyalty_chain: Callable = Callable(),
 ) -> int:
 	var total: int = 0
-	var pending: Array[CommitmentData] = get_pending(commitments, debtor_id)
+	var pending: Array = get_pending(commitments, debtor_id)
 	var uses_reduced: bool = character.shourido_virtue in REDUCED_PENALTY_VIRTUES
 
 	for c: CommitmentData in pending:
@@ -458,7 +458,7 @@ static func get_action_commitment_modifier(
 	character: L5RCharacterData,
 	creditor_in_loyalty_chain: Callable = Callable(),
 ) -> int:
-	var pending: Array[CommitmentData] = get_pending(commitments, debtor_id)
+	var pending: Array = get_pending(commitments, debtor_id)
 	if pending.is_empty():
 		return 0
 	var commitment_targets: Array[int] = []

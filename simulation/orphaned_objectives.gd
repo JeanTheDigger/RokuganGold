@@ -53,7 +53,7 @@ static func process_lord_death(
 	dead_lord_id: int,
 	successor_id: int,
 	objectives_map: Dictionary,
-) -> Array[Dictionary]:
+) -> Array:
 	var results: Array[Dictionary] = []
 
 	for vassal: L5RCharacterData in vassals:
@@ -118,7 +118,7 @@ static func has_orphaned_vassals(
 	vassals: Array[L5RCharacterData],
 	lord_id: int,
 	objectives_map: Dictionary,
-) -> Array[int]:
+) -> Array:
 	var orphaned_ids: Array[int] = []
 	for vassal: L5RCharacterData in vassals:
 		if vassal.lord_id != lord_id:

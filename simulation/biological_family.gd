@@ -152,7 +152,7 @@ static func _record_bond(
 
 # -- Direct relation lookups (no traversal beyond the character itself) ------
 
-static func get_parent_ids(character: L5RCharacterData) -> Array[int]:
+static func get_parent_ids(character: L5RCharacterData) -> Array:
 	var out: Array[int] = []
 	if character == null:
 		return out
@@ -163,15 +163,15 @@ static func get_parent_ids(character: L5RCharacterData) -> Array[int]:
 	return out
 
 
-static func get_sibling_ids(character: L5RCharacterData) -> Array[int]:
+static func get_sibling_ids(character: L5RCharacterData) -> Array:
 	if character == null:
-		return ([] as Array[int])
+		return ([])
 	return character.sibling_ids.duplicate()
 
 
-static func get_child_ids(character: L5RCharacterData) -> Array[int]:
+static func get_child_ids(character: L5RCharacterData) -> Array:
 	if character == null:
-		return ([] as Array[int])
+		return ([])
 	return character.children_ids.duplicate()
 
 
@@ -180,7 +180,7 @@ static func get_child_ids(character: L5RCharacterData) -> Array[int]:
 static func get_grandparent_ids(
 	character: L5RCharacterData,
 	chars_by_id: Dictionary,
-) -> Array[int]:
+) -> Array:
 	var out: Array[int] = []
 	for parent_id: int in get_parent_ids(character):
 		var parent: L5RCharacterData = chars_by_id.get(parent_id)
@@ -195,7 +195,7 @@ static func get_grandparent_ids(
 static func get_grandchild_ids(
 	character: L5RCharacterData,
 	chars_by_id: Dictionary,
-) -> Array[int]:
+) -> Array:
 	var out: Array[int] = []
 	for child_id: int in get_child_ids(character):
 		var child: L5RCharacterData = chars_by_id.get(child_id)
@@ -210,7 +210,7 @@ static func get_grandchild_ids(
 static func get_aunt_uncle_ids(
 	character: L5RCharacterData,
 	chars_by_id: Dictionary,
-) -> Array[int]:
+) -> Array:
 	## Aunts and uncles = parents' siblings, including half-siblings detected
 	## via shared grandparent.
 	var out: Array[int] = []
@@ -235,7 +235,7 @@ static func get_aunt_uncle_ids(
 static func get_first_cousin_ids(
 	character: L5RCharacterData,
 	chars_by_id: Dictionary,
-) -> Array[int]:
+) -> Array:
 	var out: Array[int] = []
 	for au_id: int in get_aunt_uncle_ids(character, chars_by_id):
 		var au: L5RCharacterData = chars_by_id.get(au_id)
@@ -329,7 +329,7 @@ static func get_generation_lineage(
 		1: [character.character_id],
 		2: get_parent_ids(character),
 		3: get_grandparent_ids(character, chars_by_id),
-		4: ([] as Array[int]),
+		4: ([]),
 	}
 	# G4 from parents' grandparent records (lightweight only). We surface
 	# AncestorRecord ancestor_ids rather than character_ids since G4 is

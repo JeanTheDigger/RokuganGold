@@ -1007,7 +1007,7 @@ static func apply_vengeance_consequences(
 	next_topic_id: Array[int] = [],
 	ic_day: int = -1,
 ) -> Dictionary:
-	var family_ids: Array[int] = _get_biological_family(victim)
+	var family_ids: Array = _get_biological_family(victim)
 	for fam_id: int in family_ids:
 		var fam: L5RCharacterData = characters_by_id.get(fam_id) as L5RCharacterData
 		if fam == null:
@@ -1060,7 +1060,7 @@ static func apply_vengeance_consequences(
 	}
 
 
-static func _get_biological_family(character: L5RCharacterData) -> Array[int]:
+static func _get_biological_family(character: L5RCharacterData) -> Array:
 	var ids: Array[int] = []
 	if character.mother_id >= 0:
 		ids.append(character.mother_id)

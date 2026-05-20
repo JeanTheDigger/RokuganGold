@@ -130,7 +130,7 @@ static func issue_order(
 
 # -- Messenger Delivery Processing -----------------------------------------------
 
-static func process_pending_orders(order_state: Dictionary) -> Array[Dictionary]:
+static func process_pending_orders(order_state: Dictionary) -> Array:
 	var delivered: Array[Dictionary] = []
 	var still_pending: Array[Dictionary] = []
 
@@ -167,7 +167,7 @@ static func cancel_standing_order(
 	return {"cancelled": found}
 
 
-static func get_standing_orders(order_state: Dictionary) -> Array[Dictionary]:
+static func get_standing_orders(order_state: Dictionary) -> Array:
 	return order_state["standing_orders"].duplicate()
 
 

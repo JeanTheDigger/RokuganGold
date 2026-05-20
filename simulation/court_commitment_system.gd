@@ -269,7 +269,7 @@ static func process_seasonal_commitments(
 static func get_active_commitments(
 	commitments: Array[CourtCommitmentData],
 	lord_id: int,
-) -> Array[CourtCommitmentData]:
+) -> Array:
 	var result: Array[CourtCommitmentData] = []
 	for c: CourtCommitmentData in commitments:
 		if c.lord_id == lord_id and not c.fulfilled:
@@ -306,7 +306,7 @@ static func find_declarable_topics(
 	agenda_topic_ids: Array[int],
 	active_topics: Array[TopicData],
 	commitments: Array[CourtCommitmentData],
-) -> Array[TopicData]:
+) -> Array:
 	## Returns action topics on the agenda where the lord's position exceeds +50
 	## and no existing commitment exists. Used to detect voluntary declaration
 	## opportunities per GDD s16.4.

@@ -93,14 +93,14 @@ static func run_seasonal_review(
 	vassals: Array[L5RCharacterData],
 	objectives_map: Dictionary,
 	world_state: Dictionary,
-) -> Array[Dictionary]:
+) -> Array:
 	var directives: Array[Dictionary] = []
 
 	var self_select: Dictionary = _evaluate_self_selection(lord, objectives_map, world_state)
 	if not self_select.is_empty():
 		directives.append(self_select)
 
-	var orphan_directives: Array[Dictionary] = _resolve_orphaned_vassals(
+	var orphan_directives: Array = _resolve_orphaned_vassals(
 		lord, vassals, objectives_map
 	)
 	directives.append_array(orphan_directives)
@@ -109,7 +109,7 @@ static func run_seasonal_review(
 	if not court_directive.is_empty():
 		directives.append(court_directive)
 
-	var reassign_directives: Array[Dictionary] = _evaluate_vassal_objectives(
+	var reassign_directives: Array = _evaluate_vassal_objectives(
 		lord, vassals, objectives_map, world_state
 	)
 	directives.append_array(reassign_directives)
@@ -136,10 +136,10 @@ static func _resolve_orphaned_vassals(
 	lord: L5RCharacterData,
 	vassals: Array[L5RCharacterData],
 	objectives_map: Dictionary,
-) -> Array[Dictionary]:
+) -> Array:
 	var results: Array[Dictionary] = []
 
-	var orphaned_ids: Array[int] = OrphanedObjectives.has_orphaned_vassals(
+	var orphaned_ids: Array = OrphanedObjectives.has_orphaned_vassals(
 		vassals, lord.character_id, objectives_map
 	)
 	if orphaned_ids.is_empty():
@@ -209,7 +209,7 @@ static func _evaluate_vassal_objectives(
 	vassals: Array[L5RCharacterData],
 	objectives_map: Dictionary,
 	world_state: Dictionary,
-) -> Array[Dictionary]:
+) -> Array:
 	var results: Array[Dictionary] = []
 
 	var province_statuses: Array = world_state.get("province_statuses", [])
@@ -388,13 +388,13 @@ static func run_emperor_review(
 	clan_champions: Array[L5RCharacterData],
 	world_state: Dictionary,
 	objectives_map: Dictionary,
-) -> Array[Dictionary]:
+) -> Array:
 	_seed_archetype_champion_baselines(emperor, archetype, clan_champions)
 
 	var directives: Array[Dictionary] = []
 
-	var vassals: Array[L5RCharacterData] = clan_champions
-	var lord_directives: Array[Dictionary] = run_seasonal_review(
+	var vassals: Array = clan_champions
+	var lord_directives: Array = run_seasonal_review(
 		emperor, vassals, objectives_map, world_state
 	)
 	directives.append_array(lord_directives)
@@ -417,7 +417,7 @@ static func run_emperor_review(
 	if not shogun.is_empty():
 		directives.append(shogun)
 
-	var disgrace_directives: Array[Dictionary] = _evaluate_disgrace_fabrication(
+	var disgrace_directives: Array = _evaluate_disgrace_fabrication(
 		emperor, archetype, clan_champions
 	)
 	directives.append_array(disgrace_directives)
@@ -595,7 +595,7 @@ static func _evaluate_disgrace_fabrication(
 	emperor: L5RCharacterData,
 	archetype: int,
 	clan_champions: Array[L5RCharacterData],
-) -> Array[Dictionary]:
+) -> Array:
 	if archetype != EmperorArchetype.TYRANT:
 		return []
 

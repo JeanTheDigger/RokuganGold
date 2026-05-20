@@ -642,8 +642,8 @@ static func get_debate_disposition_tier(disposition: int) -> int:
 
 # -- Helpers ------------------------------------------------------------------
 
-static func _pick_random_info(count: int, dice_engine: DiceEngine) -> Array[String]:
-	var pool: Array[String] = READ_CHARACTER_INFO_TYPES.duplicate()
+static func _pick_random_info(count: int, dice_engine: DiceEngine) -> Array:
+	var pool: Array = READ_CHARACTER_INFO_TYPES.duplicate()
 	var result: Array[String] = []
 	for i: int in range(mini(count, pool.size())):
 		var idx: int = dice_engine.roll_and_keep(1, 1, 0).total % pool.size()

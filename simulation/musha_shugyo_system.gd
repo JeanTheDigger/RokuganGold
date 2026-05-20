@@ -250,7 +250,7 @@ const SHUGENJA_SETTLEMENT_TYPES: Array[int] = [
 ]
 
 
-static func get_preferred_settlement_types(school_type: Enums.SchoolType) -> Array[int]:
+static func get_preferred_settlement_types(school_type: Enums.SchoolType) -> Array:
 	match school_type:
 		Enums.SchoolType.BUSHI:
 			return BUSHI_SETTLEMENT_TYPES
@@ -268,7 +268,7 @@ static func score_settlement_for_pilgrimage(
 	is_own_clan: bool,
 ) -> int:
 	var score: int = 0
-	var preferred: Array[int] = get_preferred_settlement_types(school_type)
+	var preferred: Array = get_preferred_settlement_types(school_type)
 	if settlement.settlement_type in preferred:
 		score += 10
 	if not is_own_clan:

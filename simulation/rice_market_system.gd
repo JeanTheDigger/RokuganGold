@@ -90,7 +90,7 @@ static func resolve_purchases(
 	buy_orders: Array[Dictionary],
 	disposition_lookup: Callable,
 	worship_maluses: Dictionary = {},
-) -> Array[Dictionary]:
+) -> Array:
 	var results: Array[Dictionary] = []
 
 	for posting: RicePostingData in postings:
@@ -228,7 +228,7 @@ static func compute_trade_route_koku(
 static func get_active_routes_for_province(
 	province_id: int,
 	routes: Array[TradeRouteData],
-) -> Array[TradeRouteData]:
+) -> Array:
 	var result: Array[TradeRouteData] = []
 	for route: TradeRouteData in routes:
 		if route.connects(province_id) and not route.is_disrupted:

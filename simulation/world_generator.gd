@@ -596,7 +596,7 @@ static func generate_settlement(
 static func _default_infrastructure(
 	settlement_type: Enums.SettlementType,
 	has_castle_town: bool,
-) -> Array[String]:
+) -> Array:
 	# "shrine" and "temple" are the wind-down vocabulary (s57.44). Shrine tier
 	# (village/local/roadside) is tracked separately in worship_locations.
 	match settlement_type:
@@ -734,7 +734,7 @@ static func _assign_skills(
 
 	var wildcards: Array = school_data.get("wildcards", [])
 	for category: Variant in wildcards:
-		var pool: Array[String] = _get_skill_pool(category as String)
+		var pool: Array = _get_skill_pool(category as String)
 		var pick: String = _pick_unused_skill(pool, c.skills, dice)
 		if not pick.is_empty():
 			c.skills[pick] = 1
@@ -756,7 +756,7 @@ static func _assign_skills(
 				c.skills[pick] = 1
 
 
-static func _get_skill_pool(category: String) -> Array[String]:
+static func _get_skill_pool(category: String) -> Array:
 	match category:
 		"Bugei":
 			return BUGEI_POOL.duplicate()

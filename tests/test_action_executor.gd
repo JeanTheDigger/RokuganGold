@@ -1036,7 +1036,7 @@ func test_examine_crime_scene_calls_investigation_system() -> void:
 	cr.ic_day_committed = 5
 	cr.evidence_total = 0
 	cr.perpetrator_id = 99
-	cr.known_suspects = [] as Array[int]
+	cr.known_suspects = []
 	var records: Array[CrimeRecord] = [cr]
 
 	_character.skills["Investigation"] = 4
@@ -1077,7 +1077,7 @@ func test_examine_crime_scene_too_old_fails() -> void:
 	cr.ic_day_committed = 0
 	cr.evidence_total = 0
 	cr.perpetrator_id = 99
-	cr.known_suspects = [] as Array[int]
+	cr.known_suspects = []
 	var records: Array[CrimeRecord] = [cr]
 
 	_ctx.ic_day = 200

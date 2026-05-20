@@ -340,7 +340,7 @@ static func process_pending_letters(
 	active_wars: Array[Variant] = [],
 	dice_engine: DiceEngine = null,
 	topics_by_id: Dictionary = {},
-) -> Array[Dictionary]:
+) -> Array:
 	var results: Array[Dictionary] = []
 
 	for item: LetterData in pending_letters:
@@ -412,7 +412,7 @@ static func generate_replies(
 	ic_day: int,
 	dice_engine: DiceEngine,
 	next_letter_id: Array[int],
-) -> Array[LetterData]:
+) -> Array:
 	var replies: Array[LetterData] = []
 
 	for result: Dictionary in delivery_results:
@@ -483,7 +483,7 @@ static func _pick_reply_topic(
 	return recipient.topic_pool[0]
 
 
-static func _find_letter_by_id(pending_letters: Array[LetterData], letter_id: int) -> LetterData:
+static func _find_letter_by_id(pending_letters: Array, letter_id: int) -> LetterData:
 	for item: LetterData in pending_letters:
 		if item is LetterData and item.letter_id == letter_id:
 			return item
@@ -500,7 +500,7 @@ static func _refresh_topic_momentum(topic_id: int, topics_by_id: Dictionary) -> 
 
 # -- Unblock Letters on Blockade Lift ------------------------------------------
 
-static func unblock_letters(pending_letters: Array[LetterData]) -> int:
+static func unblock_letters(pending_letters: Array) -> int:
 	var count: int = 0
 	for item: LetterData in pending_letters:
 		if item is LetterData and item.blocked_by_blockade and not item.delivered:

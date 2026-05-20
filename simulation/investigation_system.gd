@@ -278,7 +278,7 @@ static func prioritize_witnesses(
 	candidates: Array[int],
 	characters_by_id: Dictionary,
 	present_ids: Array[int],
-) -> Array[int]:
+) -> Array:
 	if candidates.size() <= 1:
 		return candidates.duplicate()
 
@@ -437,7 +437,7 @@ static func process_witness_interview(
 			PROBE_WITNESS_EVIDENCE_MAX,
 		)
 		role = "witness"
-		var interviewed: Array[int] = objective.get("interviewed_witnesses", [])
+		var interviewed: Array = objective.get("interviewed_witnesses", [])
 		if target_id not in interviewed:
 			interviewed.append(target_id)
 			objective["interviewed_witnesses"] = interviewed
@@ -448,7 +448,7 @@ static func process_witness_interview(
 			PROBE_SUSPECT_EVIDENCE_MAX,
 		)
 		role = "suspect"
-		var interviewed: Array[int] = objective.get("interviewed_suspects", [])
+		var interviewed: Array = objective.get("interviewed_suspects", [])
 		if target_id not in interviewed:
 			interviewed.append(target_id)
 			objective["interviewed_suspects"] = interviewed
@@ -505,7 +505,7 @@ static func check_alibi(
 	var is_genuine: bool = alibi.get("genuine", false)
 	var suspect_id: int = alibi.get("suspect_id", -1)
 
-	var checked: Array[Variant] = objective.get("checked_alibis", [])
+	var checked: Array = objective.get("checked_alibis", [])
 	if alibi_id in checked:
 		return {"already_checked": true}
 	checked.append(alibi_id)
@@ -581,9 +581,9 @@ static func generate_leads_from_probe(
 	crime_record: CrimeRecord,
 	objective: Dictionary,
 	characters_present: Array[int],
-) -> Array[Dictionary]:
+) -> Array:
 	var leads: Array[Dictionary] = []
-	var unresolved: Array[Dictionary] = objective.get("unresolved_leads", [])
+	var unresolved: Array = objective.get("unresolved_leads", [])
 
 	if probe_quality >= 3 and crime_record.perpetrator_id >= 0:
 		if crime_record.perpetrator_id not in crime_record.known_suspects:

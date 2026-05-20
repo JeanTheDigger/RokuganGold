@@ -32,7 +32,7 @@ const RESERVE_COMPANIES_PER_LEGION: int = 1
 static func get_direct_subordinates(
 	character_id: int,
 	characters: Array[L5RCharacterData],
-) -> Array[L5RCharacterData]:
+) -> Array:
 	var result: Array[L5RCharacterData] = []
 	var seen: Dictionary = {}
 	for c: L5RCharacterData in characters:
@@ -48,7 +48,7 @@ static func get_direct_subordinates(
 static func get_direct_vassals(
 	character_id: int,
 	characters: Array[L5RCharacterData],
-) -> Array[L5RCharacterData]:
+) -> Array:
 	return get_direct_subordinates(character_id, characters)
 
 
@@ -176,7 +176,7 @@ static func get_commander_chain(
 	legions: Dictionary,
 	sections: Dictionary,
 	armies: Dictionary,
-) -> Array[int]:
+) -> Array:
 	var chain: Array[int] = []
 
 	var legion: MilitaryUnitData.LegionData = legions.get(company.parent_legion_id)

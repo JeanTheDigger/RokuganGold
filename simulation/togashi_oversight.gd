@@ -64,7 +64,7 @@ static func make_initial_state() -> Dictionary:
 			Axis.SPIRITUAL_HEALTH: 0.0,
 			Axis.SHADOWLANDS_CONTAINMENT: 0.0,
 		},
-		"active_forced_directives": [] as Array[Dictionary],
+		"active_forced_directives": [],
 		"defiance_count": 0,
 		"stage": 0,
 		"last_directive_axis": -1,
@@ -173,7 +173,7 @@ static func axis_concern_fires(axis: Axis, world_state: Dictionary) -> bool:
 # "directive" enum value and various target fields. Alignment is a
 # heuristic match per s55.10.2.4 Step 2.
 
-static func is_directive_aligned(axis: Axis, directives: Array[Dictionary]) -> bool:
+static func is_directive_aligned(axis: Axis, directives: Array) -> bool:
 	for d: Dictionary in directives:
 		if not (d is Dictionary):
 			continue
@@ -409,7 +409,7 @@ static func should_lift_forced_directive(
 
 
 static func remove_forced_directive(state: Dictionary, axis: Axis) -> void:
-	var actives: Array[Dictionary] = state.get("active_forced_directives", [])
+	var actives: Array = state.get("active_forced_directives", [])
 	var kept: Array[Dictionary] = []
 	for d: Dictionary in actives:
 		if int(d.get("axis", -1)) != axis:
@@ -425,7 +425,7 @@ static func _has_active_directive_on_axis(state: Dictionary, axis: Axis) -> bool
 
 
 static func add_forced_directive(state: Dictionary, directive: Dictionary) -> void:
-	var actives: Array[Dictionary] = state.get("active_forced_directives", [])
+	var actives: Array = state.get("active_forced_directives", [])
 	# Replace any existing directive on the same axis (only one per axis at a time).
 	var kept: Array[Dictionary] = []
 	for d: Dictionary in actives:

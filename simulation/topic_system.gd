@@ -199,7 +199,7 @@ static func calculate_aggregate_opinion(
 
 # -- Daily Tick Processing -----------------------------------------------------
 
-static func process_daily_tick(topics: Array[TopicData]) -> Dictionary:
+static func process_daily_tick(topics: Array) -> Dictionary:
 	var expired: Array[int] = []
 	var momentum_changes: Dictionary = {}
 
@@ -290,14 +290,14 @@ static func broadcast_public_knowledge(
 	province_clan_map: Dictionary,
 	provinces: Dictionary = {},
 	current_season: int = 0,
-) -> Array[Dictionary]:
+) -> Array:
 	var results: Array[Dictionary] = []
 
 	for topic: TopicData in topics:
 		if topic.resolved or topic.momentum < BROADCAST_MINOR:
 			continue
 
-		var target_chars: Array[L5RCharacterData] = _get_broadcast_targets(
+		var target_chars: Array = _get_broadcast_targets(
 			topic, characters, character_province_map, province_clan_map, provinces
 		)
 
@@ -326,14 +326,14 @@ static func _get_broadcast_targets(
 	character_province_map: Dictionary,
 	province_clan_map: Dictionary,
 	provinces: Dictionary = {},
-) -> Array[L5RCharacterData]:
+) -> Array:
 	var targets: Array[L5RCharacterData] = []
 
 	if topic.momentum >= BROADCAST_UNAVOIDABLE:
 		targets.assign(characters)
 		return targets
 
-	var affected_provinces: Array[int] = topic.provinces_affected
+	var affected_provinces: Array = topic.provinces_affected
 	var affected_clans: Array[String] = []
 	if topic.momentum >= BROADCAST_MAJOR:
 		for pid: int in affected_provinces:

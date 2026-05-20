@@ -206,7 +206,7 @@ func test_expose_publicly_disposition_per_witness() -> void:
 	var w2: L5RCharacterData = L5RCharacterData.new()
 	w2.character_id = 11
 	var chars: Dictionary = {10: w1, 11: w2}
-	var r: Dictionary = SecretSystem.expose_publicly(s, _revealer, _subject, [10, 11] as Array[int], chars)
+	var r: Dictionary = SecretSystem.expose_publicly(s, _revealer, _subject, [10, 11], chars)
 	assert_eq(r["disposition_per_witness"], -10)
 	assert_eq(r["witness_count"], 2)
 	assert_eq(r["witness_effects"].size(), 2)
@@ -214,14 +214,14 @@ func test_expose_publicly_disposition_per_witness() -> void:
 
 func test_expose_publicly_marks_both_flags() -> void:
 	var s: SecretData = SecretSystem.create_secret(1, _subject.character_id, SecretData.Severity.TIER_2)
-	SecretSystem.expose_publicly(s, _revealer, _subject, [] as Array[int], {})
+	SecretSystem.expose_publicly(s, _revealer, _subject, [], {})
 	assert_true(s.exposed)
 	assert_true(s.exposed_publicly)
 
 
 func test_expose_publicly_applies_subject_consequences() -> void:
 	var s: SecretData = SecretSystem.create_secret(1, _subject.character_id, SecretData.Severity.TIER_2)
-	SecretSystem.expose_publicly(s, _revealer, _subject, [] as Array[int], {})
+	SecretSystem.expose_publicly(s, _revealer, _subject, [], {})
 	assert_almost_eq(_subject.honor, 4.0, 0.01)
 	assert_almost_eq(_subject.glory, 4.5, 0.01)
 	assert_almost_eq(_subject.infamy, 0.3, 0.01)
@@ -231,25 +231,25 @@ func test_expose_publicly_witness_disposition_mutated() -> void:
 	var s: SecretData = SecretSystem.create_secret(1, _subject.character_id, SecretData.Severity.TIER_1)
 	var w: L5RCharacterData = L5RCharacterData.new()
 	w.character_id = 10
-	var r: Dictionary = SecretSystem.expose_publicly(s, _revealer, _subject, [10] as Array[int], {10: w})
+	var r: Dictionary = SecretSystem.expose_publicly(s, _revealer, _subject, [10], {10: w})
 	assert_eq(w.disposition_values[_subject.character_id], -35)
 
 
 func test_expose_publicly_tier_1_generates_betrayal_topic() -> void:
 	var s: SecretData = SecretSystem.create_secret(1, _subject.character_id, SecretData.Severity.TIER_1)
-	var r: Dictionary = SecretSystem.expose_publicly(s, _revealer, _subject, [] as Array[int], {})
+	var r: Dictionary = SecretSystem.expose_publicly(s, _revealer, _subject, [], {})
 	assert_true(r["generates_betrayal_topic"])
 
 
 func test_expose_publicly_has_proof_grants_raises() -> void:
 	var s: SecretData = SecretSystem.create_secret(1, _subject.character_id, SecretData.Severity.TIER_3)
-	var r: Dictionary = SecretSystem.expose_publicly(s, _revealer, _subject, [] as Array[int], {}, true)
+	var r: Dictionary = SecretSystem.expose_publicly(s, _revealer, _subject, [], {}, true)
 	assert_eq(r["free_raises"], 1)
 
 
 func test_expose_publicly_skips_missing_witness() -> void:
 	var s: SecretData = SecretSystem.create_secret(1, _subject.character_id, SecretData.Severity.TIER_3)
-	var r: Dictionary = SecretSystem.expose_publicly(s, _revealer, _subject, [99] as Array[int], {})
+	var r: Dictionary = SecretSystem.expose_publicly(s, _revealer, _subject, [99], {})
 	assert_eq(r["witness_effects"].size(), 0)
 
 

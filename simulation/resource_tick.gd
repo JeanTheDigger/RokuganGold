@@ -141,7 +141,7 @@ const MONTHS_PER_SEASON: Dictionary = {
 static func get_province_settlements(
 	province: ProvinceData,
 	settlements: Array[SettlementData],
-) -> Array[SettlementData]:
+) -> Array:
 	var result: Array[SettlementData] = []
 	for s: SettlementData in settlements:
 		if s.province_id == province.province_id:
@@ -428,7 +428,7 @@ static func _apply_miya_blessing(
 	if emperor_settlement != null:
 		stockpile = emperor_settlement.rice_stockpile
 
-	var scored: Array[Dictionary] = _build_scored_provinces(
+	var scored: Array = _build_scored_provinces(
 		provinces, settlements, miya_inputs, settlement_meta, current_ic_year
 	)
 
@@ -481,7 +481,7 @@ static func _build_scored_provinces(
 	miya_inputs: Dictionary,
 	settlement_meta: Dictionary,
 	current_ic_year: int,
-) -> Array[Dictionary]:
+) -> Array:
 	var scored: Array[Dictionary] = []
 	var petition_bonuses: Dictionary = miya_inputs.get("petition_bonuses", {})
 	var exclusions: Dictionary = miya_inputs.get("exclusions", {})
@@ -667,7 +667,7 @@ static func _distribute_rice_to_settlements(
 	settlements: Array[SettlementData],
 	rice_amount: float,
 ) -> void:
-	var province_settlements: Array[SettlementData] = get_province_settlements(province, settlements)
+	var province_settlements: Array = get_province_settlements(province, settlements)
 	var total_pop: int = 0
 	for s: SettlementData in province_settlements:
 		total_pop += s.population_pu

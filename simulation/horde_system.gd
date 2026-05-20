@@ -119,7 +119,7 @@ static func roll_horde_fires(dice: DiceEngine) -> bool:
 ## Returns an InvasionType enum value based on weighted d100 roll.
 static func roll_invasion_type(dice: DiceEngine) -> int:
 	var roll: int = (dice.roll_and_keep(1, 1, 0).total % 100) + 1
-	var sorted_keys: Array[int] = INVASION_TYPE_WEIGHTS.keys()
+	var sorted_keys: Array = INVASION_TYPE_WEIGHTS.keys()
 	sorted_keys.sort()
 	for threshold: int in sorted_keys:
 		if roll <= threshold:
@@ -176,7 +176,7 @@ static func get_unit_stats(unit_type: int) -> Dictionary:
 ## Each strength point adds 1 random Bakemono or Ogre Warrior company.
 static func _generate_jigoku_companies(
 	strength: int, dice: DiceEngine
-) -> Array[Dictionary]:
+) -> Array:
 	var companies: Array[Dictionary] = []
 	# Base composition.
 	for _i: int in range(4):
@@ -201,7 +201,7 @@ static func _generate_jigoku_companies(
 ## Each strength point adds 1 Zombie or Skeleton Warrior.
 static func _generate_undead_companies(
 	strength: int, dice: DiceEngine
-) -> Array[Dictionary]:
+) -> Array:
 	var companies: Array[Dictionary] = []
 	for _i: int in range(3):
 		companies.append(get_unit_stats(Enums.ShadowlandsUnitType.ZOMBIE))
@@ -225,7 +225,7 @@ static func _generate_undead_companies(
 ## The Oni itself is not a Company — it is represented separately in HordeData.
 static func _generate_oni_led_companies(
 	strength: int, dice: DiceEngine
-) -> Array[Dictionary]:
+) -> Array:
 	return _generate_jigoku_companies(strength, dice)
 
 
@@ -235,7 +235,7 @@ static func generate_horde_companies(
 	invasion_type: int,
 	strength: int,
 	dice: DiceEngine,
-) -> Array[Dictionary]:
+) -> Array:
 	match invasion_type:
 		Enums.InvasionType.JIGOKU_HORDE:
 			return _generate_jigoku_companies(strength, dice)
@@ -414,7 +414,7 @@ static func horde_companies_to_battle_states(
 	side: String,
 	start_company_id: int = 5000,
 	is_tower_assault: bool = false,
-) -> Array[Dictionary]:
+) -> Array:
 	var states: Array[Dictionary] = []
 	var id: int = start_company_id
 	# Maho-tsukai goes to row 2 (back); all others to row 1 (front).
@@ -466,7 +466,7 @@ static func resolve_horde_assault(
 	var si: int = tower_settlement.wall_si
 	var fortification_bonus: int = WallSystem.get_si_defense_bonus(si)
 
-	var horde_states: Array[Dictionary] = horde_companies_to_battle_states(
+	var horde_states: Array = horde_companies_to_battle_states(
 		horde_companies, "attacker", 5000, true,
 	)
 
@@ -503,7 +503,7 @@ static func resolve_horde_assault(
 static func _generate_sortie_horde_companies(
 	ss: int,
 	dice: DiceEngine,
-) -> Array[Dictionary]:
+) -> Array:
 	var count: int
 	if ss >= 9:
 		count = 6
@@ -535,8 +535,8 @@ static func resolve_sortie_combat(
 	ss: int,
 	dice: DiceEngine,
 ) -> Dictionary:
-	var horde_companies: Array[Dictionary] = _generate_sortie_horde_companies(ss, dice)
-	var horde_states: Array[Dictionary] = horde_companies_to_battle_states(
+	var horde_companies: Array = _generate_sortie_horde_companies(ss, dice)
+	var horde_states: Array = horde_companies_to_battle_states(
 		horde_companies, "attacker", 6000, false,
 	)
 

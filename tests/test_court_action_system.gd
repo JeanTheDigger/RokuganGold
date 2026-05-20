@@ -22,12 +22,23 @@ func _make_char(id: int, skills: Dictionary = {}, traits: Dictionary = {}) -> L5
 	c.glory = 3.0
 	c.status = 4.0
 	c.physical_location = "court_a"
-	c.traits = {
-		"Strength": 2, "Willpower": 3, "Stamina": 2, "Reflexes": 3,
-		"Awareness": 3, "Intelligence": 3, "Agility": 2, "Perception": 3,
+	c.strength = 2
+	c.willpower = 3
+	c.stamina = 2
+	c.reflexes = 3
+	c.awareness = 3
+	c.intelligence = 3
+	c.agility = 2
+	c.perception = 3
+	var _trait_map: Dictionary = {
+		"Strength": Enums.Trait.STRENGTH, "Willpower": Enums.Trait.WILLPOWER,
+		"Stamina": Enums.Trait.STAMINA, "Reflexes": Enums.Trait.REFLEXES,
+		"Awareness": Enums.Trait.AWARENESS, "Intelligence": Enums.Trait.INTELLIGENCE,
+		"Agility": Enums.Trait.AGILITY, "Perception": Enums.Trait.PERCEPTION,
 	}
 	for k: String in traits:
-		c.traits[k] = traits[k]
+		if _trait_map.has(k):
+			c.set_trait_value(_trait_map[k], traits[k])
 	c.skills = {
 		"Courtier": 3, "Etiquette": 3, "Sincerity": 3, "Investigation": 3,
 		"Intimidation": 2, "Lore": 2,
@@ -1279,7 +1290,7 @@ func test_build_context_populates_known_topics_from_character() -> void:
 	char.topic_positions = {10: 5.0, 20: -40.0}
 	var ws: Dictionary = {"is_lord": false}
 	var ctx: NPCDataStructures.ContextSnapshot = NPCDecisionEngine.build_context(char, ws)
-	assert_eq(ctx.known_topics, [10, 20, 30] as Array[int])
+	assert_eq(ctx.known_topics, [10, 20, 30])
 	assert_eq(ctx.known_positions.get(10, 0.0), 5.0)
 	assert_eq(ctx.known_positions.get(20, 0.0), -40.0)
 

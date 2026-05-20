@@ -350,7 +350,7 @@ static func apply_demotion(
 
 static func find_vacancies(
 	units: Array[Dictionary],
-) -> Array[Dictionary]:
+) -> Array:
 	var vacancies: Array[Dictionary] = []
 	for u: Dictionary in units:
 		if u.get("commander_id", -1) < 0:

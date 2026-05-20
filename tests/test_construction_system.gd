@@ -45,7 +45,7 @@ func test_validate_village_success() -> void:
 	var c := _make_char(1, 3.0)
 	var p := _make_province(1)
 	var s := _make_settlement(10, 1, Enums.SettlementType.VILLAGE, 5, 10.0, 20.0)
-	var result: Dictionary = ConstructionSystem.validate_village_founding(c, p, [s] as Array[SettlementData])
+	var result: Dictionary = ConstructionSystem.validate_village_founding(c, p, [s])
 	assert_true(result.get("valid", false))
 
 
@@ -53,7 +53,7 @@ func test_validate_village_insufficient_koku() -> void:
 	var c := _make_char(1, 3.0)
 	var p := _make_province(1)
 	var s := _make_settlement(10, 1, Enums.SettlementType.VILLAGE, 5, 10.0, 1.0)
-	var result: Dictionary = ConstructionSystem.validate_village_founding(c, p, [s] as Array[SettlementData])
+	var result: Dictionary = ConstructionSystem.validate_village_founding(c, p, [s])
 	assert_false(result.get("valid", false))
 	assert_eq(result.get("reason", ""), "insufficient_koku")
 
@@ -62,7 +62,7 @@ func test_validate_village_insufficient_pu() -> void:
 	var c := _make_char(1, 3.0)
 	var p := _make_province(1)
 	var s := _make_settlement(10, 1, Enums.SettlementType.VILLAGE, 0, 10.0, 20.0)
-	var result: Dictionary = ConstructionSystem.validate_village_founding(c, p, [s] as Array[SettlementData])
+	var result: Dictionary = ConstructionSystem.validate_village_founding(c, p, [s])
 	assert_false(result.get("valid", false))
 	assert_eq(result.get("reason", ""), "insufficient_pu")
 
@@ -72,7 +72,7 @@ func test_validate_village_tainted_terrain() -> void:
 	var p := _make_province(1)
 	p.province_taint_level = 5.0
 	var s := _make_settlement(10, 1, Enums.SettlementType.VILLAGE, 5, 10.0, 20.0)
-	var result: Dictionary = ConstructionSystem.validate_village_founding(c, p, [s] as Array[SettlementData])
+	var result: Dictionary = ConstructionSystem.validate_village_founding(c, p, [s])
 	assert_false(result.get("valid", false))
 	assert_eq(result.get("reason", ""), "tainted_terrain")
 
@@ -83,7 +83,7 @@ func test_validate_fortification_success() -> void:
 	var c := _make_char(1, 3.0)
 	var p := _make_province(1)
 	var s := _make_settlement(10, 1, Enums.SettlementType.VILLAGE, 5, 10.0, 20.0)
-	var result: Dictionary = ConstructionSystem.validate_fortification(c, p, [s] as Array[SettlementData])
+	var result: Dictionary = ConstructionSystem.validate_fortification(c, p, [s])
 	assert_true(result.get("valid", false))
 
 
@@ -91,7 +91,7 @@ func test_validate_fortification_insufficient_koku() -> void:
 	var c := _make_char(1, 3.0)
 	var p := _make_province(1)
 	var s := _make_settlement(10, 1, Enums.SettlementType.VILLAGE, 5, 10.0, 2.0)
-	var result: Dictionary = ConstructionSystem.validate_fortification(c, p, [s] as Array[SettlementData])
+	var result: Dictionary = ConstructionSystem.validate_fortification(c, p, [s])
 	assert_false(result.get("valid", false))
 	assert_eq(result.get("reason", ""), "insufficient_koku")
 
@@ -141,7 +141,7 @@ func test_validate_temple_success() -> void:
 	var p := _make_province(1)
 	var s := _make_settlement(10, 1, Enums.SettlementType.VILLAGE, 5, 10.0, 100.0)
 	var result: Dictionary = ConstructionSystem.validate_temple(
-		ConstructionData.ConstructionType.TEMPLE, c, p, [s] as Array[SettlementData], false,
+		ConstructionData.ConstructionType.TEMPLE, c, p, [s], false,
 	)
 	assert_true(result.get("valid", false))
 
@@ -151,7 +151,7 @@ func test_validate_temple_insufficient_authority() -> void:
 	var p := _make_province(1)
 	var s := _make_settlement(10, 1, Enums.SettlementType.VILLAGE, 5, 10.0, 100.0)
 	var result: Dictionary = ConstructionSystem.validate_temple(
-		ConstructionData.ConstructionType.TEMPLE, c, p, [s] as Array[SettlementData], false,
+		ConstructionData.ConstructionType.TEMPLE, c, p, [s], false,
 	)
 	assert_false(result.get("valid", false))
 	assert_eq(result.get("reason", ""), "insufficient_authority")
@@ -162,7 +162,7 @@ func test_validate_shinden_cost() -> void:
 	var p := _make_province(1)
 	var s := _make_settlement(10, 1, Enums.SettlementType.VILLAGE, 5, 10.0, 300.0)
 	var result: Dictionary = ConstructionSystem.validate_temple(
-		ConstructionData.ConstructionType.SHINDEN, c, p, [s] as Array[SettlementData], false,
+		ConstructionData.ConstructionType.SHINDEN, c, p, [s], false,
 	)
 	assert_true(result.get("valid", false))
 
@@ -172,7 +172,7 @@ func test_validate_shinden_insufficient_koku() -> void:
 	var p := _make_province(1)
 	var s := _make_settlement(10, 1, Enums.SettlementType.VILLAGE, 5, 10.0, 100.0)
 	var result: Dictionary = ConstructionSystem.validate_temple(
-		ConstructionData.ConstructionType.SHINDEN, c, p, [s] as Array[SettlementData], false,
+		ConstructionData.ConstructionType.SHINDEN, c, p, [s], false,
 	)
 	assert_false(result.get("valid", false))
 	assert_eq(result.get("reason", ""), "insufficient_koku")
@@ -183,7 +183,7 @@ func test_validate_monastery_success() -> void:
 	var p := _make_province(1)
 	var s := _make_settlement(10, 1, Enums.SettlementType.VILLAGE, 5, 10.0, 100.0)
 	var result: Dictionary = ConstructionSystem.validate_temple(
-		ConstructionData.ConstructionType.MONASTERY, c, p, [s] as Array[SettlementData], false,
+		ConstructionData.ConstructionType.MONASTERY, c, p, [s], false,
 	)
 	assert_true(result.get("valid", false))
 
@@ -288,7 +288,7 @@ func test_tick_decrements_seasons() -> void:
 		1, ConstructionData.ConstructionType.SHRINE_LOCAL, 10, 5, 100,
 	)
 	assert_eq(cd.seasons_remaining, 3)
-	ConstructionSystem.tick_construction_queue([cd] as Array[ConstructionData])
+	ConstructionSystem.tick_construction_queue([cd])
 	assert_eq(cd.seasons_remaining, 2)
 	assert_false(cd.is_complete)
 
@@ -299,7 +299,7 @@ func test_tick_completes_when_zero() -> void:
 	)
 	assert_eq(cd.seasons_remaining, 1)
 	var completed: Array[ConstructionData] = ConstructionSystem.tick_construction_queue(
-		[cd] as Array[ConstructionData],
+		[cd],
 	)
 	assert_eq(completed.size(), 1)
 	assert_true(cd.is_complete)
@@ -313,7 +313,7 @@ func test_tick_multiple_entries() -> void:
 		2, ConstructionData.ConstructionType.TEMPLE, 10, 5, 100,
 	)
 	var completed: Array[ConstructionData] = ConstructionSystem.tick_construction_queue(
-		[cd1, cd2] as Array[ConstructionData],
+		[cd1, cd2],
 	)
 	assert_eq(completed.size(), 1)
 	assert_true(cd1.is_complete)
@@ -327,7 +327,7 @@ func test_tick_skips_already_complete() -> void:
 	)
 	cd.is_complete = true
 	var completed: Array[ConstructionData] = ConstructionSystem.tick_construction_queue(
-		[cd] as Array[ConstructionData],
+		[cd],
 	)
 	assert_eq(completed.size(), 0)
 
@@ -349,7 +349,7 @@ func test_add_shrine_to_settlement() -> void:
 func test_deduct_village_resources() -> void:
 	var s := _make_settlement(10, 1, Enums.SettlementType.VILLAGE, 5, 10.0, 20.0)
 	var result: Dictionary = ConstructionSystem.deduct_village_resources(
-		[s] as Array[SettlementData], 1, 1.0, 3.0,
+		[s], 1, 1.0, 3.0,
 	)
 	assert_eq(result["pu_moved"], 1.0)
 	assert_eq(result["rice_moved"], 1.0)
@@ -363,7 +363,7 @@ func test_deduct_koku_from_province() -> void:
 	var s1 := _make_settlement(10, 1, Enums.SettlementType.VILLAGE, 5, 10.0, 3.0)
 	var s2 := _make_settlement(11, 1, Enums.SettlementType.VILLAGE, 5, 10.0, 4.0)
 	var deducted: float = ConstructionSystem.deduct_koku(
-		[s1, s2] as Array[SettlementData], 1, 5.0,
+		[s1, s2], 1, 5.0,
 	)
 	assert_eq(deducted, 5.0)
 	assert_eq(s1.koku_stockpile, 0.0)
@@ -375,7 +375,7 @@ func test_deduct_koku_from_province() -> void:
 func test_organic_check_eligible() -> void:
 	var p := _make_province(1, Enums.TerrainType.PLAINS)
 	var s := _make_settlement(10, 1, Enums.SettlementType.VILLAGE, 10, 20.0, 10.0)
-	var result: Dictionary = ConstructionSystem.check_organic_formation(p, [s] as Array[SettlementData])
+	var result: Dictionary = ConstructionSystem.check_organic_formation(p, [s])
 	assert_true(result.get("eligible", false))
 
 
@@ -383,7 +383,7 @@ func test_organic_check_low_stability() -> void:
 	var p := _make_province(1, Enums.TerrainType.PLAINS)
 	p.stability = 30.0
 	var s := _make_settlement(10, 1, Enums.SettlementType.VILLAGE, 10, 20.0, 10.0)
-	var result: Dictionary = ConstructionSystem.check_organic_formation(p, [s] as Array[SettlementData])
+	var result: Dictionary = ConstructionSystem.check_organic_formation(p, [s])
 	assert_false(result.get("eligible", false))
 	assert_eq(result.get("reason", ""), "low_stability")
 
@@ -391,7 +391,7 @@ func test_organic_check_low_stability() -> void:
 func test_organic_check_insufficient_surplus() -> void:
 	var p := _make_province(1, Enums.TerrainType.PLAINS)
 	var s := _make_settlement(10, 1, Enums.SettlementType.VILLAGE, 2, 20.0, 10.0)
-	var result: Dictionary = ConstructionSystem.check_organic_formation(p, [s] as Array[SettlementData])
+	var result: Dictionary = ConstructionSystem.check_organic_formation(p, [s])
 	assert_false(result.get("eligible", false))
 	assert_eq(result.get("reason", ""), "insufficient_surplus")
 
@@ -399,7 +399,7 @@ func test_organic_check_insufficient_surplus() -> void:
 func test_organic_check_starving_blocks() -> void:
 	var p := _make_province(1, Enums.TerrainType.PLAINS)
 	var s := _make_settlement(10, 1, Enums.SettlementType.VILLAGE, 10, 0.0, 10.0)
-	var result: Dictionary = ConstructionSystem.check_organic_formation(p, [s] as Array[SettlementData])
+	var result: Dictionary = ConstructionSystem.check_organic_formation(p, [s])
 	assert_false(result.get("eligible", false))
 	assert_eq(result.get("reason", ""), "settlements_starving")
 
@@ -408,7 +408,7 @@ func test_organic_check_tainted_blocks() -> void:
 	var p := _make_province(1, Enums.TerrainType.PLAINS)
 	p.province_taint_level = 5.0
 	var s := _make_settlement(10, 1, Enums.SettlementType.VILLAGE, 10, 20.0, 10.0)
-	var result: Dictionary = ConstructionSystem.check_organic_formation(p, [s] as Array[SettlementData])
+	var result: Dictionary = ConstructionSystem.check_organic_formation(p, [s])
 	assert_false(result.get("eligible", false))
 	assert_eq(result.get("reason", ""), "tainted")
 
@@ -417,7 +417,7 @@ func test_organic_mountains_higher_threshold() -> void:
 	var p := _make_province(1, Enums.TerrainType.MOUNTAINS)
 	# Mountains threshold = 10.0 PU. 8 PU is below threshold.
 	var s := _make_settlement(10, 1, Enums.SettlementType.VILLAGE, 8, 20.0, 10.0)
-	var result: Dictionary = ConstructionSystem.check_organic_formation(p, [s] as Array[SettlementData])
+	var result: Dictionary = ConstructionSystem.check_organic_formation(p, [s])
 	assert_false(result.get("eligible", false))
 
 
@@ -425,7 +425,7 @@ func test_organic_formation_creates_village() -> void:
 	var p := _make_province(1, Enums.TerrainType.PLAINS)
 	var s := _make_settlement(10, 1, Enums.SettlementType.VILLAGE, 10, 20.0, 10.0)
 	var result: Dictionary = ConstructionSystem.process_organic_formation(
-		p, [s] as Array[SettlementData], 200,
+		p, [s], 200,
 	)
 	assert_true(result.get("formed", false))
 	var village: SettlementData = result.get("settlement")
@@ -736,8 +736,8 @@ func test_integration_village_founding_deducts_resources() -> void:
 	var day_results: Array = [_make_day_result(1, "FOUND_VILLAGE", {"province_id": 1})]
 	DayOrchestrator._process_construction_effects(
 		day_results, chars_by_id, provinces, settlements,
-		[] as Array[ConstructionData], [100] as Array[int], [1] as Array[int],
-		50, [] as Array[ShipData], _make_dice(),
+		[], [100], [1],
+		50, [], _make_dice(),
 	)
 
 	assert_eq(s.koku_stockpile, 17.0)
@@ -758,8 +758,8 @@ func test_integration_fortification_creates_settlement() -> void:
 	var day_results: Array = [_make_day_result(1, "BUILD_FORTIFICATION", {"province_id": 1})]
 	var results: Array[Dictionary] = DayOrchestrator._process_construction_effects(
 		day_results, chars_by_id, provinces, settlements,
-		[] as Array[ConstructionData], [100] as Array[int], [1] as Array[int],
-		50, [] as Array[ShipData], _make_dice(),
+		[], [100], [1],
+		50, [], _make_dice(),
 	)
 
 	assert_eq(results.size(), 1)
@@ -784,7 +784,7 @@ func test_integration_roadside_shrine_immediate() -> void:
 	})]
 	var results: Array[Dictionary] = DayOrchestrator._process_construction_effects(
 		day_results, chars_by_id, {}, settlements, constructions,
-		[100] as Array[int], [1] as Array[int], 50, [] as Array[ShipData], _make_dice(),
+		[100], [1], 50, [], _make_dice(),
 	)
 
 	assert_true(results[0].get("applied", false))
@@ -806,7 +806,7 @@ func test_integration_village_shrine_queued() -> void:
 	})]
 	var results: Array[Dictionary] = DayOrchestrator._process_construction_effects(
 		day_results, chars_by_id, {}, settlements, constructions,
-		[100] as Array[int], [1] as Array[int], 50, [] as Array[ShipData], _make_dice(),
+		[100], [1], 50, [], _make_dice(),
 	)
 
 	assert_true(results[0].get("applied", false))
@@ -830,7 +830,7 @@ func test_integration_local_shrine_queued_3_seasons() -> void:
 	})]
 	DayOrchestrator._process_construction_effects(
 		day_results, chars_by_id, {}, settlements, constructions,
-		[100] as Array[int], [1] as Array[int], 50, [] as Array[ShipData], _make_dice(),
+		[100], [1], 50, [], _make_dice(),
 	)
 
 	assert_eq(constructions.size(), 1)
@@ -857,16 +857,16 @@ func test_integration_shrine_queue_to_completion() -> void:
 
 	# Tick once: 2 → 1
 	DayOrchestrator._process_construction_completions(
-		constructions, settlements, {}, [] as Array[ShipData], _make_dice(),
-		[100] as Array[int], topics, next_tid, 100,
+		constructions, settlements, {}, [], _make_dice(),
+		[100], topics, next_tid, 100,
 	)
 	assert_eq(constructions.size(), 1)
 	assert_eq(s.worship_locations.size(), 0)
 
 	# Tick again: 1 → 0 = complete
 	DayOrchestrator._process_construction_completions(
-		constructions, settlements, {}, [] as Array[ShipData], _make_dice(),
-		[100] as Array[int], topics, next_tid, 200,
+		constructions, settlements, {}, [], _make_dice(),
+		[100], topics, next_tid, 200,
 	)
 	assert_eq(constructions.size(), 0)
 	assert_eq(s.worship_locations.size(), 1)
@@ -892,7 +892,7 @@ func test_integration_temple_queue_entry() -> void:
 	})]
 	DayOrchestrator._process_construction_effects(
 		day_results, chars_by_id, provinces, settlements, constructions,
-		[100] as Array[int], [1] as Array[int], 50, [] as Array[ShipData], _make_dice(),
+		[100], [1], 50, [], _make_dice(),
 	)
 
 	assert_eq(constructions.size(), 1)
@@ -919,7 +919,7 @@ func test_integration_temple_completion_creates_settlement() -> void:
 	var constructions: Array[ConstructionData] = [cd]
 
 	DayOrchestrator._process_construction_completions(
-		constructions, settlements, provinces, [] as Array[ShipData], _make_dice(),
+		constructions, settlements, provinces, [], _make_dice(),
 		next_sid, topics, next_tid, 300,
 	)
 
@@ -952,7 +952,7 @@ func test_integration_monastery_completion_creates_settlement() -> void:
 	var constructions: Array[ConstructionData] = [cd]
 
 	DayOrchestrator._process_construction_completions(
-		constructions, settlements, provinces, [] as Array[ShipData], _make_dice(),
+		constructions, settlements, provinces, [], _make_dice(),
 		next_sid, topics, next_tid, 300,
 	)
 
@@ -979,7 +979,7 @@ func test_integration_ship_commission_queues() -> void:
 	})]
 	DayOrchestrator._process_construction_effects(
 		day_results, chars_by_id, {}, settlements, constructions,
-		[100] as Array[int], [1] as Array[int], 50, [] as Array[ShipData], _make_dice(),
+		[100], [1], 50, [], _make_dice(),
 	)
 
 	assert_eq(constructions.size(), 1)
@@ -1057,7 +1057,7 @@ func test_integration_organic_village_low_stability_blocked() -> void:
 	var topics: Array[TopicData] = []
 
 	DayOrchestrator._process_organic_villages(
-		provinces, settlements, [200] as Array[int], topics, [1] as Array[int], 100,
+		provinces, settlements, [200], topics, [1], 100,
 	)
 
 	assert_eq(settlements.size(), 1)
@@ -1082,7 +1082,7 @@ func test_integration_shinden_topic_tier_2() -> void:
 	var constructions: Array[ConstructionData] = [cd]
 
 	DayOrchestrator._process_construction_completions(
-		constructions, settlements, provinces, [] as Array[ShipData], _make_dice(),
+		constructions, settlements, provinces, [], _make_dice(),
 		next_sid, topics, next_tid, 300,
 	)
 
@@ -1103,8 +1103,8 @@ func test_integration_village_invalid_province_returns_not_applied() -> void:
 	var day_results: Array = [_make_day_result(1, "FOUND_VILLAGE", {"province_id": 999})]
 	var results: Array[Dictionary] = DayOrchestrator._process_construction_effects(
 		day_results, chars_by_id, {}, settlements,
-		[] as Array[ConstructionData], [100] as Array[int], [1] as Array[int],
-		50, [] as Array[ShipData], _make_dice(),
+		[], [100], [1],
+		50, [], _make_dice(),
 	)
 
 	assert_eq(results.size(), 1)
@@ -1118,9 +1118,9 @@ func test_integration_unknown_action_returns_not_applied() -> void:
 
 	var day_results: Array = [_make_day_result(1, "BUILD_CASTLE", {})]
 	var results: Array[Dictionary] = DayOrchestrator._process_construction_effects(
-		day_results, chars_by_id, {}, [] as Array[SettlementData],
-		[] as Array[ConstructionData], [100] as Array[int], [1] as Array[int],
-		50, [] as Array[ShipData], _make_dice(),
+		day_results, chars_by_id, {}, [],
+		[], [100], [1],
+		50, [], _make_dice(),
 	)
 
 	assert_eq(results.size(), 1)
@@ -1147,7 +1147,7 @@ func test_integration_temple_4_season_queue() -> void:
 
 	for i: int in range(3):
 		DayOrchestrator._process_construction_completions(
-			constructions, settlements, provinces, [] as Array[ShipData], _make_dice(),
+			constructions, settlements, provinces, [], _make_dice(),
 			next_sid, topics, next_tid, 100 + i * 90,
 		)
 
@@ -1157,7 +1157,7 @@ func test_integration_temple_4_season_queue() -> void:
 
 	# Final tick completes it
 	DayOrchestrator._process_construction_completions(
-		constructions, settlements, provinces, [] as Array[ShipData], _make_dice(),
+		constructions, settlements, provinces, [], _make_dice(),
 		next_sid, topics, next_tid, 460,
 	)
 
@@ -1181,8 +1181,8 @@ func test_integration_dedicated_roadside_shrine_fortune() -> void:
 	})]
 	DayOrchestrator._process_construction_effects(
 		day_results, chars_by_id, {}, settlements,
-		[] as Array[ConstructionData], [100] as Array[int], [1] as Array[int],
-		50, [] as Array[ShipData], _make_dice(),
+		[], [100], [1],
+		50, [], _make_dice(),
 	)
 
 	assert_eq(s.worship_locations.size(), 1)

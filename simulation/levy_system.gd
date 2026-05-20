@@ -175,7 +175,7 @@ static func evaluate_candidate(
 static func rank_candidates(
 	candidates: Array[Dictionary],
 	personality_virtue: String,
-) -> Array[Dictionary]:
+) -> Array:
 	var scored: Array[Dictionary] = []
 	for c: Dictionary in candidates:
 		var role: String = c.get("role", "uncommitted")

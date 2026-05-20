@@ -242,7 +242,7 @@ func _make_character(clan: String, courtier_rank: int = 3) -> L5RCharacterData:
 	c.character_id = 100
 	c.clan = clan
 	c.skills["Courtier"] = courtier_rank
-	c.traits[Enums.Trait.AWARENESS] = 3
+	c.set_trait_value(Enums.Trait.AWARENESS, 3)
 	return c
 
 
@@ -261,7 +261,7 @@ func test_negotiate_surrender_success_peace_accepted() -> void:
 	_war.war_score_b = 80
 	_dice.set_seed(999)
 	var c: L5RCharacterData = _make_character("Crab", 5)
-	c.traits[Enums.Trait.AWARENESS] = 5
+	c.set_trait_value(Enums.Trait.AWARENESS, 5)
 	var ctx_war: Dictionary = {"war": _war, "own_clan": "Crab", "enemy_clan": "Crane"}
 	var result: Dictionary = WarTermination.resolve_negotiate_surrender(
 		c, ctx_war, "Seigyo", false, true, _dice,
@@ -277,7 +277,7 @@ func test_negotiate_surrender_success_peace_accepted() -> void:
 func test_negotiate_surrender_roll_failure() -> void:
 	_dice.set_seed(1)
 	var c: L5RCharacterData = _make_character("Crab", 1)
-	c.traits[Enums.Trait.AWARENESS] = 1
+	c.set_trait_value(Enums.Trait.AWARENESS, 1)
 	var ctx_war: Dictionary = {"war": _war, "own_clan": "Crab", "enemy_clan": "Crane"}
 	var result: Dictionary = WarTermination.resolve_negotiate_surrender(
 		c, ctx_war, "Yu", false, false, _dice,

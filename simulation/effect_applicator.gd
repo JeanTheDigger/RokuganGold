@@ -122,9 +122,9 @@ static func _apply_recipient_effects(
 			"delta": disp_change,
 		})
 
-	var modifiers: Array[Dictionary] = effects.get("recipient_modifiers", [])
+	var modifiers: Array = effects.get("recipient_modifiers", [])
 	if not modifiers.is_empty():
-		var bucket: Array[Dictionary] = recipient.temporary_modifiers.get(actor.character_id, [])
+		var bucket: Array = recipient.temporary_modifiers.get(actor.character_id, [])
 		for mod: Dictionary in modifiers:
 			bucket.append(mod)
 		recipient.temporary_modifiers[actor.character_id] = bucket
@@ -157,7 +157,7 @@ static func _apply_witness_effects(
 	var disp_loss: int = effects.get("witness_disposition_loss", 0)
 	if disp_loss == 0:
 		return
-	var witness_ids: Array[int] = effects.get("witnesses", [])
+	var witness_ids: Array = effects.get("witnesses", [])
 	if witness_ids.is_empty():
 		return
 
@@ -188,7 +188,7 @@ static func _apply_witness_gain(
 	var disp_gain: int = effects.get("witness_disposition_gain", 0)
 	if disp_gain == 0:
 		return
-	var witness_ids: Array[int] = effects.get("witnesses", [])
+	var witness_ids: Array = effects.get("witnesses", [])
 	if witness_ids.is_empty():
 		return
 
@@ -256,7 +256,7 @@ static func _apply_target_witness_effects(
 	var disp_change: int = effects.get("target_witness_disposition", 0)
 	if disp_change == 0 or target_id < 0:
 		return
-	var witness_ids: Array[int] = effects.get("witnesses", [])
+	var witness_ids: Array = effects.get("witnesses", [])
 	if witness_ids.is_empty():
 		return
 	for wid: int in witness_ids:
@@ -601,14 +601,14 @@ static func _detect_observable_effect(
 	if effects.get("info_gained", false):
 		return true
 
-	var disp_changes: Array[Dictionary] = applied.get("disposition_changes", [])
+	var disp_changes: Array = applied.get("disposition_changes", [])
 	for change: Dictionary in disp_changes:
 		var old_tier: int = _get_disposition_tier(change.get("old", 0))
 		var new_tier: int = _get_disposition_tier(change.get("new", 0))
 		if old_tier != new_tier:
 			return true
 
-	var province_updates: Array[Dictionary] = applied.get("province_updates", [])
+	var province_updates: Array = applied.get("province_updates", [])
 	if province_updates.size() > 0:
 		return true
 
@@ -623,7 +623,7 @@ static func apply_day_results(
 	provinces: Dictionary,
 	action_log: Array[Dictionary],
 	settlements: Array[SettlementData] = [],
-) -> Array[Dictionary]:
+) -> Array:
 	var all_applied: Array[Dictionary] = []
 	for result: Dictionary in results:
 		var applied: Dictionary = apply(result, characters, provinces, action_log, settlements)

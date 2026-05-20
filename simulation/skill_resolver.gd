@@ -312,7 +312,7 @@ static func resolve_cadence_sync(
 	characters: Array[L5RCharacterData],
 	court_char_ids: Array[int],
 	dice_engine: DiceEngine,
-) -> Array[Dictionary]:
+) -> Array:
 	var results: Array[Dictionary] = []
 	var cadence_ids: Array[int] = []
 	var char_map: Dictionary = {}

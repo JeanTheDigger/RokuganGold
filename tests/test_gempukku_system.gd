@@ -612,7 +612,7 @@ func test_orchestrator_gempukku_on_season_change() -> void:
 func test_orchestrator_gempukku_result_in_return() -> void:
 	var ts: TimeSystem = _make_time_system(0)
 	var result: Dictionary = DayOrchestrator.advance_day(
-		ts, [] as Array[L5RCharacterData], {}, {}, {}, {}, {},
+		ts, [], {}, {}, {}, {}, {},
 		_dice, {}, {}, [], {},
 		[], [], [], [], [], [1],
 		{}, {}, [1000], [], {},
@@ -621,7 +621,7 @@ func test_orchestrator_gempukku_result_in_return() -> void:
 		[], [], {}, [], [], [1],
 		[], [1], [], [1],
 		[], {}, [-1], [],
-		[] as Array[ChildRecord], [10000],
+		[], [10000],
 	)
 	assert_true(result.has("gempukku_results"))
 

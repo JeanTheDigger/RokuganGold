@@ -1157,7 +1157,7 @@ func test_detected_forgery_skips_topic_transfer():
 	var sender := _make_char(1, 3)
 	var recipient := _make_char(2, 7)
 	recipient.skills["Investigation"] = 10
-	recipient.traits[Enums.Trait.PERCEPTION] = 10
+	recipient.set_trait_value(Enums.Trait.PERCEPTION, 10)
 	var chars: Dictionary = {1: sender, 2: recipient}
 	var log: Array[Dictionary] = []
 
@@ -1191,7 +1191,7 @@ func test_undetected_forgery_transfers_topic():
 	var sender := _make_char(1, 3)
 	var recipient := _make_char(2, 1)
 	recipient.skills["Investigation"] = 1
-	recipient.traits[Enums.Trait.PERCEPTION] = 1
+	recipient.set_trait_value(Enums.Trait.PERCEPTION, 1)
 	var chars: Dictionary = {1: sender, 2: recipient}
 	var log: Array[Dictionary] = []
 

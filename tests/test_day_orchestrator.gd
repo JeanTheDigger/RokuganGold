@@ -87,14 +87,14 @@ func _make_world_states() -> Dictionary:
 			"context_flag": Enums.ContextFlag.AT_OWN_HOLDINGS,
 			"season": 1,
 			"ic_day": _time.get_ic_day(),
-			"characters_present": [] as Array[int],
+			"characters_present": [],
 			"is_lord": false,
-			"known_topics": [] as Array[int],
+			"known_topics": [],
 			"known_positions": {},
 			"known_objectives": {},
-			"known_contacts": [] as Array[int],
+			"known_contacts": [],
 			"pending_events": [],
-			"action_log": [] as Array[String],
+			"action_log": [],
 		},
 	}
 
@@ -252,14 +252,14 @@ func test_from_the_ashes_activates_for_asako_at_court() -> void:
 		"context_flag": Enums.ContextFlag.AT_COURT,
 		"season": 1,
 		"ic_day": _time.get_ic_day(),
-		"characters_present": [] as Array[int],
+		"characters_present": [],
 		"is_lord": false,
-		"known_topics": [] as Array[int],
+		"known_topics": [],
 		"known_positions": {},
 		"known_objectives": {},
-		"known_contacts": [] as Array[int],
+		"known_contacts": [],
 		"pending_events": [],
-		"action_log": [] as Array[String],
+		"action_log": [],
 	}
 
 	DayOrchestrator.advance_day(
@@ -311,14 +311,14 @@ func test_from_the_ashes_clears_when_not_at_court() -> void:
 		"context_flag": Enums.ContextFlag.AT_OWN_HOLDINGS,
 		"season": 1,
 		"ic_day": _time.get_ic_day(),
-		"characters_present": [] as Array[int],
+		"characters_present": [],
 		"is_lord": false,
-		"known_topics": [] as Array[int],
+		"known_topics": [],
 		"known_positions": {},
 		"known_objectives": {},
-		"known_contacts": [] as Array[int],
+		"known_contacts": [],
 		"pending_events": [],
-		"action_log": [] as Array[String],
+		"action_log": [],
 	}
 
 	DayOrchestrator.advance_day(
@@ -409,27 +409,27 @@ func test_cadence_sync_runs_for_active_court() -> void:
 		"context_flag": Enums.ContextFlag.AT_COURT,
 		"season": 1,
 		"ic_day": _time.get_ic_day(),
-		"characters_present": [71] as Array[int],
+		"characters_present": [71],
 		"is_lord": false,
-		"known_topics": [] as Array[int],
+		"known_topics": [],
 		"known_positions": {},
 		"known_objectives": {},
-		"known_contacts": [] as Array[int],
+		"known_contacts": [],
 		"pending_events": [],
-		"action_log": [] as Array[String],
+		"action_log": [],
 	}
 	ws[71] = {
 		"context_flag": Enums.ContextFlag.AT_COURT,
 		"season": 1,
 		"ic_day": _time.get_ic_day(),
-		"characters_present": [70] as Array[int],
+		"characters_present": [70],
 		"is_lord": false,
-		"known_topics": [] as Array[int],
+		"known_topics": [],
 		"known_positions": {},
 		"known_objectives": {},
-		"known_contacts": [] as Array[int],
+		"known_contacts": [],
 		"pending_events": [],
-		"action_log": [] as Array[String],
+		"action_log": [],
 	}
 
 	var objectives: Dictionary = _make_objectives()
@@ -1076,7 +1076,7 @@ func test_process_info_events_threads_characters_present() -> void:
 	var characters_by_id: Dictionary = {1: mag, 50: target, 75: bystander}
 
 	var world_states: Dictionary = {
-		"_location_characters": {"castle_crane": [1, 50, 75] as Array[int]},
+		"_location_characters": {"castle_crane": [1, 50, 75]},
 	}
 
 	var applied_list: Array = [{
@@ -3479,7 +3479,7 @@ func test_scene_exam_accusation_generates_topic() -> void:
 	var lord := L5RCharacterData.new()
 	lord.character_id = 10
 	lord.character_name = "Bayushi Shoju"
-	lord.topic_pool = [] as Array[int]
+	lord.topic_pool = []
 
 	var record := CrimeRecord.new()
 	record.case_id = 7
@@ -3491,7 +3491,7 @@ func test_scene_exam_accusation_generates_topic() -> void:
 	var characters_by_id: Dictionary = {5: accused, 10: lord}
 	var active_topics: Array[TopicData] = []
 	var next_topic_id: Array[int] = [500]
-	var world_states: Dictionary = {"_crime_records": [record] as Array[CrimeRecord]}
+	var world_states: Dictionary = {"_crime_records": [record]}
 
 	var results: Array = [{
 		"action_id": "EXAMINE_CRIME_SCENE",
@@ -3533,7 +3533,7 @@ func test_scene_exam_accusation_transitions_case_entry() -> void:
 
 	var lord := L5RCharacterData.new()
 	lord.character_id = 10
-	lord.topic_pool = [] as Array[int]
+	lord.topic_pool = []
 
 	var record := CrimeRecord.new()
 	record.case_id = 3
@@ -3545,7 +3545,7 @@ func test_scene_exam_accusation_transitions_case_entry() -> void:
 	var characters_by_id: Dictionary = {5: accused, 10: lord}
 	var active_topics: Array[TopicData] = []
 	var next_topic_id: Array[int] = [600]
-	var world_states: Dictionary = {"_crime_records": [record] as Array[CrimeRecord]}
+	var world_states: Dictionary = {"_crime_records": [record]}
 
 	var results: Array = [{
 		"action_id": "EXAMINE_CRIME_SCENE",
@@ -3578,7 +3578,7 @@ func test_scene_exam_accusation_creates_case_entry_if_missing() -> void:
 
 	var lord := L5RCharacterData.new()
 	lord.character_id = 10
-	lord.topic_pool = [] as Array[int]
+	lord.topic_pool = []
 
 	var record := CrimeRecord.new()
 	record.case_id = 9
@@ -3590,7 +3590,7 @@ func test_scene_exam_accusation_creates_case_entry_if_missing() -> void:
 	var characters_by_id: Dictionary = {5: accused, 10: lord}
 	var active_topics: Array[TopicData] = []
 	var next_topic_id: Array[int] = [700]
-	var world_states: Dictionary = {"_crime_records": [record] as Array[CrimeRecord]}
+	var world_states: Dictionary = {"_crime_records": [record]}
 
 	var results: Array = [{
 		"action_id": "EXAMINE_CRIME_SCENE",
@@ -3625,7 +3625,7 @@ func test_witness_accusation_generates_topic() -> void:
 
 	var lord := L5RCharacterData.new()
 	lord.character_id = 20
-	lord.topic_pool = [] as Array[int]
+	lord.topic_pool = []
 
 	var record := CrimeRecord.new()
 	record.case_id = 12
@@ -3666,7 +3666,7 @@ func test_handle_evidence_threshold_accusation() -> void:
 
 	var lord := L5RCharacterData.new()
 	lord.character_id = 15
-	lord.topic_pool = [] as Array[int]
+	lord.topic_pool = []
 
 	var record := CrimeRecord.new()
 	record.case_id = 22
@@ -3726,7 +3726,7 @@ func test_failed_bribe_adds_evidence_to_existing_case() -> void:
 
 	var lord := L5RCharacterData.new()
 	lord.character_id = 10
-	lord.topic_pool = [] as Array[int]
+	lord.topic_pool = []
 
 	var record := CrimeRecord.new()
 	record.case_id = 50
@@ -3760,7 +3760,7 @@ func test_failed_bribe_triggers_accusation_if_threshold_crossed() -> void:
 
 	var lord := L5RCharacterData.new()
 	lord.character_id = 10
-	lord.topic_pool = [] as Array[int]
+	lord.topic_pool = []
 
 	var record := CrimeRecord.new()
 	record.case_id = 51
@@ -3837,7 +3837,7 @@ func test_failed_bribe_generates_bribery_attempt_topic() -> void:
 
 	var lord := L5RCharacterData.new()
 	lord.character_id = 10
-	lord.topic_pool = [] as Array[int]
+	lord.topic_pool = []
 
 	var record := CrimeRecord.new()
 	record.case_id = 77
@@ -3931,7 +3931,7 @@ func test_fugitive_declaration_generates_topic() -> void:
 
 	var lord := L5RCharacterData.new()
 	lord.character_id = 10
-	lord.topic_pool = [] as Array[int]
+	lord.topic_pool = []
 
 	var record := CrimeRecord.new()
 	record.case_id = 99
@@ -4037,7 +4037,7 @@ func test_flee_jurisdiction_triggers_fugitive_declaration() -> void:
 
 	var lord := L5RCharacterData.new()
 	lord.character_id = 10
-	lord.topic_pool = [] as Array[int]
+	lord.topic_pool = []
 
 	var record := CrimeRecord.new()
 	record.case_id = 77
@@ -4169,7 +4169,7 @@ func test_ptl_detection_shugenja_generates_topic() -> void:
 
 	var lord := L5RCharacterData.new()
 	lord.character_id = 10
-	lord.topic_pool = [] as Array[int]
+	lord.topic_pool = []
 
 	var province := ProvinceData.new()
 	province.province_name = "Kuni Wastes"
@@ -4253,7 +4253,7 @@ func test_blood_evidence_discovery_generates_topic() -> void:
 
 	var lord := L5RCharacterData.new()
 	lord.character_id = 10
-	lord.topic_pool = [] as Array[int]
+	lord.topic_pool = []
 
 	var record := CrimeRecord.new()
 	record.case_id = 66
@@ -4543,7 +4543,7 @@ func test_flee_logistics_removes_from_court() -> void:
 	fugitive.travel_days_remaining = 0
 
 	var court := CourtSessionData.new()
-	court.attendee_ids = [7, 10, 20] as Array[int]
+	court.attendee_ids = [7, 10, 20]
 
 	var characters_by_id: Dictionary = {7: fugitive}
 	var active_courts: Array[CourtSessionData] = [court]
@@ -4642,7 +4642,7 @@ func test_taint_detection_generates_topic_for_tainted_target() -> void:
 
 	var lord := L5RCharacterData.new()
 	lord.character_id = 10
-	lord.topic_pool = [] as Array[int]
+	lord.topic_pool = []
 
 	var tainted := L5RCharacterData.new()
 	tainted.character_id = 40
@@ -4719,7 +4719,7 @@ func test_bribe_witness_success_removes_from_record() -> void:
 	var record := CrimeRecord.new()
 	record.case_id = 200
 	record.perpetrator_id = 5
-	record.witnesses = [20, 30] as Array[int]
+	record.witnesses = [20, 30]
 	record.evidence_total = 15
 
 	var crime_records: Array[CrimeRecord] = [record]
@@ -4750,7 +4750,7 @@ func test_intimidate_witness_failure_adds_evidence() -> void:
 	var record := CrimeRecord.new()
 	record.case_id = 201
 	record.perpetrator_id = 5
-	record.witnesses = [20] as Array[int]
+	record.witnesses = [20]
 	record.evidence_total = 10
 
 	var crime_records: Array[CrimeRecord] = [record]
@@ -4795,7 +4795,7 @@ func test_bribe_witness_creates_tier2_secret() -> void:
 	var record := CrimeRecord.new()
 	record.case_id = 300
 	record.perpetrator_id = 5
-	record.witnesses = [20] as Array[int]
+	record.witnesses = [20]
 	record.evidence_total = 10
 
 	var crime_records: Array[CrimeRecord] = [record]
@@ -4834,7 +4834,7 @@ func test_kill_witness_removes_and_creates_murder_record() -> void:
 	var record := CrimeRecord.new()
 	record.case_id = 310
 	record.perpetrator_id = 5
-	record.witnesses = [20] as Array[int]
+	record.witnesses = [20]
 	record.evidence_total = 10
 	record.location = "scorpion_province"
 
@@ -4896,7 +4896,7 @@ func test_kill_witness_generates_murder_topic_and_seeds_witnesses() -> void:
 	var record := CrimeRecord.new()
 	record.case_id = 310
 	record.perpetrator_id = 5
-	record.witnesses = [20] as Array[int]
+	record.witnesses = [20]
 	record.evidence_total = 10
 	record.location = "scorpion_province"
 
@@ -4926,7 +4926,7 @@ func test_kill_witness_generates_murder_topic_and_seeds_witnesses() -> void:
 	assert_eq(crime_records.size(), 2)
 	var murder: CrimeRecord = crime_records[1]
 	assert_eq(murder.location, "bayushi_city")
-	assert_eq(murder.witnesses, [30] as Array[int])
+	assert_eq(murder.witnesses, [30])
 
 	# Death topic (murder variant) + crime topic
 	assert_eq(active_topics.size(), 2)
@@ -4959,7 +4959,7 @@ func test_intimidate_witness_success_applies_disposition_penalty() -> void:
 	var record := CrimeRecord.new()
 	record.case_id = 350
 	record.perpetrator_id = 5
-	record.witnesses = [20] as Array[int]
+	record.witnesses = [20]
 	record.evidence_total = 10
 
 	var crime_records: Array[CrimeRecord] = [record]
@@ -5001,7 +5001,7 @@ func test_intimidate_witness_failure_injects_report_event() -> void:
 	var record := CrimeRecord.new()
 	record.case_id = 351
 	record.perpetrator_id = 5
-	record.witnesses = [20] as Array[int]
+	record.witnesses = [20]
 	record.evidence_total = 10
 	record.investigating_magistrate_id = 30
 
@@ -5265,7 +5265,7 @@ func test_investigation_pipeline_end_to_end() -> void:
 	}
 
 	var uphold_results: Array[Dictionary] = DayOrchestrator._process_uphold_law_scan(
-		[magistrate] as Array[L5RCharacterData],
+		[magistrate],
 		objectives_map,
 		crime_records,
 		active_topics,
@@ -6251,7 +6251,7 @@ func test_impersonation_detection_applies_duped_disloyal_when_order_applied() ->
 	victim.school = "Hida Bushi"
 	victim.clan = "Crab"
 	victim.wounds_taken = 0
-	victim.knowledge_pool = [] as Array[KnowledgeEntry]
+	victim.knowledge_pool = []
 	var characters_by_id: Dictionary = {90: victim}
 
 	var forged_order := LetterData.new()
@@ -6294,7 +6294,7 @@ func test_impersonation_detection_no_duped_when_order_not_applied() -> void:
 	victim.school = "Hida Bushi"
 	victim.clan = "Crab"
 	victim.wounds_taken = 0
-	victim.knowledge_pool = [] as Array[KnowledgeEntry]
+	victim.knowledge_pool = []
 	var characters_by_id: Dictionary = {91: victim}
 
 	var forged_order := LetterData.new()
@@ -6344,10 +6344,14 @@ func test_trial_by_combat_loss_applies_conviction_consequences() -> void:
 	accused.school = "Doji Courtier"
 	accused.clan = "Crane"
 	accused.wounds_taken = 0
-	accused.earth = 2
-	accused.water = 2
-	accused.fire = 2
-	accused.air = 2
+	accused.stamina = 2
+	accused.willpower = 2
+	accused.strength = 2
+	accused.perception = 2
+	accused.agility = 2
+	accused.intelligence = 2
+	accused.reflexes = 2
+	accused.awareness = 2
 	accused.void_ring = 2
 	accused.skills = {"Kenjutsu": 1, "Iaijutsu": 1}
 
@@ -6358,10 +6362,14 @@ func test_trial_by_combat_loss_applies_conviction_consequences() -> void:
 	lord.school = "Hida Bushi"
 	lord.clan = "Crab"
 	lord.wounds_taken = 0
-	lord.earth = 5
-	lord.water = 5
-	lord.fire = 5
-	lord.air = 5
+	lord.stamina = 5
+	lord.willpower = 5
+	lord.strength = 5
+	lord.perception = 5
+	lord.agility = 5
+	lord.intelligence = 5
+	lord.reflexes = 5
+	lord.awareness = 5
 	lord.void_ring = 5
 	lord.skills = {"Kenjutsu": 7, "Iaijutsu": 7}
 
@@ -7235,7 +7243,7 @@ func test_witness_testimony_transfers_crime_topic_on_arrival() -> void:
 	magistrate.character_id = 100
 	magistrate.character_name = "Magistrate"
 	magistrate.physical_location = "crane_city"
-	magistrate.knowledge_pool = [] as Array[KnowledgeEntry]
+	magistrate.knowledge_pool = []
 
 	var crime_topic := TopicData.new()
 	crime_topic.topic_id = 900
@@ -8549,7 +8557,8 @@ func test_visit_intent_propagated_from_letter_result() -> void:
 	var char := L5RCharacterData.new()
 	char.character_id = 10
 	char.skills = {"Courtier": 3, "Calligraphy": 2}
-	char.traits = {"Awareness": 3, "Intelligence": 3}
+	char.awareness = 3
+	char.intelligence = 3
 	var chars: Array[L5RCharacterData] = [char]
 	var chars_by_id: Dictionary = {10: char}
 	var objectives: Dictionary = {
@@ -11941,14 +11950,14 @@ func test_non_magistrate_witness_gets_ignoring_honor() -> void:
 	witness.school = "Hida Bushi"
 	witness.clan = "Crab"
 	witness.role_position = ""
-	witness.topic_pool = [] as Array[int]
+	witness.topic_pool = []
 	var characters_by_id: Dictionary = {280: witness}
 
 	var topic := TopicData.new()
 	topic.topic_id = 500
 	var record := CrimeRecord.new()
 	record.case_id = 70
-	record.witnesses = [280] as Array[int]
+	record.witnesses = [280]
 	record.victim_id = -1
 
 	var initial_honor: float = witness.honor
@@ -11968,14 +11977,14 @@ func test_magistrate_witness_no_ignoring_honor() -> void:
 	magistrate.school = "Doji Courtier"
 	magistrate.clan = "Crane"
 	magistrate.role_position = "Clan Magistrate"
-	magistrate.topic_pool = [] as Array[int]
+	magistrate.topic_pool = []
 	var characters_by_id: Dictionary = {281: magistrate}
 
 	var topic := TopicData.new()
 	topic.topic_id = 501
 	var record := CrimeRecord.new()
 	record.case_id = 71
-	record.witnesses = [281] as Array[int]
+	record.witnesses = [281]
 	record.victim_id = -1
 
 	var initial_honor: float = magistrate.honor
@@ -11993,14 +12002,14 @@ func test_victim_witness_no_ignoring_honor() -> void:
 	victim.school = "Hida Bushi"
 	victim.clan = "Crab"
 	victim.role_position = ""
-	victim.topic_pool = [] as Array[int]
+	victim.topic_pool = []
 	var characters_by_id: Dictionary = {282: victim}
 
 	var topic := TopicData.new()
 	topic.topic_id = 502
 	var record := CrimeRecord.new()
 	record.case_id = 72
-	record.witnesses = [282] as Array[int]
+	record.witnesses = [282]
 	record.victim_id = 282
 
 	var initial_honor: float = victim.honor
@@ -12018,14 +12027,14 @@ func test_high_honor_witness_loses_honor_for_ignoring() -> void:
 	witness.school = "Kakita Bushi"
 	witness.clan = "Crane"
 	witness.role_position = ""
-	witness.topic_pool = [] as Array[int]
+	witness.topic_pool = []
 	var characters_by_id: Dictionary = {283: witness}
 
 	var topic := TopicData.new()
 	topic.topic_id = 503
 	var record := CrimeRecord.new()
 	record.case_id = 73
-	record.witnesses = [283] as Array[int]
+	record.witnesses = [283]
 	record.victim_id = -1
 
 	var initial_honor: float = witness.honor
@@ -12130,7 +12139,7 @@ func test_introduction_writeback_adds_contact() -> void:
 	actor.character_id = 310
 	actor.character_name = "Introducer"
 	actor.clan = "Crane"
-	actor.met_characters = [] as Array[int]
+	actor.met_characters = []
 	actor.known_contacts_by_clan = {}
 	var target := L5RCharacterData.new()
 	target.character_id = 311
@@ -12159,7 +12168,7 @@ func test_introduction_writeback_adds_contact() -> void:
 func test_introduction_writeback_skips_failure() -> void:
 	var actor := L5RCharacterData.new()
 	actor.character_id = 312
-	actor.met_characters = [] as Array[int]
+	actor.met_characters = []
 	var characters_by_id: Dictionary = {312: actor}
 	var results: Array = [{
 		"action_id": "ASK_FOR_INTRODUCTION",
@@ -12179,9 +12188,9 @@ func test_observe_attendees_writeback_adds_knowledge() -> void:
 	observer.character_id = 320
 	observer.character_name = "Observer"
 	observer.clan = "Scorpion"
-	observer.met_characters = [] as Array[int]
+	observer.met_characters = []
 	observer.known_contacts_by_clan = {}
-	observer.knowledge_pool = [] as Array[KnowledgeEntry]
+	observer.knowledge_pool = []
 	var npc := L5RCharacterData.new()
 	npc.character_id = 321
 	npc.character_name = "Unknown NPC"
@@ -12211,8 +12220,8 @@ func test_observe_attendees_writeback_adds_knowledge() -> void:
 func test_observe_attendees_writeback_skips_failure() -> void:
 	var observer := L5RCharacterData.new()
 	observer.character_id = 322
-	observer.met_characters = [] as Array[int]
-	observer.knowledge_pool = [] as Array[KnowledgeEntry]
+	observer.met_characters = []
+	observer.knowledge_pool = []
 	var characters_by_id: Dictionary = {322: observer}
 	var results: Array = [{
 		"action_id": "OBSERVE_COURT_ATTENDEES",
@@ -12312,7 +12321,7 @@ func test_commerce_topic_writeback_skips_non_public() -> void:
 func test_read_character_personality_insight_creates_knowledge() -> void:
 	var actor := L5RCharacterData.new()
 	actor.character_id = 350
-	actor.knowledge_pool = [] as Array[KnowledgeEntry]
+	actor.knowledge_pool = []
 	var target := L5RCharacterData.new()
 	target.character_id = 351
 	target.bushido_virtue = Enums.BushidoVirtue.GI
@@ -12344,7 +12353,7 @@ func test_read_character_personality_insight_creates_knowledge() -> void:
 func test_read_character_disposition_creates_knowledge() -> void:
 	var actor := L5RCharacterData.new()
 	actor.character_id = 352
-	actor.knowledge_pool = [] as Array[KnowledgeEntry]
+	actor.knowledge_pool = []
 	var target := L5RCharacterData.new()
 	target.character_id = 353
 	target.disposition_values = {352: 25}
@@ -12372,7 +12381,7 @@ func test_read_character_disposition_creates_knowledge() -> void:
 func test_probe_court_objective_creates_knowledge() -> void:
 	var actor := L5RCharacterData.new()
 	actor.character_id = 354
-	actor.knowledge_pool = [] as Array[KnowledgeEntry]
+	actor.knowledge_pool = []
 	var target := L5RCharacterData.new()
 	target.character_id = 355
 	var characters_by_id: Dictionary = {354: actor, 355: target}
@@ -12404,10 +12413,10 @@ func test_probe_court_objective_creates_knowledge() -> void:
 func test_probe_topic_position_creates_knowledge() -> void:
 	var actor := L5RCharacterData.new()
 	actor.character_id = 356
-	actor.knowledge_pool = [] as Array[KnowledgeEntry]
+	actor.knowledge_pool = []
 	var target := L5RCharacterData.new()
 	target.character_id = 357
-	target.topic_pool = [42] as Array[int]
+	target.topic_pool = [42]
 	target.topic_positions = {42: 3}
 	var characters_by_id: Dictionary = {356: actor, 357: target}
 	var results: Array = [{
@@ -12435,7 +12444,7 @@ func test_probe_topic_position_creates_knowledge() -> void:
 func test_read_character_failure_no_knowledge() -> void:
 	var actor := L5RCharacterData.new()
 	actor.character_id = 358
-	actor.knowledge_pool = [] as Array[KnowledgeEntry]
+	actor.knowledge_pool = []
 	var characters_by_id: Dictionary = {358: actor}
 	var results: Array = [{
 		"action_id": "READ_CHARACTER",

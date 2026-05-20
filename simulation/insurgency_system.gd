@@ -131,7 +131,7 @@ static func get_eligible_types(
 	tier: Enums.StabilityTier,
 	province: ProvinceData,
 	ptl: float,
-) -> Array[int]:
+) -> Array:
 	var types: Array[int] = []
 	match tier:
 		Enums.StabilityTier.RESTLESS:
@@ -835,7 +835,7 @@ static func process_season(
 		var province: ProvinceData = provinces[pid]
 		var tier: Enums.StabilityTier = get_stability_tier(province.stability)
 		var ptl: float = ptls.get(pid, 0.0)
-		var eligible: Array[int] = get_eligible_types(tier, province, ptl)
+		var eligible: Array = get_eligible_types(tier, province, ptl)
 		var ws: Dictionary = world_states.get(pid, {})
 
 		for itype: int in eligible:
