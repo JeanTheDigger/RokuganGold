@@ -743,7 +743,7 @@ func test_advance_day_letter_delivery_computes_positions() -> void:
 
 
 func test_advance_day_delivers_due_letters() -> void:
-	var recipient := _characters[0]
+	var recipient: L5RCharacterData = _characters[0]
 	var dice2 := DiceEngine.new()
 	dice2.set_seed(42)
 	var sender := L5RCharacterData.new()
@@ -868,7 +868,7 @@ func test_crime_topic_seeds_to_victim() -> void:
 # -- UPHOLD_LAW Scan Wiring ---------------------------------------------------
 
 func test_uphold_law_scan_activates_magistrate() -> void:
-	var mag := _characters[0]
+	var mag: L5RCharacterData = _characters[0]
 	mag.physical_location = "castle_crane"
 	mag.bushido_virtue = Enums.BushidoVirtue.GI
 
@@ -7570,7 +7570,7 @@ func test_apply_court_invitation_falls_back_to_lord_court() -> void:
 # -- CALL_COURT Deferred Effect ------------------------------------------------
 
 func test_apply_court_creation_creates_court() -> void:
-	var lord := _characters[0]
+	var lord: L5RCharacterData = _characters[0]
 	lord.character_id = 1
 	lord.physical_location = "5"
 	lord.clan = "Crane"
@@ -7598,7 +7598,7 @@ func test_apply_court_creation_creates_court() -> void:
 
 
 func test_apply_court_creation_blocks_duplicate() -> void:
-	var lord := _characters[0]
+	var lord: L5RCharacterData = _characters[0]
 	lord.character_id = 1
 	lord.physical_location = "5"
 	lord.status = 5.0
@@ -7623,7 +7623,7 @@ func test_apply_court_creation_blocks_duplicate() -> void:
 
 
 func test_apply_court_creation_clan_champion_type() -> void:
-	var lord := _characters[0]
+	var lord: L5RCharacterData = _characters[0]
 	lord.character_id = 1
 	lord.physical_location = "5"
 	lord.clan = "Crane"

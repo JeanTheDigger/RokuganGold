@@ -4376,7 +4376,7 @@ func test_resolve_army_battles_resolves_combat_when_at_war() -> void:
 	var c2: Dictionary = _make_company_dict_for_battle(
 		2, 2, "Crane", Enums.CompanyUnitType.PEASANT_LEVY,
 	)
-	var war: WarData = WarSystem.declare_war(1, "Crab", "Crane", 1, 1, 2)
+	var war: WarData = WarSystem.declare_war(1, "Crab", "Crane", 1, 1, 2, 0)
 	var s1: SettlementData = _make_settlement(10, 1, 10, 3)
 	var movement_results: Array = [
 		{
@@ -4409,7 +4409,7 @@ func test_resolve_army_battles_marks_battle_resolved_on_movement() -> void:
 	var army_b: Dictionary = ArmyMovementSystem.create_army_state(2, 5, "Crane")
 	var c1: Dictionary = _make_company_dict_for_battle(1, 1, "Crab")
 	var c2: Dictionary = _make_company_dict_for_battle(2, 2, "Crane")
-	var war: WarData = WarSystem.declare_war(1, "Crab", "Crane", 1, 1, 2)
+	var war: WarData = WarSystem.declare_war(1, "Crab", "Crane", 1, 1, 2, 0)
 	var mr: Dictionary = {
 		"army_id": 1, "arrived": true,
 		"battle_check": {"battle_triggered": true, "enemy_army_ids": [2]},
@@ -4431,7 +4431,7 @@ func test_resolve_army_battles_in_military_daily() -> void:
 	var army_b: Dictionary = ArmyMovementSystem.create_army_state(2, 5, "Crane")
 	var c1: Dictionary = _make_company_dict_for_battle(1, 1, "Crab")
 	var c2: Dictionary = _make_company_dict_for_battle(2, 2, "Crane")
-	var war: WarData = WarSystem.declare_war(1, "Crab", "Crane", 1, 1, 2)
+	var war: WarData = WarSystem.declare_war(1, "Crab", "Crane", 1, 1, 2, 0)
 	var result: Dictionary = DayOrchestrator._process_military_daily(
 		[army_a, army_b], [], [], [], dice, [], [c1, c2], {},
 		[war], {},
@@ -4699,7 +4699,7 @@ func test_levy_suspicion_skips_wartime() -> void:
 	var lord: L5RCharacterData = _make_char_for_levy(5, "Crab")
 	var chars_by_id: Dictionary = {5: lord}
 	var company: Dictionary = _make_levy_company(1, 5, 0)
-	var war: WarData = WarSystem.declare_war(1, "Crab", "Crane", 1, 1, 2)
+	var war: WarData = WarSystem.declare_war(1, "Crab", "Crane", 1, 1, 2, 0)
 	var topics: Array = []
 	var next_tid: Array = [100]
 	var results: Array = DayOrchestrator._process_levy_suspicion(
@@ -5152,7 +5152,7 @@ func test_storm_assault_metadata_sets_settlement_id() -> void:
 	option.action_id = "CONDUCT_STORM_ASSAULT"
 	var need: NPCDataStructures.ImmediateNeed = NPCDataStructures.ImmediateNeed.new()
 	var ctx: NPCDataStructures.ContextSnapshot = NPCDataStructures.ContextSnapshot.new()
-	ctx.location_id = 42
+	ctx.location_id = "42"
 	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
 	assert_eq(option.metadata.get("siege_settlement_id", -1), 42)
 
@@ -5206,7 +5206,7 @@ func _setup_battle_scenario(
 	if defender_has_fort:
 		settlements.append(_make_military_settlement(10, province_id))
 
-	var war: WarData = WarSystem.declare_war(1, "Crab", "Crane", 1, 1, 2)
+	var war: WarData = WarSystem.declare_war(1, "Crab", "Crane", 1, 1, 2, 0)
 
 	return {
 		"dice": dice,
@@ -5429,13 +5429,13 @@ func test_e2e_executor_produces_storm_assault_effect() -> void:
 	action.action_id = "CONDUCT_STORM_ASSAULT"
 	action.metadata = {"siege_settlement_id": 77}
 	var char: L5RCharacterData = L5RCharacterData.new()
-	char.physical_location = 77
+	char.physical_location = "77"
 	var ctx: NPCDataStructures.ContextSnapshot = NPCDataStructures.ContextSnapshot.new()
 	ctx.character_id = 1
 	ctx.ic_day = 10
 	ctx.season = 0  # SPRING
 	var result: Dictionary = ActionExecutor.execute(
-		action, char, ctx, DiceEngine.new(),
+		action, char, ctx, DiceEngine.new(), {},
 	)
 	assert_true(result.get("effects", {}).get("requires_storm_assault", false))
 	assert_eq(result["effects"]["siege_settlement_id"], 77)
@@ -5446,13 +5446,13 @@ func test_e2e_executor_uses_physical_location_fallback() -> void:
 	action.action_id = "CONDUCT_STORM_ASSAULT"
 	action.metadata = {}
 	var char: L5RCharacterData = L5RCharacterData.new()
-	char.physical_location = 55
+	char.physical_location = "55"
 	var ctx: NPCDataStructures.ContextSnapshot = NPCDataStructures.ContextSnapshot.new()
 	ctx.character_id = 1
 	ctx.ic_day = 10
 	ctx.season = 0  # SPRING
 	var result: Dictionary = ActionExecutor.execute(
-		action, char, ctx, DiceEngine.new(),
+		action, char, ctx, DiceEngine.new(), {},
 	)
 	assert_eq(result["effects"]["siege_settlement_id"], 55)
 
@@ -5462,7 +5462,7 @@ func test_e2e_metadata_to_executor_to_orchestrator() -> void:
 	option.action_id = "CONDUCT_STORM_ASSAULT"
 	var need: NPCDataStructures.ImmediateNeed = NPCDataStructures.ImmediateNeed.new()
 	var ctx: NPCDataStructures.ContextSnapshot = NPCDataStructures.ContextSnapshot.new()
-	ctx.location_id = 10
+	ctx.location_id = "10"
 	ctx.character_id = 1
 	ctx.ic_day = 10
 	ctx.season = 0  # SPRING
@@ -5470,9 +5470,9 @@ func test_e2e_metadata_to_executor_to_orchestrator() -> void:
 	assert_eq(option.metadata["siege_settlement_id"], 10)
 
 	var char: L5RCharacterData = L5RCharacterData.new()
-	char.physical_location = 10
+	char.physical_location = "10"
 	var exec_result: Dictionary = ActionExecutor.execute(
-		option, char, ctx, DiceEngine.new(),
+		option, char, ctx, DiceEngine.new(), {},
 	)
 	assert_true(exec_result["effects"]["requires_storm_assault"])
 	assert_eq(exec_result["effects"]["siege_settlement_id"], 10)
@@ -5585,12 +5585,12 @@ func test_e2e_storm_assault_uses_urban_terrain_and_fort_bonus() -> void:
 # -- MAINTAIN_SIEGE wiring tests -----------------------------------------------
 
 func test_maintain_siege_executor_returns_requires_flag() -> void:
-	var action: ScoredAction = ScoredAction.new()
+	var action: NPCDataStructures.ScoredAction = NPCDataStructures.ScoredAction.new()
 	action.action_id = "MAINTAIN_SIEGE"
 	action.metadata = {"siege_settlement_id": 10}
-	var ctx: ContextSnapshot = ContextSnapshot.new()
+	var ctx: NPCDataStructures.ContextSnapshot = NPCDataStructures.ContextSnapshot.new()
 	var dice: DiceEngine = DiceEngine.new(1)
-	var result: Dictionary = ActionExecutor.execute(action, ctx, dice)
+	var result: Dictionary = ActionExecutor.execute(action, L5RCharacterData.new(), ctx, dice, {})
 	var effects: Dictionary = result.get("effects", {})
 	assert_true(effects.get("requires_siege_maintenance", false))
 	assert_eq(effects.get("siege_settlement_id", -1), 10)
@@ -5622,25 +5622,26 @@ func test_maintain_siege_skips_non_siege_effects() -> void:
 
 
 func test_maintain_siege_metadata_population() -> void:
-	var npc: L5RCharacterData = _make_char(1, "Crab")
+	var npc: L5RCharacterData = _make_character(1, "Crab")
 	npc.physical_location = "settlement_10"
-	var ctx: ContextSnapshot = ContextSnapshot.new()
-	ctx.location_id = 10
-	var option: ScoredAction = ScoredAction.new()
+	var ctx: NPCDataStructures.ContextSnapshot = NPCDataStructures.ContextSnapshot.new()
+	ctx.location_id = "10"
+	var option: NPCDataStructures.ScoredAction = NPCDataStructures.ScoredAction.new()
 	option.action_id = "MAINTAIN_SIEGE"
-	NPCDecisionEngine._populate_action_metadata(option, ctx, {})
+	var need: NPCDataStructures.ImmediateNeed = NPCDataStructures.ImmediateNeed.new()
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
 	assert_eq(option.metadata.get("siege_settlement_id", -1), 10)
 
 
 # -- ORDER_PATROL wiring tests ------------------------------------------------
 
 func test_order_patrol_executor_returns_requires_flag() -> void:
-	var action: ScoredAction = ScoredAction.new()
+	var action: NPCDataStructures.ScoredAction = NPCDataStructures.ScoredAction.new()
 	action.action_id = "ORDER_PATROL"
 	action.target_province_id = 5
-	var ctx: ContextSnapshot = ContextSnapshot.new()
+	var ctx: NPCDataStructures.ContextSnapshot = NPCDataStructures.ContextSnapshot.new()
 	var dice: DiceEngine = DiceEngine.new(1)
-	var result: Dictionary = ActionExecutor.execute(action, ctx, dice)
+	var result: Dictionary = ActionExecutor.execute(action, L5RCharacterData.new(), ctx, dice, {})
 	var effects: Dictionary = result.get("effects", {})
 	assert_true(effects.get("requires_patrol", false))
 	assert_eq(effects.get("patrol_province_id", -1), 5)
@@ -5682,12 +5683,15 @@ func test_patrol_skips_invalid_province() -> void:
 
 
 func test_patrol_reduces_insurgency_spawn_chance() -> void:
-	var ws: Dictionary = {"is_patrolled": true}
+	var province: ProvinceData = ProvinceData.new()
+	province.province_id = 1
+	var ws_base: Dictionary = {}
+	var ws_patrolled: Dictionary = {"is_patrolled": true}
 	var base_chance: float = InsurgencySystem.get_spawn_chance(
-		Enums.InsurgencyType.PEASANT_REVOLT, Enums.StabilityTier.RESTLESS, {},
+		Enums.InsurgencyType.PEASANT_REVOLT, Enums.StabilityTier.RESTLESS, province, ws_base,
 	)
 	var patrolled_chance: float = InsurgencySystem.get_spawn_chance(
-		Enums.InsurgencyType.PEASANT_REVOLT, Enums.StabilityTier.RESTLESS, ws,
+		Enums.InsurgencyType.PEASANT_REVOLT, Enums.StabilityTier.RESTLESS, province, ws_patrolled,
 	)
 	assert_true(patrolled_chance < base_chance)
 	assert_almost_eq(patrolled_chance, base_chance * 0.5, 0.001)
@@ -5743,7 +5747,7 @@ func test_patrolled_provinces_cleared_on_season_boundary() -> void:
 # -- PURIFY_TAINTED_GROUND wiring tests ----------------------------------------
 
 func _make_kuni_shugenja(char_id: int, school_rank: int) -> L5RCharacterData:
-	var c: L5RCharacterData = _make_char(char_id, "Crab")
+	var c: L5RCharacterData = _make_character(char_id, "Crab")
 	c.family = "Kuni"
 	c.school = "Kuni Shugenja"
 	c.school_type = Enums.SchoolType.SHUGENJA
@@ -5755,16 +5759,16 @@ func _make_kuni_shugenja(char_id: int, school_rank: int) -> L5RCharacterData:
 
 func test_purify_executor_success_returns_flag() -> void:
 	var c: L5RCharacterData = _make_kuni_shugenja(1, 3)
-	var action: ScoredAction = ScoredAction.new()
+	var action: NPCDataStructures.ScoredAction = NPCDataStructures.ScoredAction.new()
 	action.action_id = "PURIFY_TAINTED_GROUND"
 	action.target_province_id = 5
-	var ctx: ContextSnapshot = ContextSnapshot.new()
+	var ctx: NPCDataStructures.ContextSnapshot = NPCDataStructures.ContextSnapshot.new()
 	ctx.character_id = 1
 	ctx.ic_day = 10
 	ctx.season = 0  # SPRING
 	var dice: DiceEngine = DiceEngine.new(99)
 	var result: Dictionary = ActionExecutor._execute_purify_tainted_ground(
-		action, ctx, c, dice, 1.0,
+		action, c, ctx, dice,
 	)
 	var effects: Dictionary = result.get("effects", {})
 	if effects.get("requires_purification", false):
@@ -5936,19 +5940,19 @@ func _make_trainable_company(cid: int, commander_id: int) -> Dictionary:
 
 
 func test_drill_executor_returns_requires_flag() -> void:
-	var action: ScoredAction = ScoredAction.new()
+	var action: NPCDataStructures.ScoredAction = NPCDataStructures.ScoredAction.new()
 	action.action_id = "DRILL_TROOPS"
 	action.metadata = {"target_company_id": 10}
-	var ctx: ContextSnapshot = ContextSnapshot.new()
+	var ctx: NPCDataStructures.ContextSnapshot = NPCDataStructures.ContextSnapshot.new()
 	var dice: DiceEngine = DiceEngine.new(1)
-	var result: Dictionary = ActionExecutor.execute(action, ctx, dice)
+	var result: Dictionary = ActionExecutor.execute(action, L5RCharacterData.new(), ctx, dice, {})
 	var effects: Dictionary = result.get("effects", {})
 	assert_true(effects.get("requires_drill", false))
 	assert_eq(effects.get("target_company_id", -1), 10)
 
 
 func test_drill_success_adds_training_points() -> void:
-	var c: L5RCharacterData = _make_char(1, "Lion")
+	var c: L5RCharacterData = _make_character(1, "Lion")
 	c.skills["Battle"] = 3
 	c.set_trait_value(Enums.Trait.PERCEPTION, 3)
 	var company: Dictionary = _make_trainable_company(10, 1)
@@ -5968,7 +5972,7 @@ func test_drill_success_adds_training_points() -> void:
 
 
 func test_drill_fallback_to_commander_id() -> void:
-	var c: L5RCharacterData = _make_char(1, "Lion")
+	var c: L5RCharacterData = _make_character(1, "Lion")
 	c.skills["Battle"] = 3
 	c.set_trait_value(Enums.Trait.PERCEPTION, 3)
 	var company: Dictionary = _make_trainable_company(10, 1)
@@ -5986,7 +5990,7 @@ func test_drill_fallback_to_commander_id() -> void:
 
 
 func test_drill_level_up_at_10_points() -> void:
-	var c: L5RCharacterData = _make_char(1, "Lion")
+	var c: L5RCharacterData = _make_character(1, "Lion")
 	c.skills["Battle"] = 5
 	c.set_trait_value(Enums.Trait.PERCEPTION, 5)
 	var company: Dictionary = _make_trainable_company(10, 1)
@@ -6006,7 +6010,7 @@ func test_drill_level_up_at_10_points() -> void:
 
 
 func test_drill_max_level_cap() -> void:
-	var c: L5RCharacterData = _make_char(1, "Lion")
+	var c: L5RCharacterData = _make_character(1, "Lion")
 	c.skills["Battle"] = 5
 	c.set_trait_value(Enums.Trait.PERCEPTION, 5)
 	var company: Dictionary = _make_trainable_company(10, 1)
@@ -6039,7 +6043,7 @@ func test_drill_no_character_skips() -> void:
 
 
 func test_drill_no_company_skips() -> void:
-	var c: L5RCharacterData = _make_char(1, "Lion")
+	var c: L5RCharacterData = _make_character(1, "Lion")
 	c.skills["Battle"] = 3
 	var applied: Array = [{
 		"effects": {"requires_drill": true, "target_company_id": 99},

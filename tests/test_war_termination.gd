@@ -649,13 +649,6 @@ func test_orchestrator_restores_routes_on_edict() -> void:
 
 # -- Territory Transfer Mutations -----------------------------------------------
 
-func _make_province(pid: int, clan: String) -> ProvinceData:
-	var p: ProvinceData = ProvinceData.new()
-	p.province_id = pid
-	p.clan = clan
-	return p
-
-
 func test_surrender_transfers_province_clan() -> void:
 	var p1: ProvinceData = _make_province(1, "Crane")
 	var p2: ProvinceData = _make_province(2, "Crane")

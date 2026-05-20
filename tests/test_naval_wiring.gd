@@ -810,7 +810,7 @@ func test_find_hostile_pairs_same_clan() -> void:
 
 	var clans_at: Dictionary = {
 		"Crane": [],
-		"Crane": [],
+		"Mantis": [],
 	}
 
 	var pairs: Array = DayOrchestrator._find_hostile_naval_pairs(

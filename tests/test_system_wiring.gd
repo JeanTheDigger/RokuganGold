@@ -1951,7 +1951,7 @@ func test_sortie_results_reduces_ss_on_province() -> void:
 	}]
 
 	var results := DayOrchestrator._process_sortie_results(
-		applied_list, [tower], {10: province}
+		applied_list, [tower], {10: province}, DiceEngine.new()
 	)
 
 	assert_eq(province.shadowlands_strength, 5, "SS reduced by 1 for small sortie")
@@ -1977,7 +1977,7 @@ func test_sortie_results_ss_clamped_at_zero() -> void:
 	}]
 
 	DayOrchestrator._process_sortie_results(
-		applied_list, [tower], {10: province}
+		applied_list, [tower], {10: province}, DiceEngine.new()
 	)
 
 	assert_eq(province.shadowlands_strength, 0, "SS cannot go below 0")
@@ -2007,7 +2007,7 @@ func test_sortie_results_deducts_jade_from_settlement() -> void:
 	}]
 
 	DayOrchestrator._process_sortie_results(
-		applied_list, [tower], {10: province}
+		applied_list, [tower], {10: province}, DiceEngine.new()
 	)
 
 	assert_almost_eq(tower.jade_stockpile, 48.0, 0.001, "2 jade consumed for 2 warriors")
@@ -2035,7 +2035,7 @@ func test_sortie_results_jade_clamped_at_zero() -> void:
 	}]
 
 	DayOrchestrator._process_sortie_results(
-		applied_list, [tower], {10: province}
+		applied_list, [tower], {10: province}, DiceEngine.new()
 	)
 
 	assert_almost_eq(tower.jade_stockpile, 0.0, 0.001, "Jade never goes negative")
