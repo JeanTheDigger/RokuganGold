@@ -3320,6 +3320,7 @@ func test_forge_order_in_all_contexts() -> void:
 func test_forge_metadata_low_forgery() -> void:
 	var ctx := _make_metadata_ctx()
 	ctx.skill_ranks = {"Forgery": 2}
+	ctx.lord_rank = Enums.LordRank.PROVINCIAL_DAIMYO
 	ctx.known_topics = [77, 88]
 	var need := _make_metadata_need()
 	need.target_npc_id = 42
@@ -3337,6 +3338,7 @@ func test_forge_metadata_low_forgery() -> void:
 func test_forge_metadata_mid_forgery() -> void:
 	var ctx := _make_metadata_ctx()
 	ctx.skill_ranks = {"Forgery": 5}
+	ctx.lord_rank = Enums.LordRank.CLAN_CHAMPION
 	var need := _make_metadata_need()
 	var option := NPCDataStructures.ScoredAction.new()
 	option.action_id = "FORGE_ORDER"
@@ -3347,6 +3349,7 @@ func test_forge_metadata_mid_forgery() -> void:
 func test_forge_metadata_high_forgery() -> void:
 	var ctx := _make_metadata_ctx()
 	ctx.skill_ranks = {"Forgery": 7}
+	ctx.lord_rank = Enums.LordRank.IMPERIAL
 	var need := _make_metadata_need()
 	var option := NPCDataStructures.ScoredAction.new()
 	option.action_id = "FORGE_ORDER"

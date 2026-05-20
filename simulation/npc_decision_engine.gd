@@ -2680,7 +2680,7 @@ static func _build_forge_letter_metadata(
 	need: NPCDataStructures.ImmediateNeed,
 ) -> Dictionary:
 	var forgery_rank: int = ctx.skill_ranks.get("Forgery", 0)
-	var authority: String = _forge_authority_from_rank(forgery_rank)
+	var authority: String = _forge_authority_from_lord_rank(ctx.lord_rank)
 	var impersonated_id: int = need.target_npc_id
 	var recipient_id: int = -1
 	if need.target_npc_id_secondary >= 0:
@@ -2702,7 +2702,7 @@ static func _build_forge_order_metadata(
 	need: NPCDataStructures.ImmediateNeed,
 ) -> Dictionary:
 	var forgery_rank: int = ctx.skill_ranks.get("Forgery", 0)
-	var authority: String = _forge_authority_from_rank(forgery_rank)
+	var authority: String = _forge_authority_from_lord_rank(ctx.lord_rank)
 	var order_info: Dictionary = _pick_forged_order_type(need)
 	return {
 		"authority_level": authority,
@@ -2744,10 +2744,16 @@ static func _pick_forged_order_type(
 			return {"need_type": "TRAVEL_TO"}
 
 
-static func _forge_authority_from_rank(forgery_rank: int) -> String:
-	if forgery_rank >= 7:
+# GDD s12.8: authority level = who is being impersonated.
+# PROVISIONAL: uses forger's own lord_rank as proxy (the authority
+# level the forger is familiar with). Proper derivation requires
+# the impersonated person's rank, blocked on target character lookup.
+static func _forge_authority_from_lord_rank(
+	lord_rank: Enums.LordRank,
+) -> String:
+	if lord_rank >= Enums.LordRank.IMPERIAL:
 		return "major"
-	elif forgery_rank >= 4:
+	elif lord_rank >= Enums.LordRank.FAMILY_DAIMYO:
 		return "moderate"
 	return "minor"
 

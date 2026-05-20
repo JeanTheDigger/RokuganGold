@@ -924,6 +924,31 @@ For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
   known_suspects. Crime record links forger (perpetrator_id) to victim
   (impersonated person), with concealment_tn from the forge roll for
   investigation difficulty. 5 tests.
+- **Forge authority level — derived from lord_rank, not Forgery skill. FIXED.**
+  `_forge_authority_from_rank(forgery_rank)` was mapping Forgery skill rank
+  to authority level (7+→major, 4+→moderate, else→minor). GDD s12.8 says
+  authority level is determined by who is being impersonated — local daimyo
+  TN 20, Family Daimyo/Champion TN 25, Emperor TN 30. Replaced with
+  `_forge_authority_from_lord_rank(lord_rank)` mapping LordRank enum:
+  IMPERIAL→major, FAMILY_DAIMYO/CLAN_CHAMPION→moderate, else→minor.
+  PROVISIONAL: uses forger's own lord_rank as proxy. Proper derivation
+  requires target character's lord rank lookup, blocked on adding
+  target_npc_status to ContextSnapshot or ImmediateNeed.
+
+### Forge Pipeline PROVISIONAL Values Audit (2026-05-20)
+Values confirmed against GDD s12.8:
+- FORGE_LETTER_TN: 15/20/25 (minor/moderate/major) — matches GDD exactly.
+- FORGE_ORDER_TN: 20/25/30 (minor/moderate/major) — matches GDD exactly.
+- Detection TN formula: base TN + (Raises × 5) — matches GDD exactly.
+- Honor cost -0.3 / Infamy +0.1 — matches other Category 6 actions
+  (Intercept a Letter, Search Quarters). GDD says "Using a Low Skill per
+  Table 2.3, scaled by Honor Rank" — rank-scaling not yet implemented
+  (systemic gap across all crime types, not forge-specific).
+- Personality filter blocks (JIN, REI, GI, MAKOTO) — matches GDD virtues.
+- Delivery distance 3 provinces — PROVISIONAL (blocked on map/adjacency data).
+- Forged objective priority 8 — PROVISIONAL (no GDD spec for objective priority).
+- Impersonation detection topic TIER_3 — PROVISIONAL (no explicit GDD tier).
+- INVESTIGATE_THREAT priority 6 — PROVISIONAL.
 
 ### Known Code Issues — Deferred (2026-05-19, metadata population audit)
 - **EXPOSE_SECRET_PRIVATELY — metadata unpopulated, always fails. FIXED.**
