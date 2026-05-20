@@ -861,6 +861,19 @@ For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
   Executor reads `raises` (default 0). NPCs never declared raises on
   Medicine rolls. Now set by `_pick_medicine_raises()` scaled by Medicine
   skill rank: 0-2→0, 3-4→1, 5-6→2, 7+→3. Values PROVISIONAL. 4 tests.
+- **FORGE_IMPERSONATION_LETTER / FORGE_ORDER — full NPC pipeline wired. FIXED.**
+  Both had working executors (SecretSystem.resolve_forge_impersonation_letter,
+  resolve_forge_order), TN tables, and tests, but were unreachable (no context
+  list, no scoring table entries, no personality filter, no metadata population).
+  Added to AT_OWN_HOLDINGS, AT_COURT, VISITING context lists. AP cost 1 each
+  (GDD s12.8). action_skill_map.json: Forgery/Agility for both (GDD-specified).
+  personality_filter.json: blocked by JIN, REI, GI, MAKOTO (same as
+  FABRICATE_SECRET — Category 6 Covert forgery actions). objective_alignment.json:
+  DAMAGE_RELATIONSHIP (70/55), ACQUIRE_LEVERAGE (50/40),
+  SUPPRESS_INVESTIGATION (45/60). Scores PROVISIONAL — GDD specifies action
+  purpose but not NeedType scoring weights. Metadata: authority_level from
+  Forgery skill rank (1-3→minor, 4-6→moderate, 7+→major); target_npc_id from
+  need. 8 tests.
 
 ### Known Code Issues — Deferred (2026-05-19, metadata population audit)
 - **EXPOSE_SECRET_PRIVATELY — metadata unpopulated, always fails. FIXED.**

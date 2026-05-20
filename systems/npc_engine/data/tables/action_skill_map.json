@@ -199,6 +199,14 @@
     "primary": "Forgery",
     "secondary": "Intelligence"
   },
+  "FORGE_IMPERSONATION_LETTER": {
+    "primary": "Forgery",
+    "secondary": "Agility"
+  },
+  "FORGE_ORDER": {
+    "primary": "Forgery",
+    "secondary": "Agility"
+  },
   "FORCE_MARCH": {
     "primary": "Battle",
     "secondary": null

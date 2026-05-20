@@ -8,7 +8,9 @@
         "ACTIVATE_SLEEPER",
         "INTIMIDATE_WITNESS",
         "KILL_WITNESS",
-        "FABRICATE_SECRET"
+        "FABRICATE_SECRET",
+        "FORGE_IMPERSONATION_LETTER",
+        "FORGE_ORDER"
       ],
       "conditional": [
         {
@@ -105,6 +107,8 @@
         "SEARCH_PERSON",
         "CONCEAL_ITEM",
         "FABRICATE_SECRET",
+        "FORGE_IMPERSONATION_LETTER",
+        "FORGE_ORDER",
         "EXPOSE_SECRET_PRIVATELY",
         "EXPOSE_SECRET_PUBLICLY",
         "SEDUCE",
@@ -161,6 +165,8 @@
       "always_blocked": [
         "GOSSIP",
         "FABRICATE_SECRET",
+        "FORGE_IMPERSONATION_LETTER",
+        "FORGE_ORDER",
         "BRIBE_FOR_INFO",
         "BRIBE_WITNESS",
         "EAVESDROP",
@@ -232,6 +238,8 @@
         "RENEGE_COMMITMENT",
         "CONDUCT_CONDITIONING",
         "FABRICATE_SECRET",
+        "FORGE_IMPERSONATION_LETTER",
+        "FORGE_ORDER",
         "EXPOSE_SECRET_PRIVATELY",
         "EXPOSE_SECRET_PUBLICLY",
         "SEDUCE",

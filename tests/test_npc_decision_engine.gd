@@ -3288,3 +3288,94 @@ func test_pick_medicine_raises_tiers() -> void:
 	assert_eq(NPCDecisionEngine._pick_medicine_raises(ctx), 3)
 	ctx.skill_ranks = {"Medicine": 10}
 	assert_eq(NPCDecisionEngine._pick_medicine_raises(ctx), 3)
+
+
+# =============================================================================
+# FORGE_IMPERSONATION_LETTER / FORGE_ORDER context and metadata
+# =============================================================================
+
+
+func test_forge_impersonation_letter_in_all_contexts() -> void:
+	for flag: Enums.ContextFlag in [
+		Enums.ContextFlag.AT_OWN_HOLDINGS,
+		Enums.ContextFlag.AT_COURT,
+		Enums.ContextFlag.VISITING,
+	]:
+		var actions: Array[String] = NPCDecisionEngine._get_actions_for_context(flag)
+		assert_true("FORGE_IMPERSONATION_LETTER" in actions,
+			"FORGE_IMPERSONATION_LETTER should be in %s" % Enums.ContextFlag.keys()[flag])
+
+
+func test_forge_order_in_all_contexts() -> void:
+	for flag: Enums.ContextFlag in [
+		Enums.ContextFlag.AT_OWN_HOLDINGS,
+		Enums.ContextFlag.AT_COURT,
+		Enums.ContextFlag.VISITING,
+	]:
+		var actions: Array[String] = NPCDecisionEngine._get_actions_for_context(flag)
+		assert_true("FORGE_ORDER" in actions,
+			"FORGE_ORDER should be in %s" % Enums.ContextFlag.keys()[flag])
+
+
+func test_forge_metadata_low_forgery() -> void:
+	var ctx := _make_metadata_ctx()
+	ctx.skill_ranks = {"Forgery": 2}
+	var need := _make_metadata_need()
+	need.target_npc_id = 42
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "FORGE_IMPERSONATION_LETTER"
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_eq(option.metadata.get("authority_level", ""), "minor")
+	assert_eq(option.metadata.get("target_npc_id", -1), 42)
+
+
+func test_forge_metadata_mid_forgery() -> void:
+	var ctx := _make_metadata_ctx()
+	ctx.skill_ranks = {"Forgery": 5}
+	var need := _make_metadata_need()
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "FORGE_ORDER"
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_eq(option.metadata.get("authority_level", ""), "moderate")
+
+
+func test_forge_metadata_high_forgery() -> void:
+	var ctx := _make_metadata_ctx()
+	ctx.skill_ranks = {"Forgery": 7}
+	var need := _make_metadata_need()
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "FORGE_ORDER"
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_eq(option.metadata.get("authority_level", ""), "major")
+
+
+func test_forge_personality_blocks() -> void:
+	var filter_path := "res://systems/npc_engine/data/tables/personality_filter.json"
+	if not FileAccess.file_exists(filter_path):
+		pass_test("Personality filter not loadable in test env")
+		return
+	var file := FileAccess.open(filter_path, FileAccess.READ)
+	var data: Dictionary = JSON.parse_string(file.get_as_text())
+	file.close()
+	for virtue_name: String in ["JIN", "REI", "GI", "MAKOTO"]:
+		var blocked: Array = data["bushido"][virtue_name]["always_blocked"]
+		assert_true("FORGE_IMPERSONATION_LETTER" in blocked,
+			"%s should block FORGE_IMPERSONATION_LETTER" % virtue_name)
+		assert_true("FORGE_ORDER" in blocked,
+			"%s should block FORGE_ORDER" % virtue_name)
+
+
+func test_forge_objective_alignment_entries() -> void:
+	var align_path := "res://systems/npc_engine/data/tables/objective_alignment.json"
+	if not FileAccess.file_exists(align_path):
+		pass_test("Objective alignment not loadable in test env")
+		return
+	var file := FileAccess.open(align_path, FileAccess.READ)
+	var data: Dictionary = JSON.parse_string(file.get_as_text())
+	file.close()
+	assert_true(data["DAMAGE_RELATIONSHIP"].has("FORGE_IMPERSONATION_LETTER"))
+	assert_true(data["DAMAGE_RELATIONSHIP"].has("FORGE_ORDER"))
+	assert_true(data["ACQUIRE_LEVERAGE"].has("FORGE_IMPERSONATION_LETTER"))
+	assert_true(data["ACQUIRE_LEVERAGE"].has("FORGE_ORDER"))
+	assert_true(data["SUPPRESS_INVESTIGATION"].has("FORGE_IMPERSONATION_LETTER"))
+	assert_true(data["SUPPRESS_INVESTIGATION"].has("FORGE_ORDER"))

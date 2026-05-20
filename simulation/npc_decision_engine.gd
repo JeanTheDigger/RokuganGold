@@ -947,6 +947,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array[S
 				"ISSUE_DUEL_CHALLENGE",
 				"SHADOW_TARGET", "SEARCH_PERSON", "CONCEAL_ITEM",
 				"FABRICATE_SECRET", "EXPOSE_SECRET_PRIVATELY", "EXPOSE_SECRET_PUBLICLY",
+				"FORGE_IMPERSONATION_LETTER", "FORGE_ORDER",
 				"SEDUCE", "SEDUCE_FOR_INFO", "SEDUCE_FOR_ACCESS",
 				"SEDUCE_FOR_LEVERAGE", "SEDUCE_TO_COMPROMISE",
 				"DO_NOTHING", "REST",
@@ -967,6 +968,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array[S
 				"INTERCEPT_LETTER", "SEARCH_QUARTERS",
 				"SHADOW_TARGET", "SEARCH_PERSON", "CONCEAL_ITEM",
 				"FABRICATE_SECRET", "EXPOSE_SECRET_PRIVATELY", "EXPOSE_SECRET_PUBLICLY",
+				"FORGE_IMPERSONATION_LETTER", "FORGE_ORDER",
 				"SEDUCE", "SEDUCE_FOR_INFO", "SEDUCE_FOR_ACCESS",
 				"SEDUCE_FOR_LEVERAGE", "SEDUCE_TO_COMPROMISE",
 				"EXAMINE_LETTER",
@@ -996,6 +998,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array[S
 				"SET_TAX_RATE", "SET_STIPEND_RATE",
 				"SHADOW_TARGET", "SEARCH_PERSON", "CONCEAL_ITEM",
 				"FABRICATE_SECRET", "EXPOSE_SECRET_PRIVATELY", "EXPOSE_SECRET_PUBLICLY",
+				"FORGE_IMPERSONATION_LETTER", "FORGE_ORDER",
 				"SEDUCE", "SEDUCE_FOR_INFO", "SEDUCE_FOR_ACCESS",
 				"SEDUCE_FOR_LEVERAGE", "SEDUCE_TO_COMPROMISE",
 				"CONDUCT_COMMERCE", "PURCHASE_MARKET",
@@ -1120,6 +1123,8 @@ static func _get_ap_cost(action_id: String) -> int:
 		"PURCHASE_MARKET": 1,
 		"EXAMINE_CRIME_SCENE": 1,
 		"ISSUE_DUEL_CHALLENGE": 1,
+		"FORGE_IMPERSONATION_LETTER": 1,
+		"FORGE_ORDER": 1,
 		"SHARE_SUPPLIES": 1,
 		"PURIFY_TAINTED_GROUND": 1,
 		"FORTIFY_WALL_SECTION": 1,
@@ -2664,6 +2669,22 @@ static func _populate_action_metadata(
 		option.metadata = sortie_meta
 	elif option.action_id == "TREAT_WOUND":
 		option.metadata = {"raises": _pick_medicine_raises(ctx)}
+	elif option.action_id in ["FORGE_IMPERSONATION_LETTER", "FORGE_ORDER"]:
+		option.metadata = _build_forge_metadata(ctx, need)
+
+
+static func _build_forge_metadata(
+	ctx: NPCDataStructures.ContextSnapshot,
+	need: NPCDataStructures.ImmediateNeed,
+) -> Dictionary:
+	var target_id: int = need.target_npc_id
+	var forgery_rank: int = ctx.skill_ranks.get("Forgery", 0)
+	var authority: String = "minor"
+	if forgery_rank >= 7:
+		authority = "major"
+	elif forgery_rank >= 4:
+		authority = "moderate"
+	return {"authority_level": authority, "target_npc_id": target_id}
 
 
 static func _pick_fabrication_severity(
