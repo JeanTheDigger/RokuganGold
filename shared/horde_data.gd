@@ -17,7 +17,7 @@ extends Resource
 ## Generated companies — each entry is a Dictionary matching the company
 ## format expected by ArmyCombatSystem (unit_type, base stats, etc.).
 ## Filled by HordeSystem.generate_horde_companies().
-@export var companies: Array[Dictionary] = []
+@export var companies: Array = []
 
 ## True when an Oni is present (ONI_LED / ONI_LED_SPAWN).
 @export var has_oni: bool = false

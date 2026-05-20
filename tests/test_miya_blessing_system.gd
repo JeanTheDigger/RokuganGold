@@ -243,51 +243,51 @@ func test_not_excluded_default() -> void:
 # -- Province selection ------------------------------------------------------
 
 func test_select_top_three_by_score() -> void:
-	var scored: Array[Dictionary] = [
+	var scored: Array = [
 		{"province_id": 1, "score": 5, "stability": 80.0, "population_pu": 10.0, "excluded": false},
 		{"province_id": 2, "score": 30, "stability": 40.0, "population_pu": 10.0, "excluded": false},
 		{"province_id": 3, "score": 15, "stability": 60.0, "population_pu": 10.0, "excluded": false},
 		{"province_id": 4, "score": 20, "stability": 50.0, "population_pu": 10.0, "excluded": false},
 	]
-	var selected: Array[int] = MiyaBlessingSystem.select_provinces(scored)
+	var selected: Array = MiyaBlessingSystem.select_provinces(scored)
 	assert_eq(selected, [2, 4, 3])
 
 
 func test_select_skips_excluded() -> void:
-	var scored: Array[Dictionary] = [
+	var scored: Array = [
 		{"province_id": 1, "score": 100, "stability": 10.0, "population_pu": 10.0, "excluded": true},
 		{"province_id": 2, "score": 30, "stability": 40.0, "population_pu": 10.0, "excluded": false},
 		{"province_id": 3, "score": 15, "stability": 60.0, "population_pu": 10.0, "excluded": false},
 	]
-	var selected: Array[int] = MiyaBlessingSystem.select_provinces(scored)
+	var selected: Array = MiyaBlessingSystem.select_provinces(scored)
 	assert_false(selected.has(1))
 	assert_eq(selected.size(), 2)
 
 
 func test_select_tiebreak_by_lowest_stability() -> void:
 	# Two provinces tie on score; the one with lower stability wins.
-	var scored: Array[Dictionary] = [
+	var scored: Array = [
 		{"province_id": 1, "score": 20, "stability": 30.0, "population_pu": 10.0, "excluded": false},
 		{"province_id": 2, "score": 20, "stability": 60.0, "population_pu": 10.0, "excluded": false},
 		{"province_id": 3, "score": 5, "stability": 80.0, "population_pu": 10.0, "excluded": false},
 	]
-	var selected: Array[int] = MiyaBlessingSystem.select_provinces(scored)
+	var selected: Array = MiyaBlessingSystem.select_provinces(scored)
 	assert_eq(selected[0], 1)
 
 
 func test_select_tiebreak_by_smaller_population() -> void:
 	# Score and stability tied; smaller PU wins.
-	var scored: Array[Dictionary] = [
+	var scored: Array = [
 		{"province_id": 1, "score": 10, "stability": 50.0, "population_pu": 30.0, "excluded": false},
 		{"province_id": 2, "score": 10, "stability": 50.0, "population_pu": 10.0, "excluded": false},
 	]
-	var selected: Array[int] = MiyaBlessingSystem.select_provinces(scored)
+	var selected: Array = MiyaBlessingSystem.select_provinces(scored)
 	assert_eq(selected[0], 2)
 
 
 func test_select_returns_only_eligible_count() -> void:
 	# Only one province; selection returns [pid].
-	var scored: Array[Dictionary] = [
+	var scored: Array = [
 		{"province_id": 1, "score": 10, "stability": 50.0, "population_pu": 10.0, "excluded": false},
 	]
 	assert_eq(MiyaBlessingSystem.select_provinces(scored).size(), 1)
@@ -348,7 +348,7 @@ func _make_inputs(
 	tax_income: float,
 	stockpile: float,
 	ou_pu: float,
-	scored: Array[Dictionary],
+	scored: Array,
 	province_settlements: Dictionary,
 ) -> Dictionary:
 	return {
@@ -384,7 +384,7 @@ func test_full_blessing_fires_and_distributes() -> void:
 	var settlements_p1: Array = [_StubSettlement.new(101, 10.0)]
 	var settlements_p2: Array = [_StubSettlement.new(201, 5.0), _StubSettlement.new(202, 5.0)]
 	var settlements_p3: Array = [_StubSettlement.new(301, 20.0)]
-	var scored: Array[Dictionary] = [
+	var scored: Array = [
 		{"province_id": 1, "score": 30, "stability": 30.0, "population_pu": 10.0, "excluded": false},
 		{"province_id": 2, "score": 20, "stability": 50.0, "population_pu": 10.0, "excluded": false},
 		{"province_id": 3, "score": 15, "stability": 70.0, "population_pu": 20.0, "excluded": false},
@@ -412,7 +412,7 @@ func test_full_blessing_fires_and_distributes() -> void:
 func test_per_province_capped_at_5_rice() -> void:
 	# Massive tax income — allocation ceiling 15.0. Per province 5.0.
 	var settlements_p1: Array = [_StubSettlement.new(101, 10.0)]
-	var scored: Array[Dictionary] = [
+	var scored: Array = [
 		{"province_id": 1, "score": 100, "stability": 10.0, "population_pu": 10.0, "excluded": false},
 		{"province_id": 2, "score": 90, "stability": 20.0, "population_pu": 10.0, "excluded": false},
 		{"province_id": 3, "score": 80, "stability": 30.0, "population_pu": 10.0, "excluded": false},
@@ -431,7 +431,7 @@ func test_per_province_capped_at_5_rice() -> void:
 
 func test_excluded_provinces_not_selected() -> void:
 	var settlements: Array = [_StubSettlement.new(101, 10.0)]
-	var scored: Array[Dictionary] = [
+	var scored: Array = [
 		{"province_id": 1, "score": 100, "stability": 10.0, "population_pu": 10.0, "excluded": true},
 		{"province_id": 2, "score": 30, "stability": 50.0, "population_pu": 10.0, "excluded": false},
 	]
@@ -446,7 +446,7 @@ func test_fewer_than_three_eligible_distributes_to_what_remains() -> void:
 	# Only one eligible province — the Blessing fires for that one,
 	# remaining allocation stays implicitly in the Emperor's stockpile.
 	var settlements: Array = [_StubSettlement.new(101, 10.0)]
-	var scored: Array[Dictionary] = [
+	var scored: Array = [
 		{"province_id": 1, "score": 30, "stability": 30.0, "population_pu": 10.0, "excluded": false},
 	]
 	var result: Dictionary = MiyaBlessingSystem.process_annual_blessing(_make_inputs(
@@ -461,7 +461,7 @@ func test_fired_total_matches_per_province_times_count() -> void:
 	# Verifies allocation_total reflects what's actually distributed (not the
 	# cap), which matters when fewer-than-three are eligible.
 	var settlements: Array = [_StubSettlement.new(101, 10.0)]
-	var scored: Array[Dictionary] = [
+	var scored: Array = [
 		{"province_id": 1, "score": 30, "stability": 30.0, "population_pu": 10.0, "excluded": false},
 		{"province_id": 2, "score": 20, "stability": 50.0, "population_pu": 10.0, "excluded": false},
 	]
@@ -480,7 +480,7 @@ func test_fired_total_matches_per_province_times_count() -> void:
 # -- Cunning archetype modifier ---------------------------------------------
 
 func test_cunning_modifier_boosts_favored_clan() -> void:
-	var scored: Array[Dictionary] = [
+	var scored: Array = [
 		{"province_id": 1, "score": 5, "clan": "Crane"},
 		{"province_id": 2, "score": 5, "clan": "Lion"},
 	]
@@ -490,7 +490,7 @@ func test_cunning_modifier_boosts_favored_clan() -> void:
 
 
 func test_cunning_modifier_ignores_neutral_clans() -> void:
-	var scored: Array[Dictionary] = [
+	var scored: Array = [
 		{"province_id": 1, "score": 5, "clan": "Dragon"},
 	]
 	MiyaBlessingSystem.apply_cunning_modifier(scored, "Crane", "Lion")

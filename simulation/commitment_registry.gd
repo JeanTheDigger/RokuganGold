@@ -103,10 +103,10 @@ const CHUGI_EXTERNAL_FORGIVENESS: float = 0.25
 # =============================================================================
 
 static func get_pending(
-	commitments: Array[CommitmentData],
+	commitments: Array,
 	npc_id: int,
 ) -> Array:
-	var result: Array[CommitmentData] = []
+	var result: Array = []
 	for c: CommitmentData in commitments:
 		if c.debtor_npc_id == npc_id and c.status == Enums.CommitmentStatus.PENDING:
 			result.append(c)
@@ -114,10 +114,10 @@ static func get_pending(
 
 
 static func get_by_crisis(
-	commitments: Array[CommitmentData],
+	commitments: Array,
 	crisis_id: int,
 ) -> Array:
-	var result: Array[CommitmentData] = []
+	var result: Array = []
 	for c: CommitmentData in commitments:
 		if c.crisis_id == crisis_id:
 			result.append(c)
@@ -138,7 +138,7 @@ static func create_commitment(
 	created_ic_day: int,
 	source_action: String = "",
 	fulfillment_target: int = -1,
-	witnesses: Array[int] = [],
+	witnesses: Array = [],
 ) -> CommitmentData:
 	var c := CommitmentData.new()
 	c.commitment_id = commitment_id
@@ -301,13 +301,13 @@ static func apply_consequences(
 # =============================================================================
 
 static func process_deadlines(
-	commitments: Array[CommitmentData],
+	commitments: Array,
 	current_ic_day: int,
 	fulfillment_checker: Callable,
 	debtor_lookup: Dictionary,
 	characters_by_id: Dictionary,
 ) -> Array:
-	var results: Array[Dictionary] = []
+	var results: Array = []
 	for c: CommitmentData in commitments:
 		if c.status != Enums.CommitmentStatus.PENDING:
 			continue
@@ -344,7 +344,7 @@ static func process_deadlines(
 # =============================================================================
 
 static func link_crisis(
-	commitments: Array[CommitmentData],
+	commitments: Array,
 	debtor_id: int,
 	crisis_id: int,
 ) -> int:
@@ -407,7 +407,7 @@ static func apply_forgiveness(
 # =============================================================================
 
 static func get_at_risk_penalty(
-	commitments: Array[CommitmentData],
+	commitments: Array,
 	debtor_id: int,
 	character: L5RCharacterData,
 	creditor_in_loyalty_chain: Callable = Callable(),
@@ -453,7 +453,7 @@ const COMMITMENT_REDIRECTING_ACTIONS: Array[String] = [
 static func get_action_commitment_modifier(
 	action_id: String,
 	action_settlement_id: int,
-	commitments: Array[CommitmentData],
+	commitments: Array,
 	debtor_id: int,
 	character: L5RCharacterData,
 	creditor_in_loyalty_chain: Callable = Callable(),
@@ -461,7 +461,7 @@ static func get_action_commitment_modifier(
 	var pending: Array = get_pending(commitments, debtor_id)
 	if pending.is_empty():
 		return 0
-	var commitment_targets: Array[int] = []
+	var commitment_targets: Array = []
 	for c: CommitmentData in pending:
 		if c.commitment_type == Enums.CommitmentType.FAVOR_OBLIGATION:
 			continue

@@ -48,7 +48,7 @@ static func get_performance_skill(art_form: ArtForm) -> String:
 static func resolve_public_performance(
 	performer: L5RCharacterData,
 	art_form: ArtForm,
-	witness_ids: Array[int],
+	witness_ids: Array,
 	dice_engine: DiceEngine,
 	fatigue_count: int = 0,
 ) -> Dictionary:
@@ -93,7 +93,7 @@ static func resolve_public_performance(
 	disp_per_witness = int(float(disp_per_witness) * fatigue_mult)
 	glory_change = glory_change * fatigue_mult
 
-	var witness_effects: Array[Dictionary] = []
+	var witness_effects: Array = []
 	for wid: int in witness_ids:
 		witness_effects.append({
 			"character_id": wid,

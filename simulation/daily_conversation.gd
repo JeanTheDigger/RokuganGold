@@ -24,7 +24,7 @@ const CONVERSATION_PROBABILITY: Array[Array] = [
 static func get_conversation_chance(disposition: int) -> int:
 	if disposition < MIN_DISPOSITION_THRESHOLD:
 		return 0
-	for bracket: Array[int] in CONVERSATION_PROBABILITY:
+	for bracket: Array in CONVERSATION_PROBABILITY:
 		if disposition >= bracket[0] and disposition <= bracket[1]:
 			return bracket[2]
 	return 0
@@ -96,7 +96,7 @@ static func select_topic_to_share_weighted(
 	if character.topic_pool.is_empty():
 		return -1
 
-	var weights: Array[float] = []
+	var weights: Array = []
 	var total_weight: float = 0.0
 	for tid: int in character.topic_pool:
 		var topic: TopicData = topics_by_id.get(tid)
@@ -214,12 +214,12 @@ static func resolve_conversation(
 # -- Settlement-Wide Day Resolution --------------------------------------------
 
 static func resolve_settlement_conversations(
-	characters: Array[L5RCharacterData],
-	rng: Array[int],
+	characters: Array,
+	rng: Array,
 	current_season: int,
 	topics_by_id: Dictionary = {},
 ) -> Array:
-	var results: Array[Dictionary] = []
+	var results: Array = []
 	var conversation_counts: Dictionary = {}
 	var rng_index: int = 0
 

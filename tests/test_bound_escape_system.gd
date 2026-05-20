@@ -354,8 +354,8 @@ func test_cast_spell_allowed() -> void:
 
 
 func test_filter_actions_removes_forbidden() -> void:
-	var actions: Array[String] = ["CHARM", "ATTACK", "NEGOTIATE", "BEGIN_TRAVEL", "CAST_SPELL"]
-	var filtered: Array[String] = BoundEscapeSystem.filter_actions_for_bound(actions)
+	var actions: Array = ["CHARM", "ATTACK", "NEGOTIATE", "BEGIN_TRAVEL", "CAST_SPELL"]
+	var filtered: Array = BoundEscapeSystem.filter_actions_for_bound(actions)
 	assert_eq(filtered.size(), 3)
 	assert_true("CHARM" in filtered)
 	assert_true("NEGOTIATE" in filtered)

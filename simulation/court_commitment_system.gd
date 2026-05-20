@@ -126,7 +126,7 @@ static func get_renege_willingness(
 
 static func check_fulfillment(
 	commitment: CourtCommitmentData,
-	action_log: Array[Dictionary],
+	action_log: Array,
 ) -> bool:
 	if commitment.fulfilled:
 		return true
@@ -149,7 +149,7 @@ static func check_fulfillment(
 
 static func _check_resource_fulfillment(
 	commitment: CourtCommitmentData,
-	action_log: Array[Dictionary],
+	action_log: Array,
 ) -> bool:
 	var total_sent: int = 0
 	for entry: Dictionary in action_log:
@@ -162,7 +162,7 @@ static func _check_resource_fulfillment(
 
 static func _check_dispatch_fulfillment(
 	commitment: CourtCommitmentData,
-	action_log: Array[Dictionary],
+	action_log: Array,
 ) -> bool:
 	for entry: Dictionary in action_log:
 		if entry.get("character_id", -1) != commitment.lord_id:
@@ -227,13 +227,13 @@ static func evaluate_good_faith(
 # -- Seasonal Processing ------------------------------------------------------
 
 static func process_seasonal_commitments(
-	commitments: Array[CourtCommitmentData],
-	action_log: Array[Dictionary],
+	commitments: Array,
+	action_log: Array,
 	current_ic_day: int,
 	characters_by_id: Dictionary,
 ) -> Dictionary:
-	var fulfilled_ids: Array[int] = []
-	var reneged: Array[Dictionary] = []
+	var fulfilled_ids: Array = []
+	var reneged: Array = []
 
 	for i: int in range(commitments.size()):
 		var c: CourtCommitmentData = commitments[i]
@@ -267,10 +267,10 @@ static func process_seasonal_commitments(
 # -- Queries -------------------------------------------------------------------
 
 static func get_active_commitments(
-	commitments: Array[CourtCommitmentData],
+	commitments: Array,
 	lord_id: int,
 ) -> Array:
-	var result: Array[CourtCommitmentData] = []
+	var result: Array = []
 	for c: CourtCommitmentData in commitments:
 		if c.lord_id == lord_id and not c.fulfilled:
 			result.append(c)
@@ -278,7 +278,7 @@ static func get_active_commitments(
 
 
 static func has_unfulfilled_commitments(
-	commitments: Array[CourtCommitmentData],
+	commitments: Array,
 	lord_id: int,
 ) -> bool:
 	for c: CourtCommitmentData in commitments:
@@ -288,7 +288,7 @@ static func has_unfulfilled_commitments(
 
 
 static func has_commitment_on_topic(
-	commitments: Array[CourtCommitmentData],
+	commitments: Array,
 	lord_id: int,
 	topic_id: int,
 ) -> bool:
@@ -303,14 +303,14 @@ const VOLUNTARY_POSITION_THRESHOLD: float = 50.0
 
 static func find_declarable_topics(
 	lord: L5RCharacterData,
-	agenda_topic_ids: Array[int],
-	active_topics: Array[TopicData],
-	commitments: Array[CourtCommitmentData],
+	agenda_topic_ids: Array,
+	active_topics: Array,
+	commitments: Array,
 ) -> Array:
 	## Returns action topics on the agenda where the lord's position exceeds +50
 	## and no existing commitment exists. Used to detect voluntary declaration
 	## opportunities per GDD s16.4.
-	var result: Array[TopicData] = []
+	var result: Array = []
 	for topic: TopicData in active_topics:
 		if topic.topic_id not in agenda_topic_ids:
 			continue

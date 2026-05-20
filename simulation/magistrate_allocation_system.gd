@@ -138,9 +138,9 @@ static func get_conviction_cascade(
 
 static func resolve_magistrate_conviction(
 	magistrate_id: int,
-	crime_records: Array[CrimeRecord],
+	crime_records: Array,
 ) -> Dictionary:
-	var suspended_cases: Array[int] = []
+	var suspended_cases: Array = []
 	for record: CrimeRecord in crime_records:
 		if record.investigating_magistrate_id == magistrate_id:
 			if record.legal_status == Enums.LegalStatus.UNDER_INVESTIGATION \
@@ -156,9 +156,9 @@ static func resolve_magistrate_conviction(
 
 
 static func assign_replacement_magistrate(
-	suspended_case_ids: Array[int],
+	suspended_case_ids: Array,
 	new_magistrate_id: int,
-	crime_records: Array[CrimeRecord],
+	crime_records: Array,
 ) -> Dictionary:
 	var reassigned: int = 0
 	for record: CrimeRecord in crime_records:

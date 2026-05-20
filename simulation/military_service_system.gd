@@ -27,7 +27,7 @@ static func create_service_request(
 
 static func cascade_request_to_vassals(
 	family_daimyo_id: int,
-	vassal_ids: Array[int],
+	vassal_ids: Array,
 	total_needed: int,
 ) -> Array:
 	if vassal_ids.is_empty():
@@ -36,7 +36,7 @@ static func cascade_request_to_vassals(
 	var per_vassal: int = maxi(int(total_needed / vassal_ids.size()), 1)
 	var remainder: int = total_needed % vassal_ids.size()
 
-	var assignments: Array[Dictionary] = []
+	var assignments: Array = []
 	for i: int in vassal_ids.size():
 		var count: int = per_vassal
 		if i < remainder:
@@ -54,7 +54,7 @@ static func cascade_request_to_vassals(
 # -- Candidate Evaluation --------------------------------------------------------
 
 static func evaluate_candidates(
-	candidates: Array[Dictionary],
+	candidates: Array,
 	selecting_lord_personality: String,
 ) -> Array:
 	return LevySystem.rank_candidates(candidates, selecting_lord_personality)
@@ -127,7 +127,7 @@ static func can_request_service(
 # -- Bulk Selection --------------------------------------------------------------
 
 static func select_candidates_for_service(
-	available_retainers: Array[Dictionary],
+	available_retainers: Array,
 	count_needed: int,
 	selecting_lord_personality: String,
 ) -> Dictionary:
@@ -135,8 +135,8 @@ static func select_candidates_for_service(
 		available_retainers, selecting_lord_personality,
 	)
 
-	var selected: Array[Dictionary] = []
-	var rejected: Array[Dictionary] = []
+	var selected: Array = []
+	var rejected: Array = []
 
 	for candidate: Dictionary in ranked:
 		if selected.size() >= count_needed:
@@ -154,12 +154,12 @@ static func select_candidates_for_service(
 
 
 static func apply_service_assignments(
-	selected: Array[Dictionary],
+	selected: Array,
 	characters_by_id: Dictionary,
 	military_commander_id: int,
 	unit_id: int,
 ) -> Array:
-	var results: Array[Dictionary] = []
+	var results: Array = []
 	for candidate: Dictionary in selected:
 		var char_id: int = candidate.get("character_id", -1)
 		if char_id < 0:

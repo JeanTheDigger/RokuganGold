@@ -130,12 +130,12 @@ func test_renege_willingness_makoto():
 func test_already_fulfilled():
 	var c := _make_commitment(1, "send_supplies", CourtCommitmentData.CommitmentSource.VOLUNTARY, 100, 200, 5)
 	c.fulfilled = true
-	var log: Array[Dictionary] = []
+	var log: Array = []
 	assert_true(CourtCommitmentSystem.check_fulfillment(c, log))
 
 func test_resource_fulfillment_met():
 	var c := _make_commitment(1, "send_supplies", CourtCommitmentData.CommitmentSource.VOLUNTARY, 100, 200, 10)
-	var log: Array[Dictionary] = [
+	var log: Array = [
 		{"character_id": 1, "action_id": "SHARE_SUPPLIES", "amount": 6},
 		{"character_id": 1, "action_id": "SHARE_SUPPLIES", "amount": 5},
 	]
@@ -143,35 +143,35 @@ func test_resource_fulfillment_met():
 
 func test_resource_fulfillment_not_met():
 	var c := _make_commitment(1, "send_supplies", CourtCommitmentData.CommitmentSource.VOLUNTARY, 100, 200, 10)
-	var log: Array[Dictionary] = [
+	var log: Array = [
 		{"character_id": 1, "action_id": "SHARE_SUPPLIES", "amount": 3},
 	]
 	assert_false(CourtCommitmentSystem.check_fulfillment(c, log))
 
 func test_dispatch_fulfillment():
 	var c := _make_commitment(1, "send_military_aid")
-	var log: Array[Dictionary] = [
+	var log: Array = [
 		{"character_id": 1, "action_id": "ORDER_DEPLOY", "fulfilled": true},
 	]
 	assert_true(CourtCommitmentSystem.check_fulfillment(c, log))
 
 func test_dispatch_not_fulfilled():
 	var c := _make_commitment(1, "send_military_aid")
-	var log: Array[Dictionary] = [
+	var log: Array = [
 		{"character_id": 1, "action_id": "ORDER_DEPLOY", "fulfilled": false},
 	]
 	assert_false(CourtCommitmentSystem.check_fulfillment(c, log))
 
 func test_wrong_lord_log_ignored():
 	var c := _make_commitment(1, "send_supplies", CourtCommitmentData.CommitmentSource.VOLUNTARY, 100, 200, 5)
-	var log: Array[Dictionary] = [
+	var log: Array = [
 		{"character_id": 2, "action_id": "SHARE_SUPPLIES", "amount": 10},
 	]
 	assert_false(CourtCommitmentSystem.check_fulfillment(c, log))
 
 func test_ap_spent_tracked():
 	var c := _make_commitment(1, "send_supplies", CourtCommitmentData.CommitmentSource.VOLUNTARY, 100, 200, 100)
-	var log: Array[Dictionary] = [
+	var log: Array = [
 		{"character_id": 1, "action_id": "SHARE_SUPPLIES", "amount": 1},
 		{"character_id": 1, "action_id": "SHARE_SUPPLIES", "amount": 1},
 		{"character_id": 1, "action_id": "ORDER_DEPLOY"},
@@ -254,8 +254,8 @@ func test_good_faith_before_deadline_with_ap():
 
 func test_seasonal_detects_fulfillment():
 	var c := _make_commitment(1, "send_supplies", CourtCommitmentData.CommitmentSource.VOLUNTARY, 100, 200, 5)
-	var commitments: Array[CourtCommitmentData] = [c]
-	var log: Array[Dictionary] = [
+	var commitments: Array = [c]
+	var log: Array = [
 		{"character_id": 1, "action_id": "SHARE_SUPPLIES", "amount": 5},
 	]
 	var lord := _make_lord(1)
@@ -268,8 +268,8 @@ func test_seasonal_detects_fulfillment():
 
 func test_seasonal_detects_renege():
 	var c := _make_commitment(1, "send_supplies", CourtCommitmentData.CommitmentSource.VOLUNTARY, 100, 200, 100)
-	var commitments: Array[CourtCommitmentData] = [c]
-	var log: Array[Dictionary] = []
+	var commitments: Array = [c]
+	var log: Array = []
 	var lord := _make_lord(1)
 	var chars: Dictionary = {1: lord}
 	var result: Dictionary = CourtCommitmentSystem.process_seasonal_commitments(
@@ -282,8 +282,8 @@ func test_seasonal_detects_renege():
 func test_seasonal_skips_already_fulfilled():
 	var c := _make_commitment()
 	c.fulfilled = true
-	var commitments: Array[CourtCommitmentData] = [c]
-	var log: Array[Dictionary] = []
+	var commitments: Array = [c]
+	var log: Array = []
 	var lord := _make_lord(1)
 	var chars: Dictionary = {1: lord}
 	var result: Dictionary = CourtCommitmentSystem.process_seasonal_commitments(
@@ -300,25 +300,25 @@ func test_get_active_commitments():
 	var c2 := _make_commitment(2, "send_supplies")
 	var c3 := _make_commitment(1, "send_military_aid")
 	c3.fulfilled = true
-	var commitments: Array[CourtCommitmentData] = [c1, c2, c3]
-	var active: Array[CourtCommitmentData] = CourtCommitmentSystem.get_active_commitments(commitments, 1)
+	var commitments: Array = [c1, c2, c3]
+	var active: Array = CourtCommitmentSystem.get_active_commitments(commitments, 1)
 	assert_eq(active.size(), 1)
 	assert_eq(active[0].commitment_type, "send_supplies")
 
 func test_has_unfulfilled_true():
 	var c := _make_commitment(1, "send_supplies")
-	var commitments: Array[CourtCommitmentData] = [c]
+	var commitments: Array = [c]
 	assert_true(CourtCommitmentSystem.has_unfulfilled_commitments(commitments, 1))
 
 func test_has_unfulfilled_false():
 	var c := _make_commitment(1, "send_supplies")
 	c.fulfilled = true
-	var commitments: Array[CourtCommitmentData] = [c]
+	var commitments: Array = [c]
 	assert_false(CourtCommitmentSystem.has_unfulfilled_commitments(commitments, 1))
 
 func test_has_unfulfilled_wrong_lord():
 	var c := _make_commitment(2, "send_supplies")
-	var commitments: Array[CourtCommitmentData] = [c]
+	var commitments: Array = [c]
 	assert_false(CourtCommitmentSystem.has_unfulfilled_commitments(commitments, 1))
 
 
@@ -326,17 +326,17 @@ func test_has_unfulfilled_wrong_lord():
 
 func test_has_commitment_on_topic_true():
 	var c := _make_commitment(1, "send_supplies")
-	var commitments: Array[CourtCommitmentData] = [c]
+	var commitments: Array = [c]
 	assert_true(CourtCommitmentSystem.has_commitment_on_topic(commitments, 1, 10))
 
 func test_has_commitment_on_topic_wrong_lord():
 	var c := _make_commitment(2, "send_supplies")
-	var commitments: Array[CourtCommitmentData] = [c]
+	var commitments: Array = [c]
 	assert_false(CourtCommitmentSystem.has_commitment_on_topic(commitments, 1, 10))
 
 func test_has_commitment_on_topic_wrong_topic():
 	var c := _make_commitment(1, "send_supplies")
-	var commitments: Array[CourtCommitmentData] = [c]
+	var commitments: Array = [c]
 	assert_false(CourtCommitmentSystem.has_commitment_on_topic(commitments, 1, 99))
 
 
@@ -355,9 +355,9 @@ func test_find_declarable_topics_above_threshold():
 	lord.topic_positions[100] = 60.0
 	var topic := _make_famine_topic(100)
 	var agenda: Array = [100]
-	var topics: Array[TopicData] = [topic]
-	var commitments: Array[CourtCommitmentData] = []
-	var result: Array[TopicData] = CourtCommitmentSystem.find_declarable_topics(
+	var topics: Array = [topic]
+	var commitments: Array = []
+	var result: Array = CourtCommitmentSystem.find_declarable_topics(
 		lord, agenda, topics, commitments,
 	)
 	assert_eq(result.size(), 1)
@@ -368,9 +368,9 @@ func test_find_declarable_topics_below_threshold():
 	lord.topic_positions[100] = 40.0
 	var topic := _make_famine_topic(100)
 	var agenda: Array = [100]
-	var topics: Array[TopicData] = [topic]
-	var commitments: Array[CourtCommitmentData] = []
-	var result: Array[TopicData] = CourtCommitmentSystem.find_declarable_topics(
+	var topics: Array = [topic]
+	var commitments: Array = []
+	var result: Array = CourtCommitmentSystem.find_declarable_topics(
 		lord, agenda, topics, commitments,
 	)
 	assert_eq(result.size(), 0)
@@ -380,11 +380,11 @@ func test_find_declarable_topics_skips_existing_commitment():
 	lord.topic_positions[100] = 60.0
 	var topic := _make_famine_topic(100)
 	var agenda: Array = [100]
-	var topics: Array[TopicData] = [topic]
+	var topics: Array = [topic]
 	var cc := _make_commitment(1, "send_supplies")
 	cc.topic_id = 100
-	var commitments: Array[CourtCommitmentData] = [cc]
-	var result: Array[TopicData] = CourtCommitmentSystem.find_declarable_topics(
+	var commitments: Array = [cc]
+	var result: Array = CourtCommitmentSystem.find_declarable_topics(
 		lord, agenda, topics, commitments,
 	)
 	assert_eq(result.size(), 0)
@@ -396,9 +396,9 @@ func test_find_declarable_topics_skips_non_action_topic():
 	topic.topic_id = 100
 	topic.topic_type = "unknown_type_no_commitment"
 	var agenda: Array = [100]
-	var topics: Array[TopicData] = [topic]
-	var commitments: Array[CourtCommitmentData] = []
-	var result: Array[TopicData] = CourtCommitmentSystem.find_declarable_topics(
+	var topics: Array = [topic]
+	var commitments: Array = []
+	var result: Array = CourtCommitmentSystem.find_declarable_topics(
 		lord, agenda, topics, commitments,
 	)
 	assert_eq(result.size(), 0)
@@ -408,9 +408,9 @@ func test_find_declarable_topics_skips_off_agenda():
 	lord.topic_positions[100] = 60.0
 	var topic := _make_famine_topic(100)
 	var agenda: Array = [200]  # different topic on agenda
-	var topics: Array[TopicData] = [topic]
-	var commitments: Array[CourtCommitmentData] = []
-	var result: Array[TopicData] = CourtCommitmentSystem.find_declarable_topics(
+	var topics: Array = [topic]
+	var commitments: Array = []
+	var result: Array = CourtCommitmentSystem.find_declarable_topics(
 		lord, agenda, topics, commitments,
 	)
 	assert_eq(result.size(), 0)
@@ -421,9 +421,9 @@ func test_find_declarable_topics_skips_resolved():
 	var topic := _make_famine_topic(100)
 	topic.resolved = true
 	var agenda: Array = [100]
-	var topics: Array[TopicData] = [topic]
-	var commitments: Array[CourtCommitmentData] = []
-	var result: Array[TopicData] = CourtCommitmentSystem.find_declarable_topics(
+	var topics: Array = [topic]
+	var commitments: Array = []
+	var result: Array = CourtCommitmentSystem.find_declarable_topics(
 		lord, agenda, topics, commitments,
 	)
 	assert_eq(result.size(), 0)

@@ -117,7 +117,7 @@ static func can_announce(
 ) -> Dictionary:
 	if SkillResolver.get_skill_rank(character, "Hunting") < MIN_HUNTING_SKILL:
 		return {"valid": false, "reason": "insufficient_hunting_skill"}
-	var valid_contexts: Array[Enums.ContextFlag] = [
+	var valid_contexts: Array = [
 		Enums.ContextFlag.AT_OWN_HOLDINGS,
 		Enums.ContextFlag.VISITING,
 		Enums.ContextFlag.AT_COURT,
@@ -138,7 +138,7 @@ static func can_cancel(
 	var hunt_date: int = ctx.known_objectives.get("hunt_date_ic_day", -1)
 	if hunt_date >= 0 and ctx.ic_day >= hunt_date:
 		return {"valid": false, "reason": "hunt_date_passed"}
-	var valid_contexts: Array[Enums.ContextFlag] = [
+	var valid_contexts: Array = [
 		Enums.ContextFlag.AT_OWN_HOLDINGS,
 		Enums.ContextFlag.AT_COURT,
 		Enums.ContextFlag.VISITING,
@@ -209,7 +209,7 @@ static func evaluate_invitation_response(
 ## Returns outcome dict: {outcome, killer_id, second_id, wounded_id, killed_id, hunt_type}
 static func resolve_npc_hunt(
 	host: L5RCharacterData,
-	participants: Array[L5RCharacterData],
+	participants: Array,
 	beast: Dictionary,
 	dice_engine: DiceEngine,
 ) -> Dictionary:
@@ -305,7 +305,7 @@ static func resolve_npc_hunt(
 ## Returns: Dictionary {character_id(int): float glory_delta}
 static func compute_glory_distribution(
 	outcome: String,
-	participants: Array[Dictionary],
+	participants: Array,
 	killer_id: int,
 	second_id: int,
 	host_id: int,
@@ -410,7 +410,7 @@ static func _find_hunt_leader(participants: Array) -> L5RCharacterData:
 
 
 static func _get_combatants(participants: Array) -> Array:
-	var result: Array[L5RCharacterData] = []
+	var result: Array = []
 	for p_var: Variant in participants:
 		var c: L5RCharacterData = p_var as L5RCharacterData
 		if c == null:

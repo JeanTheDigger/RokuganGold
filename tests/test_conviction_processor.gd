@@ -60,9 +60,9 @@ func test_conviction_for_violence():
 
 	var characters_by_id: Dictionary = {1: accused, 10: lord}
 	var lord_map: Dictionary = {1: 10}
-	var topics: Array[TopicData] = []
-	var next_id: Array[int] = [100]
-	var records: Array[CrimeRecord] = [record]
+	var topics: Array = []
+	var next_id: Array = [100]
+	var records: Array = [record]
 
 	var results := ConvictionProcessor.process_accused_cases(
 		records, characters_by_id, _dice, 200, next_id, topics, lord_map
@@ -81,9 +81,9 @@ func test_skips_non_accused_records():
 
 	var characters_by_id: Dictionary = {1: accused, 10: lord}
 	var lord_map: Dictionary = {1: 10}
-	var topics: Array[TopicData] = []
-	var next_id: Array[int] = [100]
-	var records: Array[CrimeRecord] = [record]
+	var topics: Array = []
+	var next_id: Array = [100]
+	var records: Array = [record]
 
 	var results := ConvictionProcessor.process_accused_cases(
 		records, characters_by_id, _dice, 200, next_id, topics, lord_map
@@ -99,9 +99,9 @@ func test_skips_already_convicted():
 
 	var characters_by_id: Dictionary = {1: accused, 10: lord}
 	var lord_map: Dictionary = {1: 10}
-	var topics: Array[TopicData] = []
-	var next_id: Array[int] = [100]
-	var records: Array[CrimeRecord] = [record]
+	var topics: Array = []
+	var next_id: Array = [100]
+	var records: Array = [record]
 
 	var results := ConvictionProcessor.process_accused_cases(
 		records, characters_by_id, _dice, 200, next_id, topics, lord_map
@@ -120,9 +120,9 @@ func test_skips_case_within_3_day_delay():
 
 	var characters_by_id: Dictionary = {1: accused, 10: lord}
 	var lord_map: Dictionary = {1: 10}
-	var topics: Array[TopicData] = []
-	var next_id: Array[int] = [100]
-	var records: Array[CrimeRecord] = [record]
+	var topics: Array = []
+	var next_id: Array = [100]
+	var records: Array = [record]
 
 	var results := ConvictionProcessor.process_accused_cases(
 		records, characters_by_id, _dice, 200, next_id, topics, lord_map
@@ -141,9 +141,9 @@ func test_proceeds_after_3_day_delay():
 
 	var characters_by_id: Dictionary = {1: accused, 10: lord}
 	var lord_map: Dictionary = {1: 10}
-	var topics: Array[TopicData] = []
-	var next_id: Array[int] = [100]
-	var records: Array[CrimeRecord] = [record]
+	var topics: Array = []
+	var next_id: Array = [100]
+	var records: Array = [record]
 
 	var results := ConvictionProcessor.process_accused_cases(
 		records, characters_by_id, _dice, 200, next_id, topics, lord_map
@@ -158,7 +158,7 @@ func test_seppuku_accepted():
 	record.seppuku_offered = true
 	var convicted := _make_char(1, "Lion", 3.0)
 
-	var next_id: Array[int] = [200]
+	var next_id: Array = [200]
 	var r := ConvictionProcessor.resolve_seppuku(
 		record, convicted, true, 300, next_id
 	)
@@ -173,7 +173,7 @@ func test_seppuku_refused():
 	record.seppuku_offered = true
 	var convicted := _make_char(1, "Lion", 3.0)
 
-	var next_id: Array[int] = [200]
+	var next_id: Array = [200]
 	var r := ConvictionProcessor.resolve_seppuku(
 		record, convicted, false, 300, next_id
 	)
@@ -188,7 +188,7 @@ func test_seppuku_not_applicable_when_not_offered():
 	record.seppuku_offered = false
 	var convicted := _make_char(1, "Lion", 3.0)
 
-	var next_id: Array[int] = [200]
+	var next_id: Array = [200]
 	var r := ConvictionProcessor.resolve_seppuku(
 		record, convicted, true, 300, next_id
 	)
@@ -207,9 +207,9 @@ func test_treason_blocked_by_authority():
 
 	var characters_by_id: Dictionary = {1: accused, 10: lord}
 	var lord_map: Dictionary = {1: 10}
-	var topics: Array[TopicData] = []
-	var next_id: Array[int] = [100]
-	var records: Array[CrimeRecord] = [record]
+	var topics: Array = []
+	var next_id: Array = [100]
+	var records: Array = [record]
 
 	var results := ConvictionProcessor.process_accused_cases(
 		records, characters_by_id, _dice, 200, next_id, topics, lord_map

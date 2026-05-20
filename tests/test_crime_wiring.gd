@@ -203,8 +203,8 @@ func test_treason_conviction_gi_names_conspirators():
 	convicted.glory = 5.0
 	var lord := _make_char(10, "Lion", 6.0)
 	lord.bushido_virtue = Enums.BushidoVirtue.GI
-	var co_ids: Array[int] = [5, 6]
-	var next_id: Array[int] = [100]
+	var co_ids: Array = [5, 6]
+	var next_id: Array = [100]
 	var r := CrimeWiring.process_treason_conviction(
 		record, convicted, lord, co_ids, next_id, 200
 	)
@@ -224,8 +224,8 @@ func test_treason_conviction_seigyo_hides_conspirators():
 	var convicted := _make_char(1, "Scorpion", 3.0)
 	var lord := _make_char(10, "Scorpion", 6.0)
 	lord.bushido_virtue = Enums.BushidoVirtue.CHUGI
-	var co_ids: Array[int] = [5, 6]
-	var next_id: Array[int] = [100]
+	var co_ids: Array = [5, 6]
+	var next_id: Array = [100]
 	var r := CrimeWiring.process_treason_conviction(
 		record, convicted, lord, co_ids, next_id, 200
 	)

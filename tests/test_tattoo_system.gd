@@ -1,7 +1,7 @@
 extends GutTest
 
 
-var _tattoos: Array[TattooData]
+var _tattoos: Array
 
 
 func _make_tattoo(
@@ -713,8 +713,8 @@ func test_apply_tattoo_writeback_creates_tattoo():
 	var artist := _make_artist()
 	var recipient := _make_recipient()
 	var chars: Dictionary = {100: artist, 200: recipient}
-	var tattoos: Array[TattooData] = []
-	var next_id: Array[int] = [1]
+	var tattoos: Array = []
+	var next_id: Array = [1]
 	var result: Dictionary = {
 		"success": true, "action_id": "APPLY_TATTOO",
 		"character_id": 100, "target_npc_id": 200,
@@ -743,8 +743,8 @@ func test_apply_tattoo_writeback_creates_tattoo():
 func test_apply_tattoo_writeback_deducts_extra_ap():
 	var artist := _make_artist(5, 6)
 	var chars: Dictionary = {100: artist}
-	var tattoos: Array[TattooData] = []
-	var next_id: Array[int] = [1]
+	var tattoos: Array = []
+	var next_id: Array = [1]
 	var result: Dictionary = {
 		"success": true, "action_id": "APPLY_TATTOO",
 		"character_id": 100, "target_npc_id": 200,
@@ -768,8 +768,8 @@ func test_apply_tattoo_writeback_deducts_extra_ap():
 func test_apply_tattoo_mundane_no_creation():
 	var artist := _make_artist()
 	var chars: Dictionary = {100: artist}
-	var tattoos: Array[TattooData] = []
-	var next_id: Array[int] = [1]
+	var tattoos: Array = []
+	var next_id: Array = [1]
 	var result: Dictionary = {
 		"success": false, "action_id": "APPLY_TATTOO",
 		"character_id": 100, "target_npc_id": 200,
@@ -784,11 +784,11 @@ func test_apply_tattoo_mundane_no_creation():
 	assert_eq(tattoos.size(), 0, "Mundane result should not create a tattoo")
 
 func test_apply_tattoo_context_list_includes_action():
-	var at_holdings: Array[String] = NPCDecisionEngine._get_actions_for_context(
+	var at_holdings: Array = NPCDecisionEngine._get_actions_for_context(
 		Enums.ContextFlag.AT_OWN_HOLDINGS
 	)
 	assert_true("APPLY_TATTOO" in at_holdings, "AT_OWN_HOLDINGS should include APPLY_TATTOO")
-	var visiting: Array[String] = NPCDecisionEngine._get_actions_for_context(
+	var visiting: Array = NPCDecisionEngine._get_actions_for_context(
 		Enums.ContextFlag.VISITING
 	)
 	assert_true("APPLY_TATTOO" in visiting, "VISITING should include APPLY_TATTOO")
@@ -801,7 +801,7 @@ func test_apply_tattoo_ap_cost_entry():
 # APPLY_TATTOO Precondition Filter — Consent & Decorative Gate
 # =============================================================================
 
-func _make_options_with_tattoo(target_id: int = 200) -> Array[NPCDataStructures.ScoredAction]:
+func _make_options_with_tattoo(target_id: int = 200) -> Array:
 	var tattoo_opt := NPCDataStructures.ScoredAction.new()
 	tattoo_opt.action_id = "APPLY_TATTOO"
 	tattoo_opt.target_npc_id = target_id
@@ -902,7 +902,7 @@ func test_tattoo_filter_all_locations_occupied():
 	var recipient := _make_recipient()
 	var ctx := _make_tattoo_ctx()
 	ctx.dispositions = {200: 5}
-	var full_tattoos: Array[TattooData] = []
+	var full_tattoos: Array = []
 	for loc: Enums.TattooBodyLocation in TattooSystem.ALL_BODY_LOCATIONS:
 		full_tattoos.append(_make_tattoo(full_tattoos.size(), 200, 100,
 			Enums.TattooQualityTier.NORMAL, loc))

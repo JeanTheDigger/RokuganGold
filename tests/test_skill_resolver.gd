@@ -673,7 +673,7 @@ func test_perfect_gift_clamped_at_100() -> void:
 
 # -- Cadence Sync (s29.15.4) ---------------------------------------------------
 
-func _make_cadence_doji(id: int, topics: Array[int] = []) -> L5RCharacterData:
+func _make_cadence_doji(id: int, topics: Array = []) -> L5RCharacterData:
 	var c := L5RCharacterData.new()
 	c.character_id = id
 	c.character_name = "Doji Cadence %d" % id
@@ -689,10 +689,10 @@ func _make_cadence_doji(id: int, topics: Array[int] = []) -> L5RCharacterData:
 func test_cadence_sync_transfers_topics_between_pair() -> void:
 	var a: L5RCharacterData = _make_cadence_doji(1, [10, 20])
 	var b: L5RCharacterData = _make_cadence_doji(2, [30])
-	var chars: Array[L5RCharacterData] = [a, b]
-	var court_ids: Array[int] = [1, 2]
+	var chars: Array = [a, b]
+	var court_ids: Array = [1, 2]
 	_engine.set_seed(42)
-	var results: Array[Dictionary] = SkillResolver.resolve_cadence_sync(chars, court_ids, _engine)
+	var results: Array = SkillResolver.resolve_cadence_sync(chars, court_ids, _engine)
 	assert_true(results.size() > 0)
 	var any_success: bool = false
 	for r: Dictionary in results:
@@ -710,17 +710,17 @@ func test_cadence_sync_requires_two_trained() -> void:
 	var b := L5RCharacterData.new()
 	b.character_id = 2
 	b.cadence_trained = false
-	var chars: Array[L5RCharacterData] = [a, b]
-	var court_ids: Array[int] = [1, 2]
-	var results: Array[Dictionary] = SkillResolver.resolve_cadence_sync(chars, court_ids, _engine)
+	var chars: Array = [a, b]
+	var court_ids: Array = [1, 2]
+	var results: Array = SkillResolver.resolve_cadence_sync(chars, court_ids, _engine)
 	assert_eq(results.size(), 0, "cadence needs at least 2 trained characters")
 
 
 func test_cadence_sync_no_duplicate_topics() -> void:
 	var a: L5RCharacterData = _make_cadence_doji(1, [10, 20])
 	var b: L5RCharacterData = _make_cadence_doji(2, [10])
-	var chars: Array[L5RCharacterData] = [a, b]
-	var court_ids: Array[int] = [1, 2]
+	var chars: Array = [a, b]
+	var court_ids: Array = [1, 2]
 	_engine.set_seed(42)
 	SkillResolver.resolve_cadence_sync(chars, court_ids, _engine)
 	var count: int = 0

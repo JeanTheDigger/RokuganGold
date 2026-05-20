@@ -88,7 +88,7 @@ func test_scan_political_weak_neighbors() -> void:
 		"upcoming_courts": [],
 		"secrets_held": [],
 	}
-	var opps: Array[OpportunityScanner.Opportunity] = OpportunityScanner.scan_opportunities(
+	var opps: Array = OpportunityScanner.scan_opportunities(
 		c, OpportunityScanner.DOMAIN_POLITICAL, "MAINTAIN_PEACE", world_state
 	)
 	assert_gt(opps.size(), 0)
@@ -104,7 +104,7 @@ func test_scan_political_rising_clan() -> void:
 		"upcoming_courts": [],
 		"secrets_held": [],
 	}
-	var opps: Array[OpportunityScanner.Opportunity] = OpportunityScanner.scan_opportunities(
+	var opps: Array = OpportunityScanner.scan_opportunities(
 		c, OpportunityScanner.DOMAIN_POLITICAL, "ADVANCE_FAMILY", world_state
 	)
 	assert_gt(opps.size(), 0)
@@ -120,7 +120,7 @@ func test_scan_political_skips_own_clan() -> void:
 		"upcoming_courts": [],
 		"secrets_held": [],
 	}
-	var opps: Array[OpportunityScanner.Opportunity] = OpportunityScanner.scan_opportunities(
+	var opps: Array = OpportunityScanner.scan_opportunities(
 		c, OpportunityScanner.DOMAIN_POLITICAL, "ADVANCE_FAMILY", world_state
 	)
 	assert_eq(opps.size(), 0)
@@ -134,7 +134,7 @@ func test_scan_political_secrets() -> void:
 		"upcoming_courts": [],
 		"secrets_held": [{"target_id": 5}],
 	}
-	var opps: Array[OpportunityScanner.Opportunity] = OpportunityScanner.scan_opportunities(
+	var opps: Array = OpportunityScanner.scan_opportunities(
 		c, OpportunityScanner.DOMAIN_POLITICAL, "ACCUMULATE_LEVERAGE", world_state
 	)
 	var expose_found: bool = false
@@ -157,7 +157,7 @@ func test_scan_military_border_weakness() -> void:
 		"known_clan_strengths": {},
 		"taint_topic_province_ids": [],
 	}
-	var opps: Array[OpportunityScanner.Opportunity] = OpportunityScanner.scan_opportunities(
+	var opps: Array = OpportunityScanner.scan_opportunities(
 		c, OpportunityScanner.DOMAIN_MILITARY, "EXPAND_TERRITORY", world_state
 	)
 	assert_gt(opps.size(), 0)
@@ -174,7 +174,7 @@ func test_scan_military_rival_stronger() -> void:
 		"known_clan_strengths": {"Crane": 20.0, "Lion": 30.0},
 		"taint_topic_province_ids": [],
 	}
-	var opps: Array[OpportunityScanner.Opportunity] = OpportunityScanner.scan_opportunities(
+	var opps: Array = OpportunityScanner.scan_opportunities(
 		c, OpportunityScanner.DOMAIN_MILITARY, "MILITARY_DOMINANCE", world_state
 	)
 	var build_found: bool = false
@@ -193,7 +193,7 @@ func test_scan_military_no_imbalance() -> void:
 		"known_clan_strengths": {"Crane": 25.0, "Lion": 25.0},
 		"taint_topic_province_ids": [],
 	}
-	var opps: Array[OpportunityScanner.Opportunity] = OpportunityScanner.scan_opportunities(
+	var opps: Array = OpportunityScanner.scan_opportunities(
 		c, OpportunityScanner.DOMAIN_MILITARY, "MILITARY_DOMINANCE", world_state
 	)
 	for opp: OpportunityScanner.Opportunity in opps:
@@ -208,7 +208,7 @@ func test_scan_military_taint_detected() -> void:
 		"known_clan_strengths": {},
 		"taint_topic_province_ids": [7],
 	}
-	var opps: Array[OpportunityScanner.Opportunity] = OpportunityScanner.scan_opportunities(
+	var opps: Array = OpportunityScanner.scan_opportunities(
 		c, OpportunityScanner.DOMAIN_MILITARY, "STRENGTHEN_WALL", world_state
 	)
 	var shadow_found: bool = false
@@ -230,7 +230,7 @@ func test_scan_economic_resource_deficit() -> void:
 		"famine_provinces": [],
 		"low_koku_provinces": [],
 	}
-	var opps: Array[OpportunityScanner.Opportunity] = OpportunityScanner.scan_opportunities(
+	var opps: Array = OpportunityScanner.scan_opportunities(
 		c, OpportunityScanner.DOMAIN_ECONOMIC, "MAXIMIZE_PROSPERITY", world_state
 	)
 	assert_gt(opps.size(), 0)
@@ -245,7 +245,7 @@ func test_scan_economic_famine_high_urgency() -> void:
 		"famine_provinces": [{"province_id": 3}],
 		"low_koku_provinces": [],
 	}
-	var opps: Array[OpportunityScanner.Opportunity] = OpportunityScanner.scan_opportunities(
+	var opps: Array = OpportunityScanner.scan_opportunities(
 		c, OpportunityScanner.DOMAIN_ECONOMIC, "MAXIMIZE_PROSPERITY", world_state
 	)
 	var famine_found: bool = false
@@ -266,7 +266,7 @@ func test_scan_personal_low_honor() -> void:
 		"vengeance_targets": [],
 		"trainable_vassals": [],
 	}
-	var opps: Array[OpportunityScanner.Opportunity] = OpportunityScanner.scan_opportunities(
+	var opps: Array = OpportunityScanner.scan_opportunities(
 		c, OpportunityScanner.DOMAIN_PERSONAL, "SEEK_GLORY", world_state
 	)
 	var honor_found: bool = false
@@ -285,7 +285,7 @@ func test_scan_personal_glory_gap() -> void:
 		"vengeance_targets": [],
 		"trainable_vassals": [],
 	}
-	var opps: Array[OpportunityScanner.Opportunity] = OpportunityScanner.scan_opportunities(
+	var opps: Array = OpportunityScanner.scan_opportunities(
 		c, OpportunityScanner.DOMAIN_PERSONAL, "SEEK_GLORY", world_state
 	)
 	var glory_found: bool = false
@@ -302,7 +302,7 @@ func test_scan_personal_vengeance() -> void:
 		"vengeance_targets": [{"target_id": 99, "feasibility": 60.0}],
 		"trainable_vassals": [],
 	}
-	var opps: Array[OpportunityScanner.Opportunity] = OpportunityScanner.scan_opportunities(
+	var opps: Array = OpportunityScanner.scan_opportunities(
 		c, OpportunityScanner.DOMAIN_PERSONAL, "SEEK_VENGEANCE", world_state
 	)
 	var avenge_found: bool = false
@@ -356,7 +356,7 @@ func test_personality_fit_yu_prefers_military() -> void:
 		"known_clan_strengths": {},
 		"taint_topic_province_ids": [],
 	}
-	var opps: Array[OpportunityScanner.Opportunity] = OpportunityScanner.scan_opportunities(
+	var opps: Array = OpportunityScanner.scan_opportunities(
 		c, OpportunityScanner.DOMAIN_MILITARY, "EXPAND_TERRITORY", world_state
 	)
 	assert_gt(opps.size(), 0)
@@ -371,7 +371,7 @@ func test_personality_fit_jin_dislikes_military() -> void:
 		"known_clan_strengths": {},
 		"taint_topic_province_ids": [],
 	}
-	var opps: Array[OpportunityScanner.Opportunity] = OpportunityScanner.scan_opportunities(
+	var opps: Array = OpportunityScanner.scan_opportunities(
 		c, OpportunityScanner.DOMAIN_MILITARY, "EXPAND_TERRITORY", world_state
 	)
 	assert_gt(opps.size(), 0)
@@ -391,7 +391,7 @@ func test_scan_political_unmarried_family() -> void:
 		"secrets_held": [],
 		"unmarried_family_members": [{"character_id": 5, "urgency": 40.0}],
 	}
-	var opps: Array[OpportunityScanner.Opportunity] = OpportunityScanner.scan_opportunities(
+	var opps: Array = OpportunityScanner.scan_opportunities(
 		c, OpportunityScanner.DOMAIN_POLITICAL, "ADVANCE_FAMILY", world_state
 	)
 	var marriage_found: bool = false
@@ -411,7 +411,7 @@ func test_scan_military_threatened_province() -> void:
 		"taint_topic_province_ids": [],
 		"threatened_provinces": [{"province_id": 3, "feasibility": 55.0, "urgency": 80.0}],
 	}
-	var opps: Array[OpportunityScanner.Opportunity] = OpportunityScanner.scan_opportunities(
+	var opps: Array = OpportunityScanner.scan_opportunities(
 		c, OpportunityScanner.DOMAIN_MILITARY, "EXPAND_TERRITORY", world_state
 	)
 	var defend_found: bool = false
@@ -432,7 +432,7 @@ func test_scan_military_sieged_ally() -> void:
 		"taint_topic_province_ids": [],
 		"sieged_allies": [{"province_id": 8, "feasibility": 45.0}],
 	}
-	var opps: Array[OpportunityScanner.Opportunity] = OpportunityScanner.scan_opportunities(
+	var opps: Array = OpportunityScanner.scan_opportunities(
 		c, OpportunityScanner.DOMAIN_MILITARY, "MAINTAIN_PEACE", world_state
 	)
 	var siege_found: bool = false
@@ -453,7 +453,7 @@ func test_scan_military_tainted_province() -> void:
 		"taint_topic_province_ids": [],
 		"tainted_provinces": [{"province_id": 12, "urgency": 85.0}],
 	}
-	var opps: Array[OpportunityScanner.Opportunity] = OpportunityScanner.scan_opportunities(
+	var opps: Array = OpportunityScanner.scan_opportunities(
 		c, OpportunityScanner.DOMAIN_MILITARY, "ELIMINATE_SHADOWLANDS", world_state
 	)
 	var taint_found: bool = false
@@ -473,7 +473,7 @@ func test_scan_military_insurgent_province() -> void:
 		"taint_topic_province_ids": [],
 		"insurgent_provinces": [{"province_id": 6, "urgency": 65.0}],
 	}
-	var opps: Array[OpportunityScanner.Opportunity] = OpportunityScanner.scan_opportunities(
+	var opps: Array = OpportunityScanner.scan_opportunities(
 		c, OpportunityScanner.DOMAIN_MILITARY, "UPHOLD_LAW", world_state
 	)
 	var patrol_found: bool = false
@@ -492,7 +492,7 @@ func test_scan_military_levy_at_moderate_imbalance() -> void:
 		"known_clan_strengths": {"Crane": 20.0, "Lion": 24.0},
 		"taint_topic_province_ids": [],
 	}
-	var opps: Array[OpportunityScanner.Opportunity] = OpportunityScanner.scan_opportunities(
+	var opps: Array = OpportunityScanner.scan_opportunities(
 		c, OpportunityScanner.DOMAIN_MILITARY, "BUILD_STRONGEST_FORCE", world_state
 	)
 	var levy_found: bool = false
@@ -511,7 +511,7 @@ func test_scan_economic_critical_resource_need() -> void:
 		"low_koku_provinces": [],
 		"critical_resource_needs": [{"resource": "iron", "threshold": 100.0, "urgency": 75.0}],
 	}
-	var opps: Array[OpportunityScanner.Opportunity] = OpportunityScanner.scan_opportunities(
+	var opps: Array = OpportunityScanner.scan_opportunities(
 		c, OpportunityScanner.DOMAIN_ECONOMIC, "MAXIMIZE_PROSPERITY", world_state
 	)
 	var acquire_found: bool = false
@@ -530,7 +530,7 @@ func test_scan_economic_threatened_trade_route() -> void:
 		"low_koku_provinces": [],
 		"threatened_trade_routes": [{"province_id": 15, "urgency": 60.0}],
 	}
-	var opps: Array[OpportunityScanner.Opportunity] = OpportunityScanner.scan_opportunities(
+	var opps: Array = OpportunityScanner.scan_opportunities(
 		c, OpportunityScanner.DOMAIN_ECONOMIC, "CONTROL_TRADE", world_state
 	)
 	var route_found: bool = false
@@ -548,7 +548,7 @@ func test_scan_personal_bitter_rival() -> void:
 		"trainable_vassals": [],
 		"bitter_rivals": [{"target_id": 42, "feasibility": 35.0, "urgency": 55.0}],
 	}
-	var opps: Array[OpportunityScanner.Opportunity] = OpportunityScanner.scan_opportunities(
+	var opps: Array = OpportunityScanner.scan_opportunities(
 		c, OpportunityScanner.DOMAIN_PERSONAL, "SEEK_VENGEANCE", world_state
 	)
 	var elim_found: bool = false
@@ -560,7 +560,7 @@ func test_scan_personal_bitter_rival() -> void:
 
 
 func test_standing_domain_maps_all_objectives() -> void:
-	var all_standing: Array[String] = []
+	var all_standing: Array = []
 	all_standing.append_array(ObjectiveDecomposer.POLITICAL_OBJECTIVES)
 	all_standing.append_array(ObjectiveDecomposer.ECONOMIC_OBJECTIVES)
 	all_standing.append_array(ObjectiveDecomposer.PERSONAL_OBJECTIVES)

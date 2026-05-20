@@ -300,7 +300,7 @@ static func get_stability_penalty(seasons_active: int) -> int:
 static func apply_seasonal_consequences(
 	state: Dictionary,
 	rebel_lord: L5RCharacterData,
-	provinces_in_clan: Array[ProvinceData],
+	provinces_in_clan: Array,
 	current_season: int,
 	suppress_hemorrhage: bool = false,
 ) -> Dictionary:
@@ -311,7 +311,7 @@ static func apply_seasonal_consequences(
 	## path — neither side carries automatic ongoing penalty per s55.10.3.7).
 	var seasons_active: int = current_season - int(state.get("season_started", current_season))
 	var penalty: int = get_stability_penalty(seasons_active)
-	var stability_changes: Array[Dictionary] = []
+	var stability_changes: Array = []
 	for prov: ProvinceData in provinces_in_clan:
 		if prov == null:
 			continue
@@ -479,7 +479,7 @@ static func defection_trigger_fired(
 
 static func apply_defection_consequences(
 	defector: L5RCharacterData,
-	former_faction_members: Array[L5RCharacterData],
+	former_faction_members: Array,
 ) -> void:
 	## Applies the GDD's defection penalties: -0.5 Honor on the defector
 	## and -15 disposition on every former faction member toward them.
@@ -552,13 +552,13 @@ static func apply_ronin_departure(npc: L5RCharacterData) -> void:
 
 static func apply_post_resolution_scars(
 	state: Dictionary,
-	all_characters: Array[L5RCharacterData],
+	all_characters: Array,
 	family_deaths: Dictionary = {},
 ) -> Dictionary:
 	## Applies disposition scars between opposite-faction combatants.
 	## `family_deaths` maps character_id → Array[int] of family member ids
 	## killed during the war. Returns a dict of scars applied for logging.
-	var scars: Array[Dictionary] = []
+	var scars: Array = []
 	var assignments: Dictionary = state.get("faction_assignments", {})
 	for i: int in all_characters.size():
 		var a: L5RCharacterData = all_characters[i]
@@ -596,8 +596,8 @@ static func apply_post_resolution_scars(
 
 
 static func decay_post_war_scars(
-	characters: Array[L5RCharacterData],
-	scar_entries: Array[Dictionary],
+	characters: Array,
+	scar_entries: Array,
 ) -> void:
 	## Called once per season to decay the base -10 scar by 1 per season.
 	## Family death scars (-15) do not decay.
@@ -623,13 +623,13 @@ static func decay_post_war_scars(
 
 
 static func apply_rebel_consequences_on_legitimacy_victory(
-	rebels: Array[L5RCharacterData],
-	family_daimyo_ids: Array[int],
+	rebels: Array,
+	family_daimyo_ids: Array,
 ) -> Dictionary:
 	## On legitimacy victory, rebel Family Daimyos face removal + -1.0 Honor,
 	## Provincial Daimyos face reassignment + -0.5 Honor. Rank-and-file:
 	## no penalty (following orders is duty). Returns report for logging.
-	var results: Array[Dictionary] = []
+	var results: Array = []
 	for c: L5RCharacterData in rebels:
 		if c == null:
 			continue

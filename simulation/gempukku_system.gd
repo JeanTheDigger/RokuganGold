@@ -214,7 +214,7 @@ const CLAN_POPULATION_THRESHOLDS: Dictionary = {
 
 
 static func count_clan_population(
-	characters: Array[L5RCharacterData],
+	characters: Array,
 	clan: String,
 ) -> Dictionary:
 	var counts: Dictionary = {"rank_5": 0, "rank_4": 0, "rank_3": 0, "rank_2": 0, "rank_1": 0}
@@ -266,7 +266,7 @@ const NATURAL_DEATH_CHANCES: Array[Array] = [
 static func get_natural_death_chance(age: int) -> int:
 	if age < 50:
 		return 0
-	for bracket: Array[int] in NATURAL_DEATH_CHANCES:
+	for bracket: Array in NATURAL_DEATH_CHANCES:
 		if age < bracket[0] as int:
 			return bracket[1] as int
 	return 20
@@ -404,9 +404,9 @@ static func _get_clan_families(clan: String) -> Array:
 # -- Season-Boundary Entry Point -----------------------------------------------
 
 static func process_seasonal_gempukku(
-	children: Array[ChildRecord],
-	characters: Array[L5RCharacterData],
-	next_character_id: Array[int],
+	children: Array,
+	characters: Array,
+	next_character_id: Array,
 	dice_engine: DiceEngine,
 	ic_day: int,
 	worship_maluses: Dictionary = {},

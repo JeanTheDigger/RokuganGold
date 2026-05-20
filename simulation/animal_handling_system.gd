@@ -138,7 +138,7 @@ static func can_train_first_session(
 	var skill_rank: int = SkillResolver.get_skill_rank(character, "Animal Handling")
 	if skill_rank < 1:
 		return {"valid": false, "reason": "no_animal_handling_skill"}
-	var valid_contexts: Array[Enums.ContextFlag] = [
+	var valid_contexts: Array = [
 		Enums.ContextFlag.AT_OWN_HOLDINGS,
 		Enums.ContextFlag.VISITING,
 		Enums.ContextFlag.AT_COURT,
@@ -160,7 +160,7 @@ static func can_train_subsequent_session(
 ) -> Dictionary:
 	if SkillResolver.get_skill_rank(character, "Animal Handling") < 1:
 		return {"valid": false, "reason": "no_animal_handling_skill"}
-	var valid_contexts: Array[Enums.ContextFlag] = [
+	var valid_contexts: Array = [
 		Enums.ContextFlag.AT_OWN_HOLDINGS,
 		Enums.ContextFlag.VISITING,
 		Enums.ContextFlag.AT_COURT,

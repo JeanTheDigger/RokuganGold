@@ -1037,7 +1037,7 @@ func test_examine_crime_scene_calls_investigation_system() -> void:
 	cr.evidence_total = 0
 	cr.perpetrator_id = 99
 	cr.known_suspects = []
-	var records: Array[CrimeRecord] = [cr]
+	var records: Array = [cr]
 
 	_character.skills["Investigation"] = 4
 	_character.perception = 4
@@ -1059,7 +1059,7 @@ func test_examine_crime_scene_calls_investigation_system() -> void:
 
 
 func test_examine_crime_scene_no_record_fails() -> void:
-	var records: Array[CrimeRecord] = []
+	var records: Array = []
 	var action := _make_action("EXAMINE_CRIME_SCENE")
 	action.metadata = {"case_id": 99}
 	var result: Dictionary = ActionExecutor.execute(
@@ -1078,7 +1078,7 @@ func test_examine_crime_scene_too_old_fails() -> void:
 	cr.evidence_total = 0
 	cr.perpetrator_id = 99
 	cr.known_suspects = []
-	var records: Array[CrimeRecord] = [cr]
+	var records: Array = [cr]
 
 	_ctx.ic_day = 200
 

@@ -36,7 +36,7 @@ func _make_defender(id: int, ship_class: int, col: int,
 
 
 func _to_typed_array(arr: Array) -> Array[Dictionary]:
-	var result: Array[Dictionary] = []
+	var result: Array = []
 	for item: Variant in arr:
 		result.append(item)
 	return result
@@ -137,8 +137,8 @@ func test_civilians_flee_and_surrender() -> void:
 	var sampan := _make_attacker(1, Enums.ShipClass.SAMPAN, 0)
 	var barge := _make_defender(2, Enums.ShipClass.MERCHANT_BARGE, 0)
 	var warship := _make_attacker(3, Enums.ShipClass.SENGOKOBUNE, 1)
-	var atk: Array[Dictionary] = _to_typed_array([sampan, warship])
-	var def: Array[Dictionary] = _to_typed_array([barge])
+	var atk: Array = _to_typed_array([sampan, warship])
+	var def: Array = _to_typed_array([barge])
 	var result: Dictionary = NavalCombatSystem.process_civilians(atk, def)
 	assert_true(1 in result["fled"])
 	assert_true(2 in result["surrendered"])
@@ -210,10 +210,10 @@ func test_ram_can_destroy_target() -> void:
 # =============================================================================
 
 func test_resolve_battle_returns_result() -> void:
-	var atk: Array[Dictionary] = _to_typed_array([
+	var atk: Array = _to_typed_array([
 		_make_attacker(1, Enums.ShipClass.SENGOKOBUNE, 0),
 	])
-	var def: Array[Dictionary] = _to_typed_array([
+	var def: Array = _to_typed_array([
 		_make_defender(2, Enums.ShipClass.KOBUNE, 0),
 	])
 	var result: Dictionary = NavalCombatSystem.resolve_naval_battle(
@@ -228,10 +228,10 @@ func test_resolve_battle_returns_result() -> void:
 
 
 func test_resolve_battle_has_winner() -> void:
-	var atk: Array[Dictionary] = _to_typed_array([
+	var atk: Array = _to_typed_array([
 		_make_attacker(1, Enums.ShipClass.ATAKEBUNE, 0),
 	])
-	var def: Array[Dictionary] = _to_typed_array([
+	var def: Array = _to_typed_array([
 		_make_defender(2, Enums.ShipClass.KOBUNE, 0),
 	])
 	var result: Dictionary = NavalCombatSystem.resolve_naval_battle(
@@ -240,11 +240,11 @@ func test_resolve_battle_has_winner() -> void:
 
 
 func test_resolve_battle_strong_vs_weak() -> void:
-	var atk: Array[Dictionary] = _to_typed_array([
+	var atk: Array = _to_typed_array([
 		_make_attacker(1, Enums.ShipClass.ATAKEBUNE, 0),
 		_make_attacker(3, Enums.ShipClass.SENGOKOBUNE, 1),
 	])
-	var def: Array[Dictionary] = _to_typed_array([
+	var def: Array = _to_typed_array([
 		_make_defender(2, Enums.ShipClass.KOBUNE, 0),
 	])
 	var result: Dictionary = NavalCombatSystem.resolve_naval_battle(
@@ -255,11 +255,11 @@ func test_resolve_battle_strong_vs_weak() -> void:
 func test_no_flanking_at_sea() -> void:
 	# Two attackers vs one defender — the unmatched attacker should NOT flank
 	# (flanking is disabled at sea). It will sit idle unless it can promote.
-	var atk: Array[Dictionary] = _to_typed_array([
+	var atk: Array = _to_typed_array([
 		_make_attacker(1, Enums.ShipClass.KOBUNE, 0),
 		_make_attacker(3, Enums.ShipClass.KOBUNE, 1),
 	])
-	var def: Array[Dictionary] = _to_typed_array([
+	var def: Array = _to_typed_array([
 		_make_defender(2, Enums.ShipClass.KOBUNE, 0),
 	])
 	var result: Dictionary = NavalCombatSystem.resolve_naval_battle(
@@ -279,8 +279,8 @@ func test_kobune_reserve_fires_ranged() -> void:
 	var kobune_ship := _make_ship(3, Enums.ShipClass.KOBUNE, "Mantis")
 	var ranged := _make_nc(kobune_ship, 2, 0, "attacker")
 	var def := _make_defender(2, Enums.ShipClass.KOBUNE, 0)
-	var atk: Array[Dictionary] = _to_typed_array([front, ranged])
-	var defn: Array[Dictionary] = _to_typed_array([def])
+	var atk: Array = _to_typed_array([front, ranged])
+	var defn: Array = _to_typed_array([def])
 	var result: Dictionary = NavalCombatSystem.resolve_naval_battle(
 		atk, defn, Enums.NavalWeather.CLEAR, _dice)
 	assert_eq(result["victor"], "attacker")
@@ -293,8 +293,8 @@ func test_kobune_ranged_suppressed_in_storm() -> void:
 	var kobune_ship := _make_ship(1, Enums.ShipClass.KOBUNE, "Mantis")
 	var ranged := _make_nc(kobune_ship, 2, 0, "attacker", Enums.NavalWeather.STORM)
 	var target := _make_defender(2, Enums.ShipClass.KOBUNE, 0, Enums.NavalWeather.STORM)
-	var reserve: Array[Dictionary] = _to_typed_array([ranged])
-	var enemy_r1: Array[Dictionary] = _to_typed_array([target])
+	var reserve: Array = _to_typed_array([ranged])
+	var enemy_r1: Array = _to_typed_array([target])
 	NavalCombatSystem._resolve_kobune_ranged_fire(
 		reserve, enemy_r1, Enums.NavalWeather.STORM, dice, pending_dmg, pending_morale)
 	assert_eq(pending_dmg.size(), 0)
@@ -307,14 +307,14 @@ func test_kobune_ranged_suppressed_in_storm() -> void:
 func test_atakebune_grants_defense_to_adjacent() -> void:
 	var atakebune := _make_attacker(1, Enums.ShipClass.ATAKEBUNE, 0)
 	var ally := _make_attacker(2, Enums.ShipClass.SENGOKOBUNE, 1)
-	var side: Array[Dictionary] = _to_typed_array([atakebune, ally])
+	var side: Array = _to_typed_array([atakebune, ally])
 	NavalCombatSystem._apply_atakebune_defense(side)
 	assert_eq(ally["atakebune_def_bonus"], 3)
 
 
 func test_atakebune_does_not_buff_self() -> void:
 	var atakebune := _make_attacker(1, Enums.ShipClass.ATAKEBUNE, 0)
-	var side: Array[Dictionary] = _to_typed_array([atakebune])
+	var side: Array = _to_typed_array([atakebune])
 	NavalCombatSystem._apply_atakebune_defense(side)
 	assert_eq(atakebune["atakebune_def_bonus"], 0)
 
@@ -322,7 +322,7 @@ func test_atakebune_does_not_buff_self() -> void:
 func test_atakebune_does_not_buff_non_adjacent() -> void:
 	var atakebune := _make_attacker(1, Enums.ShipClass.ATAKEBUNE, 0)
 	var far_ally := _make_attacker(2, Enums.ShipClass.SENGOKOBUNE, 3)
-	var side: Array[Dictionary] = _to_typed_array([atakebune, far_ally])
+	var side: Array = _to_typed_array([atakebune, far_ally])
 	NavalCombatSystem._apply_atakebune_defense(side)
 	assert_eq(far_ally["atakebune_def_bonus"], 0)
 
@@ -332,10 +332,10 @@ func test_atakebune_does_not_buff_non_adjacent() -> void:
 # =============================================================================
 
 func test_river_downstream_attack_bonus() -> void:
-	var atk: Array[Dictionary] = _to_typed_array([
+	var atk: Array = _to_typed_array([
 		_make_attacker(1, Enums.ShipClass.KOBUNE, 0),
 	])
-	var def: Array[Dictionary] = _to_typed_array([
+	var def: Array = _to_typed_array([
 		_make_defender(2, Enums.ShipClass.KOBUNE, 0),
 	])
 	var atk_base: int = atk[0]["base_attack"]
@@ -346,10 +346,10 @@ func test_river_downstream_attack_bonus() -> void:
 
 
 func test_river_upstream_attack_penalty() -> void:
-	var atk: Array[Dictionary] = _to_typed_array([
+	var atk: Array = _to_typed_array([
 		_make_attacker(1, Enums.ShipClass.KOBUNE, 0),
 	])
-	var def: Array[Dictionary] = _to_typed_array([
+	var def: Array = _to_typed_array([
 		_make_defender(2, Enums.ShipClass.KOBUNE, 0),
 	])
 	var atk_base: int = atk[0]["base_attack"]
@@ -358,10 +358,10 @@ func test_river_upstream_attack_penalty() -> void:
 
 
 func test_river_battle_resolves() -> void:
-	var atk: Array[Dictionary] = _to_typed_array([
+	var atk: Array = _to_typed_array([
 		_make_attacker(1, Enums.ShipClass.KOBUNE, 0),
 	])
-	var def: Array[Dictionary] = _to_typed_array([
+	var def: Array = _to_typed_array([
 		_make_defender(2, Enums.ShipClass.KOBUNE, 0),
 	])
 	var result: Dictionary = NavalCombatSystem.resolve_naval_battle(
@@ -397,7 +397,7 @@ func test_kobune_first_round_attack_bonus() -> void:
 # =============================================================================
 
 func test_naval_rout_no_cavalry_pursuit() -> void:
-	var routed: Array[Dictionary] = _to_typed_array([
+	var routed: Array = _to_typed_array([
 		_make_attacker(1, Enums.ShipClass.KOBUNE, 0),
 	])
 	routed[0]["current_health"] = 50
@@ -409,7 +409,7 @@ func test_naval_rout_no_cavalry_pursuit() -> void:
 
 
 func test_naval_rout_dissolution_threshold() -> void:
-	var routed: Array[Dictionary] = _to_typed_array([
+	var routed: Array = _to_typed_array([
 		_make_attacker(1, Enums.ShipClass.KOBUNE, 0),
 	])
 	routed[0]["current_health"] = 5  # Very low health
@@ -424,9 +424,9 @@ func test_naval_rout_dissolution_threshold() -> void:
 func test_captured_ships_collected() -> void:
 	var barge := _make_defender(2, Enums.ShipClass.MERCHANT_BARGE, 0)
 	barge["is_captured"] = true
-	var atk: Array[Dictionary] = _to_typed_array([])
-	var def: Array[Dictionary] = _to_typed_array([barge])
-	var captured: Array[Dictionary] = NavalCombatSystem._collect_captured_ships(atk, def)
+	var atk: Array = _to_typed_array([])
+	var def: Array = _to_typed_array([barge])
+	var captured: Array = NavalCombatSystem._collect_captured_ships(atk, def)
 	assert_true(captured.size() >= 1)
 	assert_eq(captured[0]["captured_by"], "attacker")
 	assert_true(captured[0]["prize_value"] > 0)
@@ -435,9 +435,9 @@ func test_captured_ships_collected() -> void:
 func test_destroyed_ships_captured_as_prize() -> void:
 	var def := _make_defender(2, Enums.ShipClass.SENGOKOBUNE, 0)
 	def["is_destroyed"] = true
-	var atk: Array[Dictionary] = _to_typed_array([])
-	var defs: Array[Dictionary] = _to_typed_array([def])
-	var captured: Array[Dictionary] = NavalCombatSystem._collect_captured_ships(atk, defs)
+	var atk: Array = _to_typed_array([])
+	var defs: Array = _to_typed_array([def])
+	var captured: Array = NavalCombatSystem._collect_captured_ships(atk, defs)
 	assert_true(captured.size() >= 1)
 	assert_eq(captured[0]["prize_value"], 4.0)  # half of 8.0
 
@@ -451,7 +451,7 @@ func test_reserve_promotes_when_front_empty() -> void:
 	r1["is_destroyed"] = true
 	var ship2 := _make_ship(2, Enums.ShipClass.SENGOKOBUNE)
 	var r2 := _make_nc(ship2, 2, 0, "attacker")
-	var states: Array[Dictionary] = _to_typed_array([r1, r2])
+	var states: Array = _to_typed_array([r1, r2])
 	NavalCombatSystem._promote_reserves(states)
 	assert_eq(r2["row"], 1)
 
@@ -461,7 +461,7 @@ func test_kobune_ranged_stays_in_reserve() -> void:
 	r1["is_destroyed"] = true
 	var kobune_ship := _make_ship(2, Enums.ShipClass.KOBUNE)
 	var r2 := _make_nc(kobune_ship, 2, 0, "attacker")
-	var states: Array[Dictionary] = _to_typed_array([r1, r2])
+	var states: Array = _to_typed_array([r1, r2])
 	NavalCombatSystem._promote_reserves(states)
 	assert_eq(r2["row"], 2)
 
@@ -471,11 +471,11 @@ func test_kobune_ranged_stays_in_reserve() -> void:
 # =============================================================================
 
 func test_full_battle_sengokobune_vs_kobune_fleet() -> void:
-	var atk: Array[Dictionary] = _to_typed_array([
+	var atk: Array = _to_typed_array([
 		_make_attacker(1, Enums.ShipClass.SENGOKOBUNE, 0),
 		_make_attacker(3, Enums.ShipClass.SENGOKOBUNE, 1),
 	])
-	var def: Array[Dictionary] = _to_typed_array([
+	var def: Array = _to_typed_array([
 		_make_defender(2, Enums.ShipClass.KOBUNE, 0),
 		_make_defender(4, Enums.ShipClass.KOBUNE, 1),
 	])
@@ -486,10 +486,10 @@ func test_full_battle_sengokobune_vs_kobune_fleet() -> void:
 
 
 func test_full_battle_with_weather() -> void:
-	var atk: Array[Dictionary] = _to_typed_array([
+	var atk: Array = _to_typed_array([
 		_make_attacker(1, Enums.ShipClass.SENGOKOBUNE, 0, Enums.NavalWeather.STORM),
 	])
-	var def: Array[Dictionary] = _to_typed_array([
+	var def: Array = _to_typed_array([
 		_make_defender(2, Enums.ShipClass.KOBUNE, 0, Enums.NavalWeather.STORM),
 	])
 	var result: Dictionary = NavalCombatSystem.resolve_naval_battle(
@@ -501,8 +501,8 @@ func test_full_battle_with_weather() -> void:
 func test_civilian_convoy_auto_captured() -> void:
 	var barge := _make_defender(2, Enums.ShipClass.MERCHANT_BARGE, 0)
 	var warship := _make_attacker(1, Enums.ShipClass.SENGOKOBUNE, 0)
-	var atk: Array[Dictionary] = _to_typed_array([warship])
-	var def: Array[Dictionary] = _to_typed_array([barge])
+	var atk: Array = _to_typed_array([warship])
+	var def: Array = _to_typed_array([barge])
 	var result: Dictionary = NavalCombatSystem.resolve_naval_battle(
 		atk, def, Enums.NavalWeather.CLEAR, _dice)
 	assert_eq(result["victor"], "attacker")
@@ -511,10 +511,10 @@ func test_civilian_convoy_auto_captured() -> void:
 
 func test_battle_max_rounds_cap() -> void:
 	# Two identical ships should eventually end, but verify cap
-	var atk: Array[Dictionary] = _to_typed_array([
+	var atk: Array = _to_typed_array([
 		_make_attacker(1, Enums.ShipClass.KOBUNE, 0),
 	])
-	var def: Array[Dictionary] = _to_typed_array([
+	var def: Array = _to_typed_array([
 		_make_defender(2, Enums.ShipClass.KOBUNE, 0),
 	])
 	var result: Dictionary = NavalCombatSystem.resolve_naval_battle(
@@ -525,13 +525,13 @@ func test_battle_max_rounds_cap() -> void:
 func test_battle_end_detection() -> void:
 	var atk := _make_attacker(1, Enums.ShipClass.KOBUNE, 0)
 	atk["is_destroyed"] = true
-	var states: Array[Dictionary] = _to_typed_array([atk])
+	var states: Array = _to_typed_array([atk])
 	assert_true(NavalCombatSystem._check_battle_end(states))
 
 
 func test_battle_not_ended_with_active_ship() -> void:
 	var atk := _make_attacker(1, Enums.ShipClass.KOBUNE, 0)
-	var states: Array[Dictionary] = _to_typed_array([atk])
+	var states: Array = _to_typed_array([atk])
 	assert_false(NavalCombatSystem._check_battle_end(states))
 
 
@@ -566,8 +566,8 @@ func test_escape_attempted_set_after_attempt() -> void:
 	var cap := _make_captain(0, 2)
 	var tortoise := _make_tortoise(1, 0, "attacker", cap)
 	var enemy := _make_defender(2, Enums.ShipClass.SENGOKOBUNE, 0)
-	var own: Array[Dictionary] = _to_typed_array([tortoise])
-	var foe: Array[Dictionary] = _to_typed_array([enemy])
+	var own: Array = _to_typed_array([tortoise])
+	var foe: Array = _to_typed_array([enemy])
 	NavalCombatSystem._process_tortoise_escapes(own, foe, _dice, Enums.NavalWeather.CLEAR)
 	assert_true(tortoise["escape_attempted"])
 
@@ -577,9 +577,9 @@ func test_escape_attempted_flag_prevents_retry() -> void:
 	var tortoise := _make_tortoise(1, 0, "attacker", cap)
 	tortoise["escape_attempted"] = true
 	var enemy := _make_defender(2, Enums.ShipClass.SENGOKOBUNE, 0)
-	var own: Array[Dictionary] = _to_typed_array([tortoise])
-	var foe: Array[Dictionary] = _to_typed_array([enemy])
-	var results: Array[Dictionary] = NavalCombatSystem._process_tortoise_escapes(
+	var own: Array = _to_typed_array([tortoise])
+	var foe: Array = _to_typed_array([enemy])
+	var results: Array = NavalCombatSystem._process_tortoise_escapes(
 		own, foe, _dice, Enums.NavalWeather.CLEAR)
 	assert_eq(results.size(), 0, "Already-attempted ship should produce no result")
 
@@ -587,9 +587,9 @@ func test_escape_attempted_flag_prevents_retry() -> void:
 func test_non_tortoise_ships_skipped_by_escape() -> void:
 	var atk := _make_attacker(1, Enums.ShipClass.SENGOKOBUNE, 0)
 	var enemy := _make_defender(2, Enums.ShipClass.SENGOKOBUNE, 0)
-	var own: Array[Dictionary] = _to_typed_array([atk])
-	var foe: Array[Dictionary] = _to_typed_array([enemy])
-	var results: Array[Dictionary] = NavalCombatSystem._process_tortoise_escapes(
+	var own: Array = _to_typed_array([atk])
+	var foe: Array = _to_typed_array([enemy])
+	var results: Array = NavalCombatSystem._process_tortoise_escapes(
 		own, foe, _dice, Enums.NavalWeather.CLEAR)
 	assert_eq(results.size(), 0, "Non-Tortoise ships must not attempt escape")
 
@@ -598,9 +598,9 @@ func test_process_tortoise_escapes_result_has_required_keys() -> void:
 	var cap := _make_captain(0, 2)
 	var tortoise := _make_tortoise(1, 0, "attacker", cap)
 	var enemy := _make_defender(2, Enums.ShipClass.SENGOKOBUNE, 0)
-	var own: Array[Dictionary] = _to_typed_array([tortoise])
-	var foe: Array[Dictionary] = _to_typed_array([enemy])
-	var results: Array[Dictionary] = NavalCombatSystem._process_tortoise_escapes(
+	var own: Array = _to_typed_array([tortoise])
+	var foe: Array = _to_typed_array([enemy])
+	var results: Array = NavalCombatSystem._process_tortoise_escapes(
 		own, foe, _dice, Enums.NavalWeather.CLEAR)
 	assert_eq(results.size(), 1)
 	var r: Dictionary = results[0]
@@ -618,9 +618,9 @@ func test_tortoise_escape_with_overwhelming_nav_skill() -> void:
 	var cap := _make_captain(10, 10)
 	var tortoise := _make_tortoise(1, 0, "attacker", cap)
 	var enemy := _make_defender(2, Enums.ShipClass.SENGOKOBUNE, 0)
-	var own: Array[Dictionary] = _to_typed_array([tortoise])
-	var foe: Array[Dictionary] = _to_typed_array([enemy])
-	var results: Array[Dictionary] = NavalCombatSystem._process_tortoise_escapes(
+	var own: Array = _to_typed_array([tortoise])
+	var foe: Array = _to_typed_array([enemy])
+	var results: Array = NavalCombatSystem._process_tortoise_escapes(
 		own, foe, _dice, Enums.NavalWeather.CLEAR)
 	assert_eq(results.size(), 1)
 	assert_true(results[0]["escaped"], "Overwhelming Nav/Int should escape vs 0-Battle enemy")
@@ -635,9 +635,9 @@ func test_tortoise_escape_with_zero_nav_vs_strong_pursuer() -> void:
 	enemy_cap.skills["Battle"] = 10
 	var enemy := _make_defender(2, Enums.ShipClass.SENGOKOBUNE, 0)
 	enemy["captain"] = enemy_cap
-	var own: Array[Dictionary] = _to_typed_array([tortoise])
-	var foe: Array[Dictionary] = _to_typed_array([enemy])
-	var results: Array[Dictionary] = NavalCombatSystem._process_tortoise_escapes(
+	var own: Array = _to_typed_array([tortoise])
+	var foe: Array = _to_typed_array([enemy])
+	var results: Array = NavalCombatSystem._process_tortoise_escapes(
 		own, foe, _dice, Enums.NavalWeather.CLEAR)
 	assert_eq(results.size(), 1)
 	assert_false(results[0]["escaped"], "Zero-nav Tortoise vs strong pursuer should fail to escape")
@@ -648,8 +648,8 @@ func test_escaped_ship_excluded_from_matchups() -> void:
 	var cap := _make_captain(10, 10)
 	var tortoise := _make_tortoise(1, 0, "attacker", cap)
 	var enemy := _make_defender(2, Enums.ShipClass.SENGOKOBUNE, 0)
-	var atk: Array[Dictionary] = _to_typed_array([tortoise])
-	var def: Array[Dictionary] = _to_typed_array([enemy])
+	var atk: Array = _to_typed_array([tortoise])
+	var def: Array = _to_typed_array([enemy])
 	# Run escape processing — with high nav the ship should escape
 	NavalCombatSystem._process_tortoise_escapes(atk, def, _dice, Enums.NavalWeather.CLEAR)
 	if tortoise["is_escaped"]:
@@ -658,8 +658,8 @@ func test_escaped_ship_excluded_from_matchups() -> void:
 
 
 func test_battle_result_has_escaped_ships_key() -> void:
-	var atk: Array[Dictionary] = _to_typed_array([_make_attacker(1, Enums.ShipClass.SENGOKOBUNE, 0)])
-	var def: Array[Dictionary] = _to_typed_array([_make_defender(2, Enums.ShipClass.SENGOKOBUNE, 0)])
+	var atk: Array = _to_typed_array([_make_attacker(1, Enums.ShipClass.SENGOKOBUNE, 0)])
+	var def: Array = _to_typed_array([_make_defender(2, Enums.ShipClass.SENGOKOBUNE, 0)])
 	var result: Dictionary = NavalCombatSystem.resolve_naval_battle(
 		atk, def, Enums.NavalWeather.CLEAR, _dice)
 	assert_has(result, "escaped_ships")
@@ -667,8 +667,8 @@ func test_battle_result_has_escaped_ships_key() -> void:
 
 
 func test_round_log_has_escape_results_key() -> void:
-	var atk: Array[Dictionary] = _to_typed_array([_make_attacker(1, Enums.ShipClass.SENGOKOBUNE, 0)])
-	var def: Array[Dictionary] = _to_typed_array([_make_defender(2, Enums.ShipClass.SENGOKOBUNE, 0)])
+	var atk: Array = _to_typed_array([_make_attacker(1, Enums.ShipClass.SENGOKOBUNE, 0)])
+	var def: Array = _to_typed_array([_make_defender(2, Enums.ShipClass.SENGOKOBUNE, 0)])
 	var result: Dictionary = NavalCombatSystem.resolve_naval_battle(
 		atk, def, Enums.NavalWeather.CLEAR, _dice)
 	assert_true(result["round_log"].size() > 0)
@@ -680,16 +680,16 @@ func test_tortoise_escape_with_typhoon_bonus_increases_escape_total() -> void:
 	var tortoise_clear := _make_tortoise(10, 0, "attacker", cap)
 	var tortoise_typhoon := _make_tortoise(11, 0, "attacker", cap)
 	var enemy := _make_defender(20, Enums.ShipClass.SENGOKOBUNE, 0)
-	var foe: Array[Dictionary] = _to_typed_array([enemy])
+	var foe: Array = _to_typed_array([enemy])
 
 	var dice_clear := DiceEngine.new(99)
-	var own_clear: Array[Dictionary] = _to_typed_array([tortoise_clear])
-	var res_clear: Array[Dictionary] = NavalCombatSystem._process_tortoise_escapes(
+	var own_clear: Array = _to_typed_array([tortoise_clear])
+	var res_clear: Array = NavalCombatSystem._process_tortoise_escapes(
 		own_clear, foe, dice_clear, Enums.NavalWeather.CLEAR)
 
 	var dice_typhoon := DiceEngine.new(99)
-	var own_typhoon: Array[Dictionary] = _to_typed_array([tortoise_typhoon])
-	var res_typhoon: Array[Dictionary] = NavalCombatSystem._process_tortoise_escapes(
+	var own_typhoon: Array = _to_typed_array([tortoise_typhoon])
+	var res_typhoon: Array = NavalCombatSystem._process_tortoise_escapes(
 		own_typhoon, foe, dice_typhoon, Enums.NavalWeather.TYPHOON)
 
 	assert_eq(res_clear.size(), 1)
@@ -705,11 +705,11 @@ func test_collect_escaped_ships_returns_correct_side() -> void:
 	atk["is_escaped"] = true
 	var def := _make_tortoise(2, 0, "defender")
 	def["is_escaped"] = true
-	var atk_arr: Array[Dictionary] = _to_typed_array([atk])
-	var def_arr: Array[Dictionary] = _to_typed_array([def])
-	var escaped: Array[Dictionary] = NavalCombatSystem._collect_escaped_ships(atk_arr, def_arr)
+	var atk_arr: Array = _to_typed_array([atk])
+	var def_arr: Array = _to_typed_array([def])
+	var escaped: Array = NavalCombatSystem._collect_escaped_ships(atk_arr, def_arr)
 	assert_eq(escaped.size(), 2)
-	var sides: Array[String] = []
+	var sides: Array = []
 	for e: Dictionary in escaped:
 		sides.append(e["side"])
 	sides.sort()

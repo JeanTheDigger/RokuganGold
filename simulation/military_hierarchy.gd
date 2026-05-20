@@ -31,9 +31,9 @@ const RESERVE_COMPANIES_PER_LEGION: int = 1
 
 static func get_direct_subordinates(
 	character_id: int,
-	characters: Array[L5RCharacterData],
+	characters: Array,
 ) -> Array:
-	var result: Array[L5RCharacterData] = []
+	var result: Array = []
 	var seen: Dictionary = {}
 	for c: L5RCharacterData in characters:
 		if c.character_id == character_id:
@@ -47,7 +47,7 @@ static func get_direct_subordinates(
 
 static func get_direct_vassals(
 	character_id: int,
-	characters: Array[L5RCharacterData],
+	characters: Array,
 ) -> Array:
 	return get_direct_subordinates(character_id, characters)
 
@@ -66,8 +66,8 @@ static func get_company(
 static func get_legion_companies(
 	companies: Dictionary,
 	legion_id: int,
-) -> Array[MilitaryUnitData.CompanyData]:
-	var result: Array[MilitaryUnitData.CompanyData] = []
+) -> Array:
+	var result: Array = []
 	for cid: int in companies:
 		var c: MilitaryUnitData.CompanyData = companies[cid]
 		if c.parent_legion_id == legion_id:
@@ -78,8 +78,8 @@ static func get_legion_companies(
 static func get_legion_regular_companies(
 	companies: Dictionary,
 	legion_id: int,
-) -> Array[MilitaryUnitData.CompanyData]:
-	var result: Array[MilitaryUnitData.CompanyData] = []
+) -> Array:
+	var result: Array = []
 	for cid: int in companies:
 		var c: MilitaryUnitData.CompanyData = companies[cid]
 		if c.parent_legion_id == legion_id and not c.is_reserve:
@@ -101,8 +101,8 @@ static func get_legion_reserve(
 static func get_section_legions(
 	legions: Dictionary,
 	section_id: int,
-) -> Array[MilitaryUnitData.LegionData]:
-	var result: Array[MilitaryUnitData.LegionData] = []
+) -> Array:
+	var result: Array = []
 	for lid: int in legions:
 		var l: MilitaryUnitData.LegionData = legions[lid]
 		if l.parent_section_id == section_id:
@@ -113,8 +113,8 @@ static func get_section_legions(
 static func get_army_sections(
 	sections: Dictionary,
 	army_id: int,
-) -> Array[MilitaryUnitData.SectionData]:
-	var result: Array[MilitaryUnitData.SectionData] = []
+) -> Array:
+	var result: Array = []
 	for sid: int in sections:
 		var s: MilitaryUnitData.SectionData = sections[sid]
 		if s.parent_army_id == army_id:
@@ -125,8 +125,8 @@ static func get_army_sections(
 static func get_clan_armies(
 	armies: Dictionary,
 	clan_id: String,
-) -> Array[MilitaryUnitData.ArmyData]:
-	var result: Array[MilitaryUnitData.ArmyData] = []
+) -> Array:
+	var result: Array = []
 	for aid: int in armies:
 		var a: MilitaryUnitData.ArmyData = armies[aid]
 		if a.clan_id == clan_id:
@@ -177,7 +177,7 @@ static func get_commander_chain(
 	sections: Dictionary,
 	armies: Dictionary,
 ) -> Array:
-	var chain: Array[int] = []
+	var chain: Array = []
 
 	var legion: MilitaryUnitData.LegionData = legions.get(company.parent_legion_id)
 	if legion == null:
@@ -208,8 +208,8 @@ static func get_companies_by_status(
 	companies: Dictionary,
 	legion_id: int,
 	status: Enums.DeploymentStatus,
-) -> Array[MilitaryUnitData.CompanyData]:
-	var result: Array[MilitaryUnitData.CompanyData] = []
+) -> Array:
+	var result: Array = []
 	for cid: int in companies:
 		var c: MilitaryUnitData.CompanyData = companies[cid]
 		if c.parent_legion_id == legion_id and c.deployment_status == status:
@@ -220,8 +220,8 @@ static func get_companies_by_status(
 static func get_present_companies(
 	companies: Dictionary,
 	legion_id: int,
-) -> Array[MilitaryUnitData.CompanyData]:
-	var result: Array[MilitaryUnitData.CompanyData] = []
+) -> Array:
+	var result: Array = []
 	for cid: int in companies:
 		var c: MilitaryUnitData.CompanyData = companies[cid]
 		if c.parent_legion_id == legion_id:
@@ -296,8 +296,8 @@ static func is_legion_vacant(legion: MilitaryUnitData.LegionData) -> bool:
 static func get_vacant_companies(
 	companies: Dictionary,
 	legion_id: int,
-) -> Array[MilitaryUnitData.CompanyData]:
-	var result: Array[MilitaryUnitData.CompanyData] = []
+) -> Array:
+	var result: Array = []
 	for cid: int in companies:
 		var c: MilitaryUnitData.CompanyData = companies[cid]
 		if c.parent_legion_id == legion_id and c.commander_id < 0:

@@ -117,7 +117,7 @@ static func resolve_public_intimidation(
 	defender_roll: int,
 	defender_honor: float,
 	raises: int = 0,
-	witnesses: Array[int] = [],
+	witnesses: Array = [],
 	disposition_tier: String = "neutral",
 ) -> Dictionary:
 	var defender_total: int = defender_roll + int(defender_honor)

@@ -63,7 +63,7 @@ static func get_low_skill_honor_cost(character: L5RCharacterData, skill_name: St
 	var points: int = HONOR_TABLE_USING_LOW_SKILL[bracket]
 	var base_cost: float = points / 10.0
 
-	var schools: Array[String] = [character.school]
+	var schools: Array = [character.school]
 	for path: String in character.school_paths:
 		if path not in schools:
 			schools.append(path)
@@ -380,7 +380,7 @@ static func create_crime_record(
 	ic_day: int,
 	victim_id: int = -1,
 	concealment_tn: int = 0,
-	witnesses: Array[int] = [],
+	witnesses: Array = [],
 ) -> CrimeRecord:
 	var record := CrimeRecord.new()
 	record.case_id = case_id

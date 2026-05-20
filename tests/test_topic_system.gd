@@ -2,7 +2,7 @@ extends GutTest
 
 
 func _make_crisis(tier: TopicData.Tier, momentum: float = 20.0, provinces: int = 1) -> TopicData:
-	var prov: Array[int] = []
+	var prov: Array = []
 	for i in range(provinces):
 		prov.append(i + 1)
 	return TopicMomentumSystem.create_topic(
@@ -243,19 +243,19 @@ func test_weight_zero_relevance():
 # -- Aggregate Weighted Opinion ------------------------------------------------
 
 func test_aggregate_basic():
-	var positions: Array[float] = [50.0, -20.0]
-	var weights: Array[float] = [10.0, 5.0]
+	var positions: Array = [50.0, -20.0]
+	var weights: Array = [10.0, 5.0]
 	var result: float = TopicMomentumSystem.calculate_aggregate_opinion(positions, weights)
 	assert_almost_eq(result, 26.667, 0.01)
 
 func test_aggregate_empty():
-	var positions: Array[float] = []
-	var weights: Array[float] = []
+	var positions: Array = []
+	var weights: Array = []
 	assert_eq(TopicMomentumSystem.calculate_aggregate_opinion(positions, weights), 0.0)
 
 func test_aggregate_zero_weights():
-	var positions: Array[float] = [50.0, -20.0]
-	var weights: Array[float] = [0.0, 0.0]
+	var positions: Array = [50.0, -20.0]
+	var weights: Array = [0.0, 0.0]
 	assert_eq(TopicMomentumSystem.calculate_aggregate_opinion(positions, weights), 0.0)
 
 
@@ -263,27 +263,27 @@ func test_aggregate_zero_weights():
 
 func test_daily_tick_advances_crisis():
 	var t := _make_crisis(TopicData.Tier.TIER_2, 10.0)
-	var topics: Array[TopicData] = [t]
+	var topics: Array = [t]
 	var result: Dictionary = TopicMomentumSystem.process_daily_tick(topics)
 	assert_almost_eq(t.momentum, 12.0, 0.001)
 	assert_true(result["momentum_changes"].has(t.topic_id))
 
 func test_daily_tick_decays_tier4():
 	var t := _make_tier4(5.0)
-	var topics: Array[TopicData] = [t]
+	var topics: Array = [t]
 	var result: Dictionary = TopicMomentumSystem.process_daily_tick(topics)
 	assert_almost_eq(t.momentum, 3.0, 0.001)
 
 func test_daily_tick_expires_tier4():
 	var t := _make_tier4(1.0)
-	var topics: Array[TopicData] = [t]
+	var topics: Array = [t]
 	var result: Dictionary = TopicMomentumSystem.process_daily_tick(topics)
 	assert_true(t.topic_id in result["expired_topic_ids"])
 
 func test_daily_tick_skips_resolved():
 	var t := _make_crisis(TopicData.Tier.TIER_2, 50.0)
 	t.resolved = true
-	var topics: Array[TopicData] = [t]
+	var topics: Array = [t]
 	var result: Dictionary = TopicMomentumSystem.process_daily_tick(topics)
 	assert_eq(result["momentum_changes"].size(), 0)
 
@@ -292,7 +292,7 @@ func test_daily_tick_mixed_topics():
 	crisis.topic_id = 1
 	var social := _make_tier4(10.0)
 	social.topic_id = 2
-	var topics: Array[TopicData] = [crisis, social]
+	var topics: Array = [crisis, social]
 	var result: Dictionary = TopicMomentumSystem.process_daily_tick(topics)
 	assert_almost_eq(crisis.momentum, 33.0, 0.001)
 	assert_almost_eq(social.momentum, 8.0, 0.001)
@@ -302,7 +302,7 @@ func test_daily_tick_mixed_topics():
 # -- Topic Factory & Resolution ------------------------------------------------
 
 func test_create_topic():
-	var provinces: Array[int] = [1, 2, 3]
+	var provinces: Array = [1, 2, 3]
 	var t: TopicData = TopicMomentumSystem.create_topic(
 		42, "War in Lion", TopicData.Tier.TIER_2, TopicData.Category.MILITARY,
 		100, 15.0, provinces, "Lion", "Akodo"
@@ -336,8 +336,8 @@ func test_increment_discussion_counts_basic():
 	t1.topic_id = 1
 	var t2 := _make_tier4(20.0)
 	t2.topic_id = 2
-	var topics: Array[TopicData] = [t1, t2]
-	var discussed: Array[int] = [1, 1, 2]
+	var topics: Array = [t1, t2]
+	var discussed: Array = [1, 1, 2]
 	TopicMomentumSystem.increment_discussion_counts(topics, discussed)
 	assert_eq(t1.discussion_count_this_day, 2)
 	assert_eq(t2.discussion_count_this_day, 1)
@@ -346,8 +346,8 @@ func test_increment_discussion_counts_basic():
 func test_increment_discussion_counts_unknown_id_ignored():
 	var t1 := _make_tier4(20.0)
 	t1.topic_id = 1
-	var topics: Array[TopicData] = [t1]
-	var discussed: Array[int] = [1, 99]
+	var topics: Array = [t1]
+	var discussed: Array = [1, 99]
 	TopicMomentumSystem.increment_discussion_counts(topics, discussed)
 	assert_eq(t1.discussion_count_this_day, 1)
 
@@ -355,8 +355,8 @@ func test_increment_discussion_counts_unknown_id_ignored():
 func test_increment_discussion_counts_empty():
 	var t1 := _make_tier4(20.0)
 	t1.topic_id = 1
-	var topics: Array[TopicData] = [t1]
-	var discussed: Array[int] = []
+	var topics: Array = [t1]
+	var discussed: Array = []
 	TopicMomentumSystem.increment_discussion_counts(topics, discussed)
 	assert_eq(t1.discussion_count_this_day, 0)
 
@@ -375,7 +375,7 @@ func _make_char(id: int, clan: String = "") -> L5RCharacterData:
 	return c
 
 
-func _make_province(id: int, clan: String = "", adjacent: Array[int] = []) -> ProvinceData:
+func _make_province(id: int, clan: String = "", adjacent: Array = []) -> ProvinceData:
 	var p := ProvinceData.new()
 	p.province_id = id
 	p.clan = clan
@@ -388,10 +388,10 @@ func test_broadcast_rumor_no_spread():
 	t.topic_id = 1
 	t.provinces_affected = [10]
 	var c := _make_char(1)
-	var chars: Array[L5RCharacterData] = [c]
+	var chars: Array = [c]
 	var char_prov: Dictionary = {1: 10}
 	var prov_clan: Dictionary = {10: "Crane"}
-	var results: Array[Dictionary] = TopicMomentumSystem.broadcast_public_knowledge(
+	var results: Array = TopicMomentumSystem.broadcast_public_knowledge(
 		[t], chars, char_prov, prov_clan
 	)
 	assert_eq(results.size(), 0)
@@ -403,10 +403,10 @@ func test_broadcast_minor_affected_province():
 	t.topic_id = 1
 	t.provinces_affected = [10]
 	var c := _make_char(1)
-	var chars: Array[L5RCharacterData] = [c]
+	var chars: Array = [c]
 	var char_prov: Dictionary = {1: 10}
 	var prov_clan: Dictionary = {10: "Crane"}
-	var results: Array[Dictionary] = TopicMomentumSystem.broadcast_public_knowledge(
+	var results: Array = TopicMomentumSystem.broadcast_public_knowledge(
 		[t], chars, char_prov, prov_clan
 	)
 	assert_eq(results.size(), 1)
@@ -418,10 +418,10 @@ func test_broadcast_minor_non_affected_province_excluded():
 	t.topic_id = 1
 	t.provinces_affected = [10]
 	var c := _make_char(1)
-	var chars: Array[L5RCharacterData] = [c]
+	var chars: Array = [c]
 	var char_prov: Dictionary = {1: 20}
 	var prov_clan: Dictionary = {10: "Crane", 20: "Lion"}
-	var results: Array[Dictionary] = TopicMomentumSystem.broadcast_public_knowledge(
+	var results: Array = TopicMomentumSystem.broadcast_public_knowledge(
 		[t], chars, char_prov, prov_clan
 	)
 	assert_eq(results.size(), 0)
@@ -434,11 +434,11 @@ func test_broadcast_secondary_adjacent_province():
 	var c := _make_char(1)
 	var p10 := _make_province(10, "Crane", [20])
 	var p20 := _make_province(20, "Lion", [10])
-	var chars: Array[L5RCharacterData] = [c]
+	var chars: Array = [c]
 	var char_prov: Dictionary = {1: 20}
 	var prov_clan: Dictionary = {10: "Crane", 20: "Lion"}
 	var provinces: Dictionary = {10: p10, 20: p20}
-	var results: Array[Dictionary] = TopicMomentumSystem.broadcast_public_knowledge(
+	var results: Array = TopicMomentumSystem.broadcast_public_knowledge(
 		[t], chars, char_prov, prov_clan, provinces
 	)
 	assert_eq(results.size(), 1)
@@ -452,11 +452,11 @@ func test_broadcast_secondary_non_adjacent_excluded():
 	var c := _make_char(1)
 	var p10 := _make_province(10, "Crane", [])
 	var p20 := _make_province(20, "Lion", [])
-	var chars: Array[L5RCharacterData] = [c]
+	var chars: Array = [c]
 	var char_prov: Dictionary = {1: 20}
 	var prov_clan: Dictionary = {10: "Crane", 20: "Lion"}
 	var provinces: Dictionary = {10: p10, 20: p20}
-	var results: Array[Dictionary] = TopicMomentumSystem.broadcast_public_knowledge(
+	var results: Array = TopicMomentumSystem.broadcast_public_knowledge(
 		[t], chars, char_prov, prov_clan, provinces
 	)
 	assert_eq(results.size(), 0)
@@ -468,10 +468,10 @@ func test_broadcast_major_same_clan():
 	t.provinces_affected = [10]
 	t.clan_involved = "Crane"
 	var c := _make_char(1)
-	var chars: Array[L5RCharacterData] = [c]
+	var chars: Array = [c]
 	var char_prov: Dictionary = {1: 20}
 	var prov_clan: Dictionary = {10: "Crane", 20: "Crane"}
-	var results: Array[Dictionary] = TopicMomentumSystem.broadcast_public_knowledge(
+	var results: Array = TopicMomentumSystem.broadcast_public_knowledge(
 		[t], chars, char_prov, prov_clan
 	)
 	assert_eq(results.size(), 1)
@@ -483,10 +483,10 @@ func test_broadcast_major_different_clan_excluded():
 	t.provinces_affected = [10]
 	t.clan_involved = "Crane"
 	var c := _make_char(1)
-	var chars: Array[L5RCharacterData] = [c]
+	var chars: Array = [c]
 	var char_prov: Dictionary = {1: 30}
 	var prov_clan: Dictionary = {10: "Crane", 30: "Dragon"}
-	var results: Array[Dictionary] = TopicMomentumSystem.broadcast_public_knowledge(
+	var results: Array = TopicMomentumSystem.broadcast_public_knowledge(
 		[t], chars, char_prov, prov_clan
 	)
 	assert_eq(results.size(), 0)
@@ -497,10 +497,10 @@ func test_broadcast_unavoidable_all_characters():
 	t.topic_id = 1
 	var c1 := _make_char(1)
 	var c2 := _make_char(2)
-	var chars: Array[L5RCharacterData] = [c1, c2]
+	var chars: Array = [c1, c2]
 	var char_prov: Dictionary = {1: 10, 2: 99}
 	var prov_clan: Dictionary = {}
-	var results: Array[Dictionary] = TopicMomentumSystem.broadcast_public_knowledge(
+	var results: Array = TopicMomentumSystem.broadcast_public_knowledge(
 		[t], chars, char_prov, prov_clan
 	)
 	assert_eq(results.size(), 2)
@@ -513,10 +513,10 @@ func test_broadcast_skips_already_known():
 	t.topic_id = 1
 	var c := _make_char(1)
 	c.topic_pool = [1]
-	var chars: Array[L5RCharacterData] = [c]
+	var chars: Array = [c]
 	var char_prov: Dictionary = {1: 10}
 	var prov_clan: Dictionary = {}
-	var results: Array[Dictionary] = TopicMomentumSystem.broadcast_public_knowledge(
+	var results: Array = TopicMomentumSystem.broadcast_public_knowledge(
 		[t], chars, char_prov, prov_clan
 	)
 	assert_eq(results.size(), 0)
@@ -527,8 +527,8 @@ func test_broadcast_skips_resolved():
 	t.topic_id = 1
 	t.resolved = true
 	var c := _make_char(1)
-	var chars: Array[L5RCharacterData] = [c]
-	var results: Array[Dictionary] = TopicMomentumSystem.broadcast_public_knowledge(
+	var chars: Array = [c]
+	var results: Array = TopicMomentumSystem.broadcast_public_knowledge(
 		[t], chars, {1: 10}, {}
 	)
 	assert_eq(results.size(), 0)
@@ -540,19 +540,19 @@ func test_is_adjacent_to_affected_true():
 	var p1 := _make_province(1, "Crane", [2, 3])
 	var p2 := _make_province(2, "Lion", [1])
 	var provinces: Dictionary = {1: p1, 2: p2}
-	var affected: Array[int] = [2]
+	var affected: Array = [2]
 	assert_true(TopicMomentumSystem._is_adjacent_to_affected(1, affected, provinces))
 
 
 func test_is_adjacent_to_affected_false():
 	var p1 := _make_province(1, "Crane", [3])
 	var provinces: Dictionary = {1: p1}
-	var affected: Array[int] = [2]
+	var affected: Array = [2]
 	assert_false(TopicMomentumSystem._is_adjacent_to_affected(1, affected, provinces))
 
 
 func test_is_adjacent_to_affected_unknown_province():
-	var affected: Array[int] = [2]
+	var affected: Array = [2]
 	assert_false(TopicMomentumSystem._is_adjacent_to_affected(99, affected, {}))
 
 
@@ -698,7 +698,7 @@ func test_broadcast_creates_knowledge_entry():
 	t.provinces_affected = [10]
 	var c := _make_char(1)
 	c.knowledge_pool = []
-	var chars: Array[L5RCharacterData] = [c]
+	var chars: Array = [c]
 	var char_prov: Dictionary = {1: 10}
 	var prov_clan: Dictionary = {10: "Crane"}
 	TopicMomentumSystem.broadcast_public_knowledge(
@@ -718,7 +718,7 @@ func test_broadcast_no_knowledge_entry_for_excluded_character():
 	t.provinces_affected = [10]
 	var c := _make_char(1)
 	c.knowledge_pool = []
-	var chars: Array[L5RCharacterData] = [c]
+	var chars: Array = [c]
 	var char_prov: Dictionary = {1: 10}
 	var prov_clan: Dictionary = {10: "Crane"}
 	TopicMomentumSystem.broadcast_public_knowledge(
@@ -734,7 +734,7 @@ func test_broadcast_no_duplicate_knowledge_entry():
 	var c := _make_char(1)
 	c.topic_pool = [1]
 	c.knowledge_pool = []
-	var chars: Array[L5RCharacterData] = [c]
+	var chars: Array = [c]
 	var char_prov: Dictionary = {1: 10}
 	var prov_clan: Dictionary = {10: "Crane"}
 	TopicMomentumSystem.broadcast_public_knowledge(

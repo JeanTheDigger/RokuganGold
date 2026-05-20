@@ -623,7 +623,7 @@ static func _default_infrastructure(
 			return ["garrison", "shrine", "sake_house", "inn"]
 
 		Enums.SettlementType.CASTLE:
-			var inf: Array[String] = ["garrison", "shrine", "forge"]
+			var inf: Array = ["garrison", "shrine", "forge"]
 			if has_castle_town:
 				inf.append_array([
 					"sake_house", "inn", "tea_house",
@@ -674,7 +674,7 @@ static func _advance_traits(
 	var focus_rings: Array = school_data.get("focus_rings", [])
 	var is_shugenja: bool = school_data["type"] == Enums.SchoolType.SHUGENJA
 
-	var focus_traits: Array[String] = []
+	var focus_traits: Array = []
 	for ring: Variant in focus_rings:
 		var ring_int: int = ring as int
 		if RING_TO_TRAITS.has(ring_int):
@@ -739,7 +739,7 @@ static func _assign_skills(
 		if not pick.is_empty():
 			c.skills[pick] = 1
 
-	var school_skills: Array[String] = []
+	var school_skills: Array = []
 	for s: String in c.skills:
 		school_skills.append(s)
 
@@ -772,11 +772,11 @@ static func _get_skill_pool(category: String) -> Array:
 
 
 static func _pick_unused_skill(
-	pool: Array[String],
+	pool: Array,
 	existing: Dictionary,
 	dice: DiceEngine,
 ) -> String:
-	var available: Array[String] = []
+	var available: Array = []
 	for s: String in pool:
 		if not existing.has(s):
 			available.append(s)

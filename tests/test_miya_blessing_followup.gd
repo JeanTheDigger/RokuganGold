@@ -7,8 +7,8 @@ extends GutTest
 
 var _provinces: Dictionary
 var _characters_by_id: Dictionary
-var _active_topics: Array[TopicData]
-var _next_topic_id: Array[int]
+var _active_topics: Array
+var _next_topic_id: Array
 var _season_meta: Dictionary
 
 

@@ -304,7 +304,7 @@ static func _get_shugenja_school(clan: String, family: String) -> String:
 # -- Character Generation Helper -----------------------------------------------
 
 static func _generate_positioned_character(
-	next_id: Array[int],
+	next_id: Array,
 	position_type: int,
 	clan: String,
 	family: String,
@@ -343,10 +343,10 @@ static func _pick_family(clan: String, dice: DiceEngine) -> String:
 # -- Step 1-2: Imperial Positions (s22.8) --------------------------------------
 
 static func _generate_imperial_positions(
-	next_id: Array[int],
+	next_id: Array,
 	dice: DiceEngine,
 ) -> Array:
-	var chars: Array[L5RCharacterData] = []
+	var chars: Array = []
 
 	var emperor: L5RCharacterData = _generate_positioned_character(
 		next_id, PositionType.EMPEROR, "Imperial", "Seppun", dice,
@@ -384,7 +384,7 @@ static func _generate_imperial_positions(
 			next_id, info[0], info[1], info[2], dice, emperor_id,
 		))
 
-	var imp_families: Array[String] = ["Seppun", "Otomo", "Miya"]
+	var imp_families: Array = ["Seppun", "Otomo", "Miya"]
 	for fam: String in imp_families:
 		chars.append(_generate_positioned_character(
 			next_id, PositionType.IMPERIAL_FAMILY_DAIMYO,
@@ -398,10 +398,10 @@ static func _generate_imperial_positions(
 
 static func _generate_clan_leadership(
 	clan: String,
-	next_id: Array[int],
+	next_id: Array,
 	dice: DiceEngine,
 ) -> Array:
-	var chars: Array[L5RCharacterData] = []
+	var chars: Array = []
 	var families: Array = CLAN_FAMILIES.get(clan, [])
 	if families.is_empty():
 		return chars
@@ -456,10 +456,10 @@ static func _generate_clan_leadership(
 static func _generate_military_commanders(
 	clan: String,
 	rikugunshokan_id: int,
-	next_id: Array[int],
+	next_id: Array,
 	dice: DiceEngine,
 ) -> Array:
-	var chars: Array[L5RCharacterData] = []
+	var chars: Array = []
 	var army_count: int = CLAN_ARMY_COUNT.get(clan, 0)
 	var families: Array = CLAN_FAMILIES.get(clan, [])
 	if families.is_empty() or army_count == 0:
@@ -486,13 +486,13 @@ static func _generate_military_commanders(
 
 static func _generate_province_positions(
 	province: ProvinceData,
-	settlements: Array[SettlementData],
+	settlements: Array,
 	clan: String,
 	family_daimyo_id: int,
-	next_id: Array[int],
+	next_id: Array,
 	dice: DiceEngine,
 ) -> Array:
-	var chars: Array[L5RCharacterData] = []
+	var chars: Array = []
 	var families: Array = CLAN_FAMILIES.get(clan, [])
 	if families.is_empty():
 		return chars
@@ -536,11 +536,11 @@ static func _generate_province_positions(
 # -- Step 2: Magistrate System (s22.8) ----------------------------------------
 
 static func _generate_magistrate_system(
-	next_id: Array[int],
+	next_id: Array,
 	dice: DiceEngine,
 	emperor_id: int,
 ) -> Array:
-	var chars: Array[L5RCharacterData] = []
+	var chars: Array = []
 
 	for _i: int in range(3):
 		chars.append(_generate_positioned_character(
@@ -561,10 +561,10 @@ static func _generate_magistrate_system(
 # -- Step 2: Minor Clan Positions (s22.8) --------------------------------------
 
 static func _generate_minor_clan_characters(
-	next_id: Array[int],
+	next_id: Array,
 	dice: DiceEngine,
 ) -> Array:
-	var chars: Array[L5RCharacterData] = []
+	var chars: Array = []
 	for mc: String in MINOR_CLANS:
 		var champ: L5RCharacterData = _generate_positioned_character(
 			next_id, PositionType.MINOR_CLAN_CHAMPION, mc, mc, dice,
@@ -580,11 +580,11 @@ static func _generate_minor_clan_characters(
 # -- Step 2: Kaiu Wall (s22.8) ------------------------------------------------
 
 static func _generate_wall_characters(
-	next_id: Array[int],
+	next_id: Array,
 	dice: DiceEngine,
 	crab_rikugunshokan_id: int,
 ) -> Array:
-	var chars: Array[L5RCharacterData] = []
+	var chars: Array = []
 	for _i: int in range(4):
 		chars.append(_generate_positioned_character(
 			next_id, PositionType.WALL_SEGMENT_COMMANDER,
@@ -602,10 +602,10 @@ static func _generate_wall_characters(
 static func _generate_rank_filling(
 	clan: String,
 	existing_count_by_rank: Dictionary,
-	next_id: Array[int],
+	next_id: Array,
 	dice: DiceEngine,
 ) -> Array:
-	var chars: Array[L5RCharacterData] = []
+	var chars: Array = []
 	var targets: Dictionary = RANK_DISTRIBUTION.get(clan, {})
 	if targets.is_empty():
 		return chars
@@ -637,7 +637,7 @@ static func _generate_rank_filling(
 # -- Step 4: Family Web Construction (s52, s22.6) -----------------------------
 
 static func _build_family_web(
-	characters: Array[L5RCharacterData],
+	characters: Array,
 	dice: DiceEngine,
 ) -> void:
 	var by_clan: Dictionary = {}
@@ -770,7 +770,7 @@ static func _assign_siblings(
 # -- Step 4: Ancestor Records (s22.6) -----------------------------------------
 
 static func _generate_ancestor_records(
-	characters: Array[L5RCharacterData],
+	characters: Array,
 	dice: DiceEngine,
 ) -> void:
 	for c: L5RCharacterData in characters:
@@ -791,7 +791,7 @@ static func _generate_ancestor_records(
 # -- Step 5: Starting Dispositions (s12.2b) ------------------------------------
 
 static func _apply_starting_dispositions(
-	characters: Array[L5RCharacterData],
+	characters: Array,
 	clan_baselines: Dictionary,
 	family_baselines: Dictionary,
 ) -> void:
@@ -825,13 +825,13 @@ static func _count_by_rank(characters: Array, clan: String) -> Dictionary:
 
 static func generate_world_population(
 	provinces: Dictionary,
-	settlements: Array[SettlementData],
+	settlements: Array,
 	dice: DiceEngine,
-	next_id: Array[int],
+	next_id: Array,
 	clan_baselines: Dictionary = {},
 	family_baselines: Dictionary = {},
 ) -> Dictionary:
-	var all_characters: Array[L5RCharacterData] = []
+	var all_characters: Array = []
 
 	var imperial_chars: Array = _generate_imperial_positions(next_id, dice)
 	all_characters.append_array(imperial_chars)
@@ -881,7 +881,7 @@ static func generate_world_population(
 		if fd_id < 0:
 			fd_id = clan_champions.get(clan, -1)
 
-		var prov_settlements: Array[SettlementData] = []
+		var prov_settlements: Array = []
 		for s: SettlementData in province_settlement_map.get(prov.province_id, []):
 			prov_settlements.append(s)
 

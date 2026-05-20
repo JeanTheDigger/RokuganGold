@@ -55,9 +55,9 @@ static func get_tier_for_lord_rank(rank: Enums.LordRank) -> String:
 
 
 static func process_monthly_koku_flow(
-	characters: Array[L5RCharacterData],
+	characters: Array,
 	characters_by_id: Dictionary,
-	settlements: Array[SettlementData],
+	settlements: Array,
 	clans: Dictionary,
 	months_in_season: int,
 ) -> Dictionary:
@@ -76,7 +76,7 @@ static func process_monthly_koku_flow(
 
 
 static func _pool_upward(
-	settlements: Array[SettlementData],
+	settlements: Array,
 	clans: Dictionary,
 	months_in_season: int,
 ) -> Dictionary:
@@ -99,7 +99,7 @@ static func _pool_upward(
 
 static func _cascade_downward(
 	clan_pools: Dictionary,
-	characters: Array[L5RCharacterData],
+	characters: Array,
 	characters_by_id: Dictionary,
 ) -> Dictionary:
 	var lord_pools: Dictionary = {}
@@ -140,13 +140,13 @@ static func _cascade_downward(
 static func _distribute_to_subordinates(
 	lord_id: int,
 	pool_arriving: float,
-	characters: Array[L5RCharacterData],
+	characters: Array,
 	characters_by_id: Dictionary,
 	lord_pools: Dictionary,
 ) -> void:
 	if pool_arriving <= 0.0:
 		return
-	var subordinate_lords: Array[L5RCharacterData] = []
+	var subordinate_lords: Array = []
 	for c: L5RCharacterData in characters:
 		if CharacterStats.is_dead(c):
 			continue
@@ -181,7 +181,7 @@ static func _distribute_to_subordinates(
 
 static func _pay_individual_stipends(
 	lord_pools: Dictionary,
-	characters: Array[L5RCharacterData],
+	characters: Array,
 	characters_by_id: Dictionary,
 ) -> Dictionary:
 	var assignments: Dictionary = {}

@@ -120,8 +120,8 @@ func test_zone_blocks_performance_in_audience_chamber() -> void:
 	var ctx: NPCDataStructures.ContextSnapshot = NPCDecisionEngine.build_context(_char, _world_state)
 	var need := NPCDataStructures.ImmediateNeed.new()
 	need.need_type = "REST"
-	var options: Array[NPCDataStructures.ScoredAction] = NPCDecisionEngine.generate_options(ctx, need)
-	var action_ids: Array[String] = []
+	var options: Array = NPCDecisionEngine.generate_options(ctx, need)
+	var action_ids: Array = []
 	for opt: NPCDataStructures.ScoredAction in options:
 		action_ids.append(opt.action_id)
 	assert_false("PUBLIC_PERFORMANCE" in action_ids)
@@ -132,8 +132,8 @@ func test_zone_allows_performance_in_ohiroma() -> void:
 	var ctx: NPCDataStructures.ContextSnapshot = NPCDecisionEngine.build_context(_char, _world_state)
 	var need := NPCDataStructures.ImmediateNeed.new()
 	need.need_type = "REST"
-	var options: Array[NPCDataStructures.ScoredAction] = NPCDecisionEngine.generate_options(ctx, need)
-	var action_ids: Array[String] = []
+	var options: Array = NPCDecisionEngine.generate_options(ctx, need)
+	var action_ids: Array = []
 	for opt: NPCDataStructures.ScoredAction in options:
 		action_ids.append(opt.action_id)
 	assert_true("PUBLIC_PERFORMANCE" in action_ids)
@@ -143,8 +143,8 @@ func test_zone_no_flags_allows_all_actions() -> void:
 	var ctx: NPCDataStructures.ContextSnapshot = NPCDecisionEngine.build_context(_char, _world_state)
 	var need := NPCDataStructures.ImmediateNeed.new()
 	need.need_type = "REST"
-	var options: Array[NPCDataStructures.ScoredAction] = NPCDecisionEngine.generate_options(ctx, need)
-	var action_ids: Array[String] = []
+	var options: Array = NPCDecisionEngine.generate_options(ctx, need)
+	var action_ids: Array = []
 	for opt: NPCDataStructures.ScoredAction in options:
 		action_ids.append(opt.action_id)
 	assert_true("PUBLIC_PERFORMANCE" in action_ids)
@@ -168,7 +168,7 @@ func test_scored_action_includes_new_fields_in_total() -> void:
 # =============================================================================
 
 func test_score_all_applies_approach_modifier() -> void:
-	var penalties: Array[Dictionary] = [{
+	var penalties: Array = [{
 		"character_id": 1,
 		"target_npc_id": 2,
 		"action_id": "CHARM",
@@ -187,7 +187,7 @@ func test_score_all_applies_approach_modifier() -> void:
 	var option := NPCDataStructures.ScoredAction.new()
 	option.action_id = "CHARM"
 	option.target_npc_id = 2
-	var options: Array[NPCDataStructures.ScoredAction] = [option]
+	var options: Array = [option]
 
 	NPCDecisionEngine.score_all(options, need, ctx, _scoring_tables, penalties)
 	assert_eq(option.approach_modifier, -15.0)
@@ -204,7 +204,7 @@ func test_score_all_approach_modifier_zero_without_penalties() -> void:
 
 	var option := NPCDataStructures.ScoredAction.new()
 	option.action_id = "REST"
-	var options: Array[NPCDataStructures.ScoredAction] = [option]
+	var options: Array = [option]
 
 	NPCDecisionEngine.score_all(options, need, ctx, _scoring_tables)
 	assert_eq(option.approach_modifier, 0.0)
@@ -218,7 +218,7 @@ func test_score_all_applies_commitment_at_risk() -> void:
 	var commitment: CommitmentData = CommitmentRegistry.create_commitment(
 		1, Enums.CommitmentType.VISIT_PROMISE, 99, 1, 20, 1, 5
 	)
-	var commitments: Array[CommitmentData] = [commitment]
+	var commitments: Array = [commitment]
 
 	var ctx := NPCDataStructures.ContextSnapshot.new()
 	ctx.character_id = 1
@@ -230,7 +230,7 @@ func test_score_all_applies_commitment_at_risk() -> void:
 
 	var option := NPCDataStructures.ScoredAction.new()
 	option.action_id = "REST"
-	var options: Array[NPCDataStructures.ScoredAction] = [option]
+	var options: Array = [option]
 
 	NPCDecisionEngine.score_all(options, need, ctx, _scoring_tables,
 		[], commitments, _char)
@@ -248,7 +248,7 @@ func test_score_all_no_commitment_penalty_without_commitments() -> void:
 
 	var option := NPCDataStructures.ScoredAction.new()
 	option.action_id = "REST"
-	var options: Array[NPCDataStructures.ScoredAction] = [option]
+	var options: Array = [option]
 
 	NPCDecisionEngine.score_all(options, need, ctx, _scoring_tables)
 	assert_eq(option.commitment_at_risk, 0.0)
@@ -269,7 +269,7 @@ func test_score_all_applies_travel_redirect_penalty() -> void:
 
 	var option := NPCDataStructures.ScoredAction.new()
 	option.action_id = "REST"
-	var options: Array[NPCDataStructures.ScoredAction] = [option]
+	var options: Array = [option]
 
 	NPCDecisionEngine.score_all(options, need, ctx, _scoring_tables,
 		[], [], null, 2)
@@ -287,7 +287,7 @@ func test_score_all_no_redirect_penalty_at_zero() -> void:
 
 	var option := NPCDataStructures.ScoredAction.new()
 	option.action_id = "REST"
-	var options: Array[NPCDataStructures.ScoredAction] = [option]
+	var options: Array = [option]
 
 	NPCDecisionEngine.score_all(options, need, ctx, _scoring_tables)
 	assert_eq(option.travel_redirect_penalty, 0.0)
@@ -320,16 +320,16 @@ func test_advance_day_returns_crime_results() -> void:
 	province.stability = 70.0
 	province.terrain_type = Enums.TerrainType.PLAINS
 
-	var characters: Array[L5RCharacterData] = [_char]
+	var characters: Array = [_char]
 	var characters_by_id: Dictionary = {1: _char}
 	var provinces: Dictionary = {10: province}
-	var action_log: Array[Dictionary] = []
+	var action_log: Array = []
 	var season_meta: Dictionary = {
 		"_peace_seasons": {10: 0},
 		"_deficit_seasons": {10: 0},
 	}
 	var ws: Dictionary = _make_day_world_state()
-	var crime_records: Array[CrimeRecord] = []
+	var crime_records: Array = []
 
 	var result: Dictionary = DayOrchestrator.advance_day(
 		time, characters, characters_by_id, {1: ws},
@@ -351,16 +351,16 @@ func test_advance_day_returns_commitment_results() -> void:
 	province.stability = 70.0
 	province.terrain_type = Enums.TerrainType.PLAINS
 
-	var characters: Array[L5RCharacterData] = [_char]
+	var characters: Array = [_char]
 	var characters_by_id: Dictionary = {1: _char}
 	var provinces: Dictionary = {10: province}
-	var action_log: Array[Dictionary] = []
+	var action_log: Array = []
 	var season_meta: Dictionary = {
 		"_peace_seasons": {10: 0},
 		"_deficit_seasons": {10: 0},
 	}
 	var ws: Dictionary = _make_day_world_state()
-	var commitments: Array[CommitmentData] = []
+	var commitments: Array = []
 
 	var result: Dictionary = DayOrchestrator.advance_day(
 		time, characters, characters_by_id, {1: ws},
@@ -381,10 +381,10 @@ func test_advance_day_processes_due_commitment() -> void:
 	province.stability = 70.0
 	province.terrain_type = Enums.TerrainType.PLAINS
 
-	var characters: Array[L5RCharacterData] = [_char]
+	var characters: Array = [_char]
 	var characters_by_id: Dictionary = {1: _char}
 	var provinces: Dictionary = {10: province}
-	var action_log: Array[Dictionary] = []
+	var action_log: Array = []
 	var season_meta: Dictionary = {
 		"_peace_seasons": {10: 0},
 		"_deficit_seasons": {10: 0},
@@ -394,7 +394,7 @@ func test_advance_day_processes_due_commitment() -> void:
 	var commitment: CommitmentData = CommitmentRegistry.create_commitment(
 		1, Enums.CommitmentType.VISIT_PROMISE, 99, 1, 0, 2, 0
 	)
-	var commitments: Array[CommitmentData] = [commitment]
+	var commitments: Array = [commitment]
 
 	var result: Dictionary = DayOrchestrator.advance_day(
 		time, characters, characters_by_id, {1: ws},
@@ -420,17 +420,17 @@ func test_season_transition_decays_approach_penalties() -> void:
 	province.stability = 70.0
 	province.terrain_type = Enums.TerrainType.PLAINS
 
-	var characters: Array[L5RCharacterData] = [_char]
+	var characters: Array = [_char]
 	var characters_by_id: Dictionary = {1: _char}
 	var provinces: Dictionary = {10: province}
-	var action_log: Array[Dictionary] = []
+	var action_log: Array = []
 	var season_meta: Dictionary = {
 		"_peace_seasons": {10: 0},
 		"_deficit_seasons": {10: 0},
 	}
 	var ws: Dictionary = _make_day_world_state()
 
-	var penalties: Array[Dictionary] = [{
+	var penalties: Array = [{
 		"character_id": 1,
 		"target_npc_id": 2,
 		"action_id": "CHARM",
@@ -456,10 +456,10 @@ func test_season_transition_decays_approach_penalties() -> void:
 func test_wave_resolver_accepts_new_params() -> void:
 	var dice: DiceEngine = DiceEngine.new()
 	dice.set_seed(42)
-	var characters: Array[L5RCharacterData] = [_char]
+	var characters: Array = [_char]
 	var characters_by_id: Dictionary = {1: _char}
 	var provinces: Dictionary = {}
-	var action_log: Array[Dictionary] = []
+	var action_log: Array = []
 	_world_state["context_flag"] = Enums.ContextFlag.AT_OWN_HOLDINGS
 	var ws: Dictionary = {1: _world_state}
 
@@ -499,8 +499,8 @@ func test_military_orders_blocked_without_commanded_unit() -> void:
 	var ctx: NPCDataStructures.ContextSnapshot = NPCDecisionEngine.build_context(_char, _world_state)
 	var need := NPCDataStructures.ImmediateNeed.new()
 	need.need_type = "DEFEND_PROVINCE"
-	var options: Array[NPCDataStructures.ScoredAction] = NPCDecisionEngine.generate_options(ctx, need)
-	var action_ids: Array[String] = []
+	var options: Array = NPCDecisionEngine.generate_options(ctx, need)
+	var action_ids: Array = []
 	for opt: NPCDataStructures.ScoredAction in options:
 		action_ids.append(opt.action_id)
 	assert_false("ORDER_BATTLE" in action_ids)
@@ -516,8 +516,8 @@ func test_military_orders_allowed_with_commanded_unit() -> void:
 	var ctx: NPCDataStructures.ContextSnapshot = NPCDecisionEngine.build_context(_char, _world_state)
 	var need := NPCDataStructures.ImmediateNeed.new()
 	need.need_type = "DEFEND_PROVINCE"
-	var options: Array[NPCDataStructures.ScoredAction] = NPCDecisionEngine.generate_options(ctx, need)
-	var action_ids: Array[String] = []
+	var options: Array = NPCDecisionEngine.generate_options(ctx, need)
+	var action_ids: Array = []
 	for opt: NPCDataStructures.ScoredAction in options:
 		action_ids.append(opt.action_id)
 	assert_true("ORDER_BATTLE" in action_ids)
@@ -660,10 +660,10 @@ func test_crime_detection_creates_topic_and_magistrate_picks_up() -> void:
 	var characters_by_id: Dictionary = {10: criminal, 20: magistrate}
 
 	# Step 1: Crime detection creates a CrimeRecord + crime topic
-	var crime_records: Array[CrimeRecord] = []
-	var active_topics: Array[TopicData] = []
-	var next_case_id: Array[int] = [1]
-	var next_topic_id: Array[int] = [100]
+	var crime_records: Array = []
+	var active_topics: Array = []
+	var next_case_id: Array = [1]
+	var next_topic_id: Array = [100]
 
 	var results: Array = [{
 		"character_id": 10,
@@ -672,7 +672,7 @@ func test_crime_detection_creates_topic_and_magistrate_picks_up() -> void:
 		"effects": {"detection_risk": true},
 	}]
 
-	var crime_results: Array[Dictionary] = DayOrchestrator._process_crime_detection(
+	var crime_results: Array = DayOrchestrator._process_crime_detection(
 		results, characters_by_id, crime_records, 5, next_case_id,
 		active_topics, next_topic_id
 	)
@@ -698,8 +698,8 @@ func test_crime_detection_creates_topic_and_magistrate_picks_up() -> void:
 		},
 	}
 
-	var characters: Array[L5RCharacterData] = [criminal, magistrate]
-	var uphold_results: Array[Dictionary] = DayOrchestrator._process_uphold_law_scan(
+	var characters: Array = [criminal, magistrate]
+	var uphold_results: Array = DayOrchestrator._process_uphold_law_scan(
 		characters, objectives, crime_records, active_topics
 	)
 
@@ -726,10 +726,10 @@ func test_magistrate_ignores_crime_in_other_province() -> void:
 	magistrate.physical_location = "castle_crane"
 	magistrate.bushido_virtue = Enums.BushidoVirtue.GI
 
-	var crime_records: Array[CrimeRecord] = []
-	var active_topics: Array[TopicData] = []
-	var next_case_id: Array[int] = [1]
-	var next_topic_id: Array[int] = [100]
+	var crime_records: Array = []
+	var active_topics: Array = []
+	var next_case_id: Array = [1]
+	var next_topic_id: Array = [100]
 
 	var results: Array = [{
 		"character_id": 10,
@@ -751,7 +751,7 @@ func test_magistrate_ignores_crime_in_other_province() -> void:
 		},
 	}
 
-	var uphold_results: Array[Dictionary] = DayOrchestrator._process_uphold_law_scan(
+	var uphold_results: Array = DayOrchestrator._process_uphold_law_scan(
 		[magistrate], objectives, crime_records, active_topics
 	)
 
@@ -778,7 +778,7 @@ func test_witness_probe_adds_evidence_via_info_events() -> void:
 	cr.crime_type = Enums.CrimeType.SKIMMING
 	cr.witnesses = [50]
 	cr.evidence_total = 5
-	var crime_records: Array[CrimeRecord] = [cr]
+	var crime_records: Array = [cr]
 
 	var objectives: Dictionary = {
 		20: {
@@ -809,7 +809,7 @@ func test_suspect_probe_adds_evidence_via_info_events() -> void:
 	cr.case_id = 1
 	cr.known_suspects = [99]
 	cr.evidence_total = 20
-	var crime_records: Array[CrimeRecord] = [cr]
+	var crime_records: Array = [cr]
 
 	var objectives: Dictionary = {
 		20: {
@@ -840,7 +840,7 @@ func test_probe_non_witness_no_evidence() -> void:
 	cr.witnesses = [50]
 	cr.known_suspects = [99]
 	cr.evidence_total = 10
-	var crime_records: Array[CrimeRecord] = [cr]
+	var crime_records: Array = [cr]
 
 	var objectives: Dictionary = {
 		20: {
@@ -893,7 +893,7 @@ func test_conviction_generates_topic_at_correct_tier() -> void:
 	assert_eq(topic_tier, 3, "Skimming should produce Tier 3 topic")
 
 	# Generate the conviction topic
-	var next_topic_id: Array[int] = [200]
+	var next_topic_id: Array = [200]
 	var topic: TopicData = InvestigationSystem.generate_conviction_topic(
 		cr, convicted, topic_tier, next_topic_id, 30
 	)
@@ -928,7 +928,7 @@ func test_maho_conviction_generates_tier_1_supernatural_topic() -> void:
 	)
 	assert_eq(consequences["topic_tier"], 1, "Maho should produce Tier 1 topic")
 
-	var next_topic_id: Array[int] = [300]
+	var next_topic_id: Array = [300]
 	var topic: TopicData = InvestigationSystem.generate_conviction_topic(
 		cr, convicted, consequences["topic_tier"], next_topic_id, 50
 	)
@@ -961,7 +961,7 @@ func test_seppuku_refused_generates_secondary_topic() -> void:
 	var refusal: Dictionary = CrimeSystem.apply_seppuku_refused(convicted, cr)
 	assert_eq(refusal["topic_tier"], 4, "Seppuku refusal should produce Tier 4 topic")
 
-	var next_topic_id: Array[int] = [400]
+	var next_topic_id: Array = [400]
 	var refusal_topic: TopicData = InvestigationSystem.generate_seppuku_refusal_topic(
 		convicted, next_topic_id, 60
 	)
@@ -1007,10 +1007,10 @@ func test_full_crime_loop_detection_through_evidence() -> void:
 	var characters_by_id: Dictionary = {10: criminal, 20: magistrate, 50: witness}
 
 	# Phase 1: Crime detection
-	var crime_records: Array[CrimeRecord] = []
-	var active_topics: Array[TopicData] = []
-	var next_case_id: Array[int] = [1]
-	var next_topic_id: Array[int] = [100]
+	var crime_records: Array = []
+	var active_topics: Array = []
+	var next_case_id: Array = [1]
+	var next_topic_id: Array = [100]
 
 	# Place witness at crime location too
 	witness.physical_location = "castle_scorpion"
@@ -1097,7 +1097,7 @@ func test_objective_transfer_includes_province_crisis() -> void:
 
 	var objective: Dictionary = {"target_province_id": 10, "need_type": "DEFEND_PROVINCE"}
 
-	var transferred: Array[KnowledgeEntry] = InformationSystem.transfer_objective_knowledge(
+	var transferred: Array = InformationSystem.transfer_objective_knowledge(
 		lord, vassal, objective, 2, [ps]
 	)
 
@@ -1177,10 +1177,10 @@ func test_end_to_end_crime_loop_through_conviction() -> void:
 	var characters_by_id: Dictionary = {10: criminal, 20: magistrate, 50: witness}
 
 	# Phase 1: Crime detection
-	var crime_records: Array[CrimeRecord] = []
-	var active_topics: Array[TopicData] = []
-	var next_case_id: Array[int] = [1]
-	var next_topic_id: Array[int] = [500]
+	var crime_records: Array = []
+	var active_topics: Array = []
+	var next_case_id: Array = [1]
+	var next_topic_id: Array = [500]
 
 	var covert_results: Array = [{
 		"character_id": 10,
@@ -1189,7 +1189,7 @@ func test_end_to_end_crime_loop_through_conviction() -> void:
 		"effects": {"detection_risk": true},
 	}]
 
-	var crime_results: Array[Dictionary] = DayOrchestrator._process_crime_detection(
+	var crime_results: Array = DayOrchestrator._process_crime_detection(
 		covert_results, characters_by_id, crime_records, 5, next_case_id,
 		active_topics, next_topic_id
 	)
@@ -1218,8 +1218,8 @@ func test_end_to_end_crime_loop_through_conviction() -> void:
 			"standing": {"need_type": "UPHOLD_LAW"},
 		},
 	}
-	var characters: Array[L5RCharacterData] = [criminal, magistrate, witness]
-	var uphold_results: Array[Dictionary] = DayOrchestrator._process_uphold_law_scan(
+	var characters: Array = [criminal, magistrate, witness]
+	var uphold_results: Array = DayOrchestrator._process_uphold_law_scan(
 		characters, objectives, crime_records, active_topics
 	)
 
@@ -1444,10 +1444,10 @@ func test_advance_day_processes_lord_death() -> void:
 	province.stability = 70.0
 	province.terrain_type = Enums.TerrainType.PLAINS
 
-	var characters: Array[L5RCharacterData] = [vassal]
+	var characters: Array = [vassal]
 	var characters_by_id: Dictionary = {1: vassal}
 	var provinces: Dictionary = {10: province}
-	var action_log: Array[Dictionary] = []
+	var action_log: Array = []
 	var season_meta: Dictionary = {
 		"_peace_seasons": {10: 0},
 		"_deficit_seasons": {10: 0},
@@ -1464,7 +1464,7 @@ func test_advance_day_processes_lord_death() -> void:
 		},
 	}
 
-	var death_events: Array[Dictionary] = [
+	var death_events: Array = [
 		{"character_id": 10, "is_lord": true},
 	]
 	var successor_map: Dictionary = {10: 20}
@@ -1495,7 +1495,7 @@ func test_advance_day_no_death_events_no_orphans() -> void:
 	province.stability = 70.0
 	province.terrain_type = Enums.TerrainType.PLAINS
 
-	var characters: Array[L5RCharacterData] = [_char]
+	var characters: Array = [_char]
 	var characters_by_id: Dictionary = {1: _char}
 	var ws: Dictionary = _make_day_world_state()
 
@@ -1538,7 +1538,7 @@ func test_stale_intel_bonus_wired_into_score_all() -> void:
 	charm_option.action_id = "CHARM"
 	charm_option.target_npc_id = 2
 
-	var options: Array[NPCDataStructures.ScoredAction] = [probe_option, charm_option]
+	var options: Array = [probe_option, charm_option]
 
 	NPCDecisionEngine.score_all(options, need, ctx, _scoring_tables,
 		[], [], _char)
@@ -1593,11 +1593,11 @@ func test_s57_19_seal_wall_breach_costs_2_ap() -> void:
 
 
 func test_s57_19_actions_in_context_list() -> void:
-	var own_holdings: Array[String] = NPCDecisionEngine._get_actions_for_context(
+	var own_holdings: Array = NPCDecisionEngine._get_actions_for_context(
 		Enums.ContextFlag.AT_OWN_HOLDINGS)
 	assert_true("PURIFY_TAINTED_GROUND" in own_holdings)
 	# FORTIFY_WALL_SECTION and SEAL_WALL_BREACH moved to AT_WALL_TOWER (s57.19 context)
-	var wall_tower: Array[String] = NPCDecisionEngine._get_actions_for_context(
+	var wall_tower: Array = NPCDecisionEngine._get_actions_for_context(
 		Enums.ContextFlag.AT_WALL_TOWER)
 	assert_true("FORTIFY_WALL_SECTION" in wall_tower)
 	assert_true("SEAL_WALL_BREACH" in wall_tower)
@@ -1622,7 +1622,7 @@ func test_s57_17_get_vassals_includes_operational_subordinates() -> void:
 	op_sub.character_id = 11
 	op_sub.lord_id = 5
 	op_sub.operational_superior_id = 1
-	var chars: Array[L5RCharacterData] = [lord, vassal, op_sub]
+	var chars: Array = [lord, vassal, op_sub]
 	var result := DayOrchestrator._get_vassals(lord, chars)
 	assert_eq(result.size(), 2, "Should include both feudal vassal and operational subordinate")
 
@@ -1634,14 +1634,14 @@ func test_s11_11_insurgency_wired_into_orchestrator() -> void:
 	# Advance to just before a season boundary
 	for i: int in range(89):
 		time.advance_tick()
-	var chars: Array[L5RCharacterData] = [_char]
+	var chars: Array = [_char]
 	var chars_by_id: Dictionary = {1: _char}
 	var province := ProvinceData.new()
 	province.province_id = 1
 	province.stability = 40.0
 	var provinces: Dictionary = {1: province}
-	var insurgencies: Array[InsurgencyData] = []
-	var next_ins_id: Array[int] = [1]
+	var insurgencies: Array = []
+	var next_ins_id: Array = [1]
 	var dice := DiceEngine.new(42)
 
 	var result: Dictionary = DayOrchestrator.advance_day(
@@ -1750,11 +1750,11 @@ func test_advance_day_sets_at_wall_tower_for_character_at_tower() -> void:
 	var time := TimeSystem.new(1120, 0)
 	var dice := DiceEngine.new()
 	dice.set_seed(1)
-	var characters: Array[L5RCharacterData] = [character]
+	var characters: Array = [character]
 	var characters_by_id: Dictionary = {99: character}
 	var provinces: Dictionary = {5: province}
 	var world_states: Dictionary = {99: char_ws}
-	var settlements: Array[SettlementData] = [tower]
+	var settlements: Array = [tower]
 	var season_meta: Dictionary = {}
 
 	DayOrchestrator.advance_day(
@@ -2110,13 +2110,13 @@ func test_horde_no_roll_on_same_season() -> void:
 	var dice := DiceEngine.new()
 	dice.set_seed(1)
 	var season_meta: Dictionary = {}
-	var hordes: Array[HordeData] = []
+	var hordes: Array = []
 	var counters: Dictionary = {}
-	var last_pid: Array[int] = [-1]
+	var last_pid: Array = [-1]
 	var tower := _make_horde_tower(1)
 	var province := _make_horde_province(1)
-	var active_topics: Array[TopicData] = []
-	var next_topic_id: Array[int] = [1000]
+	var active_topics: Array = []
+	var next_topic_id: Array = [1000]
 
 	# current_season == prev_season → no roll fires.
 	var result := DayOrchestrator._process_horde_rolls(
@@ -2134,13 +2134,13 @@ func test_horde_season_count_increments_on_season_change() -> void:
 	var dice := DiceEngine.new()
 	dice.set_seed(1)
 	var season_meta: Dictionary = {}
-	var hordes: Array[HordeData] = []
+	var hordes: Array = []
 	var counters: Dictionary = {}
-	var last_pid: Array[int] = [-1]
+	var last_pid: Array = [-1]
 	var tower := _make_horde_tower(1)
 	var province := _make_horde_province(1)
-	var active_topics: Array[TopicData] = []
-	var next_topic_id: Array[int] = [1000]
+	var active_topics: Array = []
+	var next_topic_id: Array = [1000]
 
 	DayOrchestrator._process_horde_rolls(
 		TimeSystem.Season.SUMMER, TimeSystem.Season.SPRING,
@@ -2157,13 +2157,13 @@ func test_horde_no_fire_on_first_season_change() -> void:
 	var dice := DiceEngine.new()
 	dice.set_seed(1)
 	var season_meta: Dictionary = {}
-	var hordes: Array[HordeData] = []
+	var hordes: Array = []
 	var counters: Dictionary = {}
-	var last_pid: Array[int] = [-1]
+	var last_pid: Array = [-1]
 	var tower := _make_horde_tower(1)
 	var province := _make_horde_province(1)
-	var active_topics: Array[TopicData] = []
-	var next_topic_id: Array[int] = [1000]
+	var active_topics: Array = []
+	var next_topic_id: Array = [1000]
 
 	var result := DayOrchestrator._process_horde_rolls(
 		TimeSystem.Season.SUMMER, TimeSystem.Season.SPRING,
@@ -2179,13 +2179,13 @@ func test_horde_roll_fires_at_season_count_2() -> void:
 	var dice := DiceEngine.new()
 	dice.set_seed(1)
 	var season_meta: Dictionary = {"horde_season_count": 1}  # Already at 1, next will be 2.
-	var hordes: Array[HordeData] = []
+	var hordes: Array = []
 	var counters: Dictionary = {}
-	var last_pid: Array[int] = [-1]
+	var last_pid: Array = [-1]
 	var tower := _make_horde_tower(1)
 	var province := _make_horde_province(1)
-	var active_topics: Array[TopicData] = []
-	var next_topic_id: Array[int] = [1000]
+	var active_topics: Array = []
+	var next_topic_id: Array = [1000]
 
 	var result := DayOrchestrator._process_horde_rolls(
 		TimeSystem.Season.AUTUMN, TimeSystem.Season.SUMMER,
@@ -2201,11 +2201,11 @@ func test_horde_no_towers_returns_no_formation() -> void:
 	var dice := DiceEngine.new()
 	dice.set_seed(1)
 	var season_meta: Dictionary = {"horde_season_count": 1}
-	var hordes: Array[HordeData] = []
+	var hordes: Array = []
 	var counters: Dictionary = {}
-	var last_pid: Array[int] = [-1]
-	var active_topics: Array[TopicData] = []
-	var next_topic_id: Array[int] = [1000]
+	var last_pid: Array = [-1]
+	var active_topics: Array = []
+	var next_topic_id: Array = [1000]
 
 	var result := DayOrchestrator._process_horde_rolls(
 		TimeSystem.Season.AUTUMN, TimeSystem.Season.SUMMER,
@@ -2229,13 +2229,13 @@ func test_horde_formed_appended_to_active_hordes() -> void:
 		var dice := DiceEngine.new()
 		dice.set_seed(seed_val)
 		var season_meta: Dictionary = {"horde_season_count": 1}
-		var hordes: Array[HordeData] = []
+		var hordes: Array = []
 		var counters: Dictionary = {}
-		var last_pid: Array[int] = [-1]
+		var last_pid: Array = [-1]
 		var tower := _make_horde_tower(1)
 		var province := _make_horde_province(1)
-		var active_topics: Array[TopicData] = []
-		var next_topic_id: Array[int] = [1000]
+		var active_topics: Array = []
+		var next_topic_id: Array = [1000]
 
 		var result := DayOrchestrator._process_horde_rolls(
 			TimeSystem.Season.AUTUMN, TimeSystem.Season.SUMMER,
@@ -2263,13 +2263,13 @@ func test_horde_failed_roll_increments_strength_counter() -> void:
 		var dice := DiceEngine.new()
 		dice.set_seed(seed_val)
 		var season_meta: Dictionary = {"horde_season_count": 1}
-		var hordes: Array[HordeData] = []
+		var hordes: Array = []
 		var counters: Dictionary = {}
-		var last_pid: Array[int] = [-1]
+		var last_pid: Array = [-1]
 		var tower := _make_horde_tower(1)
 		var province := _make_horde_province(1)
-		var active_topics: Array[TopicData] = []
-		var next_topic_id: Array[int] = [1000]
+		var active_topics: Array = []
+		var next_topic_id: Array = [1000]
 
 		var result := DayOrchestrator._process_horde_rolls(
 			TimeSystem.Season.AUTUMN, TimeSystem.Season.SUMMER,
@@ -2294,13 +2294,13 @@ func test_horde_formed_generates_topic() -> void:
 		var dice := DiceEngine.new()
 		dice.set_seed(seed_val)
 		var season_meta: Dictionary = {"horde_season_count": 1}
-		var hordes: Array[HordeData] = []
+		var hordes: Array = []
 		var counters: Dictionary = {}
-		var last_pid: Array[int] = [-1]
+		var last_pid: Array = [-1]
 		var tower := _make_horde_tower(1)
 		var province := _make_horde_province(1)
-		var active_topics: Array[TopicData] = []
-		var next_topic_id: Array[int] = [1000]
+		var active_topics: Array = []
+		var next_topic_id: Array = [1000]
 
 		var result := DayOrchestrator._process_horde_rolls(
 			TimeSystem.Season.AUTUMN, TimeSystem.Season.SUMMER,
@@ -2330,13 +2330,13 @@ func test_horde_oni_generated_when_has_oni() -> void:
 		var dice := DiceEngine.new()
 		dice.set_seed(seed_val)
 		var season_meta: Dictionary = {"horde_season_count": 1}
-		var hordes: Array[HordeData] = []
+		var hordes: Array = []
 		var counters: Dictionary = {}
-		var last_pid: Array[int] = [-1]
+		var last_pid: Array = [-1]
 		var tower := _make_horde_tower(1)
 		var province := _make_horde_province(1)
-		var active_topics: Array[TopicData] = []
-		var next_topic_id: Array[int] = [1000]
+		var active_topics: Array = []
+		var next_topic_id: Array = [1000]
 
 		DayOrchestrator._process_horde_rolls(
 			TimeSystem.Season.AUTUMN, TimeSystem.Season.SUMMER,
@@ -2363,13 +2363,13 @@ func test_last_targeted_province_updated_after_formation() -> void:
 		var dice := DiceEngine.new()
 		dice.set_seed(seed_val)
 		var season_meta: Dictionary = {"horde_season_count": 1}
-		var hordes: Array[HordeData] = []
+		var hordes: Array = []
 		var counters: Dictionary = {}
-		var last_pid: Array[int] = [-1]
+		var last_pid: Array = [-1]
 		var tower := _make_horde_tower(1)
 		var province := _make_horde_province(1)
-		var active_topics: Array[TopicData] = []
-		var next_topic_id: Array[int] = [1000]
+		var active_topics: Array = []
+		var next_topic_id: Array = [1000]
 
 		var result := DayOrchestrator._process_horde_rolls(
 			TimeSystem.Season.AUTUMN, TimeSystem.Season.SUMMER,
@@ -2392,13 +2392,13 @@ func test_horde_strength_used_from_counter_and_reset_on_formation() -> void:
 		var dice := DiceEngine.new()
 		dice.set_seed(seed_val)
 		var season_meta: Dictionary = {"horde_season_count": 1}
-		var hordes: Array[HordeData] = []
+		var hordes: Array = []
 		var counters: Dictionary = {"global": 3}  # Pre-accumulated strength.
-		var last_pid: Array[int] = [-1]
+		var last_pid: Array = [-1]
 		var tower := _make_horde_tower(1)
 		var province := _make_horde_province(1)
-		var active_topics: Array[TopicData] = []
-		var next_topic_id: Array[int] = [1000]
+		var active_topics: Array = []
+		var next_topic_id: Array = [1000]
 
 		var result := DayOrchestrator._process_horde_rolls(
 			TimeSystem.Season.AUTUMN, TimeSystem.Season.SUMMER,
@@ -2540,8 +2540,8 @@ func test_horde_assault_applies_si_hit_contested() -> void:
 
 	var horde := _make_resolved_horde(10, Enums.HordeBattleOutcome.CONTESTED_BATTLE)
 
-	var active_topics: Array[TopicData] = []
-	var next_topic_id: Array[int] = [1000]
+	var active_topics: Array = []
+	var next_topic_id: Array = [1000]
 
 	var results := DayOrchestrator._process_horde_assaults(
 		[horde],
@@ -2562,8 +2562,8 @@ func test_horde_assault_applies_si_hit_pushed_back() -> void:
 
 	var horde := _make_resolved_horde(10, Enums.HordeBattleOutcome.ATTACKER_PUSHED_BACK)
 
-	var active_topics: Array[TopicData] = []
-	var next_topic_id: Array[int] = [1000]
+	var active_topics: Array = []
+	var next_topic_id: Array = [1000]
 
 	DayOrchestrator._process_horde_assaults(
 		[horde],
@@ -2580,8 +2580,8 @@ func test_horde_assault_si_hit_decisive_defender_victory() -> void:
 
 	var horde := _make_resolved_horde(10, Enums.HordeBattleOutcome.DECISIVE_DEFENDER_VICTORY)
 
-	var active_topics: Array[TopicData] = []
-	var next_topic_id: Array[int] = [1000]
+	var active_topics: Array = []
+	var next_topic_id: Array = [1000]
 
 	DayOrchestrator._process_horde_assaults(
 		[horde],
@@ -2598,8 +2598,8 @@ func test_horde_assault_breach_generates_incursion_topic() -> void:
 
 	var horde := _make_resolved_horde(10, Enums.HordeBattleOutcome.DEFENDER_OVERRUN)
 
-	var active_topics: Array[TopicData] = []
-	var next_topic_id: Array[int] = [1000]
+	var active_topics: Array = []
+	var next_topic_id: Array = [1000]
 
 	var results := DayOrchestrator._process_horde_assaults(
 		[horde],
@@ -2626,8 +2626,8 @@ func test_horde_assault_no_breach_when_si_still_above_zero() -> void:
 
 	var horde := _make_resolved_horde(10, Enums.HordeBattleOutcome.DEFENDER_OVERRUN)
 
-	var active_topics: Array[TopicData] = []
-	var next_topic_id: Array[int] = [1000]
+	var active_topics: Array = []
+	var next_topic_id: Array = [1000]
 
 	var results := DayOrchestrator._process_horde_assaults(
 		[horde],
@@ -2649,8 +2649,8 @@ func test_horde_assault_skips_unresolved_hordes() -> void:
 	horde.assault_resolved = false  # Not resolved.
 	horde.battle_outcome = -1
 
-	var active_topics: Array[TopicData] = []
-	var next_topic_id: Array[int] = [1000]
+	var active_topics: Array = []
+	var next_topic_id: Array = [1000]
 
 	var results := DayOrchestrator._process_horde_assaults(
 		[horde],
@@ -2670,8 +2670,8 @@ func test_horde_assault_skips_already_processed() -> void:
 	var horde := _make_resolved_horde(10, Enums.HordeBattleOutcome.CONTESTED_BATTLE)
 	horde.assault_si_hit = 2  # Already processed.
 
-	var active_topics: Array[TopicData] = []
-	var next_topic_id: Array[int] = [1000]
+	var active_topics: Array = []
+	var next_topic_id: Array = [1000]
 
 	var results := DayOrchestrator._process_horde_assaults(
 		[horde],
@@ -2690,8 +2690,8 @@ func test_horde_assault_si_clamped_at_zero() -> void:
 
 	var horde := _make_resolved_horde(10, Enums.HordeBattleOutcome.DEFENDER_OVERRUN)
 
-	var active_topics: Array[TopicData] = []
-	var next_topic_id: Array[int] = [1000]
+	var active_topics: Array = []
+	var next_topic_id: Array = [1000]
 
 	DayOrchestrator._process_horde_assaults(
 		[horde],
@@ -2708,8 +2708,8 @@ func test_horde_assault_stores_si_hit_on_horde() -> void:
 
 	var horde := _make_resolved_horde(10, Enums.HordeBattleOutcome.ATTACKER_PUSHED_BACK)
 
-	var active_topics: Array[TopicData] = []
-	var next_topic_id: Array[int] = [1000]
+	var active_topics: Array = []
+	var next_topic_id: Array = [1000]
 
 	DayOrchestrator._process_horde_assaults(
 		[horde],

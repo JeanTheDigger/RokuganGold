@@ -73,13 +73,13 @@ func test_process_military_daily_empty() -> void:
 
 func test_army_movement_ticks() -> void:
 	var army: Dictionary = _make_army_state(true, 3)
-	var results: Array[Dictionary] = DayOrchestrator._process_army_movements([army])
+	var results: Array = DayOrchestrator._process_army_movements([army])
 	assert_eq(results.size(), 1)
 
 
 func test_army_movement_skips_stationary() -> void:
 	var army: Dictionary = _make_army_state(false, 0)
-	var results: Array[Dictionary] = DayOrchestrator._process_army_movements([army])
+	var results: Array = DayOrchestrator._process_army_movements([army])
 	assert_eq(results.size(), 0)
 
 
@@ -115,7 +115,7 @@ func test_order_tick_multiple_commanders() -> void:
 # -- Seasonal Military Processing Tests -----------------------------------------
 
 func test_army_upkeep_calculates_costs() -> void:
-	var companies: Array[Dictionary] = [
+	var companies: Array = [
 		_make_company_dict(1, Enums.CompanyUnitType.PEASANT_LEVY),
 		_make_company_dict(2, Enums.CompanyUnitType.ASHIGARU_SPEARMEN),
 	]
@@ -131,7 +131,7 @@ func test_army_upkeep_empty_companies() -> void:
 
 
 func test_army_upkeep_ronin_koku_cost() -> void:
-	var companies: Array[Dictionary] = [
+	var companies: Array = [
 		_make_company_dict(1, Enums.CompanyUnitType.RONIN),
 	]
 	var r: Dictionary = DayOrchestrator._process_army_upkeep(companies, [], {})
@@ -139,7 +139,7 @@ func test_army_upkeep_ronin_koku_cost() -> void:
 
 
 func test_army_upkeep_garrison_koku_cost() -> void:
-	var companies: Array[Dictionary] = [
+	var companies: Array = [
 		_make_company_dict(1, Enums.CompanyUnitType.GARRISON),
 	]
 	var r: Dictionary = DayOrchestrator._process_army_upkeep(companies, [], {})
@@ -149,21 +149,21 @@ func test_army_upkeep_garrison_koku_cost() -> void:
 # -- Military Promotion Wiring Tests --------------------------------------------
 
 func test_promotion_finds_no_vacancies_when_all_filled() -> void:
-	var companies: Array[Dictionary] = [
+	var companies: Array = [
 		{"company_id": 1, "commander_id": 10, "unit_type": Enums.CompanyUnitType.BUSHI_RETAINER},
 	]
-	var results: Array[Dictionary] = DayOrchestrator._process_military_promotions(
+	var results: Array = DayOrchestrator._process_military_promotions(
 		companies, {},
 	)
 	assert_eq(results.size(), 0)
 
 
 func test_promotion_detects_vacancy() -> void:
-	var companies: Array[Dictionary] = [
+	var companies: Array = [
 		{"company_id": 1, "commander_id": -1, "unit_type": Enums.CompanyUnitType.BUSHI_RETAINER},
 	]
 	# No eligible candidates available
-	var results: Array[Dictionary] = DayOrchestrator._process_military_promotions(
+	var results: Array = DayOrchestrator._process_military_promotions(
 		companies, {},
 	)
 	assert_eq(results.size(), 0)
@@ -206,8 +206,8 @@ func _make_settlement(
 
 func test_levy_pu_effect_consumes_pu() -> void:
 	var s: SettlementData = _make_settlement(10, 1, 10, 3)
-	var companies: Array[Dictionary] = []
-	var next_id: Array[int] = [100]
+	var companies: Array = []
+	var next_id: Array = [100]
 	var applied: Dictionary = {
 		"character_id": 5,
 		"target_province_id": 1,
@@ -234,8 +234,8 @@ func test_levy_pu_effect_no_province() -> void:
 
 func test_levy_creates_company_dict() -> void:
 	var s: SettlementData = _make_settlement(10, 1, 10, 3)
-	var companies: Array[Dictionary] = []
-	var next_id: Array[int] = [100]
+	var companies: Array = []
+	var next_id: Array = [100]
 	var applied: Dictionary = {
 		"character_id": 5,
 		"target_province_id": 1,
@@ -256,8 +256,8 @@ func test_levy_creates_company_dict() -> void:
 
 func test_levy_increments_company_id() -> void:
 	var s: SettlementData = _make_settlement(10, 1, 10, 5)
-	var companies: Array[Dictionary] = []
-	var next_id: Array[int] = [50]
+	var companies: Array = []
+	var next_id: Array = [50]
 	var applied: Dictionary = {
 		"character_id": 5,
 		"target_province_id": 1,
@@ -269,8 +269,8 @@ func test_levy_increments_company_id() -> void:
 
 func test_levy_respects_unit_type_metadata() -> void:
 	var s: SettlementData = _make_settlement(10, 1, 10, 3)
-	var companies: Array[Dictionary] = []
-	var next_id: Array[int] = [1]
+	var companies: Array = []
+	var next_id: Array = [1]
 	var applied: Dictionary = {
 		"character_id": 5,
 		"target_province_id": 1,
@@ -288,8 +288,8 @@ func test_levy_respects_unit_type_metadata() -> void:
 
 func test_levy_defaults_to_ashigaru_spearmen() -> void:
 	var s: SettlementData = _make_settlement(10, 1, 10, 3)
-	var companies: Array[Dictionary] = []
-	var next_id: Array[int] = [1]
+	var companies: Array = []
+	var next_id: Array = [1]
 	var applied: Dictionary = {
 		"character_id": 5,
 		"target_province_id": 1,
@@ -301,8 +301,8 @@ func test_levy_defaults_to_ashigaru_spearmen() -> void:
 
 func test_levy_company_has_correct_health() -> void:
 	var s: SettlementData = _make_settlement(10, 1, 10, 3)
-	var companies: Array[Dictionary] = []
-	var next_id: Array[int] = [1]
+	var companies: Array = []
+	var next_id: Array = [1]
 	var applied: Dictionary = {
 		"character_id": 5,
 		"target_province_id": 1,
@@ -316,8 +316,8 @@ func test_levy_company_has_correct_health() -> void:
 
 func test_levy_returns_arms_cost() -> void:
 	var s: SettlementData = _make_settlement(10, 1, 10, 3)
-	var companies: Array[Dictionary] = []
-	var next_id: Array[int] = [1]
+	var companies: Array = []
+	var next_id: Array = [1]
 	var applied: Dictionary = {
 		"character_id": 5,
 		"target_province_id": 1,
@@ -334,14 +334,14 @@ func test_levy_returns_arms_cost() -> void:
 
 func test_levy_scanned_in_process_military_effects() -> void:
 	var s: SettlementData = _make_settlement(10, 1, 10, 3)
-	var companies: Array[Dictionary] = []
-	var next_id: Array[int] = [200]
+	var companies: Array = []
+	var next_id: Array = [200]
 	var applied_list: Array = [{
 		"character_id": 5,
 		"target_province_id": 1,
 		"effects": {"requires_levy_pu": true},
 	}]
-	var results: Array[Dictionary] = DayOrchestrator._process_military_effects(
+	var results: Array = DayOrchestrator._process_military_effects(
 		applied_list, [s], {}, companies, {}, next_id,
 	)
 	assert_eq(results.size(), 1)
@@ -389,7 +389,7 @@ func test_process_military_effects_scans_results() -> void:
 			"effects": {"requires_levy_pu": true},
 		},
 	]
-	var results: Array[Dictionary] = DayOrchestrator._process_military_effects(
+	var results: Array = DayOrchestrator._process_military_effects(
 		applied_list, [s], {}, [],
 	)
 	assert_eq(results.size(), 1)
@@ -410,7 +410,7 @@ func test_build_settlements_by_province() -> void:
 # -- Iron Upkeep Dict Tests -----------------------------------------------------
 
 func test_iron_upkeep_dict_supplied() -> void:
-	var companies: Array[Dictionary] = [
+	var companies: Array = [
 		_make_company_dict(1, Enums.CompanyUnitType.ASHIGARU_SPEARMEN),
 	]
 	var iron_state: Dictionary = {}
@@ -422,7 +422,7 @@ func test_iron_upkeep_dict_supplied() -> void:
 
 
 func test_iron_upkeep_dict_not_supplied() -> void:
-	var companies: Array[Dictionary] = [
+	var companies: Array = [
 		_make_company_dict(1, Enums.CompanyUnitType.ASHIGARU_SPEARMEN),
 	]
 	var iron_state: Dictionary = {}
@@ -435,7 +435,7 @@ func test_iron_upkeep_dict_not_supplied() -> void:
 
 
 func test_iron_upkeep_dict_increments_state() -> void:
-	var companies: Array[Dictionary] = [
+	var companies: Array = [
 		_make_company_dict(1, Enums.CompanyUnitType.ASHIGARU_SPEARMEN),
 	]
 	var iron_state: Dictionary = {1: 1}
@@ -444,7 +444,7 @@ func test_iron_upkeep_dict_increments_state() -> void:
 
 
 func test_iron_upkeep_dict_resets_on_supply() -> void:
-	var companies: Array[Dictionary] = [
+	var companies: Array = [
 		_make_company_dict(1, Enums.CompanyUnitType.ASHIGARU_SPEARMEN),
 	]
 	var iron_state: Dictionary = {1: 3}
@@ -457,7 +457,7 @@ func test_iron_upkeep_dict_resets_on_supply() -> void:
 # Confirmed the day_orchestrator reads/writes iron_stockpile, not arms_stockpile.
 
 func test_army_upkeep_iron_deducts_from_iron_stockpile() -> void:
-	var companies: Array[Dictionary] = [
+	var companies: Array = [
 		_make_company_dict(1, Enums.CompanyUnitType.ASHIGARU_SPEARMEN),
 	]
 	var s: SettlementData = _make_settlement(10, 1, 10, 3)
@@ -472,7 +472,7 @@ func test_army_upkeep_iron_deducts_from_iron_stockpile() -> void:
 
 
 func test_army_upkeep_insufficient_iron_does_not_touch_arms() -> void:
-	var companies: Array[Dictionary] = [
+	var companies: Array = [
 		_make_company_dict(1, Enums.CompanyUnitType.ASHIGARU_SPEARMEN),
 	]
 	var s: SettlementData = _make_settlement(10, 1, 10, 3)
@@ -548,10 +548,10 @@ func test_resolve_and_reconcile_battle() -> void:
 	var defender: MilitaryUnitData.CompanyData = ArmyCombatSystem.create_company(
 		2, Enums.CompanyUnitType.PEASANT_LEVY, -1, 2,
 	)
-	var atk_states: Array[Dictionary] = [
+	var atk_states: Array = [
 		ArmyCombatSystem.make_battle_company(attacker, 1, 0, "attacker"),
 	]
-	var def_states: Array[Dictionary] = [
+	var def_states: Array = [
 		ArmyCombatSystem.make_battle_company(defender, 1, 0, "defender"),
 	]
 	var s1: SettlementData = _make_settlement(10, 1, 10, 3)
@@ -575,11 +575,11 @@ func test_is_cavalry_public() -> void:
 # -- Rout Dissolution Wiring Tests -----------------------------------------------
 
 func test_build_dissolution_companies_distributes_pursuit() -> void:
-	var loser_states: Array[Dictionary] = [
+	var loser_states: Array = [
 		{"current_health": 100, "is_destroyed": false, "company": _make_company_data(1, 1)},
 		{"current_health": 50, "is_destroyed": false, "company": _make_company_data(2, 2)},
 	]
-	var result: Array[Dictionary] = DayOrchestrator._build_dissolution_companies(
+	var result: Array = DayOrchestrator._build_dissolution_companies(
 		loser_states, 30,
 	)
 	assert_eq(result.size(), 2)
@@ -588,11 +588,11 @@ func test_build_dissolution_companies_distributes_pursuit() -> void:
 
 
 func test_build_dissolution_companies_skips_destroyed() -> void:
-	var loser_states: Array[Dictionary] = [
+	var loser_states: Array = [
 		{"current_health": 0, "is_destroyed": true, "company": _make_company_data(1, 1)},
 		{"current_health": 80, "is_destroyed": false, "company": _make_company_data(2, 2)},
 	]
-	var result: Array[Dictionary] = DayOrchestrator._build_dissolution_companies(
+	var result: Array = DayOrchestrator._build_dissolution_companies(
 		loser_states, 20,
 	)
 	assert_eq(result.size(), 1)
@@ -600,10 +600,10 @@ func test_build_dissolution_companies_skips_destroyed() -> void:
 
 
 func test_build_dissolution_companies_preserves_source_province() -> void:
-	var loser_states: Array[Dictionary] = [
+	var loser_states: Array = [
 		{"current_health": 50, "is_destroyed": false, "company": _make_company_data(1, 5)},
 	]
-	var result: Array[Dictionary] = DayOrchestrator._build_dissolution_companies(
+	var result: Array = DayOrchestrator._build_dissolution_companies(
 		loser_states, 0,
 	)
 	assert_eq(result[0]["source_province_id"], 5)
@@ -619,10 +619,10 @@ func test_resolve_battle_includes_dissolution_when_dissolved() -> void:
 	)
 	weak.health = 10
 	weak.morale = 1
-	var atk_states: Array[Dictionary] = [
+	var atk_states: Array = [
 		ArmyCombatSystem.make_battle_company(strong, 1, 0, "attacker"),
 	]
-	var def_states: Array[Dictionary] = [
+	var def_states: Array = [
 		ArmyCombatSystem.make_battle_company(weak, 1, 0, "defender"),
 	]
 	var s1: SettlementData = _make_settlement(10, 1, 10, 3)
@@ -639,7 +639,7 @@ func test_resolve_battle_includes_dissolution_when_dissolved() -> void:
 
 # -- Rice Upkeep Deduction Tests -------------------------------------------------
 
-func _make_clan(name: String, province_ids: Array[int]) -> ClanData:
+func _make_clan(name: String, province_ids: Array) -> ClanData:
 	var c: ClanData = ClanData.new()
 	c.clan_name = name
 	c.province_ids = province_ids
@@ -649,7 +649,7 @@ func _make_clan(name: String, province_ids: Array[int]) -> ClanData:
 
 
 func test_rice_upkeep_deducts_from_settlements() -> void:
-	var companies: Array[Dictionary] = [
+	var companies: Array = [
 		_make_company_dict(1, Enums.CompanyUnitType.PEASANT_LEVY),
 	]
 	var s: SettlementData = _make_settlement(10, 1, 10, 3)
@@ -663,7 +663,7 @@ func test_rice_upkeep_deducts_from_settlements() -> void:
 
 
 func test_rice_upkeep_caps_at_available_stockpile() -> void:
-	var companies: Array[Dictionary] = [
+	var companies: Array = [
 		_make_company_dict(1, Enums.CompanyUnitType.PEASANT_LEVY),
 		_make_company_dict(2, Enums.CompanyUnitType.BUSHI_RETAINER),
 		_make_company_dict(3, Enums.CompanyUnitType.BUSHI_RETAINER),
@@ -679,7 +679,7 @@ func test_rice_upkeep_caps_at_available_stockpile() -> void:
 
 
 func test_rice_upkeep_no_clan_no_deduction() -> void:
-	var companies: Array[Dictionary] = [
+	var companies: Array = [
 		_make_company_dict(1, Enums.CompanyUnitType.PEASANT_LEVY),
 	]
 	var s: SettlementData = _make_settlement(10, 1, 10, 3)
@@ -693,7 +693,7 @@ func test_rice_upkeep_no_clan_no_deduction() -> void:
 # -- Koku Upkeep Deduction Tests -------------------------------------------------
 
 func test_koku_upkeep_deducts_for_garrison() -> void:
-	var companies: Array[Dictionary] = [
+	var companies: Array = [
 		_make_company_dict(1, Enums.CompanyUnitType.GARRISON),
 	]
 	var s: SettlementData = _make_settlement(10, 1, 10, 3)
@@ -708,7 +708,7 @@ func test_koku_upkeep_deducts_for_garrison() -> void:
 
 
 func test_koku_upkeep_deducts_for_ronin() -> void:
-	var companies: Array[Dictionary] = [
+	var companies: Array = [
 		_make_company_dict(1, Enums.CompanyUnitType.RONIN),
 	]
 	var s: SettlementData = _make_settlement(10, 1, 10, 3)
@@ -723,7 +723,7 @@ func test_koku_upkeep_deducts_for_ronin() -> void:
 
 
 func test_koku_upkeep_zero_for_non_koku_units() -> void:
-	var companies: Array[Dictionary] = [
+	var companies: Array = [
 		_make_company_dict(1, Enums.CompanyUnitType.PEASANT_LEVY),
 		_make_company_dict(2, Enums.CompanyUnitType.BUSHI_RETAINER),
 	]
@@ -738,7 +738,7 @@ func test_koku_upkeep_zero_for_non_koku_units() -> void:
 
 
 func test_koku_upkeep_caps_at_available() -> void:
-	var companies: Array[Dictionary] = [
+	var companies: Array = [
 		_make_company_dict(1, Enums.CompanyUnitType.RONIN),
 		_make_company_dict(2, Enums.CompanyUnitType.RONIN),
 	]
@@ -753,7 +753,7 @@ func test_koku_upkeep_caps_at_available() -> void:
 
 
 func test_koku_upkeep_no_clan_no_deduction() -> void:
-	var companies: Array[Dictionary] = [
+	var companies: Array = [
 		_make_company_dict(1, Enums.CompanyUnitType.GARRISON),
 	]
 	var s: SettlementData = _make_settlement(10, 1, 10, 3)
@@ -765,7 +765,7 @@ func test_koku_upkeep_no_clan_no_deduction() -> void:
 
 
 func test_koku_upkeep_multiple_settlements_spread() -> void:
-	var companies: Array[Dictionary] = [
+	var companies: Array = [
 		_make_company_dict(1, Enums.CompanyUnitType.RONIN),
 	]
 	var s1: SettlementData = _make_settlement(10, 1, 10, 3)
@@ -794,7 +794,7 @@ func _make_tether(army_id: int, company_ids: Array) -> Dictionary:
 
 
 func test_field_deprivation_no_tethers() -> void:
-	var results: Array[Dictionary] = DayOrchestrator._process_field_deprivation([], [])
+	var results: Array = DayOrchestrator._process_field_deprivation([], [])
 	assert_eq(results.size(), 0)
 
 
@@ -804,7 +804,7 @@ func test_field_deprivation_skips_zero_ticks() -> void:
 		"rice_deprivation_tick": 0,
 		"arms_deprivation_tick": 0,
 	}
-	var results: Array[Dictionary] = DayOrchestrator._process_field_deprivation(
+	var results: Array = DayOrchestrator._process_field_deprivation(
 		[tether], [tether_result],
 	)
 	assert_eq(results.size(), 0)
@@ -816,7 +816,7 @@ func test_field_deprivation_applies_rice_effects() -> void:
 		"rice_deprivation_tick": 3,
 		"arms_deprivation_tick": 0,
 	}
-	var results: Array[Dictionary] = DayOrchestrator._process_field_deprivation(
+	var results: Array = DayOrchestrator._process_field_deprivation(
 		[tether], [tether_result],
 	)
 	assert_eq(results.size(), 1)
@@ -835,7 +835,7 @@ func test_field_deprivation_applies_arms_effects() -> void:
 		"rice_deprivation_tick": 0,
 		"arms_deprivation_tick": 2,
 	}
-	var results: Array[Dictionary] = DayOrchestrator._process_field_deprivation(
+	var results: Array = DayOrchestrator._process_field_deprivation(
 		[tether], [tether_result],
 	)
 	assert_eq(results.size(), 1)
@@ -850,7 +850,7 @@ func test_field_deprivation_both_rice_and_arms() -> void:
 		"rice_deprivation_tick": 2,
 		"arms_deprivation_tick": 3,
 	}
-	var results: Array[Dictionary] = DayOrchestrator._process_field_deprivation(
+	var results: Array = DayOrchestrator._process_field_deprivation(
 		[tether], [tether_result],
 	)
 	assert_eq(results.size(), 1)
@@ -865,7 +865,7 @@ func test_field_deprivation_tick_1_warning_only() -> void:
 		"rice_deprivation_tick": 1,
 		"arms_deprivation_tick": 1,
 	}
-	var results: Array[Dictionary] = DayOrchestrator._process_field_deprivation(
+	var results: Array = DayOrchestrator._process_field_deprivation(
 		[tether], [tether_result],
 	)
 	assert_eq(results.size(), 1)
@@ -881,7 +881,7 @@ func test_field_deprivation_multiple_tethers() -> void:
 	var t2: Dictionary = _make_tether(2, [20, 30])
 	var tr1: Dictionary = {"rice_deprivation_tick": 2, "arms_deprivation_tick": 0}
 	var tr2: Dictionary = {"rice_deprivation_tick": 0, "arms_deprivation_tick": 4}
-	var results: Array[Dictionary] = DayOrchestrator._process_field_deprivation(
+	var results: Array = DayOrchestrator._process_field_deprivation(
 		[t1, t2], [tr1, tr2],
 	)
 	assert_eq(results.size(), 2)
@@ -893,7 +893,7 @@ func test_field_deprivation_multiple_tethers() -> void:
 # -- Tether Companies Fix Tests ---------------------------------------------------
 
 func test_build_companies_by_id() -> void:
-	var companies: Array[Dictionary] = [
+	var companies: Array = [
 		_make_company_dict(10, Enums.CompanyUnitType.BUSHI_RETAINER),
 		_make_company_dict(20, Enums.CompanyUnitType.ASHIGARU_SPEARMEN),
 	]
@@ -905,7 +905,7 @@ func test_build_companies_by_id() -> void:
 
 
 func test_build_companies_by_id_skips_invalid() -> void:
-	var companies: Array[Dictionary] = [
+	var companies: Array = [
 		{"unit_type": 0},
 	]
 	var result: Dictionary = DayOrchestrator._build_companies_by_id(companies)
@@ -975,7 +975,7 @@ func _make_army_company(
 func test_recovery_stationary_damaged_army() -> void:
 	var army: Dictionary = _make_army(1, false)
 	var company: Dictionary = _make_army_company(10, 1, Enums.CompanyUnitType.BUSHI_RETAINER, 100, 10)
-	var results: Array[Dictionary] = DayOrchestrator._process_army_recovery(
+	var results: Array = DayOrchestrator._process_army_recovery(
 		[army], {}, [company],
 	)
 	assert_eq(results.size(), 1)
@@ -989,7 +989,7 @@ func test_recovery_stationary_damaged_army() -> void:
 func test_recovery_skips_moving_army() -> void:
 	var army: Dictionary = _make_army(1, true)
 	var company: Dictionary = _make_army_company(10, 1, Enums.CompanyUnitType.BUSHI_RETAINER, 100, 10)
-	var results: Array[Dictionary] = DayOrchestrator._process_army_recovery(
+	var results: Array = DayOrchestrator._process_army_recovery(
 		[army], {}, [company],
 	)
 	assert_eq(results.size(), 0)
@@ -1000,7 +1000,7 @@ func test_recovery_caps_at_max_health() -> void:
 	var max_health: int = base["health"]
 	var army: Dictionary = _make_army(1, false)
 	var company: Dictionary = _make_army_company(10, 1, Enums.CompanyUnitType.BUSHI_RETAINER, max_health, base["morale"])
-	var results: Array[Dictionary] = DayOrchestrator._process_army_recovery(
+	var results: Array = DayOrchestrator._process_army_recovery(
 		[army], {}, [company],
 	)
 	assert_eq(results.size(), 0)
@@ -1008,7 +1008,7 @@ func test_recovery_caps_at_max_health() -> void:
 
 func test_recovery_no_companies_no_result() -> void:
 	var army: Dictionary = _make_army(1, false)
-	var results: Array[Dictionary] = DayOrchestrator._process_army_recovery(
+	var results: Array = DayOrchestrator._process_army_recovery(
 		[army], {}, [],
 	)
 	assert_eq(results.size(), 0)
@@ -1023,7 +1023,7 @@ func test_recovery_broken_tether_no_supply() -> void:
 			"arms_deprivation_tick": 0,
 		},
 	}
-	var results: Array[Dictionary] = DayOrchestrator._process_army_recovery(
+	var results: Array = DayOrchestrator._process_army_recovery(
 		[army], tether_by_army, [company],
 	)
 	assert_eq(results.size(), 0)
@@ -1038,7 +1038,7 @@ func test_recovery_arms_tier_when_supplied_and_deprived() -> void:
 			"arms_deprivation_tick": 3,
 		},
 	}
-	var results: Array[Dictionary] = DayOrchestrator._process_army_recovery(
+	var results: Array = DayOrchestrator._process_army_recovery(
 		[army], tether_by_army, [company],
 	)
 	assert_eq(results.size(), 1)
@@ -1049,10 +1049,10 @@ func test_recovery_arms_tier_when_supplied_and_deprived() -> void:
 # -- Helper Extraction Tests ------------------------------------------------------
 
 func test_build_tether_result_by_army() -> void:
-	var tethers: Array[Dictionary] = [
+	var tethers: Array = [
 		{"army_id": 1}, {"army_id": 2},
 	]
-	var results: Array[Dictionary] = [
+	var results: Array = [
 		{"overall_state": 0, "rice_deprivation_tick": 3},
 		{"overall_state": 2, "rice_deprivation_tick": 0},
 	]
@@ -1065,8 +1065,8 @@ func test_build_tether_result_by_army() -> void:
 
 
 func test_build_tether_result_by_army_skips_invalid() -> void:
-	var tethers: Array[Dictionary] = [{"army_id": -1}]
-	var results: Array[Dictionary] = [{"overall_state": 0}]
+	var tethers: Array = [{"army_id": -1}]
+	var results: Array = [{"overall_state": 0}]
 	var mapping: Dictionary = DayOrchestrator._build_tether_result_by_army(
 		tethers, results,
 	)
@@ -1082,10 +1082,10 @@ func test_generate_battle_topic_from_movement() -> void:
 		],
 		"siege_results": [],
 	}
-	var active_topics: Array[TopicData] = []
-	var next_id: Array[int] = [100]
+	var active_topics: Array = []
+	var next_id: Array = [100]
 
-	var topics: Array[TopicData] = DayOrchestrator._generate_military_event_topics(
+	var topics: Array = DayOrchestrator._generate_military_event_topics(
 		military_daily, [], active_topics, next_id, 10,
 	)
 	assert_eq(topics.size(), 1)
@@ -1103,10 +1103,10 @@ func test_generate_battle_topic_skips_no_trigger() -> void:
 		],
 		"siege_results": [],
 	}
-	var active_topics: Array[TopicData] = []
-	var next_id: Array[int] = [100]
+	var active_topics: Array = []
+	var next_id: Array = [100]
 
-	var topics: Array[TopicData] = DayOrchestrator._generate_military_event_topics(
+	var topics: Array = DayOrchestrator._generate_military_event_topics(
 		military_daily, [], active_topics, next_id, 10,
 	)
 	assert_eq(topics.size(), 0)
@@ -1117,7 +1117,7 @@ func test_generate_heavy_casualties_topic() -> void:
 		"movement_results": [],
 		"siege_results": [],
 	}
-	var effects: Array[Dictionary] = [
+	var effects: Array = [
 		{
 			"type": "battle_pu_reconciliation",
 			"casualties": {
@@ -1126,10 +1126,10 @@ func test_generate_heavy_casualties_topic() -> void:
 			},
 		},
 	]
-	var active_topics: Array[TopicData] = []
-	var next_id: Array[int] = [200]
+	var active_topics: Array = []
+	var next_id: Array = [200]
 
-	var topics: Array[TopicData] = DayOrchestrator._generate_military_event_topics(
+	var topics: Array = DayOrchestrator._generate_military_event_topics(
 		military_daily, effects, active_topics, next_id, 15,
 	)
 	assert_eq(topics.size(), 1)
@@ -1143,13 +1143,13 @@ func test_generate_casualties_topic_skipped_for_small_loss() -> void:
 		"movement_results": [],
 		"siege_results": [],
 	}
-	var effects: Array[Dictionary] = [
+	var effects: Array = [
 		{
 			"type": "battle_pu_reconciliation",
 			"casualties": {"total_pu_lost": 0.2},
 		},
 	]
-	var topics: Array[TopicData] = DayOrchestrator._generate_military_event_topics(
+	var topics: Array = DayOrchestrator._generate_military_event_topics(
 		military_daily, effects, [], [300], 15,
 	)
 	assert_eq(topics.size(), 0)
@@ -1167,10 +1167,10 @@ func test_generate_siege_event_topic() -> void:
 			},
 		],
 	}
-	var active_topics: Array[TopicData] = []
-	var next_id: Array[int] = [400]
+	var active_topics: Array = []
+	var next_id: Array = [400]
 
-	var topics: Array[TopicData] = DayOrchestrator._generate_military_event_topics(
+	var topics: Array = DayOrchestrator._generate_military_event_topics(
 		military_daily, [], active_topics, next_id, 20,
 	)
 	assert_eq(topics.size(), 1)
@@ -1190,7 +1190,7 @@ func test_generate_siege_event_skips_empty_type() -> void:
 			},
 		],
 	}
-	var topics: Array[TopicData] = DayOrchestrator._generate_military_event_topics(
+	var topics: Array = DayOrchestrator._generate_military_event_topics(
 		military_daily, [], [], [500], 20,
 	)
 	assert_eq(topics.size(), 0)
@@ -1208,16 +1208,16 @@ func test_generate_multiple_topics_in_one_day() -> void:
 			},
 		],
 	}
-	var effects: Array[Dictionary] = [
+	var effects: Array = [
 		{
 			"type": "battle_pu_reconciliation",
 			"casualties": {"total_pu_lost": 1.0, "pu_lost_by_province": {3: 1.0}},
 		},
 	]
-	var active_topics: Array[TopicData] = []
-	var next_id: Array[int] = [600]
+	var active_topics: Array = []
+	var next_id: Array = [600]
 
-	var topics: Array[TopicData] = DayOrchestrator._generate_military_event_topics(
+	var topics: Array = DayOrchestrator._generate_military_event_topics(
 		military_daily, effects, active_topics, next_id, 25,
 	)
 	assert_eq(topics.size(), 3)
@@ -1232,7 +1232,7 @@ func test_battle_topic_has_province_affected() -> void:
 		],
 		"siege_results": [],
 	}
-	var topics: Array[TopicData] = DayOrchestrator._generate_military_event_topics(
+	var topics: Array = DayOrchestrator._generate_military_event_topics(
 		military_daily, [], [], [700], 30,
 	)
 	assert_eq(topics[0].provinces_affected.size(), 1)
@@ -1264,7 +1264,7 @@ func _make_character(
 
 func test_war_score_shift_on_battle_trigger() -> void:
 	var war: WarData = _make_war()
-	var companies: Array[Dictionary] = [
+	var companies: Array = [
 		{"army_id": 1, "clan_name": "Crab"},
 	]
 	var military_daily: Dictionary = {
@@ -1272,8 +1272,8 @@ func test_war_score_shift_on_battle_trigger() -> void:
 			{"army_id": 1, "battle_triggered": true, "arrived_province_id": 5},
 		],
 	}
-	var wars: Array[WarData] = [war]
-	var results: Array[Dictionary] = DayOrchestrator._process_war_score_shifts(
+	var wars: Array = [war]
+	var results: Array = DayOrchestrator._process_war_score_shifts(
 		military_daily, [], wars, companies,
 	)
 	assert_eq(results.size(), 1)
@@ -1289,7 +1289,7 @@ func test_war_score_no_shift_without_battle() -> void:
 			{"army_id": 1, "battle_triggered": false},
 		],
 	}
-	var results: Array[Dictionary] = DayOrchestrator._process_war_score_shifts(
+	var results: Array = DayOrchestrator._process_war_score_shifts(
 		military_daily, [], [war], [],
 	)
 	assert_eq(results.size(), 0)
@@ -1302,8 +1302,8 @@ func test_war_score_no_shift_without_wars() -> void:
 			{"army_id": 1, "battle_triggered": true},
 		],
 	}
-	var wars: Array[WarData] = []
-	var results: Array[Dictionary] = DayOrchestrator._process_war_score_shifts(
+	var wars: Array = []
+	var results: Array = DayOrchestrator._process_war_score_shifts(
 		military_daily, [], wars, [],
 	)
 	assert_eq(results.size(), 0)
@@ -1311,7 +1311,7 @@ func test_war_score_no_shift_without_wars() -> void:
 
 func test_war_seasonal_attrition() -> void:
 	var war: WarData = _make_war()
-	var chars: Array[L5RCharacterData] = []
+	var chars: Array = []
 	DayOrchestrator._process_war_seasonal([war], chars)
 	assert_eq(war.seasons_active, 1)
 	assert_eq(war.war_score_a, 51)
@@ -1324,7 +1324,7 @@ func test_war_seasonal_disposition_penalty() -> void:
 	var crane_char: L5RCharacterData = _make_character(2, "Crane")
 	crab_char.disposition_values[2] = 0
 	crane_char.disposition_values[1] = 0
-	var chars: Array[L5RCharacterData] = [crab_char, crane_char]
+	var chars: Array = [crab_char, crane_char]
 	DayOrchestrator._process_war_seasonal([war], chars)
 	var penalty: int = WarSystem.get_active_war_disposition_penalty(
 		war.seasons_active,
@@ -1340,7 +1340,7 @@ func test_war_seasonal_skips_same_side() -> void:
 	var crab2: L5RCharacterData = _make_character(2, "Crab")
 	crab1.disposition_values[2] = 10
 	crab2.disposition_values[1] = 10
-	var chars: Array[L5RCharacterData] = [crab1, crab2]
+	var chars: Array = [crab1, crab2]
 	DayOrchestrator._process_war_seasonal([war], chars)
 	assert_eq(crab1.disposition_values[2], 10)
 	assert_eq(crab2.disposition_values[1], 10)
@@ -1353,14 +1353,14 @@ func test_war_seasonal_skips_uninvolved_clans() -> void:
 	var crab: L5RCharacterData = _make_character(2, "Crab")
 	lion.disposition_values[2] = 10
 	crab.disposition_values[1] = 10
-	var chars: Array[L5RCharacterData] = [lion, crab]
+	var chars: Array = [lion, crab]
 	DayOrchestrator._process_war_seasonal([war], chars)
 	assert_eq(lion.disposition_values[2], 10)
 	assert_eq(crab.disposition_values[1], 10)
 
 
 func test_get_army_clan() -> void:
-	var companies: Array[Dictionary] = [
+	var companies: Array = [
 		{"army_id": 1, "clan_name": "Crab"},
 		{"army_id": 2, "clan_name": "Crane"},
 	]
@@ -1429,7 +1429,7 @@ func test_rank_to_death_event_none_returns_empty() -> void:
 
 func test_battle_size_affects_war_score() -> void:
 	var war: WarData = _make_war()
-	var companies: Array[Dictionary] = [
+	var companies: Array = [
 		{"army_id": 1, "clan_name": "Crab"},
 	]
 	var military_daily: Dictionary = {
@@ -1437,7 +1437,7 @@ func test_battle_size_affects_war_score() -> void:
 			{"army_id": 1, "battle_triggered": true, "company_count": 5},
 		],
 	}
-	var results: Array[Dictionary] = DayOrchestrator._process_war_score_shifts(
+	var results: Array = DayOrchestrator._process_war_score_shifts(
 		military_daily, [], [war], companies,
 	)
 	assert_eq(results.size(), 1)
@@ -1447,7 +1447,7 @@ func test_battle_size_affects_war_score() -> void:
 
 func test_decisive_battle_from_company_count() -> void:
 	var war: WarData = _make_war()
-	var companies: Array[Dictionary] = [
+	var companies: Array = [
 		{"army_id": 1, "clan_name": "Crab"},
 	]
 	var military_daily: Dictionary = {
@@ -1455,7 +1455,7 @@ func test_decisive_battle_from_company_count() -> void:
 			{"army_id": 1, "battle_triggered": true, "company_count": 10},
 		],
 	}
-	var results: Array[Dictionary] = DayOrchestrator._process_war_score_shifts(
+	var results: Array = DayOrchestrator._process_war_score_shifts(
 		military_daily, [], [war], companies,
 	)
 	assert_eq(results[0]["event"], "decisive_battle")
@@ -1480,7 +1480,7 @@ func test_commander_death_shifts_enemy_score() -> void:
 			},
 		],
 	}
-	var results: Array[Dictionary] = DayOrchestrator._process_war_score_shifts(
+	var results: Array = DayOrchestrator._process_war_score_shifts(
 		military_daily, [], [war], [],
 	)
 	assert_eq(results.size(), 1)
@@ -1504,7 +1504,7 @@ func test_commander_death_rikugunshokan() -> void:
 			},
 		],
 	}
-	var results: Array[Dictionary] = DayOrchestrator._process_war_score_shifts(
+	var results: Array = DayOrchestrator._process_war_score_shifts(
 		military_daily, [], [war], [],
 	)
 	assert_eq(results[0]["event"], "rikugunshokan_killed")
@@ -1526,7 +1526,7 @@ func test_commander_death_low_rank_ignored() -> void:
 			},
 		],
 	}
-	var results: Array[Dictionary] = DayOrchestrator._process_war_score_shifts(
+	var results: Array = DayOrchestrator._process_war_score_shifts(
 		military_daily, [], [war], [],
 	)
 	assert_eq(results.size(), 0)
@@ -1544,7 +1544,7 @@ func test_siege_attacker_victory_war_score() -> void:
 			},
 		],
 	}
-	var results: Array[Dictionary] = DayOrchestrator._process_war_score_shifts(
+	var results: Array = DayOrchestrator._process_war_score_shifts(
 		military_daily, [], [war], [],
 	)
 	assert_eq(results.size(), 1)
@@ -1565,7 +1565,7 @@ func test_siege_defender_victory_war_score() -> void:
 			},
 		],
 	}
-	var results: Array[Dictionary] = DayOrchestrator._process_war_score_shifts(
+	var results: Array = DayOrchestrator._process_war_score_shifts(
 		military_daily, [], [war], [],
 	)
 	assert_eq(results.size(), 1)
@@ -1585,7 +1585,7 @@ func test_siege_unresolved_no_score() -> void:
 			},
 		],
 	}
-	var results: Array[Dictionary] = DayOrchestrator._process_war_score_shifts(
+	var results: Array = DayOrchestrator._process_war_score_shifts(
 		military_daily, [], [war], [],
 	)
 	assert_eq(results.size(), 0)
@@ -1594,7 +1594,7 @@ func test_siege_unresolved_no_score() -> void:
 func test_tether_broken_cuts_supply_for_enemy() -> void:
 	var war: WarData = _make_war()
 	var score_b_before: int = war.war_score_b
-	var companies: Array[Dictionary] = [
+	var companies: Array = [
 		{"army_id": 1, "clan_name": "Crab"},
 	]
 	var military_daily: Dictionary = {
@@ -1602,7 +1602,7 @@ func test_tether_broken_cuts_supply_for_enemy() -> void:
 			{"army_id": 1, "overall_state": 2},
 		],
 	}
-	var results: Array[Dictionary] = DayOrchestrator._process_war_score_shifts(
+	var results: Array = DayOrchestrator._process_war_score_shifts(
 		military_daily, [], [war], companies,
 	)
 	assert_eq(results.size(), 1)
@@ -1614,7 +1614,7 @@ func test_tether_broken_cuts_supply_for_enemy() -> void:
 
 func test_tether_threatened_no_score() -> void:
 	var war: WarData = _make_war()
-	var companies: Array[Dictionary] = [
+	var companies: Array = [
 		{"army_id": 1, "clan_name": "Crab"},
 	]
 	var military_daily: Dictionary = {
@@ -1622,19 +1622,19 @@ func test_tether_threatened_no_score() -> void:
 			{"army_id": 1, "overall_state": 1},
 		],
 	}
-	var results: Array[Dictionary] = DayOrchestrator._process_war_score_shifts(
+	var results: Array = DayOrchestrator._process_war_score_shifts(
 		military_daily, [], [war], companies,
 	)
 	assert_eq(results.size(), 0)
 
 
 func test_tether_tick_injects_army_id_into_results() -> void:
-	var typed_path: Array[int] = [10]
+	var typed_path: Array = [10]
 	var tether: Dictionary = SupplyTetherSystem.create_tether(7, 100, typed_path)
 	tether["garrisons_on_path"] = {}
 	tether["enemy_armies_on_path"] = []
 	var dice: DiceEngine = DiceEngine.new(42)
-	var results: Array[Dictionary] = DayOrchestrator._process_tether_ticks(
+	var results: Array = DayOrchestrator._process_tether_ticks(
 		[tether], dice, [],
 	)
 	assert_eq(results.size(), 1)
@@ -1642,11 +1642,11 @@ func test_tether_tick_injects_army_id_into_results() -> void:
 
 
 func test_tether_tick_skips_detached_tethers() -> void:
-	var typed_path: Array[int] = [10]
+	var typed_path: Array = [10]
 	var tether: Dictionary = SupplyTetherSystem.create_tether(7, 100, typed_path)
 	tether["detached"] = true
 	var dice: DiceEngine = DiceEngine.new(42)
-	var results: Array[Dictionary] = DayOrchestrator._process_tether_ticks(
+	var results: Array = DayOrchestrator._process_tether_ticks(
 		[tether], dice, [],
 	)
 	assert_eq(results.size(), 0)
@@ -1655,14 +1655,14 @@ func test_tether_tick_skips_detached_tethers() -> void:
 func test_heavy_casualties_upgrade_to_decisive() -> void:
 	var war: WarData = _make_war()
 	var score_a_before: int = war.war_score_a
-	var military_effects: Array[Dictionary] = [
+	var military_effects: Array = [
 		{
 			"type": "battle_pu_reconciliation",
 			"casualties": {"total_pu_lost": 6.0},
 			"victor_clan": "Crab",
 		},
 	]
-	var results: Array[Dictionary] = DayOrchestrator._process_war_score_shifts(
+	var results: Array = DayOrchestrator._process_war_score_shifts(
 		{}, military_effects, [war], [],
 	)
 	assert_eq(results.size(), 1)
@@ -1674,14 +1674,14 @@ func test_heavy_casualties_upgrade_to_decisive() -> void:
 
 func test_moderate_casualties_upgrade_to_major() -> void:
 	var war: WarData = _make_war()
-	var military_effects: Array[Dictionary] = [
+	var military_effects: Array = [
 		{
 			"type": "battle_pu_reconciliation",
 			"casualties": {"total_pu_lost": 3.5},
 			"victor_clan": "Crane",
 		},
 	]
-	var results: Array[Dictionary] = DayOrchestrator._process_war_score_shifts(
+	var results: Array = DayOrchestrator._process_war_score_shifts(
 		{}, military_effects, [war], [],
 	)
 	assert_eq(results.size(), 1)
@@ -1692,14 +1692,14 @@ func test_moderate_casualties_upgrade_to_major() -> void:
 
 func test_small_casualties_no_upgrade() -> void:
 	var war: WarData = _make_war()
-	var military_effects: Array[Dictionary] = [
+	var military_effects: Array = [
 		{
 			"type": "battle_pu_reconciliation",
 			"casualties": {"total_pu_lost": 2.0},
 			"victor_clan": "Crab",
 		},
 	]
-	var results: Array[Dictionary] = DayOrchestrator._process_war_score_shifts(
+	var results: Array = DayOrchestrator._process_war_score_shifts(
 		{}, military_effects, [war], [],
 	)
 	assert_eq(results.size(), 0)
@@ -1707,13 +1707,13 @@ func test_small_casualties_no_upgrade() -> void:
 
 func test_casualties_upgrade_skipped_without_victor_clan() -> void:
 	var war: WarData = _make_war()
-	var military_effects: Array[Dictionary] = [
+	var military_effects: Array = [
 		{
 			"type": "battle_pu_reconciliation",
 			"casualties": {"total_pu_lost": 6.0},
 		},
 	]
-	var results: Array[Dictionary] = DayOrchestrator._process_war_score_shifts(
+	var results: Array = DayOrchestrator._process_war_score_shifts(
 		{}, military_effects, [war], [],
 	)
 	assert_eq(results.size(), 0)
@@ -1721,7 +1721,7 @@ func test_casualties_upgrade_skipped_without_victor_clan() -> void:
 
 func test_multiple_events_combine() -> void:
 	var war: WarData = _make_war()
-	var companies: Array[Dictionary] = [
+	var companies: Array = [
 		{"army_id": 1, "clan_name": "Crab"},
 	]
 	var dead_cmd: L5RCharacterData = _make_character(10, "Crane")
@@ -1746,7 +1746,7 @@ func test_multiple_events_combine() -> void:
 			},
 		],
 	}
-	var results: Array[Dictionary] = DayOrchestrator._process_war_score_shifts(
+	var results: Array = DayOrchestrator._process_war_score_shifts(
 		military_daily, [], [war], companies,
 	)
 	assert_true(results.size() >= 3)
@@ -1755,7 +1755,7 @@ func test_multiple_events_combine() -> void:
 func test_inactive_war_skipped_for_battle_scores() -> void:
 	var war: WarData = _make_war()
 	war.is_active = false
-	var companies: Array[Dictionary] = [
+	var companies: Array = [
 		{"army_id": 1, "clan_name": "Crab"},
 	]
 	var military_daily: Dictionary = {
@@ -1763,7 +1763,7 @@ func test_inactive_war_skipped_for_battle_scores() -> void:
 			{"army_id": 1, "battle_triggered": true, "company_count": 5},
 		],
 	}
-	var results: Array[Dictionary] = DayOrchestrator._process_war_score_shifts(
+	var results: Array = DayOrchestrator._process_war_score_shifts(
 		military_daily, [], [war], companies,
 	)
 	assert_eq(results.size(), 0)
@@ -1772,8 +1772,8 @@ func test_inactive_war_skipped_for_battle_scores() -> void:
 # -- War Declaration Wiring Tests ------------------------------------------------
 
 func test_war_declaration_creates_war() -> void:
-	var active_wars: Array[WarData] = []
-	var next_wid: Array[int] = [5]
+	var active_wars: Array = []
+	var next_wid: Array = [5]
 	var applied: Array = [
 		{
 			"effects": {
@@ -1785,7 +1785,7 @@ func test_war_declaration_creates_war() -> void:
 			},
 		},
 	]
-	var results: Array[Dictionary] = DayOrchestrator._process_war_declarations(
+	var results: Array = DayOrchestrator._process_war_declarations(
 		applied, active_wars, 100, next_wid,
 	)
 	assert_eq(results.size(), 1)
@@ -1802,7 +1802,7 @@ func test_war_declaration_creates_war() -> void:
 
 func test_war_declaration_skips_duplicate() -> void:
 	var existing_war: WarData = _make_war(1, "Crab", "Crane")
-	var active_wars: Array[WarData] = [existing_war]
+	var active_wars: Array = [existing_war]
 	var applied: Array = [
 		{
 			"effects": {
@@ -1812,7 +1812,7 @@ func test_war_declaration_skips_duplicate() -> void:
 			},
 		},
 	]
-	var results: Array[Dictionary] = DayOrchestrator._process_war_declarations(
+	var results: Array = DayOrchestrator._process_war_declarations(
 		applied, active_wars, 100,
 	)
 	assert_eq(results.size(), 1)
@@ -1821,7 +1821,7 @@ func test_war_declaration_skips_duplicate() -> void:
 
 
 func test_war_declaration_skips_self_war() -> void:
-	var active_wars: Array[WarData] = []
+	var active_wars: Array = []
 	var applied: Array = [
 		{
 			"effects": {
@@ -1831,7 +1831,7 @@ func test_war_declaration_skips_self_war() -> void:
 			},
 		},
 	]
-	var results: Array[Dictionary] = DayOrchestrator._process_war_declarations(
+	var results: Array = DayOrchestrator._process_war_declarations(
 		applied, active_wars, 100,
 	)
 	assert_eq(results.size(), 0)
@@ -1839,7 +1839,7 @@ func test_war_declaration_skips_self_war() -> void:
 
 
 func test_war_declaration_skips_empty_clans() -> void:
-	var active_wars: Array[WarData] = []
+	var active_wars: Array = []
 	var applied: Array = [
 		{
 			"effects": {
@@ -1849,14 +1849,14 @@ func test_war_declaration_skips_empty_clans() -> void:
 			},
 		},
 	]
-	var results: Array[Dictionary] = DayOrchestrator._process_war_declarations(
+	var results: Array = DayOrchestrator._process_war_declarations(
 		applied, active_wars, 100,
 	)
 	assert_eq(results.size(), 0)
 
 
 func test_war_declaration_no_effect_flag() -> void:
-	var wars: Array[WarData] = []
+	var wars: Array = []
 	var applied: Array = [
 		{
 			"effects": {
@@ -1864,7 +1864,7 @@ func test_war_declaration_no_effect_flag() -> void:
 			},
 		},
 	]
-	var results: Array[Dictionary] = DayOrchestrator._process_war_declarations(
+	var results: Array = DayOrchestrator._process_war_declarations(
 		applied, wars, 100,
 	)
 	assert_eq(results.size(), 0)
@@ -1884,7 +1884,7 @@ func test_declare_war_metadata_populated_in_phase_3() -> void:
 	need.target_clan_id = "Crane"
 	need.target_intent = "EXPAND_TERRITORY"
 
-	var options: Array[NPCDataStructures.ScoredAction] = NPCDecisionEngine.generate_options(
+	var options: Array = NPCDecisionEngine.generate_options(
 		ctx, need,
 	)
 
@@ -1916,7 +1916,7 @@ func test_negotiate_surrender_metadata_populated_in_phase_3() -> void:
 	need.need_type = "SEEK_PEACE"
 	need.target_clan_id = "Crane"
 
-	var options: Array[NPCDataStructures.ScoredAction] = NPCDecisionEngine.generate_options(
+	var options: Array = NPCDecisionEngine.generate_options(
 		ctx, need,
 	)
 
@@ -1984,7 +1984,7 @@ func test_yu_lord_gets_total_war_tier_in_metadata() -> void:
 	need.target_clan_id = "Crane"
 	need.target_intent = "EXPAND_TERRITORY"
 
-	var options: Array[NPCDataStructures.ScoredAction] = NPCDecisionEngine.generate_options(
+	var options: Array = NPCDecisionEngine.generate_options(
 		ctx, need,
 	)
 	var declare_war_option: NPCDataStructures.ScoredAction = null
@@ -2020,7 +2020,7 @@ func test_jin_lord_gets_raid_tier_in_metadata() -> void:
 	need.target_clan_id = "Lion"
 	need.target_intent = "EXPAND_TERRITORY"
 
-	var options: Array[NPCDataStructures.ScoredAction] = NPCDecisionEngine.generate_options(
+	var options: Array = NPCDecisionEngine.generate_options(
 		ctx, need,
 	)
 	var declare_war_option: NPCDataStructures.ScoredAction = null
@@ -2052,7 +2052,7 @@ func test_ketsui_lord_gets_formal_war_for_dominance() -> void:
 	need.target_clan_id = "Crane"
 	need.target_intent = "MILITARY_DOMINANCE"
 
-	var options: Array[NPCDataStructures.ScoredAction] = NPCDecisionEngine.generate_options(
+	var options: Array = NPCDecisionEngine.generate_options(
 		ctx, need,
 	)
 	var declare_war_option: NPCDataStructures.ScoredAction = null
@@ -2175,7 +2175,7 @@ func test_declare_war_metadata_includes_weakness_conditions() -> void:
 	need.need_type = "INITIATE_WAR_CHECK"
 	need.target_province_id = 10
 	need.target_intent = "EXPAND_TERRITORY"
-	var options: Array[NPCDataStructures.ScoredAction] = NPCDecisionEngine.generate_options(
+	var options: Array = NPCDecisionEngine.generate_options(
 		ctx, need,
 	)
 	var dw: NPCDataStructures.ScoredAction = null
@@ -2203,7 +2203,7 @@ func test_declare_war_metadata_strong_province_not_weak() -> void:
 	need.need_type = "INITIATE_WAR_CHECK"
 	need.target_province_id = 10
 	need.target_intent = "EXPAND_TERRITORY"
-	var options: Array[NPCDataStructures.ScoredAction] = NPCDecisionEngine.generate_options(
+	var options: Array = NPCDecisionEngine.generate_options(
 		ctx, need,
 	)
 	var dw: NPCDataStructures.ScoredAction = null
@@ -2236,7 +2236,7 @@ func test_declare_war_metadata_attacker_pu_from_levy_and_garrison() -> void:
 	need.need_type = "INITIATE_WAR_CHECK"
 	need.target_province_id = 10
 	need.target_intent = "EXPAND_TERRITORY"
-	var options: Array[NPCDataStructures.ScoredAction] = NPCDecisionEngine.generate_options(
+	var options: Array = NPCDecisionEngine.generate_options(
 		ctx, need,
 	)
 	var dw: NPCDataStructures.ScoredAction = null
@@ -2261,7 +2261,7 @@ func test_declare_war_metadata_no_target_province_status_omits_weakness() -> voi
 	need.target_province_id = 99
 	need.target_clan_id = "Crane"
 	need.target_intent = "EXPAND_TERRITORY"
-	var options: Array[NPCDataStructures.ScoredAction] = NPCDecisionEngine.generate_options(
+	var options: Array = NPCDecisionEngine.generate_options(
 		ctx, need,
 	)
 	var dw: NPCDataStructures.ScoredAction = null
@@ -2292,7 +2292,7 @@ func test_declare_war_metadata_field_army_blocks_weakness() -> void:
 	need.need_type = "INITIATE_WAR_CHECK"
 	need.target_province_id = 10
 	need.target_intent = "EXPAND_TERRITORY"
-	var options: Array[NPCDataStructures.ScoredAction] = NPCDecisionEngine.generate_options(
+	var options: Array = NPCDecisionEngine.generate_options(
 		ctx, need,
 	)
 	var dw: NPCDataStructures.ScoredAction = null
@@ -2326,7 +2326,7 @@ func test_declare_war_metadata_multiple_own_provinces_sum_garrison() -> void:
 	need.need_type = "INITIATE_WAR_CHECK"
 	need.target_province_id = 10
 	need.target_intent = "EXPAND_TERRITORY"
-	var options: Array[NPCDataStructures.ScoredAction] = NPCDecisionEngine.generate_options(
+	var options: Array = NPCDecisionEngine.generate_options(
 		ctx, need,
 	)
 	var dw: NPCDataStructures.ScoredAction = null
@@ -2817,7 +2817,7 @@ func _make_supply_province(id: int, clan: String) -> ProvinceData:
 
 func test_supply_status_check_skips_when_no_wars() -> void:
 	var lord: L5RCharacterData = _make_supply_lord(1)
-	var results: Array[Dictionary] = DayOrchestrator._process_supply_status_checks(
+	var results: Array = DayOrchestrator._process_supply_status_checks(
 		[lord], [], [], {}, [], {}, [],
 	)
 	assert_eq(results.size(), 0)
@@ -2828,8 +2828,8 @@ func test_supply_status_check_skips_non_lord() -> void:
 	c.status = 2.0
 	c.lord_id = 5
 	var war: WarData = _make_war(1, "Crab", "Crane")
-	var companies: Array[Dictionary] = [{"company_id": 1, "clan_name": "Crab", "unit_type": Enums.CompanyUnitType.PEASANT_LEVY, "army_id": 1}]
-	var results: Array[Dictionary] = DayOrchestrator._process_supply_status_checks(
+	var companies: Array = [{"company_id": 1, "clan_name": "Crab", "unit_type": Enums.CompanyUnitType.PEASANT_LEVY, "army_id": 1}]
+	var results: Array = DayOrchestrator._process_supply_status_checks(
 		[c], [war], [], {}, companies, {}, [],
 	)
 	assert_eq(results.size(), 0)
@@ -2838,7 +2838,7 @@ func test_supply_status_check_skips_non_lord() -> void:
 func test_supply_status_check_skips_lord_without_companies() -> void:
 	var lord: L5RCharacterData = _make_supply_lord(1)
 	var war: WarData = _make_war(1, "Crab", "Crane")
-	var results: Array[Dictionary] = DayOrchestrator._process_supply_status_checks(
+	var results: Array = DayOrchestrator._process_supply_status_checks(
 		[lord], [war], [], {}, [], {}, [],
 	)
 	assert_eq(results.size(), 0)
@@ -2849,10 +2849,10 @@ func test_supply_status_check_continue_when_all_clear() -> void:
 	var war: WarData = _make_war(1, "Crab", "Crane")
 	var prov: ProvinceData = _make_supply_province(1, "Crab")
 	var s: SettlementData = _make_supply_settlement(1, 1, 50.0, 10, 5, 5)
-	var companies: Array[Dictionary] = [{"company_id": 1, "clan_name": "Crab", "unit_type": Enums.CompanyUnitType.PEASANT_LEVY, "army_id": 1}]
+	var companies: Array = [{"company_id": 1, "clan_name": "Crab", "unit_type": Enums.CompanyUnitType.PEASANT_LEVY, "army_id": 1}]
 	var clan: ClanData = _make_clan("Crab", [1])
 	var provinces: Dictionary = {1: prov}
-	var results: Array[Dictionary] = DayOrchestrator._process_supply_status_checks(
+	var results: Array = DayOrchestrator._process_supply_status_checks(
 		[lord], [war], [s], provinces, companies, {"Crab": clan}, [],
 	)
 	assert_eq(results.size(), 1)
@@ -2869,10 +2869,10 @@ func test_supply_status_check_shortage_seeks_peace() -> void:
 	war.war_score_a = 40
 	var prov: ProvinceData = _make_supply_province(1, "Crab")
 	var s: SettlementData = _make_supply_settlement(1, 1, 15.0, 10, 5, 5)
-	var companies: Array[Dictionary] = [{"company_id": 1, "clan_name": "Crab", "unit_type": Enums.CompanyUnitType.PEASANT_LEVY, "army_id": 1}]
+	var companies: Array = [{"company_id": 1, "clan_name": "Crab", "unit_type": Enums.CompanyUnitType.PEASANT_LEVY, "army_id": 1}]
 	var clan: ClanData = _make_clan("Crab", [1])
 	var provinces: Dictionary = {1: prov}
-	var results: Array[Dictionary] = DayOrchestrator._process_supply_status_checks(
+	var results: Array = DayOrchestrator._process_supply_status_checks(
 		[lord], [war], [s], provinces, companies, {"Crab": clan}, [],
 	)
 	assert_eq(results.size(), 1)
@@ -2885,10 +2885,10 @@ func test_supply_status_check_famine_immediate_peace() -> void:
 	var war: WarData = _make_war(1, "Crab", "Crane")
 	var prov: ProvinceData = _make_supply_province(1, "Crab")
 	var s: SettlementData = _make_supply_settlement(1, 1, 0.0, 10, 5, 5)
-	var companies: Array[Dictionary] = [{"company_id": 1, "clan_name": "Crab", "unit_type": Enums.CompanyUnitType.PEASANT_LEVY, "army_id": 1}]
+	var companies: Array = [{"company_id": 1, "clan_name": "Crab", "unit_type": Enums.CompanyUnitType.PEASANT_LEVY, "army_id": 1}]
 	var clan: ClanData = _make_clan("Crab", [1])
 	var provinces: Dictionary = {1: prov}
-	var results: Array[Dictionary] = DayOrchestrator._process_supply_status_checks(
+	var results: Array = DayOrchestrator._process_supply_status_checks(
 		[lord], [war], [s], provinces, companies, {"Crab": clan}, [],
 	)
 	assert_eq(results.size(), 1)
@@ -2902,15 +2902,15 @@ func test_supply_status_check_broken_tether_retreat() -> void:
 	var war: WarData = _make_war(1, "Crab", "Crane")
 	var prov: ProvinceData = _make_supply_province(1, "Crab")
 	var s: SettlementData = _make_supply_settlement(1, 1, 50.0, 10, 5, 5)
-	var companies: Array[Dictionary] = [{"company_id": 1, "clan_name": "Crab", "unit_type": Enums.CompanyUnitType.PEASANT_LEVY, "army_id": 1}]
+	var companies: Array = [{"company_id": 1, "clan_name": "Crab", "unit_type": Enums.CompanyUnitType.PEASANT_LEVY, "army_id": 1}]
 	var clan: ClanData = _make_clan("Crab", [1])
 	var provinces: Dictionary = {1: prov}
-	var tethers: Array[Dictionary] = [{
+	var tethers: Array = [{
 		"army_id": 1,
 		"overall_state": SupplyTetherSystem.TetherState.BROKEN,
 		"seasons_cut": 2,
 	}]
-	var results: Array[Dictionary] = DayOrchestrator._process_supply_status_checks(
+	var results: Array = DayOrchestrator._process_supply_status_checks(
 		[lord], [war], [s], provinces, companies, {"Crab": clan}, tethers,
 	)
 	assert_eq(results.size(), 1)
@@ -2923,15 +2923,15 @@ func test_supply_status_check_broken_tether_restore_first() -> void:
 	var war: WarData = _make_war(1, "Crab", "Crane")
 	var prov: ProvinceData = _make_supply_province(1, "Crab")
 	var s: SettlementData = _make_supply_settlement(1, 1, 50.0, 10, 5, 5)
-	var companies: Array[Dictionary] = [{"company_id": 1, "clan_name": "Crab", "unit_type": Enums.CompanyUnitType.PEASANT_LEVY, "army_id": 1}]
+	var companies: Array = [{"company_id": 1, "clan_name": "Crab", "unit_type": Enums.CompanyUnitType.PEASANT_LEVY, "army_id": 1}]
 	var clan: ClanData = _make_clan("Crab", [1])
 	var provinces: Dictionary = {1: prov}
-	var tethers: Array[Dictionary] = [{
+	var tethers: Array = [{
 		"army_id": 1,
 		"overall_state": SupplyTetherSystem.TetherState.BROKEN,
 		"seasons_cut": 0,
 	}]
-	var results: Array[Dictionary] = DayOrchestrator._process_supply_status_checks(
+	var results: Array = DayOrchestrator._process_supply_status_checks(
 		[lord], [war], [s], provinces, companies, {"Crab": clan}, tethers,
 	)
 	assert_eq(results.size(), 1)
@@ -2945,13 +2945,13 @@ func test_supply_status_check_war_score_from_correct_side() -> void:
 	war.war_score_b = 70
 	var prov: ProvinceData = _make_supply_province(1, "Crane")
 	var s: SettlementData = _make_supply_settlement(1, 1, 15.0, 10, 5, 5)
-	var companies: Array[Dictionary] = [{"company_id": 1, "clan_name": "Crane", "unit_type": Enums.CompanyUnitType.PEASANT_LEVY, "army_id": 1}]
+	var companies: Array = [{"company_id": 1, "clan_name": "Crane", "unit_type": Enums.CompanyUnitType.PEASANT_LEVY, "army_id": 1}]
 	var clan: ClanData = ClanData.new()
 	clan.clan_name = "Crane"
 	clan.province_ids = [1]
 	clan.iron_stockpile = 10.0
 	var provinces: Dictionary = {1: prov}
-	var results: Array[Dictionary] = DayOrchestrator._process_supply_status_checks(
+	var results: Array = DayOrchestrator._process_supply_status_checks(
 		[lord], [war], [s], provinces, companies, {"Crane": clan}, [],
 	)
 	assert_eq(results.size(), 1)
@@ -2967,10 +2967,10 @@ func test_supply_status_check_personality_ignores_shortage() -> void:
 	war.war_score_a = 40
 	var prov: ProvinceData = _make_supply_province(1, "Crab")
 	var s: SettlementData = _make_supply_settlement(1, 1, 15.0, 10, 5, 5)
-	var companies: Array[Dictionary] = [{"company_id": 1, "clan_name": "Crab", "unit_type": Enums.CompanyUnitType.PEASANT_LEVY, "army_id": 1}]
+	var companies: Array = [{"company_id": 1, "clan_name": "Crab", "unit_type": Enums.CompanyUnitType.PEASANT_LEVY, "army_id": 1}]
 	var clan: ClanData = _make_clan("Crab", [1])
 	var provinces: Dictionary = {1: prov}
-	var results: Array[Dictionary] = DayOrchestrator._process_supply_status_checks(
+	var results: Array = DayOrchestrator._process_supply_status_checks(
 		[lord], [war], [s], provinces, companies, {"Crab": clan}, [],
 	)
 	assert_eq(results.size(), 1)
@@ -2983,13 +2983,13 @@ func test_supply_status_check_uninvolved_clan_skipped() -> void:
 	var war: WarData = _make_war(1, "Crab", "Crane")
 	var prov: ProvinceData = _make_supply_province(1, "Lion")
 	var s: SettlementData = _make_supply_settlement(1, 1, 50.0, 10, 5, 5)
-	var companies: Array[Dictionary] = [{"company_id": 1, "clan_name": "Lion", "unit_type": Enums.CompanyUnitType.PEASANT_LEVY, "army_id": 1}]
+	var companies: Array = [{"company_id": 1, "clan_name": "Lion", "unit_type": Enums.CompanyUnitType.PEASANT_LEVY, "army_id": 1}]
 	var clan: ClanData = ClanData.new()
 	clan.clan_name = "Lion"
 	clan.province_ids = [1]
 	clan.iron_stockpile = 10.0
 	var provinces: Dictionary = {1: prov}
-	var results: Array[Dictionary] = DayOrchestrator._process_supply_status_checks(
+	var results: Array = DayOrchestrator._process_supply_status_checks(
 		[lord], [war], [s], provinces, companies, {"Lion": clan}, [],
 	)
 	assert_eq(results.size(), 0)
@@ -3016,11 +3016,11 @@ func test_supply_status_helper_source_has_rice() -> void:
 
 
 func test_supply_status_helper_worst_tether_state() -> void:
-	var companies: Array[Dictionary] = [
+	var companies: Array = [
 		{"company_id": 1, "clan_name": "Crab", "army_id": 1},
 		{"company_id": 2, "clan_name": "Crab", "army_id": 2},
 	]
-	var tethers: Array[Dictionary] = [
+	var tethers: Array = [
 		{"army_id": 1, "overall_state": SupplyTetherSystem.TetherState.SOLID},
 		{"army_id": 2, "overall_state": SupplyTetherSystem.TetherState.THREATENED},
 	]
@@ -3036,7 +3036,7 @@ func test_supply_status_helper_clan_settlements() -> void:
 	var s1: SettlementData = _make_supply_settlement(10, 1)
 	var s2: SettlementData = _make_supply_settlement(20, 2)
 	var provinces: Dictionary = {1: p1, 2: p2}
-	var result: Array[SettlementData] = DayOrchestrator._get_clan_settlements(
+	var result: Array = DayOrchestrator._get_clan_settlements(
 		"Crab", [s1, s2], provinces,
 	)
 	assert_eq(result.size(), 1)
@@ -3065,9 +3065,9 @@ func _make_applied_with_ladder(
 
 func test_ladder_side_effects_skips_when_no_ladder() -> void:
 	var applied: Array = [{"effects": {"requires_war_creation": true, "declaring_clan": "Crab"}}]
-	var topics: Array[TopicData] = []
-	var next_topic_id: Array[int] = [100]
-	var results: Array[Dictionary] = DayOrchestrator._process_ladder_side_effects(
+	var topics: Array = []
+	var next_topic_id: Array = [100]
+	var results: Array = DayOrchestrator._process_ladder_side_effects(
 		applied, {}, topics, next_topic_id, 1, [], [], [1],
 	)
 	assert_eq(results.size(), 0)
@@ -3079,9 +3079,9 @@ func test_ladder_side_effects_applies_glory_cost() -> void:
 	var chars_by_id: Dictionary = {1: lord}
 	var side: Dictionary = {"glory_cost": -0.3, "rung": FeasibilityLedger.LadderRung.RAID_NEIGHBOR}
 	var applied: Array = [_make_applied_with_ladder(1, "Crab", "Crane", side)]
-	var topics: Array[TopicData] = []
-	var next_topic_id: Array[int] = [100]
-	var results: Array[Dictionary] = DayOrchestrator._process_ladder_side_effects(
+	var topics: Array = []
+	var next_topic_id: Array = [100]
+	var results: Array = DayOrchestrator._process_ladder_side_effects(
 		applied, chars_by_id, topics, next_topic_id, 1, [], [], [1],
 	)
 	assert_eq(results.size(), 1)
@@ -3100,8 +3100,8 @@ func test_ladder_side_effects_applies_vassal_disposition() -> void:
 		"rung": FeasibilityLedger.LadderRung.DEMAND_TRIBUTE,
 	}
 	var applied: Array = [_make_applied_with_ladder(1, "Crab", "Crane", side)]
-	var topics: Array[TopicData] = []
-	var next_topic_id: Array[int] = [100]
+	var topics: Array = []
+	var next_topic_id: Array = [100]
 	DayOrchestrator._process_ladder_side_effects(
 		applied, chars_by_id, topics, next_topic_id, 1, [], [], [1],
 	)
@@ -3119,8 +3119,8 @@ func test_ladder_side_effects_vassal_disposition_not_applied_to_non_vassals() ->
 		"rung": FeasibilityLedger.LadderRung.DEMAND_TRIBUTE,
 	}
 	var applied: Array = [_make_applied_with_ladder(1, "Crab", "Crane", side)]
-	var topics: Array[TopicData] = []
-	var next_topic_id: Array[int] = [100]
+	var topics: Array = []
+	var next_topic_id: Array = [100]
 	DayOrchestrator._process_ladder_side_effects(
 		applied, chars_by_id, topics, next_topic_id, 1, [], [], [1],
 	)
@@ -3138,8 +3138,8 @@ func test_ladder_side_effects_clan_disposition_cost() -> void:
 		"rung": FeasibilityLedger.LadderRung.RAID_NEIGHBOR,
 	}
 	var applied: Array = [_make_applied_with_ladder(1, "Crab", "Crane", side)]
-	var topics: Array[TopicData] = []
-	var next_topic_id: Array[int] = [100]
+	var topics: Array = []
+	var next_topic_id: Array = [100]
 	DayOrchestrator._process_ladder_side_effects(
 		applied, chars_by_id, topics, next_topic_id, 1, [], [], [1],
 	)
@@ -3159,8 +3159,8 @@ func test_ladder_side_effects_other_clans_disposition_cost() -> void:
 		"rung": FeasibilityLedger.LadderRung.RAID_NEIGHBOR,
 	}
 	var applied: Array = [_make_applied_with_ladder(1, "Crab", "Crane", side)]
-	var topics: Array[TopicData] = []
-	var next_topic_id: Array[int] = [100]
+	var topics: Array = []
+	var next_topic_id: Array = [100]
 	DayOrchestrator._process_ladder_side_effects(
 		applied, chars_by_id, topics, next_topic_id, 1, [], [], [1],
 	)
@@ -3179,9 +3179,9 @@ func test_ladder_side_effects_generates_topic() -> void:
 		"rung": FeasibilityLedger.LadderRung.DEMAND_TRIBUTE,
 	}
 	var applied: Array = [_make_applied_with_ladder(1, "Crab", "Crane", side)]
-	var topics: Array[TopicData] = []
-	var next_topic_id: Array[int] = [100]
-	var results: Array[Dictionary] = DayOrchestrator._process_ladder_side_effects(
+	var topics: Array = []
+	var next_topic_id: Array = [100]
+	var results: Array = DayOrchestrator._process_ladder_side_effects(
 		applied, chars_by_id, topics, next_topic_id, 1, [], [], [1],
 	)
 	assert_eq(topics.size(), 1)
@@ -3202,8 +3202,8 @@ func test_ladder_side_effects_tier_3_topic() -> void:
 		"rung": FeasibilityLedger.LadderRung.RAID_NEIGHBOR,
 	}
 	var applied: Array = [_make_applied_with_ladder(1, "Crab", "Crane", side)]
-	var topics: Array[TopicData] = []
-	var next_topic_id: Array[int] = [200]
+	var topics: Array = []
+	var next_topic_id: Array = [200]
 	DayOrchestrator._process_ladder_side_effects(
 		applied, chars_by_id, topics, next_topic_id, 1, [], [], [1],
 	)
@@ -3221,10 +3221,10 @@ func test_ladder_side_effects_creates_favor() -> void:
 		"rung": FeasibilityLedger.LadderRung.REQUEST_ALLIED_AID,
 	}
 	var applied: Array = [_make_applied_with_ladder(1, "Crab", "Crane", side)]
-	var topics: Array[TopicData] = []
-	var next_topic_id: Array[int] = [100]
+	var topics: Array = []
+	var next_topic_id: Array = [100]
 	var favors: Array = []
-	var results: Array[Dictionary] = DayOrchestrator._process_ladder_side_effects(
+	var results: Array = DayOrchestrator._process_ladder_side_effects(
 		applied, chars_by_id, topics, next_topic_id, 1, favors, [], [1],
 	)
 	assert_eq(favors.size(), 1)
@@ -3243,11 +3243,11 @@ func test_ladder_side_effects_triggers_raid_war() -> void:
 		"rung": FeasibilityLedger.LadderRung.RAID_NEIGHBOR,
 	}
 	var applied: Array = [_make_applied_with_ladder(1, "Crab", "Crane", side)]
-	var topics: Array[TopicData] = []
-	var next_topic_id: Array[int] = [100]
-	var active_wars: Array[WarData] = []
-	var next_war_id: Array[int] = [10]
-	var results: Array[Dictionary] = DayOrchestrator._process_ladder_side_effects(
+	var topics: Array = []
+	var next_topic_id: Array = [100]
+	var active_wars: Array = []
+	var next_war_id: Array = [10]
+	var results: Array = DayOrchestrator._process_ladder_side_effects(
 		applied, chars_by_id, topics, next_topic_id, 1, [], active_wars, next_war_id,
 	)
 	assert_eq(active_wars.size(), 1)
@@ -3267,12 +3267,12 @@ func test_ladder_side_effects_no_duplicate_raid_war() -> void:
 		"rung": FeasibilityLedger.LadderRung.RAID_NEIGHBOR,
 	}
 	var applied: Array = [_make_applied_with_ladder(1, "Crab", "Crane", side)]
-	var topics: Array[TopicData] = []
-	var next_topic_id: Array[int] = [100]
+	var topics: Array = []
+	var next_topic_id: Array = [100]
 	var existing_war: WarData = _make_war(5, "Crab", "Lion")
-	var active_wars: Array[WarData] = [existing_war]
-	var next_war_id: Array[int] = [10]
-	var results: Array[Dictionary] = DayOrchestrator._process_ladder_side_effects(
+	var active_wars: Array = [existing_war]
+	var next_war_id: Array = [10]
+	var results: Array = DayOrchestrator._process_ladder_side_effects(
 		applied, chars_by_id, topics, next_topic_id, 1, [], active_wars, next_war_id,
 	)
 	assert_eq(active_wars.size(), 1)
@@ -3303,15 +3303,15 @@ func test_ladder_rung_name() -> void:
 
 func test_consume_supply_injects_peace_need_seek() -> void:
 	var world_states: Dictionary = {}
-	var results: Array[Dictionary] = [{
+	var results: Array = [{
 		"lord_id": 1,
 		"clan": "Crab",
 		"decision": FeasibilityLedger.CampaignDecision.SEEK_PEACE,
 		"peace_need": true,
 		"peace_urgency": FeasibilityLedger.CampaignDecision.SEEK_PEACE,
 	}]
-	var topics: Array[TopicData] = []
-	var next_topic_id: Array[int] = [100]
+	var topics: Array = []
+	var next_topic_id: Array = [100]
 	DayOrchestrator._consume_supply_status_results(
 		results, world_states, [], topics, next_topic_id, 1,
 	)
@@ -3325,15 +3325,15 @@ func test_consume_supply_injects_peace_need_seek() -> void:
 
 func test_consume_supply_injects_urgent_peace_priority_1() -> void:
 	var world_states: Dictionary = {}
-	var results: Array[Dictionary] = [{
+	var results: Array = [{
 		"lord_id": 1,
 		"clan": "Crab",
 		"decision": FeasibilityLedger.CampaignDecision.URGENT_PEACE,
 		"peace_need": true,
 		"peace_urgency": FeasibilityLedger.CampaignDecision.URGENT_PEACE,
 	}]
-	var topics: Array[TopicData] = []
-	var next_topic_id: Array[int] = [100]
+	var topics: Array = []
+	var next_topic_id: Array = [100]
 	DayOrchestrator._consume_supply_status_results(
 		results, world_states, [], topics, next_topic_id, 1,
 	)
@@ -3343,15 +3343,15 @@ func test_consume_supply_injects_urgent_peace_priority_1() -> void:
 
 func test_consume_supply_injects_immediate_peace_priority_1() -> void:
 	var world_states: Dictionary = {}
-	var results: Array[Dictionary] = [{
+	var results: Array = [{
 		"lord_id": 1,
 		"clan": "Crab",
 		"decision": FeasibilityLedger.CampaignDecision.IMMEDIATE_PEACE,
 		"peace_need": true,
 		"peace_urgency": FeasibilityLedger.CampaignDecision.IMMEDIATE_PEACE,
 	}]
-	var topics: Array[TopicData] = []
-	var next_topic_id: Array[int] = [100]
+	var topics: Array = []
+	var next_topic_id: Array = [100]
 	DayOrchestrator._consume_supply_status_results(
 		results, world_states, [], topics, next_topic_id, 1,
 	)
@@ -3360,18 +3360,18 @@ func test_consume_supply_injects_immediate_peace_priority_1() -> void:
 
 
 func test_consume_supply_retreat_sets_army_flags() -> void:
-	var active_armies: Array[Dictionary] = [
+	var active_armies: Array = [
 		{"army_id": 1, "clan_name": "Crab", "is_active": true},
 		{"army_id": 2, "clan_name": "Crane", "is_active": true},
 	]
-	var results: Array[Dictionary] = [{
+	var results: Array = [{
 		"lord_id": 1,
 		"clan": "Crab",
 		"decision": FeasibilityLedger.CampaignDecision.RETREAT,
 		"retreat": {"found": true, "province_id": 5, "should_disband": false},
 	}]
-	var topics: Array[TopicData] = []
-	var next_topic_id: Array[int] = [100]
+	var topics: Array = []
+	var next_topic_id: Array = [100]
 	DayOrchestrator._consume_supply_status_results(
 		results, {}, active_armies, topics, next_topic_id, 1,
 	)
@@ -3381,17 +3381,17 @@ func test_consume_supply_retreat_sets_army_flags() -> void:
 
 
 func test_consume_supply_retreat_disband_generates_topic() -> void:
-	var active_armies: Array[Dictionary] = [
+	var active_armies: Array = [
 		{"army_id": 1, "clan_name": "Crab", "is_active": true},
 	]
-	var results: Array[Dictionary] = [{
+	var results: Array = [{
 		"lord_id": 1,
 		"clan": "Crab",
 		"decision": FeasibilityLedger.CampaignDecision.RETREAT,
 		"retreat": {"found": false, "should_disband": true},
 	}]
-	var topics: Array[TopicData] = []
-	var next_topic_id: Array[int] = [100]
+	var topics: Array = []
+	var next_topic_id: Array = [100]
 	DayOrchestrator._consume_supply_status_results(
 		results, {}, active_armies, topics, next_topic_id, 1,
 	)
@@ -3404,13 +3404,13 @@ func test_consume_supply_retreat_disband_generates_topic() -> void:
 
 func test_consume_supply_continue_does_nothing() -> void:
 	var world_states: Dictionary = {}
-	var results: Array[Dictionary] = [{
+	var results: Array = [{
 		"lord_id": 1,
 		"clan": "Crab",
 		"decision": FeasibilityLedger.CampaignDecision.CONTINUE,
 	}]
-	var topics: Array[TopicData] = []
-	var next_topic_id: Array[int] = [100]
+	var topics: Array = []
+	var next_topic_id: Array = [100]
 	DayOrchestrator._consume_supply_status_results(
 		results, world_states, [], topics, next_topic_id, 1,
 	)
@@ -3420,14 +3420,14 @@ func test_consume_supply_continue_does_nothing() -> void:
 
 func test_consume_supply_appends_to_existing_pending_events() -> void:
 	var world_states: Dictionary = {1: {"pending_events": [{"need_type": "REST"}]}}
-	var results: Array[Dictionary] = [{
+	var results: Array = [{
 		"lord_id": 1,
 		"clan": "Crab",
 		"decision": FeasibilityLedger.CampaignDecision.SEEK_PEACE,
 		"peace_need": true,
 	}]
-	var topics: Array[TopicData] = []
-	var next_topic_id: Array[int] = [100]
+	var topics: Array = []
+	var next_topic_id: Array = [100]
 	DayOrchestrator._consume_supply_status_results(
 		results, world_states, [], topics, next_topic_id, 1,
 	)
@@ -3437,17 +3437,17 @@ func test_consume_supply_appends_to_existing_pending_events() -> void:
 
 
 func test_consume_supply_retreat_skips_inactive_armies() -> void:
-	var active_armies: Array[Dictionary] = [
+	var active_armies: Array = [
 		{"army_id": 1, "clan_name": "Crab", "is_active": false},
 	]
-	var results: Array[Dictionary] = [{
+	var results: Array = [{
 		"lord_id": 1,
 		"clan": "Crab",
 		"decision": FeasibilityLedger.CampaignDecision.RETREAT,
 		"retreat": {"found": true, "province_id": 5, "should_disband": false},
 	}]
-	var topics: Array[TopicData] = []
-	var next_topic_id: Array[int] = [100]
+	var topics: Array = []
+	var next_topic_id: Array = [100]
 	DayOrchestrator._consume_supply_status_results(
 		results, {}, active_armies, topics, next_topic_id, 1,
 	)
@@ -3505,13 +3505,13 @@ func test_ladder_favor_uses_real_ally_creditor_ids() -> void:
 	var ally1: L5RCharacterData = _make_character(10, "Crane")
 	var ally2: L5RCharacterData = _make_character(20, "Lion")
 	var chars_by_id: Dictionary = {1: lord, 10: ally1, 20: ally2}
-	var topics: Array[TopicData] = []
-	var next_topic_id: Array[int] = [100]
+	var topics: Array = []
+	var next_topic_id: Array = [100]
 	var favors: Array = []
-	var wars: Array[WarData] = []
-	var next_war_id: Array[int] = [1]
+	var wars: Array = []
+	var next_war_id: Array = [1]
 
-	var applied: Array[Dictionary] = [{
+	var applied: Array = [{
 		"character_id": 1,
 		"action_id": "DECLARE_WAR",
 		"effects": {
@@ -3540,13 +3540,13 @@ func test_ladder_favor_fallback_when_no_ally_ids() -> void:
 	var lord: L5RCharacterData = _make_character(1, "Crab")
 	lord.status = 6.0
 	var chars_by_id: Dictionary = {1: lord}
-	var topics: Array[TopicData] = []
-	var next_topic_id: Array[int] = [100]
+	var topics: Array = []
+	var next_topic_id: Array = [100]
 	var favors: Array = []
-	var wars: Array[WarData] = []
-	var next_war_id: Array[int] = [1]
+	var wars: Array = []
+	var next_war_id: Array = [1]
 
-	var applied: Array[Dictionary] = [{
+	var applied: Array = [{
 		"character_id": 1,
 		"action_id": "DECLARE_WAR",
 		"effects": {
@@ -3620,7 +3620,7 @@ func test_retreat_arrived_flag_set_on_arrival() -> void:
 	army["days_remaining"] = 1
 	army["path"] = [5]
 	army["destination_sub_tile"] = 5
-	var results: Array[Dictionary] = DayOrchestrator._process_army_movements([army])
+	var results: Array = DayOrchestrator._process_army_movements([army])
 	assert_eq(results.size(), 1)
 	assert_true(results[0].get("retreat_arrived", false))
 
@@ -3629,7 +3629,7 @@ func test_movement_processes_retreat_then_ticks() -> void:
 	var army: Dictionary = ArmyMovementSystem.create_army_state(1, 10, "Crab")
 	army["retreat_ordered"] = true
 	army["retreat_target_province"] = 5
-	var results: Array[Dictionary] = DayOrchestrator._process_army_movements([army])
+	var results: Array = DayOrchestrator._process_army_movements([army])
 	assert_eq(results.size(), 1, "Retreat initiated and immediately ticked")
 	assert_true(army["is_moving"])
 	assert_eq(army["days_remaining"], DayOrchestrator._RETREAT_DEFAULT_DAYS - 1)
@@ -3645,9 +3645,9 @@ func test_retreat_arrival_clears_retreat_flags() -> void:
 	army["days_remaining"] = 1
 	army["path"] = [5]
 	army["destination_sub_tile"] = 5
-	var movement_results: Array[Dictionary] = DayOrchestrator._process_army_movements([army])
-	var tethers: Array[Dictionary] = []
-	var results: Array[Dictionary] = DayOrchestrator._process_retreat_arrivals(
+	var movement_results: Array = DayOrchestrator._process_army_movements([army])
+	var tethers: Array = []
+	var results: Array = DayOrchestrator._process_retreat_arrivals(
 		movement_results, [army], tethers,
 	)
 	assert_eq(results.size(), 1)
@@ -3663,10 +3663,10 @@ func test_retreat_arrival_detaches_tether() -> void:
 	army["days_remaining"] = 1
 	army["path"] = [5]
 	army["destination_sub_tile"] = 5
-	var typed_path: Array[int] = [10, 20]
+	var typed_path: Array = [10, 20]
 	var tether: Dictionary = SupplyTetherSystem.create_tether(1, 100, typed_path)
-	var movement_results: Array[Dictionary] = DayOrchestrator._process_army_movements([army])
-	var results: Array[Dictionary] = DayOrchestrator._process_retreat_arrivals(
+	var movement_results: Array = DayOrchestrator._process_army_movements([army])
+	var results: Array = DayOrchestrator._process_retreat_arrivals(
 		movement_results, [army], [tether],
 	)
 	assert_eq(results.size(), 1)
@@ -3682,11 +3682,11 @@ func test_retreat_arrival_frees_escorts_from_tether() -> void:
 	army["days_remaining"] = 1
 	army["path"] = [5]
 	army["destination_sub_tile"] = 5
-	var typed_path: Array[int] = [10, 20]
+	var typed_path: Array = [10, 20]
 	var tether: Dictionary = SupplyTetherSystem.create_tether(1, 100, typed_path)
 	SupplyTetherSystem.assign_escort(tether, 10, 201)
-	var movement_results: Array[Dictionary] = DayOrchestrator._process_army_movements([army])
-	var results: Array[Dictionary] = DayOrchestrator._process_retreat_arrivals(
+	var movement_results: Array = DayOrchestrator._process_army_movements([army])
+	var results: Array = DayOrchestrator._process_retreat_arrivals(
 		movement_results, [army], [tether],
 	)
 	assert_eq(results[0]["freed_escort_ids"].size(), 1)
@@ -3699,8 +3699,8 @@ func test_retreat_arrival_skips_non_retreat() -> void:
 	army["days_remaining"] = 1
 	army["path"] = [5]
 	army["destination_sub_tile"] = 5
-	var movement_results: Array[Dictionary] = DayOrchestrator._process_army_movements([army])
-	var results: Array[Dictionary] = DayOrchestrator._process_retreat_arrivals(
+	var movement_results: Array = DayOrchestrator._process_army_movements([army])
+	var results: Array = DayOrchestrator._process_retreat_arrivals(
 		movement_results, [army], [],
 	)
 	assert_eq(results.size(), 0)
@@ -3714,8 +3714,8 @@ func test_retreat_arrival_no_tether_still_cleans_flags() -> void:
 	army["days_remaining"] = 1
 	army["path"] = [5]
 	army["destination_sub_tile"] = 5
-	var movement_results: Array[Dictionary] = DayOrchestrator._process_army_movements([army])
-	var results: Array[Dictionary] = DayOrchestrator._process_retreat_arrivals(
+	var movement_results: Array = DayOrchestrator._process_army_movements([army])
+	var results: Array = DayOrchestrator._process_retreat_arrivals(
 		movement_results, [army], [],
 	)
 	assert_eq(results.size(), 1)
@@ -3754,11 +3754,11 @@ func test_retreat_arrival_skips_already_detached_tether() -> void:
 	army["days_remaining"] = 1
 	army["path"] = [5]
 	army["destination_sub_tile"] = 5
-	var typed_path: Array[int] = [10, 20]
+	var typed_path: Array = [10, 20]
 	var tether: Dictionary = SupplyTetherSystem.create_tether(1, 100, typed_path)
 	tether["detached"] = true
-	var movement_results: Array[Dictionary] = DayOrchestrator._process_army_movements([army])
-	var results: Array[Dictionary] = DayOrchestrator._process_retreat_arrivals(
+	var movement_results: Array = DayOrchestrator._process_army_movements([army])
+	var results: Array = DayOrchestrator._process_retreat_arrivals(
 		movement_results, [army], [tether],
 	)
 	assert_eq(results.size(), 1)
@@ -3786,7 +3786,7 @@ func test_disband_deactivates_army_and_returns_pu() -> void:
 		"current_health": 100,
 	}
 	var settlement: SettlementData = _make_settlement_for_disband(3)
-	var results: Array[Dictionary] = DayOrchestrator._process_disbands(
+	var results: Array = DayOrchestrator._process_disbands(
 		[army], [comp], [settlement],
 	)
 	assert_eq(results.size(), 1)
@@ -3797,7 +3797,7 @@ func test_disband_deactivates_army_and_returns_pu() -> void:
 func test_disband_skips_non_disband_army() -> void:
 	var army: Dictionary = ArmyMovementSystem.create_army_state(1, 10, "Crab")
 	army["clan_name"] = "Crab"
-	var results: Array[Dictionary] = DayOrchestrator._process_disbands(
+	var results: Array = DayOrchestrator._process_disbands(
 		[army], [], [],
 	)
 	assert_eq(results.size(), 0)
@@ -3808,7 +3808,7 @@ func test_disband_skips_already_inactive() -> void:
 	army["disband_ordered"] = true
 	army["is_active"] = false
 	army["clan_name"] = "Crab"
-	var results: Array[Dictionary] = DayOrchestrator._process_disbands(
+	var results: Array = DayOrchestrator._process_disbands(
 		[army], [], [],
 	)
 	assert_eq(results.size(), 0)
@@ -3824,7 +3824,7 @@ func test_disband_skips_company_without_health() -> void:
 		"current_health": 0,
 	}
 	var settlement: SettlementData = _make_settlement_for_disband(3)
-	var results: Array[Dictionary] = DayOrchestrator._process_disbands(
+	var results: Array = DayOrchestrator._process_disbands(
 		[army], [comp], [settlement],
 	)
 	assert_eq(results.size(), 1)
@@ -3839,7 +3839,7 @@ func test_disband_multiple_companies_returns_to_correct_settlements() -> void:
 	var comp2: Dictionary = {"army_id": 1, "source_province_id": 7, "current_health": 80}
 	var s1: SettlementData = _make_settlement_for_disband(3)
 	var s2: SettlementData = _make_settlement_for_disband(7)
-	var results: Array[Dictionary] = DayOrchestrator._process_disbands(
+	var results: Array = DayOrchestrator._process_disbands(
 		[army], [comp1, comp2], [s1, s2],
 	)
 	assert_eq(results[0]["pu_returned"].size(), 2)
@@ -4017,7 +4017,7 @@ func test_garrison_assignment_scanned_in_process_military_effects() -> void:
 			},
 		},
 	]
-	var results: Array[Dictionary] = DayOrchestrator._process_military_effects(
+	var results: Array = DayOrchestrator._process_military_effects(
 		applied_list, [wall, source], {10: daimyo}, [], {200: province_crane},
 	)
 	assert_eq(results.size(), 1)
@@ -4128,7 +4128,7 @@ func test_letter_writeback_marks_tower_letter_season() -> void:
 	var tower: SettlementData = _make_wall_tower(1, 10, 0.0)
 	tower.settlement_id = 1
 	var char: L5RCharacterData = _make_character_at_tower(5, 1)
-	var letter_results: Array[Dictionary] = [{
+	var letter_results: Array = [{
 		"character_id": 5,
 		"need_type": "STRENGTHEN_WALL",
 		"action_id": "WRITE_LETTER",
@@ -4142,7 +4142,7 @@ func test_letter_writeback_marks_tower_letter_season() -> void:
 func test_letter_writeback_ignores_non_strengthen_wall_need() -> void:
 	var tower: SettlementData = _make_wall_tower(1, 10, 0.0)
 	var char: L5RCharacterData = _make_character_at_tower(5, 1)
-	var letter_results: Array[Dictionary] = [{
+	var letter_results: Array = [{
 		"character_id": 5,
 		"need_type": "MAXIMIZE_PROSPERITY",
 		"action_id": "WRITE_LETTER",
@@ -4155,7 +4155,7 @@ func test_letter_writeback_ignores_non_strengthen_wall_need() -> void:
 
 func test_letter_writeback_ignores_unknown_character() -> void:
 	var tower: SettlementData = _make_wall_tower(1, 10, 0.0)
-	var letter_results: Array[Dictionary] = [{
+	var letter_results: Array = [{
 		"character_id": 999,  # not in characters_by_id
 		"need_type": "STRENGTHEN_WALL",
 		"action_id": "WRITE_LETTER",
@@ -4169,7 +4169,7 @@ func test_letter_writeback_ignores_unknown_character() -> void:
 func test_letter_writeback_ignores_non_tower_settlement() -> void:
 	var town: SettlementData = _make_settlement(1, 10)  # not a WALL_TOWER
 	var char: L5RCharacterData = _make_character_at_tower(5, 1)
-	var letter_results: Array[Dictionary] = [{
+	var letter_results: Array = [{
 		"character_id": 5,
 		"need_type": "STRENGTHEN_WALL",
 		"action_id": "WRITE_LETTER",
@@ -4186,7 +4186,7 @@ func test_letter_writeback_ignores_non_tower_settlement() -> void:
 func test_refusal_writeback_sets_courtier_refused_flag() -> void:
 	var tower: SettlementData = _make_wall_tower(1, 100, 0.0)
 	tower.garrison_shortage_courtier_refused = false
-	var results: Array[Dictionary] = [{
+	var results: Array = [{
 		"action_id": "DISPATCH_COURTIER",
 		"effects": {
 			"garrison_refused": true,
@@ -4202,7 +4202,7 @@ func test_refusal_writeback_sets_courtier_refused_flag() -> void:
 func test_refusal_writeback_ignores_non_refused_effects() -> void:
 	var tower: SettlementData = _make_wall_tower(1, 100, 0.0)
 	tower.garrison_shortage_courtier_refused = false
-	var results: Array[Dictionary] = [{
+	var results: Array = [{
 		"action_id": "DISPATCH_COURTIER",
 		"effects": {
 			"garrison_refused": false,
@@ -4218,7 +4218,7 @@ func test_refusal_writeback_ignores_non_refused_effects() -> void:
 func test_refusal_writeback_ignores_mismatched_province() -> void:
 	var tower: SettlementData = _make_wall_tower(1, 200, 0.0)  # province 200
 	tower.garrison_shortage_courtier_refused = false
-	var results: Array[Dictionary] = [{
+	var results: Array = [{
 		"action_id": "DISPATCH_COURTIER",
 		"effects": {
 			"garrison_refused": true,
@@ -4286,7 +4286,7 @@ func test_get_army_companies_filters_by_army_id() -> void:
 	var c1: Dictionary = _make_company_dict_for_battle(1, 10)
 	var c2: Dictionary = _make_company_dict_for_battle(2, 10)
 	var c3: Dictionary = _make_company_dict_for_battle(3, 20)
-	var result: Array[Dictionary] = DayOrchestrator._get_army_companies(
+	var result: Array = DayOrchestrator._get_army_companies(
 		10, [c1, c2, c3],
 	)
 	assert_eq(result.size(), 2)
@@ -4294,7 +4294,7 @@ func test_get_army_companies_filters_by_army_id() -> void:
 
 func test_build_battle_states_creates_states() -> void:
 	var cd: Dictionary = _make_company_dict_for_battle(1, 10)
-	var states: Array[Dictionary] = DayOrchestrator._build_battle_states(
+	var states: Array = DayOrchestrator._build_battle_states(
 		[cd], "attacker", {},
 	)
 	assert_eq(states.size(), 1)
@@ -4336,10 +4336,10 @@ func test_write_battle_results_marks_destroyed() -> void:
 
 
 func test_resolve_army_battles_no_trigger_returns_empty() -> void:
-	var movement_results: Array[Dictionary] = [
+	var movement_results: Array = [
 		{"army_id": 1, "arrived": true, "battle_check": {"battle_triggered": false}},
 	]
-	var results: Array[Dictionary] = DayOrchestrator._resolve_army_battles(
+	var results: Array = DayOrchestrator._resolve_army_battles(
 		movement_results, [], [], [], DiceEngine.new(), [], {}, {},
 	)
 	assert_eq(results.size(), 0)
@@ -4350,7 +4350,7 @@ func test_resolve_army_battles_skips_when_not_at_war() -> void:
 	var army_b: Dictionary = ArmyMovementSystem.create_army_state(2, 5, "Crane")
 	var c1: Dictionary = _make_company_dict_for_battle(1, 1, "Crab")
 	var c2: Dictionary = _make_company_dict_for_battle(2, 2, "Crane")
-	var movement_results: Array[Dictionary] = [
+	var movement_results: Array = [
 		{
 			"army_id": 1, "arrived": true,
 			"battle_check": {
@@ -4359,7 +4359,7 @@ func test_resolve_army_battles_skips_when_not_at_war() -> void:
 			},
 		},
 	]
-	var results: Array[Dictionary] = DayOrchestrator._resolve_army_battles(
+	var results: Array = DayOrchestrator._resolve_army_battles(
 		movement_results, [army_a, army_b], [c1, c2],
 		[], DiceEngine.new(42), [], {}, {},
 	)
@@ -4378,7 +4378,7 @@ func test_resolve_army_battles_resolves_combat_when_at_war() -> void:
 	)
 	var war: WarData = WarSystem.declare_war(1, "Crab", "Crane", 1, 1, 2)
 	var s1: SettlementData = _make_settlement(10, 1, 10, 3)
-	var movement_results: Array[Dictionary] = [
+	var movement_results: Array = [
 		{
 			"army_id": 1, "arrived": true,
 			"battle_check": {
@@ -4387,7 +4387,7 @@ func test_resolve_army_battles_resolves_combat_when_at_war() -> void:
 			},
 		},
 	]
-	var results: Array[Dictionary] = DayOrchestrator._resolve_army_battles(
+	var results: Array = DayOrchestrator._resolve_army_battles(
 		movement_results, [army_a, army_b], [c1, c2],
 		[war], dice, [s1], {}, {},
 	)
@@ -4524,8 +4524,8 @@ func _make_char_for_levy(id: int, clan: String) -> L5RCharacterData:
 
 func test_levy_deducts_arms_from_clan() -> void:
 	var s: SettlementData = _make_settlement(10, 1, 10, 3)
-	var companies: Array[Dictionary] = []
-	var next_id: Array[int] = [1]
+	var companies: Array = []
+	var next_id: Array = [1]
 	var lord: L5RCharacterData = _make_char_for_levy(5, "Crab")
 	var clan: ClanData = _make_clan("Crab", [1])
 	clan.arms_stockpile = 10.0
@@ -4548,8 +4548,8 @@ func test_levy_deducts_arms_from_clan() -> void:
 
 func test_levy_arms_clamped_at_zero() -> void:
 	var s: SettlementData = _make_settlement(10, 1, 10, 3)
-	var companies: Array[Dictionary] = []
-	var next_id: Array[int] = [1]
+	var companies: Array = []
+	var next_id: Array = [1]
 	var lord: L5RCharacterData = _make_char_for_levy(5, "Crab")
 	var clan: ClanData = _make_clan("Crab", [1])
 	clan.arms_stockpile = 0.5
@@ -4568,8 +4568,8 @@ func test_levy_arms_clamped_at_zero() -> void:
 
 func test_levy_no_arms_deduction_without_clan() -> void:
 	var s: SettlementData = _make_settlement(10, 1, 10, 3)
-	var companies: Array[Dictionary] = []
-	var next_id: Array[int] = [1]
+	var companies: Array = []
+	var next_id: Array = [1]
 	var lord: L5RCharacterData = _make_char_for_levy(5, "Crab")
 	var chars_by_id: Dictionary = {5: lord}
 	var applied: Dictionary = {
@@ -4586,8 +4586,8 @@ func test_levy_no_arms_deduction_without_clan() -> void:
 
 func test_levy_peasant_levy_cheaper_arms() -> void:
 	var s: SettlementData = _make_settlement(10, 1, 10, 3)
-	var companies: Array[Dictionary] = []
-	var next_id: Array[int] = [1]
+	var companies: Array = []
+	var next_id: Array = [1]
 	var lord: L5RCharacterData = _make_char_for_levy(5, "Crab")
 	var clan: ClanData = _make_clan("Crab", [1])
 	clan.arms_stockpile = 10.0
@@ -4684,9 +4684,9 @@ func test_levy_suspicion_fires_after_threshold() -> void:
 	lord.family = "Hida"
 	var chars_by_id: Dictionary = {5: lord}
 	var company: Dictionary = _make_levy_company(1, 5, 0)
-	var topics: Array[TopicData] = []
-	var next_tid: Array[int] = [100]
-	var results: Array[Dictionary] = DayOrchestrator._process_levy_suspicion(
+	var topics: Array = []
+	var next_tid: Array = [100]
+	var results: Array = DayOrchestrator._process_levy_suspicion(
 		[company], [], chars_by_id, topics, next_tid, 90, 1,
 	)
 	assert_eq(results.size(), 1)
@@ -4700,9 +4700,9 @@ func test_levy_suspicion_skips_wartime() -> void:
 	var chars_by_id: Dictionary = {5: lord}
 	var company: Dictionary = _make_levy_company(1, 5, 0)
 	var war: WarData = WarSystem.declare_war(1, "Crab", "Crane", 1, 1, 2)
-	var topics: Array[TopicData] = []
-	var next_tid: Array[int] = [100]
-	var results: Array[Dictionary] = DayOrchestrator._process_levy_suspicion(
+	var topics: Array = []
+	var next_tid: Array = [100]
+	var results: Array = DayOrchestrator._process_levy_suspicion(
 		[company], [war], chars_by_id, topics, next_tid, 90, 3,
 	)
 	assert_eq(results.size(), 0)
@@ -4713,9 +4713,9 @@ func test_levy_suspicion_skips_before_threshold() -> void:
 	var lord: L5RCharacterData = _make_char_for_levy(5, "Crab")
 	var chars_by_id: Dictionary = {5: lord}
 	var company: Dictionary = _make_levy_company(1, 5, 5)
-	var topics: Array[TopicData] = []
-	var next_tid: Array[int] = [100]
-	var results: Array[Dictionary] = DayOrchestrator._process_levy_suspicion(
+	var topics: Array = []
+	var next_tid: Array = [100]
+	var results: Array = DayOrchestrator._process_levy_suspicion(
 		[company], [], chars_by_id, topics, next_tid, 90, 5,
 	)
 	assert_eq(results.size(), 0)
@@ -4726,9 +4726,9 @@ func test_levy_suspicion_escalates_at_3_seasons() -> void:
 	lord.family = "Hida"
 	var chars_by_id: Dictionary = {5: lord}
 	var company: Dictionary = _make_levy_company(1, 5, 0)
-	var topics: Array[TopicData] = []
-	var next_tid: Array[int] = [100]
-	var results: Array[Dictionary] = DayOrchestrator._process_levy_suspicion(
+	var topics: Array = []
+	var next_tid: Array = [100]
+	var results: Array = DayOrchestrator._process_levy_suspicion(
 		[company], [], chars_by_id, topics, next_tid, 90, 3,
 	)
 	assert_eq(results.size(), 1)
@@ -4741,9 +4741,9 @@ func test_levy_suspicion_skips_army_companies() -> void:
 	var chars_by_id: Dictionary = {5: lord}
 	var company: Dictionary = _make_levy_company(1, 5, 0)
 	company["army_id"] = 1
-	var topics: Array[TopicData] = []
-	var next_tid: Array[int] = [100]
-	var results: Array[Dictionary] = DayOrchestrator._process_levy_suspicion(
+	var topics: Array = []
+	var next_tid: Array = [100]
+	var results: Array = DayOrchestrator._process_levy_suspicion(
 		[company], [], chars_by_id, topics, next_tid, 90, 2,
 	)
 	assert_eq(results.size(), 0)
@@ -4755,9 +4755,9 @@ func test_levy_suspicion_one_topic_per_lord() -> void:
 	var chars_by_id: Dictionary = {5: lord}
 	var c1: Dictionary = _make_levy_company(1, 5, 0)
 	var c2: Dictionary = _make_levy_company(2, 5, 0)
-	var topics: Array[TopicData] = []
-	var next_tid: Array[int] = [100]
-	var results: Array[Dictionary] = DayOrchestrator._process_levy_suspicion(
+	var topics: Array = []
+	var next_tid: Array = [100]
+	var results: Array = DayOrchestrator._process_levy_suspicion(
 		[c1, c2], [], chars_by_id, topics, next_tid, 90, 2,
 	)
 	assert_eq(results.size(), 1)
@@ -4766,8 +4766,8 @@ func test_levy_suspicion_one_topic_per_lord() -> void:
 
 func test_levy_company_dict_has_raised_season() -> void:
 	var s: SettlementData = _make_settlement(10, 1, 10, 3)
-	var companies: Array[Dictionary] = []
-	var next_id: Array[int] = [1]
+	var companies: Array = []
+	var next_id: Array = [1]
 	var applied: Dictionary = {
 		"character_id": 5,
 		"target_province_id": 1,
@@ -4784,8 +4784,8 @@ func test_levy_company_dict_has_raised_season() -> void:
 func test_levy_fails_with_insufficient_pu() -> void:
 	var s: SettlementData = _make_settlement(10, 1, 10, 0)
 	s.garrison_pu = 10
-	var companies: Array[Dictionary] = []
-	var next_id: Array[int] = [1]
+	var companies: Array = []
+	var next_id: Array = [1]
 	var applied: Dictionary = {
 		"character_id": 5,
 		"target_province_id": 1,
@@ -4806,8 +4806,8 @@ func test_levy_fails_no_military_pu() -> void:
 	s.population_pu = 5
 	s.military_pu = 0
 	s.garrison_pu = 0
-	var companies: Array[Dictionary] = []
-	var next_id: Array[int] = [1]
+	var companies: Array = []
+	var next_id: Array = [1]
 	var applied: Dictionary = {
 		"character_id": 5,
 		"target_province_id": 1,
@@ -4824,8 +4824,8 @@ func test_levy_fails_no_military_pu() -> void:
 func test_levy_succeeds_with_sufficient_pu() -> void:
 	var s: SettlementData = _make_settlement(10, 1, 10, 3)
 	s.garrison_pu = 1
-	var companies: Array[Dictionary] = []
-	var next_id: Array[int] = [1]
+	var companies: Array = []
+	var next_id: Array = [1]
 	var applied: Dictionary = {
 		"character_id": 5,
 		"target_province_id": 1,
@@ -4841,8 +4841,8 @@ func test_levy_succeeds_with_sufficient_pu() -> void:
 func test_levy_fails_does_not_increment_company_id() -> void:
 	var s: SettlementData = _make_settlement(10, 1, 10, 0)
 	s.garrison_pu = 10
-	var companies: Array[Dictionary] = []
-	var next_id: Array[int] = [50]
+	var companies: Array = []
+	var next_id: Array = [50]
 	var applied: Dictionary = {
 		"character_id": 5,
 		"target_province_id": 1,
@@ -5052,7 +5052,7 @@ func _make_army_company(
 
 func test_storm_assault_no_flag_returns_empty() -> void:
 	var applied: Array = [{"effects": {"effect": "something_else"}}]
-	var r: Array[Dictionary] = DayOrchestrator._process_storm_assault_results(
+	var r: Array = DayOrchestrator._process_storm_assault_results(
 		applied, [], [], DiceEngine.new(), [], {},
 	)
 	assert_eq(r.size(), 0)
@@ -5062,7 +5062,7 @@ func test_storm_assault_no_siege_returns_empty() -> void:
 	var applied: Array = [{
 		"effects": {"requires_storm_assault": true, "siege_settlement_id": 99},
 	}]
-	var r: Array[Dictionary] = DayOrchestrator._process_storm_assault_results(
+	var r: Array = DayOrchestrator._process_storm_assault_results(
 		applied, [], [], DiceEngine.new(), [], {},
 	)
 	assert_eq(r.size(), 0)
@@ -5070,7 +5070,7 @@ func test_storm_assault_no_siege_returns_empty() -> void:
 
 func test_storm_assault_finds_siege_and_resolves() -> void:
 	var siege: Dictionary = _make_siege_state(10, 1, 2)
-	var companies: Array[Dictionary] = [
+	var companies: Array = [
 		_make_army_company(1, 1, Enums.CompanyUnitType.BUSHI_RETAINER),
 		_make_army_company(2, 1, Enums.CompanyUnitType.BUSHI_RETAINER),
 		_make_army_company(3, 2, Enums.CompanyUnitType.GARRISON),
@@ -5083,7 +5083,7 @@ func test_storm_assault_finds_siege_and_resolves() -> void:
 	var s: SettlementData = SettlementData.new()
 	s.settlement_id = 10
 	s.province_id = 1
-	var r: Array[Dictionary] = DayOrchestrator._process_storm_assault_results(
+	var r: Array = DayOrchestrator._process_storm_assault_results(
 		applied, [siege], companies, dice, [s], {},
 	)
 	assert_eq(r.size(), 1)
@@ -5096,7 +5096,7 @@ func test_storm_assault_finds_siege_and_resolves() -> void:
 func test_storm_assault_attacker_victory_ends_siege() -> void:
 	var siege: Dictionary = _make_siege_state(10, 1, 2)
 	# Strong attacker vs weak defender
-	var companies: Array[Dictionary] = [
+	var companies: Array = [
 		_make_army_company(1, 1, Enums.CompanyUnitType.BUSHI_RETAINER),
 		_make_army_company(2, 1, Enums.CompanyUnitType.BUSHI_RETAINER),
 		_make_army_company(3, 1, Enums.CompanyUnitType.BUSHI_RETAINER),
@@ -5119,11 +5119,11 @@ func test_storm_assault_attacker_victory_ends_siege() -> void:
 
 func test_storm_assault_empty_companies_skips() -> void:
 	var siege: Dictionary = _make_siege_state(10, 1, 2)
-	var companies: Array[Dictionary] = []
+	var companies: Array = []
 	var applied: Array = [{
 		"effects": {"requires_storm_assault": true, "siege_settlement_id": 10},
 	}]
-	var r: Array[Dictionary] = DayOrchestrator._process_storm_assault_results(
+	var r: Array = DayOrchestrator._process_storm_assault_results(
 		applied, [siege], companies, DiceEngine.new(), [], {},
 	)
 	assert_eq(r.size(), 0)
@@ -5202,7 +5202,7 @@ func _setup_battle_scenario(
 	var c1: Dictionary = _make_company_dict_for_battle(1, 1, "Crab")
 	var c2: Dictionary = _make_company_dict_for_battle(2, 2, "Crane")
 
-	var settlements: Array[SettlementData] = []
+	var settlements: Array = []
 	if defender_has_fort:
 		settlements.append(_make_military_settlement(10, province_id))
 
@@ -5314,7 +5314,7 @@ func test_integration_war_score_shift_from_battle() -> void:
 		s["armies"], [], [], [], s["dice"], s["settlements"],
 		s["companies"], {}, s["wars"], {}, s["provinces"],
 	)
-	var war_score_results: Array[Dictionary] = DayOrchestrator._process_war_score_shifts(
+	var war_score_results: Array = DayOrchestrator._process_war_score_shifts(
 		military_daily, [], s["wars"], s["companies"],
 	)
 	# A battle with 2 companies is minor (+3 shift)
@@ -5478,7 +5478,7 @@ func test_e2e_metadata_to_executor_to_orchestrator() -> void:
 	assert_eq(exec_result["effects"]["siege_settlement_id"], 10)
 
 	var siege: Dictionary = _make_siege_state(10, 1, 2)
-	var companies: Array[Dictionary] = [
+	var companies: Array = [
 		_make_army_company(1, 1, Enums.CompanyUnitType.BUSHI_RETAINER),
 		_make_army_company(2, 1, Enums.CompanyUnitType.BUSHI_RETAINER),
 		_make_army_company(3, 2, Enums.CompanyUnitType.GARRISON),
@@ -5488,7 +5488,7 @@ func test_e2e_metadata_to_executor_to_orchestrator() -> void:
 	var s: SettlementData = SettlementData.new()
 	s.settlement_id = 10
 	s.province_id = 1
-	var r: Array[Dictionary] = DayOrchestrator._process_storm_assault_results(
+	var r: Array = DayOrchestrator._process_storm_assault_results(
 		applied, [siege], companies, dice, [s], {},
 	)
 	assert_eq(r.size(), 1)
@@ -5498,7 +5498,7 @@ func test_e2e_metadata_to_executor_to_orchestrator() -> void:
 func test_e2e_storm_assault_defender_victory_resets_sortie_counter() -> void:
 	var siege: Dictionary = _make_siege_state(10, 1, 2)
 	siege["ticks_since_sortie"] = 15
-	var companies: Array[Dictionary] = [
+	var companies: Array = [
 		_make_army_company(1, 1, Enums.CompanyUnitType.PEASANT_LEVY),
 		_make_army_company(2, 2, Enums.CompanyUnitType.BUSHI_RETAINER),
 		_make_army_company(3, 2, Enums.CompanyUnitType.BUSHI_RETAINER),
@@ -5524,7 +5524,7 @@ func test_e2e_storm_assault_company_health_mutated() -> void:
 	var c_def: Dictionary = _make_army_company(2, 2, Enums.CompanyUnitType.BUSHI_RETAINER)
 	var h_atk_before: int = c_atk["current_health"]
 	var h_def_before: int = c_def["current_health"]
-	var companies: Array[Dictionary] = [c_atk, c_def]
+	var companies: Array = [c_atk, c_def]
 	var applied: Array = [{
 		"effects": {"requires_storm_assault": true, "siege_settlement_id": 10},
 	}]
@@ -5543,7 +5543,7 @@ func test_e2e_storm_assault_company_health_mutated() -> void:
 func test_e2e_storm_assault_only_targets_matching_siege() -> void:
 	var siege_a: Dictionary = _make_siege_state(10, 1, 2)
 	var siege_b: Dictionary = _make_siege_state(20, 3, 4)
-	var companies: Array[Dictionary] = [
+	var companies: Array = [
 		_make_army_company(1, 1, Enums.CompanyUnitType.BUSHI_RETAINER),
 		_make_army_company(2, 2, Enums.CompanyUnitType.GARRISON),
 		_make_army_company(3, 3, Enums.CompanyUnitType.BUSHI_RETAINER),
@@ -5564,7 +5564,7 @@ func test_e2e_storm_assault_only_targets_matching_siege() -> void:
 
 func test_e2e_storm_assault_uses_urban_terrain_and_fort_bonus() -> void:
 	var siege: Dictionary = _make_siege_state(10, 1, 2)
-	var companies: Array[Dictionary] = [
+	var companies: Array = [
 		_make_army_company(1, 1, Enums.CompanyUnitType.BUSHI_RETAINER),
 		_make_army_company(2, 2, Enums.CompanyUnitType.GARRISON),
 	]
@@ -5575,7 +5575,7 @@ func test_e2e_storm_assault_uses_urban_terrain_and_fort_bonus() -> void:
 	var s: SettlementData = SettlementData.new()
 	s.settlement_id = 10
 	s.province_id = 1
-	var r: Array[Dictionary] = DayOrchestrator._process_storm_assault_results(
+	var r: Array = DayOrchestrator._process_storm_assault_results(
 		applied, [siege], companies, dice, [s], {},
 	)
 	assert_eq(r.size(), 1)
@@ -5652,7 +5652,7 @@ func test_patrol_stamps_season_meta() -> void:
 		"character_id": 1,
 	}]
 	var season_meta: Dictionary = {}
-	var r: Array[Dictionary] = DayOrchestrator._process_patrol_effects(applied, season_meta)
+	var r: Array = DayOrchestrator._process_patrol_effects(applied, season_meta)
 	assert_eq(r.size(), 1)
 	assert_eq(r[0]["province_id"], 5)
 	assert_true(season_meta.get("patrolled_provinces", {}).has(5))
@@ -5664,7 +5664,7 @@ func test_patrol_multiple_provinces() -> void:
 		{"effects": {"requires_patrol": true, "patrol_province_id": 8}, "character_id": 2},
 	]
 	var season_meta: Dictionary = {}
-	var r: Array[Dictionary] = DayOrchestrator._process_patrol_effects(applied, season_meta)
+	var r: Array = DayOrchestrator._process_patrol_effects(applied, season_meta)
 	assert_eq(r.size(), 2)
 	var patrolled: Dictionary = season_meta.get("patrolled_provinces", {})
 	assert_true(patrolled.has(5))
@@ -5677,7 +5677,7 @@ func test_patrol_skips_invalid_province() -> void:
 		"character_id": 1,
 	}]
 	var season_meta: Dictionary = {}
-	var r: Array[Dictionary] = DayOrchestrator._process_patrol_effects(applied, season_meta)
+	var r: Array = DayOrchestrator._process_patrol_effects(applied, season_meta)
 	assert_eq(r.size(), 0)
 
 
@@ -5703,9 +5703,9 @@ func test_patrol_concealment_reduction_on_hidden_insurgency() -> void:
 	province.province_id = 5
 	var season_meta: Dictionary = {"patrolled_provinces": {5: true}}
 	var provinces: Dictionary = {5: province}
-	var insurgencies: Array[InsurgencyData] = [ins]
+	var insurgencies: Array = [ins]
 	var dice: DiceEngine = DiceEngine.new(1)
-	var next_id: Array[int] = [100]
+	var next_id: Array = [100]
 	DayOrchestrator._process_insurgencies(
 		insurgencies, provinces, dice, 0,
 		next_id, {}, {}, season_meta,
@@ -5723,9 +5723,9 @@ func test_patrol_auto_detects_at_concealment_one() -> void:
 	province.province_id = 5
 	var season_meta: Dictionary = {"patrolled_provinces": {5: true}}
 	var provinces: Dictionary = {5: province}
-	var insurgencies: Array[InsurgencyData] = [ins]
+	var insurgencies: Array = [ins]
 	var dice: DiceEngine = DiceEngine.new(1)
-	var next_id: Array[int] = [100]
+	var next_id: Array = [100]
 	DayOrchestrator._process_insurgencies(
 		insurgencies, provinces, dice, 0,
 		next_id, {}, {}, season_meta,
@@ -5787,7 +5787,7 @@ func test_purify_orchestrator_reduces_ptl() -> void:
 		},
 	}]
 	var season_meta: Dictionary = {}
-	var r: Array[Dictionary] = DayOrchestrator._process_purification_effects(
+	var r: Array = DayOrchestrator._process_purification_effects(
 		applied, {5: province}, season_meta,
 	)
 	assert_eq(r.size(), 1)
@@ -5917,7 +5917,7 @@ func test_purify_skips_nonexistent_province() -> void:
 			"ward_school_rank": 1,
 		},
 	}]
-	var r: Array[Dictionary] = DayOrchestrator._process_purification_effects(applied, {}, {})
+	var r: Array = DayOrchestrator._process_purification_effects(applied, {}, {})
 	assert_eq(r.size(), 0)
 
 
@@ -5957,7 +5957,7 @@ func test_drill_success_adds_training_points() -> void:
 		"character_id": 1,
 	}]
 	var dice: DiceEngine = DiceEngine.new(99)
-	var r: Array[Dictionary] = DayOrchestrator._process_drill_effects(
+	var r: Array = DayOrchestrator._process_drill_effects(
 		applied, [company],
 		{1: c}, dice,
 	)
@@ -5977,7 +5977,7 @@ func test_drill_fallback_to_commander_id() -> void:
 		"character_id": 1,
 	}]
 	var dice: DiceEngine = DiceEngine.new(99)
-	var r: Array[Dictionary] = DayOrchestrator._process_drill_effects(
+	var r: Array = DayOrchestrator._process_drill_effects(
 		applied, [company],
 		{1: c}, dice,
 	)
@@ -5997,7 +5997,7 @@ func test_drill_level_up_at_10_points() -> void:
 		"character_id": 1,
 	}]
 	var dice: DiceEngine = DiceEngine.new(99)
-	var r: Array[Dictionary] = DayOrchestrator._process_drill_effects(
+	var r: Array = DayOrchestrator._process_drill_effects(
 		applied, [company],
 		{1: c}, dice,
 	)
@@ -6031,7 +6031,7 @@ func test_drill_no_character_skips() -> void:
 		"character_id": 999,
 	}]
 	var dice: DiceEngine = DiceEngine.new(1)
-	var r: Array[Dictionary] = DayOrchestrator._process_drill_effects(
+	var r: Array = DayOrchestrator._process_drill_effects(
 		applied, [company],
 		{}, dice,
 	)
@@ -6046,7 +6046,7 @@ func test_drill_no_company_skips() -> void:
 		"character_id": 1,
 	}]
 	var dice: DiceEngine = DiceEngine.new(1)
-	var r: Array[Dictionary] = DayOrchestrator._process_drill_effects(
+	var r: Array = DayOrchestrator._process_drill_effects(
 		applied, [],
 		{1: c}, dice,
 	)
@@ -6056,7 +6056,7 @@ func test_drill_no_company_skips() -> void:
 func test_drill_results_in_advance_day_return() -> void:
 	var applied: Array = [{"effects": {"effect": "nothing"}}]
 	var dice: DiceEngine = DiceEngine.new(1)
-	var r: Array[Dictionary] = DayOrchestrator._process_drill_effects(
+	var r: Array = DayOrchestrator._process_drill_effects(
 		applied, [], {}, dice,
 	)
 	assert_eq(r.size(), 0)

@@ -522,7 +522,7 @@ func test_same_seed_produces_same_province() -> void:
 # =============================================================================
 
 func test_all_schools_generate_valid_characters() -> void:
-	var schools: Array[String] = [
+	var schools: Array = [
 		"Hida Bushi", "Hiruma Bushi", "Kaiu Engineer", "Kuni Shugenja",
 		"Yasuki Courtier", "Kakita Bushi", "Daidoji Iron Warrior",
 		"Doji Courtier", "Asahina Shugenja", "Mirumoto Bushi",
@@ -647,7 +647,7 @@ func _make_province() -> ProvinceData:
 
 
 func test_village_infrastructure() -> void:
-	var inf: Array[String] = WorldGenerator._default_infrastructure(
+	var inf: Array = WorldGenerator._default_infrastructure(
 		Enums.SettlementType.VILLAGE, false,
 	)
 	assert_true(inf.has("shrine"))
@@ -657,7 +657,7 @@ func test_village_infrastructure() -> void:
 
 
 func test_town_infrastructure() -> void:
-	var inf: Array[String] = WorldGenerator._default_infrastructure(
+	var inf: Array = WorldGenerator._default_infrastructure(
 		Enums.SettlementType.TOWN, false,
 	)
 	assert_true(inf.has("shrine"))
@@ -673,7 +673,7 @@ func test_town_infrastructure() -> void:
 
 
 func test_city_infrastructure() -> void:
-	var inf: Array[String] = WorldGenerator._default_infrastructure(
+	var inf: Array = WorldGenerator._default_infrastructure(
 		Enums.SettlementType.CITY, false,
 	)
 	assert_true(inf.has("theater"))
@@ -684,7 +684,7 @@ func test_city_infrastructure() -> void:
 
 
 func test_fortification_infrastructure() -> void:
-	var inf: Array[String] = WorldGenerator._default_infrastructure(
+	var inf: Array = WorldGenerator._default_infrastructure(
 		Enums.SettlementType.FORTIFICATION, false,
 	)
 	assert_eq(inf.size(), 1)
@@ -692,7 +692,7 @@ func test_fortification_infrastructure() -> void:
 
 
 func test_keep_infrastructure() -> void:
-	var inf: Array[String] = WorldGenerator._default_infrastructure(
+	var inf: Array = WorldGenerator._default_infrastructure(
 		Enums.SettlementType.KEEP, false,
 	)
 	assert_true(inf.has("garrison"))
@@ -704,7 +704,7 @@ func test_keep_infrastructure() -> void:
 
 
 func test_castle_without_town_infrastructure() -> void:
-	var inf: Array[String] = WorldGenerator._default_infrastructure(
+	var inf: Array = WorldGenerator._default_infrastructure(
 		Enums.SettlementType.CASTLE, false,
 	)
 	assert_true(inf.has("garrison"))
@@ -716,7 +716,7 @@ func test_castle_without_town_infrastructure() -> void:
 
 
 func test_castle_with_town_infrastructure() -> void:
-	var inf: Array[String] = WorldGenerator._default_infrastructure(
+	var inf: Array = WorldGenerator._default_infrastructure(
 		Enums.SettlementType.CASTLE, true,
 	)
 	assert_true(inf.has("garrison"))
@@ -732,7 +732,7 @@ func test_castle_with_town_infrastructure() -> void:
 
 
 func test_family_castle_always_has_full_town() -> void:
-	var inf: Array[String] = WorldGenerator._default_infrastructure(
+	var inf: Array = WorldGenerator._default_infrastructure(
 		Enums.SettlementType.FAMILY_CASTLE, false,
 	)
 	assert_true(inf.has("garrison"))
@@ -750,7 +750,7 @@ func test_family_castle_always_has_full_town() -> void:
 
 
 func test_temple_infrastructure() -> void:
-	var inf: Array[String] = WorldGenerator._default_infrastructure(
+	var inf: Array = WorldGenerator._default_infrastructure(
 		Enums.SettlementType.TEMPLE, false,
 	)
 	assert_true(inf.has("temple"))
@@ -759,7 +759,7 @@ func test_temple_infrastructure() -> void:
 
 
 func test_shinden_infrastructure() -> void:
-	var inf: Array[String] = WorldGenerator._default_infrastructure(
+	var inf: Array = WorldGenerator._default_infrastructure(
 		Enums.SettlementType.SHINDEN, false,
 	)
 	assert_true(inf.has("temple"))
@@ -767,7 +767,7 @@ func test_shinden_infrastructure() -> void:
 
 
 func test_monastery_infrastructure() -> void:
-	var inf: Array[String] = WorldGenerator._default_infrastructure(
+	var inf: Array = WorldGenerator._default_infrastructure(
 		Enums.SettlementType.MONASTERY, false,
 	)
 	assert_true(inf.has("temple"))
@@ -776,7 +776,7 @@ func test_monastery_infrastructure() -> void:
 
 
 func test_wall_tower_infrastructure() -> void:
-	var inf: Array[String] = WorldGenerator._default_infrastructure(
+	var inf: Array = WorldGenerator._default_infrastructure(
 		Enums.SettlementType.WALL_TOWER, false,
 	)
 	assert_eq(inf.size(), 2)

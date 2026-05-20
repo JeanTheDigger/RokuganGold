@@ -232,7 +232,7 @@ static func select_event(
 	dice: DiceEngine,
 	side: String,
 ) -> String:
-	var pool: Array[String]
+	var pool: Array
 	if side == "attacker":
 		pool = ATTACKER_EVENTS.duplicate()
 	else:
@@ -276,7 +276,7 @@ static func resolve_siege_event(
 	var success: bool = roll_result["success"]
 
 	var tick_change: int = 0
-	var effects: Array[String] = []
+	var effects: Array = []
 
 	if success:
 		tick_change = def["success_ticks"]

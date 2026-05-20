@@ -204,21 +204,21 @@ func test_uncommitted_no_personality_effect() -> void:
 # -- Rank Candidates Tests -------------------------------------------------------
 
 func test_rank_candidates_uncommitted_first() -> void:
-	var candidates: Array[Dictionary] = [
+	var candidates: Array = [
 		_make_candidate(1, "magistrate_stable"),
 		_make_candidate(2, "uncommitted"),
 		_make_candidate(3, "yoriki_idle"),
 	]
-	var ranked: Array[Dictionary] = LevySystem.rank_candidates(candidates, "")
+	var ranked: Array = LevySystem.rank_candidates(candidates, "")
 	assert_eq(ranked[0]["character_id"], 2)
 
 
 func test_rank_candidates_yu_reorders() -> void:
-	var candidates: Array[Dictionary] = [
+	var candidates: Array = [
 		_make_candidate(1, "magistrate_insurgency"),
 		_make_candidate(2, "uncommitted"),
 	]
-	var ranked: Array[Dictionary] = LevySystem.rank_candidates(candidates, "Yu")
+	var ranked: Array = LevySystem.rank_candidates(candidates, "Yu")
 	# Yu halves penalties: magistrate = -12, uncommitted = 0
 	assert_eq(ranked[0]["character_id"], 2)
 	assert_eq(ranked[1]["commitment_score"], -12)
@@ -283,8 +283,8 @@ func test_suspicion_applies_disposition_to_family_daimyo() -> void:
 	var lord: L5RCharacterData = _make_lord_char(10, "Crab", 20, 5.0)
 	var family_daimyo: L5RCharacterData = _make_lord_char(20, "Crab", -1, 6.0)
 	var characters_by_id: Dictionary = {10: lord, 20: family_daimyo}
-	var topics: Array[TopicData] = []
-	var next_topic_id: Array[int] = [1]
+	var topics: Array = []
+	var next_topic_id: Array = [1]
 	DayOrchestrator._process_levy_suspicion(
 		[_make_levy_company(10, 0)], [], characters_by_id,
 		topics, next_topic_id, 90, 1,
@@ -297,8 +297,8 @@ func test_suspicion_applies_disposition_to_clan_champion() -> void:
 	var family_daimyo: L5RCharacterData = _make_lord_char(20, "Crab", -1, 6.0)
 	var champion: L5RCharacterData = _make_lord_char(30, "Crab", -1, 7.0)
 	var characters_by_id: Dictionary = {10: lord, 20: family_daimyo, 30: champion}
-	var topics: Array[TopicData] = []
-	var next_topic_id: Array[int] = [1]
+	var topics: Array = []
+	var next_topic_id: Array = [1]
 	DayOrchestrator._process_levy_suspicion(
 		[_make_levy_company(10, 0)], [], characters_by_id,
 		topics, next_topic_id, 90, 1,
@@ -311,8 +311,8 @@ func test_suspicion_no_duplicate_if_champion_is_family_daimyo() -> void:
 	var lord: L5RCharacterData = _make_lord_char(10, "Crab", 30, 5.0)
 	var champion: L5RCharacterData = _make_lord_char(30, "Crab", -1, 7.0)
 	var characters_by_id: Dictionary = {10: lord, 30: champion}
-	var topics: Array[TopicData] = []
-	var next_topic_id: Array[int] = [1]
+	var topics: Array = []
+	var next_topic_id: Array = [1]
 	DayOrchestrator._process_levy_suspicion(
 		[_make_levy_company(10, 0)], [], characters_by_id,
 		topics, next_topic_id, 90, 1,
@@ -328,8 +328,8 @@ func test_suspicion_wartime_skips_disposition() -> void:
 	var war: WarData = WarData.new()
 	war.clan_a = "Crab"
 	war.clan_b = "Lion"
-	var topics: Array[TopicData] = []
-	var next_topic_id: Array[int] = [1]
+	var topics: Array = []
+	var next_topic_id: Array = [1]
 	DayOrchestrator._process_levy_suspicion(
 		[_make_levy_company(10, 0)], [war], characters_by_id,
 		topics, next_topic_id, 90, 1,

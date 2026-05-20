@@ -275,14 +275,14 @@ static func calculate_witness_evidence(
 # -- Witness Prioritization (s57.16.4) ----------------------------------------
 
 static func prioritize_witnesses(
-	candidates: Array[int],
+	candidates: Array,
 	characters_by_id: Dictionary,
-	present_ids: Array[int],
+	present_ids: Array,
 ) -> Array:
 	if candidates.size() <= 1:
 		return candidates.duplicate()
 
-	var scored: Array[Dictionary] = []
+	var scored: Array = []
 	for cand_id: int in candidates:
 		var c: L5RCharacterData = characters_by_id.get(cand_id)
 		var awareness: int = 2
@@ -306,7 +306,7 @@ static func prioritize_witnesses(
 		return a["honor"] < b["honor"]
 	)
 
-	var result: Array[int] = []
+	var result: Array = []
 	for entry: Dictionary in scored:
 		result.append(entry["id"])
 	return result
@@ -331,7 +331,7 @@ static func check_jurisdiction(
 
 static func find_crime_record_for_topic(
 	topic: TopicData,
-	crime_records: Array[CrimeRecord],
+	crime_records: Array,
 ) -> CrimeRecord:
 	if topic.topic_type != "crime":
 		return null
@@ -374,8 +374,8 @@ static func activate_uphold_law(
 static func scan_for_crime_topics(
 	magistrate: L5RCharacterData,
 	standing_objective: Dictionary,
-	crime_records: Array[CrimeRecord],
-	active_topics: Array[TopicData],
+	crime_records: Array,
+	active_topics: Array,
 ) -> Dictionary:
 	if standing_objective.has("active_case") and not standing_objective["active_case"].is_empty():
 		return {}
@@ -580,9 +580,9 @@ static func generate_leads_from_probe(
 	probe_quality: int,
 	crime_record: CrimeRecord,
 	objective: Dictionary,
-	characters_present: Array[int],
+	characters_present: Array,
 ) -> Array:
-	var leads: Array[Dictionary] = []
+	var leads: Array = []
 	var unresolved: Array = objective.get("unresolved_leads", [])
 
 	if probe_quality >= 3 and crime_record.perpetrator_id >= 0:
@@ -666,7 +666,7 @@ static func generate_conviction_topic(
 	record: CrimeRecord,
 	convicted: L5RCharacterData,
 	topic_tier: int,
-	next_topic_id: Array[int],
+	next_topic_id: Array,
 	ic_day: int,
 ) -> TopicData:
 	if topic_tier <= 0 or topic_tier > 4:
@@ -708,7 +708,7 @@ static func generate_conviction_topic(
 
 static func generate_seppuku_refusal_topic(
 	convicted: L5RCharacterData,
-	next_topic_id: Array[int],
+	next_topic_id: Array,
 	ic_day: int,
 ) -> TopicData:
 	var topic_id: int = next_topic_id[0]
@@ -739,7 +739,7 @@ static func generate_seppuku_refusal_topic(
 static func generate_accusation_topic(
 	record: CrimeRecord,
 	accused: L5RCharacterData,
-	next_topic_id: Array[int],
+	next_topic_id: Array,
 	ic_day: int,
 ) -> TopicData:
 	var crime_name: String = CRIME_TYPE_NAMES.get(record.crime_type, "Crime")
@@ -770,7 +770,7 @@ static func generate_accusation_topic(
 static func generate_investigation_opened_topic(
 	record: CrimeRecord,
 	magistrate: L5RCharacterData,
-	next_topic_id: Array[int],
+	next_topic_id: Array,
 	ic_day: int,
 ) -> TopicData:
 	var crime_name: String = CRIME_TYPE_NAMES.get(record.crime_type, "Crime")
@@ -801,7 +801,7 @@ static func generate_bribery_attempt_topic(
 	suspect: L5RCharacterData,
 	magistrate: L5RCharacterData,
 	record: CrimeRecord,
-	next_topic_id: Array[int],
+	next_topic_id: Array,
 	ic_day: int,
 ) -> TopicData:
 	var crime_name: String = CRIME_TYPE_NAMES.get(record.crime_type, "Crime")
@@ -833,7 +833,7 @@ static func generate_bribery_attempt_topic(
 
 static func generate_fugitive_topic(
 	fugitive: L5RCharacterData,
-	next_topic_id: Array[int],
+	next_topic_id: Array,
 	ic_day: int,
 ) -> TopicData:
 	var title: String = "%s is a fugitive from justice" % fugitive.character_name

@@ -988,10 +988,10 @@ func test_auto_conceal_fires_for_contraband() -> void:
 	)
 	npc.items.append(poison_item)
 
-	var arrivals: Array[Dictionary] = [{"character_id": 80, "destination": "Kyuden Bayushi"}]
+	var arrivals: Array = [{"character_id": 80, "destination": "Kyuden Bayushi"}]
 	var chars: Dictionary = {80: npc}
 	var e: DiceEngine = DiceEngine.new(42)
-	var results: Array[Dictionary] = DayOrchestrator._process_auto_conceal_on_arrival(arrivals, chars, e)
+	var results: Array = DayOrchestrator._process_auto_conceal_on_arrival(arrivals, chars, e)
 
 	assert_eq(results.size(), 1)
 	assert_eq(results[0]["character_id"], 80)
@@ -1010,10 +1010,10 @@ func test_auto_conceal_skips_non_contraband() -> void:
 	)
 	npc.items.append(normal_item)
 
-	var arrivals: Array[Dictionary] = [{"character_id": 81, "destination": "Kyuden Crane"}]
+	var arrivals: Array = [{"character_id": 81, "destination": "Kyuden Crane"}]
 	var chars: Dictionary = {81: npc}
 	var e: DiceEngine = DiceEngine.new(42)
-	var results: Array[Dictionary] = DayOrchestrator._process_auto_conceal_on_arrival(arrivals, chars, e)
+	var results: Array = DayOrchestrator._process_auto_conceal_on_arrival(arrivals, chars, e)
 
 	assert_eq(results.size(), 0, "Non-contraband items should not trigger auto-conceal")
 
@@ -1032,10 +1032,10 @@ func test_auto_conceal_skips_already_concealed() -> void:
 	item["concealment_tn"] = 20
 	npc.items.append(item)
 
-	var arrivals: Array[Dictionary] = [{"character_id": 82, "destination": "Otosan Uchi"}]
+	var arrivals: Array = [{"character_id": 82, "destination": "Otosan Uchi"}]
 	var chars: Dictionary = {82: npc}
 	var e: DiceEngine = DiceEngine.new(42)
-	var results: Array[Dictionary] = DayOrchestrator._process_auto_conceal_on_arrival(arrivals, chars, e)
+	var results: Array = DayOrchestrator._process_auto_conceal_on_arrival(arrivals, chars, e)
 
 	assert_eq(results.size(), 0, "Already concealed items should be skipped")
 
@@ -1052,10 +1052,10 @@ func test_auto_conceal_weapon_blocked_without_rank_5() -> void:
 	)
 	npc.items.append(blade)
 
-	var arrivals: Array[Dictionary] = [{"character_id": 83, "destination": "Kyuden Doji"}]
+	var arrivals: Array = [{"character_id": 83, "destination": "Kyuden Doji"}]
 	var chars: Dictionary = {83: npc}
 	var e: DiceEngine = DiceEngine.new(42)
-	var results: Array[Dictionary] = DayOrchestrator._process_auto_conceal_on_arrival(arrivals, chars, e)
+	var results: Array = DayOrchestrator._process_auto_conceal_on_arrival(arrivals, chars, e)
 
 	assert_eq(results.size(), 1)
 	assert_false(results[0]["success"])

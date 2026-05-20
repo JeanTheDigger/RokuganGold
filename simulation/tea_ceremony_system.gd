@@ -38,12 +38,12 @@ static func max_viable_count(void_ring: int, _tea_rank: int) -> int:
 
 static func select_eligible_ids(
 	host_id: int,
-	chars_present: Array[int],
+	chars_present: Array,
 	dispositions: Dictionary,
 ) -> Array:
 	## Returns IDs of characters eligible to participate (disp >= Acquaintance,
 	## not the host). Does NOT check VP deficit — that check runs at execution.
-	var result: Array[int] = []
+	var result: Array = []
 	for char_id: int in chars_present:
 		if char_id == host_id:
 			continue

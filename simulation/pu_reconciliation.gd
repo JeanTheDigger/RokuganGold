@@ -73,7 +73,7 @@ static func compute_company_pu_loss(
 
 
 static func process_battle_casualties(
-	battle_companies: Array[Dictionary],
+	battle_companies: Array,
 	settlements_by_province: Dictionary,
 ) -> Dictionary:
 	var pu_losses: Dictionary = {}
@@ -96,7 +96,7 @@ static func process_battle_casualties(
 		pu_losses[source_id] += pu_loss
 		total_dead_pu += pu_loss
 
-	var settlement_mutations: Array[Dictionary] = []
+	var settlement_mutations: Array = []
 	for province_id: int in pu_losses:
 		var loss_pu: int = maxi(floori(pu_losses[province_id]), 0)
 		if loss_pu <= 0:
@@ -122,7 +122,7 @@ static func process_battle_casualties(
 # -- Post-Battle Recovery (Victor Only) ------------------------------------------
 
 static func process_victor_recovery(
-	victor_companies: Array[Dictionary],
+	victor_companies: Array,
 	settlements_by_province: Dictionary,
 ) -> Dictionary:
 	var total_lost: int = 0
@@ -158,7 +158,7 @@ static func process_victor_recovery(
 		returned_pu_by_province[source_id] += company_returned_pu
 		total_returned_pu += company_returned_pu
 
-	var settlement_mutations: Array[Dictionary] = []
+	var settlement_mutations: Array = []
 	for province_id: int in returned_pu_by_province:
 		var return_pu: int = maxi(floori(returned_pu_by_province[province_id]), 0)
 		if return_pu <= 0:
@@ -187,11 +187,11 @@ static func process_victor_recovery(
 # -- Full Battle PU Reconciliation -----------------------------------------------
 
 static func reconcile_battle(
-	victor_companies: Array[Dictionary],
-	loser_companies: Array[Dictionary],
+	victor_companies: Array,
+	loser_companies: Array,
 	settlements_by_province: Dictionary,
 ) -> Dictionary:
-	var all_companies: Array[Dictionary] = []
+	var all_companies: Array = []
 	all_companies.append_array(victor_companies)
 	all_companies.append_array(loser_companies)
 
@@ -212,7 +212,7 @@ static func reconcile_battle(
 # -- Army Dissolution PU Return --------------------------------------------------
 
 static func process_army_dissolution(
-	companies: Array[Dictionary],
+	companies: Array,
 	settlements_by_province: Dictionary,
 ) -> Dictionary:
 	var returned_by_province: Dictionary = {}
@@ -233,7 +233,7 @@ static func process_army_dissolution(
 		returned_by_province[source_id] += pu_remaining
 		total_returned += pu_remaining
 
-	var settlement_mutations: Array[Dictionary] = []
+	var settlement_mutations: Array = []
 	for province_id: int in returned_by_province:
 		var return_pu: int = maxi(floori(returned_by_province[province_id]), 0)
 		if return_pu <= 0:

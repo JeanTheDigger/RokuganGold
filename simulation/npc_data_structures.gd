@@ -186,14 +186,14 @@ class ContextSnapshot:
 	var is_hostage: bool = false
 
 	# Urgency evaluation fields
-	var expiring_favor_ids: Array[int] = []
-	var starvation_province_ids: Array[int] = []
-	var cut_supply_army_ids: Array[int] = []
+	var expiring_favor_ids: Array = []
+	var starvation_province_ids: Array = []
+	var cut_supply_army_ids: Array = []
 	var besieged_settlement_health_pct: float = 1.0
 	var objective_stalled_seasons: int = 0
 
 	# Atonement (s4.6)
-	var self_offenses: Array[Dictionary] = []
+	var self_offenses: Array = []
 
 	# State
 	var pending_events: Array = []

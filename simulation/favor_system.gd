@@ -194,7 +194,7 @@ static func check_expiration(favor: FavorData, current_ic_day: int) -> bool:
 
 
 static func process_expirations(favors: Array, current_ic_day: int) -> Array:
-	var expired_ids: Array[int] = []
+	var expired_ids: Array = []
 	for favor: FavorData in favors:
 		if favor is FavorData and check_expiration(favor, current_ic_day):
 			expired_ids.append(favor.favor_id)
@@ -212,7 +212,7 @@ static func check_deadline_breach(favor: FavorData, current_ic_day: int) -> bool
 
 
 static func process_deadline_breaches(favors: Array, current_ic_day: int) -> Array:
-	var breaches: Array[Dictionary] = []
+	var breaches: Array = []
 	for favor: FavorData in favors:
 		if favor is FavorData and check_deadline_breach(favor, current_ic_day):
 			breaches.append(break_favor(favor))
@@ -222,8 +222,8 @@ static func process_deadline_breaches(favors: Array, current_ic_day: int) -> Arr
 # -- Death handling -----------------------------------------------------------
 
 static func process_creditor_death(favors: Array, dead_creditor_id: int, heir_id: int) -> Dictionary:
-	var inherited: Array[int] = []
-	var dissolved: Array[int] = []
+	var inherited: Array = []
+	var dissolved: Array = []
 
 	for favor: FavorData in favors:
 		if not (favor is FavorData):
@@ -241,7 +241,7 @@ static func process_creditor_death(favors: Array, dead_creditor_id: int, heir_id
 
 
 static func process_debtor_death(favors: Array, dead_debtor_id: int) -> Array:
-	var dissolved: Array[int] = []
+	var dissolved: Array = []
 	for favor: FavorData in favors:
 		if favor is FavorData and favor.debtor_id == dead_debtor_id:
 			dissolved.append(favor.favor_id)
@@ -262,7 +262,7 @@ static func extract_blackmail_favor(
 	if favor_tier == FavorData.FavorTier.MINOR and secret_tier >= 4:
 		return []
 
-	var favors: Array[FavorData] = []
+	var favors: Array = []
 	for i in range(raises):
 		var favor := offer_favor(
 			FavorData.FavorType.GENERAL,

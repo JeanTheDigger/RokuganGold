@@ -11,11 +11,11 @@ func before_each() -> void:
 
 
 func _make_tether(
-	path: Array[int] = [10, 20, 30],
+	path: Array = [10, 20, 30],
 	army_id: int = 1,
 	source_id: int = 100,
 ) -> Dictionary:
-	var typed_path: Array[int] = []
+	var typed_path: Array = []
 	typed_path.assign(path)
 	return SupplyTetherSystem.create_tether(army_id, source_id, typed_path)
 
@@ -131,7 +131,7 @@ func test_raid_full_cut_high_margin() -> void:
 func test_tether_tick_no_threats() -> void:
 	var t: Dictionary = _make_tether()
 	var garrisons: Dictionary = {}
-	var enemies: Array[int] = []
+	var enemies: Array = []
 	var companies: Dictionary = {}
 	var r: Dictionary = SupplyTetherSystem.process_tether_tick(
 		_dice, t, garrisons, enemies, companies,
@@ -142,7 +142,7 @@ func test_tether_tick_no_threats() -> void:
 
 func test_tether_tick_enemy_army_cuts() -> void:
 	var t: Dictionary = _make_tether()
-	var enemies: Array[int] = [20]
+	var enemies: Array = [20]
 	var r: Dictionary = SupplyTetherSystem.process_tether_tick(
 		_dice, t, {}, enemies, {},
 	)
@@ -212,12 +212,12 @@ func test_supply_fraction_broken() -> void:
 # -- Friendly Territory Tests ---------------------------------------------------
 
 func test_in_friendly_territory() -> void:
-	var friendly: Array[int] = [1, 2, 3]
+	var friendly: Array = [1, 2, 3]
 	assert_true(SupplyTetherSystem.is_in_friendly_territory(2, friendly))
 
 
 func test_not_in_friendly_territory() -> void:
-	var friendly: Array[int] = [1, 2, 3]
+	var friendly: Array = [1, 2, 3]
 	assert_false(SupplyTetherSystem.is_in_friendly_territory(5, friendly))
 
 
@@ -421,8 +421,8 @@ func test_full_recovery_sequence() -> void:
 # -- Supply Source Tests ---------------------------------------------------------
 
 func test_supply_source_lord_only() -> void:
-	var lord: Array[int] = [1, 2, 3]
-	var result: Array[int] = SupplyTetherSystem.get_supply_source_provinces(lord, [], [])
+	var lord: Array = [1, 2, 3]
+	var result: Array = SupplyTetherSystem.get_supply_source_provinces(lord, [], [])
 	assert_eq(result.size(), 3)
 	assert_has(result, 1)
 	assert_has(result, 2)
@@ -430,19 +430,19 @@ func test_supply_source_lord_only() -> void:
 
 
 func test_supply_source_with_compelled() -> void:
-	var lord: Array[int] = [1, 2]
-	var compelled: Array[int] = [3, 4]
-	var result: Array[int] = SupplyTetherSystem.get_supply_source_provinces(
+	var lord: Array = [1, 2]
+	var compelled: Array = [3, 4]
+	var result: Array = SupplyTetherSystem.get_supply_source_provinces(
 		lord, compelled, [],
 	)
 	assert_eq(result.size(), 4)
 
 
 func test_supply_source_no_duplicates() -> void:
-	var lord: Array[int] = [1, 2]
-	var compelled: Array[int] = [2, 3]
-	var shared: Array[int] = [3, 4]
-	var result: Array[int] = SupplyTetherSystem.get_supply_source_provinces(
+	var lord: Array = [1, 2]
+	var compelled: Array = [2, 3]
+	var shared: Array = [3, 4]
+	var result: Array = SupplyTetherSystem.get_supply_source_provinces(
 		lord, compelled, shared,
 	)
 	assert_eq(result.size(), 4)
@@ -462,7 +462,7 @@ func test_full_tick_solid_no_threats() -> void:
 
 func test_full_tick_broken_advances_deprivation() -> void:
 	var t: Dictionary = _make_tether([10])
-	var enemies: Array[int] = [10]
+	var enemies: Array = [10]
 	var r: Dictionary = SupplyTetherSystem.process_supply_tick(
 		_dice, t, {}, enemies, {},
 	)

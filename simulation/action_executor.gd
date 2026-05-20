@@ -97,7 +97,7 @@ static func execute(
 	characters_by_id: Dictionary = {},
 	worship_province_malus: Dictionary = {},
 	doshin_bonus: int = 0,
-	crime_records: Array[CrimeRecord] = [],
+	crime_records: Array = [],
 ) -> Dictionary:
 	var action_id: String = action.action_id
 
@@ -1318,7 +1318,7 @@ static func _get_co_located_ids(
 	character: L5RCharacterData,
 	characters_by_id: Dictionary,
 ) -> Array:
-	var ids: Array[int] = []
+	var ids: Array = []
 	var loc: String = character.physical_location
 	if loc.is_empty():
 		return ids
@@ -2399,7 +2399,7 @@ static func _execute_examine_crime_scene(
 	character: L5RCharacterData,
 	ctx: NPCDataStructures.ContextSnapshot,
 	dice_engine: DiceEngine,
-	crime_records: Array[CrimeRecord],
+	crime_records: Array,
 ) -> Dictionary:
 	var case_id: int = action.metadata.get("case_id", -1)
 	var record: CrimeRecord = _find_crime_record(case_id, crime_records)
@@ -2442,7 +2442,7 @@ static func _execute_examine_crime_scene(
 
 static func _find_crime_record(
 	case_id: int,
-	crime_records: Array[CrimeRecord],
+	crime_records: Array,
 ) -> CrimeRecord:
 	if case_id < 0:
 		return null
@@ -3791,7 +3791,7 @@ static func _execute_observe_court_attendees(
 		var learn_count: int = resolution.get("learn_count", 0)
 		# Pick learn_count random IDs from the observable pool.
 		var pool: Array = observable_ids.duplicate()
-		var learned_ids: Array[int] = []
+		var learned_ids: Array = []
 		for _i: int in range(learn_count):
 			if pool.is_empty():
 				break
@@ -3799,7 +3799,7 @@ static func _execute_observe_court_attendees(
 			learned_ids.append(int(pool[idx]))
 			pool.remove_at(idx)
 
-		var learned_info: Array[Dictionary] = []
+		var learned_info: Array = []
 		for npc_id: int in learned_ids:
 			var npc: L5RCharacterData = characters_by_id.get(npc_id)
 			if npc != null:
@@ -3936,7 +3936,7 @@ static func _execute_conduct_tea_ceremony(
 		}
 
 	var candidate_ids: Array = action.metadata.get("participant_ids", [])
-	var actual_participants: Array[int] = []
+	var actual_participants: Array = []
 	for pid: Variant in candidate_ids:
 		var pid_int: int = int(pid)
 		var c: L5RCharacterData = characters_by_id.get(pid_int)

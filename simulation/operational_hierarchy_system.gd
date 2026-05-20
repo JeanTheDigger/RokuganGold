@@ -70,7 +70,7 @@ static func get_operational_chain(
 	character: L5RCharacterData,
 	all_characters: Dictionary,
 ) -> Array:
-	var chain: Array[int] = []
+	var chain: Array = []
 	var current_id: int = character.operational_superior_id
 	var visited: Dictionary = {}
 
@@ -87,9 +87,9 @@ static func get_operational_chain(
 
 static func get_operational_subordinates(
 	superior_id: int,
-	all_characters: Array[L5RCharacterData],
+	all_characters: Array,
 ) -> Array:
-	var result: Array[L5RCharacterData] = []
+	var result: Array = []
 	for c: L5RCharacterData in all_characters:
 		if c.operational_superior_id == superior_id:
 			result.append(c)
@@ -254,9 +254,9 @@ static func get_escalation_consequences(
 
 static func clear_subordinates_on_death(
 	dead_superior_id: int,
-	all_characters: Array[L5RCharacterData],
+	all_characters: Array,
 ) -> Array:
-	var cleared_ids: Array[int] = []
+	var cleared_ids: Array = []
 	for c: L5RCharacterData in all_characters:
 		if c.operational_superior_id == dead_superior_id:
 			c.operational_superior_id = -1

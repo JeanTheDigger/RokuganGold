@@ -89,7 +89,7 @@ static func create_item(
 
 
 static func get_contraband_on_person(character: L5RCharacterData) -> Array:
-	var result: Array[Dictionary] = []
+	var result: Array = []
 	for item: Dictionary in character.items:
 		if item.get("contraband", false) and item.get("storage_tier") == StorageTier.ON_PERSON:
 			result.append(item)
@@ -223,7 +223,7 @@ static func has_evidence(items: Array) -> bool:
 
 
 static func get_evidence_items(items: Array) -> Array:
-	var evidence: Array[Dictionary] = []
+	var evidence: Array = []
 	for item: Dictionary in items:
 		if item is Dictionary and item.get("is_evidence", false):
 			evidence.append(item)
@@ -248,7 +248,7 @@ static func _find_item(items: Array, item_id: int) -> Dictionary:
 
 
 static func get_items_in_tier(items: Array, storage_tier: StorageTier) -> Array:
-	var result: Array[Dictionary] = []
+	var result: Array = []
 	for item: Dictionary in items:
 		if item is Dictionary and item.get("storage_tier") == storage_tier and not item.get("in_transit", false):
 			result.append(item)

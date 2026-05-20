@@ -337,7 +337,7 @@ static func resolve_deliver_gift(
 # as gifts even if present in inventory.
 
 static func select_best_gift(
-	items: Array[Dictionary],
+	items: Array,
 	archetype: RecipientArchetype,
 ) -> Dictionary:
 	var best: Dictionary = {}

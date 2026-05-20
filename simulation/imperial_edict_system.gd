@@ -71,10 +71,10 @@ static func create_edict(
 static func generate_winter_court_edicts(
 	emperor: L5RCharacterData,
 	archetype: int,
-	agenda_topic_ids: Array[int],
-	active_topics: Array[TopicData],
-	active_wars: Array[WarData],
-	next_edict_id: Array[int],
+	agenda_topic_ids: Array,
+	active_topics: Array,
+	active_wars: Array,
+	next_edict_id: Array,
 	ic_day: int,
 	court_id: int = -1,
 ) -> Array:
@@ -84,7 +84,7 @@ static func generate_winter_court_edicts(
 	)
 
 	var agenda_topics: Array = _resolve_topic_ids(agenda_topic_ids, active_topics)
-	var edicts: Array[EdictData] = []
+	var edicts: Array = []
 
 	for topic: TopicData in agenda_topics:
 		if edicts.size() >= max_edicts:
@@ -106,11 +106,11 @@ static func compute_emperor_weight(emperor_status: float, relevance: float) -> f
 
 static func compute_topic_aggregate(
 	topic: TopicData,
-	attendees: Array[L5RCharacterData],
+	attendees: Array,
 	emperor_id: int,
 ) -> float:
-	var positions: Array[float] = []
-	var weights: Array[float] = []
+	var positions: Array = []
+	var weights: Array = []
 	for c: L5RCharacterData in attendees:
 		var pos: float = c.topic_positions.get(topic.topic_id, 0.0)
 		var relevance: float = TopicMomentumSystem.calculate_personal_relevance(
@@ -133,10 +133,10 @@ static func generate_edicts_from_aggregate(
 	emperor: L5RCharacterData,
 	archetype: int,
 	court: CourtSessionData,
-	attendees: Array[L5RCharacterData],
-	active_topics: Array[TopicData],
-	active_wars: Array[WarData],
-	next_edict_id: Array[int],
+	attendees: Array,
+	active_topics: Array,
+	active_wars: Array,
+	next_edict_id: Array,
 	ic_day: int,
 ) -> Dictionary:
 	var max_edicts: int = mini(
@@ -153,8 +153,8 @@ static func generate_edicts_from_aggregate(
 	if agenda_topics.size() > 3:
 		agenda_topics.resize(3)
 
-	var edicts: Array[EdictData] = []
-	var aggregates: Array[Dictionary] = []
+	var edicts: Array = []
+	var aggregates: Array = []
 
 	for topic: TopicData in agenda_topics:
 		if edicts.size() >= max_edicts:
@@ -184,8 +184,8 @@ static func _evaluate_aggregate_for_edict(
 	aggregate: float,
 	emperor: L5RCharacterData,
 	archetype: int,
-	active_wars: Array[WarData],
-	next_edict_id: Array[int],
+	active_wars: Array,
+	next_edict_id: Array,
 	ic_day: int,
 	court_id: int,
 ) -> Dictionary:
@@ -208,8 +208,8 @@ static func _create_compelling_edict(
 	topic: TopicData,
 	emperor: L5RCharacterData,
 	archetype: int,
-	active_wars: Array[WarData],
-	next_edict_id: Array[int],
+	active_wars: Array,
+	next_edict_id: Array,
 	ic_day: int,
 	court_id: int,
 ) -> EdictData:
@@ -232,7 +232,7 @@ static func _create_compelling_edict(
 static func _create_blocking_edict(
 	topic: TopicData,
 	emperor: L5RCharacterData,
-	next_edict_id: Array[int],
+	next_edict_id: Array,
 	ic_day: int,
 	court_id: int,
 ) -> EdictData:
@@ -260,14 +260,14 @@ static func get_commitment_type_for_topic(topic: TopicData) -> String:
 static func generate_edict_commitments(
 	edict: EdictData,
 	topic: TopicData,
-	lords: Array[L5RCharacterData],
+	lords: Array,
 	ic_day: int,
 	deadline_ic_day: int,
 ) -> Array:
 	var commitment_type: String = get_commitment_type_for_topic(topic)
 	if commitment_type.is_empty():
 		return []
-	var commitments: Array[CourtCommitmentData] = []
+	var commitments: Array = []
 	for lord: L5RCharacterData in lords:
 		var c := CourtCommitmentSystem.create_edict_commitment(
 			lord.character_id, topic.topic_id, commitment_type,
@@ -278,10 +278,10 @@ static func generate_edict_commitments(
 
 
 static func _resolve_topic_ids(
-	ids: Array[int],
-	active_topics: Array[TopicData],
+	ids: Array,
+	active_topics: Array,
 ) -> Array:
-	var result: Array[TopicData] = []
+	var result: Array = []
 	for tid: int in ids:
 		for t: TopicData in active_topics:
 			if t.topic_id == tid and not t.resolved:
@@ -294,8 +294,8 @@ static func _evaluate_topic_for_edict(
 	topic: TopicData,
 	emperor: L5RCharacterData,
 	archetype: int,
-	active_wars: Array[WarData],
-	next_edict_id: Array[int],
+	active_wars: Array,
+	next_edict_id: Array,
 	ic_day: int,
 	court_id: int,
 ) -> EdictData:
@@ -336,7 +336,7 @@ static func _create_cease_hostilities(
 	topic: TopicData,
 	emperor: L5RCharacterData,
 	archetype: int,
-	next_edict_id: Array[int],
+	next_edict_id: Array,
 	ic_day: int,
 	court_id: int,
 ) -> EdictData:
@@ -365,7 +365,7 @@ static func _create_cease_hostilities(
 
 static func _find_war_for_topic(
 	topic: TopicData,
-	active_wars: Array[WarData],
+	active_wars: Array,
 ) -> WarData:
 	for w: WarData in active_wars:
 		if w.war_id == topic.topic_id:
@@ -379,7 +379,7 @@ static func _find_war_for_topic(
 
 static func apply_cease_hostilities(
 	edict: EdictData,
-	active_wars: Array[WarData],
+	active_wars: Array,
 ) -> Dictionary:
 	if edict.edict_type != EdictData.EdictType.CEASE_HOSTILITIES:
 		return {"applied": false, "reason": "wrong_type"}
@@ -393,7 +393,7 @@ static func apply_cease_hostilities(
 
 static func apply_condemn_clan(
 	edict: EdictData,
-	active_wars: Array[WarData],
+	active_wars: Array,
 ) -> Dictionary:
 	if edict.edict_type != EdictData.EdictType.CONDEMN_CLAN:
 		return {"applied": false, "reason": "wrong_type"}
@@ -433,7 +433,7 @@ static func is_clan_defiant(edict: EdictData, clan: String) -> bool:
 
 
 static func get_defiant_clans(edict: EdictData) -> Array:
-	var result: Array[String] = []
+	var result: Array = []
 	for clan: String in edict.compliance_by_clan:
 		if edict.compliance_by_clan[clan] == EdictData.ComplianceStatus.DEFIANT:
 			result.append(clan)
@@ -554,12 +554,12 @@ static func deactivate_edict(edict: EdictData) -> void:
 # -- Daily Compliance Processing -----------------------------------------------
 
 static func process_daily_compliance(
-	active_edicts: Array[EdictData],
-	active_wars: Array[WarData],
-	characters: Array[L5RCharacterData],
+	active_edicts: Array,
+	active_wars: Array,
+	characters: Array,
 	ic_day: int,
 ) -> Array:
-	var results: Array[Dictionary] = []
+	var results: Array = []
 	for edict: EdictData in active_edicts:
 		if not edict.is_active:
 			continue
@@ -589,7 +589,7 @@ static func process_daily_compliance(
 
 static func _check_ceasefire_auto_compliance(
 	edict: EdictData,
-	active_wars: Array[WarData],
+	active_wars: Array,
 ) -> void:
 	var war_still_active: bool = false
 	for w: WarData in active_wars:
@@ -603,7 +603,7 @@ static func _check_ceasefire_auto_compliance(
 
 
 static func _mark_pending_as_defiant(edict: EdictData) -> Array:
-	var newly_defiant: Array[String] = []
+	var newly_defiant: Array = []
 	for clan: String in edict.compliance_by_clan:
 		if edict.compliance_by_clan[clan] == EdictData.ComplianceStatus.PENDING:
 			edict.compliance_by_clan[clan] = EdictData.ComplianceStatus.DEFIANT
@@ -613,7 +613,7 @@ static func _mark_pending_as_defiant(edict: EdictData) -> Array:
 
 static func _apply_defiance_to_characters(
 	consequence: Dictionary,
-	characters: Array[L5RCharacterData],
+	characters: Array,
 	emperor_id: int,
 ) -> void:
 	var defiant_clan: String = consequence.get("clan", "")
@@ -641,8 +641,8 @@ static func _apply_defiance_to_characters(
 
 static func _apply_compliant_edict(
 	edict: EdictData,
-	active_wars: Array[WarData],
-	characters: Array[L5RCharacterData],
+	active_wars: Array,
+	characters: Array,
 	ic_day: int,
 ) -> Dictionary:
 	match edict.edict_type:
@@ -670,7 +670,7 @@ static func _apply_compliant_edict(
 
 static func apply_authorize_war(
 	edict: EdictData,
-	active_wars: Array[WarData],
+	active_wars: Array,
 ) -> Dictionary:
 	if edict.edict_type != EdictData.EdictType.AUTHORIZE_WAR:
 		return {"applied": false, "reason": "wrong_type"}
@@ -709,7 +709,7 @@ const APPOINTMENT_STATUS_GAIN: float = 1.0
 
 static func apply_appoint_position(
 	edict: EdictData,
-	characters: Array[L5RCharacterData],
+	characters: Array,
 ) -> Dictionary:
 	if edict.edict_type != EdictData.EdictType.APPOINT_POSITION:
 		return {"applied": false, "reason": "wrong_type"}
@@ -737,7 +737,7 @@ const STRIP_AUTONOMY_EMPEROR_DISPOSITION: int = -10
 
 static func apply_strip_autonomy(
 	edict: EdictData,
-	characters: Array[L5RCharacterData],
+	characters: Array,
 ) -> Dictionary:
 	if edict.edict_type != EdictData.EdictType.STRIP_AUTONOMY:
 		return {"applied": false, "reason": "wrong_type"}
@@ -745,7 +745,7 @@ static func apply_strip_autonomy(
 		return {"applied": true, "edict_id": edict.edict_id, "no_target_clan": true}
 
 	var champion: L5RCharacterData = null
-	var stripped_members: Array[int] = []
+	var stripped_members: Array = []
 	for c: L5RCharacterData in characters:
 		if c.clan != edict.target_clan:
 			continue

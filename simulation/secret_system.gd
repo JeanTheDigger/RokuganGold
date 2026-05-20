@@ -189,7 +189,7 @@ static func expose_publicly(
 	secret: SecretData,
 	_exposer: L5RCharacterData,
 	subject: L5RCharacterData,
-	witness_ids: Array[int],
+	witness_ids: Array,
 	characters_by_id: Dictionary,
 	has_proof: bool = false,
 ) -> Dictionary:
@@ -208,7 +208,7 @@ static func expose_publicly(
 	HonorGlorySystem.apply_glory_change(subject, glory_loss)
 	HonorGlorySystem.apply_infamy_change(subject, infamy_gain)
 
-	var witness_effects: Array[Dictionary] = []
+	var witness_effects: Array = []
 	for wid: int in witness_ids:
 		var w: L5RCharacterData = characters_by_id.get(wid)
 		if w != null:

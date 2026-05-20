@@ -59,8 +59,8 @@ func _run_pipeline(
 	chars: Dictionary,
 	lord_map: Dictionary,
 	ic_day: int,
-	next_id: Array[int],
-	topics: Array[TopicData],
+	next_id: Array,
+	topics: Array,
 ) -> Array[Dictionary]:
 	return ConvictionProcessor.process_accused_cases(
 		[record], chars, null, ic_day, next_id, topics, lord_map
@@ -122,8 +122,8 @@ func test_case_skipped_when_under_three_days_since_accusation():
 	var record := CrimeSystem.create_crime_record(6, Enums.CrimeType.VIOLENCE, perp.character_id, "zone_a", 1)
 	_open_and_accuse(perp, record, 10)
 
-	var next_id: Array[int] = [100]
-	var topics: Array[TopicData] = []
+	var next_id: Array = [100]
+	var topics: Array = []
 	var results := _run_pipeline(
 		record,
 		{perp.character_id: perp, lord.character_id: lord},
@@ -139,8 +139,8 @@ func test_case_processed_exactly_three_days_after_accusation():
 	var record := CrimeSystem.create_crime_record(7, Enums.CrimeType.VIOLENCE, perp.character_id, "zone_a", 1)
 	_open_and_accuse(perp, record, 10)
 
-	var next_id: Array[int] = [100]
-	var topics: Array[TopicData] = []
+	var next_id: Array = [100]
+	var topics: Array = []
 	var results := _run_pipeline(
 		record,
 		{perp.character_id: perp, lord.character_id: lord},
@@ -159,8 +159,8 @@ func test_violence_conviction_decrements_glory_and_marks_guilty():
 	_open_and_accuse(perp, record, 10)
 	var initial_glory: float = perp.glory
 
-	var next_id: Array[int] = [200]
-	var topics: Array[TopicData] = []
+	var next_id: Array = [200]
+	var topics: Array = []
 	var results := _run_pipeline(
 		record,
 		{perp.character_id: perp, lord.character_id: lord},
@@ -194,8 +194,8 @@ func test_open_killing_conviction_offers_seppuku_and_applies_infamy():
 		lord.character_id: lord,
 		victim.character_id: victim,
 	}
-	var next_id: Array[int] = [300]
-	var topics: Array[TopicData] = []
+	var next_id: Array = [300]
+	var topics: Array = []
 	var results := _run_pipeline(record, chars, {perp.character_id: lord.character_id}, 13, next_id, topics)
 
 	assert_eq(results[0]["outcome"], "convicted")
@@ -220,8 +220,8 @@ func test_cross_clan_victim_flagged_in_conviction_result():
 		lord.character_id: lord,
 		victim.character_id: victim,
 	}
-	var next_id: Array[int] = [350]
-	var topics: Array[TopicData] = []
+	var next_id: Array = [350]
+	var topics: Array = []
 	var results := _run_pipeline(record, chars, {perp.character_id: lord.character_id}, 13, next_id, topics)
 
 	assert_true(results[0]["is_cross_clan"])
@@ -237,7 +237,7 @@ func test_seppuku_accepted_grants_honor_bonus_and_marks_dead():
 	record.seppuku_offered = true
 	var initial_honor: float = perp.honor
 
-	var next_id: Array[int] = [400]
+	var next_id: Array = [400]
 	var result := ConvictionProcessor.resolve_seppuku(record, perp, true, 20, next_id)
 
 	assert_true(result["applicable"])
@@ -252,7 +252,7 @@ func test_resolve_seppuku_returns_not_applicable_when_not_offered():
 	var record := CrimeSystem.create_crime_record(
 		12, Enums.CrimeType.UNSANCTIONED_OPEN_KILLING, perp.character_id, "zone_b", 1
 	)
-	var next_id: Array[int] = [410]
+	var next_id: Array = [410]
 	var result := ConvictionProcessor.resolve_seppuku(record, perp, true, 20, next_id)
 	assert_false(result["applicable"])
 
@@ -268,7 +268,7 @@ func test_seppuku_refused_penalizes_honor_and_infamy():
 	var initial_honor: float = perp.honor
 	var initial_infamy: float = perp.infamy
 
-	var next_id: Array[int] = [500]
+	var next_id: Array = [500]
 	var result := ConvictionProcessor.resolve_seppuku(record, perp, false, 20, next_id)
 
 	assert_true(result["applicable"])
@@ -289,8 +289,8 @@ func test_conviction_topic_added_to_active_topics_and_lord_pool():
 	_open_and_accuse(perp, record, 10)
 
 	var chars: Dictionary = {perp.character_id: perp, lord.character_id: lord}
-	var next_id: Array[int] = [600]
-	var topics: Array[TopicData] = []
+	var next_id: Array = [600]
+	var topics: Array = []
 	_run_pipeline(record, chars, {perp.character_id: lord.character_id}, 13, next_id, topics)
 
 	assert_gt(topics.size(), 0)
@@ -305,8 +305,8 @@ func test_conviction_topic_id_consumed_from_counter():
 	)
 	_open_and_accuse(perp, record, 10)
 
-	var next_id: Array[int] = [700]
-	var topics: Array[TopicData] = []
+	var next_id: Array = [700]
+	var topics: Array = []
 	_run_pipeline(
 		record,
 		{perp.character_id: perp, lord.character_id: lord},
@@ -326,8 +326,8 @@ func test_already_convicted_case_not_reprocessed():
 
 	var chars: Dictionary = {perp.character_id: perp, lord.character_id: lord}
 	var lord_map: Dictionary = {perp.character_id: lord.character_id}
-	var next_id: Array[int] = [800]
-	var topics: Array[TopicData] = []
+	var next_id: Array = [800]
+	var topics: Array = []
 
 	_run_pipeline(record, chars, lord_map, 13, next_id, topics)
 	var glory_after_first: float = perp.glory
@@ -358,8 +358,8 @@ func test_two_cases_both_resolved_in_one_pass():
 		perp1.character_id: lord.character_id,
 		perp2.character_id: lord.character_id,
 	}
-	var next_id: Array[int] = [900]
-	var topics: Array[TopicData] = []
+	var next_id: Array = [900]
+	var topics: Array = []
 
 	var results := ConvictionProcessor.process_accused_cases(
 		[r1, r2], chars, null, 13, next_id, topics, lord_map

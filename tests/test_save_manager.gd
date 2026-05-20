@@ -117,7 +117,7 @@ func test_delete_nonexistent_character_does_not_error() -> void:
 # -- save_all / load_all -------------------------------------------------------
 
 func test_save_all_returns_count_of_saved_characters() -> void:
-	var chars: Array[L5RCharacterData] = [
+	var chars: Array = [
 		_make_character(100),
 		_make_character(101),
 		_make_character(102),
@@ -127,24 +127,24 @@ func test_save_all_returns_count_of_saved_characters() -> void:
 
 
 func test_load_all_returns_all_saved_characters() -> void:
-	var chars: Array[L5RCharacterData] = [
+	var chars: Array = [
 		_make_character(200),
 		_make_character(201),
 		_make_character(202),
 	]
 	_sm.save_all(chars, TEST_DIR)
-	var loaded: Array[L5RCharacterData] = _sm.load_all(TEST_DIR)
+	var loaded: Array = _sm.load_all(TEST_DIR)
 	assert_eq(loaded.size(), 3, "load_all should find all 3 saved characters")
 
 
 func test_load_all_restores_correct_ids() -> void:
-	var chars: Array[L5RCharacterData] = [
+	var chars: Array = [
 		_make_character(300),
 		_make_character(301),
 	]
 	_sm.save_all(chars, TEST_DIR)
-	var loaded: Array[L5RCharacterData] = _sm.load_all(TEST_DIR)
-	var ids: Array[int] = []
+	var loaded: Array = _sm.load_all(TEST_DIR)
+	var ids: Array = []
 	for c: L5RCharacterData in loaded:
 		ids.append(c.character_id)
 	ids.sort()
@@ -152,7 +152,7 @@ func test_load_all_restores_correct_ids() -> void:
 
 
 func test_load_all_returns_empty_for_empty_directory() -> void:
-	var loaded: Array[L5RCharacterData] = _sm.load_all(TEST_DIR)
+	var loaded: Array = _sm.load_all(TEST_DIR)
 	assert_eq(loaded.size(), 0, "Empty directory should yield no characters")
 
 

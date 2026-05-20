@@ -40,8 +40,8 @@ func test_create_service_request_default_count() -> void:
 # -- Cascade Request Tests -------------------------------------------------------
 
 func test_cascade_even_split() -> void:
-	var vassals: Array[int] = [10, 20, 30]
-	var assignments: Array[Dictionary] = MilitaryServiceSystem.cascade_request_to_vassals(
+	var vassals: Array = [10, 20, 30]
+	var assignments: Array = MilitaryServiceSystem.cascade_request_to_vassals(
 		1, vassals, 6,
 	)
 	assert_eq(assignments.size(), 3)
@@ -52,8 +52,8 @@ func test_cascade_even_split() -> void:
 
 
 func test_cascade_uneven_split() -> void:
-	var vassals: Array[int] = [10, 20, 30]
-	var assignments: Array[Dictionary] = MilitaryServiceSystem.cascade_request_to_vassals(
+	var vassals: Array = [10, 20, 30]
+	var assignments: Array = MilitaryServiceSystem.cascade_request_to_vassals(
 		1, vassals, 5,
 	)
 	# 5 / 3 = 1 each, remainder 2 → first two get +1
@@ -63,8 +63,8 @@ func test_cascade_uneven_split() -> void:
 
 
 func test_cascade_single_vassal() -> void:
-	var vassals: Array[int] = [10]
-	var assignments: Array[Dictionary] = MilitaryServiceSystem.cascade_request_to_vassals(
+	var vassals: Array = [10]
+	var assignments: Array = MilitaryServiceSystem.cascade_request_to_vassals(
 		1, vassals, 4,
 	)
 	assert_eq(assignments.size(), 1)
@@ -72,16 +72,16 @@ func test_cascade_single_vassal() -> void:
 
 
 func test_cascade_empty_vassals() -> void:
-	var vassals: Array[int] = []
-	var assignments: Array[Dictionary] = MilitaryServiceSystem.cascade_request_to_vassals(
+	var vassals: Array = []
+	var assignments: Array = MilitaryServiceSystem.cascade_request_to_vassals(
 		1, vassals, 3,
 	)
 	assert_eq(assignments.size(), 0)
 
 
 func test_cascade_more_vassals_than_needed() -> void:
-	var vassals: Array[int] = [10, 20, 30, 40]
-	var assignments: Array[Dictionary] = MilitaryServiceSystem.cascade_request_to_vassals(
+	var vassals: Array = [10, 20, 30, 40]
+	var assignments: Array = MilitaryServiceSystem.cascade_request_to_vassals(
 		1, vassals, 2,
 	)
 	# 2 / 4 = 0 each, remainder 2 → first two get 1
@@ -123,12 +123,12 @@ func test_evaluate_candidate_chugi_reduces() -> void:
 # -- Candidate Evaluation Tests --------------------------------------------------
 
 func test_evaluate_candidates_uncommitted_first() -> void:
-	var candidates: Array[Dictionary] = [
+	var candidates: Array = [
 		_make_retainer(1, "magistrate_stable"),
 		_make_retainer(2, "uncommitted"),
 		_make_retainer(3, "yoriki_idle"),
 	]
-	var ranked: Array[Dictionary] = MilitaryServiceSystem.evaluate_candidates(
+	var ranked: Array = MilitaryServiceSystem.evaluate_candidates(
 		candidates, "",
 	)
 	assert_eq(ranked[0]["character_id"], 2)
@@ -136,11 +136,11 @@ func test_evaluate_candidates_uncommitted_first() -> void:
 
 
 func test_evaluate_candidates_yu_personality() -> void:
-	var candidates: Array[Dictionary] = [
+	var candidates: Array = [
 		_make_retainer(1, "magistrate_insurgency"),
 		_make_retainer(2, "uncommitted"),
 	]
-	var ranked: Array[Dictionary] = MilitaryServiceSystem.evaluate_candidates(
+	var ranked: Array = MilitaryServiceSystem.evaluate_candidates(
 		candidates, "Yu",
 	)
 	assert_eq(ranked[0]["character_id"], 2)
@@ -219,7 +219,7 @@ func test_chui_cannot_request() -> void:
 # -- Bulk Selection Tests --------------------------------------------------------
 
 func test_select_exact_count() -> void:
-	var retainers: Array[Dictionary] = [
+	var retainers: Array = [
 		_make_retainer(1, "uncommitted"),
 		_make_retainer(2, "uncommitted"),
 		_make_retainer(3, "uncommitted"),
@@ -234,7 +234,7 @@ func test_select_exact_count() -> void:
 
 
 func test_select_with_shortfall() -> void:
-	var retainers: Array[Dictionary] = [
+	var retainers: Array = [
 		_make_retainer(1, "uncommitted"),
 	]
 	var r: Dictionary = MilitaryServiceSystem.select_candidates_for_service(
@@ -245,7 +245,7 @@ func test_select_with_shortfall() -> void:
 
 
 func test_select_uncommitted_before_committed() -> void:
-	var retainers: Array[Dictionary] = [
+	var retainers: Array = [
 		_make_retainer(1, "magistrate_stable"),
 		_make_retainer(2, "uncommitted"),
 		_make_retainer(3, "yoriki_idle"),
@@ -257,7 +257,7 @@ func test_select_uncommitted_before_committed() -> void:
 
 
 func test_select_all_available() -> void:
-	var retainers: Array[Dictionary] = [
+	var retainers: Array = [
 		_make_retainer(1, "uncommitted"),
 		_make_retainer(2, "uncommitted"),
 	]
@@ -269,7 +269,7 @@ func test_select_all_available() -> void:
 
 
 func test_select_empty_retainers() -> void:
-	var retainers: Array[Dictionary] = []
+	var retainers: Array = []
 	var r: Dictionary = MilitaryServiceSystem.select_candidates_for_service(
 		retainers, 2, "",
 	)
@@ -278,7 +278,7 @@ func test_select_empty_retainers() -> void:
 
 
 func test_select_personality_affects_order() -> void:
-	var retainers: Array[Dictionary] = [
+	var retainers: Array = [
 		_make_retainer(1, "magistrate_insurgency"),
 		_make_retainer(2, "yoriki_idle"),
 		_make_retainer(3, "uncommitted"),
@@ -294,7 +294,7 @@ func test_select_personality_affects_order() -> void:
 # -- Apply Assignments Tests -----------------------------------------------------
 
 func test_apply_service_assignments() -> void:
-	var selected: Array[Dictionary] = [
+	var selected: Array = [
 		{"character_id": 5, "role": "uncommitted", "commitment_score": 0},
 		{"character_id": 6, "role": "uncommitted", "commitment_score": 0},
 	]
@@ -302,7 +302,7 @@ func test_apply_service_assignments() -> void:
 		5: _make_char_data(5, 100),
 		6: _make_char_data(6, 100),
 	}
-	var results: Array[Dictionary] = MilitaryServiceSystem.apply_service_assignments(
+	var results: Array = MilitaryServiceSystem.apply_service_assignments(
 		selected, chars_by_id, 200, 10,
 	)
 	assert_eq(results.size(), 2)
@@ -314,14 +314,14 @@ func test_apply_service_assignments() -> void:
 
 
 func test_apply_assignments_skips_missing_chars() -> void:
-	var selected: Array[Dictionary] = [
+	var selected: Array = [
 		{"character_id": 5, "role": "uncommitted", "commitment_score": 0},
 		{"character_id": 99, "role": "uncommitted", "commitment_score": 0},
 	]
 	var chars_by_id: Dictionary = {
 		5: _make_char_data(5, 100),
 	}
-	var results: Array[Dictionary] = MilitaryServiceSystem.apply_service_assignments(
+	var results: Array = MilitaryServiceSystem.apply_service_assignments(
 		selected, chars_by_id, 200, 10,
 	)
 	assert_eq(results.size(), 1)
@@ -329,7 +329,7 @@ func test_apply_assignments_skips_missing_chars() -> void:
 
 
 func test_apply_assignments_preserves_lord_id() -> void:
-	var selected: Array[Dictionary] = [
+	var selected: Array = [
 		{"character_id": 5, "role": "uncommitted", "commitment_score": 0},
 	]
 	var chars_by_id: Dictionary = {

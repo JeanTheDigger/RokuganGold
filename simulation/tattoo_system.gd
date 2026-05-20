@@ -76,7 +76,7 @@ const RELUCTANCE_DISPOSITION_THRESHOLD: Dictionary = {
 	Enums.CulturalReluctance.VERY_RELUCTANT: 71,
 }
 
-const WRIST_FOREARM_LOCATIONS: Array[Enums.TattooBodyLocation] = [
+const WRIST_FOREARM_LOCATIONS: Array = [
 	Enums.TattooBodyLocation.LEFT_WRIST_FOREARM,
 	Enums.TattooBodyLocation.RIGHT_WRIST_FOREARM,
 ]
@@ -128,7 +128,7 @@ static func check_consent(
 # 57.25.2 — Body Location Management
 # =============================================================================
 
-const ALL_BODY_LOCATIONS: Array[Enums.TattooBodyLocation] = [
+const ALL_BODY_LOCATIONS: Array = [
 	Enums.TattooBodyLocation.LEFT_WRIST_FOREARM,
 	Enums.TattooBodyLocation.RIGHT_WRIST_FOREARM,
 	Enums.TattooBodyLocation.LEFT_UPPER_ARM_SHOULDER,
@@ -141,17 +141,17 @@ const ALL_BODY_LOCATIONS: Array[Enums.TattooBodyLocation] = [
 ]
 
 
-static func get_occupied_locations(tattoos: Array, character_id: int) -> Array[Enums.TattooBodyLocation]:
-	var result: Array[Enums.TattooBodyLocation] = []
+static func get_occupied_locations(tattoos: Array, character_id: int) -> Array:
+	var result: Array = []
 	for t: TattooData in tattoos:
 		if t.recipient_id == character_id:
 			result.append(t.body_location)
 	return result
 
 
-static func get_available_locations(tattoos: Array, character_id: int, is_bald: bool) -> Array[Enums.TattooBodyLocation]:
-	var occupied: Array[Enums.TattooBodyLocation] = get_occupied_locations(tattoos, character_id)
-	var result: Array[Enums.TattooBodyLocation] = []
+static func get_available_locations(tattoos: Array, character_id: int, is_bald: bool) -> Array:
+	var occupied: Array = get_occupied_locations(tattoos, character_id)
+	var result: Array = []
 	for loc: Enums.TattooBodyLocation in ALL_BODY_LOCATIONS:
 		if loc in occupied:
 			continue
@@ -171,7 +171,7 @@ static func is_location_available(tattoos: Array, character_id: int, location: E
 
 
 static func get_character_tattoos(tattoos: Array, character_id: int) -> Array:
-	var result: Array[TattooData] = []
+	var result: Array = []
 	for t: TattooData in tattoos:
 		if t.recipient_id == character_id:
 			result.append(t)
@@ -182,22 +182,22 @@ static func get_character_tattoos(tattoos: Array, character_id: int) -> Array:
 # 57.25.2 — Visibility
 # =============================================================================
 
-const ALWAYS_VISIBLE_LOCATIONS: Array[Enums.TattooBodyLocation] = [
+const ALWAYS_VISIBLE_LOCATIONS: Array = [
 	Enums.TattooBodyLocation.LEFT_WRIST_FOREARM,
 	Enums.TattooBodyLocation.RIGHT_WRIST_FOREARM,
 ]
 
-const VISIBLE_WITHOUT_OUTER_GARMENT: Array[Enums.TattooBodyLocation] = [
+const VISIBLE_WITHOUT_OUTER_GARMENT: Array = [
 	Enums.TattooBodyLocation.LEFT_UPPER_ARM_SHOULDER,
 	Enums.TattooBodyLocation.RIGHT_UPPER_ARM_SHOULDER,
 ]
 
-const VISIBLE_UPPER_REMOVED: Array[Enums.TattooBodyLocation] = [
+const VISIBLE_UPPER_REMOVED: Array = [
 	Enums.TattooBodyLocation.CHEST_TORSO,
 	Enums.TattooBodyLocation.BACK,
 ]
 
-const VISIBLE_LOWER_REMOVED: Array[Enums.TattooBodyLocation] = [
+const VISIBLE_LOWER_REMOVED: Array = [
 	Enums.TattooBodyLocation.LEFT_LEG_THIGH,
 	Enums.TattooBodyLocation.RIGHT_LEG_THIGH,
 ]
@@ -306,7 +306,7 @@ static func get_disposition_bond(quality: Enums.TattooQualityTier) -> int:
 
 
 static func calculate_total_bond(
-	tattoos: Array[TattooData],
+	tattoos: Array,
 	character_a: int,
 	character_b: int,
 ) -> int:
@@ -372,7 +372,7 @@ static func count_ability_tattoos(tattoos: Array, character_id: int) -> int:
 
 
 static func has_unfilled_ability_slots(
-	tattoos: Array[TattooData],
+	tattoos: Array,
 	character_id: int,
 	school: String,
 	school_rank: int,
@@ -385,7 +385,7 @@ static func has_unfilled_ability_slots(
 
 
 static func can_receive_decorative(
-	tattoos: Array[TattooData],
+	tattoos: Array,
 	character_id: int,
 	school: String,
 	school_rank: int,
@@ -414,10 +414,10 @@ static func can_self_apply(school: String, school_rank: int) -> bool:
 
 
 static func is_seek_tattoo_blocked(
-	tattoos: Array[TattooData],
+	tattoos: Array,
 	character_id: int,
 ) -> bool:
-	var occupied: Array[Enums.TattooBodyLocation] = get_occupied_locations(tattoos, character_id)
+	var occupied: Array = get_occupied_locations(tattoos, character_id)
 	return occupied.size() >= ALL_BODY_LOCATIONS.size()
 
 

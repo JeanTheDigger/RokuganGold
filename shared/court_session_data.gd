@@ -25,26 +25,26 @@ enum CourtPhase {
 @export var start_ic_day: int = -1
 @export var duration_ticks: int = 5
 @export var elapsed_ticks: int = 0
-@export var attendee_ids: Array[int] = []
-@export var agenda_topic_ids: Array[int] = []
+@export var attendee_ids: Array = []
+@export var agenda_topic_ids: Array = []
 @export var crisis_trigger_topic_id: int = -1
 @export var emperor_present: bool = false
 @export var prestige: int = 1
-@export var commitments_made: Array[Dictionary] = []
-@export var wars_resolved_during: Array[int] = []
+@export var commitments_made: Array = []
+@export var wars_resolved_during: Array = []
 @export var is_regent_court: bool = false
 @export var host_family_daimyo_id: int = -1
 @export var clan_champion_id: int = -1
 @export var grace_period_days: int = 0
 @export var no_edicts: bool = false
-@export var personal_invitation_ids: Array[int] = []
+@export var personal_invitation_ids: Array = []
 @export var clan_delegation_ids: Dictionary = {}
 @export var announcement_topic_id: int = -1
 ## Peace court link and accumulated willingness modifiers (PEACE_COURT only).
 @export var peace_court_war_id: int = -1
 @export var willingness_modifier_clan_a: int = 0
 @export var willingness_modifier_clan_b: int = 0
-@export var pending_performance_requests: Array[Dictionary] = []
+@export var pending_performance_requests: Array = []
 @export var next_request_id: int = 0
 ## Per-character session state for court action modifiers (s15.4).
 ## Key: character_id (int). Value: Dictionary with counts and TN reductions.
@@ -52,4 +52,4 @@ enum CourtPhase {
 ## target_id -> int), persuade_tn_reductions (Dictionary of target_id -> int).
 @export var session_state: Dictionary = {}
 ## Active proxy mandates for this court session (s16.2).
-@export var proxy_mandates: Array[ProxyMandateData] = []
+@export var proxy_mandates: Array = []

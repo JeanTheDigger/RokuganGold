@@ -235,7 +235,7 @@ func test_forced_march_winter_mountains() -> void:
 
 func test_path_cost_two_plains() -> void:
 	var data: Dictionary = {0: _plains_tile(), 1: _plains_tile()}
-	var path: Array[int] = [0, 1]
+	var path: Array = [0, 1]
 	assert_eq(ArmyMovementSystem.compute_path_cost(
 		path, data, ArmyMovementSystem.Season.SUMMER,
 	), 2)
@@ -243,7 +243,7 @@ func test_path_cost_two_plains() -> void:
 
 func test_path_cost_plains_then_mountains() -> void:
 	var data: Dictionary = {0: _plains_tile(), 1: _mountain_tile()}
-	var path: Array[int] = [0, 1]
+	var path: Array = [0, 1]
 	assert_eq(ArmyMovementSystem.compute_path_cost(
 		path, data, ArmyMovementSystem.Season.SUMMER,
 	), 4)
@@ -251,7 +251,7 @@ func test_path_cost_plains_then_mountains() -> void:
 
 func test_path_cost_winter_multiplied() -> void:
 	var data: Dictionary = {0: _plains_tile(), 1: _forest_tile()}
-	var path: Array[int] = [0, 1]
+	var path: Array = [0, 1]
 	# Winter: 2 + 4 = 6
 	assert_eq(ArmyMovementSystem.compute_path_cost(
 		path, data, ArmyMovementSystem.Season.WINTER,
@@ -263,7 +263,7 @@ func test_path_cost_winter_multiplied() -> void:
 func test_begin_march_success() -> void:
 	var a: Dictionary = _make_army(1, 0)
 	var data: Dictionary = {1: _plains_tile(), 2: _plains_tile()}
-	var path: Array[int] = [1, 2]
+	var path: Array = [1, 2]
 	var r: Dictionary = ArmyMovementSystem.begin_march(
 		a, path, data, ArmyMovementSystem.Season.SUMMER,
 	)
@@ -276,7 +276,7 @@ func test_begin_march_success() -> void:
 
 func test_begin_march_empty_path() -> void:
 	var a: Dictionary = _make_army()
-	var path: Array[int] = []
+	var path: Array = []
 	var r: Dictionary = ArmyMovementSystem.begin_march(
 		a, path, {}, ArmyMovementSystem.Season.SUMMER,
 	)
@@ -286,7 +286,7 @@ func test_begin_march_empty_path() -> void:
 func test_begin_march_forced() -> void:
 	var a: Dictionary = _make_army(1, 0)
 	var data: Dictionary = {1: _forest_tile(), 2: _mountain_tile()}
-	var path: Array[int] = [1, 2]
+	var path: Array = [1, 2]
 	# Forest: 2->1 (save 1), Mountains: 3->1 (save 2)
 	# Total: 2 days, morale cost: 15
 	var r: Dictionary = ArmyMovementSystem.begin_march(
@@ -365,7 +365,7 @@ func test_multi_tile_march() -> void:
 
 func test_battle_trigger_on_arrival() -> void:
 	var arrival: Dictionary = {"arrived_at": 5, "current_sub_tile": 5}
-	var enemies: Array[Dictionary] = [_make_army(2, 5, "Crane")]
+	var enemies: Array = [_make_army(2, 5, "Crane")]
 	var r: Dictionary = ArmyMovementSystem.check_battle_trigger(arrival, enemies)
 	assert_true(r["battle_triggered"])
 	assert_eq(r["sub_tile"], 5)
@@ -374,14 +374,14 @@ func test_battle_trigger_on_arrival() -> void:
 
 func test_no_battle_empty_tile() -> void:
 	var arrival: Dictionary = {"arrived_at": 5, "current_sub_tile": 5}
-	var enemies: Array[Dictionary] = [_make_army(2, 10, "Crane")]
+	var enemies: Array = [_make_army(2, 10, "Crane")]
 	var r: Dictionary = ArmyMovementSystem.check_battle_trigger(arrival, enemies)
 	assert_false(r["battle_triggered"])
 
 
 func test_battle_trigger_multiple_enemies() -> void:
 	var arrival: Dictionary = {"arrived_at": 5, "current_sub_tile": 5}
-	var enemies: Array[Dictionary] = [
+	var enemies: Array = [
 		_make_army(2, 5, "Crane"),
 		_make_army(3, 5, "Scorpion"),
 	]
@@ -394,7 +394,7 @@ func test_battle_trigger_multiple_enemies() -> void:
 
 func test_passive_visibility() -> void:
 	var adj: Dictionary = {0: [1, 2, 3]}
-	var visible: Array[int] = ArmyMovementSystem.get_visible_sub_tiles(0, adj, false)
+	var visible: Array = ArmyMovementSystem.get_visible_sub_tiles(0, adj, false)
 	assert_eq(visible.size(), 4)
 	assert_has(visible, 0)
 	assert_has(visible, 1)
@@ -404,7 +404,7 @@ func test_passive_visibility() -> void:
 
 func test_scout_visibility_extends_range() -> void:
 	var adj: Dictionary = {0: [1, 2], 1: [0, 3, 4], 2: [0, 5]}
-	var visible: Array[int] = ArmyMovementSystem.get_visible_sub_tiles(0, adj, true)
+	var visible: Array = ArmyMovementSystem.get_visible_sub_tiles(0, adj, true)
 	# 0 + [1,2] + [3,4] from 1 + [5] from 2 = {0,1,2,3,4,5}
 	assert_eq(visible.size(), 6)
 	assert_has(visible, 3)
@@ -414,20 +414,20 @@ func test_scout_visibility_extends_range() -> void:
 
 func test_passive_visibility_no_scouts_no_ring_2() -> void:
 	var adj: Dictionary = {0: [1, 2], 1: [0, 3, 4], 2: [0, 5]}
-	var visible: Array[int] = ArmyMovementSystem.get_visible_sub_tiles(0, adj, false)
+	var visible: Array = ArmyMovementSystem.get_visible_sub_tiles(0, adj, false)
 	assert_eq(visible.size(), 3)
 	assert_false(visible.has(3))
 	assert_false(visible.has(4))
 
 
 func test_detect_enemy_armies() -> void:
-	var visible: Array[int] = [0, 1, 2, 3]
-	var all: Array[Dictionary] = [
+	var visible: Array = [0, 1, 2, 3]
+	var all: Array = [
 		_make_army(1, 0, "Lion"),
 		_make_army(2, 2, "Crane"),
 		_make_army(3, 5, "Scorpion"),
 	]
-	var detected: Array[Dictionary] = ArmyMovementSystem.detect_enemy_armies(
+	var detected: Array = ArmyMovementSystem.detect_enemy_armies(
 		visible, all, "Lion",
 	)
 	assert_eq(detected.size(), 1)
@@ -435,12 +435,12 @@ func test_detect_enemy_armies() -> void:
 
 
 func test_detect_ignores_own_clan() -> void:
-	var visible: Array[int] = [0, 1]
-	var all: Array[Dictionary] = [
+	var visible: Array = [0, 1]
+	var all: Array = [
 		_make_army(1, 0, "Lion"),
 		_make_army(2, 1, "Lion"),
 	]
-	var detected: Array[Dictionary] = ArmyMovementSystem.detect_enemy_armies(
+	var detected: Array = ArmyMovementSystem.detect_enemy_armies(
 		visible, all, "Lion",
 	)
 	assert_eq(detected.size(), 0)

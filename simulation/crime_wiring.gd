@@ -12,7 +12,7 @@ static func process_killing_crime(
 	victim: L5RCharacterData,
 	case_id: int,
 	ic_day: int,
-	witnesses: Array[int],
+	witnesses: Array,
 	clans_at_war: bool,
 	is_battlefield: bool,
 	is_prisoner: bool,
@@ -183,8 +183,8 @@ static func process_treason_conviction(
 	crime_record: CrimeRecord,
 	convicted: L5RCharacterData,
 	lord: L5RCharacterData,
-	co_conspirator_ids: Array[int],
-	next_topic_id: Array[int],
+	co_conspirator_ids: Array,
+	next_topic_id: Array,
 	ic_day: int,
 ) -> Dictionary:
 	if crime_record.crime_type != Enums.CrimeType.TREASON:
@@ -254,7 +254,7 @@ static func process_attempted_murder(
 	method_tier: UnsanctionedKillingSystem.KillingTier,
 	case_id: int,
 	ic_day: int,
-	witnesses: Array[int],
+	witnesses: Array,
 ) -> Dictionary:
 	var evaluation := UnsanctionedKillingSystem.evaluate_attempted_murder(
 		method_tier, attacker.status, victim.status

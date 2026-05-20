@@ -65,7 +65,7 @@ func test_tea_uses_tea_ceremony() -> void:
 func test_public_performance_success_gives_disposition() -> void:
 	var performer := _make_performer("Artisan", 5)
 	var dice := _make_high_roller()
-	var witnesses: Array[int] = [10, 11, 12]
+	var witnesses: Array = [10, 11, 12]
 
 	var result := PerformativeArtsSystem.resolve_public_performance(
 		performer, PerformativeArtsSystem.ArtForm.POETRY, witnesses, dice)
@@ -80,7 +80,7 @@ func test_public_performance_success_gives_disposition() -> void:
 func test_public_performance_success_glory() -> void:
 	var performer := _make_performer("Artisan", 5)
 	var dice := _make_high_roller()
-	var witnesses: Array[int] = [10]
+	var witnesses: Array = [10]
 
 	var result := PerformativeArtsSystem.resolve_public_performance(
 		performer, PerformativeArtsSystem.ArtForm.POETRY, witnesses, dice)
@@ -92,7 +92,7 @@ func test_public_performance_success_glory() -> void:
 func test_raises_increase_disposition() -> void:
 	var performer := _make_performer("Artisan", 5)
 	var dice := _make_high_roller()
-	var witnesses: Array[int] = [10]
+	var witnesses: Array = [10]
 
 	var result := PerformativeArtsSystem.resolve_public_performance(
 		performer, PerformativeArtsSystem.ArtForm.POETRY, witnesses, dice)
@@ -109,7 +109,7 @@ func test_public_performance_failure_no_disposition() -> void:
 	var performer := _make_performer("Artisan", 1)
 	performer.awareness = 1
 	var dice := _make_low_roller()
-	var witnesses: Array[int] = [10]
+	var witnesses: Array = [10]
 
 	var result := PerformativeArtsSystem.resolve_public_performance(
 		performer, PerformativeArtsSystem.ArtForm.POETRY, witnesses, dice)
@@ -146,7 +146,7 @@ func test_fatigue_reduces_disposition() -> void:
 	var performer := _make_performer("Artisan", 5)
 	var dice := DiceEngine.new()
 	dice.set_seed(42)
-	var witnesses: Array[int] = [10]
+	var witnesses: Array = [10]
 
 	var result_fresh := PerformativeArtsSystem.resolve_public_performance(
 		performer, PerformativeArtsSystem.ArtForm.POETRY, witnesses, dice, 0)
@@ -163,7 +163,7 @@ func test_fatigue_reduces_disposition() -> void:
 func test_fatigue_zero_produces_no_effect() -> void:
 	var performer := _make_performer("Artisan", 5)
 	var dice := _make_high_roller()
-	var witnesses: Array[int] = [10]
+	var witnesses: Array = [10]
 
 	var result := PerformativeArtsSystem.resolve_public_performance(
 		performer, PerformativeArtsSystem.ArtForm.POETRY, witnesses, dice, 3)
@@ -365,7 +365,7 @@ func test_dance_uses_awareness_not_agility() -> void:
 	performer.awareness = 4
 	performer.agility = 6
 	var dice := _make_high_roller()
-	var witnesses: Array[int] = [10]
+	var witnesses: Array = [10]
 
 	var result := PerformativeArtsSystem.resolve_public_performance(
 		performer, PerformativeArtsSystem.ArtForm.DANCE, witnesses, dice)
@@ -379,7 +379,7 @@ func test_tea_ceremony_uses_awareness_not_void() -> void:
 	performer.awareness = 4
 	performer.void_ring = 6
 	var dice := _make_high_roller()
-	var witnesses: Array[int] = [10]
+	var witnesses: Array = [10]
 
 	var result := PerformativeArtsSystem.resolve_public_performance(
 		performer, PerformativeArtsSystem.ArtForm.TEA_CEREMONY, witnesses, dice)

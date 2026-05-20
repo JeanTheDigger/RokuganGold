@@ -287,7 +287,7 @@ static func _evaluate_void_vote(
 #     "votes": Dictionary[Master -> String]
 #   }
 static func tally_vote(
-	living_masters: Array[int],
+	living_masters: Array,
 	proposal: Dictionary,
 	dispositions_to_champion: Dictionary,
 	dice_engine: DiceEngine,
@@ -627,8 +627,8 @@ const GRAND_RITUAL_EMPIRE_DISPOSITION: int = -20
 
 static func apply_grand_ritual_devastation(
 	target_province: ProvinceData,
-	surviving_masters: Array[L5RCharacterData],
-	all_clan_representatives: Array[L5RCharacterData],
+	surviving_masters: Array,
+	all_clan_representatives: Array,
 	emperor_id: int,
 ) -> Dictionary:
 	if target_province == null:
@@ -637,12 +637,12 @@ static func apply_grand_ritual_devastation(
 	target_province.stability = 0.0
 	target_province.grand_ritual_devastated = true
 
-	var master_ids: Array[int] = []
+	var master_ids: Array = []
 	for master: L5RCharacterData in surviving_masters:
 		HonorGlorySystem.apply_honor_change(master, GRAND_RITUAL_HONOR_COST)
 		master_ids.append(master.character_id)
 
-	var rep_ids: Array[int] = []
+	var rep_ids: Array = []
 	if emperor_id >= 0:
 		for rep: L5RCharacterData in all_clan_representatives:
 			if rep.clan == "Phoenix":

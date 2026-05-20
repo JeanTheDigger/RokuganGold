@@ -88,7 +88,7 @@ const CANONICAL_FESTIVALS: Array[Dictionary] = [
 static func get_active_festivals(ic_day: int) -> Array:
 	var month: int = get_month(ic_day)
 	var day: int = get_day_of_month(ic_day)
-	var active: Array[Dictionary] = []
+	var active: Array = []
 	for fest: Dictionary in CANONICAL_FESTIVALS:
 		if fest["month"] == month and fest["day"] == day:
 			active.append(fest)
@@ -112,7 +112,7 @@ static func is_marriage_bonus_day(ic_day: int) -> bool:
 # -- Festival Effects ---------------------------------------------------------
 
 static func get_festival_effects(ic_day: int) -> Array:
-	var effects: Array[String] = []
+	var effects: Array = []
 	for fest: Dictionary in get_active_festivals(ic_day):
 		for e: String in fest.get("effects", []):
 			if not effects.has(e):
@@ -191,7 +191,7 @@ static func is_vacancy_triggered(championship: ChampionshipType) -> bool:
 	return championship not in ANNUAL_CHAMPIONSHIPS
 
 static func resolve_championship(
-	candidates: Array[Dictionary],
+	candidates: Array,
 	_dice: Object,
 ) -> Dictionary:
 	if candidates.is_empty():
@@ -403,7 +403,7 @@ const SETTLEMENT_FESTIVAL_COUNT: Dictionary = {
 	"temple": [0, 1],
 }
 
-static var _canonical_days_cache: Array[int] = []
+static var _canonical_days_cache: Array = []
 
 static func _get_canonical_days() -> Array:
 	if _canonical_days_cache.is_empty():
@@ -419,7 +419,7 @@ static func generate_local_festivals(
 	_terrain: String,
 	_clan: String,
 	rng: Object,
-	themes: Array[String] = [],
+	themes: Array = [],
 ) -> Array:
 	var count_range: Array = SETTLEMENT_FESTIVAL_COUNT.get(settlement_type, [1, 2])
 	var min_count: int = count_range[0]
@@ -428,8 +428,8 @@ static func generate_local_festivals(
 	if max_count > min_count and rng.has_method("randi_range"):
 		count = rng.randi_range(min_count, max_count)
 
-	var festivals: Array[Dictionary] = []
-	var used_days: Array[int] = []
+	var festivals: Array = []
+	var used_days: Array = []
 
 	for i in range(count):
 		var category: String = ""

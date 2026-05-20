@@ -87,7 +87,7 @@ func test_max_viable_count_capped_at_participant_cap() -> void:
 # -- select_eligible_ids -------------------------------------------------------
 
 func test_select_eligible_excludes_host() -> void:
-	var result: Array[int] = TeaCeremonySystem.select_eligible_ids(
+	var result: Array = TeaCeremonySystem.select_eligible_ids(
 		1, [1, 2, 3], {1: 50, 2: 25, 3: 30}
 	)
 	assert_false(result.has(1))
@@ -95,7 +95,7 @@ func test_select_eligible_excludes_host() -> void:
 
 func test_select_eligible_excludes_below_acquaintance() -> void:
 	# disp=5 is below the MIN_DISPOSITION threshold of 11
-	var result: Array[int] = TeaCeremonySystem.select_eligible_ids(
+	var result: Array = TeaCeremonySystem.select_eligible_ids(
 		1, [2, 3], {2: 5, 3: 30}
 	)
 	assert_false(result.has(2))
@@ -103,14 +103,14 @@ func test_select_eligible_excludes_below_acquaintance() -> void:
 
 
 func test_select_eligible_includes_acquaintance_threshold() -> void:
-	var result: Array[int] = TeaCeremonySystem.select_eligible_ids(
+	var result: Array = TeaCeremonySystem.select_eligible_ids(
 		1, [2], {2: TeaCeremonySystem.MIN_DISPOSITION}
 	)
 	assert_true(result.has(2))
 
 
 func test_select_eligible_empty_zone() -> void:
-	var result: Array[int] = TeaCeremonySystem.select_eligible_ids(1, [], {})
+	var result: Array = TeaCeremonySystem.select_eligible_ids(1, [], {})
 	assert_eq(result.size(), 0)
 
 

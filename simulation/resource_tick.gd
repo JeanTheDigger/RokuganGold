@@ -140,9 +140,9 @@ const MONTHS_PER_SEASON: Dictionary = {
 
 static func get_province_settlements(
 	province: ProvinceData,
-	settlements: Array[SettlementData],
+	settlements: Array,
 ) -> Array:
-	var result: Array[SettlementData] = []
+	var result: Array = []
 	for s: SettlementData in settlements:
 		if s.province_id == province.province_id:
 			result.append(s)
@@ -151,7 +151,7 @@ static func get_province_settlements(
 
 static func sum_farming_pu(
 	province: ProvinceData,
-	settlements: Array[SettlementData],
+	settlements: Array,
 ) -> int:
 	var total: int = 0
 	for s: SettlementData in settlements:
@@ -162,7 +162,7 @@ static func sum_farming_pu(
 
 static func sum_mining_pu(
 	province: ProvinceData,
-	settlements: Array[SettlementData],
+	settlements: Array,
 ) -> int:
 	var total: int = 0
 	for s: SettlementData in settlements:
@@ -173,7 +173,7 @@ static func sum_mining_pu(
 
 static func sum_town_pu(
 	province: ProvinceData,
-	settlements: Array[SettlementData],
+	settlements: Array,
 ) -> int:
 	var total: int = 0
 	for s: SettlementData in settlements:
@@ -184,7 +184,7 @@ static func sum_town_pu(
 
 static func sum_military_pu(
 	province: ProvinceData,
-	settlements: Array[SettlementData],
+	settlements: Array,
 ) -> int:
 	var total: int = 0
 	for s: SettlementData in settlements:
@@ -195,7 +195,7 @@ static func sum_military_pu(
 
 static func sum_population_pu(
 	province: ProvinceData,
-	settlements: Array[SettlementData],
+	settlements: Array,
 ) -> int:
 	var total: int = 0
 	for s: SettlementData in settlements:
@@ -206,7 +206,7 @@ static func sum_population_pu(
 
 static func sum_garrison_pu(
 	province: ProvinceData,
-	settlements: Array[SettlementData],
+	settlements: Array,
 ) -> int:
 	var total: int = 0
 	for s: SettlementData in settlements:
@@ -217,7 +217,7 @@ static func sum_garrison_pu(
 
 static func get_province_rice(
 	province: ProvinceData,
-	settlements: Array[SettlementData],
+	settlements: Array,
 ) -> float:
 	var total: float = 0.0
 	for s: SettlementData in settlements:
@@ -232,7 +232,7 @@ static func compute_garrison_required(total_pop_pu: int) -> float:
 
 static func is_under_garrisoned(
 	province: ProvinceData,
-	settlements: Array[SettlementData],
+	settlements: Array,
 ) -> bool:
 	var pop: int = sum_population_pu(province, settlements)
 	var garrison: int = sum_garrison_pu(province, settlements)
@@ -240,8 +240,8 @@ static func is_under_garrisoned(
 
 
 static func _process_garrison_check(
-	provinces: Array[ProvinceData],
-	settlements: Array[SettlementData],
+	provinces: Array,
+	settlements: Array,
 	settlement_meta: Dictionary,
 ) -> Dictionary:
 	var results: Dictionary = {}
@@ -306,8 +306,8 @@ static func compute_cunning_clan_modifier(
 
 
 static func process_seasonal_tick(
-	provinces: Array[ProvinceData],
-	settlements: Array[SettlementData],
+	provinces: Array,
+	settlements: Array,
 	season: String,
 	settlement_meta: Dictionary,
 	miya_inputs: Dictionary = {},
@@ -411,8 +411,8 @@ static func process_seasonal_tick(
 # describing the actual rice/stability/year-tracking mutations performed.
 
 static func _apply_miya_blessing(
-	provinces: Array[ProvinceData],
-	settlements: Array[SettlementData],
+	provinces: Array,
+	settlements: Array,
 	miya_inputs: Dictionary,
 	settlement_meta: Dictionary,
 ) -> Dictionary:
@@ -476,13 +476,13 @@ static func _apply_miya_blessing(
 
 
 static func _build_scored_provinces(
-	provinces: Array[ProvinceData],
-	settlements: Array[SettlementData],
+	provinces: Array,
+	settlements: Array,
 	miya_inputs: Dictionary,
 	settlement_meta: Dictionary,
 	current_ic_year: int,
 ) -> Array:
-	var scored: Array[Dictionary] = []
+	var scored: Array = []
 	var petition_bonuses: Dictionary = miya_inputs.get("petition_bonuses", {})
 	var exclusions: Dictionary = miya_inputs.get("exclusions", {})
 	var war_history: Dictionary = miya_inputs.get("war_history", {})
@@ -535,12 +535,12 @@ static func _worst_starvation_in_province(
 
 
 static func _group_settlements_by_province(
-	provinces: Array[ProvinceData],
-	settlements: Array[SettlementData],
+	provinces: Array,
+	settlements: Array,
 ) -> Dictionary:
 	var grouped: Dictionary = {}
 	for prov: ProvinceData in provinces:
-		var bucket: Array[SettlementData] = []
+		var bucket: Array = []
 		for s: SettlementData in settlements:
 			if s.province_id == prov.province_id:
 				bucket.append(s)
@@ -550,7 +550,7 @@ static func _group_settlements_by_province(
 
 static func _compute_emperor_income_from_cascade(
 	taxes: Dictionary,
-	provinces: Array[ProvinceData] = [],
+	provinces: Array = [],
 	emperor_tax_config: Dictionary = {},
 ) -> Dictionary:
 	var emperor_rate: float = compute_emperor_take_rate(emperor_tax_config)
@@ -617,8 +617,8 @@ static func apply_warlike_arms_redirect(
 # ==============================================================================
 
 static func _lock_planting(
-	provinces: Array[ProvinceData],
-	settlements: Array[SettlementData],
+	provinces: Array,
+	settlements: Array,
 	settlement_meta: Dictionary,
 ) -> void:
 	for prov: ProvinceData in provinces:
@@ -632,8 +632,8 @@ static func _lock_planting(
 # ==============================================================================
 
 static func _process_harvest(
-	provinces: Array[ProvinceData],
-	settlements: Array[SettlementData],
+	provinces: Array,
+	settlements: Array,
 	settlement_meta: Dictionary,
 ) -> Dictionary:
 	var harvest_results: Dictionary = {}
@@ -664,7 +664,7 @@ static func _process_harvest(
 
 static func _distribute_rice_to_settlements(
 	province: ProvinceData,
-	settlements: Array[SettlementData],
+	settlements: Array,
 	rice_amount: float,
 ) -> void:
 	var province_settlements: Array = get_province_settlements(province, settlements)
@@ -686,8 +686,8 @@ static func _distribute_rice_to_settlements(
 # ==============================================================================
 
 static func _process_rice_consumption(
-	provinces: Array[ProvinceData],
-	settlements: Array[SettlementData],
+	provinces: Array,
+	settlements: Array,
 ) -> Dictionary:
 	var results: Dictionary = {}
 	for prov: ProvinceData in provinces:
@@ -698,7 +698,7 @@ static func _process_rice_consumption(
 
 static func consume_rice_province(
 	province: ProvinceData,
-	settlements: Array[SettlementData],
+	settlements: Array,
 ) -> Dictionary:
 	var total_civilian_cost: float = 0.0
 	var total_military_cost: float = 0.0
@@ -735,8 +735,8 @@ const RELIEF_THRESHOLD_OTHER: int = 1
 
 
 static func _process_starvation_check(
-	provinces: Array[ProvinceData],
-	settlements: Array[SettlementData],
+	provinces: Array,
+	settlements: Array,
 	settlement_meta: Dictionary,
 ) -> Dictionary:
 	var results: Dictionary = {}
@@ -840,7 +840,7 @@ static func check_starvation(
 
 static func apply_starvation_loss_settlements(
 	province: ProvinceData,
-	settlements: Array[SettlementData],
+	settlements: Array,
 	loss_rate: float,
 ) -> Dictionary:
 	var total_lost: int = 0
@@ -920,8 +920,8 @@ static func compute_taxable_surplus(total_population_pu: int, autumn_yield: floa
 
 
 static func _process_tax_cascade(
-	provinces: Array[ProvinceData],
-	settlements: Array[SettlementData],
+	provinces: Array,
+	settlements: Array,
 	settlement_meta: Dictionary,
 ) -> Dictionary:
 	var results: Dictionary = {}
@@ -966,8 +966,8 @@ static func apply_tax_at_tier(
 # ==============================================================================
 
 static func _process_population_adjustment(
-	provinces: Array[ProvinceData],
-	settlements: Array[SettlementData],
+	provinces: Array,
+	settlements: Array,
 	settlement_meta: Dictionary,
 ) -> Dictionary:
 	var results: Dictionary = {}
@@ -1022,7 +1022,7 @@ static func compute_growth_rate(
 
 static func apply_population_growth_settlements(
 	province: ProvinceData,
-	settlements: Array[SettlementData],
+	settlements: Array,
 	seasonal_rate: float,
 ) -> Dictionary:
 	if seasonal_rate <= 0.0:
@@ -1047,7 +1047,7 @@ static func apply_population_growth_settlements(
 # ==============================================================================
 
 static func _process_iron_production(
-	settlements: Array[SettlementData],
+	settlements: Array,
 	settlement_meta: Dictionary,
 ) -> Dictionary:
 	var results: Dictionary = {}
@@ -1084,7 +1084,7 @@ static func produce_iron_settlement(settlement: SettlementData, mine_quality: fl
 const ARMS_PER_FORGE_PER_SEASON: float = 3.0
 
 static func _process_forge_conversion(
-	settlements: Array[SettlementData],
+	settlements: Array,
 	settlement_meta: Dictionary,
 ) -> Dictionary:
 	var clan_data: Dictionary = settlement_meta.get("_clan_data", {})
@@ -1141,7 +1141,7 @@ static func process_forge_conversion_single_clan(
 # ==============================================================================
 
 static func _process_koku_generation(
-	settlements: Array[SettlementData],
+	settlements: Array,
 	settlement_meta: Dictionary,
 ) -> Dictionary:
 	var results: Dictionary = {}
@@ -1172,15 +1172,15 @@ static func _process_koku_generation(
 # ==============================================================================
 
 static func _process_trade_route_koku(
-	provinces: Array[ProvinceData],
-	settlements: Array[SettlementData],
+	provinces: Array,
+	settlements: Array,
 	trade_routes: Array,
 	settlement_meta: Dictionary,
 ) -> Dictionary:
 	var results: Dictionary = {}
 	if trade_routes.is_empty():
 		return results
-	var typed_routes: Array[TradeRouteData] = []
+	var typed_routes: Array = []
 	for r: Variant in trade_routes:
 		if r is TradeRouteData:
 			typed_routes.append(r)
@@ -1206,10 +1206,10 @@ static func _process_trade_route_koku(
 
 static func _distribute_koku_to_settlements(
 	province: ProvinceData,
-	settlements: Array[SettlementData],
+	settlements: Array,
 	amount: float,
 ) -> void:
-	var prov_settlements: Array[SettlementData] = []
+	var prov_settlements: Array = []
 	for s: SettlementData in settlements:
 		if s.province_id == province.province_id:
 			prov_settlements.append(s)

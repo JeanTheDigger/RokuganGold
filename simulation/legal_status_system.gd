@@ -123,7 +123,7 @@ static func get_case(
 
 
 static func get_active_cases(character: L5RCharacterData) -> Array:
-	var active: Array[LegalCaseEntry] = []
+	var active: Array = []
 	for entry: LegalCaseEntry in character.legal_cases:
 		if entry.state != Enums.LegalStatus.CLEAR and entry.state != Enums.LegalStatus.ACQUITTED and entry.state != Enums.LegalStatus.PARDONED:
 			active.append(entry)

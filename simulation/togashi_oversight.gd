@@ -220,7 +220,7 @@ static func is_directive_aligned(axis: Axis, directives: Array) -> bool:
 static func tick_oversight(
 	state: Dictionary,
 	world_state: Dictionary,
-	strategic_directives: Array[Dictionary],
+	strategic_directives: Array,
 ) -> Dictionary:
 	## Updates dissatisfaction across all four axes, returns information
 	## about any threshold crossing this season.
@@ -248,7 +248,7 @@ static func tick_oversight(
 		dissatisfaction[axis] = current
 
 	# Identify triggered axes and the primary one.
-	var triggered: Array[int] = []
+	var triggered: Array = []
 	var primary_axis: int = -1
 	var primary_value: float = 0.0
 	for axis: int in dissatisfaction:
@@ -410,7 +410,7 @@ static func should_lift_forced_directive(
 
 static func remove_forced_directive(state: Dictionary, axis: Axis) -> void:
 	var actives: Array = state.get("active_forced_directives", [])
-	var kept: Array[Dictionary] = []
+	var kept: Array = []
 	for d: Dictionary in actives:
 		if int(d.get("axis", -1)) != axis:
 			kept.append(d)
@@ -427,7 +427,7 @@ static func _has_active_directive_on_axis(state: Dictionary, axis: Axis) -> bool
 static func add_forced_directive(state: Dictionary, directive: Dictionary) -> void:
 	var actives: Array = state.get("active_forced_directives", [])
 	# Replace any existing directive on the same axis (only one per axis at a time).
-	var kept: Array[Dictionary] = []
+	var kept: Array = []
 	for d: Dictionary in actives:
 		if int(d.get("axis", -1)) != int(directive.get("axis", -1)):
 			kept.append(d)

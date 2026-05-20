@@ -131,8 +131,8 @@ static func issue_order(
 # -- Messenger Delivery Processing -----------------------------------------------
 
 static func process_pending_orders(order_state: Dictionary) -> Array:
-	var delivered: Array[Dictionary] = []
-	var still_pending: Array[Dictionary] = []
+	var delivered: Array = []
+	var still_pending: Array = []
 
 	for order: Dictionary in order_state["pending_orders"]:
 		if order["delivered"]:
@@ -157,7 +157,7 @@ static func cancel_standing_order(
 	target_character_id: int,
 ) -> Dictionary:
 	var found: bool = false
-	var remaining: Array[Dictionary] = []
+	var remaining: Array = []
 	for order: Dictionary in order_state["standing_orders"]:
 		if order["target_character_id"] == target_character_id and not found:
 			found = true

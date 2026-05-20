@@ -11,8 +11,8 @@ static func apply(
 	result: Dictionary,
 	characters: Dictionary,
 	provinces: Dictionary,
-	action_log: Array[Dictionary],
-	settlements: Array[SettlementData] = [],
+	action_log: Array,
+	settlements: Array = [],
 ) -> Dictionary:
 	var applied: Dictionary = {
 		"disposition_changes": [],
@@ -416,7 +416,7 @@ static func _apply_province_effects(
 	result: Dictionary,
 	provinces: Dictionary,
 	applied: Dictionary,
-	settlements: Array[SettlementData] = [],
+	settlements: Array = [],
 ) -> void:
 	var effect_type: String = effects.get("effect", "")
 	var province_id: int = result.get("target_province_id", -1)
@@ -455,7 +455,7 @@ static func _apply_province_effects(
 
 static func _find_settlement_in_province(
 	province_id: int,
-	settlements: Array[SettlementData],
+	settlements: Array,
 ) -> SettlementData:
 	for s: SettlementData in settlements:
 		if s.province_id == province_id:
@@ -556,7 +556,7 @@ static func _pick_different_virtue(actual: int) -> int:
 
 static func _log_action(
 	result: Dictionary,
-	action_log: Array[Dictionary],
+	action_log: Array,
 ) -> void:
 	var entry: Dictionary = {
 		"character_id": result.get("character_id", -1),
@@ -618,13 +618,13 @@ static func _detect_observable_effect(
 # -- Batch Apply ---------------------------------------------------------------
 
 static func apply_day_results(
-	results: Array[Dictionary],
+	results: Array,
 	characters: Dictionary,
 	provinces: Dictionary,
-	action_log: Array[Dictionary],
-	settlements: Array[SettlementData] = [],
+	action_log: Array,
+	settlements: Array = [],
 ) -> Array:
-	var all_applied: Array[Dictionary] = []
+	var all_applied: Array = []
 	for result: Dictionary in results:
 		var applied: Dictionary = apply(result, characters, provinces, action_log, settlements)
 		all_applied.append(applied)

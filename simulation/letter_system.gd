@@ -143,7 +143,7 @@ static func deliver_letter(
 	letter: LetterData,
 	recipient: L5RCharacterData,
 	current_season: int,
-	action_log: Array[Dictionary],
+	action_log: Array,
 	topics_by_id: Dictionary = {},
 ) -> Dictionary:
 	if letter.delivered:
@@ -246,7 +246,7 @@ static func apply_exchange_bonus(
 static func has_prior_correspondence(
 	recipient: L5RCharacterData,
 	apparent_sender_id: int,
-	pending_letters: Array[LetterData],
+	pending_letters: Array,
 ) -> bool:
 	for item: LetterData in pending_letters:
 		if item is LetterData and item.delivered and not item.is_forged:
@@ -260,7 +260,7 @@ static func auto_detect_forgery(
 	letter: LetterData,
 	recipient: L5RCharacterData,
 	dice_engine: DiceEngine,
-	pending_letters: Array[LetterData],
+	pending_letters: Array,
 ) -> bool:
 	if not letter.is_forged:
 		return false
@@ -276,7 +276,7 @@ static func deliberate_examine_letter(
 	letter: LetterData,
 	examiner: L5RCharacterData,
 	dice_engine: DiceEngine,
-	pending_letters: Array[LetterData],
+	pending_letters: Array,
 ) -> Dictionary:
 	if not has_prior_correspondence(examiner, letter.sender_id, pending_letters):
 		return {"detected": false, "no_reference": true}
@@ -304,7 +304,7 @@ static func deliberate_examine_letter(
 
 static func is_blocked_by_blockade(
 	letter: LetterData,
-	active_wars: Array[Variant] = [],
+	active_wars: Array = [],
 ) -> bool:
 	if letter.ocean_segments <= 0:
 		return false
@@ -332,16 +332,16 @@ static func is_recipient_dead(
 # Returns list of delivery result dicts.
 
 static func process_pending_letters(
-	pending_letters: Array[LetterData],
+	pending_letters: Array,
 	characters_by_id: Dictionary,
 	current_ic_day: int,
 	current_season: int,
-	action_log: Array[Dictionary],
-	active_wars: Array[Variant] = [],
+	action_log: Array,
+	active_wars: Array = [],
 	dice_engine: DiceEngine = null,
 	topics_by_id: Dictionary = {},
 ) -> Array:
-	var results: Array[Dictionary] = []
+	var results: Array = []
 
 	for item: LetterData in pending_letters:
 		if item is LetterData and not item.delivered:
@@ -406,14 +406,14 @@ static func process_pending_letters(
 # Generates reply letters for delivered letters. Called after process_pending_letters.
 
 static func generate_replies(
-	delivery_results: Array[Dictionary],
-	pending_letters: Array[LetterData],
+	delivery_results: Array,
+	pending_letters: Array,
 	characters_by_id: Dictionary,
 	ic_day: int,
 	dice_engine: DiceEngine,
-	next_letter_id: Array[int],
+	next_letter_id: Array,
 ) -> Array:
-	var replies: Array[LetterData] = []
+	var replies: Array = []
 
 	for result: Dictionary in delivery_results:
 		if result.get("undeliverable", false):

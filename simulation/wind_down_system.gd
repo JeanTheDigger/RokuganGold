@@ -165,7 +165,7 @@ static func get_available_methods(
 	settlement: SettlementData,
 	companion_present: bool,
 ) -> Array:
-	var available: Array[Method] = [Method.REST]
+	var available: Array = [Method.REST]
 
 	# Sake House: inn or sake house present.
 	if settlement.has_infrastructure(FEATURE_INN) or \
@@ -227,7 +227,7 @@ static func _add_weight(weights: Dictionary, method: Method, amount: int) -> voi
 
 static func _build_npc_weights(
 	character: L5RCharacterData,
-	available: Array[Method],
+	available: Array,
 ) -> Dictionary:
 	var weights: Dictionary = {}
 	for m: Method in available:
@@ -307,7 +307,7 @@ static func _weighted_pick(weights: Dictionary, dice: DiceEngine) -> Method:
 ## NPC selects a wind-down method from `available` based on personality weights.
 static func select_npc_method(
 	character: L5RCharacterData,
-	available: Array[Method],
+	available: Array,
 	dice: DiceEngine,
 ) -> Method:
 	if available.is_empty():
@@ -359,7 +359,7 @@ static func apply_wind_down(
 	character: L5RCharacterData,
 	method: Method,
 	dice: DiceEngine,
-	present_character_ids: Array[int],
+	present_character_ids: Array,
 	companion_id: int,
 	go_parlor_opponent: Dictionary,
 	fortune_id: int,

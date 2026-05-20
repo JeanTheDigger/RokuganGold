@@ -78,21 +78,21 @@ func _make_action(action_id: String, metadata: Dictionary = {}) -> NPCDataStruct
 # -- Context Action List: ARRANGE_MARRIAGE ------------------------------------
 
 func test_arrange_marriage_in_at_own_holdings() -> void:
-	var actions: Array[String] = NPCDecisionEngine._get_actions_for_context(
+	var actions: Array = NPCDecisionEngine._get_actions_for_context(
 		Enums.ContextFlag.AT_OWN_HOLDINGS
 	)
 	assert_true(actions.has("ARRANGE_MARRIAGE"))
 
 
 func test_arrange_marriage_in_at_court() -> void:
-	var actions: Array[String] = NPCDecisionEngine._get_actions_for_context(
+	var actions: Array = NPCDecisionEngine._get_actions_for_context(
 		Enums.ContextFlag.AT_COURT
 	)
 	assert_true(actions.has("ARRANGE_MARRIAGE"))
 
 
 func test_arrange_marriage_not_in_traveling() -> void:
-	var actions: Array[String] = NPCDecisionEngine._get_actions_for_context(
+	var actions: Array = NPCDecisionEngine._get_actions_for_context(
 		Enums.ContextFlag.TRAVELING
 	)
 	assert_false(actions.has("ARRANGE_MARRIAGE"))
@@ -255,7 +255,7 @@ func test_apply_marriage_mutates_spouse_ids() -> void:
 	var char_a := _make_char(10, "Crane", "Doji")
 	var char_b := _make_char(11, "Lion", "Akodo")
 	var chars_by_id: Dictionary = {10: char_a, 11: char_b}
-	var marriages: Array[Dictionary] = []
+	var marriages: Array = []
 
 	var effects: Dictionary = {
 		"requires_marriage": true,
@@ -281,7 +281,7 @@ func test_apply_marriage_returns_boosts() -> void:
 	var char_a := _make_char(10, "Crane", "Doji")
 	var char_b := _make_char(11, "Lion", "Akodo")
 	var chars_by_id: Dictionary = {10: char_a, 11: char_b}
-	var marriages: Array[Dictionary] = []
+	var marriages: Array = []
 
 	var effects: Dictionary = {
 		"requires_marriage": true,
@@ -302,7 +302,7 @@ func test_apply_marriage_between_families_no_clan_boost() -> void:
 	var char_a := _make_char(10, "Crane", "Doji")
 	var char_b := _make_char(11, "Crane", "Kakita")
 	var chars_by_id: Dictionary = {10: char_a, 11: char_b}
-	var marriages: Array[Dictionary] = []
+	var marriages: Array = []
 
 	var effects: Dictionary = {
 		"requires_marriage": true,
@@ -321,7 +321,7 @@ func test_apply_marriage_between_families_no_clan_boost() -> void:
 
 func test_apply_marriage_fails_for_missing_character() -> void:
 	var chars_by_id: Dictionary = {}
-	var marriages: Array[Dictionary] = []
+	var marriages: Array = []
 
 	var effects: Dictionary = {
 		"requires_marriage": true,
@@ -341,7 +341,7 @@ func test_apply_marriage_fails_if_already_married() -> void:
 	char_a.spouse_id = 50
 	var char_b := _make_char(11)
 	var chars_by_id: Dictionary = {10: char_a, 11: char_b}
-	var marriages: Array[Dictionary] = []
+	var marriages: Array = []
 
 	var effects: Dictionary = {
 		"requires_marriage": true,
@@ -418,7 +418,7 @@ func test_governance_results_include_marriages() -> void:
 	var lord := _make_char(1, "Crane", "Doji", 5.0)
 	lord.physical_location = "100"
 
-	var characters: Array[L5RCharacterData] = [lord]
+	var characters: Array = [lord]
 	var chars_by_id: Dictionary = {1: lord}
 	var _loader := ScoringTableLoader.new()
 	_loader.load_all()
@@ -444,7 +444,7 @@ func test_cross_clan_marriage_applies_baseline_boosts() -> void:
 	var char_a := _make_char(10, "Crane", "Doji")
 	var char_b := _make_char(11, "Lion", "Akodo")
 	var chars_by_id: Dictionary = {10: char_a, 11: char_b}
-	var marriages: Array[Dictionary] = []
+	var marriages: Array = []
 	var baselines: Dictionary = CollectiveDisposition.make_starting_baselines()
 	var clan_bl: Dictionary = baselines["clan"]
 	var family_bl: Dictionary = baselines["family"]
@@ -473,7 +473,7 @@ func test_within_family_marriage_no_baseline_change() -> void:
 	var char_a := _make_char(10, "Crane", "Doji")
 	var char_b := _make_char(11, "Crane", "Doji")
 	var chars_by_id: Dictionary = {10: char_a, 11: char_b}
-	var marriages: Array[Dictionary] = []
+	var marriages: Array = []
 	var baselines: Dictionary = CollectiveDisposition.make_starting_baselines()
 	var clan_bl: Dictionary = baselines["clan"]
 	var family_bl: Dictionary = baselines["family"]
@@ -502,7 +502,7 @@ func test_cross_clan_marriage_creates_favor() -> void:
 	var char_a := _make_char(10, "Crane", "Doji")
 	var char_b := _make_char(11, "Lion", "Akodo")
 	var chars_by_id: Dictionary = {10: char_a, 11: char_b}
-	var marriages: Array[Dictionary] = []
+	var marriages: Array = []
 	var favors: Array = []
 
 	var effects: Dictionary = {
@@ -531,7 +531,7 @@ func test_between_families_marriage_no_favor() -> void:
 	var char_a := _make_char(10, "Crane", "Doji")
 	var char_b := _make_char(11, "Crane", "Kakita")
 	var chars_by_id: Dictionary = {10: char_a, 11: char_b}
-	var marriages: Array[Dictionary] = []
+	var marriages: Array = []
 	var favors: Array = []
 
 	var effects: Dictionary = {
@@ -557,9 +557,9 @@ func test_marriage_generates_topic() -> void:
 	var char_a := _make_char(10, "Crane", "Doji")
 	var char_b := _make_char(11, "Lion", "Akodo")
 	var chars_by_id: Dictionary = {10: char_a, 11: char_b}
-	var marriages: Array[Dictionary] = []
-	var topics: Array[TopicData] = []
-	var next_tid: Array[int] = [500]
+	var marriages: Array = []
+	var topics: Array = []
+	var next_tid: Array = [500]
 
 	var effects: Dictionary = {
 		"requires_marriage": true,
@@ -589,9 +589,9 @@ func test_between_families_topic_variant() -> void:
 	var char_a := _make_char(10, "Crane", "Doji")
 	var char_b := _make_char(11, "Crane", "Kakita")
 	var chars_by_id: Dictionary = {10: char_a, 11: char_b}
-	var marriages: Array[Dictionary] = []
-	var topics: Array[TopicData] = []
-	var next_tid: Array[int] = [600]
+	var marriages: Array = []
+	var topics: Array = []
+	var next_tid: Array = [600]
 
 	var effects: Dictionary = {
 		"requires_marriage": true,
@@ -614,7 +614,7 @@ func test_reassign_moving_character_cross_clan_sets_birth_fields() -> void:
 	var char_a: L5RCharacterData = _make_char(10, "Crane", "Doji")
 	var char_b: L5RCharacterData = _make_char(11, "Lion", "Akodo")
 	var chars_by_id: Dictionary = {10: char_a, 11: char_b}
-	var marriages: Array[Dictionary] = []
+	var marriages: Array = []
 
 	var effects: Dictionary = {
 		"requires_marriage": true,
@@ -640,7 +640,7 @@ func test_reassign_moving_character_updates_lord_id() -> void:
 	var char_b: L5RCharacterData = _make_char(11, "Lion", "Akodo")
 	char_b.lord_id = 50
 	var chars_by_id: Dictionary = {10: char_a, 11: char_b}
-	var marriages: Array[Dictionary] = []
+	var marriages: Array = []
 
 	var effects: Dictionary = {
 		"requires_marriage": true,
@@ -661,7 +661,7 @@ func test_reassign_within_family_no_reassignment() -> void:
 	var char_a: L5RCharacterData = _make_char(10, "Crane", "Doji")
 	var char_b: L5RCharacterData = _make_char(11, "Crane", "Doji")
 	var chars_by_id: Dictionary = {10: char_a, 11: char_b}
-	var marriages: Array[Dictionary] = []
+	var marriages: Array = []
 
 	var effects: Dictionary = {
 		"requires_marriage": true,
@@ -683,7 +683,7 @@ func test_reassign_between_families_sets_birth_family() -> void:
 	var char_a: L5RCharacterData = _make_char(10, "Crane", "Doji")
 	var char_b: L5RCharacterData = _make_char(11, "Crane", "Kakita")
 	var chars_by_id: Dictionary = {10: char_a, 11: char_b}
-	var marriages: Array[Dictionary] = []
+	var marriages: Array = []
 
 	var effects: Dictionary = {
 		"requires_marriage": true,
@@ -716,15 +716,15 @@ func test_pregnancy_check_creates_child_on_success() -> void:
 	var marriage: Dictionary = MarriageSystem.create_marriage(
 		10, 11, MarriageSystem.MarriageType.WITHIN_FAMILY, -1, 50,
 	)
-	var marriages: Array[Dictionary] = [marriage]
-	var children: Array[ChildRecord] = []
+	var marriages: Array = [marriage]
+	var children: Array = []
 
 	var dice: DiceEngine = DiceEngine.new()
 	dice.set_seed(1)
 
 	var found_child: bool = false
 	for _i: int in range(20):
-		var results: Array[Dictionary] = DayOrchestrator._process_pregnancy_checks(
+		var results: Array = DayOrchestrator._process_pregnancy_checks(
 			marriages, chars_by_id, children, dice, 100 + _i,
 		)
 		if results.size() > 0:
@@ -753,10 +753,10 @@ func test_pregnancy_skips_inactive_marriage() -> void:
 		10, 11, MarriageSystem.MarriageType.WITHIN_FAMILY, -1, 50,
 	)
 	marriage["active"] = false
-	var marriages: Array[Dictionary] = [marriage]
-	var children: Array[ChildRecord] = []
+	var marriages: Array = [marriage]
+	var children: Array = []
 
-	var results: Array[Dictionary] = DayOrchestrator._process_pregnancy_checks(
+	var results: Array = DayOrchestrator._process_pregnancy_checks(
 		marriages, chars_by_id, children, _dice, 100,
 	)
 	assert_eq(results.size(), 0, "No pregnancy from inactive marriage")
@@ -775,10 +775,10 @@ func test_pregnancy_skips_dead_spouse() -> void:
 	var marriage: Dictionary = MarriageSystem.create_marriage(
 		10, 11, MarriageSystem.MarriageType.WITHIN_FAMILY, -1, 50,
 	)
-	var marriages: Array[Dictionary] = [marriage]
-	var children: Array[ChildRecord] = []
+	var marriages: Array = [marriage]
+	var children: Array = []
 
-	var results: Array[Dictionary] = DayOrchestrator._process_pregnancy_checks(
+	var results: Array = DayOrchestrator._process_pregnancy_checks(
 		marriages, chars_by_id, children, _dice, 100,
 	)
 	assert_eq(results.size(), 0, "No pregnancy when spouse is dead")
@@ -796,10 +796,10 @@ func test_pregnancy_skips_same_gender_non_bisexual() -> void:
 	var marriage: Dictionary = MarriageSystem.create_marriage(
 		10, 11, MarriageSystem.MarriageType.WITHIN_FAMILY, -1, 50,
 	)
-	var marriages: Array[Dictionary] = [marriage]
-	var children: Array[ChildRecord] = []
+	var marriages: Array = [marriage]
+	var children: Array = []
 
-	var results: Array[Dictionary] = DayOrchestrator._process_pregnancy_checks(
+	var results: Array = DayOrchestrator._process_pregnancy_checks(
 		marriages, chars_by_id, children, _dice, 100,
 	)
 	assert_eq(results.size(), 0, "Same-gender couples cannot have biological children")
@@ -817,11 +817,11 @@ func test_pregnancy_zero_chance_at_hostile_disposition() -> void:
 	var marriage: Dictionary = MarriageSystem.create_marriage(
 		10, 11, MarriageSystem.MarriageType.WITHIN_FAMILY, -1, 50,
 	)
-	var marriages: Array[Dictionary] = [marriage]
-	var children: Array[ChildRecord] = []
+	var marriages: Array = [marriage]
+	var children: Array = []
 
 	for _i: int in range(50):
-		var results: Array[Dictionary] = DayOrchestrator._process_pregnancy_checks(
+		var results: Array = DayOrchestrator._process_pregnancy_checks(
 			marriages, chars_by_id, children, _dice, 100 + _i,
 		)
 		assert_eq(results.size(), 0, "Hostile disposition = 0% pregnancy chance")
@@ -839,15 +839,15 @@ func test_pregnancy_adds_child_to_marriage_record() -> void:
 	var marriage: Dictionary = MarriageSystem.create_marriage(
 		10, 11, MarriageSystem.MarriageType.WITHIN_FAMILY, -1, 50,
 	)
-	var marriages: Array[Dictionary] = [marriage]
-	var children: Array[ChildRecord] = []
+	var marriages: Array = [marriage]
+	var children: Array = []
 
 	var dice: DiceEngine = DiceEngine.new()
 	dice.set_seed(1)
 
 	var found: bool = false
 	for _i: int in range(20):
-		var results: Array[Dictionary] = DayOrchestrator._process_pregnancy_checks(
+		var results: Array = DayOrchestrator._process_pregnancy_checks(
 			marriages, chars_by_id, children, dice, 100 + _i,
 		)
 		if results.size() > 0:
@@ -871,7 +871,7 @@ func test_find_marriageable_vassals_returns_unmarried() -> void:
 	married.spouse_id = 5
 	var chars_by_id: Dictionary = {1: lord, 2: vassal, 3: married}
 
-	var result: Array[int] = NPCDecisionEngine._find_marriageable_vassals(lord, chars_by_id)
+	var result: Array = NPCDecisionEngine._find_marriageable_vassals(lord, chars_by_id)
 	assert_true(result.has(2), "Unmarried vassal included")
 	assert_false(result.has(3), "Married vassal excluded")
 	assert_false(result.has(1), "Lord excluded from own list")
@@ -885,7 +885,7 @@ func test_find_marriageable_vassals_includes_children() -> void:
 	child.spouse_id = -1
 	var chars_by_id: Dictionary = {1: lord, 4: child}
 
-	var result: Array[int] = NPCDecisionEngine._find_marriageable_vassals(lord, chars_by_id)
+	var result: Array = NPCDecisionEngine._find_marriageable_vassals(lord, chars_by_id)
 	assert_true(result.has(4), "Lord's child included even with different lord_id")
 
 
@@ -897,7 +897,7 @@ func test_find_marriageable_vassals_excludes_dead() -> void:
 	vassal.wounds_taken = 999
 	var chars_by_id: Dictionary = {1: lord, 2: vassal}
 
-	var result: Array[int] = NPCDecisionEngine._find_marriageable_vassals(lord, chars_by_id)
+	var result: Array = NPCDecisionEngine._find_marriageable_vassals(lord, chars_by_id)
 	assert_eq(result.size(), 0, "Dead vassal excluded")
 
 

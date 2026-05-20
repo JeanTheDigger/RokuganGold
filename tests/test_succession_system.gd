@@ -218,27 +218,27 @@ func test_find_confirming_authority_wrong_clan_skipped() -> void:
 
 func test_clean_succession_with_designated_heir() -> void:
 	var data := SuccessionData.new()
-	var candidates: Array[Dictionary] = [{"priority": SuccessionSystem.CandidatePriority.DESIGNATED_HEIR, "id": 10}]
+	var candidates: Array = [{"priority": SuccessionSystem.CandidatePriority.DESIGNATED_HEIR, "id": 10}]
 	assert_true(SuccessionSystem.is_clean_succession(data, candidates, 31))
 
 
 func test_suspicious_death_forces_dispute() -> void:
 	var data := SuccessionData.new()
 	data.suspicious_death = true
-	var candidates: Array[Dictionary] = [{"priority": SuccessionSystem.CandidatePriority.DESIGNATED_HEIR, "id": 10}]
+	var candidates: Array = [{"priority": SuccessionSystem.CandidatePriority.DESIGNATED_HEIR, "id": 10}]
 	assert_false(SuccessionSystem.is_clean_succession(data, candidates, 50))
 
 
 func test_contester_forces_dispute() -> void:
 	var data := SuccessionData.new()
 	data.contesting_ids = [20]
-	var candidates: Array[Dictionary] = [{"priority": SuccessionSystem.CandidatePriority.DESIGNATED_HEIR, "id": 10}]
+	var candidates: Array = [{"priority": SuccessionSystem.CandidatePriority.DESIGNATED_HEIR, "id": 10}]
 	assert_false(SuccessionSystem.is_clean_succession(data, candidates, 50))
 
 
 func test_multiple_same_priority_forces_dispute() -> void:
 	var data := SuccessionData.new()
-	var candidates: Array[Dictionary] = [
+	var candidates: Array = [
 		{"priority": SuccessionSystem.CandidatePriority.ELDEST_CHILD, "id": 10},
 		{"priority": SuccessionSystem.CandidatePriority.ELDEST_CHILD, "id": 11},
 	]
@@ -247,19 +247,19 @@ func test_multiple_same_priority_forces_dispute() -> void:
 
 func test_rival_disposition_forces_dispute() -> void:
 	var data := SuccessionData.new()
-	var candidates: Array[Dictionary] = [{"priority": SuccessionSystem.CandidatePriority.DESIGNATED_HEIR, "id": 10}]
+	var candidates: Array = [{"priority": SuccessionSystem.CandidatePriority.DESIGNATED_HEIR, "id": 10}]
 	assert_false(SuccessionSystem.is_clean_succession(data, candidates, -11))
 
 
 func test_stranger_disposition_not_clean() -> void:
 	var data := SuccessionData.new()
-	var candidates: Array[Dictionary] = [{"priority": SuccessionSystem.CandidatePriority.DESIGNATED_HEIR, "id": 10}]
+	var candidates: Array = [{"priority": SuccessionSystem.CandidatePriority.DESIGNATED_HEIR, "id": 10}]
 	assert_false(SuccessionSystem.is_clean_succession(data, candidates, 0))
 
 
 func test_acquaintance_boundary_is_clean() -> void:
 	var data := SuccessionData.new()
-	var candidates: Array[Dictionary] = [{"priority": SuccessionSystem.CandidatePriority.DESIGNATED_HEIR, "id": 10}]
+	var candidates: Array = [{"priority": SuccessionSystem.CandidatePriority.DESIGNATED_HEIR, "id": 10}]
 	assert_true(SuccessionSystem.is_clean_succession(data, candidates, 11))
 
 
@@ -362,7 +362,7 @@ func test_school_type_mismatch() -> void:
 func test_achievement_score_caps_at_10() -> void:
 	var lord := _make_lord(1)
 	var candidate := _make_char(10)
-	var topics: Array[Dictionary] = []
+	var topics: Array = []
 	for i in range(10):
 		topics.append({"topic_type": "battle_commander_victory"})
 	var weights := SuccessionSystem.BASE_WEIGHTS.duplicate()
@@ -374,7 +374,7 @@ func test_achievement_score_caps_at_10() -> void:
 func test_achievement_score_floors_at_0() -> void:
 	var lord := _make_lord(1)
 	var candidate := _make_char(10)
-	var topics: Array[Dictionary] = [
+	var topics: Array = [
 		{"topic_type": "betrayal"},
 		{"topic_type": "betrayal"},
 	]
@@ -456,7 +456,7 @@ func test_evaluate_all_returns_sorted_by_total() -> void:
 	lord.disposition_values[10] = 50
 	lord.disposition_values[11] = -20
 
-	var candidates: Array[Dictionary] = [
+	var candidates: Array = [
 		{"id": 10, "priority": SuccessionSystem.CandidatePriority.ELDEST_CHILD, "character": c1},
 		{"id": 11, "priority": SuccessionSystem.CandidatePriority.OTHER_CHILD, "character": c2},
 	]
@@ -710,7 +710,7 @@ func test_no_candidates_returns_empty() -> void:
 
 func test_empty_candidates_not_clean() -> void:
 	var data := SuccessionData.new()
-	var candidates: Array[Dictionary] = []
+	var candidates: Array = []
 	assert_false(SuccessionSystem.is_clean_succession(data, candidates, 50))
 
 

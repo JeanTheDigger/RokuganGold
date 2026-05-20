@@ -80,7 +80,7 @@ static func get_wound_level(character: L5RCharacterData) -> Enums.WoundLevel:
 	if character.wounds_taken <= 0:
 		return Enums.WoundLevel.HEALTHY
 
-	var levels: Array[Enums.WoundLevel] = [
+	var levels: Array = [
 		Enums.WoundLevel.HEALTHY,
 		Enums.WoundLevel.NICKED,
 		Enums.WoundLevel.GRAZED,

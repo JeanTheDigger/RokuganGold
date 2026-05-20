@@ -109,7 +109,7 @@ static func get_forced_march_cost(
 # -- Path Computation -----------------------------------------------------------
 
 static func compute_path_cost(
-	path: Array[int],
+	path: Array,
 	sub_tile_data: Dictionary,
 	season: Season,
 ) -> int:
@@ -126,7 +126,7 @@ static func compute_path_cost(
 
 static func begin_march(
 	army_state: Dictionary,
-	path: Array[int],
+	path: Array,
 	sub_tile_data: Dictionary,
 	season: Season,
 	forced_march: bool = false,
@@ -200,7 +200,7 @@ static func process_movement_tick(army_state: Dictionary) -> Dictionary:
 
 static func check_battle_trigger(
 	arriving_army: Dictionary,
-	enemy_armies: Array[Dictionary],
+	enemy_armies: Array,
 ) -> Dictionary:
 	if not arriving_army.get("arrived_at", -1) >= 0:
 		# Use the current sub-tile if not a fresh arrival
@@ -212,7 +212,7 @@ static func check_battle_trigger(
 	if tile < 0:
 		return {"battle_triggered": false}
 
-	var enemies_at_tile: Array[int] = []
+	var enemies_at_tile: Array = []
 	for enemy: Dictionary in enemy_armies:
 		if enemy.get("current_sub_tile", -1) == tile:
 			enemies_at_tile.append(enemy["army_id"])
@@ -234,7 +234,7 @@ static func get_visible_sub_tiles(
 	adjacency: Dictionary,
 	has_scouts: bool,
 ) -> Array:
-	var visible: Array[int] = [current_sub_tile]
+	var visible: Array = [current_sub_tile]
 
 	var adjacent: Array = adjacency.get(current_sub_tile, [])
 	for tile: int in adjacent:
@@ -255,11 +255,11 @@ static func get_visible_sub_tiles(
 
 
 static func detect_enemy_armies(
-	visible_tiles: Array[int],
-	all_armies: Array[Dictionary],
+	visible_tiles: Array,
+	all_armies: Array,
 	own_clan: String,
 ) -> Array:
-	var detected: Array[Dictionary] = []
+	var detected: Array = []
 	for army: Dictionary in all_armies:
 		if army.get("owning_clan", "") == own_clan:
 			continue

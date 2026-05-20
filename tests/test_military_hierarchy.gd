@@ -117,7 +117,7 @@ func test_company_chain_broken_at_legion():
 
 func test_commander_chain():
 	var company: MilitaryUnitData.CompanyData = _companies[1000]
-	var chain: Array[int] = MilitaryHierarchy.get_commander_chain(
+	var chain: Array = MilitaryHierarchy.get_commander_chain(
 		company, _legions, _sections, _armies
 	)
 	assert_eq(chain.size(), 3)
@@ -128,7 +128,7 @@ func test_commander_chain():
 func test_commander_chain_with_vacancy():
 	_legions[100].commander_id = -1
 	var company: MilitaryUnitData.CompanyData = _companies[1000]
-	var chain: Array[int] = MilitaryHierarchy.get_commander_chain(
+	var chain: Array = MilitaryHierarchy.get_commander_chain(
 		company, _legions, _sections, _armies
 	)
 	assert_eq(chain.size(), 2)
@@ -313,7 +313,7 @@ func test_get_direct_subordinates_feudal_only():
 	var v1 := _make_subordinate_char(10, 1)
 	var v2 := _make_subordinate_char(11, 1)
 	var other := _make_subordinate_char(20, 5)
-	var chars: Array[L5RCharacterData] = [lord, v1, v2, other]
+	var chars: Array = [lord, v1, v2, other]
 	var result := MilitaryHierarchy.get_direct_subordinates(1, chars)
 	assert_eq(result.size(), 2)
 
@@ -321,7 +321,7 @@ func test_get_direct_subordinates_feudal_only():
 func test_get_direct_subordinates_operational_only():
 	var commander := _make_subordinate_char(1, -1)
 	var op1 := _make_subordinate_char(10, 5, 1)
-	var chars: Array[L5RCharacterData] = [commander, op1]
+	var chars: Array = [commander, op1]
 	var result := MilitaryHierarchy.get_direct_subordinates(1, chars)
 	assert_eq(result.size(), 1)
 	assert_eq(result[0].character_id, 10)
@@ -331,7 +331,7 @@ func test_get_direct_subordinates_mixed():
 	var lord := _make_subordinate_char(1, -1)
 	var vassal := _make_subordinate_char(10, 1)
 	var op_sub := _make_subordinate_char(11, 5, 1)
-	var chars: Array[L5RCharacterData] = [lord, vassal, op_sub]
+	var chars: Array = [lord, vassal, op_sub]
 	var result := MilitaryHierarchy.get_direct_subordinates(1, chars)
 	assert_eq(result.size(), 2)
 
@@ -339,21 +339,21 @@ func test_get_direct_subordinates_mixed():
 func test_get_direct_subordinates_deduplicates():
 	var lord := _make_subordinate_char(1, -1)
 	var both := _make_subordinate_char(10, 1, 1)
-	var chars: Array[L5RCharacterData] = [lord, both]
+	var chars: Array = [lord, both]
 	var result := MilitaryHierarchy.get_direct_subordinates(1, chars)
 	assert_eq(result.size(), 1)
 
 
 func test_get_direct_subordinates_excludes_self():
 	var lord := _make_subordinate_char(1, 1)
-	var chars: Array[L5RCharacterData] = [lord]
+	var chars: Array = [lord]
 	var result := MilitaryHierarchy.get_direct_subordinates(1, chars)
 	assert_eq(result.size(), 0)
 
 
 func test_get_direct_subordinates_empty():
 	var lord := _make_subordinate_char(1, -1)
-	var chars: Array[L5RCharacterData] = [lord]
+	var chars: Array = [lord]
 	var result := MilitaryHierarchy.get_direct_subordinates(1, chars)
 	assert_eq(result.size(), 0)
 
@@ -361,7 +361,7 @@ func test_get_direct_subordinates_empty():
 func test_get_direct_vassals_is_alias():
 	var lord := _make_subordinate_char(1, -1)
 	var v := _make_subordinate_char(10, 1)
-	var chars: Array[L5RCharacterData] = [lord, v]
+	var chars: Array = [lord, v]
 	var r1 := MilitaryHierarchy.get_direct_subordinates(1, chars)
 	var r2 := MilitaryHierarchy.get_direct_vassals(1, chars)
 	assert_eq(r1.size(), r2.size())

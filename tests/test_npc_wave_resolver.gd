@@ -61,7 +61,7 @@ func test_sort_by_status_descending() -> void:
 	var c1 := _make_char(1, 3.0, 2)
 	var c2 := _make_char(2, 5.0, 2)
 	var c3 := _make_char(3, 1.0, 2)
-	var sorted: Array[L5RCharacterData] = NPCWaveResolver._sort_by_resolution_order(
+	var sorted: Array = NPCWaveResolver._sort_by_resolution_order(
 		[c1, c2, c3], {}
 	)
 	assert_eq(sorted[0].character_id, 2)
@@ -72,7 +72,7 @@ func test_sort_by_status_descending() -> void:
 func test_sort_tiebreaker_awareness() -> void:
 	var c1 := _make_char(1, 3.0, 2)
 	var c2 := _make_char(2, 3.0, 5)
-	var sorted: Array[L5RCharacterData] = NPCWaveResolver._sort_by_resolution_order(
+	var sorted: Array = NPCWaveResolver._sort_by_resolution_order(
 		[c1, c2], {}
 	)
 	assert_eq(sorted[0].character_id, 2)
@@ -83,7 +83,7 @@ func test_sort_tiebreaker_awareness() -> void:
 func test_resolve_day_all_npcs_act() -> void:
 	var c1 := _make_char(1, 3.0, 2)
 	var c2 := _make_char(2, 5.0, 2)
-	var chars: Array[L5RCharacterData] = [c1, c2]
+	var chars: Array = [c1, c2]
 	var ws: Dictionary = {
 		1: _make_world_state(Enums.ContextFlag.AT_OWN_HOLDINGS),
 		2: _make_world_state(Enums.ContextFlag.AT_OWN_HOLDINGS),
@@ -92,7 +92,7 @@ func test_resolve_day_all_npcs_act() -> void:
 		1: {"primary": {"need_type": "REST", "priority": 3}},
 		2: {"primary": {"need_type": "REST", "priority": 3}},
 	}
-	var results: Array[Dictionary] = NPCWaveResolver.resolve_day(
+	var results: Array = NPCWaveResolver.resolve_day(
 		chars, ws, objs, _scoring_tables, _filter_data
 	)
 	assert_true(results.size() >= 2)
@@ -101,10 +101,10 @@ func test_resolve_day_all_npcs_act() -> void:
 func test_resolve_day_skips_zero_ap() -> void:
 	var c1 := _make_char(1, 3.0, 2)
 	c1.action_points_current = 0
-	var chars: Array[L5RCharacterData] = [c1]
+	var chars: Array = [c1]
 	var ws: Dictionary = {1: _make_world_state(Enums.ContextFlag.AT_OWN_HOLDINGS)}
 	var objs: Dictionary = {1: {"primary": {"need_type": "REST", "priority": 3}}}
-	var results: Array[Dictionary] = NPCWaveResolver.resolve_day(
+	var results: Array = NPCWaveResolver.resolve_day(
 		chars, ws, objs, _scoring_tables, _filter_data
 	)
 	assert_eq(results.size(), 0)
@@ -121,7 +121,7 @@ func test_reactive_events_resolve_first() -> void:
 		{"need_type": "DEFEND_PROVINCE", "priority": 1, "target_province_id": 10}
 	]
 	var objs: Dictionary = {1: {"primary": {"need_type": "REST", "priority": 3}}}
-	var results: Array[Dictionary] = NPCWaveResolver.resolve_day(
+	var results: Array = NPCWaveResolver.resolve_day(
 		[c1], ws, objs, _scoring_tables, _filter_data
 	)
 	assert_true(results.size() > 0)
@@ -166,14 +166,14 @@ func test_resolve_day_full_produces_effects() -> void:
 		"WRITE_LETTER": {"primary": "Calligraphy", "secondary": "Courtier"},
 	}
 	var c1 := _make_char_with_skills(1, 3.0, 3)
-	var chars: Array[L5RCharacterData] = [c1]
+	var chars: Array = [c1]
 	var ws: Dictionary = {
 		1: _make_world_state(Enums.ContextFlag.AT_OWN_HOLDINGS),
 	}
 	var objs: Dictionary = {
 		1: {"primary": {"need_type": "REST", "priority": 3}},
 	}
-	var results: Array[Dictionary] = NPCWaveResolver.resolve_day_full(
+	var results: Array = NPCWaveResolver.resolve_day_full(
 		chars, ws, objs, _scoring_tables, _filter_data, dice, action_map
 	)
 	assert_true(results.size() >= 1)
@@ -185,10 +185,10 @@ func test_resolve_day_full_skips_zero_ap() -> void:
 	dice.set_seed(1)
 	var c1 := _make_char_with_skills(1, 3.0, 3)
 	c1.action_points_current = 0
-	var chars: Array[L5RCharacterData] = [c1]
+	var chars: Array = [c1]
 	var ws: Dictionary = {1: _make_world_state(Enums.ContextFlag.AT_OWN_HOLDINGS)}
 	var objs: Dictionary = {1: {"primary": {"need_type": "REST", "priority": 3}}}
-	var results: Array[Dictionary] = NPCWaveResolver.resolve_day_full(
+	var results: Array = NPCWaveResolver.resolve_day_full(
 		chars, ws, objs, _scoring_tables, _filter_data, dice, {}
 	)
 	assert_eq(results.size(), 0)
@@ -204,7 +204,7 @@ func test_resolve_day_full_multiple_npcs() -> void:
 	}
 	var c1 := _make_char_with_skills(1, 5.0, 3)
 	var c2 := _make_char_with_skills(2, 3.0, 2)
-	var chars: Array[L5RCharacterData] = [c1, c2]
+	var chars: Array = [c1, c2]
 	var ws: Dictionary = {
 		1: _make_world_state(Enums.ContextFlag.AT_OWN_HOLDINGS),
 		2: _make_world_state(Enums.ContextFlag.AT_OWN_HOLDINGS),
@@ -213,7 +213,7 @@ func test_resolve_day_full_multiple_npcs() -> void:
 		1: {"primary": {"need_type": "REST", "priority": 3}},
 		2: {"primary": {"need_type": "REST", "priority": 3}},
 	}
-	var results: Array[Dictionary] = NPCWaveResolver.resolve_day_full(
+	var results: Array = NPCWaveResolver.resolve_day_full(
 		chars, ws, objs, _scoring_tables, _filter_data, dice, action_map
 	)
 	assert_true(results.size() >= 2)
@@ -230,10 +230,10 @@ func test_resolve_day_applied_returns_results_and_applied() -> void:
 		"TRAIN": {"primary": "_trained_skill", "secondary": null},
 	}
 	var c1 := _make_char_with_skills(1, 3.0, 3)
-	var chars: Array[L5RCharacterData] = [c1]
+	var chars: Array = [c1]
 	var chars_by_id: Dictionary = {1: c1}
 	var provinces: Dictionary = {}
-	var action_log: Array[Dictionary] = []
+	var action_log: Array = []
 	var ws: Dictionary = {1: _make_world_state(Enums.ContextFlag.AT_OWN_HOLDINGS)}
 	var objs: Dictionary = {1: {"primary": {"need_type": "REST", "priority": 3}}}
 	var day_result: Dictionary = NPCWaveResolver.resolve_day_applied(
@@ -255,10 +255,10 @@ func test_resolve_day_applied_logs_actions() -> void:
 		"TRAIN": {"primary": "_trained_skill", "secondary": null},
 	}
 	var c1 := _make_char_with_skills(1, 3.0, 3)
-	var chars: Array[L5RCharacterData] = [c1]
+	var chars: Array = [c1]
 	var chars_by_id: Dictionary = {1: c1}
 	var provinces: Dictionary = {}
-	var action_log: Array[Dictionary] = []
+	var action_log: Array = []
 	var ws: Dictionary = {1: _make_world_state(Enums.ContextFlag.AT_OWN_HOLDINGS)}
 	var objs: Dictionary = {1: {"primary": {"need_type": "REST", "priority": 3}}}
 	NPCWaveResolver.resolve_day_applied(
@@ -284,10 +284,10 @@ func test_resolve_day_applied_mutates_character_state() -> void:
 	c1.glory = 3.0
 	c1.disposition_values = {2: 30}
 	var c2 := _make_char_with_skills(2, 2.0, 2)
-	var chars: Array[L5RCharacterData] = [c1]
+	var chars: Array = [c1]
 	var chars_by_id: Dictionary = {1: c1, 2: c2}
 	var provinces: Dictionary = {}
-	var action_log: Array[Dictionary] = []
+	var action_log: Array = []
 	var ws: Dictionary = {
 		1: _make_world_state(Enums.ContextFlag.AT_COURT),
 	}

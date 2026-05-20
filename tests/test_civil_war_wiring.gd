@@ -8,7 +8,7 @@ var _scoring_tables: Dictionary
 var _filter_data: Dictionary
 var _action_skill_map: Dictionary
 var _season_meta: Dictionary
-var _action_log: Array[Dictionary]
+var _action_log: Array
 var _provinces: Dictionary
 
 
@@ -78,8 +78,8 @@ func _make_char(id: int, clan: String = "Lion") -> L5RCharacterData:
 
 
 func _advance_to_season_boundary(
-	characters: Array[L5RCharacterData],
-	active_civil_wars: Array[Dictionary] = [],
+	characters: Array,
+	active_civil_wars: Array = [],
 	precedent_modifiers: Dictionary = {},
 ) -> Dictionary:
 	var result: Dictionary = {}
@@ -91,8 +91,8 @@ func _advance_to_season_boundary(
 
 
 func _run_day(
-	characters: Array[L5RCharacterData],
-	active_civil_wars: Array[Dictionary] = [],
+	characters: Array,
+	active_civil_wars: Array = [],
 	precedent_modifiers: Dictionary = {},
 ) -> Dictionary:
 	var chars_by_id: Dictionary = {}
@@ -526,9 +526,9 @@ func test_trigger_civil_war_creates_state() -> void:
 	var vassal := _make_char(50, "Lion")
 	vassal.lord_id = 1
 
-	var wars: Array[Dictionary] = []
-	var topics: Array[TopicData] = []
-	var tid: Array[int] = [5000]
+	var wars: Array = []
+	var topics: Array = []
+	var tid: Array = [5000]
 	var chars_by_id: Dictionary = {100: rebel, 1: authority, 50: vassal}
 
 	var result: Dictionary = DayOrchestrator._trigger_civil_war(
@@ -550,9 +550,9 @@ func test_trigger_generates_tier_2_topic() -> void:
 	var authority := _make_char(1, "Lion")
 	authority.lord_id = -1
 
-	var wars: Array[Dictionary] = []
-	var topics: Array[TopicData] = []
-	var tid: Array[int] = [5000]
+	var wars: Array = []
+	var topics: Array = []
+	var tid: Array = [5000]
 	var chars_by_id: Dictionary = {100: rebel, 1: authority}
 
 	DayOrchestrator._trigger_civil_war(
@@ -577,10 +577,10 @@ func test_trigger_assigns_factions_to_all_clan_npcs() -> void:
 	var npc2 := _make_char(51, "Lion")
 	npc2.lord_id = 100
 
-	var wars: Array[Dictionary] = []
-	var topics: Array[TopicData] = []
-	var tid: Array[int] = [5000]
-	var chars: Array[L5RCharacterData] = [rebel, authority, npc1, npc2]
+	var wars: Array = []
+	var topics: Array = []
+	var tid: Array = [5000]
+	var chars: Array = [rebel, authority, npc1, npc2]
 	var chars_by_id: Dictionary = {100: rebel, 1: authority, 50: npc1, 51: npc2}
 
 	DayOrchestrator._trigger_civil_war(
@@ -603,9 +603,9 @@ func test_trigger_skips_dead_npcs() -> void:
 	var dead_npc := _make_char(50, "Lion")
 	dead_npc.wounds_taken = 999
 
-	var wars: Array[Dictionary] = []
-	var topics: Array[TopicData] = []
-	var tid: Array[int] = [5000]
+	var wars: Array = []
+	var topics: Array = []
+	var tid: Array = [5000]
 	var chars_by_id: Dictionary = {100: rebel, 1: authority, 50: dead_npc}
 
 	DayOrchestrator._trigger_civil_war(
@@ -625,9 +625,9 @@ func test_trigger_skips_other_clan_npcs() -> void:
 	var crane_npc := _make_char(50, "Crane")
 	crane_npc.clan = "Crane"
 
-	var wars: Array[Dictionary] = []
-	var topics: Array[TopicData] = []
-	var tid: Array[int] = [5000]
+	var wars: Array = []
+	var topics: Array = []
+	var tid: Array = [5000]
 	var chars_by_id: Dictionary = {100: rebel, 1: authority, 50: crane_npc}
 
 	DayOrchestrator._trigger_civil_war(
@@ -646,9 +646,9 @@ func test_trigger_prevents_duplicate_wars() -> void:
 	authority.lord_id = -1
 
 	var existing: Dictionary = IntraClanCivilWar.make_initial_state(200, 1, "Lion", 4000, 0)
-	var wars: Array[Dictionary] = [existing]
-	var topics: Array[TopicData] = []
-	var tid: Array[int] = [5000]
+	var wars: Array = [existing]
+	var topics: Array = []
+	var tid: Array = [5000]
 	var chars_by_id: Dictionary = {100: rebel, 1: authority}
 
 	var result: Dictionary = DayOrchestrator._trigger_civil_war(
@@ -672,9 +672,9 @@ func test_trigger_ronin_departure_on_low_pulls() -> void:
 	npc.shourido_virtue = Enums.ShouridoVirtue.NONE
 	npc.disposition_values[100] = -80
 
-	var wars: Array[Dictionary] = []
-	var topics: Array[TopicData] = []
-	var tid: Array[int] = [5000]
+	var wars: Array = []
+	var topics: Array = []
+	var tid: Array = [5000]
 	var chars_by_id: Dictionary = {100: rebel, 1: authority, 50: npc}
 
 	var result: Dictionary = DayOrchestrator._trigger_civil_war(
@@ -703,9 +703,9 @@ func test_trigger_reassigns_broken_feudal_chains() -> void:
 	vassal.bushido_virtue = Enums.BushidoVirtue.CHUGI
 	vassal.disposition_values[100] = -50
 
-	var wars: Array[Dictionary] = []
-	var topics: Array[TopicData] = []
-	var tid: Array[int] = [5000]
+	var wars: Array = []
+	var topics: Array = []
+	var tid: Array = [5000]
 	var chars_by_id: Dictionary = {100: rebel, 1: authority, 50: vassal}
 
 	DayOrchestrator._trigger_civil_war(
@@ -756,8 +756,8 @@ func test_phoenix_dead_champion_chugi_capitulates_resolves_war() -> void:
 	var chars_by_id: Dictionary = {
 		100: dead_champion, 1: authority, 200: shiba_candidate,
 	}
-	var topics: Array[TopicData] = []
-	var tid: Array[int] = [5000]
+	var topics: Array = []
+	var tid: Array = [5000]
 	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
 	rng.seed = 1
 
@@ -792,8 +792,8 @@ func test_phoenix_dead_champion_ishi_continues_schism() -> void:
 	var chars_by_id: Dictionary = {
 		100: dead_champion, 1: authority, 200: shiba_candidate,
 	}
-	var topics: Array[TopicData] = []
-	var tid: Array[int] = [5000]
+	var topics: Array = []
+	var tid: Array = [5000]
 	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
 	rng.seed = 1
 
@@ -826,8 +826,8 @@ func test_phoenix_dead_champion_no_eligible_shiba_resolves_war() -> void:
 	# No Shiba characters in the roster.
 	var state: Dictionary = _make_phoenix_schism_state(100, 1)
 	var chars_by_id: Dictionary = {100: dead_champion, 1: authority}
-	var topics: Array[TopicData] = []
-	var tid: Array[int] = [5000]
+	var topics: Array = []
+	var tid: Array = [5000]
 	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
 
 	var result: Dictionary = DayOrchestrator._check_civil_war_resolution(

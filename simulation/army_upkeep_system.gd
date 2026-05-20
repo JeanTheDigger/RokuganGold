@@ -148,7 +148,7 @@ static func compute_company_seasonal_costs(
 
 
 static func compute_army_seasonal_costs(
-	companies: Array[MilitaryUnitData.CompanyData],
+	companies: Array,
 ) -> Dictionary:
 	var total_rice: float = 0.0
 	var total_iron: float = 0.0
@@ -187,7 +187,7 @@ static func apply_iron_failure(
 
 
 static func process_iron_upkeep(
-	companies: Array[MilitaryUnitData.CompanyData],
+	companies: Array,
 	iron_state: Dictionary,
 	clan_iron_available: float,
 ) -> Dictionary:
@@ -197,7 +197,7 @@ static func process_iron_upkeep(
 
 	var supplied: bool = clan_iron_available >= total_needed
 	var iron_consumed: float = minf(clan_iron_available, total_needed)
-	var degraded: Array[int] = []
+	var degraded: Array = []
 
 	for c: MilitaryUnitData.CompanyData in companies:
 		var cid: int = c.company_id
@@ -238,7 +238,7 @@ static func apply_iron_failure_to_dict(
 
 
 static func process_iron_upkeep_dict(
-	companies: Array[Dictionary],
+	companies: Array,
 	iron_state: Dictionary,
 	clan_iron_available: float,
 ) -> Dictionary:
@@ -248,7 +248,7 @@ static func process_iron_upkeep_dict(
 
 	var supplied: bool = clan_iron_available >= total_needed
 	var iron_consumed: float = minf(clan_iron_available, total_needed)
-	var degraded: Array[int] = []
+	var degraded: Array = []
 
 	for c: Dictionary in companies:
 		var cid: int = c.get("company_id", -1)
@@ -328,10 +328,10 @@ static func apply_arms_deprivation(
 
 
 static func process_deprivation_tick(
-	companies: Array[MilitaryUnitData.CompanyData],
+	companies: Array,
 	dep_state: Dictionary,
 ) -> Dictionary:
-	var results: Array[Dictionary] = []
+	var results: Array = []
 
 	for c: MilitaryUnitData.CompanyData in companies:
 		var cid: int = c.company_id

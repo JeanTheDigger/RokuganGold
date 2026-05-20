@@ -121,7 +121,7 @@ static func get_candidates(
 	position_clan: String = "",
 ) -> Array:
 	var clan: String = position_clan if position_clan != "" else deceased.clan
-	var candidates: Array[Dictionary] = []
+	var candidates: Array = []
 
 	# Priority 1 — Designated Heir
 	if deceased.designated_heir_id >= 0:
@@ -131,7 +131,7 @@ static func get_candidates(
 			candidates.append({"id": heir.character_id, "priority": CandidatePriority.DESIGNATED_HEIR, "birth_order_type": birth_type, "character": heir})
 
 	# Priority 2 & 3 — Biological Children (eldest first)
-	var children: Array[Dictionary] = []
+	var children: Array = []
 	for cid: int in deceased.children_ids:
 		var child: L5RCharacterData = chars_by_id.get(cid)
 		if child != null and not _is_dead(child) and child.clan == clan:
@@ -225,7 +225,7 @@ static func find_confirming_authority(
 
 static func is_clean_succession(
 	succession: SuccessionData,
-	candidates: Array[Dictionary],
+	candidates: Array,
 	confirming_disp_toward_top: int,
 ) -> bool:
 	if succession.suspicious_death:
@@ -294,7 +294,7 @@ static func evaluate_candidate(
 	priority: int,
 	weights: Dictionary,
 	position_demand: String = "military",
-	topics_about_candidate: Array[Dictionary] = [],
+	topics_about_candidate: Array = [],
 	birth_order_type: int = -1,
 ) -> Dictionary:
 	var scores: Dictionary = {}
@@ -339,12 +339,12 @@ static func evaluate_candidate(
 
 static func evaluate_all_candidates(
 	lord: L5RCharacterData,
-	candidates: Array[Dictionary],
+	candidates: Array,
 	position_demand: String = "military",
 	topics_by_character: Dictionary = {},
 ) -> Array:
 	var weights: Dictionary = compute_personality_weights(lord.bushido_virtue, lord.shourido_virtue)
-	var results: Array[Dictionary] = []
+	var results: Array = []
 
 	for c: Dictionary in candidates:
 		var candidate_char: L5RCharacterData = c.get("character")
@@ -398,7 +398,7 @@ static func apply_successor_inheritance(
 	deceased: L5RCharacterData,
 ) -> Dictionary:
 	var inherited_favors: int = 0
-	var remaining_favors: Array[FavorData] = []
+	var remaining_favors: Array = []
 	for favor: FavorData in deceased.favors:
 		if favor.tier == FavorData.FavorTier.MAJOR:
 			favor.heir_id = successor.character_id
@@ -622,7 +622,7 @@ static func resolve_shiba_reincarnation(
 	rng: RandomNumberGenerator,
 ) -> Dictionary:
 	# Gather all living, non-captive Shiba characters
-	var eligible: Array[L5RCharacterData] = []
+	var eligible: Array = []
 	for c: L5RCharacterData in chars_by_id.values():
 		if c.family != "Shiba":
 			continue
@@ -852,7 +852,7 @@ static func _get_birth_order_type(
 	chars_by_id: Dictionary,
 ) -> int:
 	if candidate.character_id in deceased.children_ids:
-		var sorted_ages: Array[Dictionary] = []
+		var sorted_ages: Array = []
 		for cid: int in deceased.children_ids:
 			var c: L5RCharacterData = chars_by_id.get(cid)
 			if c != null and not _is_dead(c):

@@ -459,7 +459,7 @@ func test_chugi_self_selected_stalls() -> void:
 func test_evaluate_all_objectives() -> void:
 	var c := _make_character(1)
 	c.bushido_virtue = Enums.BushidoVirtue.NONE
-	var chars: Array[L5RCharacterData] = [c]
+	var chars: Array = [c]
 	var objectives_map: Dictionary = {
 		1: {
 			"primary": {
@@ -472,7 +472,7 @@ func test_evaluate_all_objectives() -> void:
 		},
 	}
 	var world_state: Dictionary = {"season": 2}
-	var results: Array[Dictionary] = ObjectiveProgress.evaluate_all_objectives(
+	var results: Array = ObjectiveProgress.evaluate_all_objectives(
 		chars, objectives_map, world_state
 	)
 	assert_eq(results.size(), 1)

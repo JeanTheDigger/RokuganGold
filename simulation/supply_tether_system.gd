@@ -30,7 +30,7 @@ const STEP_DOWN_PARTIAL_RATE: int = 2
 static func create_tether(
 	army_id: int,
 	source_province_id: int,
-	sub_tile_path: Array[int],
+	sub_tile_path: Array,
 ) -> Dictionary:
 	var node_states: Dictionary = {}
 	for tile_id: int in sub_tile_path:
@@ -119,10 +119,10 @@ static func process_tether_tick(
 	dice: DiceEngine,
 	tether: Dictionary,
 	garrisons_on_path: Dictionary,
-	enemy_armies_on_path: Array[int],
+	enemy_armies_on_path: Array,
 	companies_by_id: Dictionary,
 ) -> Dictionary:
-	var raid_results: Array[Dictionary] = []
+	var raid_results: Array = []
 	var worst_state: TetherState = TetherState.SOLID
 	var partial_count: int = 0
 
@@ -198,7 +198,7 @@ static func compute_supply_fraction(tether_state: TetherState) -> float:
 
 static func is_in_friendly_territory(
 	army_location_id: int,
-	friendly_province_ids: Array[int],
+	friendly_province_ids: Array,
 ) -> bool:
 	return army_location_id in friendly_province_ids
 
@@ -323,9 +323,9 @@ static func process_step_down_recovery(
 # -- Supply Source ---------------------------------------------------------------
 
 static func get_supply_source_provinces(
-	lord_province_ids: Array[int],
-	compelled_province_ids: Array[int],
-	shared_province_ids: Array[int],
+	lord_province_ids: Array,
+	compelled_province_ids: Array,
+	shared_province_ids: Array,
 ) -> Array:
 	var sources: Array = lord_province_ids.duplicate()
 	for pid: int in compelled_province_ids:
@@ -343,7 +343,7 @@ static func process_supply_tick(
 	dice: DiceEngine,
 	tether: Dictionary,
 	garrisons_on_path: Dictionary,
-	enemy_armies_on_path: Array[int],
+	enemy_armies_on_path: Array,
 	companies_by_id: Dictionary,
 ) -> Dictionary:
 	var tick_result: Dictionary = process_tether_tick(
@@ -382,7 +382,7 @@ static func process_supply_tick(
 # -- Tether Detachment -----------------------------------------------------------
 
 static func detach_tether(tether: Dictionary) -> Dictionary:
-	var freed_escort_ids: Array[int] = []
+	var freed_escort_ids: Array = []
 	var node_states: Dictionary = tether.get("node_states", {})
 	for tile_id: Variant in node_states:
 		var node: Dictionary = node_states[tile_id]

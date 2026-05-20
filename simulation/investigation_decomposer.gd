@@ -64,14 +64,14 @@ static func _select_best_next_action(
 	ctx: NPCDataStructures.ContextSnapshot,
 	crime_location: String,
 	evidence_total: int,
-	known_suspects: Array[int],
-	witness_pool: Array[int],
-	interviewed_witnesses: Array[int],
-	interviewed_suspects: Array[int],
-	checked_alibis: Array[Variant],
-	unresolved_leads: Array[Dictionary],
+	known_suspects: Array,
+	witness_pool: Array,
+	interviewed_witnesses: Array,
+	interviewed_suspects: Array,
+	checked_alibis: Array,
+	unresolved_leads: Array,
 ) -> NPCDataStructures.ImmediateNeed:
-	var candidates: Array[Dictionary] = []
+	var candidates: Array = []
 	var evidence_gap: int = ACCUSATION_THRESHOLD - evidence_total
 	var days_elapsed: int = ctx.ic_day - objective.get("ic_day_committed", ctx.ic_day)
 
@@ -168,7 +168,7 @@ static func _action_from_candidate(
 	objective: Dictionary,
 	ctx: NPCDataStructures.ContextSnapshot,
 	crime_location: String,
-	unresolved_leads: Array[Dictionary],
+	unresolved_leads: Array,
 ) -> NPCDataStructures.ImmediateNeed:
 	var ctype: String = candidate.get("type", "")
 	var target_id: int = candidate.get("target_id", -1)
@@ -263,7 +263,7 @@ static func _prioritize_witness(candidates: Array, ctx: NPCDataStructures.Contex
 # -- Helpers -------------------------------------------------------------------
 
 static func _get_uninterviewed(pool: Array, interviewed: Array) -> Array:
-	var result: Array[int] = []
+	var result: Array = []
 	for npc_id: Variant in pool:
 		if npc_id is int and npc_id not in interviewed:
 			result.append(npc_id)
@@ -272,7 +272,7 @@ static func _get_uninterviewed(pool: Array, interviewed: Array) -> Array:
 
 static func _get_unchecked_alibis(objective: Dictionary, checked: Array) -> Array:
 	var alibis: Array = objective.get("alibis", [])
-	var result: Array[Dictionary] = []
+	var result: Array = []
 	for alibi: Variant in alibis:
 		if alibi is Dictionary:
 			var alibi_id: Variant = alibi.get("id", -1)

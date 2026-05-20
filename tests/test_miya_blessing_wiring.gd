@@ -5,8 +5,8 @@ extends GutTest
 ## last_blessed_ic_year update.
 
 
-var _provinces: Array[ProvinceData]
-var _settlements: Array[SettlementData]
+var _provinces: Array
+var _settlements: Array
 
 
 func _make_province(pid: int, stability: float = 50.0) -> ProvinceData:

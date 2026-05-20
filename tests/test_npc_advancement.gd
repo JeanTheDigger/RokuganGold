@@ -243,7 +243,7 @@ func test_accumulate_many_ic_days():
 
 func test_get_school_skills_hida():
 	var c := _make_character()
-	var skills: Array[String] = NPCAdvancement.get_school_skills(c)
+	var skills: Array = NPCAdvancement.get_school_skills(c)
 	assert_true(skills.has("Athletics"))
 	assert_true(skills.has("Kenjutsu"))
 	assert_eq(skills.size(), 6)
@@ -258,7 +258,7 @@ func test_get_focus_rings_hida():
 func test_get_school_skills_unknown():
 	var c := _make_character()
 	c.school = "Unknown School"
-	var skills: Array[String] = NPCAdvancement.get_school_skills(c)
+	var skills: Array = NPCAdvancement.get_school_skills(c)
 	assert_eq(skills.size(), 0)
 
 

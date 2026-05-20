@@ -397,7 +397,7 @@ func test_prevent_shortage_gi_blocked() -> void:
 
 
 func test_all_peace_objectives_listed() -> void:
-	var expected: Array[String] = [
+	var expected: Array = [
 		"MAINTAIN_BALANCE", "MAINTAIN_PEACE", "STRENGTHEN_IMPERIAL",
 		"ACCUMULATE_LEVERAGE", "MAXIMIZE_PROSPERITY", "PROTECT_DEPENDENTS",
 		"ACCUMULATE_KNOWLEDGE", "LIVE_BY_BUSHIDO",
@@ -410,7 +410,7 @@ func test_all_peace_objectives_listed() -> void:
 
 
 func test_all_standing_objectives_covered() -> void:
-	var all_standings: Array[String] = [
+	var all_standings: Array = [
 		"EXPAND_TERRITORY", "MILITARY_DOMINANCE", "ELIMINATE_SHADOWLANDS",
 		"STRENGTHEN_WALL", "BUILD_STRONGEST_FORCE", "SEEK_VENGEANCE",
 		"ADVANCE_GLORY", "UNDERMINE_CLAN", "PREVENT_SHORTAGE",

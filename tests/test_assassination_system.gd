@@ -250,7 +250,7 @@ func test_seduce_for_access_found() -> void:
 	household.physical_location = "Kyuden Bayushi"
 	_target.physical_location = "Kyuden Bayushi"
 	var chars: Dictionary = {1: _assassin, 2: _target, 90: household}
-	var ent: Array[Dictionary] = [SeductionSystem.create_entanglement(
+	var ent: Array = [SeductionSystem.create_entanglement(
 		1, 90, 10, SeductionSystem.SeductionVariant.SEDUCE_FOR_ACCESS,
 	)]
 	assert_true(AssassinationSystem.has_seduce_for_access(1, "Kyuden Bayushi", ent, chars))
@@ -261,7 +261,7 @@ func test_seduce_for_access_wrong_variant() -> void:
 	household.character_id = 91
 	household.physical_location = "Kyuden Bayushi"
 	var chars: Dictionary = {91: household}
-	var ent: Array[Dictionary] = [SeductionSystem.create_entanglement(1, 91, 10)]
+	var ent: Array = [SeductionSystem.create_entanglement(1, 91, 10)]
 	assert_false(AssassinationSystem.has_seduce_for_access(1, "Kyuden Bayushi", ent, chars))
 
 
@@ -270,7 +270,7 @@ func test_seduce_for_access_broken_entanglement() -> void:
 	household.character_id = 92
 	household.physical_location = "Kyuden Bayushi"
 	var chars: Dictionary = {92: household}
-	var ent: Array[Dictionary] = [SeductionSystem.create_entanglement(
+	var ent: Array = [SeductionSystem.create_entanglement(
 		1, 92, 10, SeductionSystem.SeductionVariant.SEDUCE_FOR_ACCESS,
 	)]
 	ent[0]["state"] = SeductionSystem.EntanglementState.BROKEN
@@ -282,7 +282,7 @@ func test_seduce_for_access_wrong_location() -> void:
 	household.character_id = 93
 	household.physical_location = "Otosan Uchi"
 	var chars: Dictionary = {93: household}
-	var ent: Array[Dictionary] = [SeductionSystem.create_entanglement(
+	var ent: Array = [SeductionSystem.create_entanglement(
 		1, 93, 10, SeductionSystem.SeductionVariant.SEDUCE_FOR_ACCESS,
 	)]
 	assert_false(AssassinationSystem.has_seduce_for_access(1, "Kyuden Bayushi", ent, chars))
@@ -293,7 +293,7 @@ func test_seduce_for_access_wrong_seducer() -> void:
 	household.character_id = 94
 	household.physical_location = "Kyuden Bayushi"
 	var chars: Dictionary = {94: household}
-	var ent: Array[Dictionary] = [SeductionSystem.create_entanglement(
+	var ent: Array = [SeductionSystem.create_entanglement(
 		99, 94, 10, SeductionSystem.SeductionVariant.SEDUCE_FOR_ACCESS,
 	)]
 	assert_false(AssassinationSystem.has_seduce_for_access(1, "Kyuden Bayushi", ent, chars))
@@ -1684,14 +1684,14 @@ func test_is_household_member_unrelated() -> void:
 # ==============================================================================
 
 func test_process_seduction_entanglements_creates_on_success() -> void:
-	var day_results: Array[Dictionary] = [{
+	var day_results: Array = [{
 		"action_id": "SEDUCE_FOR_ACCESS",
 		"success": true,
 		"character_id": 1,
 		"target_npc_id": 2,
 		"effects": {"creates_entanglement": true},
 	}]
-	var entanglements: Array[Dictionary] = []
+	var entanglements: Array = []
 	DayOrchestrator._process_seduction_entanglements(day_results, entanglements, 10)
 	assert_eq(entanglements.size(), 1)
 	assert_eq(entanglements[0]["seducer_id"], 1)
@@ -1701,22 +1701,22 @@ func test_process_seduction_entanglements_creates_on_success() -> void:
 
 
 func test_process_seduction_entanglements_skips_failure() -> void:
-	var day_results: Array[Dictionary] = [{
+	var day_results: Array = [{
 		"action_id": "SEDUCE",
 		"success": false,
 		"character_id": 1,
 		"target_npc_id": 2,
 		"effects": {},
 	}]
-	var entanglements: Array[Dictionary] = []
+	var entanglements: Array = []
 	DayOrchestrator._process_seduction_entanglements(day_results, entanglements, 10)
 	assert_eq(entanglements.size(), 0, "Failed seduction should not create entanglement")
 
 
 func test_process_seduction_entanglements_no_duplicate() -> void:
 	var existing: Dictionary = SeductionSystem.create_entanglement(1, 2, 5, SeductionSystem.SeductionVariant.SEDUCE)
-	var entanglements: Array[Dictionary] = [existing]
-	var day_results: Array[Dictionary] = [{
+	var entanglements: Array = [existing]
+	var day_results: Array = [{
 		"action_id": "SEDUCE",
 		"success": true,
 		"character_id": 1,
@@ -1730,8 +1730,8 @@ func test_process_seduction_entanglements_no_duplicate() -> void:
 func test_process_seduction_entanglements_allows_after_broken() -> void:
 	var broken: Dictionary = SeductionSystem.create_entanglement(1, 2, 5)
 	broken["state"] = SeductionSystem.EntanglementState.BROKEN
-	var entanglements: Array[Dictionary] = [broken]
-	var day_results: Array[Dictionary] = [{
+	var entanglements: Array = [broken]
+	var day_results: Array = [{
 		"action_id": "SEDUCE",
 		"success": true,
 		"character_id": 1,
@@ -1750,8 +1750,8 @@ func test_process_seduction_entanglements_variant_mapping() -> void:
 		"SEDUCE_TO_COMPROMISE": SeductionSystem.SeductionVariant.SEDUCE_TO_COMPROMISE,
 	}
 	for action_id: String in variants:
-		var entanglements: Array[Dictionary] = []
-		var day_results: Array[Dictionary] = [{
+		var entanglements: Array = []
+		var day_results: Array = [{
 			"action_id": action_id,
 			"success": true,
 			"character_id": 100 + variants[action_id],
@@ -1906,7 +1906,7 @@ func test_get_biological_family_comprehensive() -> void:
 	c.sibling_ids = [12, 13]
 	c.children_ids = [14]
 	c.spouse_id = 15
-	var family: Array[int] = AssassinationSystem._get_biological_family(c)
+	var family: Array = AssassinationSystem._get_biological_family(c)
 	assert_eq(family.size(), 6)
 	assert_true(10 in family)
 	assert_true(11 in family)
@@ -1921,7 +1921,7 @@ func test_get_biological_family_skips_unset_ids() -> void:
 	c.mother_id = -1
 	c.father_id = -1
 	c.spouse_id = -1
-	var family: Array[int] = AssassinationSystem._get_biological_family(c)
+	var family: Array = AssassinationSystem._get_biological_family(c)
 	assert_eq(family.size(), 0)
 
 
@@ -1971,14 +1971,14 @@ func test_pvp_blade_wait_decays_suspicion() -> void:
 # ==============================================================================
 
 func test_entanglement_integration_seduce_for_access_to_bypass() -> void:
-	var day_results: Array[Dictionary] = [{
+	var day_results: Array = [{
 		"action_id": "SEDUCE_FOR_ACCESS",
 		"success": true,
 		"character_id": 1,
 		"target_npc_id": 5,
 		"effects": {"creates_entanglement": true},
 	}]
-	var entanglements: Array[Dictionary] = []
+	var entanglements: Array = []
 	DayOrchestrator._process_seduction_entanglements(day_results, entanglements, 10)
 	assert_eq(entanglements.size(), 1)
 
@@ -1995,7 +1995,7 @@ func test_entanglement_integration_seduce_for_access_to_bypass() -> void:
 
 
 func test_entanglement_integration_broken_revokes_bypass() -> void:
-	var entanglements: Array[Dictionary] = [
+	var entanglements: Array = [
 		SeductionSystem.create_entanglement(1, 5, 5, SeductionSystem.SeductionVariant.SEDUCE_FOR_ACCESS),
 	]
 	entanglements[0]["state"] = SeductionSystem.EntanglementState.BROKEN
@@ -2021,8 +2021,8 @@ func test_vengeance_creates_betrayal_topic() -> void:
 
 	var chars: Dictionary = {100: victim}
 	var objectives: Dictionary = {100: {"primary": "MAINTAIN_POSITION"}}
-	var topics: Array[TopicData] = []
-	var next_id: Array[int] = [500]
+	var topics: Array = []
+	var next_id: Array = [500]
 
 	var result: Dictionary = AssassinationSystem.apply_vengeance_consequences(
 		50, victim, false, chars, objectives, topics, next_id, 30,
@@ -2053,8 +2053,8 @@ func test_vengeance_topic_subject_role_neutral() -> void:
 	var victim: L5RCharacterData = L5RCharacterData.new()
 	victim.character_id = 100
 	var chars: Dictionary = {100: victim}
-	var topics: Array[TopicData] = []
-	var next_id: Array[int] = [1]
+	var topics: Array = []
+	var next_id: Array = [1]
 	AssassinationSystem.apply_vengeance_consequences(
 		50, victim, true, chars, {}, topics, next_id, 10,
 	)
@@ -2145,15 +2145,15 @@ func test_apply_assassination_vengeance_fires_on_covert_killing() -> void:
 	record.perpetrator_id = 1
 	record.commissioner_id = 50
 
-	var conviction_results: Array[Dictionary] = [{
+	var conviction_results: Array = [{
 		"case_id": 1,
 		"outcome": "convicted",
 		"crime_type": Enums.CrimeType.UNSANCTIONED_COVERT_KILLING,
 	}]
 	var chars: Dictionary = {100: victim, 103: sibling}
 	var objectives: Dictionary = {}
-	var topics: Array[TopicData] = []
-	var next_id: Array[int] = [500]
+	var topics: Array = []
+	var next_id: Array = [500]
 
 	DayOrchestrator._apply_assassination_vengeance(
 		conviction_results, [record], chars, objectives, topics, next_id, 30,
@@ -2171,12 +2171,12 @@ func test_apply_assassination_vengeance_skips_non_assassination() -> void:
 	record.crime_type = Enums.CrimeType.VIOLENCE
 	record.commissioner_id = 50
 
-	var conviction_results: Array[Dictionary] = [{
+	var conviction_results: Array = [{
 		"case_id": 2,
 		"outcome": "convicted",
 		"crime_type": Enums.CrimeType.VIOLENCE,
 	}]
-	var topics: Array[TopicData] = []
+	var topics: Array = []
 	DayOrchestrator._apply_assassination_vengeance(
 		conviction_results, [record], {}, {}, topics, [1], 10,
 	)
@@ -2193,12 +2193,12 @@ func test_apply_assassination_vengeance_skips_no_commissioner() -> void:
 	record.victim_id = 100
 	record.commissioner_id = -1
 
-	var conviction_results: Array[Dictionary] = [{
+	var conviction_results: Array = [{
 		"case_id": 3,
 		"outcome": "convicted",
 		"crime_type": Enums.CrimeType.UNSANCTIONED_COVERT_KILLING,
 	}]
-	var topics: Array[TopicData] = []
+	var topics: Array = []
 	DayOrchestrator._apply_assassination_vengeance(
 		conviction_results, [record], {100: victim}, {}, topics, [1], 10,
 	)

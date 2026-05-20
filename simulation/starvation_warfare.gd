@@ -144,7 +144,7 @@ static func get_blockaded_routes(
 	trade_routes: Array,
 	blocking_clan: String,
 ) -> Array:
-	var result: Array[TradeRouteData] = []
+	var result: Array = []
 	var reason: String = "blockade_%s" % blocking_clan
 	for r: Variant in trade_routes:
 		if r is TradeRouteData and (r as TradeRouteData).disruption_reason == reason:
@@ -156,7 +156,7 @@ static func process_seasonal_blockade_honor(
 	trade_routes: Array,
 	characters_by_id: Dictionary,
 ) -> Array:
-	var results: Array[Dictionary] = []
+	var results: Array = []
 	var clans_with_blockades: Dictionary = {}
 
 	for r: Variant in trade_routes:
@@ -209,7 +209,7 @@ static func _find_clan_lord(
 static func generate_harvest_topic(
 	ordering_clan: String,
 	target_province_id: int,
-	next_topic_id: Array[int],
+	next_topic_id: Array,
 	ic_day: int,
 ) -> TopicData:
 	var topic: TopicData = TopicData.new()

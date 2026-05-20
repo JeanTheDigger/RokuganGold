@@ -11,7 +11,7 @@ func _make_wall_tower(sid: int, province_id: int, si: int = 10) -> SettlementDat
 	return s
 
 
-func _make_wall_province(pid: int, ss: int = 0, adjacent: Array[int] = []) -> ProvinceData:
+func _make_wall_province(pid: int, ss: int = 0, adjacent: Array = []) -> ProvinceData:
 	var p := ProvinceData.new()
 	p.province_id = pid
 	p.shadowlands_strength = ss

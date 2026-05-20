@@ -259,7 +259,7 @@ func test_build_context_military_populated() -> void:
 	_world_state["can_sustain_iron_upkeep"] = false
 	_world_state["active_wars"] = [{"clan_a": "Crab", "clan_b": "Lion"}]
 	_world_state["escalating_conflicts"] = [{"topic_id": 5}]
-	var taint_ids: Array[int] = [10, 20]
+	var taint_ids: Array = [10, 20]
 	_world_state["taint_topic_province_ids"] = taint_ids
 	var ctx := NPCDecisionEngine.build_context(_char, _world_state)
 	assert_eq(ctx.wall_statuses.size(), 1)
@@ -342,7 +342,7 @@ func test_generate_options_court_context() -> void:
 	need.target_npc_id = 2
 	var options := NPCDecisionEngine.generate_options(ctx, need)
 	assert_true(options.size() > 0)
-	var action_ids: Array[String] = []
+	var action_ids: Array = []
 	for o in options:
 		action_ids.append(o.action_id)
 	assert_has(action_ids, "CHARM")
@@ -356,7 +356,7 @@ func test_generate_options_holdings_context() -> void:
 	var need := NPCDataStructures.ImmediateNeed.new()
 	need.need_type = "REST"
 	var options := NPCDecisionEngine.generate_options(ctx, need)
-	var action_ids: Array[String] = []
+	var action_ids: Array = []
 	for o in options:
 		action_ids.append(o.action_id)
 	assert_has(action_ids, "WRITE_LETTER")
@@ -377,7 +377,7 @@ func test_generate_options_carry_target() -> void:
 
 func test_filter_blocks_action() -> void:
 	var ctx := NPCDecisionEngine.build_context(_char, _world_state)
-	var options: Array[NPCDataStructures.ScoredAction] = []
+	var options: Array = []
 	var charm := NPCDataStructures.ScoredAction.new()
 	charm.action_id = "CHARM"
 	options.append(charm)
@@ -394,7 +394,7 @@ func test_filter_no_blocks_pass_through() -> void:
 	var ctx := NPCDecisionEngine.build_context(_char, _world_state)
 	ctx.bushido_virtue = Enums.BushidoVirtue.NONE
 	ctx.shourido_virtue = Enums.ShouridoVirtue.NONE
-	var options: Array[NPCDataStructures.ScoredAction] = []
+	var options: Array = []
 	var charm := NPCDataStructures.ScoredAction.new()
 	charm.action_id = "CHARM"
 	options.append(charm)
@@ -816,7 +816,7 @@ func test_extract_famine_province_ids_known_topic() -> void:
 	t.variant = "provincial_famine"
 	t.provinces_affected = [3, 7]
 	_char.topic_pool = [50]
-	var ids: Array[int] = NPCDecisionEngine._extract_famine_province_ids(
+	var ids: Array = NPCDecisionEngine._extract_famine_province_ids(
 		_char, [t],
 	)
 	assert_true(3 in ids)
@@ -829,7 +829,7 @@ func test_extract_famine_province_ids_unknown_topic_ignored() -> void:
 	t.topic_type = "famine"
 	t.provinces_affected = [3]
 	_char.topic_pool = []
-	var ids: Array[int] = NPCDecisionEngine._extract_famine_province_ids(
+	var ids: Array = NPCDecisionEngine._extract_famine_province_ids(
 		_char, [t],
 	)
 	assert_eq(ids.size(), 0, "Unknown topic yields no provinces")
@@ -842,7 +842,7 @@ func test_extract_famine_province_ids_resolved_ignored() -> void:
 	t.resolved = true
 	t.provinces_affected = [3]
 	_char.topic_pool = [50]
-	var ids: Array[int] = NPCDecisionEngine._extract_famine_province_ids(
+	var ids: Array = NPCDecisionEngine._extract_famine_province_ids(
 		_char, [t],
 	)
 	assert_eq(ids.size(), 0, "Resolved famine topic yields no provinces")
@@ -853,51 +853,51 @@ func test_extract_famine_province_ids_resolved_ignored() -> void:
 # =============================================================================
 
 func test_at_wall_tower_has_fortify_wall_section() -> void:
-	var actions: Array[String] = NPCDecisionEngine._get_actions_for_context(
+	var actions: Array = NPCDecisionEngine._get_actions_for_context(
 		Enums.ContextFlag.AT_WALL_TOWER
 	)
 	assert_true("FORTIFY_WALL_SECTION" in actions)
 
 func test_at_wall_tower_has_seal_wall_breach() -> void:
-	var actions: Array[String] = NPCDecisionEngine._get_actions_for_context(
+	var actions: Array = NPCDecisionEngine._get_actions_for_context(
 		Enums.ContextFlag.AT_WALL_TOWER
 	)
 	assert_true("SEAL_WALL_BREACH" in actions)
 
 func test_at_wall_tower_has_conduct_sortie() -> void:
-	var actions: Array[String] = NPCDecisionEngine._get_actions_for_context(
+	var actions: Array = NPCDecisionEngine._get_actions_for_context(
 		Enums.ContextFlag.AT_WALL_TOWER
 	)
 	assert_true("CONDUCT_SORTIE" in actions)
 
 func test_at_wall_tower_has_scout_enemy() -> void:
-	var actions: Array[String] = NPCDecisionEngine._get_actions_for_context(
+	var actions: Array = NPCDecisionEngine._get_actions_for_context(
 		Enums.ContextFlag.AT_WALL_TOWER
 	)
 	assert_true("SCOUT_ENEMY" in actions)
 
 func test_at_wall_tower_has_dispatch_courtier() -> void:
-	var actions: Array[String] = NPCDecisionEngine._get_actions_for_context(
+	var actions: Array = NPCDecisionEngine._get_actions_for_context(
 		Enums.ContextFlag.AT_WALL_TOWER
 	)
 	assert_true("DISPATCH_COURTIER" in actions)
 
 func test_at_own_holdings_no_fortify_wall_section() -> void:
-	var actions: Array[String] = NPCDecisionEngine._get_actions_for_context(
+	var actions: Array = NPCDecisionEngine._get_actions_for_context(
 		Enums.ContextFlag.AT_OWN_HOLDINGS
 	)
 	assert_false("FORTIFY_WALL_SECTION" in actions,
 		"FORTIFY_WALL_SECTION requires AT_WALL_TOWER, not AT_OWN_HOLDINGS")
 
 func test_at_own_holdings_no_seal_wall_breach() -> void:
-	var actions: Array[String] = NPCDecisionEngine._get_actions_for_context(
+	var actions: Array = NPCDecisionEngine._get_actions_for_context(
 		Enums.ContextFlag.AT_OWN_HOLDINGS
 	)
 	assert_false("SEAL_WALL_BREACH" in actions,
 		"SEAL_WALL_BREACH requires AT_WALL_TOWER, not AT_OWN_HOLDINGS")
 
 func test_at_own_holdings_has_purify_tainted_ground() -> void:
-	var actions: Array[String] = NPCDecisionEngine._get_actions_for_context(
+	var actions: Array = NPCDecisionEngine._get_actions_for_context(
 		Enums.ContextFlag.AT_OWN_HOLDINGS
 	)
 	assert_true("PURIFY_TAINTED_GROUND" in actions,
@@ -1352,7 +1352,7 @@ func test_build_known_topic_types_from_topic_data() -> void:
 	var t3 := TopicData.new()
 	t3.topic_id = 30
 	t3.topic_type = ""
-	var pool: Array[int] = [10, 20, 30]
+	var pool: Array = [10, 20, 30]
 	var result: Dictionary = NPCDecisionEngine._build_known_topic_types(pool, [t1, t2, t3])
 	assert_eq(result.get(10, ""), "Clan_War")
 	assert_eq(result.get(20, ""), "Provincial_Famine")
@@ -1364,7 +1364,7 @@ func test_build_known_topic_types_from_dicts() -> void:
 		{"topic_id": 5, "topic_type": "Siege_Beginning"},
 		{"topic_id": 6, "topic_type": "Betrayal"},
 	]
-	var pool: Array[int] = [5, 6]
+	var pool: Array = [5, 6]
 	var result: Dictionary = NPCDecisionEngine._build_known_topic_types(pool, topics)
 	assert_eq(result.get(5, ""), "Siege_Beginning")
 	assert_eq(result.get(6, ""), "Betrayal")
@@ -1377,7 +1377,7 @@ func test_build_known_topic_types_filters_by_pool() -> void:
 	var t2 := TopicData.new()
 	t2.topic_id = 20
 	t2.topic_type = "Provincial_Raid"
-	var pool: Array[int] = [10]
+	var pool: Array = [10]
 	var result: Dictionary = NPCDecisionEngine._build_known_topic_types(pool, [t1, t2])
 	assert_true(result.has(10))
 	assert_false(result.has(20), "Topic not in pool should be excluded")
@@ -1748,7 +1748,7 @@ func test_conditional_yu_blocks_seek_peace_when_war_score_high() -> void:
 		},
 		"shourido": {},
 	}
-	var options: Array[NPCDataStructures.ScoredAction] = []
+	var options: Array = []
 	var seek := NPCDataStructures.ScoredAction.new()
 	seek.action_id = "SEEK_PEACE"
 	options.append(seek)
@@ -1776,7 +1776,7 @@ func test_conditional_yu_allows_seek_peace_when_war_score_low() -> void:
 		},
 		"shourido": {},
 	}
-	var options: Array[NPCDataStructures.ScoredAction] = []
+	var options: Array = []
 	var seek := NPCDataStructures.ScoredAction.new()
 	seek.action_id = "SEEK_PEACE"
 	options.append(seek)
@@ -1801,7 +1801,7 @@ func test_conditional_jin_blocks_demand_tribute_at_shortage() -> void:
 		},
 		"shourido": {},
 	}
-	var options: Array[NPCDataStructures.ScoredAction] = []
+	var options: Array = []
 	var demand := NPCDataStructures.ScoredAction.new()
 	demand.action_id = "DEMAND_TRIBUTE"
 	options.append(demand)
@@ -1825,7 +1825,7 @@ func test_conditional_jin_allows_demand_tribute_no_shortage() -> void:
 		},
 		"shourido": {},
 	}
-	var options: Array[NPCDataStructures.ScoredAction] = []
+	var options: Array = []
 	var demand := NPCDataStructures.ScoredAction.new()
 	demand.action_id = "DEMAND_TRIBUTE"
 	options.append(demand)
@@ -1851,7 +1851,7 @@ func test_conditional_kyoryoku_blocks_negotiate_when_confrontation_available() -
 			},
 		},
 	}
-	var options: Array[NPCDataStructures.ScoredAction] = []
+	var options: Array = []
 	var neg := NPCDataStructures.ScoredAction.new()
 	neg.action_id = "NEGOTIATE"
 	options.append(neg)
@@ -1884,7 +1884,7 @@ func test_conditional_ishi_blocks_change_course_when_committed() -> void:
 			},
 		},
 	}
-	var options: Array[NPCDataStructures.ScoredAction] = []
+	var options: Array = []
 	var peace := NPCDataStructures.ScoredAction.new()
 	peace.action_id = "SEEK_PEACE"
 	options.append(peace)
@@ -1915,7 +1915,7 @@ func test_conditional_chishiki_blocks_commit_without_intel() -> void:
 			},
 		},
 	}
-	var options: Array[NPCDataStructures.ScoredAction] = []
+	var options: Array = []
 	var deploy := NPCDataStructures.ScoredAction.new()
 	deploy.action_id = "ORDER_DEPLOY"
 	options.append(deploy)
@@ -1943,7 +1943,7 @@ func test_conditional_chishiki_allows_commit_after_intel() -> void:
 			},
 		},
 	}
-	var options: Array[NPCDataStructures.ScoredAction] = []
+	var options: Array = []
 	var deploy := NPCDataStructures.ScoredAction.new()
 	deploy.action_id = "ORDER_DEPLOY"
 	options.append(deploy)
@@ -1967,7 +1967,7 @@ func test_conditional_ketsui_blocks_relief_army() -> void:
 			},
 		},
 	}
-	var options: Array[NPCDataStructures.ScoredAction] = []
+	var options: Array = []
 	var accept := NPCDataStructures.ScoredAction.new()
 	accept.action_id = "ACCEPT_RELIEF_ARMY"
 	options.append(accept)
@@ -1994,7 +1994,7 @@ func test_conditional_harvest_rei_blocked_without_demand() -> void:
 		},
 		"shourido": {},
 	}
-	var options: Array[NPCDataStructures.ScoredAction] = []
+	var options: Array = []
 	var harvest := NPCDataStructures.ScoredAction.new()
 	harvest.action_id = "RAID_HARVEST"
 	options.append(harvest)
@@ -2021,7 +2021,7 @@ func test_conditional_harvest_rei_allowed_after_demand() -> void:
 		},
 		"shourido": {},
 	}
-	var options: Array[NPCDataStructures.ScoredAction] = []
+	var options: Array = []
 	var harvest := NPCDataStructures.ScoredAction.new()
 	harvest.action_id = "RAID_HARVEST"
 	options.append(harvest)
@@ -2044,7 +2044,7 @@ func test_conditional_unevaluable_condition_does_not_block() -> void:
 		},
 		"shourido": {},
 	}
-	var options: Array[NPCDataStructures.ScoredAction] = []
+	var options: Array = []
 	var charm := NPCDataStructures.ScoredAction.new()
 	charm.action_id = "CHARM"
 	options.append(charm)
@@ -2086,9 +2086,9 @@ func test_seppuku_generates_accept_refuse_options() -> void:
 	need.target_intent = "case_15"
 
 	var ctx := NPCDecisionEngine.build_context(_char, _world_state)
-	var options: Array[NPCDataStructures.ScoredAction] = NPCDecisionEngine.generate_options(ctx, need)
+	var options: Array = NPCDecisionEngine.generate_options(ctx, need)
 
-	var action_ids: Array[String] = []
+	var action_ids: Array = []
 	for opt: NPCDataStructures.ScoredAction in options:
 		action_ids.append(opt.action_id)
 	assert_true("ACCEPT_SEPPUKU" in action_ids)
@@ -2476,50 +2476,50 @@ func test_virtue_modifier_applied_in_scoring() -> void:
 # -- Context list coverage: commerce and investigation actions -----------------
 
 func test_purchase_market_in_holdings_context() -> void:
-	var actions: Array[String] = NPCDecisionEngine._get_actions_for_context(
+	var actions: Array = NPCDecisionEngine._get_actions_for_context(
 		Enums.ContextFlag.AT_OWN_HOLDINGS)
 	assert_has(actions, "PURCHASE_MARKET", "PURCHASE_MARKET should be available at own holdings")
 
 
 func test_purchase_market_in_court_context() -> void:
-	var actions: Array[String] = NPCDecisionEngine._get_actions_for_context(
+	var actions: Array = NPCDecisionEngine._get_actions_for_context(
 		Enums.ContextFlag.AT_COURT)
 	assert_has(actions, "PURCHASE_MARKET", "PURCHASE_MARKET should be available at court")
 
 
 func test_purchase_market_in_visiting_context() -> void:
-	var actions: Array[String] = NPCDecisionEngine._get_actions_for_context(
+	var actions: Array = NPCDecisionEngine._get_actions_for_context(
 		Enums.ContextFlag.VISITING)
 	assert_has(actions, "PURCHASE_MARKET", "PURCHASE_MARKET should be available when visiting")
 
 
 func test_conduct_commerce_in_holdings_context() -> void:
-	var actions: Array[String] = NPCDecisionEngine._get_actions_for_context(
+	var actions: Array = NPCDecisionEngine._get_actions_for_context(
 		Enums.ContextFlag.AT_OWN_HOLDINGS)
 	assert_has(actions, "CONDUCT_COMMERCE", "CONDUCT_COMMERCE should be available at own holdings")
 
 
 func test_conduct_commerce_in_court_context() -> void:
-	var actions: Array[String] = NPCDecisionEngine._get_actions_for_context(
+	var actions: Array = NPCDecisionEngine._get_actions_for_context(
 		Enums.ContextFlag.AT_COURT)
 	assert_has(actions, "CONDUCT_COMMERCE", "CONDUCT_COMMERCE should be available at court")
 
 
 func test_conduct_commerce_in_visiting_context() -> void:
-	var actions: Array[String] = NPCDecisionEngine._get_actions_for_context(
+	var actions: Array = NPCDecisionEngine._get_actions_for_context(
 		Enums.ContextFlag.VISITING)
 	assert_has(actions, "CONDUCT_COMMERCE", "CONDUCT_COMMERCE should be available when visiting")
 
 
 func test_examine_crime_scene_in_holdings_context() -> void:
-	var actions: Array[String] = NPCDecisionEngine._get_actions_for_context(
+	var actions: Array = NPCDecisionEngine._get_actions_for_context(
 		Enums.ContextFlag.AT_OWN_HOLDINGS)
 	assert_has(actions, "EXAMINE_CRIME_SCENE",
 		"EXAMINE_CRIME_SCENE should be available at own holdings")
 
 
 func test_examine_crime_scene_in_visiting_context() -> void:
-	var actions: Array[String] = NPCDecisionEngine._get_actions_for_context(
+	var actions: Array = NPCDecisionEngine._get_actions_for_context(
 		Enums.ContextFlag.VISITING)
 	assert_has(actions, "EXAMINE_CRIME_SCENE",
 		"EXAMINE_CRIME_SCENE should be available when visiting")
@@ -2536,7 +2536,7 @@ func test_purchase_market_generates_as_option() -> void:
 	var options := NPCDecisionEngine.generate_options(ctx, need)
 	var filtered := NPCDecisionEngine.apply_allowlist_filter(
 		options, need.need_type, _scoring_tables)
-	var action_ids: Array[String] = []
+	var action_ids: Array = []
 	for o in filtered:
 		action_ids.append(o.action_id)
 	assert_has(action_ids, "PURCHASE_MARKET",
@@ -2554,7 +2554,7 @@ func test_examine_crime_scene_generates_for_investigate_threat() -> void:
 	var options := NPCDecisionEngine.generate_options(ctx, need)
 	var filtered := NPCDecisionEngine.apply_allowlist_filter(
 		options, need.need_type, _scoring_tables)
-	var action_ids: Array[String] = []
+	var action_ids: Array = []
 	for o in filtered:
 		action_ids.append(o.action_id)
 	assert_has(action_ids, "EXAMINE_CRIME_SCENE",
@@ -2820,7 +2820,7 @@ func test_expose_metadata_empty_when_no_secrets() -> void:
 
 
 func test_known_secrets_flows_through_build_context() -> void:
-	var secret_dicts: Array[Dictionary] = [
+	var secret_dicts: Array = [
 		{"_secret_ref": SecretData.new(), "secret_id": 1, "subject_id": 2, "has_proof": false, "severity": 4},
 	]
 	_world_state["known_secrets"] = secret_dicts
@@ -3074,7 +3074,7 @@ func test_search_person_no_authority_by_default() -> void:
 
 
 func test_duel_challenge_in_at_own_holdings() -> void:
-	var actions: Array[String] = NPCDecisionEngine._get_actions_for_context(
+	var actions: Array = NPCDecisionEngine._get_actions_for_context(
 		Enums.ContextFlag.AT_OWN_HOLDINGS
 	)
 	assert_true("ISSUE_DUEL_CHALLENGE" in actions,
@@ -3082,7 +3082,7 @@ func test_duel_challenge_in_at_own_holdings() -> void:
 
 
 func test_duel_challenge_in_at_court() -> void:
-	var actions: Array[String] = NPCDecisionEngine._get_actions_for_context(
+	var actions: Array = NPCDecisionEngine._get_actions_for_context(
 		Enums.ContextFlag.AT_COURT
 	)
 	assert_true("ISSUE_DUEL_CHALLENGE" in actions,
@@ -3090,7 +3090,7 @@ func test_duel_challenge_in_at_court() -> void:
 
 
 func test_duel_challenge_in_visiting() -> void:
-	var actions: Array[String] = NPCDecisionEngine._get_actions_for_context(
+	var actions: Array = NPCDecisionEngine._get_actions_for_context(
 		Enums.ContextFlag.VISITING
 	)
 	assert_true("ISSUE_DUEL_CHALLENGE" in actions,
@@ -3098,7 +3098,7 @@ func test_duel_challenge_in_visiting() -> void:
 
 
 func test_duel_challenge_not_in_traveling() -> void:
-	var actions: Array[String] = NPCDecisionEngine._get_actions_for_context(
+	var actions: Array = NPCDecisionEngine._get_actions_for_context(
 		Enums.ContextFlag.TRAVELING
 	)
 	assert_false("ISSUE_DUEL_CHALLENGE" in actions,
@@ -3114,7 +3114,7 @@ func test_seek_pretext_not_in_context_lists() -> void:
 		Enums.ContextFlag.AT_DOJO, Enums.ContextFlag.AT_WALL_TOWER,
 	]
 	for flag: Enums.ContextFlag in all_flags:
-		var actions: Array[String] = NPCDecisionEngine._get_actions_for_context(flag)
+		var actions: Array = NPCDecisionEngine._get_actions_for_context(flag)
 		assert_false("SEEK_PRETEXT" in actions,
 			"SEEK_PRETEXT is a NeedType, not an ActionID — should not be in any context list")
 
@@ -3163,7 +3163,7 @@ func test_public_atonement_metadata_populated() -> void:
 
 
 func test_demand_tribute_in_at_own_holdings() -> void:
-	var actions: Array[String] = NPCDecisionEngine._get_actions_for_context(
+	var actions: Array = NPCDecisionEngine._get_actions_for_context(
 		Enums.ContextFlag.AT_OWN_HOLDINGS
 	)
 	assert_true("DEMAND_TRIBUTE" in actions,
@@ -3171,7 +3171,7 @@ func test_demand_tribute_in_at_own_holdings() -> void:
 
 
 func test_request_allied_aid_in_at_own_holdings() -> void:
-	var actions: Array[String] = NPCDecisionEngine._get_actions_for_context(
+	var actions: Array = NPCDecisionEngine._get_actions_for_context(
 		Enums.ContextFlag.AT_OWN_HOLDINGS
 	)
 	assert_true("REQUEST_ALLIED_AID" in actions,
@@ -3179,7 +3179,7 @@ func test_request_allied_aid_in_at_own_holdings() -> void:
 
 
 func test_request_allied_aid_in_at_court() -> void:
-	var actions: Array[String] = NPCDecisionEngine._get_actions_for_context(
+	var actions: Array = NPCDecisionEngine._get_actions_for_context(
 		Enums.ContextFlag.AT_COURT
 	)
 	assert_true("REQUEST_ALLIED_AID" in actions,
@@ -3316,7 +3316,7 @@ func test_forge_impersonation_letter_in_all_contexts() -> void:
 		Enums.ContextFlag.AT_COURT,
 		Enums.ContextFlag.VISITING,
 	]:
-		var actions: Array[String] = NPCDecisionEngine._get_actions_for_context(flag)
+		var actions: Array = NPCDecisionEngine._get_actions_for_context(flag)
 		assert_true("FORGE_IMPERSONATION_LETTER" in actions,
 			"FORGE_IMPERSONATION_LETTER should be in %s" % Enums.ContextFlag.keys()[flag])
 
@@ -3327,7 +3327,7 @@ func test_forge_order_in_all_contexts() -> void:
 		Enums.ContextFlag.AT_COURT,
 		Enums.ContextFlag.VISITING,
 	]:
-		var actions: Array[String] = NPCDecisionEngine._get_actions_for_context(flag)
+		var actions: Array = NPCDecisionEngine._get_actions_for_context(flag)
 		assert_true("FORGE_ORDER" in actions,
 			"FORGE_ORDER should be in %s" % Enums.ContextFlag.keys()[flag])
 

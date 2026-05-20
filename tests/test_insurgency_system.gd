@@ -66,45 +66,45 @@ func test_stability_tier_broken():
 
 func test_stability_loss_from_starvation():
 	var p := _make_province(1, 80.0)
-	var ins_arr: Array[InsurgencyData] = []
+	var ins_arr: Array = []
 	assert_eq(InsurgencySystem.compute_stability_change(p, ins_arr, 1, false, false, 0), -1.0)
 	assert_eq(InsurgencySystem.compute_stability_change(p, ins_arr, 2, false, false, 0), -3.0)
 	assert_eq(InsurgencySystem.compute_stability_change(p, ins_arr, 3, false, false, 0), -10.0)
 
 func test_stability_loss_from_war():
 	var p := _make_province(1, 80.0)
-	var ins_arr: Array[InsurgencyData] = []
+	var ins_arr: Array = []
 	var delta: float = InsurgencySystem.compute_stability_change(p, ins_arr, 0, true, false, 0)
 	assert_eq(delta, -2.0)
 
 func test_stability_loss_from_raid():
 	var p := _make_province(1, 80.0)
-	var ins_arr: Array[InsurgencyData] = []
+	var ins_arr: Array = []
 	var delta: float = InsurgencySystem.compute_stability_change(p, ins_arr, 0, false, true, 0)
 	assert_eq(delta, -5.0)
 
 func test_stability_loss_from_insurgency():
 	var p := _make_province(1, 80.0)
 	var ins: InsurgencyData = _make_insurgency(1, Enums.InsurgencyType.RONIN_BANDIT, 1)
-	var ins_arr: Array[InsurgencyData] = [ins]
+	var ins_arr: Array = [ins]
 	var delta: float = InsurgencySystem.compute_stability_change(p, ins_arr, 0, false, false, 0)
 	assert_eq(delta, -1.0)
 
 func test_stability_recovery_clear():
 	var p := _make_province(1, 80.0)
-	var ins_arr: Array[InsurgencyData] = []
+	var ins_arr: Array = []
 	var delta: float = InsurgencySystem.compute_stability_change(p, ins_arr, 0, false, false, 0)
 	assert_eq(delta, 2.0)
 
 func test_stability_recovery_with_peace_bonus():
 	var p := _make_province(1, 80.0)
-	var ins_arr: Array[InsurgencyData] = []
+	var ins_arr: Array = []
 	var delta: float = InsurgencySystem.compute_stability_change(p, ins_arr, 0, false, false, 4)
 	assert_eq(delta, 3.0)
 
 func test_stability_under_garrisoned():
 	var p := _make_province(1, 80.0)
-	var ins_arr: Array[InsurgencyData] = []
+	var ins_arr: Array = []
 	var delta: float = InsurgencySystem.compute_stability_change(p, ins_arr, 0, false, false, 0, 1000, 10)
 	assert_true(delta < 0.0, "Under-garrisoned should prevent recovery and add penalty")
 
@@ -113,24 +113,24 @@ func test_stability_under_garrisoned():
 
 func test_eligible_types_stable():
 	var p := _make_province(1, 100.0)
-	var types: Array[int] = InsurgencySystem.get_eligible_types(Enums.StabilityTier.STABLE, p, 0.0)
+	var types: Array = InsurgencySystem.get_eligible_types(Enums.StabilityTier.STABLE, p, 0.0)
 	assert_true(Enums.InsurgencyType.MAHO_CULT in types, "Maho cult can spawn in stable")
 	assert_true(Enums.InsurgencyType.NEZUMI_INFESTATION in types, "Nezumi can spawn anywhere")
 	assert_false(Enums.InsurgencyType.PEASANT_REVOLT in types, "No revolt in stable")
 
 func test_eligible_types_coastal():
 	var p := _make_province(1, 50.0, true)
-	var types: Array[int] = InsurgencySystem.get_eligible_types(Enums.StabilityTier.VOLATILE, p, 0.0)
+	var types: Array = InsurgencySystem.get_eligible_types(Enums.StabilityTier.VOLATILE, p, 0.0)
 	assert_true(Enums.InsurgencyType.PIRATE_FLEET in types, "Pirates on coastal")
 
 func test_eligible_types_not_coastal():
 	var p := _make_province(1, 50.0, false)
-	var types: Array[int] = InsurgencySystem.get_eligible_types(Enums.StabilityTier.VOLATILE, p, 0.0)
+	var types: Array = InsurgencySystem.get_eligible_types(Enums.StabilityTier.VOLATILE, p, 0.0)
 	assert_false(Enums.InsurgencyType.PIRATE_FLEET in types, "No pirates inland")
 
 func test_eligible_taint_from_ptl():
 	var p := _make_province(1, 100.0)
-	var types: Array[int] = InsurgencySystem.get_eligible_types(Enums.StabilityTier.STABLE, p, 3.0)
+	var types: Array = InsurgencySystem.get_eligible_types(Enums.StabilityTier.STABLE, p, 3.0)
 	assert_true(Enums.InsurgencyType.TAINT_MANIFESTATION in types, "Taint spawns from PTL >= 3")
 
 
@@ -278,13 +278,13 @@ func test_suppression_eliminates():
 
 func test_coordinated_suppression_cumulative():
 	var ins := _make_insurgency(1, Enums.InsurgencyType.RONIN_BANDIT, 1, 8, 0, true)
-	var rolls: Array[int] = [60, 58, 40]  # TN = 56 for ronin S8
+	var rolls: Array = [60, 58, 40]  # TN = 56 for ronin S8
 	var result: Dictionary = InsurgencySystem.resolve_coordinated_suppression(ins, rolls, false, 0)
 	assert_true(result["outcomes"].size() == 3)
 
 func test_coordinated_with_leader_bonus():
 	var ins := _make_insurgency(1, Enums.InsurgencyType.PEASANT_REVOLT, 1, 4, 0, true)
-	var rolls: Array[int] = [15, 15]  # TN = 20, with bonus 10 = 25 each
+	var rolls: Array = [15, 15]  # TN = 20, with bonus 10 = 25 each
 	var result: Dictionary = InsurgencySystem.resolve_coordinated_suppression(ins, rolls, false, 10)
 	assert_eq(result["outcomes"][0], "success")
 	assert_eq(result["outcomes"][1], "success")
@@ -337,7 +337,7 @@ func test_taint_resistance_tn():
 
 func test_ptl_gain_from_maho_events():
 	var p := _make_province(1)
-	var ins_arr: Array[InsurgencyData] = []
+	var ins_arr: Array = []
 	var delta: float = InsurgencySystem.compute_ptl_change(
 		p, 0.0, ins_arr, 2, {}, false, 0, false, false, 0, false
 	)
@@ -346,7 +346,7 @@ func test_ptl_gain_from_maho_events():
 func test_ptl_gain_from_active_maho_cult():
 	var p := _make_province(1)
 	var maho := _make_insurgency(1, Enums.InsurgencyType.MAHO_CULT, 1)
-	var ins_arr: Array[InsurgencyData] = [maho]
+	var ins_arr: Array = [maho]
 	var delta: float = InsurgencySystem.compute_ptl_change(
 		p, 0.0, ins_arr, 0, {}, false, 0, false, false, 0, false
 	)
@@ -356,7 +356,7 @@ func test_ptl_double_from_maho_plus_taint():
 	var p := _make_province(1)
 	var maho := _make_insurgency(1, Enums.InsurgencyType.MAHO_CULT, 1)
 	var taint := _make_insurgency(2, Enums.InsurgencyType.TAINT_MANIFESTATION, 1)
-	var ins_arr: Array[InsurgencyData] = [maho, taint]
+	var ins_arr: Array = [maho, taint]
 	var delta: float = InsurgencySystem.compute_ptl_change(
 		p, 0.0, ins_arr, 0, {}, false, 0, false, false, 0, false
 	)
@@ -364,7 +364,7 @@ func test_ptl_double_from_maho_plus_taint():
 
 func test_ptl_adjacent_bleed():
 	var p := _make_province(1)
-	var ins_arr: Array[InsurgencyData] = []
+	var ins_arr: Array = []
 	var adj_ptls: Dictionary = {2: 8.0}
 	var delta: float = InsurgencySystem.compute_ptl_change(
 		p, 0.0, ins_arr, 0, adj_ptls, false, 0, false, false, 0, false
@@ -373,7 +373,7 @@ func test_ptl_adjacent_bleed():
 
 func test_ptl_adjacent_bleed_reduced_by_jade():
 	var p := _make_province(1)
-	var ins_arr: Array[InsurgencyData] = []
+	var ins_arr: Array = []
 	var adj_ptls: Dictionary = {2: 8.0}
 	var no_jade: float = InsurgencySystem.compute_ptl_change(
 		p, 0.0, ins_arr, 0, adj_ptls, false, 0, false, false, 0, false
@@ -385,7 +385,7 @@ func test_ptl_adjacent_bleed_reduced_by_jade():
 
 func test_ptl_natural_decay():
 	var p := _make_province(1)
-	var ins_arr: Array[InsurgencyData] = []
+	var ins_arr: Array = []
 	var delta: float = InsurgencySystem.compute_ptl_change(
 		p, 5.0, ins_arr, 0, {}, false, 0, false, false, 0, false
 	)
@@ -393,7 +393,7 @@ func test_ptl_natural_decay():
 
 func test_ptl_shugenja_purification():
 	var p := _make_province(1)
-	var ins_arr: Array[InsurgencyData] = []
+	var ins_arr: Array = []
 	var delta: float = InsurgencySystem.compute_ptl_change(
 		p, 5.0, ins_arr, 0, {}, false, 0, false, false, 2, false
 	)
@@ -519,7 +519,7 @@ func test_strength_below_10_no_consequence():
 func test_process_season_basic():
 	var provinces: Dictionary = {1: _make_province(1, 40.0)}
 	var ptls: Dictionary = {1: 0.0}
-	var insurgencies: Array[InsurgencyData] = []
+	var insurgencies: Array = []
 	var world_states: Dictionary = {1: {}}
 	var result: Dictionary = InsurgencySystem.process_season(
 		insurgencies, provinces, ptls, _dice, 0, 100, world_states

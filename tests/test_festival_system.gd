@@ -110,7 +110,7 @@ func test_season_winter():
 
 func test_new_year_festival_on_day_1():
 	var fests := FestivalSystem.get_active_festivals(1)
-	var names: Array[String] = []
+	var names: Array = []
 	for f in fests:
 		names.append(f["name"])
 	assert_true(names.has("New Year's Festival"))
@@ -119,7 +119,7 @@ func test_new_year_festival_on_day_1():
 func test_cherry_blossom_on_month1_day15():
 	# Month 1, day 15 → IC day 15
 	var fests := FestivalSystem.get_active_festivals(15)
-	var names: Array[String] = []
+	var names: Array = []
 	for f in fests:
 		names.append(f["name"])
 	assert_true(names.has("Cherry Blossom Festival"))
@@ -258,7 +258,7 @@ func test_resolve_championship_empty():
 
 
 func test_resolve_championship_single_candidate():
-	var candidates: Array[Dictionary] = [
+	var candidates: Array = [
 		_make_candidate(1, {"Athletics": 3, "Kenjutsu": 3, "Etiquette": 2},
 			{"strength": 3, "agility": 3, "intelligence": 3}),
 	]
@@ -268,7 +268,7 @@ func test_resolve_championship_single_candidate():
 
 
 func test_resolve_championship_higher_skill_wins():
-	var candidates: Array[Dictionary] = [
+	var candidates: Array = [
 		_make_candidate(1, {"Athletics": 5, "Kenjutsu": 5, "Etiquette": 5},
 			{"strength": 4, "agility": 4, "intelligence": 4}),
 		_make_candidate(2, {"Athletics": 1, "Kenjutsu": 1, "Etiquette": 1},
@@ -279,7 +279,7 @@ func test_resolve_championship_higher_skill_wins():
 
 
 func test_resolve_championship_honor_tiebreak():
-	var candidates: Array[Dictionary] = [
+	var candidates: Array = [
 		_make_candidate(1, {"Athletics": 3, "Kenjutsu": 3, "Etiquette": 3},
 			{"strength": 3, "agility": 3, "intelligence": 3}, 5.0),
 		_make_candidate(2, {"Athletics": 3, "Kenjutsu": 3, "Etiquette": 3},
@@ -290,7 +290,7 @@ func test_resolve_championship_honor_tiebreak():
 
 
 func test_resolve_championship_returns_topic_tier_4():
-	var candidates: Array[Dictionary] = [
+	var candidates: Array = [
 		_make_candidate(1, {"Athletics": 3}, {"strength": 3, "agility": 3, "intelligence": 3}),
 	]
 	var result := FestivalSystem.resolve_championship(candidates, null)
@@ -365,7 +365,7 @@ func test_local_festival_has_required_fields():
 func test_local_festival_custom_themes():
 	var rng := MockRNG.new()
 	rng._value = 5
-	var themes: Array[String] = ["maritime", "spiritual"]
+	var themes: Array = ["maritime", "spiritual"]
 	var fests := FestivalSystem.generate_local_festivals("town", "coast", "Mantis", rng, themes)
 	if fests.size() >= 2:
 		assert_eq(fests[0]["theme_category"], "maritime")
@@ -376,7 +376,7 @@ func test_local_festival_no_duplicate_days():
 	var rng := MockRNG.new()
 	rng._value = 50
 	var fests := FestivalSystem.generate_local_festivals("castle_town", "plains", "Lion", rng)
-	var days: Array[int] = []
+	var days: Array = []
 	for f in fests:
 		assert_false(f["day_of_year"] in days)
 		days.append(f["day_of_year"])
@@ -427,7 +427,7 @@ func test_local_festival_uses_theme_words():
 func test_local_festival_avoids_canonical_days():
 	var rng := MockRNG.new()
 	rng._value = 50
-	var canonical_days: Array[int] = FestivalSystem._get_canonical_days()
+	var canonical_days: Array = FestivalSystem._get_canonical_days()
 	var fests := FestivalSystem.generate_local_festivals("town", "plains", "Crane", rng)
 	for f in fests:
 		assert_false(f["day_of_year"] in canonical_days,
@@ -435,6 +435,6 @@ func test_local_festival_avoids_canonical_days():
 
 
 func test_canonical_days_cache_populated():
-	var days: Array[int] = FestivalSystem._get_canonical_days()
+	var days: Array = FestivalSystem._get_canonical_days()
 	assert_true(days.size() > 0)
 	assert_true(days.size() <= FestivalSystem.CANONICAL_FESTIVALS.size())

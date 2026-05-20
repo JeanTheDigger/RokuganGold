@@ -2,7 +2,7 @@ extends GutTest
 
 
 var _char: L5RCharacterData
-var _action_log: Array[Dictionary]
+var _action_log: Array
 
 
 func before_each() -> void:
@@ -32,7 +32,7 @@ func test_active_court_returns_attend() -> void:
 # =============================================================================
 
 func test_upcoming_court_returns_travel() -> void:
-	var upcoming: Array[Dictionary] = [
+	var upcoming: Array = [
 		{"settlement_id": 20, "prestige": 5, "start_ic_day": 30},
 	]
 	var result: Variant = CourtAvailability.attend_court_or_alternative(
@@ -44,7 +44,7 @@ func test_upcoming_court_returns_travel() -> void:
 
 
 func test_upcoming_court_picks_highest_prestige() -> void:
-	var upcoming: Array[Dictionary] = [
+	var upcoming: Array = [
 		{"settlement_id": 20, "prestige": 3},
 		{"settlement_id": 30, "prestige": 7},
 		{"settlement_id": 40, "prestige": 5},
@@ -60,7 +60,7 @@ func test_upcoming_court_picks_highest_prestige() -> void:
 # =============================================================================
 
 func test_leverage_sends_letter_to_target_lord() -> void:
-	var leverage: Array[Dictionary] = [
+	var leverage: Array = [
 		{"secret_id": 1, "target_lord_id": 50},
 	]
 	var result: Variant = CourtAvailability.attend_court_or_alternative(
@@ -72,7 +72,7 @@ func test_leverage_sends_letter_to_target_lord() -> void:
 
 
 func test_leverage_sends_letter_to_target_if_no_lord() -> void:
-	var leverage: Array[Dictionary] = [
+	var leverage: Array = [
 		{"secret_id": 1},
 	]
 	var result: Variant = CourtAvailability.attend_court_or_alternative(
@@ -167,7 +167,7 @@ func test_no_lord_no_target_no_leverage_returns_null() -> void:
 
 func test_active_court_beats_upcoming() -> void:
 	var active: Dictionary = {"settlement_id": 10}
-	var upcoming: Array[Dictionary] = [{"settlement_id": 20, "prestige": 9}]
+	var upcoming: Array = [{"settlement_id": 20, "prestige": 9}]
 	var result: Variant = CourtAvailability.attend_court_or_alternative(
 		active, upcoming, _char, -1, [], _action_log, 1
 	)
@@ -176,8 +176,8 @@ func test_active_court_beats_upcoming() -> void:
 
 
 func test_upcoming_court_beats_leverage() -> void:
-	var upcoming: Array[Dictionary] = [{"settlement_id": 20, "prestige": 5}]
-	var leverage: Array[Dictionary] = [{"secret_id": 1, "target_lord_id": 50}]
+	var upcoming: Array = [{"settlement_id": 20, "prestige": 5}]
+	var leverage: Array = [{"secret_id": 1, "target_lord_id": 50}]
 	var result: Variant = CourtAvailability.attend_court_or_alternative(
 		{}, upcoming, _char, 10, leverage, _action_log, 1
 	)
@@ -186,7 +186,7 @@ func test_upcoming_court_beats_leverage() -> void:
 
 
 func test_leverage_beats_lord_request() -> void:
-	var leverage: Array[Dictionary] = [{"secret_id": 1, "target_lord_id": 50}]
+	var leverage: Array = [{"secret_id": 1, "target_lord_id": 50}]
 	var result: Variant = CourtAvailability.attend_court_or_alternative(
 		{}, [], _char, 10, leverage, _action_log, 1
 	)

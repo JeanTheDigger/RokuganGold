@@ -103,7 +103,7 @@ func test_triage_returns_sorted_by_score_descending() -> void:
 		_make_province(3, 40.0),  # volatile = 30
 	]
 
-	var results: Array[ProvinceTriage.TriageResult] = ProvinceTriage.triage_provinces(provinces)
+	var results: Array = ProvinceTriage.triage_provinces(provinces)
 
 	assert_eq(results.size(), 3)
 	assert_eq(results[0].province_id, 2)
@@ -112,7 +112,7 @@ func test_triage_returns_sorted_by_score_descending() -> void:
 
 
 func test_triage_empty_array() -> void:
-	var results: Array[ProvinceTriage.TriageResult] = ProvinceTriage.triage_provinces([])
+	var results: Array = ProvinceTriage.triage_provinces([])
 	assert_eq(results.size(), 0)
 
 
@@ -141,7 +141,7 @@ func test_get_top_provinces_limits_count() -> void:
 		_make_province(3, 70.0),  # 10
 	]
 
-	var top: Array[ProvinceTriage.TriageResult] = ProvinceTriage.get_top_provinces(provinces, 2)
+	var top: Array = ProvinceTriage.get_top_provinces(provinces, 2)
 	assert_eq(top.size(), 2)
 	assert_eq(top[0].province_id, 1)
 	assert_eq(top[1].province_id, 2)
@@ -153,7 +153,7 @@ func test_get_top_provinces_excludes_zero_score() -> void:
 		_make_province(2, 100.0),  # 0
 	]
 
-	var top: Array[ProvinceTriage.TriageResult] = ProvinceTriage.get_top_provinces(provinces, 5)
+	var top: Array = ProvinceTriage.get_top_provinces(provinces, 5)
 	assert_eq(top.size(), 1)
 	assert_eq(top[0].province_id, 1)
 
@@ -162,32 +162,32 @@ func test_get_top_provinces_excludes_zero_score() -> void:
 
 func test_stale_info_recommends_investigate() -> void:
 	var provinces: Array = [_make_province(1, 80.0, 5, -1, -1, 0)]
-	var results: Array[ProvinceTriage.TriageResult] = ProvinceTriage.triage_provinces(provinces)
+	var results: Array = ProvinceTriage.triage_provinces(provinces)
 	assert_eq(results[0].recommended_need, "INVESTIGATE_THREAT")
 
 
 func test_crisis_recommends_defend() -> void:
 	var provinces: Array = [_make_province(1, 80.0, 5, 1, -1, 2)]
-	var results: Array[ProvinceTriage.TriageResult] = ProvinceTriage.triage_provinces(provinces)
+	var results: Array = ProvinceTriage.triage_provinces(provinces)
 	assert_eq(results[0].recommended_need, "DEFEND_PROVINCE")
 
 
 func test_low_stability_recommends_patrol() -> void:
 	var provinces: Array = [_make_province(1, 40.0, 5, -1, -1, 2)]
-	var results: Array[ProvinceTriage.TriageResult] = ProvinceTriage.triage_provinces(provinces)
+	var results: Array = ProvinceTriage.triage_provinces(provinces)
 	assert_eq(results[0].recommended_need, "PATROL_PROVINCE")
 
 
 func test_stable_recommends_rest() -> void:
 	var provinces: Array = [_make_province(1, 80.0, 5, -1, -1, 2)]
-	var results: Array[ProvinceTriage.TriageResult] = ProvinceTriage.triage_provinces(provinces)
+	var results: Array = ProvinceTriage.triage_provinces(provinces)
 	assert_eq(results[0].recommended_need, "REST")
 
 
 func test_crisis_overrides_stale_for_need() -> void:
 	# Known crisis always recommends DEFEND even if info is stale
 	var provinces: Array = [_make_province(1, 80.0, 5, 1, -1, 0)]
-	var results: Array[ProvinceTriage.TriageResult] = ProvinceTriage.triage_provinces(provinces)
+	var results: Array = ProvinceTriage.triage_provinces(provinces)
 	assert_eq(results[0].recommended_need, "DEFEND_PROVINCE")
 
 
@@ -195,37 +195,37 @@ func test_crisis_overrides_stale_for_need() -> void:
 
 func test_crisis_priority_3() -> void:
 	var provinces: Array = [_make_province(1, 80.0, 5, 1, -1, 2)]
-	var results: Array[ProvinceTriage.TriageResult] = ProvinceTriage.triage_provinces(provinces)
+	var results: Array = ProvinceTriage.triage_provinces(provinces)
 	assert_eq(results[0].priority, 3)
 
 
 func test_insurgency_priority_3() -> void:
 	var provinces: Array = [_make_province(1, 80.0, 5, -1, 1, 2)]
-	var results: Array[ProvinceTriage.TriageResult] = ProvinceTriage.triage_provinces(provinces)
+	var results: Array = ProvinceTriage.triage_provinces(provinces)
 	assert_eq(results[0].priority, 3)
 
 
 func test_broken_stability_priority_3() -> void:
 	var provinces: Array = [_make_province(1, 25.0, 5, -1, -1, 2)]
-	var results: Array[ProvinceTriage.TriageResult] = ProvinceTriage.triage_provinces(provinces)
+	var results: Array = ProvinceTriage.triage_provinces(provinces)
 	assert_eq(results[0].priority, 3)
 
 
 func test_stale_info_priority_2() -> void:
 	var provinces: Array = [_make_province(1, 80.0, 5, -1, -1, 0)]
-	var results: Array[ProvinceTriage.TriageResult] = ProvinceTriage.triage_provinces(provinces)
+	var results: Array = ProvinceTriage.triage_provinces(provinces)
 	assert_eq(results[0].priority, 2)
 
 
 func test_volatile_priority_2() -> void:
 	var provinces: Array = [_make_province(1, 50.0, 5, -1, -1, 2)]
-	var results: Array[ProvinceTriage.TriageResult] = ProvinceTriage.triage_provinces(provinces)
+	var results: Array = ProvinceTriage.triage_provinces(provinces)
 	assert_eq(results[0].priority, 2)
 
 
 func test_restless_priority_1() -> void:
 	var provinces: Array = [_make_province(1, 70.0, 5, -1, -1, 2)]
-	var results: Array[ProvinceTriage.TriageResult] = ProvinceTriage.triage_provinces(provinces)
+	var results: Array = ProvinceTriage.triage_provinces(provinces)
 	assert_eq(results[0].priority, 1)
 
 

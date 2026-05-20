@@ -105,7 +105,7 @@ class Participant:
 	var has_acted_this_round: bool = false
 	var is_delaying: bool = false
 	var actions_remaining: int = 0   # 0 = not their turn yet / done
-	var conditions: Array[String] = []
+	var conditions: Array = []
 	var guarding_id: int = -1        # character_id they're guarding, -1 if none
 	var full_defense_bonus: int = 0  # bonus from Full Defense Stance roll
 	var grapple_partner_id: int = -1
@@ -121,7 +121,7 @@ class Participant:
 class CombatState:
 	var round_number: int = 1
 	var participants: Dictionary = {}  # character_id -> Participant
-	var turn_order: Array[int] = []    # sorted character_ids by initiative (desc)
+	var turn_order: Array = []    # sorted character_ids by initiative (desc)
 	var current_turn_index: int = 0
 	var is_over: bool = false
 	var winner_id: int = -1
@@ -176,7 +176,7 @@ static func build_combat_state(participants_data: Array) -> CombatState:
 
 
 static func _sort_turn_order(state: CombatState) -> void:
-	var ids: Array[int] = []
+	var ids: Array = []
 	for cid: int in state.participants.keys():
 		ids.append(cid)
 	ids.sort_custom(func(a: int, b: int) -> bool:
@@ -673,8 +673,8 @@ static func resolve_duel_assessment(
 		defender.awareness, def_iai, def_tn
 	)
 
-	var ch_learned: Array[String] = []
-	var def_learned: Array[String] = []
+	var ch_learned: Array = []
+	var def_learned: Array = []
 
 	# On success, learn one piece of info (+1 per Raise); see s40 for full info list
 	if ch_result["success"]:
@@ -953,7 +953,7 @@ static func advance_round_reactions(
 	characters_by_id: Dictionary,
 	dice_engine: DiceEngine,
 ) -> Array:
-	var events: Array[Dictionary] = []
+	var events: Array = []
 	for cid: int in state.participants:
 		var p: Participant = state.participants[cid]
 		var c: L5RCharacterData = characters_by_id.get(cid)
@@ -984,7 +984,7 @@ static func check_combat_over(
 	state: CombatState,
 	characters_by_id: Dictionary,
 ) -> bool:
-	var alive: Array[int] = []
+	var alive: Array = []
 	for cid: int in state.participants:
 		var c: L5RCharacterData = characters_by_id.get(cid)
 		if c != null and not CharacterStats.is_dead(c):

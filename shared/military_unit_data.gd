@@ -27,7 +27,7 @@ class LegionData:
 	@export var commander_id: int = -1
 	@export var home_province_id: int = -1
 	@export var current_location_id: String = ""
-	@export var constituent_companies: Array[int] = []
+	@export var constituent_companies: Array = []
 
 
 class SectionData:
@@ -35,7 +35,7 @@ class SectionData:
 	@export var section_id: int = -1
 	@export var parent_army_id: int = -1
 	@export var commander_id: int = -1
-	@export var constituent_legions: Array[int] = []
+	@export var constituent_legions: Array = []
 
 
 class ArmyData:
@@ -43,4 +43,4 @@ class ArmyData:
 	@export var army_id: int = -1
 	@export var clan_id: String = ""
 	@export var commander_id: int = -1
-	@export var constituent_sections: Array[int] = []
+	@export var constituent_sections: Array = []

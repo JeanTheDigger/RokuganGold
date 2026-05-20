@@ -119,7 +119,7 @@ static func scan_opportunities(
 	standing_type: String,
 	world_state: Dictionary,
 ) -> Array:
-	var results: Array[Opportunity] = []
+	var results: Array = []
 
 	match domain:
 		DOMAIN_POLITICAL:
@@ -160,7 +160,7 @@ static func _scan_political(
 	standing_type: String,
 	world_state: Dictionary,
 ) -> Array:
-	var results: Array[Opportunity] = []
+	var results: Array = []
 
 	var weak_neighbors: Array = world_state.get("weak_neighbor_provinces", [])
 	for neighbor: Dictionary in weak_neighbors:
@@ -225,7 +225,7 @@ static func _scan_military(
 	standing_type: String,
 	world_state: Dictionary,
 ) -> Array:
-	var results: Array[Opportunity] = []
+	var results: Array = []
 
 	var border_weaknesses: Array = world_state.get("border_weaknesses", [])
 	for border: Dictionary in border_weaknesses:
@@ -331,7 +331,7 @@ static func _scan_economic(
 	standing_type: String,
 	world_state: Dictionary,
 ) -> Array:
-	var results: Array[Opportunity] = []
+	var results: Array = []
 
 	var resource_deficits: Array = world_state.get("resource_deficits", [])
 	for deficit: Dictionary in resource_deficits:
@@ -396,7 +396,7 @@ static func _scan_personal(
 	standing_type: String,
 	world_state: Dictionary,
 ) -> Array:
-	var results: Array[Opportunity] = []
+	var results: Array = []
 
 	if character.honor < 3.0:
 		var opp := Opportunity.new()

@@ -314,7 +314,7 @@ func test_disclose_critical_failure() -> void:
 # -- Provoke Emotion ----------------------------------------------------------
 
 func test_provoke_emotion_success() -> void:
-	var witnesses: Array[int] = [10, 11, 12]
+	var witnesses: Array = [10, 11, 12]
 	var r: Dictionary = CourtActionSystem.resolve_provoke_emotion(20, 15, witnesses)
 	assert_true(r["success"])
 	assert_eq(r["target_honor_change"], -0.2)
@@ -324,14 +324,14 @@ func test_provoke_emotion_success() -> void:
 
 
 func test_provoke_emotion_failure() -> void:
-	var witnesses: Array[int] = [10, 11]
+	var witnesses: Array = [10, 11]
 	var r: Dictionary = CourtActionSystem.resolve_provoke_emotion(10, 15, witnesses)
 	assert_false(r["success"])
 	assert_false(r.has("target_honor_change"))
 
 
 func test_provoke_emotion_critical_failure() -> void:
-	var witnesses: Array[int] = [10, 11]
+	var witnesses: Array = [10, 11]
 	var r: Dictionary = CourtActionSystem.resolve_provoke_emotion(5, 20, witnesses)
 	assert_false(r["success"])
 	assert_eq(r["witness_disposition_loss"], -5)
@@ -1470,7 +1470,7 @@ func test_observe_court_empty_pool() -> void:
 
 # -- NPC metadata population: OBSERVE_COURT_ATTENDEES / ASK_FOR_INTRODUCTION ---
 
-func _make_contact_ctx(char_id: int, court_attendees: Array[int], met: Array[int], disp: Dictionary = {}) -> NPCDataStructures.ContextSnapshot:
+func _make_contact_ctx(char_id: int, court_attendees: Array, met: Array, disp: Dictionary = {}) -> NPCDataStructures.ContextSnapshot:
 	var ctx := NPCDataStructures.ContextSnapshot.new()
 	ctx.character_id = char_id
 	ctx.met_characters = met

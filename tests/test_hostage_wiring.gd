@@ -136,14 +136,14 @@ func test_escape_succeeds_and_clears_captive_status() -> void:
 	var hostage: Dictionary = HostageSystem.capture_hostage(
 		1, 99, HostageSystem.CaptureSource.SIEGE_SURRENDER, "1", 10
 	)
-	var active_hostages: Array[Dictionary] = [hostage]
+	var active_hostages: Array = [hostage]
 	var settlement: SettlementData = _make_settlement(1, Enums.SettlementType.TOWN, 0)
 	var dice := DiceEngine.new()
 	# Seed chosen to guarantee a very high Stealth roll (character has Stealth 4 + Agility 3 = 7k3)
 	# TN is 20 for a town with 0 garrison (no excess). High seed ensures success.
 	dice.set_seed(9999)
-	var death_events: Array[Dictionary] = []
-	var results: Array[Dictionary] = DayOrchestrator._process_hostage_escapes(
+	var death_events: Array = []
+	var results: Array = DayOrchestrator._process_hostage_escapes(
 		active_hostages, chars_by_id, [settlement], dice, 50, death_events
 	)
 	if results.size() > 0 and results[0].get("success", false):
@@ -160,11 +160,11 @@ func test_courtier_cannot_escape() -> void:
 	var hostage: Dictionary = HostageSystem.capture_hostage(
 		1, 99, HostageSystem.CaptureSource.SIEGE_SURRENDER, "1", 10
 	)
-	var active_hostages: Array[Dictionary] = [hostage]
+	var active_hostages: Array = [hostage]
 	var settlement: SettlementData = _make_settlement(1, Enums.SettlementType.TOWN, 0)
 	var dice := DiceEngine.new()
-	var death_events: Array[Dictionary] = []
-	var results: Array[Dictionary] = DayOrchestrator._process_hostage_escapes(
+	var death_events: Array = []
+	var results: Array = DayOrchestrator._process_hostage_escapes(
 		active_hostages, chars_by_id, [settlement], dice, 50, death_events
 	)
 	assert_true(results.is_empty())
@@ -178,11 +178,11 @@ func test_released_hostage_skipped() -> void:
 		1, 99, HostageSystem.CaptureSource.BATTLE_CAPTURE, "1", 10
 	)
 	hostage["released"] = true
-	var active_hostages: Array[Dictionary] = [hostage]
+	var active_hostages: Array = [hostage]
 	var settlement: SettlementData = _make_settlement(1, Enums.SettlementType.CASTLE, 1)
 	var dice := DiceEngine.new()
-	var death_events: Array[Dictionary] = []
-	var results: Array[Dictionary] = DayOrchestrator._process_hostage_escapes(
+	var death_events: Array = []
+	var results: Array = DayOrchestrator._process_hostage_escapes(
 		active_hostages, chars_by_id, [settlement], dice, 50, death_events
 	)
 	assert_true(results.is_empty())
@@ -197,8 +197,8 @@ func test_war_end_releases_hostage() -> void:
 	var hostage: Dictionary = HostageSystem.capture_hostage(
 		1, 99, HostageSystem.CaptureSource.SIEGE_SURRENDER, "1", 10
 	)
-	var active_hostages: Array[Dictionary] = [hostage]
-	var war_results: Array[Dictionary] = [{
+	var active_hostages: Array = [hostage]
+	var war_results: Array = [{
 		"resolution": "formal_surrender",
 		"war_id": 1,
 		"winner_clan": "lion",
@@ -219,8 +219,8 @@ func test_war_end_skips_already_released() -> void:
 	)
 	hostage["released"] = true
 	hostage["released_ic_day"] = 100
-	var active_hostages: Array[Dictionary] = [hostage]
-	var war_results: Array[Dictionary] = [{
+	var active_hostages: Array = [hostage]
+	var war_results: Array = [{
 		"resolution": "negotiated_settlement",
 		"war_id": 1,
 		"proposing_clan": "crane",
@@ -237,8 +237,8 @@ func test_war_end_third_clan_hostage_not_released() -> void:
 	var hostage: Dictionary = HostageSystem.capture_hostage(
 		1, 99, HostageSystem.CaptureSource.SIEGE_SURRENDER, "1", 10
 	)
-	var active_hostages: Array[Dictionary] = [hostage]
-	var war_results: Array[Dictionary] = [{
+	var active_hostages: Array = [hostage]
+	var war_results: Array = [{
 		"resolution": "formal_surrender",
 		"war_id": 1,
 		"winner_clan": "lion",
@@ -267,7 +267,7 @@ func test_battle_capture_converts_dead_commander_to_hostage() -> void:
 			}
 		],
 	}
-	var active_hostages: Array[Dictionary] = []
+	var active_hostages: Array = []
 	var dice := DiceEngine.new()
 	dice.set_seed(42)
 	DayOrchestrator._capture_dead_commanders(
@@ -289,7 +289,7 @@ func test_battle_capture_draw_does_nothing() -> void:
 		"attacker_states": [],
 		"defender_states": [{"commander_id": 1, "commander_dead": true}],
 	}
-	var active_hostages: Array[Dictionary] = []
+	var active_hostages: Array = []
 	var dice := DiceEngine.new()
 	DayOrchestrator._capture_dead_commanders(
 		battle_result, "draw", 99, "5", chars_by_id, active_hostages, 1, dice
@@ -312,9 +312,9 @@ func test_siege_hostage_captures_military_ranked_character() -> void:
 		"settlement_id": 10,
 		"attacker_army_id": 5,
 	}
-	var active_sieges: Array[Dictionary] = [siege]
+	var active_sieges: Array = [siege]
 	var company: Dictionary = {"army_id": 5, "lord_id": 99, "company_id": 1}
-	var active_hostages: Array[Dictionary] = []
+	var active_hostages: Array = []
 	DayOrchestrator._capture_siege_hostages(active_sieges, chars_by_id, [company], active_hostages, 1)
 	assert_eq(character.captive_status, "99")
 	assert_eq(active_hostages.size(), 1)
@@ -335,7 +335,7 @@ func test_siege_hostage_skips_no_military_rank() -> void:
 		"attacker_army_id": 5,
 	}
 	var company: Dictionary = {"army_id": 5, "lord_id": 99, "company_id": 1}
-	var active_hostages: Array[Dictionary] = []
+	var active_hostages: Array = []
 	DayOrchestrator._capture_siege_hostages([siege], chars_by_id, [company], active_hostages, 1)
 	assert_eq(active_hostages.size(), 0)
 	assert_eq(character.captive_status, "")
@@ -355,7 +355,7 @@ func test_siege_hostage_not_processed_twice() -> void:
 		"hostages_captured": true,
 	}
 	var company: Dictionary = {"army_id": 5, "lord_id": 99, "company_id": 1}
-	var active_hostages: Array[Dictionary] = []
+	var active_hostages: Array = []
 	DayOrchestrator._capture_siege_hostages([siege], chars_by_id, [company], active_hostages, 1)
 	assert_eq(active_hostages.size(), 0)
 	assert_eq(character.captive_status, "")

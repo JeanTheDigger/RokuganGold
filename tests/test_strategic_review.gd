@@ -26,11 +26,11 @@ func _make_vassal(id: int, lord_id: int) -> L5RCharacterData:
 
 func test_no_change_when_nothing_to_do() -> void:
 	var lord := _make_lord()
-	var vassals: Array[L5RCharacterData] = []
+	var vassals: Array = []
 	var objectives_map: Dictionary = {}
 	var world_state: Dictionary = {"last_court_season": 0, "current_season": 0}
 
-	var results: Array[Dictionary] = StrategicReview.run_seasonal_review(
+	var results: Array = StrategicReview.run_seasonal_review(
 		lord, vassals, objectives_map, world_state
 	)
 
@@ -42,7 +42,7 @@ func test_returns_multiple_directives() -> void:
 	var lord := _make_lord(1, Enums.BushidoVirtue.JIN)
 	var v1 := _make_vassal(10, 1)
 	var v2 := _make_vassal(11, 1)
-	var vassals: Array[L5RCharacterData] = [v1, v2]
+	var vassals: Array = [v1, v2]
 	var objectives_map: Dictionary = {
 		10: {"primary": {"status": "COMPLETED"}},
 		11: {"primary": {"status": "COMPLETED"}},
@@ -59,7 +59,7 @@ func test_returns_multiple_directives() -> void:
 		"military_readiness": 1.0,
 	}
 
-	var results: Array[Dictionary] = StrategicReview.run_seasonal_review(
+	var results: Array = StrategicReview.run_seasonal_review(
 		lord, vassals, objectives_map, world_state
 	)
 
@@ -71,13 +71,13 @@ func test_returns_multiple_directives() -> void:
 func test_resolves_orphaned_vassals_confirm_for_chugi() -> void:
 	var lord := _make_lord(1, Enums.BushidoVirtue.CHUGI)
 	var v := _make_vassal(10, 1)
-	var vassals: Array[L5RCharacterData] = [v]
+	var vassals: Array = [v]
 	var objectives_map: Dictionary = {
 		10: {"primary": {"objective_type": "BREAK_ALLIANCE", "status": "ORPHANED", "assigning_lord_id": 1}},
 	}
 	var world_state: Dictionary = {"last_court_season": 0, "current_season": 0}
 
-	var results: Array[Dictionary] = StrategicReview.run_seasonal_review(
+	var results: Array = StrategicReview.run_seasonal_review(
 		lord, vassals, objectives_map, world_state
 	)
 
@@ -95,13 +95,13 @@ func test_resolves_orphaned_vassals_confirm_for_chugi() -> void:
 func test_resolves_orphaned_vassals_cancel_for_jin() -> void:
 	var lord := _make_lord(1, Enums.BushidoVirtue.JIN)
 	var v := _make_vassal(10, 1)
-	var vassals: Array[L5RCharacterData] = [v]
+	var vassals: Array = [v]
 	var objectives_map: Dictionary = {
 		10: {"primary": {"objective_type": "BREAK_ALLIANCE", "status": "ORPHANED", "assigning_lord_id": 1}},
 	}
 	var world_state: Dictionary = {"last_court_season": 0, "current_season": 0}
 
-	var results: Array[Dictionary] = StrategicReview.run_seasonal_review(
+	var results: Array = StrategicReview.run_seasonal_review(
 		lord, vassals, objectives_map, world_state
 	)
 
@@ -118,13 +118,13 @@ func test_resolves_orphaned_vassals_cancel_for_jin() -> void:
 func test_resolves_orphaned_vassals_modify_for_gi() -> void:
 	var lord := _make_lord(1, Enums.BushidoVirtue.GI)
 	var v := _make_vassal(10, 1)
-	var vassals: Array[L5RCharacterData] = [v]
+	var vassals: Array = [v]
 	var objectives_map: Dictionary = {
 		10: {"primary": {"objective_type": "ISOLATE_CHARACTER", "status": "ORPHANED", "assigning_lord_id": 1}},
 	}
 	var world_state: Dictionary = {"last_court_season": 0, "current_season": 0}
 
-	var results: Array[Dictionary] = StrategicReview.run_seasonal_review(
+	var results: Array = StrategicReview.run_seasonal_review(
 		lord, vassals, objectives_map, world_state
 	)
 
@@ -141,7 +141,7 @@ func test_resolves_orphaned_vassals_modify_for_gi() -> void:
 
 func test_call_court_in_winter_with_vassals() -> void:
 	var lord := _make_lord(1, Enums.BushidoVirtue.REI)
-	var vassals: Array[L5RCharacterData] = []
+	var vassals: Array = []
 	for i: int in range(5):
 		vassals.append(_make_vassal(10 + i, 1))
 	var objectives_map: Dictionary = {}
@@ -157,7 +157,7 @@ func test_call_court_in_winter_with_vassals() -> void:
 		"military_readiness": 1.0,
 	}
 
-	var results: Array[Dictionary] = StrategicReview.run_seasonal_review(
+	var results: Array = StrategicReview.run_seasonal_review(
 		lord, vassals, objectives_map, world_state
 	)
 
@@ -171,7 +171,7 @@ func test_call_court_in_winter_with_vassals() -> void:
 
 func test_no_court_if_already_held_this_season() -> void:
 	var lord := _make_lord(1, Enums.BushidoVirtue.REI)
-	var vassals: Array[L5RCharacterData] = []
+	var vassals: Array = []
 	for i: int in range(10):
 		vassals.append(_make_vassal(10 + i, 1))
 	var objectives_map: Dictionary = {}
@@ -187,7 +187,7 @@ func test_no_court_if_already_held_this_season() -> void:
 		"military_readiness": 1.0,
 	}
 
-	var results: Array[Dictionary] = StrategicReview.run_seasonal_review(
+	var results: Array = StrategicReview.run_seasonal_review(
 		lord, vassals, objectives_map, world_state
 	)
 
@@ -198,7 +198,7 @@ func test_no_court_if_already_held_this_season() -> void:
 func test_court_triggered_by_crises() -> void:
 	var lord := _make_lord()
 	var v := _make_vassal(10, 1)
-	var vassals: Array[L5RCharacterData] = [v]
+	var vassals: Array = [v]
 	var objectives_map: Dictionary = {}
 	var world_state: Dictionary = {
 		"last_court_season": -1,
@@ -213,7 +213,7 @@ func test_court_triggered_by_crises() -> void:
 		"military_readiness": 1.0,
 	}
 
-	var results: Array[Dictionary] = StrategicReview.run_seasonal_review(
+	var results: Array = StrategicReview.run_seasonal_review(
 		lord, vassals, objectives_map, world_state
 	)
 
@@ -229,7 +229,7 @@ func test_court_triggered_by_crises() -> void:
 
 func test_tax_lower_when_low_stability_high_treasury() -> void:
 	var lord := _make_lord(1, Enums.BushidoVirtue.JIN)
-	var vassals: Array[L5RCharacterData] = []
+	var vassals: Array = []
 	var objectives_map: Dictionary = {}
 	var world_state: Dictionary = {
 		"last_court_season": 0,
@@ -243,7 +243,7 @@ func test_tax_lower_when_low_stability_high_treasury() -> void:
 		"low_stability_provinces": [],
 	}
 
-	var results: Array[Dictionary] = StrategicReview.run_seasonal_review(
+	var results: Array = StrategicReview.run_seasonal_review(
 		lord, vassals, objectives_map, world_state
 	)
 
@@ -259,7 +259,7 @@ func test_tax_lower_when_low_stability_high_treasury() -> void:
 func test_tax_raise_when_low_treasury_high_stability() -> void:
 	var lord := _make_lord(1, Enums.BushidoVirtue.MEIYO)
 	lord.shourido_virtue = Enums.ShouridoVirtue.SEIGYO
-	var vassals: Array[L5RCharacterData] = []
+	var vassals: Array = []
 	var objectives_map: Dictionary = {}
 	var world_state: Dictionary = {
 		"last_court_season": 0,
@@ -273,7 +273,7 @@ func test_tax_raise_when_low_treasury_high_stability() -> void:
 		"low_stability_provinces": [],
 	}
 
-	var results: Array[Dictionary] = StrategicReview.run_seasonal_review(
+	var results: Array = StrategicReview.run_seasonal_review(
 		lord, vassals, objectives_map, world_state
 	)
 
@@ -288,7 +288,7 @@ func test_tax_raise_when_low_treasury_high_stability() -> void:
 
 func test_no_tax_change_when_balanced() -> void:
 	var lord := _make_lord()
-	var vassals: Array[L5RCharacterData] = []
+	var vassals: Array = []
 	var objectives_map: Dictionary = {}
 	var world_state: Dictionary = {
 		"last_court_season": 0,
@@ -302,7 +302,7 @@ func test_no_tax_change_when_balanced() -> void:
 		"low_stability_provinces": [],
 	}
 
-	var results: Array[Dictionary] = StrategicReview.run_seasonal_review(
+	var results: Array = StrategicReview.run_seasonal_review(
 		lord, vassals, objectives_map, world_state
 	)
 
@@ -314,7 +314,7 @@ func test_no_tax_change_when_balanced() -> void:
 
 func test_war_readiness_with_active_wars() -> void:
 	var lord := _make_lord()
-	var vassals: Array[L5RCharacterData] = []
+	var vassals: Array = []
 	var objectives_map: Dictionary = {}
 	var world_state: Dictionary = {
 		"last_court_season": 0,
@@ -328,7 +328,7 @@ func test_war_readiness_with_active_wars() -> void:
 		"low_stability_provinces": [],
 	}
 
-	var results: Array[Dictionary] = StrategicReview.run_seasonal_review(
+	var results: Array = StrategicReview.run_seasonal_review(
 		lord, vassals, objectives_map, world_state
 	)
 
@@ -342,7 +342,7 @@ func test_war_readiness_with_active_wars() -> void:
 
 func test_war_readiness_yu_virtue_with_escalation() -> void:
 	var lord := _make_lord(1, Enums.BushidoVirtue.YU)
-	var vassals: Array[L5RCharacterData] = []
+	var vassals: Array = []
 	var objectives_map: Dictionary = {}
 	var world_state: Dictionary = {
 		"last_court_season": 0,
@@ -356,7 +356,7 @@ func test_war_readiness_yu_virtue_with_escalation() -> void:
 		"low_stability_provinces": [],
 	}
 
-	var results: Array[Dictionary] = StrategicReview.run_seasonal_review(
+	var results: Array = StrategicReview.run_seasonal_review(
 		lord, vassals, objectives_map, world_state
 	)
 
@@ -370,7 +370,7 @@ func test_war_readiness_yu_virtue_with_escalation() -> void:
 
 func test_no_war_readiness_without_threats() -> void:
 	var lord := _make_lord()
-	var vassals: Array[L5RCharacterData] = []
+	var vassals: Array = []
 	var objectives_map: Dictionary = {}
 	var world_state: Dictionary = {
 		"last_court_season": 0,
@@ -384,7 +384,7 @@ func test_no_war_readiness_without_threats() -> void:
 		"low_stability_provinces": [],
 	}
 
-	var results: Array[Dictionary] = StrategicReview.run_seasonal_review(
+	var results: Array = StrategicReview.run_seasonal_review(
 		lord, vassals, objectives_map, world_state
 	)
 
@@ -396,7 +396,7 @@ func test_no_war_readiness_without_threats() -> void:
 
 func test_seek_peace_jin_lord_with_wars() -> void:
 	var lord := _make_lord(1, Enums.BushidoVirtue.JIN)
-	var vassals: Array[L5RCharacterData] = []
+	var vassals: Array = []
 	var objectives_map: Dictionary = {}
 	var world_state: Dictionary = {
 		"last_court_season": 0,
@@ -411,7 +411,7 @@ func test_seek_peace_jin_lord_with_wars() -> void:
 		"low_stability_provinces": [],
 	}
 
-	var results: Array[Dictionary] = StrategicReview.run_seasonal_review(
+	var results: Array = StrategicReview.run_seasonal_review(
 		lord, vassals, objectives_map, world_state
 	)
 
@@ -425,7 +425,7 @@ func test_seek_peace_jin_lord_with_wars() -> void:
 
 func test_no_peace_for_yu_lord() -> void:
 	var lord := _make_lord(1, Enums.BushidoVirtue.YU)
-	var vassals: Array[L5RCharacterData] = []
+	var vassals: Array = []
 	var objectives_map: Dictionary = {}
 	var world_state: Dictionary = {
 		"last_court_season": 0,
@@ -440,7 +440,7 @@ func test_no_peace_for_yu_lord() -> void:
 		"low_stability_provinces": [],
 	}
 
-	var results: Array[Dictionary] = StrategicReview.run_seasonal_review(
+	var results: Array = StrategicReview.run_seasonal_review(
 		lord, vassals, objectives_map, world_state
 	)
 
@@ -450,7 +450,7 @@ func test_no_peace_for_yu_lord() -> void:
 
 func test_seek_peace_long_war_any_lord() -> void:
 	var lord := _make_lord(1, Enums.BushidoVirtue.MEIYO)
-	var vassals: Array[L5RCharacterData] = []
+	var vassals: Array = []
 	var objectives_map: Dictionary = {}
 	var world_state: Dictionary = {
 		"last_court_season": 0,
@@ -465,7 +465,7 @@ func test_seek_peace_long_war_any_lord() -> void:
 		"low_stability_provinces": [],
 	}
 
-	var results: Array[Dictionary] = StrategicReview.run_seasonal_review(
+	var results: Array = StrategicReview.run_seasonal_review(
 		lord, vassals, objectives_map, world_state
 	)
 
@@ -482,7 +482,7 @@ func test_seek_peace_long_war_any_lord() -> void:
 func test_assigns_objectives_to_idle_vassals() -> void:
 	var lord := _make_lord()
 	var v := _make_vassal(10, 1)
-	var vassals: Array[L5RCharacterData] = [v]
+	var vassals: Array = [v]
 	var objectives_map: Dictionary = {
 		10: {"primary": {"status": "COMPLETED"}},
 	}
@@ -498,7 +498,7 @@ func test_assigns_objectives_to_idle_vassals() -> void:
 		"military_readiness": 1.0,
 	}
 
-	var results: Array[Dictionary] = StrategicReview.run_seasonal_review(
+	var results: Array = StrategicReview.run_seasonal_review(
 		lord, vassals, objectives_map, world_state
 	)
 
@@ -515,7 +515,7 @@ func test_assigns_objectives_to_idle_vassals() -> void:
 func test_assigns_threat_objective_when_threats_exist() -> void:
 	var lord := _make_lord()
 	var v := _make_vassal(10, 1)
-	var vassals: Array[L5RCharacterData] = [v]
+	var vassals: Array = [v]
 	var objectives_map: Dictionary = {
 		10: {"primary": {}},
 	}
@@ -531,7 +531,7 @@ func test_assigns_threat_objective_when_threats_exist() -> void:
 		"military_readiness": 1.0,
 	}
 
-	var results: Array[Dictionary] = StrategicReview.run_seasonal_review(
+	var results: Array = StrategicReview.run_seasonal_review(
 		lord, vassals, objectives_map, world_state
 	)
 
@@ -547,7 +547,7 @@ func test_assigns_threat_objective_when_threats_exist() -> void:
 func test_no_assignment_for_active_vassals() -> void:
 	var lord := _make_lord()
 	var v := _make_vassal(10, 1)
-	var vassals: Array[L5RCharacterData] = [v]
+	var vassals: Array = [v]
 	var objectives_map: Dictionary = {
 		10: {"primary": {"objective_type": "MAINTAIN_PEACE", "status": "ACTIVE"}},
 	}
@@ -563,7 +563,7 @@ func test_no_assignment_for_active_vassals() -> void:
 		"military_readiness": 1.0,
 	}
 
-	var results: Array[Dictionary] = StrategicReview.run_seasonal_review(
+	var results: Array = StrategicReview.run_seasonal_review(
 		lord, vassals, objectives_map, world_state
 	)
 
@@ -577,7 +577,7 @@ func test_emperor_review_includes_lord_directives() -> void:
 	var emperor := _make_lord(1, Enums.BushidoVirtue.CHUGI)
 	var champion := _make_vassal(10, 1)
 	champion.clan = "Lion"
-	var champions: Array[L5RCharacterData] = [champion]
+	var champions: Array = [champion]
 	var objectives_map: Dictionary = {}
 	var world_state: Dictionary = {
 		"last_court_season": -1,
@@ -597,7 +597,7 @@ func test_emperor_review_includes_lord_directives() -> void:
 		"shogun_exists": false,
 	}
 
-	var results: Array[Dictionary] = StrategicReview.run_emperor_review(
+	var results: Array = StrategicReview.run_emperor_review(
 		emperor, StrategicReview.EmperorArchetype.IRON, champions, world_state, objectives_map
 	)
 
@@ -610,7 +610,7 @@ func test_emperor_winter_court_selection_autumn_only() -> void:
 	c1.clan = "Crane"
 	var c2 := _make_vassal(11, 1)
 	c2.clan = "Lion"
-	var champions: Array[L5RCharacterData] = [c1, c2]
+	var champions: Array = [c1, c2]
 	var objectives_map: Dictionary = {}
 	var world_state: Dictionary = {
 		"last_court_season": -1,
@@ -630,7 +630,7 @@ func test_emperor_winter_court_selection_autumn_only() -> void:
 		"shogun_exists": false,
 	}
 
-	var results: Array[Dictionary] = StrategicReview.run_emperor_review(
+	var results: Array = StrategicReview.run_emperor_review(
 		emperor, StrategicReview.EmperorArchetype.BENEVOLENT, champions, world_state, objectives_map
 	)
 
@@ -645,7 +645,7 @@ func test_emperor_winter_court_host_selected_in_autumn() -> void:
 	c1.clan = "Crane"
 	var c2 := _make_vassal(11, 1)
 	c2.clan = "Lion"
-	var champions: Array[L5RCharacterData] = [c1, c2]
+	var champions: Array = [c1, c2]
 	var objectives_map: Dictionary = {}
 	var world_state: Dictionary = {
 		"last_court_season": -1,
@@ -665,7 +665,7 @@ func test_emperor_winter_court_host_selected_in_autumn() -> void:
 		"shogun_exists": false,
 	}
 
-	var results: Array[Dictionary] = StrategicReview.run_emperor_review(
+	var results: Array = StrategicReview.run_emperor_review(
 		emperor, StrategicReview.EmperorArchetype.BENEVOLENT, champions, world_state, objectives_map
 	)
 
@@ -680,7 +680,7 @@ func test_emperor_winter_court_host_selected_in_autumn() -> void:
 
 func test_emperor_vacancy_fill_iron_immediate() -> void:
 	var emperor := _make_lord()
-	var champions: Array[L5RCharacterData] = []
+	var champions: Array = []
 	var objectives_map: Dictionary = {}
 	var world_state: Dictionary = {
 		"last_court_season": 0,
@@ -700,7 +700,7 @@ func test_emperor_vacancy_fill_iron_immediate() -> void:
 		"shogun_exists": false,
 	}
 
-	var results: Array[Dictionary] = StrategicReview.run_emperor_review(
+	var results: Array = StrategicReview.run_emperor_review(
 		emperor, StrategicReview.EmperorArchetype.IRON, champions, world_state, objectives_map
 	)
 
@@ -716,7 +716,7 @@ func test_emperor_vacancy_fill_iron_immediate() -> void:
 
 func test_cunning_emperor_delays_vacancy_season_zero() -> void:
 	var emperor := _make_lord()
-	var champions: Array[L5RCharacterData] = []
+	var champions: Array = []
 	var objectives_map: Dictionary = {}
 	var world_state: Dictionary = {
 		"last_court_season": 0,
@@ -736,7 +736,7 @@ func test_cunning_emperor_delays_vacancy_season_zero() -> void:
 		"shogun_exists": false,
 	}
 
-	var results: Array[Dictionary] = StrategicReview.run_emperor_review(
+	var results: Array = StrategicReview.run_emperor_review(
 		emperor, StrategicReview.EmperorArchetype.CUNNING, champions, world_state, objectives_map
 	)
 
@@ -746,7 +746,7 @@ func test_cunning_emperor_delays_vacancy_season_zero() -> void:
 
 func test_cunning_emperor_fills_after_one_season() -> void:
 	var emperor := _make_lord()
-	var champions: Array[L5RCharacterData] = []
+	var champions: Array = []
 	var objectives_map: Dictionary = {}
 	var world_state: Dictionary = {
 		"last_court_season": 0,
@@ -766,7 +766,7 @@ func test_cunning_emperor_fills_after_one_season() -> void:
 		"shogun_exists": false,
 	}
 
-	var results: Array[Dictionary] = StrategicReview.run_emperor_review(
+	var results: Array = StrategicReview.run_emperor_review(
 		emperor, StrategicReview.EmperorArchetype.CUNNING, champions, world_state, objectives_map
 	)
 
@@ -784,7 +784,7 @@ func test_cunning_emperor_fills_after_one_season() -> void:
 
 func test_warlike_fills_military_vacancy_immediately() -> void:
 	var emperor := _make_lord()
-	var champions: Array[L5RCharacterData] = []
+	var champions: Array = []
 	var objectives_map: Dictionary = {}
 	var world_state: Dictionary = {
 		"last_court_season": 0,
@@ -804,7 +804,7 @@ func test_warlike_fills_military_vacancy_immediately() -> void:
 		"shogun_exists": false,
 	}
 
-	var results: Array[Dictionary] = StrategicReview.run_emperor_review(
+	var results: Array = StrategicReview.run_emperor_review(
 		emperor, StrategicReview.EmperorArchetype.WARLIKE, champions, world_state, objectives_map
 	)
 
@@ -818,7 +818,7 @@ func test_warlike_fills_military_vacancy_immediately() -> void:
 
 func test_warlike_delays_political_vacancy() -> void:
 	var emperor := _make_lord()
-	var champions: Array[L5RCharacterData] = []
+	var champions: Array = []
 	var objectives_map: Dictionary = {}
 	var world_state: Dictionary = {
 		"last_court_season": 0,
@@ -838,7 +838,7 @@ func test_warlike_delays_political_vacancy() -> void:
 		"shogun_exists": false,
 	}
 
-	var results: Array[Dictionary] = StrategicReview.run_emperor_review(
+	var results: Array = StrategicReview.run_emperor_review(
 		emperor, StrategicReview.EmperorArchetype.WARLIKE, champions, world_state, objectives_map
 	)
 
@@ -848,7 +848,7 @@ func test_warlike_delays_political_vacancy() -> void:
 
 func test_warlike_fills_political_after_season() -> void:
 	var emperor := _make_lord()
-	var champions: Array[L5RCharacterData] = []
+	var champions: Array = []
 	var objectives_map: Dictionary = {}
 	var world_state: Dictionary = {
 		"last_court_season": 0,
@@ -868,7 +868,7 @@ func test_warlike_fills_political_after_season() -> void:
 		"shogun_exists": false,
 	}
 
-	var results: Array[Dictionary] = StrategicReview.run_emperor_review(
+	var results: Array = StrategicReview.run_emperor_review(
 		emperor, StrategicReview.EmperorArchetype.WARLIKE, champions, world_state, objectives_map
 	)
 
@@ -882,7 +882,7 @@ func test_warlike_fills_political_after_season() -> void:
 
 func test_warlike_prefers_military_over_political() -> void:
 	var emperor := _make_lord()
-	var champions: Array[L5RCharacterData] = []
+	var champions: Array = []
 	var objectives_map: Dictionary = {}
 	var world_state: Dictionary = {
 		"last_court_season": 0,
@@ -905,7 +905,7 @@ func test_warlike_prefers_military_over_political() -> void:
 		"shogun_exists": false,
 	}
 
-	var results: Array[Dictionary] = StrategicReview.run_emperor_review(
+	var results: Array = StrategicReview.run_emperor_review(
 		emperor, StrategicReview.EmperorArchetype.WARLIKE, champions, world_state, objectives_map
 	)
 
@@ -923,7 +923,7 @@ func test_warlike_seeds_bushi_champion_acquaintance() -> void:
 	var champion := _make_champion(10, "Crab")
 	champion.school_type = Enums.SchoolType.BUSHI
 
-	var champions: Array[L5RCharacterData] = [champion]
+	var champions: Array = [champion]
 	var ws: Dictionary = _base_emperor_world_state()
 	StrategicReview.run_emperor_review(
 		emperor, StrategicReview.EmperorArchetype.WARLIKE, champions, ws, {}
@@ -938,7 +938,7 @@ func test_warlike_seeds_courtier_champion_stranger() -> void:
 	var champion := _make_champion(11, "Crane")
 	champion.school_type = Enums.SchoolType.COURTIER
 
-	var champions: Array[L5RCharacterData] = [champion]
+	var champions: Array = [champion]
 	var ws: Dictionary = _base_emperor_world_state()
 	StrategicReview.run_emperor_review(
 		emperor, StrategicReview.EmperorArchetype.WARLIKE, champions, ws, {}
@@ -954,7 +954,7 @@ func test_warlike_does_not_overwrite_existing_disposition() -> void:
 	champion.school_type = Enums.SchoolType.BUSHI
 	emperor.disposition_values[10] = -20  # Already has disposition
 
-	var champions: Array[L5RCharacterData] = [champion]
+	var champions: Array = [champion]
 	var ws: Dictionary = _base_emperor_world_state()
 	StrategicReview.run_emperor_review(
 		emperor, StrategicReview.EmperorArchetype.WARLIKE, champions, ws, {}
@@ -971,7 +971,7 @@ func test_benevolent_seeds_all_champions_acquaintance() -> void:
 	var courtier := _make_champion(11, "Crane")
 	courtier.school_type = Enums.SchoolType.COURTIER
 
-	var champions: Array[L5RCharacterData] = [bushi, courtier]
+	var champions: Array = [bushi, courtier]
 	var ws: Dictionary = _base_emperor_world_state()
 	StrategicReview.run_emperor_review(
 		emperor, StrategicReview.EmperorArchetype.BENEVOLENT, champions, ws, {}
@@ -988,7 +988,7 @@ func test_iron_does_not_seed_champion_baselines() -> void:
 	var champion := _make_champion(10, "Crab")
 	champion.school_type = Enums.SchoolType.BUSHI
 
-	var champions: Array[L5RCharacterData] = [champion]
+	var champions: Array = [champion]
 	var ws: Dictionary = _base_emperor_world_state()
 	StrategicReview.run_emperor_review(
 		emperor, StrategicReview.EmperorArchetype.IRON, champions, ws, {}
@@ -1028,7 +1028,7 @@ func test_get_archetype_baseline_benevolent() -> void:
 
 func test_shogun_never_for_cunning() -> void:
 	var emperor := _make_lord()
-	var champions: Array[L5RCharacterData] = []
+	var champions: Array = []
 	var objectives_map: Dictionary = {}
 	var world_state: Dictionary = {
 		"last_court_season": 0,
@@ -1051,7 +1051,7 @@ func test_shogun_never_for_cunning() -> void:
 		"shogun_exists": false,
 	}
 
-	var results: Array[Dictionary] = StrategicReview.run_emperor_review(
+	var results: Array = StrategicReview.run_emperor_review(
 		emperor, StrategicReview.EmperorArchetype.CUNNING, champions, world_state, objectives_map
 	)
 
@@ -1061,7 +1061,7 @@ func test_shogun_never_for_cunning() -> void:
 
 func test_shogun_never_for_warlike() -> void:
 	var emperor := _make_lord()
-	var champions: Array[L5RCharacterData] = []
+	var champions: Array = []
 	var objectives_map: Dictionary = {}
 	var world_state: Dictionary = {
 		"last_court_season": 0,
@@ -1082,7 +1082,7 @@ func test_shogun_never_for_warlike() -> void:
 		"shogun_exists": false,
 	}
 
-	var results: Array[Dictionary] = StrategicReview.run_emperor_review(
+	var results: Array = StrategicReview.run_emperor_review(
 		emperor, StrategicReview.EmperorArchetype.WARLIKE, champions, world_state, objectives_map
 	)
 
@@ -1092,7 +1092,7 @@ func test_shogun_never_for_warlike() -> void:
 
 func test_shogun_benevolent_after_prolonged_crisis() -> void:
 	var emperor := _make_lord()
-	var champions: Array[L5RCharacterData] = []
+	var champions: Array = []
 	var objectives_map: Dictionary = {}
 	var world_state: Dictionary = {
 		"last_court_season": 0,
@@ -1114,7 +1114,7 @@ func test_shogun_benevolent_after_prolonged_crisis() -> void:
 		"shogun_exists": false,
 	}
 
-	var results: Array[Dictionary] = StrategicReview.run_emperor_review(
+	var results: Array = StrategicReview.run_emperor_review(
 		emperor, StrategicReview.EmperorArchetype.BENEVOLENT, champions, world_state, objectives_map
 	)
 
@@ -1129,7 +1129,7 @@ func test_shogun_benevolent_after_prolonged_crisis() -> void:
 
 func test_shogun_iron_on_tier1_crisis() -> void:
 	var emperor := _make_lord()
-	var champions: Array[L5RCharacterData] = []
+	var champions: Array = []
 	var objectives_map: Dictionary = {}
 	var world_state: Dictionary = {
 		"last_court_season": 0,
@@ -1150,7 +1150,7 @@ func test_shogun_iron_on_tier1_crisis() -> void:
 		"shogun_exists": false,
 	}
 
-	var results: Array[Dictionary] = StrategicReview.run_emperor_review(
+	var results: Array = StrategicReview.run_emperor_review(
 		emperor, StrategicReview.EmperorArchetype.IRON, champions, world_state, objectives_map
 	)
 
@@ -1165,7 +1165,7 @@ func test_shogun_iron_on_tier1_crisis() -> void:
 
 func test_shogun_tyrant_needs_loyal_candidate() -> void:
 	var emperor := _make_lord()
-	var champions: Array[L5RCharacterData] = []
+	var champions: Array = []
 	var objectives_map: Dictionary = {}
 	var world_state: Dictionary = {
 		"last_court_season": 0,
@@ -1186,7 +1186,7 @@ func test_shogun_tyrant_needs_loyal_candidate() -> void:
 		"shogun_exists": false,
 	}
 
-	var results: Array[Dictionary] = StrategicReview.run_emperor_review(
+	var results: Array = StrategicReview.run_emperor_review(
 		emperor, StrategicReview.EmperorArchetype.TYRANT, champions, world_state, objectives_map
 	)
 
@@ -1196,7 +1196,7 @@ func test_shogun_tyrant_needs_loyal_candidate() -> void:
 
 func test_shogun_tyrant_with_loyal_candidate() -> void:
 	var emperor := _make_lord()
-	var champions: Array[L5RCharacterData] = []
+	var champions: Array = []
 	var objectives_map: Dictionary = {}
 	var world_state: Dictionary = {
 		"last_court_season": 0,
@@ -1217,7 +1217,7 @@ func test_shogun_tyrant_with_loyal_candidate() -> void:
 		"shogun_exists": false,
 	}
 
-	var results: Array[Dictionary] = StrategicReview.run_emperor_review(
+	var results: Array = StrategicReview.run_emperor_review(
 		emperor, StrategicReview.EmperorArchetype.TYRANT, champions, world_state, objectives_map
 	)
 
@@ -1232,7 +1232,7 @@ func test_shogun_tyrant_with_loyal_candidate() -> void:
 
 func test_no_shogun_if_already_exists() -> void:
 	var emperor := _make_lord()
-	var champions: Array[L5RCharacterData] = []
+	var champions: Array = []
 	var objectives_map: Dictionary = {}
 	var world_state: Dictionary = {
 		"last_court_season": 0,
@@ -1253,7 +1253,7 @@ func test_no_shogun_if_already_exists() -> void:
 		"shogun_exists": true,
 	}
 
-	var results: Array[Dictionary] = StrategicReview.run_emperor_review(
+	var results: Array = StrategicReview.run_emperor_review(
 		emperor, StrategicReview.EmperorArchetype.IRON, champions, world_state, objectives_map
 	)
 
@@ -1271,7 +1271,7 @@ func test_day_orchestrator_runs_strategic_review_on_season_change() -> void:
 
 	var lord := _make_lord()
 	lord.action_points_current = 2
-	var characters: Array[L5RCharacterData] = [lord]
+	var characters: Array = [lord]
 	var characters_by_id: Dictionary = {lord.character_id: lord}
 	var objectives_map: Dictionary = {}
 
@@ -1292,7 +1292,7 @@ func test_day_orchestrator_no_strategic_review_same_season() -> void:
 
 	var lord := _make_lord()
 	lord.action_points_current = 2
-	var characters: Array[L5RCharacterData] = [lord]
+	var characters: Array = [lord]
 	var characters_by_id: Dictionary = {lord.character_id: lord}
 	var objectives_map: Dictionary = {}
 
@@ -1390,8 +1390,8 @@ func test_tyrant_fabricates_disgrace_for_rival_champions() -> void:
 	emperor.disposition_values[10] = -15  # Rival
 	emperor.disposition_values[11] = 20   # Acquaintance
 
-	var champions: Array[L5RCharacterData] = [crab, crane]
-	var results: Array[Dictionary] = StrategicReview._evaluate_disgrace_fabrication(
+	var champions: Array = [crab, crane]
+	var results: Array = StrategicReview._evaluate_disgrace_fabrication(
 		emperor, StrategicReview.EmperorArchetype.TYRANT, champions
 	)
 
@@ -1406,8 +1406,8 @@ func test_tyrant_fabricates_disgrace_for_enemy_champions() -> void:
 	var lion := _make_champion(12, "Lion")
 	emperor.disposition_values[12] = -50  # Enemy
 
-	var champions: Array[L5RCharacterData] = [lion]
-	var results: Array[Dictionary] = StrategicReview._evaluate_disgrace_fabrication(
+	var champions: Array = [lion]
+	var results: Array = StrategicReview._evaluate_disgrace_fabrication(
 		emperor, StrategicReview.EmperorArchetype.TYRANT, champions
 	)
 
@@ -1420,8 +1420,8 @@ func test_tyrant_no_disgrace_for_friendly_champions() -> void:
 	var crane := _make_champion(11, "Crane")
 	emperor.disposition_values[11] = 40  # Friend
 
-	var champions: Array[L5RCharacterData] = [crane]
-	var results: Array[Dictionary] = StrategicReview._evaluate_disgrace_fabrication(
+	var champions: Array = [crane]
+	var results: Array = StrategicReview._evaluate_disgrace_fabrication(
 		emperor, StrategicReview.EmperorArchetype.TYRANT, champions
 	)
 
@@ -1433,8 +1433,8 @@ func test_non_tyrant_no_disgrace_fabrication() -> void:
 	var crab := _make_champion(10, "Crab")
 	emperor.disposition_values[10] = -50
 
-	var champions: Array[L5RCharacterData] = [crab]
-	var results: Array[Dictionary] = StrategicReview._evaluate_disgrace_fabrication(
+	var champions: Array = [crab]
+	var results: Array = StrategicReview._evaluate_disgrace_fabrication(
 		emperor, StrategicReview.EmperorArchetype.IRON, champions
 	)
 
@@ -1446,8 +1446,8 @@ func test_tyrant_disgrace_stranger_not_targeted() -> void:
 	var dragon := _make_champion(13, "Dragon")
 	emperor.disposition_values[13] = 0  # Stranger
 
-	var champions: Array[L5RCharacterData] = [dragon]
-	var results: Array[Dictionary] = StrategicReview._evaluate_disgrace_fabrication(
+	var champions: Array = [dragon]
+	var results: Array = StrategicReview._evaluate_disgrace_fabrication(
 		emperor, StrategicReview.EmperorArchetype.TYRANT, champions
 	)
 
@@ -1468,7 +1468,7 @@ func test_breaking_point_fires_with_three_hostile_clans() -> void:
 	lion.disposition_values[emperor.character_id] = -35
 	dragon.disposition_values[emperor.character_id] = 10  # Neutral
 
-	var champions: Array[L5RCharacterData] = [crab, crane, lion, dragon]
+	var champions: Array = [crab, crane, lion, dragon]
 	var result: Dictionary = StrategicReview._evaluate_breaking_point(
 		emperor, StrategicReview.EmperorArchetype.TYRANT, champions
 	)
@@ -1487,7 +1487,7 @@ func test_breaking_point_does_not_fire_with_two_hostile_clans() -> void:
 	crane.disposition_values[emperor.character_id] = -50
 	lion.disposition_values[emperor.character_id] = -20  # Rival, not Enemy
 
-	var champions: Array[L5RCharacterData] = [crab, crane, lion]
+	var champions: Array = [crab, crane, lion]
 	var result: Dictionary = StrategicReview._evaluate_breaking_point(
 		emperor, StrategicReview.EmperorArchetype.TYRANT, champions
 	)
@@ -1504,7 +1504,7 @@ func test_breaking_point_ignores_minor_clans() -> void:
 	fox.disposition_values[emperor.character_id] = -60
 	wasp.disposition_values[emperor.character_id] = -45
 
-	var champions: Array[L5RCharacterData] = [sparrow, fox, wasp]
+	var champions: Array = [sparrow, fox, wasp]
 	var result: Dictionary = StrategicReview._evaluate_breaking_point(
 		emperor, StrategicReview.EmperorArchetype.TYRANT, champions
 	)
@@ -1521,7 +1521,7 @@ func test_breaking_point_non_tyrant_never_fires() -> void:
 	crane.disposition_values[emperor.character_id] = -80
 	lion.disposition_values[emperor.character_id] = -80
 
-	var champions: Array[L5RCharacterData] = [crab, crane, lion]
+	var champions: Array = [crab, crane, lion]
 	var result: Dictionary = StrategicReview._evaluate_breaking_point(
 		emperor, StrategicReview.EmperorArchetype.BENEVOLENT, champions
 	)
@@ -1541,9 +1541,9 @@ func test_emperor_review_includes_tyrant_directives() -> void:
 	crane.disposition_values[emperor.character_id] = -50
 	lion.disposition_values[emperor.character_id] = -35
 
-	var champions: Array[L5RCharacterData] = [crab, crane, lion]
+	var champions: Array = [crab, crane, lion]
 	var ws: Dictionary = _base_emperor_world_state()
-	var results: Array[Dictionary] = StrategicReview.run_emperor_review(
+	var results: Array = StrategicReview.run_emperor_review(
 		emperor, StrategicReview.EmperorArchetype.TYRANT, champions, ws, {}
 	)
 
@@ -1753,9 +1753,9 @@ func test_disgrace_directive_creates_topic() -> void:
 	crab.character_name = "Hida Kisada"
 	var characters_by_id: Dictionary = {100: emperor, 10: crab}
 
-	var active_topics: Array[TopicData] = []
-	var next_topic_id: Array[int] = [500]
-	var strategic_results: Array[Dictionary] = [{
+	var active_topics: Array = []
+	var next_topic_id: Array = [500]
+	var strategic_results: Array = [{
 		"directive": "FABRICATE_DISGRACE",
 		"lord_id": 100,
 		"target_id": 10,
@@ -1781,9 +1781,9 @@ func test_disgrace_directive_creates_topic() -> void:
 
 
 func test_imperial_civil_war_directive_creates_tier1_topic() -> void:
-	var active_topics: Array[TopicData] = []
-	var next_topic_id: Array[int] = [600]
-	var strategic_results: Array[Dictionary] = [{
+	var active_topics: Array = []
+	var next_topic_id: Array = [600]
+	var strategic_results: Array = [{
 		"directive": "IMPERIAL_CIVIL_WAR",
 		"lord_id": 100,
 		"hostile_clan_count": 4,
@@ -1813,9 +1813,9 @@ func test_multiple_disgrace_directives_create_multiple_topics() -> void:
 	lion.character_name = "Akodo Toturi"
 	var characters_by_id: Dictionary = {100: emperor, 10: crab, 12: lion}
 
-	var active_topics: Array[TopicData] = []
-	var next_topic_id: Array[int] = [700]
-	var strategic_results: Array[Dictionary] = [
+	var active_topics: Array = []
+	var next_topic_id: Array = [700]
+	var strategic_results: Array = [
 		{
 			"directive": "FABRICATE_DISGRACE",
 			"lord_id": 100,
@@ -1843,9 +1843,9 @@ func test_multiple_disgrace_directives_create_multiple_topics() -> void:
 
 
 func test_non_tyrant_directives_ignored() -> void:
-	var active_topics: Array[TopicData] = []
-	var next_topic_id: Array[int] = [800]
-	var strategic_results: Array[Dictionary] = [
+	var active_topics: Array = []
+	var next_topic_id: Array = [800]
+	var strategic_results: Array = [
 		{"directive": StrategicReview.Directive.CALL_COURT, "lord_id": 1},
 		{"directive": "FILL_VACANCY", "lord_id": 100},
 	]
@@ -1871,10 +1871,10 @@ func test_disgrace_guard_prevents_duplicate_for_same_champion() -> void:
 	existing_topic.topic_type = "disgrace"
 	existing_topic.subject_character_id = 10
 	existing_topic.resolved = false
-	var active_topics: Array[TopicData] = [existing_topic]
+	var active_topics: Array = [existing_topic]
 
-	var next_topic_id: Array[int] = [500]
-	var strategic_results: Array[Dictionary] = [{
+	var next_topic_id: Array = [500]
+	var strategic_results: Array = [{
 		"directive": "FABRICATE_DISGRACE",
 		"lord_id": 100,
 		"target_id": 10,
@@ -1901,10 +1901,10 @@ func test_disgrace_guard_allows_after_resolution() -> void:
 	resolved_topic.topic_type = "disgrace"
 	resolved_topic.subject_character_id = 10
 	resolved_topic.resolved = true
-	var active_topics: Array[TopicData] = [resolved_topic]
+	var active_topics: Array = [resolved_topic]
 
-	var next_topic_id: Array[int] = [500]
-	var strategic_results: Array[Dictionary] = [{
+	var next_topic_id: Array = [500]
+	var strategic_results: Array = [{
 		"directive": "FABRICATE_DISGRACE",
 		"lord_id": 100,
 		"target_id": 10,
@@ -1933,10 +1933,10 @@ func test_disgrace_guard_allows_different_champion() -> void:
 	existing_topic.topic_type = "disgrace"
 	existing_topic.subject_character_id = 10
 	existing_topic.resolved = false
-	var active_topics: Array[TopicData] = [existing_topic]
+	var active_topics: Array = [existing_topic]
 
-	var next_topic_id: Array[int] = [500]
-	var strategic_results: Array[Dictionary] = [{
+	var next_topic_id: Array = [500]
+	var strategic_results: Array = [{
 		"directive": "FABRICATE_DISGRACE",
 		"lord_id": 100,
 		"target_id": 12,
@@ -1957,10 +1957,10 @@ func test_civil_war_guard_prevents_duplicate() -> void:
 	existing_topic.topic_id = 400
 	existing_topic.variant = "imperial_civil_war"
 	existing_topic.resolved = false
-	var active_topics: Array[TopicData] = [existing_topic]
+	var active_topics: Array = [existing_topic]
 
-	var next_topic_id: Array[int] = [600]
-	var strategic_results: Array[Dictionary] = [{
+	var next_topic_id: Array = [600]
+	var strategic_results: Array = [{
 		"directive": "IMPERIAL_CIVIL_WAR",
 		"lord_id": 100,
 		"hostile_clan_count": 4,
@@ -1979,10 +1979,10 @@ func test_civil_war_guard_allows_after_resolution() -> void:
 	resolved_topic.topic_id = 400
 	resolved_topic.variant = "imperial_civil_war"
 	resolved_topic.resolved = true
-	var active_topics: Array[TopicData] = [resolved_topic]
+	var active_topics: Array = [resolved_topic]
 
-	var next_topic_id: Array[int] = [600]
-	var strategic_results: Array[Dictionary] = [{
+	var next_topic_id: Array = [600]
+	var strategic_results: Array = [{
 		"directive": "IMPERIAL_CIVIL_WAR",
 		"lord_id": 100,
 		"hostile_clan_count": 3,

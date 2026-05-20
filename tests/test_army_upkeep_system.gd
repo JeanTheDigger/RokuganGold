@@ -151,7 +151,7 @@ func test_arms_equip_clan_t3() -> void:
 # -- Cost Tier Mapping Tests -----------------------------------------------------
 
 func test_tier_mapping_all_clans_have_t1() -> void:
-	var t1_units: Array[int] = [
+	var t1_units: Array = [
 		Enums.CompanyUnitType.HIDA_BUSHI,
 		Enums.CompanyUnitType.KAKITA_BUSHI,
 		Enums.CompanyUnitType.MIRUMOTO_BUSHI,
@@ -166,7 +166,7 @@ func test_tier_mapping_all_clans_have_t1() -> void:
 
 
 func test_tier_mapping_elite_units() -> void:
-	var t3_units: Array[int] = [
+	var t3_units: Array = [
 		Enums.CompanyUnitType.CRAB_BERSERKERS,
 		Enums.CompanyUnitType.KENSHINZEN,
 		Enums.CompanyUnitType.LIONS_PRIDE,
@@ -225,7 +225,7 @@ func test_compute_company_costs_ronin() -> void:
 
 
 func test_compute_army_costs() -> void:
-	var companies: Array[MilitaryUnitData.CompanyData] = [
+	var companies: Array = [
 		_make_company(1, Enums.CompanyUnitType.BUSHI_RETAINER),
 		_make_company(2, Enums.CompanyUnitType.ASHIGARU_SPEARMEN),
 		_make_company(3, Enums.CompanyUnitType.PEASANT_LEVY),
@@ -305,7 +305,7 @@ func test_apply_iron_failure_floors_at_zero() -> void:
 
 
 func test_process_iron_upkeep_sufficient() -> void:
-	var companies: Array[MilitaryUnitData.CompanyData] = [
+	var companies: Array = [
 		_make_company(1, Enums.CompanyUnitType.BUSHI_RETAINER),
 	]
 	var state: Dictionary = {}
@@ -317,7 +317,7 @@ func test_process_iron_upkeep_sufficient() -> void:
 
 
 func test_process_iron_upkeep_insufficient() -> void:
-	var companies: Array[MilitaryUnitData.CompanyData] = [
+	var companies: Array = [
 		_make_company(1, Enums.CompanyUnitType.BUSHI_RETAINER),
 	]
 	var state: Dictionary = {}
@@ -331,7 +331,7 @@ func test_process_iron_upkeep_insufficient() -> void:
 
 
 func test_process_iron_upkeep_recovery() -> void:
-	var companies: Array[MilitaryUnitData.CompanyData] = [
+	var companies: Array = [
 		_make_company(1, Enums.CompanyUnitType.BUSHI_RETAINER),
 	]
 	var state: Dictionary = {1: 2}
@@ -554,7 +554,7 @@ func test_apply_iron_failure_to_dict_two_seasons_not_stacked() -> void:
 
 
 func test_process_iron_upkeep_dict_insufficient_applies_penalties() -> void:
-	var companies: Array[Dictionary] = [
+	var companies: Array = [
 		_make_company_dict(1, Enums.CompanyUnitType.BUSHI_RETAINER),
 	]
 	var state: Dictionary = {}
@@ -569,7 +569,7 @@ func test_process_iron_upkeep_dict_insufficient_applies_penalties() -> void:
 
 
 func test_process_iron_upkeep_dict_two_seasons_cumulative() -> void:
-	var companies: Array[Dictionary] = [
+	var companies: Array = [
 		_make_company_dict(1, Enums.CompanyUnitType.BUSHI_RETAINER),
 	]
 	var state: Dictionary = {1: 1}
@@ -583,7 +583,7 @@ func test_process_iron_upkeep_dict_two_seasons_cumulative() -> void:
 
 
 func test_process_iron_upkeep_dict_recovery_resets_stats() -> void:
-	var companies: Array[Dictionary] = [
+	var companies: Array = [
 		_make_company_dict(1, Enums.CompanyUnitType.BUSHI_RETAINER),
 	]
 	var state: Dictionary = {1: 2}
@@ -599,7 +599,7 @@ func test_process_iron_upkeep_dict_recovery_resets_stats() -> void:
 
 
 func test_process_iron_upkeep_dict_sufficient_no_degradation() -> void:
-	var companies: Array[Dictionary] = [
+	var companies: Array = [
 		_make_company_dict(1, Enums.CompanyUnitType.BUSHI_RETAINER),
 	]
 	var state: Dictionary = {}

@@ -240,7 +240,7 @@ func test_create_crime_record_basic():
 	assert_eq(record.ic_day_committed, 55)
 
 func test_create_crime_record_with_witnesses():
-	var witnesses: Array[int] = [200, 201, 202]
+	var witnesses: Array = [200, 201, 202]
 	var record: CrimeRecord = CrimeSystem.create_crime_record(
 		1, Enums.CrimeType.VIOLENCE, 100, "zone", 10, 150, 20, witnesses
 	)

@@ -60,7 +60,7 @@ static func _apply_confidence_gate(
 	objective: Dictionary,
 	ctx: NPCDataStructures.ContextSnapshot,
 	target_id: int,
-	intel_actions: Array[String],
+	intel_actions: Array,
 ) -> float:
 	var seasons: int = _objective_age_seasons(objective, ctx)
 	var intel_count: int = _count_intel_actions(ctx, target_id, intel_actions)
@@ -77,7 +77,7 @@ static func _objective_age_seasons(objective: Dictionary, ctx: NPCDataStructures
 static func _count_intel_actions(
 	ctx: NPCDataStructures.ContextSnapshot,
 	target_id: int,
-	action_types: Array[String],
+	action_types: Array,
 ) -> int:
 	var count: int = 0
 	for entry: Dictionary in ctx.action_log:
@@ -99,7 +99,7 @@ static func _get_known_allies_from_objective(
 	objective: Dictionary,
 ) -> Array:
 	var raw: Array = objective.get("known_allies", [])
-	var result: Array[int] = []
+	var result: Array = []
 	for entry: Variant in raw:
 		if entry is int:
 			result.append(entry)
@@ -589,11 +589,11 @@ static func _progress_sabotage_economy(
 # =============================================================================
 
 static func evaluate_all_objectives(
-	characters: Array[L5RCharacterData],
+	characters: Array,
 	objectives_map: Dictionary,
 	world_state: Dictionary,
 ) -> Array:
-	var results: Array[Dictionary] = []
+	var results: Array = []
 
 	for character: L5RCharacterData in characters:
 		var objectives: Dictionary = objectives_map.get(character.character_id, {})

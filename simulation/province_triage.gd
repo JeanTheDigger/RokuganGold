@@ -44,7 +44,7 @@ static func score_province(ps: NPCDataStructures.ProvinceStatus) -> float:
 static func triage_provinces(
 	province_statuses: Array,
 ) -> Array:
-	var results: Array[TriageResult] = []
+	var results: Array = []
 
 	for ps: Variant in province_statuses:
 		if not ps is NPCDataStructures.ProvinceStatus:
@@ -78,7 +78,7 @@ static func get_top_provinces(
 	count: int = 2,
 ) -> Array:
 	var results: Array = triage_provinces(province_statuses)
-	var top: Array[TriageResult] = []
+	var top: Array = []
 	for i: int in range(mini(count, results.size())):
 		if results[i].score > 0.0:
 			top.append(results[i])

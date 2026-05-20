@@ -174,7 +174,7 @@ static func get_school_skills(character: L5RCharacterData) -> Array:
 	var school_data: Dictionary = WorldGenerator.SCHOOL_DATA.get(character.school, {})
 	if school_data.is_empty():
 		return []
-	var skills: Array[String] = []
+	var skills: Array = []
 	for s: String in school_data.get("skills", []):
 		skills.append(s)
 	return skills
@@ -258,7 +258,7 @@ static func spend_accumulated_xp(character: L5RCharacterData) -> Dictionary:
 
 	var available_progress: int = available_xp * XP_TO_PROGRESS
 	var total_spent_progress: int = 0
-	var advancements: Array[Dictionary] = []
+	var advancements: Array = []
 
 	var focus_rings: Array = get_focus_rings(character)
 	var school_skills: Array = get_school_skills(character)
@@ -335,11 +335,11 @@ static func _get_highest_ranked_skill(character: L5RCharacterData, skill_list: A
 
 
 static func _sort_skills_by_rank_desc(character: L5RCharacterData, skill_list: Array) -> Array:
-	var pairs: Array[Dictionary] = []
+	var pairs: Array = []
 	for skill: String in skill_list:
 		pairs.append({"skill": skill, "rank": character.skills.get(skill, 0)})
 	pairs.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a["rank"] > b["rank"])
-	var result: Array[String] = []
+	var result: Array = []
 	for p: Dictionary in pairs:
 		result.append(p["skill"])
 	return result
@@ -348,7 +348,7 @@ static func _sort_skills_by_rank_desc(character: L5RCharacterData, skill_list: A
 # === SEASONAL BATCH PROCESSING ===
 
 static func process_seasonal_advancement(characters: Array, world_state: Dictionary, days_in_season: int) -> Dictionary:
-	var results: Array[Dictionary] = []
+	var results: Array = []
 	var total_rank_advancements: int = 0
 
 	for character: L5RCharacterData in characters:

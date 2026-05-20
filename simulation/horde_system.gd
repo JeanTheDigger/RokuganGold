@@ -139,7 +139,7 @@ static func roll_invasion_type(dice: DiceEngine) -> int:
 ## last_targeted: province_id of the most recently attacked tower (-1 = none).
 ## The last-targeted tower has 2× probability of being selected again.
 static func select_target_tower(
-	tower_province_ids: Array[int],
+	tower_province_ids: Array,
 	last_targeted: int,
 	dice: DiceEngine,
 ) -> int:
@@ -149,7 +149,7 @@ static func select_target_tower(
 		return tower_province_ids[0]
 
 	# Build weighted list: last-targeted appears twice.
-	var pool: Array[int] = []
+	var pool: Array = []
 	for pid: int in tower_province_ids:
 		pool.append(pid)
 		if pid == last_targeted:
@@ -177,7 +177,7 @@ static func get_unit_stats(unit_type: int) -> Dictionary:
 static func _generate_jigoku_companies(
 	strength: int, dice: DiceEngine
 ) -> Array:
-	var companies: Array[Dictionary] = []
+	var companies: Array = []
 	# Base composition.
 	for _i: int in range(4):
 		companies.append(get_unit_stats(Enums.ShadowlandsUnitType.BAKEMONO))
@@ -202,7 +202,7 @@ static func _generate_jigoku_companies(
 static func _generate_undead_companies(
 	strength: int, dice: DiceEngine
 ) -> Array:
-	var companies: Array[Dictionary] = []
+	var companies: Array = []
 	for _i: int in range(3):
 		companies.append(get_unit_stats(Enums.ShadowlandsUnitType.ZOMBIE))
 	for _i: int in range(2):
@@ -279,7 +279,7 @@ static func apply_assault_si_hit(
 ## keyed by province_id. Counter only resets when a horde fires.
 static func increment_strength_counter(
 	strength_counters: Dictionary,
-	all_tower_province_ids: Array[int],
+	all_tower_province_ids: Array,
 ) -> void:
 	# The strength counter accumulates globally — it doesn't track per-tower
 	# pre-targeting. A single global counter applies when any horde finally fires.
@@ -306,7 +306,7 @@ static func get_strength_counter(strength_counters: Dictionary) -> int:
 ## Generate a complete HordeData from the current world state.
 ## Returns a populated HordeData; caller appends it to world horde list.
 static func generate_horde(
-	tower_province_ids: Array[int],
+	tower_province_ids: Array,
 	last_targeted_province_id: int,
 	strength_counters: Dictionary,
 	dice: DiceEngine,
@@ -410,12 +410,12 @@ static func make_horde_battle_company(
 ## into an Array[Dictionary] of battle companies compatible with ArmyCombatSystem.
 ## Companies are assigned to rows/columns in waves: front row first.
 static func horde_companies_to_battle_states(
-	companies: Array[Dictionary],
+	companies: Array,
 	side: String,
 	start_company_id: int = 5000,
 	is_tower_assault: bool = false,
 ) -> Array:
-	var states: Array[Dictionary] = []
+	var states: Array = []
 	var id: int = start_company_id
 	# Maho-tsukai goes to row 2 (back); all others to row 1 (front).
 	# Columns assigned left to right.
@@ -458,8 +458,8 @@ static func _map_battle_outcome(battle_result: Dictionary, rounds: int) -> int:
 ## tower_settlement: SettlementData whose wall_si will be mutated on return.
 ## Returns full result including battle log, outcome, SI hit, and breach flag.
 static func resolve_horde_assault(
-	garrison_states: Array[Dictionary],
-	horde_companies: Array[Dictionary],
+	garrison_states: Array,
+	horde_companies: Array,
 	tower_settlement: SettlementData,
 	dice: DiceEngine,
 ) -> Dictionary:
@@ -512,7 +512,7 @@ static func _generate_sortie_horde_companies(
 	else:
 		count = 2
 
-	var companies: Array[Dictionary] = []
+	var companies: Array = []
 	for i: int in range(count):
 		# Alternate Bakemono / Bakemono Warrior with a single Ogre Warrior at end.
 		if i == count - 1:
@@ -530,7 +530,7 @@ static func _generate_sortie_horde_companies(
 ## A successful sortie means the horde is routed/destroyed (attacker wins).
 ## A failed sortie: garrison takes casualties, no SS reduction.
 static func resolve_sortie_combat(
-	sortie_states: Array[Dictionary],
+	sortie_states: Array,
 	ss_reduction: int,
 	ss: int,
 	dice: DiceEngine,

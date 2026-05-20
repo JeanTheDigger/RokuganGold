@@ -1,8 +1,8 @@
 class_name DiceResult
 
 
-var kept_dice: Array[int] = []
-var dropped_dice: Array[int] = []
+var kept_dice: Array = []
+var dropped_dice: Array = []
 var total: int = 0
 var explosions: int = 0
 var overflow_bonus: int = 0

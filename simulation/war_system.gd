@@ -265,7 +265,7 @@ static func remove_ally(
 
 
 static func get_all_combatant_clans(war: WarData) -> Array:
-	var clans: Array[String] = [war.clan_a, war.clan_b]
+	var clans: Array = [war.clan_a, war.clan_b]
 	for c: String in war.allied_clans_a:
 		if c not in clans:
 			clans.append(c)
@@ -344,7 +344,7 @@ static func record_province_capture(
 # -- Mechanical Effects of Active War (s53) --------------------------------------
 
 static func are_clans_at_war(
-	wars: Array[WarData],
+	wars: Array,
 	clan_a: String,
 	clan_b: String,
 ) -> bool:
@@ -359,7 +359,7 @@ static func are_clans_at_war(
 
 
 static func get_war_between(
-	wars: Array[WarData],
+	wars: Array,
 	clan_a: String,
 	clan_b: String,
 ) -> WarData:
@@ -374,10 +374,10 @@ static func get_war_between(
 
 
 static func get_active_wars_for_clan(
-	wars: Array[WarData],
+	wars: Array,
 	clan: String,
 ) -> Array:
-	var result: Array[WarData] = []
+	var result: Array = []
 	for war: WarData in wars:
 		if war.is_active and is_clan_involved(war, clan):
 			result.append(war)

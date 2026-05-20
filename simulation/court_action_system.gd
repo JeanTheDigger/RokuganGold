@@ -338,7 +338,7 @@ static func resolve_disclose(
 static func resolve_provoke_emotion(
 	attacker_roll: int,
 	defender_roll: int,
-	witness_ids: Array[int],
+	witness_ids: Array,
 ) -> Dictionary:
 	var success: bool = attacker_roll >= defender_roll
 	var margin: int = attacker_roll - defender_roll
@@ -371,8 +371,8 @@ static func resolve_public_debate(
 	var base_margin: int = a_roll - b_roll
 	var a_won: bool = base_margin > 0
 
-	var per_witness_results: Array[Dictionary] = []
-	var all_witnesses: Array[int] = []
+	var per_witness_results: Array = []
+	var all_witnesses: Array = []
 	for wid: int in witness_dispositions_a:
 		if wid not in all_witnesses:
 			all_witnesses.append(wid)
@@ -494,7 +494,7 @@ static func resolve_probe(
 	var success: bool = attacker_roll >= defender_roll
 	var raises: int = maxi(int(margin / 5.0), 0) if success else 0
 
-	var probe_types: Array[String] = ["topic_position", "court_objective"]
+	var probe_types: Array = ["topic_position", "court_objective"]
 
 	if not success:
 		if margin <= -10:
@@ -520,7 +520,7 @@ static func resolve_probe(
 			"detected": true,
 		}
 
-	var types: Array[String] = []
+	var types: Array = []
 	if count >= 2:
 		types = probe_types.duplicate()
 	else:
@@ -644,7 +644,7 @@ static func get_debate_disposition_tier(disposition: int) -> int:
 
 static func _pick_random_info(count: int, dice_engine: DiceEngine) -> Array:
 	var pool: Array = READ_CHARACTER_INFO_TYPES.duplicate()
-	var result: Array[String] = []
+	var result: Array = []
 	for i: int in range(mini(count, pool.size())):
 		var idx: int = dice_engine.roll_and_keep(1, 1, 0).total % pool.size()
 		result.append(pool[idx])

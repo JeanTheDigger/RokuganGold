@@ -58,7 +58,7 @@ static func make_pair_key(clan_a: String, clan_b: String) -> String:
 
 
 static func get_all_clan_pairs() -> Array:
-	var pairs: Array[String] = []
+	var pairs: Array = []
 	for i: int in range(GREAT_CLANS.size()):
 		for j: int in range(i + 1, GREAT_CLANS.size()):
 			pairs.append(make_pair_key(GREAT_CLANS[i], GREAT_CLANS[j]))
@@ -73,7 +73,7 @@ static func scan_champion_dispositions(
 	active_wars: Array = [],
 	emperor_war_exemptions: bool = false,
 ) -> Array:
-	var alarms: Array[Dictionary] = []
+	var alarms: Array = []
 	var pairs: Array = get_all_clan_pairs()
 	for pair_key: String in pairs:
 		var disp: int = champion_dispositions.get(pair_key, 0)
@@ -147,11 +147,11 @@ static func create_directive(
 
 static func assign_directives(
 	state: Dictionary,
-	alarms: Array[Dictionary],
-	available_operative_ids: Array[int],
+	alarms: Array,
+	available_operative_ids: Array,
 	pool_size: int,
 ) -> Array:
-	var new_directives: Array[Dictionary] = []
+	var new_directives: Array = []
 	var directives: Dictionary = state["active_directives"]
 	var assigned: Dictionary = state["assigned_operatives"]
 
@@ -202,7 +202,7 @@ static func update_escalation(
 	champion_dispositions: Dictionary,
 	threshold: int,
 ) -> Array:
-	var escalated_pairs: Array[String] = []
+	var escalated_pairs: Array = []
 	var seasons: Dictionary = state["seasons_above_threshold"]
 	var directives: Dictionary = state["active_directives"]
 
@@ -228,7 +228,7 @@ static func check_cancellations(
 	champion_dispositions: Dictionary,
 	threshold: int,
 ) -> Array:
-	var cancelled: Array[String] = []
+	var cancelled: Array = []
 	var cancel_threshold: int = threshold - CANCEL_BUFFER
 	var directives: Dictionary = state["active_directives"]
 	var keys: Array = directives.keys()
@@ -376,7 +376,7 @@ static func process_seasonal_review(
 	state: Dictionary,
 	champion_dispositions: Dictionary,
 	archetype: int,
-	available_operative_ids: Array[int],
+	available_operative_ids: Array,
 	otomo_courtier_count: int,
 	active_wars: Array = [],
 ) -> Dictionary:

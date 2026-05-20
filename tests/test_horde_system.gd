@@ -145,7 +145,7 @@ func test_invasion_type_jigoku_60_percent_majority() -> void:
 func test_select_target_returns_valid_province() -> void:
 	var dice := DiceEngine.new()
 	dice.set_seed(1)
-	var towers: Array[int] = [10, 20, 30]
+	var towers: Array = [10, 20, 30]
 	var result: int = HordeSystem.select_target_tower(towers, -1, dice)
 	assert_true(result in towers)
 
@@ -153,7 +153,7 @@ func test_select_target_returns_valid_province() -> void:
 func test_select_target_single_tower_always_selected() -> void:
 	var dice := DiceEngine.new()
 	dice.set_seed(1)
-	var towers: Array[int] = [42]
+	var towers: Array = [42]
 	var result: int = HordeSystem.select_target_tower(towers, -1, dice)
 	assert_eq(result, 42)
 
@@ -170,7 +170,7 @@ func test_last_targeted_appears_with_double_weight() -> void:
 	# so tower 10 has roughly 2/3 probability.
 	var dice := DiceEngine.new()
 	dice.set_seed(7)
-	var towers: Array[int] = [10, 20]
+	var towers: Array = [10, 20]
 	var counts: Dictionary = {10: 0, 20: 0}
 	for _i: int in range(120):
 		var r: int = HordeSystem.select_target_tower(towers, 10, dice)
@@ -357,7 +357,7 @@ func test_reset_strength_counter_sets_to_zero() -> void:
 func test_generate_horde_returns_horde_data() -> void:
 	var dice := DiceEngine.new()
 	dice.set_seed(1)
-	var towers: Array[int] = [10, 20, 30]
+	var towers: Array = [10, 20, 30]
 	var counters: Dictionary = {}
 	var horde := HordeSystem.generate_horde(towers, -1, counters, dice, 100)
 	assert_not_null(horde)
@@ -367,7 +367,7 @@ func test_generate_horde_returns_horde_data() -> void:
 func test_generate_horde_target_is_valid_tower() -> void:
 	var dice := DiceEngine.new()
 	dice.set_seed(2)
-	var towers: Array[int] = [10, 20, 30]
+	var towers: Array = [10, 20, 30]
 	var counters: Dictionary = {}
 	var horde := HordeSystem.generate_horde(towers, -1, counters, dice, 1)
 	assert_true(horde.target_province_id in towers)
@@ -376,7 +376,7 @@ func test_generate_horde_target_is_valid_tower() -> void:
 func test_generate_horde_resets_strength_counter() -> void:
 	var dice := DiceEngine.new()
 	dice.set_seed(1)
-	var towers: Array[int] = [10]
+	var towers: Array = [10]
 	var counters: Dictionary = {"global": 4}
 	var horde := HordeSystem.generate_horde(towers, -1, counters, dice, 1)
 	assert_eq(horde.strength_at_formation, 4, "Strength at formation captures counter value")
@@ -385,7 +385,7 @@ func test_generate_horde_resets_strength_counter() -> void:
 
 func test_generate_horde_has_oni_only_for_oni_types() -> void:
 	var dice := DiceEngine.new()
-	var towers: Array[int] = [10]
+	var towers: Array = [10]
 	var counters: Dictionary = {}
 
 	# Force Jigoku type by checking non-Oni invasion type.
@@ -400,7 +400,7 @@ func test_generate_horde_has_oni_only_for_oni_types() -> void:
 func test_generate_horde_has_companies() -> void:
 	var dice := DiceEngine.new()
 	dice.set_seed(5)
-	var towers: Array[int] = [10]
+	var towers: Array = [10]
 	var counters: Dictionary = {}
 	var horde := HordeSystem.generate_horde(towers, -1, counters, dice, 1)
 	assert_true(horde.companies.size() >= 7, "Every horde has at least 7 companies")
@@ -409,7 +409,7 @@ func test_generate_horde_has_companies() -> void:
 func test_generate_horde_ic_day_recorded() -> void:
 	var dice := DiceEngine.new()
 	dice.set_seed(1)
-	var towers: Array[int] = [10]
+	var towers: Array = [10]
 	var counters: Dictionary = {}
 	var horde := HordeSystem.generate_horde(towers, -1, counters, dice, 250)
 	assert_eq(horde.ic_day_generated, 250)
@@ -461,7 +461,7 @@ func test_make_horde_battle_company_wall_breaker_bonus_applied() -> void:
 
 
 func test_horde_companies_to_battle_states_count() -> void:
-	var companies: Array[Dictionary] = [
+	var companies: Array = [
 		HordeSystem.get_unit_stats(Enums.ShadowlandsUnitType.BAKEMONO),
 		HordeSystem.get_unit_stats(Enums.ShadowlandsUnitType.BAKEMONO),
 		HordeSystem.get_unit_stats(Enums.ShadowlandsUnitType.OGRE_WARRIOR),
@@ -471,7 +471,7 @@ func test_horde_companies_to_battle_states_count() -> void:
 
 
 func test_horde_companies_to_battle_states_maho_tsukai_row2() -> void:
-	var companies: Array[Dictionary] = [
+	var companies: Array = [
 		HordeSystem.get_unit_stats(Enums.ShadowlandsUnitType.ZOMBIE),
 		HordeSystem.get_unit_stats(Enums.ShadowlandsUnitType.MAHO_TSUKAI),
 	]
@@ -588,7 +588,7 @@ func test_resolve_horde_assault_returns_outcome() -> void:
 	dice.set_seed(42)
 	var tower := _make_tower_settlement(10, 8)
 	# Strong garrison: 4 elite companies vs standard Jigoku horde
-	var garrison: Array[Dictionary] = []
+	var garrison: Array = []
 	for i: int in range(4):
 		garrison.append(_make_garrison_battle_company(i, 12, 10, 153))
 	var horde_companies := HordeSystem._generate_jigoku_companies(0, dice)
@@ -605,7 +605,7 @@ func test_resolve_horde_assault_si_reduced() -> void:
 	dice.set_seed(99)
 	var tower := _make_tower_settlement(10, 8)
 	var old_si: int = tower.wall_si
-	var garrison: Array[Dictionary] = []
+	var garrison: Array = []
 	for i: int in range(3):
 		garrison.append(_make_garrison_battle_company(i, 10, 8, 153))
 	var horde_companies := HordeSystem._generate_jigoku_companies(0, dice)
@@ -618,7 +618,7 @@ func test_resolve_horde_assault_outcome_in_valid_range() -> void:
 	var dice := DiceEngine.new()
 	dice.set_seed(7)
 	var tower := _make_tower_settlement(10, 6)
-	var garrison: Array[Dictionary] = [
+	var garrison: Array = [
 		_make_garrison_battle_company(0, 10, 8, 153)
 	]
 	var horde_companies := HordeSystem._generate_jigoku_companies(0, dice)
@@ -639,7 +639,7 @@ func test_resolve_horde_assault_outcome_in_valid_range() -> void:
 func test_resolve_sortie_combat_returns_expected_keys() -> void:
 	var dice := DiceEngine.new()
 	dice.set_seed(42)
-	var sortie: Array[Dictionary] = []
+	var sortie: Array = []
 	for i: int in range(3):
 		sortie.append(_make_garrison_battle_company(i, 12, 10, 153))
 	var result := HordeSystem.resolve_sortie_combat(sortie, 1, 6, dice)
@@ -653,7 +653,7 @@ func test_resolve_sortie_combat_failed_sortie_no_ss_reduction() -> void:
 	var dice := DiceEngine.new()
 	dice.set_seed(3)
 	# Weak sortie force vs Medium SS horde
-	var sortie: Array[Dictionary] = [
+	var sortie: Array = [
 		_make_garrison_battle_company(0, 1, 1, 10),  # nearly dead
 	]
 	var result := HordeSystem.resolve_sortie_combat(sortie, 1, 6, dice)
@@ -665,7 +665,7 @@ func test_resolve_sortie_combat_successful_sortie_applies_ss_reduction() -> void
 	var dice := DiceEngine.new()
 	dice.set_seed(50)
 	# Very strong sortie force
-	var sortie: Array[Dictionary] = []
+	var sortie: Array = []
 	for i: int in range(8):
 		sortie.append(_make_garrison_battle_company(i, 14, 12, 153))
 	var result := HordeSystem.resolve_sortie_combat(sortie, 2, 9, dice)

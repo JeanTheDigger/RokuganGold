@@ -62,8 +62,8 @@ func test_character_at_wall_tower_gets_at_wall_tower_flag() -> void:
 	var char := _make_character(1, "100")
 	var provinces: Dictionary = {10: _make_province(10, 3)}
 	var world_states := _make_ws(1)
-	var settlements: Array[SettlementData] = [tower]
-	var characters: Array[L5RCharacterData] = [char]
+	var settlements: Array = [tower]
+	var characters: Array = [char]
 
 	DayOrchestrator._set_wall_tower_context_flags(characters, settlements, provinces, world_states)
 

@@ -7,7 +7,7 @@ class_name CourtPrioritySystem
 # -- Court Selection ----------------------------------------------------------
 
 static func select_court(
-	courts: Array[Dictionary],
+	courts: Array,
 	primary_objective: Dictionary,
 	standing_objective: String,
 	character_status: float,
