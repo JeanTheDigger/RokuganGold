@@ -203,7 +203,7 @@ static func evaluate_intervention(
 # -- Co-Conspirator Naming (s11.3.8e) -----
 
 static func should_name_co_conspirators(
-	primary_virtue: Enums.BushidoVirtue,
+	primary_virtue: int,
 ) -> Dictionary:
 	var names_publicly: bool = false
 	var reason: String = ""
@@ -218,7 +218,7 @@ static func should_name_co_conspirators(
 		Enums.BushidoVirtue.CHUGI:
 			names_publicly = false
 			reason = "continued_surveillance"
-		Enums.BushidoVirtue.SEIGYO:
+		Enums.ShouridoVirtue.SEIGYO:
 			names_publicly = false
 			reason = "quiet_investigation_continues"
 		_:
@@ -273,23 +273,28 @@ enum SuspicionResponse {
 	WAIT_FOR_PROOF,
 }
 
-const PERSONALITY_RESPONSE_PREFERENCE: Dictionary = {
+static var BUSHIDO_RESPONSE_PREFERENCE: Dictionary = {
 	Enums.BushidoVirtue.YU: SuspicionResponse.CONFRONT_DIRECTLY,
-	Enums.BushidoVirtue.SEIGYO: SuspicionResponse.WAIT_FOR_PROOF,
-	Enums.BushidoVirtue.DOSATSU: SuspicionResponse.INCREASE_SURVEILLANCE,
-	Enums.BushidoVirtue.KANPEKI: SuspicionResponse.WAIT_FOR_PROOF,
-	Enums.BushidoVirtue.KETSUI: SuspicionResponse.CONFRONT_DIRECTLY,
 	Enums.BushidoVirtue.JIN: SuspicionResponse.TEST_LOYALTY,
 	Enums.BushidoVirtue.GI: SuspicionResponse.CONFRONT_DIRECTLY,
 }
 
+static var SHOURIDO_RESPONSE_PREFERENCE: Dictionary = {
+	Enums.ShouridoVirtue.SEIGYO: SuspicionResponse.WAIT_FOR_PROOF,
+	Enums.ShouridoVirtue.DOSATSU: SuspicionResponse.INCREASE_SURVEILLANCE,
+	Enums.ShouridoVirtue.KANPEKI: SuspicionResponse.WAIT_FOR_PROOF,
+	Enums.ShouridoVirtue.KETSUI: SuspicionResponse.CONFRONT_DIRECTLY,
+}
+
 
 static func get_preferred_response(
-	primary_virtue: Enums.BushidoVirtue,
+	primary_virtue: int,
 ) -> SuspicionResponse:
-	return PERSONALITY_RESPONSE_PREFERENCE.get(
-		primary_virtue, SuspicionResponse.INCREASE_SURVEILLANCE
-	)
+	if BUSHIDO_RESPONSE_PREFERENCE.has(primary_virtue):
+		return BUSHIDO_RESPONSE_PREFERENCE[primary_virtue]
+	if SHOURIDO_RESPONSE_PREFERENCE.has(primary_virtue):
+		return SHOURIDO_RESPONSE_PREFERENCE[primary_virtue]
+	return SuspicionResponse.INCREASE_SURVEILLANCE
 
 
 static func evaluate_suspicion_response(

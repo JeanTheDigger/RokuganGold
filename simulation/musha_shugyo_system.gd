@@ -134,8 +134,7 @@ static func is_lord_dead_or_missing(
 		return true
 	var lord: L5RCharacterData = characters_by_id[lord_id]
 	if lord.wounds_taken > 0:
-		var earth: int = CharacterStats.get_ring_value(lord, Enums.Ring.EARTH)
-		if CharacterStats.is_dead(lord.wounds_taken, earth):
+		if CharacterStats.is_dead(lord):
 			return true
 	return false
 

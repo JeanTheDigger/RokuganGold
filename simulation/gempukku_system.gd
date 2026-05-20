@@ -222,10 +222,9 @@ static func count_clan_population(
 		if c.clan != clan:
 			continue
 		if c.wounds_taken > 0:
-			var earth: int = CharacterStats.get_ring_value(c, Enums.Ring.EARTH)
-			if CharacterStats.is_dead(c.wounds_taken, earth):
+			if CharacterStats.is_dead(c):
 				continue
-		var rank: int = CharacterStats.get_insight_rank(CharacterStats.get_insight(c))
+		var rank: int = CharacterStats.get_insight_rank(c)
 		if rank >= 5:
 			counts["rank_5"] += 1
 		elif rank == 4:

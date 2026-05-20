@@ -467,7 +467,7 @@ static func assault_high_house(
 	topic.slug = "togashi_vanished_y%d" % ic_day
 	topic.tier = TopicData.Tier.TIER_1
 	topic.momentum = 100.0
-	topic.category = TopicData.Category.SPIRITUAL
+	topic.category = TopicData.Category.SUPERNATURAL
 	topic.ic_day_created = ic_day
 
 	return {
