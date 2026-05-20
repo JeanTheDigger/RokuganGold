@@ -834,6 +834,34 @@ For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
   `_get_actions_for_context()` list. Added to AT_OWN_HOLDINGS, AT_COURT,
   VISITING per GDD s14 Category 13 (Honor and Dueling). 5 tests.
 
+### Known Code Issues (found and fixed 2026-05-20, comprehensive ActionID audit)
+- **DEMAND_TRIBUTE missing from all context lists. FIXED.**
+  Had full executor (ADMINISTRATIVE_ACTIONS), 4 NeedTypes in
+  objective_alignment (max score 70 under ACQUIRE_RESOURCE), personality
+  filter entries (JIN blocks, KETSUI/KYORYOKU lean), but was unreachable.
+  Added to AT_OWN_HOLDINGS. Added to LORD_ONLY_ACTIONS. 2 tests.
+- **REQUEST_ALLIED_AID missing from all context lists. FIXED.**
+  Had full executor (ADMINISTRATIVE_ACTIONS), 8 NeedTypes in
+  objective_alignment (max score 75 under REQUEST_AID), personality
+  filter entries (ISHI/KETSUI block), but was unreachable. Added to
+  AT_OWN_HOLDINGS and AT_COURT. Added to LORD_ONLY_ACTIONS. 3 tests.
+- **ISSUE_DUEL_CHALLENGE — to_death/is_sanctioned not populated. FIXED.**
+  Executor reads `to_death` (default false) and `is_sanctioned` (default
+  true). Without population, all NPC duels were non-lethal sanctioned.
+  Now sets `to_death = true` when NeedType is ELIMINATE_CHARACTER.
+  `is_sanctioned` kept at default true (sanctioned duel is the standard
+  Rokugani form; unsanctioned duels require narrative context not modeled).
+  2 tests.
+- **CONDUCT_SORTIE — ss/force_size not populated. FIXED.**
+  Executor reads `ss` from metadata with fallback to wall_statuses context.
+  Metadata now populated from wall_statuses to make intent explicit.
+  `force_size` left as "" (WallSystem.resolve_sortie handles default).
+  2 tests.
+- **TREAT_WOUND — raises not populated. FIXED.**
+  Executor reads `raises` (default 0). NPCs never declared raises on
+  Medicine rolls. Now set by `_pick_medicine_raises()` scaled by Medicine
+  skill rank: 0-2→0, 3-4→1, 5-6→2, 7+→3. Values PROVISIONAL. 4 tests.
+
 ### Known Code Issues — Deferred (2026-05-19, metadata population audit)
 - **EXPOSE_SECRET_PRIVATELY — metadata unpopulated, always fails. FIXED.**
   Full pipeline wired: SecretData.known_by_ids tracks who knows each secret.

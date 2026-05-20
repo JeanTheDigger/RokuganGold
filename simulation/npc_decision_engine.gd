@@ -928,6 +928,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array[S
 				"COMPLY_WITH_EDICT", "DEFY_EDICT",
 				"RESTORE_COUNCIL_COMPACT",
 				"SHARE_SUPPLIES",
+				"DEMAND_TRIBUTE", "REQUEST_ALLIED_AID",
 				"CRAFT", "MENTOR",
 				"TREAT_WOUND",
 				"CONDUCT_COMMERCE", "PURCHASE_MARKET",
@@ -977,6 +978,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array[S
 				"REQUEST_ART", "ASSIGN_VASSAL_OBJECTIVE",
 				"SEND_INVITATION",
 				"CONDUCT_COMMERCE", "PURCHASE_MARKET",
+				"REQUEST_ALLIED_AID",
 				"ISSUE_DUEL_CHALLENGE",
 				"DO_NOTHING", "REST",
 			]
@@ -2023,6 +2025,7 @@ const LORD_ONLY_ACTIONS: Array[String] = [
 	"ASSIGN_VASSAL_OBJECTIVE", "ASSIGN_TO_MILITARY_SERVICE",
 	"SEND_INVITATION", "CALL_COURT",
 	"COMMISSION_ASSASSINATION",
+	"DEMAND_TRIBUTE", "REQUEST_ALLIED_AID",
 ]
 
 
@@ -2653,6 +2656,14 @@ static func _populate_action_metadata(
 	elif option.action_id == "PUBLIC_ATONEMENT":
 		var best: Dictionary = _pick_best_offense(ctx)
 		option.metadata = best
+	elif option.action_id == "ISSUE_DUEL_CHALLENGE":
+		var lethal: bool = need.need_type == "ELIMINATE_CHARACTER"
+		option.metadata = {"to_death": lethal, "is_sanctioned": true}
+	elif option.action_id == "CONDUCT_SORTIE":
+		var sortie_meta: Dictionary = _build_sortie_metadata(ctx)
+		option.metadata = sortie_meta
+	elif option.action_id == "TREAT_WOUND":
+		option.metadata = {"raises": _pick_medicine_raises(ctx)}
 
 
 static func _pick_fabrication_severity(
@@ -2666,6 +2677,30 @@ static func _pick_fabrication_severity(
 	elif forgery >= 3:
 		return SecretData.Severity.TIER_3
 	return SecretData.Severity.TIER_4
+
+
+static func _pick_medicine_raises(
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> int:
+	var rank: int = ctx.skill_ranks.get("Medicine", 0)
+	if rank >= 7:
+		return 3
+	elif rank >= 5:
+		return 2
+	elif rank >= 3:
+		return 1
+	return 0
+
+
+static func _build_sortie_metadata(
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> Dictionary:
+	for ws_variant: Variant in ctx.wall_statuses:
+		if not ws_variant is NPCDataStructures.WallStatus:
+			continue
+		var ws: NPCDataStructures.WallStatus = ws_variant as NPCDataStructures.WallStatus
+		return {"ss": ws.ss, "force_size": ""}
+	return {"ss": -1, "force_size": ""}
 
 
 static func _pick_best_offense(

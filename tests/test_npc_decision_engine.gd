@@ -3140,3 +3140,151 @@ func test_public_atonement_metadata_populated() -> void:
 	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
 	assert_eq(option.metadata.get("offense_key", ""), "topic_10")
 	assert_eq(option.metadata.get("offense_tier", 0), 2)
+
+
+# =============================================================================
+# Context list reachability (DEMAND_TRIBUTE, REQUEST_ALLIED_AID)
+# =============================================================================
+
+
+func test_demand_tribute_in_at_own_holdings() -> void:
+	var actions: Array[String] = NPCDecisionEngine._get_actions_for_context(
+		Enums.ContextFlag.AT_OWN_HOLDINGS
+	)
+	assert_true("DEMAND_TRIBUTE" in actions,
+		"DEMAND_TRIBUTE should be reachable from AT_OWN_HOLDINGS")
+
+
+func test_request_allied_aid_in_at_own_holdings() -> void:
+	var actions: Array[String] = NPCDecisionEngine._get_actions_for_context(
+		Enums.ContextFlag.AT_OWN_HOLDINGS
+	)
+	assert_true("REQUEST_ALLIED_AID" in actions,
+		"REQUEST_ALLIED_AID should be reachable from AT_OWN_HOLDINGS")
+
+
+func test_request_allied_aid_in_at_court() -> void:
+	var actions: Array[String] = NPCDecisionEngine._get_actions_for_context(
+		Enums.ContextFlag.AT_COURT
+	)
+	assert_true("REQUEST_ALLIED_AID" in actions,
+		"REQUEST_ALLIED_AID should be reachable from AT_COURT")
+
+
+func test_demand_tribute_is_lord_only() -> void:
+	assert_true("DEMAND_TRIBUTE" in NPCDecisionEngine.LORD_ONLY_ACTIONS,
+		"DEMAND_TRIBUTE should be lord-only")
+
+
+func test_request_allied_aid_is_lord_only() -> void:
+	assert_true("REQUEST_ALLIED_AID" in NPCDecisionEngine.LORD_ONLY_ACTIONS,
+		"REQUEST_ALLIED_AID should be lord-only")
+
+
+# =============================================================================
+# ISSUE_DUEL_CHALLENGE metadata
+# =============================================================================
+
+
+func test_duel_metadata_eliminate_sets_to_death() -> void:
+	var ctx := _make_metadata_ctx()
+	var need := _make_metadata_need()
+	need.need_type = "ELIMINATE_CHARACTER"
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "ISSUE_DUEL_CHALLENGE"
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_true(option.metadata.get("to_death", false))
+	assert_true(option.metadata.get("is_sanctioned", false))
+
+
+func test_duel_metadata_non_eliminate_not_to_death() -> void:
+	var ctx := _make_metadata_ctx()
+	var need := _make_metadata_need()
+	need.need_type = "CHALLENGE_TO_DUEL"
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "ISSUE_DUEL_CHALLENGE"
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_false(option.metadata.get("to_death", true))
+
+
+# =============================================================================
+# CONDUCT_SORTIE metadata
+# =============================================================================
+
+
+func test_sortie_metadata_from_wall_status() -> void:
+	var ctx := _make_metadata_ctx()
+	var ws := NPCDataStructures.WallStatus.new()
+	ws.province_id = 10
+	ws.ss = 7
+	ctx.wall_statuses = [ws]
+	var need := _make_metadata_need()
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "CONDUCT_SORTIE"
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_eq(option.metadata.get("ss", -1), 7)
+
+
+func test_sortie_metadata_no_wall_status() -> void:
+	var ctx := _make_metadata_ctx()
+	ctx.wall_statuses = []
+	var need := _make_metadata_need()
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "CONDUCT_SORTIE"
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_eq(option.metadata.get("ss", 0), -1)
+
+
+# =============================================================================
+# TREAT_WOUND metadata
+# =============================================================================
+
+
+func test_treat_wound_raises_by_medicine_rank() -> void:
+	var ctx := _make_metadata_ctx()
+	ctx.skill_ranks = {"Medicine": 5}
+	var need := _make_metadata_need()
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "TREAT_WOUND"
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_eq(option.metadata.get("raises", -1), 2)
+
+
+func test_treat_wound_no_medicine_zero_raises() -> void:
+	var ctx := _make_metadata_ctx()
+	ctx.skill_ranks = {}
+	var need := _make_metadata_need()
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "TREAT_WOUND"
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_eq(option.metadata.get("raises", -1), 0)
+
+
+func test_treat_wound_high_medicine_three_raises() -> void:
+	var ctx := _make_metadata_ctx()
+	ctx.skill_ranks = {"Medicine": 7}
+	var need := _make_metadata_need()
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "TREAT_WOUND"
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_eq(option.metadata.get("raises", -1), 3)
+
+
+func test_pick_medicine_raises_tiers() -> void:
+	var ctx := _make_metadata_ctx()
+	ctx.skill_ranks = {"Medicine": 0}
+	assert_eq(NPCDecisionEngine._pick_medicine_raises(ctx), 0)
+	ctx.skill_ranks = {"Medicine": 2}
+	assert_eq(NPCDecisionEngine._pick_medicine_raises(ctx), 0)
+	ctx.skill_ranks = {"Medicine": 3}
+	assert_eq(NPCDecisionEngine._pick_medicine_raises(ctx), 1)
+	ctx.skill_ranks = {"Medicine": 4}
+	assert_eq(NPCDecisionEngine._pick_medicine_raises(ctx), 1)
+	ctx.skill_ranks = {"Medicine": 5}
+	assert_eq(NPCDecisionEngine._pick_medicine_raises(ctx), 2)
+	ctx.skill_ranks = {"Medicine": 6}
+	assert_eq(NPCDecisionEngine._pick_medicine_raises(ctx), 2)
+	ctx.skill_ranks = {"Medicine": 7}
+	assert_eq(NPCDecisionEngine._pick_medicine_raises(ctx), 3)
+	ctx.skill_ranks = {"Medicine": 10}
+	assert_eq(NPCDecisionEngine._pick_medicine_raises(ctx), 3)
