@@ -931,11 +931,11 @@ func test_examine_letter_in_personality_lean():
 func test_examine_letter_in_context_lists():
 	var ctx := NPCDataStructures.ContextSnapshot.new()
 	ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
-	var holdings_actions: Array = NPCDecisionEngine._get_context_actions(ctx.context_flag)
+	var holdings_actions: Array = NPCDecisionEngine._get_actions_for_context(ctx.context_flag)
 	assert_true("EXAMINE_LETTER" in holdings_actions,
 		"EXAMINE_LETTER should be in AT_OWN_HOLDINGS actions")
 	ctx.context_flag = Enums.ContextFlag.AT_COURT
-	var court_actions: Array = NPCDecisionEngine._get_context_actions(ctx.context_flag)
+	var court_actions: Array = NPCDecisionEngine._get_actions_for_context(ctx.context_flag)
 	assert_true("EXAMINE_LETTER" in court_actions,
 		"EXAMINE_LETTER should be in AT_COURT actions")
 

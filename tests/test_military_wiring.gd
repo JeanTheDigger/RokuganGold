@@ -15,7 +15,7 @@ func _make_army_state(is_marching: bool = true, days_remaining: int = 2) -> Dict
 	}
 
 
-func _make_siege_state() -> Dictionary:
+func _make_empty_siege_state() -> Dictionary:
 	return {
 		"siege_id": 1,
 		"ticks_elapsed": 5,

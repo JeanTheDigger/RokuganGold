@@ -174,7 +174,7 @@ func test_violence_conviction_decrements_glory_and_marks_guilty():
 	assert_false(results[0]["seppuku_offered"])
 	assert_lt(perp.glory, initial_glory)
 	assert_eq(record.legal_status, Enums.LegalStatus.DECREED_GUILTY)
-	assert_ge(record.ic_day_conviction, 0)
+	assert_true(record.ic_day_conviction >= 0, "ic_day_conviction should be >= 0")
 
 
 # -- 5. Conviction — UNSANCTIONED_OPEN_KILLING (seppuku offered) ---------------

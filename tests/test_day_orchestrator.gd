@@ -8874,7 +8874,7 @@ func test_support_pledge_stores_topic_and_shift() -> void:
 		"pledge_position_shift": 15.0,
 	}
 	var court := _make_court_at(100)
-	court.phase = CourtSessionData.CourtPhase.OPEN
+	court.phase = CourtSessionData.CourtPhase.ACTIVE
 	court.start_ic_day = 1
 	court.duration_ticks = 30
 	var commitments: Array[CommitmentData] = []
@@ -9265,7 +9265,7 @@ func test_famine_recovery_clears_crisis_id() -> void:
 	var recovering_result: Dictionary = {
 		"resource_tick": {
 			"starvation_changes": {
-				1: {"stage": ResourceTick.StarvationStage.NORMAL, "pu_loss_rate": 0.0},
+				1: {"stage": ResourceTick.StarvationStage.CLEAR, "pu_loss_rate": 0.0},
 			},
 		},
 	}

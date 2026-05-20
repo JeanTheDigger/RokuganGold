@@ -1833,8 +1833,8 @@ func test_negotiate_emits_resource_promise_for_acquire_resource() -> void:
 	action.target_npc_id = 20
 	action.metadata = {"need_type": "ACQUIRE_RESOURCE", "koku_amount": 30.0}
 	_ctx.character_id = 10
-	var result: Dictionary = ActionExecutor.execute_action(
-		action, _character, _ctx, _dice, {}, {},
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, {}, {},
 	)
 	var effects: Dictionary = result.get("effects", result)
 	if effects.get("requires_resource_promise", false):
@@ -1853,8 +1853,8 @@ func test_negotiate_no_resource_promise_for_non_resource_need() -> void:
 	action.target_npc_id = 20
 	action.metadata = {"need_type": "RAISE_DISPOSITION"}
 	_ctx.character_id = 10
-	var result: Dictionary = ActionExecutor.execute_action(
-		action, _character, _ctx, _dice, {}, {},
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, {}, {},
 	)
 	var effects: Dictionary = result.get("effects", result)
 	assert_false(effects.get("requires_resource_promise", false),

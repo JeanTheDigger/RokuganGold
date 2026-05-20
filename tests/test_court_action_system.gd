@@ -517,7 +517,9 @@ func _make_ctx(char_id: int = 1, disp: Dictionary = {}) -> NPCDataStructures.Con
 
 
 func _build_skill_map() -> Dictionary:
-	return ScoringTableLoader.load_action_skill_map()
+	var loader := ScoringTableLoader.new()
+	loader.load_all()
+	return loader.get_table("action_skill_map")
 
 
 func test_executor_negotiate_contested() -> void:
@@ -549,9 +551,9 @@ func test_executor_charm_ceiling_enforced() -> void:
 		action, actor, ctx, _dice, _build_skill_map(), {}, chars
 	)
 	if result["success"]:
-		assert_le(
-			result["effects"].get("disposition_change", 0),
-			1,
+		assert_true(
+			result["effects"].get("disposition_change", 0) <= 1,
+			"Disposition change should be <= 1 due to charm ceiling",
 		)
 
 
@@ -589,8 +591,10 @@ func test_executor_play_game() -> void:
 	assert_true(result["success"])
 	assert_true(result["effects"].has("a_disposition_toward_b"))
 	assert_true(result["effects"].has("b_disposition_toward_a"))
-	assert_ge(result["effects"]["a_disposition_toward_b"], 3)
-	assert_ge(result["effects"]["b_disposition_toward_a"], 3)
+	assert_true(result["effects"]["a_disposition_toward_b"] >= 3,
+		"a_disposition_toward_b should be >= 3")
+	assert_true(result["effects"]["b_disposition_toward_a"] >= 3,
+		"b_disposition_toward_a should be >= 3")
 
 
 func test_executor_discern_need() -> void:

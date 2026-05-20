@@ -368,9 +368,11 @@ func test_governance_results_in_advance_day() -> void:
 
 	var characters: Array[L5RCharacterData] = [lord]
 	var chars_by_id: Dictionary = {1: lord}
-	var scoring_tables: Dictionary = ScoringTableLoader.get_scoring_tables()
-	var filter_data: Dictionary = ScoringTableLoader.get_filter_data()
-	var action_skill_map: Dictionary = ScoringTableLoader.load_action_skill_map()
+	var _loader := ScoringTableLoader.new()
+	_loader.load_all()
+	var scoring_tables: Dictionary = _loader.get_scoring_tables()
+	var filter_data: Dictionary = _loader.get_filter_data()
+	var action_skill_map: Dictionary = _loader.get_table("action_skill_map")
 
 	var result: Dictionary = DayOrchestrator.advance_day(
 		_time, characters, chars_by_id,

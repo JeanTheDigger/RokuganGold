@@ -2011,13 +2011,10 @@ func test_build_emperor_tax_config_iron_archetype() -> void:
 func test_build_emperor_tax_config_cunning_builds_dispositions() -> void:
 	var emperor := _make_emperor()
 	emperor.disposition_values = {200: 40, 300: -20}
-	var crane_champ := _make_champion()
-	crane_champ.character_id = 200
-	crane_champ.clan = "Crane"
+	var crane_champ := _make_champion(200, "Crane")
 	crane_champ.status = 7.5
 	crane_champ.lord_id = -1
-	var lion_champ := _make_champion()
-	lion_champ.character_id = 300
+	var lion_champ := _make_champion(300, "Lion")
 	lion_champ.clan = "Lion"
 	lion_champ.status = 7.5
 	lion_champ.lord_id = -1
