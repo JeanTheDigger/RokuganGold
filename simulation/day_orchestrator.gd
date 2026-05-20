@@ -4506,6 +4506,11 @@ static func _process_forge_order_writebacks(
 		letter.forged_sender_id = forger_id
 		letter.forgery_tn = detection_tn
 		letter.is_order = true
+		var metadata: Dictionary = d.get("metadata", {})
+		letter.order_need_type = metadata.get("order_need_type", "TRAVEL_TO")
+		letter.order_target_province_id = metadata.get("order_target_province_id", -1)
+		letter.order_target_npc_id = metadata.get("order_target_npc_id", -1)
+		letter.order_target_settlement_id = metadata.get("order_target_settlement_id", -1)
 		pending_letters.append(letter)
 
 
@@ -4529,19 +4534,24 @@ static func _process_forged_order_delivery(
 		if target == null:
 			continue
 		var forger_id: int = letter.forged_sender_id
-		var current_objectives: Array = objectives_map.get(letter.recipient_id, [])
+		var need_type: String = letter.order_need_type if letter.order_need_type != "" else "TRAVEL_TO"
 		var forged_objective: Dictionary = {
-			"need_type": "TRAVEL_TO",
+			"need_type": need_type,
 			"priority": 8,
-			"target_settlement_id": -1,
 			"source": "forged_order",
 			"forger_id": forger_id,
 			"assigned_by": letter.sender_id,
+			"status": "ACTIVE",
 		}
-		if current_objectives.size() > 0:
-			current_objectives.insert(0, forged_objective)
-		else:
-			objectives_map[letter.recipient_id] = [forged_objective]
+		if letter.order_target_settlement_id >= 0:
+			forged_objective["target_settlement_id"] = letter.order_target_settlement_id
+		if letter.order_target_province_id >= 0:
+			forged_objective["target_province_id"] = letter.order_target_province_id
+		if letter.order_target_npc_id >= 0:
+			forged_objective["target_npc_id"] = letter.order_target_npc_id
+		if not objectives_map.has(letter.recipient_id):
+			objectives_map[letter.recipient_id] = {}
+		objectives_map[letter.recipient_id]["primary"] = forged_objective
 		letter.order_applied = true
 
 

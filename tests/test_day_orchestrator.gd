@@ -10051,17 +10051,18 @@ func test_forged_order_delivery_writes_objective() -> void:
 	letter.is_order = true
 	letter.forged_sender_id = 10
 	letter.forgery_detected = false
+	letter.order_need_type = "TRAVEL_TO"
 	var pending: Array[LetterData] = [letter]
 
 	DayOrchestrator._process_forged_order_delivery(
 		pending, objectives_map, chars,
 	)
 	assert_true(objectives_map.has(20))
-	var objs: Array = objectives_map[20]
-	assert_eq(objs.size(), 1)
-	assert_eq(objs[0]["source"], "forged_order")
-	assert_eq(objs[0]["forger_id"], 10)
-	assert_eq(objs[0]["assigned_by"], 5)
+	var obj: Dictionary = objectives_map[20].get("primary", {})
+	assert_eq(obj["source"], "forged_order")
+	assert_eq(obj["forger_id"], 10)
+	assert_eq(obj["assigned_by"], 5)
+	assert_eq(obj["need_type"], "TRAVEL_TO")
 	assert_true(letter.order_applied)
 
 
@@ -10086,6 +10087,60 @@ func test_forged_order_delivery_skips_detected() -> void:
 		pending, objectives_map, chars,
 	)
 	assert_false(objectives_map.has(20))
+
+
+func test_forged_order_attend_court_type() -> void:
+	var target := L5RCharacterData.new()
+	target.character_id = 20
+	var chars: Dictionary = {20: target}
+	var objectives_map: Dictionary = {}
+
+	var letter := LetterData.new()
+	letter.letter_id = 1
+	letter.sender_id = 5
+	letter.recipient_id = 20
+	letter.delivered = true
+	letter.is_forged = true
+	letter.is_order = true
+	letter.forged_sender_id = 10
+	letter.forgery_detected = false
+	letter.order_need_type = "ATTEND_COURT"
+	letter.order_target_settlement_id = 42
+	var pending: Array[LetterData] = [letter]
+
+	DayOrchestrator._process_forged_order_delivery(
+		pending, objectives_map, chars,
+	)
+	var obj: Dictionary = objectives_map[20].get("primary", {})
+	assert_eq(obj["need_type"], "ATTEND_COURT")
+	assert_eq(obj["target_settlement_id"], 42)
+
+
+func test_forged_order_patrol_with_province() -> void:
+	var target := L5RCharacterData.new()
+	target.character_id = 20
+	var chars: Dictionary = {20: target}
+	var objectives_map: Dictionary = {}
+
+	var letter := LetterData.new()
+	letter.letter_id = 1
+	letter.sender_id = 5
+	letter.recipient_id = 20
+	letter.delivered = true
+	letter.is_forged = true
+	letter.is_order = true
+	letter.forged_sender_id = 10
+	letter.forgery_detected = false
+	letter.order_need_type = "PATROL_PROVINCE"
+	letter.order_target_province_id = 7
+	var pending: Array[LetterData] = [letter]
+
+	DayOrchestrator._process_forged_order_delivery(
+		pending, objectives_map, chars,
+	)
+	var obj: Dictionary = objectives_map[20].get("primary", {})
+	assert_eq(obj["need_type"], "PATROL_PROVINCE")
+	assert_eq(obj["target_province_id"], 7)
 
 
 # =============================================================================

@@ -885,10 +885,13 @@ For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
   `_process_forge_order_writebacks()` creates LetterData with is_order=true
   on successful FORGE_ORDER. Impersonated sender = target's lord_id. Skips
   if target has no lord. `_process_forged_order_delivery()` fires after
-  letter delivery: if forged order passes detection, writes TRAVEL_TO
-  objective with source="forged_order" and forger_id tracking. Detected
-  forgeries are discarded. LetterData gains is_order and order_applied
-  fields. 4 tests.
+  letter delivery: if forged order passes detection, writes objective to
+  target's primary objective slot (matching real ASSIGN_VASSAL_OBJECTIVE
+  pattern). Order type varies by forger's NeedType:
+  SUPPRESS_INVESTIGATION→TRAVEL_TO, ACQUIRE_LEVERAGE→ATTEND_COURT,
+  DAMAGE_RELATIONSHIP→PATROL_PROVINCE, default→TRAVEL_TO. LetterData gains
+  order_need_type, order_target_province_id, order_target_npc_id,
+  order_target_settlement_id, is_order, order_applied. 6 tests.
 - **Detected forgery topic transfer bug. FIXED.**
   `process_pending_letters()` ran `deliver_letter()` even on detected
   forgeries, transferring topics and applying disposition bonuses. GDD s12.7

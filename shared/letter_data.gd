@@ -30,6 +30,10 @@ extends Resource
 @export var forgery_detected: bool = false
 @export var is_order: bool = false
 @export var order_applied: bool = false
+@export var order_need_type: String = ""
+@export var order_target_province_id: int = -1
+@export var order_target_npc_id: int = -1
+@export var order_target_settlement_id: int = -1
 @export var reply_to_forged: bool = false
 @export var original_forger_id: int = -1
 

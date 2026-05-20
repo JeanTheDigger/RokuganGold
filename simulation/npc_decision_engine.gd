@@ -2703,10 +2703,45 @@ static func _build_forge_order_metadata(
 ) -> Dictionary:
 	var forgery_rank: int = ctx.skill_ranks.get("Forgery", 0)
 	var authority: String = _forge_authority_from_rank(forgery_rank)
+	var order_info: Dictionary = _pick_forged_order_type(need)
 	return {
 		"authority_level": authority,
 		"target_npc_id": need.target_npc_id,
+		"order_need_type": order_info.get("need_type", "TRAVEL_TO"),
+		"order_target_province_id": order_info.get("target_province_id", -1),
+		"order_target_npc_id": order_info.get("target_npc_id", -1),
+		"order_target_settlement_id": order_info.get("target_settlement_id", -1),
 	}
+
+
+static func _pick_forged_order_type(
+	need: NPCDataStructures.ImmediateNeed,
+) -> Dictionary:
+	match need.need_type:
+		"SUPPRESS_INVESTIGATION":
+			return {
+				"need_type": "TRAVEL_TO",
+				"target_settlement_id": need.target_settlement_id,
+			}
+		"ACQUIRE_LEVERAGE":
+			if need.target_settlement_id >= 0:
+				return {
+					"need_type": "ATTEND_COURT",
+					"target_settlement_id": need.target_settlement_id,
+				}
+			return {
+				"need_type": "TRAVEL_TO",
+				"target_settlement_id": -1,
+			}
+		"DAMAGE_RELATIONSHIP":
+			if need.target_npc_id >= 0:
+				return {
+					"need_type": "PATROL_PROVINCE",
+					"target_province_id": need.target_province_id,
+				}
+			return {"need_type": "TRAVEL_TO"}
+		_:
+			return {"need_type": "TRAVEL_TO"}
 
 
 static func _forge_authority_from_rank(forgery_rank: int) -> String:

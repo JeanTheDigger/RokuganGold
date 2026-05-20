@@ -3354,6 +3354,57 @@ func test_forge_metadata_high_forgery() -> void:
 	assert_eq(option.metadata.get("authority_level", ""), "major")
 
 
+func test_forge_order_suppress_investigation_maps_travel() -> void:
+	var ctx := _make_metadata_ctx()
+	ctx.skill_ranks = {"Forgery": 3}
+	var need := _make_metadata_need()
+	need.need_type = "SUPPRESS_INVESTIGATION"
+	need.target_settlement_id = 42
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "FORGE_ORDER"
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_eq(option.metadata.get("order_need_type", ""), "TRAVEL_TO")
+	assert_eq(option.metadata.get("order_target_settlement_id", -1), 42)
+
+
+func test_forge_order_acquire_leverage_maps_attend_court() -> void:
+	var ctx := _make_metadata_ctx()
+	ctx.skill_ranks = {"Forgery": 5}
+	var need := _make_metadata_need()
+	need.need_type = "ACQUIRE_LEVERAGE"
+	need.target_settlement_id = 99
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "FORGE_ORDER"
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_eq(option.metadata.get("order_need_type", ""), "ATTEND_COURT")
+	assert_eq(option.metadata.get("order_target_settlement_id", -1), 99)
+
+
+func test_forge_order_damage_relationship_maps_patrol() -> void:
+	var ctx := _make_metadata_ctx()
+	ctx.skill_ranks = {"Forgery": 4}
+	var need := _make_metadata_need()
+	need.need_type = "DAMAGE_RELATIONSHIP"
+	need.target_npc_id = 50
+	need.target_province_id = 7
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "FORGE_ORDER"
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_eq(option.metadata.get("order_need_type", ""), "PATROL_PROVINCE")
+	assert_eq(option.metadata.get("order_target_province_id", -1), 7)
+
+
+func test_forge_order_unknown_need_defaults_travel() -> void:
+	var ctx := _make_metadata_ctx()
+	ctx.skill_ranks = {"Forgery": 3}
+	var need := _make_metadata_need()
+	need.need_type = "RAISE_ARMY"
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "FORGE_ORDER"
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_eq(option.metadata.get("order_need_type", ""), "TRAVEL_TO")
+
+
 func test_forge_personality_blocks() -> void:
 	var filter_path := "res://systems/npc_engine/data/tables/personality_filter.json"
 	if not FileAccess.file_exists(filter_path):
