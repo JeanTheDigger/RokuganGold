@@ -657,6 +657,7 @@ static func advance_day(
 	_process_shadow_target_writebacks(
 		day_result.get("results", []),
 		conversation_results, characters_by_id, current_season,
+		crime_records,
 	)
 
 	_wire_discussion_counts(conversation_results, active_topics)
@@ -2930,12 +2931,14 @@ static func _process_scene_examination_writebacks(
 			)
 			for record: CrimeRecord in crime_records:
 				if record.case_id == case_id:
-					if CrimeSystem.is_low_skill_crime_type(record.crime_type):
+					if CrimeSystem.is_low_skill_crime_type(record.crime_type) \
+						and not record.low_skill_glory_applied:
 						var suspect: L5RCharacterData = characters_by_id.get(suspect_id)
 						if suspect != null:
 							HonorGlorySystem.apply_glory_change(
 								suspect, CrimeSystem.LOW_SKILL_DISCOVERY_GLORY
 							)
+							record.low_skill_glory_applied = true
 					break
 
 		var threshold: String = effects.get("threshold_crossed", "")
@@ -4526,6 +4529,7 @@ static func _process_shadow_target_writebacks(
 	conversation_results: Array[Dictionary],
 	characters_by_id: Dictionary,
 	current_season: int,
+	crime_records: Array[CrimeRecord] = [],
 ) -> void:
 	for r: Variant in results:
 		if not r is Dictionary:
@@ -4548,6 +4552,10 @@ static func _process_shadow_target_writebacks(
 				var disp: int = target.disposition_values.get(shadow_id, 0)
 				target.disposition_values[shadow_id] = clampi(disp - 5, -100, 100)
 			HonorGlorySystem.apply_glory_change(shadow, CrimeSystem.LOW_SKILL_DISCOVERY_GLORY)
+			for record: CrimeRecord in crime_records:
+				if record.perpetrator_id == shadow_id and record.crime_type == Enums.CrimeType.DISHONORABLE_CONDUCT:
+					record.low_skill_glory_applied = true
+					break
 			continue
 
 		if not success:
@@ -4824,6 +4832,7 @@ static func _escalate_detected_forgery_crimes(
 			var forger: L5RCharacterData = characters_by_id.get(forger_id)
 			if forger != null:
 				HonorGlorySystem.apply_glory_change(forger, CrimeSystem.LOW_SKILL_DISCOVERY_GLORY)
+			record.low_skill_glory_applied = true
 			break
 
 

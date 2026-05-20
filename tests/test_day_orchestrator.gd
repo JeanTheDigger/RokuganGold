@@ -5979,6 +5979,47 @@ func test_scene_exam_no_suspect_no_glory_penalty() -> void:
 	assert_almost_eq(suspect.glory, 3.0, 0.01)
 
 
+func test_scene_exam_glory_not_applied_twice_for_same_incident() -> void:
+	var suspect := L5RCharacterData.new()
+	suspect.character_id = 53
+	suspect.character_name = "Spy"
+	suspect.glory = 3.0
+	suspect.wounds_taken = 0
+	var characters_by_id: Dictionary = {53: suspect}
+
+	var record: CrimeRecord = CrimeSystem.create_crime_record(
+		103, Enums.CrimeType.DISHONORABLE_CONDUCT, 53, "province_1", 10,
+	)
+	record.low_skill_glory_applied = true
+	var crime_records: Array[CrimeRecord] = [record]
+	var world_states: Dictionary = {"_crime_records": crime_records}
+
+	var results: Array = [{
+		"action_id": "EXAMINE_CRIME_SCENE",
+		"success": true,
+		"character_id": 1,
+		"effects": {
+			"effect": "scene_examined",
+			"case_id": 103,
+			"evidence_gained": 15,
+			"suspect_found": 53,
+			"threshold_crossed": "",
+		},
+	}]
+
+	var objectives_map: Dictionary = {}
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [500]
+
+	DayOrchestrator._process_scene_examination_writebacks(
+		results, objectives_map, world_states, characters_by_id,
+		active_topics, next_topic_id, 10,
+	)
+
+	assert_almost_eq(suspect.glory, 3.0, 0.01,
+		"Glory should not be penalized twice for the same incident")
+
+
 # TABLE 2.3 — MANIPULATING (FORGE ORDER DELIVERY)
 # ==============================================================================
 

@@ -1048,6 +1048,18 @@ Remaining gaps (not critical, documented for future work):
   GDD s12.8, no other mechanical "lying" trigger exists), DUPED_CRIMINAL
   (forge orders produce misdirections not criminal acts), DUPED_FOOLISH
   (no clear mechanical trigger). 14 tests.
+- **Low Skill glory double-application prevention — audited and fixed. FIXED.**
+  GDD s46 specifies "-0.3 Glory per incident." Six glory trigger points existed
+  but no guard prevented the same incident from being penalized twice (e.g.,
+  SHADOW_TARGET critical failure → -0.3, then later EXAMINE_CRIME_SCENE
+  investigation on the same CrimeRecord → another -0.3). Added
+  `low_skill_glory_applied: bool` flag to CrimeRecord. Point 1
+  (EXAMINE_CRIME_SCENE) checks flag before applying. Points 2 (SHADOW_TARGET
+  critical failure) and 3 (forgery auto-detection) set flag on the matching
+  CrimeRecord. Points 4/5 (assassination ACCESS failures) don't create
+  CrimeRecords, so no double-application risk. Point 6 (assassination
+  concealment failure) creates UNSANCTIONED_COVERT_KILLING which is not a
+  Low Skill crime type, so point 1's type gate blocks it. 1 test.
 
 ### Known Code Issues — Deferred (2026-05-19, metadata population audit)
 - **EXPOSE_SECRET_PRIVATELY — metadata unpopulated, always fails. FIXED.**

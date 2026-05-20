@@ -23,3 +23,4 @@ extends Resource
 @export var escalation_count: int = 0
 @export var skimming_amount: float = 0.0
 @export var commissioner_id: int = -1
+@export var low_skill_glory_applied: bool = false
