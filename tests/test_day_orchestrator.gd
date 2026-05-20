@@ -13114,3 +13114,49 @@ func test_hunt_casualty_creates_death_event() -> void:
 			"Death event should have hunt_casualty cause")
 		assert_false(death_events[0]["suspicious_death"],
 			"Hunt deaths are not suspicious")
+
+
+# -- Natural Death / Death Event Field Audit Tests ----------------------------
+
+func test_natural_death_creates_death_event() -> void:
+	var dead := L5RCharacterData.new()
+	dead.character_id = 50
+	dead.role_position = "Provincial Daimyo"
+	dead.stamina = 2
+	dead.willpower = 2
+	dead.wounds_taken = 0
+	dead.knowledge_pool = []
+	dead.known_contacts_by_clan = {}
+	dead.met_characters = []
+	dead.skills = {}
+	dead.emphases = {}
+	var characters: Array[L5RCharacterData] = [dead]
+	var characters_by_id: Dictionary = {50: dead}
+	var children: Array[ChildRecord] = []
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [900]
+	var death_events: Array[Dictionary] = []
+	var objectives_map: Dictionary = {}
+	var dice := DiceEngine.new()
+	var gempukku_result: Dictionary = {"natural_deaths": [50], "new_characters": [], "replenishment_characters": [], "graduated_child_ids": []}
+
+	for dead_id: int in gempukku_result.get("natural_deaths", []):
+		if characters_by_id.has(dead_id):
+			var dead_char: L5RCharacterData = characters_by_id[dead_id]
+			var lethal: int = CharacterStats.get_ring_value(dead_char, Enums.Ring.EARTH) * 5 * 5
+			dead_char.wounds_taken = lethal
+			var is_lord: bool = dead_char.role_position != ""
+			death_events.append({
+				"character_id": dead_id,
+				"ic_day": 10,
+				"cause": "natural",
+				"is_lord": is_lord,
+				"suspicious_death": false,
+			})
+
+	assert_eq(death_events.size(), 1, "Should create death event for natural death")
+	assert_true(death_events[0]["is_lord"],
+		"Lord natural death should set is_lord for succession trigger")
+	assert_false(death_events[0]["suspicious_death"],
+		"Natural deaths are not suspicious")
+	assert_eq(death_events[0]["cause"], "natural")

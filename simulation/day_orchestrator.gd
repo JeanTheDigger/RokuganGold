@@ -969,7 +969,7 @@ static func advance_day(
 		gempukku_results = _process_gempukku(
 			children, characters, characters_by_id, next_character_id,
 			dice_engine, ic_day, active_topics, next_topic_id, objectives_map,
-			worship_maluses, _sett_prov_map,
+			worship_maluses, _sett_prov_map, death_events,
 		)
 		advancement_results = _process_npc_advancement(
 			characters, active_courts, active_sieges, active_armies,
@@ -7100,6 +7100,7 @@ static func _process_hostage_escapes(
 				"captor_id": hostage.get("captor_id", -1),
 				"critical_failure": escape_result.get("critical_failure", false),
 				"ic_day": ic_day,
+				"suspicious_death": true,
 			})
 		results.append({
 			"character_id": char_id,
@@ -12361,6 +12362,7 @@ static func _process_gempukku(
 	objectives_map: Dictionary,
 	worship_maluses: Dictionary = {},
 	settlement_province_map: Dictionary = {},
+	death_events: Array[Dictionary] = [],
 ) -> Dictionary:
 	var result: Dictionary = GempukkuSystem.process_seasonal_gempukku(
 		children, characters, next_character_id, dice_engine, ic_day,
@@ -12388,15 +12390,27 @@ static func _process_gempukku(
 			var dead_char: L5RCharacterData = characters_by_id[dead_id]
 			var lethal: int = CharacterStats.get_ring_value(dead_char, Enums.Ring.EARTH) * 5 * 5
 			dead_char.wounds_taken = lethal
+			var is_lord: bool = dead_char.role_position != ""
+			death_events.append({
+				"character_id": dead_id,
+				"ic_day": ic_day,
+				"cause": "natural",
+				"is_lord": is_lord,
+				"suspicious_death": false,
+			})
 			var topic := TopicData.new()
 			topic.topic_id = next_topic_id[0]
 			next_topic_id[0] += 1
 			topic.slug = "natural_death_" + str(dead_id)
 			topic.topic_type = "death"
 			topic.variant = "natural"
-			topic.tier = TopicData.Tier.TIER_4
-			topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)
-			topic.category = TopicData.Category.PERSONAL
+			var tier: TopicData.Tier = TopicData.Tier.TIER_3 if is_lord else TopicData.Tier.TIER_4
+			topic.tier = tier
+			topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(tier)
+			topic.category = TopicData.Category.POLITICAL if is_lord else TopicData.Category.PERSONAL
+			topic.subject_character_id = dead_id
+			topic.subject_role = "NEUTRAL"
+			topic.ic_day_created = ic_day
 			active_topics.append(topic)
 
 	return result

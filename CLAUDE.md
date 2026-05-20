@@ -1228,6 +1228,20 @@ All 10 constant arrays and 10 helper functions added. 28 constant/integration te
   confirms bear=10 and ozaru=20 wound_threshold; others derived from s54.1
   bestiary stats. 6 tests.
 
+- **Natural death never created death_events — lord succession skipped. FIXED.**
+  `_process_gempukku()` handled `natural_deaths` by setting wounds and creating
+  a topic, but never appended to `death_events`. `_process_lord_deaths()` and
+  `_process_operational_death_cascade()` both read `death_events`, so lords dying
+  of old age never triggered succession or orphaned objectives cleanup. Added
+  `death_events` parameter to `_process_gempukku()` and `death_events.append()`
+  with `is_lord`, `suspicious_death: false`, `cause: "natural"`. Also upgraded
+  lord death topics from Tier 4 PERSONAL to Tier 3 POLITICAL with subject_role
+  NEUTRAL. 1 test.
+- **Hostage execution death_events missing suspicious_death. FIXED.**
+  Hostage execution had `is_lord` but not `suspicious_death`. Successions from
+  hostage executions defaulted to non-suspicious (non-disputed). Added
+  `suspicious_death: true` — a hostage execution is inherently suspicious.
+
 ### Effect Key Audit Dead Keys — Informational / Not Bugs (2026-05-20)
 The following effect keys are set but intentionally unconsumed by the
 effect applicator or orchestrator. They are metadata, Pattern B pre-applied
