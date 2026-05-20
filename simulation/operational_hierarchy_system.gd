@@ -222,6 +222,7 @@ static func get_escalation_outcome(
 
 static func get_escalation_consequences(
 	outcome: EscalationOutcome,
+	subordinate: L5RCharacterData = null,
 ) -> Dictionary:
 	match outcome:
 		EscalationOutcome.DAIMYO_BELIEVES_SUBORDINATE:
@@ -232,9 +233,10 @@ static func get_escalation_consequences(
 				"enemy_disposition_floor": VINDICATION_ENEMY_FLOOR,
 			}
 		EscalationOutcome.DAIMYO_SIDES_WITH_SUPERIOR:
+			var _honor: float = CrimeSystem.get_disobeying_lord_honor(subordinate) if subordinate != null else INSUBORDINATION_HONOR_LOSS
 			return {
 				"insubordination_guilty": true,
-				"honor_loss": INSUBORDINATION_HONOR_LOSS,
+				"honor_loss": _honor,
 				"daimyo_disposition_loss": INSUBORDINATION_DAIMYO_DISPOSITION_LOSS,
 				"reassignment_to_lesser_posting": true,
 			}

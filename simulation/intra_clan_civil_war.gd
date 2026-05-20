@@ -323,7 +323,7 @@ static func apply_seasonal_consequences(
 			"after": prov.stability,
 		})
 	if rebel_lord != null and not suppress_hemorrhage:
-		HonorGlorySystem.apply_honor_change(rebel_lord, HONOR_HEMORRHAGE_REBEL_PER_SEASON)
+		HonorGlorySystem.apply_honor_change(rebel_lord, CrimeSystem.get_disloyalty_honor(rebel_lord))
 	return {
 		"penalty_applied": penalty,
 		"seasons_active": seasons_active,
@@ -485,7 +485,7 @@ static func apply_defection_consequences(
 	## and -15 disposition on every former faction member toward them.
 	if defector == null:
 		return
-	HonorGlorySystem.apply_honor_change(defector, DEFECTION_HONOR_PENALTY)
+	HonorGlorySystem.apply_honor_change(defector, CrimeSystem.get_disloyalty_honor(defector))
 	for c: L5RCharacterData in former_faction_members:
 		if c == null or c == defector:
 			continue

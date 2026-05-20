@@ -2914,3 +2914,66 @@ func test_technique_flags_yoritomo_both() -> void:
 	assert_true(c.intimidation_honor_exempt, "Yoritomo R1 sets intimidation_honor_exempt")
 
 
+# -- Table 2.3 additional rows -----------------------------------------------
+
+
+func test_disobeying_lord_honor_scales() -> void:
+	var low := L5RCharacterData.new()
+	low.honor = 1.0
+	low.school = "Hida Bushi"
+	low.clan = "Crab"
+	var high := L5RCharacterData.new()
+	high.honor = 8.0
+	high.school = "Hida Bushi"
+	high.clan = "Crab"
+	var cost_low: float = CrimeSystem.get_disobeying_lord_honor(low)
+	var cost_high: float = CrimeSystem.get_disobeying_lord_honor(high)
+	assert_almost_eq(cost_low, -0.2, 0.001, "Rank 1 disobedience = -0.2")
+	assert_almost_eq(cost_high, -0.6, 0.001, "Rank 8 disobedience = -0.6")
+
+
+func test_disloyalty_honor_scales() -> void:
+	var low := L5RCharacterData.new()
+	low.honor = 2.0
+	low.school = "Bayushi Bushi"
+	low.clan = "Scorpion"
+	var high := L5RCharacterData.new()
+	high.honor = 8.0
+	high.school = "Bayushi Bushi"
+	high.clan = "Scorpion"
+	var cost_low: float = CrimeSystem.get_disloyalty_honor(low)
+	var cost_high: float = CrimeSystem.get_disloyalty_honor(high)
+	assert_almost_eq(cost_low, -0.2, 0.001, "Rank 2 disloyalty = -0.2")
+	assert_almost_eq(cost_high, -1.4, 0.001, "Rank 8 disloyalty = -1.4")
+
+
+func test_accepting_bribe_honor_scales() -> void:
+	var low := L5RCharacterData.new()
+	low.honor = 2.0
+	low.school = "Yasuki Courtier"
+	low.clan = "Crab"
+	var high := L5RCharacterData.new()
+	high.honor = 10.0
+	high.school = "Yasuki Courtier"
+	high.clan = "Crab"
+	var cost_low: float = CrimeSystem.get_accepting_bribe_honor(low)
+	var cost_high: float = CrimeSystem.get_accepting_bribe_honor(high)
+	assert_eq(cost_low, 0.0, "Rank 1-2 accepting bribe = 0.0")
+	assert_almost_eq(cost_high, -0.8, 0.001, "Rank 9-10 accepting bribe = -0.8")
+
+
+func test_following_orders_honor_positive_at_low_rank() -> void:
+	var low := L5RCharacterData.new()
+	low.honor = 0.5
+	low.school = "Hida Bushi"
+	low.clan = "Crab"
+	var high := L5RCharacterData.new()
+	high.honor = 10.0
+	high.school = "Hida Bushi"
+	high.clan = "Crab"
+	var cost_low: float = CrimeSystem.get_following_orders_honor(low)
+	var cost_high: float = CrimeSystem.get_following_orders_honor(high)
+	assert_almost_eq(cost_low, 0.6, 0.001, "Rank 0 following orders = +0.6 (honor gain)")
+	assert_almost_eq(cost_high, -0.4, 0.001, "Rank 9-10 following orders = -0.4 (honor loss)")
+
+

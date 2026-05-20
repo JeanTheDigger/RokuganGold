@@ -16,6 +16,14 @@ const HONOR_TABLE_DISLOYALTY: Array[int] = [0, -2, -6, -10, -14, -18]
 const HONOR_TABLE_ACCOMPLICE_HEINOUS: Array[int] = [-1, -4, -8, -12, -16, -20]
 const HONOR_TABLE_ACCOMPLICE_MINOR: Array[int] = [0, -1, -4, -4, -8, -8]
 const HONOR_TABLE_USING_LOW_SKILL: Array[int] = [0, -1, -2, -3, -6, -9]
+const HONOR_TABLE_DISOBEYING_LORD: Array[int] = [0, -2, -2, -6, -6, -10]
+const HONOR_TABLE_FLEEING_BATTLE: Array[int] = [0, -2, -4, -6, -8, -10]
+const HONOR_TABLE_FOLLOWING_ORDERS: Array[int] = [6, 4, 0, 0, -2, -4]
+const HONOR_TABLE_LYING: Array[int] = [0, -2, -4, -6, -8, -10]
+const HONOR_TABLE_MANIPULATING: Array[int] = [0, -2, -4, -6, -8, -10]
+const HONOR_TABLE_FALSE_COURTESY: Array[int] = [0, 0, -2, -6, -10, -10]
+const HONOR_TABLE_DUPED_CRIMINAL: Array[int] = [-1, -4, -8, -12, -16, -18]
+const HONOR_TABLE_DUPED_DISLOYAL: Array[int] = [0, -2, -4, -6, -10, -14]
 
 const FULL_LOW_SKILL_EXEMPT_SCHOOLS: Array[String] = [
 	"Shosuro Infiltrator",
@@ -60,6 +68,32 @@ static func get_low_skill_honor_cost(character: L5RCharacterData, skill_name: St
 		return base_cost * 0.5
 
 	return base_cost
+
+
+static func get_table_honor_cost(table: Array[int], honor_rank: int) -> float:
+	var bracket: int = _get_rank_bracket(honor_rank)
+	return table[bracket] / 10.0
+
+
+static func get_disobeying_lord_honor(character: L5RCharacterData) -> float:
+	return get_table_honor_cost(HONOR_TABLE_DISOBEYING_LORD, HonorGlorySystem.get_honor_rank(character))
+
+
+static func get_disloyalty_honor(character: L5RCharacterData) -> float:
+	return get_table_honor_cost(HONOR_TABLE_DISLOYALTY, HonorGlorySystem.get_honor_rank(character))
+
+
+static func get_accepting_bribe_honor(character: L5RCharacterData) -> float:
+	return get_table_honor_cost(HONOR_TABLE_ACCEPTING_BRIBE, HonorGlorySystem.get_honor_rank(character))
+
+
+static func get_fleeing_battle_honor(character: L5RCharacterData) -> float:
+	return get_table_honor_cost(HONOR_TABLE_FLEEING_BATTLE, HonorGlorySystem.get_honor_rank(character))
+
+
+static func get_following_orders_honor(character: L5RCharacterData) -> float:
+	return get_table_honor_cost(HONOR_TABLE_FOLLOWING_ORDERS, HonorGlorySystem.get_honor_rank(character))
+
 
 # Maps CrimeType to the Table 2.3 row used for at-act honor loss.
 const CRIME_HONOR_TABLE: Dictionary = {
