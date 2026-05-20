@@ -11607,3 +11607,231 @@ func test_failed_insult_no_enduring_honor() -> void:
 
 	assert_almost_eq(target.honor, initial_honor, 0.01,
 		"Failed insult should not trigger enduring honor")
+
+
+# TABLE 2.3 — SHOWING KINDNESS TO ONE BENEATH YOUR STATION
+# ==============================================================================
+
+func test_gift_to_lower_status_gains_kindness_honor() -> void:
+	var giver := L5RCharacterData.new()
+	giver.character_id = 240
+	giver.character_name = "Generous Lord"
+	giver.honor = 3.0
+	giver.status = 6.0
+	giver.school = "Doji Courtier"
+	giver.clan = "Crane"
+	var recipient := L5RCharacterData.new()
+	recipient.character_id = 241
+	recipient.character_name = "Low Status Samurai"
+	recipient.status = 2.0
+	var characters_by_id: Dictionary = {240: giver, 241: recipient}
+
+	var results: Array[Dictionary] = [{
+		"success": true,
+		"action_id": "DELIVER_GIFT",
+		"character_id": 240,
+		"target_npc_id": 241,
+		"effects": {"gift_outcome": "success"},
+	}]
+
+	var initial_honor: float = giver.honor
+	DayOrchestrator._process_kindness_honor_writebacks(results, characters_by_id)
+
+	assert_true(giver.honor > initial_honor,
+		"Giving a gift to lower-status character gains kindness honor")
+
+
+func test_gift_to_equal_status_no_kindness_honor() -> void:
+	var giver := L5RCharacterData.new()
+	giver.character_id = 242
+	giver.character_name = "Peer Giver"
+	giver.honor = 3.0
+	giver.status = 4.0
+	giver.school = "Doji Courtier"
+	giver.clan = "Crane"
+	var recipient := L5RCharacterData.new()
+	recipient.character_id = 243
+	recipient.character_name = "Peer"
+	recipient.status = 4.0
+	var characters_by_id: Dictionary = {242: giver, 243: recipient}
+
+	var results: Array[Dictionary] = [{
+		"success": true,
+		"action_id": "DELIVER_GIFT",
+		"character_id": 242,
+		"target_npc_id": 243,
+		"effects": {"gift_outcome": "success"},
+	}]
+
+	var initial_honor: float = giver.honor
+	DayOrchestrator._process_kindness_honor_writebacks(results, characters_by_id)
+
+	assert_almost_eq(giver.honor, initial_honor, 0.01,
+		"Gift to equal-status should not trigger kindness honor")
+
+
+func test_offer_favor_to_lower_status_gains_kindness() -> void:
+	var offerer := L5RCharacterData.new()
+	offerer.character_id = 244
+	offerer.character_name = "Benevolent Lord"
+	offerer.honor = 3.0
+	offerer.status = 7.0
+	offerer.school = "Akodo Bushi"
+	offerer.clan = "Lion"
+	var recipient := L5RCharacterData.new()
+	recipient.character_id = 245
+	recipient.character_name = "Minor Samurai"
+	recipient.status = 2.0
+	var characters_by_id: Dictionary = {244: offerer, 245: recipient}
+
+	var results: Array[Dictionary] = [{
+		"success": true,
+		"action_id": "OFFER_FAVOR",
+		"character_id": 244,
+		"target_npc_id": 245,
+		"effects": {},
+	}]
+
+	var initial_honor: float = offerer.honor
+	DayOrchestrator._process_kindness_honor_writebacks(results, characters_by_id)
+
+	assert_true(offerer.honor > initial_honor,
+		"Offering favor to lower-status gains kindness honor")
+
+
+# TABLE 2.3 — GIVING A TRUTHFUL REPORT AT YOUR OWN EXPENSE
+# ==============================================================================
+
+func test_expose_same_clan_secret_gains_truthful_report_honor() -> void:
+	var exposer := L5RCharacterData.new()
+	exposer.character_id = 250
+	exposer.character_name = "Honest Magistrate"
+	exposer.honor = 3.0
+	exposer.school = "Akodo Bushi"
+	exposer.clan = "Lion"
+	var subject := L5RCharacterData.new()
+	subject.character_id = 251
+	subject.character_name = "Lion Conspirator"
+	subject.clan = "Lion"
+	var characters_by_id: Dictionary = {250: exposer, 251: subject}
+
+	var secret := SecretData.new()
+	secret.secret_id = 10
+	secret.subject_id = 251
+	var active_secrets: Array[SecretData] = [secret]
+
+	var results: Array[Dictionary] = [{
+		"success": true,
+		"action_id": "EXPOSE_SECRET_PUBLICLY",
+		"character_id": 250,
+		"target_npc_id": -1,
+		"effects": {"secret_id": 10},
+	}]
+
+	var initial_honor: float = exposer.honor
+	DayOrchestrator._process_truthful_report_honor_writebacks(
+		results, characters_by_id, active_secrets,
+	)
+
+	assert_true(exposer.honor > initial_honor,
+		"Exposing a same-clan secret gains truthful report honor")
+
+
+func test_expose_other_clan_secret_no_truthful_report_honor() -> void:
+	var exposer := L5RCharacterData.new()
+	exposer.character_id = 252
+	exposer.character_name = "Crane Magistrate"
+	exposer.honor = 3.0
+	exposer.school = "Doji Courtier"
+	exposer.clan = "Crane"
+	var subject := L5RCharacterData.new()
+	subject.character_id = 253
+	subject.character_name = "Scorpion Agent"
+	subject.clan = "Scorpion"
+	var characters_by_id: Dictionary = {252: exposer, 253: subject}
+
+	var secret := SecretData.new()
+	secret.secret_id = 11
+	secret.subject_id = 253
+	var active_secrets: Array[SecretData] = [secret]
+
+	var results: Array[Dictionary] = [{
+		"success": true,
+		"action_id": "EXPOSE_SECRET_PUBLICLY",
+		"character_id": 252,
+		"target_npc_id": -1,
+		"effects": {"secret_id": 11},
+	}]
+
+	var initial_honor: float = exposer.honor
+	DayOrchestrator._process_truthful_report_honor_writebacks(
+		results, characters_by_id, active_secrets,
+	)
+
+	assert_almost_eq(exposer.honor, initial_honor, 0.01,
+		"Exposing other-clan secret should not trigger truthful report")
+
+
+# TABLE 2.3 — PROTECTING CLAN/FAMILY/LORD DESPITE GREAT RISK
+# ==============================================================================
+
+func test_sortie_during_crisis_gains_protecting_honor() -> void:
+	var commander := L5RCharacterData.new()
+	commander.character_id = 260
+	commander.character_name = "Brave Commander"
+	commander.honor = 3.0
+	commander.school = "Hida Bushi"
+	commander.clan = "Crab"
+	var characters_by_id: Dictionary = {260: commander}
+
+	var province := ProvinceData.new()
+	province.province_id = 100
+	province.active_crisis_id = 5
+	var provinces: Dictionary = {100: province}
+
+	var results: Array[Dictionary] = [{
+		"success": true,
+		"action_id": "CONDUCT_SORTIE",
+		"character_id": 260,
+		"target_province_id": 100,
+		"effects": {"target_province_id": 100},
+	}]
+
+	var initial_honor: float = commander.honor
+	DayOrchestrator._process_protecting_clan_honor_writebacks(
+		results, characters_by_id, provinces,
+	)
+
+	assert_true(commander.honor > initial_honor,
+		"Sortie during crisis gains protecting clan honor")
+
+
+func test_sortie_no_crisis_no_protecting_honor() -> void:
+	var commander := L5RCharacterData.new()
+	commander.character_id = 261
+	commander.character_name = "Routine Commander"
+	commander.honor = 3.0
+	commander.school = "Hida Bushi"
+	commander.clan = "Crab"
+	var characters_by_id: Dictionary = {261: commander}
+
+	var province := ProvinceData.new()
+	province.province_id = 101
+	province.active_crisis_id = -1
+	var provinces: Dictionary = {101: province}
+
+	var results: Array[Dictionary] = [{
+		"success": true,
+		"action_id": "CONDUCT_SORTIE",
+		"character_id": 261,
+		"target_province_id": 101,
+		"effects": {"target_province_id": 101},
+	}]
+
+	var initial_honor: float = commander.honor
+	DayOrchestrator._process_protecting_clan_honor_writebacks(
+		results, characters_by_id, provinces,
+	)
+
+	assert_almost_eq(commander.honor, initial_honor, 0.01,
+		"Sortie without crisis should not trigger protecting honor")

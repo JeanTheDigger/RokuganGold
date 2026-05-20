@@ -601,6 +601,18 @@ static func advance_day(
 		day_result.get("results", []), characters_by_id,
 	)
 
+	_process_kindness_honor_writebacks(
+		day_result.get("results", []), characters_by_id,
+	)
+
+	_process_truthful_report_honor_writebacks(
+		day_result.get("results", []), characters_by_id, active_secrets,
+	)
+
+	_process_protecting_clan_honor_writebacks(
+		day_result.get("results", []), characters_by_id, provinces,
+	)
+
 	_process_travel_redirect_writebacks(
 		day_result.get("results", []), objectives_map,
 	)
@@ -15668,6 +15680,85 @@ static func _process_duel_honor_writebacks(
 			HonorGlorySystem.apply_honor_change(
 				actor, CrimeSystem.get_facing_superior_foe_honor(actor)
 			)
+
+
+static func _process_kindness_honor_writebacks(
+	results: Array[Dictionary],
+	characters_by_id: Dictionary,
+) -> void:
+	for result: Dictionary in results:
+		var aid: String = result.get("action_id", "")
+		if aid != "DELIVER_GIFT" and aid != "OFFER_FAVOR":
+			continue
+		if not result.get("success", false):
+			continue
+		var actor_id: int = result.get("character_id", -1)
+		var target_id: int = result.get("target_npc_id", -1)
+		var actor: L5RCharacterData = characters_by_id.get(actor_id)
+		var target: L5RCharacterData = characters_by_id.get(target_id)
+		if actor == null or target == null:
+			continue
+		if actor.status > target.status:
+			HonorGlorySystem.apply_honor_change(
+				actor, CrimeSystem.get_kindness_below_station_honor(actor)
+			)
+
+
+static func _process_truthful_report_honor_writebacks(
+	results: Array[Dictionary],
+	characters_by_id: Dictionary,
+	active_secrets: Array[SecretData],
+) -> void:
+	for result: Dictionary in results:
+		var aid: String = result.get("action_id", "")
+		if aid != "EXPOSE_SECRET_PUBLICLY" and aid != "EXPOSE_SECRET_PRIVATELY":
+			continue
+		if not result.get("success", false):
+			continue
+		var effects: Dictionary = result.get("effects", {})
+		var secret_id: int = effects.get("secret_id", -1)
+		if secret_id < 0:
+			continue
+		var actor_id: int = result.get("character_id", -1)
+		var actor: L5RCharacterData = characters_by_id.get(actor_id)
+		if actor == null:
+			continue
+		for s: SecretData in active_secrets:
+			if s.secret_id == secret_id:
+				var subject: L5RCharacterData = characters_by_id.get(s.subject_id)
+				if subject != null and subject.clan == actor.clan:
+					HonorGlorySystem.apply_honor_change(
+						actor, CrimeSystem.get_truthful_report_honor(actor)
+					)
+				break
+
+
+static func _process_protecting_clan_honor_writebacks(
+	results: Array[Dictionary],
+	characters_by_id: Dictionary,
+	provinces: Dictionary,
+) -> void:
+	for result: Dictionary in results:
+		var aid: String = result.get("action_id", "")
+		if aid != "CONDUCT_SORTIE" and aid != "SEAL_WALL_BREACH":
+			continue
+		if not result.get("success", false):
+			continue
+		var effects: Dictionary = result.get("effects", {})
+		var target_pid: int = effects.get("target_province_id", result.get("target_province_id", -1))
+		var province: Variant = provinces.get(target_pid)
+		if not province is ProvinceData:
+			continue
+		var prov: ProvinceData = province as ProvinceData
+		if prov.active_crisis_id < 0:
+			continue
+		var actor_id: int = result.get("character_id", -1)
+		var actor: L5RCharacterData = characters_by_id.get(actor_id)
+		if actor == null:
+			continue
+		HonorGlorySystem.apply_honor_change(
+			actor, CrimeSystem.get_protecting_clan_honor(actor)
+		)
 
 
 static func _process_travel_redirect_writebacks(

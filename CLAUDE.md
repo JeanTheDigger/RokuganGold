@@ -1096,18 +1096,22 @@ Constants and helpers added to `crime_system.gd` for all Table 2.3 rows.
 - **Enduring an insult to yourself** — target of successful PUBLIC_INSULT.
   Fires in `_process_court_action_effects()`. 2 tests.
 - **Enduring insult to ancestors / family/clan** — constants and helpers
-  added. Blocked on behavioral tracking (insult classification system
-  needed to distinguish self/ancestor/clan insults).
+  added. Blocked on insult classification (currently all PUBLIC_INSULT
+  treated as self-insult; ancestor/clan distinction needs insult type field).
+- **Showing kindness to one beneath station** — DELIVER_GIFT or OFFER_FAVOR
+  where actor.status > target.status. `_process_kindness_honor_writebacks()`
+  in DayOrchestrator. 3 tests.
+- **Giving a truthful report at own expense** — EXPOSE_SECRET_PUBLICLY or
+  EXPOSE_SECRET_PRIVATELY where secret subject is same clan as exposer
+  (reporting your own clan's dirty laundry). `_process_truthful_report_honor_writebacks()`.
+  2 tests.
+- **Protecting clan/family/lord despite great risk** — CONDUCT_SORTIE or
+  SEAL_WALL_BREACH at a province with active_crisis_id >= 0.
+  `_process_protecting_clan_honor_writebacks()`. 2 tests.
 **Blocked (no clear mechanical trigger yet):**
-- **Giving a truthful report at own expense** — requires self-incrimination
-  tracking (reporting crimes that implicate yourself or allies).
 - **Politely ignoring dishonorable behavior** — requires witnessing + choosing
   not to act tracking. Also note: gain at low Honor, loss at high Honor.
-- **Protecting clan/family/lord despite great risk** — requires risk assessment
-  (similar to crisis, but personal combat/mission risk, not province crisis).
-- **Showing kindness to one beneath station** — requires station comparison in
-  social actions targeting lower-status characters.
-All 10 constant arrays and 10 helper functions added. 10 constant tests.
+All 10 constant arrays and 10 helper functions added. 19 constant/integration tests.
 
 ### Known Code Issues — Deferred (2026-05-19, metadata population audit)
 - **EXPOSE_SECRET_PRIVATELY — metadata unpopulated, always fails. FIXED.**
