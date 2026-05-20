@@ -521,7 +521,7 @@ func _make_ctx(char_id: int = 1, disp: Dictionary = {}) -> NPCDataStructures.Con
 	var ctx := NPCDataStructures.ContextSnapshot.new()
 	ctx.character_id = char_id
 	ctx.ic_day = 45
-	ctx.season = "spring"
+	ctx.season = 0  # SPRING
 	ctx.context_flag = Enums.ContextFlag.AT_COURT
 	ctx.dispositions = disp
 	return ctx
@@ -1113,7 +1113,7 @@ func _make_meta_ctx(court_topics: Array = [], disp: Dictionary = {}) -> NPCDataS
 	var ctx := NPCDataStructures.ContextSnapshot.new()
 	ctx.character_id = 1
 	ctx.ic_day = 45
-	ctx.season = "spring"
+	ctx.season = 0  # SPRING
 	ctx.context_flag = Enums.ContextFlag.AT_COURT
 	ctx.dispositions = disp
 	ctx.disposition_values = disp.duplicate()

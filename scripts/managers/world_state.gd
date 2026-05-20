@@ -223,12 +223,17 @@ func advance_one_day() -> Dictionary:
 		active_civil_wars,
 		precedent_modifiers,
 		next_company_id,
-		active_assassination_ops,
 		[],  # active_secrets
 		[1],  # next_secret_id
 		[],  # active_hostages
+		active_assassination_ops,
 		[1],  # next_commitment_id
+		[1],  # next_crisis_id
 		disposition_snapshots,
+		[],  # tattoos
+		[1],  # next_tattoo_id
+		[],  # active_hunts
+		[1],  # next_hunt_id
 	)
 
 
