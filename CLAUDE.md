@@ -1363,6 +1363,167 @@ costs, or forward-wiring. Do not treat as bugs.
   Appraisal emphasis deferred per s57.40.8–9 (GDD marks these deferred — do not implement
   until s57.40.8–9 are unlocked).
 
+### Systems Added 2026-05-19
+- **Commitment Registry — 6 of 6 types fully wired.** COURT_ATTENDANCE
+  (SEND_INVITATION + Winter Court invitations, tier by court type).
+  VISIT_PROMISE (LetterData visit_intent, 90-day deadline PROVISIONAL,
+  NPC engine trigger at AT_OWN_HOLDINGS). MEETING_ARRANGEMENT (bilateral
+  proposals, both parties simultaneously debtor and creditor, creditor
+  travel check). SUPPORT_PLEDGE (PERSUADE/NEGOTIATE at court, position
+  alignment check, fulfillment via persuade_count + public_debate_count).
+  RESOURCE_PROMISE (REQUEST_ALLIED_AID + NEGOTIATE + ASSIGN_VASSAL_OBJECTIVE,
+  tier by quantity, SHARE_SUPPLIES/ORDER_DEPLOY fulfillment). FAVOR_OBLIGATION
+  (created alongside FavorData, visibility only per s55.31.2).
+- **Commitment advance notice and proxy system.** send_advance_notice()
+  detects unfulfillable commitments within 7-day window, personality-driven
+  send decision. register_proxy() dispatches closest vassal as proxy.
+- **Commitment retroactive forgiveness.** Crisis topic matching via
+  crisis_id field on TopicData. Same-clan 75% vs cross-clan 25% rate.
+  Crisis lifecycle wired: famine, Shadowlands breach, insurgency spawn.
+- **Position resistance applied to court actions.** calculate_position_resistance()
+  now called for targeted actions and per-witness debate shifts. Formula:
+  shift / (1 + relevance/100).
+- **Court session state persistence.** session_state Dictionary on
+  CourtSessionData with per-character tracking of charm_count,
+  negotiate_count, tn_reductions, persuade_tn_reductions. Wired for
+  Charm, Negotiate, Impress, Listen/Reflect.
+- **ProxyMandateData model.** shared/proxy_mandate_data.gd created per
+  GDD s16.2. assign_proxy_mandate(), get_proxy_mandate(),
+  is_within_mandate(), flag_out_of_mandate() on CourtSystem.
+- **NPC engine court context wiring.** court_session_state and
+  court_settlement_id flow from CourtSessionData into ContextSnapshot.
+  6 contested court actions get full metadata population.
+- **Information system wiring fixes.** s55.6 transfer_objective_knowledge()
+  wired into ASSIGN_VASSAL_OBJECTIVE. broadcast_public_knowledge() now
+  creates FRESH confidence knowledge entries. met_characters routing
+  through add_contact() (2 bypass points fixed). Military promotion
+  results written back to character/company data.
+- **Travel redirect and approach evaluation writebacks.** TravelCommitment
+  redirect counter incremented on CHANGE_DESTINATION. ApproachEvaluation
+  wired for READ_CHARACTER/PROBE measurement results. CommitmentRegistry
+  crisis linking wired. Commitment fulfillment checker replaced dummy
+  callable with actual per-type evaluation.
+- **Phase 7 resource validation.** ResourceAvailability.can_afford()
+  validates before executing. AP/civilian order refunded on failure.
+- **Koku deduction.** EffectApplicator._apply_koku_cost() handles
+  koku_cost effect key for BRIBE_FOR_INFO (5 koku) and PURCHASE_MARKET
+  (3 koku).
+- **Disposition snapshot system.** _populate_disposition_snapshots()
+  captures all pairs at season start for approach evaluation
+  disposition_at_start tracking.
+- **APPLY_TATTOO full pipeline.** Context lists, executor dispatch,
+  AP cost, body location validation, ability gate, SkillResolver roll,
+  writeback (TattooData creation), cultural reluctance precondition
+  filter. 18 tests.
+- **Secret pipeline wiring.** EXPOSE_SECRET_PRIVATELY/PUBLICLY:
+  SecretData.known_by_ids, per-character known_secrets injection,
+  _pick_best_secret(), writeback. FABRICATE_SECRET: writeback creating
+  SecretData, severity selection by Forgery rank. INTIMIDATE blackmail
+  path: _pick_secret_about_target().
+- **Metadata population fixes (13 ActionIDs).** PURIFY_TAINTED_GROUND,
+  PUBLIC_ATONEMENT, SCOUT_ENEMY, REQUEST_PERFORMANCE, DRILL_TROOPS,
+  OFFER_FAVOR, TRAIN_ANIMAL, PLAY_GAME, ARRANGE_MARRIAGE,
+  SEARCH_PERSON, EXPOSE_SECRET_PRIVATELY/PUBLICLY, FABRICATE_SECRET.
+
+### Systems Added 2026-05-20
+- **FORGE_IMPERSONATION_LETTER / FORGE_ORDER full NPC pipeline.** Context
+  lists (AT_OWN_HOLDINGS, AT_COURT, VISITING), action_skill_map.json
+  (Forgery/Agility), personality_filter.json (JIN/REI/GI/MAKOTO blocks),
+  objective_alignment.json (DAMAGE_RELATIONSHIP, ACQUIRE_LEVERAGE,
+  SUPPRESS_INVESTIGATION), metadata population (authority_level from
+  lord_rank, target_npc_id from need). 8 tests.
+- **Forge writeback pipeline.** FORGE_IMPERSONATION_LETTER creates
+  LetterData (is_forged, forged_sender_id, forgery_tn). FORGE_ORDER
+  creates LetterData (is_order, order_need_type). Forged order delivery
+  writes objective to target's primary slot. Detected forgeries skip
+  deliver_letter(). Reply confusion: impersonation detection on reply
+  delivery creates KnowledgeEntry + topic + INVESTIGATE_THREAT objective.
+- **Forge crime record pipeline.** CrimeRecord created at forge time
+  (DISHONORABLE_CONDUCT). Auto-detection escalates to
+  UNDER_INVESTIGATION. Concealment_tn from forge roll. 5 tests.
+- **Covert action pipeline fixes.** COVERT_ACTION_IDS updated (added
+  BRIBE_FOR_INFO, EAVESDROP, FORGE_IMPERSONATION_LETTER, FORGE_ORDER;
+  removed SEARCH_PERSON). SHADOW_TARGET detection_risk and crime type
+  mapping added. 3 tests.
+- **EAVESDROP writeback.** Topic transfer from overheard conversations
+  at same settlement. Free raises grant extra topics. Critical failure
+  generates Spy Uncovered Tier 4 topic. 5 tests.
+- **SHADOW_TARGET writeback.** Surveillance intelligence: contacts_observed,
+  actions_observed. Critical failure: target identifies shadow (-5 disp).
+  Normal failure: target knows they're tailed but not by whom. 4 tests.
+- **Table 2.3 rank-scaled honor — Using a Low Skill.** Full implementation
+  with 6 honor brackets and school/clan exemptions. Wired into 7 systems
+  (SecretSystem, SeductionSystem, BoundEscapeSystem, CommerceStigmaSystem,
+  ActionExecutor, BriberySystem, OperationalHierarchySystem). Skill-specific
+  exemptions via boolean flags (intimidation_honor_exempt,
+  commerce_honor_exempt). 19 tests.
+- **Table 2.3 additional rows.** DISOBEYING_LORD, FLEEING_BATTLE,
+  FOLLOWING_ORDERS, LYING, MANIPULATING, FALSE_COURTESY, DUPED_CRIMINAL,
+  DUPED_DISLOYAL, DUPED_FOOLISH. Wired mechanical triggers: MANIPULATING
+  on FORGE_ORDER delivery and SEDUCE_TO_COMPROMISE, FALSE_COURTESY on
+  CHARM against RIVAL, DUPED_DISLOYAL on impersonation detection. 18 tests.
+- **Low Skill glory penalty on discovery.** -0.3 per incident at 6
+  identification trigger points. Double-application prevention via
+  low_skill_glory_applied flag on CrimeRecord. Commerce stigma glory
+  updated from -0.1 to -0.3. 8 tests.
+- **Table 2.3 honor gain rows.** Facing superior foe (duel against
+  higher Status), fulfilling promise despite crisis, sincere/false
+  courtesy (personality-gated), enduring insult (self/ancestors/clan
+  classification), kindness to inferiors (gift/favor), truthful report
+  (same-clan secret exposure), protecting clan at risk (sortie/breach
+  with crisis). 28 tests.
+- **Conviction consequence gaps.** Trial-by-combat and treason conviction
+  now call apply_at_conviction_consequences(). Winner glory change wired
+  for non-challenger duel winners. 5 tests.
+- **Insult type classification.** PUBLIC_INSULT gains insult_type metadata
+  (self/ancestors/clan) for differential honor treatment. Politely ignoring
+  dishonorable behavior wired for non-magistrate witnesses. 7 tests.
+- **Effect key writeback wiring (4 dead keys).** ASK_FOR_INTRODUCTION
+  contact_added → add_contact() + disposition. OBSERVE_COURT_ATTENDEES
+  learned_attendees → add_contact() + KnowledgeEntry. INTIMIDATE
+  favors_extracted → FavorData creation. public_commerce_topic → Tier 4
+  topic creation. 8 tests.
+- **READ_CHARACTER/PROBE info_types → knowledge entries.** 5 info types
+  (personality_insight, disposition_toward, topic_attitude, topic_position,
+  court_objective) now create type-specific KnowledgeEntry. Intelligence
+  knowledge dedup replaces stale entries on re-read. False info correctly
+  replaces true info. 11 tests.
+- **Gossip source concealment.** source_concealed / concealment_depth
+  wired into knowledge entries and action log. Duplicate gossip disposition
+  double-application fixed. 4 tests.
+- **False info on critical failure.** Inverted knowledge entries (wrong
+  virtue, inverted disposition/position). 4 tests.
+- **Scouts detected on critical failure.** Tier 4 MILITARY topic on
+  SCOUT_ENEMY critical failure. 3 tests.
+- **Hunt resolution daily trigger.** _resolve_scheduled_hunts() checks
+  active hunts matching ic_day, gathers participants, generates beast
+  from terrain pool (10 species, 5 terrain types), distributes glory,
+  applies co-participant disposition changes, handles casualties and
+  death events. 6 tests.
+- **Hunt ActionID writebacks.** ANNOUNCE_HUNT creates hunt dict + topic.
+  REQUEST_HUNT_INVITATION evaluates host acceptance. CANCEL_HUNT applies
+  disposition penalties. Hunt context injection for NPC engine. 7 tests.
+- **Duel death writeback.** _process_duel_death_writebacks() creates
+  death events and topics for duel fatalities. Tier scaling by
+  sanctioned/unsanctioned and lord/non-lord. Wired before _process_lord_deaths
+  for same-tick succession. 5 tests.
+- **Assassination death_events fix.** is_lord and suspicious_death fields
+  added to assassination death events for succession triggering. 1 test.
+- **Letter topic momentum fix.** topics_by_id now passed through to
+  process_pending_letters(). Tier 4 topic discussion_count_this_day
+  increment now functional. 2 tests.
+- **REQUEST_PERFORMANCE writeback.** Full pipeline: request creation on
+  court session, world state injection, request expiry. 5 tests.
+- **ActionID context list gaps.** PURCHASE_MARKET, CONDUCT_COMMERCE,
+  EXAMINE_CRIME_SCENE, DEMAND_TRIBUTE, REQUEST_ALLIED_AID,
+  ISSUE_DUEL_CHALLENGE added to appropriate context lists. SEEK_PRETEXT
+  stale entries cleaned. 22 tests.
+- **Comprehensive ActionID metadata fixes.** ISSUE_DUEL_CHALLENGE
+  to_death/is_sanctioned population. CONDUCT_SORTIE ss metadata.
+  TREAT_WOUND raises by Medicine rank. 8 tests.
+- **SkillResolver from_the_ashes expiry gap.** Buff checked against
+  ic_day parameter, expired buffs cleared. 6 tests.
+
 ### Systems Added 2026-05-18
 - **s29.15 Courtier School Techniques** — School technique bonuses wired into
   SkillResolver and ActionExecutor. Doji Courtier R1a (honor-gated Free Raise on
