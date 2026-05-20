@@ -950,6 +950,38 @@ Values confirmed against GDD s12.8:
 - Impersonation detection topic TIER_3 — PROVISIONAL (no explicit GDD tier).
 - INVESTIGATE_THREAT priority 6 — PROVISIONAL.
 
+### Known Code Issues (found and fixed 2026-05-20, covert action audit)
+- **COVERT_ACTION_IDS missing 4 Category 6 actions. FIXED.**
+  BRIBE_FOR_INFO, EAVESDROP, FORGE_IMPERSONATION_LETTER, FORGE_ORDER were
+  missing from COVERT_ACTION_IDS. Honor covert penalty (Filter 2) and
+  virtue covert modifier (Filter 3) were not applied to these actions.
+  SEARCH_PERSON removed (Category 5 Intelligence, not Category 6 Covert).
+  3 tests.
+- **SHADOW_TARGET missing detection_risk return key. FIXED.**
+  `resolve_shadow_target()` returned `detected` but not `detection_risk`.
+  The crime creation handler reads `effects.detection_risk` to decide whether
+  to create a CrimeRecord. Without the key, detected shadowing never created
+  a crime record. Added `detection_risk: detected` to return dict. 1 test.
+- **SHADOW_TARGET missing from _action_to_crime_type. FIXED.**
+  Detected shadowing had no crime type mapping. Added
+  SHADOW_TARGET → DISHONORABLE_CONDUCT. 1 test.
+
+### Covert Action Pipeline Audit (2026-05-20)
+Remaining gaps (not critical, documented for future work):
+- EAVESDROP: no writeback for intelligence results. Executor returns
+  success/detected but eavesdropped topics aren't transferred to actor's
+  knowledge_pool. Blocked on deciding what intelligence EAVESDROP produces.
+- SHADOW_TARGET: no writeback for surveillance data. Successful shadowing
+  produces no persistent state. Blocked on deciding what observation data
+  to store (contacts observed, locations visited).
+- CONCEAL_ITEM: NPC voluntary concealment has default metadata ("MEDIUM",
+  non-weapon). Auto-conceal on NPC arrival handles assassination weapons
+  correctly. No gap for current gameplay.
+- Table 2.3 rank-scaled honor: systemic gap across ALL crime types. All
+  at-act honor costs use flat values (-0.3 for Low Skill use). GDD s57.47
+  says "scaled by Honor Rank" — high-Honor samurai should lose more.
+  Separate implementation task.
+
 ### Known Code Issues — Deferred (2026-05-19, metadata population audit)
 - **EXPOSE_SECRET_PRIVATELY — metadata unpopulated, always fails. FIXED.**
   Full pipeline wired: SecretData.known_by_ids tracks who knows each secret.

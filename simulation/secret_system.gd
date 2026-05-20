@@ -543,12 +543,14 @@ static func resolve_shadow_target(
 	var success: bool = contested.get("winner") == "a"
 	var margin: int = contested.get("total_a", 0) - contested.get("total_b", 0)
 
+	var detected: bool = not success
 	return {
 		"success": success,
-		"detected": not success,
+		"detected": detected,
 		"shadow_total": contested.get("total_a", 0),
 		"target_total": contested.get("total_b", 0),
 		"margin": margin,
+		"detection_risk": detected,
 	}
 
 

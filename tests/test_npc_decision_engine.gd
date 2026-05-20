@@ -2346,6 +2346,21 @@ func test_honor_covert_penalty_not_applied_to_non_covert() -> void:
 	assert_eq(option.honor_covert_penalty, 0.0, "Non-covert CHARM should have no honor penalty")
 
 
+func test_covert_action_ids_includes_forge_actions() -> void:
+	assert_true("FORGE_IMPERSONATION_LETTER" in NPCDecisionEngine.COVERT_ACTION_IDS)
+	assert_true("FORGE_ORDER" in NPCDecisionEngine.COVERT_ACTION_IDS)
+
+
+func test_covert_action_ids_includes_acquisition_actions() -> void:
+	assert_true("BRIBE_FOR_INFO" in NPCDecisionEngine.COVERT_ACTION_IDS)
+	assert_true("EAVESDROP" in NPCDecisionEngine.COVERT_ACTION_IDS)
+
+
+func test_covert_action_ids_excludes_search_person() -> void:
+	assert_false("SEARCH_PERSON" in NPCDecisionEngine.COVERT_ACTION_IDS,
+		"SEARCH_PERSON is Category 5 Intelligence, not Category 6 Covert")
+
+
 # -- Virtue Covert Modifier (s12.8 Filter 3) ----------------------------------
 
 func _make_ctx_with_virtue(

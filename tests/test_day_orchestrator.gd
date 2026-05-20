@@ -10282,6 +10282,31 @@ func test_escalate_already_investigated_no_double() -> void:
 
 
 # =============================================================================
+# Action-to-crime-type mapping tests
+# =============================================================================
+
+
+func test_shadow_target_maps_to_dishonorable_conduct() -> void:
+	var result: int = DayOrchestrator._action_to_crime_type("SHADOW_TARGET")
+	assert_eq(result, Enums.CrimeType.DISHONORABLE_CONDUCT)
+
+
+func test_eavesdrop_maps_to_dishonorable_conduct() -> void:
+	var result: int = DayOrchestrator._action_to_crime_type("EAVESDROP")
+	assert_eq(result, Enums.CrimeType.DISHONORABLE_CONDUCT)
+
+
+func test_bribe_maps_to_skimming() -> void:
+	var result: int = DayOrchestrator._action_to_crime_type("BRIBE_FOR_INFO")
+	assert_eq(result, Enums.CrimeType.SKIMMING)
+
+
+func test_unknown_action_returns_negative() -> void:
+	var result: int = DayOrchestrator._action_to_crime_type("GOSSIP")
+	assert_eq(result, -1)
+
+
+# =============================================================================
 # Impersonation detection tests
 # =============================================================================
 

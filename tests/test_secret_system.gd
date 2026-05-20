@@ -726,6 +726,8 @@ func test_shadow_target_returns_contested() -> void:
 	assert_has(r, "shadow_total")
 	assert_has(r, "target_total")
 	assert_eq(r["detected"], not r["success"])
+	assert_has(r, "detection_risk")
+	assert_eq(r["detection_risk"], r["detected"])
 
 
 # ==============================================================================

@@ -4805,7 +4805,7 @@ static func _has_zone_log_evidence(
 
 static func _action_to_crime_type(action_id: String) -> int:
 	match action_id:
-		"EAVESDROP", "SEARCH_QUARTERS", "INTERCEPT_LETTER":
+		"EAVESDROP", "SHADOW_TARGET", "SEARCH_QUARTERS", "INTERCEPT_LETTER":
 			return Enums.CrimeType.DISHONORABLE_CONDUCT
 		"BRIBE_FOR_INFO":
 			return Enums.CrimeType.SKIMMING
