@@ -152,7 +152,7 @@ static func resolve_escape_attempt(
 	var success: bool = result.get("success", false)
 	var margin: int = result.get("margin", 0)
 
-	var honor_cost: float = CrimeSystem.get_low_skill_honor_cost(character)
+	var honor_cost: float = CrimeSystem.get_low_skill_honor_cost(character, "Sleight of Hand")
 	HonorGlorySystem.apply_honor_change(character, honor_cost)
 
 	var noise: NoiseLevel = NoiseLevel.QUIET

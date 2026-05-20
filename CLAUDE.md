@@ -990,19 +990,23 @@ Remaining gaps (not critical, documented for future work):
   non-weapon). Auto-conceal on NPC arrival handles assassination weapons
   correctly. No gap for current gameplay.
 - **Table 2.3 rank-scaled honor — Using a Low Skill. FIXED.**
-  `CrimeSystem.get_low_skill_honor_cost(character)` implements the full
-  Table 2.3 "Using a Low Skill" row with 6 honor brackets: Rank 0 → 0.0,
-  Ranks 1-2 → -0.1, Ranks 3-4 → -0.2, Ranks 5-6 → -0.3, Ranks 7-8 → -0.6,
-  Ranks 9-10 → -0.9. School exemptions: full exempt (Shosuro Infiltrator,
-  Bitter Lies, Kasuga Smuggler → 0.0), half exempt (Daidoji Harrier, Daidoji
-  Spymaster, Ikoma Lion's Shadow → half cost), Scorpion clan → half cost.
+  `CrimeSystem.get_low_skill_honor_cost(character, skill_name)` implements
+  the full Table 2.3 "Using a Low Skill" row with 6 honor brackets:
+  Rank 0 → 0.0, 1-2 → -0.1, 3-4 → -0.2, 5-6 → -0.3, 7-8 → -0.6,
+  9-10 → -0.9. School exemptions: full exempt (Shosuro Infiltrator,
+  Bitter Lies, Kasuga Smuggler → 0.0), half exempt (Daidoji Harrier,
+  Daidoji Spymaster, Ikoma Lion's Shadow → half cost), Scorpion clan →
+  half cost. Skill-specific exemptions via boolean flags on character data:
+  `intimidation_honor_exempt` (Otomo Courtier R1, Yoritomo Courtier R1),
+  `commerce_honor_exempt` (Yasuki Courtier R1, Yoritomo Courtier R1,
+  Ide Trader). Flags set by `SkillResolver.apply_technique_flags()`.
   Multi-school characters checked via school_paths. Wired into:
-  SecretSystem (bribe/eavesdrop/intercept/search costs),
-  SeductionSystem (seduction honor cost), BoundEscapeSystem (escape cost),
-  CommerceStigmaSystem (commerce stigma penalty), ActionExecutor (INTIMIDATE).
-  Replaces all flat -0.X constants with rank-scaled lookup. Fabrication
-  honor costs remain tiered by secret severity (GDD s12.8 specifies
-  explicit per-tier values). 12 tests.
+  SecretSystem (bribe→Temptation, eavesdrop→Stealth, intercept→Stealth,
+  search→Sleight of Hand), SeductionSystem (Temptation),
+  BoundEscapeSystem (Sleight of Hand), CommerceStigmaSystem (Commerce),
+  ActionExecutor (Intimidation). Fabrication honor costs remain tiered
+  by secret severity (GDD s12.8 specifies explicit per-tier values).
+  19 tests.
 
 ### Known Code Issues — Deferred (2026-05-19, metadata population audit)
 - **EXPOSE_SECRET_PRIVATELY — metadata unpopulated, always fails. FIXED.**

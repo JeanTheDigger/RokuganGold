@@ -645,7 +645,7 @@ static func _execute_intimidation(
 
 	var effects: Dictionary = {
 		"disposition_change": -(3 + int(clampi(attacker_roll - defender_roll, 0, 25) / 5)) if r["success"] else 0,
-		"honor_change": CrimeSystem.get_low_skill_honor_cost(character),
+		"honor_change": CrimeSystem.get_low_skill_honor_cost(character, "Intimidation"),
 		"infamy_gain": r.get("infamy_gain", 0.0),
 		"compliance_active": r.get("compliance_active", false),
 	}

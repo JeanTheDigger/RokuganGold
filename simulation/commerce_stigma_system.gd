@@ -54,7 +54,7 @@ static func has_ide_trader_exception(character: L5RCharacterData) -> bool:
 
 
 static func compute_honor_penalty(character: L5RCharacterData) -> float:
-	return CrimeSystem.get_low_skill_honor_cost(character)
+	return CrimeSystem.get_low_skill_honor_cost(character, "Commerce")
 
 
 static func apply_stigma(

@@ -2850,3 +2850,67 @@ func test_low_skill_multi_school_exempt() -> void:
 	assert_eq(cost, 0.0, "Multi-school: Shosuro path = full exemption")
 
 
+func test_low_skill_intimidation_exempt_otomo() -> void:
+	var c := L5RCharacterData.new()
+	c.honor = 6.0
+	c.school = "Otomo Courtier"
+	c.clan = "Imperial"
+	c.intimidation_honor_exempt = true
+	var cost_intimidation: float = CrimeSystem.get_low_skill_honor_cost(c, "Intimidation")
+	assert_eq(cost_intimidation, 0.0, "Otomo: Intimidation exempt")
+	var cost_stealth: float = CrimeSystem.get_low_skill_honor_cost(c, "Stealth")
+	assert_true(cost_stealth < 0.0, "Otomo: Stealth NOT exempt")
+
+
+func test_low_skill_commerce_exempt_yasuki() -> void:
+	var c := L5RCharacterData.new()
+	c.honor = 6.0
+	c.school = "Yasuki Courtier"
+	c.clan = "Crab"
+	c.commerce_honor_exempt = true
+	var cost_commerce: float = CrimeSystem.get_low_skill_honor_cost(c, "Commerce")
+	assert_eq(cost_commerce, 0.0, "Yasuki: Commerce exempt")
+	var cost_intimidation: float = CrimeSystem.get_low_skill_honor_cost(c, "Intimidation")
+	assert_true(cost_intimidation < 0.0, "Yasuki: Intimidation NOT exempt")
+
+
+func test_low_skill_yoritomo_dual_exempt() -> void:
+	var c := L5RCharacterData.new()
+	c.honor = 6.0
+	c.school = "Yoritomo Courtier"
+	c.clan = "Mantis"
+	c.commerce_honor_exempt = true
+	c.intimidation_honor_exempt = true
+	assert_eq(CrimeSystem.get_low_skill_honor_cost(c, "Commerce"), 0.0)
+	assert_eq(CrimeSystem.get_low_skill_honor_cost(c, "Intimidation"), 0.0)
+	assert_true(CrimeSystem.get_low_skill_honor_cost(c, "Stealth") < 0.0,
+		"Yoritomo: only Commerce and Intimidation exempt")
+
+
+func test_technique_flags_set_on_apply() -> void:
+	var c := L5RCharacterData.new()
+	c.school = "Otomo Courtier"
+	c.clan = "Imperial"
+	assert_false(c.intimidation_honor_exempt)
+	SkillResolver.apply_technique_flags(c)
+	assert_true(c.intimidation_honor_exempt, "Otomo R1 sets intimidation_honor_exempt")
+
+
+func test_technique_flags_yasuki_commerce() -> void:
+	var c := L5RCharacterData.new()
+	c.school = "Yasuki Courtier"
+	c.clan = "Crab"
+	SkillResolver.apply_technique_flags(c)
+	assert_true(c.commerce_honor_exempt, "Yasuki R1 sets commerce_honor_exempt")
+	assert_false(c.intimidation_honor_exempt, "Yasuki does not get intimidation exempt")
+
+
+func test_technique_flags_yoritomo_both() -> void:
+	var c := L5RCharacterData.new()
+	c.school = "Yoritomo Courtier"
+	c.clan = "Mantis"
+	SkillResolver.apply_technique_flags(c)
+	assert_true(c.commerce_honor_exempt, "Yoritomo R1 sets commerce_honor_exempt")
+	assert_true(c.intimidation_honor_exempt, "Yoritomo R1 sets intimidation_honor_exempt")
+
+

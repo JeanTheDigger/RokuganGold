@@ -30,7 +30,12 @@ const HALF_LOW_SKILL_EXEMPT_SCHOOLS: Array[String] = [
 ]
 
 
-static func get_low_skill_honor_cost(character: L5RCharacterData) -> float:
+static func get_low_skill_honor_cost(character: L5RCharacterData, skill_name: String = "") -> float:
+	if skill_name == "Intimidation" and character.intimidation_honor_exempt:
+		return 0.0
+	if skill_name == "Commerce" and character.commerce_honor_exempt:
+		return 0.0
+
 	var honor_rank: int = HonorGlorySystem.get_honor_rank(character)
 	var bracket: int = _get_rank_bracket(honor_rank)
 	var points: int = HONOR_TABLE_USING_LOW_SKILL[bracket]

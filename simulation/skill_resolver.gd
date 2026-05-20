@@ -134,6 +134,16 @@ static func apply_technique_flags(character: L5RCharacterData) -> void:
 		character.precise_memory = true
 	if character.school.begins_with("Doji Courtier") and rank >= 2:
 		character.cadence_trained = true
+	if rank >= 1:
+		var all_schools: Array[String] = [character.school]
+		for path: String in character.school_paths:
+			if path not in all_schools:
+				all_schools.append(path)
+		for s: String in all_schools:
+			if s.begins_with("Yasuki Courtier") or s.begins_with("Yoritomo Courtier") or s.begins_with("Ide Trader"):
+				character.commerce_honor_exempt = true
+			if s.begins_with("Otomo Courtier") or s.begins_with("Yoritomo Courtier"):
+				character.intimidation_honor_exempt = true
 
 
 # -- School Technique Free Raises (s29.15) -------------------------------------
