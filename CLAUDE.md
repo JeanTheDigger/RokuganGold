@@ -968,9 +968,15 @@ Values confirmed against GDD s12.8:
 
 ### Covert Action Pipeline Audit (2026-05-20)
 Remaining gaps (not critical, documented for future work):
-- EAVESDROP: no writeback for intelligence results. Executor returns
-  success/detected but eavesdropped topics aren't transferred to actor's
-  knowledge_pool. Blocked on deciding what intelligence EAVESDROP produces.
+- **EAVESDROP writeback — topic transfer wired. FIXED.**
+  `_process_eavesdrop_writebacks()` fires after daily conversations resolve.
+  Successful eavesdrop transfers topics from conversations at the same
+  settlement. Base: 1 topic. Each free raise (margin/5) grants 1 more.
+  Skips eavesdropper's own conversations and conversations at different
+  locations. Creates INTELLIGENCE KnowledgeEntry per topic learned.
+  Critical failure (margin <= -10): generates Spy Uncovered Tier 4 topic
+  with subject_character_id = -1 (spy identity NOT revealed per GDD).
+  5 tests.
 - SHADOW_TARGET: no writeback for surveillance data. Successful shadowing
   produces no persistent state. Blocked on deciding what observation data
   to store (contacts observed, locations visited).

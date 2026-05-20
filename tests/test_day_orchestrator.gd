@@ -10307,6 +10307,173 @@ func test_unknown_action_returns_negative() -> void:
 
 
 # =============================================================================
+# Eavesdrop writeback tests
+# =============================================================================
+
+
+func test_eavesdrop_transfers_topic_on_success() -> void:
+	var spy := L5RCharacterData.new()
+	spy.character_id = 1
+	spy.physical_location = "crane_castle"
+	spy.topic_pool = []
+	var talker_a := L5RCharacterData.new()
+	talker_a.character_id = 10
+	talker_a.physical_location = "crane_castle"
+	var talker_b := L5RCharacterData.new()
+	talker_b.character_id = 20
+	talker_b.physical_location = "crane_castle"
+	var chars: Dictionary = {1: spy, 10: talker_a, 20: talker_b}
+
+	var results: Array = [{
+		"action_id": "EAVESDROP",
+		"success": true,
+		"character_id": 1,
+		"effects": {"margin": 3, "detection_risk": false},
+		"margin": 3,
+	}]
+	var convos: Array[Dictionary] = [{
+		"char_a_id": 10,
+		"char_b_id": 20,
+		"topic_shared_by_a": 42,
+		"topic_shared_by_b": 55,
+	}]
+	var topics: Array[TopicData] = []
+	var next_tid: Array[int] = [100]
+	DayOrchestrator._process_eavesdrop_writebacks(
+		results, convos, chars, 1, topics, next_tid, 50,
+	)
+	assert_true(42 in spy.topic_pool, "Should learn topic_shared_by_a")
+	assert_eq(spy.topic_pool.size(), 1, "Margin 3 = 0 raises, 1 topic max")
+
+
+func test_eavesdrop_raises_grant_extra_topics() -> void:
+	var spy := L5RCharacterData.new()
+	spy.character_id = 1
+	spy.physical_location = "crane_castle"
+	spy.topic_pool = []
+	var talker_a := L5RCharacterData.new()
+	talker_a.character_id = 10
+	talker_a.physical_location = "crane_castle"
+	var talker_b := L5RCharacterData.new()
+	talker_b.character_id = 20
+	talker_b.physical_location = "crane_castle"
+	var chars: Dictionary = {1: spy, 10: talker_a, 20: talker_b}
+
+	var results: Array = [{
+		"action_id": "EAVESDROP",
+		"success": true,
+		"character_id": 1,
+		"effects": {"margin": 12, "detection_risk": false},
+		"margin": 12,
+	}]
+	var convos: Array[Dictionary] = [{
+		"char_a_id": 10,
+		"char_b_id": 20,
+		"topic_shared_by_a": 42,
+		"topic_shared_by_b": 55,
+	}]
+	var topics: Array[TopicData] = []
+	var next_tid: Array[int] = [100]
+	DayOrchestrator._process_eavesdrop_writebacks(
+		results, convos, chars, 1, topics, next_tid, 50,
+	)
+	assert_true(42 in spy.topic_pool)
+	assert_true(55 in spy.topic_pool)
+	assert_eq(spy.topic_pool.size(), 2, "Margin 12 = 2 raises, 3 topics max but only 2 available")
+
+
+func test_eavesdrop_critical_failure_creates_topic() -> void:
+	var spy := L5RCharacterData.new()
+	spy.character_id = 1
+	spy.physical_location = "crane_castle"
+	var chars: Dictionary = {1: spy}
+
+	var results: Array = [{
+		"action_id": "EAVESDROP",
+		"success": false,
+		"character_id": 1,
+		"effects": {"margin": -12, "detection_risk": true},
+		"margin": -12,
+	}]
+	var convos: Array[Dictionary] = []
+	var topics: Array[TopicData] = []
+	var next_tid: Array[int] = [100]
+	DayOrchestrator._process_eavesdrop_writebacks(
+		results, convos, chars, 1, topics, next_tid, 50,
+	)
+	assert_eq(topics.size(), 1)
+	assert_eq(topics[0].tier, TopicData.Tier.TIER_4)
+	assert_eq(topics[0].category, TopicData.Category.PERSONAL)
+	assert_eq(topics[0].subject_character_id, -1,
+		"Spy identity not revealed in topic")
+
+
+func test_eavesdrop_ignores_own_conversations() -> void:
+	var spy := L5RCharacterData.new()
+	spy.character_id = 1
+	spy.physical_location = "crane_castle"
+	spy.topic_pool = []
+	var talker := L5RCharacterData.new()
+	talker.character_id = 10
+	talker.physical_location = "crane_castle"
+	var chars: Dictionary = {1: spy, 10: talker}
+
+	var results: Array = [{
+		"action_id": "EAVESDROP",
+		"success": true,
+		"character_id": 1,
+		"effects": {"margin": 5, "detection_risk": false},
+		"margin": 5,
+	}]
+	var convos: Array[Dictionary] = [{
+		"char_a_id": 1,
+		"char_b_id": 10,
+		"topic_shared_by_a": 42,
+		"topic_shared_by_b": 55,
+	}]
+	var topics: Array[TopicData] = []
+	var next_tid: Array[int] = [100]
+	DayOrchestrator._process_eavesdrop_writebacks(
+		results, convos, chars, 1, topics, next_tid, 50,
+	)
+	assert_eq(spy.topic_pool.size(), 0, "Should not eavesdrop on own conversations")
+
+
+func test_eavesdrop_skips_different_location() -> void:
+	var spy := L5RCharacterData.new()
+	spy.character_id = 1
+	spy.physical_location = "crane_castle"
+	spy.topic_pool = []
+	var talker_a := L5RCharacterData.new()
+	talker_a.character_id = 10
+	talker_a.physical_location = "lion_fortress"
+	var talker_b := L5RCharacterData.new()
+	talker_b.character_id = 20
+	talker_b.physical_location = "lion_fortress"
+	var chars: Dictionary = {1: spy, 10: talker_a, 20: talker_b}
+
+	var results: Array = [{
+		"action_id": "EAVESDROP",
+		"success": true,
+		"character_id": 1,
+		"effects": {"margin": 5, "detection_risk": false},
+		"margin": 5,
+	}]
+	var convos: Array[Dictionary] = [{
+		"char_a_id": 10,
+		"char_b_id": 20,
+		"topic_shared_by_a": 42,
+		"topic_shared_by_b": 55,
+	}]
+	var topics: Array[TopicData] = []
+	var next_tid: Array[int] = [100]
+	DayOrchestrator._process_eavesdrop_writebacks(
+		results, convos, chars, 1, topics, next_tid, 50,
+	)
+	assert_eq(spy.topic_pool.size(), 0, "Cannot eavesdrop on conversations at different location")
+
+
+# =============================================================================
 # Impersonation detection tests
 # =============================================================================
 

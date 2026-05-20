@@ -647,6 +647,12 @@ static func advance_day(
 		characters, dice_engine, current_season, active_topics
 	)
 
+	_process_eavesdrop_writebacks(
+		day_result.get("results", []),
+		conversation_results, characters_by_id, current_season,
+		active_topics, next_topic_id, ic_day,
+	)
+
 	_wire_discussion_counts(conversation_results, active_topics)
 	_compute_positions_from_conversations(
 		conversation_results, active_topics, characters_by_id
@@ -4399,6 +4405,99 @@ static func _process_expose_secret_writebacks(
 					if target_id not in s.known_by_ids:
 						s.known_by_ids.append(target_id)
 					break
+
+
+static func _process_eavesdrop_writebacks(
+	results: Array,
+	conversation_results: Array[Dictionary],
+	characters_by_id: Dictionary,
+	current_season: int,
+	active_topics: Array[TopicData],
+	next_topic_id: Array[int],
+	ic_day: int,
+) -> void:
+	for r: Variant in results:
+		if not r is Dictionary:
+			continue
+		var d: Dictionary = r as Dictionary
+		if d.get("action_id", "") != "EAVESDROP":
+			continue
+		var effects: Dictionary = d.get("effects", {})
+		var success: bool = d.get("success", false)
+		var char_id: int = d.get("character_id", -1)
+		var eavesdropper: L5RCharacterData = characters_by_id.get(char_id)
+		if eavesdropper == null:
+			continue
+
+		var margin: int = effects.get("margin", d.get("margin", 0))
+
+		if not success and margin <= -10:
+			_create_spy_uncovered_topic(
+				char_id, eavesdropper.physical_location,
+				active_topics, next_topic_id, ic_day,
+			)
+			continue
+
+		if not success:
+			continue
+
+		var location: String = eavesdropper.physical_location
+		var topics_learned: Array[int] = []
+		var free_raises: int = maxi(0, margin / 5)
+		var max_topics: int = 1 + free_raises
+		for conv: Dictionary in conversation_results:
+			if topics_learned.size() >= max_topics:
+				break
+			var a_id: int = conv.get("char_a_id", -1)
+			var b_id: int = conv.get("char_b_id", -1)
+			if a_id == char_id or b_id == char_id:
+				continue
+			var a_char: L5RCharacterData = characters_by_id.get(a_id)
+			var b_char: L5RCharacterData = characters_by_id.get(b_id)
+			if a_char == null or b_char == null:
+				continue
+			if a_char.physical_location != location:
+				continue
+			for key: String in ["topic_shared_by_a", "topic_shared_by_b"]:
+				if topics_learned.size() >= max_topics:
+					break
+				var tid: int = conv.get(key, -1)
+				if tid < 0:
+					continue
+				if tid in eavesdropper.topic_pool:
+					continue
+				if tid in topics_learned:
+					continue
+				topics_learned.append(tid)
+
+		for tid: int in topics_learned:
+			if tid not in eavesdropper.topic_pool:
+				eavesdropper.topic_pool.append(tid)
+			InformationSystem.add_knowledge(eavesdropper, InformationSystem.make_entry(
+				Enums.KnowledgeSource.INTELLIGENCE,
+				"eavesdropped_topic",
+				{"topic": tid},
+				current_season,
+			))
+
+
+static func _create_spy_uncovered_topic(
+	spy_id: int,
+	location: String,
+	active_topics: Array[TopicData],
+	next_topic_id: Array[int],
+	ic_day: int,
+) -> void:
+	var topic := TopicData.new()
+	topic.topic_id = next_topic_id[0]
+	next_topic_id[0] += 1
+	topic.tier = TopicData.Tier.TIER_4
+	topic.category = TopicData.Category.PERSONAL
+	topic.slug = "spy_uncovered_at_%s" % location
+	topic.ic_day_created = ic_day
+	topic.subject_character_id = -1
+	topic.subject_role_valence = "NEUTRAL"
+	active_topics.append(topic)
 
 
 static func _process_fabricate_secret_writebacks(
