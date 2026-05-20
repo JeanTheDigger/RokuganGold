@@ -66,7 +66,7 @@ static func resolve_seduction(
 	var success: bool = result.get("success", false)
 	var margin: int = result.get("margin", 0)
 
-	HonorGlorySystem.apply_honor_change(seducer, HONOR_COST)
+	HonorGlorySystem.apply_honor_change(seducer, CrimeSystem.get_low_skill_honor_cost(seducer))
 	HonorGlorySystem.apply_infamy_change(seducer, INFAMY_GAIN)
 
 	if not success:

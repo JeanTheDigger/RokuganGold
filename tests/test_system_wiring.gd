@@ -2736,3 +2736,117 @@ func test_wall_tower_context_garrison_below_minimum_at_zero() -> void:
 	assert_false(wstat.garrison_above_minimum)
 
 
+# =============================================================================
+# Table 2.3 — Using a Low Skill (rank-scaled honor cost)
+# =============================================================================
+
+
+func test_low_skill_honor_cost_rank_0() -> void:
+	var c := L5RCharacterData.new()
+	c.honor = 0.5
+	c.school = "Hida Bushi"
+	c.clan = "Crab"
+	var cost: float = CrimeSystem.get_low_skill_honor_cost(c)
+	assert_eq(cost, 0.0, "Rank 0 = no honor cost")
+
+
+func test_low_skill_honor_cost_rank_1_2() -> void:
+	var c := L5RCharacterData.new()
+	c.honor = 2.0
+	c.school = "Hida Bushi"
+	c.clan = "Crab"
+	var cost: float = CrimeSystem.get_low_skill_honor_cost(c)
+	assert_almost_eq(cost, -0.1, 0.001, "Ranks 1-2 = -0.1")
+
+
+func test_low_skill_honor_cost_rank_3_4() -> void:
+	var c := L5RCharacterData.new()
+	c.honor = 4.0
+	c.school = "Hida Bushi"
+	c.clan = "Crab"
+	var cost: float = CrimeSystem.get_low_skill_honor_cost(c)
+	assert_almost_eq(cost, -0.2, 0.001, "Ranks 3-4 = -0.2")
+
+
+func test_low_skill_honor_cost_rank_5_6() -> void:
+	var c := L5RCharacterData.new()
+	c.honor = 6.0
+	c.school = "Hida Bushi"
+	c.clan = "Crab"
+	var cost: float = CrimeSystem.get_low_skill_honor_cost(c)
+	assert_almost_eq(cost, -0.3, 0.001, "Ranks 5-6 = -0.3")
+
+
+func test_low_skill_honor_cost_rank_7_8() -> void:
+	var c := L5RCharacterData.new()
+	c.honor = 8.0
+	c.school = "Hida Bushi"
+	c.clan = "Crab"
+	var cost: float = CrimeSystem.get_low_skill_honor_cost(c)
+	assert_almost_eq(cost, -0.6, 0.001, "Ranks 7-8 = -0.6")
+
+
+func test_low_skill_honor_cost_rank_9_10() -> void:
+	var c := L5RCharacterData.new()
+	c.honor = 10.0
+	c.school = "Hida Bushi"
+	c.clan = "Crab"
+	var cost: float = CrimeSystem.get_low_skill_honor_cost(c)
+	assert_almost_eq(cost, -0.9, 0.001, "Ranks 9-10 = -0.9")
+
+
+func test_low_skill_full_exempt_shosuro() -> void:
+	var c := L5RCharacterData.new()
+	c.honor = 6.0
+	c.school = "Shosuro Infiltrator"
+	c.clan = "Scorpion"
+	var cost: float = CrimeSystem.get_low_skill_honor_cost(c)
+	assert_eq(cost, 0.0, "Shosuro Infiltrator = full exemption")
+
+
+func test_low_skill_full_exempt_bitter_lies() -> void:
+	var c := L5RCharacterData.new()
+	c.honor = 6.0
+	c.school = "Bitter Lies Swordsmen"
+	c.clan = "Scorpion"
+	var cost: float = CrimeSystem.get_low_skill_honor_cost(c)
+	assert_eq(cost, 0.0, "Bitter Lies = full exemption")
+
+
+func test_low_skill_full_exempt_kasuga() -> void:
+	var c := L5RCharacterData.new()
+	c.honor = 6.0
+	c.school = "Kasuga Smuggler"
+	c.clan = "Tortoise"
+	var cost: float = CrimeSystem.get_low_skill_honor_cost(c)
+	assert_eq(cost, 0.0, "Kasuga Smuggler = full exemption")
+
+
+func test_low_skill_half_exempt_daidoji_harrier() -> void:
+	var c := L5RCharacterData.new()
+	c.honor = 6.0
+	c.school = "Daidoji Harrier"
+	c.clan = "Crane"
+	var cost: float = CrimeSystem.get_low_skill_honor_cost(c)
+	assert_almost_eq(cost, -0.15, 0.001, "Daidoji Harrier = half cost")
+
+
+func test_low_skill_scorpion_clan_half() -> void:
+	var c := L5RCharacterData.new()
+	c.honor = 6.0
+	c.school = "Bayushi Bushi"
+	c.clan = "Scorpion"
+	var cost: float = CrimeSystem.get_low_skill_honor_cost(c)
+	assert_almost_eq(cost, -0.15, 0.001, "Scorpion clan = half cost")
+
+
+func test_low_skill_multi_school_exempt() -> void:
+	var c := L5RCharacterData.new()
+	c.honor = 8.0
+	c.school = "Bayushi Bushi"
+	c.school_paths = ["Shosuro Infiltrator R3"]
+	c.clan = "Scorpion"
+	var cost: float = CrimeSystem.get_low_skill_honor_cost(c)
+	assert_eq(cost, 0.0, "Multi-school: Shosuro path = full exemption")
+
+

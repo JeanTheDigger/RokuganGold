@@ -54,14 +54,7 @@ static func has_ide_trader_exception(character: L5RCharacterData) -> bool:
 
 
 static func compute_honor_penalty(character: L5RCharacterData) -> float:
-	var h: float = character.honor
-	if h >= HONOR_THRESHOLD_HIGH:
-		return HONOR_PENALTY_HIGH
-	if h >= HONOR_THRESHOLD_MID:
-		return HONOR_PENALTY_MID
-	if h >= HONOR_THRESHOLD_LOW:
-		return HONOR_PENALTY_LOW
-	return 0.0
+	return CrimeSystem.get_low_skill_honor_cost(character)
 
 
 static func apply_stigma(

@@ -15,6 +15,46 @@ const HONOR_TABLE_ACCEPTING_BRIBE: Array[int] = [0, 0, -3, -4, -7, -8]
 const HONOR_TABLE_DISLOYALTY: Array[int] = [0, -2, -6, -10, -14, -18]
 const HONOR_TABLE_ACCOMPLICE_HEINOUS: Array[int] = [-1, -4, -8, -12, -16, -20]
 const HONOR_TABLE_ACCOMPLICE_MINOR: Array[int] = [0, -1, -4, -4, -8, -8]
+const HONOR_TABLE_USING_LOW_SKILL: Array[int] = [0, -1, -2, -3, -6, -9]
+
+const FULL_LOW_SKILL_EXEMPT_SCHOOLS: Array[String] = [
+	"Shosuro Infiltrator",
+	"Bitter Lies",
+	"Kasuga Smuggler",
+]
+
+const HALF_LOW_SKILL_EXEMPT_SCHOOLS: Array[String] = [
+	"Daidoji Harrier",
+	"Daidoji Spymaster",
+	"Ikoma Lion's Shadow",
+]
+
+
+static func get_low_skill_honor_cost(character: L5RCharacterData) -> float:
+	var honor_rank: int = HonorGlorySystem.get_honor_rank(character)
+	var bracket: int = _get_rank_bracket(honor_rank)
+	var points: int = HONOR_TABLE_USING_LOW_SKILL[bracket]
+	var base_cost: float = points / 10.0
+
+	var schools: Array[String] = [character.school]
+	for path: String in character.school_paths:
+		if path not in schools:
+			schools.append(path)
+
+	for school: String in schools:
+		for s: String in FULL_LOW_SKILL_EXEMPT_SCHOOLS:
+			if school.begins_with(s):
+				return 0.0
+
+	for school: String in schools:
+		for s: String in HALF_LOW_SKILL_EXEMPT_SCHOOLS:
+			if school.begins_with(s):
+				return base_cost * 0.5
+
+	if character.clan == "Scorpion":
+		return base_cost * 0.5
+
+	return base_cost
 
 # Maps CrimeType to the Table 2.3 row used for at-act honor loss.
 const CRIME_HONOR_TABLE: Dictionary = {

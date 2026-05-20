@@ -316,22 +316,22 @@ static func detect_fabrication(
 # ==============================================================================
 
 static func apply_bribe_costs(actor: L5RCharacterData) -> void:
-	HonorGlorySystem.apply_honor_change(actor, BRIBE_HONOR_COST)
+	HonorGlorySystem.apply_honor_change(actor, CrimeSystem.get_low_skill_honor_cost(actor))
 	HonorGlorySystem.apply_infamy_change(actor, BRIBE_INFAMY)
 
 
 static func apply_eavesdrop_costs(actor: L5RCharacterData) -> void:
-	HonorGlorySystem.apply_honor_change(actor, EAVESDROP_HONOR_COST)
+	HonorGlorySystem.apply_honor_change(actor, CrimeSystem.get_low_skill_honor_cost(actor))
 	HonorGlorySystem.apply_infamy_change(actor, EAVESDROP_INFAMY)
 
 
 static func apply_intercept_costs(actor: L5RCharacterData) -> void:
-	HonorGlorySystem.apply_honor_change(actor, INTERCEPT_HONOR_COST)
+	HonorGlorySystem.apply_honor_change(actor, CrimeSystem.get_low_skill_honor_cost(actor))
 	HonorGlorySystem.apply_infamy_change(actor, INTERCEPT_INFAMY)
 
 
 static func apply_search_costs(actor: L5RCharacterData) -> void:
-	HonorGlorySystem.apply_honor_change(actor, SEARCH_HONOR_COST)
+	HonorGlorySystem.apply_honor_change(actor, CrimeSystem.get_low_skill_honor_cost(actor))
 	HonorGlorySystem.apply_infamy_change(actor, SEARCH_INFAMY)
 
 
