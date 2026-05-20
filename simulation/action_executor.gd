@@ -1102,6 +1102,7 @@ static func _build_covert_result(
 		"tn": system_result.get("tn", 0),
 		"margin": system_result.get("margin", 0),
 		"effects": effects,
+		"metadata": action.metadata,
 	}
 
 

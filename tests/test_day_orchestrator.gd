@@ -9919,3 +9919,170 @@ func test_offense_tier_maps_from_topic_tier() -> void:
 	var t4 := TopicData.new()
 	t4.tier = TopicData.Tier.TIER_4
 	assert_eq(DayOrchestrator._offense_tier_from_topic(t4), 4)
+
+
+# =============================================================================
+# Forge writeback tests
+# =============================================================================
+
+
+func test_forge_letter_writeback_creates_forged_letter() -> void:
+	var results: Array = [{
+		"action_id": "FORGE_IMPERSONATION_LETTER",
+		"success": true,
+		"character_id": 10,
+		"effects": {"detection_tn": 25},
+		"metadata": {
+			"impersonated_id": 5,
+			"recipient_id": 20,
+			"topic_id": 42,
+		},
+	}]
+	var pending: Array[LetterData] = []
+	var next_id: Array[int] = [100]
+	DayOrchestrator._process_forge_letter_writebacks(
+		results, pending, next_id, 50,
+	)
+	assert_eq(pending.size(), 1)
+	var letter: LetterData = pending[0]
+	assert_eq(letter.letter_id, 100)
+	assert_eq(letter.sender_id, 5)
+	assert_eq(letter.recipient_id, 20)
+	assert_eq(letter.topic, 42)
+	assert_true(letter.is_forged)
+	assert_eq(letter.forged_sender_id, 10)
+	assert_eq(letter.forgery_tn, 25)
+	assert_eq(letter.disposition_bonus, 0)
+	assert_eq(next_id[0], 101)
+
+
+func test_forge_letter_writeback_skips_failed() -> void:
+	var results: Array = [{
+		"action_id": "FORGE_IMPERSONATION_LETTER",
+		"success": false,
+		"character_id": 10,
+		"effects": {"detection_tn": 0},
+		"metadata": {"impersonated_id": 5, "recipient_id": 20},
+	}]
+	var pending: Array[LetterData] = []
+	var next_id: Array[int] = [100]
+	DayOrchestrator._process_forge_letter_writebacks(
+		results, pending, next_id, 50,
+	)
+	assert_eq(pending.size(), 0)
+
+
+func test_forge_letter_writeback_skips_missing_recipient() -> void:
+	var results: Array = [{
+		"action_id": "FORGE_IMPERSONATION_LETTER",
+		"success": true,
+		"character_id": 10,
+		"effects": {"detection_tn": 25},
+		"metadata": {"impersonated_id": 5, "recipient_id": -1},
+	}]
+	var pending: Array[LetterData] = []
+	var next_id: Array[int] = [100]
+	DayOrchestrator._process_forge_letter_writebacks(
+		results, pending, next_id, 50,
+	)
+	assert_eq(pending.size(), 0)
+
+
+func test_forge_order_writeback_creates_forged_order() -> void:
+	var target := L5RCharacterData.new()
+	target.character_id = 20
+	target.lord_id = 5
+	var chars: Dictionary = {20: target}
+	var results: Array = [{
+		"action_id": "FORGE_ORDER",
+		"success": true,
+		"character_id": 10,
+		"target_npc_id": 20,
+		"effects": {"detection_tn": 30},
+	}]
+	var pending: Array[LetterData] = []
+	var next_id: Array[int] = [200]
+	DayOrchestrator._process_forge_order_writebacks(
+		results, pending, next_id, 50, chars,
+	)
+	assert_eq(pending.size(), 1)
+	var letter: LetterData = pending[0]
+	assert_eq(letter.sender_id, 5)
+	assert_eq(letter.recipient_id, 20)
+	assert_true(letter.is_forged)
+	assert_true(letter.is_order)
+	assert_eq(letter.forged_sender_id, 10)
+	assert_eq(letter.forgery_tn, 30)
+	assert_eq(next_id[0], 201)
+
+
+func test_forge_order_writeback_skips_no_lord() -> void:
+	var target := L5RCharacterData.new()
+	target.character_id = 20
+	target.lord_id = -1
+	var chars: Dictionary = {20: target}
+	var results: Array = [{
+		"action_id": "FORGE_ORDER",
+		"success": true,
+		"character_id": 10,
+		"target_npc_id": 20,
+		"effects": {"detection_tn": 30},
+	}]
+	var pending: Array[LetterData] = []
+	var next_id: Array[int] = [200]
+	DayOrchestrator._process_forge_order_writebacks(
+		results, pending, next_id, 50, chars,
+	)
+	assert_eq(pending.size(), 0)
+
+
+func test_forged_order_delivery_writes_objective() -> void:
+	var target := L5RCharacterData.new()
+	target.character_id = 20
+	var chars: Dictionary = {20: target}
+	var objectives_map: Dictionary = {}
+
+	var letter := LetterData.new()
+	letter.letter_id = 1
+	letter.sender_id = 5
+	letter.recipient_id = 20
+	letter.delivered = true
+	letter.is_forged = true
+	letter.is_order = true
+	letter.forged_sender_id = 10
+	letter.forgery_detected = false
+	var pending: Array[LetterData] = [letter]
+
+	DayOrchestrator._process_forged_order_delivery(
+		pending, objectives_map, chars,
+	)
+	assert_true(objectives_map.has(20))
+	var objs: Array = objectives_map[20]
+	assert_eq(objs.size(), 1)
+	assert_eq(objs[0]["source"], "forged_order")
+	assert_eq(objs[0]["forger_id"], 10)
+	assert_eq(objs[0]["assigned_by"], 5)
+	assert_true(letter.order_applied)
+
+
+func test_forged_order_delivery_skips_detected() -> void:
+	var target := L5RCharacterData.new()
+	target.character_id = 20
+	var chars: Dictionary = {20: target}
+	var objectives_map: Dictionary = {}
+
+	var letter := LetterData.new()
+	letter.letter_id = 1
+	letter.sender_id = 5
+	letter.recipient_id = 20
+	letter.delivered = true
+	letter.is_forged = true
+	letter.is_order = true
+	letter.forged_sender_id = 10
+	letter.forgery_detected = true
+	var pending: Array[LetterData] = [letter]
+
+	DayOrchestrator._process_forged_order_delivery(
+		pending, objectives_map, chars,
+	)
+	assert_false(objectives_map.has(20))

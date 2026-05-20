@@ -28,6 +28,8 @@ extends Resource
 @export var forged_sender_id: int = -1
 @export var forgery_tn: int = 0
 @export var forgery_detected: bool = false
+@export var is_order: bool = false
+@export var order_applied: bool = false
 
 # Witness report (populated by reactive WRITE_LETTER for witness_report_motivated)
 @export var report_case_id: int = -1

@@ -304,6 +304,17 @@ static func advance_day(
 		active_secrets, next_secret_id,
 	)
 
+	_process_forge_letter_writebacks(
+		day_result.get("results", []),
+		pending_letters, next_letter_id, ic_day,
+	)
+
+	_process_forge_order_writebacks(
+		day_result.get("results", []),
+		pending_letters, next_letter_id, ic_day,
+		characters_by_id,
+	)
+
 	_process_taint_proximity_detection(
 		day_result.get("results", []),
 		characters_by_id, character_province_map, dice_engine,
@@ -724,6 +735,10 @@ static func advance_day(
 	_compute_positions_from_letters(letter_results, active_topics, characters_by_id)
 	_process_letter_commitment_creation(
 		pending_letters, commitments, next_commitment_id, ic_day,
+	)
+
+	_process_forged_order_delivery(
+		pending_letters, objectives_map, characters_by_id,
 	)
 
 	var reply_letters: Array[LetterData] = []
@@ -4403,6 +4418,127 @@ static func _process_fabricate_secret_writebacks(
 		if fabricator_id >= 0 and fabricator_id not in sd.known_by_ids:
 			sd.known_by_ids.append(fabricator_id)
 		active_secrets.append(sd)
+
+
+static func _process_forge_letter_writebacks(
+	results: Array,
+	pending_letters: Array[LetterData],
+	next_letter_id: Array[int],
+	ic_day: int,
+) -> void:
+	for r: Variant in results:
+		if not r is Dictionary:
+			continue
+		var d: Dictionary = r as Dictionary
+		if d.get("action_id", "") != "FORGE_IMPERSONATION_LETTER":
+			continue
+		if not d.get("success", false):
+			continue
+		var effects: Dictionary = d.get("effects", {})
+		var detection_tn: int = effects.get("detection_tn", 15)
+		var forger_id: int = d.get("character_id", -1)
+		var metadata: Dictionary = d.get("metadata", {})
+		var impersonated_id: int = metadata.get("impersonated_id", -1)
+		var recipient_id: int = metadata.get("recipient_id", -1)
+		var topic_id: int = metadata.get("topic_id", -1)
+		if impersonated_id < 0 or recipient_id < 0:
+			continue
+		var lid: int = next_letter_id[0]
+		next_letter_id[0] = lid + 1
+		var letter := LetterData.new()
+		letter.letter_id = lid
+		letter.sender_id = impersonated_id
+		letter.recipient_id = recipient_id
+		letter.topic = topic_id
+		letter.ic_day_sent = ic_day
+		letter.ic_day_arrival = ic_day + LetterSystem.calculate_delivery_time(3, 0, 0, 0, false)
+		letter.quality = 0
+		letter.disposition_bonus = 0
+		letter.is_forged = true
+		letter.forged_sender_id = forger_id
+		letter.forgery_tn = detection_tn
+		pending_letters.append(letter)
+
+
+static func _process_forge_order_writebacks(
+	results: Array,
+	pending_letters: Array[LetterData],
+	next_letter_id: Array[int],
+	ic_day: int,
+	characters_by_id: Dictionary,
+) -> void:
+	for r: Variant in results:
+		if not r is Dictionary:
+			continue
+		var d: Dictionary = r as Dictionary
+		if d.get("action_id", "") != "FORGE_ORDER":
+			continue
+		if not d.get("success", false):
+			continue
+		var effects: Dictionary = d.get("effects", {})
+		var detection_tn: int = effects.get("detection_tn", 20)
+		var forger_id: int = d.get("character_id", -1)
+		var target_id: int = d.get("target_npc_id", -1)
+		if target_id < 0:
+			continue
+		var target: L5RCharacterData = characters_by_id.get(target_id)
+		if target == null:
+			continue
+		var impersonated_id: int = target.lord_id if target.lord_id >= 0 else -1
+		if impersonated_id < 0:
+			continue
+		var lid: int = next_letter_id[0]
+		next_letter_id[0] = lid + 1
+		var letter := LetterData.new()
+		letter.letter_id = lid
+		letter.sender_id = impersonated_id
+		letter.recipient_id = target_id
+		letter.topic = -1
+		letter.ic_day_sent = ic_day
+		letter.ic_day_arrival = ic_day + LetterSystem.calculate_delivery_time(3, 0, 0, 0, false)
+		letter.quality = 0
+		letter.disposition_bonus = 0
+		letter.is_forged = true
+		letter.forged_sender_id = forger_id
+		letter.forgery_tn = detection_tn
+		letter.is_order = true
+		pending_letters.append(letter)
+
+
+static func _process_forged_order_delivery(
+	pending_letters: Array[LetterData],
+	objectives_map: Dictionary,
+	characters_by_id: Dictionary,
+) -> void:
+	for letter: LetterData in pending_letters:
+		if not letter.delivered:
+			continue
+		if not letter.is_forged:
+			continue
+		if letter.forgery_detected:
+			continue
+		if not letter.is_order:
+			continue
+		if letter.order_applied:
+			continue
+		var target: L5RCharacterData = characters_by_id.get(letter.recipient_id)
+		if target == null:
+			continue
+		var forger_id: int = letter.forged_sender_id
+		var current_objectives: Array = objectives_map.get(letter.recipient_id, [])
+		var forged_objective: Dictionary = {
+			"need_type": "TRAVEL_TO",
+			"priority": 8,
+			"target_settlement_id": -1,
+			"source": "forged_order",
+			"forger_id": forger_id,
+			"assigned_by": letter.sender_id,
+		}
+		if current_objectives.size() > 0:
+			current_objectives.insert(0, forged_objective)
+		else:
+			objectives_map[letter.recipient_id] = [forged_objective]
+		letter.order_applied = true
 
 
 # TN for the check is deferred to Section 31/42 — using placeholder TN 20.

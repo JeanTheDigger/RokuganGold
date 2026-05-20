@@ -874,6 +874,31 @@ For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
   purpose but not NeedType scoring weights. Metadata: authority_level from
   Forgery skill rank (1-3→minor, 4-6→moderate, 7+→major); target_npc_id from
   need. 8 tests.
+- **FORGE_IMPERSONATION_LETTER writeback — letter creation wired. FIXED.**
+  `_process_forge_letter_writebacks()` creates LetterData on successful
+  FORGE_IMPERSONATION_LETTER. Sets sender_id=impersonated person,
+  forged_sender_id=actual forger, is_forged=true, forgery_tn from executor,
+  disposition_bonus=0 (no Calligraphy quality per GDD s12.8). Enters normal
+  letter pipeline — auto_detect_forgery fires on receipt if recipient has
+  prior correspondence. Province distance PROVISIONAL (3). 3 tests.
+- **FORGE_ORDER writeback — forged order creation + delivery wired. FIXED.**
+  `_process_forge_order_writebacks()` creates LetterData with is_order=true
+  on successful FORGE_ORDER. Impersonated sender = target's lord_id. Skips
+  if target has no lord. `_process_forged_order_delivery()` fires after
+  letter delivery: if forged order passes detection, writes TRAVEL_TO
+  objective with source="forged_order" and forger_id tracking. Detected
+  forgeries are discarded. LetterData gains is_order and order_applied
+  fields. 4 tests.
+- **Detected forgery topic transfer bug. FIXED.**
+  `process_pending_letters()` ran `deliver_letter()` even on detected
+  forgeries, transferring topics and applying disposition bonuses. GDD s12.7
+  specifies detected forgeries are disregarded. Now skips deliver_letter()
+  on detection, marks as delivered, and returns result with
+  forgery_detected=true. 2 tests.
+- **Covert result metadata passthrough. FIXED.**
+  `_build_covert_result()` in action_executor now includes
+  `action.metadata` in the result dict. Without this, forge writeback
+  handlers had no access to impersonated_id, recipient_id, or topic_id.
 
 ### Known Code Issues — Deferred (2026-05-19, metadata population audit)
 - **EXPOSE_SECRET_PRIVATELY — metadata unpopulated, always fails. FIXED.**

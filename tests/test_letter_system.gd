@@ -1146,3 +1146,68 @@ func test_reply_does_not_propagate_meeting_when_hostile():
 	for reply: LetterData in replies:
 		assert_false(reply.meeting_proposal,
 			"Hostile recipient should not confirm meeting")
+
+
+# -- Forgery Detection Skip (GDD s12.7: detected forgery = discard) -----------
+
+
+func test_detected_forgery_skips_topic_transfer():
+	var dice := DiceEngine.new()
+	dice.set_seed(42)
+	var sender := _make_char(1, 3)
+	var recipient := _make_char(2, 7)
+	recipient.skills["Investigation"] = 10
+	recipient.traits[Enums.Trait.PERCEPTION] = 10
+	var chars: Dictionary = {1: sender, 2: recipient}
+	var log: Array[Dictionary] = []
+
+	var authentic: LetterData = LetterSystem.write_letter(
+		1, sender, 2, 5, 0, dice, 0
+	)
+	authentic.ic_day_arrival = 0
+
+	var forged: LetterData = LetterSystem.write_letter(
+		2, sender, 2, 99, 1, dice, 0
+	)
+	forged.ic_day_arrival = 1
+	forged.is_forged = true
+	forged.forged_sender_id = 50
+	forged.forgery_tn = 5
+	var pending: Array = [authentic, forged]
+
+	LetterSystem.process_pending_letters(pending, chars, 0, 1, log, [], dice)
+	var results: Array[Dictionary] = LetterSystem.process_pending_letters(
+		pending, chars, 1, 1, log, [], dice
+	)
+	assert_eq(results.size(), 1)
+	assert_true(results[0].get("forgery_detected", false))
+	assert_false(99 in recipient.topic_pool,
+		"Detected forgery should NOT transfer topic")
+
+
+func test_undetected_forgery_transfers_topic():
+	var dice := DiceEngine.new()
+	dice.set_seed(42)
+	var sender := _make_char(1, 3)
+	var recipient := _make_char(2, 1)
+	recipient.skills["Investigation"] = 1
+	recipient.traits[Enums.Trait.PERCEPTION] = 1
+	var chars: Dictionary = {1: sender, 2: recipient}
+	var log: Array[Dictionary] = []
+
+	var forged: LetterData = LetterSystem.write_letter(
+		1, sender, 2, 99, 0, dice, 0
+	)
+	forged.ic_day_arrival = 0
+	forged.is_forged = true
+	forged.forged_sender_id = 50
+	forged.forgery_tn = 50
+	var pending: Array = [forged]
+
+	var results: Array[Dictionary] = LetterSystem.process_pending_letters(
+		pending, chars, 0, 1, log, [], dice
+	)
+	assert_eq(results.size(), 1)
+	assert_false(results[0].get("forgery_detected", true))
+	assert_true(99 in recipient.topic_pool,
+		"Undetected forgery SHOULD transfer topic")

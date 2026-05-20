@@ -369,6 +369,17 @@ static func process_pending_letters(
 					)
 					if detected:
 						item.forgery_detected = true
+						item.delivered = true
+						results.append({
+							"letter_id": item.letter_id,
+							"sender_id": item.sender_id,
+							"recipient_id": item.recipient_id,
+							"topic": item.topic,
+							"is_forged": true,
+							"forged_sender_id": item.forged_sender_id,
+							"forgery_detected": true,
+						})
+						continue
 				var delivery: Dictionary = deliver_letter(
 					item, recipient, current_season, action_log, topics_by_id
 				)
@@ -380,7 +391,7 @@ static func process_pending_letters(
 					if item.is_forged:
 						delivery["is_forged"] = true
 						delivery["forged_sender_id"] = item.forged_sender_id
-						delivery["forgery_detected"] = item.forgery_detected
+						delivery["forgery_detected"] = false
 					if item.is_reply:
 						var sender_char: L5RCharacterData = characters_by_id.get(item.sender_id)
 						if sender_char != null:

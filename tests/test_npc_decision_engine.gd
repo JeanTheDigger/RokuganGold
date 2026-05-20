@@ -3320,13 +3320,18 @@ func test_forge_order_in_all_contexts() -> void:
 func test_forge_metadata_low_forgery() -> void:
 	var ctx := _make_metadata_ctx()
 	ctx.skill_ranks = {"Forgery": 2}
+	ctx.known_topics = [77, 88]
 	var need := _make_metadata_need()
 	need.target_npc_id = 42
+	need.target_npc_id_secondary = 55
 	var option := NPCDataStructures.ScoredAction.new()
 	option.action_id = "FORGE_IMPERSONATION_LETTER"
 	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
 	assert_eq(option.metadata.get("authority_level", ""), "minor")
 	assert_eq(option.metadata.get("target_npc_id", -1), 42)
+	assert_eq(option.metadata.get("impersonated_id", -1), 42)
+	assert_eq(option.metadata.get("recipient_id", -1), 55)
+	assert_eq(option.metadata.get("topic_id", -1), 77)
 
 
 func test_forge_metadata_mid_forgery() -> void:

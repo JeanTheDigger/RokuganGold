@@ -2669,22 +2669,52 @@ static func _populate_action_metadata(
 		option.metadata = sortie_meta
 	elif option.action_id == "TREAT_WOUND":
 		option.metadata = {"raises": _pick_medicine_raises(ctx)}
-	elif option.action_id in ["FORGE_IMPERSONATION_LETTER", "FORGE_ORDER"]:
-		option.metadata = _build_forge_metadata(ctx, need)
+	elif option.action_id == "FORGE_IMPERSONATION_LETTER":
+		option.metadata = _build_forge_letter_metadata(ctx, need)
+	elif option.action_id == "FORGE_ORDER":
+		option.metadata = _build_forge_order_metadata(ctx, need)
 
 
-static func _build_forge_metadata(
+static func _build_forge_letter_metadata(
 	ctx: NPCDataStructures.ContextSnapshot,
 	need: NPCDataStructures.ImmediateNeed,
 ) -> Dictionary:
-	var target_id: int = need.target_npc_id
 	var forgery_rank: int = ctx.skill_ranks.get("Forgery", 0)
-	var authority: String = "minor"
+	var authority: String = _forge_authority_from_rank(forgery_rank)
+	var impersonated_id: int = need.target_npc_id
+	var recipient_id: int = -1
+	if need.target_npc_id_secondary >= 0:
+		recipient_id = need.target_npc_id_secondary
+	var topic_id: int = -1
+	if not ctx.known_topics.is_empty():
+		topic_id = ctx.known_topics[0]
+	return {
+		"authority_level": authority,
+		"target_npc_id": need.target_npc_id,
+		"impersonated_id": impersonated_id,
+		"recipient_id": recipient_id,
+		"topic_id": topic_id,
+	}
+
+
+static func _build_forge_order_metadata(
+	ctx: NPCDataStructures.ContextSnapshot,
+	need: NPCDataStructures.ImmediateNeed,
+) -> Dictionary:
+	var forgery_rank: int = ctx.skill_ranks.get("Forgery", 0)
+	var authority: String = _forge_authority_from_rank(forgery_rank)
+	return {
+		"authority_level": authority,
+		"target_npc_id": need.target_npc_id,
+	}
+
+
+static func _forge_authority_from_rank(forgery_rank: int) -> String:
 	if forgery_rank >= 7:
-		authority = "major"
+		return "major"
 	elif forgery_rank >= 4:
-		authority = "moderate"
-	return {"authority_level": authority, "target_npc_id": target_id}
+		return "moderate"
+	return "minor"
 
 
 static func _pick_fabrication_severity(
