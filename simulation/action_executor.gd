@@ -805,12 +805,15 @@ static func _execute_public_insult(
 	var raises: int = maxi(int(margin / 5.0), 0)
 	var witness_ids: Array[int] = _get_co_located_ids(character, characters_by_id)
 
+	var insult_type: String = action.metadata.get("insult_type", "self")
+
 	var effects: Dictionary = {}
 	if success:
 		var per_witness_disp: int = -2 - raises
 		effects = {
 			"target_witness_disposition": per_witness_disp,
 			"witnesses": witness_ids,
+			"insult_type": insult_type,
 		}
 	else:
 		var backfire_disp: int = -2
@@ -818,6 +821,7 @@ static func _execute_public_insult(
 			"failed": true,
 			"witness_disposition_loss": backfire_disp,
 			"witnesses": witness_ids,
+			"insult_type": insult_type,
 		}
 		if margin <= -10:
 			effects["glory_change"] = -0.05

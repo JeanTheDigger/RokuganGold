@@ -2405,6 +2405,13 @@ static func _populate_action_metadata(
 			"damage_raises": split["damage"],
 			"concealment_raises": split["concealment"],
 		}
+	elif option.action_id == "PUBLIC_INSULT":
+		var insult_type: String = "self"
+		if need.need_type == "ELIMINATE_CHARACTER":
+			insult_type = "ancestors"
+		elif need.need_type == "DAMAGE_RELATIONSHIP":
+			insult_type = "clan"
+		option.metadata = {"insult_type": insult_type}
 	elif option.action_id == "INTIMIDATE":
 		var target_id: int = need.target_npc_id if need.target_npc_id >= 0 else option.target_npc_id
 		var secret_meta: Dictionary = _pick_secret_about_target(ctx, target_id)

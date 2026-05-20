@@ -48,6 +48,7 @@ static func apply(
 	_apply_disposition_ripple(effects, actor, target_id, characters, applied)
 	_apply_honor(effects, actor, applied)
 	_apply_glory(effects, actor, applied)
+	_apply_winner_glory(effects, characters, applied)
 	_apply_infamy(effects, actor, applied)
 	_apply_province_effects(effects, result, provinces, applied, settlements)
 	_apply_info_events(effects, result, applied)
@@ -366,6 +367,26 @@ static func _apply_glory(
 		"character_id": actor.character_id,
 		"delta": actual,
 		"new_glory": actor.glory,
+	})
+
+
+static func _apply_winner_glory(
+	effects: Dictionary,
+	characters: Dictionary,
+	applied: Dictionary,
+) -> void:
+	var winner_glory: float = effects.get("winner_glory_change", 0.0)
+	if absf(winner_glory) < 0.001:
+		return
+	var winner_id: int = effects.get("winner_glory_recipient_id", -1)
+	var winner: L5RCharacterData = characters.get(winner_id)
+	if winner == null:
+		return
+	var actual: float = HonorGlorySystem.apply_glory_change(winner, winner_glory)
+	applied["glory_changes"].append({
+		"character_id": winner.character_id,
+		"delta": actual,
+		"new_glory": winner.glory,
 	})
 
 

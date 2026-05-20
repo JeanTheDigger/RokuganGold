@@ -1311,3 +1311,52 @@ func test_false_info_no_entry_without_target() -> void:
 	}
 	EffectApplicator.apply(result, _characters, _provinces, _action_log)
 	assert_eq(_actor.knowledge_pool.size(), 0, "No false info without valid target")
+
+
+# -- Winner Glory Application (duel non-actor winner) -------------------------
+
+func test_winner_glory_change_applied_to_non_actor_winner() -> void:
+	var winner := L5RCharacterData.new()
+	winner.character_id = 90
+	winner.glory = 3.0
+	_characters[90] = winner
+
+	var result: Dictionary = {
+		"success": true,
+		"action_id": "ISSUE_DUEL_CHALLENGE",
+		"character_id": _actor.character_id,
+		"target_npc_id": 90,
+		"ic_day": 1,
+		"season": 0,
+		"effects": {
+			"winner_glory_change": 0.5,
+			"winner_glory_recipient_id": 90,
+		},
+	}
+
+	EffectApplicator.apply(result, _characters, _provinces, _action_log)
+	assert_almost_eq(winner.glory, 3.5, 0.01,
+		"Winner glory change should be applied to the winner character")
+
+
+func test_winner_glory_not_applied_without_key() -> void:
+	var target := L5RCharacterData.new()
+	target.character_id = 91
+	target.glory = 3.0
+	_characters[91] = target
+
+	var result: Dictionary = {
+		"success": true,
+		"action_id": "ISSUE_DUEL_CHALLENGE",
+		"character_id": _actor.character_id,
+		"target_npc_id": 91,
+		"ic_day": 1,
+		"season": 0,
+		"effects": {
+			"glory_change": 0.5,
+		},
+	}
+
+	EffectApplicator.apply(result, _characters, _provinces, _action_log)
+	assert_almost_eq(target.glory, 3.0, 0.01,
+		"Without winner_glory_change key, target glory unchanged")

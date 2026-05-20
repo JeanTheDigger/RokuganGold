@@ -11835,3 +11835,201 @@ func test_sortie_no_crisis_no_protecting_honor() -> void:
 
 	assert_almost_eq(commander.honor, initial_honor, 0.01,
 		"Sortie without crisis should not trigger protecting honor")
+
+
+# TABLE 2.3 — INSULT TYPE CLASSIFICATION
+# ==============================================================================
+
+func test_ancestor_insult_causes_honor_loss() -> void:
+	var target := L5RCharacterData.new()
+	target.character_id = 270
+	target.character_name = "Insulted Samurai"
+	target.honor = 5.0
+	target.school = "Akodo Bushi"
+	target.clan = "Lion"
+	target.wounds_taken = 0
+	var characters_by_id: Dictionary = {270: target}
+
+	var day_results: Array = [{
+		"action_id": "PUBLIC_INSULT",
+		"character_id": 271,
+		"target_npc_id": 270,
+		"effects": {
+			"target_witness_disposition": -3,
+			"witnesses": [],
+			"insult_type": "ancestors",
+		},
+	}]
+
+	var initial_honor: float = target.honor
+	DayOrchestrator._process_court_action_effects(
+		day_results, characters_by_id,
+	)
+
+	assert_true(target.honor < initial_honor,
+		"Ancestor insult should cause honor loss (enduring insult to ancestors)")
+
+
+func test_clan_insult_causes_honor_loss() -> void:
+	var target := L5RCharacterData.new()
+	target.character_id = 272
+	target.character_name = "Clan-Insulted Samurai"
+	target.honor = 5.0
+	target.school = "Matsu Bushi"
+	target.clan = "Lion"
+	target.wounds_taken = 0
+	var characters_by_id: Dictionary = {272: target}
+
+	var day_results: Array = [{
+		"action_id": "PUBLIC_INSULT",
+		"character_id": 273,
+		"target_npc_id": 272,
+		"effects": {
+			"target_witness_disposition": -3,
+			"witnesses": [],
+			"insult_type": "clan",
+		},
+	}]
+
+	var initial_honor: float = target.honor
+	DayOrchestrator._process_court_action_effects(
+		day_results, characters_by_id,
+	)
+
+	assert_true(target.honor < initial_honor,
+		"Clan insult should cause honor loss (enduring insult to family/clan)")
+
+
+func test_self_insult_default_type_gains_honor() -> void:
+	var target := L5RCharacterData.new()
+	target.character_id = 274
+	target.character_name = "Self-Insulted Samurai"
+	target.honor = 3.0
+	target.school = "Hida Bushi"
+	target.clan = "Crab"
+	target.wounds_taken = 0
+	var characters_by_id: Dictionary = {274: target}
+
+	var day_results: Array = [{
+		"action_id": "PUBLIC_INSULT",
+		"character_id": 275,
+		"target_npc_id": 274,
+		"effects": {
+			"target_witness_disposition": -3,
+			"witnesses": [],
+			"insult_type": "self",
+		},
+	}]
+
+	var initial_honor: float = target.honor
+	DayOrchestrator._process_court_action_effects(
+		day_results, characters_by_id,
+	)
+
+	assert_true(target.honor > initial_honor,
+		"Self insult should gain honor (enduring insult to yourself)")
+
+
+# TABLE 2.3 — POLITELY IGNORING DISHONORABLE BEHAVIOR
+# ==============================================================================
+
+func test_non_magistrate_witness_gets_ignoring_honor() -> void:
+	var witness := L5RCharacterData.new()
+	witness.character_id = 280
+	witness.character_name = "Bystander"
+	witness.honor = 1.0
+	witness.school = "Hida Bushi"
+	witness.clan = "Crab"
+	witness.role_position = ""
+	witness.topic_pool = [] as Array[int]
+	var characters_by_id: Dictionary = {280: witness}
+
+	var topic := TopicData.new()
+	topic.topic_id = 500
+	var record := CrimeRecord.new()
+	record.case_id = 70
+	record.witnesses = [280] as Array[int]
+	record.victim_id = -1
+
+	var initial_honor: float = witness.honor
+	DayOrchestrator._seed_crime_topic_to_knowers(topic, record, characters_by_id)
+
+	assert_true(witness.honor > initial_honor,
+		"Low-honor non-magistrate witness gains honor for ignoring dishonorable behavior")
+	assert_true(500 in witness.topic_pool,
+		"Witness should have the crime topic in their pool")
+
+
+func test_magistrate_witness_no_ignoring_honor() -> void:
+	var magistrate := L5RCharacterData.new()
+	magistrate.character_id = 281
+	magistrate.character_name = "Magistrate"
+	magistrate.honor = 7.0
+	magistrate.school = "Doji Courtier"
+	magistrate.clan = "Crane"
+	magistrate.role_position = "Clan Magistrate"
+	magistrate.topic_pool = [] as Array[int]
+	var characters_by_id: Dictionary = {281: magistrate}
+
+	var topic := TopicData.new()
+	topic.topic_id = 501
+	var record := CrimeRecord.new()
+	record.case_id = 71
+	record.witnesses = [281] as Array[int]
+	record.victim_id = -1
+
+	var initial_honor: float = magistrate.honor
+	DayOrchestrator._seed_crime_topic_to_knowers(topic, record, characters_by_id)
+
+	assert_almost_eq(magistrate.honor, initial_honor, 0.01,
+		"Magistrate witnesses should not get ignoring honor")
+
+
+func test_victim_witness_no_ignoring_honor() -> void:
+	var victim := L5RCharacterData.new()
+	victim.character_id = 282
+	victim.character_name = "Victim Witness"
+	victim.honor = 3.0
+	victim.school = "Hida Bushi"
+	victim.clan = "Crab"
+	victim.role_position = ""
+	victim.topic_pool = [] as Array[int]
+	var characters_by_id: Dictionary = {282: victim}
+
+	var topic := TopicData.new()
+	topic.topic_id = 502
+	var record := CrimeRecord.new()
+	record.case_id = 72
+	record.witnesses = [282] as Array[int]
+	record.victim_id = 282
+
+	var initial_honor: float = victim.honor
+	DayOrchestrator._seed_crime_topic_to_knowers(topic, record, characters_by_id)
+
+	assert_almost_eq(victim.honor, initial_honor, 0.01,
+		"Victim who is also a witness should not get ignoring honor")
+
+
+func test_high_honor_witness_loses_honor_for_ignoring() -> void:
+	var witness := L5RCharacterData.new()
+	witness.character_id = 283
+	witness.character_name = "High Honor Bystander"
+	witness.honor = 9.0
+	witness.school = "Kakita Bushi"
+	witness.clan = "Crane"
+	witness.role_position = ""
+	witness.topic_pool = [] as Array[int]
+	var characters_by_id: Dictionary = {283: witness}
+
+	var topic := TopicData.new()
+	topic.topic_id = 503
+	var record := CrimeRecord.new()
+	record.case_id = 73
+	record.witnesses = [283] as Array[int]
+	record.victim_id = -1
+
+	var initial_honor: float = witness.honor
+	DayOrchestrator._seed_crime_topic_to_knowers(topic, record, characters_by_id)
+
+	assert_true(witness.honor < initial_honor,
+		"High-honor non-magistrate witness loses honor for ignoring dishonorable behavior")

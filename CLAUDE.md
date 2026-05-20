@@ -1108,10 +1108,18 @@ Constants and helpers added to `crime_system.gd` for all Table 2.3 rows.
 - **Protecting clan/family/lord despite great risk** — CONDUCT_SORTIE or
   SEAL_WALL_BREACH at a province with active_crisis_id >= 0.
   `_process_protecting_clan_honor_writebacks()`. 2 tests.
-**Blocked (no clear mechanical trigger yet):**
-- **Politely ignoring dishonorable behavior** — requires witnessing + choosing
-  not to act tracking. Also note: gain at low Honor, loss at high Honor.
-All 10 constant arrays and 10 helper functions added. 19 constant/integration tests.
+- **Politely ignoring dishonorable behavior** — non-magistrate witnesses of
+  a crime receive ignoring honor adjustment at topic seeding time. Magistrates
+  (UPHOLD_LAW holders) are exempt. Victims who are also witnesses exempt.
+  Low honor gains (+0.3), high honor loses (-0.2). 4 tests.
+- **Insult type classification** — PUBLIC_INSULT gains `insult_type` metadata
+  (self/ancestors/clan). NPC engine selects: ELIMINATE_CHARACTER→ancestors,
+  DAMAGE_RELATIONSHIP→clan, default→self. Self-insult gains honor, ancestor/
+  clan insult loses honor. 3 tests.
+- **Effect applicator: winner_glory_change gap. FIXED.** Duel winner glory
+  (+0.5 at court) was emitted but never consumed when the winner was not
+  the challenger. Added `_apply_winner_glory()` to EffectApplicator. 2 tests.
+All 10 constant arrays and 10 helper functions added. 28 constant/integration tests.
 
 ### Known Code Issues — Deferred (2026-05-19, metadata population audit)
 - **EXPOSE_SECRET_PRIVATELY — metadata unpopulated, always fails. FIXED.**

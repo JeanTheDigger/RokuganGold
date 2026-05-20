@@ -5156,6 +5156,11 @@ static func _seed_crime_topic_to_knowers(
 		var witness: L5RCharacterData = characters_by_id.get(witness_id)
 		if witness != null and topic.topic_id not in witness.topic_pool:
 			witness.topic_pool.append(topic.topic_id)
+			if witness.role_position not in MAGISTRATE_ROLE_POSITIONS \
+					and witness_id != record.victim_id:
+				HonorGlorySystem.apply_honor_change(
+					witness, CrimeSystem.get_ignoring_dishonorable_honor(witness)
+				)
 	if record.victim_id >= 0:
 		var victim: L5RCharacterData = characters_by_id.get(record.victim_id)
 		if victim != null and topic.topic_id not in victim.topic_pool:
@@ -14081,9 +14086,20 @@ static func _process_court_action_effects(
 
 		# Table 2.3: Enduring an insult — target of successful PUBLIC_INSULT
 		if action_id == "PUBLIC_INSULT" and not effects.get("failed", false) and target != null:
-			HonorGlorySystem.apply_honor_change(
-				target, CrimeSystem.get_enduring_self_insult_honor(target)
-			)
+			var insult_type: String = effects.get("insult_type", "self")
+			match insult_type:
+				"ancestors":
+					HonorGlorySystem.apply_honor_change(
+						target, CrimeSystem.get_insult_ancestors_honor(target)
+					)
+				"clan":
+					HonorGlorySystem.apply_honor_change(
+						target, CrimeSystem.get_insult_family_clan_honor(target)
+					)
+				_:
+					HonorGlorySystem.apply_honor_change(
+						target, CrimeSystem.get_enduring_self_insult_honor(target)
+					)
 
 		# Play a Game bilateral disposition
 		if effects.has("play_game_result") and target != null:
