@@ -307,12 +307,13 @@ static func advance_day(
 	_process_forge_letter_writebacks(
 		day_result.get("results", []),
 		pending_letters, next_letter_id, ic_day,
+		crime_records, next_case_id, characters_by_id,
 	)
 
 	_process_forge_order_writebacks(
 		day_result.get("results", []),
 		pending_letters, next_letter_id, ic_day,
-		characters_by_id,
+		characters_by_id, crime_records, next_case_id,
 	)
 
 	_process_taint_proximity_detection(
@@ -736,6 +737,9 @@ static func advance_day(
 	_process_impersonation_detection(
 		pending_letters, characters_by_id, active_topics,
 		next_topic_id, ic_day, objectives_map,
+	)
+	_escalate_detected_forgery_crimes(
+		pending_letters, crime_records,
 	)
 	_process_letter_commitment_creation(
 		pending_letters, commitments, next_commitment_id, ic_day,
@@ -4429,6 +4433,9 @@ static func _process_forge_letter_writebacks(
 	pending_letters: Array[LetterData],
 	next_letter_id: Array[int],
 	ic_day: int,
+	crime_records: Array[CrimeRecord] = [],
+	next_case_id: Array[int] = [1],
+	characters_by_id: Dictionary = {},
 ) -> void:
 	for r: Variant in results:
 		if not r is Dictionary:
@@ -4463,6 +4470,14 @@ static func _process_forge_letter_writebacks(
 		letter.forgery_tn = detection_tn
 		pending_letters.append(letter)
 
+		var forger: L5RCharacterData = characters_by_id.get(forger_id)
+		var location: String = forger.physical_location if forger != null else ""
+		_create_forgery_crime_record(
+			crime_records, next_case_id, forger_id, impersonated_id,
+			ic_day, detection_tn, location,
+			Enums.CrimeSeverity.MODERATE,
+		)
+
 
 static func _process_forge_order_writebacks(
 	results: Array,
@@ -4470,6 +4485,8 @@ static func _process_forge_order_writebacks(
 	next_letter_id: Array[int],
 	ic_day: int,
 	characters_by_id: Dictionary,
+	crime_records: Array[CrimeRecord] = [],
+	next_case_id: Array[int] = [1],
 ) -> void:
 	for r: Variant in results:
 		if not r is Dictionary:
@@ -4513,6 +4530,39 @@ static func _process_forge_order_writebacks(
 		letter.order_target_settlement_id = metadata.get("order_target_settlement_id", -1)
 		pending_letters.append(letter)
 
+		var forger: L5RCharacterData = characters_by_id.get(forger_id)
+		var location: String = forger.physical_location if forger != null else ""
+		_create_forgery_crime_record(
+			crime_records, next_case_id, forger_id, impersonated_id,
+			ic_day, detection_tn, location,
+			Enums.CrimeSeverity.SERIOUS,
+		)
+
+
+static func _create_forgery_crime_record(
+	crime_records: Array[CrimeRecord],
+	next_case_id: Array[int],
+	forger_id: int,
+	victim_id: int,
+	ic_day: int,
+	concealment_tn: int,
+	location: String,
+	severity: Enums.CrimeSeverity,
+) -> CrimeRecord:
+	var record := CrimeRecord.new()
+	record.case_id = next_case_id[0]
+	next_case_id[0] += 1
+	record.crime_type = Enums.CrimeType.DISHONORABLE_CONDUCT
+	record.severity = severity
+	record.perpetrator_id = forger_id
+	record.victim_id = victim_id
+	record.ic_day_committed = ic_day
+	record.concealment_tn = concealment_tn
+	record.location = location
+	record.legal_status = Enums.LegalStatus.NONE
+	crime_records.append(record)
+	return record
+
 
 static func _process_forged_order_delivery(
 	pending_letters: Array[LetterData],
@@ -4553,6 +4603,34 @@ static func _process_forged_order_delivery(
 			objectives_map[letter.recipient_id] = {}
 		objectives_map[letter.recipient_id]["primary"] = forged_objective
 		letter.order_applied = true
+
+
+static func _escalate_detected_forgery_crimes(
+	pending_letters: Array[LetterData],
+	crime_records: Array[CrimeRecord],
+) -> void:
+	for letter: LetterData in pending_letters:
+		if not letter.delivered:
+			continue
+		if not letter.is_forged:
+			continue
+		if not letter.forgery_detected:
+			continue
+		var forger_id: int = letter.forged_sender_id
+		if forger_id < 0:
+			continue
+		for record: CrimeRecord in crime_records:
+			if record.perpetrator_id != forger_id:
+				continue
+			if record.crime_type != Enums.CrimeType.DISHONORABLE_CONDUCT:
+				continue
+			if record.legal_status != Enums.LegalStatus.NONE:
+				continue
+			if record.victim_id != letter.sender_id:
+				continue
+			record.legal_status = Enums.LegalStatus.UNDER_INVESTIGATION
+			record.known_suspects.append(forger_id)
+			break
 
 
 static func _process_impersonation_detection(

@@ -914,6 +914,16 @@ For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
   `generate_replies()` now skips detected forgeries entirely (recipient
   who detects a forgery does not reply). 5 orchestrator tests +
   3 letter system tests.
+- **Forge crime record pipeline — CrimeRecord creation + escalation wired. FIXED.**
+  `_create_forgery_crime_record()` creates DISHONORABLE_CONDUCT CrimeRecord
+  at forge time (system always knows). FORGE_IMPERSONATION_LETTER creates
+  MODERATE severity, FORGE_ORDER creates SERIOUS severity. Legal status
+  starts at NONE (undiscovered). `_escalate_detected_forgery_crimes()`
+  fires post-delivery: when auto-detection catches a forgery, matching
+  CrimeRecord escalates to UNDER_INVESTIGATION with forger added to
+  known_suspects. Crime record links forger (perpetrator_id) to victim
+  (impersonated person), with concealment_tn from the forge roll for
+  investigation difficulty. 5 tests.
 
 ### Known Code Issues — Deferred (2026-05-19, metadata population audit)
 - **EXPOSE_SECRET_PRIVATELY — metadata unpopulated, always fails. FIXED.**

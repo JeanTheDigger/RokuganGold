@@ -10144,6 +10144,144 @@ func test_forged_order_patrol_with_province() -> void:
 
 
 # =============================================================================
+# Forge crime record tests
+# =============================================================================
+
+
+func test_forge_letter_creates_crime_record() -> void:
+	var forger := L5RCharacterData.new()
+	forger.character_id = 10
+	forger.physical_location = "crane_castle"
+	var chars: Dictionary = {10: forger}
+	var results: Array = [{
+		"action_id": "FORGE_IMPERSONATION_LETTER",
+		"success": true,
+		"character_id": 10,
+		"effects": {"detection_tn": 25},
+		"metadata": {
+			"impersonated_id": 5,
+			"recipient_id": 20,
+			"topic_id": 42,
+		},
+	}]
+	var pending: Array[LetterData] = []
+	var next_lid: Array[int] = [100]
+	var crime_records: Array[CrimeRecord] = []
+	var next_case: Array[int] = [1]
+	DayOrchestrator._process_forge_letter_writebacks(
+		results, pending, next_lid, 50,
+		crime_records, next_case, chars,
+	)
+	assert_eq(crime_records.size(), 1)
+	var cr: CrimeRecord = crime_records[0]
+	assert_eq(cr.perpetrator_id, 10)
+	assert_eq(cr.victim_id, 5)
+	assert_eq(cr.crime_type, Enums.CrimeType.DISHONORABLE_CONDUCT)
+	assert_eq(cr.severity, Enums.CrimeSeverity.MODERATE)
+	assert_eq(cr.concealment_tn, 25)
+	assert_eq(cr.location, "crane_castle")
+	assert_eq(cr.legal_status, Enums.LegalStatus.NONE)
+
+
+func test_forge_order_creates_serious_crime_record() -> void:
+	var forger := L5RCharacterData.new()
+	forger.character_id = 10
+	forger.physical_location = "lion_fortress"
+	var target := L5RCharacterData.new()
+	target.character_id = 20
+	target.lord_id = 5
+	var chars: Dictionary = {10: forger, 20: target}
+	var results: Array = [{
+		"action_id": "FORGE_ORDER",
+		"success": true,
+		"character_id": 10,
+		"target_npc_id": 20,
+		"effects": {"detection_tn": 30},
+		"metadata": {},
+	}]
+	var pending: Array[LetterData] = []
+	var next_lid: Array[int] = [200]
+	var crime_records: Array[CrimeRecord] = []
+	var next_case: Array[int] = [1]
+	DayOrchestrator._process_forge_order_writebacks(
+		results, pending, next_lid, 50,
+		chars, crime_records, next_case,
+	)
+	assert_eq(crime_records.size(), 1)
+	var cr: CrimeRecord = crime_records[0]
+	assert_eq(cr.perpetrator_id, 10)
+	assert_eq(cr.victim_id, 5)
+	assert_eq(cr.severity, Enums.CrimeSeverity.SERIOUS)
+	assert_eq(cr.concealment_tn, 30)
+
+
+func test_escalate_detected_forgery_crime() -> void:
+	var record := CrimeRecord.new()
+	record.case_id = 1
+	record.crime_type = Enums.CrimeType.DISHONORABLE_CONDUCT
+	record.severity = Enums.CrimeSeverity.MODERATE
+	record.perpetrator_id = 10
+	record.victim_id = 5
+	record.legal_status = Enums.LegalStatus.NONE
+	var crime_records: Array[CrimeRecord] = [record]
+
+	var letter := LetterData.new()
+	letter.delivered = true
+	letter.is_forged = true
+	letter.forgery_detected = true
+	letter.sender_id = 5
+	letter.forged_sender_id = 10
+	var pending: Array[LetterData] = [letter]
+
+	DayOrchestrator._escalate_detected_forgery_crimes(pending, crime_records)
+	assert_eq(record.legal_status, Enums.LegalStatus.UNDER_INVESTIGATION)
+	assert_true(10 in record.known_suspects)
+
+
+func test_escalate_skips_undetected_forgery() -> void:
+	var record := CrimeRecord.new()
+	record.case_id = 1
+	record.crime_type = Enums.CrimeType.DISHONORABLE_CONDUCT
+	record.perpetrator_id = 10
+	record.victim_id = 5
+	record.legal_status = Enums.LegalStatus.NONE
+	var crime_records: Array[CrimeRecord] = [record]
+
+	var letter := LetterData.new()
+	letter.delivered = true
+	letter.is_forged = true
+	letter.forgery_detected = false
+	letter.sender_id = 5
+	letter.forged_sender_id = 10
+	var pending: Array[LetterData] = [letter]
+
+	DayOrchestrator._escalate_detected_forgery_crimes(pending, crime_records)
+	assert_eq(record.legal_status, Enums.LegalStatus.NONE)
+
+
+func test_escalate_already_investigated_no_double() -> void:
+	var record := CrimeRecord.new()
+	record.case_id = 1
+	record.crime_type = Enums.CrimeType.DISHONORABLE_CONDUCT
+	record.perpetrator_id = 10
+	record.victim_id = 5
+	record.legal_status = Enums.LegalStatus.UNDER_INVESTIGATION
+	var crime_records: Array[CrimeRecord] = [record]
+
+	var letter := LetterData.new()
+	letter.delivered = true
+	letter.is_forged = true
+	letter.forgery_detected = true
+	letter.sender_id = 5
+	letter.forged_sender_id = 10
+	var pending: Array[LetterData] = [letter]
+
+	DayOrchestrator._escalate_detected_forgery_crimes(pending, crime_records)
+	assert_eq(record.legal_status, Enums.LegalStatus.UNDER_INVESTIGATION,
+		"Should not double-escalate")
+
+
+# =============================================================================
 # Impersonation detection tests
 # =============================================================================
 
