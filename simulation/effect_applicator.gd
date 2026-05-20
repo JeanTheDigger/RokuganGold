@@ -502,7 +502,7 @@ static func _apply_false_info(
 	for info_type: String in false_info:
 		var data: Dictionary = _generate_false_data(info_type, actor, target)
 		data["target_character_id"] = target_id
-		InformationSystem.add_knowledge(actor, InformationSystem.make_entry(
+		InformationSystem.update_intelligence_knowledge(actor, InformationSystem.make_entry(
 			Enums.KnowledgeSource.INTELLIGENCE,
 			info_type,
 			data,

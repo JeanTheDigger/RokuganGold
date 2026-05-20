@@ -750,3 +750,127 @@ func test_arrival_observation_updates_contacts_by_clan() -> void:
 	assert_true(1 in lion_contacts)
 	var crane_contacts: Array = arriving.known_contacts_by_clan.get("Crane", [])
 	assert_true(2 in crane_contacts)
+
+
+# -- update_intelligence_knowledge dedup tests --------------------------------
+
+func test_update_intelligence_replaces_same_type_same_target() -> void:
+	var c := L5RCharacterData.new()
+	c.character_id = 800
+	c.knowledge_pool = [] as Array[KnowledgeEntry]
+	var old_entry := InformationSystem.make_entry(
+		Enums.KnowledgeSource.INTELLIGENCE,
+		"personality_insight",
+		{"target_character_id": 50, "bushido_virtue": Enums.BushidoVirtue.GI},
+		0,
+	)
+	InformationSystem.update_intelligence_knowledge(c, old_entry)
+	assert_eq(c.knowledge_pool.size(), 1)
+
+	var new_entry := InformationSystem.make_entry(
+		Enums.KnowledgeSource.INTELLIGENCE,
+		"personality_insight",
+		{"target_character_id": 50, "bushido_virtue": Enums.BushidoVirtue.REI, "is_false": true},
+		1,
+	)
+	InformationSystem.update_intelligence_knowledge(c, new_entry)
+	assert_eq(c.knowledge_pool.size(), 1,
+		"Should replace existing entry, not append")
+	assert_eq(c.knowledge_pool[0].data.get("bushido_virtue"), Enums.BushidoVirtue.REI,
+		"Replaced entry should have new data")
+	assert_true(c.knowledge_pool[0].data.get("is_false", false),
+		"Replaced entry should carry is_false flag")
+
+
+func test_update_intelligence_keeps_different_targets() -> void:
+	var c := L5RCharacterData.new()
+	c.character_id = 801
+	c.knowledge_pool = [] as Array[KnowledgeEntry]
+	var e1 := InformationSystem.make_entry(
+		Enums.KnowledgeSource.INTELLIGENCE,
+		"personality_insight",
+		{"target_character_id": 50, "bushido_virtue": Enums.BushidoVirtue.GI},
+		0,
+	)
+	var e2 := InformationSystem.make_entry(
+		Enums.KnowledgeSource.INTELLIGENCE,
+		"personality_insight",
+		{"target_character_id": 51, "bushido_virtue": Enums.BushidoVirtue.YU},
+		0,
+	)
+	InformationSystem.update_intelligence_knowledge(c, e1)
+	InformationSystem.update_intelligence_knowledge(c, e2)
+	assert_eq(c.knowledge_pool.size(), 2,
+		"Different targets should not dedup")
+
+
+func test_update_intelligence_keeps_different_types() -> void:
+	var c := L5RCharacterData.new()
+	c.character_id = 802
+	c.knowledge_pool = [] as Array[KnowledgeEntry]
+	var e1 := InformationSystem.make_entry(
+		Enums.KnowledgeSource.INTELLIGENCE,
+		"personality_insight",
+		{"target_character_id": 50, "bushido_virtue": Enums.BushidoVirtue.GI},
+		0,
+	)
+	var e2 := InformationSystem.make_entry(
+		Enums.KnowledgeSource.INTELLIGENCE,
+		"disposition_toward",
+		{"target_character_id": 50, "disposition": 25},
+		0,
+	)
+	InformationSystem.update_intelligence_knowledge(c, e1)
+	InformationSystem.update_intelligence_knowledge(c, e2)
+	assert_eq(c.knowledge_pool.size(), 2,
+		"Different entry types should not dedup")
+
+
+func test_update_intelligence_non_dedup_type_appends() -> void:
+	var c := L5RCharacterData.new()
+	c.character_id = 803
+	c.knowledge_pool = [] as Array[KnowledgeEntry]
+	var e1 := InformationSystem.make_entry(
+		Enums.KnowledgeSource.INTELLIGENCE,
+		"shadow_surveillance",
+		{"target_character_id": 50, "contacts": [1, 2]},
+		0,
+	)
+	var e2 := InformationSystem.make_entry(
+		Enums.KnowledgeSource.INTELLIGENCE,
+		"shadow_surveillance",
+		{"target_character_id": 50, "contacts": [3, 4]},
+		1,
+	)
+	InformationSystem.update_intelligence_knowledge(c, e1)
+	InformationSystem.update_intelligence_knowledge(c, e2)
+	assert_eq(c.knowledge_pool.size(), 2,
+		"Non-dedup types should always append")
+
+
+func test_false_info_replaces_true_info() -> void:
+	var actor := L5RCharacterData.new()
+	actor.character_id = 804
+	actor.knowledge_pool = [] as Array[KnowledgeEntry]
+	var true_entry := InformationSystem.make_entry(
+		Enums.KnowledgeSource.INTELLIGENCE,
+		"personality_insight",
+		{"target_character_id": 60, "bushido_virtue": Enums.BushidoVirtue.CHUGI},
+		0,
+	)
+	InformationSystem.update_intelligence_knowledge(actor, true_entry)
+	assert_eq(actor.knowledge_pool.size(), 1)
+	assert_eq(actor.knowledge_pool[0].data.get("bushido_virtue"),
+		Enums.BushidoVirtue.CHUGI)
+
+	var false_entry := InformationSystem.make_entry(
+		Enums.KnowledgeSource.INTELLIGENCE,
+		"personality_insight",
+		{"target_character_id": 60, "bushido_virtue": Enums.BushidoVirtue.JIN, "is_false": true},
+		1,
+	)
+	InformationSystem.update_intelligence_knowledge(actor, false_entry)
+	assert_eq(actor.knowledge_pool.size(), 1,
+		"False info should replace true info for same target")
+	assert_true(actor.knowledge_pool[0].data.get("is_false", false),
+		"Entry should now be the false version")

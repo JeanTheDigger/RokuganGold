@@ -1360,3 +1360,35 @@ func test_winner_glory_not_applied_without_key() -> void:
 	EffectApplicator.apply(result, _characters, _provinces, _action_log)
 	assert_almost_eq(target.glory, 3.0, 0.01,
 		"Without winner_glory_change key, target glory unchanged")
+
+
+# -- False Info Dedup ----------------------------------------------------------
+
+func test_false_info_replaces_existing_true_entry() -> void:
+	_actor.knowledge_pool = [] as Array[KnowledgeEntry]
+	var true_entry := InformationSystem.make_entry(
+		Enums.KnowledgeSource.INTELLIGENCE,
+		"personality_insight",
+		{"target_character_id": 2, "bushido_virtue": _target.bushido_virtue},
+		0,
+	)
+	InformationSystem.update_intelligence_knowledge(_actor, true_entry)
+	assert_eq(_actor.knowledge_pool.size(), 1)
+
+	var result: Dictionary = {
+		"success": false,
+		"character_id": 1,
+		"target_npc_id": 2,
+		"action_id": "READ_CHARACTER",
+		"ic_day": 5,
+		"season": 1,
+		"effects": {
+			"failed": true,
+			"false_info": ["personality_insight"],
+		},
+	}
+	EffectApplicator.apply(result, _characters, _provinces, _action_log)
+	assert_eq(_actor.knowledge_pool.size(), 1,
+		"False info should replace existing true entry, not append")
+	assert_true(_actor.knowledge_pool[0].data.get("is_false", false),
+		"Entry should be the false version")

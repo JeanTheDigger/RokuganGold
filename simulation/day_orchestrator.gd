@@ -1359,7 +1359,7 @@ static func _process_info_events(
 						},
 						current_season,
 					)
-					InformationSystem.add_knowledge(character, entry)
+					InformationSystem.update_intelligence_knowledge(character, entry)
 				results.append({
 					"character_id": char_id,
 					"target_id": target_id,
@@ -4835,7 +4835,7 @@ static func _process_intelligence_info_writebacks(
 					data["need_type"] = need_type
 				_:
 					continue
-			InformationSystem.add_knowledge(actor, InformationSystem.make_entry(
+			InformationSystem.update_intelligence_knowledge(actor, InformationSystem.make_entry(
 				Enums.KnowledgeSource.INTELLIGENCE,
 				type_str,
 				data,

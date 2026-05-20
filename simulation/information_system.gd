@@ -36,6 +36,30 @@ static func add_knowledge(
 	character.knowledge_pool.append(entry)
 
 
+const _DEDUP_ENTRY_TYPES: Array[String] = [
+	"personality_insight", "disposition_toward",
+	"topic_attitude", "topic_position", "court_objective",
+	"priority_objective",
+]
+
+
+static func update_intelligence_knowledge(
+	character: L5RCharacterData,
+	entry: KnowledgeEntry,
+) -> void:
+	if entry.entry_type not in _DEDUP_ENTRY_TYPES:
+		character.knowledge_pool.append(entry)
+		return
+	var target_id: int = entry.data.get("target_character_id", -1)
+	for i: int in range(character.knowledge_pool.size() - 1, -1, -1):
+		var existing: KnowledgeEntry = character.knowledge_pool[i]
+		if existing.entry_type == entry.entry_type \
+				and existing.data.get("target_character_id", -1) == target_id:
+			character.knowledge_pool.remove_at(i)
+			break
+	character.knowledge_pool.append(entry)
+
+
 static func add_contact(
 	character: L5RCharacterData,
 	contact_id: int,

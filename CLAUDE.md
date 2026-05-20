@@ -1163,6 +1163,17 @@ All 10 constant arrays and 10 helper functions added. 28 constant/integration te
   stores bushido/shourido virtue, disposition_toward stores target's
   disposition value, topic_attitude/topic_position stores topic position,
   court_objective stores standing need_type from objectives_map. 5 tests.
+- **Intelligence knowledge dedup — repeated reads accumulated. FIXED.**
+  `add_knowledge()` is a simple append. Repeated READ_CHARACTER/PROBE
+  against the same target accumulated entries without replacing older ones.
+  Critical failure false_info would coexist with earlier true entries.
+  `InformationSystem.update_intelligence_knowledge()` replaces existing
+  entries matching same (entry_type, target_character_id) for dedup types:
+  personality_insight, disposition_toward, topic_attitude, topic_position,
+  court_objective, priority_objective. Non-dedup types (shadow_surveillance,
+  court_observation, observed_action, gossip_received) still append.
+  False info now correctly replaces true info (character is deceived) and
+  subsequent true reads restore correct knowledge. 6 tests.
 
 ### Effect Key Audit Dead Keys — Informational / Not Bugs (2026-05-20)
 The following effect keys are set but intentionally unconsumed by the
