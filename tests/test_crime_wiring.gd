@@ -200,6 +200,7 @@ func test_treason_conviction_gi_names_conspirators():
 	var record := _make_crime_record(Enums.CrimeType.TREASON)
 	record.legal_status = Enums.LegalStatus.ACCUSED
 	var convicted := _make_char(1, "Lion", 3.0)
+	convicted.glory = 5.0
 	var lord := _make_char(10, "Lion", 6.0)
 	lord.bushido_virtue = Enums.BushidoVirtue.GI
 	var co_ids: Array[int] = [5, 6]
@@ -212,6 +213,9 @@ func test_treason_conviction_gi_names_conspirators():
 	assert_eq(r["co_conspirator_ids"], [5, 6])
 	assert_eq(record.legal_status, Enums.LegalStatus.DECREED_GUILTY)
 	assert_not_null(r["conviction_topic"])
+	assert_true(r.has("glory_delta"), "Treason conviction should include glory delta")
+	assert_true(r.has("infamy_delta"), "Treason conviction should include infamy delta")
+	assert_true(r.has("status_delta"), "Treason conviction should include status delta")
 
 
 func test_treason_conviction_seigyo_hides_conspirators():
@@ -250,6 +254,22 @@ func test_trial_by_combat_accused_loses_conviction():
 	assert_true(r["case_cleared"])
 	assert_false(r["accused_alive"])
 	assert_eq(record.legal_status, Enums.LegalStatus.DECREED_GUILTY)
+
+
+func test_trial_by_combat_accused_loses_applies_conviction_consequences():
+	var record := _make_crime_record(Enums.CrimeType.UNSANCTIONED_OPEN_KILLING)
+	record.legal_status = Enums.LegalStatus.ACCUSED
+	var accused := _make_char(1, "Crane", 3.0)
+	accused.glory = 5.0
+	accused.infamy = 0.0
+	var initial_glory: float = accused.glory
+	var r := CrimeWiring.process_trial_by_combat(
+		record, UnsanctionedKillingSystem.TrialOutcome.ACCUSED_LOSES, 3.0, accused
+	)
+	assert_true(r["case_cleared"])
+	assert_eq(record.legal_status, Enums.LegalStatus.DECREED_GUILTY)
+	assert_true(r.has("glory_delta"), "Lost trial with accused should include glory delta")
+	assert_true(accused.glory < initial_glory, "Accused should lose glory on conviction")
 
 
 # -- Attempted Murder ----

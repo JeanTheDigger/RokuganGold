@@ -190,13 +190,16 @@ static func process_treason_conviction(
 	if crime_record.crime_type != Enums.CrimeType.TREASON:
 		return {"applicable": false}
 
-	crime_record.legal_status = Enums.LegalStatus.DECREED_GUILTY
+	var conviction: Dictionary = CrimeSystem.apply_at_conviction_consequences(
+		convicted, crime_record
+	)
 	crime_record.ic_day_conviction = ic_day
 
 	var naming := TreasonSystem.should_name_co_conspirators(lord.bushido_virtue)
 
+	var topic_tier: int = conviction.get("topic_tier", 2)
 	var conviction_topic: TopicData = InvestigationSystem.generate_conviction_topic(
-		crime_record, convicted, 2, next_topic_id, ic_day
+		crime_record, convicted, topic_tier, next_topic_id, ic_day
 	)
 
 	return {
@@ -205,6 +208,10 @@ static func process_treason_conviction(
 		"co_conspirator_ids": co_conspirator_ids,
 		"naming_reason": naming["reason"],
 		"conviction_topic": conviction_topic,
+		"glory_delta": conviction.get("glory_delta", 0.0),
+		"infamy_delta": conviction.get("infamy_delta", 0.0),
+		"status_delta": conviction.get("status_delta", 0.0),
+		"seppuku_offered": conviction.get("seppuku_offered", false),
 	}
 
 
@@ -214,6 +221,7 @@ static func process_trial_by_combat(
 	crime_record: CrimeRecord,
 	outcome: UnsanctionedKillingSystem.TrialOutcome,
 	victim_status: float,
+	accused: L5RCharacterData = null,
 ) -> Dictionary:
 	var result := UnsanctionedKillingSystem.resolve_trial_by_combat(
 		outcome, victim_status
@@ -223,7 +231,16 @@ static func process_trial_by_combat(
 		if outcome == UnsanctionedKillingSystem.TrialOutcome.ACCUSED_WINS:
 			crime_record.legal_status = Enums.LegalStatus.ACQUITTED
 		else:
-			crime_record.legal_status = Enums.LegalStatus.DECREED_GUILTY
+			if accused != null:
+				var conviction: Dictionary = CrimeSystem.apply_at_conviction_consequences(
+					accused, crime_record, victim_status
+				)
+				result["glory_delta"] = conviction.get("glory_delta", 0.0)
+				result["infamy_delta"] = conviction.get("infamy_delta", 0.0)
+				result["status_delta"] = conviction.get("status_delta", 0.0)
+				result["seppuku_offered"] = conviction.get("seppuku_offered", false)
+			else:
+				crime_record.legal_status = Enums.LegalStatus.DECREED_GUILTY
 
 	result["case_id"] = crime_record.case_id
 	return result

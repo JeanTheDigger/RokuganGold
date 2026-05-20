@@ -1068,9 +1068,16 @@ Remaining gaps (not critical, documented for future work):
   status penalties from CONVICTION_CONSEQUENCES table were skipped for
   trial-by-combat losses. Now calls `apply_at_conviction_consequences()`
   when `accused_won == false`, adds consequence deltas and seppuku_offered
-  to the trial result dict. `CrimeWiring.process_treason_conviction()` and
-  `CrimeWiring.process_trial_by_combat()` have the same gap but are
-  dead code (only called from tests, not the orchestrator). 1 test.
+  to the trial result dict. 1 test.
+- **CrimeWiring conviction consequence gaps. FIXED.**
+  `process_treason_conviction()` set `DECREED_GUILTY` manually but never
+  called `apply_at_conviction_consequences()`. Now calls it and returns
+  glory/infamy/status/seppuku_offered in result dict. Topic tier now uses
+  conviction result instead of hardcoded 2. `process_trial_by_combat()`
+  gains optional `accused: L5RCharacterData` parameter. When accused loses
+  and accused is provided, calls `apply_at_conviction_consequences()`.
+  Backward compatible (existing callers without accused still work via
+  manual `DECREED_GUILTY` fallback). 2 tests updated, 1 new test.
 
 ### Known Code Issues — Deferred (2026-05-19, metadata population audit)
 - **EXPOSE_SECRET_PRIVATELY — metadata unpopulated, always fails. FIXED.**
