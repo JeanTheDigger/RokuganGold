@@ -613,6 +613,23 @@ static func advance_day(
 		day_result.get("results", []), characters_by_id, provinces,
 	)
 
+	_process_introduction_writebacks(
+		day_result.get("results", []), characters_by_id,
+	)
+
+	_process_observe_attendees_writebacks(
+		day_result.get("results", []), characters_by_id, current_season,
+	)
+
+	_process_blackmail_favor_writebacks(
+		day_result.get("results", []), favors, ic_day,
+	)
+
+	_process_commerce_topic_writebacks(
+		day_result.get("results", []), characters_by_id,
+		active_topics, next_topic_id, ic_day,
+	)
+
 	_process_travel_redirect_writebacks(
 		day_result.get("results", []), objectives_map,
 	)
@@ -3272,23 +3289,26 @@ static func _process_crime_detection(
 		]
 
 		if is_killing:
-			var victim: L5RCharacterData = characters_by_id.get(target_id)
-			if victim != null:
+			var perp_id: int = effects.get("crime_perpetrator_id", char_id)
+			var vict_id: int = effects.get("crime_victim_id", target_id)
+			var attacker: L5RCharacterData = characters_by_id.get(perp_id)
+			var victim: L5RCharacterData = characters_by_id.get(vict_id)
+			if attacker != null and victim != null:
 				var clans_at_war: bool = WarSystem.are_clans_at_war(
-					active_wars, character.clan, victim.clan
+					active_wars, attacker.clan, victim.clan
 				)
 				var is_battlefield: bool = _is_character_in_battle(
-					char_id, world_states
+					perp_id, world_states
 				)
 				var is_prisoner: bool = victim.captive_status != ""
 				var attacker_acted_first: bool = _did_victim_act_first(
 					effects, action_id
 				)
 				var has_zone_log: bool = _has_zone_log_evidence(
-					char_id, target_id, location, action_log
+					perp_id, vict_id, location, action_log
 				)
 				var killing_result := CrimeWiring.process_killing_crime(
-					effects, character, victim, case_id, ic_day, witnesses,
+					effects, attacker, victim, case_id, ic_day, witnesses,
 					clans_at_war, is_battlefield, is_prisoner,
 					attacker_acted_first, has_zone_log,
 				)
@@ -3305,17 +3325,17 @@ static func _process_crime_detection(
 				var record: CrimeRecord = killing_result["record"]
 				crime_records.append(record)
 				var at_act: Dictionary = CrimeSystem.apply_at_act_consequences(
-					character, record.crime_type
+					attacker, record.crime_type
 				)
 				var crime_topic: TopicData = _create_crime_topic(
-					record, character, ic_day, next_topic_id
+					record, attacker, ic_day, next_topic_id
 				)
 				if crime_topic != null:
 					active_topics.append(crime_topic)
 					_seed_crime_topic_to_knowers(crime_topic, record, characters_by_id)
 				crime_results.append({
 					"case_id": case_id,
-					"character_id": char_id,
+					"character_id": perp_id,
 					"crime_type": record.crime_type,
 					"action_id": action_id,
 					"honor_delta": at_act.get("honor_delta", 0.0),
@@ -4611,6 +4631,149 @@ static func _process_shadow_target_writebacks(
 			},
 			current_season,
 		))
+
+
+static func _process_introduction_writebacks(
+	results: Array,
+	characters_by_id: Dictionary,
+) -> void:
+	for r: Variant in results:
+		if not r is Dictionary:
+			continue
+		var d: Dictionary = r as Dictionary
+		if d.get("action_id", "") != "ASK_FOR_INTRODUCTION":
+			continue
+		if not d.get("success", false):
+			continue
+		var effects: Dictionary = d.get("effects", {})
+		if not effects.get("contact_added", false):
+			continue
+		var actor_id: int = d.get("character_id", -1)
+		var contact_id: int = effects.get("contact_id", -1)
+		var actor: L5RCharacterData = characters_by_id.get(actor_id)
+		var contact: L5RCharacterData = characters_by_id.get(contact_id)
+		if actor == null or contact == null:
+			continue
+		InformationSystem.add_contact(actor, contact_id, contact.clan)
+		var disp_gain: int = effects.get("disposition_gain", 0)
+		if disp_gain != 0:
+			var old_val: int = contact.disposition_values.get(actor_id, 0)
+			contact.disposition_values[actor_id] = clampi(old_val + disp_gain, -100, 100)
+
+
+static func _process_observe_attendees_writebacks(
+	results: Array,
+	characters_by_id: Dictionary,
+	current_season: int,
+) -> void:
+	for r: Variant in results:
+		if not r is Dictionary:
+			continue
+		var d: Dictionary = r as Dictionary
+		if d.get("action_id", "") != "OBSERVE_COURT_ATTENDEES":
+			continue
+		if not d.get("success", false):
+			continue
+		var effects: Dictionary = d.get("effects", {})
+		var learned: Array = effects.get("learned_attendees", [])
+		if learned.is_empty():
+			continue
+		var observer_id: int = d.get("character_id", -1)
+		var observer: L5RCharacterData = characters_by_id.get(observer_id)
+		if observer == null:
+			continue
+		for info: Variant in learned:
+			if not info is Dictionary:
+				continue
+			var entry: Dictionary = info as Dictionary
+			var npc_id: int = entry.get("character_id", -1)
+			if npc_id < 0:
+				continue
+			var npc: L5RCharacterData = characters_by_id.get(npc_id)
+			if npc != null and npc_id not in observer.met_characters:
+				InformationSystem.add_contact(observer, npc_id, npc.clan)
+			InformationSystem.add_knowledge(observer, InformationSystem.make_entry(
+				Enums.KnowledgeSource.INTELLIGENCE,
+				"court_observation",
+				{
+					"character_id": npc_id,
+					"clan": entry.get("clan", ""),
+					"family": entry.get("family", ""),
+					"status": entry.get("status", 0.0),
+				},
+				current_season,
+			))
+
+
+static func _process_blackmail_favor_writebacks(
+	results: Array,
+	favors: Array[FavorData],
+	ic_day: int,
+) -> void:
+	for r: Variant in results:
+		if not r is Dictionary:
+			continue
+		var d: Dictionary = r as Dictionary
+		if d.get("action_id", "") != "INTIMIDATE":
+			continue
+		if not d.get("success", false):
+			continue
+		var effects: Dictionary = d.get("effects", {})
+		var count: int = effects.get("favors_extracted", 0)
+		if count <= 0:
+			continue
+		var creditor_id: int = d.get("character_id", -1)
+		var debtor_id: int = d.get("target_npc_id", -1)
+		if creditor_id < 0 or debtor_id < 0:
+			continue
+		var max_id: int = 0
+		for f: Variant in favors:
+			if f is FavorData and (f as FavorData).favor_id >= max_id:
+				max_id = (f as FavorData).favor_id + 1
+		for i: int in range(count):
+			var favor := FavorData.new()
+			favor.favor_id = max_id + i
+			favor.favor_type = FavorData.FavorType.GENERAL
+			favor.tier = FavorData.FavorTier.MINOR
+			favor.creditor_id = creditor_id
+			favor.debtor_id = debtor_id
+			favor.created_ic_day = ic_day
+			favor.terms = "blackmail_extracted"
+			favor.source_action = "INTIMIDATE"
+			favor.is_blackmail_extracted = true
+			favors.append(favor)
+
+
+static func _process_commerce_topic_writebacks(
+	results: Array,
+	characters_by_id: Dictionary,
+	active_topics: Array[TopicData],
+	next_topic_id: Array[int],
+	ic_day: int,
+) -> void:
+	for r: Variant in results:
+		if not r is Dictionary:
+			continue
+		var d: Dictionary = r as Dictionary
+		var effects: Dictionary = d.get("effects", {})
+		if not effects.get("public_commerce_topic", false):
+			continue
+		var char_id: int = d.get("character_id", -1)
+		var character: L5RCharacterData = characters_by_id.get(char_id)
+		if character == null:
+			continue
+		if next_topic_id.is_empty():
+			continue
+		var topic := TopicData.new()
+		topic.topic_id = next_topic_id[0]
+		next_topic_id[0] += 1
+		topic.slug = "commerce_%s_d%d" % [character.family, ic_day]
+		topic.topic_type = "commerce_stigma"
+		topic.category = TopicData.Category.POLITICAL
+		topic.tier = TopicData.Tier.TIER_4
+		topic.subject_character_id = char_id
+		topic.ic_day_created = ic_day
+		active_topics.append(topic)
 
 
 static func _process_fabricate_secret_writebacks(

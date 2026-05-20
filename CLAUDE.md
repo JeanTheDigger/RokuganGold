@@ -1121,6 +1121,55 @@ Constants and helpers added to `crime_system.gd` for all Table 2.3 rows.
   the challenger. Added `_apply_winner_glory()` to EffectApplicator. 2 tests.
 All 10 constant arrays and 10 helper functions added. 28 constant/integration tests.
 
+### Known Code Issues (found and fixed 2026-05-20, effect key audit)
+- **Duel crime record perpetrator/victim swap. FIXED.**
+  When defender killed challenger in an unsanctioned duel,
+  `_process_crime_detection()` always used `character_id` (challenger) as
+  perpetrator and `target_npc_id` (defender) as victim. The executor
+  correctly set `crime_perpetrator_id`/`crime_victim_id` in effects but the
+  orchestrator ignored them. Now reads `crime_perpetrator_id`/
+  `crime_victim_id` from effects with fallback to `character_id`/
+  `target_npc_id`. `apply_at_act_consequences` and `_create_crime_topic`
+  also use the correct perpetrator. 2 tests.
+- **ASK_FOR_INTRODUCTION — contact never added. FIXED.**
+  `contact_added`, `contact_id`, and `disposition_gain` were set in effects
+  but never consumed. Successful introductions created no met_characters
+  entry and no disposition change. `_process_introduction_writebacks()`
+  calls `InformationSystem.add_contact()` and applies disposition_gain to
+  target toward actor. 2 tests.
+- **OBSERVE_COURT_ATTENDEES — learned info never transferred. FIXED.**
+  `learned_attendees` was set in effects but never consumed. Successful
+  observations yielded no knowledge. `_process_observe_attendees_writebacks()`
+  adds observed NPCs to met_characters via `add_contact()` and creates
+  `court_observation` KnowledgeEntry for each learned attendee. 2 tests.
+- **INTIMIDATE blackmail — extracted favors never created. FIXED.**
+  `favors_extracted` was set in effects but never consumed. Successful
+  blackmail created no FavorData objects. `_process_blackmail_favor_writebacks()`
+  creates one FavorData per extracted favor (MINOR tier, GENERAL type,
+  `is_blackmail_extracted = true`). 2 tests.
+- **public_commerce_topic — topic never created. FIXED.**
+  `public_commerce_topic: true` was passed through from CommerceStigmaSystem
+  but never consumed. Public commerce actions created no social signal topic.
+  `_process_commerce_topic_writebacks()` creates a Tier 4 POLITICAL
+  `commerce_stigma` topic with the merchant as subject. 2 tests.
+
+### Effect Key Audit Dead Keys — Informational / Not Bugs (2026-05-20)
+The following effect keys are set but intentionally unconsumed by the
+effect applicator or orchestrator. They are metadata, Pattern B pre-applied
+costs, or forward-wiring. Do not treat as bugs.
+- `blocked_reason` — Informational: explains why action was blocked.
+- `charm_ceiling_active` — Informational: ceiling enforced inside
+  `resolve_charm()`. Flag is metadata for callers.
+- `honor_cost` — Pattern B: pre-applied in SecretSystem, SeductionSystem,
+  FeasibilityLedger, SiegeSystem, BoundEscapeSystem, etc.
+- `ikoma_bard_exempt` — Informational: Ikoma Bard R2 exemption applied.
+- `position_durable` / `position_hardened` — Forward-wiring: no position
+  decay system exists. Will be consumed when position decay is implemented.
+- `target_is_kuge` — Informational: ASK_FOR_INTRODUCTION metadata.
+- `info_count` / `info_types` — Intermediate: consumed by executor
+  internally (READ_CHARACTER, PROBE).
+- `compliance_active` — Informational: intimidation compliance state.
+
 ### Known Code Issues — Deferred (2026-05-19, metadata population audit)
 - **EXPOSE_SECRET_PRIVATELY — metadata unpopulated, always fails. FIXED.**
   Full pipeline wired: SecretData.known_by_ids tracks who knows each secret.

@@ -12033,3 +12033,275 @@ func test_high_honor_witness_loses_honor_for_ignoring() -> void:
 
 	assert_true(witness.honor < initial_honor,
 		"High-honor non-magistrate witness loses honor for ignoring dishonorable behavior")
+
+
+# -- Duel crime perpetrator/victim swap fix -----------------------------------
+
+func test_duel_crime_defender_kills_challenger_correct_perpetrator() -> void:
+	var challenger := L5RCharacterData.new()
+	challenger.character_id = 300
+	challenger.character_name = "Challenger"
+	challenger.status = 3.0
+	challenger.honor = 5.0
+	challenger.clan = "Lion"
+	challenger.physical_location = "castle_A"
+	challenger.captive_status = ""
+	var defender := L5RCharacterData.new()
+	defender.character_id = 301
+	defender.character_name = "Defender"
+	defender.status = 4.0
+	defender.honor = 5.0
+	defender.clan = "Crane"
+	defender.physical_location = "castle_A"
+	defender.captive_status = ""
+	var characters_by_id: Dictionary = {300: challenger, 301: defender}
+	var crime_records: Array[CrimeRecord] = []
+	var active_topics: Array[TopicData] = []
+	var next_case_id: Array[int] = [100]
+	var next_topic_id: Array[int] = [500]
+	var results: Array[Dictionary] = [{
+		"action_id": "ISSUE_DUEL_CHALLENGE",
+		"character_id": 300,
+		"target_npc_id": 301,
+		"success": true,
+		"effects": {
+			"requires_crime_creation": true,
+			"crime_type": Enums.CrimeType.UNSANCTIONED_DUEL_DEATH,
+			"crime_perpetrator_id": 301,
+			"crime_victim_id": 300,
+		},
+	}]
+	DayOrchestrator._process_crime_detection(
+		results, characters_by_id, crime_records, 10,
+		next_case_id, active_topics, next_topic_id, {}, [], [], null,
+	)
+	assert_eq(crime_records.size(), 1, "Should create crime record")
+	assert_eq(crime_records[0].perpetrator_id, 301,
+		"Perpetrator should be defender who killed challenger")
+
+
+func test_duel_crime_challenger_kills_defender_correct_perpetrator() -> void:
+	var challenger := L5RCharacterData.new()
+	challenger.character_id = 302
+	challenger.character_name = "Challenger"
+	challenger.status = 3.0
+	challenger.honor = 5.0
+	challenger.clan = "Lion"
+	challenger.physical_location = "castle_B"
+	challenger.captive_status = ""
+	var defender := L5RCharacterData.new()
+	defender.character_id = 303
+	defender.character_name = "Defender"
+	defender.status = 4.0
+	defender.honor = 5.0
+	defender.clan = "Crane"
+	defender.physical_location = "castle_B"
+	defender.captive_status = ""
+	var characters_by_id: Dictionary = {302: challenger, 303: defender}
+	var crime_records: Array[CrimeRecord] = []
+	var active_topics: Array[TopicData] = []
+	var next_case_id: Array[int] = [100]
+	var next_topic_id: Array[int] = [500]
+	var results: Array[Dictionary] = [{
+		"action_id": "ISSUE_DUEL_CHALLENGE",
+		"character_id": 302,
+		"target_npc_id": 303,
+		"success": true,
+		"effects": {
+			"requires_crime_creation": true,
+			"crime_type": Enums.CrimeType.UNSANCTIONED_DUEL_DEATH,
+			"crime_perpetrator_id": 302,
+			"crime_victim_id": 303,
+		},
+	}]
+	DayOrchestrator._process_crime_detection(
+		results, characters_by_id, crime_records, 10,
+		next_case_id, active_topics, next_topic_id, {}, [], [], null,
+	)
+	assert_eq(crime_records.size(), 1, "Should create crime record")
+	assert_eq(crime_records[0].perpetrator_id, 302,
+		"Perpetrator should be challenger who killed defender")
+
+
+# -- ASK_FOR_INTRODUCTION writeback -------------------------------------------
+
+func test_introduction_writeback_adds_contact() -> void:
+	var actor := L5RCharacterData.new()
+	actor.character_id = 310
+	actor.character_name = "Introducer"
+	actor.clan = "Crane"
+	actor.met_characters = [] as Array[int]
+	actor.known_contacts_by_clan = {}
+	var target := L5RCharacterData.new()
+	target.character_id = 311
+	target.character_name = "Target"
+	target.clan = "Lion"
+	target.disposition_values = {}
+	var characters_by_id: Dictionary = {310: actor, 311: target}
+	var results: Array = [{
+		"action_id": "ASK_FOR_INTRODUCTION",
+		"character_id": 310,
+		"target_npc_id": 311,
+		"success": true,
+		"effects": {
+			"contact_added": true,
+			"contact_id": 311,
+			"disposition_gain": 3,
+		},
+	}]
+	DayOrchestrator._process_introduction_writebacks(results, characters_by_id)
+	assert_true(311 in actor.met_characters,
+		"Target should be added to actor's met_characters")
+	assert_eq(target.disposition_values.get(310, 0), 3,
+		"Target disposition toward actor should increase")
+
+
+func test_introduction_writeback_skips_failure() -> void:
+	var actor := L5RCharacterData.new()
+	actor.character_id = 312
+	actor.met_characters = [] as Array[int]
+	var characters_by_id: Dictionary = {312: actor}
+	var results: Array = [{
+		"action_id": "ASK_FOR_INTRODUCTION",
+		"character_id": 312,
+		"success": false,
+		"effects": {"failed": true},
+	}]
+	DayOrchestrator._process_introduction_writebacks(results, characters_by_id)
+	assert_eq(actor.met_characters.size(), 0,
+		"Failed introduction should not add contacts")
+
+
+# -- OBSERVE_COURT_ATTENDEES writeback ----------------------------------------
+
+func test_observe_attendees_writeback_adds_knowledge() -> void:
+	var observer := L5RCharacterData.new()
+	observer.character_id = 320
+	observer.character_name = "Observer"
+	observer.clan = "Scorpion"
+	observer.met_characters = [] as Array[int]
+	observer.known_contacts_by_clan = {}
+	observer.knowledge_pool = [] as Array[KnowledgeEntry]
+	var npc := L5RCharacterData.new()
+	npc.character_id = 321
+	npc.character_name = "Unknown NPC"
+	npc.clan = "Crane"
+	var characters_by_id: Dictionary = {320: observer, 321: npc}
+	var results: Array = [{
+		"action_id": "OBSERVE_COURT_ATTENDEES",
+		"character_id": 320,
+		"success": true,
+		"effects": {
+			"info_gained": true,
+			"learn_count": 1,
+			"learned_attendees": [
+				{"character_id": 321, "clan": "Crane", "family": "Doji", "status": 3.0},
+			],
+		},
+	}]
+	DayOrchestrator._process_observe_attendees_writebacks(results, characters_by_id, 0)
+	assert_true(321 in observer.met_characters,
+		"Observed NPC should be added to met_characters")
+	assert_eq(observer.knowledge_pool.size(), 1,
+		"Knowledge entry should be created for observed attendee")
+	assert_eq(observer.knowledge_pool[0].entry_type, "court_observation",
+		"Knowledge type should be court_observation")
+
+
+func test_observe_attendees_writeback_skips_failure() -> void:
+	var observer := L5RCharacterData.new()
+	observer.character_id = 322
+	observer.met_characters = [] as Array[int]
+	observer.knowledge_pool = [] as Array[KnowledgeEntry]
+	var characters_by_id: Dictionary = {322: observer}
+	var results: Array = [{
+		"action_id": "OBSERVE_COURT_ATTENDEES",
+		"character_id": 322,
+		"success": false,
+		"effects": {"failed": true},
+	}]
+	DayOrchestrator._process_observe_attendees_writebacks(results, characters_by_id, 0)
+	assert_eq(observer.knowledge_pool.size(), 0,
+		"Failed observation should not create knowledge")
+
+
+# -- INTIMIDATE blackmail favor writeback -------------------------------------
+
+func test_blackmail_favor_writeback_creates_favors() -> void:
+	var favors: Array[FavorData] = []
+	var results: Array = [{
+		"action_id": "INTIMIDATE",
+		"character_id": 330,
+		"target_npc_id": 331,
+		"success": true,
+		"effects": {"favors_extracted": 2},
+	}]
+	DayOrchestrator._process_blackmail_favor_writebacks(results, favors, 10)
+	assert_eq(favors.size(), 2, "Should create 2 favors")
+	assert_eq(favors[0].creditor_id, 330, "Creditor should be blackmailer")
+	assert_eq(favors[0].debtor_id, 331, "Debtor should be target")
+	assert_true(favors[0].is_blackmail_extracted, "Should be marked as blackmail")
+	assert_eq(favors[0].source_action, "INTIMIDATE", "Source should be INTIMIDATE")
+	assert_ne(favors[0].favor_id, favors[1].favor_id,
+		"Each favor should have a unique ID")
+
+
+func test_blackmail_favor_writeback_skips_zero_favors() -> void:
+	var favors: Array[FavorData] = []
+	var results: Array = [{
+		"action_id": "INTIMIDATE",
+		"character_id": 332,
+		"target_npc_id": 333,
+		"success": true,
+		"effects": {"favors_extracted": 0},
+	}]
+	DayOrchestrator._process_blackmail_favor_writebacks(results, favors, 10)
+	assert_eq(favors.size(), 0, "Zero favors_extracted should not create favors")
+
+
+# -- Commerce topic writeback -------------------------------------------------
+
+func test_commerce_topic_writeback_creates_topic() -> void:
+	var char := L5RCharacterData.new()
+	char.character_id = 340
+	char.character_name = "Merchant"
+	char.family = "Yasuki"
+	var characters_by_id: Dictionary = {340: char}
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [900]
+	var results: Array = [{
+		"action_id": "PURCHASE_MARKET",
+		"character_id": 340,
+		"success": true,
+		"effects": {"public_commerce_topic": true},
+	}]
+	DayOrchestrator._process_commerce_topic_writebacks(
+		results, characters_by_id, active_topics, next_topic_id, 15,
+	)
+	assert_eq(active_topics.size(), 1, "Should create commerce topic")
+	assert_eq(active_topics[0].topic_type, "commerce_stigma",
+		"Topic type should be commerce_stigma")
+	assert_eq(active_topics[0].tier, TopicData.Tier.TIER_4,
+		"Commerce topic should be Tier 4")
+	assert_eq(active_topics[0].subject_character_id, 340,
+		"Topic subject should be the merchant")
+	assert_eq(next_topic_id[0], 901, "Topic ID counter should increment")
+
+
+func test_commerce_topic_writeback_skips_non_public() -> void:
+	var char := L5RCharacterData.new()
+	char.character_id = 341
+	char.family = "Ide"
+	var characters_by_id: Dictionary = {341: char}
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [900]
+	var results: Array = [{
+		"action_id": "CONDUCT_COMMERCE",
+		"character_id": 341,
+		"success": true,
+		"effects": {"public_commerce_topic": false},
+	}]
+	DayOrchestrator._process_commerce_topic_writebacks(
+		results, characters_by_id, active_topics, next_topic_id, 15,
+	)
+	assert_eq(active_topics.size(), 0, "Non-public commerce should not create topic")
