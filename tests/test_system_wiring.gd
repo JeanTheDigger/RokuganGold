@@ -3053,3 +3053,116 @@ func test_duped_foolish_honor_rank_scaled() -> void:
 	assert_almost_eq(CrimeSystem.get_duped_foolish_honor(mid), -0.4, 0.001, "Rank 3-4 duped foolish = -0.4")
 
 
+# -- Table 2.3 Honor Gain rows -----------------------------------------------
+
+
+func test_insult_ancestors_honor_rank_scaled() -> void:
+	var mid := L5RCharacterData.new()
+	mid.honor = 4.0
+	mid.school = "Hida Bushi"
+	mid.clan = "Crab"
+	assert_almost_eq(CrimeSystem.get_insult_ancestors_honor(mid), -0.4, 0.001, "Rank 3-4 insult ancestors = -0.4")
+
+
+func test_insult_family_clan_honor_rank_scaled() -> void:
+	var mid := L5RCharacterData.new()
+	mid.honor = 6.0
+	mid.school = "Akodo Bushi"
+	mid.clan = "Lion"
+	assert_almost_eq(CrimeSystem.get_insult_family_clan_honor(mid), -0.2, 0.001, "Rank 5-6 insult family = -0.2")
+
+
+func test_enduring_self_insult_honor() -> void:
+	var low := L5RCharacterData.new()
+	low.honor = 0.5
+	low.school = "Hida Bushi"
+	low.clan = "Crab"
+	var high := L5RCharacterData.new()
+	high.honor = 10.0
+	high.school = "Doji Courtier"
+	high.clan = "Crane"
+	assert_almost_eq(CrimeSystem.get_enduring_self_insult_honor(low), 0.2, 0.001, "Rank 0 enduring insult = +0.2")
+	assert_almost_eq(CrimeSystem.get_enduring_self_insult_honor(high), 0.2, 0.001, "Rank 9-10 enduring insult = +0.2")
+
+
+func test_facing_superior_foe_honor() -> void:
+	var low := L5RCharacterData.new()
+	low.honor = 0.5
+	low.school = "Hida Bushi"
+	low.clan = "Crab"
+	var high := L5RCharacterData.new()
+	high.honor = 10.0
+	high.school = "Kakita Bushi"
+	high.clan = "Crane"
+	assert_almost_eq(CrimeSystem.get_facing_superior_foe_honor(low), 0.8, 0.001, "Rank 0 facing superior = +0.8")
+	assert_almost_eq(CrimeSystem.get_facing_superior_foe_honor(high), 0.2, 0.001, "Rank 9-10 facing superior = +0.2")
+
+
+func test_fulfilling_promise_honor() -> void:
+	var low := L5RCharacterData.new()
+	low.honor = 1.0
+	low.school = "Hida Bushi"
+	low.clan = "Crab"
+	var high := L5RCharacterData.new()
+	high.honor = 10.0
+	high.school = "Doji Courtier"
+	high.clan = "Crane"
+	assert_almost_eq(CrimeSystem.get_fulfilling_promise_honor(low), 0.8, 0.001, "Rank 1 fulfilling promise = +0.8")
+	assert_almost_eq(CrimeSystem.get_fulfilling_promise_honor(high), 0.0, 0.001, "Rank 10 fulfilling promise = 0.0")
+
+
+func test_truthful_report_honor() -> void:
+	var mid := L5RCharacterData.new()
+	mid.honor = 4.0
+	mid.school = "Akodo Bushi"
+	mid.clan = "Lion"
+	assert_almost_eq(CrimeSystem.get_truthful_report_honor(mid), 0.4, 0.001, "Rank 3-4 truthful report = +0.4")
+
+
+func test_ignoring_dishonorable_honor() -> void:
+	var low := L5RCharacterData.new()
+	low.honor = 0.5
+	low.school = "Doji Courtier"
+	low.clan = "Crane"
+	var high := L5RCharacterData.new()
+	high.honor = 10.0
+	high.school = "Doji Courtier"
+	high.clan = "Crane"
+	assert_almost_eq(CrimeSystem.get_ignoring_dishonorable_honor(low), 0.3, 0.001, "Rank 0 ignoring dishonorable = +0.3")
+	assert_almost_eq(CrimeSystem.get_ignoring_dishonorable_honor(high), -0.2, 0.001, "Rank 9-10 ignoring dishonorable = -0.2")
+
+
+func test_protecting_clan_honor() -> void:
+	var low := L5RCharacterData.new()
+	low.honor = 0.5
+	low.school = "Hida Bushi"
+	low.clan = "Crab"
+	var high := L5RCharacterData.new()
+	high.honor = 10.0
+	high.school = "Hida Bushi"
+	high.clan = "Crab"
+	assert_almost_eq(CrimeSystem.get_protecting_clan_honor(low), 0.8, 0.001, "Rank 0 protecting clan = +0.8")
+	assert_almost_eq(CrimeSystem.get_protecting_clan_honor(high), 0.2, 0.001, "Rank 9-10 protecting clan = +0.2")
+
+
+func test_kindness_below_station_honor() -> void:
+	var mid := L5RCharacterData.new()
+	mid.honor = 5.0
+	mid.school = "Doji Courtier"
+	mid.clan = "Crane"
+	assert_almost_eq(CrimeSystem.get_kindness_below_station_honor(mid), 0.4, 0.001, "Rank 5 kindness = +0.4")
+
+
+func test_sincere_courtesy_enemies_honor() -> void:
+	var low := L5RCharacterData.new()
+	low.honor = 0.5
+	low.school = "Doji Courtier"
+	low.clan = "Crane"
+	var high := L5RCharacterData.new()
+	high.honor = 10.0
+	high.school = "Doji Courtier"
+	high.clan = "Crane"
+	assert_almost_eq(CrimeSystem.get_sincere_courtesy_enemies_honor(low), 0.9, 0.001, "Rank 0 sincere courtesy = +0.9")
+	assert_almost_eq(CrimeSystem.get_sincere_courtesy_enemies_honor(high), 0.0, 0.001, "Rank 9-10 sincere courtesy = 0.0")
+
+

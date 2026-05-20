@@ -11330,3 +11330,280 @@ func test_forgery_detection_applies_glory_penalty() -> void:
 	DayOrchestrator._escalate_detected_forgery_crimes(letters, records, chars)
 	assert_almost_eq(forger.glory, 3.7, 0.001,
 		"Forger identified on detection loses 0.3 glory")
+
+
+# TABLE 2.3 — FACING A SUPERIOR FOE (DUEL CHALLENGE)
+# ==============================================================================
+
+func test_duel_honor_gain_facing_superior_foe() -> void:
+	var challenger := L5RCharacterData.new()
+	challenger.character_id = 200
+	challenger.character_name = "Brave Challenger"
+	challenger.honor = 3.0
+	challenger.status = 2.0
+	challenger.school = "Akodo Bushi"
+	challenger.clan = "Lion"
+	var target := L5RCharacterData.new()
+	target.character_id = 201
+	target.character_name = "Superior Opponent"
+	target.status = 6.0
+	var characters_by_id: Dictionary = {200: challenger, 201: target}
+
+	var results: Array[Dictionary] = [{
+		"success": true,
+		"action_id": "ISSUE_DUEL_CHALLENGE",
+		"character_id": 200,
+		"target_npc_id": 201,
+		"effects": {},
+	}]
+
+	var initial_honor: float = challenger.honor
+	DayOrchestrator._process_duel_honor_writebacks(results, characters_by_id)
+
+	assert_true(challenger.honor > initial_honor,
+		"Challenger facing higher-status opponent gains honor")
+
+
+func test_duel_no_honor_gain_equal_status() -> void:
+	var challenger := L5RCharacterData.new()
+	challenger.character_id = 202
+	challenger.character_name = "Equal Duelist"
+	challenger.honor = 3.0
+	challenger.status = 4.0
+	challenger.school = "Kakita Bushi"
+	challenger.clan = "Crane"
+	var target := L5RCharacterData.new()
+	target.character_id = 203
+	target.character_name = "Peer"
+	target.status = 4.0
+	var characters_by_id: Dictionary = {202: challenger, 203: target}
+
+	var results: Array[Dictionary] = [{
+		"success": true,
+		"action_id": "ISSUE_DUEL_CHALLENGE",
+		"character_id": 202,
+		"target_npc_id": 203,
+		"effects": {},
+	}]
+
+	var initial_honor: float = challenger.honor
+	DayOrchestrator._process_duel_honor_writebacks(results, characters_by_id)
+
+	assert_almost_eq(challenger.honor, initial_honor, 0.01,
+		"Equal-status duel should not trigger facing superior foe")
+
+
+# TABLE 2.3 — FULFILLING A PROMISE DESPITE GREAT PERSONAL COST
+# ==============================================================================
+
+func test_fulfilling_promise_during_crisis_gains_honor() -> void:
+	var debtor := L5RCharacterData.new()
+	debtor.character_id = 210
+	debtor.character_name = "Honorable Lord"
+	debtor.honor = 3.0
+	debtor.school = "Akodo Bushi"
+	debtor.clan = "Lion"
+	var characters_by_id: Dictionary = {210: debtor}
+
+	var commitment := CommitmentData.new()
+	commitment.commitment_id = 50
+	commitment.debtor_npc_id = 210
+	commitment.crisis_id = 5
+	commitment.status = Enums.CommitmentStatus.FULFILLED
+	var commitments: Array[CommitmentData] = [commitment]
+
+	var commitment_results: Array[Dictionary] = [{
+		"commitment_id": 50,
+		"status": "FULFILLED",
+	}]
+
+	var initial_honor: float = debtor.honor
+	DayOrchestrator._apply_promise_fulfillment_honor(
+		commitment_results, commitments, characters_by_id, {},
+	)
+
+	assert_true(debtor.honor > initial_honor,
+		"Fulfilling a promise during a crisis should gain honor")
+
+
+func test_fulfilling_promise_no_crisis_no_honor() -> void:
+	var debtor := L5RCharacterData.new()
+	debtor.character_id = 211
+	debtor.character_name = "Routine Lord"
+	debtor.honor = 3.0
+	debtor.school = "Hida Bushi"
+	debtor.clan = "Crab"
+	var characters_by_id: Dictionary = {211: debtor}
+
+	var commitment := CommitmentData.new()
+	commitment.commitment_id = 51
+	commitment.debtor_npc_id = 211
+	commitment.crisis_id = -1
+	commitment.status = Enums.CommitmentStatus.FULFILLED
+	var commitments: Array[CommitmentData] = [commitment]
+
+	var commitment_results: Array[Dictionary] = [{
+		"commitment_id": 51,
+		"status": "FULFILLED",
+	}]
+
+	var initial_honor: float = debtor.honor
+	DayOrchestrator._apply_promise_fulfillment_honor(
+		commitment_results, commitments, characters_by_id, {},
+	)
+
+	assert_almost_eq(debtor.honor, initial_honor, 0.01,
+		"Fulfilling without crisis should not trigger honor gain")
+
+
+# TABLE 2.3 — SINCERE COURTESY TO ENEMIES
+# ==============================================================================
+
+func test_charm_rival_with_rei_virtue_gains_sincere_courtesy_honor() -> void:
+	var charmer := L5RCharacterData.new()
+	charmer.character_id = 220
+	charmer.character_name = "Rei Courtier"
+	charmer.honor = 3.0
+	charmer.school = "Doji Courtier"
+	charmer.clan = "Crane"
+	charmer.wounds_taken = 0
+	charmer.bushido_virtue = Enums.BushidoVirtue.REI
+	charmer.disposition_values = {221: -20}
+	var target := L5RCharacterData.new()
+	target.character_id = 221
+	target.character_name = "Rival"
+	target.wounds_taken = 0
+	var characters_by_id: Dictionary = {220: charmer, 221: target}
+
+	var court := CourtSessionData.new()
+	court.phase = CourtSessionData.CourtPhase.ACTIVE
+	court.host_settlement_id = 10
+	court.session_state = {}
+	var active_courts: Array[CourtSessionData] = [court]
+
+	var day_results: Array = [{
+		"action_id": "CHARM",
+		"character_id": 220,
+		"target_npc_id": 221,
+		"effects": {
+			"_action_metadata": {"court_settlement_id": 10},
+			"disposition_change": 5,
+		},
+	}]
+
+	var initial_honor: float = charmer.honor
+	DayOrchestrator._process_court_action_effects(
+		day_results, characters_by_id, [], 10, -1,
+		StrategicReview.EmperorArchetype.IRON, [], active_courts,
+	)
+
+	assert_true(charmer.honor > initial_honor,
+		"Rei-virtue charmer against rival gains sincere courtesy honor")
+
+
+func test_charm_rival_without_virtue_loses_false_courtesy_honor() -> void:
+	var charmer := L5RCharacterData.new()
+	charmer.character_id = 222
+	charmer.character_name = "Cynical Courtier"
+	charmer.honor = 7.0
+	charmer.school = "Bayushi Courtier"
+	charmer.clan = "Scorpion"
+	charmer.wounds_taken = 0
+	charmer.bushido_virtue = Enums.BushidoVirtue.NONE
+	charmer.disposition_values = {223: -20}
+	var target := L5RCharacterData.new()
+	target.character_id = 223
+	target.character_name = "Rival"
+	target.wounds_taken = 0
+	var characters_by_id: Dictionary = {222: charmer, 223: target}
+
+	var court := CourtSessionData.new()
+	court.phase = CourtSessionData.CourtPhase.ACTIVE
+	court.host_settlement_id = 11
+	court.session_state = {}
+	var active_courts: Array[CourtSessionData] = [court]
+
+	var day_results: Array = [{
+		"action_id": "CHARM",
+		"character_id": 222,
+		"target_npc_id": 223,
+		"effects": {
+			"_action_metadata": {"court_settlement_id": 11},
+			"disposition_change": 5,
+		},
+	}]
+
+	var initial_honor: float = charmer.honor
+	DayOrchestrator._process_court_action_effects(
+		day_results, characters_by_id, [], 10, -1,
+		StrategicReview.EmperorArchetype.IRON, [], active_courts,
+	)
+
+	assert_true(charmer.honor < initial_honor,
+		"Non-Rei/Jin charmer against rival loses false courtesy honor")
+
+
+# TABLE 2.3 — ENDURING AN INSULT TO YOURSELF
+# ==============================================================================
+
+func test_public_insult_target_gains_enduring_honor() -> void:
+	var target := L5RCharacterData.new()
+	target.character_id = 230
+	target.character_name = "Stoic Samurai"
+	target.honor = 5.0
+	target.school = "Akodo Bushi"
+	target.clan = "Lion"
+	target.wounds_taken = 0
+	var insulter := L5RCharacterData.new()
+	insulter.character_id = 231
+	insulter.character_name = "Rude Courtier"
+	insulter.wounds_taken = 0
+	var characters_by_id: Dictionary = {230: target, 231: insulter}
+
+	var day_results: Array = [{
+		"action_id": "PUBLIC_INSULT",
+		"character_id": 231,
+		"target_npc_id": 230,
+		"effects": {
+			"target_witness_disposition": -3,
+			"witnesses": [],
+		},
+	}]
+
+	var initial_honor: float = target.honor
+	DayOrchestrator._process_court_action_effects(
+		day_results, characters_by_id,
+	)
+
+	assert_true(target.honor > initial_honor,
+		"Target of successful insult gains enduring honor")
+
+
+func test_failed_insult_no_enduring_honor() -> void:
+	var target := L5RCharacterData.new()
+	target.character_id = 232
+	target.character_name = "Never Insulted"
+	target.honor = 5.0
+	target.school = "Hida Bushi"
+	target.clan = "Crab"
+	target.wounds_taken = 0
+	var characters_by_id: Dictionary = {232: target}
+
+	var day_results: Array = [{
+		"action_id": "PUBLIC_INSULT",
+		"character_id": 233,
+		"target_npc_id": 232,
+		"effects": {
+			"failed": true,
+			"witness_disposition_loss": -2,
+			"witnesses": [],
+		},
+	}]
+
+	var initial_honor: float = target.honor
+	DayOrchestrator._process_court_action_effects(
+		day_results, characters_by_id,
+	)
+
+	assert_almost_eq(target.honor, initial_honor, 0.01,
+		"Failed insult should not trigger enduring honor")

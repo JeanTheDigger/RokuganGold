@@ -1079,6 +1079,36 @@ Remaining gaps (not critical, documented for future work):
   Backward compatible (existing callers without accused still work via
   manual `DECREED_GUILTY` fallback). 2 tests updated, 1 new test.
 
+### Table 2.3 Honor Gain/Loss Wiring (2026-05-20)
+Constants and helpers added to `crime_system.gd` for all Table 2.3 rows.
+**Wired (mechanical triggers):**
+- **Facing a superior foe** — ISSUE_DUEL_CHALLENGE where target.status >
+  actor.status. `_process_duel_honor_writebacks()` in DayOrchestrator.
+  2 tests.
+- **Fulfilling a promise despite great personal cost** —
+  CommitmentData FULFILLED with crisis_id >= 0 (debtor fulfilled despite
+  active crisis). `_apply_promise_fulfillment_honor()` in DayOrchestrator.
+  2 tests.
+- **Showing sincere courtesy to enemies** — personality-gated CHARM against
+  rivals/enemies. Rei or Jin virtue → sincere courtesy gain; other virtues →
+  false courtesy loss. Replaces unconditional false courtesy at the same
+  trigger point. 2 tests.
+- **Enduring an insult to yourself** — target of successful PUBLIC_INSULT.
+  Fires in `_process_court_action_effects()`. 2 tests.
+- **Enduring insult to ancestors / family/clan** — constants and helpers
+  added. Blocked on behavioral tracking (insult classification system
+  needed to distinguish self/ancestor/clan insults).
+**Blocked (no clear mechanical trigger yet):**
+- **Giving a truthful report at own expense** — requires self-incrimination
+  tracking (reporting crimes that implicate yourself or allies).
+- **Politely ignoring dishonorable behavior** — requires witnessing + choosing
+  not to act tracking. Also note: gain at low Honor, loss at high Honor.
+- **Protecting clan/family/lord despite great risk** — requires risk assessment
+  (similar to crisis, but personal combat/mission risk, not province crisis).
+- **Showing kindness to one beneath station** — requires station comparison in
+  social actions targeting lower-status characters.
+All 10 constant arrays and 10 helper functions added. 10 constant tests.
+
 ### Known Code Issues — Deferred (2026-05-19, metadata population audit)
 - **EXPOSE_SECRET_PRIVATELY — metadata unpopulated, always fails. FIXED.**
   Full pipeline wired: SecretData.known_by_ids tracks who knows each secret.

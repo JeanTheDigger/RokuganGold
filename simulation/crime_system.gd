@@ -26,6 +26,18 @@ const HONOR_TABLE_FALSE_COURTESY: Array[int] = [0, 0, -2, -6, -10, -10]
 const HONOR_TABLE_DUPED_CRIMINAL: Array[int] = [-1, -4, -8, -12, -16, -18]
 const HONOR_TABLE_DUPED_DISLOYAL: Array[int] = [0, -2, -4, -6, -10, -14]
 const HONOR_TABLE_DUPED_FOOLISH: Array[int] = [0, -2, -4, -4, -6, -8]
+const HONOR_TABLE_INSULT_ANCESTORS: Array[int] = [0, -2, -4, -4, -6, -8]
+const HONOR_TABLE_INSULT_FAMILY_CLAN: Array[int] = [0, 0, -2, -2, -4, -4]
+
+# -- Table 2.3 Honor Gains by Rank (values are points, 10 pts = 1.0 rank) ----
+const HONOR_TABLE_ENDURING_SELF_INSULT: Array[int] = [2, 2, 2, 0, 0, 2]
+const HONOR_TABLE_FACING_SUPERIOR_FOE: Array[int] = [8, 6, 5, 4, 3, 2]
+const HONOR_TABLE_FULFILLING_PROMISE: Array[int] = [10, 8, 6, 4, 2, 0]
+const HONOR_TABLE_TRUTHFUL_REPORT: Array[int] = [8, 6, 4, 2, 0, 0]
+const HONOR_TABLE_IGNORING_DISHONORABLE: Array[int] = [3, 2, 0, 0, -2, -2]
+const HONOR_TABLE_PROTECTING_CLAN: Array[int] = [8, 8, 6, 6, 4, 2]
+const HONOR_TABLE_KINDNESS_BELOW_STATION: Array[int] = [6, 6, 4, 4, 2, 2]
+const HONOR_TABLE_SINCERE_COURTESY_ENEMIES: Array[int] = [9, 7, 5, 2, 0, 0]
 
 const FULL_LOW_SKILL_EXEMPT_SCHOOLS: Array[String] = [
 	"Shosuro Infiltrator",
@@ -119,6 +131,48 @@ static func get_duped_disloyal_honor(character: L5RCharacterData) -> float:
 
 static func get_duped_foolish_honor(character: L5RCharacterData) -> float:
 	return get_table_honor_cost(HONOR_TABLE_DUPED_FOOLISH, HonorGlorySystem.get_honor_rank(character))
+
+
+static func get_insult_ancestors_honor(character: L5RCharacterData) -> float:
+	return get_table_honor_cost(HONOR_TABLE_INSULT_ANCESTORS, HonorGlorySystem.get_honor_rank(character))
+
+
+static func get_insult_family_clan_honor(character: L5RCharacterData) -> float:
+	return get_table_honor_cost(HONOR_TABLE_INSULT_FAMILY_CLAN, HonorGlorySystem.get_honor_rank(character))
+
+
+# -- Table 2.3 Honor Gain Helpers --------------------------------------------
+
+static func get_enduring_self_insult_honor(character: L5RCharacterData) -> float:
+	return get_table_honor_cost(HONOR_TABLE_ENDURING_SELF_INSULT, HonorGlorySystem.get_honor_rank(character))
+
+
+static func get_facing_superior_foe_honor(character: L5RCharacterData) -> float:
+	return get_table_honor_cost(HONOR_TABLE_FACING_SUPERIOR_FOE, HonorGlorySystem.get_honor_rank(character))
+
+
+static func get_fulfilling_promise_honor(character: L5RCharacterData) -> float:
+	return get_table_honor_cost(HONOR_TABLE_FULFILLING_PROMISE, HonorGlorySystem.get_honor_rank(character))
+
+
+static func get_truthful_report_honor(character: L5RCharacterData) -> float:
+	return get_table_honor_cost(HONOR_TABLE_TRUTHFUL_REPORT, HonorGlorySystem.get_honor_rank(character))
+
+
+static func get_ignoring_dishonorable_honor(character: L5RCharacterData) -> float:
+	return get_table_honor_cost(HONOR_TABLE_IGNORING_DISHONORABLE, HonorGlorySystem.get_honor_rank(character))
+
+
+static func get_protecting_clan_honor(character: L5RCharacterData) -> float:
+	return get_table_honor_cost(HONOR_TABLE_PROTECTING_CLAN, HonorGlorySystem.get_honor_rank(character))
+
+
+static func get_kindness_below_station_honor(character: L5RCharacterData) -> float:
+	return get_table_honor_cost(HONOR_TABLE_KINDNESS_BELOW_STATION, HonorGlorySystem.get_honor_rank(character))
+
+
+static func get_sincere_courtesy_enemies_honor(character: L5RCharacterData) -> float:
+	return get_table_honor_cost(HONOR_TABLE_SINCERE_COURTESY_ENEMIES, HonorGlorySystem.get_honor_rank(character))
 
 
 # Maps CrimeType to the Table 2.3 row used for at-act honor loss.

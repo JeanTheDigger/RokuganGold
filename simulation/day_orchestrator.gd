@@ -597,6 +597,10 @@ static func advance_day(
 		phoenix_council_state,
 	)
 
+	_process_duel_honor_writebacks(
+		day_result.get("results", []), characters_by_id,
+	)
+
 	_process_travel_redirect_writebacks(
 		day_result.get("results", []), objectives_map,
 	)
@@ -624,6 +628,10 @@ static func advance_day(
 
 	var commitment_results: Array[Dictionary] = _process_commitment_deadlines(
 		commitments, ic_day, characters_by_id, active_courts
+	)
+
+	_apply_promise_fulfillment_honor(
+		commitment_results, commitments, characters_by_id, objectives_map,
 	)
 
 	var forgiveness_results: Array[Dictionary] = _process_retroactive_forgiveness(
@@ -14059,6 +14067,12 @@ static func _process_court_action_effects(
 					var current: int = w.disposition_values.get(target_id, 0)
 					w.disposition_values[target_id] = clampi(current + per_witness, -100, 100)
 
+		# Table 2.3: Enduring an insult — target of successful PUBLIC_INSULT
+		if action_id == "PUBLIC_INSULT" and not effects.get("failed", false) and target != null:
+			HonorGlorySystem.apply_honor_change(
+				target, CrimeSystem.get_enduring_self_insult_honor(target)
+			)
+
 		# Play a Game bilateral disposition
 		if effects.has("play_game_result") and target != null:
 			var actor_id: int = entry.get("character_id", -1)
@@ -14143,9 +14157,15 @@ static func _process_court_action_effects(
 					if charmer != null and target_id >= 0:
 						var actor_disp: int = charmer.disposition_values.get(target_id, 0)
 						if DispositionSystem.get_tier(actor_disp) <= DispositionSystem.Tier.RIVAL:
-							HonorGlorySystem.apply_honor_change(
-								charmer, CrimeSystem.get_false_courtesy_honor(charmer)
-							)
+							if charmer.bushido_virtue == Enums.BushidoVirtue.REI \
+									or charmer.bushido_virtue == Enums.BushidoVirtue.JIN:
+								HonorGlorySystem.apply_honor_change(
+									charmer, CrimeSystem.get_sincere_courtesy_enemies_honor(charmer)
+								)
+							else:
+								HonorGlorySystem.apply_honor_change(
+									charmer, CrimeSystem.get_false_courtesy_honor(charmer)
+								)
 				elif action_id == "NEGOTIATE":
 					CourtSystem.increment_negotiate_count(court, actor_id)
 					if effects.has("session_tn_reduction"):
@@ -15599,6 +15619,56 @@ static func _apply_assassination_outcome(
 
 
 # -- Travel Redirect Tracking (s55.29.1) --------------------------------------
+
+# -- Table 2.3 Honor Gain Writebacks ------------------------------------------
+
+static func _apply_promise_fulfillment_honor(
+	commitment_results: Array[Dictionary],
+	commitments: Array[CommitmentData],
+	characters_by_id: Dictionary,
+	objectives_map: Dictionary,
+) -> void:
+	for cr: Dictionary in commitment_results:
+		if cr.get("status") != "FULFILLED":
+			continue
+		var cid: int = cr.get("commitment_id", -1)
+		var commitment: CommitmentData = null
+		for c: CommitmentData in commitments:
+			if c.commitment_id == cid:
+				commitment = c
+				break
+		if commitment == null:
+			continue
+		if commitment.crisis_id < 0:
+			continue
+		var debtor: L5RCharacterData = characters_by_id.get(commitment.debtor_npc_id)
+		if debtor == null:
+			continue
+		HonorGlorySystem.apply_honor_change(
+			debtor, CrimeSystem.get_fulfilling_promise_honor(debtor)
+		)
+
+
+static func _process_duel_honor_writebacks(
+	results: Array[Dictionary],
+	characters_by_id: Dictionary,
+) -> void:
+	for result: Dictionary in results:
+		if result.get("action_id", "") != "ISSUE_DUEL_CHALLENGE":
+			continue
+		if not result.get("success", false):
+			continue
+		var actor_id: int = result.get("character_id", -1)
+		var target_id: int = result.get("target_npc_id", -1)
+		var actor: L5RCharacterData = characters_by_id.get(actor_id)
+		var target: L5RCharacterData = characters_by_id.get(target_id)
+		if actor == null or target == null:
+			continue
+		if target.status > actor.status:
+			HonorGlorySystem.apply_honor_change(
+				actor, CrimeSystem.get_facing_superior_foe_honor(actor)
+			)
+
 
 static func _process_travel_redirect_writebacks(
 	results: Array[Dictionary],
