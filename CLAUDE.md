@@ -1007,6 +1007,17 @@ Remaining gaps (not critical, documented for future work):
   ActionExecutor (Intimidation). Fabrication honor costs remain tiered
   by secret severity (GDD s12.8 specifies explicit per-tier values).
   19 tests.
+- **Table 2.3 additional rows — disobedience, disloyalty, bribery. FIXED.**
+  Eight new Table 2.3 rows added to CrimeSystem: DISOBEYING_LORD,
+  FLEEING_BATTLE, FOLLOWING_ORDERS, LYING, MANIPULATING, FALSE_COURTESY,
+  DUPED_CRIMINAL, DUPED_DISLOYAL. Helper functions: get_disobeying_lord_honor,
+  get_disloyalty_honor, get_accepting_bribe_honor, get_fleeing_battle_honor,
+  get_following_orders_honor. Wired consumers: OperationalHierarchySystem
+  insubordination (was flat -0.3), IntraClanCivilWar defection and rebel
+  hemorrhage (was flat -0.5/-0.3), BriberySystem bribe acceptance (was
+  flat -0.5). FOLLOWING_ORDERS row (positive at low rank, negative at
+  high rank) has no consumer yet — blocked on NPC engine objective
+  conflict integration. 4 tests.
 
 ### Known Code Issues — Deferred (2026-05-19, metadata population audit)
 - **EXPOSE_SECRET_PRIVATELY — metadata unpopulated, always fails. FIXED.**
