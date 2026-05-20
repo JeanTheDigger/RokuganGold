@@ -1892,7 +1892,7 @@ static func _process_wall_engineering_effects(
 				"action": "seal_breach",
 				"settlement_id": s_2.settlement_id,
 				"province_id": target_pid,
-				"old_si_2": old_si_2,
+				"old_si": old_si_2,
 				"new_si": s_2.wall_si,
 				"koku_deducted": float(effects["koku_cost"]),
 				"sealed": effects.get("requires_breach_seal", false),
@@ -2776,8 +2776,8 @@ static func _process_famine_crises(
 						})
 		else:
 			var entry: Dictionary = entries[0]
-			var province_id_2: int = int(entry["province_id_2"])
-			var stage_2: int = int(entry["stage_2"])
+			var province_id_2: int = int(entry["province_id"])
+			var stage_2: int = int(entry["stage"])
 			if not _has_active_famine_topic(province_id_2, active_topics):
 				var tier: int = TopicData.Tier.TIER_3
 				var momentum: float = _FAMINE_HUNGER_MOMENTUM
@@ -2794,11 +2794,11 @@ static func _process_famine_crises(
 				)
 				active_topics.append(topic_2)
 				results.append({
-					"province_id_2": province_id_2,
+					"province_id": province_id_2,
 					"action": "created",
 					"topic_id": topic_2.topic_id,
 					"tier": tier,
-					"stage_2": stage_2,
+					"stage": stage_2,
 				})
 
 	for province_id: int in recovering_pids:
@@ -3597,7 +3597,7 @@ static func _process_fugitive_extradition_seasonal(
 				var consequences_2: Dictionary = ExtraditionSystem.apply_refusal(
 					harboring_lord, requesting_champ_id, crime_tier, is_denial
 				)
-				result["consequences_2"] = consequences_2
+				result["consequences"] = consequences_2
 				# Escalation for Tier 2+ crimes (s11.3.16e)
 				if FugitiveExtraditionSystem.can_request_imperial_warrant(crime_tier):
 					var compliance: Dictionary = FugitiveExtraditionSystem.evaluate_imperial_warrant_compliance(
@@ -10215,7 +10215,7 @@ static func _process_ladder_side_effects(
 
 		if side.has("other_disposition_cost"):
 			var other_cost: int = side["other_disposition_cost"]
-			var raid_target_clan_2: String = side.get("raid_target_clan_2", "")
+			var raid_target_clan_2: String = side.get("raid_target_clan", "")
 			_apply_other_clans_disposition_cost(
 				declaring_clan, raid_target_clan_2, other_cost, characters_by_id,
 			)
@@ -10249,7 +10249,7 @@ static func _process_ladder_side_effects(
 			result["favor_tier"] = favor_tier
 
 		if side.get("triggers_war_status", false):
-			var raid_target_clan_3: String = side.get("raid_target_clan_3", "")
+			var raid_target_clan_3: String = side.get("raid_target_clan", "")
 			if not raid_target_clan_3.is_empty() and not declaring_clan.is_empty():
 				if not WarSystem.are_clans_at_war(active_wars, declaring_clan, raid_target_clan_3):
 					var war_id: int = next_war_id[0]
@@ -13236,7 +13236,7 @@ static func _apply_construction_order(
 			var valid_2: Dictionary = ConstructionSystem.validate_fortification(
 				character, province as ProvinceData, settlements,
 			)
-			if not valid_2.get("valid_2", false):
+			if not valid_2.get("valid", false):
 				return {"applied": false, "reason": valid_2.get("reason", "invalid")}
 
 			ConstructionSystem.deduct_koku(
@@ -13260,7 +13260,7 @@ static func _apply_construction_order(
 			var valid_3: Dictionary = ConstructionSystem.validate_shrine(
 				shrine_type, character, target_settlement as SettlementData, is_dedicated,
 			)
-			if not valid_3.get("valid_3", false):
+			if not valid_3.get("valid", false):
 				return {"applied": false, "reason": valid_3.get("reason", "invalid")}
 
 			var cost_entry: Dictionary = ConstructionSystem.SHRINE_COSTS.get(shrine_type, {})
@@ -14412,7 +14412,7 @@ static func _process_court_action_effects(
 		# Public Debate per-witness disposition and position shifts
 		if effects.has("debate_per_witness"):
 			var actor_id_3: int = entry.get("character_id", -1)
-			var topic_id_2: int = action_meta.get("topic_id_2", -1)
+			var topic_id_2: int = action_meta.get("topic_id", -1)
 			var pw_results: Array = effects["debate_per_witness"]
 			for pw: Dictionary in pw_results:
 				var wid: int = pw.get("witness_id", -1)
@@ -14532,7 +14532,7 @@ static func _populate_court_availability_data(
 ) -> void:
 	var upcoming: Array = []
 	for court: CourtSessionData in active_courts:
-		if court.court_phase == CourtSessionData.CourtPhase.SCHEDULED:
+		if court.phase == CourtSessionData.CourtPhase.SCHEDULED:
 			upcoming.append({
 				"settlement_id": court.host_settlement_id,
 				"prestige": court.prestige,
@@ -16787,7 +16787,7 @@ static func _process_tattoo_creation(
 					char.action_points_current = maxi(char.action_points_current - extra_ap, 0)
 			continue
 
-		var effects_2: Dictionary = result.get("effects_2", {})
+		var effects_2: Dictionary = result.get("effects", {})
 		if not effects_2.get("requires_tattoo_creation", false):
 			continue
 

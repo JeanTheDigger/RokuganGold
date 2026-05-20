@@ -2227,7 +2227,7 @@ func test_upcoming_courts_populated() -> void:
 	court.court_id = 10
 	court.host_settlement_id = 50
 	court.prestige = 2
-	court.court_phase = CourtSessionData.CourtPhase.SCHEDULED
+	court.phase = CourtSessionData.CourtPhase.SCHEDULED
 	DayOrchestrator._populate_court_availability_data(
 		[court], [c], {1: c}, ws, [],
 	)
@@ -2242,7 +2242,7 @@ func test_upcoming_courts_excludes_active() -> void:
 	var c := L5RCharacterData.new()
 	c.character_id = 1
 	var court := CourtSessionData.new()
-	court.court_phase = CourtSessionData.CourtPhase.ACTIVE
+	court.phase = CourtSessionData.CourtPhase.ACTIVE
 	DayOrchestrator._populate_court_availability_data(
 		[court], [c], {1: c}, ws, [],
 	)
@@ -2326,7 +2326,7 @@ func test_available_levy_pu_populated_for_lord() -> void:
 func test_court_context_creates_world_state_entry() -> void:
 	var ws: Dictionary = {}
 	var court := CourtSessionData.new()
-	court.court_phase = CourtSessionData.CourtPhase.ACTIVE
+	court.phase = CourtSessionData.CourtPhase.ACTIVE
 	court.elapsed_ticks = 1
 	court.duration_ticks = 10
 	court.attendee_ids = [42]

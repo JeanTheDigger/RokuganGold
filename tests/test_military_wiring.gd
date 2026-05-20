@@ -1959,7 +1959,7 @@ func test_expand_territory_produces_war_check_with_intent() -> void:
 	ctx.clan = "Crab"
 	ctx.province_statuses = [_make_ps_wt(10, "Crane", 1)]
 
-	var objective: Dictionary = {"type": "EXPAND_TERRITORY", "target_clan_id": "Crane"}
+	var objective: Dictionary = {"need_type": "EXPAND_TERRITORY", "target_clan_id": "Crane"}
 	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(
 		objective, ctx,
 	)
@@ -2520,7 +2520,7 @@ func test_seek_vengeance_produces_war_check() -> void:
 	ctx.province_statuses = [_make_ps_wt(20, "Crane", 2)]
 
 	var objective: Dictionary = {
-		"type": "SEEK_VENGEANCE",
+		"need_type": "SEEK_VENGEANCE",
 		"target_npc_id": -1,
 		"target_clan_id": "Crane",
 	}
@@ -2541,7 +2541,7 @@ func test_seek_vengeance_no_war_check_without_weak_province() -> void:
 	ctx.province_statuses = [_make_strong_ps(20, "Crane")]
 
 	var objective: Dictionary = {
-		"type": "SEEK_VENGEANCE",
+		"need_type": "SEEK_VENGEANCE",
 		"target_npc_id": -1,
 		"target_clan_id": "Crane",
 	}
@@ -2559,7 +2559,7 @@ func test_seek_vengeance_no_war_check_same_clan() -> void:
 	ctx.province_statuses = [_make_ps_wt(20, "Lion", 2)]
 
 	var objective: Dictionary = {
-		"type": "SEEK_VENGEANCE",
+		"need_type": "SEEK_VENGEANCE",
 		"target_npc_id": -1,
 		"target_clan_id": "Lion",
 	}
@@ -2577,7 +2577,7 @@ func test_undermine_clan_produces_war_check() -> void:
 	ctx.province_statuses = [_make_ps_wt(30, "Crane", 2)]
 
 	var objective: Dictionary = {
-		"type": "UNDERMINE_CLAN",
+		"need_type": "UNDERMINE_CLAN",
 		"target_clan_id": "Crane",
 	}
 	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(
@@ -2596,7 +2596,7 @@ func test_undermine_clan_falls_through_when_no_weak_target() -> void:
 	ctx.province_statuses = [_make_strong_ps(30, "Crane")]
 
 	var objective: Dictionary = {
-		"type": "UNDERMINE_CLAN",
+		"need_type": "UNDERMINE_CLAN",
 		"target_clan_id": "Crane",
 	}
 	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(
@@ -2613,7 +2613,7 @@ func test_prevent_shortage_produces_war_check_when_starving() -> void:
 	ctx.resource_stockpiles = {"rice": 0.5, "rice_consumption": 1.0}
 	ctx.province_statuses = [_make_ps_wt(15, "Crane", 2)]
 
-	var objective: Dictionary = {"type": "PREVENT_SHORTAGE"}
+	var objective: Dictionary = {"need_type": "PREVENT_SHORTAGE"}
 	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(
 		objective, ctx,
 	)
@@ -2629,7 +2629,7 @@ func test_prevent_shortage_acquires_resource_when_no_weak_neighbor() -> void:
 	ctx.resource_stockpiles = {"rice": 0.5, "rice_consumption": 1.0}
 	ctx.province_statuses = []
 
-	var objective: Dictionary = {"type": "PREVENT_SHORTAGE"}
+	var objective: Dictionary = {"need_type": "PREVENT_SHORTAGE"}
 	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(
 		objective, ctx,
 	)
@@ -2647,7 +2647,7 @@ func test_build_strongest_force_produces_war_check_when_trained() -> void:
 	ctx.resource_stockpiles = {"rice": 10.0, "military_upkeep": 1.0}
 	ctx.province_statuses = [_make_ps_wt(25, "Crane", 2)]
 
-	var objective: Dictionary = {"type": "BUILD_STRONGEST_FORCE"}
+	var objective: Dictionary = {"need_type": "BUILD_STRONGEST_FORCE"}
 	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(
 		objective, ctx,
 	)
@@ -2663,7 +2663,7 @@ func test_advance_glory_produces_war_check_for_bushi_lord() -> void:
 	ctx.school_type = Enums.SchoolType.BUSHI
 	ctx.province_statuses = [_make_ps_wt(25, "Crane", 2)]
 
-	var objective: Dictionary = {"type": "ADVANCE_GLORY"}
+	var objective: Dictionary = {"need_type": "ADVANCE_GLORY"}
 	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(
 		objective, ctx,
 	)
@@ -2679,7 +2679,7 @@ func test_advance_glory_no_war_check_for_courtier() -> void:
 	ctx.school_type = Enums.SchoolType.COURTIER
 	ctx.province_statuses = [_make_ps_wt(25, "Lion", 2)]
 
-	var objective: Dictionary = {"type": "ADVANCE_GLORY"}
+	var objective: Dictionary = {"need_type": "ADVANCE_GLORY"}
 	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(
 		objective, ctx,
 	)
@@ -2693,7 +2693,7 @@ func test_advance_family_produces_war_check() -> void:
 	ctx.clan = "Lion"
 	ctx.province_statuses = [_make_ps_wt(25, "Crane", 2)]
 
-	var objective: Dictionary = {"type": "ADVANCE_FAMILY"}
+	var objective: Dictionary = {"need_type": "ADVANCE_FAMILY"}
 	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(
 		objective, ctx,
 	)
@@ -2710,7 +2710,7 @@ func test_advance_family_defends_first_on_crisis() -> void:
 	crisis_ps.active_crisis_id = 1
 	ctx.province_statuses = [crisis_ps, _make_ps_wt(25, "Crane", 2)]
 
-	var objective: Dictionary = {"type": "ADVANCE_FAMILY"}
+	var objective: Dictionary = {"need_type": "ADVANCE_FAMILY"}
 	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(
 		objective, ctx,
 	)
@@ -2725,7 +2725,7 @@ func test_honor_ancestors_produces_war_check_with_active_wars() -> void:
 	ctx.active_wars = [{"war_id": 1}]
 	ctx.province_statuses = [_make_ps_wt(25, "Crane", 2)]
 
-	var objective: Dictionary = {"type": "HONOR_ANCESTORS"}
+	var objective: Dictionary = {"need_type": "HONOR_ANCESTORS"}
 	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(
 		objective, ctx,
 	)
@@ -2742,7 +2742,7 @@ func test_honor_ancestors_trains_without_active_wars() -> void:
 	ctx.escalating_conflicts = []
 	ctx.province_statuses = [_make_ps_wt(25, "Crane", 2)]
 
-	var objective: Dictionary = {"type": "HONOR_ANCESTORS"}
+	var objective: Dictionary = {"need_type": "HONOR_ANCESTORS"}
 	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(
 		objective, ctx,
 	)
