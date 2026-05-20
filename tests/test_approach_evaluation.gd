@@ -26,7 +26,7 @@ func _make_action_log(
 	roll_result: int = 25,
 	tn: int = 15,
 	observable: bool = false,
-) -> Array[Dictionary]:
+) -> Array:
 	var log: Array = []
 	for i: int in range(count):
 		log.append(_make_log_entry({

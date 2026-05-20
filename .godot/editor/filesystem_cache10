@@ -608,8 +608,8 @@ tattoo_data.gd::GDScript::3242332325802128302::1778869128::0::1::::TattooData<>R
 topic_data.gd::GDScript::6584727903022217423::1779316299::0::1::::TopicData<>Resource<><>0<>0<><>::
 trade_route_data.gd::GDScript::5374230473753518384::1778869128::0::1::::TradeRouteData<>Resource<><>0<>0<><>::
 war_data.gd::GDScript::2224361414133437869::1779317521::0::1::::WarData<>Resource<><>0<>0<><>::
-::res://simulation/::1779317537
-action_executor.gd::GDScript::5720904671691714250::1779317240::0::1::::ActionExecutor<>RefCounted<><>0<>0<><>::
+::res://simulation/::1779318248
+action_executor.gd::GDScript::5720904671691714250::1779318248::0::1::::ActionExecutor<>RefCounted<><>0<>0<><>::
 action_point_system.gd::GDScript::7434801853146990043::1779316722::0::1::::ActionPointSystem<>RefCounted<><>0<>0<><>::
 animal_handling_system.gd::GDScript::7886184158348021989::1779317555::0::1::::AnimalHandlingSystem<>RefCounted<><>0<>0<><>::
 approach_evaluation.gd::GDScript::8278538261605539984::1779317240::0::1::::ApproachEvaluation<>RefCounted<><>0<>0<><>::
@@ -636,7 +636,7 @@ crime_suppression_system.gd::GDScript::1403837413496968132::1779316722::0::1::::
 crime_system.gd::GDScript::4987010580120276771::1779317240::0::1::::CrimeSystem<>RefCounted<><>0<>0<><>::
 crime_wiring.gd::GDScript::2679237552793419109::1779317240::0::1::::CrimeWiring<>RefCounted<><>0<>0<><>::
 daily_conversation.gd::GDScript::1960247220885944093::1779317240::0::1::::DailyConversation<>RefCounted<><>0<>0<><>::
-day_orchestrator.gd::GDScript::7482067654852345321::1779317555::0::1::::DayOrchestrator<>RefCounted<><>0<>0<><>::
+day_orchestrator.gd::GDScript::7482067654852345321::1779317920::0::1::::DayOrchestrator<>RefCounted<><>0<>0<><>::
 defense_hearing_system.gd::GDScript::7850272163385581994::1779316722::0::1::::DefenseHearingSystem<>RefCounted<><>0<>0<><>::
 dice_engine.gd::GDScript::4556299925934828584::1779317240::0::1::::DiceEngine<>RefCounted<><>0<>0<><>::
 dice_result.gd::GDScript::4773390720347958681::1779317240::0::1::::DiceResult<>RefCounted<><>0<>0<><>::
@@ -753,12 +753,12 @@ personality_filter.json::JSON::-1::1779303245::0::1::::<><><>0<>0<><>::
 personality_lean.json::JSON::-1::1779303245::0::1::::<><><>0<>0<><>::
 topic_position_alignment.json::JSON::-1::1778869128::0::1::::<><><>0<>0<><>::
 urgency_rules.json::JSON::-1::1778869128::0::1::::<><><>0<>0<><>::
-::res://tests/::1779316715
+::res://tests/::1779318189
 test_action_executor.gd::GDScript::5144869260377626587::1779317254::0::1::::<>GutTest<><>0<>0<><>::
 test_action_point_system.gd::GDScript::8654777878284594469::1779316715::0::1::::<>GutTest<><>0<>0<><>::
 test_animal_handling_system.gd::GDScript::1451361274427844447::1779316715::0::1::::<>GutTest<><>0<>0<><>::
-test_approach_evaluation.gd::GDScript::7515925494369724139::1779317255::0::1::::<>GutTest<><>0<>0<><>::
-test_army_combat_system.gd::GDScript::5036317893724643994::1779317254::0::1::::<>GutTest<><>0<>0<><>::
+test_approach_evaluation.gd::GDScript::7515925494369724139::1779317844::0::1::::<>GutTest<><>0<>0<><>::
+test_army_combat_system.gd::GDScript::5036317893724643994::1779317844::0::1::::<>GutTest<><>0<>0<><>::
 test_army_movement_system.gd::GDScript::4797524618905079086::1779317255::0::1::::<>GutTest<><>0<>0<><>::
 test_army_upkeep_system.gd::GDScript::1715591940957446910::1779317555::0::1::::<>GutTest<><>0<>0<><>::
 test_assassination_system.gd::GDScript::3592172109310655714::1779317255::0::1::::<>GutTest<><>0<>0<><>::
@@ -768,7 +768,7 @@ test_bribery_system.gd::GDScript::3070535540437910554::1779316715::0::1::::<>Gut
 test_character_sheet_field_index.gd::GDScript::3411240229900853958::1779316715::0::1::::<>GutTest<><>0<>0<><>::
 test_character_stats.gd::GDScript::3477960621278406894::1779316715::0::1::::<>GutTest<><>0<>0<><>::
 test_civilian_order_budget.gd::GDScript::902330487219446150::1779317555::0::1::::<>GutTest<><>0<>0<><>::
-test_civil_war_wiring.gd::GDScript::5525038220162471441::1779317255::0::1::::<>GutTest<><>0<>0<><>::
+test_civil_war_wiring.gd::GDScript::5525038220162471441::1779318189::0::1::::<>GutTest<><>0<>0<><>::
 test_collective_disposition.gd::GDScript::9014259533985534906::1779316715::0::1::::<>GutTest<><>0<>0<><>::
 test_commerce_stigma_system.gd::GDScript::8211027968679530485::1779316715::0::1::::<>GutTest<><>0<>0<><>::
 test_commitment_registry.gd::GDScript::6099103195221202570::1779317254::0::1::::<>GutTest<><>0<>0<><>::
@@ -779,7 +779,7 @@ test_court_availability.gd::GDScript::509544372359887371::1779317254::0::1::::<>
 test_court_commitment_system.gd::GDScript::6066776943622123991::1779317254::0::1::::<>GutTest<><>0<>0<><>::
 test_court_priority_system.gd::GDScript::145903790123481917::1779317254::0::1::::<>GutTest<><>0<>0<><>::
 test_court_system.gd::GDScript::5520932507988973483::1779317254::0::1::::<>GutTest<><>0<>0<><>::
-test_crime_pipeline_integration.gd::GDScript::4442937619893411723::1779317254::0::1::::<>GutTest<><>0<>0<><>::
+test_crime_pipeline_integration.gd::GDScript::4442937619893411723::1779317844::0::1::::<>GutTest<><>0<>0<><>::
 test_crime_suppression_system.gd::GDScript::8394430304102076026::1779316715::0::1::::<>GutTest<><>0<>0<><>::
 test_crime_system.gd::GDScript::262140652753617289::1779317255::0::1::::<>GutTest<><>0<>0<><>::
 test_crime_wiring.gd::GDScript::5088511400267518235::1779317254::0::1::::<>GutTest<><>0<>0<><>::
@@ -834,7 +834,7 @@ test_miya_blessing_system.gd::GDScript::5397719127608125751::1779317255::0::1:::
 test_miya_blessing_wiring.gd::GDScript::3072745030785514502::1779317254::0::1::::<>GutTest<><>0<>0<><>::
 test_monk_objective_system.gd::GDScript::281756186684227514::1779316715::0::1::::<>GutTest<><>0<>0<><>::
 test_musha_shugyo_system.gd::GDScript::2426103973417057601::1779317254::0::1::::<>GutTest<><>0<>0<><>::
-test_naval_combat_system.gd::GDScript::7077033443412119849::1779317254::0::1::::<>GutTest<><>0<>0<><>::
+test_naval_combat_system.gd::GDScript::7077033443412119849::1779317844::0::1::::<>GutTest<><>0<>0<><>::
 test_naval_system.gd::GDScript::120187437301929413::1779316715::0::1::::<>GutTest<><>0<>0<><>::
 test_naval_wiring.gd::GDScript::8475849928288553536::1779317255::0::1::::<>GutTest<><>0<>0<><>::
 test_npc_advancement.gd::GDScript::7731144014245558063::1779317255::0::1::::<>GutTest<><>0<>0<><>::
@@ -877,7 +877,7 @@ test_skill_resolver.gd::GDScript::5491740396386793405::1779317254::0::1::::<>Gut
 test_starvation_warfare.gd::GDScript::2741358736320587276::1779317254::0::1::::<>GutTest<><>0<>0<><>::
 test_strategic_review.gd::GDScript::6519657269207547975::1779317254::0::1::::<>GutTest<><>0<>0<><>::
 test_succession_system.gd::GDScript::2695923798939084254::1779317255::0::1::::<>GutTest<><>0<>0<><>::
-test_succession_wiring.gd::GDScript::25298584768784622::1779317254::0::1::::<>GutTest<><>0<>0<><>::
+test_succession_wiring.gd::GDScript::25298584768784622::1779318181::0::1::::<>GutTest<><>0<>0<><>::
 test_supply_tether_system.gd::GDScript::8827220595562274255::1779317254::0::1::::<>GutTest<><>0<>0<><>::
 test_system_wiring.gd::GDScript::6704901107472496243::1779317555::0::1::::<>GutTest<><>0<>0<><>::
 test_tattoo_system.gd::GDScript::7786247342588384302::1779317555::0::1::::<>GutTest<><>0<>0<><>::

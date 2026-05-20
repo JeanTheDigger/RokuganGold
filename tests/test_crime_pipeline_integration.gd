@@ -61,7 +61,7 @@ func _run_pipeline(
 	ic_day: int,
 	next_id: Array,
 	topics: Array,
-) -> Array[Dictionary]:
+) -> Array:
 	return ConvictionProcessor.process_accused_cases(
 		[record], chars, null, ic_day, next_id, topics, lord_map
 	)

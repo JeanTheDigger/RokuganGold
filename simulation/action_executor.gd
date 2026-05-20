@@ -5,6 +5,14 @@ class_name ActionExecutor
 ## This is the bridge between NPC decision and world-state mutation.
 
 
+static func _get_trait_value_by_name(character: L5RCharacterData, trait_name: String, fallback: int = 2) -> int:
+	var lower: String = trait_name.to_lower()
+	var val: Variant = character.get(lower)
+	if val is int:
+		return val
+	return fallback
+
+
 # -- Action Categories --------------------------------------------------------
 
 const SOCIAL_ACTIONS: Array[String] = [
@@ -720,7 +728,7 @@ static func _execute_gossip(
 	var primary_skill: String = skill_entry.get("primary", "Courtier")
 	var primary_trait: String = skill_entry.get("secondary", "Awareness")
 	var skill_rank: int = character.skills.get(primary_skill, 0)
-	var trait_val: int = character.traits.get(primary_trait, 2)
+	var trait_val: int = _get_trait_value_by_name(character, primary_trait)
 	var gossip_wc: int = _get_winter_court_skill_bonus(character, primary_skill, ctx)
 	var roll_result: Dictionary = dice_engine.roll_skill_check(
 		trait_val, skill_rank, tn
@@ -785,7 +793,7 @@ static func _execute_public_insult(
 	var primary_skill: String = skill_entry.get("primary", "Courtier")
 	var primary_trait: String = skill_entry.get("secondary", "Awareness")
 	var skill_rank: int = character.skills.get(primary_skill, 0)
-	var trait_val: int = character.traits.get(primary_trait, 2)
+	var trait_val: int = _get_trait_value_by_name(character, primary_trait)
 
 	var insult_wc: int = _get_winter_court_skill_bonus(character, primary_skill, ctx)
 	var attacker_total: int = dice_engine.roll_skill_check(
@@ -795,7 +803,7 @@ static func _execute_public_insult(
 	var defender_total: int = 0
 	if target != null:
 		var def_etiquette: int = target.skills.get("Etiquette", 0)
-		var def_awareness: int = target.traits.get("Awareness", 2)
+		var def_awareness: int = target.awareness
 		defender_total = dice_engine.roll_skill_check(
 			def_awareness, def_etiquette, 0
 		).get("total", 0)
@@ -918,7 +926,7 @@ static func _execute_public_debate(
 	var primary_skill: String = skill_entry.get("primary", "Courtier")
 	var a_trait_name: String = skill_entry.get("secondary", "Awareness")
 	var a_skill_rank: int = character.skills.get(primary_skill, 0)
-	var a_trait_val: int = character.traits.get(a_trait_name, 2)
+	var a_trait_val: int = _get_trait_value_by_name(character, a_trait_name)
 	var debate_wc: int = _get_winter_court_skill_bonus(character, primary_skill, ctx)
 	var a_roll: int = dice_engine.roll_skill_check(
 		a_trait_val, a_skill_rank, 0
@@ -927,7 +935,7 @@ static func _execute_public_debate(
 	var b_roll: int = 0
 	if target != null:
 		var b_courtier: int = target.skills.get("Courtier", 0)
-		var b_awareness: int = target.traits.get("Awareness", 2)
+		var b_awareness: int = target.awareness
 		b_roll = dice_engine.roll_skill_check(
 			b_awareness, b_courtier, 0
 		).get("total", 0)
@@ -3148,7 +3156,7 @@ static func _execute_contested_court_action(
 	var a_skill: String = _CONTESTED_ATTACKER_SKILL.get(action_id, skill_entry.get("primary", "Courtier"))
 	var a_trait_name: String = _CONTESTED_ATTACKER_TRAIT.get(action_id, skill_entry.get("secondary", "Awareness"))
 	var a_skill_rank: int = character.skills.get(a_skill, 0)
-	var a_trait_val: int = character.traits.get(a_trait_name, 2)
+	var a_trait_val: int = _get_trait_value_by_name(character, a_trait_name)
 	var wc_bonus: int = _get_winter_court_skill_bonus(character, a_skill, ctx)
 	var attacker_roll: int = dice_engine.roll_skill_check(
 		a_trait_val, a_skill_rank, 0
@@ -3159,7 +3167,7 @@ static func _execute_contested_court_action(
 		var d_skill: String = _CONTESTED_DEFENDER_SKILL.get(action_id, "Etiquette")
 		var d_trait_name: String = _CONTESTED_DEFENDER_TRAIT.get(action_id, "Awareness")
 		var d_skill_rank: int = target.skills.get(d_skill, 0)
-		var d_trait_val: int = target.traits.get(d_trait_name, 2)
+		var d_trait_val: int = _get_trait_value_by_name(target, d_trait_name)
 		defender_roll = dice_engine.roll_skill_check(
 			d_trait_val, d_skill_rank, 0
 		).get("total", 0)
@@ -3316,7 +3324,7 @@ static func _execute_provoke_emotion(
 	var target: L5RCharacterData = characters_by_id.get(target_id)
 
 	var a_skill_rank: int = character.skills.get("Courtier", 0)
-	var a_trait_val: int = character.traits.get("Awareness", 2)
+	var a_trait_val: int = character.awareness
 	var provoke_wc: int = _get_winter_court_skill_bonus(character, "Courtier", ctx)
 	var attacker_roll: int = dice_engine.roll_skill_check(
 		a_trait_val, a_skill_rank, 0
@@ -3325,7 +3333,7 @@ static func _execute_provoke_emotion(
 	var defender_roll: int = 0
 	if target != null:
 		var d_etiquette: int = target.skills.get("Etiquette", 0)
-		var d_willpower: int = target.traits.get("Willpower", 2)
+		var d_willpower: int = target.willpower
 		defender_roll = dice_engine.roll_skill_check(
 			d_willpower, d_etiquette, 0
 		).get("total", 0)
@@ -3389,7 +3397,7 @@ static func _execute_play_game(
 	var game_trait: String = _GAME_TRAIT_MAP.get(game_skill, "Awareness")
 
 	var a_skill_rank: int = character.skills.get(game_skill, 0)
-	var a_trait_val: int = character.traits.get(game_trait, 2)
+	var a_trait_val: int = _get_trait_value_by_name(character, game_trait)
 	var a_roll: int = dice_engine.roll_skill_check(
 		a_trait_val, a_skill_rank, 0
 	).get("total", 0)
@@ -3397,7 +3405,7 @@ static func _execute_play_game(
 	var b_roll: int = 0
 	if target != null:
 		var b_skill_rank: int = target.skills.get(game_skill, 0)
-		var b_trait_val: int = target.traits.get(game_trait, 2)
+		var b_trait_val: int = _get_trait_value_by_name(target, game_trait)
 		b_roll = dice_engine.roll_skill_check(
 			b_trait_val, b_skill_rank, 0
 		).get("total", 0)
@@ -3454,7 +3462,7 @@ static func _execute_discern_need(
 		a_skill = "Courtier"
 
 	var a_skill_rank: int = character.skills.get(a_skill, 0)
-	var a_trait_val: int = character.traits.get(a_trait_name, 2)
+	var a_trait_val: int = _get_trait_value_by_name(character, a_trait_name)
 	var discern_wc: int = _get_winter_court_skill_bonus(character, a_skill, ctx)
 	var attacker_roll: int = dice_engine.roll_skill_check(
 		a_trait_val, a_skill_rank, 0
@@ -3463,7 +3471,7 @@ static func _execute_discern_need(
 	var defender_roll: int = 0
 	if target != null:
 		var d_etiquette: int = target.skills.get("Etiquette", 0)
-		var d_awareness: int = target.traits.get("Awareness", 2)
+		var d_awareness: int = target.awareness
 		defender_roll = dice_engine.roll_skill_check(
 			d_awareness, d_etiquette, 0
 		).get("total", 0)
@@ -3513,7 +3521,7 @@ static func _execute_read_character(
 	var target: L5RCharacterData = characters_by_id.get(target_id)
 
 	var a_skill_rank: int = character.skills.get("Investigation", 0)
-	var a_trait_val: int = character.traits.get("Perception", 2)
+	var a_trait_val: int = character.perception
 	var attacker_roll: int = dice_engine.roll_skill_check(
 		a_trait_val, a_skill_rank, 0
 	).get("total", 0)
@@ -3521,7 +3529,7 @@ static func _execute_read_character(
 	var defender_roll: int = 0
 	if target != null:
 		var d_etiquette: int = target.skills.get("Etiquette", 0)
-		var d_awareness: int = target.traits.get("Awareness", 2)
+		var d_awareness: int = target.awareness
 		defender_roll = dice_engine.roll_skill_check(
 			d_awareness, d_etiquette, 0
 		).get("total", 0)
@@ -3569,7 +3577,7 @@ static func _execute_probe(
 	var target: L5RCharacterData = characters_by_id.get(target_id)
 
 	var a_skill_rank: int = character.skills.get("Courtier", 0)
-	var a_trait_val: int = character.traits.get("Perception", 2)
+	var a_trait_val: int = character.perception
 	var probe_wc: int = _get_winter_court_skill_bonus(character, "Courtier", ctx)
 	var attacker_roll: int = dice_engine.roll_skill_check(
 		a_trait_val, a_skill_rank, 0
@@ -3578,7 +3586,7 @@ static func _execute_probe(
 	var defender_roll: int = 0
 	if target != null:
 		var d_sincerity: int = target.skills.get("Sincerity", 0)
-		var d_awareness: int = target.traits.get("Awareness", 2)
+		var d_awareness: int = target.awareness
 		defender_roll = dice_engine.roll_skill_check(
 			d_awareness, d_sincerity, 0
 		).get("total", 0)
@@ -3725,7 +3733,7 @@ static func _execute_ask_for_introduction(
 	# Skill selection: kuge targets use Etiquette/Awareness; others use Courtier/Awareness.
 	var skill: String = "Etiquette" if target_is_kuge else "Courtier"
 	var skill_rank: int = character.skills.get(skill, 0)
-	var trait_val: int = character.traits.get("Awareness", 2)
+	var trait_val: int = character.awareness
 
 	# Bureaucracy emphasis grants +1k0 on kuge rolls per s55.7.3.
 	var has_emphasis: bool = target_is_kuge and character.skills.has("Bureaucracy")
@@ -3777,7 +3785,7 @@ static func _execute_observe_court_attendees(
 	characters_by_id: Dictionary,
 ) -> Dictionary:
 	var skill_rank: int = character.skills.get("Investigation", 0)
-	var trait_val: int = character.traits.get("Perception", 2)
+	var trait_val: int = character.perception
 	var roll_result: Dictionary = dice_engine.roll_skill_check(trait_val, skill_rank, 0)
 	var roll_total: int = roll_result.get("total", 0)
 

@@ -13727,7 +13727,7 @@ static func _populate_vacancy_intelligence(
 			continue
 		if c.role_position.is_empty():
 			continue
-		var lord_id_2: int = c.lord_id_2
+		var lord_id_2: int = c.lord_id
 		if lord_id_2 < 0:
 			continue
 		if not filled_positions.has(lord_id_2):

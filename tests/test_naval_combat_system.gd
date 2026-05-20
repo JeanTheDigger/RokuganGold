@@ -35,7 +35,7 @@ func _make_defender(id: int, ship_class: int, col: int,
 	return _make_nc(ship, 1, col, "defender", weather)
 
 
-func _to_typed_array(arr: Array) -> Array[Dictionary]:
+func _to_typed_array(arr: Array) -> Array:
 	var result: Array = []
 	for item: Variant in arr:
 		result.append(item)

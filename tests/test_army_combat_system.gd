@@ -59,7 +59,7 @@ func _make_army(
 	unit_type: Enums.CompanyUnitType,
 	side: String,
 	start_id: int = 1,
-) -> Array[Dictionary]:
+) -> Array:
 	var states: Array = []
 	for i: int in range(count):
 		var c: MilitaryUnitData.CompanyData = _make_company(start_id + i, unit_type)

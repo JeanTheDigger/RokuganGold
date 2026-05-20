@@ -34,7 +34,7 @@ func before_each() -> void:
 		"personality_lean": {},
 		"competence_table": {},
 		"disposition_tiers": {},
-		"urgency_rules": {},
+		"urgency_rules": [],
 		"topic_position_alignment": {},
 	}
 	_filter_data = {
