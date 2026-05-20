@@ -1021,13 +1021,16 @@ Remaining gaps (not critical, documented for future work):
 - **Low Skill glory on discovery — Caught using a Low Skill. FIXED.**
   `CrimeSystem.LOW_SKILL_DISCOVERY_GLORY = -0.3` per GDD s46 Glory table.
   Fires when the Low Skill user is identified by another character. Wired
-  at 4 identification points: (1) SHADOW_TARGET critical failure (target
+  at 5 identification points: (1) SHADOW_TARGET critical failure (target
   identifies shadow), (2) forgery auto-detection on letter delivery (forger
   identified via CrimeRecord escalation), (3) assassination critical failure
   detection (household identifies assassin), (4) assassination SEARCH_PERSON
-  equipment discovery (bodyguard finds concealed weapons). Commerce stigma
-  glory penalty updated from -0.1 to -0.3 (commerce is inherently public,
-  so discovery is automatic). 3 tests.
+  equipment discovery (bodyguard finds concealed weapons), (5) EXAMINE_CRIME_SCENE
+  suspect identification (raises >= 2, Low Skill crime type gate via
+  `CrimeSystem.is_low_skill_crime_type()`). Commerce stigma glory penalty
+  updated from -0.1 to -0.3 (commerce is inherently public, so discovery
+  is automatic). `is_low_skill_crime_type()` returns true for
+  DISHONORABLE_CONDUCT and SKIMMING. 7 tests.
 
 ### Known Code Issues — Deferred (2026-05-19, metadata population audit)
 - **EXPOSE_SECRET_PRIVATELY — metadata unpopulated, always fails. FIXED.**

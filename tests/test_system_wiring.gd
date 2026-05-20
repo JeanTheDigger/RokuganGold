@@ -2967,6 +2967,19 @@ func test_low_skill_discovery_glory_constant() -> void:
 		"Caught using Low Skill = -0.3 Glory per GDD s46")
 
 
+func test_is_low_skill_crime_type() -> void:
+	assert_true(CrimeSystem.is_low_skill_crime_type(Enums.CrimeType.DISHONORABLE_CONDUCT),
+		"DISHONORABLE_CONDUCT is a Low Skill crime type")
+	assert_true(CrimeSystem.is_low_skill_crime_type(Enums.CrimeType.SKIMMING),
+		"SKIMMING (bribery) is a Low Skill crime type")
+	assert_false(CrimeSystem.is_low_skill_crime_type(Enums.CrimeType.VIOLENCE),
+		"VIOLENCE is not a Low Skill crime type")
+	assert_false(CrimeSystem.is_low_skill_crime_type(Enums.CrimeType.TREASON),
+		"TREASON is not a Low Skill crime type")
+	assert_false(CrimeSystem.is_low_skill_crime_type(Enums.CrimeType.MAHO),
+		"MAHO is not a Low Skill crime type")
+
+
 func test_following_orders_honor_positive_at_low_rank() -> void:
 	var low := L5RCharacterData.new()
 	low.honor = 0.5

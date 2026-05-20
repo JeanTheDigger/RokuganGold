@@ -2922,6 +2922,21 @@ static func _process_scene_examination_writebacks(
 					active_case["evidence_total"] = effects.get("evidence_gained", 0) + active_case.get("evidence_total", 0)
 					break
 
+		var suspect_id: int = effects.get("suspect_found", -1)
+		if suspect_id >= 0:
+			var crime_records: Array[CrimeRecord] = world_states.get(
+				"_crime_records", [] as Array[CrimeRecord]
+			)
+			for record: CrimeRecord in crime_records:
+				if record.case_id == case_id:
+					if CrimeSystem.is_low_skill_crime_type(record.crime_type):
+						var suspect: L5RCharacterData = characters_by_id.get(suspect_id)
+						if suspect != null:
+							HonorGlorySystem.apply_glory_change(
+								suspect, CrimeSystem.LOW_SKILL_DISCOVERY_GLORY
+							)
+					break
+
 		var threshold: String = effects.get("threshold_crossed", "")
 		if threshold == "bribery_eval":
 			_inject_bribery_eval_event_by_case(case_id, world_states)

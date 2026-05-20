@@ -5859,6 +5859,126 @@ func test_scene_exam_increments_scene_exam_count() -> void:
 	assert_eq(active_case["evidence_total"], 20)
 
 
+# INVESTIGATION GLORY TRIGGER — SUSPECT IDENTIFIED VIA CRIME SCENE EXAM
+# ==============================================================================
+
+func test_scene_exam_suspect_found_low_skill_crime_applies_glory_penalty() -> void:
+	var suspect := L5RCharacterData.new()
+	suspect.character_id = 50
+	suspect.character_name = "Spy"
+	suspect.glory = 3.0
+	suspect.wounds_taken = 0
+	var characters_by_id: Dictionary = {50: suspect}
+
+	var record: CrimeRecord = CrimeSystem.create_crime_record(
+		100, Enums.CrimeType.DISHONORABLE_CONDUCT, 50, "province_1", 10,
+	)
+	var crime_records: Array[CrimeRecord] = [record]
+	var world_states: Dictionary = {"_crime_records": crime_records}
+
+	var results: Array = [{
+		"action_id": "EXAMINE_CRIME_SCENE",
+		"success": true,
+		"character_id": 1,
+		"effects": {
+			"effect": "scene_examined",
+			"case_id": 100,
+			"evidence_gained": 15,
+			"suspect_found": 50,
+			"threshold_crossed": "",
+		},
+	}]
+
+	var objectives_map: Dictionary = {}
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [500]
+
+	DayOrchestrator._process_scene_examination_writebacks(
+		results, objectives_map, world_states, characters_by_id,
+		active_topics, next_topic_id, 10,
+	)
+
+	assert_almost_eq(suspect.glory, 3.0 + CrimeSystem.LOW_SKILL_DISCOVERY_GLORY, 0.01)
+
+
+func test_scene_exam_suspect_found_non_low_skill_crime_no_glory_penalty() -> void:
+	var suspect := L5RCharacterData.new()
+	suspect.character_id = 51
+	suspect.character_name = "Killer"
+	suspect.glory = 3.0
+	suspect.wounds_taken = 0
+	var characters_by_id: Dictionary = {51: suspect}
+
+	var record: CrimeRecord = CrimeSystem.create_crime_record(
+		101, Enums.CrimeType.VIOLENCE, 51, "province_2", 10,
+	)
+	var crime_records: Array[CrimeRecord] = [record]
+	var world_states: Dictionary = {"_crime_records": crime_records}
+
+	var results: Array = [{
+		"action_id": "EXAMINE_CRIME_SCENE",
+		"success": true,
+		"character_id": 2,
+		"effects": {
+			"effect": "scene_examined",
+			"case_id": 101,
+			"evidence_gained": 15,
+			"suspect_found": 51,
+			"threshold_crossed": "",
+		},
+	}]
+
+	var objectives_map: Dictionary = {}
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [500]
+
+	DayOrchestrator._process_scene_examination_writebacks(
+		results, objectives_map, world_states, characters_by_id,
+		active_topics, next_topic_id, 10,
+	)
+
+	assert_almost_eq(suspect.glory, 3.0, 0.01)
+
+
+func test_scene_exam_no_suspect_no_glory_penalty() -> void:
+	var suspect := L5RCharacterData.new()
+	suspect.character_id = 52
+	suspect.character_name = "Unknown"
+	suspect.glory = 3.0
+	suspect.wounds_taken = 0
+	var characters_by_id: Dictionary = {52: suspect}
+
+	var record: CrimeRecord = CrimeSystem.create_crime_record(
+		102, Enums.CrimeType.DISHONORABLE_CONDUCT, 52, "province_3", 10,
+	)
+	var crime_records: Array[CrimeRecord] = [record]
+	var world_states: Dictionary = {"_crime_records": crime_records}
+
+	var results: Array = [{
+		"action_id": "EXAMINE_CRIME_SCENE",
+		"success": true,
+		"character_id": 3,
+		"effects": {
+			"effect": "scene_examined",
+			"case_id": 102,
+			"evidence_gained": 5,
+			"suspect_found": -1,
+			"threshold_crossed": "",
+		},
+	}]
+
+	var objectives_map: Dictionary = {}
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [500]
+
+	DayOrchestrator._process_scene_examination_writebacks(
+		results, objectives_map, world_states, characters_by_id,
+		active_topics, next_topic_id, 10,
+	)
+
+	assert_almost_eq(suspect.glory, 3.0, 0.01)
+
+
 # MAGISTRATE RELEASE AFTER CONVICTION
 # ==============================================================================
 

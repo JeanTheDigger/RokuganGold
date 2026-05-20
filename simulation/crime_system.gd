@@ -181,6 +181,13 @@ static func get_severity(crime_type: Enums.CrimeType) -> Enums.CrimeSeverity:
 			return Enums.CrimeSeverity.MINOR
 
 
+static func is_low_skill_crime_type(crime_type: Enums.CrimeType) -> bool:
+	match crime_type:
+		Enums.CrimeType.DISHONORABLE_CONDUCT, Enums.CrimeType.SKIMMING:
+			return true
+	return false
+
+
 # -- Table 2.3 Lookup ---------------------------------------------------------
 
 static func _get_honor_table(table_name: String) -> Array[int]:
