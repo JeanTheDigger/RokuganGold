@@ -580,6 +580,128 @@ func test_introduction_skips_bonus_when_already_met() -> void:
 	assert_eq(_char_a.disposition_values[_char_b.character_id], 25)
 
 
+# =============================================================================
+# s55.6 — Information Transfer on Vassal Objective Assignment
+# =============================================================================
+
+
+func test_vassal_assignment_transfers_knowledge() -> void:
+	# Lord has knowledge about province 5; vassal should receive it
+	var lord := L5RCharacterData.new()
+	lord.character_id = 10
+	lord.character_name = "Lord"
+	lord.clan = "Lion"
+	lord.knowledge_pool = []
+	var province_entry := InformationSystem.make_entry(
+		Enums.KnowledgeSource.DIRECT_OBSERVATION, "province_status",
+		{"target_province_id": 5, "stability": 80.0}, 0
+	)
+	InformationSystem.add_knowledge(lord, province_entry)
+
+	var vassal := L5RCharacterData.new()
+	vassal.character_id = 20
+	vassal.character_name = "Vassal"
+	vassal.clan = "Lion"
+	vassal.lord_id = 10
+	vassal.knowledge_pool = []
+
+	var characters_by_id: Dictionary = {10: lord, 20: vassal}
+	var objectives_map: Dictionary = {}
+
+	var applied: Dictionary = {
+		"character_id": 10,
+		"effects": {
+			"requires_vassal_objective_assignment": true,
+			"vassal_id": 20,
+			"assigned_need_type": "STABILIZE_PROVINCE",
+			"target_province_id": 5,
+		},
+	}
+
+	var result: Dictionary = DayOrchestrator._apply_vassal_objective_assignment(
+		applied, characters_by_id, objectives_map, 0
+	)
+	assert_eq(result.get("type", ""), "vassal_objective_assigned")
+	assert_eq(vassal.knowledge_pool.size(), 1)
+	assert_eq(vassal.knowledge_pool[0].entry_type, "province_status")
+	assert_eq(vassal.knowledge_pool[0].data.get("target_province_id", -1), 5)
+
+
+func test_vassal_assignment_transfers_clan_contacts() -> void:
+	var lord := L5RCharacterData.new()
+	lord.character_id = 10
+	lord.character_name = "Lord"
+	lord.clan = "Lion"
+	lord.knowledge_pool = []
+	lord.known_contacts_by_clan = {"Crane": [30]}
+
+	var vassal := L5RCharacterData.new()
+	vassal.character_id = 20
+	vassal.character_name = "Vassal"
+	vassal.clan = "Lion"
+	vassal.lord_id = 10
+	vassal.knowledge_pool = []
+	vassal.met_characters = []
+	vassal.known_contacts_by_clan = {}
+
+	var contact := L5RCharacterData.new()
+	contact.character_id = 30
+	contact.character_name = "Crane Contact"
+	contact.clan = "Crane"
+
+	var characters_by_id: Dictionary = {10: lord, 20: vassal, 30: contact}
+	var objectives_map: Dictionary = {}
+
+	var applied: Dictionary = {
+		"character_id": 10,
+		"effects": {
+			"requires_vassal_objective_assignment": true,
+			"vassal_id": 20,
+			"assigned_need_type": "IMPROVE_RELATIONS",
+			"target_clan": "Crane",
+		},
+	}
+
+	DayOrchestrator._apply_vassal_objective_assignment(
+		applied, characters_by_id, objectives_map, 0
+	)
+	assert_true(30 in vassal.met_characters)
+	var crane_contacts: Array = vassal.known_contacts_by_clan.get("Crane", [])
+	assert_true(30 in crane_contacts)
+
+
+func test_vassal_assignment_objective_has_target_fields() -> void:
+	var lord := L5RCharacterData.new()
+	lord.character_id = 10
+	lord.knowledge_pool = []
+
+	var vassal := L5RCharacterData.new()
+	vassal.character_id = 20
+	vassal.lord_id = 10
+	vassal.knowledge_pool = []
+
+	var characters_by_id: Dictionary = {10: lord, 20: vassal}
+	var objectives_map: Dictionary = {}
+
+	var applied: Dictionary = {
+		"character_id": 10,
+		"effects": {
+			"requires_vassal_objective_assignment": true,
+			"vassal_id": 20,
+			"assigned_need_type": "DEFEND_PROVINCE",
+			"target_province_id": 7,
+			"target_clan": "Crab",
+		},
+	}
+
+	DayOrchestrator._apply_vassal_objective_assignment(
+		applied, characters_by_id, objectives_map, 0
+	)
+	var obj: Dictionary = objectives_map[20]["primary"]
+	assert_eq(obj.get("target_province_id", -1), 7)
+	assert_eq(obj.get("target_clan", ""), "Crab")
+
+
 func test_transfer_objective_knowledge_seeds_contacts() -> void:
 	var baselines: Dictionary = CollectiveDisposition.make_starting_baselines()
 	_char_a.known_contacts_by_clan = {"Crab": [_char_c.character_id]}
@@ -592,3 +714,163 @@ func test_transfer_objective_knowledge_seeds_contacts() -> void:
 		[], chars_by_id, baselines["clan"], baselines["family"],
 	)
 	assert_eq(_char_b.disposition_values.get(_char_c.character_id, 999), -4)
+
+
+# =============================================================================
+# met_characters wiring — arrival observation uses add_contact
+# =============================================================================
+
+
+func test_arrival_observation_updates_contacts_by_clan() -> void:
+	var arriving := L5RCharacterData.new()
+	arriving.character_id = 1
+	arriving.clan = "Lion"
+	arriving.physical_location = "10"
+	arriving.met_characters = []
+	arriving.known_contacts_by_clan = {}
+	arriving.knowledge_pool = []
+
+	var resident := L5RCharacterData.new()
+	resident.character_id = 2
+	resident.clan = "Crane"
+	resident.physical_location = "10"
+	resident.met_characters = []
+	resident.known_contacts_by_clan = {}
+	resident.knowledge_pool = []
+
+	var chars_by_id: Dictionary = {1: arriving, 2: resident}
+	var arrivals: Array[Dictionary] = [{"character_id": 1, "destination": "10"}]
+
+	DayOrchestrator._process_arrival_observation(arrivals, chars_by_id, 0)
+	# Both should be in each other's met_characters
+	assert_true(2 in arriving.met_characters)
+	assert_true(1 in resident.met_characters)
+	# known_contacts_by_clan should be updated
+	var lion_contacts: Array = resident.known_contacts_by_clan.get("Lion", [])
+	assert_true(1 in lion_contacts)
+	var crane_contacts: Array = arriving.known_contacts_by_clan.get("Crane", [])
+	assert_true(2 in crane_contacts)
+
+
+# -- update_intelligence_knowledge dedup tests --------------------------------
+
+func test_update_intelligence_replaces_same_type_same_target() -> void:
+	var c := L5RCharacterData.new()
+	c.character_id = 800
+	c.knowledge_pool = [] as Array[KnowledgeEntry]
+	var old_entry := InformationSystem.make_entry(
+		Enums.KnowledgeSource.INTELLIGENCE,
+		"personality_insight",
+		{"target_character_id": 50, "bushido_virtue": Enums.BushidoVirtue.GI},
+		0,
+	)
+	InformationSystem.update_intelligence_knowledge(c, old_entry)
+	assert_eq(c.knowledge_pool.size(), 1)
+
+	var new_entry := InformationSystem.make_entry(
+		Enums.KnowledgeSource.INTELLIGENCE,
+		"personality_insight",
+		{"target_character_id": 50, "bushido_virtue": Enums.BushidoVirtue.REI, "is_false": true},
+		1,
+	)
+	InformationSystem.update_intelligence_knowledge(c, new_entry)
+	assert_eq(c.knowledge_pool.size(), 1,
+		"Should replace existing entry, not append")
+	assert_eq(c.knowledge_pool[0].data.get("bushido_virtue"), Enums.BushidoVirtue.REI,
+		"Replaced entry should have new data")
+	assert_true(c.knowledge_pool[0].data.get("is_false", false),
+		"Replaced entry should carry is_false flag")
+
+
+func test_update_intelligence_keeps_different_targets() -> void:
+	var c := L5RCharacterData.new()
+	c.character_id = 801
+	c.knowledge_pool = [] as Array[KnowledgeEntry]
+	var e1 := InformationSystem.make_entry(
+		Enums.KnowledgeSource.INTELLIGENCE,
+		"personality_insight",
+		{"target_character_id": 50, "bushido_virtue": Enums.BushidoVirtue.GI},
+		0,
+	)
+	var e2 := InformationSystem.make_entry(
+		Enums.KnowledgeSource.INTELLIGENCE,
+		"personality_insight",
+		{"target_character_id": 51, "bushido_virtue": Enums.BushidoVirtue.YU},
+		0,
+	)
+	InformationSystem.update_intelligence_knowledge(c, e1)
+	InformationSystem.update_intelligence_knowledge(c, e2)
+	assert_eq(c.knowledge_pool.size(), 2,
+		"Different targets should not dedup")
+
+
+func test_update_intelligence_keeps_different_types() -> void:
+	var c := L5RCharacterData.new()
+	c.character_id = 802
+	c.knowledge_pool = [] as Array[KnowledgeEntry]
+	var e1 := InformationSystem.make_entry(
+		Enums.KnowledgeSource.INTELLIGENCE,
+		"personality_insight",
+		{"target_character_id": 50, "bushido_virtue": Enums.BushidoVirtue.GI},
+		0,
+	)
+	var e2 := InformationSystem.make_entry(
+		Enums.KnowledgeSource.INTELLIGENCE,
+		"disposition_toward",
+		{"target_character_id": 50, "disposition": 25},
+		0,
+	)
+	InformationSystem.update_intelligence_knowledge(c, e1)
+	InformationSystem.update_intelligence_knowledge(c, e2)
+	assert_eq(c.knowledge_pool.size(), 2,
+		"Different entry types should not dedup")
+
+
+func test_update_intelligence_non_dedup_type_appends() -> void:
+	var c := L5RCharacterData.new()
+	c.character_id = 803
+	c.knowledge_pool = [] as Array[KnowledgeEntry]
+	var e1 := InformationSystem.make_entry(
+		Enums.KnowledgeSource.INTELLIGENCE,
+		"shadow_surveillance",
+		{"target_character_id": 50, "contacts": [1, 2]},
+		0,
+	)
+	var e2 := InformationSystem.make_entry(
+		Enums.KnowledgeSource.INTELLIGENCE,
+		"shadow_surveillance",
+		{"target_character_id": 50, "contacts": [3, 4]},
+		1,
+	)
+	InformationSystem.update_intelligence_knowledge(c, e1)
+	InformationSystem.update_intelligence_knowledge(c, e2)
+	assert_eq(c.knowledge_pool.size(), 2,
+		"Non-dedup types should always append")
+
+
+func test_false_info_replaces_true_info() -> void:
+	var actor := L5RCharacterData.new()
+	actor.character_id = 804
+	actor.knowledge_pool = [] as Array[KnowledgeEntry]
+	var true_entry := InformationSystem.make_entry(
+		Enums.KnowledgeSource.INTELLIGENCE,
+		"personality_insight",
+		{"target_character_id": 60, "bushido_virtue": Enums.BushidoVirtue.CHUGI},
+		0,
+	)
+	InformationSystem.update_intelligence_knowledge(actor, true_entry)
+	assert_eq(actor.knowledge_pool.size(), 1)
+	assert_eq(actor.knowledge_pool[0].data.get("bushido_virtue"),
+		Enums.BushidoVirtue.CHUGI)
+
+	var false_entry := InformationSystem.make_entry(
+		Enums.KnowledgeSource.INTELLIGENCE,
+		"personality_insight",
+		{"target_character_id": 60, "bushido_virtue": Enums.BushidoVirtue.JIN, "is_false": true},
+		1,
+	)
+	InformationSystem.update_intelligence_knowledge(actor, false_entry)
+	assert_eq(actor.knowledge_pool.size(), 1,
+		"False info should replace true info for same target")
+	assert_true(actor.knowledge_pool[0].data.get("is_false", false),
+		"Entry should now be the false version")

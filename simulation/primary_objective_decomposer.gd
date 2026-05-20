@@ -76,8 +76,6 @@ static func _decompose_break_alliance(
 	var contacts_x: Array = ctx.known_contacts_by_clan.get(clan_x, [])
 	var contacts_y: Array = ctx.known_contacts_by_clan.get(clan_y, [])
 
-	if contacts_x.is_empty() and contacts_y.is_empty():
-		return _make_need("IDENTIFY_CONTACT", 2, {"target_clan_id": clan_x})
 	if contacts_x.is_empty():
 		return _make_need("IDENTIFY_CONTACT", 2, {"target_clan_id": clan_x})
 	if contacts_y.is_empty():

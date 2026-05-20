@@ -236,7 +236,7 @@ static func get_visible_sub_tiles(
 ) -> Array[int]:
 	var visible: Array[int] = [current_sub_tile]
 
-	var adjacent: Array = adjacency.get(current_sub_tile, [])
+	var adjacent: Array[int] = adjacency.get(current_sub_tile, [])
 	for tile: int in adjacent:
 		if tile not in visible:
 			visible.append(tile)
@@ -246,7 +246,7 @@ static func get_visible_sub_tiles(
 		for tile: int in ring_1:
 			if tile == current_sub_tile:
 				continue
-			var next_ring: Array = adjacency.get(tile, [])
+			var next_ring: Array[int] = adjacency.get(tile, [])
 			for far_tile: int in next_ring:
 				if far_tile not in visible:
 					visible.append(far_tile)

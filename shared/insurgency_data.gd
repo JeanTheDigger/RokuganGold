@@ -11,5 +11,5 @@ extends Resource
 @export var concealment: int = 5
 @export var detected: bool = false
 @export var seasons_active: int = 0
-@export var season_spawned: int = 0
+@export var season_spawned: int = -1
 @export var spread_from_id: int = -1

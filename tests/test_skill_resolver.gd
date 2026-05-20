@@ -525,6 +525,68 @@ func test_ashes_bonus_adds_rolled_dice_to_skill_check() -> void:
 		"+2k0 should increase or maintain roll total")
 
 
+# -- From the Ashes: expiry at resolve time (gap fix) -------------------------
+
+func test_ashes_bonus_cleared_at_resolve_when_expired() -> void:
+	_char.from_the_ashes = {"location_id": "court_1", "expires_ic_day": 5}
+	var bonus: int = SkillResolver._get_ashes_bonus_for_skill(_char, "Courtier", 5)
+	assert_eq(bonus, 0, "Buff expired on ic_day 5 should return 0")
+	assert_true(_char.from_the_ashes.is_empty(), "Buff should be cleared")
+
+
+func test_ashes_bonus_cleared_at_resolve_when_past_expiry() -> void:
+	_char.from_the_ashes = {"location_id": "court_1", "expires_ic_day": 5}
+	var bonus: int = SkillResolver._get_ashes_bonus_for_skill(_char, "Courtier", 7)
+	assert_eq(bonus, 0, "Buff past expiry should return 0")
+	assert_true(_char.from_the_ashes.is_empty(), "Buff should be cleared")
+
+
+func test_ashes_bonus_active_before_expiry_with_ic_day() -> void:
+	_char.from_the_ashes = {"location_id": "court_1", "expires_ic_day": 10}
+	var bonus: int = SkillResolver._get_ashes_bonus_for_skill(_char, "Courtier", 8)
+	assert_eq(bonus, 2, "Buff still active should return bonus")
+	assert_false(_char.from_the_ashes.is_empty(), "Buff should remain")
+
+
+func test_ashes_bonus_no_expiry_check_without_ic_day() -> void:
+	_char.from_the_ashes = {"location_id": "court_1", "expires_ic_day": 5}
+	var bonus: int = SkillResolver._get_ashes_bonus_for_skill(_char, "Courtier")
+	assert_eq(bonus, 2, "Without ic_day, no expiry check — returns bonus")
+	assert_false(_char.from_the_ashes.is_empty(), "Buff should remain without ic_day")
+
+
+func test_ashes_expired_buff_not_applied_in_skill_check() -> void:
+	var loremaster: L5RCharacterData = _make_asako_loremaster()
+	loremaster.from_the_ashes = {"location_id": "court_1", "expires_ic_day": 5}
+	_engine.set_seed(100)
+	var expired_result: Dictionary = SkillResolver.resolve_skill_check(
+		loremaster, _engine, "Courtier", 15, 0, "", Enums.Trait.NONE, 0, 0, 0, 5
+	)
+	assert_true(loremaster.from_the_ashes.is_empty(), "Buff should be cleared")
+	_engine.set_seed(100)
+	var no_buff_result: Dictionary = SkillResolver.resolve_skill_check(
+		loremaster, _engine, "Courtier", 15
+	)
+	assert_eq(expired_result["total"], no_buff_result["total"],
+		"Expired buff should produce same result as no buff")
+
+
+func test_ashes_active_buff_applied_in_skill_check_with_ic_day() -> void:
+	var loremaster: L5RCharacterData = _make_asako_loremaster()
+	loremaster.from_the_ashes = {"location_id": "court_1", "expires_ic_day": 99}
+	_engine.set_seed(100)
+	var with_buff: Dictionary = SkillResolver.resolve_skill_check(
+		loremaster, _engine, "Courtier", 15, 0, "", Enums.Trait.NONE, 0, 0, 0, 10
+	)
+	loremaster.from_the_ashes = {}
+	_engine.set_seed(100)
+	var without_buff: Dictionary = SkillResolver.resolve_skill_check(
+		loremaster, _engine, "Courtier", 15
+	)
+	assert_true(with_buff["total"] >= without_buff["total"],
+		"Active buff with ic_day should still apply bonus")
+
+
 # -- Doji R3: Perfect Gift (s29.15.4) -----------------------------------------
 
 func _make_doji_r3() -> L5RCharacterData:

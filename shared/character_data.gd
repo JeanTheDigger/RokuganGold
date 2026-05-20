@@ -134,6 +134,8 @@ extends Resource
 @export var enhanced_void: bool = false
 @export var precise_memory: bool = false
 @export var cadence_trained: bool = false
+@export var commerce_honor_exempt: bool = false
+@export var intimidation_honor_exempt: bool = false
 @export var timed_advantages: Array[String] = []
 @export var action_blocks: Array[String] = []
 @export var combat_modifiers_pending: Array[String] = []
@@ -248,6 +250,9 @@ extends Resource
 @export var progress_bars: Dictionary = {}
 @export var training_relationships: Dictionary = {}
 @export var atoned_offenses: Array[String] = []
+
+# -- Bodyguard / Yojimbo Assignment -------------------------------------------
+@export var assigned_protection_target_id: int = -1
 
 
 # -- Trait Access Helpers (used by CharacterStats) -----------------------------

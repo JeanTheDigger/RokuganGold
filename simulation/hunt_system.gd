@@ -61,6 +61,54 @@ const HUNT_NEGATIVE_SCHOOL_PREFIXES: Array[String] = [
 const HUNT_SCHOOL_LEAN: int = 15
 
 
+# -- Beast stat blocks (derived from s54.1 bestiary, values PROVISIONAL) -------
+# wound_threshold is a hunt-specific abstraction per s57.38: "a rough proxy for
+# how hard it is to land a mortal blow." GDD specifies bear=10, ozaru=20.
+
+const BEAST_STATS: Dictionary = {
+	"wolf": {"armor_tn": 20, "wound_threshold": 6, "initiative": 3, "attack_skill": 3},
+	"boar": {"armor_tn": 20, "wound_threshold": 10, "initiative": 3, "attack_skill": 3},
+	"stag": {"armor_tn": 30, "wound_threshold": 6, "initiative": 5, "attack_skill": 3},
+	"fox": {"armor_tn": 25, "wound_threshold": 3, "initiative": 4, "attack_skill": 3},
+	"ox": {"armor_tn": 10, "wound_threshold": 8, "initiative": 2, "attack_skill": 3},
+	"bear": {"armor_tn": 20, "wound_threshold": 10, "initiative": 3, "attack_skill": 4},
+	"mountain_bear": {"armor_tn": 25, "wound_threshold": 15, "initiative": 3, "attack_skill": 4},
+	"goat": {"armor_tn": 15, "wound_threshold": 4, "initiative": 2, "attack_skill": 3},
+	"tiger": {"armor_tn": 25, "wound_threshold": 8, "initiative": 4, "attack_skill": 4},
+	"ozaru": {"armor_tn": 30, "wound_threshold": 20, "initiative": 3, "attack_skill": 4},
+}
+
+# Terrain → beast pool (s57.38 "Beast generation — terrain pools")
+# Last entry is the rare beast (lower probability).
+const TERRAIN_BEAST_POOLS: Dictionary = {
+	Enums.TerrainType.PLAINS: ["wolf", "boar", "stag", "fox", "ox"],
+	Enums.TerrainType.RIVER_DELTA: ["wolf", "boar", "stag", "fox"],
+	Enums.TerrainType.FOREST: ["bear", "boar", "stag", "wolf", "tiger"],
+	Enums.TerrainType.HILLS: ["boar", "wolf", "stag", "fox", "bear"],
+	Enums.TerrainType.MOUNTAINS: ["mountain_bear", "wolf", "goat", "ozaru"],
+}
+
+const RARE_BEAST_CHANCE: float = 0.1
+
+
+static func generate_beast(terrain: Enums.TerrainType, dice_engine: DiceEngine) -> Dictionary:
+	var pool: Array = TERRAIN_BEAST_POOLS.get(terrain, TERRAIN_BEAST_POOLS[Enums.TerrainType.PLAINS])
+	if pool.is_empty():
+		return BEAST_STATS["boar"].duplicate()
+	var beast_name: String
+	var rare_roll: DiceResult = dice_engine.roll_and_keep(1, 1, false, false)
+	if pool.size() > 1 and rare_roll.total <= int(RARE_BEAST_CHANCE * 10):
+		beast_name = pool[pool.size() - 1]
+	else:
+		var common_pool: Array = pool.slice(0, pool.size() - 1) if pool.size() > 1 else pool
+		var pick_roll: DiceResult = dice_engine.roll_and_keep(1, 1, false, false)
+		var idx: int = (pick_roll.total - 1) % common_pool.size()
+		beast_name = common_pool[idx]
+	var stats: Dictionary = BEAST_STATS.get(beast_name, BEAST_STATS["boar"]).duplicate()
+	stats["beast_name"] = beast_name
+	return stats
+
+
 # -- Precondition checks -------------------------------------------------------
 
 static func can_announce(
@@ -69,7 +117,7 @@ static func can_announce(
 ) -> Dictionary:
 	if SkillResolver.get_skill_rank(character, "Hunting") < MIN_HUNTING_SKILL:
 		return {"valid": false, "reason": "insufficient_hunting_skill"}
-	var valid_contexts: Array = [
+	var valid_contexts: Array[Enums.ContextFlag] = [
 		Enums.ContextFlag.AT_OWN_HOLDINGS,
 		Enums.ContextFlag.VISITING,
 		Enums.ContextFlag.AT_COURT,
@@ -90,7 +138,7 @@ static func can_cancel(
 	var hunt_date: int = ctx.known_objectives.get("hunt_date_ic_day", -1)
 	if hunt_date >= 0 and ctx.ic_day >= hunt_date:
 		return {"valid": false, "reason": "hunt_date_passed"}
-	var valid_contexts: Array = [
+	var valid_contexts: Array[Enums.ContextFlag] = [
 		Enums.ContextFlag.AT_OWN_HOLDINGS,
 		Enums.ContextFlag.AT_COURT,
 		Enums.ContextFlag.VISITING,
@@ -161,7 +209,7 @@ static func evaluate_invitation_response(
 ## Returns outcome dict: {outcome, killer_id, second_id, wounded_id, killed_id, hunt_type}
 static func resolve_npc_hunt(
 	host: L5RCharacterData,
-	participants: Array,
+	participants: Array[L5RCharacterData],
 	beast: Dictionary,
 	dice_engine: DiceEngine,
 ) -> Dictionary:
@@ -210,22 +258,29 @@ static func resolve_npc_hunt(
 	var threat_excess: int = beast_threat - party_defence
 	var wounded_id: int = -1
 	var killed_id: int = -1
+	var casualty_level: String = ""
 	if threat_excess >= 1:
 		var victim: L5RCharacterData = _select_casualty_victim(combatants)
 		if victim != null:
 			if threat_excess >= CASUALTY_KILLED_MIN:
 				killed_id = victim.character_id
+				casualty_level = "killed"
+			elif threat_excess >= CASUALTY_DOWN_MIN:
+				wounded_id = victim.character_id
+				casualty_level = "down"
 			else:
 				wounded_id = victim.character_id
+				casualty_level = "hurt"
 
 	# Determine outcome
 	var outcome: String
 	if killed_id >= 0:
 		outcome = OUTCOME_DISASTROUS
+	elif casualty_level == "down" and not beast_killed:
+		outcome = OUTCOME_DISASTROUS
 	elif wounded_id >= 0 and beast_killed:
 		outcome = OUTCOME_COSTLY
 	elif wounded_id >= 0 and not beast_killed:
-		# Beast escaped after serious casualties
 		outcome = OUTCOME_DISASTROUS
 	elif beast_killed:
 		outcome = OUTCOME_SUCCESS
@@ -238,6 +293,7 @@ static func resolve_npc_hunt(
 		"second_id": second_id,
 		"wounded_id": wounded_id,
 		"killed_id": killed_id,
+		"casualty_level": casualty_level,
 		"hunt_type": hunt_type,
 	}
 
@@ -249,7 +305,7 @@ static func resolve_npc_hunt(
 ## Returns: Dictionary {character_id(int): float glory_delta}
 static func compute_glory_distribution(
 	outcome: String,
-	participants: Array,
+	participants: Array[Dictionary],
 	killer_id: int,
 	second_id: int,
 	host_id: int,
@@ -317,7 +373,7 @@ static func has_hunt_negative_lean(school: String) -> bool:
 
 ## Compute party defence TN: mean Armor TN + party-size bonus (capped).
 ## participants: Array[L5RCharacterData]
-static func compute_party_defence_tn(participants: Array) -> int:
+static func compute_party_defence_tn(participants: Array[L5RCharacterData]) -> int:
 	if participants.is_empty():
 		return 10
 	var sum: int = 0
@@ -339,7 +395,7 @@ static func compute_party_defence_tn(participants: Array) -> int:
 
 # -- Private helpers -----------------------------------------------------------
 
-static func _find_hunt_leader(participants: Array) -> L5RCharacterData:
+static func _find_hunt_leader(participants: Array[L5RCharacterData]) -> L5RCharacterData:
 	var best: L5RCharacterData = null
 	var best_rank: int = -1
 	for p_var: Variant in participants:
@@ -353,8 +409,8 @@ static func _find_hunt_leader(participants: Array) -> L5RCharacterData:
 	return best
 
 
-static func _get_combatants(participants: Array) -> Array:
-	var result: Array = []
+static func _get_combatants(participants: Array[L5RCharacterData]) -> Array[L5RCharacterData]:
+	var result: Array[L5RCharacterData] = []
 	for p_var: Variant in participants:
 		var c: L5RCharacterData = p_var as L5RCharacterData
 		if c == null:
@@ -365,7 +421,7 @@ static func _get_combatants(participants: Array) -> Array:
 	return result
 
 
-static func _find_best_hunter(combatants: Array) -> L5RCharacterData:
+static func _find_best_hunter(combatants: Array[L5RCharacterData]) -> L5RCharacterData:
 	var best: L5RCharacterData = null
 	var best_rank: int = -1
 	for c_var: Variant in combatants:
@@ -382,7 +438,7 @@ static func _find_best_hunter(combatants: Array) -> L5RCharacterData:
 	return best
 
 
-static func _find_second_hunter_id(combatants: Array, exclude_id: int) -> int:
+static func _find_second_hunter_id(combatants: Array[L5RCharacterData], exclude_id: int) -> int:
 	var best: L5RCharacterData = null
 	var best_rank: int = -1
 	for c_var: Variant in combatants:
@@ -414,7 +470,7 @@ static func _roll_beast_threat(beast: Dictionary, dice_engine: DiceEngine) -> in
 	return dr.total
 
 
-static func _select_casualty_victim(combatants: Array) -> L5RCharacterData:
+static func _select_casualty_victim(combatants: Array[L5RCharacterData]) -> L5RCharacterData:
 	# Lowest hunting-weapon rank is most likely to be caught (s57.38.6)
 	var worst: L5RCharacterData = null
 	var worst_rank: int = 999

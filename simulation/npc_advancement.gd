@@ -159,7 +159,7 @@ static func _raise_ring(character: L5RCharacterData, ring: Enums.Ring) -> void:
 		character.void_ring += 1
 		character.max_void_points = character.void_ring
 		return
-	var traits: Array = Enums.RING_TRAITS[ring]
+	var traits: Array[int] = Enums.RING_TRAITS[ring]
 	var t1_val: int = character.get_trait_value(traits[0])
 	var t2_val: int = character.get_trait_value(traits[1])
 	if t1_val <= t2_val:
@@ -180,7 +180,7 @@ static func get_school_skills(character: L5RCharacterData) -> Array[String]:
 	return skills
 
 
-static func get_focus_rings(character: L5RCharacterData) -> Array:
+static func get_focus_rings(character: L5RCharacterData) -> Array[int]:
 	var school_data: Dictionary = WorldGenerator.SCHOOL_DATA.get(character.school, {})
 	if school_data.is_empty():
 		return []
@@ -260,7 +260,7 @@ static func spend_accumulated_xp(character: L5RCharacterData) -> Dictionary:
 	var total_spent_progress: int = 0
 	var advancements: Array[Dictionary] = []
 
-	var focus_rings: Array = get_focus_rings(character)
+	var focus_rings: Array[int] = get_focus_rings(character)
 	var school_skills: Array[String] = get_school_skills(character)
 	var is_shugenja: bool = character.school_type == Enums.SchoolType.SHUGENJA
 
@@ -347,7 +347,7 @@ static func _sort_skills_by_rank_desc(character: L5RCharacterData, skill_list: A
 
 # === SEASONAL BATCH PROCESSING ===
 
-static func process_seasonal_advancement(characters: Array, world_state: Dictionary, days_in_season: int) -> Dictionary:
+static func process_seasonal_advancement(characters: Array[L5RCharacterData], world_state: Dictionary, days_in_season: int) -> Dictionary:
 	var results: Array[Dictionary] = []
 	var total_rank_advancements: int = 0
 

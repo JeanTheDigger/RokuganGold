@@ -411,6 +411,9 @@ static func _resolve_civilian_order(
 	var order_options: Array[NPCDataStructures.ScoredAction] = []
 	for opt: NPCDataStructures.ScoredAction in options:
 		if _is_order_action(opt.action_id):
+			if opt.action_id in CivilianOrderBudget.DUAL_COST_ACTIONS:
+				if character.action_points_current <= 0:
+					continue
 			order_options.append(opt)
 
 	if order_options.is_empty():
@@ -425,6 +428,10 @@ static func _resolve_civilian_order(
 	var chosen: NPCDataStructures.ScoredAction = NPCDecisionEngine.select_action(order_options, ctx)
 
 	character.civilian_orders_remaining -= 1
+	var ap_for_order: int = 0
+	if chosen.action_id in CivilianOrderBudget.DUAL_COST_ACTIONS:
+		ap_for_order = 1
+		character.action_points_current = maxi(character.action_points_current - 1, 0)
 	return {
 		"success": true,
 		"action_id": chosen.action_id,
@@ -432,7 +439,7 @@ static func _resolve_civilian_order(
 		"target_npc_id_secondary": chosen.target_npc_id_secondary,
 		"target_settlement_id": chosen.target_settlement_id,
 		"target_province_id": chosen.target_province_id,
-		"ap_spent": 0,
+		"ap_spent": ap_for_order,
 		"order_spent": 1,
 		"total_score": chosen.get_total_score(),
 		"character_id": ctx.character_id,
@@ -506,12 +513,12 @@ static func _consume_reactive_event(
 # -- Helpers -------------------------------------------------------------------
 
 static func _is_order_action(action_id: String) -> bool:
-	return action_id in [
-		"ASSESS_PROVINCE_STATUS", "INVESTIGATE_PROVINCE", "ORDER_PATROL",
-		"ADJUST_TAX", "BUILD_INFRASTRUCTURE", "LEVY_TROOPS",
-		"DEPLOY_ARMY", "TRAIN_TROOPS", "ASSIGN_OBJECTIVE",
-		"FILL_VACANCY", "ARRANGE_MARRIAGE",
-	]
+	return (
+		action_id in CivilianOrderBudget.PURE_ORDER_ACTIONS
+		or action_id in CivilianOrderBudget.MILITARY_OR_CIVILIAN_ACTIONS
+		or action_id in CivilianOrderBudget.DUAL_COST_ACTIONS
+		or action_id == CivilianOrderBudget.WRITE_LETTER
+	)
 
 
 static func _sort_by_resolution_order(

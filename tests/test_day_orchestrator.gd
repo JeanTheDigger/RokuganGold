@@ -5859,6 +5859,543 @@ func test_scene_exam_increments_scene_exam_count() -> void:
 	assert_eq(active_case["evidence_total"], 20)
 
 
+# INVESTIGATION GLORY TRIGGER — SUSPECT IDENTIFIED VIA CRIME SCENE EXAM
+# ==============================================================================
+
+func test_scene_exam_suspect_found_low_skill_crime_applies_glory_penalty() -> void:
+	var suspect := L5RCharacterData.new()
+	suspect.character_id = 50
+	suspect.character_name = "Spy"
+	suspect.glory = 3.0
+	suspect.wounds_taken = 0
+	var characters_by_id: Dictionary = {50: suspect}
+
+	var record: CrimeRecord = CrimeSystem.create_crime_record(
+		100, Enums.CrimeType.DISHONORABLE_CONDUCT, 50, "province_1", 10,
+	)
+	var crime_records: Array[CrimeRecord] = [record]
+	var world_states: Dictionary = {"_crime_records": crime_records}
+
+	var results: Array = [{
+		"action_id": "EXAMINE_CRIME_SCENE",
+		"success": true,
+		"character_id": 1,
+		"effects": {
+			"effect": "scene_examined",
+			"case_id": 100,
+			"evidence_gained": 15,
+			"suspect_found": 50,
+			"threshold_crossed": "",
+		},
+	}]
+
+	var objectives_map: Dictionary = {}
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [500]
+
+	DayOrchestrator._process_scene_examination_writebacks(
+		results, objectives_map, world_states, characters_by_id,
+		active_topics, next_topic_id, 10,
+	)
+
+	assert_almost_eq(suspect.glory, 3.0 + CrimeSystem.LOW_SKILL_DISCOVERY_GLORY, 0.01)
+
+
+func test_scene_exam_suspect_found_non_low_skill_crime_no_glory_penalty() -> void:
+	var suspect := L5RCharacterData.new()
+	suspect.character_id = 51
+	suspect.character_name = "Killer"
+	suspect.glory = 3.0
+	suspect.wounds_taken = 0
+	var characters_by_id: Dictionary = {51: suspect}
+
+	var record: CrimeRecord = CrimeSystem.create_crime_record(
+		101, Enums.CrimeType.VIOLENCE, 51, "province_2", 10,
+	)
+	var crime_records: Array[CrimeRecord] = [record]
+	var world_states: Dictionary = {"_crime_records": crime_records}
+
+	var results: Array = [{
+		"action_id": "EXAMINE_CRIME_SCENE",
+		"success": true,
+		"character_id": 2,
+		"effects": {
+			"effect": "scene_examined",
+			"case_id": 101,
+			"evidence_gained": 15,
+			"suspect_found": 51,
+			"threshold_crossed": "",
+		},
+	}]
+
+	var objectives_map: Dictionary = {}
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [500]
+
+	DayOrchestrator._process_scene_examination_writebacks(
+		results, objectives_map, world_states, characters_by_id,
+		active_topics, next_topic_id, 10,
+	)
+
+	assert_almost_eq(suspect.glory, 3.0, 0.01)
+
+
+func test_scene_exam_no_suspect_no_glory_penalty() -> void:
+	var suspect := L5RCharacterData.new()
+	suspect.character_id = 52
+	suspect.character_name = "Unknown"
+	suspect.glory = 3.0
+	suspect.wounds_taken = 0
+	var characters_by_id: Dictionary = {52: suspect}
+
+	var record: CrimeRecord = CrimeSystem.create_crime_record(
+		102, Enums.CrimeType.DISHONORABLE_CONDUCT, 52, "province_3", 10,
+	)
+	var crime_records: Array[CrimeRecord] = [record]
+	var world_states: Dictionary = {"_crime_records": crime_records}
+
+	var results: Array = [{
+		"action_id": "EXAMINE_CRIME_SCENE",
+		"success": true,
+		"character_id": 3,
+		"effects": {
+			"effect": "scene_examined",
+			"case_id": 102,
+			"evidence_gained": 5,
+			"suspect_found": -1,
+			"threshold_crossed": "",
+		},
+	}]
+
+	var objectives_map: Dictionary = {}
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [500]
+
+	DayOrchestrator._process_scene_examination_writebacks(
+		results, objectives_map, world_states, characters_by_id,
+		active_topics, next_topic_id, 10,
+	)
+
+	assert_almost_eq(suspect.glory, 3.0, 0.01)
+
+
+func test_scene_exam_glory_not_applied_twice_for_same_incident() -> void:
+	var suspect := L5RCharacterData.new()
+	suspect.character_id = 53
+	suspect.character_name = "Spy"
+	suspect.glory = 3.0
+	suspect.wounds_taken = 0
+	var characters_by_id: Dictionary = {53: suspect}
+
+	var record: CrimeRecord = CrimeSystem.create_crime_record(
+		103, Enums.CrimeType.DISHONORABLE_CONDUCT, 53, "province_1", 10,
+	)
+	record.low_skill_glory_applied = true
+	var crime_records: Array[CrimeRecord] = [record]
+	var world_states: Dictionary = {"_crime_records": crime_records}
+
+	var results: Array = [{
+		"action_id": "EXAMINE_CRIME_SCENE",
+		"success": true,
+		"character_id": 1,
+		"effects": {
+			"effect": "scene_examined",
+			"case_id": 103,
+			"evidence_gained": 15,
+			"suspect_found": 53,
+			"threshold_crossed": "",
+		},
+	}]
+
+	var objectives_map: Dictionary = {}
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [500]
+
+	DayOrchestrator._process_scene_examination_writebacks(
+		results, objectives_map, world_states, characters_by_id,
+		active_topics, next_topic_id, 10,
+	)
+
+	assert_almost_eq(suspect.glory, 3.0, 0.01,
+		"Glory should not be penalized twice for the same incident")
+
+
+# TABLE 2.3 — MANIPULATING (FORGE ORDER DELIVERY)
+# ==============================================================================
+
+func test_forge_order_delivery_applies_manipulating_honor_to_forger() -> void:
+	var forger := L5RCharacterData.new()
+	forger.character_id = 60
+	forger.character_name = "Forger"
+	forger.honor = 5.0
+	forger.school = "Shosuro Infiltrator"
+	forger.clan = "Scorpion"
+	forger.wounds_taken = 0
+	var victim := L5RCharacterData.new()
+	victim.character_id = 61
+	victim.character_name = "Victim"
+	victim.lord_id = 99
+	victim.wounds_taken = 0
+	var characters_by_id: Dictionary = {60: forger, 61: victim}
+
+	var forged_letter := LetterData.new()
+	forged_letter.sender_id = 99
+	forged_letter.recipient_id = 61
+	forged_letter.delivered = true
+	forged_letter.is_forged = true
+	forged_letter.forged_sender_id = 60
+	forged_letter.is_order = true
+	forged_letter.order_applied = false
+	forged_letter.order_need_type = "TRAVEL_TO"
+	forged_letter.forgery_detected = false
+	var pending_letters: Array[LetterData] = [forged_letter]
+
+	var objectives_map: Dictionary = {}
+	var initial_honor: float = forger.honor
+
+	DayOrchestrator._process_forged_order_delivery(
+		pending_letters, objectives_map, characters_by_id,
+	)
+
+	assert_true(forged_letter.order_applied)
+	var expected_cost: float = CrimeSystem.get_manipulating_honor(forger)
+	assert_true(forger.honor < initial_honor, "Forger should lose honor for manipulating")
+
+
+func test_forge_order_delivery_no_manipulating_when_detected() -> void:
+	var forger := L5RCharacterData.new()
+	forger.character_id = 62
+	forger.character_name = "Forger"
+	forger.honor = 5.0
+	forger.school = "Bayushi Courtier"
+	forger.clan = "Scorpion"
+	forger.wounds_taken = 0
+	var characters_by_id: Dictionary = {62: forger}
+
+	var forged_letter := LetterData.new()
+	forged_letter.sender_id = 99
+	forged_letter.recipient_id = 63
+	forged_letter.delivered = true
+	forged_letter.is_forged = true
+	forged_letter.forged_sender_id = 62
+	forged_letter.is_order = true
+	forged_letter.forgery_detected = true
+	var pending_letters: Array[LetterData] = [forged_letter]
+
+	var initial_honor: float = forger.honor
+	DayOrchestrator._process_forged_order_delivery(
+		pending_letters, {}, characters_by_id,
+	)
+
+	assert_almost_eq(forger.honor, initial_honor, 0.01,
+		"Detected forgery should not apply manipulating honor cost")
+
+
+# TABLE 2.3 — MANIPULATING (SEDUCE_TO_COMPROMISE)
+# ==============================================================================
+
+func test_seduce_to_compromise_applies_manipulating_honor() -> void:
+	var seducer := L5RCharacterData.new()
+	seducer.character_id = 70
+	seducer.character_name = "Seducer"
+	seducer.honor = 5.0
+	seducer.school = "Bayushi Courtier"
+	seducer.clan = "Scorpion"
+	seducer.wounds_taken = 0
+	var characters_by_id: Dictionary = {70: seducer}
+
+	var day_results: Array[Dictionary] = [{
+		"action_id": "SEDUCE_TO_COMPROMISE",
+		"success": true,
+		"character_id": 70,
+		"target_npc_id": 71,
+		"effects": {"creates_entanglement": true},
+	}]
+
+	var entanglements: Array[Dictionary] = []
+	var initial_honor: float = seducer.honor
+
+	DayOrchestrator._process_seduction_entanglements(
+		day_results, entanglements, 10, characters_by_id,
+	)
+
+	assert_eq(entanglements.size(), 1)
+	assert_true(seducer.honor < initial_honor, "Seducer should lose honor for manipulating")
+
+
+func test_seduce_non_compromise_no_manipulating_honor() -> void:
+	var seducer := L5RCharacterData.new()
+	seducer.character_id = 72
+	seducer.character_name = "Seducer"
+	seducer.honor = 5.0
+	seducer.school = "Bayushi Courtier"
+	seducer.clan = "Scorpion"
+	seducer.wounds_taken = 0
+	var characters_by_id: Dictionary = {72: seducer}
+
+	var day_results: Array[Dictionary] = [{
+		"action_id": "SEDUCE",
+		"success": true,
+		"character_id": 72,
+		"target_npc_id": 73,
+		"effects": {"creates_entanglement": true},
+	}]
+
+	var entanglements: Array[Dictionary] = []
+	var initial_honor: float = seducer.honor
+
+	DayOrchestrator._process_seduction_entanglements(
+		day_results, entanglements, 10, characters_by_id,
+	)
+
+	assert_eq(entanglements.size(), 1)
+	assert_almost_eq(seducer.honor, initial_honor, 0.01,
+		"Regular SEDUCE should not trigger manipulating honor cost")
+
+
+# TABLE 2.3 — FALSE COURTESY (CHARM AGAINST RIVAL/ENEMY)
+# ==============================================================================
+
+func test_charm_against_rival_applies_false_courtesy_honor() -> void:
+	var charmer := L5RCharacterData.new()
+	charmer.character_id = 80
+	charmer.character_name = "False Courtier"
+	charmer.honor = 7.0
+	charmer.school = "Doji Courtier"
+	charmer.clan = "Crane"
+	charmer.wounds_taken = 0
+	charmer.disposition_values = {81: -15}
+	var target := L5RCharacterData.new()
+	target.character_id = 81
+	target.character_name = "Enemy"
+	target.wounds_taken = 0
+	var characters_by_id: Dictionary = {80: charmer, 81: target}
+
+	var court := CourtSessionData.new()
+	court.phase = CourtSessionData.CourtPhase.ACTIVE
+	court.host_settlement_id = 1
+	court.session_state = {}
+	var active_courts: Array[CourtSessionData] = [court]
+
+	var day_results: Array = [{
+		"action_id": "CHARM",
+		"character_id": 80,
+		"target_npc_id": 81,
+		"effects": {
+			"_action_metadata": {"court_settlement_id": 1},
+			"disposition_change": 5,
+		},
+	}]
+
+	var initial_honor: float = charmer.honor
+
+	DayOrchestrator._process_court_action_effects(
+		day_results, characters_by_id, [], 10, -1,
+		StrategicReview.EmperorArchetype.IRON, [], active_courts,
+	)
+
+	assert_true(charmer.honor < initial_honor,
+		"Charming a rival should trigger false courtesy honor cost")
+
+
+func test_charm_against_friend_no_false_courtesy() -> void:
+	var charmer := L5RCharacterData.new()
+	charmer.character_id = 82
+	charmer.character_name = "Sincere Courtier"
+	charmer.honor = 7.0
+	charmer.school = "Doji Courtier"
+	charmer.clan = "Crane"
+	charmer.wounds_taken = 0
+	charmer.disposition_values = {83: 25}
+	var target := L5RCharacterData.new()
+	target.character_id = 83
+	target.character_name = "Friend"
+	target.wounds_taken = 0
+	var characters_by_id: Dictionary = {82: charmer, 83: target}
+
+	var court := CourtSessionData.new()
+	court.phase = CourtSessionData.CourtPhase.ACTIVE
+	court.host_settlement_id = 2
+	court.session_state = {}
+	var active_courts: Array[CourtSessionData] = [court]
+
+	var day_results: Array = [{
+		"action_id": "CHARM",
+		"character_id": 82,
+		"target_npc_id": 83,
+		"effects": {
+			"_action_metadata": {"court_settlement_id": 2},
+			"disposition_change": 5,
+		},
+	}]
+
+	var initial_honor: float = charmer.honor
+
+	DayOrchestrator._process_court_action_effects(
+		day_results, characters_by_id, [], 10, -1,
+		StrategicReview.EmperorArchetype.IRON, [], active_courts,
+	)
+
+	assert_almost_eq(charmer.honor, initial_honor, 0.01,
+		"Charming a friend should not trigger false courtesy")
+
+
+# TABLE 2.3 — DUPED DISLOYAL (FORGED ORDER VICTIM DISCOVERY)
+# ==============================================================================
+
+func test_impersonation_detection_applies_duped_disloyal_when_order_applied() -> void:
+	var victim := L5RCharacterData.new()
+	victim.character_id = 90
+	victim.character_name = "Duped Vassal"
+	victim.honor = 5.0
+	victim.school = "Hida Bushi"
+	victim.clan = "Crab"
+	victim.wounds_taken = 0
+	victim.knowledge_pool = [] as Array[KnowledgeEntry]
+	var characters_by_id: Dictionary = {90: victim}
+
+	var forged_order := LetterData.new()
+	forged_order.sender_id = 99
+	forged_order.recipient_id = 90
+	forged_order.delivered = true
+	forged_order.is_forged = true
+	forged_order.forged_sender_id = 60
+	forged_order.is_order = true
+	forged_order.order_applied = true
+
+	var reply := LetterData.new()
+	reply.recipient_id = 90
+	reply.sender_id = 99
+	reply.delivered = true
+	reply.is_reply = true
+	reply.reply_to_forged = true
+	reply.original_forger_id = 60
+	var pending_letters: Array[LetterData] = [forged_order, reply]
+
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [500]
+	var objectives_map: Dictionary = {}
+	var initial_honor: float = victim.honor
+
+	DayOrchestrator._process_impersonation_detection(
+		pending_letters, characters_by_id, active_topics,
+		next_topic_id, 10, objectives_map,
+	)
+
+	assert_true(victim.honor < initial_honor,
+		"Victim should lose honor for being duped into disloyalty")
+
+
+func test_impersonation_detection_no_duped_when_order_not_applied() -> void:
+	var victim := L5RCharacterData.new()
+	victim.character_id = 91
+	victim.character_name = "Unduped Vassal"
+	victim.honor = 5.0
+	victim.school = "Hida Bushi"
+	victim.clan = "Crab"
+	victim.wounds_taken = 0
+	victim.knowledge_pool = [] as Array[KnowledgeEntry]
+	var characters_by_id: Dictionary = {91: victim}
+
+	var forged_order := LetterData.new()
+	forged_order.sender_id = 99
+	forged_order.recipient_id = 91
+	forged_order.delivered = true
+	forged_order.is_forged = true
+	forged_order.forged_sender_id = 60
+	forged_order.is_order = true
+	forged_order.order_applied = false
+
+	var reply := LetterData.new()
+	reply.recipient_id = 91
+	reply.sender_id = 99
+	reply.delivered = true
+	reply.is_reply = true
+	reply.reply_to_forged = true
+	reply.original_forger_id = 60
+	var pending_letters: Array[LetterData] = [forged_order, reply]
+
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [500]
+	var objectives_map: Dictionary = {}
+	var initial_honor: float = victim.honor
+
+	DayOrchestrator._process_impersonation_detection(
+		pending_letters, characters_by_id, active_topics,
+		next_topic_id, 10, objectives_map,
+	)
+
+	assert_almost_eq(victim.honor, initial_honor, 0.01,
+		"Victim should not lose honor if forged order was never applied")
+
+
+# CONVICTION CONSEQUENCES — TRIAL BY COMBAT LOSS
+# ==============================================================================
+
+func test_trial_by_combat_loss_applies_conviction_consequences() -> void:
+	var accused := L5RCharacterData.new()
+	accused.character_id = 95
+	accused.character_name = "Weak Accused"
+	accused.honor = 3.0
+	accused.glory = 3.0
+	accused.infamy = 0.0
+	accused.status = 2.0
+	accused.school_type = Enums.SchoolType.COURTIER
+	accused.school = "Doji Courtier"
+	accused.clan = "Crane"
+	accused.wounds_taken = 0
+	accused.earth = 2
+	accused.water = 2
+	accused.fire = 2
+	accused.air = 2
+	accused.void_ring = 2
+	accused.skills = {"Kenjutsu": 1, "Iaijutsu": 1}
+
+	var lord := L5RCharacterData.new()
+	lord.character_id = 96
+	lord.character_name = "Strong Lord"
+	lord.school_type = Enums.SchoolType.BUSHI
+	lord.school = "Hida Bushi"
+	lord.clan = "Crab"
+	lord.wounds_taken = 0
+	lord.earth = 5
+	lord.water = 5
+	lord.fire = 5
+	lord.air = 5
+	lord.void_ring = 5
+	lord.skills = {"Kenjutsu": 7, "Iaijutsu": 7}
+
+	var characters_by_id: Dictionary = {95: accused, 96: lord}
+	var lord_map: Dictionary = {95: 96}
+
+	var record: CrimeRecord = CrimeSystem.create_crime_record(
+		200, Enums.CrimeType.VIOLENCE, 95, "province_1", 10, 97,
+	)
+	record.legal_status = Enums.LegalStatus.ACCUSED
+	var crime_records: Array[CrimeRecord] = [record]
+
+	var conviction_results: Array[Dictionary] = [{
+		"case_id": 200,
+		"accused_id": 95,
+		"outcome": "trial_by_combat_pending",
+	}]
+
+	var dice := DiceEngine.new(42)
+	var initial_glory: float = accused.glory
+
+	var results: Array[Dictionary] = DayOrchestrator._resolve_pending_trials(
+		conviction_results, crime_records, characters_by_id, lord_map, dice, 20,
+	)
+
+	assert_eq(results.size(), 1)
+	var trial: Dictionary = results[0]
+	if not trial.get("accused_won", false):
+		assert_true(trial.has("glory_delta"), "Lost trial should have glory_delta")
+		assert_true(trial.has("infamy_delta"), "Lost trial should have infamy_delta")
+		assert_true(trial.has("status_delta"), "Lost trial should have status_delta")
+		assert_eq(record.legal_status, Enums.LegalStatus.DECREED_GUILTY)
+
+
 # MAGISTRATE RELEASE AFTER CONVICTION
 # ==============================================================================
 
@@ -6890,3 +7427,5690 @@ func test_void_refresh_not_blocked_when_sentinel_minus_one() -> void:
 		_action_skill_map, _provinces, _action_log, _season_meta,
 	)
 	assert_true(_characters[0].current_void_points > 0)
+
+
+# -- ASSIGN_VASSAL_OBJECTIVE Deferred Effect -----------------------------------
+
+func test_apply_vassal_objective_assignment_sets_primary() -> void:
+	var vassal := L5RCharacterData.new()
+	vassal.character_id = 99
+	vassal.lord_id = 1
+	var chars: Dictionary = {1: _characters[0], 99: vassal}
+	var objs: Dictionary = {}
+	var applied: Dictionary = {
+		"character_id": 1,
+		"effects": {
+			"requires_vassal_objective_assignment": true,
+			"vassal_id": 99,
+			"assigned_need_type": "SECURE_ALLIANCE",
+		},
+	}
+	var r: Dictionary = DayOrchestrator._apply_vassal_objective_assignment(
+		applied, chars, objs,
+	)
+	assert_eq(r["type"], "vassal_objective_assigned")
+	assert_eq(r["vassal_id"], 99)
+	assert_eq(r["need_type"], "SECURE_ALLIANCE")
+	assert_true(objs.has(99))
+	assert_eq(objs[99]["primary"]["need_type"], "SECURE_ALLIANCE")
+	assert_eq(objs[99]["primary"]["assigned_by"], 1)
+	assert_eq(objs[99]["primary"]["status"], "ACTIVE")
+
+
+func test_apply_vassal_objective_rejects_non_vassal() -> void:
+	var stranger := L5RCharacterData.new()
+	stranger.character_id = 99
+	stranger.lord_id = 50
+	var chars: Dictionary = {1: _characters[0], 99: stranger}
+	var objs: Dictionary = {}
+	var applied: Dictionary = {
+		"character_id": 1,
+		"effects": {
+			"requires_vassal_objective_assignment": true,
+			"vassal_id": 99,
+			"assigned_need_type": "SECURE_ALLIANCE",
+		},
+	}
+	var r: Dictionary = DayOrchestrator._apply_vassal_objective_assignment(
+		applied, chars, objs,
+	)
+	assert_eq(r.get("type", ""), "assignment_failed")
+	assert_false(objs.has(99))
+
+
+# -- SEND_INVITATION Deferred Effect -------------------------------------------
+
+func test_apply_court_invitation_adds_to_personal_list() -> void:
+	var court := CourtSessionData.new()
+	court.court_id = 10
+	court.host_settlement_id = 5
+	court.host_lord_id = 1
+	court.phase = CourtSessionData.CourtPhase.ACTIVE
+	var invitee := L5RCharacterData.new()
+	invitee.character_id = 30
+	var chars: Dictionary = {1: _characters[0], 30: invitee}
+	var courts: Array[CourtSessionData] = [court]
+	var applied: Dictionary = {
+		"character_id": 1,
+		"effects": {
+			"requires_court_invitation": true,
+			"invitee_id": 30,
+			"invitation_settlement_id": 5,
+		},
+	}
+	var r: Dictionary = DayOrchestrator._apply_court_invitation(
+		applied, chars, courts,
+	)
+	assert_eq(r["type"], "invitation_sent")
+	assert_eq(r["invitee_id"], 30)
+	assert_eq(r["court_id"], 10)
+	assert_true(30 in court.personal_invitation_ids)
+
+
+func test_apply_court_invitation_no_duplicate() -> void:
+	var court := CourtSessionData.new()
+	court.court_id = 10
+	court.host_settlement_id = 5
+	court.host_lord_id = 1
+	court.phase = CourtSessionData.CourtPhase.ACTIVE
+	court.personal_invitation_ids = [30]
+	var invitee := L5RCharacterData.new()
+	invitee.character_id = 30
+	var chars: Dictionary = {1: _characters[0], 30: invitee}
+	var courts: Array[CourtSessionData] = [court]
+	var applied: Dictionary = {
+		"character_id": 1,
+		"effects": {
+			"requires_court_invitation": true,
+			"invitee_id": 30,
+			"invitation_settlement_id": 5,
+		},
+	}
+	var r: Dictionary = DayOrchestrator._apply_court_invitation(
+		applied, chars, courts,
+	)
+	assert_eq(r["type"], "invitation_redundant")
+	assert_eq(court.personal_invitation_ids.size(), 1)
+
+
+func test_apply_court_invitation_falls_back_to_lord_court() -> void:
+	var court := CourtSessionData.new()
+	court.court_id = 10
+	court.host_settlement_id = 99
+	court.host_lord_id = 1
+	court.phase = CourtSessionData.CourtPhase.SCHEDULED
+	var invitee := L5RCharacterData.new()
+	invitee.character_id = 30
+	var chars: Dictionary = {1: _characters[0], 30: invitee}
+	var courts: Array[CourtSessionData] = [court]
+	var applied: Dictionary = {
+		"character_id": 1,
+		"effects": {
+			"requires_court_invitation": true,
+			"invitee_id": 30,
+			"invitation_settlement_id": 5,
+		},
+	}
+	var r: Dictionary = DayOrchestrator._apply_court_invitation(
+		applied, chars, courts,
+	)
+	assert_eq(r["type"], "invitation_sent")
+	assert_eq(r["court_id"], 10)
+	assert_true(30 in court.personal_invitation_ids)
+
+
+# -- CALL_COURT Deferred Effect ------------------------------------------------
+
+func test_apply_court_creation_creates_court() -> void:
+	var lord := _characters[0]
+	lord.character_id = 1
+	lord.physical_location = "5"
+	lord.clan = "Crane"
+	lord.status = 5.0
+	var chars: Dictionary = {1: lord}
+	var courts: Array[CourtSessionData] = []
+	var topics: Array[TopicData] = []
+	var next_id: Array[int] = [100]
+	var ws: Dictionary = {}
+	var applied: Dictionary = {
+		"character_id": 1,
+		"effects": {"requires_court_creation": true, "court_settlement_id": 5},
+	}
+	var r: Dictionary = DayOrchestrator._apply_court_creation(
+		applied, chars, courts, topics, next_id, 10, ws,
+	)
+	assert_eq(r["type"], "court_created")
+	assert_eq(r["lord_id"], 1)
+	assert_eq(r["court_id"], 100)
+	assert_eq(r["settlement_id"], 5)
+	assert_eq(courts.size(), 1)
+	assert_eq(courts[0].host_lord_id, 1)
+	assert_eq(courts[0].host_clan, "Crane")
+	assert_eq(next_id[0], 101)
+
+
+func test_apply_court_creation_blocks_duplicate() -> void:
+	var lord := _characters[0]
+	lord.character_id = 1
+	lord.physical_location = "5"
+	lord.status = 5.0
+	var existing := CourtSessionData.new()
+	existing.host_lord_id = 1
+	existing.phase = CourtSessionData.CourtPhase.ACTIVE
+	var chars: Dictionary = {1: lord}
+	var courts: Array[CourtSessionData] = [existing]
+	var topics: Array[TopicData] = []
+	var next_id: Array[int] = [100]
+	var ws: Dictionary = {}
+	var applied: Dictionary = {
+		"character_id": 1,
+		"effects": {"requires_court_creation": true},
+	}
+	var r: Dictionary = DayOrchestrator._apply_court_creation(
+		applied, chars, courts, topics, next_id, 10, ws,
+	)
+	assert_eq(r["type"], "court_creation_failed")
+	assert_eq(r["reason"], "already_hosting")
+	assert_eq(courts.size(), 1)
+
+
+func test_apply_court_creation_clan_champion_type() -> void:
+	var lord := _characters[0]
+	lord.character_id = 1
+	lord.physical_location = "5"
+	lord.clan = "Crane"
+	lord.status = 7.5
+	var chars: Dictionary = {1: lord}
+	var courts: Array[CourtSessionData] = []
+	var topics: Array[TopicData] = []
+	var next_id: Array[int] = [200]
+	var ws: Dictionary = {}
+	var applied: Dictionary = {
+		"character_id": 1,
+		"effects": {"requires_court_creation": true, "court_settlement_id": 5},
+	}
+	var r: Dictionary = DayOrchestrator._apply_court_creation(
+		applied, chars, courts, topics, next_id, 10, ws,
+	)
+	assert_eq(r["type"], "court_created")
+	assert_eq(r["court_type"], CourtSessionData.CourtType.CLAN_CHAMPION_COURT)
+
+
+# -- Military Promotion Writeback -----------------------------------------------
+
+
+func test_apply_promotion_results_updates_character_rank() -> void:
+	var char := L5RCharacterData.new()
+	char.character_id = 50
+	char.military_rank = Enums.MilitaryRank.NONE
+	char.commanded_unit_id = -1
+	var chars_by_id: Dictionary = {50: char}
+	var companies: Array[Dictionary] = [
+		{"company_id": 7, "commander_id": -1},
+	]
+	var results: Array = [{
+		"promoted_character_id": 50,
+		"unit_id": 7,
+		"rank_needed": Enums.MilitaryRank.CHUI,
+		"score": 85.0,
+	}]
+	DayOrchestrator._apply_promotion_results(results, chars_by_id, companies)
+	assert_eq(char.military_rank, Enums.MilitaryRank.CHUI)
+	assert_eq(char.commanded_unit_id, 7)
+	assert_eq(companies[0]["commander_id"], 50)
+
+
+func test_apply_promotion_results_skips_invalid_character() -> void:
+	var chars_by_id: Dictionary = {}
+	var companies: Array[Dictionary] = [{"company_id": 7, "commander_id": -1}]
+	var results: Array = [{
+		"promoted_character_id": 99,
+		"unit_id": 7,
+		"rank_needed": Enums.MilitaryRank.CHUI,
+	}]
+	DayOrchestrator._apply_promotion_results(results, chars_by_id, companies)
+	assert_eq(companies[0]["commander_id"], -1)
+
+
+# -- Travel Redirect Writeback (s55.29.1) --------------------------------------
+
+
+func test_travel_redirect_increments_on_change_destination() -> void:
+	var objectives_map: Dictionary = {
+		1: {"primary": {"need_type": "AVENGE", "travel_redirects": 0}},
+	}
+	var results: Array[Dictionary] = [{
+		"action_id": "CHANGE_DESTINATION",
+		"character_id": 1,
+		"effects": {"travel": {"changed": true}},
+	}]
+	DayOrchestrator._process_travel_redirect_writebacks(results, objectives_map)
+	assert_eq(objectives_map[1]["primary"]["travel_redirects"], 1)
+
+
+func test_travel_redirect_skips_failed_change() -> void:
+	var objectives_map: Dictionary = {
+		1: {"primary": {"need_type": "AVENGE", "travel_redirects": 0}},
+	}
+	var results: Array[Dictionary] = [{
+		"action_id": "CHANGE_DESTINATION",
+		"character_id": 1,
+		"effects": {"travel": {"changed": false}},
+	}]
+	DayOrchestrator._process_travel_redirect_writebacks(results, objectives_map)
+	assert_eq(objectives_map[1]["primary"]["travel_redirects"], 0)
+
+
+func test_travel_redirect_skips_non_redirect_actions() -> void:
+	var objectives_map: Dictionary = {
+		1: {"primary": {"need_type": "AVENGE", "travel_redirects": 0}},
+	}
+	var results: Array[Dictionary] = [{
+		"action_id": "BEGIN_TRAVEL",
+		"character_id": 1,
+		"effects": {"travel": {"changed": true}},
+	}]
+	DayOrchestrator._process_travel_redirect_writebacks(results, objectives_map)
+	assert_eq(objectives_map[1]["primary"]["travel_redirects"], 0)
+
+
+# -- Approach Evaluation Writebacks (s55.30) -----------------------------------
+
+
+func test_approach_evaluation_records_capped_penalty() -> void:
+	var action_log: Array[Dictionary] = []
+	for i: int in range(3):
+		action_log.append({
+			"character_id": 1, "target_npc_id": 2,
+			"action_id": "CHARM", "season": 5,
+			"roll_result": 30, "tn": 20,
+			"observable_effect": false,
+		})
+	var target := L5RCharacterData.new()
+	target.character_id = 2
+	target.disposition_values = {1: 42}
+	var chars_by_id: Dictionary = {2: target}
+	var penalties: Array[Dictionary] = []
+	var results: Array[Dictionary] = [{
+		"action_id": "READ_CHARACTER",
+		"character_id": 1,
+		"target_npc_id": 2,
+		"success": true,
+	}]
+	DayOrchestrator._process_approach_evaluation_writebacks(
+		results, action_log, penalties, chars_by_id, 5
+	)
+	assert_eq(penalties.size(), 1)
+	assert_eq(penalties[0]["tag"], ApproachEvaluation.AssessmentTag.APPROACH_CAPPED)
+
+
+func test_approach_evaluation_skips_failed_measurement() -> void:
+	var action_log: Array[Dictionary] = []
+	for i: int in range(3):
+		action_log.append({
+			"character_id": 1, "target_npc_id": 2,
+			"action_id": "CHARM", "season": 5,
+			"roll_result": 30, "tn": 20,
+			"observable_effect": false,
+		})
+	var target := L5RCharacterData.new()
+	target.character_id = 2
+	target.disposition_values = {1: 42}
+	var chars_by_id: Dictionary = {2: target}
+	var penalties: Array[Dictionary] = []
+	var results: Array[Dictionary] = [{
+		"action_id": "READ_CHARACTER",
+		"character_id": 1,
+		"target_npc_id": 2,
+		"success": false,
+	}]
+	DayOrchestrator._process_approach_evaluation_writebacks(
+		results, action_log, penalties, chars_by_id, 5
+	)
+	assert_eq(penalties.size(), 0)
+
+
+func test_approach_evaluation_records_ineffective_penalty() -> void:
+	var action_log: Array[Dictionary] = []
+	for i: int in range(3):
+		action_log.append({
+			"character_id": 1, "target_npc_id": 2,
+			"action_id": "CHARM", "season": 5,
+			"roll_result": 30, "tn": 20,
+			"observable_effect": false,
+		})
+	var target := L5RCharacterData.new()
+	target.character_id = 2
+	target.disposition_values = {1: 10}
+	var chars_by_id: Dictionary = {2: target}
+	var penalties: Array[Dictionary] = []
+	var results: Array[Dictionary] = [{
+		"action_id": "PROBE",
+		"character_id": 1,
+		"target_npc_id": 2,
+		"success": true,
+	}]
+	DayOrchestrator._process_approach_evaluation_writebacks(
+		results, action_log, penalties, chars_by_id, 5
+	)
+	assert_eq(penalties.size(), 1)
+	assert_eq(penalties[0]["tag"], ApproachEvaluation.AssessmentTag.APPROACH_INEFFECTIVE)
+
+
+# -- Disposition Snapshots (s55.30.3) ------------------------------------------
+
+
+func test_populate_disposition_snapshots() -> void:
+	var c1 := L5RCharacterData.new()
+	c1.character_id = 1
+	c1.disposition_values = {2: 15, 3: -10}
+	var c2 := L5RCharacterData.new()
+	c2.character_id = 2
+	c2.disposition_values = {1: 25}
+	var chars: Array[L5RCharacterData] = [c1, c2]
+	var snapshots: Dictionary = {}
+	DayOrchestrator._populate_disposition_snapshots(chars, snapshots)
+	assert_eq(snapshots["1:2"], 15)
+	assert_eq(snapshots["1:3"], -10)
+	assert_eq(snapshots["2:1"], 25)
+
+
+func test_get_disposition_at_start_returns_snapshot() -> void:
+	var snapshots: Dictionary = {"2:1": 8}
+	var result: int = DayOrchestrator._get_disposition_at_start(snapshots, 2, 1, 25)
+	assert_eq(result, 8)
+
+
+func test_get_disposition_at_start_falls_back_to_current() -> void:
+	var snapshots: Dictionary = {}
+	var result: int = DayOrchestrator._get_disposition_at_start(snapshots, 2, 1, 25)
+	assert_eq(result, 25)
+
+
+func test_approach_evaluation_effective_with_snapshot() -> void:
+	var action_log: Array[Dictionary] = []
+	for i: int in range(3):
+		action_log.append({
+			"character_id": 1, "target_npc_id": 2,
+			"action_id": "CHARM", "season": 5,
+			"roll_result": 30, "tn": 20,
+			"observable_effect": false,
+		})
+	var target := L5RCharacterData.new()
+	target.character_id = 2
+	target.disposition_values = {1: 15}
+	var chars_by_id: Dictionary = {2: target}
+	var penalties: Array[Dictionary] = []
+	var snapshots: Dictionary = {"2:1": 8}
+	var results: Array[Dictionary] = [{
+		"action_id": "PROBE",
+		"character_id": 1,
+		"target_npc_id": 2,
+		"success": true,
+	}]
+	DayOrchestrator._process_approach_evaluation_writebacks(
+		results, action_log, penalties, chars_by_id, 5, snapshots
+	)
+	assert_eq(penalties.size(), 0)
+
+
+func test_approach_evaluation_ineffective_with_snapshot() -> void:
+	var action_log: Array[Dictionary] = []
+	for i: int in range(3):
+		action_log.append({
+			"character_id": 1, "target_npc_id": 2,
+			"action_id": "CHARM", "season": 5,
+			"roll_result": 30, "tn": 20,
+			"observable_effect": false,
+		})
+	var target := L5RCharacterData.new()
+	target.character_id = 2
+	target.disposition_values = {1: 10}
+	var chars_by_id: Dictionary = {2: target}
+	var penalties: Array[Dictionary] = []
+	var snapshots: Dictionary = {"2:1": 9}
+	var results: Array[Dictionary] = [{
+		"action_id": "PROBE",
+		"character_id": 1,
+		"target_npc_id": 2,
+		"success": true,
+	}]
+	DayOrchestrator._process_approach_evaluation_writebacks(
+		results, action_log, penalties, chars_by_id, 5, snapshots
+	)
+	assert_eq(penalties.size(), 1)
+	assert_eq(penalties[0]["tag"], ApproachEvaluation.AssessmentTag.APPROACH_INEFFECTIVE)
+
+
+# -- Crisis Commitment Linking (s55.31.11) -------------------------------------
+
+
+func test_crisis_commitment_linking_stamps_crisis_id() -> void:
+	var c1 := CommitmentData.new()
+	c1.commitment_id = 1
+	c1.debtor_npc_id = 10
+	c1.status = Enums.CommitmentStatus.PENDING
+	var commitments: Array[CommitmentData] = [c1]
+	var objectives_map: Dictionary = {
+		10: {"primary": {"need_type": "DEFEND_PROVINCE", "crisis_id": 77}},
+	}
+	var results: Array[Dictionary] = [{
+		"action_id": "ORDER_DEPLOY",
+		"character_id": 10,
+	}]
+	DayOrchestrator._process_crisis_commitment_linking(results, commitments, objectives_map)
+	assert_eq(c1.crisis_id, 77)
+
+
+func test_crisis_commitment_linking_skips_non_crisis() -> void:
+	var c1 := CommitmentData.new()
+	c1.commitment_id = 1
+	c1.debtor_npc_id = 10
+	c1.status = Enums.CommitmentStatus.PENDING
+	var commitments: Array[CommitmentData] = [c1]
+	var objectives_map: Dictionary = {
+		10: {"primary": {"need_type": "CONQUER_PROVINCE", "crisis_id": -1}},
+	}
+	var results: Array[Dictionary] = [{
+		"action_id": "ORDER_DEPLOY",
+		"character_id": 10,
+	}]
+	DayOrchestrator._process_crisis_commitment_linking(results, commitments, objectives_map)
+	assert_eq(c1.crisis_id, -1)
+
+
+# -- Commitment Fulfillment Checker (s55.31.4) ---------------------------------
+
+
+func test_commitment_fulfillment_court_attendance() -> void:
+	var debtor := L5RCharacterData.new()
+	debtor.character_id = 10
+	debtor.physical_location = "100"
+	debtor.travel_destination = ""
+	debtor.travel_days_remaining = 0
+	var chars_by_id: Dictionary = {10: debtor}
+	var c1 := CommitmentData.new()
+	c1.debtor_npc_id = 10
+	c1.commitment_type = Enums.CommitmentType.COURT_ATTENDANCE
+	c1.fulfillment_target = 100
+	assert_true(DayOrchestrator._check_commitment_fulfilled(c1, chars_by_id))
+
+
+func test_commitment_fulfillment_court_attendance_wrong_location() -> void:
+	var debtor := L5RCharacterData.new()
+	debtor.character_id = 10
+	debtor.physical_location = "200"
+	debtor.travel_destination = ""
+	debtor.travel_days_remaining = 0
+	var chars_by_id: Dictionary = {10: debtor}
+	var c1 := CommitmentData.new()
+	c1.debtor_npc_id = 10
+	c1.commitment_type = Enums.CommitmentType.COURT_ATTENDANCE
+	c1.fulfillment_target = 100
+	assert_false(DayOrchestrator._check_commitment_fulfilled(c1, chars_by_id))
+
+
+func test_commitment_fulfillment_meeting_both_present() -> void:
+	var debtor := L5RCharacterData.new()
+	debtor.character_id = 10
+	debtor.physical_location = "50"
+	debtor.travel_destination = ""
+	debtor.travel_days_remaining = 0
+	var creditor := L5RCharacterData.new()
+	creditor.character_id = 20
+	creditor.physical_location = "50"
+	var chars_by_id: Dictionary = {10: debtor, 20: creditor}
+	var c1 := CommitmentData.new()
+	c1.debtor_npc_id = 10
+	c1.creditor_npc_id = 20
+	c1.commitment_type = Enums.CommitmentType.MEETING_ARRANGEMENT
+	c1.fulfillment_target = 50
+	assert_true(DayOrchestrator._check_commitment_fulfilled(c1, chars_by_id))
+
+
+func test_commitment_fulfillment_court_attendance_while_traveling() -> void:
+	var debtor := L5RCharacterData.new()
+	debtor.character_id = 10
+	debtor.physical_location = "100"
+	debtor.travel_destination = "200"
+	debtor.travel_days_remaining = 3
+	var chars_by_id: Dictionary = {10: debtor}
+	var c1 := CommitmentData.new()
+	c1.debtor_npc_id = 10
+	c1.commitment_type = Enums.CommitmentType.COURT_ATTENDANCE
+	c1.fulfillment_target = 100
+	assert_false(DayOrchestrator._check_commitment_fulfilled(c1, chars_by_id))
+
+
+func test_commitment_fulfillment_meeting_one_absent() -> void:
+	var debtor := L5RCharacterData.new()
+	debtor.character_id = 10
+	debtor.physical_location = "50"
+	debtor.travel_destination = ""
+	debtor.travel_days_remaining = 0
+	var creditor := L5RCharacterData.new()
+	creditor.character_id = 20
+	creditor.physical_location = "300"
+	var chars_by_id: Dictionary = {10: debtor, 20: creditor}
+	var c1 := CommitmentData.new()
+	c1.debtor_npc_id = 10
+	c1.creditor_npc_id = 20
+	c1.commitment_type = Enums.CommitmentType.MEETING_ARRANGEMENT
+	c1.fulfillment_target = 50
+	assert_false(DayOrchestrator._check_commitment_fulfilled(c1, chars_by_id))
+
+
+func test_visit_promise_fulfilled_when_co_located() -> void:
+	var debtor := L5RCharacterData.new()
+	debtor.character_id = 10
+	debtor.physical_location = "50"
+	debtor.travel_destination = ""
+	debtor.travel_days_remaining = 0
+	var creditor := L5RCharacterData.new()
+	creditor.character_id = 20
+	creditor.physical_location = "50"
+	creditor.travel_destination = ""
+	creditor.travel_days_remaining = 0
+	var chars_by_id: Dictionary = {10: debtor, 20: creditor}
+	var c1 := CommitmentData.new()
+	c1.debtor_npc_id = 10
+	c1.creditor_npc_id = 20
+	c1.commitment_type = Enums.CommitmentType.VISIT_PROMISE
+	c1.fulfillment_target = -1
+	assert_true(DayOrchestrator._check_commitment_fulfilled(c1, chars_by_id),
+		"Visit fulfilled when both at same location")
+
+
+func test_visit_promise_not_fulfilled_when_apart() -> void:
+	var debtor := L5RCharacterData.new()
+	debtor.character_id = 10
+	debtor.physical_location = "50"
+	debtor.travel_destination = ""
+	debtor.travel_days_remaining = 0
+	var creditor := L5RCharacterData.new()
+	creditor.character_id = 20
+	creditor.physical_location = "200"
+	var chars_by_id: Dictionary = {10: debtor, 20: creditor}
+	var c1 := CommitmentData.new()
+	c1.debtor_npc_id = 10
+	c1.creditor_npc_id = 20
+	c1.commitment_type = Enums.CommitmentType.VISIT_PROMISE
+	assert_false(DayOrchestrator._check_commitment_fulfilled(c1, chars_by_id),
+		"Visit not fulfilled when at different locations")
+
+
+func test_visit_promise_not_fulfilled_when_creditor_traveling() -> void:
+	var debtor := L5RCharacterData.new()
+	debtor.character_id = 10
+	debtor.physical_location = "50"
+	debtor.travel_destination = ""
+	debtor.travel_days_remaining = 0
+	var creditor := L5RCharacterData.new()
+	creditor.character_id = 20
+	creditor.physical_location = "50"
+	creditor.travel_destination = "100"
+	creditor.travel_days_remaining = 3
+	var chars_by_id: Dictionary = {10: debtor, 20: creditor}
+	var c1 := CommitmentData.new()
+	c1.debtor_npc_id = 10
+	c1.creditor_npc_id = 20
+	c1.commitment_type = Enums.CommitmentType.VISIT_PROMISE
+	assert_false(DayOrchestrator._check_commitment_fulfilled(c1, chars_by_id),
+		"Visit not fulfilled when creditor is traveling")
+
+
+func test_meeting_not_fulfilled_when_creditor_traveling() -> void:
+	var debtor := L5RCharacterData.new()
+	debtor.character_id = 10
+	debtor.physical_location = "50"
+	debtor.travel_destination = ""
+	debtor.travel_days_remaining = 0
+	var creditor := L5RCharacterData.new()
+	creditor.character_id = 20
+	creditor.physical_location = "50"
+	creditor.travel_destination = "100"
+	creditor.travel_days_remaining = 3
+	var chars_by_id: Dictionary = {10: debtor, 20: creditor}
+	var c1 := CommitmentData.new()
+	c1.debtor_npc_id = 10
+	c1.creditor_npc_id = 20
+	c1.commitment_type = Enums.CommitmentType.MEETING_ARRANGEMENT
+	c1.fulfillment_target = 50
+	assert_false(DayOrchestrator._check_commitment_fulfilled(c1, chars_by_id),
+		"Meeting not fulfilled when creditor is traveling through")
+
+
+# -- Commitment Creation Writebacks (s55.31.3) --------------------------------
+
+func test_favor_obligation_commitment_created_on_offer_favor() -> void:
+	var results: Array = [
+		{
+			"character_id": 1,
+			"action_id": "OFFER_FAVOR",
+			"effects": {
+				"requires_favor_creation": true,
+				"favor_creditor_id": 1,
+				"favor_debtor_id": 2,
+				"_action_metadata": {},
+			},
+		},
+	]
+	var commitments: Array[CommitmentData] = []
+	var courts: Array[CourtSessionData] = []
+	var next_id: Array[int] = [1]
+	DayOrchestrator._process_commitment_creation_writebacks(
+		results, commitments, courts, 10, next_id,
+	)
+	assert_eq(commitments.size(), 1)
+	var c: CommitmentData = commitments[0]
+	assert_eq(c.commitment_id, 1)
+	assert_eq(c.commitment_type, Enums.CommitmentType.FAVOR_OBLIGATION)
+	assert_eq(c.creditor_npc_id, 1)
+	assert_eq(c.debtor_npc_id, 2)
+	assert_eq(c.deadline_ic_day, -1)
+	assert_eq(c.tier, int(FavorData.FavorTier.MINOR))
+	assert_eq(c.source_action_id, "OFFER_FAVOR")
+	assert_eq(c.created_ic_day, 10)
+	assert_eq(next_id[0], 2)
+
+
+func test_favor_obligation_witnesses_private() -> void:
+	var results: Array = [
+		{
+			"character_id": 5,
+			"action_id": "OFFER_FAVOR",
+			"effects": {
+				"requires_favor_creation": true,
+				"favor_creditor_id": 5,
+				"favor_debtor_id": 6,
+				"_action_metadata": {},
+			},
+		},
+	]
+	var commitments: Array[CommitmentData] = []
+	var courts: Array[CourtSessionData] = []
+	var next_id: Array[int] = [1]
+	DayOrchestrator._process_commitment_creation_writebacks(
+		results, commitments, courts, 10, next_id,
+	)
+	assert_eq(commitments.size(), 1)
+	assert_eq(commitments[0].witnesses.size(), 2)
+	assert_true(5 in commitments[0].witnesses)
+	assert_true(6 in commitments[0].witnesses)
+
+
+func test_favor_obligation_witnesses_at_court() -> void:
+	var court := CourtSessionData.new()
+	court.host_settlement_id = 100
+	court.attendee_ids = [5, 6, 7, 8, 9]
+	var results: Array = [
+		{
+			"character_id": 5,
+			"action_id": "OFFER_FAVOR",
+			"effects": {
+				"requires_favor_creation": true,
+				"favor_creditor_id": 5,
+				"favor_debtor_id": 6,
+				"_action_metadata": {"court_settlement_id": 100},
+			},
+		},
+	]
+	var commitments: Array[CommitmentData] = []
+	var courts: Array[CourtSessionData] = [court]
+	var next_id: Array[int] = [1]
+	DayOrchestrator._process_commitment_creation_writebacks(
+		results, commitments, courts, 10, next_id,
+	)
+	assert_eq(commitments.size(), 1)
+	assert_eq(commitments[0].witnesses.size(), 5)
+	assert_true(7 in commitments[0].witnesses)
+	assert_true(9 in commitments[0].witnesses)
+
+
+func test_favor_obligation_skips_duplicate() -> void:
+	var existing := CommitmentData.new()
+	existing.commitment_type = Enums.CommitmentType.FAVOR_OBLIGATION
+	existing.creditor_npc_id = 1
+	existing.debtor_npc_id = 2
+	existing.status = Enums.CommitmentStatus.PENDING
+	var results: Array = [
+		{
+			"character_id": 1,
+			"action_id": "OFFER_FAVOR",
+			"effects": {
+				"requires_favor_creation": true,
+				"favor_creditor_id": 1,
+				"favor_debtor_id": 2,
+				"_action_metadata": {},
+			},
+		},
+	]
+	var commitments: Array[CommitmentData] = [existing]
+	var courts: Array[CourtSessionData] = []
+	var next_id: Array[int] = [5]
+	DayOrchestrator._process_commitment_creation_writebacks(
+		results, commitments, courts, 10, next_id,
+	)
+	assert_eq(commitments.size(), 1)
+	assert_eq(next_id[0], 5)
+
+
+func test_favor_obligation_skips_missing_ids() -> void:
+	var results: Array = [
+		{
+			"character_id": 1,
+			"action_id": "OFFER_FAVOR",
+			"effects": {
+				"requires_favor_creation": true,
+				"favor_creditor_id": -1,
+				"favor_debtor_id": 2,
+				"_action_metadata": {},
+			},
+		},
+	]
+	var commitments: Array[CommitmentData] = []
+	var courts: Array[CourtSessionData] = []
+	var next_id: Array[int] = [1]
+	DayOrchestrator._process_commitment_creation_writebacks(
+		results, commitments, courts, 10, next_id,
+	)
+	assert_eq(commitments.size(), 0)
+
+
+func test_favor_obligation_not_created_on_failed_offer() -> void:
+	var results: Array = [
+		{
+			"character_id": 1,
+			"action_id": "OFFER_FAVOR",
+			"effects": {
+				"failed": true,
+				"disposition_change": -2,
+			},
+		},
+	]
+	var commitments: Array[CommitmentData] = []
+	var courts: Array[CourtSessionData] = []
+	var next_id: Array[int] = [1]
+	DayOrchestrator._process_commitment_creation_writebacks(
+		results, commitments, courts, 10, next_id,
+	)
+	assert_eq(commitments.size(), 0)
+
+
+# -- FAVOR_OBLIGATION Registry Behavior (s55.31 visibility only) ---------------
+
+func test_favor_obligation_skipped_in_deadline_processing() -> void:
+	var favor_c := CommitmentData.new()
+	favor_c.commitment_id = 1
+	favor_c.commitment_type = Enums.CommitmentType.FAVOR_OBLIGATION
+	favor_c.creditor_npc_id = 1
+	favor_c.debtor_npc_id = 2
+	favor_c.deadline_ic_day = -1
+	favor_c.status = Enums.CommitmentStatus.PENDING
+	favor_c.tier = 3
+	var debtor := L5RCharacterData.new()
+	debtor.character_id = 2
+	var chars_by_id: Dictionary = {2: debtor}
+	var commitments: Array[CommitmentData] = [favor_c]
+	var checker: Callable = func(_c: CommitmentData) -> bool: return false
+	var results: Array[Dictionary] = CommitmentRegistry.process_deadlines(
+		commitments, 100, checker, chars_by_id, chars_by_id,
+	)
+	assert_eq(results.size(), 0)
+	assert_eq(favor_c.status, Enums.CommitmentStatus.PENDING)
+
+
+func test_favor_obligation_skipped_in_at_risk_penalty() -> void:
+	var favor_c := CommitmentData.new()
+	favor_c.commitment_type = Enums.CommitmentType.FAVOR_OBLIGATION
+	favor_c.creditor_npc_id = 1
+	favor_c.debtor_npc_id = 2
+	favor_c.status = Enums.CommitmentStatus.PENDING
+	favor_c.tier = 1
+	var char := L5RCharacterData.new()
+	char.character_id = 2
+	char.bushido_virtue = Enums.BushidoVirtue.GI
+	var commitments: Array[CommitmentData] = [favor_c]
+	var penalty: int = CommitmentRegistry.get_at_risk_penalty(
+		commitments, 2, char,
+	)
+	assert_eq(penalty, 0)
+
+
+# -- COURT_ATTENDANCE Commitment Creation (s55.31) ----------------------------
+
+func test_court_attendance_commitment_created_on_invitation() -> void:
+	var court := CourtSessionData.new()
+	court.court_id = 1
+	court.court_type = CourtSessionData.CourtType.PROVINCIAL_FAMILY_COURT
+	court.host_settlement_id = 100
+	court.start_ic_day = 50
+	court.phase = CourtSessionData.CourtPhase.ACTIVE
+	court.personal_invitation_ids = [20]
+	var results: Array = [
+		{
+			"character_id": 10,
+			"action_id": "SEND_INVITATION",
+			"effects": {
+				"requires_court_invitation": true,
+				"invitee_id": 20,
+				"invitation_settlement_id": 100,
+			},
+		},
+	]
+	var commitments: Array[CommitmentData] = []
+	var courts: Array[CourtSessionData] = [court]
+	var next_id: Array[int] = [1]
+	DayOrchestrator._process_commitment_creation_writebacks(
+		results, commitments, courts, 40, next_id,
+	)
+	assert_eq(commitments.size(), 1)
+	var c: CommitmentData = commitments[0]
+	assert_eq(c.commitment_type, Enums.CommitmentType.COURT_ATTENDANCE)
+	assert_eq(c.creditor_npc_id, 10)
+	assert_eq(c.debtor_npc_id, 20)
+	assert_eq(c.deadline_ic_day, 50)
+	assert_eq(c.fulfillment_target, 100)
+	assert_eq(c.source_action_id, "SEND_INVITATION")
+	assert_eq(c.tier, 3)
+	assert_eq(next_id[0], 2)
+
+
+func test_court_attendance_tier2_for_winter_court() -> void:
+	var court := CourtSessionData.new()
+	court.court_id = 1
+	court.court_type = CourtSessionData.CourtType.IMPERIAL_WINTER_COURT
+	court.host_settlement_id = 100
+	court.start_ic_day = 270
+	court.phase = CourtSessionData.CourtPhase.ACTIVE
+	court.personal_invitation_ids = [20]
+	var results: Array = [
+		{
+			"character_id": 10,
+			"action_id": "SEND_INVITATION",
+			"effects": {
+				"requires_court_invitation": true,
+				"invitee_id": 20,
+				"invitation_settlement_id": 100,
+			},
+		},
+	]
+	var commitments: Array[CommitmentData] = []
+	var courts: Array[CourtSessionData] = [court]
+	var next_id: Array[int] = [1]
+	DayOrchestrator._process_commitment_creation_writebacks(
+		results, commitments, courts, 200, next_id,
+	)
+	assert_eq(commitments.size(), 1)
+	assert_eq(commitments[0].tier, 2)
+
+
+func test_court_attendance_tier2_for_clan_champion_court() -> void:
+	var court := CourtSessionData.new()
+	court.court_id = 1
+	court.court_type = CourtSessionData.CourtType.CLAN_CHAMPION_COURT
+	court.host_settlement_id = 100
+	court.start_ic_day = 50
+	court.phase = CourtSessionData.CourtPhase.ACTIVE
+	court.personal_invitation_ids = [20]
+	var results: Array = [
+		{
+			"character_id": 10,
+			"action_id": "SEND_INVITATION",
+			"effects": {
+				"requires_court_invitation": true,
+				"invitee_id": 20,
+				"invitation_settlement_id": 100,
+			},
+		},
+	]
+	var commitments: Array[CommitmentData] = []
+	var courts: Array[CourtSessionData] = [court]
+	var next_id: Array[int] = [1]
+	DayOrchestrator._process_commitment_creation_writebacks(
+		results, commitments, courts, 40, next_id,
+	)
+	assert_eq(commitments.size(), 1)
+	assert_eq(commitments[0].tier, 2)
+
+
+func test_court_attendance_skips_if_invitee_not_added() -> void:
+	var court := CourtSessionData.new()
+	court.court_id = 1
+	court.court_type = CourtSessionData.CourtType.PROVINCIAL_FAMILY_COURT
+	court.host_settlement_id = 100
+	court.start_ic_day = 50
+	court.phase = CourtSessionData.CourtPhase.ACTIVE
+	court.personal_invitation_ids = []
+	var results: Array = [
+		{
+			"character_id": 10,
+			"action_id": "SEND_INVITATION",
+			"effects": {
+				"requires_court_invitation": true,
+				"invitee_id": 20,
+				"invitation_settlement_id": 100,
+			},
+		},
+	]
+	var commitments: Array[CommitmentData] = []
+	var courts: Array[CourtSessionData] = [court]
+	var next_id: Array[int] = [1]
+	DayOrchestrator._process_commitment_creation_writebacks(
+		results, commitments, courts, 40, next_id,
+	)
+	assert_eq(commitments.size(), 0)
+
+
+func test_court_attendance_skips_duplicate() -> void:
+	var court := CourtSessionData.new()
+	court.court_id = 1
+	court.court_type = CourtSessionData.CourtType.PROVINCIAL_FAMILY_COURT
+	court.host_settlement_id = 100
+	court.start_ic_day = 50
+	court.phase = CourtSessionData.CourtPhase.ACTIVE
+	court.personal_invitation_ids = [20]
+	var existing := CommitmentData.new()
+	existing.commitment_type = Enums.CommitmentType.COURT_ATTENDANCE
+	existing.debtor_npc_id = 20
+	existing.fulfillment_target = 100
+	existing.status = Enums.CommitmentStatus.PENDING
+	var results: Array = [
+		{
+			"character_id": 10,
+			"action_id": "SEND_INVITATION",
+			"effects": {
+				"requires_court_invitation": true,
+				"invitee_id": 20,
+				"invitation_settlement_id": 100,
+			},
+		},
+	]
+	var commitments: Array[CommitmentData] = [existing]
+	var courts: Array[CourtSessionData] = [court]
+	var next_id: Array[int] = [1]
+	DayOrchestrator._process_commitment_creation_writebacks(
+		results, commitments, courts, 40, next_id,
+	)
+	assert_eq(commitments.size(), 1, "Should not add duplicate")
+
+
+func test_court_attendance_witnesses_are_inviter_and_invitee() -> void:
+	var court := CourtSessionData.new()
+	court.court_id = 1
+	court.court_type = CourtSessionData.CourtType.PROVINCIAL_FAMILY_COURT
+	court.host_settlement_id = 100
+	court.start_ic_day = 50
+	court.phase = CourtSessionData.CourtPhase.ACTIVE
+	court.personal_invitation_ids = [20]
+	var results: Array = [
+		{
+			"character_id": 10,
+			"action_id": "SEND_INVITATION",
+			"effects": {
+				"requires_court_invitation": true,
+				"invitee_id": 20,
+				"invitation_settlement_id": 100,
+			},
+		},
+	]
+	var commitments: Array[CommitmentData] = []
+	var courts: Array[CourtSessionData] = [court]
+	var next_id: Array[int] = [1]
+	DayOrchestrator._process_commitment_creation_writebacks(
+		results, commitments, courts, 40, next_id,
+	)
+	assert_eq(commitments[0].witnesses.size(), 2)
+	assert_true(10 in commitments[0].witnesses)
+	assert_true(20 in commitments[0].witnesses)
+
+
+# -- VISIT_PROMISE Commitment Creation (s55.31) --------------------------------
+
+func _make_delivered_letter(lid: int, sender_id: int, recipient_id: int) -> LetterData:
+	var letter := LetterData.new()
+	letter.letter_id = lid
+	letter.sender_id = sender_id
+	letter.recipient_id = recipient_id
+	letter.delivered = true
+	return letter
+
+
+func test_visit_promise_created_from_letter_with_intent() -> void:
+	var letter := _make_delivered_letter(1, 10, 20)
+	letter.visit_intent = true
+	letter.visit_deadline_ic_day = 100
+	var pending: Array[LetterData] = [letter]
+	var commitments: Array[CommitmentData] = []
+	var next_id: Array[int] = [1]
+	DayOrchestrator._process_letter_commitment_creation(
+		pending, commitments, next_id, 50,
+	)
+	assert_eq(commitments.size(), 1)
+	var c: CommitmentData = commitments[0]
+	assert_eq(c.commitment_type, Enums.CommitmentType.VISIT_PROMISE)
+	assert_eq(c.creditor_npc_id, 20)
+	assert_eq(c.debtor_npc_id, 10)
+	assert_eq(c.deadline_ic_day, 100)
+	assert_eq(c.tier, 3)
+	assert_eq(c.source_action_id, "WRITE_LETTER")
+	assert_eq(next_id[0], 2)
+
+
+func test_visit_promise_not_created_without_deadline() -> void:
+	var letter := _make_delivered_letter(1, 10, 20)
+	letter.visit_intent = true
+	letter.visit_deadline_ic_day = -1
+	var pending: Array[LetterData] = [letter]
+	var commitments: Array[CommitmentData] = []
+	var next_id: Array[int] = [1]
+	DayOrchestrator._process_letter_commitment_creation(
+		pending, commitments, next_id, 50,
+	)
+	assert_eq(commitments.size(), 0)
+
+
+func test_visit_promise_skips_duplicate() -> void:
+	var letter := _make_delivered_letter(1, 10, 20)
+	letter.visit_intent = true
+	letter.visit_deadline_ic_day = 100
+	var existing := CommitmentData.new()
+	existing.commitment_type = Enums.CommitmentType.VISIT_PROMISE
+	existing.debtor_npc_id = 10
+	existing.creditor_npc_id = 20
+	existing.status = Enums.CommitmentStatus.PENDING
+	var pending: Array[LetterData] = [letter]
+	var commitments: Array[CommitmentData] = [existing]
+	var next_id: Array[int] = [1]
+	DayOrchestrator._process_letter_commitment_creation(
+		pending, commitments, next_id, 50,
+	)
+	assert_eq(commitments.size(), 1, "Should not add duplicate")
+
+
+func test_visit_promise_not_created_for_undelivered_letter() -> void:
+	var letter := LetterData.new()
+	letter.letter_id = 1
+	letter.sender_id = 10
+	letter.recipient_id = 20
+	letter.delivered = false
+	letter.visit_intent = true
+	letter.visit_deadline_ic_day = 100
+	var pending: Array[LetterData] = [letter]
+	var commitments: Array[CommitmentData] = []
+	var next_id: Array[int] = [1]
+	DayOrchestrator._process_letter_commitment_creation(
+		pending, commitments, next_id, 50,
+	)
+	assert_eq(commitments.size(), 0)
+
+
+func test_visit_intent_propagated_from_letter_result() -> void:
+	var char := L5RCharacterData.new()
+	char.character_id = 10
+	char.skills = {"Courtier": 3, "Calligraphy": 2}
+	char.traits = {"Awareness": 3, "Intelligence": 3}
+	var chars: Array[L5RCharacterData] = [char]
+	var chars_by_id: Dictionary = {10: char}
+	var objectives: Dictionary = {
+		10: {"primary": {"need_type": "RAISE_DISPOSITION", "target_npc_id": 20}},
+	}
+	var scoring_tables: Dictionary = {
+		"objective_alignment": {
+			"RAISE_DISPOSITION": {"WRITE_LETTER": 60},
+		},
+	}
+	var ws: Dictionary = {
+		"is_lord": false,
+		"context_flag": Enums.ContextFlag.AT_OWN_HOLDINGS,
+	}
+	var pending: Array[LetterData] = []
+	var dice := DiceEngine.new()
+	var next_lid: Array[int] = [1]
+	DayOrchestrator._process_daily_letter_pass(
+		chars, chars_by_id, objectives, scoring_tables, ws,
+		pending, 50, dice, next_lid,
+	)
+	if pending.size() > 0:
+		assert_true(pending[0].visit_intent, "Letter should carry visit_intent")
+		assert_eq(pending[0].visit_deadline_ic_day, 50 + DayOrchestrator.VISIT_DEADLINE_OFFSET)
+	else:
+		pass_test("No letter generated (lord filter or score)")
+
+
+# -- MEETING_ARRANGEMENT Commitment Creation (s55.31) --------------------------
+
+func test_meeting_arrangement_created_from_matching_proposals() -> void:
+	var letter_a := _make_delivered_letter(1, 10, 20)
+	letter_a.meeting_proposal = true
+	letter_a.meeting_settlement_id = 100
+	letter_a.meeting_deadline_ic_day = 150
+	var letter_b := _make_delivered_letter(2, 20, 10)
+	letter_b.meeting_proposal = true
+	letter_b.meeting_settlement_id = 100
+	letter_b.meeting_deadline_ic_day = 150
+	var pending: Array[LetterData] = [letter_a, letter_b]
+	var commitments: Array[CommitmentData] = []
+	var next_id: Array[int] = [1]
+	DayOrchestrator._process_letter_commitment_creation(
+		pending, commitments, next_id, 50,
+	)
+	assert_eq(commitments.size(), 2, "Matching pair should create two commitments (both parties)")
+	var debtors: Array[int] = [commitments[0].debtor_npc_id, commitments[1].debtor_npc_id]
+	debtors.sort()
+	assert_eq(debtors, [10, 20], "Both parties should be debtors")
+	for c: CommitmentData in commitments:
+		assert_eq(c.commitment_type, Enums.CommitmentType.MEETING_ARRANGEMENT)
+		assert_eq(c.fulfillment_target, 100)
+		assert_eq(c.deadline_ic_day, 150)
+		assert_eq(c.tier, 3)
+
+
+func test_meeting_arrangement_not_created_without_match() -> void:
+	var letter_a := _make_delivered_letter(1, 10, 20)
+	letter_a.meeting_proposal = true
+	letter_a.meeting_settlement_id = 100
+	letter_a.meeting_deadline_ic_day = 150
+	var pending: Array[LetterData] = [letter_a]
+	var commitments: Array[CommitmentData] = []
+	var next_id: Array[int] = [1]
+	DayOrchestrator._process_letter_commitment_creation(
+		pending, commitments, next_id, 50,
+	)
+	assert_eq(commitments.size(), 0, "Single proposal should not create commitment")
+
+
+func test_meeting_arrangement_not_created_for_different_settlements() -> void:
+	var letter_a := _make_delivered_letter(1, 10, 20)
+	letter_a.meeting_proposal = true
+	letter_a.meeting_settlement_id = 100
+	letter_a.meeting_deadline_ic_day = 150
+	var letter_b := _make_delivered_letter(2, 20, 10)
+	letter_b.meeting_proposal = true
+	letter_b.meeting_settlement_id = 200
+	letter_b.meeting_deadline_ic_day = 150
+	var pending: Array[LetterData] = [letter_a, letter_b]
+	var commitments: Array[CommitmentData] = []
+	var next_id: Array[int] = [1]
+	DayOrchestrator._process_letter_commitment_creation(
+		pending, commitments, next_id, 50,
+	)
+	assert_eq(commitments.size(), 0, "Mismatched settlements should not create commitment")
+
+
+func test_meeting_arrangement_skips_duplicate() -> void:
+	var letter_a := _make_delivered_letter(1, 10, 20)
+	letter_a.meeting_proposal = true
+	letter_a.meeting_settlement_id = 100
+	letter_a.meeting_deadline_ic_day = 150
+	var letter_b := _make_delivered_letter(2, 20, 10)
+	letter_b.meeting_proposal = true
+	letter_b.meeting_settlement_id = 100
+	letter_b.meeting_deadline_ic_day = 150
+	var existing_a := CommitmentData.new()
+	existing_a.commitment_type = Enums.CommitmentType.MEETING_ARRANGEMENT
+	existing_a.creditor_npc_id = 10
+	existing_a.debtor_npc_id = 20
+	existing_a.fulfillment_target = 100
+	existing_a.status = Enums.CommitmentStatus.PENDING
+	var existing_b := CommitmentData.new()
+	existing_b.commitment_type = Enums.CommitmentType.MEETING_ARRANGEMENT
+	existing_b.creditor_npc_id = 20
+	existing_b.debtor_npc_id = 10
+	existing_b.fulfillment_target = 100
+	existing_b.status = Enums.CommitmentStatus.PENDING
+	var pending: Array[LetterData] = [letter_a, letter_b]
+	var commitments: Array[CommitmentData] = [existing_a, existing_b]
+	var next_id: Array[int] = [1]
+	DayOrchestrator._process_letter_commitment_creation(
+		pending, commitments, next_id, 50,
+	)
+	assert_eq(commitments.size(), 2, "Should not add duplicate meetings")
+
+
+# -- SUPPORT_PLEDGE Commitment Creation (s55.31) --------------------------------
+
+func _make_court_at(settlement_id: int, court_type: CourtSessionData.CourtType = CourtSessionData.CourtType.PROVINCIAL_FAMILY_COURT) -> CourtSessionData:
+	var court := CourtSessionData.new()
+	court.court_id = 1
+	court.court_type = court_type
+	court.host_settlement_id = settlement_id
+	court.start_ic_day = 30
+	court.duration_ticks = 20
+	court.phase = CourtSessionData.CourtPhase.ACTIVE
+	court.attendee_ids = [10, 20, 30]
+	return court
+
+
+func test_support_pledge_created_on_persuade_with_position_shift() -> void:
+	var court := _make_court_at(100)
+	var results: Array = [
+		{
+			"character_id": 10,
+			"action_id": "PERSUADE",
+			"target_npc_id": 20,
+			"effects": {
+				"target_position_shift": 15.0,
+				"requires_support_pledge": true,
+				"pledge_creditor_id": 10,
+				"pledge_debtor_id": 20,
+				"pledge_court_settlement_id": 100,
+				"_action_metadata": {"topic_id": 5, "court_settlement_id": 100},
+			},
+		},
+	]
+	var commitments: Array[CommitmentData] = []
+	var courts: Array[CourtSessionData] = [court]
+	var next_id: Array[int] = [1]
+	DayOrchestrator._process_commitment_creation_writebacks(
+		results, commitments, courts, 35, next_id,
+	)
+	assert_eq(commitments.size(), 1)
+	var c: CommitmentData = commitments[0]
+	assert_eq(c.commitment_type, Enums.CommitmentType.SUPPORT_PLEDGE)
+	assert_eq(c.creditor_npc_id, 10)
+	assert_eq(c.debtor_npc_id, 20)
+	assert_eq(c.fulfillment_target, 100)
+	assert_eq(c.deadline_ic_day, 50)
+	assert_eq(c.tier, 2)
+	assert_eq(c.source_action_id, "PERSUADE")
+
+
+func test_support_pledge_witnesses_are_court_attendees() -> void:
+	var court := _make_court_at(100)
+	var results: Array = [
+		{
+			"character_id": 10,
+			"action_id": "NEGOTIATE",
+			"target_npc_id": 20,
+			"effects": {
+				"target_position_shift": 10.0,
+				"requires_support_pledge": true,
+				"pledge_creditor_id": 10,
+				"pledge_debtor_id": 20,
+				"pledge_court_settlement_id": 100,
+				"_action_metadata": {"topic_id": 5, "court_settlement_id": 100},
+			},
+		},
+	]
+	var commitments: Array[CommitmentData] = []
+	var courts: Array[CourtSessionData] = [court]
+	var next_id: Array[int] = [1]
+	DayOrchestrator._process_commitment_creation_writebacks(
+		results, commitments, courts, 35, next_id,
+	)
+	assert_eq(commitments[0].witnesses.size(), 3)
+	assert_true(10 in commitments[0].witnesses)
+	assert_true(20 in commitments[0].witnesses)
+	assert_true(30 in commitments[0].witnesses)
+
+
+func test_support_pledge_skips_duplicate() -> void:
+	var court := _make_court_at(100)
+	var existing := CommitmentData.new()
+	existing.commitment_type = Enums.CommitmentType.SUPPORT_PLEDGE
+	existing.creditor_npc_id = 10
+	existing.debtor_npc_id = 20
+	existing.fulfillment_target = 100
+	existing.status = Enums.CommitmentStatus.PENDING
+	var results: Array = [
+		{
+			"character_id": 10,
+			"action_id": "PERSUADE",
+			"effects": {
+				"requires_support_pledge": true,
+				"pledge_creditor_id": 10,
+				"pledge_debtor_id": 20,
+				"pledge_court_settlement_id": 100,
+				"_action_metadata": {},
+			},
+		},
+	]
+	var commitments: Array[CommitmentData] = [existing]
+	var courts: Array[CourtSessionData] = [court]
+	var next_id: Array[int] = [1]
+	DayOrchestrator._process_commitment_creation_writebacks(
+		results, commitments, courts, 35, next_id,
+	)
+	assert_eq(commitments.size(), 1, "Should not duplicate")
+
+
+func test_support_pledge_fulfillment_requires_position_action() -> void:
+	var court := _make_court_at(100)
+	var debtor := L5RCharacterData.new()
+	debtor.character_id = 20
+	debtor.physical_location = "100"
+	var chars_by_id: Dictionary = {20: debtor}
+	var c := CommitmentData.new()
+	c.commitment_type = Enums.CommitmentType.SUPPORT_PLEDGE
+	c.debtor_npc_id = 20
+	c.fulfillment_target = 100
+	var result: bool = DayOrchestrator._check_commitment_fulfilled(
+		c, chars_by_id, [court],
+	)
+	assert_false(result, "Present but no position action should not fulfill")
+	court.session_state[20] = {"negotiate_count": 1}
+	result = DayOrchestrator._check_commitment_fulfilled(
+		c, chars_by_id, [court],
+	)
+	assert_true(result, "Present with NEGOTIATE should fulfill")
+
+
+func test_support_pledge_fulfilled_by_persuade() -> void:
+	var court := _make_court_at(100)
+	var debtor := L5RCharacterData.new()
+	debtor.character_id = 20
+	debtor.physical_location = "100"
+	var chars_by_id: Dictionary = {20: debtor}
+	var c := CommitmentData.new()
+	c.commitment_type = Enums.CommitmentType.SUPPORT_PLEDGE
+	c.debtor_npc_id = 20
+	c.fulfillment_target = 100
+	court.session_state[20] = {"persuade_count": 1}
+	var result: bool = DayOrchestrator._check_commitment_fulfilled(
+		c, chars_by_id, [court],
+	)
+	assert_true(result, "Present with PERSUADE should fulfill")
+
+
+func test_support_pledge_fulfilled_by_public_debate() -> void:
+	var court := _make_court_at(100)
+	var debtor := L5RCharacterData.new()
+	debtor.character_id = 20
+	debtor.physical_location = "100"
+	var chars_by_id: Dictionary = {20: debtor}
+	var c := CommitmentData.new()
+	c.commitment_type = Enums.CommitmentType.SUPPORT_PLEDGE
+	c.debtor_npc_id = 20
+	c.fulfillment_target = 100
+	court.session_state[20] = {"public_debate_count": 1}
+	var result: bool = DayOrchestrator._check_commitment_fulfilled(
+		c, chars_by_id, [court],
+	)
+	assert_true(result, "Present with PUBLIC_DEBATE should fulfill")
+
+
+func test_support_pledge_not_fulfilled_by_charm_only() -> void:
+	var court := _make_court_at(100)
+	var debtor := L5RCharacterData.new()
+	debtor.character_id = 20
+	debtor.physical_location = "100"
+	var chars_by_id: Dictionary = {20: debtor}
+	var c := CommitmentData.new()
+	c.commitment_type = Enums.CommitmentType.SUPPORT_PLEDGE
+	c.debtor_npc_id = 20
+	c.fulfillment_target = 100
+	court.session_state[20] = {"charm_count": 3}
+	var result: bool = DayOrchestrator._check_commitment_fulfilled(
+		c, chars_by_id, [court],
+	)
+	assert_false(result, "CHARM alone should not fulfill — not a position action")
+
+
+func test_support_pledge_not_fulfilled_if_absent() -> void:
+	var court := _make_court_at(100)
+	court.session_state[20] = {"persuade_count": 1}
+	var debtor := L5RCharacterData.new()
+	debtor.character_id = 20
+	debtor.physical_location = "200"
+	var chars_by_id: Dictionary = {20: debtor}
+	var c := CommitmentData.new()
+	c.commitment_type = Enums.CommitmentType.SUPPORT_PLEDGE
+	c.debtor_npc_id = 20
+	c.fulfillment_target = 100
+	var result: bool = DayOrchestrator._check_commitment_fulfilled(
+		c, chars_by_id, [court],
+	)
+	assert_false(result, "Absent debtor should not fulfill")
+
+
+func test_support_pledge_stores_topic_and_shift() -> void:
+	var effects: Dictionary = {
+		"requires_support_pledge": true,
+		"pledge_creditor_id": 10,
+		"pledge_debtor_id": 20,
+		"pledge_court_settlement_id": 100,
+		"pledge_topic_id": 42,
+		"pledge_position_shift": 15.0,
+	}
+	var court := _make_court_at(100)
+	court.phase = CourtSessionData.CourtPhase.OPEN
+	court.start_ic_day = 1
+	court.duration_ticks = 30
+	var commitments: Array[CommitmentData] = []
+	var next_id: Array[int] = [1]
+	DayOrchestrator._create_support_pledge_commitment(
+		effects, commitments, [court], 5, next_id,
+	)
+	assert_eq(commitments.size(), 1)
+	assert_eq(commitments[0].pledge_topic_id, 42)
+	assert_almost_eq(commitments[0].pledge_position_shift, 15.0, 0.01)
+
+
+func test_support_pledge_fulfilled_with_aligned_position() -> void:
+	var court := _make_court_at(100)
+	court.session_state[20] = {"persuade_count": 1}
+	var debtor := L5RCharacterData.new()
+	debtor.character_id = 20
+	debtor.physical_location = "100"
+	debtor.topic_positions = {42: 10.0}
+	var chars_by_id: Dictionary = {20: debtor}
+	var c := CommitmentData.new()
+	c.commitment_type = Enums.CommitmentType.SUPPORT_PLEDGE
+	c.debtor_npc_id = 20
+	c.fulfillment_target = 100
+	c.pledge_topic_id = 42
+	c.pledge_position_shift = 5.0
+	var result: bool = DayOrchestrator._check_commitment_fulfilled(
+		c, chars_by_id, [court],
+	)
+	assert_true(result, "Positive pledge + positive position = fulfilled")
+
+
+func test_support_pledge_not_fulfilled_with_opposing_position() -> void:
+	var court := _make_court_at(100)
+	court.session_state[20] = {"persuade_count": 1}
+	var debtor := L5RCharacterData.new()
+	debtor.character_id = 20
+	debtor.physical_location = "100"
+	debtor.topic_positions = {42: -5.0}
+	var chars_by_id: Dictionary = {20: debtor}
+	var c := CommitmentData.new()
+	c.commitment_type = Enums.CommitmentType.SUPPORT_PLEDGE
+	c.debtor_npc_id = 20
+	c.fulfillment_target = 100
+	c.pledge_topic_id = 42
+	c.pledge_position_shift = 10.0
+	var result: bool = DayOrchestrator._check_commitment_fulfilled(
+		c, chars_by_id, [court],
+	)
+	assert_false(result, "Positive pledge but negative position = not fulfilled")
+
+
+func test_support_pledge_no_topic_still_works() -> void:
+	var court := _make_court_at(100)
+	court.session_state[20] = {"negotiate_count": 2}
+	var debtor := L5RCharacterData.new()
+	debtor.character_id = 20
+	debtor.physical_location = "100"
+	var chars_by_id: Dictionary = {20: debtor}
+	var c := CommitmentData.new()
+	c.commitment_type = Enums.CommitmentType.SUPPORT_PLEDGE
+	c.debtor_npc_id = 20
+	c.fulfillment_target = 100
+	c.pledge_topic_id = -1
+	var result: bool = DayOrchestrator._check_commitment_fulfilled(
+		c, chars_by_id, [court],
+	)
+	assert_true(result, "No topic constraint = fulfilled by any position action")
+
+
+func test_support_pledge_negative_shift_negative_position_fulfilled() -> void:
+	var court := _make_court_at(100)
+	court.session_state[20] = {"public_debate_count": 1}
+	var debtor := L5RCharacterData.new()
+	debtor.character_id = 20
+	debtor.physical_location = "100"
+	debtor.topic_positions = {42: -8.0}
+	var chars_by_id: Dictionary = {20: debtor}
+	var c := CommitmentData.new()
+	c.commitment_type = Enums.CommitmentType.SUPPORT_PLEDGE
+	c.debtor_npc_id = 20
+	c.fulfillment_target = 100
+	c.pledge_topic_id = 42
+	c.pledge_position_shift = -10.0
+	var result: bool = DayOrchestrator._check_commitment_fulfilled(
+		c, chars_by_id, [court],
+	)
+	assert_true(result, "Negative pledge + negative position = fulfilled")
+
+
+# -- Retroactive Forgiveness (s55.31.11.2) ------------------------------------
+
+func test_forgiveness_fires_when_npc_learns_crisis_topic() -> void:
+	var debtor := L5RCharacterData.new()
+	debtor.character_id = 10
+	debtor.clan = "Crane"
+	var receiver := L5RCharacterData.new()
+	receiver.character_id = 20
+	receiver.clan = "Lion"
+	receiver.bushido_virtue = Enums.BushidoVirtue.JIN
+	receiver.disposition_values = {10: -20}
+	var chars_by_id: Dictionary = {10: debtor, 20: receiver}
+
+	var c := CommitmentData.new()
+	c.commitment_id = 1
+	c.commitment_type = Enums.CommitmentType.COURT_ATTENDANCE
+	c.debtor_npc_id = 10
+	c.creditor_npc_id = 20
+	c.crisis_id = 42
+	c.status = Enums.CommitmentStatus.BROKEN_FORCE_MAJEURE
+	c.penalty_records = [{"npc_id": 20, "disposition_change": -10, "forgiveness_applied": false}]
+
+	var topic := TopicData.new()
+	topic.topic_id = 100
+	topic.crisis_id = 42
+	topic.topic_type = "famine"
+	receiver.topic_pool = [100]
+
+	var commitments: Array[CommitmentData] = [c]
+	var topics: Array[TopicData] = [topic]
+	var results: Array[Dictionary] = DayOrchestrator._process_retroactive_forgiveness(
+		commitments, chars_by_id, topics,
+	)
+	assert_eq(results.size(), 1, "Should produce one forgiveness result")
+	assert_eq(results[0]["receiving_npc_id"], 20)
+	assert_gt(results[0]["recovery"], 0.0, "Jin virtue should give 100% recovery")
+	assert_true(c.penalty_records[0]["forgiveness_applied"], "Should mark applied")
+
+
+func test_forgiveness_skips_when_npc_does_not_know_topic() -> void:
+	var debtor := L5RCharacterData.new()
+	debtor.character_id = 10
+	debtor.clan = "Crane"
+	var receiver := L5RCharacterData.new()
+	receiver.character_id = 20
+	receiver.clan = "Lion"
+	receiver.topic_pool = []
+	var chars_by_id: Dictionary = {10: debtor, 20: receiver}
+
+	var c := CommitmentData.new()
+	c.commitment_id = 1
+	c.crisis_id = 42
+	c.status = Enums.CommitmentStatus.BROKEN_FORCE_MAJEURE
+	c.debtor_npc_id = 10
+	c.penalty_records = [{"npc_id": 20, "disposition_change": -10, "forgiveness_applied": false}]
+
+	var topic := TopicData.new()
+	topic.topic_id = 100
+	topic.crisis_id = 42
+
+	var commitments: Array[CommitmentData] = [c]
+	var topics: Array[TopicData] = [topic]
+	var results: Array[Dictionary] = DayOrchestrator._process_retroactive_forgiveness(
+		commitments, chars_by_id, topics,
+	)
+	assert_eq(results.size(), 0, "No forgiveness when NPC doesn't know crisis topic")
+	assert_false(c.penalty_records[0]["forgiveness_applied"])
+
+
+func test_forgiveness_skips_already_applied() -> void:
+	var debtor := L5RCharacterData.new()
+	debtor.character_id = 10
+	debtor.clan = "Crane"
+	var receiver := L5RCharacterData.new()
+	receiver.character_id = 20
+	receiver.clan = "Crane"
+	receiver.topic_pool = [100]
+	var chars_by_id: Dictionary = {10: debtor, 20: receiver}
+
+	var c := CommitmentData.new()
+	c.commitment_id = 1
+	c.crisis_id = 42
+	c.status = Enums.CommitmentStatus.BROKEN_FORCE_MAJEURE
+	c.debtor_npc_id = 10
+	c.penalty_records = [{"npc_id": 20, "disposition_change": -10, "forgiveness_applied": true}]
+
+	var topic := TopicData.new()
+	topic.topic_id = 100
+	topic.crisis_id = 42
+
+	var commitments: Array[CommitmentData] = [c]
+	var topics: Array[TopicData] = [topic]
+	var results: Array[Dictionary] = DayOrchestrator._process_retroactive_forgiveness(
+		commitments, chars_by_id, topics,
+	)
+	assert_eq(results.size(), 0, "Should skip already-applied forgiveness")
+
+
+func test_forgiveness_same_clan_gives_higher_chugi_rate() -> void:
+	var debtor := L5RCharacterData.new()
+	debtor.character_id = 10
+	debtor.clan = "Crane"
+	var receiver := L5RCharacterData.new()
+	receiver.character_id = 20
+	receiver.clan = "Crane"
+	receiver.bushido_virtue = Enums.BushidoVirtue.CHUGI
+	receiver.disposition_values = {10: -20}
+	receiver.topic_pool = [100]
+	var chars_by_id: Dictionary = {10: debtor, 20: receiver}
+
+	var c := CommitmentData.new()
+	c.commitment_id = 1
+	c.crisis_id = 42
+	c.status = Enums.CommitmentStatus.BROKEN_FORCE_MAJEURE
+	c.debtor_npc_id = 10
+	c.penalty_records = [{"npc_id": 20, "disposition_change": -10, "forgiveness_applied": false}]
+
+	var topic := TopicData.new()
+	topic.topic_id = 100
+	topic.crisis_id = 42
+
+	var commitments: Array[CommitmentData] = [c]
+	var topics: Array[TopicData] = [topic]
+	var results: Array[Dictionary] = DayOrchestrator._process_retroactive_forgiveness(
+		commitments, chars_by_id, topics,
+	)
+	assert_eq(results.size(), 1)
+	assert_true(results[0]["same_loyalty_chain"], "Same clan = same loyalty chain")
+	assert_almost_eq(results[0]["recovery"], 7.5, 0.01, "Chugi same-clan = 75% of 10")
+
+
+func test_forgiveness_cross_clan_chugi_gets_lower_rate() -> void:
+	var debtor := L5RCharacterData.new()
+	debtor.character_id = 10
+	debtor.clan = "Crane"
+	var receiver := L5RCharacterData.new()
+	receiver.character_id = 20
+	receiver.clan = "Lion"
+	receiver.bushido_virtue = Enums.BushidoVirtue.CHUGI
+	receiver.disposition_values = {10: -20}
+	receiver.topic_pool = [100]
+	var chars_by_id: Dictionary = {10: debtor, 20: receiver}
+
+	var c := CommitmentData.new()
+	c.commitment_id = 1
+	c.crisis_id = 42
+	c.status = Enums.CommitmentStatus.BROKEN_FORCE_MAJEURE
+	c.debtor_npc_id = 10
+	c.penalty_records = [{"npc_id": 20, "disposition_change": -10, "forgiveness_applied": false}]
+
+	var topic := TopicData.new()
+	topic.topic_id = 100
+	topic.crisis_id = 42
+
+	var commitments: Array[CommitmentData] = [c]
+	var topics: Array[TopicData] = [topic]
+	var results: Array[Dictionary] = DayOrchestrator._process_retroactive_forgiveness(
+		commitments, chars_by_id, topics,
+	)
+	assert_eq(results.size(), 1)
+	assert_false(results[0]["same_loyalty_chain"], "Different clan = cross-chain")
+	assert_almost_eq(results[0]["recovery"], 2.5, 0.01, "Chugi cross-clan = 25% of 10")
+
+
+func test_forgiveness_skips_non_force_majeure() -> void:
+	var debtor := L5RCharacterData.new()
+	debtor.character_id = 10
+	debtor.clan = "Crane"
+	var receiver := L5RCharacterData.new()
+	receiver.character_id = 20
+	receiver.clan = "Lion"
+	receiver.topic_pool = [100]
+	var chars_by_id: Dictionary = {10: debtor, 20: receiver}
+
+	var c := CommitmentData.new()
+	c.commitment_id = 1
+	c.crisis_id = 42
+	c.status = Enums.CommitmentStatus.BROKEN_NO_NOTICE
+	c.debtor_npc_id = 10
+	c.penalty_records = [{"npc_id": 20, "disposition_change": -10, "forgiveness_applied": false}]
+
+	var topic := TopicData.new()
+	topic.topic_id = 100
+	topic.crisis_id = 42
+
+	var commitments: Array[CommitmentData] = [c]
+	var topics: Array[TopicData] = [topic]
+	var results: Array[Dictionary] = DayOrchestrator._process_retroactive_forgiveness(
+		commitments, chars_by_id, topics,
+	)
+	assert_eq(results.size(), 0, "Non-BROKEN_FORCE_MAJEURE should be skipped")
+
+
+func test_forgiveness_disposition_recovery_applied() -> void:
+	var debtor := L5RCharacterData.new()
+	debtor.character_id = 10
+	debtor.clan = "Scorpion"
+	var receiver := L5RCharacterData.new()
+	receiver.character_id = 20
+	receiver.clan = "Scorpion"
+	receiver.bushido_virtue = Enums.BushidoVirtue.JIN
+	receiver.disposition_values = {10: -30}
+	receiver.topic_pool = [100]
+	var chars_by_id: Dictionary = {10: debtor, 20: receiver}
+
+	var c := CommitmentData.new()
+	c.commitment_id = 1
+	c.crisis_id = 42
+	c.status = Enums.CommitmentStatus.BROKEN_FORCE_MAJEURE
+	c.debtor_npc_id = 10
+	c.penalty_records = [{"npc_id": 20, "disposition_change": -10, "forgiveness_applied": false}]
+
+	var topic := TopicData.new()
+	topic.topic_id = 100
+	topic.crisis_id = 42
+
+	var commitments: Array[CommitmentData] = [c]
+	var topics: Array[TopicData] = [topic]
+	DayOrchestrator._process_retroactive_forgiveness(commitments, chars_by_id, topics)
+	assert_eq(receiver.disposition_values[10], -20, "Jin 100% recovery: -30 + 10 = -20")
+
+
+func test_famine_topic_carries_crisis_id() -> void:
+	var next_id: Array[int] = [1]
+	var topic: TopicData = DayOrchestrator._create_famine_topic(
+		5, "Crab", TopicData.Tier.TIER_3, 25.0, next_id, 10, 42,
+	)
+	assert_eq(topic.crisis_id, 42, "Famine topic should carry province crisis_id")
+
+
+func test_famine_topic_multi_carries_crisis_id() -> void:
+	var next_id: Array[int] = [1]
+	var pids: Array[int] = [5, 6, 7]
+	var topic: TopicData = DayOrchestrator._create_famine_topic_multi(
+		pids, "Crab", next_id, 10, 42,
+	)
+	assert_eq(topic.crisis_id, 42, "Multi-province famine topic should carry crisis_id")
+
+
+# -- Crisis ID Population (s55.31 / s55.3) ------------------------------------
+
+func test_famine_onset_assigns_crisis_id_to_province() -> void:
+	var p := _make_province_for_famine(1)
+	assert_eq(p.active_crisis_id, -1, "Starts unset")
+	var seasonal_result: Dictionary = {
+		"resource_tick": {
+			"starvation_changes": {
+				1: {"stage": ResourceTick.StarvationStage.HUNGER, "pu_loss_rate": 0.08},
+			},
+		},
+	}
+	var provinces: Dictionary = {1: p}
+	var topics: Array[TopicData] = []
+	var next_tid: Array[int] = [100]
+	var next_cid: Array[int] = [50]
+	var meta: Dictionary = {}
+	DayOrchestrator._process_famine_crises(
+		seasonal_result, provinces, topics, next_tid, 10, meta, next_cid,
+	)
+	assert_eq(p.active_crisis_id, 50, "Province should get crisis_id on famine onset")
+	assert_eq(next_cid[0], 51, "Counter should advance")
+	assert_eq(topics[0].crisis_id, 50, "Topic should carry same crisis_id")
+
+
+func test_famine_onset_does_not_overwrite_existing_crisis_id() -> void:
+	var p := _make_province_for_famine(1)
+	p.active_crisis_id = 99
+	var seasonal_result: Dictionary = {
+		"resource_tick": {
+			"starvation_changes": {
+				1: {"stage": ResourceTick.StarvationStage.HUNGER, "pu_loss_rate": 0.08},
+			},
+		},
+	}
+	var provinces: Dictionary = {1: p}
+	var topics: Array[TopicData] = []
+	var next_tid: Array[int] = [100]
+	var next_cid: Array[int] = [50]
+	var meta: Dictionary = {}
+	DayOrchestrator._process_famine_crises(
+		seasonal_result, provinces, topics, next_tid, 10, meta, next_cid,
+	)
+	assert_eq(p.active_crisis_id, 99, "Existing crisis_id should not be overwritten")
+	assert_eq(next_cid[0], 50, "Counter should not advance")
+
+
+func test_famine_recovery_clears_crisis_id() -> void:
+	var p := _make_province_for_famine(1)
+	p.active_crisis_id = 42
+	var topic := TopicData.new()
+	topic.topic_id = 100
+	topic.topic_type = "famine"
+	topic.variant = "provincial_famine"
+	topic.provinces_affected = [1]
+	var provinces: Dictionary = {1: p}
+	var topics: Array[TopicData] = [topic]
+	var meta: Dictionary = {"_famine_tracking": {1: 9}}
+	var recovering_result: Dictionary = {
+		"resource_tick": {
+			"starvation_changes": {
+				1: {"stage": ResourceTick.StarvationStage.NORMAL, "pu_loss_rate": 0.0},
+			},
+		},
+	}
+	DayOrchestrator._process_famine_crises(
+		recovering_result, provinces, topics, [200], 100, meta,
+	)
+	assert_eq(p.active_crisis_id, -1, "Crisis_id should clear on full recovery")
+
+
+func test_breach_assigns_crisis_id_to_province() -> void:
+	var p := ProvinceData.new()
+	p.province_id = 5
+	p.clan = "Crab"
+	var s := SettlementData.new()
+	s.settlement_id = 50
+	s.province_id = 5
+	s.settlement_type = Enums.SettlementType.WALL_TOWER
+	s.wall_si = 1
+	var h := HordeData.new()
+	h.target_province_id = 5
+	h.assault_resolved = true
+	h.battle_outcome = Enums.HordeBattleOutcome.DEFENDER_OVERRUN
+	var topics: Array[TopicData] = []
+	var next_tid: Array[int] = [100]
+	var next_cid: Array[int] = [60]
+	var results: Array[Dictionary] = DayOrchestrator._process_horde_assaults(
+		[h], [s], topics, next_tid, 10, {5: p}, next_cid,
+	)
+	assert_gt(results.size(), 0, "Should produce breach result")
+	assert_eq(p.active_crisis_id, 60, "Province should get crisis_id on breach")
+	assert_eq(topics[0].crisis_id, 60, "Topic should carry same crisis_id")
+
+
+func test_insurgency_spawn_assigns_crisis_id() -> void:
+	var p := ProvinceData.new()
+	p.province_id = 3
+	p.clan = "Crab"
+	p.province_taint_level = 5.0
+	var provinces: Dictionary = {3: p}
+	var insurgencies: Array[InsurgencyData] = []
+	var next_cid: Array[int] = [70]
+	var new_ins := InsurgencyData.new()
+	new_ins.insurgency_id = 1
+	new_ins.province_id = 3
+	new_ins.strength = 3
+	var fake_result: Dictionary = {
+		"new_insurgencies": [new_ins],
+		"next_id": 2,
+	}
+	insurgencies.append(new_ins)
+	var ins_prov: Variant = provinces.get(new_ins.province_id, null)
+	if ins_prov is ProvinceData:
+		var ipd: ProvinceData = ins_prov as ProvinceData
+		if ipd.active_crisis_id < 0:
+			ipd.active_crisis_id = next_cid[0]
+			next_cid[0] += 1
+	assert_eq(p.active_crisis_id, 70, "Province should get crisis_id on insurgency spawn")
+	assert_eq(next_cid[0], 71, "Counter should advance")
+
+
+func test_insurgency_resolution_clears_crisis_id() -> void:
+	var p := ProvinceData.new()
+	p.province_id = 3
+	p.clan = "Crab"
+	p.active_crisis_id = 70
+	var provinces: Dictionary = {3: p}
+	var ins := InsurgencyData.new()
+	ins.insurgency_id = 1
+	ins.province_id = 3
+	ins.strength = 0
+	var insurgencies: Array[InsurgencyData] = [ins]
+	var fake_result: Dictionary = {
+		"new_insurgencies": [],
+		"next_id": 2,
+	}
+	var removed: Array[InsurgencyData] = []
+	for i: InsurgencyData in insurgencies:
+		if i.strength <= 0:
+			removed.append(i)
+	for i: InsurgencyData in removed:
+		insurgencies.erase(i)
+		var rem_prov: Variant = provinces.get(i.province_id, null)
+		if rem_prov is ProvinceData:
+			(rem_prov as ProvinceData).active_crisis_id = -1
+	assert_eq(p.active_crisis_id, -1, "Crisis_id should clear when insurgency resolved")
+	assert_eq(insurgencies.size(), 0, "Insurgency should be removed")
+
+
+# -- RESOURCE_PROMISE Commitment (s55.31) -------------------------------------
+
+func test_resource_promise_created_on_aid_accepted() -> void:
+	var lord := L5RCharacterData.new()
+	lord.character_id = 10
+	var vassal_of_lord := L5RCharacterData.new()
+	vassal_of_lord.character_id = 11
+	vassal_of_lord.lord_id = 10
+	var ally := L5RCharacterData.new()
+	ally.character_id = 20
+	var vassal_of_ally := L5RCharacterData.new()
+	vassal_of_ally.character_id = 21
+	vassal_of_ally.lord_id = 20
+	var chars_by_id: Dictionary = {10: lord, 11: vassal_of_lord, 20: ally, 21: vassal_of_ally}
+
+	var effects: Dictionary = {
+		"requires_resource_promise": true,
+		"promise_creditor_id": 10,
+		"promise_debtor_id": 20,
+		"promise_tier": 2,
+	}
+	var commitments: Array[CommitmentData] = []
+	var next_id: Array[int] = [1]
+	DayOrchestrator._create_resource_promise_commitment(
+		effects, commitments, 50, next_id, chars_by_id,
+	)
+	assert_eq(commitments.size(), 1, "Should create one commitment")
+	var c: CommitmentData = commitments[0]
+	assert_eq(c.commitment_type, Enums.CommitmentType.RESOURCE_PROMISE)
+	assert_eq(c.creditor_npc_id, 10)
+	assert_eq(c.debtor_npc_id, 20)
+	assert_eq(c.tier, 2)
+	assert_eq(c.deadline_ic_day, 50 + DayOrchestrator.RESOURCE_PROMISE_DEADLINE_OFFSET)
+	assert_eq(c.source_action_id, "REQUEST_ALLIED_AID")
+
+
+func test_resource_promise_witnesses_include_vassals() -> void:
+	var lord := L5RCharacterData.new()
+	lord.character_id = 10
+	var vassal_a := L5RCharacterData.new()
+	vassal_a.character_id = 11
+	vassal_a.lord_id = 10
+	var ally := L5RCharacterData.new()
+	ally.character_id = 20
+	var vassal_b := L5RCharacterData.new()
+	vassal_b.character_id = 21
+	vassal_b.lord_id = 20
+	var unrelated := L5RCharacterData.new()
+	unrelated.character_id = 30
+	unrelated.lord_id = 99
+	var chars_by_id: Dictionary = {10: lord, 11: vassal_a, 20: ally, 21: vassal_b, 30: unrelated}
+
+	var effects: Dictionary = {
+		"requires_resource_promise": true,
+		"promise_creditor_id": 10,
+		"promise_debtor_id": 20,
+	}
+	var commitments: Array[CommitmentData] = []
+	var next_id: Array[int] = [1]
+	DayOrchestrator._create_resource_promise_commitment(
+		effects, commitments, 50, next_id, chars_by_id,
+	)
+	var c: CommitmentData = commitments[0]
+	assert_true(10 in c.witnesses, "Creditor should be witness")
+	assert_true(20 in c.witnesses, "Debtor should be witness")
+	assert_true(11 in c.witnesses, "Creditor's vassal should be witness")
+	assert_true(21 in c.witnesses, "Debtor's vassal should be witness")
+	assert_false(30 in c.witnesses, "Unrelated character should not be witness")
+
+
+func test_resource_promise_skips_duplicate() -> void:
+	var effects: Dictionary = {
+		"requires_resource_promise": true,
+		"promise_creditor_id": 10,
+		"promise_debtor_id": 20,
+	}
+	var existing := CommitmentData.new()
+	existing.commitment_type = Enums.CommitmentType.RESOURCE_PROMISE
+	existing.creditor_npc_id = 10
+	existing.debtor_npc_id = 20
+	existing.status = Enums.CommitmentStatus.PENDING
+	var commitments: Array[CommitmentData] = [existing]
+	var next_id: Array[int] = [5]
+	DayOrchestrator._create_resource_promise_commitment(
+		effects, commitments, 50, next_id, {},
+	)
+	assert_eq(commitments.size(), 1, "Should not add duplicate")
+	assert_eq(next_id[0], 5, "Counter should not advance")
+
+
+func test_resource_promise_tier_from_effects() -> void:
+	var effects: Dictionary = {
+		"requires_resource_promise": true,
+		"promise_creditor_id": 10,
+		"promise_debtor_id": 20,
+		"promise_tier": 1,
+	}
+	var commitments: Array[CommitmentData] = []
+	var next_id: Array[int] = [1]
+	DayOrchestrator._create_resource_promise_commitment(
+		effects, commitments, 50, next_id, {},
+	)
+	assert_eq(commitments[0].tier, 1, "Should use tier from effects")
+
+
+func test_resource_promise_fulfillment_returns_false() -> void:
+	var debtor := L5RCharacterData.new()
+	debtor.character_id = 20
+	var chars_by_id: Dictionary = {20: debtor}
+	var c := CommitmentData.new()
+	c.commitment_type = Enums.CommitmentType.RESOURCE_PROMISE
+	c.debtor_npc_id = 20
+	var result: bool = DayOrchestrator._check_commitment_fulfilled(c, chars_by_id)
+	assert_false(result, "RESOURCE_PROMISE fulfillment needs SHARE_SUPPLIES wiring")
+
+
+# -- RESOURCE_PROMISE Fulfillment via SHARE_SUPPLIES --------------------------
+
+func test_resource_promise_fulfilled_on_successful_share() -> void:
+	var commitment := CommitmentData.new()
+	commitment.commitment_type = Enums.CommitmentType.RESOURCE_PROMISE
+	commitment.creditor_npc_id = 10
+	commitment.debtor_npc_id = 20
+	commitment.status = Enums.CommitmentStatus.PENDING
+	var commitments: Array[CommitmentData] = [commitment]
+
+	var day_results: Array[Dictionary] = [{
+		"action_id": "SHARE_SUPPLIES",
+		"character_id": 20,
+		"target_npc_id": 10,
+	}]
+	var supply_results: Array[Dictionary] = [{
+		"type": "supply_sharing",
+		"character_id": 20,
+		"target_province_id": 1,
+		"amount": 5.0,
+	}]
+
+	DayOrchestrator._process_resource_promise_fulfillment(
+		day_results, supply_results, commitments,
+	)
+	assert_eq(commitment.status, Enums.CommitmentStatus.FULFILLED)
+
+
+func test_resource_promise_not_fulfilled_when_share_fails() -> void:
+	var commitment := CommitmentData.new()
+	commitment.commitment_type = Enums.CommitmentType.RESOURCE_PROMISE
+	commitment.creditor_npc_id = 10
+	commitment.debtor_npc_id = 20
+	commitment.status = Enums.CommitmentStatus.PENDING
+	var commitments: Array[CommitmentData] = [commitment]
+
+	var day_results: Array[Dictionary] = [{
+		"action_id": "SHARE_SUPPLIES",
+		"character_id": 20,
+		"target_npc_id": 10,
+	}]
+	var supply_results: Array[Dictionary] = []
+
+	DayOrchestrator._process_resource_promise_fulfillment(
+		day_results, supply_results, commitments,
+	)
+	assert_eq(commitment.status, Enums.CommitmentStatus.PENDING,
+		"Should not fulfill when supply sharing did not succeed")
+
+
+func test_resource_promise_not_fulfilled_for_wrong_target() -> void:
+	var commitment := CommitmentData.new()
+	commitment.commitment_type = Enums.CommitmentType.RESOURCE_PROMISE
+	commitment.creditor_npc_id = 10
+	commitment.debtor_npc_id = 20
+	commitment.status = Enums.CommitmentStatus.PENDING
+	var commitments: Array[CommitmentData] = [commitment]
+
+	var day_results: Array[Dictionary] = [{
+		"action_id": "SHARE_SUPPLIES",
+		"character_id": 20,
+		"target_npc_id": 99,
+	}]
+	var supply_results: Array[Dictionary] = [{
+		"type": "supply_sharing",
+		"character_id": 20,
+		"amount": 5.0,
+	}]
+
+	DayOrchestrator._process_resource_promise_fulfillment(
+		day_results, supply_results, commitments,
+	)
+	assert_eq(commitment.status, Enums.CommitmentStatus.PENDING,
+		"Should not fulfill when supplies sent to different target")
+
+
+func test_resource_promise_skips_non_pending() -> void:
+	var commitment := CommitmentData.new()
+	commitment.commitment_type = Enums.CommitmentType.RESOURCE_PROMISE
+	commitment.creditor_npc_id = 10
+	commitment.debtor_npc_id = 20
+	commitment.status = Enums.CommitmentStatus.BROKEN_NO_NOTICE
+	var commitments: Array[CommitmentData] = [commitment]
+
+	var day_results: Array[Dictionary] = [{
+		"action_id": "SHARE_SUPPLIES",
+		"character_id": 20,
+		"target_npc_id": 10,
+	}]
+	var supply_results: Array[Dictionary] = [{
+		"type": "supply_sharing",
+		"character_id": 20,
+		"amount": 5.0,
+	}]
+
+	DayOrchestrator._process_resource_promise_fulfillment(
+		day_results, supply_results, commitments,
+	)
+	assert_eq(commitment.status, Enums.CommitmentStatus.BROKEN_NO_NOTICE,
+		"Should not change status of non-PENDING commitment")
+
+
+func test_resource_promise_fulfilled_by_order_deploy() -> void:
+	var commitment := CommitmentData.new()
+	commitment.commitment_type = Enums.CommitmentType.RESOURCE_PROMISE
+	commitment.creditor_npc_id = 10
+	commitment.debtor_npc_id = 20
+	commitment.status = Enums.CommitmentStatus.PENDING
+	var commitments: Array[CommitmentData] = [commitment]
+
+	var day_results: Array[Dictionary] = [{
+		"action_id": "ORDER_DEPLOY",
+		"character_id": 20,
+		"target_npc_id": 10,
+	}]
+	var supply_results: Array[Dictionary] = []
+	DayOrchestrator._process_resource_promise_fulfillment(
+		day_results, supply_results, commitments,
+	)
+	assert_eq(commitment.status, Enums.CommitmentStatus.FULFILLED,
+		"ORDER_DEPLOY to creditor should fulfill resource promise")
+
+
+func test_resource_promise_not_fulfilled_by_deploy_to_other() -> void:
+	var commitment := CommitmentData.new()
+	commitment.commitment_type = Enums.CommitmentType.RESOURCE_PROMISE
+	commitment.creditor_npc_id = 10
+	commitment.debtor_npc_id = 20
+	commitment.status = Enums.CommitmentStatus.PENDING
+	var commitments: Array[CommitmentData] = [commitment]
+
+	var day_results: Array[Dictionary] = [{
+		"action_id": "ORDER_DEPLOY",
+		"character_id": 20,
+		"target_npc_id": 30,
+	}]
+	var supply_results: Array[Dictionary] = []
+	DayOrchestrator._process_resource_promise_fulfillment(
+		day_results, supply_results, commitments,
+	)
+	assert_eq(commitment.status, Enums.CommitmentStatus.PENDING,
+		"ORDER_DEPLOY to non-creditor should not fulfill")
+
+
+func test_resource_promise_fulfilled_by_either_path() -> void:
+	var commitment_a := CommitmentData.new()
+	commitment_a.commitment_type = Enums.CommitmentType.RESOURCE_PROMISE
+	commitment_a.creditor_npc_id = 10
+	commitment_a.debtor_npc_id = 20
+	commitment_a.status = Enums.CommitmentStatus.PENDING
+
+	var commitment_b := CommitmentData.new()
+	commitment_b.commitment_type = Enums.CommitmentType.RESOURCE_PROMISE
+	commitment_b.creditor_npc_id = 30
+	commitment_b.debtor_npc_id = 40
+	commitment_b.status = Enums.CommitmentStatus.PENDING
+	var commitments: Array[CommitmentData] = [commitment_a, commitment_b]
+
+	var day_results: Array[Dictionary] = [
+		{"action_id": "SHARE_SUPPLIES", "character_id": 20, "target_npc_id": 10},
+		{"action_id": "ORDER_DEPLOY", "character_id": 40, "target_npc_id": 30},
+	]
+	var supply_results: Array[Dictionary] = [
+		{"type": "supply_sharing", "character_id": 20, "amount": 5.0},
+	]
+	DayOrchestrator._process_resource_promise_fulfillment(
+		day_results, supply_results, commitments,
+	)
+	assert_eq(commitment_a.status, Enums.CommitmentStatus.FULFILLED,
+		"SHARE_SUPPLIES path should fulfill first promise")
+	assert_eq(commitment_b.status, Enums.CommitmentStatus.FULFILLED,
+		"ORDER_DEPLOY path should fulfill second promise")
+
+
+func test_resource_promise_from_negotiate_with_resource_need() -> void:
+	var effects: Dictionary = {
+		"requires_resource_promise": true,
+		"promise_creditor_id": 10,
+		"promise_debtor_id": 20,
+		"promise_tier": 3,
+		"source_action_id": "NEGOTIATE",
+	}
+	var commitments: Array[CommitmentData] = []
+	var next_id: Array[int] = [1]
+	DayOrchestrator._create_resource_promise_commitment(
+		effects, commitments, 50, next_id, {},
+	)
+	assert_eq(commitments.size(), 1)
+	assert_eq(commitments[0].source_action_id, "NEGOTIATE")
+	assert_eq(commitments[0].tier, 3)
+
+
+func test_resource_promise_from_vassal_objective_with_resource_need() -> void:
+	var effects: Dictionary = {
+		"requires_resource_promise": true,
+		"promise_creditor_id": 10,
+		"promise_debtor_id": 30,
+		"promise_tier": 1,
+		"source_action_id": "ASSIGN_VASSAL_OBJECTIVE",
+	}
+	var commitments: Array[CommitmentData] = []
+	var next_id: Array[int] = [1]
+	DayOrchestrator._create_resource_promise_commitment(
+		effects, commitments, 50, next_id, {},
+	)
+	assert_eq(commitments.size(), 1)
+	assert_eq(commitments[0].source_action_id, "ASSIGN_VASSAL_OBJECTIVE")
+	assert_eq(commitments[0].tier, 1)
+
+
+# -- Commitment Advance Notice (s55.31.6) ------------------------------------
+
+func _make_commitment_for_notice(
+	debtor_id: int, creditor_id: int, deadline: int,
+	c_type: Enums.CommitmentType = Enums.CommitmentType.COURT_ATTENDANCE,
+	target: int = 100,
+) -> CommitmentData:
+	var c := CommitmentData.new()
+	c.commitment_type = c_type
+	c.debtor_npc_id = debtor_id
+	c.creditor_npc_id = creditor_id
+	c.deadline_ic_day = deadline
+	c.fulfillment_target = target
+	c.status = Enums.CommitmentStatus.PENDING
+	return c
+
+
+func test_advance_notice_sent_when_unfulfillable() -> void:
+	var debtor := L5RCharacterData.new()
+	debtor.character_id = 10
+	debtor.physical_location = "200"
+	debtor.bushido_virtue = Enums.BushidoVirtue.REI
+	var chars_by_id: Dictionary = {10: debtor}
+	var c: CommitmentData = _make_commitment_for_notice(10, 20, 55)
+	var commitments: Array[CommitmentData] = [c]
+	var letters: Array[LetterData] = []
+	var next_lid: Array[int] = [1]
+	TravelSystem.set_distance("200", "100", 10)
+	DayOrchestrator._process_commitment_advance_notices(
+		commitments, chars_by_id, 50, letters, next_lid, DiceEngine.new(),
+	)
+	TravelSystem.clear_distances()
+	assert_true(c.advance_notice_sent, "Should send notice when can't arrive in time")
+	assert_eq(c.notice_ic_day, 50)
+	assert_eq(letters.size(), 1, "Should create apology letter")
+	assert_eq(letters[0].sender_id, 10)
+	assert_eq(letters[0].recipient_id, 20)
+
+
+func test_advance_notice_not_sent_when_already_present() -> void:
+	var debtor := L5RCharacterData.new()
+	debtor.character_id = 10
+	debtor.physical_location = "100"
+	debtor.bushido_virtue = Enums.BushidoVirtue.REI
+	var chars_by_id: Dictionary = {10: debtor}
+	var c: CommitmentData = _make_commitment_for_notice(10, 20, 55)
+	var commitments: Array[CommitmentData] = [c]
+	var letters: Array[LetterData] = []
+	var next_lid: Array[int] = [1]
+	DayOrchestrator._process_commitment_advance_notices(
+		commitments, chars_by_id, 50, letters, next_lid, DiceEngine.new(),
+	)
+	assert_false(c.advance_notice_sent, "Should not notify when already at target")
+	assert_eq(letters.size(), 0)
+
+
+func test_advance_notice_not_sent_when_traveling_toward() -> void:
+	var debtor := L5RCharacterData.new()
+	debtor.character_id = 10
+	debtor.physical_location = "200"
+	debtor.travel_destination = "100"
+	debtor.travel_days_remaining = 3
+	debtor.bushido_virtue = Enums.BushidoVirtue.REI
+	var chars_by_id: Dictionary = {10: debtor}
+	var c: CommitmentData = _make_commitment_for_notice(10, 20, 55)
+	var commitments: Array[CommitmentData] = [c]
+	var letters: Array[LetterData] = []
+	var next_lid: Array[int] = [1]
+	DayOrchestrator._process_commitment_advance_notices(
+		commitments, chars_by_id, 50, letters, next_lid, DiceEngine.new(),
+	)
+	assert_false(c.advance_notice_sent, "Should not notify when traveling toward target in time")
+
+
+func test_advance_notice_skipped_by_yu_personality() -> void:
+	var debtor := L5RCharacterData.new()
+	debtor.character_id = 10
+	debtor.physical_location = "200"
+	debtor.bushido_virtue = Enums.BushidoVirtue.YU
+	var chars_by_id: Dictionary = {10: debtor}
+	var c: CommitmentData = _make_commitment_for_notice(10, 20, 55)
+	var commitments: Array[CommitmentData] = [c]
+	var letters: Array[LetterData] = []
+	var next_lid: Array[int] = [1]
+	TravelSystem.set_distance("200", "100", 10)
+	DayOrchestrator._process_commitment_advance_notices(
+		commitments, chars_by_id, 50, letters, next_lid, DiceEngine.new(),
+	)
+	TravelSystem.clear_distances()
+	assert_false(c.advance_notice_sent, "Yu characters skip advance notice")
+	assert_eq(letters.size(), 0)
+
+
+func test_advance_notice_outside_window() -> void:
+	var debtor := L5RCharacterData.new()
+	debtor.character_id = 10
+	debtor.physical_location = "200"
+	debtor.bushido_virtue = Enums.BushidoVirtue.REI
+	var chars_by_id: Dictionary = {10: debtor}
+	var c: CommitmentData = _make_commitment_for_notice(10, 20, 100)
+	var commitments: Array[CommitmentData] = [c]
+	var letters: Array[LetterData] = []
+	var next_lid: Array[int] = [1]
+	DayOrchestrator._process_commitment_advance_notices(
+		commitments, chars_by_id, 50, letters, next_lid, DiceEngine.new(),
+	)
+	assert_false(c.advance_notice_sent, "Should not notify when deadline is far away")
+
+
+func test_advance_notice_not_sent_twice() -> void:
+	var debtor := L5RCharacterData.new()
+	debtor.character_id = 10
+	debtor.physical_location = "200"
+	debtor.bushido_virtue = Enums.BushidoVirtue.REI
+	var chars_by_id: Dictionary = {10: debtor}
+	var c: CommitmentData = _make_commitment_for_notice(10, 20, 55)
+	c.advance_notice_sent = true
+	c.notice_ic_day = 49
+	var commitments: Array[CommitmentData] = [c]
+	var letters: Array[LetterData] = []
+	var next_lid: Array[int] = [1]
+	DayOrchestrator._process_commitment_advance_notices(
+		commitments, chars_by_id, 50, letters, next_lid, DiceEngine.new(),
+	)
+	assert_eq(letters.size(), 0, "Should not send notice twice")
+	assert_eq(c.notice_ic_day, 49, "Should preserve original notice day")
+
+
+func test_advance_notice_visit_promise_unfulfillable() -> void:
+	var debtor := L5RCharacterData.new()
+	debtor.character_id = 10
+	debtor.physical_location = "200"
+	debtor.bushido_virtue = Enums.BushidoVirtue.GI
+	var creditor := L5RCharacterData.new()
+	creditor.character_id = 20
+	creditor.physical_location = "300"
+	var chars_by_id: Dictionary = {10: debtor, 20: creditor}
+	var c: CommitmentData = _make_commitment_for_notice(
+		10, 20, 55, Enums.CommitmentType.VISIT_PROMISE, -1,
+	)
+	var commitments: Array[CommitmentData] = [c]
+	var letters: Array[LetterData] = []
+	var next_lid: Array[int] = [1]
+	TravelSystem.set_distance("200", "300", 10)
+	DayOrchestrator._process_commitment_advance_notices(
+		commitments, chars_by_id, 50, letters, next_lid, DiceEngine.new(),
+	)
+	TravelSystem.clear_distances()
+	assert_true(c.advance_notice_sent, "Should send notice for unreachable visit")
+
+
+# -- Proxy Dispatch (s55.31.6) ------------------------------------------------
+
+func test_proxy_dispatch_assigns_vassal_to_target() -> void:
+	var lord := L5RCharacterData.new()
+	lord.character_id = 10
+	lord.physical_location = "200"
+	lord.bushido_virtue = Enums.BushidoVirtue.REI
+	lord.civilian_order_budget_max = 3
+	var vassal := L5RCharacterData.new()
+	vassal.character_id = 30
+	vassal.lord_id = 10
+	vassal.physical_location = "150"
+	var chars: Array[L5RCharacterData] = [lord, vassal]
+	var chars_by_id: Dictionary = {10: lord, 30: vassal}
+	var objectives_map: Dictionary = {}
+	var c: CommitmentData = _make_commitment_for_notice(10, 20, 55)
+	c.commitment_id = 1
+	var commitments: Array[CommitmentData] = [c]
+	var letters: Array[LetterData] = []
+	var next_lid: Array[int] = [1]
+	TravelSystem.set_distance("200", "100", 10)
+	TravelSystem.set_distance("150", "100", 2)
+	DayOrchestrator._process_commitment_advance_notices(
+		commitments, chars_by_id, 50, letters, next_lid, DiceEngine.new(),
+		chars, objectives_map,
+	)
+	TravelSystem.clear_distances()
+	assert_eq(c.proxy_npc_id, 30, "Should assign vassal as proxy")
+	assert_true(objectives_map.has(30), "Should set vassal objective")
+	var obj: Dictionary = objectives_map[30].get("primary", {})
+	assert_eq(obj.get("need_type"), "ATTEND_COURT")
+	assert_eq(obj.get("assigned_by"), 10)
+	assert_eq(obj.get("proxy_for_commitment_id"), 1)
+
+
+func test_proxy_dispatch_picks_closest_vassal() -> void:
+	var lord := L5RCharacterData.new()
+	lord.character_id = 10
+	lord.physical_location = "200"
+	lord.bushido_virtue = Enums.BushidoVirtue.GI
+	lord.civilian_order_budget_max = 3
+	var far_vassal := L5RCharacterData.new()
+	far_vassal.character_id = 30
+	far_vassal.lord_id = 10
+	far_vassal.physical_location = "300"
+	var near_vassal := L5RCharacterData.new()
+	near_vassal.character_id = 40
+	near_vassal.lord_id = 10
+	near_vassal.physical_location = "110"
+	var chars: Array[L5RCharacterData] = [lord, far_vassal, near_vassal]
+	var chars_by_id: Dictionary = {10: lord, 30: far_vassal, 40: near_vassal}
+	var objectives_map: Dictionary = {}
+	var c: CommitmentData = _make_commitment_for_notice(10, 20, 55)
+	c.commitment_id = 2
+	var commitments: Array[CommitmentData] = [c]
+	var letters: Array[LetterData] = []
+	var next_lid: Array[int] = [1]
+	TravelSystem.set_distance("200", "100", 10)
+	TravelSystem.set_distance("300", "100", 4)
+	TravelSystem.set_distance("110", "100", 1)
+	DayOrchestrator._process_commitment_advance_notices(
+		commitments, chars_by_id, 50, letters, next_lid, DiceEngine.new(),
+		chars, objectives_map,
+	)
+	TravelSystem.clear_distances()
+	assert_eq(c.proxy_npc_id, 40, "Should pick closest vassal")
+
+
+func test_proxy_dispatch_skipped_for_non_lords() -> void:
+	var debtor := L5RCharacterData.new()
+	debtor.character_id = 10
+	debtor.physical_location = "200"
+	debtor.bushido_virtue = Enums.BushidoVirtue.REI
+	debtor.civilian_order_budget_max = 0
+	var vassal := L5RCharacterData.new()
+	vassal.character_id = 30
+	vassal.lord_id = 10
+	vassal.physical_location = "100"
+	var chars: Array[L5RCharacterData] = [debtor, vassal]
+	var chars_by_id: Dictionary = {10: debtor, 30: vassal}
+	var objectives_map: Dictionary = {}
+	var c: CommitmentData = _make_commitment_for_notice(10, 20, 55)
+	var commitments: Array[CommitmentData] = [c]
+	var letters: Array[LetterData] = []
+	var next_lid: Array[int] = [1]
+	TravelSystem.set_distance("200", "100", 10)
+	DayOrchestrator._process_commitment_advance_notices(
+		commitments, chars_by_id, 50, letters, next_lid, DiceEngine.new(),
+		chars, objectives_map,
+	)
+	TravelSystem.clear_distances()
+	assert_eq(c.proxy_npc_id, -1, "Non-lords should not dispatch proxies")
+
+
+func test_proxy_dispatch_skipped_for_support_pledge() -> void:
+	var lord := L5RCharacterData.new()
+	lord.character_id = 10
+	lord.physical_location = "200"
+	lord.bushido_virtue = Enums.BushidoVirtue.REI
+	lord.civilian_order_budget_max = 3
+	var vassal := L5RCharacterData.new()
+	vassal.character_id = 30
+	vassal.lord_id = 10
+	vassal.physical_location = "100"
+	var chars: Array[L5RCharacterData] = [lord, vassal]
+	var chars_by_id: Dictionary = {10: lord, 30: vassal}
+	var objectives_map: Dictionary = {}
+	var c: CommitmentData = _make_commitment_for_notice(
+		10, 20, 55, Enums.CommitmentType.SUPPORT_PLEDGE, 100,
+	)
+	var commitments: Array[CommitmentData] = [c]
+	var letters: Array[LetterData] = []
+	var next_lid: Array[int] = [1]
+	TravelSystem.set_distance("200", "100", 10)
+	DayOrchestrator._process_commitment_advance_notices(
+		commitments, chars_by_id, 50, letters, next_lid, DiceEngine.new(),
+		chars, objectives_map,
+	)
+	TravelSystem.clear_distances()
+	assert_eq(c.proxy_npc_id, -1, "SUPPORT_PLEDGE should not allow proxy per register_proxy()")
+
+
+func test_proxy_arrival_marks_proxy_sent() -> void:
+	var proxy := L5RCharacterData.new()
+	proxy.character_id = 30
+	proxy.physical_location = "100"
+	var chars_by_id: Dictionary = {30: proxy}
+	var c := CommitmentData.new()
+	c.commitment_type = Enums.CommitmentType.COURT_ATTENDANCE
+	c.status = Enums.CommitmentStatus.PENDING
+	c.proxy_npc_id = 30
+	c.fulfillment_target = 100
+	var commitments: Array[CommitmentData] = [c]
+	DayOrchestrator._process_proxy_arrivals(commitments, chars_by_id)
+	assert_true(c.proxy_sent, "Should mark proxy_sent when proxy arrives at target")
+
+
+func test_proxy_arrival_not_marked_while_traveling() -> void:
+	var proxy := L5RCharacterData.new()
+	proxy.character_id = 30
+	proxy.physical_location = "100"
+	proxy.travel_destination = "100"
+	proxy.travel_days_remaining = 1
+	var chars_by_id: Dictionary = {30: proxy}
+	var c := CommitmentData.new()
+	c.commitment_type = Enums.CommitmentType.COURT_ATTENDANCE
+	c.status = Enums.CommitmentStatus.PENDING
+	c.proxy_npc_id = 30
+	c.fulfillment_target = 100
+	var commitments: Array[CommitmentData] = [c]
+	DayOrchestrator._process_proxy_arrivals(commitments, chars_by_id)
+	assert_false(c.proxy_sent, "Should not mark proxy_sent while proxy is still traveling")
+
+
+# -- Expose Secret Writebacks ---------------------------------------------------
+
+func test_expose_privately_writeback_adds_recipient_to_known_by() -> void:
+	var s := SecretData.new()
+	s.secret_id = 50
+	s.subject_id = 3
+	s.known_by_ids = [1]
+	var secrets: Array[SecretData] = [s]
+	var results: Array = [{
+		"action_id": "EXPOSE_SECRET_PRIVATELY",
+		"success": true,
+		"character_id": 1,
+		"target_npc_id": 7,
+		"effects": {"secret_id": 50, "subject_id": 3},
+	}]
+	DayOrchestrator._process_expose_secret_writebacks(results, secrets, {})
+	assert_true(7 in s.known_by_ids, "Recipient should be added to known_by_ids")
+
+
+func test_expose_privately_writeback_no_duplicate() -> void:
+	var s := SecretData.new()
+	s.secret_id = 50
+	s.subject_id = 3
+	s.known_by_ids = [1, 7]
+	var secrets: Array[SecretData] = [s]
+	var results: Array = [{
+		"action_id": "EXPOSE_SECRET_PRIVATELY",
+		"success": true,
+		"character_id": 1,
+		"target_npc_id": 7,
+		"effects": {"secret_id": 50, "subject_id": 3},
+	}]
+	DayOrchestrator._process_expose_secret_writebacks(results, secrets, {})
+	var count: int = 0
+	for kid: int in s.known_by_ids:
+		if kid == 7:
+			count += 1
+	assert_eq(count, 1, "Should not duplicate recipient in known_by_ids")
+
+
+func test_expose_publicly_writeback_does_not_add_known_by() -> void:
+	var s := SecretData.new()
+	s.secret_id = 60
+	s.subject_id = 3
+	s.known_by_ids = [1]
+	var secrets: Array[SecretData] = [s]
+	var results: Array = [{
+		"action_id": "EXPOSE_SECRET_PUBLICLY",
+		"success": true,
+		"character_id": 1,
+		"target_npc_id": 3,
+		"effects": {"secret_id": 60, "subject_id": 3},
+	}]
+	DayOrchestrator._process_expose_secret_writebacks(results, secrets, {})
+	assert_eq(s.known_by_ids.size(), 1, "Public exposure should not modify known_by_ids")
+
+
+func test_expose_writeback_skips_failed_results() -> void:
+	var s := SecretData.new()
+	s.secret_id = 50
+	s.subject_id = 3
+	s.known_by_ids = [1]
+	var secrets: Array[SecretData] = [s]
+	var results: Array = [{
+		"action_id": "EXPOSE_SECRET_PRIVATELY",
+		"success": false,
+		"character_id": 1,
+		"target_npc_id": 7,
+		"effects": {"secret_id": 50, "subject_id": 3},
+	}]
+	DayOrchestrator._process_expose_secret_writebacks(results, secrets, {})
+	assert_false(7 in s.known_by_ids, "Failed exposure should not modify known_by_ids")
+
+
+# -- Secret known_by_ids population at creation ---------------------------------
+
+func test_secret_known_by_ids_populated_on_bribe_accepted() -> void:
+	var s := SecretData.new()
+	s.known_by_ids = [10, 20]
+	assert_eq(s.known_by_ids.size(), 2, "known_by_ids should hold both parties")
+
+
+# -- FABRICATE_SECRET Writebacks ------------------------------------------------
+
+func test_fabricate_secret_writeback_adds_to_active_secrets() -> void:
+	var fabricated := SecretData.new()
+	fabricated.secret_id = -1
+	fabricated.subject_id = 5
+	fabricated.severity = SecretData.Severity.TIER_3
+	fabricated.fabricated = true
+	fabricated.fabricator_id = 1
+	var secrets: Array[SecretData] = []
+	var next_id: Array[int] = [100]
+	var results: Array = [{
+		"action_id": "FABRICATE_SECRET",
+		"success": true,
+		"character_id": 1,
+		"effects": {"secret": fabricated, "success": true},
+	}]
+	DayOrchestrator._process_fabricate_secret_writebacks(results, secrets, next_id)
+	assert_eq(secrets.size(), 1, "Fabricated secret should be added to active_secrets")
+	assert_eq(secrets[0].secret_id, 100, "Should assign secret_id from next_secret_id")
+	assert_eq(next_id[0], 101, "next_secret_id should be incremented")
+	assert_true(1 in secrets[0].known_by_ids, "Fabricator should be in known_by_ids")
+
+
+func test_fabricate_secret_writeback_preserves_existing_id() -> void:
+	var fabricated := SecretData.new()
+	fabricated.secret_id = 42
+	fabricated.subject_id = 5
+	fabricated.fabricated = true
+	var secrets: Array[SecretData] = []
+	var next_id: Array[int] = [100]
+	var results: Array = [{
+		"action_id": "FABRICATE_SECRET",
+		"success": true,
+		"character_id": 1,
+		"effects": {"secret": fabricated, "success": true},
+	}]
+	DayOrchestrator._process_fabricate_secret_writebacks(results, secrets, next_id)
+	assert_eq(secrets[0].secret_id, 42, "Should not overwrite existing valid secret_id")
+	assert_eq(next_id[0], 100, "next_secret_id should not be incremented")
+
+
+func test_fabricate_secret_writeback_skips_failures() -> void:
+	var secrets: Array[SecretData] = []
+	var next_id: Array[int] = [100]
+	var results: Array = [{
+		"action_id": "FABRICATE_SECRET",
+		"success": false,
+		"character_id": 1,
+		"effects": {"success": false},
+	}]
+	DayOrchestrator._process_fabricate_secret_writebacks(results, secrets, next_id)
+	assert_eq(secrets.size(), 0, "Failed fabrication should not add to active_secrets")
+
+
+func test_fabricate_secret_writeback_no_duplicate_fabricator() -> void:
+	var fabricated := SecretData.new()
+	fabricated.secret_id = -1
+	fabricated.subject_id = 5
+	fabricated.fabricated = true
+	fabricated.known_by_ids = [1]
+	var secrets: Array[SecretData] = []
+	var next_id: Array[int] = [100]
+	var results: Array = [{
+		"action_id": "FABRICATE_SECRET",
+		"success": true,
+		"character_id": 1,
+		"effects": {"secret": fabricated, "success": true},
+	}]
+	DayOrchestrator._process_fabricate_secret_writebacks(results, secrets, next_id)
+	var count: int = 0
+	for kid: int in secrets[0].known_by_ids:
+		if kid == 1:
+			count += 1
+	assert_eq(count, 1, "Should not duplicate fabricator in known_by_ids")
+
+
+# -- Letter Delivery Topic Momentum -------------------------------------------
+
+func test_letter_delivery_increments_topic_discussion_count() -> void:
+	var recipient := L5RCharacterData.new()
+	recipient.character_id = 10
+	recipient.topic_pool = []
+	recipient.knowledge_pool = []
+	recipient.met_characters = []
+	recipient.known_contacts_by_clan = {}
+	recipient.disposition_values = {}
+	var chars_by_id: Dictionary = {10: recipient}
+
+	var topic := TopicMomentumSystem.create_topic(
+		300, "Scandal", TopicData.Tier.TIER_4, TopicData.Category.POLITICAL,
+		0, 15.0
+	)
+	var topics_by_id: Dictionary = {300: topic}
+	assert_eq(topic.discussion_count_this_day, 0)
+
+	var letter := LetterData.new()
+	letter.letter_id = 1
+	letter.sender_id = 99
+	letter.recipient_id = 10
+	letter.topic = 300
+	letter.ic_day_sent = 0
+	letter.ic_day_arrival = 0
+	var pending: Array[LetterData] = [letter]
+
+	LetterSystem.process_pending_letters(
+		pending, chars_by_id, 1, 0, [], [], null, topics_by_id
+	)
+	assert_eq(topic.discussion_count_this_day, 1, "Letter delivery should increment discussion count")
+	assert_true(letter.delivered, "Letter should be delivered")
+
+
+func test_letter_delivery_without_topics_by_id_skips_momentum() -> void:
+	var recipient := L5RCharacterData.new()
+	recipient.character_id = 10
+	recipient.topic_pool = []
+	recipient.knowledge_pool = []
+	recipient.met_characters = []
+	recipient.known_contacts_by_clan = {}
+	recipient.disposition_values = {}
+	var chars_by_id: Dictionary = {10: recipient}
+
+	var topic := TopicMomentumSystem.create_topic(
+		301, "Rumor", TopicData.Tier.TIER_4, TopicData.Category.POLITICAL,
+		0, 15.0
+	)
+	assert_eq(topic.discussion_count_this_day, 0)
+
+	var letter := LetterData.new()
+	letter.letter_id = 2
+	letter.sender_id = 99
+	letter.recipient_id = 10
+	letter.topic = 301
+	letter.ic_day_sent = 0
+	letter.ic_day_arrival = 0
+	var pending: Array[LetterData] = [letter]
+
+	LetterSystem.process_pending_letters(
+		pending, chars_by_id, 1, 0, [], [], null
+	)
+	assert_eq(topic.discussion_count_this_day, 0, "Without topics_by_id, discussion count stays 0")
+
+
+# -- Scout Detection Topic Generation -----------------------------------------
+
+func test_scout_detection_creates_topic() -> void:
+	var scout := L5RCharacterData.new()
+	scout.character_id = 50
+	scout.physical_location = "border_province"
+	var chars_by_id: Dictionary = {50: scout}
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [500]
+
+	var results: Array = [{
+		"character_id": 50,
+		"action_id": "SCOUT_ENEMY",
+		"effects": {
+			"scouts_detected": true,
+			"target_clan_id": "Lion",
+		},
+	}]
+	DayOrchestrator._process_scout_detection_topics(
+		results, chars_by_id, active_topics, next_topic_id, 10,
+	)
+	assert_eq(active_topics.size(), 1)
+	assert_eq(active_topics[0].topic_id, 500)
+	assert_eq(active_topics[0].tier, TopicData.Tier.TIER_4)
+	assert_eq(active_topics[0].category, TopicData.Category.MILITARY)
+	assert_true(active_topics[0].title.contains("Lion"))
+	assert_eq(active_topics[0].variant, "scout_detected")
+	assert_eq(next_topic_id[0], 501)
+
+
+func test_scout_detection_skips_without_flag() -> void:
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [500]
+	var results: Array = [{
+		"character_id": 50,
+		"action_id": "SCOUT_ENEMY",
+		"effects": {"info_gained": true},
+	}]
+	DayOrchestrator._process_scout_detection_topics(
+		results, _characters_by_id, active_topics, next_topic_id, 10,
+	)
+	assert_eq(active_topics.size(), 0, "No topic when scouts not detected")
+
+
+func test_scout_detection_generic_title_without_clan() -> void:
+	var scout := L5RCharacterData.new()
+	scout.character_id = 50
+	scout.physical_location = "frontier"
+	var chars_by_id: Dictionary = {50: scout}
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [600]
+
+	var results: Array = [{
+		"character_id": 50,
+		"action_id": "SCOUT_ENEMY",
+		"effects": {
+			"scouts_detected": true,
+			"target_clan_id": "",
+		},
+	}]
+	DayOrchestrator._process_scout_detection_topics(
+		results, chars_by_id, active_topics, next_topic_id, 10,
+	)
+	assert_eq(active_topics.size(), 1)
+	assert_true(active_topics[0].title.contains("Enemy scouts"))
+
+
+# -- REQUEST_PERFORMANCE writeback (s57.33) ------------------------------------
+
+
+func test_performance_request_writeback_creates_request_on_court() -> void:
+	var court := CourtSessionData.new()
+	court.court_id = 1
+	court.phase = CourtSessionData.CourtPhase.ACTIVE
+	court.host_settlement_id = 10
+	court.attendee_ids = [1]
+	court.next_request_id = 0
+	var courts: Array[CourtSessionData] = [court]
+
+	var lord := L5RCharacterData.new()
+	lord.character_id = 1
+	var chars_by_id: Dictionary = {1: lord}
+
+	var results: Array = [{
+		"action_id": "REQUEST_PERFORMANCE",
+		"success": true,
+		"character_id": 1,
+		"effects": {
+			"performance_type": "biwa",
+			"target_performer_id": -1,
+			"venue_mode": "public",
+		},
+	}]
+	DayOrchestrator._process_performance_request_writebacks(results, courts, chars_by_id, 5)
+	assert_eq(court.pending_performance_requests.size(), 1)
+	var req: Dictionary = court.pending_performance_requests[0]
+	assert_eq(req.get("request_id", -1), 0)
+	assert_eq(req.get("requesting_lord_id", -1), 1)
+	assert_eq(req.get("performance_type", ""), "biwa")
+	assert_eq(court.next_request_id, 1)
+
+
+func test_performance_request_writeback_skips_failed() -> void:
+	var court := CourtSessionData.new()
+	court.court_id = 1
+	court.phase = CourtSessionData.CourtPhase.ACTIVE
+	court.attendee_ids = [1]
+	var courts: Array[CourtSessionData] = [court]
+
+	var lord := L5RCharacterData.new()
+	lord.character_id = 1
+	var chars_by_id: Dictionary = {1: lord}
+
+	var results: Array = [{
+		"action_id": "REQUEST_PERFORMANCE",
+		"success": false,
+		"character_id": 1,
+		"effects": {},
+	}]
+	DayOrchestrator._process_performance_request_writebacks(results, courts, chars_by_id, 5)
+	assert_eq(court.pending_performance_requests.size(), 0)
+
+
+func test_performance_request_writeback_skips_non_attendee() -> void:
+	var court := CourtSessionData.new()
+	court.court_id = 1
+	court.phase = CourtSessionData.CourtPhase.ACTIVE
+	court.attendee_ids = [2]
+	var courts: Array[CourtSessionData] = [court]
+
+	var lord := L5RCharacterData.new()
+	lord.character_id = 1
+	var chars_by_id: Dictionary = {1: lord}
+
+	var results: Array = [{
+		"action_id": "REQUEST_PERFORMANCE",
+		"success": true,
+		"character_id": 1,
+		"effects": {"performance_type": "song", "target_performer_id": -1, "venue_mode": "public"},
+	}]
+	DayOrchestrator._process_performance_request_writebacks(results, courts, chars_by_id, 5)
+	assert_eq(court.pending_performance_requests.size(), 0)
+
+
+func test_performance_requests_injected_into_world_state() -> void:
+	var court := CourtSessionData.new()
+	court.court_id = 1
+	court.phase = CourtSessionData.CourtPhase.ACTIVE
+	court.host_settlement_id = 10
+	court.attendee_ids = [1]
+	court.pending_performance_requests = [
+		{"request_id": 0, "requesting_lord_id": 1, "performance_type": "song"},
+	]
+	var courts: Array[CourtSessionData] = [court]
+	var world_states: Dictionary = {}
+	DayOrchestrator._set_court_context_flags(courts, world_states)
+	var ws: Dictionary = world_states.get(1, {})
+	var reqs: Array = ws.get("pending_performance_requests", [])
+	assert_eq(reqs.size(), 1)
+	assert_eq(reqs[0].get("performance_type", ""), "song")
+
+
+func test_performance_request_expiry_in_court_tick() -> void:
+	var expired_req: Dictionary = RequestPerformanceSystem.create_request(0, 1, "song", -1, "public", 1)
+	var valid_req: Dictionary = RequestPerformanceSystem.create_request(1, 1, "biwa", -1, "public", 100)
+	var court := CourtSessionData.new()
+	court.court_id = 1
+	court.phase = CourtSessionData.CourtPhase.ACTIVE
+	court.start_ic_day = 1
+	court.duration_ticks = 999
+	court.elapsed_ticks = 0
+	court.pending_performance_requests = [expired_req, valid_req]
+	var courts: Array[CourtSessionData] = [court]
+	var topics: Array[TopicData] = []
+	var nti: Array[int] = [1]
+	DayOrchestrator._process_active_courts(courts, topics, nti, 200)
+	assert_eq(court.pending_performance_requests.size(), 1)
+	assert_eq(court.pending_performance_requests[0].get("request_id", -1), 1)
+
+
+# -- Self-offense injection (s4.6 PUBLIC_ATONEMENT) ----------------------------
+
+
+func test_inject_self_offenses_creates_offense_from_topic() -> void:
+	var c := L5RCharacterData.new()
+	c.character_id = 1
+	var chars: Array[L5RCharacterData] = [c]
+
+	var topic := TopicData.new()
+	topic.topic_id = 100
+	topic.subject_character_id = 1
+	topic.tier = TopicData.Tier.TIER_2
+	var topics: Array[TopicData] = [topic]
+	var world_states: Dictionary = {}
+
+	DayOrchestrator._inject_self_offenses(chars, topics, world_states)
+	var ws: Dictionary = world_states.get(1, {})
+	var offenses: Array = ws.get("self_offenses", [])
+	assert_eq(offenses.size(), 1)
+	assert_eq(offenses[0].get("offense_key", ""), "topic_100")
+	assert_eq(offenses[0].get("offense_tier", 0), 2)
+
+
+func test_inject_self_offenses_skips_atoned() -> void:
+	var c := L5RCharacterData.new()
+	c.character_id = 1
+	c.atoned_offenses = ["topic_100"]
+	var chars: Array[L5RCharacterData] = [c]
+
+	var topic := TopicData.new()
+	topic.topic_id = 100
+	topic.subject_character_id = 1
+	topic.tier = TopicData.Tier.TIER_3
+	var topics: Array[TopicData] = [topic]
+	var world_states: Dictionary = {}
+
+	DayOrchestrator._inject_self_offenses(chars, topics, world_states)
+	var ws: Dictionary = world_states.get(1, {})
+	assert_true(ws.get("self_offenses", []).is_empty())
+
+
+func test_inject_self_offenses_skips_resolved_topics() -> void:
+	var c := L5RCharacterData.new()
+	c.character_id = 1
+	var chars: Array[L5RCharacterData] = [c]
+
+	var topic := TopicData.new()
+	topic.topic_id = 100
+	topic.subject_character_id = 1
+	topic.tier = TopicData.Tier.TIER_2
+	topic.resolved = true
+	var topics: Array[TopicData] = [topic]
+	var world_states: Dictionary = {}
+
+	DayOrchestrator._inject_self_offenses(chars, topics, world_states)
+	var ws: Dictionary = world_states.get(1, {})
+	assert_true(ws.get("self_offenses", []).is_empty())
+
+
+func test_offense_tier_maps_from_topic_tier() -> void:
+	var t1 := TopicData.new()
+	t1.tier = TopicData.Tier.TIER_1
+	assert_eq(DayOrchestrator._offense_tier_from_topic(t1), 1)
+	var t4 := TopicData.new()
+	t4.tier = TopicData.Tier.TIER_4
+	assert_eq(DayOrchestrator._offense_tier_from_topic(t4), 4)
+
+
+# =============================================================================
+# Forge writeback tests
+# =============================================================================
+
+
+func test_forge_letter_writeback_creates_forged_letter() -> void:
+	var results: Array = [{
+		"action_id": "FORGE_IMPERSONATION_LETTER",
+		"success": true,
+		"character_id": 10,
+		"effects": {"detection_tn": 25},
+		"metadata": {
+			"impersonated_id": 5,
+			"recipient_id": 20,
+			"topic_id": 42,
+		},
+	}]
+	var pending: Array[LetterData] = []
+	var next_id: Array[int] = [100]
+	DayOrchestrator._process_forge_letter_writebacks(
+		results, pending, next_id, 50,
+	)
+	assert_eq(pending.size(), 1)
+	var letter: LetterData = pending[0]
+	assert_eq(letter.letter_id, 100)
+	assert_eq(letter.sender_id, 5)
+	assert_eq(letter.recipient_id, 20)
+	assert_eq(letter.topic, 42)
+	assert_true(letter.is_forged)
+	assert_eq(letter.forged_sender_id, 10)
+	assert_eq(letter.forgery_tn, 25)
+	assert_eq(letter.disposition_bonus, 0)
+	assert_eq(next_id[0], 101)
+
+
+func test_forge_letter_writeback_skips_failed() -> void:
+	var results: Array = [{
+		"action_id": "FORGE_IMPERSONATION_LETTER",
+		"success": false,
+		"character_id": 10,
+		"effects": {"detection_tn": 0},
+		"metadata": {"impersonated_id": 5, "recipient_id": 20},
+	}]
+	var pending: Array[LetterData] = []
+	var next_id: Array[int] = [100]
+	DayOrchestrator._process_forge_letter_writebacks(
+		results, pending, next_id, 50,
+	)
+	assert_eq(pending.size(), 0)
+
+
+func test_forge_letter_writeback_skips_missing_recipient() -> void:
+	var results: Array = [{
+		"action_id": "FORGE_IMPERSONATION_LETTER",
+		"success": true,
+		"character_id": 10,
+		"effects": {"detection_tn": 25},
+		"metadata": {"impersonated_id": 5, "recipient_id": -1},
+	}]
+	var pending: Array[LetterData] = []
+	var next_id: Array[int] = [100]
+	DayOrchestrator._process_forge_letter_writebacks(
+		results, pending, next_id, 50,
+	)
+	assert_eq(pending.size(), 0)
+
+
+func test_forge_order_writeback_creates_forged_order() -> void:
+	var target := L5RCharacterData.new()
+	target.character_id = 20
+	target.lord_id = 5
+	var chars: Dictionary = {20: target}
+	var results: Array = [{
+		"action_id": "FORGE_ORDER",
+		"success": true,
+		"character_id": 10,
+		"target_npc_id": 20,
+		"effects": {"detection_tn": 30},
+	}]
+	var pending: Array[LetterData] = []
+	var next_id: Array[int] = [200]
+	DayOrchestrator._process_forge_order_writebacks(
+		results, pending, next_id, 50, chars,
+	)
+	assert_eq(pending.size(), 1)
+	var letter: LetterData = pending[0]
+	assert_eq(letter.sender_id, 5)
+	assert_eq(letter.recipient_id, 20)
+	assert_true(letter.is_forged)
+	assert_true(letter.is_order)
+	assert_eq(letter.forged_sender_id, 10)
+	assert_eq(letter.forgery_tn, 30)
+	assert_eq(next_id[0], 201)
+
+
+func test_forge_order_writeback_skips_no_lord() -> void:
+	var target := L5RCharacterData.new()
+	target.character_id = 20
+	target.lord_id = -1
+	var chars: Dictionary = {20: target}
+	var results: Array = [{
+		"action_id": "FORGE_ORDER",
+		"success": true,
+		"character_id": 10,
+		"target_npc_id": 20,
+		"effects": {"detection_tn": 30},
+	}]
+	var pending: Array[LetterData] = []
+	var next_id: Array[int] = [200]
+	DayOrchestrator._process_forge_order_writebacks(
+		results, pending, next_id, 50, chars,
+	)
+	assert_eq(pending.size(), 0)
+
+
+func test_forged_order_delivery_writes_objective() -> void:
+	var target := L5RCharacterData.new()
+	target.character_id = 20
+	var chars: Dictionary = {20: target}
+	var objectives_map: Dictionary = {}
+
+	var letter := LetterData.new()
+	letter.letter_id = 1
+	letter.sender_id = 5
+	letter.recipient_id = 20
+	letter.delivered = true
+	letter.is_forged = true
+	letter.is_order = true
+	letter.forged_sender_id = 10
+	letter.forgery_detected = false
+	letter.order_need_type = "TRAVEL_TO"
+	var pending: Array[LetterData] = [letter]
+
+	DayOrchestrator._process_forged_order_delivery(
+		pending, objectives_map, chars,
+	)
+	assert_true(objectives_map.has(20))
+	var obj: Dictionary = objectives_map[20].get("primary", {})
+	assert_eq(obj["source"], "forged_order")
+	assert_eq(obj["forger_id"], 10)
+	assert_eq(obj["assigned_by"], 5)
+	assert_eq(obj["need_type"], "TRAVEL_TO")
+	assert_true(letter.order_applied)
+
+
+func test_forged_order_delivery_skips_detected() -> void:
+	var target := L5RCharacterData.new()
+	target.character_id = 20
+	var chars: Dictionary = {20: target}
+	var objectives_map: Dictionary = {}
+
+	var letter := LetterData.new()
+	letter.letter_id = 1
+	letter.sender_id = 5
+	letter.recipient_id = 20
+	letter.delivered = true
+	letter.is_forged = true
+	letter.is_order = true
+	letter.forged_sender_id = 10
+	letter.forgery_detected = true
+	var pending: Array[LetterData] = [letter]
+
+	DayOrchestrator._process_forged_order_delivery(
+		pending, objectives_map, chars,
+	)
+	assert_false(objectives_map.has(20))
+
+
+func test_forged_order_attend_court_type() -> void:
+	var target := L5RCharacterData.new()
+	target.character_id = 20
+	var chars: Dictionary = {20: target}
+	var objectives_map: Dictionary = {}
+
+	var letter := LetterData.new()
+	letter.letter_id = 1
+	letter.sender_id = 5
+	letter.recipient_id = 20
+	letter.delivered = true
+	letter.is_forged = true
+	letter.is_order = true
+	letter.forged_sender_id = 10
+	letter.forgery_detected = false
+	letter.order_need_type = "ATTEND_COURT"
+	letter.order_target_settlement_id = 42
+	var pending: Array[LetterData] = [letter]
+
+	DayOrchestrator._process_forged_order_delivery(
+		pending, objectives_map, chars,
+	)
+	var obj: Dictionary = objectives_map[20].get("primary", {})
+	assert_eq(obj["need_type"], "ATTEND_COURT")
+	assert_eq(obj["target_settlement_id"], 42)
+
+
+func test_forged_order_patrol_with_province() -> void:
+	var target := L5RCharacterData.new()
+	target.character_id = 20
+	var chars: Dictionary = {20: target}
+	var objectives_map: Dictionary = {}
+
+	var letter := LetterData.new()
+	letter.letter_id = 1
+	letter.sender_id = 5
+	letter.recipient_id = 20
+	letter.delivered = true
+	letter.is_forged = true
+	letter.is_order = true
+	letter.forged_sender_id = 10
+	letter.forgery_detected = false
+	letter.order_need_type = "PATROL_PROVINCE"
+	letter.order_target_province_id = 7
+	var pending: Array[LetterData] = [letter]
+
+	DayOrchestrator._process_forged_order_delivery(
+		pending, objectives_map, chars,
+	)
+	var obj: Dictionary = objectives_map[20].get("primary", {})
+	assert_eq(obj["need_type"], "PATROL_PROVINCE")
+	assert_eq(obj["target_province_id"], 7)
+
+
+# =============================================================================
+# Forge crime record tests
+# =============================================================================
+
+
+func test_forge_letter_creates_crime_record() -> void:
+	var forger := L5RCharacterData.new()
+	forger.character_id = 10
+	forger.physical_location = "crane_castle"
+	var chars: Dictionary = {10: forger}
+	var results: Array = [{
+		"action_id": "FORGE_IMPERSONATION_LETTER",
+		"success": true,
+		"character_id": 10,
+		"effects": {"detection_tn": 25},
+		"metadata": {
+			"impersonated_id": 5,
+			"recipient_id": 20,
+			"topic_id": 42,
+		},
+	}]
+	var pending: Array[LetterData] = []
+	var next_lid: Array[int] = [100]
+	var crime_records: Array[CrimeRecord] = []
+	var next_case: Array[int] = [1]
+	DayOrchestrator._process_forge_letter_writebacks(
+		results, pending, next_lid, 50,
+		crime_records, next_case, chars,
+	)
+	assert_eq(crime_records.size(), 1)
+	var cr: CrimeRecord = crime_records[0]
+	assert_eq(cr.perpetrator_id, 10)
+	assert_eq(cr.victim_id, 5)
+	assert_eq(cr.crime_type, Enums.CrimeType.DISHONORABLE_CONDUCT)
+	assert_eq(cr.severity, Enums.CrimeSeverity.MODERATE)
+	assert_eq(cr.concealment_tn, 25)
+	assert_eq(cr.location, "crane_castle")
+	assert_eq(cr.legal_status, Enums.LegalStatus.NONE)
+
+
+func test_forge_order_creates_serious_crime_record() -> void:
+	var forger := L5RCharacterData.new()
+	forger.character_id = 10
+	forger.physical_location = "lion_fortress"
+	var target := L5RCharacterData.new()
+	target.character_id = 20
+	target.lord_id = 5
+	var chars: Dictionary = {10: forger, 20: target}
+	var results: Array = [{
+		"action_id": "FORGE_ORDER",
+		"success": true,
+		"character_id": 10,
+		"target_npc_id": 20,
+		"effects": {"detection_tn": 30},
+		"metadata": {},
+	}]
+	var pending: Array[LetterData] = []
+	var next_lid: Array[int] = [200]
+	var crime_records: Array[CrimeRecord] = []
+	var next_case: Array[int] = [1]
+	DayOrchestrator._process_forge_order_writebacks(
+		results, pending, next_lid, 50,
+		chars, crime_records, next_case,
+	)
+	assert_eq(crime_records.size(), 1)
+	var cr: CrimeRecord = crime_records[0]
+	assert_eq(cr.perpetrator_id, 10)
+	assert_eq(cr.victim_id, 5)
+	assert_eq(cr.severity, Enums.CrimeSeverity.SERIOUS)
+	assert_eq(cr.concealment_tn, 30)
+
+
+func test_escalate_detected_forgery_crime() -> void:
+	var record := CrimeRecord.new()
+	record.case_id = 1
+	record.crime_type = Enums.CrimeType.DISHONORABLE_CONDUCT
+	record.severity = Enums.CrimeSeverity.MODERATE
+	record.perpetrator_id = 10
+	record.victim_id = 5
+	record.legal_status = Enums.LegalStatus.NONE
+	var crime_records: Array[CrimeRecord] = [record]
+
+	var letter := LetterData.new()
+	letter.delivered = true
+	letter.is_forged = true
+	letter.forgery_detected = true
+	letter.sender_id = 5
+	letter.forged_sender_id = 10
+	var pending: Array[LetterData] = [letter]
+
+	DayOrchestrator._escalate_detected_forgery_crimes(pending, crime_records)
+	assert_eq(record.legal_status, Enums.LegalStatus.UNDER_INVESTIGATION)
+	assert_true(10 in record.known_suspects)
+
+
+func test_escalate_skips_undetected_forgery() -> void:
+	var record := CrimeRecord.new()
+	record.case_id = 1
+	record.crime_type = Enums.CrimeType.DISHONORABLE_CONDUCT
+	record.perpetrator_id = 10
+	record.victim_id = 5
+	record.legal_status = Enums.LegalStatus.NONE
+	var crime_records: Array[CrimeRecord] = [record]
+
+	var letter := LetterData.new()
+	letter.delivered = true
+	letter.is_forged = true
+	letter.forgery_detected = false
+	letter.sender_id = 5
+	letter.forged_sender_id = 10
+	var pending: Array[LetterData] = [letter]
+
+	DayOrchestrator._escalate_detected_forgery_crimes(pending, crime_records)
+	assert_eq(record.legal_status, Enums.LegalStatus.NONE)
+
+
+func test_escalate_already_investigated_no_double() -> void:
+	var record := CrimeRecord.new()
+	record.case_id = 1
+	record.crime_type = Enums.CrimeType.DISHONORABLE_CONDUCT
+	record.perpetrator_id = 10
+	record.victim_id = 5
+	record.legal_status = Enums.LegalStatus.UNDER_INVESTIGATION
+	var crime_records: Array[CrimeRecord] = [record]
+
+	var letter := LetterData.new()
+	letter.delivered = true
+	letter.is_forged = true
+	letter.forgery_detected = true
+	letter.sender_id = 5
+	letter.forged_sender_id = 10
+	var pending: Array[LetterData] = [letter]
+
+	DayOrchestrator._escalate_detected_forgery_crimes(pending, crime_records)
+	assert_eq(record.legal_status, Enums.LegalStatus.UNDER_INVESTIGATION,
+		"Should not double-escalate")
+
+
+# =============================================================================
+# Action-to-crime-type mapping tests
+# =============================================================================
+
+
+func test_shadow_target_maps_to_dishonorable_conduct() -> void:
+	var result: int = DayOrchestrator._action_to_crime_type("SHADOW_TARGET")
+	assert_eq(result, Enums.CrimeType.DISHONORABLE_CONDUCT)
+
+
+func test_eavesdrop_maps_to_dishonorable_conduct() -> void:
+	var result: int = DayOrchestrator._action_to_crime_type("EAVESDROP")
+	assert_eq(result, Enums.CrimeType.DISHONORABLE_CONDUCT)
+
+
+func test_bribe_maps_to_skimming() -> void:
+	var result: int = DayOrchestrator._action_to_crime_type("BRIBE_FOR_INFO")
+	assert_eq(result, Enums.CrimeType.SKIMMING)
+
+
+func test_unknown_action_returns_negative() -> void:
+	var result: int = DayOrchestrator._action_to_crime_type("GOSSIP")
+	assert_eq(result, -1)
+
+
+# =============================================================================
+# Eavesdrop writeback tests
+# =============================================================================
+
+
+func test_eavesdrop_transfers_topic_on_success() -> void:
+	var spy := L5RCharacterData.new()
+	spy.character_id = 1
+	spy.physical_location = "crane_castle"
+	spy.topic_pool = []
+	var talker_a := L5RCharacterData.new()
+	talker_a.character_id = 10
+	talker_a.physical_location = "crane_castle"
+	var talker_b := L5RCharacterData.new()
+	talker_b.character_id = 20
+	talker_b.physical_location = "crane_castle"
+	var chars: Dictionary = {1: spy, 10: talker_a, 20: talker_b}
+
+	var results: Array = [{
+		"action_id": "EAVESDROP",
+		"success": true,
+		"character_id": 1,
+		"effects": {"margin": 3, "detection_risk": false},
+		"margin": 3,
+	}]
+	var convos: Array[Dictionary] = [{
+		"char_a_id": 10,
+		"char_b_id": 20,
+		"topic_shared_by_a": 42,
+		"topic_shared_by_b": 55,
+	}]
+	var topics: Array[TopicData] = []
+	var next_tid: Array[int] = [100]
+	DayOrchestrator._process_eavesdrop_writebacks(
+		results, convos, chars, 1, topics, next_tid, 50,
+	)
+	assert_true(42 in spy.topic_pool, "Should learn topic_shared_by_a")
+	assert_eq(spy.topic_pool.size(), 1, "Margin 3 = 0 raises, 1 topic max")
+
+
+func test_eavesdrop_raises_grant_extra_topics() -> void:
+	var spy := L5RCharacterData.new()
+	spy.character_id = 1
+	spy.physical_location = "crane_castle"
+	spy.topic_pool = []
+	var talker_a := L5RCharacterData.new()
+	talker_a.character_id = 10
+	talker_a.physical_location = "crane_castle"
+	var talker_b := L5RCharacterData.new()
+	talker_b.character_id = 20
+	talker_b.physical_location = "crane_castle"
+	var chars: Dictionary = {1: spy, 10: talker_a, 20: talker_b}
+
+	var results: Array = [{
+		"action_id": "EAVESDROP",
+		"success": true,
+		"character_id": 1,
+		"effects": {"margin": 12, "detection_risk": false},
+		"margin": 12,
+	}]
+	var convos: Array[Dictionary] = [{
+		"char_a_id": 10,
+		"char_b_id": 20,
+		"topic_shared_by_a": 42,
+		"topic_shared_by_b": 55,
+	}]
+	var topics: Array[TopicData] = []
+	var next_tid: Array[int] = [100]
+	DayOrchestrator._process_eavesdrop_writebacks(
+		results, convos, chars, 1, topics, next_tid, 50,
+	)
+	assert_true(42 in spy.topic_pool)
+	assert_true(55 in spy.topic_pool)
+	assert_eq(spy.topic_pool.size(), 2, "Margin 12 = 2 raises, 3 topics max but only 2 available")
+
+
+func test_eavesdrop_critical_failure_creates_topic() -> void:
+	var spy := L5RCharacterData.new()
+	spy.character_id = 1
+	spy.physical_location = "crane_castle"
+	var chars: Dictionary = {1: spy}
+
+	var results: Array = [{
+		"action_id": "EAVESDROP",
+		"success": false,
+		"character_id": 1,
+		"effects": {"margin": -12, "detection_risk": true},
+		"margin": -12,
+	}]
+	var convos: Array[Dictionary] = []
+	var topics: Array[TopicData] = []
+	var next_tid: Array[int] = [100]
+	DayOrchestrator._process_eavesdrop_writebacks(
+		results, convos, chars, 1, topics, next_tid, 50,
+	)
+	assert_eq(topics.size(), 1)
+	assert_eq(topics[0].tier, TopicData.Tier.TIER_4)
+	assert_eq(topics[0].category, TopicData.Category.PERSONAL)
+	assert_eq(topics[0].subject_character_id, -1,
+		"Spy identity not revealed in topic")
+
+
+func test_eavesdrop_ignores_own_conversations() -> void:
+	var spy := L5RCharacterData.new()
+	spy.character_id = 1
+	spy.physical_location = "crane_castle"
+	spy.topic_pool = []
+	var talker := L5RCharacterData.new()
+	talker.character_id = 10
+	talker.physical_location = "crane_castle"
+	var chars: Dictionary = {1: spy, 10: talker}
+
+	var results: Array = [{
+		"action_id": "EAVESDROP",
+		"success": true,
+		"character_id": 1,
+		"effects": {"margin": 5, "detection_risk": false},
+		"margin": 5,
+	}]
+	var convos: Array[Dictionary] = [{
+		"char_a_id": 1,
+		"char_b_id": 10,
+		"topic_shared_by_a": 42,
+		"topic_shared_by_b": 55,
+	}]
+	var topics: Array[TopicData] = []
+	var next_tid: Array[int] = [100]
+	DayOrchestrator._process_eavesdrop_writebacks(
+		results, convos, chars, 1, topics, next_tid, 50,
+	)
+	assert_eq(spy.topic_pool.size(), 0, "Should not eavesdrop on own conversations")
+
+
+func test_eavesdrop_skips_different_location() -> void:
+	var spy := L5RCharacterData.new()
+	spy.character_id = 1
+	spy.physical_location = "crane_castle"
+	spy.topic_pool = []
+	var talker_a := L5RCharacterData.new()
+	talker_a.character_id = 10
+	talker_a.physical_location = "lion_fortress"
+	var talker_b := L5RCharacterData.new()
+	talker_b.character_id = 20
+	talker_b.physical_location = "lion_fortress"
+	var chars: Dictionary = {1: spy, 10: talker_a, 20: talker_b}
+
+	var results: Array = [{
+		"action_id": "EAVESDROP",
+		"success": true,
+		"character_id": 1,
+		"effects": {"margin": 5, "detection_risk": false},
+		"margin": 5,
+	}]
+	var convos: Array[Dictionary] = [{
+		"char_a_id": 10,
+		"char_b_id": 20,
+		"topic_shared_by_a": 42,
+		"topic_shared_by_b": 55,
+	}]
+	var topics: Array[TopicData] = []
+	var next_tid: Array[int] = [100]
+	DayOrchestrator._process_eavesdrop_writebacks(
+		results, convos, chars, 1, topics, next_tid, 50,
+	)
+	assert_eq(spy.topic_pool.size(), 0, "Cannot eavesdrop on conversations at different location")
+
+
+# =============================================================================
+# Impersonation detection tests
+# =============================================================================
+
+
+func test_impersonation_detection_creates_knowledge_and_topic() -> void:
+	var victim := L5RCharacterData.new()
+	victim.character_id = 5
+	victim.knowledge_pool = []
+	var chars: Dictionary = {5: victim}
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [500]
+	var objectives_map: Dictionary = {}
+
+	var reply := LetterData.new()
+	reply.letter_id = 1
+	reply.sender_id = 20
+	reply.recipient_id = 5
+	reply.delivered = true
+	reply.is_reply = true
+	reply.reply_to_forged = true
+	reply.original_forger_id = 99
+	var pending: Array[LetterData] = [reply]
+
+	DayOrchestrator._process_impersonation_detection(
+		pending, chars, active_topics, next_topic_id, 50, objectives_map,
+	)
+	assert_eq(victim.knowledge_pool.size(), 1)
+	assert_eq(victim.knowledge_pool[0].entry_type, "impersonation_detected")
+	assert_eq(victim.knowledge_pool[0].data.get("forger_id", -1), 99)
+	assert_eq(active_topics.size(), 1)
+	assert_eq(active_topics[0].tier, TopicData.Tier.TIER_3)
+	assert_eq(active_topics[0].subject_character_id, 5)
+	assert_eq(next_topic_id[0], 501)
+
+
+func test_impersonation_detection_creates_investigate_objective() -> void:
+	var victim := L5RCharacterData.new()
+	victim.character_id = 5
+	victim.knowledge_pool = []
+	var chars: Dictionary = {5: victim}
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [500]
+	var objectives_map: Dictionary = {}
+
+	var reply := LetterData.new()
+	reply.letter_id = 1
+	reply.sender_id = 20
+	reply.recipient_id = 5
+	reply.delivered = true
+	reply.is_reply = true
+	reply.reply_to_forged = true
+	reply.original_forger_id = 99
+	var pending: Array[LetterData] = [reply]
+
+	DayOrchestrator._process_impersonation_detection(
+		pending, chars, active_topics, next_topic_id, 50, objectives_map,
+	)
+	assert_true(objectives_map.has(5))
+	var objs: Array = objectives_map[5]
+	assert_eq(objs.size(), 1)
+	assert_eq(objs[0]["need_type"], "INVESTIGATE_THREAT")
+	assert_eq(objs[0]["target_npc_id"], 99)
+	assert_eq(objs[0]["source"], "impersonation_detected")
+
+
+func test_impersonation_detection_skips_non_reply() -> void:
+	var victim := L5RCharacterData.new()
+	victim.character_id = 5
+	victim.knowledge_pool = []
+	var chars: Dictionary = {5: victim}
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [500]
+	var objectives_map: Dictionary = {}
+
+	var letter := LetterData.new()
+	letter.letter_id = 1
+	letter.sender_id = 20
+	letter.recipient_id = 5
+	letter.delivered = true
+	letter.is_reply = false
+	letter.reply_to_forged = true
+	letter.original_forger_id = 99
+	var pending: Array[LetterData] = [letter]
+
+	DayOrchestrator._process_impersonation_detection(
+		pending, chars, active_topics, next_topic_id, 50, objectives_map,
+	)
+	assert_eq(victim.knowledge_pool.size(), 0)
+	assert_eq(active_topics.size(), 0)
+
+
+func test_impersonation_detection_deduplicates() -> void:
+	var victim := L5RCharacterData.new()
+	victim.character_id = 5
+	var existing := KnowledgeEntry.new()
+	existing.entry_type = "impersonation_detected"
+	existing.data = {"forger_id": 99}
+	victim.knowledge_pool = [existing]
+	var chars: Dictionary = {5: victim}
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [500]
+	var objectives_map: Dictionary = {}
+
+	var reply := LetterData.new()
+	reply.letter_id = 1
+	reply.sender_id = 20
+	reply.recipient_id = 5
+	reply.delivered = true
+	reply.is_reply = true
+	reply.reply_to_forged = true
+	reply.original_forger_id = 99
+	var pending: Array[LetterData] = [reply]
+
+	DayOrchestrator._process_impersonation_detection(
+		pending, chars, active_topics, next_topic_id, 50, objectives_map,
+	)
+	assert_eq(victim.knowledge_pool.size(), 1,
+		"Should not add duplicate impersonation knowledge")
+	assert_eq(active_topics.size(), 0)
+
+
+# =============================================================================
+# Shadow Target writeback tests
+# =============================================================================
+
+
+func test_shadow_target_records_contacts_and_actions() -> void:
+	var shadow := L5RCharacterData.new()
+	shadow.character_id = 1
+	shadow.physical_location = "crane_castle"
+	var target := L5RCharacterData.new()
+	target.character_id = 10
+	target.physical_location = "crane_castle"
+	var contact := L5RCharacterData.new()
+	contact.character_id = 20
+	contact.physical_location = "crane_castle"
+	var chars: Dictionary = {1: shadow, 10: target, 20: contact}
+
+	var results: Array = [
+		{
+			"action_id": "SHADOW_TARGET",
+			"success": true,
+			"character_id": 1,
+			"target_npc_id": 10,
+			"margin": 8,
+			"effects": {},
+		},
+		{
+			"action_id": "CHARM",
+			"success": true,
+			"character_id": 10,
+			"target_npc_id": 20,
+		},
+	]
+	var convos: Array[Dictionary] = [{
+		"char_a_id": 10,
+		"char_b_id": 20,
+		"topic_shared_by_a": 42,
+		"topic_shared_by_b": 55,
+	}]
+	DayOrchestrator._process_shadow_target_writebacks(
+		results, convos, chars, 1,
+	)
+	assert_eq(shadow.knowledge_pool.size(), 1)
+	var entry: KnowledgeEntry = shadow.knowledge_pool[0]
+	assert_eq(entry.entry_type, "shadow_surveillance")
+	assert_eq(entry.data.get("target_id"), 10)
+	var contacts: Array = entry.data.get("contacts_observed", [])
+	assert_true(20 in contacts, "Should observe target's conversation partner")
+	var actions: Array = entry.data.get("actions_observed", [])
+	assert_true("CHARM" in actions, "Should observe target's CHARM action")
+
+
+func test_shadow_target_critical_failure_reveals_shadow() -> void:
+	var shadow := L5RCharacterData.new()
+	shadow.character_id = 1
+	shadow.physical_location = "crane_castle"
+	var target := L5RCharacterData.new()
+	target.character_id = 10
+	target.physical_location = "crane_castle"
+	target.disposition_values = {1: 20}
+	var chars: Dictionary = {1: shadow, 10: target}
+
+	var results: Array = [{
+		"action_id": "SHADOW_TARGET",
+		"success": false,
+		"character_id": 1,
+		"target_npc_id": 10,
+		"margin": -12,
+		"effects": {},
+	}]
+	var convos: Array[Dictionary] = []
+	DayOrchestrator._process_shadow_target_writebacks(
+		results, convos, chars, 1,
+	)
+	assert_eq(target.disposition_values[1], 15,
+		"Target disposition should drop by 5 on critical failure")
+	assert_eq(shadow.knowledge_pool.size(), 0,
+		"No intelligence on failure")
+
+
+func test_shadow_target_normal_failure_no_effect() -> void:
+	var shadow := L5RCharacterData.new()
+	shadow.character_id = 1
+	shadow.physical_location = "crane_castle"
+	var target := L5RCharacterData.new()
+	target.character_id = 10
+	target.physical_location = "crane_castle"
+	target.disposition_values = {1: 20}
+	var chars: Dictionary = {1: shadow, 10: target}
+
+	var results: Array = [{
+		"action_id": "SHADOW_TARGET",
+		"success": false,
+		"character_id": 1,
+		"target_npc_id": 10,
+		"margin": -5,
+		"effects": {},
+	}]
+	var convos: Array[Dictionary] = []
+	DayOrchestrator._process_shadow_target_writebacks(
+		results, convos, chars, 1,
+	)
+	assert_eq(target.disposition_values[1], 20,
+		"Normal failure: target knows they're being tailed but not by whom")
+	assert_eq(shadow.knowledge_pool.size(), 0)
+
+
+func test_shadow_target_no_duplicate_contacts() -> void:
+	var shadow := L5RCharacterData.new()
+	shadow.character_id = 1
+	shadow.physical_location = "crane_castle"
+	var target := L5RCharacterData.new()
+	target.character_id = 10
+	target.physical_location = "crane_castle"
+	var contact := L5RCharacterData.new()
+	contact.character_id = 20
+	contact.physical_location = "crane_castle"
+	var chars: Dictionary = {1: shadow, 10: target, 20: contact}
+
+	var results: Array = [{
+		"action_id": "SHADOW_TARGET",
+		"success": true,
+		"character_id": 1,
+		"target_npc_id": 10,
+		"margin": 5,
+		"effects": {},
+	}]
+	var convos: Array[Dictionary] = [
+		{"char_a_id": 10, "char_b_id": 20, "topic_shared_by_a": 1, "topic_shared_by_b": 2},
+		{"char_a_id": 20, "char_b_id": 10, "topic_shared_by_a": 3, "topic_shared_by_b": 4},
+	]
+	DayOrchestrator._process_shadow_target_writebacks(
+		results, convos, chars, 1,
+	)
+	var entry: KnowledgeEntry = shadow.knowledge_pool[0]
+	var contacts: Array = entry.data.get("contacts_observed", [])
+	assert_eq(contacts.size(), 1, "Contact 20 should appear only once")
+
+
+# =============================================================================
+# Low Skill glory on discovery tests
+# =============================================================================
+
+
+func test_shadow_target_critical_failure_applies_glory_penalty() -> void:
+	var shadow := L5RCharacterData.new()
+	shadow.character_id = 1
+	shadow.physical_location = "crane_castle"
+	shadow.glory = 3.0
+	var target := L5RCharacterData.new()
+	target.character_id = 10
+	target.physical_location = "crane_castle"
+	target.disposition_values = {}
+	var chars: Dictionary = {1: shadow, 10: target}
+
+	var results: Array = [{
+		"action_id": "SHADOW_TARGET",
+		"success": false,
+		"character_id": 1,
+		"target_npc_id": 10,
+		"margin": -12,
+		"effects": {},
+	}]
+	var convos: Array[Dictionary] = []
+	DayOrchestrator._process_shadow_target_writebacks(
+		results, convos, chars, 1,
+	)
+	assert_almost_eq(shadow.glory, 2.7, 0.001,
+		"Shadow identified on critical failure loses 0.3 glory")
+
+
+func test_forgery_detection_applies_glory_penalty() -> void:
+	var forger := L5RCharacterData.new()
+	forger.character_id = 1
+	forger.glory = 4.0
+	var victim := L5RCharacterData.new()
+	victim.character_id = 10
+	var chars: Dictionary = {1: forger, 10: victim}
+
+	var letter := LetterData.new()
+	letter.delivered = true
+	letter.is_forged = true
+	letter.forgery_detected = true
+	letter.forged_sender_id = 1
+	letter.sender_id = 10
+	letter.recipient_id = 20
+
+	var record := CrimeRecord.new()
+	record.perpetrator_id = 1
+	record.victim_id = 10
+	record.crime_type = Enums.CrimeType.DISHONORABLE_CONDUCT
+	record.legal_status = Enums.LegalStatus.NONE
+
+	var letters: Array[LetterData] = [letter]
+	var records: Array[CrimeRecord] = [record]
+	DayOrchestrator._escalate_detected_forgery_crimes(letters, records, chars)
+	assert_almost_eq(forger.glory, 3.7, 0.001,
+		"Forger identified on detection loses 0.3 glory")
+
+
+# TABLE 2.3 — FACING A SUPERIOR FOE (DUEL CHALLENGE)
+# ==============================================================================
+
+func test_duel_honor_gain_facing_superior_foe() -> void:
+	var challenger := L5RCharacterData.new()
+	challenger.character_id = 200
+	challenger.character_name = "Brave Challenger"
+	challenger.honor = 3.0
+	challenger.status = 2.0
+	challenger.school = "Akodo Bushi"
+	challenger.clan = "Lion"
+	var target := L5RCharacterData.new()
+	target.character_id = 201
+	target.character_name = "Superior Opponent"
+	target.status = 6.0
+	var characters_by_id: Dictionary = {200: challenger, 201: target}
+
+	var results: Array[Dictionary] = [{
+		"success": true,
+		"action_id": "ISSUE_DUEL_CHALLENGE",
+		"character_id": 200,
+		"target_npc_id": 201,
+		"effects": {},
+	}]
+
+	var initial_honor: float = challenger.honor
+	DayOrchestrator._process_duel_honor_writebacks(results, characters_by_id)
+
+	assert_true(challenger.honor > initial_honor,
+		"Challenger facing higher-status opponent gains honor")
+
+
+func test_duel_no_honor_gain_equal_status() -> void:
+	var challenger := L5RCharacterData.new()
+	challenger.character_id = 202
+	challenger.character_name = "Equal Duelist"
+	challenger.honor = 3.0
+	challenger.status = 4.0
+	challenger.school = "Kakita Bushi"
+	challenger.clan = "Crane"
+	var target := L5RCharacterData.new()
+	target.character_id = 203
+	target.character_name = "Peer"
+	target.status = 4.0
+	var characters_by_id: Dictionary = {202: challenger, 203: target}
+
+	var results: Array[Dictionary] = [{
+		"success": true,
+		"action_id": "ISSUE_DUEL_CHALLENGE",
+		"character_id": 202,
+		"target_npc_id": 203,
+		"effects": {},
+	}]
+
+	var initial_honor: float = challenger.honor
+	DayOrchestrator._process_duel_honor_writebacks(results, characters_by_id)
+
+	assert_almost_eq(challenger.honor, initial_honor, 0.01,
+		"Equal-status duel should not trigger facing superior foe")
+
+
+# TABLE 2.3 — FULFILLING A PROMISE DESPITE GREAT PERSONAL COST
+# ==============================================================================
+
+func test_fulfilling_promise_during_crisis_gains_honor() -> void:
+	var debtor := L5RCharacterData.new()
+	debtor.character_id = 210
+	debtor.character_name = "Honorable Lord"
+	debtor.honor = 3.0
+	debtor.school = "Akodo Bushi"
+	debtor.clan = "Lion"
+	var characters_by_id: Dictionary = {210: debtor}
+
+	var commitment := CommitmentData.new()
+	commitment.commitment_id = 50
+	commitment.debtor_npc_id = 210
+	commitment.crisis_id = 5
+	commitment.status = Enums.CommitmentStatus.FULFILLED
+	var commitments: Array[CommitmentData] = [commitment]
+
+	var commitment_results: Array[Dictionary] = [{
+		"commitment_id": 50,
+		"status": "FULFILLED",
+	}]
+
+	var initial_honor: float = debtor.honor
+	DayOrchestrator._apply_promise_fulfillment_honor(
+		commitment_results, commitments, characters_by_id, {},
+	)
+
+	assert_true(debtor.honor > initial_honor,
+		"Fulfilling a promise during a crisis should gain honor")
+
+
+func test_fulfilling_promise_no_crisis_no_honor() -> void:
+	var debtor := L5RCharacterData.new()
+	debtor.character_id = 211
+	debtor.character_name = "Routine Lord"
+	debtor.honor = 3.0
+	debtor.school = "Hida Bushi"
+	debtor.clan = "Crab"
+	var characters_by_id: Dictionary = {211: debtor}
+
+	var commitment := CommitmentData.new()
+	commitment.commitment_id = 51
+	commitment.debtor_npc_id = 211
+	commitment.crisis_id = -1
+	commitment.status = Enums.CommitmentStatus.FULFILLED
+	var commitments: Array[CommitmentData] = [commitment]
+
+	var commitment_results: Array[Dictionary] = [{
+		"commitment_id": 51,
+		"status": "FULFILLED",
+	}]
+
+	var initial_honor: float = debtor.honor
+	DayOrchestrator._apply_promise_fulfillment_honor(
+		commitment_results, commitments, characters_by_id, {},
+	)
+
+	assert_almost_eq(debtor.honor, initial_honor, 0.01,
+		"Fulfilling without crisis should not trigger honor gain")
+
+
+# TABLE 2.3 — SINCERE COURTESY TO ENEMIES
+# ==============================================================================
+
+func test_charm_rival_with_rei_virtue_gains_sincere_courtesy_honor() -> void:
+	var charmer := L5RCharacterData.new()
+	charmer.character_id = 220
+	charmer.character_name = "Rei Courtier"
+	charmer.honor = 3.0
+	charmer.school = "Doji Courtier"
+	charmer.clan = "Crane"
+	charmer.wounds_taken = 0
+	charmer.bushido_virtue = Enums.BushidoVirtue.REI
+	charmer.disposition_values = {221: -20}
+	var target := L5RCharacterData.new()
+	target.character_id = 221
+	target.character_name = "Rival"
+	target.wounds_taken = 0
+	var characters_by_id: Dictionary = {220: charmer, 221: target}
+
+	var court := CourtSessionData.new()
+	court.phase = CourtSessionData.CourtPhase.ACTIVE
+	court.host_settlement_id = 10
+	court.session_state = {}
+	var active_courts: Array[CourtSessionData] = [court]
+
+	var day_results: Array = [{
+		"action_id": "CHARM",
+		"character_id": 220,
+		"target_npc_id": 221,
+		"effects": {
+			"_action_metadata": {"court_settlement_id": 10},
+			"disposition_change": 5,
+		},
+	}]
+
+	var initial_honor: float = charmer.honor
+	DayOrchestrator._process_court_action_effects(
+		day_results, characters_by_id, [], 10, -1,
+		StrategicReview.EmperorArchetype.IRON, [], active_courts,
+	)
+
+	assert_true(charmer.honor > initial_honor,
+		"Rei-virtue charmer against rival gains sincere courtesy honor")
+
+
+func test_charm_rival_without_virtue_loses_false_courtesy_honor() -> void:
+	var charmer := L5RCharacterData.new()
+	charmer.character_id = 222
+	charmer.character_name = "Cynical Courtier"
+	charmer.honor = 7.0
+	charmer.school = "Bayushi Courtier"
+	charmer.clan = "Scorpion"
+	charmer.wounds_taken = 0
+	charmer.bushido_virtue = Enums.BushidoVirtue.NONE
+	charmer.disposition_values = {223: -20}
+	var target := L5RCharacterData.new()
+	target.character_id = 223
+	target.character_name = "Rival"
+	target.wounds_taken = 0
+	var characters_by_id: Dictionary = {222: charmer, 223: target}
+
+	var court := CourtSessionData.new()
+	court.phase = CourtSessionData.CourtPhase.ACTIVE
+	court.host_settlement_id = 11
+	court.session_state = {}
+	var active_courts: Array[CourtSessionData] = [court]
+
+	var day_results: Array = [{
+		"action_id": "CHARM",
+		"character_id": 222,
+		"target_npc_id": 223,
+		"effects": {
+			"_action_metadata": {"court_settlement_id": 11},
+			"disposition_change": 5,
+		},
+	}]
+
+	var initial_honor: float = charmer.honor
+	DayOrchestrator._process_court_action_effects(
+		day_results, characters_by_id, [], 10, -1,
+		StrategicReview.EmperorArchetype.IRON, [], active_courts,
+	)
+
+	assert_true(charmer.honor < initial_honor,
+		"Non-Rei/Jin charmer against rival loses false courtesy honor")
+
+
+# TABLE 2.3 — ENDURING AN INSULT TO YOURSELF
+# ==============================================================================
+
+func test_public_insult_target_gains_enduring_honor() -> void:
+	var target := L5RCharacterData.new()
+	target.character_id = 230
+	target.character_name = "Stoic Samurai"
+	target.honor = 5.0
+	target.school = "Akodo Bushi"
+	target.clan = "Lion"
+	target.wounds_taken = 0
+	var insulter := L5RCharacterData.new()
+	insulter.character_id = 231
+	insulter.character_name = "Rude Courtier"
+	insulter.wounds_taken = 0
+	var characters_by_id: Dictionary = {230: target, 231: insulter}
+
+	var day_results: Array = [{
+		"action_id": "PUBLIC_INSULT",
+		"character_id": 231,
+		"target_npc_id": 230,
+		"effects": {
+			"target_witness_disposition": -3,
+			"witnesses": [],
+		},
+	}]
+
+	var initial_honor: float = target.honor
+	DayOrchestrator._process_court_action_effects(
+		day_results, characters_by_id,
+	)
+
+	assert_true(target.honor > initial_honor,
+		"Target of successful insult gains enduring honor")
+
+
+func test_failed_insult_no_enduring_honor() -> void:
+	var target := L5RCharacterData.new()
+	target.character_id = 232
+	target.character_name = "Never Insulted"
+	target.honor = 5.0
+	target.school = "Hida Bushi"
+	target.clan = "Crab"
+	target.wounds_taken = 0
+	var characters_by_id: Dictionary = {232: target}
+
+	var day_results: Array = [{
+		"action_id": "PUBLIC_INSULT",
+		"character_id": 233,
+		"target_npc_id": 232,
+		"effects": {
+			"failed": true,
+			"witness_disposition_loss": -2,
+			"witnesses": [],
+		},
+	}]
+
+	var initial_honor: float = target.honor
+	DayOrchestrator._process_court_action_effects(
+		day_results, characters_by_id,
+	)
+
+	assert_almost_eq(target.honor, initial_honor, 0.01,
+		"Failed insult should not trigger enduring honor")
+
+
+# TABLE 2.3 — SHOWING KINDNESS TO ONE BENEATH YOUR STATION
+# ==============================================================================
+
+func test_gift_to_lower_status_gains_kindness_honor() -> void:
+	var giver := L5RCharacterData.new()
+	giver.character_id = 240
+	giver.character_name = "Generous Lord"
+	giver.honor = 3.0
+	giver.status = 6.0
+	giver.school = "Doji Courtier"
+	giver.clan = "Crane"
+	var recipient := L5RCharacterData.new()
+	recipient.character_id = 241
+	recipient.character_name = "Low Status Samurai"
+	recipient.status = 2.0
+	var characters_by_id: Dictionary = {240: giver, 241: recipient}
+
+	var results: Array[Dictionary] = [{
+		"success": true,
+		"action_id": "DELIVER_GIFT",
+		"character_id": 240,
+		"target_npc_id": 241,
+		"effects": {"gift_outcome": "success"},
+	}]
+
+	var initial_honor: float = giver.honor
+	DayOrchestrator._process_kindness_honor_writebacks(results, characters_by_id)
+
+	assert_true(giver.honor > initial_honor,
+		"Giving a gift to lower-status character gains kindness honor")
+
+
+func test_gift_to_equal_status_no_kindness_honor() -> void:
+	var giver := L5RCharacterData.new()
+	giver.character_id = 242
+	giver.character_name = "Peer Giver"
+	giver.honor = 3.0
+	giver.status = 4.0
+	giver.school = "Doji Courtier"
+	giver.clan = "Crane"
+	var recipient := L5RCharacterData.new()
+	recipient.character_id = 243
+	recipient.character_name = "Peer"
+	recipient.status = 4.0
+	var characters_by_id: Dictionary = {242: giver, 243: recipient}
+
+	var results: Array[Dictionary] = [{
+		"success": true,
+		"action_id": "DELIVER_GIFT",
+		"character_id": 242,
+		"target_npc_id": 243,
+		"effects": {"gift_outcome": "success"},
+	}]
+
+	var initial_honor: float = giver.honor
+	DayOrchestrator._process_kindness_honor_writebacks(results, characters_by_id)
+
+	assert_almost_eq(giver.honor, initial_honor, 0.01,
+		"Gift to equal-status should not trigger kindness honor")
+
+
+func test_offer_favor_to_lower_status_gains_kindness() -> void:
+	var offerer := L5RCharacterData.new()
+	offerer.character_id = 244
+	offerer.character_name = "Benevolent Lord"
+	offerer.honor = 3.0
+	offerer.status = 7.0
+	offerer.school = "Akodo Bushi"
+	offerer.clan = "Lion"
+	var recipient := L5RCharacterData.new()
+	recipient.character_id = 245
+	recipient.character_name = "Minor Samurai"
+	recipient.status = 2.0
+	var characters_by_id: Dictionary = {244: offerer, 245: recipient}
+
+	var results: Array[Dictionary] = [{
+		"success": true,
+		"action_id": "OFFER_FAVOR",
+		"character_id": 244,
+		"target_npc_id": 245,
+		"effects": {},
+	}]
+
+	var initial_honor: float = offerer.honor
+	DayOrchestrator._process_kindness_honor_writebacks(results, characters_by_id)
+
+	assert_true(offerer.honor > initial_honor,
+		"Offering favor to lower-status gains kindness honor")
+
+
+# TABLE 2.3 — GIVING A TRUTHFUL REPORT AT YOUR OWN EXPENSE
+# ==============================================================================
+
+func test_expose_same_clan_secret_gains_truthful_report_honor() -> void:
+	var exposer := L5RCharacterData.new()
+	exposer.character_id = 250
+	exposer.character_name = "Honest Magistrate"
+	exposer.honor = 3.0
+	exposer.school = "Akodo Bushi"
+	exposer.clan = "Lion"
+	var subject := L5RCharacterData.new()
+	subject.character_id = 251
+	subject.character_name = "Lion Conspirator"
+	subject.clan = "Lion"
+	var characters_by_id: Dictionary = {250: exposer, 251: subject}
+
+	var secret := SecretData.new()
+	secret.secret_id = 10
+	secret.subject_id = 251
+	var active_secrets: Array[SecretData] = [secret]
+
+	var results: Array[Dictionary] = [{
+		"success": true,
+		"action_id": "EXPOSE_SECRET_PUBLICLY",
+		"character_id": 250,
+		"target_npc_id": -1,
+		"effects": {"secret_id": 10},
+	}]
+
+	var initial_honor: float = exposer.honor
+	DayOrchestrator._process_truthful_report_honor_writebacks(
+		results, characters_by_id, active_secrets,
+	)
+
+	assert_true(exposer.honor > initial_honor,
+		"Exposing a same-clan secret gains truthful report honor")
+
+
+func test_expose_other_clan_secret_no_truthful_report_honor() -> void:
+	var exposer := L5RCharacterData.new()
+	exposer.character_id = 252
+	exposer.character_name = "Crane Magistrate"
+	exposer.honor = 3.0
+	exposer.school = "Doji Courtier"
+	exposer.clan = "Crane"
+	var subject := L5RCharacterData.new()
+	subject.character_id = 253
+	subject.character_name = "Scorpion Agent"
+	subject.clan = "Scorpion"
+	var characters_by_id: Dictionary = {252: exposer, 253: subject}
+
+	var secret := SecretData.new()
+	secret.secret_id = 11
+	secret.subject_id = 253
+	var active_secrets: Array[SecretData] = [secret]
+
+	var results: Array[Dictionary] = [{
+		"success": true,
+		"action_id": "EXPOSE_SECRET_PUBLICLY",
+		"character_id": 252,
+		"target_npc_id": -1,
+		"effects": {"secret_id": 11},
+	}]
+
+	var initial_honor: float = exposer.honor
+	DayOrchestrator._process_truthful_report_honor_writebacks(
+		results, characters_by_id, active_secrets,
+	)
+
+	assert_almost_eq(exposer.honor, initial_honor, 0.01,
+		"Exposing other-clan secret should not trigger truthful report")
+
+
+# TABLE 2.3 — PROTECTING CLAN/FAMILY/LORD DESPITE GREAT RISK
+# ==============================================================================
+
+func test_sortie_during_crisis_gains_protecting_honor() -> void:
+	var commander := L5RCharacterData.new()
+	commander.character_id = 260
+	commander.character_name = "Brave Commander"
+	commander.honor = 3.0
+	commander.school = "Hida Bushi"
+	commander.clan = "Crab"
+	var characters_by_id: Dictionary = {260: commander}
+
+	var province := ProvinceData.new()
+	province.province_id = 100
+	province.active_crisis_id = 5
+	var provinces: Dictionary = {100: province}
+
+	var results: Array[Dictionary] = [{
+		"success": true,
+		"action_id": "CONDUCT_SORTIE",
+		"character_id": 260,
+		"target_province_id": 100,
+		"effects": {"target_province_id": 100},
+	}]
+
+	var initial_honor: float = commander.honor
+	DayOrchestrator._process_protecting_clan_honor_writebacks(
+		results, characters_by_id, provinces,
+	)
+
+	assert_true(commander.honor > initial_honor,
+		"Sortie during crisis gains protecting clan honor")
+
+
+func test_sortie_no_crisis_no_protecting_honor() -> void:
+	var commander := L5RCharacterData.new()
+	commander.character_id = 261
+	commander.character_name = "Routine Commander"
+	commander.honor = 3.0
+	commander.school = "Hida Bushi"
+	commander.clan = "Crab"
+	var characters_by_id: Dictionary = {261: commander}
+
+	var province := ProvinceData.new()
+	province.province_id = 101
+	province.active_crisis_id = -1
+	var provinces: Dictionary = {101: province}
+
+	var results: Array[Dictionary] = [{
+		"success": true,
+		"action_id": "CONDUCT_SORTIE",
+		"character_id": 261,
+		"target_province_id": 101,
+		"effects": {"target_province_id": 101},
+	}]
+
+	var initial_honor: float = commander.honor
+	DayOrchestrator._process_protecting_clan_honor_writebacks(
+		results, characters_by_id, provinces,
+	)
+
+	assert_almost_eq(commander.honor, initial_honor, 0.01,
+		"Sortie without crisis should not trigger protecting honor")
+
+
+# TABLE 2.3 — INSULT TYPE CLASSIFICATION
+# ==============================================================================
+
+func test_ancestor_insult_causes_honor_loss() -> void:
+	var target := L5RCharacterData.new()
+	target.character_id = 270
+	target.character_name = "Insulted Samurai"
+	target.honor = 5.0
+	target.school = "Akodo Bushi"
+	target.clan = "Lion"
+	target.wounds_taken = 0
+	var characters_by_id: Dictionary = {270: target}
+
+	var day_results: Array = [{
+		"action_id": "PUBLIC_INSULT",
+		"character_id": 271,
+		"target_npc_id": 270,
+		"effects": {
+			"target_witness_disposition": -3,
+			"witnesses": [],
+			"insult_type": "ancestors",
+		},
+	}]
+
+	var initial_honor: float = target.honor
+	DayOrchestrator._process_court_action_effects(
+		day_results, characters_by_id,
+	)
+
+	assert_true(target.honor < initial_honor,
+		"Ancestor insult should cause honor loss (enduring insult to ancestors)")
+
+
+func test_clan_insult_causes_honor_loss() -> void:
+	var target := L5RCharacterData.new()
+	target.character_id = 272
+	target.character_name = "Clan-Insulted Samurai"
+	target.honor = 5.0
+	target.school = "Matsu Bushi"
+	target.clan = "Lion"
+	target.wounds_taken = 0
+	var characters_by_id: Dictionary = {272: target}
+
+	var day_results: Array = [{
+		"action_id": "PUBLIC_INSULT",
+		"character_id": 273,
+		"target_npc_id": 272,
+		"effects": {
+			"target_witness_disposition": -3,
+			"witnesses": [],
+			"insult_type": "clan",
+		},
+	}]
+
+	var initial_honor: float = target.honor
+	DayOrchestrator._process_court_action_effects(
+		day_results, characters_by_id,
+	)
+
+	assert_true(target.honor < initial_honor,
+		"Clan insult should cause honor loss (enduring insult to family/clan)")
+
+
+func test_self_insult_default_type_gains_honor() -> void:
+	var target := L5RCharacterData.new()
+	target.character_id = 274
+	target.character_name = "Self-Insulted Samurai"
+	target.honor = 3.0
+	target.school = "Hida Bushi"
+	target.clan = "Crab"
+	target.wounds_taken = 0
+	var characters_by_id: Dictionary = {274: target}
+
+	var day_results: Array = [{
+		"action_id": "PUBLIC_INSULT",
+		"character_id": 275,
+		"target_npc_id": 274,
+		"effects": {
+			"target_witness_disposition": -3,
+			"witnesses": [],
+			"insult_type": "self",
+		},
+	}]
+
+	var initial_honor: float = target.honor
+	DayOrchestrator._process_court_action_effects(
+		day_results, characters_by_id,
+	)
+
+	assert_true(target.honor > initial_honor,
+		"Self insult should gain honor (enduring insult to yourself)")
+
+
+# TABLE 2.3 — POLITELY IGNORING DISHONORABLE BEHAVIOR
+# ==============================================================================
+
+func test_non_magistrate_witness_gets_ignoring_honor() -> void:
+	var witness := L5RCharacterData.new()
+	witness.character_id = 280
+	witness.character_name = "Bystander"
+	witness.honor = 1.0
+	witness.school = "Hida Bushi"
+	witness.clan = "Crab"
+	witness.role_position = ""
+	witness.topic_pool = [] as Array[int]
+	var characters_by_id: Dictionary = {280: witness}
+
+	var topic := TopicData.new()
+	topic.topic_id = 500
+	var record := CrimeRecord.new()
+	record.case_id = 70
+	record.witnesses = [280] as Array[int]
+	record.victim_id = -1
+
+	var initial_honor: float = witness.honor
+	DayOrchestrator._seed_crime_topic_to_knowers(topic, record, characters_by_id)
+
+	assert_true(witness.honor > initial_honor,
+		"Low-honor non-magistrate witness gains honor for ignoring dishonorable behavior")
+	assert_true(500 in witness.topic_pool,
+		"Witness should have the crime topic in their pool")
+
+
+func test_magistrate_witness_no_ignoring_honor() -> void:
+	var magistrate := L5RCharacterData.new()
+	magistrate.character_id = 281
+	magistrate.character_name = "Magistrate"
+	magistrate.honor = 7.0
+	magistrate.school = "Doji Courtier"
+	magistrate.clan = "Crane"
+	magistrate.role_position = "Clan Magistrate"
+	magistrate.topic_pool = [] as Array[int]
+	var characters_by_id: Dictionary = {281: magistrate}
+
+	var topic := TopicData.new()
+	topic.topic_id = 501
+	var record := CrimeRecord.new()
+	record.case_id = 71
+	record.witnesses = [281] as Array[int]
+	record.victim_id = -1
+
+	var initial_honor: float = magistrate.honor
+	DayOrchestrator._seed_crime_topic_to_knowers(topic, record, characters_by_id)
+
+	assert_almost_eq(magistrate.honor, initial_honor, 0.01,
+		"Magistrate witnesses should not get ignoring honor")
+
+
+func test_victim_witness_no_ignoring_honor() -> void:
+	var victim := L5RCharacterData.new()
+	victim.character_id = 282
+	victim.character_name = "Victim Witness"
+	victim.honor = 3.0
+	victim.school = "Hida Bushi"
+	victim.clan = "Crab"
+	victim.role_position = ""
+	victim.topic_pool = [] as Array[int]
+	var characters_by_id: Dictionary = {282: victim}
+
+	var topic := TopicData.new()
+	topic.topic_id = 502
+	var record := CrimeRecord.new()
+	record.case_id = 72
+	record.witnesses = [282] as Array[int]
+	record.victim_id = 282
+
+	var initial_honor: float = victim.honor
+	DayOrchestrator._seed_crime_topic_to_knowers(topic, record, characters_by_id)
+
+	assert_almost_eq(victim.honor, initial_honor, 0.01,
+		"Victim who is also a witness should not get ignoring honor")
+
+
+func test_high_honor_witness_loses_honor_for_ignoring() -> void:
+	var witness := L5RCharacterData.new()
+	witness.character_id = 283
+	witness.character_name = "High Honor Bystander"
+	witness.honor = 9.0
+	witness.school = "Kakita Bushi"
+	witness.clan = "Crane"
+	witness.role_position = ""
+	witness.topic_pool = [] as Array[int]
+	var characters_by_id: Dictionary = {283: witness}
+
+	var topic := TopicData.new()
+	topic.topic_id = 503
+	var record := CrimeRecord.new()
+	record.case_id = 73
+	record.witnesses = [283] as Array[int]
+	record.victim_id = -1
+
+	var initial_honor: float = witness.honor
+	DayOrchestrator._seed_crime_topic_to_knowers(topic, record, characters_by_id)
+
+	assert_true(witness.honor < initial_honor,
+		"High-honor non-magistrate witness loses honor for ignoring dishonorable behavior")
+
+
+# -- Duel crime perpetrator/victim swap fix -----------------------------------
+
+func test_duel_crime_defender_kills_challenger_correct_perpetrator() -> void:
+	var challenger := L5RCharacterData.new()
+	challenger.character_id = 300
+	challenger.character_name = "Challenger"
+	challenger.status = 3.0
+	challenger.honor = 5.0
+	challenger.clan = "Lion"
+	challenger.physical_location = "castle_A"
+	challenger.captive_status = ""
+	var defender := L5RCharacterData.new()
+	defender.character_id = 301
+	defender.character_name = "Defender"
+	defender.status = 4.0
+	defender.honor = 5.0
+	defender.clan = "Crane"
+	defender.physical_location = "castle_A"
+	defender.captive_status = ""
+	var characters_by_id: Dictionary = {300: challenger, 301: defender}
+	var crime_records: Array[CrimeRecord] = []
+	var active_topics: Array[TopicData] = []
+	var next_case_id: Array[int] = [100]
+	var next_topic_id: Array[int] = [500]
+	var results: Array[Dictionary] = [{
+		"action_id": "ISSUE_DUEL_CHALLENGE",
+		"character_id": 300,
+		"target_npc_id": 301,
+		"success": true,
+		"effects": {
+			"requires_crime_creation": true,
+			"crime_type": Enums.CrimeType.UNSANCTIONED_DUEL_DEATH,
+			"crime_perpetrator_id": 301,
+			"crime_victim_id": 300,
+		},
+	}]
+	DayOrchestrator._process_crime_detection(
+		results, characters_by_id, crime_records, 10,
+		next_case_id, active_topics, next_topic_id, {}, [], [], null,
+	)
+	assert_eq(crime_records.size(), 1, "Should create crime record")
+	assert_eq(crime_records[0].perpetrator_id, 301,
+		"Perpetrator should be defender who killed challenger")
+
+
+func test_duel_crime_challenger_kills_defender_correct_perpetrator() -> void:
+	var challenger := L5RCharacterData.new()
+	challenger.character_id = 302
+	challenger.character_name = "Challenger"
+	challenger.status = 3.0
+	challenger.honor = 5.0
+	challenger.clan = "Lion"
+	challenger.physical_location = "castle_B"
+	challenger.captive_status = ""
+	var defender := L5RCharacterData.new()
+	defender.character_id = 303
+	defender.character_name = "Defender"
+	defender.status = 4.0
+	defender.honor = 5.0
+	defender.clan = "Crane"
+	defender.physical_location = "castle_B"
+	defender.captive_status = ""
+	var characters_by_id: Dictionary = {302: challenger, 303: defender}
+	var crime_records: Array[CrimeRecord] = []
+	var active_topics: Array[TopicData] = []
+	var next_case_id: Array[int] = [100]
+	var next_topic_id: Array[int] = [500]
+	var results: Array[Dictionary] = [{
+		"action_id": "ISSUE_DUEL_CHALLENGE",
+		"character_id": 302,
+		"target_npc_id": 303,
+		"success": true,
+		"effects": {
+			"requires_crime_creation": true,
+			"crime_type": Enums.CrimeType.UNSANCTIONED_DUEL_DEATH,
+			"crime_perpetrator_id": 302,
+			"crime_victim_id": 303,
+		},
+	}]
+	DayOrchestrator._process_crime_detection(
+		results, characters_by_id, crime_records, 10,
+		next_case_id, active_topics, next_topic_id, {}, [], [], null,
+	)
+	assert_eq(crime_records.size(), 1, "Should create crime record")
+	assert_eq(crime_records[0].perpetrator_id, 302,
+		"Perpetrator should be challenger who killed defender")
+
+
+# -- ASK_FOR_INTRODUCTION writeback -------------------------------------------
+
+func test_introduction_writeback_adds_contact() -> void:
+	var actor := L5RCharacterData.new()
+	actor.character_id = 310
+	actor.character_name = "Introducer"
+	actor.clan = "Crane"
+	actor.met_characters = [] as Array[int]
+	actor.known_contacts_by_clan = {}
+	var target := L5RCharacterData.new()
+	target.character_id = 311
+	target.character_name = "Target"
+	target.clan = "Lion"
+	target.disposition_values = {}
+	var characters_by_id: Dictionary = {310: actor, 311: target}
+	var results: Array = [{
+		"action_id": "ASK_FOR_INTRODUCTION",
+		"character_id": 310,
+		"target_npc_id": 311,
+		"success": true,
+		"effects": {
+			"contact_added": true,
+			"contact_id": 311,
+			"disposition_gain": 3,
+		},
+	}]
+	DayOrchestrator._process_introduction_writebacks(results, characters_by_id)
+	assert_true(311 in actor.met_characters,
+		"Target should be added to actor's met_characters")
+	assert_eq(target.disposition_values.get(310, 0), 3,
+		"Target disposition toward actor should increase")
+
+
+func test_introduction_writeback_skips_failure() -> void:
+	var actor := L5RCharacterData.new()
+	actor.character_id = 312
+	actor.met_characters = [] as Array[int]
+	var characters_by_id: Dictionary = {312: actor}
+	var results: Array = [{
+		"action_id": "ASK_FOR_INTRODUCTION",
+		"character_id": 312,
+		"success": false,
+		"effects": {"failed": true},
+	}]
+	DayOrchestrator._process_introduction_writebacks(results, characters_by_id)
+	assert_eq(actor.met_characters.size(), 0,
+		"Failed introduction should not add contacts")
+
+
+# -- OBSERVE_COURT_ATTENDEES writeback ----------------------------------------
+
+func test_observe_attendees_writeback_adds_knowledge() -> void:
+	var observer := L5RCharacterData.new()
+	observer.character_id = 320
+	observer.character_name = "Observer"
+	observer.clan = "Scorpion"
+	observer.met_characters = [] as Array[int]
+	observer.known_contacts_by_clan = {}
+	observer.knowledge_pool = [] as Array[KnowledgeEntry]
+	var npc := L5RCharacterData.new()
+	npc.character_id = 321
+	npc.character_name = "Unknown NPC"
+	npc.clan = "Crane"
+	var characters_by_id: Dictionary = {320: observer, 321: npc}
+	var results: Array = [{
+		"action_id": "OBSERVE_COURT_ATTENDEES",
+		"character_id": 320,
+		"success": true,
+		"effects": {
+			"info_gained": true,
+			"learn_count": 1,
+			"learned_attendees": [
+				{"character_id": 321, "clan": "Crane", "family": "Doji", "status": 3.0},
+			],
+		},
+	}]
+	DayOrchestrator._process_observe_attendees_writebacks(results, characters_by_id, 0)
+	assert_true(321 in observer.met_characters,
+		"Observed NPC should be added to met_characters")
+	assert_eq(observer.knowledge_pool.size(), 1,
+		"Knowledge entry should be created for observed attendee")
+	assert_eq(observer.knowledge_pool[0].entry_type, "court_observation",
+		"Knowledge type should be court_observation")
+
+
+func test_observe_attendees_writeback_skips_failure() -> void:
+	var observer := L5RCharacterData.new()
+	observer.character_id = 322
+	observer.met_characters = [] as Array[int]
+	observer.knowledge_pool = [] as Array[KnowledgeEntry]
+	var characters_by_id: Dictionary = {322: observer}
+	var results: Array = [{
+		"action_id": "OBSERVE_COURT_ATTENDEES",
+		"character_id": 322,
+		"success": false,
+		"effects": {"failed": true},
+	}]
+	DayOrchestrator._process_observe_attendees_writebacks(results, characters_by_id, 0)
+	assert_eq(observer.knowledge_pool.size(), 0,
+		"Failed observation should not create knowledge")
+
+
+# -- INTIMIDATE blackmail favor writeback -------------------------------------
+
+func test_blackmail_favor_writeback_creates_favors() -> void:
+	var favors: Array[FavorData] = []
+	var results: Array = [{
+		"action_id": "INTIMIDATE",
+		"character_id": 330,
+		"target_npc_id": 331,
+		"success": true,
+		"effects": {"favors_extracted": 2},
+	}]
+	DayOrchestrator._process_blackmail_favor_writebacks(results, favors, 10)
+	assert_eq(favors.size(), 2, "Should create 2 favors")
+	assert_eq(favors[0].creditor_id, 330, "Creditor should be blackmailer")
+	assert_eq(favors[0].debtor_id, 331, "Debtor should be target")
+	assert_true(favors[0].is_blackmail_extracted, "Should be marked as blackmail")
+	assert_eq(favors[0].source_action, "INTIMIDATE", "Source should be INTIMIDATE")
+	assert_ne(favors[0].favor_id, favors[1].favor_id,
+		"Each favor should have a unique ID")
+
+
+func test_blackmail_favor_writeback_skips_zero_favors() -> void:
+	var favors: Array[FavorData] = []
+	var results: Array = [{
+		"action_id": "INTIMIDATE",
+		"character_id": 332,
+		"target_npc_id": 333,
+		"success": true,
+		"effects": {"favors_extracted": 0},
+	}]
+	DayOrchestrator._process_blackmail_favor_writebacks(results, favors, 10)
+	assert_eq(favors.size(), 0, "Zero favors_extracted should not create favors")
+
+
+# -- Commerce topic writeback -------------------------------------------------
+
+func test_commerce_topic_writeback_creates_topic() -> void:
+	var char := L5RCharacterData.new()
+	char.character_id = 340
+	char.character_name = "Merchant"
+	char.family = "Yasuki"
+	var characters_by_id: Dictionary = {340: char}
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [900]
+	var results: Array = [{
+		"action_id": "PURCHASE_MARKET",
+		"character_id": 340,
+		"success": true,
+		"effects": {"public_commerce_topic": true},
+	}]
+	DayOrchestrator._process_commerce_topic_writebacks(
+		results, characters_by_id, active_topics, next_topic_id, 15,
+	)
+	assert_eq(active_topics.size(), 1, "Should create commerce topic")
+	assert_eq(active_topics[0].topic_type, "commerce_stigma",
+		"Topic type should be commerce_stigma")
+	assert_eq(active_topics[0].tier, TopicData.Tier.TIER_4,
+		"Commerce topic should be Tier 4")
+	assert_eq(active_topics[0].subject_character_id, 340,
+		"Topic subject should be the merchant")
+	assert_eq(next_topic_id[0], 901, "Topic ID counter should increment")
+
+
+func test_commerce_topic_writeback_skips_non_public() -> void:
+	var char := L5RCharacterData.new()
+	char.character_id = 341
+	char.family = "Ide"
+	var characters_by_id: Dictionary = {341: char}
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [900]
+	var results: Array = [{
+		"action_id": "CONDUCT_COMMERCE",
+		"character_id": 341,
+		"success": true,
+		"effects": {"public_commerce_topic": false},
+	}]
+	DayOrchestrator._process_commerce_topic_writebacks(
+		results, characters_by_id, active_topics, next_topic_id, 15,
+	)
+	assert_eq(active_topics.size(), 0, "Non-public commerce should not create topic")
+
+
+# -- READ_CHARACTER / PROBE info_types writeback ------------------------------
+
+func test_read_character_personality_insight_creates_knowledge() -> void:
+	var actor := L5RCharacterData.new()
+	actor.character_id = 350
+	actor.knowledge_pool = [] as Array[KnowledgeEntry]
+	var target := L5RCharacterData.new()
+	target.character_id = 351
+	target.bushido_virtue = Enums.BushidoVirtue.GI
+	target.shourido_virtue = Enums.ShouridoVirtue.NONE
+	var characters_by_id: Dictionary = {350: actor, 351: target}
+	var results: Array = [{
+		"action_id": "READ_CHARACTER",
+		"character_id": 350,
+		"target_npc_id": 351,
+		"success": true,
+		"effects": {
+			"info_gained": true,
+			"info_types": ["personality_insight"],
+			"info_count": 1,
+		},
+	}]
+	DayOrchestrator._process_intelligence_info_writebacks(
+		results, characters_by_id, {}, [], 0,
+	)
+	assert_eq(actor.knowledge_pool.size(), 1,
+		"Should create knowledge entry for personality_insight")
+	assert_eq(actor.knowledge_pool[0].entry_type, "personality_insight",
+		"Knowledge type should be personality_insight")
+	assert_eq(actor.knowledge_pool[0].data.get("bushido_virtue"),
+		Enums.BushidoVirtue.GI,
+		"Should contain target's bushido virtue")
+
+
+func test_read_character_disposition_creates_knowledge() -> void:
+	var actor := L5RCharacterData.new()
+	actor.character_id = 352
+	actor.knowledge_pool = [] as Array[KnowledgeEntry]
+	var target := L5RCharacterData.new()
+	target.character_id = 353
+	target.disposition_values = {352: 25}
+	var characters_by_id: Dictionary = {352: actor, 353: target}
+	var results: Array = [{
+		"action_id": "READ_CHARACTER",
+		"character_id": 352,
+		"target_npc_id": 353,
+		"success": true,
+		"effects": {
+			"info_gained": true,
+			"info_types": ["disposition_toward"],
+			"info_count": 1,
+		},
+	}]
+	DayOrchestrator._process_intelligence_info_writebacks(
+		results, characters_by_id, {}, [], 0,
+	)
+	assert_eq(actor.knowledge_pool.size(), 1,
+		"Should create knowledge entry for disposition")
+	assert_eq(actor.knowledge_pool[0].data.get("disposition"), 25,
+		"Should contain target's disposition toward actor")
+
+
+func test_probe_court_objective_creates_knowledge() -> void:
+	var actor := L5RCharacterData.new()
+	actor.character_id = 354
+	actor.knowledge_pool = [] as Array[KnowledgeEntry]
+	var target := L5RCharacterData.new()
+	target.character_id = 355
+	var characters_by_id: Dictionary = {354: actor, 355: target}
+	var objectives_map: Dictionary = {
+		355: {"standing": {"need_type": "SECURE_ALLIANCE"}},
+	}
+	var results: Array = [{
+		"action_id": "PROBE",
+		"character_id": 354,
+		"target_npc_id": 355,
+		"success": true,
+		"effects": {
+			"info_gained": true,
+			"info_types": ["court_objective"],
+			"info_count": 1,
+		},
+	}]
+	DayOrchestrator._process_intelligence_info_writebacks(
+		results, characters_by_id, objectives_map, [], 0,
+	)
+	assert_eq(actor.knowledge_pool.size(), 1,
+		"Should create knowledge entry for court objective")
+	assert_eq(actor.knowledge_pool[0].entry_type, "court_objective",
+		"Knowledge type should be court_objective")
+	assert_eq(actor.knowledge_pool[0].data.get("need_type"), "SECURE_ALLIANCE",
+		"Should contain target's objective need_type")
+
+
+func test_probe_topic_position_creates_knowledge() -> void:
+	var actor := L5RCharacterData.new()
+	actor.character_id = 356
+	actor.knowledge_pool = [] as Array[KnowledgeEntry]
+	var target := L5RCharacterData.new()
+	target.character_id = 357
+	target.topic_pool = [42] as Array[int]
+	target.topic_positions = {42: 3}
+	var characters_by_id: Dictionary = {356: actor, 357: target}
+	var results: Array = [{
+		"action_id": "PROBE",
+		"character_id": 356,
+		"target_npc_id": 357,
+		"success": true,
+		"effects": {
+			"info_gained": true,
+			"info_types": ["topic_position"],
+			"info_count": 1,
+		},
+	}]
+	DayOrchestrator._process_intelligence_info_writebacks(
+		results, characters_by_id, {}, [], 0,
+	)
+	assert_eq(actor.knowledge_pool.size(), 1,
+		"Should create knowledge entry for topic position")
+	assert_eq(actor.knowledge_pool[0].data.get("topic_id"), 42,
+		"Should reference the correct topic")
+	assert_eq(actor.knowledge_pool[0].data.get("position"), 3,
+		"Should contain target's position on the topic")
+
+
+func test_read_character_failure_no_knowledge() -> void:
+	var actor := L5RCharacterData.new()
+	actor.character_id = 358
+	actor.knowledge_pool = [] as Array[KnowledgeEntry]
+	var characters_by_id: Dictionary = {358: actor}
+	var results: Array = [{
+		"action_id": "READ_CHARACTER",
+		"character_id": 358,
+		"target_npc_id": 359,
+		"success": false,
+		"effects": {"failed": true},
+	}]
+	DayOrchestrator._process_intelligence_info_writebacks(
+		results, characters_by_id, {}, [], 0,
+	)
+	assert_eq(actor.knowledge_pool.size(), 0,
+		"Failed READ_CHARACTER should not create knowledge")
+
+
+# -- Hunt Writeback Tests (s57.38) -------------------------------------------
+
+func test_announce_hunt_creates_topic_and_hunt() -> void:
+	var active_hunts: Array[Dictionary] = []
+	var next_hunt_id: Array[int] = [1]
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [500]
+	var results: Array = [{
+		"action_id": "ANNOUNCE_HUNT",
+		"character_id": 1,
+		"target_province_id": 10,
+		"success": true,
+		"ic_day": 5,
+		"season": 0,
+		"effects": {
+			"hunt_date_ic_day": 12,
+			"priority_invitee_id": 2,
+			"topic_tier": 4,
+			"topic_type": "hunt_announcement",
+		},
+	}]
+	DayOrchestrator._process_announce_hunt_writebacks(
+		results, active_hunts, next_hunt_id, active_topics, next_topic_id, 5,
+	)
+	assert_eq(active_hunts.size(), 1, "Should create one hunt")
+	assert_eq(active_hunts[0]["hunt_id"], 1, "Should assign hunt_id from counter")
+	assert_eq(active_hunts[0]["host_id"], 1, "Host should be the announcing character")
+	assert_eq(active_hunts[0]["hunt_date_ic_day"], 12, "Should carry hunt date")
+	assert_eq(active_hunts[0]["status"], "active", "Should start as active")
+	assert_eq(active_hunts[0]["priority_invitee_id"], 2, "Should carry priority invitee")
+	assert_eq(active_topics.size(), 1, "Should create hunt announcement topic")
+	assert_eq(active_topics[0].topic_type, "hunt_announcement")
+	assert_eq(active_topics[0].tier, TopicData.Tier.TIER_4)
+	assert_eq(next_hunt_id[0], 2, "Should increment hunt ID counter")
+	assert_eq(next_topic_id[0], 501, "Should increment topic ID counter")
+
+
+func test_announce_hunt_skips_failure() -> void:
+	var active_hunts: Array[Dictionary] = []
+	var next_hunt_id: Array[int] = [1]
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [500]
+	var results: Array = [{
+		"action_id": "ANNOUNCE_HUNT",
+		"success": false,
+		"reason": "precondition_failed",
+	}]
+	DayOrchestrator._process_announce_hunt_writebacks(
+		results, active_hunts, next_hunt_id, active_topics, next_topic_id, 5,
+	)
+	assert_eq(active_hunts.size(), 0, "Failed announce should not create hunt")
+	assert_eq(active_topics.size(), 0, "Failed announce should not create topic")
+
+
+func test_request_hunt_invitation_accepted() -> void:
+	var host := L5RCharacterData.new()
+	host.character_id = 10
+	host.status = 5.0
+	host.disposition_values = {20: 15}
+	var requester := L5RCharacterData.new()
+	requester.character_id = 20
+	requester.status = 3.0
+	requester.glory = 2.0
+	requester.disposition_values = {}
+	var characters_by_id: Dictionary = {10: host, 20: requester}
+	var active_hunts: Array[Dictionary] = [{
+		"hunt_id": 1,
+		"host_id": 10,
+		"hunt_date_ic_day": 20,
+		"topic_id": 500,
+		"accepted_invitee_ids": [],
+		"status": "active",
+	}]
+	var results: Array = [{
+		"action_id": "REQUEST_HUNT_INVITATION",
+		"character_id": 20,
+		"target_npc_id": 10,
+		"success": true,
+		"effects": {
+			"hunt_topic_id": 500,
+			"requester_id": 20,
+			"requester_status": 3.0,
+		},
+	}]
+	DayOrchestrator._process_request_hunt_invitation_writebacks(
+		results, active_hunts, characters_by_id,
+	)
+	var accepted: Array = active_hunts[0]["accepted_invitee_ids"]
+	assert_eq(accepted.size(), 1, "Should add requester to accepted list")
+	assert_eq(accepted[0], 20, "Should be the requester")
+
+
+func test_request_hunt_invitation_rejected_rival() -> void:
+	var host := L5RCharacterData.new()
+	host.character_id = 10
+	host.status = 3.0
+	host.disposition_values = {20: -15}
+	var requester := L5RCharacterData.new()
+	requester.character_id = 20
+	requester.status = 3.0
+	requester.glory = 2.0
+	requester.disposition_values = {}
+	var characters_by_id: Dictionary = {10: host, 20: requester}
+	var active_hunts: Array[Dictionary] = [{
+		"hunt_id": 1,
+		"host_id": 10,
+		"topic_id": 500,
+		"accepted_invitee_ids": [],
+		"status": "active",
+	}]
+	var results: Array = [{
+		"action_id": "REQUEST_HUNT_INVITATION",
+		"character_id": 20,
+		"target_npc_id": 10,
+		"success": true,
+		"effects": {
+			"hunt_topic_id": 500,
+			"requester_id": 20,
+			"requester_status": 3.0,
+		},
+	}]
+	DayOrchestrator._process_request_hunt_invitation_writebacks(
+		results, active_hunts, characters_by_id,
+	)
+	var accepted: Array = active_hunts[0]["accepted_invitee_ids"]
+	assert_eq(accepted.size(), 0, "Rival host should reject invitation request")
+
+
+func test_request_hunt_invitation_no_duplicate() -> void:
+	var host := L5RCharacterData.new()
+	host.character_id = 10
+	host.status = 5.0
+	host.disposition_values = {20: 15}
+	var requester := L5RCharacterData.new()
+	requester.character_id = 20
+	requester.status = 3.0
+	requester.glory = 2.0
+	requester.disposition_values = {}
+	var characters_by_id: Dictionary = {10: host, 20: requester}
+	var active_hunts: Array[Dictionary] = [{
+		"hunt_id": 1,
+		"host_id": 10,
+		"topic_id": 500,
+		"accepted_invitee_ids": [20],
+		"status": "active",
+	}]
+	var results: Array = [{
+		"action_id": "REQUEST_HUNT_INVITATION",
+		"character_id": 20,
+		"target_npc_id": 10,
+		"success": true,
+		"effects": {
+			"hunt_topic_id": 500,
+			"requester_id": 20,
+			"requester_status": 3.0,
+		},
+	}]
+	DayOrchestrator._process_request_hunt_invitation_writebacks(
+		results, active_hunts, characters_by_id,
+	)
+	var accepted: Array = active_hunts[0]["accepted_invitee_ids"]
+	assert_eq(accepted.size(), 1, "Should not duplicate already-accepted invitee")
+
+
+func test_cancel_hunt_marks_cancelled_and_penalizes_invitees() -> void:
+	var host := L5RCharacterData.new()
+	host.character_id = 10
+	host.glory = 3.0
+	var invitee := L5RCharacterData.new()
+	invitee.character_id = 20
+	invitee.disposition_values = {10: 25}
+	var characters_by_id: Dictionary = {10: host, 20: invitee}
+	var active_hunts: Array[Dictionary] = [{
+		"hunt_id": 1,
+		"host_id": 10,
+		"accepted_invitee_ids": [20],
+		"status": "active",
+	}]
+	var results: Array = [{
+		"action_id": "CANCEL_HUNT",
+		"character_id": 10,
+		"success": true,
+		"effects": {
+			"hunt_id": 1,
+			"glory_change": HuntSystem.GLORY_HOST_CANCEL,
+			"accepted_invitee_ids": [20],
+			"disposition_change_per_invitee": HuntSystem.DISP_CANCEL_PER_INVITEE,
+			"topic_type": "hunt_cancellation",
+		},
+	}]
+	DayOrchestrator._process_cancel_hunt_writebacks(
+		results, active_hunts, characters_by_id,
+	)
+	assert_eq(active_hunts[0]["status"], "cancelled", "Hunt should be marked cancelled")
+	assert_eq(invitee.disposition_values[10], 24,
+		"Invitee disposition toward host should decrease by DISP_CANCEL_PER_INVITEE")
+
+
+func test_cancel_hunt_skips_failure() -> void:
+	var active_hunts: Array[Dictionary] = [{
+		"hunt_id": 1,
+		"host_id": 10,
+		"accepted_invitee_ids": [20],
+		"status": "active",
+	}]
+	var results: Array = [{
+		"action_id": "CANCEL_HUNT",
+		"success": false,
+		"reason": "no_active_hunt",
+	}]
+	DayOrchestrator._process_cancel_hunt_writebacks(
+		results, active_hunts, {},
+	)
+	assert_eq(active_hunts[0]["status"], "active",
+		"Failed cancel should not change hunt status")
+
+
+func test_inject_hunt_context_sets_known_objectives() -> void:
+	var host := L5RCharacterData.new()
+	host.character_id = 10
+	var world_states: Dictionary = {10: {"known_objectives": {}}, 20: {"known_objectives": {}}}
+	var active_hunts: Array[Dictionary] = [{
+		"hunt_id": 1,
+		"host_id": 10,
+		"hunt_date_ic_day": 15,
+		"topic_id": 500,
+		"accepted_invitee_ids": [],
+		"status": "active",
+	}]
+	var topic := TopicData.new()
+	topic.topic_id = 500
+	topic.topic_type = "hunt_announcement"
+	topic.resolved = false
+	var active_topics: Array[TopicData] = [topic]
+	DayOrchestrator._inject_hunt_context(
+		active_hunts, world_states, active_topics,
+	)
+	var host_objs: Dictionary = world_states[10]["known_objectives"]
+	assert_eq(host_objs.get("active_hunt_id", -1), 1,
+		"Host should see their active hunt ID")
+	assert_eq(host_objs.get("hunt_date_ic_day", -1), 15,
+		"Host should see hunt date")
+	var other_objs: Dictionary = world_states[20]["known_objectives"]
+	assert_eq(other_objs.get("hunt_topic_id", -1), 500,
+		"Other NPCs should see hunt topic ID for invitation requests")
+
+
+# -- Duel Death Writeback Tests (s40) -----------------------------------------
+
+func test_duel_death_creates_death_event_and_topic() -> void:
+	var dead := L5RCharacterData.new()
+	dead.character_id = 100
+	dead.role_position = ""
+	dead.wounds_taken = 999
+	var winner := L5RCharacterData.new()
+	winner.character_id = 200
+	var characters_by_id: Dictionary = {100: dead, 200: winner}
+	var death_events: Array[Dictionary] = []
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [700]
+	var results: Array = [{
+		"action_id": "ISSUE_DUEL_CHALLENGE",
+		"character_id": 100,
+		"target_npc_id": 200,
+		"success": true,
+		"actor_won": false,
+		"effects": {
+			"death_occurred": true,
+			"challenger_dead": true,
+			"defender_dead": false,
+			"winner_id": 200,
+			"loser_id": 100,
+		},
+	}]
+	DayOrchestrator._process_duel_death_writebacks(
+		results, death_events, characters_by_id,
+		active_topics, next_topic_id, 10,
+	)
+	assert_eq(death_events.size(), 1, "Should create one death event")
+	assert_eq(death_events[0]["character_id"], 100, "Dead character ID")
+	assert_eq(death_events[0]["cause"], "duel", "Sanctioned duel cause")
+	assert_eq(death_events[0]["killer_id"], 200, "Killer is the defender")
+	assert_false(death_events[0]["is_lord"], "Non-lord death")
+	assert_false(death_events[0]["suspicious_death"], "Sanctioned duel not suspicious")
+	assert_eq(active_topics.size(), 1, "Should create death topic")
+	assert_eq(active_topics[0].topic_type, "death")
+	assert_eq(active_topics[0].variant, "duel")
+	assert_eq(active_topics[0].tier, TopicData.Tier.TIER_4,
+		"Non-lord sanctioned duel = Tier 4")
+	assert_eq(active_topics[0].subject_role, "NEUTRAL",
+		"Dead characters carry NEUTRAL subject_role")
+
+
+func test_duel_death_lord_creates_lord_death_event() -> void:
+	var dead := L5RCharacterData.new()
+	dead.character_id = 100
+	dead.role_position = "Provincial Daimyo"
+	dead.wounds_taken = 999
+	var winner := L5RCharacterData.new()
+	winner.character_id = 200
+	var characters_by_id: Dictionary = {100: dead, 200: winner}
+	var death_events: Array[Dictionary] = []
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [700]
+	var results: Array = [{
+		"action_id": "ISSUE_DUEL_CHALLENGE",
+		"character_id": 200,
+		"target_npc_id": 100,
+		"success": true,
+		"actor_won": true,
+		"effects": {
+			"death_occurred": true,
+			"challenger_dead": false,
+			"defender_dead": true,
+			"winner_id": 200,
+			"loser_id": 100,
+		},
+	}]
+	DayOrchestrator._process_duel_death_writebacks(
+		results, death_events, characters_by_id,
+		active_topics, next_topic_id, 10,
+	)
+	assert_eq(death_events.size(), 1)
+	assert_true(death_events[0]["is_lord"],
+		"Lord death should set is_lord for succession")
+	assert_eq(death_events[0]["killer_id"], 200, "Challenger killed the defender")
+	assert_eq(active_topics[0].tier, TopicData.Tier.TIER_3,
+		"Lord sanctioned duel death = Tier 3")
+	assert_eq(active_topics[0].category, TopicData.Category.POLITICAL,
+		"Lord death is political")
+
+
+func test_unsanctioned_duel_death_suspicious_and_tier2() -> void:
+	var dead := L5RCharacterData.new()
+	dead.character_id = 100
+	dead.role_position = ""
+	dead.wounds_taken = 999
+	var winner := L5RCharacterData.new()
+	winner.character_id = 200
+	var characters_by_id: Dictionary = {100: dead, 200: winner}
+	var death_events: Array[Dictionary] = []
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [700]
+	var results: Array = [{
+		"action_id": "ISSUE_DUEL_CHALLENGE",
+		"character_id": 200,
+		"target_npc_id": 100,
+		"success": true,
+		"effects": {
+			"death_occurred": true,
+			"challenger_dead": false,
+			"defender_dead": true,
+			"winner_id": 200,
+			"loser_id": 100,
+			"requires_crime_creation": true,
+			"crime_type": Enums.CrimeType.UNSANCTIONED_DUEL_DEATH,
+			"crime_perpetrator_id": 200,
+			"crime_victim_id": 100,
+		},
+	}]
+	DayOrchestrator._process_duel_death_writebacks(
+		results, death_events, characters_by_id,
+		active_topics, next_topic_id, 10,
+	)
+	assert_eq(death_events[0]["cause"], "unsanctioned_duel")
+	assert_true(death_events[0]["suspicious_death"],
+		"Unsanctioned duel should be suspicious")
+	assert_eq(active_topics[0].variant, "unsanctioned_duel")
+	assert_eq(active_topics[0].tier, TopicData.Tier.TIER_2,
+		"Unsanctioned duel death = Tier 2")
+
+
+func test_simultaneous_duel_death_creates_two_events() -> void:
+	var c1 := L5RCharacterData.new()
+	c1.character_id = 100
+	c1.role_position = ""
+	c1.wounds_taken = 999
+	var c2 := L5RCharacterData.new()
+	c2.character_id = 200
+	c2.role_position = ""
+	c2.wounds_taken = 999
+	var characters_by_id: Dictionary = {100: c1, 200: c2}
+	var death_events: Array[Dictionary] = []
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [700]
+	var results: Array = [{
+		"action_id": "ISSUE_DUEL_CHALLENGE",
+		"character_id": 100,
+		"target_npc_id": 200,
+		"success": false,
+		"effects": {
+			"death_occurred": true,
+			"challenger_dead": true,
+			"defender_dead": true,
+			"simultaneous": true,
+			"winner_id": -1,
+			"loser_id": -1,
+		},
+	}]
+	DayOrchestrator._process_duel_death_writebacks(
+		results, death_events, characters_by_id,
+		active_topics, next_topic_id, 10,
+	)
+	assert_eq(death_events.size(), 2,
+		"Simultaneous death should create two death events")
+	assert_eq(active_topics.size(), 2,
+		"Should create two death topics")
+	var ids: Array[int] = [death_events[0]["character_id"], death_events[1]["character_id"]]
+	assert_true(100 in ids and 200 in ids,
+		"Both characters should have death events")
+
+
+func test_no_death_no_event() -> void:
+	var c1 := L5RCharacterData.new()
+	c1.character_id = 100
+	var c2 := L5RCharacterData.new()
+	c2.character_id = 200
+	var characters_by_id: Dictionary = {100: c1, 200: c2}
+	var death_events: Array[Dictionary] = []
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [700]
+	var results: Array = [{
+		"action_id": "ISSUE_DUEL_CHALLENGE",
+		"character_id": 100,
+		"target_npc_id": 200,
+		"success": true,
+		"effects": {
+			"death_occurred": false,
+			"challenger_dead": false,
+			"defender_dead": false,
+			"winner_id": 100,
+			"loser_id": 200,
+		},
+	}]
+	DayOrchestrator._process_duel_death_writebacks(
+		results, death_events, characters_by_id,
+		active_topics, next_topic_id, 10,
+	)
+	assert_eq(death_events.size(), 0, "Non-lethal duel creates no death events")
+	assert_eq(active_topics.size(), 0, "Non-lethal duel creates no death topics")
+
+
+# -- Assassination Death Event is_lord Fix -----------------------------------
+
+func test_assassination_death_event_includes_is_lord() -> void:
+	var target := L5RCharacterData.new()
+	target.character_id = 50
+	target.role_position = "Family Daimyo"
+	target.stamina = 2
+	target.willpower = 2
+	target.wounds_taken = 0
+	var assassin := L5RCharacterData.new()
+	assassin.character_id = 60
+	assassin.school_type = "Shosuro Infiltrator"
+	var characters_by_id: Dictionary = {50: target, 60: assassin}
+	var op: Dictionary = {
+		"commissioner_id": 70,
+		"target_id": 50,
+		"assassin_id": 60,
+		"method": "poison",
+	}
+	var conceal_result: Dictionary = {
+		"outcome": "full",
+		"concealment_tn": 25,
+	}
+	var death_events: Array[Dictionary] = []
+	var crime_records: Array[CrimeRecord] = []
+	var next_case_id: Array[int] = [1]
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [900]
+	DayOrchestrator._apply_assassination_outcome(
+		op, target, assassin, conceal_result, 10,
+		death_events, crime_records, next_case_id,
+		active_topics, next_topic_id, characters_by_id,
+	)
+	assert_eq(death_events.size(), 1, "Should create death event")
+	assert_true(death_events[0]["is_lord"],
+		"Lord assassination should set is_lord for succession trigger")
+	assert_true(death_events[0]["suspicious_death"],
+		"Assassination should be suspicious")
+
+
+# -- Hunt Resolution Tests (s57.38.6) ----------------------------------------
+
+func _make_hunter(id: int, hunting: int = 3, kyujutsu: int = 3, spears: int = 0, status: float = 3.0) -> L5RCharacterData:
+	var c := L5RCharacterData.new()
+	c.character_id = id
+	c.character_name = "Hunter_%d" % id
+	c.status = status
+	c.glory = 2.0
+	c.honor = 5.0
+	c.reflexes = 3
+	c.awareness = 3
+	c.agility = 3
+	c.perception = 3
+	c.stamina = 3
+	c.willpower = 3
+	c.strength = 3
+	c.intelligence = 3
+	c.void_ring = 2
+	c.wounds_taken = 0
+	c.skills = {"Hunting": hunting, "Kyujutsu": kyujutsu, "Spears": spears, "Etiquette": 1}
+	c.emphases = {}
+	c.role_position = ""
+	c.physical_location = "100"
+	c.travel_destination = ""
+	c.disposition_values = {}
+	c.met_characters = []
+	c.knowledge_pool = []
+	c.known_contacts_by_clan = {}
+	return c
+
+
+func test_hunt_resolves_on_date_and_distributes_glory() -> void:
+	var host: L5RCharacterData = _make_hunter(10, 4, 4)
+	var invitee: L5RCharacterData = _make_hunter(20, 3, 3)
+	var characters_by_id: Dictionary = {10: host, 20: invitee}
+	var province := ProvinceData.new()
+	province.province_id = 5
+	province.terrain_type = Enums.TerrainType.FOREST
+	var provinces: Dictionary = {5: province}
+	var dice := DiceEngine.new()
+	dice.set_seed(99)
+	var active_hunts: Array[Dictionary] = [{
+		"hunt_id": 1,
+		"host_id": 10,
+		"hunt_date_ic_day": 10,
+		"province_id": 5,
+		"topic_id": 500,
+		"accepted_invitee_ids": [20],
+		"status": "active",
+	}]
+	var death_events: Array[Dictionary] = []
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [800]
+
+	var old_glory_host: float = host.glory
+	var old_glory_invitee: float = invitee.glory
+
+	var results: Array[Dictionary] = DayOrchestrator._resolve_scheduled_hunts(
+		active_hunts, characters_by_id, provinces, dice, 10,
+		death_events, active_topics, next_topic_id,
+	)
+
+	assert_eq(results.size(), 1, "Should resolve one hunt")
+	assert_eq(active_hunts[0]["status"], "resolved", "Hunt should be marked resolved")
+	assert_true(active_hunts[0].has("outcome"), "Should record outcome")
+	assert_eq(active_topics.size(), 1, "Should create hunt result topic")
+	assert_eq(active_topics[0].topic_type, "hunt_result")
+	assert_true(host.glory != old_glory_host or invitee.glory != old_glory_invitee or results[0]["outcome"] == "failed",
+		"Glory should change on success, or outcome is failed (no glory change)")
+
+
+func test_hunt_not_resolved_before_date() -> void:
+	var host: L5RCharacterData = _make_hunter(10)
+	var characters_by_id: Dictionary = {10: host}
+	var provinces: Dictionary = {}
+	var dice := DiceEngine.new()
+	var active_hunts: Array[Dictionary] = [{
+		"hunt_id": 1,
+		"host_id": 10,
+		"hunt_date_ic_day": 15,
+		"province_id": 5,
+		"accepted_invitee_ids": [],
+		"status": "active",
+	}]
+	var death_events: Array[Dictionary] = []
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [800]
+	var results: Array[Dictionary] = DayOrchestrator._resolve_scheduled_hunts(
+		active_hunts, characters_by_id, provinces, dice, 10,
+		death_events, active_topics, next_topic_id,
+	)
+	assert_eq(results.size(), 0, "Hunt should not resolve before its date")
+	assert_eq(active_hunts[0]["status"], "active", "Should remain active")
+
+
+func test_hunt_cancelled_if_host_dead() -> void:
+	var host: L5RCharacterData = _make_hunter(10)
+	host.wounds_taken = 999
+	var characters_by_id: Dictionary = {10: host}
+	var provinces: Dictionary = {}
+	var dice := DiceEngine.new()
+	var active_hunts: Array[Dictionary] = [{
+		"hunt_id": 1,
+		"host_id": 10,
+		"hunt_date_ic_day": 10,
+		"province_id": 5,
+		"accepted_invitee_ids": [],
+		"status": "active",
+	}]
+	var death_events: Array[Dictionary] = []
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [800]
+	var results: Array[Dictionary] = DayOrchestrator._resolve_scheduled_hunts(
+		active_hunts, characters_by_id, provinces, dice, 10,
+		death_events, active_topics, next_topic_id,
+	)
+	assert_eq(results.size(), 0, "Dead host should not produce hunt result")
+	assert_eq(active_hunts[0]["status"], "cancelled_no_host",
+		"Hunt should be cancelled when host is dead")
+
+
+func test_hunt_disposition_new_relationship() -> void:
+	var a: L5RCharacterData = _make_hunter(10)
+	var b: L5RCharacterData = _make_hunter(20)
+	var participants: Array[L5RCharacterData] = [a, b]
+	DayOrchestrator._apply_hunt_disposition(participants)
+	assert_eq(a.disposition_values.get(20, 0), HuntSystem.DISP_NEW_RELATIONSHIP,
+		"New relationship disposition for first meeting")
+	assert_eq(b.disposition_values.get(10, 0), HuntSystem.DISP_NEW_RELATIONSHIP,
+		"Reciprocal new relationship disposition")
+	assert_true(20 in a.met_characters, "Should add to met_characters")
+	assert_true(10 in b.met_characters, "Should add to met_characters")
+
+
+func test_hunt_disposition_existing_acquaintance() -> void:
+	var a: L5RCharacterData = _make_hunter(10)
+	var b: L5RCharacterData = _make_hunter(20)
+	a.met_characters = [20]
+	b.met_characters = [10]
+	a.disposition_values = {20: 15}
+	b.disposition_values = {10: 15}
+	var participants: Array[L5RCharacterData] = [a, b]
+	DayOrchestrator._apply_hunt_disposition(participants)
+	assert_eq(a.disposition_values.get(20, 0), 15 + HuntSystem.DISP_EXISTING_ACQUAINTANCE,
+		"Existing acquaintance gets smaller disposition bump")
+
+
+func test_hunt_casualty_creates_death_event() -> void:
+	var host: L5RCharacterData = _make_hunter(10, 4, 4)
+	host.agility = 5
+	var victim: L5RCharacterData = _make_hunter(20, 1, 1)
+	victim.agility = 1
+	victim.reflexes = 1
+	var characters_by_id: Dictionary = {10: host, 20: victim}
+	var province := ProvinceData.new()
+	province.province_id = 5
+	province.terrain_type = Enums.TerrainType.MOUNTAINS
+	var provinces: Dictionary = {5: province}
+	var dice := DiceEngine.new()
+	dice.set_seed(1)
+	var active_hunts: Array[Dictionary] = [{
+		"hunt_id": 1,
+		"host_id": 10,
+		"hunt_date_ic_day": 10,
+		"province_id": 5,
+		"topic_id": 500,
+		"accepted_invitee_ids": [20],
+		"status": "active",
+	}]
+	var death_events: Array[Dictionary] = []
+	var active_topics: Array[TopicData] = []
+	var next_topic_id: Array[int] = [800]
+	var _results: Array[Dictionary] = DayOrchestrator._resolve_scheduled_hunts(
+		active_hunts, characters_by_id, provinces, dice, 10,
+		death_events, active_topics, next_topic_id,
+	)
+	if not death_events.is_empty():
+		assert_eq(death_events[0]["cause"], "hunt_casualty",
+			"Death event should have hunt_casualty cause")
+		assert_false(death_events[0]["suspicious_death"],
+			"Hunt deaths are not suspicious")

@@ -563,3 +563,353 @@ func test_apply_tns():
 	assert_eq(TattooSystem.get_apply_tn(Enums.TattooQualityTier.EXCEPTIONAL), 25)
 	assert_eq(TattooSystem.get_apply_tn(Enums.TattooQualityTier.MASTERWORK), 30)
 	assert_eq(TattooSystem.get_apply_tn(Enums.TattooQualityTier.LEGENDARY), 35)
+
+
+# =============================================================================
+# APPLY_TATTOO Executor Wiring
+# =============================================================================
+
+func _make_artist(tattooing_rank: int = 3, ap: int = 6) -> L5RCharacterData:
+	var c := L5RCharacterData.new()
+	c.character_id = 100
+	c.character_name = "Togashi Artisan"
+	c.agility = 4
+	c.skills = {"Artisan: Tattooing": tattooing_rank}
+	c.school_name = "Togashi Tattooed Order"
+	c.school_rank = 3
+	c.action_points_current = ap
+	c.action_points_max = ap
+	return c
+
+func _make_recipient() -> L5RCharacterData:
+	var c := L5RCharacterData.new()
+	c.character_id = 200
+	c.character_name = "Mirumoto Recipient"
+	c.clan = "Dragon"
+	c.family = "Mirumoto"
+	return c
+
+func _make_tattoo_action(
+	target_id: int = 200,
+	tier: Enums.TattooQualityTier = Enums.TattooQualityTier.NORMAL,
+	loc: Enums.TattooBodyLocation = Enums.TattooBodyLocation.CHEST_TORSO,
+) -> NPCDataStructures.ScoredAction:
+	var a := NPCDataStructures.ScoredAction.new()
+	a.action_id = "APPLY_TATTOO"
+	a.target_npc_id = target_id
+	a.ap_cost = 2
+	a.metadata = {
+		"target_tier": tier,
+		"body_location": loc,
+		"is_ability_tattoo": false,
+		"ability": Enums.TattooAbility.NONE,
+		"world_tattoos": [] as Array[TattooData],
+		"recipient_is_bald": false,
+		"subject_type": Enums.TattooSubjectType.IMAGE,
+		"subject_description": "Dragon coiling",
+		"subject_topic_id": -1,
+	}
+	return a
+
+func _make_tattoo_ctx() -> NPCDataStructures.ContextSnapshot:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.character_id = 100
+	ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
+	ctx.ic_day = 50
+	ctx.season = "Spring"
+	return ctx
+
+func test_apply_tattoo_success():
+	var artist := _make_artist()
+	var recipient := _make_recipient()
+	var action := _make_tattoo_action()
+	var ctx := _make_tattoo_ctx()
+	var dice := DiceEngine.new()
+	dice.set_seed(42)
+	var chars: Dictionary = {100: artist, 200: recipient}
+	var result: Dictionary = ActionExecutor.execute(
+		action, artist, ctx, dice, {"APPLY_TATTOO": {"primary": "Artisan: Tattooing", "secondary": "Agility"}},
+		{}, chars,
+	)
+	assert_true(result.get("success", false), "Should succeed with rank 3 artist on NORMAL tier")
+	assert_eq(result.get("action_id", ""), "APPLY_TATTOO")
+	var effects: Dictionary = result.get("effects", {})
+	assert_true(effects.get("requires_tattoo_creation", false), "Should flag tattoo creation")
+	assert_true(effects.get("disposition_change", 0) > 0, "Should have positive disposition bond")
+
+func test_apply_tattoo_skill_gate_blocks():
+	var artist := _make_artist(0)
+	var recipient := _make_recipient()
+	var action := _make_tattoo_action()
+	var ctx := _make_tattoo_ctx()
+	var dice := DiceEngine.new()
+	var chars: Dictionary = {100: artist, 200: recipient}
+	var result: Dictionary = ActionExecutor.execute(
+		action, artist, ctx, dice, {"APPLY_TATTOO": {"primary": "Artisan: Tattooing", "secondary": "Agility"}},
+		{}, chars,
+	)
+	assert_false(result.get("success", true))
+	assert_eq(result.get("reason", ""), "skill_gate_failed")
+
+func test_apply_tattoo_insufficient_ap():
+	var artist := _make_artist(3, 1)
+	var recipient := _make_recipient()
+	var action := _make_tattoo_action()
+	var ctx := _make_tattoo_ctx()
+	var dice := DiceEngine.new()
+	var chars: Dictionary = {100: artist, 200: recipient}
+	var result: Dictionary = ActionExecutor.execute(
+		action, artist, ctx, dice, {"APPLY_TATTOO": {"primary": "Artisan: Tattooing", "secondary": "Agility"}},
+		{}, chars,
+	)
+	assert_false(result.get("success", true))
+	assert_eq(result.get("reason", ""), "insufficient_ap")
+
+func test_apply_tattoo_location_occupied():
+	var artist := _make_artist()
+	var recipient := _make_recipient()
+	var existing := _make_tattoo(1, 200, 100, Enums.TattooQualityTier.NORMAL, Enums.TattooBodyLocation.CHEST_TORSO)
+	var action := _make_tattoo_action()
+	action.metadata["world_tattoos"] = [existing] as Array[TattooData]
+	var ctx := _make_tattoo_ctx()
+	var dice := DiceEngine.new()
+	var chars: Dictionary = {100: artist, 200: recipient}
+	var result: Dictionary = ActionExecutor.execute(
+		action, artist, ctx, dice, {"APPLY_TATTOO": {"primary": "Artisan: Tattooing", "secondary": "Agility"}},
+		{}, chars,
+	)
+	assert_false(result.get("success", true))
+	assert_eq(result.get("reason", ""), "location_occupied")
+
+func test_apply_tattoo_no_recipient():
+	var artist := _make_artist()
+	var action := _make_tattoo_action(999)
+	var ctx := _make_tattoo_ctx()
+	var dice := DiceEngine.new()
+	var chars: Dictionary = {100: artist}
+	var result: Dictionary = ActionExecutor.execute(
+		action, artist, ctx, dice, {"APPLY_TATTOO": {"primary": "Artisan: Tattooing", "secondary": "Agility"}},
+		{}, chars,
+	)
+	assert_false(result.get("success", true))
+	assert_eq(result.get("reason", ""), "no_recipient")
+
+func test_apply_tattoo_fine_tier_ap_override():
+	var artist := _make_artist(3, 6)
+	var recipient := _make_recipient()
+	var action := _make_tattoo_action(200, Enums.TattooQualityTier.FINE)
+	var ctx := _make_tattoo_ctx()
+	var dice := DiceEngine.new()
+	dice.set_seed(42)
+	var chars: Dictionary = {100: artist, 200: recipient}
+	var result: Dictionary = ActionExecutor.execute(
+		action, artist, ctx, dice, {"APPLY_TATTOO": {"primary": "Artisan: Tattooing", "secondary": "Agility"}},
+		{}, chars,
+	)
+	var effects: Dictionary = result.get("effects", {})
+	assert_eq(effects.get("ap_cost_override", 0), 3, "FINE tier should cost 3 AP")
+
+func test_apply_tattoo_writeback_creates_tattoo():
+	var artist := _make_artist()
+	var recipient := _make_recipient()
+	var chars: Dictionary = {100: artist, 200: recipient}
+	var tattoos: Array[TattooData] = []
+	var next_id: Array[int] = [1]
+	var result: Dictionary = {
+		"success": true, "action_id": "APPLY_TATTOO",
+		"character_id": 100, "target_npc_id": 200,
+		"effects": {
+			"requires_tattoo_creation": true,
+			"result_quality": Enums.TattooQualityTier.FINE,
+			"body_location": Enums.TattooBodyLocation.BACK,
+			"is_ability_tattoo": false,
+			"ability": Enums.TattooAbility.NONE,
+			"subject_type": Enums.TattooSubjectType.IMAGE,
+			"subject_description": "Mountain",
+			"topic_id": -1,
+			"ap_cost_override": 3,
+		},
+	}
+	DayOrchestrator._process_tattoo_creation(
+		[result], chars, tattoos, next_id, 50,
+	)
+	assert_eq(tattoos.size(), 1, "Should create one tattoo")
+	assert_eq(tattoos[0].recipient_id, 200)
+	assert_eq(tattoos[0].artist_id, 100)
+	assert_eq(tattoos[0].quality_tier, Enums.TattooQualityTier.FINE)
+	assert_eq(tattoos[0].body_location, Enums.TattooBodyLocation.BACK)
+	assert_eq(next_id[0], 2, "Should increment tattoo ID")
+
+func test_apply_tattoo_writeback_deducts_extra_ap():
+	var artist := _make_artist(5, 6)
+	var chars: Dictionary = {100: artist}
+	var tattoos: Array[TattooData] = []
+	var next_id: Array[int] = [1]
+	var result: Dictionary = {
+		"success": true, "action_id": "APPLY_TATTOO",
+		"character_id": 100, "target_npc_id": 200,
+		"effects": {
+			"requires_tattoo_creation": true,
+			"result_quality": Enums.TattooQualityTier.EXCEPTIONAL,
+			"body_location": Enums.TattooBodyLocation.CHEST_TORSO,
+			"ap_cost_override": 4,
+			"is_ability_tattoo": false,
+			"ability": Enums.TattooAbility.NONE,
+			"subject_type": Enums.TattooSubjectType.IMAGE,
+			"subject_description": "",
+			"topic_id": -1,
+		},
+	}
+	DayOrchestrator._process_tattoo_creation(
+		[result], chars, tattoos, next_id, 50,
+	)
+	assert_eq(artist.action_points_current, 4, "Should deduct 2 extra AP (4 - 2 base)")
+
+func test_apply_tattoo_mundane_no_creation():
+	var artist := _make_artist()
+	var chars: Dictionary = {100: artist}
+	var tattoos: Array[TattooData] = []
+	var next_id: Array[int] = [1]
+	var result: Dictionary = {
+		"success": false, "action_id": "APPLY_TATTOO",
+		"character_id": 100, "target_npc_id": 200,
+		"effects": {
+			"ap_cost_override": 2,
+			"result_quality": Enums.TattooQualityTier.MUNDANE,
+		},
+	}
+	DayOrchestrator._process_tattoo_creation(
+		[result], chars, tattoos, next_id, 50,
+	)
+	assert_eq(tattoos.size(), 0, "Mundane result should not create a tattoo")
+
+func test_apply_tattoo_context_list_includes_action():
+	var at_holdings: Array[String] = NPCDecisionEngine._get_actions_for_context(
+		Enums.ContextFlag.AT_OWN_HOLDINGS
+	)
+	assert_true("APPLY_TATTOO" in at_holdings, "AT_OWN_HOLDINGS should include APPLY_TATTOO")
+	var visiting: Array[String] = NPCDecisionEngine._get_actions_for_context(
+		Enums.ContextFlag.VISITING
+	)
+	assert_true("APPLY_TATTOO" in visiting, "VISITING should include APPLY_TATTOO")
+
+func test_apply_tattoo_ap_cost_entry():
+	assert_eq(NPCDecisionEngine._get_ap_cost("APPLY_TATTOO"), 2)
+
+
+# =============================================================================
+# APPLY_TATTOO Precondition Filter — Consent & Decorative Gate
+# =============================================================================
+
+func _make_options_with_tattoo(target_id: int = 200) -> Array[NPCDataStructures.ScoredAction]:
+	var tattoo_opt := NPCDataStructures.ScoredAction.new()
+	tattoo_opt.action_id = "APPLY_TATTOO"
+	tattoo_opt.target_npc_id = target_id
+	tattoo_opt.metadata = {
+		"target_tier": Enums.TattooQualityTier.NORMAL,
+		"body_location": Enums.TattooBodyLocation.LEFT_WRIST_FOREARM,
+		"is_ability_tattoo": false,
+		"ability": Enums.TattooAbility.NONE,
+	}
+	var rest_opt := NPCDataStructures.ScoredAction.new()
+	rest_opt.action_id = "REST"
+	return [tattoo_opt, rest_opt] as Array[NPCDataStructures.ScoredAction]
+
+func test_tattoo_filter_removes_when_no_skill():
+	var artist := _make_artist(0)
+	var ctx := _make_tattoo_ctx()
+	var options := _make_options_with_tattoo()
+	var result := NPCDecisionEngine._apply_tattoo_precondition_filter(
+		options, artist, ctx, {100: artist, 200: _make_recipient()}, {}
+	)
+	for opt: NPCDataStructures.ScoredAction in result:
+		assert_ne(opt.action_id, "APPLY_TATTOO", "Should remove APPLY_TATTOO with no skill")
+	assert_eq(result.size(), 1)
+
+func test_tattoo_filter_removes_when_no_recipient():
+	var artist := _make_artist()
+	var ctx := _make_tattoo_ctx()
+	var options := _make_options_with_tattoo(999)
+	var result := NPCDecisionEngine._apply_tattoo_precondition_filter(
+		options, artist, ctx, {100: artist}, {}
+	)
+	for opt: NPCDataStructures.ScoredAction in result:
+		assert_ne(opt.action_id, "APPLY_TATTOO", "Should remove when recipient not in chars_by_id")
+
+func test_tattoo_filter_removes_when_consent_fails():
+	var artist := _make_artist()
+	var recipient := _make_recipient()
+	recipient.clan = "Phoenix"
+	recipient.family = "Isawa"
+	var ctx := _make_tattoo_ctx()
+	ctx.dispositions = {200: 10}
+	var options := _make_options_with_tattoo()
+	var result := NPCDecisionEngine._apply_tattoo_precondition_filter(
+		options, artist, ctx, {100: artist, 200: recipient}, {}
+	)
+	for opt: NPCDataStructures.ScoredAction in result:
+		assert_ne(opt.action_id, "APPLY_TATTOO", "Reluctant clan with low disposition should block")
+
+func test_tattoo_filter_passes_when_consent_ok():
+	var artist := _make_artist()
+	var recipient := _make_recipient()
+	var ctx := _make_tattoo_ctx()
+	ctx.dispositions = {200: 5}
+	var options := _make_options_with_tattoo()
+	var result := NPCDecisionEngine._apply_tattoo_precondition_filter(
+		options, artist, ctx, {100: artist, 200: recipient}, {}
+	)
+	var found: bool = false
+	for opt: NPCDataStructures.ScoredAction in result:
+		if opt.action_id == "APPLY_TATTOO":
+			found = true
+	assert_true(found, "Dragon clan recipient at Neutral should consent")
+
+func test_tattoo_filter_decorative_gate_blocks():
+	var artist := _make_artist()
+	var recipient := _make_recipient()
+	recipient.school_name = "Togashi Tattooed Order"
+	recipient.school_rank = 1
+	var ctx := _make_tattoo_ctx()
+	ctx.dispositions = {200: 50}
+	var options := _make_options_with_tattoo()
+	var result := NPCDecisionEngine._apply_tattoo_precondition_filter(
+		options, artist, ctx, {100: artist, 200: recipient}, {}
+	)
+	for opt: NPCDataStructures.ScoredAction in result:
+		assert_ne(opt.action_id, "APPLY_TATTOO",
+			"Togashi R1 with unfilled ability slots should block decorative")
+
+func test_tattoo_filter_decorative_gate_passes_non_togashi():
+	var artist := _make_artist()
+	var recipient := _make_recipient()
+	recipient.school_name = "Mirumoto Bushi"
+	recipient.school_rank = 3
+	var ctx := _make_tattoo_ctx()
+	ctx.dispositions = {200: 5}
+	var options := _make_options_with_tattoo()
+	var result := NPCDecisionEngine._apply_tattoo_precondition_filter(
+		options, artist, ctx, {100: artist, 200: recipient}, {}
+	)
+	var found: bool = false
+	for opt: NPCDataStructures.ScoredAction in result:
+		if opt.action_id == "APPLY_TATTOO":
+			found = true
+	assert_true(found, "Non-Togashi recipient should pass decorative gate")
+
+func test_tattoo_filter_all_locations_occupied():
+	var artist := _make_artist()
+	var recipient := _make_recipient()
+	var ctx := _make_tattoo_ctx()
+	ctx.dispositions = {200: 5}
+	var full_tattoos: Array[TattooData] = []
+	for loc: Enums.TattooBodyLocation in TattooSystem.ALL_BODY_LOCATIONS:
+		full_tattoos.append(_make_tattoo(full_tattoos.size(), 200, 100,
+			Enums.TattooQualityTier.NORMAL, loc))
+	var options := _make_options_with_tattoo()
+	var ws: Dictionary = {"tattoos": full_tattoos}
+	var result := NPCDecisionEngine._apply_tattoo_precondition_filter(
+		options, artist, ctx, {100: artist, 200: recipient}, ws
+	)
+	for opt: NPCDataStructures.ScoredAction in result:
+		assert_ne(opt.action_id, "APPLY_TATTOO", "All locations full should block")

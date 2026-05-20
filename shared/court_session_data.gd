@@ -46,3 +46,10 @@ enum CourtPhase {
 @export var willingness_modifier_clan_b: int = 0
 @export var pending_performance_requests: Array[Dictionary] = []
 @export var next_request_id: int = 0
+## Per-character session state for court action modifiers (s15.4).
+## Key: character_id (int). Value: Dictionary with counts and TN reductions.
+## Fields per entry: charm_count, negotiate_count, tn_reductions (Dictionary of
+## target_id -> int), persuade_tn_reductions (Dictionary of target_id -> int).
+@export var session_state: Dictionary = {}
+## Active proxy mandates for this court session (s16.2).
+@export var proxy_mandates: Array[ProxyMandateData] = []

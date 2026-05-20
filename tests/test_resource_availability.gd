@@ -213,3 +213,42 @@ func test_offer_favor_cost() -> void:
 	)
 	# 2/2 = 1.0 → -15
 	assert_eq(mod, -15.0)
+
+
+# =============================================================================
+# can_afford (Phase 7 validation)
+# =============================================================================
+
+func test_can_afford_free_action() -> void:
+	_char.koku = 0.0
+	assert_true(ResourceAvailability.can_afford("REST", _char))
+
+
+func test_can_afford_with_exact_koku() -> void:
+	_char.koku = 5.0
+	assert_true(ResourceAvailability.can_afford("BRIBE_FOR_INFO", _char))
+
+
+func test_cannot_afford_insufficient_koku() -> void:
+	_char.koku = 4.0
+	assert_false(ResourceAvailability.can_afford("BRIBE_FOR_INFO", _char))
+
+
+func test_can_afford_with_inventory() -> void:
+	_char.items = [{"id": 1}]
+	assert_true(ResourceAvailability.can_afford("DELIVER_GIFT", _char))
+
+
+func test_cannot_afford_empty_inventory() -> void:
+	_char.items = []
+	assert_false(ResourceAvailability.can_afford("DELIVER_GIFT", _char))
+
+
+func test_can_afford_with_province_troops() -> void:
+	var province: Dictionary = {"available_levy_pu": 3.0}
+	assert_true(ResourceAvailability.can_afford("ORDER_LEVY", _char, province))
+
+
+func test_cannot_afford_no_troops() -> void:
+	var province: Dictionary = {"available_levy_pu": 0.0}
+	assert_false(ResourceAvailability.can_afford("ORDER_LEVY", _char, province))

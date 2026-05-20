@@ -1051,3 +1051,344 @@ func test_ripple_no_op_when_at_cap() -> void:
 		if change.get("target_id", -1) == 60:
 			ripple_found = true
 	assert_false(ripple_found)
+
+
+# =============================================================================
+# Koku Cost Deduction (s55.32)
+# =============================================================================
+
+func test_koku_cost_deducted_on_success() -> void:
+	_actor.koku = 20.0
+	var result: Dictionary = {
+		"success": true,
+		"character_id": 1,
+		"target_npc_id": 2,
+		"action_id": "BRIBE_FOR_INFO",
+		"ic_day": 5,
+		"effects": {"koku_cost": 5.0},
+	}
+	EffectApplicator.apply(result, _characters, _provinces, _action_log)
+	assert_almost_eq(_actor.koku, 15.0, 0.01)
+
+
+func test_koku_cost_deducted_on_failed_with_marker() -> void:
+	_actor.koku = 10.0
+	var result: Dictionary = {
+		"success": false,
+		"character_id": 1,
+		"target_npc_id": 2,
+		"action_id": "BRIBE_FOR_INFO",
+		"ic_day": 5,
+		"effects": {"failed": true, "koku_cost": 5.0},
+	}
+	EffectApplicator.apply(result, _characters, _provinces, _action_log)
+	assert_almost_eq(_actor.koku, 5.0, 0.01)
+
+
+func test_koku_cost_clamps_to_zero() -> void:
+	_actor.koku = 2.0
+	var result: Dictionary = {
+		"success": true,
+		"character_id": 1,
+		"target_npc_id": 2,
+		"action_id": "PURCHASE_MARKET",
+		"ic_day": 5,
+		"effects": {"koku_cost": 3.0},
+	}
+	EffectApplicator.apply(result, _characters, _provinces, _action_log)
+	assert_almost_eq(_actor.koku, 0.0, 0.01)
+
+
+func test_no_koku_cost_when_absent() -> void:
+	_actor.koku = 10.0
+	var result: Dictionary = {
+		"success": true,
+		"character_id": 1,
+		"target_npc_id": 2,
+		"action_id": "CHARM",
+		"ic_day": 5,
+		"effects": {"disposition_change": 5},
+	}
+	EffectApplicator.apply(result, _characters, _provinces, _action_log)
+	assert_almost_eq(_actor.koku, 10.0, 0.01)
+
+
+func test_koku_cost_skipped_when_blocked() -> void:
+	_actor.koku = 10.0
+	var result: Dictionary = {
+		"success": false,
+		"character_id": 1,
+		"target_npc_id": 2,
+		"action_id": "BRIBE_FOR_INFO",
+		"ic_day": 5,
+		"effects": {},
+	}
+	EffectApplicator.apply(result, _characters, _provinces, _action_log)
+	assert_almost_eq(_actor.koku, 10.0, 0.01)
+
+
+# -- Gossip Source Concealment -------------------------------------------------
+
+func test_gossip_unconcealed_creates_knowledge_with_gossiper_id() -> void:
+	_target.knowledge_pool = []
+	var subject := L5RCharacterData.new()
+	subject.character_id = 3
+	_characters[3] = subject
+	var result: Dictionary = {
+		"success": true,
+		"character_id": 1,
+		"target_npc_id": 2,
+		"action_id": "GOSSIP",
+		"ic_day": 5,
+		"season": 2,
+		"effects": {
+			"gossip_subject_id": 3,
+			"gossip_subject_disposition": -5,
+			"source_concealed": false,
+			"concealment_depth": 0,
+		},
+	}
+	EffectApplicator.apply(result, _characters, _provinces, _action_log)
+	assert_eq(_target.knowledge_pool.size(), 1)
+	var entry: KnowledgeEntry = _target.knowledge_pool[0]
+	assert_eq(entry.entry_type, "gossip_received")
+	assert_eq(entry.data["gossiper_id"], 1, "Unconcealed gossip should attribute the gossiper")
+	assert_eq(entry.data["subject_id"], 3)
+
+
+func test_gossip_concealed_hides_gossiper_id() -> void:
+	_target.knowledge_pool = []
+	var subject := L5RCharacterData.new()
+	subject.character_id = 3
+	_characters[3] = subject
+	var result: Dictionary = {
+		"success": true,
+		"character_id": 1,
+		"target_npc_id": 2,
+		"action_id": "GOSSIP",
+		"ic_day": 5,
+		"season": 2,
+		"effects": {
+			"gossip_subject_id": 3,
+			"gossip_subject_disposition": -5,
+			"source_concealed": true,
+			"concealment_depth": 2,
+		},
+	}
+	EffectApplicator.apply(result, _characters, _provinces, _action_log)
+	assert_eq(_target.knowledge_pool.size(), 1)
+	var entry: KnowledgeEntry = _target.knowledge_pool[0]
+	assert_eq(entry.entry_type, "gossip_received")
+	assert_eq(entry.data["gossiper_id"], -1, "Concealed gossip should hide the gossiper")
+	assert_eq(entry.data["subject_id"], 3)
+
+
+func test_gossip_action_log_includes_source_concealed() -> void:
+	var subject := L5RCharacterData.new()
+	subject.character_id = 3
+	_characters[3] = subject
+	_target.knowledge_pool = []
+	var result: Dictionary = {
+		"success": true,
+		"character_id": 1,
+		"target_npc_id": 2,
+		"action_id": "GOSSIP",
+		"ic_day": 5,
+		"season": 2,
+		"effects": {
+			"gossip_subject_id": 3,
+			"gossip_subject_disposition": -5,
+			"source_concealed": true,
+			"concealment_depth": 2,
+		},
+	}
+	EffectApplicator.apply(result, _characters, _provinces, _action_log)
+	assert_eq(_action_log.size(), 1)
+	assert_true(_action_log[0].has("source_concealed"), "Action log should include source_concealed")
+	assert_true(_action_log[0]["source_concealed"])
+	assert_eq(_action_log[0]["concealment_depth"], 2)
+
+
+func test_non_gossip_action_log_omits_source_concealed() -> void:
+	var result: Dictionary = {
+		"success": true,
+		"character_id": 1,
+		"target_npc_id": 2,
+		"action_id": "CHARM",
+		"ic_day": 5,
+		"effects": {"disposition_change": 5},
+	}
+	EffectApplicator.apply(result, _characters, _provinces, _action_log)
+	assert_eq(_action_log.size(), 1)
+	assert_false(_action_log[0].has("source_concealed"), "Non-gossip actions should not have source_concealed")
+
+
+# -- False Info on Critical Failure --------------------------------------------
+
+func test_false_info_personality_creates_wrong_virtue() -> void:
+	_actor.knowledge_pool = []
+	_target.bushido_virtue = Enums.BushidoVirtue.GI
+	var result: Dictionary = {
+		"success": false,
+		"character_id": 1,
+		"target_npc_id": 2,
+		"action_id": "READ_CHARACTER",
+		"ic_day": 5,
+		"season": 2,
+		"effects": {
+			"failed": true,
+			"false_info": ["personality_insight"],
+		},
+	}
+	EffectApplicator.apply(result, _characters, _provinces, _action_log)
+	assert_eq(_actor.knowledge_pool.size(), 1)
+	var entry: KnowledgeEntry = _actor.knowledge_pool[0]
+	assert_eq(entry.entry_type, "personality_insight")
+	assert_eq(entry.source, Enums.KnowledgeSource.INTELLIGENCE)
+	assert_eq(entry.confidence, Enums.KnowledgeConfidence.FRESH)
+	assert_ne(entry.data["bushido_virtue"], Enums.BushidoVirtue.GI, "False virtue should differ from actual")
+	assert_true(entry.data["is_false"])
+
+
+func test_false_info_disposition_inverts_sign() -> void:
+	_actor.knowledge_pool = []
+	_target.disposition_values = {1: 30}
+	var result: Dictionary = {
+		"success": false,
+		"character_id": 1,
+		"target_npc_id": 2,
+		"action_id": "READ_CHARACTER",
+		"ic_day": 5,
+		"season": 2,
+		"effects": {
+			"failed": true,
+			"false_info": ["disposition_toward"],
+		},
+	}
+	EffectApplicator.apply(result, _characters, _provinces, _action_log)
+	assert_eq(_actor.knowledge_pool.size(), 1)
+	var entry: KnowledgeEntry = _actor.knowledge_pool[0]
+	assert_eq(entry.data["disposition"], -30, "False disposition should invert actual")
+	assert_true(entry.data["is_false"])
+
+
+func test_false_info_topic_position_inverted() -> void:
+	_actor.knowledge_pool = []
+	_target.topic_positions = {100: 25.0}
+	var result: Dictionary = {
+		"success": false,
+		"character_id": 1,
+		"target_npc_id": 2,
+		"action_id": "PROBE",
+		"ic_day": 5,
+		"season": 2,
+		"effects": {
+			"failed": true,
+			"false_info": ["topic_position"],
+		},
+	}
+	EffectApplicator.apply(result, _characters, _provinces, _action_log)
+	assert_eq(_actor.knowledge_pool.size(), 1)
+	var entry: KnowledgeEntry = _actor.knowledge_pool[0]
+	assert_eq(entry.data["topic_id"], 100)
+	assert_almost_eq(entry.data["position"], -25.0, 0.01, "False position should invert actual")
+	assert_true(entry.data["is_false"])
+
+
+func test_false_info_no_entry_without_target() -> void:
+	_actor.knowledge_pool = []
+	var result: Dictionary = {
+		"success": false,
+		"character_id": 1,
+		"target_npc_id": -1,
+		"action_id": "READ_CHARACTER",
+		"ic_day": 5,
+		"season": 2,
+		"effects": {
+			"failed": true,
+			"false_info": ["personality_insight"],
+		},
+	}
+	EffectApplicator.apply(result, _characters, _provinces, _action_log)
+	assert_eq(_actor.knowledge_pool.size(), 0, "No false info without valid target")
+
+
+# -- Winner Glory Application (duel non-actor winner) -------------------------
+
+func test_winner_glory_change_applied_to_non_actor_winner() -> void:
+	var winner := L5RCharacterData.new()
+	winner.character_id = 90
+	winner.glory = 3.0
+	_characters[90] = winner
+
+	var result: Dictionary = {
+		"success": true,
+		"action_id": "ISSUE_DUEL_CHALLENGE",
+		"character_id": _actor.character_id,
+		"target_npc_id": 90,
+		"ic_day": 1,
+		"season": 0,
+		"effects": {
+			"winner_glory_change": 0.5,
+			"winner_glory_recipient_id": 90,
+		},
+	}
+
+	EffectApplicator.apply(result, _characters, _provinces, _action_log)
+	assert_almost_eq(winner.glory, 3.5, 0.01,
+		"Winner glory change should be applied to the winner character")
+
+
+func test_winner_glory_not_applied_without_key() -> void:
+	var target := L5RCharacterData.new()
+	target.character_id = 91
+	target.glory = 3.0
+	_characters[91] = target
+
+	var result: Dictionary = {
+		"success": true,
+		"action_id": "ISSUE_DUEL_CHALLENGE",
+		"character_id": _actor.character_id,
+		"target_npc_id": 91,
+		"ic_day": 1,
+		"season": 0,
+		"effects": {
+			"glory_change": 0.5,
+		},
+	}
+
+	EffectApplicator.apply(result, _characters, _provinces, _action_log)
+	assert_almost_eq(target.glory, 3.0, 0.01,
+		"Without winner_glory_change key, target glory unchanged")
+
+
+# -- False Info Dedup ----------------------------------------------------------
+
+func test_false_info_replaces_existing_true_entry() -> void:
+	_actor.knowledge_pool = [] as Array[KnowledgeEntry]
+	var true_entry := InformationSystem.make_entry(
+		Enums.KnowledgeSource.INTELLIGENCE,
+		"personality_insight",
+		{"target_character_id": 2, "bushido_virtue": _target.bushido_virtue},
+		0,
+	)
+	InformationSystem.update_intelligence_knowledge(_actor, true_entry)
+	assert_eq(_actor.knowledge_pool.size(), 1)
+
+	var result: Dictionary = {
+		"success": false,
+		"character_id": 1,
+		"target_npc_id": 2,
+		"action_id": "READ_CHARACTER",
+		"ic_day": 5,
+		"season": 1,
+		"effects": {
+			"failed": true,
+			"false_info": ["personality_insight"],
+		},
+	}
+	EffectApplicator.apply(result, _characters, _provinces, _action_log)
+	assert_eq(_actor.knowledge_pool.size(), 1,
+		"False info should replace existing true entry, not append")
+	assert_true(_actor.knowledge_pool[0].data.get("is_false", false),
+		"Entry should be the false version")

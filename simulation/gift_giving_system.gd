@@ -337,12 +337,12 @@ static func resolve_deliver_gift(
 # as gifts even if present in inventory.
 
 static func select_best_gift(
-	items: Array,
+	items: Array[Dictionary],
 	archetype: RecipientArchetype,
 ) -> Dictionary:
 	var best: Dictionary = {}
 	var best_score: int = -1
-	for item in items:
+	for item: Dictionary in items:
 		if not _is_giftable(item):
 			continue
 		var tier: int = item.get("quality_tier", 0)

@@ -419,7 +419,7 @@ static func _apply_miya_blessing(
 	var current_ic_year: int = int(miya_inputs.get("current_ic_year", -1))
 	var emperor_settlement_id: int = int(miya_inputs.get("emperor_settlement_id", -1))
 	var emperor_settlement: SettlementData = null
-	for s in settlements:
+	for s: SettlementData in settlements:
 		if s.settlement_id == emperor_settlement_id:
 			emperor_settlement = s
 			break
@@ -455,14 +455,14 @@ static func _apply_miya_blessing(
 			0.0, emperor_settlement.rice_stockpile - float(result.get("allocation_total", 0.0))
 		)
 	var grants: Dictionary = result.get("settlement_rice_grants", {})
-	for s in settlements:
+	for s: SettlementData in settlements:
 		if grants.has(s.settlement_id):
 			s.rice_stockpile += float(grants[s.settlement_id])
 	# One-season +1% pop growth (§6.3) — stash by province_id; the
 	# population adjustment step reads this dict and adds to its rate.
 	var growth_bonus: Dictionary = {}
 	var pop_growth_bonus: float = float(result.get("pop_growth_bonus", 0.0))
-	for prov in provinces:
+	for prov: ProvinceData in provinces:
 		if prov.province_id in result.get("selected_province_ids", []):
 			prov.stability = clampf(
 				prov.stability + float(result.get("stability_bonus", 0)),
@@ -489,7 +489,7 @@ static func _build_scored_provinces(
 	var raid_history: Dictionary = miya_inputs.get("raid_history", {})
 	var pu_decline: Dictionary = miya_inputs.get("pu_decline", {})
 
-	for prov in provinces:
+	for prov: ProvinceData in provinces:
 		var pid: int = prov.province_id
 		var blessed_last_year: bool = (
 			current_ic_year > 0 and prov.last_blessed_ic_year == current_ic_year - 1
@@ -539,9 +539,9 @@ static func _group_settlements_by_province(
 	settlements: Array[SettlementData],
 ) -> Dictionary:
 	var grouped: Dictionary = {}
-	for prov in provinces:
-		var bucket: Array = []
-		for s in settlements:
+	for prov: ProvinceData in provinces:
+		var bucket: Array[SettlementData] = []
+		for s: SettlementData in settlements:
 			if s.province_id == prov.province_id:
 				bucket.append(s)
 		grouped[prov.province_id] = bucket

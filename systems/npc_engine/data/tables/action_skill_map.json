@@ -31,6 +31,10 @@
     "primary": "Battle",
     "secondary": null
   },
+  "ASSIGN_TO_MILITARY_SERVICE": {
+    "primary": "Battle",
+    "secondary": "Courtier"
+  },
   "ASSIGN_VASSAL_OBJECTIVE": {
     "primary": "Courtier",
     "secondary": "Battle"
@@ -77,7 +81,7 @@
   },
   "COMMISSION_ASSASSINATION": {
     "primary": "Courtier",
-    "secondary": "Sincerity"
+    "secondary": "Awareness"
   },
   "COMMISSION_SHIP": {
     "primary": "Commerce",
@@ -86,6 +90,10 @@
   "COMPLY_WITH_EDICT": {
     "primary": "Courtier",
     "secondary": "Sincerity"
+  },
+  "CONCEAL_ITEM": {
+    "primary": "Sleight_of_Hand",
+    "secondary": "Agility"
   },
   "CONDUCT_COMMERCE": {
     "primary": "Commerce",
@@ -179,13 +187,25 @@
     "primary": "Stealth",
     "secondary": "Acting"
   },
-  "EXPOSE_SECRET_PUBLIC": {
+  "EXPOSE_SECRET_PRIVATELY": {
+    "primary": "Courtier",
+    "secondary": "Awareness"
+  },
+  "EXPOSE_SECRET_PUBLICLY": {
     "primary": "Courtier",
     "secondary": "Awareness"
   },
   "FABRICATE_SECRET": {
     "primary": "Forgery",
     "secondary": "Intelligence"
+  },
+  "FORGE_IMPERSONATION_LETTER": {
+    "primary": "Forgery",
+    "secondary": "Agility"
+  },
+  "FORGE_ORDER": {
+    "primary": "Forgery",
+    "secondary": "Agility"
   },
   "FORCE_MARCH": {
     "primary": "Battle",
@@ -383,10 +403,6 @@
     "primary": null,
     "secondary": null
   },
-  "REVEAL_SECRET_PRIVATE": {
-    "primary": "Courtier",
-    "secondary": "Awareness"
-  },
   "SCOUT_ENEMY": {
     "primary": "Battle",
     "secondary": "Perception"
@@ -395,12 +411,32 @@
     "primary": "Engineering",
     "secondary": "Intelligence"
   },
+  "SEARCH_PERSON": {
+    "primary": "Investigation",
+    "secondary": "Perception"
+  },
   "SEARCH_QUARTERS": {
     "primary": "Sleight of Hand",
     "secondary": "Investigation"
   },
-  "SEEK_PRETEXT": {
-    "primary": "Courtier",
+  "SEDUCE": {
+    "primary": "Temptation",
+    "secondary": "Awareness"
+  },
+  "SEDUCE_FOR_ACCESS": {
+    "primary": "Temptation",
+    "secondary": "Awareness"
+  },
+  "SEDUCE_FOR_INFO": {
+    "primary": "Temptation",
+    "secondary": "Awareness"
+  },
+  "SEDUCE_FOR_LEVERAGE": {
+    "primary": "Temptation",
+    "secondary": "Awareness"
+  },
+  "SEDUCE_TO_COMPROMISE": {
+    "primary": "Temptation",
     "secondary": "Awareness"
   },
   "SEND_INVITATION": {
@@ -414,6 +450,10 @@
   "SET_TAX_RATE": {
     "primary": "Commerce",
     "secondary": null
+  },
+  "SHADOW_TARGET": {
+    "primary": "Stealth",
+    "secondary": "Agility"
   },
   "SHARE_SUPPLIES": {
     "primary": "Commerce",

@@ -16,8 +16,8 @@ extends Resource
 @export var disposition_bonus: int = 0
 
 # Timing
-@export var ic_day_sent: int = 0
-@export var ic_day_arrival: int = 0
+@export var ic_day_sent: int = -1
+@export var ic_day_arrival: int = -1
 
 # State
 @export var delivered: bool = false
@@ -28,10 +28,25 @@ extends Resource
 @export var forged_sender_id: int = -1
 @export var forgery_tn: int = 0
 @export var forgery_detected: bool = false
+@export var is_order: bool = false
+@export var order_applied: bool = false
+@export var order_need_type: String = ""
+@export var order_target_province_id: int = -1
+@export var order_target_npc_id: int = -1
+@export var order_target_settlement_id: int = -1
+@export var reply_to_forged: bool = false
+@export var original_forger_id: int = -1
 
 # Witness report (populated by reactive WRITE_LETTER for witness_report_motivated)
 @export var report_case_id: int = -1
 @export var report_criminal_id: int = -1
+
+# Commitment intent flags (s55.31 — commitment creation triggers)
+@export var visit_intent: bool = false
+@export var visit_deadline_ic_day: int = -1
+@export var meeting_proposal: bool = false
+@export var meeting_settlement_id: int = -1
+@export var meeting_deadline_ic_day: int = -1
 
 # Blockade state
 @export var blocked_by_blockade: bool = false

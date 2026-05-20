@@ -300,7 +300,7 @@ static func get_stability_penalty(seasons_active: int) -> int:
 static func apply_seasonal_consequences(
 	state: Dictionary,
 	rebel_lord: L5RCharacterData,
-	provinces_in_clan: Array,
+	provinces_in_clan: Array[ProvinceData],
 	current_season: int,
 	suppress_hemorrhage: bool = false,
 ) -> Dictionary:
@@ -312,7 +312,7 @@ static func apply_seasonal_consequences(
 	var seasons_active: int = current_season - int(state.get("season_started", current_season))
 	var penalty: int = get_stability_penalty(seasons_active)
 	var stability_changes: Array[Dictionary] = []
-	for prov in provinces_in_clan:
+	for prov: ProvinceData in provinces_in_clan:
 		if prov == null:
 			continue
 		var before: float = prov.stability
@@ -323,7 +323,7 @@ static func apply_seasonal_consequences(
 			"after": prov.stability,
 		})
 	if rebel_lord != null and not suppress_hemorrhage:
-		HonorGlorySystem.apply_honor_change(rebel_lord, HONOR_HEMORRHAGE_REBEL_PER_SEASON)
+		HonorGlorySystem.apply_honor_change(rebel_lord, CrimeSystem.get_disloyalty_honor(rebel_lord))
 	return {
 		"penalty_applied": penalty,
 		"seasons_active": seasons_active,
@@ -479,14 +479,14 @@ static func defection_trigger_fired(
 
 static func apply_defection_consequences(
 	defector: L5RCharacterData,
-	former_faction_members: Array,
+	former_faction_members: Array[L5RCharacterData],
 ) -> void:
 	## Applies the GDD's defection penalties: -0.5 Honor on the defector
 	## and -15 disposition on every former faction member toward them.
 	if defector == null:
 		return
-	HonorGlorySystem.apply_honor_change(defector, DEFECTION_HONOR_PENALTY)
-	for c in former_faction_members:
+	HonorGlorySystem.apply_honor_change(defector, CrimeSystem.get_disloyalty_honor(defector))
+	for c: L5RCharacterData in former_faction_members:
 		if c == null or c == defector:
 			continue
 		var current: int = int(c.disposition_values.get(defector.character_id, 0))
@@ -524,8 +524,8 @@ static func tick_precedent_decay(
 ) -> int:
 	## Removes expired modifiers. Returns the count removed.
 	var removed: int = 0
-	var keys: Array = precedent_modifiers.keys().duplicate()
-	for k in keys:
+	var keys: Array[int] = precedent_modifiers.keys().duplicate()
+	for k: int in keys:
 		var mod: Dictionary = precedent_modifiers[k]
 		if int(mod.get("expires", 0)) <= current_season:
 			precedent_modifiers.erase(k)
@@ -535,7 +535,7 @@ static func tick_precedent_decay(
 
 static func get_active_precedent_bonus(precedent_modifiers: Dictionary) -> int:
 	var total: int = 0
-	for k in precedent_modifiers:
+	for k: int in precedent_modifiers:
 		total += int(precedent_modifiers[k].get("bonus", 0))
 	return total
 
@@ -552,7 +552,7 @@ static func apply_ronin_departure(npc: L5RCharacterData) -> void:
 
 static func apply_post_resolution_scars(
 	state: Dictionary,
-	all_characters: Array,
+	all_characters: Array[L5RCharacterData],
 	family_deaths: Dictionary = {},
 ) -> Dictionary:
 	## Applies disposition scars between opposite-faction combatants.
@@ -578,10 +578,10 @@ static func apply_post_resolution_scars(
 				continue
 			var scar_a: int = POST_WAR_SCAR_BASE
 			var scar_b: int = POST_WAR_SCAR_BASE
-			var deaths_a: Array = family_deaths.get(a.character_id, [])
+			var deaths_a: Array[int] = family_deaths.get(a.character_id, [])
 			if b.character_id in deaths_a:
 				scar_a += POST_WAR_SCAR_FAMILY_DEATH
-			var deaths_b: Array = family_deaths.get(b.character_id, [])
+			var deaths_b: Array[int] = family_deaths.get(b.character_id, [])
 			if a.character_id in deaths_b:
 				scar_b += POST_WAR_SCAR_FAMILY_DEATH
 			var cur_ab: int = int(a.disposition_values.get(b.character_id, 0))
@@ -596,13 +596,13 @@ static func apply_post_resolution_scars(
 
 
 static func decay_post_war_scars(
-	characters: Array,
+	characters: Array[L5RCharacterData],
 	scar_entries: Array[Dictionary],
 ) -> void:
 	## Called once per season to decay the base -10 scar by 1 per season.
 	## Family death scars (-15) do not decay.
 	## Caller tracks remaining scar values and stops calling when 0.
-	for entry in scar_entries:
+	for entry: Dictionary in scar_entries:
 		var base_remaining: int = int(entry.get("base_remaining", POST_WAR_SCAR_BASE))
 		if base_remaining >= 0:
 			continue
@@ -611,7 +611,7 @@ static func decay_post_war_scars(
 		entry["base_remaining"] = new_remaining
 		var a_id: int = int(entry.get("a_id", -1))
 		var b_id: int = int(entry.get("b_id", -1))
-		for c in characters:
+		for c: L5RCharacterData in characters:
 			if c == null:
 				continue
 			if c.character_id == a_id and b_id >= 0:
@@ -623,14 +623,14 @@ static func decay_post_war_scars(
 
 
 static func apply_rebel_consequences_on_legitimacy_victory(
-	rebels: Array,
+	rebels: Array[L5RCharacterData],
 	family_daimyo_ids: Array[int],
 ) -> Dictionary:
 	## On legitimacy victory, rebel Family Daimyos face removal + -1.0 Honor,
 	## Provincial Daimyos face reassignment + -0.5 Honor. Rank-and-file:
 	## no penalty (following orders is duty). Returns report for logging.
 	var results: Array[Dictionary] = []
-	for c in rebels:
+	for c: L5RCharacterData in rebels:
 		if c == null:
 			continue
 		if c.character_id in family_daimyo_ids:

@@ -47,6 +47,8 @@ static func build_context(
 	ctx.upcoming_courts = world_state.get("upcoming_courts", [] as Array[Dictionary])
 	ctx.held_leverage = world_state.get("held_leverage", [] as Array[Dictionary])
 	ctx.known_npc_locations = world_state.get("known_npc_locations", {})
+	ctx.court_session_state = world_state.get("court_session_state", {})
+	ctx.court_settlement_id = world_state.get("court_settlement_id", -1)
 
 	# Stats
 	ctx.skill_ranks = character.skills.duplicate()
@@ -93,6 +95,7 @@ static func build_context(
 	ctx.contact_clans = clan_lookup
 	ctx.met_characters = character.met_characters.duplicate()
 	ctx.knowledge_pool = character.knowledge_pool
+	ctx.known_secrets = world_state.get("known_secrets", [])
 
 	# Lord-tier fields
 	if ctx.is_lord:
@@ -249,6 +252,13 @@ static func build_context(
 	# Phoenix governance (s55.10.3.7) — set when the Champion holds autonomous authority.
 	ctx.phoenix_champion_authority = world_state.get("phoenix_champion_authority", false)
 
+	# Atonement (s4.6)
+	var raw_offenses: Variant = world_state.get("self_offenses", [])
+	if raw_offenses is Array:
+		for off: Variant in raw_offenses:
+			if off is Dictionary:
+				ctx.self_offenses.append(off as Dictionary)
+
 	return ctx
 
 
@@ -306,6 +316,7 @@ static func resolve_goal(
 static func generate_options(
 	ctx: NPCDataStructures.ContextSnapshot,
 	need: NPCDataStructures.ImmediateNeed,
+	character: L5RCharacterData = null,
 ) -> Array[NPCDataStructures.ScoredAction]:
 	var options: Array[NPCDataStructures.ScoredAction] = []
 	var available_actions: Array[String] = _get_actions_for_context(ctx.context_flag)
@@ -345,7 +356,7 @@ static func generate_options(
 			if ctx.civilian_orders_remaining <= 0:
 				if not CivilianOrderBudget.draws_from_military_pool(action_id, has_mil_rank):
 					continue
-		_populate_action_metadata(option, need, ctx)
+		_populate_action_metadata(option, need, ctx, character)
 		options.append(option)
 
 	return options
@@ -386,6 +397,86 @@ static func apply_allowlist_filter(
 	var filtered: Array[NPCDataStructures.ScoredAction] = []
 	for option: NPCDataStructures.ScoredAction in options:
 		if need_entry.has(option.action_id):
+			filtered.append(option)
+	return filtered
+
+
+# -- Phase 4c: APPLY_TATTOO Precondition Filter (s57.25.3) --------------------
+# Removes APPLY_TATTOO if cultural reluctance blocks consent or if the
+# target is a Togashi monk with unfilled ability slots (decorative gate).
+
+static func _apply_tattoo_precondition_filter(
+	options: Array[NPCDataStructures.ScoredAction],
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	chars_by_id: Dictionary,
+	world_state: Dictionary,
+) -> Array[NPCDataStructures.ScoredAction]:
+	var has_tattoo_action: bool = false
+	for option: NPCDataStructures.ScoredAction in options:
+		if option.action_id == "APPLY_TATTOO":
+			has_tattoo_action = true
+			break
+	if not has_tattoo_action:
+		return options
+
+	var tattooing_rank: int = character.skills.get("Artisan: Tattooing", 0)
+	if tattooing_rank < 1:
+		return _remove_action(options, "APPLY_TATTOO")
+
+	var world_tattoos: Array[TattooData] = world_state.get("tattoos", [] as Array[TattooData])
+	var recipient_id: int = -1
+	for option: NPCDataStructures.ScoredAction in options:
+		if option.action_id == "APPLY_TATTOO":
+			recipient_id = option.target_npc_id
+			break
+
+	var recipient: L5RCharacterData = chars_by_id.get(recipient_id)
+	if recipient == null:
+		return _remove_action(options, "APPLY_TATTOO")
+
+	var available_locs: Array[Enums.TattooBodyLocation] = TattooSystem.get_available_locations(
+		world_tattoos, recipient_id, false
+	)
+	if available_locs.is_empty():
+		return _remove_action(options, "APPLY_TATTOO")
+
+	var is_ability: bool = false
+	for option: NPCDataStructures.ScoredAction in options:
+		if option.action_id == "APPLY_TATTOO":
+			is_ability = option.metadata.get("is_ability_tattoo", false)
+			break
+
+	if not is_ability:
+		if not TattooSystem.can_receive_decorative(
+			world_tattoos, recipient_id,
+			recipient.school_name, recipient.school_rank,
+		):
+			return _remove_action(options, "APPLY_TATTOO")
+
+	var disp: int = ctx.dispositions.get(recipient_id, 0)
+	var body_loc: Enums.TattooBodyLocation = available_locs[0]
+	if not TattooSystem.check_consent(
+		recipient.clan, recipient.family, body_loc, disp, false, false,
+	):
+		return _remove_action(options, "APPLY_TATTOO")
+
+	for option: NPCDataStructures.ScoredAction in options:
+		if option.action_id == "APPLY_TATTOO":
+			option.metadata["body_location"] = body_loc
+			option.metadata["world_tattoos"] = world_tattoos
+			break
+
+	return options
+
+
+static func _remove_action(
+	options: Array[NPCDataStructures.ScoredAction],
+	action_id: String,
+) -> Array[NPCDataStructures.ScoredAction]:
+	var filtered: Array[NPCDataStructures.ScoredAction] = []
+	for option: NPCDataStructures.ScoredAction in options:
+		if option.action_id != action_id:
 			filtered.append(option)
 	return filtered
 
@@ -436,7 +527,8 @@ static func score_all(
 		))
 
 		if character != null and not commitments.is_empty():
-			option.commitment_at_risk = float(CommitmentRegistry.get_at_risk_penalty(
+			option.commitment_at_risk = float(CommitmentRegistry.get_action_commitment_modifier(
+				option.action_id, option.target_settlement_id,
 				commitments, ctx.character_id, character
 			))
 		else:
@@ -463,6 +555,12 @@ static func score_all(
 				option.deception_defense_penalty = float(-SkillResolver.get_deception_defense_bonus(target))
 
 		option.festival_modifier = _compute_festival_modifier(option.action_id, ctx)
+
+		if option.action_id in COVERT_ACTION_IDS:
+			option.honor_covert_penalty = _compute_honor_covert_penalty(
+				ctx.honor, ctx.school, ctx.clan
+			)
+			option.virtue_covert_modifier = _compute_virtue_covert_modifier(ctx)
 
 	# Tea ceremony: +10 per eligible guest (s57.37.4 social multiplier).
 	# Clan affinity bonuses (Crane +10, Phoenix +5) applied via disposition_modifier.
@@ -568,6 +666,18 @@ static func execute_action(
 				}
 			orders_spent = 1
 
+	if ResourceAvailability.has_resource_cost(chosen.action_id):
+		var prov_data: Dictionary = _build_province_data_for_resource_check(ctx)
+		if not ResourceAvailability.can_afford(chosen.action_id, character, prov_data):
+			character.action_points_current += chosen.ap_cost
+			if orders_spent > 0:
+				character.civilian_orders_remaining += 1
+			return {
+				"success": false,
+				"reason": "insufficient_resources",
+				"action_id": chosen.action_id,
+			}
+
 	var decision: Dictionary = {
 		"success": true,
 		"action_id": chosen.action_id,
@@ -607,11 +717,12 @@ static func run(
 	var need := resolve_goal(character, ctx, objectives)
 
 	# Phase 3
-	var options := generate_options(ctx, need)
+	var options := generate_options(ctx, need, character)
 
 	# Phase 4
 	options = apply_personality_filter(options, ctx, filter_data)
 	options = apply_allowlist_filter(options, need.need_type, scoring_tables)
+	options = _apply_tattoo_precondition_filter(options, character, ctx, chars_by_id, world_state)
 
 	# Phase 5
 	score_all(options, need, ctx, scoring_tables,
@@ -775,7 +886,7 @@ static func _check_crisis_override(
 	if not ctx.is_lord:
 		return null
 
-	for ps in ctx.province_statuses:
+	for ps: Variant in ctx.province_statuses:
 		if ps is NPCDataStructures.ProvinceStatus and ps.active_crisis_id >= 0:
 			var need := NPCDataStructures.ImmediateNeed.new()
 			need.need_type = "DEFEND_PROVINCE"
@@ -817,11 +928,28 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array[S
 				"COMPLY_WITH_EDICT", "DEFY_EDICT",
 				"RESTORE_COUNCIL_COMPACT",
 				"SHARE_SUPPLIES",
+				"DEMAND_TRIBUTE", "REQUEST_ALLIED_AID",
 				"CRAFT", "MENTOR",
 				"TREAT_WOUND",
+				"CONDUCT_COMMERCE", "PURCHASE_MARKET",
+				"EXAMINE_CRIME_SCENE",
 				"REQUEST_PERFORMANCE",
 				"ANNOUNCE_HUNT", "CANCEL_HUNT",
 				"TRAIN_ANIMAL",
+				"APPLY_TATTOO",
+				"SET_TAX_RATE", "SET_STIPEND_RATE",
+				"REQUEST_ART", "ASSIGN_VASSAL_OBJECTIVE",
+				"ASSIGN_TO_MILITARY_SERVICE",
+				"ASSIGN_GARRISON", "ORDER_LEVY",
+				"ORDER_DEPLOY", "ORDER_FORTIFY",
+				"SEND_INVITATION", "CALL_COURT",
+				"COMMISSION_ASSASSINATION",
+				"ISSUE_DUEL_CHALLENGE",
+				"SHADOW_TARGET", "SEARCH_PERSON", "CONCEAL_ITEM",
+				"FABRICATE_SECRET", "EXPOSE_SECRET_PRIVATELY", "EXPOSE_SECRET_PUBLICLY",
+				"FORGE_IMPERSONATION_LETTER", "FORGE_ORDER",
+				"SEDUCE", "SEDUCE_FOR_INFO", "SEDUCE_FOR_ACCESS",
+				"SEDUCE_FOR_LEVERAGE", "SEDUCE_TO_COMPROMISE",
 				"DO_NOTHING", "REST",
 			]
 		Enums.ContextFlag.AT_COURT:
@@ -838,11 +966,22 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array[S
 				"TRAIN", "MEDITATE", "CONDUCT_TEA_CEREMONY",
 				"BRIBE_FOR_INFO", "EAVESDROP",
 				"INTERCEPT_LETTER", "SEARCH_QUARTERS",
+				"SHADOW_TARGET", "SEARCH_PERSON", "CONCEAL_ITEM",
+				"FABRICATE_SECRET", "EXPOSE_SECRET_PRIVATELY", "EXPOSE_SECRET_PUBLICLY",
+				"FORGE_IMPERSONATION_LETTER", "FORGE_ORDER",
+				"SEDUCE", "SEDUCE_FOR_INFO", "SEDUCE_FOR_ACCESS",
+				"SEDUCE_FOR_LEVERAGE", "SEDUCE_TO_COMPROMISE",
 				"EXAMINE_LETTER",
 				"TREAT_WOUND",
 				"REQUEST_PERFORMANCE",
 				"ANNOUNCE_HUNT", "REQUEST_HUNT_INVITATION", "CANCEL_HUNT",
 				"TRAIN_ANIMAL",
+				"SET_TAX_RATE", "SET_STIPEND_RATE",
+				"REQUEST_ART", "ASSIGN_VASSAL_OBJECTIVE",
+				"SEND_INVITATION",
+				"CONDUCT_COMMERCE", "PURCHASE_MARKET",
+				"REQUEST_ALLIED_AID",
+				"ISSUE_DUEL_CHALLENGE",
 				"DO_NOTHING", "REST",
 			]
 		Enums.ContextFlag.VISITING:
@@ -855,6 +994,16 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array[S
 				"TREAT_WOUND",
 				"ANNOUNCE_HUNT", "REQUEST_HUNT_INVITATION", "CANCEL_HUNT",
 				"TRAIN_ANIMAL",
+				"APPLY_TATTOO",
+				"SET_TAX_RATE", "SET_STIPEND_RATE",
+				"SHADOW_TARGET", "SEARCH_PERSON", "CONCEAL_ITEM",
+				"FABRICATE_SECRET", "EXPOSE_SECRET_PRIVATELY", "EXPOSE_SECRET_PUBLICLY",
+				"FORGE_IMPERSONATION_LETTER", "FORGE_ORDER",
+				"SEDUCE", "SEDUCE_FOR_INFO", "SEDUCE_FOR_ACCESS",
+				"SEDUCE_FOR_LEVERAGE", "SEDUCE_TO_COMPROMISE",
+				"CONDUCT_COMMERCE", "PURCHASE_MARKET",
+				"EXAMINE_CRIME_SCENE",
+				"ISSUE_DUEL_CHALLENGE",
 				"DO_NOTHING", "REST",
 			]
 		Enums.ContextFlag.TRAVELING:
@@ -872,6 +1021,8 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array[S
 				"INTIMIDATE", "NEGOTIATE",
 				"TREAT_WOUND",
 				"TRAIN",
+				"ORDER_DEPLOY", "ORDER_FORTIFY", "ORDER_RETREAT",
+				"ASSIGN_GARRISON",
 				"DO_NOTHING", "REST",
 			]
 		Enums.ContextFlag.UNDER_SIEGE:
@@ -969,8 +1120,11 @@ static func _get_ap_cost(action_id: String) -> int:
 		"DISPATCH_COURTIER": 1,
 		"SCOUT_ENEMY": 1,
 		"CONDUCT_COMMERCE": 1,
+		"PURCHASE_MARKET": 1,
+		"EXAMINE_CRIME_SCENE": 1,
 		"ISSUE_DUEL_CHALLENGE": 1,
-		"SEEK_PRETEXT": 1,
+		"FORGE_IMPERSONATION_LETTER": 1,
+		"FORGE_ORDER": 1,
 		"SHARE_SUPPLIES": 1,
 		"PURIFY_TAINTED_GROUND": 1,
 		"FORTIFY_WALL_SECTION": 1,
@@ -993,6 +1147,7 @@ static func _get_ap_cost(action_id: String) -> int:
 		"REQUEST_HUNT_INVITATION": 0,
 		"CANCEL_HUNT": 0,
 		"TRAIN_ANIMAL": 1,
+		"APPLY_TATTOO": 2,
 	}
 	return costs.get(action_id, 1)
 
@@ -1088,7 +1243,7 @@ const _OBSERVATION_ACTIONS: Array[String] = [
 
 static func _evaluate_condition(
 	condition: String,
-	_action_id: String,
+	action_id: String,
 	ctx: NPCDataStructures.ContextSnapshot,
 ) -> bool:
 	match condition:
@@ -1153,7 +1308,119 @@ static func _evaluate_condition(
 			)
 			return not has_urgency
 
+		"target_is_innocent_third_party":
+			for npc_id: Variant in ctx.characters_present:
+				var disp: float = float(ctx.disposition_values.get(npc_id, 0))
+				if disp <= -31.0:
+					return false
+			return true
+
+		"target_not_hated_enemy":
+			for npc_id: Variant in ctx.characters_present:
+				var disp: float = float(ctx.disposition_values.get(npc_id, 0))
+				if disp <= -31.0:
+					return false
+			return true
+
+		"not_lord_commanded":
+			return not ctx.known_objectives.get("lord_assigned", false)
+
+		"not_publicly_declared":
+			for entry: Dictionary in ctx.action_log:
+				if entry.get("action_id", "") == "PUBLIC_DECLARATION":
+					return false
+			return true
+
+		"no_prior_formal_demand":
+			for entry: Dictionary in ctx.action_log:
+				var aid: String = entry.get("action_id", "")
+				if aid == "DEMAND_TRIBUTE" or aid == "NEGOTIATE":
+					return false
+			return true
+
+		"no_prior_grievance_or_lord_directive":
+			if ctx.known_objectives.get("lord_assigned", false):
+				return false
+			for npc_id: Variant in ctx.characters_present:
+				var disp: float = float(ctx.disposition_values.get(npc_id, 0))
+				if disp <= -31.0:
+					return false
+			return true
+
+		"other_paths_available":
+			if not ctx.active_wars.is_empty():
+				return false
+			if not ctx.starvation_province_ids.is_empty():
+				return false
+			return true
+
+		"would_cause_public_scene":
+			return ctx.sublocation == Enums.Sublocation.PUBLIC
+
+		"would_execute_below_standard":
+			if not ctx.skill_ranks.is_empty():
+				var primary: String = _get_primary_skill_for_action(action_id)
+				if not primary.is_empty():
+					return int(ctx.skill_ranks.get(primary, 0)) < 4
+			return false
+
+		"battle_assessed_unwinnable":
+			if ctx.commanded_unit_id < 0:
+				return true
+			return false
+
+		"position_not_certain":
+			var observation_count: int = 0
+			for entry: Dictionary in ctx.action_log:
+				if entry.get("action_id", "") in _OBSERVATION_ACTIONS:
+					observation_count += 1
+			return observation_count < 2
+
+		"not_all_others_declared":
+			var court: Dictionary = ctx.active_court_at_location
+			if court.is_empty():
+				return true
+			var declared_count: int = int(court.get("declarations_made", 0))
+			var attendee_count: int = int(court.get("attendee_count", 1))
+			return declared_count < (attendee_count - 1)
+
+		"contradicts_lords_known_position":
+			return false
+
+		"deviates_from_lord_directive":
+			return false
+
+		"information_is_false":
+			return false
+
+		"npc_knows_declaration_is_false":
+			return false
+
+		"violates_personal_code":
+			return false
+
+		"order_violates_personal_code":
+			return false
+
 	return false
+
+
+static func _get_primary_skill_for_action(action_id: String) -> String:
+	var skill_map: Dictionary = {
+		"ORDER_DEPLOY": "Battle",
+		"PUBLIC_DECLARATION": "Courtier",
+		"COMMISSION_ASSASSINATION": "Courtier",
+		"SHADOW_TARGET": "Stealth",
+		"SEARCH_PERSON": "Investigation",
+		"CONCEAL_ITEM": "Sleight of Hand",
+		"FABRICATE_SECRET": "Forgery",
+		"SEDUCE": "Temptation",
+		"SEDUCE_FOR_INFO": "Temptation",
+		"SEDUCE_FOR_ACCESS": "Temptation",
+		"SEDUCE_FOR_LEVERAGE": "Temptation",
+		"SEDUCE_TO_COMPROMISE": "Temptation",
+	}
+	return skill_map.get(action_id, "")
 
 
 static func _is_harvest_blocked_by_virtue(ctx: NPCDataStructures.ContextSnapshot) -> bool:
@@ -1230,15 +1497,92 @@ static func _lookup_objective_alignment(
 # All others use "cooperative". Per GDD s55.4.5 / s57.3 scoring examples.
 const HOSTILE_ACTIONS: Array[String] = [
 	"INTIMIDATE", "PUBLIC_INSULT", "PROVOKE_EMOTION",
-	"DAMAGE_RELATIONSHIP",
 	"BRIBE_FOR_INFO", "EAVESDROP", "INTERCEPT_LETTER", "SEARCH_QUARTERS",
 	"SHADOW_TARGET", "SEARCH_PERSON",
 	"EXPOSE_SECRET_PRIVATELY", "EXPOSE_SECRET_PUBLICLY", "FABRICATE_SECRET",
 	"CONCEAL_ITEM",
 	"SEDUCE", "SEDUCE_FOR_INFO", "SEDUCE_FOR_ACCESS",
 	"SEDUCE_FOR_LEVERAGE", "SEDUCE_TO_COMPROMISE",
-	"ASSASSINATE", "ISSUE_DUEL_CHALLENGE",
+	"COMMISSION_ASSASSINATION", "ISSUE_DUEL_CHALLENGE",
 ]
+
+# Covert actions subject to the honor threshold filter (s12.8 Filter 2).
+const COVERT_ACTION_IDS: Array[String] = [
+	"SHADOW_TARGET", "CONCEAL_ITEM", "FABRICATE_SECRET",
+	"EXPOSE_SECRET_PRIVATELY", "EXPOSE_SECRET_PUBLICLY",
+	"SEDUCE", "SEDUCE_FOR_INFO", "SEDUCE_FOR_ACCESS",
+	"SEDUCE_FOR_LEVERAGE", "SEDUCE_TO_COMPROMISE",
+	"COMMISSION_ASSASSINATION",
+	"BRIBE_FOR_INFO", "EAVESDROP",
+	"FORGE_IMPERSONATION_LETTER", "FORGE_ORDER",
+]
+
+# Schools with full covert honor exemption (s12.8, s46).
+const _FULL_COVERT_EXEMPT_SCHOOLS: Array[String] = [
+	"Shosuro Infiltrator",
+	"Bitter Lies",
+	"Kasuga Smuggler",
+]
+
+# Schools with half covert honor exemption (s12.8, s46).
+const _HALF_COVERT_EXEMPT_SCHOOLS: Array[String] = [
+	"Daidoji Harrier",
+	"Daidoji Spymaster",
+	"Ikoma Lion's Shadow",
+]
+
+
+static func _compute_honor_covert_penalty(
+	honor: float, school: String, clan: String,
+) -> float:
+	if honor < 2.0:
+		return 0.0
+
+	var base_penalty: float = -50.0 if honor > 3.5 else -25.0
+
+	for s: String in _FULL_COVERT_EXEMPT_SCHOOLS:
+		if school.begins_with(s):
+			return 0.0
+
+	for s: String in _HALF_COVERT_EXEMPT_SCHOOLS:
+		if school.begins_with(s):
+			return base_penalty * 0.5
+
+	# Scorpion Reduced Honour Bleed — clan-wide half exemption (s46).
+	if clan == "Scorpion":
+		return base_penalty * 0.5
+
+	return base_penalty
+
+
+static func _compute_virtue_covert_modifier(
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> float:
+	var threat: bool = _has_existential_threat(ctx)
+
+	match ctx.bushido_virtue:
+		Enums.BushidoVirtue.MEIYO:
+			return 15.0 if threat else -15.0
+		Enums.BushidoVirtue.CHUGI:
+			if ctx.known_objectives.get("lord_assigned", false):
+				return 10.0
+			return -25.0
+		Enums.BushidoVirtue.YU:
+			return 10.0 if threat else -15.0
+
+	return 0.0
+
+
+static func _has_existential_threat(
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> bool:
+	if not ctx.active_wars.is_empty():
+		return true
+	if not ctx.starvation_province_ids.is_empty():
+		return true
+	if ctx.besieged_settlement_health_pct < 1.0:
+		return true
+	return false
 
 
 static func _lookup_disposition_modifier(
@@ -1254,7 +1598,7 @@ static func _lookup_disposition_modifier(
 	var tiers: Array = scoring_tables.get("disposition_tiers", [])
 	var column: String = "hostile" if action_id in HOSTILE_ACTIONS else "cooperative"
 
-	for tier in tiers:
+	for tier: Variant in tiers:
 		if tier is Dictionary:
 			var min_val: float = float(tier.get("min", -100))
 			var max_val: float = float(tier.get("max", 100))
@@ -1321,7 +1665,7 @@ static func _compute_urgency_bonus(
 	var urgency_rules: Array = scoring_tables.get("urgency_rules", [])
 	var bonus: float = 0.0
 
-	for rule in urgency_rules:
+	for rule: Variant in urgency_rules:
 		if not (rule is Dictionary):
 			continue
 		var condition: String = rule.get("condition", "")
@@ -1329,7 +1673,7 @@ static func _compute_urgency_bonus(
 		var applies_to: Variant = rule.get("applies_to", "")
 		var stacks: bool = rule.get("stacks_per_crisis", false)
 
-		var instances: Array = _evaluate_urgency_condition(condition, ctx, scoring_tables)
+		var instances: Array[Dictionary] = _evaluate_urgency_condition(condition, ctx, scoring_tables)
 		if instances.is_empty():
 			continue
 		if not _action_matches_urgency_category(action_id, applies_to, need.need_type, scoring_tables):
@@ -1351,10 +1695,10 @@ static func _evaluate_urgency_condition(
 	condition: String,
 	ctx: NPCDataStructures.ContextSnapshot,
 	_scoring_tables: Dictionary,
-) -> Array:
+) -> Array[Dictionary]:
 	match condition:
 		"active_crisis_in_relevance_range":
-			var instances: Array = []
+			var instances: Array[Dictionary] = []
 			for ps: Variant in ctx.province_statuses:
 				if ps is NPCDataStructures.ProvinceStatus:
 					var status: NPCDataStructures.ProvinceStatus = ps
@@ -1369,21 +1713,21 @@ static func _evaluate_urgency_condition(
 						return [{"relevance": 1.0}]
 			return []
 		"home_front_famine":
-			var instances: Array = []
+			var instances: Array[Dictionary] = []
 			for pid: int in ctx.famine_crisis_province_ids:
 				instances.append({"relevance": 1.0, "province_id": pid})
 			return instances
 		"vassal_disposition_below_rival":
 			if not ctx.is_lord:
 				return []
-			var instances: Array = []
+			var instances: Array[Dictionary] = []
 			for cid: Variant in ctx.disposition_values:
 				var disp: int = ctx.disposition_values[cid]
 				if disp <= -11:
 					instances.append({"relevance": 1.0, "npc_id": cid})
 			return instances
 		"favor_expiring_within_7_ooc_days":
-			var instances: Array = []
+			var instances: Array[Dictionary] = []
 			for fid: int in ctx.expiring_favor_ids:
 				instances.append({"relevance": 1.0, "favor_id": fid})
 			return instances
@@ -1397,12 +1741,12 @@ static func _evaluate_urgency_condition(
 				return [{"relevance": 1.0}]
 			return []
 		"home_front_hunger":
-			var instances: Array = []
+			var instances: Array[Dictionary] = []
 			for pid: int in ctx.starvation_province_ids:
 				instances.append({"relevance": 1.0, "province_id": pid})
 			return instances
 		"army_supply_cut":
-			var instances: Array = []
+			var instances: Array[Dictionary] = []
 			for aid: int in ctx.cut_supply_army_ids:
 				instances.append({"relevance": 1.0, "army_id": aid})
 			return instances
@@ -1530,7 +1874,7 @@ static func _compute_topic_position_modifier(
 	var invert: bool = need.need_type == "SEEK_PEACE"
 	var type_filter: Array = need_entry.get("topic_types", [])
 	var best_modifier: float = 0.0
-	for topic_id in ctx.known_topics:
+	for topic_id: int in ctx.known_topics:
 		if not type_filter.is_empty():
 			var tt: String = ctx.known_topic_types.get(topic_id, "")
 			if not tt.is_empty() and tt not in type_filter:
@@ -1612,7 +1956,7 @@ static func _compute_confidence_penalty(
 
 const STALE_INTEL_GATHER_BONUS: float = 15.0
 
-const GATHER_INTELLIGENCE_ACTIONS: Array = [
+const GATHER_INTELLIGENCE_ACTIONS: Array[String] = [
 	"PROBE", "READ_CHARACTER", "BRIBE_FOR_INFO", "EAVESDROP",
 	"INTERCEPT_LETTER", "SEARCH_QUARTERS", "DISCERN_NEED",
 ]
@@ -1669,11 +2013,13 @@ const MILITARY_ORDER_ACTIONS: Array[String] = [
 	"DRILL_TROOPS", "EVALUATE_WAR_READINESS",
 	"ORDER_PATROL", "CONDUCT_SORTIE", "CONDUCT_STORM_ASSAULT",
 	"MAINTAIN_SIEGE", "NEGOTIATE_SURRENDER",
+	"ASSIGN_GARRISON", "ORDER_LEVY", "ORDER_DEPLOY",
+	"ORDER_FORTIFY", "ORDER_RETREAT",
 ]
 
 const COMMANDER_RANK_ACTIONS: Dictionary = {
 	"DISPATCH_COURTIER": Enums.MilitaryRank.SHIREIKAN,
-	"LEVY_TROOPS": Enums.MilitaryRank.CHUI,
+	"ORDER_LEVY": Enums.MilitaryRank.CHUI,
 }
 
 const LORD_ONLY_ACTIONS: Array[String] = [
@@ -1684,7 +2030,9 @@ const LORD_ONLY_ACTIONS: Array[String] = [
 	"SET_TAX_RATE", "SET_STIPEND_RATE",
 	"REQUEST_ART", "REQUEST_PERFORMANCE",
 	"ASSIGN_VASSAL_OBJECTIVE", "ASSIGN_TO_MILITARY_SERVICE",
-	"SEND_INVITATION",
+	"SEND_INVITATION", "CALL_COURT",
+	"COMMISSION_ASSASSINATION",
+	"DEMAND_TRIBUTE", "REQUEST_ALLIED_AID",
 ]
 
 
@@ -1708,6 +2056,8 @@ static func _is_military_blocked(
 			return false
 		return ctx.commanded_unit_id < 0
 	if COMMANDER_RANK_ACTIONS.has(action_id):
+		if ctx.is_lord and action_id in CivilianOrderBudget.MILITARY_OR_CIVILIAN_ACTIONS:
+			return false
 		var min_rank: int = COMMANDER_RANK_ACTIONS[action_id]
 		return ctx.military_rank < min_rank
 	return false
@@ -1722,8 +2072,9 @@ const CEASEFIRE_BLOCKED_ACTIONS: Array[String] = [
 ]
 
 const LABOR_HALT_BLOCKED_ACTIONS: Array[String] = [
-	"COMMISSION_CONSTRUCTION", "COMMISSION_REPAIR",
-	"LEVY_TROOPS", "DRILL_TROOPS",
+	"FOUND_VILLAGE", "BUILD_FORTIFICATION", "BUILD_SHRINE",
+	"FOUND_TEMPLE", "FOUND_MONASTERY", "COMMISSION_SHIP",
+	"ORDER_LEVY", "DRILL_TROOPS",
 ]
 
 const SOCIAL_ACTIONS: Array[String] = [
@@ -1787,13 +2138,26 @@ static func resolve_daily_letter(
 
 	var topic_id: int = _pick_letter_topic(ctx)
 
-	return {
+	var visit: bool = _should_set_visit_intent(
+		character, objectives, target_id, ctx
+	)
+	var meeting: Dictionary = _should_set_meeting_proposal(
+		character, objectives, target_id, ctx
+	)
+
+	var result: Dictionary = {
 		"character_id": character.character_id,
 		"action_id": "WRITE_LETTER",
 		"target_npc_id": target_id,
 		"need_type": need_type,
 		"topic_id": topic_id,
 	}
+	if not meeting.is_empty():
+		result["meeting_proposal"] = true
+		result["meeting_settlement_id"] = meeting["settlement_id"]
+	elif visit:
+		result["visit_intent"] = true
+	return result
 
 
 static func _get_letter_need_type(objectives: Dictionary) -> String:
@@ -1804,6 +2168,70 @@ static func _get_letter_need_type(objectives: Dictionary) -> String:
 	if not standing.is_empty():
 		return standing.get("need_type", "")
 	return ""
+
+
+const VISIT_INTENT_NEED_TYPES: Array[String] = [
+	"RAISE_DISPOSITION", "SECURE_ALLIANCE", "ARRANGE_MARRIAGE",
+	"ACQUIRE_LEVERAGE", "GATHER_INTELLIGENCE",
+]
+
+
+static func _should_set_visit_intent(
+	character: L5RCharacterData,
+	objectives: Dictionary,
+	letter_target_id: int,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> bool:
+	if ctx.context_flag != Enums.ContextFlag.AT_OWN_HOLDINGS:
+		return false
+	var primary: Dictionary = objectives.get("primary", {})
+	if primary.is_empty():
+		return false
+	var need_type: String = primary.get("need_type", "")
+	if need_type not in VISIT_INTENT_NEED_TYPES:
+		return false
+	var obj_target: int = primary.get("target_npc_id", -1)
+	if obj_target < 0 or obj_target != letter_target_id:
+		return false
+	return true
+
+
+const MEETING_PROPOSAL_NEED_TYPES: Array[String] = [
+	"SECURE_ALLIANCE", "ARRANGE_MARRIAGE",
+]
+
+
+static func _should_set_meeting_proposal(
+	character: L5RCharacterData,
+	objectives: Dictionary,
+	letter_target_id: int,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> Dictionary:
+	if ctx.context_flag != Enums.ContextFlag.AT_OWN_HOLDINGS:
+		return {}
+	var primary: Dictionary = objectives.get("primary", {})
+	if primary.is_empty():
+		return {}
+	var need_type: String = primary.get("need_type", "")
+	if need_type not in MEETING_PROPOSAL_NEED_TYPES:
+		return {}
+	var obj_target: int = primary.get("target_npc_id", -1)
+	if obj_target < 0 or obj_target != letter_target_id:
+		return {}
+	var settlement_id: int = _pick_meeting_settlement(character, ctx)
+	if settlement_id < 0:
+		return {}
+	return {"settlement_id": settlement_id}
+
+
+static func _pick_meeting_settlement(
+	character: L5RCharacterData,
+	_ctx: NPCDataStructures.ContextSnapshot,
+) -> int:
+	var loc: String = character.physical_location
+	if loc.is_valid_int():
+		return loc.to_int()
+	return -1
 
 
 static func _select_letter_target(
@@ -1902,6 +2330,7 @@ static func build_province_statuses_from_data(
 				ps.insurgency_type = Enums.InsurgencyType.keys()[ins.insurgency_type]
 				break
 		ps.last_report_ic_day = pd.last_report_ic_day
+		ps.province_taint_level = pd.province_taint_level
 		ps.garrison_pu = settlement_garrison.get(pd.province_id, 0)
 		ps.total_settlement_pu = settlement_total_pu.get(pd.province_id, 0)
 		ps.rice_stockpile = settlement_rice.get(pd.province_id, 0.0)
@@ -1924,6 +2353,7 @@ static func _populate_action_metadata(
 	option: NPCDataStructures.ScoredAction,
 	need: NPCDataStructures.ImmediateNeed,
 	ctx: NPCDataStructures.ContextSnapshot,
+	character: L5RCharacterData = null,
 ) -> void:
 	if option.action_id == "DECLARE_WAR":
 		option.metadata = _build_declare_war_metadata(need, ctx)
@@ -1936,10 +2366,17 @@ static func _populate_action_metadata(
 	elif option.action_id == "COMPLY_WITH_EDICT" or option.action_id == "DEFY_EDICT":
 		option.metadata = _build_edict_response_metadata(need, ctx)
 	elif option.action_id == "ARRANGE_MARRIAGE":
+		var target_lord_id: int = need.target_npc_id_secondary
+		var favor: int = _get_favor_tier_held_against(ctx, target_lord_id)
+		var mil_need: bool = need.need_type in [
+			"SECURE_ALLIANCE", "RAISE_ARMY", "DEFEND_PROVINCE",
+		]
 		option.metadata = {
 			"candidate_id": need.target_npc_id,
-			"target_lord_id": need.target_npc_id_secondary,
+			"target_lord_id": target_lord_id,
 			"target_candidate_id": need.target_settlement_id,
+			"favor_tier": favor,
+			"has_military_objective": mil_need,
 		}
 	elif option.action_id == "APPOINT_TO_POSITION":
 		option.metadata = {
@@ -1968,10 +2405,42 @@ static func _populate_action_metadata(
 			"damage_raises": split["damage"],
 			"concealment_raises": split["concealment"],
 		}
-	elif option.action_id in ["NEGOTIATE", "PERSUADE", "PUBLIC_DEBATE"]:
-		option.metadata = {
-			"topic_id": _pick_court_agenda_topic(ctx),
+	elif option.action_id == "PUBLIC_INSULT":
+		var insult_type: String = "self"
+		if need.need_type == "ELIMINATE_CHARACTER":
+			insult_type = "ancestors"
+		elif need.need_type == "DAMAGE_RELATIONSHIP":
+			insult_type = "clan"
+		option.metadata = {"insult_type": insult_type}
+	elif option.action_id == "INTIMIDATE":
+		var target_id: int = need.target_npc_id if need.target_npc_id >= 0 else option.target_npc_id
+		var secret_meta: Dictionary = _pick_secret_about_target(ctx, target_id)
+		option.metadata = secret_meta
+	elif option.action_id == "PLAY_GAME":
+		option.metadata = {"game_skill": _pick_best_game_skill(ctx)}
+	elif option.action_id in ["NEGOTIATE", "PERSUADE", "PUBLIC_DEBATE",
+			"CHARM", "IMPRESS", "LISTEN_REFLECT", "OFFER_FAVOR"]:
+		var court_meta: Dictionary = {
+			"court_settlement_id": ctx.court_settlement_id,
+			"has_topic": _has_known_agenda_topic(ctx),
+			"need_type": need.need_type,
 		}
+		if option.action_id in ["NEGOTIATE", "PERSUADE", "PUBLIC_DEBATE"]:
+			court_meta["topic_id"] = _pick_court_agenda_topic(ctx)
+		if option.action_id == "NEGOTIATE":
+			court_meta["session_negotiate_count"] = ctx.court_session_state.get("negotiate_count", 0)
+		elif option.action_id == "CHARM":
+			court_meta["session_charm_count"] = ctx.court_session_state.get("charm_count", 0)
+		option.metadata = court_meta
+	elif option.action_id == "ASSIGN_VASSAL_OBJECTIVE":
+		option.metadata = {
+			"need_type": need.need_type,
+			"lord_id": ctx.character_id,
+		}
+		if need.target_npc_id >= 0:
+			option.metadata["target_npc_id"] = need.target_npc_id
+		if not need.target_intent.is_empty():
+			option.metadata["target_clan"] = need.target_intent
 	elif option.action_id == "DISCLOSE":
 		var about_id: int = need.target_npc_id if need.target_npc_id >= 0 else -1
 		var opinion: int = 0
@@ -2017,6 +2486,11 @@ static func _populate_action_metadata(
 		var active_case: Dictionary = ctx.known_objectives.get("active_case", {})
 		option.metadata = {
 			"case_id": active_case.get("case_id", -1),
+		}
+	elif option.action_id == "SEARCH_PERSON":
+		var is_magistrate: bool = ctx.known_objectives.get("standing_need_type", "") == "UPHOLD_LAW"
+		option.metadata = {
+			"magistrate_authority": is_magistrate,
 		}
 	elif option.action_id == "EXAMINE_LETTER":
 		option.metadata = {
@@ -2130,6 +2604,338 @@ static func _populate_action_metadata(
 				best_disp = disp
 				best_intermediary = cid_int
 		option.metadata = {"intermediary_id": best_intermediary}
+	elif option.action_id == "APPLY_TATTOO":
+		var tattooing_rank: int = ctx.skill_ranks.get("Artisan: Tattooing", 0)
+		var best_tier: Enums.TattooQualityTier = Enums.TattooQualityTier.NORMAL
+		if tattooing_rank >= 5:
+			best_tier = Enums.TattooQualityTier.LEGENDARY
+		elif tattooing_rank >= 4:
+			best_tier = Enums.TattooQualityTier.MASTERWORK
+		elif tattooing_rank >= 3:
+			best_tier = Enums.TattooQualityTier.EXCEPTIONAL
+		elif tattooing_rank >= 2:
+			best_tier = Enums.TattooQualityTier.FINE
+		option.metadata = {
+			"target_tier": best_tier,
+			"body_location": Enums.TattooBodyLocation.LEFT_WRIST_FOREARM,
+			"is_ability_tattoo": false,
+			"ability": Enums.TattooAbility.NONE,
+			"subject_type": Enums.TattooSubjectType.IMAGE,
+			"subject_description": "",
+			"subject_topic_id": -1,
+		}
+	elif option.action_id == "PURIFY_TAINTED_GROUND":
+		var ptl: float = 0.0
+		var target_prov_id: int = option.target_province_id
+		for ps_var: Variant in ctx.province_statuses:
+			if ps_var is NPCDataStructures.ProvinceStatus:
+				var ps: NPCDataStructures.ProvinceStatus = ps_var
+				if ps.province_id == target_prov_id:
+					ptl = ps.province_taint_level
+					break
+		option.metadata = {"ptl": ptl}
+	elif option.action_id == "SCOUT_ENEMY":
+		var target_clan_id: String = ""
+		for w: Variant in ctx.active_wars:
+			if w is Dictionary:
+				target_clan_id = WarSystem.get_enemy_clan_from_war(w, ctx.clan)
+				if not target_clan_id.is_empty():
+					break
+		option.metadata = {"target_clan_id": target_clan_id}
+	elif option.action_id == "DRILL_TROOPS":
+		var target_company_id: int = ctx.assigned_company_id
+		if target_company_id < 0:
+			target_company_id = ctx.commanded_unit_id
+		option.metadata = {"target_company_id": target_company_id}
+	elif option.action_id == "REQUEST_PERFORMANCE":
+		var target_performer_id: int = need.target_npc_id if need.target_npc_id >= 0 else -1
+		option.metadata = {
+			"target_performer_id": target_performer_id,
+			"performance_type": "song",
+			"venue_mode": "public",
+		}
+	elif option.action_id == "EXPOSE_SECRET_PRIVATELY":
+		var best: Dictionary = _pick_best_secret(ctx, need, false)
+		option.metadata = best
+		if best.get("subject_id", -1) >= 0:
+			option.target_npc_id = need.target_npc_id if need.target_npc_id >= 0 else _pick_private_recipient(ctx, best.get("subject_id", -1))
+	elif option.action_id == "EXPOSE_SECRET_PUBLICLY":
+		var best: Dictionary = _pick_best_secret(ctx, need, true)
+		option.metadata = best
+	elif option.action_id == "FABRICATE_SECRET":
+		var sev: SecretData.Severity = _pick_fabrication_severity(ctx)
+		option.metadata = {"severity": sev}
+		if need.target_npc_id >= 0:
+			option.target_npc_id = need.target_npc_id
+	elif option.action_id == "PUBLIC_ATONEMENT":
+		var best: Dictionary = _pick_best_offense(ctx)
+		option.metadata = best
+	elif option.action_id == "ISSUE_DUEL_CHALLENGE":
+		var lethal: bool = need.need_type == "ELIMINATE_CHARACTER"
+		option.metadata = {"to_death": lethal, "is_sanctioned": true}
+	elif option.action_id == "CONDUCT_SORTIE":
+		var sortie_meta: Dictionary = _build_sortie_metadata(ctx)
+		option.metadata = sortie_meta
+	elif option.action_id == "TREAT_WOUND":
+		option.metadata = {"raises": _pick_medicine_raises(ctx)}
+	elif option.action_id == "FORGE_IMPERSONATION_LETTER":
+		option.metadata = _build_forge_letter_metadata(ctx, need)
+	elif option.action_id == "FORGE_ORDER":
+		option.metadata = _build_forge_order_metadata(ctx, need)
+
+
+static func _build_forge_letter_metadata(
+	ctx: NPCDataStructures.ContextSnapshot,
+	need: NPCDataStructures.ImmediateNeed,
+) -> Dictionary:
+	var forgery_rank: int = ctx.skill_ranks.get("Forgery", 0)
+	var authority: String = _forge_authority_from_lord_rank(ctx.lord_rank)
+	var impersonated_id: int = need.target_npc_id
+	var recipient_id: int = -1
+	if need.target_npc_id_secondary >= 0:
+		recipient_id = need.target_npc_id_secondary
+	var topic_id: int = -1
+	if not ctx.known_topics.is_empty():
+		topic_id = ctx.known_topics[0]
+	return {
+		"authority_level": authority,
+		"target_npc_id": need.target_npc_id,
+		"impersonated_id": impersonated_id,
+		"recipient_id": recipient_id,
+		"topic_id": topic_id,
+	}
+
+
+static func _build_forge_order_metadata(
+	ctx: NPCDataStructures.ContextSnapshot,
+	need: NPCDataStructures.ImmediateNeed,
+) -> Dictionary:
+	var forgery_rank: int = ctx.skill_ranks.get("Forgery", 0)
+	var authority: String = _forge_authority_from_lord_rank(ctx.lord_rank)
+	var order_info: Dictionary = _pick_forged_order_type(need)
+	return {
+		"authority_level": authority,
+		"target_npc_id": need.target_npc_id,
+		"order_need_type": order_info.get("need_type", "TRAVEL_TO"),
+		"order_target_province_id": order_info.get("target_province_id", -1),
+		"order_target_npc_id": order_info.get("target_npc_id", -1),
+		"order_target_settlement_id": order_info.get("target_settlement_id", -1),
+	}
+
+
+static func _pick_forged_order_type(
+	need: NPCDataStructures.ImmediateNeed,
+) -> Dictionary:
+	match need.need_type:
+		"SUPPRESS_INVESTIGATION":
+			return {
+				"need_type": "TRAVEL_TO",
+				"target_settlement_id": need.target_settlement_id,
+			}
+		"ACQUIRE_LEVERAGE":
+			if need.target_settlement_id >= 0:
+				return {
+					"need_type": "ATTEND_COURT",
+					"target_settlement_id": need.target_settlement_id,
+				}
+			return {
+				"need_type": "TRAVEL_TO",
+				"target_settlement_id": -1,
+			}
+		"DAMAGE_RELATIONSHIP":
+			if need.target_npc_id >= 0:
+				return {
+					"need_type": "PATROL_PROVINCE",
+					"target_province_id": need.target_province_id,
+				}
+			return {"need_type": "TRAVEL_TO"}
+		_:
+			return {"need_type": "TRAVEL_TO"}
+
+
+# GDD s12.8: authority level = who is being impersonated.
+# PROVISIONAL: uses forger's own lord_rank as proxy (the authority
+# level the forger is familiar with). Proper derivation requires
+# the impersonated person's rank, blocked on target character lookup.
+static func _forge_authority_from_lord_rank(
+	lord_rank: Enums.LordRank,
+) -> String:
+	if lord_rank >= Enums.LordRank.IMPERIAL:
+		return "major"
+	elif lord_rank >= Enums.LordRank.FAMILY_DAIMYO:
+		return "moderate"
+	return "minor"
+
+
+static func _pick_fabrication_severity(
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> SecretData.Severity:
+	var forgery: int = ctx.skill_ranks.get("Forgery", 0)
+	if forgery >= 7:
+		return SecretData.Severity.TIER_1
+	elif forgery >= 5:
+		return SecretData.Severity.TIER_2
+	elif forgery >= 3:
+		return SecretData.Severity.TIER_3
+	return SecretData.Severity.TIER_4
+
+
+static func _pick_medicine_raises(
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> int:
+	var rank: int = ctx.skill_ranks.get("Medicine", 0)
+	if rank >= 7:
+		return 3
+	elif rank >= 5:
+		return 2
+	elif rank >= 3:
+		return 1
+	return 0
+
+
+static func _build_sortie_metadata(
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> Dictionary:
+	for ws_variant: Variant in ctx.wall_statuses:
+		if not ws_variant is NPCDataStructures.WallStatus:
+			continue
+		var ws: NPCDataStructures.WallStatus = ws_variant as NPCDataStructures.WallStatus
+		return {"ss": ws.ss, "force_size": ""}
+	return {"ss": -1, "force_size": ""}
+
+
+static func _pick_best_offense(
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> Dictionary:
+	var best_tier: int = 5
+	var best: Dictionary = {"offense_key": "", "offense_tier": 3}
+	for off: Dictionary in ctx.self_offenses:
+		var tier: int = off.get("offense_tier", 4)
+		if tier < best_tier:
+			best_tier = tier
+			best = off
+	return best
+
+
+static func _pick_best_secret(
+	ctx: NPCDataStructures.ContextSnapshot,
+	need: NPCDataStructures.ImmediateNeed,
+	_public: bool,
+) -> Dictionary:
+	var best_sev: int = 999
+	var best: Dictionary = {"secret_ref": null, "subject_id": -1, "has_proof": false}
+	for sd: Variant in ctx.known_secrets:
+		if not sd is Dictionary:
+			continue
+		var d: Dictionary = sd as Dictionary
+		var ref: Variant = d.get("_secret_ref")
+		if ref == null:
+			continue
+		if ref is SecretData and (ref as SecretData).exposed:
+			continue
+		var subj: int = d.get("subject_id", -1)
+		if subj < 0 or subj == ctx.character_id:
+			continue
+		if need.target_npc_id >= 0 and subj != need.target_npc_id:
+			continue
+		var sev: int = d.get("severity", 0)
+		if sev < best_sev:
+			best_sev = sev
+			best = {
+				"secret_ref": ref,
+				"subject_id": subj,
+				"has_proof": d.get("has_proof", false),
+			}
+	return best
+
+
+static func _pick_private_recipient(
+	ctx: NPCDataStructures.ContextSnapshot,
+	subject_id: int,
+) -> int:
+	for pid: int in ctx.characters_present:
+		if pid != ctx.character_id and pid != subject_id:
+			return pid
+	return -1
+
+
+const _GAME_SKILLS: Array[String] = [
+	"Games: Go", "Games: Shogi", "Games: Kemari",
+	"Games: Fortunes & Winds", "Games: Letters", "Games: Sadane",
+]
+
+
+static func _pick_best_game_skill(
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> String:
+	var best_skill: String = "Games: Go"
+	var best_rank: int = 0
+	for gs: String in _GAME_SKILLS:
+		var rank: int = ctx.skill_ranks.get(gs, 0)
+		if rank > best_rank:
+			best_rank = rank
+			best_skill = gs
+	return best_skill
+
+
+static func _get_favor_tier_held_against(
+	ctx: NPCDataStructures.ContextSnapshot,
+	target_lord_id: int,
+) -> int:
+	var best_tier: int = 0
+	for lev: Variant in ctx.held_leverage:
+		if not lev is Dictionary:
+			continue
+		var d: Dictionary = lev as Dictionary
+		var debtor: int = d.get("debtor_id", -1)
+		var lord: int = d.get("target_lord_id", -1)
+		if debtor == target_lord_id or lord == target_lord_id:
+			var tier: int = d.get("tier", 0)
+			if tier > best_tier:
+				best_tier = tier
+	return best_tier
+
+
+static func _pick_secret_about_target(
+	ctx: NPCDataStructures.ContextSnapshot,
+	target_id: int,
+) -> Dictionary:
+	var best_sev: int = 999
+	var best_ref: Variant = null
+	for sd: Variant in ctx.known_secrets:
+		if not sd is Dictionary:
+			continue
+		var d: Dictionary = sd as Dictionary
+		var ref: Variant = d.get("_secret_ref")
+		if ref == null:
+			continue
+		if ref is SecretData and (ref as SecretData).exposed:
+			continue
+		var subj: int = d.get("subject_id", -1)
+		if subj != target_id:
+			continue
+		var sev: int = d.get("severity", 0)
+		if sev < best_sev:
+			best_sev = sev
+			best_ref = ref
+	if best_ref != null:
+		return {
+			"secret_ref": best_ref,
+			"secret_tier": best_sev,
+			"by_letter": false,
+		}
+	return {}
+
+
+static func _has_known_agenda_topic(ctx: NPCDataStructures.ContextSnapshot) -> bool:
+	var court: Dictionary = ctx.active_court_at_location
+	if court.is_empty():
+		return false
+	var topics: Array = court.get("topics", [])
+	for t: Variant in topics:
+		if int(t) in ctx.known_topics:
+			return true
+	return false
 
 
 static func _pick_court_agenda_topic(ctx: NPCDataStructures.ContextSnapshot) -> int:
@@ -2340,16 +3146,16 @@ static func _build_feasibility_data(
 	var levy_before_planting: bool = current_season == "spring"
 	var spans_autumn: bool = true
 
-	var vassal_stockpiles: Array = _collect_vassal_stockpiles(
+	var vassal_stockpiles: Array[Dictionary] = _collect_vassal_stockpiles(
 		character, world_state, settlements, provinces,
 	)
 	var active_wars: Array = world_state.get("active_wars", [])
-	var raidable: Array = _collect_raidable_provinces(
+	var raidable: Array[Dictionary] = _collect_raidable_provinces(
 		character.clan, provinces, settlements, active_wars,
 	)
 	var trade_routes: Array = world_state.get("trade_routes", [])
 	var has_routes: bool = _has_active_trade_routes(trade_routes, character.clan)
-	var allied: Array = _collect_allied_surplus(
+	var allied: Array[Dictionary] = _collect_allied_surplus(
 		character, world_state, settlements, provinces,
 	)
 	var war_info: Dictionary = _get_war_context(character.clan, active_wars)
@@ -2386,9 +3192,9 @@ static func _collect_vassal_stockpiles(
 	world_state: Dictionary,
 	settlements: Array,
 	provinces: Array,
-) -> Array:
+) -> Array[Dictionary]:
 	var chars: Dictionary = world_state.get("characters_by_id", {})
-	var result: Array = []
+	var result: Array[Dictionary] = []
 	for cid: Variant in chars:
 		var c: Variant = chars[cid]
 		if not (c is L5RCharacterData):
@@ -2426,7 +3232,7 @@ static func _collect_raidable_provinces(
 	provinces: Array,
 	settlements: Array,
 	active_wars: Array,
-) -> Array:
+) -> Array[Dictionary]:
 	var at_war_clans: Dictionary = {}
 	for w: Variant in active_wars:
 		if w is Dictionary:
@@ -2444,7 +3250,7 @@ static func _collect_raidable_provinces(
 			province_rice[sd.province_id] = province_rice.get(sd.province_id, 0.0) + sd.rice_stockpile
 			province_garrison[sd.province_id] = province_garrison.get(sd.province_id, 0.0) + float(sd.garrison_pu)
 
-	var result: Array = []
+	var result: Array[Dictionary] = []
 	for p: Variant in provinces:
 		if not (p is ProvinceData):
 			continue
@@ -2479,9 +3285,9 @@ static func _collect_allied_surplus(
 	world_state: Dictionary,
 	settlements: Array,
 	provinces: Array,
-) -> Array:
+) -> Array[Dictionary]:
 	var chars: Dictionary = world_state.get("characters_by_id", {})
-	var result: Array = []
+	var result: Array[Dictionary] = []
 	for cid: Variant in chars:
 		var c: Variant = chars[cid]
 		if not (c is L5RCharacterData):
@@ -2695,7 +3501,7 @@ static func _extract_expiring_favor_ids(
 			continue
 		if favor.invoked:
 			var deadline: int = favor.response_deadline_ic_day
-			if deadline > 0 and (deadline - ic_day) <= threshold:
+			if deadline >= 0 and (deadline - ic_day) <= threshold:
 				result.append(favor.favor_id)
 	return result
 

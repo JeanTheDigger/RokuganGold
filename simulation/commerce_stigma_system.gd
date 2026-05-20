@@ -12,7 +12,7 @@ const HONOR_THRESHOLD_LOW: float = 3.0
 const HONOR_PENALTY_HIGH: float = -0.3
 const HONOR_PENALTY_MID: float = -0.2
 const HONOR_PENALTY_LOW: float = -0.1
-const GLORY_PENALTY: float = -0.1
+const GLORY_PENALTY: float = CrimeSystem.LOW_SKILL_DISCOVERY_GLORY
 
 const LEAN_PLUS_10_SCORE: int = 10
 const LEAN_PLUS_5_SCORE: int = 5
@@ -54,14 +54,7 @@ static func has_ide_trader_exception(character: L5RCharacterData) -> bool:
 
 
 static func compute_honor_penalty(character: L5RCharacterData) -> float:
-	var h: float = character.honor
-	if h >= HONOR_THRESHOLD_HIGH:
-		return HONOR_PENALTY_HIGH
-	if h >= HONOR_THRESHOLD_MID:
-		return HONOR_PENALTY_MID
-	if h >= HONOR_THRESHOLD_LOW:
-		return HONOR_PENALTY_LOW
-	return 0.0
+	return CrimeSystem.get_low_skill_honor_cost(character, "Commerce")
 
 
 static func apply_stigma(

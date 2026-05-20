@@ -152,7 +152,7 @@ static func resolve_escape_attempt(
 	var success: bool = result.get("success", false)
 	var margin: int = result.get("margin", 0)
 
-	var honor_cost: float = LOW_SKILL_HONOR_COST
+	var honor_cost: float = CrimeSystem.get_low_skill_honor_cost(character, "Sleight of Hand")
 	HonorGlorySystem.apply_honor_change(character, honor_cost)
 
 	var noise: NoiseLevel = NoiseLevel.QUIET
@@ -314,7 +314,7 @@ static func is_action_allowed_while_bound(action_id: String) -> bool:
 
 static func filter_actions_for_bound(actions: Array[String]) -> Array[String]:
 	var allowed: Array[String] = []
-	for a in actions:
+	for a: String in actions:
 		if is_action_allowed_while_bound(a):
 			allowed.append(a)
 	return allowed

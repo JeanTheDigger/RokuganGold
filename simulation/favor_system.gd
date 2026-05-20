@@ -193,9 +193,9 @@ static func check_expiration(favor: FavorData, current_ic_day: int) -> bool:
 	return (current_ic_day - favor.created_ic_day) >= max_days
 
 
-static func process_expirations(favors: Array, current_ic_day: int) -> Array[int]:
+static func process_expirations(favors: Array[FavorData], current_ic_day: int) -> Array[int]:
 	var expired_ids: Array[int] = []
-	for favor in favors:
+	for favor: FavorData in favors:
 		if favor is FavorData and check_expiration(favor, current_ic_day):
 			expired_ids.append(favor.favor_id)
 	return expired_ids
@@ -211,9 +211,9 @@ static func check_deadline_breach(favor: FavorData, current_ic_day: int) -> bool
 	return current_ic_day > favor.response_deadline_ic_day
 
 
-static func process_deadline_breaches(favors: Array, current_ic_day: int) -> Array[Dictionary]:
+static func process_deadline_breaches(favors: Array[FavorData], current_ic_day: int) -> Array[Dictionary]:
 	var breaches: Array[Dictionary] = []
-	for favor in favors:
+	for favor: FavorData in favors:
 		if favor is FavorData and check_deadline_breach(favor, current_ic_day):
 			breaches.append(break_favor(favor))
 	return breaches
@@ -221,11 +221,11 @@ static func process_deadline_breaches(favors: Array, current_ic_day: int) -> Arr
 
 # -- Death handling -----------------------------------------------------------
 
-static func process_creditor_death(favors: Array, dead_creditor_id: int, heir_id: int) -> Dictionary:
+static func process_creditor_death(favors: Array[FavorData], dead_creditor_id: int, heir_id: int) -> Dictionary:
 	var inherited: Array[int] = []
 	var dissolved: Array[int] = []
 
-	for favor in favors:
+	for favor: FavorData in favors:
 		if not (favor is FavorData):
 			continue
 		if favor.creditor_id != dead_creditor_id:
@@ -240,9 +240,9 @@ static func process_creditor_death(favors: Array, dead_creditor_id: int, heir_id
 	return {"inherited": inherited, "dissolved": dissolved}
 
 
-static func process_debtor_death(favors: Array, dead_debtor_id: int) -> Array[int]:
+static func process_debtor_death(favors: Array[FavorData], dead_debtor_id: int) -> Array[int]:
 	var dissolved: Array[int] = []
-	for favor in favors:
+	for favor: FavorData in favors:
 		if favor is FavorData and favor.debtor_id == dead_debtor_id:
 			dissolved.append(favor.favor_id)
 	return dissolved

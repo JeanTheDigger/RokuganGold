@@ -182,9 +182,9 @@ static func generate_name(clan: String, gender: String, dice_engine: DiceEngine)
 		return "Unknown"
 
 	var prefix: String = "male" if gender == "male" else "female"
-	var initials: Array = tables.get(prefix + "_initial", [])
-	var middles: Array = tables.get(prefix + "_middle", [])
-	var finals: Array = tables.get(prefix + "_final", [])
+	var initials: Array[String] = tables.get(prefix + "_initial", [])
+	var middles: Array[String] = tables.get(prefix + "_middle", [])
+	var finals: Array[String] = tables.get(prefix + "_final", [])
 
 	if initials.is_empty() or finals.is_empty():
 		return "Unknown"
@@ -267,7 +267,7 @@ const NATURAL_DEATH_CHANCES: Array[Array] = [
 static func get_natural_death_chance(age: int) -> int:
 	if age < 50:
 		return 0
-	for bracket: Array in NATURAL_DEATH_CHANCES:
+	for bracket: Array[int] in NATURAL_DEATH_CHANCES:
 		if age < bracket[0] as int:
 			return bracket[1] as int
 	return 20
@@ -353,7 +353,7 @@ static func generate_replenishment_character(
 	clan: String,
 	dice_engine: DiceEngine,
 ) -> L5RCharacterData:
-	var families: Array = _get_clan_families(clan)
+	var families: Array[String] = _get_clan_families(clan)
 	if families.is_empty():
 		return null
 
@@ -381,7 +381,7 @@ static func generate_replenishment_character(
 	return character
 
 
-static func _get_clan_families(clan: String) -> Array:
+static func _get_clan_families(clan: String) -> Array[String]:
 	match clan:
 		"Crab":
 			return ["Hida", "Hiruma", "Kaiu", "Kuni", "Yasuki"]

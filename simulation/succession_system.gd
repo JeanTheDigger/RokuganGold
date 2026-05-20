@@ -132,7 +132,7 @@ static func get_candidates(
 
 	# Priority 2 & 3 — Biological Children (eldest first)
 	var children: Array[Dictionary] = []
-	for cid in deceased.children_ids:
+	for cid: int in deceased.children_ids:
 		var child: L5RCharacterData = chars_by_id.get(cid)
 		if child != null and not _is_dead(child) and child.clan == clan:
 			children.append({"id": child.character_id, "age": child.age, "character": child})
@@ -149,7 +149,7 @@ static func get_candidates(
 		else:
 			bot = BIRTH_TYPE_THIRD_CHILD_PLUS
 		var already: bool = false
-		for c in candidates:
+		for c: Dictionary in candidates:
 			if c["id"] == children[i]["id"]:
 				already = true
 				break
@@ -157,12 +157,12 @@ static func get_candidates(
 			candidates.append({"id": children[i]["id"], "priority": pri, "birth_order_type": bot, "character": children[i]["character"]})
 
 	# Priority 4 — Adopted Heirs
-	for aid in deceased.adopted_children_ids:
+	for aid: int in deceased.adopted_children_ids:
 		var adopted: L5RCharacterData = chars_by_id.get(aid)
 		if adopted == null or _is_dead(adopted) or adopted.clan != clan:
 			continue
 		var already: bool = false
-		for c in candidates:
+		for c: Dictionary in candidates:
 			if c["id"] == adopted.character_id:
 				already = true
 				break
@@ -170,11 +170,11 @@ static func get_candidates(
 			candidates.append({"id": adopted.character_id, "priority": CandidatePriority.ADOPTED_HEIR, "birth_order_type": CandidatePriority.ADOPTED_HEIR, "character": adopted})
 
 	# Priority 5 — Siblings
-	for sid in deceased.sibling_ids:
+	for sid: int in deceased.sibling_ids:
 		var sib: L5RCharacterData = chars_by_id.get(sid)
 		if sib != null and not _is_dead(sib) and sib.family == deceased.family:
 			var already: bool = false
-			for c in candidates:
+			for c: Dictionary in candidates:
 				if c["id"] == sib.character_id:
 					already = true
 					break
@@ -201,7 +201,7 @@ static func find_confirming_authority(
 
 	var best_id: int = -1
 	var best_status: float = -1.0
-	for id in chars_by_id:
+	for id: int in chars_by_id:
 		var c: L5RCharacterData = chars_by_id[id]
 		if _is_dead(c):
 			continue
@@ -238,7 +238,7 @@ static func is_clean_succession(
 
 	var top_priority: int = candidates[0]["priority"]
 	var same_priority_count: int = 0
-	for c in candidates:
+	for c: Dictionary in candidates:
 		if c["priority"] == top_priority:
 			same_priority_count += 1
 
@@ -271,17 +271,17 @@ static func compute_personality_weights(
 
 	if bushido != Enums.BushidoVirtue.NONE and BUSHIDO_WEIGHT_MODS.has(bushido):
 		var mods: Dictionary = BUSHIDO_WEIGHT_MODS[bushido]
-		for key in mods:
+		for key: String in mods:
 			if weights.has(key):
 				weights[key] = int(float(weights[key]) * mods[key])
 
 	if shourido != Enums.ShouridoVirtue.NONE and SHOURIDO_WEIGHT_MODS.has(shourido):
 		var mods: Dictionary = SHOURIDO_WEIGHT_MODS[shourido]
-		for key in mods:
+		for key: String in mods:
 			if weights.has(key):
 				weights[key] = int(float(weights[key]) * mods[key])
 		if shourido == Enums.ShouridoVirtue.ISHI:
-			for key in weights:
+			for key: String in weights:
 				if not mods.has(key):
 					weights[key] = int(float(weights[key]) * ISHI_OTHER_FACTOR_MOD)
 
@@ -330,7 +330,7 @@ static func evaluate_candidate(
 	scores["titles"] = _score_titles(candidate.status)
 
 	var total: float = 0.0
-	for key in scores:
+	for key: String in scores:
 		var w: int = weights.get(key, 0)
 		total += float(scores[key]) * float(w) / float(BASE_WEIGHTS.get(key, 1))
 
@@ -346,7 +346,7 @@ static func evaluate_all_candidates(
 	var weights: Dictionary = compute_personality_weights(lord.bushido_virtue, lord.shourido_virtue)
 	var results: Array[Dictionary] = []
 
-	for c in candidates:
+	for c: Dictionary in candidates:
 		var candidate_char: L5RCharacterData = c.get("character")
 		if candidate_char == null:
 			continue
@@ -399,7 +399,7 @@ static func apply_successor_inheritance(
 ) -> Dictionary:
 	var inherited_favors: int = 0
 	var remaining_favors: Array[FavorData] = []
-	for favor in deceased.favors:
+	for favor: FavorData in deceased.favors:
 		if favor.tier == FavorData.FavorTier.MAJOR:
 			favor.heir_id = successor.character_id
 			successor.favors.append(favor)
@@ -484,7 +484,7 @@ static func get_designation_urgency(lord: L5RCharacterData) -> int:
 	if lord.age >= 40:
 		return 2
 	var has_blood_enemy: bool = false
-	for disp in lord.disposition_values.values():
+	for disp: int in lord.disposition_values.values():
 		if disp <= -60:
 			has_blood_enemy = true
 			break
@@ -512,7 +512,7 @@ static func evaluate_emperor_succession(
 
 	var eldest_child_id: int = -1
 	var eldest_age: int = -1
-	for cid in deceased_emperor.children_ids:
+	for cid: int in deceased_emperor.children_ids:
 		var child: L5RCharacterData = chars_by_id.get(cid)
 		if child != null and not _is_dead(child) and child.age > eldest_age:
 			eldest_age = child.age
@@ -787,7 +787,7 @@ static func _score_skills(candidate: L5RCharacterData, demand: String) -> int:
 	var relevant_skills: Array[String] = _get_relevant_skills(demand)
 	var total: int = 0
 	var count: int = 0
-	for skill_name in relevant_skills:
+	for skill_name: String in relevant_skills:
 		var rank: int = candidate.skills.get(skill_name, 0)
 		total += rank
 		count += 1
@@ -817,7 +817,7 @@ static func _get_relevant_skills(demand: String) -> Array[String]:
 
 static func _score_achievements(topics: Array[Dictionary]) -> int:
 	var score: int = 0
-	for topic in topics:
+	for topic: Dictionary in topics:
 		var t_type: String = topic.get("topic_type", "")
 		if t_type in BATTLE_COMMANDER_TYPES:
 			score += 3
@@ -853,7 +853,7 @@ static func _get_birth_order_type(
 ) -> int:
 	if candidate.character_id in deceased.children_ids:
 		var sorted_ages: Array[Dictionary] = []
-		for cid in deceased.children_ids:
+		for cid: int in deceased.children_ids:
 			var c: L5RCharacterData = chars_by_id.get(cid)
 			if c != null and not _is_dead(c):
 				sorted_ages.append({"id": c.character_id, "age": c.age})

@@ -169,8 +169,8 @@ static func compute_permanent_modifier(
 	if shourido_b != Enums.ShouridoVirtue.NONE:
 		virtues_b.append(Enums.shourido_virtue_name(shourido_b))
 
-	for va in virtues_a:
-		for vb in virtues_b:
+	for va: String in virtues_a:
+		for vb: String in virtues_b:
 			total += get_virtue_pair_modifier(va, vb)
 	return total
 
@@ -411,15 +411,15 @@ static func will_share_supplies(disposition: int) -> bool:
 
 static func compute_total_disposition(
 	permanent: int,
-	historical_modifiers: Array,
-	temporary_modifiers: Array,
+	historical_modifiers: Array[Dictionary],
+	temporary_modifiers: Array[Dictionary],
 	cohabitation_bonus: float = 0.0,
 ) -> int:
 	var total: float = float(permanent) + cohabitation_bonus
-	for mod in historical_modifiers:
+	for mod: Dictionary in historical_modifiers:
 		if mod is Dictionary:
 			total += mod.get("current_value", 0)
-	for mod in temporary_modifiers:
+	for mod: Dictionary in temporary_modifiers:
 		if mod is Dictionary:
 			total += mod.get("value", 0)
 	return clampi(int(total), -100, 100)

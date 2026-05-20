@@ -60,6 +60,11 @@ func before_each() -> void:
 		"TRAIN": {"primary": "_trained_skill", "secondary": null},
 		"PUBLIC_DEBATE": {"primary": "Courtier", "secondary": "Awareness"},
 		"PUBLIC_INSULT": {"primary": "Courtier", "secondary": "Awareness"},
+		"ASSIGN_VASSAL_OBJECTIVE": {"primary": "Courtier", "secondary": "Battle"},
+		"SEND_INVITATION": {"primary": "Calligraphy", "secondary": "Etiquette"},
+		"CALL_COURT": {"primary": "Courtier", "secondary": "Etiquette"},
+		"PURCHASE_MARKET": {"primary": "Commerce", "secondary": null},
+		"REQUEST_ALLIED_AID": {"primary": "Courtier", "secondary": "Sincerity"},
 	}
 
 
@@ -1167,6 +1172,92 @@ func test_bribe_attempt_high_honor_magistrate_resists():
 	assert_true(result["effects"].get("detection_risk", false))
 
 
+func test_bribe_accepted_has_koku_cost() -> void:
+	var target := L5RCharacterData.new()
+	target.character_id = 20
+	target.character_name = "Corrupt Magistrate"
+	target.skills = {"Etiquette": 1}
+	target.emphases = {}
+	target.willpower = 1
+	target.honor = 1.0
+	target.wounds_taken = 0
+	var chars: Dictionary = {1: _character, 20: target}
+
+	_character.skills["Temptation"] = 5
+	_character.awareness = 5
+	_dice_engine.set_seed(42)
+
+	var action := _make_action("BRIBE_FOR_INFO", 20)
+	action.metadata = {"suppress_case": true, "magistrate_id": 20}
+
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map, {}, chars
+	)
+	assert_eq(result["effects"].get("koku_cost", 0.0), ActionExecutor.BRIBE_KOKU_COST)
+
+
+func test_bribe_refused_has_koku_cost_and_failed() -> void:
+	var magistrate := L5RCharacterData.new()
+	magistrate.character_id = 20
+	magistrate.character_name = "Honest Magistrate"
+	magistrate.skills = {"Etiquette": 5}
+	magistrate.emphases = {}
+	magistrate.willpower = 5
+	magistrate.honor = 9.0
+	magistrate.wounds_taken = 0
+	var chars: Dictionary = {1: _character, 20: magistrate}
+
+	_character.skills["Temptation"] = 1
+	_character.awareness = 2
+	_dice_engine.set_seed(1)
+
+	var action := _make_action("BRIBE_FOR_INFO", 20)
+	action.metadata = {"suppress_case": true, "magistrate_id": 20}
+
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map, {}, chars
+	)
+	assert_false(result["success"])
+	assert_eq(result["effects"].get("koku_cost", 0.0), ActionExecutor.BRIBE_KOKU_COST)
+	assert_true(result["effects"].has("failed"))
+
+
+func test_bribe_blocked_by_personality_no_koku_cost() -> void:
+	var magistrate := L5RCharacterData.new()
+	magistrate.character_id = 20
+	magistrate.character_name = "Honorable Magistrate"
+	magistrate.skills = {"Etiquette": 5}
+	magistrate.emphases = {}
+	magistrate.willpower = 5
+	magistrate.honor = 10.0
+	magistrate.wounds_taken = 0
+	var chars: Dictionary = {1: _character, 20: magistrate}
+
+	_character.bushido_virtue = Enums.BushidoVirtue.MEIYO
+	_character.skills["Temptation"] = 1
+	_character.awareness = 2
+	_dice_engine.set_seed(1)
+
+	var action := _make_action("BRIBE_FOR_INFO", 20)
+	action.metadata = {"suppress_case": true, "magistrate_id": 20}
+
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map, {}, chars
+	)
+	assert_false(result["effects"].has("koku_cost"))
+
+
+func test_purchase_market_has_koku_cost() -> void:
+	_character.skills["Commerce"] = 5
+	_dice_engine.set_seed(42)
+	var action := _make_action("PURCHASE_MARKET", -1)
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map
+	)
+	assert_true(result["success"])
+	assert_eq(result["effects"].get("koku_cost", 0.0), ActionExecutor.PURCHASE_KOKU_COST)
+
+
 # -- FLEE_JURISDICTION ---------------------------------------------------------
 
 func test_flee_jurisdiction_returns_success() -> void:
@@ -1497,3 +1588,300 @@ func test_meditate_cannot_exceed_max_pool() -> void:
 	if result["success"]:
 		assert_true(_character.current_void_points <= _character.max_void_points)
 		assert_eq(result["effects"]["void_recovered"], 1)  # capped at 3-2=1
+
+
+# -- ASSIGN_VASSAL_OBJECTIVE (s57.34) ------------------------------------------
+
+func test_assign_vassal_objective_returns_deferred_flag() -> void:
+	_ctx.is_lord = true
+	_ctx.lord_rank = Enums.LordRank.PROVINCIAL_DAIMYO
+	var action := _make_action("ASSIGN_VASSAL_OBJECTIVE", 20)
+	action.metadata = {"need_type": "SECURE_ALLIANCE"}
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map
+	)
+	assert_true(result["success"])
+	var effects: Dictionary = result.get("effects", {})
+	assert_eq(effects["effect"], "vassal_objective_assigned")
+	assert_true(effects["requires_vassal_objective_assignment"])
+	assert_eq(effects["vassal_id"], 20)
+	assert_eq(effects["assigned_need_type"], "SECURE_ALLIANCE")
+
+
+func test_assign_vassal_objective_uses_courtier_roll() -> void:
+	_ctx.is_lord = true
+	_ctx.lord_rank = Enums.LordRank.PROVINCIAL_DAIMYO
+	var action := _make_action("ASSIGN_VASSAL_OBJECTIVE", 20)
+	action.metadata = {"need_type": "ACQUIRE_RESOURCE"}
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map
+	)
+	assert_eq(result.get("skill_used", ""), "Courtier")
+	assert_eq(result.get("tn", 0), 10)
+
+
+# -- SEND_INVITATION (s57.34.7) ------------------------------------------------
+
+func test_send_invitation_returns_deferred_flag() -> void:
+	_ctx.is_lord = true
+	_ctx.lord_rank = Enums.LordRank.PROVINCIAL_DAIMYO
+	_character.skills["Calligraphy"] = 3
+	var action := _make_action("SEND_INVITATION", 30)
+	action.target_settlement_id = 5
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map
+	)
+	assert_true(result["success"])
+	var effects: Dictionary = result.get("effects", {})
+	assert_eq(effects["effect"], "invitation_sent")
+	assert_true(effects["requires_court_invitation"])
+	assert_eq(effects["invitee_id"], 30)
+	assert_eq(effects["invitation_settlement_id"], 5)
+
+
+func test_send_invitation_grants_disposition() -> void:
+	_ctx.is_lord = true
+	_character.skills["Calligraphy"] = 3
+	var action := _make_action("SEND_INVITATION", 30)
+	action.target_settlement_id = 5
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map
+	)
+	var effects: Dictionary = result.get("effects", {})
+	assert_eq(effects["recipient_disposition_change"], 5)
+
+
+# -- CALL_COURT (s15.1, s57.34) ------------------------------------------------
+
+func test_call_court_returns_deferred_flag() -> void:
+	_ctx.is_lord = true
+	_ctx.lord_rank = Enums.LordRank.PROVINCIAL_DAIMYO
+	var action := _make_action("CALL_COURT")
+	action.target_settlement_id = 7
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map
+	)
+	assert_true(result["success"])
+	var effects: Dictionary = result.get("effects", {})
+	assert_eq(effects["effect"], "court_called")
+	assert_true(effects["requires_court_creation"])
+	assert_eq(effects["court_settlement_id"], 7)
+
+
+func test_call_court_grants_glory() -> void:
+	_ctx.is_lord = true
+	var action := _make_action("CALL_COURT")
+	action.target_settlement_id = 7
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map
+	)
+	if result["success"]:
+		var effects: Dictionary = result.get("effects", {})
+		assert_almost_eq(effects.get("glory_change", 0.0), 0.1, 0.001)
+
+
+# -- Winter Court Skill Bonus --------------------------------------------------
+
+func test_wc_bonus_applies_to_gossip() -> void:
+	_ctx.active_court_at_location = {
+		"court_type": CourtSessionData.CourtType.IMPERIAL_WINTER_COURT,
+		"host_clan": "Crane",
+	}
+	_character.clan = "Crane"
+	_character.skills["Courtier"] = 3
+	_character.awareness = 3
+
+	var target := L5RCharacterData.new()
+	target.character_id = 10
+	target.character_name = "Gossip Subject"
+	target.glory = 2.0
+	var chars: Dictionary = {1: _character, 10: target}
+	_action_skill_map["GOSSIP"] = {"primary": "Courtier", "secondary": "Awareness"}
+
+	_dice_engine.set_seed(7)
+	var action_wc := _make_action("GOSSIP", 10)
+	action_wc.metadata = {"gossip_subject_id": 10}
+	var result_wc: Dictionary = ActionExecutor.execute(
+		action_wc, _character, _ctx, _dice_engine, _action_skill_map, {}, chars
+	)
+
+	_ctx.active_court_at_location = {}
+	_dice_engine.set_seed(7)
+	var action_no := _make_action("GOSSIP", 10)
+	action_no.metadata = {"gossip_subject_id": 10}
+	var result_no: Dictionary = ActionExecutor.execute(
+		action_no, _character, _ctx, _dice_engine, _action_skill_map, {}, chars
+	)
+
+	var wc_roll: int = result_wc.get("roll_total", 0)
+	var no_roll: int = result_no.get("roll_total", 0)
+	assert_eq(wc_roll - no_roll, WinterCourtSystem.HOST_SKILL_BONUS)
+
+
+func test_wc_bonus_not_applied_to_non_host_clan() -> void:
+	_ctx.active_court_at_location = {
+		"court_type": CourtSessionData.CourtType.IMPERIAL_WINTER_COURT,
+		"host_clan": "Scorpion",
+	}
+	_character.clan = "Crane"
+	var bonus: int = ActionExecutor._get_winter_court_skill_bonus(
+		_character, "Courtier", _ctx
+	)
+	assert_eq(bonus, 0)
+
+
+func test_wc_bonus_not_applied_to_non_wc_court() -> void:
+	_ctx.active_court_at_location = {
+		"court_type": CourtSessionData.CourtType.CLAN_CHAMPION_COURT,
+		"host_clan": "Crane",
+	}
+	_character.clan = "Crane"
+	var bonus: int = ActionExecutor._get_winter_court_skill_bonus(
+		_character, "Courtier", _ctx
+	)
+	assert_eq(bonus, 0)
+
+
+# -- REQUEST_ALLIED_AID (s55.31 RESOURCE_PROMISE) ----------------------------
+
+func test_allied_aid_accepted_when_disposition_high() -> void:
+	var action := NPCDataStructures.ScoredAction.new()
+	action.action_id = "REQUEST_ALLIED_AID"
+	action.target_npc_id = 30
+	_ctx.dispositions[30] = 50
+	var effects: Dictionary = ActionExecutor._compute_allied_aid_effects(
+		action, _ctx, true,
+	)
+	assert_eq(effects["effect"], "aid_accepted")
+	assert_true(effects.get("requires_resource_promise", false))
+	assert_eq(effects["promise_creditor_id"], _ctx.character_id)
+	assert_eq(effects["promise_debtor_id"], 30)
+
+
+func test_allied_aid_refused_when_disposition_low() -> void:
+	var action := NPCDataStructures.ScoredAction.new()
+	action.action_id = "REQUEST_ALLIED_AID"
+	action.target_npc_id = 20
+	_ctx.dispositions[20] = 10
+	var effects: Dictionary = ActionExecutor._compute_allied_aid_effects(
+		action, _ctx, true,
+	)
+	assert_eq(effects["effect"], "aid_refused")
+	assert_true(effects.get("failed", false))
+
+
+func test_allied_aid_fails_on_roll_failure() -> void:
+	var action := NPCDataStructures.ScoredAction.new()
+	action.action_id = "REQUEST_ALLIED_AID"
+	action.target_npc_id = 30
+	_ctx.dispositions[30] = 50
+	var effects: Dictionary = ActionExecutor._compute_allied_aid_effects(
+		action, _ctx, false,
+	)
+	assert_eq(effects["effect"], "aid_request_failed")
+	assert_true(effects.get("failed", false))
+
+
+func test_allied_aid_threshold_boundary() -> void:
+	var action := NPCDataStructures.ScoredAction.new()
+	action.action_id = "REQUEST_ALLIED_AID"
+	action.target_npc_id = 30
+	_ctx.dispositions[30] = 31
+	var effects: Dictionary = ActionExecutor._compute_allied_aid_effects(
+		action, _ctx, true,
+	)
+	assert_eq(effects["effect"], "aid_accepted", "Exactly at threshold should accept")
+	_ctx.dispositions[30] = 30
+	effects = ActionExecutor._compute_allied_aid_effects(action, _ctx, true)
+	assert_eq(effects["effect"], "aid_refused", "Below threshold should refuse")
+
+
+# -- Resource Tier Scaling (s55.31) -------------------------------------------
+
+func test_resource_tier_small_amounts() -> void:
+	var meta: Dictionary = {"koku_amount": 5.0, "pu_amount": 2}
+	assert_eq(ActionExecutor._resource_tier_from_metadata(meta), 3)
+
+
+func test_resource_tier_medium_koku() -> void:
+	var meta: Dictionary = {"koku_amount": 25.0}
+	assert_eq(ActionExecutor._resource_tier_from_metadata(meta), 2)
+
+
+func test_resource_tier_medium_pu() -> void:
+	var meta: Dictionary = {"pu_amount": 10}
+	assert_eq(ActionExecutor._resource_tier_from_metadata(meta), 2)
+
+
+func test_resource_tier_large_koku() -> void:
+	var meta: Dictionary = {"koku_amount": 60.0}
+	assert_eq(ActionExecutor._resource_tier_from_metadata(meta), 1)
+
+
+func test_resource_tier_large_pu() -> void:
+	var meta: Dictionary = {"pu_amount": 25}
+	assert_eq(ActionExecutor._resource_tier_from_metadata(meta), 1)
+
+
+func test_resource_tier_empty_metadata() -> void:
+	assert_eq(ActionExecutor._resource_tier_from_metadata({}), 3)
+
+
+func test_negotiate_emits_resource_promise_for_acquire_resource() -> void:
+	var action := NPCDataStructures.ScoredAction.new()
+	action.action_id = "NEGOTIATE"
+	action.target_npc_id = 20
+	action.metadata = {"need_type": "ACQUIRE_RESOURCE", "koku_amount": 30.0}
+	_ctx.character_id = 10
+	var result: Dictionary = ActionExecutor.execute_action(
+		action, _character, _ctx, _dice, {}, {},
+	)
+	var effects: Dictionary = result.get("effects", result)
+	if effects.get("requires_resource_promise", false):
+		assert_eq(effects["promise_creditor_id"], 10)
+		assert_eq(effects["promise_debtor_id"], 20)
+		assert_eq(effects["promise_tier"], 2)
+		assert_eq(effects["source_action_id"], "NEGOTIATE")
+	else:
+		assert_true(result.get("success", false) == false,
+			"If roll failed, no resource promise expected")
+
+
+func test_negotiate_no_resource_promise_for_non_resource_need() -> void:
+	var action := NPCDataStructures.ScoredAction.new()
+	action.action_id = "NEGOTIATE"
+	action.target_npc_id = 20
+	action.metadata = {"need_type": "RAISE_DISPOSITION"}
+	_ctx.character_id = 10
+	var result: Dictionary = ActionExecutor.execute_action(
+		action, _character, _ctx, _dice, {}, {},
+	)
+	var effects: Dictionary = result.get("effects", result)
+	assert_false(effects.get("requires_resource_promise", false),
+		"Non-resource need_type should not create resource promise")
+
+
+func test_assign_vassal_objective_emits_resource_promise() -> void:
+	var action := NPCDataStructures.ScoredAction.new()
+	action.action_id = "ASSIGN_VASSAL_OBJECTIVE"
+	action.target_npc_id = 30
+	action.metadata = {
+		"need_type": "REQUEST_AID",
+		"lord_id": 10,
+		"pu_amount": 25,
+	}
+	var effects: Dictionary = ActionExecutor._compute_assign_vassal_objective_effects(action)
+	assert_true(effects.get("requires_resource_promise", false))
+	assert_eq(effects["promise_creditor_id"], 10)
+	assert_eq(effects["promise_debtor_id"], 30)
+	assert_eq(effects["promise_tier"], 1)
+	assert_eq(effects["source_action_id"], "ASSIGN_VASSAL_OBJECTIVE")
+
+
+func test_assign_vassal_objective_no_resource_promise_for_non_resource() -> void:
+	var action := NPCDataStructures.ScoredAction.new()
+	action.action_id = "ASSIGN_VASSAL_OBJECTIVE"
+	action.target_npc_id = 30
+	action.metadata = {"need_type": "ASSIGN_OBJECTIVE", "lord_id": 10}
+	var effects: Dictionary = ActionExecutor._compute_assign_vassal_objective_effects(action)
+	assert_false(effects.get("requires_resource_promise", false))

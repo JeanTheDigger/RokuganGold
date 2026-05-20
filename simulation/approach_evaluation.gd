@@ -104,8 +104,6 @@ enum AssessmentTag {
 	APPROACH_INEFFECTIVE,
 }
 
-const CHARM_CEILING: int = 40
-
 const ACTION_CEILINGS: Dictionary = {
 	"CHARM": 40,
 	"DELIVER_GIFT": 40,

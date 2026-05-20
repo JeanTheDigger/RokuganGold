@@ -55,7 +55,7 @@ const PERSONALITY_AT_RISK_MODIFIERS: Dictionary = {
 
 const CHUGI_EXTERNAL_REDUCTION: int = 3
 
-const REDUCED_PENALTY_VIRTUES: Array = [
+const REDUCED_PENALTY_VIRTUES: Array[int] = [
 	Enums.ShouridoVirtue.SEIGYO,
 	Enums.ShouridoVirtue.KYORYOKU,
 ]
@@ -311,6 +311,8 @@ static func process_deadlines(
 	for c: CommitmentData in commitments:
 		if c.status != Enums.CommitmentStatus.PENDING:
 			continue
+		if c.commitment_type == Enums.CommitmentType.FAVOR_OBLIGATION:
+			continue
 		if c.deadline_ic_day > current_ic_day:
 			continue
 		var is_fulfilled: bool = fulfillment_checker.call(c)
@@ -415,6 +417,8 @@ static func get_at_risk_penalty(
 	var uses_reduced: bool = character.shourido_virtue in REDUCED_PENALTY_VIRTUES
 
 	for c: CommitmentData in pending:
+		if c.commitment_type == Enums.CommitmentType.FAVOR_OBLIGATION:
+			continue
 		var tier: int = clampi(c.tier, 1, 3)
 		var base: int = 0
 		if uses_reduced:
@@ -439,3 +443,42 @@ static func get_at_risk_penalty(
 		total += base
 
 	return maxi(total, MAX_AT_RISK_PENALTY)
+
+
+const COMMITMENT_REDIRECTING_ACTIONS: Array[String] = [
+	"CHANGE_DESTINATION", "BEGIN_TRAVEL",
+]
+
+
+static func get_action_commitment_modifier(
+	action_id: String,
+	action_settlement_id: int,
+	commitments: Array[CommitmentData],
+	debtor_id: int,
+	character: L5RCharacterData,
+	creditor_in_loyalty_chain: Callable = Callable(),
+) -> int:
+	var pending: Array[CommitmentData] = get_pending(commitments, debtor_id)
+	if pending.is_empty():
+		return 0
+	var commitment_targets: Array[int] = []
+	for c: CommitmentData in pending:
+		if c.commitment_type == Enums.CommitmentType.FAVOR_OBLIGATION:
+			continue
+		if c.fulfillment_target >= 0 and c.fulfillment_target not in commitment_targets:
+			commitment_targets.append(c.fulfillment_target)
+	if commitment_targets.is_empty():
+		return 0
+	var raw_penalty: int = get_at_risk_penalty(commitments, debtor_id, character, creditor_in_loyalty_chain)
+	if raw_penalty == 0:
+		return 0
+	var targets_committed: bool = action_settlement_id in commitment_targets
+	if action_id in COMMITMENT_REDIRECTING_ACTIONS:
+		if targets_committed:
+			if action_id == "BEGIN_TRAVEL":
+				return -raw_penalty
+			return 0
+		return raw_penalty
+	if targets_committed:
+		return -raw_penalty
+	return 0

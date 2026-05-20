@@ -48,6 +48,8 @@ class ScoredAction:
 	var stale_intel_bonus: float = 0.0
 	var festival_modifier: float = 0.0
 	var deception_defense_penalty: float = 0.0
+	var honor_covert_penalty: float = 0.0
+	var virtue_covert_modifier: float = 0.0
 
 	func get_total_score() -> float:
 		return (
@@ -66,6 +68,8 @@ class ScoredAction:
 			+ stale_intel_bonus
 			+ festival_modifier
 			+ deception_defense_penalty
+			+ honor_covert_penalty
+			+ virtue_covert_modifier
 		)
 
 
@@ -96,6 +100,8 @@ class ContextSnapshot:
 	var upcoming_courts: Array[Dictionary] = []
 	var held_leverage: Array[Dictionary] = []
 	var known_npc_locations: Dictionary = {}
+	var court_session_state: Dictionary = {}
+	var court_settlement_id: int = -1
 
 	# Stats
 	var skill_ranks: Dictionary = {}
@@ -117,10 +123,11 @@ class ContextSnapshot:
 	var known_contacts_by_clan: Dictionary = {}
 	var met_characters: Array[int] = []
 	var knowledge_pool: Array[KnowledgeEntry] = []
+	var known_secrets: Array[Dictionary] = []
 
 	# Lord-tier fields
 	var resource_stockpiles: Dictionary = {}
-	var province_statuses: Array = []
+	var province_statuses: Array[ProvinceStatus] = []
 	var feasibility_data: Dictionary = {}
 
 	# Vacancy detection (s57.20.3)
@@ -137,7 +144,7 @@ class ContextSnapshot:
 	var assigned_company_id: int = -1
 
 	# Wall management (s55.23)
-	var wall_statuses: Array = []
+	var wall_statuses: Array[WallStatus] = []
 	# Precomputed garrison shortage personality modifier per known contact
 	# (character_id → float from WallSystem personality table, s2.4.12–13).
 	# Populated only for characters with wall_statuses; empty otherwise.
@@ -185,6 +192,9 @@ class ContextSnapshot:
 	var besieged_settlement_health_pct: float = 1.0
 	var objective_stalled_seasons: int = 0
 
+	# Atonement (s4.6)
+	var self_offenses: Array[Dictionary] = []
+
 	# State
 	var pending_events: Array = []
 	var ap_remaining: int = 0
@@ -215,6 +225,7 @@ class ProvinceStatus:
 	var confidence: int = 0  # 0=stale, 1=recent, 2=fresh
 	var is_wall_province: bool = false
 	var crisis_type: String = ""
+	var province_taint_level: float = 0.0
 
 
 class WallStatus:

@@ -718,6 +718,58 @@ func test_execute_records_character_and_day() -> void:
 	assert_eq(result["ic_day"], 10)
 
 
+func test_execute_insufficient_resources_refunds_ap() -> void:
+	_char.koku = 0.0
+	var chosen := NPCDataStructures.ScoredAction.new()
+	chosen.action_id = "BRIBE_FOR_INFO"
+	chosen.ap_cost = 1
+	var ap_before: int = _char.action_points_current
+	var ctx := NPCDecisionEngine.build_context(_char, _world_state)
+	var result := NPCDecisionEngine.execute_action(chosen, _char, ctx)
+	assert_false(result["success"])
+	assert_eq(result["reason"], "insufficient_resources")
+	assert_eq(_char.action_points_current, ap_before)
+
+
+func test_execute_sufficient_resources_succeeds() -> void:
+	_char.koku = 10.0
+	var chosen := NPCDataStructures.ScoredAction.new()
+	chosen.action_id = "BRIBE_FOR_INFO"
+	chosen.ap_cost = 1
+	var ctx := NPCDecisionEngine.build_context(_char, _world_state)
+	var result := NPCDecisionEngine.execute_action(chosen, _char, ctx)
+	assert_true(result["success"])
+
+
+func test_execute_free_action_skips_resource_check() -> void:
+	_char.koku = 0.0
+	var chosen := NPCDataStructures.ScoredAction.new()
+	chosen.action_id = "CHARM"
+	chosen.ap_cost = 1
+	var ctx := NPCDecisionEngine.build_context(_char, _world_state)
+	var result := NPCDecisionEngine.execute_action(chosen, _char, ctx)
+	assert_true(result["success"])
+
+
+func test_execute_insufficient_resources_refunds_civilian_order() -> void:
+	_char.lord_rank = Enums.LordRank.PROVINCIAL_DAIMYO
+	_char.military_rank = Enums.MilitaryRank.NONE
+	_char.civilian_orders_remaining = 3
+	_world_state["available_levy_pu"] = 0.0
+	var orders_before: int = _char.civilian_orders_remaining
+	var ap_before: int = _char.action_points_current
+	var chosen := NPCDataStructures.ScoredAction.new()
+	chosen.action_id = "ORDER_LEVY"
+	chosen.ap_cost = 0
+	chosen.is_order = true
+	var ctx := NPCDecisionEngine.build_context(_char, _world_state)
+	var result := NPCDecisionEngine.execute_action(chosen, _char, ctx)
+	assert_false(result["success"])
+	assert_eq(result["reason"], "insufficient_resources")
+	assert_eq(_char.civilian_orders_remaining, orders_before)
+	assert_eq(_char.action_points_current, ap_before)
+
+
 # -- Full Loop -----------------------------------------------------------------
 
 func test_full_loop_runs() -> void:
@@ -1055,6 +1107,184 @@ func test_resolve_daily_letter_includes_topic_id() -> void:
 		char, objectives, scoring_tables, ctx,
 	)
 	assert_eq(result.get("topic_id", -1), 42, "Should include strongest position topic")
+
+
+# --- Visit Intent on Daily Letter (s17 / s55.31) ---
+
+func test_visit_intent_set_when_at_own_holdings_with_visit_need() -> void:
+	var char := L5RCharacterData.new()
+	char.character_id = 1
+	char.skills = {"Courtier": 3}
+	char.traits = {"Awareness": 3}
+	var objectives: Dictionary = {
+		"primary": {"need_type": "RAISE_DISPOSITION", "target_npc_id": 5},
+	}
+	var scoring_tables: Dictionary = {
+		"objective_alignment": {
+			"RAISE_DISPOSITION": {"WRITE_LETTER": 60},
+		},
+	}
+	var ws: Dictionary = {
+		"is_lord": false,
+		"context_flag": Enums.ContextFlag.AT_OWN_HOLDINGS,
+	}
+	var ctx := NPCDecisionEngine.build_context(char, ws)
+	ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
+	var result: Dictionary = NPCDecisionEngine.resolve_daily_letter(
+		char, objectives, scoring_tables, ctx,
+	)
+	assert_true(result.get("visit_intent", false),
+		"Should set visit_intent when at own holdings targeting someone")
+
+
+func test_visit_intent_not_set_when_at_court() -> void:
+	var char := L5RCharacterData.new()
+	char.character_id = 1
+	char.skills = {"Courtier": 3}
+	char.traits = {"Awareness": 3}
+	var objectives: Dictionary = {
+		"primary": {"need_type": "RAISE_DISPOSITION", "target_npc_id": 5},
+	}
+	var scoring_tables: Dictionary = {
+		"objective_alignment": {
+			"RAISE_DISPOSITION": {"WRITE_LETTER": 60},
+		},
+	}
+	var ws: Dictionary = {"is_lord": false}
+	var ctx := NPCDecisionEngine.build_context(char, ws)
+	ctx.context_flag = Enums.ContextFlag.AT_COURT
+	var result: Dictionary = NPCDecisionEngine.resolve_daily_letter(
+		char, objectives, scoring_tables, ctx,
+	)
+	assert_false(result.get("visit_intent", false),
+		"Should not set visit_intent when at court")
+
+
+func test_visit_intent_not_set_for_non_visit_need() -> void:
+	var char := L5RCharacterData.new()
+	char.character_id = 1
+	char.skills = {"Courtier": 3}
+	char.traits = {"Awareness": 3}
+	var objectives: Dictionary = {
+		"primary": {"need_type": "DEFEND_PROVINCE", "target_npc_id": 5},
+	}
+	var scoring_tables: Dictionary = {
+		"objective_alignment": {
+			"DEFEND_PROVINCE": {"WRITE_LETTER": 25},
+		},
+	}
+	var ws: Dictionary = {"is_lord": false}
+	var ctx := NPCDecisionEngine.build_context(char, ws)
+	ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
+	var result: Dictionary = NPCDecisionEngine.resolve_daily_letter(
+		char, objectives, scoring_tables, ctx,
+	)
+	assert_false(result.get("visit_intent", false),
+		"DEFEND_PROVINCE should not trigger visit intent")
+
+
+func test_visit_intent_not_set_when_target_differs_from_objective() -> void:
+	var char := L5RCharacterData.new()
+	char.character_id = 1
+	char.skills = {"Courtier": 3}
+	char.traits = {"Awareness": 3}
+	var objectives: Dictionary = {
+		"primary": {"need_type": "RAISE_DISPOSITION", "target_npc_id": 5},
+	}
+	var scoring_tables: Dictionary = {
+		"objective_alignment": {
+			"RAISE_DISPOSITION": {"WRITE_LETTER": 60},
+		},
+	}
+	var ws: Dictionary = {"is_lord": false}
+	var ctx := NPCDecisionEngine.build_context(char, ws)
+	ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
+	# Force letter target to differ from objective target — this
+	# is hard to trigger since _select_letter_target returns the
+	# primary objective's target_npc_id. Test via the helper directly.
+	var result: bool = NPCDecisionEngine._should_set_visit_intent(
+		char, objectives, 99, ctx,
+	)
+	assert_false(result,
+		"Mismatched target should not trigger visit intent")
+
+
+# --- Meeting Proposal on Daily Letter (s55.31) ---
+
+func test_meeting_proposal_set_for_secure_alliance() -> void:
+	var char := L5RCharacterData.new()
+	char.character_id = 1
+	char.physical_location = "100"
+	char.skills = {"Courtier": 3}
+	char.traits = {"Awareness": 3}
+	var objectives: Dictionary = {
+		"primary": {"need_type": "SECURE_ALLIANCE", "target_npc_id": 5},
+	}
+	var scoring_tables: Dictionary = {
+		"objective_alignment": {
+			"SECURE_ALLIANCE": {"WRITE_LETTER": 60},
+		},
+	}
+	var ws: Dictionary = {"is_lord": false}
+	var ctx := NPCDecisionEngine.build_context(char, ws)
+	ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
+	var result: Dictionary = NPCDecisionEngine.resolve_daily_letter(
+		char, objectives, scoring_tables, ctx,
+	)
+	assert_true(result.get("meeting_proposal", false),
+		"SECURE_ALLIANCE should trigger meeting proposal")
+	assert_eq(result.get("meeting_settlement_id", -1), 100,
+		"Meeting should be at character's location")
+
+
+func test_meeting_proposal_not_set_for_raise_disposition() -> void:
+	var char := L5RCharacterData.new()
+	char.character_id = 1
+	char.physical_location = "100"
+	char.skills = {"Courtier": 3}
+	char.traits = {"Awareness": 3}
+	var objectives: Dictionary = {
+		"primary": {"need_type": "RAISE_DISPOSITION", "target_npc_id": 5},
+	}
+	var scoring_tables: Dictionary = {
+		"objective_alignment": {
+			"RAISE_DISPOSITION": {"WRITE_LETTER": 60},
+		},
+	}
+	var ws: Dictionary = {"is_lord": false}
+	var ctx := NPCDecisionEngine.build_context(char, ws)
+	ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
+	var result: Dictionary = NPCDecisionEngine.resolve_daily_letter(
+		char, objectives, scoring_tables, ctx,
+	)
+	assert_false(result.get("meeting_proposal", false),
+		"RAISE_DISPOSITION should use visit_intent, not meeting_proposal")
+	assert_true(result.get("visit_intent", false),
+		"RAISE_DISPOSITION should set visit_intent instead")
+
+
+func test_meeting_proposal_not_set_when_at_court() -> void:
+	var char := L5RCharacterData.new()
+	char.character_id = 1
+	char.physical_location = "100"
+	char.skills = {"Courtier": 3}
+	char.traits = {"Awareness": 3}
+	var objectives: Dictionary = {
+		"primary": {"need_type": "SECURE_ALLIANCE", "target_npc_id": 5},
+	}
+	var scoring_tables: Dictionary = {
+		"objective_alignment": {
+			"SECURE_ALLIANCE": {"WRITE_LETTER": 60},
+		},
+	}
+	var ws: Dictionary = {"is_lord": false}
+	var ctx := NPCDecisionEngine.build_context(char, ws)
+	ctx.context_flag = Enums.ContextFlag.AT_COURT
+	var result: Dictionary = NPCDecisionEngine.resolve_daily_letter(
+		char, objectives, scoring_tables, ctx,
+	)
+	assert_false(result.get("meeting_proposal", false),
+		"Should not propose meeting when at court")
 
 
 # --- SEEK_PEACE position inversion (s55.26 Annex H) ---
@@ -2012,3 +2242,1214 @@ func test_tend_wounded_ally_not_injected_for_hostile() -> void:
 		if ev is Dictionary and (ev as Dictionary).get("type", "") == "tend_wounded_ally_opportunity":
 			fail_test("Should not inject tend_wounded_ally_opportunity for hostile target")
 			return
+
+
+# -- Honor Covert Penalty (s12.8 Filter 2) ------------------------------------
+
+func test_honor_covert_penalty_low_honor_no_penalty() -> void:
+	var penalty: float = NPCDecisionEngine._compute_honor_covert_penalty(1.5, "Bayushi Bushi", "Scorpion")
+	assert_eq(penalty, 0.0, "Honor < 2.0 should produce no penalty")
+
+
+func test_honor_covert_penalty_mid_honor_moderate() -> void:
+	var penalty: float = NPCDecisionEngine._compute_honor_covert_penalty(3.0, "Doji Courtier", "Crane")
+	assert_eq(penalty, -25.0, "Honor 2.0-3.5 should produce -25 penalty")
+
+
+func test_honor_covert_penalty_high_honor_severe() -> void:
+	var penalty: float = NPCDecisionEngine._compute_honor_covert_penalty(5.0, "Akodo Bushi", "Lion")
+	assert_eq(penalty, -50.0, "Honor > 3.5 should produce -50 penalty")
+
+
+func test_honor_covert_penalty_boundary_2_0() -> void:
+	var penalty: float = NPCDecisionEngine._compute_honor_covert_penalty(2.0, "Doji Courtier", "Crane")
+	assert_eq(penalty, -25.0, "Honor exactly 2.0 should hit moderate tier")
+
+
+func test_honor_covert_penalty_boundary_3_5() -> void:
+	var penalty: float = NPCDecisionEngine._compute_honor_covert_penalty(3.5, "Doji Courtier", "Crane")
+	assert_eq(penalty, -25.0, "Honor exactly 3.5 should still be moderate tier")
+
+
+func test_honor_covert_penalty_boundary_3_6() -> void:
+	var penalty: float = NPCDecisionEngine._compute_honor_covert_penalty(3.6, "Doji Courtier", "Crane")
+	assert_eq(penalty, -50.0, "Honor 3.6 should hit severe tier")
+
+
+func test_honor_covert_full_exempt_shosuro_infiltrator() -> void:
+	var penalty: float = NPCDecisionEngine._compute_honor_covert_penalty(5.0, "Shosuro Infiltrator", "Scorpion")
+	assert_eq(penalty, 0.0, "Shosuro Infiltrator gets full exemption")
+
+
+func test_honor_covert_full_exempt_bitter_lies() -> void:
+	var penalty: float = NPCDecisionEngine._compute_honor_covert_penalty(4.0, "Bitter Lies Swordsman", "Scorpion")
+	assert_eq(penalty, 0.0, "Bitter Lies gets full exemption")
+
+
+func test_honor_covert_full_exempt_kasuga_smuggler() -> void:
+	var penalty: float = NPCDecisionEngine._compute_honor_covert_penalty(4.0, "Kasuga Smuggler", "Tortoise")
+	assert_eq(penalty, 0.0, "Kasuga Smuggler gets full exemption")
+
+
+func test_honor_covert_half_exempt_daidoji_harrier() -> void:
+	var penalty: float = NPCDecisionEngine._compute_honor_covert_penalty(5.0, "Daidoji Harrier", "Crane")
+	assert_eq(penalty, -25.0, "Daidoji Harrier gets half of -50")
+
+
+func test_honor_covert_half_exempt_ikoma_lions_shadow() -> void:
+	var penalty: float = NPCDecisionEngine._compute_honor_covert_penalty(5.0, "Ikoma Lion's Shadow", "Lion")
+	assert_eq(penalty, -25.0, "Ikoma Lion's Shadow gets half of -50")
+
+
+func test_honor_covert_half_exempt_daidoji_spymaster() -> void:
+	var penalty: float = NPCDecisionEngine._compute_honor_covert_penalty(3.0, "Daidoji Spymaster", "Crane")
+	assert_eq(penalty, -12.5, "Daidoji Spymaster gets half of -25 at mid honor")
+
+
+func test_honor_covert_scorpion_clan_half_exempt() -> void:
+	var penalty: float = NPCDecisionEngine._compute_honor_covert_penalty(5.0, "Bayushi Bushi", "Scorpion")
+	assert_eq(penalty, -25.0, "Scorpion clan gets half of -50 via Reduced Honour Bleed")
+
+
+func test_honor_covert_scorpion_mid_honor() -> void:
+	var penalty: float = NPCDecisionEngine._compute_honor_covert_penalty(3.0, "Soshi Shugenja", "Scorpion")
+	assert_eq(penalty, -12.5, "Scorpion at mid honor gets half of -25")
+
+
+func test_honor_covert_penalty_applied_to_covert_action_in_scoring() -> void:
+	_char.honor = 5.0
+	_char.clan = "Lion"
+	_char.school = "Akodo Bushi"
+	_scoring_tables["objective_alignment"]["RAISE_DISPOSITION"]["SHADOW_TARGET"] = 70
+	_scoring_tables["action_skill_map"]["SHADOW_TARGET"] = {"primary": "Stealth", "secondary": "Agility"}
+	var ctx := NPCDecisionEngine.build_context(_char, _world_state)
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "SHADOW_TARGET"
+	option.target_npc_id = 2
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "RAISE_DISPOSITION"
+	NPCDecisionEngine.score_all([option], need, ctx, _scoring_tables)
+	assert_eq(option.honor_covert_penalty, -50.0, "High-honor Lion should get -50 on covert action")
+
+
+func test_honor_covert_penalty_not_applied_to_non_covert() -> void:
+	_char.honor = 5.0
+	_char.clan = "Lion"
+	_char.school = "Akodo Bushi"
+	var ctx := NPCDecisionEngine.build_context(_char, _world_state)
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "CHARM"
+	option.target_npc_id = 2
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "RAISE_DISPOSITION"
+	NPCDecisionEngine.score_all([option], need, ctx, _scoring_tables)
+	assert_eq(option.honor_covert_penalty, 0.0, "Non-covert CHARM should have no honor penalty")
+
+
+func test_covert_action_ids_includes_forge_actions() -> void:
+	assert_true("FORGE_IMPERSONATION_LETTER" in NPCDecisionEngine.COVERT_ACTION_IDS)
+	assert_true("FORGE_ORDER" in NPCDecisionEngine.COVERT_ACTION_IDS)
+
+
+func test_covert_action_ids_includes_acquisition_actions() -> void:
+	assert_true("BRIBE_FOR_INFO" in NPCDecisionEngine.COVERT_ACTION_IDS)
+	assert_true("EAVESDROP" in NPCDecisionEngine.COVERT_ACTION_IDS)
+
+
+func test_covert_action_ids_excludes_search_person() -> void:
+	assert_false("SEARCH_PERSON" in NPCDecisionEngine.COVERT_ACTION_IDS,
+		"SEARCH_PERSON is Category 5 Intelligence, not Category 6 Covert")
+
+
+# -- Virtue Covert Modifier (s12.8 Filter 3) ----------------------------------
+
+func _make_ctx_with_virtue(
+	virtue: Enums.BushidoVirtue,
+	threat: bool = false,
+	lord_assigned: bool = false,
+) -> NPCDataStructures.ContextSnapshot:
+	_char.bushido_virtue = virtue
+	if threat:
+		_world_state["active_wars"] = [{"war_id": 1}]
+	else:
+		_world_state["active_wars"] = []
+	if lord_assigned:
+		_world_state["known_objectives"] = {"lord_assigned": true, "primary": {}}
+	else:
+		_world_state["known_objectives"] = {}
+	return NPCDecisionEngine.build_context(_char, _world_state)
+
+
+func test_virtue_meiyo_no_threat_amplifies_reluctance() -> void:
+	var ctx := _make_ctx_with_virtue(Enums.BushidoVirtue.MEIYO)
+	var mod: float = NPCDecisionEngine._compute_virtue_covert_modifier(ctx)
+	assert_eq(mod, -15.0, "Meiyo without threat should amplify reluctance")
+
+
+func test_virtue_meiyo_with_threat_reduces_reluctance() -> void:
+	var ctx := _make_ctx_with_virtue(Enums.BushidoVirtue.MEIYO, true)
+	var mod: float = NPCDecisionEngine._compute_virtue_covert_modifier(ctx)
+	assert_eq(mod, 15.0, "Meiyo under existential threat should reduce reluctance")
+
+
+func test_virtue_chugi_no_lord_directive_heavy_penalty() -> void:
+	var ctx := _make_ctx_with_virtue(Enums.BushidoVirtue.CHUGI)
+	var mod: float = NPCDecisionEngine._compute_virtue_covert_modifier(ctx)
+	assert_eq(mod, -25.0, "Chugi without lord directive should block covert actions")
+
+
+func test_virtue_chugi_lord_assigned_enables() -> void:
+	var ctx := _make_ctx_with_virtue(Enums.BushidoVirtue.CHUGI, false, true)
+	var mod: float = NPCDecisionEngine._compute_virtue_covert_modifier(ctx)
+	assert_eq(mod, 10.0, "Chugi with lord directive should enable covert actions")
+
+
+func test_virtue_yu_no_threat_amplifies_reluctance() -> void:
+	var ctx := _make_ctx_with_virtue(Enums.BushidoVirtue.YU)
+	var mod: float = NPCDecisionEngine._compute_virtue_covert_modifier(ctx)
+	assert_eq(mod, -15.0, "Yu without threat should amplify reluctance")
+
+
+func test_virtue_yu_with_threat_reduces_reluctance() -> void:
+	var ctx := _make_ctx_with_virtue(Enums.BushidoVirtue.YU, true)
+	var mod: float = NPCDecisionEngine._compute_virtue_covert_modifier(ctx)
+	assert_eq(mod, 10.0, "Yu under existential threat should reduce reluctance")
+
+
+func test_virtue_seigyo_no_modifier() -> void:
+	_char.bushido_virtue = Enums.BushidoVirtue.NONE
+	_char.shourido_virtue = Enums.ShouridoVirtue.SEIGYO
+	var ctx := NPCDecisionEngine.build_context(_char, _world_state)
+	var mod: float = NPCDecisionEngine._compute_virtue_covert_modifier(ctx)
+	assert_eq(mod, 0.0, "Seigyo should have no extra modifier (handled by personality_lean)")
+
+
+func test_virtue_jin_no_modifier() -> void:
+	var ctx := _make_ctx_with_virtue(Enums.BushidoVirtue.JIN)
+	var mod: float = NPCDecisionEngine._compute_virtue_covert_modifier(ctx)
+	assert_eq(mod, 0.0, "Jin flat reluctance is in personality_lean, no conditional modifier")
+
+
+func test_existential_threat_starvation() -> void:
+	_char.bushido_virtue = Enums.BushidoVirtue.MEIYO
+	_world_state["is_lord"] = true
+	_world_state["resource_stockpiles"] = {"rice": 0}
+	var ps := NPCDataStructures.ProvinceStatus.new()
+	ps.province_id = 1
+	ps.starvation_stage = 2
+	_world_state["province_statuses"] = [ps]
+	var ctx := NPCDecisionEngine.build_context(_char, _world_state)
+	var has_threat: bool = NPCDecisionEngine._has_existential_threat(ctx)
+	assert_true(has_threat, "Starvation in own province is existential threat")
+
+
+func test_existential_threat_siege() -> void:
+	_world_state["besieged_settlement_health_pct"] = 0.5
+	var ctx := NPCDecisionEngine.build_context(_char, _world_state)
+	var has_threat: bool = NPCDecisionEngine._has_existential_threat(ctx)
+	assert_true(has_threat, "Being under siege is existential threat")
+
+
+func test_no_existential_threat_peacetime() -> void:
+	var ctx := NPCDecisionEngine.build_context(_char, _world_state)
+	var has_threat: bool = NPCDecisionEngine._has_existential_threat(ctx)
+	assert_false(has_threat, "Peacetime should have no existential threat")
+
+
+func test_virtue_modifier_applied_in_scoring() -> void:
+	_char.honor = 1.5
+	_char.clan = "Crane"
+	_char.school = "Doji Courtier"
+	_char.bushido_virtue = Enums.BushidoVirtue.CHUGI
+	_scoring_tables["objective_alignment"]["RAISE_DISPOSITION"]["SHADOW_TARGET"] = 70
+	_scoring_tables["action_skill_map"]["SHADOW_TARGET"] = {"primary": "Stealth", "secondary": "Agility"}
+	var ctx := NPCDecisionEngine.build_context(_char, _world_state)
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "SHADOW_TARGET"
+	option.target_npc_id = 2
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "RAISE_DISPOSITION"
+	NPCDecisionEngine.score_all([option], need, ctx, _scoring_tables)
+	assert_eq(option.virtue_covert_modifier, -25.0, "Chugi without lord directive should penalize covert")
+
+
+# -- Context list coverage: commerce and investigation actions -----------------
+
+func test_purchase_market_in_holdings_context() -> void:
+	var actions: Array[String] = NPCDecisionEngine._get_actions_for_context(
+		Enums.ContextFlag.AT_OWN_HOLDINGS)
+	assert_has(actions, "PURCHASE_MARKET", "PURCHASE_MARKET should be available at own holdings")
+
+
+func test_purchase_market_in_court_context() -> void:
+	var actions: Array[String] = NPCDecisionEngine._get_actions_for_context(
+		Enums.ContextFlag.AT_COURT)
+	assert_has(actions, "PURCHASE_MARKET", "PURCHASE_MARKET should be available at court")
+
+
+func test_purchase_market_in_visiting_context() -> void:
+	var actions: Array[String] = NPCDecisionEngine._get_actions_for_context(
+		Enums.ContextFlag.VISITING)
+	assert_has(actions, "PURCHASE_MARKET", "PURCHASE_MARKET should be available when visiting")
+
+
+func test_conduct_commerce_in_holdings_context() -> void:
+	var actions: Array[String] = NPCDecisionEngine._get_actions_for_context(
+		Enums.ContextFlag.AT_OWN_HOLDINGS)
+	assert_has(actions, "CONDUCT_COMMERCE", "CONDUCT_COMMERCE should be available at own holdings")
+
+
+func test_conduct_commerce_in_court_context() -> void:
+	var actions: Array[String] = NPCDecisionEngine._get_actions_for_context(
+		Enums.ContextFlag.AT_COURT)
+	assert_has(actions, "CONDUCT_COMMERCE", "CONDUCT_COMMERCE should be available at court")
+
+
+func test_conduct_commerce_in_visiting_context() -> void:
+	var actions: Array[String] = NPCDecisionEngine._get_actions_for_context(
+		Enums.ContextFlag.VISITING)
+	assert_has(actions, "CONDUCT_COMMERCE", "CONDUCT_COMMERCE should be available when visiting")
+
+
+func test_examine_crime_scene_in_holdings_context() -> void:
+	var actions: Array[String] = NPCDecisionEngine._get_actions_for_context(
+		Enums.ContextFlag.AT_OWN_HOLDINGS)
+	assert_has(actions, "EXAMINE_CRIME_SCENE",
+		"EXAMINE_CRIME_SCENE should be available at own holdings")
+
+
+func test_examine_crime_scene_in_visiting_context() -> void:
+	var actions: Array[String] = NPCDecisionEngine._get_actions_for_context(
+		Enums.ContextFlag.VISITING)
+	assert_has(actions, "EXAMINE_CRIME_SCENE",
+		"EXAMINE_CRIME_SCENE should be available when visiting")
+
+
+func test_purchase_market_generates_as_option() -> void:
+	_world_state["context_flag"] = Enums.ContextFlag.AT_OWN_HOLDINGS
+	var ctx := NPCDecisionEngine.build_context(_char, _world_state)
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "ACQUIRE_RESOURCE"
+	_scoring_tables["objective_alignment"]["ACQUIRE_RESOURCE"] = {
+		"PURCHASE_MARKET": 90, "DO_NOTHING": 0, "REST": 0,
+	}
+	var options := NPCDecisionEngine.generate_options(ctx, need)
+	var filtered := NPCDecisionEngine.apply_allowlist_filter(
+		options, need.need_type, _scoring_tables)
+	var action_ids: Array[String] = []
+	for o in filtered:
+		action_ids.append(o.action_id)
+	assert_has(action_ids, "PURCHASE_MARKET",
+		"PURCHASE_MARKET should survive allowlist filter for ACQUIRE_RESOURCE")
+
+
+func test_examine_crime_scene_generates_for_investigate_threat() -> void:
+	_world_state["context_flag"] = Enums.ContextFlag.AT_OWN_HOLDINGS
+	var ctx := NPCDecisionEngine.build_context(_char, _world_state)
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "INVESTIGATE_THREAT"
+	_scoring_tables["objective_alignment"]["INVESTIGATE_THREAT"] = {
+		"EXAMINE_CRIME_SCENE": 90, "DO_NOTHING": 0,
+	}
+	var options := NPCDecisionEngine.generate_options(ctx, need)
+	var filtered := NPCDecisionEngine.apply_allowlist_filter(
+		options, need.need_type, _scoring_tables)
+	var action_ids: Array[String] = []
+	for o in filtered:
+		action_ids.append(o.action_id)
+	assert_has(action_ids, "EXAMINE_CRIME_SCENE",
+		"EXAMINE_CRIME_SCENE should survive allowlist filter for INVESTIGATE_THREAT")
+
+
+# -- Phase 4b metadata population tests ----------------------------------------
+
+func _make_metadata_ctx() -> NPCDataStructures.ContextSnapshot:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.character_id = 1
+	ctx.clan = "Crab"
+	ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
+	ctx.court_settlement_id = 42
+	return ctx
+
+
+func _make_metadata_need() -> NPCDataStructures.ImmediateNeed:
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "REST"
+	need.priority = 5
+	return need
+
+
+func test_purify_metadata_populates_ptl() -> void:
+	var ctx := _make_metadata_ctx()
+	var ps := NPCDataStructures.ProvinceStatus.new()
+	ps.province_id = 7
+	ps.province_taint_level = 4.5
+	ctx.province_statuses = [ps]
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "PURIFY_TAINTED_GROUND"
+	option.target_province_id = 7
+	var need := _make_metadata_need()
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_almost_eq(option.metadata.get("ptl", 0.0), 4.5, 0.01,
+		"PURIFY_TAINTED_GROUND metadata should contain province PTL")
+
+
+func test_purify_metadata_zero_when_no_matching_province() -> void:
+	var ctx := _make_metadata_ctx()
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "PURIFY_TAINTED_GROUND"
+	option.target_province_id = 99
+	var need := _make_metadata_need()
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_almost_eq(option.metadata.get("ptl", -1.0), 0.0, 0.01,
+		"PURIFY_TAINTED_GROUND metadata ptl should default to 0.0")
+
+
+func test_scout_enemy_metadata_extracts_enemy_clan() -> void:
+	var ctx := _make_metadata_ctx()
+	ctx.clan = "Crab"
+	ctx.active_wars = [{"clan_a": "Crab", "clan_b": "Shadowlands"}]
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "SCOUT_ENEMY"
+	var need := _make_metadata_need()
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_ne(option.metadata.get("target_clan_id", ""), "",
+		"SCOUT_ENEMY metadata should extract enemy clan from active wars")
+
+
+func test_scout_enemy_metadata_empty_when_no_wars() -> void:
+	var ctx := _make_metadata_ctx()
+	ctx.active_wars = []
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "SCOUT_ENEMY"
+	var need := _make_metadata_need()
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_eq(option.metadata.get("target_clan_id", ""), "",
+		"SCOUT_ENEMY metadata target_clan_id should be empty with no wars")
+
+
+func test_drill_troops_metadata_uses_assigned_company() -> void:
+	var ctx := _make_metadata_ctx()
+	ctx.assigned_company_id = 5
+	ctx.commanded_unit_id = 10
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "DRILL_TROOPS"
+	var need := _make_metadata_need()
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_eq(option.metadata.get("target_company_id", -1), 5,
+		"DRILL_TROOPS should prefer assigned_company_id")
+
+
+func test_drill_troops_metadata_falls_back_to_commanded_unit() -> void:
+	var ctx := _make_metadata_ctx()
+	ctx.assigned_company_id = -1
+	ctx.commanded_unit_id = 10
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "DRILL_TROOPS"
+	var need := _make_metadata_need()
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_eq(option.metadata.get("target_company_id", -1), 10,
+		"DRILL_TROOPS should fall back to commanded_unit_id")
+
+
+func test_request_performance_metadata_uses_need_target() -> void:
+	var ctx := _make_metadata_ctx()
+	var need := _make_metadata_need()
+	need.target_npc_id = 42
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "REQUEST_PERFORMANCE"
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_eq(option.metadata.get("target_performer_id", -1), 42,
+		"REQUEST_PERFORMANCE should use need.target_npc_id as performer")
+
+
+func test_request_performance_metadata_defaults_without_target() -> void:
+	var ctx := _make_metadata_ctx()
+	var need := _make_metadata_need()
+	need.target_npc_id = -1
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "REQUEST_PERFORMANCE"
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_eq(option.metadata.get("target_performer_id", 0), -1,
+		"REQUEST_PERFORMANCE should default to -1 without target")
+
+
+func test_offer_favor_metadata_includes_court_settlement() -> void:
+	var ctx := _make_metadata_ctx()
+	ctx.court_settlement_id = 42
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "OFFER_FAVOR"
+	var need := _make_metadata_need()
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_eq(option.metadata.get("court_settlement_id", -1), 42,
+		"OFFER_FAVOR should get court_settlement_id for witness tracking")
+
+
+func test_province_status_carries_ptl() -> void:
+	var provinces: Array = []
+	var pd := ProvinceData.new()
+	pd.province_id = 3
+	pd.province_taint_level = 6.0
+	pd.clan = "Crab"
+	provinces.append(pd)
+	var statuses: Array = NPCDecisionEngine.build_province_statuses_from_data(provinces)
+	assert_eq(statuses.size(), 1)
+	var ps: NPCDataStructures.ProvinceStatus = statuses[0]
+	assert_almost_eq(ps.province_taint_level, 6.0, 0.01,
+		"ProvinceStatus should carry province_taint_level from ProvinceData")
+
+
+func test_expose_privately_metadata_picks_best_secret() -> void:
+	var ctx := _make_metadata_ctx()
+	ctx.characters_present = [2, 3] as Array[int]
+	var s1 := SecretData.new()
+	s1.secret_id = 10
+	s1.subject_id = 3
+	s1.severity = SecretData.Severity.TIER_4
+	var s2 := SecretData.new()
+	s2.secret_id = 11
+	s2.subject_id = 3
+	s2.severity = SecretData.Severity.TIER_2
+	ctx.known_secrets = [
+		{"_secret_ref": s1, "secret_id": 10, "subject_id": 3, "has_proof": false, "severity": SecretData.Severity.TIER_4},
+		{"_secret_ref": s2, "secret_id": 11, "subject_id": 3, "has_proof": true, "severity": SecretData.Severity.TIER_2},
+	]
+	var need := _make_metadata_need()
+	need.target_npc_id = 3
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "EXPOSE_SECRET_PRIVATELY"
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_eq(option.metadata.get("subject_id", -1), 3,
+		"Should select secret about need target")
+	assert_true(option.metadata.get("has_proof", false),
+		"Should pick most severe secret (TIER_2 beats TIER_4)")
+
+
+func test_expose_privately_metadata_skips_exposed_secrets() -> void:
+	var ctx := _make_metadata_ctx()
+	ctx.characters_present = [2, 3] as Array[int]
+	var s1 := SecretData.new()
+	s1.secret_id = 10
+	s1.subject_id = 3
+	s1.severity = SecretData.Severity.TIER_1
+	s1.exposed = true
+	var s2 := SecretData.new()
+	s2.secret_id = 11
+	s2.subject_id = 3
+	s2.severity = SecretData.Severity.TIER_4
+	ctx.known_secrets = [
+		{"_secret_ref": s1, "secret_id": 10, "subject_id": 3, "has_proof": false, "severity": SecretData.Severity.TIER_1},
+		{"_secret_ref": s2, "secret_id": 11, "subject_id": 3, "has_proof": false, "severity": SecretData.Severity.TIER_4},
+	]
+	var need := _make_metadata_need()
+	need.target_npc_id = 3
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "EXPOSE_SECRET_PRIVATELY"
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	var ref: Variant = option.metadata.get("secret_ref")
+	assert_eq(ref, s2, "Should skip already-exposed secret and pick the unexposed one")
+
+
+func test_expose_privately_metadata_skips_own_secrets() -> void:
+	var ctx := _make_metadata_ctx()
+	ctx.character_id = 1
+	ctx.characters_present = [2, 3] as Array[int]
+	var s1 := SecretData.new()
+	s1.secret_id = 10
+	s1.subject_id = 1
+	s1.severity = SecretData.Severity.TIER_1
+	ctx.known_secrets = [
+		{"_secret_ref": s1, "secret_id": 10, "subject_id": 1, "has_proof": false, "severity": SecretData.Severity.TIER_1},
+	]
+	var need := _make_metadata_need()
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "EXPOSE_SECRET_PRIVATELY"
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_null(option.metadata.get("secret_ref"),
+		"Should not pick a secret about the character themselves")
+
+
+func test_expose_privately_picks_recipient_from_present() -> void:
+	var ctx := _make_metadata_ctx()
+	ctx.character_id = 1
+	ctx.characters_present = [5, 7] as Array[int]
+	var s1 := SecretData.new()
+	s1.secret_id = 10
+	s1.subject_id = 7
+	s1.severity = SecretData.Severity.TIER_3
+	ctx.known_secrets = [
+		{"_secret_ref": s1, "secret_id": 10, "subject_id": 7, "has_proof": false, "severity": SecretData.Severity.TIER_3},
+	]
+	var need := _make_metadata_need()
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "EXPOSE_SECRET_PRIVATELY"
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_eq(option.target_npc_id, 5,
+		"Should pick a present character who is not the subject as recipient")
+
+
+func test_expose_publicly_metadata_picks_secret() -> void:
+	var ctx := _make_metadata_ctx()
+	var s1 := SecretData.new()
+	s1.secret_id = 20
+	s1.subject_id = 5
+	s1.severity = SecretData.Severity.TIER_2
+	ctx.known_secrets = [
+		{"_secret_ref": s1, "secret_id": 20, "subject_id": 5, "has_proof": true, "severity": SecretData.Severity.TIER_2},
+	]
+	var need := _make_metadata_need()
+	need.target_npc_id = 5
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "EXPOSE_SECRET_PUBLICLY"
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_eq(option.metadata.get("subject_id", -1), 5)
+	assert_true(option.metadata.get("has_proof", false))
+	assert_eq(option.metadata.get("secret_ref"), s1)
+
+
+func test_expose_metadata_empty_when_no_secrets() -> void:
+	var ctx := _make_metadata_ctx()
+	ctx.known_secrets = []
+	var need := _make_metadata_need()
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "EXPOSE_SECRET_PRIVATELY"
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_null(option.metadata.get("secret_ref"),
+		"Should have null secret_ref when NPC knows no secrets")
+	assert_eq(option.metadata.get("subject_id", -1), -1)
+
+
+func test_known_secrets_flows_through_build_context() -> void:
+	var secret_dicts: Array[Dictionary] = [
+		{"_secret_ref": SecretData.new(), "secret_id": 1, "subject_id": 2, "has_proof": false, "severity": 4},
+	]
+	_world_state["known_secrets"] = secret_dicts
+	var ctx := NPCDecisionEngine.build_context(_char, _world_state)
+	assert_eq(ctx.known_secrets.size(), 1, "known_secrets should flow from world_state")
+
+
+func test_known_secrets_defaults_empty() -> void:
+	_world_state.erase("known_secrets")
+	var ctx := NPCDecisionEngine.build_context(_char, _world_state)
+	assert_eq(ctx.known_secrets.size(), 0, "known_secrets should default to empty")
+
+
+func test_intimidate_metadata_populates_blackmail_when_secret_exists() -> void:
+	var ctx := _make_metadata_ctx()
+	var s1 := SecretData.new()
+	s1.secret_id = 30
+	s1.subject_id = 5
+	s1.severity = SecretData.Severity.TIER_2
+	ctx.known_secrets = [
+		{"_secret_ref": s1, "secret_id": 30, "subject_id": 5, "has_proof": false, "severity": SecretData.Severity.TIER_2},
+	]
+	var need := _make_metadata_need()
+	need.target_npc_id = 5
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "INTIMIDATE"
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_eq(option.metadata.get("secret_ref"), s1,
+		"Should populate secret_ref for blackmail branch")
+	assert_eq(option.metadata.get("secret_tier", -1), SecretData.Severity.TIER_2,
+		"Should set secret_tier from severity")
+	assert_false(option.metadata.get("by_letter", true),
+		"Should default to in-person intimidation")
+
+
+func test_intimidate_metadata_empty_when_no_secret_about_target() -> void:
+	var ctx := _make_metadata_ctx()
+	var s1 := SecretData.new()
+	s1.secret_id = 30
+	s1.subject_id = 99
+	s1.severity = SecretData.Severity.TIER_1
+	ctx.known_secrets = [
+		{"_secret_ref": s1, "secret_id": 30, "subject_id": 99, "has_proof": false, "severity": SecretData.Severity.TIER_1},
+	]
+	var need := _make_metadata_need()
+	need.target_npc_id = 5
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "INTIMIDATE"
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_null(option.metadata.get("secret_ref"),
+		"Should not populate blackmail when no secret about target")
+
+
+func test_intimidate_metadata_picks_most_severe_secret() -> void:
+	var ctx := _make_metadata_ctx()
+	var s1 := SecretData.new()
+	s1.secret_id = 30
+	s1.subject_id = 5
+	s1.severity = SecretData.Severity.TIER_4
+	var s2 := SecretData.new()
+	s2.secret_id = 31
+	s2.subject_id = 5
+	s2.severity = SecretData.Severity.TIER_1
+	ctx.known_secrets = [
+		{"_secret_ref": s1, "secret_id": 30, "subject_id": 5, "has_proof": false, "severity": SecretData.Severity.TIER_4},
+		{"_secret_ref": s2, "secret_id": 31, "subject_id": 5, "has_proof": false, "severity": SecretData.Severity.TIER_1},
+	]
+	var need := _make_metadata_need()
+	need.target_npc_id = 5
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "INTIMIDATE"
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_eq(option.metadata.get("secret_ref"), s2,
+		"Should pick TIER_1 (most severe) over TIER_4")
+	assert_eq(option.metadata.get("secret_tier", -1), SecretData.Severity.TIER_1)
+
+
+func test_intimidate_metadata_skips_exposed_secrets() -> void:
+	var ctx := _make_metadata_ctx()
+	var s1 := SecretData.new()
+	s1.secret_id = 30
+	s1.subject_id = 5
+	s1.severity = SecretData.Severity.TIER_1
+	s1.exposed = true
+	ctx.known_secrets = [
+		{"_secret_ref": s1, "secret_id": 30, "subject_id": 5, "has_proof": false, "severity": SecretData.Severity.TIER_1},
+	]
+	var need := _make_metadata_need()
+	need.target_npc_id = 5
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "INTIMIDATE"
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_null(option.metadata.get("secret_ref"),
+		"Should not use already-exposed secret for blackmail")
+
+
+func test_fabricate_secret_metadata_picks_severity_by_forgery() -> void:
+	var ctx := _make_metadata_ctx()
+	ctx.skill_ranks = {"Forgery": 5}
+	var need := _make_metadata_need()
+	need.target_npc_id = 7
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "FABRICATE_SECRET"
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_eq(option.metadata.get("severity"), SecretData.Severity.TIER_2,
+		"Forgery 5 should target TIER_2")
+	assert_eq(option.target_npc_id, 7,
+		"target_npc_id should flow from need")
+
+
+func test_fabricate_secret_tier_4_for_low_forgery() -> void:
+	var ctx := _make_metadata_ctx()
+	ctx.skill_ranks = {"Forgery": 1}
+	var need := _make_metadata_need()
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "FABRICATE_SECRET"
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_eq(option.metadata.get("severity"), SecretData.Severity.TIER_4,
+		"Forgery 1 should target TIER_4 (lowest difficulty)")
+
+
+func test_fabricate_secret_tier_3_for_mid_forgery() -> void:
+	var ctx := _make_metadata_ctx()
+	ctx.skill_ranks = {"Forgery": 3}
+	var need := _make_metadata_need()
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "FABRICATE_SECRET"
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_eq(option.metadata.get("severity"), SecretData.Severity.TIER_3,
+		"Forgery 3 should target TIER_3")
+
+
+func test_fabricate_secret_tier_1_for_master_forger() -> void:
+	var ctx := _make_metadata_ctx()
+	ctx.skill_ranks = {"Forgery": 7}
+	var need := _make_metadata_need()
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "FABRICATE_SECRET"
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_eq(option.metadata.get("severity"), SecretData.Severity.TIER_1,
+		"Forgery 7+ should target TIER_1 (most severe)")
+
+
+# -- ARRANGE_MARRIAGE metadata --------------------------------------------------
+
+func test_arrange_marriage_metadata_includes_favor_tier() -> void:
+	var ctx := _make_metadata_ctx()
+	ctx.held_leverage = [
+		{"debtor_id": 10, "target_lord_id": 10, "tier": 2},
+	]
+	var need := _make_metadata_need()
+	need.target_npc_id = 5
+	need.target_npc_id_secondary = 10
+	need.target_settlement_id = 20
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "ARRANGE_MARRIAGE"
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_eq(option.metadata.get("favor_tier", 0), 2,
+		"Should populate favor_tier from held leverage against target lord")
+	assert_eq(option.metadata.get("candidate_id", -1), 5)
+	assert_eq(option.metadata.get("target_lord_id", -1), 10)
+
+
+func test_arrange_marriage_no_favor_defaults_to_zero() -> void:
+	var ctx := _make_metadata_ctx()
+	ctx.held_leverage = []
+	var need := _make_metadata_need()
+	need.target_npc_id_secondary = 10
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "ARRANGE_MARRIAGE"
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_eq(option.metadata.get("favor_tier", -1), 0,
+		"Should default to 0 when no favor held against target lord")
+
+
+func test_arrange_marriage_military_objective_detected() -> void:
+	var ctx := _make_metadata_ctx()
+	var need := _make_metadata_need()
+	need.need_type = "SECURE_ALLIANCE"
+	need.target_npc_id_secondary = 10
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "ARRANGE_MARRIAGE"
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_true(option.metadata.get("has_military_objective", false),
+		"SECURE_ALLIANCE should set has_military_objective")
+
+
+func test_arrange_marriage_non_military_objective() -> void:
+	var ctx := _make_metadata_ctx()
+	var need := _make_metadata_need()
+	need.need_type = "RAISE_DISPOSITION"
+	need.target_npc_id_secondary = 10
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "ARRANGE_MARRIAGE"
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_false(option.metadata.get("has_military_objective", true),
+		"RAISE_DISPOSITION should not set has_military_objective")
+
+
+# -- PLAY_GAME metadata --------------------------------------------------------
+
+func test_play_game_picks_best_skill() -> void:
+	var ctx := _make_metadata_ctx()
+	ctx.skill_ranks = {"Games: Go": 2, "Games: Shogi": 5, "Games: Kemari": 1}
+	var need := _make_metadata_need()
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "PLAY_GAME"
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_eq(option.metadata.get("game_skill", ""), "Games: Shogi",
+		"Should pick game with highest skill rank")
+
+
+func test_play_game_defaults_to_go() -> void:
+	var ctx := _make_metadata_ctx()
+	ctx.skill_ranks = {}
+	var need := _make_metadata_need()
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "PLAY_GAME"
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_eq(option.metadata.get("game_skill", ""), "Games: Go",
+		"Should default to Games: Go when NPC has no game skills")
+
+
+# -- SEARCH_PERSON metadata ----------------------------------------------------
+
+func test_search_person_magistrate_authority_when_uphold_law() -> void:
+	var ctx := _make_metadata_ctx()
+	ctx.known_objectives = {"standing_need_type": "UPHOLD_LAW"}
+	var need := _make_metadata_need()
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "SEARCH_PERSON"
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_true(option.metadata.get("magistrate_authority", false),
+		"UPHOLD_LAW standing objective should grant magistrate authority")
+
+
+func test_search_person_no_authority_by_default() -> void:
+	var ctx := _make_metadata_ctx()
+	ctx.known_objectives = {}
+	var need := _make_metadata_need()
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "SEARCH_PERSON"
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_false(option.metadata.get("magistrate_authority", true),
+		"Should not have magistrate authority without UPHOLD_LAW objective")
+
+
+# =============================================================================
+# ISSUE_DUEL_CHALLENGE context wiring (s14 Category 13)
+# =============================================================================
+
+
+func test_duel_challenge_in_at_own_holdings() -> void:
+	var actions: Array[String] = NPCDecisionEngine._get_actions_for_context(
+		Enums.ContextFlag.AT_OWN_HOLDINGS
+	)
+	assert_true("ISSUE_DUEL_CHALLENGE" in actions,
+		"ISSUE_DUEL_CHALLENGE available at own holdings per s14 Category 13")
+
+
+func test_duel_challenge_in_at_court() -> void:
+	var actions: Array[String] = NPCDecisionEngine._get_actions_for_context(
+		Enums.ContextFlag.AT_COURT
+	)
+	assert_true("ISSUE_DUEL_CHALLENGE" in actions,
+		"ISSUE_DUEL_CHALLENGE available at court per s14 Category 13")
+
+
+func test_duel_challenge_in_visiting() -> void:
+	var actions: Array[String] = NPCDecisionEngine._get_actions_for_context(
+		Enums.ContextFlag.VISITING
+	)
+	assert_true("ISSUE_DUEL_CHALLENGE" in actions,
+		"ISSUE_DUEL_CHALLENGE available when visiting per s14 Category 13")
+
+
+func test_duel_challenge_not_in_traveling() -> void:
+	var actions: Array[String] = NPCDecisionEngine._get_actions_for_context(
+		Enums.ContextFlag.TRAVELING
+	)
+	assert_false("ISSUE_DUEL_CHALLENGE" in actions,
+		"ISSUE_DUEL_CHALLENGE not available while traveling")
+
+
+func test_seek_pretext_not_in_context_lists() -> void:
+	var all_flags: Array = [
+		Enums.ContextFlag.AT_OWN_HOLDINGS, Enums.ContextFlag.AT_COURT,
+		Enums.ContextFlag.VISITING, Enums.ContextFlag.TRAVELING,
+		Enums.ContextFlag.ON_CAMPAIGN, Enums.ContextFlag.UNDER_SIEGE,
+		Enums.ContextFlag.IN_EXILE, Enums.ContextFlag.AT_TEMPLE,
+		Enums.ContextFlag.AT_DOJO, Enums.ContextFlag.AT_WALL_TOWER,
+	]
+	for flag: Enums.ContextFlag in all_flags:
+		var actions: Array[String] = NPCDecisionEngine._get_actions_for_context(flag)
+		assert_false("SEEK_PRETEXT" in actions,
+			"SEEK_PRETEXT is a NeedType, not an ActionID — should not be in any context list")
+
+
+# =============================================================================
+# PUBLIC_ATONEMENT metadata population (s4.6)
+# =============================================================================
+
+
+func test_pick_best_offense_selects_highest_tier() -> void:
+	var ctx := _make_metadata_ctx()
+	ctx.self_offenses = [
+		{"offense_key": "topic_5", "offense_tier": 3},
+		{"offense_key": "topic_2", "offense_tier": 1},
+		{"offense_key": "topic_8", "offense_tier": 4},
+	]
+	var best: Dictionary = NPCDecisionEngine._pick_best_offense(ctx)
+	assert_eq(best.get("offense_key", ""), "topic_2")
+	assert_eq(best.get("offense_tier", 0), 1)
+
+
+func test_pick_best_offense_empty_returns_defaults() -> void:
+	var ctx := _make_metadata_ctx()
+	ctx.self_offenses = []
+	var best: Dictionary = NPCDecisionEngine._pick_best_offense(ctx)
+	assert_eq(best.get("offense_key", "x"), "")
+	assert_eq(best.get("offense_tier", 0), 3)
+
+
+func test_public_atonement_metadata_populated() -> void:
+	var ctx := _make_metadata_ctx()
+	ctx.self_offenses = [
+		{"offense_key": "topic_10", "offense_tier": 2},
+	]
+	var need := _make_metadata_need()
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "PUBLIC_ATONEMENT"
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_eq(option.metadata.get("offense_key", ""), "topic_10")
+	assert_eq(option.metadata.get("offense_tier", 0), 2)
+
+
+# =============================================================================
+# Context list reachability (DEMAND_TRIBUTE, REQUEST_ALLIED_AID)
+# =============================================================================
+
+
+func test_demand_tribute_in_at_own_holdings() -> void:
+	var actions: Array[String] = NPCDecisionEngine._get_actions_for_context(
+		Enums.ContextFlag.AT_OWN_HOLDINGS
+	)
+	assert_true("DEMAND_TRIBUTE" in actions,
+		"DEMAND_TRIBUTE should be reachable from AT_OWN_HOLDINGS")
+
+
+func test_request_allied_aid_in_at_own_holdings() -> void:
+	var actions: Array[String] = NPCDecisionEngine._get_actions_for_context(
+		Enums.ContextFlag.AT_OWN_HOLDINGS
+	)
+	assert_true("REQUEST_ALLIED_AID" in actions,
+		"REQUEST_ALLIED_AID should be reachable from AT_OWN_HOLDINGS")
+
+
+func test_request_allied_aid_in_at_court() -> void:
+	var actions: Array[String] = NPCDecisionEngine._get_actions_for_context(
+		Enums.ContextFlag.AT_COURT
+	)
+	assert_true("REQUEST_ALLIED_AID" in actions,
+		"REQUEST_ALLIED_AID should be reachable from AT_COURT")
+
+
+func test_demand_tribute_is_lord_only() -> void:
+	assert_true("DEMAND_TRIBUTE" in NPCDecisionEngine.LORD_ONLY_ACTIONS,
+		"DEMAND_TRIBUTE should be lord-only")
+
+
+func test_request_allied_aid_is_lord_only() -> void:
+	assert_true("REQUEST_ALLIED_AID" in NPCDecisionEngine.LORD_ONLY_ACTIONS,
+		"REQUEST_ALLIED_AID should be lord-only")
+
+
+# =============================================================================
+# ISSUE_DUEL_CHALLENGE metadata
+# =============================================================================
+
+
+func test_duel_metadata_eliminate_sets_to_death() -> void:
+	var ctx := _make_metadata_ctx()
+	var need := _make_metadata_need()
+	need.need_type = "ELIMINATE_CHARACTER"
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "ISSUE_DUEL_CHALLENGE"
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_true(option.metadata.get("to_death", false))
+	assert_true(option.metadata.get("is_sanctioned", false))
+
+
+func test_duel_metadata_non_eliminate_not_to_death() -> void:
+	var ctx := _make_metadata_ctx()
+	var need := _make_metadata_need()
+	need.need_type = "CHALLENGE_TO_DUEL"
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "ISSUE_DUEL_CHALLENGE"
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_false(option.metadata.get("to_death", true))
+
+
+# =============================================================================
+# CONDUCT_SORTIE metadata
+# =============================================================================
+
+
+func test_sortie_metadata_from_wall_status() -> void:
+	var ctx := _make_metadata_ctx()
+	var ws := NPCDataStructures.WallStatus.new()
+	ws.province_id = 10
+	ws.ss = 7
+	ctx.wall_statuses = [ws]
+	var need := _make_metadata_need()
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "CONDUCT_SORTIE"
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_eq(option.metadata.get("ss", -1), 7)
+
+
+func test_sortie_metadata_no_wall_status() -> void:
+	var ctx := _make_metadata_ctx()
+	ctx.wall_statuses = []
+	var need := _make_metadata_need()
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "CONDUCT_SORTIE"
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_eq(option.metadata.get("ss", 0), -1)
+
+
+# =============================================================================
+# TREAT_WOUND metadata
+# =============================================================================
+
+
+func test_treat_wound_raises_by_medicine_rank() -> void:
+	var ctx := _make_metadata_ctx()
+	ctx.skill_ranks = {"Medicine": 5}
+	var need := _make_metadata_need()
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "TREAT_WOUND"
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_eq(option.metadata.get("raises", -1), 2)
+
+
+func test_treat_wound_no_medicine_zero_raises() -> void:
+	var ctx := _make_metadata_ctx()
+	ctx.skill_ranks = {}
+	var need := _make_metadata_need()
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "TREAT_WOUND"
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_eq(option.metadata.get("raises", -1), 0)
+
+
+func test_treat_wound_high_medicine_three_raises() -> void:
+	var ctx := _make_metadata_ctx()
+	ctx.skill_ranks = {"Medicine": 7}
+	var need := _make_metadata_need()
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "TREAT_WOUND"
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_eq(option.metadata.get("raises", -1), 3)
+
+
+func test_pick_medicine_raises_tiers() -> void:
+	var ctx := _make_metadata_ctx()
+	ctx.skill_ranks = {"Medicine": 0}
+	assert_eq(NPCDecisionEngine._pick_medicine_raises(ctx), 0)
+	ctx.skill_ranks = {"Medicine": 2}
+	assert_eq(NPCDecisionEngine._pick_medicine_raises(ctx), 0)
+	ctx.skill_ranks = {"Medicine": 3}
+	assert_eq(NPCDecisionEngine._pick_medicine_raises(ctx), 1)
+	ctx.skill_ranks = {"Medicine": 4}
+	assert_eq(NPCDecisionEngine._pick_medicine_raises(ctx), 1)
+	ctx.skill_ranks = {"Medicine": 5}
+	assert_eq(NPCDecisionEngine._pick_medicine_raises(ctx), 2)
+	ctx.skill_ranks = {"Medicine": 6}
+	assert_eq(NPCDecisionEngine._pick_medicine_raises(ctx), 2)
+	ctx.skill_ranks = {"Medicine": 7}
+	assert_eq(NPCDecisionEngine._pick_medicine_raises(ctx), 3)
+	ctx.skill_ranks = {"Medicine": 10}
+	assert_eq(NPCDecisionEngine._pick_medicine_raises(ctx), 3)
+
+
+# =============================================================================
+# FORGE_IMPERSONATION_LETTER / FORGE_ORDER context and metadata
+# =============================================================================
+
+
+func test_forge_impersonation_letter_in_all_contexts() -> void:
+	for flag: Enums.ContextFlag in [
+		Enums.ContextFlag.AT_OWN_HOLDINGS,
+		Enums.ContextFlag.AT_COURT,
+		Enums.ContextFlag.VISITING,
+	]:
+		var actions: Array[String] = NPCDecisionEngine._get_actions_for_context(flag)
+		assert_true("FORGE_IMPERSONATION_LETTER" in actions,
+			"FORGE_IMPERSONATION_LETTER should be in %s" % Enums.ContextFlag.keys()[flag])
+
+
+func test_forge_order_in_all_contexts() -> void:
+	for flag: Enums.ContextFlag in [
+		Enums.ContextFlag.AT_OWN_HOLDINGS,
+		Enums.ContextFlag.AT_COURT,
+		Enums.ContextFlag.VISITING,
+	]:
+		var actions: Array[String] = NPCDecisionEngine._get_actions_for_context(flag)
+		assert_true("FORGE_ORDER" in actions,
+			"FORGE_ORDER should be in %s" % Enums.ContextFlag.keys()[flag])
+
+
+func test_forge_metadata_low_forgery() -> void:
+	var ctx := _make_metadata_ctx()
+	ctx.skill_ranks = {"Forgery": 2}
+	ctx.lord_rank = Enums.LordRank.PROVINCIAL_DAIMYO
+	ctx.known_topics = [77, 88]
+	var need := _make_metadata_need()
+	need.target_npc_id = 42
+	need.target_npc_id_secondary = 55
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "FORGE_IMPERSONATION_LETTER"
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_eq(option.metadata.get("authority_level", ""), "minor")
+	assert_eq(option.metadata.get("target_npc_id", -1), 42)
+	assert_eq(option.metadata.get("impersonated_id", -1), 42)
+	assert_eq(option.metadata.get("recipient_id", -1), 55)
+	assert_eq(option.metadata.get("topic_id", -1), 77)
+
+
+func test_forge_metadata_mid_forgery() -> void:
+	var ctx := _make_metadata_ctx()
+	ctx.skill_ranks = {"Forgery": 5}
+	ctx.lord_rank = Enums.LordRank.CLAN_CHAMPION
+	var need := _make_metadata_need()
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "FORGE_ORDER"
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_eq(option.metadata.get("authority_level", ""), "moderate")
+
+
+func test_forge_metadata_high_forgery() -> void:
+	var ctx := _make_metadata_ctx()
+	ctx.skill_ranks = {"Forgery": 7}
+	ctx.lord_rank = Enums.LordRank.IMPERIAL
+	var need := _make_metadata_need()
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "FORGE_ORDER"
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_eq(option.metadata.get("authority_level", ""), "major")
+
+
+func test_forge_order_suppress_investigation_maps_travel() -> void:
+	var ctx := _make_metadata_ctx()
+	ctx.skill_ranks = {"Forgery": 3}
+	var need := _make_metadata_need()
+	need.need_type = "SUPPRESS_INVESTIGATION"
+	need.target_settlement_id = 42
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "FORGE_ORDER"
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_eq(option.metadata.get("order_need_type", ""), "TRAVEL_TO")
+	assert_eq(option.metadata.get("order_target_settlement_id", -1), 42)
+
+
+func test_forge_order_acquire_leverage_maps_attend_court() -> void:
+	var ctx := _make_metadata_ctx()
+	ctx.skill_ranks = {"Forgery": 5}
+	var need := _make_metadata_need()
+	need.need_type = "ACQUIRE_LEVERAGE"
+	need.target_settlement_id = 99
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "FORGE_ORDER"
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_eq(option.metadata.get("order_need_type", ""), "ATTEND_COURT")
+	assert_eq(option.metadata.get("order_target_settlement_id", -1), 99)
+
+
+func test_forge_order_damage_relationship_maps_patrol() -> void:
+	var ctx := _make_metadata_ctx()
+	ctx.skill_ranks = {"Forgery": 4}
+	var need := _make_metadata_need()
+	need.need_type = "DAMAGE_RELATIONSHIP"
+	need.target_npc_id = 50
+	need.target_province_id = 7
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "FORGE_ORDER"
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_eq(option.metadata.get("order_need_type", ""), "PATROL_PROVINCE")
+	assert_eq(option.metadata.get("order_target_province_id", -1), 7)
+
+
+func test_forge_order_unknown_need_defaults_travel() -> void:
+	var ctx := _make_metadata_ctx()
+	ctx.skill_ranks = {"Forgery": 3}
+	var need := _make_metadata_need()
+	need.need_type = "RAISE_ARMY"
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "FORGE_ORDER"
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_eq(option.metadata.get("order_need_type", ""), "TRAVEL_TO")
+
+
+func test_forge_personality_blocks() -> void:
+	var filter_path := "res://systems/npc_engine/data/tables/personality_filter.json"
+	if not FileAccess.file_exists(filter_path):
+		pass_test("Personality filter not loadable in test env")
+		return
+	var file := FileAccess.open(filter_path, FileAccess.READ)
+	var data: Dictionary = JSON.parse_string(file.get_as_text())
+	file.close()
+	for virtue_name: String in ["JIN", "REI", "GI", "MAKOTO"]:
+		var blocked: Array = data["bushido"][virtue_name]["always_blocked"]
+		assert_true("FORGE_IMPERSONATION_LETTER" in blocked,
+			"%s should block FORGE_IMPERSONATION_LETTER" % virtue_name)
+		assert_true("FORGE_ORDER" in blocked,
+			"%s should block FORGE_ORDER" % virtue_name)
+
+
+func test_forge_objective_alignment_entries() -> void:
+	var align_path := "res://systems/npc_engine/data/tables/objective_alignment.json"
+	if not FileAccess.file_exists(align_path):
+		pass_test("Objective alignment not loadable in test env")
+		return
+	var file := FileAccess.open(align_path, FileAccess.READ)
+	var data: Dictionary = JSON.parse_string(file.get_as_text())
+	file.close()
+	assert_true(data["DAMAGE_RELATIONSHIP"].has("FORGE_IMPERSONATION_LETTER"))
+	assert_true(data["DAMAGE_RELATIONSHIP"].has("FORGE_ORDER"))
+	assert_true(data["ACQUIRE_LEVERAGE"].has("FORGE_IMPERSONATION_LETTER"))
+	assert_true(data["ACQUIRE_LEVERAGE"].has("FORGE_ORDER"))
+	assert_true(data["SUPPRESS_INVESTIGATION"].has("FORGE_IMPERSONATION_LETTER"))
+	assert_true(data["SUPPRESS_INVESTIGATION"].has("FORGE_ORDER"))

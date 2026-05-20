@@ -39,16 +39,20 @@ static func apply(
 
 	_apply_disposition(effects, actor, target_id, applied)
 	_apply_recipient_effects(effects, actor, target_id, characters, applied)
+	_apply_koku_cost(effects, actor)
 	_apply_witness_effects(effects, actor, characters, applied)
 	_apply_witness_gain(effects, actor, characters, applied)
-	_apply_gossip_effects(effects, target_id, characters, applied)
+	_apply_gossip_effects(effects, actor_id, target_id, characters, applied,
+		result.get("season", 0))
 	_apply_target_witness_effects(effects, target_id, characters, applied)
 	_apply_disposition_ripple(effects, actor, target_id, characters, applied)
 	_apply_honor(effects, actor, applied)
 	_apply_glory(effects, actor, applied)
+	_apply_winner_glory(effects, characters, applied)
 	_apply_infamy(effects, actor, applied)
 	_apply_province_effects(effects, result, provinces, applied, settlements)
 	_apply_info_events(effects, result, applied)
+	_apply_false_info(effects, actor, target_id, characters, result.get("season", 0))
 	result["observable_effect"] = _detect_observable_effect(result, effects, applied)
 	_log_action(result, action_log)
 	applied["logged"] = true
@@ -118,10 +122,10 @@ static func _apply_recipient_effects(
 			"delta": disp_change,
 		})
 
-	var modifiers: Array = effects.get("recipient_modifiers", [])
+	var modifiers: Array[Dictionary] = effects.get("recipient_modifiers", [])
 	if not modifiers.is_empty():
-		var bucket: Array = recipient.temporary_modifiers.get(actor.character_id, [])
-		for mod in modifiers:
+		var bucket: Array[Dictionary] = recipient.temporary_modifiers.get(actor.character_id, [])
+		for mod: Dictionary in modifiers:
 			bucket.append(mod)
 		recipient.temporary_modifiers[actor.character_id] = bucket
 
@@ -132,6 +136,14 @@ static func _remove_item_by_id(actor: L5RCharacterData, item_id: int) -> void:
 		if item.get("item_id", -1) == item_id:
 			actor.items.remove_at(i)
 			return
+
+
+# -- Koku cost deduction -------------------------------------------------------
+
+static func _apply_koku_cost(effects: Dictionary, actor: L5RCharacterData) -> void:
+	var cost: float = effects.get("koku_cost", 0.0)
+	if cost > 0.0:
+		actor.koku = maxf(0.0, actor.koku - cost)
 
 
 # -- Witness disposition loss ---------------------------------------------------
@@ -145,11 +157,11 @@ static func _apply_witness_effects(
 	var disp_loss: int = effects.get("witness_disposition_loss", 0)
 	if disp_loss == 0:
 		return
-	var witness_ids: Array = effects.get("witnesses", [])
+	var witness_ids: Array[int] = effects.get("witnesses", [])
 	if witness_ids.is_empty():
 		return
 
-	for wid in witness_ids:
+	for wid: int in witness_ids:
 		var witness: L5RCharacterData = characters.get(wid)
 		if witness == null or witness.character_id == actor.character_id:
 			continue
@@ -176,11 +188,11 @@ static func _apply_witness_gain(
 	var disp_gain: int = effects.get("witness_disposition_gain", 0)
 	if disp_gain == 0:
 		return
-	var witness_ids: Array = effects.get("witnesses", [])
+	var witness_ids: Array[int] = effects.get("witnesses", [])
 	if witness_ids.is_empty():
 		return
 
-	for wid in witness_ids:
+	for wid: int in witness_ids:
 		var witness: L5RCharacterData = characters.get(wid)
 		if witness == null or witness.character_id == actor.character_id:
 			continue
@@ -200,9 +212,11 @@ static func _apply_witness_gain(
 
 static func _apply_gossip_effects(
 	effects: Dictionary,
+	gossiper_id: int,
 	listener_id: int,
 	characters: Dictionary,
 	applied: Dictionary,
+	season: int = 0,
 ) -> void:
 	var subject_id: int = effects.get("gossip_subject_id", -1)
 	var disp_change: int = effects.get("gossip_subject_disposition", 0)
@@ -221,6 +235,14 @@ static func _apply_gossip_effects(
 		"new": new_val,
 		"delta": disp_change,
 	})
+	var concealed: bool = effects.get("source_concealed", false)
+	var source_id: int = -1 if concealed else gossiper_id
+	InformationSystem.add_knowledge(listener, InformationSystem.make_entry(
+		Enums.KnowledgeSource.DAILY_CONVERSATION,
+		"gossip_received",
+		{"subject_id": subject_id, "gossiper_id": source_id},
+		season,
+	))
 
 
 # -- Per-witness disposition toward target (PUBLIC_INSULT) ---------------------
@@ -234,10 +256,10 @@ static func _apply_target_witness_effects(
 	var disp_change: int = effects.get("target_witness_disposition", 0)
 	if disp_change == 0 or target_id < 0:
 		return
-	var witness_ids: Array = effects.get("witnesses", [])
+	var witness_ids: Array[int] = effects.get("witnesses", [])
 	if witness_ids.is_empty():
 		return
-	for wid in witness_ids:
+	for wid: int in witness_ids:
 		var witness: L5RCharacterData = characters.get(wid)
 		if witness == null or witness.character_id == target_id:
 			continue
@@ -278,7 +300,7 @@ static func _apply_disposition_ripple(
 	if target_clan.is_empty():
 		return
 
-	for cid in characters:
+	for cid: int in characters:
 		if cid == actor.character_id or cid == target_id:
 			continue
 		var c: L5RCharacterData = characters[cid]
@@ -345,6 +367,26 @@ static func _apply_glory(
 		"character_id": actor.character_id,
 		"delta": actual,
 		"new_glory": actor.glory,
+	})
+
+
+static func _apply_winner_glory(
+	effects: Dictionary,
+	characters: Dictionary,
+	applied: Dictionary,
+) -> void:
+	var winner_glory: float = effects.get("winner_glory_change", 0.0)
+	if absf(winner_glory) < 0.001:
+		return
+	var winner_id: int = effects.get("winner_glory_recipient_id", -1)
+	var winner: L5RCharacterData = characters.get(winner_id)
+	if winner == null:
+		return
+	var actual: float = HonorGlorySystem.apply_glory_change(winner, winner_glory)
+	applied["glory_changes"].append({
+		"character_id": winner.character_id,
+		"delta": actual,
+		"new_glory": winner.glory,
 	})
 
 
@@ -442,13 +484,81 @@ static func _apply_info_events(
 	})
 
 
+# -- False Info on Critical Failure (s15.4) ------------------------------------
+
+static func _apply_false_info(
+	effects: Dictionary,
+	actor: L5RCharacterData,
+	target_id: int,
+	characters: Dictionary,
+	season: int,
+) -> void:
+	var false_info: Array = effects.get("false_info", [])
+	if false_info.is_empty() or target_id < 0:
+		return
+	var target: L5RCharacterData = characters.get(target_id)
+	if target == null:
+		return
+	for info_type: String in false_info:
+		var data: Dictionary = _generate_false_data(info_type, actor, target)
+		data["target_character_id"] = target_id
+		InformationSystem.update_intelligence_knowledge(actor, InformationSystem.make_entry(
+			Enums.KnowledgeSource.INTELLIGENCE,
+			info_type,
+			data,
+			season,
+		))
+
+
+static func _generate_false_data(
+	info_type: String,
+	actor: L5RCharacterData,
+	target: L5RCharacterData,
+) -> Dictionary:
+	match info_type:
+		"personality_insight":
+			var actual: int = target.bushido_virtue
+			var false_virtue: int = _pick_different_virtue(actual)
+			return {"bushido_virtue": false_virtue, "is_false": true}
+		"disposition_toward":
+			var actual_disp: int = target.disposition_values.get(actor.character_id, 0)
+			var inverted: int = clampi(-actual_disp, -100, 100)
+			if inverted == 0:
+				inverted = 15
+			return {"toward_id": actor.character_id, "disposition": inverted, "is_false": true}
+		"topic_attitude", "topic_position":
+			if target.topic_positions.is_empty():
+				return {"is_false": true}
+			var tid: int = target.topic_positions.keys()[0]
+			var actual_pos: float = target.topic_positions[tid]
+			return {"topic_id": tid, "position": -actual_pos, "is_false": true}
+		"court_objective":
+			return {"need_type": "unknown", "is_false": true}
+	return {"is_false": true}
+
+
+const _BUSHIDO_VALUES: Array[int] = [
+	Enums.BushidoVirtue.JIN, Enums.BushidoVirtue.YU,
+	Enums.BushidoVirtue.REI, Enums.BushidoVirtue.CHUGI,
+	Enums.BushidoVirtue.GI, Enums.BushidoVirtue.MEIYO,
+	Enums.BushidoVirtue.MAKOTO,
+]
+
+
+static func _pick_different_virtue(actual: int) -> int:
+	for v: int in _BUSHIDO_VALUES:
+		if v != actual:
+			return v
+	return Enums.BushidoVirtue.JIN
+
+
 # -- Action Log ----------------------------------------------------------------
 
 static func _log_action(
 	result: Dictionary,
 	action_log: Array[Dictionary],
 ) -> void:
-	action_log.append({
+	var entry: Dictionary = {
 		"character_id": result.get("character_id", -1),
 		"action_id": result.get("action_id", ""),
 		"target_npc_id": result.get("target_npc_id", -1),
@@ -461,7 +571,12 @@ static func _log_action(
 		"roll_result": result.get("roll_total", 0),
 		"tn": result.get("tn", 0),
 		"observable_effect": result.get("observable_effect", false),
-	})
+	}
+	var effects: Dictionary = result.get("effects", {})
+	if effects.has("source_concealed"):
+		entry["source_concealed"] = effects["source_concealed"]
+		entry["concealment_depth"] = effects.get("concealment_depth", 0)
+	action_log.append(entry)
 
 
 # -- Observable Effect Detection -----------------------------------------------
@@ -486,14 +601,14 @@ static func _detect_observable_effect(
 	if effects.get("info_gained", false):
 		return true
 
-	var disp_changes: Array = applied.get("disposition_changes", [])
+	var disp_changes: Array[Dictionary] = applied.get("disposition_changes", [])
 	for change: Dictionary in disp_changes:
 		var old_tier: int = _get_disposition_tier(change.get("old", 0))
 		var new_tier: int = _get_disposition_tier(change.get("new", 0))
 		if old_tier != new_tier:
 			return true
 
-	var province_updates: Array = applied.get("province_updates", [])
+	var province_updates: Array[Dictionary] = applied.get("province_updates", [])
 	if province_updates.size() > 0:
 		return true
 

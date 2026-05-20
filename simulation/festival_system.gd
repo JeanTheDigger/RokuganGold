@@ -89,13 +89,13 @@ static func get_active_festivals(ic_day: int) -> Array[Dictionary]:
 	var month: int = get_month(ic_day)
 	var day: int = get_day_of_month(ic_day)
 	var active: Array[Dictionary] = []
-	for fest in CANONICAL_FESTIVALS:
+	for fest: Dictionary in CANONICAL_FESTIVALS:
 		if fest["month"] == month and fest["day"] == day:
 			active.append(fest)
 	return active
 
 static func is_ceasefire_day(ic_day: int) -> bool:
-	for fest in get_active_festivals(ic_day):
+	for fest: Dictionary in get_active_festivals(ic_day):
 		if "ceasefire" in fest.get("effects", []):
 			return true
 	return false
@@ -113,22 +113,22 @@ static func is_marriage_bonus_day(ic_day: int) -> bool:
 
 static func get_festival_effects(ic_day: int) -> Array[String]:
 	var effects: Array[String] = []
-	for fest in get_active_festivals(ic_day):
-		for e in fest.get("effects", []):
+	for fest: Dictionary in get_active_festivals(ic_day):
+		for e: String in fest.get("effects", []):
 			if not effects.has(e):
 				effects.append(e)
 	return effects
 
 static func get_honor_gain_festivals(ic_day: int) -> float:
 	var gain: float = 0.0
-	for fest in get_active_festivals(ic_day):
+	for fest: Dictionary in get_active_festivals(ic_day):
 		if "honor_gain" in fest.get("effects", []):
 			gain += 0.1
 	return gain
 
 static func get_glory_gain_festivals(ic_day: int) -> float:
 	var gain: float = 0.0
-	for fest in get_active_festivals(ic_day):
+	for fest: Dictionary in get_active_festivals(ic_day):
 		if "martial_glory" in fest.get("effects", []) or "poetry_exchange" in fest.get("effects", []):
 			gain += 0.1
 	return gain
@@ -198,7 +198,7 @@ static func resolve_championship(
 		return {}
 
 	var championship_type: ChampionshipType = candidates[0].get("championship", ChampionshipType.TOPAZ) as ChampionshipType
-	var stages: Array = CHAMPIONSHIP_STAGES.get(championship_type, [])
+	var stages: Array[Dictionary] = CHAMPIONSHIP_STAGES.get(championship_type, [])
 	if stages.is_empty():
 		return {}
 
@@ -206,9 +206,9 @@ static func resolve_championship(
 	var best_total: int = -1
 	var best_honor: float = 0.0
 
-	for candidate in candidates:
+	for candidate: Dictionary in candidates:
 		var total: int = 0
-		for stage in stages:
+		for stage: Dictionary in stages:
 			var skill_rank: int = candidate.get("skill_ranks", {}).get(stage["skill"], 0)
 			var trait_val: int = candidate.get("traits", {}).get(stage["trait"], 2)
 			var roll_k: int = mini(skill_rank + trait_val, 10)
@@ -407,7 +407,7 @@ static var _canonical_days_cache: Array[int] = []
 
 static func _get_canonical_days() -> Array[int]:
 	if _canonical_days_cache.is_empty():
-		for fest in CANONICAL_FESTIVALS:
+		for fest: Dictionary in CANONICAL_FESTIVALS:
 			var day_of_year: int = (fest["month"] - 1) * 30 + (fest["day"] - 1)
 			if day_of_year not in _canonical_days_cache:
 				_canonical_days_cache.append(day_of_year)
@@ -421,7 +421,7 @@ static func generate_local_festivals(
 	rng: Object,
 	themes: Array[String] = [],
 ) -> Array[Dictionary]:
-	var count_range: Array = SETTLEMENT_FESTIVAL_COUNT.get(settlement_type, [1, 2])
+	var count_range: Array[int] = SETTLEMENT_FESTIVAL_COUNT.get(settlement_type, [1, 2])
 	var min_count: int = count_range[0]
 	var max_count: int = count_range[1]
 	var count: int = min_count
@@ -464,7 +464,7 @@ static func generate_local_festivals(
 
 
 static func _pick_theme_word(category: String, rng: Object) -> String:
-	var words: Array = THEME_WORDS.get(category, [])
+	var words: Array[String] = THEME_WORDS.get(category, [])
 	if words.is_empty():
 		return category.capitalize()
 	if rng.has_method("randi_range"):
@@ -480,7 +480,7 @@ static func _pick_festival_day(index: int, total: int, used: Array[int], rng: Ob
 
 	var canonical: Array[int] = _get_canonical_days()
 	var blocked: Array[int] = used.duplicate()
-	for cd in canonical:
+	for cd: int in canonical:
 		if cd not in blocked:
 			blocked.append(cd)
 

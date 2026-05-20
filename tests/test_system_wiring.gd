@@ -2736,3 +2736,433 @@ func test_wall_tower_context_garrison_below_minimum_at_zero() -> void:
 	assert_false(wstat.garrison_above_minimum)
 
 
+# =============================================================================
+# Table 2.3 — Using a Low Skill (rank-scaled honor cost)
+# =============================================================================
+
+
+func test_low_skill_honor_cost_rank_0() -> void:
+	var c := L5RCharacterData.new()
+	c.honor = 0.5
+	c.school = "Hida Bushi"
+	c.clan = "Crab"
+	var cost: float = CrimeSystem.get_low_skill_honor_cost(c)
+	assert_eq(cost, 0.0, "Rank 0 = no honor cost")
+
+
+func test_low_skill_honor_cost_rank_1_2() -> void:
+	var c := L5RCharacterData.new()
+	c.honor = 2.0
+	c.school = "Hida Bushi"
+	c.clan = "Crab"
+	var cost: float = CrimeSystem.get_low_skill_honor_cost(c)
+	assert_almost_eq(cost, -0.1, 0.001, "Ranks 1-2 = -0.1")
+
+
+func test_low_skill_honor_cost_rank_3_4() -> void:
+	var c := L5RCharacterData.new()
+	c.honor = 4.0
+	c.school = "Hida Bushi"
+	c.clan = "Crab"
+	var cost: float = CrimeSystem.get_low_skill_honor_cost(c)
+	assert_almost_eq(cost, -0.2, 0.001, "Ranks 3-4 = -0.2")
+
+
+func test_low_skill_honor_cost_rank_5_6() -> void:
+	var c := L5RCharacterData.new()
+	c.honor = 6.0
+	c.school = "Hida Bushi"
+	c.clan = "Crab"
+	var cost: float = CrimeSystem.get_low_skill_honor_cost(c)
+	assert_almost_eq(cost, -0.3, 0.001, "Ranks 5-6 = -0.3")
+
+
+func test_low_skill_honor_cost_rank_7_8() -> void:
+	var c := L5RCharacterData.new()
+	c.honor = 8.0
+	c.school = "Hida Bushi"
+	c.clan = "Crab"
+	var cost: float = CrimeSystem.get_low_skill_honor_cost(c)
+	assert_almost_eq(cost, -0.6, 0.001, "Ranks 7-8 = -0.6")
+
+
+func test_low_skill_honor_cost_rank_9_10() -> void:
+	var c := L5RCharacterData.new()
+	c.honor = 10.0
+	c.school = "Hida Bushi"
+	c.clan = "Crab"
+	var cost: float = CrimeSystem.get_low_skill_honor_cost(c)
+	assert_almost_eq(cost, -0.9, 0.001, "Ranks 9-10 = -0.9")
+
+
+func test_low_skill_full_exempt_shosuro() -> void:
+	var c := L5RCharacterData.new()
+	c.honor = 6.0
+	c.school = "Shosuro Infiltrator"
+	c.clan = "Scorpion"
+	var cost: float = CrimeSystem.get_low_skill_honor_cost(c)
+	assert_eq(cost, 0.0, "Shosuro Infiltrator = full exemption")
+
+
+func test_low_skill_full_exempt_bitter_lies() -> void:
+	var c := L5RCharacterData.new()
+	c.honor = 6.0
+	c.school = "Bitter Lies Swordsmen"
+	c.clan = "Scorpion"
+	var cost: float = CrimeSystem.get_low_skill_honor_cost(c)
+	assert_eq(cost, 0.0, "Bitter Lies = full exemption")
+
+
+func test_low_skill_full_exempt_kasuga() -> void:
+	var c := L5RCharacterData.new()
+	c.honor = 6.0
+	c.school = "Kasuga Smuggler"
+	c.clan = "Tortoise"
+	var cost: float = CrimeSystem.get_low_skill_honor_cost(c)
+	assert_eq(cost, 0.0, "Kasuga Smuggler = full exemption")
+
+
+func test_low_skill_half_exempt_daidoji_harrier() -> void:
+	var c := L5RCharacterData.new()
+	c.honor = 6.0
+	c.school = "Daidoji Harrier"
+	c.clan = "Crane"
+	var cost: float = CrimeSystem.get_low_skill_honor_cost(c)
+	assert_almost_eq(cost, -0.15, 0.001, "Daidoji Harrier = half cost")
+
+
+func test_low_skill_scorpion_clan_half() -> void:
+	var c := L5RCharacterData.new()
+	c.honor = 6.0
+	c.school = "Bayushi Bushi"
+	c.clan = "Scorpion"
+	var cost: float = CrimeSystem.get_low_skill_honor_cost(c)
+	assert_almost_eq(cost, -0.15, 0.001, "Scorpion clan = half cost")
+
+
+func test_low_skill_multi_school_exempt() -> void:
+	var c := L5RCharacterData.new()
+	c.honor = 8.0
+	c.school = "Bayushi Bushi"
+	c.school_paths = ["Shosuro Infiltrator R3"]
+	c.clan = "Scorpion"
+	var cost: float = CrimeSystem.get_low_skill_honor_cost(c)
+	assert_eq(cost, 0.0, "Multi-school: Shosuro path = full exemption")
+
+
+func test_low_skill_intimidation_exempt_otomo() -> void:
+	var c := L5RCharacterData.new()
+	c.honor = 6.0
+	c.school = "Otomo Courtier"
+	c.clan = "Imperial"
+	c.intimidation_honor_exempt = true
+	var cost_intimidation: float = CrimeSystem.get_low_skill_honor_cost(c, "Intimidation")
+	assert_eq(cost_intimidation, 0.0, "Otomo: Intimidation exempt")
+	var cost_stealth: float = CrimeSystem.get_low_skill_honor_cost(c, "Stealth")
+	assert_true(cost_stealth < 0.0, "Otomo: Stealth NOT exempt")
+
+
+func test_low_skill_commerce_exempt_yasuki() -> void:
+	var c := L5RCharacterData.new()
+	c.honor = 6.0
+	c.school = "Yasuki Courtier"
+	c.clan = "Crab"
+	c.commerce_honor_exempt = true
+	var cost_commerce: float = CrimeSystem.get_low_skill_honor_cost(c, "Commerce")
+	assert_eq(cost_commerce, 0.0, "Yasuki: Commerce exempt")
+	var cost_intimidation: float = CrimeSystem.get_low_skill_honor_cost(c, "Intimidation")
+	assert_true(cost_intimidation < 0.0, "Yasuki: Intimidation NOT exempt")
+
+
+func test_low_skill_yoritomo_dual_exempt() -> void:
+	var c := L5RCharacterData.new()
+	c.honor = 6.0
+	c.school = "Yoritomo Courtier"
+	c.clan = "Mantis"
+	c.commerce_honor_exempt = true
+	c.intimidation_honor_exempt = true
+	assert_eq(CrimeSystem.get_low_skill_honor_cost(c, "Commerce"), 0.0)
+	assert_eq(CrimeSystem.get_low_skill_honor_cost(c, "Intimidation"), 0.0)
+	assert_true(CrimeSystem.get_low_skill_honor_cost(c, "Stealth") < 0.0,
+		"Yoritomo: only Commerce and Intimidation exempt")
+
+
+func test_technique_flags_set_on_apply() -> void:
+	var c := L5RCharacterData.new()
+	c.school = "Otomo Courtier"
+	c.clan = "Imperial"
+	assert_false(c.intimidation_honor_exempt)
+	SkillResolver.apply_technique_flags(c)
+	assert_true(c.intimidation_honor_exempt, "Otomo R1 sets intimidation_honor_exempt")
+
+
+func test_technique_flags_yasuki_commerce() -> void:
+	var c := L5RCharacterData.new()
+	c.school = "Yasuki Courtier"
+	c.clan = "Crab"
+	SkillResolver.apply_technique_flags(c)
+	assert_true(c.commerce_honor_exempt, "Yasuki R1 sets commerce_honor_exempt")
+	assert_false(c.intimidation_honor_exempt, "Yasuki does not get intimidation exempt")
+
+
+func test_technique_flags_yoritomo_both() -> void:
+	var c := L5RCharacterData.new()
+	c.school = "Yoritomo Courtier"
+	c.clan = "Mantis"
+	SkillResolver.apply_technique_flags(c)
+	assert_true(c.commerce_honor_exempt, "Yoritomo R1 sets commerce_honor_exempt")
+	assert_true(c.intimidation_honor_exempt, "Yoritomo R1 sets intimidation_honor_exempt")
+
+
+# -- Table 2.3 additional rows -----------------------------------------------
+
+
+func test_disobeying_lord_honor_scales() -> void:
+	var low := L5RCharacterData.new()
+	low.honor = 1.0
+	low.school = "Hida Bushi"
+	low.clan = "Crab"
+	var high := L5RCharacterData.new()
+	high.honor = 8.0
+	high.school = "Hida Bushi"
+	high.clan = "Crab"
+	var cost_low: float = CrimeSystem.get_disobeying_lord_honor(low)
+	var cost_high: float = CrimeSystem.get_disobeying_lord_honor(high)
+	assert_almost_eq(cost_low, -0.2, 0.001, "Rank 1 disobedience = -0.2")
+	assert_almost_eq(cost_high, -0.6, 0.001, "Rank 8 disobedience = -0.6")
+
+
+func test_disloyalty_honor_scales() -> void:
+	var low := L5RCharacterData.new()
+	low.honor = 2.0
+	low.school = "Bayushi Bushi"
+	low.clan = "Scorpion"
+	var high := L5RCharacterData.new()
+	high.honor = 8.0
+	high.school = "Bayushi Bushi"
+	high.clan = "Scorpion"
+	var cost_low: float = CrimeSystem.get_disloyalty_honor(low)
+	var cost_high: float = CrimeSystem.get_disloyalty_honor(high)
+	assert_almost_eq(cost_low, -0.2, 0.001, "Rank 2 disloyalty = -0.2")
+	assert_almost_eq(cost_high, -1.4, 0.001, "Rank 8 disloyalty = -1.4")
+
+
+func test_accepting_bribe_honor_scales() -> void:
+	var low := L5RCharacterData.new()
+	low.honor = 2.0
+	low.school = "Yasuki Courtier"
+	low.clan = "Crab"
+	var high := L5RCharacterData.new()
+	high.honor = 10.0
+	high.school = "Yasuki Courtier"
+	high.clan = "Crab"
+	var cost_low: float = CrimeSystem.get_accepting_bribe_honor(low)
+	var cost_high: float = CrimeSystem.get_accepting_bribe_honor(high)
+	assert_eq(cost_low, 0.0, "Rank 1-2 accepting bribe = 0.0")
+	assert_almost_eq(cost_high, -0.8, 0.001, "Rank 9-10 accepting bribe = -0.8")
+
+
+func test_low_skill_discovery_glory_constant() -> void:
+	assert_almost_eq(CrimeSystem.LOW_SKILL_DISCOVERY_GLORY, -0.3, 0.001,
+		"Caught using Low Skill = -0.3 Glory per GDD s46")
+
+
+func test_is_low_skill_crime_type() -> void:
+	assert_true(CrimeSystem.is_low_skill_crime_type(Enums.CrimeType.DISHONORABLE_CONDUCT),
+		"DISHONORABLE_CONDUCT is a Low Skill crime type")
+	assert_true(CrimeSystem.is_low_skill_crime_type(Enums.CrimeType.SKIMMING),
+		"SKIMMING (bribery) is a Low Skill crime type")
+	assert_false(CrimeSystem.is_low_skill_crime_type(Enums.CrimeType.VIOLENCE),
+		"VIOLENCE is not a Low Skill crime type")
+	assert_false(CrimeSystem.is_low_skill_crime_type(Enums.CrimeType.TREASON),
+		"TREASON is not a Low Skill crime type")
+	assert_false(CrimeSystem.is_low_skill_crime_type(Enums.CrimeType.MAHO),
+		"MAHO is not a Low Skill crime type")
+
+
+func test_following_orders_honor_positive_at_low_rank() -> void:
+	var low := L5RCharacterData.new()
+	low.honor = 0.5
+	low.school = "Hida Bushi"
+	low.clan = "Crab"
+	var high := L5RCharacterData.new()
+	high.honor = 10.0
+	high.school = "Hida Bushi"
+	high.clan = "Crab"
+	var cost_low: float = CrimeSystem.get_following_orders_honor(low)
+	var cost_high: float = CrimeSystem.get_following_orders_honor(high)
+	assert_almost_eq(cost_low, 0.6, 0.001, "Rank 0 following orders = +0.6 (honor gain)")
+	assert_almost_eq(cost_high, -0.4, 0.001, "Rank 9-10 following orders = -0.4 (honor loss)")
+
+
+func test_lying_honor_rank_scaled() -> void:
+	var low := L5RCharacterData.new()
+	low.honor = 0.5
+	low.school = "Doji Courtier"
+	low.clan = "Crane"
+	var high := L5RCharacterData.new()
+	high.honor = 10.0
+	high.school = "Doji Courtier"
+	high.clan = "Crane"
+	assert_almost_eq(CrimeSystem.get_lying_honor(low), 0.0, 0.001, "Rank 0 lying = 0")
+	assert_almost_eq(CrimeSystem.get_lying_honor(high), -1.0, 0.001, "Rank 9-10 lying = -1.0")
+
+
+func test_manipulating_honor_rank_scaled() -> void:
+	var mid := L5RCharacterData.new()
+	mid.honor = 5.0
+	mid.school = "Shosuro Actor"
+	mid.clan = "Scorpion"
+	assert_almost_eq(CrimeSystem.get_manipulating_honor(mid), -0.6, 0.001, "Rank 5 manipulating = -0.6")
+
+
+func test_false_courtesy_honor_rank_scaled() -> void:
+	var low := L5RCharacterData.new()
+	low.honor = 1.5
+	low.school = "Bayushi Courtier"
+	low.clan = "Scorpion"
+	var high := L5RCharacterData.new()
+	high.honor = 9.0
+	high.school = "Doji Courtier"
+	high.clan = "Crane"
+	assert_almost_eq(CrimeSystem.get_false_courtesy_honor(low), 0.0, 0.001, "Rank 1 false courtesy = 0")
+	assert_almost_eq(CrimeSystem.get_false_courtesy_honor(high), -1.0, 0.001, "Rank 9 false courtesy = -1.0")
+
+
+func test_duped_criminal_honor_rank_scaled() -> void:
+	var mid := L5RCharacterData.new()
+	mid.honor = 4.0
+	mid.school = "Hida Bushi"
+	mid.clan = "Crab"
+	assert_almost_eq(CrimeSystem.get_duped_criminal_honor(mid), -0.8, 0.001, "Rank 3-4 duped criminal = -0.8")
+
+
+func test_duped_disloyal_honor_rank_scaled() -> void:
+	var mid := L5RCharacterData.new()
+	mid.honor = 4.0
+	mid.school = "Hida Bushi"
+	mid.clan = "Crab"
+	assert_almost_eq(CrimeSystem.get_duped_disloyal_honor(mid), -0.4, 0.001, "Rank 3-4 duped disloyal = -0.4")
+
+
+func test_duped_foolish_honor_rank_scaled() -> void:
+	var mid := L5RCharacterData.new()
+	mid.honor = 4.0
+	mid.school = "Hida Bushi"
+	mid.clan = "Crab"
+	assert_almost_eq(CrimeSystem.get_duped_foolish_honor(mid), -0.4, 0.001, "Rank 3-4 duped foolish = -0.4")
+
+
+# -- Table 2.3 Honor Gain rows -----------------------------------------------
+
+
+func test_insult_ancestors_honor_rank_scaled() -> void:
+	var mid := L5RCharacterData.new()
+	mid.honor = 4.0
+	mid.school = "Hida Bushi"
+	mid.clan = "Crab"
+	assert_almost_eq(CrimeSystem.get_insult_ancestors_honor(mid), -0.4, 0.001, "Rank 3-4 insult ancestors = -0.4")
+
+
+func test_insult_family_clan_honor_rank_scaled() -> void:
+	var mid := L5RCharacterData.new()
+	mid.honor = 6.0
+	mid.school = "Akodo Bushi"
+	mid.clan = "Lion"
+	assert_almost_eq(CrimeSystem.get_insult_family_clan_honor(mid), -0.2, 0.001, "Rank 5-6 insult family = -0.2")
+
+
+func test_enduring_self_insult_honor() -> void:
+	var low := L5RCharacterData.new()
+	low.honor = 0.5
+	low.school = "Hida Bushi"
+	low.clan = "Crab"
+	var high := L5RCharacterData.new()
+	high.honor = 10.0
+	high.school = "Doji Courtier"
+	high.clan = "Crane"
+	assert_almost_eq(CrimeSystem.get_enduring_self_insult_honor(low), 0.2, 0.001, "Rank 0 enduring insult = +0.2")
+	assert_almost_eq(CrimeSystem.get_enduring_self_insult_honor(high), 0.2, 0.001, "Rank 9-10 enduring insult = +0.2")
+
+
+func test_facing_superior_foe_honor() -> void:
+	var low := L5RCharacterData.new()
+	low.honor = 0.5
+	low.school = "Hida Bushi"
+	low.clan = "Crab"
+	var high := L5RCharacterData.new()
+	high.honor = 10.0
+	high.school = "Kakita Bushi"
+	high.clan = "Crane"
+	assert_almost_eq(CrimeSystem.get_facing_superior_foe_honor(low), 0.8, 0.001, "Rank 0 facing superior = +0.8")
+	assert_almost_eq(CrimeSystem.get_facing_superior_foe_honor(high), 0.2, 0.001, "Rank 9-10 facing superior = +0.2")
+
+
+func test_fulfilling_promise_honor() -> void:
+	var low := L5RCharacterData.new()
+	low.honor = 1.0
+	low.school = "Hida Bushi"
+	low.clan = "Crab"
+	var high := L5RCharacterData.new()
+	high.honor = 10.0
+	high.school = "Doji Courtier"
+	high.clan = "Crane"
+	assert_almost_eq(CrimeSystem.get_fulfilling_promise_honor(low), 0.8, 0.001, "Rank 1 fulfilling promise = +0.8")
+	assert_almost_eq(CrimeSystem.get_fulfilling_promise_honor(high), 0.0, 0.001, "Rank 10 fulfilling promise = 0.0")
+
+
+func test_truthful_report_honor() -> void:
+	var mid := L5RCharacterData.new()
+	mid.honor = 4.0
+	mid.school = "Akodo Bushi"
+	mid.clan = "Lion"
+	assert_almost_eq(CrimeSystem.get_truthful_report_honor(mid), 0.4, 0.001, "Rank 3-4 truthful report = +0.4")
+
+
+func test_ignoring_dishonorable_honor() -> void:
+	var low := L5RCharacterData.new()
+	low.honor = 0.5
+	low.school = "Doji Courtier"
+	low.clan = "Crane"
+	var high := L5RCharacterData.new()
+	high.honor = 10.0
+	high.school = "Doji Courtier"
+	high.clan = "Crane"
+	assert_almost_eq(CrimeSystem.get_ignoring_dishonorable_honor(low), 0.3, 0.001, "Rank 0 ignoring dishonorable = +0.3")
+	assert_almost_eq(CrimeSystem.get_ignoring_dishonorable_honor(high), -0.2, 0.001, "Rank 9-10 ignoring dishonorable = -0.2")
+
+
+func test_protecting_clan_honor() -> void:
+	var low := L5RCharacterData.new()
+	low.honor = 0.5
+	low.school = "Hida Bushi"
+	low.clan = "Crab"
+	var high := L5RCharacterData.new()
+	high.honor = 10.0
+	high.school = "Hida Bushi"
+	high.clan = "Crab"
+	assert_almost_eq(CrimeSystem.get_protecting_clan_honor(low), 0.8, 0.001, "Rank 0 protecting clan = +0.8")
+	assert_almost_eq(CrimeSystem.get_protecting_clan_honor(high), 0.2, 0.001, "Rank 9-10 protecting clan = +0.2")
+
+
+func test_kindness_below_station_honor() -> void:
+	var mid := L5RCharacterData.new()
+	mid.honor = 5.0
+	mid.school = "Doji Courtier"
+	mid.clan = "Crane"
+	assert_almost_eq(CrimeSystem.get_kindness_below_station_honor(mid), 0.4, 0.001, "Rank 5 kindness = +0.4")
+
+
+func test_sincere_courtesy_enemies_honor() -> void:
+	var low := L5RCharacterData.new()
+	low.honor = 0.5
+	low.school = "Doji Courtier"
+	low.clan = "Crane"
+	var high := L5RCharacterData.new()
+	high.honor = 10.0
+	high.school = "Doji Courtier"
+	high.clan = "Crane"
+	assert_almost_eq(CrimeSystem.get_sincere_courtesy_enemies_honor(low), 0.9, 0.001, "Rank 0 sincere courtesy = +0.9")
+	assert_almost_eq(CrimeSystem.get_sincere_courtesy_enemies_honor(high), 0.0, 0.001, "Rank 9-10 sincere courtesy = 0.0")
+
+

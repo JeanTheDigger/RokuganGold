@@ -25,13 +25,13 @@ enum BribeCurrency {
 }
 
 # Personality gates (s11.3.11g)
-const ALWAYS_BLOCKED_BUSHIDO: Array = [
+const ALWAYS_BLOCKED_BUSHIDO: Array[int] = [
 	Enums.BushidoVirtue.GI,
 	Enums.BushidoVirtue.MAKOTO,
 	Enums.BushidoVirtue.MEIYO,
 ]
 
-const CONDITIONAL_BUSHIDO: Array = [
+const CONDITIONAL_BUSHIDO: Array[int] = [
 	Enums.BushidoVirtue.JIN,
 	Enums.BushidoVirtue.YU,
 	Enums.BushidoVirtue.REI,
@@ -127,14 +127,15 @@ static func apply_bribe_accepted(
 	magistrate: L5RCharacterData,
 	crime_record: CrimeRecord,
 ) -> Dictionary:
-	HonorGlorySystem.apply_honor_change(magistrate, ACCEPTANCE_HONOR_LOSS)
+	var _honor: float = CrimeSystem.get_accepting_bribe_honor(magistrate)
+	HonorGlorySystem.apply_honor_change(magistrate, _honor)
 
 	var suppressed_evidence: int = crime_record.evidence_total
 	crime_record.evidence_total = 0
 	crime_record.legal_status = Enums.LegalStatus.CLEAR
 
 	return {
-		"honor_loss": ACCEPTANCE_HONOR_LOSS,
+		"honor_loss": _honor,
 		"evidence_suppressed": suppressed_evidence,
 		"creates_secret": true,
 		"secret_tier": 1,

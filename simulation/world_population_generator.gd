@@ -176,7 +176,7 @@ const POSITION_ROLE_NAMES: Dictionary = {
 
 # -- Position School Type Preferences -----------------------------------------
 
-const BUSHI_POSITION_TYPES: Array = [
+const BUSHI_POSITION_TYPES: Array[int] = [
 	PositionType.EMERALD_CHAMPION,
 	PositionType.JADE_CHAMPION,
 	PositionType.RIKUGUNSHOKAN,
@@ -188,7 +188,7 @@ const BUSHI_POSITION_TYPES: Array = [
 	PositionType.MINOR_CLAN_CHAMPION,
 ]
 
-const COURTIER_POSITION_TYPES: Array = [
+const COURTIER_POSITION_TYPES: Array[int] = [
 	PositionType.IMPERIAL_ADVISOR,
 	PositionType.IMPERIAL_CHANCELLOR,
 	PositionType.IMPERIAL_HERALD,
@@ -198,7 +198,7 @@ const COURTIER_POSITION_TYPES: Array = [
 	PositionType.EMERALD_MAGISTRATE,
 ]
 
-const SHUGENJA_POSITION_TYPES: Array = [
+const SHUGENJA_POSITION_TYPES: Array[int] = [
 	PositionType.JADE_MAGISTRATE,
 	PositionType.TEMPLE_HEAD,
 ]

@@ -726,6 +726,8 @@ func test_shadow_target_returns_contested() -> void:
 	assert_has(r, "shadow_total")
 	assert_has(r, "target_total")
 	assert_eq(r["detected"], not r["success"])
+	assert_has(r, "detection_risk")
+	assert_eq(r["detection_risk"], r["detected"])
 
 
 # ==============================================================================
@@ -907,3 +909,154 @@ func test_detect_fabrication_kitsuki_gets_free_raise() -> void:
 		kitsuki_total > generic_total,
 		"Kitsuki should average higher due to free raise (+5 flat bonus)"
 	)
+
+
+# ==============================================================================
+# CONCEAL_ITEM School Lean (s12.8)
+# ==============================================================================
+
+func test_conceal_school_lean_shosuro() -> void:
+	var shosuro: L5RCharacterData = L5RCharacterData.new()
+	shosuro.school = "Shosuro Infiltrator"
+	shosuro.agility = 3
+	shosuro.skills = {"Sleight of Hand": 3}
+	assert_true(SecretSystem._has_conceal_lean(shosuro))
+
+
+func test_conceal_school_lean_kasuga() -> void:
+	var kasuga: L5RCharacterData = L5RCharacterData.new()
+	kasuga.school = "Kasuga Smuggler"
+	kasuga.agility = 3
+	kasuga.skills = {"Sleight of Hand": 3}
+	assert_true(SecretSystem._has_conceal_lean(kasuga))
+
+
+func test_conceal_school_lean_kolat() -> void:
+	var kolat: L5RCharacterData = L5RCharacterData.new()
+	kolat.school = "Bayushi Bushi"
+	kolat.kolat_sect = Enums.KolatSect.SILK
+	kolat.agility = 3
+	kolat.skills = {"Sleight of Hand": 3}
+	assert_true(SecretSystem._has_conceal_lean(kolat))
+
+
+func test_conceal_no_lean_generic() -> void:
+	var generic: L5RCharacterData = L5RCharacterData.new()
+	generic.school = "Akodo Bushi"
+	generic.agility = 3
+	generic.skills = {"Sleight of Hand": 3}
+	assert_false(SecretSystem._has_conceal_lean(generic))
+
+
+func test_conceal_lean_improves_roll() -> void:
+	var shosuro: L5RCharacterData = L5RCharacterData.new()
+	shosuro.school = "Shosuro Infiltrator"
+	shosuro.agility = 3
+	shosuro.skills = {"Sleight of Hand": 3}
+	var generic: L5RCharacterData = L5RCharacterData.new()
+	generic.school = "Akodo Bushi"
+	generic.agility = 3
+	generic.skills = {"Sleight of Hand": 3}
+
+	var shosuro_total: int = 0
+	var generic_total: int = 0
+	for i: int in range(100):
+		var e1: DiceEngine = DiceEngine.new(i * 11)
+		var r1: Dictionary = SecretSystem.resolve_conceal_item(shosuro, "SMALL", false, e1)
+		shosuro_total += r1.get("roll_total", 0)
+		var e2: DiceEngine = DiceEngine.new(i * 11)
+		var r2: Dictionary = SecretSystem.resolve_conceal_item(generic, "SMALL", false, e2)
+		generic_total += r2.get("roll_total", 0)
+
+	assert_true(shosuro_total > generic_total,
+		"Shosuro should average higher due to +1k0 school lean")
+
+
+# ==============================================================================
+# Auto-Conceal on Arrival (s12.8 NPC Behavior)
+# ==============================================================================
+
+func test_auto_conceal_fires_for_contraband() -> void:
+	var npc: L5RCharacterData = L5RCharacterData.new()
+	npc.character_id = 80
+	npc.agility = 4
+	npc.skills = {"Sleight of Hand": 4}
+	npc.physical_location = "Kyuden Bayushi"
+	var poison_item: Dictionary = InventorySystem.create_item(
+		1, "Poison Vial", InventorySystem.ItemCategory.VALUABLE,
+		InventorySystem.ItemSize.SMALL, 1, false, true,
+	)
+	npc.items.append(poison_item)
+
+	var arrivals: Array[Dictionary] = [{"character_id": 80, "destination": "Kyuden Bayushi"}]
+	var chars: Dictionary = {80: npc}
+	var e: DiceEngine = DiceEngine.new(42)
+	var results: Array[Dictionary] = DayOrchestrator._process_auto_conceal_on_arrival(arrivals, chars, e)
+
+	assert_eq(results.size(), 1)
+	assert_eq(results[0]["character_id"], 80)
+	assert_eq(results[0]["item_id"], 1)
+
+
+func test_auto_conceal_skips_non_contraband() -> void:
+	var npc: L5RCharacterData = L5RCharacterData.new()
+	npc.character_id = 81
+	npc.agility = 3
+	npc.skills = {"Sleight of Hand": 2}
+	npc.physical_location = "Kyuden Crane"
+	var normal_item: Dictionary = InventorySystem.create_item(
+		2, "Letter", InventorySystem.ItemCategory.DOCUMENT,
+		InventorySystem.ItemSize.SMALL, 1, false, false,
+	)
+	npc.items.append(normal_item)
+
+	var arrivals: Array[Dictionary] = [{"character_id": 81, "destination": "Kyuden Crane"}]
+	var chars: Dictionary = {81: npc}
+	var e: DiceEngine = DiceEngine.new(42)
+	var results: Array[Dictionary] = DayOrchestrator._process_auto_conceal_on_arrival(arrivals, chars, e)
+
+	assert_eq(results.size(), 0, "Non-contraband items should not trigger auto-conceal")
+
+
+func test_auto_conceal_skips_already_concealed() -> void:
+	var npc: L5RCharacterData = L5RCharacterData.new()
+	npc.character_id = 82
+	npc.agility = 4
+	npc.skills = {"Sleight of Hand": 4}
+	npc.physical_location = "Otosan Uchi"
+	var item: Dictionary = InventorySystem.create_item(
+		3, "Stolen Evidence", InventorySystem.ItemCategory.EVIDENCE,
+		InventorySystem.ItemSize.SMALL, 1, false, true,
+	)
+	item["concealed"] = true
+	item["concealment_tn"] = 20
+	npc.items.append(item)
+
+	var arrivals: Array[Dictionary] = [{"character_id": 82, "destination": "Otosan Uchi"}]
+	var chars: Dictionary = {82: npc}
+	var e: DiceEngine = DiceEngine.new(42)
+	var results: Array[Dictionary] = DayOrchestrator._process_auto_conceal_on_arrival(arrivals, chars, e)
+
+	assert_eq(results.size(), 0, "Already concealed items should be skipped")
+
+
+func test_auto_conceal_weapon_blocked_without_rank_5() -> void:
+	var npc: L5RCharacterData = L5RCharacterData.new()
+	npc.character_id = 83
+	npc.agility = 3
+	npc.skills = {"Sleight of Hand": 3}
+	npc.physical_location = "Kyuden Doji"
+	var blade: Dictionary = InventorySystem.create_item(
+		4, "Tanto", InventorySystem.ItemCategory.WEAPON,
+		InventorySystem.ItemSize.SMALL, 1, false, true,
+	)
+	npc.items.append(blade)
+
+	var arrivals: Array[Dictionary] = [{"character_id": 83, "destination": "Kyuden Doji"}]
+	var chars: Dictionary = {83: npc}
+	var e: DiceEngine = DiceEngine.new(42)
+	var results: Array[Dictionary] = DayOrchestrator._process_auto_conceal_on_arrival(arrivals, chars, e)
+
+	assert_eq(results.size(), 1)
+	assert_false(results[0]["success"])
+	assert_eq(results[0]["reason"], "weapon_skill_gate")

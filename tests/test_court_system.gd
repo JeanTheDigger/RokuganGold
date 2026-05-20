@@ -1137,3 +1137,531 @@ func test_renege_excludes_reneging_lord_from_own_modifier() -> void:
 	assert_true(witness.historical_modifiers.has(1))
 	assert_false(lord.historical_modifiers.has(1))
 	assert_eq(DayOrchestrator._status_to_lord_rank(2.0), Enums.LordRank.VILLAGE_HEADMAN)
+
+
+# =============================================================================
+# SESSION STATE TRACKING (s15.4)
+# =============================================================================
+
+
+func test_session_state_initialized_on_first_access() -> void:
+	var court := _make_court()
+	var state: Dictionary = CourtSystem.get_session_state(court, 1)
+	assert_eq(state["charm_count"], 0)
+	assert_eq(state["negotiate_count"], 0)
+	assert_true(state["tn_reductions"] is Dictionary)
+	assert_true(state["persuade_tn_reductions"] is Dictionary)
+
+
+func test_charm_count_increments() -> void:
+	var court := _make_court()
+	CourtSystem.increment_charm_count(court, 1)
+	assert_eq(CourtSystem.get_charm_count(court, 1), 1)
+	CourtSystem.increment_charm_count(court, 1)
+	assert_eq(CourtSystem.get_charm_count(court, 1), 2)
+
+
+func test_negotiate_count_increments() -> void:
+	var court := _make_court()
+	CourtSystem.increment_negotiate_count(court, 1)
+	assert_eq(CourtSystem.get_negotiate_count(court, 1), 1)
+
+
+func test_tn_reduction_recorded_and_retrieved() -> void:
+	var court := _make_court()
+	CourtSystem.record_tn_reduction(court, 1, 2, 5)
+	assert_eq(CourtSystem.get_tn_reduction(court, 1, 2), 5)
+	CourtSystem.record_tn_reduction(court, 1, 2, 5)
+	assert_eq(CourtSystem.get_tn_reduction(court, 1, 2), 10)
+
+
+func test_persuade_tn_reduction_separate_from_general() -> void:
+	var court := _make_court()
+	CourtSystem.record_tn_reduction(court, 1, 2, 5)
+	CourtSystem.record_persuade_tn_reduction(court, 1, 2, 5)
+	assert_eq(CourtSystem.get_tn_reduction(court, 1, 2), 5)
+	assert_eq(CourtSystem.get_persuade_tn_reduction(court, 1, 2), 5)
+
+
+func test_session_state_per_character_independent() -> void:
+	var court := _make_court()
+	CourtSystem.increment_charm_count(court, 1)
+	CourtSystem.increment_charm_count(court, 1)
+	CourtSystem.increment_charm_count(court, 2)
+	assert_eq(CourtSystem.get_charm_count(court, 1), 2)
+	assert_eq(CourtSystem.get_charm_count(court, 2), 1)
+
+
+func test_tn_reduction_default_zero_for_unknown_target() -> void:
+	var court := _make_court()
+	CourtSystem.record_tn_reduction(court, 1, 2, 5)
+	assert_eq(CourtSystem.get_tn_reduction(court, 1, 99), 0)
+
+
+# =============================================================================
+# PROXY MANDATE SYSTEM (s16.2)
+# =============================================================================
+
+
+func test_assign_proxy_mandate_creates_mandate() -> void:
+	var court := _make_court()
+	var mandate: ProxyMandateData = CourtSystem.assign_proxy_mandate(
+		court, 100, 200, 5, true, 20, 50
+	)
+	assert_not_null(mandate)
+	assert_eq(mandate.lord_id, 100)
+	assert_eq(mandate.proxy_id, 200)
+	assert_eq(mandate.mandate_topic_id, 5)
+	assert_true(mandate.decision_authority)
+	assert_eq(mandate.depth_limit, 20)
+	assert_eq(mandate.court_id, court.court_id)
+
+
+func test_get_proxy_mandate_finds_by_proxy_id() -> void:
+	var court := _make_court()
+	CourtSystem.assign_proxy_mandate(court, 100, 200, 5, true, 20, 50)
+	CourtSystem.assign_proxy_mandate(court, 101, 201, 6, false, -1, 50)
+	var m: ProxyMandateData = CourtSystem.get_proxy_mandate(court, 201)
+	assert_not_null(m)
+	assert_eq(m.lord_id, 101)
+	assert_eq(m.mandate_topic_id, 6)
+	assert_false(m.decision_authority)
+
+
+func test_get_proxy_mandate_returns_null_for_unknown() -> void:
+	var court := _make_court()
+	var m: ProxyMandateData = CourtSystem.get_proxy_mandate(court, 999)
+	assert_null(m)
+
+
+func test_is_within_mandate_correct_topic_and_amount() -> void:
+	var mandate := ProxyMandateData.new()
+	mandate.mandate_topic_id = 5
+	mandate.decision_authority = true
+	mandate.depth_limit = 20
+	assert_true(CourtSystem.is_within_mandate(mandate, 5, 15))
+	assert_true(CourtSystem.is_within_mandate(mandate, 5, 20))
+
+
+func test_is_within_mandate_exceeds_depth_limit() -> void:
+	var mandate := ProxyMandateData.new()
+	mandate.mandate_topic_id = 5
+	mandate.decision_authority = true
+	mandate.depth_limit = 20
+	assert_false(CourtSystem.is_within_mandate(mandate, 5, 21))
+
+
+func test_is_within_mandate_wrong_topic() -> void:
+	var mandate := ProxyMandateData.new()
+	mandate.mandate_topic_id = 5
+	mandate.decision_authority = true
+	mandate.depth_limit = 20
+	assert_false(CourtSystem.is_within_mandate(mandate, 6, 15))
+
+
+func test_is_within_mandate_no_decision_authority() -> void:
+	var mandate := ProxyMandateData.new()
+	mandate.mandate_topic_id = 5
+	mandate.decision_authority = false
+	mandate.depth_limit = 20
+	assert_false(CourtSystem.is_within_mandate(mandate, 5, 10))
+
+
+func test_is_within_mandate_unlimited_depth() -> void:
+	var mandate := ProxyMandateData.new()
+	mandate.mandate_topic_id = 5
+	mandate.decision_authority = true
+	mandate.depth_limit = -1
+	assert_true(CourtSystem.is_within_mandate(mandate, 5, 999))
+
+
+func test_flag_out_of_mandate() -> void:
+	var mandate := ProxyMandateData.new()
+	assert_false(mandate.out_of_mandate_flag)
+	CourtSystem.flag_out_of_mandate(mandate)
+	assert_true(mandate.out_of_mandate_flag)
+
+
+func test_flag_out_of_mandate_null_safe() -> void:
+	CourtSystem.flag_out_of_mandate(null)
+	assert_true(true)
+
+
+# =============================================================================
+# POSITION RESISTANCE (s16.4)
+# =============================================================================
+
+
+func test_position_resistance_zero_relevance_full_shift() -> void:
+	var result: float = TopicMomentumSystem.calculate_position_resistance(12.0, 0.0)
+	assert_almost_eq(result, 12.0, 0.01)
+
+
+func test_position_resistance_50_relevance_halves_shift() -> void:
+	var result: float = TopicMomentumSystem.calculate_position_resistance(12.0, 50.0)
+	assert_almost_eq(result, 8.0, 0.01)
+
+
+func test_position_resistance_100_relevance_halves_shift() -> void:
+	var result: float = TopicMomentumSystem.calculate_position_resistance(12.0, 100.0)
+	assert_almost_eq(result, 6.0, 0.01)
+
+
+func test_position_resistance_applied_in_court_effects() -> void:
+	var target := _make_char(2)
+	target.topic_positions[10] = 0.0
+	var characters_by_id: Dictionary = {2: target}
+	# Momentum 50 + DISTANT (no clan match) + TIER_3 → relevance = 50.0
+	var topic := _make_topic(10, 50.0)
+	var topics: Array[TopicData] = [topic]
+	var courts: Array[CourtSessionData] = []
+
+	var day_results: Array = [{
+		"action_id": "NEGOTIATE",
+		"character_id": 1,
+		"target_npc_id": 2,
+		"effects": {
+			"disposition_change": 9,
+			"target_position_shift": 12.0,
+			"_action_metadata": {"topic_id": 10},
+		},
+	}]
+
+	DayOrchestrator._process_court_action_effects(
+		day_results, characters_by_id, [], 0, -1,
+		StrategicReview.EmperorArchetype.IRON, topics, courts
+	)
+	# relevance = 50 * 1.0 = 50; shift = 12.0 / 1.5 = 8.0
+	assert_almost_eq(target.topic_positions[10], 8.0, 0.01)
+
+
+func test_position_resistance_zero_relevance_in_effects() -> void:
+	var target := _make_char(2)
+	target.topic_positions[10] = 0.0
+	var characters_by_id: Dictionary = {2: target}
+	# Momentum 0 → relevance = 0; full shift applied
+	var topic := _make_topic(10, 0.0)
+	var topics: Array[TopicData] = [topic]
+	var courts: Array[CourtSessionData] = []
+
+	var day_results: Array = [{
+		"action_id": "PERSUADE",
+		"character_id": 1,
+		"target_npc_id": 2,
+		"effects": {
+			"disposition_change": 11,
+			"target_position_shift": 12.0,
+			"_action_metadata": {"topic_id": 10},
+		},
+	}]
+
+	DayOrchestrator._process_court_action_effects(
+		day_results, characters_by_id, [], 0, -1,
+		StrategicReview.EmperorArchetype.IRON, topics, courts
+	)
+	assert_almost_eq(target.topic_positions[10], 12.0, 0.01)
+
+
+func test_position_resistance_debate_per_witness() -> void:
+	var witness := _make_char(3)
+	witness.clan = "Crane"
+	witness.topic_positions[10] = 0.0
+	var characters_by_id: Dictionary = {1: _make_char(1), 2: _make_char(2), 3: witness}
+	# TIER_2, momentum 50, witness same clan → OWN → 50*2.0 = 100 relevance
+	var topic := _make_topic(10, 50.0)
+	topic.tier = TopicData.Tier.TIER_2
+	topic.clan_involved = "Crane"
+	var topics: Array[TopicData] = [topic]
+	var courts: Array[CourtSessionData] = []
+
+	var day_results: Array = [{
+		"action_id": "PUBLIC_DEBATE",
+		"character_id": 1,
+		"target_npc_id": 2,
+		"effects": {
+			"debate_per_witness": [
+				{
+					"witness_id": 3,
+					"a_disposition_change": 2,
+					"b_disposition_change": -2,
+					"position_shift_toward_a": 6.0,
+				},
+			],
+			"_action_metadata": {"topic_id": 10},
+		},
+	}]
+
+	DayOrchestrator._process_court_action_effects(
+		day_results, characters_by_id, [], 0, -1,
+		StrategicReview.EmperorArchetype.IRON, topics, courts
+	)
+	# relevance = 50*2.0 = 100; shift = 6.0 / 2.0 = 3.0
+	assert_almost_eq(witness.topic_positions[10], 3.0, 0.01)
+
+
+func test_session_state_wired_in_effects_charm() -> void:
+	var court := _make_court(1, CourtSessionData.CourtType.PROVINCIAL_FAMILY_COURT, 100, 10, "Crane")
+	CourtSystem.open_court(court, 50)
+	var target := _make_char(2)
+	var characters_by_id: Dictionary = {1: _make_char(1), 2: target}
+	var topics: Array[TopicData] = []
+	var courts: Array[CourtSessionData] = [court]
+
+	var day_results: Array = [{
+		"action_id": "CHARM",
+		"character_id": 1,
+		"target_npc_id": 2,
+		"effects": {
+			"disposition_change": 8,
+			"_action_metadata": {"court_settlement_id": 10},
+		},
+	}]
+
+	DayOrchestrator._process_court_action_effects(
+		day_results, characters_by_id, [], 0, -1,
+		StrategicReview.EmperorArchetype.IRON, topics, courts
+	)
+	assert_eq(CourtSystem.get_charm_count(court, 1), 1)
+
+
+func test_session_state_wired_in_effects_negotiate_tn() -> void:
+	var court := _make_court(1, CourtSessionData.CourtType.PROVINCIAL_FAMILY_COURT, 100, 10, "Crane")
+	CourtSystem.open_court(court, 50)
+	var target := _make_char(2)
+	var characters_by_id: Dictionary = {1: _make_char(1), 2: target}
+	var topics: Array[TopicData] = []
+	var courts: Array[CourtSessionData] = [court]
+
+	var day_results: Array = [{
+		"action_id": "NEGOTIATE",
+		"character_id": 1,
+		"target_npc_id": 2,
+		"effects": {
+			"disposition_change": 9,
+			"session_tn_reduction": 5,
+			"_action_metadata": {"court_settlement_id": 10},
+		},
+	}]
+
+	DayOrchestrator._process_court_action_effects(
+		day_results, characters_by_id, [], 0, -1,
+		StrategicReview.EmperorArchetype.IRON, topics, courts
+	)
+	assert_eq(CourtSystem.get_negotiate_count(court, 1), 1)
+	assert_eq(CourtSystem.get_tn_reduction(court, 1, 2), 5)
+
+
+func test_session_state_listen_reflect_persuade_tn() -> void:
+	var court := _make_court(1, CourtSessionData.CourtType.PROVINCIAL_FAMILY_COURT, 100, 10, "Crane")
+	CourtSystem.open_court(court, 50)
+	var target := _make_char(2)
+	var characters_by_id: Dictionary = {1: _make_char(1), 2: target}
+	var topics: Array[TopicData] = []
+	var courts: Array[CourtSessionData] = [court]
+
+	var day_results: Array = [{
+		"action_id": "LISTEN_REFLECT",
+		"character_id": 1,
+		"target_npc_id": 2,
+		"effects": {
+			"disposition_change": 11,
+			"persuade_negotiate_tn_reduction": 5,
+			"_action_metadata": {"court_settlement_id": 10},
+		},
+	}]
+
+	DayOrchestrator._process_court_action_effects(
+		day_results, characters_by_id, [], 0, -1,
+		StrategicReview.EmperorArchetype.IRON, topics, courts
+	)
+	assert_eq(CourtSystem.get_persuade_tn_reduction(court, 1, 2), 5)
+
+
+func test_session_state_failed_action_not_tracked() -> void:
+	var court := _make_court(1, CourtSessionData.CourtType.PROVINCIAL_FAMILY_COURT, 100, 10, "Crane")
+	CourtSystem.open_court(court, 50)
+	var characters_by_id: Dictionary = {1: _make_char(1), 2: _make_char(2)}
+	var topics: Array[TopicData] = []
+	var courts: Array[CourtSessionData] = [court]
+
+	var day_results: Array = [{
+		"action_id": "CHARM",
+		"character_id": 1,
+		"target_npc_id": 2,
+		"effects": {
+			"failed": true,
+			"disposition_change": -5,
+			"_action_metadata": {"court_settlement_id": 10},
+		},
+	}]
+
+	DayOrchestrator._process_court_action_effects(
+		day_results, characters_by_id, [], 0, -1,
+		StrategicReview.EmperorArchetype.IRON, topics, courts
+	)
+	assert_eq(CourtSystem.get_charm_count(court, 1), 0)
+
+
+# =============================================================================
+# NPC ENGINE INTEGRATION — Context and Metadata Wiring
+# =============================================================================
+
+
+func test_court_context_flags_set_session_state() -> void:
+	var court := _make_court(1, CourtSessionData.CourtType.PROVINCIAL_FAMILY_COURT, 100, 10, "Crane")
+	CourtSystem.open_court(court, 50)
+	CourtSystem.add_attendee(court, 1)
+	CourtSystem.increment_charm_count(court, 1)
+	var world_states: Dictionary = {}
+	DayOrchestrator._set_court_context_flags([court], world_states)
+	var ws: Dictionary = world_states.get(1, {})
+	assert_eq(ws.get("court_settlement_id", -1), 10)
+	var ss: Dictionary = ws.get("court_session_state", {})
+	assert_eq(ss.get("charm_count", 0), 1)
+
+
+func test_court_context_flags_set_settlement_id() -> void:
+	var court := _make_court(1, CourtSessionData.CourtType.CLAN_CHAMPION_COURT, 100, 42, "Lion")
+	CourtSystem.open_court(court, 50)
+	CourtSystem.add_attendee(court, 5)
+	var world_states: Dictionary = {}
+	DayOrchestrator._set_court_context_flags([court], world_states)
+	assert_eq(world_states[5]["court_settlement_id"], 42)
+
+
+func test_build_context_reads_court_session_state() -> void:
+	var character := _make_char(1)
+	character.physical_location = "10"
+	var world_state: Dictionary = {
+		"court_session_state": {"charm_count": 3, "negotiate_count": 1, "tn_reductions": {}, "persuade_tn_reductions": {}},
+		"court_settlement_id": 10,
+	}
+	var ctx: NPCDataStructures.ContextSnapshot = NPCDecisionEngine.build_context(character, world_state)
+	assert_eq(ctx.court_session_state.get("charm_count", 0), 3)
+	assert_eq(ctx.court_settlement_id, 10)
+
+
+func test_metadata_negotiate_has_session_count() -> void:
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "NEGOTIATE"
+	var need := NPCDataStructures.ImmediateNeed.new()
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.court_session_state = {"charm_count": 0, "negotiate_count": 4, "tn_reductions": {}, "persuade_tn_reductions": {}}
+	ctx.court_settlement_id = 10
+	ctx.active_court_at_location = {"topics": [5]}
+	ctx.known_topics = [5]
+	ctx.known_positions = {5: 30.0}
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_eq(option.metadata.get("session_negotiate_count", -1), 4)
+	assert_eq(option.metadata.get("topic_id", -1), 5)
+	assert_eq(option.metadata.get("court_settlement_id", -1), 10)
+	assert_true(option.metadata.get("has_topic", false))
+
+
+func test_metadata_charm_has_session_count() -> void:
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "CHARM"
+	var need := NPCDataStructures.ImmediateNeed.new()
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.court_session_state = {"charm_count": 2, "negotiate_count": 0, "tn_reductions": {}, "persuade_tn_reductions": {}}
+	ctx.court_settlement_id = 10
+	ctx.active_court_at_location = {"topics": [5]}
+	ctx.known_topics = [5]
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_eq(option.metadata.get("session_charm_count", -1), 2)
+	assert_eq(option.metadata.get("court_settlement_id", -1), 10)
+	assert_true(option.metadata.get("has_topic", false))
+
+
+func test_metadata_impress_has_topic_and_settlement() -> void:
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "IMPRESS"
+	var need := NPCDataStructures.ImmediateNeed.new()
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.court_session_state = {}
+	ctx.court_settlement_id = 15
+	ctx.active_court_at_location = {"topics": [7]}
+	ctx.known_topics = [7]
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_true(option.metadata.get("has_topic", false))
+	assert_eq(option.metadata.get("court_settlement_id", -1), 15)
+	assert_false(option.metadata.has("topic_id"))
+
+
+func test_metadata_listen_reflect_has_topic() -> void:
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "LISTEN_REFLECT"
+	var need := NPCDataStructures.ImmediateNeed.new()
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.court_session_state = {}
+	ctx.court_settlement_id = 20
+	ctx.active_court_at_location = {"topics": [3]}
+	ctx.known_topics = [3]
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_true(option.metadata.get("has_topic", false))
+	assert_eq(option.metadata.get("court_settlement_id", -1), 20)
+
+
+func test_metadata_has_topic_false_when_no_known_topics() -> void:
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "CHARM"
+	var need := NPCDataStructures.ImmediateNeed.new()
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.court_session_state = {}
+	ctx.court_settlement_id = 10
+	ctx.active_court_at_location = {"topics": [5, 6]}
+	ctx.known_topics = []
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_false(option.metadata.get("has_topic", true))
+
+
+func test_metadata_public_debate_has_topic_id() -> void:
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "PUBLIC_DEBATE"
+	var need := NPCDataStructures.ImmediateNeed.new()
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.court_session_state = {}
+	ctx.court_settlement_id = 10
+	ctx.active_court_at_location = {"topics": [8]}
+	ctx.known_topics = [8]
+	ctx.known_positions = {8: -20.0}
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_eq(option.metadata.get("topic_id", -1), 8)
+	assert_true(option.metadata.get("has_topic", false))
+
+
+func test_compute_topic_relevance_distant_clan() -> void:
+	var topic := _make_topic(1, 50.0)
+	var character := _make_char(1)
+	var relevance: float = DayOrchestrator._compute_topic_relevance(topic, character)
+	# DISTANT (no clan match): 50 * 1.0 = 50.0, TIER_3 cap 60 → 50.0
+	assert_almost_eq(relevance, 50.0, 0.01)
+
+
+func test_compute_topic_relevance_own_clan() -> void:
+	var topic := _make_topic(1, 30.0)
+	topic.clan_involved = "Crane"
+	var character := _make_char(1)
+	character.clan = "Crane"
+	var relevance: float = DayOrchestrator._compute_topic_relevance(topic, character)
+	# OWN: 30 * 2.0 = 60.0, TIER_3 cap 60 → 60.0
+	assert_almost_eq(relevance, 60.0, 0.01)
+
+
+func test_compute_topic_relevance_null_topic() -> void:
+	var character := _make_char(1)
+	var relevance: float = DayOrchestrator._compute_topic_relevance(null, character)
+	assert_almost_eq(relevance, 0.0, 0.01)
+
+
+func test_compute_topic_relevance_own_family() -> void:
+	var topic := _make_topic(1, 20.0)
+	topic.tier = TopicData.Tier.TIER_2
+	topic.clan_involved = "Crane"
+	topic.family_involved = "Doji"
+	var character := _make_char(1)
+	character.clan = "Crane"
+	character.family = "Doji"
+	var relevance: float = DayOrchestrator._compute_topic_relevance(topic, character)
+	# OWN: 20*2.0=40 + family_own 20 = 60.0, TIER_2 no cap
+	assert_almost_eq(relevance, 60.0, 0.01)

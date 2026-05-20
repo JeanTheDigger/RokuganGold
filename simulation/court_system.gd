@@ -345,3 +345,148 @@ static func generate_court_close_topic(court: CourtSessionData) -> Dictionary:
 		"commitments_count": court.commitments_made.size(),
 		"wars_resolved": court.wars_resolved_during.size(),
 	}
+
+
+# -- Session State (s15.4 — per-character court action tracking) ---------------
+
+
+static func get_session_state(court: CourtSessionData, character_id: int) -> Dictionary:
+	if not court.session_state.has(character_id):
+		court.session_state[character_id] = {
+			"charm_count": 0,
+			"negotiate_count": 0,
+			"persuade_count": 0,
+			"public_debate_count": 0,
+			"tn_reductions": {},
+			"persuade_tn_reductions": {},
+		}
+	return court.session_state[character_id]
+
+
+static func increment_charm_count(court: CourtSessionData, character_id: int) -> int:
+	var state: Dictionary = get_session_state(court, character_id)
+	state["charm_count"] += 1
+	return state["charm_count"]
+
+
+static func increment_negotiate_count(court: CourtSessionData, character_id: int) -> int:
+	var state: Dictionary = get_session_state(court, character_id)
+	state["negotiate_count"] += 1
+	return state["negotiate_count"]
+
+
+static func increment_persuade_count(court: CourtSessionData, character_id: int) -> int:
+	var state: Dictionary = get_session_state(court, character_id)
+	state["persuade_count"] += 1
+	return state["persuade_count"]
+
+
+static func increment_public_debate_count(court: CourtSessionData, character_id: int) -> int:
+	var state: Dictionary = get_session_state(court, character_id)
+	state["public_debate_count"] += 1
+	return state["public_debate_count"]
+
+
+static func record_tn_reduction(
+	court: CourtSessionData,
+	character_id: int,
+	target_id: int,
+	reduction: int,
+) -> void:
+	var state: Dictionary = get_session_state(court, character_id)
+	var reductions: Dictionary = state["tn_reductions"]
+	reductions[target_id] = reductions.get(target_id, 0) + reduction
+
+
+static func record_persuade_tn_reduction(
+	court: CourtSessionData,
+	character_id: int,
+	target_id: int,
+	reduction: int,
+) -> void:
+	var state: Dictionary = get_session_state(court, character_id)
+	var reductions: Dictionary = state["persuade_tn_reductions"]
+	reductions[target_id] = reductions.get(target_id, 0) + reduction
+
+
+static func get_tn_reduction(
+	court: CourtSessionData,
+	character_id: int,
+	target_id: int,
+) -> int:
+	var state: Dictionary = get_session_state(court, character_id)
+	return state["tn_reductions"].get(target_id, 0)
+
+
+static func get_persuade_tn_reduction(
+	court: CourtSessionData,
+	character_id: int,
+	target_id: int,
+) -> int:
+	var state: Dictionary = get_session_state(court, character_id)
+	return state["persuade_tn_reductions"].get(target_id, 0)
+
+
+static func get_charm_count(court: CourtSessionData, character_id: int) -> int:
+	var state: Dictionary = get_session_state(court, character_id)
+	return state["charm_count"]
+
+
+static func get_negotiate_count(court: CourtSessionData, character_id: int) -> int:
+	var state: Dictionary = get_session_state(court, character_id)
+	return state["negotiate_count"]
+
+
+# -- Proxy Mandates (s16.2) ---------------------------------------------------
+
+
+static func assign_proxy_mandate(
+	court: CourtSessionData,
+	lord_id: int,
+	proxy_id: int,
+	topic_id: int,
+	decision_authority: bool,
+	depth_limit: int,
+	ic_day: int,
+) -> ProxyMandateData:
+	var mandate := ProxyMandateData.new()
+	mandate.lord_id = lord_id
+	mandate.proxy_id = proxy_id
+	mandate.mandate_topic_id = topic_id
+	mandate.decision_authority = decision_authority
+	mandate.depth_limit = depth_limit
+	mandate.assigned_ic_day = ic_day
+	mandate.court_id = court.court_id
+	court.proxy_mandates.append(mandate)
+	return mandate
+
+
+static func get_proxy_mandate(
+	court: CourtSessionData,
+	proxy_id: int,
+) -> ProxyMandateData:
+	for m: ProxyMandateData in court.proxy_mandates:
+		if m.proxy_id == proxy_id:
+			return m
+	return null
+
+
+static func is_within_mandate(
+	mandate: ProxyMandateData,
+	topic_id: int,
+	resource_amount: int = 0,
+) -> bool:
+	if mandate == null:
+		return false
+	if not mandate.decision_authority:
+		return false
+	if mandate.mandate_topic_id != topic_id:
+		return false
+	if mandate.depth_limit >= 0 and resource_amount > mandate.depth_limit:
+		return false
+	return true
+
+
+static func flag_out_of_mandate(mandate: ProxyMandateData) -> void:
+	if mandate != null:
+		mandate.out_of_mandate_flag = true

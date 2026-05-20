@@ -81,6 +81,9 @@ const COVERT_BASE_TN: int = 20
 const MILITARY_BASE_TN: int = 15
 const ADMIN_BASE_TN: int = 10
 
+const BRIBE_KOKU_COST: float = 5.0
+const PURCHASE_KOKU_COST: float = 3.0
+
 
 # -- Main Entry Point ---------------------------------------------------------
 
@@ -302,6 +305,9 @@ static func execute(
 	if action_id == "TRAIN_ANIMAL":
 		return _execute_train_animal(action, character, ctx, dice_engine)
 
+	if action_id == "APPLY_TATTOO":
+		return _execute_apply_tattoo(action, character, ctx, dice_engine, characters_by_id)
+
 	if action_id == "ANNOUNCE_HUNT":
 		return _execute_announce_hunt(action, character, ctx)
 
@@ -310,6 +316,9 @@ static func execute(
 
 	if action_id == "CANCEL_HUNT":
 		return _execute_cancel_hunt(action, character, ctx)
+
+	if action_id == "COMMISSION_ASSASSINATION":
+		return _execute_commission_assassination(action, character, ctx, characters_by_id)
 
 	if action_id in COVERT_ACTIONS:
 		var covert_result: Dictionary = _try_execute_covert(
@@ -636,7 +645,7 @@ static func _execute_intimidation(
 
 	var effects: Dictionary = {
 		"disposition_change": -(3 + int(clampi(attacker_roll - defender_roll, 0, 25) / 5)) if r["success"] else 0,
-		"honor_change": r.get("honor_loss", 0.0),
+		"honor_change": CrimeSystem.get_low_skill_honor_cost(character, "Intimidation"),
 		"infamy_gain": r.get("infamy_gain", 0.0),
 		"compliance_active": r.get("compliance_active", false),
 	}
@@ -712,11 +721,12 @@ static func _execute_gossip(
 	var primary_trait: String = skill_entry.get("secondary", "Awareness")
 	var skill_rank: int = character.skills.get(primary_skill, 0)
 	var trait_val: int = character.traits.get(primary_trait, 2)
+	var gossip_wc: int = _get_winter_court_skill_bonus(character, primary_skill, ctx)
 	var roll_result: Dictionary = dice_engine.roll_skill_check(
 		trait_val, skill_rank, tn
 	)
 
-	var roll_total: int = roll_result.get("total", 0)
+	var roll_total: int = roll_result.get("total", 0) + gossip_wc
 	var margin: int = roll_total - tn
 	var total_raises: int = maxi(int(margin / 5.0), 0)
 	var damage_raises: int = action.metadata.get("damage_raises", total_raises)
@@ -777,9 +787,10 @@ static func _execute_public_insult(
 	var skill_rank: int = character.skills.get(primary_skill, 0)
 	var trait_val: int = character.traits.get(primary_trait, 2)
 
+	var insult_wc: int = _get_winter_court_skill_bonus(character, primary_skill, ctx)
 	var attacker_total: int = dice_engine.roll_skill_check(
 		trait_val, skill_rank, 0
-	).get("total", 0)
+	).get("total", 0) + insult_wc
 
 	var defender_total: int = 0
 	if target != null:
@@ -794,12 +805,15 @@ static func _execute_public_insult(
 	var raises: int = maxi(int(margin / 5.0), 0)
 	var witness_ids: Array[int] = _get_co_located_ids(character, characters_by_id)
 
+	var insult_type: String = action.metadata.get("insult_type", "self")
+
 	var effects: Dictionary = {}
 	if success:
 		var per_witness_disp: int = -2 - raises
 		effects = {
 			"target_witness_disposition": per_witness_disp,
 			"witnesses": witness_ids,
+			"insult_type": insult_type,
 		}
 	else:
 		var backfire_disp: int = -2
@@ -807,6 +821,7 @@ static func _execute_public_insult(
 			"failed": true,
 			"witness_disposition_loss": backfire_disp,
 			"witnesses": witness_ids,
+			"insult_type": insult_type,
 		}
 		if margin <= -10:
 			effects["glory_change"] = -0.05
@@ -841,8 +856,9 @@ static func _execute_broadcast_social(
 	var skill_entry: Dictionary = action_skill_map.get(action_id, {})
 	var primary_skill: String = skill_entry.get("primary", "Courtier")
 	var tn: int = _get_social_tn(action, ctx, character)
+	var broadcast_wc: int = _get_winter_court_skill_bonus(character, primary_skill, ctx)
 	var roll_result: Dictionary = SkillResolver.resolve_skill_check(
-		character, dice_engine, primary_skill, tn
+		character, dice_engine, primary_skill, tn, 0, "", Enums.Trait.NONE, 0, 0, broadcast_wc
 	)
 
 	var success: bool = roll_result.get("success", false)
@@ -903,9 +919,10 @@ static func _execute_public_debate(
 	var a_trait_name: String = skill_entry.get("secondary", "Awareness")
 	var a_skill_rank: int = character.skills.get(primary_skill, 0)
 	var a_trait_val: int = character.traits.get(a_trait_name, 2)
+	var debate_wc: int = _get_winter_court_skill_bonus(character, primary_skill, ctx)
 	var a_roll: int = dice_engine.roll_skill_check(
 		a_trait_val, a_skill_rank, 0
-	).get("total", 0)
+	).get("total", 0) + debate_wc
 
 	var b_roll: int = 0
 	if target != null:
@@ -1089,6 +1106,7 @@ static func _build_covert_result(
 		"tn": system_result.get("tn", 0),
 		"margin": system_result.get("margin", 0),
 		"effects": effects,
+		"metadata": action.metadata,
 	}
 
 
@@ -1101,10 +1119,11 @@ static func _resolve_bribe_attempt(
 	var bribe_result: Dictionary = BriberySystem.attempt_bribe(briber, magistrate, dice_engine)
 	var result: int = bribe_result.get("result", BriberySystem.BribeResult.REFUSED)
 	var success: bool = result == BriberySystem.BribeResult.ACCEPTED
+	var blocked: bool = result == BriberySystem.BribeResult.BLOCKED_BY_PERSONALITY
 	var suppress_case: bool = action.metadata.get("suppress_case", false)
-	return {
+	var r: Dictionary = {
 		"success": success,
-		"blocked_by_personality": result == BriberySystem.BribeResult.BLOCKED_BY_PERSONALITY,
+		"blocked_by_personality": blocked,
 		"roll_total": bribe_result.get("briber_total", 0),
 		"tn": bribe_result.get("magistrate_total", 0),
 		"margin": bribe_result.get("briber_total", 0) - bribe_result.get("magistrate_total", 0),
@@ -1112,6 +1131,11 @@ static func _resolve_bribe_attempt(
 		"suppress_case": suppress_case,
 		"magistrate_id": magistrate.character_id,
 	}
+	if not blocked:
+		r["koku_cost"] = BRIBE_KOKU_COST
+	if not success and not blocked:
+		r["failed"] = true
+	return r
 
 
 # -- Witness Tampering (s11.3.13c) --------------------------------------------
@@ -1233,6 +1257,8 @@ static func _execute_expose_privately(
 
 	var has_proof: bool = action.metadata.get("has_proof", false)
 	var r: Dictionary = SecretSystem.reveal_privately(secret, character, recipient, subject, has_proof)
+	r["subject_id"] = subject_id
+	r["secret_id"] = secret.secret_id
 
 	return {
 		"success": true,
@@ -1269,6 +1295,8 @@ static func _execute_expose_publicly(
 	var has_proof: bool = action.metadata.get("has_proof", false)
 	var witness_ids: Array[int] = _get_co_located_ids(character, characters_by_id)
 	var r: Dictionary = SecretSystem.expose_publicly(secret, character, subject, witness_ids, characters_by_id, has_proof)
+	r["subject_id"] = subject_id
+	r["secret_id"] = secret.secret_id
 
 	return {
 		"success": true,
@@ -1294,8 +1322,8 @@ static func _get_co_located_ids(
 	var loc: String = character.physical_location
 	if loc.is_empty():
 		return ids
-	for id in characters_by_id:
-		var c: L5RCharacterData = characters_by_id[id]
+	for cid: int in characters_by_id:
+		var c: L5RCharacterData = characters_by_id[cid]
 		if c.character_id != character.character_id and c.physical_location == loc:
 			ids.append(c.character_id)
 	return ids
@@ -1371,15 +1399,25 @@ static func _apply_effects(
 		var offense_key: String = action.metadata.get("offense_key", "")
 		if not offense_key.is_empty():
 			HonorGlorySystem.record_atonement(_character, offense_key)
+	elif action_id == "REQUEST_ALLIED_AID":
+		effects = _compute_allied_aid_effects(action, ctx, result["success"])
 	elif result["success"]:
 		if action_id in SOCIAL_ACTIONS:
 			effects = _compute_social_effects(action_id, result["margin"])
+			if action_id == "NEGOTIATE" and action != null:
+				var nt: String = action.metadata.get("need_type", "")
+				if nt in RESOURCE_PROMISE_NEED_TYPES and action.target_npc_id >= 0:
+					effects["requires_resource_promise"] = true
+					effects["promise_creditor_id"] = ctx.character_id
+					effects["promise_debtor_id"] = action.target_npc_id
+					effects["promise_tier"] = _resource_tier_from_metadata(action.metadata)
+					effects["source_action_id"] = "NEGOTIATE"
 		elif action_id in COVERT_ACTIONS:
 			effects = _compute_covert_effects(action_id, result["margin"])
 		elif action_id in MILITARY_ORDERS:
 			effects = _compute_military_effects(action_id, action)
 		elif action_id in ADMINISTRATIVE_ACTIONS:
-			effects = _compute_admin_effects(action_id)
+			effects = _compute_admin_effects(action_id, action)
 		elif action_id in INTELLIGENCE_ACTIONS:
 			effects = _compute_intelligence_effects(action_id, result.get("margin", 0))
 		else:
@@ -1515,12 +1553,56 @@ static func _compute_military_effects(action_id: String, action: NPCDataStructur
 	return {"effect": "military_order_issued"}
 
 
-static func _compute_admin_effects(action_id: String) -> Dictionary:
+# PROVISIONAL: Disposition threshold reuses feasibility ledger constant (31).
+const ALLIED_AID_ACCEPT_THRESHOLD: int = 31
+
+const RESOURCE_PROMISE_NEED_TYPES: Array[String] = [
+	"ACQUIRE_RESOURCE", "REQUEST_AID", "CONDUCT_COMMERCE",
+]
+
+const RESOURCE_TIER_KOKU_THRESHOLDS: Array[int] = [10, 50]
+const RESOURCE_TIER_PU_THRESHOLDS: Array[int] = [5, 20]
+
+
+static func _resource_tier_from_metadata(metadata: Dictionary) -> int:
+	var koku: float = metadata.get("koku_amount", 0.0)
+	var pu: int = metadata.get("pu_amount", 0)
+	if koku > RESOURCE_TIER_KOKU_THRESHOLDS[1] or pu > RESOURCE_TIER_PU_THRESHOLDS[1]:
+		return 1
+	if koku >= RESOURCE_TIER_KOKU_THRESHOLDS[0] or pu >= RESOURCE_TIER_PU_THRESHOLDS[0]:
+		return 2
+	return 3
+
+static func _compute_allied_aid_effects(
+	action: NPCDataStructures.ScoredAction,
+	ctx: NPCDataStructures.ContextSnapshot,
+	roll_success: bool,
+) -> Dictionary:
+	if not roll_success:
+		return {"effect": "aid_request_failed", "failed": true}
+
+	var target_id: int = action.target_npc_id
+	if target_id < 0:
+		return {"effect": "aid_request_failed", "failed": true, "reason": "no_target"}
+
+	var target_disp: int = ctx.dispositions.get(target_id, 0)
+	if target_disp < ALLIED_AID_ACCEPT_THRESHOLD:
+		return {"effect": "aid_refused", "failed": true, "reason": "disposition_too_low"}
+
+	return {
+		"effect": "aid_accepted",
+		"requires_resource_promise": true,
+		"promise_creditor_id": ctx.character_id,
+		"promise_debtor_id": target_id,
+	}
+
+
+static func _compute_admin_effects(action_id: String, action: NPCDataStructures.ScoredAction = null) -> Dictionary:
 	match action_id:
 		"SET_TAX_RATE", "SET_STIPEND_RATE":
 			return {"effect": "rate_adjusted"}
 		"PURCHASE_MARKET":
-			return {"effect": "transaction_completed"}
+			return {"effect": "transaction_completed", "koku_cost": PURCHASE_KOKU_COST}
 		"SHARE_SUPPLIES":
 			return {
 				"effect": "supplies_shared",
@@ -1537,7 +1619,7 @@ static func _compute_admin_effects(action_id: String) -> Dictionary:
 		"DEMAND_TRIBUTE":
 			return {"effect": "tribute_demanded"}
 		"REQUEST_ALLIED_AID":
-			return {"effect": "aid_requested"}
+			return {"effect": "aid_requested", "failed": true}
 		"FOUND_VILLAGE":
 			return {"effect": "village_founded"}
 		"BUILD_FORTIFICATION":
@@ -1558,7 +1640,70 @@ static func _compute_admin_effects(action_id: String) -> Dictionary:
 			return {"effect": "wall_fortified"}
 		"SEAL_WALL_BREACH":
 			return {"effect": "breach_sealed"}
+		"ASSIGN_VASSAL_OBJECTIVE":
+			return _compute_assign_vassal_objective_effects(action)
+		"SEND_INVITATION":
+			return _compute_send_invitation_effects(action)
+		"CALL_COURT":
+			return _compute_call_court_effects(action)
 	return {"effect": "administrative_action"}
+
+
+static func _compute_assign_vassal_objective_effects(
+	action: NPCDataStructures.ScoredAction,
+) -> Dictionary:
+	var vassal_id: int = action.target_npc_id if action != null else -1
+	var need_type: String = action.metadata.get("need_type", "") if action != null else ""
+	var result: Dictionary = {
+		"effect": "vassal_objective_assigned",
+		"requires_vassal_objective_assignment": true,
+		"vassal_id": vassal_id,
+		"assigned_need_type": need_type,
+	}
+	if action != null:
+		if action.target_province_id >= 0:
+			result["target_province_id"] = action.target_province_id
+		var target_clan: String = action.metadata.get("target_clan", "")
+		if not target_clan.is_empty():
+			result["target_clan"] = target_clan
+		var target_npc: int = action.metadata.get("target_npc_id", -1)
+		if target_npc >= 0:
+			result["objective_target_npc_id"] = target_npc
+		if need_type in RESOURCE_PROMISE_NEED_TYPES and vassal_id >= 0:
+			var lord_id: int = action.metadata.get("lord_id", -1) if action != null else -1
+			if lord_id >= 0:
+				result["requires_resource_promise"] = true
+				result["promise_creditor_id"] = lord_id
+				result["promise_debtor_id"] = vassal_id
+				result["promise_tier"] = _resource_tier_from_metadata(action.metadata)
+				result["source_action_id"] = "ASSIGN_VASSAL_OBJECTIVE"
+	return result
+
+
+static func _compute_send_invitation_effects(
+	action: NPCDataStructures.ScoredAction,
+) -> Dictionary:
+	var invitee_id: int = action.target_npc_id if action != null else -1
+	var settlement_id: int = action.target_settlement_id if action != null else -1
+	return {
+		"effect": "invitation_sent",
+		"requires_court_invitation": true,
+		"invitee_id": invitee_id,
+		"invitation_settlement_id": settlement_id,
+		"recipient_disposition_change": 5,
+	}
+
+
+static func _compute_call_court_effects(
+	action: NPCDataStructures.ScoredAction,
+) -> Dictionary:
+	var settlement_id: int = action.target_settlement_id if action != null else -1
+	return {
+		"effect": "court_called",
+		"requires_court_creation": true,
+		"court_settlement_id": settlement_id,
+		"glory_change": 0.1,
+	}
 
 
 static func _execute_dispatch_courtier(
@@ -1813,7 +1958,7 @@ static func _execute_conduct_sortie(
 
 	# Read SS from metadata (populated by NPC engine from world_state) or
 	# fall back to the WallStatus context for the target province.
-	var ss: int = action.metadata.get("ss", 0)
+	var ss: int = action.metadata.get("ss", -1)
 	var si: int = 10
 	var garrison_above_minimum: bool = true
 	var jade_stockpile_critical: bool = false
@@ -1823,7 +1968,7 @@ static func _execute_conduct_sortie(
 			continue
 		var ws: NPCDataStructures.WallStatus = ws_variant as NPCDataStructures.WallStatus
 		if ws.province_id == target_province_id or target_province_id < 0:
-			ss = ws.ss if ss == 0 else ss
+			ss = ws.ss if ss < 0 else ss
 			si = ws.si
 			garrison_above_minimum = ws.garrison_above_minimum
 			jade_stockpile_critical = ws.jade_stockpile_critical
@@ -1879,7 +2024,7 @@ static func _execute_conduct_storm_assault(
 	ctx: NPCDataStructures.ContextSnapshot,
 ) -> Dictionary:
 	var settlement_id: int = action.metadata.get(
-		"siege_settlement_id", character.physical_location,
+		"siege_settlement_id", -1,
 	)
 	return {
 		"success": true,
@@ -2206,6 +2351,11 @@ static func _validate_military_order(
 	military_data: Dictionary,
 ) -> Dictionary:
 	if ctx.commanded_unit_id < 0:
+		if ctx.is_lord and (
+			action_id in CivilianOrderBudget.MILITARY_OR_CIVILIAN_ACTIONS
+			or action_id in CivilianOrderBudget.PURE_ORDER_ACTIONS
+		):
+			return {"valid": true}
 		return {"valid": false, "reason": "no_commanded_unit"}
 
 	if military_data.is_empty():
@@ -3167,9 +3317,10 @@ static func _execute_provoke_emotion(
 
 	var a_skill_rank: int = character.skills.get("Courtier", 0)
 	var a_trait_val: int = character.traits.get("Awareness", 2)
+	var provoke_wc: int = _get_winter_court_skill_bonus(character, "Courtier", ctx)
 	var attacker_roll: int = dice_engine.roll_skill_check(
 		a_trait_val, a_skill_rank, 0
-	).get("total", 0)
+	).get("total", 0) + provoke_wc
 
 	var defender_roll: int = 0
 	if target != null:
@@ -3304,9 +3455,10 @@ static func _execute_discern_need(
 
 	var a_skill_rank: int = character.skills.get(a_skill, 0)
 	var a_trait_val: int = character.traits.get(a_trait_name, 2)
+	var discern_wc: int = _get_winter_court_skill_bonus(character, a_skill, ctx)
 	var attacker_roll: int = dice_engine.roll_skill_check(
 		a_trait_val, a_skill_rank, 0
-	).get("total", 0)
+	).get("total", 0) + discern_wc
 
 	var defender_roll: int = 0
 	if target != null:
@@ -3418,9 +3570,10 @@ static func _execute_probe(
 
 	var a_skill_rank: int = character.skills.get("Courtier", 0)
 	var a_trait_val: int = character.traits.get("Perception", 2)
+	var probe_wc: int = _get_winter_court_skill_bonus(character, "Courtier", ctx)
 	var attacker_roll: int = dice_engine.roll_skill_check(
 		a_trait_val, a_skill_rank, 0
-	).get("total", 0)
+	).get("total", 0) + probe_wc
 
 	var defender_roll: int = 0
 	if target != null:
@@ -3576,10 +3729,11 @@ static func _execute_ask_for_introduction(
 
 	# Bureaucracy emphasis grants +1k0 on kuge rolls per s55.7.3.
 	var has_emphasis: bool = target_is_kuge and character.skills.has("Bureaucracy")
+	var intro_wc: int = _get_winter_court_skill_bonus(character, skill, ctx)
 	var roll_result: Dictionary = dice_engine.roll_skill_check(
 		trait_val, skill_rank, 0, 0, 0, has_emphasis
 	)
-	var roll_total: int = roll_result.get("total", 0)
+	var roll_total: int = roll_result.get("total", 0) + intro_wc
 
 	var resolution: Dictionary = CourtActionSystem.resolve_ask_for_introduction(
 		roll_total, target_is_kuge, intermediary_status
@@ -3627,7 +3781,7 @@ static func _execute_observe_court_attendees(
 	var roll_result: Dictionary = dice_engine.roll_skill_check(trait_val, skill_rank, 0)
 	var roll_total: int = roll_result.get("total", 0)
 
-	var observable_ids: Array = action.metadata.get("observable_attendee_ids", [])
+	var observable_ids: Array[int] = action.metadata.get("observable_attendee_ids", [] as Array[int])
 	var resolution: Dictionary = CourtActionSystem.resolve_observe_court_attendees(
 		roll_total, observable_ids.size()
 	)
@@ -3636,7 +3790,7 @@ static func _execute_observe_court_attendees(
 	if resolution.get("success", false):
 		var learn_count: int = resolution.get("learn_count", 0)
 		# Pick learn_count random IDs from the observable pool.
-		var pool: Array = observable_ids.duplicate()
+		var pool: Array[int] = observable_ids.duplicate()
 		var learned_ids: Array[int] = []
 		for _i: int in range(learn_count):
 			if pool.is_empty():
@@ -3781,7 +3935,7 @@ static func _execute_conduct_tea_ceremony(
 			"effects": {},
 		}
 
-	var candidate_ids: Array = action.metadata.get("participant_ids", [])
+	var candidate_ids: Array[int] = action.metadata.get("participant_ids", [] as Array[int])
 	var actual_participants: Array[int] = []
 	for pid: Variant in candidate_ids:
 		var pid_int: int = int(pid)
@@ -3938,7 +4092,7 @@ static func _execute_cancel_hunt(
 		}
 
 	var active_hunt_id: int = ctx.known_objectives.get("active_hunt_id", -1)
-	var accepted_invitee_ids: Array = action.metadata.get("accepted_invitee_ids", [])
+	var accepted_invitee_ids: Array[int] = action.metadata.get("accepted_invitee_ids", [] as Array[int])
 
 	return {
 		"success": true,
@@ -3956,6 +4110,98 @@ static func _execute_cancel_hunt(
 			"topic_type": "hunt_cancellation",
 		},
 	}
+
+
+# -- COMMISSION_ASSASSINATION --------------------------------------------------
+
+static func _execute_commission_assassination(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	characters_by_id: Dictionary,
+) -> Dictionary:
+	var target_id: int = action.target_npc_id
+	if target_id < 0:
+		return {
+			"success": false,
+			"action_id": "COMMISSION_ASSASSINATION",
+			"reason": "no_target",
+		}
+
+	var target: L5RCharacterData = characters_by_id.get(target_id)
+	if target == null:
+		return {
+			"success": false,
+			"action_id": "COMMISSION_ASSASSINATION",
+			"reason": "target_not_found",
+		}
+
+	var assassin: L5RCharacterData = _select_best_assassin(
+		character, characters_by_id, ctx
+	)
+	if assassin == null:
+		return {
+			"success": false,
+			"action_id": "COMMISSION_ASSASSINATION",
+			"reason": "no_eligible_assassin",
+		}
+
+	var method: int = _select_assassination_method(assassin)
+	var honor_cost: float = SecretSystem.get_assassination_order_honor_cost(target.status)
+	character.honor = maxf(character.honor + honor_cost, 0.0)
+
+	return {
+		"success": true,
+		"action_id": "COMMISSION_ASSASSINATION",
+		"character_id": character.character_id,
+		"target_npc_id": target_id,
+		"target_province_id": -1,
+		"ic_day": ctx.ic_day,
+		"season": ctx.season,
+		"effects": {
+			"assassin_id": assassin.character_id,
+			"target_id": target_id,
+			"method": method,
+			"commissioner_id": character.character_id,
+			"subject_honor_loss": honor_cost,
+		},
+	}
+
+
+static func _select_best_assassin(
+	lord: L5RCharacterData,
+	characters_by_id: Dictionary,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> L5RCharacterData:
+	var best: L5RCharacterData = null
+	var best_score: int = -1
+	for char_id: Variant in characters_by_id:
+		var c: L5RCharacterData = characters_by_id[char_id]
+		if c.character_id == lord.character_id:
+			continue
+		if c.lord_id != lord.character_id:
+			continue
+		if CharacterStats.is_dead(c):
+			continue
+		var stealth: int = c.skills.get("Stealth", 0)
+		if stealth < 3:
+			continue
+		var score: int = stealth + c.skills.get("Temptation", 0) + c.skills.get("Ninjutsu", 0)
+		if score > best_score:
+			best_score = score
+			best = c
+	return best
+
+
+static func _select_assassination_method(assassin: L5RCharacterData) -> int:
+	var poison_score: int = assassin.skills.get("Sleight of Hand", 0) + assassin.skills.get("Medicine", 0)
+	var blade_score: int = maxi(assassin.skills.get("Kenjutsu", 0), assassin.skills.get("Ninjutsu", 0))
+	var accident_score: int = assassin.skills.get("Engineering", 0) + assassin.skills.get("Investigation", 0)
+	if poison_score >= blade_score and poison_score >= accident_score:
+		return AssassinationSystem.ExecutionMethod.POISON
+	if blade_score >= accident_score:
+		return AssassinationSystem.ExecutionMethod.BLADE
+	return AssassinationSystem.ExecutionMethod.ARRANGED_ACCIDENT
 
 
 # -- TRAIN_ANIMAL --------------------------------------------------------------
@@ -4075,3 +4321,139 @@ static func _execute_train_animal(
 				"sessions_completed": companion.get("sessions_completed", 0),
 			},
 		}
+
+
+# -- s57.25.3 APPLY_TATTOO ---------------------------------------------------
+
+static func _execute_apply_tattoo(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	dice_engine: DiceEngine,
+	characters_by_id: Dictionary,
+) -> Dictionary:
+	var recipient_id: int = action.target_npc_id
+	var recipient: L5RCharacterData = characters_by_id.get(recipient_id)
+	if recipient == null:
+		return {
+			"success": false, "action_id": "APPLY_TATTOO",
+			"character_id": character.character_id,
+			"target_npc_id": recipient_id,
+			"target_province_id": -1,
+			"ic_day": ctx.ic_day, "season": ctx.season,
+			"reason": "no_recipient", "effects": {},
+		}
+
+	var target_tier: Enums.TattooQualityTier = action.metadata.get(
+		"target_tier", Enums.TattooQualityTier.NORMAL
+	) as Enums.TattooQualityTier
+	var body_location: Enums.TattooBodyLocation = action.metadata.get(
+		"body_location", Enums.TattooBodyLocation.LEFT_WRIST_FOREARM
+	) as Enums.TattooBodyLocation
+	var is_ability: bool = action.metadata.get("is_ability_tattoo", false)
+	var ability: Enums.TattooAbility = action.metadata.get(
+		"ability", Enums.TattooAbility.NONE
+	) as Enums.TattooAbility
+
+	var tattooing_rank: int = character.skills.get("Artisan: Tattooing", 0)
+	if not TattooSystem.meets_skill_gate(tattooing_rank, target_tier):
+		return {
+			"success": false, "action_id": "APPLY_TATTOO",
+			"character_id": character.character_id,
+			"target_npc_id": recipient_id,
+			"target_province_id": -1,
+			"ic_day": ctx.ic_day, "season": ctx.season,
+			"reason": "skill_gate_failed", "effects": {},
+		}
+
+	var ap_required: int = TattooSystem.get_ap_cost(target_tier)
+	if character.action_points_current < ap_required:
+		return {
+			"success": false, "action_id": "APPLY_TATTOO",
+			"character_id": character.character_id,
+			"target_npc_id": recipient_id,
+			"target_province_id": -1,
+			"ic_day": ctx.ic_day, "season": ctx.season,
+			"reason": "insufficient_ap", "effects": {},
+		}
+
+	var world_tattoos: Array[TattooData] = action.metadata.get("world_tattoos", [] as Array[TattooData])
+	var is_bald: bool = action.metadata.get("recipient_is_bald", false)
+	if not TattooSystem.is_location_available(world_tattoos, recipient_id, body_location, is_bald):
+		return {
+			"success": false, "action_id": "APPLY_TATTOO",
+			"character_id": character.character_id,
+			"target_npc_id": recipient_id,
+			"target_province_id": -1,
+			"ic_day": ctx.ic_day, "season": ctx.season,
+			"reason": "location_occupied", "effects": {},
+		}
+
+	if is_ability:
+		var in_togashi_territory: bool = action.metadata.get("in_togashi_territory", false)
+		if not TattooSystem.can_apply_ability_tattoo(
+			character.school_name, character.school_rank, in_togashi_territory
+		):
+			return {
+				"success": false, "action_id": "APPLY_TATTOO",
+				"character_id": character.character_id,
+				"target_npc_id": recipient_id,
+				"target_province_id": -1,
+				"ic_day": ctx.ic_day, "season": ctx.season,
+				"reason": "ability_tattoo_gate_failed", "effects": {},
+			}
+
+	var tn: int = TattooSystem.get_apply_tn(target_tier)
+	var roll_result: Dictionary = SkillResolver.resolve_skill_check(
+		character, dice_engine, "Artisan: Tattooing", tn, 0, "",
+		Enums.Trait.AGILITY, 0, 0, 0, ctx.ic_day
+	)
+
+	var roll_total: int = roll_result.get("total", 0)
+	var raises: int = maxi((roll_total - tn) / 5, 0) if roll_result.get("success", false) else 0
+	var final_quality: Enums.TattooQualityTier = TattooSystem.resolve_quality(
+		target_tier, roll_total, raises
+	)
+
+	if final_quality == Enums.TattooQualityTier.MUNDANE:
+		return {
+			"success": false, "action_id": "APPLY_TATTOO",
+			"character_id": character.character_id,
+			"target_npc_id": recipient_id,
+			"target_province_id": -1,
+			"ic_day": ctx.ic_day, "season": ctx.season,
+			"skill_used": "Artisan: Tattooing",
+			"roll_total": roll_total, "tn": tn,
+			"margin": roll_total - tn,
+			"effects": {
+				"ap_cost_override": ap_required,
+				"result_quality": Enums.TattooQualityTier.MUNDANE,
+			},
+		}
+
+	var disp_bond: int = TattooSystem.get_disposition_bond(final_quality)
+	return {
+		"success": true, "action_id": "APPLY_TATTOO",
+		"character_id": character.character_id,
+		"target_npc_id": recipient_id,
+		"target_province_id": -1,
+		"ic_day": ctx.ic_day, "season": ctx.season,
+		"skill_used": "Artisan: Tattooing",
+		"roll_total": roll_total, "tn": tn,
+		"margin": roll_total - tn,
+		"effects": {
+			"requires_tattoo_creation": true,
+			"ap_cost_override": ap_required,
+			"result_quality": final_quality,
+			"body_location": body_location,
+			"is_ability_tattoo": is_ability,
+			"ability": ability,
+			"target_tier": target_tier,
+			"raises": raises,
+			"disposition_change": disp_bond,
+			"recipient_disposition_change": disp_bond,
+			"subject_type": action.metadata.get("subject_type", Enums.TattooSubjectType.IMAGE),
+			"subject_description": action.metadata.get("subject_description", ""),
+			"topic_id": action.metadata.get("subject_topic_id", -1),
+		},
+	}

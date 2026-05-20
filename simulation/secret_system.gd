@@ -209,7 +209,7 @@ static func expose_publicly(
 	HonorGlorySystem.apply_infamy_change(subject, infamy_gain)
 
 	var witness_effects: Array[Dictionary] = []
-	for wid in witness_ids:
+	for wid: int in witness_ids:
 		var w: L5RCharacterData = characters_by_id.get(wid)
 		if w != null:
 			var current: int = w.disposition_values.get(subject.character_id, 0)
@@ -316,22 +316,22 @@ static func detect_fabrication(
 # ==============================================================================
 
 static func apply_bribe_costs(actor: L5RCharacterData) -> void:
-	HonorGlorySystem.apply_honor_change(actor, BRIBE_HONOR_COST)
+	HonorGlorySystem.apply_honor_change(actor, CrimeSystem.get_low_skill_honor_cost(actor, "Temptation"))
 	HonorGlorySystem.apply_infamy_change(actor, BRIBE_INFAMY)
 
 
 static func apply_eavesdrop_costs(actor: L5RCharacterData) -> void:
-	HonorGlorySystem.apply_honor_change(actor, EAVESDROP_HONOR_COST)
+	HonorGlorySystem.apply_honor_change(actor, CrimeSystem.get_low_skill_honor_cost(actor, "Stealth"))
 	HonorGlorySystem.apply_infamy_change(actor, EAVESDROP_INFAMY)
 
 
 static func apply_intercept_costs(actor: L5RCharacterData) -> void:
-	HonorGlorySystem.apply_honor_change(actor, INTERCEPT_HONOR_COST)
+	HonorGlorySystem.apply_honor_change(actor, CrimeSystem.get_low_skill_honor_cost(actor, "Stealth"))
 	HonorGlorySystem.apply_infamy_change(actor, INTERCEPT_INFAMY)
 
 
 static func apply_search_costs(actor: L5RCharacterData) -> void:
-	HonorGlorySystem.apply_honor_change(actor, SEARCH_HONOR_COST)
+	HonorGlorySystem.apply_honor_change(actor, CrimeSystem.get_low_skill_honor_cost(actor, "Sleight of Hand"))
 	HonorGlorySystem.apply_infamy_change(actor, SEARCH_INFAMY)
 
 
@@ -543,12 +543,14 @@ static func resolve_shadow_target(
 	var success: bool = contested.get("winner") == "a"
 	var margin: int = contested.get("total_a", 0) - contested.get("total_b", 0)
 
+	var detected: bool = not success
 	return {
 		"success": success,
-		"detected": not success,
+		"detected": detected,
 		"shadow_total": contested.get("total_a", 0),
 		"target_total": contested.get("total_b", 0),
 		"margin": margin,
+		"detection_risk": detected,
 	}
 
 
@@ -573,6 +575,21 @@ static func get_conceal_tn(item_size: String) -> int:
 			return CONCEAL_TN_MEDIUM
 
 
+const _CONCEAL_SCHOOL_LEAN: Array[String] = [
+	"Shosuro Infiltrator",
+	"Kasuga Smuggler",
+]
+
+
+static func _has_conceal_lean(actor: L5RCharacterData) -> bool:
+	for s: String in _CONCEAL_SCHOOL_LEAN:
+		if actor.school.begins_with(s):
+			return true
+	if actor.kolat_sect != Enums.KolatSect.NONE:
+		return true
+	return false
+
+
 static func resolve_conceal_item(
 	actor: L5RCharacterData,
 	item_size: String,
@@ -584,8 +601,10 @@ static func resolve_conceal_item(
 	if is_weapon and soh_rank < CONCEAL_WEAPON_SKILL_GATE:
 		return {"success": false, "reason": "weapon_skill_gate", "required_rank": CONCEAL_WEAPON_SKILL_GATE}
 
+	var bonus_kept: int = 1 if _has_conceal_lean(actor) else 0
 	var result: Dictionary = SkillResolver.resolve_skill_check(
 		actor, dice_engine, "Sleight of Hand", tn,
+		0, "Conceal", Enums.Trait.NONE, 0, bonus_kept,
 	)
 	var success: bool = result.get("success", false)
 

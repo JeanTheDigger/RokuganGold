@@ -108,7 +108,7 @@ static func _decompose_fight_bandits(
 	if ctx.active_insurgency_id >= 0:
 		return _make_need("PATROL_PROVINCE", 2)
 
-	for ps in ctx.province_statuses:
+	for ps: NPCDataStructures.ProvinceStatus in ctx.province_statuses:
 		if ps is NPCDataStructures.ProvinceStatus:
 			if ps.crisis_type == "bandit" or ps.crisis_type == "ronin" or ps.stability < 50.0:
 				return _make_need("INVESTIGATE_THREAT", 2, {"target_province_id": ps.province_id})
@@ -194,7 +194,7 @@ static func _find_worst_stability_province(
 ) -> Dictionary:
 	var worst: Dictionary = {}
 	var worst_stability: float = 100.0
-	for ps in ctx.province_statuses:
+	for ps: NPCDataStructures.ProvinceStatus in ctx.province_statuses:
 		if ps is NPCDataStructures.ProvinceStatus:
 			if ps.stability < worst_stability:
 				worst_stability = ps.stability

@@ -98,7 +98,7 @@ static func _count_intel_actions(
 static func _get_known_allies_from_objective(
 	objective: Dictionary,
 ) -> Array[int]:
-	var raw: Array = objective.get("known_allies", [])
+	var raw: Array[Variant] = objective.get("known_allies", [])
 	var result: Array[int] = []
 	for entry: Variant in raw:
 		if entry is int:
@@ -147,8 +147,8 @@ static func _progress_break_alliance(
 	var clan_x: String = objective.get("target_clan_id", "")
 	var clan_y: String = objective.get("target_clan_id_secondary", "")
 
-	var contacts_x: Array = ctx.known_contacts_by_clan.get(clan_x, [])
-	var contacts_y: Array = ctx.known_contacts_by_clan.get(clan_y, [])
+	var contacts_x: Array[int] = ctx.known_contacts_by_clan.get(clan_x, [])
+	var contacts_y: Array[int] = ctx.known_contacts_by_clan.get(clan_y, [])
 	if contacts_x.size() > 0:
 		score += 0.1
 	if contacts_y.size() > 0:
@@ -342,8 +342,8 @@ static func _progress_negotiate_peace(
 	var clan_a: String = objective.get("target_clan_id", "")
 	var clan_b: String = objective.get("target_clan_id_secondary", "")
 
-	var contacts_a: Array = ctx.known_contacts_by_clan.get(clan_a, [])
-	var contacts_b: Array = ctx.known_contacts_by_clan.get(clan_b, [])
+	var contacts_a: Array[int] = ctx.known_contacts_by_clan.get(clan_a, [])
+	var contacts_b: Array[int] = ctx.known_contacts_by_clan.get(clan_b, [])
 
 	if contacts_a.size() > 0:
 		score += 0.05
@@ -553,7 +553,7 @@ static func _progress_sabotage_economy(
 ) -> float:
 	var score: float = 0.0
 
-	var known_provinces: Array = objective.get("known_enemy_provinces", [])
+	var known_provinces: Array[int] = objective.get("known_enemy_provinces", [])
 	if known_provinces.is_empty():
 		var intel: int = _count_intel_actions(
 			ctx, -1,

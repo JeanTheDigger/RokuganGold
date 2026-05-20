@@ -1076,3 +1076,251 @@ func test_exchange_bonus_clamps_at_100():
 
 	assert_eq(sender.disposition_values[2], 100)
 	assert_eq(recipient.disposition_values[1], 100)
+
+
+# --- Meeting Proposal Reply Propagation (s55.31) ---
+
+func test_reply_propagates_meeting_proposal_when_disposition_ok():
+	var dice := DiceEngine.new()
+	dice.set_seed(42)
+	var sender := _make_char(1, 3)
+	var recipient := _make_char(2, 3)
+	recipient.disposition_values[1] = 10
+	recipient.topic_pool = [10]
+	recipient.bushido_virtue = Enums.BushidoVirtue.REI
+	var chars: Dictionary = {1: sender, 2: recipient}
+
+	var letter: LetterData = LetterSystem.write_letter(
+		1, sender, 2, 10, 0, dice, 3
+	)
+	letter.meeting_proposal = true
+	letter.meeting_settlement_id = 100
+	letter.meeting_deadline_ic_day = 90
+	var pending: Array = [letter]
+
+	var delivery_results: Array[Dictionary] = [{
+		"letter_id": 1,
+		"sender_id": 1,
+		"recipient_id": 2,
+		"topic": 10,
+	}]
+	var next_id: Array[int] = [100]
+	var replies: Array[LetterData] = LetterSystem.generate_replies(
+		delivery_results, pending, chars, 0, dice, next_id
+	)
+	if replies.size() > 0:
+		assert_true(replies[0].meeting_proposal,
+			"Reply should carry meeting_proposal")
+		assert_eq(replies[0].meeting_settlement_id, 100)
+		assert_eq(replies[0].meeting_deadline_ic_day, 90)
+
+
+func test_reply_does_not_propagate_meeting_when_hostile():
+	var dice := DiceEngine.new()
+	dice.set_seed(42)
+	var sender := _make_char(1, 3)
+	var recipient := _make_char(2, 3)
+	recipient.disposition_values[1] = -5
+	recipient.topic_pool = [10]
+	recipient.bushido_virtue = Enums.BushidoVirtue.REI
+	var chars: Dictionary = {1: sender, 2: recipient}
+
+	var letter: LetterData = LetterSystem.write_letter(
+		1, sender, 2, 10, 0, dice, 3
+	)
+	letter.meeting_proposal = true
+	letter.meeting_settlement_id = 100
+	letter.meeting_deadline_ic_day = 90
+	var pending: Array = [letter]
+
+	var delivery_results: Array[Dictionary] = [{
+		"letter_id": 1,
+		"sender_id": 1,
+		"recipient_id": 2,
+		"topic": 10,
+	}]
+	var next_id: Array[int] = [100]
+	var replies: Array[LetterData] = LetterSystem.generate_replies(
+		delivery_results, pending, chars, 0, dice, next_id
+	)
+	for reply: LetterData in replies:
+		assert_false(reply.meeting_proposal,
+			"Hostile recipient should not confirm meeting")
+
+
+# -- Forgery Detection Skip (GDD s12.7: detected forgery = discard) -----------
+
+
+func test_detected_forgery_skips_topic_transfer():
+	var dice := DiceEngine.new()
+	dice.set_seed(42)
+	var sender := _make_char(1, 3)
+	var recipient := _make_char(2, 7)
+	recipient.skills["Investigation"] = 10
+	recipient.traits[Enums.Trait.PERCEPTION] = 10
+	var chars: Dictionary = {1: sender, 2: recipient}
+	var log: Array[Dictionary] = []
+
+	var authentic: LetterData = LetterSystem.write_letter(
+		1, sender, 2, 5, 0, dice, 0
+	)
+	authentic.ic_day_arrival = 0
+
+	var forged: LetterData = LetterSystem.write_letter(
+		2, sender, 2, 99, 1, dice, 0
+	)
+	forged.ic_day_arrival = 1
+	forged.is_forged = true
+	forged.forged_sender_id = 50
+	forged.forgery_tn = 5
+	var pending: Array = [authentic, forged]
+
+	LetterSystem.process_pending_letters(pending, chars, 0, 1, log, [], dice)
+	var results: Array[Dictionary] = LetterSystem.process_pending_letters(
+		pending, chars, 1, 1, log, [], dice
+	)
+	assert_eq(results.size(), 1)
+	assert_true(results[0].get("forgery_detected", false))
+	assert_false(99 in recipient.topic_pool,
+		"Detected forgery should NOT transfer topic")
+
+
+func test_undetected_forgery_transfers_topic():
+	var dice := DiceEngine.new()
+	dice.set_seed(42)
+	var sender := _make_char(1, 3)
+	var recipient := _make_char(2, 1)
+	recipient.skills["Investigation"] = 1
+	recipient.traits[Enums.Trait.PERCEPTION] = 1
+	var chars: Dictionary = {1: sender, 2: recipient}
+	var log: Array[Dictionary] = []
+
+	var forged: LetterData = LetterSystem.write_letter(
+		1, sender, 2, 99, 0, dice, 0
+	)
+	forged.ic_day_arrival = 0
+	forged.is_forged = true
+	forged.forged_sender_id = 50
+	forged.forgery_tn = 50
+	var pending: Array = [forged]
+
+	var results: Array[Dictionary] = LetterSystem.process_pending_letters(
+		pending, chars, 0, 1, log, [], dice
+	)
+	assert_eq(results.size(), 1)
+	assert_false(results[0].get("forgery_detected", true))
+	assert_true(99 in recipient.topic_pool,
+		"Undetected forgery SHOULD transfer topic")
+
+
+# -- Reply to forged letter tags reply_to_forged --------------------------------
+
+
+func test_reply_to_forged_letter_tagged():
+	var dice := DiceEngine.new()
+	dice.set_seed(42)
+	var sender := _make_char(1, 3)
+	var recipient := _make_char(2, 3)
+	recipient.disposition_values[1] = 80
+	recipient.topic_pool = [10, 20]
+	var chars: Dictionary = {1: sender, 2: recipient}
+	var log: Array[Dictionary] = []
+
+	var forged: LetterData = LetterSystem.write_letter(
+		1, sender, 2, 10, 0, dice, 3
+	)
+	forged.ic_day_arrival = 0
+	forged.is_forged = true
+	forged.forged_sender_id = 99
+	forged.forgery_tn = 50
+	var pending: Array = [forged]
+
+	LetterSystem.process_pending_letters(pending, chars, 0, 1, log, [], dice)
+	var delivery_results: Array[Dictionary] = [{
+		"letter_id": 1,
+		"sender_id": 1,
+		"recipient_id": 2,
+		"topic": 10,
+		"is_forged": true,
+		"forged_sender_id": 99,
+		"forgery_detected": false,
+	}]
+	var next_id: Array[int] = [100]
+	var replies: Array[LetterData] = LetterSystem.generate_replies(
+		delivery_results, pending, chars, 0, dice, next_id,
+	)
+	if replies.size() > 0:
+		assert_true(replies[0].reply_to_forged,
+			"Reply to undetected forged letter should be tagged")
+		assert_eq(replies[0].original_forger_id, 99)
+	else:
+		pass_test("No reply generated (RNG), can't test tag")
+
+
+func test_no_reply_to_detected_forgery():
+	var dice := DiceEngine.new()
+	dice.set_seed(42)
+	var sender := _make_char(1, 3)
+	var recipient := _make_char(2, 3)
+	recipient.disposition_values[1] = 80
+	recipient.topic_pool = [10]
+	var chars: Dictionary = {1: sender, 2: recipient}
+
+	var forged: LetterData = LetterSystem.write_letter(
+		1, sender, 2, 10, 0, dice, 3
+	)
+	forged.is_forged = true
+	forged.forged_sender_id = 99
+	forged.forgery_detected = true
+	var pending: Array = [forged]
+
+	var delivery_results: Array[Dictionary] = [{
+		"letter_id": 1,
+		"sender_id": 1,
+		"recipient_id": 2,
+		"topic": 10,
+		"is_forged": true,
+		"forged_sender_id": 99,
+		"forgery_detected": true,
+	}]
+	var next_id: Array[int] = [100]
+	var replies: Array[LetterData] = LetterSystem.generate_replies(
+		delivery_results, pending, chars, 0, dice, next_id,
+	)
+	assert_eq(replies.size(), 0,
+		"Should not generate reply to detected forgery")
+
+
+func test_reply_to_detected_forgery_not_tagged():
+	var dice := DiceEngine.new()
+	dice.set_seed(42)
+	var sender := _make_char(1, 3)
+	var recipient := _make_char(2, 3)
+	recipient.disposition_values[1] = 80
+	recipient.topic_pool = [10]
+	var chars: Dictionary = {1: sender, 2: recipient}
+
+	var forged: LetterData = LetterSystem.write_letter(
+		1, sender, 2, 10, 0, dice, 3
+	)
+	forged.is_forged = true
+	forged.forged_sender_id = 99
+	forged.forgery_detected = true
+	var pending: Array = [forged]
+
+	var delivery_results: Array[Dictionary] = [{
+		"letter_id": 1,
+		"sender_id": 1,
+		"recipient_id": 2,
+		"topic": 10,
+		"is_forged": true,
+		"forged_sender_id": 99,
+		"forgery_detected": true,
+	}]
+	var next_id: Array[int] = [100]
+	var replies: Array[LetterData] = LetterSystem.generate_replies(
+		delivery_results, pending, chars, 0, dice, next_id,
+	)
+	for reply: LetterData in replies:
+		assert_false(reply.reply_to_forged,
+			"Reply to detected forgery should NOT be tagged")

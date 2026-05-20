@@ -66,7 +66,7 @@ static func resolve_seduction(
 	var success: bool = result.get("success", false)
 	var margin: int = result.get("margin", 0)
 
-	HonorGlorySystem.apply_honor_change(seducer, HONOR_COST)
+	HonorGlorySystem.apply_honor_change(seducer, CrimeSystem.get_low_skill_honor_cost(seducer, "Temptation"))
 	HonorGlorySystem.apply_infamy_change(seducer, INFAMY_GAIN)
 
 	if not success:
@@ -118,6 +118,7 @@ static func create_entanglement(
 	seducer_id: int,
 	target_id: int,
 	current_ic_day: int,
+	variant: SeductionVariant = SeductionVariant.SEDUCE,
 ) -> Dictionary:
 	return {
 		"seducer_id": seducer_id,
@@ -126,6 +127,7 @@ static func create_entanglement(
 		"created_ic_day": current_ic_day,
 		"last_maintained_ic_day": current_ic_day,
 		"missed_windows": 0,
+		"variant": variant,
 	}
 
 
@@ -133,7 +135,7 @@ static func check_maintenance(
 	entanglement: Dictionary,
 	current_ic_day: int,
 ) -> Dictionary:
-	var last: int = entanglement.get("last_maintained_ic_day", 0)
+	var last: int = entanglement.get("last_maintained_ic_day", -1)
 	var days_since: int = current_ic_day - last
 	var windows_missed: int = days_since / MAINTENANCE_WINDOW_IC_DAYS
 
