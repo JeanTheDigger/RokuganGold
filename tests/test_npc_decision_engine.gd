@@ -85,7 +85,6 @@ func before_each() -> void:
 			{"condition": "war_score_below_25", "bonus": 25, "applies_to": ["CHARM", "ORDER_BATTLE"], "stacks_per_crisis": false},
 			{"condition": "active_crisis_in_relevance_range", "bonus": 15, "applies_to": "actions_addressing_crisis", "stacks_per_crisis": true, "weight_by_relevance": true},
 			{"condition": "court_ending_within_2_ic_days", "bonus": 10, "applies_to": "court_actions", "stacks_per_crisis": false},
-			{"condition": "favor_expiring_within_7_ooc_days", "bonus": 20, "applies_to": ["HONOR_FAVOR", "BREAK_FAVOR"], "stacks_per_crisis": false},
 			{"condition": "objective_stalled_2_plus_seasons", "bonus": 10, "applies_to": "actions_addressing_primary_objective", "stacks_per_crisis": false},
 		],
 		"topic_position_alignment": {},

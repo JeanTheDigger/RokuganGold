@@ -13220,3 +13220,136 @@ func test_garrison_courtier_refusal_critical_wall_honor_loss() -> void:
 	)
 	assert_almost_eq(daimyo.honor, 4.0, 0.01,
 		"Critical wall refusal should lose 1.0 honor")
+
+
+# -- Bug fix: dead character cleanup ------------------------------------------
+
+func _make_dead_character(id: int) -> L5RCharacterData:
+	var c := L5RCharacterData.new()
+	c.character_id = id
+	c.earth_ring = 0
+	return c
+
+
+func test_dead_character_removed_from_court_attendee_ids() -> void:
+	var alive := L5RCharacterData.new()
+	alive.character_id = 1
+	var dead := _make_dead_character(2)
+	var characters: Array = [alive, dead]
+	var characters_by_id: Dictionary = {1: alive, 2: dead}
+	var court := CourtSessionData.new()
+	court.attendee_ids = [1, 2]
+	court.court_id = 10
+	court.host_settlement_id = 100
+	var active_courts: Array = [court]
+	DayOrchestrator._cleanup_dead_character_references(
+		characters, characters_by_id, active_courts, [], [], [],
+	)
+	assert_true(1 in court.attendee_ids, "Alive character stays in court")
+	assert_false(2 in court.attendee_ids, "Dead character removed from court")
+
+
+func test_dead_character_breaks_entanglement() -> void:
+	var alive := L5RCharacterData.new()
+	alive.character_id = 1
+	var dead := _make_dead_character(2)
+	var characters: Array = [alive, dead]
+	var characters_by_id: Dictionary = {1: alive, 2: dead}
+	var ent: Dictionary = {
+		"seducer_id": 1,
+		"target_id": 2,
+		"state": SeductionSystem.EntanglementState.ACTIVE,
+	}
+	var entanglements: Array = [ent]
+	DayOrchestrator._cleanup_dead_character_references(
+		characters, characters_by_id, [], entanglements, [], [],
+	)
+	assert_eq(ent["state"], SeductionSystem.EntanglementState.BROKEN,
+		"Entanglement with dead target should be broken")
+
+
+func test_dead_host_cancels_hunt() -> void:
+	var alive := L5RCharacterData.new()
+	alive.character_id = 1
+	var dead := _make_dead_character(2)
+	var characters: Array = [alive, dead]
+	var characters_by_id: Dictionary = {1: alive, 2: dead}
+	var hunt: Dictionary = {
+		"hunt_id": 1,
+		"host_id": 2,
+		"accepted_invitee_ids": [1],
+		"status": "active",
+	}
+	var active_hunts: Array = [hunt]
+	DayOrchestrator._cleanup_dead_character_references(
+		characters, characters_by_id, [], [], active_hunts, [],
+	)
+	assert_eq(hunt["status"], "cancelled",
+		"Hunt with dead host should be cancelled")
+
+
+func test_dead_invitee_removed_from_hunt() -> void:
+	var alive := L5RCharacterData.new()
+	alive.character_id = 1
+	var dead := _make_dead_character(2)
+	var characters: Array = [alive, dead]
+	var characters_by_id: Dictionary = {1: alive, 2: dead}
+	var hunt: Dictionary = {
+		"hunt_id": 1,
+		"host_id": 1,
+		"accepted_invitee_ids": [2, 3],
+		"status": "active",
+	}
+	var active_hunts: Array = [hunt]
+	DayOrchestrator._cleanup_dead_character_references(
+		characters, characters_by_id, [], [], active_hunts, [],
+	)
+	assert_eq(hunt["status"], "active", "Hunt with alive host stays active")
+	assert_false(2 in hunt["accepted_invitee_ids"],
+		"Dead invitee removed from hunt")
+	assert_true(3 in hunt["accepted_invitee_ids"],
+		"Alive invitee stays in hunt")
+
+
+func test_dead_character_dissolves_favors() -> void:
+	var alive := L5RCharacterData.new()
+	alive.character_id = 1
+	var dead := _make_dead_character(2)
+	dead.designated_heir_id = -1
+	var characters: Array = [alive, dead]
+	var characters_by_id: Dictionary = {1: alive, 2: dead}
+	var favor := FavorData.new()
+	favor.favor_id = 1
+	favor.creditor_id = 2
+	favor.debtor_id = 1
+	favor.tier = FavorData.FavorTier.MINOR
+	var favors: Array = [favor]
+	DayOrchestrator._cleanup_dead_character_references(
+		characters, characters_by_id, [], [], [], favors,
+	)
+	var dissolved: Array = FavorSystem.process_creditor_death(favors, 2, -1)
+	assert_true(favor.favor_id in dissolved.get("dissolved", []),
+		"Favor with dead creditor (minor tier) should be dissolved")
+
+
+func test_court_attendance_skips_dead_characters() -> void:
+	var alive := L5RCharacterData.new()
+	alive.character_id = 1
+	alive.physical_location = "100"
+	var dead := _make_dead_character(2)
+	dead.physical_location = "100"
+	var characters: Array = [alive, dead]
+	var court := CourtSessionData.new()
+	court.court_id = 10
+	court.host_settlement_id = 100
+	court.host_lord_id = 99
+	court.start_ic_day = 1
+	court.duration_ticks = 30
+	court.elapsed_ticks = 5
+	court.attendee_ids = []
+	var active_courts: Array = [court]
+	DayOrchestrator._process_court_attendance(active_courts, characters)
+	assert_true(1 in court.attendee_ids,
+		"Alive character at settlement should be added to court")
+	assert_false(2 in court.attendee_ids,
+		"Dead character at settlement should NOT be added to court")

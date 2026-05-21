@@ -713,6 +713,11 @@ static func advance_day(
 
 	death_events.clear()
 
+	_cleanup_dead_character_references(
+		characters, characters_by_id, active_courts, entanglements,
+		active_hunts, favors,
+	)
+
 	var succession_results: Array = _process_successions(
 		active_successions, characters_by_id
 	)
@@ -5761,6 +5766,59 @@ static func _process_operational_death_cascade(
 		)
 		all_cleared.append_array(cleared)
 	return all_cleared
+
+
+static func _cleanup_dead_character_references(
+	characters: Array,
+	characters_by_id: Dictionary,
+	active_courts: Array,
+	entanglements: Array,
+	active_hunts: Array,
+	favors: Array,
+) -> void:
+	var dead_ids: Array = []
+	for c: L5RCharacterData in characters:
+		if CharacterStats.is_dead(c):
+			dead_ids.append(c.character_id)
+	if dead_ids.is_empty():
+		return
+
+	for court_entry: Variant in active_courts:
+		if not court_entry is CourtSessionData:
+			continue
+		var court: CourtSessionData = court_entry as CourtSessionData
+		for did: int in dead_ids:
+			court.attendee_ids.erase(did)
+
+	for ent: Dictionary in entanglements:
+		if ent.get("state") == SeductionSystem.EntanglementState.BROKEN:
+			continue
+		var seducer_id: int = ent.get("seducer_id", -1)
+		var target_id: int = ent.get("target_id", -1)
+		if seducer_id in dead_ids or target_id in dead_ids:
+			ent["state"] = SeductionSystem.EntanglementState.BROKEN
+
+	var hunts_to_cancel: Array = []
+	for hunt: Dictionary in active_hunts:
+		if hunt.get("status", "") != "active":
+			continue
+		var host_id: int = hunt.get("host_id", -1)
+		if host_id in dead_ids:
+			hunts_to_cancel.append(hunt)
+			continue
+		var invitees: Array = hunt.get("accepted_invitee_ids", [])
+		for did: int in dead_ids:
+			invitees.erase(did)
+	for hunt: Dictionary in hunts_to_cancel:
+		hunt["status"] = "cancelled"
+
+	for did: int in dead_ids:
+		FavorSystem.process_debtor_death(favors, did)
+		var heir_id: int = -1
+		var dead_char: L5RCharacterData = characters_by_id.get(did)
+		if dead_char != null:
+			heir_id = dead_char.designated_heir_id
+		FavorSystem.process_creditor_death(favors, did, heir_id)
 
 
 static func _process_successions(
@@ -11006,6 +11064,8 @@ static func _process_court_attendance(
 			continue
 		var settlement_str: String = str(court.host_settlement_id)
 		for c: L5RCharacterData in characters:
+			if CharacterStats.is_dead(c):
+				continue
 			var at_settlement: bool = c.physical_location == settlement_str
 			var is_attending: bool = c.character_id in court.attendee_ids
 			if at_settlement and not is_attending:

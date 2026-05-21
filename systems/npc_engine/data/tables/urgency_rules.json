@@ -7,12 +7,6 @@
     "weight_by_relevance": true
   },
   {
-    "condition": "favor_expiring_within_7_ooc_days",
-    "bonus": 20,
-    "applies_to": ["HONOR_FAVOR", "BREAK_FAVOR"],
-    "stacks_per_crisis": false
-  },
-  {
     "condition": "court_ending_within_2_ic_days",
     "bonus": 10,
     "applies_to": "court_actions",

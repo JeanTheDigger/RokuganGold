@@ -423,6 +423,10 @@ static func _resolve_civilian_order(
 	if order_options.is_empty():
 		return {}
 
+	order_options = NPCDecisionEngine.apply_allowlist_filter(order_options, need.need_type, scoring_tables)
+	if order_options.is_empty():
+		return {}
+
 	NPCDecisionEngine.score_all(order_options, need, ctx, scoring_tables,
 		approach_penalties, commitments, character, travel_redirects)
 	var chosen: NPCDataStructures.ScoredAction = NPCDecisionEngine.select_action(order_options, ctx)

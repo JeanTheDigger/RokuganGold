@@ -1254,23 +1254,32 @@ All 10 constant arrays and 10 helper functions added. 28 constant/integration te
   passthrough. 2 tests.
 
 ### Known Code Issues — Remaining (2026-05-21, NPC pipeline audit)
-- **Civilian order resolution skips allowlist filter (LOW severity).**
-  `npc_wave_resolver.gd:422` applies personality_filter but not
-  `apply_allowlist_filter()`. Lords' civilian orders can select actions
-  with 0 objective alignment for their current NeedType. Practical impact
-  is low: 0-alignment actions score poorly and rarely win selection.
-  Civilian orders are exclusively governance/military (SET_TAX_RATE,
-  ASSIGN_GARRISON, etc.) so covert/deceptive penalty gaps from missing
-  `chars_by_id` parameter have zero practical impact.
-- **Urgency rule for HONOR_FAVOR/BREAK_FAVOR is dead.**
-  `urgency_rules.json:12` applies +20 bonus to `["HONOR_FAVOR",
-  "BREAK_FAVOR"]` on expiring favors. These are not real ActionIDs —
-  `HONOR_FAVOR` is a NeedType in reactive_decisions.gd. The favor expiry
-  urgency bonus never fires for any actual action.
-- **Dead characters not removed from court attendee lists on death.**
-  Inert (dead characters don't take actions) but stale data accumulates.
-- **Entanglements, favors, hunt participations not cleaned on death.**
-  Low impact — these systems check alive status at usage time.
+- **Civilian order resolution skips allowlist filter. FIXED.**
+  `npc_wave_resolver.gd:422` applied personality_filter but not
+  `apply_allowlist_filter()`. Lords' civilian orders could select actions
+  with 0 objective alignment for their current NeedType. Added
+  `apply_allowlist_filter()` call after personality_filter in
+  `_resolve_civilian_order()`. Practical impact was low (governance/military
+  actions only) but correctness now matches the standard AP-loop pipeline.
+- **Urgency rule for HONOR_FAVOR/BREAK_FAVOR is dead. FIXED.**
+  Removed `favor_expiring_within_7_ooc_days` rule from urgency_rules.json.
+  `HONOR_FAVOR` and `BREAK_FAVOR` are NeedTypes in reactive_decisions.gd,
+  not AP-loop ActionIDs. The +20 urgency bonus never matched any action.
+  Favor honoring runs through the reactive decision path, not the AP
+  scoring loop.
+- **Dead characters not removed from court attendee lists on death. FIXED.**
+  `_cleanup_dead_character_references()` added to advance_day() after death
+  processing. Removes dead character IDs from all active court attendee_ids
+  arrays. Also added `CharacterStats.is_dead()` skip in
+  `_process_court_attendance()` to prevent dead characters from being
+  re-added to courts based on physical_location. 2 tests.
+- **Entanglements, favors, hunt participations not cleaned on death. FIXED.**
+  `_cleanup_dead_character_references()` handles all three: breaks
+  entanglements involving dead participants (sets state to BROKEN), cancels
+  hunts with dead hosts and removes dead invitees from accepted lists,
+  dissolves favors using existing FavorSystem.process_debtor_death() and
+  process_creditor_death() (creditor favors transfer to designated heir).
+  5 tests.
 
 ### Effect Key Audit Dead Keys — Informational / Not Bugs (2026-05-20)
 The following effect keys are set but intentionally unconsumed by the
