@@ -15,7 +15,7 @@ func before_each() -> void:
 
 
 func after_each() -> void:
-	_sm.queue_free()
+	_sm.free()
 	_purge_test_dir()
 
 
