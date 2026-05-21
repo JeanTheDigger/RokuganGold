@@ -271,7 +271,7 @@ static func _process_tortoise_escapes(
 			bc["is_escaped"] = true
 		results.append({
 			"company_id": bc["company_id"],
-			"ship_id": bc.get("ship", {}).get("ship_id", bc["company_id"]),
+			"ship_id": bc["ship"].ship_id if bc.has("ship") and bc["ship"] != null else bc["company_id"],
 			"escaped": attempt["escaped"],
 			"escape_total": attempt["escape_total"],
 			"pursue_total": attempt["pursue_total"],

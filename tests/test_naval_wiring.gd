@@ -966,8 +966,8 @@ func test_s57_18_1_deploy_army_when_pirate_fleet_and_has_ships() -> void:
 	)
 	assert_eq(need.need_type, "DEPLOY_ARMY",
 		"Lord with ships vs pirate fleet should DEPLOY_ARMY")
-	assert_eq(need.data.get("target_intent", ""), "SUPPRESS_PIRACY")
-	assert_eq(need.data.get("target_province_id", -1), 42)
+	assert_eq(need.target_intent, "SUPPRESS_PIRACY")
+	assert_eq(need.target_province_id, 42)
 
 
 func test_s57_18_1_request_aid_when_pirate_fleet_and_no_ships() -> void:
@@ -977,7 +977,7 @@ func test_s57_18_1_request_aid_when_pirate_fleet_and_no_ships() -> void:
 	)
 	assert_eq(need.need_type, "REQUEST_AID",
 		"Lord without ships vs pirate fleet should REQUEST_AID")
-	assert_eq(need.data.get("target_intent", ""), "naval_suppression")
+	assert_eq(need.target_intent, "naval_suppression")
 
 
 func test_s57_18_1_no_pirate_fleet_gives_patrol_province() -> void:
@@ -1014,7 +1014,7 @@ func test_s57_18_2_write_letter_when_no_ships_for_pirate_patrol() -> void:
 	)
 	assert_eq(need.need_type, "WRITE_LETTER",
 		"Lord without ships cannot patrol pirate waters — should WRITE_LETTER")
-	assert_eq(need.data.get("target_intent", ""), "report_piracy")
+	assert_eq(need.target_intent, "report_piracy")
 
 
 func test_province_has_pirate_fleet_helper_true_case() -> void:

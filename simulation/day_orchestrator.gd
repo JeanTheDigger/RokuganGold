@@ -10931,7 +10931,10 @@ static func _process_court_openings(
 	ic_day: int,
 ) -> Array:
 	var results: Array = []
-	for court: CourtSessionData in active_courts:
+	for court_entry: Variant in active_courts:
+		if not court_entry is CourtSessionData:
+			continue
+		var court: CourtSessionData = court_entry as CourtSessionData
 		if court.phase != CourtSessionData.CourtPhase.SCHEDULED:
 			continue
 		if ic_day >= court.start_ic_day:
@@ -10950,7 +10953,10 @@ static func _process_court_attendance(
 	characters_by_id: Dictionary = {},
 ) -> Array:
 	var results: Array = []
-	for court: CourtSessionData in active_courts:
+	for court_entry_2: Variant in active_courts:
+		if not court_entry_2 is CourtSessionData:
+			continue
+		var court: CourtSessionData = court_entry_2 as CourtSessionData
 		if not CourtSystem.is_active(court):
 			continue
 		var settlement_str: String = str(court.host_settlement_id)
