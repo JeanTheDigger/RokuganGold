@@ -1228,6 +1228,50 @@ All 10 constant arrays and 10 helper functions added. 28 constant/integration te
   confirms bear=10 and ozaru=20 wound_threshold; others derived from s54.1
   bestiary stats. 6 tests.
 
+### Known Code Issues (found and fixed 2026-05-21, NPC pipeline audit)
+- **death_events array never cleared between advance_day() calls. FIXED.**
+  `death_events` passed by reference from WorldState, appended to during the
+  day (assassination, duel, hunt casualties), processed by
+  `_process_lord_deaths()` and `_process_operational_death_cascade()`, but
+  never emptied. Every death accumulated permanently and was reprocessed on
+  every subsequent day — duplicate succession triggers, orphaned objective
+  processing, hierarchy cascade re-fires. Added `death_events.clear()` after
+  both death processing passes complete. 1 test.
+- **Dead characters received AP on daily reset — entered decision loop. FIXED.**
+  `ActionPointSystem.reset_daily_ap()` set AP unconditionally (no death
+  check). Dead NPCs got 2 AP per day, passed `_get_active_characters()`
+  filter (checks AP > 0), and entered the NPC wave resolver loop. Produced
+  `DO_NOTHING` results (benign because world_state population skips dead
+  characters at line 1203), but wasted compute and polluted action logs.
+  Added `CharacterStats.is_dead()` guard — dead characters get 0 AP. 2 tests.
+- **honor_change_recipient on DISPATCH_COURTIER refusal never consumed. FIXED.**
+  `action_executor.gd:1830` set `honor_change_recipient: honor_loss` (-0.3
+  to -1.0 scaled by Wall urgency) when a daimyo refused garrison requests.
+  No writeback or applicator consumed this key — it didn't match
+  `honor_change` (EffectApplicator reads for actor) or `honor_gain_recipient`
+  (`_apply_garrison_assignment` reads on success path only). Wired into
+  `_apply_garrison_courtier_refusal_writebacks()` with `characters_by_id`
+  passthrough. 2 tests.
+
+### Known Code Issues — Remaining (2026-05-21, NPC pipeline audit)
+- **Civilian order resolution skips allowlist filter (LOW severity).**
+  `npc_wave_resolver.gd:422` applies personality_filter but not
+  `apply_allowlist_filter()`. Lords' civilian orders can select actions
+  with 0 objective alignment for their current NeedType. Practical impact
+  is low: 0-alignment actions score poorly and rarely win selection.
+  Civilian orders are exclusively governance/military (SET_TAX_RATE,
+  ASSIGN_GARRISON, etc.) so covert/deceptive penalty gaps from missing
+  `chars_by_id` parameter have zero practical impact.
+- **Urgency rule for HONOR_FAVOR/BREAK_FAVOR is dead.**
+  `urgency_rules.json:12` applies +20 bonus to `["HONOR_FAVOR",
+  "BREAK_FAVOR"]` on expiring favors. These are not real ActionIDs —
+  `HONOR_FAVOR` is a NeedType in reactive_decisions.gd. The favor expiry
+  urgency bonus never fires for any actual action.
+- **Dead characters not removed from court attendee lists on death.**
+  Inert (dead characters don't take actions) but stale data accumulates.
+- **Entanglements, favors, hunt participations not cleaned on death.**
+  Low impact — these systems check alive status at usage time.
+
 ### Effect Key Audit Dead Keys — Informational / Not Bugs (2026-05-20)
 The following effect keys are set but intentionally unconsumed by the
 effect applicator or orchestrator. They are metadata, Pattern B pre-applied
