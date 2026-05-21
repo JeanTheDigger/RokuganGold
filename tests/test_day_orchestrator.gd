@@ -13140,3 +13140,83 @@ func test_hunt_casualty_creates_death_event() -> void:
 			"Hunt deaths are not suspicious")
 	else:
 		pass_test("No casualty occurred — probabilistic")
+
+
+# -- Bug fix: death_events cleared after processing ---------------------------
+
+func test_death_events_cleared_after_lord_death_processing() -> void:
+	var lord := L5RCharacterData.new()
+	lord.character_id = 1
+	lord.role_position = "Family Daimyo"
+	lord.earth_ring = 0
+	var heir := L5RCharacterData.new()
+	heir.character_id = 2
+	heir.clan = "Crane"
+	var characters: Array = [lord, heir]
+	var characters_by_id: Dictionary = {1: lord, 2: heir}
+	var objectives_map: Dictionary = {}
+	var successor_map: Dictionary = {1: 2}
+	var active_successions: Array = []
+	var next_succession_id: Array = [1]
+	var active_topics: Array = []
+	var next_topic_id: Array = [100]
+	var death_events: Array = [{"character_id": 1, "is_lord": true, "cause": "duel", "killer_id": -1, "suspicious_death": false}]
+	DayOrchestrator._process_lord_deaths(
+		death_events, characters, objectives_map, successor_map,
+		active_successions, next_succession_id, characters_by_id, 10,
+		active_topics, next_topic_id,
+	)
+	DayOrchestrator._process_operational_death_cascade(death_events, characters)
+	death_events.clear()
+	assert_eq(death_events.size(), 0,
+		"death_events should be empty after clear — no duplicate processing")
+
+
+# -- Bug fix: garrison courtier refusal honor loss applied --------------------
+
+func test_garrison_courtier_refusal_applies_honor_loss() -> void:
+	var daimyo := L5RCharacterData.new()
+	daimyo.character_id = 50
+	daimyo.honor = 5.0
+	var characters_by_id: Dictionary = {50: daimyo}
+	var results: Array = [{
+		"action_id": "DISPATCH_COURTIER",
+		"character_id": 10,
+		"success": false,
+		"effects": {
+			"garrison_refused": true,
+			"target_npc_id": 50,
+			"target_province_id": 99,
+			"honor_change_recipient": -0.3,
+			"recipient_disposition_change": -2.0,
+		},
+	}]
+	DayOrchestrator._apply_garrison_courtier_refusal_writebacks(
+		results, [], characters_by_id,
+	)
+	assert_almost_eq(daimyo.honor, 4.7, 0.01,
+		"Daimyo who refused garrison request should lose 0.3 honor")
+
+
+func test_garrison_courtier_refusal_critical_wall_honor_loss() -> void:
+	var daimyo := L5RCharacterData.new()
+	daimyo.character_id = 50
+	daimyo.honor = 5.0
+	var characters_by_id: Dictionary = {50: daimyo}
+	var results: Array = [{
+		"action_id": "DISPATCH_COURTIER",
+		"character_id": 10,
+		"success": false,
+		"effects": {
+			"garrison_refused": true,
+			"target_npc_id": 50,
+			"target_province_id": 99,
+			"honor_change_recipient": -1.0,
+			"recipient_disposition_change": -2.0,
+		},
+	}]
+	DayOrchestrator._apply_garrison_courtier_refusal_writebacks(
+		results, [], characters_by_id,
+	)
+	assert_almost_eq(daimyo.honor, 4.0, 0.01,
+		"Critical wall refusal should lose 1.0 honor")

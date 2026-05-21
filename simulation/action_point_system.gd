@@ -14,6 +14,10 @@ enum TimeSlot {
 
 
 static func reset_daily_ap(character: L5RCharacterData) -> void:
+	if CharacterStats.is_dead(character):
+		character.action_points_current = 0
+		character.action_points_max = 0
+		return
 	character.action_points_current = AP_PER_IC_DAY
 	character.action_points_max = AP_PER_IC_DAY
 

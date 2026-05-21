@@ -348,7 +348,7 @@ static func advance_day(
 	)
 
 	_apply_garrison_courtier_refusal_writebacks(
-		day_result.get("results", []), settlements
+		day_result.get("results", []), settlements, characters_by_id
 	)
 
 	var wall_engineering_results: Array = _process_wall_engineering_effects(
@@ -710,6 +710,8 @@ static func advance_day(
 	var hierarchy_cascade_results: Array = _process_operational_death_cascade(
 		death_events, characters,
 	)
+
+	death_events.clear()
 
 	var succession_results: Array = _process_successions(
 		active_successions, characters_by_id
@@ -9818,6 +9820,7 @@ static func _apply_court_creation(
 static func _apply_garrison_courtier_refusal_writebacks(
 	results: Array,
 	settlements: Array,
+	characters_by_id: Dictionary = {},
 ) -> void:
 	for r: Dictionary in results:
 		var effects: Dictionary = r.get("effects", {})
@@ -9826,6 +9829,12 @@ static func _apply_garrison_courtier_refusal_writebacks(
 		var target_province_id: int = effects.get("target_province_id", -1)
 		if target_province_id < 0:
 			continue
+		var honor_loss: float = effects.get("honor_change_recipient", 0.0)
+		if absf(honor_loss) > 0.001:
+			var target_id: int = effects.get("target_npc_id", -1)
+			var target: L5RCharacterData = characters_by_id.get(target_id)
+			if target != null:
+				HonorGlorySystem.apply_honor_change(target, honor_loss)
 		for s: SettlementData in settlements:
 			if s.settlement_type == Enums.SettlementType.WALL_TOWER \
 					and s.province_id == target_province_id:
