@@ -527,7 +527,7 @@ func test_malus_worst_tier_cascades_from_empire() -> void:
 	var provinces: Dictionary = {1: _make_province(1)}
 	var result: Dictionary = WorshipSystem.compute_all_province_maluses(ws, provinces)
 	var malus: Dictionary = result.get(1, {})
-	assert_eq(malus.get("army_attack", 0), -3)
+	assert_eq(malus.get("army_attack", 0.0), -3.0)
 
 
 # -- ResourceTick Worship Malus Tests ------------------------------------------

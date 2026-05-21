@@ -3922,8 +3922,8 @@ func test_garrison_assignment_transfers_pu() -> void:
 	assert_eq(r["daimyo_id"], 10)
 	assert_eq(r["target_province_id"], 100)
 	assert_almost_eq(r["pu_transferred"], 1.0, 0.01)
-	assert_almost_eq(wall.garrison_pu, 3.0, 0.01)
-	assert_almost_eq(source.garrison_pu, 4.0, 0.01)
+	assert_eq(wall.garrison_pu, 3)
+	assert_eq(source.garrison_pu, 4)
 	assert_almost_eq(daimyo.honor, 3.1, 0.01)
 
 
@@ -4006,7 +4006,7 @@ func test_garrison_assignment_no_wall_tower_no_transfer() -> void:
 	)
 	assert_eq(r["type"], "garrison_assigned")
 	assert_almost_eq(r["pu_transferred"], 0.0, 0.01)
-	assert_almost_eq(source.garrison_pu, 5.0, 0.01)
+	assert_eq(source.garrison_pu, 5)
 
 
 func test_garrison_assignment_scanned_in_process_military_effects() -> void:

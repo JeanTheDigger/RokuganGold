@@ -1572,7 +1572,7 @@ func test_s57_19_purify_in_manage_taint_alignment() -> void:
 	var manage_taint: Dictionary = alignment_table.get("MANAGE_TAINT", {})
 	assert_true(manage_taint.has("PURIFY_TAINTED_GROUND"),
 		"PURIFY_TAINTED_GROUND should be in MANAGE_TAINT alignment")
-	assert_eq(manage_taint["PURIFY_TAINTED_GROUND"], 95)
+	assert_eq(manage_taint["PURIFY_TAINTED_GROUND"], 95.0)
 
 
 func test_s57_19_wall_actions_in_maintain_fortification() -> void:
@@ -1584,8 +1584,8 @@ func test_s57_19_wall_actions_in_maintain_fortification() -> void:
 	var maintain: Dictionary = alignment_table.get("MAINTAIN_FORTIFICATION", {})
 	assert_true(maintain.has("FORTIFY_WALL_SECTION"))
 	assert_true(maintain.has("SEAL_WALL_BREACH"))
-	assert_eq(maintain["SEAL_WALL_BREACH"], 100)
-	assert_eq(maintain["FORTIFY_WALL_SECTION"], 95)
+	assert_eq(maintain["SEAL_WALL_BREACH"], 100.0)
+	assert_eq(maintain["FORTIFY_WALL_SECTION"], 95.0)
 
 
 func test_s57_19_wall_actions_in_defend_province() -> void:

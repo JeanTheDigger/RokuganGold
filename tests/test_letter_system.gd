@@ -917,11 +917,11 @@ func test_examine_letter_in_objective_alignment():
 	assert_true(obj_align.has("INVESTIGATE_THREAT"))
 	var inv_threat: Dictionary = obj_align["INVESTIGATE_THREAT"]
 	assert_true(inv_threat.has("EXAMINE_LETTER"))
-	assert_eq(inv_threat["EXAMINE_LETTER"], 85)
+	assert_eq(inv_threat["EXAMINE_LETTER"], 85.0)
 	assert_true(obj_align.has("GATHER_INTELLIGENCE"))
 	var gather: Dictionary = obj_align["GATHER_INTELLIGENCE"]
 	assert_true(gather.has("EXAMINE_LETTER"))
-	assert_eq(gather["EXAMINE_LETTER"], 75)
+	assert_eq(gather["EXAMINE_LETTER"], 75.0)
 
 func test_examine_letter_in_personality_lean():
 	var loader := ScoringTableLoader.new()

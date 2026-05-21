@@ -938,8 +938,8 @@ func test_personality_lean_favors_compliance_for_chugi():
 	var tables: Dictionary = loader.get_scoring_tables()
 	var lean_table: Dictionary = tables.get("personality_lean", {})
 	var chugi_leans: Dictionary = lean_table.get("CHUGI", {})
-	assert_gt(chugi_leans.get("COMPLY_WITH_EDICT", 0), 0, "Chugi should favor compliance")
-	assert_lt(chugi_leans.get("DEFY_EDICT", 0), 0, "Chugi should penalize defiance")
+	assert_gt(chugi_leans.get("COMPLY_WITH_EDICT", 0.0), 0.0, "Chugi should favor compliance")
+	assert_lt(chugi_leans.get("DEFY_EDICT", 0.0), 0.0, "Chugi should penalize defiance")
 
 
 func test_personality_lean_favors_defiance_for_ishi():
@@ -948,8 +948,8 @@ func test_personality_lean_favors_defiance_for_ishi():
 	var tables: Dictionary = loader.get_scoring_tables()
 	var lean_table: Dictionary = tables.get("personality_lean", {})
 	var ishi_leans: Dictionary = lean_table.get("ISHI", {})
-	assert_lt(ishi_leans.get("COMPLY_WITH_EDICT", 0), 0, "Ishi should penalize compliance")
-	assert_gt(ishi_leans.get("DEFY_EDICT", 0), 0, "Ishi should favor defiance")
+	assert_lt(ishi_leans.get("COMPLY_WITH_EDICT", 0.0), 0.0, "Ishi should penalize compliance")
+	assert_gt(ishi_leans.get("DEFY_EDICT", 0.0), 0.0, "Ishi should favor defiance")
 
 
 # =============================================================================

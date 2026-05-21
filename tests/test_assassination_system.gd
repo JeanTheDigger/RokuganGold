@@ -68,27 +68,27 @@ func test_create_state() -> void:
 func test_add_suspicion() -> void:
 	var s: Dictionary = AssassinationSystem.create_assassination_state(1, 2, AssassinationSystem.ExecutionMethod.POISON, 0)
 	AssassinationSystem.add_suspicion(s, 10)
-	assert_eq(s["suspicion"], 10)
+	assert_eq(s["suspicion"], 10.0)
 
 
 func test_suspicion_clamped_at_100() -> void:
 	var s: Dictionary = AssassinationSystem.create_assassination_state(1, 2, AssassinationSystem.ExecutionMethod.POISON, 0)
 	AssassinationSystem.add_suspicion(s, 200)
-	assert_eq(s["suspicion"], 100)
+	assert_eq(s["suspicion"], 100.0)
 
 
 func test_suspicion_clamped_at_0() -> void:
 	var s: Dictionary = AssassinationSystem.create_assassination_state(1, 2, AssassinationSystem.ExecutionMethod.POISON, 0)
 	s["suspicion"] = 5
 	AssassinationSystem.decay_suspicion(s, false)
-	assert_eq(s["suspicion"], 4)
+	assert_eq(s["suspicion"], 4.0)
 
 
 func test_suspicion_decay_absent() -> void:
 	var s: Dictionary = AssassinationSystem.create_assassination_state(1, 2, AssassinationSystem.ExecutionMethod.POISON, 0)
-	s["suspicion"] = 10
+	s["suspicion"] = 10.0
 	AssassinationSystem.decay_suspicion(s, false)
-	assert_eq(s["suspicion"], 9)
+	assert_eq(s["suspicion"], 9.0)
 
 
 func test_suspicion_decay_present_inactive() -> void:
