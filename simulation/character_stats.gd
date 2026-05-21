@@ -6,7 +6,7 @@ class_name CharacterStats
 static func get_ring_value(character: L5RCharacterData, ring: Enums.Ring) -> int:
 	if ring == Enums.Ring.VOID:
 		return character.void_ring
-	var traits: Array[int] = Enums.RING_TRAITS[ring]
+	var traits: Array = Enums.RING_TRAITS[ring]
 	var t1: int = character.get_trait_value(traits[0])
 	var t2: int = character.get_trait_value(traits[1])
 	return mini(t1, t2)
@@ -80,7 +80,7 @@ static func get_wound_level(character: L5RCharacterData) -> Enums.WoundLevel:
 	if character.wounds_taken <= 0:
 		return Enums.WoundLevel.HEALTHY
 
-	var levels: Array[Enums.WoundLevel] = [
+	var levels: Array = [
 		Enums.WoundLevel.HEALTHY,
 		Enums.WoundLevel.NICKED,
 		Enums.WoundLevel.GRAZED,

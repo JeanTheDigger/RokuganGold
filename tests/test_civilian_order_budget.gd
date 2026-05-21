@@ -170,7 +170,7 @@ func test_military_or_civilian_actions_classified_for_lords() -> void:
 
 
 func test_ap_only_actions_not_classified() -> void:
-	var ap_only: Array[String] = [
+	var ap_only: Array = [
 		"CALL_COURT", "DEMAND_TRIBUTE", "DRILL_TROOPS",
 		"ORDER_BATTLE", "CONDUCT_RAID", "NEGOTIATE",
 	]
@@ -241,11 +241,12 @@ func test_generate_options_skips_order_actions_when_pool_empty() -> void:
 	}
 	var ctx: NPCDataStructures.ContextSnapshot = NPCDecisionEngine.build_context(c, world_state)
 	var need := NPCDataStructures.ImmediateNeed.new()
-	var options: Array[NPCDataStructures.ScoredAction] = NPCDecisionEngine.generate_options(ctx, need)
+	var options: Array = NPCDecisionEngine.generate_options(ctx, need)
 	for opt: NPCDataStructures.ScoredAction in options:
 		if opt.action_id == "ASSESS_PROVINCE_STATUS":
 			fail_test("ASSESS_PROVINCE_STATUS should be filtered when civilian_orders_remaining == 0")
 			return
+	pass_test("No order actions found when pool is empty")
 
 
 func test_generate_options_includes_order_actions_when_pool_has_orders() -> void:
@@ -259,7 +260,7 @@ func test_generate_options_includes_order_actions_when_pool_has_orders() -> void
 	}
 	var ctx: NPCDataStructures.ContextSnapshot = NPCDecisionEngine.build_context(c, world_state)
 	var need := NPCDataStructures.ImmediateNeed.new()
-	var options: Array[NPCDataStructures.ScoredAction] = NPCDecisionEngine.generate_options(ctx, need)
+	var options: Array = NPCDecisionEngine.generate_options(ctx, need)
 	var found: bool = false
 	for opt: NPCDataStructures.ScoredAction in options:
 		if opt.action_id == "ASSESS_PROVINCE_STATUS":

@@ -312,8 +312,8 @@ static func is_action_allowed_while_bound(action_id: String) -> bool:
 	return action_id in ALLOWED_ACTIONS_BOUND
 
 
-static func filter_actions_for_bound(actions: Array[String]) -> Array[String]:
-	var allowed: Array[String] = []
+static func filter_actions_for_bound(actions: Array) -> Array:
+	var allowed: Array = []
 	for a: String in actions:
 		if is_action_allowed_while_bound(a):
 			allowed.append(a)

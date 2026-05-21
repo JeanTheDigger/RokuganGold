@@ -436,7 +436,7 @@ static func can_tea_ceremony(zone_subtype: Enums.ZoneSubtype) -> bool:
 # Zone Category Helpers
 # =============================================================================
 
-const CASTLE_INTERIOR_ZONES: Array[Enums.ZoneSubtype] = [
+const CASTLE_INTERIOR_ZONES: Array = [
 	Enums.ZoneSubtype.OHIROMA,
 	Enums.ZoneSubtype.ENKAI_HALL,
 	Enums.ZoneSubtype.AUDIENCE_CHAMBER,
@@ -450,7 +450,7 @@ const CASTLE_INTERIOR_ZONES: Array[Enums.ZoneSubtype] = [
 	Enums.ZoneSubtype.CASTLE_SHRINE,
 ]
 
-const URBAN_ZONES: Array[Enums.ZoneSubtype] = [
+const URBAN_ZONES: Array = [
 	Enums.ZoneSubtype.MARKET_STREET,
 	Enums.ZoneSubtype.RESIDENTIAL_QUARTER,
 	Enums.ZoneSubtype.TEMPLE_GROUNDS,
@@ -460,7 +460,7 @@ const URBAN_ZONES: Array[Enums.ZoneSubtype] = [
 	Enums.ZoneSubtype.GOVERNMENT_QUARTER,
 ]
 
-const WILDERNESS_ZONES: Array[Enums.ZoneSubtype] = [
+const WILDERNESS_ZONES: Array = [
 	Enums.ZoneSubtype.ROAD,
 	Enums.ZoneSubtype.FOREST_PATH,
 	Enums.ZoneSubtype.MOUNTAIN_PASS,
@@ -469,7 +469,7 @@ const WILDERNESS_ZONES: Array[Enums.ZoneSubtype] = [
 	Enums.ZoneSubtype.SHRINE_CLEARING,
 ]
 
-const WALL_ZONES: Array[Enums.ZoneSubtype] = [
+const WALL_ZONES: Array = [
 	Enums.ZoneSubtype.WALL_TOWER,
 ]
 

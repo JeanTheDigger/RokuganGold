@@ -536,7 +536,7 @@ static func try_request_allied_aid(
 	var total_aid_rice: float = 0.0
 	var total_aid_koku: float = 0.0
 	var favor_tier: int = 3
-	var contributing_ally_ids: Array[int] = []
+	var contributing_ally_ids: Array = []
 
 	for ally: Variant in allied_surplus:
 		if not (ally is Dictionary):
@@ -702,7 +702,7 @@ static func walk_alternative_ladder(
 	war_score: int = 50,
 	is_defending: bool = false,
 ) -> Dictionary:
-	var rungs_tried: Array[Dictionary] = []
+	var rungs_tried: Array = []
 	var working_inputs: Dictionary = inputs.duplicate(true)
 	var current_ledger: Dictionary = evaluate_feasibility(working_inputs)
 

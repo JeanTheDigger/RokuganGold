@@ -11,7 +11,7 @@ extends Resource
 
 # -- Infrastructure (named features present) -----------------------------------
 
-@export var infrastructure: Array[String] = []
+@export var infrastructure: Array = []
 
 # -- Resource Stockpiles (per GDD s4.3.7, s4.3.8) ----------------------------
 
@@ -30,7 +30,7 @@ extends Resource
 # -- Worship Locations (per GDD s4.3.21/s4.3.22) -----------------------------
 # Each entry: {"type": "roadside_shrine"|"village_shrine"|"local_shrine"|"temple"|"shinden",
 #              "dedicated": bool, "fortune": int (GreatFortune enum, -1 if general)}
-@export var worship_locations: Array[Dictionary] = []
+@export var worship_locations: Array = []
 
 # -- Wall Tower fields (Fortification Settlement only, per GDD s2.4.2) --------
 # Structural Integrity: 0 (breached) to 10 (pristine). Non-wall settlements

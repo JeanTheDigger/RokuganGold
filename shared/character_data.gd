@@ -10,7 +10,9 @@ extends Resource
 @export var clan: String = ""
 @export var family: String = ""
 @export var school: String = ""
+@export var school_name: String = ""
 @export var school_type: Enums.SchoolType = Enums.SchoolType.BUSHI
+@export var school_rank: int = 1
 @export var age: int = 16
 @export var gender: String = ""
 @export var orientation: String = "straight"
@@ -43,20 +45,20 @@ extends Resource
 
 # -- Techniques & Special Abilities --------------------------------------------
 
-@export var techniques: Array[String] = []
-@export var kiho: Array[String] = []
-@export var katas: Array[String] = []
+@export var techniques: Array = []
+@export var kiho: Array = []
+@export var katas: Array = []
 
 # -- Spells (shugenja only) ----------------------------------------------------
 
 @export var affinity_element: Enums.Ring = Enums.Ring.NONE
 @export var deficiency_element: Enums.Ring = Enums.Ring.NONE
-@export var spells_known: Array[String] = []
+@export var spells_known: Array = []
 
 # -- Advantages & Disadvantages ------------------------------------------------
 
-@export var advantages: Array[String] = []
-@export var disadvantages: Array[String] = []
+@export var advantages: Array = []
+@export var disadvantages: Array = []
 
 # -- Honor, Glory, Status, Infamy (0.0 to 10.0) -------------------------------
 
@@ -64,6 +66,7 @@ extends Resource
 @export var glory: float = 1.0
 @export var status: float = 1.0
 @export var infamy: float = 0.0
+@export var insight_rank: int = 1
 
 # -- Wounds --------------------------------------------------------------------
 # Total wounds taken. Wound levels derived from Earth ring at query time.
@@ -76,18 +79,18 @@ extends Resource
 
 # -- Equipment & Outfit --------------------------------------------------------
 
-@export var weapons: Array[String] = []
+@export var weapons: Array = []
 @export var armor_worn: String = ""
 @export var armor_tn_bonus: int = 0
 @export var armor_reduction: int = 0
-@export var outfit: Array[String] = []
+@export var outfit: Array = []
 @export var koku: float = 0.0
 @export var months_without_stipend: int = 0
 
 # -- Inventory (Section 12.11) -------------------------------------------------
 # Item dicts as produced by InventorySystem.create_item / create_gift_item.
 # Storage tier and outfit-slot accounting are queried via InventorySystem.
-@export var items: Array[Dictionary] = []
+@export var items: Array = []
 
 # -- Personality (Section 19) --------------------------------------------------
 
@@ -115,33 +118,33 @@ extends Resource
 @export var cohabitation_days: Dictionary = {}
 @export var fear_rating: int = 0
 @export var captive_status: String = ""
-@export var topic_pool: Array[int] = []
+@export var topic_pool: Array = []
 @export var topic_positions: Dictionary = {}
 @export var active_quest: String = ""
-@export var met_characters: Array[int] = []
-@export var knowledge_pool: Array[KnowledgeEntry] = []
+@export var met_characters: Array = []
+@export var knowledge_pool: Array = []
 @export var known_contacts_by_clan: Dictionary = {}
-@export var favors: Array[FavorData] = []
+@export var favors: Array = []
 
 # -- Legal System (Section 11.3.14) --------------------------------------------
 
-@export var legal_cases: Array[LegalCaseEntry] = []
+@export var legal_cases: Array = []
 
 # -- Courtier Framework Fields -------------------------------------------------
 
-@export var self_reroll: Array[Dictionary] = []
-@export var granted_reroll: Array[Dictionary] = []
+@export var self_reroll: Array = []
+@export var granted_reroll: Array = []
 @export var enhanced_void: bool = false
 @export var precise_memory: bool = false
 @export var cadence_trained: bool = false
 @export var commerce_honor_exempt: bool = false
 @export var intimidation_honor_exempt: bool = false
-@export var timed_advantages: Array[String] = []
-@export var action_blocks: Array[String] = []
-@export var combat_modifiers_pending: Array[String] = []
+@export var timed_advantages: Array = []
+@export var action_blocks: Array = []
+@export var combat_modifiers_pending: Array = []
 @export var supply_ledger: Dictionary = {}
 @export var from_the_ashes: Dictionary = {}
-@export var perfect_gift_targets: Array[int] = []
+@export var perfect_gift_targets: Array = []
 
 # -- Theater & Art Tracking ----------------------------------------------------
 
@@ -174,7 +177,7 @@ extends Resource
 
 # -- Poison Tracking -----------------------------------------------------------
 
-@export var active_poisons: Array[Dictionary] = []
+@export var active_poisons: Array = []
 
 # -- Family Web (Section 22.6) -------------------------------------------------
 # Generation 1 (self), Generation 2 (parents), and any actively-simulated
@@ -184,16 +187,16 @@ extends Resource
 
 @export var mother_id: int = -1
 @export var father_id: int = -1
-@export var sibling_ids: Array[int] = []
-@export var children_ids: Array[int] = []
+@export var sibling_ids: Array = []
+@export var children_ids: Array = []
 ## Characters formally adopted for succession purposes (1 AP action, s22.5 Priority 4).
 ## Distinct from children_ids (biological) so succession can rank them correctly.
-@export var adopted_children_ids: Array[int] = []
+@export var adopted_children_ids: Array = []
 @export var spouse_id: int = -1
 @export var birth_clan: String = ""
 @export var birth_family: String = ""
-@export var grandparent_records: Array[AncestorRecord] = []
-@export var great_grandparent_records: Array[AncestorRecord] = []
+@export var grandparent_records: Array = []
+@export var great_grandparent_records: Array = []
 
 # -- Kolat (Section 54.7c) -----------------------------------------------------
 
@@ -202,15 +205,15 @@ extends Resource
 
 # -- Hunting (Section 57.38) ---------------------------------------------------
 
-@export var hunt_trophies: Array[Dictionary] = []
+@export var hunt_trophies: Array = []
 
 # -- Animal Companions (Section 57.39) -----------------------------------------
 
-@export var trained_companions: Array[Dictionary] = []
+@export var trained_companions: Array = []
 
 # -- Commerce Stigma (Section 57.40) -------------------------------------------
 
-@export var school_paths: Array[String] = []
+@export var school_paths: Array = []
 @export var commerce_stigma_applied_ic_day: int = -1
 
 # -- Sailing (Section 57.42) ---------------------------------------------------
@@ -249,7 +252,7 @@ extends Resource
 @export var xp_fractional: float = 0.0
 @export var progress_bars: Dictionary = {}
 @export var training_relationships: Dictionary = {}
-@export var atoned_offenses: Array[String] = []
+@export var atoned_offenses: Array = []
 
 # -- Bodyguard / Yojimbo Assignment -------------------------------------------
 @export var assigned_protection_target_id: int = -1

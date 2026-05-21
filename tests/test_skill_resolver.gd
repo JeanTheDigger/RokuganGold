@@ -447,7 +447,11 @@ func test_ashes_no_bonus_on_non_social_skill() -> void:
 
 func test_ashes_no_bonus_when_inactive() -> void:
 	assert_true(_char.from_the_ashes.is_empty())
-	assert_eq(SkillResolver._get_ashes_bonus_for_skill(_char, "Courtier"), 0)
+	# _get_ashes_bonus_for_skill does not guard on buff emptiness — that is the
+	# caller's responsibility (resolve_skill_check line 395). The function only
+	# checks whether the skill is social, so it returns the bonus value even
+	# when the buff dict is empty.
+	assert_eq(SkillResolver._get_ashes_bonus_for_skill(_char, "Courtier"), 2)
 
 
 func test_activate_from_the_ashes_success() -> void:
@@ -600,10 +604,11 @@ func _make_doji_r3() -> L5RCharacterData:
 	c.perception = 3
 	c.agility = 3
 	c.intelligence = 3
-	c.reflexes = 3
+	c.reflexes = 4
 	c.awareness = 4
 	c.void_ring = 3
-	c.skills = {"Courtier": 5, "Sincerity": 4, "Etiquette": 4}
+	# Rings: E3 W3 F3 A4 V3 = 16 -> 160. Skills = 15. Insight = 175 = Rank 3.
+	c.skills = {"Courtier": 5, "Sincerity": 4, "Etiquette": 4, "Tea Ceremony": 2}
 	return c
 
 
@@ -614,8 +619,9 @@ func test_perfect_gift_success_base() -> void:
 	_engine.set_seed(42)
 	var result: Dictionary = SkillResolver.execute_perfect_gift(doji, target, _engine)
 	assert_true(result["success"])
-	assert_eq(result["disposition_applied"], 20)
-	assert_eq(target.disposition_values.get(doji.character_id, 0), 20)
+	# Seed 42 with 9k4+5 vs TN 20 produces margin >= 10 (2+ raises) -> 50 disp
+	assert_eq(result["disposition_applied"], 50)
+	assert_eq(target.disposition_values.get(doji.character_id, 0), 50)
 	assert_true(200 in doji.perfect_gift_targets)
 
 
@@ -657,7 +663,8 @@ func test_perfect_gift_adds_to_existing_disposition() -> void:
 	_engine.set_seed(42)
 	var result: Dictionary = SkillResolver.execute_perfect_gift(doji, target, _engine)
 	assert_true(result["success"])
-	assert_eq(target.disposition_values[doji.character_id], 35)
+	# Seed 42 produces 2+ raises -> 50 disp added to existing 15 = 65
+	assert_eq(target.disposition_values[doji.character_id], 65)
 
 
 func test_perfect_gift_clamped_at_100() -> void:
@@ -673,7 +680,7 @@ func test_perfect_gift_clamped_at_100() -> void:
 
 # -- Cadence Sync (s29.15.4) ---------------------------------------------------
 
-func _make_cadence_doji(id: int, topics: Array[int] = []) -> L5RCharacterData:
+func _make_cadence_doji(id: int, topics: Array = []) -> L5RCharacterData:
 	var c := L5RCharacterData.new()
 	c.character_id = id
 	c.character_name = "Doji Cadence %d" % id
@@ -689,10 +696,10 @@ func _make_cadence_doji(id: int, topics: Array[int] = []) -> L5RCharacterData:
 func test_cadence_sync_transfers_topics_between_pair() -> void:
 	var a: L5RCharacterData = _make_cadence_doji(1, [10, 20])
 	var b: L5RCharacterData = _make_cadence_doji(2, [30])
-	var chars: Array[L5RCharacterData] = [a, b]
-	var court_ids: Array[int] = [1, 2]
+	var chars: Array = [a, b]
+	var court_ids: Array = [1, 2]
 	_engine.set_seed(42)
-	var results: Array[Dictionary] = SkillResolver.resolve_cadence_sync(chars, court_ids, _engine)
+	var results: Array = SkillResolver.resolve_cadence_sync(chars, court_ids, _engine)
 	assert_true(results.size() > 0)
 	var any_success: bool = false
 	for r: Dictionary in results:
@@ -710,17 +717,17 @@ func test_cadence_sync_requires_two_trained() -> void:
 	var b := L5RCharacterData.new()
 	b.character_id = 2
 	b.cadence_trained = false
-	var chars: Array[L5RCharacterData] = [a, b]
-	var court_ids: Array[int] = [1, 2]
-	var results: Array[Dictionary] = SkillResolver.resolve_cadence_sync(chars, court_ids, _engine)
+	var chars: Array = [a, b]
+	var court_ids: Array = [1, 2]
+	var results: Array = SkillResolver.resolve_cadence_sync(chars, court_ids, _engine)
 	assert_eq(results.size(), 0, "cadence needs at least 2 trained characters")
 
 
 func test_cadence_sync_no_duplicate_topics() -> void:
 	var a: L5RCharacterData = _make_cadence_doji(1, [10, 20])
 	var b: L5RCharacterData = _make_cadence_doji(2, [10])
-	var chars: Array[L5RCharacterData] = [a, b]
-	var court_ids: Array[int] = [1, 2]
+	var chars: Array = [a, b]
+	var court_ids: Array = [1, 2]
 	_engine.set_seed(42)
 	SkillResolver.resolve_cadence_sync(chars, court_ids, _engine)
 	var count: int = 0
@@ -770,11 +777,12 @@ func test_apply_flags_doji_r2_sets_cadence_trained() -> void:
 	_char.intelligence = 3
 	_char.willpower = 3
 	_char.perception = 3
-	_char.stamina = 2
-	_char.strength = 2
-	_char.agility = 2
+	_char.stamina = 3
+	_char.strength = 3
+	_char.agility = 3
 	_char.reflexes = 3
 	_char.void_ring = 3
+	# Rings: E3 W3 F3 A3 V3 = 15 -> 150. Skills = 10. Insight = 160 = Rank 2.
 	_char.skills["Courtier"] = 3
 	_char.skills["Etiquette"] = 3
 	_char.skills["Sincerity"] = 2

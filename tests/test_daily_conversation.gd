@@ -1,7 +1,7 @@
 extends GutTest
 
 
-func _make_char(id: int, topics: Array[int] = [], clan: String = "", family: String = "") -> L5RCharacterData:
+func _make_char(id: int, topics: Array = [], clan: String = "", family: String = "") -> L5RCharacterData:
 	var c := L5RCharacterData.new()
 	c.character_id = id
 	c.topic_pool = topics.duplicate()
@@ -108,7 +108,7 @@ func test_should_converse_strangers_never():
 # -- Topic Selection -----------------------------------------------------------
 
 func test_select_topic_from_pool():
-	var topics: Array[int] = [1, 2, 3]
+	var topics: Array = [1, 2, 3]
 	var c := _make_char(1, topics)
 	var topic: int = DailyConversation.select_topic_to_share(c, 1)
 	assert_eq(topic, 2)
@@ -122,7 +122,7 @@ func test_select_topic_empty_pool():
 # -- Topic Transfer ------------------------------------------------------------
 
 func test_transfer_new_topic():
-	var topics_a: Array[int] = [1]
+	var topics_a: Array = [1]
 	var a := _make_char(1, topics_a)
 	var b := _make_char(2)
 	var transferred: bool = DailyConversation.transfer_topic(a, b, 1)
@@ -130,7 +130,7 @@ func test_transfer_new_topic():
 	assert_true(1 in b.topic_pool)
 
 func test_transfer_duplicate_topic_fails():
-	var topics: Array[int] = [1]
+	var topics: Array = [1]
 	var a := _make_char(1, topics)
 	var b := _make_char(2, topics)
 	var transferred: bool = DailyConversation.transfer_topic(a, b, 1)
@@ -164,8 +164,8 @@ func test_disposition_bonus_from_zero():
 # -- Full Conversation Resolution ----------------------------------------------
 
 func test_resolve_conversation_transfers_topics():
-	var topics_a: Array[int] = [1]
-	var topics_b: Array[int] = [2]
+	var topics_a: Array = [1]
+	var topics_b: Array = [2]
 	var a := _make_char(1, topics_a)
 	var b := _make_char(2, topics_b)
 	_set_mutual_disposition(a, b, 50)
@@ -179,7 +179,7 @@ func test_resolve_conversation_transfers_topics():
 	assert_true(2 in a.topic_pool)
 
 func test_resolve_conversation_adds_knowledge_entries():
-	var topics_a: Array[int] = [1]
+	var topics_a: Array = [1]
 	var a := _make_char(1, topics_a)
 	var b := _make_char(2)
 	_set_mutual_disposition(a, b, 50)
@@ -191,7 +191,7 @@ func test_resolve_conversation_adds_knowledge_entries():
 	assert_eq(b.knowledge_pool[0].data["from_character_id"], 1)
 
 func test_resolve_conversation_no_knowledge_if_already_known():
-	var topics: Array[int] = [1]
+	var topics: Array = [1]
 	var a := _make_char(1, topics)
 	var b := _make_char(2, topics)
 	_set_mutual_disposition(a, b, 50)
@@ -200,7 +200,7 @@ func test_resolve_conversation_no_knowledge_if_already_known():
 	assert_eq(b.knowledge_pool.size(), 0)
 
 func test_resolve_conversation_grants_disposition():
-	var topics_a: Array[int] = [1]
+	var topics_a: Array = [1]
 	var a := _make_char(1, topics_a)
 	var b := _make_char(2)
 	_set_mutual_disposition(a, b, 50)
@@ -213,16 +213,16 @@ func test_resolve_conversation_grants_disposition():
 # -- Settlement Resolution with Cap --------------------------------------------
 
 func test_settlement_resolution_basic():
-	var topics_a: Array[int] = [101]
-	var topics_b: Array[int] = [102]
+	var topics_a: Array = [101]
+	var topics_b: Array = [102]
 	var a := _make_char(1, topics_a)
 	var b := _make_char(2, topics_b)
 	_set_mutual_disposition(a, b, 50)
 
-	var chars: Array[L5RCharacterData] = [a, b]
+	var chars: Array = [a, b]
 	# Roll of 5 passes (chance is 20%), then two topic rng values
-	var rng: Array[int] = [5, 0, 0]
-	var results: Array[Dictionary] = DailyConversation.resolve_settlement_conversations(chars, rng, 5)
+	var rng: Array = [5, 0, 0]
+	var results: Array = DailyConversation.resolve_settlement_conversations(chars, rng, 5)
 	assert_eq(results.size(), 1)
 	assert_eq(results[0]["char_a_id"], 1)
 	assert_eq(results[0]["char_b_id"], 2)
@@ -232,15 +232,15 @@ func test_settlement_resolution_fails_roll():
 	var b := _make_char(2)
 	_set_mutual_disposition(a, b, 50)
 
-	var chars: Array[L5RCharacterData] = [a, b]
-	var rng: Array[int] = [99]
-	var results: Array[Dictionary] = DailyConversation.resolve_settlement_conversations(chars, rng, 5)
+	var chars: Array = [a, b]
+	var rng: Array = [99]
+	var results: Array = DailyConversation.resolve_settlement_conversations(chars, rng, 5)
 	assert_eq(results.size(), 0)
 
 func test_settlement_resolution_cap_enforced():
-	var chars: Array[L5RCharacterData] = []
+	var chars: Array = []
 	for i in range(8):
-		var topics: Array[int] = [200 + i]
+		var topics: Array = [200 + i]
 		var c := _make_char(i + 1, topics)
 		chars.append(c)
 
@@ -251,11 +251,11 @@ func test_settlement_resolution_cap_enforced():
 				chars[i].disposition_values[chars[j].character_id] = 80
 
 	# All rolls pass (roll=0, chance is 35% at disp 80)
-	var rng: Array[int] = []
+	var rng: Array = []
 	for i in range(100):
 		rng.append(0)
 
-	var results: Array[Dictionary] = DailyConversation.resolve_settlement_conversations(chars, rng, 5)
+	var results: Array = DailyConversation.resolve_settlement_conversations(chars, rng, 5)
 
 	# Count how many times char 1 participated
 	var char1_count: int = 0
@@ -269,9 +269,9 @@ func test_settlement_resolution_strangers_skipped():
 	var b := _make_char(2)
 	# No disposition set — they are strangers
 
-	var chars: Array[L5RCharacterData] = [a, b]
-	var rng: Array[int] = [0, 0, 0]
-	var results: Array[Dictionary] = DailyConversation.resolve_settlement_conversations(chars, rng, 5)
+	var chars: Array = [a, b]
+	var rng: Array = [0, 0, 0]
+	var results: Array = DailyConversation.resolve_settlement_conversations(chars, rng, 5)
 	assert_eq(results.size(), 0)
 
 
@@ -284,7 +284,7 @@ func test_select_topic_weighted_empty_pool():
 	assert_eq(result, -1)
 
 func test_select_topic_weighted_single_topic():
-	var topics_arr: Array[int] = [10]
+	var topics_arr: Array = [10]
 	var c := _make_char(1, topics_arr, "Crab", "Hida")
 	var t := _make_topic(10, "Crab", "Hida", 50.0)
 	var topics_by_id: Dictionary = {10: t}
@@ -292,7 +292,7 @@ func test_select_topic_weighted_single_topic():
 	assert_eq(result, 10)
 
 func test_select_topic_weighted_favors_relevant():
-	var topics_arr: Array[int] = [1, 2, 3]
+	var topics_arr: Array = [1, 2, 3]
 	var c := _make_char(1, topics_arr, "Crab", "Hida")
 	# Topic 1: own clan+family → high relevance (momentum 80 × 2.0 + 20 = 180)
 	var t1 := _make_topic(1, "Crab", "Hida", 80.0)
@@ -314,7 +314,7 @@ func test_select_topic_weighted_favors_relevant():
 	assert_true(count_1 > 80, "High-relevance topic should dominate selection")
 
 func test_select_topic_weighted_missing_topic_data_uses_floor():
-	var topics_arr: Array[int] = [1, 999]
+	var topics_arr: Array = [1, 999]
 	var c := _make_char(1, topics_arr, "Crab", "Hida")
 	var t1 := _make_topic(1, "Crane", "", 5.0)
 	# Topic 999 not in topics_by_id — should get floor weight of 1.0
@@ -323,7 +323,7 @@ func test_select_topic_weighted_missing_topic_data_uses_floor():
 	assert_true(result == 1 or result == 999)
 
 func test_select_topic_weighted_deterministic():
-	var topics_arr: Array[int] = [1, 2, 3]
+	var topics_arr: Array = [1, 2, 3]
 	var c := _make_char(1, topics_arr, "Crab", "Hida")
 	var t1 := _make_topic(1, "Crab", "Hida", 50.0)
 	var t2 := _make_topic(2, "Crane", "", 20.0)
@@ -334,8 +334,8 @@ func test_select_topic_weighted_deterministic():
 	assert_eq(first, second, "Same rng_value should always produce same result")
 
 func test_resolve_conversation_with_topics_by_id():
-	var topics_a: Array[int] = [1, 2]
-	var topics_b: Array[int] = [3]
+	var topics_a: Array = [1, 2]
+	var topics_b: Array = [3]
 	var a := _make_char(1, topics_a, "Crab", "Hida")
 	var b := _make_char(2, topics_b, "Crane", "Doji")
 	_set_mutual_disposition(a, b, 50)
@@ -351,7 +351,7 @@ func test_resolve_conversation_with_topics_by_id():
 	assert_eq(result["topic_shared_by_b"], 3)
 
 func test_resolve_conversation_backward_compat():
-	var topics_a: Array[int] = [1]
+	var topics_a: Array = [1]
 	var a := _make_char(1, topics_a)
 	var b := _make_char(2)
 	_set_mutual_disposition(a, b, 50)
@@ -360,8 +360,8 @@ func test_resolve_conversation_backward_compat():
 	assert_eq(result["topic_shared_by_a"], 1)
 
 func test_settlement_resolution_with_topics_by_id():
-	var topics_a: Array[int] = [101]
-	var topics_b: Array[int] = [102]
+	var topics_a: Array = [101]
+	var topics_b: Array = [102]
 	var a := _make_char(1, topics_a, "Crab", "Hida")
 	var b := _make_char(2, topics_b, "Crane", "Doji")
 	_set_mutual_disposition(a, b, 50)
@@ -370,9 +370,9 @@ func test_settlement_resolution_with_topics_by_id():
 	var t2 := _make_topic(102, "Crane", "Doji", 50.0)
 	var topics_by_id: Dictionary = {101: t1, 102: t2}
 
-	var chars: Array[L5RCharacterData] = [a, b]
-	var rng: Array[int] = [5, 0, 0]
-	var results: Array[Dictionary] = DailyConversation.resolve_settlement_conversations(
+	var chars: Array = [a, b]
+	var rng: Array = [5, 0, 0]
+	var results: Array = DailyConversation.resolve_settlement_conversations(
 		chars, rng, 5, topics_by_id
 	)
 	assert_eq(results.size(), 1)
@@ -381,7 +381,7 @@ func test_settlement_resolution_with_topics_by_id():
 # -- Information Sharing Filter (s12.2 sensitivity gate) -----------------------
 
 func test_sensitive_topic_blocked_below_trusted_ally():
-	var topics_arr: Array[int] = [10]
+	var topics_arr: Array = [10]
 	var c := _make_char(1, topics_arr, "Crab", "Hida")
 	var t := _make_topic(10, "Crab", "Hida", 50.0, TopicData.Category.MILITARY)
 	var topics_by_id: Dictionary = {10: t}
@@ -390,7 +390,7 @@ func test_sensitive_topic_blocked_below_trusted_ally():
 	assert_eq(result, -1)
 
 func test_sensitive_topic_allowed_at_trusted_ally():
-	var topics_arr: Array[int] = [10]
+	var topics_arr: Array = [10]
 	var c := _make_char(1, topics_arr, "Crab", "Hida")
 	var t := _make_topic(10, "Crab", "Hida", 50.0, TopicData.Category.MILITARY)
 	var topics_by_id: Dictionary = {10: t}
@@ -399,7 +399,7 @@ func test_sensitive_topic_allowed_at_trusted_ally():
 	assert_eq(result, 10)
 
 func test_non_sensitive_topic_shared_at_acquaintance():
-	var topics_arr: Array[int] = [10]
+	var topics_arr: Array = [10]
 	var c := _make_char(1, topics_arr, "Crab", "Hida")
 	var t := _make_topic(10, "Crab", "Hida", 50.0, TopicData.Category.PERSONAL)
 	var topics_by_id: Dictionary = {10: t}
@@ -408,7 +408,7 @@ func test_non_sensitive_topic_shared_at_acquaintance():
 	assert_eq(result, 10)
 
 func test_resolve_conversation_filters_sensitive_topics():
-	var topics_a: Array[int] = [1, 2]
+	var topics_a: Array = [1, 2]
 	var a := _make_char(1, topics_a, "Crab", "Hida")
 	var b := _make_char(2, [], "Crane", "Doji")
 	_set_mutual_disposition(a, b, 40)
@@ -424,7 +424,7 @@ func test_resolve_conversation_filters_sensitive_topics():
 	assert_eq(result["topic_shared_by_a"], 2)
 
 func test_resolve_conversation_shares_sensitive_at_high_disposition():
-	var topics_a: Array[int] = [1]
+	var topics_a: Array = [1]
 	var a := _make_char(1, topics_a, "Crab", "Hida")
 	var b := _make_char(2, [], "Crane", "Doji")
 	_set_mutual_disposition(a, b, 70)
@@ -441,8 +441,8 @@ func test_resolve_conversation_shares_sensitive_at_high_disposition():
 # -- Topic Momentum Refresh (s12.6 / s16.5) -----------------------------------
 
 func test_conversation_refreshes_topic_momentum():
-	var topics_a: Array[int] = [1]
-	var topics_b: Array[int] = [1]
+	var topics_a: Array = [1]
+	var topics_b: Array = [1]
 	var a := _make_char(1, topics_a, "Crab", "Hida")
 	var b := _make_char(2, topics_b, "Crane", "Doji")
 	_set_mutual_disposition(a, b, 50)
@@ -456,7 +456,7 @@ func test_conversation_refreshes_topic_momentum():
 	assert_eq(t1.discussion_count_this_day, 2)
 
 func test_conversation_refreshes_new_topic_momentum():
-	var topics_a: Array[int] = [1]
+	var topics_a: Array = [1]
 	var a := _make_char(1, topics_a, "Crab", "Hida")
 	var b := _make_char(2, [], "Crane", "Doji")
 	_set_mutual_disposition(a, b, 50)

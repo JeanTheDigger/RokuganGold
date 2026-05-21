@@ -65,26 +65,26 @@ func test_create_clamps_tier():
 # =============================================================================
 
 func test_get_pending_filters_by_debtor():
-	var all: Array[CommitmentData] = [
+	var all: Array = [
 		_make_commitment({"debtor": 1}),
 		_make_commitment({"debtor": 2}),
 	]
-	var pending: Array[CommitmentData] = CommitmentRegistry.get_pending(all, 1)
+	var pending: Array = CommitmentRegistry.get_pending(all, 1)
 	assert_eq(pending.size(), 1)
 
 func test_get_pending_excludes_fulfilled():
-	var all: Array[CommitmentData] = [
+	var all: Array = [
 		_make_commitment({"debtor": 1, "status": Enums.CommitmentStatus.FULFILLED}),
 		_make_commitment({"debtor": 1, "id": 2}),
 	]
-	var pending: Array[CommitmentData] = CommitmentRegistry.get_pending(all, 1)
+	var pending: Array = CommitmentRegistry.get_pending(all, 1)
 	assert_eq(pending.size(), 1)
 
 func test_get_by_crisis():
 	var c1 := _make_commitment({"id": 1})
 	c1.crisis_id = 99
 	var c2 := _make_commitment({"id": 2})
-	var all: Array[CommitmentData] = [c1, c2]
+	var all: Array = [c1, c2]
 	assert_eq(CommitmentRegistry.get_by_crisis(all, 99).size(), 1)
 
 
@@ -318,7 +318,7 @@ func test_apply_consequences_skips_debtor_witness():
 # =============================================================================
 
 func test_link_crisis_stamps_pending():
-	var all: Array[CommitmentData] = [
+	var all: Array = [
 		_make_commitment({"id": 1, "debtor": 1}),
 		_make_commitment({"id": 2, "debtor": 1}),
 		_make_commitment({"id": 3, "debtor": 2}),
@@ -331,7 +331,7 @@ func test_link_crisis_stamps_pending():
 
 func test_link_crisis_skips_fulfilled():
 	var c := _make_commitment({"debtor": 1, "status": Enums.CommitmentStatus.FULFILLED})
-	var all: Array[CommitmentData] = [c]
+	var all: Array = [c]
 	assert_eq(CommitmentRegistry.link_crisis(all, 1, 99), 0)
 
 
@@ -416,22 +416,22 @@ func test_forgiveness_only_on_force_majeure():
 
 func test_at_risk_tier3_base():
 	var c := _make_char(1)
-	var all: Array[CommitmentData] = [_make_commitment({"tier": 3, "debtor": 1})]
+	var all: Array = [_make_commitment({"tier": 3, "debtor": 1})]
 	assert_eq(CommitmentRegistry.get_at_risk_penalty(all, 1, c), -5)
 
 func test_at_risk_tier2_base():
 	var c := _make_char(1)
-	var all: Array[CommitmentData] = [_make_commitment({"tier": 2, "debtor": 1})]
+	var all: Array = [_make_commitment({"tier": 2, "debtor": 1})]
 	assert_eq(CommitmentRegistry.get_at_risk_penalty(all, 1, c), -15)
 
 func test_at_risk_tier1_base():
 	var c := _make_char(1)
-	var all: Array[CommitmentData] = [_make_commitment({"tier": 1, "debtor": 1})]
+	var all: Array = [_make_commitment({"tier": 1, "debtor": 1})]
 	assert_eq(CommitmentRegistry.get_at_risk_penalty(all, 1, c), -25)
 
 func test_at_risk_stacking():
 	var c := _make_char(1)
-	var all: Array[CommitmentData] = [
+	var all: Array = [
 		_make_commitment({"id": 1, "tier": 2, "debtor": 1}),
 		_make_commitment({"id": 2, "tier": 3, "debtor": 1}),
 	]
@@ -439,7 +439,7 @@ func test_at_risk_stacking():
 
 func test_at_risk_capped_at_minus_40():
 	var c := _make_char(1)
-	var all: Array[CommitmentData] = [
+	var all: Array = [
 		_make_commitment({"id": 1, "tier": 1, "debtor": 1}),
 		_make_commitment({"id": 2, "tier": 1, "debtor": 1}),
 	]
@@ -447,39 +447,39 @@ func test_at_risk_capped_at_minus_40():
 
 func test_at_risk_meiyo_additional():
 	var c := _make_char(1, Enums.BushidoVirtue.MEIYO)
-	var all: Array[CommitmentData] = [_make_commitment({"tier": 3, "debtor": 1})]
+	var all: Array = [_make_commitment({"tier": 3, "debtor": 1})]
 	assert_eq(CommitmentRegistry.get_at_risk_penalty(all, 1, c), -10)
 
 func test_at_risk_gi_additional():
 	var c := _make_char(1, Enums.BushidoVirtue.GI)
-	var all: Array[CommitmentData] = [_make_commitment({"tier": 2, "debtor": 1})]
+	var all: Array = [_make_commitment({"tier": 2, "debtor": 1})]
 	assert_eq(CommitmentRegistry.get_at_risk_penalty(all, 1, c), -23)
 
 func test_at_risk_seigyo_reduced():
 	var c := _make_char_shourido(1, Enums.ShouridoVirtue.SEIGYO)
-	var all: Array[CommitmentData] = [_make_commitment({"tier": 2, "debtor": 1})]
+	var all: Array = [_make_commitment({"tier": 2, "debtor": 1})]
 	assert_eq(CommitmentRegistry.get_at_risk_penalty(all, 1, c), -10)
 
 func test_at_risk_kyoryoku_reduced():
 	var c := _make_char_shourido(1, Enums.ShouridoVirtue.KYORYOKU)
-	var all: Array[CommitmentData] = [_make_commitment({"tier": 1, "debtor": 1})]
+	var all: Array = [_make_commitment({"tier": 1, "debtor": 1})]
 	assert_eq(CommitmentRegistry.get_at_risk_penalty(all, 1, c), -20)
 
 func test_at_risk_chugi_in_chain():
 	var c := _make_char(1, Enums.BushidoVirtue.CHUGI)
-	var all: Array[CommitmentData] = [_make_commitment({"tier": 2, "debtor": 1, "creditor": 5})]
+	var all: Array = [_make_commitment({"tier": 2, "debtor": 1, "creditor": 5})]
 	var in_chain: Callable = func(npc_id: int) -> bool: return npc_id == 5
 	assert_eq(CommitmentRegistry.get_at_risk_penalty(all, 1, c, in_chain), -20)
 
 func test_at_risk_chugi_external():
 	var c := _make_char(1, Enums.BushidoVirtue.CHUGI)
-	var all: Array[CommitmentData] = [_make_commitment({"tier": 2, "debtor": 1, "creditor": 5})]
+	var all: Array = [_make_commitment({"tier": 2, "debtor": 1, "creditor": 5})]
 	var not_in_chain: Callable = func(npc_id: int) -> bool: return false
 	assert_eq(CommitmentRegistry.get_at_risk_penalty(all, 1, c, not_in_chain), -17)
 
 func test_at_risk_ignores_other_debtor():
 	var c := _make_char(1)
-	var all: Array[CommitmentData] = [_make_commitment({"tier": 1, "debtor": 99})]
+	var all: Array = [_make_commitment({"tier": 1, "debtor": 99})]
 	assert_eq(CommitmentRegistry.get_at_risk_penalty(all, 1, c), 0)
 
 
@@ -491,7 +491,7 @@ func test_action_modifier_penalty_on_travel_away() -> void:
 	var c := _make_char(1)
 	var commitment: CommitmentData = _make_commitment({"tier": 2, "debtor": 1})
 	commitment.fulfillment_target = 100
-	var all: Array[CommitmentData] = [commitment]
+	var all: Array = [commitment]
 	var result: int = CommitmentRegistry.get_action_commitment_modifier(
 		"BEGIN_TRAVEL", 200, all, 1, c,
 	)
@@ -502,7 +502,7 @@ func test_action_modifier_bonus_on_travel_toward() -> void:
 	var c := _make_char(1)
 	var commitment: CommitmentData = _make_commitment({"tier": 2, "debtor": 1})
 	commitment.fulfillment_target = 100
-	var all: Array[CommitmentData] = [commitment]
+	var all: Array = [commitment]
 	var result: int = CommitmentRegistry.get_action_commitment_modifier(
 		"BEGIN_TRAVEL", 100, all, 1, c,
 	)
@@ -513,7 +513,7 @@ func test_action_modifier_penalty_change_destination_away() -> void:
 	var c := _make_char(1)
 	var commitment: CommitmentData = _make_commitment({"tier": 1, "debtor": 1})
 	commitment.fulfillment_target = 100
-	var all: Array[CommitmentData] = [commitment]
+	var all: Array = [commitment]
 	var result: int = CommitmentRegistry.get_action_commitment_modifier(
 		"CHANGE_DESTINATION", 200, all, 1, c,
 	)
@@ -524,7 +524,7 @@ func test_action_modifier_no_penalty_change_destination_toward() -> void:
 	var c := _make_char(1)
 	var commitment: CommitmentData = _make_commitment({"tier": 1, "debtor": 1})
 	commitment.fulfillment_target = 100
-	var all: Array[CommitmentData] = [commitment]
+	var all: Array = [commitment]
 	var result: int = CommitmentRegistry.get_action_commitment_modifier(
 		"CHANGE_DESTINATION", 100, all, 1, c,
 	)
@@ -535,7 +535,7 @@ func test_action_modifier_bonus_attend_court_at_target() -> void:
 	var c := _make_char(1)
 	var commitment: CommitmentData = _make_commitment({"tier": 3, "debtor": 1})
 	commitment.fulfillment_target = 100
-	var all: Array[CommitmentData] = [commitment]
+	var all: Array = [commitment]
 	var result: int = CommitmentRegistry.get_action_commitment_modifier(
 		"ATTEND_COURT", 100, all, 1, c,
 	)
@@ -546,7 +546,7 @@ func test_action_modifier_bonus_for_action_at_committed_settlement() -> void:
 	var c := _make_char(1)
 	var commitment: CommitmentData = _make_commitment({"tier": 2, "debtor": 1})
 	commitment.fulfillment_target = 100
-	var all: Array[CommitmentData] = [commitment]
+	var all: Array = [commitment]
 	var result: int = CommitmentRegistry.get_action_commitment_modifier(
 		"CHARM", 100, all, 1, c,
 	)
@@ -557,7 +557,7 @@ func test_action_modifier_zero_for_action_elsewhere() -> void:
 	var c := _make_char(1)
 	var commitment: CommitmentData = _make_commitment({"tier": 2, "debtor": 1})
 	commitment.fulfillment_target = 100
-	var all: Array[CommitmentData] = [commitment]
+	var all: Array = [commitment]
 	var result: int = CommitmentRegistry.get_action_commitment_modifier(
 		"CHARM", 200, all, 1, c,
 	)
@@ -568,7 +568,7 @@ func test_action_modifier_personality_stacks() -> void:
 	var c := _make_char(1, Enums.BushidoVirtue.GI)
 	var commitment: CommitmentData = _make_commitment({"tier": 2, "debtor": 1})
 	commitment.fulfillment_target = 100
-	var all: Array[CommitmentData] = [commitment]
+	var all: Array = [commitment]
 	var result: int = CommitmentRegistry.get_action_commitment_modifier(
 		"BEGIN_TRAVEL", 200, all, 1, c,
 	)
@@ -577,7 +577,7 @@ func test_action_modifier_personality_stacks() -> void:
 
 func test_action_modifier_no_commitments() -> void:
 	var c := _make_char(1)
-	var all: Array[CommitmentData] = []
+	var all: Array = []
 	var result: int = CommitmentRegistry.get_action_commitment_modifier(
 		"BEGIN_TRAVEL", 200, all, 1, c,
 	)
@@ -589,7 +589,7 @@ func test_action_modifier_favor_obligation_ignored() -> void:
 	var commitment: CommitmentData = _make_commitment({"tier": 1, "debtor": 1})
 	commitment.commitment_type = Enums.CommitmentType.FAVOR_OBLIGATION
 	commitment.fulfillment_target = 100
-	var all: Array[CommitmentData] = [commitment]
+	var all: Array = [commitment]
 	var result: int = CommitmentRegistry.get_action_commitment_modifier(
 		"BEGIN_TRAVEL", 200, all, 1, c,
 	)
@@ -601,7 +601,7 @@ func test_action_modifier_persuade_at_committed_court() -> void:
 	var commitment: CommitmentData = _make_commitment({"tier": 2, "debtor": 1})
 	commitment.commitment_type = Enums.CommitmentType.SUPPORT_PLEDGE
 	commitment.fulfillment_target = 100
-	var all: Array[CommitmentData] = [commitment]
+	var all: Array = [commitment]
 	var result: int = CommitmentRegistry.get_action_commitment_modifier(
 		"PERSUADE", 100, all, 1, c,
 	)
@@ -613,7 +613,7 @@ func test_action_modifier_negotiate_at_committed_court() -> void:
 	var commitment: CommitmentData = _make_commitment({"tier": 1, "debtor": 1})
 	commitment.commitment_type = Enums.CommitmentType.SUPPORT_PLEDGE
 	commitment.fulfillment_target = 100
-	var all: Array[CommitmentData] = [commitment]
+	var all: Array = [commitment]
 	var result: int = CommitmentRegistry.get_action_commitment_modifier(
 		"NEGOTIATE", 100, all, 1, c,
 	)
@@ -629,11 +629,11 @@ func test_process_deadlines_fulfills():
 	var debtor := _make_char(1)
 	var creditor := _make_char(2)
 	var chars: Dictionary = {1: debtor, 2: creditor}
-	var all: Array[CommitmentData] = [
+	var all: Array = [
 		_make_commitment({"deadline": 5, "debtor": 1, "creditor": 2}),
 	]
 	var checker: Callable = func(_c: CommitmentData) -> bool: return true
-	var results: Array[Dictionary] = CommitmentRegistry.process_deadlines(
+	var results: Array = CommitmentRegistry.process_deadlines(
 		all, 5, checker, chars, chars
 	)
 	assert_eq(results.size(), 1)
@@ -643,11 +643,11 @@ func test_process_deadlines_breaks_unfulfilled():
 	var debtor := _make_char(1)
 	var creditor := _make_char(2)
 	var chars: Dictionary = {1: debtor, 2: creditor}
-	var all: Array[CommitmentData] = [
+	var all: Array = [
 		_make_commitment({"deadline": 5, "debtor": 1, "creditor": 2, "tier": 3}),
 	]
 	var checker: Callable = func(_c: CommitmentData) -> bool: return false
-	var results: Array[Dictionary] = CommitmentRegistry.process_deadlines(
+	var results: Array = CommitmentRegistry.process_deadlines(
 		all, 5, checker, chars, chars
 	)
 	assert_eq(results.size(), 1)
@@ -658,11 +658,11 @@ func test_process_deadlines_skips_future():
 	var debtor := _make_char(1)
 	var creditor := _make_char(2)
 	var chars: Dictionary = {1: debtor, 2: creditor}
-	var all: Array[CommitmentData] = [
+	var all: Array = [
 		_make_commitment({"deadline": 20, "debtor": 1}),
 	]
 	var checker: Callable = func(_c: CommitmentData) -> bool: return false
-	var results: Array[Dictionary] = CommitmentRegistry.process_deadlines(
+	var results: Array = CommitmentRegistry.process_deadlines(
 		all, 5, checker, chars, chars
 	)
 	assert_eq(results.size(), 0)

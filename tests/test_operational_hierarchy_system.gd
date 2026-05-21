@@ -57,7 +57,7 @@ func test_get_operational_chain_single_level():
 	var c := _make_char(1, 10, 20)
 	var superior := _make_char(20, 10)
 	var chars: Dictionary = {1: c, 20: superior}
-	var chain: Array[int] = OperationalHierarchySystem.get_operational_chain(c, chars)
+	var chain: Array = OperationalHierarchySystem.get_operational_chain(c, chars)
 	assert_eq(chain.size(), 1)
 	assert_eq(chain[0], 20)
 
@@ -67,7 +67,7 @@ func test_get_operational_chain_multi_level():
 	var chui := _make_char(2, 10, 3)
 	var taisa := _make_char(3, 10)
 	var chars: Dictionary = {1: soldier, 2: chui, 3: taisa}
-	var chain: Array[int] = OperationalHierarchySystem.get_operational_chain(soldier, chars)
+	var chain: Array = OperationalHierarchySystem.get_operational_chain(soldier, chars)
 	assert_eq(chain.size(), 2)
 	assert_eq(chain[0], 2)
 	assert_eq(chain[1], 3)
@@ -76,7 +76,7 @@ func test_get_operational_chain_multi_level():
 func test_get_operational_chain_no_superior():
 	var c := _make_char(1, 10)
 	var chars: Dictionary = {1: c}
-	var chain: Array[int] = OperationalHierarchySystem.get_operational_chain(c, chars)
+	var chain: Array = OperationalHierarchySystem.get_operational_chain(c, chars)
 	assert_eq(chain.size(), 0)
 
 
@@ -85,8 +85,8 @@ func test_get_operational_subordinates():
 	var sub1 := _make_char(20, 1, 10)
 	var sub2 := _make_char(30, 1, 10)
 	var other := _make_char(40, 1, 99)
-	var all: Array[L5RCharacterData] = [sup, sub1, sub2, other]
-	var subs: Array[L5RCharacterData] = OperationalHierarchySystem.get_operational_subordinates(10, all)
+	var all: Array = [sup, sub1, sub2, other]
+	var subs: Array = OperationalHierarchySystem.get_operational_subordinates(10, all)
 	assert_eq(subs.size(), 2)
 
 
@@ -264,8 +264,8 @@ func test_clear_subordinates_on_death():
 	var sub1 := _make_char(1, 10, 20, Enums.OperationalHierarchyType.LEGAL)
 	var sub2 := _make_char(2, 10, 20, Enums.OperationalHierarchyType.LEGAL)
 	var other := _make_char(3, 10, 99, Enums.OperationalHierarchyType.MILITARY)
-	var all: Array[L5RCharacterData] = [sub1, sub2, other]
-	var cleared: Array[int] = OperationalHierarchySystem.clear_subordinates_on_death(20, all)
+	var all: Array = [sub1, sub2, other]
+	var cleared: Array = OperationalHierarchySystem.clear_subordinates_on_death(20, all)
 	assert_eq(cleared.size(), 2)
 	assert_eq(sub1.operational_superior_id, -1)
 	assert_eq(sub1.operational_hierarchy_type, Enums.OperationalHierarchyType.NONE)

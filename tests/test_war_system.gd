@@ -155,7 +155,7 @@ func test_both_scores_can_be_above_50() -> void:
 
 
 func test_all_score_shift_events_exist() -> void:
-	var expected: Array[String] = [
+	var expected: Array = [
 		"minor_battle", "major_battle", "decisive_battle",
 		"province_captured", "castle_captured",
 		"siege_won_attacker", "siege_won_defender",
@@ -357,7 +357,7 @@ func test_get_all_combatants() -> void:
 	var w: WarData = _make_war()
 	WarSystem.add_ally(w, "Lion", "a")
 	WarSystem.add_ally(w, "Dragon", "b")
-	var clans: Array[String] = WarSystem.get_all_combatant_clans(w)
+	var clans: Array = WarSystem.get_all_combatant_clans(w)
 	assert_true("Crab" in clans)
 	assert_true("Crane" in clans)
 	assert_true("Lion" in clans)
@@ -443,7 +443,7 @@ func test_allied_capture() -> void:
 
 func test_are_clans_at_war() -> void:
 	var w: WarData = _make_war()
-	var wars: Array[WarData] = [w]
+	var wars: Array = [w]
 	assert_true(WarSystem.are_clans_at_war(wars, "Crab", "Crane"))
 	assert_true(WarSystem.are_clans_at_war(wars, "Crane", "Crab"))
 	assert_false(WarSystem.are_clans_at_war(wars, "Crab", "Lion"))
@@ -452,13 +452,13 @@ func test_are_clans_at_war() -> void:
 func test_are_clans_at_war_inactive_excluded() -> void:
 	var w: WarData = _make_war()
 	WarSystem.end_war(w, "peace")
-	var wars: Array[WarData] = [w]
+	var wars: Array = [w]
 	assert_false(WarSystem.are_clans_at_war(wars, "Crab", "Crane"))
 
 
 func test_get_war_between() -> void:
 	var w: WarData = _make_war()
-	var wars: Array[WarData] = [w]
+	var wars: Array = [w]
 	var found: WarData = WarSystem.get_war_between(wars, "Crab", "Crane")
 	assert_not_null(found)
 	assert_eq(found.war_id, 1)
@@ -466,7 +466,7 @@ func test_get_war_between() -> void:
 
 func test_get_war_between_not_found() -> void:
 	var w: WarData = _make_war()
-	var wars: Array[WarData] = [w]
+	var wars: Array = [w]
 	var found: WarData = WarSystem.get_war_between(wars, "Crab", "Lion")
 	assert_null(found)
 
@@ -476,8 +476,8 @@ func test_get_active_wars_for_clan() -> void:
 	var w2: WarData = _make_war(2, "Crab", "Lion")
 	var w3: WarData = _make_war(3, "Lion", "Crane")
 	WarSystem.end_war(w2, "peace")
-	var wars: Array[WarData] = [w1, w2, w3]
-	var crab_wars: Array[WarData] = WarSystem.get_active_wars_for_clan(wars, "Crab")
+	var wars: Array = [w1, w2, w3]
+	var crab_wars: Array = WarSystem.get_active_wars_for_clan(wars, "Crab")
 	assert_eq(crab_wars.size(), 1)
 	assert_eq(crab_wars[0].war_id, 1)
 
@@ -485,7 +485,7 @@ func test_get_active_wars_for_clan() -> void:
 func test_allied_clans_at_war() -> void:
 	var w: WarData = _make_war()
 	WarSystem.add_ally(w, "Lion", "a")
-	var wars: Array[WarData] = [w]
+	var wars: Array = [w]
 	assert_true(WarSystem.are_clans_at_war(wars, "Lion", "Crane"))
 
 
@@ -513,6 +513,6 @@ func test_wars_to_context_array_skips_inactive() -> void:
 	var w1: WarData = _make_war(1)
 	var w2: WarData = _make_war(2)
 	WarSystem.end_war(w2, "peace")
-	var wars: Array[WarData] = [w1, w2]
+	var wars: Array = [w1, w2]
 	var arr: Array = WarSystem.wars_to_context_array(wars)
 	assert_eq(arr.size(), 1)

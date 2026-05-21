@@ -114,7 +114,7 @@ func test_pair_key_already_sorted():
 
 
 func test_get_all_clan_pairs_count():
-	var pairs: Array[String] = OtomoSeiyakuSystem.get_all_clan_pairs()
+	var pairs: Array = OtomoSeiyakuSystem.get_all_clan_pairs()
 	assert_eq(pairs.size(), 21)
 
 
@@ -146,7 +146,7 @@ func test_invalid_non_great_clan():
 
 func test_scan_no_alarms_below_threshold():
 	var disps: Dictionary = {"Crab||Crane": 30}
-	var alarms: Array[Dictionary] = OtomoSeiyakuSystem.scan_champion_dispositions(
+	var alarms: Array = OtomoSeiyakuSystem.scan_champion_dispositions(
 		disps, 45,
 	)
 	assert_eq(alarms.size(), 0)
@@ -155,7 +155,7 @@ func test_scan_no_alarms_below_threshold():
 func test_scan_alarm_at_threshold():
 	var pair_key: String = OtomoSeiyakuSystem.make_pair_key("Crab", "Crane")
 	var disps: Dictionary = {pair_key: 45}
-	var alarms: Array[Dictionary] = OtomoSeiyakuSystem.scan_champion_dispositions(
+	var alarms: Array = OtomoSeiyakuSystem.scan_champion_dispositions(
 		disps, 45,
 	)
 	assert_eq(alarms.size(), 1)
@@ -166,7 +166,7 @@ func test_scan_alarms_sorted_by_disposition_desc():
 	var k1: String = OtomoSeiyakuSystem.make_pair_key("Crab", "Crane")
 	var k2: String = OtomoSeiyakuSystem.make_pair_key("Lion", "Dragon")
 	var disps: Dictionary = {k1: 50, k2: 70}
-	var alarms: Array[Dictionary] = OtomoSeiyakuSystem.scan_champion_dispositions(
+	var alarms: Array = OtomoSeiyakuSystem.scan_champion_dispositions(
 		disps, 45,
 	)
 	assert_eq(alarms.size(), 2)
@@ -178,7 +178,7 @@ func test_scan_war_exemption_warlike():
 	var k1: String = OtomoSeiyakuSystem.make_pair_key("Crab", "Crane")
 	var disps: Dictionary = {k1: 60}
 	var wars: Array = [{"clan_a": "Crab", "clan_b": "Dragon", "allied_clans_a": ["Crane"], "allied_clans_b": []}]
-	var alarms: Array[Dictionary] = OtomoSeiyakuSystem.scan_champion_dispositions(
+	var alarms: Array = OtomoSeiyakuSystem.scan_champion_dispositions(
 		disps, 45, wars, true,
 	)
 	assert_eq(alarms.size(), 0)
@@ -188,7 +188,7 @@ func test_scan_war_exemption_not_warlike():
 	var k1: String = OtomoSeiyakuSystem.make_pair_key("Crab", "Crane")
 	var disps: Dictionary = {k1: 60}
 	var wars: Array = [{"clan_a": "Crab", "clan_b": "Dragon", "allied_clans_a": ["Crane"], "allied_clans_b": []}]
-	var alarms: Array[Dictionary] = OtomoSeiyakuSystem.scan_champion_dispositions(
+	var alarms: Array = OtomoSeiyakuSystem.scan_champion_dispositions(
 		disps, 45, wars, false,
 	)
 	assert_eq(alarms.size(), 1)
@@ -218,11 +218,11 @@ func test_create_directive():
 
 func test_assign_directives():
 	var state: Dictionary = OtomoSeiyakuSystem.make_initial_state()
-	var alarms: Array[Dictionary] = [
+	var alarms: Array = [
 		{"pair_key": "Crab||Crane", "clan_a": "Crab", "clan_b": "Crane", "disposition": 50},
 	]
-	var ops: Array[int] = [100, 101, 102]
-	var new_dirs: Array[Dictionary] = OtomoSeiyakuSystem.assign_directives(state, alarms, ops, 3)
+	var ops: Array = [100, 101, 102]
+	var new_dirs: Array = OtomoSeiyakuSystem.assign_directives(state, alarms, ops, 3)
 	assert_eq(new_dirs.size(), 1)
 	assert_eq(state["active_directives"].size(), 1)
 	assert_eq(state["assigned_operatives"].size(), 1)
@@ -230,13 +230,13 @@ func test_assign_directives():
 
 func test_assign_respects_pool_limit():
 	var state: Dictionary = OtomoSeiyakuSystem.make_initial_state()
-	var alarms: Array[Dictionary] = [
+	var alarms: Array = [
 		{"pair_key": "Crab||Crane", "clan_a": "Crab", "clan_b": "Crane", "disposition": 60},
 		{"pair_key": "Dragon||Lion", "clan_a": "Dragon", "clan_b": "Lion", "disposition": 55},
 		{"pair_key": "Phoenix||Scorpion", "clan_a": "Phoenix", "clan_b": "Scorpion", "disposition": 50},
 	]
-	var ops: Array[int] = [100, 101, 102]
-	var new_dirs: Array[Dictionary] = OtomoSeiyakuSystem.assign_directives(state, alarms, ops, 2)
+	var ops: Array = [100, 101, 102]
+	var new_dirs: Array = OtomoSeiyakuSystem.assign_directives(state, alarms, ops, 2)
 	assert_eq(new_dirs.size(), 2)
 	assert_eq(state["active_directives"].size(), 2)
 
@@ -247,12 +247,12 @@ func test_assign_skips_existing_directive():
 		"Crab||Crane", 100, "Crab", "Crane",
 	)
 	state["assigned_operatives"][100] = "Crab||Crane"
-	var alarms: Array[Dictionary] = [
+	var alarms: Array = [
 		{"pair_key": "Crab||Crane", "clan_a": "Crab", "clan_b": "Crane", "disposition": 60},
 		{"pair_key": "Dragon||Lion", "clan_a": "Dragon", "clan_b": "Lion", "disposition": 55},
 	]
-	var ops: Array[int] = [100, 101, 102]
-	var new_dirs: Array[Dictionary] = OtomoSeiyakuSystem.assign_directives(state, alarms, ops, 3)
+	var ops: Array = [100, 101, 102]
+	var new_dirs: Array = OtomoSeiyakuSystem.assign_directives(state, alarms, ops, 3)
 	assert_eq(new_dirs.size(), 1)
 	assert_eq(new_dirs[0]["pair_key"], "Dragon||Lion")
 
@@ -281,7 +281,7 @@ func test_escalation_after_two_seasons():
 	OtomoSeiyakuSystem.update_escalation(state, disps, 45)
 	assert_eq(state["seasons_above_threshold"].get("Crab||Crane", 0), 1)
 	assert_false(state["active_directives"]["Crab||Crane"]["escalated"])
-	var escalated: Array[String] = OtomoSeiyakuSystem.update_escalation(state, disps, 45)
+	var escalated: Array = OtomoSeiyakuSystem.update_escalation(state, disps, 45)
 	assert_eq(escalated.size(), 1)
 	assert_true(state["active_directives"]["Crab||Crane"]["escalated"])
 
@@ -308,7 +308,7 @@ func test_check_cancellation_below_buffer():
 	)
 	state["assigned_operatives"][100] = "Crab||Crane"
 	var disps: Dictionary = {"Crab||Crane": 34}
-	var cancelled: Array[String] = OtomoSeiyakuSystem.check_cancellations(state, disps, 45)
+	var cancelled: Array = OtomoSeiyakuSystem.check_cancellations(state, disps, 45)
 	assert_eq(cancelled.size(), 1)
 	assert_eq(state["active_directives"].size(), 0)
 
@@ -320,7 +320,7 @@ func test_check_cancellation_not_below_buffer():
 	)
 	state["assigned_operatives"][100] = "Crab||Crane"
 	var disps: Dictionary = {"Crab||Crane": 36}
-	var cancelled: Array[String] = OtomoSeiyakuSystem.check_cancellations(state, disps, 45)
+	var cancelled: Array = OtomoSeiyakuSystem.check_cancellations(state, disps, 45)
 	assert_eq(cancelled.size(), 0)
 	assert_eq(state["active_directives"].size(), 1)
 
@@ -472,7 +472,7 @@ func test_process_seasonal_review_full():
 		OtomoSeiyakuSystem.make_pair_key("Crab", "Crane"): 50,
 		OtomoSeiyakuSystem.make_pair_key("Lion", "Dragon"): 30,
 	}
-	var ops: Array[int] = [100, 101, 102]
+	var ops: Array = [100, 101, 102]
 	var result: Dictionary = OtomoSeiyakuSystem.process_seasonal_review(
 		state, disps, StrategicReview.EmperorArchetype.IRON, ops, 2,
 	)
@@ -490,7 +490,7 @@ func test_seasonal_review_increments_seasons_active():
 	)
 	state["assigned_operatives"][100] = pair
 	var disps: Dictionary = {pair: 50}
-	var ops: Array[int] = [100, 101, 102]
+	var ops: Array = [100, 101, 102]
 	OtomoSeiyakuSystem.process_seasonal_review(
 		state, disps, StrategicReview.EmperorArchetype.IRON, ops, 0,
 	)
@@ -505,7 +505,7 @@ func test_seasonal_review_cancels_low_disp():
 	)
 	state["assigned_operatives"][100] = pair
 	var disps: Dictionary = {pair: 20}
-	var ops: Array[int] = [100, 101, 102]
+	var ops: Array = [100, 101, 102]
 	var result: Dictionary = OtomoSeiyakuSystem.process_seasonal_review(
 		state, disps, StrategicReview.EmperorArchetype.IRON, ops, 0,
 	)
@@ -520,7 +520,7 @@ func test_seasonal_review_uncovered_count():
 	var k3: String = OtomoSeiyakuSystem.make_pair_key("Phoenix", "Scorpion")
 	var k4: String = OtomoSeiyakuSystem.make_pair_key("Crab", "Lion")
 	var disps: Dictionary = {k1: 50, k2: 55, k3: 60, k4: 48}
-	var ops: Array[int] = [100, 101, 102]
+	var ops: Array = [100, 101, 102]
 	var result: Dictionary = OtomoSeiyakuSystem.process_seasonal_review(
 		state, disps, StrategicReview.EmperorArchetype.IRON, ops, 0,
 	)
@@ -535,7 +535,7 @@ func test_build_champion_dispositions():
 	var champ_crane := _make_champion(2, "Crane")
 	champ_crab.disposition_values[2] = 40
 	champ_crane.disposition_values[1] = 60
-	var chars: Array[L5RCharacterData] = [champ_crab, champ_crane]
+	var chars: Array = [champ_crab, champ_crane]
 	var by_id: Dictionary = {1: champ_crab, 2: champ_crane}
 	var disps: Dictionary = DayOrchestrator._build_champion_dispositions(chars, by_id)
 	var key: String = OtomoSeiyakuSystem.make_pair_key("Crab", "Crane")
@@ -548,7 +548,7 @@ func test_build_champion_dispositions_skips_dead():
 	var champ_crane := _make_champion(2, "Crane")
 	champ_crane.wounds_taken = 999
 	champ_crab.disposition_values[2] = 40
-	var chars: Array[L5RCharacterData] = [champ_crab, champ_crane]
+	var chars: Array = [champ_crab, champ_crane]
 	var by_id: Dictionary = {1: champ_crab, 2: champ_crane}
 	var disps: Dictionary = DayOrchestrator._build_champion_dispositions(chars, by_id)
 	assert_eq(disps.size(), 0)
@@ -559,7 +559,7 @@ func test_build_champion_dispositions_skips_vassals():
 	var vassal := _make_char(2, "Crane", "", 8.0)
 	vassal.lord_id = 5
 	champ_crab.disposition_values[2] = 40
-	var chars: Array[L5RCharacterData] = [champ_crab, vassal]
+	var chars: Array = [champ_crab, vassal]
 	var by_id: Dictionary = {1: champ_crab, 2: vassal}
 	var disps: Dictionary = DayOrchestrator._build_champion_dispositions(chars, by_id)
 	assert_eq(disps.size(), 0)
@@ -570,8 +570,8 @@ func test_get_otomo_courtier_ids():
 	var otomo2 := _make_otomo_courtier(11)
 	var bushi := _make_char(12, "Imperial", "Otomo", 4.0)
 	bushi.school_type = Enums.SchoolType.BUSHI
-	var chars: Array[L5RCharacterData] = [otomo1, otomo2, bushi]
-	var ids: Array[int] = DayOrchestrator._get_otomo_courtier_ids(chars)
+	var chars: Array = [otomo1, otomo2, bushi]
+	var ids: Array = DayOrchestrator._get_otomo_courtier_ids(chars)
 	assert_eq(ids.size(), 2)
 	assert_true(10 in ids)
 	assert_true(11 in ids)
@@ -580,8 +580,8 @@ func test_get_otomo_courtier_ids():
 func test_get_otomo_courtier_ids_excludes_dead():
 	var otomo := _make_otomo_courtier(10)
 	otomo.wounds_taken = 999
-	var chars: Array[L5RCharacterData] = [otomo]
-	var ids: Array[int] = DayOrchestrator._get_otomo_courtier_ids(chars)
+	var chars: Array = [otomo]
+	var ids: Array = DayOrchestrator._get_otomo_courtier_ids(chars)
 	assert_eq(ids.size(), 0)
 
 

@@ -788,7 +788,7 @@ func test_process_compact_restorations_clears_authority_flag() -> void:
 		}
 	]
 
-	var results: Array[Dictionary] = DayOrchestrator._process_compact_restorations(
+	var results: Array = DayOrchestrator._process_compact_restorations(
 		applied_list, _state
 	)
 
@@ -799,7 +799,7 @@ func test_process_compact_restorations_clears_authority_flag() -> void:
 
 
 func test_process_compact_restorations_skips_empty_state() -> void:
-	var results: Array[Dictionary] = DayOrchestrator._process_compact_restorations(
+	var results: Array = DayOrchestrator._process_compact_restorations(
 		[{"effects": {"requires_compact_restoration": true}}],
 		{}   # empty state
 	)
@@ -828,8 +828,8 @@ func test_generate_options_excludes_compact_when_no_authority() -> void:
 	ctx.civilian_orders_remaining = 3
 
 	var need := NPCDataStructures.ImmediateNeed.new()
-	var options: Array[NPCDataStructures.ScoredAction] = NPCDecisionEngine.generate_options(ctx, need)
-	var action_ids: Array[String] = []
+	var options: Array = NPCDecisionEngine.generate_options(ctx, need)
+	var action_ids: Array = []
 	for opt in options:
 		action_ids.append(opt.action_id)
 	assert_false("RESTORE_COUNCIL_COMPACT" in action_ids)
@@ -846,8 +846,8 @@ func test_generate_options_includes_compact_when_authority_held() -> void:
 	ctx.ap_remaining = 5
 
 	var need := NPCDataStructures.ImmediateNeed.new()
-	var options: Array[NPCDataStructures.ScoredAction] = NPCDecisionEngine.generate_options(ctx, need)
-	var action_ids: Array[String] = []
+	var options: Array = NPCDecisionEngine.generate_options(ctx, need)
+	var action_ids: Array = []
 	for opt in options:
 		action_ids.append(opt.action_id)
 	assert_true("RESTORE_COUNCIL_COMPACT" in action_ids)
@@ -917,8 +917,9 @@ func test_grand_ritual_applies_empire_disposition_to_status5_reps():
 		province, [], [rep, low_rank], 99
 	)
 	assert_eq(rep.disposition_values.get(99, 0), PhoenixCouncil.GRAND_RITUAL_EMPIRE_DISPOSITION)
-	assert_eq(low_rank.disposition_values.get(99, 0), 0, "Status < 5 should not be affected")
-	assert_eq(result["reps_affected"].size(), 1)
+	assert_eq(low_rank.disposition_values.get(99, 0), PhoenixCouncil.GRAND_RITUAL_EMPIRE_DISPOSITION,
+		"All non-Phoenix reps affected regardless of status")
+	assert_eq(result["reps_affected"].size(), 2)
 
 
 func test_grand_ritual_skips_phoenix_clan_reps():

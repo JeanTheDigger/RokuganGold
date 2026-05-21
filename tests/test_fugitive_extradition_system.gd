@@ -202,7 +202,8 @@ func test_gi_complies_with_imperial_warrant():
 
 
 func test_seigyo_resists_imperial_warrant():
-	var lord := _make_lord(Enums.BushidoVirtue.GI, Enums.ShouridoVirtue.SEIGYO)
+	# Use YU (not GI/CHUGI) so bushido doesn't force compliance before shourido check.
+	var lord := _make_lord(Enums.BushidoVirtue.YU, Enums.ShouridoVirtue.SEIGYO)
 	var r := FugitiveExtraditionSystem.evaluate_imperial_warrant_compliance(lord)
 	assert_false(r["complies"])
 

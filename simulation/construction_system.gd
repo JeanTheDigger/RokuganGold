@@ -134,14 +134,14 @@ static func has_authority(
 	character: L5RCharacterData,
 ) -> bool:
 	var level: AuthorityLevel = get_authority_level(character)
-	var allowed: Array[int] = CONSTRUCTION_AUTHORITY.get(construction_type, [])
+	var allowed: Array = CONSTRUCTION_AUTHORITY.get(construction_type, [])
 	return level in allowed
 
 
 static func validate_village_founding(
 	character: L5RCharacterData,
 	province: ProvinceData,
-	settlements: Array[SettlementData],
+	settlements: Array,
 ) -> Dictionary:
 	if not has_authority(ConstructionData.ConstructionType.VILLAGE, character):
 		return {"valid": false, "reason": "insufficient_authority"}
@@ -176,7 +176,7 @@ static func validate_village_founding(
 static func validate_fortification(
 	character: L5RCharacterData,
 	province: ProvinceData,
-	settlements: Array[SettlementData],
+	settlements: Array,
 ) -> Dictionary:
 	if not has_authority(ConstructionData.ConstructionType.FORTIFICATION, character):
 		return {"valid": false, "reason": "insufficient_authority"}
@@ -215,7 +215,7 @@ static func validate_temple(
 	construction_type: ConstructionData.ConstructionType,
 	character: L5RCharacterData,
 	province: ProvinceData,
-	settlements: Array[SettlementData],
+	settlements: Array,
 	is_dedicated: bool,
 ) -> Dictionary:
 	if not has_authority(construction_type, character):
@@ -342,9 +342,9 @@ static func _get_build_seasons(ct: ConstructionData.ConstructionType) -> int:
 
 
 static func tick_construction_queue(
-	constructions: Array[ConstructionData],
-) -> Array[ConstructionData]:
-	var completed: Array[ConstructionData] = []
+	constructions: Array,
+) -> Array:
+	var completed: Array = []
 	for cd: ConstructionData in constructions:
 		if cd.is_complete:
 			continue
@@ -464,7 +464,7 @@ static func add_shrine_to_settlement(
 
 
 static func deduct_village_resources(
-	settlements: Array[SettlementData],
+	settlements: Array,
 	province_id: int,
 	pu_to_move: float,
 	koku_cost: float,
@@ -494,7 +494,7 @@ static func deduct_village_resources(
 
 
 static func deduct_koku(
-	settlements: Array[SettlementData],
+	settlements: Array,
 	province_id: int,
 	amount: float,
 ) -> float:
@@ -511,7 +511,7 @@ static func deduct_koku(
 
 
 static func deduct_pu(
-	settlements: Array[SettlementData],
+	settlements: Array,
 	province_id: int,
 	amount: float,
 ) -> float:
@@ -532,7 +532,7 @@ static func deduct_pu(
 
 static func check_organic_formation(
 	province: ProvinceData,
-	settlements: Array[SettlementData],
+	settlements: Array,
 ) -> Dictionary:
 	if province.stability < ORGANIC_MIN_STABILITY:
 		return {"eligible": false, "reason": "low_stability"}
@@ -563,7 +563,7 @@ static func check_organic_formation(
 
 static func process_organic_formation(
 	province: ProvinceData,
-	settlements: Array[SettlementData],
+	settlements: Array,
 	next_settlement_id: int,
 ) -> Dictionary:
 	var check: Dictionary = check_organic_formation(province, settlements)

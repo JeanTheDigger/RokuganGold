@@ -86,7 +86,7 @@ static func select_primary_objective(
 	world_state: Dictionary,
 ) -> Dictionary:
 	var domain: String = STANDING_OBJECTIVE_DOMAIN.get(standing_type, DOMAIN_POLITICAL)
-	var opportunities: Array[Opportunity] = scan_opportunities(
+	var opportunities: Array = scan_opportunities(
 		character, domain, standing_type, world_state
 	)
 
@@ -118,8 +118,8 @@ static func scan_opportunities(
 	domain: String,
 	standing_type: String,
 	world_state: Dictionary,
-) -> Array[Opportunity]:
-	var results: Array[Opportunity] = []
+) -> Array:
+	var results: Array = []
 
 	match domain:
 		DOMAIN_POLITICAL:
@@ -159,8 +159,8 @@ static func _scan_political(
 	character: L5RCharacterData,
 	standing_type: String,
 	world_state: Dictionary,
-) -> Array[Opportunity]:
-	var results: Array[Opportunity] = []
+) -> Array:
+	var results: Array = []
 
 	var weak_neighbors: Array = world_state.get("weak_neighbor_provinces", [])
 	for neighbor: Dictionary in weak_neighbors:
@@ -224,8 +224,8 @@ static func _scan_military(
 	character: L5RCharacterData,
 	standing_type: String,
 	world_state: Dictionary,
-) -> Array[Opportunity]:
-	var results: Array[Opportunity] = []
+) -> Array:
+	var results: Array = []
 
 	var border_weaknesses: Array = world_state.get("border_weaknesses", [])
 	for border: Dictionary in border_weaknesses:
@@ -330,8 +330,8 @@ static func _scan_economic(
 	_character: L5RCharacterData,
 	standing_type: String,
 	world_state: Dictionary,
-) -> Array[Opportunity]:
-	var results: Array[Opportunity] = []
+) -> Array:
+	var results: Array = []
 
 	var resource_deficits: Array = world_state.get("resource_deficits", [])
 	for deficit: Dictionary in resource_deficits:
@@ -395,8 +395,8 @@ static func _scan_personal(
 	character: L5RCharacterData,
 	standing_type: String,
 	world_state: Dictionary,
-) -> Array[Opportunity]:
-	var results: Array[Opportunity] = []
+) -> Array:
+	var results: Array = []
 
 	if character.honor < 3.0:
 		var opp := Opportunity.new()

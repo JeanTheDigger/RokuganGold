@@ -103,7 +103,7 @@ func test_quality_success_with_high_skill():
 	dice.set_seed(42)
 	var c := _make_char(1, 5)
 	c.awareness = 4
-	var results: Array[int] = []
+	var results: Array = []
 	for i in range(10):
 		results.append(LetterSystem.roll_letter_quality(c, dice))
 	# With high skill, most rolls should pass TN 15
@@ -175,7 +175,7 @@ func test_deliver_transfers_new_topic():
 	dice.set_seed(42)
 	var sender := _make_char(1, 3)
 	var recipient := _make_char(2)
-	var log: Array[Dictionary] = []
+	var log: Array = []
 
 	var letter: LetterData = LetterSystem.write_letter(
 		1, sender, 2, 2, 0, dice, 0
@@ -192,7 +192,7 @@ func test_deliver_does_not_duplicate_known_topic():
 	var sender := _make_char(1, 3)
 	var recipient := _make_char(2)
 	recipient.topic_pool = [2]
-	var log: Array[Dictionary] = []
+	var log: Array = []
 
 	var letter: LetterData = LetterSystem.write_letter(
 		1, sender, 2, 2, 0, dice, 0
@@ -209,7 +209,7 @@ func test_deliver_applies_disposition_bonus():
 	sender.awareness = 5
 	var recipient := _make_char(2)
 	recipient.disposition_values[1] = 30
-	var log: Array[Dictionary] = []
+	var log: Array = []
 
 	var letter: LetterData = LetterSystem.write_letter(
 		1, sender, 2, 10, 0, dice, 0
@@ -224,7 +224,7 @@ func test_deliver_marks_letter_delivered():
 	dice.set_seed(42)
 	var sender := _make_char(1, 3)
 	var recipient := _make_char(2)
-	var log: Array[Dictionary] = []
+	var log: Array = []
 
 	var letter: LetterData = LetterSystem.write_letter(
 		1, sender, 2, 10, 0, dice, 0
@@ -237,7 +237,7 @@ func test_deliver_idempotent():
 	dice.set_seed(42)
 	var sender := _make_char(1, 3)
 	var recipient := _make_char(2)
-	var log: Array[Dictionary] = []
+	var log: Array = []
 
 	var letter: LetterData = LetterSystem.write_letter(
 		1, sender, 2, 2, 0, dice, 0
@@ -317,13 +317,13 @@ func test_process_pending_delivers_due_letters():
 	var sender := _make_char(1, 3)
 	var recipient := _make_char(2)
 	var chars: Dictionary = {1: sender, 2: recipient}
-	var log: Array[Dictionary] = []
+	var log: Array = []
 
 	var letter: LetterData = LetterSystem.write_letter(
 		1, sender, 2, 2, 0, dice, 0
 	)
 	var pending: Array = [letter]
-	var results: Array[Dictionary] = LetterSystem.process_pending_letters(
+	var results: Array = LetterSystem.process_pending_letters(
 		pending, chars, 0, 1, log
 	)
 	assert_eq(results.size(), 1)
@@ -335,14 +335,14 @@ func test_process_pending_skips_not_yet_due():
 	var sender := _make_char(1, 3)
 	var recipient := _make_char(2)
 	var chars: Dictionary = {1: sender, 2: recipient}
-	var log: Array[Dictionary] = []
+	var log: Array = []
 
 	# 6 provinces = arrives day 2
 	var letter: LetterData = LetterSystem.write_letter(
 		1, sender, 2, 2, 0, dice, 6
 	)
 	var pending: Array = [letter]
-	var results: Array[Dictionary] = LetterSystem.process_pending_letters(
+	var results: Array = LetterSystem.process_pending_letters(
 		pending, chars, 1, 1, log
 	)
 	assert_eq(results.size(), 0)
@@ -354,14 +354,14 @@ func test_process_pending_skips_already_delivered():
 	var sender := _make_char(1, 3)
 	var recipient := _make_char(2)
 	var chars: Dictionary = {1: sender, 2: recipient}
-	var log: Array[Dictionary] = []
+	var log: Array = []
 
 	var letter: LetterData = LetterSystem.write_letter(
 		1, sender, 2, 10, 0, dice, 0
 	)
 	letter.delivered = true
 	var pending: Array = [letter]
-	var results: Array[Dictionary] = LetterSystem.process_pending_letters(
+	var results: Array = LetterSystem.process_pending_letters(
 		pending, chars, 0, 1, log
 	)
 	assert_eq(results.size(), 0)
@@ -376,13 +376,13 @@ func test_dead_recipient_marked_undeliverable():
 	var recipient := _make_char(2)
 	recipient.wounds_taken = 200
 	var chars: Dictionary = {1: sender, 2: recipient}
-	var log: Array[Dictionary] = []
+	var log: Array = []
 
 	var letter: LetterData = LetterSystem.write_letter(
 		1, sender, 2, 5, 0, dice, 0
 	)
 	var pending: Array = [letter]
-	var results: Array[Dictionary] = LetterSystem.process_pending_letters(
+	var results: Array = LetterSystem.process_pending_letters(
 		pending, chars, 0, 1, log
 	)
 	assert_eq(results.size(), 1)
@@ -397,7 +397,7 @@ func test_dead_recipient_topic_not_transferred():
 	var recipient := _make_char(2)
 	recipient.wounds_taken = 200
 	var chars: Dictionary = {1: sender, 2: recipient}
-	var log: Array[Dictionary] = []
+	var log: Array = []
 
 	var letter: LetterData = LetterSystem.write_letter(
 		1, sender, 2, 5, 0, dice, 0
@@ -415,15 +415,17 @@ func test_ocean_letter_blocked_by_blockade():
 	var sender := _make_char(1, 3)
 	var recipient := _make_char(2)
 	var chars: Dictionary = {1: sender, 2: recipient}
-	var log: Array[Dictionary] = []
+	var log: Array = []
 
 	var letter: LetterData = LetterSystem.write_letter(
 		1, sender, 2, 5, 0, dice, 0, 0, 0, 1
 	)
+	# Ocean transit = 1 * OCEAN_SEGMENT_DELAY(2) = 2 days. ic_day_arrival = 2.
+	# Must process at ic_day >= 2 so the letter is due for delivery.
 	var wars: Array = [{"has_naval_component": true}]
 	var pending: Array = [letter]
-	var results: Array[Dictionary] = LetterSystem.process_pending_letters(
-		pending, chars, 0, 1, log, wars
+	var results: Array = LetterSystem.process_pending_letters(
+		pending, chars, 2, 1, log, wars
 	)
 	assert_eq(results.size(), 0)
 	assert_true(letter.blocked_by_blockade)
@@ -435,15 +437,17 @@ func test_overland_letter_not_blocked_by_blockade():
 	var sender := _make_char(1, 3)
 	var recipient := _make_char(2)
 	var chars: Dictionary = {1: sender, 2: recipient}
-	var log: Array[Dictionary] = []
+	var log: Array = []
 
 	var letter: LetterData = LetterSystem.write_letter(
 		1, sender, 2, 5, 0, dice, 3
 	)
+	# Overland transit = ceil(3/3) = 1 day. ic_day_arrival = 1.
+	# Must process at ic_day >= 1 so the letter is due for delivery.
 	var wars: Array = [{"has_naval_component": true}]
 	var pending: Array = [letter]
-	var results: Array[Dictionary] = LetterSystem.process_pending_letters(
-		pending, chars, 0, 1, log, wars
+	var results: Array = LetterSystem.process_pending_letters(
+		pending, chars, 1, 1, log, wars
 	)
 	assert_eq(results.size(), 1)
 	assert_false(letter.blocked_by_blockade)
@@ -660,7 +664,7 @@ func test_forged_letter_delivers_with_forgery_info():
 	var sender := _make_char(1, 3)
 	var recipient := _make_char(2)
 	var chars: Dictionary = {1: sender, 2: recipient}
-	var log: Array[Dictionary] = []
+	var log: Array = []
 
 	var letter: LetterData = LetterSystem.write_letter(
 		1, sender, 2, 5, 0, dice, 0
@@ -669,7 +673,7 @@ func test_forged_letter_delivers_with_forgery_info():
 	letter.forged_sender_id = 99
 	letter.forgery_tn = 30
 	var pending: Array = [letter]
-	var results: Array[Dictionary] = LetterSystem.process_pending_letters(
+	var results: Array = LetterSystem.process_pending_letters(
 		pending, chars, 0, 1, log, [], dice
 	)
 	assert_eq(results.size(), 1)
@@ -687,7 +691,7 @@ func test_generate_replies_creates_reply():
 	recipient.disposition_values[1] = 80
 	recipient.topic_pool = [10, 20]
 	var chars: Dictionary = {1: sender, 2: recipient}
-	var log: Array[Dictionary] = []
+	var log: Array = []
 
 	var letter: LetterData = LetterSystem.write_letter(
 		1, sender, 2, 10, 0, dice, 3
@@ -695,7 +699,7 @@ func test_generate_replies_creates_reply():
 	var pending: Array = [letter]
 	LetterSystem.process_pending_letters(pending, chars, 0, 1, log)
 
-	var delivery_results: Array[Dictionary] = [{
+	var delivery_results: Array = [{
 		"letter_id": 1,
 		"sender_id": 1,
 		"recipient_id": 2,
@@ -703,8 +707,8 @@ func test_generate_replies_creates_reply():
 		"topic_transferred": true,
 		"disposition_bonus": 1,
 	}]
-	var next_id: Array[int] = [100]
-	var replies: Array[LetterData] = LetterSystem.generate_replies(
+	var next_id: Array = [100]
+	var replies: Array = LetterSystem.generate_replies(
 		delivery_results, pending, chars, 0, dice, next_id
 	)
 	if replies.size() > 0:
@@ -723,14 +727,14 @@ func test_generate_replies_skips_dead_sender():
 	recipient.topic_pool = [10]
 	var chars: Dictionary = {1: sender, 2: recipient}
 
-	var delivery_results: Array[Dictionary] = [{
+	var delivery_results: Array = [{
 		"letter_id": 1,
 		"sender_id": 1,
 		"recipient_id": 2,
 		"topic": 10,
 	}]
-	var next_id: Array[int] = [100]
-	var replies: Array[LetterData] = LetterSystem.generate_replies(
+	var next_id: Array = [100]
+	var replies: Array = LetterSystem.generate_replies(
 		delivery_results, [], chars, 0, dice, next_id
 	)
 	assert_eq(replies.size(), 0)
@@ -744,7 +748,7 @@ func test_generate_replies_skips_undeliverable():
 	recipient.topic_pool = [10]
 	var chars: Dictionary = {1: sender, 2: recipient}
 
-	var delivery_results: Array[Dictionary] = [{
+	var delivery_results: Array = [{
 		"letter_id": 1,
 		"sender_id": 1,
 		"recipient_id": 2,
@@ -752,8 +756,8 @@ func test_generate_replies_skips_undeliverable():
 		"undeliverable": true,
 		"reason": "recipient_dead",
 	}]
-	var next_id: Array[int] = [100]
-	var replies: Array[LetterData] = LetterSystem.generate_replies(
+	var next_id: Array = [100]
+	var replies: Array = LetterSystem.generate_replies(
 		delivery_results, [], chars, 0, dice, next_id
 	)
 	assert_eq(replies.size(), 0)
@@ -774,14 +778,14 @@ func test_generate_replies_does_not_apply_exchange_bonus():
 	)
 	var pending: Array = [letter]
 
-	var delivery_results: Array[Dictionary] = [{
+	var delivery_results: Array = [{
 		"letter_id": 1,
 		"sender_id": 1,
 		"recipient_id": 2,
 		"topic": 10,
 	}]
-	var next_id: Array[int] = [100]
-	var replies: Array[LetterData] = LetterSystem.generate_replies(
+	var next_id: Array = [100]
+	var replies: Array = LetterSystem.generate_replies(
 		delivery_results, pending, chars, 0, dice, next_id
 	)
 	if replies.size() > 0:
@@ -798,7 +802,7 @@ func test_exchange_bonus_applied_when_reply_delivered():
 	var recipient := _make_char(2, 3)
 	recipient.disposition_values[1] = 50
 	var chars: Dictionary = {1: sender, 2: recipient}
-	var log: Array[Dictionary] = []
+	var log: Array = []
 
 	# Create a reply letter from recipient(2) to sender(1), same province (arrives immediately)
 	var reply: LetterData = LetterSystem.write_letter(
@@ -808,8 +812,9 @@ func test_exchange_bonus_applied_when_reply_delivered():
 	var pending: Array = [reply]
 	LetterSystem.process_pending_letters(pending, chars, 0, 1, log)
 
-	# Exchange bonus: both get +1
-	assert_eq(sender.disposition_values[2], 31)
+	# Reply delivery applies calligraphy quality disposition bonus (2) to
+	# the reply's recipient (sender of the original), plus exchange bonus (+1).
+	assert_eq(sender.disposition_values[2], 33)
 	assert_eq(recipient.disposition_values[1], 51)
 
 func test_generate_replies_uses_original_route():
@@ -827,14 +832,14 @@ func test_generate_replies_uses_original_route():
 	)
 	var pending: Array = [letter]
 
-	var delivery_results: Array[Dictionary] = [{
+	var delivery_results: Array = [{
 		"letter_id": 1,
 		"sender_id": 1,
 		"recipient_id": 2,
 		"topic": 10,
 	}]
-	var next_id: Array[int] = [100]
-	var replies: Array[LetterData] = LetterSystem.generate_replies(
+	var next_id: Array = [100]
+	var replies: Array = LetterSystem.generate_replies(
 		delivery_results, pending, chars, 0, dice, next_id
 	)
 	if replies.size() > 0:
@@ -880,12 +885,12 @@ func test_next_letter_id_incremented_per_reply():
 	var l2: LetterData = LetterSystem.write_letter(2, sender, 3, 20, 0, dice, 0)
 	var pending: Array = [l1, l2]
 
-	var delivery_results: Array[Dictionary] = [
+	var delivery_results: Array = [
 		{"letter_id": 1, "sender_id": 1, "recipient_id": 2, "topic": 10},
 		{"letter_id": 2, "sender_id": 1, "recipient_id": 3, "topic": 20},
 	]
-	var next_id: Array[int] = [100]
-	var replies: Array[LetterData] = LetterSystem.generate_replies(
+	var next_id: Array = [100]
+	var replies: Array = LetterSystem.generate_replies(
 		delivery_results, pending, chars, 0, dice, next_id
 	)
 	if replies.size() >= 2:
@@ -912,11 +917,11 @@ func test_examine_letter_in_objective_alignment():
 	assert_true(obj_align.has("INVESTIGATE_THREAT"))
 	var inv_threat: Dictionary = obj_align["INVESTIGATE_THREAT"]
 	assert_true(inv_threat.has("EXAMINE_LETTER"))
-	assert_eq(inv_threat["EXAMINE_LETTER"], 85)
+	assert_eq(inv_threat["EXAMINE_LETTER"], 85.0)
 	assert_true(obj_align.has("GATHER_INTELLIGENCE"))
 	var gather: Dictionary = obj_align["GATHER_INTELLIGENCE"]
 	assert_true(gather.has("EXAMINE_LETTER"))
-	assert_eq(gather["EXAMINE_LETTER"], 75)
+	assert_eq(gather["EXAMINE_LETTER"], 75.0)
 
 func test_examine_letter_in_personality_lean():
 	var loader := ScoringTableLoader.new()
@@ -931,11 +936,11 @@ func test_examine_letter_in_personality_lean():
 func test_examine_letter_in_context_lists():
 	var ctx := NPCDataStructures.ContextSnapshot.new()
 	ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
-	var holdings_actions: Array = NPCDecisionEngine._get_context_actions(ctx.context_flag)
+	var holdings_actions: Array = NPCDecisionEngine._get_actions_for_context(ctx.context_flag)
 	assert_true("EXAMINE_LETTER" in holdings_actions,
 		"EXAMINE_LETTER should be in AT_OWN_HOLDINGS actions")
 	ctx.context_flag = Enums.ContextFlag.AT_COURT
-	var court_actions: Array = NPCDecisionEngine._get_context_actions(ctx.context_flag)
+	var court_actions: Array = NPCDecisionEngine._get_actions_for_context(ctx.context_flag)
 	assert_true("EXAMINE_LETTER" in court_actions,
 		"EXAMINE_LETTER should be in AT_COURT actions")
 
@@ -989,7 +994,7 @@ func test_examine_letter_orchestrator_processes_examination():
 			"examiner_id": 1,
 		},
 	}]
-	var results: Array[Dictionary] = DayOrchestrator._process_letter_examinations(
+	var results: Array = DayOrchestrator._process_letter_examinations(
 		day_results, pending, chars, dice,
 	)
 	assert_eq(results.size(), 1)
@@ -1011,7 +1016,7 @@ func test_examine_letter_orchestrator_skips_invalid_letter():
 			"examiner_id": 1,
 		},
 	}]
-	var results: Array[Dictionary] = DayOrchestrator._process_letter_examinations(
+	var results: Array = DayOrchestrator._process_letter_examinations(
 		day_results, pending, chars, dice,
 	)
 	assert_eq(results.size(), 0)
@@ -1020,7 +1025,7 @@ func test_examine_letter_orchestrator_skips_without_dice():
 	var day_results: Array = [{
 		"effects": {"requires_letter_examination": true, "letter_id": 1, "examiner_id": 1},
 	}]
-	var results: Array[Dictionary] = DayOrchestrator._process_letter_examinations(
+	var results: Array = DayOrchestrator._process_letter_examinations(
 		day_results, [], {}, null,
 	)
 	assert_eq(results.size(), 0)
@@ -1032,7 +1037,7 @@ func test_deliver_refreshes_topic_momentum_for_known_topic():
 	var sender := _make_char(1, 3)
 	var recipient := _make_char(2)
 	recipient.topic_pool = [5]
-	var log: Array[Dictionary] = []
+	var log: Array = []
 
 	var topic := TopicData.new()
 	topic.topic_id = 5
@@ -1052,7 +1057,7 @@ func test_deliver_refreshes_momentum_for_new_topic_too():
 	var sender := _make_char(1, 3)
 	var recipient := _make_char(2)
 	recipient.topic_pool = []
-	var log: Array[Dictionary] = []
+	var log: Array = []
 
 	var topic := TopicData.new()
 	topic.topic_id = 7
@@ -1098,14 +1103,14 @@ func test_reply_propagates_meeting_proposal_when_disposition_ok():
 	letter.meeting_deadline_ic_day = 90
 	var pending: Array = [letter]
 
-	var delivery_results: Array[Dictionary] = [{
+	var delivery_results: Array = [{
 		"letter_id": 1,
 		"sender_id": 1,
 		"recipient_id": 2,
 		"topic": 10,
 	}]
-	var next_id: Array[int] = [100]
-	var replies: Array[LetterData] = LetterSystem.generate_replies(
+	var next_id: Array = [100]
+	var replies: Array = LetterSystem.generate_replies(
 		delivery_results, pending, chars, 0, dice, next_id
 	)
 	if replies.size() > 0:
@@ -1133,14 +1138,14 @@ func test_reply_does_not_propagate_meeting_when_hostile():
 	letter.meeting_deadline_ic_day = 90
 	var pending: Array = [letter]
 
-	var delivery_results: Array[Dictionary] = [{
+	var delivery_results: Array = [{
 		"letter_id": 1,
 		"sender_id": 1,
 		"recipient_id": 2,
 		"topic": 10,
 	}]
-	var next_id: Array[int] = [100]
-	var replies: Array[LetterData] = LetterSystem.generate_replies(
+	var next_id: Array = [100]
+	var replies: Array = LetterSystem.generate_replies(
 		delivery_results, pending, chars, 0, dice, next_id
 	)
 	for reply: LetterData in replies:
@@ -1157,9 +1162,9 @@ func test_detected_forgery_skips_topic_transfer():
 	var sender := _make_char(1, 3)
 	var recipient := _make_char(2, 7)
 	recipient.skills["Investigation"] = 10
-	recipient.traits[Enums.Trait.PERCEPTION] = 10
+	recipient.set_trait_value(Enums.Trait.PERCEPTION, 10)
 	var chars: Dictionary = {1: sender, 2: recipient}
-	var log: Array[Dictionary] = []
+	var log: Array = []
 
 	var authentic: LetterData = LetterSystem.write_letter(
 		1, sender, 2, 5, 0, dice, 0
@@ -1176,7 +1181,7 @@ func test_detected_forgery_skips_topic_transfer():
 	var pending: Array = [authentic, forged]
 
 	LetterSystem.process_pending_letters(pending, chars, 0, 1, log, [], dice)
-	var results: Array[Dictionary] = LetterSystem.process_pending_letters(
+	var results: Array = LetterSystem.process_pending_letters(
 		pending, chars, 1, 1, log, [], dice
 	)
 	assert_eq(results.size(), 1)
@@ -1191,9 +1196,9 @@ func test_undetected_forgery_transfers_topic():
 	var sender := _make_char(1, 3)
 	var recipient := _make_char(2, 1)
 	recipient.skills["Investigation"] = 1
-	recipient.traits[Enums.Trait.PERCEPTION] = 1
+	recipient.set_trait_value(Enums.Trait.PERCEPTION, 1)
 	var chars: Dictionary = {1: sender, 2: recipient}
-	var log: Array[Dictionary] = []
+	var log: Array = []
 
 	var forged: LetterData = LetterSystem.write_letter(
 		1, sender, 2, 99, 0, dice, 0
@@ -1204,7 +1209,7 @@ func test_undetected_forgery_transfers_topic():
 	forged.forgery_tn = 50
 	var pending: Array = [forged]
 
-	var results: Array[Dictionary] = LetterSystem.process_pending_letters(
+	var results: Array = LetterSystem.process_pending_letters(
 		pending, chars, 0, 1, log, [], dice
 	)
 	assert_eq(results.size(), 1)
@@ -1224,7 +1229,7 @@ func test_reply_to_forged_letter_tagged():
 	recipient.disposition_values[1] = 80
 	recipient.topic_pool = [10, 20]
 	var chars: Dictionary = {1: sender, 2: recipient}
-	var log: Array[Dictionary] = []
+	var log: Array = []
 
 	var forged: LetterData = LetterSystem.write_letter(
 		1, sender, 2, 10, 0, dice, 3
@@ -1236,7 +1241,7 @@ func test_reply_to_forged_letter_tagged():
 	var pending: Array = [forged]
 
 	LetterSystem.process_pending_letters(pending, chars, 0, 1, log, [], dice)
-	var delivery_results: Array[Dictionary] = [{
+	var delivery_results: Array = [{
 		"letter_id": 1,
 		"sender_id": 1,
 		"recipient_id": 2,
@@ -1245,8 +1250,8 @@ func test_reply_to_forged_letter_tagged():
 		"forged_sender_id": 99,
 		"forgery_detected": false,
 	}]
-	var next_id: Array[int] = [100]
-	var replies: Array[LetterData] = LetterSystem.generate_replies(
+	var next_id: Array = [100]
+	var replies: Array = LetterSystem.generate_replies(
 		delivery_results, pending, chars, 0, dice, next_id,
 	)
 	if replies.size() > 0:
@@ -1274,7 +1279,7 @@ func test_no_reply_to_detected_forgery():
 	forged.forgery_detected = true
 	var pending: Array = [forged]
 
-	var delivery_results: Array[Dictionary] = [{
+	var delivery_results: Array = [{
 		"letter_id": 1,
 		"sender_id": 1,
 		"recipient_id": 2,
@@ -1283,8 +1288,8 @@ func test_no_reply_to_detected_forgery():
 		"forged_sender_id": 99,
 		"forgery_detected": true,
 	}]
-	var next_id: Array[int] = [100]
-	var replies: Array[LetterData] = LetterSystem.generate_replies(
+	var next_id: Array = [100]
+	var replies: Array = LetterSystem.generate_replies(
 		delivery_results, pending, chars, 0, dice, next_id,
 	)
 	assert_eq(replies.size(), 0,
@@ -1308,7 +1313,7 @@ func test_reply_to_detected_forgery_not_tagged():
 	forged.forgery_detected = true
 	var pending: Array = [forged]
 
-	var delivery_results: Array[Dictionary] = [{
+	var delivery_results: Array = [{
 		"letter_id": 1,
 		"sender_id": 1,
 		"recipient_id": 2,
@@ -1317,10 +1322,11 @@ func test_reply_to_detected_forgery_not_tagged():
 		"forged_sender_id": 99,
 		"forgery_detected": true,
 	}]
-	var next_id: Array[int] = [100]
-	var replies: Array[LetterData] = LetterSystem.generate_replies(
+	var next_id: Array = [100]
+	var replies: Array = LetterSystem.generate_replies(
 		delivery_results, pending, chars, 0, dice, next_id,
 	)
 	for reply: LetterData in replies:
 		assert_false(reply.reply_to_forged,
 			"Reply to detected forgery should NOT be tagged")
+	pass_test("No reply tagged as reply_to_forged for detected forgery")

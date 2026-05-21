@@ -123,9 +123,9 @@ static func _estimate_current_position(character: L5RCharacterData) -> String:
 # -- Daily Tick ---------------------------------------------------------------
 
 static func process_travel_tick(
-	characters: Array[L5RCharacterData],
-) -> Array[Dictionary]:
-	var arrivals: Array[Dictionary] = []
+	characters: Array,
+) -> Array:
+	var arrivals: Array = []
 
 	for c: L5RCharacterData in characters:
 		if not is_traveling(c):

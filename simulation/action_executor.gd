@@ -5,6 +5,14 @@ class_name ActionExecutor
 ## This is the bridge between NPC decision and world-state mutation.
 
 
+static func _get_trait_value_by_name(character: L5RCharacterData, trait_name: String, fallback: int = 2) -> int:
+	var lower: String = trait_name.to_lower()
+	var val: Variant = character.get(lower)
+	if val is int:
+		return val
+	return fallback
+
+
 # -- Action Categories --------------------------------------------------------
 
 const SOCIAL_ACTIONS: Array[String] = [
@@ -97,7 +105,7 @@ static func execute(
 	characters_by_id: Dictionary = {},
 	worship_province_malus: Dictionary = {},
 	doshin_bonus: int = 0,
-	crime_records: Array[CrimeRecord] = [],
+	crime_records: Array = [],
 ) -> Dictionary:
 	var action_id: String = action.action_id
 
@@ -514,7 +522,7 @@ static func _execute_public_performance(
 	characters_by_id: Dictionary,
 ) -> Dictionary:
 	var art_form: PerformativeArtsSystem.ArtForm = PerformativeArtsSystem.get_best_art_form(character)
-	var witness_ids: Array[int] = _get_co_located_ids(character, characters_by_id)
+	var witness_ids: Array = _get_co_located_ids(character, characters_by_id)
 	var fatigue_count: int = character.pieces_seen.get("_performance_count_today", 0)
 
 	var perf_result: Dictionary = PerformativeArtsSystem.resolve_public_performance(
@@ -634,7 +642,7 @@ static func _execute_intimidation(
 			attacker_roll, defender_roll, target.honor, secret_tier, disp_tier
 		)
 	elif is_public:
-		var witness_ids: Array[int] = _get_co_located_ids(character, characters_by_id)
+		var witness_ids: Array = _get_co_located_ids(character, characters_by_id)
 		r = IntimidationSystem.resolve_public_intimidation(
 			attacker_roll, defender_roll, target.honor, 0, witness_ids, disp_tier
 		)
@@ -720,7 +728,7 @@ static func _execute_gossip(
 	var primary_skill: String = skill_entry.get("primary", "Courtier")
 	var primary_trait: String = skill_entry.get("secondary", "Awareness")
 	var skill_rank: int = character.skills.get(primary_skill, 0)
-	var trait_val: int = character.traits.get(primary_trait, 2)
+	var trait_val: int = _get_trait_value_by_name(character, primary_trait)
 	var gossip_wc: int = _get_winter_court_skill_bonus(character, primary_skill, ctx)
 	var roll_result: Dictionary = dice_engine.roll_skill_check(
 		trait_val, skill_rank, tn
@@ -785,7 +793,7 @@ static func _execute_public_insult(
 	var primary_skill: String = skill_entry.get("primary", "Courtier")
 	var primary_trait: String = skill_entry.get("secondary", "Awareness")
 	var skill_rank: int = character.skills.get(primary_skill, 0)
-	var trait_val: int = character.traits.get(primary_trait, 2)
+	var trait_val: int = _get_trait_value_by_name(character, primary_trait)
 
 	var insult_wc: int = _get_winter_court_skill_bonus(character, primary_skill, ctx)
 	var attacker_total: int = dice_engine.roll_skill_check(
@@ -795,7 +803,7 @@ static func _execute_public_insult(
 	var defender_total: int = 0
 	if target != null:
 		var def_etiquette: int = target.skills.get("Etiquette", 0)
-		var def_awareness: int = target.traits.get("Awareness", 2)
+		var def_awareness: int = target.awareness
 		defender_total = dice_engine.roll_skill_check(
 			def_awareness, def_etiquette, 0
 		).get("total", 0)
@@ -803,7 +811,7 @@ static func _execute_public_insult(
 	var success: bool = attacker_total >= defender_total
 	var margin: int = attacker_total - defender_total
 	var raises: int = maxi(int(margin / 5.0), 0)
-	var witness_ids: Array[int] = _get_co_located_ids(character, characters_by_id)
+	var witness_ids: Array = _get_co_located_ids(character, characters_by_id)
 
 	var insult_type: String = action.metadata.get("insult_type", "self")
 
@@ -864,7 +872,7 @@ static func _execute_broadcast_social(
 	var success: bool = roll_result.get("success", false)
 	var margin: int = roll_result.get("total", 0) - tn
 	var raises: int = maxi(int(margin / 5.0), 0)
-	var witness_ids: Array[int] = _get_co_located_ids(character, characters_by_id)
+	var witness_ids: Array = _get_co_located_ids(character, characters_by_id)
 
 	var effects: Dictionary = {}
 	if success:
@@ -918,7 +926,7 @@ static func _execute_public_debate(
 	var primary_skill: String = skill_entry.get("primary", "Courtier")
 	var a_trait_name: String = skill_entry.get("secondary", "Awareness")
 	var a_skill_rank: int = character.skills.get(primary_skill, 0)
-	var a_trait_val: int = character.traits.get(a_trait_name, 2)
+	var a_trait_val: int = _get_trait_value_by_name(character, a_trait_name)
 	var debate_wc: int = _get_winter_court_skill_bonus(character, primary_skill, ctx)
 	var a_roll: int = dice_engine.roll_skill_check(
 		a_trait_val, a_skill_rank, 0
@@ -927,14 +935,14 @@ static func _execute_public_debate(
 	var b_roll: int = 0
 	if target != null:
 		var b_courtier: int = target.skills.get("Courtier", 0)
-		var b_awareness: int = target.traits.get("Awareness", 2)
+		var b_awareness: int = target.awareness
 		b_roll = dice_engine.roll_skill_check(
 			b_awareness, b_courtier, 0
 		).get("total", 0)
 
 	var margin: int = a_roll - b_roll
 	var raises: int = maxi(int(margin / 5.0), 0) if margin > 0 else 0
-	var witness_ids: Array[int] = _get_co_located_ids(character, characters_by_id)
+	var witness_ids: Array = _get_co_located_ids(character, characters_by_id)
 
 	var witness_disp_a: Dictionary = {}
 	var witness_disp_b: Dictionary = {}
@@ -1293,7 +1301,7 @@ static func _execute_expose_publicly(
 		return {}
 
 	var has_proof: bool = action.metadata.get("has_proof", false)
-	var witness_ids: Array[int] = _get_co_located_ids(character, characters_by_id)
+	var witness_ids: Array = _get_co_located_ids(character, characters_by_id)
 	var r: Dictionary = SecretSystem.expose_publicly(secret, character, subject, witness_ids, characters_by_id, has_proof)
 	r["subject_id"] = subject_id
 	r["secret_id"] = secret.secret_id
@@ -1317,8 +1325,8 @@ static func _execute_expose_publicly(
 static func _get_co_located_ids(
 	character: L5RCharacterData,
 	characters_by_id: Dictionary,
-) -> Array[int]:
-	var ids: Array[int] = []
+) -> Array:
+	var ids: Array = []
 	var loc: String = character.physical_location
 	if loc.is_empty():
 		return ids
@@ -2399,7 +2407,7 @@ static func _execute_examine_crime_scene(
 	character: L5RCharacterData,
 	ctx: NPCDataStructures.ContextSnapshot,
 	dice_engine: DiceEngine,
-	crime_records: Array[CrimeRecord],
+	crime_records: Array,
 ) -> Dictionary:
 	var case_id: int = action.metadata.get("case_id", -1)
 	var record: CrimeRecord = _find_crime_record(case_id, crime_records)
@@ -2442,7 +2450,7 @@ static func _execute_examine_crime_scene(
 
 static func _find_crime_record(
 	case_id: int,
-	crime_records: Array[CrimeRecord],
+	crime_records: Array,
 ) -> CrimeRecord:
 	if case_id < 0:
 		return null
@@ -3148,7 +3156,7 @@ static func _execute_contested_court_action(
 	var a_skill: String = _CONTESTED_ATTACKER_SKILL.get(action_id, skill_entry.get("primary", "Courtier"))
 	var a_trait_name: String = _CONTESTED_ATTACKER_TRAIT.get(action_id, skill_entry.get("secondary", "Awareness"))
 	var a_skill_rank: int = character.skills.get(a_skill, 0)
-	var a_trait_val: int = character.traits.get(a_trait_name, 2)
+	var a_trait_val: int = _get_trait_value_by_name(character, a_trait_name)
 	var wc_bonus: int = _get_winter_court_skill_bonus(character, a_skill, ctx)
 	var attacker_roll: int = dice_engine.roll_skill_check(
 		a_trait_val, a_skill_rank, 0
@@ -3159,7 +3167,7 @@ static func _execute_contested_court_action(
 		var d_skill: String = _CONTESTED_DEFENDER_SKILL.get(action_id, "Etiquette")
 		var d_trait_name: String = _CONTESTED_DEFENDER_TRAIT.get(action_id, "Awareness")
 		var d_skill_rank: int = target.skills.get(d_skill, 0)
-		var d_trait_val: int = target.traits.get(d_trait_name, 2)
+		var d_trait_val: int = _get_trait_value_by_name(target, d_trait_name)
 		defender_roll = dice_engine.roll_skill_check(
 			d_trait_val, d_skill_rank, 0
 		).get("total", 0)
@@ -3316,7 +3324,7 @@ static func _execute_provoke_emotion(
 	var target: L5RCharacterData = characters_by_id.get(target_id)
 
 	var a_skill_rank: int = character.skills.get("Courtier", 0)
-	var a_trait_val: int = character.traits.get("Awareness", 2)
+	var a_trait_val: int = character.awareness
 	var provoke_wc: int = _get_winter_court_skill_bonus(character, "Courtier", ctx)
 	var attacker_roll: int = dice_engine.roll_skill_check(
 		a_trait_val, a_skill_rank, 0
@@ -3325,12 +3333,12 @@ static func _execute_provoke_emotion(
 	var defender_roll: int = 0
 	if target != null:
 		var d_etiquette: int = target.skills.get("Etiquette", 0)
-		var d_willpower: int = target.traits.get("Willpower", 2)
+		var d_willpower: int = target.willpower
 		defender_roll = dice_engine.roll_skill_check(
 			d_willpower, d_etiquette, 0
 		).get("total", 0)
 
-	var witness_ids: Array[int] = _get_co_located_ids(character, characters_by_id)
+	var witness_ids: Array = _get_co_located_ids(character, characters_by_id)
 	var resolution: Dictionary = CourtActionSystem.resolve_provoke_emotion(
 		attacker_roll, defender_roll, witness_ids
 	)
@@ -3389,7 +3397,7 @@ static func _execute_play_game(
 	var game_trait: String = _GAME_TRAIT_MAP.get(game_skill, "Awareness")
 
 	var a_skill_rank: int = character.skills.get(game_skill, 0)
-	var a_trait_val: int = character.traits.get(game_trait, 2)
+	var a_trait_val: int = _get_trait_value_by_name(character, game_trait)
 	var a_roll: int = dice_engine.roll_skill_check(
 		a_trait_val, a_skill_rank, 0
 	).get("total", 0)
@@ -3397,7 +3405,7 @@ static func _execute_play_game(
 	var b_roll: int = 0
 	if target != null:
 		var b_skill_rank: int = target.skills.get(game_skill, 0)
-		var b_trait_val: int = target.traits.get(game_trait, 2)
+		var b_trait_val: int = _get_trait_value_by_name(target, game_trait)
 		b_roll = dice_engine.roll_skill_check(
 			b_trait_val, b_skill_rank, 0
 		).get("total", 0)
@@ -3454,7 +3462,7 @@ static func _execute_discern_need(
 		a_skill = "Courtier"
 
 	var a_skill_rank: int = character.skills.get(a_skill, 0)
-	var a_trait_val: int = character.traits.get(a_trait_name, 2)
+	var a_trait_val: int = _get_trait_value_by_name(character, a_trait_name)
 	var discern_wc: int = _get_winter_court_skill_bonus(character, a_skill, ctx)
 	var attacker_roll: int = dice_engine.roll_skill_check(
 		a_trait_val, a_skill_rank, 0
@@ -3463,7 +3471,7 @@ static func _execute_discern_need(
 	var defender_roll: int = 0
 	if target != null:
 		var d_etiquette: int = target.skills.get("Etiquette", 0)
-		var d_awareness: int = target.traits.get("Awareness", 2)
+		var d_awareness: int = target.awareness
 		defender_roll = dice_engine.roll_skill_check(
 			d_awareness, d_etiquette, 0
 		).get("total", 0)
@@ -3513,7 +3521,7 @@ static func _execute_read_character(
 	var target: L5RCharacterData = characters_by_id.get(target_id)
 
 	var a_skill_rank: int = character.skills.get("Investigation", 0)
-	var a_trait_val: int = character.traits.get("Perception", 2)
+	var a_trait_val: int = character.perception
 	var attacker_roll: int = dice_engine.roll_skill_check(
 		a_trait_val, a_skill_rank, 0
 	).get("total", 0)
@@ -3521,7 +3529,7 @@ static func _execute_read_character(
 	var defender_roll: int = 0
 	if target != null:
 		var d_etiquette: int = target.skills.get("Etiquette", 0)
-		var d_awareness: int = target.traits.get("Awareness", 2)
+		var d_awareness: int = target.awareness
 		defender_roll = dice_engine.roll_skill_check(
 			d_awareness, d_etiquette, 0
 		).get("total", 0)
@@ -3569,7 +3577,7 @@ static func _execute_probe(
 	var target: L5RCharacterData = characters_by_id.get(target_id)
 
 	var a_skill_rank: int = character.skills.get("Courtier", 0)
-	var a_trait_val: int = character.traits.get("Perception", 2)
+	var a_trait_val: int = character.perception
 	var probe_wc: int = _get_winter_court_skill_bonus(character, "Courtier", ctx)
 	var attacker_roll: int = dice_engine.roll_skill_check(
 		a_trait_val, a_skill_rank, 0
@@ -3578,7 +3586,7 @@ static func _execute_probe(
 	var defender_roll: int = 0
 	if target != null:
 		var d_sincerity: int = target.skills.get("Sincerity", 0)
-		var d_awareness: int = target.traits.get("Awareness", 2)
+		var d_awareness: int = target.awareness
 		defender_roll = dice_engine.roll_skill_check(
 			d_awareness, d_sincerity, 0
 		).get("total", 0)
@@ -3725,7 +3733,7 @@ static func _execute_ask_for_introduction(
 	# Skill selection: kuge targets use Etiquette/Awareness; others use Courtier/Awareness.
 	var skill: String = "Etiquette" if target_is_kuge else "Courtier"
 	var skill_rank: int = character.skills.get(skill, 0)
-	var trait_val: int = character.traits.get("Awareness", 2)
+	var trait_val: int = character.awareness
 
 	# Bureaucracy emphasis grants +1k0 on kuge rolls per s55.7.3.
 	var has_emphasis: bool = target_is_kuge and character.skills.has("Bureaucracy")
@@ -3777,11 +3785,11 @@ static func _execute_observe_court_attendees(
 	characters_by_id: Dictionary,
 ) -> Dictionary:
 	var skill_rank: int = character.skills.get("Investigation", 0)
-	var trait_val: int = character.traits.get("Perception", 2)
+	var trait_val: int = character.perception
 	var roll_result: Dictionary = dice_engine.roll_skill_check(trait_val, skill_rank, 0)
 	var roll_total: int = roll_result.get("total", 0)
 
-	var observable_ids: Array[int] = action.metadata.get("observable_attendee_ids", [] as Array[int])
+	var observable_ids: Array = action.metadata.get("observable_attendee_ids", [])
 	var resolution: Dictionary = CourtActionSystem.resolve_observe_court_attendees(
 		roll_total, observable_ids.size()
 	)
@@ -3790,8 +3798,8 @@ static func _execute_observe_court_attendees(
 	if resolution.get("success", false):
 		var learn_count: int = resolution.get("learn_count", 0)
 		# Pick learn_count random IDs from the observable pool.
-		var pool: Array[int] = observable_ids.duplicate()
-		var learned_ids: Array[int] = []
+		var pool: Array = observable_ids.duplicate()
+		var learned_ids: Array = []
 		for _i: int in range(learn_count):
 			if pool.is_empty():
 				break
@@ -3799,7 +3807,7 @@ static func _execute_observe_court_attendees(
 			learned_ids.append(int(pool[idx]))
 			pool.remove_at(idx)
 
-		var learned_info: Array[Dictionary] = []
+		var learned_info: Array = []
 		for npc_id: int in learned_ids:
 			var npc: L5RCharacterData = characters_by_id.get(npc_id)
 			if npc != null:
@@ -3935,8 +3943,8 @@ static func _execute_conduct_tea_ceremony(
 			"effects": {},
 		}
 
-	var candidate_ids: Array[int] = action.metadata.get("participant_ids", [] as Array[int])
-	var actual_participants: Array[int] = []
+	var candidate_ids: Array = action.metadata.get("participant_ids", [])
+	var actual_participants: Array = []
 	for pid: Variant in candidate_ids:
 		var pid_int: int = int(pid)
 		var c: L5RCharacterData = characters_by_id.get(pid_int)
@@ -4092,7 +4100,7 @@ static func _execute_cancel_hunt(
 		}
 
 	var active_hunt_id: int = ctx.known_objectives.get("active_hunt_id", -1)
-	var accepted_invitee_ids: Array[int] = action.metadata.get("accepted_invitee_ids", [] as Array[int])
+	var accepted_invitee_ids: Array = action.metadata.get("accepted_invitee_ids", [])
 
 	return {
 		"success": true,
@@ -4377,7 +4385,7 @@ static func _execute_apply_tattoo(
 			"reason": "insufficient_ap", "effects": {},
 		}
 
-	var world_tattoos: Array[TattooData] = action.metadata.get("world_tattoos", [] as Array[TattooData])
+	var world_tattoos: Array = action.metadata.get("world_tattoos", [])
 	var is_bald: bool = action.metadata.get("recipient_is_bald", false)
 	if not TattooSystem.is_location_available(world_tattoos, recipient_id, body_location, is_bald):
 		return {

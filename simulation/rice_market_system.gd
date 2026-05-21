@@ -86,18 +86,18 @@ static func can_sell_to(seller_disposition_to_buyer: int) -> bool:
 # =============================================================================
 
 static func resolve_purchases(
-	postings: Array[RicePostingData],
-	buy_orders: Array[Dictionary],
+	postings: Array,
+	buy_orders: Array,
 	disposition_lookup: Callable,
 	worship_maluses: Dictionary = {},
-) -> Array[Dictionary]:
-	var results: Array[Dictionary] = []
+) -> Array:
+	var results: Array = []
 
 	for posting: RicePostingData in postings:
 		if posting.quantity <= 0.0:
 			continue
 
-		var prioritized: Array[Dictionary] = []
+		var prioritized: Array = []
 		for order: Dictionary in buy_orders:
 			var buyer_id: int = order.get("lord_id", -1)
 			if buyer_id == posting.lord_id:
@@ -210,7 +210,7 @@ static func share_rice(
 
 static func compute_trade_route_koku(
 	province: ProvinceData,
-	routes: Array[TradeRouteData],
+	routes: Array,
 	worship_maluses: Dictionary = {},
 ) -> float:
 	var prov_malus: Dictionary = worship_maluses.get(province.province_id, {})
@@ -227,9 +227,9 @@ static func compute_trade_route_koku(
 
 static func get_active_routes_for_province(
 	province_id: int,
-	routes: Array[TradeRouteData],
-) -> Array[TradeRouteData]:
-	var result: Array[TradeRouteData] = []
+	routes: Array,
+) -> Array:
+	var result: Array = []
 	for route: TradeRouteData in routes:
 		if route.connects(province_id) and not route.is_disrupted:
 			result.append(route)

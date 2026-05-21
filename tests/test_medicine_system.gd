@@ -157,10 +157,11 @@ func test_refusal_high_willpower_high_honour_public_refuses_minor_wound() -> voi
 
 func test_refusal_severe_wound_overrides_pride() -> void:
 	# Same character but at Crippled (-30 severity) — acceptance should win.
+	# Earth = (3+4)/2 = 3, threshold = 6, wounds 31 → level_index 5 = CRIPPLED
 	# pressure = (4×5) + (5×2) + (3×5) - (2×4) + (-30) + (-10 Friend) = 20+10+15-8-30-10 = -3 → accepts
 	_target.willpower = 4
 	_target.honor = 5.0
-	_target.wounds_taken = 25  # Crippled for Earth 3.
+	_target.wounds_taken = 31  # Crippled for Earth 3 (threshold 6, index 5).
 	_target.disposition_values[1] = 25  # Friend.
 	assert_false(MedicineSystem.evaluate_refusal(_target, _healer, 3))
 

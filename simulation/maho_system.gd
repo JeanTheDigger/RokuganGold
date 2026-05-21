@@ -73,7 +73,7 @@ static func resolve_cast(
 	next_case_id: int,
 	ic_day: int,
 	location: String,
-	witnesses: Array[int] = [],
+	witnesses: Array = [],
 ) -> Dictionary:
 	# 1. Apply wounds to blood source — bypasses armor (deliberate blood-letting)
 	var blood_wounds: int = total_blood_cost(mastery_level, raises_purchased)

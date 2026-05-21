@@ -5,8 +5,8 @@ extends GutTest
 ## last_blessed_ic_year update.
 
 
-var _provinces: Array[ProvinceData]
-var _settlements: Array[SettlementData]
+var _provinces: Array
+var _settlements: Array
 
 
 func _make_province(pid: int, stability: float = 50.0) -> ProvinceData:
@@ -57,10 +57,13 @@ func test_spring_tick_without_miya_inputs_does_nothing() -> void:
 		_provinces, _settlements, "spring", meta
 	)
 	assert_eq(result.get("miya_blessing", {}), {})
-	# Imperial stockpile untouched.
+	# No Miya blessing fires, but the seasonal tick still processes rice
+	# consumption and garrison checks. Imperial settlement (pop_pu=50,
+	# farming_pu=25): civilian_cost = 25*0.25 = 6.25. Under-garrisoned
+	# drain = 0.05. Total = 100.0 - 6.25 - 0.05 = 93.70.
 	for s in _settlements:
 		if s.settlement_id == 999:
-			assert_eq(s.rice_stockpile, 100.0)
+			assert_almost_eq(s.rice_stockpile, 93.70, 0.01)
 	# No province got blessed.
 	for p in _provinces:
 		assert_eq(p.last_blessed_ic_year, -1)
@@ -77,7 +80,6 @@ func test_spring_tick_with_iron_archetype_distributes_rice() -> void:
 		"emperor_autumn_tax_income": 12.0,
 		"current_ic_year": 1120,
 	}
-	var pre_imperial_rice: float = 100.0
 	var result: Dictionary = ResourceTick.process_seasonal_tick(
 		_provinces, _settlements, "spring", meta, miya_inputs
 	)
@@ -85,16 +87,15 @@ func test_spring_tick_with_iron_archetype_distributes_rice() -> void:
 	assert_true(blessing.get("fired", false))
 	# 12 * 0.15 = 1.80 total → 0.60 per province → 0.60 to each settlement.
 	assert_almost_eq(blessing["allocation_total"], 1.80, 0.001)
-	# Imperial settlement rice reduced by 1.80.
+	# Imperial settlement: 100.0 - 1.80 (blessing) - 6.25 (consumption)
+	# - 0.05 (garrison drain) = 91.90.
 	for s in _settlements:
 		if s.settlement_id == 999:
-			assert_almost_eq(s.rice_stockpile, pre_imperial_rice - 1.80, 0.001)
-	# Each selected province got rice deposited.
-	var got_rice_count: int = 0
-	for s in _settlements:
-		if s.province_id != 99 and s.rice_stockpile > 0.0:
-			got_rice_count += 1
-	assert_eq(got_rice_count, 3)
+			assert_almost_eq(s.rice_stockpile, 91.90, 0.01)
+	# Each selected province got 0.60 rice but subsequent consumption
+	# (5 farming_pu * 0.25 = 1.25) exceeds the grant, so final
+	# stockpile is 0. Verify the blessing dict recorded the grants.
+	assert_eq(blessing["selected_province_ids"].size(), 3)
 
 
 func test_blessed_provinces_get_stability_bump() -> void:
@@ -114,11 +115,12 @@ func test_blessed_provinces_get_stability_bump() -> void:
 	ResourceTick.process_seasonal_tick(
 		_provinces, _settlements, "spring", meta, miya_inputs
 	)
-	# Selected provinces (1, 2, 3 — not 99) should have stability +5.
+	# Selected provinces (1, 2, 3 — not 99) get stability +5 from blessing
+	# but -2.0 from garrison check (all under-garrisoned). Net = +3.0.
 	for p in _provinces:
 		if p.province_id == 99:
 			continue
-		assert_almost_eq(p.stability, prev_stab[p.province_id] + 5.0, 0.001)
+		assert_almost_eq(p.stability, prev_stab[p.province_id] + 3.0, 0.001)
 
 
 func test_blessed_provinces_record_ic_year() -> void:
@@ -155,10 +157,11 @@ func test_tyrant_archetype_suspends_and_does_not_transfer() -> void:
 	)
 	var blessing: Dictionary = result.get("miya_blessing", {})
 	assert_true(blessing.get("suspended", false))
-	# No rice moved.
+	# No blessing rice moved, but seasonal consumption still applies.
+	# Imperial settlement: 100.0 - 6.25 (consumption) - 0.05 (garrison drain) = 93.70.
 	for s in _settlements:
 		if s.settlement_id == 999:
-			assert_eq(s.rice_stockpile, 100.0)
+			assert_almost_eq(s.rice_stockpile, 93.70, 0.01)
 	# No province blessed.
 	for p in _provinces:
 		assert_eq(p.last_blessed_ic_year, -1)

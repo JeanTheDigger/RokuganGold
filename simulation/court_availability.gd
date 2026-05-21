@@ -6,11 +6,11 @@ class_name CourtAvailability
 
 static func attend_court_or_alternative(
 	active_court_at_location: Dictionary,
-	upcoming_courts: Array[Dictionary],
+	upcoming_courts: Array,
 	character: L5RCharacterData,
 	target_npc_id: int,
-	held_leverage: Array[Dictionary],
-	action_log: Array[Dictionary],
+	held_leverage: Array,
+	action_log: Array,
 	current_season: int,
 	known_locations: Dictionary = {},
 ) -> Variant:
@@ -70,7 +70,7 @@ static func attend_court_or_alternative(
 
 
 static func _pick_highest_prestige_court(
-	courts: Array[Dictionary],
+	courts: Array,
 ) -> Dictionary:
 	if courts.is_empty():
 		return {}
@@ -86,7 +86,7 @@ static func _pick_highest_prestige_court(
 
 static func _pick_best_letter_target(
 	target_npc_id: int,
-	held_leverage: Array[Dictionary],
+	held_leverage: Array,
 	_character: L5RCharacterData,
 ) -> int:
 	# Prefer the target's lord, then the target themselves
@@ -102,7 +102,7 @@ static func _pick_best_letter_target(
 static func _has_requested_court_this_season(
 	requester_id: int,
 	lord_id: int,
-	action_log: Array[Dictionary],
+	action_log: Array,
 	current_season: int,
 ) -> bool:
 	for entry: Dictionary in action_log:

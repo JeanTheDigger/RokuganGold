@@ -155,7 +155,7 @@ static func generate(dice: DiceEngine, ic_day: int) -> OniData:
 
 	# Distribute remainder across the other 3 rings (each ≥ 1, < dominant).
 	var remaining: int = budget - dominant_value
-	var other_rings: Array[int] = []
+	var other_rings: Array = []
 	for r: int in DOMINANT_RINGS:
 		if r != dominant_ring:
 			other_rings.append(r)
@@ -170,7 +170,7 @@ static func generate(dice: DiceEngine, ic_day: int) -> OniData:
 
 	# Distribute remainder randomly across non-dominant rings within cap.
 	for _i: int in range(remaining):
-		var cands: Array[int] = []
+		var cands: Array = []
 		for r: int in other_rings:
 			if ring_values[r] < dominant_value - 1:
 				cands.append(r)

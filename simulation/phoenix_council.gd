@@ -287,7 +287,7 @@ static func _evaluate_void_vote(
 #     "votes": Dictionary[Master -> String]
 #   }
 static func tally_vote(
-	living_masters: Array[int],
+	living_masters: Array,
 	proposal: Dictionary,
 	dispositions_to_champion: Dictionary,
 	dice_engine: DiceEngine,
@@ -627,8 +627,8 @@ const GRAND_RITUAL_EMPIRE_DISPOSITION: int = -20
 
 static func apply_grand_ritual_devastation(
 	target_province: ProvinceData,
-	surviving_masters: Array[L5RCharacterData],
-	all_clan_representatives: Array[L5RCharacterData],
+	surviving_masters: Array,
+	all_clan_representatives: Array,
 	emperor_id: int,
 ) -> Dictionary:
 	if target_province == null:
@@ -637,12 +637,12 @@ static func apply_grand_ritual_devastation(
 	target_province.stability = 0.0
 	target_province.grand_ritual_devastated = true
 
-	var master_ids: Array[int] = []
+	var master_ids: Array = []
 	for master: L5RCharacterData in surviving_masters:
 		HonorGlorySystem.apply_honor_change(master, GRAND_RITUAL_HONOR_COST)
 		master_ids.append(master.character_id)
 
-	var rep_ids: Array[int] = []
+	var rep_ids: Array = []
 	if emperor_id >= 0:
 		for rep: L5RCharacterData in all_clan_representatives:
 			if rep.clan == "Phoenix":
@@ -671,21 +671,21 @@ static func apply_grand_ritual_devastation(
 
 # -- Master vacancy / extinction (s55.10.3.9) -------------------------------
 
-static func count_living_masters(living_masters: Array[int]) -> int:
+static func count_living_masters(living_masters: Array) -> int:
 	return living_masters.size()
 
 
-static func can_council_self_govern(living_masters: Array[int]) -> bool:
+static func can_council_self_govern(living_masters: Array) -> bool:
 	return count_living_masters(living_masters) >= SOLE_CHAMPION_AUTHORITY_THRESHOLD
 
 
-static func champion_appoints_replacements(living_masters: Array[int]) -> bool:
+static func champion_appoints_replacements(living_masters: Array) -> bool:
 	## True when the Council is below quorum and the Champion gains
 	## temporary appointment authority for vacant seats.
 	return not can_council_self_govern(living_masters)
 
 
-static func is_council_extinct(living_masters: Array[int]) -> bool:
+static func is_council_extinct(living_masters: Array) -> bool:
 	return count_living_masters(living_masters) == 0
 
 

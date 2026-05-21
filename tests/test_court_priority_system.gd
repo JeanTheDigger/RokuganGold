@@ -17,19 +17,19 @@ func _make_court(id: String, status: float = 5.0, relevance: float = 0.0, assign
 # -- Court selection tests ----------------------------------------------------
 
 func test_single_court_always_selected():
-	var courts: Array[Dictionary] = [_make_court("A")]
+	var courts: Array = [_make_court("A")]
 	var result := CourtPrioritySystem.select_court(courts, {}, "", 3.0)
 	assert_eq(result["court_id"], "A")
 
 
 func test_empty_courts_returns_empty():
-	var courts: Array[Dictionary] = []
+	var courts: Array = []
 	var result := CourtPrioritySystem.select_court(courts, {}, "", 3.0)
 	assert_true(result.is_empty())
 
 
 func test_lord_assigned_court_wins():
-	var courts: Array[Dictionary] = [
+	var courts: Array = [
 		_make_court("A", 10.0, 5.0),
 		_make_court("B", 1.0, 0.0, true),
 	]
@@ -38,7 +38,7 @@ func test_lord_assigned_court_wins():
 
 
 func test_primary_objective_court_wins():
-	var courts: Array[Dictionary] = [
+	var courts: Array = [
 		_make_court("A", 10.0),
 		_make_court("B", 5.0),
 	]
@@ -48,7 +48,7 @@ func test_primary_objective_court_wins():
 
 
 func test_personal_relevance_breaks_tie():
-	var courts: Array[Dictionary] = [
+	var courts: Array = [
 		_make_court("A", 5.0, 2.0),
 		_make_court("B", 5.0, 8.0),
 	]
@@ -57,7 +57,7 @@ func test_personal_relevance_breaks_tie():
 
 
 func test_higher_status_court_wins_when_equal():
-	var courts: Array[Dictionary] = [
+	var courts: Array = [
 		_make_court("A", 3.0),
 		_make_court("B", 8.0),
 	]

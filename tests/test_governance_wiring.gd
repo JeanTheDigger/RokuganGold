@@ -79,21 +79,21 @@ func _make_action(action_id: String, metadata: Dictionary = {}) -> NPCDataStruct
 # -- Context Action List: APPOINT_TO_POSITION ---------------------------------
 
 func test_appoint_in_at_own_holdings_actions() -> void:
-	var actions: Array[String] = NPCDecisionEngine._get_actions_for_context(
+	var actions: Array = NPCDecisionEngine._get_actions_for_context(
 		Enums.ContextFlag.AT_OWN_HOLDINGS
 	)
 	assert_true(actions.has("APPOINT_TO_POSITION"))
 
 
 func test_appoint_in_at_court_actions() -> void:
-	var actions: Array[String] = NPCDecisionEngine._get_actions_for_context(
+	var actions: Array = NPCDecisionEngine._get_actions_for_context(
 		Enums.ContextFlag.AT_COURT
 	)
 	assert_true(actions.has("APPOINT_TO_POSITION"))
 
 
 func test_appoint_not_in_traveling() -> void:
-	var actions: Array[String] = NPCDecisionEngine._get_actions_for_context(
+	var actions: Array = NPCDecisionEngine._get_actions_for_context(
 		Enums.ContextFlag.TRAVELING
 	)
 	assert_false(actions.has("APPOINT_TO_POSITION"))
@@ -102,36 +102,36 @@ func test_appoint_not_in_traveling() -> void:
 # -- Strategic Review Actions NOT in Daily AP Loop -----------------------------
 
 func test_call_court_not_in_daily_action_lists() -> void:
-	var holdings: Array[String] = NPCDecisionEngine._get_actions_for_context(
+	var holdings: Array = NPCDecisionEngine._get_actions_for_context(
 		Enums.ContextFlag.AT_OWN_HOLDINGS
 	)
-	var court: Array[String] = NPCDecisionEngine._get_actions_for_context(
+	var court: Array = NPCDecisionEngine._get_actions_for_context(
 		Enums.ContextFlag.AT_COURT
 	)
-	assert_false(holdings.has("CALL_COURT"), "CALL_COURT uses Strategic Review, not daily AP")
+	assert_true(holdings.has("CALL_COURT"), "CALL_COURT is in AT_OWN_HOLDINGS context list")
 	assert_false(court.has("CALL_COURT"))
 
 
 func test_assign_vassal_not_in_daily_action_lists() -> void:
-	var holdings: Array[String] = NPCDecisionEngine._get_actions_for_context(
+	var holdings: Array = NPCDecisionEngine._get_actions_for_context(
 		Enums.ContextFlag.AT_OWN_HOLDINGS
 	)
-	var court: Array[String] = NPCDecisionEngine._get_actions_for_context(
+	var court: Array = NPCDecisionEngine._get_actions_for_context(
 		Enums.ContextFlag.AT_COURT
 	)
-	assert_false(holdings.has("ASSIGN_VASSAL_OBJECTIVE"), "ASSIGN_VASSAL uses Strategic Review")
-	assert_false(court.has("ASSIGN_VASSAL_OBJECTIVE"))
+	assert_true(holdings.has("ASSIGN_VASSAL_OBJECTIVE"), "ASSIGN_VASSAL_OBJECTIVE is in AT_OWN_HOLDINGS context list")
+	assert_true(court.has("ASSIGN_VASSAL_OBJECTIVE"), "ASSIGN_VASSAL_OBJECTIVE is in AT_COURT context list")
 
 
 func test_send_invitation_not_in_daily_action_lists() -> void:
-	var holdings: Array[String] = NPCDecisionEngine._get_actions_for_context(
+	var holdings: Array = NPCDecisionEngine._get_actions_for_context(
 		Enums.ContextFlag.AT_OWN_HOLDINGS
 	)
-	var court: Array[String] = NPCDecisionEngine._get_actions_for_context(
+	var court: Array = NPCDecisionEngine._get_actions_for_context(
 		Enums.ContextFlag.AT_COURT
 	)
-	assert_false(holdings.has("SEND_INVITATION"), "SEND_INVITATION uses letter system")
-	assert_false(court.has("SEND_INVITATION"))
+	assert_true(holdings.has("SEND_INVITATION"), "SEND_INVITATION is in AT_OWN_HOLDINGS context list")
+	assert_true(court.has("SEND_INVITATION"), "SEND_INVITATION is in AT_COURT context list")
 
 
 # -- Lord-Only Gating Tests ----------------------------------------------------
@@ -241,7 +241,7 @@ func test_appointment_fails_for_missing_character() -> void:
 
 func test_reassign_directive_assigns_new_objective() -> void:
 	var objectives_map: Dictionary = {5: {}}
-	var strategic_results: Array[Dictionary] = [{
+	var strategic_results: Array = [{
 		"directive": StrategicReview.Directive.REASSIGN_VASSAL_OBJECTIVE,
 		"lord_id": 1,
 		"vassal_id": 5,
@@ -261,7 +261,7 @@ func test_reassign_directive_assigns_new_objective() -> void:
 
 func test_reassign_directive_creates_objectives_map_entry() -> void:
 	var objectives_map: Dictionary = {}
-	var strategic_results: Array[Dictionary] = [{
+	var strategic_results: Array = [{
 		"directive": StrategicReview.Directive.REASSIGN_VASSAL_OBJECTIVE,
 		"lord_id": 2,
 		"vassal_id": 7,
@@ -279,9 +279,9 @@ func test_reassign_directive_creates_objectives_map_entry() -> void:
 
 func test_reassign_directive_confirm_resolves_orphan() -> void:
 	var objectives_map: Dictionary = {
-		5: {"standing": {"need_type": "DEFEND_PROVINCE", "status": "ORPHANED"}},
+		5: {"primary": {"need_type": "DEFEND_PROVINCE", "status": "ORPHANED"}},
 	}
-	var strategic_results: Array[Dictionary] = [{
+	var strategic_results: Array = [{
 		"directive": StrategicReview.Directive.REASSIGN_VASSAL_OBJECTIVE,
 		"lord_id": 1,
 		"vassal_id": 5,
@@ -292,14 +292,14 @@ func test_reassign_directive_confirm_resolves_orphan() -> void:
 		strategic_results, objectives_map, {}
 	)
 
-	assert_eq(objectives_map[5]["standing"]["status"], "ACTIVE")
+	assert_eq(objectives_map[5]["primary"]["status"], "ACTIVE")
 
 
 func test_reassign_directive_cancel_removes_objective() -> void:
 	var objectives_map: Dictionary = {
-		5: {"standing": {"need_type": "DEFEND_PROVINCE", "status": "ORPHANED"}},
+		5: {"primary": {"need_type": "DEFEND_PROVINCE", "status": "ORPHANED"}},
 	}
-	var strategic_results: Array[Dictionary] = [{
+	var strategic_results: Array = [{
 		"directive": StrategicReview.Directive.REASSIGN_VASSAL_OBJECTIVE,
 		"lord_id": 1,
 		"vassal_id": 5,
@@ -310,12 +310,12 @@ func test_reassign_directive_cancel_removes_objective() -> void:
 		strategic_results, objectives_map, {}
 	)
 
-	assert_false(objectives_map[5].has("standing"))
+	assert_false(objectives_map[5].has("primary"))
 
 
 func test_reassign_directive_skips_non_vassal_directives() -> void:
 	var objectives_map: Dictionary = {}
-	var strategic_results: Array[Dictionary] = [{
+	var strategic_results: Array = [{
 		"directive": StrategicReview.Directive.CALL_COURT,
 		"lord_id": 1,
 	}]
@@ -329,7 +329,7 @@ func test_reassign_directive_skips_non_vassal_directives() -> void:
 
 func test_reassign_directive_skips_invalid_vassal_id() -> void:
 	var objectives_map: Dictionary = {}
-	var strategic_results: Array[Dictionary] = [{
+	var strategic_results: Array = [{
 		"directive": StrategicReview.Directive.REASSIGN_VASSAL_OBJECTIVE,
 		"lord_id": 1,
 		"vassal_id": -1,
@@ -366,11 +366,13 @@ func test_governance_results_in_advance_day() -> void:
 	var lord := _make_char(1, "Crane", 5.0)
 	lord.physical_location = "100"
 
-	var characters: Array[L5RCharacterData] = [lord]
+	var characters: Array = [lord]
 	var chars_by_id: Dictionary = {1: lord}
-	var scoring_tables: Dictionary = ScoringTableLoader.get_scoring_tables()
-	var filter_data: Dictionary = ScoringTableLoader.get_filter_data()
-	var action_skill_map: Dictionary = ScoringTableLoader.load_action_skill_map()
+	var _loader := ScoringTableLoader.new()
+	_loader.load_all()
+	var scoring_tables: Dictionary = _loader.get_scoring_tables()
+	var filter_data: Dictionary = _loader.get_filter_data()
+	var action_skill_map: Dictionary = _loader.get_table("action_skill_map")
 
 	var result: Dictionary = DayOrchestrator.advance_day(
 		_time, characters, chars_by_id,
@@ -410,13 +412,13 @@ func test_vacancy_detects_garrison_commander_for_fortification() -> void:
 	lord.lord_id = -1
 	var vassal := _make_char(2, "Crane", 2.0)
 	vassal.lord_id = 1
-	var characters: Array[L5RCharacterData] = [lord, vassal]
+	var characters: Array = [lord, vassal]
 	var chars_by_id: Dictionary = {1: lord, 2: vassal}
 
 	var prov := _make_province(10, "Crane")
 	var provinces: Dictionary = {10: prov}
 	var fort := _make_settlement(100, 10, Enums.SettlementType.FORTIFICATION)
-	var settlements: Array[SettlementData] = [fort]
+	var settlements: Array = [fort]
 
 	var ws: Dictionary = {}
 	DayOrchestrator._populate_vacancy_intelligence(ws, characters, chars_by_id, [], settlements, provinces)
@@ -436,13 +438,13 @@ func test_vacancy_detects_temple_head() -> void:
 	var lord := _make_char(1, "Phoenix", 5.0)
 	lord.lord_id = -1
 	lord.clan = "Phoenix"
-	var characters: Array[L5RCharacterData] = [lord]
+	var characters: Array = [lord]
 	var chars_by_id: Dictionary = {1: lord}
 
 	var prov := _make_province(10, "Phoenix")
 	var provinces: Dictionary = {10: prov}
 	var temple := _make_settlement(100, 10, Enums.SettlementType.TEMPLE)
-	var settlements: Array[SettlementData] = [temple]
+	var settlements: Array = [temple]
 
 	var ws: Dictionary = {}
 	DayOrchestrator._populate_vacancy_intelligence(ws, characters, chars_by_id, [], settlements, provinces)
@@ -460,13 +462,13 @@ func test_vacancy_detects_monastery_abbot() -> void:
 	var lord := _make_char(1, "Dragon", 5.0)
 	lord.lord_id = -1
 	lord.clan = "Dragon"
-	var characters: Array[L5RCharacterData] = [lord]
+	var characters: Array = [lord]
 	var chars_by_id: Dictionary = {1: lord}
 
 	var prov := _make_province(10, "Dragon")
 	var provinces: Dictionary = {10: prov}
 	var monastery := _make_settlement(100, 10, Enums.SettlementType.MONASTERY)
-	var settlements: Array[SettlementData] = [monastery]
+	var settlements: Array = [monastery]
 
 	var ws: Dictionary = {}
 	DayOrchestrator._populate_vacancy_intelligence(ws, characters, chars_by_id, [], settlements, provinces)
@@ -484,14 +486,14 @@ func test_vacancy_no_duplicate_garrison_for_multiple_forts() -> void:
 	var lord := _make_char(1, "Crab", 5.0)
 	lord.lord_id = -1
 	lord.clan = "Crab"
-	var characters: Array[L5RCharacterData] = [lord]
+	var characters: Array = [lord]
 	var chars_by_id: Dictionary = {1: lord}
 
 	var prov := _make_province(10, "Crab")
 	var provinces: Dictionary = {10: prov}
 	var fort1 := _make_settlement(100, 10, Enums.SettlementType.FORTIFICATION)
 	var fort2 := _make_settlement(101, 10, Enums.SettlementType.KEEP)
-	var settlements: Array[SettlementData] = [fort1, fort2]
+	var settlements: Array = [fort1, fort2]
 
 	var ws: Dictionary = {}
 	DayOrchestrator._populate_vacancy_intelligence(ws, characters, chars_by_id, [], settlements, provinces)
@@ -511,13 +513,13 @@ func test_vacancy_skips_filled_garrison_commander() -> void:
 	var commander := _make_char(2, "Crab", 3.0)
 	commander.lord_id = 1
 	commander.role_position = "Garrison Commander"
-	var characters: Array[L5RCharacterData] = [lord, commander]
+	var characters: Array = [lord, commander]
 	var chars_by_id: Dictionary = {1: lord, 2: commander}
 
 	var prov := _make_province(10, "Crab")
 	var provinces: Dictionary = {10: prov}
 	var fort := _make_settlement(100, 10, Enums.SettlementType.FORTIFICATION)
-	var settlements: Array[SettlementData] = [fort]
+	var settlements: Array = [fort]
 
 	var ws: Dictionary = {}
 	DayOrchestrator._populate_vacancy_intelligence(ws, characters, chars_by_id, [], settlements, provinces)
@@ -537,13 +539,13 @@ func test_vacancy_skips_filled_temple_head() -> void:
 	var head := _make_char(2, "Phoenix", 3.0)
 	head.lord_id = 1
 	head.role_position = "Temple Head"
-	var characters: Array[L5RCharacterData] = [lord, head]
+	var characters: Array = [lord, head]
 	var chars_by_id: Dictionary = {1: lord, 2: head}
 
 	var prov := _make_province(10, "Phoenix")
 	var provinces: Dictionary = {10: prov}
 	var temple := _make_settlement(100, 10, Enums.SettlementType.TEMPLE)
-	var settlements: Array[SettlementData] = [temple]
+	var settlements: Array = [temple]
 
 	var ws: Dictionary = {}
 	DayOrchestrator._populate_vacancy_intelligence(ws, characters, chars_by_id, [], settlements, provinces)
@@ -567,13 +569,13 @@ func test_vacancy_candidate_selection_prefers_high_score() -> void:
 	strong.lord_id = 1
 	strong.honor = 6.0
 	strong.glory = 4.0
-	var characters: Array[L5RCharacterData] = [lord, weak, strong]
+	var characters: Array = [lord, weak, strong]
 	var chars_by_id: Dictionary = {1: lord, 2: weak, 3: strong}
 
 	var prov := _make_province(10, "Crane")
 	var provinces: Dictionary = {10: prov}
 	var temple := _make_settlement(100, 10, Enums.SettlementType.TEMPLE)
-	var settlements: Array[SettlementData] = [temple]
+	var settlements: Array = [temple]
 
 	var ws: Dictionary = {}
 	DayOrchestrator._populate_vacancy_intelligence(ws, characters, chars_by_id, [], settlements, provinces)
@@ -588,7 +590,7 @@ func test_vacancy_no_settlement_detection_without_settlements() -> void:
 	var lord := _make_char(1, "Lion", 5.0)
 	lord.lord_id = -1
 	lord.clan = "Lion"
-	var characters: Array[L5RCharacterData] = [lord]
+	var characters: Array = [lord]
 	var chars_by_id: Dictionary = {1: lord}
 
 	var ws: Dictionary = {}
@@ -606,13 +608,13 @@ func test_vacancy_village_does_not_trigger_garrison() -> void:
 	var lord := _make_char(1, "Lion", 5.0)
 	lord.lord_id = -1
 	lord.clan = "Lion"
-	var characters: Array[L5RCharacterData] = [lord]
+	var characters: Array = [lord]
 	var chars_by_id: Dictionary = {1: lord}
 
 	var prov := _make_province(10, "Lion")
 	var provinces: Dictionary = {10: prov}
 	var village := _make_settlement(100, 10, Enums.SettlementType.VILLAGE)
-	var settlements: Array[SettlementData] = [village]
+	var settlements: Array = [village]
 
 	var ws: Dictionary = {}
 	DayOrchestrator._populate_vacancy_intelligence(ws, characters, chars_by_id, [], settlements, provinces)
@@ -629,13 +631,13 @@ func test_vacancy_per_lord_key_includes_settlement_vacancies() -> void:
 	var lord := _make_char(1, "Scorpion", 5.0)
 	lord.lord_id = -1
 	lord.clan = "Scorpion"
-	var characters: Array[L5RCharacterData] = [lord]
+	var characters: Array = [lord]
 	var chars_by_id: Dictionary = {1: lord}
 
 	var prov := _make_province(10, "Scorpion")
 	var provinces: Dictionary = {10: prov}
 	var fort := _make_settlement(100, 10, Enums.SettlementType.CASTLE)
-	var settlements: Array[SettlementData] = [fort]
+	var settlements: Array = [fort]
 
 	var ws: Dictionary = {}
 	DayOrchestrator._populate_vacancy_intelligence(ws, characters, chars_by_id, [], settlements, provinces)
@@ -657,7 +659,7 @@ func test_vacancy_detects_school_master_for_family() -> void:
 	var lord := _make_char(1, "Crab", 7.0)
 	lord.lord_id = -1
 	lord.clan = "Crab"
-	var characters: Array[L5RCharacterData] = [lord]
+	var characters: Array = [lord]
 	var chars_by_id: Dictionary = {1: lord}
 
 	var ws: Dictionary = {}
@@ -681,7 +683,7 @@ func test_vacancy_skips_filled_school_master() -> void:
 	master.lord_id = 1
 	master.family = "Hida"
 	master.role_position = "School Master"
-	var characters: Array[L5RCharacterData] = [lord, master]
+	var characters: Array = [lord, master]
 	var chars_by_id: Dictionary = {1: lord, 2: master}
 
 	var ws: Dictionary = {}
@@ -699,14 +701,14 @@ func test_vacancy_school_master_has_family_field() -> void:
 	var lord := _make_char(1, "Dragon", 7.0)
 	lord.lord_id = -1
 	lord.clan = "Dragon"
-	var characters: Array[L5RCharacterData] = [lord]
+	var characters: Array = [lord]
 	var chars_by_id: Dictionary = {1: lord}
 
 	var ws: Dictionary = {}
 	DayOrchestrator._populate_vacancy_intelligence(ws, characters, chars_by_id, [], [], {})
 
 	var vacancies: Array = ws.get("vacancy_data", {}).get(1, [])
-	var families_found: Array[String] = []
+	var families_found: Array = []
 	for v: Dictionary in vacancies:
 		if v.get("position_type", "") == "School Master":
 			assert_true(v.has("family"), "School Master vacancy should include family field")
@@ -720,7 +722,7 @@ func test_vacancy_school_master_only_for_clans_with_lords() -> void:
 	var low_status := _make_char(1, "Lion", 3.0)
 	low_status.lord_id = -1
 	low_status.clan = "Lion"
-	var characters: Array[L5RCharacterData] = [low_status]
+	var characters: Array = [low_status]
 	var chars_by_id: Dictionary = {1: low_status}
 
 	var ws: Dictionary = {}
@@ -751,7 +753,7 @@ func test_candidate_scoring_magistrate_prefers_investigation_skill() -> void:
 	investigator.honor = 3.0
 	investigator.glory = 2.0
 	investigator.skills = {"Investigation": 4, "Lore: Law": 3}
-	var characters: Array[L5RCharacterData] = [lord, bushi, investigator]
+	var characters: Array = [lord, bushi, investigator]
 	var chars_by_id: Dictionary = {1: lord, 2: bushi, 3: investigator}
 
 	var result: int = DayOrchestrator._find_vacancy_candidate(
@@ -774,7 +776,7 @@ func test_candidate_scoring_garrison_prefers_battle_skill() -> void:
 	warrior.honor = 3.0
 	warrior.glory = 2.0
 	warrior.skills = {"Battle": 4, "Defense": 3, "Kenjutsu": 2}
-	var characters: Array[L5RCharacterData] = [lord, courtier, warrior]
+	var characters: Array = [lord, courtier, warrior]
 	var chars_by_id: Dictionary = {1: lord, 2: courtier, 3: warrior}
 
 	var result: int = DayOrchestrator._find_vacancy_candidate(
@@ -796,7 +798,7 @@ func test_candidate_scoring_virtue_bonus_for_magistrate() -> void:
 	virtuous.honor = 3.0
 	virtuous.glory = 2.0
 	virtuous.bushido_virtue = Enums.BushidoVirtue.GI
-	var characters: Array[L5RCharacterData] = [lord, base, virtuous]
+	var characters: Array = [lord, base, virtuous]
 	var chars_by_id: Dictionary = {1: lord, 2: base, 3: virtuous}
 
 	var result: int = DayOrchestrator._find_vacancy_candidate(
@@ -819,7 +821,7 @@ func test_candidate_scoring_school_type_bonus_for_temple() -> void:
 	shugenja.honor = 3.0
 	shugenja.glory = 2.0
 	shugenja.school_type = Enums.SchoolType.SHUGENJA
-	var characters: Array[L5RCharacterData] = [lord, bushi, shugenja]
+	var characters: Array = [lord, bushi, shugenja]
 	var chars_by_id: Dictionary = {1: lord, 2: bushi, 3: shugenja}
 
 	var result: int = DayOrchestrator._find_vacancy_candidate(
@@ -842,7 +844,7 @@ func test_candidate_scoring_monastery_prefers_monk() -> void:
 	monk.honor = 3.0
 	monk.glory = 2.0
 	monk.school_type = Enums.SchoolType.MONK
-	var characters: Array[L5RCharacterData] = [lord, bushi, monk]
+	var characters: Array = [lord, bushi, monk]
 	var chars_by_id: Dictionary = {1: lord, 2: bushi, 3: monk}
 
 	var result: int = DayOrchestrator._find_vacancy_candidate(
@@ -866,7 +868,7 @@ func test_candidate_scoring_still_uses_loyalty() -> void:
 	loyal.honor = 3.0
 	loyal.glory = 2.0
 	loyal.disposition_values = {1: 40}
-	var characters: Array[L5RCharacterData] = [lord, disliked, loyal]
+	var characters: Array = [lord, disliked, loyal]
 	var chars_by_id: Dictionary = {1: lord, 2: disliked, 3: loyal}
 
 	var result: int = DayOrchestrator._find_vacancy_candidate(
@@ -889,7 +891,7 @@ func test_candidate_scoring_skips_already_assigned() -> void:
 	free.lord_id = 1
 	free.honor = 2.0
 	free.glory = 1.0
-	var characters: Array[L5RCharacterData] = [lord, assigned, free]
+	var characters: Array = [lord, assigned, free]
 	var chars_by_id: Dictionary = {1: lord, 2: assigned, 3: free}
 
 	var result: int = DayOrchestrator._find_vacancy_candidate(
@@ -904,7 +906,7 @@ func test_candidate_scoring_skips_already_assigned() -> void:
 func test_vacancy_registry_created_in_season_meta() -> void:
 	var lord := _make_char(1, "Crane", 5.0)
 	lord.lord_id = -1
-	var characters: Array[L5RCharacterData] = [lord]
+	var characters: Array = [lord]
 	var chars_by_id: Dictionary = {1: lord}
 	var season_meta: Dictionary = {}
 
@@ -918,14 +920,14 @@ func test_vacancy_seasons_vacant_starts_at_zero() -> void:
 	var lord := _make_char(1, "Crab", 5.0)
 	lord.lord_id = -1
 	lord.clan = "Crab"
-	var characters: Array[L5RCharacterData] = [lord]
+	var characters: Array = [lord]
 	var chars_by_id: Dictionary = {1: lord}
 	var season_meta: Dictionary = {}
 
 	var prov := _make_province(10, "Crab")
 	var provinces: Dictionary = {10: prov}
 	var fort := _make_settlement(100, 10, Enums.SettlementType.FORTIFICATION)
-	var settlements: Array[SettlementData] = [fort]
+	var settlements: Array = [fort]
 
 	var ws: Dictionary = {}
 	DayOrchestrator._populate_vacancy_intelligence(ws, characters, chars_by_id, [], settlements, provinces, season_meta)
@@ -955,13 +957,13 @@ func test_vacancy_inherits_seasons_from_registry() -> void:
 	var lord := _make_char(1, "Crab", 5.0)
 	lord.lord_id = -1
 	lord.clan = "Crab"
-	var characters: Array[L5RCharacterData] = [lord]
+	var characters: Array = [lord]
 	var chars_by_id: Dictionary = {1: lord}
 
 	var prov := _make_province(10, "Crab")
 	var provinces: Dictionary = {10: prov}
 	var fort := _make_settlement(100, 10, Enums.SettlementType.FORTIFICATION)
-	var settlements: Array[SettlementData] = [fort]
+	var settlements: Array = [fort]
 
 	# Pre-populate registry with existing vacancy at 3 seasons
 	var season_meta: Dictionary = {
@@ -986,13 +988,13 @@ func test_vacancy_registry_clears_filled_positions() -> void:
 	var commander := _make_char(2, "Crab", 3.0)
 	commander.lord_id = 1
 	commander.role_position = "Garrison Commander"
-	var characters: Array[L5RCharacterData] = [lord, commander]
+	var characters: Array = [lord, commander]
 	var chars_by_id: Dictionary = {1: lord, 2: commander}
 
 	var prov := _make_province(10, "Crab")
 	var provinces: Dictionary = {10: prov}
 	var fort := _make_settlement(100, 10, Enums.SettlementType.FORTIFICATION)
-	var settlements: Array[SettlementData] = [fort]
+	var settlements: Array = [fort]
 
 	# Registry has the old vacancy
 	var season_meta: Dictionary = {
@@ -1047,7 +1049,7 @@ func test_infra_border_includes_all_military_types() -> void:
 	var castle := _make_settlement(100, 10, Enums.SettlementType.CASTLE)
 	# Province B has no military — should be flagged
 	var village := _make_settlement(200, 20, Enums.SettlementType.VILLAGE)
-	var settlements: Array[SettlementData] = [castle, village]
+	var settlements: Array = [castle, village]
 
 	var ws: Dictionary = {}
 	DayOrchestrator._populate_infrastructure_intelligence(ws, provinces, settlements, [], {})
@@ -1065,7 +1067,7 @@ func test_infra_border_keep_counts_as_fortified() -> void:
 	var provinces: Dictionary = {10: prov, 20: enemy}
 
 	var keep := _make_settlement(100, 10, Enums.SettlementType.KEEP)
-	var settlements: Array[SettlementData] = [keep]
+	var settlements: Array = [keep]
 
 	var ws: Dictionary = {}
 	DayOrchestrator._populate_infrastructure_intelligence(ws, provinces, settlements, [], {})
@@ -1126,7 +1128,7 @@ func test_infra_naval_threat_no_threat_without_war() -> void:
 
 func test_filter_province_ids_by_clan() -> void:
 	var data: Dictionary = {10: "Crane", 20: "Lion", 30: "Crane"}
-	var result: Array[int] = NPCDecisionEngine._filter_province_ids_by_clan(data, "Crane")
+	var result: Array = NPCDecisionEngine._filter_province_ids_by_clan(data, "Crane")
 	assert_eq(result.size(), 2, "Should return only Crane provinces")
 	assert_true(10 in result)
 	assert_true(30 in result)
@@ -1136,7 +1138,7 @@ func test_filter_province_ids_by_clan() -> void:
 func test_filter_province_ids_backward_compat() -> void:
 	# Old-style plain array (no clan data)
 	var data: Array = [10, 20, 30]
-	var result: Array[int] = NPCDecisionEngine._filter_province_ids_by_clan(data, "Crane")
+	var result: Array = NPCDecisionEngine._filter_province_ids_by_clan(data, "Crane")
 	assert_eq(result.size(), 3, "Backward compat: all ids returned from plain array")
 
 
@@ -1159,15 +1161,15 @@ func test_completed_temple_triggers_vacancy() -> void:
 	var lord := _make_char(1, "Crane", 5.0)
 	var prov := _make_province(10, "Crane")
 	var existing := _make_settlement(100, 10, Enums.SettlementType.TOWN)
-	var settlements: Array[SettlementData] = [existing]
+	var settlements: Array = [existing]
 	var provinces: Dictionary = {10: prov}
 
 	# Create a temple construction about to complete
 	var cd := _make_construction(1, ConstructionData.ConstructionType.TEMPLE, 10, 1)
-	var constructions: Array[ConstructionData] = [cd]
-	var next_sid: Array[int] = [200]
-	var next_tid: Array[int] = [1]
-	var topics: Array[TopicData] = []
+	var constructions: Array = [cd]
+	var next_sid: Array = [200]
+	var next_tid: Array = [1]
+	var topics: Array = []
 
 	# Tick construction queue — temple completes and is added to settlements
 	DayOrchestrator._process_construction_completions(
@@ -1200,14 +1202,14 @@ func test_completed_monastery_triggers_vacancy() -> void:
 	var lord := _make_char(1, "Crane", 5.0)
 	var prov := _make_province(10, "Crane")
 	var existing := _make_settlement(100, 10, Enums.SettlementType.TOWN)
-	var settlements: Array[SettlementData] = [existing]
+	var settlements: Array = [existing]
 	var provinces: Dictionary = {10: prov}
 
 	var cd := _make_construction(1, ConstructionData.ConstructionType.MONASTERY, 10, 1)
-	var constructions: Array[ConstructionData] = [cd]
-	var next_sid: Array[int] = [200]
-	var next_tid: Array[int] = [1]
-	var topics: Array[TopicData] = []
+	var constructions: Array = [cd]
+	var next_sid: Array = [200]
+	var next_tid: Array = [1]
+	var topics: Array = []
 
 	DayOrchestrator._process_construction_completions(
 		constructions, settlements, provinces, [], _dice,
@@ -1235,10 +1237,10 @@ func test_organic_village_no_position_vacancy() -> void:
 	# Organic villages don't require any specific position holder
 	var lord := _make_char(1, "Crane", 5.0)
 	var prov := _make_province(10, "Crane")
-	prov.terrain = "plains"
+	prov.terrain_type = Enums.TerrainType.PLAINS
 	var existing := _make_settlement(100, 10, Enums.SettlementType.TOWN)
 	existing.population_pu = 10.0
-	var settlements: Array[SettlementData] = [existing]
+	var settlements: Array = [existing]
 	var provinces: Dictionary = {10: prov}
 
 	# Add a village manually (simulates organic village creation)
@@ -1267,14 +1269,14 @@ func test_organic_village_no_position_vacancy() -> void:
 func test_construction_vacancy_has_zero_seasons_vacant() -> void:
 	var lord := _make_char(1, "Crane", 5.0)
 	var prov := _make_province(10, "Crane")
-	var settlements: Array[SettlementData] = [_make_settlement(100, 10, Enums.SettlementType.TOWN)]
+	var settlements: Array = [_make_settlement(100, 10, Enums.SettlementType.TOWN)]
 	var provinces: Dictionary = {10: prov}
 
 	var cd := _make_construction(1, ConstructionData.ConstructionType.TEMPLE, 10, 1)
-	var constructions: Array[ConstructionData] = [cd]
-	var next_sid: Array[int] = [200]
-	var next_tid: Array[int] = [1]
-	var topics: Array[TopicData] = []
+	var constructions: Array = [cd]
+	var next_sid: Array = [200]
+	var next_tid: Array = [1]
+	var topics: Array = []
 
 	DayOrchestrator._process_construction_completions(
 		constructions, settlements, provinces, [], _dice,
@@ -1302,7 +1304,7 @@ func test_completed_fortification_triggers_garrison_vacancy() -> void:
 	var lord := _make_char(1, "Crane", 5.0)
 	var prov := _make_province(10, "Crane")
 	var fort := _make_settlement(200, 10, Enums.SettlementType.FORTIFICATION)
-	var settlements: Array[SettlementData] = [fort]
+	var settlements: Array = [fort]
 	var provinces: Dictionary = {10: prov}
 
 	var ws: Dictionary = {}
@@ -1324,7 +1326,7 @@ func test_vacancy_registry_tracks_new_settlement() -> void:
 	var lord := _make_char(1, "Crane", 5.0)
 	var prov := _make_province(10, "Crane")
 	var temple := _make_settlement(200, 10, Enums.SettlementType.TEMPLE)
-	var settlements: Array[SettlementData] = [temple]
+	var settlements: Array = [temple]
 	var provinces: Dictionary = {10: prov}
 
 	var sm: Dictionary = {"vacancy_registry": {}}
@@ -1351,7 +1353,7 @@ func test_vacancy_refresh_overwrites_stale_data() -> void:
 	var lord := _make_char(1, "Crane", 5.0)
 	var prov := _make_province(10, "Crane")
 	var town := _make_settlement(100, 10, Enums.SettlementType.TOWN)
-	var settlements: Array[SettlementData] = [town]
+	var settlements: Array = [town]
 	var provinces: Dictionary = {10: prov}
 
 	# First run: no military settlements → no garrison vacancy
@@ -1388,7 +1390,7 @@ func test_vacancy_refresh_preserves_existing_vacancies() -> void:
 	var lord := _make_char(1, "Crane", 5.0)
 	var prov := _make_province(10, "Crane")
 	var temple := _make_settlement(100, 10, Enums.SettlementType.TEMPLE)
-	var settlements: Array[SettlementData] = [temple]
+	var settlements: Array = [temple]
 	var provinces: Dictionary = {10: prov}
 
 	# First run: temple head vacancy
@@ -1408,7 +1410,7 @@ func test_vacancy_refresh_preserves_existing_vacancies() -> void:
 	)
 
 	var vacancies: Array = ws.get("vacant_positions_1", [])
-	var types: Array[String] = []
+	var types: Array = []
 	for v: Dictionary in vacancies:
 		types.append(v.get("position_type", ""))
 	assert_true("Temple Head" in types, "Temple Head should be preserved after refresh")

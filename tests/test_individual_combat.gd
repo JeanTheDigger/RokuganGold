@@ -99,7 +99,7 @@ func test_wound_penalty_reduces_initiative() -> void:
 # -- Combat State Build --------------------------------------------------------
 
 func test_build_combat_state_creates_participants() -> void:
-	var data: Array[Dictionary] = [
+	var data: Array = [
 		{"character_id": 1, "initiative_score": 20, "stance": Enums.Stance.ATTACK},
 		{"character_id": 2, "initiative_score": 15, "stance": Enums.Stance.DEFENSE},
 	]
@@ -109,7 +109,7 @@ func test_build_combat_state_creates_participants() -> void:
 
 
 func test_build_combat_state_sorts_turn_order_by_initiative() -> void:
-	var data: Array[Dictionary] = [
+	var data: Array = [
 		{"character_id": 10, "initiative_score": 15},
 		{"character_id": 20, "initiative_score": 30},
 		{"character_id": 30, "initiative_score": 22},

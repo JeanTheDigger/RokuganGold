@@ -159,7 +159,7 @@ func _make_record(
 
 
 func test_resolve_magistrate_conviction_suspends_active_cases():
-	var records: Array[CrimeRecord] = [
+	var records: Array = [
 		_make_record(1, 5, Enums.LegalStatus.UNDER_INVESTIGATION),
 		_make_record(2, 5, Enums.LegalStatus.ACCUSED),
 		_make_record(3, 5, Enums.LegalStatus.DECREED_GUILTY),
@@ -174,7 +174,7 @@ func test_resolve_magistrate_conviction_suspends_active_cases():
 
 
 func test_resolve_magistrate_conviction_no_active_cases():
-	var records: Array[CrimeRecord] = [
+	var records: Array = [
 		_make_record(1, 5, Enums.LegalStatus.DECREED_GUILTY),
 	]
 	var r := MagistrateAllocationSystem.resolve_magistrate_conviction(5, records)
@@ -182,12 +182,12 @@ func test_resolve_magistrate_conviction_no_active_cases():
 
 
 func test_assign_replacement_magistrate():
-	var records: Array[CrimeRecord] = [
+	var records: Array = [
 		_make_record(1, 5, Enums.LegalStatus.UNDER_INVESTIGATION),
 		_make_record(2, 5, Enums.LegalStatus.ACCUSED),
 		_make_record(3, 9, Enums.LegalStatus.UNDER_INVESTIGATION),
 	]
-	var suspended: Array[int] = [1, 2]
+	var suspended: Array = [1, 2]
 	var r := MagistrateAllocationSystem.assign_replacement_magistrate(
 		suspended, 20, records
 	)

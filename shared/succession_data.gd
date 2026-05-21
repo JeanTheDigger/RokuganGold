@@ -27,7 +27,7 @@ enum VacancyCause {
 @export var ticks_elapsed: int = 0
 @export var successor_id: int = -1
 @export var designated_heir_id: int = -1
-@export var candidate_ids: Array[int] = []
-@export var contesting_ids: Array[int] = []
+@export var candidate_ids: Array = []
+@export var contesting_ids: Array = []
 @export var suspicious_death: bool = false
 @export var settlement_id: String = ""

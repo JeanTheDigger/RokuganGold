@@ -8,7 +8,7 @@ var _scoring_tables: Dictionary
 var _filter_data: Dictionary
 var _action_skill_map: Dictionary
 var _season_meta: Dictionary
-var _action_log: Array[Dictionary]
+var _action_log: Array
 var _provinces: Dictionary
 
 
@@ -34,7 +34,7 @@ func before_each() -> void:
 		"personality_lean": {},
 		"competence_table": {},
 		"disposition_tiers": {},
-		"urgency_rules": {},
+		"urgency_rules": [],
 		"topic_position_alignment": {},
 	}
 	_filter_data = {
@@ -78,8 +78,8 @@ func _make_char(id: int, clan: String = "Lion") -> L5RCharacterData:
 
 
 func _advance_to_season_boundary(
-	characters: Array[L5RCharacterData],
-	active_civil_wars: Array[Dictionary] = [],
+	characters: Array,
+	active_civil_wars: Array = [],
 	precedent_modifiers: Dictionary = {},
 ) -> Dictionary:
 	var result: Dictionary = {}
@@ -91,8 +91,8 @@ func _advance_to_season_boundary(
 
 
 func _run_day(
-	characters: Array[L5RCharacterData],
-	active_civil_wars: Array[Dictionary] = [],
+	characters: Array,
+	active_civil_wars: Array = [],
 	precedent_modifiers: Dictionary = {},
 ) -> Dictionary:
 	var chars_by_id: Dictionary = {}
@@ -171,6 +171,24 @@ func test_stability_penalty_applied_on_season_boundary() -> void:
 
 
 func test_stability_penalty_is_minus_3_base() -> void:
+	# Run a baseline without civil war to measure other seasonal stability drains.
+	var baseline_rebel := _make_char(100, "Lion")
+	var baseline_authority := _make_char(1, "Lion")
+	var baseline_prov := ProvinceData.new()
+	baseline_prov.province_id = 10
+	baseline_prov.stability = 50.0
+	baseline_prov.terrain_type = Enums.TerrainType.PLAINS
+	baseline_prov.clan = "Lion"
+	var saved_provinces: Dictionary = _provinces.duplicate()
+	_provinces = {10: baseline_prov}
+	var saved_time := _time
+	_time = TimeSystem.new(1120, 0)
+	_advance_to_season_boundary([baseline_rebel, baseline_authority])
+	var baseline_stability: float = baseline_prov.stability
+
+	# Now run with civil war.
+	_provinces = saved_provinces
+	_time = TimeSystem.new(1120, 0)
 	var rebel := _make_char(100, "Lion")
 	var authority := _make_char(1, "Lion")
 
@@ -185,8 +203,8 @@ func test_stability_penalty_is_minus_3_base() -> void:
 
 	_advance_to_season_boundary([rebel, authority], [state])
 
-	assert_eq(province.stability, 47.0,
-		"Base stability penalty should be -3 per season")
+	assert_almost_eq(province.stability, baseline_stability - 3.0, 0.01,
+		"Base stability penalty should be -3 per season beyond baseline")
 
 
 # -- Honor hemorrhage ----------------------------------------------------------
@@ -204,8 +222,10 @@ func test_rebel_lord_honor_hemorrhage() -> void:
 
 	_advance_to_season_boundary([rebel, authority], [state])
 
-	assert_almost_eq(rebel.honor, 4.7, 0.01,
-		"Rebel lord should lose 0.3 honor per season")
+	# Honor hemorrhage is rank-scaled via CrimeSystem.get_disloyalty_honor().
+	# At honor 5.0 (rank 5, bracket 3): HONOR_TABLE_DISLOYALTY[3] = -10 → -1.0.
+	assert_almost_eq(rebel.honor, 4.0, 0.01,
+		"Rebel lord should lose rank-scaled disloyalty honor per season")
 
 
 # -- Precedent decay runs unconditionally --------------------------------------
@@ -336,6 +356,12 @@ func test_rebel_victory_counter_increments() -> void:
 	var rebel := _make_char(100, "Lion")
 	rebel.honor = 5.0
 	rebel.status = 6.0
+	# Rebel must hold a seat: physical_location in a matching province's settlement_ids.
+	rebel.physical_location = "5000"
+	var province: ProvinceData = _provinces[10]
+	province.family = "Akodo"
+	province.settlement_ids = [5000]
+
 	var authority := _make_char(1, "Lion")
 	authority.status = 7.0
 	var allied_fd := _make_char(50, "Lion")
@@ -357,6 +383,23 @@ func test_rebel_victory_counter_increments() -> void:
 # -- Inactive wars skipped -----------------------------------------------------
 
 func test_inactive_war_skipped() -> void:
+	# Run a baseline without any civil war to measure other seasonal stability drains.
+	var baseline_char := _make_char(1)
+	var baseline_prov := ProvinceData.new()
+	baseline_prov.province_id = 10
+	baseline_prov.stability = 80.0
+	baseline_prov.terrain_type = Enums.TerrainType.PLAINS
+	baseline_prov.clan = "Lion"
+	var saved_provinces: Dictionary = _provinces.duplicate()
+	_provinces = {10: baseline_prov}
+	var saved_time := _time
+	_time = TimeSystem.new(1120, 0)
+	_advance_to_season_boundary([baseline_char])
+	var baseline_stability: float = baseline_prov.stability
+
+	# Now run with an inactive civil war.
+	_provinces = saved_provinces
+	_time = TimeSystem.new(1120, 0)
 	var c := _make_char(1)
 	var state: Dictionary = IntraClanCivilWar.make_initial_state(100, 1, "Lion", 5000, 0)
 	state["active"] = false
@@ -366,8 +409,8 @@ func test_inactive_war_skipped() -> void:
 
 	_advance_to_season_boundary([c], [state])
 
-	assert_eq(province.stability, 80.0,
-		"Inactive war should not affect province stability")
+	assert_eq(province.stability, baseline_stability,
+		"Inactive war should not affect province stability beyond baseline")
 
 
 # -- Defection -----------------------------------------------------------------
@@ -396,7 +439,7 @@ func test_defection_on_desperate_war_score() -> void:
 	var defections: Array = cw.get("civil_war_results", {}).get("defections", [])
 	# We can't guarantee defection fires due to loyalty re-eval,
 	# but defection trigger should have been checked
-	assert_true(true, "Defection check runs without error")
+	pass_test("Defection check runs without error")
 
 
 # -- Precedent effect on rebel victory -----------------------------------------
@@ -405,6 +448,12 @@ func test_precedent_effect_applied_on_rebel_victory() -> void:
 	var rebel := _make_char(100, "Lion")
 	rebel.honor = 5.0
 	rebel.status = 6.0
+	# Rebel must hold a seat to prevent legitimacy victory via rebel_seat_lost.
+	rebel.physical_location = "5000"
+	var province: ProvinceData = _provinces[10]
+	province.family = "Akodo"
+	province.settlement_ids = [5000]
+
 	var authority := _make_char(1, "Lion")
 	authority.status = 7.0
 	authority.wounds_taken = 999
@@ -426,7 +475,7 @@ func test_precedent_effect_applied_on_rebel_victory() -> void:
 	if not state.get("active", true):
 		assert_gt(mods.size(), 0, "Precedent effect should be applied on rebel victory")
 	else:
-		assert_true(true, "War not yet resolved — counter may have reset")
+		pass_test("War not yet resolved — counter may have reset")
 
 
 # -- Rebel consequences on legitimacy victory ----------------------------------
@@ -493,6 +542,28 @@ func test_multiple_civil_wars_processed_independently() -> void:
 # -- Non-clan provinces unaffected ---------------------------------------------
 
 func test_non_clan_provinces_unaffected() -> void:
+	# Run a baseline to measure non-civil-war seasonal effects on Crane province.
+	var baseline_char := _make_char(1, "Lion")
+	var baseline_crane := ProvinceData.new()
+	baseline_crane.province_id = 20
+	baseline_crane.stability = 80.0
+	baseline_crane.terrain_type = Enums.TerrainType.PLAINS
+	baseline_crane.clan = "Crane"
+	var baseline_lion := ProvinceData.new()
+	baseline_lion.province_id = 10
+	baseline_lion.stability = 70.0
+	baseline_lion.terrain_type = Enums.TerrainType.PLAINS
+	baseline_lion.clan = "Lion"
+	var saved_provinces: Dictionary = _provinces.duplicate()
+	_provinces = {10: baseline_lion, 20: baseline_crane}
+	var saved_time := _time
+	_time = TimeSystem.new(1120, 0)
+	_advance_to_season_boundary([baseline_char])
+	var baseline_crane_stability: float = baseline_crane.stability
+
+	# Now run with Lion civil war.
+	_provinces = saved_provinces
+	_time = TimeSystem.new(1120, 0)
 	var rebel := _make_char(100, "Lion")
 	var authority := _make_char(1, "Lion")
 
@@ -511,8 +582,8 @@ func test_non_clan_provinces_unaffected() -> void:
 
 	_advance_to_season_boundary([rebel, authority], [state])
 
-	assert_eq(crane_prov.stability, 80.0,
-		"Non-clan provinces should not be affected by civil war")
+	assert_eq(crane_prov.stability, baseline_crane_stability,
+		"Non-clan provinces should not be affected by civil war beyond baseline")
 
 
 # -- Trigger & Faction Formation (s53.2.1, s53.2.2) ---------------------------
@@ -526,9 +597,9 @@ func test_trigger_civil_war_creates_state() -> void:
 	var vassal := _make_char(50, "Lion")
 	vassal.lord_id = 1
 
-	var wars: Array[Dictionary] = []
-	var topics: Array[TopicData] = []
-	var tid: Array[int] = [5000]
+	var wars: Array = []
+	var topics: Array = []
+	var tid: Array = [5000]
 	var chars_by_id: Dictionary = {100: rebel, 1: authority, 50: vassal}
 
 	var result: Dictionary = DayOrchestrator._trigger_civil_war(
@@ -550,9 +621,9 @@ func test_trigger_generates_tier_2_topic() -> void:
 	var authority := _make_char(1, "Lion")
 	authority.lord_id = -1
 
-	var wars: Array[Dictionary] = []
-	var topics: Array[TopicData] = []
-	var tid: Array[int] = [5000]
+	var wars: Array = []
+	var topics: Array = []
+	var tid: Array = [5000]
 	var chars_by_id: Dictionary = {100: rebel, 1: authority}
 
 	DayOrchestrator._trigger_civil_war(
@@ -577,10 +648,10 @@ func test_trigger_assigns_factions_to_all_clan_npcs() -> void:
 	var npc2 := _make_char(51, "Lion")
 	npc2.lord_id = 100
 
-	var wars: Array[Dictionary] = []
-	var topics: Array[TopicData] = []
-	var tid: Array[int] = [5000]
-	var chars: Array[L5RCharacterData] = [rebel, authority, npc1, npc2]
+	var wars: Array = []
+	var topics: Array = []
+	var tid: Array = [5000]
+	var chars: Array = [rebel, authority, npc1, npc2]
 	var chars_by_id: Dictionary = {100: rebel, 1: authority, 50: npc1, 51: npc2}
 
 	DayOrchestrator._trigger_civil_war(
@@ -603,9 +674,9 @@ func test_trigger_skips_dead_npcs() -> void:
 	var dead_npc := _make_char(50, "Lion")
 	dead_npc.wounds_taken = 999
 
-	var wars: Array[Dictionary] = []
-	var topics: Array[TopicData] = []
-	var tid: Array[int] = [5000]
+	var wars: Array = []
+	var topics: Array = []
+	var tid: Array = [5000]
 	var chars_by_id: Dictionary = {100: rebel, 1: authority, 50: dead_npc}
 
 	DayOrchestrator._trigger_civil_war(
@@ -625,9 +696,9 @@ func test_trigger_skips_other_clan_npcs() -> void:
 	var crane_npc := _make_char(50, "Crane")
 	crane_npc.clan = "Crane"
 
-	var wars: Array[Dictionary] = []
-	var topics: Array[TopicData] = []
-	var tid: Array[int] = [5000]
+	var wars: Array = []
+	var topics: Array = []
+	var tid: Array = [5000]
 	var chars_by_id: Dictionary = {100: rebel, 1: authority, 50: crane_npc}
 
 	DayOrchestrator._trigger_civil_war(
@@ -646,9 +717,9 @@ func test_trigger_prevents_duplicate_wars() -> void:
 	authority.lord_id = -1
 
 	var existing: Dictionary = IntraClanCivilWar.make_initial_state(200, 1, "Lion", 4000, 0)
-	var wars: Array[Dictionary] = [existing]
-	var topics: Array[TopicData] = []
-	var tid: Array[int] = [5000]
+	var wars: Array = [existing]
+	var topics: Array = []
+	var tid: Array = [5000]
 	var chars_by_id: Dictionary = {100: rebel, 1: authority}
 
 	var result: Dictionary = DayOrchestrator._trigger_civil_war(
@@ -672,9 +743,9 @@ func test_trigger_ronin_departure_on_low_pulls() -> void:
 	npc.shourido_virtue = Enums.ShouridoVirtue.NONE
 	npc.disposition_values[100] = -80
 
-	var wars: Array[Dictionary] = []
-	var topics: Array[TopicData] = []
-	var tid: Array[int] = [5000]
+	var wars: Array = []
+	var topics: Array = []
+	var tid: Array = [5000]
 	var chars_by_id: Dictionary = {100: rebel, 1: authority, 50: npc}
 
 	var result: Dictionary = DayOrchestrator._trigger_civil_war(
@@ -688,7 +759,7 @@ func test_trigger_ronin_departure_on_low_pulls() -> void:
 		assert_true(npc.permanent_ronin, "Ronin departure should set permanent_ronin")
 		assert_eq(npc.lord_id, -1, "Ronin should have no lord")
 	else:
-		assert_true(true, "NPC did not meet ronin threshold")
+		pass_test("NPC did not meet ronin threshold")
 
 
 func test_trigger_reassigns_broken_feudal_chains() -> void:
@@ -703,9 +774,9 @@ func test_trigger_reassigns_broken_feudal_chains() -> void:
 	vassal.bushido_virtue = Enums.BushidoVirtue.CHUGI
 	vassal.disposition_values[100] = -50
 
-	var wars: Array[Dictionary] = []
-	var topics: Array[TopicData] = []
-	var tid: Array[int] = [5000]
+	var wars: Array = []
+	var topics: Array = []
+	var tid: Array = [5000]
 	var chars_by_id: Dictionary = {100: rebel, 1: authority, 50: vassal}
 
 	DayOrchestrator._trigger_civil_war(
@@ -756,8 +827,8 @@ func test_phoenix_dead_champion_chugi_capitulates_resolves_war() -> void:
 	var chars_by_id: Dictionary = {
 		100: dead_champion, 1: authority, 200: shiba_candidate,
 	}
-	var topics: Array[TopicData] = []
-	var tid: Array[int] = [5000]
+	var topics: Array = []
+	var tid: Array = [5000]
 	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
 	rng.seed = 1
 
@@ -792,8 +863,8 @@ func test_phoenix_dead_champion_ishi_continues_schism() -> void:
 	var chars_by_id: Dictionary = {
 		100: dead_champion, 1: authority, 200: shiba_candidate,
 	}
-	var topics: Array[TopicData] = []
-	var tid: Array[int] = [5000]
+	var topics: Array = []
+	var tid: Array = [5000]
 	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
 	rng.seed = 1
 
@@ -826,8 +897,8 @@ func test_phoenix_dead_champion_no_eligible_shiba_resolves_war() -> void:
 	# No Shiba characters in the roster.
 	var state: Dictionary = _make_phoenix_schism_state(100, 1)
 	var chars_by_id: Dictionary = {100: dead_champion, 1: authority}
-	var topics: Array[TopicData] = []
-	var tid: Array[int] = [5000]
+	var topics: Array = []
+	var tid: Array = [5000]
 	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
 
 	var result: Dictionary = DayOrchestrator._check_civil_war_resolution(

@@ -67,14 +67,14 @@ func _make_world_state() -> Dictionary:
 		"context_flag": Enums.ContextFlag.AT_OWN_HOLDINGS,
 		"season": 1,
 		"ic_day": 1,
-		"characters_present": [] as Array[int],
+		"characters_present": [],
 		"is_lord": false,
-		"known_topics": [] as Array[int],
+		"known_topics": [],
 		"known_positions": {},
 		"known_objectives": {},
-		"known_contacts": [] as Array[int],
+		"known_contacts": [],
 		"pending_events": [],
-		"action_log": [] as Array[Dictionary],
+		"action_log": [],
 	}
 
 
@@ -94,16 +94,16 @@ func _make_season_meta() -> Dictionary:
 
 
 func _run_advance_day(
-	ships: Array[ShipData] = [],
-	active_wars: Array[WarData] = [],
-	extra_chars: Array[L5RCharacterData] = [],
+	ships: Array = [],
+	active_wars: Array = [],
+	extra_chars: Array = [],
 ) -> Dictionary:
 	var time := TimeSystem.new(1120, 0)
 	var dice := DiceEngine.new()
 	dice.set_seed(42)
 
 	var province: ProvinceData = _make_province()
-	var all_chars: Array[L5RCharacterData] = [_char]
+	var all_chars: Array = [_char]
 	all_chars.append_array(extra_chars)
 	var chars_by_id: Dictionary = {}
 	for c: L5RCharacterData in all_chars:
@@ -129,42 +129,42 @@ func _run_advance_day(
 		dice,                                  # dice_engine
 		_action_skill_map,                     # action_skill_map
 		{10: province},                        # provinces
-		[] as Array[Dictionary],               # action_log
+		[],               # action_log
 		_make_season_meta(),                   # season_meta
-		[] as Array[TopicData],                # active_topics
+		[],                # active_topics
 		[],                                    # pending_letters
-		[] as Array[Dictionary],               # approach_penalties
-		[] as Array[CommitmentData],           # commitments
-		[] as Array[CrimeRecord],              # crime_records
+		[],               # approach_penalties
+		[],           # commitments
+		[],              # crime_records
 		[1],                                   # next_case_id
 		{},                                    # military_data
 		{},                                    # character_province_map
 		[1000],                                # next_topic_id
-		[] as Array[Dictionary],               # death_events
+		[],               # death_events
 		{},                                    # successor_map
 		[],                                    # favors
-		[] as Array[InsurgencyData],           # insurgencies
+		[],           # insurgencies
 		[1],                                   # next_insurgency_id
-		[] as Array[SettlementData],           # settlements
+		[],           # settlements
 		{},                                    # miya_inputs
-		[] as Array[SuccessionData],           # active_successions
+		[],           # active_successions
 		[1],                                   # next_succession_id
-		[] as Array[Dictionary],               # entanglements
-		[] as Array[Dictionary],               # bound_states
-		[] as Array[Dictionary],               # active_armies
-		[] as Array[Dictionary],               # active_sieges
-		[] as Array[Dictionary],               # active_tethers
-		[] as Array[Dictionary],               # order_states
-		[] as Array[Dictionary],               # companies
+		[],               # entanglements
+		[],               # bound_states
+		[],               # active_armies
+		[],               # active_sieges
+		[],               # active_tethers
+		[],               # order_states
+		[],               # companies
 		{},                                    # clans
 		active_wars,                           # active_wars
 		[],                                    # trade_routes
 		[1],                                   # next_war_id
-		[] as Array[CourtSessionData],         # active_courts
+		[],         # active_courts
 		[1],                                   # next_court_id
-		[] as Array[EdictData],                # active_edicts
+		[],                # active_edicts
 		[1],                                   # next_edict_id
-		[] as Array[HordeData],                # active_hordes
+		[],                # active_hordes
 		{},                                    # horde_strength_counters
 		[-1],                                  # last_targeted_province_id
 		ships,                                 # ships
@@ -215,8 +215,8 @@ func test_ship_movement_decrements_days() -> void:
 
 	var dice := DiceEngine.new()
 	dice.set_seed(42)
-	var results: Array[Dictionary] = DayOrchestrator._process_ship_movement(
-		[ship] as Array[ShipData], dice,
+	var results: Array = DayOrchestrator._process_ship_movement(
+		[ship], dice,
 	)
 	assert_eq(results.size(), 1)
 	assert_false(results[0]["arrived"])
@@ -232,8 +232,8 @@ func test_ship_movement_arrives_at_destination() -> void:
 
 	var dice := DiceEngine.new()
 	dice.set_seed(42)
-	var results: Array[Dictionary] = DayOrchestrator._process_ship_movement(
-		[ship] as Array[ShipData], dice,
+	var results: Array = DayOrchestrator._process_ship_movement(
+		[ship], dice,
 	)
 	assert_eq(results.size(), 1)
 	assert_true(results[0]["arrived"])
@@ -249,8 +249,8 @@ func test_ship_movement_skips_destroyed_ships() -> void:
 	ship.movement_days_remaining = 1
 
 	var dice := DiceEngine.new()
-	var results: Array[Dictionary] = DayOrchestrator._process_ship_movement(
-		[ship] as Array[ShipData], dice,
+	var results: Array = DayOrchestrator._process_ship_movement(
+		[ship], dice,
 	)
 	assert_eq(results.size(), 0)
 
@@ -262,8 +262,8 @@ func test_ship_movement_skips_captured_ships() -> void:
 	ship.movement_days_remaining = 1
 
 	var dice := DiceEngine.new()
-	var results: Array[Dictionary] = DayOrchestrator._process_ship_movement(
-		[ship] as Array[ShipData], dice,
+	var results: Array = DayOrchestrator._process_ship_movement(
+		[ship], dice,
 	)
 	assert_eq(results.size(), 0)
 
@@ -273,8 +273,8 @@ func test_ship_movement_skips_stationary_ships() -> void:
 	ship.is_moving = false
 
 	var dice := DiceEngine.new()
-	var results: Array[Dictionary] = DayOrchestrator._process_ship_movement(
-		[ship] as Array[ShipData], dice,
+	var results: Array = DayOrchestrator._process_ship_movement(
+		[ship], dice,
 	)
 	assert_eq(results.size(), 0)
 
@@ -290,7 +290,7 @@ func test_deep_ocean_loss_possible_for_kobune() -> void:
 
 		var dice := DiceEngine.new()
 		dice.set_seed(seed_val)
-		DayOrchestrator._process_ship_movement([ship] as Array[ShipData], dice)
+		DayOrchestrator._process_ship_movement([ship], dice)
 		if ship.is_destroyed:
 			lost_count += 1
 
@@ -308,7 +308,7 @@ func test_no_deep_ocean_loss_for_sengokobune() -> void:
 
 		var dice := DiceEngine.new()
 		dice.set_seed(seed_val)
-		DayOrchestrator._process_ship_movement([ship] as Array[ShipData], dice)
+		DayOrchestrator._process_ship_movement([ship], dice)
 		assert_false(ship.is_destroyed)
 
 
@@ -324,8 +324,8 @@ func test_no_battle_without_hostile_ships() -> void:
 
 	var dice := DiceEngine.new()
 	dice.set_seed(42)
-	var results: Array[Dictionary] = DayOrchestrator._process_naval_battle_triggers(
-		[ship_a, ship_b] as Array[ShipData], {}, [], Enums.NavalWeather.CLEAR, dice,
+	var results: Array = DayOrchestrator._process_naval_battle_triggers(
+		[ship_a, ship_b], {}, [], Enums.NavalWeather.CLEAR, dice,
 	)
 	assert_eq(results.size(), 0)
 
@@ -338,8 +338,8 @@ func test_no_battle_without_war() -> void:
 
 	var dice := DiceEngine.new()
 	dice.set_seed(42)
-	var results: Array[Dictionary] = DayOrchestrator._process_naval_battle_triggers(
-		[ship_a, ship_b] as Array[ShipData], {}, [], Enums.NavalWeather.CLEAR, dice,
+	var results: Array = DayOrchestrator._process_naval_battle_triggers(
+		[ship_a, ship_b], {}, [], Enums.NavalWeather.CLEAR, dice,
 	)
 	assert_eq(results.size(), 0)
 
@@ -360,8 +360,8 @@ func test_battle_triggers_when_hostile_ships_at_same_subtile() -> void:
 
 	var dice := DiceEngine.new()
 	dice.set_seed(42)
-	var results: Array[Dictionary] = DayOrchestrator._process_naval_battle_triggers(
-		[ship_a, ship_b] as Array[ShipData], {}, [war], Enums.NavalWeather.CLEAR, dice,
+	var results: Array = DayOrchestrator._process_naval_battle_triggers(
+		[ship_a, ship_b], {}, [war], Enums.NavalWeather.CLEAR, dice,
 	)
 	assert_eq(results.size(), 1)
 	assert_true(results[0].has("victor"))
@@ -382,8 +382,8 @@ func test_no_battle_for_ships_at_different_subtiles() -> void:
 	war.war_score_b = 50
 
 	var dice := DiceEngine.new()
-	var results: Array[Dictionary] = DayOrchestrator._process_naval_battle_triggers(
-		[ship_a, ship_b] as Array[ShipData], {}, [war], Enums.NavalWeather.CLEAR, dice,
+	var results: Array = DayOrchestrator._process_naval_battle_triggers(
+		[ship_a, ship_b], {}, [war], Enums.NavalWeather.CLEAR, dice,
 	)
 	assert_eq(results.size(), 0)
 
@@ -402,8 +402,8 @@ func test_moving_ships_excluded_from_battle_triggers() -> void:
 	war.is_active = true
 
 	var dice := DiceEngine.new()
-	var results: Array[Dictionary] = DayOrchestrator._process_naval_battle_triggers(
-		[ship_a, ship_b] as Array[ShipData], {}, [war], Enums.NavalWeather.CLEAR, dice,
+	var results: Array = DayOrchestrator._process_naval_battle_triggers(
+		[ship_a, ship_b], {}, [war], Enums.NavalWeather.CLEAR, dice,
 	)
 	assert_eq(results.size(), 0)
 
@@ -422,8 +422,8 @@ func test_destroyed_ships_excluded_from_battle_triggers() -> void:
 	war.is_active = true
 
 	var dice := DiceEngine.new()
-	var results: Array[Dictionary] = DayOrchestrator._process_naval_battle_triggers(
-		[ship_a, ship_b] as Array[ShipData], {}, [war], Enums.NavalWeather.CLEAR, dice,
+	var results: Array = DayOrchestrator._process_naval_battle_triggers(
+		[ship_a, ship_b], {}, [war], Enums.NavalWeather.CLEAR, dice,
 	)
 	assert_eq(results.size(), 0)
 
@@ -441,8 +441,8 @@ func test_docked_ships_excluded_from_battle_triggers() -> void:
 	war.is_active = true
 
 	var dice := DiceEngine.new()
-	var results: Array[Dictionary] = DayOrchestrator._process_naval_battle_triggers(
-		[ship_a, ship_b] as Array[ShipData], {}, [war], Enums.NavalWeather.CLEAR, dice,
+	var results: Array = DayOrchestrator._process_naval_battle_triggers(
+		[ship_a, ship_b], {}, [war], Enums.NavalWeather.CLEAR, dice,
 	)
 	assert_eq(results.size(), 0)
 
@@ -468,8 +468,8 @@ func test_battle_mutations_update_ship_health() -> void:
 	var dice := DiceEngine.new()
 	dice.set_seed(42)
 
-	var ships: Array[ShipData] = [ship_a, ship_b]
-	var results: Array[Dictionary] = DayOrchestrator._process_naval_battle_triggers(
+	var ships: Array = [ship_a, ship_b]
+	var results: Array = DayOrchestrator._process_naval_battle_triggers(
 		ships, {}, [war], Enums.NavalWeather.CLEAR, dice,
 	)
 	assert_eq(results.size(), 1)
@@ -498,8 +498,8 @@ func test_battle_mutations_mark_destroyed_ships() -> void:
 	var dice := DiceEngine.new()
 	dice.set_seed(42)
 
-	var ships: Array[ShipData] = [ship_a, ship_b]
-	var results: Array[Dictionary] = DayOrchestrator._process_naval_battle_triggers(
+	var ships: Array = [ship_a, ship_b]
+	var results: Array = DayOrchestrator._process_naval_battle_triggers(
 		ships, {}, [war], Enums.NavalWeather.CLEAR, dice,
 	)
 	DayOrchestrator._apply_naval_battle_mutations(results, ships, {})
@@ -525,8 +525,8 @@ func test_battle_mutations_handle_captured_ships() -> void:
 	var dice := DiceEngine.new()
 	dice.set_seed(42)
 
-	var ships: Array[ShipData] = [ship_a, ship_b]
-	var results: Array[Dictionary] = DayOrchestrator._process_naval_battle_triggers(
+	var ships: Array = [ship_a, ship_b]
+	var results: Array = DayOrchestrator._process_naval_battle_triggers(
 		ships, {}, [war], Enums.NavalWeather.CLEAR, dice,
 	)
 	DayOrchestrator._apply_naval_battle_mutations(results, ships, {})
@@ -569,9 +569,9 @@ func test_captain_death_clears_ship_captain() -> void:
 	var dice := DiceEngine.new()
 	dice.set_seed(42)
 
-	var ships: Array[ShipData] = [ship_a, ship_b]
+	var ships: Array = [ship_a, ship_b]
 	var chars_by_id: Dictionary = {100: captain}
-	var results: Array[Dictionary] = DayOrchestrator._process_naval_battle_triggers(
+	var results: Array = DayOrchestrator._process_naval_battle_triggers(
 		ships, chars_by_id, [war], Enums.NavalWeather.CLEAR, dice,
 	)
 	DayOrchestrator._apply_naval_battle_mutations(results, ships, chars_by_id)
@@ -606,7 +606,7 @@ func test_naval_war_score_shift_on_battle() -> void:
 		"defender_states": [{}, {}],
 	}
 
-	var results: Array[Dictionary] = DayOrchestrator._process_naval_war_scores(
+	var results: Array = DayOrchestrator._process_naval_war_scores(
 		[battle_result], [war],
 	)
 	assert_eq(results.size(), 1)
@@ -632,7 +632,7 @@ func test_naval_war_score_no_shift_on_draw() -> void:
 		"defender_states": [{}],
 	}
 
-	var results: Array[Dictionary] = DayOrchestrator._process_naval_war_scores(
+	var results: Array = DayOrchestrator._process_naval_war_scores(
 		[battle_result], [war],
 	)
 	assert_eq(results.size(), 0)
@@ -656,7 +656,7 @@ func test_naval_battle_size_classification() -> void:
 		"defender_states": [{}],
 	}
 
-	var results: Array[Dictionary] = DayOrchestrator._process_naval_war_scores(
+	var results: Array = DayOrchestrator._process_naval_war_scores(
 		[small_battle], [war],
 	)
 	assert_eq(results[0]["event"], "minor_battle")
@@ -680,7 +680,7 @@ func test_naval_major_battle_classification() -> void:
 		"defender_states": [{}],
 	}
 
-	var results: Array[Dictionary] = DayOrchestrator._process_naval_war_scores(
+	var results: Array = DayOrchestrator._process_naval_war_scores(
 		[battle], [war],
 	)
 	assert_true(results[0]["event"] == "major_battle" or results[0]["event"] == "decisive_battle")
@@ -691,8 +691,8 @@ func test_naval_major_battle_classification() -> void:
 # =============================================================================
 
 func test_naval_battle_generates_topic() -> void:
-	var active_topics: Array[TopicData] = []
-	var next_topic_id: Array[int] = [100]
+	var active_topics: Array = []
+	var next_topic_id: Array = [100]
 
 	var battle_result: Dictionary = {
 		"attacker_clan": "Crane",
@@ -700,7 +700,7 @@ func test_naval_battle_generates_topic() -> void:
 		"victor": "attacker",
 	}
 
-	var topics: Array[TopicData] = DayOrchestrator._generate_naval_battle_topics(
+	var topics: Array = DayOrchestrator._generate_naval_battle_topics(
 		[battle_result], active_topics, next_topic_id, 10,
 	)
 	assert_eq(topics.size(), 1)
@@ -713,8 +713,8 @@ func test_naval_battle_generates_topic() -> void:
 
 
 func test_naval_battle_topic_added_to_active_topics() -> void:
-	var active_topics: Array[TopicData] = []
-	var next_topic_id: Array[int] = [100]
+	var active_topics: Array = []
+	var next_topic_id: Array = [100]
 
 	var battle_result: Dictionary = {
 		"attacker_clan": "Crane",
@@ -729,8 +729,8 @@ func test_naval_battle_topic_added_to_active_topics() -> void:
 
 
 func test_multiple_naval_battles_generate_multiple_topics() -> void:
-	var active_topics: Array[TopicData] = []
-	var next_topic_id: Array[int] = [100]
+	var active_topics: Array = []
+	var next_topic_id: Array = [100]
 
 	var battle_a: Dictionary = {
 		"attacker_clan": "Crane",
@@ -743,7 +743,7 @@ func test_multiple_naval_battles_generate_multiple_topics() -> void:
 		"victor": "defender",
 	}
 
-	var topics: Array[TopicData] = DayOrchestrator._generate_naval_battle_topics(
+	var topics: Array = DayOrchestrator._generate_naval_battle_topics(
 		[battle_a, battle_b], active_topics, next_topic_id, 10,
 	)
 	assert_eq(topics.size(), 2)
@@ -752,8 +752,8 @@ func test_multiple_naval_battles_generate_multiple_topics() -> void:
 
 
 func test_naval_topic_slug_format() -> void:
-	var active_topics: Array[TopicData] = []
-	var next_topic_id: Array[int] = [100]
+	var active_topics: Array = []
+	var next_topic_id: Array = [100]
 
 	var battle: Dictionary = {
 		"attacker_clan": "Crane",
@@ -761,7 +761,7 @@ func test_naval_topic_slug_format() -> void:
 		"victor": "attacker",
 	}
 
-	var topics: Array[TopicData] = DayOrchestrator._generate_naval_battle_topics(
+	var topics: Array = DayOrchestrator._generate_naval_battle_topics(
 		[battle], active_topics, next_topic_id, 42,
 	)
 	assert_eq(topics[0].slug, "naval_battle_crane_vs_mantis_d42")
@@ -783,7 +783,7 @@ func test_find_hostile_pairs_with_war() -> void:
 		"Mantis": [],
 	}
 
-	var pairs: Array[Array] = DayOrchestrator._find_hostile_naval_pairs(
+	var pairs: Array = DayOrchestrator._find_hostile_naval_pairs(
 		clans_at, [war],
 	)
 	assert_eq(pairs.size(), 1)
@@ -797,7 +797,7 @@ func test_find_hostile_pairs_no_war() -> void:
 		"Mantis": [],
 	}
 
-	var pairs: Array[Array] = DayOrchestrator._find_hostile_naval_pairs(clans_at, [])
+	var pairs: Array = DayOrchestrator._find_hostile_naval_pairs(clans_at, [])
 	assert_eq(pairs.size(), 0)
 
 
@@ -810,10 +810,9 @@ func test_find_hostile_pairs_same_clan() -> void:
 
 	var clans_at: Dictionary = {
 		"Crane": [],
-		"Crane": [],
 	}
 
-	var pairs: Array[Array] = DayOrchestrator._find_hostile_naval_pairs(
+	var pairs: Array = DayOrchestrator._find_hostile_naval_pairs(
 		clans_at, [war],
 	)
 	assert_eq(pairs.size(), 0)
@@ -880,7 +879,7 @@ func test_advance_day_with_moving_ship() -> void:
 	ship.movement_days_remaining = 2
 	ship.current_subtile_id = 1
 
-	var result: Dictionary = _run_advance_day([ship] as Array[ShipData])
+	var result: Dictionary = _run_advance_day([ship])
 	assert_eq(result["naval_movement_results"].size(), 1)
 	assert_false(result["naval_movement_results"][0]["arrived"])
 	assert_eq(ship.movement_days_remaining, 1)
@@ -907,6 +906,7 @@ func _make_ctx_with_naval(
 	ctx.has_naval_assets = has_naval_assets
 	ctx.is_coastal = true
 	ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
+	ctx.resource_stockpiles = {"rice": 100.0, "population_pu": 10.0}
 
 	if has_pirate_province:
 		var ps := NPCDataStructures.ProvinceStatus.new()
@@ -914,6 +914,8 @@ func _make_ctx_with_naval(
 		ps.stability = province_stability
 		ps.active_insurgency_id = 1
 		ps.insurgency_type = "PIRATE_FLEET"
+		ps.garrison_pu = 2
+		ps.confidence = 1
 		ctx.province_statuses.append(ps)
 
 	return ctx
@@ -966,8 +968,8 @@ func test_s57_18_1_deploy_army_when_pirate_fleet_and_has_ships() -> void:
 	)
 	assert_eq(need.need_type, "DEPLOY_ARMY",
 		"Lord with ships vs pirate fleet should DEPLOY_ARMY")
-	assert_eq(need.data.get("target_intent", ""), "SUPPRESS_PIRACY")
-	assert_eq(need.data.get("target_province_id", -1), 42)
+	assert_eq(need.target_intent, "SUPPRESS_PIRACY")
+	assert_eq(need.target_province_id, 42)
 
 
 func test_s57_18_1_request_aid_when_pirate_fleet_and_no_ships() -> void:
@@ -977,17 +979,18 @@ func test_s57_18_1_request_aid_when_pirate_fleet_and_no_ships() -> void:
 	)
 	assert_eq(need.need_type, "REQUEST_AID",
 		"Lord without ships vs pirate fleet should REQUEST_AID")
-	assert_eq(need.data.get("target_intent", ""), "naval_suppression")
+	assert_eq(need.target_intent, "naval_suppression")
 
 
 func test_s57_18_1_no_pirate_fleet_gives_patrol_province() -> void:
 	var ctx := _make_ctx_with_naval(true, false)
-	# Add a non-pirate unstable province
 	var ps := NPCDataStructures.ProvinceStatus.new()
 	ps.province_id = 99
 	ps.stability = 60.0
 	ps.active_insurgency_id = -1
 	ps.insurgency_type = ""
+	ps.garrison_pu = 2
+	ps.confidence = 1
 	ctx.province_statuses.append(ps)
 	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer._decompose_protect_dependents(
 		{}, ctx,
@@ -1012,9 +1015,9 @@ func test_s57_18_2_write_letter_when_no_ships_for_pirate_patrol() -> void:
 	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer._decompose_defend_territory(
 		{}, ctx,
 	)
-	assert_eq(need.need_type, "WRITE_LETTER",
-		"Lord without ships cannot patrol pirate waters — should WRITE_LETTER")
-	assert_eq(need.data.get("target_intent", ""), "report_piracy")
+	assert_eq(need.need_type, "SEND_LETTER",
+		"Lord without ships cannot patrol pirate waters — should SEND_LETTER")
+	assert_eq(need.target_intent, "report_piracy")
 
 
 func test_province_has_pirate_fleet_helper_true_case() -> void:
@@ -1042,7 +1045,7 @@ func test_advance_day_naval_battle_with_war() -> void:
 	war.war_score_b = 50
 
 	var result: Dictionary = _run_advance_day(
-		[ship_a, ship_b] as Array[ShipData],
+		[ship_a, ship_b],
 		[war],
 	)
 

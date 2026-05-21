@@ -90,12 +90,12 @@ static func add_contact(
 static func process_probe_result(
 	prober: L5RCharacterData,
 	target_id: int,
-	action_log: Array[Dictionary],
+	action_log: Array,
 	current_season: int,
 	quality: int,
-) -> Array[KnowledgeEntry]:
-	var discovered: Array[KnowledgeEntry] = []
-	var target_actions: Array[Dictionary] = _get_target_actions(target_id, action_log)
+) -> Array:
+	var discovered: Array = []
+	var target_actions: Array = _get_target_actions(target_id, action_log)
 
 	var max_entries: int = clampi(quality, 1, 5)
 	var count: int = 0
@@ -122,8 +122,8 @@ static func process_probe_result(
 	return discovered
 
 
-static func _get_target_actions(target_id: int, action_log: Array[Dictionary]) -> Array[Dictionary]:
-	var actions: Array[Dictionary] = []
+static func _get_target_actions(target_id: int, action_log: Array) -> Array:
+	var actions: Array = []
 	for entry: Dictionary in action_log:
 		if entry.get("character_id", -1) == target_id:
 			actions.append(entry)
@@ -134,14 +134,14 @@ static func _get_target_actions(target_id: int, action_log: Array[Dictionary]) -
 
 static func process_observe_court(
 	observer: L5RCharacterData,
-	attendees: Array[L5RCharacterData],
+	attendees: Array,
 	quality: int,
 	current_season: int,
 	clan_baselines: Dictionary = {},
 	family_baselines: Dictionary = {},
-) -> Array[KnowledgeEntry]:
-	var discovered: Array[KnowledgeEntry] = []
-	var unknown: Array[L5RCharacterData] = []
+) -> Array:
+	var discovered: Array = []
+	var unknown: Array = []
 	for a: L5RCharacterData in attendees:
 		if a.character_id != observer.character_id and a.character_id not in observer.met_characters:
 			unknown.append(a)
@@ -215,13 +215,13 @@ static func transfer_objective_knowledge(
 	recipient: L5RCharacterData,
 	objective: Dictionary,
 	current_season: int,
-	province_statuses: Array[Variant] = [],
+	province_statuses: Array = [],
 	chars_by_id: Dictionary = {},
 	clan_baselines: Dictionary = {},
 	family_baselines: Dictionary = {},
-) -> Array[KnowledgeEntry]:
-	var transferred: Array[KnowledgeEntry] = []
-	var target_tags: Array[String] = _extract_target_tags(objective)
+) -> Array:
+	var transferred: Array = []
+	var target_tags: Array = _extract_target_tags(objective)
 
 	for entry: KnowledgeEntry in assigner.knowledge_pool:
 		if _entry_matches_tags(entry, target_tags):
@@ -297,8 +297,8 @@ static func _make_crisis_entry(
 	)
 
 
-static func _extract_target_tags(objective: Dictionary) -> Array[String]:
-	var tags: Array[String] = []
+static func _extract_target_tags(objective: Dictionary) -> Array:
+	var tags: Array = []
 	if objective.has("target_province_id"):
 		tags.append("province:" + str(objective["target_province_id"]))
 	if objective.has("target_clan"):
@@ -308,7 +308,7 @@ static func _extract_target_tags(objective: Dictionary) -> Array[String]:
 	return tags
 
 
-static func _entry_matches_tags(entry: KnowledgeEntry, tags: Array[String]) -> bool:
+static func _entry_matches_tags(entry: KnowledgeEntry, tags: Array) -> bool:
 	var data: Dictionary = entry.data
 	for tag: String in tags:
 		var parts: PackedStringArray = tag.split(":")
@@ -366,9 +366,9 @@ static func _compute_confidence(seasons_old: int) -> int:
 static func get_known_contacts_for_clan(
 	character: L5RCharacterData,
 	clan_id: String,
-) -> Array[int]:
-	var contacts: Array[int] = character.known_contacts_by_clan.get(clan_id, [])
-	var result: Array[int] = []
+) -> Array:
+	var contacts: Array = character.known_contacts_by_clan.get(clan_id, [])
+	var result: Array = []
 	for c: int in contacts:
 		result.append(c)
 	return result
@@ -385,8 +385,8 @@ static func has_fresh_intel_on(
 	return false
 
 
-static func get_stale_entries(character: L5RCharacterData) -> Array[KnowledgeEntry]:
-	var stale: Array[KnowledgeEntry] = []
+static func get_stale_entries(character: L5RCharacterData) -> Array:
+	var stale: Array = []
 	for entry: KnowledgeEntry in character.knowledge_pool:
 		if entry.confidence == Enums.KnowledgeConfidence.STALE:
 			stale.append(entry)

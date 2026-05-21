@@ -100,7 +100,7 @@ func test_travel_tick_decrements_days() -> void:
 	c.travel_destination = "town_b"
 	c.travel_origin = "town_a"
 	c.travel_days_remaining = 3
-	var chars: Array[L5RCharacterData] = [c]
+	var chars: Array = [c]
 	TravelSystem.process_travel_tick(chars)
 	assert_eq(c.travel_days_remaining, 2)
 
@@ -110,8 +110,8 @@ func test_travel_tick_arrival() -> void:
 	c.travel_destination = "town_b"
 	c.travel_origin = "town_a"
 	c.travel_days_remaining = 1
-	var chars: Array[L5RCharacterData] = [c]
-	var arrivals: Array[Dictionary] = TravelSystem.process_travel_tick(chars)
+	var chars: Array = [c]
+	var arrivals: Array = TravelSystem.process_travel_tick(chars)
 	assert_eq(arrivals.size(), 1)
 	assert_eq(arrivals[0]["character_id"], 1)
 	assert_eq(arrivals[0]["destination"], "town_b")
@@ -123,8 +123,8 @@ func test_travel_tick_arrival() -> void:
 
 func test_travel_tick_no_travelers() -> void:
 	var c := _make_character(1, "town_a")
-	var chars: Array[L5RCharacterData] = [c]
-	var arrivals: Array[Dictionary] = TravelSystem.process_travel_tick(chars)
+	var chars: Array = [c]
+	var arrivals: Array = TravelSystem.process_travel_tick(chars)
 	assert_eq(arrivals.size(), 0)
 
 
@@ -137,8 +137,8 @@ func test_travel_tick_multiple_characters() -> void:
 	c2.travel_destination = "town_d"
 	c2.travel_origin = "town_c"
 	c2.travel_days_remaining = 3
-	var chars: Array[L5RCharacterData] = [c1, c2]
-	var arrivals: Array[Dictionary] = TravelSystem.process_travel_tick(chars)
+	var chars: Array = [c1, c2]
+	var arrivals: Array = TravelSystem.process_travel_tick(chars)
 	assert_eq(arrivals.size(), 1)
 	assert_eq(arrivals[0]["character_id"], 1)
 	assert_eq(c2.travel_days_remaining, 2)
@@ -321,7 +321,7 @@ func test_orchestrator_processes_travel_arrivals() -> void:
 
 	var time := TimeSystem.new()
 	var dice := DiceEngine.new()
-	var chars: Array[L5RCharacterData] = [c]
+	var chars: Array = [c]
 	var chars_by_id: Dictionary = {1: c}
 	var result: Dictionary = DayOrchestrator.advance_day(
 		time, chars, chars_by_id, {}, {}, {}, {},

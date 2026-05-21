@@ -7,4 +7,4 @@ extends Resource
 @export var iron_stockpile: float = 0.0
 @export var arms_stockpile: float = 0.0
 @export var champion_id: int = -1
-@export var province_ids: Array[int] = []
+@export var province_ids: Array = []

@@ -157,7 +157,7 @@ func test_harvest_recovers_next_year() -> void:
 
 
 func test_generate_harvest_topic() -> void:
-	var next_id: Array[int] = [50]
+	var next_id: Array = [50]
 	var topic: TopicData = StarvationWarfare.generate_harvest_topic("Lion", 5, next_id, 100)
 	assert_eq(topic.topic_id, 50)
 	assert_eq(next_id[0], 51)
@@ -245,7 +245,7 @@ func test_get_blockaded_routes() -> void:
 	var r3: TradeRouteData = _make_trade_route(3)
 	r3.is_disrupted = true
 	r3.disruption_reason = "blockade_Crab"
-	var result: Array[TradeRouteData] = StarvationWarfare.get_blockaded_routes(
+	var result: Array = StarvationWarfare.get_blockaded_routes(
 		[r1, r2, r3], "Crab",
 	)
 	assert_eq(result.size(), 2)
@@ -257,7 +257,7 @@ func test_seasonal_blockade_honor_cost() -> void:
 	route.disruption_reason = "blockade_Crab"
 	var lord: L5RCharacterData = _make_character(1, "Crab", 6.0)
 	var chars: Dictionary = {1: lord}
-	var results: Array[Dictionary] = StarvationWarfare.process_seasonal_blockade_honor(
+	var results: Array = StarvationWarfare.process_seasonal_blockade_honor(
 		[route], chars,
 	)
 	assert_eq(results.size(), 1)
@@ -274,7 +274,7 @@ func test_seasonal_blockade_honor_stacks_per_route() -> void:
 	r2.disruption_reason = "blockade_Crab"
 	var lord: L5RCharacterData = _make_character(1, "Crab", 6.0)
 	var chars: Dictionary = {1: lord}
-	var results: Array[Dictionary] = StarvationWarfare.process_seasonal_blockade_honor(
+	var results: Array = StarvationWarfare.process_seasonal_blockade_honor(
 		[r1, r2], chars,
 	)
 	assert_eq(results.size(), 1)
@@ -284,7 +284,7 @@ func test_seasonal_blockade_honor_stacks_per_route() -> void:
 
 func test_seasonal_blockade_no_results_when_no_blockades() -> void:
 	var route: TradeRouteData = _make_trade_route(1)
-	var results: Array[Dictionary] = StarvationWarfare.process_seasonal_blockade_honor(
+	var results: Array = StarvationWarfare.process_seasonal_blockade_honor(
 		[route], {},
 	)
 	assert_eq(results.size(), 0)
@@ -299,8 +299,8 @@ func test_orchestrator_harvest_destruction_creates_topic() -> void:
 	var other_char: L5RCharacterData = _make_character(3, "Dragon")
 	var attacker: L5RCharacterData = _make_character(1, "Lion")
 	var chars_by_id: Dictionary = {1: attacker, 2: target_char, 3: other_char}
-	var topics: Array[TopicData] = []
-	var next_topic_id: Array[int] = [100]
+	var topics: Array = []
+	var next_topic_id: Array = [100]
 	var season_meta: Dictionary = {}
 
 	var applied: Array = [{
@@ -316,7 +316,7 @@ func test_orchestrator_harvest_destruction_creates_topic() -> void:
 		},
 	}]
 
-	var results: Array[Dictionary] = DayOrchestrator._process_starvation_warfare_effects(
+	var results: Array = DayOrchestrator._process_starvation_warfare_effects(
 		applied, chars_by_id, [], topics, next_topic_id, 100, season_meta, [], [1],
 	)
 	assert_eq(results.size(), 1)
@@ -331,8 +331,8 @@ func test_orchestrator_harvest_applies_disposition() -> void:
 	var other_char: L5RCharacterData = _make_character(3, "Dragon")
 	var attacker: L5RCharacterData = _make_character(1, "Lion")
 	var chars_by_id: Dictionary = {1: attacker, 2: target_char, 3: other_char}
-	var topics: Array[TopicData] = []
-	var next_topic_id: Array[int] = [100]
+	var topics: Array = []
+	var next_topic_id: Array = [100]
 	var season_meta: Dictionary = {}
 
 	var applied: Array = [{
@@ -365,10 +365,10 @@ func test_orchestrator_harvest_applies_disposition() -> void:
 
 func test_orchestrator_blockade_disrupts_route_and_creates_war() -> void:
 	var route: TradeRouteData = _make_trade_route(10, 1, 2)
-	var topics: Array[TopicData] = []
-	var next_topic_id: Array[int] = [100]
-	var wars: Array[WarData] = []
-	var next_war_id: Array[int] = [1]
+	var topics: Array = []
+	var next_topic_id: Array = [100]
+	var wars: Array = []
+	var next_war_id: Array = [1]
 
 	var applied: Array = [{
 		"effects": {
@@ -381,7 +381,7 @@ func test_orchestrator_blockade_disrupts_route_and_creates_war() -> void:
 		},
 	}]
 
-	var results: Array[Dictionary] = DayOrchestrator._process_starvation_warfare_effects(
+	var results: Array = DayOrchestrator._process_starvation_warfare_effects(
 		applied, {}, [route], topics, next_topic_id, 50, {}, wars, next_war_id,
 	)
 	assert_eq(results.size(), 1)
@@ -400,8 +400,8 @@ func test_orchestrator_blockade_no_duplicate_war() -> void:
 	existing_war.clan_a = "Crab"
 	existing_war.clan_b = "Crane"
 	existing_war.is_active = true
-	var wars: Array[WarData] = [existing_war]
-	var next_war_id: Array[int] = [2]
+	var wars: Array = [existing_war]
+	var next_war_id: Array = [2]
 
 	var applied: Array = [{
 		"effects": {
@@ -414,7 +414,7 @@ func test_orchestrator_blockade_no_duplicate_war() -> void:
 		},
 	}]
 
-	var results: Array[Dictionary] = DayOrchestrator._process_starvation_warfare_effects(
+	var results: Array = DayOrchestrator._process_starvation_warfare_effects(
 		applied, {}, [route], [], [100], 50, {}, wars, next_war_id,
 	)
 	assert_eq(wars.size(), 1, "No duplicate war")

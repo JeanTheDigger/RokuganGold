@@ -36,9 +36,9 @@ func _make_character(honor: float = 5.0) -> L5RCharacterData:
 # -- Surplus Calculation -------------------------------------------------------
 
 func test_surplus_positive():
-	var s := _make_settlement(1, 1, 10.0, 1000)
+	var s := _make_settlement(1, 1, 10.0, 4)
 	var surplus: float = RiceMarketSystem.compute_surplus(s, 4)
-	# need = 1000 * 0.001 * 4 = 4.0
+	# need = 4 * 0.25 * 4 = 4.0
 	assert_almost_eq(surplus, 6.0, 0.01)
 
 
@@ -135,13 +135,13 @@ func test_cannot_sell_to_blood_enemy():
 
 func test_resolve_simple_purchase():
 	var posting := RiceMarketSystem.create_posting(1, 10, 5.0, 1.0)
-	var postings: Array[RicePostingData] = [posting]
-	var orders: Array[Dictionary] = [
+	var postings: Array = [posting]
+	var orders: Array = [
 		{"lord_id": 2, "quantity": 3.0, "koku_budget": 5.0},
 	]
 	var lookup: Callable = func(_a: int, _b: int) -> int: return 0
 
-	var results: Array[Dictionary] = RiceMarketSystem.resolve_purchases(postings, orders, lookup)
+	var results: Array = RiceMarketSystem.resolve_purchases(postings, orders, lookup)
 	assert_eq(results.size(), 1)
 	assert_almost_eq(results[0]["quantity"], 3.0, 0.01)
 	assert_almost_eq(results[0]["total_cost"], 3.0, 0.01)
@@ -149,8 +149,8 @@ func test_resolve_simple_purchase():
 
 func test_resolve_priority_ordering():
 	var posting := RiceMarketSystem.create_posting(1, 10, 3.0, 1.0)
-	var postings: Array[RicePostingData] = [posting]
-	var orders: Array[Dictionary] = [
+	var postings: Array = [posting]
+	var orders: Array = [
 		{"lord_id": 2, "quantity": 2.0, "koku_budget": 5.0},
 		{"lord_id": 3, "quantity": 2.0, "koku_budget": 5.0},
 	]
@@ -160,7 +160,7 @@ func test_resolve_priority_ordering():
 			return 50
 		return -20
 
-	var results: Array[Dictionary] = RiceMarketSystem.resolve_purchases(postings, orders, lookup)
+	var results: Array = RiceMarketSystem.resolve_purchases(postings, orders, lookup)
 	assert_eq(results.size(), 2)
 	assert_eq(results[0]["buyer_id"], 3, "Friend should buy first")
 	assert_almost_eq(results[0]["quantity"], 2.0, 0.01)
@@ -170,24 +170,24 @@ func test_resolve_priority_ordering():
 
 func test_resolve_budget_limited():
 	var posting := RiceMarketSystem.create_posting(1, 10, 5.0, 2.0)
-	var postings: Array[RicePostingData] = [posting]
-	var orders: Array[Dictionary] = [
+	var postings: Array = [posting]
+	var orders: Array = [
 		{"lord_id": 2, "quantity": 5.0, "koku_budget": 4.0},
 	]
 	var lookup: Callable = func(_a: int, _b: int) -> int: return 0
-	var results: Array[Dictionary] = RiceMarketSystem.resolve_purchases(postings, orders, lookup)
+	var results: Array = RiceMarketSystem.resolve_purchases(postings, orders, lookup)
 	assert_eq(results.size(), 1)
 	assert_almost_eq(results[0]["quantity"], 2.0, 0.01, "Can only afford 2 units at 2 koku each")
 
 
 func test_resolve_seller_skips_self():
 	var posting := RiceMarketSystem.create_posting(1, 10, 5.0, 1.0)
-	var postings: Array[RicePostingData] = [posting]
-	var orders: Array[Dictionary] = [
+	var postings: Array = [posting]
+	var orders: Array = [
 		{"lord_id": 1, "quantity": 3.0, "koku_budget": 5.0},
 	]
 	var lookup: Callable = func(_a: int, _b: int) -> int: return 50
-	var results: Array[Dictionary] = RiceMarketSystem.resolve_purchases(postings, orders, lookup)
+	var results: Array = RiceMarketSystem.resolve_purchases(postings, orders, lookup)
 	assert_eq(results.size(), 0, "Cannot buy from yourself")
 
 
@@ -260,7 +260,7 @@ func test_share_rice_not_needed():
 
 func test_trade_route_koku_bonus():
 	var p := _make_province(1)
-	var routes: Array[TradeRouteData] = [
+	var routes: Array = [
 		_make_route(1, 1, 2),
 		_make_route(2, 1, 3),
 	]
@@ -272,7 +272,7 @@ func test_trade_route_disrupted_no_bonus():
 	var p := _make_province(1)
 	var r := _make_route(1, 1, 2)
 	r.is_disrupted = true
-	var routes: Array[TradeRouteData] = [r]
+	var routes: Array = [r]
 	var koku: float = RiceMarketSystem.compute_trade_route_koku(p, routes)
 	assert_almost_eq(koku, 0.0, 0.01)
 
@@ -296,8 +296,8 @@ func test_get_active_routes():
 	var r2 := _make_route(2, 1, 3)
 	r2.is_disrupted = true
 	var r3 := _make_route(3, 2, 3)
-	var routes: Array[TradeRouteData] = [r1, r2, r3]
-	var active: Array[TradeRouteData] = RiceMarketSystem.get_active_routes_for_province(1, routes)
+	var routes: Array = [r1, r2, r3]
+	var active: Array = RiceMarketSystem.get_active_routes_for_province(1, routes)
 	assert_eq(active.size(), 1)
 	assert_eq(active[0].route_id, 1)
 

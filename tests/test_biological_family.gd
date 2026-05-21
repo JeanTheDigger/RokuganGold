@@ -176,7 +176,7 @@ func test_get_grandparent_ids_dedupe() -> void:
 	p2.father_id = 100   # both parents share a father (unusual, but tests dedupe)
 	child.mother_id = 2
 	child.father_id = 1
-	var grandparents: Array[int] = BiologicalFamily.get_grandparent_ids(child, _chars)
+	var grandparents: Array = BiologicalFamily.get_grandparent_ids(child, _chars)
 	assert_eq(grandparents.size(), 1)
 	assert_eq(grandparents[0], 100)
 
@@ -343,7 +343,7 @@ func test_get_parent_ids_returns_both_when_set() -> void:
 	var c: L5RCharacterData = _make(3)
 	c.mother_id = 2
 	c.father_id = 1
-	var parents: Array[int] = BiologicalFamily.get_parent_ids(c)
+	var parents: Array = BiologicalFamily.get_parent_ids(c)
 	assert_eq(parents.size(), 2)
 	assert_true(parents.has(1))
 	assert_true(parents.has(2))
@@ -353,7 +353,7 @@ func test_get_parent_ids_skips_unset_sentinels() -> void:
 	var c: L5RCharacterData = _make(3)
 	c.mother_id = -1
 	c.father_id = 1
-	var parents: Array[int] = BiologicalFamily.get_parent_ids(c)
+	var parents: Array = BiologicalFamily.get_parent_ids(c)
 	assert_eq(parents.size(), 1)
 	assert_eq(parents[0], 1)
 
@@ -364,7 +364,7 @@ func test_get_aunt_uncle_ids_excludes_self_parent() -> void:
 	var child: L5RCharacterData = _make(3)
 	father.sibling_ids = [5]
 	child.father_id = 1
-	var aunts_uncles: Array[int] = BiologicalFamily.get_aunt_uncle_ids(child, _chars)
+	var aunts_uncles: Array = BiologicalFamily.get_aunt_uncle_ids(child, _chars)
 	assert_true(aunts_uncles.has(5))
 	assert_false(aunts_uncles.has(1))
 

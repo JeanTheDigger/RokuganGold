@@ -28,7 +28,7 @@ func _make_settlement(sid: int, pid: int, koku: float, town_pu: int = 0) -> Sett
 	return s
 
 
-func _make_clan(name: String, pids: Array[int]) -> ClanData:
+func _make_clan(name: String, pids: Array) -> ClanData:
 	var cd := ClanData.new()
 	cd.clan_name = name
 	cd.province_ids = pids
@@ -70,7 +70,7 @@ func test_tier_for_city_daimyo() -> void:
 func test_pool_upward_drains_settlement_koku() -> void:
 	var s1 := _make_settlement(1, 10, 6.0)
 	var clan := _make_clan("Crane", [10])
-	var settlements: Array[SettlementData] = [s1]
+	var settlements: Array = [s1]
 	var clans: Dictionary = {"Crane": clan}
 	var result: Dictionary = KokuCascadeSystem._pool_upward(settlements, clans, 3)
 	# Monthly share = 6.0 / 3 = 2.0
@@ -82,7 +82,7 @@ func test_pool_upward_multiple_settlements() -> void:
 	var s1 := _make_settlement(1, 10, 9.0)
 	var s2 := _make_settlement(2, 11, 3.0)
 	var clan := _make_clan("Lion", [10, 11])
-	var settlements: Array[SettlementData] = [s1, s2]
+	var settlements: Array = [s1, s2]
 	var clans: Dictionary = {"Lion": clan}
 	var result: Dictionary = KokuCascadeSystem._pool_upward(settlements, clans, 3)
 	# (9 + 3) / 3 = 4.0
@@ -94,7 +94,7 @@ func test_pool_upward_different_clans() -> void:
 	var s2 := _make_settlement(2, 20, 12.0)
 	var crane := _make_clan("Crane", [10])
 	var crab := _make_clan("Crab", [20])
-	var settlements: Array[SettlementData] = [s1, s2]
+	var settlements: Array = [s1, s2]
 	var clans: Dictionary = {"Crane": crane, "Crab": crab}
 	var result: Dictionary = KokuCascadeSystem._pool_upward(settlements, clans, 3)
 	assert_almost_eq(result["Crane"], 2.0, 0.001)
@@ -105,7 +105,7 @@ func test_pool_upward_different_clans() -> void:
 
 func test_champion_retains_40_percent() -> void:
 	var champ := _make_character(1, "Crane", 7.0)
-	var chars: Array[L5RCharacterData] = [champ]
+	var chars: Array = [champ]
 	var by_id: Dictionary = {1: champ}
 	var clan_pools: Dictionary = {"Crane": 10.0}
 	var result: Dictionary = KokuCascadeSystem._cascade_downward(clan_pools, chars, by_id)
@@ -117,7 +117,7 @@ func test_champion_retains_40_percent() -> void:
 
 func test_generous_champion_retains_less() -> void:
 	var champ := _make_character(1, "Crane", 7.0, -1, Enums.BushidoVirtue.JIN)
-	var chars: Array[L5RCharacterData] = [champ]
+	var chars: Array = [champ]
 	var by_id: Dictionary = {1: champ}
 	var clan_pools: Dictionary = {"Crane": 10.0}
 	KokuCascadeSystem._cascade_downward(clan_pools, chars, by_id)
@@ -131,7 +131,7 @@ func test_miserly_champion_retains_more() -> void:
 		1, "Crane", 7.0, -1,
 		Enums.BushidoVirtue.NONE, Enums.ShouridoVirtue.KYORYOKU,
 	)
-	var chars: Array[L5RCharacterData] = [champ]
+	var chars: Array = [champ]
 	var by_id: Dictionary = {1: champ}
 	var clan_pools: Dictionary = {"Crane": 10.0}
 	KokuCascadeSystem._cascade_downward(clan_pools, chars, by_id)
@@ -143,7 +143,7 @@ func test_miserly_champion_retains_more() -> void:
 func test_cascade_two_tiers() -> void:
 	var champ := _make_character(1, "Crane", 7.0)
 	var family := _make_character(2, "Crane", 6.0, 1)
-	var chars: Array[L5RCharacterData] = [champ, family]
+	var chars: Array = [champ, family]
 	var by_id: Dictionary = {1: champ, 2: family}
 	var clan_pools: Dictionary = {"Crane": 10.0}
 	var result: Dictionary = KokuCascadeSystem._cascade_downward(clan_pools, chars, by_id)
@@ -159,7 +159,7 @@ func test_cascade_full_chain() -> void:
 	var family := _make_character(2, "Crane", 6.0, 1)
 	var provincial := _make_character(3, "Crane", 5.0, 2)
 	var local := _make_character(4, "Crane", 4.0, 3)
-	var chars: Array[L5RCharacterData] = [champ, family, provincial, local]
+	var chars: Array = [champ, family, provincial, local]
 	var by_id: Dictionary = {1: champ, 2: family, 3: provincial, 4: local}
 	var clan_pools: Dictionary = {"Crane": 10.0}
 	var result: Dictionary = KokuCascadeSystem._cascade_downward(clan_pools, chars, by_id)
@@ -178,7 +178,7 @@ func test_cascade_full_chain() -> void:
 func test_retainer_receives_stipend_from_local_lord() -> void:
 	var local := _make_character(1, "Crane", 4.0)
 	var retainer := _make_character(2, "Crane", 2.0, 1)
-	var chars: Array[L5RCharacterData] = [local, retainer]
+	var chars: Array = [local, retainer]
 	var by_id: Dictionary = {1: local, 2: retainer}
 	var lord_pools: Dictionary = {
 		1: {"tier": "local_daimyo", "retained": 0.5, "passed_down": 3.0},
@@ -195,7 +195,7 @@ func test_retainer_receives_stipend_from_local_lord() -> void:
 func test_retainer_of_champion_gets_five_koku() -> void:
 	var champ := _make_character(1, "Crane", 7.0)
 	var retainer := _make_character(2, "Crane", 2.0, 1)
-	var chars: Array[L5RCharacterData] = [champ, retainer]
+	var chars: Array = [champ, retainer]
 	var by_id: Dictionary = {1: champ, 2: retainer}
 	var lord_pools: Dictionary = {
 		1: {"tier": "clan_champion", "retained": 4.0, "passed_down": 6.0},
@@ -210,7 +210,7 @@ func test_reduced_stipend_from_empty_pool() -> void:
 	var local := _make_character(1, "Crane", 4.0)
 	var r1 := _make_character(2, "Crane", 2.0, 1)
 	var r2 := _make_character(3, "Crane", 2.0, 1)
-	var chars: Array[L5RCharacterData] = [local, r1, r2]
+	var chars: Array = [local, r1, r2]
 	var by_id: Dictionary = {1: local, 2: r1, 3: r2}
 	var lord_pools: Dictionary = {
 		1: {"tier": "local_daimyo", "retained": 0.0, "passed_down": 0.0},
@@ -225,7 +225,7 @@ func test_reduced_stipend_from_empty_pool() -> void:
 func test_partial_stipend_reduced_consequence() -> void:
 	var local := _make_character(1, "Crane", 4.0)
 	var retainer := _make_character(2, "Crane", 2.0, 1)
-	var chars: Array[L5RCharacterData] = [local, retainer]
+	var chars: Array = [local, retainer]
 	var by_id: Dictionary = {1: local, 2: retainer}
 	# Pool = 0.001 koku units * 500 = 0.5 individual koku
 	# Needed: 1.0 per retainer. Ratio = 0.5 → severely reduced
@@ -264,7 +264,7 @@ func test_consequence_no_stipend() -> void:
 func test_months_without_stipend_increments_on_zero_payment() -> void:
 	var local := _make_character(1, "Crane", 4.0)
 	var retainer := _make_character(2, "Crane", 2.0, 1)
-	var chars: Array[L5RCharacterData] = [local, retainer]
+	var chars: Array = [local, retainer]
 	var by_id: Dictionary = {1: local, 2: retainer}
 	var lord_pools: Dictionary = {
 		1: {"tier": "local_daimyo", "retained": 0.0, "passed_down": 0.0},
@@ -279,7 +279,7 @@ func test_months_without_stipend_resets_on_any_payment() -> void:
 	var local := _make_character(1, "Crane", 4.0)
 	var retainer := _make_character(2, "Crane", 2.0, 1)
 	retainer.months_without_stipend = 2
-	var chars: Array[L5RCharacterData] = [local, retainer]
+	var chars: Array = [local, retainer]
 	var by_id: Dictionary = {1: local, 2: retainer}
 	var lord_pools: Dictionary = {
 		1: {"tier": "local_daimyo", "retained": 0.5, "passed_down": 3.0},
@@ -292,7 +292,7 @@ func test_severely_reduced_resets_counter() -> void:
 	var local := _make_character(1, "Crane", 4.0)
 	var retainer := _make_character(2, "Crane", 2.0, 1)
 	retainer.months_without_stipend = 2
-	var chars: Array[L5RCharacterData] = [local, retainer]
+	var chars: Array = [local, retainer]
 	var by_id: Dictionary = {1: local, 2: retainer}
 	# Pool = 0.0002 * 500 = 0.1 koku. Need 1.0. Ratio = 0.1 (severely reduced but nonzero)
 	var lord_pools: Dictionary = {
@@ -306,7 +306,7 @@ func test_crisis_flag_after_three_months() -> void:
 	var local := _make_character(1, "Crane", 4.0)
 	var retainer := _make_character(2, "Crane", 2.0, 1)
 	retainer.months_without_stipend = 2
-	var chars: Array[L5RCharacterData] = [local, retainer]
+	var chars: Array = [local, retainer]
 	var by_id: Dictionary = {1: local, 2: retainer}
 	var lord_pools: Dictionary = {
 		1: {"tier": "local_daimyo", "retained": 0.0, "passed_down": 0.0},
@@ -322,7 +322,7 @@ func test_no_crisis_at_two_months() -> void:
 	var local := _make_character(1, "Crane", 4.0)
 	var retainer := _make_character(2, "Crane", 2.0, 1)
 	retainer.months_without_stipend = 1
-	var chars: Array[L5RCharacterData] = [local, retainer]
+	var chars: Array = [local, retainer]
 	var by_id: Dictionary = {1: local, 2: retainer}
 	var lord_pools: Dictionary = {
 		1: {"tier": "local_daimyo", "retained": 0.0, "passed_down": 0.0},
@@ -338,7 +338,7 @@ func test_crisis_persists_beyond_three() -> void:
 	var local := _make_character(1, "Crane", 4.0)
 	var retainer := _make_character(2, "Crane", 2.0, 1)
 	retainer.months_without_stipend = 5
-	var chars: Array[L5RCharacterData] = [local, retainer]
+	var chars: Array = [local, retainer]
 	var by_id: Dictionary = {1: local, 2: retainer}
 	var lord_pools: Dictionary = {
 		1: {"tier": "local_daimyo", "retained": 0.0, "passed_down": 0.0},
@@ -355,7 +355,7 @@ func test_crisis_persists_beyond_three() -> void:
 func test_reduced_stipend_generates_topic() -> void:
 	var local := _make_character(1, "Crane", 4.0)
 	var retainer := _make_character(2, "Crane", 2.0, 1)
-	var chars: Array[L5RCharacterData] = [local, retainer]
+	var chars: Array = [local, retainer]
 	var by_id: Dictionary = {1: local, 2: retainer}
 	# Pool = 0.0012 * 500 = 0.6. Need 1.0. Ratio = 0.6 → reduced (50-75%)
 	var lord_pools: Dictionary = {
@@ -372,7 +372,7 @@ func test_reduced_stipend_generates_topic() -> void:
 func test_full_stipend_no_topic() -> void:
 	var local := _make_character(1, "Crane", 4.0)
 	var retainer := _make_character(2, "Crane", 2.0, 1)
-	var chars: Array[L5RCharacterData] = [local, retainer]
+	var chars: Array = [local, retainer]
 	var by_id: Dictionary = {1: local, 2: retainer}
 	var lord_pools: Dictionary = {
 		1: {"tier": "local_daimyo", "retained": 0.5, "passed_down": 3.0},
@@ -386,7 +386,7 @@ func test_full_stipend_no_topic() -> void:
 func test_severely_reduced_no_topic() -> void:
 	var local := _make_character(1, "Crane", 4.0)
 	var retainer := _make_character(2, "Crane", 2.0, 1)
-	var chars: Array[L5RCharacterData] = [local, retainer]
+	var chars: Array = [local, retainer]
 	var by_id: Dictionary = {1: local, 2: retainer}
 	# Pool = 0.0004 * 500 = 0.2. Need 1.0. Ratio = 0.2 → severely reduced (<50%)
 	var lord_pools: Dictionary = {
@@ -403,7 +403,7 @@ func test_crisis_month_generates_topic() -> void:
 	var local := _make_character(1, "Crane", 4.0)
 	var retainer := _make_character(2, "Crane", 2.0, 1)
 	retainer.months_without_stipend = 2
-	var chars: Array[L5RCharacterData] = [local, retainer]
+	var chars: Array = [local, retainer]
 	var by_id: Dictionary = {1: local, 2: retainer}
 	var lord_pools: Dictionary = {
 		1: {"tier": "local_daimyo", "retained": 0.0, "passed_down": 0.0},
@@ -419,7 +419,7 @@ func test_crisis_beyond_three_no_repeat_topic() -> void:
 	var local := _make_character(1, "Crane", 4.0)
 	var retainer := _make_character(2, "Crane", 2.0, 1)
 	retainer.months_without_stipend = 3
-	var chars: Array[L5RCharacterData] = [local, retainer]
+	var chars: Array = [local, retainer]
 	var by_id: Dictionary = {1: local, 2: retainer}
 	var lord_pools: Dictionary = {
 		1: {"tier": "local_daimyo", "retained": 0.0, "passed_down": 0.0},
@@ -440,9 +440,9 @@ func test_full_flow_single_clan() -> void:
 	var retainer := _make_character(3, "Crane", 2.0, 2)
 	var settlement := _make_settlement(100, 10, 12.0)
 	var clan := _make_clan("Crane", [10])
-	var chars: Array[L5RCharacterData] = [champ, local, retainer]
+	var chars: Array = [champ, local, retainer]
 	var by_id: Dictionary = {1: champ, 2: local, 3: retainer}
-	var settlements: Array[SettlementData] = [settlement]
+	var settlements: Array = [settlement]
 	var clans: Dictionary = {"Crane": clan}
 	var result: Dictionary = KokuCascadeSystem.process_monthly_koku_flow(
 		chars, by_id, settlements, clans, 3,
@@ -460,7 +460,7 @@ func test_indirect_retainer_gets_point_six_koku() -> void:
 	var local := _make_character(1, "Crane", 4.0)
 	var samurai := _make_character(2, "Crane", 2.0, 1)
 	var yojimbo := _make_character(3, "Crane", 2.0, 2)
-	var chars: Array[L5RCharacterData] = [local, samurai, yojimbo]
+	var chars: Array = [local, samurai, yojimbo]
 	var by_id: Dictionary = {1: local, 2: samurai, 3: yojimbo}
 	var lord_pools: Dictionary = {
 		1: {"tier": "local_daimyo", "retained": 0.5, "passed_down": 3.0},
@@ -479,7 +479,7 @@ func test_indirect_retainer_disposition_targets_direct_lord() -> void:
 	var local := _make_character(1, "Crane", 4.0)
 	var samurai := _make_character(2, "Crane", 2.0, 1)
 	var yojimbo := _make_character(3, "Crane", 2.0, 2)
-	var chars: Array[L5RCharacterData] = [local, samurai, yojimbo]
+	var chars: Array = [local, samurai, yojimbo]
 	var by_id: Dictionary = {1: local, 2: samurai, 3: yojimbo}
 	var lord_pools: Dictionary = {
 		1: {"tier": "local_daimyo", "retained": 0.0, "passed_down": 0.0},
@@ -496,7 +496,7 @@ func test_indirect_retainer_shares_pool_with_direct() -> void:
 	var champ := _make_character(1, "Crane", 7.0)
 	var samurai := _make_character(2, "Crane", 2.0, 1)
 	var yojimbo := _make_character(3, "Crane", 2.0, 2)
-	var chars: Array[L5RCharacterData] = [champ, samurai, yojimbo]
+	var chars: Array = [champ, samurai, yojimbo]
 	var by_id: Dictionary = {1: champ, 2: samurai, 3: yojimbo}
 	# Pool = 0.02 koku units * 500 = 10.0 individual koku
 	# Demand: samurai direct (5.0) + yojimbo indirect (0.6) = 5.6
@@ -515,7 +515,7 @@ func test_indirect_retainer_insufficient_pool_proportional() -> void:
 	var champ := _make_character(1, "Crane", 7.0)
 	var samurai := _make_character(2, "Crane", 2.0, 1)
 	var yojimbo := _make_character(3, "Crane", 2.0, 2)
-	var chars: Array[L5RCharacterData] = [champ, samurai, yojimbo]
+	var chars: Array = [champ, samurai, yojimbo]
 	var by_id: Dictionary = {1: champ, 2: samurai, 3: yojimbo}
 	# Pool = 0.0056 koku units * 500 = 2.8 individual koku
 	# Demand: 5.0 + 0.6 = 5.6. Ratio = 2.8 / 5.6 = 0.5
@@ -536,7 +536,7 @@ func test_deep_chain_indirect_retainer() -> void:
 	var a := _make_character(2, "Crane", 2.0, 1)
 	var b := _make_character(3, "Crane", 2.0, 2)
 	var c := _make_character(4, "Crane", 2.0, 3)
-	var chars: Array[L5RCharacterData] = [local, a, b, c]
+	var chars: Array = [local, a, b, c]
 	var by_id: Dictionary = {1: local, 2: a, 3: b, 4: c}
 	var lord_pools: Dictionary = {
 		1: {"tier": "local_daimyo", "retained": 0.5, "passed_down": 3.0},
@@ -555,7 +555,7 @@ func test_deep_chain_indirect_retainer() -> void:
 func test_no_funding_lord_no_stipend() -> void:
 	var ronin := _make_character(1, "Crane", 2.0)
 	var retainer := _make_character(2, "Crane", 2.0, 1)
-	var chars: Array[L5RCharacterData] = [ronin, retainer]
+	var chars: Array = [ronin, retainer]
 	var by_id: Dictionary = {1: ronin, 2: retainer}
 	var lord_pools: Dictionary = {}
 	var result: Dictionary = KokuCascadeSystem._pay_individual_stipends(
@@ -603,9 +603,9 @@ func test_no_champion_no_cascade() -> void:
 	var local := _make_character(2, "Crane", 4.0)
 	var settlement := _make_settlement(100, 10, 12.0)
 	var clan := _make_clan("Crane", [10])
-	var chars: Array[L5RCharacterData] = [local]
+	var chars: Array = [local]
 	var by_id: Dictionary = {2: local}
-	var settlements: Array[SettlementData] = [settlement]
+	var settlements: Array = [settlement]
 	var clans: Dictionary = {"Crane": clan}
 	var result: Dictionary = KokuCascadeSystem.process_monthly_koku_flow(
 		chars, by_id, settlements, clans, 3,

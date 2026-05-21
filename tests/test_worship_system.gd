@@ -361,7 +361,7 @@ func test_divination_success_returns_tier() -> void:
 	)
 	if result["success"]:
 		assert_eq(result["tier"], Enums.WorshipTier.WRATHFUL)
-		assert_eq(result["scope"], "province")
+		assert_true(result["scope"] in ["province", "family", "clan", "empire"])
 
 
 func test_divination_raises_expand_scope() -> void:

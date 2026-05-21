@@ -26,8 +26,8 @@ func _make_action_log(
 	roll_result: int = 25,
 	tn: int = 15,
 	observable: bool = false,
-) -> Array[Dictionary]:
-	var log: Array[Dictionary] = []
+) -> Array:
+	var log: Array = []
 	for i: int in range(count):
 		log.append(_make_log_entry({
 			"action_id": action_id,
@@ -60,63 +60,63 @@ func test_unknown_returns_negative():
 # =============================================================================
 
 func test_measurement_not_needed_with_zero_actions():
-	var log: Array[Dictionary] = []
+	var log: Array = []
 	assert_false(ApproachEvaluation.check_measurement_needed(log, 1, 2, "CHARM", 1))
 
 func test_measurement_not_needed_with_one_high_roll():
-	var log: Array[Dictionary] = _make_action_log(1)
+	var log: Array = _make_action_log(1)
 	assert_false(ApproachEvaluation.check_measurement_needed(log, 1, 2, "CHARM", 1))
 
 func test_measurement_needed_with_two_high_rolls_no_effect():
-	var log: Array[Dictionary] = _make_action_log(2)
+	var log: Array = _make_action_log(2)
 	assert_true(ApproachEvaluation.check_measurement_needed(log, 1, 2, "CHARM", 1))
 
 func test_measurement_not_needed_when_observable():
-	var log: Array[Dictionary] = _make_action_log(2, "CHARM", 25, 15, true)
+	var log: Array = _make_action_log(2, "CHARM", 25, 15, true)
 	assert_false(ApproachEvaluation.check_measurement_needed(log, 1, 2, "CHARM", 1))
 
 func test_measurement_not_needed_for_low_rolls():
-	var log: Array[Dictionary] = _make_action_log(3, "CHARM", 16, 15, false)
+	var log: Array = _make_action_log(3, "CHARM", 16, 15, false)
 	assert_false(ApproachEvaluation.check_measurement_needed(log, 1, 2, "CHARM", 1))
 
 func test_covert_needs_three_high_rolls():
-	var log: Array[Dictionary] = _make_action_log(2, "BRIBE_FOR_INFO", 30, 20, false)
+	var log: Array = _make_action_log(2, "BRIBE_FOR_INFO", 30, 20, false)
 	assert_false(ApproachEvaluation.check_measurement_needed(log, 1, 2, "BRIBE_FOR_INFO", 1))
 
 func test_covert_triggers_at_three():
-	var log: Array[Dictionary] = _make_action_log(3, "BRIBE_FOR_INFO", 30, 20, false)
+	var log: Array = _make_action_log(3, "BRIBE_FOR_INFO", 30, 20, false)
 	assert_true(ApproachEvaluation.check_measurement_needed(log, 1, 2, "BRIBE_FOR_INFO", 1))
 
 func test_measurement_scoped_to_target():
-	var log: Array[Dictionary] = _make_action_log(2)
+	var log: Array = _make_action_log(2)
 	assert_false(ApproachEvaluation.check_measurement_needed(log, 1, 99, "CHARM", 1))
 
 func test_measurement_scoped_to_character():
-	var log: Array[Dictionary] = _make_action_log(2)
+	var log: Array = _make_action_log(2)
 	assert_false(ApproachEvaluation.check_measurement_needed(log, 99, 2, "CHARM", 1))
 
 func test_measurement_mixed_observable_and_not():
-	var log: Array[Dictionary] = []
+	var log: Array = []
 	log.append(_make_log_entry({"roll_result": 25, "observable_effect": false}))
 	log.append(_make_log_entry({"roll_result": 25, "observable_effect": true}))
 	log.append(_make_log_entry({"roll_result": 25, "observable_effect": false}))
 	assert_false(ApproachEvaluation.check_measurement_needed(log, 1, 2, "CHARM", 1))
 
 func test_measurement_any_observable_blocks_with_enough_high_rolls():
-	var log: Array[Dictionary] = []
+	var log: Array = []
 	log.append(_make_log_entry({"roll_result": 25, "observable_effect": true}))
 	log.append(_make_log_entry({"roll_result": 25, "observable_effect": false}))
 	log.append(_make_log_entry({"roll_result": 25, "observable_effect": false}))
 	assert_false(ApproachEvaluation.check_measurement_needed(log, 1, 2, "CHARM", 1))
 
 func test_measurement_scoped_to_current_season():
-	var log: Array[Dictionary] = []
+	var log: Array = []
 	log.append(_make_log_entry({"roll_result": 25, "season": 0}))
 	log.append(_make_log_entry({"roll_result": 25, "season": 0}))
 	assert_false(ApproachEvaluation.check_measurement_needed(log, 1, 2, "CHARM", 1))
 
 func test_measurement_triggers_in_correct_season():
-	var log: Array[Dictionary] = []
+	var log: Array = []
 	log.append(_make_log_entry({"roll_result": 25, "season": 2}))
 	log.append(_make_log_entry({"roll_result": 25, "season": 2}))
 	assert_true(ApproachEvaluation.check_measurement_needed(log, 1, 2, "CHARM", 2))
@@ -174,7 +174,7 @@ func test_deliver_gift_capped():
 # =============================================================================
 
 func test_record_penalty_creates_entry():
-	var penalties: Array[Dictionary] = []
+	var penalties: Array = []
 	ApproachEvaluation.record_penalty(
 		penalties, 1, 2, "CHARM",
 		ApproachEvaluation.AssessmentTag.APPROACH_INEFFECTIVE, 3
@@ -183,7 +183,7 @@ func test_record_penalty_creates_entry():
 	assert_eq(penalties[0]["action_id"], "CHARM")
 
 func test_record_penalty_updates_existing():
-	var penalties: Array[Dictionary] = []
+	var penalties: Array = []
 	ApproachEvaluation.record_penalty(
 		penalties, 1, 2, "CHARM",
 		ApproachEvaluation.AssessmentTag.APPROACH_INEFFECTIVE, 3
@@ -197,7 +197,7 @@ func test_record_penalty_updates_existing():
 	assert_eq(penalties[0]["season_recorded"], 4)
 
 func test_record_penalty_separate_targets():
-	var penalties: Array[Dictionary] = []
+	var penalties: Array = []
 	ApproachEvaluation.record_penalty(
 		penalties, 1, 2, "CHARM",
 		ApproachEvaluation.AssessmentTag.APPROACH_INEFFECTIVE, 3
@@ -214,7 +214,7 @@ func test_record_penalty_separate_targets():
 # =============================================================================
 
 func test_get_penalty_same_season():
-	var penalties: Array[Dictionary] = []
+	var penalties: Array = []
 	ApproachEvaluation.record_penalty(
 		penalties, 1, 2, "CHARM",
 		ApproachEvaluation.AssessmentTag.APPROACH_INEFFECTIVE, 3
@@ -222,7 +222,7 @@ func test_get_penalty_same_season():
 	assert_eq(ApproachEvaluation.get_penalty(penalties, 1, 2, "CHARM", 3), -15)
 
 func test_get_penalty_next_season_halved():
-	var penalties: Array[Dictionary] = []
+	var penalties: Array = []
 	ApproachEvaluation.record_penalty(
 		penalties, 1, 2, "CHARM",
 		ApproachEvaluation.AssessmentTag.APPROACH_INEFFECTIVE, 3
@@ -230,7 +230,7 @@ func test_get_penalty_next_season_halved():
 	assert_eq(ApproachEvaluation.get_penalty(penalties, 1, 2, "CHARM", 4), -7)
 
 func test_get_penalty_two_seasons_later_cleared():
-	var penalties: Array[Dictionary] = []
+	var penalties: Array = []
 	ApproachEvaluation.record_penalty(
 		penalties, 1, 2, "CHARM",
 		ApproachEvaluation.AssessmentTag.APPROACH_INEFFECTIVE, 3
@@ -238,7 +238,7 @@ func test_get_penalty_two_seasons_later_cleared():
 	assert_eq(ApproachEvaluation.get_penalty(penalties, 1, 2, "CHARM", 5), 0)
 
 func test_get_penalty_effective_returns_zero():
-	var penalties: Array[Dictionary] = []
+	var penalties: Array = []
 	ApproachEvaluation.record_penalty(
 		penalties, 1, 2, "CHARM",
 		ApproachEvaluation.AssessmentTag.APPROACH_EFFECTIVE, 3
@@ -246,11 +246,11 @@ func test_get_penalty_effective_returns_zero():
 	assert_eq(ApproachEvaluation.get_penalty(penalties, 1, 2, "CHARM", 3), 0)
 
 func test_get_penalty_no_entry_returns_zero():
-	var penalties: Array[Dictionary] = []
+	var penalties: Array = []
 	assert_eq(ApproachEvaluation.get_penalty(penalties, 1, 2, "CHARM", 3), 0)
 
 func test_get_penalty_wrong_target_returns_zero():
-	var penalties: Array[Dictionary] = []
+	var penalties: Array = []
 	ApproachEvaluation.record_penalty(
 		penalties, 1, 2, "CHARM",
 		ApproachEvaluation.AssessmentTag.APPROACH_INEFFECTIVE, 3
@@ -258,7 +258,7 @@ func test_get_penalty_wrong_target_returns_zero():
 	assert_eq(ApproachEvaluation.get_penalty(penalties, 1, 99, "CHARM", 3), 0)
 
 func test_capped_also_penalizes():
-	var penalties: Array[Dictionary] = []
+	var penalties: Array = []
 	ApproachEvaluation.record_penalty(
 		penalties, 1, 2, "CHARM",
 		ApproachEvaluation.AssessmentTag.APPROACH_CAPPED, 3
@@ -271,7 +271,7 @@ func test_capped_also_penalizes():
 # =============================================================================
 
 func test_alternative_bonus_when_penalized():
-	var penalties: Array[Dictionary] = []
+	var penalties: Array = []
 	ApproachEvaluation.record_penalty(
 		penalties, 1, 2, "CHARM",
 		ApproachEvaluation.AssessmentTag.APPROACH_INEFFECTIVE, 3
@@ -279,7 +279,7 @@ func test_alternative_bonus_when_penalized():
 	assert_eq(ApproachEvaluation.get_alternative_bonus(penalties, 1, 2, 3), 10)
 
 func test_alternative_bonus_next_season():
-	var penalties: Array[Dictionary] = []
+	var penalties: Array = []
 	ApproachEvaluation.record_penalty(
 		penalties, 1, 2, "CHARM",
 		ApproachEvaluation.AssessmentTag.APPROACH_INEFFECTIVE, 3
@@ -287,7 +287,7 @@ func test_alternative_bonus_next_season():
 	assert_eq(ApproachEvaluation.get_alternative_bonus(penalties, 1, 2, 4), 10)
 
 func test_alternative_bonus_expired():
-	var penalties: Array[Dictionary] = []
+	var penalties: Array = []
 	ApproachEvaluation.record_penalty(
 		penalties, 1, 2, "CHARM",
 		ApproachEvaluation.AssessmentTag.APPROACH_INEFFECTIVE, 3
@@ -295,7 +295,7 @@ func test_alternative_bonus_expired():
 	assert_eq(ApproachEvaluation.get_alternative_bonus(penalties, 1, 2, 5), 0)
 
 func test_alternative_bonus_wrong_target():
-	var penalties: Array[Dictionary] = []
+	var penalties: Array = []
 	ApproachEvaluation.record_penalty(
 		penalties, 1, 2, "CHARM",
 		ApproachEvaluation.AssessmentTag.APPROACH_INEFFECTIVE, 3
@@ -303,7 +303,7 @@ func test_alternative_bonus_wrong_target():
 	assert_eq(ApproachEvaluation.get_alternative_bonus(penalties, 1, 99, 3), 0)
 
 func test_effective_no_alternative_bonus():
-	var penalties: Array[Dictionary] = []
+	var penalties: Array = []
 	ApproachEvaluation.record_penalty(
 		penalties, 1, 2, "CHARM",
 		ApproachEvaluation.AssessmentTag.APPROACH_EFFECTIVE, 3
@@ -316,7 +316,7 @@ func test_effective_no_alternative_bonus():
 # =============================================================================
 
 func test_decay_removes_old_penalties():
-	var penalties: Array[Dictionary] = []
+	var penalties: Array = []
 	ApproachEvaluation.record_penalty(
 		penalties, 1, 2, "CHARM",
 		ApproachEvaluation.AssessmentTag.APPROACH_INEFFECTIVE, 1
@@ -326,7 +326,7 @@ func test_decay_removes_old_penalties():
 	assert_eq(penalties.size(), 0)
 
 func test_decay_keeps_recent_penalties():
-	var penalties: Array[Dictionary] = []
+	var penalties: Array = []
 	ApproachEvaluation.record_penalty(
 		penalties, 1, 2, "CHARM",
 		ApproachEvaluation.AssessmentTag.APPROACH_INEFFECTIVE, 3
@@ -336,7 +336,7 @@ func test_decay_keeps_recent_penalties():
 	assert_eq(penalties.size(), 1)
 
 func test_decay_mixed_ages():
-	var penalties: Array[Dictionary] = []
+	var penalties: Array = []
 	ApproachEvaluation.record_penalty(
 		penalties, 1, 2, "CHARM",
 		ApproachEvaluation.AssessmentTag.APPROACH_INEFFECTIVE, 1
@@ -356,32 +356,32 @@ func test_decay_mixed_ages():
 # =============================================================================
 
 func test_scoring_measurement_bonus_for_read_character():
-	var log: Array[Dictionary] = _make_action_log(2)
-	var penalties: Array[Dictionary] = []
+	var log: Array = _make_action_log(2)
+	var penalties: Array = []
 	var mod: int = ApproachEvaluation.get_scoring_modifier(
 		"READ_CHARACTER", 1, 2, log, penalties, 1
 	)
 	assert_eq(mod, 15)
 
 func test_scoring_measurement_bonus_for_probe():
-	var log: Array[Dictionary] = _make_action_log(2)
-	var penalties: Array[Dictionary] = []
+	var log: Array = _make_action_log(2)
+	var penalties: Array = []
 	var mod: int = ApproachEvaluation.get_scoring_modifier(
 		"PROBE", 1, 2, log, penalties, 1
 	)
 	assert_eq(mod, 15)
 
 func test_scoring_no_measurement_bonus_without_pressure():
-	var log: Array[Dictionary] = []
-	var penalties: Array[Dictionary] = []
+	var log: Array = []
+	var penalties: Array = []
 	var mod: int = ApproachEvaluation.get_scoring_modifier(
 		"READ_CHARACTER", 1, 2, log, penalties, 1
 	)
 	assert_eq(mod, 0)
 
 func test_scoring_penalty_for_penalized_action():
-	var log: Array[Dictionary] = []
-	var penalties: Array[Dictionary] = []
+	var log: Array = []
+	var penalties: Array = []
 	ApproachEvaluation.record_penalty(
 		penalties, 1, 2, "CHARM",
 		ApproachEvaluation.AssessmentTag.APPROACH_INEFFECTIVE, 3
@@ -392,8 +392,8 @@ func test_scoring_penalty_for_penalized_action():
 	assert_eq(mod, -15)
 
 func test_scoring_alt_bonus_for_unpenalized_action():
-	var log: Array[Dictionary] = []
-	var penalties: Array[Dictionary] = []
+	var log: Array = []
+	var penalties: Array = []
 	ApproachEvaluation.record_penalty(
 		penalties, 1, 2, "CHARM",
 		ApproachEvaluation.AssessmentTag.APPROACH_INEFFECTIVE, 3
@@ -404,8 +404,8 @@ func test_scoring_alt_bonus_for_unpenalized_action():
 	assert_eq(mod, 10)
 
 func test_scoring_no_bonus_for_unrelated_target():
-	var log: Array[Dictionary] = []
-	var penalties: Array[Dictionary] = []
+	var log: Array = []
+	var penalties: Array = []
 	ApproachEvaluation.record_penalty(
 		penalties, 1, 2, "CHARM",
 		ApproachEvaluation.AssessmentTag.APPROACH_INEFFECTIVE, 3

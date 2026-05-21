@@ -782,8 +782,8 @@ func test_check_dragon_schism_fires_on_high_house_capture():
 	var military_daily: Dictionary = {
 		"siege_results": [_make_dragon_siege_result(99, "attacker_victory", "Dragon")],
 	}
-	var topics: Array[TopicData] = []
-	var next_tid: Array[int] = [1000]
+	var topics: Array = []
+	var next_tid: Array = [1000]
 
 	var result: Dictionary = DayOrchestrator._check_dragon_schism_siege_events(
 		military_daily, _state, [fc], {10: fc}, [high_house], topics, next_tid, 300
@@ -869,8 +869,9 @@ func test_tick_order_reconstitution_returns_true_on_completion():
 
 func test_tick_order_reconstitution_no_op_at_zero():
 	_state["order_reconstitution_seasons_remaining"] = 0
+	_state["togashi_vanished"] = true
 	var done: bool = TogashiOversight.tick_order_reconstitution(_state)
-	# Returns false when already zero and not yet reappeared.
+	# Returns false when already zero but togashi still vanished.
 	assert_false(done)
 
 
@@ -911,12 +912,12 @@ func test_reappear_togashi_clears_autonomous_rule_flag():
 
 
 func test_has_active_dragon_schism_true():
-	var wars: Array[Dictionary] = [{"clan": "Dragon", "active": true}]
+	var wars: Array = [{"clan": "Dragon", "active": true}]
 	assert_true(DayOrchestrator._has_active_dragon_schism(wars))
 
 
 func test_has_active_dragon_schism_false_when_inactive():
-	var wars: Array[Dictionary] = [{"clan": "Dragon", "active": false}]
+	var wars: Array = [{"clan": "Dragon", "active": false}]
 	assert_false(DayOrchestrator._has_active_dragon_schism(wars))
 
 

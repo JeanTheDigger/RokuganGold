@@ -11,15 +11,15 @@ extends Resource
 
 # -- Geography -----------------------------------------------------------------
 
-@export var adjacent_province_ids: Array[int] = []
+@export var adjacent_province_ids: Array = []
 @export var is_coastal: bool = false
-@export var rivers: Array[String] = []
-@export var roads: Array[String] = []
+@export var rivers: Array = []
+@export var roads: Array = []
 @export var terrain_type: Enums.TerrainType = Enums.TerrainType.PLAINS
 
 # -- Settlements ---------------------------------------------------------------
 
-@export var settlement_ids: Array[int] = []
+@export var settlement_ids: Array = []
 
 # -- Stability (used by NPC engine, s55.3) -------------------------------------
 

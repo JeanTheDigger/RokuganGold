@@ -90,11 +90,11 @@ static func is_active(bc: Dictionary) -> bool:
 # -- Pre-Battle: Civilian Processing ---------------------------------------------
 
 static func process_civilians(
-	attacker_states: Array[Dictionary],
-	defender_states: Array[Dictionary],
+	attacker_states: Array,
+	defender_states: Array,
 ) -> Dictionary:
-	var fled: Array[int] = []
-	var surrendered: Array[int] = []
+	var fled: Array = []
+	var surrendered: Array = []
 
 	for bc: Dictionary in attacker_states:
 		if bc.get("auto_flees", false):
@@ -115,7 +115,7 @@ static func process_civilians(
 	return {"fled": fled, "surrendered": surrendered}
 
 
-static func _any_active_on_side(states: Array[Dictionary]) -> bool:
+static func _any_active_on_side(states: Array) -> bool:
 	for bc: Dictionary in states:
 		if is_active(bc) and not bc.get("is_civilian", false):
 			return true
@@ -125,8 +125,8 @@ static func _any_active_on_side(states: Array[Dictionary]) -> bool:
 # -- Core Battle Entry Point -----------------------------------------------------
 
 static func resolve_naval_battle(
-	attacker_states: Array[Dictionary],
-	defender_states: Array[Dictionary],
+	attacker_states: Array,
+	defender_states: Array,
 	weather: int,
 	dice_engine: DiceEngine,
 	is_river: bool = false,
@@ -137,9 +137,9 @@ static func resolve_naval_battle(
 	if is_river:
 		_apply_river_modifiers(attacker_states, defender_states, is_downstream_attacker)
 
-	var round_log: Array[Dictionary] = []
+	var round_log: Array = []
 	var round_num: int = 0
-	var captain_deaths: Array[Dictionary] = []
+	var captain_deaths: Array = []
 
 	while round_num < MAX_ROUNDS:
 		round_num += 1
@@ -161,8 +161,8 @@ static func resolve_naval_battle(
 	elif defender_defeated and not attacker_defeated:
 		victor = "attacker"
 
-	var captured_ships: Array[Dictionary] = _collect_captured_ships(attacker_states, defender_states)
-	var escaped_ships: Array[Dictionary] = _collect_escaped_ships(attacker_states, defender_states)
+	var captured_ships: Array = _collect_captured_ships(attacker_states, defender_states)
+	var escaped_ships: Array = _collect_escaped_ships(attacker_states, defender_states)
 
 	return {
 		"victor": victor,
@@ -181,8 +181,8 @@ static func resolve_naval_battle(
 # -- River Modifiers -------------------------------------------------------------
 
 static func _apply_river_modifiers(
-	attacker_states: Array[Dictionary],
-	defender_states: Array[Dictionary],
+	attacker_states: Array,
+	defender_states: Array,
 	is_downstream_attacker: bool,
 ) -> void:
 	var atk_mod: int = NavalSystem.get_river_current_modifier(is_downstream_attacker)
@@ -195,7 +195,7 @@ static func _apply_river_modifiers(
 
 # -- Atakebune Adjacent Defense --------------------------------------------------
 
-static func _apply_atakebune_defense(side: Array[Dictionary]) -> void:
+static func _apply_atakebune_defense(side: Array) -> void:
 	for bc: Dictionary in side:
 		if not is_active(bc):
 			continue
@@ -225,7 +225,7 @@ static func _tortoise_captain_nav_int(bc: Dictionary) -> Dictionary:
 	}
 
 
-static func _best_enemy_battle_int(enemy_side: Array[Dictionary]) -> Dictionary:
+static func _best_enemy_battle_int(enemy_side: Array) -> Dictionary:
 	var best_battle: int = 0
 	var best_int: int = 2
 	for bc: Dictionary in enemy_side:
@@ -243,12 +243,12 @@ static func _best_enemy_battle_int(enemy_side: Array[Dictionary]) -> Dictionary:
 
 
 static func _process_tortoise_escapes(
-	own_side: Array[Dictionary],
-	enemy_side: Array[Dictionary],
+	own_side: Array,
+	enemy_side: Array,
 	dice_engine: DiceEngine,
 	weather: int,
-) -> Array[Dictionary]:
-	var results: Array[Dictionary] = []
+) -> Array:
+	var results: Array = []
 	var enemy_stats: Dictionary = _best_enemy_battle_int(enemy_side)
 	for bc: Dictionary in own_side:
 		if bc["ship_class"] != Enums.ShipClass.TORTOISE_OCEANGOING:
@@ -271,7 +271,7 @@ static func _process_tortoise_escapes(
 			bc["is_escaped"] = true
 		results.append({
 			"company_id": bc["company_id"],
-			"ship_id": bc.get("ship", {}).get("ship_id", bc["company_id"]),
+			"ship_id": bc["ship"].ship_id if bc.has("ship") and bc["ship"] != null else bc["company_id"],
 			"escaped": attempt["escaped"],
 			"escape_total": attempt["escape_total"],
 			"pursue_total": attempt["pursue_total"],
@@ -283,8 +283,8 @@ static func _process_tortoise_escapes(
 # -- Combat Round ----------------------------------------------------------------
 
 static func _resolve_naval_round(
-	attackers: Array[Dictionary],
-	defenders: Array[Dictionary],
+	attackers: Array,
+	defenders: Array,
 	weather: int,
 	dice_engine: DiceEngine,
 	round_num: int,
@@ -299,7 +299,7 @@ static func _resolve_naval_round(
 		bc["atakebune_def_bonus"] = 0
 
 	# Tortoise escape attempts happen before matchups (consumes Company action).
-	var escape_results: Array[Dictionary] = []
+	var escape_results: Array = []
 	escape_results.append_array(_process_tortoise_escapes(attackers, defenders, dice_engine, weather))
 	escape_results.append_array(_process_tortoise_escapes(defenders, attackers, dice_engine, weather))
 
@@ -308,14 +308,14 @@ static func _resolve_naval_round(
 
 	var pending_damage: Dictionary = {}
 	var pending_morale_triggers: Dictionary = {}
-	var captain_deaths: Array[Dictionary] = []
+	var captain_deaths: Array = []
 
-	var active_atk_r1: Array[Dictionary] = _get_active_row(attackers, 1)
-	var active_def_r1: Array[Dictionary] = _get_active_row(defenders, 1)
-	var active_atk_r2: Array[Dictionary] = _get_active_row(attackers, 2)
-	var active_def_r2: Array[Dictionary] = _get_active_row(defenders, 2)
+	var active_atk_r1: Array = _get_active_row(attackers, 1)
+	var active_def_r1: Array = _get_active_row(defenders, 1)
+	var active_atk_r2: Array = _get_active_row(attackers, 2)
+	var active_def_r2: Array = _get_active_row(defenders, 2)
 
-	var matchups: Array[Dictionary] = _build_matchups(active_atk_r1, active_def_r1)
+	var matchups: Array = _build_matchups(active_atk_r1, active_def_r1)
 
 	for m: Dictionary in matchups:
 		var atk: Dictionary = m["attacker"]
@@ -475,8 +475,8 @@ static func resolve_ram_in_battle(
 # -- Kobune Ranged Fire (Reserve Row) -------------------------------------------
 
 static func _resolve_kobune_ranged_fire(
-	reserve_row: Array[Dictionary],
-	enemy_r1: Array[Dictionary],
+	reserve_row: Array,
+	enemy_r1: Array,
 	weather: int,
 	dice_engine: DiceEngine,
 	pending_damage: Dictionary,
@@ -501,7 +501,7 @@ static func _resolve_kobune_ranged_fire(
 
 static func _find_target_in_column(
 	bc: Dictionary,
-	enemy_r1: Array[Dictionary],
+	enemy_r1: Array,
 ) -> Dictionary:
 	for e: Dictionary in enemy_r1:
 		if is_active(e) and e["column"] == bc["column"]:
@@ -515,7 +515,7 @@ static func _resolve_morale_check(
 	bc: Dictionary,
 	_triggers: Dictionary,
 	dice_engine: DiceEngine,
-	captain_deaths: Array[Dictionary],
+	captain_deaths: Array,
 ) -> void:
 	var modifier: int = 0
 
@@ -547,13 +547,13 @@ static func _resolve_morale_check(
 
 
 static func _process_rout_contagion(
-	side: Array[Dictionary],
+	side: Array,
 	dice_engine: DiceEngine,
 ) -> void:
 	var had_new_routs: bool = true
 	while had_new_routs:
 		had_new_routs = false
-		var newly_routed: Array[Dictionary] = []
+		var newly_routed: Array = []
 		for bc: Dictionary in side:
 			if bc["is_routed"] and not bc.get("_rout_contagion_processed", false):
 				newly_routed.append(bc)
@@ -590,7 +590,7 @@ static func _check_captain_survival(
 	if starting <= 0:
 		return {}
 
-	var thresholds: Array[int] = [75, 50, 25, 0]
+	var thresholds: Array = [75, 50, 25, 0]
 	var triggered: Array = bc.get("survival_thresholds_triggered", [])
 
 	for threshold: int in thresholds:
@@ -655,7 +655,7 @@ static func _roll_captain_survival(
 
 # -- Reserve Promotion -----------------------------------------------------------
 
-static func _promote_reserves(states: Array[Dictionary]) -> void:
+static func _promote_reserves(states: Array) -> void:
 	for bc: Dictionary in states:
 		if bc["row"] != 2:
 			continue
@@ -675,7 +675,7 @@ static func _promote_reserves(states: Array[Dictionary]) -> void:
 
 # -- Battle End ------------------------------------------------------------------
 
-static func _check_battle_end(states: Array[Dictionary]) -> bool:
+static func _check_battle_end(states: Array) -> bool:
 	for bc: Dictionary in states:
 		if is_active(bc):
 			return false
@@ -685,10 +685,10 @@ static func _check_battle_end(states: Array[Dictionary]) -> bool:
 # -- Captured Ship Collection ---------------------------------------------------
 
 static func _collect_captured_ships(
-	attackers: Array[Dictionary],
-	defenders: Array[Dictionary],
-) -> Array[Dictionary]:
-	var captured: Array[Dictionary] = []
+	attackers: Array,
+	defenders: Array,
+) -> Array:
+	var captured: Array = []
 	for bc: Dictionary in attackers:
 		if bc.get("is_captured", false):
 			captured.append({
@@ -730,10 +730,10 @@ static func _collect_captured_ships(
 # -- Escaped Ship Collection ---------------------------------------------------
 
 static func _collect_escaped_ships(
-	attackers: Array[Dictionary],
-	defenders: Array[Dictionary],
-) -> Array[Dictionary]:
-	var escaped: Array[Dictionary] = []
+	attackers: Array,
+	defenders: Array,
+) -> Array:
+	var escaped: Array = []
 	for bc: Dictionary in attackers:
 		if bc.get("is_escaped", false):
 			escaped.append({
@@ -754,7 +754,7 @@ static func _collect_escaped_ships(
 # -- Rout Resolution (naval — same structure as land) ---------------------------
 
 static func resolve_naval_rout(
-	routed_states: Array[Dictionary],
+	routed_states: Array,
 	dice_engine: DiceEngine,
 ) -> Dictionary:
 	var total_remaining: int = 0
@@ -784,8 +784,8 @@ static func resolve_naval_rout(
 
 # -- Helpers --------------------------------------------------------------------
 
-static func _get_active_row(states: Array[Dictionary], row: int) -> Array[Dictionary]:
-	var result: Array[Dictionary] = []
+static func _get_active_row(states: Array, row: int) -> Array:
+	var result: Array = []
 	for bc: Dictionary in states:
 		if is_active(bc) and bc["row"] == row:
 			result.append(bc)
@@ -793,11 +793,11 @@ static func _get_active_row(states: Array[Dictionary], row: int) -> Array[Dictio
 
 
 static func _build_matchups(
-	atk_r1: Array[Dictionary],
-	def_r1: Array[Dictionary],
-) -> Array[Dictionary]:
-	var matchups: Array[Dictionary] = []
-	var matched_def_ids: Array[int] = []
+	atk_r1: Array,
+	def_r1: Array,
+) -> Array:
+	var matchups: Array = []
+	var matched_def_ids: Array = []
 	for atk: Dictionary in atk_r1:
 		for dfn: Dictionary in def_r1:
 			if dfn["company_id"] in matched_def_ids:
@@ -821,8 +821,8 @@ static func _ensure_trigger(triggers: Dictionary, bc: Dictionary) -> void:
 
 
 static func _find_bc_by_id(
-	attackers: Array[Dictionary],
-	defenders: Array[Dictionary],
+	attackers: Array,
+	defenders: Array,
 	company_id: int,
 ) -> Dictionary:
 	for bc: Dictionary in attackers:

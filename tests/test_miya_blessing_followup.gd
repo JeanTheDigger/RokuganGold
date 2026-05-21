@@ -7,8 +7,8 @@ extends GutTest
 
 var _provinces: Dictionary
 var _characters_by_id: Dictionary
-var _active_topics: Array[TopicData]
-var _next_topic_id: Array[int]
+var _active_topics: Array
+var _next_topic_id: Array
 var _season_meta: Dictionary
 
 
@@ -220,6 +220,7 @@ func test_two_consecutive_suspensions_double_stability_penalty() -> void:
 
 func test_suspension_applies_miya_disposition_penalty_toward_emperor() -> void:
 	var miya: L5RCharacterData = _make_char(50, "Imperial", "Miya")
+	miya.lord_id = 99  # Not a champion — avoid clan champion penalty stacking.
 	_make_char(99, "Imperial", "Otomo")  # Emperor
 	var miya_inputs: Dictionary = {
 		"emperor_id": 99,

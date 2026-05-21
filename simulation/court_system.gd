@@ -162,15 +162,15 @@ static func get_attendee_count(court: CourtSessionData) -> int:
 # -- Agenda Topics -------------------------------------------------------------
 
 static func select_agenda_topics(
-	topics: Array[TopicData],
+	topics: Array,
 	court_type: CourtSessionData.CourtType,
 	crisis_trigger_topic_id: int = -1,
-) -> Array[int]:
+) -> Array:
 	var max_topics: int = MAX_AGENDA_TOPICS
 	if court_type == CourtSessionData.CourtType.IMPERIAL_WINTER_COURT:
 		max_topics = MAX_AGENDA_TOPICS_WINTER_COURT
 
-	var candidates: Array[TopicData] = []
+	var candidates: Array = []
 	for t: TopicData in topics:
 		if t.resolved:
 			continue
@@ -180,7 +180,7 @@ static func select_agenda_topics(
 		return a.momentum > b.momentum
 	)
 
-	var result: Array[int] = []
+	var result: Array = []
 
 	if crisis_trigger_topic_id >= 0:
 		result.append(crisis_trigger_topic_id)
@@ -195,7 +195,7 @@ static func select_agenda_topics(
 	return result
 
 
-static func set_agenda(court: CourtSessionData, topic_ids: Array[int]) -> void:
+static func set_agenda(court: CourtSessionData, topic_ids: Array) -> void:
 	court.agenda_topic_ids = topic_ids.duplicate()
 
 
@@ -203,10 +203,13 @@ static func set_agenda(court: CourtSessionData, topic_ids: Array[int]) -> void:
 
 static func should_call_court(
 	lord_rank: Enums.LordRank,
-	topics: Array[TopicData],
-	active_courts_at_settlement: Array[CourtSessionData],
+	topics: Array,
+	active_courts_at_settlement: Array,
 ) -> Dictionary:
-	for c: CourtSessionData in active_courts_at_settlement:
+	for c_entry_v1: Variant in active_courts_at_settlement:
+		if not c_entry_v1 is CourtSessionData:
+			continue
+		var c: CourtSessionData = c_entry_v1 as CourtSessionData
 		if c.phase != CourtSessionData.CourtPhase.CLOSED:
 			return {}
 
@@ -232,7 +235,7 @@ static func record_commitment(
 	character_id: int,
 	commitment_type: String,
 	description: String,
-	witnesses: Array[int] = [],
+	witnesses: Array = [],
 ) -> Dictionary:
 	if court.phase != CourtSessionData.CourtPhase.ACTIVE:
 		return {"recorded": false, "reason": "court_not_active"}
@@ -256,29 +259,38 @@ static func record_war_resolution(court: CourtSessionData, war_id: int) -> void:
 # -- Context Helpers -----------------------------------------------------------
 
 static func get_active_court_at_settlement(
-	courts: Array[CourtSessionData],
+	courts: Array,
 	settlement_id: int,
 ) -> CourtSessionData:
-	for c: CourtSessionData in courts:
+	for c_entry_v2: Variant in courts:
+		if not c_entry_v2 is CourtSessionData:
+			continue
+		var c: CourtSessionData = c_entry_v2 as CourtSessionData
 		if c.phase == CourtSessionData.CourtPhase.ACTIVE and c.host_settlement_id == settlement_id:
 			return c
 	return null
 
 
-static func get_active_courts(courts: Array[CourtSessionData]) -> Array[CourtSessionData]:
-	var result: Array[CourtSessionData] = []
-	for c: CourtSessionData in courts:
+static func get_active_courts(courts: Array) -> Array:
+	var result: Array = []
+	for c_entry_v3: Variant in courts:
+		if not c_entry_v3 is CourtSessionData:
+			continue
+		var c: CourtSessionData = c_entry_v3 as CourtSessionData
 		if c.phase == CourtSessionData.CourtPhase.ACTIVE:
 			result.append(c)
 	return result
 
 
 static func get_upcoming_courts(
-	courts: Array[CourtSessionData],
+	courts: Array,
 	current_ic_day: int,
-) -> Array[CourtSessionData]:
-	var result: Array[CourtSessionData] = []
-	for c: CourtSessionData in courts:
+) -> Array:
+	var result: Array = []
+	for c_entry_v4: Variant in courts:
+		if not c_entry_v4 is CourtSessionData:
+			continue
+		var c: CourtSessionData = c_entry_v4 as CourtSessionData
 		if c.phase == CourtSessionData.CourtPhase.SCHEDULED and c.start_ic_day > current_ic_day:
 			result.append(c)
 	return result
@@ -298,10 +310,13 @@ static func to_context_dict(court: CourtSessionData) -> Dictionary:
 
 
 static func get_character_context_flag(
-	courts: Array[CourtSessionData],
+	courts: Array,
 	character_id: int,
 ) -> bool:
-	for c: CourtSessionData in courts:
+	for c_entry_v5: Variant in courts:
+		if not c_entry_v5 is CourtSessionData:
+			continue
+		var c: CourtSessionData = c_entry_v5 as CourtSessionData
 		if c.phase == CourtSessionData.CourtPhase.ACTIVE and character_id in c.attendee_ids:
 			return true
 	return false

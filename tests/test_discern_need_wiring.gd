@@ -78,35 +78,35 @@ func _build_world_state(context_flag: Enums.ContextFlag) -> Dictionary:
 		"context_flag": context_flag,
 		"season": 1,
 		"ic_day": 10,
-		"characters_present": [2] as Array[int],
+		"characters_present": [2],
 		"is_lord": false,
-		"known_topics": [] as Array[int],
+		"known_topics": [],
 		"known_positions": {},
 		"known_objectives": {},
-		"known_contacts": [] as Array[int],
+		"known_contacts": [],
 		"pending_events": [],
-		"action_log": [] as Array[String],
+		"action_log": [],
 	}
 
 
 # -- Context List Inclusion ----------------------------------------------------
 
 func test_discern_need_in_at_court_context() -> void:
-	var actions: Array[String] = NPCDecisionEngine._get_actions_for_context(
+	var actions: Array = NPCDecisionEngine._get_actions_for_context(
 		Enums.ContextFlag.AT_COURT
 	)
 	assert_true("DISCERN_NEED" in actions)
 
 
 func test_discern_need_in_visiting_context() -> void:
-	var actions: Array[String] = NPCDecisionEngine._get_actions_for_context(
+	var actions: Array = NPCDecisionEngine._get_actions_for_context(
 		Enums.ContextFlag.VISITING
 	)
 	assert_true("DISCERN_NEED" in actions)
 
 
 func test_discern_need_not_in_traveling_context() -> void:
-	var actions: Array[String] = NPCDecisionEngine._get_actions_for_context(
+	var actions: Array = NPCDecisionEngine._get_actions_for_context(
 		Enums.ContextFlag.TRAVELING
 	)
 	assert_false("DISCERN_NEED" in actions)
@@ -122,7 +122,7 @@ func test_yasuki_school_lean_boosts_discern_need() -> void:
 	need.need_type = "GATHER_INTELLIGENCE"
 	need.target_npc_id = 2
 
-	var options: Array[NPCDataStructures.ScoredAction] = NPCDecisionEngine.generate_options(
+	var options: Array = NPCDecisionEngine.generate_options(
 		ctx, need
 	)
 
@@ -150,7 +150,7 @@ func test_doji_courtier_school_lean_boosts_discern_need() -> void:
 	need.need_type = "GATHER_INTELLIGENCE"
 	need.target_npc_id = 2
 
-	var options: Array[NPCDataStructures.ScoredAction] = NPCDecisionEngine.generate_options(
+	var options: Array = NPCDecisionEngine.generate_options(
 		ctx, need
 	)
 
@@ -179,7 +179,7 @@ func test_non_courtier_school_no_lean() -> void:
 	need.need_type = "GATHER_INTELLIGENCE"
 	need.target_npc_id = 2
 
-	var options: Array[NPCDataStructures.ScoredAction] = NPCDecisionEngine.generate_options(
+	var options: Array = NPCDecisionEngine.generate_options(
 		ctx, need
 	)
 
@@ -221,7 +221,7 @@ func test_effect_applicator_passes_info_type() -> void:
 	}
 	var characters: Dictionary = {1: _char, 2: _target}
 	var provinces: Dictionary = {}
-	var action_log: Array[Dictionary] = []
+	var action_log: Array = []
 
 	var applied: Dictionary = EffectApplicator.apply(
 		result, characters, provinces, action_log
@@ -248,7 +248,7 @@ func test_effect_applicator_default_info_type_empty() -> void:
 	}
 	var characters: Dictionary = {1: _char, 2: _target}
 	var provinces: Dictionary = {}
-	var action_log: Array[Dictionary] = []
+	var action_log: Array = []
 
 	var applied: Dictionary = EffectApplicator.apply(
 		result, characters, provinces, action_log
@@ -275,12 +275,12 @@ func test_discern_need_writes_priority_objective_to_knowledge() -> void:
 		}],
 	}]
 	var characters_by_id: Dictionary = {1: _char, 2: _target}
-	var action_log: Array[Dictionary] = []
+	var action_log: Array = []
 	var objectives_map: Dictionary = {
 		2: {"standing": {"need_type": "RAISE_DISPOSITION", "priority": 2}},
 	}
 
-	var results: Array[Dictionary] = DayOrchestrator._process_info_events(
+	var results: Array = DayOrchestrator._process_info_events(
 		applied_list, characters_by_id, action_log, 1, [], objectives_map,
 	)
 
@@ -311,10 +311,10 @@ func test_discern_need_no_objective_writes_empty() -> void:
 		}],
 	}]
 	var characters_by_id: Dictionary = {1: _char, 2: _target}
-	var action_log: Array[Dictionary] = []
+	var action_log: Array = []
 	var objectives_map: Dictionary = {2: {}}
 
-	var results: Array[Dictionary] = DayOrchestrator._process_info_events(
+	var results: Array = DayOrchestrator._process_info_events(
 		applied_list, characters_by_id, action_log, 1, [], objectives_map,
 	)
 
@@ -336,7 +336,7 @@ func test_probe_info_event_still_uses_action_log_path() -> void:
 			"info_type": "",
 		}],
 	}]
-	var action_log: Array[Dictionary] = [{
+	var action_log: Array = [{
 		"character_id": 2,
 		"action_id": "CHARM",
 		"target_npc_id": 3,
@@ -345,7 +345,7 @@ func test_probe_info_event_still_uses_action_log_path() -> void:
 	}]
 	var characters_by_id: Dictionary = {1: _char, 2: _target}
 
-	var results: Array[Dictionary] = DayOrchestrator._process_info_events(
+	var results: Array = DayOrchestrator._process_info_events(
 		applied_list, characters_by_id, action_log, 1,
 	)
 
@@ -358,7 +358,7 @@ func test_probe_info_event_still_uses_action_log_path() -> void:
 func test_self_select_directive_writes_primary_objective() -> void:
 	var objectives_map: Dictionary = {1: {"standing": {"need_type": "SEEK_GLORY"}}}
 	var characters_by_id: Dictionary = {1: _char}
-	var strategic_results: Array[Dictionary] = [{
+	var strategic_results: Array = [{
 		"directive": StrategicReview.Directive.REASSIGN_VASSAL_OBJECTIVE,
 		"lord_id": 1,
 		"vassal_id": 1,
@@ -385,7 +385,7 @@ func test_self_select_directive_writes_primary_objective() -> void:
 func test_self_select_does_not_overwrite_standing() -> void:
 	var objectives_map: Dictionary = {1: {"standing": {"need_type": "SEEK_GLORY"}}}
 	var characters_by_id: Dictionary = {1: _char}
-	var strategic_results: Array[Dictionary] = [{
+	var strategic_results: Array = [{
 		"directive": StrategicReview.Directive.REASSIGN_VASSAL_OBJECTIVE,
 		"lord_id": 1,
 		"vassal_id": 1,

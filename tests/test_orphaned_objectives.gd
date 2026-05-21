@@ -110,7 +110,7 @@ func test_process_lord_death_orphans_vassals() -> void:
 	vassal.character_id = 1
 	vassal.lord_id = 10
 
-	var vassals: Array[L5RCharacterData] = [vassal]
+	var vassals: Array = [vassal]
 	var objectives: Dictionary = {
 		1: {
 			"primary": {
@@ -120,7 +120,7 @@ func test_process_lord_death_orphans_vassals() -> void:
 		},
 	}
 
-	var results: Array[Dictionary] = OrphanedObjectives.process_lord_death(
+	var results: Array = OrphanedObjectives.process_lord_death(
 		vassals, 10, 20, objectives
 	)
 
@@ -136,7 +136,7 @@ func test_process_lord_death_skips_target_dependent() -> void:
 	vassal.character_id = 1
 	vassal.lord_id = 10
 
-	var vassals: Array[L5RCharacterData] = [vassal]
+	var vassals: Array = [vassal]
 	var objectives: Dictionary = {
 		1: {
 			"primary": {
@@ -146,7 +146,7 @@ func test_process_lord_death_skips_target_dependent() -> void:
 		},
 	}
 
-	var results: Array[Dictionary] = OrphanedObjectives.process_lord_death(
+	var results: Array = OrphanedObjectives.process_lord_death(
 		vassals, 10, 20, objectives
 	)
 
@@ -158,7 +158,7 @@ func test_process_lord_death_skips_non_vassals() -> void:
 	non_vassal.character_id = 1
 	non_vassal.lord_id = 99
 
-	var vassals: Array[L5RCharacterData] = [non_vassal]
+	var vassals: Array = [non_vassal]
 	var objectives: Dictionary = {
 		1: {
 			"primary": {
@@ -168,7 +168,7 @@ func test_process_lord_death_skips_non_vassals() -> void:
 		},
 	}
 
-	var results: Array[Dictionary] = OrphanedObjectives.process_lord_death(
+	var results: Array = OrphanedObjectives.process_lord_death(
 		vassals, 10, 20, objectives
 	)
 
@@ -181,7 +181,7 @@ func test_process_lord_death_no_successor_uses_operational_superior() -> void:
 	vassal.lord_id = 10
 	vassal.operational_superior_id = 50
 
-	var vassals: Array[L5RCharacterData] = [vassal]
+	var vassals: Array = [vassal]
 	var objectives: Dictionary = {
 		1: {
 			"primary": {
@@ -191,7 +191,7 @@ func test_process_lord_death_no_successor_uses_operational_superior() -> void:
 		},
 	}
 
-	var results: Array[Dictionary] = OrphanedObjectives.process_lord_death(
+	var results: Array = OrphanedObjectives.process_lord_death(
 		vassals, 10, -1, objectives
 	)
 
@@ -207,13 +207,13 @@ func test_process_lord_death_multiple_vassals() -> void:
 	v2.character_id = 2
 	v2.lord_id = 10
 
-	var vassals: Array[L5RCharacterData] = [v1, v2]
+	var vassals: Array = [v1, v2]
 	var objectives: Dictionary = {
 		1: {"primary": {"objective_type": "CONQUER_PROVINCE", "assigning_lord_id": 10}},
 		2: {"primary": {"objective_type": "ISOLATE_CHARACTER", "assigning_lord_id": 10}},
 	}
 
-	var results: Array[Dictionary] = OrphanedObjectives.process_lord_death(
+	var results: Array = OrphanedObjectives.process_lord_death(
 		vassals, 10, 20, objectives
 	)
 
@@ -312,13 +312,13 @@ func test_has_orphaned_vassals_finds_them() -> void:
 	v2.character_id = 2
 	v2.lord_id = 20
 
-	var vassals: Array[L5RCharacterData] = [v1, v2]
+	var vassals: Array = [v1, v2]
 	var objectives: Dictionary = {
 		1: {"primary": {"status": "ORPHANED"}},
 		2: {"primary": {"status": "ACTIVE"}},
 	}
 
-	var orphaned: Array[int] = OrphanedObjectives.has_orphaned_vassals(
+	var orphaned: Array = OrphanedObjectives.has_orphaned_vassals(
 		vassals, 20, objectives
 	)
 	assert_eq(orphaned.size(), 1)
@@ -330,12 +330,12 @@ func test_has_orphaned_vassals_empty_when_none() -> void:
 	v1.character_id = 1
 	v1.lord_id = 20
 
-	var vassals: Array[L5RCharacterData] = [v1]
+	var vassals: Array = [v1]
 	var objectives: Dictionary = {
 		1: {"primary": {"status": "ACTIVE"}},
 	}
 
-	var orphaned: Array[int] = OrphanedObjectives.has_orphaned_vassals(
+	var orphaned: Array = OrphanedObjectives.has_orphaned_vassals(
 		vassals, 20, objectives
 	)
 	assert_eq(orphaned.size(), 0)

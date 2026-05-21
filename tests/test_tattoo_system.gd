@@ -1,7 +1,7 @@
 extends GutTest
 
 
-var _tattoos: Array[TattooData]
+var _tattoos: Array
 
 
 func _make_tattoo(
@@ -26,7 +26,7 @@ func _make_tattoo(
 
 
 func before_each() -> void:
-	_tattoos = [] as Array[TattooData]
+	_tattoos = []
 
 
 # =============================================================================
@@ -603,7 +603,7 @@ func _make_tattoo_action(
 		"body_location": loc,
 		"is_ability_tattoo": false,
 		"ability": Enums.TattooAbility.NONE,
-		"world_tattoos": [] as Array[TattooData],
+		"world_tattoos": [],
 		"recipient_is_bald": false,
 		"subject_type": Enums.TattooSubjectType.IMAGE,
 		"subject_description": "Dragon coiling",
@@ -616,7 +616,7 @@ func _make_tattoo_ctx() -> NPCDataStructures.ContextSnapshot:
 	ctx.character_id = 100
 	ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
 	ctx.ic_day = 50
-	ctx.season = "Spring"
+	ctx.season = 0  # SPRING
 	return ctx
 
 func test_apply_tattoo_success():
@@ -670,7 +670,7 @@ func test_apply_tattoo_location_occupied():
 	var recipient := _make_recipient()
 	var existing := _make_tattoo(1, 200, 100, Enums.TattooQualityTier.NORMAL, Enums.TattooBodyLocation.CHEST_TORSO)
 	var action := _make_tattoo_action()
-	action.metadata["world_tattoos"] = [existing] as Array[TattooData]
+	action.metadata["world_tattoos"] = [existing]
 	var ctx := _make_tattoo_ctx()
 	var dice := DiceEngine.new()
 	var chars: Dictionary = {100: artist, 200: recipient}
@@ -713,8 +713,8 @@ func test_apply_tattoo_writeback_creates_tattoo():
 	var artist := _make_artist()
 	var recipient := _make_recipient()
 	var chars: Dictionary = {100: artist, 200: recipient}
-	var tattoos: Array[TattooData] = []
-	var next_id: Array[int] = [1]
+	var tattoos: Array = []
+	var next_id: Array = [1]
 	var result: Dictionary = {
 		"success": true, "action_id": "APPLY_TATTOO",
 		"character_id": 100, "target_npc_id": 200,
@@ -743,8 +743,8 @@ func test_apply_tattoo_writeback_creates_tattoo():
 func test_apply_tattoo_writeback_deducts_extra_ap():
 	var artist := _make_artist(5, 6)
 	var chars: Dictionary = {100: artist}
-	var tattoos: Array[TattooData] = []
-	var next_id: Array[int] = [1]
+	var tattoos: Array = []
+	var next_id: Array = [1]
 	var result: Dictionary = {
 		"success": true, "action_id": "APPLY_TATTOO",
 		"character_id": 100, "target_npc_id": 200,
@@ -768,8 +768,8 @@ func test_apply_tattoo_writeback_deducts_extra_ap():
 func test_apply_tattoo_mundane_no_creation():
 	var artist := _make_artist()
 	var chars: Dictionary = {100: artist}
-	var tattoos: Array[TattooData] = []
-	var next_id: Array[int] = [1]
+	var tattoos: Array = []
+	var next_id: Array = [1]
 	var result: Dictionary = {
 		"success": false, "action_id": "APPLY_TATTOO",
 		"character_id": 100, "target_npc_id": 200,
@@ -784,11 +784,11 @@ func test_apply_tattoo_mundane_no_creation():
 	assert_eq(tattoos.size(), 0, "Mundane result should not create a tattoo")
 
 func test_apply_tattoo_context_list_includes_action():
-	var at_holdings: Array[String] = NPCDecisionEngine._get_actions_for_context(
+	var at_holdings: Array = NPCDecisionEngine._get_actions_for_context(
 		Enums.ContextFlag.AT_OWN_HOLDINGS
 	)
 	assert_true("APPLY_TATTOO" in at_holdings, "AT_OWN_HOLDINGS should include APPLY_TATTOO")
-	var visiting: Array[String] = NPCDecisionEngine._get_actions_for_context(
+	var visiting: Array = NPCDecisionEngine._get_actions_for_context(
 		Enums.ContextFlag.VISITING
 	)
 	assert_true("APPLY_TATTOO" in visiting, "VISITING should include APPLY_TATTOO")
@@ -801,7 +801,7 @@ func test_apply_tattoo_ap_cost_entry():
 # APPLY_TATTOO Precondition Filter — Consent & Decorative Gate
 # =============================================================================
 
-func _make_options_with_tattoo(target_id: int = 200) -> Array[NPCDataStructures.ScoredAction]:
+func _make_options_with_tattoo(target_id: int = 200) -> Array:
 	var tattoo_opt := NPCDataStructures.ScoredAction.new()
 	tattoo_opt.action_id = "APPLY_TATTOO"
 	tattoo_opt.target_npc_id = target_id
@@ -813,7 +813,7 @@ func _make_options_with_tattoo(target_id: int = 200) -> Array[NPCDataStructures.
 	}
 	var rest_opt := NPCDataStructures.ScoredAction.new()
 	rest_opt.action_id = "REST"
-	return [tattoo_opt, rest_opt] as Array[NPCDataStructures.ScoredAction]
+	return [tattoo_opt, rest_opt]
 
 func test_tattoo_filter_removes_when_no_skill():
 	var artist := _make_artist(0)
@@ -902,7 +902,7 @@ func test_tattoo_filter_all_locations_occupied():
 	var recipient := _make_recipient()
 	var ctx := _make_tattoo_ctx()
 	ctx.dispositions = {200: 5}
-	var full_tattoos: Array[TattooData] = []
+	var full_tattoos: Array = []
 	for loc: Enums.TattooBodyLocation in TattooSystem.ALL_BODY_LOCATIONS:
 		full_tattoos.append(_make_tattoo(full_tattoos.size(), 200, 100,
 			Enums.TattooQualityTier.NORMAL, loc))

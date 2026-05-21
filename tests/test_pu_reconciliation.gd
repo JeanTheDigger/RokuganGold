@@ -131,7 +131,7 @@ func test_compute_company_pu_loss_destroyed() -> void:
 # -- Battle Casualty Processing --------------------------------------------------
 
 func test_process_battle_casualties_single_company() -> void:
-	var companies: Array[Dictionary] = [
+	var companies: Array = [
 		_make_battle_company(1, 153, 80, 1),
 	]
 	var s: SettlementData = _make_settlement(10, 1, 10, 2)
@@ -144,7 +144,7 @@ func test_process_battle_casualties_single_company() -> void:
 
 
 func test_process_battle_casualties_multiple_provinces() -> void:
-	var companies: Array[Dictionary] = [
+	var companies: Array = [
 		_make_battle_company(1, 153, 80, 1),
 		_make_battle_company(2, 153, 50, 2),
 	]
@@ -159,7 +159,7 @@ func test_process_battle_casualties_multiple_provinces() -> void:
 
 
 func test_process_battle_casualties_ronin_no_pu_exchange() -> void:
-	var companies: Array[Dictionary] = [
+	var companies: Array = [
 		_make_battle_company(1, 153, 80, -1),
 	]
 	var r: Dictionary = PUReconciliation.process_battle_casualties(companies, {})
@@ -169,7 +169,7 @@ func test_process_battle_casualties_ronin_no_pu_exchange() -> void:
 
 
 func test_process_battle_casualties_no_damage_no_loss() -> void:
-	var companies: Array[Dictionary] = [
+	var companies: Array = [
 		_make_battle_company(1, 153, 153, 1),
 	]
 	var s: SettlementData = _make_settlement(10, 1, 10, 2)
@@ -181,7 +181,7 @@ func test_process_battle_casualties_no_damage_no_loss() -> void:
 
 
 func test_process_battle_casualties_destroyed_company() -> void:
-	var companies: Array[Dictionary] = [
+	var companies: Array = [
 		_make_battle_company(1, 153, 0, 1),
 	]
 	var s: SettlementData = _make_settlement(10, 1, 10, 2)
@@ -194,7 +194,7 @@ func test_process_battle_casualties_destroyed_company() -> void:
 
 
 func test_process_battle_casualties_mutates_settlement() -> void:
-	var companies: Array[Dictionary] = [
+	var companies: Array = [
 		_make_battle_company(1, 153, 0, 1),
 	]
 	var s: SettlementData = _make_settlement(10, 1, 10, 2)
@@ -207,7 +207,7 @@ func test_process_battle_casualties_mutates_settlement() -> void:
 # -- Victor Recovery Tests -------------------------------------------------------
 
 func test_victor_recovery_splits_correctly() -> void:
-	var companies: Array[Dictionary] = [
+	var companies: Array = [
 		_make_battle_company(1, 153, 53, 1),
 	]
 	var s: SettlementData = _make_settlement(10, 1, 10, 2)
@@ -223,7 +223,7 @@ func test_victor_recovery_splits_correctly() -> void:
 
 
 func test_victor_recovery_no_losses() -> void:
-	var companies: Array[Dictionary] = [
+	var companies: Array = [
 		_make_battle_company(1, 153, 153, 1),
 	]
 	var r: Dictionary = PUReconciliation.process_victor_recovery(companies, {})
@@ -233,7 +233,7 @@ func test_victor_recovery_no_losses() -> void:
 
 
 func test_victor_recovery_ronin_no_pu_return() -> void:
-	var companies: Array[Dictionary] = [
+	var companies: Array = [
 		_make_battle_company(1, 153, 53, -1),
 	]
 	var r: Dictionary = PUReconciliation.process_victor_recovery(companies, {})
@@ -243,7 +243,7 @@ func test_victor_recovery_ronin_no_pu_return() -> void:
 
 
 func test_victor_recovery_multiple_companies_same_province() -> void:
-	var companies: Array[Dictionary] = [
+	var companies: Array = [
 		_make_battle_company(1, 153, 100, 1),
 		_make_battle_company(2, 153, 100, 1),
 	]
@@ -260,10 +260,10 @@ func test_victor_recovery_multiple_companies_same_province() -> void:
 # -- Full Battle Reconciliation --------------------------------------------------
 
 func test_reconcile_battle_produces_both() -> void:
-	var victors: Array[Dictionary] = [
+	var victors: Array = [
 		_make_battle_company(1, 153, 100, 1),
 	]
-	var losers: Array[Dictionary] = [
+	var losers: Array = [
 		_make_battle_company(2, 153, 50, 2),
 	]
 	var s1: SettlementData = _make_settlement(10, 1, 10, 2)
@@ -279,7 +279,7 @@ func test_reconcile_battle_produces_both() -> void:
 # -- Army Dissolution Tests ------------------------------------------------------
 
 func test_process_army_dissolution() -> void:
-	var companies: Array[Dictionary] = [
+	var companies: Array = [
 		_make_battle_company(1, 153, 30, 1),
 		_make_battle_company(2, 153, 20, 1),
 	]
@@ -292,7 +292,7 @@ func test_process_army_dissolution() -> void:
 
 
 func test_dissolution_ronin_no_return() -> void:
-	var companies: Array[Dictionary] = [
+	var companies: Array = [
 		_make_battle_company(1, 153, 50, -1),
 	]
 	var r: Dictionary = PUReconciliation.process_army_dissolution(companies, {})
@@ -301,7 +301,7 @@ func test_dissolution_ronin_no_return() -> void:
 
 
 func test_dissolution_dead_companies_return_nothing() -> void:
-	var companies: Array[Dictionary] = [
+	var companies: Array = [
 		_make_battle_company(1, 153, 0, 1),
 	]
 	var s: SettlementData = _make_settlement(10, 1, 10, 2)
@@ -314,7 +314,7 @@ func test_dissolution_dead_companies_return_nothing() -> void:
 
 
 func test_dissolution_returns_survivors() -> void:
-	var companies: Array[Dictionary] = [
+	var companies: Array = [
 		_make_battle_company(1, 153, 153, 1),
 	]
 	var s: SettlementData = _make_settlement(10, 1, 8, 1)
@@ -329,7 +329,7 @@ func test_dissolution_returns_survivors() -> void:
 
 func test_loss_distributed_to_military_first() -> void:
 	var s: SettlementData = _make_settlement(10, 1, 10, 3)
-	var companies: Array[Dictionary] = [
+	var companies: Array = [
 		_make_battle_company(1, 153, 0, 1),
 		_make_battle_company(2, 153, 0, 1),
 	]
@@ -342,7 +342,7 @@ func test_loss_distributed_to_military_first() -> void:
 
 func test_loss_overflows_to_general_population() -> void:
 	var s: SettlementData = _make_settlement(10, 1, 10, 1)
-	var companies: Array[Dictionary] = [
+	var companies: Array = [
 		_make_battle_company(1, 153, 0, 1),
 		_make_battle_company(2, 153, 0, 1),
 	]

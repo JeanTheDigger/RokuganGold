@@ -117,10 +117,10 @@ func test_togashi_skipped_when_state_empty() -> void:
 func test_togashi_skipped_when_no_mirumoto_fc() -> void:
 	var state := TogashiOversight.make_initial_state()
 	var togashi := _make_togashi_kami()
-	var chars: Array[L5RCharacterData] = [togashi]
-	var topics: Array[TopicData] = []
-	var next_tid: Array[int] = [1]
-	var directives: Array[Dictionary] = []
+	var chars: Array = [togashi]
+	var topics: Array = []
+	var next_tid: Array = [1]
+	var directives: Array = []
 	var result := DayOrchestrator._process_togashi_oversight(
 		state, directives, chars, {200: togashi}, {}, topics, next_tid, 0,
 	)
@@ -131,17 +131,18 @@ func test_togashi_skipped_when_no_mirumoto_fc() -> void:
 func test_togashi_runs_when_fc_present() -> void:
 	var fc := _make_mirumoto_fc()
 	var togashi := _make_togashi_kami()
-	var chars: Array[L5RCharacterData] = [fc, togashi]
+	var chars: Array = [fc, togashi]
 	var chars_by_id: Dictionary = {100: fc, 200: togashi}
 	var state := TogashiOversight.make_initial_state()
-	var directives: Array[Dictionary] = []
-	var topics: Array[TopicData] = []
-	var next_tid: Array[int] = [1]
+	var directives: Array = []
+	var topics: Array = []
+	var next_tid: Array = [1]
 	var result := DayOrchestrator._process_togashi_oversight(
 		state, directives, chars, chars_by_id, {}, topics, next_tid, 0,
 	)
 	assert_false(result.is_empty())
-	assert_false(result.get("skipped", true))
+	# When oversight runs but no intervention fires, "skipped" key is absent.
+	assert_false(result.get("skipped", false))
 
 
 func test_find_mirumoto_fc_picks_highest_status() -> void:
@@ -151,7 +152,7 @@ func test_find_mirumoto_fc_picks_highest_status() -> void:
 	var fc2 := _make_mirumoto_fc()
 	fc2.character_id = 102
 	fc2.status = 8.0
-	var chars: Array[L5RCharacterData] = [fc1, fc2]
+	var chars: Array = [fc1, fc2]
 	var found: L5RCharacterData = DayOrchestrator._find_mirumoto_fc(chars)
 	assert_eq(found.character_id, 102)
 
@@ -161,7 +162,7 @@ func test_find_mirumoto_fc_skips_dead() -> void:
 	fc.wounds_taken = 200
 	fc.stamina = 2
 	fc.willpower = 2
-	var chars: Array[L5RCharacterData] = [fc]
+	var chars: Array = [fc]
 	var found: L5RCharacterData = DayOrchestrator._find_mirumoto_fc(chars)
 	assert_null(found)
 
@@ -169,31 +170,31 @@ func test_find_mirumoto_fc_skips_dead() -> void:
 func test_find_mirumoto_fc_skips_non_dragon() -> void:
 	var c := _make_mirumoto_fc()
 	c.clan = "Crane"
-	var chars: Array[L5RCharacterData] = [c]
+	var chars: Array = [c]
 	assert_null(DayOrchestrator._find_mirumoto_fc(chars))
 
 
 func test_find_mirumoto_fc_requires_no_lord() -> void:
 	var c := _make_mirumoto_fc()
 	c.lord_id = 5
-	var chars: Array[L5RCharacterData] = [c]
+	var chars: Array = [c]
 	assert_null(DayOrchestrator._find_mirumoto_fc(chars))
 
 
 func test_find_togashi_id_returns_togashi_champion() -> void:
 	var t := _make_togashi_kami()
-	var chars: Array[L5RCharacterData] = [t]
+	var chars: Array = [t]
 	assert_eq(DayOrchestrator._find_togashi_id(chars), 200)
 
 
 func test_find_togashi_id_returns_minus_one_when_missing() -> void:
 	var fc := _make_mirumoto_fc()
-	var chars: Array[L5RCharacterData] = [fc]
+	var chars: Array = [fc]
 	assert_eq(DayOrchestrator._find_togashi_id(chars), -1)
 
 
 func test_build_togashi_world_state_has_required_keys() -> void:
-	var chars: Array[L5RCharacterData] = [_make_mirumoto_fc()]
+	var chars: Array = [_make_mirumoto_fc()]
 	var ws: Dictionary = DayOrchestrator._build_togashi_world_state({}, chars, {})
 	assert_true(ws.has("clan_strengths"))
 	assert_true(ws.has("active_inter_clan_wars"))
@@ -208,7 +209,7 @@ func test_build_togashi_world_state_counts_clan_strength() -> void:
 	c1.status = 5.0
 	var c2 := _make_char(2, "B", "Dragon", "Kitsuki")
 	c2.status = 3.0
-	var chars: Array[L5RCharacterData] = [c1, c2]
+	var chars: Array = [c1, c2]
 	var ws: Dictionary = DayOrchestrator._build_togashi_world_state({}, chars, {})
 	assert_almost_eq(float(ws["clan_strengths"]["Dragon"]), 8.0, 0.01)
 
@@ -230,7 +231,7 @@ func test_togashi_defiance_applies_honor_loss() -> void:
 	var togashi := _make_togashi_kami()
 	fc.disposition_values[togashi.character_id] = -50
 
-	var chars: Array[L5RCharacterData] = [fc, togashi]
+	var chars: Array = [fc, togashi]
 	var chars_by_id: Dictionary = {100: fc, 200: togashi}
 
 	var ws: Dictionary = {
@@ -247,9 +248,9 @@ func test_togashi_defiance_applies_honor_loss() -> void:
 		"crab_military_readiness": 1.0,
 	}
 
-	var directives: Array[Dictionary] = []
-	var topics: Array[TopicData] = []
-	var next_tid: Array[int] = [1]
+	var directives: Array = []
+	var topics: Array = []
+	var next_tid: Array = [1]
 
 	var result := DayOrchestrator._process_togashi_oversight(
 		state, directives, chars, chars_by_id, {"clan_strengths": ws["clan_strengths"]},
@@ -280,8 +281,8 @@ func test_phoenix_skipped_when_state_empty() -> void:
 
 func test_phoenix_skipped_when_no_shiba_champion() -> void:
 	var state := PhoenixCouncil.make_initial_state()
-	var chars: Array[L5RCharacterData] = [_make_char(1, "A", "Phoenix", "Isawa")]
-	var topics: Array[TopicData] = []
+	var chars: Array = [_make_char(1, "A", "Phoenix", "Isawa")]
+	var topics: Array = []
 	var result := DayOrchestrator._process_phoenix_council_gating(
 		state, [], chars, {}, _make_dice_engine(), topics, [1], 0,
 	)
@@ -293,7 +294,7 @@ func test_phoenix_skipped_when_champion_has_authority() -> void:
 	var state := PhoenixCouncil.make_initial_state()
 	state["phoenix_champion_authority"] = true
 	var champion := _make_shiba_champion()
-	var chars: Array[L5RCharacterData] = [champion]
+	var chars: Array = [champion]
 	var result := DayOrchestrator._process_phoenix_council_gating(
 		state, [], chars, {300: champion}, _make_dice_engine(), [], [1], 0,
 	)
@@ -304,7 +305,7 @@ func test_phoenix_skipped_when_council_below_quorum() -> void:
 	var state := PhoenixCouncil.make_initial_state()
 	var champion := _make_shiba_champion()
 	var master := _make_elemental_master(400, "Fire")
-	var chars: Array[L5RCharacterData] = [champion, master]
+	var chars: Array = [champion, master]
 	var chars_by_id: Dictionary = {300: champion, 400: master}
 	var result := DayOrchestrator._process_phoenix_council_gating(
 		state, [], chars, chars_by_id, _make_dice_engine(), [], [1], 0,
@@ -318,7 +319,7 @@ func test_find_shiba_champion_picks_highest_status_phoenix() -> void:
 	var c2 := _make_shiba_champion()
 	c2.character_id = 301
 	c2.status = 9.0
-	var chars: Array[L5RCharacterData] = [c1, c2]
+	var chars: Array = [c1, c2]
 	var found := DayOrchestrator._find_shiba_champion(chars)
 	assert_eq(found.character_id, 301)
 
@@ -328,7 +329,7 @@ func test_find_shiba_champion_skips_dead() -> void:
 	c.wounds_taken = 200
 	c.stamina = 2
 	c.willpower = 2
-	var chars: Array[L5RCharacterData] = [c]
+	var chars: Array = [c]
 	assert_null(DayOrchestrator._find_shiba_champion(chars))
 
 
@@ -338,7 +339,7 @@ func test_find_living_elemental_masters() -> void:
 	var m3 := _make_elemental_master(403, "Air")
 	var m4 := _make_elemental_master(404, "Earth")
 	var m5 := _make_elemental_master(405, "Void")
-	var chars: Array[L5RCharacterData] = [m1, m2, m3, m4, m5]
+	var chars: Array = [m1, m2, m3, m4, m5]
 	var masters := DayOrchestrator._find_living_elemental_masters(chars)
 	assert_eq(masters.size(), 5)
 
@@ -349,7 +350,7 @@ func test_find_living_masters_skips_dead() -> void:
 	m1.stamina = 2
 	m1.willpower = 2
 	var m2 := _make_elemental_master(402, "Water")
-	var chars: Array[L5RCharacterData] = [m1, m2]
+	var chars: Array = [m1, m2]
 	var masters := DayOrchestrator._find_living_elemental_masters(chars)
 	assert_eq(masters.size(), 1)
 
@@ -387,13 +388,13 @@ func test_phoenix_council_gates_major_directive() -> void:
 	var m4 := _make_elemental_master(404, "Earth")
 	m4.bushido_virtue = Enums.BushidoVirtue.JIN
 	var m5 := _make_elemental_master(405, "Void")
-	var chars: Array[L5RCharacterData] = [champion, m1, m2, m3, m4, m5]
+	var chars: Array = [champion, m1, m2, m3, m4, m5]
 	var chars_by_id: Dictionary = {300: champion, 401: m1, 402: m2, 403: m3, 404: m4, 405: m5}
 
-	var directives: Array[Dictionary] = [
+	var directives: Array = [
 		{"directive": StrategicReview.Directive.WAR_READINESS, "lord_id": 300},
 	]
-	var topics: Array[TopicData] = []
+	var topics: Array = []
 	var de := _make_dice_engine()
 
 	var result := DayOrchestrator._process_phoenix_council_gating(
@@ -411,10 +412,10 @@ func test_phoenix_non_major_directives_pass_through() -> void:
 	var m1 := _make_elemental_master(401, "Fire")
 	var m2 := _make_elemental_master(402, "Water")
 	var m3 := _make_elemental_master(403, "Air")
-	var chars: Array[L5RCharacterData] = [champion, m1, m2, m3]
+	var chars: Array = [champion, m1, m2, m3]
 	var chars_by_id: Dictionary = {300: champion, 401: m1, 402: m2, 403: m3}
 
-	var directives: Array[Dictionary] = [
+	var directives: Array = [
 		{"directive": StrategicReview.Directive.ADJUST_TAX, "lord_id": 300},
 		{"directive": StrategicReview.Directive.CALL_COURT, "lord_id": 300},
 	]
@@ -439,10 +440,10 @@ func test_phoenix_vetoed_directive_removed_from_results() -> void:
 	var m4 := _make_elemental_master(404, "Earth")
 	m4.bushido_virtue = Enums.BushidoVirtue.JIN
 	var m5 := _make_elemental_master(405, "Void")
-	var chars: Array[L5RCharacterData] = [champion, m1, m2, m3, m4, m5]
+	var chars: Array = [champion, m1, m2, m3, m4, m5]
 	var chars_by_id: Dictionary = {300: champion, 401: m1, 402: m2, 403: m3, 404: m4, 405: m5}
 
-	var directives: Array[Dictionary] = [
+	var directives: Array = [
 		{"directive": StrategicReview.Directive.ADJUST_TAX, "lord_id": 300},
 		{"directive": StrategicReview.Directive.WAR_READINESS, "lord_id": 300},
 	]
@@ -473,10 +474,10 @@ func test_phoenix_other_clan_directives_ignored() -> void:
 	var m1 := _make_elemental_master(401, "Fire")
 	var m2 := _make_elemental_master(402, "Water")
 	var m3 := _make_elemental_master(403, "Air")
-	var chars: Array[L5RCharacterData] = [champion, m1, m2, m3]
+	var chars: Array = [champion, m1, m2, m3]
 	var chars_by_id: Dictionary = {300: champion, 401: m1, 402: m2, 403: m3}
 
-	var directives: Array[Dictionary] = [
+	var directives: Array = [
 		{"directive": StrategicReview.Directive.WAR_READINESS, "lord_id": 999},
 	]
 	var original_count: int = directives.size()
@@ -500,13 +501,13 @@ func test_phoenix_generates_topic_on_veto() -> void:
 	var m4 := _make_elemental_master(404, "Earth")
 	m4.bushido_virtue = Enums.BushidoVirtue.JIN
 	var m5 := _make_elemental_master(405, "Void")
-	var chars: Array[L5RCharacterData] = [champion, m1, m2, m3, m4, m5]
+	var chars: Array = [champion, m1, m2, m3, m4, m5]
 	var chars_by_id: Dictionary = {300: champion, 401: m1, 402: m2, 403: m3, 404: m4, 405: m5}
 
-	var directives: Array[Dictionary] = [
+	var directives: Array = [
 		{"directive": StrategicReview.Directive.WAR_READINESS, "lord_id": 300},
 	]
-	var topics: Array[TopicData] = []
+	var topics: Array = []
 
 	DayOrchestrator._process_phoenix_council_gating(
 		state, directives, chars, chars_by_id, _make_dice_engine(1), topics, [1], 50,

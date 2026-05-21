@@ -163,12 +163,12 @@ static func hire_as_mercenary(
 
 
 static func process_seasonal_ronin(
-	characters: Array[L5RCharacterData],
+	characters: Array,
 	current_season_count: int,
 ) -> Dictionary:
-	var debt_results: Array[Dictionary] = []
-	var desperate_results: Array[Dictionary] = []
-	var insurgency_seeds: Array[int] = []
+	var debt_results: Array = []
+	var desperate_results: Array = []
+	var insurgency_seeds: Array = []
 
 	for c: L5RCharacterData in characters:
 		if CharacterStats.is_dead(c):

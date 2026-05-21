@@ -19,7 +19,7 @@ func _make_ctx() -> NPCDataStructures.ContextSnapshot:
 	ctx.characters_present = []
 	ctx.known_contacts_by_clan = {}
 	ctx.known_npc_locations = {}
-	ctx.action_log = [] as Array[Dictionary]
+	ctx.action_log = []
 	ctx.province_statuses = []
 	return ctx
 
@@ -128,7 +128,7 @@ func test_isolate_all_severed_with_confidence() -> void:
 		{"target_npc_id": 10, "action_id": "PROBE"},
 		{"target_npc_id": 10, "action_id": "READ_CHARACTER"},
 		{"target_npc_id": 10, "action_id": "READ_CHARACTER"},
-	] as Array[Dictionary]
+	]
 	var obj: Dictionary = {
 		"need_type": "ISOLATE_CHARACTER",
 		"target_npc_id": 10,
@@ -459,7 +459,7 @@ func test_chugi_self_selected_stalls() -> void:
 func test_evaluate_all_objectives() -> void:
 	var c := _make_character(1)
 	c.bushido_virtue = Enums.BushidoVirtue.NONE
-	var chars: Array[L5RCharacterData] = [c]
+	var chars: Array = [c]
 	var objectives_map: Dictionary = {
 		1: {
 			"primary": {
@@ -472,7 +472,7 @@ func test_evaluate_all_objectives() -> void:
 		},
 	}
 	var world_state: Dictionary = {"season": 2}
-	var results: Array[Dictionary] = ObjectiveProgress.evaluate_all_objectives(
+	var results: Array = ObjectiveProgress.evaluate_all_objectives(
 		chars, objectives_map, world_state
 	)
 	assert_eq(results.size(), 1)
@@ -493,7 +493,7 @@ func test_confidence_gate_thorough() -> void:
 		{"target_npc_id": 10, "action_id": "PROBE"},
 		{"target_npc_id": 10, "action_id": "READ_CHARACTER"},
 		{"target_npc_id": 10, "action_id": "READ_CHARACTER"},
-	] as Array[Dictionary]
+	]
 	var obj: Dictionary = {
 		"need_type": "ISOLATE_CHARACTER",
 		"target_npc_id": 10,
@@ -509,7 +509,7 @@ func test_confidence_gate_insufficient() -> void:
 	ctx.disposition_values = {5: 10}
 	ctx.action_log = [
 		{"target_npc_id": 10, "action_id": "PROBE"},
-	] as Array[Dictionary]
+	]
 	var obj: Dictionary = {
 		"need_type": "ISOLATE_CHARACTER",
 		"target_npc_id": 10,

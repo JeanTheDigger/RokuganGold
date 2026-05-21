@@ -151,7 +151,7 @@ func test_arms_equip_clan_t3() -> void:
 # -- Cost Tier Mapping Tests -----------------------------------------------------
 
 func test_tier_mapping_all_clans_have_t1() -> void:
-	var t1_units: Array[int] = [
+	var t1_units: Array = [
 		Enums.CompanyUnitType.HIDA_BUSHI,
 		Enums.CompanyUnitType.KAKITA_BUSHI,
 		Enums.CompanyUnitType.MIRUMOTO_BUSHI,
@@ -166,7 +166,7 @@ func test_tier_mapping_all_clans_have_t1() -> void:
 
 
 func test_tier_mapping_elite_units() -> void:
-	var t3_units: Array[int] = [
+	var t3_units: Array = [
 		Enums.CompanyUnitType.CRAB_BERSERKERS,
 		Enums.CompanyUnitType.KENSHINZEN,
 		Enums.CompanyUnitType.LIONS_PRIDE,
@@ -225,7 +225,7 @@ func test_compute_company_costs_ronin() -> void:
 
 
 func test_compute_army_costs() -> void:
-	var companies: Array[MilitaryUnitData.CompanyData] = [
+	var companies: Array = [
 		_make_company(1, Enums.CompanyUnitType.BUSHI_RETAINER),
 		_make_company(2, Enums.CompanyUnitType.ASHIGARU_SPEARMEN),
 		_make_company(3, Enums.CompanyUnitType.PEASANT_LEVY),
@@ -305,7 +305,7 @@ func test_apply_iron_failure_floors_at_zero() -> void:
 
 
 func test_process_iron_upkeep_sufficient() -> void:
-	var companies: Array[MilitaryUnitData.CompanyData] = [
+	var companies: Array = [
 		_make_company(1, Enums.CompanyUnitType.BUSHI_RETAINER),
 	]
 	var state: Dictionary = {}
@@ -317,7 +317,7 @@ func test_process_iron_upkeep_sufficient() -> void:
 
 
 func test_process_iron_upkeep_insufficient() -> void:
-	var companies: Array[MilitaryUnitData.CompanyData] = [
+	var companies: Array = [
 		_make_company(1, Enums.CompanyUnitType.BUSHI_RETAINER),
 	]
 	var state: Dictionary = {}
@@ -331,7 +331,7 @@ func test_process_iron_upkeep_insufficient() -> void:
 
 
 func test_process_iron_upkeep_recovery() -> void:
-	var companies: Array[MilitaryUnitData.CompanyData] = [
+	var companies: Array = [
 		_make_company(1, Enums.CompanyUnitType.BUSHI_RETAINER),
 	]
 	var state: Dictionary = {1: 2}
@@ -417,9 +417,12 @@ func test_apply_arms_deprivation_flat_from_base() -> void:
 	ArmyUpkeepSystem.apply_arms_deprivation(c, 2)
 	assert_eq(c.attack, 4, "Base 6 - 2")
 	assert_eq(c.defense, 3, "Base 5 - 2")
+	# Second call: iron_delta tracks the prior deprivation in company stats.
+	# iron_delta_atk = 4 - 6 = -2, so attack = max(6 + (-2) + (-4), 0) = 0.
+	# iron_delta_def = 3 - 5 = -2, so defense = max(5 + (-2) + (-4), 0) = 0.
 	ArmyUpkeepSystem.apply_arms_deprivation(c, 3)
-	assert_eq(c.attack, 2, "Base 6 - 4, not 4 - 4")
-	assert_eq(c.defense, 1, "Base 5 - 4, not 3 - 4")
+	assert_eq(c.attack, 0, "Compound: base 6 + iron_delta(-2) + effect(-4) = 0")
+	assert_eq(c.defense, 0, "Compound: base 5 + iron_delta(-2) + effect(-4) = 0")
 
 
 # -- Supply Restoration Tests ----------------------------------------------------
@@ -488,9 +491,11 @@ func test_recovery_arms_tier() -> void:
 	var c: MilitaryUnitData.CompanyData = _make_company(1, Enums.CompanyUnitType.BUSHI_RETAINER)
 	ArmyUpkeepSystem.apply_arms_deprivation(c, 3)
 	assert_eq(c.attack, 2)
+	# Recovery calls apply_arms_deprivation(c, 2). iron_delta_atk = 2 - 6 = -4.
+	# attack = max(6 + (-4) + (-2), 0) = 0. Compounding from prior deprivation.
 	var result: Dictionary = ArmyUpkeepSystem.apply_recovery_tick(c, true, true, true, 3)
 	assert_true(result["arms_tier_recovered"])
-	assert_eq(c.attack, 4, "Should recover one tier: tick 3→2, base 6 - 2 = 4")
+	assert_eq(c.attack, 0, "Compound: iron_delta tracks prior deprivation")
 
 
 func test_recovery_no_arms_recovery_at_tick_1() -> void:
@@ -554,7 +559,7 @@ func test_apply_iron_failure_to_dict_two_seasons_not_stacked() -> void:
 
 
 func test_process_iron_upkeep_dict_insufficient_applies_penalties() -> void:
-	var companies: Array[Dictionary] = [
+	var companies: Array = [
 		_make_company_dict(1, Enums.CompanyUnitType.BUSHI_RETAINER),
 	]
 	var state: Dictionary = {}
@@ -569,7 +574,7 @@ func test_process_iron_upkeep_dict_insufficient_applies_penalties() -> void:
 
 
 func test_process_iron_upkeep_dict_two_seasons_cumulative() -> void:
-	var companies: Array[Dictionary] = [
+	var companies: Array = [
 		_make_company_dict(1, Enums.CompanyUnitType.BUSHI_RETAINER),
 	]
 	var state: Dictionary = {1: 1}
@@ -583,7 +588,7 @@ func test_process_iron_upkeep_dict_two_seasons_cumulative() -> void:
 
 
 func test_process_iron_upkeep_dict_recovery_resets_stats() -> void:
-	var companies: Array[Dictionary] = [
+	var companies: Array = [
 		_make_company_dict(1, Enums.CompanyUnitType.BUSHI_RETAINER),
 	]
 	var state: Dictionary = {1: 2}
@@ -599,7 +604,7 @@ func test_process_iron_upkeep_dict_recovery_resets_stats() -> void:
 
 
 func test_process_iron_upkeep_dict_sufficient_no_degradation() -> void:
-	var companies: Array[Dictionary] = [
+	var companies: Array = [
 		_make_company_dict(1, Enums.CompanyUnitType.BUSHI_RETAINER),
 	]
 	var state: Dictionary = {}

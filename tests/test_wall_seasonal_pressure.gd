@@ -11,7 +11,7 @@ func _make_wall_tower(sid: int, province_id: int, si: int = 10) -> SettlementDat
 	return s
 
 
-func _make_wall_province(pid: int, ss: int = 0, adjacent: Array[int] = []) -> ProvinceData:
+func _make_wall_province(pid: int, ss: int = 0, adjacent: Array = []) -> ProvinceData:
 	var p := ProvinceData.new()
 	p.province_id = pid
 	p.shadowlands_strength = ss
@@ -35,7 +35,7 @@ func test_non_wall_settlement_not_processed() -> void:
 	var s := SettlementData.new()
 	s.settlement_id = 1
 	s.province_id = 10
-	s.settlement_type = Enums.SettlementType.WALL_TOWER
+	s.settlement_type = Enums.SettlementType.CASTLE
 	s.wall_si = 10
 	var p := _make_wall_province(10, 0)
 	var result: Dictionary = DayOrchestrator._process_wall_seasonal_pressure(
@@ -167,8 +167,8 @@ func test_si_decay_result_fields() -> void:
 func test_adjacent_bleed_accumulates_in_season_meta() -> void:
 	var s1 := _make_wall_tower(1, 10, 4)  # SI=4, at bleed threshold
 	var s2 := _make_wall_tower(2, 20, 8)  # adjacent
-	var p1 := _make_wall_province(10, 0, [20] as Array[int])
-	var p2 := _make_wall_province(20, 0, [10] as Array[int])
+	var p1 := _make_wall_province(10, 0, [20])
+	var p2 := _make_wall_province(20, 0, [10])
 	var meta: Dictionary = {}
 	DayOrchestrator._process_wall_seasonal_pressure(
 		[s1, s2], {10: p1, 20: p2}, TimeSystem.Season.SUMMER, meta
@@ -185,8 +185,8 @@ func test_adjacent_bleed_accumulates_in_season_meta() -> void:
 func test_adjacent_bleed_applies_when_accum_reaches_one() -> void:
 	var s1 := _make_wall_tower(1, 10, 4)  # SI=4, at threshold
 	var s2 := _make_wall_tower(2, 20, 8)
-	var p1 := _make_wall_province(10, 0, [20] as Array[int])
-	var p2 := _make_wall_province(20, 0, [10] as Array[int])
+	var p1 := _make_wall_province(10, 0, [20])
+	var p2 := _make_wall_province(20, 0, [10])
 	# Pre-load accum with 0.5 from a previous season
 	var meta: Dictionary = {"_wall_bleed_accum": {"2": 0.5}}
 	DayOrchestrator._process_wall_seasonal_pressure(
@@ -201,7 +201,7 @@ func test_adjacent_bleed_applies_when_accum_reaches_one() -> void:
 func test_no_bleed_when_si_above_threshold() -> void:
 	var s1 := _make_wall_tower(1, 10, 5)  # SI=5, above ADJACENT_BLEED_THRESHOLD=4
 	var s2 := _make_wall_tower(2, 20, 8)
-	var p1 := _make_wall_province(10, 0, [20] as Array[int])
+	var p1 := _make_wall_province(10, 0, [20])
 	var p2 := _make_wall_province(20, 0)
 	var meta: Dictionary = {}
 	DayOrchestrator._process_wall_seasonal_pressure(
@@ -214,7 +214,7 @@ func test_no_bleed_when_si_above_threshold() -> void:
 func test_bleed_only_affects_adjacent_wall_provinces() -> void:
 	var s1 := _make_wall_tower(1, 10, 4)  # SI=4, at threshold
 	var s2 := _make_wall_tower(2, 30, 8)  # NOT adjacent to province 10
-	var p1 := _make_wall_province(10, 0, [20] as Array[int])  # adjacent to 20, not 30
+	var p1 := _make_wall_province(10, 0, [20])  # adjacent to 20, not 30
 	var p2_nonwall := ProvinceData.new()
 	p2_nonwall.province_id = 20
 	var p3 := _make_wall_province(30, 0)

@@ -2,19 +2,20 @@ extends GutTest
 ## Tests for SaveManager — character sheet persistence.
 ## Uses a scratch directory (user://test_saves/) isolated from production data.
 
+const SaveManagerScript = preload("res://scripts/managers/SaveManager.gd")
 const TEST_DIR := "user://test_saves/characters/"
 
 
-var _sm: SaveManager
+var _sm: Node
 
 
 func before_each() -> void:
-	_sm = SaveManager.new()
+	_sm = SaveManagerScript.new()
 	DirAccess.make_dir_recursive_absolute(TEST_DIR)
 
 
 func after_each() -> void:
-	_sm.queue_free()
+	_sm.free()
 	_purge_test_dir()
 
 
@@ -111,7 +112,7 @@ func test_delete_removes_file() -> void:
 
 func test_delete_nonexistent_character_does_not_error() -> void:
 	_sm.delete_character(99999, TEST_DIR)
-	pass  # No error = pass
+	pass_test("No error when deleting nonexistent character")
 
 
 # -- save_all / load_all -------------------------------------------------------
@@ -161,7 +162,8 @@ func test_save_all_overwrites_existing_file_with_updated_data() -> void:
 	_sm.save_character(c, TEST_DIR)
 
 	c.stamina = 5
-	_sm.save_all([c], TEST_DIR)
+	var batch: Array[L5RCharacterData] = [c]
+	_sm.save_all(batch, TEST_DIR)
 
 	var loaded: L5RCharacterData = _sm.load_character(400, TEST_DIR)
 	assert_eq(loaded.stamina, 5, "Overwrite should persist updated stamina")

@@ -49,12 +49,12 @@ static func check_objective_validity(
 
 
 static func process_lord_death(
-	vassals: Array[L5RCharacterData],
+	vassals: Array,
 	dead_lord_id: int,
 	successor_id: int,
 	objectives_map: Dictionary,
-) -> Array[Dictionary]:
-	var results: Array[Dictionary] = []
+) -> Array:
+	var results: Array = []
 
 	for vassal: L5RCharacterData in vassals:
 		if vassal.lord_id != dead_lord_id:
@@ -115,11 +115,11 @@ static func resolve_orphaned_objective(
 
 
 static func has_orphaned_vassals(
-	vassals: Array[L5RCharacterData],
+	vassals: Array,
 	lord_id: int,
 	objectives_map: Dictionary,
-) -> Array[int]:
-	var orphaned_ids: Array[int] = []
+) -> Array:
+	var orphaned_ids: Array = []
 	for vassal: L5RCharacterData in vassals:
 		if vassal.lord_id != lord_id:
 			continue

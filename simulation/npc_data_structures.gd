@@ -97,8 +97,8 @@ class ContextSnapshot:
 	# Lord & court (s55.34)
 	var lord_id: int = -1
 	var active_court_at_location: Dictionary = {}
-	var upcoming_courts: Array[Dictionary] = []
-	var held_leverage: Array[Dictionary] = []
+	var upcoming_courts: Array = []
+	var held_leverage: Array = []
 	var known_npc_locations: Dictionary = {}
 	var court_session_state: Dictionary = {}
 	var court_settlement_id: int = -1
@@ -111,30 +111,30 @@ class ContextSnapshot:
 	var insight_rank: int = 1
 
 	# Social knowledge
-	var characters_present: Array[int] = []
+	var characters_present: Array = []
 	var dispositions: Dictionary = {}
 	var disposition_values: Dictionary = {}
-	var known_topics: Array[int] = []
+	var known_topics: Array = []
 	var known_positions: Dictionary = {}
 	var known_topic_types: Dictionary = {}
 	var known_objectives: Dictionary = {}
-	var known_contacts: Array[int] = []
+	var known_contacts: Array = []
 	var contact_clans: Dictionary = {}
 	var known_contacts_by_clan: Dictionary = {}
-	var met_characters: Array[int] = []
-	var knowledge_pool: Array[KnowledgeEntry] = []
-	var known_secrets: Array[Dictionary] = []
+	var met_characters: Array = []
+	var knowledge_pool: Array = []
+	var known_secrets: Array = []
 
 	# Lord-tier fields
 	var resource_stockpiles: Dictionary = {}
-	var province_statuses: Array[ProvinceStatus] = []
+	var province_statuses: Array = []
 	var feasibility_data: Dictionary = {}
 
 	# Vacancy detection (s57.20.3)
-	var vacant_positions: Array[Dictionary] = []
+	var vacant_positions: Array = []
 
 	# Marriage (s22.7)
-	var marriageable_vassal_ids: Array[int] = []
+	var marriageable_vassal_ids: Array = []
 	var succession_insecure: bool = false
 	var lord_is_unmarried: bool = false
 
@@ -144,7 +144,7 @@ class ContextSnapshot:
 	var assigned_company_id: int = -1
 
 	# Wall management (s55.23)
-	var wall_statuses: Array[WallStatus] = []
+	var wall_statuses: Array = []
 	# Precomputed garrison shortage personality modifier per known contact
 	# (character_id → float from WallSystem personality table, s2.4.12–13).
 	# Populated only for characters with wall_statuses; empty otherwise.
@@ -160,16 +160,19 @@ class ContextSnapshot:
 	var active_wars: Array = []
 	var escalating_conflicts: Array = []
 
+	# Insurgency context (convenience field populated from ProvinceStatus)
+	var active_insurgency_id: int = -1
+
 	# Shadowlands intelligence (s55.23)
-	var taint_topic_province_ids: Array[int] = []
+	var taint_topic_province_ids: Array = []
 
 	# Famine crisis intelligence
-	var famine_crisis_province_ids: Array[int] = []
+	var famine_crisis_province_ids: Array = []
 
 	# Infrastructure intelligence (s4.3.22)
-	var worship_failing_province_ids: Array[int] = []
-	var border_province_ids_without_fort: Array[int] = []
-	var surplus_pu_province_ids: Array[int] = []
+	var worship_failing_province_ids: Array = []
+	var border_province_ids_without_fort: Array = []
+	var surplus_pu_province_ids: Array = []
 	var is_coastal: bool = false
 	var has_naval_assets: bool = false
 	var has_naval_threat: bool = false
@@ -186,19 +189,19 @@ class ContextSnapshot:
 	var is_hostage: bool = false
 
 	# Urgency evaluation fields
-	var expiring_favor_ids: Array[int] = []
-	var starvation_province_ids: Array[int] = []
-	var cut_supply_army_ids: Array[int] = []
+	var expiring_favor_ids: Array = []
+	var starvation_province_ids: Array = []
+	var cut_supply_army_ids: Array = []
 	var besieged_settlement_health_pct: float = 1.0
 	var objective_stalled_seasons: int = 0
 
 	# Atonement (s4.6)
-	var self_offenses: Array[Dictionary] = []
+	var self_offenses: Array = []
 
 	# State
 	var pending_events: Array = []
 	var ap_remaining: int = 0
-	var action_log: Array[Dictionary] = []
+	var action_log: Array = []
 
 	# Personality
 	var bushido_virtue: Enums.BushidoVirtue = Enums.BushidoVirtue.NONE

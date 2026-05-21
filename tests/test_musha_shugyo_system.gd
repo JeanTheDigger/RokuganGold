@@ -454,20 +454,20 @@ func test_decompose_source_tag() -> void:
 # =============================================================================
 
 func test_bushi_preferred_settlements() -> void:
-	var types: Array[int] = MushaShugyo.get_preferred_settlement_types(Enums.SchoolType.BUSHI)
+	var types: Array = MushaShugyo.get_preferred_settlement_types(Enums.SchoolType.BUSHI)
 	assert_true(Enums.SettlementType.CASTLE in types)
 	assert_true(Enums.SettlementType.FORTIFICATION in types)
 
 
 func test_courtier_preferred_settlements() -> void:
-	var types: Array[int] = MushaShugyo.get_preferred_settlement_types(Enums.SchoolType.COURTIER)
+	var types: Array = MushaShugyo.get_preferred_settlement_types(Enums.SchoolType.COURTIER)
 	assert_true(Enums.SettlementType.CASTLE in types)
 	assert_true(Enums.SettlementType.CITY in types)
 	assert_true(Enums.SettlementType.IMPERIAL_CAPITAL in types)
 
 
 func test_shugenja_preferred_settlements() -> void:
-	var types: Array[int] = MushaShugyo.get_preferred_settlement_types(Enums.SchoolType.SHUGENJA)
+	var types: Array = MushaShugyo.get_preferred_settlement_types(Enums.SchoolType.SHUGENJA)
 	assert_true(Enums.SettlementType.TEMPLE in types)
 	assert_true(Enums.SettlementType.SHINDEN in types)
 	assert_true(Enums.SettlementType.MONASTERY in types)
@@ -560,10 +560,10 @@ func test_orchestrator_ends_pilgrimage_on_correct_day() -> void:
 	var lord := L5RCharacterData.new()
 	lord.character_id = 100
 	lord.wounds_taken = 0
-	var chars: Array[L5RCharacterData] = [_char]
+	var chars: Array = [_char]
 	var chars_by_id: Dictionary = {1: _char, 100: lord}
 	var objectives_map: Dictionary = {1: {"standing": {"need_type": "SEEK_EXPERIENCE"}}}
-	var results: Array[Dictionary] = DayOrchestrator._process_musha_shugyo(chars, chars_by_id, 360, objectives_map)
+	var results: Array = DayOrchestrator._process_musha_shugyo(chars, chars_by_id, 360, objectives_map)
 	assert_eq(results.size(), 1)
 	assert_eq(results[0]["character_id"], 1)
 	assert_false(_char.musha_shugyo)
@@ -573,10 +573,10 @@ func test_orchestrator_ends_pilgrimage_on_correct_day() -> void:
 func test_orchestrator_does_not_end_early() -> void:
 	_char.lord_id = 100
 	MushaShugyo.begin_pilgrimage(_char, 0)
-	var chars: Array[L5RCharacterData] = [_char]
+	var chars: Array = [_char]
 	var chars_by_id: Dictionary = {1: _char}
 	var objectives_map: Dictionary = {1: {"standing": {"need_type": "SEEK_EXPERIENCE"}}}
-	var results: Array[Dictionary] = DayOrchestrator._process_musha_shugyo(chars, chars_by_id, 359, objectives_map)
+	var results: Array = DayOrchestrator._process_musha_shugyo(chars, chars_by_id, 359, objectives_map)
 	assert_eq(results.size(), 0)
 	assert_true(_char.musha_shugyo)
 
@@ -589,10 +589,10 @@ func test_orchestrator_detects_dead_lord() -> void:
 	lord.stamina = 2
 	lord.willpower = 2
 	lord.wounds_taken = 999
-	var chars: Array[L5RCharacterData] = [_char]
+	var chars: Array = [_char]
 	var chars_by_id: Dictionary = {1: _char, 100: lord}
 	var objectives_map: Dictionary = {}
-	var results: Array[Dictionary] = DayOrchestrator._process_musha_shugyo(chars, chars_by_id, 360, objectives_map)
+	var results: Array = DayOrchestrator._process_musha_shugyo(chars, chars_by_id, 360, objectives_map)
 	assert_eq(results.size(), 1)
 	assert_true(results[0].get("lord_dead", false))
 
@@ -603,7 +603,7 @@ func test_orchestrator_clears_objectives_map_on_end() -> void:
 	var lord := L5RCharacterData.new()
 	lord.character_id = 100
 	lord.wounds_taken = 0
-	var chars: Array[L5RCharacterData] = [_char]
+	var chars: Array = [_char]
 	var chars_by_id: Dictionary = {1: _char, 100: lord}
 	var objectives_map: Dictionary = {1: {"standing": {"need_type": "SEEK_EXPERIENCE"}}}
 	DayOrchestrator._process_musha_shugyo(chars, chars_by_id, 360, objectives_map)
@@ -615,10 +615,10 @@ func test_orchestrator_skips_non_pilgrimage_characters() -> void:
 	other.character_id = 2
 	other.lord_id = 100
 	other.musha_shugyo = false
-	var chars: Array[L5RCharacterData] = [_char, other]
+	var chars: Array = [_char, other]
 	var chars_by_id: Dictionary = {1: _char, 2: other}
 	var objectives_map: Dictionary = {}
-	var results: Array[Dictionary] = DayOrchestrator._process_musha_shugyo(chars, chars_by_id, 500, objectives_map)
+	var results: Array = DayOrchestrator._process_musha_shugyo(chars, chars_by_id, 500, objectives_map)
 	assert_eq(results.size(), 0)
 
 
@@ -776,7 +776,7 @@ func test_normal_ronin_can_still_petition() -> void:
 func test_orchestrator_ronin_conversion_sets_permanent_flag() -> void:
 	_char.lord_id = 100
 	MushaShugyo.begin_pilgrimage(_char, 0)
-	var chars: Array[L5RCharacterData] = [_char]
+	var chars: Array = [_char]
 	var chars_by_id: Dictionary = {1: _char}
 	var objectives_map: Dictionary = {1: {"standing": {"need_type": "SEEK_EXPERIENCE"}}}
 	var converted: bool = false
@@ -793,12 +793,12 @@ func test_orchestrator_ronin_conversion_sets_permanent_flag() -> void:
 		test_char.honor = 5.0
 		test_char.role_position = "Samurai"
 		MushaShugyo.begin_pilgrimage(test_char, 0)
-		var test_chars: Array[L5RCharacterData] = [test_char]
+		var test_chars: Array = [test_char]
 		var test_cbi: Dictionary = {1: test_char}
 		var test_omap: Dictionary = {1: {"standing": {"need_type": "SEEK_EXPERIENCE"}}}
 		var d := DiceEngine.new()
 		d.set_seed(seed_val)
-		var results: Array[Dictionary] = DayOrchestrator._process_musha_shugyo(test_chars, test_cbi, 360, test_omap, d)
+		var results: Array = DayOrchestrator._process_musha_shugyo(test_chars, test_cbi, 360, test_omap, d)
 		if results.size() > 0 and results[0].get("became_ronin", false):
 			converted = true
 			assert_true(test_char.permanent_ronin)
@@ -814,7 +814,7 @@ func test_orchestrator_normal_end_when_no_ronin_conversion() -> void:
 	var lord := L5RCharacterData.new()
 	lord.character_id = 100
 	lord.wounds_taken = 0
-	var chars: Array[L5RCharacterData] = [_char]
+	var chars: Array = [_char]
 	var chars_by_id: Dictionary = {1: _char, 100: lord}
 	var objectives_map: Dictionary = {1: {"standing": {"need_type": "SEEK_EXPERIENCE"}}}
 	var found_normal: bool = false
@@ -827,12 +827,12 @@ func test_orchestrator_normal_end_when_no_ronin_conversion() -> void:
 		test_char.status = 1.0
 		test_char.honor = 5.0
 		MushaShugyo.begin_pilgrimage(test_char, 0)
-		var test_chars: Array[L5RCharacterData] = [test_char]
+		var test_chars: Array = [test_char]
 		var test_cbi: Dictionary = {1: test_char, 100: lord}
 		var test_omap: Dictionary = {1: {"standing": {"need_type": "SEEK_EXPERIENCE"}}}
 		var d := DiceEngine.new()
 		d.set_seed(seed_val)
-		var results: Array[Dictionary] = DayOrchestrator._process_musha_shugyo(test_chars, test_cbi, 360, test_omap, d)
+		var results: Array = DayOrchestrator._process_musha_shugyo(test_chars, test_cbi, 360, test_omap, d)
 		if results.size() > 0 and not results[0].get("became_ronin", false):
 			found_normal = true
 			assert_false(test_char.permanent_ronin)
@@ -852,12 +852,12 @@ func test_orchestrator_ronin_marks_ronin_start() -> void:
 		test_char.honor = 5.0
 		test_char.role_position = "Samurai"
 		MushaShugyo.begin_pilgrimage(test_char, 0)
-		var test_chars: Array[L5RCharacterData] = [test_char]
+		var test_chars: Array = [test_char]
 		var test_cbi: Dictionary = {1: test_char}
 		var test_omap: Dictionary = {}
 		var d := DiceEngine.new()
 		d.set_seed(seed_val)
-		var results: Array[Dictionary] = DayOrchestrator._process_musha_shugyo(test_chars, test_cbi, 360, test_omap, d, 5)
+		var results: Array = DayOrchestrator._process_musha_shugyo(test_chars, test_cbi, 360, test_omap, d, 5)
 		if results.size() > 0 and results[0].get("became_ronin", false):
 			assert_eq(test_char.supply_ledger.get("ronin_since_season"), 5)
 			return

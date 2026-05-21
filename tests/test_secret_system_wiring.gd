@@ -189,24 +189,24 @@ func test_scored_action_metadata_default_empty() -> void:
 func test_entanglement_broken_after_3_missed() -> void:
 	var ent: Dictionary = SeductionSystem.create_entanglement(1, 2, 10)
 	ent["missed_windows"] = 2
-	var entanglements: Array[Dictionary] = [ent]
-	var results: Array[Dictionary] = DayOrchestrator._process_entanglements(entanglements, 30)
+	var entanglements: Array = [ent]
+	var results: Array = DayOrchestrator._process_entanglements(entanglements, 30)
 	assert_true(results.size() > 0)
 	assert_eq(results[0]["event"], "broken")
 
 
 func test_entanglement_neglected_warning() -> void:
 	var ent: Dictionary = SeductionSystem.create_entanglement(1, 2, 10)
-	var entanglements: Array[Dictionary] = [ent]
-	var results: Array[Dictionary] = DayOrchestrator._process_entanglements(entanglements, 30)
+	var entanglements: Array = [ent]
+	var results: Array = DayOrchestrator._process_entanglements(entanglements, 30)
 	if results.size() > 0:
 		assert_eq(results[0]["event"], "neglected")
 
 
 func test_active_entanglement_no_result() -> void:
 	var ent: Dictionary = SeductionSystem.create_entanglement(1, 2, 100)
-	var entanglements: Array[Dictionary] = [ent]
-	var results: Array[Dictionary] = DayOrchestrator._process_entanglements(entanglements, 105)
+	var entanglements: Array = [ent]
+	var results: Array = DayOrchestrator._process_entanglements(entanglements, 105)
 	assert_eq(results.size(), 0)
 
 
@@ -222,8 +222,8 @@ func test_bound_character_attempts_escape() -> void:
 	prisoner.honor = 5.0
 	var chars: Dictionary = {10: prisoner}
 	var bs: Dictionary = BoundEscapeSystem.create_bound_state(10, 3, BoundEscapeSystem.BindingMaterial.SIMPLE_ROPE, 100)
-	var bound_states: Array[Dictionary] = [bs]
-	var results: Array[Dictionary] = DayOrchestrator._process_bound_states(
+	var bound_states: Array = [bs]
+	var results: Array = DayOrchestrator._process_bound_states(
 		bound_states, chars, _engine, 101
 	)
 	assert_eq(results.size(), 1)
@@ -238,8 +238,8 @@ func test_bound_no_sleight_of_hand_no_attempt() -> void:
 	prisoner.honor = 5.0
 	var chars: Dictionary = {11: prisoner}
 	var bs: Dictionary = BoundEscapeSystem.create_bound_state(11, 3, BoundEscapeSystem.BindingMaterial.CHAINS, 100)
-	var bound_states: Array[Dictionary] = [bs]
-	var results: Array[Dictionary] = DayOrchestrator._process_bound_states(
+	var bound_states: Array = [bs]
+	var results: Array = DayOrchestrator._process_bound_states(
 		bound_states, chars, _engine, 101
 	)
 	assert_eq(results.size(), 0)
@@ -248,6 +248,8 @@ func test_bound_no_sleight_of_hand_no_attempt() -> void:
 func test_freed_states_removed() -> void:
 	var bs: Dictionary = BoundEscapeSystem.create_bound_state(10, 3, BoundEscapeSystem.BindingMaterial.SIMPLE_ROPE, 100)
 	bs["state"] = BoundEscapeSystem.BoundState.FREE
-	var bound_states: Array[Dictionary] = [bs]
-	DayOrchestrator._process_bound_states(bound_states, {}, _engine, 101)
+	var bound_states: Array = [bs]
+	var c := L5RCharacterData.new()
+	c.character_id = 10
+	DayOrchestrator._process_bound_states(bound_states, {10: c}, _engine, 101)
 	assert_eq(bound_states.size(), 0)

@@ -114,9 +114,9 @@ static func select_host_castle(
 	emperor: L5RCharacterData,
 	archetype: int,
 	characters_by_id: Dictionary,
-	provinces: Array[ProvinceData],
-	settlements: Array[SettlementData],
-	active_topics: Array[TopicData],
+	provinces: Array,
+	settlements: Array,
+	active_topics: Array,
 	world_state: Dictionary,
 ) -> Dictionary:
 	var current_season: int = world_state.get("current_season", 0)
@@ -133,9 +133,9 @@ static func select_host_castle(
 static func select_host_regent(
 	chancellor: L5RCharacterData,
 	characters_by_id: Dictionary,
-	provinces: Array[ProvinceData],
-	settlements: Array[SettlementData],
-	active_topics: Array[TopicData],
+	provinces: Array,
+	settlements: Array,
+	active_topics: Array,
 	world_state: Dictionary,
 ) -> Dictionary:
 	var regent_state: Dictionary = world_state.duplicate()
@@ -193,7 +193,7 @@ static func _score_province_stability(province: ProvinceData) -> float:
 
 static func _score_crisis_relevance(
 	province: ProvinceData,
-	active_topics: Array[TopicData],
+	active_topics: Array,
 	archetype: int,
 ) -> float:
 	var max_momentum: float = 0.0
@@ -247,15 +247,15 @@ static func get_delegation_capacity(host_lord_rank: Enums.LordRank) -> Dictionar
 
 static func select_clan_delegation(
 	champion: L5RCharacterData,
-	vassals: Array[L5RCharacterData],
+	vassals: Array,
 	slots: int,
-	agenda_topic_ids: Array[int],
+	agenda_topic_ids: Array,
 	topic_pool_map: Dictionary,
-) -> Array[int]:
+) -> Array:
 	if vassals.is_empty() or slots <= 0:
 		return []
 
-	var scored: Array[Dictionary] = []
+	var scored: Array = []
 	for vassal: L5RCharacterData in vassals:
 		var score: float = _score_delegate_candidate(vassal, champion, agenda_topic_ids, topic_pool_map)
 		scored.append({"id": vassal.character_id, "score": score, "char": vassal})
@@ -264,7 +264,7 @@ static func select_clan_delegation(
 		return a["score"] > b["score"]
 	)
 
-	var selected_ids: Array[int] = []
+	var selected_ids: Array = []
 	for i: int in range(mini(slots, scored.size())):
 		selected_ids.append(int(scored[i]["id"]))
 
@@ -276,7 +276,7 @@ static func select_clan_delegation(
 static func _score_delegate_candidate(
 	candidate: L5RCharacterData,
 	champion: L5RCharacterData,
-	agenda_topic_ids: Array[int],
+	agenda_topic_ids: Array,
 	topic_pool_map: Dictionary,
 ) -> float:
 	var court_skills: float = 0.0
@@ -315,10 +315,10 @@ static func _score_delegate_candidate(
 
 
 static func _apply_yojimbo_pull_in(
-	selected_ids: Array[int],
-	all_vassals: Array[L5RCharacterData],
-) -> Array[int]:
-	var result: Array[int] = selected_ids.duplicate()
+	selected_ids: Array,
+	all_vassals: Array,
+) -> Array:
+	var result: Array = selected_ids.duplicate()
 	var vassal_map: Dictionary = {}
 	for v: L5RCharacterData in all_vassals:
 		vassal_map[v.character_id] = v
@@ -342,11 +342,11 @@ static func select_personal_invitations(
 	emperor: L5RCharacterData,
 	archetype: int,
 	pool_size: int,
-	candidates: Array[L5RCharacterData],
-	agenda_topic_ids: Array[int],
+	candidates: Array,
+	agenda_topic_ids: Array,
 	topic_pool_map: Dictionary,
-	already_invited: Array[int],
-) -> Array[int]:
+	already_invited: Array,
+) -> Array:
 	if candidates.is_empty() or pool_size <= 0:
 		return []
 
@@ -354,7 +354,7 @@ static func select_personal_invitations(
 		archetype, PERSONAL_INVITATION_WEIGHTS[StrategicReview.EmperorArchetype.IRON]
 	)
 
-	var scored: Array[Dictionary] = []
+	var scored: Array = []
 	for candidate: L5RCharacterData in candidates:
 		if candidate.character_id in already_invited:
 			continue
@@ -393,7 +393,7 @@ static func select_personal_invitations(
 		return a["score"] > b["score"]
 	)
 
-	var result: Array[int] = []
+	var result: Array = []
 	for i: int in range(mini(pool_size, scored.size())):
 		result.append(int(scored[i]["id"]))
 	return result
@@ -448,11 +448,11 @@ static func record_emperors_peace_violation(
 	action_id: String,
 	court: CourtSessionData,
 	ic_day: int,
-	next_case_id: Array[int],
-	next_topic_id: Array[int],
+	next_case_id: Array,
+	next_topic_id: Array,
 	characters_by_id: Dictionary,
 ) -> Dictionary:
-	var witnesses: Array[int] = []
+	var witnesses: Array = []
 	for aid: int in court.attendee_ids:
 		if aid != offender.character_id:
 			witnesses.append(aid)
@@ -522,8 +522,8 @@ static func record_emperors_peace_violation(
 static func compute_glory_rewards(
 	court: CourtSessionData,
 	characters_by_id: Dictionary,
-) -> Array[Dictionary]:
-	var rewards: Array[Dictionary] = []
+) -> Array:
+	var rewards: Array = []
 
 	var host_daimyo_id: int = court.host_lord_id
 	if host_daimyo_id >= 0:
@@ -564,7 +564,7 @@ static func is_home_ground_skill(skill_name: String) -> bool:
 	return skill_name in HOST_SKILL_IDS
 
 
-static func get_agenda_day_allocation() -> Array[int]:
+static func get_agenda_day_allocation() -> Array:
 	return AGENDA_TOPIC_DAYS.duplicate()
 
 
@@ -579,12 +579,12 @@ static func get_agenda_day_allocation() -> Array[int]:
 ## 3. Remaining topics fill the middle slot, ordered by descending momentum.
 ## If multiple topics compete for the same slot, descending momentum breaks ties.
 static func order_agenda_for_host(
-	topic_ids: Array[int],
-	active_topics: Array[TopicData],
+	topic_ids: Array,
+	active_topics: Array,
 	host_clan: String,
 	host_champion: L5RCharacterData,
 	characters_by_id: Dictionary,
-) -> Array[int]:
+) -> Array:
 	if topic_ids.size() <= 1:
 		return topic_ids.duplicate()
 	# Build a map of topic_id → TopicData for fast lookup.
@@ -600,7 +600,7 @@ static func order_agenda_for_host(
 		if c.lord_id == -1 and c.status >= 7.0:
 			clan_champion_id[c.clan] = c.character_id
 	# Score each topic: 2 = own clan, 0 = rival clan, 1 = other.
-	var scored: Array[Dictionary] = []
+	var scored: Array = []
 	for tid: int in topic_ids:
 		var topic: TopicData = topic_map.get(tid) as TopicData
 		var momentum: float = topic.momentum if topic != null else 0.0
@@ -620,7 +620,7 @@ static func order_agenda_for_host(
 			return a["priority"] > b["priority"]
 		return a["momentum"] > b["momentum"]
 	)
-	var result: Array[int] = []
+	var result: Array = []
 	for entry: Dictionary in scored:
 		result.append(int(entry["topic_id"]))
 	return result
@@ -680,9 +680,9 @@ static func run_winter_court_selection(
 	emperor: L5RCharacterData,
 	archetype: int,
 	characters_by_id: Dictionary,
-	provinces: Array[ProvinceData],
-	settlements: Array[SettlementData],
-	active_topics: Array[TopicData],
+	provinces: Array,
+	settlements: Array,
+	active_topics: Array,
 	world_state: Dictionary,
 ) -> Dictionary:
 	var is_regent: bool = should_use_regent(emperor.character_id if emperor != null else -1, characters_by_id)
@@ -721,14 +721,14 @@ static func run_invitation_pipeline(
 	archetype: int,
 	characters_by_id: Dictionary,
 	host_lord_rank: Enums.LordRank,
-	agenda_topic_ids: Array[int],
+	agenda_topic_ids: Array,
 ) -> Dictionary:
 	var capacity: Dictionary = get_delegation_capacity(host_lord_rank)
 	var per_clan: int = capacity.get("per_clan", 8)
 	var personal_pool: int = capacity.get("personal_invitations", 3)
 
 	var host_clan: String = host_result.get("host_clan", "")
-	var all_invited: Array[int] = []
+	var all_invited: Array = []
 
 	if emperor != null:
 		all_invited.append(emperor.character_id)
@@ -748,8 +748,8 @@ static func run_invitation_pipeline(
 		var champion: L5RCharacterData = _find_clan_champion(clan, characters_by_id)
 		if champion == null:
 			continue
-		var vassals: Array[L5RCharacterData] = _get_clan_vassals(clan, characters_by_id)
-		var delegation: Array[int] = select_clan_delegation(
+		var vassals: Array = _get_clan_vassals(clan, characters_by_id)
+		var delegation: Array = select_clan_delegation(
 			champion, vassals, per_clan, agenda_topic_ids, topic_pool_map
 		)
 		clan_delegations[clan] = delegation
@@ -757,7 +757,7 @@ static func run_invitation_pipeline(
 		if champion.character_id not in all_invited:
 			all_invited.append(champion.character_id)
 
-	var personal_candidates: Array[L5RCharacterData] = []
+	var personal_candidates: Array = []
 	if emperor != null:
 		for char_id: int in characters_by_id:
 			var c: L5RCharacterData = characters_by_id[char_id] as L5RCharacterData
@@ -768,7 +768,7 @@ static func run_invitation_pipeline(
 			if c.character_id in emperor.met_characters or emperor.knowledge_pool.size() > 0:
 				personal_candidates.append(c)
 
-	var personal_invites: Array[int] = []
+	var personal_invites: Array = []
 	if not host_result.get("is_regent_court", false) and emperor != null:
 		personal_invites = select_personal_invitations(
 			emperor, archetype, personal_pool, personal_candidates,
@@ -846,8 +846,8 @@ static func _find_clan_champion(clan: String, characters_by_id: Dictionary) -> L
 	return best
 
 
-static func _get_clan_vassals(clan: String, characters_by_id: Dictionary) -> Array[L5RCharacterData]:
-	var result: Array[L5RCharacterData] = []
+static func _get_clan_vassals(clan: String, characters_by_id: Dictionary) -> Array:
+	var result: Array = []
 	for char_id: int in characters_by_id:
 		var c: L5RCharacterData = characters_by_id[char_id] as L5RCharacterData
 		if c == null or CharacterStats.is_dead(c):
@@ -870,9 +870,9 @@ static func _build_topic_pool_map(characters_by_id: Dictionary) -> Dictionary:
 static func _select_host_with_weights(
 	selector: L5RCharacterData,
 	characters_by_id: Dictionary,
-	provinces: Array[ProvinceData],
-	settlements: Array[SettlementData],
-	active_topics: Array[TopicData],
+	provinces: Array,
+	settlements: Array,
+	active_topics: Array,
 	world_state: Dictionary,
 	weights: Dictionary,
 	archetype_override: int,

@@ -9,6 +9,6 @@ extends Resource
 @export var crime_record_id: int = -1
 @export var state: Enums.LegalStatus = Enums.LegalStatus.CLEAR
 @export var evidence_total: int = 0
-@export var evidence_items: Array[Dictionary] = []
+@export var evidence_items: Array = []
 @export var accusation_timestamp: int = -1
 @export var verdict_timestamp: int = -1

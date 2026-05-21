@@ -110,7 +110,7 @@ static func creates_duel_pretext(
 
 
 static func count_offenses_in_window(
-	offense_days: Array[int],
+	offense_days: Array,
 	current_ic_day: int,
 	days_per_season: int = 90,
 ) -> int:

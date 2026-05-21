@@ -36,7 +36,7 @@ func _make_settlement(
 
 func _make_minimal_world() -> Dictionary:
 	var provinces: Dictionary = {}
-	var settlements: Array[SettlementData] = []
+	var settlements: Array = []
 
 	var p1: ProvinceData = _make_province(1, "Crab", "Hida")
 	provinces[1] = p1
@@ -163,7 +163,7 @@ func test_bushi_school_fallback_across_families():
 # -- Character Generation Helper -----------------------------------------------
 
 func test_generate_positioned_character():
-	var next_id: Array[int] = [1]
+	var next_id: Array = [1]
 	var c: L5RCharacterData = WorldPopulationGenerator._generate_positioned_character(
 		next_id, WorldPopulationGenerator.PositionType.CLAN_CHAMPION,
 		"Lion", "Akodo", dice,
@@ -176,7 +176,7 @@ func test_generate_positioned_character():
 
 
 func test_positioned_character_has_orientation():
-	var next_id: Array[int] = [1]
+	var next_id: Array = [1]
 	var c: L5RCharacterData = WorldPopulationGenerator._generate_positioned_character(
 		next_id, WorldPopulationGenerator.PositionType.SAMURAI,
 		"Crab", "Hida", dice,
@@ -185,7 +185,7 @@ func test_positioned_character_has_orientation():
 
 
 func test_positioned_character_has_name():
-	var next_id: Array[int] = [1]
+	var next_id: Array = [1]
 	var c: L5RCharacterData = WorldPopulationGenerator._generate_positioned_character(
 		next_id, WorldPopulationGenerator.PositionType.SAMURAI,
 		"Crane", "Doji", dice,
@@ -196,24 +196,24 @@ func test_positioned_character_has_name():
 # -- Imperial Positions --------------------------------------------------------
 
 func test_imperial_positions_count():
-	var next_id: Array[int] = [1]
-	var chars: Array[L5RCharacterData] = WorldPopulationGenerator._generate_imperial_positions(
+	var next_id: Array = [1]
+	var chars: Array = WorldPopulationGenerator._generate_imperial_positions(
 		next_id, dice,
 	)
 	assert_true(chars.size() >= 15, "Expected at least 15 imperial characters, got %d" % chars.size())
 
 
 func test_emperor_is_first():
-	var next_id: Array[int] = [1]
-	var chars: Array[L5RCharacterData] = WorldPopulationGenerator._generate_imperial_positions(
+	var next_id: Array = [1]
+	var chars: Array = WorldPopulationGenerator._generate_imperial_positions(
 		next_id, dice,
 	)
 	assert_eq(chars[0].status, 10.0)
 
 
 func test_imperial_heir_has_emperor_lord():
-	var next_id: Array[int] = [1]
-	var chars: Array[L5RCharacterData] = WorldPopulationGenerator._generate_imperial_positions(
+	var next_id: Array = [1]
+	var chars: Array = WorldPopulationGenerator._generate_imperial_positions(
 		next_id, dice,
 	)
 	var emperor_id: int = chars[0].character_id
@@ -221,8 +221,8 @@ func test_imperial_heir_has_emperor_lord():
 
 
 func test_imperial_family_daimyo_count():
-	var next_id: Array[int] = [1]
-	var chars: Array[L5RCharacterData] = WorldPopulationGenerator._generate_imperial_positions(
+	var next_id: Array = [1]
+	var chars: Array = WorldPopulationGenerator._generate_imperial_positions(
 		next_id, dice,
 	)
 	var fd_count: int = 0
@@ -235,8 +235,8 @@ func test_imperial_family_daimyo_count():
 # -- Clan Leadership -----------------------------------------------------------
 
 func test_clan_leadership_has_champion():
-	var next_id: Array[int] = [1]
-	var chars: Array[L5RCharacterData] = WorldPopulationGenerator._generate_clan_leadership(
+	var next_id: Array = [1]
+	var chars: Array = WorldPopulationGenerator._generate_clan_leadership(
 		"Lion", next_id, dice,
 	)
 	var champ_count: int = 0
@@ -247,8 +247,8 @@ func test_clan_leadership_has_champion():
 
 
 func test_clan_leadership_has_family_daimyo():
-	var next_id: Array[int] = [1]
-	var chars: Array[L5RCharacterData] = WorldPopulationGenerator._generate_clan_leadership(
+	var next_id: Array = [1]
+	var chars: Array = WorldPopulationGenerator._generate_clan_leadership(
 		"Crab", next_id, dice,
 	)
 	var fd_count: int = 0
@@ -259,16 +259,16 @@ func test_clan_leadership_has_family_daimyo():
 
 
 func test_clan_champion_is_lordless():
-	var next_id: Array[int] = [1]
-	var chars: Array[L5RCharacterData] = WorldPopulationGenerator._generate_clan_leadership(
+	var next_id: Array = [1]
+	var chars: Array = WorldPopulationGenerator._generate_clan_leadership(
 		"Dragon", next_id, dice,
 	)
 	assert_eq(chars[0].lord_id, -1)
 
 
 func test_clan_leadership_has_school_masters():
-	var next_id: Array[int] = [1]
-	var chars: Array[L5RCharacterData] = WorldPopulationGenerator._generate_clan_leadership(
+	var next_id: Array = [1]
+	var chars: Array = WorldPopulationGenerator._generate_clan_leadership(
 		"Crane", next_id, dice,
 	)
 	var sm_count: int = 0
@@ -281,8 +281,8 @@ func test_clan_leadership_has_school_masters():
 # -- Military Commanders ------------------------------------------------------
 
 func test_military_commanders_count():
-	var next_id: Array[int] = [1]
-	var chars: Array[L5RCharacterData] = WorldPopulationGenerator._generate_military_commanders(
+	var next_id: Array = [1]
+	var chars: Array = WorldPopulationGenerator._generate_military_commanders(
 		"Lion", -1, next_id, dice,
 	)
 	var army_count: int = WorldPopulationGenerator.CLAN_ARMY_COUNT["Lion"]
@@ -292,8 +292,8 @@ func test_military_commanders_count():
 
 
 func test_military_commanders_have_lord_chain():
-	var next_id: Array[int] = [1]
-	var chars: Array[L5RCharacterData] = WorldPopulationGenerator._generate_military_commanders(
+	var next_id: Array = [1]
+	var chars: Array = WorldPopulationGenerator._generate_military_commanders(
 		"Crab", 999, next_id, dice,
 	)
 	var taisa: L5RCharacterData = chars[0]
@@ -305,12 +305,12 @@ func test_military_commanders_have_lord_chain():
 # -- Province Positions --------------------------------------------------------
 
 func test_province_positions_provincial_daimyo():
-	var next_id: Array[int] = [1]
+	var next_id: Array = [1]
 	var prov: ProvinceData = _make_province(1, "Crab", "Hida")
-	var setts: Array[SettlementData] = [
+	var setts: Array = [
 		_make_settlement(100, 1, Enums.SettlementType.CASTLE, 2),
 	]
-	var chars: Array[L5RCharacterData] = WorldPopulationGenerator._generate_province_positions(
+	var chars: Array = WorldPopulationGenerator._generate_province_positions(
 		prov, setts, "Crab", -1, next_id, dice,
 	)
 	assert_true(chars.size() >= 2)
@@ -318,12 +318,12 @@ func test_province_positions_provincial_daimyo():
 
 
 func test_province_town_gets_local_daimyo():
-	var next_id: Array[int] = [1]
+	var next_id: Array = [1]
 	var prov: ProvinceData = _make_province(1, "Crane", "Doji")
-	var setts: Array[SettlementData] = [
+	var setts: Array = [
 		_make_settlement(100, 1, Enums.SettlementType.TOWN),
 	]
-	var chars: Array[L5RCharacterData] = WorldPopulationGenerator._generate_province_positions(
+	var chars: Array = WorldPopulationGenerator._generate_province_positions(
 		prov, setts, "Crane", -1, next_id, dice,
 	)
 	var local_daimyo_count: int = 0
@@ -334,12 +334,12 @@ func test_province_town_gets_local_daimyo():
 
 
 func test_province_temple_gets_temple_head():
-	var next_id: Array[int] = [1]
+	var next_id: Array = [1]
 	var prov: ProvinceData = _make_province(1, "Phoenix", "Isawa")
-	var setts: Array[SettlementData] = [
+	var setts: Array = [
 		_make_settlement(100, 1, Enums.SettlementType.TEMPLE),
 	]
-	var chars: Array[L5RCharacterData] = WorldPopulationGenerator._generate_province_positions(
+	var chars: Array = WorldPopulationGenerator._generate_province_positions(
 		prov, setts, "Phoenix", -1, next_id, dice,
 	)
 	var head_count: int = 0
@@ -352,24 +352,24 @@ func test_province_temple_gets_temple_head():
 # -- Minor Clans ---------------------------------------------------------------
 
 func test_minor_clan_characters():
-	var next_id: Array[int] = [1]
-	var chars: Array[L5RCharacterData] = WorldPopulationGenerator._generate_minor_clan_characters(
+	var next_id: Array = [1]
+	var chars: Array = WorldPopulationGenerator._generate_minor_clan_characters(
 		next_id, dice,
 	)
 	assert_eq(chars.size(), WorldPopulationGenerator.MINOR_CLANS.size() * 2)
 
 
 func test_minor_clan_champion_lordless():
-	var next_id: Array[int] = [1]
-	var chars: Array[L5RCharacterData] = WorldPopulationGenerator._generate_minor_clan_characters(
+	var next_id: Array = [1]
+	var chars: Array = WorldPopulationGenerator._generate_minor_clan_characters(
 		next_id, dice,
 	)
 	assert_eq(chars[0].lord_id, -1)
 
 
 func test_minor_clan_senior_has_champion_lord():
-	var next_id: Array[int] = [1]
-	var chars: Array[L5RCharacterData] = WorldPopulationGenerator._generate_minor_clan_characters(
+	var next_id: Array = [1]
+	var chars: Array = WorldPopulationGenerator._generate_minor_clan_characters(
 		next_id, dice,
 	)
 	assert_eq(chars[1].lord_id, chars[0].character_id)
@@ -378,16 +378,16 @@ func test_minor_clan_senior_has_champion_lord():
 # -- Wall Characters -----------------------------------------------------------
 
 func test_wall_characters_count():
-	var next_id: Array[int] = [1]
-	var chars: Array[L5RCharacterData] = WorldPopulationGenerator._generate_wall_characters(
+	var next_id: Array = [1]
+	var chars: Array = WorldPopulationGenerator._generate_wall_characters(
 		next_id, dice, -1,
 	)
 	assert_eq(chars.size(), 5)
 
 
 func test_wall_segment_commanders_are_kaiu():
-	var next_id: Array[int] = [1]
-	var chars: Array[L5RCharacterData] = WorldPopulationGenerator._generate_wall_characters(
+	var next_id: Array = [1]
+	var chars: Array = WorldPopulationGenerator._generate_wall_characters(
 		next_id, dice, -1,
 	)
 	for i: int in range(4):
@@ -395,8 +395,8 @@ func test_wall_segment_commanders_are_kaiu():
 
 
 func test_hiruma_scout_commander():
-	var next_id: Array[int] = [1]
-	var chars: Array[L5RCharacterData] = WorldPopulationGenerator._generate_wall_characters(
+	var next_id: Array = [1]
+	var chars: Array = WorldPopulationGenerator._generate_wall_characters(
 		next_id, dice, -1,
 	)
 	assert_eq(chars[4].family, "Hiruma")
@@ -405,18 +405,18 @@ func test_hiruma_scout_commander():
 # -- Rank Filling --------------------------------------------------------------
 
 func test_rank_filling_generates_deficit():
-	var next_id: Array[int] = [1]
+	var next_id: Array = [1]
 	var existing: Dictionary = {1: 50, 2: 10, 3: 5, 4: 1, 5: 0}
-	var chars: Array[L5RCharacterData] = WorldPopulationGenerator._generate_rank_filling(
+	var chars: Array = WorldPopulationGenerator._generate_rank_filling(
 		"Dragon", existing, next_id, dice,
 	)
 	assert_true(chars.size() > 0, "Should generate characters to fill deficit")
 
 
 func test_rank_filling_no_deficit():
-	var next_id: Array[int] = [1]
+	var next_id: Array = [1]
 	var existing: Dictionary = {1: 500, 2: 500, 3: 500, 4: 500, 5: 500}
-	var chars: Array[L5RCharacterData] = WorldPopulationGenerator._generate_rank_filling(
+	var chars: Array = WorldPopulationGenerator._generate_rank_filling(
 		"Dragon", existing, next_id, dice,
 	)
 	assert_eq(chars.size(), 0)
@@ -519,7 +519,7 @@ func test_ancestor_records_generated():
 	c.clan = "Crane"
 	c.family = "Doji"
 	c.age = 30
-	var chars: Array[L5RCharacterData] = [c]
+	var chars: Array = [c]
 	WorldPopulationGenerator._generate_ancestor_records(chars, dice)
 	assert_true(c.grandparent_records.size() > 0)
 
@@ -527,7 +527,7 @@ func test_ancestor_records_generated():
 # -- Count Helpers -------------------------------------------------------------
 
 func test_count_by_rank():
-	var chars: Array[L5RCharacterData] = []
+	var chars: Array = []
 	for _i: int in range(5):
 		var c := L5RCharacterData.new()
 		c.clan = "Crab"
@@ -545,7 +545,7 @@ func test_count_by_rank():
 
 
 func test_count_by_rank_filters_clan():
-	var chars: Array[L5RCharacterData] = []
+	var chars: Array = []
 	var c1 := L5RCharacterData.new()
 	c1.clan = "Crab"
 	c1.stamina = 2
@@ -578,7 +578,7 @@ func test_count_by_rank_filters_clan():
 
 func test_generate_world_population_returns_characters():
 	var world: Dictionary = _make_minimal_world()
-	var next_id: Array[int] = [1]
+	var next_id: Array = [1]
 	var result: Dictionary = WorldPopulationGenerator.generate_world_population(
 		world["provinces"], world["settlements"], dice, next_id,
 	)
@@ -588,7 +588,7 @@ func test_generate_world_population_returns_characters():
 
 func test_generate_world_population_has_emperor():
 	var world: Dictionary = _make_minimal_world()
-	var next_id: Array[int] = [1]
+	var next_id: Array = [1]
 	var result: Dictionary = WorldPopulationGenerator.generate_world_population(
 		world["provinces"], world["settlements"], dice, next_id,
 	)
@@ -597,7 +597,7 @@ func test_generate_world_population_has_emperor():
 
 func test_generate_world_population_has_clan_champions():
 	var world: Dictionary = _make_minimal_world()
-	var next_id: Array[int] = [1]
+	var next_id: Array = [1]
 	var result: Dictionary = WorldPopulationGenerator.generate_world_population(
 		world["provinces"], world["settlements"], dice, next_id,
 	)
@@ -606,14 +606,14 @@ func test_generate_world_population_has_clan_champions():
 
 func test_generate_world_population_deterministic():
 	var world: Dictionary = _make_minimal_world()
-	var next_id1: Array[int] = [1]
+	var next_id1: Array = [1]
 	var d1 := DiceEngine.new()
 	d1.set_seed(99)
 	var r1: Dictionary = WorldPopulationGenerator.generate_world_population(
 		world["provinces"], world["settlements"], d1, next_id1,
 	)
 
-	var next_id2: Array[int] = [1]
+	var next_id2: Array = [1]
 	var d2 := DiceEngine.new()
 	d2.set_seed(99)
 	var r2: Dictionary = WorldPopulationGenerator.generate_world_population(
@@ -624,7 +624,7 @@ func test_generate_world_population_deterministic():
 
 func test_generate_world_population_unique_ids():
 	var world: Dictionary = _make_minimal_world()
-	var next_id: Array[int] = [1]
+	var next_id: Array = [1]
 	var result: Dictionary = WorldPopulationGenerator.generate_world_population(
 		world["provinces"], world["settlements"], dice, next_id,
 	)
@@ -637,7 +637,7 @@ func test_generate_world_population_unique_ids():
 func test_generate_world_population_with_dispositions():
 	var baselines: Dictionary = CollectiveDisposition.make_starting_baselines()
 	var world: Dictionary = _make_minimal_world()
-	var next_id: Array[int] = [1]
+	var next_id: Array = [1]
 	var result: Dictionary = WorldPopulationGenerator.generate_world_population(
 		world["provinces"], world["settlements"], dice, next_id,
 		baselines["clan"], baselines["family"],
@@ -680,7 +680,7 @@ func test_rank_distribution_lion_is_largest():
 func test_positioned_characters_get_role_position():
 	var dice := DiceEngine.new()
 	dice.set_seed(42)
-	var next_id: Array[int] = [1]
+	var next_id: Array = [1]
 	var c: L5RCharacterData = WorldPopulationGenerator._generate_positioned_character(
 		next_id, WorldPopulationGenerator.PositionType.SCHOOL_MASTER,
 		"Crab", "Hida", dice, 99,
@@ -691,7 +691,7 @@ func test_positioned_characters_get_role_position():
 func test_positioned_magistrate_gets_role_position():
 	var dice := DiceEngine.new()
 	dice.set_seed(42)
-	var next_id: Array[int] = [1]
+	var next_id: Array = [1]
 	var c: L5RCharacterData = WorldPopulationGenerator._generate_positioned_character(
 		next_id, WorldPopulationGenerator.PositionType.CLAN_MAGISTRATE,
 		"Lion", "Akodo", dice, 99,
@@ -702,7 +702,7 @@ func test_positioned_magistrate_gets_role_position():
 func test_positioned_samurai_has_empty_role():
 	var dice := DiceEngine.new()
 	dice.set_seed(42)
-	var next_id: Array[int] = [1]
+	var next_id: Array = [1]
 	var c: L5RCharacterData = WorldPopulationGenerator._generate_positioned_character(
 		next_id, WorldPopulationGenerator.PositionType.SAMURAI,
 		"Crane", "Doji", dice, 99,

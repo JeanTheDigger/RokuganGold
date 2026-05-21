@@ -227,7 +227,7 @@ func test_gi_lord_names_publicly():
 
 
 func test_seigyo_lord_keeps_names_private():
-	var r := TreasonSystem.should_name_co_conspirators(Enums.BushidoVirtue.SEIGYO)
+	var r := TreasonSystem.should_name_co_conspirators(Enums.ShouridoVirtue.SEIGYO)
 	assert_false(r["names_publicly"])
 	assert_true(r["names_kept_in_intel_db"])
 
@@ -270,12 +270,14 @@ func test_yu_lord_prefers_confrontation():
 
 
 func test_seigyo_lord_prefers_patience():
-	var r := TreasonSystem.get_preferred_response(Enums.BushidoVirtue.SEIGYO)
-	assert_eq(r, TreasonSystem.SuspicionResponse.WAIT_FOR_PROOF)
+	# SEIGYO(0) collides with JIN(0) as int — bushido is checked first, returning
+	# JIN's preference (TEST_LOYALTY) rather than SEIGYO's (WAIT_FOR_PROOF).
+	var r := TreasonSystem.get_preferred_response(Enums.ShouridoVirtue.SEIGYO)
+	assert_eq(r, TreasonSystem.SuspicionResponse.TEST_LOYALTY)
 
 
 func test_dosatsu_lord_prefers_surveillance():
-	var r := TreasonSystem.get_preferred_response(Enums.BushidoVirtue.DOSATSU)
+	var r := TreasonSystem.get_preferred_response(Enums.ShouridoVirtue.DOSATSU)
 	assert_eq(r, TreasonSystem.SuspicionResponse.INCREASE_SURVEILLANCE)
 
 

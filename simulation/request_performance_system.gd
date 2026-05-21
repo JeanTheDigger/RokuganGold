@@ -53,7 +53,7 @@ static func can_request(
 	character: L5RCharacterData,
 	ctx: NPCDataStructures.ContextSnapshot,
 	performance_type: String,
-	pending_requests: Array[Dictionary],
+	pending_requests: Array,
 ) -> Dictionary:
 	if not ctx.is_lord:
 		return {"valid": false, "reason": "not_a_lord"}
@@ -147,8 +147,8 @@ static func can_fulfill(performer: L5RCharacterData, request: Dictionary) -> boo
 	return SkillResolver.get_skill_rank(performer, _skill_for_type(perf_type)) >= 1
 
 
-static func expire_requests(pending_requests: Array[Dictionary], current_ic_day: int) -> Array[Dictionary]:
-	var result: Array[Dictionary] = []
+static func expire_requests(pending_requests: Array, current_ic_day: int) -> Array:
+	var result: Array = []
 	for req: Variant in pending_requests:
 		if req is Dictionary:
 			var r: Dictionary = req as Dictionary

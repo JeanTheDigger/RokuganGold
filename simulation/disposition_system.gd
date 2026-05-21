@@ -157,8 +157,8 @@ static func compute_permanent_modifier(
 	shourido_b: Enums.ShouridoVirtue,
 ) -> int:
 	var total: int = 0
-	var virtues_a: Array[String] = []
-	var virtues_b: Array[String] = []
+	var virtues_a: Array = []
+	var virtues_b: Array = []
 
 	if bushido_a != Enums.BushidoVirtue.NONE:
 		virtues_a.append(Enums.bushido_virtue_name(bushido_a))
@@ -411,8 +411,8 @@ static func will_share_supplies(disposition: int) -> bool:
 
 static func compute_total_disposition(
 	permanent: int,
-	historical_modifiers: Array[Dictionary],
-	temporary_modifiers: Array[Dictionary],
+	historical_modifiers: Array,
+	temporary_modifiers: Array,
 	cohabitation_bonus: float = 0.0,
 ) -> int:
 	var total: float = float(permanent) + cohabitation_bonus

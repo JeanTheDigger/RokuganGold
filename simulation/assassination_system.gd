@@ -336,7 +336,7 @@ static func find_best_searcher(
 static func has_seduce_for_access(
 	assassin_id: int,
 	target_location: String,
-	entanglements: Array[Dictionary],
+	entanglements: Array,
 	characters_by_id: Dictionary,
 ) -> bool:
 	if target_location == "":
@@ -986,7 +986,7 @@ static func create_pc_crisis_event(
 
 static func is_target_pc_offline(
 	target_id: int,
-	online_player_ids: Array[int],
+	online_player_ids: Array,
 ) -> bool:
 	return target_id not in online_player_ids
 
@@ -1003,11 +1003,11 @@ static func apply_vengeance_consequences(
 	victim_is_dead: bool,
 	characters_by_id: Dictionary,
 	objectives_map: Dictionary,
-	active_topics: Array[TopicData] = [],
-	next_topic_id: Array[int] = [],
+	active_topics: Array = [],
+	next_topic_id: Array = [],
 	ic_day: int = -1,
 ) -> Dictionary:
-	var family_ids: Array[int] = _get_biological_family(victim)
+	var family_ids: Array = _get_biological_family(victim)
 	for fam_id: int in family_ids:
 		var fam: L5RCharacterData = characters_by_id.get(fam_id) as L5RCharacterData
 		if fam == null:
@@ -1060,8 +1060,8 @@ static func apply_vengeance_consequences(
 	}
 
 
-static func _get_biological_family(character: L5RCharacterData) -> Array[int]:
-	var ids: Array[int] = []
+static func _get_biological_family(character: L5RCharacterData) -> Array:
+	var ids: Array = []
 	if character.mother_id >= 0:
 		ids.append(character.mother_id)
 	if character.father_id >= 0:

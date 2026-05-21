@@ -39,7 +39,7 @@ const ACCUSATION_THRESHOLD: int = 40
 static func is_valid_transition(from: Enums.LegalStatus, to: Enums.LegalStatus) -> bool:
 	if not VALID_TRANSITIONS.has(from):
 		return false
-	var targets: Array[int] = VALID_TRANSITIONS[from]
+	var targets: Array = VALID_TRANSITIONS[from]
 	return to in targets
 
 
@@ -122,8 +122,8 @@ static func get_case(
 	return null
 
 
-static func get_active_cases(character: L5RCharacterData) -> Array[LegalCaseEntry]:
-	var active: Array[LegalCaseEntry] = []
+static func get_active_cases(character: L5RCharacterData) -> Array:
+	var active: Array = []
 	for entry: LegalCaseEntry in character.legal_cases:
 		if entry.state != Enums.LegalStatus.CLEAR and entry.state != Enums.LegalStatus.ACQUITTED and entry.state != Enums.LegalStatus.PARDONED:
 			active.append(entry)
@@ -149,7 +149,7 @@ static func is_accused(character: L5RCharacterData) -> bool:
 
 
 static func get_worst_state(character: L5RCharacterData) -> Enums.LegalStatus:
-	var severity_order: Array[int] = [
+	var severity_order: Array = [
 		Enums.LegalStatus.FUGITIVE,
 		Enums.LegalStatus.DECREED_GUILTY,
 		Enums.LegalStatus.ACCUSED,

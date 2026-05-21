@@ -1,7 +1,7 @@
 extends GutTest
 
 
-func _make_ctx(location: String = "zone_a", present: Array[int] = []) -> NPCDataStructures.ContextSnapshot:
+func _make_ctx(location: String = "zone_a", present: Array = []) -> NPCDataStructures.ContextSnapshot:
 	var ctx := NPCDataStructures.ContextSnapshot.new()
 	ctx.character_id = 1
 	ctx.location_id = location

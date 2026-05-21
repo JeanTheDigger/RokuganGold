@@ -182,9 +182,9 @@ static func generate_name(clan: String, gender: String, dice_engine: DiceEngine)
 		return "Unknown"
 
 	var prefix: String = "male" if gender == "male" else "female"
-	var initials: Array[String] = tables.get(prefix + "_initial", [])
-	var middles: Array[String] = tables.get(prefix + "_middle", [])
-	var finals: Array[String] = tables.get(prefix + "_final", [])
+	var initials: Array = tables.get(prefix + "_initial", [])
+	var middles: Array = tables.get(prefix + "_middle", [])
+	var finals: Array = tables.get(prefix + "_final", [])
 
 	if initials.is_empty() or finals.is_empty():
 		return "Unknown"
@@ -214,7 +214,7 @@ const CLAN_POPULATION_THRESHOLDS: Dictionary = {
 
 
 static func count_clan_population(
-	characters: Array[L5RCharacterData],
+	characters: Array,
 	clan: String,
 ) -> Dictionary:
 	var counts: Dictionary = {"rank_5": 0, "rank_4": 0, "rank_3": 0, "rank_2": 0, "rank_1": 0}
@@ -222,10 +222,9 @@ static func count_clan_population(
 		if c.clan != clan:
 			continue
 		if c.wounds_taken > 0:
-			var earth: int = CharacterStats.get_ring_value(c, Enums.Ring.EARTH)
-			if CharacterStats.is_dead(c.wounds_taken, earth):
+			if CharacterStats.is_dead(c):
 				continue
-		var rank: int = CharacterStats.get_insight_rank(CharacterStats.get_insight(c))
+		var rank: int = CharacterStats.get_insight_rank(c)
 		if rank >= 5:
 			counts["rank_5"] += 1
 		elif rank == 4:
@@ -267,7 +266,7 @@ const NATURAL_DEATH_CHANCES: Array[Array] = [
 static func get_natural_death_chance(age: int) -> int:
 	if age < 50:
 		return 0
-	for bracket: Array[int] in NATURAL_DEATH_CHANCES:
+	for bracket: Array in NATURAL_DEATH_CHANCES:
 		if age < bracket[0] as int:
 			return bracket[1] as int
 	return 20
@@ -353,7 +352,7 @@ static func generate_replenishment_character(
 	clan: String,
 	dice_engine: DiceEngine,
 ) -> L5RCharacterData:
-	var families: Array[String] = _get_clan_families(clan)
+	var families: Array = _get_clan_families(clan)
 	if families.is_empty():
 		return null
 
@@ -381,7 +380,7 @@ static func generate_replenishment_character(
 	return character
 
 
-static func _get_clan_families(clan: String) -> Array[String]:
+static func _get_clan_families(clan: String) -> Array:
 	match clan:
 		"Crab":
 			return ["Hida", "Hiruma", "Kaiu", "Kuni", "Yasuki"]
@@ -405,20 +404,20 @@ static func _get_clan_families(clan: String) -> Array[String]:
 # -- Season-Boundary Entry Point -----------------------------------------------
 
 static func process_seasonal_gempukku(
-	children: Array[ChildRecord],
-	characters: Array[L5RCharacterData],
-	next_character_id: Array[int],
+	children: Array,
+	characters: Array,
+	next_character_id: Array,
 	dice_engine: DiceEngine,
 	ic_day: int,
 	worship_maluses: Dictionary = {},
 	settlement_province_map: Dictionary = {},
 ) -> Dictionary:
 	var results: Dictionary = {
-		"new_characters": [] as Array[L5RCharacterData],
-		"graduated_child_ids": [] as Array[int],
-		"replenishment_characters": [] as Array[L5RCharacterData],
-		"natural_deaths": [] as Array[int],
-		"musha_shugyo_triggered": [] as Array[int],
+		"new_characters": [],
+		"graduated_child_ids": [],
+		"replenishment_characters": [],
+		"natural_deaths": [],
+		"musha_shugyo_triggered": [],
 	}
 
 	for child: ChildRecord in children:
@@ -436,7 +435,7 @@ static func process_seasonal_gempukku(
 		if MushaShugyo.evaluate_at_gempukku(character, dice_engine, ic_day):
 			results["musha_shugyo_triggered"].append(character.character_id)
 
-	var all_characters: Array[L5RCharacterData] = characters.duplicate()
+	var all_characters: Array = characters.duplicate()
 	for nc: L5RCharacterData in results["new_characters"]:
 		all_characters.append(nc)
 

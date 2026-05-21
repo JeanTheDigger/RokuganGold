@@ -109,11 +109,11 @@ func test_process_pending_delivers_after_days() -> void:
 	var order: Dictionary = OrderSystem.create_march_order(10, 20)
 	OrderSystem.issue_order(s, order, false, 2)
 	# Day 1: still pending
-	var d1: Array[Dictionary] = OrderSystem.process_pending_orders(s)
+	var d1: Array = OrderSystem.process_pending_orders(s)
 	assert_eq(d1.size(), 0)
 	assert_eq(s["pending_orders"].size(), 1)
 	# Day 2: delivered
-	var d2: Array[Dictionary] = OrderSystem.process_pending_orders(s)
+	var d2: Array = OrderSystem.process_pending_orders(s)
 	assert_eq(d2.size(), 1)
 	assert_eq(s["pending_orders"].size(), 0)
 	assert_true(d2[0]["delivered"])
@@ -124,7 +124,7 @@ func test_process_pending_instant_already_delivered() -> void:
 	var order: Dictionary = OrderSystem.create_scout_order(10, 5)
 	OrderSystem.issue_order(s, order, true)
 	# Instant orders go to pending but are already delivered
-	var d: Array[Dictionary] = OrderSystem.process_pending_orders(s)
+	var d: Array = OrderSystem.process_pending_orders(s)
 	assert_eq(d.size(), 1)
 
 
@@ -135,14 +135,14 @@ func test_process_multiple_pending() -> void:
 	OrderSystem.issue_order(s, o1, false, 1)
 	OrderSystem.issue_order(s, o2, false, 3)
 	# Day 1: o1 delivers
-	var d1: Array[Dictionary] = OrderSystem.process_pending_orders(s)
+	var d1: Array = OrderSystem.process_pending_orders(s)
 	assert_eq(d1.size(), 1)
 	assert_eq(s["pending_orders"].size(), 1)
 	# Day 2: still waiting
-	var d2: Array[Dictionary] = OrderSystem.process_pending_orders(s)
+	var d2: Array = OrderSystem.process_pending_orders(s)
 	assert_eq(d2.size(), 0)
 	# Day 3: o2 delivers
-	var d3: Array[Dictionary] = OrderSystem.process_pending_orders(s)
+	var d3: Array = OrderSystem.process_pending_orders(s)
 	assert_eq(d3.size(), 1)
 
 
@@ -170,7 +170,7 @@ func test_get_standing_orders() -> void:
 	var o2: Dictionary = OrderSystem.create_patrol_order(11, 6)
 	OrderSystem.issue_order(s, o1, true)
 	OrderSystem.issue_order(s, o2, true)
-	var standing: Array[Dictionary] = OrderSystem.get_standing_orders(s)
+	var standing: Array = OrderSystem.get_standing_orders(s)
 	assert_eq(standing.size(), 2)
 
 

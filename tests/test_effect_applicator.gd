@@ -5,7 +5,7 @@ var _actor: L5RCharacterData
 var _target: L5RCharacterData
 var _characters: Dictionary
 var _provinces: Dictionary
-var _action_log: Array[Dictionary]
+var _action_log: Array
 
 
 func before_each() -> void:
@@ -386,7 +386,7 @@ func test_garrison_assigned_increases_pu() -> void:
 	settlement.settlement_id = 100
 	settlement.province_id = 10
 	settlement.garrison_pu = 3
-	var settlements: Array[SettlementData] = [settlement]
+	var settlements: Array = [settlement]
 	var result: Dictionary = {
 		"success": true,
 		"character_id": 1,
@@ -549,7 +549,7 @@ func test_failed_action_logged() -> void:
 # -- Batch Apply ---------------------------------------------------------------
 
 func test_batch_apply_multiple_results() -> void:
-	var results: Array[Dictionary] = [
+	var results: Array = [
 		{
 			"success": true,
 			"character_id": 1,
@@ -567,7 +567,7 @@ func test_batch_apply_multiple_results() -> void:
 			"effects": {"honor_change": 0.1},
 		},
 	]
-	var all_applied: Array[Dictionary] = EffectApplicator.apply_day_results(
+	var all_applied: Array = EffectApplicator.apply_day_results(
 		results, _characters, _provinces, _action_log
 	)
 	assert_eq(all_applied.size(), 2)
@@ -1365,7 +1365,7 @@ func test_winner_glory_not_applied_without_key() -> void:
 # -- False Info Dedup ----------------------------------------------------------
 
 func test_false_info_replaces_existing_true_entry() -> void:
-	_actor.knowledge_pool = [] as Array[KnowledgeEntry]
+	_actor.knowledge_pool = []
 	var true_entry := InformationSystem.make_entry(
 		Enums.KnowledgeSource.INTELLIGENCE,
 		"personality_insight",

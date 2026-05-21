@@ -250,7 +250,7 @@ static func score_rikugunshokan_candidate(
 # -- Candidate Selection ---------------------------------------------------------
 
 static func select_best_candidate(
-	candidates: Array[Dictionary],
+	candidates: Array,
 	rank: Enums.MilitaryRank,
 ) -> Dictionary:
 	if candidates.is_empty():
@@ -349,9 +349,9 @@ static func apply_demotion(
 # -- Vacancy Detection -----------------------------------------------------------
 
 static func find_vacancies(
-	units: Array[Dictionary],
-) -> Array[Dictionary]:
-	var vacancies: Array[Dictionary] = []
+	units: Array,
+) -> Array:
+	var vacancies: Array = []
 	for u: Dictionary in units:
 		if u.get("commander_id", -1) < 0:
 			vacancies.append({

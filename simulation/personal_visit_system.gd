@@ -158,8 +158,8 @@ static func decline_invitation_effects() -> Dictionary:
 
 # -- Action Filtering ---------------------------------------------------------
 
-static func get_available_actions() -> Array[String]:
-	var actions: Array[String] = []
+static func get_available_actions() -> Array:
+	var actions: Array = []
 	actions.append_array(VISIT_ACTIONS)
 	return actions
 

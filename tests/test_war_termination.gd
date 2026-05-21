@@ -242,7 +242,7 @@ func _make_character(clan: String, courtier_rank: int = 3) -> L5RCharacterData:
 	c.character_id = 100
 	c.clan = clan
 	c.skills["Courtier"] = courtier_rank
-	c.traits[Enums.Trait.AWARENESS] = 3
+	c.set_trait_value(Enums.Trait.AWARENESS, 3)
 	return c
 
 
@@ -261,7 +261,7 @@ func test_negotiate_surrender_success_peace_accepted() -> void:
 	_war.war_score_b = 80
 	_dice.set_seed(999)
 	var c: L5RCharacterData = _make_character("Crab", 5)
-	c.traits[Enums.Trait.AWARENESS] = 5
+	c.set_trait_value(Enums.Trait.AWARENESS, 5)
 	var ctx_war: Dictionary = {"war": _war, "own_clan": "Crab", "enemy_clan": "Crane"}
 	var result: Dictionary = WarTermination.resolve_negotiate_surrender(
 		c, ctx_war, "Seigyo", false, true, _dice,
@@ -277,7 +277,7 @@ func test_negotiate_surrender_success_peace_accepted() -> void:
 func test_negotiate_surrender_roll_failure() -> void:
 	_dice.set_seed(1)
 	var c: L5RCharacterData = _make_character("Crab", 1)
-	c.traits[Enums.Trait.AWARENESS] = 1
+	c.set_trait_value(Enums.Trait.AWARENESS, 1)
 	var ctx_war: Dictionary = {"war": _war, "own_clan": "Crab", "enemy_clan": "Crane"}
 	var result: Dictionary = WarTermination.resolve_negotiate_surrender(
 		c, ctx_war, "Yu", false, false, _dice,
@@ -290,12 +290,12 @@ func test_negotiate_surrender_roll_failure() -> void:
 
 func test_negotiate_surrender_not_combatant() -> void:
 	var c: L5RCharacterData = _make_character("Lion")
-	var ctx_war: Dictionary = {"war": _war, "own_clan": "Lion", "enemy_clan": ""}
+	var ctx_war: Dictionary = {"war": null, "own_clan": "Lion", "enemy_clan": ""}
 	var result: Dictionary = WarTermination.resolve_negotiate_surrender(
 		c, ctx_war, "Gi", false, false, _dice,
 	)
 	assert_true(result["failed"])
-	assert_eq(result["reason"], "not_a_combatant")
+	assert_eq(result["reason"], "no_active_war")
 
 
 # -- Topic Generation ---------------------------------------------------------
@@ -307,7 +307,7 @@ func test_generate_surrender_topic() -> void:
 		"loser_clan": "Crane",
 		"winner_clan": "Crab",
 	}
-	var next_id: Array[int] = [500]
+	var next_id: Array = [500]
 	var topic: TopicData = WarTermination.generate_war_end_topic(resolution, next_id, 100)
 	assert_eq(topic.topic_id, 500)
 	assert_eq(next_id[0], 501)
@@ -325,7 +325,7 @@ func test_generate_negotiated_topic() -> void:
 		"resolution": "negotiated_settlement",
 		"war_id": 1,
 	}
-	var next_id: Array[int] = [600]
+	var next_id: Array = [600]
 	var topic: TopicData = WarTermination.generate_war_end_topic(resolution, next_id, 200)
 	assert_eq(topic.tier, TopicData.Tier.TIER_3)
 	assert_eq(topic.momentum, 40.0)
@@ -336,7 +336,7 @@ func test_generate_imperial_edict_topic() -> void:
 		"resolution": "imperial_edict",
 		"war_id": 1,
 	}
-	var next_id: Array[int] = [700]
+	var next_id: Array = [700]
 	var topic: TopicData = WarTermination.generate_war_end_topic(resolution, next_id, 300)
 	assert_eq(topic.tier, TopicData.Tier.TIER_2)
 	assert_eq(topic.momentum, 70.0)
@@ -348,7 +348,7 @@ func test_generate_annihilation_topic() -> void:
 		"war_id": 1,
 		"annihilated_clan": "Crane",
 	}
-	var next_id: Array[int] = [800]
+	var next_id: Array = [800]
 	var topic: TopicData = WarTermination.generate_war_end_topic(resolution, next_id, 400)
 	assert_eq(topic.tier, TopicData.Tier.TIER_1)
 	assert_eq(topic.momentum, 80.0)
@@ -359,10 +359,10 @@ func test_generate_annihilation_topic() -> void:
 
 func test_annihilation_auto_resolves_in_orchestrator() -> void:
 	_war.war_score_a = 0
-	var active_wars: Array[WarData] = [_war]
-	var active_topics: Array[TopicData] = []
-	var next_id: Array[int] = [100]
-	var results: Array[Dictionary] = DayOrchestrator._process_war_terminations(
+	var active_wars: Array = [_war]
+	var active_topics: Array = []
+	var next_id: Array = [100]
+	var results: Array = DayOrchestrator._process_war_terminations(
 		[], active_wars, active_topics, next_id, 50,
 	)
 	assert_eq(results.size(), 1)
@@ -375,10 +375,10 @@ func test_annihilation_auto_resolves_in_orchestrator() -> void:
 func test_inactive_wars_skipped_in_annihilation_check() -> void:
 	_war.war_score_a = 0
 	_war.is_active = false
-	var active_wars: Array[WarData] = [_war]
-	var active_topics: Array[TopicData] = []
-	var next_id: Array[int] = [100]
-	var results: Array[Dictionary] = DayOrchestrator._process_war_terminations(
+	var active_wars: Array = [_war]
+	var active_topics: Array = []
+	var next_id: Array = [100]
+	var results: Array = DayOrchestrator._process_war_terminations(
 		[], active_wars, active_topics, next_id, 50,
 	)
 	assert_eq(results.size(), 0)
@@ -399,10 +399,10 @@ func test_peace_resolution_from_applied_list() -> void:
 			},
 		},
 	}]
-	var active_wars: Array[WarData] = [_war]
-	var active_topics: Array[TopicData] = []
-	var next_id: Array[int] = [200]
-	var results: Array[Dictionary] = DayOrchestrator._process_war_terminations(
+	var active_wars: Array = [_war]
+	var active_topics: Array = []
+	var next_id: Array = [200]
+	var results: Array = DayOrchestrator._process_war_terminations(
 		applied, active_wars, active_topics, next_id, 60,
 	)
 	assert_eq(results.size(), 1)
@@ -420,10 +420,10 @@ func test_formal_surrender_from_applied_list() -> void:
 			"own_clan": "Crane",
 		},
 	}]
-	var active_wars: Array[WarData] = [_war]
-	var active_topics: Array[TopicData] = []
-	var next_id: Array[int] = [300]
-	var results: Array[Dictionary] = DayOrchestrator._process_war_terminations(
+	var active_wars: Array = [_war]
+	var active_topics: Array = []
+	var next_id: Array = [300]
+	var results: Array = DayOrchestrator._process_war_terminations(
 		applied, active_wars, active_topics, next_id, 70,
 	)
 	assert_eq(results.size(), 1)
@@ -440,17 +440,17 @@ func test_missing_war_id_skipped() -> void:
 			"terms": {"proposing_clan": "Crab"},
 		},
 	}]
-	var active_wars: Array[WarData] = [_war]
-	var active_topics: Array[TopicData] = []
-	var next_id: Array[int] = [400]
-	var results: Array[Dictionary] = DayOrchestrator._process_war_terminations(
+	var active_wars: Array = [_war]
+	var active_topics: Array = []
+	var next_id: Array = [400]
+	var results: Array = DayOrchestrator._process_war_terminations(
 		applied, active_wars, active_topics, next_id, 80,
 	)
 	assert_eq(results.size(), 0)
 
 
 func test_find_war_by_id() -> void:
-	var wars: Array[WarData] = [_war]
+	var wars: Array = [_war]
 	assert_eq(DayOrchestrator._find_war_by_id(wars, 1), _war)
 	assert_null(DayOrchestrator._find_war_by_id(wars, 99))
 
@@ -502,7 +502,7 @@ func test_suspend_routes_between_warring_clans() -> void:
 	var route_same: TradeRouteData = _make_route(11, 1, 3)
 	var routes: Array = [route_cross, route_same]
 
-	var results: Array[Dictionary] = WarTermination.suspend_trade_routes_for_war(
+	var results: Array = WarTermination.suspend_trade_routes_for_war(
 		routes, provinces, "Crab", "Crane",
 	)
 	assert_eq(results.size(), 1)
@@ -522,7 +522,7 @@ func test_suspend_skips_already_disrupted() -> void:
 	route.disruption_reason = "bandits"
 	var routes: Array = [route]
 
-	var results: Array[Dictionary] = WarTermination.suspend_trade_routes_for_war(
+	var results: Array = WarTermination.suspend_trade_routes_for_war(
 		routes, provinces, "Crab", "Crane",
 	)
 	assert_eq(results.size(), 0)
@@ -538,7 +538,7 @@ func test_restore_routes_on_peace() -> void:
 	route_other.disruption_reason = "war_Lion_Unicorn"
 	var routes: Array = [route, route_other]
 
-	var results: Array[Dictionary] = WarTermination.restore_trade_routes_for_peace(
+	var results: Array = WarTermination.restore_trade_routes_for_peace(
 		routes, "Crab", "Crane",
 	)
 	assert_eq(results.size(), 1)
@@ -553,7 +553,7 @@ func test_restore_handles_reversed_clan_order() -> void:
 	route.disruption_reason = "war_Crane_Crab"
 	var routes: Array = [route]
 
-	var results: Array[Dictionary] = WarTermination.restore_trade_routes_for_peace(
+	var results: Array = WarTermination.restore_trade_routes_for_peace(
 		routes, "Crab", "Crane",
 	)
 	assert_eq(results.size(), 1)
@@ -566,7 +566,7 @@ func test_annihilation_does_not_restore_routes() -> void:
 	route.disruption_reason = "war_Crab_Crane"
 	var routes: Array = [route]
 
-	var results: Array[Dictionary] = DayOrchestrator._process_peace_trade_routes(
+	var results: Array = DayOrchestrator._process_peace_trade_routes(
 		[{"resolution": "annihilation", "victor_clan": "Crab", "annihilated_clan": "Crane"}],
 		routes,
 	)
@@ -580,13 +580,13 @@ func test_orchestrator_suspends_routes_on_declaration() -> void:
 	var provinces: Dictionary = {1: p1, 2: p2}
 	var route: TradeRouteData = _make_route(10, 1, 2)
 	var routes: Array = [route]
-	var declarations: Array[Dictionary] = [{
+	var declarations: Array = [{
 		"event": "war_declared",
 		"declaring_clan": "Crab",
 		"target_clan": "Crane",
 	}]
 
-	var results: Array[Dictionary] = DayOrchestrator._process_war_trade_routes(
+	var results: Array = DayOrchestrator._process_war_trade_routes(
 		declarations, routes, provinces,
 	)
 	assert_eq(results.size(), 1)
@@ -598,13 +598,13 @@ func test_orchestrator_restores_routes_on_settlement() -> void:
 	route.is_disrupted = true
 	route.disruption_reason = "war_Crab_Crane"
 	var routes: Array = [route]
-	var terminations: Array[Dictionary] = [{
+	var terminations: Array = [{
 		"resolution": "negotiated_settlement",
 		"proposing_clan": "Crab",
 		"receiving_clan": "Crane",
 	}]
 
-	var results: Array[Dictionary] = DayOrchestrator._process_peace_trade_routes(
+	var results: Array = DayOrchestrator._process_peace_trade_routes(
 		terminations, routes,
 	)
 	assert_eq(results.size(), 1)
@@ -616,13 +616,13 @@ func test_orchestrator_restores_routes_on_surrender() -> void:
 	route.is_disrupted = true
 	route.disruption_reason = "war_Crab_Crane"
 	var routes: Array = [route]
-	var terminations: Array[Dictionary] = [{
+	var terminations: Array = [{
 		"resolution": "formal_surrender",
 		"winner_clan": "Crab",
 		"loser_clan": "Crane",
 	}]
 
-	var results: Array[Dictionary] = DayOrchestrator._process_peace_trade_routes(
+	var results: Array = DayOrchestrator._process_peace_trade_routes(
 		terminations, routes,
 	)
 	assert_eq(results.size(), 1)
@@ -634,13 +634,13 @@ func test_orchestrator_restores_routes_on_edict() -> void:
 	route.is_disrupted = true
 	route.disruption_reason = "war_Crab_Crane"
 	var routes: Array = [route]
-	var terminations: Array[Dictionary] = [{
+	var terminations: Array = [{
 		"resolution": "imperial_edict",
 		"clan_a": "Crab",
 		"clan_b": "Crane",
 	}]
 
-	var results: Array[Dictionary] = DayOrchestrator._process_peace_trade_routes(
+	var results: Array = DayOrchestrator._process_peace_trade_routes(
 		terminations, routes,
 	)
 	assert_eq(results.size(), 1)
@@ -648,13 +648,6 @@ func test_orchestrator_restores_routes_on_edict() -> void:
 
 
 # -- Territory Transfer Mutations -----------------------------------------------
-
-func _make_province(pid: int, clan: String) -> ProvinceData:
-	var p: ProvinceData = ProvinceData.new()
-	p.province_id = pid
-	p.clan = clan
-	return p
-
 
 func test_surrender_transfers_province_clan() -> void:
 	var p1: ProvinceData = _make_province(1, "Crane")
@@ -665,7 +658,7 @@ func test_surrender_transfers_province_clan() -> void:
 		"winner_clan": "Crab",
 		"territory_transferred": [1, 2],
 	}
-	var log: Array[Dictionary] = WarTermination.apply_territory_transfers(resolution, provinces)
+	var log: Array = WarTermination.apply_territory_transfers(resolution, provinces)
 	assert_eq(p1.clan, "Crab")
 	assert_eq(p2.clan, "Crab")
 	assert_eq(log.size(), 2)
@@ -679,7 +672,7 @@ func test_negotiated_settlement_transfers_partial() -> void:
 		"proposing_clan": "Crab",
 		"territory_transferred": [10],
 	}
-	var log: Array[Dictionary] = WarTermination.apply_territory_transfers(resolution, provinces)
+	var log: Array = WarTermination.apply_territory_transfers(resolution, provinces)
 	assert_eq(p1.clan, "Crab")
 	assert_eq(log[0]["old_clan"], "Crane")
 	assert_eq(log[0]["new_clan"], "Crab")
@@ -692,7 +685,7 @@ func test_no_transfer_when_empty() -> void:
 		"proposing_clan": "Crab",
 		"territory_transferred": [],
 	}
-	var log: Array[Dictionary] = WarTermination.apply_territory_transfers(resolution, provinces)
+	var log: Array = WarTermination.apply_territory_transfers(resolution, provinces)
 	assert_eq(log.size(), 0)
 
 
@@ -718,19 +711,19 @@ func test_transfer_skips_already_correct_clan() -> void:
 		"winner_clan": "Crab",
 		"territory_transferred": [7],
 	}
-	var log: Array[Dictionary] = WarTermination.apply_territory_transfers(resolution, provinces)
+	var log: Array = WarTermination.apply_territory_transfers(resolution, provinces)
 	assert_eq(log.size(), 0)  # no change logged — clan was already correct
 
 
 func test_orchestrator_applies_territory_transfers() -> void:
 	var p: ProvinceData = _make_province(3, "Crane")
 	var provinces: Dictionary = {3: p}
-	var war_termination_results: Array[Dictionary] = [{
+	var war_termination_results: Array = [{
 		"resolution": "formal_surrender",
 		"winner_clan": "Crab",
 		"territory_transferred": [3],
 	}]
-	var result: Array[Dictionary] = DayOrchestrator._apply_war_territory_transfers(
+	var result: Array = DayOrchestrator._apply_war_territory_transfers(
 		war_termination_results, provinces,
 	)
 	assert_eq(p.clan, "Crab")

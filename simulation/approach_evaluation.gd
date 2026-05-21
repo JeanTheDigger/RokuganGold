@@ -45,13 +45,13 @@ static func get_measurement_threshold(action_id: String) -> int:
 # =============================================================================
 
 static func get_recent_actions(
-	action_log: Array[Dictionary],
+	action_log: Array,
 	character_id: int,
 	target_npc_id: int,
 	action_id: String,
 	current_season: int,
-) -> Array[Dictionary]:
-	var matches: Array[Dictionary] = []
+) -> Array:
+	var matches: Array = []
 	for entry: Dictionary in action_log:
 		if entry.get("character_id", -1) != character_id:
 			continue
@@ -66,7 +66,7 @@ static func get_recent_actions(
 
 
 static func check_measurement_needed(
-	action_log: Array[Dictionary],
+	action_log: Array,
 	character_id: int,
 	target_npc_id: int,
 	action_id: String,
@@ -76,7 +76,7 @@ static func check_measurement_needed(
 	if threshold < 0:
 		return false
 
-	var recent: Array[Dictionary] = get_recent_actions(
+	var recent: Array = get_recent_actions(
 		action_log, character_id, target_npc_id, action_id, current_season
 	)
 
@@ -138,7 +138,7 @@ static func evaluate_approach(
 # =============================================================================
 
 static func record_penalty(
-	penalties: Array[Dictionary],
+	penalties: Array,
 	character_id: int,
 	target_npc_id: int,
 	action_id: String,
@@ -163,7 +163,7 @@ static func record_penalty(
 
 
 static func get_penalty(
-	penalties: Array[Dictionary],
+	penalties: Array,
 	character_id: int,
 	target_npc_id: int,
 	action_id: String,
@@ -188,7 +188,7 @@ static func get_penalty(
 
 
 static func get_alternative_bonus(
-	penalties: Array[Dictionary],
+	penalties: Array,
 	character_id: int,
 	target_npc_id: int,
 	current_season: int,
@@ -211,7 +211,7 @@ static func get_alternative_bonus(
 # =============================================================================
 
 static func decay_penalties(
-	penalties: Array[Dictionary],
+	penalties: Array,
 	current_season: int,
 ) -> int:
 	var removed: int = 0
@@ -233,8 +233,8 @@ static func get_scoring_modifier(
 	action_id: String,
 	character_id: int,
 	target_npc_id: int,
-	action_log: Array[Dictionary],
-	penalties: Array[Dictionary],
+	action_log: Array,
+	penalties: Array,
 	current_season: int,
 	shourido_virtue: Enums.ShouridoVirtue = Enums.ShouridoVirtue.NONE,
 ) -> int:
@@ -278,12 +278,12 @@ static func get_scoring_modifier(
 
 
 static func _get_penalized_actions(
-	penalties: Array[Dictionary],
+	penalties: Array,
 	character_id: int,
 	target_npc_id: int,
 	current_season: int,
-) -> Array[String]:
-	var result: Array[String] = []
+) -> Array:
+	var result: Array = []
 	for p: Dictionary in penalties:
 		if (p.get("character_id", -1) != character_id
 			or p.get("target_npc_id", -1) != target_npc_id):

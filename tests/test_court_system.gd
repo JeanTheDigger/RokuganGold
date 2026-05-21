@@ -204,7 +204,7 @@ func test_multiple_attendees():
 # =============================================================================
 
 func test_select_agenda_topics_by_momentum():
-	var topics: Array[TopicData] = [
+	var topics: Array = [
 		_make_topic(1, 30.0),
 		_make_topic(2, 80.0),
 		_make_topic(3, 50.0),
@@ -220,7 +220,7 @@ func test_select_agenda_topics_by_momentum():
 
 
 func test_select_agenda_skips_resolved():
-	var topics: Array[TopicData] = [
+	var topics: Array = [
 		_make_topic(1, 90.0, true),
 		_make_topic(2, 50.0),
 		_make_topic(3, 30.0),
@@ -233,7 +233,7 @@ func test_select_agenda_skips_resolved():
 
 
 func test_select_agenda_crisis_trigger_first():
-	var topics: Array[TopicData] = [
+	var topics: Array = [
 		_make_topic(1, 90.0),
 		_make_topic(2, 50.0),
 		_make_topic(3, 30.0),
@@ -247,7 +247,7 @@ func test_select_agenda_crisis_trigger_first():
 
 
 func test_select_agenda_fewer_than_max():
-	var topics: Array[TopicData] = [_make_topic(1, 20.0)]
+	var topics: Array = [_make_topic(1, 20.0)]
 	var agenda := CourtSystem.select_agenda_topics(
 		topics, CourtSessionData.CourtType.CLAN_CHAMPION_COURT
 	)
@@ -266,7 +266,7 @@ func test_set_agenda():
 # =============================================================================
 
 func test_should_call_court_momentum_exceeds_threshold():
-	var topics: Array[TopicData] = [_make_topic(1, 60.0)]
+	var topics: Array = [_make_topic(1, 60.0)]
 	var result := CourtSystem.should_call_court(
 		Enums.LordRank.PROVINCIAL_DAIMYO, topics, []
 	)
@@ -275,7 +275,7 @@ func test_should_call_court_momentum_exceeds_threshold():
 
 
 func test_should_call_court_momentum_below_threshold():
-	var topics: Array[TopicData] = [_make_topic(1, 20.0)]
+	var topics: Array = [_make_topic(1, 20.0)]
 	var result := CourtSystem.should_call_court(
 		Enums.LordRank.PROVINCIAL_DAIMYO, topics, []
 	)
@@ -283,7 +283,7 @@ func test_should_call_court_momentum_below_threshold():
 
 
 func test_should_call_court_higher_rank_higher_threshold():
-	var topics: Array[TopicData] = [_make_topic(1, 40.0)]
+	var topics: Array = [_make_topic(1, 40.0)]
 	var result_provincial := CourtSystem.should_call_court(
 		Enums.LordRank.PROVINCIAL_DAIMYO, topics, []
 	)
@@ -297,10 +297,10 @@ func test_should_call_court_higher_rank_higher_threshold():
 
 
 func test_should_call_court_blocked_by_existing():
-	var topics: Array[TopicData] = [_make_topic(1, 60.0)]
+	var topics: Array = [_make_topic(1, 60.0)]
 	var existing := _make_court()
 	CourtSystem.open_court(existing, 50)
-	var active_courts: Array[CourtSessionData] = [existing]
+	var active_courts: Array = [existing]
 	var result := CourtSystem.should_call_court(
 		Enums.LordRank.PROVINCIAL_DAIMYO, topics, active_courts
 	)
@@ -308,11 +308,11 @@ func test_should_call_court_blocked_by_existing():
 
 
 func test_should_call_court_allowed_after_closed():
-	var topics: Array[TopicData] = [_make_topic(1, 60.0)]
+	var topics: Array = [_make_topic(1, 60.0)]
 	var existing := _make_court()
 	CourtSystem.open_court(existing, 50)
 	CourtSystem.close_court(existing)
-	var courts: Array[CourtSessionData] = [existing]
+	var courts: Array = [existing]
 	var result := CourtSystem.should_call_court(
 		Enums.LordRank.PROVINCIAL_DAIMYO, topics, courts
 	)
@@ -320,7 +320,7 @@ func test_should_call_court_allowed_after_closed():
 
 
 func test_should_call_court_skips_resolved_topics():
-	var topics: Array[TopicData] = [_make_topic(1, 60.0, true)]
+	var topics: Array = [_make_topic(1, 60.0, true)]
 	var result := CourtSystem.should_call_court(
 		Enums.LordRank.PROVINCIAL_DAIMYO, topics, []
 	)
@@ -351,7 +351,7 @@ func test_record_commitment_custom_witnesses():
 	CourtSystem.add_attendee(c, 1)
 	CourtSystem.add_attendee(c, 2)
 	CourtSystem.add_attendee(c, 3)
-	var witnesses: Array[int] = [2]
+	var witnesses: Array = [2]
 	var r := CourtSystem.record_commitment(c, 1, "PEACE", "Accept terms", witnesses)
 	assert_eq(r["entry"]["witnesses"].size(), 1)
 
@@ -380,7 +380,7 @@ func test_get_active_court_at_settlement():
 	var c1 := _make_court(1, CourtSessionData.CourtType.PROVINCIAL_FAMILY_COURT, 100, 10, "Crane")
 	var c2 := _make_court(2, CourtSessionData.CourtType.CLAN_CHAMPION_COURT, 200, 20, "Lion")
 	CourtSystem.open_court(c1, 50)
-	var courts: Array[CourtSessionData] = [c1, c2]
+	var courts: Array = [c1, c2]
 	var found := CourtSystem.get_active_court_at_settlement(courts, 10)
 	assert_not_null(found)
 	assert_eq(found.court_id, 1)
@@ -394,7 +394,7 @@ func test_get_active_courts():
 	var c3 := _make_court(3)
 	CourtSystem.open_court(c1, 50)
 	CourtSystem.open_court(c3, 50)
-	var courts: Array[CourtSessionData] = [c1, c2, c3]
+	var courts: Array = [c1, c2, c3]
 	var active := CourtSystem.get_active_courts(courts)
 	assert_eq(active.size(), 2)
 
@@ -404,7 +404,7 @@ func test_get_upcoming_courts():
 	c1.start_ic_day = 100
 	var c2 := _make_court(2)
 	c2.start_ic_day = 50
-	var courts: Array[CourtSessionData] = [c1, c2]
+	var courts: Array = [c1, c2]
 	var upcoming := CourtSystem.get_upcoming_courts(courts, 60)
 	assert_eq(upcoming.size(), 1)
 	assert_eq(upcoming[0].court_id, 1)
@@ -427,7 +427,7 @@ func test_character_context_flag():
 	var c := _make_court()
 	CourtSystem.open_court(c, 50)
 	CourtSystem.add_attendee(c, 5)
-	var courts: Array[CourtSessionData] = [c]
+	var courts: Array = [c]
 	assert_true(CourtSystem.get_character_context_flag(courts, 5))
 	assert_false(CourtSystem.get_character_context_flag(courts, 99))
 
@@ -437,7 +437,7 @@ func test_character_context_flag_closed_court():
 	CourtSystem.open_court(c, 50)
 	CourtSystem.add_attendee(c, 5)
 	CourtSystem.close_court(c)
-	var courts: Array[CourtSessionData] = [c]
+	var courts: Array = [c]
 	assert_false(CourtSystem.get_character_context_flag(courts, 5),
 		"Closed court does not give AT_COURT")
 
@@ -576,7 +576,7 @@ func test_scheduled_court_opens_on_start_day():
 	var court := _make_court(1)
 	court.start_ic_day = 50
 	assert_eq(court.phase, CourtSessionData.CourtPhase.SCHEDULED)
-	var courts: Array[CourtSessionData] = [court]
+	var courts: Array = [court]
 	var results := DayOrchestrator._process_court_openings(courts, 50)
 	assert_eq(results.size(), 1)
 	assert_true(results[0]["opened"])
@@ -586,7 +586,7 @@ func test_scheduled_court_opens_on_start_day():
 func test_scheduled_court_does_not_open_before_start():
 	var court := _make_court(1)
 	court.start_ic_day = 100
-	var courts: Array[CourtSessionData] = [court]
+	var courts: Array = [court]
 	var results := DayOrchestrator._process_court_openings(courts, 50)
 	assert_eq(results.size(), 0)
 	assert_eq(court.phase, CourtSessionData.CourtPhase.SCHEDULED)
@@ -596,8 +596,8 @@ func test_character_auto_attends_when_at_settlement():
 	var court := _make_court(1, CourtSessionData.CourtType.PROVINCIAL_FAMILY_COURT, 100, 10)
 	CourtSystem.open_court(court, 50)
 	var npc := _make_character(200, "10")
-	var chars: Array[L5RCharacterData] = [npc]
-	var courts: Array[CourtSessionData] = [court]
+	var chars: Array = [npc]
+	var courts: Array = [court]
 	var results := DayOrchestrator._process_court_attendance(courts, chars)
 	assert_eq(results.size(), 1)
 	assert_eq(results[0]["action"], "arrived")
@@ -609,8 +609,8 @@ func test_character_departs_when_leaving_settlement():
 	CourtSystem.open_court(court, 50)
 	CourtSystem.add_attendee(court, 200)
 	var npc := _make_character(200, "99")
-	var chars: Array[L5RCharacterData] = [npc]
-	var courts: Array[CourtSessionData] = [court]
+	var chars: Array = [npc]
+	var courts: Array = [court]
 	var results := DayOrchestrator._process_court_attendance(courts, chars)
 	assert_eq(results.size(), 1)
 	assert_eq(results[0]["action"], "departed")
@@ -622,8 +622,8 @@ func test_host_not_removed_when_away():
 	CourtSystem.open_court(court, 50)
 	CourtSystem.add_attendee(court, 100)
 	var host := _make_character(100, "99")
-	var chars: Array[L5RCharacterData] = [host]
-	var courts: Array[CourtSessionData] = [court]
+	var chars: Array = [host]
+	var courts: Array = [court]
 	DayOrchestrator._process_court_attendance(courts, chars)
 	assert_true(100 in court.attendee_ids, "Host stays in attendee list")
 
@@ -633,8 +633,8 @@ func test_no_duplicate_attendance():
 	CourtSystem.open_court(court, 50)
 	CourtSystem.add_attendee(court, 200)
 	var npc := _make_character(200, "10")
-	var chars: Array[L5RCharacterData] = [npc]
-	var courts: Array[CourtSessionData] = [court]
+	var chars: Array = [npc]
+	var courts: Array = [court]
 	var results := DayOrchestrator._process_court_attendance(courts, chars)
 	assert_eq(results.size(), 0, "Already attending — no duplicate")
 	assert_eq(court.attendee_ids.count(200), 1)
@@ -645,8 +645,8 @@ func test_closed_court_skipped_for_attendance():
 	CourtSystem.open_court(court, 50)
 	CourtSystem.close_court(court)
 	var npc := _make_character(200, "10")
-	var chars: Array[L5RCharacterData] = [npc]
-	var courts: Array[CourtSessionData] = [court]
+	var chars: Array = [npc]
+	var courts: Array = [court]
 	var results := DayOrchestrator._process_court_attendance(courts, chars)
 	assert_eq(results.size(), 0, "Closed court ignored")
 
@@ -663,8 +663,8 @@ func test_guest_departure_applies_disposition_cost():
 	var host := _make_character(100, "10")
 	var guest := _make_character(200, "99")
 	var chars_by_id: Dictionary = {100: host, 200: guest}
-	var chars: Array[L5RCharacterData] = [host, guest]
-	var courts: Array[CourtSessionData] = [court]
+	var chars: Array = [host, guest]
+	var courts: Array = [court]
 	var results := DayOrchestrator._process_court_attendance(courts, chars, chars_by_id)
 	var departure: Dictionary = {}
 	for r: Dictionary in results:
@@ -683,8 +683,8 @@ func test_guest_departure_no_honor_loss():
 	var guest := _make_character(200, "99")
 	guest.honor = 5.0
 	var chars_by_id: Dictionary = {200: guest}
-	var chars: Array[L5RCharacterData] = [guest]
-	var courts: Array[CourtSessionData] = [court]
+	var chars: Array = [guest]
+	var courts: Array = [court]
 	DayOrchestrator._process_court_attendance(courts, chars, chars_by_id)
 	assert_eq(guest.honor, 5.0, "Guests lose no honor on departure")
 
@@ -696,8 +696,8 @@ func test_departure_result_includes_costs():
 	var guest := _make_character(200, "99")
 	var host := _make_character(100, "10")
 	var chars_by_id: Dictionary = {100: host, 200: guest}
-	var chars: Array[L5RCharacterData] = [guest]
-	var courts: Array[CourtSessionData] = [court]
+	var chars: Array = [guest]
+	var courts: Array = [court]
 	var results := DayOrchestrator._process_court_attendance(courts, chars, chars_by_id)
 	assert_eq(results.size(), 1)
 	assert_true(results[0].has("honor_loss"))
@@ -718,9 +718,9 @@ func test_winter_court_host_directive_creates_imperial_court():
 	crane_champ.clan = "Crane"
 	crane_champ.lord_id = -1
 	var chars_by_id: Dictionary = {1: emperor, 10: crane_champ}
-	var active_courts: Array[CourtSessionData] = []
-	var active_topics: Array[TopicData] = []
-	var next_court_id: Array[int] = [1]
+	var active_courts: Array = []
+	var active_topics: Array = []
+	var next_court_id: Array = [1]
 
 	var directive: Dictionary = {
 		"directive": "WINTER_COURT_HOST",
@@ -757,8 +757,8 @@ func test_winter_court_not_duplicated():
 		1, 50, "Imperial", 100, 120, true
 	)
 	CourtSystem.open_court(existing, 100)
-	var active_courts: Array[CourtSessionData] = [existing]
-	var next_court_id: Array[int] = [2]
+	var active_courts: Array = [existing]
+	var next_court_id: Array = [2]
 
 	var directive: Dictionary = {
 		"directive": "WINTER_COURT_HOST",
@@ -781,8 +781,8 @@ func test_winter_court_starts_30_days_later():
 	scorpion.clan = "Scorpion"
 	scorpion.lord_id = -1
 	var chars_by_id: Dictionary = {1: emperor, 30: scorpion}
-	var active_courts: Array[CourtSessionData] = []
-	var next_court_id: Array[int] = [1]
+	var active_courts: Array = []
+	var next_court_id: Array = [1]
 
 	var directive: Dictionary = {
 		"directive": "WINTER_COURT_HOST",
@@ -793,7 +793,7 @@ func test_winter_court_starts_30_days_later():
 		[directive], active_courts, [],
 		chars_by_id, next_court_id, 250,
 	)
-	assert_eq(active_courts[0].start_ic_day, 280, "Starts 30 days after directive")
+	assert_eq(active_courts[0].start_ic_day, 291, "Starts WINTER_START - ANNOUNCEMENT days after directive")
 	assert_eq(active_courts[0].phase, CourtSessionData.CourtPhase.SCHEDULED)
 
 
@@ -806,7 +806,7 @@ func test_emperor_review_runs_for_emperor():
 	lion.status = 8.0
 	lion.clan = "Lion"
 	lion.lord_id = -1
-	var characters: Array[L5RCharacterData] = [emperor, lion]
+	var characters: Array = [emperor, lion]
 	var world_states: Dictionary = {
 		"emperor_id": 1,
 		"emperor_archetype": StrategicReview.EmperorArchetype.IRON,
@@ -819,7 +819,7 @@ func test_emperor_review_runs_for_emperor():
 	)
 	var has_winter_court: bool = false
 	for d: Dictionary in results:
-		if d.get("directive", "") == "WINTER_COURT_HOST":
+		if str(d.get("directive", "")) == "WINTER_COURT_HOST":
 			has_winter_court = true
 	assert_true(has_winter_court, "Emperor review should produce WINTER_COURT_HOST in Autumn")
 
@@ -838,12 +838,12 @@ func _make_lord(id: int, location: String, clan: String, status: float = 6.0) ->
 
 func test_crisis_topic_triggers_court_call():
 	var lord := _make_lord(100, "10", "Crane", 6.0)
-	var topic := _make_topic(1, 30.0)
-	var characters: Array[L5RCharacterData] = [lord]
-	var courts: Array[CourtSessionData] = []
-	var topics: Array[TopicData] = [topic]
+	var topic := _make_topic(1, 40.0)
+	var characters: Array = [lord]
+	var courts: Array = []
+	var topics: Array = [topic]
 	var world_states: Dictionary = {}
-	var next_id: Array[int] = [1]
+	var next_id: Array = [1]
 
 	var results := DayOrchestrator._process_crisis_court_calls(
 		characters, courts, topics, world_states, next_id, 50,
@@ -861,11 +861,11 @@ func test_crisis_topic_triggers_court_call():
 func test_crisis_court_not_triggered_below_threshold():
 	var lord := _make_lord(100, "10", "Lion", 6.0)
 	var topic := _make_topic(1, 10.0)
-	var characters: Array[L5RCharacterData] = [lord]
-	var courts: Array[CourtSessionData] = []
-	var topics: Array[TopicData] = [topic]
+	var characters: Array = [lord]
+	var courts: Array = []
+	var topics: Array = [topic]
 	var world_states: Dictionary = {}
-	var next_id: Array[int] = [1]
+	var next_id: Array = [1]
 
 	var results := DayOrchestrator._process_crisis_court_calls(
 		characters, courts, topics, world_states, next_id, 50,
@@ -881,11 +881,11 @@ func test_crisis_court_not_triggered_for_non_lords():
 	vassal.status = 3.0
 	vassal.lord_id = 100
 	var topic := _make_topic(1, 50.0)
-	var characters: Array[L5RCharacterData] = [vassal]
-	var courts: Array[CourtSessionData] = []
-	var topics: Array[TopicData] = [topic]
+	var characters: Array = [vassal]
+	var courts: Array = []
+	var topics: Array = [topic]
 	var world_states: Dictionary = {}
-	var next_id: Array[int] = [1]
+	var next_id: Array = [1]
 
 	var results := DayOrchestrator._process_crisis_court_calls(
 		characters, courts, topics, world_states, next_id, 50,
@@ -899,11 +899,11 @@ func test_crisis_court_blocked_by_existing_active_court():
 	var topic := _make_topic(1, 30.0)
 	var existing := _make_court(1, CourtSessionData.CourtType.PROVINCIAL_FAMILY_COURT, 100, 10, "Crane")
 	CourtSystem.open_court(existing, 45)
-	var characters: Array[L5RCharacterData] = [lord]
-	var courts: Array[CourtSessionData] = [existing]
-	var topics: Array[TopicData] = [topic]
+	var characters: Array = [lord]
+	var courts: Array = [existing]
+	var topics: Array = [topic]
 	var world_states: Dictionary = {}
-	var next_id: Array[int] = [2]
+	var next_id: Array = [2]
 
 	var results := DayOrchestrator._process_crisis_court_calls(
 		characters, courts, topics, world_states, next_id, 50,
@@ -915,11 +915,11 @@ func test_crisis_court_blocked_by_existing_active_court():
 func test_crisis_court_cooldown_prevents_rapid_calls():
 	var lord := _make_lord(100, "10", "Dragon", 6.0)
 	var topic := _make_topic(1, 30.0)
-	var characters: Array[L5RCharacterData] = [lord]
-	var courts: Array[CourtSessionData] = []
-	var topics: Array[TopicData] = [topic]
+	var characters: Array = [lord]
+	var courts: Array = []
+	var topics: Array = [topic]
 	var world_states: Dictionary = {100: {"last_court_called_ic_day": 30}}
-	var next_id: Array[int] = [1]
+	var next_id: Array = [1]
 
 	var results := DayOrchestrator._process_crisis_court_calls(
 		characters, courts, topics, world_states, next_id, 50,
@@ -930,12 +930,12 @@ func test_crisis_court_cooldown_prevents_rapid_calls():
 
 func test_crisis_court_allowed_after_cooldown():
 	var lord := _make_lord(100, "10", "Dragon", 6.0)
-	var topic := _make_topic(1, 30.0)
-	var characters: Array[L5RCharacterData] = [lord]
-	var courts: Array[CourtSessionData] = []
-	var topics: Array[TopicData] = [topic]
+	var topic := _make_topic(1, 40.0)
+	var characters: Array = [lord]
+	var courts: Array = []
+	var topics: Array = [topic]
 	var world_states: Dictionary = {100: {"last_court_called_ic_day": 10}}
-	var next_id: Array[int] = [1]
+	var next_id: Array = [1]
 
 	var results := DayOrchestrator._process_crisis_court_calls(
 		characters, courts, topics, world_states, next_id, 50,
@@ -947,11 +947,11 @@ func test_crisis_court_allowed_after_cooldown():
 func test_crisis_court_type_matches_lord_status():
 	var champion := _make_lord(100, "10", "Lion", 8.0)
 	var topic := _make_topic(1, 55.0)
-	var characters: Array[L5RCharacterData] = [champion]
-	var courts: Array[CourtSessionData] = []
-	var topics: Array[TopicData] = [topic]
+	var characters: Array = [champion]
+	var courts: Array = []
+	var topics: Array = [topic]
 	var world_states: Dictionary = {}
-	var next_id: Array[int] = [1]
+	var next_id: Array = [1]
 
 	DayOrchestrator._process_crisis_court_calls(
 		characters, courts, topics, world_states, next_id, 50,
@@ -963,12 +963,12 @@ func test_crisis_court_type_matches_lord_status():
 
 func test_crisis_court_tracks_last_court_day():
 	var lord := _make_lord(100, "10", "Crane", 6.0)
-	var topic := _make_topic(1, 30.0)
-	var characters: Array[L5RCharacterData] = [lord]
-	var courts: Array[CourtSessionData] = []
-	var topics: Array[TopicData] = [topic]
+	var topic := _make_topic(1, 40.0)
+	var characters: Array = [lord]
+	var courts: Array = []
+	var topics: Array = [topic]
 	var world_states: Dictionary = {}
-	var next_id: Array[int] = [1]
+	var next_id: Array = [1]
 
 	DayOrchestrator._process_crisis_court_calls(
 		characters, courts, topics, world_states, next_id, 50,
@@ -984,14 +984,14 @@ func test_crisis_court_tracks_last_court_day():
 
 func test_strategic_call_court_creates_session():
 	var lord := _make_lord(100, "10", "Crane", 6.0)
-	var directives: Array[Dictionary] = [{
+	var directives: Array = [{
 		"directive": StrategicReview.Directive.CALL_COURT,
 		"lord_id": 100,
 	}]
-	var courts: Array[CourtSessionData] = []
-	var topics: Array[TopicData] = []
+	var courts: Array = []
+	var topics: Array = []
 	var chars_by_id: Dictionary = {100: lord}
-	var next_id: Array[int] = [1]
+	var next_id: Array = [1]
 
 	DayOrchestrator._process_strategic_court_calls(
 		directives, courts, topics, chars_by_id, next_id, 50,
@@ -1005,14 +1005,14 @@ func test_strategic_call_court_creates_session():
 
 func test_strategic_call_court_champion_gets_clan_type():
 	var champion := _make_lord(100, "10", "Lion", 8.0)
-	var directives: Array[Dictionary] = [{
+	var directives: Array = [{
 		"directive": StrategicReview.Directive.CALL_COURT,
 		"lord_id": 100,
 	}]
-	var courts: Array[CourtSessionData] = []
-	var topics: Array[TopicData] = []
+	var courts: Array = []
+	var topics: Array = []
 	var chars_by_id: Dictionary = {100: champion}
-	var next_id: Array[int] = [1]
+	var next_id: Array = [1]
 
 	DayOrchestrator._process_strategic_court_calls(
 		directives, courts, topics, chars_by_id, next_id, 50,
@@ -1026,14 +1026,14 @@ func test_strategic_call_court_blocked_by_active_court():
 	var lord := _make_lord(100, "10", "Crane", 6.0)
 	var existing := _make_court(1, CourtSessionData.CourtType.PROVINCIAL_FAMILY_COURT, 100, 10, "Crane")
 	CourtSystem.open_court(existing, 45)
-	var directives: Array[Dictionary] = [{
+	var directives: Array = [{
 		"directive": StrategicReview.Directive.CALL_COURT,
 		"lord_id": 100,
 	}]
-	var courts: Array[CourtSessionData] = [existing]
-	var topics: Array[TopicData] = []
+	var courts: Array = [existing]
+	var topics: Array = []
 	var chars_by_id: Dictionary = {100: lord}
-	var next_id: Array[int] = [2]
+	var next_id: Array = [2]
 
 	DayOrchestrator._process_strategic_court_calls(
 		directives, courts, topics, chars_by_id, next_id, 50,
@@ -1044,14 +1044,14 @@ func test_strategic_call_court_blocked_by_active_court():
 
 func test_strategic_call_court_tracks_last_court_season():
 	var lord := _make_lord(100, "10", "Crane", 6.0)
-	var directives: Array[Dictionary] = [{
+	var directives: Array = [{
 		"directive": StrategicReview.Directive.CALL_COURT,
 		"lord_id": 100,
 	}]
-	var courts: Array[CourtSessionData] = []
-	var topics: Array[TopicData] = []
+	var courts: Array = []
+	var topics: Array = []
 	var chars_by_id: Dictionary = {100: lord}
-	var next_id: Array[int] = [1]
+	var next_id: Array = [1]
 	var world_states: Dictionary = {}
 
 	DayOrchestrator._process_strategic_court_calls(
@@ -1076,7 +1076,7 @@ func test_status_to_lord_rank_mapping():
 
 # -- Renege Historical Modifier (s15.2) ----------------------------------------
 
-func _make_renege_commitment(lord_id: int, witnesses: Array[int]) -> CourtCommitmentData:
+func _make_renege_commitment(lord_id: int, witnesses: Array) -> CourtCommitmentData:
 	var c: CourtCommitmentData = CourtCommitmentSystem.create_commitment(
 		lord_id, 10, "send_supplies",
 		CourtCommitmentData.CommitmentSource.VOLUNTARY,
@@ -1098,8 +1098,8 @@ func test_renege_applies_historical_modifier_to_witness() -> void:
 	var witness: L5RCharacterData = _make_char(2)
 	var characters_by_id: Dictionary = {1: lord, 2: witness}
 	var cc: CourtCommitmentData = _make_renege_commitment(1, [2])
-	var topics: Array[TopicData] = []
-	var next_id: Array[int] = [1]
+	var topics: Array = []
+	var next_id: Array = [1]
 	DayOrchestrator._process_commitment_seasonal(
 		[cc], [], 201, characters_by_id, topics, next_id,
 	)
@@ -1113,8 +1113,8 @@ func test_renege_skips_historical_modifier_when_no_witnesses() -> void:
 	var lord: L5RCharacterData = _make_char(1)
 	var characters_by_id: Dictionary = {1: lord}
 	var cc: CourtCommitmentData = _make_renege_commitment(1, [])
-	var topics: Array[TopicData] = []
-	var next_id: Array[int] = [1]
+	var topics: Array = []
+	var next_id: Array = [1]
 	DayOrchestrator._process_commitment_seasonal(
 		[cc], [], 201, characters_by_id, topics, next_id,
 	)
@@ -1128,8 +1128,8 @@ func test_renege_excludes_reneging_lord_from_own_modifier() -> void:
 	var characters_by_id: Dictionary = {1: lord, 2: witness}
 	# Include lord's own ID in witness list — should be skipped.
 	var cc: CourtCommitmentData = _make_renege_commitment(1, [1, 2])
-	var topics: Array[TopicData] = []
-	var next_id: Array[int] = [1]
+	var topics: Array = []
+	var next_id: Array = [1]
 	DayOrchestrator._process_commitment_seasonal(
 		[cc], [], 201, characters_by_id, topics, next_id,
 	)
@@ -1284,7 +1284,7 @@ func test_flag_out_of_mandate() -> void:
 
 func test_flag_out_of_mandate_null_safe() -> void:
 	CourtSystem.flag_out_of_mandate(null)
-	assert_true(true)
+	pass_test("No crash on null input")
 
 
 # =============================================================================
@@ -1313,8 +1313,8 @@ func test_position_resistance_applied_in_court_effects() -> void:
 	var characters_by_id: Dictionary = {2: target}
 	# Momentum 50 + DISTANT (no clan match) + TIER_3 → relevance = 50.0
 	var topic := _make_topic(10, 50.0)
-	var topics: Array[TopicData] = [topic]
-	var courts: Array[CourtSessionData] = []
+	var topics: Array = [topic]
+	var courts: Array = []
 
 	var day_results: Array = [{
 		"action_id": "NEGOTIATE",
@@ -1341,8 +1341,8 @@ func test_position_resistance_zero_relevance_in_effects() -> void:
 	var characters_by_id: Dictionary = {2: target}
 	# Momentum 0 → relevance = 0; full shift applied
 	var topic := _make_topic(10, 0.0)
-	var topics: Array[TopicData] = [topic]
-	var courts: Array[CourtSessionData] = []
+	var topics: Array = [topic]
+	var courts: Array = []
 
 	var day_results: Array = [{
 		"action_id": "PERSUADE",
@@ -1371,8 +1371,8 @@ func test_position_resistance_debate_per_witness() -> void:
 	var topic := _make_topic(10, 50.0)
 	topic.tier = TopicData.Tier.TIER_2
 	topic.clan_involved = "Crane"
-	var topics: Array[TopicData] = [topic]
-	var courts: Array[CourtSessionData] = []
+	var topics: Array = [topic]
+	var courts: Array = []
 
 	var day_results: Array = [{
 		"action_id": "PUBLIC_DEBATE",
@@ -1404,8 +1404,8 @@ func test_session_state_wired_in_effects_charm() -> void:
 	CourtSystem.open_court(court, 50)
 	var target := _make_char(2)
 	var characters_by_id: Dictionary = {1: _make_char(1), 2: target}
-	var topics: Array[TopicData] = []
-	var courts: Array[CourtSessionData] = [court]
+	var topics: Array = []
+	var courts: Array = [court]
 
 	var day_results: Array = [{
 		"action_id": "CHARM",
@@ -1429,8 +1429,8 @@ func test_session_state_wired_in_effects_negotiate_tn() -> void:
 	CourtSystem.open_court(court, 50)
 	var target := _make_char(2)
 	var characters_by_id: Dictionary = {1: _make_char(1), 2: target}
-	var topics: Array[TopicData] = []
-	var courts: Array[CourtSessionData] = [court]
+	var topics: Array = []
+	var courts: Array = [court]
 
 	var day_results: Array = [{
 		"action_id": "NEGOTIATE",
@@ -1456,8 +1456,8 @@ func test_session_state_listen_reflect_persuade_tn() -> void:
 	CourtSystem.open_court(court, 50)
 	var target := _make_char(2)
 	var characters_by_id: Dictionary = {1: _make_char(1), 2: target}
-	var topics: Array[TopicData] = []
-	var courts: Array[CourtSessionData] = [court]
+	var topics: Array = []
+	var courts: Array = [court]
 
 	var day_results: Array = [{
 		"action_id": "LISTEN_REFLECT",
@@ -1481,8 +1481,8 @@ func test_session_state_failed_action_not_tracked() -> void:
 	var court := _make_court(1, CourtSessionData.CourtType.PROVINCIAL_FAMILY_COURT, 100, 10, "Crane")
 	CourtSystem.open_court(court, 50)
 	var characters_by_id: Dictionary = {1: _make_char(1), 2: _make_char(2)}
-	var topics: Array[TopicData] = []
-	var courts: Array[CourtSessionData] = [court]
+	var topics: Array = []
+	var courts: Array = [court]
 
 	var day_results: Array = [{
 		"action_id": "CHARM",

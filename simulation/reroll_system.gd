@@ -16,7 +16,7 @@ const REFRESH_WEEKLY: String = "weekly"
 
 static func create_self_reroll_entry(
 	source: String,
-	eligible_skills: Array[String],
+	eligible_skills: Array,
 	charges_max: int,
 	refresh: String = REFRESH_WEEKLY,
 	skill_swap: String = "",

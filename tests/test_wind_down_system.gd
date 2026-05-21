@@ -69,142 +69,142 @@ func test_music_modifier_is_partial() -> void:
 # -- get_available_methods -----------------------------------------------------
 
 func test_rest_always_available() -> void:
-	var methods: Array[WindDownSystem.Method] = \
+	var methods: Array = \
 		WindDownSystem.get_available_methods(_char, _settlement, false)
 	assert_true(WindDownSystem.Method.REST in methods)
 
 
 func test_sake_house_requires_inn_or_sake_house_feature() -> void:
-	var without: Array[WindDownSystem.Method] = \
+	var without: Array = \
 		WindDownSystem.get_available_methods(_char, _settlement, false)
 	assert_false(WindDownSystem.Method.SAKE_HOUSE in without)
 
 	_settlement.infrastructure.append(WindDownSystem.FEATURE_INN)
-	var with_inn: Array[WindDownSystem.Method] = \
+	var with_inn: Array = \
 		WindDownSystem.get_available_methods(_char, _settlement, false)
 	assert_true(WindDownSystem.Method.SAKE_HOUSE in with_inn)
 
 
 func test_sake_house_available_with_sake_house_feature() -> void:
 	_settlement.infrastructure.append(WindDownSystem.FEATURE_SAKE_HOUSE)
-	var methods: Array[WindDownSystem.Method] = \
+	var methods: Array = \
 		WindDownSystem.get_available_methods(_char, _settlement, false)
 	assert_true(WindDownSystem.Method.SAKE_HOUSE in methods)
 
 
 func test_geisha_house_requires_okiya() -> void:
-	var without: Array[WindDownSystem.Method] = \
+	var without: Array = \
 		WindDownSystem.get_available_methods(_char, _settlement, false)
 	assert_false(WindDownSystem.Method.GEISHA_HOUSE in without)
 
 	_settlement.infrastructure.append(WindDownSystem.FEATURE_OKIYA)
-	var with_okiya: Array[WindDownSystem.Method] = \
+	var with_okiya: Array = \
 		WindDownSystem.get_available_methods(_char, _settlement, false)
 	assert_true(WindDownSystem.Method.GEISHA_HOUSE in with_okiya)
 
 
 func test_shrine_prayer_requires_shrine() -> void:
 	_settlement.infrastructure.append(WindDownSystem.FEATURE_SHRINE)
-	var methods: Array[WindDownSystem.Method] = \
+	var methods: Array = \
 		WindDownSystem.get_available_methods(_char, _settlement, false)
 	assert_true(WindDownSystem.Method.SHRINE_PRAYER in methods)
 
 
 func test_temple_stay_requires_temple() -> void:
 	_settlement.infrastructure.append(WindDownSystem.FEATURE_TEMPLE)
-	var methods: Array[WindDownSystem.Method] = \
+	var methods: Array = \
 		WindDownSystem.get_available_methods(_char, _settlement, false)
 	assert_true(WindDownSystem.Method.TEMPLE_STAY in methods)
 
 
 func test_garden_walking_requires_garden() -> void:
-	var without: Array[WindDownSystem.Method] = \
+	var without: Array = \
 		WindDownSystem.get_available_methods(_char, _settlement, false)
 	assert_false(WindDownSystem.Method.GARDEN_WALKING in without)
 
 	_settlement.infrastructure.append(WindDownSystem.FEATURE_GARDEN)
-	var with_garden: Array[WindDownSystem.Method] = \
+	var with_garden: Array = \
 		WindDownSystem.get_available_methods(_char, _settlement, false)
 	assert_true(WindDownSystem.Method.GARDEN_WALKING in with_garden)
 
 
 func test_tea_house_requires_feature_and_companion() -> void:
 	_settlement.infrastructure.append(WindDownSystem.FEATURE_TEA_HOUSE)
-	var without_companion: Array[WindDownSystem.Method] = \
+	var without_companion: Array = \
 		WindDownSystem.get_available_methods(_char, _settlement, false)
 	assert_false(WindDownSystem.Method.TEA_HOUSE in without_companion)
 
-	var with_companion: Array[WindDownSystem.Method] = \
+	var with_companion: Array = \
 		WindDownSystem.get_available_methods(_char, _settlement, true)
 	assert_true(WindDownSystem.Method.TEA_HOUSE in with_companion)
 
 
 func test_go_parlor_requires_game_house_or_inn() -> void:
-	var without: Array[WindDownSystem.Method] = \
+	var without: Array = \
 		WindDownSystem.get_available_methods(_char, _settlement, false)
 	assert_false(WindDownSystem.Method.GO_PARLOR in without)
 
 	_settlement.infrastructure.append(WindDownSystem.FEATURE_GAME_HOUSE)
-	var with_game: Array[WindDownSystem.Method] = \
+	var with_game: Array = \
 		WindDownSystem.get_available_methods(_char, _settlement, false)
 	assert_true(WindDownSystem.Method.GO_PARLOR in with_game)
 
 
 func test_go_parlor_available_with_inn() -> void:
 	_settlement.infrastructure.append(WindDownSystem.FEATURE_INN)
-	var methods: Array[WindDownSystem.Method] = \
+	var methods: Array = \
 		WindDownSystem.get_available_methods(_char, _settlement, false)
 	assert_true(WindDownSystem.Method.GO_PARLOR in methods)
 
 
 func test_music_requires_perform_skill_and_instrument() -> void:
-	var without: Array[WindDownSystem.Method] = \
+	var without: Array = \
 		WindDownSystem.get_available_methods(_char, _settlement, false)
 	assert_false(WindDownSystem.Method.MUSIC in without)
 
 	# Skill without instrument: not available.
 	_char.skills["Perform: Flute"] = 2
-	var with_skill_only: Array[WindDownSystem.Method] = \
+	var with_skill_only: Array = \
 		WindDownSystem.get_available_methods(_char, _settlement, false)
 	assert_false(WindDownSystem.Method.MUSIC in with_skill_only)
 
 	# Skill AND instrument: available.
 	_char.items.append({"item_id": 999, "name": "Flute", "tag": WindDownSystem.ITEM_TAG_INSTRUMENT})
-	var with_both: Array[WindDownSystem.Method] = \
+	var with_both: Array = \
 		WindDownSystem.get_available_methods(_char, _settlement, false)
 	assert_true(WindDownSystem.Method.MUSIC in with_both)
 
 
 func test_incense_ceremony_requires_kodo_set_and_incense() -> void:
-	var without: Array[WindDownSystem.Method] = \
+	var without: Array = \
 		WindDownSystem.get_available_methods(_char, _settlement, false)
 	assert_false(WindDownSystem.Method.INCENSE_CEREMONY in without)
 
 	_char.items.append({"item_id": 100, "name": "Kodo Set", "tag": WindDownSystem.ITEM_TAG_KODO_SET})
-	var with_kodo_only: Array[WindDownSystem.Method] = \
+	var with_kodo_only: Array = \
 		WindDownSystem.get_available_methods(_char, _settlement, false)
 	assert_false(WindDownSystem.Method.INCENSE_CEREMONY in with_kodo_only)
 
 	_char.items.append({"item_id": 101, "name": "Aloeswood", "tag": WindDownSystem.ITEM_TAG_INCENSE})
-	var with_both: Array[WindDownSystem.Method] = \
+	var with_both: Array = \
 		WindDownSystem.get_available_methods(_char, _settlement, false)
 	assert_true(WindDownSystem.Method.INCENSE_CEREMONY in with_both)
 
 
 func test_bathhouse_requires_bathhouse_feature() -> void:
 	_settlement.infrastructure.append(WindDownSystem.FEATURE_BATHHOUSE)
-	var methods: Array[WindDownSystem.Method] = \
+	var methods: Array = \
 		WindDownSystem.get_available_methods(_char, _settlement, false)
 	assert_true(WindDownSystem.Method.BATHHOUSE in methods)
 
 
 func test_pleasure_quarter_requires_feature() -> void:
-	var without: Array[WindDownSystem.Method] = \
+	var without: Array = \
 		WindDownSystem.get_available_methods(_char, _settlement, false)
 	assert_false(WindDownSystem.Method.PLEASURE_QUARTER in without)
 
 	_settlement.infrastructure.append(WindDownSystem.FEATURE_PLEASURE_QUARTER)
-	var with_pq: Array[WindDownSystem.Method] = \
+	var with_pq: Array = \
 		WindDownSystem.get_available_methods(_char, _settlement, false)
 	assert_true(WindDownSystem.Method.PLEASURE_QUARTER in with_pq)
 
@@ -408,7 +408,7 @@ func test_select_npc_always_returns_available_method() -> void:
 	_settlement.infrastructure.append(WindDownSystem.FEATURE_SAKE_HOUSE)
 	_settlement.infrastructure.append(WindDownSystem.FEATURE_SHRINE)
 	_settlement.infrastructure.append(WindDownSystem.FEATURE_BATHHOUSE)
-	var available: Array[WindDownSystem.Method] = \
+	var available: Array = \
 		WindDownSystem.get_available_methods(_char, _settlement, false)
 	for i: int in range(20):
 		var dice_test: DiceEngine = DiceEngine.new(i)
@@ -421,7 +421,7 @@ func test_crab_clan_elevated_sake_house_weight() -> void:
 	_char.clan = "Crab"
 	_settlement.infrastructure.append(WindDownSystem.FEATURE_SAKE_HOUSE)
 	_settlement.infrastructure.append(WindDownSystem.FEATURE_SHRINE)
-	var available: Array[WindDownSystem.Method] = \
+	var available: Array = \
 		WindDownSystem.get_available_methods(_char, _settlement, false)
 	# With elevated Crab sake house weight, sake house should appear more often.
 	var sake_count: int = 0
@@ -437,7 +437,7 @@ func test_scorpion_clan_elevated_geisha_weight() -> void:
 	_char.clan = "Scorpion"
 	_settlement.infrastructure.append(WindDownSystem.FEATURE_OKIYA)
 	_settlement.infrastructure.append(WindDownSystem.FEATURE_SHRINE)
-	var available: Array[WindDownSystem.Method] = \
+	var available: Array = \
 		WindDownSystem.get_available_methods(_char, _settlement, false)
 	var geisha_count: int = 0
 	for i: int in range(100):
@@ -452,7 +452,7 @@ func test_gi_virtue_leans_toward_shrine_prayer() -> void:
 	_char.bushido_virtue = Enums.BushidoVirtue.GI
 	_settlement.infrastructure.append(WindDownSystem.FEATURE_SHRINE)
 	_settlement.infrastructure.append(WindDownSystem.FEATURE_PLEASURE_QUARTER)
-	var available: Array[WindDownSystem.Method] = \
+	var available: Array = \
 		WindDownSystem.get_available_methods(_char, _settlement, false)
 	var shrine_count: int = 0
 	var pq_count: int = 0

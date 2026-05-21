@@ -33,7 +33,7 @@ enum WarScoreTier {
 @export var seasons_active: int = 0
 @export var is_active: bool = true
 @export var resolution_type: String = ""
-@export var allied_clans_a: Array[String] = []
-@export var allied_clans_b: Array[String] = []
-@export var provinces_captured_by_a: Array[int] = []
-@export var provinces_captured_by_b: Array[int] = []
+@export var allied_clans_a: Array = []
+@export var allied_clans_b: Array = []
+@export var provinces_captured_by_a: Array = []
+@export var provinces_captured_by_b: Array = []

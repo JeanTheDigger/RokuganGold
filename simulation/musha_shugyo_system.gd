@@ -134,8 +134,7 @@ static func is_lord_dead_or_missing(
 		return true
 	var lord: L5RCharacterData = characters_by_id[lord_id]
 	if lord.wounds_taken > 0:
-		var earth: int = CharacterStats.get_ring_value(lord, Enums.Ring.EARTH)
-		if CharacterStats.is_dead(lord.wounds_taken, earth):
+		if CharacterStats.is_dead(lord):
 			return true
 	return false
 
@@ -251,7 +250,7 @@ const SHUGENJA_SETTLEMENT_TYPES: Array[int] = [
 ]
 
 
-static func get_preferred_settlement_types(school_type: Enums.SchoolType) -> Array[int]:
+static func get_preferred_settlement_types(school_type: Enums.SchoolType) -> Array:
 	match school_type:
 		Enums.SchoolType.BUSHI:
 			return BUSHI_SETTLEMENT_TYPES
@@ -269,7 +268,7 @@ static func score_settlement_for_pilgrimage(
 	is_own_clan: bool,
 ) -> int:
 	var score: int = 0
-	var preferred: Array[int] = get_preferred_settlement_types(school_type)
+	var preferred: Array = get_preferred_settlement_types(school_type)
 	if settlement.settlement_type in preferred:
 		score += 10
 	if not is_own_clan:

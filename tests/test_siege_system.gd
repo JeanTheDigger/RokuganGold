@@ -187,24 +187,24 @@ func test_should_not_fire_at_zero() -> void:
 
 func test_select_attacker_event() -> void:
 	var event: String = SiegeSystem.select_event(_dice, "attacker")
-	var valid: Array[String] = ATTACKER_EVENTS_PLUS_MUTUAL()
+	var valid: Array = ATTACKER_EVENTS_PLUS_MUTUAL()
 	assert_has(valid, event)
 
 
 func test_select_defender_event() -> void:
 	var event: String = SiegeSystem.select_event(_dice, "defender")
-	var valid: Array[String] = DEFENDER_EVENTS_PLUS_MUTUAL()
+	var valid: Array = DEFENDER_EVENTS_PLUS_MUTUAL()
 	assert_has(valid, event)
 
 
 func ATTACKER_EVENTS_PLUS_MUTUAL() -> Array[String]:
-	var pool: Array[String] = SiegeSystem.ATTACKER_EVENTS.duplicate()
+	var pool: Array = SiegeSystem.ATTACKER_EVENTS.duplicate()
 	pool.append_array(SiegeSystem.MUTUAL_EVENTS)
 	return pool
 
 
 func DEFENDER_EVENTS_PLUS_MUTUAL() -> Array[String]:
-	var pool: Array[String] = SiegeSystem.DEFENDER_EVENTS.duplicate()
+	var pool: Array = SiegeSystem.DEFENDER_EVENTS.duplicate()
 	pool.append_array(SiegeSystem.MUTUAL_EVENTS)
 	return pool
 

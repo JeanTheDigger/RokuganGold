@@ -182,8 +182,8 @@ static func calculate_position_weight(status: float, relevance: float) -> float:
 # -- Aggregate Weighted Opinion (s16.4) ----------------------------------------
 
 static func calculate_aggregate_opinion(
-	positions: Array[float],
-	weights: Array[float],
+	positions: Array,
+	weights: Array,
 ) -> float:
 	if positions.size() != weights.size() or positions.size() == 0:
 		return 0.0
@@ -199,8 +199,8 @@ static func calculate_aggregate_opinion(
 
 # -- Daily Tick Processing -----------------------------------------------------
 
-static func process_daily_tick(topics: Array[TopicData]) -> Dictionary:
-	var expired: Array[int] = []
+static func process_daily_tick(topics: Array) -> Dictionary:
+	var expired: Array = []
 	var momentum_changes: Dictionary = {}
 
 	for topic: TopicData in topics:
@@ -233,7 +233,7 @@ static func create_topic(
 	category: TopicData.Category,
 	ic_day: int,
 	initial_momentum: float = MOMENTUM_MINOR_FLOOR,
-	provinces_affected: Array[int] = [],
+	provinces_affected: Array = [],
 	clan_involved: String = "",
 	family_involved: String = "",
 	subject_character_id: int = -1,
@@ -264,8 +264,8 @@ static func resolve_topic(topic: TopicData) -> void:
 # -- Discussion Count Wiring (s16.5) -------------------------------------------
 
 static func increment_discussion_counts(
-	topics: Array[TopicData],
-	discussed_topic_ids: Array[int],
+	topics: Array,
+	discussed_topic_ids: Array,
 ) -> void:
 	var topic_map: Dictionary = {}
 	for topic: TopicData in topics:
@@ -284,20 +284,20 @@ const BROADCAST_MAJOR: float = 51.0
 const BROADCAST_UNAVOIDABLE: float = 76.0
 
 static func broadcast_public_knowledge(
-	topics: Array[TopicData],
-	characters: Array[L5RCharacterData],
+	topics: Array,
+	characters: Array,
 	character_province_map: Dictionary,
 	province_clan_map: Dictionary,
 	provinces: Dictionary = {},
 	current_season: int = 0,
-) -> Array[Dictionary]:
-	var results: Array[Dictionary] = []
+) -> Array:
+	var results: Array = []
 
 	for topic: TopicData in topics:
 		if topic.resolved or topic.momentum < BROADCAST_MINOR:
 			continue
 
-		var target_chars: Array[L5RCharacterData] = _get_broadcast_targets(
+		var target_chars: Array = _get_broadcast_targets(
 			topic, characters, character_province_map, province_clan_map, provinces
 		)
 
@@ -322,19 +322,19 @@ static func broadcast_public_knowledge(
 
 static func _get_broadcast_targets(
 	topic: TopicData,
-	characters: Array[L5RCharacterData],
+	characters: Array,
 	character_province_map: Dictionary,
 	province_clan_map: Dictionary,
 	provinces: Dictionary = {},
-) -> Array[L5RCharacterData]:
-	var targets: Array[L5RCharacterData] = []
+) -> Array:
+	var targets: Array = []
 
 	if topic.momentum >= BROADCAST_UNAVOIDABLE:
 		targets.assign(characters)
 		return targets
 
-	var affected_provinces: Array[int] = topic.provinces_affected
-	var affected_clans: Array[String] = []
+	var affected_provinces: Array = topic.provinces_affected
+	var affected_clans: Array = []
 	if topic.momentum >= BROADCAST_MAJOR:
 		for pid: int in affected_provinces:
 			var clan: String = province_clan_map.get(pid, "")
@@ -373,7 +373,7 @@ static func _get_broadcast_targets(
 
 static func _is_adjacent_to_affected(
 	province_id: int,
-	affected: Array[int],
+	affected: Array,
 	provinces: Dictionary,
 ) -> bool:
 	var province: ProvinceData = provinces.get(province_id)

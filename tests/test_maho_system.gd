@@ -329,7 +329,7 @@ func test_crime_record_records_ic_day() -> void:
 
 
 func test_crime_record_records_witnesses() -> void:
-	var witnesses: Array[int] = [10, 11, 12]
+	var witnesses: Array = [10, 11, 12]
 	var rec: CrimeRecord = MahoSystem.resolve_cast(
 		_caster, _blood_source, _province, 1, 0, _dice, 505, 10, "Province_99",
 		witnesses

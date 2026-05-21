@@ -103,11 +103,11 @@ func test_add_contact_multiple_clans() -> void:
 # -- Probe Visibility ----------------------------------------------------------
 
 func test_probe_discovers_target_actions() -> void:
-	var action_log: Array[Dictionary] = [
+	var action_log: Array = [
 		{"character_id": 2, "action_id": "CHARM", "target_npc_id": 3, "ic_day": 5, "success": true},
 		{"character_id": 2, "action_id": "GOSSIP", "target_npc_id": 1, "ic_day": 6, "success": true},
 	]
-	var discovered: Array[KnowledgeEntry] = InformationSystem.process_probe_result(
+	var discovered: Array = InformationSystem.process_probe_result(
 		_char_a, 2, action_log, 1, 3
 	)
 	assert_eq(discovered.size(), 2)
@@ -115,49 +115,49 @@ func test_probe_discovers_target_actions() -> void:
 
 
 func test_probe_quality_limits_entries() -> void:
-	var action_log: Array[Dictionary] = [
+	var action_log: Array = [
 		{"character_id": 2, "action_id": "CHARM", "target_npc_id": 3, "ic_day": 5, "success": true},
 		{"character_id": 2, "action_id": "GOSSIP", "target_npc_id": 1, "ic_day": 6, "success": true},
 		{"character_id": 2, "action_id": "TRAIN", "target_npc_id": -1, "ic_day": 7, "success": true},
 	]
-	var discovered: Array[KnowledgeEntry] = InformationSystem.process_probe_result(
+	var discovered: Array = InformationSystem.process_probe_result(
 		_char_a, 2, action_log, 1, 1
 	)
 	assert_eq(discovered.size(), 1)
 
 
 func test_probe_returns_most_recent_first() -> void:
-	var action_log: Array[Dictionary] = [
+	var action_log: Array = [
 		{"character_id": 2, "action_id": "CHARM", "target_npc_id": 3, "ic_day": 5, "success": true},
 		{"character_id": 2, "action_id": "GOSSIP", "target_npc_id": 1, "ic_day": 6, "success": true},
 	]
-	var discovered: Array[KnowledgeEntry] = InformationSystem.process_probe_result(
+	var discovered: Array = InformationSystem.process_probe_result(
 		_char_a, 2, action_log, 1, 1
 	)
 	assert_eq(discovered[0].data["action_id"], "GOSSIP")
 
 
 func test_probe_ignores_other_characters() -> void:
-	var action_log: Array[Dictionary] = [
+	var action_log: Array = [
 		{"character_id": 2, "action_id": "CHARM", "target_npc_id": 3, "ic_day": 5, "success": true},
 		{"character_id": 3, "action_id": "TRAIN", "target_npc_id": -1, "ic_day": 6, "success": true},
 	]
-	var discovered: Array[KnowledgeEntry] = InformationSystem.process_probe_result(
+	var discovered: Array = InformationSystem.process_probe_result(
 		_char_a, 2, action_log, 1, 5
 	)
 	assert_eq(discovered.size(), 1)
 
 
 func test_probe_empty_log_returns_nothing() -> void:
-	var action_log: Array[Dictionary] = []
-	var discovered: Array[KnowledgeEntry] = InformationSystem.process_probe_result(
+	var action_log: Array = []
+	var discovered: Array = InformationSystem.process_probe_result(
 		_char_a, 2, action_log, 1, 3
 	)
 	assert_eq(discovered.size(), 0)
 
 
 func test_probe_entries_are_intelligence_source() -> void:
-	var action_log: Array[Dictionary] = [
+	var action_log: Array = [
 		{"character_id": 2, "action_id": "CHARM", "target_npc_id": 3, "ic_day": 5, "success": true},
 	]
 	InformationSystem.process_probe_result(_char_a, 2, action_log, 1, 3)
@@ -167,8 +167,8 @@ func test_probe_entries_are_intelligence_source() -> void:
 # -- Observe Court Attendees ---------------------------------------------------
 
 func test_observe_court_discovers_unknown() -> void:
-	var attendees: Array[L5RCharacterData] = [_char_b, _char_c]
-	var discovered: Array[KnowledgeEntry] = InformationSystem.process_observe_court(
+	var attendees: Array = [_char_b, _char_c]
+	var discovered: Array = InformationSystem.process_observe_court(
 		_char_a, attendees, 2, 1
 	)
 	assert_eq(discovered.size(), 2)
@@ -179,8 +179,8 @@ func test_observe_court_discovers_unknown() -> void:
 func test_observe_court_skips_known() -> void:
 	_char_a.met_characters = [2]
 	InformationSystem.add_contact(_char_a, 2, "Scorpion")
-	var attendees: Array[L5RCharacterData] = [_char_b, _char_c]
-	var discovered: Array[KnowledgeEntry] = InformationSystem.process_observe_court(
+	var attendees: Array = [_char_b, _char_c]
+	var discovered: Array = InformationSystem.process_observe_court(
 		_char_a, attendees, 3, 1
 	)
 	assert_eq(discovered.size(), 1)
@@ -188,8 +188,8 @@ func test_observe_court_skips_known() -> void:
 
 
 func test_observe_court_skips_self() -> void:
-	var attendees: Array[L5RCharacterData] = [_char_a, _char_b]
-	var discovered: Array[KnowledgeEntry] = InformationSystem.process_observe_court(
+	var attendees: Array = [_char_a, _char_b]
+	var discovered: Array = InformationSystem.process_observe_court(
 		_char_a, attendees, 3, 1
 	)
 	assert_eq(discovered.size(), 1)
@@ -203,16 +203,16 @@ func test_observe_court_quality_caps_at_3() -> void:
 	c4.clan = "Crane"
 	c4.family = "Doji"
 	c4.status = 6.0
-	var attendees: Array[L5RCharacterData] = [_char_b, _char_c, c4]
-	var discovered: Array[KnowledgeEntry] = InformationSystem.process_observe_court(
+	var attendees: Array = [_char_b, _char_c, c4]
+	var discovered: Array = InformationSystem.process_observe_court(
 		_char_a, attendees, 5, 1
 	)
 	assert_eq(discovered.size(), 3)
 
 
 func test_observe_court_records_clan_info() -> void:
-	var attendees: Array[L5RCharacterData] = [_char_b]
-	var discovered: Array[KnowledgeEntry] = InformationSystem.process_observe_court(
+	var attendees: Array = [_char_b]
+	var discovered: Array = InformationSystem.process_observe_court(
 		_char_a, attendees, 1, 1
 	)
 	assert_eq(discovered[0].data["clan"], "Scorpion")
@@ -220,7 +220,7 @@ func test_observe_court_records_clan_info() -> void:
 
 
 func test_observe_court_direct_observation_source() -> void:
-	var attendees: Array[L5RCharacterData] = [_char_b]
+	var attendees: Array = [_char_b]
 	InformationSystem.process_observe_court(_char_a, attendees, 1, 1)
 	assert_eq(_char_a.knowledge_pool[0].source, Enums.KnowledgeSource.DIRECT_OBSERVATION)
 
@@ -244,6 +244,7 @@ func test_introduction_kuge_sets_disposition_2() -> void:
 
 func test_introduction_does_not_overwrite_existing_disposition() -> void:
 	_char_a.disposition_values[2] = 30
+	_char_a.met_characters.append(2)
 	InformationSystem.process_introduction(_char_a, _char_b, false, 1)
 	assert_eq(_char_a.disposition_values[2], 30)
 
@@ -317,7 +318,7 @@ func test_transfer_copies_matching_entries() -> void:
 		{"target_province_id": 20, "stability": 80}, 1
 	))
 	var objective: Dictionary = {"target_province_id": 10}
-	var transferred: Array[KnowledgeEntry] = InformationSystem.transfer_objective_knowledge(
+	var transferred: Array = InformationSystem.transfer_objective_knowledge(
 		_char_a, _char_b, objective, 2
 	)
 	assert_eq(transferred.size(), 1)
@@ -352,7 +353,7 @@ func test_transfer_npc_targeted_entries() -> void:
 		{"target_character_id": 5, "action_id": "CHARM"}, 1
 	))
 	var objective: Dictionary = {"target_npc_id": 5}
-	var transferred: Array[KnowledgeEntry] = InformationSystem.transfer_objective_knowledge(
+	var transferred: Array = InformationSystem.transfer_objective_knowledge(
 		_char_a, _char_b, objective, 1
 	)
 	assert_eq(transferred.size(), 1)
@@ -363,14 +364,14 @@ func test_transfer_npc_targeted_entries() -> void:
 func test_get_known_contacts_for_clan() -> void:
 	InformationSystem.add_contact(_char_a, 2, "Scorpion")
 	InformationSystem.add_contact(_char_a, 5, "Scorpion")
-	var contacts: Array[int] = InformationSystem.get_known_contacts_for_clan(_char_a, "Scorpion")
+	var contacts: Array = InformationSystem.get_known_contacts_for_clan(_char_a, "Scorpion")
 	assert_eq(contacts.size(), 2)
 	assert_true(2 in contacts)
 	assert_true(5 in contacts)
 
 
 func test_get_known_contacts_empty_clan() -> void:
-	var contacts: Array[int] = InformationSystem.get_known_contacts_for_clan(_char_a, "Phoenix")
+	var contacts: Array = InformationSystem.get_known_contacts_for_clan(_char_a, "Phoenix")
 	assert_eq(contacts.size(), 0)
 
 
@@ -406,7 +407,7 @@ func test_get_stale_entries() -> void:
 	stale.confidence = Enums.KnowledgeConfidence.STALE
 	InformationSystem.add_knowledge(_char_a, fresh)
 	InformationSystem.add_knowledge(_char_a, stale)
-	var stale_entries: Array[KnowledgeEntry] = InformationSystem.get_stale_entries(_char_a)
+	var stale_entries: Array = InformationSystem.get_stale_entries(_char_a)
 	assert_eq(stale_entries.size(), 1)
 
 
@@ -438,10 +439,10 @@ func test_transfer_province_status() -> void:
 	ps.last_report_ic_day = 3
 
 	var objective: Dictionary = {"target_province_id": 10}
-	var transferred: Array[KnowledgeEntry] = InformationSystem.transfer_objective_knowledge(
+	var transferred: Array = InformationSystem.transfer_objective_knowledge(
 		_char_a, _char_b, objective, 2, [ps]
 	)
-	var province_entries: Array[KnowledgeEntry] = []
+	var province_entries: Array = []
 	for e: KnowledgeEntry in transferred:
 		if e.entry_type == "province_status":
 			province_entries.append(e)
@@ -459,10 +460,10 @@ func test_transfer_crisis_data() -> void:
 	ps.crisis_type = "shadowlands_incursion"
 
 	var objective: Dictionary = {"target_province_id": 10}
-	var transferred: Array[KnowledgeEntry] = InformationSystem.transfer_objective_knowledge(
+	var transferred: Array = InformationSystem.transfer_objective_knowledge(
 		_char_a, _char_b, objective, 2, [ps]
 	)
-	var crisis_entries: Array[KnowledgeEntry] = []
+	var crisis_entries: Array = []
 	for e: KnowledgeEntry in transferred:
 		if e.entry_type == "crisis_data":
 			crisis_entries.append(e)
@@ -478,7 +479,7 @@ func test_transfer_no_crisis_when_none_active() -> void:
 	ps.active_crisis_id = -1
 
 	var objective: Dictionary = {"target_province_id": 10}
-	var transferred: Array[KnowledgeEntry] = InformationSystem.transfer_objective_knowledge(
+	var transferred: Array = InformationSystem.transfer_objective_knowledge(
 		_char_a, _char_b, objective, 2, [ps]
 	)
 	for e: KnowledgeEntry in transferred:
@@ -491,11 +492,12 @@ func test_transfer_province_wrong_id_ignored() -> void:
 	ps.stability = 60.0
 
 	var objective: Dictionary = {"target_province_id": 10}
-	var transferred: Array[KnowledgeEntry] = InformationSystem.transfer_objective_knowledge(
+	var transferred: Array = InformationSystem.transfer_objective_knowledge(
 		_char_a, _char_b, objective, 2, [ps]
 	)
 	for e: KnowledgeEntry in transferred:
 		assert_ne(e.entry_type, "province_status")
+	pass_test("No province_status entry transferred for mismatched province ID")
 
 
 # -- Collective Disposition Seed Wiring (s12.2b) -----------------------------
@@ -739,7 +741,7 @@ func test_arrival_observation_updates_contacts_by_clan() -> void:
 	resident.knowledge_pool = []
 
 	var chars_by_id: Dictionary = {1: arriving, 2: resident}
-	var arrivals: Array[Dictionary] = [{"character_id": 1, "destination": "10"}]
+	var arrivals: Array = [{"character_id": 1, "destination": "10"}]
 
 	DayOrchestrator._process_arrival_observation(arrivals, chars_by_id, 0)
 	# Both should be in each other's met_characters
@@ -757,7 +759,7 @@ func test_arrival_observation_updates_contacts_by_clan() -> void:
 func test_update_intelligence_replaces_same_type_same_target() -> void:
 	var c := L5RCharacterData.new()
 	c.character_id = 800
-	c.knowledge_pool = [] as Array[KnowledgeEntry]
+	c.knowledge_pool = []
 	var old_entry := InformationSystem.make_entry(
 		Enums.KnowledgeSource.INTELLIGENCE,
 		"personality_insight",
@@ -785,7 +787,7 @@ func test_update_intelligence_replaces_same_type_same_target() -> void:
 func test_update_intelligence_keeps_different_targets() -> void:
 	var c := L5RCharacterData.new()
 	c.character_id = 801
-	c.knowledge_pool = [] as Array[KnowledgeEntry]
+	c.knowledge_pool = []
 	var e1 := InformationSystem.make_entry(
 		Enums.KnowledgeSource.INTELLIGENCE,
 		"personality_insight",
@@ -807,7 +809,7 @@ func test_update_intelligence_keeps_different_targets() -> void:
 func test_update_intelligence_keeps_different_types() -> void:
 	var c := L5RCharacterData.new()
 	c.character_id = 802
-	c.knowledge_pool = [] as Array[KnowledgeEntry]
+	c.knowledge_pool = []
 	var e1 := InformationSystem.make_entry(
 		Enums.KnowledgeSource.INTELLIGENCE,
 		"personality_insight",
@@ -829,7 +831,7 @@ func test_update_intelligence_keeps_different_types() -> void:
 func test_update_intelligence_non_dedup_type_appends() -> void:
 	var c := L5RCharacterData.new()
 	c.character_id = 803
-	c.knowledge_pool = [] as Array[KnowledgeEntry]
+	c.knowledge_pool = []
 	var e1 := InformationSystem.make_entry(
 		Enums.KnowledgeSource.INTELLIGENCE,
 		"shadow_surveillance",
@@ -851,7 +853,7 @@ func test_update_intelligence_non_dedup_type_appends() -> void:
 func test_false_info_replaces_true_info() -> void:
 	var actor := L5RCharacterData.new()
 	actor.character_id = 804
-	actor.knowledge_pool = [] as Array[KnowledgeEntry]
+	actor.knowledge_pool = []
 	var true_entry := InformationSystem.make_entry(
 		Enums.KnowledgeSource.INTELLIGENCE,
 		"personality_insight",

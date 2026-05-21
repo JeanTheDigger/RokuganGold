@@ -213,7 +213,7 @@ func test_rikugunshokan_no_battle_count_required() -> void:
 # -- Select Best Candidate Tests -------------------------------------------------
 
 func test_select_best_chui() -> void:
-	var candidates: Array[Dictionary] = [
+	var candidates: Array = [
 		_make_candidate({"character_id": 1, "battle_skill": 3, "glory": 2.0}),
 		_make_candidate({"character_id": 2, "battle_skill": 5, "glory": 5.0}),
 	]
@@ -224,7 +224,7 @@ func test_select_best_chui() -> void:
 
 
 func test_select_best_chui_filters_ineligible() -> void:
-	var candidates: Array[Dictionary] = [
+	var candidates: Array = [
 		_make_candidate({"character_id": 1, "battle_skill": 2}),
 		_make_candidate({"character_id": 2, "battle_skill": 3}),
 	]
@@ -235,7 +235,7 @@ func test_select_best_chui_filters_ineligible() -> void:
 
 
 func test_select_best_chui_all_ineligible() -> void:
-	var candidates: Array[Dictionary] = [
+	var candidates: Array = [
 		_make_candidate({"character_id": 1, "battle_skill": 1}),
 		_make_candidate({"character_id": 2, "battle_skill": 2}),
 	]
@@ -246,7 +246,7 @@ func test_select_best_chui_all_ineligible() -> void:
 
 
 func test_select_best_taisa() -> void:
-	var candidates: Array[Dictionary] = [
+	var candidates: Array = [
 		_make_candidate({
 			"character_id": 1, "battle_skill": 4, "battles_as_chui": 1,
 			"battles_commanded": 3, "glory": 5.0,
@@ -263,7 +263,7 @@ func test_select_best_taisa() -> void:
 
 
 func test_select_best_empty() -> void:
-	var candidates: Array[Dictionary] = []
+	var candidates: Array = []
 	var best: Dictionary = MilitaryPromotionSystem.select_best_candidate(
 		candidates, Enums.MilitaryRank.CHUI,
 	)
@@ -295,20 +295,20 @@ func test_apply_demotion() -> void:
 # -- Vacancy Detection Tests -----------------------------------------------------
 
 func test_find_vacancies() -> void:
-	var units: Array[Dictionary] = [
+	var units: Array = [
 		{"unit_id": 1, "commander_id": 5, "rank_needed": Enums.MilitaryRank.CHUI},
 		{"unit_id": 2, "commander_id": -1, "rank_needed": Enums.MilitaryRank.CHUI},
 		{"unit_id": 3, "commander_id": -1, "rank_needed": Enums.MilitaryRank.TAISA},
 	]
-	var vacancies: Array[Dictionary] = MilitaryPromotionSystem.find_vacancies(units)
+	var vacancies: Array = MilitaryPromotionSystem.find_vacancies(units)
 	assert_eq(vacancies.size(), 2)
 	assert_eq(vacancies[0]["unit_id"], 2)
 	assert_eq(vacancies[1]["rank_needed"], Enums.MilitaryRank.TAISA)
 
 
 func test_find_no_vacancies() -> void:
-	var units: Array[Dictionary] = [
+	var units: Array = [
 		{"unit_id": 1, "commander_id": 5, "rank_needed": Enums.MilitaryRank.CHUI},
 	]
-	var vacancies: Array[Dictionary] = MilitaryPromotionSystem.find_vacancies(units)
+	var vacancies: Array = MilitaryPromotionSystem.find_vacancies(units)
 	assert_eq(vacancies.size(), 0)

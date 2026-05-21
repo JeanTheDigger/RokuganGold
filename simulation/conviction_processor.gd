@@ -16,15 +16,15 @@ const DEFENSE_HEARING_DAYS_AFTER_ACCUSATION: int = 3
 
 
 static func process_accused_cases(
-	crime_records: Array[CrimeRecord],
+	crime_records: Array,
 	characters_by_id: Dictionary,
 	dice_engine: DiceEngine,
 	ic_day: int,
-	next_topic_id: Array[int],
-	active_topics: Array[TopicData],
+	next_topic_id: Array,
+	active_topics: Array,
 	lord_map: Dictionary,
-) -> Array[Dictionary]:
-	var results: Array[Dictionary] = []
+) -> Array:
+	var results: Array = []
 
 	for record: CrimeRecord in crime_records:
 		if record.legal_status != Enums.LegalStatus.ACCUSED:
@@ -66,8 +66,8 @@ static func _process_single_case(
 	lord: L5RCharacterData,
 	dice_engine: DiceEngine,
 	ic_day: int,
-	next_topic_id: Array[int],
-	active_topics: Array[TopicData],
+	next_topic_id: Array,
+	active_topics: Array,
 	characters_by_id: Dictionary,
 ) -> Dictionary:
 	var hearing := _run_defense_hearing(
@@ -151,7 +151,7 @@ static func _process_single_case(
 	}
 
 	if record.crime_type == Enums.CrimeType.TREASON:
-		var co_ids: Array[int] = []
+		var co_ids: Array = []
 		for sid: int in record.known_suspects:
 			if sid != accused.character_id:
 				co_ids.append(sid)
@@ -246,7 +246,7 @@ static func resolve_seppuku(
 	convicted: L5RCharacterData,
 	accepted: bool,
 	ic_day: int,
-	next_topic_id: Array[int],
+	next_topic_id: Array,
 ) -> Dictionary:
 	if not record.seppuku_offered:
 		return {"applicable": false}

@@ -40,7 +40,7 @@ func roll_and_keep(rolled: int, kept: int, explodes: bool = true, emphasis: bool
 		overflow_bonus += (kept - 10) * 2
 		kept = 10
 
-	var all_dice: Array[int] = []
+	var all_dice: Array = []
 	var explosion_count: int = 0
 
 	for i: int in range(rolled):
@@ -61,8 +61,8 @@ func roll_and_keep(rolled: int, kept: int, explodes: bool = true, emphasis: bool
 	all_dice.sort()
 	all_dice.reverse()
 
-	var kept_dice: Array[int] = []
-	var dropped_dice: Array[int] = []
+	var kept_dice: Array = []
+	var dropped_dice: Array = []
 
 	for i: int in range(all_dice.size()):
 		if i < kept:

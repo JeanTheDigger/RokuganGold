@@ -76,7 +76,7 @@ const RELUCTANCE_DISPOSITION_THRESHOLD: Dictionary = {
 	Enums.CulturalReluctance.VERY_RELUCTANT: 71,
 }
 
-const WRIST_FOREARM_LOCATIONS: Array[Enums.TattooBodyLocation] = [
+const WRIST_FOREARM_LOCATIONS: Array = [
 	Enums.TattooBodyLocation.LEFT_WRIST_FOREARM,
 	Enums.TattooBodyLocation.RIGHT_WRIST_FOREARM,
 ]
@@ -128,7 +128,7 @@ static func check_consent(
 # 57.25.2 — Body Location Management
 # =============================================================================
 
-const ALL_BODY_LOCATIONS: Array[Enums.TattooBodyLocation] = [
+const ALL_BODY_LOCATIONS: Array = [
 	Enums.TattooBodyLocation.LEFT_WRIST_FOREARM,
 	Enums.TattooBodyLocation.RIGHT_WRIST_FOREARM,
 	Enums.TattooBodyLocation.LEFT_UPPER_ARM_SHOULDER,
@@ -141,17 +141,17 @@ const ALL_BODY_LOCATIONS: Array[Enums.TattooBodyLocation] = [
 ]
 
 
-static func get_occupied_locations(tattoos: Array[TattooData], character_id: int) -> Array[Enums.TattooBodyLocation]:
-	var result: Array[Enums.TattooBodyLocation] = []
+static func get_occupied_locations(tattoos: Array, character_id: int) -> Array:
+	var result: Array = []
 	for t: TattooData in tattoos:
 		if t.recipient_id == character_id:
 			result.append(t.body_location)
 	return result
 
 
-static func get_available_locations(tattoos: Array[TattooData], character_id: int, is_bald: bool) -> Array[Enums.TattooBodyLocation]:
-	var occupied: Array[Enums.TattooBodyLocation] = get_occupied_locations(tattoos, character_id)
-	var result: Array[Enums.TattooBodyLocation] = []
+static func get_available_locations(tattoos: Array, character_id: int, is_bald: bool) -> Array:
+	var occupied: Array = get_occupied_locations(tattoos, character_id)
+	var result: Array = []
 	for loc: Enums.TattooBodyLocation in ALL_BODY_LOCATIONS:
 		if loc in occupied:
 			continue
@@ -161,7 +161,7 @@ static func get_available_locations(tattoos: Array[TattooData], character_id: in
 	return result
 
 
-static func is_location_available(tattoos: Array[TattooData], character_id: int, location: Enums.TattooBodyLocation, is_bald: bool) -> bool:
+static func is_location_available(tattoos: Array, character_id: int, location: Enums.TattooBodyLocation, is_bald: bool) -> bool:
 	if location == Enums.TattooBodyLocation.HEAD and not is_bald:
 		return false
 	for t: TattooData in tattoos:
@@ -170,8 +170,8 @@ static func is_location_available(tattoos: Array[TattooData], character_id: int,
 	return true
 
 
-static func get_character_tattoos(tattoos: Array[TattooData], character_id: int) -> Array[TattooData]:
-	var result: Array[TattooData] = []
+static func get_character_tattoos(tattoos: Array, character_id: int) -> Array:
+	var result: Array = []
 	for t: TattooData in tattoos:
 		if t.recipient_id == character_id:
 			result.append(t)
@@ -182,22 +182,22 @@ static func get_character_tattoos(tattoos: Array[TattooData], character_id: int)
 # 57.25.2 — Visibility
 # =============================================================================
 
-const ALWAYS_VISIBLE_LOCATIONS: Array[Enums.TattooBodyLocation] = [
+const ALWAYS_VISIBLE_LOCATIONS: Array = [
 	Enums.TattooBodyLocation.LEFT_WRIST_FOREARM,
 	Enums.TattooBodyLocation.RIGHT_WRIST_FOREARM,
 ]
 
-const VISIBLE_WITHOUT_OUTER_GARMENT: Array[Enums.TattooBodyLocation] = [
+const VISIBLE_WITHOUT_OUTER_GARMENT: Array = [
 	Enums.TattooBodyLocation.LEFT_UPPER_ARM_SHOULDER,
 	Enums.TattooBodyLocation.RIGHT_UPPER_ARM_SHOULDER,
 ]
 
-const VISIBLE_UPPER_REMOVED: Array[Enums.TattooBodyLocation] = [
+const VISIBLE_UPPER_REMOVED: Array = [
 	Enums.TattooBodyLocation.CHEST_TORSO,
 	Enums.TattooBodyLocation.BACK,
 ]
 
-const VISIBLE_LOWER_REMOVED: Array[Enums.TattooBodyLocation] = [
+const VISIBLE_LOWER_REMOVED: Array = [
 	Enums.TattooBodyLocation.LEFT_LEG_THIGH,
 	Enums.TattooBodyLocation.RIGHT_LEG_THIGH,
 ]
@@ -306,7 +306,7 @@ static func get_disposition_bond(quality: Enums.TattooQualityTier) -> int:
 
 
 static func calculate_total_bond(
-	tattoos: Array[TattooData],
+	tattoos: Array,
 	character_a: int,
 	character_b: int,
 ) -> int:
@@ -363,7 +363,7 @@ static func get_current_rank_allotment(school: String, school_rank: int) -> int:
 	return allotments.get(school_rank, 0)
 
 
-static func count_ability_tattoos(tattoos: Array[TattooData], character_id: int) -> int:
+static func count_ability_tattoos(tattoos: Array, character_id: int) -> int:
 	var count: int = 0
 	for t: TattooData in tattoos:
 		if t.recipient_id == character_id and t.is_ability_tattoo:
@@ -372,7 +372,7 @@ static func count_ability_tattoos(tattoos: Array[TattooData], character_id: int)
 
 
 static func has_unfilled_ability_slots(
-	tattoos: Array[TattooData],
+	tattoos: Array,
 	character_id: int,
 	school: String,
 	school_rank: int,
@@ -385,7 +385,7 @@ static func has_unfilled_ability_slots(
 
 
 static func can_receive_decorative(
-	tattoos: Array[TattooData],
+	tattoos: Array,
 	character_id: int,
 	school: String,
 	school_rank: int,
@@ -414,10 +414,10 @@ static func can_self_apply(school: String, school_rank: int) -> bool:
 
 
 static func is_seek_tattoo_blocked(
-	tattoos: Array[TattooData],
+	tattoos: Array,
 	character_id: int,
 ) -> bool:
-	var occupied: Array[Enums.TattooBodyLocation] = get_occupied_locations(tattoos, character_id)
+	var occupied: Array = get_occupied_locations(tattoos, character_id)
 	return occupied.size() >= ALL_BODY_LOCATIONS.size()
 
 
@@ -526,21 +526,21 @@ static func get_dragon_decorative_count(rng_value: float) -> int:
 # Permanent Passive Tattoo Checks
 # =============================================================================
 
-static func has_mantis_tattoo(tattoos: Array[TattooData], character_id: int) -> bool:
+static func has_mantis_tattoo(tattoos: Array, character_id: int) -> bool:
 	for t: TattooData in tattoos:
 		if t.recipient_id == character_id and t.is_ability_tattoo and t.ability_granted == Enums.TattooAbility.MANTIS:
 			return true
 	return false
 
 
-static func has_ocean_tattoo(tattoos: Array[TattooData], character_id: int) -> bool:
+static func has_ocean_tattoo(tattoos: Array, character_id: int) -> bool:
 	for t: TattooData in tattoos:
 		if t.recipient_id == character_id and t.is_ability_tattoo and t.ability_granted == Enums.TattooAbility.OCEAN:
 			return true
 	return false
 
 
-static func get_active_ability_tattoo(tattoos: Array[TattooData], character_id: int, active_tattoo_ability: Enums.TattooAbility) -> TattooData:
+static func get_active_ability_tattoo(tattoos: Array, character_id: int, active_tattoo_ability: Enums.TattooAbility) -> TattooData:
 	if active_tattoo_ability == Enums.TattooAbility.NONE:
 		return null
 	for t: TattooData in tattoos:

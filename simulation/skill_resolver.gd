@@ -113,7 +113,7 @@ static func get_skill_rank(character: L5RCharacterData, skill_name: String) -> i
 
 static func has_emphasis(character: L5RCharacterData, skill_name: String, emphasis_name: String) -> bool:
 	# Check exact skill name first, then parent
-	var check_names: Array[String] = [skill_name]
+	var check_names: Array = [skill_name]
 	var colon_pos: int = skill_name.find(":")
 	if colon_pos >= 0:
 		check_names.append(skill_name.substr(0, colon_pos).strip_edges())
@@ -135,7 +135,7 @@ static func apply_technique_flags(character: L5RCharacterData) -> void:
 	if character.school.begins_with("Doji Courtier") and rank >= 2:
 		character.cadence_trained = true
 	if rank >= 1:
-		var all_schools: Array[String] = [character.school]
+		var all_schools: Array = [character.school]
 		for path: String in character.school_paths:
 			if path not in all_schools:
 				all_schools.append(path)
@@ -309,12 +309,12 @@ static func get_deception_defense_bonus(defender: L5RCharacterData) -> int:
 const CADENCE_TN: int = 15
 
 static func resolve_cadence_sync(
-	characters: Array[L5RCharacterData],
-	court_char_ids: Array[int],
+	characters: Array,
+	court_char_ids: Array,
 	dice_engine: DiceEngine,
-) -> Array[Dictionary]:
-	var results: Array[Dictionary] = []
-	var cadence_ids: Array[int] = []
+) -> Array:
+	var results: Array = []
+	var cadence_ids: Array = []
 	var char_map: Dictionary = {}
 	for cid: int in court_char_ids:
 		for c: L5RCharacterData in characters:
@@ -336,7 +336,7 @@ static func resolve_cadence_sync(
 				"success": false,
 			})
 			continue
-		var transferred: Array[int] = []
+		var transferred: Array = []
 		for j: int in range(cadence_ids.size()):
 			if i == j:
 				continue

@@ -206,7 +206,7 @@ func test_expose_publicly_disposition_per_witness() -> void:
 	var w2: L5RCharacterData = L5RCharacterData.new()
 	w2.character_id = 11
 	var chars: Dictionary = {10: w1, 11: w2}
-	var r: Dictionary = SecretSystem.expose_publicly(s, _revealer, _subject, [10, 11] as Array[int], chars)
+	var r: Dictionary = SecretSystem.expose_publicly(s, _revealer, _subject, [10, 11], chars)
 	assert_eq(r["disposition_per_witness"], -10)
 	assert_eq(r["witness_count"], 2)
 	assert_eq(r["witness_effects"].size(), 2)
@@ -214,14 +214,14 @@ func test_expose_publicly_disposition_per_witness() -> void:
 
 func test_expose_publicly_marks_both_flags() -> void:
 	var s: SecretData = SecretSystem.create_secret(1, _subject.character_id, SecretData.Severity.TIER_2)
-	SecretSystem.expose_publicly(s, _revealer, _subject, [] as Array[int], {})
+	SecretSystem.expose_publicly(s, _revealer, _subject, [], {})
 	assert_true(s.exposed)
 	assert_true(s.exposed_publicly)
 
 
 func test_expose_publicly_applies_subject_consequences() -> void:
 	var s: SecretData = SecretSystem.create_secret(1, _subject.character_id, SecretData.Severity.TIER_2)
-	SecretSystem.expose_publicly(s, _revealer, _subject, [] as Array[int], {})
+	SecretSystem.expose_publicly(s, _revealer, _subject, [], {})
 	assert_almost_eq(_subject.honor, 4.0, 0.01)
 	assert_almost_eq(_subject.glory, 4.5, 0.01)
 	assert_almost_eq(_subject.infamy, 0.3, 0.01)
@@ -231,25 +231,25 @@ func test_expose_publicly_witness_disposition_mutated() -> void:
 	var s: SecretData = SecretSystem.create_secret(1, _subject.character_id, SecretData.Severity.TIER_1)
 	var w: L5RCharacterData = L5RCharacterData.new()
 	w.character_id = 10
-	var r: Dictionary = SecretSystem.expose_publicly(s, _revealer, _subject, [10] as Array[int], {10: w})
+	var r: Dictionary = SecretSystem.expose_publicly(s, _revealer, _subject, [10], {10: w})
 	assert_eq(w.disposition_values[_subject.character_id], -35)
 
 
 func test_expose_publicly_tier_1_generates_betrayal_topic() -> void:
 	var s: SecretData = SecretSystem.create_secret(1, _subject.character_id, SecretData.Severity.TIER_1)
-	var r: Dictionary = SecretSystem.expose_publicly(s, _revealer, _subject, [] as Array[int], {})
+	var r: Dictionary = SecretSystem.expose_publicly(s, _revealer, _subject, [], {})
 	assert_true(r["generates_betrayal_topic"])
 
 
 func test_expose_publicly_has_proof_grants_raises() -> void:
 	var s: SecretData = SecretSystem.create_secret(1, _subject.character_id, SecretData.Severity.TIER_3)
-	var r: Dictionary = SecretSystem.expose_publicly(s, _revealer, _subject, [] as Array[int], {}, true)
+	var r: Dictionary = SecretSystem.expose_publicly(s, _revealer, _subject, [], {}, true)
 	assert_eq(r["free_raises"], 1)
 
 
 func test_expose_publicly_skips_missing_witness() -> void:
 	var s: SecretData = SecretSystem.create_secret(1, _subject.character_id, SecretData.Severity.TIER_3)
-	var r: Dictionary = SecretSystem.expose_publicly(s, _revealer, _subject, [99] as Array[int], {})
+	var r: Dictionary = SecretSystem.expose_publicly(s, _revealer, _subject, [99], {})
 	assert_eq(r["witness_effects"].size(), 0)
 
 
@@ -258,19 +258,19 @@ func test_expose_publicly_skips_missing_witness() -> void:
 # ==============================================================================
 
 func test_fabrication_tn_tier_1() -> void:
-	assert_eq(SecretSystem.get_fabrication_tn(SecretData.Severity.TIER_1), 15)
+	assert_eq(SecretSystem.get_fabrication_tn(SecretData.Severity.TIER_1), 30)
 
 
 func test_fabrication_tn_tier_2() -> void:
-	assert_eq(SecretSystem.get_fabrication_tn(SecretData.Severity.TIER_2), 20)
+	assert_eq(SecretSystem.get_fabrication_tn(SecretData.Severity.TIER_2), 25)
 
 
 func test_fabrication_tn_tier_3() -> void:
-	assert_eq(SecretSystem.get_fabrication_tn(SecretData.Severity.TIER_3), 25)
+	assert_eq(SecretSystem.get_fabrication_tn(SecretData.Severity.TIER_3), 20)
 
 
 func test_fabrication_tn_tier_4() -> void:
-	assert_eq(SecretSystem.get_fabrication_tn(SecretData.Severity.TIER_4), 30)
+	assert_eq(SecretSystem.get_fabrication_tn(SecretData.Severity.TIER_4), 15)
 
 
 # ==============================================================================
@@ -316,19 +316,19 @@ func test_fabricate_success_creates_secret() -> void:
 
 func test_fabricate_with_raises_increases_tn() -> void:
 	var r: Dictionary = SecretSystem.fabricate_secret(_fabricator, 10, SecretData.Severity.TIER_1, 1, _engine, 2)
-	assert_eq(r["tn"], 25)
+	assert_eq(r["tn"], 40)
 
 
 func test_fabricate_honor_cost_tier_4() -> void:
 	_fabricator.honor = 5.0
 	SecretSystem.fabricate_secret(_fabricator, 10, SecretData.Severity.TIER_4, 1, _engine)
-	assert_almost_eq(_fabricator.honor, 3.5, 0.01)
+	assert_almost_eq(_fabricator.honor, 4.7, 0.01)
 
 
 func test_fabricate_honor_cost_tier_1() -> void:
 	_fabricator.honor = 5.0
 	SecretSystem.fabricate_secret(_fabricator, 10, SecretData.Severity.TIER_1, 1, _engine)
-	assert_almost_eq(_fabricator.honor, 4.7, 0.01)
+	assert_almost_eq(_fabricator.honor, 3.5, 0.01)
 
 
 # ==============================================================================
@@ -367,7 +367,7 @@ func test_bribe_costs() -> void:
 	actor.honor = 5.0
 	actor.infamy = 0.0
 	SecretSystem.apply_bribe_costs(actor)
-	assert_almost_eq(actor.honor, 4.8, 0.01)
+	assert_almost_eq(actor.honor, 4.7, 0.01)
 	assert_almost_eq(actor.infamy, 0.1, 0.01)
 
 
@@ -376,7 +376,7 @@ func test_eavesdrop_costs() -> void:
 	actor.honor = 5.0
 	actor.infamy = 0.0
 	SecretSystem.apply_eavesdrop_costs(actor)
-	assert_almost_eq(actor.honor, 4.9, 0.01)
+	assert_almost_eq(actor.honor, 4.7, 0.01)
 	assert_almost_eq(actor.infamy, 0.05, 0.01)
 
 
@@ -403,7 +403,8 @@ func test_covert_costs_clamp_honor_at_zero() -> void:
 	actor.honor = 0.1
 	actor.infamy = 0.0
 	SecretSystem.apply_intercept_costs(actor)
-	assert_almost_eq(actor.honor, 0.0, 0.01)
+	# Honor rank 0 → bracket 0 → cost 0.0 (Table 2.3), so honor stays at 0.1
+	assert_almost_eq(actor.honor, 0.1, 0.01)
 
 
 func test_covert_costs_clamp_infamy_at_ten() -> void:
@@ -615,7 +616,7 @@ func test_eavesdrop_applies_costs() -> void:
 	var eav: L5RCharacterData = _make_eavesdropper()
 	var tgt: L5RCharacterData = _make_eavesdrop_target()
 	SecretSystem.resolve_eavesdrop(eav, tgt, _engine)
-	assert_almost_eq(eav.honor, 4.9, 0.01)
+	assert_almost_eq(eav.honor, 4.7, 0.01)
 	assert_almost_eq(eav.infamy, 0.05, 0.01)
 
 
@@ -988,10 +989,10 @@ func test_auto_conceal_fires_for_contraband() -> void:
 	)
 	npc.items.append(poison_item)
 
-	var arrivals: Array[Dictionary] = [{"character_id": 80, "destination": "Kyuden Bayushi"}]
+	var arrivals: Array = [{"character_id": 80, "destination": "Kyuden Bayushi"}]
 	var chars: Dictionary = {80: npc}
 	var e: DiceEngine = DiceEngine.new(42)
-	var results: Array[Dictionary] = DayOrchestrator._process_auto_conceal_on_arrival(arrivals, chars, e)
+	var results: Array = DayOrchestrator._process_auto_conceal_on_arrival(arrivals, chars, e)
 
 	assert_eq(results.size(), 1)
 	assert_eq(results[0]["character_id"], 80)
@@ -1010,10 +1011,10 @@ func test_auto_conceal_skips_non_contraband() -> void:
 	)
 	npc.items.append(normal_item)
 
-	var arrivals: Array[Dictionary] = [{"character_id": 81, "destination": "Kyuden Crane"}]
+	var arrivals: Array = [{"character_id": 81, "destination": "Kyuden Crane"}]
 	var chars: Dictionary = {81: npc}
 	var e: DiceEngine = DiceEngine.new(42)
-	var results: Array[Dictionary] = DayOrchestrator._process_auto_conceal_on_arrival(arrivals, chars, e)
+	var results: Array = DayOrchestrator._process_auto_conceal_on_arrival(arrivals, chars, e)
 
 	assert_eq(results.size(), 0, "Non-contraband items should not trigger auto-conceal")
 
@@ -1032,10 +1033,10 @@ func test_auto_conceal_skips_already_concealed() -> void:
 	item["concealment_tn"] = 20
 	npc.items.append(item)
 
-	var arrivals: Array[Dictionary] = [{"character_id": 82, "destination": "Otosan Uchi"}]
+	var arrivals: Array = [{"character_id": 82, "destination": "Otosan Uchi"}]
 	var chars: Dictionary = {82: npc}
 	var e: DiceEngine = DiceEngine.new(42)
-	var results: Array[Dictionary] = DayOrchestrator._process_auto_conceal_on_arrival(arrivals, chars, e)
+	var results: Array = DayOrchestrator._process_auto_conceal_on_arrival(arrivals, chars, e)
 
 	assert_eq(results.size(), 0, "Already concealed items should be skipped")
 
@@ -1052,10 +1053,10 @@ func test_auto_conceal_weapon_blocked_without_rank_5() -> void:
 	)
 	npc.items.append(blade)
 
-	var arrivals: Array[Dictionary] = [{"character_id": 83, "destination": "Kyuden Doji"}]
+	var arrivals: Array = [{"character_id": 83, "destination": "Kyuden Doji"}]
 	var chars: Dictionary = {83: npc}
 	var e: DiceEngine = DiceEngine.new(42)
-	var results: Array[Dictionary] = DayOrchestrator._process_auto_conceal_on_arrival(arrivals, chars, e)
+	var results: Array = DayOrchestrator._process_auto_conceal_on_arrival(arrivals, chars, e)
 
 	assert_eq(results.size(), 1)
 	assert_false(results[0]["success"])

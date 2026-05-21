@@ -124,18 +124,18 @@ func test_brutal_first_offense_gains_infamy():
 # -- Offense Window Counting ----
 
 func test_count_offenses_in_window():
-	var days: Array[int] = [10, 100, 200, 400]
+	var days: Array = [10, 100, 200, 400]
 	# Window = 4 seasons * 90 = 360 days. Current day 450 → window starts at 90
 	assert_eq(ViolenceSystem.count_offenses_in_window(days, 450), 3)
 
 
 func test_count_offenses_all_old():
-	var days: Array[int] = [5, 10, 15]
+	var days: Array = [5, 10, 15]
 	assert_eq(ViolenceSystem.count_offenses_in_window(days, 500), 0)
 
 
 func test_count_offenses_all_recent():
-	var days: Array[int] = [100, 110, 120]
+	var days: Array = [100, 110, 120]
 	assert_eq(ViolenceSystem.count_offenses_in_window(days, 150), 3)
 
 

@@ -10,7 +10,7 @@ var _scoring_tables: Dictionary
 var _filter_data: Dictionary
 var _action_skill_map: Dictionary
 var _season_meta: Dictionary
-var _action_log: Array[Dictionary]
+var _action_log: Array
 var _provinces: Dictionary
 
 
@@ -35,7 +35,7 @@ func before_each() -> void:
 		"personality_lean": {},
 		"competence_table": {},
 		"disposition_tiers": {},
-		"urgency_rules": {},
+		"urgency_rules": [],
 		"topic_position_alignment": {},
 	}
 	_filter_data = {
@@ -79,11 +79,11 @@ func _make_char(id: int, clan: String = "Crane") -> L5RCharacterData:
 
 
 func _run_day(
-	characters: Array[L5RCharacterData],
-	death_events: Array[Dictionary] = [],
+	characters: Array,
+	death_events: Array = [],
 	successor_map: Dictionary = {},
-	active_successions: Array[SuccessionData] = [],
-	next_succession_id: Array[int] = [1],
+	active_successions: Array = [],
+	next_succession_id: Array = [1],
 ) -> Dictionary:
 	var chars_by_id: Dictionary = {}
 	for c in characters:
@@ -116,11 +116,11 @@ func test_lord_death_creates_succession() -> void:
 	confirmer.clan = "Crane"
 	confirmer.disposition_values[10] = 40
 
-	var death_events: Array[Dictionary] = [
+	var death_events: Array = [
 		{"character_id": 1, "is_lord": true, "position_tier": Enums.LordRank.PROVINCIAL_DAIMYO}
 	]
-	var active_successions: Array[SuccessionData] = []
-	var next_id: Array[int] = [1]
+	var active_successions: Array = []
+	var next_id: Array = [1]
 
 	var result := _run_day(
 		[lord, child, confirmer], death_events, {}, active_successions, next_id
@@ -146,10 +146,10 @@ func test_clean_succession_auto_confirms() -> void:
 	confirmer.clan = "Crane"
 	confirmer.disposition_values[10] = 50
 
-	var death_events: Array[Dictionary] = [
+	var death_events: Array = [
 		{"character_id": 1, "is_lord": true, "position_tier": Enums.LordRank.PROVINCIAL_DAIMYO}
 	]
-	var active_successions: Array[SuccessionData] = []
+	var active_successions: Array = []
 	var successor_map: Dictionary = {}
 
 	_run_day(
@@ -174,12 +174,12 @@ func test_suspicious_death_creates_dispute() -> void:
 	confirmer.clan = "Crane"
 	confirmer.disposition_values[10] = 50
 
-	var death_events: Array[Dictionary] = [
+	var death_events: Array = [
 		{"character_id": 1, "is_lord": true,
 		 "position_tier": Enums.LordRank.PROVINCIAL_DAIMYO,
 		 "suspicious_death": true}
 	]
-	var active_successions: Array[SuccessionData] = []
+	var active_successions: Array = []
 
 	_run_day(
 		[lord, heir, confirmer], death_events, {}, active_successions
@@ -195,11 +195,11 @@ func test_phoenix_champion_skipped() -> void:
 	lord.status = 8.0
 	lord.wounds_taken = 999
 
-	var death_events: Array[Dictionary] = [
+	var death_events: Array = [
 		{"character_id": 1, "is_lord": true,
 		 "position_tier": Enums.LordRank.CLAN_CHAMPION}
 	]
-	var active_successions: Array[SuccessionData] = []
+	var active_successions: Array = []
 
 	_run_day([lord], death_events, {}, active_successions)
 
@@ -221,7 +221,7 @@ func test_succession_ticks_and_expires() -> void:
 	confirmer.clan = "Crane"
 	succ.confirming_authority_id = 20
 
-	var active_successions: Array[SuccessionData] = [succ]
+	var active_successions: Array = [succ]
 
 	_run_day([candidate, confirmer], [], {}, active_successions)
 
@@ -309,7 +309,7 @@ func test_major_favor_inherited_on_clean_succession() -> void:
 	confirmer.clan = "Crane"
 	confirmer.disposition_values[10] = 50
 
-	var death_events: Array[Dictionary] = [
+	var death_events: Array = [
 		{"character_id": 1, "is_lord": true,
 		 "position_tier": Enums.LordRank.PROVINCIAL_DAIMYO}
 	]
@@ -324,10 +324,10 @@ func test_non_lord_death_no_succession() -> void:
 	var npc := _make_char(1)
 	npc.wounds_taken = 999
 
-	var death_events: Array[Dictionary] = [
+	var death_events: Array = [
 		{"character_id": 1, "is_lord": false}
 	]
-	var active_successions: Array[SuccessionData] = []
+	var active_successions: Array = []
 
 	_run_day([npc], death_events, {}, active_successions)
 

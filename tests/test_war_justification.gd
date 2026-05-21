@@ -261,7 +261,7 @@ func test_full_no_objective_no_personality() -> void:
 
 func test_full_personality_aggression_raid() -> void:
 	var r: Dictionary = WarJustification.evaluate_war_justification(
-		"ACCUMULATE_KNOWLEDGE", "", WarJustification.MilitaryTier.RAID, "Yu",
+		"RAISE_DISPOSITION", "", WarJustification.MilitaryTier.RAID, "Yu",
 		true, true, true,
 	)
 	assert_true(r["justified"])
@@ -270,7 +270,7 @@ func test_full_personality_aggression_raid() -> void:
 
 func test_full_personality_aggression_weakness_fails() -> void:
 	var r: Dictionary = WarJustification.evaluate_war_justification(
-		"ACCUMULATE_KNOWLEDGE", "", WarJustification.MilitaryTier.RAID, "Yu",
+		"RAISE_DISPOSITION", "", WarJustification.MilitaryTier.RAID, "Yu",
 		false, true, true,
 	)
 	assert_false(r["justified"])
@@ -279,7 +279,7 @@ func test_full_personality_aggression_weakness_fails() -> void:
 
 func test_full_personality_formal_war_needs_2x() -> void:
 	var r: Dictionary = WarJustification.evaluate_war_justification(
-		"ACCUMULATE_KNOWLEDGE", "", WarJustification.MilitaryTier.FORMAL_WAR, "Yu",
+		"RAISE_DISPOSITION", "", WarJustification.MilitaryTier.FORMAL_WAR, "Yu",
 		true, true, true, 10.0, 6.0,
 	)
 	assert_false(r["justified"])
@@ -288,7 +288,7 @@ func test_full_personality_formal_war_needs_2x() -> void:
 
 func test_full_personality_formal_war_passes_2x() -> void:
 	var r: Dictionary = WarJustification.evaluate_war_justification(
-		"ACCUMULATE_KNOWLEDGE", "", WarJustification.MilitaryTier.FORMAL_WAR, "Yu",
+		"RAISE_DISPOSITION", "", WarJustification.MilitaryTier.FORMAL_WAR, "Yu",
 		true, true, true, 12.0, 5.0,
 	)
 	assert_true(r["justified"])
@@ -397,7 +397,7 @@ func test_prevent_shortage_gi_blocked() -> void:
 
 
 func test_all_peace_objectives_listed() -> void:
-	var expected: Array[String] = [
+	var expected: Array = [
 		"MAINTAIN_BALANCE", "MAINTAIN_PEACE", "STRENGTHEN_IMPERIAL",
 		"ACCUMULATE_LEVERAGE", "MAXIMIZE_PROSPERITY", "PROTECT_DEPENDENTS",
 		"ACCUMULATE_KNOWLEDGE", "LIVE_BY_BUSHIDO",
@@ -410,7 +410,7 @@ func test_all_peace_objectives_listed() -> void:
 
 
 func test_all_standing_objectives_covered() -> void:
-	var all_standings: Array[String] = [
+	var all_standings: Array = [
 		"EXPAND_TERRITORY", "MILITARY_DOMINANCE", "ELIMINATE_SHADOWLANDS",
 		"STRENGTHEN_WALL", "BUILD_STRONGEST_FORCE", "SEEK_VENGEANCE",
 		"ADVANCE_GLORY", "UNDERMINE_CLAN", "PREVENT_SHORTAGE",

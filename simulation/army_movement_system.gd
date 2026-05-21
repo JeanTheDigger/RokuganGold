@@ -53,7 +53,7 @@ static func create_army_state(
 		"army_id": army_id,
 		"current_sub_tile": current_sub_tile,
 		"destination_sub_tile": -1,
-		"path": [] as Array[int],
+		"path": [],
 		"days_remaining": 0,
 		"is_moving": false,
 		"owning_clan": owning_clan,
@@ -109,7 +109,7 @@ static func get_forced_march_cost(
 # -- Path Computation -----------------------------------------------------------
 
 static func compute_path_cost(
-	path: Array[int],
+	path: Array,
 	sub_tile_data: Dictionary,
 	season: Season,
 ) -> int:
@@ -126,7 +126,7 @@ static func compute_path_cost(
 
 static func begin_march(
 	army_state: Dictionary,
-	path: Array[int],
+	path: Array,
 	sub_tile_data: Dictionary,
 	season: Season,
 	forced_march: bool = false,
@@ -166,7 +166,7 @@ static func begin_march(
 static func cancel_march(army_state: Dictionary) -> Dictionary:
 	var was_moving: bool = army_state["is_moving"]
 	army_state["destination_sub_tile"] = -1
-	army_state["path"] = [] as Array[int]
+	army_state["path"] = []
 	army_state["days_remaining"] = 0
 	army_state["is_moving"] = false
 	army_state["forced_march"] = false
@@ -184,7 +184,7 @@ static func process_movement_tick(army_state: Dictionary) -> Dictionary:
 	if army_state["days_remaining"] <= 0:
 		army_state["current_sub_tile"] = army_state["destination_sub_tile"]
 		army_state["destination_sub_tile"] = -1
-		army_state["path"] = [] as Array[int]
+		army_state["path"] = []
 		army_state["is_moving"] = false
 		army_state["forced_march"] = false
 		return {
@@ -200,7 +200,7 @@ static func process_movement_tick(army_state: Dictionary) -> Dictionary:
 
 static func check_battle_trigger(
 	arriving_army: Dictionary,
-	enemy_armies: Array[Dictionary],
+	enemy_armies: Array,
 ) -> Dictionary:
 	if not arriving_army.get("arrived_at", -1) >= 0:
 		# Use the current sub-tile if not a fresh arrival
@@ -212,7 +212,7 @@ static func check_battle_trigger(
 	if tile < 0:
 		return {"battle_triggered": false}
 
-	var enemies_at_tile: Array[int] = []
+	var enemies_at_tile: Array = []
 	for enemy: Dictionary in enemy_armies:
 		if enemy.get("current_sub_tile", -1) == tile:
 			enemies_at_tile.append(enemy["army_id"])
@@ -233,20 +233,20 @@ static func get_visible_sub_tiles(
 	current_sub_tile: int,
 	adjacency: Dictionary,
 	has_scouts: bool,
-) -> Array[int]:
-	var visible: Array[int] = [current_sub_tile]
+) -> Array:
+	var visible: Array = [current_sub_tile]
 
-	var adjacent: Array[int] = adjacency.get(current_sub_tile, [])
+	var adjacent: Array = adjacency.get(current_sub_tile, [])
 	for tile: int in adjacent:
 		if tile not in visible:
 			visible.append(tile)
 
 	if has_scouts:
-		var ring_1: Array[int] = visible.duplicate()
+		var ring_1: Array = visible.duplicate()
 		for tile: int in ring_1:
 			if tile == current_sub_tile:
 				continue
-			var next_ring: Array[int] = adjacency.get(tile, [])
+			var next_ring: Array = adjacency.get(tile, [])
 			for far_tile: int in next_ring:
 				if far_tile not in visible:
 					visible.append(far_tile)
@@ -255,11 +255,11 @@ static func get_visible_sub_tiles(
 
 
 static func detect_enemy_armies(
-	visible_tiles: Array[int],
-	all_armies: Array[Dictionary],
+	visible_tiles: Array,
+	all_armies: Array,
 	own_clan: String,
-) -> Array[Dictionary]:
-	var detected: Array[Dictionary] = []
+) -> Array:
+	var detected: Array = []
 	for army: Dictionary in all_armies:
 		if army.get("owning_clan", "") == own_clan:
 			continue
@@ -280,7 +280,7 @@ static func retreat_army(
 ) -> void:
 	army_state["current_sub_tile"] = previous_sub_tile
 	army_state["destination_sub_tile"] = -1
-	army_state["path"] = [] as Array[int]
+	army_state["path"] = []
 	army_state["days_remaining"] = 0
 	army_state["is_moving"] = false
 	army_state["forced_march"] = false

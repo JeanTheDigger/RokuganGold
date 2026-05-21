@@ -90,17 +90,17 @@ const GREAT_CLANS: Array[String] = [
 
 static func run_seasonal_review(
 	lord: L5RCharacterData,
-	vassals: Array[L5RCharacterData],
+	vassals: Array,
 	objectives_map: Dictionary,
 	world_state: Dictionary,
-) -> Array[Dictionary]:
-	var directives: Array[Dictionary] = []
+) -> Array:
+	var directives: Array = []
 
 	var self_select: Dictionary = _evaluate_self_selection(lord, objectives_map, world_state)
 	if not self_select.is_empty():
 		directives.append(self_select)
 
-	var orphan_directives: Array[Dictionary] = _resolve_orphaned_vassals(
+	var orphan_directives: Array = _resolve_orphaned_vassals(
 		lord, vassals, objectives_map
 	)
 	directives.append_array(orphan_directives)
@@ -109,7 +109,7 @@ static func run_seasonal_review(
 	if not court_directive.is_empty():
 		directives.append(court_directive)
 
-	var reassign_directives: Array[Dictionary] = _evaluate_vassal_objectives(
+	var reassign_directives: Array = _evaluate_vassal_objectives(
 		lord, vassals, objectives_map, world_state
 	)
 	directives.append_array(reassign_directives)
@@ -134,12 +134,12 @@ static func run_seasonal_review(
 
 static func _resolve_orphaned_vassals(
 	lord: L5RCharacterData,
-	vassals: Array[L5RCharacterData],
+	vassals: Array,
 	objectives_map: Dictionary,
-) -> Array[Dictionary]:
-	var results: Array[Dictionary] = []
+) -> Array:
+	var results: Array = []
 
-	var orphaned_ids: Array[int] = OrphanedObjectives.has_orphaned_vassals(
+	var orphaned_ids: Array = OrphanedObjectives.has_orphaned_vassals(
 		vassals, lord.character_id, objectives_map
 	)
 	if orphaned_ids.is_empty():
@@ -171,7 +171,7 @@ static func _get_orphan_resolution_for_personality(lord: L5RCharacterData) -> St
 
 static func _evaluate_call_court(
 	lord: L5RCharacterData,
-	vassals: Array[L5RCharacterData],
+	vassals: Array,
 	world_state: Dictionary,
 ) -> Dictionary:
 	var last_court_season: int = world_state.get("last_court_season", -1)
@@ -206,14 +206,14 @@ static func _evaluate_call_court(
 
 static func _evaluate_vassal_objectives(
 	lord: L5RCharacterData,
-	vassals: Array[L5RCharacterData],
+	vassals: Array,
 	objectives_map: Dictionary,
 	world_state: Dictionary,
-) -> Array[Dictionary]:
-	var results: Array[Dictionary] = []
+) -> Array:
+	var results: Array = []
 
 	var province_statuses: Array = world_state.get("province_statuses", [])
-	var triage_results: Array[ProvinceTriage.TriageResult] = ProvinceTriage.get_top_provinces(
+	var triage_results: Array = ProvinceTriage.get_top_provinces(
 		province_statuses, 3
 	)
 
@@ -223,7 +223,7 @@ static func _evaluate_vassal_objectives(
 			if t.score >= ProvinceTriage.SCORE_VOLATILE_STABILITY:
 				threats.append({"type": "instability", "target_province_id": t.province_id})
 
-	var idle_vassals: Array[int] = []
+	var idle_vassals: Array = []
 	for vassal: L5RCharacterData in vassals:
 		if vassal.lord_id != lord.character_id:
 			continue
@@ -385,16 +385,16 @@ static func _evaluate_seek_peace(
 static func run_emperor_review(
 	emperor: L5RCharacterData,
 	archetype: int,
-	clan_champions: Array[L5RCharacterData],
+	clan_champions: Array,
 	world_state: Dictionary,
 	objectives_map: Dictionary,
-) -> Array[Dictionary]:
+) -> Array:
 	_seed_archetype_champion_baselines(emperor, archetype, clan_champions)
 
-	var directives: Array[Dictionary] = []
+	var directives: Array = []
 
-	var vassals: Array[L5RCharacterData] = clan_champions
-	var lord_directives: Array[Dictionary] = run_seasonal_review(
+	var vassals: Array = clan_champions
+	var lord_directives: Array = run_seasonal_review(
 		emperor, vassals, objectives_map, world_state
 	)
 	directives.append_array(lord_directives)
@@ -417,7 +417,7 @@ static func run_emperor_review(
 	if not shogun.is_empty():
 		directives.append(shogun)
 
-	var disgrace_directives: Array[Dictionary] = _evaluate_disgrace_fabrication(
+	var disgrace_directives: Array = _evaluate_disgrace_fabrication(
 		emperor, archetype, clan_champions
 	)
 	directives.append_array(disgrace_directives)
@@ -434,7 +434,7 @@ static func run_emperor_review(
 static func _evaluate_winter_court_host(
 	emperor: L5RCharacterData,
 	archetype: int,
-	clan_champions: Array[L5RCharacterData],
+	clan_champions: Array,
 	world_state: Dictionary,
 ) -> Dictionary:
 	var current_season: int = world_state.get("current_season", 0)
@@ -594,12 +594,12 @@ static func _evaluate_shogun_creation(
 static func _evaluate_disgrace_fabrication(
 	emperor: L5RCharacterData,
 	archetype: int,
-	clan_champions: Array[L5RCharacterData],
-) -> Array[Dictionary]:
+	clan_champions: Array,
+) -> Array:
 	if archetype != EmperorArchetype.TYRANT:
 		return []
 
-	var results: Array[Dictionary] = []
+	var results: Array = []
 	for champion: L5RCharacterData in clan_champions:
 		var disp: int = emperor.disposition_values.get(champion.character_id, 0)
 		var tier: int = DispositionSystem.get_tier(disp)
@@ -617,7 +617,7 @@ static func _evaluate_disgrace_fabrication(
 static func _evaluate_breaking_point(
 	emperor: L5RCharacterData,
 	archetype: int,
-	clan_champions: Array[L5RCharacterData],
+	clan_champions: Array,
 ) -> Dictionary:
 	if archetype != EmperorArchetype.TYRANT:
 		return {}
@@ -642,7 +642,7 @@ static func _evaluate_breaking_point(
 static func _seed_archetype_champion_baselines(
 	emperor: L5RCharacterData,
 	archetype: int,
-	clan_champions: Array[L5RCharacterData],
+	clan_champions: Array,
 ) -> void:
 	for champion: L5RCharacterData in clan_champions:
 		if emperor.disposition_values.has(champion.character_id):

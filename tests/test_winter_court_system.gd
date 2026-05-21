@@ -7,9 +7,9 @@ extends GutTest
 var _emperor: L5RCharacterData
 var _chancellor: L5RCharacterData
 var _characters_by_id: Dictionary
-var _provinces: Array[ProvinceData]
-var _settlements: Array[SettlementData]
-var _topics: Array[TopicData]
+var _provinces: Array
+var _settlements: Array
+var _topics: Array
 var _world_state: Dictionary
 
 
@@ -69,7 +69,7 @@ func _make_settlement(id: int, province_id: int, stype: Enums.SettlementType) ->
 	return s
 
 
-func _make_topic(id: int, provinces: Array[int], momentum: float, topic_type: String = "crisis") -> TopicData:
+func _make_topic(id: int, provinces: Array, momentum: float, topic_type: String = "crisis") -> TopicData:
 	var t := TopicData.new()
 	t.topic_id = id
 	t.provinces_affected = provinces
@@ -279,7 +279,7 @@ func test_family_prestige_score() -> void:
 
 func test_crisis_relevance_with_topic() -> void:
 	var p := _make_province(10, "Crane", "Doji", 80.0)
-	var t := _make_topic(1, [10] as Array[int], 60.0, "war")
+	var t := _make_topic(1, [10], 60.0, "war")
 	_topics.append(t)
 	var score: float = WinterCourtSystem._score_crisis_relevance(
 		p, _topics, StrategicReview.EmperorArchetype.CUNNING
@@ -289,7 +289,7 @@ func test_crisis_relevance_with_topic() -> void:
 
 func test_crisis_relevance_benevolent_filters_military() -> void:
 	var p := _make_province(10, "Crane", "Doji", 80.0)
-	var t := _make_topic(1, [10] as Array[int], 60.0, "war")
+	var t := _make_topic(1, [10], 60.0, "war")
 	_topics.append(t)
 	var score: float = WinterCourtSystem._score_crisis_relevance(
 		p, _topics, StrategicReview.EmperorArchetype.BENEVOLENT
@@ -299,7 +299,7 @@ func test_crisis_relevance_benevolent_filters_military() -> void:
 
 func test_crisis_relevance_benevolent_accepts_famine() -> void:
 	var p := _make_province(10, "Crane", "Doji", 80.0)
-	var t := _make_topic(1, [10] as Array[int], 60.0, "famine")
+	var t := _make_topic(1, [10], 60.0, "famine")
 	_topics.append(t)
 	var score: float = WinterCourtSystem._score_crisis_relevance(
 		p, _topics, StrategicReview.EmperorArchetype.BENEVOLENT
@@ -309,7 +309,7 @@ func test_crisis_relevance_benevolent_accepts_famine() -> void:
 
 func test_crisis_relevance_warlike_accepts_military() -> void:
 	var p := _make_province(10, "Crane", "Doji", 80.0)
-	var t := _make_topic(1, [10] as Array[int], 80.0, "war")
+	var t := _make_topic(1, [10], 80.0, "war")
 	_topics.append(t)
 	var score: float = WinterCourtSystem._score_crisis_relevance(
 		p, _topics, StrategicReview.EmperorArchetype.WARLIKE
@@ -371,14 +371,14 @@ func test_delegation_capacity_champion() -> void:
 func test_select_clan_delegation_respects_slots() -> void:
 	var champion := _make_character(20, "Crane Champ", "Crane", "Doji", 8.0)
 	champion.lord_id = -1
-	var vassals: Array[L5RCharacterData] = []
+	var vassals: Array = []
 	for i: int in range(10):
 		var v := _make_character(100 + i, "Vassal %d" % i, "Crane", "Doji", 3.0)
 		v.lord_id = 20
 		vassals.append(v)
 
-	var delegation: Array[int] = WinterCourtSystem.select_clan_delegation(
-		champion, vassals, 3, [] as Array[int], {}
+	var delegation: Array = WinterCourtSystem.select_clan_delegation(
+		champion, vassals, 3, [], {}
 	)
 	assert_eq(delegation.size(), 3)
 
@@ -394,8 +394,8 @@ func test_delegation_scores_courtiers_higher() -> void:
 	bushi.school_type = Enums.SchoolType.BUSHI
 	bushi.skills = {"Etiquette": 1, "Sincerity": 0, "Courtier": 0, "Perform": 0}
 
-	var delegation: Array[int] = WinterCourtSystem.select_clan_delegation(
-		champion, [courtier, bushi], 1, [] as Array[int], {}
+	var delegation: Array = WinterCourtSystem.select_clan_delegation(
+		champion, [courtier, bushi], 1, [], {}
 	)
 	assert_eq(delegation[0], 100)
 
@@ -411,8 +411,8 @@ func test_yojimbo_pull_in() -> void:
 	yojimbo.school_type = Enums.SchoolType.BUSHI
 	yojimbo.operational_superior_id = 100
 
-	var delegation: Array[int] = WinterCourtSystem.select_clan_delegation(
-		champion, [courtier, yojimbo], 1, [] as Array[int], {}
+	var delegation: Array = WinterCourtSystem.select_clan_delegation(
+		champion, [courtier, yojimbo], 1, [], {}
 	)
 	assert_true(100 in delegation)
 	assert_true(101 in delegation)
@@ -421,15 +421,15 @@ func test_yojimbo_pull_in() -> void:
 # -- Personal Invitation Tests -------------------------------------------------
 
 func test_personal_invitation_respects_pool_size() -> void:
-	var candidates: Array[L5RCharacterData] = []
+	var candidates: Array = []
 	for i: int in range(5):
 		var c := _make_character(200 + i, "Candidate %d" % i, "Scorpion", "Bayushi", 4.0)
 		candidates.append(c)
 	_emperor.met_characters = [200, 201, 202, 203, 204]
 
-	var invites: Array[int] = WinterCourtSystem.select_personal_invitations(
+	var invites: Array = WinterCourtSystem.select_personal_invitations(
 		_emperor, StrategicReview.EmperorArchetype.IRON, 3, candidates,
-		[] as Array[int], {}, []
+		[], {}, []
 	)
 	assert_eq(invites.size(), 3)
 
@@ -438,9 +438,9 @@ func test_personal_invitation_excludes_already_invited() -> void:
 	var c := _make_character(200, "Already Invited", "Scorpion", "Bayushi", 4.0)
 	_emperor.met_characters = [200]
 
-	var invites: Array[int] = WinterCourtSystem.select_personal_invitations(
+	var invites: Array = WinterCourtSystem.select_personal_invitations(
 		_emperor, StrategicReview.EmperorArchetype.IRON, 3, [c],
-		[] as Array[int], {}, [200]
+		[], {}, [200]
 	)
 	assert_eq(invites.size(), 0)
 
@@ -453,9 +453,9 @@ func test_warlike_personal_invitation_favors_bushi() -> void:
 	_emperor.met_characters = [200, 201]
 	_emperor.disposition_values = {200: 0.0, 201: 0.0}
 
-	var invites: Array[int] = WinterCourtSystem.select_personal_invitations(
+	var invites: Array = WinterCourtSystem.select_personal_invitations(
 		_emperor, StrategicReview.EmperorArchetype.WARLIKE, 1, [bushi, courtier],
-		[] as Array[int], {}, []
+		[], {}, []
 	)
 	assert_eq(invites.size(), 1)
 	assert_eq(invites[0], 200)
@@ -544,7 +544,7 @@ func test_glory_rewards_host_daimyo() -> void:
 	court.host_clan = "Crane"
 	court.attendee_ids = [1, 10]
 
-	var rewards: Array[Dictionary] = WinterCourtSystem.compute_glory_rewards(court, _characters_by_id)
+	var rewards: Array = WinterCourtSystem.compute_glory_rewards(court, _characters_by_id)
 	var daimyo_reward: Dictionary = {}
 	for r: Dictionary in rewards:
 		if r["character_id"] == 10:
@@ -564,7 +564,7 @@ func test_glory_rewards_clan_champion_separate() -> void:
 	court.host_clan = "Crane"
 	court.attendee_ids = [1, 10, 11]
 
-	var rewards: Array[Dictionary] = WinterCourtSystem.compute_glory_rewards(court, _characters_by_id)
+	var rewards: Array = WinterCourtSystem.compute_glory_rewards(court, _characters_by_id)
 	var champ_reward: Dictionary = {}
 	for r: Dictionary in rewards:
 		if r["character_id"] == 11:
@@ -583,7 +583,7 @@ func test_glory_rewards_host_clan_delegates() -> void:
 	court.host_clan = "Crane"
 	court.attendee_ids = [1, 10, 12]
 
-	var rewards: Array[Dictionary] = WinterCourtSystem.compute_glory_rewards(court, _characters_by_id)
+	var rewards: Array = WinterCourtSystem.compute_glory_rewards(court, _characters_by_id)
 	var delegate_reward: Dictionary = {}
 	for r: Dictionary in rewards:
 		if r["character_id"] == 12:
@@ -602,7 +602,7 @@ func test_glory_rewards_non_host_clan_excluded() -> void:
 	court.host_clan = "Crane"
 	court.attendee_ids = [1, 10, 12]
 
-	var rewards: Array[Dictionary] = WinterCourtSystem.compute_glory_rewards(court, _characters_by_id)
+	var rewards: Array = WinterCourtSystem.compute_glory_rewards(court, _characters_by_id)
 	for r: Dictionary in rewards:
 		assert_ne(r["character_id"], 12)
 
@@ -640,7 +640,7 @@ func test_home_ground_skill_check() -> void:
 
 func test_regent_needed_when_emperor_dead() -> void:
 	var dead_emperor := _make_character(50, "Dead Emperor", "Imperial", "Hantei", 10.0)
-	dead_emperor.wounds_current = 999
+	dead_emperor.wounds_taken = 999
 	_characters_by_id[50] = dead_emperor
 
 	assert_true(WinterCourtSystem.should_use_regent(50, _characters_by_id))
@@ -703,7 +703,7 @@ func test_announcement_topic_generated() -> void:
 # -- Agenda Day Allocation Tests -----------------------------------------------
 
 func test_agenda_day_allocation() -> void:
-	var days: Array[int] = WinterCourtSystem.get_agenda_day_allocation()
+	var days: Array = WinterCourtSystem.get_agenda_day_allocation()
 	assert_eq(days.size(), 3)
 	assert_eq(days[0], 45)
 	assert_eq(days[1], 35)
@@ -741,7 +741,7 @@ func test_invitation_pipeline() -> void:
 		"clan_champion_id": 10,
 		"is_regent_court": false,
 	}
-	var agenda: Array[int] = []
+	var agenda: Array = []
 	var pipeline_result: Dictionary = WinterCourtSystem.run_invitation_pipeline(
 		host_result, _emperor, StrategicReview.EmperorArchetype.IRON,
 		_characters_by_id, Enums.LordRank.FAMILY_DAIMYO, agenda
@@ -869,7 +869,7 @@ func test_summons_dispatched_to_clan_champions() -> void:
 
 	var pending_letters: Array = []
 	var dice := DiceEngine.new()
-	var next_letter_id: Array[int] = [1]
+	var next_letter_id: Array = [1]
 
 	var count: int = DayOrchestrator._dispatch_winter_court_summons(
 		_emperor, "Crane", 500, 200, _characters_by_id,
@@ -894,7 +894,7 @@ func test_summons_skips_host_clan_champion() -> void:
 
 	var pending_letters: Array = []
 	var dice := DiceEngine.new()
-	var next_letter_id: Array[int] = [1]
+	var next_letter_id: Array = [1]
 
 	DayOrchestrator._dispatch_winter_court_summons(
 		_emperor, "Crane", 500, 200, _characters_by_id,
@@ -912,7 +912,7 @@ func test_summons_skips_emperor() -> void:
 
 	var pending_letters: Array = []
 	var dice := DiceEngine.new()
-	var next_letter_id: Array[int] = [1]
+	var next_letter_id: Array = [1]
 
 	DayOrchestrator._dispatch_winter_court_summons(
 		_emperor, "Crane", 500, 200, _characters_by_id,
@@ -930,7 +930,7 @@ func test_summons_skips_non_champion_characters() -> void:
 
 	var pending_letters: Array = []
 	var dice := DiceEngine.new()
-	var next_letter_id: Array[int] = [1]
+	var next_letter_id: Array = [1]
 
 	DayOrchestrator._dispatch_winter_court_summons(
 		_emperor, "Crane", 500, 200, _characters_by_id,
@@ -938,6 +938,7 @@ func test_summons_skips_non_champion_characters() -> void:
 	)
 	for letter: LetterData in pending_letters:
 		assert_ne(letter.recipient_id, 40, "Non-champion should not receive summons")
+	pass_test("No summons sent to non-champion vassal")
 
 
 func test_summons_zero_when_no_dice_engine() -> void:
@@ -959,7 +960,7 @@ func test_summons_increments_letter_ids() -> void:
 
 	var pending_letters: Array = []
 	var dice := DiceEngine.new()
-	var next_letter_id: Array[int] = [100]
+	var next_letter_id: Array = [100]
 
 	DayOrchestrator._dispatch_winter_court_summons(
 		_emperor, "Crane", 500, 200, _characters_by_id,
@@ -976,7 +977,7 @@ func test_summons_has_miya_route() -> void:
 
 	var pending_letters: Array = []
 	var dice := DiceEngine.new()
-	var next_letter_id: Array[int] = [1]
+	var next_letter_id: Array = [1]
 
 	DayOrchestrator._dispatch_winter_court_summons(
 		_emperor, "Crane", 500, 200, _characters_by_id,
@@ -998,16 +999,16 @@ func test_winter_court_creates_attendance_commitments_for_invitees() -> void:
 	scorpion_champ.lord_id = -1
 	_characters_by_id[31] = scorpion_champ
 
-	var commitments: Array[CommitmentData] = []
-	var next_commitment_id: Array[int] = [1]
+	var commitments: Array = []
+	var next_commitment_id: Array = [1]
 	var directive: Dictionary = {"lord_id": _emperor.character_id, "host_clan": "Crane"}
-	var courts: Array[CourtSessionData] = []
-	var topics: Array[TopicData] = []
-	var next_court_id: Array[int] = [1]
-	var next_topic_id: Array[int] = [100]
+	var courts: Array = []
+	var topics: Array = []
+	var next_court_id: Array = [1]
+	var next_topic_id: Array = [100]
 	var dice := DiceEngine.new()
-	var pending_letters: Array[LetterData] = []
-	var next_letter_id: Array[int] = [1]
+	var pending_letters: Array = []
+	var next_letter_id: Array = [1]
 
 	var result: Dictionary = DayOrchestrator._create_winter_court_from_directive(
 		directive, courts, topics, _characters_by_id, next_court_id, 200,
@@ -1016,7 +1017,7 @@ func test_winter_court_creates_attendance_commitments_for_invitees() -> void:
 		commitments, next_commitment_id,
 	)
 	assert_gt(commitments.size(), 0)
-	var debtor_ids: Array[int] = []
+	var debtor_ids: Array = []
 	for c: CommitmentData in commitments:
 		assert_eq(c.commitment_type, Enums.CommitmentType.COURT_ATTENDANCE)
 		assert_eq(c.creditor_npc_id, _emperor.character_id)
@@ -1033,16 +1034,16 @@ func test_winter_court_commitments_have_correct_deadline() -> void:
 	lion_champ.lord_id = -1
 	_characters_by_id[30] = lion_champ
 
-	var commitments: Array[CommitmentData] = []
-	var next_commitment_id: Array[int] = [1]
+	var commitments: Array = []
+	var next_commitment_id: Array = [1]
 	var directive: Dictionary = {"lord_id": _emperor.character_id, "host_clan": "Crane"}
-	var courts: Array[CourtSessionData] = []
-	var topics: Array[TopicData] = []
-	var next_court_id: Array[int] = [1]
-	var next_topic_id: Array[int] = [100]
+	var courts: Array = []
+	var topics: Array = []
+	var next_court_id: Array = [1]
+	var next_topic_id: Array = [100]
 	var dice := DiceEngine.new()
-	var pending_letters: Array[LetterData] = []
-	var next_letter_id: Array[int] = [1]
+	var pending_letters: Array = []
+	var next_letter_id: Array = [1]
 
 	DayOrchestrator._create_winter_court_from_directive(
 		directive, courts, topics, _characters_by_id, next_court_id, 200,
@@ -1067,16 +1068,16 @@ func test_winter_court_commitment_skips_duplicates() -> void:
 	existing.fulfillment_target = int(lion_champ.physical_location) if lion_champ.physical_location.is_valid_int() else -1
 	existing.status = Enums.CommitmentStatus.PENDING
 
-	var commitments: Array[CommitmentData] = [existing]
-	var next_commitment_id: Array[int] = [1]
+	var commitments: Array = [existing]
+	var next_commitment_id: Array = [1]
 	var directive: Dictionary = {"lord_id": _emperor.character_id, "host_clan": "Crane"}
-	var courts: Array[CourtSessionData] = []
-	var topics: Array[TopicData] = []
-	var next_court_id: Array[int] = [1]
-	var next_topic_id: Array[int] = [100]
+	var courts: Array = []
+	var topics: Array = []
+	var next_court_id: Array = [1]
+	var next_topic_id: Array = [100]
 	var dice := DiceEngine.new()
-	var pending_letters: Array[LetterData] = []
-	var next_letter_id: Array[int] = [1]
+	var pending_letters: Array = []
+	var next_letter_id: Array = [1]
 
 	DayOrchestrator._create_winter_court_from_directive(
 		directive, courts, topics, _characters_by_id, next_court_id, 200,
@@ -1108,9 +1109,9 @@ func test_late_arrival_adds_delegate_to_winter_court() -> void:
 	late_delegate.physical_location = "100"
 	_characters_by_id[50] = late_delegate
 
-	var active_courts: Array[CourtSessionData] = [court]
-	var results: Array[Dictionary] = DayOrchestrator._process_court_attendance(
-		active_courts, [_emperor, late_delegate] as Array[L5RCharacterData], _characters_by_id
+	var active_courts: Array = [court]
+	var results: Array = DayOrchestrator._process_court_attendance(
+		active_courts, [_emperor, late_delegate], _characters_by_id
 	)
 
 	assert_true(50 in court.attendee_ids, "Late delegate should be added to attendee list")
@@ -1135,9 +1136,9 @@ func test_late_arrival_not_added_if_at_different_settlement() -> void:
 	distant.physical_location = "200"
 	_characters_by_id[51] = distant
 
-	var active_courts: Array[CourtSessionData] = [court]
+	var active_courts: Array = [court]
 	DayOrchestrator._process_court_attendance(
-		active_courts, [_emperor, distant] as Array[L5RCharacterData], _characters_by_id
+		active_courts, [_emperor, distant], _characters_by_id
 	)
 	assert_false(51 in court.attendee_ids)
 
@@ -1172,9 +1173,9 @@ func test_agenda_order_own_clan_first() -> void:
 	var t1 := _make_topic_for_clan(1, "Crab", 90.0)
 	var t2 := _make_topic_for_clan(2, "Crane", 70.0)
 	var t3 := _make_topic_for_clan(3, "Lion", 80.0)
-	var topics: Array[TopicData] = [t1, t2, t3]
-	var topic_ids: Array[int] = [1, 2, 3]
-	var result: Array[int] = WinterCourtSystem.order_agenda_for_host(
+	var topics: Array = [t1, t2, t3]
+	var topic_ids: Array = [1, 2, 3]
+	var result: Array = WinterCourtSystem.order_agenda_for_host(
 		topic_ids, topics, "Crane", host_champion, {}
 	)
 	# Crane topic (id=2) should be slot 1 despite lower momentum.
@@ -1190,9 +1191,9 @@ func test_agenda_order_rival_clan_last() -> void:
 	var t1 := _make_topic_for_clan(1, "Crab", 80.0)
 	var t2 := _make_topic_for_clan(2, "Lion", 90.0)  # rival, high momentum
 	var t3 := _make_topic_for_clan(3, "Scorpion", 70.0)
-	var topics: Array[TopicData] = [t1, t2, t3]
-	var topic_ids: Array[int] = [1, 2, 3]
-	var result: Array[int] = WinterCourtSystem.order_agenda_for_host(
+	var topics: Array = [t1, t2, t3]
+	var topic_ids: Array = [1, 2, 3]
+	var result: Array = WinterCourtSystem.order_agenda_for_host(
 		topic_ids, topics, "Crane", host_champion, _characters_by_id
 	)
 	# Lion topic (id=2) should be slot 3 despite highest momentum.
@@ -1204,9 +1205,9 @@ func test_agenda_order_neutral_topics_by_momentum() -> void:
 	var t1 := _make_topic_for_clan(1, "Crab", 60.0)
 	var t2 := _make_topic_for_clan(2, "Lion", 80.0)
 	var t3 := _make_topic_for_clan(3, "Scorpion", 70.0)
-	var topics: Array[TopicData] = [t1, t2, t3]
-	var topic_ids: Array[int] = [1, 2, 3]
-	var result: Array[int] = WinterCourtSystem.order_agenda_for_host(
+	var topics: Array = [t1, t2, t3]
+	var topic_ids: Array = [1, 2, 3]
+	var result: Array = WinterCourtSystem.order_agenda_for_host(
 		topic_ids, topics, "Crane", host_champion, {}
 	)
 	# No own-clan or rival topics — sort by descending momentum.
@@ -1218,7 +1219,7 @@ func test_agenda_order_neutral_topics_by_momentum() -> void:
 func test_agenda_order_single_topic_unchanged() -> void:
 	var host_champion := _make_champion(100, "Crane")
 	var t1 := _make_topic_for_clan(1, "Crab", 80.0)
-	var result: Array[int] = WinterCourtSystem.order_agenda_for_host(
+	var result: Array = WinterCourtSystem.order_agenda_for_host(
 		[1], [t1], "Crane", host_champion, {}
 	)
 	assert_eq(result.size(), 1)
@@ -1229,8 +1230,8 @@ func test_agenda_order_null_champion_uses_momentum_only() -> void:
 	var t1 := _make_topic_for_clan(1, "Crab", 60.0)
 	var t2 := _make_topic_for_clan(2, "Lion", 80.0)
 	var t3 := _make_topic_for_clan(3, "Scorpion", 70.0)
-	var topics: Array[TopicData] = [t1, t2, t3]
-	var result: Array[int] = WinterCourtSystem.order_agenda_for_host(
+	var topics: Array = [t1, t2, t3]
+	var result: Array = WinterCourtSystem.order_agenda_for_host(
 		[1, 2, 3], topics, "Crane", null, {}
 	)
 	# No champion → can't check disposition; own-clan check still applies but no own clan topic.
@@ -1259,8 +1260,8 @@ func test_peace_violation_creates_crime_record() -> void:
 	var witness2 := _make_character(30, "Bayushi Shoju", "Scorpion", "Bayushi", 6.0)
 	var chars: Dictionary = {10: offender, 20: witness1, 30: witness2, 50: _emperor}
 	var court := _make_active_winter_court(100)
-	var next_case: Array[int] = [1]
-	var next_topic: Array[int] = [500]
+	var next_case: Array = [1]
+	var next_topic: Array = [500]
 
 	var result: Dictionary = WinterCourtSystem.record_emperors_peace_violation(
 		offender, "ATTACK", court, 250, next_case, next_topic, chars
@@ -1369,8 +1370,8 @@ func test_peace_violation_increments_case_and_topic_ids() -> void:
 	var chars: Dictionary = {10: offender}
 	var court := _make_active_winter_court(100)
 	court.attendee_ids = [10]
-	var next_case: Array[int] = [5]
-	var next_topic: Array[int] = [100]
+	var next_case: Array = [5]
+	var next_topic: Array = [100]
 
 	WinterCourtSystem.record_emperors_peace_violation(
 		offender, "ATTACK", court, 250, next_case, next_topic, chars

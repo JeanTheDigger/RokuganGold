@@ -47,7 +47,7 @@ static func get_stability_tier(stability: float) -> Enums.StabilityTier:
 
 static func compute_stability_change(
 	province: ProvinceData,
-	active_insurgencies: Array[InsurgencyData],
+	active_insurgencies: Array,
 	starvation_stage: int,
 	war_status_active: bool,
 	raided_this_season: bool,
@@ -131,8 +131,8 @@ static func get_eligible_types(
 	tier: Enums.StabilityTier,
 	province: ProvinceData,
 	ptl: float,
-) -> Array[int]:
-	var types: Array[int] = []
+) -> Array:
+	var types: Array = []
 	match tier:
 		Enums.StabilityTier.RESTLESS:
 			types = RESTLESS_TYPES.duplicate()
@@ -451,12 +451,12 @@ static func resolve_suppression(
 
 static func resolve_coordinated_suppression(
 	ins: InsurgencyData,
-	participant_rolls: Array[int],
+	participant_rolls: Array,
 	has_shugenja: bool,
 	leader_bonus: int,
 ) -> Dictionary:
 	var total_reduction: int = 0
-	var outcomes: Array[String] = []
+	var outcomes: Array = []
 	var tn: int = get_suppression_tn(ins)
 
 	for roll: int in participant_rolls:
@@ -502,7 +502,7 @@ static func _needs_shugenja(itype: Enums.InsurgencyType) -> bool:
 static func compute_ptl_change(
 	province: ProvinceData,
 	_ptl: float,
-	active_insurgencies: Array[InsurgencyData],
+	active_insurgencies: Array,
 	maho_events_this_season: int,
 	adjacent_ptls: Dictionary,
 	has_jade_stockpile: bool,
@@ -770,7 +770,7 @@ static func get_pu_loss_on_suppression(ins: InsurgencyData) -> float:
 # =============================================================================
 
 static func process_season(
-	insurgencies: Array[InsurgencyData],
+	insurgencies: Array,
 	provinces: Dictionary,
 	ptls: Dictionary,
 	dice: DiceEngine,
@@ -779,8 +779,8 @@ static func process_season(
 	world_states: Dictionary,
 	worship_maluses: Dictionary = {},
 ) -> Dictionary:
-	var new_insurgencies: Array[InsurgencyData] = []
-	var events: Array[Dictionary] = []
+	var new_insurgencies: Array = []
+	var events: Array = []
 	var id_counter: int = next_id_counter
 
 	# Process existing insurgencies
@@ -835,7 +835,7 @@ static func process_season(
 		var province: ProvinceData = provinces[pid]
 		var tier: Enums.StabilityTier = get_stability_tier(province.stability)
 		var ptl: float = ptls.get(pid, 0.0)
-		var eligible: Array[int] = get_eligible_types(tier, province, ptl)
+		var eligible: Array = get_eligible_types(tier, province, ptl)
 		var ws: Dictionary = world_states.get(pid, {})
 
 		for itype: int in eligible:

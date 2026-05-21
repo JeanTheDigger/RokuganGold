@@ -140,7 +140,7 @@ static func release_hostage(hostage_record: Dictionary, current_ic_day: int) -> 
 static func is_action_blocked_for_hostage(action_id: String, targets_captor: bool) -> bool:
 	if targets_captor:
 		return true
-	var blocked_actions: Array[String] = [
+	var blocked_actions: Array = [
 		"TRAVEL_TO", "ORDER_BATTLE", "CONDUCT_RAID",
 		"LEVY_TROOPS", "DECLARE_WAR",
 	]

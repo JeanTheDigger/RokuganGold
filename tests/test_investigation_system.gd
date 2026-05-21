@@ -164,9 +164,9 @@ func test_prioritize_witnesses_present_first() -> void:
 	c2.awareness = 4
 	c2.honor = 3.0
 	var chars_by_id: Dictionary = {10: c1, 20: c2}
-	var candidates: Array[int] = [10, 20]
-	var present: Array[int] = [10]
-	var result: Array[int] = InvestigationSystem.prioritize_witnesses(candidates, chars_by_id, present)
+	var candidates: Array = [10, 20]
+	var present: Array = [10]
+	var result: Array = InvestigationSystem.prioritize_witnesses(candidates, chars_by_id, present)
 	assert_eq(result[0], 10)
 
 
@@ -180,9 +180,9 @@ func test_prioritize_witnesses_awareness_tiebreak() -> void:
 	c2.awareness = 4
 	c2.honor = 3.0
 	var chars_by_id: Dictionary = {10: c1, 20: c2}
-	var candidates: Array[int] = [10, 20]
-	var present: Array[int] = [10, 20]
-	var result: Array[int] = InvestigationSystem.prioritize_witnesses(candidates, chars_by_id, present)
+	var candidates: Array = [10, 20]
+	var present: Array = [10, 20]
+	var result: Array = InvestigationSystem.prioritize_witnesses(candidates, chars_by_id, present)
 	assert_eq(result[0], 20)
 
 
@@ -196,15 +196,15 @@ func test_prioritize_witnesses_honor_tiebreak() -> void:
 	c2.awareness = 3
 	c2.honor = 2.0
 	var chars_by_id: Dictionary = {10: c1, 20: c2}
-	var candidates: Array[int] = [10, 20]
-	var present: Array[int] = [10, 20]
-	var result: Array[int] = InvestigationSystem.prioritize_witnesses(candidates, chars_by_id, present)
+	var candidates: Array = [10, 20]
+	var present: Array = [10, 20]
+	var result: Array = InvestigationSystem.prioritize_witnesses(candidates, chars_by_id, present)
 	assert_eq(result[0], 20)
 
 
 func test_prioritize_single_candidate() -> void:
-	var candidates: Array[int] = [5]
-	var result: Array[int] = InvestigationSystem.prioritize_witnesses(candidates, {}, [])
+	var candidates: Array = [5]
+	var result: Array = InvestigationSystem.prioritize_witnesses(candidates, {}, [])
 	assert_eq(result.size(), 1)
 	assert_eq(result[0], 5)
 
@@ -221,9 +221,9 @@ func test_jurisdiction_same_province() -> void:
 
 func test_jurisdiction_different_province() -> void:
 	var mag := _make_magistrate()
-	mag.physical_location = "castle_crane"
+	mag.physical_location = "crane_castle"
 	var cr := _make_crime_record()
-	cr.location = "castle_lion"
+	cr.location = "lion_castle"
 	assert_false(InvestigationSystem.check_jurisdiction(mag, cr))
 
 
@@ -273,8 +273,8 @@ func test_scan_for_crime_topics_finds_matching_case() -> void:
 	mag.topic_pool = [100]
 	var topic := _make_crime_topic(1, 100)
 	var standing: Dictionary = {"need_type": "UPHOLD_LAW"}
-	var topics: Array[TopicData] = [topic]
-	var records: Array[CrimeRecord] = [cr]
+	var topics: Array = [topic]
+	var records: Array = [cr]
 	var result: Dictionary = InvestigationSystem.scan_for_crime_topics(
 		mag, standing, records, topics
 	)
@@ -290,8 +290,8 @@ func test_scan_skips_already_investigated_case() -> void:
 	mag.topic_pool = [100]
 	var topic := _make_crime_topic(1, 100)
 	var standing: Dictionary = {"need_type": "UPHOLD_LAW"}
-	var topics: Array[TopicData] = [topic]
-	var records: Array[CrimeRecord] = [cr]
+	var topics: Array = [topic]
+	var records: Array = [cr]
 	var result: Dictionary = InvestigationSystem.scan_for_crime_topics(
 		mag, standing, records, topics
 	)
@@ -300,14 +300,14 @@ func test_scan_skips_already_investigated_case() -> void:
 
 func test_scan_skips_out_of_jurisdiction() -> void:
 	var mag := _make_magistrate()
-	mag.physical_location = "castle_lion"
+	mag.physical_location = "lion_castle"
 	var cr := _make_crime_record()
-	cr.location = "castle_crane"
+	cr.location = "crane_castle"
 	mag.topic_pool = [100]
 	var topic := _make_crime_topic(1, 100)
 	var standing: Dictionary = {"need_type": "UPHOLD_LAW"}
-	var topics: Array[TopicData] = [topic]
-	var records: Array[CrimeRecord] = [cr]
+	var topics: Array = [topic]
+	var records: Array = [cr]
 	var result: Dictionary = InvestigationSystem.scan_for_crime_topics(
 		mag, standing, records, topics
 	)
@@ -321,8 +321,8 @@ func test_scan_skips_when_active_case_exists() -> void:
 	mag.topic_pool = [100]
 	var topic := _make_crime_topic(1, 100)
 	var standing: Dictionary = {"need_type": "UPHOLD_LAW", "active_case": {"case_id": 99}}
-	var topics: Array[TopicData] = [topic]
-	var records: Array[CrimeRecord] = [cr]
+	var topics: Array = [topic]
+	var records: Array = [cr]
 	var result: Dictionary = InvestigationSystem.scan_for_crime_topics(
 		mag, standing, records, topics
 	)
@@ -396,7 +396,7 @@ func test_conviction_topic_created() -> void:
 	convicted.character_name = "Criminal"
 	convicted.clan = "Scorpion"
 	convicted.family = "Bayushi"
-	var next_id: Array[int] = [1]
+	var next_id: Array = [1]
 	var topic: TopicData = InvestigationSystem.generate_conviction_topic(
 		cr, convicted, 3, next_id, 10
 	)
@@ -419,7 +419,7 @@ func test_conviction_topic_tier_1_maho() -> void:
 	var convicted := L5RCharacterData.new()
 	convicted.character_id = 7
 	convicted.character_name = "Tsukai"
-	var next_id: Array[int] = [10]
+	var next_id: Array = [10]
 	var topic: TopicData = InvestigationSystem.generate_conviction_topic(
 		cr, convicted, 1, next_id, 20
 	)
@@ -436,7 +436,7 @@ func test_conviction_topic_tier_2_treason() -> void:
 	var convicted := L5RCharacterData.new()
 	convicted.character_id = 8
 	convicted.character_name = "Traitor"
-	var next_id: Array[int] = [20]
+	var next_id: Array = [20]
 	var topic: TopicData = InvestigationSystem.generate_conviction_topic(
 		cr, convicted, 2, next_id, 30
 	)
@@ -451,7 +451,7 @@ func test_conviction_topic_zero_tier_returns_null() -> void:
 	cr.crime_type = Enums.CrimeType.DISHONORABLE_CONDUCT
 	var convicted := L5RCharacterData.new()
 	convicted.character_id = 9
-	var next_id: Array[int] = [30]
+	var next_id: Array = [30]
 	var topic: TopicData = InvestigationSystem.generate_conviction_topic(
 		cr, convicted, 0, next_id, 40
 	)
@@ -465,7 +465,7 @@ func test_seppuku_refusal_topic() -> void:
 	convicted.character_name = "Coward"
 	convicted.clan = "Lion"
 	convicted.family = "Matsu"
-	var next_id: Array[int] = [50]
+	var next_id: Array = [50]
 	var topic: TopicData = InvestigationSystem.generate_seppuku_refusal_topic(
 		convicted, next_id, 10
 	)
@@ -481,7 +481,7 @@ func test_seppuku_refusal_topic() -> void:
 func test_find_crime_record_for_topic() -> void:
 	var cr := _make_crime_record()
 	var topic := _make_crime_topic(1, 100)
-	var records: Array[CrimeRecord] = [cr]
+	var records: Array = [cr]
 	var found: CrimeRecord = InvestigationSystem.find_crime_record_for_topic(topic, records)
 	assert_not_null(found)
 	assert_eq(found.case_id, 1)
@@ -492,7 +492,7 @@ func test_find_crime_record_wrong_type() -> void:
 	var topic := TopicData.new()
 	topic.topic_type = "political"
 	topic.slug = "crime_case_1"
-	var records: Array[CrimeRecord] = [cr]
+	var records: Array = [cr]
 	var found: CrimeRecord = InvestigationSystem.find_crime_record_for_topic(topic, records)
 	assert_null(found)
 
@@ -589,7 +589,10 @@ func test_recall_tn_two_months() -> void:
 
 
 func test_recall_tn_approaching_season() -> void:
-	assert_eq(InvestigationSystem.get_witness_recall_tn(88), 30)
+	# 88 days <= DAYS_PER_MONTH*3 (90), so it falls into the TWO_MONTHS
+	# bracket. APPROACHING_SEASON is unreachable because DAYS_PER_MONTH*3
+	# equals DAYS_PER_SEASON (both 90).
+	assert_eq(InvestigationSystem.get_witness_recall_tn(88), 25)
 
 
 func test_recall_too_old_returns_negative() -> void:
@@ -709,7 +712,7 @@ func test_generate_accusation_topic_creates_valid_topic() -> void:
 	accused.character_name = "Bayushi Koro"
 	accused.clan = "Scorpion"
 	accused.family = "Bayushi"
-	var next_id: Array[int] = [100]
+	var next_id: Array = [100]
 
 	var topic: TopicData = InvestigationSystem.generate_accusation_topic(
 		cr, accused, next_id, 50
@@ -733,7 +736,7 @@ func test_generate_accusation_topic_uses_crime_name() -> void:
 	accused.character_name = "Shosuro Mei"
 	accused.clan = "Scorpion"
 	accused.family = "Shosuro"
-	var next_id: Array[int] = [200]
+	var next_id: Array = [200]
 
 	var topic: TopicData = InvestigationSystem.generate_accusation_topic(
 		cr, accused, next_id, 75
@@ -776,7 +779,7 @@ func test_generate_bribery_attempt_topic() -> void:
 
 	var cr := _make_crime_record(15, 0)
 	cr.crime_type = Enums.CrimeType.SKIMMING
-	var next_id: Array[int] = [300]
+	var next_id: Array = [300]
 
 	var topic: TopicData = InvestigationSystem.generate_bribery_attempt_topic(
 		suspect, magistrate, cr, next_id, 100
@@ -800,7 +803,7 @@ func test_generate_fugitive_topic() -> void:
 	fugitive.clan = "Lion"
 	fugitive.family = "Ikoma"
 
-	var next_id: Array[int] = [400]
+	var next_id: Array = [400]
 
 	var topic: TopicData = InvestigationSystem.generate_fugitive_topic(
 		fugitive, next_id, 200
@@ -940,9 +943,9 @@ func test_leads_quality_3_reveals_perpetrator() -> void:
 	cr.perpetrator_id = 5
 	cr.known_suspects = []
 	var obj: Dictionary = {"unresolved_leads": []}
-	var present: Array[int] = []
+	var present: Array = []
 
-	var leads: Array[Dictionary] = InvestigationSystem.generate_leads_from_probe(
+	var leads: Array = InvestigationSystem.generate_leads_from_probe(
 		10, 3, cr, obj, present,
 	)
 	assert_eq(leads.size(), 1)
@@ -957,9 +960,9 @@ func test_leads_quality_2_no_perpetrator_reveal() -> void:
 	cr.perpetrator_id = 5
 	cr.known_suspects = []
 	var obj: Dictionary = {"unresolved_leads": []}
-	var present: Array[int] = []
+	var present: Array = []
 
-	var leads: Array[Dictionary] = InvestigationSystem.generate_leads_from_probe(
+	var leads: Array = InvestigationSystem.generate_leads_from_probe(
 		10, 2, cr, obj, present,
 	)
 	assert_eq(leads.size(), 0)
@@ -971,9 +974,9 @@ func test_leads_quality_2_reveals_present_characters() -> void:
 	cr.known_suspects = [5]
 	cr.witnesses = [10]
 	var obj: Dictionary = {"unresolved_leads": []}
-	var present: Array[int] = [15, 20]
+	var present: Array = [15, 20]
 
-	var leads: Array[Dictionary] = InvestigationSystem.generate_leads_from_probe(
+	var leads: Array = InvestigationSystem.generate_leads_from_probe(
 		10, 2, cr, obj, present,
 	)
 	assert_eq(leads.size(), 2)
@@ -988,9 +991,9 @@ func test_leads_skips_target_and_known() -> void:
 	cr.known_suspects = [5]
 	cr.witnesses = [10]
 	var obj: Dictionary = {"unresolved_leads": []}
-	var present: Array[int] = [10, 5, 25]
+	var present: Array = [10, 5, 25]
 
-	var leads: Array[Dictionary] = InvestigationSystem.generate_leads_from_probe(
+	var leads: Array = InvestigationSystem.generate_leads_from_probe(
 		10, 2, cr, obj, present,
 	)
 	assert_eq(leads.size(), 1)
@@ -1004,9 +1007,9 @@ func test_leads_deduplicates_existing() -> void:
 	var obj: Dictionary = {
 		"unresolved_leads": [{"type": "witness", "target_npc_id": 5, "priority": 3}],
 	}
-	var present: Array[int] = []
+	var present: Array = []
 
-	var leads: Array[Dictionary] = InvestigationSystem.generate_leads_from_probe(
+	var leads: Array = InvestigationSystem.generate_leads_from_probe(
 		10, 3, cr, obj, present,
 	)
 	assert_eq(leads.size(), 0)
@@ -1017,9 +1020,9 @@ func test_leads_quality_1_generates_nothing() -> void:
 	cr.perpetrator_id = 5
 	cr.known_suspects = []
 	var obj: Dictionary = {"unresolved_leads": []}
-	var present: Array[int] = [15, 20]
+	var present: Array = [15, 20]
 
-	var leads: Array[Dictionary] = InvestigationSystem.generate_leads_from_probe(
+	var leads: Array = InvestigationSystem.generate_leads_from_probe(
 		10, 1, cr, obj, present,
 	)
 	assert_eq(leads.size(), 0)
@@ -1030,9 +1033,9 @@ func test_leads_perpetrator_already_suspect_skipped() -> void:
 	cr.perpetrator_id = 5
 	cr.known_suspects = [5]
 	var obj: Dictionary = {"unresolved_leads": []}
-	var present: Array[int] = []
+	var present: Array = []
 
-	var leads: Array[Dictionary] = InvestigationSystem.generate_leads_from_probe(
+	var leads: Array = InvestigationSystem.generate_leads_from_probe(
 		10, 3, cr, obj, present,
 	)
 	assert_eq(leads.size(), 0)

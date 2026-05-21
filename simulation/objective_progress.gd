@@ -60,7 +60,7 @@ static func _apply_confidence_gate(
 	objective: Dictionary,
 	ctx: NPCDataStructures.ContextSnapshot,
 	target_id: int,
-	intel_actions: Array[String],
+	intel_actions: Array,
 ) -> float:
 	var seasons: int = _objective_age_seasons(objective, ctx)
 	var intel_count: int = _count_intel_actions(ctx, target_id, intel_actions)
@@ -77,7 +77,7 @@ static func _objective_age_seasons(objective: Dictionary, ctx: NPCDataStructures
 static func _count_intel_actions(
 	ctx: NPCDataStructures.ContextSnapshot,
 	target_id: int,
-	action_types: Array[String],
+	action_types: Array,
 ) -> int:
 	var count: int = 0
 	for entry: Dictionary in ctx.action_log:
@@ -97,9 +97,9 @@ static func _count_intel_actions(
 
 static func _get_known_allies_from_objective(
 	objective: Dictionary,
-) -> Array[int]:
-	var raw: Array[Variant] = objective.get("known_allies", [])
-	var result: Array[int] = []
+) -> Array:
+	var raw: Array = objective.get("known_allies", [])
+	var result: Array = []
 	for entry: Variant in raw:
 		if entry is int:
 			result.append(entry)
@@ -147,8 +147,8 @@ static func _progress_break_alliance(
 	var clan_x: String = objective.get("target_clan_id", "")
 	var clan_y: String = objective.get("target_clan_id_secondary", "")
 
-	var contacts_x: Array[int] = ctx.known_contacts_by_clan.get(clan_x, [])
-	var contacts_y: Array[int] = ctx.known_contacts_by_clan.get(clan_y, [])
+	var contacts_x: Array = ctx.known_contacts_by_clan.get(clan_x, [])
+	var contacts_y: Array = ctx.known_contacts_by_clan.get(clan_y, [])
 	if contacts_x.size() > 0:
 		score += 0.1
 	if contacts_y.size() > 0:
@@ -178,11 +178,11 @@ static func _progress_isolate_character(
 	var score: float = 0.0
 	var target_x: int = objective.get("target_npc_id", -1)
 
-	var known_allies: Array[int] = _get_known_allies_from_objective(objective)
+	var known_allies: Array = _get_known_allies_from_objective(objective)
 
 	if known_allies.is_empty():
 		var intel: int = _count_intel_actions(
-			ctx, target_x, ["PROBE", "READ_CHARACTER"] as Array[String]
+			ctx, target_x, ["PROBE", "READ_CHARACTER"]
 		)
 		score += minf(intel * 0.05, 0.1)
 		return score
@@ -205,7 +205,7 @@ static func _progress_isolate_character(
 	if severed == total and total > 0:
 		score = _apply_confidence_gate(
 			score, objective, ctx, target_x,
-			["PROBE", "READ_CHARACTER", "OBSERVE_COURT_ATTENDEES"] as Array[String],
+			["PROBE", "READ_CHARACTER", "OBSERVE_COURT_ATTENDEES"],
 		)
 
 	return minf(score, 1.0)
@@ -305,7 +305,7 @@ static func _progress_remove_from_position(
 	elif lord_disp <= 25:
 		score += 0.1
 
-	var known_allies: Array[int] = _get_known_allies_from_objective(objective)
+	var known_allies: Array = _get_known_allies_from_objective(objective)
 	if known_allies.size() > 0:
 		var severed: int = 0
 		for ally_id: int in known_allies:
@@ -323,7 +323,7 @@ static func _progress_remove_from_position(
 	if lord_disp <= 0 and known_allies.is_empty():
 		score = _apply_confidence_gate(
 			score, objective, ctx, target_x,
-			["PROBE", "READ_CHARACTER", "GATHER_INTELLIGENCE"] as Array[String],
+			["PROBE", "READ_CHARACTER", "GATHER_INTELLIGENCE"],
 		)
 
 	return minf(score, 1.0)
@@ -342,8 +342,8 @@ static func _progress_negotiate_peace(
 	var clan_a: String = objective.get("target_clan_id", "")
 	var clan_b: String = objective.get("target_clan_id_secondary", "")
 
-	var contacts_a: Array[int] = ctx.known_contacts_by_clan.get(clan_a, [])
-	var contacts_b: Array[int] = ctx.known_contacts_by_clan.get(clan_b, [])
+	var contacts_a: Array = ctx.known_contacts_by_clan.get(clan_a, [])
+	var contacts_b: Array = ctx.known_contacts_by_clan.get(clan_b, [])
 
 	if contacts_a.size() > 0:
 		score += 0.05
@@ -429,7 +429,7 @@ static func _progress_expose_secret(
 	if not has_secrets:
 		var probe_intel: int = _count_intel_actions(
 			ctx, target_x,
-			["BRIBE_FOR_INFO", "EAVESDROP", "PROBE", "SEARCH_QUARTERS", "INTERCEPT_LETTER"] as Array[String],
+			["BRIBE_FOR_INFO", "EAVESDROP", "PROBE", "SEARCH_QUARTERS", "INTERCEPT_LETTER"],
 		)
 		score += minf(probe_intel * 0.03, 0.1)
 		return score
@@ -456,7 +456,7 @@ static func _progress_expose_secret(
 	var seasons: int = _objective_age_seasons(objective, ctx)
 	var intel: int = _count_intel_actions(
 		ctx, target_x,
-		["BRIBE_FOR_INFO", "EAVESDROP", "PROBE", "SEARCH_QUARTERS"] as Array[String],
+		["BRIBE_FOR_INFO", "EAVESDROP", "PROBE", "SEARCH_QUARTERS"],
 	)
 	if best_severity >= 3 and seasons < 2:
 		score = minf(score, 0.6)
@@ -553,11 +553,11 @@ static func _progress_sabotage_economy(
 ) -> float:
 	var score: float = 0.0
 
-	var known_provinces: Array[int] = objective.get("known_enemy_provinces", [])
+	var known_provinces: Array = objective.get("known_enemy_provinces", [])
 	if known_provinces.is_empty():
 		var intel: int = _count_intel_actions(
 			ctx, -1,
-			["GATHER_INTELLIGENCE", "PROBE"] as Array[String],
+			["GATHER_INTELLIGENCE", "PROBE"],
 		)
 		score += minf(intel * 0.03, 0.1)
 		return score
@@ -576,7 +576,7 @@ static func _progress_sabotage_economy(
 	var seasons: int = _objective_age_seasons(objective, ctx)
 	var intel_count: int = _count_intel_actions(
 		ctx, -1,
-		["GATHER_INTELLIGENCE", "PROBE", "INVESTIGATE_PROVINCE"] as Array[String],
+		["GATHER_INTELLIGENCE", "PROBE", "INVESTIGATE_PROVINCE"],
 	)
 	if seasons < 2 or intel_count < 3:
 		score = minf(score, 0.7)
@@ -589,11 +589,11 @@ static func _progress_sabotage_economy(
 # =============================================================================
 
 static func evaluate_all_objectives(
-	characters: Array[L5RCharacterData],
+	characters: Array,
 	objectives_map: Dictionary,
 	world_state: Dictionary,
-) -> Array[Dictionary]:
-	var results: Array[Dictionary] = []
+) -> Array:
+	var results: Array = []
 
 	for character: L5RCharacterData in characters:
 		var objectives: Dictionary = objectives_map.get(character.character_id, {})
@@ -612,7 +612,7 @@ static func evaluate_all_objectives(
 		ctx.characters_present = []
 		ctx.known_contacts_by_clan = character.known_contacts_by_clan
 		ctx.known_npc_locations = world_state.get("known_npc_locations", {})
-		ctx.action_log = world_state.get("action_log_%d" % character.character_id, [] as Array[Dictionary])
+		ctx.action_log = world_state.get("action_log_%d" % character.character_id, [])
 		ctx.context_flag = TravelSystem.get_context_flag(character)
 		ctx.province_statuses = world_state.get("province_statuses", [])
 		ctx.commanded_unit_id = character.commanded_unit_id

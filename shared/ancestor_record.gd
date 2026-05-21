@@ -29,7 +29,7 @@ extends Resource
 # Names of known children, recorded for lineage display only. The actual
 # parent linkage to descendants is via L5RCharacterData.mother_id /
 # father_id and AncestorRecord.maternal flag — names are flavor.
-@export var children_names: Array[String] = []
+@export var children_names: Array = []
 
 # True if the ancestor is on the mother's side, false if paternal side.
 # Used for lineage-side queries (e.g. "show maternal grandparents").

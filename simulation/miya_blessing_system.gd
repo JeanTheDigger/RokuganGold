@@ -168,7 +168,7 @@ static func compute_need_score(conditions: Dictionary) -> int:
 # -- Cunning archetype modifier (§5) -----------------------------------------
 
 static func apply_cunning_modifier(
-	scored: Array[Dictionary],
+	scored: Array,
 	favored_clan: String,
 	disfavored_clan: String,
 ) -> void:
@@ -195,8 +195,8 @@ static func is_excluded(conditions: Dictionary) -> bool:
 
 
 static func select_provinces(
-	scored: Array[Dictionary],
-) -> Array[int]:
+	scored: Array,
+) -> Array:
 	## scored is an array of dicts shaped:
 	##   {
 	##     "province_id": int,
@@ -207,7 +207,7 @@ static func select_provinces(
 	##   }
 	## Returns up to PROVINCES_SELECTED province_ids ordered by score desc,
 	## tiebroken by lowest stability, then by smaller population PU.
-	var eligible: Array[Dictionary] = []
+	var eligible: Array = []
 	for entry: Dictionary in scored:
 		if entry.get("excluded", false):
 			continue
@@ -219,7 +219,7 @@ static func select_provinces(
 			return a["stability"] < b["stability"]
 		return a["population_pu"] < b["population_pu"]
 	)
-	var selected: Array[int] = []
+	var selected: Array = []
 	for entry: Dictionary in eligible:
 		if selected.size() >= PROVINCES_SELECTED:
 			break
@@ -294,7 +294,7 @@ static func process_annual_blessing(inputs: Dictionary) -> Dictionary:
 		"suspension_reason": "",
 		"allocation_total": 0.0,
 		"allocation_per_province": 0.0,
-		"selected_province_ids": [] as Array[int],
+		"selected_province_ids": [],
 		"settlement_rice_grants": {},
 		"stability_bonus": STABILITY_BONUS,
 		"pop_growth_bonus": POP_GROWTH_BONUS,
@@ -328,10 +328,10 @@ static func process_annual_blessing(inputs: Dictionary) -> Dictionary:
 	allocation = minf(allocation, MAX_TOTAL)
 	var per_province: float = allocation / float(PROVINCES_SELECTED)
 
-	var scored_array: Array[Dictionary] = []
+	var scored_array: Array = []
 	for entry: Dictionary in inputs.get("scored_provinces", []):
 		scored_array.append(entry)
-	var selected_ids: Array[int] = select_provinces(scored_array)
+	var selected_ids: Array = select_provinces(scored_array)
 	if selected_ids.is_empty():
 		# No eligible recipient — the allocation stays in the Emperor's stockpile.
 		result["allocation_total"] = allocation
