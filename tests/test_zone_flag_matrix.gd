@@ -228,6 +228,8 @@ func test_categories_do_not_overlap():
 			count += 1
 		if ZoneFlagMatrix.is_wilderness(zone):
 			count += 1
+		if ZoneFlagMatrix.is_wall_zone(zone):
+			count += 1
 		assert_eq(count, 1, "Zone %d should be in exactly one category" % z)
 
 
