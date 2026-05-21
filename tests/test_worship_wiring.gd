@@ -578,16 +578,26 @@ func test_resource_tick_pop_growth_modifier_reduces_growth() -> void:
 	var prov := _make_province(1)
 	prov.stability = 80.0
 	var s := _make_settlement(1, 1)
-	s.population_pu = 10
-	s.rice_stockpile = 100.0
+	s.farming_pu = 100
+	s.rice_stockpile = 500.0
 	var provinces: Array = [prov]
 	var settlements: Array = [s]
 	var meta: Dictionary = {"starvation_stages": {1: ResourceTick.StarvationStage.CLEAR}}
+	ResourceTick.process_seasonal_tick(
+		provinces, settlements, "spring", meta, {},
+	)
+	var farming_without: int = s.farming_pu
+
+	s.farming_pu = 100
+	s.rice_stockpile = 500.0
+	meta = {"starvation_stages": {1: ResourceTick.StarvationStage.CLEAR}}
 	var maluses: Dictionary = {1: {"pop_growth_modifier": -0.50}}
-	var _result: Dictionary = ResourceTick.process_seasonal_tick(
+	ResourceTick.process_seasonal_tick(
 		provinces, settlements, "spring", meta, {}, maluses,
 	)
-	assert_true(true)
+	var farming_with: int = s.farming_pu
+	assert_true(farming_without > 100, "Farming PU should grow without modifier")
+	assert_true(farming_with <= farming_without, "Modifier should reduce or equal growth")
 
 
 # -- DayOrchestrator Stability Malus Tests -------------------------------------
@@ -783,10 +793,10 @@ func test_divination_dice_penalty_reduces_rolled() -> void:
 	var penalized: Dictionary = WorshipSystem.resolve_divination(
 		_dice, 5, 4, Enums.GreatFortune.BISHAMON, {}, malus,
 	)
-	if normal.get("success", false) and penalized.get("success", false):
-		assert_true(penalized.get("roll_total", 0) <= normal.get("roll_total", 0))
-	else:
-		assert_true(true)
+	assert_true(
+		penalized.get("roll_total", 0) <= normal.get("roll_total", 0),
+		"Fewer dice should produce equal or lower roll total",
+	)
 
 
 # -- Jurojin Natural Death Tests -----------------------------------------------

@@ -1284,7 +1284,7 @@ func test_flag_out_of_mandate() -> void:
 
 func test_flag_out_of_mandate_null_safe() -> void:
 	CourtSystem.flag_out_of_mandate(null)
-	assert_true(true)
+	pass_test("No crash on null input")
 
 
 # =============================================================================

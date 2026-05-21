@@ -439,7 +439,7 @@ func test_defection_on_desperate_war_score() -> void:
 	var defections: Array = cw.get("civil_war_results", {}).get("defections", [])
 	# We can't guarantee defection fires due to loyalty re-eval,
 	# but defection trigger should have been checked
-	assert_true(true, "Defection check runs without error")
+	pass_test("Defection check runs without error")
 
 
 # -- Precedent effect on rebel victory -----------------------------------------
@@ -475,7 +475,7 @@ func test_precedent_effect_applied_on_rebel_victory() -> void:
 	if not state.get("active", true):
 		assert_gt(mods.size(), 0, "Precedent effect should be applied on rebel victory")
 	else:
-		assert_true(true, "War not yet resolved — counter may have reset")
+		pass_test("War not yet resolved — counter may have reset")
 
 
 # -- Rebel consequences on legitimacy victory ----------------------------------
@@ -759,7 +759,7 @@ func test_trigger_ronin_departure_on_low_pulls() -> void:
 		assert_true(npc.permanent_ronin, "Ronin departure should set permanent_ronin")
 		assert_eq(npc.lord_id, -1, "Ronin should have no lord")
 	else:
-		assert_true(true, "NPC did not meet ronin threshold")
+		pass_test("NPC did not meet ronin threshold")
 
 
 func test_trigger_reassigns_broken_feudal_chains() -> void:
