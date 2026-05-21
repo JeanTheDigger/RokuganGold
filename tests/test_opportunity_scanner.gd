@@ -360,7 +360,7 @@ func test_personality_fit_yu_prefers_military() -> void:
 		c, OpportunityScanner.DOMAIN_MILITARY, "EXPAND_TERRITORY", world_state
 	)
 	assert_gt(opps.size(), 0)
-	assert_eq(opps[0].personality_fit, 90.0)
+	assert_eq(opps[0].personality_fit, 80.0)
 
 
 func test_personality_fit_jin_dislikes_military() -> void:

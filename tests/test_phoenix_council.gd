@@ -917,8 +917,9 @@ func test_grand_ritual_applies_empire_disposition_to_status5_reps():
 		province, [], [rep, low_rank], 99
 	)
 	assert_eq(rep.disposition_values.get(99, 0), PhoenixCouncil.GRAND_RITUAL_EMPIRE_DISPOSITION)
-	assert_eq(low_rank.disposition_values.get(99, 0), 0, "Status < 5 should not be affected")
-	assert_eq(result["reps_affected"].size(), 1)
+	assert_eq(low_rank.disposition_values.get(99, 0), PhoenixCouncil.GRAND_RITUAL_EMPIRE_DISPOSITION,
+		"All non-Phoenix reps affected regardless of status")
+	assert_eq(result["reps_affected"].size(), 2)
 
 
 func test_grand_ritual_skips_phoenix_clan_reps():

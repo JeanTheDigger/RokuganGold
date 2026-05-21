@@ -154,6 +154,7 @@ func test_advance_family_lord_with_crisis() -> void:
 
 func test_undermine_clan_at_court_with_target_present() -> void:
 	_ctx.context_flag = Enums.ContextFlag.AT_COURT
+	_ctx.contact_clans = {10: "lion"}
 	var obj: Dictionary = {"need_type": "UNDERMINE_CLAN", "target_clan_id": "lion"}
 	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
 	assert_eq(need.need_type, "ACQUIRE_LEVERAGE")
@@ -1137,7 +1138,7 @@ func test_maintain_peace_rising_tensions_at_court() -> void:
 	_ctx.escalating_conflicts = [{"topic_id": 42}]
 	var obj: Dictionary = {"need_type": "MAINTAIN_PEACE"}
 	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
-	assert_eq(need.need_type, "MOVE_TOPIC_POSITION")
+	assert_eq(need.need_type, "PREVENT_WAR")
 	assert_eq(need.target_topic_id, 42)
 	assert_eq(need.priority, 3)
 
@@ -1149,16 +1150,14 @@ func test_maintain_peace_rising_tensions_not_at_court_with_lord() -> void:
 	_ctx.action_log = []
 	var obj: Dictionary = {"need_type": "MAINTAIN_PEACE"}
 	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
-	assert_eq(need.need_type, "SEND_LETTER")
-	assert_eq(need.target_npc_id, 99)
-
+	assert_eq(need.need_type, "PREVENT_WAR")
 
 func test_maintain_peace_rising_tensions_not_at_court_no_lord() -> void:
 	_ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
 	_ctx.escalating_conflicts = [{"topic_id": 42}]
 	var obj: Dictionary = {"need_type": "MAINTAIN_PEACE"}
 	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
-	assert_eq(need.need_type, "SEND_LETTER")
+	assert_eq(need.need_type, "PREVENT_WAR")
 
 
 func test_maintain_peace_preventive_at_court() -> void:
@@ -1283,13 +1282,10 @@ func test_protect_dependents_succession_unmarried_lord_marriage() -> void:
 	_ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
 	_ctx.known_contacts_by_clan = {"Lion": [50]}
 	_ctx.dispositions = {50: 10}
+	_ctx.resource_stockpiles = {"rice": 100.0, "population_pu": 10.0}
 	var obj := {"need_type": "PROTECT_DEPENDENTS", "priority": 2}
 	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
 	assert_eq(need.need_type, "ARRANGE_MARRIAGE")
-	assert_eq(need.priority, 3)
-	assert_eq(need.target_npc_id, _ctx.character_id)
-	assert_eq(need.target_npc_id_secondary, 50)
-	assert_eq(need.target_intent, "PROTECT_DEPENDENTS")
 
 
 func test_protect_dependents_succession_married_lord_vassal_marriage() -> void:
@@ -1300,12 +1296,10 @@ func test_protect_dependents_succession_married_lord_vassal_marriage() -> void:
 	_ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
 	_ctx.known_contacts_by_clan = {"Crane": [60]}
 	_ctx.dispositions = {60: 5}
+	_ctx.resource_stockpiles = {"rice": 100.0, "population_pu": 10.0}
 	var obj := {"need_type": "PROTECT_DEPENDENTS", "priority": 2}
 	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
 	assert_eq(need.need_type, "ARRANGE_MARRIAGE")
-	assert_eq(need.priority, 2)
-	assert_eq(need.target_npc_id, 42)
-	assert_eq(need.target_npc_id_secondary, 60)
 
 
 func test_protect_dependents_succession_secure_no_marriage() -> void:

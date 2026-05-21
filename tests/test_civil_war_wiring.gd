@@ -171,6 +171,24 @@ func test_stability_penalty_applied_on_season_boundary() -> void:
 
 
 func test_stability_penalty_is_minus_3_base() -> void:
+	# Run a baseline without civil war to measure other seasonal stability drains.
+	var baseline_rebel := _make_char(100, "Lion")
+	var baseline_authority := _make_char(1, "Lion")
+	var baseline_prov := ProvinceData.new()
+	baseline_prov.province_id = 10
+	baseline_prov.stability = 50.0
+	baseline_prov.terrain_type = Enums.TerrainType.PLAINS
+	baseline_prov.clan = "Lion"
+	var saved_provinces: Dictionary = _provinces.duplicate()
+	_provinces = {10: baseline_prov}
+	var saved_time := _time
+	_time = TimeSystem.new(1120, 0)
+	_advance_to_season_boundary([baseline_rebel, baseline_authority])
+	var baseline_stability: float = baseline_prov.stability
+
+	# Now run with civil war.
+	_provinces = saved_provinces
+	_time = TimeSystem.new(1120, 0)
 	var rebel := _make_char(100, "Lion")
 	var authority := _make_char(1, "Lion")
 
@@ -185,8 +203,8 @@ func test_stability_penalty_is_minus_3_base() -> void:
 
 	_advance_to_season_boundary([rebel, authority], [state])
 
-	assert_eq(province.stability, 47.0,
-		"Base stability penalty should be -3 per season")
+	assert_almost_eq(province.stability, baseline_stability - 3.0, 0.01,
+		"Base stability penalty should be -3 per season beyond baseline")
 
 
 # -- Honor hemorrhage ----------------------------------------------------------
@@ -204,8 +222,10 @@ func test_rebel_lord_honor_hemorrhage() -> void:
 
 	_advance_to_season_boundary([rebel, authority], [state])
 
-	assert_almost_eq(rebel.honor, 4.7, 0.01,
-		"Rebel lord should lose 0.3 honor per season")
+	# Honor hemorrhage is rank-scaled via CrimeSystem.get_disloyalty_honor().
+	# At honor 5.0 (rank 5, bracket 3): HONOR_TABLE_DISLOYALTY[3] = -10 → -1.0.
+	assert_almost_eq(rebel.honor, 4.0, 0.01,
+		"Rebel lord should lose rank-scaled disloyalty honor per season")
 
 
 # -- Precedent decay runs unconditionally --------------------------------------
@@ -336,6 +356,12 @@ func test_rebel_victory_counter_increments() -> void:
 	var rebel := _make_char(100, "Lion")
 	rebel.honor = 5.0
 	rebel.status = 6.0
+	# Rebel must hold a seat: physical_location in a matching province's settlement_ids.
+	rebel.physical_location = "5000"
+	var province: ProvinceData = _provinces[10]
+	province.family = "Akodo"
+	province.settlement_ids = [5000]
+
 	var authority := _make_char(1, "Lion")
 	authority.status = 7.0
 	var allied_fd := _make_char(50, "Lion")
@@ -357,6 +383,23 @@ func test_rebel_victory_counter_increments() -> void:
 # -- Inactive wars skipped -----------------------------------------------------
 
 func test_inactive_war_skipped() -> void:
+	# Run a baseline without any civil war to measure other seasonal stability drains.
+	var baseline_char := _make_char(1)
+	var baseline_prov := ProvinceData.new()
+	baseline_prov.province_id = 10
+	baseline_prov.stability = 80.0
+	baseline_prov.terrain_type = Enums.TerrainType.PLAINS
+	baseline_prov.clan = "Lion"
+	var saved_provinces: Dictionary = _provinces.duplicate()
+	_provinces = {10: baseline_prov}
+	var saved_time := _time
+	_time = TimeSystem.new(1120, 0)
+	_advance_to_season_boundary([baseline_char])
+	var baseline_stability: float = baseline_prov.stability
+
+	# Now run with an inactive civil war.
+	_provinces = saved_provinces
+	_time = TimeSystem.new(1120, 0)
 	var c := _make_char(1)
 	var state: Dictionary = IntraClanCivilWar.make_initial_state(100, 1, "Lion", 5000, 0)
 	state["active"] = false
@@ -366,8 +409,8 @@ func test_inactive_war_skipped() -> void:
 
 	_advance_to_season_boundary([c], [state])
 
-	assert_eq(province.stability, 80.0,
-		"Inactive war should not affect province stability")
+	assert_eq(province.stability, baseline_stability,
+		"Inactive war should not affect province stability beyond baseline")
 
 
 # -- Defection -----------------------------------------------------------------
@@ -405,6 +448,12 @@ func test_precedent_effect_applied_on_rebel_victory() -> void:
 	var rebel := _make_char(100, "Lion")
 	rebel.honor = 5.0
 	rebel.status = 6.0
+	# Rebel must hold a seat to prevent legitimacy victory via rebel_seat_lost.
+	rebel.physical_location = "5000"
+	var province: ProvinceData = _provinces[10]
+	province.family = "Akodo"
+	province.settlement_ids = [5000]
+
 	var authority := _make_char(1, "Lion")
 	authority.status = 7.0
 	authority.wounds_taken = 999
@@ -493,6 +542,28 @@ func test_multiple_civil_wars_processed_independently() -> void:
 # -- Non-clan provinces unaffected ---------------------------------------------
 
 func test_non_clan_provinces_unaffected() -> void:
+	# Run a baseline to measure non-civil-war seasonal effects on Crane province.
+	var baseline_char := _make_char(1, "Lion")
+	var baseline_crane := ProvinceData.new()
+	baseline_crane.province_id = 20
+	baseline_crane.stability = 80.0
+	baseline_crane.terrain_type = Enums.TerrainType.PLAINS
+	baseline_crane.clan = "Crane"
+	var baseline_lion := ProvinceData.new()
+	baseline_lion.province_id = 10
+	baseline_lion.stability = 70.0
+	baseline_lion.terrain_type = Enums.TerrainType.PLAINS
+	baseline_lion.clan = "Lion"
+	var saved_provinces: Dictionary = _provinces.duplicate()
+	_provinces = {10: baseline_lion, 20: baseline_crane}
+	var saved_time := _time
+	_time = TimeSystem.new(1120, 0)
+	_advance_to_season_boundary([baseline_char])
+	var baseline_crane_stability: float = baseline_crane.stability
+
+	# Now run with Lion civil war.
+	_provinces = saved_provinces
+	_time = TimeSystem.new(1120, 0)
 	var rebel := _make_char(100, "Lion")
 	var authority := _make_char(1, "Lion")
 
@@ -511,8 +582,8 @@ func test_non_clan_provinces_unaffected() -> void:
 
 	_advance_to_season_boundary([rebel, authority], [state])
 
-	assert_eq(crane_prov.stability, 80.0,
-		"Non-clan provinces should not be affected by civil war")
+	assert_eq(crane_prov.stability, baseline_crane_stability,
+		"Non-clan provinces should not be affected by civil war beyond baseline")
 
 
 # -- Trigger & Faction Formation (s53.2.1, s53.2.2) ---------------------------

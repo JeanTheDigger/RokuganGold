@@ -810,7 +810,6 @@ func test_find_hostile_pairs_same_clan() -> void:
 
 	var clans_at: Dictionary = {
 		"Crane": [],
-		"Mantis": [],
 	}
 
 	var pairs: Array = DayOrchestrator._find_hostile_naval_pairs(
@@ -907,6 +906,7 @@ func _make_ctx_with_naval(
 	ctx.has_naval_assets = has_naval_assets
 	ctx.is_coastal = true
 	ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
+	ctx.resource_stockpiles = {"rice": 100.0, "population_pu": 10.0}
 
 	if has_pirate_province:
 		var ps := NPCDataStructures.ProvinceStatus.new()
@@ -914,6 +914,8 @@ func _make_ctx_with_naval(
 		ps.stability = province_stability
 		ps.active_insurgency_id = 1
 		ps.insurgency_type = "PIRATE_FLEET"
+		ps.garrison_pu = 2
+		ps.confidence = 1
 		ctx.province_statuses.append(ps)
 
 	return ctx
@@ -982,12 +984,13 @@ func test_s57_18_1_request_aid_when_pirate_fleet_and_no_ships() -> void:
 
 func test_s57_18_1_no_pirate_fleet_gives_patrol_province() -> void:
 	var ctx := _make_ctx_with_naval(true, false)
-	# Add a non-pirate unstable province
 	var ps := NPCDataStructures.ProvinceStatus.new()
 	ps.province_id = 99
 	ps.stability = 60.0
 	ps.active_insurgency_id = -1
 	ps.insurgency_type = ""
+	ps.garrison_pu = 2
+	ps.confidence = 1
 	ctx.province_statuses.append(ps)
 	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer._decompose_protect_dependents(
 		{}, ctx,

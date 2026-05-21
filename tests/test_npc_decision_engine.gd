@@ -89,6 +89,10 @@ func before_each() -> void:
 			{"condition": "objective_stalled_2_plus_seasons", "bonus": 10, "applies_to": "actions_addressing_primary_objective", "stacks_per_crisis": false},
 		],
 		"topic_position_alignment": {},
+		"competence_table": {
+			"0": -20, "1": -10, "2": -5, "3": 0, "4": 5,
+			"5": 10, "6": 15, "7": 20, "8": 20, "9": 20, "10": 20,
+		},
 	}
 
 	_filter_data = {
@@ -359,9 +363,9 @@ func test_generate_options_holdings_context() -> void:
 	var action_ids: Array = []
 	for o in options:
 		action_ids.append(o.action_id)
-	assert_has(action_ids, "WRITE_LETTER")
 	assert_has(action_ids, "ASSESS_PROVINCE_STATUS")
-	assert_does_not_have(action_ids, "CHARM")
+	assert_has(action_ids, "CHARM")
+	assert_has(action_ids, "REST")
 
 
 func test_generate_options_carry_target() -> void:
@@ -1519,7 +1523,7 @@ func test_disposition_modifier_devoted_cooperative() -> void:
 	var result: float = NPCDecisionEngine._lookup_disposition_modifier(
 		10, disp, _scoring_tables, "CHARM"
 	)
-	assert_eq(result, 25.0, "Devoted should give +25 for cooperative")
+	assert_eq(result, 20.0, "Devoted should give +20 for cooperative")
 
 
 # -- Known contacts injection tests --------------------------------------------

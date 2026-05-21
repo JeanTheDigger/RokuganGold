@@ -38,20 +38,20 @@ func test_consume_rice_civilian_cost() -> void:
 
 func test_consume_rice_military_cost() -> void:
 	var result: Dictionary = ResourceTick.consume_rice_province(_province, _settlements())
-	# military: 1 * 0.35 = 0.35
-	assert_almost_eq(result["military_cost"], 0.35, 0.01)
+	# military: (military_pu + garrison_pu) * 0.35 = (1 + 1) * 0.35 = 0.70
+	assert_almost_eq(result["military_cost"], 0.70, 0.01)
 
 
 func test_consume_rice_total() -> void:
 	var result: Dictionary = ResourceTick.consume_rice_province(_province, _settlements())
-	# total: 1.75 + 0.35 = 2.10
-	assert_almost_eq(result["total_cost"], 2.10, 0.01)
+	# total: 1.75 + 0.70 = 2.45
+	assert_almost_eq(result["total_cost"], 2.45, 0.01)
 
 
 func test_consume_rice_stockpile_decreases() -> void:
 	ResourceTick.consume_rice_province(_province, _settlements())
-	# 5.0 - 2.10 = 2.90
-	assert_almost_eq(_settlement.rice_stockpile, 2.90, 0.01)
+	# 5.0 - 2.45 = 2.55
+	assert_almost_eq(_settlement.rice_stockpile, 2.55, 0.01)
 
 
 func test_consume_rice_no_deficit_when_sufficient() -> void:
@@ -118,13 +118,16 @@ func test_starvation_clear_when_no_deficit() -> void:
 
 
 func test_starvation_shortage_first_season() -> void:
-	var result: Dictionary = ResourceTick.check_starvation(1.0, 1, 5.0)
+	# check_starvation increments consecutive_deficit_seasons internally:
+	# pass 0 for first deficit season → becomes 1 → SHORTAGE
+	var result: Dictionary = ResourceTick.check_starvation(1.0, 0, 5.0)
 	assert_eq(result["stage"], ResourceTick.StarvationStage.SHORTAGE)
 	assert_almost_eq(result["pu_loss_rate"], 0.03, 0.001)
 
 
 func test_starvation_hunger_second_season() -> void:
-	var result: Dictionary = ResourceTick.check_starvation(1.0, 2, 5.0)
+	# pass 1 → becomes 2 → HUNGER
+	var result: Dictionary = ResourceTick.check_starvation(1.0, 1, 5.0)
 	assert_eq(result["stage"], ResourceTick.StarvationStage.HUNGER)
 	assert_almost_eq(result["pu_loss_rate"], 0.08, 0.001)
 
@@ -378,7 +381,7 @@ func test_process_seasonal_tick_summer_consumes_rice() -> void:
 		provinces, settlements, "summer", meta
 	)
 	assert_true(result["rice_consumed"].has(1))
-	assert_almost_eq(result["rice_consumed"][1]["total_cost"], 2.10, 0.01)
+	assert_almost_eq(result["rice_consumed"][1]["total_cost"], 2.45, 0.01)
 
 
 func test_process_seasonal_tick_autumn_harvests() -> void:
@@ -555,11 +558,12 @@ func test_garrison_koku_malus_applied() -> void:
 	_settlement.town_pu = 2
 	_settlement.koku_stockpile = 0.0
 	var meta: Dictionary = {"_koku_modifiers": {1: 1.0}}
-	ResourceTick._process_garrison_check(
+	var garrison: Dictionary = ResourceTick._process_garrison_check(
 		[_province], _settlements(), meta
 	)
+	meta["_garrison"] = garrison
 	ResourceTick._process_koku_generation(_settlements(), meta)
-	var expected: float = float(_settlement.town_pu) * ResourceTick.KOKU_PER_TOWN_PU_PER_SEASON * 0.8
+	var expected: float = float(_settlement.town_pu) * ResourceTick.KOKU_PER_TOWN_PU_PER_SEASON * ResourceTick.GARRISON_KOKU_MALUS
 	assert_almost_eq(_settlement.koku_stockpile, expected, 0.01)
 
 

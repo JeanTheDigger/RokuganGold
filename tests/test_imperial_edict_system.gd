@@ -760,6 +760,7 @@ func test_pending_clans_become_defiant_at_deadline():
 		"Crane": EdictData.ComplianceStatus.PENDING,
 		"Lion": EdictData.ComplianceStatus.PENDING,
 	}
+	e.target_war_id = 1
 	var chars: Array = [_make_clan_lord(10, "Crane"), _make_clan_lord(20, "Lion")]
 	var edicts: Array = [e]
 	var wars: Array = [_make_war(1, "Crane", "Lion")]
@@ -775,6 +776,7 @@ func test_defiance_applies_honor_cost():
 		1, EdictData.EdictType.CEASE_HOSTILITIES, 100, 10
 	)
 	e.compliance_by_clan = {"Crane": EdictData.ComplianceStatus.PENDING}
+	e.target_war_id = 1
 	var lord := _make_clan_lord(10, "Crane")
 	var initial_honor: float = lord.honor
 	var chars: Array = [lord]
@@ -821,6 +823,7 @@ func test_defiance_topic_generated():
 		1, EdictData.EdictType.CEASE_HOSTILITIES, 100, 10
 	)
 	e.compliance_by_clan = {"Crane": EdictData.ComplianceStatus.PENDING}
+	e.target_war_id = 1
 	var chars: Array = [_make_clan_lord(10, "Crane")]
 	var edicts: Array = [e]
 	var wars: Array = [_make_war(1, "Crane", "Lion")]
@@ -837,6 +840,7 @@ func test_orchestrator_creates_defiance_topic_data():
 		1, EdictData.EdictType.CEASE_HOSTILITIES, 100, 10
 	)
 	e.compliance_by_clan = {"Crane": EdictData.ComplianceStatus.PENDING}
+	e.target_war_id = 1
 	var lord := _make_clan_lord(10, "Crane")
 	var chars: Array = [lord]
 	var edicts: Array = [e]

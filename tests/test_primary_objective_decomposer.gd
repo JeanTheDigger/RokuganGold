@@ -55,6 +55,7 @@ func test_break_alliance_at_court_with_leverage() -> void:
 	_ctx.known_contacts_by_clan = {"Crane": [10], "Lion": [20]}
 	var entry := KnowledgeEntry.new()
 	entry.entry_type = "disposition_observation"
+	entry.data = {"target_character_id": 10}
 	_ctx.knowledge_pool = [entry]
 	_ctx.held_leverage = [{"target_id": 10}]
 	_ctx.characters_present = [20]
@@ -69,6 +70,7 @@ func test_break_alliance_at_court_no_leverage_acquires() -> void:
 	_ctx.known_contacts_by_clan = {"Crane": [10], "Lion": [20]}
 	var entry := KnowledgeEntry.new()
 	entry.entry_type = "disposition_observation"
+	entry.data = {"target_character_id": 10}
 	_ctx.knowledge_pool = [entry]
 	_ctx.held_leverage = []
 	_ctx.characters_present = [10]
