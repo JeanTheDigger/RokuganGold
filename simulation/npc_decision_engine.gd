@@ -325,6 +325,18 @@ static func generate_options(
 	if need.need_type == "RESPOND_TO_SEPPUKU":
 		available_actions = ["ACCEPT_SEPPUKU", "REFUSE_SEPPUKU"]
 
+	# Reactive-event ActionIDs are scoped to their triggering need.source rather
+	# than added to general context lists. The scoring branches at lines below
+	# (BRIBE_WITNESS / INTIMIDATE_WITNESS / KILL_WITNESS / FLEE_JURISDICTION /
+	# EXTORT_ACCUSED) are unreachable unless we surface the actions here.
+	if need.source == "bribery_eval":
+		available_actions = available_actions + [
+			"BRIBE_WITNESS", "INTIMIDATE_WITNESS", "KILL_WITNESS",
+			"FLEE_JURISDICTION",
+		]
+	elif need.source == "extortion_opportunity":
+		available_actions = available_actions + ["EXTORT_ACCUSED"]
+
 	for action_id: String in available_actions:
 		if _is_zone_blocked(action_id, ctx.zone_flags):
 			continue
@@ -1017,6 +1029,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 		Enums.ContextFlag.ON_CAMPAIGN:
 			return [
 				"ORDER_BATTLE", "CONDUCT_RAID", "RAID_HARVEST",
+				"BLOCKADE_TRADE_ROUTE",
 				"DRILL_TROOPS", "EVALUATE_WAR_READINESS",
 				"SCOUT_ENEMY",
 				"INTIMIDATE", "NEGOTIATE",
@@ -1149,6 +1162,12 @@ static func _get_ap_cost(action_id: String) -> int:
 		"CANCEL_HUNT": 0,
 		"TRAIN_ANIMAL": 1,
 		"APPLY_TATTOO": 2,
+		"BLOCKADE_TRADE_ROUTE": 1,
+		"BRIBE_WITNESS": 1,
+		"INTIMIDATE_WITNESS": 1,
+		"KILL_WITNESS": 1,
+		"FLEE_JURISDICTION": 1,
+		"EXTORT_ACCUSED": 1,
 	}
 	return costs.get(action_id, 1)
 
@@ -2011,6 +2030,7 @@ static func _is_zone_blocked(action_id: String, zone_flags: Dictionary) -> bool:
 
 const MILITARY_ORDER_ACTIONS: Array[String] = [
 	"ORDER_BATTLE", "CONDUCT_RAID", "RAID_HARVEST",
+	"BLOCKADE_TRADE_ROUTE",
 	"DRILL_TROOPS", "EVALUATE_WAR_READINESS",
 	"ORDER_PATROL", "CONDUCT_SORTIE", "CONDUCT_STORM_ASSAULT",
 	"MAINTAIN_SIEGE", "NEGOTIATE_SURRENDER",

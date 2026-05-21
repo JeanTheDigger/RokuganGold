@@ -2100,6 +2100,118 @@ func test_seppuku_generates_accept_refuse_options() -> void:
 	assert_eq(action_ids.size(), 2)
 
 
+func test_bribery_eval_surfaces_witness_tampering_options() -> void:
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "SUPPRESS_INVESTIGATION"
+	need.priority = 2
+	need.source = "bribery_eval"
+	need.target_npc_id = 99
+	need.target_npc_id_secondary = 50
+
+	var ctx := NPCDecisionEngine.build_context(_char, _world_state)
+	var options: Array = NPCDecisionEngine.generate_options(ctx, need)
+
+	var action_ids: Array = []
+	for opt: NPCDataStructures.ScoredAction in options:
+		action_ids.append(opt.action_id)
+	assert_has(action_ids, "BRIBE_WITNESS")
+	assert_has(action_ids, "INTIMIDATE_WITNESS")
+	assert_has(action_ids, "KILL_WITNESS")
+	assert_has(action_ids, "FLEE_JURISDICTION")
+
+
+func test_bribery_eval_witness_id_flows_to_metadata() -> void:
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "SUPPRESS_INVESTIGATION"
+	need.priority = 2
+	need.source = "bribery_eval"
+	need.target_npc_id = 99
+	need.target_npc_id_secondary = 50
+
+	var ctx := NPCDecisionEngine.build_context(_char, _world_state)
+	var options: Array = NPCDecisionEngine.generate_options(ctx, need)
+
+	var bribe_opt: NPCDataStructures.ScoredAction = null
+	for opt: NPCDataStructures.ScoredAction in options:
+		if opt.action_id == "BRIBE_WITNESS":
+			bribe_opt = opt
+			break
+	assert_not_null(bribe_opt, "BRIBE_WITNESS option should be present")
+	assert_eq(bribe_opt.target_npc_id, 50)
+	assert_eq(int(bribe_opt.metadata.get("witness_id", -1)), 50)
+
+
+func test_extortion_opportunity_surfaces_extort_accused() -> void:
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "EXTORT_ACCUSED"
+	need.priority = 2
+	need.source = "extortion_opportunity"
+	need.target_npc_id = 42
+
+	var ctx := NPCDecisionEngine.build_context(_char, _world_state)
+	var options: Array = NPCDecisionEngine.generate_options(ctx, need)
+
+	var action_ids: Array = []
+	for opt: NPCDataStructures.ScoredAction in options:
+		action_ids.append(opt.action_id)
+	assert_has(action_ids, "EXTORT_ACCUSED")
+
+
+func test_reactive_actions_absent_without_matching_source() -> void:
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "RAISE_DISPOSITION"
+	need.priority = 3
+	need.target_npc_id = 2
+
+	var ctx := NPCDecisionEngine.build_context(_char, _world_state)
+	var options: Array = NPCDecisionEngine.generate_options(ctx, need)
+
+	var action_ids: Array = []
+	for opt: NPCDataStructures.ScoredAction in options:
+		action_ids.append(opt.action_id)
+	assert_false("BRIBE_WITNESS" in action_ids)
+	assert_false("KILL_WITNESS" in action_ids)
+	assert_false("EXTORT_ACCUSED" in action_ids)
+
+
+func test_blockade_trade_route_reachable_on_campaign() -> void:
+	_char.commanded_unit_id = 7
+	_char.military_rank = Enums.MilitaryRank.CHUI
+	_world_state["context_flag"] = Enums.ContextFlag.ON_CAMPAIGN
+
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "DESTROY_ECONOMY"
+	need.priority = 2
+	need.target_clan_id = "Crab"
+
+	var ctx := NPCDecisionEngine.build_context(_char, _world_state)
+	var options: Array = NPCDecisionEngine.generate_options(ctx, need)
+
+	var action_ids: Array = []
+	for opt: NPCDataStructures.ScoredAction in options:
+		action_ids.append(opt.action_id)
+	assert_has(action_ids, "BLOCKADE_TRADE_ROUTE")
+
+
+func test_blockade_trade_route_blocked_without_commanded_unit() -> void:
+	_char.commanded_unit_id = -1
+	_char.military_rank = Enums.MilitaryRank.NONE
+	_world_state["context_flag"] = Enums.ContextFlag.ON_CAMPAIGN
+
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "DESTROY_ECONOMY"
+	need.priority = 2
+	need.target_clan_id = "Crab"
+
+	var ctx := NPCDecisionEngine.build_context(_char, _world_state)
+	var options: Array = NPCDecisionEngine.generate_options(ctx, need)
+
+	var action_ids: Array = []
+	for opt: NPCDataStructures.ScoredAction in options:
+		action_ids.append(opt.action_id)
+	assert_false("BLOCKADE_TRADE_ROUTE" in action_ids)
+
+
 func test_witness_report_motivated_reactive_event() -> void:
 	_world_state["pending_events"] = [
 		{"type": "witness_report_motivated", "criminal_id": 99, "case_id": 42, "magistrate_id": 30}

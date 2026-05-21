@@ -1256,6 +1256,40 @@ costs, or forward-wiring. Do not treat as bugs.
   `challenger_dead`, `defender_dead` now consumed by
   `_process_duel_death_writebacks()` for death events and topics.
 
+### Known Code Issues (found and fixed 2026-05-21, cross-system wiring sweep)
+- **Witness tampering actions unreachable. FIXED.**
+  `BRIBE_WITNESS`, `INTIMIDATE_WITNESS`, `KILL_WITNESS`, and `FLEE_JURISDICTION`
+  had complete pipelines — executors (`action_executor.gd` lines 1073-1089
+  and 271), metadata population gated on `need.source == "bribery_eval"`
+  (`npc_decision_engine.gd:2462`), full scoring entries in
+  `objective_alignment.json` / `action_skill_map.json` / `personality_filter.json`,
+  and a comprehensive writeback handler at
+  `day_orchestrator.gd:_process_witness_tampering_writebacks()` — but were
+  in NO context list. `generate_options()` iterates only
+  `_get_actions_for_context()` (with one carve-out for `RESPOND_TO_SEPPUKU`),
+  so `bribery_eval` events produced a `SUPPRESS_INVESTIGATION` need that
+  the engine could never fulfill via these actions. Witness tampering was
+  a no-op in the simulation. Added `need.source == "bribery_eval"` carve-out
+  to `generate_options()` mirroring the RESPOND_TO_SEPPUKU pattern, surfacing
+  all four reactive ActionIDs only when the bribery_eval event fires. Added
+  explicit AP cost entries (1 each). 4 tests.
+- **EXTORT_ACCUSED unreachable. FIXED.**
+  Same pattern as witness tampering. Executor (`action_executor.gd:277`),
+  metadata gated on `need.source == "extortion_opportunity"`
+  (`npc_decision_engine.gd:2466`), full scoring entries, and writeback at
+  `day_orchestrator.gd:3846` — but in no context list. Added
+  `need.source == "extortion_opportunity"` carve-out and AP cost. 1 test.
+- **BLOCKADE_TRADE_ROUTE unreachable. FIXED.**
+  Full executor (`action_executor.gd:1554` → `_compute_blockade_effects` at
+  line 2881, emits `requires_blockade: true` consumed by
+  `day_orchestrator.gd:8329`), metadata builder
+  (`npc_decision_engine.gd:_build_blockade_metadata` line 3094), and high
+  scoring entry (95) in `objective_alignment.json` — but in no context
+  list. NPCs could never decide to blockade enemy trade routes. Added to
+  `ON_CAMPAIGN` context list and `MILITARY_ORDER_ACTIONS` (consistent with
+  peers RAID_HARVEST, CONDUCT_RAID, MAINTAIN_SIEGE — requires commanded
+  unit). Added explicit AP cost entry (1). 2 tests.
+
 ### Known Code Issues — Deferred (2026-05-19, metadata population audit)
 - **EXPOSE_SECRET_PRIVATELY — metadata unpopulated, always fails. FIXED.**
   Full pipeline wired: SecretData.known_by_ids tracks who knows each secret.
