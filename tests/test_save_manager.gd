@@ -2,14 +2,15 @@ extends GutTest
 ## Tests for SaveManager — character sheet persistence.
 ## Uses a scratch directory (user://test_saves/) isolated from production data.
 
+const SaveManagerScript = preload("res://scripts/managers/SaveManager.gd")
 const TEST_DIR := "user://test_saves/characters/"
 
 
-var _sm: SaveManager
+var _sm: Node
 
 
 func before_each() -> void:
-	_sm = SaveManager.new()
+	_sm = SaveManagerScript.new()
 	DirAccess.make_dir_recursive_absolute(TEST_DIR)
 
 
@@ -117,7 +118,7 @@ func test_delete_nonexistent_character_does_not_error() -> void:
 # -- save_all / load_all -------------------------------------------------------
 
 func test_save_all_returns_count_of_saved_characters() -> void:
-	var chars: Array = [
+	var chars: Array[L5RCharacterData] = [
 		_make_character(100),
 		_make_character(101),
 		_make_character(102),
@@ -127,24 +128,24 @@ func test_save_all_returns_count_of_saved_characters() -> void:
 
 
 func test_load_all_returns_all_saved_characters() -> void:
-	var chars: Array = [
+	var chars: Array[L5RCharacterData] = [
 		_make_character(200),
 		_make_character(201),
 		_make_character(202),
 	]
 	_sm.save_all(chars, TEST_DIR)
-	var loaded: Array = _sm.load_all(TEST_DIR)
+	var loaded: Array[L5RCharacterData] = _sm.load_all(TEST_DIR)
 	assert_eq(loaded.size(), 3, "load_all should find all 3 saved characters")
 
 
 func test_load_all_restores_correct_ids() -> void:
-	var chars: Array = [
+	var chars: Array[L5RCharacterData] = [
 		_make_character(300),
 		_make_character(301),
 	]
 	_sm.save_all(chars, TEST_DIR)
-	var loaded: Array = _sm.load_all(TEST_DIR)
-	var ids: Array = []
+	var loaded: Array[L5RCharacterData] = _sm.load_all(TEST_DIR)
+	var ids: Array[int] = []
 	for c: L5RCharacterData in loaded:
 		ids.append(c.character_id)
 	ids.sort()
@@ -152,7 +153,7 @@ func test_load_all_restores_correct_ids() -> void:
 
 
 func test_load_all_returns_empty_for_empty_directory() -> void:
-	var loaded: Array = _sm.load_all(TEST_DIR)
+	var loaded: Array[L5RCharacterData] = _sm.load_all(TEST_DIR)
 	assert_eq(loaded.size(), 0, "Empty directory should yield no characters")
 
 
@@ -161,7 +162,8 @@ func test_save_all_overwrites_existing_file_with_updated_data() -> void:
 	_sm.save_character(c, TEST_DIR)
 
 	c.stamina = 5
-	_sm.save_all([c], TEST_DIR)
+	var batch: Array[L5RCharacterData] = [c]
+	_sm.save_all(batch, TEST_DIR)
 
 	var loaded: L5RCharacterData = _sm.load_character(400, TEST_DIR)
 	assert_eq(loaded.stamina, 5, "Overwrite should persist updated stamina")
