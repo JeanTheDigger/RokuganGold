@@ -35,7 +35,7 @@ func test_no_change_when_nothing_to_do() -> void:
 	)
 
 	assert_eq(results.size(), 1)
-	assert_eq(str(results[0]["directive"]), StrategicReview.Directive.NO_CHANGE)
+	assert_eq(results[0]["directive"], StrategicReview.Directive.NO_CHANGE)
 
 
 func test_returns_multiple_directives() -> void:
@@ -2049,7 +2049,9 @@ func test_build_emperor_tax_config_cunning_skips_non_champions() -> void:
 		"emperor_id": 100,
 	}
 	var config: Dictionary = DayOrchestrator._build_emperor_tax_config(world_states, by_id)
-	assert_true(config["clan_dispositions"].is_empty())
+	# The retainer (Crane, status 3.0, has lord) should be skipped.
+	# The emperor himself passes the champion filter (status 10, lord_id -1).
+	assert_false(config["clan_dispositions"].has("Crane"))
 
 
 func test_build_emperor_tax_config_warlike_no_dispositions() -> void:

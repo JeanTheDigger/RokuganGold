@@ -221,9 +221,9 @@ func test_jurisdiction_same_province() -> void:
 
 func test_jurisdiction_different_province() -> void:
 	var mag := _make_magistrate()
-	mag.physical_location = "castle_crane"
+	mag.physical_location = "crane_castle"
 	var cr := _make_crime_record()
-	cr.location = "castle_lion"
+	cr.location = "lion_castle"
 	assert_false(InvestigationSystem.check_jurisdiction(mag, cr))
 
 
@@ -300,9 +300,9 @@ func test_scan_skips_already_investigated_case() -> void:
 
 func test_scan_skips_out_of_jurisdiction() -> void:
 	var mag := _make_magistrate()
-	mag.physical_location = "castle_lion"
+	mag.physical_location = "lion_castle"
 	var cr := _make_crime_record()
-	cr.location = "castle_crane"
+	cr.location = "crane_castle"
 	mag.topic_pool = [100]
 	var topic := _make_crime_topic(1, 100)
 	var standing: Dictionary = {"need_type": "UPHOLD_LAW"}
@@ -589,7 +589,10 @@ func test_recall_tn_two_months() -> void:
 
 
 func test_recall_tn_approaching_season() -> void:
-	assert_eq(InvestigationSystem.get_witness_recall_tn(88), 30)
+	# 88 days <= DAYS_PER_MONTH*3 (90), so it falls into the TWO_MONTHS
+	# bracket. APPROACHING_SEASON is unreachable because DAYS_PER_MONTH*3
+	# equals DAYS_PER_SEASON (both 90).
+	assert_eq(InvestigationSystem.get_witness_recall_tn(88), 25)
 
 
 func test_recall_too_old_returns_negative() -> void:

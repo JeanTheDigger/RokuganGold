@@ -261,7 +261,7 @@ func test_full_no_objective_no_personality() -> void:
 
 func test_full_personality_aggression_raid() -> void:
 	var r: Dictionary = WarJustification.evaluate_war_justification(
-		"ACCUMULATE_KNOWLEDGE", "", WarJustification.MilitaryTier.RAID, "Yu",
+		"RAISE_DISPOSITION", "", WarJustification.MilitaryTier.RAID, "Yu",
 		true, true, true,
 	)
 	assert_true(r["justified"])
@@ -270,7 +270,7 @@ func test_full_personality_aggression_raid() -> void:
 
 func test_full_personality_aggression_weakness_fails() -> void:
 	var r: Dictionary = WarJustification.evaluate_war_justification(
-		"ACCUMULATE_KNOWLEDGE", "", WarJustification.MilitaryTier.RAID, "Yu",
+		"RAISE_DISPOSITION", "", WarJustification.MilitaryTier.RAID, "Yu",
 		false, true, true,
 	)
 	assert_false(r["justified"])
@@ -279,7 +279,7 @@ func test_full_personality_aggression_weakness_fails() -> void:
 
 func test_full_personality_formal_war_needs_2x() -> void:
 	var r: Dictionary = WarJustification.evaluate_war_justification(
-		"ACCUMULATE_KNOWLEDGE", "", WarJustification.MilitaryTier.FORMAL_WAR, "Yu",
+		"RAISE_DISPOSITION", "", WarJustification.MilitaryTier.FORMAL_WAR, "Yu",
 		true, true, true, 10.0, 6.0,
 	)
 	assert_false(r["justified"])
@@ -288,7 +288,7 @@ func test_full_personality_formal_war_needs_2x() -> void:
 
 func test_full_personality_formal_war_passes_2x() -> void:
 	var r: Dictionary = WarJustification.evaluate_war_justification(
-		"ACCUMULATE_KNOWLEDGE", "", WarJustification.MilitaryTier.FORMAL_WAR, "Yu",
+		"RAISE_DISPOSITION", "", WarJustification.MilitaryTier.FORMAL_WAR, "Yu",
 		true, true, true, 12.0, 5.0,
 	)
 	assert_true(r["justified"])

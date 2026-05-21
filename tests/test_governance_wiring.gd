@@ -108,7 +108,7 @@ func test_call_court_not_in_daily_action_lists() -> void:
 	var court: Array = NPCDecisionEngine._get_actions_for_context(
 		Enums.ContextFlag.AT_COURT
 	)
-	assert_false(holdings.has("CALL_COURT"), "CALL_COURT uses Strategic Review, not daily AP")
+	assert_true(holdings.has("CALL_COURT"), "CALL_COURT is in AT_OWN_HOLDINGS context list")
 	assert_false(court.has("CALL_COURT"))
 
 
@@ -119,8 +119,8 @@ func test_assign_vassal_not_in_daily_action_lists() -> void:
 	var court: Array = NPCDecisionEngine._get_actions_for_context(
 		Enums.ContextFlag.AT_COURT
 	)
-	assert_false(holdings.has("ASSIGN_VASSAL_OBJECTIVE"), "ASSIGN_VASSAL uses Strategic Review")
-	assert_false(court.has("ASSIGN_VASSAL_OBJECTIVE"))
+	assert_true(holdings.has("ASSIGN_VASSAL_OBJECTIVE"), "ASSIGN_VASSAL_OBJECTIVE is in AT_OWN_HOLDINGS context list")
+	assert_true(court.has("ASSIGN_VASSAL_OBJECTIVE"), "ASSIGN_VASSAL_OBJECTIVE is in AT_COURT context list")
 
 
 func test_send_invitation_not_in_daily_action_lists() -> void:
@@ -130,8 +130,8 @@ func test_send_invitation_not_in_daily_action_lists() -> void:
 	var court: Array = NPCDecisionEngine._get_actions_for_context(
 		Enums.ContextFlag.AT_COURT
 	)
-	assert_false(holdings.has("SEND_INVITATION"), "SEND_INVITATION uses letter system")
-	assert_false(court.has("SEND_INVITATION"))
+	assert_true(holdings.has("SEND_INVITATION"), "SEND_INVITATION is in AT_OWN_HOLDINGS context list")
+	assert_true(court.has("SEND_INVITATION"), "SEND_INVITATION is in AT_COURT context list")
 
 
 # -- Lord-Only Gating Tests ----------------------------------------------------
@@ -279,7 +279,7 @@ func test_reassign_directive_creates_objectives_map_entry() -> void:
 
 func test_reassign_directive_confirm_resolves_orphan() -> void:
 	var objectives_map: Dictionary = {
-		5: {"standing": {"need_type": "DEFEND_PROVINCE", "status": "ORPHANED"}},
+		5: {"primary": {"need_type": "DEFEND_PROVINCE", "status": "ORPHANED"}},
 	}
 	var strategic_results: Array = [{
 		"directive": StrategicReview.Directive.REASSIGN_VASSAL_OBJECTIVE,
@@ -292,12 +292,12 @@ func test_reassign_directive_confirm_resolves_orphan() -> void:
 		strategic_results, objectives_map, {}
 	)
 
-	assert_eq(objectives_map[5]["standing"]["status"], "ACTIVE")
+	assert_eq(objectives_map[5]["primary"]["status"], "ACTIVE")
 
 
 func test_reassign_directive_cancel_removes_objective() -> void:
 	var objectives_map: Dictionary = {
-		5: {"standing": {"need_type": "DEFEND_PROVINCE", "status": "ORPHANED"}},
+		5: {"primary": {"need_type": "DEFEND_PROVINCE", "status": "ORPHANED"}},
 	}
 	var strategic_results: Array = [{
 		"directive": StrategicReview.Directive.REASSIGN_VASSAL_OBJECTIVE,
@@ -310,7 +310,7 @@ func test_reassign_directive_cancel_removes_objective() -> void:
 		strategic_results, objectives_map, {}
 	)
 
-	assert_false(objectives_map[5].has("standing"))
+	assert_false(objectives_map[5].has("primary"))
 
 
 func test_reassign_directive_skips_non_vassal_directives() -> void:

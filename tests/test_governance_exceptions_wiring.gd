@@ -141,7 +141,8 @@ func test_togashi_runs_when_fc_present() -> void:
 		state, directives, chars, chars_by_id, {}, topics, next_tid, 0,
 	)
 	assert_false(result.is_empty())
-	assert_false(result.get("skipped", true))
+	# When oversight runs but no intervention fires, "skipped" key is absent.
+	assert_false(result.get("skipped", false))
 
 
 func test_find_mirumoto_fc_picks_highest_status() -> void:

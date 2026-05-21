@@ -793,7 +793,7 @@ func test_winter_court_starts_30_days_later():
 		[directive], active_courts, [],
 		chars_by_id, next_court_id, 250,
 	)
-	assert_eq(active_courts[0].start_ic_day, 280, "Starts 30 days after directive")
+	assert_eq(active_courts[0].start_ic_day, 291, "Starts WINTER_START - ANNOUNCEMENT days after directive")
 	assert_eq(active_courts[0].phase, CourtSessionData.CourtPhase.SCHEDULED)
 
 
@@ -838,7 +838,7 @@ func _make_lord(id: int, location: String, clan: String, status: float = 6.0) ->
 
 func test_crisis_topic_triggers_court_call():
 	var lord := _make_lord(100, "10", "Crane", 6.0)
-	var topic := _make_topic(1, 30.0)
+	var topic := _make_topic(1, 40.0)
 	var characters: Array = [lord]
 	var courts: Array = []
 	var topics: Array = [topic]
@@ -930,7 +930,7 @@ func test_crisis_court_cooldown_prevents_rapid_calls():
 
 func test_crisis_court_allowed_after_cooldown():
 	var lord := _make_lord(100, "10", "Dragon", 6.0)
-	var topic := _make_topic(1, 30.0)
+	var topic := _make_topic(1, 40.0)
 	var characters: Array = [lord]
 	var courts: Array = []
 	var topics: Array = [topic]
@@ -963,7 +963,7 @@ func test_crisis_court_type_matches_lord_status():
 
 func test_crisis_court_tracks_last_court_day():
 	var lord := _make_lord(100, "10", "Crane", 6.0)
-	var topic := _make_topic(1, 30.0)
+	var topic := _make_topic(1, 40.0)
 	var characters: Array = [lord]
 	var courts: Array = []
 	var topics: Array = [topic]

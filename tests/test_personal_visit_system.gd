@@ -10,7 +10,7 @@ func test_initiate_visit_creates_record():
 	assert_eq(visit["host_id"], 2)
 	assert_eq(visit["visit_type"], PersonalVisitSystem.VisitType.INVITATION_SENT)
 	assert_eq(visit["initiated_ic_day"], 50)
-	assert_false(visit["active"])
+	assert_eq(visit["state"], PersonalVisitSystem.VisitState.INITIATED)
 
 
 func test_initiate_uninvited_visit():

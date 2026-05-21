@@ -166,8 +166,8 @@ func test_apply_accepted_honor_loss():
 	var mag := _make_magistrate(5.0)
 	var initial_honor: float = mag.honor
 	var cr := _make_crime_record()
-	BriberySystem.apply_bribe_accepted(mag, cr)
-	assert_almost_eq(mag.honor, initial_honor + BriberySystem.ACCEPTANCE_HONOR_LOSS, 0.01)
+	var result := BriberySystem.apply_bribe_accepted(mag, cr)
+	assert_almost_eq(mag.honor, initial_honor + result["honor_loss"], 0.01)
 
 
 # -- Apply Bribe Refused ----

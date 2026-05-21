@@ -869,8 +869,9 @@ func test_tick_order_reconstitution_returns_true_on_completion():
 
 func test_tick_order_reconstitution_no_op_at_zero():
 	_state["order_reconstitution_seasons_remaining"] = 0
+	_state["togashi_vanished"] = true
 	var done: bool = TogashiOversight.tick_order_reconstitution(_state)
-	# Returns false when already zero and not yet reappeared.
+	# Returns false when already zero but togashi still vanished.
 	assert_false(done)
 
 

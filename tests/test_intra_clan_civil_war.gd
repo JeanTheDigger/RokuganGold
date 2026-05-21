@@ -211,13 +211,15 @@ func test_apply_seasonal_consequences_bleeds_provinces_and_honor() -> void:
 	assert_eq(result["penalty_applied"], -3)
 	assert_eq(p1.stability, 77.0)
 	assert_eq(p2.stability, 57.0)
-	assert_almost_eq(_rebel.honor, 4.7, 0.001)
+	# Honor 5.0, rank 5, bracket 3, DISLOYALTY[3]=-10 => cost -1.0
+	assert_almost_eq(_rebel.honor, 4.0, 0.001)
 
 
 func test_seasonal_consequences_honor_floors_at_zero() -> void:
 	_rebel.honor = 0.1
 	IntraClanCivilWar.apply_seasonal_consequences(_state, _rebel, [], 101)
-	assert_eq(_rebel.honor, 0.0)
+	# Honor 0.1, rank 0, bracket 0, DISLOYALTY[0]=0 => no change
+	assert_almost_eq(_rebel.honor, 0.1, 0.001)
 
 
 func test_seasonal_consequences_suppress_hemorrhage_skips_honor_loss() -> void:
@@ -235,7 +237,8 @@ func test_seasonal_consequences_suppress_false_still_bleeds() -> void:
 	var result: Dictionary = IntraClanCivilWar.apply_seasonal_consequences(
 		_state, _rebel, [], 101, false
 	)
-	assert_almost_eq(_rebel.honor, 4.7, 0.001)
+	# Honor 5.0, rank 5, bracket 3, DISLOYALTY[3]=-10 => cost -1.0
+	assert_almost_eq(_rebel.honor, 4.0, 0.001)
 	assert_false(result["hemorrhage_suppressed"])
 
 
@@ -451,7 +454,8 @@ func test_defection_costs_half_honor() -> void:
 	var defector: L5RCharacterData = _make_npc(50)
 	defector.honor = 4.0
 	IntraClanCivilWar.apply_defection_consequences(defector, [])
-	assert_almost_eq(defector.honor, 3.5, 0.001)
+	# Honor 4.0, rank 4, bracket 2, DISLOYALTY[2]=-6 => cost -0.6
+	assert_almost_eq(defector.honor, 3.4, 0.001)
 
 
 func test_defection_creates_disposition_penalty_among_former_allies() -> void:

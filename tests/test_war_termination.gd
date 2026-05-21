@@ -290,12 +290,12 @@ func test_negotiate_surrender_roll_failure() -> void:
 
 func test_negotiate_surrender_not_combatant() -> void:
 	var c: L5RCharacterData = _make_character("Lion")
-	var ctx_war: Dictionary = {"war": _war, "own_clan": "Lion", "enemy_clan": ""}
+	var ctx_war: Dictionary = {"war": null, "own_clan": "Lion", "enemy_clan": ""}
 	var result: Dictionary = WarTermination.resolve_negotiate_surrender(
 		c, ctx_war, "Gi", false, false, _dice,
 	)
 	assert_true(result["failed"])
-	assert_eq(result["reason"], "not_a_combatant")
+	assert_eq(result["reason"], "no_active_war")
 
 
 # -- Topic Generation ---------------------------------------------------------

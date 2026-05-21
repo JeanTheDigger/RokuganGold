@@ -255,6 +255,7 @@ func test_decomposer_triage_falls_through_to_adjust_tax() -> void:
 	ctx.character_id = 1
 	ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
 	ctx.province_statuses = [_make_province(10, 100.0, 5, -1, -1, 2)]
+	ctx.resource_stockpiles = {"rice": 100.0, "population_pu": 10.0}
 
 	var objective: Dictionary = {"need_type": "MAXIMIZE_PROSPERITY"}
 	var result: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(

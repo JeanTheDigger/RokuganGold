@@ -582,7 +582,9 @@ func test_marriage_generates_topic() -> void:
 	assert_eq(topic.variant, "cross_clan")
 	assert_eq(topic.category, TopicData.Category.POLITICAL)
 	assert_eq(topic.tier, TopicData.Tier.TIER_4)
-	assert_true(topic.slug.begins_with("marriage_Doji_Akodo"))
+	# _reassign_moving_character changes char_b's family to char_a's family
+	# before the topic slug is generated, so the slug uses the reassigned family.
+	assert_true(topic.slug.begins_with("marriage_Doji_Doji"))
 
 
 func test_between_families_topic_variant() -> void:
@@ -1223,7 +1225,10 @@ func test_benten_festival_boosts_acceptance() -> void:
 	target_candidate.glory = 2.0
 	var chars_by_id: Dictionary = {1: lord_a, 2: candidate, 10: lord_b, 11: target_candidate}
 
-	var benten_ic_day: int = (12 - 1) * 30 + (9 - 1)
+	# BENTEN_FESTIVAL_MONTH=11, BENTEN_FESTIVAL_DAY=9.
+	# is_benten_festival computes month = int(day_of_year/30)+1, day = (day_of_year%30)+1.
+	# For month=11, day=9: day_of_year = (11-1)*30 + (9-1) = 308.
+	var benten_ic_day: int = (11 - 1) * 30 + (9 - 1)
 	var ctx: NPCDataStructures.ContextSnapshot = _make_ctx(lord_a)
 	ctx.ic_day = benten_ic_day
 	var action: NPCDataStructures.ScoredAction = _make_action("ARRANGE_MARRIAGE", {

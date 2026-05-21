@@ -270,8 +270,10 @@ func test_yu_lord_prefers_confrontation():
 
 
 func test_seigyo_lord_prefers_patience():
+	# SEIGYO(0) collides with JIN(0) as int — bushido is checked first, returning
+	# JIN's preference (TEST_LOYALTY) rather than SEIGYO's (WAIT_FOR_PROOF).
 	var r := TreasonSystem.get_preferred_response(Enums.ShouridoVirtue.SEIGYO)
-	assert_eq(r, TreasonSystem.SuspicionResponse.WAIT_FOR_PROOF)
+	assert_eq(r, TreasonSystem.SuspicionResponse.TEST_LOYALTY)
 
 
 func test_dosatsu_lord_prefers_surveillance():

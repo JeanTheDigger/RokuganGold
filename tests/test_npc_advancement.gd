@@ -460,8 +460,10 @@ func test_seasonal_advancement_multiple_characters():
 	var c1 := _make_character(1)
 	var c2 := _make_courtier()
 	c1.military_rank = Enums.MilitaryRank.GUNSO
-	c1.xp_total = 50
-	c2.xp_total = 50
+	# Need enough XP so progress exceeds ring cost and spills into skills.
+	# Earth ring rank 2→3 costs 12000 progress (60 XP). Additional skills cost 2000–3000.
+	c1.xp_total = 100
+	c2.xp_total = 100
 	var result: Dictionary = NPCAdvancement.process_seasonal_advancement([c1, c2], {}, 90)
 	# Both should have advancement results
 	assert_true(result["results"].size() >= 1)

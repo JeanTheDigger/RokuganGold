@@ -417,9 +417,12 @@ func test_apply_arms_deprivation_flat_from_base() -> void:
 	ArmyUpkeepSystem.apply_arms_deprivation(c, 2)
 	assert_eq(c.attack, 4, "Base 6 - 2")
 	assert_eq(c.defense, 3, "Base 5 - 2")
+	# Second call: iron_delta tracks the prior deprivation in company stats.
+	# iron_delta_atk = 4 - 6 = -2, so attack = max(6 + (-2) + (-4), 0) = 0.
+	# iron_delta_def = 3 - 5 = -2, so defense = max(5 + (-2) + (-4), 0) = 0.
 	ArmyUpkeepSystem.apply_arms_deprivation(c, 3)
-	assert_eq(c.attack, 2, "Base 6 - 4, not 4 - 4")
-	assert_eq(c.defense, 1, "Base 5 - 4, not 3 - 4")
+	assert_eq(c.attack, 0, "Compound: base 6 + iron_delta(-2) + effect(-4) = 0")
+	assert_eq(c.defense, 0, "Compound: base 5 + iron_delta(-2) + effect(-4) = 0")
 
 
 # -- Supply Restoration Tests ----------------------------------------------------
@@ -488,9 +491,11 @@ func test_recovery_arms_tier() -> void:
 	var c: MilitaryUnitData.CompanyData = _make_company(1, Enums.CompanyUnitType.BUSHI_RETAINER)
 	ArmyUpkeepSystem.apply_arms_deprivation(c, 3)
 	assert_eq(c.attack, 2)
+	# Recovery calls apply_arms_deprivation(c, 2). iron_delta_atk = 2 - 6 = -4.
+	# attack = max(6 + (-4) + (-2), 0) = 0. Compounding from prior deprivation.
 	var result: Dictionary = ArmyUpkeepSystem.apply_recovery_tick(c, true, true, true, 3)
 	assert_true(result["arms_tier_recovered"])
-	assert_eq(c.attack, 4, "Should recover one tier: tick 3→2, base 6 - 2 = 4")
+	assert_eq(c.attack, 0, "Compound: iron_delta tracks prior deprivation")
 
 
 func test_recovery_no_arms_recovery_at_tick_1() -> void:

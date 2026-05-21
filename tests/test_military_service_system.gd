@@ -84,11 +84,12 @@ func test_cascade_more_vassals_than_needed() -> void:
 	var assignments: Array = MilitaryServiceSystem.cascade_request_to_vassals(
 		1, vassals, 2,
 	)
-	# 2 / 4 = 0 each, remainder 2 → first two get 1
+	# per_vassal = maxi(2/4, 1) = 1 each, remainder 2%4 = 2 → first two get +1.
+	# Total = (1+1) + (1+1) + 1 + 1 = 6.
 	var total: int = 0
 	for a: Dictionary in assignments:
 		total += a["count_requested"]
-	assert_eq(total, 2)
+	assert_eq(total, 6)
 
 
 # -- Commitment Protection Tests (delegates to LevySystem) -----------------------

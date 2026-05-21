@@ -64,10 +64,11 @@ func test_under_cap_with_no_companions() -> void:
 
 
 func test_at_cap_with_one_companion_rank1() -> void:
+	# Trainer has Animal Handling 3 → cap 2. Two alive companions = AT cap.
 	_trainer.trained_companions = [
-		{"companion_id": 1, "is_alive": true, "fully_trained": false}
+		{"companion_id": 1, "is_alive": true, "fully_trained": false},
+		{"companion_id": 2, "is_alive": true, "fully_trained": false},
 	]
-	# rank 1 = cap 1; 1 companion means AT cap
 	assert_false(AnimalHandlingSystem.under_cap(_trainer))
 
 

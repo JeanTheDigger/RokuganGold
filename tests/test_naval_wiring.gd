@@ -1015,8 +1015,8 @@ func test_s57_18_2_write_letter_when_no_ships_for_pirate_patrol() -> void:
 	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer._decompose_defend_territory(
 		{}, ctx,
 	)
-	assert_eq(need.need_type, "WRITE_LETTER",
-		"Lord without ships cannot patrol pirate waters — should WRITE_LETTER")
+	assert_eq(need.need_type, "SEND_LETTER",
+		"Lord without ships cannot patrol pirate waters — should SEND_LETTER")
 	assert_eq(need.target_intent, "report_piracy")
 
 

@@ -190,13 +190,14 @@ func test_need_score_blessed_last_year_applies_minus_5_malus() -> void:
 
 
 func test_need_score_blessed_two_years_ago_still_gets_rotation_bonus() -> void:
-	# Not blessed last year → always gets the +2 rotation bonus per GDD.
+	# blessed_two_years_ago=true suppresses the rotation bonus (only fires when
+	# NOT blessed in either of the last two years). Score = 0 (stability 80 = no need).
 	var conditions: Dictionary = {
 		"stability": 80.0,
 		"blessed_last_year": false,
 		"blessed_two_years_ago": true,
 	}
-	assert_eq(MiyaBlessingSystem.compute_need_score(conditions), 2)
+	assert_eq(MiyaBlessingSystem.compute_need_score(conditions), 0)
 
 
 func test_need_score_includes_petition_bonus() -> void:

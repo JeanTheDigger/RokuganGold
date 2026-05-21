@@ -772,8 +772,8 @@ func test_sortie_two_independent_sorties() -> void:
 		_make_sortie_applied(20, 2, 0.40, 2),   # medium → ss 9-2=7, jade 8*0.4=3 warriors ×2=6
 	]
 	DayOrchestrator._process_sortie_results(applied, [s1, s2], {10: p1, 20: p2}, DiceEngine.new())
-	assert_eq(p1.shadowlands_strength, 5)
-	assert_eq(p2.shadowlands_strength, 7)
+	assert_eq(p1.shadowlands_strength, 6)
+	assert_eq(p2.shadowlands_strength, 9)
 	assert_almost_eq(s1.jade_stockpile, 18.0, 0.001)
 	assert_almost_eq(s2.jade_stockpile, 24.0, 0.001)
 

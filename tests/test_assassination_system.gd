@@ -907,6 +907,7 @@ func test_bodyguard_decision_high_combat_fights() -> void:
 func test_bodyguard_decision_stealthy_goes_for_target() -> void:
 	_assassin.skills["Stealth"] = 6
 	_assassin.skills["Kenjutsu"] = 2
+	_assassin.skills["Ninjutsu"] = 0
 	var s: Dictionary = AssassinationSystem.create_assassination_state(1, 2, AssassinationSystem.ExecutionMethod.BLADE, 0)
 	assert_eq(AssassinationSystem.evaluate_bodyguard_response(_assassin, s), AssassinationSystem.BodyguardResponse.GO_FOR_TARGET)
 

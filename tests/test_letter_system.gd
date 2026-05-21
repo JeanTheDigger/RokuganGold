@@ -420,10 +420,12 @@ func test_ocean_letter_blocked_by_blockade():
 	var letter: LetterData = LetterSystem.write_letter(
 		1, sender, 2, 5, 0, dice, 0, 0, 0, 1
 	)
+	# Ocean transit = 1 * OCEAN_SEGMENT_DELAY(2) = 2 days. ic_day_arrival = 2.
+	# Must process at ic_day >= 2 so the letter is due for delivery.
 	var wars: Array = [{"has_naval_component": true}]
 	var pending: Array = [letter]
 	var results: Array = LetterSystem.process_pending_letters(
-		pending, chars, 0, 1, log, wars
+		pending, chars, 2, 1, log, wars
 	)
 	assert_eq(results.size(), 0)
 	assert_true(letter.blocked_by_blockade)
@@ -440,10 +442,12 @@ func test_overland_letter_not_blocked_by_blockade():
 	var letter: LetterData = LetterSystem.write_letter(
 		1, sender, 2, 5, 0, dice, 3
 	)
+	# Overland transit = ceil(3/3) = 1 day. ic_day_arrival = 1.
+	# Must process at ic_day >= 1 so the letter is due for delivery.
 	var wars: Array = [{"has_naval_component": true}]
 	var pending: Array = [letter]
 	var results: Array = LetterSystem.process_pending_letters(
-		pending, chars, 0, 1, log, wars
+		pending, chars, 1, 1, log, wars
 	)
 	assert_eq(results.size(), 1)
 	assert_false(letter.blocked_by_blockade)
@@ -808,8 +812,9 @@ func test_exchange_bonus_applied_when_reply_delivered():
 	var pending: Array = [reply]
 	LetterSystem.process_pending_letters(pending, chars, 0, 1, log)
 
-	# Exchange bonus: both get +1
-	assert_eq(sender.disposition_values[2], 31)
+	# Reply delivery applies calligraphy quality disposition bonus (2) to
+	# the reply's recipient (sender of the original), plus exchange bonus (+1).
+	assert_eq(sender.disposition_values[2], 33)
 	assert_eq(recipient.disposition_values[1], 51)
 
 func test_generate_replies_uses_original_route():

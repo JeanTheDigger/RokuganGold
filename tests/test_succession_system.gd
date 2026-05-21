@@ -408,7 +408,7 @@ func test_yu_boosts_achievements() -> void:
 	var weights := SuccessionSystem.compute_personality_weights(
 		Enums.BushidoVirtue.YU, Enums.ShouridoVirtue.NONE)
 	assert_eq(weights["achievements"], 18)
-	assert_eq(weights["disposition"], 7)
+	assert_eq(weights["disposition"], 10)
 
 
 func test_ishi_boosts_birth_order_reduces_others() -> void:

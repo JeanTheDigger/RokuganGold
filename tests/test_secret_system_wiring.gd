@@ -249,5 +249,7 @@ func test_freed_states_removed() -> void:
 	var bs: Dictionary = BoundEscapeSystem.create_bound_state(10, 3, BoundEscapeSystem.BindingMaterial.SIMPLE_ROPE, 100)
 	bs["state"] = BoundEscapeSystem.BoundState.FREE
 	var bound_states: Array = [bs]
-	DayOrchestrator._process_bound_states(bound_states, {}, _engine, 101)
+	var c := L5RCharacterData.new()
+	c.character_id = 10
+	DayOrchestrator._process_bound_states(bound_states, {10: c}, _engine, 101)
 	assert_eq(bound_states.size(), 0)

@@ -123,6 +123,7 @@ func test_make_ronin_clears_operational_hierarchy():
 
 func test_is_ronin_true():
 	var c := _make_samurai()
+	c.status = 0.5
 	RoninSystem.make_ronin(c, RoninSystem.RoninCause.LORD_DEATH_NO_HEIR)
 	assert_true(RoninSystem.is_ronin(c))
 
@@ -302,6 +303,7 @@ func test_process_seasonal_skips_dead():
 
 func test_process_seasonal_detects_debt():
 	var c := _make_samurai()
+	c.status = 0.5
 	RoninSystem.make_ronin(c, RoninSystem.RoninCause.DISMISSAL)
 	RoninSystem.mark_ronin_start(c, 10)
 	var result: Dictionary = RoninSystem.process_seasonal_ronin([c], 14)
@@ -309,6 +311,7 @@ func test_process_seasonal_detects_debt():
 
 func test_process_seasonal_detects_desperate():
 	var c := _make_samurai()
+	c.status = 0.5
 	RoninSystem.make_ronin(c, RoninSystem.RoninCause.DISMISSAL)
 	RoninSystem.mark_ronin_start(c, 10)
 	var result: Dictionary = RoninSystem.process_seasonal_ronin([c], 18)
@@ -316,6 +319,7 @@ func test_process_seasonal_detects_desperate():
 
 func test_process_seasonal_insurgency_seeds():
 	var c := _make_samurai()
+	c.status = 0.5
 	c.bushido_virtue = Enums.BushidoVirtue.YU
 	RoninSystem.make_ronin(c, RoninSystem.RoninCause.DISMISSAL)
 	RoninSystem.mark_ronin_start(c, 10)
@@ -334,6 +338,8 @@ func test_process_seasonal_multiple_characters():
 	var c1 := _make_samurai(1)
 	var c2 := _make_samurai(2)
 	c2.character_id = 2
+	c1.status = 0.5
+	c2.status = 0.5
 	c1.bushido_virtue = Enums.BushidoVirtue.YU
 	c2.bushido_virtue = Enums.BushidoVirtue.CHUGI
 	RoninSystem.make_ronin(c1, RoninSystem.RoninCause.DISMISSAL)

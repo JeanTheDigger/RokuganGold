@@ -244,6 +244,7 @@ func test_introduction_kuge_sets_disposition_2() -> void:
 
 func test_introduction_does_not_overwrite_existing_disposition() -> void:
 	_char_a.disposition_values[2] = 30
+	_char_a.met_characters.append(2)
 	InformationSystem.process_introduction(_char_a, _char_b, false, 1)
 	assert_eq(_char_a.disposition_values[2], 30)
 

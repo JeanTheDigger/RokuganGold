@@ -36,9 +36,9 @@ func _make_character(honor: float = 5.0) -> L5RCharacterData:
 # -- Surplus Calculation -------------------------------------------------------
 
 func test_surplus_positive():
-	var s := _make_settlement(1, 1, 10.0, 1000)
+	var s := _make_settlement(1, 1, 10.0, 4)
 	var surplus: float = RiceMarketSystem.compute_surplus(s, 4)
-	# need = 1000 * 0.001 * 4 = 4.0
+	# need = 4 * 0.25 * 4 = 4.0
 	assert_almost_eq(surplus, 6.0, 0.01)
 
 

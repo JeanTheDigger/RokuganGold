@@ -69,7 +69,7 @@ func test_dragon_dragonfly_baseline_plus_20() -> void:
 
 func test_unlisted_clan_pair_is_zero() -> void:
 	assert_eq(
-		CollectiveDisposition.get_clan_baseline("Sparrow", "Wasp", _clan_baselines),
+		CollectiveDisposition.get_clan_baseline("Badger", "Hare", _clan_baselines),
 		0,
 	)
 
