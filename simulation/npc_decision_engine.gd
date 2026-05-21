@@ -328,7 +328,8 @@ static func generate_options(
 	# Reactive-event ActionIDs are scoped to their triggering need.source rather
 	# than added to general context lists. The scoring branches at lines below
 	# (BRIBE_WITNESS / INTIMIDATE_WITNESS / KILL_WITNESS / FLEE_JURISDICTION /
-	# EXTORT_ACCUSED) are unreachable unless we surface the actions here.
+	# EXTORT_ACCUSED / BEGIN_TRAVEL / WRITE_LETTER) are unreachable unless we
+	# surface the actions here.
 	if need.source == "bribery_eval":
 		available_actions = available_actions + [
 			"BRIBE_WITNESS", "INTIMIDATE_WITNESS", "KILL_WITNESS",
@@ -336,6 +337,12 @@ static func generate_options(
 		]
 	elif need.source == "extortion_opportunity":
 		available_actions = available_actions + ["EXTORT_ACCUSED"]
+	elif need.source == "witness_report_motivated":
+		# Witness who saw a crime decides between traveling to a magistrate
+		# (BEGIN_TRAVEL) or sending a letter (WRITE_LETTER). The chosen action
+		# is consumed by _capture_witness_travel_intent / witness letter
+		# writeback in day_orchestrator.
+		available_actions = available_actions + ["BEGIN_TRAVEL", "WRITE_LETTER"]
 
 	for action_id: String in available_actions:
 		if _is_zone_blocked(action_id, ctx.zone_flags):

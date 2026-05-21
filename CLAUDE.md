@@ -1289,6 +1289,20 @@ costs, or forward-wiring. Do not treat as bugs.
   `ON_CAMPAIGN` context list and `MILITARY_ORDER_ACTIONS` (consistent with
   peers RAID_HARVEST, CONDUCT_RAID, MAINTAIN_SIEGE — requires commanded
   unit). Added explicit AP cost entry (1). 2 tests.
+- **Witness reporting (BEGIN_TRAVEL / WRITE_LETTER) unreachable. FIXED.**
+  When a `witness_report_motivated` reactive event fires
+  (`day_orchestrator.gd:_inject_witness_report_event`), the NPC engine
+  generates a SEEK_MAGISTRATE need with source `witness_report_motivated`.
+  Scoring branches at `npc_decision_engine.gd:2492` and `2500` populate
+  metadata for `BEGIN_TRAVEL` (travel to magistrate's location) and
+  `WRITE_LETTER` (file report by mail). Downstream writebacks exist:
+  `_capture_witness_travel_intent` (`day_orchestrator.gd:6803`) reads
+  `seek_magistrate_id` and stores travel intent, and
+  `_process_witness_letter_writebacks` (`day_orchestrator.gd:4353`) creates
+  a LetterData with the crime topic on success. Neither action was in any
+  context list, so witnesses could never act on the motivation event.
+  Added a third `need.source == "witness_report_motivated"` carve-out
+  surfacing both actions. 2 tests.
 
 ### Known Code Issues — Deferred (2026-05-19, metadata population audit)
 - **EXPOSE_SECRET_PRIVATELY — metadata unpopulated, always fails. FIXED.**

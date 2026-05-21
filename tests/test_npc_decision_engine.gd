@@ -2193,6 +2193,48 @@ func test_blockade_trade_route_reachable_on_campaign() -> void:
 	assert_has(action_ids, "BLOCKADE_TRADE_ROUTE")
 
 
+func test_witness_report_motivated_surfaces_begin_travel_and_letter() -> void:
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "SEEK_MAGISTRATE"
+	need.priority = 2
+	need.source = "witness_report_motivated"
+	need.target_npc_id = 30
+	need.target_npc_id_secondary = 99
+	need.target_intent = "case_42"
+
+	var ctx := NPCDecisionEngine.build_context(_char, _world_state)
+	var options: Array = NPCDecisionEngine.generate_options(ctx, need)
+
+	var action_ids: Array = []
+	for opt: NPCDataStructures.ScoredAction in options:
+		action_ids.append(opt.action_id)
+	assert_has(action_ids, "BEGIN_TRAVEL")
+	assert_has(action_ids, "WRITE_LETTER")
+
+
+func test_witness_report_letter_metadata_populated() -> void:
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "SEEK_MAGISTRATE"
+	need.priority = 2
+	need.source = "witness_report_motivated"
+	need.target_npc_id = 30
+	need.target_npc_id_secondary = 99
+	need.target_intent = "case_42"
+
+	var ctx := NPCDecisionEngine.build_context(_char, _world_state)
+	var options: Array = NPCDecisionEngine.generate_options(ctx, need)
+
+	var letter_opt: NPCDataStructures.ScoredAction = null
+	for opt: NPCDataStructures.ScoredAction in options:
+		if opt.action_id == "WRITE_LETTER":
+			letter_opt = opt
+			break
+	assert_not_null(letter_opt, "WRITE_LETTER option should be present")
+	assert_eq(letter_opt.target_npc_id, 30)
+	assert_eq(int(letter_opt.metadata.get("report_case_id", -1)), 42)
+	assert_eq(int(letter_opt.metadata.get("report_criminal_id", -2)), 99)
+
+
 func test_blockade_trade_route_blocked_without_commanded_unit() -> void:
 	_char.commanded_unit_id = -1
 	_char.military_rank = Enums.MilitaryRank.NONE
