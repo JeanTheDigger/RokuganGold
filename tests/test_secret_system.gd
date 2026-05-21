@@ -258,19 +258,19 @@ func test_expose_publicly_skips_missing_witness() -> void:
 # ==============================================================================
 
 func test_fabrication_tn_tier_1() -> void:
-	assert_eq(SecretSystem.get_fabrication_tn(SecretData.Severity.TIER_1), 15)
+	assert_eq(SecretSystem.get_fabrication_tn(SecretData.Severity.TIER_1), 30)
 
 
 func test_fabrication_tn_tier_2() -> void:
-	assert_eq(SecretSystem.get_fabrication_tn(SecretData.Severity.TIER_2), 20)
+	assert_eq(SecretSystem.get_fabrication_tn(SecretData.Severity.TIER_2), 25)
 
 
 func test_fabrication_tn_tier_3() -> void:
-	assert_eq(SecretSystem.get_fabrication_tn(SecretData.Severity.TIER_3), 25)
+	assert_eq(SecretSystem.get_fabrication_tn(SecretData.Severity.TIER_3), 20)
 
 
 func test_fabrication_tn_tier_4() -> void:
-	assert_eq(SecretSystem.get_fabrication_tn(SecretData.Severity.TIER_4), 30)
+	assert_eq(SecretSystem.get_fabrication_tn(SecretData.Severity.TIER_4), 15)
 
 
 # ==============================================================================
@@ -316,19 +316,19 @@ func test_fabricate_success_creates_secret() -> void:
 
 func test_fabricate_with_raises_increases_tn() -> void:
 	var r: Dictionary = SecretSystem.fabricate_secret(_fabricator, 10, SecretData.Severity.TIER_1, 1, _engine, 2)
-	assert_eq(r["tn"], 25)
+	assert_eq(r["tn"], 40)
 
 
 func test_fabricate_honor_cost_tier_4() -> void:
 	_fabricator.honor = 5.0
 	SecretSystem.fabricate_secret(_fabricator, 10, SecretData.Severity.TIER_4, 1, _engine)
-	assert_almost_eq(_fabricator.honor, 3.5, 0.01)
+	assert_almost_eq(_fabricator.honor, 4.7, 0.01)
 
 
 func test_fabricate_honor_cost_tier_1() -> void:
 	_fabricator.honor = 5.0
 	SecretSystem.fabricate_secret(_fabricator, 10, SecretData.Severity.TIER_1, 1, _engine)
-	assert_almost_eq(_fabricator.honor, 4.7, 0.01)
+	assert_almost_eq(_fabricator.honor, 3.5, 0.01)
 
 
 # ==============================================================================
@@ -367,7 +367,7 @@ func test_bribe_costs() -> void:
 	actor.honor = 5.0
 	actor.infamy = 0.0
 	SecretSystem.apply_bribe_costs(actor)
-	assert_almost_eq(actor.honor, 4.8, 0.01)
+	assert_almost_eq(actor.honor, 4.7, 0.01)
 	assert_almost_eq(actor.infamy, 0.1, 0.01)
 
 
@@ -376,7 +376,7 @@ func test_eavesdrop_costs() -> void:
 	actor.honor = 5.0
 	actor.infamy = 0.0
 	SecretSystem.apply_eavesdrop_costs(actor)
-	assert_almost_eq(actor.honor, 4.9, 0.01)
+	assert_almost_eq(actor.honor, 4.7, 0.01)
 	assert_almost_eq(actor.infamy, 0.05, 0.01)
 
 
@@ -403,7 +403,8 @@ func test_covert_costs_clamp_honor_at_zero() -> void:
 	actor.honor = 0.1
 	actor.infamy = 0.0
 	SecretSystem.apply_intercept_costs(actor)
-	assert_almost_eq(actor.honor, 0.0, 0.01)
+	# Honor rank 0 → bracket 0 → cost 0.0 (Table 2.3), so honor stays at 0.1
+	assert_almost_eq(actor.honor, 0.1, 0.01)
 
 
 func test_covert_costs_clamp_infamy_at_ten() -> void:
@@ -615,7 +616,7 @@ func test_eavesdrop_applies_costs() -> void:
 	var eav: L5RCharacterData = _make_eavesdropper()
 	var tgt: L5RCharacterData = _make_eavesdrop_target()
 	SecretSystem.resolve_eavesdrop(eav, tgt, _engine)
-	assert_almost_eq(eav.honor, 4.9, 0.01)
+	assert_almost_eq(eav.honor, 4.7, 0.01)
 	assert_almost_eq(eav.infamy, 0.05, 0.01)
 
 

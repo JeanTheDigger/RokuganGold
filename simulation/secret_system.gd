@@ -132,7 +132,7 @@ static func get_effective_severity(
 	if seasons_since_act >= 0 and seasons_since_act < RECENCY_SEASONS:
 		should_upgrade = true
 
-	if should_upgrade and sev > SecretData.Severity.TIER_1:
+	if should_upgrade and sev > SecretData.Severity.TIER_1 and sev < SecretData.Severity.TIER_4:
 		sev -= 1
 
 	return sev as SecretData.Severity
