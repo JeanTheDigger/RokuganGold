@@ -246,6 +246,7 @@ func test_generate_options_skips_order_actions_when_pool_empty() -> void:
 		if opt.action_id == "ASSESS_PROVINCE_STATUS":
 			fail_test("ASSESS_PROVINCE_STATUS should be filtered when civilian_orders_remaining == 0")
 			return
+	pass_test("No order actions found when pool is empty")
 
 
 func test_generate_options_includes_order_actions_when_pool_has_orders() -> void:

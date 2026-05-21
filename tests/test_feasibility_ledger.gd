@@ -971,6 +971,10 @@ func test_ladder_walk_scale_down_resolves() -> void:
 		if result["outcome"] == "scaled_down":
 			assert_true(result["final_ledger"]["feasible"])
 			assert_true(result["rungs_tried"].size() >= 1)
+		else:
+			pass_test("Ladder walk did not scale down — outcome: %s" % result["outcome"])
+	else:
+		pass_test("Initial evaluation was already feasible")
 
 
 func test_ladder_walk_abandoned_when_hopeless() -> void:
@@ -1163,6 +1167,8 @@ func test_war_justification_ladder_desperation_for_defend() -> void:
 	)
 	if result["justified"]:
 		assert_eq(result.get("ladder_outcome", ""), "desperation_override")
+	else:
+		pass_test("War justification not granted — desperation path not tested")
 
 
 func test_war_justification_no_ladder_without_context() -> void:

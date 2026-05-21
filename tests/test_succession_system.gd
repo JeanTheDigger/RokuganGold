@@ -779,6 +779,7 @@ func test_dead_adopted_heir_excluded() -> void:
 	var candidates := SuccessionSystem.get_candidates(deceased, chars)
 	for c in candidates:
 		assert_ne(c["id"], 30, "Dead adopted heir must be excluded")
+	pass_test("Dead adopted heir correctly excluded from candidates")
 
 
 func test_adopted_heir_wrong_clan_excluded() -> void:
@@ -789,6 +790,7 @@ func test_adopted_heir_wrong_clan_excluded() -> void:
 	var candidates := SuccessionSystem.get_candidates(deceased, chars)
 	for c in candidates:
 		assert_ne(c["id"], 31, "Adopted heir from wrong clan must be excluded")
+	pass_test("Wrong-clan adopted heir correctly excluded from candidates")
 
 
 func test_adopted_heir_not_duplicated_if_also_designated() -> void:

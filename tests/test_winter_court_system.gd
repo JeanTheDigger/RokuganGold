@@ -938,6 +938,7 @@ func test_summons_skips_non_champion_characters() -> void:
 	)
 	for letter: LetterData in pending_letters:
 		assert_ne(letter.recipient_id, 40, "Non-champion should not receive summons")
+	pass_test("No summons sent to non-champion vassal")
 
 
 func test_summons_zero_when_no_dice_engine() -> void:

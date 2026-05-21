@@ -497,6 +497,7 @@ func test_transfer_province_wrong_id_ignored() -> void:
 	)
 	for e: KnowledgeEntry in transferred:
 		assert_ne(e.entry_type, "province_status")
+	pass_test("No province_status entry transferred for mismatched province ID")
 
 
 # -- Collective Disposition Seed Wiring (s12.2b) -----------------------------

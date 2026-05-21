@@ -388,8 +388,8 @@ func test_kobune_first_round_attack_bonus() -> void:
 	# Net: -2 boarding penalty + 1 kobune bonus = -1 total
 	var atk := _make_attacker(1, Enums.ShipClass.KOBUNE, 0)
 	var def := _make_defender(2, Enums.ShipClass.KOBUNE, 0)
-	# Just verify it doesn't crash — exact outcome depends on dice
-	var _dmg: int = NavalCombatSystem._compute_naval_damage(atk, def, _dice, true)
+	var dmg: int = NavalCombatSystem._compute_naval_damage(atk, def, _dice, true)
+	assert_true(dmg >= 0, "Kobune first-round damage should be non-negative")
 
 
 # =============================================================================

@@ -112,7 +112,7 @@ func test_delete_removes_file() -> void:
 
 func test_delete_nonexistent_character_does_not_error() -> void:
 	_sm.delete_character(99999, TEST_DIR)
-	pass  # No error = pass
+	pass_test("No error when deleting nonexistent character")
 
 
 # -- save_all / load_all -------------------------------------------------------

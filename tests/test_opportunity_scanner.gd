@@ -198,6 +198,7 @@ func test_scan_military_no_imbalance() -> void:
 	)
 	for opp: OpportunityScanner.Opportunity in opps:
 		assert_ne(opp.objective_type, "BUILD_STRONGEST_FORCE")
+	pass_test("No BUILD_STRONGEST_FORCE opportunity when clans are balanced")
 
 
 func test_scan_military_taint_detected() -> void:

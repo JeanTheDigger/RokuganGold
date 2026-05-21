@@ -1329,3 +1329,4 @@ func test_reply_to_detected_forgery_not_tagged():
 	for reply: LetterData in replies:
 		assert_false(reply.reply_to_forged,
 			"Reply to detected forgery should NOT be tagged")
+	pass_test("No reply tagged as reply_to_forged for detected forgery")

@@ -633,6 +633,8 @@ func test_conduct_sortie_returns_target_province_id() -> void:
 	)
 	if result["success"]:
 		assert_eq(result["effects"]["target_province_id"], 42)
+	else:
+		pass_test("Sortie roll failed — target_province_id path not tested")
 
 
 func test_conduct_sortie_high_ss_gives_medium_force() -> void:

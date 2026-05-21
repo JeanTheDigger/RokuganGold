@@ -2226,6 +2226,7 @@ func test_tend_wounded_ally_not_injected_without_kit() -> void:
 		if ev is Dictionary and (ev as Dictionary).get("type", "") == "tend_wounded_ally_opportunity":
 			fail_test("Should not inject tend_wounded_ally_opportunity without kit")
 			return
+	pass_test("No tend_wounded_ally_opportunity injected without kit")
 
 
 func test_tend_wounded_ally_not_injected_for_hostile() -> void:
@@ -2246,6 +2247,7 @@ func test_tend_wounded_ally_not_injected_for_hostile() -> void:
 		if ev is Dictionary and (ev as Dictionary).get("type", "") == "tend_wounded_ally_opportunity":
 			fail_test("Should not inject tend_wounded_ally_opportunity for hostile target")
 			return
+	pass_test("No tend_wounded_ally_opportunity injected for hostile target")
 
 
 # -- Honor Covert Penalty (s12.8 Filter 2) ------------------------------------
