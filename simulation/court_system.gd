@@ -206,7 +206,10 @@ static func should_call_court(
 	topics: Array,
 	active_courts_at_settlement: Array,
 ) -> Dictionary:
-	for c: CourtSessionData in active_courts_at_settlement:
+	for c_entry_v1: Variant in active_courts_at_settlement:
+		if not c_entry_v1 is CourtSessionData:
+			continue
+		var c: CourtSessionData = c_entry_v1 as CourtSessionData
 		if c.phase != CourtSessionData.CourtPhase.CLOSED:
 			return {}
 
@@ -259,7 +262,10 @@ static func get_active_court_at_settlement(
 	courts: Array,
 	settlement_id: int,
 ) -> CourtSessionData:
-	for c: CourtSessionData in courts:
+	for c_entry_v2: Variant in courts:
+		if not c_entry_v2 is CourtSessionData:
+			continue
+		var c: CourtSessionData = c_entry_v2 as CourtSessionData
 		if c.phase == CourtSessionData.CourtPhase.ACTIVE and c.host_settlement_id == settlement_id:
 			return c
 	return null
@@ -267,7 +273,10 @@ static func get_active_court_at_settlement(
 
 static func get_active_courts(courts: Array) -> Array:
 	var result: Array = []
-	for c: CourtSessionData in courts:
+	for c_entry_v3: Variant in courts:
+		if not c_entry_v3 is CourtSessionData:
+			continue
+		var c: CourtSessionData = c_entry_v3 as CourtSessionData
 		if c.phase == CourtSessionData.CourtPhase.ACTIVE:
 			result.append(c)
 	return result
@@ -278,7 +287,10 @@ static func get_upcoming_courts(
 	current_ic_day: int,
 ) -> Array:
 	var result: Array = []
-	for c: CourtSessionData in courts:
+	for c_entry_v4: Variant in courts:
+		if not c_entry_v4 is CourtSessionData:
+			continue
+		var c: CourtSessionData = c_entry_v4 as CourtSessionData
 		if c.phase == CourtSessionData.CourtPhase.SCHEDULED and c.start_ic_day > current_ic_day:
 			result.append(c)
 	return result
@@ -301,7 +313,10 @@ static func get_character_context_flag(
 	courts: Array,
 	character_id: int,
 ) -> bool:
-	for c: CourtSessionData in courts:
+	for c_entry_v5: Variant in courts:
+		if not c_entry_v5 is CourtSessionData:
+			continue
+		var c: CourtSessionData = c_entry_v5 as CourtSessionData
 		if c.phase == CourtSessionData.CourtPhase.ACTIVE and character_id in c.attendee_ids:
 			return true
 	return false

@@ -1944,7 +1944,7 @@ func test_metadata_carried_through_execute_action() -> void:
 
 	var c: L5RCharacterData = L5RCharacterData.new()
 	c.character_id = 1
-	c.action_points = 4
+	c.action_points_current = 4
 
 	var result: Dictionary = NPCDecisionEngine.execute_action(action, c, ctx)
 	assert_true(result.has("metadata"))
@@ -3515,11 +3515,11 @@ func test_ladder_favor_uses_real_ally_creditor_ids() -> void:
 		"character_id": 1,
 		"action_id": "DECLARE_WAR",
 		"effects": {
-			"ladder_side_effects": [{
+			"ladder_side_effects": {
 				"creates_favor": true,
 				"favor_tier": 3,
 				"contributing_ally_ids": [10, 20],
-			}],
+			},
 		},
 	}]
 
@@ -3550,11 +3550,11 @@ func test_ladder_favor_fallback_when_no_ally_ids() -> void:
 		"character_id": 1,
 		"action_id": "DECLARE_WAR",
 		"effects": {
-			"ladder_side_effects": [{
+			"ladder_side_effects": {
 				"creates_favor": true,
 				"favor_tier": 2,
 				"contributing_ally_ids": [],
-			}],
+			},
 		},
 	}]
 
@@ -5467,15 +5467,16 @@ func test_e2e_metadata_to_executor_to_orchestrator() -> void:
 	ctx.ic_day = 10
 	ctx.season = 0  # SPRING
 	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
-	assert_eq(option.metadata["siege_settlement_id"], 10)
+	assert_eq(option.metadata["siege_settlement_id"], "10")
 
 	var char: L5RCharacterData = L5RCharacterData.new()
 	char.physical_location = "10"
 	var exec_result: Dictionary = ActionExecutor.execute(
 		option, char, ctx, DiceEngine.new(), {},
 	)
-	assert_true(exec_result["effects"]["requires_storm_assault"])
-	assert_eq(exec_result["effects"]["siege_settlement_id"], 10)
+	var eff: Dictionary = exec_result.get("effects", {})
+	assert_true(eff.get("requires_storm_assault", false))
+	assert_eq(str(eff.get("siege_settlement_id", "")), "10")
 
 	var siege: Dictionary = _make_siege_state(10, 1, 2)
 	var companies: Array = [

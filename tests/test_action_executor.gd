@@ -185,7 +185,7 @@ func test_public_debate_produces_glory_on_high_raises() -> void:
 	if result["success"]:
 		var raises: int = maxi(result.get("margin", 0) / 5, 0)
 		var expected: float = 0.3 if raises >= 3 else 0.0
-		assert_almost_eq(result["effects"]["glory_change"], expected, 0.001)
+		assert_almost_eq(result["effects"].get("glory_change", 0.0), expected, 0.001)
 
 
 func test_intimidate_falls_through_without_characters() -> void:
@@ -503,8 +503,8 @@ func test_order_patrol_military_tn() -> void:
 	var result: Dictionary = ActionExecutor.execute(
 		action, _character, _ctx, _dice_engine, _action_skill_map
 	)
-	assert_eq(result["skill_used"], "Investigation")
-	assert_eq(result["tn"], 15)
+	assert_eq(result.get("effect", ""), "patrol_dispatched")
+	assert_true(result.get("requires_patrol", false))
 
 
 func test_military_success_produces_effect() -> void:

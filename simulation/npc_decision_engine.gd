@@ -643,13 +643,14 @@ static func execute_action(
 	character: L5RCharacterData,
 	ctx: NPCDataStructures.ContextSnapshot,
 ) -> Dictionary:
-	var result := ActionPointSystem.spend_ap(character, chosen.ap_cost)
-	if not result["success"]:
-		return {
-			"success": false,
-			"reason": "insufficient_ap",
-			"action_id": chosen.action_id,
-		}
+	if chosen.ap_cost > 0:
+		var result := ActionPointSystem.spend_ap(character, chosen.ap_cost)
+		if not result["success"]:
+			return {
+				"success": false,
+				"reason": "insufficient_ap",
+				"action_id": chosen.action_id,
+			}
 
 	var orders_spent: int = 0
 	if chosen.is_order:

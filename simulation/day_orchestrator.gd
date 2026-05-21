@@ -2467,7 +2467,10 @@ static func _process_cadence_sync(
 	active_courts: Array,
 	dice_engine: DiceEngine,
 ) -> void:
-	for court: CourtSessionData in active_courts:
+	for court_entry_v: Variant in active_courts:
+		if not court_entry_v is CourtSessionData:
+			continue
+		var court: CourtSessionData = court_entry_v as CourtSessionData
 		if not CourtSystem.is_active(court):
 			continue
 		var court_ids: Array = court.attendee_ids.duplicate()
@@ -4142,7 +4145,10 @@ static func _process_flee_logistics(
 
 		TravelSystem.begin_travel(fugitive, "ronin_haven")
 
-		for court: CourtSessionData in active_courts:
+		for court_entry_v: Variant in active_courts:
+			if not court_entry_v is CourtSessionData:
+				continue
+			var court: CourtSessionData = court_entry_v as CourtSessionData
 			if fugitive_id in court.attendee_ids:
 				court.attendee_ids.erase(fugitive_id)
 
@@ -4595,7 +4601,7 @@ static func _create_spy_uncovered_topic(
 	topic.slug = "spy_uncovered_at_%s" % location
 	topic.ic_day_created = ic_day
 	topic.subject_character_id = -1
-	topic.subject_role_valence = "NEUTRAL"
+	topic.subject_role = "NEUTRAL"
 	active_topics.append(topic)
 
 
@@ -5853,7 +5859,10 @@ static func _check_commitment_fulfilled(
 		Enums.CommitmentType.SUPPORT_PLEDGE:
 			if not is_present:
 				return false
-			for court: CourtSessionData in active_courts:
+			for court_entry_v: Variant in active_courts:
+				if not court_entry_v is CourtSessionData:
+					continue
+				var court: CourtSessionData = court_entry_v as CourtSessionData
 				if court.host_settlement_id == c.fulfillment_target:
 					var state: Dictionary = court.session_state.get(c.debtor_npc_id, {})
 					var position_actions: int = (state.get("persuade_count", 0)
@@ -9258,7 +9267,10 @@ static func _inject_edict_reactive_events(
 	world_states: Dictionary,
 	_ic_day: int,
 ) -> void:
-	for edict: EdictData in active_edicts:
+	for edict_entry_v: Variant in active_edicts:
+		if not edict_entry_v is EdictData:
+			continue
+		var edict: EdictData = edict_entry_v as EdictData
 		if not edict.is_active:
 			continue
 		for clan: String in edict.compliance_by_clan:
@@ -9710,14 +9722,20 @@ static func _apply_court_invitation(
 		return {}
 
 	var target_court: CourtSessionData = null
-	for c: CourtSessionData in courts:
+	for c_entry_v1: Variant in courts:
+		if not c_entry_v1 is CourtSessionData:
+			continue
+		var c: CourtSessionData = c_entry_v1 as CourtSessionData
 		if c.host_settlement_id == settlement_id and c.phase != CourtSessionData.CourtPhase.CLOSED:
 			target_court = c
 			break
 
 	if target_court == null:
 		if settlement_id >= 0:
-			for c: CourtSessionData in courts:
+			for c_entry_v2: Variant in courts:
+				if not c_entry_v2 is CourtSessionData:
+					continue
+				var c: CourtSessionData = c_entry_v2 as CourtSessionData
 				if c.host_lord_id == inviter_id and c.phase != CourtSessionData.CourtPhase.CLOSED:
 					target_court = c
 					break
@@ -9756,7 +9774,10 @@ static func _apply_court_creation(
 	if lord == null:
 		return {}
 
-	for c: CourtSessionData in courts:
+	for c_entry_v3: Variant in courts:
+		if not c_entry_v3 is CourtSessionData:
+			continue
+		var c: CourtSessionData = c_entry_v3 as CourtSessionData
 		if c.host_lord_id == lord_id and CourtSystem.is_active(c):
 			return {"type": "court_creation_failed", "reason": "already_hosting"}
 
@@ -10572,7 +10593,10 @@ static func _process_active_courts(
 	characters: Array = [],
 ) -> Array:
 	var results: Array = []
-	for court: CourtSessionData in active_courts:
+	for court_entry_v: Variant in active_courts:
+		if not court_entry_v is CourtSessionData:
+			continue
+		var court: CourtSessionData = court_entry_v as CourtSessionData
 		if not CourtSystem.is_active(court):
 			continue
 		court.pending_performance_requests = RequestPerformanceSystem.expire_requests(
@@ -10672,13 +10696,19 @@ static func _generate_court_edicts(
 		active_topics, active_wars, next_edict_id, ic_day,
 	)
 	var edicts: Array = []
-	for e: EdictData in agg_result.get("edicts", []):
+	for e_entry_v1: Variant in agg_result.get("edicts", []):
+		if not e_entry_v1 is EdictData:
+			continue
+		var e: EdictData = e_entry_v1 as EdictData
 		edicts.append(e)
 
 	var deadline_ic_day: int = ic_day + 90
 	var lords: Array = _gather_lord_tier_characters(characters)
 
-	for edict: EdictData in edicts:
+	for edict_entry_v2: Variant in edicts:
+		if not edict_entry_v2 is EdictData:
+			continue
+		var edict: EdictData = edict_entry_v2 as EdictData
 		active_edicts.append(edict)
 		var topic_dict: Dictionary = ImperialEdictSystem.generate_edict_topic(edict)
 		if not topic_dict.is_empty():
@@ -10754,7 +10784,10 @@ static func _set_court_context_flags(
 	active_courts: Array,
 	world_states: Dictionary,
 ) -> void:
-	for court: CourtSessionData in active_courts:
+	for court_entry_v: Variant in active_courts:
+		if not court_entry_v is CourtSessionData:
+			continue
+		var court: CourtSessionData = court_entry_v as CourtSessionData
 		if not CourtSystem.is_active(court):
 			continue
 		var ctx_dict: Dictionary = CourtSystem.to_context_dict(court)
@@ -10854,7 +10887,10 @@ static func _process_crisis_court_calls(
 		var lord_rank: Enums.LordRank = _status_to_lord_rank(lord.status)
 		var courts_at_settlement: Array = []
 		var settlement_str: String = str(lord.physical_location)
-		for c: CourtSessionData in active_courts:
+		for c_entry: Variant in active_courts:
+			if not c_entry is CourtSessionData:
+				continue
+			var c: CourtSessionData = c_entry as CourtSessionData
 			if str(c.host_settlement_id) == settlement_str:
 				courts_at_settlement.append(c)
 		var eval_result: Dictionary = CourtSystem.should_call_court(
@@ -11052,7 +11088,10 @@ static func _process_edict_compliance_actions(
 		var compliant: bool = effects.get("compliant", true)
 		if edict_id < 0 or clan.is_empty():
 			continue
-		for edict: EdictData in active_edicts:
+		for edict_entry_v: Variant in active_edicts:
+			if not edict_entry_v is EdictData:
+				continue
+			var edict: EdictData = edict_entry_v as EdictData
 			if edict.edict_id == edict_id and edict.is_active:
 				ImperialEdictSystem.record_compliance(edict, clan, compliant)
 				break
@@ -11099,7 +11138,10 @@ static func _process_strategic_court_calls(
 			continue
 
 		var already_hosting: bool = false
-		for c: CourtSessionData in active_courts:
+		for c_entry_v4: Variant in active_courts:
+			if not c_entry_v4 is CourtSessionData:
+				continue
+			var c: CourtSessionData = c_entry_v4 as CourtSessionData
 			if c.host_lord_id == lord_id and CourtSystem.is_active(c):
 				already_hosting = true
 				break
@@ -11151,7 +11193,10 @@ static func _create_winter_court_from_directive(
 	if emperor_id < 0:
 		return {}
 
-	for c: CourtSessionData in active_courts:
+	for c_entry_v5: Variant in active_courts:
+		if not c_entry_v5 is CourtSessionData:
+			continue
+		var c: CourtSessionData = c_entry_v5 as CourtSessionData
 		if c.court_type == CourtSessionData.CourtType.IMPERIAL_WINTER_COURT:
 			if c.phase != CourtSessionData.CourtPhase.CLOSED:
 				return {}
@@ -12449,7 +12494,10 @@ static func _build_advancement_world_state(
 	insurgencies: Array,
 ) -> Dictionary:
 	var in_court_ids: Array = []
-	for court: CourtSessionData in active_courts:
+	for court_entry_v: Variant in active_courts:
+		if not court_entry_v is CourtSessionData:
+			continue
+		var court: CourtSessionData = court_entry_v as CourtSessionData
 		if court.phase == CourtSessionData.CourtPhase.ACTIVE:
 			for aid: int in court.attendee_ids:
 				if not in_court_ids.has(aid):
@@ -14253,7 +14301,10 @@ static func _find_active_court_for_character(
 	active_courts: Array,
 	character_id: int,
 ) -> CourtSessionData:
-	for court: CourtSessionData in active_courts:
+	for court_entry_v: Variant in active_courts:
+		if not court_entry_v is CourtSessionData:
+			continue
+		var court: CourtSessionData = court_entry_v as CourtSessionData
 		if court.phase != CourtSessionData.CourtPhase.ACTIVE:
 			continue
 		if character_id in court.attendee_ids:
@@ -14445,7 +14496,10 @@ static func _process_court_action_effects(
 		if action_id in ["CHARM", "NEGOTIATE", "PERSUADE", "PUBLIC_DEBATE", "IMPRESS", "LISTEN_REFLECT"] and not effects.get("failed", false):
 			var court_settlement: int = action_meta.get("court_settlement_id", -1)
 			var court: CourtSessionData = null
-			for c: CourtSessionData in active_courts:
+			for c_entry_v6: Variant in active_courts:
+				if not c_entry_v6 is CourtSessionData:
+					continue
+				var c: CourtSessionData = c_entry_v6 as CourtSessionData
 				if c.phase == CourtSessionData.CourtPhase.ACTIVE and c.host_settlement_id == court_settlement:
 					court = c
 					break
@@ -14504,7 +14558,10 @@ static func _process_performance_request_writebacks(
 			continue
 
 		var court: CourtSessionData = null
-		for c: CourtSessionData in active_courts:
+		for c_entry_v7: Variant in active_courts:
+			if not c_entry_v7 is CourtSessionData:
+				continue
+			var c: CourtSessionData = c_entry_v7 as CourtSessionData
 			if not CourtSystem.is_active(c):
 				continue
 			if lord_id in c.attendee_ids:
@@ -14537,7 +14594,10 @@ static func _populate_court_availability_data(
 	favors: Array,
 ) -> void:
 	var upcoming: Array = []
-	for court: CourtSessionData in active_courts:
+	for court_entry_v: Variant in active_courts:
+		if not court_entry_v is CourtSessionData:
+			continue
+		var court: CourtSessionData = court_entry_v as CourtSessionData
 		if court.phase == CourtSessionData.CourtPhase.SCHEDULED:
 			upcoming.append({
 				"settlement_id": court.host_settlement_id,
@@ -15316,7 +15376,10 @@ static func _apply_civil_war_edict_shifts(
 	active_edicts: Array,
 ) -> void:
 	var processed: Array = state.get("processed_edict_ids", [])
-	for edict: EdictData in active_edicts:
+	for edict_entry_v: Variant in active_edicts:
+		if not edict_entry_v is EdictData:
+			continue
+		var edict: EdictData = edict_entry_v as EdictData
 		if not edict.is_active:
 			continue
 		if edict.edict_id in processed:
@@ -16547,7 +16610,10 @@ static func _create_favor_obligation_commitment(
 	var action_meta: Dictionary = effects.get("_action_metadata", {})
 	var court_settlement_id: int = action_meta.get("court_settlement_id", -1)
 	if court_settlement_id >= 0:
-		for court: CourtSessionData in active_courts:
+		for court_entry_v: Variant in active_courts:
+			if not court_entry_v is CourtSessionData:
+				continue
+			var court: CourtSessionData = court_entry_v as CourtSessionData
 			if court.host_settlement_id == court_settlement_id:
 				for attendee_id: int in court.attendee_ids:
 					if attendee_id not in witnesses:
@@ -16585,7 +16651,10 @@ static func _create_court_attendance_commitment(
 		return
 
 	var target_court: CourtSessionData = null
-	for c: CourtSessionData in active_courts:
+	for c_entry_v8: Variant in active_courts:
+		if not c_entry_v8 is CourtSessionData:
+			continue
+		var c: CourtSessionData = c_entry_v8 as CourtSessionData
 		if c.host_settlement_id == settlement_id and c.phase != CourtSessionData.CourtPhase.CLOSED:
 			target_court = c
 			break
@@ -16645,7 +16714,10 @@ static func _create_support_pledge_commitment(
 			return
 
 	var target_court: CourtSessionData = null
-	for c: CourtSessionData in active_courts:
+	for c_entry_v9: Variant in active_courts:
+		if not c_entry_v9 is CourtSessionData:
+			continue
+		var c: CourtSessionData = c_entry_v9 as CourtSessionData
 		if c.host_settlement_id == court_sid and c.phase != CourtSessionData.CourtPhase.CLOSED:
 			target_court = c
 			break

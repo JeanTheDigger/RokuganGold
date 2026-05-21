@@ -560,7 +560,10 @@ static func process_daily_compliance(
 	ic_day: int,
 ) -> Array:
 	var results: Array = []
-	for edict: EdictData in active_edicts:
+	for edict_entry_v: Variant in active_edicts:
+		if not edict_entry_v is EdictData:
+			continue
+		var edict: EdictData = edict_entry_v as EdictData
 		if not edict.is_active:
 			continue
 		if edict.compliance_by_clan.is_empty():

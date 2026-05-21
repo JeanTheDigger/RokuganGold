@@ -1237,7 +1237,7 @@ func test_organic_village_no_position_vacancy() -> void:
 	# Organic villages don't require any specific position holder
 	var lord := _make_char(1, "Crane", 5.0)
 	var prov := _make_province(10, "Crane")
-	prov.terrain = "plains"
+	prov.terrain_type = Enums.TerrainType.PLAINS
 	var existing := _make_settlement(100, 10, Enums.SettlementType.TOWN)
 	existing.population_pu = 10.0
 	var settlements: Array = [existing]

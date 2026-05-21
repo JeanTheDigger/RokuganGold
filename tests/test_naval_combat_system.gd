@@ -316,7 +316,7 @@ func test_atakebune_does_not_buff_self() -> void:
 	var atakebune := _make_attacker(1, Enums.ShipClass.ATAKEBUNE, 0)
 	var side: Array = _to_typed_array([atakebune])
 	NavalCombatSystem._apply_atakebune_defense(side)
-	assert_eq(atakebune["atakebune_def_bonus"], 0)
+	assert_eq(atakebune.get("atakebune_def_bonus", 0), 0)
 
 
 func test_atakebune_does_not_buff_non_adjacent() -> void:
@@ -324,7 +324,7 @@ func test_atakebune_does_not_buff_non_adjacent() -> void:
 	var far_ally := _make_attacker(2, Enums.ShipClass.SENGOKOBUNE, 3)
 	var side: Array = _to_typed_array([atakebune, far_ally])
 	NavalCombatSystem._apply_atakebune_defense(side)
-	assert_eq(far_ally["atakebune_def_bonus"], 0)
+	assert_eq(far_ally.get("atakebune_def_bonus", 0), 0)
 
 
 # =============================================================================

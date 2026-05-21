@@ -752,7 +752,7 @@ func test_execute_free_action_skips_resource_check() -> void:
 
 
 func test_execute_insufficient_resources_refunds_civilian_order() -> void:
-	_char.lord_rank = Enums.LordRank.PROVINCIAL_DAIMYO
+	_char.status = 5.0  # Maps to PROVINCIAL_DAIMYO via lord_rank_from_status
 	_char.military_rank = Enums.MilitaryRank.NONE
 	_char.civilian_orders_remaining = 3
 	_world_state["available_levy_pu"] = 0.0

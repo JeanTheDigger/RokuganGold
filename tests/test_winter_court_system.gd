@@ -640,7 +640,7 @@ func test_home_ground_skill_check() -> void:
 
 func test_regent_needed_when_emperor_dead() -> void:
 	var dead_emperor := _make_character(50, "Dead Emperor", "Imperial", "Hantei", 10.0)
-	dead_emperor.wounds_current = 999
+	dead_emperor.wounds_taken = 999
 	_characters_by_id[50] = dead_emperor
 
 	assert_true(WinterCourtSystem.should_use_regent(50, _characters_by_id))
