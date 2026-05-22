@@ -119,6 +119,7 @@ static func _resolve_reactive_events(
 			c, ws, objs, scoring_tables, filter_data,
 			approach_penalties, commitments, redirects
 		)
+		_consume_reactive_event(result, ws)
 		results.append(result)
 
 	return results
@@ -160,6 +161,7 @@ static func _resolve_reactive_events_full(
 				characters_by_id, c_doshin, cr
 			)
 			decision.merge(exec_result, true)
+		_consume_reactive_event(decision, ws)
 		results.append(decision)
 
 	return results
@@ -379,7 +381,7 @@ static func _resolve_character_wave_full(
 	if is_lord and character.civilian_orders_remaining > 0:
 		var order_decision: Dictionary = _resolve_civilian_order(
 			character, ws, objs, scoring_tables, filter_data,
-			approach_penalties, commitments, redirects
+			approach_penalties, commitments, redirects, characters_by_id
 		)
 		if not order_decision.is_empty():
 			var exec_result: Dictionary = _execute_decision(
@@ -403,10 +405,11 @@ static func _resolve_civilian_order(
 	approach_penalties: Array = [],
 	commitments: Array = [],
 	travel_redirects: int = 0,
+	characters_by_id: Dictionary = {},
 ) -> Dictionary:
-	var ctx: NPCDataStructures.ContextSnapshot = NPCDecisionEngine.build_context(character, world_state)
+	var ctx: NPCDataStructures.ContextSnapshot = NPCDecisionEngine.build_context(character, world_state, characters_by_id)
 	var need: NPCDataStructures.ImmediateNeed = NPCDecisionEngine.resolve_goal(character, ctx, objectives)
-	var options: Array = NPCDecisionEngine.generate_options(ctx, need)
+	var options: Array = NPCDecisionEngine.generate_options(ctx, need, character)
 
 	var order_options: Array = []
 	for opt: NPCDataStructures.ScoredAction in options:
@@ -428,7 +431,7 @@ static func _resolve_civilian_order(
 		return {}
 
 	NPCDecisionEngine.score_all(order_options, need, ctx, scoring_tables,
-		approach_penalties, commitments, character, travel_redirects)
+		approach_penalties, commitments, character, travel_redirects, characters_by_id)
 	var chosen: NPCDataStructures.ScoredAction = NPCDecisionEngine.select_action(order_options, ctx)
 
 	character.civilian_orders_remaining -= 1
@@ -436,7 +439,7 @@ static func _resolve_civilian_order(
 	if chosen.action_id in CivilianOrderBudget.DUAL_COST_ACTIONS:
 		ap_for_order = 1
 		character.action_points_current = maxi(character.action_points_current - 1, 0)
-	return {
+	var result: Dictionary = {
 		"success": true,
 		"action_id": chosen.action_id,
 		"target_npc_id": chosen.target_npc_id,
@@ -450,6 +453,9 @@ static func _resolve_civilian_order(
 		"ic_day": ctx.ic_day,
 		"is_order": true,
 	}
+	if not chosen.metadata.is_empty():
+		result["metadata"] = chosen.metadata
+	return result
 
 
 # -- Executor Bridge -----------------------------------------------------------
@@ -560,6 +566,8 @@ static func _gather_reactive_npcs(
 ) -> Array:
 	var reactive_npcs: Array = []
 	for c: L5RCharacterData in characters:
+		if CharacterStats.is_dead(c):
+			continue
 		var ws: Dictionary = world_states.get(c.character_id, {})
 		var events: Array = ws.get("pending_events", [])
 		if events.size() > 0:

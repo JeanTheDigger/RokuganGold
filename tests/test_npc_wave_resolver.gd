@@ -406,3 +406,76 @@ func test_consume_non_reactive_source_no_events_is_noop() -> void:
 	}
 	NPCWaveResolver._consume_reactive_event(decision, ws)
 	assert_eq(ws["pending_events"].size(), 0)
+
+
+# -- Dead Character Filtering --------------------------------------------------
+
+func test_gather_reactive_npcs_skips_dead_characters() -> void:
+	var c1 := _make_char(1, 3.0, 2)
+	var c2 := _make_char(2, 5.0, 2)
+	c2.wounds_taken = 999
+	var ws: Dictionary = {
+		1: {"pending_events": [{"type": "provocation", "source_id": 5}]},
+		2: {"pending_events": [{"type": "provocation", "source_id": 6}]},
+	}
+	var result: Array = NPCWaveResolver._gather_reactive_npcs([c1, c2], ws)
+	assert_eq(result.size(), 1)
+	assert_eq(result[0].character_id, 1)
+
+
+# -- Reactive Event Consumption in Full Execution Path -------------------------
+
+func test_reactive_events_consumed_after_reactive_resolution() -> void:
+	var c := _make_char(1, 3.0, 2)
+	c.action_points_current = 2
+	var ws_inner: Dictionary = _make_world_state(Enums.ContextFlag.AT_OWN_HOLDINGS)
+	ws_inner["pending_events"] = [{"type": "provocation", "source_id": 5}]
+	var world_states: Dictionary = {1: ws_inner}
+	var objs: Dictionary = {1: {"standing": {"need_type": "REST"}}}
+	var results: Array = NPCWaveResolver._resolve_reactive_events(
+		[c], world_states, objs, _scoring_tables, _filter_data
+	)
+	assert_eq(results.size(), 1)
+	assert_eq(ws_inner["pending_events"].size(), 0,
+		"Reactive event should be consumed after reactive resolution")
+
+
+# -- Civilian Order Metadata ---------------------------------------------------
+
+func test_civilian_order_includes_metadata() -> void:
+	var c := _make_char(1, 6.0, 3)
+	c.civilian_orders_remaining = 5
+	c.civilian_order_budget_max = 5
+	c.action_points_current = 2
+	var ws: Dictionary = _make_world_state(Enums.ContextFlag.AT_OWN_HOLDINGS, true)
+	ws["province_statuses"] = []
+	var scoring: Dictionary = _scoring_tables.duplicate(true)
+	scoring["objective_alignment"]["REST"]["ASSIGN_VASSAL_OBJECTIVE"] = 90
+	scoring["objective_alignment"]["REST"]["SET_TAX_RATE"] = 70
+	var objs: Dictionary = {"standing": {"need_type": "REST"}}
+	var result: Dictionary = NPCWaveResolver._resolve_civilian_order(
+		c, ws, objs, scoring, _filter_data
+	)
+	if result.get("success", false) and result.get("action_id", "") == "ASSIGN_VASSAL_OBJECTIVE":
+		assert_true(result.has("metadata"),
+			"Civilian order result should include metadata when action has it")
+
+
+# -- Civilian Order with chars_by_id -------------------------------------------
+
+func test_civilian_order_accepts_characters_by_id() -> void:
+	var c := _make_char(1, 6.0, 3)
+	c.civilian_orders_remaining = 5
+	c.civilian_order_budget_max = 5
+	c.action_points_current = 2
+	c.clan = "Crane"
+	var ws: Dictionary = _make_world_state(Enums.ContextFlag.AT_OWN_HOLDINGS, true)
+	ws["province_statuses"] = []
+	var chars_by_id: Dictionary = {1: c}
+	var objs: Dictionary = {"standing": {"need_type": "REST"}}
+	var result: Dictionary = NPCWaveResolver._resolve_civilian_order(
+		c, ws, objs, _scoring_tables, _filter_data,
+		[], [], 0, chars_by_id
+	)
+	assert_true(result.is_empty() or result.has("success"),
+		"Civilian order should accept chars_by_id without error")

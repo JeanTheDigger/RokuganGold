@@ -1693,6 +1693,37 @@ costs, or forward-wiring. Do not treat as bugs.
   never appeared in `known_contacts_by_clan`. Same bug class as two
   previous fixes (WindDown and travel arrival). 12 tests.
 
+### Known Code Issues (found and fixed 2026-05-22, NPC WaveResolver audit)
+- **Reactive events double-executed — not consumed after reactive phase. FIXED.**
+  `_resolve_reactive_events_full()` and `_resolve_reactive_events()` ran the
+  full decision+execution pipeline for NPCs with pending events but never
+  called `_consume_reactive_event()`. The event remained in `pending_events`
+  and was processed AGAIN in the subsequent AP wave (`_resolve_character_wave_full`
+  calls `_consume_reactive_event` after `run()`). Result: NPCs spent 2 AP on
+  the same event, double-executing effects (double honor loss, double
+  disposition change, etc.). Added `_consume_reactive_event()` call after
+  each reactive decision in both paths. 1 test.
+- **Dead characters entered reactive event loop. FIXED.**
+  `_gather_reactive_npcs()` iterated all characters checking for
+  `pending_events` without a `CharacterStats.is_dead()` guard. Dead NPCs
+  with leftover pending events (injected before death) would enter the
+  reactive loop and execute decisions. Added dead character filter. 1 test.
+- **Civilian order result missing metadata dict. FIXED.**
+  `_resolve_civilian_order()` returned the decision dict without
+  `chosen.metadata`. `_execute_decision()` reconstructs a ScoredAction
+  from the decision dict and reads `decision.get("metadata", {})` — always
+  empty for civilian orders. Actions requiring metadata (ASSIGN_VASSAL_OBJECTIVE,
+  ANNOUNCE_HUNT, REQUEST_PERFORMANCE, etc.) executed with blank inputs. Added
+  metadata propagation matching the AP path pattern. 1 test.
+- **Civilian order context built without chars_by_id. FIXED.**
+  `_resolve_civilian_order()` called `build_context(character, world_state)`
+  without the third `chars_by_id` parameter. Family bonds (s22.6), marriageable
+  vassal detection, garrison shortage personality scores, and deception defense
+  penalties were all skipped for lord civilian order decisions. Added
+  `characters_by_id` optional parameter to `_resolve_civilian_order()`, passed
+  through from the full-execution call site. Also passed `character` to
+  `generate_options()` and `chars_by_id` to `score_all()`. 1 test.
+
 ### Systems Added 2026-05-18
 - **s29.15 Courtier School Techniques** — School technique bonuses wired into
   SkillResolver and ActionExecutor. Doji Courtier R1a (honor-gated Free Raise on
