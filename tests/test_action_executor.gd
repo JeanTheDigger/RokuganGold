@@ -1900,3 +1900,53 @@ func test_assign_vassal_objective_no_resource_promise_for_non_resource() -> void
 	action.metadata = {"need_type": "ASSIGN_OBJECTIVE", "lord_id": 10}
 	var effects: Dictionary = ActionExecutor._compute_assign_vassal_objective_effects(action)
 	assert_false(effects.get("requires_resource_promise", false))
+
+
+# -- Intimidation Failed Effects Gate ------------------------------------------
+
+func test_intimidate_failed_sets_failed_flag_so_honor_cost_applies() -> void:
+	var target := L5RCharacterData.new()
+	target.character_id = 10
+	target.character_name = "Strong Target"
+	target.honor = 8.0
+	target.reflexes = 3
+	target.awareness = 5
+	target.willpower = 5
+	target.skills = {"Etiquette": 5}
+	target.emphases = {}
+	target.wounds_taken = 0
+	var chars: Dictionary = {1: _character, 10: target}
+
+	_dice_engine.set_seed(1)
+	var action := _make_action("INTIMIDATE", 10)
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map, {}, chars
+	)
+	if not result["success"]:
+		assert_true(result["effects"].has("failed"),
+			"Failed intimidation must set effects['failed'] so EffectApplicator applies honor cost")
+		assert_true(result["effects"]["honor_change"] < 0.0,
+			"Low Skill honor cost should be present on failed intimidation")
+
+
+func test_intimidate_success_does_not_set_failed_flag() -> void:
+	var target := L5RCharacterData.new()
+	target.character_id = 10
+	target.character_name = "Weak Target"
+	target.honor = 1.0
+	target.reflexes = 2
+	target.awareness = 2
+	target.willpower = 2
+	target.skills = {"Etiquette": 1}
+	target.emphases = {}
+	target.wounds_taken = 0
+	var chars: Dictionary = {1: _character, 10: target}
+
+	_dice_engine.set_seed(99)
+	var action := _make_action("INTIMIDATE", 10)
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map, {}, chars
+	)
+	if result["success"]:
+		assert_false(result["effects"].has("failed"),
+			"Successful intimidation should NOT have failed flag")

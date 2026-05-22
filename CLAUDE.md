@@ -1730,6 +1730,20 @@ costs, or forward-wiring. Do not treat as bugs.
   LetterData objects from the grave. Added dead character filter at loop start.
   1 test.
 
+### Known Code Issues (found and fixed 2026-05-22, ActionExecutor audit)
+- **INTIMIDATE failed effects silently dropped — `effects["failed"]` missing. FIXED.**
+  `_execute_intimidation()` set `honor_change` (Low Skill penalty from Table 2.3)
+  and `infamy_gain` unconditionally in the effects dict, but never set
+  `effects["failed"] = true` on failure. EffectApplicator line 27 early-returns
+  when `success==false` and no `"failed"` key exists — so failed intimidation's
+  Low Skill honor cost, infamy, and witness_disposition_loss were all silently
+  dropped. Added `effects["failed"] = true` when `not r["success"]`. 2 tests.
+- **DISPATCH_COURTIER `recipient_disposition_change` type mismatch. FIXED.**
+  Lines 1807/1831 used float literals (2.0, -2.0) for `recipient_disposition_change`.
+  EffectApplicator reads the key into `var disp_change: int`. GDScript implicit
+  conversion is correct (2.0 → 2) but the type annotation mismatch could cause
+  issues in strict mode. Changed to int literals (2, -2).
+
 ### Systems Added 2026-05-18
 - **s29.15 Courtier School Techniques** — School technique bonuses wired into
   SkillResolver and ActionExecutor. Doji Courtier R1a (honor-gated Free Raise on

@@ -658,6 +658,9 @@ static func _execute_intimidation(
 		"compliance_active": r.get("compliance_active", false),
 	}
 
+	if not r["success"]:
+		effects["failed"] = true
+
 	if r.has("witnesses"):
 		effects["witnesses"] = r["witnesses"]
 		effects["witness_disposition_loss"] = r.get("witness_disposition_loss", 0)
@@ -1804,7 +1807,7 @@ static func _execute_dispatch_courtier(
 				"target_npc_id": target_id,
 				"target_province_id": target_province_id,
 				"honor_gain_recipient": 0.1,
-				"recipient_disposition_change": 2.0,
+				"recipient_disposition_change": 2,
 			},
 		}
 	else:
@@ -1828,7 +1831,7 @@ static func _execute_dispatch_courtier(
 				"target_npc_id": target_id,
 				"target_province_id": target_province_id,
 				"honor_change_recipient": honor_loss,
-				"recipient_disposition_change": -2.0,
+				"recipient_disposition_change": -2,
 			},
 		}
 
