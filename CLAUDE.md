@@ -1723,6 +1723,12 @@ costs, or forward-wiring. Do not treat as bugs.
   `characters_by_id` optional parameter to `_resolve_civilian_order()`, passed
   through from the full-execution call site. Also passed `character` to
   `generate_options()` and `chars_by_id` to `score_all()`. 1 test.
+- **Dead characters wrote letters in daily letter pass. FIXED.**
+  `_process_daily_letter_pass()` iterated all characters without a
+  `CharacterStats.is_dead()` check. Dead non-lord NPCs (civilian_order_budget_max
+  == 0) would go through `resolve_daily_letter()`, select targets, and create
+  LetterData objects from the grave. Added dead character filter at loop start.
+  1 test.
 
 ### Systems Added 2026-05-18
 - **s29.15 Courtier School Techniques** — School technique bonuses wired into
