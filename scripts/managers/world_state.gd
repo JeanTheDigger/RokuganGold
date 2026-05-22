@@ -109,6 +109,27 @@ var active_assassination_ops: Array[Dictionary] = []
 # -- Approach Evaluation Snapshots (s55.30.3) ---------------------------------
 var disposition_snapshots: Dictionary = {}
 
+# -- Secrets (s12.8) ----------------------------------------------------------
+var active_secrets: Array[SecretData] = []
+var next_secret_id: Array[int] = [1]
+
+# -- Hostages (s22.9) ---------------------------------------------------------
+var active_hostages: Array[Dictionary] = []
+
+# -- Tattoos (s57.25) ---------------------------------------------------------
+var tattoos: Array[TattooData] = []
+var next_tattoo_id: Array[int] = [1]
+
+# -- Hunts (s57.38) -----------------------------------------------------------
+var active_hunts: Array[Dictionary] = []
+var next_hunt_id: Array[int] = [1]
+
+# -- Commitments ID Counter (s55.31) ------------------------------------------
+var next_commitment_id: Array[int] = [1]
+
+# -- Crisis ID Counter ---------------------------------------------------------
+var next_crisis_id: Array[int] = [1]
+
 # -- Intra-Clan Civil War (s53.2) ---------------------------------------------
 var active_civil_wars: Array[Dictionary] = []
 var precedent_modifiers: Dictionary = {}
@@ -223,17 +244,17 @@ func advance_one_day() -> Dictionary:
 		active_civil_wars,
 		precedent_modifiers,
 		next_company_id,
-		[],  # active_secrets
-		[1],  # next_secret_id
-		[],  # active_hostages
+		active_secrets,
+		next_secret_id,
+		active_hostages,
 		active_assassination_ops,
-		[1],  # next_commitment_id
-		[1],  # next_crisis_id
+		next_commitment_id,
+		next_crisis_id,
 		disposition_snapshots,
-		[],  # tattoos
-		[1],  # next_tattoo_id
-		[],  # active_hunts
-		[1],  # next_hunt_id
+		tattoos,
+		next_tattoo_id,
+		active_hunts,
+		next_hunt_id,
 	)
 
 

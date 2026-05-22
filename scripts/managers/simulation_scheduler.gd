@@ -11,10 +11,12 @@ const TICK_HOURS: Array[int] = [0, 6, 12, 18]
 
 var _last_processed_tick_key: String = ""
 var _processing: bool = false
+var _world_saver: WorldStateSaver = WorldStateSaver.new()
 
 
 func _ready() -> void:
 	_load_state()
+	_load_world_state()
 	set_process(true)
 	print("[SimulationScheduler] Ready. Last tick: %s" % _last_processed_tick_key)
 
@@ -101,6 +103,7 @@ func _save_state() -> void:
 		file.store_line(_last_processed_tick_key)
 		file.store_line(str(WorldState.time_system.current_tick))
 		file.close()
+	_save_world_state()
 
 
 func _load_state() -> void:
@@ -116,6 +119,23 @@ func _load_state() -> void:
 		print("[SimulationScheduler] Restored tick %d from %s" % [
 			WorldState.time_system.current_tick, _last_processed_tick_key
 		])
+
+
+func _save_world_state() -> void:
+	if _world_saver.save_world(WorldState):
+		print("[SimulationScheduler] World state saved.")
+	else:
+		push_error("[SimulationScheduler] World state save failed.")
+
+
+func _load_world_state() -> void:
+	if _world_saver.load_world(WorldState):
+		print("[SimulationScheduler] World state loaded (%d characters, %d provinces)." % [
+			WorldState.characters.size(),
+			WorldState.provinces.size(),
+		])
+	else:
+		print("[SimulationScheduler] No saved world state found — starting fresh.")
 
 
 # -- DST / Calendar Helpers ----------------------------------------------------
