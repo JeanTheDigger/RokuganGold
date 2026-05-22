@@ -211,7 +211,7 @@ static func expose_publicly(
 	var witness_effects: Array = []
 	for wid: int in witness_ids:
 		var w: L5RCharacterData = characters_by_id.get(wid)
-		if w != null:
+		if w != null and not CharacterStats.is_dead(w):
 			var current: int = w.disposition_values.get(subject.character_id, 0)
 			w.disposition_values[subject.character_id] = clampi(
 				current + disp_per_witness, -100, 100

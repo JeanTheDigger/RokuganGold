@@ -1061,3 +1061,23 @@ func test_auto_conceal_weapon_blocked_without_rank_5() -> void:
 	assert_eq(results.size(), 1)
 	assert_false(results[0]["success"])
 	assert_eq(results[0]["reason"], "weapon_skill_gate")
+
+
+# -- Audit: Dead character guards (2026-05-22) ---------------------------------
+
+func test_expose_publicly_skips_dead_witness() -> void:
+	var secret: SecretData = SecretSystem.create_secret(1, 1, SecretData.Severity.TIER_2)
+	var dead_witness: L5RCharacterData = L5RCharacterData.new()
+	dead_witness.character_id = 50
+	dead_witness.stamina = 2
+	dead_witness.willpower = 2
+	dead_witness.wounds_taken = 999
+	dead_witness.disposition_values = {1: 10}
+	var chars: Dictionary = {1: _subject, 50: dead_witness}
+	var result: Dictionary = SecretSystem.expose_publicly(
+		secret, _revealer, _subject, [50], chars
+	)
+	assert_eq(result["witness_effects"].size(), 0,
+		"Dead witness should be skipped")
+	assert_eq(dead_witness.disposition_values.get(1, 0), 10,
+		"Dead witness disposition should not change")

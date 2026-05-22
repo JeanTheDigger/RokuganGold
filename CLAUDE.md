@@ -1730,6 +1730,12 @@ costs, or forward-wiring. Do not treat as bugs.
   LetterData objects from the grave. Added dead character filter at loop start.
   1 test.
 
+### Known Code Issues (found and fixed 2026-05-22, SecretSystem audit)
+- **expose_publicly() disposition applied to dead witnesses. FIXED.**
+  `expose_publicly()` iterated witness_ids and checked `w != null` but not dead.
+  Dead witnesses received disposition changes toward the secret's subject. Added
+  `CharacterStats.is_dead(w)` guard. 1 test.
+
 ### Known Code Issues (found and fixed 2026-05-22, EffectApplicator audit)
 - **Disposition ripple applied to dead clan members. FIXED.**
   `_apply_disposition_ripple()` iterates all characters matching target's clan
