@@ -1577,6 +1577,30 @@ costs, or forward-wiring. Do not treat as bugs.
 - **SkillResolver from_the_ashes expiry gap.** Buff checked against
   ic_day parameter, expired buffs cleared. 6 tests.
 
+### Systems Added 2026-05-22
+- **WorldStateSaver — full world state persistence.** Prior to this,
+  only L5RCharacterData (via SaveManager) and the tick counter (via
+  SimulationScheduler) persisted across restarts. All other world state
+  — provinces, topics, wars, courts, edicts, letters, commitments,
+  secrets, tattoos, hunts, assassination operations, governance states,
+  clan data, ID counters, collective disposition baselines — was lost on
+  restart. `scripts/managers/world_state_saver.gd` (class WorldStateSaver,
+  extends RefCounted) saves and restores the full WorldStateData:
+  20 Resource-typed collections via Godot ResourceSaver (one .tres per
+  item, keyed by primary ID field), Dictionary/primitive state via JSON
+  (state.json), ClanData via JSON (clans.json), mixed-type arrays
+  (favors, letters) with format auto-detection on load. Wired into
+  SimulationScheduler: _save_world_state() fires after each tick,
+  _load_world_state() fires on startup. Save directory:
+  `user://saves/world/` with 21 sub-directories for typed collections.
+  18 round-trip tests.
+- **WorldStateData inline state promotion.** 9 fields that were
+  previously passed as inline empty arrays in advance_one_day() are now
+  persistent fields on WorldStateData: active_secrets, next_secret_id,
+  active_hostages, tattoos, next_tattoo_id, active_hunts, next_hunt_id,
+  next_commitment_id, next_crisis_id. These now survive between sessions
+  instead of silently resetting to empty on every startup.
+
 ### Systems Added 2026-05-18
 - **s29.15 Courtier School Techniques** — School technique bonuses wired into
   SkillResolver and ActionExecutor. Doji Courtier R1a (honor-gated Free Raise on
