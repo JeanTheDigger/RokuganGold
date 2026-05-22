@@ -532,9 +532,9 @@ static func generate_succession_topic(
 	succession: SuccessionData,
 	is_disputed: bool,
 ) -> Dictionary:
-	var tier: int = 4 if not is_disputed else 2
+	var tier: TopicData.Tier = TopicData.Tier.TIER_4 if not is_disputed else TopicData.Tier.TIER_2
 	var momentum: float = 10.0 if not is_disputed else 50.0
-	var category: String = "POLITICAL"
+	var category: TopicData.Category = TopicData.Category.POLITICAL
 	var slug: String = "succession_%s_%s" % [succession.clan, str(succession.succession_id)]
 
 	return {

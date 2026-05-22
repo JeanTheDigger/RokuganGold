@@ -13665,3 +13665,124 @@ func test_daily_letter_pass_skips_dead_characters() -> void:
 	)
 	assert_eq(results.size(), 0,
 		"Dead characters should not write letters")
+
+
+# -- DayOrchestrator Audit (2026-05-22) ----------------------------------------
+
+func _make_dead_char_do(id: int, clan: String = "Crane") -> L5RCharacterData:
+	var c := L5RCharacterData.new()
+	c.character_id = id
+	c.clan = clan
+	c.stamina = 2
+	c.willpower = 2
+	c.wounds_taken = 999
+	return c
+
+
+func test_grand_ritual_uses_find_master_character_not_direct_lookup() -> void:
+	var master := L5RCharacterData.new()
+	master.character_id = 100
+	master.clan = "Phoenix"
+	master.role_position = "Master of Fire"
+	master.stamina = 2
+	master.willpower = 2
+	var chars_by_id: Dictionary = {100: master}
+	var result: L5RCharacterData = DayOrchestrator._find_master_character(
+		PhoenixCouncil.Master.FIRE, chars_by_id)
+	assert_eq(result.character_id, 100,
+		"_find_master_character should find by role_position, not by enum ID")
+
+
+func test_succession_topic_reads_tier_and_category_from_dict() -> void:
+	var succession := SuccessionData.new()
+	succession.clan = "Crane"
+	succession.deceased_id = 5
+	succession.succession_id = 1
+	var topic_dict: Dictionary = SuccessionSystem.generate_succession_topic(
+		succession, true)
+	assert_eq(topic_dict["tier"], TopicData.Tier.TIER_2,
+		"Disputed succession should produce TIER_2")
+	assert_eq(topic_dict["category"], TopicData.Category.POLITICAL,
+		"Succession topics should be POLITICAL")
+
+
+func test_topic_from_dict_reads_title() -> void:
+	var topic_dict: Dictionary = {
+		"title": "War Declared",
+		"topic_type": "war",
+		"tier": TopicData.Tier.TIER_2,
+		"category": TopicData.Category.MILITARY,
+	}
+	var next_id: Array = [100]
+	var t: TopicData = DayOrchestrator._topic_from_dict(topic_dict, next_id, 10)
+	assert_eq(t.title, "War Declared",
+		"_topic_from_dict should read title from dict")
+	assert_eq(t.topic_id, 100)
+	assert_eq(next_id[0], 101)
+
+
+func test_get_witnesses_at_location_skips_dead_characters() -> void:
+	var alive := L5RCharacterData.new()
+	alive.character_id = 2
+	alive.physical_location = "castle_1"
+	alive.stamina = 2
+	alive.willpower = 2
+	var dead := _make_dead_char_do(3)
+	dead.physical_location = "castle_1"
+	var chars_by_id: Dictionary = {2: alive, 3: dead}
+	var witnesses: Array = DayOrchestrator._get_witnesses_at_location(
+		1, "castle_1", chars_by_id, {})
+	assert_true(2 in witnesses, "Alive character should be witness")
+	assert_false(3 in witnesses, "Dead character should not be witness")
+
+
+func test_find_clan_lord_skips_dead_lords() -> void:
+	var dead_lord := _make_dead_char_do(10, "Lion")
+	dead_lord.status = 7.0
+	dead_lord.lord_id = -1
+	var alive_lord := L5RCharacterData.new()
+	alive_lord.character_id = 11
+	alive_lord.clan = "Lion"
+	alive_lord.status = 5.5
+	alive_lord.lord_id = -1
+	alive_lord.stamina = 2
+	alive_lord.willpower = 2
+	var result: int = DayOrchestrator._find_clan_lord([dead_lord, alive_lord], "Lion")
+	assert_eq(result, 11, "Should select alive lord, not dead one")
+
+
+func test_find_bodyguard_skips_dead_bodyguard() -> void:
+	var target := L5RCharacterData.new()
+	target.character_id = 1
+	target.physical_location = "castle_1"
+	target.stamina = 2
+	target.willpower = 2
+	var dead_guard := _make_dead_char_do(2)
+	dead_guard.assigned_protection_target_id = 1
+	dead_guard.physical_location = "castle_1"
+	dead_guard.skills = {"Kenjutsu": 7, "Iaijutsu": 5}
+	var alive_guard := L5RCharacterData.new()
+	alive_guard.character_id = 3
+	alive_guard.assigned_protection_target_id = 1
+	alive_guard.physical_location = "castle_1"
+	alive_guard.skills = {"Kenjutsu": 3, "Iaijutsu": 2}
+	alive_guard.stamina = 2
+	alive_guard.willpower = 2
+	var chars_by_id: Dictionary = {2: dead_guard, 3: alive_guard}
+	var result: L5RCharacterData = DayOrchestrator._find_bodyguard(target, chars_by_id)
+	assert_eq(result.character_id, 3,
+		"Should select alive bodyguard, not dead one with higher skill")
+
+
+func test_cohabitation_skips_dead_characters() -> void:
+	var alive1 := L5RCharacterData.new()
+	alive1.character_id = 1
+	alive1.physical_location = "castle_1"
+	alive1.stamina = 2
+	alive1.willpower = 2
+	var dead := _make_dead_char_do(2)
+	dead.physical_location = "castle_1"
+	var chars_by_id: Dictionary = {1: alive1, 2: dead}
+	DayOrchestrator._apply_cohabitation([alive1, dead], chars_by_id)
+	assert_false(alive1.cohabitation_days.has(2),
+		"Alive character should not accumulate cohabitation with dead character")

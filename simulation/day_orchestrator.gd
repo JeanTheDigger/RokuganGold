@@ -1633,10 +1633,12 @@ static func _process_seasonal_stipend_disposition(
 ) -> int:
 	var updates_applied: int = 0
 	for retainer: L5RCharacterData in characters:
+		if CharacterStats.is_dead(retainer):
+			continue
 		if retainer.lord_id < 0:
 			continue
 		var lord: L5RCharacterData = characters_by_id.get(retainer.lord_id)
-		if lord == null:
+		if lord == null or CharacterStats.is_dead(lord):
 			continue
 		var modifier: float = ResourceTick.compute_stipend_modifier(
 			lord.bushido_virtue, lord.shourido_virtue,
@@ -1693,6 +1695,8 @@ static func _create_stipend_failure_topics(
 			if oid == lord_id or oid == cid:
 				continue
 			var other: L5RCharacterData = characters_by_id[oid]
+			if CharacterStats.is_dead(other):
+				continue
 			if other.lord_id == lord_id and affected != null and other.physical_location == affected.physical_location and other.physical_location != "":
 				if topic.topic_id not in other.topic_pool:
 					other.topic_pool.append(topic.topic_id)
@@ -5399,6 +5403,8 @@ static func _get_witnesses_at_location(
 		if cid == perpetrator_id:
 			continue
 		var c: L5RCharacterData = characters_by_id[cid]
+		if CharacterStats.is_dead(c):
+			continue
 		if c.physical_location == location:
 			witnesses.append(cid)
 	return witnesses
@@ -5757,6 +5763,12 @@ static func _process_lord_deaths(
 		topic.momentum = topic_dict.get("momentum", 10.0)
 		topic.topic_type = "succession"
 		topic.variant = topic_dict.get("variant", "clean")
+		topic.tier = topic_dict.get("tier", TopicData.Tier.TIER_4)
+		topic.category = topic_dict.get("category", TopicData.Category.POLITICAL)
+		topic.ic_day_created = ic_day
+		var subject_ids: Array = topic_dict.get("subject_ids", [])
+		if not subject_ids.is_empty():
+			topic.subject_character_id = subject_ids[0]
 		active_topics.append(topic)
 
 		active_successions.append(succession)
@@ -6075,8 +6087,6 @@ static func _process_letter_commitment_creation(
 			if not already_exists:
 				var witnesses: Array = [letter.sender_id, letter.recipient_id]
 				var target_settlement: int = -1
-				var recipient_loc: String = ""
-				# fulfillment_target populated by caller if available
 				var cm: CommitmentData = CommitmentRegistry.create_commitment(
 					next_commitment_id[0],
 					Enums.CommitmentType.VISIT_PROMISE,
@@ -6680,6 +6690,8 @@ static func _apply_cohabitation(
 ) -> void:
 	var by_location: Dictionary = {}
 	for c: L5RCharacterData in characters:
+		if CharacterStats.is_dead(c):
+			continue
 		var loc: String = c.physical_location
 		if loc.is_empty():
 			continue
@@ -6875,6 +6887,8 @@ static func _process_arrival_observation(
 			if other_id == char_id:
 				continue
 			var other: L5RCharacterData = characters_by_id[other_id]
+			if CharacterStats.is_dead(other):
+				continue
 			if other.physical_location != dest:
 				continue
 			# Arriving character observes residents
@@ -8309,7 +8323,7 @@ static func _gather_promotion_candidates(
 			"school_rank": c.school_rank,
 			"glory": c.glory,
 			"disposition": 10,
-			"personality_virtue": c.primary_virtue,
+			"personality_virtue": c.bushido_virtue,
 			"battles_commanded": c.battle_record.get("battles_fought", 0) if c.battle_record is Dictionary else 0,
 			"battles_as_chui": c.battle_record.get("battles_as_chui", 0) if c.battle_record is Dictionary else 0,
 			"battles_as_taisa": c.battle_record.get("battles_as_taisa", 0) if c.battle_record is Dictionary else 0,
@@ -8972,11 +8986,15 @@ static func _apply_war_disposition_penalty(
 	if penalty >= 0:
 		return
 	for c: L5RCharacterData in characters:
+		if CharacterStats.is_dead(c):
+			continue
 		var c_side: String = WarSystem.get_clan_side(war, c.clan)
 		if c_side.is_empty():
 			continue
 		for other: L5RCharacterData in characters:
 			if other.character_id == c.character_id:
+				continue
+			if CharacterStats.is_dead(other):
 				continue
 			var o_side: String = WarSystem.get_clan_side(war, other.clan)
 			if o_side.is_empty() or o_side == c_side:
@@ -9005,6 +9023,8 @@ static func _process_supply_status_checks(
 	var results: Array = []
 
 	for lord: L5RCharacterData in characters:
+		if CharacterStats.is_dead(lord):
+			continue
 		if not _is_lord_tier(lord):
 			continue
 		var war: WarData = _find_active_war_for_clan(lord.clan, active_wars)
@@ -9409,6 +9429,8 @@ static func _find_clan_lord(
 	var best_id: int = -1
 	var best_status: float = -1.0
 	for c: L5RCharacterData in characters:
+		if CharacterStats.is_dead(c):
+			continue
 		if c.clan == clan and c.status >= 5.0 and c.lord_id == -1:
 			if c.status > best_status:
 				best_status = c.status
@@ -9931,7 +9953,7 @@ static func _apply_garrison_courtier_refusal_writebacks(
 		if absf(honor_loss) > 0.001:
 			var target_id: int = effects.get("target_npc_id", -1)
 			var target: L5RCharacterData = characters_by_id.get(target_id)
-			if target != null:
+			if target != null and not CharacterStats.is_dead(target):
 				HonorGlorySystem.apply_honor_change(target, honor_loss)
 		for s: SettlementData in settlements:
 			if s.settlement_type == Enums.SettlementType.WALL_TOWER \
@@ -10751,6 +10773,7 @@ static func _topic_from_dict(
 	var t := TopicData.new()
 	t.topic_id = next_topic_id[0]
 	next_topic_id[0] += 1
+	t.title = topic_dict.get("title", "")
 	t.topic_type = topic_dict.get("topic_type", "")
 	t.variant = topic_dict.get("variant", "")
 	t.slug = topic_dict.get("slug", "")
@@ -12338,7 +12361,7 @@ static func _process_phoenix_council_gating(
 		)
 		var master_chars: Array = []
 		for mid: int in living_masters:
-			var mc: L5RCharacterData = characters_by_id.get(mid) as L5RCharacterData
+			var mc: L5RCharacterData = _find_master_character(mid, characters_by_id)
 			if mc != null:
 				master_chars.append(mc)
 		var ritual_result: Dictionary = PhoenixCouncil.apply_grand_ritual_devastation(
@@ -16023,6 +16046,8 @@ static func _find_bodyguard(
 	var best_combat: int = -1
 	for char_id: int in characters_by_id:
 		var c: L5RCharacterData = characters_by_id[char_id]
+		if CharacterStats.is_dead(c):
+			continue
 		if c.assigned_protection_target_id != target.character_id:
 			continue
 		if c.physical_location != target.physical_location:
@@ -16513,6 +16538,8 @@ static func _attempt_proxy_dispatch(
 	var best_vassal: L5RCharacterData = null
 	var best_travel: int = days_remaining + 1
 	for ch: L5RCharacterData in characters:
+		if CharacterStats.is_dead(ch):
+			continue
 		if ch.lord_id != lord.character_id:
 			continue
 		if TravelSystem.is_traveling(ch):

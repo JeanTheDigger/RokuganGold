@@ -1730,6 +1730,39 @@ costs, or forward-wiring. Do not treat as bugs.
   LetterData objects from the grave. Added dead character filter at loop start.
   1 test.
 
+### Known Code Issues (found and fixed 2026-05-22, DayOrchestrator audit)
+- **Grand Ritual master lookup — enum IDs used as character IDs. FIXED.**
+  `_find_living_elemental_masters()` returns PhoenixCouncil.Master enum values
+  (FIRE=0, WATER=1...), not character IDs. Line 12340 fed these directly into
+  `characters_by_id.get(mid)`, which never found any match. Grand Ritual always
+  had zero masters, making it ineffective. Changed to call
+  `_find_master_character(mid, characters_by_id)` which scans by role_position.
+  1 test.
+- **Succession topic missing tier/category/ic_day_created from topic_dict. FIXED.**
+  `generate_succession_topic()` returned tier, category, subject_ids but the
+  orchestrator never read them. Topic always got default TIER_4/PERSONAL.
+  Disputed successions (TIER_2/POLITICAL) were incorrectly created as minor
+  personal topics. Also fixed raw int tier values in SuccessionSystem to use
+  TopicData.Tier enum. 1 test.
+- **`c.primary_virtue` — nonexistent field on L5RCharacterData. FIXED.**
+  Military promotion candidate gathering at line 8312 referenced
+  `c.primary_virtue` which doesn't exist. Changed to `c.bushido_virtue`.
+- **`_topic_from_dict` missing title read. FIXED.**
+  All topics created via this helper (court close, edict, war end, Winter Court
+  announcement) had blank titles. Added `t.title = topic_dict.get("title", "")`.
+  1 test.
+- **Dead character guards (12 functions). FIXED.**
+  `_get_witnesses_at_location`, `_apply_cohabitation`,
+  `_process_arrival_observation`, `_apply_war_disposition_penalty` (both loops),
+  `_process_supply_status_checks`, `_find_clan_lord`, `_find_bodyguard`,
+  `_attempt_proxy_dispatch`, `_process_seasonal_stipend_disposition` (retainer
+  and lord), `_create_stipend_failure_topics`,
+  `_apply_garrison_courtier_refusal_writebacks`. Dead characters could be
+  selected as witnesses, bodyguards, proxies, clan lords; could accumulate
+  cohabitation days, disposition changes, and stipend topics. 4 tests.
+- **Dead `recipient_loc` variable in VISIT_PROMISE creation. FIXED.**
+  Declared but never used. Removed.
+
 ### Known Code Issues (found and fixed 2026-05-22, ActionExecutor audit)
 - **INTIMIDATE failed effects silently dropped — `effects["failed"]` missing. FIXED.**
   `_execute_intimidation()` set `honor_change` (Low Skill penalty from Table 2.3)
