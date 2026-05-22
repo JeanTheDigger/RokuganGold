@@ -94,7 +94,7 @@ static func build_context(
 	ctx.known_contacts = flat_contacts
 	ctx.contact_clans = clan_lookup
 	ctx.met_characters = character.met_characters.duplicate()
-	ctx.knowledge_pool = character.knowledge_pool
+	ctx.knowledge_pool = character.knowledge_pool.duplicate()
 	ctx.known_secrets = world_state.get("known_secrets", [])
 
 	# Lord-tier fields
@@ -2689,7 +2689,6 @@ static func _build_forge_letter_metadata(
 	ctx: NPCDataStructures.ContextSnapshot,
 	need: NPCDataStructures.ImmediateNeed,
 ) -> Dictionary:
-	var forgery_rank: int = ctx.skill_ranks.get("Forgery", 0)
 	var authority: String = _forge_authority_from_lord_rank(ctx.lord_rank)
 	var impersonated_id: int = need.target_npc_id
 	var recipient_id: int = -1
@@ -2711,7 +2710,6 @@ static func _build_forge_order_metadata(
 	ctx: NPCDataStructures.ContextSnapshot,
 	need: NPCDataStructures.ImmediateNeed,
 ) -> Dictionary:
-	var forgery_rank: int = ctx.skill_ranks.get("Forgery", 0)
 	var authority: String = _forge_authority_from_lord_rank(ctx.lord_rank)
 	var order_info: Dictionary = _pick_forged_order_type(need)
 	return {
@@ -2963,6 +2961,8 @@ static func _pick_gossip_subject(ctx: NPCDataStructures.ContextSnapshot) -> int:
 	var worst_id: int = -1
 	var worst_disp: int = 0
 	for cid: Variant in ctx.disposition_values:
+		if int(cid) == ctx.character_id:
+			continue
 		var disp: int = ctx.disposition_values[cid]
 		if disp < worst_disp:
 			worst_disp = disp
@@ -3201,6 +3201,8 @@ static func _collect_vassal_stockpiles(
 		if not (c is L5RCharacterData):
 			continue
 		var ch: L5RCharacterData = c
+		if CharacterStats.is_dead(ch):
+			continue
 		if ch.lord_id != lord.character_id:
 			continue
 		var disp: int = ch.disposition_values.get(lord.character_id, 0)
@@ -3294,6 +3296,8 @@ static func _collect_allied_surplus(
 		if not (c is L5RCharacterData):
 			continue
 		var ch: L5RCharacterData = c
+		if CharacterStats.is_dead(ch):
+			continue
 		if ch.clan == character.clan:
 			continue
 		if ch.character_id == character.character_id:
@@ -3424,6 +3428,8 @@ static func _pick_levy_province(ctx: NPCDataStructures.ContextSnapshot) -> int:
 	var best_id: int = -1
 	var best_pu: int = -1
 	for ps: Variant in ctx.province_statuses:
+		if not ps is NPCDataStructures.ProvinceStatus:
+			continue
 		var pid: int = (ps as NPCDataStructures.ProvinceStatus).province_id
 		var pu: int = (ps as NPCDataStructures.ProvinceStatus).total_settlement_pu
 		if pu > best_pu:

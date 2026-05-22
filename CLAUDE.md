@@ -1744,6 +1744,37 @@ costs, or forward-wiring. Do not treat as bugs.
   conversion is correct (2.0 → 2) but the type annotation mismatch could cause
   issues in strict mode. Changed to int literals (2, -2).
 
+### Known Code Issues (found and fixed 2026-05-22, NPCDecisionEngine audit)
+- **knowledge_pool aliasing in build_context() — mutation leaked to character. FIXED.**
+  `ctx.knowledge_pool = character.knowledge_pool` assigned a direct reference.
+  Unlike `topic_pool`, `skills`, `disposition_values`, and `met_characters`
+  (all `.duplicate()`), knowledge_pool had no copy. Any engine code modifying
+  `ctx.knowledge_pool` (filtering, appending) would mutate the character's
+  persistent data. Added `.duplicate()`. 1 test.
+- **Dead characters in _collect_vassal_stockpiles() — phantom resources. FIXED.**
+  Iterated `characters_by_id` without `CharacterStats.is_dead()` check. Dead
+  vassals contributed phantom rice/arms stockpiles to lord's feasibility
+  calculations, inflating perceived resource availability. Added dead guard.
+  1 test.
+- **Dead characters in _collect_allied_surplus() — phantom allied surplus. FIXED.**
+  Same pattern as vassal stockpiles. Dead allied lords contributed phantom
+  surplus rice/koku to inter-clan aid calculations. Added dead guard. 1 test.
+- **_pick_levy_province() unchecked cast — potential crash on non-typed entries. FIXED.**
+  `(ps as NPCDataStructures.ProvinceStatus)` cast without type guard. If
+  `province_statuses` contained non-ProvinceStatus entries, the cast would
+  produce null and crash on `.province_id` access. Added
+  `if not ps is NPCDataStructures.ProvinceStatus: continue`. 2 tests.
+- **_pick_gossip_subject() self-selection — NPC could gossip about themselves. FIXED.**
+  Iterated `ctx.disposition_values` without excluding `ctx.character_id`. If
+  the NPC had negative self-disposition (edge case from modifier stacking),
+  they could select themselves as gossip target. Added
+  `if int(cid) == ctx.character_id: continue`. 2 tests.
+- **Dead forgery_rank variables in forge metadata helpers. FIXED.**
+  `_build_forge_letter_metadata()` and `_build_forge_order_metadata()` both
+  declared `var forgery_rank: int = ctx.skill_ranks.get("Forgery", 0)` but
+  never used it. Authority level comes from `_forge_authority_from_lord_rank()`.
+  Removed both dead variables.
+
 ### Systems Added 2026-05-18
 - **s29.15 Courtier School Techniques** — School technique bonuses wired into
   SkillResolver and ActionExecutor. Doji Courtier R1a (honor-gated Free Raise on

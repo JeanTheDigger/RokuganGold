@@ -3458,3 +3458,141 @@ func test_forge_objective_alignment_entries() -> void:
 	assert_true(data["ACQUIRE_LEVERAGE"].has("FORGE_ORDER"))
 	assert_true(data["SUPPRESS_INVESTIGATION"].has("FORGE_IMPERSONATION_LETTER"))
 	assert_true(data["SUPPRESS_INVESTIGATION"].has("FORGE_ORDER"))
+
+
+# -- Audit: knowledge_pool aliasing -------------------------------------------
+
+func test_build_context_knowledge_pool_is_independent_copy() -> void:
+	var entry := KnowledgeEntry.new()
+	entry.entry_type = "personality_insight"
+	entry.data = {"virtue": "REI"}
+	_char.knowledge_pool.append(entry)
+	var ctx := NPCDecisionEngine.build_context(_char, _world_state)
+	ctx.knowledge_pool.clear()
+	assert_eq(_char.knowledge_pool.size(), 1,
+		"Clearing ctx.knowledge_pool must not affect character.knowledge_pool")
+
+
+# -- Audit: dead character guards in stockpile collectors --------------------
+
+func _make_dead_char(id: int, clan: String, lord_id: int) -> L5RCharacterData:
+	var ch := L5RCharacterData.new()
+	ch.character_id = id
+	ch.clan = clan
+	ch.lord_id = lord_id
+	ch.stamina = 2
+	ch.willpower = 2
+	ch.wounds_taken = 999
+	return ch
+
+
+func test_collect_vassal_stockpiles_skips_dead_vassals() -> void:
+	var lord := L5RCharacterData.new()
+	lord.character_id = 10
+	lord.clan = "Crane"
+	var alive_vassal := L5RCharacterData.new()
+	alive_vassal.character_id = 20
+	alive_vassal.clan = "Crane"
+	alive_vassal.lord_id = 10
+	alive_vassal.stamina = 2
+	alive_vassal.willpower = 2
+	var dead_vassal := _make_dead_char(30, "Crane", 10)
+	var province := ProvinceData.new()
+	province.province_id = 1
+	province.clan = "Crane"
+	var settlement := SettlementData.new()
+	settlement.province_id = 1
+	settlement.rice_stockpile = 50.0
+	settlement.population_pu = 10
+	var ws: Dictionary = {
+		"characters_by_id": {20: alive_vassal, 30: dead_vassal},
+	}
+	var result: Array = NPCDecisionEngine._collect_vassal_stockpiles(
+		lord, ws, [settlement], [province])
+	var found_ids: Array = []
+	for entry: Variant in result:
+		found_ids.append(entry["character_id"])
+	assert_true(20 in found_ids, "Alive vassal should appear")
+	assert_false(30 in found_ids, "Dead vassal should be skipped")
+
+
+func test_collect_allied_surplus_skips_dead_allies() -> void:
+	var me := L5RCharacterData.new()
+	me.character_id = 1
+	me.clan = "Crane"
+	me.stamina = 2
+	me.willpower = 2
+	var alive_ally := L5RCharacterData.new()
+	alive_ally.character_id = 2
+	alive_ally.clan = "Lion"
+	alive_ally.lord_id = -1
+	alive_ally.status = 6.0
+	alive_ally.stamina = 2
+	alive_ally.willpower = 2
+	me.disposition_values[2] = 40
+	var dead_ally := _make_dead_char(3, "Phoenix", -1)
+	dead_ally.status = 6.0
+	me.disposition_values[3] = 40
+	var province_lion := ProvinceData.new()
+	province_lion.province_id = 1
+	province_lion.clan = "Lion"
+	var province_phoenix := ProvinceData.new()
+	province_phoenix.province_id = 2
+	province_phoenix.clan = "Phoenix"
+	var settlement_lion := SettlementData.new()
+	settlement_lion.province_id = 1
+	settlement_lion.rice_stockpile = 200.0
+	settlement_lion.farming_pu = 10
+	var settlement_phoenix := SettlementData.new()
+	settlement_phoenix.province_id = 2
+	settlement_phoenix.rice_stockpile = 200.0
+	settlement_phoenix.farming_pu = 10
+	var ws: Dictionary = {
+		"characters_by_id": {2: alive_ally, 3: dead_ally},
+	}
+	var result: Array = NPCDecisionEngine._collect_allied_surplus(
+		me, ws, [settlement_lion, settlement_phoenix],
+		[province_lion, province_phoenix])
+	var found_ids: Array = []
+	for entry: Variant in result:
+		found_ids.append(entry["character_id"])
+	assert_true(2 in found_ids, "Alive ally should appear")
+	assert_false(3 in found_ids, "Dead ally should be skipped")
+
+
+# -- Audit: _pick_levy_province type guard ------------------------------------
+
+func test_pick_levy_province_skips_non_province_status_entries() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	var ps := NPCDataStructures.ProvinceStatus.new()
+	ps.province_id = 5
+	ps.total_settlement_pu = 100
+	ctx.province_statuses = [ps, "garbage_string", 42]
+	var result: int = NPCDecisionEngine._pick_levy_province(ctx)
+	assert_eq(result, 5, "Should pick the valid ProvinceStatus and skip non-typed entries")
+
+
+func test_pick_levy_province_empty_returns_negative_one() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.province_statuses = []
+	var result: int = NPCDecisionEngine._pick_levy_province(ctx)
+	assert_eq(result, -1, "Empty province_statuses should return -1")
+
+
+# -- Audit: _pick_gossip_subject self-selection guard -------------------------
+
+func test_pick_gossip_subject_excludes_self() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.character_id = 1
+	ctx.disposition_values = {1: -50, 2: -10, 3: 5}
+	var result: int = NPCDecisionEngine._pick_gossip_subject(ctx)
+	assert_ne(result, 1, "NPC should never select themselves as gossip subject")
+	assert_eq(result, 2, "Should pick character 2 (worst non-self disposition)")
+
+
+func test_pick_gossip_subject_self_is_only_negative_returns_negative_one() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.character_id = 1
+	ctx.disposition_values = {1: -50, 2: 10, 3: 20}
+	var result: int = NPCDecisionEngine._pick_gossip_subject(ctx)
+	assert_eq(result, -1, "Only negative is self, so no valid gossip target")
