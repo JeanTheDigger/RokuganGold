@@ -295,6 +295,7 @@ static func advance_day(
 		crime_records, characters_by_id,
 		active_topics, next_topic_id, ic_day, world_states,
 		active_secrets, next_secret_id, next_case_id, dice_engine,
+		death_events,
 	)
 
 	_process_witness_report_letter_writebacks(
@@ -4207,6 +4208,7 @@ static func _process_witness_tampering_writebacks(
 	next_secret_id: Array = [1],
 	next_case_id: Array = [1],
 	dice_engine: DiceEngine = null,
+	death_events: Array = [],
 ) -> void:
 	for result: Variant in results:
 		if not result is Dictionary:
@@ -4272,7 +4274,7 @@ static func _process_witness_tampering_writebacks(
 					next_case_id[0] += 1
 					crime_records.append(murder_record)
 					if victim != null:
-						_apply_victim_death(victim, active_topics, next_topic_id, ic_day, kill_location)
+						_apply_victim_death(victim, active_topics, next_topic_id, ic_day, kill_location, death_events)
 					var criminal_2: L5RCharacterData = characters_by_id.get(criminal_id)
 					if criminal_2 != null:
 						var murder_topic: TopicData = _create_crime_topic(
@@ -4353,9 +4355,17 @@ static func _apply_victim_death(
 	next_topic_id: Array,
 	ic_day: int,
 	kill_location: String,
+	death_events: Array = [],
 ) -> void:
 	var earth: int = CharacterStats.get_ring_value(victim, Enums.Ring.EARTH)
 	victim.wounds_taken = earth * 5 * 5
+	death_events.append({
+		"character_id": victim.character_id,
+		"is_lord": victim.role_position != "",
+		"cause": "witness_killed",
+		"suspicious_death": true,
+		"ic_day": ic_day,
+	})
 	var death_topic_id: int = next_topic_id[0]
 	next_topic_id[0] = death_topic_id + 1
 	var title: String = "Death of %s at %s" % [victim.character_name, kill_location]

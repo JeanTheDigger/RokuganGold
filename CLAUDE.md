@@ -1602,6 +1602,12 @@ costs, or forward-wiring. Do not treat as bugs.
   instead of silently resetting to empty on every startup.
 
 ### Known Code Issues (found and fixed 2026-05-22, DayOrchestrator audit)
+- **KILL_WITNESS never created death_events — lord succession skipped. FIXED.**
+  `_apply_victim_death()` set wounds to lethal and created a death topic
+  but never appended to `death_events`. If a killed witness held a lord
+  position, succession never triggered. Added `death_events` parameter to
+  `_apply_victim_death()` and `_process_witness_tampering_writebacks()`.
+  Creates death_event with `suspicious_death: true`. 2 tests.
 - **Construction validation key mismatch — temples, monasteries, ships. FIXED.**
   `valid_4.get("valid_4", false)`, `valid_5.get("valid_5", false)`,
   `valid_6.get("valid_6", false)` used wrong keys (copy-paste error from

@@ -13577,3 +13577,45 @@ func test_heir_topics_filtered_by_subject_character() -> void:
 				break
 	assert_eq(cand_topics.size(), 1, "Only topics about candidate 10 should be included")
 	assert_eq(cand_topics[0]["topic_type"], "military_victory")
+
+
+# -- KILL_WITNESS Death Event (2026-05-22) ------------------------------------
+
+func test_kill_witness_creates_death_event() -> void:
+	var victim := L5RCharacterData.new()
+	victim.character_id = 50
+	victim.character_name = "Witness Lord"
+	victim.role_position = "Provincial Daimyo"
+	victim.stamina = 2
+	victim.willpower = 2
+	var death_events: Array = []
+	var active_topics: Array = []
+	var next_topic_id: Array = [200]
+	DayOrchestrator._apply_victim_death(
+		victim, active_topics, next_topic_id, 10, "settlement_100", death_events,
+	)
+	assert_true(CharacterStats.is_dead(victim), "Victim should be dead")
+	assert_eq(death_events.size(), 1, "Should create a death_event")
+	assert_eq(death_events[0]["character_id"], 50)
+	assert_true(death_events[0].get("is_lord", false),
+		"Lord victim should have is_lord=true")
+	assert_true(death_events[0].get("suspicious_death", false),
+		"Killed witness death should be suspicious")
+
+
+func test_kill_witness_non_lord_death_event() -> void:
+	var victim := L5RCharacterData.new()
+	victim.character_id = 51
+	victim.character_name = "Witness Peasant"
+	victim.role_position = ""
+	victim.stamina = 2
+	victim.willpower = 2
+	var death_events: Array = []
+	var active_topics: Array = []
+	var next_topic_id: Array = [300]
+	DayOrchestrator._apply_victim_death(
+		victim, active_topics, next_topic_id, 10, "settlement_200", death_events,
+	)
+	assert_eq(death_events.size(), 1)
+	assert_false(death_events[0].get("is_lord", true),
+		"Non-lord victim should have is_lord=false")
