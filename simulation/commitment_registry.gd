@@ -254,7 +254,7 @@ static func apply_consequences(
 	var creditor_disp: int = conseq.get("creditor_disp", 0)
 	if creditor_disp != 0:
 		var creditor: L5RCharacterData = characters_by_id.get(commitment.creditor_npc_id)
-		if creditor != null:
+		if creditor != null and not CharacterStats.is_dead(creditor):
 			var old_val: int = creditor.disposition_values.get(debtor.character_id, 0)
 			var new_val: int = clampi(old_val + creditor_disp, -100, 100)
 			creditor.disposition_values[debtor.character_id] = new_val
@@ -276,7 +276,7 @@ static func apply_consequences(
 			if w_id == commitment.creditor_npc_id or w_id == commitment.debtor_npc_id:
 				continue
 			var witness: L5RCharacterData = characters_by_id.get(w_id)
-			if witness == null:
+			if witness == null or CharacterStats.is_dead(witness):
 				continue
 			var old_val: int = witness.disposition_values.get(debtor.character_id, 0)
 			var new_val: int = clampi(old_val + witness_disp, -100, 100)

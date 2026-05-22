@@ -1740,6 +1740,21 @@ costs, or forward-wiring. Do not treat as bugs.
   Dead recipients of gifts/social actions received disposition changes.
   Added dead guard. 1 test.
 
+### Known Code Issues (found and fixed 2026-05-22, CommitmentRegistry audit)
+- **apply_consequences() creditor disposition applied to dead creditor. FIXED.**
+  `apply_consequences()` checked `creditor != null` but not dead. Dead creditors
+  accumulated meaningless disposition changes toward the debtor. Added
+  `CharacterStats.is_dead(creditor)` guard. 1 test.
+- **apply_consequences() witness disposition applied to dead witnesses. FIXED.**
+  Same pattern — `witness == null` check but no dead guard. Dead witnesses
+  received disposition penalties from broken commitments. Added
+  `CharacterStats.is_dead(witness)` guard. 1 test.
+- **topic_tier values in CONSEQUENCE_TABLE — dead data (not a bug).**
+  Raw int `topic_tier` values (4, 3, 2, -1) exist in the consequence table
+  but are never consumed. Topic creation in `_process_commitment_deadlines()`
+  uses commitment tier, not consequence topic_tier. Documented, not removed
+  (may be consumed by future topic generation).
+
 ### Known Code Issues (found and fixed 2026-05-22, DayOrchestrator audit)
 - **Grand Ritual master lookup — enum IDs used as character IDs. FIXED.**
   `_find_living_elemental_masters()` returns PhoenixCouncil.Master enum values
