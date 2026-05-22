@@ -6825,6 +6825,8 @@ static func _process_daily_letter_pass(
 ) -> Array:
 	var results: Array = []
 	for character: L5RCharacterData in characters:
+		if CharacterStats.is_dead(character):
+			continue
 		var objectives: Dictionary = objectives_map.get(character.character_id, {})
 		if objectives.is_empty():
 			continue

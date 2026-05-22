@@ -13619,3 +13619,49 @@ func test_kill_witness_non_lord_death_event() -> void:
 	assert_eq(death_events.size(), 1)
 	assert_false(death_events[0].get("is_lord", true),
 		"Non-lord victim should have is_lord=false")
+
+
+# -- Dead Character Letter Pass ------------------------------------------------
+
+func test_daily_letter_pass_skips_dead_characters() -> void:
+	var c := L5RCharacterData.new()
+	c.character_id = 50
+	c.character_name = "Dead Letter Writer"
+	c.status = 2.0
+	c.wounds_taken = 999
+	c.bushido_virtue = Enums.BushidoVirtue.NONE
+	c.shourido_virtue = Enums.ShouridoVirtue.NONE
+	c.civilian_order_budget_max = 0
+	c.met_characters = [1]
+	c.topic_pool = [100]
+	c.topic_positions = {100: 50.0}
+	var objectives_map: Dictionary = {
+		50: {"primary": {"need_type": "RAISE_DISPOSITION", "target_npc_id": 1}},
+	}
+	var world_states: Dictionary = {
+		50: {
+			"context_flag": Enums.ContextFlag.AT_OWN_HOLDINGS,
+			"season": 1,
+			"ic_day": 10,
+			"characters_present": [],
+			"is_lord": false,
+			"pending_events": [],
+			"action_log": [],
+			"active_topics": [],
+		},
+	}
+	var scoring: Dictionary = {
+		"objective_alignment": {
+			"RAISE_DISPOSITION": {"WRITE_LETTER": 60, "CHARM": 80},
+		},
+		"disposition_tiers": [],
+		"personality_lean": {},
+		"action_skill_map": {},
+		"urgency_rules": [],
+		"topic_position_alignment": {},
+	}
+	var results: Array = DayOrchestrator._process_daily_letter_pass(
+		[c], {50: c}, objectives_map, scoring, world_states
+	)
+	assert_eq(results.size(), 0,
+		"Dead characters should not write letters")
