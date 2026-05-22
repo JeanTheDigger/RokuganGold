@@ -199,14 +199,14 @@ static func compute_renege_consequences(
 	var result: Dictionary = {
 		"honor_change": base_honor,
 		"disposition_penalty": RENEGE_DISPOSITION_PENALTY,
-		"topic_tier": 3,
+		"topic_tier": TopicData.Tier.TIER_3,
 		"topic_type": "renege",
 		"topic_variant": "commitment_broken",
 	}
 
 	if commitment.source == CourtCommitmentData.CommitmentSource.EDICT:
 		result["honor_change"] = base_honor + EDICT_RENEGE_HONOR_COST
-		result["topic_tier"] = 2
+		result["topic_tier"] = TopicData.Tier.TIER_2
 
 	return result
 

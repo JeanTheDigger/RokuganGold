@@ -1601,6 +1601,92 @@ costs, or forward-wiring. Do not treat as bugs.
   next_commitment_id, next_crisis_id. These now survive between sessions
   instead of silently resetting to empty on every startup.
 
+### Known Code Issues (found and fixed 2026-05-22, DayOrchestrator audit)
+- **Construction validation key mismatch — temples, monasteries, ships. FIXED.**
+  `valid_4.get("valid_4", false)`, `valid_5.get("valid_5", false)`,
+  `valid_6.get("valid_6", false)` used wrong keys (copy-paste error from
+  variable suffix). All three always evaluated to false, silently blocking
+  FOUND_TEMPLE, FOUND_MONASTERY, and COMMISSION_SHIP construction. Changed
+  to `valid_4.get("valid", false)` etc., matching BUILD_FORTIFICATION and
+  BUILD_SHRINE patterns.
+- **Natural deaths never created death_events — lord succession skipped. FIXED.**
+  `_process_gempukku()` set wounds to lethal and created a topic but never
+  appended to `death_events`. Function didn't even receive the parameter.
+  Lords dying of natural causes never triggered succession, orphaned
+  objectives, or hierarchy cascade. Added `death_events` parameter and
+  death_event creation with `is_lord`, `suspicious_death: false`. Also
+  added second death processing pass after seasonal block (gempukku runs
+  in seasonal, but `_process_lord_deaths` runs in daily phase before
+  `death_events.clear()`). Natural death topics now set
+  `subject_character_id` and `ic_day_created`.
+- **Battle war scores never fire — wrong key access. FIXED.**
+  `md.get("battle_triggered", false)` at two sites read top-level key, but
+  `battle_triggered` is nested inside `mr["battle_check"]`. Changed to
+  `md.get("battle_check", {}).get("battle_triggered", false)`. War scores
+  from battle engagements were silently lost, affecting war termination.
+- **Army recovery computed but never applied. FIXED.**
+  `_process_army_recovery()` computed `health_recovery` and
+  `morale_recovery` per company but only placed them in metadata — never
+  wrote back to company dicts. Armies never healed between battles. Added
+  writeback lines for `current_health`, `current_morale`, and
+  `arms_deprivation_tick`.
+- **objectives_map type mismatch in impersonation detection. FIXED.**
+  `objectives_map[victim_id] = []` initialized as Array instead of
+  Dictionary. Every other site uses `{}`. The INVESTIGATE_THREAT objective
+  was invisible to the NPC engine. Changed to `objectives_map[victim_id] = {}`
+  with proper `["primary"]` key assignment.
+- **Seppuku refusal topic never added to active_topics. FIXED.**
+  `resolve_seppuku()` created TopicData but only returned `topic_id` in
+  result dict. Object went out of scope. Orchestrator searched
+  `active_topics` for the ID (never found it). Lord got phantom topic_id
+  in topic_pool. Now returns `refusal_topic` TopicData in result dict;
+  orchestrator appends it to `active_topics`.
+- **Civil war resolution topic tier uses raw int. FIXED.**
+  `topic.tier = 2` assigned raw int 2 = TIER_3 (enum: TIER_1=0, TIER_2=1,
+  TIER_3=2, TIER_4=3). Intent was TIER_2. Changed to
+  `TopicData.Tier.TIER_2`.
+- **Court commitment renege topic tier off by one. FIXED.**
+  `CourtCommitmentSystem` returned raw ints 3 and 2 for topic_tier.
+  Assigned directly to enum field: raw 3 = TIER_4, raw 2 = TIER_3.
+  Both one level lower than intended. Changed source to use
+  `TopicData.Tier.TIER_3` and `TopicData.Tier.TIER_2`. Momentum
+  comparison updated to use enum.
+- **Letter ID computed from array size, not max ID. FIXED.**
+  `next_letter_id = [pending_letters.size() + 1]` — after save/load,
+  letters with high IDs could collide with newly assigned ones. Changed
+  to scan max `letter_id` across all pending letters.
+- **Winter Court letter IDs used separate counter. FIXED.**
+  `wc_letter_id = [pending_letters.size() + 1000]` created a disconnected
+  counter that would eventually collide with main letter IDs. Changed to
+  reuse `next_letter_id`.
+- **Heir designation topics not filtered by candidate. FIXED.**
+  `_evaluate_heir_designations` gave ALL of lord's known topics to EVERY
+  candidate equally. Achievement scoring factor was meaningless. Added
+  `topic.subject_character_id == cand_id` filter.
+- **Togashi worship_maluses structure mismatch. FIXED.**
+  `_build_togashi_world_state()` iterated worship malus values as nested
+  fortune→tier dictionaries, but `compute_all_province_maluses()` returns
+  flat combined dicts with keys like "stability_per_season" (floats/bools).
+  Calling `.get("tier", 0)` on a float would crash. Replaced with check
+  for any negative float/int or true bool value.
+- **Dead characters not filtered in 5 functions. FIXED.**
+  `_find_province_lord()`, `_get_clan_champions()`, `_run_strategic_reviews()`,
+  `_gather_promotion_candidates()`, `_apply_blessing_disposition()` all
+  iterated characters without `CharacterStats.is_dead()` check. Dead lords
+  could be selected as province lords, champions, strategic review
+  targets, and promotion candidates.
+- **_track_court_called missing current_season. FIXED.**
+  `_apply_court_creation()` called `_track_court_called()` without
+  `current_season` parameter (default -1). `last_court_season` never set,
+  allowing duplicate court creation in same season. Threaded
+  `current_season` through `_process_military_effects` →
+  `_apply_court_creation` → `_track_court_called`.
+- **Hunt disposition bypasses add_contact(). FIXED.**
+  `_apply_hunt_disposition()` directly mutated `met_characters` instead of
+  routing through `InformationSystem.add_contact()`. Hunt co-participants
+  never appeared in `known_contacts_by_clan`. Same bug class as two
+  previous fixes (WindDown and travel arrival). 12 tests.
+
 ### Systems Added 2026-05-18
 - **s29.15 Courtier School Techniques** — School technique bonuses wired into
   SkillResolver and ActionExecutor. Doji Courtier R1a (honor-gated Free Raise on

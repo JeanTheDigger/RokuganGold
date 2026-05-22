@@ -277,6 +277,7 @@ static func resolve_seppuku(
 		"infamy_delta": result.get("infamy_delta", 0.0),
 		"refusal_topic_tier": result.get("topic_tier", 4),
 		"refusal_topic_id": refusal_topic.topic_id if refusal_topic != null else -1,
+		"refusal_topic": refusal_topic,
 		"exile": record.crime_type == Enums.CrimeType.TREASON,
 		"treason_exile": treason_exile,
 	}

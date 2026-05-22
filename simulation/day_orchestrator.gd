@@ -205,7 +205,13 @@ static func advance_day(
 		approach_penalties, commitments, military_data, settlements
 	)
 
-	var next_letter_id: Array = [pending_letters.size() + 1]
+	var max_letter_id: int = 0
+	for _l: Variant in pending_letters:
+		if _l is LetterData and _l.letter_id > max_letter_id:
+			max_letter_id = _l.letter_id
+		elif _l is Dictionary and int(_l.get("letter_id", 0)) > max_letter_id:
+			max_letter_id = int(_l.get("letter_id", 0))
+	var next_letter_id: Array = [max_letter_id + 1]
 	var letter_pass_results: Array = _process_daily_letter_pass(
 		characters, characters_by_id, objectives_map, scoring_tables, world_states,
 		pending_letters, ic_day, dice_engine, next_letter_id,
@@ -345,6 +351,7 @@ static func advance_day(
 		next_court_id,
 		ic_day,
 		world_states,
+		current_season,
 	)
 
 	_apply_garrison_courtier_refusal_writebacks(
@@ -978,7 +985,7 @@ static func advance_day(
 		gempukku_results = _process_gempukku(
 			children, characters, characters_by_id, next_character_id,
 			dice_engine, ic_day, active_topics, next_topic_id, objectives_map,
-			worship_maluses, _sett_prov_map,
+			worship_maluses, _sett_prov_map, death_events,
 		)
 		advancement_results = _process_npc_advancement(
 			characters, active_courts, active_sieges, active_armies,
@@ -1013,13 +1020,12 @@ static func advance_day(
 		)
 		var provinces_array: Array = _dict_values_to_province_array(provinces)
 		var emperor_archetype: int = world_states.get("emperor_archetype", StrategicReview.EmperorArchetype.IRON)
-		var wc_letter_id: Array = [pending_letters.size() + 1000]
 		_process_strategic_court_calls(
 			strategic_results, active_courts, active_topics,
 			characters_by_id, next_court_id, ic_day, world_states,
 			current_season, provinces_array, settlements,
 			emperor_archetype, next_topic_id,
-			pending_letters, dice_engine, wc_letter_id,
+			pending_letters, dice_engine, next_letter_id,
 			commitments, next_commitment_id,
 		)
 		_process_vassal_reassignments(
@@ -1051,6 +1057,21 @@ static func advance_day(
 			marriages, characters_by_id, children, dice_engine, ic_day,
 			next_character_id,
 		)
+
+		if not death_events.is_empty():
+			var seasonal_orphan_results: Array = _process_lord_deaths(
+				death_events, characters, objectives_map, successor_map,
+				active_successions, next_succession_id, characters_by_id, ic_day,
+				active_topics, next_topic_id,
+			)
+			var seasonal_cascade_results: Array = _process_operational_death_cascade(
+				death_events, characters,
+			)
+			death_events.clear()
+			_cleanup_dead_character_references(
+				characters, characters_by_id, active_courts, entanglements,
+				active_hunts, favors,
+			)
 
 	var koku_flow_results: Dictionary = {}
 	var stipend_topic_results: Array = []
@@ -2664,7 +2685,7 @@ static func _apply_blessing_disposition(
 	if miya_rep_id >= 0:
 		for cid: int in characters_by_id:
 			var c: L5RCharacterData = characters_by_id[cid]
-			if c == null or c.clan != prov.clan:
+			if c == null or CharacterStats.is_dead(c) or c.clan != prov.clan:
 				continue
 			if c.status < 4.0:
 				continue
@@ -2682,7 +2703,7 @@ static func _find_province_lord(
 	var best: L5RCharacterData = null
 	for cid: int in characters_by_id:
 		var c: L5RCharacterData = characters_by_id[cid]
-		if c == null:
+		if c == null or CharacterStats.is_dead(c):
 			continue
 		if prov.clan != "" and c.clan != prov.clan:
 			continue
@@ -5193,20 +5214,18 @@ static func _process_impersonation_detection(
 			)
 
 		if not objectives_map.has(victim_id):
-			objectives_map[victim_id] = []
-		var current_objs: Array = objectives_map[victim_id]
+			objectives_map[victim_id] = {}
+		var victim_objs: Dictionary = objectives_map[victim_id]
 		var already_investigating: bool = false
-		for obj: Variant in current_objs:
-			if obj is Dictionary and obj.get("source", "") == "impersonation_detected":
-				already_investigating = true
-				break
+		if victim_objs.get("primary", {}).get("source", "") == "impersonation_detected":
+			already_investigating = true
 		if not already_investigating:
-			current_objs.append({
+			objectives_map[victim_id]["primary"] = {
 				"need_type": "INVESTIGATE_THREAT",
 				"priority": 6,
 				"target_npc_id": letter.original_forger_id,
 				"source": "impersonation_detected",
-			})
+			}
 
 
 # TN for the check is deferred to Section 31/42 — using placeholder TN 20.
@@ -6315,14 +6334,12 @@ static func _process_seppuku_action_writebacks(
 
 		if resolution.get("applicable", false):
 			if not accepted:
-				var refusal_topic_id: int = resolution.get("refusal_topic_id", -1)
-				if refusal_topic_id >= 0:
-					for t: TopicData in active_topics:
-						if t.topic_id == refusal_topic_id:
-							break
+				var refusal_topic: TopicData = resolution.get("refusal_topic")
+				if refusal_topic != null:
+					active_topics.append(refusal_topic)
 					var lord: L5RCharacterData = characters_by_id.get(character.lord_id)
-					if lord != null and refusal_topic_id not in lord.topic_pool:
-						lord.topic_pool.append(refusal_topic_id)
+					if lord != null and refusal_topic.topic_id not in lord.topic_pool:
+						lord.topic_pool.append(refusal_topic.topic_id)
 			resolution["action_id"] = action_id
 			resolution["character_id"] = char_id
 			seppuku_results.append(resolution)
@@ -6557,6 +6574,8 @@ static func _run_strategic_reviews(
 	var emperor_archetype: int = int(world_states.get("emperor_archetype", StrategicReview.EmperorArchetype.IRON))
 
 	for lord: L5RCharacterData in characters:
+		if CharacterStats.is_dead(lord):
+			continue
 		if not _is_lord_tier(lord):
 			continue
 		if lord.character_id == emperor_id and emperor_id >= 0:
@@ -6582,6 +6601,8 @@ static func _get_clan_champions(
 ) -> Array:
 	var champions: Array = []
 	for c: L5RCharacterData in characters:
+		if CharacterStats.is_dead(c):
+			continue
 		if c.status >= 7.0 and c.lord_id == -1:
 			champions.append(c)
 	return champions
@@ -7056,7 +7077,7 @@ static func _evaluate_heir_designations(
 			var cand_topics: Array = []
 			for t: int in lord.topic_pool:
 				for topic: TopicData in active_topics:
-					if topic.topic_id == t:
+					if topic.topic_id == t and topic.subject_character_id == cand_id:
 						cand_topics.append({"topic_type": topic.topic_type})
 						break
 			topics_by_char[cand_id] = cand_topics
@@ -7909,6 +7930,10 @@ static func _process_army_recovery(
 				arms_recovery = true
 
 			if health_recovery > 0 or morale_recovery > 0 or arms_recovery:
+				cd["current_health"] = cd.get("current_health", 0) + health_recovery
+				cd["current_morale"] = cd.get("current_morale", 0) + morale_recovery
+				if arms_recovery:
+					cd["arms_deprivation_tick"] = 0
 				per_company.append({
 					"company_id": cid,
 					"health_recovery": health_recovery,
@@ -8257,7 +8282,7 @@ static func _gather_promotion_candidates(
 
 	for char_id: int in characters_by_id:
 		var c: L5RCharacterData = characters_by_id[char_id]
-		if c == null:
+		if c == null or CharacterStats.is_dead(c):
 			continue
 		if c.military_rank >= rank_needed:
 			continue
@@ -8299,6 +8324,7 @@ static func _process_military_effects(
 	next_court_id: Array = [1],
 	ic_day: int = 0,
 	world_states: Dictionary = {},
+	current_season: int = -1,
 ) -> Array:
 	var results: Array = []
 	var settlements_by_province: Dictionary = _build_settlements_by_province(settlements)
@@ -8353,6 +8379,7 @@ static func _process_military_effects(
 			var r_7: Dictionary = _apply_court_creation(
 				applied, characters_by_id, courts,
 				active_topics, next_court_id, ic_day, world_states,
+				current_season,
 			)
 			if not r_7.is_empty():
 				results.append(r_7)
@@ -8605,7 +8632,7 @@ static func _process_battle_war_scores(
 		if not (mr is Dictionary):
 			continue
 		var md: Dictionary = mr
-		if not md.get("battle_triggered", false):
+		if not md.get("battle_check", {}).get("battle_triggered", false):
 			continue
 		var army_id: int = md.get("army_id", -1)
 		var army_clan: String = _get_army_clan(army_id, companies)
@@ -9464,7 +9491,7 @@ static func _generate_military_event_topics(
 		if not (mr is Dictionary):
 			continue
 		var md: Dictionary = mr
-		if md.get("battle_triggered", false):
+		if md.get("battle_check", {}).get("battle_triggered", false):
 			var topic: TopicData = _create_battle_topic(
 				md, next_topic_id, ic_day,
 			)
@@ -9825,6 +9852,7 @@ static func _apply_court_creation(
 	next_court_id: Array,
 	ic_day: int,
 	world_states: Dictionary,
+	current_season: int = -1,
 ) -> Dictionary:
 	var lord_id: int = applied.get("character_id", -1)
 	if lord_id < 0:
@@ -9861,7 +9889,7 @@ static func _apply_court_creation(
 	CourtSystem.add_attendee(court, lord_id)
 	courts.append(court)
 
-	_track_court_called(world_states, lord_id, ic_day)
+	_track_court_called(world_states, lord_id, ic_day, current_season)
 
 	return {
 		"type": "court_created",
@@ -12088,11 +12116,17 @@ static func _build_togashi_world_state(
 		var pm: Dictionary = worship_maluses[prov_id]
 		if pm.is_empty():
 			continue
-		for fortune_key: Variant in pm:
-			var malus: Dictionary = pm[fortune_key]
-			if malus.get("tier", 0) >= 2:
-				failing_worship += 1
+		var has_severe_malus: bool = false
+		for key: Variant in pm:
+			var val: Variant = pm[key]
+			if val is bool and val:
+				has_severe_malus = true
 				break
+			if (val is float or val is int) and val < 0:
+				has_severe_malus = true
+				break
+		if has_severe_malus:
+			failing_worship += 1
 
 	var emperor_vacant: bool = int(world_states.get("emperor_id", -1)) < 0
 
@@ -12486,6 +12520,7 @@ static func _process_gempukku(
 	objectives_map: Dictionary,
 	worship_maluses: Dictionary = {},
 	settlement_province_map: Dictionary = {},
+	death_events: Array = [],
 ) -> Dictionary:
 	var result: Dictionary = GempukkuSystem.process_seasonal_gempukku(
 		children, characters, next_character_id, dice_engine, ic_day,
@@ -12513,6 +12548,13 @@ static func _process_gempukku(
 			var dead_char: L5RCharacterData = characters_by_id[dead_id]
 			var lethal: int = CharacterStats.get_ring_value(dead_char, Enums.Ring.EARTH) * 5 * 5
 			dead_char.wounds_taken = lethal
+			death_events.append({
+				"character_id": dead_id,
+				"is_lord": dead_char.role_position != "",
+				"cause": "natural_death",
+				"suspicious_death": false,
+				"ic_day": ic_day,
+			})
 			var topic := TopicData.new()
 			topic.topic_id = next_topic_id[0]
 			next_topic_id[0] += 1
@@ -12522,6 +12564,9 @@ static func _process_gempukku(
 			topic.tier = TopicData.Tier.TIER_4
 			topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)
 			topic.category = TopicData.Category.PERSONAL
+			topic.subject_character_id = dead_id
+			topic.subject_role = "NEUTRAL"
+			topic.ic_day_created = ic_day
 			active_topics.append(topic)
 
 	return result
@@ -13415,7 +13460,7 @@ static func _apply_construction_order(
 				ConstructionData.ConstructionType.TEMPLE, character,
 				province as ProvinceData, settlements, is_dedicated,
 			)
-			if not valid_4.get("valid_4", false):
+			if not valid_4.get("valid", false):
 				return {"applied": false, "reason": valid_4.get("reason", "invalid")}
 
 			var koku_cost: float = ConstructionSystem.TEMPLE_DEDICATED_KOKU_COST if is_dedicated else ConstructionSystem.TEMPLE_KOKU_COST
@@ -13440,7 +13485,7 @@ static func _apply_construction_order(
 				ConstructionData.ConstructionType.MONASTERY, character,
 				province as ProvinceData, settlements, is_dedicated,
 			)
-			if not valid_5.get("valid_5", false):
+			if not valid_5.get("valid", false):
 				return {"applied": false, "reason": valid_5.get("reason", "invalid")}
 
 			ConstructionSystem.deduct_koku(settlements, province_id, ConstructionSystem.MONASTERY_KOKU_COST)
@@ -13466,7 +13511,7 @@ static func _apply_construction_order(
 			var valid_6: Dictionary = ConstructionSystem.validate_ship_commission(
 				character, sc, target_settlement_2 as SettlementData,
 			)
-			if not valid_6.get("valid_6", false):
+			if not valid_6.get("valid", false):
 				return {"applied": false, "reason": valid_6.get("reason", "invalid")}
 
 			var cost_2: float = ConstructionSystem.SHIP_COSTS.get(sc, 3.0)
@@ -14307,7 +14352,7 @@ static func _process_commitment_seasonal(
 		topic.tier = topic_tier
 		topic.topic_type = topic_type
 		topic.variant = topic_variant
-		topic.momentum = TopicMomentumSystem.MOMENTUM_MINOR_FLOOR if topic_tier >= 3 else _COMBAT_EVENT_MOMENTUM
+		topic.momentum = TopicMomentumSystem.MOMENTUM_MINOR_FLOOR if topic_tier >= TopicData.Tier.TIER_3 else _COMBAT_EVENT_MOMENTUM
 		topic.category = TopicData.Category.POLITICAL
 		topic.ic_day_created = ic_day
 		active_topics.append(topic)
@@ -15179,7 +15224,7 @@ static func _resolve_civil_war(
 	var topic: TopicData = TopicData.new()
 	topic.topic_id = topic_id
 	topic.slug = "civil_war_resolved_%s_%d" % [clan.to_lower(), ic_day]
-	topic.tier = 2
+	topic.tier = TopicData.Tier.TIER_2
 	topic.topic_type = "civil_war"
 	topic.variant = "legitimacy_victory" if legitimacy_won else ("championship_seizure" if from_seizure else "rebel_victory")
 	topic.momentum = _CIVIL_WAR_MOMENTUM
@@ -17278,8 +17323,8 @@ static func _apply_hunt_disposition(participants: Array) -> void:
 			var disp_ab: int = a.disposition_values.get(b.character_id, 0)
 			var disp_ba: int = b.disposition_values.get(a.character_id, 0)
 			if a.character_id not in b.met_characters:
-				b.met_characters.append(a.character_id)
-				a.met_characters.append(b.character_id)
+				InformationSystem.add_contact(b, a.character_id, a.clan)
+				InformationSystem.add_contact(a, b.character_id, b.clan)
 				a.disposition_values[b.character_id] = clampi(disp_ab + HuntSystem.DISP_NEW_RELATIONSHIP, -100, 100)
 				b.disposition_values[a.character_id] = clampi(disp_ba + HuntSystem.DISP_NEW_RELATIONSHIP, -100, 100)
 			else:
