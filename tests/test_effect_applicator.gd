@@ -1392,3 +1392,44 @@ func test_false_info_replaces_existing_true_entry() -> void:
 		"False info should replace existing true entry, not append")
 	assert_true(_actor.knowledge_pool[0].data.get("is_false", false),
 		"Entry should be the false version")
+
+
+# -- Audit: Dead character guards (2026-05-22) ---------------------------------
+
+func test_disposition_ripple_skips_dead_clan_members() -> void:
+	var dead_clan_member := L5RCharacterData.new()
+	dead_clan_member.character_id = 5
+	dead_clan_member.clan = "Lion"
+	dead_clan_member.family = "Akodo"
+	dead_clan_member.stamina = 2
+	dead_clan_member.willpower = 2
+	dead_clan_member.wounds_taken = 999
+	_characters[5] = dead_clan_member
+	_target.clan = "Lion"
+	_target.family = "Akodo"
+	var result: Dictionary = {
+		"success": true,
+		"character_id": 1,
+		"target_npc_id": 2,
+		"action_id": "CHARM",
+		"effects": {"disposition_change": 5},
+	}
+	EffectApplicator.apply(result, _characters, _provinces, _action_log)
+	assert_false(dead_clan_member.disposition_values.has(1),
+		"Dead clan member should not receive disposition ripple")
+
+
+func test_recipient_disposition_skips_dead_recipient() -> void:
+	_target.wounds_taken = 999
+	var result: Dictionary = {
+		"success": true,
+		"character_id": 1,
+		"target_npc_id": 2,
+		"action_id": "DELIVER_GIFT",
+		"effects": {"recipient_disposition_change": 10, "consume_item_id": -1},
+	}
+	var old_disp: int = _target.disposition_values.get(1, 0)
+	EffectApplicator.apply(result, _characters, _provinces, _action_log)
+	var new_disp: int = _target.disposition_values.get(1, 0)
+	assert_eq(new_disp, old_disp,
+		"Dead recipient should not receive disposition change")

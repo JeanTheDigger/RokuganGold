@@ -106,7 +106,7 @@ static func _apply_recipient_effects(
 	if target_id < 0:
 		return
 	var recipient: L5RCharacterData = characters.get(target_id)
-	if recipient == null:
+	if recipient == null or CharacterStats.is_dead(recipient):
 		return
 
 	var disp_change: int = effects.get("recipient_disposition_change", 0)
@@ -304,6 +304,8 @@ static func _apply_disposition_ripple(
 		if cid == actor.character_id or cid == target_id:
 			continue
 		var c: L5RCharacterData = characters[cid]
+		if CharacterStats.is_dead(c):
+			continue
 		if c.clan != target_clan:
 			continue
 

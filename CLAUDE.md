@@ -1730,6 +1730,16 @@ costs, or forward-wiring. Do not treat as bugs.
   LetterData objects from the grave. Added dead character filter at loop start.
   1 test.
 
+### Known Code Issues (found and fixed 2026-05-22, EffectApplicator audit)
+- **Disposition ripple applied to dead clan members. FIXED.**
+  `_apply_disposition_ripple()` iterates all characters matching target's clan
+  without a dead check. Dead clan members accumulated meaningless disposition
+  changes. Added `CharacterStats.is_dead(c)` guard. 1 test.
+- **Recipient effects applied to dead recipients. FIXED.**
+  `_apply_recipient_effects()` checked `recipient == null` but not dead.
+  Dead recipients of gifts/social actions received disposition changes.
+  Added dead guard. 1 test.
+
 ### Known Code Issues (found and fixed 2026-05-22, DayOrchestrator audit)
 - **Grand Ritual master lookup — enum IDs used as character IDs. FIXED.**
   `_find_living_elemental_masters()` returns PhoenixCouncil.Master enum values
