@@ -1887,6 +1887,28 @@ costs, or forward-wiring. Do not treat as bugs.
   gossip listeners received disposition changes toward the gossip subject
   and got KnowledgeEntry entries. Added dead guard. 1 test.
 
+### Systems Added 2026-05-23
+- **s55.11b Named Monk Standing Objectives** — `simulation/monk_objective_system.gd`.
+  Five standing objective types: HELP_PEOPLE (RAISE_DISPOSITION), FIGHT_BANDITS
+  (INVESTIGATE_THREAT/PATROL_PROVINCE), MEDITATE_DEEPLY (PERFORM_RITUAL),
+  TRAIN_MASTERY (TRAIN_SKILL), WORSHIP_KAMI (PERFORM_RITUAL). School-based
+  standing selection with personality override: 6 sohei schools default to
+  FIGHT_BANDITS, 6 contemplative schools default to MEDITATE_DEEPLY, 6 social
+  schools default to HELP_PEOPLE. Fortunist devotion schools with Chugi/Rei
+  virtue lean to WORSHIP_KAMI. Unclassified schools fall through to pure
+  personality routing. Decomposition trees for all 5 types with context flag
+  routing (AT_TEMPLE, AT_OWN_HOLDINGS, AT_COURT, AT_DOJO, TRAVELING). Monk
+  self-selection: `select_primary_from_standing()` scans world state for
+  matching opportunities (famine provinces, insurgencies, temples, dojos) and
+  produces primary objectives. 5 type-specific opportunity scanners produce
+  OpportunityScanner.Opportunity objects with personality-fit scoring.
+  Wired into DayOrchestrator: `_assign_monk_standing_objectives()` assigns
+  standing objectives to monk characters daily (alongside magistrate
+  assignment), `_process_monk_self_selection()` runs seasonally (alongside
+  lord strategic review). Already integrated into ObjectiveDecomposer routing
+  (line 76). Monk standing types added to OpportunityScanner.STANDING_OBJECTIVE_DOMAIN.
+  83 tests.
+
 ### Known Code Issues (found and fixed 2026-05-22, SecretSystem audit)
 - **expose_publicly() disposition applied to dead witnesses. FIXED.**
   `expose_publicly()` iterated witness_ids and checked `w != null` but not dead.

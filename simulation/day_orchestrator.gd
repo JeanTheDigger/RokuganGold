@@ -107,6 +107,7 @@ static func advance_day(
 	_populate_resource_stockpiles(world_states, characters, provinces, settlements, clans, companies)
 	_populate_crime_suppression_data(world_states, settlements, provinces, current_season)
 	_assign_magistrate_standing_objectives(characters, objectives_map)
+	_assign_monk_standing_objectives(characters, objectives_map)
 
 	var festival_results: Dictionary = _process_festivals(ic_day, world_states)
 
@@ -1032,6 +1033,7 @@ static func advance_day(
 		_process_vassal_reassignments(
 			strategic_results, objectives_map, characters_by_id,
 		)
+		_process_monk_self_selection(characters, objectives_map, world_states)
 		_process_tyrant_directives(
 			strategic_results, active_topics, next_topic_id, ic_day,
 			characters_by_id,
@@ -5514,6 +5516,76 @@ static func _assign_magistrate_standing_objectives(
 			"need_type": "UPHOLD_LAW",
 			"priority": 4,
 			"auto_assigned": true,
+		}
+
+
+static func _assign_monk_standing_objectives(
+	characters: Array,
+	objectives_map: Dictionary,
+) -> void:
+	for character: L5RCharacterData in characters:
+		if CharacterStats.is_dead(character):
+			continue
+		if not MonkObjectiveSystem.is_monk(character):
+			continue
+
+		var char_id: int = character.character_id
+		if not objectives_map.has(char_id):
+			objectives_map[char_id] = {}
+
+		var objectives: Dictionary = objectives_map[char_id]
+		var standing: Dictionary = objectives.get("standing", {})
+
+		if standing.get("monk_standing", false):
+			continue
+
+		if not standing.is_empty():
+			continue
+
+		var monk_standing: Dictionary = MonkObjectiveSystem.assign_standing_objective(character)
+		if not monk_standing.is_empty():
+			objectives["standing"] = monk_standing
+
+
+static func _process_monk_self_selection(
+	characters: Array,
+	objectives_map: Dictionary,
+	world_states: Dictionary,
+) -> void:
+	for character: L5RCharacterData in characters:
+		if CharacterStats.is_dead(character):
+			continue
+		if not MonkObjectiveSystem.is_monk(character):
+			continue
+
+		var char_id: int = character.character_id
+		var objectives: Dictionary = objectives_map.get(char_id, {})
+		var primary: Dictionary = objectives.get("primary", {})
+
+		if not primary.is_empty() and primary.get("status", "") == "ACTIVE":
+			continue
+
+		var standing: Dictionary = objectives.get("standing", {})
+		var standing_type: String = standing.get("need_type", "")
+		if standing_type.is_empty():
+			continue
+
+		var selected: Dictionary = MonkObjectiveSystem.select_primary_from_standing(
+			character, standing_type, world_states
+		)
+		if selected.is_empty():
+			continue
+
+		if not objectives_map.has(char_id):
+			objectives_map[char_id] = {}
+
+		objectives_map[char_id]["primary"] = {
+			"need_type": selected["objective_type"],
+			"objective_type": selected["objective_type"],
+			"target_fields": selected.get("target_fields", {}),
+			"assigning_lord_id": char_id,
+			"status": "ACTIVE",
+			"source": "MONK_SELF_SELECTED",
 		}
 
 
