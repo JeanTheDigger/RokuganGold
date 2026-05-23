@@ -1983,6 +1983,20 @@ costs, or forward-wiring. Do not treat as bugs.
   in `_execute_contested_court_action()` (picks highest-ranked "Lore: *" entry).
   Same fix in `NPCDecisionEngine._compute_competence_modifier()` for scoring.
   2 tests.
+- **Bare "Games" in world generator skill pools — characters got unusable skill. FIXED.**
+  `HIGH_POOL` and `ALL_SKILL_POOL` used bare "Games" but NPC engine's
+  `_pick_best_game_skill()` searches "Games: Go", "Games: Shogi", etc. Characters
+  created with `skills["Games"]` could never use it for PLAY_GAME. Changed to
+  "Games: Go". Added `_best_skill_rank()` helper in NPCDecisionEngine for
+  generalized category-to-sub-skill resolution (Lore, Games, Perform, Craft,
+  Artisan). 4 tests.
+- **known_objectives["lord_assigned"] never populated — 3 NPC engine consumers dead. FIXED.**
+  `_inject_urgency_data()` populated `known_objectives` with `standing_need_type`
+  and `active_case` but never set `lord_assigned` from `primary.assigned_by`.
+  Three consumers always got `false`: `not_lord_commanded` precondition (never
+  blocked self-directed alternatives), `no_prior_grievance_or_lord_directive`
+  (never detected lord directives), CHUGI virtue covert modifier (always -25
+  instead of +10 on lord business). Added `assigned_by >= 0` check. 2 tests.
 
 ### Systems Added 2026-05-23
 - **s55.11b Named Monk Standing Objectives** — `simulation/monk_objective_system.gd`.
