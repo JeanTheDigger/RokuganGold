@@ -3665,9 +3665,98 @@ static func _execute_duel_challenge(
 	var to_death: bool = action.metadata.get("to_death", false)
 	var is_sanctioned: bool = action.metadata.get("is_sanctioned", true)
 
-	var duel_result: Dictionary = IndividualCombat.resolve_full_duel(
-		character, target, to_death, dice_engine
+	var duel: IndividualCombat.DuelState = IndividualCombat.create_duel(
+		character.character_id, target.character_id, to_death
 	)
+
+	var stare_down_result: Dictionary = {}
+	if _should_attempt_stare_down(character):
+		stare_down_result = IndividualCombat.resolve_iaijutsu_stare_down(
+			character, target, duel, dice_engine
+		)
+
+	var ch_p := IndividualCombat.Participant.new()
+	ch_p.character_id = character.character_id
+	ch_p.stance = Enums.Stance.CENTER
+	var def_p := IndividualCombat.Participant.new()
+	def_p.character_id = target.character_id
+	def_p.stance = Enums.Stance.CENTER
+
+	var assessment: Dictionary = IndividualCombat.resolve_duel_assessment(
+		character, target, duel, dice_engine
+	)
+
+	if _should_concede_at_assessment(target, assessment, duel):
+		var concession: Dictionary = IndividualCombat.concede_at_assessment(
+			target.character_id, duel
+		)
+		if concession["glory_change"] != 0.0:
+			target.glory = maxf(target.glory + concession["glory_change"], 0.0)
+		var effects: Dictionary = {
+			"duel_result": {"assessment": assessment, "concession": concession},
+			"winner_id": duel.winner_id,
+			"loser_id": duel.loser_id,
+			"simultaneous": false,
+			"death_occurred": false,
+			"challenger_dead": false,
+			"defender_dead": false,
+			"conceded": true,
+			"conceder_id": target.character_id,
+		}
+		if stare_down_result.size() > 0:
+			effects["stare_down"] = stare_down_result
+		if duel.winner_id == character.character_id and ctx.context_flag == Enums.ContextFlag.AT_COURT:
+			effects["glory_change"] = 0.5
+		return {
+			"success": true,
+			"action_id": "ISSUE_DUEL_CHALLENGE",
+			"character_id": ctx.character_id,
+			"target_npc_id": target_id,
+			"target_province_id": action.target_province_id,
+			"ic_day": ctx.ic_day,
+			"season": ctx.season,
+			"actor_won": true,
+			"effects": effects,
+		}
+
+	var focus: Dictionary = IndividualCombat.resolve_duel_focus(
+		character, target, duel, dice_engine
+	)
+
+	var first_char: L5RCharacterData
+	var second_char: L5RCharacterData
+	var first_p: IndividualCombat.Participant
+	var second_p: IndividualCombat.Participant
+	if duel.simultaneous or duel.first_striker_id == duel.challenger_id:
+		first_char = character
+		first_p = ch_p
+		second_char = target
+		second_p = def_p
+	else:
+		first_char = target
+		first_p = def_p
+		second_char = character
+		second_p = ch_p
+
+	ch_p.void_ring_bonus = character.void_ring
+	def_p.void_ring_bonus = target.void_ring
+
+	var strike: Dictionary = IndividualCombat.resolve_duel_strike(
+		first_char, first_p, second_char, second_p, duel, dice_engine
+	)
+
+	var duel_result: Dictionary = {
+		"assessment": assessment,
+		"focus": focus,
+		"strike": strike,
+		"winner_id": duel.winner_id,
+		"loser_id": duel.loser_id,
+		"simultaneous": duel.simultaneous,
+		"challenger_id": character.character_id,
+		"defender_id": target.character_id,
+	}
+	if stare_down_result.size() > 0:
+		duel_result["stare_down"] = stare_down_result
 
 	var winner_id: int = duel_result.get("winner_id", -1)
 	var loser_id: int = duel_result.get("loser_id", -1)
@@ -3719,6 +3808,55 @@ static func _execute_duel_challenge(
 		"actor_won": actor_is_winner,
 		"effects": effects,
 	}
+
+
+static func _should_attempt_stare_down(character: L5RCharacterData) -> bool:
+	var intim: int = character.skills.get("Intimidation", 0)
+	if intim == 0:
+		return false
+	match character.bushido_virtue:
+		Enums.BushidoVirtue.YU:
+			return true
+		Enums.BushidoVirtue.REI:
+			return false
+		Enums.BushidoVirtue.JIN:
+			return false
+	match character.shourido_virtue:
+		Enums.ShouridoVirtue.KETSUI:
+			return true
+		Enums.ShouridoVirtue.ISHI:
+			return true
+		Enums.ShouridoVirtue.SEIGYO:
+			return false
+	return intim >= 3
+
+
+static func _should_concede_at_assessment(
+	defender: L5RCharacterData,
+	assessment: Dictionary,
+	duel: IndividualCombat.DuelState,
+) -> bool:
+	var outmatched: bool = (
+		assessment.get("assessment_bonus_id", -1) == duel.challenger_id
+		and not assessment.get("defender_succeeded", true)
+	)
+	if not outmatched:
+		return false
+	match defender.bushido_virtue:
+		Enums.BushidoVirtue.YU:
+			return false
+		Enums.BushidoVirtue.MEIYO:
+			return not duel.duel_to_death
+	match defender.shourido_virtue:
+		Enums.ShouridoVirtue.KETSUI:
+			return false
+		Enums.ShouridoVirtue.ISHI:
+			return false
+		Enums.ShouridoVirtue.SEIGYO:
+			return true
+		Enums.ShouridoVirtue.CHISHIKI:
+			return true
+	return not duel.duel_to_death
 
 
 # -- ASK_FOR_INTRODUCTION (s55.7.3 — LOCKED) ----------------------------------

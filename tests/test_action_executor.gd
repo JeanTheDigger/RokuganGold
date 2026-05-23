@@ -2069,3 +2069,110 @@ func test_get_co_located_ids_skips_dead_characters() -> void:
 	var ids: Array = ActionExecutor._get_co_located_ids(_character, chars)
 	assert_true(ids.has(10), "Living co-located NPC should be included")
 	assert_false(ids.has(99), "Dead co-located NPC should be excluded")
+
+
+# -- Stare-Down NPC Decision (s4.8) -------------------------------------------
+
+func test_stare_down_yu_virtue_attempts() -> void:
+	_character.bushido_virtue = Enums.BushidoVirtue.YU
+	_character.skills["Intimidation"] = 3
+	assert_true(ActionExecutor._should_attempt_stare_down(_character))
+
+
+func test_stare_down_rei_virtue_declines() -> void:
+	_character.bushido_virtue = Enums.BushidoVirtue.REI
+	_character.skills["Intimidation"] = 5
+	assert_false(ActionExecutor._should_attempt_stare_down(_character))
+
+
+func test_stare_down_no_intimidation_skill_declines() -> void:
+	_character.bushido_virtue = Enums.BushidoVirtue.YU
+	_character.skills.erase("Intimidation")
+	assert_false(ActionExecutor._should_attempt_stare_down(_character))
+
+
+func test_stare_down_ketsui_virtue_attempts() -> void:
+	_character.shourido_virtue = Enums.ShouridoVirtue.KETSUI
+	_character.skills["Intimidation"] = 2
+	assert_true(ActionExecutor._should_attempt_stare_down(_character))
+
+
+func test_stare_down_seigyo_virtue_declines() -> void:
+	_character.shourido_virtue = Enums.ShouridoVirtue.SEIGYO
+	_character.skills["Intimidation"] = 5
+	assert_false(ActionExecutor._should_attempt_stare_down(_character))
+
+
+func test_stare_down_neutral_virtue_needs_rank_3() -> void:
+	_character.bushido_virtue = Enums.BushidoVirtue.GI
+	_character.skills["Intimidation"] = 2
+	assert_false(ActionExecutor._should_attempt_stare_down(_character))
+	_character.skills["Intimidation"] = 3
+	assert_true(ActionExecutor._should_attempt_stare_down(_character))
+
+
+# -- Assessment Concession NPC Decision (s4.8) --------------------------------
+
+func _make_duel_target() -> L5RCharacterData:
+	var t := L5RCharacterData.new()
+	t.character_id = 20
+	t.character_name = "Defender"
+	t.reflexes = 2
+	t.awareness = 2
+	t.stamina = 2
+	t.willpower = 2
+	t.agility = 2
+	t.intelligence = 2
+	t.strength = 2
+	t.perception = 2
+	t.void_ring = 2
+	t.wounds_taken = 0
+	t.skills = {"Iaijutsu": 1}
+	t.emphases = {}
+	return t
+
+
+func test_concede_seigyo_when_outmatched() -> void:
+	var defender: L5RCharacterData = _make_duel_target()
+	defender.shourido_virtue = Enums.ShouridoVirtue.SEIGYO
+	var duel: IndividualCombat.DuelState = IndividualCombat.create_duel(1, 20, false)
+	var assessment: Dictionary = {
+		"assessment_bonus_id": 1,
+		"defender_succeeded": false,
+	}
+	assert_true(ActionExecutor._should_concede_at_assessment(defender, assessment, duel))
+
+
+func test_concede_yu_never() -> void:
+	var defender: L5RCharacterData = _make_duel_target()
+	defender.bushido_virtue = Enums.BushidoVirtue.YU
+	var duel: IndividualCombat.DuelState = IndividualCombat.create_duel(1, 20, false)
+	var assessment: Dictionary = {
+		"assessment_bonus_id": 1,
+		"defender_succeeded": false,
+	}
+	assert_false(ActionExecutor._should_concede_at_assessment(defender, assessment, duel))
+
+
+func test_concede_not_outmatched_stays() -> void:
+	var defender: L5RCharacterData = _make_duel_target()
+	defender.shourido_virtue = Enums.ShouridoVirtue.SEIGYO
+	var duel: IndividualCombat.DuelState = IndividualCombat.create_duel(1, 20, false)
+	var assessment: Dictionary = {
+		"assessment_bonus_id": -1,
+		"defender_succeeded": true,
+	}
+	assert_false(ActionExecutor._should_concede_at_assessment(defender, assessment, duel))
+
+
+func test_concede_meiyo_only_non_death() -> void:
+	var defender: L5RCharacterData = _make_duel_target()
+	defender.bushido_virtue = Enums.BushidoVirtue.MEIYO
+	var assessment: Dictionary = {
+		"assessment_bonus_id": 1,
+		"defender_succeeded": false,
+	}
+	var duel_non_death: IndividualCombat.DuelState = IndividualCombat.create_duel(1, 20, false)
+	assert_true(ActionExecutor._should_concede_at_assessment(defender, assessment, duel_non_death))
+	var duel_death: IndividualCombat.DuelState = IndividualCombat.create_duel(1, 20, true)
+	assert_false(ActionExecutor._should_concede_at_assessment(defender, assessment, duel_death))

@@ -1796,6 +1796,20 @@ costs, or forward-wiring. Do not treat as bugs.
 - **Striking after first blood (s4.8, LOCKED)** — `resolve_strike_after_first_blood()`
   added for the dishonor edge case. Returns HONOR_STRIKING_AFTER_FIRST_BLOOD
   (-1.0 Honor). Sets struck_after_first_blood flag on DuelState. 1 test.
+- **NPC stare-down decision** — `_should_attempt_stare_down()` in ActionExecutor.
+  Yu/Ketsui/Ishi attempt (aggressive/determined). Rei/Jin/Seigyo decline
+  (courtesy/compassion/control). Neutral virtues: attempt only at Intimidation 3+.
+  Gate: Intimidation 0 always declines. 6 tests.
+- **NPC assessment concession decision** — `_should_concede_at_assessment()` in
+  ActionExecutor. Only fires when outmatched (opponent got +1k1 AND defender
+  failed Assessment). Yu/Ketsui/Ishi never concede. Seigyo/Chishiki always
+  concede when outmatched. Meiyo concedes in non-death duels only. Neutral
+  virtues concede in non-death duels. 4 tests.
+- **ISSUE_DUEL_CHALLENGE executor rewritten** — Now uses step-by-step duel
+  resolution instead of resolve_full_duel(). Stare-down fires when personality
+  approves. Concession evaluated after Assessment — defender concedes early
+  when outmatched and personality permits. Concession path applies -0.5 Glory
+  for death duels directly. Full duel continues if no concession.
 
 ### Known Code Issues (found and fixed 2026-05-22, SecretSystem audit)
 - **expose_publicly() disposition applied to dead witnesses. FIXED.**
