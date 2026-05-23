@@ -448,6 +448,8 @@ static func _evaluate_winter_court_host(
 	var crisis_by_clan: Dictionary = world_state.get("crisis_momentum_by_clan", {})
 
 	for champion: L5RCharacterData in clan_champions:
+		if CharacterStats.is_dead(champion):
+			continue
 		var clan: String = champion.clan
 		var score: float = 0.0
 
@@ -601,6 +603,8 @@ static func _evaluate_disgrace_fabrication(
 
 	var results: Array = []
 	for champion: L5RCharacterData in clan_champions:
+		if CharacterStats.is_dead(champion):
+			continue
 		var disp: int = emperor.disposition_values.get(champion.character_id, 0)
 		var tier: int = DispositionSystem.get_tier(disp)
 		if tier <= DispositionSystem.Tier.RIVAL:
@@ -624,6 +628,8 @@ static func _evaluate_breaking_point(
 
 	var hostile_clan_count: int = 0
 	for champion: L5RCharacterData in clan_champions:
+		if CharacterStats.is_dead(champion):
+			continue
 		if champion.clan not in GREAT_CLANS:
 			continue
 		var disp: int = champion.disposition_values.get(emperor.character_id, 0)
@@ -645,11 +651,13 @@ static func _seed_archetype_champion_baselines(
 	clan_champions: Array,
 ) -> void:
 	for champion: L5RCharacterData in clan_champions:
+		if CharacterStats.is_dead(champion):
+			continue
 		if emperor.disposition_values.has(champion.character_id):
 			continue
 		var baseline: int = get_archetype_champion_baseline(archetype, champion.school_type)
 		if baseline != 0:
-			emperor.disposition_values[champion.character_id] = baseline
+			emperor.disposition_values[champion.character_id] = clampi(baseline, -100, 100)
 
 
 static func get_archetype_champion_baseline(
