@@ -2329,6 +2329,9 @@ static func build_province_statuses_from_data(
 				break
 		ps.last_report_ic_day = pd.last_report_ic_day
 		ps.province_taint_level = pd.province_taint_level
+		ps.is_wall_province = pd.shadowlands_strength > 0
+		if pd.crisis_type == "famine":
+			ps.starvation_stage = 1
 		ps.garrison_pu = settlement_garrison.get(pd.province_id, 0)
 		ps.total_settlement_pu = settlement_total_pu.get(pd.province_id, 0)
 		ps.rice_stockpile = settlement_rice.get(pd.province_id, 0.0)

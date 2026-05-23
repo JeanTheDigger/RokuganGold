@@ -3676,3 +3676,58 @@ func _load_real_scoring_tables() -> Dictionary:
 		if err == OK:
 			tables["objective_alignment"] = json.data
 	return tables
+
+
+# -- build_province_statuses_from_data tests -----------------------------------
+
+func test_build_province_statuses_wall_province() -> void:
+	var pd := ProvinceData.new()
+	pd.province_id = 1
+	pd.clan = "Crab"
+	pd.shadowlands_strength = 5
+	var result: Array = NPCDecisionEngine.build_province_statuses_from_data([pd])
+	assert_eq(result.size(), 1)
+	var ps: NPCDataStructures.ProvinceStatus = result[0]
+	assert_true(ps.is_wall_province,
+		"Province with shadowlands_strength > 0 should be marked as wall province")
+
+func test_build_province_statuses_non_wall_province() -> void:
+	var pd := ProvinceData.new()
+	pd.province_id = 2
+	pd.clan = "Crane"
+	pd.shadowlands_strength = 0
+	var result: Array = NPCDecisionEngine.build_province_statuses_from_data([pd])
+	var ps: NPCDataStructures.ProvinceStatus = result[0]
+	assert_false(ps.is_wall_province,
+		"Province with shadowlands_strength 0 should not be wall province")
+
+func test_build_province_statuses_famine_starvation() -> void:
+	var pd := ProvinceData.new()
+	pd.province_id = 3
+	pd.clan = "Lion"
+	pd.crisis_type = "famine"
+	var result: Array = NPCDecisionEngine.build_province_statuses_from_data([pd])
+	var ps: NPCDataStructures.ProvinceStatus = result[0]
+	assert_true(ps.starvation_stage > 0,
+		"Province with famine crisis should have non-zero starvation_stage")
+
+func test_build_province_statuses_no_famine() -> void:
+	var pd := ProvinceData.new()
+	pd.province_id = 4
+	pd.clan = "Scorpion"
+	pd.crisis_type = ""
+	var result: Array = NPCDecisionEngine.build_province_statuses_from_data([pd])
+	var ps: NPCDataStructures.ProvinceStatus = result[0]
+	assert_eq(ps.starvation_stage, 0,
+		"Province without famine should have 0 starvation_stage")
+
+func test_build_province_statuses_can_sustain_iron() -> void:
+	var c := L5RCharacterData.new()
+	c.character_id = 1
+	c.status = 6.0
+	c.lord_id = -1
+	c.clan = "Crab"
+	var ws: Dictionary = {}
+	DayOrchestrator._populate_resource_stockpiles(ws, [c], {}, [], {"Crab": ClanData.new()}, [])
+	assert_true(ws[1].has("can_sustain_iron_upkeep"),
+		"can_sustain_iron_upkeep should be set by _populate_resource_stockpiles")

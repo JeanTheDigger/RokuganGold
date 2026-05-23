@@ -207,6 +207,7 @@ static func advance_day(
 		world_states, characters, active_topics, tattoos, trade_routes,
 		phoenix_council_state, companies, ic_day, current_season,
 		provinces, settlements, clans, active_wars, characters_by_id,
+		active_armies, insurgencies,
 	)
 
 	world_states["_crime_records"] = crime_records
@@ -15330,6 +15331,7 @@ static func _populate_resource_stockpiles(
 			"military_upkeep": maxf(clan_military_upkeep.get(c.clan, 0.0), 0.01),
 		}
 		ws["available_levy_pu"] = total_military_pu
+		ws["can_sustain_iron_upkeep"] = iron >= arms_upkeep
 
 
 # -- Base Character Context Injection ------------------------------------------
@@ -15349,6 +15351,8 @@ static func _inject_base_character_context(
 	clans: Dictionary = {},
 	active_wars: Array = [],
 	characters_by_id: Dictionary = {},
+	active_armies: Array = [],
+	insurgencies: Array = [],
 ) -> void:
 	var taint_province_ids: Array = []
 	for t: Variant in active_topics:
@@ -15418,6 +15422,8 @@ static func _inject_base_character_context(
 			ws["clans"] = clan_values
 			ws["current_season"] = season_name
 			ws["characters_by_id"] = characters_by_id
+			ws["active_armies"] = active_armies
+			ws["active_insurgencies"] = insurgencies
 
 		if has_champion_authority and c.character_id == phoenix_champion_id:
 			ws["phoenix_champion_authority"] = true
