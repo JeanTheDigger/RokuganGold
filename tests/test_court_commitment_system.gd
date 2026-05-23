@@ -210,7 +210,7 @@ func test_voluntary_renege_honor_scaled():
 	var result: Dictionary = CourtCommitmentSystem.compute_renege_consequences(c, lord)
 	assert_almost_eq(result["honor_change"], -2.5, 0.01)
 	assert_eq(result["disposition_penalty"], -15)
-	assert_eq(result["topic_tier"], 3)
+	assert_eq(result["topic_tier"], TopicData.Tier.TIER_3)
 
 func test_edict_renege_extra_honor():
 	var c := _make_commitment(1, "send_supplies", CourtCommitmentData.CommitmentSource.EDICT)
@@ -218,7 +218,7 @@ func test_edict_renege_extra_honor():
 	var result: Dictionary = CourtCommitmentSystem.compute_renege_consequences(c, lord)
 	# Base -1.5 (rank 3) + -3.0 edict = -4.5
 	assert_almost_eq(result["honor_change"], -4.5, 0.01)
-	assert_eq(result["topic_tier"], 2)
+	assert_eq(result["topic_tier"], TopicData.Tier.TIER_2)
 
 func test_low_honor_renege():
 	var c := _make_commitment()

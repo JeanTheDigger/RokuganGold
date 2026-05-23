@@ -144,7 +144,7 @@ func test_conviction_maho_all_consequences():
 	assert_almost_eq(c.glory, 2.0, 0.001)
 	assert_almost_eq(c.infamy, 5.0, 0.001)
 	assert_eq(c.status, 0.0)
-	assert_eq(result["topic_tier"], 1)
+	assert_eq(result["topic_tier"], TopicData.Tier.TIER_1)
 
 func test_conviction_violence_minor_consequences():
 	var c := _make_character(5.0, 3.0, 3.0)
@@ -152,7 +152,7 @@ func test_conviction_violence_minor_consequences():
 	var result: Dictionary = CrimeSystem.apply_at_conviction_consequences(c, record)
 	assert_almost_eq(c.glory, 2.9, 0.001)
 	assert_eq(c.infamy, 0.0)
-	assert_eq(result["topic_tier"], 4)
+	assert_eq(result["topic_tier"], TopicData.Tier.TIER_4)
 
 func test_conviction_sets_legal_status():
 	var c := _make_character()
@@ -188,13 +188,13 @@ func test_conviction_covert_killing_high_status_victim_tier_2():
 	var c := _make_character(5.0, 5.0, 5.0)
 	var record := _make_record(Enums.CrimeType.UNSANCTIONED_COVERT_KILLING)
 	var result: Dictionary = CrimeSystem.apply_at_conviction_consequences(c, record, 6.0)
-	assert_eq(result["topic_tier"], 2)
+	assert_eq(result["topic_tier"], TopicData.Tier.TIER_2)
 
 func test_conviction_covert_killing_low_status_victim_tier_3():
 	var c := _make_character(5.0, 5.0, 5.0)
 	var record := _make_record(Enums.CrimeType.UNSANCTIONED_COVERT_KILLING)
 	var result: Dictionary = CrimeSystem.apply_at_conviction_consequences(c, record, 2.0)
-	assert_eq(result["topic_tier"], 3)
+	assert_eq(result["topic_tier"], TopicData.Tier.TIER_3)
 
 func test_conviction_covert_killing():
 	var c := _make_character(5.0, 5.0, 5.0)
@@ -202,7 +202,7 @@ func test_conviction_covert_killing():
 	var result: Dictionary = CrimeSystem.apply_at_conviction_consequences(c, record)
 	assert_almost_eq(c.glory, 4.0, 0.001)
 	assert_almost_eq(c.infamy, 2.0, 0.001)
-	assert_eq(result["topic_tier"], 3)
+	assert_eq(result["topic_tier"], TopicData.Tier.TIER_3)
 
 
 # -- Seppuku Resolution -------------------------------------------------------
@@ -221,7 +221,7 @@ func test_seppuku_refused_penalties():
 	var result: Dictionary = CrimeSystem.apply_seppuku_refused(c, record)
 	assert_almost_eq(c.honor, 2.0, 0.001)
 	assert_almost_eq(c.infamy, 1.0, 0.001)
-	assert_eq(result["topic_tier"], 4)
+	assert_eq(result["topic_tier"], TopicData.Tier.TIER_4)
 	assert_false(record.seppuku_accepted)
 	assert_true(record.seppuku_offered)
 

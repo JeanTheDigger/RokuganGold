@@ -12492,7 +12492,7 @@ func test_announce_hunt_creates_topic_and_hunt() -> void:
 		"effects": {
 			"hunt_date_ic_day": 12,
 			"priority_invitee_id": 2,
-			"topic_tier": 4,
+			"topic_tier": TopicData.Tier.TIER_4,
 			"topic_type": "hunt_announcement",
 		},
 	}]

@@ -188,7 +188,7 @@ static func flee(
 		"success": true,
 		"was_accused": was_accused,
 		"generates_topic": true,
-		"topic_tier": 3,
+		"topic_tier": TopicData.Tier.TIER_3,
 	}
 
 
@@ -217,7 +217,7 @@ static func pardon(
 	return {
 		"success": true,
 		"generates_topic": true,
-		"topic_tier": 3,
+		"topic_tier": TopicData.Tier.TIER_3,
 	}
 
 

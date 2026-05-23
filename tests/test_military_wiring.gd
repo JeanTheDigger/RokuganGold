@@ -3179,7 +3179,7 @@ func test_ladder_side_effects_generates_topic() -> void:
 	var chars_by_id: Dictionary = {1: lord}
 	var side: Dictionary = {
 		"generates_topic": true,
-		"topic_tier": 4,
+		"topic_tier": TopicData.Tier.TIER_4,
 		"rung": FeasibilityLedger.LadderRung.DEMAND_TRIBUTE,
 	}
 	var applied: Array = [_make_applied_with_ladder(1, "Crab", "Crane", side)]
@@ -3202,7 +3202,7 @@ func test_ladder_side_effects_tier_3_topic() -> void:
 	var chars_by_id: Dictionary = {1: lord}
 	var side: Dictionary = {
 		"generates_topic": true,
-		"topic_tier": 3,
+		"topic_tier": TopicData.Tier.TIER_3,
 		"rung": FeasibilityLedger.LadderRung.RAID_NEIGHBOR,
 	}
 	var applied: Array = [_make_applied_with_ladder(1, "Crab", "Crane", side)]
@@ -4700,7 +4700,7 @@ func test_levy_suspicion_fires_after_threshold() -> void:
 	)
 	assert_eq(results.size(), 1)
 	assert_eq(results[0]["lord_id"], 5)
-	assert_eq(results[0]["topic_tier"], 4)
+	assert_eq(results[0]["topic_tier"], TopicData.Tier.TIER_4)
 	assert_eq(topics.size(), 1)
 
 
@@ -4741,7 +4741,7 @@ func test_levy_suspicion_escalates_at_3_seasons() -> void:
 		[company], [], chars_by_id, topics, next_tid, 90, 3,
 	)
 	assert_eq(results.size(), 1)
-	assert_eq(results[0]["topic_tier"], 3)
+	assert_eq(results[0]["topic_tier"], TopicData.Tier.TIER_3)
 	assert_true(results[0]["escalated"])
 
 

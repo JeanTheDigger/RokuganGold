@@ -4197,7 +4197,7 @@ static func _execute_announce_hunt(
 		"effects": {
 			"hunt_date_ic_day": hunt_date_ic_day,
 			"priority_invitee_id": priority_invitee_id,
-			"topic_tier": 4,
+			"topic_tier": TopicData.Tier.TIER_4,
 			"topic_type": "hunt_announcement",
 		},
 	}

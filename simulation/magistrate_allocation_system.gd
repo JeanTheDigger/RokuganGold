@@ -103,7 +103,7 @@ static func get_conviction_cascade(
 				"replacement_required": true,
 				"replacement_re_examines_evidence": true,
 				"stability_hit": 0,
-				"topic_tier": 4,
+				"topic_tier": TopicData.Tier.TIER_4,
 				"scope": "province",
 			}
 		ConvictedPosition.GOVERNOR:
@@ -112,7 +112,7 @@ static func get_conviction_cascade(
 				"succession_fires": true,
 				"stability_hit": STABILITY_HIT_GOVERNOR,
 				"stability_scope": "province",
-				"topic_tier": 3,
+				"topic_tier": TopicData.Tier.TIER_3,
 				"scope": "province",
 			}
 		ConvictedPosition.FAMILY_DAIMYO:
@@ -121,7 +121,7 @@ static func get_conviction_cascade(
 				"succession_fires": true,
 				"stability_hit": STABILITY_HIT_FAMILY_DAIMYO,
 				"stability_scope": "family_provinces",
-				"topic_tier": 2,
+				"topic_tier": TopicData.Tier.TIER_2,
 				"scope": "clan",
 			}
 		ConvictedPosition.CLAN_CHAMPION:
@@ -130,7 +130,7 @@ static func get_conviction_cascade(
 				"succession_fires": true,
 				"stability_hit": STABILITY_HIT_CLAN_CHAMPION,
 				"stability_scope": "all_clan_provinces",
-				"topic_tier": 2,
+				"topic_tier": TopicData.Tier.TIER_2,
 				"scope": "empire",
 			}
 	return {}
@@ -228,4 +228,4 @@ static func can_override_clan_magistrate() -> bool:
 
 
 static func get_emerald_assignment_topic_tier() -> int:
-	return 3
+	return TopicData.Tier.TIER_3

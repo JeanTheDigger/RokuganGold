@@ -227,7 +227,7 @@ static func resolve_championship(
 		"winner_id": best_id,
 		"winning_score": best_total,
 		"championship": championship_type,
-		"topic_tier": 4,
+		"topic_tier": TopicData.Tier.TIER_4,
 	}
 
 

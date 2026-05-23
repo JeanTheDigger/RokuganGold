@@ -192,7 +192,7 @@ func test_no_notice_tier1_all():
 	assert_almost_eq(conseq["honor"], -0.5, 0.001)
 	assert_eq(conseq["creditor_disp"], -10)
 	assert_eq(conseq["witness_disp"], -5)
-	assert_eq(conseq["topic_tier"], 2)
+	assert_eq(conseq["topic_tier"], TopicData.Tier.TIER_2)
 
 
 # =============================================================================

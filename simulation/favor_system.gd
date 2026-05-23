@@ -51,9 +51,9 @@ const BREAK_GLORY_LOSS: Dictionary = {
 }
 
 const BREAK_TOPIC_TIER: Dictionary = {
-	FavorData.FavorTier.MINOR: 4,
-	FavorData.FavorTier.MODERATE: 4,
-	FavorData.FavorTier.MAJOR: 2,
+	FavorData.FavorTier.MINOR: TopicData.Tier.TIER_4,
+	FavorData.FavorTier.MODERATE: TopicData.Tier.TIER_4,
+	FavorData.FavorTier.MAJOR: TopicData.Tier.TIER_2,
 }
 
 const HONOR_ON_FULFILL: float = 0.1
@@ -161,9 +161,9 @@ static func break_favor(favor: FavorData, witnesses: Array = []) -> Dictionary:
 		"glory_loss": BREAK_GLORY_LOSS.get(tier, 0.0),
 		"witness_disposition_loss": BREAK_WITNESS_DISPOSITION.get(tier, 0),
 		"witnesses": witnesses,
-		"topic_tier": BREAK_TOPIC_TIER.get(tier, 4),
-		"topic_type": "POLITICAL",
-		"topic_category": "BETRAYAL",
+		"topic_tier": BREAK_TOPIC_TIER.get(tier, TopicData.Tier.TIER_4),
+		"topic_type": "favor_breach",
+		"topic_category": TopicData.Category.POLITICAL,
 		"resolved": true,
 	}
 	return result

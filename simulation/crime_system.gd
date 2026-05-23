@@ -196,18 +196,18 @@ const CRIME_HONOR_TABLE: Dictionary = {
 # Skimming uses 0.0 here — the GDD says "stripped of the office" not all status.
 # Office removal is a role_position change, not a numeric status zeroing.
 const CONVICTION_CONSEQUENCES: Dictionary = {
-	Enums.CrimeType.DISHONORABLE_CONDUCT: [-0.1, 0.0, 0.0, 0],
-	Enums.CrimeType.VIOLENCE: [-0.1, 0.0, 0.0, 4],
-	Enums.CrimeType.UNSANCTIONED_DUEL_DEATH: [0.0, 0.0, 0.0, 4],
-	Enums.CrimeType.SKIMMING: [-0.3, 0.5, 0.0, 3],
-	Enums.CrimeType.UNSANCTIONED_OPEN_KILLING: [-0.5, 1.0, 0.0, 3],
-	Enums.CrimeType.UNSANCTIONED_COVERT_KILLING: [-1.0, 2.0, 0.0, 3],
-	Enums.CrimeType.MAGISTRATE_CORRUPTION: [-1.5, 2.0, -99.0, 2],
-	Enums.CrimeType.DUEL_DEFILEMENT: [-0.5, 0.5, 0.0, 3],
-	Enums.CrimeType.TREASON: [-2.0, 3.0, -99.0, 2],
-	Enums.CrimeType.MAHO: [-3.0, 5.0, -99.0, 1],
-	Enums.CrimeType.VIOLATION_EMPERORS_PEACE: [-3.0, 5.0, -99.0, 1],
-	Enums.CrimeType.OTHER: [-0.1, 0.0, 0.0, 4],
+	Enums.CrimeType.DISHONORABLE_CONDUCT: [-0.1, 0.0, 0.0, -1],
+	Enums.CrimeType.VIOLENCE: [-0.1, 0.0, 0.0, TopicData.Tier.TIER_4],
+	Enums.CrimeType.UNSANCTIONED_DUEL_DEATH: [0.0, 0.0, 0.0, TopicData.Tier.TIER_4],
+	Enums.CrimeType.SKIMMING: [-0.3, 0.5, 0.0, TopicData.Tier.TIER_3],
+	Enums.CrimeType.UNSANCTIONED_OPEN_KILLING: [-0.5, 1.0, 0.0, TopicData.Tier.TIER_3],
+	Enums.CrimeType.UNSANCTIONED_COVERT_KILLING: [-1.0, 2.0, 0.0, TopicData.Tier.TIER_3],
+	Enums.CrimeType.MAGISTRATE_CORRUPTION: [-1.5, 2.0, -99.0, TopicData.Tier.TIER_2],
+	Enums.CrimeType.DUEL_DEFILEMENT: [-0.5, 0.5, 0.0, TopicData.Tier.TIER_3],
+	Enums.CrimeType.TREASON: [-2.0, 3.0, -99.0, TopicData.Tier.TIER_2],
+	Enums.CrimeType.MAHO: [-3.0, 5.0, -99.0, TopicData.Tier.TIER_1],
+	Enums.CrimeType.VIOLATION_EMPERORS_PEACE: [-3.0, 5.0, -99.0, TopicData.Tier.TIER_1],
+	Enums.CrimeType.OTHER: [-0.1, 0.0, 0.0, TopicData.Tier.TIER_4],
 }
 
 const SEPPUKU_HONOR_BONUS: float = 1.0
@@ -332,7 +332,7 @@ static func apply_at_conviction_consequences(character: L5RCharacterData, record
 	var topic_tier: int = int(consequences[3])
 	if crime_type == Enums.CrimeType.UNSANCTIONED_COVERT_KILLING:
 		if victim_status >= HIGH_STATUS_THRESHOLD:
-			topic_tier = 2
+			topic_tier = TopicData.Tier.TIER_2
 
 	return {
 		"glory_delta": glory_delta,
@@ -360,7 +360,7 @@ static func apply_seppuku_refused(character: L5RCharacterData, record: CrimeReco
 	return {
 		"honor_delta": honor_delta,
 		"infamy_delta": infamy_delta,
-		"topic_tier": 4,
+		"topic_tier": TopicData.Tier.TIER_4,
 	}
 
 

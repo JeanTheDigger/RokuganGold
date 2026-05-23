@@ -620,7 +620,7 @@ func test_demand_tribute_generates_topic() -> void:
 		inputs, "", vassals,
 	)
 	assert_true(result["generates_topic"])
-	assert_eq(result["topic_tier"], 4)
+	assert_eq(result["topic_tier"], TopicData.Tier.TIER_4)
 
 
 func test_demand_tribute_no_vassals() -> void:

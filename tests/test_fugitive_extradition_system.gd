@@ -47,7 +47,7 @@ func test_extradition_request_format():
 	)
 	assert_eq(r["requesting_clan"], "Crane")
 	assert_eq(r["harboring_clan"], "Scorpion")
-	assert_eq(r["topic_tier"], 4)
+	assert_eq(r["topic_tier"], TopicData.Tier.TIER_4)
 	assert_true(r["topic_title"].find("Crane") >= 0)
 	assert_true(r["topic_title"].find("Bayushi Toru") >= 0)
 
@@ -122,7 +122,7 @@ func test_refusal_disposition_hit():
 	var r := FugitiveExtraditionSystem.get_refusal_consequences(3)
 	assert_eq(r["disposition_hit"], -10)
 	assert_true(r["topic_escalates"])
-	assert_eq(r["escalated_topic_tier"], 3)
+	assert_eq(r["escalated_topic_tier"], TopicData.Tier.TIER_3)
 
 
 func test_refusal_worse_for_serious_crime():
@@ -217,7 +217,7 @@ func test_ishi_resists_imperial_warrant():
 func test_covert_extraction_risk():
 	var r := FugitiveExtraditionSystem.get_covert_extraction_risk()
 	assert_true(r["sovereignty_violation"])
-	assert_eq(r["topic_tier_if_caught"], 3)
+	assert_eq(r["topic_tier_if_caught"], TopicData.Tier.TIER_3)
 
 
 func test_standing_warrant_persists():

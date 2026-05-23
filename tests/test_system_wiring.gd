@@ -891,7 +891,7 @@ func test_conviction_generates_topic_at_correct_tier() -> void:
 		convicted, cr
 	)
 	var topic_tier: int = consequences["topic_tier"]
-	assert_eq(topic_tier, 3, "Skimming should produce Tier 3 topic")
+	assert_eq(topic_tier, TopicData.Tier.TIER_3, "Skimming should produce Tier 3 topic")
 
 	# Generate the conviction topic
 	var next_topic_id: Array = [200]
@@ -927,7 +927,7 @@ func test_maho_conviction_generates_tier_1_supernatural_topic() -> void:
 	var consequences: Dictionary = CrimeSystem.apply_at_conviction_consequences(
 		convicted, cr
 	)
-	assert_eq(consequences["topic_tier"], 1, "Maho should produce Tier 1 topic")
+	assert_eq(consequences["topic_tier"], TopicData.Tier.TIER_1, "Maho should produce Tier 1 topic")
 
 	var next_topic_id: Array = [300]
 	var topic: TopicData = InvestigationSystem.generate_conviction_topic(
@@ -960,7 +960,7 @@ func test_seppuku_refused_generates_secondary_topic() -> void:
 
 	# Seppuku refused
 	var refusal: Dictionary = CrimeSystem.apply_seppuku_refused(convicted, cr)
-	assert_eq(refusal["topic_tier"], 4, "Seppuku refusal should produce Tier 4 topic")
+	assert_eq(refusal["topic_tier"], TopicData.Tier.TIER_4, "Seppuku refusal should produce Tier 4 topic")
 
 	var next_topic_id: Array = [400]
 	var refusal_topic: TopicData = InvestigationSystem.generate_seppuku_refusal_topic(
@@ -1254,7 +1254,7 @@ func test_end_to_end_crime_loop_through_conviction() -> void:
 		criminal, record
 	)
 	assert_eq(record.legal_status, Enums.LegalStatus.DECREED_GUILTY)
-	assert_eq(conviction["topic_tier"], 3, "Skimming -> Tier 3 topic")
+	assert_eq(conviction["topic_tier"], TopicData.Tier.TIER_3, "Skimming -> Tier 3 topic")
 	assert_true(criminal.glory < 2.0, "Glory should decrease on conviction")
 	assert_true(criminal.infamy > 0.0, "Infamy should increase on conviction")
 

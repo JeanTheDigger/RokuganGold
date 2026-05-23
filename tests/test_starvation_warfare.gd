@@ -127,7 +127,7 @@ func test_execute_harvest_destruction_returns_correct_effects() -> void:
 	assert_eq(result["targeted_clan_disposition"], -20)
 	assert_eq(result["other_clans_disposition"], -10)
 	assert_true(result["generates_topic"])
-	assert_eq(result["topic_tier"], 2)
+	assert_eq(result["topic_tier"], TopicData.Tier.TIER_2)
 
 
 func test_apply_harvest_destruction_sets_flag() -> void:

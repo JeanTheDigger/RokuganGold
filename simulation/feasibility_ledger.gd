@@ -516,7 +516,7 @@ static func try_demand_tribute(
 		"refusing_vassals": refusing_vassals,
 		"disposition_cost": TRIBUTE_DISPOSITION_COST,
 		"generates_topic": true,
-		"topic_tier": 4,
+		"topic_tier": TopicData.Tier.TIER_4,
 	}
 
 
@@ -639,7 +639,7 @@ static func try_raid_neighbor(
 		"other_disposition_cost": RAID_OTHER_DISPOSITION_COST,
 		"triggers_war_status": not best_target.get("already_at_war", false),
 		"generates_topic": true,
-		"topic_tier": 3,
+		"topic_tier": TopicData.Tier.TIER_3,
 	}
 
 
@@ -682,7 +682,7 @@ static func try_desperation_override(
 		"desperation_levy": true,
 		"honor_cost": honor_cost,
 		"generates_topic": true,
-		"topic_tier": 3,
+		"topic_tier": TopicData.Tier.TIER_3,
 	}
 
 
@@ -832,7 +832,7 @@ static func _extract_side_effects(rung_result: Dictionary) -> Dictionary:
 	effects["rung"] = rung_result.get("rung", -1)
 	if rung_result.get("generates_topic", false):
 		effects["generates_topic"] = true
-		effects["topic_tier"] = rung_result.get("topic_tier", 4)
+		effects["topic_tier"] = rung_result.get("topic_tier", TopicData.Tier.TIER_4)
 	if rung_result.has("honor_cost"):
 		effects["honor_cost"] = rung_result["honor_cost"]
 	if rung_result.has("glory_cost"):

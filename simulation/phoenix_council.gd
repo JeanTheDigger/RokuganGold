@@ -411,7 +411,7 @@ static func get_defiance_consequences(state: Dictionary) -> Dictionary:
 	return {
 		"stage": stage,
 		"honor_penalty": DEFIANCE_STAGE_1_HONOR_PENALTY if stage >= 1 else 0.0,
-		"topic_tier": 4,
+		"topic_tier": TopicData.Tier.TIER_4,
 		"topic_slug": "phoenix_champion_defiance_stage_%d" % stage,
 		"diplomatic_suspended": stage >= 2,
 		"shugenja_withdrawn": stage >= 3,
@@ -425,7 +425,7 @@ static func get_overreach_consequences(state: Dictionary) -> Dictionary:
 		return {}
 	return {
 		"stage": stage,
-		"topic_tier": 4 if stage <= 1 else 3,
+		"topic_tier": TopicData.Tier.TIER_4 if stage <= 1 else TopicData.Tier.TIER_3,
 		"topic_slug": "phoenix_council_overreach_stage_%d" % stage,
 		"emperor_appeal_available": stage >= 2,
 		"compact_violated": stage >= 3,

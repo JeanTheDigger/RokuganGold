@@ -52,7 +52,7 @@ static func create_extradition_request(
 		"harboring_clan": harboring_clan,
 		"fugitive_name": fugitive_name,
 		"crime_type": crime_type,
-		"topic_tier": 4,
+		"topic_tier": TopicData.Tier.TIER_4,
 		"topic_title": "%s requests extradition of %s from %s" % [
 			requesting_clan, fugitive_name, harboring_clan
 		],
@@ -211,7 +211,7 @@ static func get_refusal_consequences(crime_severity_tier: int) -> Dictionary:
 		"fugitive_returned": false,
 		"disposition_hit": disp_hit,
 		"topic_escalates": true,
-		"escalated_topic_tier": 3,
+		"escalated_topic_tier": TopicData.Tier.TIER_3,
 	}
 
 
@@ -288,7 +288,7 @@ static func evaluate_imperial_warrant_compliance(
 static func get_covert_extraction_risk() -> Dictionary:
 	return {
 		"sovereignty_violation": true,
-		"topic_tier_if_caught": 3,
+		"topic_tier_if_caught": TopicData.Tier.TIER_3,
 		"topic_title_template": "%s agents operating illegally in %s territory",
 		"disposition_hit_if_caught": -20,
 		"uses_stealth_mechanics": true,

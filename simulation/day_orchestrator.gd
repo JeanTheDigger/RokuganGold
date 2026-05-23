@@ -2644,7 +2644,7 @@ static func _process_miya_blessing_followup(
 		var champions: Dictionary = {}
 		for cid: int in characters_by_id:
 			var c: L5RCharacterData = characters_by_id[cid]
-			if c == null or c.clan == "" or c.character_id == emperor_id:
+			if c == null or CharacterStats.is_dead(c) or c.clan == "" or c.character_id == emperor_id:
 				continue
 			if c.lord_id != -1:
 				continue
@@ -8501,8 +8501,7 @@ static func _process_levy_suspicion(
 
 		var tid: int = next_topic_id[0]
 		next_topic_id[0] += 1
-		var tier_val: int = check["topic_tier"]
-		var tier: TopicData.Tier = TopicData.Tier.TIER_4 if tier_val == 4 else TopicData.Tier.TIER_3
+		var tier: TopicData.Tier = check["topic_tier"] as TopicData.Tier
 		var momentum: float = TopicMomentumSystem.initial_momentum_for_tier(tier)
 		var topic: TopicData = TopicMomentumSystem.create_topic(
 			tid,
@@ -8537,6 +8536,8 @@ static func _process_levy_suspicion(
 				penalized_ids[family_daimyo.character_id] = true
 			for cid2: int in characters_by_id:
 				var ch2: L5RCharacterData = characters_by_id[cid2]
+				if ch2 == null or CharacterStats.is_dead(ch2):
+					continue
 				if ch2.clan != lord.clan:
 					continue
 				if CivilianOrderBudget.lord_rank_from_status(ch2.status) != Enums.LordRank.CLAN_CHAMPION:
@@ -8553,7 +8554,7 @@ static func _process_levy_suspicion(
 			"lord_id": lord_id,
 			"clan": lord.clan,
 			"seasons_maintained": seasons_maintained,
-			"topic_tier": tier_val,
+			"topic_tier": tier,
 			"disposition_loss_lord": check.get("disposition_loss_lord", 0),
 			"disposition_loss_neighbor": check.get("disposition_loss_neighbor", 0),
 			"escalated": check.get("escalated", false),
@@ -8868,7 +8869,7 @@ static func _apply_harvest_destruction(
 
 	for id: Variant in characters_by_id:
 		var c: L5RCharacterData = characters_by_id[id] as L5RCharacterData
-		if c == null:
+		if c == null or CharacterStats.is_dead(c):
 			continue
 		if c.clan == ordering_clan:
 			continue
@@ -10823,6 +10824,8 @@ static func _apply_vassal_disposition_cost(
 		if not (c is L5RCharacterData):
 			continue
 		var ch: L5RCharacterData = c
+		if CharacterStats.is_dead(ch):
+			continue
 		if ch.lord_id == lord.character_id:
 			var key: int = lord.character_id
 			if ch.disposition_values.has(key):
@@ -10844,6 +10847,8 @@ static func _apply_clan_disposition_cost(
 		if not (c is L5RCharacterData):
 			continue
 		var ch: L5RCharacterData = c
+		if CharacterStats.is_dead(ch):
+			continue
 		if ch.clan != target_clan:
 			continue
 		for oid: Variant in characters_by_id:
@@ -10851,6 +10856,8 @@ static func _apply_clan_disposition_cost(
 			if not (o is L5RCharacterData):
 				continue
 			var other: L5RCharacterData = o
+			if CharacterStats.is_dead(other):
+				continue
 			if other.clan != declaring_clan:
 				continue
 			var key: int = other.character_id
@@ -10873,6 +10880,8 @@ static func _apply_other_clans_disposition_cost(
 		if not (c is L5RCharacterData):
 			continue
 		var ch: L5RCharacterData = c
+		if CharacterStats.is_dead(ch):
+			continue
 		if ch.clan == declaring_clan or ch.clan == exempt_clan:
 			continue
 		for oid: Variant in characters_by_id:
@@ -10880,6 +10889,8 @@ static func _apply_other_clans_disposition_cost(
 			if not (o is L5RCharacterData):
 				continue
 			var other: L5RCharacterData = o
+			if CharacterStats.is_dead(other):
+				continue
 			if other.clan != declaring_clan:
 				continue
 			var key: int = other.character_id
@@ -10903,12 +10914,7 @@ static func _create_ladder_topic(
 	next_topic_id[0] += 1
 
 	var rung: int = side_effects.get("rung", -1)
-	var tier_val: int = side_effects.get("topic_tier", 4)
-	match tier_val:
-		3: topic.tier = TopicData.Tier.TIER_3
-		2: topic.tier = TopicData.Tier.TIER_2
-		1: topic.tier = TopicData.Tier.TIER_1
-		_: topic.tier = TopicData.Tier.TIER_4
+	topic.tier = side_effects.get("topic_tier", TopicData.Tier.TIER_4) as TopicData.Tier
 
 	var rung_name: String = _ladder_rung_name(rung)
 	topic.slug = "war_preparation_%s_%s_d%d" % [rung_name, declaring_clan, ic_day]
@@ -11930,7 +11936,7 @@ static func _legacy_host_selection(
 		return {}
 	for char_id: int in characters_by_id:
 		var c: L5RCharacterData = characters_by_id[char_id] as L5RCharacterData
-		if c != null and c.clan == host_clan and c.status >= 7.0 and c.lord_id == -1:
+		if c != null and not CharacterStats.is_dead(c) and c.clan == host_clan and c.status >= 7.0 and c.lord_id == -1:
 			var loc: String = c.physical_location
 			var sid: int = int(loc) if loc.is_valid_int() else -1
 			if sid >= 0:
@@ -13765,7 +13771,7 @@ static func _build_emperor_tax_config(
 	var clan_disps: Dictionary = {}
 	for cid: Variant in characters_by_id:
 		var c: L5RCharacterData = characters_by_id[cid] as L5RCharacterData
-		if c == null or c.clan == "" or c.status < 7.0 or c.lord_id != -1:
+		if c == null or CharacterStats.is_dead(c) or c.clan == "" or c.status < 7.0 or c.lord_id != -1:
 			continue
 		var disp: int = int(emperor.disposition_values.get(c.character_id, 0))
 		clan_disps[c.clan] = disp
@@ -14816,6 +14822,8 @@ static func _process_commitment_seasonal(
 		if disp_penalty != 0:
 			for other: L5RCharacterData in characters_by_id.values():
 				if other.character_id == lord_id:
+					continue
+				if CharacterStats.is_dead(other):
 					continue
 				if other.disposition_values.has(lord_id):
 					other.disposition_values[lord_id] = clampi(
@@ -17500,6 +17508,8 @@ static func _create_resource_promise_commitment(
 		if not (c_var is L5RCharacterData):
 			continue
 		var ch: L5RCharacterData = c_var as L5RCharacterData
+		if CharacterStats.is_dead(ch):
+			continue
 		if ch.lord_id == creditor_id or ch.lord_id == debtor_id:
 			if ch.character_id not in witnesses:
 				witnesses.append(ch.character_id)

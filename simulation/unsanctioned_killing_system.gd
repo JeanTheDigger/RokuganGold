@@ -34,9 +34,9 @@ const INFAMY_GAIN: Dictionary = {
 }
 
 const TOPIC_TIER: Dictionary = {
-	KillingTier.UNSANCTIONED_DUEL_DEATH: 4,
-	KillingTier.OPEN_KILLING: 3,
-	KillingTier.COVERT_KILLING: 3,
+	KillingTier.UNSANCTIONED_DUEL_DEATH: TopicData.Tier.TIER_4,
+	KillingTier.OPEN_KILLING: TopicData.Tier.TIER_3,
+	KillingTier.COVERT_KILLING: TopicData.Tier.TIER_3,
 }
 
 const HIGH_STATUS_THRESHOLD: float = 5.0
@@ -88,7 +88,7 @@ static func get_consequences(
 			infamy = INFAMY_GAIN[effective_tier]
 
 	if effective_tier == KillingTier.COVERT_KILLING and victim_status >= HIGH_STATUS_THRESHOLD:
-		topic_tier = 2
+		topic_tier = TopicData.Tier.TIER_2
 
 	var seppuku_offered: bool = effective_tier != KillingTier.UNSANCTIONED_DUEL_DEATH
 	var capital: bool = effective_tier == KillingTier.COVERT_KILLING

@@ -543,7 +543,7 @@ func test_defiance_stage_2_consequences_include_diplomatic() -> void:
 func test_overreach_returns_consequences() -> void:
 	var result: Dictionary = PhoenixCouncil.handle_overreach_trigger(_state)
 	assert_eq(result["stage"], 1)
-	assert_eq(result["topic_tier"], 4)
+	assert_eq(result["topic_tier"], TopicData.Tier.TIER_4)
 	assert_false(_state["phoenix_champion_authority"])
 
 

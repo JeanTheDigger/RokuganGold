@@ -12,8 +12,8 @@ enum PunishmentLevel {
 
 const HONOR_LOSS: float = -0.2
 const GLORY_LOSS: float = -0.1
-const BASE_TOPIC_TIER: int = 4
-const REPEATED_OFFENSE_TIER: int = 3
+const BASE_TOPIC_TIER: int = TopicData.Tier.TIER_4
+const REPEATED_OFFENSE_TIER: int = TopicData.Tier.TIER_3
 const REPEAT_WINDOW_SEASONS: int = 4
 const REPEAT_THRESHOLD_FOR_ESCALATION: int = 3
 const INFAMY_PER_REPEATED_OFFENSE: float = 0.5

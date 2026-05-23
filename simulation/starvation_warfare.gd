@@ -10,7 +10,7 @@ const HARVEST_HONOR_COST: float = -2.0
 const HARVEST_GLORY_COST: float = -0.5
 const HARVEST_DISP_TARGETED_CLAN: int = -20
 const HARVEST_DISP_OTHER_CLANS: int = -10
-const HARVEST_TOPIC_TIER: int = 2
+const HARVEST_TOPIC_TIER: int = TopicData.Tier.TIER_2
 const HARVEST_TOPIC_MOMENTUM: float = 60.0
 
 const HARVEST_NEVER_VIRTUES: Array[String] = ["Jin", "Gi"]

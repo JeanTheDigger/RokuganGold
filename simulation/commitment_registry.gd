@@ -10,15 +10,15 @@ class_name CommitmentRegistry
 # =============================================================================
 
 const BROKEN_NO_NOTICE: Dictionary = {
-	3: {"honor": -0.1, "creditor_disp": -3, "witness_disp": 0, "topic_tier": 4},
-	2: {"honor": -0.2, "creditor_disp": -6, "witness_disp": -2, "topic_tier": 3},
-	1: {"honor": -0.5, "creditor_disp": -10, "witness_disp": -5, "topic_tier": 2},
+	3: {"honor": -0.1, "creditor_disp": -3, "witness_disp": 0, "topic_tier": TopicData.Tier.TIER_4},
+	2: {"honor": -0.2, "creditor_disp": -6, "witness_disp": -2, "topic_tier": TopicData.Tier.TIER_3},
+	1: {"honor": -0.5, "creditor_disp": -10, "witness_disp": -5, "topic_tier": TopicData.Tier.TIER_2},
 }
 
 const BROKEN_WITH_NOTICE: Dictionary = {
 	3: {"honor": 0.0, "creditor_disp": -1, "witness_disp": 0, "topic_tier": -1},
 	2: {"honor": -0.1, "creditor_disp": -3, "witness_disp": 0, "topic_tier": -1},
-	1: {"honor": -0.2, "creditor_disp": -5, "witness_disp": -2, "topic_tier": 3},
+	1: {"honor": -0.2, "creditor_disp": -5, "witness_disp": -2, "topic_tier": TopicData.Tier.TIER_3},
 }
 
 const BROKEN_WITH_PROXY: Dictionary = {
@@ -30,7 +30,7 @@ const BROKEN_WITH_PROXY: Dictionary = {
 const BROKEN_FORCE_MAJEURE: Dictionary = {
 	3: {"honor": 0.0, "creditor_disp": -1, "witness_disp": 0, "topic_tier": -1},
 	2: {"honor": -0.1, "creditor_disp": -3, "witness_disp": 0, "topic_tier": -1},
-	1: {"honor": -0.2, "creditor_disp": -5, "witness_disp": -2, "topic_tier": 3},
+	1: {"honor": -0.2, "creditor_disp": -5, "witness_disp": -2, "topic_tier": TopicData.Tier.TIER_3},
 }
 
 

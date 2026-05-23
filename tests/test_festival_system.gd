@@ -294,7 +294,7 @@ func test_resolve_championship_returns_topic_tier_4():
 		_make_candidate(1, {"Athletics": 3}, {"strength": 3, "agility": 3, "intelligence": 3}),
 	]
 	var result := FestivalSystem.resolve_championship(candidates, null)
-	assert_eq(result["topic_tier"], 4)
+	assert_eq(result["topic_tier"], TopicData.Tier.TIER_4)
 
 
 # -- Emperor's Chosen tests ---------------------------------------------------

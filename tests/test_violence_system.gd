@@ -41,7 +41,7 @@ func test_first_offense_tier_4_topic():
 	var attacker := _make_character(3.0)
 	var victim := _make_character(3.0)
 	var result := ViolenceSystem.evaluate_violence(attacker, victim, 0, false)
-	assert_eq(result["topic_tier"], 4)
+	assert_eq(result["topic_tier"], TopicData.Tier.TIER_4)
 
 
 func test_auto_detected():
@@ -97,7 +97,7 @@ func test_third_offense_escalates_topic():
 	var attacker := _make_character(3.0)
 	var victim := _make_character(3.0)
 	var result := ViolenceSystem.evaluate_violence(attacker, victim, 3, false)
-	assert_eq(result["topic_tier"], 3)
+	assert_eq(result["topic_tier"], TopicData.Tier.TIER_3)
 
 
 func test_third_offense_escalates_punishment():
