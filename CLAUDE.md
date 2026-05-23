@@ -2008,6 +2008,27 @@ costs, or forward-wiring. Do not treat as bugs.
   commitment renege, civil war triggered/resolved, assassination death
   (3 tiers), duel death, hunt announcement/result, betrayal, Togashi
   vanished, war termination (4 types).
+- **_crime_type_to_string() — 5 CrimeType enum values missing from match. FIXED.**
+  DISHONORABLE_CONDUCT, UNSANCTIONED_DUEL_DEATH, MAGISTRATE_CORRUPTION,
+  DUEL_DEFILEMENT, VIOLATION_EMPERORS_PEACE all fell through to "other".
+  Now return descriptive strings for investigation logs.
+- **Alibi check null guard — characters_by_id.get() unchecked. FIXED.**
+  `_check_witness_evidence()` passed raw .get() results to
+  `_check_alibi_for_target()` without null guards. If characters_by_id
+  was empty or missing the ID, null would flow through to SkillResolver
+  and crash on co-conspirator alibi path.
+
+### Known Performance Concerns — Deferred
+- **Unbounded array growth in advance_day().** `active_topics`,
+  `crime_records`, `pending_letters`, `active_secrets`, `commitments`,
+  and `action_log` grow monotonically — items are appended but never
+  removed when resolved/delivered/completed. After thousands of game
+  days, these arrays will contain many stale entries. Each array has
+  early-skip guards (e.g., `if letter.delivered: continue`) so the
+  per-tick CPU cost is low, but memory grows linearly. Cleanup logic
+  requires design decisions about retention windows (how long to keep
+  resolved topics, closed cases, etc.) — do not implement without GDD
+  guidance.
 
 ### Systems Added 2026-05-23
 - **s55.11b Named Monk Standing Objectives** — `simulation/monk_objective_system.gd`.
