@@ -733,6 +733,8 @@ static func advance_day(
 		commitments, characters_by_id, active_topics
 	)
 
+	_remove_terminal_commitments(commitments)
+
 	var orphan_results: Array = _process_lord_deaths(
 		death_events, characters, objectives_map, successor_map,
 		active_successions, next_succession_id, characters_by_id, ic_day,
@@ -778,6 +780,8 @@ static func advance_day(
 	)
 
 	var topic_results: Dictionary = TopicMomentumSystem.process_daily_tick(active_topics)
+
+	_remove_resolved_topics(active_topics)
 
 	var province_clan_map: Dictionary = _build_province_clan_map(provinces)
 	var broadcast_results: Array = TopicMomentumSystem.broadcast_public_knowledge(
@@ -18155,4 +18159,24 @@ static func _remove_resolved_favors(favors: Array) -> void:
 		var favor: Variant = favors[i]
 		if favor is FavorData and (favor as FavorData).resolved:
 			favors.remove_at(i)
+		i -= 1
+
+
+static func _remove_resolved_topics(active_topics: Array) -> void:
+	var i: int = active_topics.size() - 1
+	while i >= 0:
+		var topic: Variant = active_topics[i]
+		if topic is TopicData and (topic as TopicData).resolved:
+			active_topics.remove_at(i)
+		i -= 1
+
+
+static func _remove_terminal_commitments(commitments: Array) -> void:
+	var i: int = commitments.size() - 1
+	while i >= 0:
+		var c: Variant = commitments[i]
+		if c is CommitmentData:
+			var status: Enums.CommitmentStatus = (c as CommitmentData).status
+			if status != Enums.CommitmentStatus.PENDING:
+				commitments.remove_at(i)
 		i -= 1

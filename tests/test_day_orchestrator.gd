@@ -14543,3 +14543,36 @@ func test_remove_resolved_favors() -> void:
 	assert_eq(favors.size(), 2, "Should remove resolved favor")
 	assert_eq((favors[0] as FavorData).favor_id, 1)
 	assert_eq((favors[1] as FavorData).favor_id, 3)
+
+
+func test_remove_resolved_topics() -> void:
+	var live := TopicData.new()
+	live.topic_id = 1
+	live.resolved = false
+	var done := TopicData.new()
+	done.topic_id = 2
+	done.resolved = true
+	var also_live := TopicData.new()
+	also_live.topic_id = 3
+	also_live.resolved = false
+	var topics: Array = [live, done, also_live]
+	DayOrchestrator._remove_resolved_topics(topics)
+	assert_eq(topics.size(), 2, "Should remove resolved topic")
+	assert_eq((topics[0] as TopicData).topic_id, 1)
+	assert_eq((topics[1] as TopicData).topic_id, 3)
+
+
+func test_remove_terminal_commitments() -> void:
+	var pending := CommitmentData.new()
+	pending.status = Enums.CommitmentStatus.PENDING
+	var fulfilled := CommitmentData.new()
+	fulfilled.status = Enums.CommitmentStatus.FULFILLED
+	var broken := CommitmentData.new()
+	broken.status = Enums.CommitmentStatus.BROKEN_NO_NOTICE
+	var also_pending := CommitmentData.new()
+	also_pending.status = Enums.CommitmentStatus.PENDING
+	var commitments: Array = [pending, fulfilled, broken, also_pending]
+	DayOrchestrator._remove_terminal_commitments(commitments)
+	assert_eq(commitments.size(), 2, "Should remove FULFILLED and BROKEN")
+	assert_eq((commitments[0] as CommitmentData).status, Enums.CommitmentStatus.PENDING)
+	assert_eq((commitments[1] as CommitmentData).status, Enums.CommitmentStatus.PENDING)

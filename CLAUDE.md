@@ -2102,22 +2102,33 @@ costs, or forward-wiring. Do not treat as bugs.
 - **No settlement-level court duplicate guard. FIXED.**
   (Previous session.) Two lords at the same settlement could both create courts.
   Added settlement_id check in `_apply_court_creation()`.
+- **Resolved topics never removed from active_topics array. FIXED.**
+  `TopicMomentumSystem.process_daily_tick()` sets `resolved = true` on
+  decayed/expired topics, but nothing removed them. All consumers skip
+  resolved topics via `not t.resolved` guards. `_remove_resolved_topics()`
+  now runs after daily topic processing. Character `topic_pool` arrays
+  may retain orphaned IDs for removed topics — benign (lookups fail
+  gracefully). 1 test.
+- **Terminal commitments never removed from commitments array. FIXED.**
+  Commitments transitioning to FULFILLED, BROKEN_*, or EXPIRED were
+  never removed. All processing loops guard with
+  `status == CommitmentStatus.PENDING`. `_remove_terminal_commitments()`
+  now runs after deadline processing and retroactive forgiveness. 1 test.
+- **Resolved favors removed after daily processing. FIXED.**
+  `_remove_resolved_favors()` runs after `_process_favors()`. Combined
+  with FavorData.resolved tracking added earlier, favors are now properly
+  cleaned up at all resolution points (honor, break, expiration, death).
+  1 test.
 
 ### Known Performance Concerns — Deferred
-- **Unbounded array growth in advance_day().** `active_topics`,
-  `crime_records`, `pending_letters`, `active_secrets`, `commitments`,
-  and `action_log` grow monotonically — items are appended but never
-  removed when resolved/delivered/completed. After thousands of game
-  days, these arrays will contain many stale entries. Each array has
-  early-skip guards (e.g., `if letter.delivered: continue`) so the
-  per-tick CPU cost is low, but memory grows linearly. Cleanup logic
-  requires design decisions about retention windows (how long to keep
-  resolved topics, closed cases, etc.) — do not implement without GDD
-  guidance. Note: `active_wars`, `active_successions`, `active_civil_wars`,
-  `active_hostages`, `active_hunts`, `active_courts`, `entanglements`,
-  and `favors` now properly remove resolved items. The remaining
-  unbounded arrays are `active_topics`, `crime_records`,
-  `pending_letters`, `active_secrets`, and `commitments`.
+- **Unbounded array growth in advance_day().** `crime_records`,
+  `pending_letters`, `active_secrets`, and `action_log` grow
+  monotonically. `pending_letters` cannot be removed after delivery
+  because multi-stage forgery/impersonation processing reads delivered
+  letters. `crime_records` have complex terminal state logic (PARDONED,
+  FUGITIVE are live states). `active_secrets` partially exposed secrets
+  may still be read. `action_log` is cleared daily (via stale key
+  clearing). These require design decisions about retention windows.
 
 ### Systems Added 2026-05-23
 - **s55.11b Named Monk Standing Objectives** — `simulation/monk_objective_system.gd`.
