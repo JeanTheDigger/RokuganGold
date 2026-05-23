@@ -655,9 +655,9 @@ static func resolve_shiba_reincarnation(
 		"previous_position_vacated":     had_position,
 		"previous_position_tier":        prev_tier,
 		"topic": {
-			"tier":        3,
+			"tier":        TopicData.Tier.TIER_2,
 			"momentum":    40.0,
-			"category":    "SPIRITUAL",
+			"category":    TopicData.Category.SUPERNATURAL,
 			"slug":        "shiba_reincarnation_%d" % selected.character_id,
 			"subject_ids": [selected.character_id],
 			"variant":     "reincarnation",

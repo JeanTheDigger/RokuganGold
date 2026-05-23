@@ -192,8 +192,8 @@ static func generate_betrayal_topic(actor_id: int) -> Dictionary:
 	return {
 		"topic_type": "betrayal",
 		"subject_id": actor_id,
-		"tier": 4,
-		"category": "PERSONAL",
+		"tier": TopicData.Tier.TIER_4,
+		"category": TopicData.Category.PERSONAL,
 		"slug": "intimidation_bluff_failure_%d" % actor_id,
 	}
 
