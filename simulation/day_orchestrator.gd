@@ -2555,7 +2555,7 @@ static func _decay_all_knowledge(
 	current_season: int,
 ) -> void:
 	for c: L5RCharacterData in characters:
-		if c.precise_memory:
+		if CharacterStats.is_dead(c) or c.precise_memory:
 			continue
 		InformationSystem.decay_confidence(c, current_season)
 
