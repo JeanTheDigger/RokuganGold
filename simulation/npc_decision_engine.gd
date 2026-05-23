@@ -145,7 +145,7 @@ static func build_context(
 	if not ctx.wall_statuses.is_empty() and not chars_by_id.is_empty():
 		for cid: int in ctx.known_contacts:
 			var contact: L5RCharacterData = chars_by_id.get(cid)
-			if contact != null:
+			if contact != null and not CharacterStats.is_dead(contact):
 				ctx.contact_garrison_scores[cid] = \
 					WallSystem.compute_garrison_shortage_personality_modifier(
 						contact.bushido_virtue, contact.shourido_virtue
@@ -1727,11 +1727,6 @@ static func _evaluate_urgency_condition(
 				if disp <= -11:
 					instances.append({"relevance": 1.0, "npc_id": cid})
 			return instances
-		"favor_expiring_within_7_ooc_days":
-			var instances: Array = []
-			for fid: int in ctx.expiring_favor_ids:
-				instances.append({"relevance": 1.0, "favor_id": fid})
-			return instances
 		"court_ending_within_2_ic_days":
 			var court: Dictionary = ctx.active_court_at_location
 			if court.is_empty():
@@ -1767,7 +1762,7 @@ static func _evaluate_urgency_condition(
 # NeedType(s). Per GDD s55.G schema definition.
 const URGENCY_CATEGORY_NEED_TYPES: Dictionary = {
 	"actions_addressing_crisis": ["DEFEND_PROVINCE", "PATROL_PROVINCE", "INVESTIGATE_THREAT"],
-	"actions_addressing_war": ["LEVY_TROOPS", "DEPLOY_ARMY", "CONDUCT_SIEGE", "ORDER_BATTLE"],
+	"actions_addressing_war": ["LEVY_TROOPS", "DEPLOY_ARMY", "CONDUCT_SIEGE"],
 	"actions_addressing_food_crisis": ["ACQUIRE_RESOURCE", "CONDUCT_COMMERCE"],
 	"actions_addressing_primary_objective": [],
 }

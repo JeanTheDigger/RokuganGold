@@ -3596,3 +3596,83 @@ func test_pick_gossip_subject_self_is_only_negative_returns_negative_one() -> vo
 	ctx.disposition_values = {1: -50, 2: 10, 3: 20}
 	var result: int = NPCDecisionEngine._pick_gossip_subject(ctx)
 	assert_eq(result, -1, "Only negative is self, so no valid gossip target")
+
+
+# -- Audit: CHANGE_DESTINATION reachability (was missing from objective_alignment)
+
+func test_change_destination_passes_allowlist_for_travel_to() -> void:
+	var tables: Dictionary = _load_real_scoring_tables()
+	var options: Array = []
+	for aid: String in ["CHANGE_DESTINATION", "TRAIN", "MEDITATE", "DO_NOTHING", "REST"]:
+		var opt := NPCDataStructures.ScoredAction.new()
+		opt.action_id = aid
+		options.append(opt)
+	var filtered: Array = NPCDecisionEngine.apply_allowlist_filter(
+		options, "TRAVEL_TO", tables
+	)
+	var action_ids: Array = []
+	for o: NPCDataStructures.ScoredAction in filtered:
+		action_ids.append(o.action_id)
+	assert_true(action_ids.has("CHANGE_DESTINATION"),
+		"CHANGE_DESTINATION must pass allowlist for TRAVEL_TO")
+	assert_true(action_ids.has("DO_NOTHING"),
+		"DO_NOTHING must pass allowlist for TRAVEL_TO")
+
+
+func test_perform_ritual_passes_allowlist_for_perform_ritual_need() -> void:
+	var tables: Dictionary = _load_real_scoring_tables()
+	var options: Array = []
+	for aid: String in ["PERFORM_RITUAL", "PERFORM_WORSHIP", "MEDITATE", "DO_NOTHING"]:
+		var opt := NPCDataStructures.ScoredAction.new()
+		opt.action_id = aid
+		options.append(opt)
+	var filtered: Array = NPCDecisionEngine.apply_allowlist_filter(
+		options, "PERFORM_RITUAL", tables
+	)
+	var action_ids: Array = []
+	for o: NPCDataStructures.ScoredAction in filtered:
+		action_ids.append(o.action_id)
+	assert_true(action_ids.has("PERFORM_RITUAL"),
+		"PERFORM_RITUAL ActionID must pass allowlist for PERFORM_RITUAL NeedType")
+	assert_true(action_ids.has("PERFORM_WORSHIP"),
+		"PERFORM_WORSHIP must pass allowlist for PERFORM_RITUAL NeedType")
+
+
+func test_dead_contact_excluded_from_garrison_scores() -> void:
+	var lord := L5RCharacterData.new()
+	lord.character_id = 1
+	lord.character_name = "Lord"
+	lord.skills = {}
+	lord.emphases = {}
+	lord.bushido_virtue = Enums.BushidoVirtue.REI
+	lord.known_contacts_by_clan = {"Crab": [2]}
+	var dead_contact := L5RCharacterData.new()
+	dead_contact.character_id = 2
+	dead_contact.character_name = "Dead Contact"
+	dead_contact.bushido_virtue = Enums.BushidoVirtue.YU
+	dead_contact.wounds_taken = 999
+	dead_contact.earth_ring = 2
+	dead_contact.stamina = 2
+	dead_contact.skills = {}
+	dead_contact.emphases = {}
+	var ws: Dictionary = {
+		"is_lord": true,
+		"wall_statuses": [{"tower_id": 1, "ss": 5}],
+	}
+	var chars: Dictionary = {1: lord, 2: dead_contact}
+	var ctx := NPCDecisionEngine.build_context(lord, ws, chars)
+	assert_false(ctx.contact_garrison_scores.has(2),
+		"Dead contact should not have garrison personality score")
+
+
+func _load_real_scoring_tables() -> Dictionary:
+	var tables: Dictionary = {}
+	var alignment_file := FileAccess.open(
+		"res://systems/npc_engine/data/tables/objective_alignment.json", FileAccess.READ
+	)
+	if alignment_file != null:
+		var json := JSON.new()
+		var err: Error = json.parse(alignment_file.get_as_text())
+		if err == OK:
+			tables["objective_alignment"] = json.data
+	return tables

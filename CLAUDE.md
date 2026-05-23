@@ -1815,6 +1815,41 @@ costs, or forward-wiring. Do not treat as bugs.
   for death duels directly. Full duel continues if no concession.
   2 integration tests (defender-initiated stare-down, both-decline).
 
+### Known Code Issues (found and fixed 2026-05-23, NPC engine audit)
+- **CHANGE_DESTINATION missing from objective_alignment — unreachable. FIXED.**
+  Was in TRAVELING context list but had no entry in objective_alignment.json
+  under TRAVEL_TO NeedType. The allowlist filter (Phase 4b) removed it
+  because TRAVEL_TO only listed BEGIN_TRAVEL. Traveling NPCs who needed to
+  redirect their travel always ended up with DO_NOTHING. Added
+  CHANGE_DESTINATION: 100 to TRAVEL_TO NeedType. 1 test.
+- **PERFORM_RITUAL ActionID missing from PERFORM_RITUAL NeedType — unreachable. FIXED.**
+  Name collision: PERFORM_RITUAL exists as both a NeedType (outer key) and
+  ActionID. The ActionID was not listed under its own NeedType. Shugenja at
+  temples with PERFORM_RITUAL need could never select the PERFORM_RITUAL
+  action. Added PERFORM_RITUAL: 90 (PROVISIONAL — below PERFORM_WORSHIP at
+  100). 1 test.
+- **RESTORE_COUNCIL_COMPACT missing from objective_alignment — unreachable. DEFERRED.**
+  Phoenix Champion voluntary action (s55.10.3.7) in AT_OWN_HOLDINGS context
+  but has no scoring entry. Requires a NeedType that Phoenix Champions with
+  `phoenix_champion_authority` naturally receive through the strategic review
+  (s55.10.3). Design gap — GDD says personality-driven (Chugi restores, Ishi
+  keeps) but doesn't specify NeedType routing.
+- **ORDER_BATTLE dead entry in URGENCY_CATEGORY_NEED_TYPES. FIXED.**
+  ORDER_BATTLE was listed as a NeedType in "actions_addressing_war" urgency
+  category but doesn't exist as a NeedType in objective_alignment (it's only
+  an ActionID). The matching function looked up an empty dict and silently
+  returned false. Removed dead entry. The other three NeedTypes
+  (LEVY_TROOPS, DEPLOY_ARMY, CONDUCT_SIEGE) are unaffected.
+- **Dead urgency condition evaluator for favor_expiring_within_7_ooc_days. FIXED.**
+  Match arm existed in `_evaluate_urgency_condition()` but the urgency rule
+  was previously removed from urgency_rules.json. Dead code removed.
+  `expiring_favor_ids` field retained — still consumed by
+  `_has_existential_threat()` for virtue covert modifier (s12.8 Filter 3).
+- **Dead contact garrison scores — dead characters in garrison scoring. FIXED.**
+  `build_context()` computed garrison_shortage_personality_modifier for dead
+  contacts (checked `!= null` but not `is_dead`). Dead contacts influenced
+  DISPATCH_COURTIER targeting. Added dead guard. 1 test.
+
 ### Known Code Issues (found and fixed 2026-05-22, SecretSystem audit)
 - **expose_publicly() disposition applied to dead witnesses. FIXED.**
   `expose_publicly()` iterated witness_ids and checked `w != null` but not dead.
