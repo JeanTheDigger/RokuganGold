@@ -14345,3 +14345,91 @@ func test_active_wars_converted_to_context_dicts() -> void:
 		assert_true(char_wars[0] is Dictionary, "War should be converted to Dictionary")
 		assert_eq(char_wars[0].get("clan_a", ""), "Lion")
 		assert_eq(char_wars[0].get("war_score_a", 0), 35)
+
+
+func test_hostage_escape_family_honor_loss_applied() -> void:
+	var hostage := L5RCharacterData.new()
+	hostage.character_id = 500
+	hostage.honor = 5.0
+	hostage.mother_id = 501
+	hostage.father_id = 502
+	hostage.spouse_id = 503
+	hostage.sibling_ids = [504]
+	hostage.children_ids = [505]
+
+	var mother := L5RCharacterData.new()
+	mother.character_id = 501
+	mother.honor = 6.0
+	mother.wounds_taken = 0
+
+	var father := L5RCharacterData.new()
+	father.character_id = 502
+	father.honor = 7.0
+	father.wounds_taken = 0
+
+	var spouse := L5RCharacterData.new()
+	spouse.character_id = 503
+	spouse.honor = 5.0
+	spouse.wounds_taken = 0
+
+	var sibling := L5RCharacterData.new()
+	sibling.character_id = 504
+	sibling.honor = 4.0
+	sibling.wounds_taken = 0
+
+	var child := L5RCharacterData.new()
+	child.character_id = 505
+	child.honor = 3.0
+	child.wounds_taken = 0
+
+	var chars_by_id: Dictionary = {
+		500: hostage, 501: mother, 502: father,
+		503: spouse, 504: sibling, 505: child,
+	}
+
+	var escape_results: Array = [{
+		"character_id": 500,
+		"success": true,
+		"family_honor_loss": -1.0,
+	}]
+
+	DayOrchestrator._apply_hostage_escape_family_honor(escape_results, chars_by_id)
+
+	assert_almost_eq(mother.honor, 5.0, 0.01, "Mother should lose 1.0 honor")
+	assert_almost_eq(father.honor, 6.0, 0.01, "Father should lose 1.0 honor")
+	assert_almost_eq(spouse.honor, 4.0, 0.01, "Spouse should lose 1.0 honor")
+	assert_almost_eq(sibling.honor, 3.0, 0.01, "Sibling should lose 1.0 honor")
+	assert_almost_eq(child.honor, 2.0, 0.01, "Child should lose 1.0 honor")
+
+
+func test_hostage_escape_family_honor_skips_dead_family() -> void:
+	var hostage := L5RCharacterData.new()
+	hostage.character_id = 600
+	hostage.honor = 5.0
+	hostage.father_id = 601
+	hostage.mother_id = 602
+
+	var dead_father := L5RCharacterData.new()
+	dead_father.character_id = 601
+	dead_father.honor = 7.0
+	dead_father.wounds_taken = 999
+	dead_father.stamina = 2
+
+	var living_mother := L5RCharacterData.new()
+	living_mother.character_id = 602
+	living_mother.honor = 6.0
+	living_mother.wounds_taken = 0
+
+	var chars_by_id: Dictionary = {600: hostage, 601: dead_father, 602: living_mother}
+	var escape_results: Array = [{
+		"character_id": 600,
+		"success": false,
+		"executed": true,
+		"critical_failure": true,
+		"family_honor_loss": -2.0,
+	}]
+
+	DayOrchestrator._apply_hostage_escape_family_honor(escape_results, chars_by_id)
+
+	assert_almost_eq(dead_father.honor, 7.0, 0.01, "Dead father should not lose honor")
+	assert_almost_eq(living_mother.honor, 4.0, 0.01, "Living mother should lose 2.0 honor")

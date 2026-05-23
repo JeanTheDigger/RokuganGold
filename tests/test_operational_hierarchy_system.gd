@@ -322,3 +322,27 @@ func test_is_delegation_member():
 func test_not_legal_if_military():
 	var c := _make_char(1, 10, 20, Enums.OperationalHierarchyType.MILITARY)
 	assert_false(OperationalHierarchySystem.is_legal_subordinate(c))
+
+
+func test_get_operational_subordinates_skips_dead():
+	var alive := _make_char(2, 10, 1, Enums.OperationalHierarchyType.LEGAL)
+	var dead := _make_char(3, 10, 1, Enums.OperationalHierarchyType.LEGAL)
+	dead.wounds_taken = 999
+	dead.stamina = 2
+	var all: Array = [alive, dead]
+	var result: Array = OperationalHierarchySystem.get_operational_subordinates(1, all)
+	assert_eq(result.size(), 1, "Should only return living subordinate")
+	assert_eq(result[0].character_id, 2)
+
+
+func test_clear_subordinates_on_death_skips_dead():
+	var alive := _make_char(2, 10, 1, Enums.OperationalHierarchyType.LEGAL)
+	var dead := _make_char(3, 10, 1, Enums.OperationalHierarchyType.LEGAL)
+	dead.wounds_taken = 999
+	dead.stamina = 2
+	dead.operational_superior_id = 1
+	var all: Array = [alive, dead]
+	var cleared: Array = OperationalHierarchySystem.clear_subordinates_on_death(1, all)
+	assert_eq(cleared.size(), 1, "Should only clear living subordinate")
+	assert_eq(alive.operational_superior_id, -1)
+	assert_eq(dead.operational_superior_id, 1, "Dead subordinate should not be modified")

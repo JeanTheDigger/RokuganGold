@@ -138,6 +138,7 @@ static func advance_day(
 	var hostage_escape_results: Array = _process_hostage_escapes(
 		active_hostages, characters_by_id, settlements, dice_engine, ic_day, death_events,
 	)
+	_apply_hostage_escape_family_honor(hostage_escape_results, characters_by_id)
 
 	var crisis_courts: Array = _process_crisis_court_calls(
 		characters, active_courts, active_topics, world_states, next_court_id, ic_day,
@@ -7623,6 +7624,36 @@ static func _process_hostage_escapes(
 			"settlement_id": settlement_id_str,
 		})
 	return results
+
+
+static func _apply_hostage_escape_family_honor(
+	escape_results: Array,
+	characters_by_id: Dictionary,
+) -> void:
+	for r: Dictionary in escape_results:
+		var honor_loss: float = r.get("family_honor_loss", 0.0)
+		if honor_loss >= 0.0:
+			continue
+		var char_id: int = r.get("character_id", -1)
+		var character: L5RCharacterData = characters_by_id.get(char_id) as L5RCharacterData
+		if character == null:
+			continue
+		var family_ids: Array = []
+		if character.mother_id >= 0:
+			family_ids.append(character.mother_id)
+		if character.father_id >= 0:
+			family_ids.append(character.father_id)
+		if character.spouse_id >= 0:
+			family_ids.append(character.spouse_id)
+		for sid: int in character.sibling_ids:
+			family_ids.append(sid)
+		for cid: int in character.children_ids:
+			family_ids.append(cid)
+		for fid: int in family_ids:
+			var family_member: L5RCharacterData = characters_by_id.get(fid) as L5RCharacterData
+			if family_member == null or CharacterStats.is_dead(family_member):
+				continue
+			HonorGlorySystem.apply_honor_change(family_member, honor_loss)
 
 
 static func _release_war_hostages(

@@ -224,9 +224,13 @@ static func resolve_settlement_conversations(
 	var rng_index: int = 0
 
 	for i: int in range(characters.size()):
+		var char_a: L5RCharacterData = characters[i]
+		if CharacterStats.is_dead(char_a):
+			continue
 		for j: int in range(i + 1, characters.size()):
-			var char_a: L5RCharacterData = characters[i]
 			var char_b: L5RCharacterData = characters[j]
+			if CharacterStats.is_dead(char_b):
+				continue
 
 			var count_a: int = conversation_counts.get(char_a.character_id, 0)
 			var count_b: int = conversation_counts.get(char_b.character_id, 0)
