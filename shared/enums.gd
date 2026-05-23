@@ -363,6 +363,20 @@ enum KolatSect {
 	TIGER,
 }
 
+enum BloodspeakerCellState {
+	DORMANT,
+	ACTIVE,
+	PROPAGATING,
+	DESTROYED,
+}
+
+enum CellEstablishmentPath {
+	AGENT_INFILTRATION,
+	PTL_CORRUPTION,
+	NAMED_NPC_FALL,
+	ARTIFACT_DISCOVERY,
+}
+
 enum KnowledgeSource {
 	DIRECT_OBSERVATION,
 	DAILY_CONVERSATION,

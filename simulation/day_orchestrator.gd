@@ -86,6 +86,8 @@ static func advance_day(
 	next_hunt_id: Array = [1],
 	spiritual_insurgency_events: Array = [],
 	next_spiritual_event_id: Array = [1],
+	bloodspeaker_cells: Array = [],
+	next_cell_id: Array = [1],
 ) -> Dictionary:
 	var prev_season: int = time_system.get_season()
 
@@ -880,6 +882,7 @@ static func advance_day(
 	var togashi_results: Dictionary = {}
 	var phoenix_council_results: Dictionary = {}
 	var spiritual_insurgency_results: Dictionary = {}
+	var bloodspeaker_results: Dictionary = {}
 	if current_season != prev_season:
 		# Add the IC year to miya_inputs so per-province blessed-year tracking
 		# stays consistent. Year is computed from the time system's tick count.
@@ -976,6 +979,12 @@ static func advance_day(
 			next_spiritual_event_id, current_season, dice_engine,
 			characters, characters_by_id, active_topics,
 			next_topic_id, ic_day, season_meta, _si_spm,
+		)
+		bloodspeaker_results = _process_bloodspeaker_network(
+			bloodspeaker_cells, provinces, settlements, insurgencies,
+			next_insurgency_id, dice_engine, current_season, next_cell_id,
+			characters, characters_by_id, _si_spm,
+			season_meta, active_topics, next_topic_id, ic_day,
 		)
 		_process_doshin_seasonal_recovery(world_states)
 		_tick_kuni_wards(season_meta)
@@ -1148,6 +1157,7 @@ static func advance_day(
 		"letter_pass_results": letter_pass_results,
 		"insurgency_results": insurgency_results,
 		"spiritual_insurgency_results": spiritual_insurgency_results,
+		"bloodspeaker_results": bloodspeaker_results,
 		"succession_results": succession_results,
 		"entanglement_results": entanglement_results,
 		"bound_escape_results": bound_escape_results,
@@ -7266,6 +7276,106 @@ static func _find_province_shugenja(
 			best_rank = theology
 			best = c
 	return best
+
+
+# -- Bloodspeaker Cult Network (s56.14) ----------------------------------------
+
+static func _process_bloodspeaker_network(
+	cells: Array,
+	provinces: Dictionary,
+	settlements: Array,
+	insurgencies: Array,
+	next_insurgency_id: Array,
+	dice_engine: DiceEngine,
+	current_season: int,
+	next_cell_id: Array,
+	characters: Array,
+	characters_by_id: Dictionary,
+	settlement_province_map: Dictionary,
+	season_meta: Dictionary = {},
+	active_topics: Array = [],
+	next_topic_id: Array = [1000],
+	ic_day: int = 0,
+) -> Dictionary:
+	var maho_provinces: Array = _detect_maho_provinces(characters, characters_by_id, settlement_province_map)
+
+	var shadowlands_ids: Array = season_meta.get("shadowlands_province_ids", [])
+
+	var result: Dictionary = BloodspeakerNetworkSystem.process_season(
+		cells, provinces, settlements, insurgencies,
+		next_insurgency_id, dice_engine, current_season, next_cell_id,
+		characters, characters_by_id, shadowlands_ids, maho_provinces,
+	)
+
+	for new_cell: BloodspeakerCellData in result.get("new_cells", []):
+		cells.append(new_cell)
+
+	for new_ins: InsurgencyData in result.get("new_insurgencies", []):
+		insurgencies.append(new_ins)
+
+	var ptl_contribs: Dictionary = result.get("ptl_contributions", {})
+	for pid: int in ptl_contribs:
+		var province: ProvinceData = provinces.get(pid)
+		if province != null:
+			province.province_taint_level += ptl_contribs[pid]
+
+	var active_ins_ids: Dictionary = {}
+	for ins: InsurgencyData in insurgencies:
+		active_ins_ids[ins.insurgency_id] = true
+
+	for cell: BloodspeakerCellData in cells:
+		if cell.state == Enums.BloodspeakerCellState.DESTROYED:
+			continue
+		if cell.insurgency_id < 0:
+			continue
+		if cell.state != Enums.BloodspeakerCellState.ACTIVE and cell.state != Enums.BloodspeakerCellState.PROPAGATING:
+			continue
+		if active_ins_ids.has(cell.insurgency_id):
+			continue
+		var sup_result: Dictionary = BloodspeakerNetworkSystem.on_cell_suppressed(
+			cell, provinces, cells, settlements,
+			dice_engine, next_cell_id, current_season, shadowlands_ids,
+		)
+		if sup_result.get("hydra_spawned", false):
+			var hydra_cell: BloodspeakerCellData = sup_result.get("hydra_cell")
+			if hydra_cell != null:
+				cells.append(hydra_cell)
+				result["events"] = result.get("events", [])
+				result["events"].append({
+					"event": "hydra_spawn",
+					"parent_cell_id": cell.cell_id,
+					"new_cell_id": hydra_cell.cell_id,
+					"target_province_id": hydra_cell.province_id,
+				})
+
+	for event: Dictionary in result.get("events", []):
+		if event.get("event") == "cell_activated":
+			var topic := TopicData.new()
+			topic.topic_id = next_topic_id[0]
+			next_topic_id[0] += 1
+			topic.title = "Maho cult activity in province"
+			topic.tier = TopicData.Tier.TIER_3
+			topic.category = TopicData.Category.POLITICAL
+			topic.ic_day_created = ic_day
+			active_topics.append(topic)
+
+	return result
+
+
+static func _detect_maho_provinces(
+	characters: Array,
+	characters_by_id: Dictionary,
+	settlement_province_map: Dictionary,
+) -> Array:
+	var provinces: Array = []
+	for c: L5RCharacterData in characters:
+		if CharacterStats.is_dead(c):
+			continue
+		if c.taint >= 2.0 and c.school_type == Enums.SchoolType.SHUGENJA:
+			var pid: int = BloodspeakerNetworkSystem._get_character_province(c, settlement_province_map)
+			if pid >= 0 and pid not in provinces:
+				provinces.append(pid)
+	return provinces
 
 
 # -- Heir Designation Evaluation (s22.5, season boundary) --------------------

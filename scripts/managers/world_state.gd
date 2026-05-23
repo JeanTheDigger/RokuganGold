@@ -128,6 +128,10 @@ var next_hunt_id: Array[int] = [1]
 var spiritual_insurgency_events: Array = []
 var next_spiritual_event_id: Array[int] = [1]
 
+# -- Bloodspeaker Cult Network (s56.14) --------------------------------------
+var bloodspeaker_cells: Array[BloodspeakerCellData] = []
+var next_cell_id: Array[int] = [1]
+
 # -- Commitments ID Counter (s55.31) ------------------------------------------
 var next_commitment_id: Array[int] = [1]
 
@@ -261,6 +265,8 @@ func advance_one_day() -> Dictionary:
 		next_hunt_id,
 		spiritual_insurgency_events,
 		next_spiritual_event_id,
+		bloodspeaker_cells,
+		next_cell_id,
 	)
 
 

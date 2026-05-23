@@ -98,7 +98,7 @@ When implementing or auditing a system, go here first:
 | ASCII map mission generation                  | 56 (not yet built)   |
 | Quest seeds                                   | 56.1 (not yet built) |
 | Spiritual insurgency (trigger layer)          | 56.16                |
-| Bloodspeaker cult network                     | 56.14 (not yet built)|
+| Bloodspeaker cult network                     | 56.14                |
 | NPC decision engine — core loop               | 55 (all subsects)    |
 | NPC decision engine — amendments              | 57 (all subsects)    |
 | Province triage                               | 55.9                 |
@@ -1934,6 +1934,38 @@ costs, or forward-wiring. Do not treat as bugs.
   and `next_spiritual_event_id` on WorldState, saved/loaded via WorldStateSaver
   (Resource array pattern). DiceEngine gains `randf()` convenience method.
   73 tests.
+- **s56.14 Bloodspeaker Cult Network** — `simulation/bloodspeaker_network_system.gd`,
+  `shared/bloodspeaker_cell_data.gd`. Empire-wide persistent cult cell network per
+  GDD s56.14. Four cell states: DORMANT, ACTIVE, PROPAGATING, DESTROYED (enum on
+  Enums). BloodspeakerCellData Resource with cell_id, province_id, state, strength,
+  concealment, leader_id, parent_cell_id, establishment_path (4 paths: AGENT_INFILTRATION,
+  PTL_CORRUPTION, NAMED_NPC_FALL, ARTIFACT_DISCOVERY), season_created, seasons_dormant,
+  seasons_active, insurgency_id, propagation_count. `cult_affiliation: bool` field
+  added to L5RCharacterData. World generation: 25-35 cells at game start, 75-80%
+  dormant, placement weighted by population, urban centers, Shadowlands proximity,
+  low garrison. Active cells start at strength 2-4 with concealment 8. Leader selection
+  via Kolat-pattern weighted tiers (susceptibility 6+: weight 5, 4-5: weight 2,
+  3: weight 1). Leaders get cult_affiliation flag. Five activation triggers:
+  PTL 3+ (20%/season), Volatile/Broken stability (15%/season), named NPC maho
+  (automatic), instruction from propagating cell (checked before new-cell creation),
+  passage of time (2% base). Propagation: 10% chance at strength 4+, prefers
+  activating existing dormant cells (instruction path), falls back to creating new
+  dormant cells at 3+ province distance in different clan territory. Parent loses
+  1 strength on propagation. Target selection weighted by same criteria as world
+  generation. Hydra Rule on suppression: <4 seasons = no check, 4-7 = 60% chance,
+  8+ = 90% chance of spawning a hidden dormant cell. Sleeper aftermath: +15% per
+  cult-affiliated character in province (caps at +30%). Dormant PTL contribution:
+  +0.25/season per dormant cell (s56.14.6). Active cells feed into InsurgencySystem
+  (s11.11 MAHO_CULT) for detection, growth, and suppression. DayOrchestrator wiring:
+  `_process_bloodspeaker_network()` runs seasonally after insurgency processing.
+  Detects suppressed cells by comparing active cell insurgency_ids against surviving
+  insurgencies array. PTL contributions applied to ProvinceData. Maho province
+  detection: shugenja with taint 2+ triggers automatic activation. Topic generation
+  on cell activation (TIER_3 POLITICAL). Persistent state: `bloodspeaker_cells` and
+  `next_cell_id` on WorldState, saved/loaded via WorldStateSaver (Resource array
+  pattern). 60 tests. LIMITATION: eta community weight declared but not applied
+  (no eta field on ProvinceData/SettlementData). Cell-level roster composition and
+  ASCII map encounter design deferred per GDD s56.14.7.
 
 ### Known Code Issues (found and fixed 2026-05-22, SecretSystem audit)
 - **expose_publicly() disposition applied to dead witnesses. FIXED.**
