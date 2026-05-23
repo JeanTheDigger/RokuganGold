@@ -203,6 +203,11 @@ static func advance_day(
 		world_states, characters, favors, active_tethers, active_sieges,
 		objectives_map, active_topics, active_secrets,
 	)
+	_inject_base_character_context(
+		world_states, characters, active_topics, tattoos, trade_routes,
+		phoenix_council_state, companies, ic_day, current_season,
+		provinces, settlements, clans, active_wars, characters_by_id,
+	)
 
 	world_states["_crime_records"] = crime_records
 
@@ -6809,19 +6814,17 @@ static func _process_festivals(ic_day: int, world_states: Dictionary) -> Diction
 	var festival_glory_poetry: float = 0.1 if "poetry_exchange" in effects else 0.0
 	var festival_glory_martial: float = 0.1 if "martial_glory" in effects else 0.0
 
-	for char_id: Variant in world_states:
-		if char_id is not int:
-			continue
-		var ws: Dictionary = world_states[char_id]
-		ws["is_ceasefire_day"] = is_ceasefire
-		ws["is_labor_halt_day"] = is_labor_halt
-		ws["is_taian"] = is_taian
-		ws["is_inauspicious_for_social"] = is_inauspicious
-		ws["rokuyo"] = rokuyo_name
-		ws["festival_honor_gain"] = festival_honor
-		ws["festival_has_lion_honor"] = festival_has_lion_honor
-		ws["festival_glory_poetry"] = festival_glory_poetry
-		ws["festival_glory_martial"] = festival_glory_martial
+	world_states["_festival_flags"] = {
+		"is_ceasefire_day": is_ceasefire,
+		"is_labor_halt_day": is_labor_halt,
+		"is_taian": is_taian,
+		"is_inauspicious_for_social": is_inauspicious,
+		"rokuyo": rokuyo_name,
+		"festival_honor_gain": festival_honor,
+		"festival_has_lion_honor": festival_has_lion_honor,
+		"festival_glory_poetry": festival_glory_poetry,
+		"festival_glory_martial": festival_glory_martial,
+	}
 
 	return {
 		"active_festivals": active_festivals,
@@ -14296,12 +14299,12 @@ static func _populate_infrastructure_intelligence(
 				naval_threat = true
 				break
 
-	world_states["worship_failing_province_ids"] = worship_failing
-	world_states["border_province_ids_without_fort"] = border_no_fort
-	world_states["surplus_pu_province_ids"] = surplus_pu
-	world_states["is_coastal"] = coastal
-	world_states["has_naval_assets"] = has_naval_assets_flag
-	world_states["has_naval_threat"] = naval_threat
+	world_states["_worship_failing_province_ids"] = worship_failing
+	world_states["_border_province_ids_without_fort"] = border_no_fort
+	world_states["_surplus_pu_province_ids"] = surplus_pu
+	world_states["_is_coastal"] = coastal
+	world_states["_has_naval_assets"] = has_naval_assets_flag
+	world_states["_has_naval_threat"] = naval_threat
 
 
 # -- Vacancy Intelligence Population (s57.20.3) --------------------------------
@@ -15327,6 +15330,97 @@ static func _populate_resource_stockpiles(
 			"military_upkeep": maxf(clan_military_upkeep.get(c.clan, 0.0), 0.01),
 		}
 		ws["available_levy_pu"] = total_military_pu
+
+
+# -- Base Character Context Injection ------------------------------------------
+
+static func _inject_base_character_context(
+	world_states: Dictionary,
+	characters: Array,
+	active_topics: Array,
+	tattoos: Array,
+	trade_routes: Array,
+	phoenix_council_state: Dictionary,
+	companies: Array,
+	ic_day: int = 0,
+	current_season: int = 0,
+	provinces: Dictionary = {},
+	settlements: Array = [],
+	clans: Dictionary = {},
+	active_wars: Array = [],
+	characters_by_id: Dictionary = {},
+) -> void:
+	var taint_province_ids: Array = []
+	for t: Variant in active_topics:
+		if not (t is TopicData):
+			continue
+		var topic: TopicData = t as TopicData
+		if topic.variant == "ptl_detection" or topic.variant == "shadowlands_incursion":
+			for pid: Variant in topic.affected_province_ids:
+				if pid is int and pid >= 0 and pid not in taint_province_ids:
+					taint_province_ids.append(pid)
+
+	var has_champion_authority: bool = PhoenixCouncil.has_champion_authority(phoenix_council_state) if not phoenix_council_state.is_empty() else false
+	var phoenix_champion_id: int = -1
+	if has_champion_authority:
+		for c: L5RCharacterData in characters:
+			if CharacterStats.is_dead(c):
+				continue
+			if c.clan == "Phoenix" and c.role_position == "Clan Champion":
+				phoenix_champion_id = c.character_id
+				break
+
+	var unit_counts: Dictionary = {}
+	for comp: Dictionary in companies:
+		var comp_clan: String = comp.get("clan", "")
+		if comp_clan.is_empty():
+			continue
+		if not unit_counts.has(comp_clan):
+			unit_counts[comp_clan] = {}
+		var ut: int = comp.get("unit_type", 0)
+		unit_counts[comp_clan][ut] = unit_counts[comp_clan].get(ut, 0) + 1
+
+	var g_worship: Dictionary = world_states.get("_worship_failing_province_ids", {})
+	var g_border: Dictionary = world_states.get("_border_province_ids_without_fort", {})
+	var g_surplus: Dictionary = world_states.get("_surplus_pu_province_ids", {})
+	var g_festival: Dictionary = world_states.get("_festival_flags", {})
+	var g_active_wars: Array = world_states.get("active_wars", active_wars)
+
+	var province_values: Array = provinces.values()
+	var clan_values: Array = clans.values()
+	var season_name: String = _season_to_name(current_season)
+
+	for c: L5RCharacterData in characters:
+		if CharacterStats.is_dead(c):
+			continue
+		var ws: Dictionary = world_states.get(c.character_id, {})
+		if ws.is_empty():
+			ws = {}
+			world_states[c.character_id] = ws
+
+		var char_is_lord: bool = c.status >= 5.0 or c.lord_id == -1
+		ws["is_lord"] = char_is_lord
+		ws["ic_day"] = ic_day
+		ws["season"] = current_season
+		ws["tattoos"] = tattoos
+		ws["trade_routes"] = trade_routes
+		ws["taint_topic_province_ids"] = taint_province_ids
+		ws["unit_training_counts"] = unit_counts.get(c.clan, {})
+		ws["worship_failing_province_ids"] = g_worship
+		ws["border_province_ids_without_fort"] = g_border
+		ws["surplus_pu_province_ids"] = g_surplus
+		ws["active_wars"] = g_active_wars
+		ws.merge(g_festival)
+
+		if char_is_lord:
+			ws["province_data"] = province_values
+			ws["settlements"] = settlements
+			ws["clans"] = clan_values
+			ws["current_season"] = season_name
+			ws["characters_by_id"] = characters_by_id
+
+		if has_champion_authority and c.character_id == phoenix_champion_id:
+			ws["phoenix_champion_authority"] = true
 
 
 # -- Crime Suppression Data (s11.3.19) -----------------------------------------

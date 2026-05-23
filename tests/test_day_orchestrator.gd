@@ -14028,3 +14028,262 @@ func test_inject_insurgency_context_skips_non_insurgent_province() -> void:
 	)
 	assert_eq(ws[10].get("active_insurgency_id", -1), -1,
 		"Character at peaceful province should not get active_insurgency_id")
+
+
+# -- _inject_base_character_context tests --------------------------------------
+
+func test_inject_base_context_is_lord_for_high_status() -> void:
+	var c := L5RCharacterData.new()
+	c.character_id = 1
+	c.status = 6.0
+	c.lord_id = 99
+	c.clan = "Crane"
+	var ws: Dictionary = {}
+	DayOrchestrator._inject_base_character_context(
+		ws, [c], [], [], [], {}, [],
+	)
+	assert_true(ws[1].get("is_lord", false),
+		"Character with status >= 5.0 should be marked as lord")
+
+func test_inject_base_context_is_lord_for_no_lord() -> void:
+	var c := L5RCharacterData.new()
+	c.character_id = 2
+	c.status = 3.0
+	c.lord_id = -1
+	c.clan = "Lion"
+	var ws: Dictionary = {}
+	DayOrchestrator._inject_base_character_context(
+		ws, [c], [], [], [], {}, [],
+	)
+	assert_true(ws[2].get("is_lord", false),
+		"Character with lord_id == -1 should be marked as lord")
+
+func test_inject_base_context_not_lord() -> void:
+	var c := L5RCharacterData.new()
+	c.character_id = 3
+	c.status = 3.0
+	c.lord_id = 10
+	c.clan = "Crab"
+	var ws: Dictionary = {}
+	DayOrchestrator._inject_base_character_context(
+		ws, [c], [], [], [], {}, [],
+	)
+	assert_false(ws[3].get("is_lord", false),
+		"Character with low status and a lord should not be marked as lord")
+
+func test_inject_base_context_tattoos_and_trade_routes() -> void:
+	var c := L5RCharacterData.new()
+	c.character_id = 4
+	c.status = 3.0
+	c.lord_id = 10
+	c.clan = "Dragon"
+	var tattoo_array: Array = [{"tattoo_id": 1}]
+	var trade_array: Array = [{"route_id": 5}]
+	var ws: Dictionary = {}
+	DayOrchestrator._inject_base_character_context(
+		ws, [c], [], tattoo_array, trade_array, {}, [],
+	)
+	assert_eq(ws[4].get("tattoos", []).size(), 1,
+		"Tattoos should be injected into world_state")
+	assert_eq(ws[4].get("trade_routes", []).size(), 1,
+		"Trade routes should be injected into world_state")
+
+func test_inject_base_context_taint_province_ids_from_topics() -> void:
+	var c := L5RCharacterData.new()
+	c.character_id = 5
+	c.status = 3.0
+	c.lord_id = 10
+	c.clan = "Crab"
+	var topic := TopicData.new()
+	topic.variant = "ptl_detection"
+	topic.affected_province_ids = [7, 12]
+	var topic2 := TopicData.new()
+	topic2.variant = "shadowlands_incursion"
+	topic2.affected_province_ids = [7, 15]
+	var ws: Dictionary = {}
+	DayOrchestrator._inject_base_character_context(
+		ws, [c], [topic, topic2], [], [], {}, [],
+	)
+	var ids: Array = ws[5].get("taint_topic_province_ids", [])
+	assert_true(7 in ids, "Province 7 from ptl_detection should be in taint ids")
+	assert_true(12 in ids, "Province 12 from ptl_detection should be in taint ids")
+	assert_true(15 in ids, "Province 15 from shadowlands_incursion should be in taint ids")
+	assert_eq(ids.size(), 3, "Duplicates should be excluded")
+
+func test_inject_base_context_phoenix_champion_authority() -> void:
+	var c := L5RCharacterData.new()
+	c.character_id = 6
+	c.status = 7.0
+	c.lord_id = -1
+	c.clan = "Phoenix"
+	c.role_position = "Clan Champion"
+	var phoenix_state: Dictionary = {"phoenix_champion_authority": true}
+	var ws: Dictionary = {}
+	DayOrchestrator._inject_base_character_context(
+		ws, [c], [], [], [], phoenix_state, [],
+	)
+	assert_true(ws[6].get("phoenix_champion_authority", false),
+		"Phoenix Champion should get phoenix_champion_authority when council grants it")
+
+func test_inject_base_context_non_phoenix_no_authority() -> void:
+	var c := L5RCharacterData.new()
+	c.character_id = 7
+	c.status = 7.0
+	c.lord_id = -1
+	c.clan = "Crane"
+	c.role_position = "Clan Champion"
+	var phoenix_state: Dictionary = {"phoenix_champion_authority": true}
+	var ws: Dictionary = {}
+	DayOrchestrator._inject_base_character_context(
+		ws, [c], [], [], [], phoenix_state, [],
+	)
+	assert_false(ws[7].has("phoenix_champion_authority"),
+		"Non-Phoenix Champion should not get phoenix_champion_authority")
+
+func test_inject_base_context_unit_training_counts() -> void:
+	var c := L5RCharacterData.new()
+	c.character_id = 8
+	c.status = 6.0
+	c.lord_id = -1
+	c.clan = "Crab"
+	var companies: Array = [
+		{"clan": "Crab", "unit_type": 1},
+		{"clan": "Crab", "unit_type": 1},
+		{"clan": "Crab", "unit_type": 2},
+		{"clan": "Lion", "unit_type": 1},
+	]
+	var ws: Dictionary = {}
+	DayOrchestrator._inject_base_character_context(
+		ws, [c], [], [], [], {}, companies,
+	)
+	var counts: Dictionary = ws[8].get("unit_training_counts", {})
+	assert_eq(counts.get(1, 0), 2, "Should have 2 units of type 1 for Crab")
+	assert_eq(counts.get(2, 0), 1, "Should have 1 unit of type 2 for Crab")
+
+func test_inject_base_context_dead_character_skipped() -> void:
+	var c := L5RCharacterData.new()
+	c.character_id = 9
+	c.status = 7.0
+	c.lord_id = -1
+	c.clan = "Scorpion"
+	c.wounds_current = 999
+	var ws: Dictionary = {}
+	DayOrchestrator._inject_base_character_context(
+		ws, [c], [], [], [], {}, [],
+	)
+	assert_false(ws.has(9),
+		"Dead character should not get world_state entry")
+
+func test_inject_base_context_ic_day_and_season() -> void:
+	var c := L5RCharacterData.new()
+	c.character_id = 10
+	c.status = 3.0
+	c.lord_id = 5
+	c.clan = "Crane"
+	var ws: Dictionary = {}
+	DayOrchestrator._inject_base_character_context(
+		ws, [c], [], [], [], {}, [], 42, 2,
+	)
+	assert_eq(ws[10].get("ic_day", -1), 42,
+		"ic_day should be injected into world_state")
+	assert_eq(ws[10].get("season", -1), 2,
+		"season should be injected into world_state")
+
+func test_inject_base_context_festival_flags() -> void:
+	var c := L5RCharacterData.new()
+	c.character_id = 11
+	c.status = 3.0
+	c.lord_id = 5
+	c.clan = "Lion"
+	var ws: Dictionary = {
+		"_festival_flags": {
+			"is_ceasefire_day": true,
+			"is_labor_halt_day": false,
+			"is_taian": true,
+			"festival_honor_gain": 0.5,
+		},
+	}
+	DayOrchestrator._inject_base_character_context(
+		ws, [c], [], [], [], {}, [],
+	)
+	assert_true(ws[11].get("is_ceasefire_day", false),
+		"Ceasefire flag should be injected from _festival_flags")
+	assert_true(ws[11].get("is_taian", false),
+		"Taian flag should be injected from _festival_flags")
+	assert_eq(ws[11].get("festival_honor_gain", 0.0), 0.5,
+		"Festival honor gain should be injected")
+
+func test_inject_base_context_lord_gets_game_data() -> void:
+	var c := L5RCharacterData.new()
+	c.character_id = 13
+	c.status = 6.0
+	c.lord_id = -1
+	c.clan = "Lion"
+	var prov := ProvinceData.new()
+	prov.province_id = 1
+	prov.clan = "Lion"
+	var provinces: Dictionary = {1: prov}
+	var sett := SettlementData.new()
+	sett.settlement_id = 10
+	sett.province_id = 1
+	var clan_data := ClanData.new()
+	clan_data.clan_name = "Lion"
+	var clans: Dictionary = {"Lion": clan_data}
+	var wars: Array = [{"war_id": 1}]
+	var chars_by_id: Dictionary = {13: c}
+	var ws: Dictionary = {}
+	DayOrchestrator._inject_base_character_context(
+		ws, [c], [], [], [], {}, [], 0, 0,
+		provinces, [sett], clans, wars, chars_by_id,
+	)
+	assert_eq(ws[13].get("province_data", []).size(), 1,
+		"Lord should get province_data array")
+	assert_eq(ws[13].get("settlements", []).size(), 1,
+		"Lord should get settlements array")
+	assert_eq(ws[13].get("clans", []).size(), 1,
+		"Lord should get clans array")
+	assert_eq(ws[13].get("active_wars", []).size(), 1,
+		"Lord should get active_wars array")
+	assert_true(ws[13].has("characters_by_id"),
+		"Lord should get characters_by_id")
+
+func test_inject_base_context_non_lord_no_game_data() -> void:
+	var c := L5RCharacterData.new()
+	c.character_id = 14
+	c.status = 3.0
+	c.lord_id = 10
+	c.clan = "Crane"
+	var ws: Dictionary = {}
+	DayOrchestrator._inject_base_character_context(
+		ws, [c], [], [], [], {}, [], 0, 0,
+		{1: ProvinceData.new()}, [SettlementData.new()], {"Crane": ClanData.new()}, [], {},
+	)
+	assert_false(ws[14].has("province_data"),
+		"Non-lord should not get province_data")
+	assert_false(ws[14].has("settlements"),
+		"Non-lord should not get settlements")
+	assert_false(ws[14].has("clans"),
+		"Non-lord should not get clans")
+	assert_false(ws[14].has("characters_by_id"),
+		"Non-lord should not get characters_by_id")
+
+func test_inject_base_context_infrastructure_intelligence() -> void:
+	var c := L5RCharacterData.new()
+	c.character_id = 12
+	c.status = 6.0
+	c.lord_id = -1
+	c.clan = "Crab"
+	var worship_failing: Dictionary = {1: "Crab", 2: "Crane"}
+	var border_no_fort: Dictionary = {3: "Crab"}
+	var ws: Dictionary = {
+		"_worship_failing_province_ids": worship_failing,
+		"_border_province_ids_without_fort": border_no_fort,
+		"_surplus_pu_province_ids": {},
+	}
+	DayOrchestrator._inject_base_character_context(
+		ws, [c], [], [], [], {}, [],
+	)
+	assert_eq(ws[12].get("worship_failing_province_ids", {}), worship_failing,
+		"Worship failing province IDs should be injected per-character")
+	assert_eq(ws[12].get("border_province_ids_without_fort", {}), border_no_fort,
+		"Border province IDs without fort should be injected per-character")

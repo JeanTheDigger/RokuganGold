@@ -1054,7 +1054,7 @@ func test_infra_border_includes_all_military_types() -> void:
 	var ws: Dictionary = {}
 	DayOrchestrator._populate_infrastructure_intelligence(ws, provinces, settlements, [], {})
 
-	var border_dict: Dictionary = ws.get("border_province_ids_without_fort", {})
+	var border_dict: Dictionary = ws.get("_border_province_ids_without_fort", {})
 	assert_false(border_dict.has(10), "Province with castle should not be flagged")
 	assert_true(border_dict.has(20), "Province without military should be flagged")
 
@@ -1072,7 +1072,7 @@ func test_infra_border_keep_counts_as_fortified() -> void:
 	var ws: Dictionary = {}
 	DayOrchestrator._populate_infrastructure_intelligence(ws, provinces, settlements, [], {})
 
-	var border_dict: Dictionary = ws.get("border_province_ids_without_fort", {})
+	var border_dict: Dictionary = ws.get("_border_province_ids_without_fort", {})
 	assert_false(border_dict.has(10), "Province with keep should count as fortified")
 
 
@@ -1086,7 +1086,7 @@ func test_infra_data_includes_clan() -> void:
 	var ws: Dictionary = {}
 	DayOrchestrator._populate_infrastructure_intelligence(ws, provinces, [], [], {})
 
-	var border_dict: Dictionary = ws.get("border_province_ids_without_fort", {})
+	var border_dict: Dictionary = ws.get("_border_province_ids_without_fort", {})
 	if border_dict.has(10):
 		assert_eq(border_dict[10], "Crane", "Border dict should include clan")
 
@@ -1099,7 +1099,7 @@ func test_infra_naval_threat_requires_ships() -> void:
 	# No ships at all — naval threat should be false
 	var ws: Dictionary = {"active_wars": [war]}
 	DayOrchestrator._populate_infrastructure_intelligence(ws, {}, [], [], {})
-	assert_false(ws.get("has_naval_threat", true), "No ships means no naval threat")
+	assert_false(ws.get("_has_naval_threat", true), "No ships means no naval threat")
 
 
 func test_infra_naval_threat_with_enemy_ships() -> void:
@@ -1113,7 +1113,7 @@ func test_infra_naval_threat_with_enemy_ships() -> void:
 
 	var ws: Dictionary = {"active_wars": [war]}
 	DayOrchestrator._populate_infrastructure_intelligence(ws, {}, [], [ship], {})
-	assert_true(ws.get("has_naval_threat", false), "Enemy clan with ships = naval threat")
+	assert_true(ws.get("_has_naval_threat", false), "Enemy clan with ships = naval threat")
 
 
 func test_infra_naval_threat_no_threat_without_war() -> void:
@@ -1123,7 +1123,7 @@ func test_infra_naval_threat_no_threat_without_war() -> void:
 
 	var ws: Dictionary = {}
 	DayOrchestrator._populate_infrastructure_intelligence(ws, {}, [], [ship], {})
-	assert_false(ws.get("has_naval_threat", true), "Ships without war = no naval threat")
+	assert_false(ws.get("_has_naval_threat", true), "Ships without war = no naval threat")
 
 
 func test_filter_province_ids_by_clan() -> void:
@@ -1435,7 +1435,7 @@ func test_worship_failure_detected_when_below_threshold() -> void:
 
 	var ws: Dictionary = {}
 	DayOrchestrator._populate_infrastructure_intelligence(ws, {10: prov}, [], [], worship_state)
-	var failing: Dictionary = ws.get("worship_failing_province_ids", {})
+	var failing: Dictionary = ws.get("_worship_failing_province_ids", {})
 	assert_true(failing.has(10), "Province below threshold should be flagged as failing")
 
 
@@ -1449,7 +1449,7 @@ func test_worship_not_failing_when_at_threshold() -> void:
 
 	var ws: Dictionary = {}
 	DayOrchestrator._populate_infrastructure_intelligence(ws, {10: prov}, [], [], worship_state)
-	var failing: Dictionary = ws.get("worship_failing_province_ids", {})
+	var failing: Dictionary = ws.get("_worship_failing_province_ids", {})
 	assert_false(failing.has(10), "Province at threshold should not be flagged")
 
 
@@ -1461,7 +1461,7 @@ func test_worship_failure_wrathful_when_zero_wp() -> void:
 
 	var ws: Dictionary = {}
 	DayOrchestrator._populate_infrastructure_intelligence(ws, {10: prov}, [], [], worship_state)
-	var failing: Dictionary = ws.get("worship_failing_province_ids", {})
+	var failing: Dictionary = ws.get("_worship_failing_province_ids", {})
 	assert_true(failing.has(10), "Zero WP province should be flagged as failing")
 
 
@@ -1470,7 +1470,7 @@ func test_worship_failure_empty_worship_state_no_flag() -> void:
 	var prov := _make_province(10, "Crane")
 	var ws: Dictionary = {}
 	DayOrchestrator._populate_infrastructure_intelligence(ws, {10: prov}, [], [], {})
-	var failing: Dictionary = ws.get("worship_failing_province_ids", {})
+	var failing: Dictionary = ws.get("_worship_failing_province_ids", {})
 	assert_false(failing.has(10), "Empty worship state should not flag provinces")
 
 
@@ -1485,7 +1485,7 @@ func test_worship_failure_one_fortune_below() -> void:
 
 	var ws: Dictionary = {}
 	DayOrchestrator._populate_infrastructure_intelligence(ws, {10: prov}, [], [], worship_state)
-	var failing: Dictionary = ws.get("worship_failing_province_ids", {})
+	var failing: Dictionary = ws.get("_worship_failing_province_ids", {})
 	assert_true(failing.has(10), "One fortune below threshold should flag province")
 
 
@@ -1500,7 +1500,7 @@ func test_worship_failure_restless_tier_flagged() -> void:
 
 	var ws: Dictionary = {}
 	DayOrchestrator._populate_infrastructure_intelligence(ws, {10: prov}, [], [], worship_state)
-	var failing: Dictionary = ws.get("worship_failing_province_ids", {})
+	var failing: Dictionary = ws.get("_worship_failing_province_ids", {})
 	assert_true(failing.has(10), "RESTLESS tier should still count as failing")
 
 
@@ -1511,5 +1511,5 @@ func test_worship_failure_province_not_in_wp_data() -> void:
 
 	var ws: Dictionary = {}
 	DayOrchestrator._populate_infrastructure_intelligence(ws, {10: prov}, [], [], worship_state)
-	var failing: Dictionary = ws.get("worship_failing_province_ids", {})
+	var failing: Dictionary = ws.get("_worship_failing_province_ids", {})
 	assert_true(failing.has(10), "Province absent from wp_data should be flagged")
