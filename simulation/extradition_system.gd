@@ -180,7 +180,7 @@ static func apply_cooperation(
 ) -> Dictionary:
 	var disp_gain: int = get_cooperation_disposition_reward(crime_topic_tier)
 	var current: int = harboring_lord.disposition_values.get(requesting_clan_lord_id, 0)
-	harboring_lord.disposition_values[requesting_clan_lord_id] = current + disp_gain
+	harboring_lord.disposition_values[requesting_clan_lord_id] = clampi(current + disp_gain, -100, 100)
 	return {
 		"disposition_change": disp_gain,
 		"fugitive_returned": true,
@@ -197,7 +197,7 @@ static func apply_refusal(
 	if is_denial:
 		disp_loss += DENY_INSULT_PENALTY
 	var current: int = harboring_lord.disposition_values.get(requesting_clan_lord_id, 0)
-	harboring_lord.disposition_values[requesting_clan_lord_id] = current + disp_loss
+	harboring_lord.disposition_values[requesting_clan_lord_id] = clampi(current + disp_loss, -100, 100)
 	return {
 		"disposition_change": disp_loss,
 		"topic_escalation": true,

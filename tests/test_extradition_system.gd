@@ -219,3 +219,19 @@ func test_cannot_petition_for_tier_3():
 
 func test_cannot_petition_for_tier_4():
 	assert_false(ExtraditionSystem.can_petition_emerald_champion(4))
+
+
+func test_cooperation_disposition_clamped_at_100():
+	var lord := L5RCharacterData.new()
+	lord.character_id = 1
+	lord.disposition_values = {2: 96}
+	ExtraditionSystem.apply_cooperation(lord, 2, 1)
+	assert_eq(lord.disposition_values[2], 100, "Disposition should clamp at 100")
+
+
+func test_refusal_disposition_clamped_at_negative_100():
+	var lord := L5RCharacterData.new()
+	lord.character_id = 1
+	lord.disposition_values = {2: -90}
+	ExtraditionSystem.apply_refusal(lord, 2, 1, true)
+	assert_eq(lord.disposition_values[2], -100, "Disposition should clamp at -100")
