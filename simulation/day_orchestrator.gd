@@ -4687,6 +4687,7 @@ static func _create_spy_uncovered_topic(
 	topic.category = TopicData.Category.PERSONAL
 	topic.slug = "spy_uncovered_at_%s" % location
 	topic.title = "Spy Uncovered at %s" % location
+	topic.topic_type = "spy_uncovered"
 	topic.ic_day_created = ic_day
 	topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)
 	topic.subject_character_id = -1
@@ -5265,6 +5266,7 @@ static func _process_impersonation_detection(
 		topic.ic_day_created = ic_day
 		topic.slug = "impersonation_victim_%d" % victim_id
 		topic.title = "Impersonation of %s Discovered" % (victim.character_name if victim != null else "Unknown")
+		topic.topic_type = "impersonation_detected"
 		active_topics.append(topic)
 
 		var was_duped_by_order: bool = false
@@ -7277,6 +7279,7 @@ static func _process_spiritual_insurgency(
 		var topic := TopicData.new()
 		topic.topic_id = topic_dict.get("topic_id", -1)
 		topic.title = topic_dict.get("title", "")
+		topic.slug = "spiritual_insurgency_%d_p%d" % [event.event_id, event.province_id]
 		topic.tier = topic_dict.get("tier", TopicData.Tier.TIER_4)
 		topic.category = topic_dict.get("category", TopicData.Category.SUPERNATURAL)
 		topic.subject_character_id = topic_dict.get("subject_character_id", -1)
@@ -7449,6 +7452,7 @@ static func _process_bloodspeaker_network(
 			topic.topic_id = next_topic_id[0]
 			next_topic_id[0] += 1
 			var evt_pid: int = event.get("province_id", -1)
+			topic.slug = "bloodspeaker_activation_p%d_d%d" % [evt_pid, ic_day]
 			topic.title = "Maho cult activity in province %d" % evt_pid
 			topic.topic_type = "bloodspeaker_activation"
 			topic.tier = TopicData.Tier.TIER_3
@@ -16754,6 +16758,7 @@ static func _apply_assassination_outcome(
 	var topic: TopicData = TopicData.new()
 	topic.topic_id = next_topic_id[0]
 	next_topic_id[0] += 1
+	topic.slug = "assassination_%s_%d_d%d" % [outcome, target.character_id, ic_day]
 	topic.ic_day_created = ic_day
 	topic.category = TopicData.Category.PERSONAL
 	match outcome:

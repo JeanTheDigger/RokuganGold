@@ -1997,6 +1997,17 @@ costs, or forward-wiring. Do not treat as bugs.
   blocked self-directed alternatives), `no_prior_grievance_or_lord_directive`
   (never detected lord directives), CHUGI virtue covert modifier (always -25
   instead of +10 on lord business). Added `assigned_by >= 0` check. 2 tests.
+- **24 TopicData creation sites missing title field. FIXED.**
+  21 in day_orchestrator.gd, 1 in assassination_system.gd, 1 in
+  togashi_oversight.gd, 1 in war_termination.gd. Also added `title` key
+  to SuccessionSystem.generate_succession_topic() return dict. Topics
+  affected: shadowlands incursion, horde sighting, spy uncovered,
+  commerce stigma, impersonation detection, succession, naval battle,
+  Otomo exhaustion, Togashi directive/defiance, Phoenix council veto,
+  natural death, marriage, organic village, construction (5 types),
+  commitment renege, civil war triggered/resolved, assassination death
+  (3 tiers), duel death, hunt announcement/result, betrayal, Togashi
+  vanished, war termination (4 types).
 
 ### Systems Added 2026-05-23
 - **s55.11b Named Monk Standing Objectives** — `simulation/monk_objective_system.gd`.
