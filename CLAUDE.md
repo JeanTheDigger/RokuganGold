@@ -1887,6 +1887,54 @@ costs, or forward-wiring. Do not treat as bugs.
   gossip listeners received disposition changes toward the gossip subject
   and got KnowledgeEntry entries. Added dead guard. 1 test.
 
+### Known Code Issues (found and fixed 2026-05-23, comprehensive audit)
+- **Active wars format mismatch — NPC engine received WarData, expected Dictionary. FIXED.**
+  `world_states["active_wars"]` was pre-converted by `_sync_wars_to_world_states()`
+  but DayOrchestrator re-converted the already-converted array, causing typed loop
+  `for war: WarData in wars:` to null-cast Dictionaries. All `w is Dictionary` checks
+  in NPC urgency conditions silently returned false — war urgency was completely
+  non-functional. Fixed by using raw `active_wars` parameter directly. War score
+  extraction also fixed: `_get_own_war_score()` helper returns clan-specific
+  `war_score_a`/`war_score_b` instead of nonexistent `war_score`. 3 tests.
+- **Naval context keys never reached NPC engine — underscore prefix mismatch. FIXED.**
+  `_is_coastal`, `_has_naval_assets`, `_has_naval_threat` stored with `_` prefix
+  in global world_states but NPC engine reads without prefix. All three always
+  defaulted to false. Now injected into per-character world_states without prefix.
+  1 test.
+- **Dead character guards (6 functions). FIXED.**
+  `StarvationWarfare._find_clan_lord()`, `CourtCommitmentSystem.process_seasonal_commitments()`
+  (dead lords triggered renege consequences), `DayOrchestrator._populate_resource_stockpiles()`
+  (dead lords got resource data populated), `OperationalHierarchySystem.get_operational_subordinates()`
+  and `clear_subordinates_on_death()` (dead characters returned as subordinates),
+  `DailyConversation.resolve_settlement_conversations()` (dead characters paired for
+  conversations), `GempukkuSystem.count_clan_population()` (dead guard nested inside
+  `wounds_taken > 0` conditional — dead characters with 0 wounds still counted).
+  8 tests.
+- **Hostage escape family_honor_loss never applied. FIXED.**
+  `HostageSystem.resolve_escape()` returned `family_honor_loss` (-1.0 normal,
+  -2.0 critical) but no handler applied it to biological family members.
+  `_apply_hostage_escape_family_honor()` now applies honor loss to mother, father,
+  spouse, siblings, and children. Dead family members skipped. 2 tests.
+- **DISHONORABLE_CONDUCT conviction topic_tier was raw -1. FIXED.**
+  `CONVICTION_CONSEQUENCES` dictionary used -1 for DISHONORABLE_CONDUCT topic_tier
+  while all other crime types used `TopicData.Tier.TIER_X` enum. Changed to TIER_4.
+  Fallback default also fixed from raw int 4 to enum. 1 test.
+- **Sleight_of_Hand skill name mismatch in action_skill_map.json. FIXED.**
+  CONCEAL_ITEM primary skill was "Sleight_of_Hand" (underscores) but canonical
+  skill name is "Sleight of Hand" (spaces). The underscore form never matched
+  any skill_ranks entry, giving all NPCs rank 0 competence (-20 modifier) for
+  concealment, making voluntary CONCEAL_ITEM nearly unreachable.
+- **Unclamped disposition assignments in extradition_system. FIXED.**
+  `apply_cooperation()` and `apply_refusal()` wrote disposition values without
+  `clampi()`, allowing values to exceed [-100, 100] range. Every other disposition
+  assignment in the codebase uses clampi(). 2 tests.
+- **Honor/glory mutations bypassing HonorGlorySystem [0.0, 10.0] clamp. FIXED.**
+  Five direct mutations: `assassination_system` (execution honor), `day_orchestrator`
+  (spiritual insurgency honor/glory, assassination commission honor),
+  `action_executor` (COMMISSION_ASSASSINATION honor via maxf missing 10.0 ceiling,
+  duel concession glory via maxf missing 10.0 ceiling). All now route through
+  `apply_honor_change()`/`apply_glory_change()`.
+
 ### Systems Added 2026-05-23
 - **s55.11b Named Monk Standing Objectives** — `simulation/monk_objective_system.gd`.
   Five standing objective types: HELP_PEOPLE (RAISE_DISPOSITION), FIGHT_BANDITS
