@@ -15296,6 +15296,8 @@ static func _populate_resource_stockpiles(
 		clan_military_upkeep[comp_clan] = clan_military_upkeep.get(comp_clan, 0.0) + rice_cost
 
 	for c: L5RCharacterData in characters:
+		if CharacterStats.is_dead(c):
+			continue
 		if c.status < 5.0 and c.lord_id != -1:
 			continue
 		var ws: Dictionary = world_states.get(c.character_id, {})
