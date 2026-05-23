@@ -664,7 +664,7 @@ static func resolve_execution(
 
 	if result.get("success", false):
 		var honor_cost: float = get_execution_honor_loss(assassin)
-		assassin.honor += honor_cost
+		HonorGlorySystem.apply_honor_change(assassin, honor_cost)
 		result["honor_cost"] = honor_cost
 		state["phase"] = AssassinationPhase.CONCEALMENT
 	else:

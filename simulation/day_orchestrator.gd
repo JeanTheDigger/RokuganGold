@@ -7321,8 +7321,8 @@ static func _resolve_spiritual_events(
 		)
 		var effects: Dictionary = SpiritualInsurgencySystem.get_resolution_effects(result)
 		if result.get("success", false):
-			shugenja.honor += effects.get("honor_gain", 0.0)
-			shugenja.glory += effects.get("glory_gain", 0.0)
+			HonorGlorySystem.apply_honor_change(shugenja, effects.get("honor_gain", 0.0))
+			HonorGlorySystem.apply_glory_change(shugenja, effects.get("glory_gain", 0.0))
 		results.append(result)
 	return results
 
@@ -16459,7 +16459,7 @@ static func _process_assassination_commissions(
 		var commissioner: L5RCharacterData = characters_by_id.get(commissioner_id) as L5RCharacterData
 		var target_char: L5RCharacterData = characters_by_id.get(target_id) as L5RCharacterData
 		if commissioner != null and target_char != null:
-			commissioner.honor += AssassinationSystem.get_ordering_honor_loss(target_char.status)
+			HonorGlorySystem.apply_honor_change(commissioner, AssassinationSystem.get_ordering_honor_loss(target_char.status))
 		active_assassination_ops.append(state)
 
 

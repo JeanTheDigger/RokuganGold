@@ -3695,7 +3695,7 @@ static func _execute_duel_challenge(
 			target.character_id, duel
 		)
 		if concession["glory_change"] != 0.0:
-			target.glory = maxf(target.glory + concession["glory_change"], 0.0)
+			HonorGlorySystem.apply_glory_change(target, concession["glory_change"])
 		var effects: Dictionary = {
 			"duel_result": {"assessment": assessment, "concession": concession},
 			"winner_id": duel.winner_id,
@@ -4308,7 +4308,7 @@ static func _execute_commission_assassination(
 
 	var method: int = _select_assassination_method(assassin)
 	var honor_cost: float = SecretSystem.get_assassination_order_honor_cost(target.status)
-	character.honor = maxf(character.honor + honor_cost, 0.0)
+	HonorGlorySystem.apply_honor_change(character, honor_cost)
 
 	return {
 		"success": true,
