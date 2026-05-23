@@ -5479,6 +5479,16 @@ static func _crime_type_to_string(crime_type: int) -> String:
 			return "skimming"
 		Enums.CrimeType.MAHO:
 			return "maho"
+		Enums.CrimeType.DISHONORABLE_CONDUCT:
+			return "dishonorable_conduct"
+		Enums.CrimeType.UNSANCTIONED_DUEL_DEATH:
+			return "unsanctioned_duel_death"
+		Enums.CrimeType.MAGISTRATE_CORRUPTION:
+			return "magistrate_corruption"
+		Enums.CrimeType.DUEL_DEFILEMENT:
+			return "duel_defilement"
+		Enums.CrimeType.VIOLATION_EMPERORS_PEACE:
+			return "violation_emperors_peace"
 		_:
 			return "other"
 
