@@ -92,17 +92,18 @@ static func generate_initial_cells(
 	next_cell_id: Array,
 	current_season: int,
 	shadowlands_province_ids: Array = [],
-) -> Array:
+	next_insurgency_id: Array = [1],
+) -> Dictionary:
 	var cell_count: int = dice.rand_int_range(CELL_COUNT_MIN, CELL_COUNT_MAX)
 	var dormant_fraction: float = DORMANT_FRACTION_MIN + dice.randf() * (DORMANT_FRACTION_MAX - DORMANT_FRACTION_MIN)
 	var dormant_count: int = int(cell_count * dormant_fraction)
-	var active_count: int = cell_count - dormant_count
 
 	var province_weights: Dictionary = _compute_province_weights(provinces, settlements, shadowlands_province_ids)
 
 	var selected_provinces: Array = _weighted_select_provinces(province_weights, cell_count, dice)
 
 	var cells: Array = []
+	var insurgencies: Array = []
 	for i: int in range(selected_provinces.size()):
 		var pid: int = selected_provinces[i]
 		var cell := BloodspeakerCellData.new()
@@ -118,6 +119,12 @@ static func generate_initial_cells(
 		else:
 			cell.state = Enums.BloodspeakerCellState.ACTIVE
 			cell.strength = dice.rand_int_range(ACTIVE_STRENGTH_MIN, ACTIVE_STRENGTH_MAX)
+			var ins: InsurgencyData = _create_insurgency_from_cell(
+				cell, next_insurgency_id[0], current_season,
+			)
+			next_insurgency_id[0] += 1
+			cell.insurgency_id = ins.insurgency_id
+			insurgencies.append(ins)
 
 		cell.leader_id = _select_cell_leader(pid, characters, characters_by_id, cells, dice)
 		if cell.leader_id >= 0:
@@ -127,7 +134,7 @@ static func generate_initial_cells(
 
 		cells.append(cell)
 
-	return cells
+	return {"cells": cells, "insurgencies": insurgencies}
 
 
 static func _compute_province_weights(
@@ -205,7 +212,7 @@ static func _weighted_select_provinces(
 
 
 static func _select_cell_leader(
-	province_id: int,
+	_province_id: int,
 	characters: Array,
 	characters_by_id: Dictionary,
 	existing_cells: Array,

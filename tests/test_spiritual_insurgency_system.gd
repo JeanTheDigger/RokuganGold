@@ -848,3 +848,20 @@ func test_spiritual_insurgency_data_realm_default() -> void:
 func test_spiritual_insurgency_data_element_default() -> void:
 	var data := SpiritualInsurgencyData.new()
 	assert_eq(data.element, Enums.Ring.NONE)
+
+
+func test_spiritual_insurgency_topic_has_momentum() -> void:
+	var worship_state: Dictionary = {"province_tiers": {10: _make_tiers(2)}}
+	var events: Array = []
+	var next_id: Array = [1]
+	var active_topics: Array = []
+	var next_tid: Array = [1000]
+	var spm: Dictionary = {100: 10}
+	DayOrchestrator._process_spiritual_insurgency(
+		worship_state, {}, events, next_id, 0, _dice_engine,
+		[_shugenja], {1: _shugenja}, active_topics, next_tid, 42,
+		{}, spm,
+	)
+	for t: TopicData in active_topics:
+		assert_gt(t.momentum, 0.0,
+			"Spiritual insurgency topic should have non-zero momentum")

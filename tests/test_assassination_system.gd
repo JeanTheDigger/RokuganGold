@@ -2034,6 +2034,8 @@ func test_vengeance_creates_betrayal_topic() -> void:
 	assert_eq(topics[0].category, TopicData.Category.POLITICAL)
 	assert_eq(topics[0].subject_character_id, 50)
 	assert_eq(topics[0].ic_day_created, 30)
+	assert_gt(topics[0].momentum, 0.0,
+		"Betrayal topic should have non-zero momentum")
 	assert_eq(result["betrayal_topic_id"], 500)
 	assert_eq(next_id[0], 501)
 

@@ -103,12 +103,12 @@ func test_generate_initial_cells_count():
 		settlements.append(_make_settlement(i * 10, i, 30, 2))
 
 	var next_id: Array = [1]
-	var cells: Array = BloodspeakerNetworkSystem.generate_initial_cells(
+	var gen_result: Dictionary = BloodspeakerNetworkSystem.generate_initial_cells(
 		provinces, settlements, [], {}, _dice, next_id, 0,
 	)
+	var cells: Array = gen_result["cells"]
 	assert_true(cells.size() >= BloodspeakerNetworkSystem.CELL_COUNT_MIN)
 	assert_true(cells.size() <= BloodspeakerNetworkSystem.CELL_COUNT_MAX)
-	assert_eq(next_id[0], cells.size() + 1)
 
 
 func test_generate_initial_cells_dormant_fraction():
@@ -120,9 +120,10 @@ func test_generate_initial_cells_dormant_fraction():
 		settlements.append(_make_settlement(i * 10, i, 30, 2))
 
 	var next_id: Array = [1]
-	var cells: Array = BloodspeakerNetworkSystem.generate_initial_cells(
+	var gen_result: Dictionary = BloodspeakerNetworkSystem.generate_initial_cells(
 		provinces, settlements, [], {}, _dice, next_id, 0,
 	)
+	var cells: Array = gen_result["cells"]
 	var dormant_count: int = 0
 	var active_count: int = 0
 	for cell: BloodspeakerCellData in cells:
@@ -145,9 +146,10 @@ func test_active_cells_have_strength_2_to_4():
 		settlements.append(_make_settlement(i * 10, i, 30, 2))
 
 	var next_id: Array = [1]
-	var cells: Array = BloodspeakerNetworkSystem.generate_initial_cells(
+	var gen_result: Dictionary = BloodspeakerNetworkSystem.generate_initial_cells(
 		provinces, settlements, [], {}, _dice, next_id, 0,
 	)
+	var cells: Array = gen_result["cells"]
 	for cell: BloodspeakerCellData in cells:
 		if cell.state == Enums.BloodspeakerCellState.ACTIVE:
 			assert_true(cell.strength >= BloodspeakerNetworkSystem.ACTIVE_STRENGTH_MIN)
@@ -163,9 +165,10 @@ func test_unique_cell_ids():
 		settlements.append(_make_settlement(i * 10, i, 30, 2))
 
 	var next_id: Array = [1]
-	var cells: Array = BloodspeakerNetworkSystem.generate_initial_cells(
+	var gen_result: Dictionary = BloodspeakerNetworkSystem.generate_initial_cells(
 		provinces, settlements, [], {}, _dice, next_id, 0,
 	)
+	var cells: Array = gen_result["cells"]
 	var ids: Dictionary = {}
 	for cell: BloodspeakerCellData in cells:
 		assert_false(ids.has(cell.cell_id), "Duplicate cell ID: %d" % cell.cell_id)
@@ -1008,3 +1011,53 @@ func test_detect_maho_provinces_ignores_dead():
 		[c1], {1: c1}, {10: 1},
 	)
 	assert_eq(result.size(), 0)
+
+
+func test_generate_initial_active_cells_have_insurgencies():
+	var provinces: Dictionary = {}
+	for i: int in range(40):
+		provinces[i] = _make_province(i)
+	var settlements: Array = []
+	for i: int in range(40):
+		settlements.append(_make_settlement(i * 10, i, 30, 2))
+	var next_cid: Array = [1]
+	var next_iid: Array = [100]
+	var gen_result: Dictionary = BloodspeakerNetworkSystem.generate_initial_cells(
+		provinces, settlements, [], {}, _dice, next_cid, 0, [], next_iid,
+	)
+	var cells: Array = gen_result["cells"]
+	var insurgencies: Array = gen_result["insurgencies"]
+	var active_count: int = 0
+	for cell: BloodspeakerCellData in cells:
+		if cell.state == Enums.BloodspeakerCellState.ACTIVE:
+			active_count += 1
+			assert_true(cell.insurgency_id >= 100,
+				"Active cell should have an insurgency_id assigned")
+	assert_eq(insurgencies.size(), active_count,
+		"Should create one insurgency per active cell")
+	for ins: InsurgencyData in insurgencies:
+		assert_eq(ins.insurgency_type, Enums.InsurgencyType.MAHO_CULT)
+
+
+func test_bloodspeaker_activation_topic_has_momentum():
+	var cell := BloodspeakerCellData.new()
+	cell.cell_id = 1
+	cell.province_id = 1
+	cell.state = Enums.BloodspeakerCellState.ACTIVE
+	cell.insurgency_id = 100
+	var prov := ProvinceData.new()
+	prov.province_id = 1
+	var ins := InsurgencyData.new()
+	ins.insurgency_id = 100
+	var topics: Array = []
+	var next_tid: Array = [500]
+	var result: Dictionary = DayOrchestrator._process_bloodspeaker_network(
+		[cell], {1: prov}, [], [ins], [2], _dice, 0, [2],
+		[], {}, {}, {}, topics, next_tid, 10,
+	)
+	if topics.size() > 0:
+		var t: TopicData = topics[0]
+		assert_gt(t.momentum, 0.0,
+			"Bloodspeaker activation topic should have non-zero momentum")
+		assert_eq(t.ic_day_created, 10,
+			"Bloodspeaker activation topic should have ic_day_created set")

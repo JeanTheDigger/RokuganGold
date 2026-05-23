@@ -298,7 +298,7 @@ static func resolve_npc_event(
 			trait_value = _get_trait_value(shugenja, trait_name)
 
 	var roll_result: DiceResult = dice_engine.roll_and_keep(
-		theology_rank + trait_value, theology_rank, false
+		theology_rank + trait_value, trait_value, theology_rank > 0
 	)
 	var total: int = roll_result.total
 	var margin: int = total - tn
@@ -316,8 +316,6 @@ static func resolve_npc_event(
 	if margin >= 0:
 		if margin >= 15:
 			result["resolution_type"] = "full"
-		elif margin >= 5:
-			result["resolution_type"] = "partial"
 		else:
 			result["resolution_type"] = "partial"
 		event.resolved = true
@@ -453,7 +451,7 @@ static func create_event_topic(
 		"topic_id": topic_id,
 		"title": title,
 		"tier": tier,
-		"category": "SPIRITUAL",
+		"category": TopicData.Category.SUPERNATURAL,
 		"subject_character_id": -1,
 		"ic_day_created": ic_day,
 		"province_id": event.province_id,
