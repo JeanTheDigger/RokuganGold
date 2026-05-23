@@ -163,7 +163,7 @@ static func _apply_witness_effects(
 
 	for wid: int in witness_ids:
 		var witness: L5RCharacterData = characters.get(wid)
-		if witness == null or witness.character_id == actor.character_id:
+		if witness == null or witness.character_id == actor.character_id or CharacterStats.is_dead(witness):
 			continue
 		var old_val: int = witness.disposition_values.get(actor.character_id, 0)
 		var new_val: int = clampi(old_val + disp_loss, -100, 100)
@@ -194,7 +194,7 @@ static func _apply_witness_gain(
 
 	for wid: int in witness_ids:
 		var witness: L5RCharacterData = characters.get(wid)
-		if witness == null or witness.character_id == actor.character_id:
+		if witness == null or witness.character_id == actor.character_id or CharacterStats.is_dead(witness):
 			continue
 		var old_val: int = witness.disposition_values.get(actor.character_id, 0)
 		var new_val: int = clampi(old_val + disp_gain, -100, 100)
@@ -223,7 +223,7 @@ static func _apply_gossip_effects(
 	if subject_id < 0 or disp_change == 0 or listener_id < 0:
 		return
 	var listener: L5RCharacterData = characters.get(listener_id)
-	if listener == null:
+	if listener == null or CharacterStats.is_dead(listener):
 		return
 	var old_val: int = listener.disposition_values.get(subject_id, 0)
 	var new_val: int = clampi(old_val + disp_change, -100, 100)
@@ -261,7 +261,7 @@ static func _apply_target_witness_effects(
 		return
 	for wid: int in witness_ids:
 		var witness: L5RCharacterData = characters.get(wid)
-		if witness == null or witness.character_id == target_id:
+		if witness == null or witness.character_id == target_id or CharacterStats.is_dead(witness):
 			continue
 		var old_val: int = witness.disposition_values.get(target_id, 0)
 		var new_val: int = clampi(old_val + disp_change, -100, 100)

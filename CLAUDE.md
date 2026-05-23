@@ -1857,6 +1857,25 @@ costs, or forward-wiring. Do not treat as bugs.
   NEXT day. Added dead guard to both `_get_active_characters()` and
   `_get_max_ap()`. 1 test.
 
+### Known Code Issues (found and fixed 2026-05-23, EffectApplicator dead-char sweep)
+- **Witness disposition loss applied to dead witnesses. FIXED.**
+  `_apply_witness_effects()` checked `witness == null` but not
+  `CharacterStats.is_dead(witness)`. Dead witnesses received disposition
+  loss from witnessed actions (PUBLIC_INSULT, INTIMIDATE, etc.).
+  Added dead guard. 1 test.
+- **Witness disposition gain applied to dead witnesses. FIXED.**
+  `_apply_witness_gain()` same pattern — dead witnesses received broadcast
+  disposition gains (PUBLIC_PERFORMANCE, BROADCAST_SOCIAL). Added dead
+  guard. 1 test.
+- **Target witness disposition applied to dead witnesses. FIXED.**
+  `_apply_target_witness_effects()` same pattern — dead witnesses received
+  target-facing disposition changes from PUBLIC_INSULT. Added dead guard.
+  1 test.
+- **Gossip effects applied to dead listener. FIXED.**
+  `_apply_gossip_effects()` checked `listener == null` but not dead. Dead
+  gossip listeners received disposition changes toward the gossip subject
+  and got KnowledgeEntry entries. Added dead guard. 1 test.
+
 ### Known Code Issues (found and fixed 2026-05-22, SecretSystem audit)
 - **expose_publicly() disposition applied to dead witnesses. FIXED.**
   `expose_publicly()` iterated witness_ids and checked `w != null` but not dead.
