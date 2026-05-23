@@ -2018,6 +2018,46 @@ costs, or forward-wiring. Do not treat as bugs.
   was empty or missing the ID, null would flow through to SkillResolver
   and crash on co-conspirator alibi path.
 
+### Known Code Issues (found and fixed 2026-05-23, world_states audit)
+- **Stale context flags persisting across days. FIXED.**
+  `world_states` (persistent Dictionary on WorldState autoload) was never
+  cleared between `advance_day()` calls. Context keys like `context_flag`,
+  `active_court_at_location`, `court_session_state`, `zone_subtype`,
+  `active_insurgency_id` persisted from yesterday. Characters retained
+  `AT_COURT` indefinitely after their court closed, blocking wall tower
+  and temple context assignment. `_clear_stale_context_flags()` now runs
+  at the start of each day, erasing all location-context keys before the
+  context setters re-evaluate.
+- **Per-character action_log accumulating across days. FIXED.**
+  `npc_wave_resolver.gd` appended to `ws["action_log"]` during wave
+  resolution but never cleared it. After day 1, personality filter
+  conditions like `already_committed_to_action` always returned true,
+  `no_intelligence_gathered_this_session` always returned false, and
+  `public_declaration_already_made` always returned true. Added
+  `action_log` to daily stale key clearing.
+- **self_offenses, wall_statuses, criminal_recall staleness. FIXED.**
+  Three more conditionally-set keys that persisted between days:
+  `self_offenses` (atoned offenses still appeared), `wall_statuses`
+  (characters who left towers kept stale data, append pattern
+  accumulated entries), `criminal_recall` (recall results from
+  yesterday persisted instead of being re-evaluated).
+- **siege_settlement_id type mismatch — String passed as int. FIXED.**
+  `_populate_action_metadata()` for CONDUCT_STORM_ASSAULT / MAINTAIN_SIEGE
+  set `siege_settlement_id: ctx.location_id` (String) but
+  `action_executor.gd` read it as `int` with `-1` fallback. Converted
+  via `to_int()` with empty-string guard.
+- **SupplyTetherSystem.TetherState raw int comparisons. FIXED.**
+  Two sites used raw `2` instead of `SupplyTetherSystem.TetherState.BROKEN`:
+  `npc_decision_engine.gd:3556` and `day_orchestrator.gd:9384`.
+- **Renege topic slug using wrong source. FIXED.**
+  `_process_commitment_seasonal()` used `renege_info.get("topic_id", 0)`
+  (source dict key that likely doesn't exist) instead of the newly
+  generated `topic_id` variable for the slug.
+- **Missing null guards — emperor and togashi lookups. FIXED.**
+  Winter Court selection passed potentially null emperor to
+  `run_winter_court_selection()`. Togashi reappear flow passed
+  potentially null togashi_char to `reappear_togashi()`.
+
 ### Known Performance Concerns — Deferred
 - **Unbounded array growth in advance_day().** `active_topics`,
   `crime_records`, `pending_letters`, `active_secrets`, `commitments`,
