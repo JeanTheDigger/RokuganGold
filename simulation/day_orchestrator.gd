@@ -10363,16 +10363,20 @@ static func _apply_court_creation(
 	if lord == null:
 		return {}
 
+	var settlement_id: int = int(lord.physical_location) if lord.physical_location.is_valid_int() else -1
+	if settlement_id < 0:
+		return {"type": "court_creation_failed", "reason": "no_settlement"}
+
 	for c_entry_v3: Variant in courts:
 		if not c_entry_v3 is CourtSessionData:
 			continue
 		var c: CourtSessionData = c_entry_v3 as CourtSessionData
-		if c.host_lord_id == lord_id and CourtSystem.is_active(c):
+		if not CourtSystem.is_active(c):
+			continue
+		if c.host_lord_id == lord_id:
 			return {"type": "court_creation_failed", "reason": "already_hosting"}
-
-	var settlement_id: int = int(lord.physical_location) if lord.physical_location.is_valid_int() else -1
-	if settlement_id < 0:
-		return {"type": "court_creation_failed", "reason": "no_settlement"}
+		if c.host_settlement_id == settlement_id:
+			return {"type": "court_creation_failed", "reason": "settlement_occupied"}
 
 	var court_type: CourtSessionData.CourtType = CourtSessionData.CourtType.PROVINCIAL_FAMILY_COURT
 	if lord.status >= 7.0:
@@ -11194,11 +11198,14 @@ static func _process_active_courts(
 	characters: Array = [],
 ) -> Array:
 	var results: Array = []
+	var closed_courts: Array = []
 	for court_entry_v: Variant in active_courts:
 		if not court_entry_v is CourtSessionData:
 			continue
 		var court: CourtSessionData = court_entry_v as CourtSessionData
 		if not CourtSystem.is_active(court):
+			if court.phase == CourtSessionData.CourtPhase.CLOSED:
+				closed_courts.append(court)
 			continue
 		court.pending_performance_requests = RequestPerformanceSystem.expire_requests(
 			court.pending_performance_requests, ic_day,
@@ -11234,6 +11241,8 @@ static func _process_active_courts(
 			results.append(close_result)
 		else:
 			results.append(advance_result)
+	for closed: CourtSessionData in closed_courts:
+		active_courts.erase(closed)
 	return results
 
 
