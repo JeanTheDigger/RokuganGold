@@ -9934,6 +9934,10 @@ static func _inject_peace_need(
 	if not ws.has("pending_events"):
 		ws["pending_events"] = []
 
+	for ev: Variant in ws["pending_events"]:
+		if ev is Dictionary and (ev as Dictionary).get("source", "") == "supply_status_check":
+			return
+
 	var need_type: String = _PEACE_NEED_TYPES.get(decision, "SEEK_PEACE")
 	var priority: int = _PEACE_PRIORITIES.get(decision, 2)
 
