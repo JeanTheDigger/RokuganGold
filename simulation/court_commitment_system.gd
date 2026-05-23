@@ -249,7 +249,7 @@ static func process_seasonal_commitments(
 
 		if check_renege(c, current_ic_day):
 			var lord: L5RCharacterData = characters_by_id.get(c.lord_id)
-			if lord != null:
+			if lord != null and not CharacterStats.is_dead(lord):
 				var consequences: Dictionary = compute_renege_consequences(c, lord)
 				consequences["lord_id"] = c.lord_id
 				consequences["commitment_index"] = i
