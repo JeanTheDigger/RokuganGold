@@ -14846,7 +14846,7 @@ static func _process_commitment_seasonal(
 						witness.historical_modifiers[lord_id] = []
 					(witness.historical_modifiers[lord_id] as Array).append(renege_mod.duplicate())
 
-		var topic_tier: int = renege_info.get("topic_tier", 3)
+		var topic_tier: int = renege_info.get("topic_tier", TopicData.Tier.TIER_3)
 		var topic_type: String = renege_info.get("topic_type", "renege")
 		var topic_variant: String = renege_info.get("topic_variant", "commitment_broken")
 		var topic_id: int = next_topic_id[0]

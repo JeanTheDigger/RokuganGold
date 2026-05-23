@@ -286,7 +286,10 @@ static func is_temporary_expired(modifier: Dictionary, current_ic_day: int) -> b
 	var duration: int = modifier.get("duration", -1)
 	if duration < 0:
 		return false
-	return (current_ic_day - modifier.get("created_ic_day", 0)) >= duration
+	var created: int = modifier.get("created_ic_day", -1)
+	if created < 0:
+		return false
+	return (current_ic_day - created) >= duration
 
 
 # -- Death of Mutual Friend (Category 2 — dynamic) ---------------------------

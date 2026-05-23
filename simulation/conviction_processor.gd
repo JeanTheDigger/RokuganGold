@@ -123,7 +123,7 @@ static func _process_single_case(
 		)
 
 	var conviction_topic: TopicData = InvestigationSystem.generate_conviction_topic(
-		record, accused, conviction.get("topic_tier", 4), next_topic_id, ic_day
+		record, accused, conviction.get("topic_tier", TopicData.Tier.TIER_4), next_topic_id, ic_day
 	)
 	if conviction_topic != null:
 		active_topics.append(conviction_topic)
@@ -144,7 +144,7 @@ static func _process_single_case(
 		"glory_delta": conviction.get("glory_delta", 0.0),
 		"infamy_delta": conviction.get("infamy_delta", 0.0),
 		"status_delta": conviction.get("status_delta", 0.0),
-		"topic_tier": conviction.get("topic_tier", 4),
+		"topic_tier": conviction.get("topic_tier", TopicData.Tier.TIER_4),
 		"topic_id": conviction_topic.topic_id if conviction_topic != null else -1,
 		"seppuku_offered": seppuku_offered,
 		"is_cross_clan": is_cross_clan,
@@ -275,7 +275,7 @@ static func resolve_seppuku(
 		"accepted": false,
 		"honor_delta": result.get("honor_delta", 0.0),
 		"infamy_delta": result.get("infamy_delta", 0.0),
-		"refusal_topic_tier": result.get("topic_tier", 4),
+		"refusal_topic_tier": result.get("topic_tier", TopicData.Tier.TIER_4),
 		"refusal_topic_id": refusal_topic.topic_id if refusal_topic != null else -1,
 		"refusal_topic": refusal_topic,
 		"exile": record.crime_type == Enums.CrimeType.TREASON,
