@@ -1857,6 +1857,17 @@ costs, or forward-wiring. Do not treat as bugs.
   NEXT day. Added dead guard to both `_get_active_characters()` and
   `_get_max_ap()`. 1 test.
 
+### Known Code Issues (found and fixed 2026-05-23, NPC engine audit continued)
+- **WinterCourtSystem._build_topic_pool_map() — dead characters included. FIXED.**
+  Iterated `characters_by_id` without dead guard. Dead characters' topic
+  pools were included in the map used for personal invitation scoring and
+  agenda topic ordering. Added `CharacterStats.is_dead(c)` guard. 1 test.
+- **WinterCourtSystem.record_emperors_peace_violation() — dead family daimyo
+  received glory penalty. FIXED.** Iterated `characters_by_id` looking for
+  the offender's family daimyo without dead guard. A dead family daimyo
+  could receive the PEACE_VIOLATION_FAMILY_DAIMYO_GLORY penalty. Added
+  dead guard. 1 test.
+
 ### Known Code Issues (found and fixed 2026-05-23, EffectApplicator dead-char sweep)
 - **Witness disposition loss applied to dead witnesses. FIXED.**
   `_apply_witness_effects()` checked `witness == null` but not
