@@ -5788,12 +5788,14 @@ static func _check_witness_evidence(
 			record, target_id, quality, active_case
 		)
 
-		var alibi_result: Dictionary = _check_alibi_for_target(
-			target_id, active_case, record,
-			characters_by_id.get(prober_id),
-			characters_by_id.get(target_id),
-			dice_engine,
-		)
+		var prober_char: L5RCharacterData = characters_by_id.get(prober_id)
+		var target_char: L5RCharacterData = characters_by_id.get(target_id)
+		var alibi_result: Dictionary = {}
+		if prober_char != null and target_char != null:
+			alibi_result = _check_alibi_for_target(
+				target_id, active_case, record,
+				prober_char, target_char, dice_engine,
+			)
 		if not alibi_result.is_empty():
 			result["alibi_result"] = alibi_result
 			var alibi_threshold: String = alibi_result.get("threshold_crossed", "")
