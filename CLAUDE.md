@@ -1958,6 +1958,31 @@ costs, or forward-wiring. Do not treat as bugs.
 - **Dead character guard — confidence decay loop. FIXED.**
   `_decay_knowledge_confidence()` iterated all characters without dead check.
   Dead characters had their knowledge confidence uselessly decayed.
+- **Dead character guards — strategic_review.gd (4 sites). FIXED.**
+  `_evaluate_winter_court_host()` iterated clan champions without dead guard
+  (dead champions scored for Winter Court hosting). `_fabricate_disgrace()`
+  iterated champions without dead guard. `_evaluate_breaking_point()` counted
+  dead champions in hostile clan count. `_seed_collective_baselines()` applied
+  baselines for dead champions. Also added `clampi(baseline, -100, 100)` to
+  baseline seeding.
+- **Theology → "Lore: Theology" skill name mismatch — 7 code sites + 5 JSON entries. FIXED.**
+  `action_skill_map.json` had bare "Theology" for BUILD_SHRINE, FOUND_MONASTERY,
+  FOUND_TEMPLE, PERFORM_RITUAL, PERFORM_WORSHIP. `action_executor.gd` worship
+  executor used `character.skills.get("Theology", 0)`. `spiritual_insurgency_system.gd`
+  used `shugenja.skills.get("Theology", 0)`. `day_orchestrator.gd` used bare
+  "Theology" in `_find_province_shugenja()` and POSITION_SKILL_WEIGHTS table
+  (Temple Head, Monastery Abbot). `world_generator.gd` Shiba Bushi school data
+  used bare "Theology". 11 of 12 schools store the skill as "Lore: Theology" in
+  `character.skills`, so all lookups silently returned rank 0. All changed to
+  "Lore: Theology". Temple Head POSITION_SKILL_WEIGHTS deduplicated (had both
+  bare "Theology" and "Lore: Theology"). Test files updated (3 files).
+- **IMPRESS action always rolled Lore rank 0 — bare "Lore" skill lookup. FIXED.**
+  `_CONTESTED_ATTACKER_SKILL` mapped IMPRESS to "Lore" (bare), but characters
+  store Lore sub-skills as "Lore: Heraldry", "Lore: Theology", etc. GDD s15.4
+  specifies "Intelligence + Lore (relevant)". Added best-Lore-sub-skill selection
+  in `_execute_contested_court_action()` (picks highest-ranked "Lore: *" entry).
+  Same fix in `NPCDecisionEngine._compute_competence_modifier()` for scoring.
+  2 tests.
 
 ### Systems Added 2026-05-23
 - **s55.11b Named Monk Standing Objectives** — `simulation/monk_objective_system.gd`.
