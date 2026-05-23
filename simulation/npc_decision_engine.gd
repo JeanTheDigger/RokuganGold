@@ -3525,7 +3525,7 @@ static func _extract_expiring_favor_ids(
 		if not (f is FavorData):
 			continue
 		var favor: FavorData = f as FavorData
-		if favor.debtor_id != character_id:
+		if favor.resolved or favor.debtor_id != character_id:
 			continue
 		if favor.invoked:
 			var deadline: int = favor.response_deadline_ic_day
