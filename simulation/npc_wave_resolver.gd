@@ -547,7 +547,7 @@ static func _sort_by_resolution_order(
 static func _get_max_ap(characters: Array) -> int:
 	var max_val: int = 0
 	for c: L5RCharacterData in characters:
-		if c.action_points_current > max_val:
+		if not CharacterStats.is_dead(c) and c.action_points_current > max_val:
 			max_val = c.action_points_current
 	return max_val
 
@@ -555,7 +555,7 @@ static func _get_max_ap(characters: Array) -> int:
 static func _get_active_characters(characters: Array) -> Array:
 	var active: Array = []
 	for c: L5RCharacterData in characters:
-		if c.action_points_current > 0:
+		if c.action_points_current > 0 and not CharacterStats.is_dead(c):
 			active.append(c)
 	return active
 

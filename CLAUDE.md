@@ -1849,6 +1849,13 @@ costs, or forward-wiring. Do not treat as bugs.
   `build_context()` computed garrison_shortage_personality_modifier for dead
   contacts (checked `!= null` but not `is_dead`). Dead contacts influenced
   DISPATCH_COURTIER targeting. Added dead guard. 1 test.
+- **Dead characters entered AP waves after mid-day death. FIXED.**
+  `_get_active_characters()` checked `action_points_current > 0` without
+  `is_dead()`. Characters killed mid-day (duel, assassination, hunt casualty)
+  still had AP from morning reset and entered subsequent wave resolution.
+  The daily reset guard (already fixed) only prevented AP assignment on the
+  NEXT day. Added dead guard to both `_get_active_characters()` and
+  `_get_max_ap()`. 1 test.
 
 ### Known Code Issues (found and fixed 2026-05-22, SecretSystem audit)
 - **expose_publicly() disposition applied to dead witnesses. FIXED.**

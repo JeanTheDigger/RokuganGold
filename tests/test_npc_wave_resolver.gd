@@ -479,3 +479,19 @@ func test_civilian_order_accepts_characters_by_id() -> void:
 	)
 	assert_true(result.is_empty() or result.has("success"),
 		"Civilian order should accept chars_by_id without error")
+
+
+func test_dead_character_with_ap_excluded_from_active() -> void:
+	var c := L5RCharacterData.new()
+	c.character_id = 1
+	c.character_name = "Dead Mid-Day"
+	c.action_points_current = 2
+	c.wounds_taken = 999
+	c.earth_ring = 2
+	c.stamina = 2
+	c.skills = {}
+	c.emphases = {}
+	var active: Array = NPCWaveResolver._get_active_characters([c])
+	assert_true(active.is_empty(), "Dead character with AP should be excluded")
+	var max_ap: int = NPCWaveResolver._get_max_ap([c])
+	assert_eq(max_ap, 0, "Dead character should not inflate max AP")
