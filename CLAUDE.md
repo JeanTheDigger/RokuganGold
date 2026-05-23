@@ -1934,6 +1934,30 @@ costs, or forward-wiring. Do not treat as bugs.
   `action_executor` (COMMISSION_ASSASSINATION honor via maxf missing 10.0 ceiling,
   duel concession glory via maxf missing 10.0 ceiling). All now route through
   `apply_honor_change()`/`apply_glory_change()`.
+- **Infamy bypass in violence_system. FIXED.**
+  `apply_consequences()` used direct `attacker.infamy += evaluation["infamy_gain"]`
+  bypassing HonorGlorySystem's [0.0, 10.0] clamp. Changed to
+  `HonorGlorySystem.apply_infamy_change()`.
+- **Dead sender letter exchange bonus. FIXED.**
+  `LetterSystem.generate_replies()` checked `sender_char != null` but not dead.
+  Dead senders received calligraphy quality exchange bonus. Added dead guard.
+- **Dead character guards — disposition mutations (~15 sites). FIXED.**
+  `_apply_favor_breach()` creditor and witnesses, WindDown conversation targets
+  and met_characters, SHADOW_TARGET critical failure target, ASK_FOR_INTRODUCTION
+  contact/actor, Provoke Emotion witnesses, Play a Game bilateral disposition,
+  Disclose opinion transfer, PUBLIC_DEBATE per-witness, court departure host,
+  marriage rejection target lord, Miya Blessing representative, Dragon FC assault
+  empire-wide penalty, hunt invitation host/requester, cancel hunt invitees.
+  All were checking null but not `CharacterStats.is_dead()`.
+- **WinterCourtSystem.compute_glory_rewards() — dead attendee/champion. FIXED.**
+  Dead host clan attendees and dead clan champions received glory rewards.
+  Added dead guards. 2 tests.
+- **CollectiveDisposition.seed_disposition_if_missing() — implicit safety. FIXED.**
+  Seed value was mathematically bounded to [-75, 75] but not explicitly
+  clamped via `clampi()`. Added defensive clamp. 1 test.
+- **Dead character guard — confidence decay loop. FIXED.**
+  `_decay_knowledge_confidence()` iterated all characters without dead check.
+  Dead characters had their knowledge confidence uselessly decayed.
 
 ### Systems Added 2026-05-23
 - **s55.11b Named Monk Standing Objectives** — `simulation/monk_objective_system.gd`.
