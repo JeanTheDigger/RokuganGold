@@ -739,7 +739,7 @@ static func advance_day(
 
 	_cleanup_dead_character_references(
 		characters, characters_by_id, active_courts, entanglements,
-		active_hunts, favors, bloodspeaker_cells,
+		active_hunts, favors, bloodspeaker_cells, active_secrets,
 	)
 
 	var succession_results: Array = _process_successions(
@@ -1105,7 +1105,7 @@ static func advance_day(
 			death_events.clear()
 			_cleanup_dead_character_references(
 				characters, characters_by_id, active_courts, entanglements,
-				active_hunts, favors, bloodspeaker_cells,
+				active_hunts, favors, bloodspeaker_cells, active_secrets,
 			)
 
 	var koku_flow_results: Dictionary = {}
@@ -5999,6 +5999,7 @@ static func _cleanup_dead_character_references(
 	active_hunts: Array,
 	favors: Array,
 	bloodspeaker_cells: Array = [],
+	active_secrets: Array = [],
 ) -> void:
 	var dead_ids: Array = []
 	for c: L5RCharacterData in characters:
@@ -6047,6 +6048,13 @@ static func _cleanup_dead_character_references(
 	for cell: BloodspeakerCellData in bloodspeaker_cells:
 		if cell.leader_id in dead_ids:
 			cell.leader_id = -1
+
+	for secret: Variant in active_secrets:
+		if not secret is SecretData:
+			continue
+		var sd: SecretData = secret as SecretData
+		for did: int in dead_ids:
+			sd.known_by_ids.erase(did)
 
 
 static func _process_successions(
@@ -7551,6 +7559,7 @@ static func _process_entanglements(
 
 	for ent: Dictionary in entanglements:
 		if ent.get("state") == SeductionSystem.EntanglementState.BROKEN:
+			broken.append(ent)
 			continue
 
 		var check: Dictionary = SeductionSystem.check_maintenance(ent, ic_day)
