@@ -492,17 +492,21 @@ static func generate_war_end_topic(
 
 	match res_type:
 		"formal_surrender":
+			topic.title = "War Ends — %s Surrenders" % resolution.get("loser_clan", "Unknown")
 			topic.momentum = 60.0
 			topic.tier = TopicData.Tier.TIER_2
 			topic.clan_involved = resolution.get("loser_clan", "")
 			topic.subject_role = "VICTIM"
 		"negotiated_settlement":
+			topic.title = "War Ends — Negotiated Settlement"
 			topic.momentum = 40.0
 			topic.tier = TopicData.Tier.TIER_3
 		"imperial_edict":
+			topic.title = "War Ends — Imperial Edict"
 			topic.momentum = 70.0
 			topic.tier = TopicData.Tier.TIER_2
 		"annihilation":
+			topic.title = "War Ends — %s Annihilated" % resolution.get("annihilated_clan", "Unknown")
 			topic.momentum = 80.0
 			topic.tier = TopicData.Tier.TIER_1
 			topic.clan_involved = resolution.get("annihilated_clan", "")

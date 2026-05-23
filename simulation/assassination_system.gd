@@ -1046,6 +1046,7 @@ static func apply_vengeance_consequences(
 		topic.topic_id = next_topic_id[0]
 		next_topic_id[0] += 1
 		topic.topic_type = "betrayal"
+		topic.title = "Betrayal — Assassination Traced to Commissioner"
 		topic.tier = TopicData.Tier.TIER_2
 		topic.category = TopicData.Category.POLITICAL
 		topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)

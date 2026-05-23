@@ -537,11 +537,16 @@ static func generate_succession_topic(
 	var category: TopicData.Category = TopicData.Category.POLITICAL
 	var slug: String = "succession_%s_%s" % [succession.clan, str(succession.succession_id)]
 
+	var title: String = "%s Succession in %s" % [
+		"Disputed" if is_disputed else "Orderly", succession.clan,
+	]
+
 	return {
 		"tier": tier,
 		"momentum": momentum,
 		"category": category,
 		"slug": slug,
+		"title": title,
 		"subject_ids": [succession.deceased_id],
 		"variant": "disputed" if is_disputed else "clean",
 	}

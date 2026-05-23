@@ -2394,6 +2394,7 @@ static func _process_horde_assaults(
 			topic.topic_id = next_topic_id[0]
 			next_topic_id[0] += 1
 			topic.slug = "shadowlands_incursion_p%d_d%d" % [horde.target_province_id, ic_day]
+			topic.title = "Shadowlands Breach in Province %d" % horde.target_province_id
 			topic.topic_type = "crisis"
 			topic.variant = "shadowlands_incursion"
 			topic.category = TopicData.Category.MILITARY
@@ -2484,6 +2485,7 @@ static func _process_horde_rolls(
 		topic.topic_id = next_topic_id[0]
 		next_topic_id[0] += 1
 		topic.slug = "horde_sighted_p%d_d%d" % [horde.target_province_id, ic_day]
+		topic.title = "Shadowlands Horde Sighted Near Province %d" % horde.target_province_id
 		topic.topic_type = "military"
 		topic.category = TopicData.Category.POLITICAL
 		topic.tier = TopicData.Tier.TIER_3
@@ -4684,6 +4686,7 @@ static func _create_spy_uncovered_topic(
 	topic.tier = TopicData.Tier.TIER_4
 	topic.category = TopicData.Category.PERSONAL
 	topic.slug = "spy_uncovered_at_%s" % location
+	topic.title = "Spy Uncovered at %s" % location
 	topic.ic_day_created = ic_day
 	topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)
 	topic.subject_character_id = -1
@@ -4897,6 +4900,7 @@ static func _process_commerce_topic_writebacks(
 		topic.topic_id = next_topic_id[0]
 		next_topic_id[0] += 1
 		topic.slug = "commerce_%s_d%d" % [character.family, ic_day]
+		topic.title = "%s Engaged in Commerce" % character.character_name
 		topic.topic_type = "commerce_stigma"
 		topic.category = TopicData.Category.POLITICAL
 		topic.tier = TopicData.Tier.TIER_4
@@ -5260,6 +5264,7 @@ static func _process_impersonation_detection(
 		topic.subject_character_id = victim_id
 		topic.ic_day_created = ic_day
 		topic.slug = "impersonation_victim_%d" % victim_id
+		topic.title = "Impersonation of %s Discovered" % (victim.character_name if victim != null else "Unknown")
 		active_topics.append(topic)
 
 		var was_duped_by_order: bool = false
@@ -5920,6 +5925,7 @@ static func _process_lord_deaths(
 		topic.topic_id = next_topic_id[0]
 		next_topic_id[0] += 1
 		topic.slug = topic_dict.get("slug", "")
+		topic.title = topic_dict.get("title", "Succession")
 		topic.momentum = topic_dict.get("momentum", 10.0)
 		topic.topic_type = "succession"
 		topic.variant = topic_dict.get("variant", "clean")
@@ -12330,6 +12336,7 @@ static func _generate_naval_battle_topics(
 		topic.topic_type = "military"
 		topic.variant = "naval_battle"
 		topic.slug = "naval_battle_%s_vs_%s_d%d" % [atk_clan.to_lower(), def_clan.to_lower(), ic_day]
+		topic.title = "Naval Battle — %s vs %s" % [atk_clan, def_clan]
 		topic.tier = TopicData.Tier.TIER_3
 		topic.momentum = _COMBAT_EVENT_MOMENTUM
 		topic.category = TopicData.Category.MILITARY
@@ -12404,6 +12411,7 @@ static func _process_seiyaku_review(
 		topic.topic_id = next_topic_id[0]
 		next_topic_id[0] += 1
 		topic.slug = "otomo_resources_stretched_" + str(ic_day)
+		topic.title = "Otomo Diplomatic Resources Stretched Thin"
 		topic.topic_type = "political"
 		topic.variant = "otomo_exhaustion"
 		topic.tier = TopicData.Tier.TIER_4
@@ -12547,9 +12555,11 @@ static func _process_togashi_oversight(
 			var axis_name: String = _axis_to_string(int(result["forced_directive"].get("axis", 0)))
 			if compliance.get("comply", false):
 				topic.slug = "togashi_directive_comply_%s_%d" % [axis_name, ic_day]
+				topic.title = "Mirumoto Complies with Togashi Directive on %s" % axis_name
 				topic.variant = "togashi_directive_comply"
 			else:
 				topic.slug = "togashi_defiance_stage_%d_%d" % [stage, ic_day]
+				topic.title = "Mirumoto Defies Togashi Oversight (Stage %d)" % stage
 				topic.variant = "togashi_defiance"
 				HonorGlorySystem.apply_honor_change(mirumoto_fc, -0.3)
 			topic.topic_type = "political"
@@ -12843,6 +12853,7 @@ static func _process_phoenix_council_gating(
 		next_topic_id[0] += 1
 		var overreach_stage: int = int(phoenix_state.get("overreach_stage", 0))
 		topic.slug = "phoenix_council_veto_%d" % ic_day
+		topic.title = "Elemental Council Vetoes Champion Proposal"
 		topic.variant = "phoenix_council_veto"
 		topic.topic_type = "political"
 		topic.tier = TopicData.Tier.TIER_4 if overreach_stage <= 1 else TopicData.Tier.TIER_3
@@ -13100,6 +13111,7 @@ static func _process_gempukku(
 			topic.topic_id = next_topic_id[0]
 			next_topic_id[0] += 1
 			topic.slug = "natural_death_" + str(dead_id)
+			topic.title = "Death of %s" % dead_char.character_name
 			topic.topic_type = "death"
 			topic.variant = "natural"
 			topic.tier = TopicData.Tier.TIER_4
@@ -13338,6 +13350,7 @@ static func _apply_marriage(
 		topic.topic_id = next_topic_id[0]
 		next_topic_id[0] += 1
 		topic.slug = "marriage_%s_%s_d%d" % [char_a.family, char_b.family, ic_day]
+		topic.title = "Marriage of %s and %s" % [char_a.character_name, char_b.character_name]
 		topic.topic_type = "marriage"
 		topic.variant = _marriage_type_to_variant(marriage_type)
 		topic.category = TopicData.Category.POLITICAL
@@ -14190,6 +14203,7 @@ static func _process_organic_villages(
 			topic.topic_id = next_topic_id[0]
 			next_topic_id[0] += 1
 			topic.slug = "organic_village_%d" % village.settlement_id
+			topic.title = "New Village Formed — %s" % village.settlement_name
 			topic.topic_type = "settlement"
 			topic.variant = "organic_formation"
 			topic.category = TopicData.Category.ECONOMIC
@@ -14216,22 +14230,27 @@ static func _generate_construction_topic(
 	match cd.construction_type:
 		ConstructionData.ConstructionType.TEMPLE:
 			topic.slug = "temple_completed_%d" % cd.construction_id
+			topic.title = "Temple Construction Completed"
 			topic.variant = "temple_completed"
 			topic.tier = TopicData.Tier.TIER_3
 		ConstructionData.ConstructionType.SHINDEN:
 			topic.slug = "shinden_completed_%d" % cd.construction_id
+			topic.title = "Grand Shinden Construction Completed"
 			topic.variant = "shinden_completed"
 			topic.tier = TopicData.Tier.TIER_2
 			topic.momentum = _CONSTRUCTION_TIER2_MOMENTUM
 		ConstructionData.ConstructionType.MONASTERY:
 			topic.slug = "monastery_completed_%d" % cd.construction_id
+			topic.title = "Monastery Construction Completed"
 			topic.variant = "monastery_completed"
 			topic.tier = TopicData.Tier.TIER_3
 		ConstructionData.ConstructionType.SHIP:
 			topic.slug = "ship_launched_%d" % cd.construction_id
+			topic.title = "Ship Launched"
 			topic.variant = "ship_launched"
 		_:
 			topic.slug = "construction_%d" % cd.construction_id
+			topic.title = "Shrine Construction Completed"
 			topic.variant = "shrine_completed"
 
 	if topic.momentum == 0.0:
@@ -14894,6 +14913,7 @@ static func _process_commitment_seasonal(
 		var topic: TopicData = TopicData.new()
 		topic.topic_id = topic_id
 		topic.slug = "renege_%d_%d" % [lord_id, renege_info.get("topic_id", 0)]
+		topic.title = "Broken Commitment by Lord %d" % lord_id
 		topic.tier = topic_tier
 		topic.topic_type = topic_type
 		topic.variant = topic_variant
@@ -15873,6 +15893,7 @@ static func _resolve_civil_war(
 	var topic: TopicData = TopicData.new()
 	topic.topic_id = topic_id
 	topic.slug = "civil_war_resolved_%s_%d" % [clan.to_lower(), ic_day]
+	topic.title = "%s Civil War Resolved" % clan
 	topic.tier = TopicData.Tier.TIER_2
 	topic.topic_type = "civil_war"
 	topic.variant = "legitimacy_victory" if legitimacy_won else ("championship_seizure" if from_seizure else "rebel_victory")
@@ -16222,6 +16243,7 @@ static func _trigger_civil_war(
 		clan.to_lower(), rebel_name.to_lower().replace(" ", "_"),
 		order_type.to_lower().replace(" ", "_"), ic_day,
 	]
+	topic.title = "%s Civil War — %s Defies %s" % [clan, rebel_name, auth_name]
 	topic.tier = TopicData.Tier.TIER_2
 	topic.topic_type = "civil_war"
 	topic.variant = "civil_war_triggered"
@@ -16737,12 +16759,15 @@ static func _apply_assassination_outcome(
 	match outcome:
 		"full":
 			topic.topic_type = "death_natural"
+			topic.title = "Death of %s" % target.character_name
 			topic.tier = TopicData.Tier.TIER_4
 		"partial":
 			topic.topic_type = "death_suspicious"
+			topic.title = "Suspicious Death of %s" % target.character_name
 			topic.tier = TopicData.Tier.TIER_3
 		_:
 			topic.topic_type = "death_murder"
+			topic.title = "Murder of %s" % target.character_name
 			topic.tier = TopicData.Tier.TIER_2
 	topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)
 	topic.subject_character_id = target.character_id
@@ -16848,6 +16873,7 @@ static func _process_duel_death_writebacks(
 			topic.topic_id = next_topic_id[0]
 			next_topic_id[0] += 1
 			topic.slug = "duel_death_%d_day%d" % [dead_id, ic_day]
+			topic.title = "%s Slain in %sDuel" % [dead_char.character_name, "Unsanctioned " if is_unsanctioned else ""]
 			topic.topic_type = "death"
 			topic.variant = "unsanctioned_duel" if is_unsanctioned else "duel"
 			topic.tier = tier
@@ -17741,6 +17767,7 @@ static func _process_announce_hunt_writebacks(
 		var topic := TopicData.new()
 		topic.topic_id = topic_id
 		topic.slug = "hunt_announcement_%d_day%d" % [host_id, ic_day]
+		topic.title = "Hunt Announced"
 		topic.topic_type = "hunt_announcement"
 		topic.tier = TopicData.Tier.TIER_4
 		topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)
@@ -17950,6 +17977,7 @@ static func _resolve_scheduled_hunts(
 		next_topic_id[0] += 1
 		var outcome_str: String = outcome.get("outcome", "failed")
 		topic.slug = "hunt_result_%d_day%d_%s" % [host_id, ic_day, outcome_str]
+		topic.title = "Hunt %s — %s" % ["Successful" if outcome_str == "kill" else "Concluded", beast.get("beast_name", "Beast")]
 		topic.topic_type = "hunt_result"
 		topic.variant = outcome_str
 		topic.tier = TopicData.Tier.TIER_3 if killed_id >= 0 else TopicData.Tier.TIER_4
