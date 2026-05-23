@@ -88,7 +88,7 @@ static func apply_consequences(
 	HonorGlorySystem.apply_honor_change(attacker, evaluation["honor_loss"])
 	HonorGlorySystem.apply_glory_change(attacker, evaluation["glory_loss"])
 	if evaluation["infamy_gain"] > 0.0:
-		attacker.infamy += evaluation["infamy_gain"]
+		HonorGlorySystem.apply_infamy_change(attacker, evaluation["infamy_gain"])
 
 	return {
 		"honor_change": evaluation["honor_loss"],

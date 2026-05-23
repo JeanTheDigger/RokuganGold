@@ -394,7 +394,7 @@ static func process_pending_letters(
 						delivery["forgery_detected"] = false
 					if item.is_reply:
 						var sender_char: L5RCharacterData = characters_by_id.get(item.sender_id)
-						if sender_char != null:
+						if sender_char != null and not CharacterStats.is_dead(sender_char):
 							apply_exchange_bonus(sender_char, recipient)
 							delivery["exchange_bonus_applied"] = true
 					results.append(delivery)
