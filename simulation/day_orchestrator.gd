@@ -16527,6 +16527,13 @@ static func _process_assassination_commissions(
 		var method: int = int(effects.get("method", AssassinationSystem.ExecutionMethod.POISON))
 		if assassin_id < 0 or target_id < 0:
 			continue
+		var duplicate: bool = false
+		for existing: Dictionary in active_assassination_ops:
+			if int(existing.get("assassin_id", -1)) == assassin_id and int(existing.get("target_id", -1)) == target_id:
+				duplicate = true
+				break
+		if duplicate:
+			continue
 		var state: Dictionary = AssassinationSystem.create_assassination_state(
 			assassin_id, target_id, method, ic_day,
 		)
