@@ -93,6 +93,9 @@ const CONDITION_MOUNTED:   String = "mounted"
 const CONDITION_PRONE:     String = "prone"
 const CONDITION_STUNNED:   String = "stunned"
 
+const HONOR_STRIKING_AFTER_FIRST_BLOOD: float = -1.0
+const GLORY_DECLINE_DEATH_DUEL: float = -0.5
+
 
 # =============================================================================
 # -- Participant State ---------------------------------------------------------
@@ -136,6 +139,9 @@ class DuelState:
 	var free_raises_first: int = 0    # Free Raises for the first striker
 	var simultaneous: bool = false    # kharmic strike flag
 	var assessment_bonus_id: int = -1 # who got +1k1 on Focus for winning Assessment by 10+
+	var stare_down_penalty_id: int = -1 # who takes -1k0 on Assessment (lost stare-down)
+	var conceded_id: int = -1         # who conceded at Assessment
+	var struck_after_first_blood: bool = false
 	var is_over: bool = false
 	var winner_id: int = -1
 	var loser_id: int = -1
@@ -639,6 +645,38 @@ static func resolve_sumai_stare_down(
 
 
 # =============================================================================
+# -- Iaijutsu Pre-Duel Stare-Down (s4.8) --------------------------------------
+# =============================================================================
+
+static func resolve_iaijutsu_stare_down(
+	challenger: L5RCharacterData,
+	defender: L5RCharacterData,
+	duel: DuelState,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	var ch_intim: int = challenger.skills.get("Intimidation", 0)
+	var def_intim: int = defender.skills.get("Intimidation", 0)
+	var contested: Dictionary = dice_engine.contested_roll(
+		challenger.willpower + ch_intim, challenger.willpower,
+		defender.willpower + def_intim, defender.willpower,
+	)
+	var winner_is_challenger: bool = contested["winner"] != "b"
+	if contested["winner"] == "tie":
+		return {"attempted": true, "resolved": false, "penalty_id": -1}
+	if winner_is_challenger:
+		duel.stare_down_penalty_id = duel.defender_id
+	else:
+		duel.stare_down_penalty_id = duel.challenger_id
+	return {
+		"attempted": true,
+		"resolved": true,
+		"challenger_roll": contested["total_a"],
+		"defender_roll": contested["total_b"],
+		"penalty_id": duel.stare_down_penalty_id,
+	}
+
+
+# =============================================================================
 # -- Iaijutsu Dueling (s40) ---------------------------------------------------
 # =============================================================================
 
@@ -666,11 +704,19 @@ static func resolve_duel_assessment(
 	var ch_tn: int = 10 + CharacterStats.get_insight_rank(defender) * 5
 	var def_tn: int = 10 + CharacterStats.get_insight_rank(challenger) * 5
 
-	var ch_result: Dictionary = dice_engine.roll_skill_check(
-		challenger.awareness, ch_iai, ch_tn
+	var ch_stare_penalty: int = 1 if duel.stare_down_penalty_id == duel.challenger_id else 0
+	var def_stare_penalty: int = 1 if duel.stare_down_penalty_id == duel.defender_id else 0
+
+	var ch_rolled: int = maxi(challenger.awareness + ch_iai - ch_stare_penalty, 1)
+	var def_rolled: int = maxi(defender.awareness + def_iai - def_stare_penalty, 1)
+	var ch_explodes: bool = ch_iai > 0
+	var def_explodes: bool = def_iai > 0
+
+	var ch_result: Dictionary = dice_engine.roll_check(
+		ch_rolled, challenger.awareness, ch_tn, 0, 0, ch_explodes
 	)
-	var def_result: Dictionary = dice_engine.roll_skill_check(
-		defender.awareness, def_iai, def_tn
+	var def_result: Dictionary = dice_engine.roll_check(
+		def_rolled, defender.awareness, def_tn, 0, 0, def_explodes
 	)
 
 	var ch_learned: Array = []
@@ -699,6 +745,28 @@ static func resolve_duel_assessment(
 		"assessment_bonus_id": duel.assessment_bonus_id,
 		"challenger_learned": ch_learned,
 		"defender_learned": def_learned,
+	}
+
+
+static func concede_at_assessment(
+	conceder_id: int,
+	duel: DuelState,
+) -> Dictionary:
+	duel.conceded_id = conceder_id
+	duel.is_over = true
+	if conceder_id == duel.challenger_id:
+		duel.winner_id = duel.defender_id
+		duel.loser_id = duel.challenger_id
+	else:
+		duel.winner_id = duel.challenger_id
+		duel.loser_id = duel.defender_id
+	var glory_change: float = GLORY_DECLINE_DEATH_DUEL if duel.duel_to_death else 0.0
+	return {
+		"conceded": true,
+		"conceder_id": conceder_id,
+		"winner_id": duel.winner_id,
+		"honor_change": 0.0,
+		"glory_change": glory_change,
 	}
 
 
@@ -821,11 +889,17 @@ static func resolve_duel_strike(
 		first_damage = resolve_damage(first_striker, "katana", duel.free_raises_first, 0, dice_engine)
 		first_wounds = WoundSystem.apply_damage(second_striker, first_damage["raw_damage"])
 
-	# In a kharmic strike, both attack simultaneously
+	var first_blood_drawn: bool = not duel.duel_to_death and first_attack.get("hit", false)
+	var second_may_strike: bool = duel.simultaneous or (
+		not duel.simultaneous
+		and not CharacterStats.is_dead(second_striker)
+		and not first_blood_drawn
+	)
+
 	var second_damage: Dictionary = {}
 	var second_wounds: Dictionary = {}
 	var second_attack: Dictionary = {}
-	if duel.simultaneous or (not duel.simultaneous and not CharacterStats.is_dead(second_striker)):
+	if second_may_strike:
 		var second_armor_tn: int = get_armor_tn(first_striker, first_striker_p, dice_engine)
 		second_attack = _iaijutsu_attack(
 			second_striker, second_striker_p, second_armor_tn, dice_engine
@@ -834,31 +908,28 @@ static func resolve_duel_strike(
 			second_damage = resolve_damage(second_striker, "katana", 0, 0, dice_engine)
 			second_wounds = WoundSystem.apply_damage(first_striker, second_damage["raw_damage"])
 
-	# Determine outcome
 	var first_dead: bool = CharacterStats.is_dead(first_striker)
 	var second_dead: bool = CharacterStats.is_dead(second_striker)
 
-	if not duel.simultaneous:
-		if second_dead:
-			duel.winner_id = first_striker.character_id
-			duel.loser_id = second_striker.character_id
-			duel.is_over = true
-		elif first_dead:
-			duel.winner_id = second_striker.character_id
-			duel.loser_id = first_striker.character_id
-			duel.is_over = true
-		elif not duel.duel_to_death:
-			# First blood: the moment a strike lands the duel is over (s40).
-			# Checking the attack result rather than wound level avoids false positives
-			# from characters who entered the duel already wounded.
-			if first_attack.get("hit", false):
-				duel.winner_id = first_striker.character_id
-				duel.loser_id = second_striker.character_id
-				duel.is_over = true
-	else:
-		# Kharmic strike: cause considered dropped, no victor
+	if duel.simultaneous:
 		duel.is_over = true
-		duel.winner_id = -1  # no winner
+		duel.winner_id = -1
+	elif first_blood_drawn:
+		duel.winner_id = first_striker.character_id
+		duel.loser_id = second_striker.character_id
+		duel.is_over = true
+	elif second_dead:
+		duel.winner_id = first_striker.character_id
+		duel.loser_id = second_striker.character_id
+		duel.is_over = true
+	elif first_dead:
+		duel.winner_id = second_striker.character_id
+		duel.loser_id = first_striker.character_id
+		duel.is_over = true
+	elif not duel.duel_to_death and second_attack.get("hit", false):
+		duel.winner_id = second_striker.character_id
+		duel.loser_id = first_striker.character_id
+		duel.is_over = true
 
 	return {
 		"simultaneous": duel.simultaneous,
@@ -871,6 +942,32 @@ static func resolve_duel_strike(
 		"second_wounds": second_wounds,
 		"winner_id": duel.winner_id,
 		"is_over": duel.is_over,
+		"first_blood_drawn": first_blood_drawn,
+	}
+
+
+static func resolve_strike_after_first_blood(
+	striker: L5RCharacterData,
+	striker_p: Participant,
+	target: L5RCharacterData,
+	target_p: Participant,
+	duel: DuelState,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	duel.struck_after_first_blood = true
+	var target_armor_tn: int = get_armor_tn(target, target_p, dice_engine)
+	var attack: Dictionary = _iaijutsu_attack(striker, striker_p, target_armor_tn, dice_engine)
+	var damage: Dictionary = {}
+	var wounds: Dictionary = {}
+	if attack.get("hit", false):
+		damage = resolve_damage(striker, "katana", 0, 0, dice_engine)
+		wounds = WoundSystem.apply_damage(target, damage["raw_damage"])
+	return {
+		"struck_after_first_blood": true,
+		"attack": attack,
+		"damage": damage,
+		"wounds": wounds,
+		"honor_change": HONOR_STRIKING_AFTER_FIRST_BLOOD,
 	}
 
 

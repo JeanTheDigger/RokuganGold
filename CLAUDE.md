@@ -1779,6 +1779,24 @@ costs, or forward-wiring. Do not treat as bugs.
   `distribute_individual_stipends()` paid koku and applied lord disposition
   to dead retainers. Added dead guard. 1 test.
 
+### Iaijutsu Duel Gaps Implemented (2026-05-23)
+- **Stare-Down (s4.8, LOCKED)** — `resolve_iaijutsu_stare_down()` added to
+  IndividualCombat. Contested Intimidation/Willpower roll. Loser takes -1k0
+  on Assessment roll (stare_down_penalty_id on DuelState). Ties produce no
+  effect. Optional pre-duel step — not called by resolve_full_duel (callers
+  opt in). 2 tests.
+- **Assessment Concession (s4.8, LOCKED)** — `concede_at_assessment()` added.
+  Ends duel immediately. No honor/glory change for non-death duels. Death
+  duel concession costs -0.5 Glory (GLORY_DECLINE_DEATH_DUEL). 2 tests.
+- **First blood duel — second attack prevented (s4.8, existing bug).**
+  resolve_duel_strike() allowed second striker to attack after first blood
+  was drawn, incorrectly applying damage to the winner. Fixed: second attack
+  skipped when first blood drawn in non-death duels. first_blood_drawn flag
+  added to strike result. 1 test.
+- **Striking after first blood (s4.8, LOCKED)** — `resolve_strike_after_first_blood()`
+  added for the dishonor edge case. Returns HONOR_STRIKING_AFTER_FIRST_BLOOD
+  (-1.0 Honor). Sets struck_after_first_blood flag on DuelState. 1 test.
+
 ### Known Code Issues (found and fixed 2026-05-22, SecretSystem audit)
 - **expose_publicly() disposition applied to dead witnesses. FIXED.**
   `expose_publicly()` iterated witness_ids and checked `w != null` but not dead.
