@@ -154,6 +154,7 @@ static func advance_day(
 	_inject_hunt_context(active_hunts, world_states, active_topics)
 	_set_wall_tower_context_flags(characters, settlements, provinces, world_states)
 	_set_temple_context_flags(characters, settlements, world_states)
+	_inject_insurgency_context(characters, provinces, _spm, insurgencies, world_states)
 	_populate_court_availability_data(
 		active_courts, characters, characters_by_id, world_states, favors,
 	)
@@ -11422,6 +11423,38 @@ static func _set_temple_context_flags(
 		if ws.get("context_flag", -1) == Enums.ContextFlag.AT_WALL_TOWER:
 			continue
 		ws["context_flag"] = Enums.ContextFlag.AT_TEMPLE
+
+
+static func _inject_insurgency_context(
+	characters: Array,
+	provinces: Dictionary,
+	settlement_province_map: Dictionary,
+	insurgencies: Array,
+	world_states: Dictionary,
+) -> void:
+	var ins_by_province: Dictionary = {}
+	for ins: InsurgencyData in insurgencies:
+		ins_by_province[ins.province_id] = ins.insurgency_id
+
+	for character: L5RCharacterData in characters:
+		if CharacterStats.is_dead(character):
+			continue
+		if character.physical_location.is_empty():
+			continue
+		var sid: int = int(character.physical_location) if character.physical_location.is_valid_int() else -1
+		if sid < 0:
+			continue
+		var pid: int = settlement_province_map.get(sid, -1)
+		if pid < 0:
+			continue
+		var iid: int = ins_by_province.get(pid, -1)
+		if iid < 0:
+			continue
+		var ws: Dictionary = world_states.get(character.character_id, {})
+		if ws.is_empty():
+			ws = {}
+			world_states[character.character_id] = ws
+		ws["active_insurgency_id"] = iid
 
 
 static func _process_crisis_court_calls(

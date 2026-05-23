@@ -157,6 +157,7 @@ static func build_context(
 	ctx.active_wars = world_state.get("active_wars", [])
 	ctx.escalating_conflicts = world_state.get("escalating_conflicts", [])
 	ctx.taint_topic_province_ids = world_state.get("taint_topic_province_ids", [])
+	ctx.active_insurgency_id = world_state.get("active_insurgency_id", -1)
 	ctx.famine_crisis_province_ids = _extract_famine_province_ids(
 		character, world_state.get("active_topics", [])
 	)

@@ -13992,3 +13992,39 @@ func test_stipend_failure_topic_has_nonzero_momentum() -> void:
 		"Stipend failure topic should have non-zero momentum")
 	assert_eq(topics[0].ic_day_created, 42,
 		"Stipend failure topic should have ic_day_created set")
+
+
+# -- Insurgency context injection ----------------------------------------------
+
+func test_inject_insurgency_context_sets_active_insurgency_id() -> void:
+	var c := L5RCharacterData.new()
+	c.character_id = 10
+	c.physical_location = "100"
+	var prov := ProvinceData.new()
+	prov.province_id = 5
+	prov.active_insurgency_id = 42
+	var ins := InsurgencyData.new()
+	ins.insurgency_id = 42
+	ins.province_id = 5
+	var spm: Dictionary = {100: 5}
+	var ws: Dictionary = {10: {}}
+	DayOrchestrator._inject_insurgency_context(
+		[c], {5: prov}, spm, [ins], ws,
+	)
+	assert_eq(ws[10].get("active_insurgency_id", -1), 42,
+		"Character at insurgent province should get active_insurgency_id")
+
+
+func test_inject_insurgency_context_skips_non_insurgent_province() -> void:
+	var c := L5RCharacterData.new()
+	c.character_id = 10
+	c.physical_location = "100"
+	var prov := ProvinceData.new()
+	prov.province_id = 5
+	var spm: Dictionary = {100: 5}
+	var ws: Dictionary = {10: {}}
+	DayOrchestrator._inject_insurgency_context(
+		[c], {5: prov}, spm, [], ws,
+	)
+	assert_eq(ws[10].get("active_insurgency_id", -1), -1,
+		"Character at peaceful province should not get active_insurgency_id")

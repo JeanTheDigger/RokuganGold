@@ -162,6 +162,7 @@ static func _resolve_reactive_events_full(
 			)
 			decision.merge(exec_result, true)
 		_consume_reactive_event(decision, ws)
+		_append_to_action_log(ws, decision)
 		results.append(decision)
 
 	return results
@@ -376,6 +377,7 @@ static func _resolve_character_wave_full(
 			)
 			decision.merge(exec_result, true)
 		_consume_reactive_event(decision, ws)
+		_append_to_action_log(ws, decision)
 		results.append(decision)
 
 	if is_lord and character.civilian_orders_remaining > 0:
@@ -389,6 +391,7 @@ static func _resolve_character_wave_full(
 				military_data, characters_by_id, doshin_bonus, cr
 			)
 			order_decision.merge(exec_result, true)
+			_append_to_action_log(ws, order_decision)
 			results.append(order_decision)
 
 	return results
@@ -604,3 +607,15 @@ static func _partition_by_court(
 static func _get_travel_redirects(objectives: Dictionary) -> int:
 	var primary: Dictionary = objectives.get("primary", {})
 	return primary.get("travel_redirects", 0)
+
+
+static func _append_to_action_log(ws: Dictionary, decision: Dictionary) -> void:
+	var aid: String = decision.get("action_id", "")
+	if aid.is_empty():
+		return
+	if not ws.has("action_log"):
+		ws["action_log"] = []
+	ws["action_log"].append({
+		"action_id": aid,
+		"success": decision.get("success", false),
+	})

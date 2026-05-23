@@ -495,3 +495,26 @@ func test_dead_character_with_ap_excluded_from_active() -> void:
 	assert_true(active.is_empty(), "Dead character with AP should be excluded")
 	var max_ap: int = NPCWaveResolver._get_max_ap([c])
 	assert_eq(max_ap, 0, "Dead character should not inflate max AP")
+
+
+func test_append_to_action_log_populates_ws() -> void:
+	var ws: Dictionary = {}
+	var decision: Dictionary = {"action_id": "CHARM", "success": true}
+	NPCWaveResolver._append_to_action_log(ws, decision)
+	assert_true(ws.has("action_log"), "Should create action_log key")
+	assert_eq(ws["action_log"].size(), 1, "Should have one entry")
+	assert_eq(ws["action_log"][0]["action_id"], "CHARM")
+
+
+func test_append_to_action_log_accumulates() -> void:
+	var ws: Dictionary = {"action_log": [{"action_id": "GOSSIP", "success": true}]}
+	var decision: Dictionary = {"action_id": "CHARM", "success": true}
+	NPCWaveResolver._append_to_action_log(ws, decision)
+	assert_eq(ws["action_log"].size(), 2, "Should accumulate entries")
+
+
+func test_append_to_action_log_skips_empty_action_id() -> void:
+	var ws: Dictionary = {}
+	var decision: Dictionary = {"success": false}
+	NPCWaveResolver._append_to_action_log(ws, decision)
+	assert_false(ws.has("action_log"), "Should not create log for empty action_id")
