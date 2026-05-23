@@ -113,6 +113,8 @@ static func advance_day(
 	_assign_magistrate_standing_objectives(characters, objectives_map)
 	_assign_monk_standing_objectives(characters, objectives_map)
 
+	_clear_stale_context_flags(world_states)
+
 	var festival_results: Dictionary = _process_festivals(ic_day, world_states)
 
 	var travel_arrivals: Array = _process_travel(characters)
@@ -11371,6 +11373,21 @@ static func _compute_topic_relevance(topic: TopicData, character: L5RCharacterDa
 	)
 
 
+static func _clear_stale_context_flags(world_states: Dictionary) -> void:
+	var stale_keys: Array = [
+		"context_flag", "active_court_at_location", "court_settlement_id",
+		"court_session_state", "pending_performance_requests",
+		"zone_subtype", "active_insurgency_id",
+	]
+	for char_id: Variant in world_states:
+		if not char_id is int:
+			continue
+		var ws: Variant = world_states[char_id]
+		if ws is Dictionary:
+			for key: String in stale_keys:
+				(ws as Dictionary).erase(key)
+
+
 static func _set_court_context_flags(
 	active_courts: Array,
 	world_states: Dictionary,
@@ -11859,6 +11876,8 @@ static func _create_winter_court_from_directive(
 				return {}
 
 	var emperor: L5RCharacterData = characters_by_id.get(emperor_id) as L5RCharacterData
+	if emperor == null:
+		return {}
 
 	var host_result: Dictionary
 	if not provinces.is_empty() and not settlements.is_empty():
@@ -12514,6 +12533,8 @@ static func _process_togashi_oversight(
 			and candidate_fc.character_id != last_assaulter_id
 		):
 			var togashi_char: L5RCharacterData = characters_by_id.get(_find_togashi_id(characters))
+			if togashi_char == null:
+				return {}
 			var settled_cw: Dictionary = {}
 			for cw: Dictionary in active_civil_wars:
 				if not cw.get("active", false) and cw.get("clan", "") == "Dragon":
