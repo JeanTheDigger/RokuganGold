@@ -15370,7 +15370,7 @@ static func _inject_base_character_context(
 			continue
 		var topic: TopicData = t as TopicData
 		if topic.variant == "ptl_detection" or topic.variant == "shadowlands_incursion":
-			for pid: Variant in topic.affected_province_ids:
+			for pid: Variant in topic.provinces_affected:
 				if pid is int and pid >= 0 and pid not in taint_province_ids:
 					taint_province_ids.append(pid)
 

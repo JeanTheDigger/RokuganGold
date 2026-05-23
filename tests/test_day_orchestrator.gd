@@ -14096,10 +14096,10 @@ func test_inject_base_context_taint_province_ids_from_topics() -> void:
 	c.clan = "Crab"
 	var topic := TopicData.new()
 	topic.variant = "ptl_detection"
-	topic.affected_province_ids = [7, 12]
+	topic.provinces_affected = [7, 12]
 	var topic2 := TopicData.new()
 	topic2.variant = "shadowlands_incursion"
-	topic2.affected_province_ids = [7, 15]
+	topic2.provinces_affected = [7, 15]
 	var ws: Dictionary = {}
 	DayOrchestrator._inject_base_character_context(
 		ws, [c], [topic, topic2], [], [], {}, [],

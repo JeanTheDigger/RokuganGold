@@ -382,7 +382,7 @@ static func _apply_winner_glory(
 		return
 	var winner_id: int = effects.get("winner_glory_recipient_id", -1)
 	var winner: L5RCharacterData = characters.get(winner_id)
-	if winner == null:
+	if winner == null or CharacterStats.is_dead(winner):
 		return
 	var actual: float = HonorGlorySystem.apply_glory_change(winner, winner_glory)
 	applied["glory_changes"].append({
