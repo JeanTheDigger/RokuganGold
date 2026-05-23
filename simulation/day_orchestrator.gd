@@ -11377,7 +11377,7 @@ static func _clear_stale_context_flags(world_states: Dictionary) -> void:
 	var stale_keys: Array = [
 		"context_flag", "active_court_at_location", "court_settlement_id",
 		"court_session_state", "pending_performance_requests",
-		"zone_subtype", "active_insurgency_id",
+		"zone_subtype", "active_insurgency_id", "action_log",
 	]
 	for char_id: Variant in world_states:
 		if not char_id is int:
