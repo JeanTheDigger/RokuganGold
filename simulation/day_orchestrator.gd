@@ -15401,9 +15401,7 @@ static func _inject_base_character_context(
 	var g_is_coastal: bool = world_states.get("_is_coastal", false)
 	var g_has_naval_assets: bool = world_states.get("_has_naval_assets", false)
 	var g_has_naval_threat: bool = world_states.get("_has_naval_threat", false)
-	var g_active_wars: Array = WarSystem.wars_to_context_array(
-		world_states.get("active_wars", active_wars) as Array
-	)
+	var g_active_wars: Array = WarSystem.wars_to_context_array(active_wars)
 
 	var province_values: Array = provinces.values()
 	var clan_values: Array = clans.values()
