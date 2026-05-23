@@ -3669,11 +3669,15 @@ static func _execute_duel_challenge(
 		character.character_id, target.character_id, to_death
 	)
 
+	var challenger_wants_stare_down: bool = _should_attempt_stare_down(character)
+	var defender_wants_stare_down: bool = _should_attempt_stare_down(target)
 	var stare_down_result: Dictionary = {}
-	if _should_attempt_stare_down(character):
+	if challenger_wants_stare_down or defender_wants_stare_down:
 		stare_down_result = IndividualCombat.resolve_iaijutsu_stare_down(
 			character, target, duel, dice_engine
 		)
+		stare_down_result["challenger_initiated"] = challenger_wants_stare_down
+		stare_down_result["defender_initiated"] = defender_wants_stare_down
 
 	var ch_p := IndividualCombat.Participant.new()
 	ch_p.character_id = character.character_id

@@ -2111,6 +2111,18 @@ func test_stare_down_neutral_virtue_needs_rank_3() -> void:
 	assert_true(ActionExecutor._should_attempt_stare_down(_character))
 
 
+func test_stare_down_ishi_virtue_attempts() -> void:
+	_character.shourido_virtue = Enums.ShouridoVirtue.ISHI
+	_character.skills["Intimidation"] = 1
+	assert_true(ActionExecutor._should_attempt_stare_down(_character))
+
+
+func test_stare_down_jin_virtue_declines() -> void:
+	_character.bushido_virtue = Enums.BushidoVirtue.JIN
+	_character.skills["Intimidation"] = 5
+	assert_false(ActionExecutor._should_attempt_stare_down(_character))
+
+
 # -- Assessment Concession NPC Decision (s4.8) --------------------------------
 
 func _make_duel_target() -> L5RCharacterData:
@@ -2176,3 +2188,50 @@ func test_concede_meiyo_only_non_death() -> void:
 	assert_true(ActionExecutor._should_concede_at_assessment(defender, assessment, duel_non_death))
 	var duel_death: IndividualCombat.DuelState = IndividualCombat.create_duel(1, 20, true)
 	assert_false(ActionExecutor._should_concede_at_assessment(defender, assessment, duel_death))
+
+
+func test_defender_initiated_stare_down_fires() -> void:
+	_character.bushido_virtue = Enums.BushidoVirtue.REI
+	_character.skills["Iaijutsu"] = 3
+	_character.skills["Kenjutsu"] = 3
+	var defender: L5RCharacterData = _make_duel_target()
+	defender.shourido_virtue = Enums.ShouridoVirtue.KETSUI
+	defender.skills["Intimidation"] = 4
+	defender.skills["Iaijutsu"] = 3
+	defender.skills["Kenjutsu"] = 3
+	var chars: Dictionary = {1: _character, 20: defender}
+	var action := NPCDataStructures.ScoredAction.new()
+	action.action_id = "ISSUE_DUEL_CHALLENGE"
+	action.target_npc_id = 20
+	action.metadata = {"to_death": false, "is_sanctioned": true}
+	var result: Dictionary = ActionExecutor._execute_duel_challenge(
+		action, _character, _ctx, _dice_engine, chars
+	)
+	var effects: Dictionary = result.get("effects", {})
+	var duel_result: Dictionary = effects.get("duel_result", {})
+	var sd: Dictionary = duel_result.get("stare_down", {})
+	assert_true(sd.get("attempted", false), "Stare-down should fire when defender wants it")
+	assert_false(sd.get("challenger_initiated", true), "Challenger (Rei) should not initiate")
+	assert_true(sd.get("defender_initiated", false), "Defender (Ketsui) should initiate")
+
+
+func test_neither_duelist_wants_stare_down() -> void:
+	_character.bushido_virtue = Enums.BushidoVirtue.JIN
+	_character.skills["Iaijutsu"] = 3
+	_character.skills["Kenjutsu"] = 3
+	var defender: L5RCharacterData = _make_duel_target()
+	defender.bushido_virtue = Enums.BushidoVirtue.REI
+	defender.skills["Intimidation"] = 3
+	defender.skills["Iaijutsu"] = 3
+	defender.skills["Kenjutsu"] = 3
+	var chars: Dictionary = {1: _character, 20: defender}
+	var action := NPCDataStructures.ScoredAction.new()
+	action.action_id = "ISSUE_DUEL_CHALLENGE"
+	action.target_npc_id = 20
+	action.metadata = {"to_death": false, "is_sanctioned": true}
+	var result: Dictionary = ActionExecutor._execute_duel_challenge(
+		action, _character, _ctx, _dice_engine, chars
+	)
+	var effects: Dictionary = result.get("effects", {})
+	var duel_result: Dictionary = effects.get("duel_result", {})
+	assert_false(duel_result.has("stare_down"), "No stare-down when both decline")

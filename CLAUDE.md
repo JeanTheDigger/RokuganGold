@@ -1799,7 +1799,10 @@ costs, or forward-wiring. Do not treat as bugs.
 - **NPC stare-down decision** — `_should_attempt_stare_down()` in ActionExecutor.
   Yu/Ketsui/Ishi attempt (aggressive/determined). Rei/Jin/Seigyo decline
   (courtesy/compassion/control). Neutral virtues: attempt only at Intimidation 3+.
-  Gate: Intimidation 0 always declines. 6 tests.
+  Gate: Intimidation 0 always declines. Checked for BOTH challenger and defender
+  per GDD ("either duelist may attempt"). Stare-down fires if either side wants
+  it. Result tracks which side initiated via challenger_initiated/defender_initiated
+  flags. 8 tests.
 - **NPC assessment concession decision** — `_should_concede_at_assessment()` in
   ActionExecutor. Only fires when outmatched (opponent got +1k1 AND defender
   failed Assessment). Yu/Ketsui/Ishi never concede. Seigyo/Chishiki always
@@ -1810,6 +1813,7 @@ costs, or forward-wiring. Do not treat as bugs.
   approves. Concession evaluated after Assessment — defender concedes early
   when outmatched and personality permits. Concession path applies -0.5 Glory
   for death duels directly. Full duel continues if no concession.
+  2 integration tests (defender-initiated stare-down, both-decline).
 
 ### Known Code Issues (found and fixed 2026-05-22, SecretSystem audit)
 - **expose_publicly() disposition applied to dead witnesses. FIXED.**
