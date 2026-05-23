@@ -2059,6 +2059,36 @@ func test_inject_urgency_data_propagates_active_case_from_standing() -> void:
 	assert_eq(known_objs.get("active_case", {}).get("case_id", -1), 55)
 
 
+func test_inject_urgency_data_lord_assigned_flag_set() -> void:
+	var ws: Dictionary = {1: {}}
+	var c := L5RCharacterData.new()
+	c.character_id = 1
+	var objectives_map: Dictionary = {
+		1: {"primary": {"need_type": "CONQUER_PROVINCE", "assigned_by": 99}},
+	}
+	DayOrchestrator._inject_urgency_data(
+		ws, [c], [], [], [], objectives_map, [],
+	)
+	var known_objs: Dictionary = ws[1].get("known_objectives", {})
+	assert_true(known_objs.get("lord_assigned", false),
+		"Primary objective with assigned_by should set lord_assigned")
+
+
+func test_inject_urgency_data_lord_assigned_flag_not_set() -> void:
+	var ws: Dictionary = {1: {}}
+	var c := L5RCharacterData.new()
+	c.character_id = 1
+	var objectives_map: Dictionary = {
+		1: {"primary": {"need_type": "CONQUER_PROVINCE"}},
+	}
+	DayOrchestrator._inject_urgency_data(
+		ws, [c], [], [], [], objectives_map, [],
+	)
+	var known_objs: Dictionary = ws[1].get("known_objectives", {})
+	assert_false(known_objs.get("lord_assigned", false),
+		"Primary objective without assigned_by should not set lord_assigned")
+
+
 # -- Characters present injection tests ----------------------------------------
 
 func test_inject_characters_present_co_located() -> void:

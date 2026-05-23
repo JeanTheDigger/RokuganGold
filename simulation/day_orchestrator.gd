@@ -9782,6 +9782,8 @@ static func _inject_urgency_data(
 		var known_objs: Dictionary = ws.get("known_objectives", {})
 		if not standing.is_empty():
 			known_objs["standing_need_type"] = standing.get("need_type", "")
+		if primary.has("assigned_by") and int(primary.get("assigned_by", -1)) >= 0:
+			known_objs["lord_assigned"] = true
 		var active_case: Dictionary = standing.get("active_case", primary.get("active_case", {}))
 		if not active_case.is_empty():
 			known_objs["active_case"] = active_case
