@@ -219,11 +219,10 @@ static func count_clan_population(
 ) -> Dictionary:
 	var counts: Dictionary = {"rank_5": 0, "rank_4": 0, "rank_3": 0, "rank_2": 0, "rank_1": 0}
 	for c: L5RCharacterData in characters:
+		if CharacterStats.is_dead(c):
+			continue
 		if c.clan != clan:
 			continue
-		if c.wounds_taken > 0:
-			if CharacterStats.is_dead(c):
-				continue
 		var rank: int = CharacterStats.get_insight_rank(c)
 		if rank >= 5:
 			counts["rank_5"] += 1

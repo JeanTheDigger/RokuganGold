@@ -315,3 +315,17 @@ func test_escalation_ignores_other_crime_types():
 		var r := CrimeSystem.create_crime_record(i, Enums.CrimeType.VIOLENCE, 1, "z", 10 + i)
 		records.append(r)
 	assert_false(CrimeSystem.check_escalation(records, 50, 90))
+
+
+func test_dishonorable_conduct_conviction_topic_tier_is_enum():
+	var c := L5RCharacterData.new()
+	c.character_id = 900
+	c.honor = 5.0
+	c.glory = 3.0
+	c.infamy = 0.0
+	c.status = 2.0
+	var record := CrimeRecord.new()
+	record.crime_type = Enums.CrimeType.DISHONORABLE_CONDUCT
+	var result: Dictionary = CrimeSystem.apply_at_conviction_consequences(c, record)
+	assert_eq(result["topic_tier"], TopicData.Tier.TIER_4,
+		"DISHONORABLE_CONDUCT should use TIER_4 enum, not raw -1")

@@ -196,7 +196,7 @@ const CRIME_HONOR_TABLE: Dictionary = {
 # Skimming uses 0.0 here — the GDD says "stripped of the office" not all status.
 # Office removal is a role_position change, not a numeric status zeroing.
 const CONVICTION_CONSEQUENCES: Dictionary = {
-	Enums.CrimeType.DISHONORABLE_CONDUCT: [-0.1, 0.0, 0.0, -1],
+	Enums.CrimeType.DISHONORABLE_CONDUCT: [-0.1, 0.0, 0.0, TopicData.Tier.TIER_4],
 	Enums.CrimeType.VIOLENCE: [-0.1, 0.0, 0.0, TopicData.Tier.TIER_4],
 	Enums.CrimeType.UNSANCTIONED_DUEL_DEATH: [0.0, 0.0, 0.0, TopicData.Tier.TIER_4],
 	Enums.CrimeType.SKIMMING: [-0.3, 0.5, 0.0, TopicData.Tier.TIER_3],
@@ -316,7 +316,7 @@ static func apply_at_act_consequences(character: L5RCharacterData, crime_type: E
 
 static func apply_at_conviction_consequences(character: L5RCharacterData, record: CrimeRecord, victim_status: float = 0.0) -> Dictionary:
 	var crime_type: Enums.CrimeType = record.crime_type
-	var consequences: Array = CONVICTION_CONSEQUENCES.get(crime_type, [-0.1, 0.0, 0.0, 4])
+	var consequences: Array = CONVICTION_CONSEQUENCES.get(crime_type, [-0.1, 0.0, 0.0, TopicData.Tier.TIER_4])
 
 	var glory_delta: float = HonorGlorySystem.apply_glory_change(character, consequences[0])
 	var infamy_delta: float = HonorGlorySystem.apply_infamy_change(character, consequences[1])

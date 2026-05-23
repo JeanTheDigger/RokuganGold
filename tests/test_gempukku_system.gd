@@ -705,3 +705,33 @@ func test_natural_death_roll_skips_already_dead_characters() -> void:
 	)
 	assert_false(50 in result["natural_deaths"],
 		"Already dead character should not appear in natural_deaths")
+
+
+func test_count_clan_population_skips_dead_characters() -> void:
+	var alive := L5RCharacterData.new()
+	alive.character_id = 60
+	alive.clan = "Lion"
+	alive.wounds_taken = 0
+	alive.stamina = 2
+	alive.willpower = 2
+	alive.intelligence = 2
+	alive.awareness = 2
+	alive.reflexes = 2
+	alive.void_ring = 2
+	alive.perception = 2
+
+	var dead := L5RCharacterData.new()
+	dead.character_id = 61
+	dead.clan = "Lion"
+	dead.wounds_taken = 999
+	dead.stamina = 2
+	dead.willpower = 2
+	dead.intelligence = 2
+	dead.awareness = 2
+	dead.reflexes = 2
+	dead.void_ring = 2
+	dead.perception = 2
+
+	var counts: Dictionary = GempukkuSystem.count_clan_population([alive, dead], "Lion")
+	var total: int = counts["rank_1"] + counts["rank_2"] + counts["rank_3"] + counts["rank_4"] + counts["rank_5"]
+	assert_eq(total, 1, "Dead character should not be counted in population")
