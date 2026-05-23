@@ -133,6 +133,8 @@ static func advance_day(
 
 	var favor_results: Dictionary = _process_favors(favors, ic_day, characters_by_id)
 
+	_remove_resolved_favors(favors)
+
 	var entanglement_results: Array = _process_entanglements(entanglements, ic_day)
 	var bound_escape_results: Array = _process_bound_states(
 		bound_states, characters_by_id, dice_engine, ic_day
@@ -609,6 +611,8 @@ static func advance_day(
 
 	_release_war_hostages(war_termination_results, active_hostages, characters_by_id, ic_day)
 
+	_remove_resolved_hostages(active_hostages)
+
 	var peace_route_results: Array = _process_peace_trade_routes(
 		war_termination_results, trade_routes,
 	)
@@ -619,6 +623,8 @@ static func advance_day(
 	var territory_transfer_results: Array = _apply_war_territory_transfers(
 		war_termination_results, provinces,
 	)
+
+	_remove_resolved_wars(active_wars)
 
 	var military_topics: Array = _generate_military_event_topics(
 		military_daily, military_effects, active_topics, next_topic_id, ic_day,
@@ -688,6 +694,8 @@ static func advance_day(
 		active_hunts, characters_by_id,
 	)
 
+	_remove_resolved_hunts(active_hunts)
+
 	_process_travel_redirect_writebacks(
 		day_result.get("results", []), objectives_map,
 	)
@@ -745,6 +753,8 @@ static func advance_day(
 	var succession_results: Array = _process_successions(
 		active_successions, characters_by_id
 	)
+
+	_remove_resolved_successions(active_successions)
 
 	var conversation_results: Array = _process_daily_conversations(
 		characters, dice_engine, current_season, active_topics
@@ -979,6 +989,7 @@ static func advance_day(
 				togashi_state["dragon_autonomous_rule"] = true
 			if vflags.get("phoenix_champion_authority", false) and not phoenix_council_state.is_empty():
 				PhoenixCouncil.grant_champion_authority(phoenix_council_state)
+		_remove_resolved_civil_wars(active_civil_wars)
 		insurgency_results = _process_insurgencies(
 			insurgencies, provinces, dice_engine, current_season,
 			next_insurgency_id, world_states, worship_maluses,
@@ -18081,3 +18092,67 @@ static func _apply_hunt_disposition(participants: Array) -> void:
 			else:
 				a.disposition_values[b.character_id] = clampi(disp_ab + HuntSystem.DISP_EXISTING_ACQUAINTANCE, -100, 100)
 				b.disposition_values[a.character_id] = clampi(disp_ba + HuntSystem.DISP_EXISTING_ACQUAINTANCE, -100, 100)
+
+
+# -- Resolved Item Cleanup ----------------------------------------------------
+
+
+static func _remove_resolved_wars(active_wars: Array) -> void:
+	var i: int = active_wars.size() - 1
+	while i >= 0:
+		var war: Variant = active_wars[i]
+		if war is WarData and not (war as WarData).is_active:
+			active_wars.remove_at(i)
+		i -= 1
+
+
+static func _remove_resolved_successions(active_successions: Array) -> void:
+	var i: int = active_successions.size() - 1
+	while i >= 0:
+		var succ: Variant = active_successions[i]
+		if succ is SuccessionData:
+			var s: SuccessionData = succ as SuccessionData
+			if s.state == SuccessionData.SuccessionState.CONFIRMED or \
+				s.state == SuccessionData.SuccessionState.RESOLVED:
+				active_successions.remove_at(i)
+		i -= 1
+
+
+static func _remove_resolved_civil_wars(active_civil_wars: Array) -> void:
+	var i: int = active_civil_wars.size() - 1
+	while i >= 0:
+		var state: Variant = active_civil_wars[i]
+		if state is Dictionary and not (state as Dictionary).get("active", false):
+			active_civil_wars.remove_at(i)
+		i -= 1
+
+
+static func _remove_resolved_hostages(active_hostages: Array) -> void:
+	var i: int = active_hostages.size() - 1
+	while i >= 0:
+		var hostage: Variant = active_hostages[i]
+		if hostage is Dictionary:
+			var h: Dictionary = hostage as Dictionary
+			if h.get("released", false) or h.get("escaped", false):
+				active_hostages.remove_at(i)
+		i -= 1
+
+
+static func _remove_resolved_hunts(active_hunts: Array) -> void:
+	var i: int = active_hunts.size() - 1
+	while i >= 0:
+		var hunt: Variant = active_hunts[i]
+		if hunt is Dictionary:
+			var status: String = (hunt as Dictionary).get("status", "")
+			if status == "resolved" or status == "cancelled" or status == "cancelled_no_host":
+				active_hunts.remove_at(i)
+		i -= 1
+
+
+static func _remove_resolved_favors(favors: Array) -> void:
+	var i: int = favors.size() - 1
+	while i >= 0:
+		var favor: Variant = favors[i]
+		if favor is FavorData and (favor as FavorData).resolved:
+			favors.remove_at(i)
+		i -= 1

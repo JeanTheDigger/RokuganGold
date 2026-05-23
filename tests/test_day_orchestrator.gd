@@ -14463,3 +14463,83 @@ func test_hostage_escape_family_honor_skips_dead_family() -> void:
 
 	assert_almost_eq(dead_father.honor, 7.0, 0.01, "Dead father should not lose honor")
 	assert_almost_eq(living_mother.honor, 4.0, 0.01, "Living mother should lose 2.0 honor")
+
+
+# -- Resolved Item Cleanup Tests -----------------------------------------------
+
+
+func test_remove_resolved_wars() -> void:
+	var war_a := WarData.new()
+	war_a.is_active = true
+	var war_b := WarData.new()
+	war_b.is_active = false
+	var war_c := WarData.new()
+	war_c.is_active = true
+	var wars: Array = [war_a, war_b, war_c]
+	DayOrchestrator._remove_resolved_wars(wars)
+	assert_eq(wars.size(), 2, "Should remove 1 inactive war")
+	assert_true(wars[0].is_active, "Remaining war 0 should be active")
+	assert_true(wars[1].is_active, "Remaining war 1 should be active")
+
+
+func test_remove_resolved_successions() -> void:
+	var s_pending := SuccessionData.new()
+	s_pending.state = SuccessionData.SuccessionState.PENDING
+	var s_confirmed := SuccessionData.new()
+	s_confirmed.state = SuccessionData.SuccessionState.CONFIRMED
+	var s_resolved := SuccessionData.new()
+	s_resolved.state = SuccessionData.SuccessionState.RESOLVED
+	var s_disputed := SuccessionData.new()
+	s_disputed.state = SuccessionData.SuccessionState.DISPUTED
+	var succs: Array = [s_pending, s_confirmed, s_resolved, s_disputed]
+	DayOrchestrator._remove_resolved_successions(succs)
+	assert_eq(succs.size(), 2, "Should remove CONFIRMED and RESOLVED")
+	assert_eq(succs[0].state, SuccessionData.SuccessionState.PENDING)
+	assert_eq(succs[1].state, SuccessionData.SuccessionState.DISPUTED)
+
+
+func test_remove_resolved_civil_wars() -> void:
+	var active_cw: Dictionary = {"active": true, "clan": "Crane"}
+	var inactive_cw: Dictionary = {"active": false, "clan": "Lion"}
+	var cws: Array = [active_cw, inactive_cw]
+	DayOrchestrator._remove_resolved_civil_wars(cws)
+	assert_eq(cws.size(), 1, "Should remove inactive civil war")
+	assert_eq(cws[0]["clan"], "Crane")
+
+
+func test_remove_resolved_hostages() -> void:
+	var active: Dictionary = {"character_id": 1, "released": false, "escaped": false}
+	var released: Dictionary = {"character_id": 2, "released": true, "escaped": false}
+	var escaped: Dictionary = {"character_id": 3, "released": false, "escaped": true}
+	var hostages: Array = [active, released, escaped]
+	DayOrchestrator._remove_resolved_hostages(hostages)
+	assert_eq(hostages.size(), 1, "Should remove released and escaped hostages")
+	assert_eq(hostages[0]["character_id"], 1)
+
+
+func test_remove_resolved_hunts() -> void:
+	var active: Dictionary = {"hunt_id": 1, "status": "active"}
+	var resolved: Dictionary = {"hunt_id": 2, "status": "resolved"}
+	var cancelled: Dictionary = {"hunt_id": 3, "status": "cancelled"}
+	var no_host: Dictionary = {"hunt_id": 4, "status": "cancelled_no_host"}
+	var hunts: Array = [active, resolved, cancelled, no_host]
+	DayOrchestrator._remove_resolved_hunts(hunts)
+	assert_eq(hunts.size(), 1, "Should remove resolved and cancelled hunts")
+	assert_eq(hunts[0]["hunt_id"], 1)
+
+
+func test_remove_resolved_favors() -> void:
+	var active := FavorData.new()
+	active.favor_id = 1
+	active.resolved = false
+	var resolved := FavorData.new()
+	resolved.favor_id = 2
+	resolved.resolved = true
+	var also_active := FavorData.new()
+	also_active.favor_id = 3
+	also_active.resolved = false
+	var favors: Array = [active, resolved, also_active]
+	DayOrchestrator._remove_resolved_favors(favors)
+	assert_eq(favors.size(), 2, "Should remove resolved favor")
+	assert_eq((favors[0] as FavorData).favor_id, 1)
+	assert_eq((favors[1] as FavorData).favor_id, 3)

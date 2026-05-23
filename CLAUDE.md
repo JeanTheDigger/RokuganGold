@@ -2058,6 +2058,51 @@ costs, or forward-wiring. Do not treat as bugs.
   `run_winter_court_selection()`. Togashi reappear flow passed
   potentially null togashi_char to `reappear_togashi()`.
 
+### Known Code Issues (found and fixed 2026-05-23, lifecycle leak audit)
+- **Resolved wars never removed from active_wars array. FIXED.**
+  `WarTermination.resolve_annihilation()` / `resolve_formal_surrender()` /
+  `resolve_negotiated_settlement()` set `war.is_active = false` but nothing
+  removed the WarData from `active_wars`. Every war ever declared persisted
+  forever, requiring `if not war.is_active: continue` guards at 8+ iteration
+  sites. `_remove_resolved_wars()` now runs after war termination processing
+  completes. 1 test.
+- **Resolved successions never removed from active_successions array. FIXED.**
+  `SuccessionSystem.confirm_successor()` transitions state to CONFIRMED/RESOLVED
+  but nothing removed the SuccessionData from `active_successions`. Every
+  succession event persisted forever. `_remove_resolved_successions()` now runs
+  after `_process_successions()`. 1 test.
+- **Resolved civil wars never removed from active_civil_wars array. FIXED.**
+  `IntraClanCivilWar.finalise()` sets `state["active"] = false` but nothing
+  removed the Dictionary from `active_civil_wars`. `_remove_resolved_civil_wars()`
+  now runs after seasonal civil war processing. 1 test.
+- **Released/escaped hostages never removed from active_hostages array. FIXED.**
+  Hostages marked `released: true` or `escaped: true` by escape attempts and
+  war peace resolution were skipped via guard clause but never removed.
+  `_remove_resolved_hostages()` now runs after war hostage release. 1 test.
+- **Resolved/cancelled hunts never removed from active_hunts array. FIXED.**
+  Hunt resolution set `status: "resolved"`, cancellation set `status: "cancelled"`,
+  dead host set `status: "cancelled_no_host"`. All skipped via guard but never
+  removed. `_remove_resolved_hunts()` now runs after hunt writebacks. 1 test.
+- **FavorData never marked resolved — re-processing on each tick. FIXED.**
+  (Previous session.) `FavorData.resolved: bool` field added. `honor_favor()`,
+  `break_favor()`, `process_expirations()`, `process_deadline_breaches()`,
+  `process_creditor_death()`, `process_debtor_death()` all now set
+  `favor.resolved = true` on resolution. Processing loops guard with
+  `not favor.resolved`.
+- **BROKEN entanglements accumulated in entanglements array. FIXED.**
+  (Previous session.) Death cleanup set entanglement state to BROKEN but the
+  collection pass skipped already-BROKEN entries instead of adding them to the
+  removal list. Fixed by collecting BROKEN entries for removal.
+- **Closed courts persisted in active_courts array. FIXED.**
+  (Previous session.) Courts transitioning to CLOSED state were never removed.
+  `_process_active_courts()` now collects closed courts and removes them.
+- **No assassination operation dedup guard. FIXED.**
+  (Previous session.) Same assassin-target pair could have multiple parallel
+  assassination operations. Added dedup check scanning existing ops.
+- **No settlement-level court duplicate guard. FIXED.**
+  (Previous session.) Two lords at the same settlement could both create courts.
+  Added settlement_id check in `_apply_court_creation()`.
+
 ### Known Performance Concerns — Deferred
 - **Unbounded array growth in advance_day().** `active_topics`,
   `crime_records`, `pending_letters`, `active_secrets`, `commitments`,
@@ -2068,7 +2113,11 @@ costs, or forward-wiring. Do not treat as bugs.
   per-tick CPU cost is low, but memory grows linearly. Cleanup logic
   requires design decisions about retention windows (how long to keep
   resolved topics, closed cases, etc.) — do not implement without GDD
-  guidance.
+  guidance. Note: `active_wars`, `active_successions`, `active_civil_wars`,
+  `active_hostages`, `active_hunts`, `active_courts`, `entanglements`,
+  and `favors` now properly remove resolved items. The remaining
+  unbounded arrays are `active_topics`, `crime_records`,
+  `pending_letters`, `active_secrets`, and `commitments`.
 
 ### Systems Added 2026-05-23
 - **s55.11b Named Monk Standing Objectives** — `simulation/monk_objective_system.gd`.
