@@ -153,6 +153,7 @@ static func advance_day(
 	_set_court_context_flags(active_courts, world_states)
 	_inject_hunt_context(active_hunts, world_states, active_topics)
 	_set_wall_tower_context_flags(characters, settlements, provinces, world_states)
+	_set_temple_context_flags(characters, settlements, world_states)
 	_populate_court_availability_data(
 		active_courts, characters, characters_by_id, world_states, favors,
 	)
@@ -728,7 +729,7 @@ static func advance_day(
 
 	_cleanup_dead_character_references(
 		characters, characters_by_id, active_courts, entanglements,
-		active_hunts, favors,
+		active_hunts, favors, bloodspeaker_cells,
 	)
 
 	var succession_results: Array = _process_successions(
@@ -1052,7 +1053,9 @@ static func advance_day(
 		_process_vassal_reassignments(
 			strategic_results, objectives_map, characters_by_id,
 		)
-		_process_monk_self_selection(characters, objectives_map, world_states)
+		_process_monk_self_selection(
+			characters, objectives_map, provinces, settlements, insurgencies,
+		)
 		_process_tyrant_directives(
 			strategic_results, active_topics, next_topic_id, ic_day,
 			characters_by_id,
@@ -1092,7 +1095,7 @@ static func advance_day(
 			death_events.clear()
 			_cleanup_dead_character_references(
 				characters, characters_by_id, active_courts, entanglements,
-				active_hunts, favors,
+				active_hunts, favors, bloodspeaker_cells,
 			)
 
 	var koku_flow_results: Dictionary = {}
@@ -4665,6 +4668,7 @@ static func _create_spy_uncovered_topic(
 	topic.category = TopicData.Category.PERSONAL
 	topic.slug = "spy_uncovered_at_%s" % location
 	topic.ic_day_created = ic_day
+	topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)
 	topic.subject_character_id = -1
 	topic.subject_role = "NEUTRAL"
 	active_topics.append(topic)
@@ -4877,6 +4881,7 @@ static func _process_commerce_topic_writebacks(
 		topic.topic_type = "commerce_stigma"
 		topic.category = TopicData.Category.POLITICAL
 		topic.tier = TopicData.Tier.TIER_4
+		topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)
 		topic.subject_character_id = char_id
 		topic.ic_day_created = ic_day
 		active_topics.append(topic)
@@ -5232,6 +5237,7 @@ static func _process_impersonation_detection(
 		next_topic_id[0] += 1
 		topic.tier = TopicData.Tier.TIER_3
 		topic.category = TopicData.Category.POLITICAL
+		topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)
 		topic.subject_character_id = victim_id
 		topic.ic_day_created = ic_day
 		topic.slug = "impersonation_victim_%d" % victim_id
@@ -5571,8 +5577,12 @@ static func _assign_monk_standing_objectives(
 static func _process_monk_self_selection(
 	characters: Array,
 	objectives_map: Dictionary,
-	world_states: Dictionary,
+	provinces: Dictionary,
+	settlements: Array,
+	insurgencies: Array,
 ) -> void:
+	var monk_ws: Dictionary = _build_monk_world_state(provinces, settlements, insurgencies)
+
 	for character: L5RCharacterData in characters:
 		if CharacterStats.is_dead(character):
 			continue
@@ -5592,7 +5602,7 @@ static func _process_monk_self_selection(
 			continue
 
 		var selected: Dictionary = MonkObjectiveSystem.select_primary_from_standing(
-			character, standing_type, world_states
+			character, standing_type, monk_ws
 		)
 		if selected.is_empty():
 			continue
@@ -5610,6 +5620,42 @@ static func _process_monk_self_selection(
 		}
 
 
+static func _build_monk_world_state(
+	provinces: Dictionary,
+	settlements: Array,
+	insurgencies: Array,
+) -> Dictionary:
+	var famine_provinces: Array = []
+	var tainted_provinces: Array = []
+	var insurgent_provinces: Array = []
+	var known_temples: Array = []
+
+	for pid: int in provinces:
+		var prov: ProvinceData = provinces[pid]
+		if prov.stability < 30.0:
+			famine_provinces.append({"province_id": pid})
+		if prov.province_taint_level >= 3.0:
+			tainted_provinces.append({"province_id": pid, "taint_level": prov.province_taint_level})
+
+	for ins: InsurgencyData in insurgencies:
+		var urgency: float = 60.0 + ins.strength * 5.0
+		insurgent_provinces.append({
+			"province_id": ins.province_id,
+			"urgency": urgency,
+		})
+
+	for s: SettlementData in settlements:
+		if s.settlement_type in Enums.RELIGIOUS_SETTLEMENT_TYPES:
+			known_temples.append({"settlement_id": s.settlement_id, "province_id": s.province_id})
+
+	return {
+		"famine_provinces": famine_provinces,
+		"tainted_provinces": tainted_provinces,
+		"insurgent_provinces": insurgent_provinces,
+		"known_temples": known_temples,
+	}
+
+
 # -- UPHOLD_LAW Magistrate Scan (s57.16.9) ------------------------------------
 
 static func _process_uphold_law_scan(
@@ -5621,6 +5667,8 @@ static func _process_uphold_law_scan(
 	var results: Array = []
 
 	for character: L5RCharacterData in characters:
+		if CharacterStats.is_dead(character):
+			continue
 		var objectives: Dictionary = objectives_map.get(character.character_id, {})
 		var standing: Dictionary = objectives.get("standing", {})
 		if standing.get("need_type", "") != "UPHOLD_LAW":
@@ -5909,6 +5957,7 @@ static func _cleanup_dead_character_references(
 	entanglements: Array,
 	active_hunts: Array,
 	favors: Array,
+	bloodspeaker_cells: Array = [],
 ) -> void:
 	var dead_ids: Array = []
 	for c: L5RCharacterData in characters:
@@ -5953,6 +6002,10 @@ static func _cleanup_dead_character_references(
 		if dead_char != null:
 			heir_id = dead_char.designated_heir_id
 		FavorSystem.process_creditor_death(favors, did, heir_id)
+
+	for cell: BloodspeakerCellData in bloodspeaker_cells:
+		if cell.leader_id in dead_ids:
+			cell.leader_id = -1
 
 
 static func _process_successions(
@@ -6291,6 +6344,8 @@ static func _build_province_clan_map(provinces: Dictionary) -> Dictionary:
 static func _build_lord_map(characters: Array) -> Dictionary:
 	var result: Dictionary = {}
 	for c: L5RCharacterData in characters:
+		if CharacterStats.is_dead(c):
+			continue
 		if c.lord_id >= 0:
 			result[c.character_id] = c.lord_id
 	return result
@@ -7194,9 +7249,10 @@ static func _process_spiritual_insurgency(
 		topic.topic_id = topic_dict.get("topic_id", -1)
 		topic.title = topic_dict.get("title", "")
 		topic.tier = topic_dict.get("tier", TopicData.Tier.TIER_4)
-		topic.category = topic_dict.get("category", "SPIRITUAL")
+		topic.category = topic_dict.get("category", TopicData.Category.SUPERNATURAL)
 		topic.subject_character_id = topic_dict.get("subject_character_id", -1)
 		topic.ic_day_created = topic_dict.get("ic_day_created", ic_day)
+		topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)
 		topic.topic_type = "spiritual_insurgency"
 		active_topics.append(topic)
 		new_topics.append(topic_dict)
@@ -7349,13 +7405,17 @@ static func _process_bloodspeaker_network(
 				})
 
 	for event: Dictionary in result.get("events", []):
-		if event.get("event") == "cell_activated":
+		var evt_type: String = event.get("event", "")
+		if evt_type == "cell_activated" or evt_type == "cell_activated_by_instruction":
 			var topic := TopicData.new()
 			topic.topic_id = next_topic_id[0]
 			next_topic_id[0] += 1
-			topic.title = "Maho cult activity in province"
+			var evt_pid: int = event.get("province_id", -1)
+			topic.title = "Maho cult activity in province %d" % evt_pid
+			topic.topic_type = "bloodspeaker_activation"
 			topic.tier = TopicData.Tier.TIER_3
 			topic.category = TopicData.Category.POLITICAL
+			topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)
 			topic.ic_day_created = ic_day
 			active_topics.append(topic)
 
@@ -7364,7 +7424,7 @@ static func _process_bloodspeaker_network(
 
 static func _detect_maho_provinces(
 	characters: Array,
-	characters_by_id: Dictionary,
+	_characters_by_id: Dictionary,
 	settlement_province_map: Dictionary,
 ) -> Array:
 	var provinces: Array = []
@@ -11311,6 +11371,38 @@ static func _set_wall_tower_context_flags(
 		ws["wall_statuses"] = existing
 
 
+static func _set_temple_context_flags(
+	characters: Array,
+	settlements: Array,
+	world_states: Dictionary,
+) -> void:
+	var temple_locs: Dictionary = {}
+	for s: SettlementData in settlements:
+		if s.settlement_type in Enums.RELIGIOUS_SETTLEMENT_TYPES:
+			temple_locs[str(s.settlement_id)] = true
+
+	if temple_locs.is_empty():
+		return
+
+	for character: L5RCharacterData in characters:
+		if CharacterStats.is_dead(character):
+			continue
+		var loc: String = character.physical_location
+		if not temple_locs.has(loc):
+			continue
+		if TravelSystem.is_traveling(character):
+			continue
+		var ws: Dictionary = world_states.get(character.character_id, {})
+		if ws.is_empty():
+			ws = {}
+			world_states[character.character_id] = ws
+		if ws.get("context_flag", -1) == Enums.ContextFlag.AT_COURT:
+			continue
+		if ws.get("context_flag", -1) == Enums.ContextFlag.AT_WALL_TOWER:
+			continue
+		ws["context_flag"] = Enums.ContextFlag.AT_TEMPLE
+
+
 static func _process_crisis_court_calls(
 	characters: Array,
 	active_courts: Array,
@@ -12215,6 +12307,7 @@ static func _process_seiyaku_review(
 		topic.tier = TopicData.Tier.TIER_4
 		topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)
 		topic.category = TopicData.Category.POLITICAL
+		topic.ic_day_created = ic_day
 		active_topics.append(topic)
 		result["exhaustion_topic_id"] = topic.topic_id
 
@@ -12361,6 +12454,7 @@ static func _process_togashi_oversight(
 			topic.tier = TopicData.Tier.TIER_4 if stage <= 2 else TopicData.Tier.TIER_3
 			topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)
 			topic.category = TopicData.Category.POLITICAL
+			topic.ic_day_created = ic_day
 			active_topics.append(topic)
 			result["topic_id"] = topic.topic_id
 
@@ -12652,6 +12746,7 @@ static func _process_phoenix_council_gating(
 		topic.tier = TopicData.Tier.TIER_4 if overreach_stage <= 1 else TopicData.Tier.TIER_3
 		topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)
 		topic.category = TopicData.Category.POLITICAL
+		topic.ic_day_created = ic_day
 		active_topics.append(topic)
 
 	# Apply devastating effect for any approved GRAND_RITUAL directive (s55.10.3.7).
@@ -16438,6 +16533,7 @@ static func _apply_assassination_outcome(
 		_:
 			topic.topic_type = "death_murder"
 			topic.tier = TopicData.Tier.TIER_2
+	topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)
 	topic.subject_character_id = target.character_id
 	active_topics.append(topic)
 

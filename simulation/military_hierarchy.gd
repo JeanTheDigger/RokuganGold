@@ -36,6 +36,8 @@ static func get_direct_subordinates(
 	var result: Array = []
 	var seen: Dictionary = {}
 	for c: L5RCharacterData in characters:
+		if CharacterStats.is_dead(c):
+			continue
 		if c.character_id == character_id:
 			continue
 		if c.lord_id == character_id or c.operational_superior_id == character_id:

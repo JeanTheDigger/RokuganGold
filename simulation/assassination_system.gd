@@ -316,6 +316,8 @@ static func find_best_searcher(
 		if char_id == assassin_id or char_id == target.character_id:
 			continue
 		var c: L5RCharacterData = characters_by_id[char_id]
+		if CharacterStats.is_dead(c):
+			continue
 		if c.physical_location != target.physical_location:
 			continue
 		if c.physical_location == "":
@@ -438,6 +440,8 @@ static func has_seppun_guard_present(
 		return false
 	for char_id: int in characters_by_id:
 		var c: L5RCharacterData = characters_by_id[char_id]
+		if CharacterStats.is_dead(c):
+			continue
 		if c.character_id == target.character_id:
 			continue
 		if c.family == "Seppun" and c.physical_location == target.physical_location:
@@ -1044,6 +1048,7 @@ static func apply_vengeance_consequences(
 		topic.topic_type = "betrayal"
 		topic.tier = TopicData.Tier.TIER_2
 		topic.category = TopicData.Category.POLITICAL
+		topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)
 		topic.subject_character_id = commissioner_id
 		topic.subject_role = "NEUTRAL"
 		topic.ic_day_created = ic_day

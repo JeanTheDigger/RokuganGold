@@ -12957,6 +12957,44 @@ func test_assassination_death_event_includes_is_lord() -> void:
 		"Assassination should be suspicious")
 
 
+func test_assassination_outcome_topic_has_momentum() -> void:
+	var target := L5RCharacterData.new()
+	target.character_id = 50
+	target.role_position = ""
+	target.stamina = 2
+	target.willpower = 2
+	target.wounds_taken = 0
+	var assassin := L5RCharacterData.new()
+	assassin.character_id = 60
+	assassin.school = "Shosuro Infiltrator"
+	var characters_by_id: Dictionary = {50: target, 60: assassin}
+	var op: Dictionary = {
+		"commissioner_id": 70,
+		"target_id": 50,
+		"assassin_id": 60,
+		"method": "poison",
+	}
+	var death_events: Array = []
+	var crime_records: Array = []
+	var next_case_id: Array = [1]
+	for outcome_str: String in ["full", "partial", "failure"]:
+		var active_topics: Array = []
+		var next_topic_id: Array = [900]
+		var conceal_result: Dictionary = {
+			"outcome": outcome_str,
+			"concealment_tn": 25,
+		}
+		DayOrchestrator._apply_assassination_outcome(
+			op, target, assassin, conceal_result, 10,
+			death_events, crime_records, next_case_id,
+			active_topics, next_topic_id, characters_by_id,
+		)
+		assert_eq(active_topics.size(), 1,
+			"Should create death topic for outcome: %s" % outcome_str)
+		assert_gt(active_topics[0].momentum, 0.0,
+			"Death topic should have non-zero momentum for outcome: %s" % outcome_str)
+
+
 # -- Hunt Resolution Tests (s57.38.6) ----------------------------------------
 
 func _make_hunter(id: int, hunting: int = 3, kyujutsu: int = 3, spears: int = 0, status: float = 3.0) -> L5RCharacterData:
@@ -13786,3 +13824,38 @@ func test_cohabitation_skips_dead_characters() -> void:
 	DayOrchestrator._apply_cohabitation([alive1, dead], chars_by_id)
 	assert_false(alive1.cohabitation_days.has(2),
 		"Alive character should not accumulate cohabitation with dead character")
+
+
+func test_uphold_law_scan_skips_dead_magistrate() -> void:
+	var dead_magistrate := _make_dead_char_do(1)
+	dead_magistrate.role_position = "Emerald Magistrate"
+	var alive_magistrate := L5RCharacterData.new()
+	alive_magistrate.character_id = 2
+	alive_magistrate.role_position = "Emerald Magistrate"
+	alive_magistrate.stamina = 2
+	alive_magistrate.willpower = 2
+	var objectives_map: Dictionary = {
+		1: {"standing": {"need_type": "UPHOLD_LAW"}},
+		2: {"standing": {"need_type": "UPHOLD_LAW"}},
+	}
+	var results: Array = DayOrchestrator._process_uphold_law_scan(
+		[dead_magistrate, alive_magistrate], objectives_map, [], []
+	)
+	for r: Dictionary in results:
+		assert_ne(r.get("magistrate_id", -1), 1,
+			"Dead magistrate should not be assigned to investigate crimes")
+
+
+func test_build_lord_map_skips_dead_characters() -> void:
+	var dead := _make_dead_char_do(1)
+	dead.lord_id = 99
+	var alive := L5RCharacterData.new()
+	alive.character_id = 2
+	alive.lord_id = 99
+	alive.stamina = 2
+	alive.willpower = 2
+	var lord_map: Dictionary = DayOrchestrator._build_lord_map([dead, alive])
+	assert_false(lord_map.has(1),
+		"Dead character should not appear in lord map")
+	assert_true(lord_map.has(2),
+		"Alive character should appear in lord map")

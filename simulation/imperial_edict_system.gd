@@ -112,6 +112,8 @@ static func compute_topic_aggregate(
 	var positions: Array = []
 	var weights: Array = []
 	for c: L5RCharacterData in attendees:
+		if CharacterStats.is_dead(c):
+			continue
 		var pos: float = c.topic_positions.get(topic.topic_id, 0.0)
 		var relevance: float = TopicMomentumSystem.calculate_personal_relevance(
 			topic,
@@ -269,6 +271,8 @@ static func generate_edict_commitments(
 		return []
 	var commitments: Array = []
 	for lord: L5RCharacterData in lords:
+		if CharacterStats.is_dead(lord):
+			continue
 		var c := CourtCommitmentSystem.create_edict_commitment(
 			lord.character_id, topic.topic_id, commitment_type,
 			ic_day, deadline_ic_day,

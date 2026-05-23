@@ -257,6 +257,8 @@ static func select_clan_delegation(
 
 	var scored: Array = []
 	for vassal: L5RCharacterData in vassals:
+		if CharacterStats.is_dead(vassal):
+			continue
 		var score: float = _score_delegate_candidate(vassal, champion, agenda_topic_ids, topic_pool_map)
 		scored.append({"id": vassal.character_id, "score": score, "char": vassal})
 
@@ -321,6 +323,8 @@ static func _apply_yojimbo_pull_in(
 	var result: Array = selected_ids.duplicate()
 	var vassal_map: Dictionary = {}
 	for v: L5RCharacterData in all_vassals:
+		if CharacterStats.is_dead(v):
+			continue
 		vassal_map[v.character_id] = v
 
 	for sel_id: int in selected_ids:
@@ -330,6 +334,8 @@ static func _apply_yojimbo_pull_in(
 		if sel.school_type != Enums.SchoolType.COURTIER:
 			continue
 		for v: L5RCharacterData in all_vassals:
+			if CharacterStats.is_dead(v):
+				continue
 			if v.operational_superior_id == sel_id and v.school_type == Enums.SchoolType.BUSHI:
 				if v.character_id not in result:
 					result.append(v.character_id)
@@ -356,6 +362,8 @@ static func select_personal_invitations(
 
 	var scored: Array = []
 	for candidate: L5RCharacterData in candidates:
+		if CharacterStats.is_dead(candidate):
+			continue
 		if candidate.character_id in already_invited:
 			continue
 		if candidate.character_id == emperor.character_id:
