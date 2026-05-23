@@ -281,7 +281,7 @@ static func _get_lord_disposition(c: L5RCharacterData, characters_by_id: Diction
 	var lord: L5RCharacterData = characters_by_id.get(c.lord_id)
 	if lord == null:
 		return 0
-	return c.disposition_values.get(str(c.lord_id), 0)
+	return c.disposition_values.get(c.lord_id, 0)
 
 
 # =============================================================================

@@ -14154,6 +14154,7 @@ static func _process_organic_villages(
 			topic.slug = "organic_village_%d" % village.settlement_id
 			topic.topic_type = "settlement"
 			topic.variant = "organic_formation"
+			topic.category = TopicData.Category.ECONOMIC
 			topic.ic_day_created = ic_day
 			topic.tier = TopicData.Tier.TIER_4
 			topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)
@@ -14171,6 +14172,7 @@ static func _generate_construction_topic(
 	next_topic_id[0] += 1
 	topic.ic_day_created = ic_day
 	topic.tier = TopicData.Tier.TIER_4
+	topic.category = TopicData.Category.ECONOMIC
 	topic.topic_type = "construction"
 
 	match cd.construction_type:
@@ -16685,6 +16687,7 @@ static func _apply_assassination_outcome(
 	topic.topic_id = next_topic_id[0]
 	next_topic_id[0] += 1
 	topic.ic_day_created = ic_day
+	topic.category = TopicData.Category.PERSONAL
 	match outcome:
 		"full":
 			topic.topic_type = "death_natural"
