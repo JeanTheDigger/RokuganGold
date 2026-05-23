@@ -318,7 +318,7 @@ static func resolve_cadence_sync(
 	var char_map: Dictionary = {}
 	for cid: int in court_char_ids:
 		for c: L5RCharacterData in characters:
-			if c.character_id == cid and c.cadence_trained:
+			if c.character_id == cid and c.cadence_trained and not CharacterStats.is_dead(c):
 				cadence_ids.append(cid)
 				char_map[cid] = c
 				break

@@ -876,3 +876,49 @@ func test_false_info_replaces_true_info() -> void:
 		"False info should replace true info for same target")
 	assert_true(actor.knowledge_pool[0].data.get("is_false", false),
 		"Entry should now be the false version")
+
+
+# -- Dead character guards (2026-05-23) ----------------------------------------
+
+func test_process_observe_court_skips_dead_attendees() -> void:
+	var observer := L5RCharacterData.new()
+	observer.character_id = 10
+	observer.character_name = "Observer"
+	observer.clan = "Lion"
+	observer.family = "Akodo"
+	observer.met_characters = []
+	observer.knowledge_pool = []
+	observer.known_contacts_by_clan = {}
+	observer.disposition_values = {}
+
+	var alive_attendee := L5RCharacterData.new()
+	alive_attendee.character_id = 20
+	alive_attendee.character_name = "Alive Courtier"
+	alive_attendee.clan = "Crane"
+	alive_attendee.family = "Doji"
+	alive_attendee.status = 4.0
+	alive_attendee.stamina = 2
+	alive_attendee.willpower = 2
+
+	var dead_attendee := L5RCharacterData.new()
+	dead_attendee.character_id = 30
+	dead_attendee.character_name = "Dead Courtier"
+	dead_attendee.clan = "Scorpion"
+	dead_attendee.family = "Bayushi"
+	dead_attendee.status = 5.0
+	dead_attendee.stamina = 2
+	dead_attendee.willpower = 2
+	dead_attendee.wounds_taken = 999
+
+	var attendees: Array = [alive_attendee, dead_attendee]
+	var discovered: Array = InformationSystem.process_observe_court(
+		observer, attendees, 3, 1,
+	)
+	# Only the alive attendee should be discovered
+	var discovered_ids: Array = []
+	for entry: KnowledgeEntry in discovered:
+		discovered_ids.append(entry.data.get("character_id", -1))
+	assert_true(20 in discovered_ids,
+		"Alive attendee should be discovered")
+	assert_false(30 in discovered_ids,
+		"Dead attendee should not be discovered")

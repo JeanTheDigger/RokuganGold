@@ -825,3 +825,25 @@ func test_apply_flags_non_doji_no_cadence_trained() -> void:
 	_char.skills["Sincerity"] = 2
 	SkillResolver.apply_technique_flags(_char)
 	assert_false(_char.cadence_trained, "non-Doji should not get cadence_trained")
+
+
+# -- Dead character guards (2026-05-23) ----------------------------------------
+
+func test_cadence_sync_skips_dead_characters() -> void:
+	var alive := _make_cadence_doji(1, [10, 20])
+	var dead := _make_cadence_doji(2, [30])
+	dead.stamina = 2
+	dead.willpower = 2
+	dead.wounds_taken = 999
+	var chars: Array = [alive, dead]
+	var court_ids: Array = [1, 2]
+	_engine.set_seed(42)
+	var results: Array = SkillResolver.resolve_cadence_sync(chars, court_ids, _engine)
+	# Dead character should not participate — fewer than 2 cadence-trained
+	# characters remain, so cadence sync should produce no results
+	assert_eq(results.size(), 0,
+		"Cadence sync should not fire with only one living cadence-trained character")
+	assert_false(10 in dead.topic_pool or 20 in dead.topic_pool,
+		"Dead character should not receive topics")
+	assert_false(30 in alive.topic_pool,
+		"Alive character should not receive topics from dead character")

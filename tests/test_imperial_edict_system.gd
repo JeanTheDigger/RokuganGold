@@ -1882,3 +1882,17 @@ func test_strip_autonomy_skips_dead_members() -> void:
 	var result: Dictionary = ImperialEdictSystem.apply_strip_autonomy(edict, [dead_member])
 	assert_eq(result.get("stripped_members", []).size(), 0,
 		"Dead members should not be stripped")
+
+func test_apply_appoint_position_skips_dead_character() -> void:
+	var dead_appointee := _make_clan_member(10, "Crane", 3.0)
+	dead_appointee.stamina = 2
+	dead_appointee.willpower = 2
+	dead_appointee.wounds_taken = 999
+	var edict := EdictData.new()
+	edict.edict_type = EdictData.EdictType.APPOINT_POSITION
+	edict.target_character_id = 10
+	var result: Dictionary = ImperialEdictSystem.apply_appoint_position(edict, [dead_appointee])
+	assert_true(result.get("character_not_found", false),
+		"Dead character should not be found for appointment")
+	assert_eq(dead_appointee.status, 3.0,
+		"Dead character status should not change")

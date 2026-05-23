@@ -453,6 +453,8 @@ static func process_seasonal_gempukku(
 			all_characters.append(rc)
 
 	for character: L5RCharacterData in characters:
+		if CharacterStats.is_dead(character):
+			continue
 		var char_province: int = settlement_province_map.get(
 			int(character.physical_location) if character.physical_location.is_valid_int() else -1, -1,
 		)

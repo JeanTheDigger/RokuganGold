@@ -985,7 +985,7 @@ static func advance_day(
 			bloodspeaker_cells, provinces, settlements, insurgencies,
 			next_insurgency_id, dice_engine, current_season, next_cell_id,
 			characters, characters_by_id, _si_spm,
-			season_meta, active_topics, next_topic_id, ic_day,
+			season_meta, active_topics, next_topic_id, ic_day, next_crisis_id,
 		)
 		_process_doshin_seasonal_recovery(world_states)
 		_tick_kuni_wards(season_meta)
@@ -1704,7 +1704,7 @@ static func _create_stipend_failure_topics(
 		topic.subject_character_id = lord_id
 		topic.subject_role = "NEGATIVE"
 		topic.ic_day_created = ic_day
-		topic.momentum = 0.0
+		topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)
 		active_topics.append(topic)
 		var holder_ids: Array = []
 		if lord_id >= 0:
@@ -2377,6 +2377,7 @@ static func _process_horde_assaults(
 				clan_str = prov.clan
 				if prov.active_crisis_id < 0:
 					prov.active_crisis_id = next_crisis_id[0]
+					prov.crisis_type = "shadowlands_incursion"
 					next_crisis_id[0] += 1
 			var topic := TopicData.new()
 			topic.topic_id = next_topic_id[0]
@@ -2508,6 +2509,8 @@ static func _refresh_from_the_ashes(
 	ic_day: int,
 ) -> void:
 	for c: L5RCharacterData in characters:
+		if CharacterStats.is_dead(c):
+			continue
 		if not c.school.begins_with("Asako Loremaster"):
 			continue
 		var ws: Dictionary = world_states.get(c.character_id, {})
@@ -2793,6 +2796,7 @@ static func _process_famine_crises(
 				clan = pd.clan
 				if pd.active_crisis_id < 0:
 					pd.active_crisis_id = next_crisis_id[0]
+					pd.crisis_type = "famine"
 					next_crisis_id[0] += 1
 			if not starving_by_clan.has(clan):
 				starving_by_clan[clan] = []
@@ -2874,7 +2878,9 @@ static func _process_famine_crises(
 			tracking.erase(province_id)
 			var recovered_prov: Variant = provinces.get(province_id, null)
 			if recovered_prov is ProvinceData:
-				(recovered_prov as ProvinceData).active_crisis_id = -1
+				var rec_pd: ProvinceData = recovered_prov as ProvinceData
+				rec_pd.active_crisis_id = -1
+				rec_pd.crisis_type = ""
 			if topic_3.provinces_affected.size() > 1:
 				topic_3.provinces_affected.erase(province_id)
 				results.append({
@@ -7192,8 +7198,10 @@ static func _process_insurgencies(
 		var ins_prov: Variant = provinces.get(new_ins.province_id, null)
 		if ins_prov is ProvinceData:
 			var ipd: ProvinceData = ins_prov as ProvinceData
+			ipd.active_insurgency_id = new_ins.insurgency_id
 			if ipd.active_crisis_id < 0:
 				ipd.active_crisis_id = next_crisis_id[0]
+				ipd.crisis_type = "insurgency"
 				next_crisis_id[0] += 1
 
 	next_insurgency_id[0] = result.get("next_id", next_insurgency_id[0])
@@ -7212,7 +7220,11 @@ static func _process_insurgencies(
 		insurgencies.erase(ins)
 		var rem_prov: Variant = provinces.get(ins.province_id, null)
 		if rem_prov is ProvinceData:
-			(rem_prov as ProvinceData).active_crisis_id = -1
+			var rpd: ProvinceData = rem_prov as ProvinceData
+			rpd.active_crisis_id = -1
+			rpd.crisis_type = ""
+			if rpd.active_insurgency_id == ins.insurgency_id:
+				rpd.active_insurgency_id = -1
 
 	return result
 
@@ -7352,6 +7364,7 @@ static func _process_bloodspeaker_network(
 	active_topics: Array = [],
 	next_topic_id: Array = [1000],
 	ic_day: int = 0,
+	next_crisis_id: Array = [1],
 ) -> Dictionary:
 	var maho_provinces: Array = _detect_maho_provinces(characters, characters_by_id, settlement_province_map)
 
@@ -7368,6 +7381,14 @@ static func _process_bloodspeaker_network(
 
 	for new_ins: InsurgencyData in result.get("new_insurgencies", []):
 		insurgencies.append(new_ins)
+		var bp_prov: Variant = provinces.get(new_ins.province_id, null)
+		if bp_prov is ProvinceData:
+			var bpd: ProvinceData = bp_prov as ProvinceData
+			bpd.active_insurgency_id = new_ins.insurgency_id
+			if bpd.active_crisis_id < 0:
+				bpd.active_crisis_id = next_crisis_id[0]
+				bpd.crisis_type = "insurgency"
+				next_crisis_id[0] += 1
 
 	var ptl_contribs: Dictionary = result.get("ptl_contributions", {})
 	for pid: int in ptl_contribs:

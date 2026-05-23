@@ -25,6 +25,7 @@ extends Resource
 
 @export var stability: float = 100.0
 @export var active_crisis_id: int = -1
+@export var crisis_type: String = ""
 @export var active_insurgency_id: int = -1
 @export var province_taint_level: float = 0.0
 @export var last_report_ic_day: int = -1

@@ -2320,6 +2320,7 @@ static func build_province_statuses_from_data(
 		ps.clan = pd.clan
 		ps.stability = pd.stability
 		ps.active_crisis_id = pd.active_crisis_id
+		ps.crisis_type = pd.crisis_type
 		ps.active_insurgency_id = pd.active_insurgency_id
 		for ins: Variant in active_insurgencies:
 			if ins is InsurgencyData and ins.province_id == pd.province_id:

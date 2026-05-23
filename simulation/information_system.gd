@@ -143,6 +143,8 @@ static func process_observe_court(
 	var discovered: Array = []
 	var unknown: Array = []
 	for a: L5RCharacterData in attendees:
+		if CharacterStats.is_dead(a):
+			continue
 		if a.character_id != observer.character_id and a.character_id not in observer.met_characters:
 			unknown.append(a)
 

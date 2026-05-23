@@ -676,3 +676,32 @@ func test_orientation_field_on_character_data() -> void:
 	assert_eq(c.orientation, "straight")
 	c.orientation = "bisexual"
 	assert_eq(c.orientation, "bisexual")
+
+
+# -- Dead character guards (2026-05-23) ----------------------------------------
+
+func test_natural_death_roll_skips_already_dead_characters() -> void:
+	var dead_char := L5RCharacterData.new()
+	dead_char.character_id = 50
+	dead_char.stamina = 2
+	dead_char.willpower = 2
+	dead_char.wounds_taken = 999
+	dead_char.age = 80  # high age guarantees natural death roll would succeed
+	dead_char.physical_location = "100"
+
+	var alive_char := L5RCharacterData.new()
+	alive_char.character_id = 51
+	alive_char.stamina = 2
+	alive_char.willpower = 2
+	alive_char.wounds_taken = 0
+	alive_char.age = 20  # young age = 0% chance of natural death
+	alive_char.physical_location = "100"
+
+	var children: Array = []
+	var characters: Array = [dead_char, alive_char]
+	var next_id: Array = [200]
+	var result: Dictionary = GempukkuSystem.process_seasonal_gempukku(
+		children, characters, next_id, _dice, 6480,
+	)
+	assert_false(50 in result["natural_deaths"],
+		"Already dead character should not appear in natural_deaths")

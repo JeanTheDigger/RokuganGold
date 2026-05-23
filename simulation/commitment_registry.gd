@@ -326,7 +326,7 @@ static func process_deadlines(
 			continue
 
 		var debtor: L5RCharacterData = debtor_lookup.get(c.debtor_npc_id)
-		if debtor == null:
+		if debtor == null or CharacterStats.is_dead(debtor):
 			continue
 		var conseq: Dictionary = apply_consequences(c, debtor, characters_by_id)
 		results.append({

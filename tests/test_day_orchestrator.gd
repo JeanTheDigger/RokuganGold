@@ -13859,3 +13859,136 @@ func test_build_lord_map_skips_dead_characters() -> void:
 		"Dead character should not appear in lord map")
 	assert_true(lord_map.has(2),
 		"Alive character should appear in lord map")
+
+
+func test_refresh_from_the_ashes_skips_dead_asako() -> void:
+	var dead_asako := L5RCharacterData.new()
+	dead_asako.character_id = 200
+	dead_asako.character_name = "Dead Asako"
+	dead_asako.school = "Asako Loremaster"
+	dead_asako.clan = "Phoenix"
+	dead_asako.stamina = 2
+	dead_asako.willpower = 2
+	dead_asako.wounds_taken = 999
+	dead_asako.awareness = 4
+	dead_asako.intelligence = 3
+	dead_asako.perception = 3
+	dead_asako.reflexes = 3
+	dead_asako.agility = 3
+	dead_asako.strength = 3
+	dead_asako.void_ring = 3
+	dead_asako.skills = {"Lore: History": 5, "Courtier": 3}
+	dead_asako.from_the_ashes = {"location_id": "100", "expires_ic_day": 999}
+	dead_asako.physical_location = "100"
+
+	var alive_asako := L5RCharacterData.new()
+	alive_asako.character_id = 201
+	alive_asako.character_name = "Alive Asako"
+	alive_asako.school = "Asako Loremaster"
+	alive_asako.clan = "Phoenix"
+	alive_asako.stamina = 3
+	alive_asako.willpower = 3
+	alive_asako.awareness = 4
+	alive_asako.intelligence = 3
+	alive_asako.perception = 3
+	alive_asako.reflexes = 3
+	alive_asako.agility = 3
+	alive_asako.strength = 3
+	alive_asako.void_ring = 3
+	alive_asako.skills = {"Lore: History": 5, "Courtier": 3}
+	alive_asako.from_the_ashes = {}
+	alive_asako.physical_location = "100"
+
+	var ws: Dictionary = {
+		200: {"context_flag": Enums.ContextFlag.AT_COURT},
+		201: {"context_flag": Enums.ContextFlag.AT_COURT},
+	}
+
+	DayOrchestrator._refresh_from_the_ashes(
+		[dead_asako, alive_asako], ws, _dice, 5
+	)
+	# Dead asako's buff should remain unchanged (not processed)
+	assert_eq(dead_asako.from_the_ashes.get("location_id", ""), "100",
+		"Dead Asako's from_the_ashes should not be modified")
+
+
+# -- Insurgency province linkage (active_insurgency_id) ------------------------
+
+func test_insurgency_spawn_sets_active_insurgency_id() -> void:
+	var p := ProvinceData.new()
+	p.province_id = 5
+	p.clan = "Crab"
+	p.stability = 20.0
+	p.province_taint_level = 5.0
+	p.adjacent_province_ids = []
+	var provinces: Dictionary = {5: p}
+	var insurgencies: Array = []
+	var next_iid: Array = [1]
+	var next_cid: Array = [70]
+	var ins := InsurgencyData.new()
+	ins.insurgency_id = 10
+	ins.province_id = 5
+	ins.strength = 3
+	ins.insurgency_type = Enums.InsurgencyType.RONIN_BANDIT
+	insurgencies.append(ins)
+	p.active_insurgency_id = ins.insurgency_id
+	assert_eq(p.active_insurgency_id, 10,
+		"Province should track active insurgency ID")
+
+
+func test_insurgency_removal_clears_active_insurgency_id() -> void:
+	var p := ProvinceData.new()
+	p.province_id = 5
+	p.clan = "Crab"
+	p.stability = 60.0
+	p.province_taint_level = 0.0
+	p.active_insurgency_id = 10
+	p.active_crisis_id = 70
+	p.adjacent_province_ids = []
+	var provinces: Dictionary = {5: p}
+	var ins := InsurgencyData.new()
+	ins.insurgency_id = 10
+	ins.province_id = 5
+	ins.strength = 0
+	var insurgencies: Array = [ins]
+	var removed: Array = []
+	for i: InsurgencyData in insurgencies:
+		if i.strength <= 0:
+			removed.append(i)
+	for i: InsurgencyData in removed:
+		insurgencies.erase(i)
+		var rem_prov: Variant = provinces.get(i.province_id, null)
+		if rem_prov is ProvinceData:
+			var rpd: ProvinceData = rem_prov as ProvinceData
+			rpd.active_crisis_id = -1
+			if rpd.active_insurgency_id == i.insurgency_id:
+				rpd.active_insurgency_id = -1
+	assert_eq(p.active_insurgency_id, -1,
+		"active_insurgency_id should clear when insurgency resolved")
+	assert_eq(p.active_crisis_id, -1,
+		"active_crisis_id should clear when insurgency resolved")
+
+
+func test_stipend_failure_topic_has_nonzero_momentum() -> void:
+	var lord := L5RCharacterData.new()
+	lord.character_id = 10
+	lord.character_name = "Test Lord"
+	var retainer := L5RCharacterData.new()
+	retainer.character_id = 20
+	retainer.character_name = "Test Retainer"
+	retainer.lord_id = 10
+	retainer.physical_location = "100"
+	var chars_by_id: Dictionary = {10: lord, 20: retainer}
+	var topics: Array = []
+	var next_tid: Array = [500]
+	var stipends: Dictionary = {
+		20: {"generates_topic": true, "lord_id": 10},
+	}
+	DayOrchestrator._create_stipend_failure_topics(
+		stipends, chars_by_id, topics, next_tid, 42,
+	)
+	assert_eq(topics.size(), 1, "Should create one stipend failure topic")
+	assert_gt(topics[0].momentum, 0.0,
+		"Stipend failure topic should have non-zero momentum")
+	assert_eq(topics[0].ic_day_created, 42,
+		"Stipend failure topic should have ic_day_created set")

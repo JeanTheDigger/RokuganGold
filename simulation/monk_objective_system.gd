@@ -404,7 +404,7 @@ static func _decompose_fight_bandits(
 
 	for ps: NPCDataStructures.ProvinceStatus in ctx.province_statuses:
 		if ps is NPCDataStructures.ProvinceStatus:
-			if ps.crisis_type == "bandit" or ps.crisis_type == "ronin" or ps.stability < 50.0:
+			if ps.insurgency_type == "RONIN_BANDIT" or ps.insurgency_type == "PEASANT_REVOLT" or ps.stability < 50.0:
 				return _make_need("INVESTIGATE_THREAT", 2, {"target_province_id": ps.province_id})
 
 	match ctx.context_flag:

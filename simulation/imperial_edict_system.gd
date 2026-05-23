@@ -725,6 +725,8 @@ static func apply_appoint_position(
 	if edict.edict_type != EdictData.EdictType.APPOINT_POSITION:
 		return {"applied": false, "reason": "wrong_type"}
 	for c: L5RCharacterData in characters:
+		if CharacterStats.is_dead(c):
+			continue
 		if c.character_id == edict.target_character_id:
 			var old_status: float = c.status
 			HonorGlorySystem.apply_status_change(c, APPOINTMENT_STATUS_GAIN)

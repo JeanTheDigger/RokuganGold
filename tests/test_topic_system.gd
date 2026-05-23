@@ -742,3 +742,60 @@ func test_broadcast_no_duplicate_knowledge_entry():
 	)
 	# Already in topic_pool → skipped, no knowledge entry either
 	assert_eq(c.knowledge_pool.size(), 0)
+
+
+# -- Dead character guards (2026-05-23) ----------------------------------------
+
+func test_broadcast_targets_skips_dead_characters() -> void:
+	var alive := _make_char(1, "Crane")
+	alive.stamina = 2
+	alive.willpower = 2
+	alive.knowledge_pool = []
+	var dead := _make_char(2, "Crane")
+	dead.stamina = 2
+	dead.willpower = 2
+	dead.wounds_taken = 999
+	dead.knowledge_pool = []
+	var t: TopicData = TopicMomentumSystem.create_topic(
+		100, "Test", TopicData.Tier.TIER_1, TopicData.Category.POLITICAL,
+		0, 80.0, [10], "Crane"
+	)
+	var chars: Array = [alive, dead]
+	var char_prov: Dictionary = {1: 10, 2: 10}
+	var prov_clan: Dictionary = {10: "Crane"}
+	var targets: Array = TopicMomentumSystem._get_broadcast_targets(
+		t, chars, char_prov, prov_clan
+	)
+	for tgt: L5RCharacterData in targets:
+		assert_ne(tgt.character_id, 2,
+			"Dead character should not appear in broadcast targets")
+	assert_true(targets.size() >= 1,
+		"Alive character should be in broadcast targets")
+
+func test_broadcast_public_knowledge_skips_dead_characters() -> void:
+	var alive := _make_char(1, "Crane")
+	alive.stamina = 2
+	alive.willpower = 2
+	alive.knowledge_pool = []
+	var dead := _make_char(2, "Crane")
+	dead.stamina = 2
+	dead.willpower = 2
+	dead.wounds_taken = 999
+	dead.knowledge_pool = []
+	var t: TopicData = TopicMomentumSystem.create_topic(
+		100, "Test", TopicData.Tier.TIER_1, TopicData.Category.POLITICAL,
+		0, 80.0, [10], "Crane"
+	)
+	var chars: Array = [alive, dead]
+	var char_prov: Dictionary = {1: 10, 2: 10}
+	var prov_clan: Dictionary = {10: "Crane"}
+	var results: Array = TopicMomentumSystem.broadcast_public_knowledge(
+		[t], chars, char_prov, prov_clan, {}, 1
+	)
+	for r: Dictionary in results:
+		assert_ne(r.get("character_id", -1), 2,
+			"Dead character should not receive public knowledge")
+	assert_eq(dead.knowledge_pool.size(), 0,
+		"Dead character should not gain knowledge entries")
+	assert_true(100 in alive.topic_pool,
+		"Alive character should receive the topic")
