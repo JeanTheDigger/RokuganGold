@@ -1858,7 +1858,7 @@ static func _execute_perform_worship(
 	if directed_fortune >= 0:
 		ring_id = WorshipSystem.FORTUNE_RING.get(directed_fortune, Enums.Ring.VOID)
 	var ring_value: int = CharacterStats.get_ring_value(character, ring_id)
-	var theology_rank: int = character.skills.get("Theology", 0)
+	var theology_rank: int = character.skills.get("Lore: Theology", 0)
 
 	var location_type: String = action.metadata.get("location_type", "roadside_shrine")
 
@@ -3165,7 +3165,14 @@ static func _execute_contested_court_action(
 	var skill_entry: Dictionary = action_skill_map.get(action_id, {})
 	var a_skill: String = _CONTESTED_ATTACKER_SKILL.get(action_id, skill_entry.get("primary", "Courtier"))
 	var a_trait_name: String = _CONTESTED_ATTACKER_TRAIT.get(action_id, skill_entry.get("secondary", "Awareness"))
-	var a_skill_rank: int = character.skills.get(a_skill, 0)
+	var a_skill_rank: int = 0
+	if a_skill == "Lore":
+		for sk: String in character.skills:
+			if sk.begins_with("Lore:") and character.skills[sk] > a_skill_rank:
+				a_skill_rank = character.skills[sk]
+				a_skill = sk
+	else:
+		a_skill_rank = character.skills.get(a_skill, 0)
 	var a_trait_val: int = _get_trait_value_by_name(character, a_trait_name)
 	var wc_bonus: int = _get_winter_court_skill_bonus(character, a_skill, ctx)
 	var attacker_roll: int = dice_engine.roll_skill_check(

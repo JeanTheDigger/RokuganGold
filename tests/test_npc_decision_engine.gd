@@ -1633,6 +1633,34 @@ func test_competence_modifier_unknown_action() -> void:
 	assert_eq(result, 0.0, "Unknown action should return 0")
 
 
+func test_competence_modifier_lore_picks_best_sub_skill() -> void:
+	var tables: Dictionary = {
+		"action_skill_map": {
+			"IMPRESS": {"primary": "Lore", "secondary": "Etiquette"},
+		},
+		"competence_table": {"0": -20, "1": -10, "2": -5, "3": 0, "4": 5, "5": 10, "6": 15, "7": 20},
+	}
+	var skills: Dictionary = {"Lore: Heraldry": 2, "Lore: Theology": 5, "Etiquette": 3}
+	var result: float = NPCDecisionEngine._compute_competence_modifier(
+		"IMPRESS", skills, tables,
+	)
+	assert_almost_eq(result, 10.0, 0.01, "Should use best Lore sub-skill (Theology rank 5 = +10)")
+
+
+func test_competence_modifier_lore_no_sub_skills() -> void:
+	var tables: Dictionary = {
+		"action_skill_map": {
+			"IMPRESS": {"primary": "Lore", "secondary": "Etiquette"},
+		},
+		"competence_table": {"0": -20, "1": -10, "2": -5, "3": 0, "4": 5, "5": 10, "6": 15, "7": 20},
+	}
+	var skills: Dictionary = {"Etiquette": 3}
+	var result: float = NPCDecisionEngine._compute_competence_modifier(
+		"IMPRESS", skills, tables,
+	)
+	assert_almost_eq(result, -20.0, 0.01, "No Lore sub-skills means rank 0 = -20")
+
+
 # -- Province status rice stockpile population ---------------------------------
 
 func test_province_status_rice_stockpile_from_settlements() -> void:

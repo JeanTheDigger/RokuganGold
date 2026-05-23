@@ -56,7 +56,7 @@
     "secondary": "Intelligence"
   },
   "BUILD_SHRINE": {
-    "primary": "Theology",
+    "primary": "Lore: Theology",
     "secondary": "Awareness"
   },
   "CALL_COURT": {
@@ -216,11 +216,11 @@
     "secondary": "Intelligence"
   },
   "FOUND_MONASTERY": {
-    "primary": "Theology",
+    "primary": "Lore: Theology",
     "secondary": "Awareness"
   },
   "FOUND_TEMPLE": {
-    "primary": "Theology",
+    "primary": "Lore: Theology",
     "secondary": "Awareness"
   },
   "FOUND_VILLAGE": {
@@ -324,11 +324,11 @@
     "secondary": null
   },
   "PERFORM_RITUAL": {
-    "primary": "Theology",
+    "primary": "Lore: Theology",
     "secondary": null
   },
   "PERFORM_WORSHIP": {
-    "primary": "Theology",
+    "primary": "Lore: Theology",
     "secondary": null
   },
   "PERSUADE": {

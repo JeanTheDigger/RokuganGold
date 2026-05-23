@@ -22,7 +22,7 @@ func before_each() -> void:
 	_monk.honor = 5.0
 	_monk.glory = 2.0
 	_monk.status = 2.0
-	_monk.skills = {"Meditation": 3, "Theology": 2}
+	_monk.skills = {"Meditation": 3, "Lore: Theology": 2}
 	_monk.emphases = {}
 	_monk.reflexes = 3
 	_monk.awareness = 3

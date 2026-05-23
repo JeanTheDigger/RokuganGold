@@ -281,7 +281,7 @@ static func resolve_npc_event(
 	dice_engine: DiceEngine,
 ) -> Dictionary:
 	var tn: int = NPC_RESOLUTION_BASE_TN.get(event.severity, 20)
-	var theology_rank: int = shugenja.skills.get("Theology", 0)
+	var theology_rank: int = shugenja.skills.get("Lore: Theology", 0)
 	var trait_name: String = ""
 	var trait_value: int = 0
 

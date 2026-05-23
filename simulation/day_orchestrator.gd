@@ -7350,7 +7350,7 @@ static func _find_province_shugenja(
 		var char_prov: int = settlement_province_map.get(settlement_id, -1)
 		if char_prov != province_id:
 			continue
-		var theology: int = c.skills.get("Theology", 0)
+		var theology: int = c.skills.get("Lore: Theology", 0)
 		if theology > best_rank:
 			best_rank = theology
 			best = c
@@ -14659,8 +14659,8 @@ const POSITION_SKILL_WEIGHTS: Dictionary = {
 	"Emerald Magistrate": ["Investigation", "Lore: Law", "Etiquette"],
 	"Garrison Commander": ["Battle", "Defense", "Kenjutsu"],
 	"military_commander": ["Battle", "War", "Kenjutsu"],
-	"Temple Head": ["Theology", "Meditation", "Lore: Theology"],
-	"Monastery Abbot": ["Theology", "Meditation", "Jiujutsu"],
+	"Temple Head": ["Lore: Theology", "Meditation"],
+	"Monastery Abbot": ["Lore: Theology", "Meditation", "Jiujutsu"],
 	"School Master": ["Lore: Theology", "Instruction"],
 }
 

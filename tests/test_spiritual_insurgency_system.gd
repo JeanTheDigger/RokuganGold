@@ -19,7 +19,7 @@ func before_each() -> void:
 	_shugenja.clan = "Phoenix"
 	_shugenja.school_type = Enums.SchoolType.SHUGENJA
 	_shugenja.school_name = "Isawa Shugenja"
-	_shugenja.skills = {"Theology": 4, "Meditation": 3}
+	_shugenja.skills = {"Lore: Theology": 4, "Meditation": 3}
 	_shugenja.awareness = 4
 	_shugenja.willpower = 3
 	_shugenja.perception = 3
@@ -323,7 +323,7 @@ func test_battle_trigger_very_high_casualties_severe() -> void:
 
 
 func test_npc_resolution_realm_overlap_success() -> void:
-	_shugenja.skills["Theology"] = 5
+	_shugenja.skills["Lore: Theology"] = 5
 	_shugenja.awareness = 5
 	_dice_engine.set_seed(999)
 	var event: SpiritualInsurgencyData = _make_event(
@@ -369,7 +369,7 @@ func test_npc_resolution_void_imbalance_uses_void() -> void:
 
 
 func test_npc_resolution_marks_resolved_on_success() -> void:
-	_shugenja.skills["Theology"] = 7
+	_shugenja.skills["Lore: Theology"] = 7
 	_shugenja.awareness = 5
 	_dice_engine.set_seed(100)
 	var event: SpiritualInsurgencyData = _make_event(Enums.SpiritualSeverity.MILD)
@@ -682,19 +682,19 @@ func test_find_province_shugenja_returns_best_theology() -> void:
 	shugenja_a.character_id = 10
 	shugenja_a.school_type = Enums.SchoolType.SHUGENJA
 	shugenja_a.physical_location = "100"
-	shugenja_a.skills = {"Theology": 3}
+	shugenja_a.skills = {"Lore: Theology": 3}
 	shugenja_a.wounds_taken = 0
 	var shugenja_b := L5RCharacterData.new()
 	shugenja_b.character_id = 11
 	shugenja_b.school_type = Enums.SchoolType.SHUGENJA
 	shugenja_b.physical_location = "100"
-	shugenja_b.skills = {"Theology": 5}
+	shugenja_b.skills = {"Lore: Theology": 5}
 	shugenja_b.wounds_taken = 0
 	var bushi := L5RCharacterData.new()
 	bushi.character_id = 12
 	bushi.school_type = Enums.SchoolType.BUSHI
 	bushi.physical_location = "100"
-	bushi.skills = {"Theology": 7}
+	bushi.skills = {"Lore: Theology": 7}
 	bushi.wounds_taken = 0
 
 	var result: L5RCharacterData = DayOrchestrator._find_province_shugenja(
@@ -710,7 +710,7 @@ func test_find_province_shugenja_excludes_dead() -> void:
 	dead_shugenja.character_id = 10
 	dead_shugenja.school_type = Enums.SchoolType.SHUGENJA
 	dead_shugenja.physical_location = "100"
-	dead_shugenja.skills = {"Theology": 5}
+	dead_shugenja.skills = {"Lore: Theology": 5}
 	dead_shugenja.wounds_taken = 9999
 
 	var result: L5RCharacterData = DayOrchestrator._find_province_shugenja(
@@ -753,7 +753,7 @@ func test_process_spiritual_insurgency_generates_events_and_topics() -> void:
 
 
 func test_process_spiritual_insurgency_resolves_with_shugenja() -> void:
-	_shugenja.skills["Theology"] = 6
+	_shugenja.skills["Lore: Theology"] = 6
 	_shugenja.awareness = 5
 	var spm: Dictionary = {100: 10}
 	var event: SpiritualInsurgencyData = _make_event(Enums.SpiritualSeverity.MILD)
@@ -803,7 +803,7 @@ func test_resolved_events_removed_from_active_list() -> void:
 
 
 func test_honor_glory_applied_on_successful_resolution() -> void:
-	_shugenja.skills["Theology"] = 8
+	_shugenja.skills["Lore: Theology"] = 8
 	_shugenja.awareness = 6
 	_shugenja.honor = 5.0
 	_shugenja.glory = 3.0

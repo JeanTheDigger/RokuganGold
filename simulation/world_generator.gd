@@ -213,7 +213,7 @@ const SCHOOL_DATA: Dictionary = {
 		"clan": "Phoenix", "family": "Shiba",
 		"type": Enums.SchoolType.BUSHI,
 		"benefit": "perception", "honor": 5.5,
-		"skills": ["Defense", "Kenjutsu", "Kyujutsu", "Meditation", "Spears", "Theology"],
+		"skills": ["Defense", "Kenjutsu", "Kyujutsu", "Meditation", "Spears", "Lore: Theology"],
 		"wildcards": ["Bugei"],
 		"focus_rings": [Enums.Ring.WATER, Enums.Ring.EARTH],
 		"skill_rank_2": [],

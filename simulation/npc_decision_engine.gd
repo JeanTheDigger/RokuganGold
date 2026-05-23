@@ -1648,7 +1648,13 @@ static func _compute_competence_modifier(
 		return 0.0
 
 	var competence_table: Dictionary = scoring_tables.get("competence_table", {})
-	var rank: int = int(skill_ranks.get(primary_skill, 0))
+	var rank: int = 0
+	if primary_skill == "Lore":
+		for sk: String in skill_ranks:
+			if sk.begins_with("Lore:") and int(skill_ranks[sk]) > rank:
+				rank = int(skill_ranks[sk])
+	else:
+		rank = int(skill_ranks.get(primary_skill, 0))
 	var modifier: float = float(competence_table.get(str(rank), competence_table.get(rank, -20)))
 
 	var secondary_raw: Variant = action_skills.get("secondary", "")

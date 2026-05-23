@@ -25,7 +25,7 @@ func _make_char(id: int, clan: String = "Crane", school_type: Enums.SchoolType =
 	c.honor = 5.0
 	c.glory = 3.0
 	c.status = 4.0
-	c.skills = {"Theology": 3, "Courtier": 3}
+	c.skills = {"Lore: Theology": 3, "Courtier": 3}
 	c.emphases = {}
 	c.reflexes = 3
 	c.awareness = 3
@@ -116,7 +116,7 @@ func test_executor_monk_generates_2_wp() -> void:
 
 func test_executor_shugenja_gets_bonus_wp() -> void:
 	var c := _make_char(1, "Phoenix", Enums.SchoolType.SHUGENJA)
-	c.skills["Theology"] = 5
+	c.skills["Lore: Theology"] = 5
 	c.intelligence = 4
 	c.agility = 4
 	var action := _make_action(Enums.GreatFortune.BISHAMON, "temple")
@@ -896,7 +896,7 @@ func test_rank4_commander_risk_adds_bonus_for_high_rank() -> void:
 	c.willpower = 5
 	c.strength = 5
 	c.void_ring = 5
-	c.skills = {"Battle": 5, "Theology": 3, "Courtier": 3}
+	c.skills = {"Battle": 5, "Lore: Theology": 3, "Courtier": 3}
 	var company := ArmyCombatSystem.create_company(1, Enums.CompanyUnitType.BUSHI_RETAINER, c.character_id, 5)
 	var bc: Dictionary = ArmyCombatSystem.make_battle_company(company, 0, 0, "attacker", c)
 	var states: Array = [bc]
@@ -926,7 +926,7 @@ func test_bishamon_and_jurojin_risk_stacks() -> void:
 	c.willpower = 5
 	c.strength = 5
 	c.void_ring = 5
-	c.skills = {"Battle": 5, "Theology": 3, "Courtier": 3}
+	c.skills = {"Battle": 5, "Lore: Theology": 3, "Courtier": 3}
 	var company := ArmyCombatSystem.create_company(1, Enums.CompanyUnitType.BUSHI_RETAINER, c.character_id, 5)
 	var bc: Dictionary = ArmyCombatSystem.make_battle_company(company, 0, 0, "attacker", c)
 	var states: Array = [bc]
