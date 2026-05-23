@@ -538,7 +538,7 @@ static func compute_glory_rewards(
 		rewards.append({"character_id": host_daimyo_id, "glory_change": GLORY_HOST_FAMILY_DAIMYO})
 
 	var host_champion: L5RCharacterData = _find_clan_champion(court.host_clan, characters_by_id)
-	if host_champion != null and host_champion.character_id != host_daimyo_id:
+	if host_champion != null and not CharacterStats.is_dead(host_champion) and host_champion.character_id != host_daimyo_id:
 		rewards.append({"character_id": host_champion.character_id, "glory_change": GLORY_HOST_CLAN_CHAMPION})
 
 	for attendee_id: int in court.attendee_ids:
@@ -547,7 +547,7 @@ static func compute_glory_rewards(
 		if host_champion != null and attendee_id == host_champion.character_id:
 			continue
 		var attendee: L5RCharacterData = characters_by_id.get(attendee_id) as L5RCharacterData
-		if attendee != null and attendee.clan == court.host_clan:
+		if attendee != null and not CharacterStats.is_dead(attendee) and attendee.clan == court.host_clan:
 			rewards.append({"character_id": attendee_id, "glory_change": GLORY_HOST_CLAN_DELEGATE})
 
 	return rewards

@@ -366,3 +366,21 @@ func test_repeated_raids_compound_negative_baseline() -> void:
 	assert_eq(_clan_baselines[CollectiveDisposition.make_pair_key("Crab", "Crane")], -30)
 	# 5 × -4 = -20 ripple on Hida||Doji (starting 0) → -20.
 	assert_eq(_family_baselines[CollectiveDisposition.make_pair_key("Hida", "Doji")], -20)
+
+
+func test_seed_disposition_clamped_to_range() -> void:
+	var a: L5RCharacterData = _make(1, "Crab", "Hida")
+	var b: L5RCharacterData = _make(2, "Crane", "Doji")
+	var extreme_clan: Dictionary = {}
+	extreme_clan[CollectiveDisposition.make_pair_key("Crab", "Crane")] = -100
+	var extreme_family: Dictionary = {}
+	extreme_family[CollectiveDisposition.make_pair_key("Hida", "Doji")] = -100
+	var result: int = CollectiveDisposition.seed_disposition_if_missing(
+		a, b, extreme_clan, extreme_family,
+	)
+	assert_true(result >= -100 and result <= 100,
+		"Seed disposition should be clamped to [-100, 100]")
+	assert_true(a.disposition_values[b.character_id] >= -100,
+		"Stored disposition should be >= -100")
+	assert_true(a.disposition_values[b.character_id] <= 100,
+		"Stored disposition should be <= 100")

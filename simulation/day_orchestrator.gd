@@ -1352,13 +1352,16 @@ static func _process_ooc_day_tick(
 			c.disposition_values[target_id] = clampi(self_old + delta, -100, 100)
 			if characters_by_id.has(target_id):
 				var target: L5RCharacterData = characters_by_id[target_id] as L5RCharacterData
-				var other_old: int = target.disposition_values.get(c.character_id, 0)
-				target.disposition_values[c.character_id] = clampi(other_old + delta, -100, 100)
+				if not CharacterStats.is_dead(target):
+					var other_old: int = target.disposition_values.get(c.character_id, 0)
+					target.disposition_values[c.character_id] = clampi(other_old + delta, -100, 100)
 
 		# met_characters — add newly met characters via add_contact (s55.7).
 		for met_id: int in wind_result["met_character_ids"]:
 			if characters_by_id.has(met_id):
 				var met_char: L5RCharacterData = characters_by_id[met_id] as L5RCharacterData
+				if CharacterStats.is_dead(met_char):
+					continue
 				InformationSystem.add_contact(c, met_id, met_char.clan, met_char)
 				InformationSystem.add_contact(met_char, c.character_id, c.clan, c)
 
@@ -2635,7 +2638,7 @@ static func _process_miya_blessing_followup(
 
 	if miya_rep_id >= 0 and emperor_id >= 0:
 		var miya: L5RCharacterData = characters_by_id.get(miya_rep_id)
-		if miya != null:
+		if miya != null and not CharacterStats.is_dead(miya):
 			var current: int = int(miya.disposition_values.get(emperor_id, 0))
 			miya.disposition_values[emperor_id] = clampi(current - 3, -100, 100)
 
@@ -4712,7 +4715,7 @@ static func _process_shadow_target_writebacks(
 
 		if not success and margin <= -10:
 			var target: L5RCharacterData = characters_by_id.get(target_id)
-			if target != null:
+			if target != null and not CharacterStats.is_dead(target):
 				var disp: int = target.disposition_values.get(shadow_id, 0)
 				target.disposition_values[shadow_id] = clampi(disp - 5, -100, 100)
 			HonorGlorySystem.apply_glory_change(shadow, CrimeSystem.LOW_SKILL_DISCOVERY_GLORY)
@@ -4777,6 +4780,8 @@ static func _process_introduction_writebacks(
 		var actor: L5RCharacterData = characters_by_id.get(actor_id)
 		var contact: L5RCharacterData = characters_by_id.get(contact_id)
 		if actor == null or contact == null:
+			continue
+		if CharacterStats.is_dead(actor) or CharacterStats.is_dead(contact):
 			continue
 		InformationSystem.add_contact(actor, contact_id, contact.clan)
 		var disp_gain: int = effects.get("disposition_gain", 0)
@@ -6914,7 +6919,7 @@ static func _apply_favor_breach(
 		HonorGlorySystem.apply_glory_change(debtor, glory_loss)
 
 	var creditor: L5RCharacterData = characters_by_id.get(creditor_id)
-	if creditor != null:
+	if creditor != null and not CharacterStats.is_dead(creditor):
 		var disp_change: int = breach.get("disposition_change", 0)
 		var disp_floor: int = breach.get("disposition_floor", -100)
 		if disp_change != 0:
@@ -6927,7 +6932,7 @@ static func _apply_favor_breach(
 	if witness_loss != 0:
 		for wid: Variant in witness_ids:
 			var witness: L5RCharacterData = characters_by_id.get(wid)
-			if witness == null or witness.character_id == debtor_id:
+			if witness == null or CharacterStats.is_dead(witness) or witness.character_id == debtor_id:
 				continue
 			var old_val_2: int = witness.disposition_values.get(debtor_id, 0)
 			var new_val_2: int = clampi(old_val_2 + witness_loss, -100, 100)
@@ -8559,7 +8564,7 @@ static func _process_levy_suspicion(
 			var family_daimyo: L5RCharacterData = (
 				characters_by_id.get(lord.lord_id) if lord.lord_id >= 0 else null
 			)
-			if family_daimyo != null:
+			if family_daimyo != null and not CharacterStats.is_dead(family_daimyo):
 				var cur_fd: int = family_daimyo.disposition_values.get(lord_id, 0)
 				family_daimyo.disposition_values[lord_id] = clampi(
 					cur_fd + disposition_penalty, -100, 100,
@@ -9322,7 +9327,7 @@ static func _check_dragon_schism_siege_events(
 		var disp_change: int = int(assault_result.get("empire_disposition_change", 0))
 		if disp_change != 0 and fc_id >= 0:
 			for c: L5RCharacterData in characters:
-				if c.status < 5.0:
+				if CharacterStats.is_dead(c) or c.status < 5.0:
 					continue
 				if c.clan == "Dragon":
 					continue
@@ -11663,7 +11668,7 @@ static func _apply_early_departure(
 		HonorGlorySystem.apply_glory_change(character, glory_loss)
 	if disp_cost != 0:
 		var host: L5RCharacterData = characters_by_id.get(court.host_lord_id) as L5RCharacterData
-		if host != null:
+		if host != null and not CharacterStats.is_dead(host):
 			var current: int = int(host.disposition_values.get(character.character_id, 0))
 			host.disposition_values[character.character_id] = clampi(current + disp_cost, -100, 100)
 
@@ -13399,7 +13404,7 @@ static func _apply_marriage_rejection(
 	var disp_change: int = effects.get("disposition_change", -3)
 
 	var target_lord: L5RCharacterData = characters_by_id.get(target_lord_id) as L5RCharacterData
-	if target_lord == null:
+	if target_lord == null or CharacterStats.is_dead(target_lord):
 		return {"applied": false, "reason": "target_lord_not_found", "rejected": true}
 
 	var current: int = target_lord.disposition_values.get(proposing_lord_id, 0)
@@ -15054,7 +15059,7 @@ static func _process_court_action_effects(
 			var witnesses: Array = effects.get("witnesses", [])
 			for wid: Variant in witnesses:
 				var w: L5RCharacterData = characters_by_id.get(wid)
-				if w != null and target_id >= 0:
+				if w != null and not CharacterStats.is_dead(w) and target_id >= 0:
 					var current: int = w.disposition_values.get(target_id, 0)
 					w.disposition_values[target_id] = clampi(current + per_witness, -100, 100)
 
@@ -15076,10 +15081,10 @@ static func _process_court_action_effects(
 					)
 
 		# Play a Game bilateral disposition
-		if effects.has("play_game_result") and target != null:
+		if effects.has("play_game_result") and target != null and not CharacterStats.is_dead(target):
 			var actor_id_2: int = entry.get("character_id", -1)
 			var actor_2: L5RCharacterData = characters_by_id.get(actor_id_2)
-			if actor_2 != null:
+			if actor_2 != null and not CharacterStats.is_dead(actor_2):
 				var a_disp: int = effects.get("a_disposition_toward_b", 0)
 				var b_disp: int = effects.get("b_disposition_toward_a", 0)
 				var cur_a: int = actor_2.disposition_values.get(target_id, 0)
@@ -15088,7 +15093,7 @@ static func _process_court_action_effects(
 				target.disposition_values[actor_id_2] = clampi(cur_b + b_disp, -100, 100)
 
 		# Disclose downstream opinion transfer
-		if effects.has("disclosed_opinion") and target != null:
+		if effects.has("disclosed_opinion") and target != null and not CharacterStats.is_dead(target):
 			var about_id: int = effects.get("disclose_about_id", -1)
 			var opinion: int = effects["disclosed_opinion"]
 			if about_id >= 0 and opinion != 0:
@@ -15126,7 +15131,7 @@ static func _process_court_action_effects(
 			for pw: Dictionary in pw_results:
 				var wid: int = pw.get("witness_id", -1)
 				var w_2: L5RCharacterData = characters_by_id.get(wid)
-				if w_2 == null:
+				if w_2 == null or CharacterStats.is_dead(w_2):
 					continue
 				var a_disp_change: int = pw.get("a_disposition_change", 0)
 				var b_disp_change: int = pw.get("b_disposition_change", 0)
@@ -17791,6 +17796,8 @@ static func _process_request_hunt_invitation_writebacks(
 		var requester: L5RCharacterData = characters_by_id.get(requester_id)
 		if host == null or requester == null:
 			continue
+		if CharacterStats.is_dead(host) or CharacterStats.is_dead(requester):
+			continue
 
 		var host_disp: int = host.disposition_values.get(requester_id, 0)
 		var tier: DispositionSystem.Tier = DispositionSystem.get_tier(host_disp)
@@ -17835,7 +17842,7 @@ static func _process_cancel_hunt_writebacks(
 		for invitee_id: Variant in invitee_ids:
 			var iid: int = int(invitee_id)
 			var invitee: L5RCharacterData = characters_by_id.get(iid)
-			if invitee == null:
+			if invitee == null or CharacterStats.is_dead(invitee):
 				continue
 			var old_val: int = invitee.disposition_values.get(host_id, 0)
 			invitee.disposition_values[host_id] = clampi(old_val + penalty, -100, 100)

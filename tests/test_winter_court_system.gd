@@ -1414,3 +1414,41 @@ func test_peace_violation_skips_dead_family_daimyo() -> void:
 	)
 	assert_almost_eq(dead_daimyo.glory, 5.0, 0.01,
 		"Dead family daimyo should not receive glory penalty")
+
+
+func test_glory_rewards_skip_dead_attendees() -> void:
+	var host := _make_character(50, "Doji Host", "Crane", "Doji", 7.0)
+	host.lord_id = -1
+	var alive_attendee := _make_character(10, "Doji Alive", "Crane", "Doji", 4.0)
+	var dead_attendee := _make_character(20, "Doji Dead", "Crane", "Doji", 4.0)
+	dead_attendee.stamina = 2
+	dead_attendee.willpower = 2
+	dead_attendee.wounds_taken = 999
+	var chars: Dictionary = {50: host, 10: alive_attendee, 20: dead_attendee}
+	var court := _make_active_winter_court(100)
+	court.host_clan = "Crane"
+	court.host_lord_id = 50
+	court.attendee_ids = [50, 10, 20]
+	var rewards: Array = WinterCourtSystem.compute_glory_rewards(court, chars)
+	var reward_ids: Array = []
+	for r: Dictionary in rewards:
+		reward_ids.append(r["character_id"])
+	assert_true(10 in reward_ids, "Living attendee should get glory reward")
+	assert_false(20 in reward_ids, "Dead attendee should NOT get glory reward")
+
+
+func test_glory_rewards_skip_dead_champion() -> void:
+	var dead_champion := _make_character(50, "Doji Champion", "Crane", "Doji", 8.0)
+	dead_champion.lord_id = -1
+	dead_champion.stamina = 2
+	dead_champion.willpower = 2
+	dead_champion.wounds_taken = 999
+	var host := _make_character(60, "Doji Host", "Crane", "Doji", 7.0)
+	var chars: Dictionary = {50: dead_champion, 60: host}
+	var court := _make_active_winter_court(100)
+	court.host_clan = "Crane"
+	court.host_lord_id = 60
+	court.attendee_ids = [50, 60]
+	var rewards: Array = WinterCourtSystem.compute_glory_rewards(court, chars)
+	for r: Dictionary in rewards:
+		assert_ne(r["character_id"], 50, "Dead clan champion should NOT get glory reward")
