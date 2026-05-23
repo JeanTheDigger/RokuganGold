@@ -2518,7 +2518,7 @@ static func _populate_action_metadata(
 		}
 	elif option.action_id in ["CONDUCT_STORM_ASSAULT", "MAINTAIN_SIEGE"]:
 		option.metadata = {
-			"siege_settlement_id": ctx.location_id,
+			"siege_settlement_id": ctx.location_id.to_int() if not ctx.location_id.is_empty() else -1,
 		}
 	elif option.action_id == "CONDUCT_TEA_CEREMONY":
 		# Select up to (max_viable_count - 1) guests with disp >= Acquaintance.
@@ -3553,7 +3553,7 @@ static func _extract_cut_supply_army_ids(
 	var tethers: Array = world_state.get("active_tethers", [])
 	for t: Variant in tethers:
 		if t is Dictionary:
-			if t.get("overall_state", 0) == 2:
+			if t.get("overall_state", 0) == SupplyTetherSystem.TetherState.BROKEN:
 				var aid: int = t.get("army_id", -1)
 				if aid >= 0:
 					result.append(aid)

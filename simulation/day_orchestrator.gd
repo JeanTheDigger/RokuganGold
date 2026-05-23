@@ -9381,7 +9381,7 @@ static func _process_tether_war_scores(
 			continue
 		var td: Dictionary = tether_r
 		var state: int = td.get("overall_state", 0)
-		if state != 2:
+		if state != SupplyTetherSystem.TetherState.BROKEN:
 			continue
 
 		var army_id: int = td.get("army_id", -1)
@@ -14928,7 +14928,7 @@ static func _process_commitment_seasonal(
 		next_topic_id[0] += 1
 		var topic: TopicData = TopicData.new()
 		topic.topic_id = topic_id
-		topic.slug = "renege_%d_%d" % [lord_id, renege_info.get("topic_id", 0)]
+		topic.slug = "renege_%d_%d" % [lord_id, topic_id]
 		topic.title = "Broken Commitment by Lord %d" % lord_id
 		topic.tier = topic_tier
 		topic.topic_type = topic_type
