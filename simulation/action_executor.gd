@@ -1335,7 +1335,8 @@ static func _get_co_located_ids(
 		return ids
 	for cid: int in characters_by_id:
 		var c: L5RCharacterData = characters_by_id[cid]
-		if c.character_id != character.character_id and c.physical_location == loc:
+		if c.character_id != character.character_id and c.physical_location == loc \
+				and not CharacterStats.is_dead(c):
 			ids.append(c.character_id)
 	return ids
 
@@ -1827,6 +1828,7 @@ static func _execute_dispatch_courtier(
 			"margin": margin,
 			"effects": {
 				"effect": "courtier_refused",
+				"failed": true,
 				"garrison_refused": true,
 				"target_npc_id": target_id,
 				"target_province_id": target_province_id,
@@ -2170,6 +2172,15 @@ static func _execute_seal_wall_breach(
 	var success: bool = roll_result.get("success", false)
 	var margin: int = roll_result.get("margin", 0)
 
+	var seal_effects: Dictionary = {
+		"effect": "breach_sealed" if success else "breach_seal_failed",
+		"requires_breach_seal": success,
+		"koku_cost": SEAL_KOKU_COST,
+		"target_province_id": target_province_id,
+	}
+	if not success:
+		seal_effects["failed"] = true
+
 	return {
 		"success": success,
 		"action_id": "SEAL_WALL_BREACH",
@@ -2182,12 +2193,7 @@ static func _execute_seal_wall_breach(
 		"roll_total": roll_result.get("total", 0),
 		"tn": SEAL_TN,
 		"margin": margin,
-		"effects": {
-			"effect": "breach_sealed" if success else "breach_seal_failed",
-			"requires_breach_seal": success,
-			"koku_cost": SEAL_KOKU_COST,
-			"target_province_id": target_province_id,
-		},
+		"effects": seal_effects,
 	}
 
 
@@ -2991,6 +2997,7 @@ static func _execute_arrange_marriage(
 			"ic_day": ctx.ic_day,
 			"season": ctx.season,
 			"effects": {
+				"failed": true,
 				"marriage_rejected": true,
 				"proposing_lord_id": ctx.character_id,
 				"target_lord_id": target_lord_id,

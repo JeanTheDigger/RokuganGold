@@ -1950,3 +1950,122 @@ func test_intimidate_success_does_not_set_failed_flag() -> void:
 	if result["success"]:
 		assert_false(result["effects"].has("failed"),
 			"Successful intimidation should NOT have failed flag")
+
+
+func test_dispatch_courtier_refusal_sets_failed_flag() -> void:
+	var target := L5RCharacterData.new()
+	target.character_id = 10
+	target.character_name = "Target Daimyo"
+	target.honor = 5.0
+	target.bushido_virtue = Enums.BushidoVirtue.JIN
+	target.shourido_virtue = Enums.ShouridoVirtue.SEIGYO
+	target.skills = {"Courtier": 1}
+	target.emphases = {}
+	target.wounds_taken = 0
+	target.awareness = 2
+	var chars: Dictionary = {1: _character, 10: target}
+	_character.skills["Courtier"] = 1
+	_ctx.wall_statuses = []
+	var action := _make_action("DISPATCH_COURTIER", 10)
+	_dice_engine.set_seed(1)
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map, {}, chars
+	)
+	if not result["success"]:
+		assert_true(result["effects"].has("failed"),
+			"DISPATCH_COURTIER refusal must set failed flag for EffectApplicator")
+		assert_eq(result["effects"]["recipient_disposition_change"], -2)
+
+
+func test_seal_wall_breach_failure_sets_failed_flag() -> void:
+	_character.skills["Engineering"] = 1
+	var ws := NPCDataStructures.WallStatus.new()
+	ws.province_id = 5
+	ws.si = 0
+	ws.garrison_above_minimum = true
+	ws.jade_stockpile_critical = false
+	_ctx.wall_statuses = [ws]
+	var action := _make_action("SEAL_WALL_BREACH")
+	action.target_province_id = 5
+	_dice_engine.set_seed(1)
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map
+	)
+	if not result["success"]:
+		assert_true(result["effects"].has("failed"),
+			"SEAL_WALL_BREACH failure must set failed flag so koku_cost is processed")
+		assert_eq(result["effects"]["koku_cost"], 5.0)
+
+
+func test_arrange_marriage_rejection_sets_failed_flag() -> void:
+	var target_lord := L5RCharacterData.new()
+	target_lord.character_id = 10
+	target_lord.character_name = "Target Lord"
+	target_lord.disposition_values = {1: -50}
+	target_lord.children_ids = [20]
+	target_lord.skills = {}
+	target_lord.emphases = {}
+	target_lord.wounds_taken = 0
+	var candidate := L5RCharacterData.new()
+	candidate.character_id = 20
+	candidate.character_name = "Candidate"
+	candidate.lord_id = 10
+	candidate.status = 2.0
+	candidate.glory = 1.0
+	candidate.spouse_id = -1
+	candidate.clan = "crane"
+	candidate.family = "doji"
+	candidate.skills = {}
+	candidate.emphases = {}
+	candidate.wounds_taken = 0
+	var chars: Dictionary = {1: _character, 10: target_lord, 20: candidate}
+	_character.children_ids = [30]
+	var own_candidate := L5RCharacterData.new()
+	own_candidate.character_id = 30
+	own_candidate.lord_id = 1
+	own_candidate.status = 2.0
+	own_candidate.glory = 1.0
+	own_candidate.spouse_id = -1
+	own_candidate.clan = "lion"
+	own_candidate.family = "akodo"
+	own_candidate.skills = {}
+	own_candidate.emphases = {}
+	own_candidate.wounds_taken = 0
+	chars[30] = own_candidate
+	var action := _make_action("ARRANGE_MARRIAGE")
+	action.metadata = {
+		"candidate_id": 30,
+		"target_lord_id": 10,
+		"target_candidate_id": 20,
+		"favor_tier": 0,
+		"has_military_objective": false,
+	}
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map, {}, chars
+	)
+	assert_false(result["success"], "Marriage should be rejected with -50 disposition")
+	assert_true(result["effects"].has("failed"),
+		"ARRANGE_MARRIAGE rejection must set failed flag for disposition_change")
+	assert_eq(result["effects"]["disposition_change"], -3)
+
+
+func test_get_co_located_ids_skips_dead_characters() -> void:
+	var dead_npc := L5RCharacterData.new()
+	dead_npc.character_id = 99
+	dead_npc.character_name = "Dead Witness"
+	dead_npc.physical_location = "settlement_5"
+	dead_npc.wounds_taken = 999
+	dead_npc.skills = {}
+	dead_npc.emphases = {}
+	var alive_npc := L5RCharacterData.new()
+	alive_npc.character_id = 10
+	alive_npc.character_name = "Alive Witness"
+	alive_npc.physical_location = "settlement_5"
+	alive_npc.wounds_taken = 0
+	alive_npc.skills = {}
+	alive_npc.emphases = {}
+	_character.physical_location = "settlement_5"
+	var chars: Dictionary = {1: _character, 10: alive_npc, 99: dead_npc}
+	var ids: Array = ActionExecutor._get_co_located_ids(_character, chars)
+	assert_true(ids.has(10), "Living co-located NPC should be included")
+	assert_false(ids.has(99), "Dead co-located NPC should be excluded")

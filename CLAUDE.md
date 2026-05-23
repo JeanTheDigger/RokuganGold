@@ -1730,6 +1730,29 @@ costs, or forward-wiring. Do not treat as bugs.
   LetterData objects from the grave. Added dead character filter at loop start.
   1 test.
 
+### Known Code Issues (found and fixed 2026-05-23, deep ActionExecutor audit)
+- **DISPATCH_COURTIER refusal — `recipient_disposition_change` silently dropped. FIXED.**
+  Failure path (line 1817) returned `success: false` with `recipient_disposition_change: -2`
+  but no `"failed": true`. EffectApplicator gate at line 27 early-returned, silently
+  skipping `_apply_recipient_effects()`. Daimyo refusing garrison commitment never got
+  the -2 disposition penalty. Added `"failed": true` to failure effects dict. 1 test.
+- **SEAL_WALL_BREACH failure — `koku_cost` silently dropped. FIXED.**
+  Failure path (line 2186) returned `success: false` with `koku_cost: 5.0` but no
+  `"failed": true`. EffectApplicator gate skipped `_apply_koku_cost()`. GDD s2.4.16
+  specifies "Failure: no SI change, Koku still paid." Extracted effects dict to variable,
+  conditionally added `"failed": true` on failure. 1 test.
+- **ARRANGE_MARRIAGE rejection — `disposition_change` silently dropped. FIXED.**
+  Rejection path (line 2992) returned `success: false` with `disposition_change: -3`
+  but no `"failed": true`. EffectApplicator gate skipped `_apply_disposition()`.
+  Proposing lord never received -3 disposition penalty from rejected marriage proposal.
+  Added `"failed": true` to failure effects dict. 1 test.
+- **`_get_co_located_ids()` — dead characters included as witnesses. FIXED.**
+  Iterated all characters_by_id without `CharacterStats.is_dead()` check. Dead
+  characters at the same location were included in witness lists for PUBLIC_DEBATE,
+  PUBLIC_INSULT, GOSSIP, PROVOKE_EMOTION, broadcast social, and PUBLIC_PERFORMANCE.
+  Dead witnesses received disposition changes through EffectApplicator. Added dead
+  guard. 1 test.
+
 ### Known Code Issues (found and fixed 2026-05-23, comprehensive dead-char sweep)
 - **performative_arts_system.gd — dead witness/recipient disposition. FIXED.**
   `apply_performance_effects()` checked `witness != null` / `recipient != null`
