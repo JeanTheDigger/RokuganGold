@@ -14287,3 +14287,61 @@ func test_inject_base_context_infrastructure_intelligence() -> void:
 		"Worship failing province IDs should be injected per-character")
 	assert_eq(ws[12].get("border_province_ids_without_fort", {}), border_no_fort,
 		"Border province IDs without fort should be injected per-character")
+
+
+func test_naval_keys_injected_into_per_character_world_states() -> void:
+	var c := L5RCharacterData.new()
+	c.character_id = 30
+	c.clan = "Crane"
+	c.status = 3.0
+	c.action_points_current = 2
+	c.action_points_max = 2
+	var ws: Dictionary = {
+		"_is_coastal": true,
+		"_has_naval_assets": true,
+		"_has_naval_threat": false,
+		"_worship_failing_province_ids": {},
+		"_border_province_ids_without_fort": {},
+		"_surplus_pu_province_ids": {},
+	}
+	DayOrchestrator._inject_base_character_context(
+		ws, [c], [], [], [], {}, [],
+	)
+	assert_true(ws[30].get("is_coastal", false),
+		"is_coastal should be injected into per-character world state")
+	assert_true(ws[30].get("has_naval_assets", false),
+		"has_naval_assets should be injected into per-character world state")
+	assert_false(ws[30].get("has_naval_threat", true),
+		"has_naval_threat should be injected into per-character world state")
+
+
+func test_active_wars_converted_to_context_dicts() -> void:
+	var c := L5RCharacterData.new()
+	c.character_id = 31
+	c.clan = "Lion"
+	c.status = 3.0
+	c.action_points_current = 2
+	c.action_points_max = 2
+	var war := WarData.new()
+	war.war_id = 1
+	war.clan_a = "Lion"
+	war.clan_b = "Crane"
+	war.war_score_a = 35
+	war.war_score_b = 65
+	war.is_active = true
+	war.initiator_clan = "Crane"
+	var ws: Dictionary = {
+		"active_wars": [war],
+		"_worship_failing_province_ids": {},
+		"_border_province_ids_without_fort": {},
+		"_surplus_pu_province_ids": {},
+	}
+	DayOrchestrator._inject_base_character_context(
+		ws, [c], [], [], [], {}, [], 0, 0, {}, [], {}, [war],
+	)
+	var char_wars: Array = ws[31].get("active_wars", [])
+	assert_eq(char_wars.size(), 1, "Should have 1 active war")
+	if char_wars.size() > 0:
+		assert_true(char_wars[0] is Dictionary, "War should be converted to Dictionary")
+		assert_eq(char_wars[0].get("clan_a", ""), "Lion")
+		assert_eq(char_wars[0].get("war_score_a", 0), 35)

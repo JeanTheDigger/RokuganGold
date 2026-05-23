@@ -3731,3 +3731,18 @@ func test_build_province_statuses_can_sustain_iron() -> void:
 	DayOrchestrator._populate_resource_stockpiles(ws, [c], {}, [], {"Crab": ClanData.new()}, [])
 	assert_true(ws[1].has("can_sustain_iron_upkeep"),
 		"can_sustain_iron_upkeep should be set by _populate_resource_stockpiles")
+
+
+func test_get_own_war_score_extracts_correct_clan_score() -> void:
+	var war_dict: Dictionary = {
+		"clan_a": "Lion",
+		"clan_b": "Crane",
+		"war_score_a": 35,
+		"war_score_b": 65,
+	}
+	assert_eq(NPCDecisionEngine._get_own_war_score(war_dict, "Lion"), 35,
+		"Should return clan_a score for Lion")
+	assert_eq(NPCDecisionEngine._get_own_war_score(war_dict, "Crane"), 65,
+		"Should return clan_b score for Crane")
+	assert_eq(NPCDecisionEngine._get_own_war_score(war_dict, "Phoenix"), 50,
+		"Should return default 50 for uninvolved clan")

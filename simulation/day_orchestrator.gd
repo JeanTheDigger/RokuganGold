@@ -15398,7 +15398,12 @@ static func _inject_base_character_context(
 	var g_border: Dictionary = world_states.get("_border_province_ids_without_fort", {})
 	var g_surplus: Dictionary = world_states.get("_surplus_pu_province_ids", {})
 	var g_festival: Dictionary = world_states.get("_festival_flags", {})
-	var g_active_wars: Array = world_states.get("active_wars", active_wars)
+	var g_is_coastal: bool = world_states.get("_is_coastal", false)
+	var g_has_naval_assets: bool = world_states.get("_has_naval_assets", false)
+	var g_has_naval_threat: bool = world_states.get("_has_naval_threat", false)
+	var g_active_wars: Array = WarSystem.wars_to_context_array(
+		world_states.get("active_wars", active_wars) as Array
+	)
 
 	var province_values: Array = provinces.values()
 	var clan_values: Array = clans.values()
@@ -15424,6 +15429,9 @@ static func _inject_base_character_context(
 		ws["border_province_ids_without_fort"] = g_border
 		ws["surplus_pu_province_ids"] = g_surplus
 		ws["active_wars"] = g_active_wars
+		ws["is_coastal"] = g_is_coastal
+		ws["has_naval_assets"] = g_has_naval_assets
+		ws["has_naval_threat"] = g_has_naval_threat
 		ws.merge(g_festival)
 
 		if char_is_lord:

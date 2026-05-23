@@ -194,7 +194,7 @@ static func _find_clan_lord(
 	var best_status: float = -1.0
 	for id: Variant in characters_by_id:
 		var c: L5RCharacterData = characters_by_id[id] as L5RCharacterData
-		if c == null:
+		if c == null or CharacterStats.is_dead(c):
 			continue
 		if c.clan != clan:
 			continue

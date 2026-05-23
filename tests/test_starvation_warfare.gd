@@ -595,3 +595,18 @@ func test_blockade_metadata_populates() -> void:
 	var meta: Dictionary = NPCDecisionEngine._build_blockade_metadata(need, ctx)
 	assert_eq(meta["blocking_clan"], "Lion")
 	assert_eq(meta["target_clan"], "Crane")
+
+
+func test_find_clan_lord_skips_dead_characters() -> void:
+	var alive := L5RCharacterData.new()
+	alive.character_id = 10
+	alive.clan = "Crane"
+	alive.status = 6.0
+	var dead := L5RCharacterData.new()
+	dead.character_id = 11
+	dead.clan = "Crane"
+	dead.status = 8.0
+	dead.wounds_taken = 999
+	var chars: Dictionary = {10: alive, 11: dead}
+	var result: int = StarvationWarfare._find_clan_lord("Crane", chars)
+	assert_eq(result, 10, "Should pick living character, not dead one with higher status")

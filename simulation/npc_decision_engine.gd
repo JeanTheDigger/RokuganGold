@@ -1251,8 +1251,10 @@ static func _evaluate_condition(
 	match condition:
 		"war_score_above_25_and_army_capable":
 			for w: Variant in ctx.active_wars:
-				if w is Dictionary and w.get("war_score", 50) > 25:
-					return true
+				if w is Dictionary:
+					var s: int = _get_own_war_score(w, ctx.clan)
+					if s > 25:
+						return true
 			return false
 
 		"any_vassal_at_shortage_or_worse":
@@ -1447,7 +1449,7 @@ static func _evaluate_harvest_conditions(ctx: NPCDataStructures.ContextSnapshot)
 	var no_other_path: bool = false
 	for w: Variant in ctx.active_wars:
 		if w is Dictionary:
-			var score: int = w.get("war_score", 50)
+			var score: int = _get_own_war_score(w, ctx.clan)
 			if score < 25:
 				no_other_path = true
 				break
@@ -1710,7 +1712,7 @@ static func _evaluate_urgency_condition(
 		"war_score_below_25":
 			for war: Variant in ctx.active_wars:
 				if war is Dictionary:
-					var score: int = war.get("war_score", 50)
+					var score: int = _get_own_war_score(war, ctx.clan)
 					if score < 25:
 						return [{"relevance": 1.0}]
 			return []
@@ -3373,6 +3375,14 @@ static func _get_war_context(
 		if my_score >= 0 and my_score < worst_score:
 			worst_score = my_score
 	return {"war_score": worst_score, "is_defending": is_defending}
+
+
+static func _get_own_war_score(war: Dictionary, clan: String) -> int:
+	if war.get("clan_a", "") == clan:
+		return war.get("war_score_a", 50)
+	if war.get("clan_b", "") == clan:
+		return war.get("war_score_b", 50)
+	return 50
 
 
 static func _has_grievance_against_neighbors(
