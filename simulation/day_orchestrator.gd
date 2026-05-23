@@ -84,6 +84,8 @@ static func advance_day(
 	next_tattoo_id: Array = [1],
 	active_hunts: Array = [],
 	next_hunt_id: Array = [1],
+	spiritual_insurgency_events: Array = [],
+	next_spiritual_event_id: Array = [1],
 ) -> Dictionary:
 	var prev_season: int = time_system.get_season()
 
@@ -877,6 +879,7 @@ static func advance_day(
 	var extradition_results: Array = []
 	var togashi_results: Dictionary = {}
 	var phoenix_council_results: Dictionary = {}
+	var spiritual_insurgency_results: Dictionary = {}
 	if current_season != prev_season:
 		# Add the IC year to miya_inputs so per-province blessed-year tracking
 		# stays consistent. Year is computed from the time system's tick count.
@@ -966,6 +969,13 @@ static func advance_day(
 			insurgencies, provinces, dice_engine, current_season,
 			next_insurgency_id, world_states, worship_maluses,
 			season_meta, next_crisis_id,
+		)
+		var _si_spm: Dictionary = world_states.get("_settlement_province_map", {})
+		spiritual_insurgency_results = _process_spiritual_insurgency(
+			worship_state, provinces, spiritual_insurgency_events,
+			next_spiritual_event_id, current_season, dice_engine,
+			characters, characters_by_id, active_topics,
+			next_topic_id, ic_day, season_meta, _si_spm,
 		)
 		_process_doshin_seasonal_recovery(world_states)
 		_tick_kuni_wards(season_meta)
@@ -1137,6 +1147,7 @@ static func advance_day(
 		"progress_results": progress_results,
 		"letter_pass_results": letter_pass_results,
 		"insurgency_results": insurgency_results,
+		"spiritual_insurgency_results": spiritual_insurgency_results,
 		"succession_results": succession_results,
 		"entanglement_results": entanglement_results,
 		"bound_escape_results": bound_escape_results,
@@ -7139,6 +7150,122 @@ static func _process_insurgencies(
 			(rem_prov as ProvinceData).active_crisis_id = -1
 
 	return result
+
+
+# -- Spiritual Insurgency Processing (s56.16, season boundary) ----------------
+
+static func _process_spiritual_insurgency(
+	worship_state: Dictionary,
+	provinces: Dictionary,
+	events: Array,
+	next_event_id: Array,
+	current_season: int,
+	dice_engine: DiceEngine,
+	characters: Array,
+	characters_by_id: Dictionary,
+	active_topics: Array,
+	next_topic_id: Array,
+	ic_day: int,
+	season_meta: Dictionary = {},
+	settlement_province_map: Dictionary = {},
+) -> Dictionary:
+	SpiritualInsurgencySystem.increment_seasons(events)
+	var new_events: Array = SpiritualInsurgencySystem.process_seasonal_check(
+		worship_state, provinces, events, next_event_id,
+		current_season, dice_engine, season_meta,
+	)
+	var new_topics: Array = []
+	for event: SpiritualInsurgencyData in new_events:
+		events.append(event)
+		var topic_dict: Dictionary = SpiritualInsurgencySystem.create_event_topic(
+			event, next_topic_id, ic_day,
+		)
+		var topic := TopicData.new()
+		topic.topic_id = topic_dict.get("topic_id", -1)
+		topic.title = topic_dict.get("title", "")
+		topic.tier = topic_dict.get("tier", TopicData.Tier.TIER_4)
+		topic.category = topic_dict.get("category", "SPIRITUAL")
+		topic.subject_character_id = topic_dict.get("subject_character_id", -1)
+		topic.ic_day_created = topic_dict.get("ic_day_created", ic_day)
+		topic.topic_type = "spiritual_insurgency"
+		active_topics.append(topic)
+		new_topics.append(topic_dict)
+
+	var resolution_results: Array = _resolve_spiritual_events(
+		events, characters, characters_by_id, dice_engine,
+		settlement_province_map,
+	)
+
+	var resolved_events: Array = []
+	for event: SpiritualInsurgencyData in events:
+		if event.resolved:
+			resolved_events.append(event)
+	for event: SpiritualInsurgencyData in resolved_events:
+		events.erase(event)
+
+	return {
+		"new_events": new_events,
+		"new_topics": new_topics,
+		"resolution_results": resolution_results,
+		"resolved_count": resolved_events.size(),
+		"active_count": events.size(),
+	}
+
+
+static func _resolve_spiritual_events(
+	events: Array,
+	characters: Array,
+	characters_by_id: Dictionary,
+	dice_engine: DiceEngine,
+	settlement_province_map: Dictionary = {},
+) -> Array:
+	var results: Array = []
+	for event: SpiritualInsurgencyData in events:
+		if not event is SpiritualInsurgencyData:
+			continue
+		if event.resolved or event.npc_resolution_attempted:
+			continue
+
+		var shugenja: L5RCharacterData = _find_province_shugenja(
+			event.province_id, characters, settlement_province_map,
+		)
+		if shugenja == null:
+			continue
+
+		var result: Dictionary = SpiritualInsurgencySystem.resolve_npc_event(
+			event, shugenja, dice_engine,
+		)
+		var effects: Dictionary = SpiritualInsurgencySystem.get_resolution_effects(result)
+		if result.get("success", false):
+			shugenja.honor += effects.get("honor_gain", 0.0)
+			shugenja.glory += effects.get("glory_gain", 0.0)
+		results.append(result)
+	return results
+
+
+static func _find_province_shugenja(
+	province_id: int,
+	characters: Array,
+	settlement_province_map: Dictionary = {},
+) -> L5RCharacterData:
+	var best: L5RCharacterData = null
+	var best_rank: int = -1
+	for c: L5RCharacterData in characters:
+		if CharacterStats.is_dead(c):
+			continue
+		if c.school_type != Enums.SchoolType.SHUGENJA:
+			continue
+		if not c.physical_location.is_valid_int():
+			continue
+		var settlement_id: int = int(c.physical_location)
+		var char_prov: int = settlement_province_map.get(settlement_id, -1)
+		if char_prov != province_id:
+			continue
+		var theology: int = c.skills.get("Theology", 0)
+		if theology > best_rank:
+			best_rank = theology
+			best = c
+	return best
 
 
 # -- Heir Designation Evaluation (s22.5, season boundary) --------------------

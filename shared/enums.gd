@@ -643,3 +643,28 @@ enum CompanionSpecies {
 	WARHORSE,
 	WARCAT,
 }
+
+
+# -- Spiritual Insurgency (s56.16 — LOCKED) ------------------------------------
+enum SpiritRealm {
+	GAKI_DO,
+	TOSHIGOKU,
+	CHIKUSHUDO,
+	SAKKAKU,
+	MEIDO,
+	YUME_DO,
+}
+
+
+enum SpiritualEventType {
+	REALM_OVERLAP,
+	ELEMENTAL_IMBALANCE,
+}
+
+
+enum SpiritualSeverity {
+	MILD,
+	MODERATE,
+	SEVERE,
+	CATASTROPHIC,
+}

@@ -29,6 +29,7 @@ const DIR_SECRETS := "secrets/"
 const DIR_FAVORS := "favors/"
 const DIR_TATTOOS := "tattoos/"
 const DIR_TRADE_ROUTES := "trade_routes/"
+const DIR_SPIRITUAL_EVENTS := "spiritual_events/"
 
 
 # ============================================================================
@@ -56,6 +57,7 @@ func save_world(ws: Node) -> bool:
 	ok = _save_resource_array(ws.active_wars, base + DIR_WARS, "war_id") and ok
 	ok = _save_resource_array(ws.active_secrets, base + DIR_SECRETS, "secret_id") and ok
 	ok = _save_resource_array(ws.tattoos, base + DIR_TATTOOS, "tattoo_id") and ok
+	ok = _save_resource_array(ws.spiritual_insurgency_events, base + DIR_SPIRITUAL_EVENTS, "event_id") and ok
 
 	# Provinces and settlements use their own ID fields
 	ok = _save_resource_array(ws.settlements, base + DIR_SETTLEMENTS, "settlement_id") and ok
@@ -101,6 +103,7 @@ func load_world(ws: Node) -> bool:
 	ws.active_wars = _load_resource_array(base + DIR_WARS)
 	ws.active_secrets = _load_resource_array(base + DIR_SECRETS)
 	ws.tattoos = _load_resource_array(base + DIR_TATTOOS)
+	ws.spiritual_insurgency_events = _load_resource_array(base + DIR_SPIRITUAL_EVENTS)
 	ws.settlements = _load_resource_array(base + DIR_SETTLEMENTS)
 	ws.provinces = _load_province_dict(base + DIR_PROVINCES)
 	ws.favors = _load_favors(base + DIR_FAVORS)
@@ -382,6 +385,7 @@ func _save_json_state(ws: Node, base: String) -> bool:
 		"next_crisis_id": ws.next_crisis_id[0],
 		"next_tattoo_id": ws.next_tattoo_id[0],
 		"next_hunt_id": ws.next_hunt_id[0],
+		"next_spiritual_event_id": ws.next_spiritual_event_id[0],
 		"last_targeted_province_id": ws.last_targeted_province_id[0],
 
 		# Emperor
@@ -478,6 +482,7 @@ func _load_json_state(ws: Node, base: String) -> void:
 	_restore_counter(ws.next_crisis_id, state, "next_crisis_id")
 	_restore_counter(ws.next_tattoo_id, state, "next_tattoo_id")
 	_restore_counter(ws.next_hunt_id, state, "next_hunt_id")
+	_restore_counter(ws.next_spiritual_event_id, state, "next_spiritual_event_id")
 	_restore_counter(ws.last_targeted_province_id, state, "last_targeted_province_id")
 
 	# Emperor

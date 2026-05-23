@@ -124,6 +124,10 @@ var next_tattoo_id: Array[int] = [1]
 var active_hunts: Array[Dictionary] = []
 var next_hunt_id: Array[int] = [1]
 
+# -- Spiritual Insurgency (s56.16) -------------------------------------------
+var spiritual_insurgency_events: Array = []
+var next_spiritual_event_id: Array[int] = [1]
+
 # -- Commitments ID Counter (s55.31) ------------------------------------------
 var next_commitment_id: Array[int] = [1]
 
@@ -255,6 +259,8 @@ func advance_one_day() -> Dictionary:
 		next_tattoo_id,
 		active_hunts,
 		next_hunt_id,
+		spiritual_insurgency_events,
+		next_spiritual_event_id,
 	)
 
 

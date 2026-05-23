@@ -97,7 +97,7 @@ When implementing or auditing a system, go here first:
 | Individual combat                             | 40 (not yet built)   |
 | ASCII map mission generation                  | 56 (not yet built)   |
 | Quest seeds                                   | 56.1 (not yet built) |
-| Spiritual insurgency                          | 56.16 (not yet built)|
+| Spiritual insurgency (trigger layer)          | 56.16                |
 | Bloodspeaker cult network                     | 56.14 (not yet built)|
 | NPC decision engine — core loop               | 55 (all subsects)    |
 | NPC decision engine — amendments              | 57 (all subsects)    |
@@ -1908,6 +1908,32 @@ costs, or forward-wiring. Do not treat as bugs.
   lord strategic review). Already integrated into ObjectiveDecomposer routing
   (line 76). Monk standing types added to OpportunityScanner.STANDING_OBJECTIVE_DOMAIN.
   83 tests.
+- **s56.16 Spiritual Insurgency Trigger Layer** — `simulation/spiritual_insurgency_system.gd`,
+  `shared/spiritual_insurgency_data.gd`. Trigger-only implementation (ASCII map encounters
+  blocked on s56 quest system). Detects worship failure thresholds from Kami Worship
+  System (s4.3.21): 2+ Great Fortunes at Displeased triggers spiritual insurgency.
+  Two event types: REALM_OVERLAP (6 realms weighted by province conditions — famine
+  biases Gaki-do +30, battle biases Toshigoku +25, forest biases Chikushudo +20,
+  intrigue biases Sakkaku +20, population loss biases Meido +25, shugenja surplus
+  biases Yume-do +15) and ELEMENTAL_IMBALANCE (5 elements, equal probability).
+  Four severity tiers: MILD (2 displeased, 1 event/season), MODERATE (3 displeased,
+  2 events/season), SEVERE (4+ displeased or any wrathful, 3 events/season),
+  CATASTROPHIC (5+ wrathful, 4 events/season). Mass battle casualties (50+ PU)
+  directly trigger Gaki-do/Toshigoku overlap regardless of worship state (60/40
+  split). NPC resolution: shugenja rolls Theology + realm/element-specific trait
+  vs severity-based TN (15/20/25/30). Margin-based resolution: full (margin 15+),
+  partial (margin 5+), retreat (margin -10+), failure (margin <-10). Honor/glory
+  gains on success. Topic generation: TIER_3 for MILD, TIER_2 for MODERATE,
+  TIER_1 for SEVERE/CATASTROPHIC. Elemental counter pairs per GDD s56.16.5d:
+  Fire→Water, Water→Earth, Earth→Fire, Air→Earth, Void→any. Ritual rounds per
+  severity: 10/20/30/50. Wired into DayOrchestrator seasonal block:
+  `_process_spiritual_insurgency()` runs after standard insurgency processing,
+  increments seasons on active events, generates new events from worship state,
+  creates topics, resolves via best available shugenja in province. Resolved
+  events removed from active list. Persistent state: `spiritual_insurgency_events`
+  and `next_spiritual_event_id` on WorldState, saved/loaded via WorldStateSaver
+  (Resource array pattern). DiceEngine gains `randf()` convenience method.
+  73 tests.
 
 ### Known Code Issues (found and fixed 2026-05-22, SecretSystem audit)
 - **expose_publicly() disposition applied to dead witnesses. FIXED.**
