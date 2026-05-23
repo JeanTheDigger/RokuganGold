@@ -1730,6 +1730,32 @@ costs, or forward-wiring. Do not treat as bugs.
   LetterData objects from the grave. Added dead character filter at loop start.
   1 test.
 
+### Known Code Issues (found and fixed 2026-05-23, comprehensive dead-char sweep)
+- **performative_arts_system.gd — dead witness/recipient disposition. FIXED.**
+  `apply_performance_effects()` checked `witness != null` / `recipient != null`
+  but not dead. Dead characters received performance disposition changes.
+  Added `CharacterStats.is_dead()` guards. 2 sites.
+- **imperial_edict_system.gd — dead characters in defiance and strip_autonomy. FIXED.**
+  `_apply_defiance_to_characters()` outer and inner loops, and
+  `apply_strip_autonomy()` loop all iterated characters without dead guards.
+  Dead clan members received honor changes, disposition changes toward
+  emperor, and were selected as champions. 3 sites. 2 tests.
+- **intra_clan_civil_war.gd — dead characters in 4 loops. FIXED.**
+  `apply_defector_consequences()` (dead faction members received -15 disp),
+  `apply_post_war_scars()` (dead characters received/applied scars),
+  `decay_post_war_scars()` (dead characters received scar decay),
+  `apply_rebel_consequences_on_legitimacy_victory()` (dead rebels received
+  honor penalties). All checked `c == null` but not dead. 4 sites. 2 tests.
+- **phoenix_council.gd — dead representatives in Grand Ritual. FIXED.**
+  `apply_grand_ritual_devastation()` applied emperor disposition to dead
+  clan representatives. Added dead guard. 1 test.
+- **action_executor.gd — dead witnesses in PUBLIC_DEBATE. FIXED.**
+  Dead characters contributed witness disposition tiers to debate resolution,
+  influencing position shifts for living characters. Added dead guard.
+- **koku_cascade_system.gd — dead retainers receive stipends. FIXED.**
+  `distribute_individual_stipends()` paid koku and applied lord disposition
+  to dead retainers. Added dead guard. 1 test.
+
 ### Known Code Issues (found and fixed 2026-05-22, SecretSystem audit)
 - **expose_publicly() disposition applied to dead witnesses. FIXED.**
   `expose_publicly()` iterated witness_ids and checked `w != null` but not dead.

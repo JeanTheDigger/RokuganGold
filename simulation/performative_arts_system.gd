@@ -200,7 +200,7 @@ static func apply_performance_effects(
 			var disp_delta: int = effect.get("disposition_change", 0)
 			if wid >= 0 and disp_delta != 0:
 				var witness: L5RCharacterData = characters_by_id.get(wid)
-				if witness != null:
+				if witness != null and not CharacterStats.is_dead(witness):
 					var current: int = witness.disposition_values.get(performer.character_id, 0)
 					witness.disposition_values[performer.character_id] = clampi(current + disp_delta, -100, 100)
 
@@ -208,6 +208,6 @@ static func apply_performance_effects(
 		var rid: int = result["recipient_id"]
 		var disp_delta: int = result["disposition_change"]
 		var recipient: L5RCharacterData = characters_by_id.get(rid)
-		if recipient != null:
+		if recipient != null and not CharacterStats.is_dead(recipient):
 			var current: int = recipient.disposition_values.get(performer.character_id, 0)
 			recipient.disposition_values[performer.character_id] = clampi(current + disp_delta, -100, 100)

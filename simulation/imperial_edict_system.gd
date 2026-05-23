@@ -625,6 +625,8 @@ static func _apply_defiance_to_characters(
 	var disp_others: int = consequence.get("disposition_from_others", 0)
 
 	for c: L5RCharacterData in characters:
+		if CharacterStats.is_dead(c):
+			continue
 		if c.clan != defiant_clan:
 			continue
 		if c.status < 5.0:
@@ -634,6 +636,8 @@ static func _apply_defiance_to_characters(
 			var cur_emp: int = int(c.disposition_values.get(emperor_id, 0))
 			c.disposition_values[emperor_id] = clampi(cur_emp + disp_emperor, -100, 100)
 		for other: L5RCharacterData in characters:
+			if CharacterStats.is_dead(other):
+				continue
 			if other.clan == defiant_clan or other.character_id == emperor_id:
 				continue
 			if other.status < 3.0:
@@ -750,6 +754,8 @@ static func apply_strip_autonomy(
 	var champion: L5RCharacterData = null
 	var stripped_members: Array = []
 	for c: L5RCharacterData in characters:
+		if CharacterStats.is_dead(c):
+			continue
 		if c.clan != edict.target_clan:
 			continue
 		if champion == null or c.status > champion.status:

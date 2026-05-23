@@ -1852,3 +1852,33 @@ func test_next_season_end_winter():
 	# Current season end: day 359. Next season end: Spring of next year = day 449
 	var result: int = DayOrchestrator._compute_next_season_end_ic_day(ts)
 	assert_eq(result, 449)
+
+
+# -- Audit: Dead character guards (2026-05-23) ---------------------------------
+
+func test_defiance_skips_dead_clan_members() -> void:
+	var dead_member := _make_clan_member(10, "Crane", 6.0)
+	dead_member.stamina = 2
+	dead_member.willpower = 2
+	dead_member.wounds_taken = 999
+	dead_member.honor = 5.0
+	var consequence: Dictionary = {"clan": "Crane", "honor_cost": -1.0,
+		"disposition_from_emperor": -5, "disposition_from_others": -3}
+	ImperialEdictSystem._apply_defiance_to_characters(
+		consequence, [dead_member], 99
+	)
+	assert_eq(dead_member.honor, 5.0,
+		"Dead character honor should not change")
+
+func test_strip_autonomy_skips_dead_members() -> void:
+	var dead_member := _make_clan_member(10, "Lion", 7.0)
+	dead_member.stamina = 2
+	dead_member.willpower = 2
+	dead_member.wounds_taken = 999
+	var edict := EdictData.new()
+	edict.edict_type = EdictData.EdictType.STRIP_AUTONOMY
+	edict.target_clan = "Lion"
+	edict.emperor_id = 99
+	var result: Dictionary = ImperialEdictSystem.apply_strip_autonomy(edict, [dead_member])
+	assert_eq(result.get("stripped_members", []).size(), 0,
+		"Dead members should not be stripped")

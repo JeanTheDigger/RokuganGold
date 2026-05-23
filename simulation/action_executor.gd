@@ -951,7 +951,7 @@ static func _execute_public_debate(
 	var witness_disp_b: Dictionary = {}
 	for wid: int in witness_ids:
 		var w: L5RCharacterData = characters_by_id.get(wid)
-		if w != null:
+		if w != null and not CharacterStats.is_dead(w):
 			var w_disp_a: int = w.disposition_values.get(character.character_id, 0)
 			var w_disp_b: int = w.disposition_values.get(target_id, 0)
 			witness_disp_a[wid] = CourtActionSystem.get_debate_disposition_tier(w_disp_a)

@@ -645,6 +645,8 @@ static func apply_grand_ritual_devastation(
 	var rep_ids: Array = []
 	if emperor_id >= 0:
 		for rep: L5RCharacterData in all_clan_representatives:
+			if CharacterStats.is_dead(rep):
+				continue
 			if rep.clan == "Phoenix":
 				continue
 			var cur: int = rep.disposition_values.get(emperor_id, 0)

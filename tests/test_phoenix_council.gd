@@ -944,3 +944,24 @@ func test_grand_ritual_returns_crisis_topic_dict():
 func test_grand_ritual_null_province_returns_not_applied():
 	var result: Dictionary = PhoenixCouncil.apply_grand_ritual_devastation(null, [], [], -1)
 	assert_false(result.get("applied", true))
+
+
+# -- Audit: Dead character guards (2026-05-23) ---------------------------------
+
+func test_grand_ritual_skips_dead_representatives() -> void:
+	var province := _make_province(1)
+	var dead_rep := L5RCharacterData.new()
+	dead_rep.character_id = 50
+	dead_rep.clan = "Crane"
+	dead_rep.status = 7.0
+	dead_rep.stamina = 2
+	dead_rep.willpower = 2
+	dead_rep.wounds_taken = 999
+	dead_rep.disposition_values = {99: 10}
+	var result: Dictionary = PhoenixCouncil.apply_grand_ritual_devastation(
+		province, [], [dead_rep], 99
+	)
+	assert_eq(dead_rep.disposition_values.get(99, 0), 10,
+		"Dead representative disposition should not change")
+	assert_eq(result.get("reps_affected", []).size(), 0,
+		"Dead reps should not appear in affected list")

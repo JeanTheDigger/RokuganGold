@@ -221,6 +221,8 @@ static func _pay_individual_stipends(
 		pool_demands[funding_lord_id] = pool_demands.get(funding_lord_id, 0.0) + base_stipend
 	var results: Dictionary = {}
 	for c: L5RCharacterData in characters:
+		if CharacterStats.is_dead(c):
+			continue
 		if not assignments.has(c.character_id):
 			continue
 		var asgn: Dictionary = assignments[c.character_id]
