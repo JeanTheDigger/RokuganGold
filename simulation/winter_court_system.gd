@@ -496,7 +496,7 @@ static func record_emperors_peace_violation(
 	var family_daimyo_glory_applied: float = 0.0
 	for cid: int in characters_by_id:
 		var c: L5RCharacterData = characters_by_id[cid] as L5RCharacterData
-		if c == null:
+		if c == null or CharacterStats.is_dead(c):
 			continue
 		if c.family == offender.family and c.role_position == "family_daimyo":
 			family_daimyo_glory_applied = HonorGlorySystem.apply_glory_change(
@@ -861,7 +861,7 @@ static func _build_topic_pool_map(characters_by_id: Dictionary) -> Dictionary:
 	var result: Dictionary = {}
 	for char_id: int in characters_by_id:
 		var c: L5RCharacterData = characters_by_id[char_id] as L5RCharacterData
-		if c == null:
+		if c == null or CharacterStats.is_dead(c):
 			continue
 		result[char_id] = c.topic_pool.duplicate()
 	return result

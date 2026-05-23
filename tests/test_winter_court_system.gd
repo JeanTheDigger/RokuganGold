@@ -1379,3 +1379,38 @@ func test_peace_violation_increments_case_and_topic_ids() -> void:
 
 	assert_eq(next_case[0], 6)
 	assert_eq(next_topic[0], 101)
+
+
+# -- Dead Character Guards ----------------------------------------------------
+
+func test_build_topic_pool_map_skips_dead_characters() -> void:
+	var alive := _make_character(10, "Alive", "Crane", "Doji", 5.0)
+	alive.topic_pool = [1, 2, 3]
+	var dead := _make_character(11, "Dead", "Crane", "Doji", 5.0)
+	dead.topic_pool = [4, 5]
+	dead.stamina = 2
+	dead.willpower = 2
+	dead.wounds_taken = 999
+	var chars: Dictionary = {10: alive, 11: dead}
+	var result: Dictionary = WinterCourtSystem._build_topic_pool_map(chars)
+	assert_true(result.has(10), "Living character should appear in topic map")
+	assert_false(result.has(11), "Dead character should not appear in topic map")
+
+
+func test_peace_violation_skips_dead_family_daimyo() -> void:
+	var offender := _make_character(10, "Akodo Toturi", "Lion", "Akodo", 6.0)
+	var dead_daimyo := _make_character(20, "Akodo Daimyo", "Lion", "Akodo", 7.0)
+	dead_daimyo.role_position = "family_daimyo"
+	dead_daimyo.lord_id = -1
+	dead_daimyo.glory = 5.0
+	dead_daimyo.stamina = 2
+	dead_daimyo.willpower = 2
+	dead_daimyo.wounds_taken = 999
+	var chars: Dictionary = {10: offender, 20: dead_daimyo}
+	var court := _make_active_winter_court(100)
+	court.attendee_ids = [10]
+	var result: Dictionary = WinterCourtSystem.record_emperors_peace_violation(
+		offender, "ATTACK", court, 250, [1], [500], chars
+	)
+	assert_almost_eq(dead_daimyo.glory, 5.0, 0.01,
+		"Dead family daimyo should not receive glory penalty")
