@@ -1661,6 +1661,30 @@ func test_competence_modifier_lore_no_sub_skills() -> void:
 	assert_almost_eq(result, -20.0, 0.01, "No Lore sub-skills means rank 0 = -20")
 
 
+func test_competence_modifier_games_picks_best_sub_skill() -> void:
+	var tables: Dictionary = {
+		"action_skill_map": {
+			"PLAY_GAME": {"primary": "Games", "secondary": "Awareness"},
+		},
+		"competence_table": {"0": -20, "1": -10, "2": -5, "3": 0, "4": 5, "5": 10, "6": 15, "7": 20},
+	}
+	var skills: Dictionary = {"Games: Go": 3, "Games: Shogi": 6}
+	var result: float = NPCDecisionEngine._compute_competence_modifier(
+		"PLAY_GAME", skills, tables,
+	)
+	assert_almost_eq(result, 15.0, 0.01, "Should use best Games sub-skill (Shogi rank 6 = +15)")
+
+
+func test_best_skill_rank_exact_match() -> void:
+	var skills: Dictionary = {"Kenjutsu": 4}
+	assert_eq(NPCDecisionEngine._best_skill_rank("Kenjutsu", skills), 4)
+
+
+func test_best_skill_rank_category_match() -> void:
+	var skills: Dictionary = {"Craft: Weaponsmithing": 5, "Craft: Armorsmithing": 3}
+	assert_eq(NPCDecisionEngine._best_skill_rank("Craft", skills), 5)
+
+
 # -- Province status rice stockpile population ---------------------------------
 
 func test_province_status_rice_stockpile_from_settlements() -> void:

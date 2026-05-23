@@ -1634,6 +1634,17 @@ static func _lookup_personality_lean(
 	return clampf(total, -15.0, 15.0)
 
 
+static func _best_skill_rank(skill_name: String, skill_ranks: Dictionary) -> int:
+	if skill_name in ["Lore", "Games", "Perform", "Craft", "Artisan"]:
+		var best: int = 0
+		var prefix: String = skill_name + ":"
+		for sk: String in skill_ranks:
+			if sk.begins_with(prefix) and int(skill_ranks[sk]) > best:
+				best = int(skill_ranks[sk])
+		return best
+	return int(skill_ranks.get(skill_name, 0))
+
+
 static func _compute_competence_modifier(
 	action_id: String,
 	skill_ranks: Dictionary,
@@ -1648,13 +1659,7 @@ static func _compute_competence_modifier(
 		return 0.0
 
 	var competence_table: Dictionary = scoring_tables.get("competence_table", {})
-	var rank: int = 0
-	if primary_skill == "Lore":
-		for sk: String in skill_ranks:
-			if sk.begins_with("Lore:") and int(skill_ranks[sk]) > rank:
-				rank = int(skill_ranks[sk])
-	else:
-		rank = int(skill_ranks.get(primary_skill, 0))
+	var rank: int = _best_skill_rank(primary_skill, skill_ranks)
 	var modifier: float = float(competence_table.get(str(rank), competence_table.get(rank, -20)))
 
 	var secondary_raw: Variant = action_skills.get("secondary", "")
