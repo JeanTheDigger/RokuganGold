@@ -7251,10 +7251,10 @@ static func _process_daily_letter_pass(
 				if letter_result.get("meeting_proposal", false):
 					letter.meeting_proposal = true
 					letter.meeting_settlement_id = letter_result.get("meeting_settlement_id", -1)
-					letter.meeting_deadline_ic_day = ic_day + MEETING_DEADLINE_OFFSET
+					letter.meeting_deadline_ic_day = _compute_meeting_deadline(ic_day)
 				elif letter_result.get("visit_intent", false):
 					letter.visit_intent = true
-					letter.visit_deadline_ic_day = ic_day + VISIT_DEADLINE_OFFSET
+					letter.visit_deadline_ic_day = _compute_visit_deadline(ic_day)
 				pending_letters.append(letter)
 	return results
 
@@ -17834,14 +17834,30 @@ static func _create_support_pledge_commitment(
 	next_commitment_id[0] += 1
 
 
-# PROVISIONAL: 90 IC days for visit (one full season from announcement).
-const VISIT_DEADLINE_OFFSET: int = 90
+const DEADLINE_MIN_DAYS: int = 30
 
-# PROVISIONAL: 90 IC days for meeting arrangement.
-const MEETING_DEADLINE_OFFSET: int = 90
 
-# PROVISIONAL: 90 IC days for resource delivery (one full season).
-const RESOURCE_PROMISE_DEADLINE_OFFSET: int = 90
+static func _compute_visit_deadline(ic_day: int) -> int:
+	var next: int = TimeSystem.get_next_season_start(ic_day)
+	if next - ic_day < DEADLINE_MIN_DAYS:
+		return TimeSystem.get_season_after_next_start(ic_day)
+	return next
+
+
+static func _compute_meeting_deadline(ic_day: int) -> int:
+	var target: int = TimeSystem.get_season_after_next_start(ic_day)
+	if target - ic_day < DEADLINE_MIN_DAYS:
+		return TimeSystem.get_next_season_start(target)
+	return target
+
+
+static func _compute_resource_deadline(ic_day: int, is_urgent: bool) -> int:
+	if is_urgent:
+		var next: int = TimeSystem.get_next_season_start(ic_day)
+		if next - ic_day < DEADLINE_MIN_DAYS:
+			return TimeSystem.get_season_after_next_start(ic_day)
+		return next
+	return TimeSystem.get_season_after_next_start(ic_day)
 
 static func _create_resource_promise_commitment(
 	effects: Dictionary,
@@ -17863,7 +17879,8 @@ static func _create_resource_promise_commitment(
 			return
 
 	var tier: int = effects.get("promise_tier", 2)
-	var deadline: int = ic_day + RESOURCE_PROMISE_DEADLINE_OFFSET
+	var is_urgent: bool = effects.get("is_crisis_request", false)
+	var deadline: int = _compute_resource_deadline(ic_day, is_urgent)
 	var source_action: String = effects.get("source_action_id", "REQUEST_ALLIED_AID")
 
 	var witnesses: Array = [creditor_id, debtor_id]

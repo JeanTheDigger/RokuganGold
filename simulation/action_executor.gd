@@ -1427,6 +1427,7 @@ static func _apply_effects(
 					effects["promise_debtor_id"] = action.target_npc_id
 					effects["promise_tier"] = _resource_tier_from_metadata(action.metadata)
 					effects["source_action_id"] = "NEGOTIATE"
+					effects["is_crisis_request"] = nt in CRISIS_NEED_TYPES
 		elif action_id in COVERT_ACTIONS:
 			effects = _compute_covert_effects(action_id, result["margin"])
 		elif action_id in MILITARY_ORDERS:
@@ -1575,6 +1576,10 @@ const RESOURCE_PROMISE_NEED_TYPES: Array[String] = [
 	"ACQUIRE_RESOURCE", "REQUEST_AID", "CONDUCT_COMMERCE",
 ]
 
+const CRISIS_NEED_TYPES: Array[String] = [
+	"DEFEND_PROVINCE", "REQUEST_AID",
+]
+
 const RESOURCE_TIER_KOKU_THRESHOLDS: Array[int] = [10, 50]
 const RESOURCE_TIER_PU_THRESHOLDS: Array[int] = [5, 20]
 
@@ -1609,6 +1614,7 @@ static func _compute_allied_aid_effects(
 		"requires_resource_promise": true,
 		"promise_creditor_id": ctx.character_id,
 		"promise_debtor_id": target_id,
+		"is_crisis_request": true,
 	}
 
 
@@ -1694,6 +1700,7 @@ static func _compute_assign_vassal_objective_effects(
 				result["promise_debtor_id"] = vassal_id
 				result["promise_tier"] = _resource_tier_from_metadata(action.metadata)
 				result["source_action_id"] = "ASSIGN_VASSAL_OBJECTIVE"
+				result["is_crisis_request"] = need_type in CRISIS_NEED_TYPES
 	return result
 
 

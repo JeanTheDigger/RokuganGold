@@ -61,9 +61,11 @@ const HUNT_NEGATIVE_SCHOOL_PREFIXES: Array[String] = [
 const HUNT_SCHOOL_LEAN: int = 15
 
 
-# -- Beast stat blocks (derived from s54.1 bestiary, values PROVISIONAL) -------
+# -- Beast stat blocks ---------------------------------------------------------
 # wound_threshold is a hunt-specific abstraction per s57.38: "a rough proxy for
-# how hard it is to land a mortal blow." GDD specifies bear=10, ozaru=20.
+# how hard it is to land a mortal blow." GDD confirms bear (armor_tn=20,
+# wound_threshold=10) and ozaru (armor_tn=30, wound_threshold=20).
+# Other 8 species interpolated from s54.1 bestiary — PROVISIONAL.
 
 const BEAST_STATS: Dictionary = {
 	"wolf": {"armor_tn": 20, "wound_threshold": 6, "initiative": 3, "attack_skill": 3},

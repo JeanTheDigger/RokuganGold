@@ -3561,3 +3561,49 @@ func test_purge_exposed_secrets() -> void:
 	assert_true(unexposed in secrets)
 
 
+# -- Variable Commitment Deadline tests ------------------------------------------
+
+
+func test_time_system_next_season_start_from_spring() -> void:
+	var ic_day: int = 30
+	var next: int = TimeSystem.get_next_season_start(ic_day)
+	assert_eq(next, 90, "Next season from day 30 (Spring) should be Summer at day 90")
+
+
+func test_time_system_next_season_start_from_late_winter() -> void:
+	var ic_day: int = 350
+	var next: int = TimeSystem.get_next_season_start(ic_day)
+	assert_eq(next, 360, "Next season from day 350 (Winter) should be Spring at day 360")
+
+
+func test_time_system_season_after_next_from_spring() -> void:
+	var ic_day: int = 30
+	var target: int = TimeSystem.get_season_after_next_start(ic_day)
+	assert_eq(target, 180, "Season after next from day 30 should be Autumn at day 180")
+
+
+func test_visit_deadline_mid_season() -> void:
+	var deadline: int = DayOrchestrator._compute_visit_deadline(30)
+	assert_eq(deadline, 90, "Visit from day 30 should target next season at 90")
+
+
+func test_visit_deadline_near_boundary_bumps_forward() -> void:
+	var deadline: int = DayOrchestrator._compute_visit_deadline(75)
+	assert_eq(deadline, 180, "Visit from day 75 (15 days to boundary) should bump to season after")
+
+
+func test_meeting_deadline_uses_season_after_next() -> void:
+	var deadline: int = DayOrchestrator._compute_meeting_deadline(30)
+	assert_eq(deadline, 180, "Meeting from day 30 should use season after next at 180")
+
+
+func test_resource_deadline_urgent_next_season() -> void:
+	var deadline: int = DayOrchestrator._compute_resource_deadline(30, true)
+	assert_eq(deadline, 90, "Urgent resource from day 30 should target next season at 90")
+
+
+func test_resource_deadline_non_urgent_season_after_next() -> void:
+	var deadline: int = DayOrchestrator._compute_resource_deadline(30, false)
+	assert_eq(deadline, 180, "Non-urgent resource from day 30 should target season after next at 180")
+
+

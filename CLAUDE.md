@@ -2748,26 +2748,26 @@ may be wrong.
 | # | Value | Current | Where Used | GDD Says | Code Location |
 |---|-------|---------|------------|----------|---------------|
 | A1 | Non-shinobi TN penalty on Phase 1 access rolls | +10 | assassination_system.gd | "severe disadvantage" — no number | s12.8 |
-| A2 | Per-failed-access permanent TN penalty tiers | +5/+10/+15 | assassination_system.gd | Matches suspicion scale; no explicit spec | s12.8 |
+| A2 | Per-failed-access permanent TN penalty tiers | +5/+10/+15 | assassination_system.gd | GDD-sourced: matches suspicion accumulation tiers | s12.8 |
 | A3 | Critical failure detection TN (assassin's roll total) | roll total | assassination_system.gd | No explicit detection TN formula | s12.8 |
 | A4 | Execution honor cost (non-Scorpion) | -3.0 | assassination_system.gd | "significant" — no number | s12.8 |
 | A5 | Concealment partial failure threshold | missed by <10 | assassination_system.gd | "near miss" — no number | s12.8 |
 | A6 | Daily detection suspicion gain on observer success | +3 | assassination_system.gd | No explicit amount per observation | s12.8 |
 | A7 | Target Status as direct TN adder on Phase 1 access | int(status) | assassination_system.gd | "higher Status = higher base TN" — no formula | s12.8 |
 | A8 | Non-shinobi detection bonus for observers | +5 Investigation | assassination_system.gd | "easier to detect" — no number | s12.8 |
-| A9 | VISIT_PROMISE deadline | 90 IC days | commitment_registry.gd | No explicit deadline in GDD | s55.31 |
-| A10 | MEETING_ARRANGEMENT deadline | 90 IC days | commitment_registry.gd | No explicit deadline in GDD | s55.31 |
+| A9 | VISIT_PROMISE deadline | Next season start (min 30d) | day_orchestrator.gd | "the season stated in the letter" — RESOLVED | s55.31 |
+| A10 | MEETING_ARRANGEMENT deadline | Season after next (min 30d) | day_orchestrator.gd | "the arranged meeting date" — RESOLVED | s55.31 |
 | A11 | MEETING_ARRANGEMENT reply disposition gate | >= 0 | letter_system.gd | No explicit threshold in GDD | s55.31 |
 | A12 | REQUEST_ALLIED_AID acceptance disposition gate | 31 | npc_decision_engine.gd | No explicit threshold in GDD | s55.31 |
-| A13 | RESOURCE_PROMISE deadline | 90 IC days | commitment_registry.gd | No explicit deadline in GDD | s55.31 |
+| A13 | RESOURCE_PROMISE deadline | Next/after-next season (urgency) | day_orchestrator.gd | "the agreed delivery season" — RESOLVED | s55.31 |
 | A14 | TREAT_WOUND raises by Medicine rank | 0-2→0, 3-4→1, 5-6→2, 7+ →3 | npc_decision_engine.gd | NPCs should declare raises; no scale given | s4.5 |
 | A15 | FORGE letter/order NeedType alignment scores | 40–70 | objective_alignment.json | GDD says what forges do but not how to score them vs other actions | s12.8 |
 | A16 | Forged letter delivery distance | 3 provinces | day_orchestrator.gd | Blocked on map/adjacency data | s12.7 |
 | A17 | Forged objective priority | 8 | day_orchestrator.gd | No GDD spec for objective priority values | — |
 | A18 | Impersonation detection topic tier | TIER_3 | day_orchestrator.gd | No explicit tier in GDD | — |
 | A19 | INVESTIGATE_THREAT priority (from impersonation) | 6 | day_orchestrator.gd | No GDD spec for objective priority values | — |
-| A20 | Forge authority level | Derived from forger's own lord_rank | npc_decision_engine.gd | Should come from impersonated target's rank | s12.8 |
-| A21 | Hunt beast stat blocks (8 of 10 species) | Derived from s54.1 | hunt_system.gd | Bear=10 and ozaru=20 confirmed; others interpolated | s57.38 |
+| A20 | Forge authority level | Target's lord_rank via chars_by_id | npc_decision_engine.gd | RESOLVED (B11) | s12.8 |
+| A21 | Hunt beast stat blocks (8 of 10 species) | Derived from s54.1 | hunt_system.gd | Bear and ozaru GDD-confirmed; 8 others interpolated | s57.38 |
 | A22 | PERFORM_RITUAL alignment score under PERFORM_RITUAL NeedType | 90 (below PERFORM_WORSHIP at 100) | objective_alignment.json | No explicit scoring hierarchy for rituals | — |
 
 ---

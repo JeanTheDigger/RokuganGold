@@ -8624,7 +8624,7 @@ func test_visit_intent_propagated_from_letter_result() -> void:
 	)
 	if pending.size() > 0:
 		assert_true(pending[0].visit_intent, "Letter should carry visit_intent")
-		assert_eq(pending[0].visit_deadline_ic_day, 50 + DayOrchestrator.VISIT_DEADLINE_OFFSET)
+		assert_eq(pending[0].visit_deadline_ic_day, DayOrchestrator._compute_visit_deadline(50))
 	else:
 		pass_test("No letter generated (lord filter or score)")
 
@@ -9437,7 +9437,7 @@ func test_resource_promise_created_on_aid_accepted() -> void:
 	assert_eq(c.creditor_npc_id, 10)
 	assert_eq(c.debtor_npc_id, 20)
 	assert_eq(c.tier, 2)
-	assert_eq(c.deadline_ic_day, 50 + DayOrchestrator.RESOURCE_PROMISE_DEADLINE_OFFSET)
+	assert_eq(c.deadline_ic_day, DayOrchestrator._compute_resource_deadline(50, false))
 	assert_eq(c.source_action_id, "REQUEST_ALLIED_AID")
 
 

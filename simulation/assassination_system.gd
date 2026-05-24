@@ -98,8 +98,7 @@ const EQUIPMENT_BLADE_RANK_REQUIREMENT: int = 5
 # Each failed access roll permanently increases subsequent Phase 1 TNs.
 # Cannot be reduced except by aborting and restarting Phase 1 from scratch.
 # Stacks with lockdown +10 and all other TN modifiers.
-# Values PROVISIONAL — GDD specifies the mechanic exists but does not give
-# numeric penalty amounts. Using suspicion scale pending playtest.
+# Values match GDD s12.8 suspicion accumulation tiers (+5/+10/+15).
 const ACCESS_PENALTY_STANDARD: int = 5
 const ACCESS_PENALTY_NOTABLE: int = 10
 const ACCESS_PENALTY_CRITICAL: int = 15
