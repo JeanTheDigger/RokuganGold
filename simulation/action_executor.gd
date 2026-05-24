@@ -316,6 +316,9 @@ static func execute(
 	if action_id == "APPLY_TATTOO":
 		return _execute_apply_tattoo(action, character, ctx, dice_engine, characters_by_id)
 
+	if action_id == "INVOKE_FAVOR":
+		return _execute_invoke_favor(action, character, ctx)
+
 	if action_id == "ANNOUNCE_HUNT":
 		return _execute_announce_hunt(action, character, ctx)
 
@@ -1407,7 +1410,7 @@ static func _apply_effects(
 	var action_id: String = action.action_id
 
 	if action_id == "PUBLIC_ATONEMENT":
-		effects = _compute_atonement_effects(action, result)
+		effects = _compute_atonement_effects(action, result, character)
 		var offense_key: String = action.metadata.get("offense_key", "")
 		if not offense_key.is_empty():
 			HonorGlorySystem.record_atonement(_character, offense_key)
@@ -2289,6 +2292,7 @@ static func _compute_self_effects(action_id: String) -> Dictionary:
 static func _compute_atonement_effects(
 	action: NPCDataStructures.ScoredAction,
 	result: Dictionary,
+	character: L5RCharacterData = null,
 ) -> Dictionary:
 	var tier: int = action.metadata.get("offense_tier", 3)
 	var margin: int = result.get("margin", 0)
@@ -2304,10 +2308,11 @@ static func _compute_atonement_effects(
 			"offense_tier": tier,
 		}
 	if margin <= -10:
+		var crit_honor: float = CrimeSystem.scale_honor_by_rank(HonorGlorySystem.ATONEMENT_CRITICAL_FAIL_HONOR_LOSS, character) if character != null else HonorGlorySystem.ATONEMENT_CRITICAL_FAIL_HONOR_LOSS
 		return {
 			"effect": "atonement_critical_failure",
 			"failed": true,
-			"honor_change": HonorGlorySystem.ATONEMENT_CRITICAL_FAIL_HONOR_LOSS,
+			"honor_change": crit_honor,
 			"glory_change": HonorGlorySystem.ATONEMENT_CRITICAL_FAIL_GLORY_LOSS,
 			"offense_tier": tier,
 		}
@@ -2820,10 +2825,10 @@ static func _execute_declare_war(
 		"authority_level", WarData.AuthorityLevel.PROVINCIAL_RAID,
 	)
 
-	var honor: float = -0.5 if intended_tier == WarJustification.MilitaryTier.TOTAL_WAR else 0.0
+	var honor: float = CrimeSystem.scale_honor_by_rank(-0.5, character) if intended_tier == WarJustification.MilitaryTier.TOTAL_WAR else 0.0
 	var ladder_effects: Dictionary = justification.get("ladder_side_effects", {})
 	if ladder_effects.has("honor_cost"):
-		honor += ladder_effects["honor_cost"]
+		honor += CrimeSystem.scale_honor_by_rank(ladder_effects["honor_cost"], character)
 
 	var result: Dictionary = {
 		"effect": "war_declared",
@@ -3999,6 +4004,41 @@ static func _execute_observe_court_attendees(
 	}
 
 
+# -- INVOKE_FAVOR --------------------------------------------------------------
+
+static func _execute_invoke_favor(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> Dictionary:
+	var favor_id: int = action.metadata.get("favor_id", -1)
+	var debtor_id: int = action.metadata.get("debtor_id", -1)
+	if favor_id < 0 or debtor_id < 0:
+		return {
+			"success": false,
+			"action_id": "INVOKE_FAVOR",
+			"character_id": character.character_id,
+			"reason": "no_favor_available",
+		}
+	var method: int = FavorData.InvocationMethod.PERSONAL_VISIT
+	if ctx.context_flag == Enums.ContextFlag.AT_COURT:
+		method = FavorData.InvocationMethod.COURT
+	return {
+		"success": true,
+		"action_id": "INVOKE_FAVOR",
+		"character_id": character.character_id,
+		"target_npc_id": debtor_id,
+		"ic_day": ctx.ic_day,
+		"season": ctx.season,
+		"effects": {
+			"requires_favor_invocation": true,
+			"favor_id": favor_id,
+			"debtor_id": debtor_id,
+			"invocation_method": method,
+		},
+	}
+
+
 # -- REQUEST_PERFORMANCE -------------------------------------------------------
 
 static func _execute_request_performance(
@@ -4314,7 +4354,7 @@ static func _execute_commission_assassination(
 		}
 
 	var method: int = _select_assassination_method(assassin)
-	var honor_cost: float = SecretSystem.get_assassination_order_honor_cost(target.status)
+	var honor_cost: float = CrimeSystem.scale_honor_by_rank(SecretSystem.get_assassination_order_honor_cost(target.status), character)
 	HonorGlorySystem.apply_honor_change(character, honor_cost)
 
 	return {

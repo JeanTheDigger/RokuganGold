@@ -657,6 +657,10 @@ static func advance_day(
 		day_result.get("results", []), characters_by_id, provinces,
 	)
 
+	_process_following_orders_honor_writebacks(
+		day_result.get("results", []), characters_by_id, objectives_map,
+	)
+
 	_process_introduction_writebacks(
 		day_result.get("results", []), characters_by_id,
 	)
@@ -667,6 +671,10 @@ static func advance_day(
 
 	_process_blackmail_favor_writebacks(
 		day_result.get("results", []), favors, ic_day,
+	)
+
+	_process_invoke_favor_writebacks(
+		day_result.get("results", []), favors, world_states, ic_day,
 	)
 
 	_process_commerce_topic_writebacks(
@@ -1043,6 +1051,9 @@ static func advance_day(
 		)
 		strategic_results = _run_strategic_reviews(
 			characters, objectives_map, world_states
+		)
+		_assign_phoenix_champion_restore_objective(
+			characters, objectives_map, phoenix_council_state,
 		)
 		var cw_season_count: int = int(season_meta.get("horde_season_count", 0))
 		if not togashi_state.is_empty():
@@ -3792,7 +3803,7 @@ static func _process_successful_bribe_writebacks(
 				var entry: LegalCaseEntry = LegalStatusSystem.get_case(briber, record.case_id)
 				if entry != null:
 					LegalStatusSystem.transition(entry, Enums.LegalStatus.CLEAR, ic_day)
-			HonorGlorySystem.apply_honor_change(magistrate, -0.5)
+			HonorGlorySystem.apply_honor_change(magistrate, CrimeSystem.scale_honor_by_rank(-0.5, magistrate))
 
 			# Release magistrate's active case
 			var mag_objs: Dictionary = objectives_map.get(magistrate_id, {})
@@ -3963,7 +3974,7 @@ static func _process_extortion_writebacks(
 				var entry: LegalCaseEntry = LegalStatusSystem.get_case(suspect, record.case_id)
 				if entry != null:
 					LegalStatusSystem.transition(entry, Enums.LegalStatus.CLEAR, ic_day)
-			HonorGlorySystem.apply_honor_change(magistrate, -1.0)
+			HonorGlorySystem.apply_honor_change(magistrate, CrimeSystem.scale_honor_by_rank(-1.0, magistrate))
 
 			var crime_name: String = InvestigationSystem.CRIME_TYPE_NAMES.get(
 				record.crime_type, "Crime"
@@ -4893,6 +4904,48 @@ static func _process_blackmail_favor_writebacks(
 			favors.append(favor)
 
 
+static func _process_invoke_favor_writebacks(
+	results: Array,
+	favors: Array,
+	world_states: Dictionary,
+	ic_day: int,
+) -> void:
+	for r: Variant in results:
+		if not r is Dictionary:
+			continue
+		var d: Dictionary = r as Dictionary
+		if d.get("action_id", "") != "INVOKE_FAVOR":
+			continue
+		if not d.get("success", false):
+			continue
+		var effects: Dictionary = d.get("effects", {})
+		if not effects.get("requires_favor_invocation", false):
+			continue
+		var favor_id: int = effects.get("favor_id", -1)
+		var debtor_id: int = effects.get("debtor_id", -1)
+		var method: int = effects.get("invocation_method", FavorData.InvocationMethod.PERSONAL_VISIT)
+		if favor_id < 0 or debtor_id < 0:
+			continue
+		var favor: FavorData = null
+		for f: Variant in favors:
+			if f is FavorData and (f as FavorData).favor_id == favor_id:
+				favor = f as FavorData
+				break
+		if favor == null or favor.invoked or favor.resolved:
+			continue
+		FavorSystem.invoke_favor(favor, method, ic_day)
+		var debtor_ws: Dictionary = world_states.get(debtor_id, {})
+		var pending: Array = debtor_ws.get("pending_events", [])
+		pending.append({
+			"reactive_type": "FAVOR_REQUESTED",
+			"requester_id": d.get("character_id", -1),
+			"favor_id": favor_id,
+			"ic_day": ic_day,
+		})
+		debtor_ws["pending_events"] = pending
+		world_states[debtor_id] = debtor_ws
+
+
 static func _process_commerce_topic_writebacks(
 	results: Array,
 	characters_by_id: Dictionary,
@@ -5596,6 +5649,40 @@ static func _assign_magistrate_standing_objectives(
 			"priority": 4,
 			"auto_assigned": true,
 		}
+
+
+static func _assign_phoenix_champion_restore_objective(
+	characters: Array,
+	objectives_map: Dictionary,
+	phoenix_council_state: Dictionary,
+) -> void:
+	if phoenix_council_state.is_empty():
+		return
+	if not phoenix_council_state.get("champion_authority_active", false):
+		return
+	var champion_id: int = int(phoenix_council_state.get("champion_id", -1))
+	if champion_id < 0:
+		return
+	var champion: L5RCharacterData = null
+	for c: L5RCharacterData in characters:
+		if c.character_id == champion_id:
+			champion = c
+			break
+	if champion == null or CharacterStats.is_dead(champion):
+		return
+	if champion.bushido_virtue != Enums.BushidoVirtue.CHUGI:
+		return
+	if not objectives_map.has(champion_id):
+		objectives_map[champion_id] = {}
+	var objectives: Dictionary = objectives_map[champion_id]
+	if objectives.get("primary", {}).get("need_type", "") == "RESTORE_GOVERNANCE":
+		return
+	objectives["primary"] = {
+		"need_type": "RESTORE_GOVERNANCE",
+		"objective_type": "RESTORE_GOVERNANCE",
+		"priority": 5,
+		"assigned_by": -1,
+	}
 
 
 static func _assign_monk_standing_objectives(
@@ -9368,7 +9455,8 @@ static func _check_dragon_schism_siege_events(
 
 		# Apply Honor cost to the FC (s55.10.2.8).
 		if mirumoto_fc != null:
-			HonorGlorySystem.apply_honor_change(mirumoto_fc, float(assault_result.get("honor_change", 0.0)))
+			var base_honor: float = float(assault_result.get("honor_change", 0.0))
+			HonorGlorySystem.apply_honor_change(mirumoto_fc, CrimeSystem.scale_honor_by_rank(base_honor, mirumoto_fc) if base_honor < 0.0 else base_honor)
 
 		# Apply empire-wide disposition penalty to all status-5+ clan representatives.
 		var disp_change: int = int(assault_result.get("empire_disposition_change", 0))
@@ -10438,12 +10526,12 @@ static func _apply_garrison_courtier_refusal_writebacks(
 		var target_province_id: int = effects.get("target_province_id", -1)
 		if target_province_id < 0:
 			continue
-		var honor_loss: float = effects.get("honor_change_recipient", 0.0)
-		if absf(honor_loss) > 0.001:
+		var base_honor_loss: float = effects.get("honor_change_recipient", 0.0)
+		if absf(base_honor_loss) > 0.001:
 			var target_id: int = effects.get("target_npc_id", -1)
 			var target: L5RCharacterData = characters_by_id.get(target_id)
 			if target != null and not CharacterStats.is_dead(target):
-				HonorGlorySystem.apply_honor_change(target, honor_loss)
+				HonorGlorySystem.apply_honor_change(target, CrimeSystem.scale_honor_by_rank(base_honor_loss, target))
 		for s: SettlementData in settlements:
 			if s.settlement_type == Enums.SettlementType.WALL_TOWER \
 					and s.province_id == target_province_id:
@@ -12635,7 +12723,7 @@ static func _process_togashi_oversight(
 				topic.slug = "togashi_defiance_stage_%d_%d" % [stage, ic_day]
 				topic.title = "Mirumoto Defies Togashi Oversight (Stage %d)" % stage
 				topic.variant = "togashi_defiance"
-				HonorGlorySystem.apply_honor_change(mirumoto_fc, -0.3)
+				HonorGlorySystem.apply_honor_change(mirumoto_fc, CrimeSystem.scale_honor_by_rank(-0.3, mirumoto_fc))
 			topic.topic_type = "political"
 			topic.tier = TopicData.Tier.TIER_4 if stage <= 2 else TopicData.Tier.TIER_3
 			topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)
@@ -16120,7 +16208,7 @@ static func _apply_phoenix_master_death_honor_penalty(
 		if not master.role_position.begins_with("Master of "):
 			continue
 		if CharacterStats.is_dead(master):
-			HonorGlorySystem.apply_honor_change(champion, -0.5)
+			HonorGlorySystem.apply_honor_change(champion, CrimeSystem.scale_honor_by_rank(-0.5, champion))
 			penalized.append(cid)
 			penalty_count += 1
 	state["master_death_penalized_ids"] = penalized
@@ -16569,7 +16657,7 @@ static func _process_assassination_commissions(
 		var commissioner: L5RCharacterData = characters_by_id.get(commissioner_id) as L5RCharacterData
 		var target_char: L5RCharacterData = characters_by_id.get(target_id) as L5RCharacterData
 		if commissioner != null and target_char != null:
-			HonorGlorySystem.apply_honor_change(commissioner, AssassinationSystem.get_ordering_honor_loss(target_char.status))
+			HonorGlorySystem.apply_honor_change(commissioner, AssassinationSystem.get_ordering_honor_loss(target_char.status, commissioner))
 		active_assassination_ops.append(state)
 
 
@@ -17044,6 +17132,31 @@ static func _process_protecting_clan_honor_writebacks(
 		HonorGlorySystem.apply_honor_change(
 			actor, CrimeSystem.get_protecting_clan_honor(actor)
 		)
+
+
+static func _process_following_orders_honor_writebacks(
+	results: Array,
+	characters_by_id: Dictionary,
+	objectives_map: Dictionary,
+) -> void:
+	var processed: Dictionary = {}
+	for result: Dictionary in results:
+		if not result.get("success", false):
+			continue
+		var char_id: int = result.get("character_id", -1)
+		if char_id < 0 or processed.has(char_id):
+			continue
+		var objectives: Dictionary = objectives_map.get(char_id, {})
+		var primary: Dictionary = objectives.get("primary", {})
+		if int(primary.get("assigned_by", -1)) < 0:
+			continue
+		var actor: L5RCharacterData = characters_by_id.get(char_id)
+		if actor == null or CharacterStats.is_dead(actor):
+			continue
+		HonorGlorySystem.apply_honor_change(
+			actor, CrimeSystem.get_following_orders_honor(actor)
+		)
+		processed[char_id] = true
 
 
 static func _process_travel_redirect_writebacks(

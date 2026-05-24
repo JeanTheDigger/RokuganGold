@@ -175,22 +175,24 @@ static func evaluate_intervention(
 	intervention: InterventionType,
 	intervener_status: float,
 	convicting_lord_status: float,
+	intervener: L5RCharacterData = null,
 ) -> Dictionary:
 	if intervener_status <= convicting_lord_status:
 		return {"valid": false, "reason": "insufficient_status"}
 
-	var honor_cost: float = 0.0
+	var base_cost: float = 0.0
 	var disposition_hit: int = 0
 	match intervention:
 		InterventionType.PARDON:
-			honor_cost = -0.5
+			base_cost = -0.5
 			disposition_hit = -15
 		InterventionType.OVERTURN:
-			honor_cost = -0.3
+			base_cost = -0.3
 			disposition_hit = -10
 		InterventionType.COMMUTE:
-			honor_cost = -0.2
+			base_cost = -0.2
 			disposition_hit = -5
+	var honor_cost: float = CrimeSystem.scale_honor_by_rank(base_cost, intervener) if intervener != null else base_cost
 
 	return {
 		"valid": true,
@@ -239,9 +241,10 @@ const FALSE_ACCUSATION_HONOR_LOSS: float = -0.5
 const FALSE_ACCUSATION_DISPOSITION_HIT: int = -15
 
 
-static func apply_false_accusation_penalty() -> Dictionary:
+static func apply_false_accusation_penalty(lord: L5RCharacterData = null) -> Dictionary:
+	var honor: float = CrimeSystem.scale_honor_by_rank(FALSE_ACCUSATION_HONOR_LOSS, lord) if lord != null else FALSE_ACCUSATION_HONOR_LOSS
 	return {
-		"honor_change": FALSE_ACCUSATION_HONOR_LOSS,
+		"honor_change": honor,
 		"disposition_hit_all_vassals": FALSE_ACCUSATION_DISPOSITION_HIT,
 		"chilling_effect": true,
 	}
@@ -253,10 +256,11 @@ const REFUSED_SEPPUKU_HONOR_LOSS: float = -5.0
 const REFUSED_SEPPUKU_INFAMY_GAIN: float = 3.0
 
 
-static func apply_refused_seppuku() -> Dictionary:
+static func apply_refused_seppuku(convicted: L5RCharacterData = null) -> Dictionary:
+	var honor: float = CrimeSystem.scale_honor_by_rank(REFUSED_SEPPUKU_HONOR_LOSS, convicted) if convicted != null else REFUSED_SEPPUKU_HONOR_LOSS
 	return {
 		"new_legal_status": "ronin",
-		"honor_change": REFUSED_SEPPUKU_HONOR_LOSS,
+		"honor_change": honor,
 		"infamy_gain": REFUSED_SEPPUKU_INFAMY_GAIN,
 		"status_set_to": 0.0,
 		"exile": true,

@@ -949,6 +949,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 				"ORDER_DEPLOY", "ORDER_FORTIFY",
 				"SEND_INVITATION", "CALL_COURT",
 				"COMMISSION_ASSASSINATION",
+				"INVOKE_FAVOR",
 				"ISSUE_DUEL_CHALLENGE",
 				"SHADOW_TARGET", "SEARCH_PERSON", "CONCEAL_ITEM",
 				"FABRICATE_SECRET", "EXPOSE_SECRET_PRIVATELY", "EXPOSE_SECRET_PUBLICLY",
@@ -986,6 +987,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 				"SEND_INVITATION",
 				"CONDUCT_COMMERCE", "PURCHASE_MARKET",
 				"REQUEST_ALLIED_AID",
+				"INVOKE_FAVOR",
 				"ISSUE_DUEL_CHALLENGE",
 				"DO_NOTHING", "REST",
 			]
@@ -1008,6 +1010,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 				"SEDUCE_FOR_LEVERAGE", "SEDUCE_TO_COMPROMISE",
 				"CONDUCT_COMMERCE", "PURCHASE_MARKET",
 				"EXAMINE_CRIME_SCENE",
+				"INVOKE_FAVOR",
 				"ISSUE_DUEL_CHALLENGE",
 				"DO_NOTHING", "REST",
 			]
@@ -1146,6 +1149,7 @@ static func _get_ap_cost(action_id: String) -> int:
 		"FOUND_MONASTERY": 1,
 		"COMMISSION_SHIP": 1,
 		"RESTORE_COUNCIL_COMPACT": 1,
+		"INVOKE_FAVOR": 1,
 		"TREAT_WOUND": 1,
 		"REQUEST_PERFORMANCE": 0,
 		"ANNOUNCE_HUNT": 0,
@@ -2428,11 +2432,19 @@ static func _populate_action_metadata(
 			insult_type = "ancestors"
 		elif need.need_type == "DAMAGE_RELATIONSHIP":
 			insult_type = "clan"
+		else:
+			var roll: int = (ctx.character_id * 7 + option.target_npc_id * 13) % 100
+			if roll >= 90:
+				insult_type = "ancestors"
+			elif roll >= 70:
+				insult_type = "clan"
 		option.metadata = {"insult_type": insult_type}
 	elif option.action_id == "INTIMIDATE":
 		var target_id: int = need.target_npc_id if need.target_npc_id >= 0 else option.target_npc_id
 		var secret_meta: Dictionary = _pick_secret_about_target(ctx, target_id)
 		option.metadata = secret_meta
+	elif option.action_id == "INVOKE_FAVOR":
+		option.metadata = _pick_best_favor_to_invoke(ctx)
 	elif option.action_id == "PLAY_GAME":
 		option.metadata = {"game_skill": _pick_best_game_skill(ctx)}
 	elif option.action_id in ["NEGOTIATE", "PERSUADE", "PUBLIC_DEBATE",
@@ -2909,6 +2921,28 @@ static func _get_favor_tier_held_against(
 			if tier > best_tier:
 				best_tier = tier
 	return best_tier
+
+
+static func _pick_best_favor_to_invoke(
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> Dictionary:
+	var best_favor_id: int = -1
+	var best_debtor_id: int = -1
+	var best_tier: int = 0
+	for lev: Variant in ctx.held_leverage:
+		if not lev is Dictionary:
+			continue
+		var d: Dictionary = lev as Dictionary
+		if d.get("invoked", false):
+			continue
+		if d.get("resolved", false):
+			continue
+		var tier: int = d.get("tier", 0)
+		if tier > best_tier:
+			best_tier = tier
+			best_favor_id = d.get("favor_id", -1)
+			best_debtor_id = d.get("debtor_id", -1)
+	return {"favor_id": best_favor_id, "debtor_id": best_debtor_id}
 
 
 static func _pick_secret_about_target(

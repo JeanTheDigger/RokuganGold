@@ -239,7 +239,7 @@ static func _apply_acquittal(
 	record.evidence_total = record.evidence_total / 2
 
 	HonorGlorySystem.apply_honor_change(
-		lord, TreasonSystem.FALSE_ACCUSATION_HONOR_LOSS
+		lord, CrimeSystem.scale_honor_by_rank(TreasonSystem.FALSE_ACCUSATION_HONOR_LOSS, lord)
 	)
 
 

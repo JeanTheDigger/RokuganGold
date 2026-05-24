@@ -89,6 +89,13 @@ static func get_table_honor_cost(table: Array, honor_rank: int) -> float:
 	return table[bracket] / 10.0
 
 
+const RANK_SCALE: Array[float] = [0.0, 0.333, 0.667, 1.0, 2.0, 3.0]
+
+static func scale_honor_by_rank(base_cost: float, character: L5RCharacterData) -> float:
+	var bracket: int = _get_rank_bracket(HonorGlorySystem.get_honor_rank(character))
+	return base_cost * RANK_SCALE[bracket]
+
+
 static func get_disobeying_lord_honor(character: L5RCharacterData) -> float:
 	return get_table_honor_cost(HONOR_TABLE_DISOBEYING_LORD, HonorGlorySystem.get_honor_rank(character))
 

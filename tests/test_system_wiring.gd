@@ -3183,3 +3183,76 @@ func test_sincere_courtesy_enemies_honor() -> void:
 	assert_almost_eq(CrimeSystem.get_sincere_courtesy_enemies_honor(high), 0.0, 0.001, "Rank 9-10 sincere courtesy = 0.0")
 
 
+func test_scale_honor_by_rank_zero_at_rank_0() -> void:
+	var c := L5RCharacterData.new()
+	c.honor = 0.0
+	c.school = "Hida Bushi"
+	c.clan = "Crab"
+	var result: float = CrimeSystem.scale_honor_by_rank(-1.0, c)
+	assert_almost_eq(result, 0.0, 0.001, "Rank 0 gets zero honor loss")
+
+
+func test_scale_honor_by_rank_full_at_rank_5() -> void:
+	var c := L5RCharacterData.new()
+	c.honor = 5.5
+	c.school = "Doji Courtier"
+	c.clan = "Crane"
+	var result: float = CrimeSystem.scale_honor_by_rank(-1.0, c)
+	assert_almost_eq(result, -1.0, 0.001, "Rank 5-6 gets base cost")
+
+
+func test_scale_honor_by_rank_triple_at_rank_10() -> void:
+	var c := L5RCharacterData.new()
+	c.honor = 10.0
+	c.school = "Doji Courtier"
+	c.clan = "Crane"
+	var result: float = CrimeSystem.scale_honor_by_rank(-1.0, c)
+	assert_almost_eq(result, -3.0, 0.001, "Rank 9-10 gets triple cost")
+
+
+func test_following_orders_writeback_fires_on_lord_assigned() -> void:
+	var c := L5RCharacterData.new()
+	c.character_id = 1
+	c.honor = 0.5
+	c.school = "Hida Bushi"
+	c.clan = "Crab"
+	var chars_by_id: Dictionary = {1: c}
+	var objectives_map: Dictionary = {1: {"primary": {"assigned_by": 5}}}
+	var results: Array = [{"character_id": 1, "action_id": "CHARM", "success": true}]
+	var before: float = c.honor
+	DayOrchestrator._process_following_orders_honor_writebacks(results, chars_by_id, objectives_map)
+	assert_true(c.honor > before, "Low honor NPC gains honor for following orders")
+
+
+func test_following_orders_writeback_skips_self_directed() -> void:
+	var c := L5RCharacterData.new()
+	c.character_id = 1
+	c.honor = 8.0
+	c.school = "Doji Courtier"
+	c.clan = "Crane"
+	var chars_by_id: Dictionary = {1: c}
+	var objectives_map: Dictionary = {1: {"primary": {"assigned_by": -1}}}
+	var results: Array = [{"character_id": 1, "action_id": "CHARM", "success": true}]
+	var before: float = c.honor
+	DayOrchestrator._process_following_orders_honor_writebacks(results, chars_by_id, objectives_map)
+	assert_almost_eq(c.honor, before, 0.001, "Self-directed NPC gets no following orders adjustment")
+
+
+func test_following_orders_writeback_once_per_day() -> void:
+	var c := L5RCharacterData.new()
+	c.character_id = 1
+	c.honor = 0.5
+	c.school = "Hida Bushi"
+	c.clan = "Crab"
+	var chars_by_id: Dictionary = {1: c}
+	var objectives_map: Dictionary = {1: {"primary": {"assigned_by": 5}}}
+	var results: Array = [
+		{"character_id": 1, "action_id": "CHARM", "success": true},
+		{"character_id": 1, "action_id": "GOSSIP", "success": true},
+	]
+	var before: float = c.honor
+	DayOrchestrator._process_following_orders_honor_writebacks(results, chars_by_id, objectives_map)
+	var expected_gain: float = CrimeSystem.get_following_orders_honor(c)
+	assert_almost_eq(c.honor - before, expected_gain, 0.05, "Only applied once despite multiple actions")
+
+

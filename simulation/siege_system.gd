@@ -349,13 +349,17 @@ static func get_cowardice_threshold(personality_tag: String) -> int:
 static func compute_honor_loss(
 	ticks_since_sortie: int,
 	personality_tag: String,
+	character: L5RCharacterData = null,
 ) -> float:
 	var threshold: int = get_cowardice_threshold(personality_tag)
 	if ticks_since_sortie <= threshold:
 		return 0.0
 	var ticks_past: int = ticks_since_sortie - threshold
 	var intervals: int = int(ticks_past / float(HONOR_LOSS_INTERVAL))
-	return float(intervals) * HONOR_LOSS_PER_INTERVAL
+	var base: float = float(intervals) * HONOR_LOSS_PER_INTERVAL
+	if character != null:
+		return CrimeSystem.scale_honor_by_rank(-base, character)
+	return base
 
 
 static func process_honor_cowardice(

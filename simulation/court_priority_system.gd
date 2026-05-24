@@ -69,10 +69,11 @@ const HOST_LEAVING_HONOR_LOSS: float = -1.0
 const HOST_LEAVING_GLORY_LOSS: float = -0.5
 const GUEST_LEAVING_DISPOSITION_COST: int = -3
 
-static func get_early_departure_cost(is_host: bool, is_proxy: bool) -> Dictionary:
+static func get_early_departure_cost(is_host: bool, is_proxy: bool, character: L5RCharacterData = null) -> Dictionary:
 	if is_host:
+		var honor: float = CrimeSystem.scale_honor_by_rank(HOST_LEAVING_HONOR_LOSS, character) if character != null else HOST_LEAVING_HONOR_LOSS
 		return {
-			"honor_loss": HOST_LEAVING_HONOR_LOSS,
+			"honor_loss": honor,
 			"glory_loss": HOST_LEAVING_GLORY_LOSS,
 			"disposition_cost": 0,
 			"mandate_violation": false,

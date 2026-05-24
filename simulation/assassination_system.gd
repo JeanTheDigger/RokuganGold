@@ -152,20 +152,24 @@ const EXECUTE_HONOR_LOSS_DEFAULT: float = -3.0
 # Honor / Infamy Consequences
 # ==============================================================================
 
-static func get_ordering_honor_loss(target_status: float) -> float:
+static func get_ordering_honor_loss(target_status: float, commissioner: L5RCharacterData = null) -> float:
+	var base: float
 	if target_status >= 8.0:
-		return ORDER_HONOR_LOSS_STATUS_ELITE
-	if target_status >= 6.0:
-		return ORDER_HONOR_LOSS_STATUS_HIGH
-	if target_status >= 3.0:
-		return ORDER_HONOR_LOSS_STATUS_MID
-	return ORDER_HONOR_LOSS_STATUS_LOW
+		base = ORDER_HONOR_LOSS_STATUS_ELITE
+	elif target_status >= 6.0:
+		base = ORDER_HONOR_LOSS_STATUS_HIGH
+	elif target_status >= 3.0:
+		base = ORDER_HONOR_LOSS_STATUS_MID
+	else:
+		base = ORDER_HONOR_LOSS_STATUS_LOW
+	if commissioner != null:
+		return CrimeSystem.scale_honor_by_rank(base, commissioner)
+	return base
 
 
 static func get_execution_honor_loss(assassin: L5RCharacterData) -> float:
-	if assassin.clan == "Scorpion":
-		return EXECUTE_HONOR_LOSS_SCORPION
-	return EXECUTE_HONOR_LOSS_DEFAULT
+	var base: float = EXECUTE_HONOR_LOSS_SCORPION if assassin.clan == "Scorpion" else EXECUTE_HONOR_LOSS_DEFAULT
+	return CrimeSystem.scale_honor_by_rank(base, assassin)
 
 
 # ==============================================================================

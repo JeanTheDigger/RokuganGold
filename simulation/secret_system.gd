@@ -151,7 +151,7 @@ static func reveal_privately(
 ) -> Dictionary:
 	var sev: SecretData.Severity = secret.severity
 	var disp_change: int = PRIVATE_EXPOSURE_DISP.get(sev, -8)
-	var honor_loss: float = SUBJECT_HONOR_LOSS.get(sev, 0.0)
+	var honor_loss: float = CrimeSystem.scale_honor_by_rank(SUBJECT_HONOR_LOSS.get(sev, 0.0), subject)
 	var glory_loss: float = SUBJECT_GLORY_LOSS.get(sev, 0.0)
 	var infamy_gain: float = SUBJECT_INFAMY_GAIN.get(sev, 0.0)
 
@@ -195,7 +195,7 @@ static func expose_publicly(
 ) -> Dictionary:
 	var sev: SecretData.Severity = secret.severity
 	var disp_per_witness: int = PUBLIC_EXPOSURE_DISP_PER_WITNESS.get(sev, -5)
-	var honor_loss: float = SUBJECT_HONOR_LOSS.get(sev, 0.0)
+	var honor_loss: float = CrimeSystem.scale_honor_by_rank(SUBJECT_HONOR_LOSS.get(sev, 0.0), subject)
 	var glory_loss: float = SUBJECT_GLORY_LOSS.get(sev, 0.0)
 	var infamy_gain: float = SUBJECT_INFAMY_GAIN.get(sev, 0.0)
 
@@ -264,7 +264,8 @@ static func fabricate_secret(
 	var total: int = roll.get("total", 0)
 	var success: bool = roll.get("success", false)
 
-	var honor_cost: float = FABRICATION_HONOR_COST.get(severity, -0.5)
+	var base_cost: float = FABRICATION_HONOR_COST.get(severity, -0.5)
+	var honor_cost: float = CrimeSystem.scale_honor_by_rank(base_cost, fabricator)
 	HonorGlorySystem.apply_honor_change(fabricator, honor_cost)
 	HonorGlorySystem.apply_infamy_change(fabricator, FABRICATION_INFAMY)
 
@@ -676,7 +677,7 @@ static func resolve_forge_impersonation_letter(
 	var success: bool = result.get("success", false)
 	var detection_tn: int = needed if success else 0
 
-	HonorGlorySystem.apply_honor_change(forger, -0.3)
+	HonorGlorySystem.apply_honor_change(forger, CrimeSystem.scale_honor_by_rank(-0.3, forger))
 	HonorGlorySystem.apply_infamy_change(forger, 0.1)
 
 	return {
@@ -717,7 +718,7 @@ static func resolve_forge_order(
 	var success: bool = result.get("success", false)
 	var detection_tn: int = needed if success else 0
 
-	HonorGlorySystem.apply_honor_change(forger, -0.3)
+	HonorGlorySystem.apply_honor_change(forger, CrimeSystem.scale_honor_by_rank(-0.3, forger))
 	HonorGlorySystem.apply_infamy_change(forger, 0.1)
 
 	return {
