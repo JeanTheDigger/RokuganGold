@@ -2675,6 +2675,219 @@ mechanical code changes to implement them.
   InformationSystem methods from dict access to property access. Updated all
   test files.
 
+## Decisions Needed and Blocked Items
+
+Everything below needs a decision, a GDD spec, or a dependency before dev
+can proceed. Items are grouped by what's blocking them. Each entry says
+what the code currently does, what it needs, and where the answer lives.
+
+---
+
+### A. PROVISIONAL Numeric Values — Need GDD Confirmation or Replacement
+
+These values were invented because the GDD describes a mechanic without
+giving exact numbers. Each is marked PROVISIONAL in code. They work but
+may be wrong.
+
+| # | Value | Current | Where Used | GDD Says | Code Location |
+|---|-------|---------|------------|----------|---------------|
+| A1 | Non-shinobi TN penalty on Phase 1 access rolls | +10 | assassination_system.gd | "severe disadvantage" — no number | s12.8 |
+| A2 | Per-failed-access permanent TN penalty tiers | +5/+10/+15 | assassination_system.gd | Matches suspicion scale; no explicit spec | s12.8 |
+| A3 | Critical failure detection TN (assassin's roll total) | roll total | assassination_system.gd | No explicit detection TN formula | s12.8 |
+| A4 | Execution honor cost (non-Scorpion) | -3.0 | assassination_system.gd | "significant" — no number | s12.8 |
+| A5 | Concealment partial failure threshold | missed by <10 | assassination_system.gd | "near miss" — no number | s12.8 |
+| A6 | Daily detection suspicion gain on observer success | +3 | assassination_system.gd | No explicit amount per observation | s12.8 |
+| A7 | Target Status as direct TN adder on Phase 1 access | int(status) | assassination_system.gd | "higher Status = higher base TN" — no formula | s12.8 |
+| A8 | Non-shinobi detection bonus for observers | +5 Investigation | assassination_system.gd | "easier to detect" — no number | s12.8 |
+| A9 | VISIT_PROMISE deadline | 90 IC days | commitment_registry.gd | No explicit deadline in GDD | s55.31 |
+| A10 | MEETING_ARRANGEMENT deadline | 90 IC days | commitment_registry.gd | No explicit deadline in GDD | s55.31 |
+| A11 | MEETING_ARRANGEMENT reply disposition gate | >= 0 | letter_system.gd | No explicit threshold in GDD | s55.31 |
+| A12 | REQUEST_ALLIED_AID acceptance disposition gate | 31 | npc_decision_engine.gd | No explicit threshold in GDD | s55.31 |
+| A13 | RESOURCE_PROMISE deadline | 90 IC days | commitment_registry.gd | No explicit deadline in GDD | s55.31 |
+| A14 | TREAT_WOUND raises by Medicine rank | 0-2→0, 3-4→1, 5-6→2, 7+ →3 | npc_decision_engine.gd | NPCs should declare raises; no scale given | s4.5 |
+| A15 | FORGE letter/order NeedType alignment scores | 40–70 | objective_alignment.json | GDD says what forges do but not how to score them vs other actions | s12.8 |
+| A16 | Forged letter delivery distance | 3 provinces | day_orchestrator.gd | Blocked on map/adjacency data | s12.7 |
+| A17 | Forged objective priority | 8 | day_orchestrator.gd | No GDD spec for objective priority values | — |
+| A18 | Impersonation detection topic tier | TIER_3 | day_orchestrator.gd | No explicit tier in GDD | — |
+| A19 | INVESTIGATE_THREAT priority (from impersonation) | 6 | day_orchestrator.gd | No GDD spec for objective priority values | — |
+| A20 | Forge authority level | Derived from forger's own lord_rank | npc_decision_engine.gd | Should come from impersonated target's rank | s12.8 |
+| A21 | Hunt beast stat blocks (8 of 10 species) | Derived from s54.1 | hunt_system.gd | Bear=10 and ozaru=20 confirmed; others interpolated | s57.38 |
+| A22 | PERFORM_RITUAL alignment score under PERFORM_RITUAL NeedType | 90 (below PERFORM_WORSHIP at 100) | objective_alignment.json | No explicit scoring hierarchy for rituals | — |
+
+---
+
+### B. Design Gaps — Need GDD Spec or Design Decision
+
+These are places where the code cannot proceed because the GDD doesn't
+specify the mechanic, or two GDD sections conflict, or a concept has no
+implementation path.
+
+**B1. NPC favor invocation — when does an NPC call in a held favor?**
+GDD s12.10 specifies three channels (letter, court, personal visit) but
+s57.12 and s14 have no ActionID for "INVOKE_FAVOR" or similar. The
+`FAVOR_REQUESTED` reactive event handler exists but nothing creates the
+event. **Decision needed:** Define an ActionID (or reactive trigger) for
+NPC-initiated favor invocation, or specify that favors are player-only.
+
+**B2. MENTOR executor is a stub — training pipeline undesigned.**
+MENTOR is in context lists and scoring tables but returns a single-line
+placeholder effect. Full implementation requires: s48 Sensei multipliers,
+student AP consumption, ACCEPT_TRAINING reactive event injection.
+**Decision needed:** LOCK GDD s48 training mechanics.
+
+**B3. RESTORE_COUNCIL_COMPACT — no NeedType routing for Phoenix Champions.**
+Action is in AT_OWN_HOLDINGS context but has no objective_alignment entry.
+GDD s55.10.3.7 says it's personality-driven (Chugi restores, Ishi keeps)
+but doesn't specify which NeedType routes Phoenix Champions to this action.
+**Decision needed:** Define a NeedType (or Strategic Review directive) that
+creates the objective leading to RESTORE_COUNCIL_COMPACT.
+
+**B4. Position decay — no GDD spec exists.**
+`position_hardened` and `position_durable` flags are emitted by NEGOTIATE
+and PERSUADE but no position decay system consumes them. Topic position
+shifts are currently permanent. **Decision needed:** Define whether and
+how topic positions decay over time (or confirm they're permanent).
+
+**B5. FOLLOWING_ORDERS honor row — no consumer.**
+Table 2.3 row "Following Orders" (positive honor at low rank, negative
+at high rank) is fully defined in code but has no mechanical trigger.
+**Decision needed:** Identify when an NPC is "following orders" in a way
+that should trigger this row (e.g., NPC objective conflict resolution).
+
+**B6. Three Table 2.3 rows have no mechanical trigger.**
+LYING (FABRICATE_SECRET already has explicit per-tier costs), DUPED_CRIMINAL
+(forge orders produce misdirections not criminal acts), DUPED_FOOLISH (no
+mechanical concept of "being duped into foolishness").
+**Decision needed:** Identify mechanical triggers or confirm these are
+player-only / narrative-only rows.
+
+**B7. Koku transfer ActionID — RESOURCE_PROMISE partial fulfillment.**
+RESOURCE_PROMISE commitments can be fulfilled via SHARE_SUPPLIES (rice/arms)
+and ORDER_DEPLOY (troops), but there is no dedicated ActionID for "send koku
+to another character." Koku payment fulfillment is blocked.
+**Decision needed:** Define a TRANSFER_KOKU ActionID (or equivalent), or
+specify that koku promises can't be fulfilled via the commitment system.
+
+**B8. Crime-sourced offenses for PUBLIC_ATONEMENT.**
+Currently only topic-sourced offenses feed the atonement pipeline. An NPC
+convicted of a crime has a CrimeRecord but no corresponding "offense" entry
+for PUBLIC_ATONEMENT to pick up.
+**Decision needed:** Define how CrimeRecord convictions register as
+atonable offenses (or confirm that convicted NPCs don't atone publicly).
+
+**B9. Insult classification — ancestor/clan honor distinction.**
+All PUBLIC_INSULT actions are treated as self-insults. GDD Table 2.3
+distinguishes "insult to self" (gain honor) vs "insult to ancestors/family/
+clan" (lose honor) with different rates. The `insult_type` metadata field
+exists but only the NPC engine populates it heuristically.
+**Decision needed:** Define how insult targets are mechanically classified
+(self vs ancestors vs clan) beyond the current NPC heuristic.
+
+**B10. Data retention windows for unbounded arrays.**
+`crime_records`, `pending_letters`, and `active_secrets` grow
+monotonically. `pending_letters` can't be removed after delivery due to
+multi-stage forgery/impersonation processing. `crime_records` have complex
+terminal states (PARDONED, FUGITIVE are live). `active_secrets` may be
+partially exposed.
+**Decision needed:** Define retention policies (e.g., archive after N
+seasons, purge fully resolved records, or accept unbounded growth).
+
+**B11. Forge authority level — should come from target, not forger.**
+Currently uses `_forge_authority_from_lord_rank(forger_lord_rank)` as proxy
+because the impersonated target's rank is not available in ContextSnapshot.
+**Decision needed:** Add `target_npc_status` or `target_lord_rank` to
+ContextSnapshot/ImmediateNeed, or confirm the proxy is acceptable.
+
+**B12. Honor rank-scaling for Low Skill use — systemic gap.**
+GDD says "Using a Low Skill per Table 2.3, scaled by Honor Rank." The
+6-bracket implementation is wired, but the broader pattern of rank-scaling
+honor costs across all crime types (not just Low Skill) is not implemented.
+Every honor cost in the game is flat, not rank-scaled.
+**Decision needed:** Confirm whether rank-scaling applies to all Table 2.3
+rows or only the "Using a Low Skill" row.
+
+---
+
+### C. Blocked on World Map / Adjacency Data
+
+These sections cannot be implemented until the tile/sub-tile map system and
+province adjacency data are available. No design decision needed — just
+the data.
+
+| Section | What's Blocked |
+|---------|----------------|
+| s4.3 | `is_coastal` flag — always false; naval context keys unreachable |
+| s11.7 | Sub-tile pathfinding; 5 stub military ActionIDs (FORCE_MARCH, EVALUATE_CLAN_STRENGTH, DEPLOY_ARMY sub-tile, etc.) |
+| s11.7a | Army movement, levy & mobilization (sub-tile movement) |
+| s11.9 | Ship movement initiation; naval blockade (per-sub-tile military unit) |
+| s40 | Individual combat — ASCII map tile positioning and range tracking |
+| s4.4 | Local Interface / ASCII Map (NOT STARTED) |
+| s56 | Quest System / ASCII Map (NOT STARTED) |
+| A16 | Forged letter delivery distance (3 provinces — needs adjacency data) |
+| — | `rivers` and `roads` fields on ProvinceData — no producer or consumer until map format decided |
+
+---
+
+### D. Blocked on GDD Spec (No LOCKED Section)
+
+These need GDD sections to be written or unlocked before implementation.
+
+| Section | What's Blocked |
+|---------|----------------|
+| s2.4 | `DECLARE_WALL_EMERGENCY` ActionID — s2.4.14 Decision 6 has no LOCKED spec (AP cost, agenda topic format, compliance enforcement all unspecified) |
+| s31–s37 | Spell system — all REFERENCE sections, no design started. Blocks: Sense spell detection TN (Maho Channel 3), spell_intent tag, spells_known field |
+| s38 | Kiho system — REFERENCE section |
+| s40 | Individual combat — REFERENCE section (beyond map dependency) |
+| s43 | Maho spell cast roll TN — GDD does not specify it. Blocks: CAST_MAHO NPC ActionID |
+| s48 | Sensei/training system — blocks MENTOR executor and ACCEPT_TRAINING reactive chain |
+| s49 | Artisan progression beyond gift/tattoo quality tiers — not LOCKED |
+| s54.7 | Kolat system — blocks 23 Kolat spy network ActionIDs and BRIBE_GARRISON_COMMANDER |
+| s56.14 | Full Bloodspeaker cult encounters — trigger layer done, ASCII map encounters blocked |
+| s57.40.8 | Commerce rank 5 mastery (price ±20%) — section not unlocked |
+| s57.40.9 | Appraisal skill emphasis modifier — section not unlocked |
+| s11.3.5 | Kuni/Asako/Kuroiban Named Characters with UPHOLD_LAW standing objectives — PARTIALLY DESIGNED |
+
+**REFERENCE sections** (source material only, design not started): s31–s37,
+s38, s44, s45, s54.7, s57.22–s57.24, s57.26–s57.30, s57.41–s57.43,
+s57.45–s57.46.
+
+---
+
+### E. Blocked on Other Systems Being Built First
+
+| Blocked Item | Depends On |
+|--------------|------------|
+| `techniques`, `kiho`, `katas`, `spells_known`, `weapons`, `armor_worn` fields on L5RCharacterData | s40 individual combat, s31–s37 spells |
+| `active_quest`, `active_poisons`, `combat_modifiers_pending` fields on L5RCharacterData | s56 quest system, s40 combat |
+| `timed_advantages` and `action_blocks` on L5RCharacterData | Individual school technique implementation (s29.15.24 is LOCKED but techniques are per-school) |
+| FORCE_MARCH, EVALUATE_CLAN_STRENGTH ActionIDs | Sub-tile army movement (s11.7a) |
+| BRIBE_GARRISON_COMMANDER ActionID | Kolat system (s54.7d) |
+| 37 Kolat/artisan/theater ActionIDs (scored in objective_alignment.json) | Kolat (s54.7d/s56.14), artisan (s49), theater (s49) |
+| SEEK_PRETEXT ActionID executor | GDD s14 Category 13 lists it as both NeedType and ActionID, but no executor mechanics specified |
+| `eta` community weight in Bloodspeaker cell placement | No `eta` field on ProvinceData/SettlementData |
+| Maho Channel 3 detection roll TN | s31 Sense spell design |
+| Hunt player ASCII missions | s56 coordinate system |
+| Animal companion ASCII combat | s40/s56 |
+
+---
+
+### F. Forward-Wired (No Action Needed — Documenting for Awareness)
+
+These are flags, fields, or scored entries that exist in code but have no
+consumer yet. They are NOT bugs — they are pre-wired for future systems.
+No decision needed; listed here to prevent re-auditing.
+
+- `position_hardened` / `position_durable` — emitted by NEGOTIATE/PERSUADE,
+  waiting on position decay system (see B4)
+- 37 Kolat/artisan/theater ActionIDs in objective_alignment.json — Phase 4b
+  filters them out because they have no context list entry
+- Military hierarchy constituent arrays (`constituent_companies`, etc.) —
+  intentionally unpopulated; linear scan is fine at current scale
+- `topic_tier` values in CONSEQUENCE_TABLE — present but never consumed
+  (topic creation uses commitment tier instead)
+
+---
+
 ## What To Do When Uncertain
 Stop. Read the relevant LOCKED section in /gdd/. If it does not answer the
 question, say so explicitly — do not guess, do not fill gaps with plausible
