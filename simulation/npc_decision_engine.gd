@@ -72,6 +72,9 @@ static func build_context(
 			character, chars_by_id
 		)
 		for other_id: int in bonds:
+			var other_char: L5RCharacterData = chars_by_id.get(other_id)
+			if other_char == null or CharacterStats.is_dead(other_char):
+				continue
 			var bond: int = bonds[other_id]
 			var current: int = ctx.dispositions.get(other_id, 0)
 			var combined: int = clampi(current + bond, -100, 100)

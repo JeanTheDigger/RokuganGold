@@ -105,6 +105,8 @@ static func compute_all_family_bonds(
 			var other: L5RCharacterData = chars_by_id.get(other_id)
 			if other == null:
 				continue
+			if CharacterStats.is_dead(other):
+				continue
 			if _are_siblings(actor, other):
 				_record_bond(bonds, other_id, Relationship.SIBLING)
 
@@ -130,6 +132,8 @@ static func compute_all_family_bonds(
 					continue
 				var other: L5RCharacterData = chars_by_id.get(other_id)
 				if other == null:
+					continue
+				if CharacterStats.is_dead(other):
 					continue
 				if other.clan == actor.clan:
 					continue
