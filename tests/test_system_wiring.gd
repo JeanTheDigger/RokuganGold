@@ -4252,3 +4252,54 @@ func test_duel_response_accept_resolves_duel() -> void:
 	assert_true(effects.has("winner_id") or effects.has("duel_result"), "Should have duel resolution data")
 
 
+# -- INVOKE_FAVOR held_leverage population ------------------------------------
+
+func test_held_leverage_includes_favor_id() -> void:
+	var favor := FavorData.new()
+	favor.favor_id = 42
+	favor.creditor_id = 1
+	favor.debtor_id = 2
+	favor.tier = FavorData.FavorTier.MODERATE
+	favor.invoked = false
+	favor.resolved = false
+	var debtor := L5RCharacterData.new()
+	debtor.character_id = 2
+	debtor.lord_id = 3
+	var creditor := L5RCharacterData.new()
+	creditor.character_id = 1
+	var characters_by_id: Dictionary = {1: creditor, 2: debtor}
+	var characters: Array = [creditor, debtor]
+	var world_states: Dictionary = {}
+	DayOrchestrator._populate_court_availability_data(
+		[], characters, characters_by_id, world_states, [favor],
+	)
+	var ws: Dictionary = world_states.get(1, {})
+	var leverage: Array = ws.get("held_leverage", [])
+	assert_eq(leverage.size(), 1, "Creditor should have one favor in held_leverage")
+	assert_eq(leverage[0].get("favor_id", -1), 42, "held_leverage should include favor_id")
+	assert_eq(leverage[0].get("debtor_id", -1), 2)
+	assert_eq(leverage[0].get("tier", -1), FavorData.FavorTier.MODERATE)
+
+
+func test_held_leverage_excludes_resolved_favors() -> void:
+	var favor := FavorData.new()
+	favor.favor_id = 10
+	favor.creditor_id = 1
+	favor.debtor_id = 2
+	favor.tier = FavorData.FavorTier.MINOR
+	favor.resolved = true
+	var creditor := L5RCharacterData.new()
+	creditor.character_id = 1
+	var debtor := L5RCharacterData.new()
+	debtor.character_id = 2
+	var characters_by_id: Dictionary = {1: creditor, 2: debtor}
+	var characters: Array = [creditor, debtor]
+	var world_states: Dictionary = {}
+	DayOrchestrator._populate_court_availability_data(
+		[], characters, characters_by_id, world_states, [favor],
+	)
+	var ws: Dictionary = world_states.get(1, {})
+	var leverage: Array = ws.get("held_leverage", [])
+	assert_eq(leverage.size(), 0, "Resolved favors should not appear in held_leverage")
+
+

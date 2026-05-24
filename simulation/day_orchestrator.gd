@@ -15913,7 +15913,7 @@ static func _populate_court_availability_data(
 	for fv: Variant in favors:
 		if fv is FavorData:
 			var f: FavorData = fv as FavorData
-			if f.invoked or f.creditor_id < 0:
+			if f.resolved or f.invoked or f.creditor_id < 0:
 				continue
 			if not creditor_favors.has(f.creditor_id):
 				creditor_favors[f.creditor_id] = []
@@ -15922,6 +15922,7 @@ static func _populate_court_availability_data(
 			if debtor is L5RCharacterData:
 				target_lord = (debtor as L5RCharacterData).lord_id
 			creditor_favors[f.creditor_id].append({
+				"favor_id": f.favor_id,
 				"debtor_id": f.debtor_id,
 				"target_lord_id": target_lord,
 				"tier": f.tier,
