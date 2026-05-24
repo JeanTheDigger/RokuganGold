@@ -2149,6 +2149,24 @@ costs, or forward-wiring. Do not treat as bugs.
   ones of the same type. Other seasonal injection sites (edict_response,
   commitment_honor) all had dedup. Added source check before append.
 
+### Known Code Issues (found and fixed 2026-05-24, JSON table + dead char audit)
+- **action_skill_map.json — 4 ActionIDs missing skill entries. FIXED.**
+  BRIBE_WITNESS (Temptation), EXTORT_ACCUSED (Intimidation),
+  INTIMIDATE_WITNESS (Intimidation), KILL_WITNESS (Stealth) all have
+  skill rolls in their executor implementations but were missing from
+  action_skill_map.json. NPCs with high relevant skills got no competence
+  scoring advantage. Added entries with matching primary/secondary skills.
+  3 auto-success ActionIDs (ACCEPT_SEPPUKU, REFUSE_SEPPUKU,
+  FLEE_JURISDICTION) correctly have no entry (no skill roll = 0 competence
+  modifier is appropriate).
+- **_process_witness_testimony_on_arrival — dead magistrate/witness. FIXED.**
+  Dead magistrates could receive crime topics via testimony transfer. Dead
+  witnesses could transfer topics from their topic_pool. Added
+  `CharacterStats.is_dead()` guards for both. 2 tests.
+- **_apply_intimidation_consequences — dead witness. FIXED.**
+  Dead witnesses could receive -30 disposition penalty and pending
+  provocation events. Added dead guard with early return. 1 test.
+
 ### Known Code Issues — Deferred (2026-05-24, pipeline gaps)
 - **FAVOR_REQUESTED reactive events never injected.** The handler exists in
   `reactive_decisions.gd` but nothing creates FAVOR_REQUESTED events in
