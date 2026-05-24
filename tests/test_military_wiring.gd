@@ -2769,7 +2769,7 @@ func _make_strong_ps(
 	var ps := NPCDataStructures.ProvinceStatus.new()
 	ps.province_id = prov_id
 	ps.clan = clan_name
-	ps.confidence = 2
+	ps.confidence = NPCDataStructures.ProvinceStatus.CONFIDENCE_FRESH
 	ps.garrison_pu = 5
 	ps.total_settlement_pu = 20
 	return ps

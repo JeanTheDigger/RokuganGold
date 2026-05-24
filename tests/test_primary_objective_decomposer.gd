@@ -427,7 +427,7 @@ func test_standing_still_routes_correctly() -> void:
 	ps.province_id = 1
 	ps.stability = 90.0
 	ps.garrison_pu = 5
-	ps.confidence = 2
+	ps.confidence = NPCDataStructures.ProvinceStatus.CONFIDENCE_FRESH
 	_ctx.province_statuses = [ps]
 	_ctx.resource_stockpiles = {"rice": 20.0, "population_pu": 8.0}
 	var obj: Dictionary = {"need_type": "MAXIMIZE_PROSPERITY"}

@@ -258,7 +258,7 @@ static func _decompose_expand_territory(
 	var weak_province_id: int = _find_weak_neighbor_province(ctx)
 	if weak_province_id >= 0:
 		var ps: Variant = _get_province_status(ctx, weak_province_id)
-		if ps == null or (ps is NPCDataStructures.ProvinceStatus and ps.confidence == 0):
+		if ps == null or (ps is NPCDataStructures.ProvinceStatus and ps.confidence == NPCDataStructures.ProvinceStatus.CONFIDENCE_STALE):
 			return _make_need("GATHER_INTELLIGENCE", 2, {"target_province_id": weak_province_id})
 		return _make_need("INITIATE_WAR_CHECK", 2, {
 			"target_province_id": weak_province_id,
@@ -835,7 +835,7 @@ static func _decompose_strengthen_wall(
 			continue
 		var w: NPCDataStructures.WallStatus = ws as NPCDataStructures.WallStatus
 		var ps: NPCDataStructures.ProvinceStatus = _get_province_status(ctx, w.province_id)
-		if ps != null and ps.confidence == 0:
+		if ps != null and ps.confidence == NPCDataStructures.ProvinceStatus.CONFIDENCE_STALE:
 			return _make_need("INVESTIGATE_THREAT", 3, {"target_province_id": w.province_id})
 
 	for ws: Variant in ctx.wall_statuses:
@@ -1248,7 +1248,7 @@ static func _find_undergarrisoned_province(ctx: NPCDataStructures.ContextSnapsho
 
 static func _find_stale_province(ctx: NPCDataStructures.ContextSnapshot) -> int:
 	for ps: Variant in ctx.province_statuses:
-		if ps is NPCDataStructures.ProvinceStatus and ps.confidence == 0:
+		if ps is NPCDataStructures.ProvinceStatus and ps.confidence == NPCDataStructures.ProvinceStatus.CONFIDENCE_STALE:
 			return ps.province_id
 	return -1
 

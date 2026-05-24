@@ -212,6 +212,10 @@ class ContextSnapshot:
 
 
 class ProvinceStatus:
+	const CONFIDENCE_STALE: int = 0
+	const CONFIDENCE_RECENT: int = 1
+	const CONFIDENCE_FRESH: int = 2
+
 	var province_id: int = -1
 	var clan: String = ""
 	var stability: float = 100.0
@@ -225,7 +229,7 @@ class ProvinceStatus:
 	var rice_stockpile: float = 0.0
 	var starvation_stage: int = 0
 	var last_report_ic_day: int = -1
-	var confidence: int = 0  # 0=stale, 1=recent, 2=fresh
+	var confidence: int = CONFIDENCE_STALE
 	var is_wall_province: bool = false
 	var crisis_type: String = ""
 	var province_taint_level: float = 0.0

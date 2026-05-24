@@ -2347,11 +2347,11 @@ static func build_province_statuses_from_data(
 		ps.province_taint_level = pd.province_taint_level
 		ps.is_wall_province = pd.shadowlands_strength > 0
 		if pd.crisis_type == "famine":
-			ps.starvation_stage = 1
+			ps.starvation_stage = ResourceTick.StarvationStage.SHORTAGE
 		ps.garrison_pu = settlement_garrison.get(pd.province_id, 0)
 		ps.total_settlement_pu = settlement_total_pu.get(pd.province_id, 0)
 		ps.rice_stockpile = settlement_rice.get(pd.province_id, 0.0)
-		ps.confidence = 2
+		ps.confidence = NPCDataStructures.ProvinceStatus.CONFIDENCE_FRESH
 		var army_clans: Array = armies_by_province.get(pd.province_id, [])
 		for ac: Variant in army_clans:
 			if ac is String and ac != pd.clan:
@@ -3544,7 +3544,7 @@ static func _extract_starvation_province_ids(
 	for ps: Variant in province_statuses:
 		if ps is NPCDataStructures.ProvinceStatus:
 			var status: NPCDataStructures.ProvinceStatus = ps
-			if status.starvation_stage > 0:
+			if status.starvation_stage > ResourceTick.StarvationStage.CLEAR:
 				result.append(status.province_id)
 	return result
 

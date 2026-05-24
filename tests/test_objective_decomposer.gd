@@ -80,7 +80,7 @@ func test_expand_territory_lord_with_weak_province() -> void:
 	var ps := NPCDataStructures.ProvinceStatus.new()
 	ps.province_id = 5
 	ps.stability = 40.0
-	ps.confidence = 0
+	ps.confidence = NPCDataStructures.ProvinceStatus.CONFIDENCE_STALE
 	_ctx.province_statuses = [ps]
 	var obj: Dictionary = {"need_type": "EXPAND_TERRITORY"}
 	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
@@ -209,7 +209,7 @@ func test_maximize_prosperity_lord_stale_info() -> void:
 	_ctx.is_lord = true
 	var ps := NPCDataStructures.ProvinceStatus.new()
 	ps.province_id = 4
-	ps.confidence = 0
+	ps.confidence = NPCDataStructures.ProvinceStatus.CONFIDENCE_STALE
 	_ctx.province_statuses = [ps]
 	var obj: Dictionary = {"need_type": "MAXIMIZE_PROSPERITY"}
 	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
@@ -222,7 +222,7 @@ func test_maximize_prosperity_lord_all_clear() -> void:
 	ps.province_id = 4
 	ps.stability = 90.0
 	ps.garrison_pu = 5
-	ps.confidence = 2
+	ps.confidence = NPCDataStructures.ProvinceStatus.CONFIDENCE_FRESH
 	_ctx.province_statuses = [ps]
 	_ctx.resource_stockpiles = {"rice": 20.0, "population_pu": 8.0}
 	var obj: Dictionary = {"need_type": "MAXIMIZE_PROSPERITY"}
@@ -238,7 +238,7 @@ func test_maximize_prosperity_famine_response_with_surplus() -> void:
 	ps.province_id = 4
 	ps.stability = 90.0
 	ps.garrison_pu = 5
-	ps.confidence = 2
+	ps.confidence = NPCDataStructures.ProvinceStatus.CONFIDENCE_FRESH
 	_ctx.province_statuses = [ps]
 	var obj: Dictionary = {"need_type": "MAXIMIZE_PROSPERITY"}
 	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
@@ -255,7 +255,7 @@ func test_maximize_prosperity_famine_no_surplus_skips() -> void:
 	ps.province_id = 4
 	ps.stability = 90.0
 	ps.garrison_pu = 5
-	ps.confidence = 2
+	ps.confidence = NPCDataStructures.ProvinceStatus.CONFIDENCE_FRESH
 	_ctx.province_statuses = [ps]
 	var obj: Dictionary = {"need_type": "MAXIMIZE_PROSPERITY"}
 	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
@@ -504,7 +504,7 @@ func test_defend_territory_lord_no_issues() -> void:
 	ps.province_id = 1
 	ps.stability = 90.0
 	ps.garrison_pu = 5
-	ps.confidence = 2
+	ps.confidence = NPCDataStructures.ProvinceStatus.CONFIDENCE_FRESH
 	_ctx.province_statuses = [ps]
 	var obj: Dictionary = {"need_type": "DEFEND_TERRITORY"}
 	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)

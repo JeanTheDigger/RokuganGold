@@ -151,7 +151,7 @@ static func select_realm(
 
 	if province_conditions.get("famine_active", false):
 		weights[Enums.SpiritRealm.GAKI_DO] += FAMINE_GAKI_DO_BONUS
-	if province_conditions.get("starvation_stage", 0) >= 2:
+	if province_conditions.get("starvation_stage", 0) >= ResourceTick.StarvationStage.HUNGER:
 		weights[Enums.SpiritRealm.GAKI_DO] += FAMINE_GAKI_DO_BONUS * 0.5
 
 	if province_conditions.get("recent_battle", false):

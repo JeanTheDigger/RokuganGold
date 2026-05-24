@@ -2493,7 +2493,7 @@ func test_existential_threat_starvation() -> void:
 	_world_state["resource_stockpiles"] = {"rice": 0}
 	var ps := NPCDataStructures.ProvinceStatus.new()
 	ps.province_id = 1
-	ps.starvation_stage = 2
+	ps.starvation_stage = ResourceTick.StarvationStage.HUNGER
 	_world_state["province_statuses"] = [ps]
 	var ctx := NPCDecisionEngine.build_context(_char, _world_state)
 	var has_threat: bool = NPCDecisionEngine._has_existential_threat(ctx)
@@ -3760,7 +3760,7 @@ func test_build_province_statuses_famine_starvation() -> void:
 	pd.crisis_type = "famine"
 	var result: Array = NPCDecisionEngine.build_province_statuses_from_data([pd])
 	var ps: NPCDataStructures.ProvinceStatus = result[0]
-	assert_true(ps.starvation_stage > 0,
+	assert_true(ps.starvation_stage > ResourceTick.StarvationStage.CLEAR,
 		"Province with famine crisis should have non-zero starvation_stage")
 
 func test_build_province_statuses_no_famine() -> void:

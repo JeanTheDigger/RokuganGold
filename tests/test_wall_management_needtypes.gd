@@ -394,7 +394,7 @@ func test_strengthen_wall_lord_deploy_scouts_when_not_deployed() -> void:
 
 	var ps := NPCDataStructures.ProvinceStatus.new()
 	ps.province_id = 10
-	ps.confidence = 1  # not zero — so no INVESTIGATE_THREAT
+	ps.confidence = NPCDataStructures.ProvinceStatus.CONFIDENCE_RECENT
 	ps.garrison_pu = 10
 	ps.crisis_type = ""
 	ps.active_crisis_id = -1
@@ -416,7 +416,7 @@ func test_strengthen_wall_lord_deploy_scouts_when_report_stale() -> void:
 
 	var ps := NPCDataStructures.ProvinceStatus.new()
 	ps.province_id = 10
-	ps.confidence = 1
+	ps.confidence = NPCDataStructures.ProvinceStatus.CONFIDENCE_RECENT
 	ps.garrison_pu = 10
 	ps.crisis_type = ""
 	ps.active_crisis_id = -1
@@ -437,7 +437,7 @@ func test_strengthen_wall_lord_maintain_fortification_when_si_low() -> void:
 
 	var ps := NPCDataStructures.ProvinceStatus.new()
 	ps.province_id = 10
-	ps.confidence = 1
+	ps.confidence = NPCDataStructures.ProvinceStatus.CONFIDENCE_RECENT
 	ps.garrison_pu = 10
 	ps.crisis_type = ""
 	ps.active_crisis_id = -1
@@ -466,7 +466,7 @@ func test_strengthen_wall_lord_maintain_fortification_si_boundary_6() -> void:
 
 	var ps := NPCDataStructures.ProvinceStatus.new()
 	ps.province_id = 10
-	ps.confidence = 1
+	ps.confidence = NPCDataStructures.ProvinceStatus.CONFIDENCE_RECENT
 	ps.garrison_pu = 10
 	ps.crisis_type = ""
 	ps.active_crisis_id = -1
@@ -495,7 +495,7 @@ func test_strengthen_wall_lord_manage_taint_when_taint_high() -> void:
 
 	var ps := NPCDataStructures.ProvinceStatus.new()
 	ps.province_id = 10
-	ps.confidence = 1
+	ps.confidence = NPCDataStructures.ProvinceStatus.CONFIDENCE_RECENT
 	ps.garrison_pu = 10
 	ps.crisis_type = ""
 	ps.active_crisis_id = -1
@@ -522,7 +522,7 @@ func test_strengthen_wall_lord_manage_taint_when_tea_low() -> void:
 
 	var ps := NPCDataStructures.ProvinceStatus.new()
 	ps.province_id = 10
-	ps.confidence = 1
+	ps.confidence = NPCDataStructures.ProvinceStatus.CONFIDENCE_RECENT
 	ps.garrison_pu = 10
 	ps.crisis_type = ""
 	ps.active_crisis_id = -1
@@ -548,7 +548,7 @@ func test_strengthen_wall_lord_sortie_when_elevated_activity_confirmed() -> void
 
 	var ps := NPCDataStructures.ProvinceStatus.new()
 	ps.province_id = 10
-	ps.confidence = 1
+	ps.confidence = NPCDataStructures.ProvinceStatus.CONFIDENCE_RECENT
 	ps.garrison_pu = 10
 	ps.crisis_type = ""
 	ps.active_crisis_id = -1
@@ -576,7 +576,7 @@ func test_strengthen_wall_sortie_blocked_when_jade_critical() -> void:
 
 	var ps := NPCDataStructures.ProvinceStatus.new()
 	ps.province_id = 10
-	ps.confidence = 1
+	ps.confidence = NPCDataStructures.ProvinceStatus.CONFIDENCE_RECENT
 	ps.garrison_pu = 10
 	ps.crisis_type = ""
 	ps.active_crisis_id = -1
@@ -604,7 +604,7 @@ func test_strengthen_wall_sortie_blocked_when_garrison_below_minimum() -> void:
 
 	var ps := NPCDataStructures.ProvinceStatus.new()
 	ps.province_id = 10
-	ps.confidence = 1
+	ps.confidence = NPCDataStructures.ProvinceStatus.CONFIDENCE_RECENT
 	ps.garrison_pu = 10
 	ps.crisis_type = ""
 	ps.active_crisis_id = -1
@@ -633,7 +633,7 @@ func test_strengthen_wall_sortie_blocked_when_report_stale() -> void:
 
 	var ps := NPCDataStructures.ProvinceStatus.new()
 	ps.province_id = 10
-	ps.confidence = 1
+	ps.confidence = NPCDataStructures.ProvinceStatus.CONFIDENCE_RECENT
 	ps.garrison_pu = 10
 	ps.crisis_type = ""
 	ps.active_crisis_id = -1

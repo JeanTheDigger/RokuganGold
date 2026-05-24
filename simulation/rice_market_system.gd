@@ -158,13 +158,13 @@ static func compute_sharing_honor(
 	recipient_starvation_stage: int,
 	resolves_famine: bool,
 ) -> float:
-	if recipient_starvation_stage >= 3:
+	if recipient_starvation_stage >= ResourceTick.StarvationStage.FAMINE:
 		if resolves_famine:
 			return HONOR_SHARING_FAMINE_RESOLVED
 		return HONOR_SHARING_FAMINE
-	if recipient_starvation_stage == 2:
+	if recipient_starvation_stage == ResourceTick.StarvationStage.HUNGER:
 		return HONOR_SHARING_HUNGER
-	if recipient_starvation_stage == 1:
+	if recipient_starvation_stage == ResourceTick.StarvationStage.SHORTAGE:
 		if amount >= 1.0:
 			return HONOR_SHARING_SHORTAGE_SIGNIFICANT
 		return HONOR_SHARING_SHORTAGE_SMALL
@@ -184,7 +184,7 @@ static func share_rice(
 	if giver_settlement.rice_stockpile < amount:
 		return {"result": "insufficient", "honor_gain": 0.0}
 
-	if recipient_starvation_stage <= 0:
+	if recipient_starvation_stage <= ResourceTick.StarvationStage.CLEAR:
 		return {"result": "not_needed", "honor_gain": 0.0}
 
 	var seasonal_need: float = receiver_settlement.population_pu * 0.25

@@ -78,7 +78,7 @@ static func compute_stability_change(
 			insurgency_count += 1
 	delta -= insurgency_count
 
-	var has_starvation: bool = starvation_stage > 0
+	var has_starvation: bool = starvation_stage > ResourceTick.StarvationStage.CLEAR
 	var has_insurgency: bool = insurgency_count > 0
 	if not has_starvation and garrison_pu >= garrison_min and not has_insurgency and not war_status_active:
 		delta += 2.0
@@ -188,7 +188,7 @@ static func get_spawn_chance(
 		Enums.InsurgencyType.PEASANT_REVOLT:
 			if tier == Enums.StabilityTier.STABLE or tier == Enums.StabilityTier.RESTLESS:
 				return 0.0
-			if world_state.get("starvation_stage", 0) >= 2:
+			if world_state.get("starvation_stage", 0) >= ResourceTick.StarvationStage.HUNGER:
 				base += 0.10
 			if world_state.get("under_garrisoned", false):
 				base += 0.10
