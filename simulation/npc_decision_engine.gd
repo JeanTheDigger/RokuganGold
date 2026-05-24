@@ -321,6 +321,7 @@ static func generate_options(
 	ctx: NPCDataStructures.ContextSnapshot,
 	need: NPCDataStructures.ImmediateNeed,
 	character: L5RCharacterData = null,
+	chars_by_id: Dictionary = {},
 ) -> Array:
 	var options: Array = []
 	var available_actions: Array = _get_actions_for_context(ctx.context_flag)
@@ -360,7 +361,7 @@ static func generate_options(
 			if ctx.civilian_orders_remaining <= 0:
 				if not CivilianOrderBudget.draws_from_military_pool(action_id, has_mil_rank):
 					continue
-		_populate_action_metadata(option, need, ctx, character)
+		_populate_action_metadata(option, need, ctx, character, chars_by_id)
 		options.append(option)
 
 	return options
@@ -722,7 +723,7 @@ static func run(
 	var need := resolve_goal(character, ctx, objectives)
 
 	# Phase 3
-	var options := generate_options(ctx, need, character)
+	var options := generate_options(ctx, need, character, chars_by_id)
 
 	# Phase 4
 	options = apply_personality_filter(options, ctx, filter_data)
@@ -932,7 +933,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 				"DECLARE_WAR", "NEGOTIATE_SURRENDER",
 				"COMPLY_WITH_EDICT", "DEFY_EDICT",
 				"RESTORE_COUNCIL_COMPACT",
-				"SHARE_SUPPLIES",
+				"SHARE_SUPPLIES", "TRANSFER_KOKU",
 				"DEMAND_TRIBUTE", "REQUEST_ALLIED_AID",
 				"CRAFT", "MENTOR",
 				"TREAT_WOUND",
@@ -987,6 +988,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 				"SEND_INVITATION",
 				"CONDUCT_COMMERCE", "PURCHASE_MARKET",
 				"REQUEST_ALLIED_AID",
+				"TRANSFER_KOKU",
 				"INVOKE_FAVOR",
 				"ISSUE_DUEL_CHALLENGE",
 				"DO_NOTHING", "REST",
@@ -1134,6 +1136,7 @@ static func _get_ap_cost(action_id: String) -> int:
 		"FORGE_IMPERSONATION_LETTER": 1,
 		"FORGE_ORDER": 1,
 		"SHARE_SUPPLIES": 1,
+	"TRANSFER_KOKU": 1,
 		"PURIFY_TAINTED_GROUND": 1,
 		"FORTIFY_WALL_SECTION": 1,
 		"SEAL_WALL_BREACH": 2,
@@ -2050,6 +2053,7 @@ const LORD_ONLY_ACTIONS: Array[String] = [
 	"SEND_INVITATION", "CALL_COURT",
 	"COMMISSION_ASSASSINATION",
 	"DEMAND_TRIBUTE", "REQUEST_ALLIED_AID",
+	"TRANSFER_KOKU", "SHARE_SUPPLIES",
 ]
 
 
@@ -2375,6 +2379,7 @@ static func _populate_action_metadata(
 	need: NPCDataStructures.ImmediateNeed,
 	ctx: NPCDataStructures.ContextSnapshot,
 	character: L5RCharacterData = null,
+	chars_by_id: Dictionary = {},
 ) -> void:
 	if option.action_id == "DECLARE_WAR":
 		option.metadata = _build_declare_war_metadata(need, ctx)
@@ -2708,17 +2713,21 @@ static func _populate_action_metadata(
 	elif option.action_id == "TREAT_WOUND":
 		option.metadata = {"raises": _pick_medicine_raises(ctx)}
 	elif option.action_id == "FORGE_IMPERSONATION_LETTER":
-		option.metadata = _build_forge_letter_metadata(ctx, need)
+		option.metadata = _build_forge_letter_metadata(ctx, need, chars_by_id)
 	elif option.action_id == "FORGE_ORDER":
-		option.metadata = _build_forge_order_metadata(ctx, need)
+		option.metadata = _build_forge_order_metadata(ctx, need, chars_by_id)
+	elif option.action_id == "TRANSFER_KOKU":
+		option.metadata = {"target_npc_id": need.target_npc_id}
 
 
 static func _build_forge_letter_metadata(
 	ctx: NPCDataStructures.ContextSnapshot,
 	need: NPCDataStructures.ImmediateNeed,
+	chars_by_id: Dictionary = {},
 ) -> Dictionary:
-	var authority: String = _forge_authority_from_lord_rank(ctx.lord_rank)
 	var impersonated_id: int = need.target_npc_id
+	var target_rank: Enums.LordRank = _get_target_lord_rank(impersonated_id, chars_by_id, ctx.lord_rank)
+	var authority: String = _forge_authority_from_lord_rank(target_rank)
 	var recipient_id: int = -1
 	if need.target_npc_id_secondary >= 0:
 		recipient_id = need.target_npc_id_secondary
@@ -2737,12 +2746,20 @@ static func _build_forge_letter_metadata(
 static func _build_forge_order_metadata(
 	ctx: NPCDataStructures.ContextSnapshot,
 	need: NPCDataStructures.ImmediateNeed,
+	chars_by_id: Dictionary = {},
 ) -> Dictionary:
-	var authority: String = _forge_authority_from_lord_rank(ctx.lord_rank)
+	var target_id: int = need.target_npc_id
+	var target_char: L5RCharacterData = chars_by_id.get(target_id) as L5RCharacterData
+	var impersonated_rank: Enums.LordRank = ctx.lord_rank
+	if target_char != null and target_char.lord_id >= 0:
+		var lord_char: L5RCharacterData = chars_by_id.get(target_char.lord_id) as L5RCharacterData
+		if lord_char != null:
+			impersonated_rank = lord_char.lord_rank
+	var authority: String = _forge_authority_from_lord_rank(impersonated_rank)
 	var order_info: Dictionary = _pick_forged_order_type(need)
 	return {
 		"authority_level": authority,
-		"target_npc_id": need.target_npc_id,
+		"target_npc_id": target_id,
 		"order_need_type": order_info.get("need_type", "TRAVEL_TO"),
 		"order_target_province_id": order_info.get("target_province_id", -1),
 		"order_target_npc_id": order_info.get("target_npc_id", -1),
@@ -2780,10 +2797,17 @@ static func _pick_forged_order_type(
 			return {"need_type": "TRAVEL_TO"}
 
 
-# GDD s12.8: authority level = who is being impersonated.
-# PROVISIONAL: uses forger's own lord_rank as proxy (the authority
-# level the forger is familiar with). Proper derivation requires
-# the impersonated person's rank, blocked on target character lookup.
+static func _get_target_lord_rank(
+	target_id: int, chars_by_id: Dictionary, fallback: Enums.LordRank,
+) -> Enums.LordRank:
+	if target_id < 0 or chars_by_id.is_empty():
+		return fallback
+	var target: L5RCharacterData = chars_by_id.get(target_id) as L5RCharacterData
+	if target == null:
+		return fallback
+	return target.lord_rank
+
+
 static func _forge_authority_from_lord_rank(
 	lord_rank: Enums.LordRank,
 ) -> String:

@@ -494,5 +494,9 @@
   "WRITE_LETTER": {
     "primary": "Calligraphy",
     "secondary": "Courtier"
+  },
+  "TRANSFER_KOKU": {
+    "primary": "Commerce",
+    "secondary": null
   }
 }

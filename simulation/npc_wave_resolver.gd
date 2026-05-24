@@ -412,7 +412,7 @@ static func _resolve_civilian_order(
 ) -> Dictionary:
 	var ctx: NPCDataStructures.ContextSnapshot = NPCDecisionEngine.build_context(character, world_state, characters_by_id)
 	var need: NPCDataStructures.ImmediateNeed = NPCDecisionEngine.resolve_goal(character, ctx, objectives)
-	var options: Array = NPCDecisionEngine.generate_options(ctx, need, character)
+	var options: Array = NPCDecisionEngine.generate_options(ctx, need, character, characters_by_id)
 
 	var order_options: Array = []
 	for opt: NPCDataStructures.ScoredAction in options:

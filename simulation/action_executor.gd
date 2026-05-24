@@ -45,7 +45,7 @@ const MILITARY_ORDERS: Array[String] = [
 
 const ADMINISTRATIVE_ACTIONS: Array[String] = [
 	"SET_TAX_RATE", "SET_STIPEND_RATE", "PURCHASE_MARKET",
-	"SHARE_SUPPLIES", "ASSESS_PROVINCE_STATUS", "EVALUATE_WAR_READINESS",
+	"SHARE_SUPPLIES", "TRANSFER_KOKU", "ASSESS_PROVINCE_STATUS", "EVALUATE_WAR_READINESS",
 	"ASSIGN_VASSAL_OBJECTIVE", "CALL_COURT", "SEND_INVITATION",
 	"DEMAND_TRIBUTE", "REQUEST_ALLIED_AID", "INVESTIGATE_PROVINCE",
 	"INVESTIGATE_RUMOR", "NEGOTIATE_SURRENDER", "CONDUCT_COMMERCE",
@@ -1623,6 +1623,8 @@ static func _compute_admin_effects(action_id: String, action: NPCDataStructures.
 				"effect": "supplies_shared",
 				"requires_supply_sharing": true,
 			}
+		"TRANSFER_KOKU":
+			return _execute_transfer_koku(action, character, characters_by_id)
 		"ASSESS_PROVINCE_STATUS", "INVESTIGATE_PROVINCE", "INVESTIGATE_RUMOR":
 			return {"effect": "intelligence_gathered", "info_gained": true}
 		"EVALUATE_WAR_READINESS":
@@ -4036,6 +4038,41 @@ static func _execute_invoke_favor(
 			"debtor_id": debtor_id,
 			"invocation_method": method,
 		},
+	}
+
+
+# -- TRANSFER_KOKU -------------------------------------------------------------
+
+const TRANSFER_KOKU_BASE_AMOUNT: float = 5.0
+const TRANSFER_KOKU_WEALTHY_THRESHOLD: float = 20.0
+const TRANSFER_KOKU_WEALTHY_AMOUNT: float = 10.0
+
+static func _execute_transfer_koku(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	characters_by_id: Dictionary = {},
+) -> Dictionary:
+	var recipient_id: int = action.metadata.get("target_npc_id", action.target_npc_id)
+	if recipient_id < 0:
+		return {"success": false, "blocked_reason": "no_recipient"}
+	var recipient: L5RCharacterData = characters_by_id.get(recipient_id) as L5RCharacterData
+	if recipient == null or CharacterStats.is_dead(recipient):
+		return {"success": false, "blocked_reason": "recipient_unavailable"}
+	var amount: float = TRANSFER_KOKU_BASE_AMOUNT
+	if character.koku >= TRANSFER_KOKU_WEALTHY_THRESHOLD:
+		amount = TRANSFER_KOKU_WEALTHY_AMOUNT
+	amount = minf(amount, character.koku)
+	if amount <= 0.0:
+		return {"success": false, "blocked_reason": "insufficient_koku"}
+	character.koku -= amount
+	recipient.koku += amount
+	return {
+		"success": true,
+		"effect": "koku_transferred",
+		"koku_amount": amount,
+		"recipient_id": recipient_id,
+		"requires_koku_transfer_fulfillment": true,
+		"disposition_change": 3,
 	}
 
 

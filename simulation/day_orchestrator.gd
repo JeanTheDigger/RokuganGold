@@ -125,6 +125,9 @@ static func advance_day(
 	var auto_conceal_results: Array = _process_auto_conceal_on_arrival(
 		travel_arrivals, characters_by_id, dice_engine,
 	)
+	_process_duped_foolish_on_arrival(
+		travel_arrivals, characters_by_id, objectives_map,
+	)
 
 	var musha_season_count: int = int(season_meta.get("horde_season_count", 0))
 	var musha_shugyo_results: Array = _process_musha_shugyo(characters, characters_by_id, ic_day, objectives_map, dice_engine, musha_season_count)
@@ -330,6 +333,11 @@ static func advance_day(
 	_process_fabricate_secret_writebacks(
 		day_result.get("results", []),
 		active_secrets, next_secret_id,
+	)
+
+	_process_lying_honor_writebacks(
+		day_result.get("results", []),
+		characters_by_id,
 	)
 
 	_process_forge_letter_writebacks(
@@ -873,7 +881,7 @@ static func advance_day(
 	_compute_positions_from_letters(letter_results, active_topics, characters_by_id)
 	_process_impersonation_detection(
 		pending_letters, characters_by_id, active_topics,
-		next_topic_id, ic_day, objectives_map,
+		next_topic_id, ic_day, objectives_map, commitments,
 	)
 	_escalate_detected_forgery_crimes(
 		pending_letters, crime_records, characters_by_id,
@@ -1146,6 +1154,11 @@ static func advance_day(
 		stipend_topic_results = _create_stipend_failure_topics(
 			stipends, characters_by_id, active_topics, next_topic_id, ic_day,
 		)
+
+	if current_season != prev_season:
+		_purge_resolved_crime_records(crime_records, ic_day)
+		_purge_delivered_letters(pending_letters, characters_by_id, ic_day)
+		_purge_exposed_secrets(active_secrets, characters_by_id, ic_day)
 
 	var horde_results: Dictionary = _process_horde_rolls(
 		current_season, prev_season,
@@ -5069,6 +5082,34 @@ static func _process_fabricate_secret_writebacks(
 		active_secrets.append(sd)
 
 
+static func _process_lying_honor_writebacks(
+	results: Array,
+	characters_by_id: Dictionary,
+) -> void:
+	for r: Variant in results:
+		if not r is Dictionary:
+			continue
+		var d: Dictionary = r as Dictionary
+		if d.get("action_id", "") != "FABRICATE_SECRET":
+			continue
+		if not d.get("success", false):
+			continue
+		var fabricator_id: int = d.get("character_id", -1)
+		var fabricator: L5RCharacterData = characters_by_id.get(fabricator_id) as L5RCharacterData
+		if fabricator == null or CharacterStats.is_dead(fabricator):
+			continue
+		var effects: Dictionary = d.get("effects", {})
+		var secret: Variant = effects.get("secret")
+		if secret == null or not secret is SecretData:
+			continue
+		var subject_id: int = (secret as SecretData).subject_id
+		if subject_id < 0:
+			continue
+		var disp: int = fabricator.disposition_values.get(str(subject_id), 0)
+		if disp > 0:
+			HonorGlorySystem.apply_honor_change(fabricator, CrimeSystem.get_lying_honor(fabricator))
+
+
 static func _process_forge_letter_writebacks(
 	results: Array,
 	pending_letters: Array,
@@ -5292,6 +5333,7 @@ static func _process_impersonation_detection(
 	next_topic_id: Array,
 	ic_day: int,
 	objectives_map: Dictionary,
+	commitments: Array = [],
 ) -> void:
 	for letter: LetterData in pending_letters:
 		if not letter.delivered:
@@ -5350,6 +5392,25 @@ static func _process_impersonation_detection(
 			HonorGlorySystem.apply_honor_change(
 				victim, CrimeSystem.get_duped_disloyal_honor(victim)
 			)
+			var forged_arrival_day: int = -1
+			for fl: LetterData in pending_letters:
+				if fl.is_forged and fl.is_order and fl.order_applied \
+					and fl.forged_sender_id == letter.original_forger_id \
+					and fl.recipient_id == victim_id:
+					forged_arrival_day = fl.ic_day_arrival
+					break
+			if forged_arrival_day >= 0:
+				for cm: CommitmentData in commitments:
+					if cm.debtor_npc_id != victim_id:
+						continue
+					if cm.status != Enums.CommitmentStatus.BROKEN_NO_NOTICE \
+						and cm.status != Enums.CommitmentStatus.BROKEN_LATE_NOTICE:
+						continue
+					if cm.deadline_ic_day >= forged_arrival_day:
+						HonorGlorySystem.apply_honor_change(
+							victim, CrimeSystem.get_duped_criminal_honor(victim)
+						)
+						break
 
 		if not objectives_map.has(victim_id):
 			objectives_map[victim_id] = {}
@@ -7071,6 +7132,39 @@ static func _apply_favor_breach(
 
 
 # -- Travel Processing (s55.29) -----------------------------------------------
+
+static func _process_duped_foolish_on_arrival(
+	arrivals: Array,
+	characters_by_id: Dictionary,
+	objectives_map: Dictionary,
+) -> void:
+	for arrival: Dictionary in arrivals:
+		var char_id: int = arrival.get("character_id", -1)
+		var character: L5RCharacterData = characters_by_id.get(char_id) as L5RCharacterData
+		if character == null or CharacterStats.is_dead(character):
+			continue
+		var obj_dict: Dictionary = objectives_map.get(char_id, {})
+		var primary: Dictionary = obj_dict.get("primary", {})
+		if primary.get("source", "") != "forged_order":
+			continue
+		var destination: String = character.physical_location
+		if destination.is_empty():
+			continue
+		var target_npc_id: int = primary.get("target_npc_id", -1)
+		var has_target_here: bool = false
+		if target_npc_id >= 0:
+			var target_char: L5RCharacterData = characters_by_id.get(target_npc_id) as L5RCharacterData
+			if target_char != null and not CharacterStats.is_dead(target_char) \
+				and target_char.physical_location == destination:
+				has_target_here = true
+		var target_settlement_id: int = primary.get("target_settlement_id", -1)
+		if target_settlement_id >= 0 and destination == str(target_settlement_id):
+			has_target_here = true
+		if not has_target_here:
+			HonorGlorySystem.apply_honor_change(
+				character, CrimeSystem.get_duped_foolish_honor(character)
+			)
+
 
 static func _process_travel(
 	characters: Array,
@@ -17807,6 +17901,7 @@ static func _process_resource_promise_fulfillment(
 ) -> void:
 	var supplier_targets: Dictionary = {}
 	var deploy_targets: Dictionary = {}
+	var koku_targets: Dictionary = {}
 
 	var successful_suppliers: Dictionary = {}
 	for sr: Dictionary in supply_sharing_results:
@@ -17819,8 +17914,12 @@ static func _process_resource_promise_fulfillment(
 			supplier_targets[cid] = entry.get("target_npc_id", -1)
 		elif aid == "ORDER_DEPLOY" and entry.get("target_npc_id", -1) >= 0:
 			deploy_targets[cid] = entry.get("target_npc_id", -1)
+		elif aid == "TRANSFER_KOKU" and entry.get("success", false):
+			var effects: Dictionary = entry.get("effects", {})
+			if effects.get("requires_koku_transfer_fulfillment", false):
+				koku_targets[cid] = effects.get("recipient_id", entry.get("target_npc_id", -1))
 
-	if supplier_targets.is_empty() and deploy_targets.is_empty():
+	if supplier_targets.is_empty() and deploy_targets.is_empty() and koku_targets.is_empty():
 		return
 
 	for c: CommitmentData in commitments:
@@ -17834,6 +17933,10 @@ static func _process_resource_promise_fulfillment(
 			continue
 		var deploy_target: int = deploy_targets.get(c.debtor_npc_id, -1)
 		if deploy_target == c.creditor_npc_id:
+			c.status = Enums.CommitmentStatus.FULFILLED
+			continue
+		var koku_target: int = koku_targets.get(c.debtor_npc_id, -1)
+		if koku_target == c.creditor_npc_id:
 			c.status = Enums.CommitmentStatus.FULFILLED
 
 
@@ -18295,4 +18398,82 @@ static func _remove_terminal_commitments(commitments: Array) -> void:
 			var status: Enums.CommitmentStatus = (c as CommitmentData).status
 			if status != Enums.CommitmentStatus.PENDING:
 				commitments.remove_at(i)
+		i -= 1
+
+
+# -- B10 Data Retention — Seasonal Purge Functions -----------------------------
+
+const CRIME_RECORD_RETENTION_DAYS: int = 360
+const LETTER_RETENTION_DAYS: int = 180
+const SECRET_RETENTION_DAYS: int = 90
+
+const TERMINAL_LEGAL_STATUSES: Array[Enums.LegalStatus] = [
+	Enums.LegalStatus.DECREED_GUILTY,
+	Enums.LegalStatus.CLEAR,
+	Enums.LegalStatus.PARDONED,
+	Enums.LegalStatus.ACQUITTED,
+]
+
+
+static func _purge_resolved_crime_records(
+	crime_records: Array,
+	ic_day: int,
+) -> void:
+	var i: int = crime_records.size() - 1
+	while i >= 0:
+		var cr: Variant = crime_records[i]
+		if cr is CrimeRecord:
+			var record: CrimeRecord = cr as CrimeRecord
+			if record.legal_status in TERMINAL_LEGAL_STATUSES:
+				var age: int = ic_day - record.ic_day_committed
+				if age > CRIME_RECORD_RETENTION_DAYS:
+					crime_records.remove_at(i)
+		i -= 1
+
+
+static func _purge_delivered_letters(
+	pending_letters: Array,
+	characters_by_id: Dictionary,
+	ic_day: int,
+) -> void:
+	var i: int = pending_letters.size() - 1
+	while i >= 0:
+		var letter: Variant = pending_letters[i]
+		if letter is LetterData:
+			var ld: LetterData = letter as LetterData
+			if not ld.delivered:
+				i -= 1
+				continue
+			var age: int = ic_day - ld.ic_day_arrival if ld.ic_day_arrival >= 0 else ic_day - ld.ic_day_sent
+			if age <= LETTER_RETENTION_DAYS:
+				i -= 1
+				continue
+			if ld.is_forged and ld.is_order and ld.order_applied:
+				var victim: L5RCharacterData = characters_by_id.get(ld.recipient_id) as L5RCharacterData
+				if victim != null:
+					var aware: bool = false
+					for entry: KnowledgeEntry in victim.knowledge_pool:
+						if entry.entry_type == "impersonation_detected" \
+							and entry.data.get("forger_id", -1) == ld.forged_sender_id:
+							aware = true
+							break
+					if not aware:
+						i -= 1
+						continue
+			pending_letters.remove_at(i)
+		i -= 1
+
+
+static func _purge_exposed_secrets(
+	active_secrets: Array,
+	_characters_by_id: Dictionary,
+	_ic_day: int,
+) -> void:
+	var i: int = active_secrets.size() - 1
+	while i >= 0:
+		var secret: Variant = active_secrets[i]
+		if secret is SecretData:
+			var sd: SecretData = secret as SecretData
+			if sd.exposed_publicly:
+				active_secrets.remove_at(i)
 		i -= 1

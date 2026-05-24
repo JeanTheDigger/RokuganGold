@@ -3512,6 +3512,56 @@ func test_forge_objective_alignment_entries() -> void:
 	assert_true(data["SUPPRESS_INVESTIGATION"].has("FORGE_ORDER"))
 
 
+func test_forge_letter_authority_uses_target_lord_rank() -> void:
+	var ctx := _make_metadata_ctx()
+	ctx.lord_rank = Enums.LordRank.PROVINCIAL_DAIMYO
+	ctx.known_topics = [10]
+	var need := _make_metadata_need()
+	need.target_npc_id = 42
+	need.target_npc_id_secondary = 55
+	var target := L5RCharacterData.new()
+	target.character_id = 42
+	target.lord_rank = Enums.LordRank.CLAN_CHAMPION
+	var chars: Dictionary = {42: target}
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "FORGE_IMPERSONATION_LETTER"
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx, null, chars)
+	assert_eq(option.metadata.get("authority_level", ""), "moderate",
+		"Should use target's CLAN_CHAMPION rank (moderate), not forger's PROVINCIAL_DAIMYO (minor)")
+
+
+func test_forge_order_authority_uses_target_lord_rank() -> void:
+	var ctx := _make_metadata_ctx()
+	ctx.lord_rank = Enums.LordRank.PROVINCIAL_DAIMYO
+	var need := _make_metadata_need()
+	need.target_npc_id = 50
+	var target := L5RCharacterData.new()
+	target.character_id = 50
+	target.lord_id = 99
+	var lord := L5RCharacterData.new()
+	lord.character_id = 99
+	lord.lord_rank = Enums.LordRank.IMPERIAL
+	var chars: Dictionary = {50: target, 99: lord}
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "FORGE_ORDER"
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx, null, chars)
+	assert_eq(option.metadata.get("authority_level", ""), "major",
+		"Should use target's lord's IMPERIAL rank (major), not forger's PROVINCIAL_DAIMYO (minor)")
+
+
+func test_forge_authority_fallback_without_chars_by_id() -> void:
+	var ctx := _make_metadata_ctx()
+	ctx.lord_rank = Enums.LordRank.CLAN_CHAMPION
+	ctx.known_topics = [5]
+	var need := _make_metadata_need()
+	need.target_npc_id = 42
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "FORGE_IMPERSONATION_LETTER"
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_eq(option.metadata.get("authority_level", ""), "moderate",
+		"Without chars_by_id, should fall back to forger's own lord_rank")
+
+
 # -- Audit: knowledge_pool aliasing -------------------------------------------
 
 func test_build_context_knowledge_pool_is_independent_copy() -> void:

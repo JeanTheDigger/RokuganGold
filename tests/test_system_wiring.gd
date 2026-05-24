@@ -3256,3 +3256,308 @@ func test_following_orders_writeback_once_per_day() -> void:
 	assert_almost_eq(c.honor - before, expected_gain, 0.05, "Only applied once despite multiple actions")
 
 
+# -- TRANSFER_KOKU tests -------------------------------------------------------
+
+
+func test_transfer_koku_in_context_lists() -> void:
+	for flag: Enums.ContextFlag in [
+		Enums.ContextFlag.AT_OWN_HOLDINGS,
+		Enums.ContextFlag.AT_COURT,
+	]:
+		var actions: Array = NPCDecisionEngine._get_actions_for_context(flag)
+		assert_true("TRANSFER_KOKU" in actions,
+			"TRANSFER_KOKU should be in %s" % Enums.ContextFlag.keys()[flag])
+
+
+func test_transfer_koku_is_lord_only() -> void:
+	assert_true("TRANSFER_KOKU" in NPCDecisionEngine.LORD_ONLY_ACTIONS)
+
+
+func test_transfer_koku_executor_transfers_koku() -> void:
+	var sender := L5RCharacterData.new()
+	sender.character_id = 1
+	sender.koku = 15.0
+	var recipient := L5RCharacterData.new()
+	recipient.character_id = 2
+	recipient.koku = 3.0
+	var chars: Dictionary = {1: sender, 2: recipient}
+	var action := NPCDataStructures.ScoredAction.new()
+	action.action_id = "TRANSFER_KOKU"
+	action.target_npc_id = 2
+	action.metadata = {"target_npc_id": 2}
+	var result: Dictionary = ActionExecutor._execute_transfer_koku(action, sender, chars)
+	assert_true(result.get("success", false))
+	assert_eq(result.get("koku_amount", 0.0), 5.0, "Below 20 koku sends base amount 5")
+	assert_almost_eq(sender.koku, 10.0, 0.01)
+	assert_almost_eq(recipient.koku, 8.0, 0.01)
+
+
+func test_transfer_koku_wealthy_sends_more() -> void:
+	var sender := L5RCharacterData.new()
+	sender.character_id = 1
+	sender.koku = 25.0
+	var recipient := L5RCharacterData.new()
+	recipient.character_id = 2
+	recipient.koku = 0.0
+	var chars: Dictionary = {1: sender, 2: recipient}
+	var action := NPCDataStructures.ScoredAction.new()
+	action.action_id = "TRANSFER_KOKU"
+	action.target_npc_id = 2
+	action.metadata = {"target_npc_id": 2}
+	var result: Dictionary = ActionExecutor._execute_transfer_koku(action, sender, chars)
+	assert_true(result.get("success", false))
+	assert_eq(result.get("koku_amount", 0.0), 10.0, "Above 20 koku sends wealthy amount 10")
+
+
+func test_transfer_koku_insufficient_blocked() -> void:
+	var sender := L5RCharacterData.new()
+	sender.character_id = 1
+	sender.koku = 0.0
+	var recipient := L5RCharacterData.new()
+	recipient.character_id = 2
+	var chars: Dictionary = {1: sender, 2: recipient}
+	var action := NPCDataStructures.ScoredAction.new()
+	action.action_id = "TRANSFER_KOKU"
+	action.target_npc_id = 2
+	action.metadata = {"target_npc_id": 2}
+	var result: Dictionary = ActionExecutor._execute_transfer_koku(action, sender, chars)
+	assert_false(result.get("success", true))
+
+
+func test_transfer_koku_fulfills_resource_promise() -> void:
+	var commitment := CommitmentData.new()
+	commitment.commitment_type = Enums.CommitmentType.RESOURCE_PROMISE
+	commitment.status = Enums.CommitmentStatus.PENDING
+	commitment.debtor_npc_id = 1
+	commitment.creditor_npc_id = 2
+	var commitments: Array = [commitment]
+	var results: Array = [{
+		"action_id": "TRANSFER_KOKU",
+		"character_id": 1,
+		"target_npc_id": 2,
+		"success": true,
+		"effects": {
+			"requires_koku_transfer_fulfillment": true,
+			"recipient_id": 2,
+		},
+	}]
+	DayOrchestrator._process_resource_promise_fulfillment(results, [], commitments)
+	assert_eq(commitment.status, Enums.CommitmentStatus.FULFILLED)
+
+
+# -- B6 LYING honor trigger tests -----------------------------------------------
+
+
+func test_lying_honor_fires_on_fabricate_with_positive_disposition() -> void:
+	var fabricator := L5RCharacterData.new()
+	fabricator.character_id = 1
+	fabricator.honor = 5.0
+	fabricator.stamina = 2
+	fabricator.willpower = 2
+	fabricator.disposition_values = {"42": 15}
+	var secret := SecretData.new()
+	secret.subject_id = 42
+	var results: Array = [{
+		"action_id": "FABRICATE_SECRET",
+		"character_id": 1,
+		"success": true,
+		"effects": {"secret": secret},
+	}]
+	var before: float = fabricator.honor
+	DayOrchestrator._process_lying_honor_writebacks(results, {1: fabricator})
+	assert_true(fabricator.honor < before, "Lying honor loss should apply")
+
+
+func test_lying_honor_skips_negative_disposition() -> void:
+	var fabricator := L5RCharacterData.new()
+	fabricator.character_id = 1
+	fabricator.honor = 5.0
+	fabricator.stamina = 2
+	fabricator.willpower = 2
+	fabricator.disposition_values = {"42": -10}
+	var secret := SecretData.new()
+	secret.subject_id = 42
+	var results: Array = [{
+		"action_id": "FABRICATE_SECRET",
+		"character_id": 1,
+		"success": true,
+		"effects": {"secret": secret},
+	}]
+	var before: float = fabricator.honor
+	DayOrchestrator._process_lying_honor_writebacks(results, {1: fabricator})
+	assert_almost_eq(fabricator.honor, before, 0.001, "No lying cost when disposition is negative")
+
+
+# -- B6 DUPED_CRIMINAL honor trigger tests ---------------------------------------
+
+
+func test_duped_criminal_fires_on_forged_order_with_broken_commitment() -> void:
+	var victim := L5RCharacterData.new()
+	victim.character_id = 10
+	victim.honor = 5.0
+	victim.stamina = 2
+	victim.willpower = 2
+	var forger_id: int = 20
+	var forged_letter := LetterData.new()
+	forged_letter.sender_id = 99
+	forged_letter.recipient_id = 10
+	forged_letter.is_forged = true
+	forged_letter.forged_sender_id = forger_id
+	forged_letter.is_order = true
+	forged_letter.order_applied = true
+	forged_letter.delivered = true
+	forged_letter.ic_day_arrival = 5
+	var reply := LetterData.new()
+	reply.delivered = true
+	reply.reply_to_forged = true
+	reply.is_reply = true
+	reply.recipient_id = 10
+	reply.sender_id = 30
+	reply.original_forger_id = forger_id
+	var broken_commitment := CommitmentData.new()
+	broken_commitment.debtor_npc_id = 10
+	broken_commitment.status = Enums.CommitmentStatus.BROKEN_NO_NOTICE
+	broken_commitment.deadline_ic_day = 8
+	var commitments: Array = [broken_commitment]
+	var chars: Dictionary = {10: victim}
+	var topics: Array = []
+	var next_topic: Array = [100]
+	var objectives: Dictionary = {}
+	var before: float = victim.honor
+	DayOrchestrator._process_impersonation_detection(
+		[forged_letter, reply], chars, topics, next_topic, 10, objectives, commitments,
+	)
+	assert_true(victim.honor < before, "DUPED_CRIMINAL honor loss should apply")
+
+
+# -- B6 DUPED_FOOLISH honor trigger tests ----------------------------------------
+
+
+func test_duped_foolish_fires_on_arrival_at_empty_destination() -> void:
+	var victim := L5RCharacterData.new()
+	victim.character_id = 10
+	victim.honor = 5.0
+	victim.stamina = 2
+	victim.willpower = 2
+	victim.physical_location = "settlement_7"
+	var objectives: Dictionary = {10: {"primary": {
+		"source": "forged_order",
+		"need_type": "TRAVEL_TO",
+		"target_npc_id": 42,
+	}}}
+	var arrivals: Array = [{"character_id": 10, "destination": "settlement_7"}]
+	var chars: Dictionary = {10: victim}
+	var before: float = victim.honor
+	DayOrchestrator._process_duped_foolish_on_arrival(arrivals, chars, objectives)
+	assert_true(victim.honor < before, "DUPED_FOOLISH should fire when target NPC not at destination")
+
+
+func test_duped_foolish_skips_when_target_present() -> void:
+	var victim := L5RCharacterData.new()
+	victim.character_id = 10
+	victim.honor = 5.0
+	victim.stamina = 2
+	victim.willpower = 2
+	victim.physical_location = "settlement_7"
+	var target := L5RCharacterData.new()
+	target.character_id = 42
+	target.physical_location = "settlement_7"
+	target.stamina = 2
+	target.willpower = 2
+	var objectives: Dictionary = {10: {"primary": {
+		"source": "forged_order",
+		"need_type": "TRAVEL_TO",
+		"target_npc_id": 42,
+	}}}
+	var arrivals: Array = [{"character_id": 10, "destination": "settlement_7"}]
+	var chars: Dictionary = {10: victim, 42: target}
+	var before: float = victim.honor
+	DayOrchestrator._process_duped_foolish_on_arrival(arrivals, chars, objectives)
+	assert_almost_eq(victim.honor, before, 0.001, "No penalty when target is present")
+
+
+func test_duped_foolish_skips_non_forged_objective() -> void:
+	var victim := L5RCharacterData.new()
+	victim.character_id = 10
+	victim.honor = 5.0
+	victim.stamina = 2
+	victim.willpower = 2
+	victim.physical_location = "settlement_7"
+	var objectives: Dictionary = {10: {"primary": {
+		"source": "lord_assigned",
+		"need_type": "TRAVEL_TO",
+		"target_npc_id": 42,
+	}}}
+	var arrivals: Array = [{"character_id": 10, "destination": "settlement_7"}]
+	var chars: Dictionary = {10: victim}
+	var before: float = victim.honor
+	DayOrchestrator._process_duped_foolish_on_arrival(arrivals, chars, objectives)
+	assert_almost_eq(victim.honor, before, 0.001, "No penalty for non-forged objectives")
+
+
+# -- B10 Data Retention tests ---------------------------------------------------
+
+
+func test_purge_resolved_crime_records() -> void:
+	var old_resolved := CrimeRecord.new()
+	old_resolved.legal_status = Enums.LegalStatus.DECREED_GUILTY
+	old_resolved.ic_day_committed = 10
+	var recent_resolved := CrimeRecord.new()
+	recent_resolved.legal_status = Enums.LegalStatus.PARDONED
+	recent_resolved.ic_day_committed = 300
+	var active := CrimeRecord.new()
+	active.legal_status = Enums.LegalStatus.UNDER_INVESTIGATION
+	active.ic_day_committed = 10
+	var fugitive := CrimeRecord.new()
+	fugitive.legal_status = Enums.LegalStatus.FUGITIVE
+	fugitive.ic_day_committed = 10
+	var records: Array = [old_resolved, recent_resolved, active, fugitive]
+	DayOrchestrator._purge_resolved_crime_records(records, 400)
+	assert_eq(records.size(), 3, "Only old resolved record should be purged")
+	assert_true(old_resolved not in records)
+	assert_true(recent_resolved in records)
+	assert_true(active in records)
+	assert_true(fugitive in records)
+
+
+func test_purge_delivered_letters() -> void:
+	var old_delivered := LetterData.new()
+	old_delivered.delivered = true
+	old_delivered.ic_day_arrival = 10
+	var recent := LetterData.new()
+	recent.delivered = true
+	recent.ic_day_arrival = 350
+	var undelivered := LetterData.new()
+	undelivered.delivered = false
+	undelivered.ic_day_sent = 10
+	var forged_undetected := LetterData.new()
+	forged_undetected.delivered = true
+	forged_undetected.ic_day_arrival = 10
+	forged_undetected.is_forged = true
+	forged_undetected.is_order = true
+	forged_undetected.order_applied = true
+	forged_undetected.forged_sender_id = 99
+	forged_undetected.recipient_id = 42
+	var victim := L5RCharacterData.new()
+	victim.character_id = 42
+	var chars: Dictionary = {42: victim}
+	var letters: Array = [old_delivered, recent, undelivered, forged_undetected]
+	DayOrchestrator._purge_delivered_letters(letters, chars, 400)
+	assert_eq(letters.size(), 3, "Only old non-forged delivered letter should be purged")
+	assert_true(old_delivered not in letters)
+	assert_true(recent in letters)
+	assert_true(undelivered in letters)
+	assert_true(forged_undetected in letters, "Undetected forged letter should be retained")
+
+
+func test_purge_exposed_secrets() -> void:
+	var exposed := SecretData.new()
+	exposed.exposed_publicly = true
+	var unexposed := SecretData.new()
+	unexposed.exposed_publicly = false
+	var secrets: Array = [exposed, unexposed]
+	DayOrchestrator._purge_exposed_secrets(secrets, {}, 400)
+	assert_eq(secrets.size(), 1, "Publicly exposed secret should be purged")
+	assert_true(unexposed in secrets)
+
+

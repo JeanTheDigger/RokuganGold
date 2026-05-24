@@ -16,6 +16,7 @@ const ACTION_RESOURCE_COSTS: Dictionary = {
 	"DEPLOY_ARMY": {"resource_type": "troop_pu", "amount": 1},
 	"ASSIGN_GARRISON": {"resource_type": "troop_pu", "amount": 1},
 	"SHARE_SUPPLIES": {"resource_type": "rice", "amount": 1},
+	"TRANSFER_KOKU": {"resource_type": "koku", "amount": 5},
 }
 
 const MODIFIER_FLUSH: float = 0.0

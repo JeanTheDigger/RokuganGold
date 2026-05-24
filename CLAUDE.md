@@ -2778,12 +2778,12 @@ These are places where the code cannot proceed because the GDD doesn't
 specify the mechanic, or two GDD sections conflict, or a concept has no
 implementation path.
 
-**B1. NPC favor invocation — when does an NPC call in a held favor?**
-GDD s12.10 specifies three channels (letter, court, personal visit) but
-s57.12 and s14 have no ActionID for "INVOKE_FAVOR" or similar. The
-`FAVOR_REQUESTED` reactive event handler exists but nothing creates the
-event. **Decision needed:** Define an ActionID (or reactive trigger) for
-NPC-initiated favor invocation, or specify that favors are player-only.
+**B1. NPC favor invocation — RESOLVED: INVOKE_FAVOR ActionID.**
+Added INVOKE_FAVOR to AT_OWN_HOLDINGS, AT_COURT, VISITING context lists.
+AP cost 1. Metadata picks highest-tier uninvoked favor via
+`_pick_best_favor_to_invoke()`. Executor invokes favor and injects
+FAVOR_REQUESTED reactive event on the debtor. objective_alignment entries:
+ACQUIRE_RESOURCE (75), DEFEND_PROVINCE (55), REQUEST_AID (85).
 
 **B2. MENTOR executor is a stub — training pipeline undesigned.**
 MENTOR is in context lists and scoring tables but returns a single-line
@@ -2791,76 +2791,82 @@ placeholder effect. Full implementation requires: s48 Sensei multipliers,
 student AP consumption, ACCEPT_TRAINING reactive event injection.
 **Decision needed:** LOCK GDD s48 training mechanics.
 
-**B3. RESTORE_COUNCIL_COMPACT — no NeedType routing for Phoenix Champions.**
-Action is in AT_OWN_HOLDINGS context but has no objective_alignment entry.
-GDD s55.10.3.7 says it's personality-driven (Chugi restores, Ishi keeps)
-but doesn't specify which NeedType routes Phoenix Champions to this action.
-**Decision needed:** Define a NeedType (or Strategic Review directive) that
-creates the objective leading to RESTORE_COUNCIL_COMPACT.
+**B3. RESTORE_COUNCIL_COMPACT — RESOLVED: seasonal objective assignment.**
+Added RESTORE_GOVERNANCE NeedType to objective_alignment.json with
+RESTORE_COUNCIL_COMPACT: 100. `_assign_phoenix_champion_restore_objective()`
+runs seasonally: assigns RESTORE_GOVERNANCE primary objective to Phoenix
+Champions with `phoenix_champion_authority` and Chugi virtue. Ishi-virtue
+champions skip (keep authority). Personality-driven per GDD s55.10.3.7.
 
-**B4. Position decay — no GDD spec exists.**
-`position_hardened` and `position_durable` flags are emitted by NEGOTIATE
-and PERSUADE but no position decay system consumes them. Topic position
-shifts are currently permanent. **Decision needed:** Define whether and
-how topic positions decay over time (or confirm they're permanent).
+**B4. Position decay — RESOLVED: positions are permanent.**
+Topic position shifts do not decay. `position_hardened` and `position_durable`
+flags are now dead forward-wiring — no position decay system will be built.
+The flags remain emitted (harmless metadata) but will never be consumed.
 
-**B5. FOLLOWING_ORDERS honor row — no consumer.**
-Table 2.3 row "Following Orders" (positive honor at low rank, negative
-at high rank) is fully defined in code but has no mechanical trigger.
-**Decision needed:** Identify when an NPC is "following orders" in a way
-that should trigger this row (e.g., NPC objective conflict resolution).
+**B5. FOLLOWING_ORDERS honor row — RESOLVED: lord-assigned objective trigger.**
+`_process_following_orders_honor_writebacks()` fires once per day per NPC
+whose primary objective has `assigned_by >= 0` (lord-assigned). Applies
+`get_following_orders_honor()` (positive at low rank, negative at high rank).
+Deduped per character per day.
 
-**B6. Three Table 2.3 rows have no mechanical trigger.**
-LYING (FABRICATE_SECRET already has explicit per-tier costs), DUPED_CRIMINAL
-(forge orders produce misdirections not criminal acts), DUPED_FOOLISH (no
-mechanical concept of "being duped into foolishness").
-**Decision needed:** Identify mechanical triggers or confirm these are
-player-only / narrative-only rows.
+**B6. Three Table 2.3 rows — RESOLVED: mechanical triggers wired.**
+LYING fires on successful FABRICATE_SECRET when fabricator has positive
+disposition toward the secret's subject (lying about someone you like).
+DUPED_CRIMINAL fires during impersonation detection when a forged order
+was applied AND the victim has a BROKEN commitment with deadline after
+the forged order's arrival (tricked into breaking social obligations).
+DUPED_FOOLISH fires on travel arrival when the character's primary
+objective has `source == "forged_order"` and the destination has no
+matching target (sent to a useless location by a fake order).
 
-**B7. Koku transfer ActionID — RESOURCE_PROMISE partial fulfillment.**
-RESOURCE_PROMISE commitments can be fulfilled via SHARE_SUPPLIES (rice/arms)
-and ORDER_DEPLOY (troops), but there is no dedicated ActionID for "send koku
-to another character." Koku payment fulfillment is blocked.
-**Decision needed:** Define a TRANSFER_KOKU ActionID (or equivalent), or
-specify that koku promises can't be fulfilled via the commitment system.
+**B7. Koku transfer ActionID — RESOLVED: TRANSFER_KOKU.**
+Added TRANSFER_KOKU to AT_OWN_HOLDINGS, AT_COURT context lists and
+LORD_ONLY_ACTIONS. AP cost 1. Executor transfers 5 koku base (10 if
+sender has 20+), caps at available koku, +3 disposition toward recipient.
+Pattern B (pre-applied). Resource validation via ACTION_RESOURCE_COSTS.
+objective_alignment: HONOR_COMMITMENT (85), REQUEST_AID (70),
+CONDUCT_COMMERCE (60), RAISE_DISPOSITION (40). RESOURCE_PROMISE
+fulfillment path added alongside SHARE_SUPPLIES and ORDER_DEPLOY.
 
-**B8. Crime-sourced offenses for PUBLIC_ATONEMENT.**
-Currently only topic-sourced offenses feed the atonement pipeline. An NPC
-convicted of a crime has a CrimeRecord but no corresponding "offense" entry
-for PUBLIC_ATONEMENT to pick up.
-**Decision needed:** Define how CrimeRecord convictions register as
-atonable offenses (or confirm that convicted NPCs don't atone publicly).
+**B8. Crime-sourced offenses for PUBLIC_ATONEMENT — RESOLVED: no crime atonement.**
+Convicted NPCs do not atone publicly. PUBLIC_ATONEMENT remains topic-sourced
+only. CrimeRecord convictions resolve through the sentencing pipeline
+(seppuku, exile, execution) — not through voluntary atonement.
 
-**B9. Insult classification — ancestor/clan honor distinction.**
-All PUBLIC_INSULT actions are treated as self-insults. GDD Table 2.3
-distinguishes "insult to self" (gain honor) vs "insult to ancestors/family/
-clan" (lose honor) with different rates. The `insult_type` metadata field
-exists but only the NPC engine populates it heuristically.
-**Decision needed:** Define how insult targets are mechanically classified
-(self vs ancestors vs clan) beyond the current NPC heuristic.
+**B9. Insult classification — RESOLVED: weighted deterministic selection.**
+NPC engine uses hash-based weighted randomness: ELIMINATE_CHARACTER →
+ancestors, DAMAGE_RELATIONSHIP → clan, otherwise 10% ancestors / 20% clan /
+70% self (deterministic from `(character_id * 7 + target_id * 13) % 100`).
+Existing insult_type metadata and honor gain/loss wiring unchanged.
 
-**B10. Data retention windows for unbounded arrays.**
-`crime_records`, `pending_letters`, and `active_secrets` grow
-monotonically. `pending_letters` can't be removed after delivery due to
-multi-stage forgery/impersonation processing. `crime_records` have complex
-terminal states (PARDONED, FUGITIVE are live). `active_secrets` may be
-partially exposed.
-**Decision needed:** Define retention policies (e.g., archive after N
-seasons, purge fully resolved records, or accept unbounded growth).
+**B10. Data retention — RESOLVED: seasonal purge functions.**
+Three purge functions run at each season boundary:
+`_purge_resolved_crime_records()` removes records with terminal legal
+status (DECREED_GUILTY, CLEAR, PARDONED, ACQUITTED) older than 360 IC
+days. FUGITIVE records retained (still active). `_purge_delivered_letters()`
+removes delivered letters older than 180 IC days, EXCEPT forged+applied
+order letters where the victim hasn't yet detected the impersonation
+(retains until impersonation_detected KnowledgeEntry exists).
+`_purge_exposed_secrets()` removes publicly exposed secrets immediately
+at season boundary (no further use once public).
 
-**B11. Forge authority level — should come from target, not forger.**
-Currently uses `_forge_authority_from_lord_rank(forger_lord_rank)` as proxy
-because the impersonated target's rank is not available in ContextSnapshot.
-**Decision needed:** Add `target_npc_status` or `target_lord_rank` to
-ContextSnapshot/ImmediateNeed, or confirm the proxy is acceptable.
+**B11. Forge authority level — RESOLVED: uses target's lord_rank.**
+`_get_target_lord_rank()` looks up the impersonated target in chars_by_id
+and returns their lord_rank. For FORGE_ORDER, looks up target's lord's
+lord_rank. Falls back to forger's own lord_rank when chars_by_id is empty
+or target not found. `_populate_action_metadata()` gains optional
+`chars_by_id` parameter (backward compatible). `generate_options()` and
+`score_all()` pass chars_by_id through. 3 tests.
 
-**B12. Honor rank-scaling for Low Skill use — systemic gap.**
-GDD says "Using a Low Skill per Table 2.3, scaled by Honor Rank." The
-6-bracket implementation is wired, but the broader pattern of rank-scaling
-honor costs across all crime types (not just Low Skill) is not implemented.
-Every honor cost in the game is flat, not rank-scaled.
-**Decision needed:** Confirm whether rank-scaling applies to all Table 2.3
-rows or only the "Using a Low Skill" row.
+**B12. Honor rank-scaling — RESOLVED: universal RANK_SCALE applied.**
+`CrimeSystem.RANK_SCALE = [0.0, 0.333, 0.667, 1.0, 2.0, 3.0]` (6 brackets
+matching LOW_SKILL pattern). `scale_honor_by_rank(base_cost, character)`
+multiplies any flat honor cost by the rank-appropriate multiplier.
+Applied to: assassination ordering/execution honor, secret fabrication/
+exposure honor, forge honor, declare_war total_war honor, atonement
+critical failure, court early departure, siege honor loss, treason
+intervention/false accusation/refused seppuku. Table 2.3 Low Skill costs
+(already rank-scaled via their own 6-bracket arrays) are NOT double-scaled.
 
 ---
 
@@ -2934,7 +2940,7 @@ consumer yet. They are NOT bugs — they are pre-wired for future systems.
 No decision needed; listed here to prevent re-auditing.
 
 - `position_hardened` / `position_durable` — emitted by NEGOTIATE/PERSUADE,
-  waiting on position decay system (see B4)
+  permanently dead (B4 resolved: positions don't decay). Harmless metadata.
 - 37 Kolat/artisan/theater ActionIDs in objective_alignment.json — Phase 4b
   filters them out because they have no context list entry
 - Military hierarchy constituent arrays (`constituent_companies`, etc.) —
