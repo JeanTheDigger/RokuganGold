@@ -462,8 +462,12 @@ static func record_emperors_peace_violation(
 ) -> Dictionary:
 	var witnesses: Array = []
 	for aid: int in court.attendee_ids:
-		if aid != offender.character_id:
-			witnesses.append(aid)
+		if aid == offender.character_id:
+			continue
+		var att: L5RCharacterData = characters_by_id.get(aid) as L5RCharacterData
+		if att == null or CharacterStats.is_dead(att):
+			continue
+		witnesses.append(aid)
 
 	var case_id: int = next_case_id[0]
 	next_case_id[0] = case_id + 1
@@ -535,7 +539,9 @@ static func compute_glory_rewards(
 
 	var host_daimyo_id: int = court.host_lord_id
 	if host_daimyo_id >= 0:
-		rewards.append({"character_id": host_daimyo_id, "glory_change": GLORY_HOST_FAMILY_DAIMYO})
+		var host_daimyo: L5RCharacterData = characters_by_id.get(host_daimyo_id) as L5RCharacterData
+		if host_daimyo != null and not CharacterStats.is_dead(host_daimyo):
+			rewards.append({"character_id": host_daimyo_id, "glory_change": GLORY_HOST_FAMILY_DAIMYO})
 
 	var host_champion: L5RCharacterData = _find_clan_champion(court.host_clan, characters_by_id)
 	if host_champion != null and not CharacterStats.is_dead(host_champion) and host_champion.character_id != host_daimyo_id:
@@ -773,7 +779,7 @@ static func run_invitation_pipeline(
 				continue
 			if c.character_id in all_invited:
 				continue
-			if c.character_id in emperor.met_characters or emperor.knowledge_pool.size() > 0:
+			if c.character_id in emperor.met_characters:
 				personal_candidates.append(c)
 
 	var personal_invites: Array = []

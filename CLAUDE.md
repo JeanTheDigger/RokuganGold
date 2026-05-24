@@ -2184,6 +2184,27 @@ costs, or forward-wiring. Do not treat as bugs.
   injection, and no actual training progression. Full implementation
   requires the ACCEPT_TRAINING reactive chain.
 
+### Known Code Issues (found and fixed 2026-05-24, multi-system audit)
+- **WinterCourtSystem.record_emperors_peace_violation() — dead attendees as witnesses. FIXED.**
+  Witness collection loop iterated `court.attendee_ids` without
+  `CharacterStats.is_dead()` check. Dead attendees were included as witnesses
+  in Emperor's Peace violation CrimeRecords. Added character lookup and dead
+  guard. 1 test.
+- **WinterCourtSystem.compute_glory_rewards() — dead host daimyo receives glory. FIXED.**
+  `host_lord_id` was checked `>= 0` but never verified alive. Dead host daimyos
+  received GLORY_HOST_FAMILY_DAIMYO reward. Added character lookup and dead guard.
+  1 test.
+- **WinterCourtSystem personal candidate filter — tautological condition. FIXED.**
+  `emperor.knowledge_pool.size() > 0` was OR'd with `met_characters` check,
+  making virtually all characters personal invitation candidates once the emperor
+  had any knowledge at all. Removed the tautological branch; now only `met_characters`
+  gates personal candidacy. 1 test.
+- **BoundEscapeSystem.free_ally_chains() — tautological noise_level ternary. FIXED.**
+  `NoiseLevel.MODERATE if success else NoiseLevel.MODERATE` returned MODERATE
+  regardless of success/failure. Failed force attempts (chains not broken) should
+  produce QUIET noise. Changed failure branch to `NoiseLevel.QUIET` with
+  `QUIET_NOISE_RANGE`. 1 test.
+
 ### Known Performance Concerns — Deferred
 - **Unbounded array growth in advance_day().** `crime_records`,
   `pending_letters`, `active_secrets`, and `action_log` grow

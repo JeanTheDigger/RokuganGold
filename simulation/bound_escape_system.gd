@@ -299,8 +299,8 @@ static func free_ally_chains(
 		"roll_total": result.total,
 		"tn": BREAK_CHAINS_TN,
 		"method": "force",
-		"noise_level": NoiseLevel.MODERATE if success else NoiseLevel.MODERATE,
-		"noise_range": 6,
+		"noise_level": NoiseLevel.MODERATE if success else NoiseLevel.QUIET,
+		"noise_range": 6 if success else QUIET_NOISE_RANGE,
 	}
 
 

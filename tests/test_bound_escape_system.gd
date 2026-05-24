@@ -327,6 +327,17 @@ func test_free_ally_chains_not_chains() -> void:
 	assert_eq(r["reason"], "not_chains")
 
 
+func test_free_ally_chains_force_failure_quiet_noise() -> void:
+	var weak_rescuer := L5RCharacterData.new()
+	weak_rescuer.character_id = 99
+	weak_rescuer.strength = 1
+	var s: Dictionary = BoundEscapeSystem.create_bound_state(1, 3, BoundEscapeSystem.BindingMaterial.CHAINS, 100)
+	var r: Dictionary = BoundEscapeSystem.free_ally_chains(weak_rescuer, s, false, true, _engine)
+	if not r["success"]:
+		assert_eq(r["noise_level"], BoundEscapeSystem.NoiseLevel.QUIET, "Failed force attempt should be QUIET noise")
+		assert_eq(r["noise_range"], BoundEscapeSystem.QUIET_NOISE_RANGE, "Failed force attempt should use quiet noise range")
+
+
 func test_free_ally_high_grade_chains() -> void:
 	var s: Dictionary = BoundEscapeSystem.create_bound_state(1, 3, BoundEscapeSystem.BindingMaterial.HIGH_GRADE_CHAINS, 100)
 	var r: Dictionary = BoundEscapeSystem.free_ally_chains(_rescuer, s, true, false, _engine)

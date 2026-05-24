@@ -1452,3 +1452,60 @@ func test_glory_rewards_skip_dead_champion() -> void:
 	var rewards: Array = WinterCourtSystem.compute_glory_rewards(court, chars)
 	for r: Dictionary in rewards:
 		assert_ne(r["character_id"], 50, "Dead clan champion should NOT get glory reward")
+
+
+func test_glory_rewards_skip_dead_host_daimyo() -> void:
+	var dead_host := _make_character(60, "Doji Host", "Crane", "Doji", 7.0)
+	dead_host.lord_id = -1
+	dead_host.wounds_taken = 999
+	var chars: Dictionary = {60: dead_host}
+	var court := _make_active_winter_court(100)
+	court.host_clan = "Crane"
+	court.host_lord_id = 60
+	court.attendee_ids = [60]
+	var rewards: Array = WinterCourtSystem.compute_glory_rewards(court, chars)
+	for r: Dictionary in rewards:
+		assert_ne(r["character_id"], 60, "Dead host daimyo should NOT get glory reward")
+
+
+func test_peace_violation_witnesses_skip_dead_attendees() -> void:
+	var offender := _make_character(10, "Akodo Toturi", "Lion", "Akodo", 6.0)
+	var alive_witness := _make_character(20, "Doji Satsume", "Crane", "Doji", 7.0)
+	var dead_witness := _make_character(30, "Bayushi Shoju", "Scorpion", "Bayushi", 6.0)
+	dead_witness.wounds_taken = 999
+	var chars: Dictionary = {10: offender, 20: alive_witness, 30: dead_witness, 50: _emperor}
+	var court := _make_active_winter_court(100)
+	court.attendee_ids = [10, 20, 30, 50]
+	var next_case: Array = [1]
+	var next_topic: Array = [100]
+	var result: Dictionary = WinterCourtSystem.record_emperors_peace_violation(
+		offender, "PUBLIC_INSULT", court, 1, next_case, next_topic, chars
+	)
+	var witnesses: Array = result.get("crime_record").witnesses
+	assert_false(witnesses.has(30), "Dead attendee should NOT be a witness")
+	assert_true(witnesses.has(20), "Alive attendee should be a witness")
+
+
+func test_personal_candidates_require_met_characters() -> void:
+	var emperor := _make_character(1, "Emperor", "Imperial", "Hantei", 10.0)
+	emperor.lord_id = -1
+	emperor.met_characters = [10]
+	emperor.knowledge_pool = [KnowledgeEntry.new()]
+	var known := _make_character(10, "Known NPC", "Crane", "Doji", 5.0)
+	var unknown := _make_character(20, "Unknown NPC", "Lion", "Akodo", 5.0)
+	var chars: Dictionary = {1: emperor, 10: known, 20: unknown}
+	var already_invited: Array = []
+	var personal_candidates: Array = []
+	for char_id: int in chars:
+		var c: L5RCharacterData = chars[char_id] as L5RCharacterData
+		if c == null or CharacterStats.is_dead(c):
+			continue
+		if c.character_id in already_invited:
+			continue
+		if c.character_id in emperor.met_characters:
+			personal_candidates.append(c)
+	var found_unknown: bool = false
+	for pc: L5RCharacterData in personal_candidates:
+		if pc.character_id == 20:
+			found_unknown = true
+	assert_false(found_unknown, "Unknown NPC should not be a personal candidate")
