@@ -4005,3 +4005,142 @@ func test_court_invitation_decline_creates_no_objective() -> void:
 	assert_false(objectives_map.has(2), "Declined invitation should not create objective")
 
 
+func test_build_vengeance_targets_from_avenge_death_string() -> void:
+	var lord := L5RCharacterData.new()
+	lord.character_id = 1
+	lord.character_name = "Lord"
+	lord.wounds_taken = 0
+	lord.earth_ring = 3
+	lord.stamina = 3
+	var target := L5RCharacterData.new()
+	target.character_id = 99
+	target.character_name = "Killer"
+	target.wounds_taken = 0
+	target.earth_ring = 3
+	target.stamina = 3
+	var objectives_map: Dictionary = {
+		1: {"primary": "AVENGE_DEATH", "avenge_target_id": 99},
+	}
+	var chars: Dictionary = {1: lord, 99: target}
+	var result: Array = DayOrchestrator._build_vengeance_targets(lord, objectives_map, chars)
+	assert_eq(result.size(), 1, "Should find one vengeance target")
+	assert_eq(result[0].get("target_id", -1), 99)
+
+
+func test_build_vengeance_targets_from_historical_modifiers() -> void:
+	var lord := L5RCharacterData.new()
+	lord.character_id = 1
+	lord.character_name = "Lord"
+	lord.wounds_taken = 0
+	lord.earth_ring = 3
+	lord.stamina = 3
+	lord.historical_modifiers = {
+		"vengeance_42": {
+			"target_id": 42,
+			"modifier": AssassinationSystem.FAMILY_VENGEANCE_DISPOSITION,
+			"created_ic_day": 100,
+			"permanent": true,
+		},
+	}
+	var target := L5RCharacterData.new()
+	target.character_id = 42
+	target.character_name = "Commissioner"
+	target.wounds_taken = 0
+	target.earth_ring = 3
+	target.stamina = 3
+	var chars: Dictionary = {1: lord, 42: target}
+	var result: Array = DayOrchestrator._build_vengeance_targets(lord, {}, chars)
+	assert_eq(result.size(), 1, "Should find one vengeance target from historical_modifiers")
+	assert_eq(result[0].get("target_id", -1), 42)
+
+
+func test_build_vengeance_targets_skips_dead_target() -> void:
+	var lord := L5RCharacterData.new()
+	lord.character_id = 1
+	lord.character_name = "Lord"
+	lord.wounds_taken = 0
+	lord.earth_ring = 3
+	lord.stamina = 3
+	lord.historical_modifiers = {
+		"vengeance_42": {
+			"target_id": 42,
+			"modifier": AssassinationSystem.FAMILY_VENGEANCE_DISPOSITION,
+			"created_ic_day": 100,
+			"permanent": true,
+		},
+	}
+	var dead_target := L5RCharacterData.new()
+	dead_target.character_id = 42
+	dead_target.character_name = "Dead Commissioner"
+	dead_target.wounds_taken = 200
+	dead_target.earth_ring = 3
+	dead_target.stamina = 3
+	var chars: Dictionary = {1: lord, 42: dead_target}
+	var result: Array = DayOrchestrator._build_vengeance_targets(lord, {}, chars)
+	assert_eq(result.size(), 0, "Dead target should not appear in vengeance_targets")
+
+
+func test_build_bitter_rivals_from_disposition() -> void:
+	var lord := L5RCharacterData.new()
+	lord.character_id = 1
+	lord.character_name = "Lord"
+	lord.wounds_taken = 0
+	lord.earth_ring = 3
+	lord.stamina = 3
+	lord.disposition_values = {50: -40, 51: -70, 52: -10, 53: -31}
+	var c50 := L5RCharacterData.new()
+	c50.character_id = 50
+	c50.character_name = "Enemy"
+	c50.wounds_taken = 0
+	c50.earth_ring = 3
+	c50.stamina = 3
+	var c51 := L5RCharacterData.new()
+	c51.character_id = 51
+	c51.character_name = "Blood Enemy"
+	c51.wounds_taken = 0
+	c51.earth_ring = 3
+	c51.stamina = 3
+	var c52 := L5RCharacterData.new()
+	c52.character_id = 52
+	c52.character_name = "Neutral"
+	c52.wounds_taken = 0
+	c52.earth_ring = 3
+	c52.stamina = 3
+	var c53 := L5RCharacterData.new()
+	c53.character_id = 53
+	c53.character_name = "Rival"
+	c53.wounds_taken = 0
+	c53.earth_ring = 3
+	c53.stamina = 3
+	var chars: Dictionary = {1: lord, 50: c50, 51: c51, 52: c52, 53: c53}
+	var result: Array = DayOrchestrator._build_bitter_rivals(lord, chars)
+	assert_eq(result.size(), 2, "Should find two bitter rivals (disp <= -31)")
+	var target_ids: Array = []
+	for r: Dictionary in result:
+		target_ids.append(r.get("target_id", -1))
+	assert_true(50 in target_ids, "Enemy (-40) should be a bitter rival")
+	assert_true(51 in target_ids, "Blood enemy (-70) should be a bitter rival")
+	for r2: Dictionary in result:
+		if r2.get("target_id", -1) == 51:
+			assert_eq(r2.get("urgency", 0.0), 70.0, "Blood enemy should have higher urgency")
+
+
+func test_build_bitter_rivals_skips_dead() -> void:
+	var lord := L5RCharacterData.new()
+	lord.character_id = 1
+	lord.character_name = "Lord"
+	lord.wounds_taken = 0
+	lord.earth_ring = 3
+	lord.stamina = 3
+	lord.disposition_values = {50: -50}
+	var dead := L5RCharacterData.new()
+	dead.character_id = 50
+	dead.character_name = "Dead Rival"
+	dead.wounds_taken = 200
+	dead.earth_ring = 3
+	dead.stamina = 3
+	var chars: Dictionary = {1: lord, 50: dead}
+	var result: Array = DayOrchestrator._build_bitter_rivals(lord, chars)
+	assert_eq(result.size(), 0, "Dead rival should not appear in bitter_rivals")
+
+

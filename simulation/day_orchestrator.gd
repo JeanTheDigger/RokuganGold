@@ -1074,7 +1074,8 @@ static func advance_day(
 			characters, objectives_map, world_states
 		)
 		strategic_results = _run_strategic_reviews(
-			characters, objectives_map, world_states
+			characters, objectives_map, world_states,
+			characters_by_id,
 		)
 		_assign_phoenix_champion_restore_objective(
 			characters, objectives_map, phoenix_council_state,
@@ -7126,6 +7127,7 @@ static func _run_strategic_reviews(
 	characters: Array,
 	objectives_map: Dictionary,
 	world_states: Dictionary,
+	characters_by_id: Dictionary = {},
 ) -> Array:
 	var results: Array = []
 	var emperor_id: int = int(world_states.get("emperor_id", -1))
@@ -7146,6 +7148,12 @@ static func _run_strategic_reviews(
 		else:
 			var vassals: Array = _get_vassals(lord, characters)
 			world_states["trainable_vassals"] = _build_trainable_vassals(lord, vassals)
+			world_states["vengeance_targets"] = _build_vengeance_targets(
+				lord, objectives_map, characters_by_id,
+			)
+			world_states["bitter_rivals"] = _build_bitter_rivals(
+				lord, characters_by_id,
+			)
 			var directives_2: Array = StrategicReview.run_seasonal_review(
 				lord, vassals, objectives_map, world_states
 			)
@@ -7153,6 +7161,8 @@ static func _run_strategic_reviews(
 				results.append(d)
 
 	world_states.erase("trainable_vassals")
+	world_states.erase("vengeance_targets")
+	world_states.erase("bitter_rivals")
 	return results
 
 
@@ -7192,6 +7202,74 @@ static func _build_trainable_vassals(
 				trainable.append({"vassal_id": vassal.character_id})
 				break
 	return trainable
+
+
+static func _build_vengeance_targets(
+	lord: L5RCharacterData,
+	objectives_map: Dictionary,
+	characters_by_id: Dictionary,
+) -> Array:
+	var targets: Array = []
+	var seen: Dictionary = {}
+	var lord_objs: Dictionary = objectives_map.get(lord.character_id, {})
+	var primary: Variant = lord_objs.get("primary", {})
+	if primary is Dictionary:
+		var pd: Dictionary = primary as Dictionary
+		if pd.get("need_type", "") == "AVENGE_DEATH" or str(primary) == "AVENGE_DEATH":
+			var avenge_id: int = lord_objs.get("avenge_target_id", -1)
+			if avenge_id >= 0 and not seen.has(avenge_id):
+				var t: L5RCharacterData = characters_by_id.get(avenge_id) as L5RCharacterData
+				if t != null and not CharacterStats.is_dead(t):
+					seen[avenge_id] = true
+					targets.append({"target_id": avenge_id, "feasibility": 50.0})
+	if primary is String and str(primary) == "AVENGE_DEATH":
+		var avenge_id_2: int = lord_objs.get("avenge_target_id", -1)
+		if avenge_id_2 >= 0 and not seen.has(avenge_id_2):
+			var t2: L5RCharacterData = characters_by_id.get(avenge_id_2) as L5RCharacterData
+			if t2 != null and not CharacterStats.is_dead(t2):
+				seen[avenge_id_2] = true
+				targets.append({"target_id": avenge_id_2, "feasibility": 50.0})
+	for key: Variant in lord.historical_modifiers:
+		var mod: Variant = lord.historical_modifiers[key]
+		if not mod is Dictionary:
+			continue
+		var md: Dictionary = mod as Dictionary
+		if md.get("modifier", 0) != AssassinationSystem.FAMILY_VENGEANCE_DISPOSITION:
+			continue
+		var tid: int = md.get("target_id", -1)
+		if tid < 0 or seen.has(tid):
+			continue
+		var target_char: L5RCharacterData = characters_by_id.get(tid) as L5RCharacterData
+		if target_char == null or CharacterStats.is_dead(target_char):
+			continue
+		seen[tid] = true
+		targets.append({"target_id": tid, "feasibility": 50.0})
+	return targets
+
+
+const BITTER_RIVAL_THRESHOLD: int = -31
+
+static func _build_bitter_rivals(
+	lord: L5RCharacterData,
+	characters_by_id: Dictionary,
+) -> Array:
+	var rivals: Array = []
+	for cid_key: Variant in lord.disposition_values:
+		var cid: int = int(cid_key)
+		var disp: int = int(lord.disposition_values[cid_key])
+		if disp > BITTER_RIVAL_THRESHOLD:
+			continue
+		if cid == lord.character_id:
+			continue
+		var target: L5RCharacterData = characters_by_id.get(cid) as L5RCharacterData
+		if target == null or CharacterStats.is_dead(target):
+			continue
+		var urgency: float = 50.0
+		if disp <= -61:
+			urgency = 70.0
+		var feasibility: float = 40.0
+		rivals.append({"target_id": cid, "feasibility": feasibility, "urgency": urgency})
+	return rivals
 
 
 # -- Festival Processing (s11.5) ----------------------------------------------

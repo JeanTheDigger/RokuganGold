@@ -2521,6 +2521,15 @@ costs, or forward-wiring. Do not treat as bugs.
   objective. Full pipeline: SEND_INVITATION → _apply_court_invitation →
   reactive event injection → next-tick ReactiveDecisions → personality
   evaluation → travel objective writeback. 3 tests.
+- **vengeance_targets / bitter_rivals population.** Two builder functions
+  populate world state keys read by OpportunityScanner. `_build_vengeance_targets()`
+  scans objectives_map for AVENGE_DEATH (String format from assassination system)
+  and historical_modifiers for FAMILY_VENGEANCE_DISPOSITION entries. Dead targets
+  filtered. `_build_bitter_rivals()` scans lord's disposition_values for entries
+  at ENEMY tier or worse (disposition <= -31). Blood enemies get urgency 70
+  (vs 50 for enemies). Dead targets filtered. Both wired into
+  `_run_strategic_reviews()` alongside trainable_vassals, erased after use.
+  5 tests.
 
 ### Systems Added 2026-05-18
 - **s29.15 Courtier School Techniques** — School technique bonuses wired into
