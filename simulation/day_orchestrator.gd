@@ -1390,7 +1390,7 @@ static func _process_ooc_day_tick(
 				var target_id_2: int = wind_result["leak_target_id"]
 				if target_id_2 != -1 and characters_by_id.has(target_id_2):
 					var target_2: L5RCharacterData = characters_by_id[target_id_2] as L5RCharacterData
-					if not target_2.topic_pool.has(leaked_topic):
+					if not CharacterStats.is_dead(target_2) and not target_2.topic_pool.has(leaked_topic):
 						target_2.topic_pool.append(leaked_topic)
 			# ROUTING_HANDLER_PIPELINE and ROUTING_BROTHERHOOD are handled by
 			# their respective systems (Geisha Intelligence, Brotherhood network)
@@ -1737,11 +1737,11 @@ static func _create_stipend_failure_topics(
 		var holder_ids: Array = []
 		if lord_id >= 0:
 			var lord: L5RCharacterData = characters_by_id.get(lord_id)
-			if lord != null and topic.topic_id not in lord.topic_pool:
+			if lord != null and not CharacterStats.is_dead(lord) and topic.topic_id not in lord.topic_pool:
 				lord.topic_pool.append(topic.topic_id)
 				holder_ids.append(lord_id)
 		var affected: L5RCharacterData = characters_by_id.get(cid)
-		if affected != null and topic.topic_id not in affected.topic_pool:
+		if affected != null and not CharacterStats.is_dead(affected) and topic.topic_id not in affected.topic_pool:
 			affected.topic_pool.append(topic.topic_id)
 			holder_ids.append(cid)
 		for other_id: Variant in characters_by_id:
@@ -3246,7 +3246,7 @@ static func _generate_accusation_topic_for_case(
 				active_topics.append(topic)
 				var lord_id: int = accused.lord_id
 				var lord: L5RCharacterData = characters_by_id.get(lord_id)
-				if lord != null and topic.topic_id not in lord.topic_pool:
+				if lord != null and not CharacterStats.is_dead(lord) and topic.topic_id not in lord.topic_pool:
 					lord.topic_pool.append(topic.topic_id)
 			return
 
@@ -3286,7 +3286,7 @@ static func _generate_accusation_topic_from_witness(
 				active_topics.append(topic)
 				var lord_id: int = accused.lord_id
 				var lord: L5RCharacterData = characters_by_id.get(lord_id)
-				if lord != null and topic.topic_id not in lord.topic_pool:
+				if lord != null and not CharacterStats.is_dead(lord) and topic.topic_id not in lord.topic_pool:
 					lord.topic_pool.append(topic.topic_id)
 			return
 
@@ -3364,7 +3364,7 @@ static func handle_evidence_threshold(
 			active_topics.append(topic)
 			var lord_id: int = accused.lord_id
 			var lord: L5RCharacterData = characters_by_id.get(lord_id)
-			if lord != null and topic.topic_id not in lord.topic_pool:
+			if lord != null and not CharacterStats.is_dead(lord) and topic.topic_id not in lord.topic_pool:
 				lord.topic_pool.append(topic.topic_id)
 
 
@@ -3547,7 +3547,7 @@ static func process_fugitive_declaration(
 		active_topics.append(topic)
 		var lord_id: int = fugitive.lord_id
 		var lord: L5RCharacterData = characters_by_id.get(lord_id)
-		if lord != null and topic.topic_id not in lord.topic_pool:
+		if lord != null and not CharacterStats.is_dead(lord) and topic.topic_id not in lord.topic_pool:
 			lord.topic_pool.append(topic.topic_id)
 
 	return {
@@ -4047,7 +4047,7 @@ static func _process_ptl_detection(
 			active_topics.append(topic)
 			if character.lord_id >= 0:
 				var lord: L5RCharacterData = characters_by_id.get(character.lord_id)
-				if lord != null and topic.topic_id not in lord.topic_pool:
+				if lord != null and not CharacterStats.is_dead(lord) and topic.topic_id not in lord.topic_pool:
 					lord.topic_pool.append(topic.topic_id)
 
 
@@ -4210,7 +4210,7 @@ static func _emit_blood_evidence_topic(
 
 	if investigator.lord_id >= 0:
 		var lord: L5RCharacterData = characters_by_id.get(investigator.lord_id)
-		if lord != null and topic.topic_id not in lord.topic_pool:
+		if lord != null and not CharacterStats.is_dead(lord) and topic.topic_id not in lord.topic_pool:
 			lord.topic_pool.append(topic.topic_id)
 
 
@@ -5170,7 +5170,7 @@ static func _process_forged_order_delivery(
 		if letter.order_applied:
 			continue
 		var target: L5RCharacterData = characters_by_id.get(letter.recipient_id)
-		if target == null:
+		if target == null or CharacterStats.is_dead(target):
 			continue
 		var forger_id: int = letter.forged_sender_id
 		var need_type: String = letter.order_need_type if letter.order_need_type != "" else "TRAVEL_TO"
@@ -5250,7 +5250,7 @@ static func _process_impersonation_detection(
 			continue
 		var victim_id: int = letter.recipient_id
 		var victim: L5RCharacterData = characters_by_id.get(victim_id)
-		if victim == null:
+		if victim == null or CharacterStats.is_dead(victim):
 			continue
 
 		var already_aware: bool = false
@@ -5383,7 +5383,7 @@ static func _process_taint_proximity_detection(
 
 		if detector.lord_id >= 0:
 			var lord: L5RCharacterData = characters_by_id.get(detector.lord_id)
-			if lord != null and topic.topic_id not in lord.topic_pool:
+			if lord != null and not CharacterStats.is_dead(lord) and topic.topic_id not in lord.topic_pool:
 				lord.topic_pool.append(topic.topic_id)
 
 
@@ -5544,7 +5544,7 @@ static func _seed_crime_topic_to_knowers(
 ) -> void:
 	for witness_id: int in record.witnesses:
 		var witness: L5RCharacterData = characters_by_id.get(witness_id)
-		if witness != null and topic.topic_id not in witness.topic_pool:
+		if witness != null and not CharacterStats.is_dead(witness) and topic.topic_id not in witness.topic_pool:
 			witness.topic_pool.append(topic.topic_id)
 			if witness.role_position not in MAGISTRATE_ROLE_POSITIONS \
 					and witness_id != record.victim_id:
@@ -5553,7 +5553,7 @@ static func _seed_crime_topic_to_knowers(
 				)
 	if record.victim_id >= 0:
 		var victim: L5RCharacterData = characters_by_id.get(record.victim_id)
-		if victim != null and topic.topic_id not in victim.topic_pool:
+		if victim != null and not CharacterStats.is_dead(victim) and topic.topic_id not in victim.topic_pool:
 			victim.topic_pool.append(topic.topic_id)
 
 
@@ -6570,7 +6570,7 @@ static func _process_seppuku_action_writebacks(
 				if refusal_topic != null:
 					active_topics.append(refusal_topic)
 					var lord: L5RCharacterData = characters_by_id.get(character.lord_id)
-					if lord != null and refusal_topic.topic_id not in lord.topic_pool:
+					if lord != null and not CharacterStats.is_dead(lord) and refusal_topic.topic_id not in lord.topic_pool:
 						lord.topic_pool.append(refusal_topic.topic_id)
 			resolution["action_id"] = action_id
 			resolution["character_id"] = char_id
@@ -6687,7 +6687,7 @@ static func _seed_conviction_topics_to_victim_lords(
 			continue
 
 		var victim_lord: L5RCharacterData = characters_by_id.get(victim.lord_id)
-		if victim_lord == null:
+		if victim_lord == null or CharacterStats.is_dead(victim_lord):
 			continue
 		if topic_id in victim_lord.topic_pool:
 			continue
