@@ -2204,6 +2204,14 @@ costs, or forward-wiring. Do not treat as bugs.
   regardless of success/failure. Failed force attempts (chains not broken) should
   produce QUIET noise. Changed failure branch to `NoiseLevel.QUIET` with
   `QUIET_NOISE_RANGE`. 1 test.
+- **InformationSystem.transfer_objective_knowledge() — dead contacts transferred. FIXED.**
+  Contact transfer loop in `known_contacts_by_clan` iterated without
+  `CharacterStats.is_dead()` check. Dead characters were added to recipient's
+  contact network. Added null and dead guard. 1 test.
+- **ObjectiveProgress.evaluate_all_objectives() — dead characters evaluated. FIXED.**
+  Iterated full characters array without dead guard. Dead characters had their
+  primary objectives evaluated and `TravelCommitment.update_progress()` called,
+  unnecessarily mutating their objectives_map. Added dead guard. 1 test.
 
 ### Known Performance Concerns — Deferred
 - **Unbounded array growth in advance_day().** `crime_records`,

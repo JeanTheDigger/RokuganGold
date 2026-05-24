@@ -543,3 +543,27 @@ func test_arrival_observation_updates_existing() -> void:
 	assert_eq(observer.knowledge_pool.size(), 1)
 	assert_eq(observer.knowledge_pool[0].data["settlement_id"], "castle_b")
 	assert_eq(observer.knowledge_pool[0].season_acquired, 3)
+
+
+func test_evaluate_all_objectives_skips_dead_characters() -> void:
+	var alive := _make_character(1)
+	alive.disposition_values = {}
+	alive.known_contacts_by_clan = {}
+	var dead := _make_character(2)
+	dead.wounds_taken = 999
+	dead.disposition_values = {}
+	dead.known_contacts_by_clan = {}
+	var characters: Array = [alive, dead]
+	var objectives_map: Dictionary = {
+		1: {"primary": {"need_type": "RAISE_DISPOSITION", "target_npc_id": 99, "status": "ACTIVE", "seasons_without_progress": 0}},
+		2: {"primary": {"need_type": "RAISE_DISPOSITION", "target_npc_id": 99, "status": "ACTIVE", "seasons_without_progress": 0}},
+	}
+	var world_state: Dictionary = {"season": 0}
+	var results: Array = ObjectiveProgress.evaluate_all_objectives(
+		characters, objectives_map, world_state
+	)
+	var found_dead: bool = false
+	for r: Dictionary in results:
+		if r.get("character_id", -1) == 2:
+			found_dead = true
+	assert_false(found_dead, "Dead character should not have objectives evaluated")
