@@ -2246,6 +2246,29 @@ costs, or forward-wiring. Do not treat as bugs.
   "TIER_1, TIER_2, or TIER_3." Changed to `<= TopicData.Tier.TIER_2`.
   `escalated_tier: 3` raw int → `TopicData.Tier.TIER_3`.
 
+### Known Code Issues (found and fixed 2026-05-24, enum and guard audit)
+- **FugitiveExtraditionSystem raw 1-4 tier keys — same bug class as above. FIXED.**
+  `CRIME_SEVERITY_COOPERATION` keyed by raw {1:-30, 2:-15, 3:-5, 4:0} but
+  callers now pass TopicData.Tier enum values (0-3). TIER_1 crimes (maho)
+  received 0 severity pressure instead of -30. `<= 2` comparisons in
+  `get_cooperation_consequences()` and `get_refusal_consequences()` matched
+  TIER_3 (shouldn't). `IMPERIAL_WARRANT_SEVERITY_THRESHOLD = 2` matched
+  TIER_3 — imperial warrants available for minor crimes. All re-keyed.
+  1 test file updated.
+- **feasibility_ledger tether_state == 0 — raw int enum comparison. FIXED.**
+  Two sites in `assess_army_supply()` compared tether_state against raw `0`
+  instead of `SupplyTetherSystem.TetherState.SOLID`.
+- **conviction_processor — dead accused/lord not skipped. FIXED.**
+  `process_accused_cases()` checked `accused == null` and `lord == null`
+  but not `CharacterStats.is_dead()`. Dead characters could be tried and
+  sentenced.
+- **investigation_system — dead witness candidates ranked. FIXED.**
+  `prioritize_witnesses()` iterated candidate IDs without dead guard. Dead
+  characters could be ranked as witness candidates.
+- **world_generator — glory assignment unclamped. FIXED.**
+  `c.glory = 1.0 + (insight_rank - 1) * 0.5` was not clamped to [0.0, 10.0].
+  Honor line immediately above was already clamped.
+
 ### Known Performance Concerns — Deferred
 - **Unbounded array growth in advance_day().** `crime_records`,
   `pending_letters`, `active_secrets`, and `action_log` grow
