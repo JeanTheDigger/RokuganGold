@@ -2282,6 +2282,46 @@ costs, or forward-wiring. Do not treat as bugs.
   `c.glory = 1.0 + (insight_rank - 1) * 0.5` was not clamped to [0.0, 10.0].
   Honor line immediately above was already clamped.
 
+### Known Code Issues (found and fixed 2026-05-24, DayOrchestrator writeback audit)
+- **Duel response writeback ordering — crime detection ran before duel resolution. FIXED.**
+  `_process_duel_response_writebacks()` ran at line 650 AFTER `_process_crime_detection()`
+  at line 253. Resolved duels with `requires_crime_creation: true` were appended to the
+  results array AFTER crime detection had already scanned it. Unsanctioned duel deaths
+  never created CrimeRecords. Moved both duel writebacks to run before crime detection.
+- **held_leverage missing favor_id — INVOKE_FAVOR always failed. FIXED.**
+  `_populate_court_availability_data()` built held_leverage entries without `favor_id`
+  field. `_pick_best_favor_to_invoke()` always returned `favor_id: -1`, making
+  INVOKE_FAVOR executor always fail. Added `favor_id: f.favor_id` and `f.resolved`
+  filter to exclude already-resolved favors. 2 tests.
+- **Dead character guards (11 writeback functions). FIXED.**
+  `_apply_favor_breach()` debtor, `_process_eavesdrop_writebacks()` eavesdropper,
+  `_process_shadow_target_writebacks()` shadow, `_process_observe_attendees_writebacks()`
+  observer, `_process_intelligence_info_writebacks()` actor and target,
+  `_compute_positions_from_conversations()` both participants,
+  `_compute_positions_from_broadcast()` character,
+  `_compute_positions_from_letters()` recipient,
+  `_process_court_action_effects()` charmer (false courtesy honor). All had null
+  guards but no `CharacterStats.is_dead()` check. Dead characters received
+  knowledge entries, glory/honor changes, topic positions, and disposition
+  mutations. 6 tests.
+
+### Known Code Issues — Informational (2026-05-24, context injection audit)
+- **escalating_conflicts — ContextSnapshot field never populated.** Read by
+  `build_context()`, `strategic_review.gd`, `objective_decomposer.gd`. Always
+  defaults to empty array. Strategic review escalation detection and decomposer
+  conflict routing are inactive. Not a bug — schema placeholder for future
+  population path (requires conflict escalation detection logic).
+- **known_clan_strengths — ContextSnapshot field never populated.** Read by
+  `build_context()`, `opportunity_scanner.gd`, `objective_decomposer.gd`.
+  Always defaults to empty dict. Military comparison logic and clan strength
+  opportunity scanning are inactive. Not a bug — schema placeholder for future
+  EVALUATE_CLAN_STRENGTH ActionID (blocked on sub-tile army system s11.7a).
+- **sublocation — ContextSnapshot field never populated.** Read by
+  `build_context()`. Always defaults to `Enums.Sublocation.PUBLIC`. Only
+  consumer is `would_cause_public_scene` personality filter (line 1372).
+  Defaulting to PUBLIC is the conservative case (more restrictions apply).
+  Not a bug — schema placeholder for zone-level sublocation tracking.
+
 ### Known Performance Concerns — Deferred
 - **Unbounded array growth in advance_day().** `crime_records`,
   `pending_letters`, `active_secrets`, and `action_log` grow

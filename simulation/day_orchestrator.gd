@@ -4683,7 +4683,7 @@ static func _process_eavesdrop_writebacks(
 		var success: bool = d.get("success", false)
 		var char_id: int = d.get("character_id", -1)
 		var eavesdropper: L5RCharacterData = characters_by_id.get(char_id)
-		if eavesdropper == null:
+		if eavesdropper == null or CharacterStats.is_dead(eavesdropper):
 			continue
 
 		var margin: int = effects.get("margin", d.get("margin", 0))
@@ -4777,7 +4777,7 @@ static func _process_shadow_target_writebacks(
 		var shadow_id: int = d.get("character_id", -1)
 		var target_id: int = d.get("target_npc_id", -1)
 		var shadow: L5RCharacterData = characters_by_id.get(shadow_id)
-		if shadow == null:
+		if shadow == null or CharacterStats.is_dead(shadow):
 			continue
 
 		var margin: int = d.get("margin", d.get("effects", {}).get("margin", 0))
@@ -4878,7 +4878,7 @@ static func _process_observe_attendees_writebacks(
 			continue
 		var observer_id: int = d.get("character_id", -1)
 		var observer: L5RCharacterData = characters_by_id.get(observer_id)
-		if observer == null:
+		if observer == null or CharacterStats.is_dead(observer):
 			continue
 		for info: Variant in learned:
 			if not info is Dictionary:
@@ -5288,7 +5288,7 @@ static func _process_intelligence_info_writebacks(
 		var target_id: int = d.get("target_npc_id", -1)
 		var actor: L5RCharacterData = characters_by_id.get(actor_id)
 		var target: L5RCharacterData = characters_by_id.get(target_id)
-		if actor == null or target == null:
+		if actor == null or target == null or CharacterStats.is_dead(actor) or CharacterStats.is_dead(target):
 			continue
 		for info_type: Variant in info_types:
 			var type_str: String = str(info_type)
@@ -6653,7 +6653,7 @@ static func _compute_positions_from_conversations(
 
 		if transferred_to_b and topic_a >= 0 and topic_map.has(topic_a):
 			var char_b: L5RCharacterData = characters_by_id.get(char_b_id)
-			if char_b != null and not char_b.topic_positions.has(topic_a):
+			if char_b != null and not CharacterStats.is_dead(char_b) and not char_b.topic_positions.has(topic_a):
 				var pos: float = TopicMomentumSystem.calculate_starting_position(
 					topic_map[topic_a], char_b.disposition_values,
 					char_b.bushido_virtue, char_b.shourido_virtue
@@ -6662,7 +6662,7 @@ static func _compute_positions_from_conversations(
 
 		if transferred_to_a and topic_b >= 0 and topic_map.has(topic_b):
 			var char_a: L5RCharacterData = characters_by_id.get(char_a_id)
-			if char_a != null and not char_a.topic_positions.has(topic_b):
+			if char_a != null and not CharacterStats.is_dead(char_a) and not char_a.topic_positions.has(topic_b):
 				var pos_2: float = TopicMomentumSystem.calculate_starting_position(
 					topic_map[topic_b], char_a.disposition_values,
 					char_a.bushido_virtue, char_a.shourido_virtue
@@ -6683,7 +6683,7 @@ static func _compute_positions_from_broadcast(
 		var char_id: int = result.get("character_id", -1)
 		var topic_id: int = result.get("topic_id", -1)
 		var character: L5RCharacterData = characters_by_id.get(char_id)
-		if character == null or not topic_map.has(topic_id):
+		if character == null or CharacterStats.is_dead(character) or not topic_map.has(topic_id):
 			continue
 		if not character.topic_positions.has(topic_id):
 			var pos: float = TopicMomentumSystem.calculate_starting_position(
@@ -6805,7 +6805,7 @@ static func _compute_positions_from_letters(
 		if topic_id < 0 or not topic_map.has(topic_id):
 			continue
 		var recipient: L5RCharacterData = characters_by_id.get(recipient_id)
-		if recipient == null or recipient.topic_positions.has(topic_id):
+		if recipient == null or CharacterStats.is_dead(recipient) or recipient.topic_positions.has(topic_id):
 			continue
 		var pos: float = TopicMomentumSystem.calculate_starting_position(
 			topic_map[topic_id], recipient.disposition_values,
@@ -7464,7 +7464,7 @@ static func _apply_favor_breach(
 	var debtor_id: int = breach.get("debtor_id", -1)
 	var creditor_id: int = breach.get("creditor_id", -1)
 	var debtor: L5RCharacterData = characters_by_id.get(debtor_id)
-	if debtor == null:
+	if debtor == null or CharacterStats.is_dead(debtor):
 		return
 
 	var honor_loss: float = breach.get("honor_loss", 0.0)
@@ -15811,7 +15811,7 @@ static func _process_court_action_effects(
 				if action_id == "CHARM":
 					CourtSystem.increment_charm_count(court, actor_id)
 					var charmer: L5RCharacterData = characters_by_id.get(actor_id)
-					if charmer != null and target_id >= 0:
+					if charmer != null and not CharacterStats.is_dead(charmer) and target_id >= 0:
 						var actor_disp: int = charmer.disposition_values.get(target_id, 0)
 						if DispositionSystem.get_tier(actor_disp) <= DispositionSystem.Tier.RIVAL:
 							if charmer.bushido_virtue == Enums.BushidoVirtue.REI \

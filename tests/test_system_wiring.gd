@@ -4303,3 +4303,136 @@ func test_held_leverage_excludes_resolved_favors() -> void:
 	assert_eq(leverage.size(), 0, "Resolved favors should not appear in held_leverage")
 
 
+# -- Dead character guard tests (writeback audit 2026-05-24) -----------------
+
+func test_dead_eavesdropper_skipped() -> void:
+	var dead := L5RCharacterData.new()
+	dead.character_id = 10
+	dead.wounds_taken = 200
+	dead.earth = 2
+	dead.physical_location = "100"
+	var results: Array = [{
+		"action_id": "EAVESDROP",
+		"success": true,
+		"character_id": 10,
+		"effects": {"margin": 5},
+	}]
+	var chars_by_id: Dictionary = {10: dead}
+	var conversation_results: Array = [{"settlement_id": "100", "topics_shared": [1]}]
+	var active_topics: Array = []
+	var next_topic_id: Array = [100]
+	DayOrchestrator._process_eavesdrop_writebacks(
+		results, conversation_results, chars_by_id, 0, active_topics, next_topic_id, 1,
+	)
+	assert_eq(dead.knowledge_pool.size(), 0, "Dead eavesdropper should not gain knowledge")
+
+
+func test_dead_shadow_skipped() -> void:
+	var dead := L5RCharacterData.new()
+	dead.character_id = 10
+	dead.wounds_taken = 200
+	dead.earth = 2
+	dead.glory = 3.0
+	var results: Array = [{
+		"action_id": "SHADOW_TARGET",
+		"success": false,
+		"character_id": 10,
+		"target_npc_id": 20,
+		"margin": -15,
+	}]
+	var target := L5RCharacterData.new()
+	target.character_id = 20
+	var chars_by_id: Dictionary = {10: dead, 20: target}
+	DayOrchestrator._process_shadow_target_writebacks(
+		results, [], chars_by_id, 0,
+	)
+	assert_eq(dead.glory, 3.0, "Dead shadow should not receive glory change")
+
+
+func test_dead_observer_skipped() -> void:
+	var dead := L5RCharacterData.new()
+	dead.character_id = 10
+	dead.wounds_taken = 200
+	dead.earth = 2
+	var results: Array = [{
+		"action_id": "OBSERVE_COURT_ATTENDEES",
+		"success": true,
+		"character_id": 10,
+		"effects": {"learned_attendees": [{"character_id": 20, "clan": "Crane", "family": "Doji", "status": 4.0}]},
+	}]
+	var chars_by_id: Dictionary = {10: dead}
+	DayOrchestrator._process_observe_attendees_writebacks(results, chars_by_id, 0)
+	assert_eq(dead.knowledge_pool.size(), 0, "Dead observer should not gain knowledge")
+
+
+func test_dead_intelligence_actor_skipped() -> void:
+	var dead := L5RCharacterData.new()
+	dead.character_id = 10
+	dead.wounds_taken = 200
+	dead.earth = 2
+	var target := L5RCharacterData.new()
+	target.character_id = 20
+	target.bushido_virtue = Enums.BushidoVirtue.GI
+	var results: Array = [{
+		"action_id": "READ_CHARACTER",
+		"success": true,
+		"character_id": 10,
+		"target_npc_id": 20,
+		"effects": {"info_types": ["personality_insight"]},
+	}]
+	var chars_by_id: Dictionary = {10: dead, 20: target}
+	DayOrchestrator._process_intelligence_info_writebacks(results, chars_by_id, {}, [], 0)
+	assert_eq(dead.knowledge_pool.size(), 0, "Dead actor should not gain intelligence")
+
+
+func test_dead_charmer_skipped_false_courtesy() -> void:
+	var dead := L5RCharacterData.new()
+	dead.character_id = 10
+	dead.wounds_taken = 200
+	dead.earth = 2
+	dead.honor = 5.0
+	dead.bushido_virtue = Enums.BushidoVirtue.KETSUI
+	dead.disposition_values = {20: -40}
+	var target := L5RCharacterData.new()
+	target.character_id = 20
+	var chars_by_id: Dictionary = {10: dead, 20: target}
+	var court := CourtSessionData.new()
+	court.host_settlement_id = 100
+	court.attendee_ids = [10, 20]
+	court.session_state = {}
+	court.phase = CourtSessionData.CourtPhase.ACTIVE
+	var results: Array = [{
+		"action_id": "CHARM",
+		"success": true,
+		"character_id": 10,
+		"target_npc_id": 20,
+		"effects": {"_action_metadata": {"court_settlement_id": 100}},
+	}]
+	DayOrchestrator._process_court_action_effects(
+		results, chars_by_id, [], 1, -1,
+		StrategicReview.EmperorArchetype.IRON, [], [court],
+	)
+	assert_eq(dead.honor, 5.0, "Dead charmer should not receive honor change")
+
+
+func test_dead_favor_breach_debtor_skipped() -> void:
+	var dead := L5RCharacterData.new()
+	dead.character_id = 2
+	dead.wounds_taken = 200
+	dead.earth = 2
+	dead.honor = 5.0
+	dead.glory = 3.0
+	var creditor := L5RCharacterData.new()
+	creditor.character_id = 1
+	var chars_by_id: Dictionary = {1: creditor, 2: dead}
+	var breach: Dictionary = {
+		"debtor_id": 2,
+		"creditor_id": 1,
+		"honor_loss": -1.0,
+		"glory_loss": -0.5,
+		"disposition_floor": -30,
+	}
+	DayOrchestrator._apply_favor_breach(breach, chars_by_id, [])
+	assert_eq(dead.honor, 5.0, "Dead debtor should not receive honor loss from favor breach")
+
+
