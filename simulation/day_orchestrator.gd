@@ -697,6 +697,10 @@ static func advance_day(
 		day_result.get("results", []), favors, characters_by_id, world_states,
 	)
 
+	_process_court_invitation_response_writebacks(
+		day_result.get("results", []), objectives_map,
+	)
+
 	_process_commerce_topic_writebacks(
 		day_result.get("results", []), characters_by_id,
 		active_topics, next_topic_id, ic_day,
@@ -5072,6 +5076,68 @@ static func _process_favor_response_writebacks(
 			_apply_favor_breach(breach, characters_by_id)
 
 
+static func _inject_court_invitation_event(
+	invitation_result: Dictionary,
+	applied: Dictionary,
+	world_states: Dictionary,
+	courts: Array,
+) -> void:
+	var inv_id: int = invitation_result.get("invitee_id", -1)
+	if inv_id < 0:
+		return
+	var inv_host: int = invitation_result.get("inviter_id", applied.get("character_id", -1))
+	var inv_settle: int = invitation_result.get("settlement_id", -1)
+	var inv_court_id: int = invitation_result.get("court_id", -1)
+	var inv_prestige: int = 1
+	for c_entry: Variant in courts:
+		if c_entry is CourtSessionData and (c_entry as CourtSessionData).court_id == inv_court_id:
+			inv_prestige = (c_entry as CourtSessionData).prestige
+			break
+	var inv_ws: Dictionary = world_states.get(inv_id, {})
+	var inv_pending: Array = inv_ws.get("pending_events", [])
+	inv_pending.append({
+		"reactive_type": "COURT_INVITATION",
+		"host_id": inv_host,
+		"settlement_id": inv_settle,
+		"court_id": inv_court_id,
+		"prestige": inv_prestige,
+	})
+	inv_ws["pending_events"] = inv_pending
+	world_states[inv_id] = inv_ws
+
+
+static func _process_court_invitation_response_writebacks(
+	results: Array,
+	objectives_map: Dictionary,
+) -> void:
+	for r: Variant in results:
+		if not r is Dictionary:
+			continue
+		var d: Dictionary = r as Dictionary
+		if d.get("reactive_type", "") != "COURT_INVITATION":
+			continue
+		var action: String = d.get("action", "")
+		if action != "ATTEND_COURT":
+			continue
+		var char_id: int = d.get("character_id", -1)
+		var event_data: Dictionary = d.get("event_data", {})
+		var settlement_id: int = event_data.get("settlement_id", -1)
+		var host_id: int = event_data.get("host_id", -1)
+		if char_id < 0 or settlement_id < 0:
+			continue
+		var court_objective: Dictionary = {
+			"need_type": "ATTEND_COURT",
+			"priority": 5,
+			"source": "court_invitation",
+			"assigned_by": host_id,
+			"status": "ACTIVE",
+			"target_settlement_id": settlement_id,
+		}
+		if not objectives_map.has(char_id):
+			objectives_map[char_id] = {}
+		objectives_map[char_id]["primary"] = court_objective
+
+
 static func _process_commerce_topic_writebacks(
 	results: Array,
 	characters_by_id: Dictionary,
@@ -9190,6 +9256,10 @@ static func _process_military_effects(
 			)
 			if not r_6.is_empty():
 				results.append(r_6)
+				if r_6.get("type", "") == "invitation_sent":
+					_inject_court_invitation_event(
+						r_6, applied, world_states, courts,
+					)
 
 		if effects.get("requires_court_creation", false):
 			var r_7: Dictionary = _apply_court_creation(

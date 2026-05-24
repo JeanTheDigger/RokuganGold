@@ -2185,6 +2185,17 @@ costs, or forward-wiring. Do not treat as bugs.
   reactive event injection, progress application via
   `NPCAdvancement.resolve_training_session()`. Student AP deduction on
   acceptance. Metadata population selects best co-located student.
+- **COURT_INVITATION reactive events — FIXED.** SEND_INVITATION now
+  injects COURT_INVITATION reactive event into invitee's pending_events
+  after `_apply_court_invitation()` succeeds. Prestige read from
+  CourtSessionData. ReactiveDecisions._evaluate_court_invitation()
+  evaluates: prestige >= 3 or disposition >= 15 → attend, Rei always
+  attends, Ishi declines low-prestige. ATTEND_COURT response creates
+  primary objective (need_type=ATTEND_COURT, target_settlement_id,
+  source=court_invitation). DECLINE_INVITATION creates no objective
+  (commitment still applies — declining the invitation doesn't cancel
+  the social obligation). Winter Court invitations are excluded
+  (Imperial summons are automatic). 3 tests.
 
 ### Known Code Issues (found and fixed 2026-05-24, multi-system audit)
 - **WinterCourtSystem.record_emperors_peace_violation() — dead attendees as witnesses. FIXED.**
@@ -2501,6 +2512,15 @@ costs, or forward-wiring. Do not treat as bugs.
   already-resolved favor, missing favor_id. Full pipeline: INVOKE_FAVOR action
   → invoke_favor() sets deadline → pending_event injection → next-tick reactive
   routing → personality evaluation → writeback → resolution. 4 tests.
+- **COURT_INVITATION writeback pipeline.** `_inject_court_invitation_event()`
+  fires after successful SEND_INVITATION, injects COURT_INVITATION reactive
+  event with host_id, settlement_id, court_id, prestige (from CourtSessionData).
+  `_process_court_invitation_response_writebacks()` handles results:
+  ATTEND_COURT creates primary objective (ATTEND_COURT, target_settlement_id,
+  source=court_invitation, assigned_by=host). DECLINE_INVITATION creates no
+  objective. Full pipeline: SEND_INVITATION → _apply_court_invitation →
+  reactive event injection → next-tick ReactiveDecisions → personality
+  evaluation → travel objective writeback. 3 tests.
 
 ### Systems Added 2026-05-18
 - **s29.15 Courtier School Techniques** — School technique bonuses wired into

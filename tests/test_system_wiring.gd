@@ -3940,3 +3940,68 @@ func test_favor_response_skips_already_resolved() -> void:
 	assert_almost_eq(debtor.honor, 5.0, 0.01, "Already-resolved favor should not re-apply honor")
 
 
+func test_court_invitation_injection_creates_reactive_event() -> void:
+	var court := CourtSessionData.new()
+	court.court_id = 1
+	court.host_settlement_id = 100
+	court.host_lord_id = 10
+	court.prestige = 3
+	court.phase = CourtSessionData.CourtPhase.ACTIVE
+	var invitation_result: Dictionary = {
+		"type": "invitation_sent",
+		"inviter_id": 10,
+		"invitee_id": 2,
+		"court_id": 1,
+		"settlement_id": 100,
+	}
+	var applied: Dictionary = {"character_id": 10}
+	var world_states: Dictionary = {}
+	DayOrchestrator._inject_court_invitation_event(
+		invitation_result, applied, world_states, [court],
+	)
+	var ws: Dictionary = world_states.get(2, {})
+	var pending: Array = ws.get("pending_events", [])
+	assert_eq(pending.size(), 1, "Should inject one COURT_INVITATION event")
+	assert_eq(pending[0].get("reactive_type", ""), "COURT_INVITATION")
+	assert_eq(pending[0].get("host_id", -1), 10)
+	assert_eq(pending[0].get("settlement_id", -1), 100)
+	assert_eq(pending[0].get("prestige", -1), 3)
+
+
+func test_court_invitation_attend_creates_travel_objective() -> void:
+	var objectives_map: Dictionary = {}
+	var results: Array = [{
+		"reactive_type": "COURT_INVITATION",
+		"action": "ATTEND_COURT",
+		"character_id": 2,
+		"event_data": {
+			"host_id": 10,
+			"settlement_id": 100,
+			"court_id": 1,
+			"prestige": 3,
+		},
+	}]
+	DayOrchestrator._process_court_invitation_response_writebacks(results, objectives_map)
+	assert_true(objectives_map.has(2), "Should have objective for invitee")
+	var primary: Dictionary = objectives_map[2].get("primary", {})
+	assert_eq(primary.get("need_type", ""), "ATTEND_COURT")
+	assert_eq(primary.get("target_settlement_id", -1), 100)
+	assert_eq(primary.get("source", ""), "court_invitation")
+	assert_eq(primary.get("assigned_by", -1), 10)
+
+
+func test_court_invitation_decline_creates_no_objective() -> void:
+	var objectives_map: Dictionary = {}
+	var results: Array = [{
+		"reactive_type": "COURT_INVITATION",
+		"action": "DECLINE_INVITATION",
+		"character_id": 2,
+		"event_data": {
+			"host_id": 10,
+			"settlement_id": 100,
+		},
+	}]
+	DayOrchestrator._process_court_invitation_response_writebacks(results, objectives_map)
+	assert_false(objectives_map.has(2), "Declined invitation should not create objective")
+
+
