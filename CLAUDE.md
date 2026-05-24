@@ -2174,15 +2174,14 @@ costs, or forward-wiring. Do not treat as bugs.
   The GDD s12.10 specifies three invocation channels (letter, court, personal
   visit) but there's no ActionID for NPC-initiated favor invocation in s57.12
   or s14. Design gap — when does an NPC decide to call in a held favor?
-- **ACCEPT_TRAINING reactive events never injected.** Handler exists but
-  nothing creates these events. GDD s55.11 says they fire when a Sensei
-  executes MENTOR, but the MENTOR executor is a stub (returns
-  `{"effect": "student_trained"}` with no student interaction). Blocked on
-  full training pipeline (s48 Sensei multipliers, student AP consumption).
-- **MENTOR executor is a stub.** In context lists and scoring tables but
-  returns a single-line effect with no roll, no student reactive event
-  injection, and no actual training progression. Full implementation
-  requires the ACCEPT_TRAINING reactive chain.
+- **ACCEPT_TRAINING reactive events — FIXED.** MENTOR executor now injects
+  ACCEPT_TRAINING reactive events into student's pending_events.
+  `reactive_type` events now route through ReactiveDecisions in the NPC
+  wave resolver. Full training pipeline wired (s48 progress bars).
+- **MENTOR executor — FIXED.** Full validation (co-location, rank gap),
+  reactive event injection, progress application via
+  `NPCAdvancement.resolve_training_session()`. Student AP deduction on
+  acceptance. Metadata population selects best co-located student.
 
 ### Known Code Issues (found and fixed 2026-05-24, multi-system audit)
 - **WinterCourtSystem.record_emperors_peace_violation() — dead attendees as witnesses. FIXED.**
@@ -2467,6 +2466,29 @@ costs, or forward-wiring. Do not treat as bugs.
   declared `var forgery_rank: int = ctx.skill_ranks.get("Forgery", 0)` but
   never used it. Authority level comes from `_forge_authority_from_lord_rank()`.
   Removed both dead variables.
+
+### Systems Added 2026-05-24
+- **s48 MENTOR training pipeline — full wiring.** MENTOR executor validates
+  co-location, sensei rank > student rank, both alive. Returns reactive event
+  injection data. `_process_mentor_writebacks()` injects ACCEPT_TRAINING
+  reactive event into student's `pending_events`. Next tick, reactive event
+  routes through `ReactiveDecisions._evaluate_training_response()` which
+  personality-gates acceptance: Kanpeki requires rank gap 2+, Ketsui
+  requires lord-assigned MENTOR_CHARACTER objective. On acceptance,
+  `_process_training_acceptance_writebacks()` calls
+  `NPCAdvancement.resolve_training_session()` for progress bar advancement
+  (100 progress at rank gap 2+, 75 at gap 1, 25 sensei self-gain) and
+  deducts 1 AP from student. Metadata population:
+  `_build_mentor_metadata()` selects best co-located student with positive
+  disposition and largest rank gap via `_pick_mentor_skill()`. MENTOR added
+  to TRAIN_SKILL NeedType (score 80). 14 tests.
+- **ReactiveDecisions routing fix.** `reactive_type` events in
+  `pending_events` now route through `ReactiveDecisions.evaluate_reactive_event()`
+  instead of `NPCDecisionEngine.run()` (which silently discarded them via
+  `_decompose_reactive_event()` returning null). Fixes: ACCEPT_TRAINING
+  (new), FAVOR_REQUESTED (was dead since injection), COURT_INVITATION
+  (was dead since injection). Wired in both `_resolve_reactive_events()`
+  and `_resolve_reactive_events_full()`.
 
 ### Systems Added 2026-05-18
 - **s29.15 Courtier School Techniques** — School technique bonuses wired into
@@ -2789,11 +2811,22 @@ AP cost 1. Metadata picks highest-tier uninvoked favor via
 FAVOR_REQUESTED reactive event on the debtor. objective_alignment entries:
 ACQUIRE_RESOURCE (75), DEFEND_PROVINCE (55), REQUEST_AID (85).
 
-**B2. MENTOR executor is a stub — training pipeline undesigned.**
-MENTOR is in context lists and scoring tables but returns a single-line
-placeholder effect. Full implementation requires: s48 Sensei multipliers,
-student AP consumption, ACCEPT_TRAINING reactive event injection.
-**Decision needed:** LOCK GDD s48 training mechanics.
+**B2. MENTOR executor — RESOLVED: full training pipeline.**
+MENTOR executor validates co-location, skill rank gap, and student/sensei
+availability. Returns `injects_reactive_event: true` with ACCEPT_TRAINING
+data. `_process_mentor_writebacks()` injects reactive event into student's
+`pending_events`. Next tick, student's reactive decision evaluates via
+`ReactiveDecisions._evaluate_training_response()` (personality-gated:
+Kanpeki requires rank gap 2+, Ketsui requires lord-assigned objective).
+`_process_training_acceptance_writebacks()` calls
+`NPCAdvancement.resolve_training_session()` which applies progress: 100
+(sensei 2+ ranks above), 75 (sensei 1 rank above), 25 (sensei self-gain).
+Student spends 1 AP on acceptance. Metadata selection picks co-located
+student with largest rank gap and positive disposition. Also fixed:
+`reactive_type` events now route through `ReactiveDecisions` instead of
+being silently discarded (fixes FAVOR_REQUESTED, COURT_INVITATION too).
+MENTOR added to TRAIN_SKILL NeedType in objective_alignment (score 80).
+14 tests.
 
 **B3. RESTORE_COUNCIL_COMPACT — RESOLVED: seasonal objective assignment.**
 Added RESTORE_GOVERNANCE NeedType to objective_alignment.json with

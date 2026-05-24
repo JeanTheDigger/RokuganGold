@@ -2292,7 +2292,7 @@ static func _compute_self_effects(action_id: String) -> Dictionary:
 		"PERFORM_RITUAL", "PERFORM_WORSHIP":
 			return {"effect": "ritual_completed", "honor_change": 0.1}
 		"MENTOR":
-			return {"effect": "student_trained"}
+			return _execute_mentor(action, ctx, characters_by_id)
 		"OBSERVE_COURT_ATTENDEES":
 			return {"effect": "court_observed", "info_gained": true}  # fallback — should not reach here
 	return {"effect": "self_action_completed"}
@@ -4049,6 +4049,41 @@ static func _execute_invoke_favor(
 
 
 # -- TRANSFER_KOKU -------------------------------------------------------------
+
+static func _execute_mentor(
+	action: NPCDataStructures.ScoredAction,
+	ctx: NPCDataStructures.ContextSnapshot,
+	characters_by_id: Dictionary,
+) -> Dictionary:
+	var skill_name: String = action.metadata.get("skill_name", "")
+	var student_id: int = action.metadata.get("student_id", action.target_npc_id)
+	if skill_name.is_empty() or student_id < 0:
+		return {"effect": "mentor_failed", "reason": "no_target_or_skill"}
+	var student: L5RCharacterData = characters_by_id.get(student_id) as L5RCharacterData
+	if student == null or CharacterStats.is_dead(student):
+		return {"effect": "mentor_failed", "reason": "student_unavailable"}
+	var sensei_char: L5RCharacterData = characters_by_id.get(ctx.character_id) as L5RCharacterData
+	if sensei_char == null:
+		return {"effect": "mentor_failed", "reason": "sensei_unavailable"}
+	if student.physical_location != sensei_char.physical_location:
+		return {"effect": "mentor_failed", "reason": "not_co_located"}
+	var sensei_rank: int = sensei_char.skills.get(skill_name, 0)
+	var student_rank: int = student.skills.get(skill_name, 0)
+	if sensei_rank <= student_rank:
+		return {"effect": "mentor_failed", "reason": "rank_not_higher"}
+	return {
+		"effect": "mentor_offered",
+		"success": true,
+		"student_id": student_id,
+		"sensei_id": ctx.character_id,
+		"skill_name": skill_name,
+		"sensei_skill_rank": sensei_rank,
+		"rank_gap": sensei_rank - student_rank,
+		"injects_reactive_event": true,
+		"reactive_event_type": "ACCEPT_TRAINING",
+		"reactive_event_target_id": student_id,
+	}
+
 
 const TRANSFER_KOKU_BASE_AMOUNT: float = 5.0
 const TRANSFER_KOKU_WEALTHY_THRESHOLD: float = 20.0

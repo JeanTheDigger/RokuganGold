@@ -794,6 +794,7 @@
   "TRAIN_SKILL": {
     "DO_NOTHING": 0,
     "MEDITATE": 40,
+    "MENTOR": 80,
     "TRAIN": 100,
     "TRAIN_ANIMAL": 70
   },

@@ -113,6 +113,22 @@ static func _resolve_reactive_events(
 
 	for c: L5RCharacterData in reactive_npcs:
 		var ws: Dictionary = world_states.get(c.character_id, {})
+		var events: Array = ws.get("pending_events", [])
+		var first_event: Dictionary = events[0] if events.size() > 0 else {}
+		if first_event.get("reactive_type", "").length() > 0:
+			var ctx: NPCDataStructures.ContextSnapshot = NPCDecisionEngine.build_context(
+				c, ws
+			)
+			var reactive_result: Dictionary = ReactiveDecisions.evaluate_reactive_event(
+				first_event, c, ctx
+			)
+			reactive_result["character_id"] = c.character_id
+			reactive_result["reactive_type"] = first_event.get("reactive_type", "")
+			reactive_result["event_data"] = first_event
+			if events.size() > 0:
+				events.remove_at(0)
+			results.append(reactive_result)
+			continue
 		var objs: Dictionary = objectives_map.get(c.character_id, {})
 		var redirects: int = _get_travel_redirects(objs)
 		var result: Dictionary = NPCDecisionEngine.run(
@@ -148,6 +164,22 @@ static func _resolve_reactive_events_full(
 	for c: L5RCharacterData in reactive_npcs:
 		var ws: Dictionary = world_states.get(c.character_id, {})
 		var objs: Dictionary = objectives_map.get(c.character_id, {})
+		var events: Array = ws.get("pending_events", [])
+		var first_event: Dictionary = events[0] if events.size() > 0 else {}
+		if first_event.get("reactive_type", "").length() > 0:
+			var ctx: NPCDataStructures.ContextSnapshot = NPCDecisionEngine.build_context(
+				c, ws, characters_by_id
+			)
+			var reactive_result: Dictionary = ReactiveDecisions.evaluate_reactive_event(
+				first_event, c, ctx
+			)
+			reactive_result["character_id"] = c.character_id
+			reactive_result["reactive_type"] = first_event.get("reactive_type", "")
+			reactive_result["event_data"] = first_event
+			if events.size() > 0:
+				events.remove_at(0)
+			results.append(reactive_result)
+			continue
 		var redirects: int = _get_travel_redirects(objs)
 		var decision: Dictionary = NPCDecisionEngine.run(
 			c, ws, objs, scoring_tables, filter_data,

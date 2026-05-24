@@ -685,6 +685,14 @@ static func advance_day(
 		day_result.get("results", []), favors, world_states, ic_day,
 	)
 
+	_process_mentor_writebacks(
+		day_result.get("results", []), world_states,
+	)
+
+	_process_training_acceptance_writebacks(
+		day_result.get("results", []), characters_by_id,
+	)
+
 	_process_commerce_topic_writebacks(
 		day_result.get("results", []), characters_by_id,
 		active_topics, next_topic_id, ic_day,
@@ -4957,6 +4965,65 @@ static func _process_invoke_favor_writebacks(
 		})
 		debtor_ws["pending_events"] = pending
 		world_states[debtor_id] = debtor_ws
+
+
+static func _process_mentor_writebacks(
+	results: Array,
+	world_states: Dictionary,
+) -> void:
+	for r: Variant in results:
+		if not r is Dictionary:
+			continue
+		var d: Dictionary = r as Dictionary
+		if d.get("action_id", "") != "MENTOR":
+			continue
+		if not d.get("success", false):
+			continue
+		if not d.get("injects_reactive_event", false):
+			continue
+		var student_id: int = d.get("student_id", -1)
+		var sensei_id: int = d.get("sensei_id", d.get("character_id", -1))
+		var skill_name: String = d.get("skill_name", "")
+		var sensei_skill_rank: int = d.get("sensei_skill_rank", 0)
+		if student_id < 0 or skill_name.is_empty():
+			continue
+		var student_ws: Dictionary = world_states.get(student_id, {})
+		var pending: Array = student_ws.get("pending_events", [])
+		pending.append({
+			"reactive_type": "ACCEPT_TRAINING",
+			"sensei_id": sensei_id,
+			"skill": skill_name,
+			"sensei_rank": sensei_skill_rank,
+		})
+		student_ws["pending_events"] = pending
+		world_states[student_id] = student_ws
+
+
+static func _process_training_acceptance_writebacks(
+	results: Array,
+	characters_by_id: Dictionary,
+) -> void:
+	for r: Variant in results:
+		if not r is Dictionary:
+			continue
+		var d: Dictionary = r as Dictionary
+		if d.get("action", "") != "ACCEPT_TRAINING":
+			continue
+		var student_id: int = d.get("character_id", -1)
+		var event_data: Dictionary = d.get("event_data", {})
+		var sensei_id: int = event_data.get("sensei_id", d.get("target_npc_id", -1))
+		var skill_name: String = d.get("skill", event_data.get("skill", ""))
+		if student_id < 0 or sensei_id < 0 or skill_name.is_empty():
+			continue
+		var student: L5RCharacterData = characters_by_id.get(student_id) as L5RCharacterData
+		var sensei: L5RCharacterData = characters_by_id.get(sensei_id) as L5RCharacterData
+		if student == null or sensei == null:
+			continue
+		if CharacterStats.is_dead(student) or CharacterStats.is_dead(sensei):
+			continue
+		NPCAdvancement.resolve_training_session(sensei, student, skill_name)
+		if student.action_points_current > 0:
+			student.action_points_current -= 1
 
 
 static func _process_commerce_topic_writebacks(

@@ -3607,3 +3607,175 @@ func test_resource_deadline_non_urgent_season_after_next() -> void:
 	assert_eq(deadline, 180, "Non-urgent resource from day 30 should target season after next at 180")
 
 
+# -- MENTOR Pipeline (s48, B2) ------------------------------------------------
+
+func test_mentor_writeback_injects_accept_training_event() -> void:
+	var results: Array = [{
+		"action_id": "MENTOR",
+		"success": true,
+		"injects_reactive_event": true,
+		"student_id": 2,
+		"sensei_id": 1,
+		"skill_name": "Kenjutsu",
+		"sensei_skill_rank": 5,
+		"rank_gap": 3,
+		"character_id": 1,
+	}]
+	var world_states: Dictionary = {}
+	DayOrchestrator._process_mentor_writebacks(results, world_states)
+	var ws2: Dictionary = world_states.get(2, {})
+	var pending: Array = ws2.get("pending_events", [])
+	assert_eq(pending.size(), 1, "Should inject one ACCEPT_TRAINING event")
+	assert_eq(pending[0].get("reactive_type", ""), "ACCEPT_TRAINING")
+	assert_eq(pending[0].get("sensei_id", -1), 1)
+	assert_eq(pending[0].get("skill", ""), "Kenjutsu")
+	assert_eq(pending[0].get("sensei_rank", 0), 5)
+
+
+func test_mentor_writeback_skips_failed_mentor() -> void:
+	var results: Array = [{
+		"action_id": "MENTOR",
+		"success": false,
+		"effect": "mentor_failed",
+		"character_id": 1,
+	}]
+	var world_states: Dictionary = {}
+	DayOrchestrator._process_mentor_writebacks(results, world_states)
+	assert_true(world_states.is_empty(), "Failed MENTOR should not inject event")
+
+
+func test_training_acceptance_writeback_applies_progress() -> void:
+	var sensei: L5RCharacterData = L5RCharacterData.new()
+	sensei.character_id = 1
+	sensei.character_name = "Sensei"
+	sensei.skills = {"Kenjutsu": 5}
+	sensei.wounds_taken = 0
+	sensei.earth_ring = 3
+	sensei.stamina = 3
+	sensei.skill_progress = {}
+	var student: L5RCharacterData = L5RCharacterData.new()
+	student.character_id = 2
+	student.character_name = "Student"
+	student.skills = {"Kenjutsu": 2}
+	student.wounds_taken = 0
+	student.earth_ring = 3
+	student.stamina = 3
+	student.action_points_current = 2
+	student.skill_progress = {}
+	var characters_by_id: Dictionary = {1: sensei, 2: student}
+	var results: Array = [{
+		"action": "ACCEPT_TRAINING",
+		"character_id": 2,
+		"skill": "Kenjutsu",
+		"event_data": {"sensei_id": 1, "skill": "Kenjutsu"},
+		"target_npc_id": 1,
+	}]
+	DayOrchestrator._process_training_acceptance_writebacks(results, characters_by_id)
+	assert_eq(student.action_points_current, 1, "Student should spend 1 AP")
+	var student_progress: int = student.skill_progress.get("Kenjutsu", 0)
+	assert_gt(student_progress, 0, "Student should have gained skill progress")
+
+
+func test_training_acceptance_skips_dead_student() -> void:
+	var sensei: L5RCharacterData = L5RCharacterData.new()
+	sensei.character_id = 1
+	sensei.character_name = "Sensei"
+	sensei.skills = {"Kenjutsu": 5}
+	sensei.wounds_taken = 0
+	sensei.earth_ring = 3
+	sensei.stamina = 3
+	var student: L5RCharacterData = L5RCharacterData.new()
+	student.character_id = 2
+	student.character_name = "Student"
+	student.skills = {"Kenjutsu": 2}
+	student.wounds_taken = 200
+	student.earth_ring = 3
+	student.stamina = 3
+	student.action_points_current = 2
+	student.skill_progress = {}
+	var characters_by_id: Dictionary = {1: sensei, 2: student}
+	var results: Array = [{
+		"action": "ACCEPT_TRAINING",
+		"character_id": 2,
+		"skill": "Kenjutsu",
+		"event_data": {"sensei_id": 1, "skill": "Kenjutsu"},
+		"target_npc_id": 1,
+	}]
+	DayOrchestrator._process_training_acceptance_writebacks(results, characters_by_id)
+	assert_eq(student.action_points_current, 2, "Dead student should not spend AP")
+
+
+func test_reactive_type_events_route_through_reactive_decisions() -> void:
+	var c: L5RCharacterData = L5RCharacterData.new()
+	c.character_id = 10
+	c.character_name = "Student"
+	c.clan = "Crab"
+	c.family = "Hida"
+	c.skills = {"Kenjutsu": 2}
+	c.wounds_taken = 0
+	c.earth_ring = 3
+	c.stamina = 3
+	c.action_points_current = 2
+	c.bushido_virtue = Enums.BushidoVirtue.GI
+	var ws: Dictionary = {
+		"pending_events": [{
+			"reactive_type": "ACCEPT_TRAINING",
+			"sensei_id": 5,
+			"skill": "Kenjutsu",
+			"sensei_rank": 5,
+		}],
+	}
+	var world_states: Dictionary = {10: ws}
+	var characters: Array = [c]
+	var objectives_map: Dictionary = {10: {}}
+	var scoring_tables: Dictionary = {
+		"objective_alignment": {},
+		"personality_lean": {},
+		"personality_filter": {},
+		"action_skill_map": {},
+		"competence_table": {},
+		"disposition_tiers": {},
+		"urgency_rules": [],
+		"topic_position_alignment": {},
+	}
+	var filter_data: Dictionary = {}
+	var results: Array = NPCWaveResolver._resolve_reactive_events(
+		characters, world_states, objectives_map, scoring_tables, filter_data,
+	)
+	assert_eq(results.size(), 1, "Should produce one result")
+	assert_eq(results[0].get("action", ""), "ACCEPT_TRAINING")
+	assert_eq(results[0].get("character_id", -1), 10)
+	var remaining_events: Array = ws.get("pending_events", [])
+	assert_eq(remaining_events.size(), 0, "Event should be consumed")
+
+
+func test_mentor_metadata_selects_best_student() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.character_id = 1
+	ctx.location_id = "100"
+	ctx.skill_ranks = {"Kenjutsu": 5, "Etiquette": 3}
+	ctx.disposition_values = {"2": 20, "3": 10}
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.target_npc_id = -1
+	var student_a: L5RCharacterData = L5RCharacterData.new()
+	student_a.character_id = 2
+	student_a.character_name = "StudentA"
+	student_a.skills = {"Kenjutsu": 2}
+	student_a.physical_location = "100"
+	student_a.wounds_taken = 0
+	student_a.earth_ring = 3
+	student_a.stamina = 3
+	var student_b: L5RCharacterData = L5RCharacterData.new()
+	student_b.character_id = 3
+	student_b.character_name = "StudentB"
+	student_b.skills = {"Kenjutsu": 4}
+	student_b.physical_location = "100"
+	student_b.wounds_taken = 0
+	student_b.earth_ring = 3
+	student_b.stamina = 3
+	var chars: Dictionary = {1: L5RCharacterData.new(), 2: student_a, 3: student_b}
+	var meta: Dictionary = NPCDecisionEngine._build_mentor_metadata(ctx, need, chars)
+	assert_eq(meta.get("student_id", -1), 2, "Should pick student with largest rank gap")
+	assert_eq(meta.get("skill_name", ""), "Kenjutsu")
+
+

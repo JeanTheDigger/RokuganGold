@@ -2718,6 +2718,63 @@ static func _populate_action_metadata(
 		option.metadata = _build_forge_order_metadata(ctx, need, chars_by_id)
 	elif option.action_id == "TRANSFER_KOKU":
 		option.metadata = {"target_npc_id": need.target_npc_id}
+	elif option.action_id == "MENTOR":
+		option.metadata = _build_mentor_metadata(ctx, need, chars_by_id)
+
+
+static func _build_mentor_metadata(
+	ctx: NPCDataStructures.ContextSnapshot,
+	need: NPCDataStructures.ImmediateNeed,
+	chars_by_id: Dictionary = {},
+) -> Dictionary:
+	var best_student_id: int = -1
+	var best_skill: String = ""
+	var best_gap: int = 0
+	var target_id: int = need.target_npc_id
+	if target_id >= 0:
+		var target: L5RCharacterData = chars_by_id.get(target_id) as L5RCharacterData
+		if target != null and not CharacterStats.is_dead(target):
+			if target.physical_location == ctx.location_id:
+				var pair: Dictionary = _pick_mentor_skill(ctx, target)
+				if pair.get("gap", 0) > 0:
+					best_student_id = target_id
+					best_skill = pair["skill"]
+					best_gap = pair["gap"]
+	if best_student_id < 0:
+		for cid: Variant in ctx.disposition_values:
+			var cid_int: int = int(cid)
+			if cid_int == ctx.character_id:
+				continue
+			var disp: int = int(ctx.disposition_values[cid])
+			if disp < 0:
+				continue
+			var candidate: L5RCharacterData = chars_by_id.get(cid_int) as L5RCharacterData
+			if candidate == null or CharacterStats.is_dead(candidate):
+				continue
+			if candidate.physical_location != ctx.location_id:
+				continue
+			var pair: Dictionary = _pick_mentor_skill(ctx, candidate)
+			var gap: int = pair.get("gap", 0)
+			if gap > best_gap:
+				best_gap = gap
+				best_student_id = cid_int
+				best_skill = pair["skill"]
+	return {"student_id": best_student_id, "skill_name": best_skill}
+
+
+static func _pick_mentor_skill(
+	ctx: NPCDataStructures.ContextSnapshot,
+	student: L5RCharacterData,
+) -> Dictionary:
+	var best_skill: String = ""
+	var best_gap: int = 0
+	for skill_name: String in ctx.skill_ranks:
+		var sensei_rank: int = int(ctx.skill_ranks[skill_name])
+		var student_rank: int = student.skills.get(skill_name, 0)
+		if sensei_rank > student_rank and (sensei_rank - student_rank) > best_gap:
+			best_gap = sensei_rank - student_rank
+			best_skill = skill_name
+	return {"skill": best_skill, "gap": best_gap}
 
 
 static func _build_forge_letter_metadata(
