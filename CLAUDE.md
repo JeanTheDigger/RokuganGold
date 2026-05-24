@@ -2168,12 +2168,15 @@ costs, or forward-wiring. Do not treat as bugs.
   provocation events. Added dead guard with early return. 1 test.
 
 ### Known Code Issues — Deferred (2026-05-24, pipeline gaps)
-- **FAVOR_REQUESTED reactive events never injected.** The handler exists in
-  `reactive_decisions.gd` but nothing creates FAVOR_REQUESTED events in
-  `pending_events`. `FavorSystem.invoke_favor()` is only called in tests.
-  The GDD s12.10 specifies three invocation channels (letter, court, personal
-  visit) but there's no ActionID for NPC-initiated favor invocation in s57.12
-  or s14. Design gap — when does an NPC decide to call in a held favor?
+- **FAVOR_REQUESTED reactive events — FIXED.** INVOKE_FAVOR ActionID (B1)
+  creates FAVOR_REQUESTED events in debtor's pending_events. ReactiveDecisions
+  routing (previous session fix) delivers them to `_evaluate_favor_response()`.
+  `_process_favor_response_writebacks()` in DayOrchestrator handles results:
+  HONOR_FAVOR calls `FavorSystem.honor_favor()` (+0.1 honor, resolved=true).
+  DECLINE_FAVOR calls `FavorSystem.break_favor()` with co-located witnesses and
+  applies consequences via `_apply_favor_breach()` (honor/glory loss, creditor
+  disposition drop with floor, witness disposition loss). Dead debtor guard,
+  already-resolved guard. 4 tests.
 - **ACCEPT_TRAINING reactive events — FIXED.** MENTOR executor now injects
   ACCEPT_TRAINING reactive events into student's pending_events.
   `reactive_type` events now route through ReactiveDecisions in the NPC
@@ -2489,6 +2492,15 @@ costs, or forward-wiring. Do not treat as bugs.
   (new), FAVOR_REQUESTED (was dead since injection), COURT_INVITATION
   (was dead since injection). Wired in both `_resolve_reactive_events()`
   and `_resolve_reactive_events_full()`.
+- **FAVOR_REQUESTED writeback pipeline.** `_process_favor_response_writebacks()`
+  in DayOrchestrator scans reactive results for HONOR_FAVOR / DECLINE_FAVOR.
+  HONOR_FAVOR: calls `FavorSystem.honor_favor()` (resolved=true, +0.1 honor
+  via HonorGlorySystem). DECLINE_FAVOR: calls `FavorSystem.break_favor()`
+  with co-located witnesses, then `_apply_favor_breach()` for honor/glory loss,
+  creditor disposition with floor, witness disposition loss. Guards: dead debtor,
+  already-resolved favor, missing favor_id. Full pipeline: INVOKE_FAVOR action
+  → invoke_favor() sets deadline → pending_event injection → next-tick reactive
+  routing → personality evaluation → writeback → resolution. 4 tests.
 
 ### Systems Added 2026-05-18
 - **s29.15 Courtier School Techniques** — School technique bonuses wired into

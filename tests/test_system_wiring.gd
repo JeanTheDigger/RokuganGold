@@ -3826,3 +3826,117 @@ func test_build_trainable_vassals_skips_dead() -> void:
 	assert_eq(result.size(), 0, "Dead vassal should not be trainable")
 
 
+func test_favor_response_honor_applies_honor_and_resolves() -> void:
+	var favor := FavorData.new()
+	favor.favor_id = 42
+	favor.tier = FavorData.FavorTier.MINOR
+	favor.creditor_id = 10
+	favor.debtor_id = 1
+	favor.invoked = true
+	var debtor := L5RCharacterData.new()
+	debtor.character_id = 1
+	debtor.character_name = "Debtor"
+	debtor.honor = 5.0
+	debtor.wounds_taken = 0
+	debtor.earth_ring = 3
+	debtor.stamina = 3
+	var chars: Dictionary = {1: debtor}
+	var results: Array = [{
+		"reactive_type": "FAVOR_REQUESTED",
+		"action": "HONOR_FAVOR",
+		"character_id": 1,
+		"event_data": {"favor_id": 42, "requester_id": 10, "ic_day": 5},
+	}]
+	DayOrchestrator._process_favor_response_writebacks(results, [favor], chars, {})
+	assert_true(favor.resolved, "Favor should be resolved after honoring")
+	assert_almost_eq(debtor.honor, 5.1, 0.01, "Debtor should gain +0.1 honor")
+
+
+func test_favor_response_decline_breaks_favor() -> void:
+	var favor := FavorData.new()
+	favor.favor_id = 43
+	favor.tier = FavorData.FavorTier.MODERATE
+	favor.creditor_id = 10
+	favor.debtor_id = 1
+	favor.invoked = true
+	var debtor := L5RCharacterData.new()
+	debtor.character_id = 1
+	debtor.character_name = "Debtor"
+	debtor.honor = 5.0
+	debtor.glory = 3.0
+	debtor.wounds_taken = 0
+	debtor.earth_ring = 3
+	debtor.stamina = 3
+	debtor.physical_location = "castle_doji"
+	var creditor := L5RCharacterData.new()
+	creditor.character_id = 10
+	creditor.character_name = "Creditor"
+	creditor.wounds_taken = 0
+	creditor.earth_ring = 3
+	creditor.stamina = 3
+	creditor.disposition_values = {1: 20}
+	var chars: Dictionary = {1: debtor, 10: creditor}
+	var results: Array = [{
+		"reactive_type": "FAVOR_REQUESTED",
+		"action": "DECLINE_FAVOR",
+		"character_id": 1,
+		"event_data": {"favor_id": 43, "requester_id": 10, "ic_day": 5},
+	}]
+	DayOrchestrator._process_favor_response_writebacks(results, [favor], chars, {})
+	assert_true(favor.resolved, "Favor should be resolved after declining")
+	assert_lt(debtor.honor, 5.0, "Debtor should lose honor from breaking")
+	assert_lt(creditor.disposition_values.get(1, 0), 20, "Creditor disposition toward debtor should drop")
+
+
+func test_favor_response_skips_dead_debtor() -> void:
+	var favor := FavorData.new()
+	favor.favor_id = 44
+	favor.tier = FavorData.FavorTier.MINOR
+	favor.creditor_id = 10
+	favor.debtor_id = 1
+	favor.invoked = true
+	var debtor := L5RCharacterData.new()
+	debtor.character_id = 1
+	debtor.character_name = "Dead Debtor"
+	debtor.honor = 5.0
+	debtor.wounds_taken = 200
+	debtor.earth_ring = 3
+	debtor.stamina = 3
+	var chars: Dictionary = {1: debtor}
+	var results: Array = [{
+		"reactive_type": "FAVOR_REQUESTED",
+		"action": "HONOR_FAVOR",
+		"character_id": 1,
+		"event_data": {"favor_id": 44, "requester_id": 10, "ic_day": 5},
+	}]
+	DayOrchestrator._process_favor_response_writebacks(results, [favor], chars, {})
+	assert_false(favor.resolved, "Favor should not resolve for dead debtor")
+	assert_almost_eq(debtor.honor, 5.0, 0.01, "Dead debtor honor unchanged")
+
+
+func test_favor_response_skips_already_resolved() -> void:
+	var favor := FavorData.new()
+	favor.favor_id = 45
+	favor.tier = FavorData.FavorTier.MINOR
+	favor.creditor_id = 10
+	favor.debtor_id = 1
+	favor.invoked = true
+	favor.resolved = true
+	var debtor := L5RCharacterData.new()
+	debtor.character_id = 1
+	debtor.character_name = "Debtor"
+	debtor.honor = 5.0
+	debtor.wounds_taken = 0
+	debtor.earth_ring = 3
+	debtor.stamina = 3
+	var chars: Dictionary = {1: debtor}
+	var results: Array = [{
+		"reactive_type": "FAVOR_REQUESTED",
+		"action": "HONOR_FAVOR",
+		"character_id": 1,
+		"event_data": {"favor_id": 45, "requester_id": 10, "ic_day": 5},
+	}]
+	DayOrchestrator._process_favor_response_writebacks(results, [favor], chars, {})
+	assert_almost_eq(debtor.honor, 5.0, 0.01, "Already-resolved favor should not re-apply honor")
+
+

@@ -693,6 +693,10 @@ static func advance_day(
 		day_result.get("results", []), characters_by_id,
 	)
 
+	_process_favor_response_writebacks(
+		day_result.get("results", []), favors, characters_by_id, world_states,
+	)
+
 	_process_commerce_topic_writebacks(
 		day_result.get("results", []), characters_by_id,
 		active_topics, next_topic_id, ic_day,
@@ -5024,6 +5028,48 @@ static func _process_training_acceptance_writebacks(
 		NPCAdvancement.resolve_training_session(sensei, student, skill_name)
 		if student.action_points_current > 0:
 			student.action_points_current -= 1
+
+
+static func _process_favor_response_writebacks(
+	results: Array,
+	favors: Array,
+	characters_by_id: Dictionary,
+	world_states: Dictionary,
+) -> void:
+	for r: Variant in results:
+		if not r is Dictionary:
+			continue
+		var d: Dictionary = r as Dictionary
+		if d.get("reactive_type", "") != "FAVOR_REQUESTED":
+			continue
+		var action: String = d.get("action", "")
+		var debtor_id: int = d.get("character_id", -1)
+		var event_data: Dictionary = d.get("event_data", {})
+		var favor_id: int = event_data.get("favor_id", -1)
+		if debtor_id < 0 or favor_id < 0:
+			continue
+		var favor: FavorData = null
+		for f: Variant in favors:
+			if f is FavorData and (f as FavorData).favor_id == favor_id:
+				favor = f as FavorData
+				break
+		if favor == null or favor.resolved:
+			continue
+		var debtor: L5RCharacterData = characters_by_id.get(debtor_id) as L5RCharacterData
+		if debtor == null or CharacterStats.is_dead(debtor):
+			continue
+		if action == "HONOR_FAVOR":
+			var result: Dictionary = FavorSystem.honor_favor(favor)
+			var honor_gain: float = result.get("honor_change", 0.0)
+			if absf(honor_gain) > 0.001:
+				HonorGlorySystem.apply_honor_change(debtor, honor_gain)
+		elif action == "DECLINE_FAVOR":
+			var location: String = debtor.physical_location
+			var witnesses: Array = _get_witnesses_at_location(
+				debtor_id, location, characters_by_id, world_states,
+			)
+			var breach: Dictionary = FavorSystem.break_favor(favor, witnesses)
+			_apply_favor_breach(breach, characters_by_id)
 
 
 static func _process_commerce_topic_writebacks(
