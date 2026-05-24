@@ -4380,10 +4380,11 @@ static func _apply_intimidation_consequences(
 	record: CrimeRecord,
 ) -> void:
 	var witness: L5RCharacterData = characters_by_id.get(witness_id)
-	if witness != null:
-		var old_disp: int = witness.disposition_values.get(criminal_id, 0)
-		var new_disp: int = clampi(old_disp + INTIMIDATION_DISPOSITION_PENALTY, -100, 100)
-		witness.disposition_values[criminal_id] = new_disp
+	if witness == null or CharacterStats.is_dead(witness):
+		return
+	var old_disp: int = witness.disposition_values.get(criminal_id, 0)
+	var new_disp: int = clampi(old_disp + INTIMIDATION_DISPOSITION_PENALTY, -100, 100)
+	witness.disposition_values[criminal_id] = new_disp
 	var witness_ws: Dictionary = world_states.get(witness_id, {})
 	var events: Array = witness_ws.get("pending_events", [])
 	events.append({
@@ -7159,11 +7160,11 @@ static func _process_witness_testimony_on_arrival(
 
 		var mag_id: int = intent.get("magistrate_id", -1)
 		var magistrate: L5RCharacterData = characters_by_id.get(mag_id)
-		if magistrate == null or magistrate.physical_location != dest:
+		if magistrate == null or CharacterStats.is_dead(magistrate) or magistrate.physical_location != dest:
 			continue
 
 		var witness: L5RCharacterData = characters_by_id.get(char_id)
-		if witness == null:
+		if witness == null or CharacterStats.is_dead(witness):
 			continue
 
 		for topic_id: int in witness.topic_pool:

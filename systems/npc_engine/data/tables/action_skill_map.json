@@ -51,6 +51,10 @@
     "primary": "Temptation",
     "secondary": "Awareness"
   },
+  "BRIBE_WITNESS": {
+    "primary": "Temptation",
+    "secondary": "Awareness"
+  },
   "BUILD_FORTIFICATION": {
     "primary": "Engineering",
     "secondary": "Intelligence"
@@ -195,6 +199,10 @@
     "primary": "Courtier",
     "secondary": "Awareness"
   },
+  "EXTORT_ACCUSED": {
+    "primary": "Intimidation",
+    "secondary": "Etiquette"
+  },
   "FABRICATE_SECRET": {
     "primary": "Forgery",
     "secondary": "Intelligence"
@@ -243,6 +251,10 @@
     "primary": "Intimidation",
     "secondary": null
   },
+  "INTIMIDATE_WITNESS": {
+    "primary": "Intimidation",
+    "secondary": "Willpower"
+  },
   "INVESTIGATE_PROVINCE": {
     "primary": "Investigation",
     "secondary": "Lore: Shadowlands"
@@ -254,6 +266,10 @@
   "ISSUE_DUEL_CHALLENGE": {
     "primary": "Iaijutsu",
     "secondary": "Awareness"
+  },
+  "KILL_WITNESS": {
+    "primary": "Stealth",
+    "secondary": "Agility"
   },
   "LISTEN_REFLECT": {
     "primary": "Investigation",

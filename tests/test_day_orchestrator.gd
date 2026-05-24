@@ -14576,3 +14576,81 @@ func test_remove_terminal_commitments() -> void:
 	assert_eq(commitments.size(), 2, "Should remove FULFILLED and BROKEN")
 	assert_eq((commitments[0] as CommitmentData).status, Enums.CommitmentStatus.PENDING)
 	assert_eq((commitments[1] as CommitmentData).status, Enums.CommitmentStatus.PENDING)
+
+
+func test_witness_testimony_skips_dead_magistrate() -> void:
+	var witness := L5RCharacterData.new()
+	witness.character_id = 50
+	witness.topic_pool = [900]
+
+	var magistrate := L5RCharacterData.new()
+	magistrate.character_id = 100
+	magistrate.physical_location = "crane_city"
+	magistrate.topic_pool = []
+	magistrate.wounds_taken = CharacterStats.LETHAL_WOUND_THRESHOLD
+
+	var crime_topic := TopicData.new()
+	crime_topic.topic_id = 900
+	crime_topic.topic_type = "crime"
+
+	var characters_by_id: Dictionary = {50: witness, 100: magistrate}
+	var world_states: Dictionary = {
+		50: {"witness_travel_intent": {"magistrate_id": 100, "destination": "crane_city"}},
+	}
+	var arrivals: Array = [{"character_id": 50, "destination": "crane_city"}]
+
+	DayOrchestrator._process_witness_testimony_on_arrival(
+		arrivals, characters_by_id, world_states, [crime_topic], 1,
+	)
+
+	assert_false(magistrate.topic_pool.has(900), "Dead magistrate should not receive topics")
+
+
+func test_witness_testimony_skips_dead_witness() -> void:
+	var witness := L5RCharacterData.new()
+	witness.character_id = 50
+	witness.topic_pool = [900]
+	witness.wounds_taken = CharacterStats.LETHAL_WOUND_THRESHOLD
+
+	var magistrate := L5RCharacterData.new()
+	magistrate.character_id = 100
+	magistrate.physical_location = "crane_city"
+	magistrate.topic_pool = []
+	magistrate.knowledge_pool = []
+
+	var crime_topic := TopicData.new()
+	crime_topic.topic_id = 900
+	crime_topic.topic_type = "crime"
+
+	var characters_by_id: Dictionary = {50: witness, 100: magistrate}
+	var world_states: Dictionary = {
+		50: {"witness_travel_intent": {"magistrate_id": 100, "destination": "crane_city"}},
+	}
+	var arrivals: Array = [{"character_id": 50, "destination": "crane_city"}]
+
+	DayOrchestrator._process_witness_testimony_on_arrival(
+		arrivals, characters_by_id, world_states, [crime_topic], 1,
+	)
+
+	assert_false(magistrate.topic_pool.has(900), "Dead witness should not transfer topics")
+
+
+func test_intimidation_consequences_skip_dead_witness() -> void:
+	var criminal := L5RCharacterData.new()
+	criminal.character_id = 10
+
+	var witness := L5RCharacterData.new()
+	witness.character_id = 20
+	witness.wounds_taken = CharacterStats.LETHAL_WOUND_THRESHOLD
+	witness.disposition_values = {10: 0}
+
+	var characters_by_id: Dictionary = {10: criminal, 20: witness}
+	var world_states: Dictionary = {}
+	var record := CrimeRecord.new()
+	record.case_id = 1
+
+	DayOrchestrator._apply_intimidation_consequences(
+		10, 20, characters_by_id, world_states, record,
+	)
+
+	assert_eq(witness.disposition_values.get(10, 0), 0, "Dead witness should not receive disposition penalty")
