@@ -591,3 +591,22 @@ func test_tiebreak_urgency_first() -> void:
 	)
 	assert_false(result.is_empty())
 	assert_eq(result["target_fields"]["target_resource"], "iron")
+
+
+func test_scan_personal_trainable_vassal_creates_mentor_opportunity() -> void:
+	var c := _make_character()
+	var world_state: Dictionary = {
+		"trainable_vassals": [{"vassal_id": 42}],
+		"vengeance_targets": [],
+	}
+	var opps: Array = OpportunityScanner.scan_opportunities(
+		c, OpportunityScanner.DOMAIN_PERSONAL, "PERSONAL_EXCELLENCE", world_state
+	)
+	var mentor_found: bool = false
+	for opp: OpportunityScanner.Opportunity in opps:
+		if opp.objective_type == "MENTOR_CHARACTER":
+			mentor_found = true
+			assert_eq(opp.target_fields.get("target_npc_id", -1), 42)
+			assert_eq(opp.standing_alignment, 60.0)
+			assert_eq(opp.feasibility, 85.0)
+	assert_true(mentor_found, "Should create MENTOR_CHARACTER opportunity from trainable vassal")

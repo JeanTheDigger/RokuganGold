@@ -7033,12 +7033,14 @@ static func _run_strategic_reviews(
 				results.append(d)
 		else:
 			var vassals: Array = _get_vassals(lord, characters)
+			world_states["trainable_vassals"] = _build_trainable_vassals(lord, vassals)
 			var directives_2: Array = StrategicReview.run_seasonal_review(
 				lord, vassals, objectives_map, world_states
 			)
 			for d: Dictionary in directives_2:
 				results.append(d)
 
+	world_states.erase("trainable_vassals")
 	return results
 
 
@@ -7063,6 +7065,21 @@ static func _get_vassals(
 	characters: Array,
 ) -> Array:
 	return MilitaryHierarchy.get_direct_subordinates(lord.character_id, characters)
+
+
+static func _build_trainable_vassals(
+	lord: L5RCharacterData,
+	vassals: Array,
+) -> Array:
+	var trainable: Array = []
+	for vassal: L5RCharacterData in vassals:
+		if CharacterStats.is_dead(vassal):
+			continue
+		for skill_name: String in lord.skills:
+			if lord.skills[skill_name] > vassal.skills.get(skill_name, 0):
+				trainable.append({"vassal_id": vassal.character_id})
+				break
+	return trainable
 
 
 # -- Festival Processing (s11.5) ----------------------------------------------

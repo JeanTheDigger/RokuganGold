@@ -3779,3 +3779,50 @@ func test_mentor_metadata_selects_best_student() -> void:
 	assert_eq(meta.get("skill_name", ""), "Kenjutsu")
 
 
+func test_build_trainable_vassals_finds_trainable() -> void:
+	var lord: L5RCharacterData = L5RCharacterData.new()
+	lord.character_id = 1
+	lord.character_name = "Lord"
+	lord.skills = {"Kenjutsu": 5, "Etiquette": 3}
+	lord.wounds_taken = 0
+	lord.earth_ring = 3
+	lord.stamina = 3
+	var vassal_a: L5RCharacterData = L5RCharacterData.new()
+	vassal_a.character_id = 2
+	vassal_a.character_name = "VassalA"
+	vassal_a.skills = {"Kenjutsu": 2, "Etiquette": 3}
+	vassal_a.wounds_taken = 0
+	vassal_a.earth_ring = 3
+	vassal_a.stamina = 3
+	var vassal_b: L5RCharacterData = L5RCharacterData.new()
+	vassal_b.character_id = 3
+	vassal_b.character_name = "VassalB"
+	vassal_b.skills = {"Kenjutsu": 5, "Etiquette": 5}
+	vassal_b.wounds_taken = 0
+	vassal_b.earth_ring = 3
+	vassal_b.stamina = 3
+	var vassals: Array = [vassal_a, vassal_b]
+	var result: Array = DayOrchestrator._build_trainable_vassals(lord, vassals)
+	assert_eq(result.size(), 1, "Only vassal_a should be trainable (vassal_b has equal/higher skills)")
+	assert_eq(result[0].get("vassal_id", -1), 2)
+
+
+func test_build_trainable_vassals_skips_dead() -> void:
+	var lord: L5RCharacterData = L5RCharacterData.new()
+	lord.character_id = 1
+	lord.character_name = "Lord"
+	lord.skills = {"Kenjutsu": 5}
+	lord.wounds_taken = 0
+	lord.earth_ring = 3
+	lord.stamina = 3
+	var dead_vassal: L5RCharacterData = L5RCharacterData.new()
+	dead_vassal.character_id = 2
+	dead_vassal.character_name = "Dead"
+	dead_vassal.skills = {"Kenjutsu": 1}
+	dead_vassal.wounds_taken = 200
+	dead_vassal.earth_ring = 3
+	dead_vassal.stamina = 3
+	var result: Array = DayOrchestrator._build_trainable_vassals(lord, [dead_vassal])
+	assert_eq(result.size(), 0, "Dead vassal should not be trainable")
+
+
