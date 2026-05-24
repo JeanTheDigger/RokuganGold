@@ -242,6 +242,14 @@ static func advance_day(
 		letter_pass_results, characters_by_id, settlements, current_season
 	)
 
+	_process_duel_challenge_writebacks(
+		day_result.get("results", []), world_states,
+	)
+
+	_process_duel_response_writebacks(
+		day_result.get("results", []), characters_by_id, dice_engine,
+	)
+
 	var crime_results: Array = _process_crime_detection(
 		day_result.get("results", []),
 		characters_by_id,
@@ -641,14 +649,6 @@ static func advance_day(
 	var compact_restoration_results: Array = _process_compact_restorations(
 		day_result.get("results", []),
 		phoenix_council_state,
-	)
-
-	_process_duel_challenge_writebacks(
-		day_result.get("results", []), world_states,
-	)
-
-	_process_duel_response_writebacks(
-		day_result.get("results", []), characters_by_id, dice_engine,
 	)
 
 	_process_duel_honor_writebacks(
