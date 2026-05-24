@@ -285,6 +285,8 @@ static func prioritize_witnesses(
 	var scored: Array = []
 	for cand_id: int in candidates:
 		var c: L5RCharacterData = characters_by_id.get(cand_id)
+		if c != null and CharacterStats.is_dead(c):
+			continue
 		var awareness: int = 2
 		var honor: float = 5.0
 		var is_present: bool = cand_id in present_ids

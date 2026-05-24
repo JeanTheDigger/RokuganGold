@@ -33,12 +33,12 @@ static func process_accused_cases(
 			continue
 
 		var accused: L5RCharacterData = characters_by_id.get(record.perpetrator_id)
-		if accused == null:
+		if accused == null or CharacterStats.is_dead(accused):
 			continue
 
 		var lord_id: int = lord_map.get(record.perpetrator_id, -1)
 		var lord: L5RCharacterData = characters_by_id.get(lord_id)
-		if lord == null:
+		if lord == null or CharacterStats.is_dead(lord):
 			continue
 
 		var case_entry: LegalCaseEntry = LegalStatusSystem.get_case(

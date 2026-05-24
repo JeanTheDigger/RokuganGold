@@ -945,10 +945,10 @@ static func assess_army_supply(
 	tether_state: int,
 	source_has_rice: bool,
 ) -> Dictionary:
-	var supplied: bool = tether_state == 0 and source_has_rice
+	var supplied: bool = tether_state == SupplyTetherSystem.TetherState.SOLID and source_has_rice
 	return {
 		"status": ArmySupplyStatus.SUPPLIED if supplied else ArmySupplyStatus.UNSUPPLIED,
-		"tether_intact": tether_state == 0,
+		"tether_intact": tether_state == SupplyTetherSystem.TetherState.SOLID,
 		"source_has_rice": source_has_rice,
 	}
 

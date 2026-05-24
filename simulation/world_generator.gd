@@ -513,7 +513,7 @@ static func generate_character(
 
 	c.honor = sd["honor"] + (insight_rank - 1) * 0.25 + _float_variance(dice_engine, 0.5)
 	c.honor = clampf(c.honor, 0.0, 10.0)
-	c.glory = 1.0 + (insight_rank - 1) * 0.5
+	c.glory = clampf(1.0 + (insight_rank - 1) * 0.5, 0.0, 10.0)
 	c.status = 1.0
 
 	_assign_personality(c, clan, dice_engine)

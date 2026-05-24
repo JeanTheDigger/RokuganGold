@@ -81,10 +81,10 @@ const LEVERAGE_SCORES: Dictionary = {
 }
 
 const CRIME_SEVERITY_COOPERATION: Dictionary = {
-	4: 0,
-	3: -5,
-	2: -15,
-	1: -30,
+	TopicData.Tier.TIER_4: 0,
+	TopicData.Tier.TIER_3: -5,
+	TopicData.Tier.TIER_2: -15,
+	TopicData.Tier.TIER_1: -30,
 }
 
 const FUGITIVE_STATUS_COOPERATION: Dictionary = {
@@ -180,7 +180,7 @@ enum ExtraditionResponse {
 
 static func get_cooperation_consequences(crime_severity_tier: int) -> Dictionary:
 	var disp_gain: int = 5
-	if crime_severity_tier <= 2:
+	if crime_severity_tier <= TopicData.Tier.TIER_2:
 		disp_gain = 10
 
 	return {
@@ -203,7 +203,7 @@ static func get_negotiate_consequences() -> Dictionary:
 
 static func get_refusal_consequences(crime_severity_tier: int) -> Dictionary:
 	var disp_hit: int = -10
-	if crime_severity_tier <= 2:
+	if crime_severity_tier <= TopicData.Tier.TIER_2:
 		disp_hit = -20
 
 	return {
@@ -222,7 +222,7 @@ static func get_deny_knowledge_consequences(
 	var viable: bool = fugitive_status < 3.0 and not requesting_clan_has_intel
 
 	if not viable:
-		var refusal := get_refusal_consequences(3)
+		var refusal := get_refusal_consequences(TopicData.Tier.TIER_3)
 		refusal["denial_transparent"] = true
 		refusal["additional_disposition_hit"] = -5
 		return refusal
@@ -262,7 +262,7 @@ static func select_response(
 
 # -- Escalation (s11.3.16e) -----
 
-const IMPERIAL_WARRANT_SEVERITY_THRESHOLD: int = 2
+const IMPERIAL_WARRANT_SEVERITY_THRESHOLD: int = TopicData.Tier.TIER_2
 
 
 static func can_request_imperial_warrant(crime_severity_tier: int) -> bool:

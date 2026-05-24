@@ -57,7 +57,7 @@ func test_extradition_request_format():
 func test_gi_lord_cooperates_readily():
 	var lord := _make_lord(Enums.BushidoVirtue.GI)
 	var r := FugitiveExtraditionSystem.evaluate_extradition(
-		lord, "Crane", 3.0, 3, "none", "no_value"
+		lord, "Crane", 3.0, TopicData.Tier.TIER_3, "none", "no_value"
 	)
 	assert_true(r["cooperates"])
 	assert_eq(r["personality_score"], 30)
@@ -66,7 +66,7 @@ func test_gi_lord_cooperates_readily():
 func test_seigyo_lord_resists():
 	var lord := _make_lord(Enums.BushidoVirtue.GI, Enums.ShouridoVirtue.SEIGYO)
 	var r := FugitiveExtraditionSystem.evaluate_extradition(
-		lord, "Crane", 3.0, 3, "none", "no_value"
+		lord, "Crane", 3.0, TopicData.Tier.TIER_3, "none", "no_value"
 	)
 	assert_eq(r["personality_score"], -20)
 
@@ -74,7 +74,7 @@ func test_seigyo_lord_resists():
 func test_valuable_fugitive_resists_cooperation():
 	var lord := _make_lord(Enums.BushidoVirtue.YU)
 	var r := FugitiveExtraditionSystem.evaluate_extradition(
-		lord, "Crane", 3.0, 3, "valuable_intelligence", "bargaining_chip"
+		lord, "Crane", 3.0, TopicData.Tier.TIER_3, "valuable_intelligence", "bargaining_chip"
 	)
 	assert_eq(r["usefulness_score"], -25)
 	assert_eq(r["leverage_score"], -20)
@@ -84,7 +84,7 @@ func test_valuable_fugitive_resists_cooperation():
 func test_maho_crime_pushes_cooperation():
 	var lord := _make_lord(Enums.BushidoVirtue.YU)
 	var r := FugitiveExtraditionSystem.evaluate_extradition(
-		lord, "Crane", 3.0, 1, "none", "no_value"
+		lord, "Crane", 3.0, TopicData.Tier.TIER_1, "none", "no_value"
 	)
 	assert_eq(r["severity_score"], -30)
 
@@ -92,7 +92,7 @@ func test_maho_crime_pushes_cooperation():
 func test_high_status_fugitive_hard_to_hide():
 	var lord := _make_lord(Enums.BushidoVirtue.YU)
 	var r := FugitiveExtraditionSystem.evaluate_extradition(
-		lord, "Crane", 5.0, 3, "none", "no_value"
+		lord, "Crane", 5.0, TopicData.Tier.TIER_3, "none", "no_value"
 	)
 	assert_eq(r["status_score"], -15)
 
@@ -100,7 +100,7 @@ func test_high_status_fugitive_hard_to_hide():
 func test_ji_samurai_easy_to_hide():
 	var lord := _make_lord(Enums.BushidoVirtue.YU)
 	var r := FugitiveExtraditionSystem.evaluate_extradition(
-		lord, "Crane", 1.0, 4, "none", "no_value"
+		lord, "Crane", 1.0, TopicData.Tier.TIER_4, "none", "no_value"
 	)
 	assert_eq(r["status_score"], 0)
 
@@ -108,25 +108,25 @@ func test_ji_samurai_easy_to_hide():
 # -- Response Options (s11.3.16d) ----
 
 func test_cooperation_returns_fugitive():
-	var r := FugitiveExtraditionSystem.get_cooperation_consequences(3)
+	var r := FugitiveExtraditionSystem.get_cooperation_consequences(TopicData.Tier.TIER_3)
 	assert_true(r["fugitive_returned"])
 	assert_eq(r["disposition_gain"], 5)
 
 
 func test_cooperation_higher_gain_for_serious_crime():
-	var r := FugitiveExtraditionSystem.get_cooperation_consequences(2)
+	var r := FugitiveExtraditionSystem.get_cooperation_consequences(TopicData.Tier.TIER_2)
 	assert_eq(r["disposition_gain"], 10)
 
 
 func test_refusal_disposition_hit():
-	var r := FugitiveExtraditionSystem.get_refusal_consequences(3)
+	var r := FugitiveExtraditionSystem.get_refusal_consequences(TopicData.Tier.TIER_3)
 	assert_eq(r["disposition_hit"], -10)
 	assert_true(r["topic_escalates"])
 	assert_eq(r["escalated_topic_tier"], TopicData.Tier.TIER_3)
 
 
 func test_refusal_worse_for_serious_crime():
-	var r := FugitiveExtraditionSystem.get_refusal_consequences(2)
+	var r := FugitiveExtraditionSystem.get_refusal_consequences(TopicData.Tier.TIER_2)
 	assert_eq(r["disposition_hit"], -20)
 
 
@@ -186,13 +186,13 @@ func test_low_status_fugitive_deny_knowledge():
 # -- Escalation (s11.3.16e) ----
 
 func test_imperial_warrant_available_for_serious_crimes():
-	assert_true(FugitiveExtraditionSystem.can_request_imperial_warrant(1))
-	assert_true(FugitiveExtraditionSystem.can_request_imperial_warrant(2))
+	assert_true(FugitiveExtraditionSystem.can_request_imperial_warrant(TopicData.Tier.TIER_1))
+	assert_true(FugitiveExtraditionSystem.can_request_imperial_warrant(TopicData.Tier.TIER_2))
 
 
 func test_no_imperial_warrant_for_minor_crimes():
-	assert_false(FugitiveExtraditionSystem.can_request_imperial_warrant(3))
-	assert_false(FugitiveExtraditionSystem.can_request_imperial_warrant(4))
+	assert_false(FugitiveExtraditionSystem.can_request_imperial_warrant(TopicData.Tier.TIER_3))
+	assert_false(FugitiveExtraditionSystem.can_request_imperial_warrant(TopicData.Tier.TIER_4))
 
 
 func test_gi_complies_with_imperial_warrant():
