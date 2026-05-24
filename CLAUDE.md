@@ -2120,6 +2120,52 @@ costs, or forward-wiring. Do not treat as bugs.
   cleaned up at all resolution points (honor, break, expiration, death).
   1 test.
 
+### Known Code Issues (found and fixed 2026-05-24, dead character sweep)
+- **BiologicalFamily.compute_all_family_bonds() — dead characters in half-sibling
+  and cross-clan marriage scans. FIXED.** Half-sibling scan (line 100) and
+  cross-clan marriage relative scan (line 126) iterated chars_by_id without
+  `CharacterStats.is_dead()` guard. Dead relatives produced disposition bonds
+  that were applied to living NPCs during context building. Added dead guards
+  at both scan sites and at the NPC engine consumer (build_context line 74).
+  3 tests.
+- **Topic seeding — dead lords, witnesses, victims received topics (14 sites). FIXED.**
+  Lord topic seeding (8 sites in crime detection, seppuku refusal, etc.),
+  witness/victim crime topic seeding (2 sites), WindDown topic leak target
+  (1 site), forged order delivery target (1 site), impersonation detection
+  victim (1 site), and initial topic distribution (1 site) all added
+  topic IDs to dead characters' topic_pool arrays. Dead characters were
+  never processed by the NPC engine, so the topics were wasted compute.
+  Added `CharacterStats.is_dead()` guards at all 14 sites.
+- **Forged order delivery — dead recipients received objectives_map mutations. FIXED.**
+  `_process_forged_order_delivery()` checked `target == null` but not dead.
+  Dead recipients could have forged objectives written to their objectives_map.
+  Added dead guard.
+- **Impersonation detection — dead victims received knowledge/objectives/honor. FIXED.**
+  `_process_impersonation_detection()` checked `victim == null` but not dead.
+  Dead victims received knowledge entries, INVESTIGATE_THREAT objectives, and
+  DUPED_DISLOYAL honor changes. Added dead guard.
+- **supply_status_check events accumulate without dedup. FIXED.**
+  `_inject_peace_need()` appended seasonal events without checking for existing
+  ones of the same type. Other seasonal injection sites (edict_response,
+  commitment_honor) all had dedup. Added source check before append.
+
+### Known Code Issues — Deferred (2026-05-24, pipeline gaps)
+- **FAVOR_REQUESTED reactive events never injected.** The handler exists in
+  `reactive_decisions.gd` but nothing creates FAVOR_REQUESTED events in
+  `pending_events`. `FavorSystem.invoke_favor()` is only called in tests.
+  The GDD s12.10 specifies three invocation channels (letter, court, personal
+  visit) but there's no ActionID for NPC-initiated favor invocation in s57.12
+  or s14. Design gap — when does an NPC decide to call in a held favor?
+- **ACCEPT_TRAINING reactive events never injected.** Handler exists but
+  nothing creates these events. GDD s55.11 says they fire when a Sensei
+  executes MENTOR, but the MENTOR executor is a stub (returns
+  `{"effect": "student_trained"}` with no student interaction). Blocked on
+  full training pipeline (s48 Sensei multipliers, student AP consumption).
+- **MENTOR executor is a stub.** In context lists and scoring tables but
+  returns a single-line effect with no roll, no student reactive event
+  injection, and no actual training progression. Full implementation
+  requires the ACCEPT_TRAINING reactive chain.
+
 ### Known Performance Concerns — Deferred
 - **Unbounded array growth in advance_day().** `crime_records`,
   `pending_letters`, `active_secrets`, and `action_log` grow
