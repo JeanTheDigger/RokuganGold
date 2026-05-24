@@ -643,6 +643,14 @@ static func advance_day(
 		phoenix_council_state,
 	)
 
+	_process_duel_challenge_writebacks(
+		day_result.get("results", []), world_states,
+	)
+
+	_process_duel_response_writebacks(
+		day_result.get("results", []), characters_by_id, dice_engine,
+	)
+
 	_process_duel_honor_writebacks(
 		day_result.get("results", []), characters_by_id,
 	)
@@ -5137,6 +5145,89 @@ static func _process_court_invitation_response_writebacks(
 		if not objectives_map.has(char_id):
 			objectives_map[char_id] = {}
 		objectives_map[char_id]["primary"] = court_objective
+
+
+static func _process_duel_challenge_writebacks(
+	results: Array,
+	world_states: Dictionary,
+) -> void:
+	for r: Variant in results:
+		if not r is Dictionary:
+			continue
+		var d: Dictionary = r as Dictionary
+		if d.get("action_id", "") != "ISSUE_DUEL_CHALLENGE":
+			continue
+		if not d.get("success", false):
+			continue
+		if not d.get("injects_reactive_event", false):
+			continue
+		var defender_id: int = d.get("target_npc_id", -1)
+		var challenger_id: int = d.get("character_id", -1)
+		if defender_id < 0 or challenger_id < 0:
+			continue
+		var effects: Dictionary = d.get("effects", {})
+		var def_ws: Dictionary = world_states.get(defender_id, {})
+		var pending: Array = def_ws.get("pending_events", [])
+		pending.append({
+			"reactive_type": "DUEL_CHALLENGE_RECEIVED",
+			"challenger_id": challenger_id,
+			"to_death": effects.get("to_death", false),
+			"is_sanctioned": effects.get("is_sanctioned", true),
+			"is_public": effects.get("is_public", false),
+		})
+		def_ws["pending_events"] = pending
+		world_states[defender_id] = def_ws
+
+
+const DUEL_DECLINE_GLORY_LOSS: float = -0.3
+
+static func _process_duel_response_writebacks(
+	results: Array,
+	characters_by_id: Dictionary,
+	dice_engine: DiceEngine,
+) -> void:
+	for r: Variant in results:
+		if not r is Dictionary:
+			continue
+		var d: Dictionary = r as Dictionary
+		if d.get("reactive_type", "") != "DUEL_CHALLENGE_RECEIVED":
+			continue
+		var action: String = d.get("action", "")
+		var defender_id: int = d.get("character_id", -1)
+		var event_data: Dictionary = d.get("event_data", {})
+		var challenger_id: int = event_data.get("challenger_id", -1)
+		if defender_id < 0 or challenger_id < 0:
+			continue
+		var defender: L5RCharacterData = characters_by_id.get(defender_id) as L5RCharacterData
+		var challenger: L5RCharacterData = characters_by_id.get(challenger_id) as L5RCharacterData
+		if defender == null or challenger == null:
+			continue
+		if CharacterStats.is_dead(defender) or CharacterStats.is_dead(challenger):
+			continue
+
+		if action == "DECLINE_DUEL":
+			HonorGlorySystem.apply_glory_change(defender, DUEL_DECLINE_GLORY_LOSS)
+			continue
+
+		if action != "ACCEPT_DUEL":
+			continue
+
+		var to_death: bool = event_data.get("to_death", false)
+		var is_sanctioned: bool = event_data.get("is_sanctioned", true)
+		var is_at_court: bool = event_data.get("is_public", false)
+
+		var duel_effects: Dictionary = ActionExecutor.resolve_accepted_duel(
+			challenger, defender, to_death, is_sanctioned, is_at_court, dice_engine,
+		)
+
+		var wrapped: Dictionary = {
+			"success": true,
+			"action_id": "ISSUE_DUEL_CHALLENGE",
+			"character_id": challenger_id,
+			"target_npc_id": defender_id,
+			"effects": duel_effects,
+		}
+		results.append(wrapped)
 
 
 static func _process_commerce_topic_writebacks(

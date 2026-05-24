@@ -4144,3 +4144,111 @@ func test_build_bitter_rivals_skips_dead() -> void:
 	assert_eq(result.size(), 0, "Dead rival should not appear in bitter_rivals")
 
 
+func test_duel_challenge_writeback_injects_reactive_event() -> void:
+	var world_states: Dictionary = {}
+	var results: Array = [{
+		"action_id": "ISSUE_DUEL_CHALLENGE",
+		"success": true,
+		"character_id": 1,
+		"target_npc_id": 2,
+		"injects_reactive_event": true,
+		"effects": {
+			"challenge_issued": true,
+			"to_death": false,
+			"is_sanctioned": true,
+			"is_public": true,
+		},
+	}]
+	DayOrchestrator._process_duel_challenge_writebacks(results, world_states)
+	var ws: Dictionary = world_states.get(2, {})
+	var pending: Array = ws.get("pending_events", [])
+	assert_eq(pending.size(), 1, "Should inject one DUEL_CHALLENGE_RECEIVED event")
+	assert_eq(pending[0].get("reactive_type", ""), "DUEL_CHALLENGE_RECEIVED")
+	assert_eq(pending[0].get("challenger_id", -1), 1)
+	assert_false(pending[0].get("to_death", true), "Should pass through to_death=false")
+	assert_true(pending[0].get("is_public", false), "Should pass through is_public=true")
+
+
+func test_duel_response_decline_applies_glory_loss() -> void:
+	var defender := L5RCharacterData.new()
+	defender.character_id = 2
+	defender.character_name = "Defender"
+	defender.glory = 5.0
+	defender.wounds_taken = 0
+	defender.earth_ring = 3
+	defender.stamina = 3
+	var challenger := L5RCharacterData.new()
+	challenger.character_id = 1
+	challenger.character_name = "Challenger"
+	challenger.wounds_taken = 0
+	challenger.earth_ring = 3
+	challenger.stamina = 3
+	var chars: Dictionary = {1: challenger, 2: defender}
+	var results: Array = [{
+		"reactive_type": "DUEL_CHALLENGE_RECEIVED",
+		"action": "DECLINE_DUEL",
+		"character_id": 2,
+		"event_data": {"challenger_id": 1, "to_death": false, "is_sanctioned": true},
+	}]
+	DayOrchestrator._process_duel_response_writebacks(results, chars, DiceEngine.new())
+	assert_lt(defender.glory, 5.0, "Declining duel should lose glory")
+
+
+func test_duel_response_accept_resolves_duel() -> void:
+	var defender := L5RCharacterData.new()
+	defender.character_id = 2
+	defender.character_name = "Defender"
+	defender.glory = 5.0
+	defender.honor = 5.0
+	defender.wounds_taken = 0
+	defender.earth_ring = 3
+	defender.stamina = 3
+	defender.reflexes = 3
+	defender.agility = 3
+	defender.awareness = 3
+	defender.intelligence = 3
+	defender.perception = 3
+	defender.willpower = 3
+	defender.strength = 3
+	defender.void_ring = 2
+	defender.skills = {"Iaijutsu": 3}
+	defender.emphases = {}
+	var challenger := L5RCharacterData.new()
+	challenger.character_id = 1
+	challenger.character_name = "Challenger"
+	challenger.glory = 5.0
+	challenger.honor = 5.0
+	challenger.wounds_taken = 0
+	challenger.earth_ring = 3
+	challenger.stamina = 3
+	challenger.reflexes = 3
+	challenger.agility = 3
+	challenger.awareness = 3
+	challenger.intelligence = 3
+	challenger.perception = 3
+	challenger.willpower = 3
+	challenger.strength = 3
+	challenger.void_ring = 2
+	challenger.skills = {"Iaijutsu": 3}
+	challenger.emphases = {}
+	var chars: Dictionary = {1: challenger, 2: defender}
+	var results: Array = [{
+		"reactive_type": "DUEL_CHALLENGE_RECEIVED",
+		"action": "ACCEPT_DUEL",
+		"character_id": 2,
+		"event_data": {
+			"challenger_id": 1,
+			"to_death": false,
+			"is_sanctioned": true,
+			"is_public": false,
+		},
+	}]
+	DayOrchestrator._process_duel_response_writebacks(results, chars, DiceEngine.new())
+	assert_gt(results.size(), 1, "Should append resolved duel result to results")
+	var appended: Dictionary = results[results.size() - 1]
+	assert_eq(appended.get("action_id", ""), "ISSUE_DUEL_CHALLENGE")
+	assert_true(appended.get("success", false), "Resolved duel should be successful")
+	var effects: Dictionary = appended.get("effects", {})
+	assert_true(effects.has("winner_id") or effects.has("duel_result"), "Should have duel resolution data")
+
+

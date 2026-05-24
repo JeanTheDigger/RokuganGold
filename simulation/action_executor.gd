@@ -3666,7 +3666,7 @@ static func _execute_duel_challenge(
 	action: NPCDataStructures.ScoredAction,
 	character: L5RCharacterData,
 	ctx: NPCDataStructures.ContextSnapshot,
-	dice_engine: DiceEngine,
+	_dice_engine: DiceEngine,
 	characters_by_id: Dictionary,
 ) -> Dictionary:
 	var target_id: int = action.target_npc_id
@@ -3685,38 +3685,67 @@ static func _execute_duel_challenge(
 
 	var to_death: bool = action.metadata.get("to_death", false)
 	var is_sanctioned: bool = action.metadata.get("is_sanctioned", true)
+	var is_public: bool = ctx.context_flag == Enums.ContextFlag.AT_COURT
 
+	return {
+		"success": true,
+		"action_id": "ISSUE_DUEL_CHALLENGE",
+		"character_id": ctx.character_id,
+		"target_npc_id": target_id,
+		"target_province_id": action.target_province_id,
+		"ic_day": ctx.ic_day,
+		"season": ctx.season,
+		"injects_reactive_event": true,
+		"reactive_event_type": "DUEL_CHALLENGE_RECEIVED",
+		"reactive_event_target_id": target_id,
+		"effects": {
+			"challenge_issued": true,
+			"to_death": to_death,
+			"is_sanctioned": is_sanctioned,
+			"is_public": is_public,
+		},
+	}
+
+
+static func resolve_accepted_duel(
+	challenger: L5RCharacterData,
+	defender: L5RCharacterData,
+	to_death: bool,
+	is_sanctioned: bool,
+	is_at_court: bool,
+	dice_engine: DiceEngine,
+) -> Dictionary:
 	var duel: IndividualCombat.DuelState = IndividualCombat.create_duel(
-		character.character_id, target.character_id, to_death
+		challenger.character_id, defender.character_id, to_death
 	)
 
-	var challenger_wants_stare_down: bool = _should_attempt_stare_down(character)
-	var defender_wants_stare_down: bool = _should_attempt_stare_down(target)
+	var challenger_wants_stare_down: bool = _should_attempt_stare_down(challenger)
+	var defender_wants_stare_down: bool = _should_attempt_stare_down(defender)
 	var stare_down_result: Dictionary = {}
 	if challenger_wants_stare_down or defender_wants_stare_down:
 		stare_down_result = IndividualCombat.resolve_iaijutsu_stare_down(
-			character, target, duel, dice_engine
+			challenger, defender, duel, dice_engine
 		)
 		stare_down_result["challenger_initiated"] = challenger_wants_stare_down
 		stare_down_result["defender_initiated"] = defender_wants_stare_down
 
 	var ch_p := IndividualCombat.Participant.new()
-	ch_p.character_id = character.character_id
+	ch_p.character_id = challenger.character_id
 	ch_p.stance = Enums.Stance.CENTER
 	var def_p := IndividualCombat.Participant.new()
-	def_p.character_id = target.character_id
+	def_p.character_id = defender.character_id
 	def_p.stance = Enums.Stance.CENTER
 
 	var assessment: Dictionary = IndividualCombat.resolve_duel_assessment(
-		character, target, duel, dice_engine
+		challenger, defender, duel, dice_engine
 	)
 
-	if _should_concede_at_assessment(target, assessment, duel):
+	if _should_concede_at_assessment(defender, assessment, duel):
 		var concession: Dictionary = IndividualCombat.concede_at_assessment(
-			target.character_id, duel
+			defender.character_id, duel
 		)
 		if concession["glory_change"] != 0.0:
-			HonorGlorySystem.apply_glory_change(target, concession["glory_change"])
+			HonorGlorySystem.apply_glory_change(defender, concession["glory_change"])
 		var effects: Dictionary = {
 			"duel_result": {"assessment": assessment, "concession": concession},
 			"winner_id": duel.winner_id,
@@ -3726,26 +3755,19 @@ static func _execute_duel_challenge(
 			"challenger_dead": false,
 			"defender_dead": false,
 			"conceded": true,
-			"conceder_id": target.character_id,
+			"conceder_id": defender.character_id,
 		}
 		if stare_down_result.size() > 0:
 			effects["stare_down"] = stare_down_result
-		if duel.winner_id == character.character_id and ctx.context_flag == Enums.ContextFlag.AT_COURT:
+		if duel.winner_id == challenger.character_id and is_at_court:
 			effects["glory_change"] = 0.5
-		return {
-			"success": true,
-			"action_id": "ISSUE_DUEL_CHALLENGE",
-			"character_id": ctx.character_id,
-			"target_npc_id": target_id,
-			"target_province_id": action.target_province_id,
-			"ic_day": ctx.ic_day,
-			"season": ctx.season,
-			"actor_won": true,
-			"effects": effects,
-		}
+		effects["is_sanctioned"] = is_sanctioned
+		effects["challenger_id"] = challenger.character_id
+		effects["defender_id"] = defender.character_id
+		return effects
 
 	var focus: Dictionary = IndividualCombat.resolve_duel_focus(
-		character, target, duel, dice_engine
+		challenger, defender, duel, dice_engine
 	)
 
 	var first_char: L5RCharacterData
@@ -3753,18 +3775,18 @@ static func _execute_duel_challenge(
 	var first_p: IndividualCombat.Participant
 	var second_p: IndividualCombat.Participant
 	if duel.simultaneous or duel.first_striker_id == duel.challenger_id:
-		first_char = character
+		first_char = challenger
 		first_p = ch_p
-		second_char = target
+		second_char = defender
 		second_p = def_p
 	else:
-		first_char = target
+		first_char = defender
 		first_p = def_p
-		second_char = character
+		second_char = challenger
 		second_p = ch_p
 
-	ch_p.void_ring_bonus = character.void_ring
-	def_p.void_ring_bonus = target.void_ring
+	ch_p.void_ring_bonus = challenger.void_ring
+	def_p.void_ring_bonus = defender.void_ring
 
 	var strike: Dictionary = IndividualCombat.resolve_duel_strike(
 		first_char, first_p, second_char, second_p, duel, dice_engine
@@ -3777,8 +3799,8 @@ static func _execute_duel_challenge(
 		"winner_id": duel.winner_id,
 		"loser_id": duel.loser_id,
 		"simultaneous": duel.simultaneous,
-		"challenger_id": character.character_id,
-		"defender_id": target.character_id,
+		"challenger_id": challenger.character_id,
+		"defender_id": defender.character_id,
 	}
 	if stare_down_result.size() > 0:
 		duel_result["stare_down"] = stare_down_result
@@ -3787,8 +3809,8 @@ static func _execute_duel_challenge(
 	var loser_id: int = duel_result.get("loser_id", -1)
 	var simultaneous: bool = duel_result.get("simultaneous", false)
 
-	var challenger_dead: bool = CharacterStats.is_dead(character)
-	var defender_dead: bool = CharacterStats.is_dead(target)
+	var challenger_dead: bool = CharacterStats.is_dead(challenger)
+	var defender_dead: bool = CharacterStats.is_dead(defender)
 	var death_occurred: bool = challenger_dead or defender_dead
 
 	var effects: Dictionary = {
@@ -3799,40 +3821,30 @@ static func _execute_duel_challenge(
 		"death_occurred": death_occurred,
 		"challenger_dead": challenger_dead,
 		"defender_dead": defender_dead,
+		"is_sanctioned": is_sanctioned,
+		"challenger_id": challenger.character_id,
+		"defender_id": defender.character_id,
 	}
 
-	# Glory bonus for winning a witnessed duel at court (s40 / s4.6)
-	if winner_id != -1 and ctx.context_flag == Enums.ContextFlag.AT_COURT:
-		if winner_id == character.character_id:
+	if winner_id != -1 and is_at_court:
+		if winner_id == challenger.character_id:
 			effects["glory_change"] = 0.5
 		else:
 			effects["winner_glory_change"] = 0.5
 			effects["winner_glory_recipient_id"] = winner_id
 
-	# Crime record if an unsanctioned duel caused a death (s40 / s2.8.11)
 	if death_occurred and not is_sanctioned:
 		var killer_id: int = -1
 		if challenger_dead:
-			killer_id = target.character_id
+			killer_id = defender.character_id
 		elif defender_dead:
-			killer_id = character.character_id
+			killer_id = challenger.character_id
 		effects["requires_crime_creation"] = true
 		effects["crime_type"] = Enums.CrimeType.UNSANCTIONED_DUEL_DEATH
 		effects["crime_perpetrator_id"] = killer_id
 		effects["crime_victim_id"] = loser_id
 
-	var actor_is_winner: bool = winner_id == character.character_id
-	return {
-		"success": not simultaneous and winner_id != -1,
-		"action_id": "ISSUE_DUEL_CHALLENGE",
-		"character_id": ctx.character_id,
-		"target_npc_id": target_id,
-		"target_province_id": action.target_province_id,
-		"ic_day": ctx.ic_day,
-		"season": ctx.season,
-		"actor_won": actor_is_winner,
-		"effects": effects,
-	}
+	return effects
 
 
 static func _should_attempt_stare_down(character: L5RCharacterData) -> bool:

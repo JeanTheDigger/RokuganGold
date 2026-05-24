@@ -2530,6 +2530,20 @@ costs, or forward-wiring. Do not treat as bugs.
   (vs 50 for enemies). Dead targets filtered. Both wired into
   `_run_strategic_reviews()` alongside trainable_vassals, erased after use.
   5 tests.
+- **Duel challenge reactive pipeline.** ISSUE_DUEL_CHALLENGE refactored from
+  single-tick synchronous resolution to two-tick reactive flow per GDD s55.11.
+  Phase 1: `_execute_duel_challenge()` returns challenge-issued result with
+  `injects_reactive_event: true`. `_process_duel_challenge_writebacks()` injects
+  DUEL_CHALLENGE_RECEIVED into defender's `pending_events`. Phase 2 (next tick):
+  `ReactiveDecisions._evaluate_duel_response()` personality-gates acceptance
+  (Yu/Kyoryoku/rivals always accept, Meiyo accepts public, Ishi accepts, public
+  bushido accepts). `_process_duel_response_writebacks()` handles results:
+  DECLINE_DUEL applies -0.3 glory. ACCEPT_DUEL calls
+  `ActionExecutor.resolve_accepted_duel()` (full resolution: stare-down,
+  assessment, concession, focus, strike) and appends wrapped result to results
+  array for downstream writebacks (duel death, duel honor). Existing executor
+  tests updated from synchronous `_execute_duel_challenge` to
+  `resolve_accepted_duel()`. 3 wiring tests + 8 executor tests updated.
 
 ### Systems Added 2026-05-18
 - **s29.15 Courtier School Techniques** — School technique bonuses wired into

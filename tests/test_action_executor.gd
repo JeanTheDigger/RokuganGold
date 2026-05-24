@@ -856,7 +856,7 @@ func test_duel_challenge_missing_target_returns_failed() -> void:
 	assert_eq(result["effects"].get("reason"), "target_not_found")
 
 
-func test_duel_challenge_returns_required_fields() -> void:
+func test_duel_challenge_returns_challenge_issued() -> void:
 	var target := L5RCharacterData.new()
 	target.character_id = 10
 	target.reflexes = 3
@@ -879,16 +879,18 @@ func test_duel_challenge_returns_required_fields() -> void:
 	assert_true(result.has("action_id"))
 	assert_true(result.has("character_id"))
 	assert_true(result.has("target_npc_id"))
-	assert_true(result.has("ic_day"))
-	assert_true(result.has("season"))
-	assert_true(result.has("actor_won"))
-	assert_true(result.has("effects"))
+	assert_true(result.has("injects_reactive_event"))
+	assert_true(result["injects_reactive_event"])
 	assert_eq(result["action_id"], "ISSUE_DUEL_CHALLENGE")
 	assert_eq(result["character_id"], 1)
 	assert_eq(result["target_npc_id"], 10)
+	var effects: Dictionary = result["effects"]
+	assert_true(effects.get("challenge_issued", false))
+	assert_false(effects.get("to_death", true))
+	assert_true(effects.get("is_sanctioned", false))
 
 
-func test_duel_challenge_effects_include_duel_result() -> void:
+func test_resolve_accepted_duel_includes_duel_result() -> void:
 	var target := L5RCharacterData.new()
 	target.character_id = 10
 	target.reflexes = 3
@@ -902,20 +904,16 @@ func test_duel_challenge_effects_include_duel_result() -> void:
 	target.void_ring = 2
 	target.skills = {"Iaijutsu": 2}
 	_character.skills["Iaijutsu"] = 2
-	var chars: Dictionary = {1: _character, 10: target}
-	var action := _make_action("ISSUE_DUEL_CHALLENGE", 10)
-	action.metadata = {"to_death": false, "is_sanctioned": true}
-	var result: Dictionary = ActionExecutor.execute(
-		action, _character, _ctx, _dice_engine, _action_skill_map, {}, chars
+	var effects: Dictionary = ActionExecutor.resolve_accepted_duel(
+		_character, target, false, true, false, _dice_engine,
 	)
-	var effects: Dictionary = result["effects"]
 	assert_true(effects.has("duel_result"))
 	assert_true(effects.has("winner_id"))
 	assert_true(effects.has("loser_id"))
 	assert_true(effects.has("death_occurred"))
 
 
-func test_duel_challenge_at_court_winner_gets_glory_change() -> void:
+func test_resolve_accepted_duel_at_court_winner_gets_glory_change() -> void:
 	var target := L5RCharacterData.new()
 	target.character_id = 10
 	target.reflexes = 2
@@ -928,20 +926,14 @@ func test_duel_challenge_at_court_winner_gets_glory_change() -> void:
 	target.willpower = 2
 	target.void_ring = 2
 	target.skills = {}
-	# Give challenger a strong advantage for a deterministic win
 	_character.reflexes = 5
 	_character.awareness = 5
 	_character.agility = 5
 	_character.skills["Iaijutsu"] = 5
-	_ctx.context_flag = Enums.ContextFlag.AT_COURT
-	var chars: Dictionary = {1: _character, 10: target}
 	_dice_engine.set_seed(7)
-	var action := _make_action("ISSUE_DUEL_CHALLENGE", 10)
-	action.metadata = {"to_death": false, "is_sanctioned": true}
-	var result: Dictionary = ActionExecutor.execute(
-		action, _character, _ctx, _dice_engine, _action_skill_map, {}, chars
+	var effects: Dictionary = ActionExecutor.resolve_accepted_duel(
+		_character, target, false, true, true, _dice_engine,
 	)
-	var effects: Dictionary = result["effects"]
 	var winner: int = effects.get("winner_id", -1)
 	if winner == 1:
 		assert_eq(effects.get("glory_change", 0.0), 0.5)
@@ -950,7 +942,7 @@ func test_duel_challenge_at_court_winner_gets_glory_change() -> void:
 		assert_eq(effects.get("winner_glory_recipient_id", -1), 10)
 
 
-func test_duel_challenge_not_at_court_no_glory_change() -> void:
+func test_resolve_accepted_duel_not_at_court_no_glory_change() -> void:
 	var target := L5RCharacterData.new()
 	target.character_id = 10
 	target.reflexes = 3
@@ -964,19 +956,14 @@ func test_duel_challenge_not_at_court_no_glory_change() -> void:
 	target.void_ring = 2
 	target.skills = {"Iaijutsu": 2}
 	_character.skills["Iaijutsu"] = 2
-	_ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
-	var chars: Dictionary = {1: _character, 10: target}
-	var action := _make_action("ISSUE_DUEL_CHALLENGE", 10)
-	action.metadata = {"to_death": false, "is_sanctioned": true}
-	var result: Dictionary = ActionExecutor.execute(
-		action, _character, _ctx, _dice_engine, _action_skill_map, {}, chars
+	var effects: Dictionary = ActionExecutor.resolve_accepted_duel(
+		_character, target, false, true, false, _dice_engine,
 	)
-	var effects: Dictionary = result["effects"]
 	assert_false(effects.has("glory_change"))
 	assert_false(effects.has("winner_glory_change"))
 
 
-func test_duel_challenge_unsanctioned_death_creates_crime_record() -> void:
+func test_resolve_accepted_duel_unsanctioned_death_creates_crime_record() -> void:
 	var target := L5RCharacterData.new()
 	target.character_id = 10
 	target.reflexes = 1
@@ -990,27 +977,22 @@ func test_duel_challenge_unsanctioned_death_creates_crime_record() -> void:
 	target.void_ring = 1
 	target.skills = {}
 	target.wounds_taken = 0
-	# Give challenger overwhelming advantage for near-certain kill
 	_character.reflexes = 5
 	_character.agility = 5
 	_character.awareness = 5
 	_character.strength = 5
 	_character.skills["Iaijutsu"] = 5
-	var chars: Dictionary = {1: _character, 10: target}
 	_dice_engine.set_seed(42)
-	var action := _make_action("ISSUE_DUEL_CHALLENGE", 10)
-	action.metadata = {"to_death": true, "is_sanctioned": false}
-	var result: Dictionary = ActionExecutor.execute(
-		action, _character, _ctx, _dice_engine, _action_skill_map, {}, chars
+	var effects: Dictionary = ActionExecutor.resolve_accepted_duel(
+		_character, target, true, false, false, _dice_engine,
 	)
-	var effects: Dictionary = result["effects"]
 	if effects.get("death_occurred", false):
 		assert_true(effects.get("requires_crime_creation", false))
 		assert_eq(effects.get("crime_type"), Enums.CrimeType.UNSANCTIONED_DUEL_DEATH)
 		assert_ne(effects.get("crime_perpetrator_id", -1), -1)
 
 
-func test_duel_challenge_sanctioned_death_no_crime_record() -> void:
+func test_resolve_accepted_duel_sanctioned_death_no_crime_record() -> void:
 	var target := L5RCharacterData.new()
 	target.character_id = 10
 	target.reflexes = 1
@@ -1029,14 +1011,10 @@ func test_duel_challenge_sanctioned_death_no_crime_record() -> void:
 	_character.awareness = 5
 	_character.strength = 5
 	_character.skills["Iaijutsu"] = 5
-	var chars: Dictionary = {1: _character, 10: target}
 	_dice_engine.set_seed(42)
-	var action := _make_action("ISSUE_DUEL_CHALLENGE", 10)
-	action.metadata = {"to_death": true, "is_sanctioned": true}
-	var result: Dictionary = ActionExecutor.execute(
-		action, _character, _ctx, _dice_engine, _action_skill_map, {}, chars
+	var effects: Dictionary = ActionExecutor.resolve_accepted_duel(
+		_character, target, true, true, false, _dice_engine,
 	)
-	var effects: Dictionary = result["effects"]
 	if effects.get("death_occurred", false):
 		assert_false(effects.get("requires_crime_creation", false))
 
@@ -2199,15 +2177,9 @@ func test_defender_initiated_stare_down_fires() -> void:
 	defender.skills["Intimidation"] = 4
 	defender.skills["Iaijutsu"] = 3
 	defender.skills["Kenjutsu"] = 3
-	var chars: Dictionary = {1: _character, 20: defender}
-	var action := NPCDataStructures.ScoredAction.new()
-	action.action_id = "ISSUE_DUEL_CHALLENGE"
-	action.target_npc_id = 20
-	action.metadata = {"to_death": false, "is_sanctioned": true}
-	var result: Dictionary = ActionExecutor._execute_duel_challenge(
-		action, _character, _ctx, _dice_engine, chars
+	var effects: Dictionary = ActionExecutor.resolve_accepted_duel(
+		_character, defender, false, true, false, _dice_engine,
 	)
-	var effects: Dictionary = result.get("effects", {})
 	var duel_result: Dictionary = effects.get("duel_result", {})
 	var sd: Dictionary = duel_result.get("stare_down", {})
 	assert_true(sd.get("attempted", false), "Stare-down should fire when defender wants it")
@@ -2224,14 +2196,8 @@ func test_neither_duelist_wants_stare_down() -> void:
 	defender.skills["Intimidation"] = 3
 	defender.skills["Iaijutsu"] = 3
 	defender.skills["Kenjutsu"] = 3
-	var chars: Dictionary = {1: _character, 20: defender}
-	var action := NPCDataStructures.ScoredAction.new()
-	action.action_id = "ISSUE_DUEL_CHALLENGE"
-	action.target_npc_id = 20
-	action.metadata = {"to_death": false, "is_sanctioned": true}
-	var result: Dictionary = ActionExecutor._execute_duel_challenge(
-		action, _character, _ctx, _dice_engine, chars
+	var effects: Dictionary = ActionExecutor.resolve_accepted_duel(
+		_character, defender, false, true, false, _dice_engine,
 	)
-	var effects: Dictionary = result.get("effects", {})
 	var duel_result: Dictionary = effects.get("duel_result", {})
 	assert_false(duel_result.has("stare_down"), "No stare-down when both decline")
