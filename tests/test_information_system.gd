@@ -922,3 +922,25 @@ func test_process_observe_court_skips_dead_attendees() -> void:
 		"Alive attendee should be discovered")
 	assert_false(30 in discovered_ids,
 		"Dead attendee should not be discovered")
+
+
+func test_transfer_objective_knowledge_skips_dead_contacts() -> void:
+	var baselines: Dictionary = CollectiveDisposition.make_starting_baselines()
+	var dead_contact := L5RCharacterData.new()
+	dead_contact.character_id = 50
+	dead_contact.clan = "Crab"
+	dead_contact.family = "Hida"
+	dead_contact.wounds_taken = 999
+	_char_a.known_contacts_by_clan = {"Crab": [50]}
+	_char_b.met_characters = []
+	_char_b.known_contacts_by_clan = {}
+	_char_b.knowledge_pool = []
+	_char_b.disposition_values = {}
+	var chars_by_id: Dictionary = {50: dead_contact}
+	var objective: Dictionary = {"target_clan": "Crab"}
+	InformationSystem.transfer_objective_knowledge(
+		_char_a, _char_b, objective, 0,
+		[], chars_by_id, baselines["clan"], baselines["family"],
+	)
+	var crab_contacts: Array = _char_b.known_contacts_by_clan.get("Crab", [])
+	assert_false(50 in crab_contacts, "Dead contact should not be transferred")

@@ -240,6 +240,8 @@ static func transfer_objective_knowledge(
 	if target_clan != "" and assigner.known_contacts_by_clan.has(target_clan):
 		for contact_id: int in assigner.known_contacts_by_clan[target_clan]:
 			var contact: L5RCharacterData = chars_by_id.get(contact_id)
+			if contact == null or CharacterStats.is_dead(contact):
+				continue
 			add_contact(
 				recipient, contact_id, target_clan,
 				contact, clan_baselines, family_baselines,
