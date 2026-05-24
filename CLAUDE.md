@@ -2213,6 +2213,19 @@ costs, or forward-wiring. Do not treat as bugs.
   primary objectives evaluated and `TravelCommitment.update_progress()` called,
   unnecessarily mutating their objectives_map. Added dead guard. 1 test.
 
+### Known Code Issues (found and fixed 2026-05-24, magic number audit)
+- **ProvinceStatus.confidence raw int comparisons — 7 sites. FIXED.**
+  `ps.confidence == 0` / `= 2` used across objective_decomposer.gd (3 sites),
+  province_triage.gd (3 sites), npc_decision_engine.gd (1 site). Added
+  CONFIDENCE_STALE/RECENT/FRESH constants to ProvinceStatus class. All consumers
+  and 5 test files updated. 0=stale, 1=recent, 2=fresh scale unchanged (opposite
+  ordinal from KnowledgeConfidence — intentional, different system).
+- **StarvationStage raw int comparisons — 5 sites. FIXED.**
+  `starvation_stage >= 2` / `> 0` / `<= 0` / `= 1` used across
+  rice_market_system.gd (3 sites), insurgency_system.gd (1 site),
+  spiritual_insurgency_system.gd (1 site), npc_decision_engine.gd (2 sites).
+  All replaced with ResourceTick.StarvationStage enum references. 1 test updated.
+
 ### Known Performance Concerns — Deferred
 - **Unbounded array growth in advance_day().** `crime_records`,
   `pending_letters`, `active_secrets`, and `action_log` grow
