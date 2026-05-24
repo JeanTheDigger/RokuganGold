@@ -2739,11 +2739,15 @@ what the code currently does, what it needs, and where the answer lives.
 
 ---
 
-### A. PROVISIONAL Numeric Values — Need GDD Confirmation or Replacement
+### A. PROVISIONAL Numeric Values — Audited 2026-05-24
 
 These values were invented because the GDD describes a mechanic without
-giving exact numbers. Each is marked PROVISIONAL in code. They work but
-may be wrong.
+giving exact numbers. Each is marked PROVISIONAL in code. All 22 values
+have been audited for reasonableness against L5R 4e scale, comparable
+mechanics, and GDD intent. A2 confirmed as GDD-sourced. A9/A10/A13
+replaced with variable season-aware deadlines. A20/A21 confirmed against
+GDD. The remaining 15 values pass reasonableness review and are retained
+pending playtesting.
 
 | # | Value | Current | Where Used | GDD Says | Code Location |
 |---|-------|---------|------------|----------|---------------|
