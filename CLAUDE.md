@@ -2226,6 +2226,26 @@ costs, or forward-wiring. Do not treat as bugs.
   spiritual_insurgency_system.gd (1 site), npc_decision_engine.gd (2 sites).
   All replaced with ResourceTick.StarvationStage enum references. 1 test updated.
 
+### Known Code Issues (found and fixed 2026-05-24, topic tier numbering audit)
+- **Topic tier numbering mismatch across legal pipeline — 4 systems. FIXED.**
+  CONVICTION_CONSEQUENCES table was migrated to TopicData.Tier enum (TIER_1=0,
+  TIER_2=1, TIER_3=2, TIER_4=3) but three downstream systems still used raw
+  1-4 ints. ExtraditionSystem.SEVERITY_TIER_PRESSURE keyed by {1:-30, 2:-15,
+  3:-5, 4:0} — TIER_1 crimes (maho, emperor's peace) received 0 pressure
+  instead of -30. SentencingSystem.TOPIC_TIER_PRESSURE same pattern — TIER_1
+  crimes got 0 pressure instead of -30. InvestigationSystem.TIER_MAP and
+  TOPIC_INITIAL_MOMENTUM keyed by 1-4 — TIER_1 (value 0) missed all lookups.
+  `_extrad_crime_tier()` treated TIER_1=0 as "no tier" and returned 4. All
+  tables re-keyed by TopicData.Tier enum. TIER_MAP removed (direct cast).
+  conviction_processor now passes actual crime tier to sentencing (was 0).
+  `select_punishment` default changed from 0 to -1. 3 test files updated.
+- **Extradition `<= 2` comparisons — wrong threshold after enum migration. FIXED.**
+  `get_cooperation_disposition_reward()`, `get_refusal_disposition_penalty()`,
+  and `can_petition_emerald_champion()` used `crime_topic_tier <= 2` which in
+  the old 1-4 system meant "tier 1 or 2" but in the enum system (0-3) meant
+  "TIER_1, TIER_2, or TIER_3." Changed to `<= TopicData.Tier.TIER_2`.
+  `escalated_tier: 3` raw int → `TopicData.Tier.TIER_3`.
+
 ### Known Performance Concerns — Deferred
 - **Unbounded array growth in advance_day().** `crime_records`,
   `pending_letters`, `active_secrets`, and `action_log` grow
