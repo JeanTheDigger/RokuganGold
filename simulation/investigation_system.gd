@@ -647,18 +647,11 @@ const CRIME_TYPE_NAMES: Dictionary = {
 	Enums.CrimeType.OTHER: "Crime",
 }
 
-const TIER_MAP: Dictionary = {
-	1: TopicData.Tier.TIER_1,
-	2: TopicData.Tier.TIER_2,
-	3: TopicData.Tier.TIER_3,
-	4: TopicData.Tier.TIER_4,
-}
-
 const TOPIC_INITIAL_MOMENTUM: Dictionary = {
-	1: 80.0,
-	2: 50.0,
-	3: 25.0,
-	4: 10.0,
+	TopicData.Tier.TIER_1: 80.0,
+	TopicData.Tier.TIER_2: 50.0,
+	TopicData.Tier.TIER_3: 25.0,
+	TopicData.Tier.TIER_4: 10.0,
 }
 
 
@@ -669,13 +662,13 @@ static func generate_conviction_topic(
 	next_topic_id: Array,
 	ic_day: int,
 ) -> TopicData:
-	if topic_tier <= 0 or topic_tier > 4:
+	if topic_tier < TopicData.Tier.TIER_1 or topic_tier > TopicData.Tier.TIER_4:
 		return null
 
 	var crime_name: String = CRIME_TYPE_NAMES.get(record.crime_type, "Crime")
 	var title: String = "%s convicted of %s" % [convicted.character_name, crime_name]
 
-	var tier: TopicData.Tier = TIER_MAP.get(topic_tier, TopicData.Tier.TIER_4)
+	var tier: TopicData.Tier = topic_tier as TopicData.Tier
 	var momentum: float = TOPIC_INITIAL_MOMENTUM.get(topic_tier, 10.0)
 
 	var category: TopicData.Category = TopicData.Category.LEGAL

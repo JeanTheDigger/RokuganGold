@@ -58,11 +58,10 @@ const DISPOSITION_LENIENCY_THRESHOLDS: Array[Array] = [
 ]
 
 const TOPIC_TIER_PRESSURE: Dictionary = {
-	0: 0,
-	4: -5,
-	3: -10,
-	2: -20,
-	1: -30,
+	TopicData.Tier.TIER_4: -5,
+	TopicData.Tier.TIER_3: -10,
+	TopicData.Tier.TIER_2: -20,
+	TopicData.Tier.TIER_1: -30,
 }
 
 const CROSS_CLAN_VICTIM_PRESSURE: int = -10
@@ -173,7 +172,7 @@ static func calculate_leniency(
 static func select_punishment(
 	daimyo: L5RCharacterData,
 	record: CrimeRecord,
-	crime_topic_tier: int = 0,
+	crime_topic_tier: int = -1,
 	is_cross_clan_victim: bool = false,
 	victim_clan_pushing: bool = false,
 	seigyo_usefulness: int = 0,

@@ -3744,12 +3744,10 @@ static func _extrad_find_clan_champion_id(clan: String, characters: Array) -> in
 
 
 static func _extrad_crime_tier(crime_type: Enums.CrimeType) -> int:
-	var consequences: Array = CrimeSystem.CONVICTION_CONSEQUENCES.get(crime_type, [-0.1, 0.0, 0.0, 4])
-	var tier: int = int(consequences[3])
-	# tier 0 in the table means "no formal standalone topic" — treat as minor (4) for scoring
-	if tier <= 0:
-		return 4
-	return clampi(tier, 1, 4)
+	var consequences: Array = CrimeSystem.CONVICTION_CONSEQUENCES.get(
+		crime_type, [-0.1, 0.0, 0.0, TopicData.Tier.TIER_4]
+	)
+	return int(consequences[3])
 
 
 static func _process_successful_bribe_writebacks(

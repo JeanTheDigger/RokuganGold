@@ -32,10 +32,10 @@ const LEVERAGE_NONE: int = 0
 
 # Crime severity pressure (s11.3.16c) — negative values = resist cooperation
 const SEVERITY_TIER_PRESSURE: Dictionary = {
-	4: 0,
-	3: -5,
-	2: -15,
-	1: -30,
+	TopicData.Tier.TIER_4: 0,
+	TopicData.Tier.TIER_3: -5,
+	TopicData.Tier.TIER_2: -15,
+	TopicData.Tier.TIER_1: -30,
 }
 
 # Fugitive status visibility (s11.3.16c)
@@ -121,13 +121,13 @@ static func evaluate_extradition(
 
 
 static func get_cooperation_disposition_reward(crime_topic_tier: int) -> int:
-	if crime_topic_tier <= 2:
+	if crime_topic_tier <= TopicData.Tier.TIER_2:
 		return COOPERATE_DISPOSITION_MAX
 	return COOPERATE_DISPOSITION_MIN
 
 
 static func get_refusal_disposition_penalty(crime_topic_tier: int) -> int:
-	if crime_topic_tier <= 2:
+	if crime_topic_tier <= TopicData.Tier.TIER_2:
 		return REFUSE_DISPOSITION_MAX
 	return REFUSE_DISPOSITION_MIN
 
@@ -201,9 +201,9 @@ static func apply_refusal(
 	return {
 		"disposition_change": disp_loss,
 		"topic_escalation": true,
-		"escalated_tier": 3,
+		"escalated_tier": TopicData.Tier.TIER_3,
 	}
 
 
 static func can_petition_emerald_champion(crime_topic_tier: int) -> bool:
-	return crime_topic_tier <= 2
+	return crime_topic_tier <= TopicData.Tier.TIER_2

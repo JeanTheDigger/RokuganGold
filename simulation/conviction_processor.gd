@@ -106,8 +106,12 @@ static func _process_single_case(
 	var victim_clan: String = victim.clan if victim != null else ""
 	var is_cross_clan: bool = not victim_clan.is_empty() and victim_clan != accused.clan
 
+	var crime_consequences: Array = CrimeSystem.CONVICTION_CONSEQUENCES.get(
+		record.crime_type, [-0.1, 0.0, 0.0, TopicData.Tier.TIER_4]
+	)
+	var crime_tier: int = int(crime_consequences[3])
 	var sentencing := SentencingSystem.select_punishment(
-		lord, record, 0, is_cross_clan, false
+		lord, record, crime_tier, is_cross_clan, false
 	)
 
 	var conviction := CrimeSystem.apply_at_conviction_consequences(
