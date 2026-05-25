@@ -2319,22 +2319,29 @@ costs, or forward-wiring. Do not treat as bugs.
   knowledge entries, glory/honor changes, topic positions, and disposition
   mutations. 6 tests.
 
-### Known Code Issues — Informational (2026-05-24, context injection audit)
-- **escalating_conflicts — ContextSnapshot field never populated.** Read by
-  `build_context()`, `strategic_review.gd`, `objective_decomposer.gd`. Always
-  defaults to empty array. Strategic review escalation detection and decomposer
-  conflict routing are inactive. Not a bug — schema placeholder for future
-  population path (requires conflict escalation detection logic).
-- **known_clan_strengths — ContextSnapshot field never populated.** Read by
-  `build_context()`, `opportunity_scanner.gd`, `objective_decomposer.gd`.
-  Always defaults to empty dict. Military comparison logic and clan strength
-  opportunity scanning are inactive. Not a bug — schema placeholder for future
-  EVALUATE_CLAN_STRENGTH ActionID (blocked on sub-tile army system s11.7a).
-- **sublocation — ContextSnapshot field never populated.** Read by
-  `build_context()`. Always defaults to `Enums.Sublocation.PUBLIC`. Only
-  consumer is `would_cause_public_scene` personality filter (line 1372).
-  Defaulting to PUBLIC is the conservative case (more restrictions apply).
-  Not a bug — schema placeholder for zone-level sublocation tracking.
+### Known Code Issues (found and fixed 2026-05-25, ContextSnapshot population)
+- **escalating_conflicts — ContextSnapshot field never populated. FIXED.**
+  `_extract_escalating_conflicts()` filters active_topics for MILITARY/POLITICAL
+  topics with conflict-related topic_type (war_preparation, military, civil_war,
+  border_dispute) and unresolved state. Excludes clans already at war.
+  `_filter_escalating_conflicts_for_clan()` further removes clans that the
+  character's own clan is actively fighting (already covered by active_wars).
+  Output: Array of `{"topic_id": int, "clan": String}`. Consumers now
+  functional: strategic_review WAR_READINESS directive, objective_decomposer
+  PREVENT_WAR and INITIATE_WAR_CHECK routing. 5 tests.
+- **known_clan_strengths — ContextSnapshot field never populated. FIXED.**
+  Computed from companies array by summing `current_health` per clan.
+  Output: `{"Crab": 150.0, "Lion": 200.0, ...}`. Consumers now functional:
+  objective_decomposer MILITARY_DOMINANCE decomposition (my_strength vs
+  strongest_rival ratio), opportunity_scanner BUILD_STRONGEST_FORCE trigger
+  (fires when rival > own * 1.3). 1 test.
+- **sublocation — ContextSnapshot field never populated. FIXED.**
+  Mapped from `context_flag`: AT_COURT → Enums.Sublocation.COURT, all others
+  → Enums.Sublocation.PUBLIC. Zone-level sublocation (PRIVATE, RESTRICTED)
+  remains blocked on zone system data — will require zone_subtype mapping
+  when implemented. Consumer now functional: `would_cause_public_scene`
+  personality filter correctly distinguishes court from public contexts.
+  2 tests.
 
 ### Known Performance Concerns — Deferred
 - **Unbounded array growth in advance_day().** `crime_records`,

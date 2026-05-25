@@ -5675,7 +5675,7 @@ static func _process_impersonation_detection(
 					if cm.debtor_npc_id != victim_id:
 						continue
 					if cm.status != Enums.CommitmentStatus.BROKEN_NO_NOTICE \
-						and cm.status != Enums.CommitmentStatus.BROKEN_LATE_NOTICE:
+						and cm.status != Enums.CommitmentStatus.BROKEN_WITH_NOTICE:
 						continue
 					if cm.deadline_ic_day >= forged_arrival_day:
 						HonorGlorySystem.apply_honor_change(
@@ -6380,7 +6380,7 @@ static func _process_lord_deaths(
 		topic.variant = topic_dict.get("variant", "clean")
 		topic.tier = topic_dict.get("tier", TopicData.Tier.TIER_4)
 		topic.category = topic_dict.get("category", TopicData.Category.POLITICAL)
-		topic.ic_day_created = ic_day
+		topic.ic_day_created = current_tick
 		var subject_ids: Array = topic_dict.get("subject_ids", [])
 		if not subject_ids.is_empty():
 			topic.subject_character_id = subject_ids[0]
@@ -16073,6 +16073,7 @@ static func _inject_base_character_context(
 				break
 
 	var unit_counts: Dictionary = {}
+	var g_clan_strengths: Dictionary = {}
 	for comp: Dictionary in companies:
 		var comp_clan: String = comp.get("clan", "")
 		if comp_clan.is_empty():
@@ -16081,6 +16082,9 @@ static func _inject_base_character_context(
 			unit_counts[comp_clan] = {}
 		var ut: int = comp.get("unit_type", 0)
 		unit_counts[comp_clan][ut] = unit_counts[comp_clan].get(ut, 0) + 1
+		g_clan_strengths[comp_clan] = float(g_clan_strengths.get(comp_clan, 0.0)) + float(comp.get("current_health", 0))
+
+	var g_escalating_conflicts: Array = _extract_escalating_conflicts(active_topics, active_wars)
 
 	var g_worship: Dictionary = world_states.get("_worship_failing_province_ids", {})
 	var g_border: Dictionary = world_states.get("_border_province_ids_without_fort", {})
@@ -16118,6 +16122,15 @@ static func _inject_base_character_context(
 		ws["is_coastal"] = g_is_coastal
 		ws["has_naval_assets"] = g_has_naval_assets
 		ws["has_naval_threat"] = g_has_naval_threat
+		ws["known_clan_strengths"] = g_clan_strengths
+		ws["escalating_conflicts"] = _filter_escalating_conflicts_for_clan(
+			g_escalating_conflicts, c.clan, active_wars
+		)
+		var cf: int = ws.get("context_flag", -1)
+		if cf == Enums.ContextFlag.AT_COURT:
+			ws["sublocation"] = Enums.Sublocation.COURT
+		else:
+			ws["sublocation"] = Enums.Sublocation.PUBLIC
 		ws.merge(g_festival)
 
 		if char_is_lord:
@@ -16131,6 +16144,63 @@ static func _inject_base_character_context(
 
 		if has_champion_authority and c.character_id == phoenix_champion_id:
 			ws["phoenix_champion_authority"] = true
+
+
+# -- Escalating Conflicts (s55.23) ---------------------------------------------
+
+static func _extract_escalating_conflicts(
+	active_topics: Array,
+	active_wars: Array,
+) -> Array:
+	var conflicts: Array = []
+	var war_clans: Dictionary = {}
+	for w: Variant in active_wars:
+		if w is WarData and (w as WarData).is_active:
+			war_clans[(w as WarData).clan_a] = true
+			war_clans[(w as WarData).clan_b] = true
+	for t: Variant in active_topics:
+		if not (t is TopicData):
+			continue
+		var topic: TopicData = t as TopicData
+		if topic.resolved:
+			continue
+		if topic.clan_involved.is_empty():
+			continue
+		if topic.category != TopicData.Category.MILITARY and topic.category != TopicData.Category.POLITICAL:
+			continue
+		var dominated_by_war: bool = topic.topic_type == "war_preparation" or topic.topic_type == "military" or topic.topic_type == "civil_war" or topic.variant == "border_dispute"
+		if not dominated_by_war:
+			continue
+		if war_clans.has(topic.clan_involved):
+			continue
+		conflicts.append({
+			"topic_id": topic.topic_id,
+			"clan": topic.clan_involved,
+		})
+	return conflicts
+
+
+static func _filter_escalating_conflicts_for_clan(
+	all_conflicts: Array,
+	character_clan: String,
+	active_wars: Array,
+) -> Array:
+	var at_war_with: Dictionary = {}
+	for w: Variant in active_wars:
+		if w is WarData and (w as WarData).is_active:
+			var war: WarData = w as WarData
+			if WarSystem.is_clan_involved(war, character_clan):
+				if war.clan_a != character_clan:
+					at_war_with[war.clan_a] = true
+				if war.clan_b != character_clan:
+					at_war_with[war.clan_b] = true
+	if at_war_with.is_empty():
+		return all_conflicts
+	var filtered: Array = []
+	for entry: Dictionary in all_conflicts:
+		if not at_war_with.has(entry.get("clan", "")):
+			filtered.append(entry)
+	return filtered
 
 
 # -- Crime Suppression Data (s11.3.19) -----------------------------------------

@@ -14654,3 +14654,132 @@ func test_intimidation_consequences_skip_dead_witness() -> void:
 	)
 
 	assert_eq(witness.disposition_values.get(10, 0), 0, "Dead witness should not receive disposition penalty")
+
+
+# -- ContextSnapshot population tests -----------------------------------------
+
+func test_extract_escalating_conflicts_basic() -> void:
+	var topic := TopicData.new()
+	topic.topic_id = 50
+	topic.topic_type = "war_preparation"
+	topic.category = TopicData.Category.MILITARY
+	topic.clan_involved = "Lion"
+	topic.resolved = false
+	var result: Array = DayOrchestrator._extract_escalating_conflicts([topic], [])
+	assert_eq(result.size(), 1, "Should extract one escalating conflict")
+	assert_eq(result[0]["topic_id"], 50)
+	assert_eq(result[0]["clan"], "Lion")
+
+
+func test_extract_escalating_conflicts_skips_resolved() -> void:
+	var topic := TopicData.new()
+	topic.topic_id = 51
+	topic.topic_type = "military"
+	topic.category = TopicData.Category.MILITARY
+	topic.clan_involved = "Crane"
+	topic.resolved = true
+	var result: Array = DayOrchestrator._extract_escalating_conflicts([topic], [])
+	assert_eq(result.size(), 0, "Resolved topics should be excluded")
+
+
+func test_extract_escalating_conflicts_skips_clan_already_at_war() -> void:
+	var topic := TopicData.new()
+	topic.topic_id = 52
+	topic.topic_type = "war_preparation"
+	topic.category = TopicData.Category.MILITARY
+	topic.clan_involved = "Crab"
+	topic.resolved = false
+	var war := WarData.new()
+	war.clan_a = "Crab"
+	war.clan_b = "Scorpion"
+	war.is_active = true
+	var result: Array = DayOrchestrator._extract_escalating_conflicts([topic], [war])
+	assert_eq(result.size(), 0, "Clan already at war should be excluded")
+
+
+func test_extract_escalating_conflicts_skips_non_conflict_topics() -> void:
+	var topic := TopicData.new()
+	topic.topic_id = 53
+	topic.topic_type = "famine"
+	topic.category = TopicData.Category.POLITICAL
+	topic.clan_involved = "Phoenix"
+	topic.resolved = false
+	var result: Array = DayOrchestrator._extract_escalating_conflicts([topic], [])
+	assert_eq(result.size(), 0, "Non-conflict topic types should be excluded")
+
+
+func test_filter_escalating_conflicts_removes_own_war_enemies() -> void:
+	var conflicts: Array = [
+		{"topic_id": 60, "clan": "Lion"},
+		{"topic_id": 61, "clan": "Scorpion"},
+	]
+	var war := WarData.new()
+	war.clan_a = "Crane"
+	war.clan_b = "Lion"
+	war.is_active = true
+	var filtered: Array = DayOrchestrator._filter_escalating_conflicts_for_clan(
+		conflicts, "Crane", [war]
+	)
+	assert_eq(filtered.size(), 1, "Should remove clan already at war with character")
+	assert_eq(filtered[0]["clan"], "Scorpion")
+
+
+func test_inject_base_context_clan_strengths_from_companies() -> void:
+	var c := L5RCharacterData.new()
+	c.character_id = 900
+	c.status = 3.0
+	c.lord_id = 10
+	c.clan = "Crab"
+	var companies: Array = [
+		{"clan": "Crab", "current_health": 100, "unit_type": 0},
+		{"clan": "Crab", "current_health": 50, "unit_type": 1},
+		{"clan": "Lion", "current_health": 200, "unit_type": 0},
+	]
+	var ws: Dictionary = {}
+	DayOrchestrator._inject_base_character_context(ws, [c], [], [], [], {}, companies)
+	var strengths: Dictionary = ws[900].get("known_clan_strengths", {})
+	assert_eq(strengths.get("Crab", 0.0), 150.0, "Crab should have 150 total health")
+	assert_eq(strengths.get("Lion", 0.0), 200.0, "Lion should have 200 total health")
+
+
+func test_inject_base_context_sublocation_at_court() -> void:
+	var c := L5RCharacterData.new()
+	c.character_id = 901
+	c.status = 3.0
+	c.lord_id = 10
+	c.clan = "Crane"
+	var ws: Dictionary = {901: {"context_flag": Enums.ContextFlag.AT_COURT}}
+	DayOrchestrator._inject_base_character_context(ws, [c], [], [], [], {}, [])
+	assert_eq(ws[901].get("sublocation", -1), Enums.Sublocation.COURT,
+		"AT_COURT context should set sublocation to COURT")
+
+
+func test_inject_base_context_sublocation_default_public() -> void:
+	var c := L5RCharacterData.new()
+	c.character_id = 902
+	c.status = 3.0
+	c.lord_id = 10
+	c.clan = "Lion"
+	var ws: Dictionary = {}
+	DayOrchestrator._inject_base_character_context(ws, [c], [], [], [], {}, [])
+	assert_eq(ws[902].get("sublocation", -1), Enums.Sublocation.PUBLIC,
+		"Default sublocation should be PUBLIC")
+
+
+func test_inject_base_context_escalating_conflicts_injected() -> void:
+	var c := L5RCharacterData.new()
+	c.character_id = 903
+	c.status = 3.0
+	c.lord_id = 10
+	c.clan = "Crane"
+	var topic := TopicData.new()
+	topic.topic_id = 70
+	topic.topic_type = "war_preparation"
+	topic.category = TopicData.Category.MILITARY
+	topic.clan_involved = "Lion"
+	topic.resolved = false
+	var ws: Dictionary = {}
+	DayOrchestrator._inject_base_character_context(ws, [c], [topic], [], [], {}, [])
+	var conflicts: Array = ws[903].get("escalating_conflicts", [])
+	assert_eq(conflicts.size(), 1, "Escalating conflict should be injected")
+	assert_eq(conflicts[0]["clan"], "Lion")
