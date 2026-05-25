@@ -1166,14 +1166,14 @@ static func advance_day(
 		)
 
 		if not death_events.is_empty():
-			var seasonal_orphan_results: Array = _process_lord_deaths(
+			orphan_results.append_array(_process_lord_deaths(
 				death_events, characters, objectives_map, successor_map,
 				active_successions, next_succession_id, characters_by_id, ic_day,
 				active_topics, next_topic_id,
-			)
-			var seasonal_cascade_results: Array = _process_operational_death_cascade(
+			))
+			hierarchy_cascade_results.append_array(_process_operational_death_cascade(
 				death_events, characters,
-			)
+			))
 			death_events.clear()
 			_cleanup_dead_character_references(
 				characters, characters_by_id, active_courts, entanglements,
