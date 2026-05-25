@@ -2282,6 +2282,20 @@ costs, or forward-wiring. Do not treat as bugs.
   `c.glory = 1.0 + (insight_rank - 1) * 0.5` was not clamped to [0.0, 10.0].
   Honor line immediately above was already clamped.
 
+### Known Code Issues (found and fixed 2026-05-25, NPC wave resolver audit)
+- **Court batching completely non-functional — court_id never injected. FIXED.**
+  `_partition_by_court()` read `ws.get("court_id", "")` but `_set_court_context_flags()`
+  never wrote `court_id` to per-character world_states. All NPCs went into `non_court`
+  regardless of court attendance. Court batching (s55.13: "all NPCs at the same court
+  resolve as a group before others") was completely inert. Added
+  `ws["court_id"] = court.court_id` to `_set_court_context_flags()`, added to stale key
+  clearing, updated `_partition_by_court()` to use int keys (was String). 2 tests.
+- **reactive_type events silently discarded during AP waves. FIXED.**
+  `_consume_reactive_event()` treated `reactive_type` events (DUEL_CHALLENGE_RECEIVED,
+  ACCEPT_TRAINING, FAVOR_REQUESTED, COURT_INVITATION) as "unprocessable" and discarded
+  them when NPCs entered the AP wave with remaining pending_events. Events in position 1+
+  were lost. Now preserves `reactive_type` events for next day's reactive phase. 2 tests.
+
 ### Known Code Issues (found and fixed 2026-05-24, DayOrchestrator writeback audit)
 - **Duel response writeback ordering — crime detection ran before duel resolution. FIXED.**
   `_process_duel_response_writebacks()` ran at line 650 AFTER `_process_crime_detection()`
