@@ -316,6 +316,32 @@ static func execute(
 	if action_id == "APPLY_TATTOO":
 		return _execute_apply_tattoo(action, character, ctx, dice_engine, characters_by_id)
 
+	if action_id == "TRANSFER_KOKU":
+		var koku_result: Dictionary = _execute_transfer_koku(action, character, characters_by_id)
+		return {
+			"success": koku_result.get("success", false),
+			"action_id": action_id,
+			"character_id": character.character_id,
+			"target_npc_id": action.target_npc_id,
+			"target_province_id": action.target_province_id,
+			"ic_day": ctx.ic_day,
+			"season": ctx.season,
+			"effects": koku_result,
+		}
+
+	if action_id == "MENTOR":
+		var mentor_result: Dictionary = _execute_mentor(action, ctx, characters_by_id)
+		return {
+			"success": mentor_result.get("success", false),
+			"action_id": action_id,
+			"character_id": character.character_id,
+			"target_npc_id": action.target_npc_id,
+			"target_province_id": action.target_province_id,
+			"ic_day": ctx.ic_day,
+			"season": ctx.season,
+			"effects": mentor_result,
+		}
+
 	if action_id == "INVOKE_FAVOR":
 		return _execute_invoke_favor(action, character, ctx)
 
@@ -1410,7 +1436,7 @@ static func _apply_effects(
 	var action_id: String = action.action_id
 
 	if action_id == "PUBLIC_ATONEMENT":
-		effects = _compute_atonement_effects(action, result, character)
+		effects = _compute_atonement_effects(action, result, _character)
 		var offense_key: String = action.metadata.get("offense_key", "")
 		if not offense_key.is_empty():
 			HonorGlorySystem.record_atonement(_character, offense_key)
@@ -1630,7 +1656,7 @@ static func _compute_admin_effects(action_id: String, action: NPCDataStructures.
 				"requires_supply_sharing": true,
 			}
 		"TRANSFER_KOKU":
-			return _execute_transfer_koku(action, character, characters_by_id)
+			return {"effect": "koku_transferred"}
 		"ASSESS_PROVINCE_STATUS", "INVESTIGATE_PROVINCE", "INVESTIGATE_RUMOR":
 			return {"effect": "intelligence_gathered", "info_gained": true}
 		"EVALUATE_WAR_READINESS":
@@ -2292,7 +2318,7 @@ static func _compute_self_effects(action_id: String) -> Dictionary:
 		"PERFORM_RITUAL", "PERFORM_WORSHIP":
 			return {"effect": "ritual_completed", "honor_change": 0.1}
 		"MENTOR":
-			return _execute_mentor(action, ctx, characters_by_id)
+			return {"effect": "mentor_offered"}
 		"OBSERVE_COURT_ATTENDEES":
 			return {"effect": "court_observed", "info_gained": true}  # fallback — should not reach here
 	return {"effect": "self_action_completed"}
