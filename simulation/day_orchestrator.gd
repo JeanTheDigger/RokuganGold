@@ -106,6 +106,19 @@ static func advance_day(
 		_spm[_s.settlement_id] = _s.province_id
 	world_states["_settlement_province_map"] = _spm
 
+	character_province_map.clear()
+	for _cpm_c: L5RCharacterData in characters:
+		if CharacterStats.is_dead(_cpm_c):
+			continue
+		var _loc: String = _cpm_c.physical_location
+		if _loc.is_empty():
+			continue
+		if _loc.is_valid_int():
+			var _sid: int = _loc.to_int()
+			var _pid: int = _spm.get(_sid, -1)
+			if _pid >= 0:
+				character_province_map[_cpm_c.character_id] = _pid
+
 	_populate_infrastructure_intelligence(world_states, provinces, settlements, ships, worship_state)
 	_populate_vacancy_intelligence(world_states, characters, characters_by_id, companies, settlements, provinces, season_meta)
 	_populate_resource_stockpiles(world_states, characters, provinces, settlements, clans, companies)

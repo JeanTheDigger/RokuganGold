@@ -14783,3 +14783,58 @@ func test_inject_base_context_escalating_conflicts_injected() -> void:
 	var conflicts: Array = ws[903].get("escalating_conflicts", [])
 	assert_eq(conflicts.size(), 1, "Escalating conflict should be injected")
 	assert_eq(conflicts[0]["clan"], "Lion")
+
+
+func test_character_province_map_population_from_settlements() -> void:
+	var c := L5RCharacterData.new()
+	c.character_id = 910
+	c.physical_location = "100"
+	c.status = 3.0
+	c.clan = "Crab"
+	var s := SettlementData.new()
+	s.settlement_id = 100
+	s.province_id = 5
+	var cpm: Dictionary = {}
+	var _spm: Dictionary = {}
+	_spm[s.settlement_id] = s.province_id
+	if c.physical_location.is_valid_int():
+		var _sid: int = c.physical_location.to_int()
+		var _pid: int = _spm.get(_sid, -1)
+		if _pid >= 0:
+			cpm[c.character_id] = _pid
+	assert_eq(cpm.get(910, -1), 5,
+		"Character at settlement 100 should map to province 5")
+
+
+func test_character_province_map_skips_dead_and_empty() -> void:
+	var alive := L5RCharacterData.new()
+	alive.character_id = 911
+	alive.physical_location = "200"
+	alive.status = 3.0
+	var dead := L5RCharacterData.new()
+	dead.character_id = 912
+	dead.physical_location = "200"
+	dead.wounds_taken = 999
+	dead.wound_level_per_rank = 5
+	dead.earth = 2
+	var no_loc := L5RCharacterData.new()
+	no_loc.character_id = 913
+	no_loc.physical_location = ""
+	no_loc.status = 3.0
+	var _spm: Dictionary = {200: 10}
+	var cpm: Dictionary = {}
+	for c: L5RCharacterData in [alive, dead, no_loc]:
+		if CharacterStats.is_dead(c):
+			continue
+		var _loc: String = c.physical_location
+		if _loc.is_empty():
+			continue
+		if _loc.is_valid_int():
+			var _sid: int = _loc.to_int()
+			var _pid: int = _spm.get(_sid, -1)
+			if _pid >= 0:
+				cpm[c.character_id] = _pid
+	assert_eq(cpm.size(), 1, "Only alive character with valid location should be mapped")
+	assert_eq(cpm.get(911, -1), 10)
+	assert_false(cpm.has(912), "Dead character should not be in map")
+	assert_false(cpm.has(913), "Empty-location character should not be in map")

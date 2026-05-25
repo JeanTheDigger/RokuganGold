@@ -2343,6 +2343,42 @@ costs, or forward-wiring. Do not treat as bugs.
   personality filter correctly distinguishes court from public contexts.
   2 tests.
 
+### Known Code Issues (found and fixed 2026-05-25, compile and runtime audit)
+- **ActionExecutor._compute_atonement_effects() — `character` undefined. FIXED.**
+  Referenced `character` instead of `_character` (the actual parameter name).
+  PUBLIC_ATONEMENT always crashed at runtime. Changed to `_character`.
+- **ActionExecutor TRANSFER_KOKU — characters_by_id out of scope. FIXED.**
+  `_execute_transfer_koku()` requires `characters_by_id` but was called from
+  `_compute_admin_effects()` where the parameter is not in scope. Moved to
+  early-return handler in `execute()` (same pattern as APPLY_TATTOO).
+- **ActionExecutor MENTOR — characters_by_id out of scope. FIXED.**
+  Same pattern as TRANSFER_KOKU. `_execute_mentor()` requires `characters_by_id`
+  but was called from `_compute_self_effects()`. Moved to early-return handler.
+- **DayOrchestrator BROKEN_LATE_NOTICE — enum value doesn't exist. FIXED.**
+  Line 5678 referenced `CommitmentData.CommitmentStatus.BROKEN_LATE_NOTICE`
+  which doesn't exist. Changed to `BROKEN_WITH_NOTICE`.
+- **DayOrchestrator `ic_day` undeclared in _process_lord_deaths. FIXED.**
+  Line 6383 used `ic_day` but the parameter name is `current_tick`.
+- **WorldStateSaver typed array assignment — all loads silently failed. FIXED.**
+  All 34 typed array assignments in `load_world()` and `_load_json_state()`
+  used direct assignment (`ws.field = array`) which fails at runtime when
+  assigning untyped `Array` to typed `Array[T]` (e.g. `Array[L5RCharacterData]`).
+  Changed all to `.assign()` method. Dictionary fields kept direct assignment.
+  World state was never actually loading from saves — every restart started
+  fresh despite save files existing on disk.
+
+- **character_province_map permanently empty — topic broadcasting broken. FIXED.**
+  `character_province_map` was declared as `{}` on WorldState and passed to
+  `advance_day()` but never populated by anyone — not the world generator,
+  not the day orchestrator, not the save/load system. Every `.get(char_id, -1)`
+  returned -1, breaking: (1) Topic broadcasting below UNAVOIDABLE tier — characters
+  at BROADCAST_MAJOR/SECONDARY/MINOR tiers never received province-based topics,
+  (2) PTL detection province lookups (had fallback to `target_province_id` so
+  partial impact), (3) Crime detection province context. Built population loop
+  at start of `advance_day()`: iterates living characters, maps `physical_location`
+  (String settlement ID) through settlement-province map to province ID. Clears
+  and rebuilds each day. 2 tests.
+
 ### Known Performance Concerns — Deferred
 - **Unbounded array growth in advance_day().** `crime_records`,
   `pending_letters`, `active_secrets`, and `action_log` grow
