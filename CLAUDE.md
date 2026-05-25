@@ -2393,6 +2393,29 @@ costs, or forward-wiring. Do not treat as bugs.
   at start of `advance_day()`: iterates living characters, maps `physical_location`
   (String settlement ID) through settlement-province map to province ID. Clears
   and rebuilds each day. 2 tests.
+- **Stale context flags: is_patrolled, phoenix_champion_authority. FIXED.**
+  Both flags are conditionally set in per-character world_states but were
+  not erased between days by `_clear_stale_context_flags()`. If the
+  condition stopped applying (character left patrol, Phoenix Champion
+  lost authority), the flag persisted from yesterday.
+- **Commitment renege topic created with invalid tier -1. FIXED.**
+  CommitmentRegistry consequence tables use `topic_tier: -1` to signal
+  "no topic should be created" for mitigated broken commitments
+  (BROKEN_WITH_NOTICE tiers 3 and 2, BROKEN_WITH_PROXY all tiers,
+  BROKEN_FORCE_MAJEURE tiers 3 and 2). `_process_commitment_seasonal()`
+  did not guard against this sentinel and created TopicData objects with
+  `tier = -1` (invalid enum value). Added `topic_tier >= 0` guard to
+  skip topic creation entirely when the consequence table says no topic
+  is needed. 1 test.
+- **Seasonal death processing results silently discarded. FIXED.**
+  `_process_lord_deaths()` and `_process_operational_death_cascade()`
+  called during seasonal phase (natural deaths from gempukku) assigned
+  results to local variables (`seasonal_orphan_results`,
+  `seasonal_cascade_results`) that were never used. The functions apply
+  their effects correctly (succession, orphaned objectives, hierarchy
+  cascade), but the result metadata was lost from advance_day()'s return
+  dict. Now appends seasonal results to the daily `orphan_results` and
+  `hierarchy_cascade_results` arrays.
 
 ### Known Performance Concerns — Deferred
 - **Unbounded array growth in advance_day().** `crime_records`,
