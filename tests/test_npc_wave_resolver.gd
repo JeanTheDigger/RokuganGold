@@ -518,3 +518,57 @@ func test_append_to_action_log_skips_empty_action_id() -> void:
 	var decision: Dictionary = {"success": false}
 	NPCWaveResolver._append_to_action_log(ws, decision)
 	assert_false(ws.has("action_log"), "Should not create log for empty action_id")
+
+
+# -- Court batching tests (wave resolver audit 2026-05-25) -------------------
+
+func test_court_partitioning_groups_by_court_id() -> void:
+	var c1 := _make_char(1, 5.0, 3)
+	var c2 := _make_char(2, 4.0, 3)
+	var c3 := _make_char(3, 3.0, 3)
+	var world_states: Dictionary = {
+		1: {"context_flag": Enums.ContextFlag.AT_COURT, "court_id": 10},
+		2: {"context_flag": Enums.ContextFlag.AT_COURT, "court_id": 10},
+		3: {"context_flag": Enums.ContextFlag.AT_OWN_HOLDINGS},
+	}
+	var sorted: Array = [c1, c2, c3]
+	var court_groups: Dictionary = {}
+	var non_court: Array = []
+	NPCWaveResolver._partition_by_court(sorted, world_states, court_groups, non_court)
+	assert_eq(court_groups.size(), 1, "Should have one court group")
+	assert_true(court_groups.has(10), "Group keyed by int court_id")
+	assert_eq(court_groups[10].size(), 2, "Two NPCs in court group")
+	assert_eq(non_court.size(), 1, "One NPC not at court")
+
+
+func test_court_partitioning_no_court_id_goes_to_non_court() -> void:
+	var c1 := _make_char(1, 5.0, 3)
+	var world_states: Dictionary = {
+		1: {"context_flag": Enums.ContextFlag.AT_COURT},
+	}
+	var sorted: Array = [c1]
+	var court_groups: Dictionary = {}
+	var non_court: Array = []
+	NPCWaveResolver._partition_by_court(sorted, world_states, court_groups, non_court)
+	assert_eq(court_groups.size(), 0, "No court group without court_id")
+	assert_eq(non_court.size(), 1, "NPC goes to non_court without court_id")
+
+
+# -- Reactive_type event consumption tests ------------------------------------
+
+func test_consume_reactive_event_preserves_reactive_type_events() -> void:
+	var ws: Dictionary = {
+		"pending_events": [{"reactive_type": "DUEL_CHALLENGE_RECEIVED", "challenger_id": 5}],
+	}
+	var decision: Dictionary = {"action_id": "CHARM", "success": true, "need_source": "primary_objective"}
+	NPCWaveResolver._consume_reactive_event(decision, ws)
+	assert_eq(ws["pending_events"].size(), 1, "reactive_type event should not be discarded by AP wave")
+
+
+func test_consume_reactive_event_discards_unprocessable_non_reactive() -> void:
+	var ws: Dictionary = {
+		"pending_events": [{"type": "unknown_event"}],
+	}
+	var decision: Dictionary = {"action_id": "CHARM", "success": true, "need_source": "primary_objective"}
+	NPCWaveResolver._consume_reactive_event(decision, ws)
+	assert_eq(ws["pending_events"].size(), 0, "Non-reactive unknown event should be discarded")

@@ -11962,8 +11962,9 @@ static func _compute_topic_relevance(topic: TopicData, character: L5RCharacterDa
 
 static func _clear_stale_context_flags(world_states: Dictionary) -> void:
 	var stale_keys: Array = [
-		"context_flag", "active_court_at_location", "court_settlement_id",
-		"court_session_state", "pending_performance_requests",
+		"context_flag", "active_court_at_location", "court_id",
+		"court_settlement_id", "court_session_state",
+		"pending_performance_requests",
 		"zone_subtype", "active_insurgency_id", "action_log",
 		"self_offenses", "wall_statuses", "criminal_recall",
 	]
@@ -11994,6 +11995,7 @@ static func _set_court_context_flags(
 				world_states[char_id] = ws
 			ws["context_flag"] = Enums.ContextFlag.AT_COURT
 			ws["active_court_at_location"] = ctx_dict
+			ws["court_id"] = court.court_id
 			ws["court_settlement_id"] = court.host_settlement_id
 			ws["court_session_state"] = CourtSystem.get_session_state(court, char_id)
 			ws["pending_performance_requests"] = court.pending_performance_requests

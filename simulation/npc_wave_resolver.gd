@@ -278,8 +278,8 @@ static func _run_wave(
 	var non_court: Array = []
 	_partition_by_court(sorted, world_states, court_groups, non_court)
 
-	for court_id: String in court_groups:
-		for c: L5RCharacterData in court_groups[court_id]:
+	for court_group_id: int in court_groups:
+		for c: L5RCharacterData in court_groups[court_group_id]:
 			var wave_results: Array = _resolve_character_wave(
 				c, world_states, objectives_map, scoring_tables, filter_data,
 				approach_penalties, commitments
@@ -315,8 +315,8 @@ static func _run_wave_full(
 	var non_court: Array = []
 	_partition_by_court(sorted, world_states, court_groups, non_court)
 
-	for court_id: String in court_groups:
-		for c: L5RCharacterData in court_groups[court_id]:
+	for court_group_id: int in court_groups:
+		for c: L5RCharacterData in court_groups[court_group_id]:
 			var wave_results: Array = _resolve_character_wave_full(
 				c, world_states, objectives_map, scoring_tables, filter_data,
 				dice_engine, action_skill_map, approach_penalties, commitments,
@@ -551,7 +551,9 @@ static func _consume_reactive_event(
 		if decision.get("success", false):
 			events.remove_at(0)
 		return
-	# Decompose returned null — discard unprocessable event to prevent infinite loop
+	var first: Variant = events[0]
+	if first is Dictionary and (first as Dictionary).get("reactive_type", "").length() > 0:
+		return
 	events.remove_at(0)
 
 
@@ -627,11 +629,11 @@ static func _partition_by_court(
 	for c: L5RCharacterData in sorted:
 		var ws: Dictionary = world_states.get(c.character_id, {})
 		var cf: int = ws.get("context_flag", Enums.ContextFlag.AT_OWN_HOLDINGS)
-		var court_id: String = ws.get("court_id", "")
-		if cf == Enums.ContextFlag.AT_COURT and court_id != "":
-			if not court_groups.has(court_id):
-				court_groups[court_id] = []
-			court_groups[court_id].append(c)
+		var cid: int = ws.get("court_id", -1)
+		if cf == Enums.ContextFlag.AT_COURT and cid >= 0:
+			if not court_groups.has(cid):
+				court_groups[cid] = []
+			court_groups[cid].append(c)
 		else:
 			non_court.append(c)
 
