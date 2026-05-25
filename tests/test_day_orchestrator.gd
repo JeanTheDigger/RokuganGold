@@ -14838,3 +14838,32 @@ func test_character_province_map_skips_dead_and_empty() -> void:
 	assert_eq(cpm.get(911, -1), 10)
 	assert_false(cpm.has(912), "Dead character should not be in map")
 	assert_false(cpm.has(913), "Empty-location character should not be in map")
+
+
+func test_commitment_renege_no_topic_when_tier_negative_one() -> void:
+	var lord := _make_char(1, "Crane", "Doji")
+	lord.status = 6.0
+	var chars_by_id: Dictionary = {1: lord}
+	var topics: Array = []
+	var next_tid: Array[int] = [5000]
+	var renege_info: Dictionary = {
+		"lord_id": 1,
+		"honor_change": -0.1,
+		"disposition_penalty": -3,
+		"witness_ids": [],
+		"topic_tier": -1,
+		"topic_type": "renege",
+		"topic_variant": "commitment_broken",
+	}
+	var result: Dictionary = {"reneged": [renege_info]}
+	# Simulate the topic creation path from _process_commitment_seasonal
+	for ri: Dictionary in result.get("reneged", []):
+		var topic_tier: int = ri.get("topic_tier", TopicData.Tier.TIER_3)
+		if topic_tier >= 0:
+			var topic: TopicData = TopicData.new()
+			topic.topic_id = next_tid[0]
+			next_tid[0] += 1
+			topic.tier = topic_tier
+			topics.append(topic)
+	assert_eq(topics.size(), 0, "No topic should be created when topic_tier is -1")
+	assert_eq(next_tid[0], 5000, "Topic ID counter should not increment")

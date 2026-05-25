@@ -15547,21 +15547,22 @@ static func _process_commitment_seasonal(
 					(witness.historical_modifiers[lord_id] as Array).append(renege_mod.duplicate())
 
 		var topic_tier: int = renege_info.get("topic_tier", TopicData.Tier.TIER_3)
-		var topic_type: String = renege_info.get("topic_type", "renege")
-		var topic_variant: String = renege_info.get("topic_variant", "commitment_broken")
-		var topic_id: int = next_topic_id[0]
-		next_topic_id[0] += 1
-		var topic: TopicData = TopicData.new()
-		topic.topic_id = topic_id
-		topic.slug = "renege_%d_%d" % [lord_id, topic_id]
-		topic.title = "Broken Commitment by Lord %d" % lord_id
-		topic.tier = topic_tier
-		topic.topic_type = topic_type
-		topic.variant = topic_variant
-		topic.momentum = TopicMomentumSystem.MOMENTUM_MINOR_FLOOR if topic_tier >= TopicData.Tier.TIER_3 else _COMBAT_EVENT_MOMENTUM
-		topic.category = TopicData.Category.POLITICAL
-		topic.ic_day_created = ic_day
-		active_topics.append(topic)
+		if topic_tier >= 0:
+			var topic_type: String = renege_info.get("topic_type", "renege")
+			var topic_variant: String = renege_info.get("topic_variant", "commitment_broken")
+			var topic_id: int = next_topic_id[0]
+			next_topic_id[0] += 1
+			var topic: TopicData = TopicData.new()
+			topic.topic_id = topic_id
+			topic.slug = "renege_%d_%d" % [lord_id, topic_id]
+			topic.title = "Broken Commitment by Lord %d" % lord_id
+			topic.tier = topic_tier
+			topic.topic_type = topic_type
+			topic.variant = topic_variant
+			topic.momentum = TopicMomentumSystem.MOMENTUM_MINOR_FLOOR if topic_tier >= TopicData.Tier.TIER_3 else _COMBAT_EVENT_MOMENTUM
+			topic.category = TopicData.Category.POLITICAL
+			topic.ic_day_created = ic_day
+			active_topics.append(topic)
 	return result
 
 
