@@ -11980,6 +11980,7 @@ static func _clear_stale_context_flags(world_states: Dictionary) -> void:
 		"pending_performance_requests",
 		"zone_subtype", "active_insurgency_id", "action_log",
 		"self_offenses", "wall_statuses", "criminal_recall",
+		"is_patrolled", "phoenix_champion_authority",
 	]
 	for char_id: Variant in world_states:
 		if not char_id is int:
