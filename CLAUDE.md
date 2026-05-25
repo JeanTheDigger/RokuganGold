@@ -2367,6 +2367,21 @@ costs, or forward-wiring. Do not treat as bugs.
   World state was never actually loading from saves — every restart started
   fresh despite save files existing on disk.
 
+- **NPC scoring tables never loaded from JSON — entire decision engine non-functional. FIXED.**
+  `scoring_tables`, `filter_data`, and `action_skill_map` on WorldStateData were
+  declared as `{}` but never populated from the 8 JSON files under
+  `systems/npc_engine/data/tables/`. The NPC decision engine received empty tables
+  at runtime, meaning: (1) `_compute_competence_modifier()` returned 0 for all
+  actions (skill-based scoring disabled), (2) `_apply_personality_filter()` blocked
+  nothing (personality-based action gates disabled), (3) `_compute_urgency_bonus()`
+  added nothing (crisis response disabled), (4) `_get_objective_alignment()` returned
+  0 for all actions (objective-action matching disabled). NPCs chose actions
+  essentially at random. Added `_load_npc_scoring_tables()` to `WorldStateData._ready()`
+  which loads all 8 JSON files: objective_alignment (94 NeedTypes), personality_lean
+  (14 virtues), competence_table (11 skill ranks), disposition_tiers (8 tiers),
+  urgency_rules (9 rules), topic_position_alignment (26 topics), action_skill_map
+  (125 ActionIDs), personality_filter (2 categories: bushido/shourido). Added
+  `_load_json()` static helper with error reporting.
 - **character_province_map permanently empty — topic broadcasting broken. FIXED.**
   `character_province_map` was declared as `{}` on WorldState and passed to
   `advance_day()` but never populated by anyone — not the world generator,

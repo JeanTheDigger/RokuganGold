@@ -169,7 +169,43 @@ func _ready() -> void:
 	var fresh: Dictionary = CollectiveDisposition.make_starting_baselines()
 	clan_baselines = fresh["clan"]
 	family_baselines = fresh["family"]
+	_load_npc_scoring_tables()
 	print("[WorldState] Initialized.")
+
+
+func _load_npc_scoring_tables() -> void:
+	var base: String = "res://systems/npc_engine/data/tables/"
+	scoring_tables = {
+		"objective_alignment": _load_json(base + "objective_alignment.json"),
+		"personality_lean": _load_json(base + "personality_lean.json"),
+		"competence_table": _load_json(base + "competence_table.json"),
+		"disposition_tiers": _load_json(base + "disposition_tiers.json"),
+		"urgency_rules": _load_json(base + "urgency_rules.json"),
+		"topic_position_alignment": _load_json(base + "topic_position_alignment.json"),
+		"action_skill_map": _load_json(base + "action_skill_map.json"),
+	}
+	filter_data = {
+		"personality_filter": _load_json(base + "personality_filter.json"),
+	}
+	action_skill_map = scoring_tables.get("action_skill_map", {})
+
+
+static func _load_json(path: String) -> Variant:
+	if not FileAccess.file_exists(path):
+		push_warning("WorldState: JSON file not found: %s" % path)
+		return {}
+	var file := FileAccess.open(path, FileAccess.READ)
+	if file == null:
+		push_warning("WorldState: Failed to open JSON file: %s" % path)
+		return {}
+	var text: String = file.get_as_text()
+	file.close()
+	var json := JSON.new()
+	var err: int = json.parse(text)
+	if err != OK:
+		push_error("WorldState: JSON parse error in %s: %s" % [path, json.get_error_message()])
+		return {}
+	return json.data
 
 
 func rebuild_characters_by_id() -> void:
